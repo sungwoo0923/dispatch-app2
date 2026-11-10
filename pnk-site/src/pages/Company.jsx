@@ -5,12 +5,14 @@
 import React from "react";
 import { useMeCtx } from "../App";
 import { DEFAULT_LINKS, saveDoc, useDocLive } from "../pnkApi";
-import { Btn, Card, Field, Hero, HeroBtn, Input, Modal, Textarea, fail } from "../ui";
+import { Btn, Card, DateInput, Field, Hero, HeroBtn, Input, Modal, Textarea, TimeInput, fail } from "../ui";
 import Icon from "../icons";
+import MailServer from "./MailServer";
 
 const INFO_FIELDS = [
   ["name", "상호(법인명)"], ["nameEn", "영문 상호"], ["ceo", "대표자"], ["bizNo", "사업자등록번호"], ["corpNo", "법인등록번호"],
   ["founded", "설립일"], ["bizType", "업태 / 종목"], ["address", "주소"], ["tel", "대표 전화"], ["email", "대표 메일"],
+  ["homepage", "홈페이지"], ["workStart", "출근 시각"], ["workEnd", "퇴근 시각"],
 ];
 
 export default function Company() {
@@ -62,6 +64,7 @@ export default function Company() {
           </div>
         </Card>
 
+        {me.isAdmin && <MailServer me={me} info={info} />}
         {me.isAdmin && (
           <Card en="ADMIN ONLY" title="관리자 전용" right={<Btn kind="ghost" icon="pen" onClick={() => setEdit("secure")}>고치기</Btn>}>
             <div className="text-[12.5px] font-bold text-[#7A8AA8] mb-1">법인 계좌</div>
@@ -93,7 +96,10 @@ function InfoEditor({ info, onClose }) {
   return (
     <Modal open wide title="법인 정보 고치기" onClose={onClose} footer={<><Btn kind="ghost" onClick={onClose}>취소</Btn><Btn onClick={() => saveDoc("pnkCompany/info", f).then(onClose).catch(fail)}>저장</Btn></>}>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {INFO_FIELDS.map(([k, l]) => <Field key={k} label={l} className={k === "address" ? "sm:col-span-2" : ""}><Input value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} /></Field>)}
+        {INFO_FIELDS.map(([k, l]) => <Field key={k} label={l} className={k === "address" ? "sm:col-span-2" : ""}>
+          {k === "founded" ? <DateInput value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
+            : k === "workStart" || k === "workEnd" ? <TimeInput value={f[k] || (k === "workStart" ? "09:00" : "18:00")} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
+              : <Input value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} />}</Field>)}
       </div>
     </Modal>
   );

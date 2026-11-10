@@ -44,6 +44,11 @@ export default function Home() {
   const [sales] = useCol("pnkSales", [], []);
   const [services] = useCol("pnkServices", [], []);
   const [members] = useCol("pnkMembers", [where("status", "==", "active")], []);
+  const [att] = useCol("pnkAttendance", [where("date", "==", today)], [today]);
+  const [aps] = useCol("pnkApprovals", [where("viewers", "array-contains", uid), where("status", "==", "pending")], [uid]);
+  const myAtt = (att || []).find((r) => r.uid === uid);
+  const myTurn = (aps || []).filter((a) => a.line?.[a.step]?.uid === uid);
+  const myUp = (aps || []).filter((a) => a.authorUid === uid);
   const [plat, setPlat] = React.useState(undefined);
   React.useEffect(() => { if (me.owner) loadPlatform().then(setPlat); }, [me.owner]);
 
@@ -188,6 +193,21 @@ export default function Home() {
 
         {/* 오른쪽 */}
         <div className="space-y-4 md:space-y-5">
+          <div className="grid grid-cols-2 gap-3">
+            <Link to="/attendance" className="rounded-[20px] p-4 text-white shadow-[0_10px_28px_rgba(27,43,75,0.2)]" style={{ background: "linear-gradient(150deg,#1B2B4B,#2D4C82)" }}>
+              <div className="text-[11px] font-extrabold tracking-[0.16em] text-blue-200/80">ATTENDANCE</div>
+              <div className="mt-1 text-[15px] font-black">{!myAtt ? "출근 전" : myAtt.outAt ? "퇴근 완료" : "근무 중"}</div>
+              <div className="text-[12px] text-blue-100/85 tnum">{myAtt?.inAt ? `${hm(new Date(myAtt.inAt))} 출근` : "누르면 출근 화면"}{myAtt?.outAt ? ` · ${hm(new Date(myAtt.outAt))} 퇴근` : ""}</div>
+              <div className="mt-3 h-9 rounded-xl bg-white text-navy text-[13.5px] font-black flex items-center justify-center">{!myAtt ? "출근하기" : myAtt.outAt ? "기록 보기" : "퇴근하기"}</div>
+              <div className="mt-2 text-[11.5px] text-blue-100/70">오늘 출근 {(att || []).length} / {(members || []).length}명</div>
+            </Link>
+            <Link to="/approvals" className="rounded-[20px] p-4 bg-white border border-line shadow-[0_10px_28px_rgba(16,24,40,0.06)] hover:border-navy-500 transition">
+              <div className="text-[11px] font-extrabold tracking-[0.16em] text-[#7A8AA8]">E-APPROVAL</div>
+              <div className="mt-1 text-[15px] font-black">결재할 문서</div>
+              <div className="text-[34px] font-black tnum leading-tight">{myTurn.length}<span className="text-[14px] ml-0.5">건</span></div>
+              <div className="text-[12px] text-[#7A8AA8]">내가 올린 진행 중 {myUp.length}건</div>
+            </Link>
+          </div>
           <Card en="MY TASKS" title="내 업무" right={<Link to="/tasks" className="text-[12.5px] font-bold text-navy-500">보드</Link>}>
             <div className="flex gap-2 mb-3">
               <Input value={quick} onChange={(e) => setQuick(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) addQuick(); }} placeholder="오늘 할 일 바로 추가" />

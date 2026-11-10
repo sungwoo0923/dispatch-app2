@@ -2348,12 +2348,29 @@ service cloud.firestore {
     function pnkDoc() {
       return /databases/$(database)/documents/pnkMembers/$(request.auth.uid);
     }
+    // 🔐 최고관리자 · 부관리자(totalMaster)는 이번 로그인에 대해 2차 인증(8자리)을 마쳐야 한다 — functions/pnkMfa.js 가 pnkMfaSessions/{uid} 를 적는다
+    function pnkMfaOk() {
+      return exists(/databases/$(database)/documents/pnkMfaSessions/$(request.auth.uid))
+        && get(/databases/$(database)/documents/pnkMfaSessions/$(request.auth.uid)).data.authTime == request.auth.token.auth_time
+        && get(/databases/$(database)/documents/pnkMfaSessions/$(request.auth.uid)).data.until > request.time;
+    }
+    // 최고관리자 · 부관리자인지 — users 문서가 없는 계정(인트라넷에서 새로 가입한 직원)도 오류 없이 false
+    function pnkIsTM() {
+      return request.auth.token.get('email', '') == "tjddnqkf@naver.com"
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'totalMaster');
+    }
+    function pnkTM() {
+      return pnkIsTM() && pnkMfaOk();
+    }
     function pnkStaff() {
-      return isSignedIn() && (isTotalMasterUser() || (exists(pnkDoc()) && get(pnkDoc()).data.get('status', '') == 'active'));
+      return isSignedIn() && (pnkIsTM() ? pnkMfaOk()
+        : (exists(pnkDoc()) && get(pnkDoc()).data.get('status', '') == 'active' && get(pnkDoc()).data.get('empNo', '') != ''));
     }
     function pnkAdmin() {
-      return isSignedIn() && (isTotalMasterUser() || (exists(pnkDoc()) && get(pnkDoc()).data.get('status', '') == 'active'
-        && get(pnkDoc()).data.get('role', '') in ['owner', 'admin']));
+      return isSignedIn() && (pnkIsTM() ? pnkMfaOk()
+        : (exists(pnkDoc()) && get(pnkDoc()).data.get('status', '') == 'active' && get(pnkDoc()).data.get('empNo', '') != ''
+          && get(pnkDoc()).data.get('role', '') in ['owner', 'admin']));
     }
     function pnkOnly(keys) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
@@ -2363,13 +2380,13 @@ service cloud.firestore {
       allow read: if isSignedIn() && (request.auth.uid == uid || pnkStaff());
       allow create: if isSignedIn() && (
         (request.auth.uid == uid && request.resource.data.uid == uid && request.resource.data.status == 'pending' && request.resource.data.role == 'staff'
-          && request.resource.data.get('mailId', '') == '')
-        || (request.auth.uid == uid && isTotalMasterUser())
+          && request.resource.data.get('mailId', '') == '' && request.resource.data.get('empNo', '') == '')
+        || (request.auth.uid == uid && pnkTM())
         || (pnkAdmin() && request.resource.data.get('role', '') != 'owner'));
       allow update: if isSignedIn() && (
         (request.auth.uid == uid && pnkOnly(['name', 'phone', 'bio', 'birthday', 'updatedAt']))
-        || (pnkAdmin() && (isTotalMasterUser() || (request.resource.data.get('role', '') != 'owner' && resource.data.get('role', '') != 'owner'))));
-      allow delete: if pnkAdmin() && (isTotalMasterUser() || resource.data.get('role', '') != 'owner');
+        || (pnkAdmin() && (pnkTM() || (request.resource.data.get('role', '') != 'owner' && resource.data.get('role', '') != 'owner'))));
+      allow delete: if pnkAdmin() && (pnkTM() || resource.data.get('role', '') != 'owner');
     }
     // 공지 · 게시판 · 회의록 — 공지는 관리자만 쓰기. 누구나 읽음 표시(readBy)만 남길 수 있다
     match /pnkPosts/{id} {
@@ -2432,9 +2449,47 @@ service cloud.firestore {
     match /pnkMail/{id} {
       allow read: if pnkStaff() && (request.auth.uid in resource.data.toUids || resource.data.fromUid == request.auth.uid);
       allow create: if pnkStaff() && request.resource.data.fromUid == request.auth.uid
-        && request.resource.data.toUids is list && request.resource.data.toUids.size() <= 50;
+        && request.resource.data.toUids is list && request.resource.data.toUids.size() <= 50
+        && request.resource.data.get('extStatus', '') in ['', 'queued'] && request.resource.data.get('direction', '') != 'in'
+        && request.resource.data.get('messageId', '') == '';
       allow update: if pnkStaff() && (request.auth.uid in resource.data.toUids || resource.data.fromUid == request.auth.uid)
         && pnkOnly(['readBy', 'trashBy', 'starBy', 'updatedAt']);
+    }
+
+    // 🏢 PnK 인트라넷 — 사번 색인(사번 → 로그인 이메일). 로그인 화면이 사번으로 이메일을 찾는다(문서 하나 읽기만, 목록은 구성원만)
+    //  같은 사번은 두 번 못 만든다(이미 있으면 create 가 아니라 update 라 막힘)
+    match /pnkEmpIndex/{empNo} {
+      allow get: if true;
+      allow list: if pnkStaff();
+      allow create: if isSignedIn() && (pnkAdmin() || (pnkTM() && request.resource.data.uid == request.auth.uid));
+      allow delete: if pnkAdmin();
+    }
+    // 🏢 PnK 인트라넷 — 전자결재. 기안자 · 결재선 · 참조자(viewers)만 읽는다
+    //  · 올리기: 기안자 본인, 진행 중(pending) · 첫 단계(step 0)로만
+    //  · 결재: 지금 차례인 결재자(line[step].uid)가 line · step · status 만 바꾼다
+    //  · 회수: 기안자가 진행 중인 문서를 canceled 로
+    match /pnkApprovals/{id} {
+      allow read: if pnkStaff() && (request.auth.uid in resource.data.viewers || pnkAdmin());
+      allow create: if pnkStaff() && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.status == 'pending' && request.resource.data.step == 0
+        && request.auth.uid in request.resource.data.viewers
+        && request.resource.data.line is list && request.resource.data.line.size() >= 1 && request.resource.data.line.size() <= 8;
+      allow update: if pnkStaff() && resource.data.status == 'pending' && (
+        (resource.data.line[resource.data.step].uid == request.auth.uid
+          && pnkOnly(['line', 'step', 'status', 'updatedAt', 'doneAt'])
+          && request.resource.data.authorUid == resource.data.authorUid)
+        || (resource.data.authorUid == request.auth.uid && request.resource.data.status == 'canceled' && pnkOnly(['status', 'updatedAt', 'doneAt'])));
+      allow delete: if pnkAdmin();
+    }
+    // 🏢 PnK 인트라넷 — 출퇴근. 문서 번호 = {uid}_{날짜}. 본인 것만 찍고(출근 · 퇴근 · 메모), 지난 기록 고치기는 관리자
+    match /pnkAttendance/{id} {
+      allow read: if pnkStaff();
+      allow create: if pnkStaff() && request.resource.data.uid == request.auth.uid && id == request.auth.uid + '_' + request.resource.data.date
+        && request.resource.data.date is string && request.resource.data.date.size() == 10;
+      allow update: if pnkStaff() && (pnkAdmin()
+        || (resource.data.uid == request.auth.uid && request.resource.data.uid == resource.data.uid && request.resource.data.date == resource.data.date
+          && pnkOnly(['outAt', 'outNote', 'note', 'place', 'workMin', 'updatedAt', 'outLate'])));
+      allow delete: if pnkAdmin();
     }
 
     // ⭐ 2026-11-07 공용 규칙도 회사 검사 — 따로 규칙이 없는 컬렉션은 "문서의 companyName == 내 회사"인 문서만(최고관리자는 전체).
@@ -2457,6 +2512,8 @@ service cloud.firestore {
       return col in [
         // 🏢 2026-11-10 PnK PROJECT 사내 인트라넷 — 위에서 따로 정함(빠지면 로지스웹 고객사 직원이 읽고 쓸 수 있다)
         'pnkMembers', 'pnkPosts', 'pnkFiles', 'pnkTasks', 'pnkEvents', 'pnkSales', 'pnkServices', 'pnkReleases', 'pnkCompany', 'pnkFinance', 'pnkMail',
+        //  사번 색인 · 전자결재 · 출퇴근 · 메일 서버 비밀값(서버만) · 외부 발송 횟수(서버만)
+        'pnkEmpIndex', 'pnkApprovals', 'pnkAttendance', 'pnkMailSecrets', 'pnkMailUsage', 'pnkMfaSecrets', 'pnkMfaSessions',
         'adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'resetLocks', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'driverContracts', 'fixedRoutes', 'routeBoards', 'personalSchedules', 'publicCompanies', 'companyContracts',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
         'orders', 'dispatch', 'dispatch_test', 'fixedClients', 'drivers', 'clients', 'places', 'recurringOrders', 'deletedOrders',

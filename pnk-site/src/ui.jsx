@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import Icon from "./icons";
 // 로지스웹 프로그램의 달력 · 시간 · 월 고르기를 그대로 쓴다(Firebase를 쓰지 않는 순수 화면 조각 — 허브도 같은 방식)
 import CustomDatePicker from "../../src/CustomDatePicker.jsx";
-import { TimeSelect } from "../../src/kpTimePick.jsx";
+import { HourMinuteSelect, TimeSelect } from "../../src/kpTimePick.jsx";
 import { MonthPicker } from "../../src/kpInputs.jsx";
 
 export const cx = (...a) => a.filter(Boolean).join(" ");
@@ -169,6 +169,10 @@ export function DateInput({ value, onChange, placeholder = "날짜 선택", clas
 }
 export function TimeInput({ value, onChange, placeholder = "시간 선택", className = "" }) {
   return <TimeSelect value={value || ""} onChange={onChange} placeholder={placeholder} className={cx(inputCls, className)} />;
+}
+// 1분 단위(시 · 분 두 칸) — 출퇴근 기록 고치기처럼 정확한 분이 필요한 곳
+export function HourMinuteInput({ value, onChange, className = "" }) {
+  return <HourMinuteSelect value={value || ""} onChange={onChange} className={cx(inputCls, className)} />;
 }
 export { MonthPicker };
 

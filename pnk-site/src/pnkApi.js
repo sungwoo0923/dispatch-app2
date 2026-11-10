@@ -14,7 +14,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import {
   addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where,
 } from "firebase/firestore";
-import { auth, db } from "./firebase";
+import { auth, callFn, db } from "./firebase";
 
 // 최고관리자(대표) 이메일 — firestore.rules isTotalMasterUser() 와 같은 기준(규칙이 서버에서 다시 확인한다)
 export const OWNER_EMAILS = ["tjddnqkf@naver.com"];
@@ -47,9 +47,9 @@ export const EVENT_TYPES = [
   { key: "etc", label: "기타", dot: "bg-slate-400" },
 ];
 
-// 사내메일 주소 — 구성원마다 pnkMembers.mailId(예: pathkey) → pathkey@logisweb.co.kr
+// 사내메일 주소 — 구성원마다 pnkMembers.mailId(예: pathkey) → pathkey@pnkproject.com
 //  지금은 구성원끼리만 오간다(인트라넷 안에 저장). 외부 주소로 보내기 · 받기는 도메인(DNS) 연결 후 켠다(pnkCompany/info.mailExternal).
-export const MAIL_DOMAIN = "logisweb.co.kr";
+export const MAIL_DOMAIN = "pnkproject.com"; // PnK PROJECT 회사 도메인(가비아)
 export const mailAddr = (m) => (m?.mailId ? `${m.mailId}@${MAIL_DOMAIN}` : "");
 
 // 영업 단계(파이프라인)
@@ -77,11 +77,54 @@ export const SERVICE_STATUS = [
   { key: "issue", label: "장애", tone: "red" },
 ];
 
+// ───────────────────────── 전자결재 ─────────────────────────
+//  pnkApprovals: { form, title, body, fields{}, amount, authorUid, authorName, authorEmpNo, dept,
+//                  line:[{ uid, name, title, status: wait|approved|rejected, at, comment }], step, cc:[{uid,name}], viewers:[uid],
+//                  status: pending|approved|rejected|canceled, docNo, createdAt, doneAt }
+export const APPROVAL_FORMS = [
+  { key: "general", label: "일반 품의서", icon: "file", hint: "업무 진행 · 결정이 필요한 내용" },
+  { key: "expense", label: "지출 결의서", icon: "receipt", hint: "비용 사용 · 정산", amount: true },
+  { key: "purchase", label: "구매 요청서", icon: "wallet", hint: "장비 · 소프트웨어 · 소모품 구매", amount: true },
+  { key: "leave", label: "휴가 신청서", icon: "calendar", hint: "연차 · 반차 · 병가 · 경조사" },
+  { key: "trip", label: "출장 신청서", icon: "route", hint: "외근 · 출장 · 고객사 방문" },
+  { key: "report", label: "업무 보고서", icon: "chart", hint: "주간 · 월간 · 프로젝트 보고" },
+  { key: "contract", label: "계약 검토 요청", icon: "stamp", hint: "고객 · 협력사 계약서 검토" },
+];
+export const formLabel = (k) => APPROVAL_FORMS.find((f) => f.key === k)?.label || "문서";
+export const APPROVAL_STATUS = { pending: "진행 중", approved: "승인 완료", rejected: "반려", canceled: "회수" };
+
+// ───────────────────────── 근태 · 휴가 ─────────────────────────
+//  pnkAttendance/{uid}_{날짜}: { uid, name, empNo, dept, date, inAt(ms), outAt(ms), place: office|remote|outside, late, workMin, note }
+//  휴가는 전자결재(form "leave")로 신청 → 승인 완료된 것만 사용 일수 · 일정에 반영
+export const LEAVE_KINDS = [
+  { key: "annual", label: "연차", days: 1 },
+  { key: "half_am", label: "오전 반차", days: 0.5 },
+  { key: "half_pm", label: "오후 반차", days: 0.5 },
+  { key: "sick", label: "병가", days: 1, free: true },
+  { key: "family", label: "경조사", days: 1, free: true },
+  { key: "official", label: "공가(예비군 등)", days: 1, free: true },
+  { key: "etc", label: "기타", days: 1 },
+];
+export const leaveLabel = (k) => LEAVE_KINDS.find((x) => x.key === k)?.label || "휴가";
+export const PLACES = [{ key: "office", label: "사무실" }, { key: "remote", label: "재택" }, { key: "outside", label: "외근 · 출장" }];
+export const DEFAULT_WORK = { start: "09:00", end: "18:00", annual: 15 };
+// 휴가 일수(주말 빼고). 반차는 0.5
+export function leaveDays(kind, from, to) {
+  const k = LEAVE_KINDS.find((x) => x.key === kind);
+  if (!from) return 0;
+  if (k && k.days === 0.5) return 0.5;
+  let n = 0;
+  const end = Date.parse(`${to || from}T12:00:00Z`);
+  for (let t = Date.parse(`${from}T12:00:00Z`); t <= end && n < 400; t += 86400e3) { const w = new Date(t).getUTCDay(); if (w !== 0 && w !== 6) n += 1; }
+  return n;
+}
+
 // 대시보드 바로가기 기본값 — 회사 정보 화면에서 바꿀 수 있다(pnkCompany/info.links)
 export const DEFAULT_LINKS = [
+  { label: "PnK PROJECT", sub: "회사 홈페이지", url: "https://www.pnkproject.com" },
   { label: "로지스웹", sub: "운송 프로그램", url: "https://app.logisweb.co.kr" },
   { label: "로지스웹 허브", sub: "오더 공유", url: "https://hub.logisweb.co.kr" },
-  { label: "공식 홈페이지", sub: "logisweb.co.kr", url: "https://www.logisweb.co.kr" },
+  { label: "로지스웹 홈페이지", sub: "logisweb.co.kr", url: "https://www.logisweb.co.kr" },
   { label: "관리자 관리센터", sub: "고객사 · 청구 · 운영", url: "https://app.logisweb.co.kr/platform" },
 ];
 
@@ -107,41 +150,114 @@ export const num = (v) => Number(String(v ?? "").replace(/[^\d-]/g, "")) || 0;
 // 반환: { loading, user, member, isOwner, isAdmin, active }
 //  · 대표(최고관리자)는 처음 들어오면 구성원 문서를 자동으로 만든다(role owner)
 //  · 다른 계정은 [가입 요청]을 눌러야 pending 문서가 생기고, 관리자가 승인하면 active
+// ⭐ 사번 — "PNK-0001" 형식. 대표(최고관리자)는 PNK-0001, 부관리자(관리자센터 subAdmin)는 다음 번호를 자동으로 받는다.
+//  직원은 [가입 요청] → 대표 · 관리자가 승인하면서 사번을 준다(구성원 화면). 사번 색인 pnkEmpIndex/{사번} = { uid, email }
+export const EMP_PREFIX = "PNK-";
+export const normEmpNo = (v) => {
+  const t = String(v || "").trim().toUpperCase().replace(/\s+/g, "");
+  if (!t) return "";
+  if (/^\d{1,6}$/.test(t)) return `${EMP_PREFIX}${t.padStart(4, "0")}`;
+  const m = t.match(/^PNK-?(\d{1,6})$/);
+  return m ? `${EMP_PREFIX}${m[1].padStart(4, "0")}` : t;
+};
+export async function nextEmpNo(prefer = 0) {
+  const s = await getDocs(collection(db, "pnkEmpIndex"));
+  const used = new Set(s.docs.map((d) => d.id));
+  let n = prefer || 1;
+  while (used.has(`${EMP_PREFIX}${String(n).padStart(4, "0")}`)) n += 1;
+  return `${EMP_PREFIX}${String(n).padStart(4, "0")}`;
+}
+// 사번을 색인에 올리고 구성원 문서에 적는다(색인은 같은 번호를 두 번 못 만든다 — 규칙)
+export async function assignEmpNo(member, empNo) {
+  const no = normEmpNo(empNo);
+  if (!/^PNK-\d{4,6}$/.test(no)) throw new Error("사번은 PNK-0001 형식으로 넣어 주세요");
+  const idx = await getDoc(doc(db, "pnkEmpIndex", no)).catch(() => null);
+  if (idx?.exists() && idx.data().uid !== member.uid) throw new Error(`${no} 은(는) 이미 다른 구성원의 사번입니다`);
+  if (!idx?.exists()) await setDoc(doc(db, "pnkEmpIndex", no), { uid: member.uid, email: String(member.email || "").toLowerCase(), at: Date.now() });
+  if (member.empNo && member.empNo !== no) await deleteDoc(doc(db, "pnkEmpIndex", member.empNo)).catch(() => {});
+  return no;
+}
+// 로그인 칸에 사번을 넣으면 이메일로 바꾼다
+export async function emailOfLogin(v) {
+  const t = String(v || "").trim();
+  if (t.includes("@")) return t;
+  const s = await getDoc(doc(db, "pnkEmpIndex", normEmpNo(t)));
+  if (!s.exists()) throw Object.assign(new Error("등록되지 않은 사번입니다"), { code: "pnk/no-empno" });
+  return s.data().email;
+}
+
+// ───────────────────────── 로그인 · 내 구성원 정보 ─────────────────────────
+// 반환: { loading, stage(0~4, 로딩 화면 단계), user, member, owner, isOwner, isAdmin, active, needEmpNo }
+//  · 대표(최고관리자) · 부관리자는 처음 들어오면 구성원 문서 + 사번이 자동으로 생긴다
+//  · 다른 계정은 [가입 요청] → pending, 관리자가 승인하면서 사번을 주면 active
 export function useMe() {
-  const [st, setSt] = React.useState({ loading: true, user: null, member: null });
+  const [st, setSt] = React.useState({ loading: true, stage: 0, user: null, member: null });
+  const resume = React.useRef(null);
   React.useEffect(() => {
     let unsubMember = null;
+    let alive = true;
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
       if (unsubMember) { unsubMember(); unsubMember = null; }
-      if (!user) { setSt({ loading: false, user: null, member: null }); return; }
+      resume.current = null;
+      if (!user) { setSt({ loading: false, stage: 1, user: null, member: null }); return; }
+      setSt((p) => ({ ...p, loading: true, stage: 1, user, mfa: null }));
       let owner = OWNER_EMAILS.includes(String(user.email || "").toLowerCase());
+      let sub = false;
       if (!owner) {
-        try { const u = await getDoc(doc(db, "users", user.uid)); owner = u.exists() && u.data().role === "totalMaster"; } catch { /* 권한 없음 = 대표 아님 */ }
+        try { const u = await getDoc(doc(db, "users", user.uid)); const d = u.exists() ? u.data() : {}; if (d.role === "totalMaster") { owner = true; sub = d.subAdmin === true; } } catch { /* 권한 없음 = 대표 아님 */ }
       }
-      const ref = doc(db, "pnkMembers", user.uid);
-      unsubMember = onSnapshot(ref, async (s) => {
-        if (!s.exists() && owner) {
-          await setDoc(ref, {
-            uid: user.uid, email: user.email || "", name: user.displayName || "대표", dept: "경영", title: "대표",
-            phone: "", role: "owner", status: "active", createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-          }).catch(() => {});
+      setSt((p) => ({ ...p, stage: 2 }));
+      const startMember = () => {
+        const ref = doc(db, "pnkMembers", user.uid);
+        let fixing = false;
+        unsubMember = onSnapshot(ref, async (s) => {
+          // 대표 · 부관리자 자동 등록 / 사번 자동 발급
+          if (owner && (!s.exists() || !s.data().empNo) && !fixing) {
+            fixing = true;
+            try {
+              const base = s.exists() ? s.data() : {
+                uid: user.uid, email: user.email || "", name: user.displayName || (sub ? "부관리자" : "대표"), dept: "경영", title: sub ? "부관리자" : "대표",
+                phone: "", role: sub ? "admin" : "owner", status: "active", tm: true, annual: 15, createdAt: serverTimestamp(),
+              };
+              const want = sub ? await nextEmpNo(2) : (await getDoc(doc(db, "pnkEmpIndex", `${EMP_PREFIX}0001`))).exists() ? await nextEmpNo(2) : `${EMP_PREFIX}0001`;
+              const no = await assignEmpNo({ ...base, uid: user.uid }, want);
+              await setDoc(ref, { ...base, empNo: no, status: "active", tm: true, updatedAt: serverTimestamp() }, { merge: true });
+            } catch (e) { console.warn("[PnK] 자동 등록 실패", e); setSt({ loading: false, stage: 4, user, owner, sub, member: s.exists() ? { id: s.id, ...s.data() } : null }); }
+            return;
+          }
+          setSt({ loading: false, stage: 4, user, owner, sub, mfa: owner ? "ok" : null, member: s.exists() ? { id: s.id, ...s.data() } : null });
+        }, () => setSt({ loading: false, stage: 4, user, owner, sub, member: null }));
+      };
+      // 🔐 최고관리자 · 부관리자 — 2차 인증(8자리)을 마쳐야 인트라넷 데이터를 연다(규칙도 같은 기준 — functions/pnkMfa.js)
+      if (owner) {
+        let r = null;
+        try {
+          r = (await Promise.race([callFn("pnkMfa")({ action: "status" }), new Promise((_, no) => setTimeout(() => no(new Error("서버 응답이 늦습니다")), 10000))])).data;
+        } catch (e) { r = { required: true, error: e.message || "서버 연결 실패" }; }
+        if (!alive) return;
+        if (r.required && !r.valid) {
+          resume.current = startMember;
+          setSt({ loading: false, stage: 2, user, owner, sub, member: null, mfa: "need", mfaInfo: r });
           return;
         }
-        setSt({ loading: false, user, owner, member: s.exists() ? { id: s.id, ...s.data() } : null });
-      }, () => setSt({ loading: false, user, owner, member: null }));
+      }
+      startMember();
     });
-    return () => { unsubAuth(); if (unsubMember) unsubMember(); };
+    return () => { alive = false; unsubAuth(); if (unsubMember) unsubMember(); };
   }, []);
+  const passMfa = React.useCallback(() => { setSt((p) => ({ ...p, loading: true, mfa: "ok", stage: 3 })); resume.current?.(); }, []);
   const m = st.member;
-  const active = !!st.owner || m?.status === "active";
-  const isAdmin = !!st.owner || (active && (m?.role === "owner" || m?.role === "admin"));
-  return { ...st, active, isAdmin, isOwner: !!st.owner || m?.role === "owner" };
+  const hasNo = !!m?.empNo;
+  const active = st.mfa !== "need" && m?.status === "active" && hasNo;
+  const isAdmin = active && (!!st.owner || m?.role === "owner" || m?.role === "admin");
+  return { ...st, passMfa, needMfa: st.mfa === "need", active, isAdmin, isOwner: active && (!!st.owner || m?.role === "owner"), needEmpNo: m?.status === "active" && !hasNo };
 }
 
 export function requestJoin(user, info) {
   return setDoc(doc(db, "pnkMembers", user.uid), {
     uid: user.uid, email: user.email || "", name: info.name.trim(), dept: info.dept.trim(), title: info.title.trim(),
     phone: info.phone.trim(), role: "staff", status: "pending", createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+    ...(info.terms ? { terms: info.terms } : {}),
   });
 }
 

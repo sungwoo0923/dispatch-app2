@@ -3,12 +3,13 @@
 //  PnK PROJECT(법인)가 만드는 로지스웹 · 로지스웹 허브 · 공식 홈페이지 · 기사앱을 한곳에서 관리하는 사내 시스템.
 import React from "react";
 import { BrowserRouter, NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { sendPasswordResetEmail, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { signOut } from "firebase/auth";
 import { auth } from "./firebase";
-import { ROLE_LABEL, limit, orderBy, requestJoin, useMe, useCol, where } from "./pnkApi";
-import { Btn, Field, Input, Select, cx, errMsg } from "./ui";
-import { DEPT_ORDER, TITLES } from "./pnkConst";
+import { ROLE_LABEL, limit, orderBy, useMe, useCol, where } from "./pnkApi";
+import { cx } from "./ui";
 import Icon from "./icons";
+import BootScreen from "./BootScreen";
+import { JoinGate, Login, MfaGate } from "./Auth";
 const Home = React.lazy(() => import("./pages/Home"));
 const Board = React.lazy(() => import("./pages/Board"));
 const Mail = React.lazy(() => import("./pages/Mail"));
@@ -21,6 +22,9 @@ const Files = React.lazy(() => import("./pages/Files"));
 const Members = React.lazy(() => import("./pages/Members"));
 const Customers = React.lazy(() => import("./pages/Customers"));
 const Services = React.lazy(() => import("./pages/Services"));
+const Approvals = React.lazy(() => import("./pages/Approvals"));
+const Attendance = React.lazy(() => import("./pages/Attendance"));
+const Leave = React.lazy(() => import("./pages/Leave"));
 
 export const MeCtx = React.createContext(null);
 export const useMeCtx = () => React.useContext(MeCtx);
@@ -38,6 +42,11 @@ const MENU = [
     { to: "/board", label: "게시판 · 회의록", icon: "chat" },
     { to: "/mail", label: "사내메일", icon: "mail", badge: "mail" },
   ] },
+  { label: "결재 · 근태", items: [
+    { to: "/approvals", label: "전자결재", icon: "stamp", badge: "approval" },
+    { to: "/attendance", label: "출퇴근 · 근태", icon: "clock" },
+    { to: "/leave", label: "휴가", icon: "flag" },
+  ] },
   { label: "업무", items: [
     { to: "/tasks", label: "업무 보드", icon: "board" },
     { to: "/calendar", label: "일정", icon: "calendar" },
@@ -52,8 +61,18 @@ const MENU = [
 
 export default function App() {
   const me = useMe();
-  if (me.loading) return <Splash />;
+  // 🏢 입장 로딩 화면 — 로그인 확인 → 구성원 · 사번 확인 → 본사 데이터 연결(첫 화면 미리 받기) → 인트라넷 준비
+  const [booted, setBooted] = React.useState(false);
+  const [pre, setPre] = React.useState(false);
+  React.useEffect(() => { if (!me.user) { setBooted(false); setPre(false); } }, [me.user]);
+  React.useEffect(() => {
+    if (me.loading || !me.active || pre) return;
+    Promise.all([import("./pages/Home"), new Promise((r) => setTimeout(r, 250))]).finally(() => setPre(true));
+  }, [me.loading, me.active, pre]);
+  const stage = me.loading ? me.stage : !me.active ? 4 : pre ? 4 : 3;
+  if (!booted && (me.loading || me.active)) return <BootScreen stage={stage} name={me.member?.name} onDone={() => setBooted(true)} />;
   if (!me.user) return <Login />;
+  if (me.needMfa) return <MfaGate me={me} />;
   if (!me.active) return <JoinGate me={me} />;
   return (
     <MeCtx.Provider value={me}>
@@ -74,6 +93,9 @@ export default function App() {
             <Route path="/members" element={<Members />} />
             <Route path="/customers" element={<Customers />} />
             <Route path="/services" element={<Services />} />
+            <Route path="/approvals" element={<Approvals />} />
+            <Route path="/attendance" element={<Attendance />} />
+            <Route path="/leave" element={<Leave />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
           </React.Suspense>
@@ -83,14 +105,6 @@ export default function App() {
   );
 }
 
-function Splash() {
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-3">
-      <img src="/brand/pnk-mark-192.png" alt="" className="w-16 h-16 rounded-2xl" />
-      <div className="text-[13px] font-bold text-[#7A8AA8]">PnK PROJECT 인트라넷 불러오는 중…</div>
-    </div>
-  );
-}
 
 // ───────────────────────── 왼쪽 메뉴 + 본문 ─────────────────────────
 function Shell({ children }) {
@@ -102,7 +116,9 @@ function Shell({ children }) {
   const [pending] = useCol(me.isAdmin ? "pnkMembers" : null, [where("status", "==", "pending")], [me.isAdmin]);
   const [mails] = useCol("pnkMail", [where("toUids", "array-contains", uid)], [uid]);
   const [notices] = useCol("pnkPosts", [where("board", "==", "notice"), orderBy("createdAt", "desc"), limit(30)], []);
+  const [aps] = useCol("pnkApprovals", [where("viewers", "array-contains", uid), where("status", "==", "pending")], [uid]);
   const badges = {
+    approval: (aps || []).filter((a) => a.line?.[a.step]?.uid === uid).length,
     notice: (notices || []).filter((p) => !p.readBy?.[uid] && p.authorUid !== uid).length,
     pending: (pending || []).length,
     mail: (mails || []).filter((m) => !m.readBy?.[uid] && !m.trashBy?.[uid]).length,
@@ -146,7 +162,7 @@ function Shell({ children }) {
           <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center text-[13px] font-black">{(me.member?.name || "?").slice(0, 1)}</div>
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-bold truncate">{me.member?.name || me.user.email}</div>
-            <div className="text-[11px] text-blue-200/75 truncate">{ROLE_LABEL[me.member?.role] || "직원"}{me.member?.dept ? ` · ${me.member.dept}` : ""}</div>
+            <div className="text-[11px] text-blue-200/75 truncate">{me.member?.empNo} · {me.member?.title || ROLE_LABEL[me.member?.role] || "직원"}{me.member?.dept ? ` · ${me.member.dept}` : ""}</div>
           </div>
           <button type="button" onClick={() => signOut(auth)} title="로그아웃" className="w-8 h-8 rounded-lg flex items-center justify-center text-blue-200/80 hover:bg-white/10 hover:text-white"><Icon name="logout" size={17} /></button>
         </div>
@@ -174,91 +190,5 @@ function Shell({ children }) {
         <div className="w-full max-w-[1600px] mx-auto">{children}</div>
       </main>
     </div>
-  );
-}
-
-// ───────────────────────── 로그인 ─────────────────────────
-function AuthFrame({ children }) {
-  return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: "linear-gradient(160deg, #14213D 0%, #1B2B4B 50%, #2D4C82 100%)" }}>
-      <div className="w-full max-w-[400px] bg-white rounded-[26px] shadow-2xl p-7">
-        <div className="flex flex-col items-center mb-6">
-          <img src="/brand/pnk-logo-600.png" alt="PnK PROJECT" className="w-28" />
-          <div className="mt-3 text-[12px] font-extrabold tracking-[0.2em] text-[#7A8AA8]">사내 인트라넷</div>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function Login() {
-  const [email, setEmail] = React.useState("");
-  const [pw, setPw] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
-  const [msg, setMsg] = React.useState("");
-  const go = async (e) => {
-    e.preventDefault(); setBusy(true); setMsg("");
-    try { await signInWithEmailAndPassword(auth, email.trim(), pw); } catch (er) {
-      setMsg(["auth/invalid-credential", "auth/wrong-password", "auth/user-not-found"].includes(er.code) ? "이메일 또는 비밀번호가 맞지 않습니다." : errMsg(er));
-    } finally { setBusy(false); }
-  };
-  const reset = async () => {
-    if (!email.trim()) { setMsg("이메일을 먼저 입력해 주세요."); return; }
-    try { await sendPasswordResetEmail(auth, email.trim()); setMsg("비밀번호 재설정 메일을 보냈습니다."); } catch (er) { setMsg(errMsg(er)); }
-  };
-  return (
-    <AuthFrame>
-      <form onSubmit={go} className="space-y-3">
-        <Field label="이메일"><Input type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="로지스웹 계정 이메일" /></Field>
-        <Field label="비밀번호"><Input type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} /></Field>
-        {msg && <div className="text-[12.5px] font-semibold text-rose-600">{msg}</div>}
-        <Btn type="submit" disabled={busy} className="w-full h-11 text-[14px]">{busy ? "로그인 중…" : "로그인"}</Btn>
-        <button type="button" onClick={reset} className="w-full text-[12.5px] font-semibold text-[#7A8AA8] hover:text-navy">비밀번호를 잊으셨나요?</button>
-      </form>
-      <p className="mt-5 text-[12px] leading-relaxed text-[#7A8AA8] text-center">로지스웹과 같은 계정으로 로그인합니다.<br />처음이면 로그인 후 [가입 요청]을 보내고 관리자 승인을 기다려 주세요.</p>
-    </AuthFrame>
-  );
-}
-
-// 로그인했지만 아직 구성원이 아닌 계정 — 가입 요청 / 승인 대기 / 사용 중지
-function JoinGate({ me }) {
-  const [f, setF] = React.useState({ name: "", dept: "", title: "", phone: "" });
-  const [busy, setBusy] = React.useState(false);
-  const [msg, setMsg] = React.useState("");
-  const st = me.member?.status;
-  const send = async () => {
-    if (!f.name.trim()) { setMsg("이름을 입력해 주세요."); return; }
-    setBusy(true); setMsg("");
-    try { await requestJoin(me.user, f); } catch (e) { setMsg(errMsg(e)); } finally { setBusy(false); }
-  };
-  return (
-    <AuthFrame>
-      {st === "pending" ? (
-        <div className="text-center">
-          <div className="text-[16px] font-black text-navy-950">가입 요청을 보냈습니다</div>
-          <p className="mt-2 text-[13px] text-[#5A6A86]">관리자가 승인하면 바로 들어갈 수 있습니다.<br />({me.user.email})</p>
-        </div>
-      ) : st === "off" ? (
-        <div className="text-center">
-          <div className="text-[16px] font-black text-navy-950">사용이 중지된 계정입니다</div>
-          <p className="mt-2 text-[13px] text-[#5A6A86]">관리자에게 문의해 주세요.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <div className="text-[15px] font-black text-navy-950">PnK PROJECT 구성원 가입 요청</div>
-          <p className="text-[12.5px] text-[#5A6A86]">{me.user.email} 계정으로 요청합니다.</p>
-          <Field label="이름 *"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="부서"><Select custom value={f.dept} onChange={(e) => setF({ ...f, dept: e.target.value })} options={DEPT_ORDER} placeholder="선택 · 직접 입력" /></Field>
-            <Field label="직책"><Select custom value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} options={TITLES} placeholder="선택 · 직접 입력" /></Field>
-          </div>
-          <Field label="연락처"><Input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} placeholder="010-0000-0000" /></Field>
-          {msg && <div className="text-[12.5px] font-semibold text-rose-600">{msg}</div>}
-          <Btn onClick={send} disabled={busy} className="w-full h-11">가입 요청 보내기</Btn>
-        </div>
-      )}
-      <button type="button" onClick={() => signOut(auth)} className="mt-4 w-full text-[12.5px] font-semibold text-[#7A8AA8] hover:text-navy">다른 계정으로 로그인</button>
-    </AuthFrame>
   );
 }

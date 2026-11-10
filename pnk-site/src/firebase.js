@@ -73,3 +73,9 @@ export const db = createDb();
 // 자료실 파일 — Storage pnk/files/ 경로(규칙: storage.rules)
 export const storage = getStorage(app);
 if (USE_EMU) { try { connectStorageEmulator(storage, "127.0.0.1", EMU_ST); } catch { /* 무시 */ } }
+
+// 서버 함수(호출형) — 사내메일 외부 연결 설정(pnkMailAdmin)
+import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/functions";
+export const functions = getFunctions(app, "us-central1");
+if (USE_EMU) { try { connectFunctionsEmulator(functions, "127.0.0.1", Number(import.meta.env.VITE_EMU_FN_PORT || 5001)); } catch { /* 무시 */ } }
+export const callFn = (name) => httpsCallable(functions, name);
