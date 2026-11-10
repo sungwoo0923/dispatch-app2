@@ -33,7 +33,7 @@ service firebase.storage {
       }
       function pnkStaffS() {
         return request.auth != null && (pnkTmS() ? pnkMfaS()
-          : (firestore.exists(/databases/(default)/documents/pnkMembers/$(request.auth.uid)) && pnkMem().get('status', '') == 'active' && pnkMem().get('empNo', '') != ''));
+          : (!firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) && firestore.exists(/databases/(default)/documents/pnkMembers/$(request.auth.uid)) && pnkMem().get('status', '') == 'active' && pnkMem().get('empNo', '') != ''));
       }
       function pnkAdminS() { return pnkStaffS() && (pnkTmS() || pnkMem().get('role', '') in ['owner', 'admin']); }
       function pnkFileDoc() { return firestore.get(/databases/(default)/documents/pnkFiles/$(fileId)).data; }
@@ -47,7 +47,8 @@ service firebase.storage {
     //  보기: 그 메일을 보낸 사람 · 받은 사람. 올리기: 구성원(메일 문서보다 먼저 올리므로 문서 확인 없이, 20MB 미만). 받은 메일 첨부는 서버가 저장
     match /pnk/mail/{mailId}/{file} {
       function pnkActiveM() {
-        return request.auth != null && firestore.exists(/databases/(default)/documents/pnkMembers/$(request.auth.uid))
+        return request.auth != null && !firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+          && firestore.exists(/databases/(default)/documents/pnkMembers/$(request.auth.uid))
           && firestore.get(/databases/(default)/documents/pnkMembers/$(request.auth.uid)).data.get('status', '') == 'active'
           && firestore.get(/databases/(default)/documents/pnkMembers/$(request.auth.uid)).data.get('empNo', '') != '';
       }

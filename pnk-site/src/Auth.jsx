@@ -1,16 +1,17 @@
 // ======================= pnk-site/src/Auth.jsx =======================
 // PnK PROJECT 인트라넷 — 로그인 · 회원가입(약관 동의) · 가입 요청 · 승인/사번 대기 · 2차 인증(최고관리자 · 부관리자)
-//  · 로그인: 사번(PNK-0001) 또는 이메일 + 비밀번호 · [아이디 저장](이 기기 기억) · [자동 로그인](끄면 브라우저를 닫을 때 로그아웃)
+//  · 로그인: 사번(PNK-0001) + 이메일 + 비밀번호(셋 다 맞아야) · [사번 · 이메일 저장] · [자동 로그인] · 사번 없는 사람은 [가입 신청 상태 확인]만
+//  · 로지스웹 계정(users 문서가 있는 계정)은 들어올 수 없다 — 최고관리자 · 부관리자만 예외(규칙도 같음)
 //  · 회원가입: 약관 동의(필수 2 · 선택 1) → 로그인 계정 만들기 → 가입 요청(승인 대기) → 대표 · 관리자가 승인하며 사번 발급
-//    로지스웹 계정이 이미 있으면 그 계정으로 로그인해 가입 요청만 보내면 된다(계정을 새로 만들지 않음)
 //  · 2차 인증: 최고관리자 · 부관리자는 비밀번호 다음에 8자리 2차 비밀번호(처음 한 번 정함) — 서버 확인(functions/pnkMfa.js)
 import React from "react";
 import {
   browserLocalPersistence, browserSessionPersistence, createUserWithEmailAndPassword, sendPasswordResetEmail,
   setPersistence, signInWithEmailAndPassword, signOut, updateProfile,
 } from "firebase/auth";
-import { auth, callFn } from "./firebase";
-import { emailOfLogin, requestJoin } from "./pnkApi";
+import { auth, callFn, db, sideConn } from "./firebase";
+import { normEmpNo, requestJoin } from "./pnkApi";
+import { doc, getDoc } from "firebase/firestore";
 import { TERMS, TERMS_VERSION } from "./pnkTerms";
 import { DEPT_ORDER, TITLES } from "./pnkConst";
 import { Btn, Field, Input, Modal, Select, cx, errMsg } from "./ui";
@@ -66,10 +67,10 @@ export function Login() {
     <Frame wide={mode === "signup"}>
       <div className="grid grid-cols-2 gap-1 p-1 bg-navy-50 rounded-2xl mb-5">
         {[["login", "로그인"], ["signup", "회원가입"]].map(([k, l]) => (
-          <button key={k} type="button" onClick={() => setMode(k)} className={cx("h-10 rounded-xl text-[14px] font-black transition", mode === k ? "bg-white text-navy shadow" : "text-[#7A8AA8]")}>{l}</button>
+          <button key={k} type="button" onClick={() => setMode(k)} className={cx("h-10 rounded-xl text-[14px] font-black transition", (mode === k || (mode === "status" && k === "login")) ? "bg-white text-navy shadow" : "text-[#7A8AA8]")}>{l}</button>
         ))}
       </div>
-      {mode === "login" ? <LoginForm /> : <SignupForm onDone={() => setMode("login")} showTerm={setTerms} />}
+      {mode === "login" ? <LoginForm onStatus={() => setMode("status")} /> : mode === "status" ? <StatusForm onBack={() => setMode("login")} /> : <SignupForm onDone={() => setMode("login")} showTerm={setTerms} />}
       <div className="mt-5 flex justify-center gap-3 text-[11.5px] text-[#7A8AA8]">
         {TERMS.filter((t) => t.required).map((t) => <button key={t.key} type="button" onClick={() => setTerms(t)} className="hover:text-navy underline-offset-2 hover:underline">{t.key === "service" ? "이용약관" : "개인정보 처리"}</button>)}
       </div>
@@ -78,49 +79,114 @@ export function Login() {
   );
 }
 
-function LoginForm() {
+// 로그인 = 사번 + 이메일 + 비밀번호(셋 다 맞아야). 로지스웹 계정은 들어올 수 없다(인트라넷 회원가입한 직원만 · 최고관리자 · 부관리자 예외)
+const LS2 = { emp: "pnkSavedEmp" };
+// 로그인 확인에 실패해 로그아웃하면 화면이 다시 그려진다 — 그때도 안내가 남게
+let flash = "";
+function LoginForm({ onStatus }) {
   const [saveId, setSaveId] = React.useState(() => lsGet(LS.saveId, "1") === "1");
   const [auto, setAuto] = React.useState(autoLoginOn);
+  const [emp, setEmp] = React.useState(() => (lsGet(LS.saveId, "1") === "1" ? lsGet(LS2.emp) : ""));
   const [id, setId] = React.useState(() => (lsGet(LS.saveId, "1") === "1" ? lsGet(LS.id) : ""));
   const [pw, setPw] = React.useState("");
   const [show, setShow] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
-  const [msg, setMsg] = React.useState("");
-  const pwRef = React.useRef(null);
+  const [msg, setMsg] = React.useState(() => flash); // 다음 로그인 시도 때 지운다(개발 모드에서 두 번 불려도 남게)
   const go = async (e) => {
     e.preventDefault();
-    if (!id.trim() || !pw) { setMsg("사번(이메일)과 비밀번호를 넣어 주세요."); return; }
-    setBusy(true); setMsg("");
+    const no = normEmpNo(emp);
+    if (!no || !id.trim() || !pw) { setMsg("사번 · 이메일 · 비밀번호를 모두 넣어 주세요."); return; }
+    if (!/^PNK-\d{4,6}$/.test(no)) { setMsg("사번은 PNK-0001 형식입니다(숫자만 넣어도 됩니다)."); return; }
+    setBusy(true); setMsg(""); flash = "";
     try {
       await applyPersistence(auto);
-      const email = await emailOfLogin(id);
-      await signInWithEmailAndPassword(auth, email, pw);
+      const cred = await signInWithEmailAndPassword(auth, id.trim(), pw);
+      const chk = await checkMember(cred.user, no);
+      if (!chk.ok) { flash = chk.msg; setMsg(chk.msg); await signOut(auth); setBusy(false); return; }
       lsSet(LS.saveId, saveId ? "1" : "0");
       lsSet(LS.id, saveId ? id.trim() : null);
+      lsSet(LS2.emp, saveId ? no : null);
     } catch (er) { setMsg(authMsg(er)); setBusy(false); }
   };
   const reset = async () => {
-    if (!id.trim()) { setMsg("사번 또는 이메일을 먼저 넣어 주세요."); return; }
-    try { await sendPasswordResetEmail(auth, await emailOfLogin(id)); setMsg("가입한 이메일로 비밀번호 재설정 메일을 보냈습니다."); } catch (er) { setMsg(authMsg(er)); }
+    if (!id.trim()) { setMsg("가입한 이메일을 먼저 넣어 주세요."); return; }
+    try { await sendPasswordResetEmail(auth, id.trim()); setMsg("가입한 이메일로 비밀번호 재설정 메일을 보냈습니다."); } catch (er) { setMsg(authMsg(er)); }
   };
   return (
     <form onSubmit={go} className="space-y-3">
-      <Field label="사번 또는 이메일"><Input autoComplete="username" value={id} onChange={(e) => setId(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !pw) { e.preventDefault(); pwRef.current?.focus(); } }} placeholder="PNK-0001 또는 이메일" autoFocus={!id} className="h-12 text-[15px]" /></Field>
+      <Field label="사번"><Input value={emp} onChange={(e) => setEmp(e.target.value.toUpperCase())} onBlur={() => setEmp((v) => normEmpNo(v))} placeholder="PNK-0001" autoFocus={!emp} className="h-12 text-[15px] tnum font-bold" /></Field>
+      <Field label="이메일"><Input type="email" autoComplete="username" value={id} onChange={(e) => setId(e.target.value)} placeholder="가입한 이메일" className="h-12 text-[15px]" /></Field>
       <Field label="비밀번호">
         <div className="relative">
-          <Input ref={pwRef} type={show ? "text" : "password"} autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} autoFocus={!!id} className="h-12 text-[15px] pr-11" />
+          <Input type={show ? "text" : "password"} autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} autoFocus={!!emp && !!id} className="h-12 text-[15px] pr-11" />
           <button type="button" onClick={() => setShow((v) => !v)} className="absolute right-3 top-3.5 text-[#7A8AA8]" aria-label="비밀번호 보기"><Icon name="eye" size={18} /></button>
         </div>
       </Field>
       <div className="flex items-center gap-4 pt-1">
-        <Check checked={saveId} onChange={setSaveId}>아이디 저장</Check>
+        <Check checked={saveId} onChange={setSaveId}>사번 · 이메일 저장</Check>
         <Check checked={auto} onChange={setAuto}>자동 로그인</Check>
         <button type="button" onClick={reset} className="ml-auto text-[12.5px] font-semibold text-[#7A8AA8] hover:text-navy">비밀번호 찾기</button>
       </div>
       {!auto && <div className="text-[11.5px] text-[#7A8AA8]">자동 로그인을 끄면 브라우저를 닫을 때 로그아웃됩니다(공용 PC 권장).</div>}
       {msg && <div className="text-[12.5px] font-semibold text-rose-600 bg-rose-50 rounded-xl px-3 py-2">{msg}</div>}
       <Btn type="submit" disabled={busy} className="w-full h-12 text-[15px]">{busy ? "로그인 중…" : "로그인"}</Btn>
-      <p className="text-[11.5px] leading-relaxed text-[#7A8AA8] text-center pt-1">로지스웹 계정이 있으면 그 이메일로 바로 로그인해 가입 요청을 보내세요.<br />최고관리자 · 부관리자는 로그인 후 2차 인증(8자리)을 합니다.</p>
+      <div className="flex items-center justify-between pt-1 text-[11.5px] text-[#7A8AA8]">
+        <span>PnK PROJECT 직원 전용 · 로지스웹 계정으로는 들어올 수 없습니다</span>
+        <button type="button" onClick={onStatus} className="font-bold text-navy hover:underline shrink-0 ml-2">사번이 아직 없나요?</button>
+      </div>
+    </form>
+  );
+}
+
+// 로그인한 계정이 이 사번의 인트라넷 직원인지 — 최고관리자 · 부관리자는 처음 들어올 때(사번 자동 발급 전) 통과
+async function checkMember(user, no) {
+  const [m, u] = await Promise.all([
+    getDoc(doc(db, "pnkMembers", user.uid)).catch(() => null),
+    getDoc(doc(db, "users", user.uid)).catch(() => null),
+  ]);
+  const tm = String(user.email || "").toLowerCase() === "tjddnqkf@naver.com" || (u?.exists() && u.data().role === "totalMaster");
+  const md = m?.exists() ? m.data() : null;
+  if (tm) return !md?.empNo || md.empNo === no ? { ok: true } : { ok: false, msg: "사번이 맞지 않습니다." };
+  if (u?.exists()) return { ok: false, msg: "로지스웹 계정으로는 사내 인트라넷에 들어올 수 없습니다. [회원가입]에서 직원으로 가입해 주세요." };
+  if (!md) return { ok: false, msg: "인트라넷 회원이 아닙니다. [회원가입]에서 직원으로 가입해 주세요." };
+  if (!md.empNo) return { ok: false, msg: "아직 사번이 없습니다(승인 대기). 아래 [사번이 아직 없나요?]에서 가입 신청 상태를 볼 수 있습니다." };
+  if (md.empNo !== no) return { ok: false, msg: "사번 · 이메일 · 비밀번호가 맞지 않습니다." };
+  if (md.status === "off") return { ok: false, msg: "사용이 중지된 계정입니다. 관리자에게 문의해 주세요." };
+  return { ok: true };
+}
+
+// 사번이 아직 없는 사람 — 이메일 · 비밀번호로 가입 신청 상태만 본다(들어가지는 못함)
+function StatusForm({ onBack }) {
+  const [id, setId] = React.useState("");
+  const [pw, setPw] = React.useState("");
+  const [res, setRes] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const go = async (e) => {
+    e.preventDefault(); setBusy(true); setRes(null);
+    try {
+      const sc = sideConn(); // 본 로그인과 따로(확인만 하고 바로 로그아웃)
+      const cred = await signInWithEmailAndPassword(sc.auth, id.trim(), pw);
+      const m = await getDoc(doc(sc.db, "pnkMembers", cred.user.uid)).catch(() => null);
+      const u = await getDoc(doc(sc.db, "users", cred.user.uid)).catch(() => null);
+      const d = m?.exists() ? m.data() : null;
+      await signOut(sc.auth);
+      setRes(u?.exists() && !d ? { tone: "red", t: "로지스웹 계정입니다", d: "사내 인트라넷은 [회원가입]으로 가입한 직원만 들어올 수 있습니다." }
+        : !d ? { tone: "red", t: "가입 신청이 없습니다", d: "[회원가입]에서 직원으로 가입해 주세요." }
+          : d.empNo ? { tone: "green", t: `승인되었습니다 — 사번 ${d.empNo}`, d: "로그인에서 사번 · 이메일 · 비밀번호를 넣어 들어오세요." }
+            : d.status === "off" ? { tone: "red", t: "사용이 중지된 계정입니다", d: "관리자에게 문의해 주세요." }
+              : { tone: "navy", t: "승인 대기 중입니다", d: `${d.name || ""}님의 가입 신청을 대표 · 관리자가 확인하고 있습니다. 승인되면 사번이 발급됩니다.` });
+    } catch (er) { setRes({ tone: "red", t: "확인하지 못했습니다", d: authMsg(er) }); }
+    setBusy(false);
+  };
+  return (
+    <form onSubmit={go} className="space-y-3">
+      <div className="text-[15px] font-black text-navy-950">가입 신청 상태 확인</div>
+      <p className="text-[12.5px] text-[#5A6A86]">회원가입 때 넣은 이메일 · 비밀번호를 넣으세요. 승인되면 사번이 보입니다.</p>
+      <Field label="이메일"><Input type="email" value={id} onChange={(e) => setId(e.target.value)} /></Field>
+      <Field label="비밀번호"><Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} /></Field>
+      {res && <div className={cx("rounded-xl px-3 py-2.5", res.tone === "green" ? "bg-emerald-50 text-emerald-800" : res.tone === "red" ? "bg-rose-50 text-rose-700" : "bg-navy-50 text-navy")}><div className="text-[13.5px] font-black">{res.t}</div><div className="text-[12.5px] mt-0.5">{res.d}</div></div>}
+      <Btn type="submit" disabled={busy} className="w-full h-11">{busy ? "확인 중…" : "확인"}</Btn>
+      <button type="button" onClick={onBack} className="w-full text-[12.5px] font-semibold text-[#7A8AA8] hover:text-navy">← 로그인으로</button>
     </form>
   );
 }
@@ -175,7 +241,7 @@ function SignupForm({ onDone, showTerm }) {
       </div>
       {msg && <div className="text-[12.5px] font-semibold text-rose-600 bg-rose-50 rounded-xl px-3 py-2">{msg}</div>}
       <Btn onClick={go} disabled={busy} className="w-full h-12 text-[15px]">{busy ? "가입 중…" : "가입 신청"}</Btn>
-      <p className="text-[11.5px] leading-relaxed text-[#7A8AA8] text-center">가입 신청 → 대표 · 관리자 승인 → 사번 발급 후 이용할 수 있습니다.<br />로지스웹 계정이 이미 있으면 <button type="button" onClick={onDone} className="text-navy font-bold underline">로그인</button>에서 그 계정으로 들어가 주세요.</p>
+      <p className="text-[11.5px] leading-relaxed text-[#7A8AA8] text-center">가입 신청 → 대표 · 관리자 승인 → 사번 발급 후 <button type="button" onClick={onDone} className="text-navy font-bold underline">로그인</button>(사번 · 이메일 · 비밀번호)합니다.<br />PnK PROJECT 직원 전용입니다. 로지스웹에서 쓰는 이메일은 쓸 수 없으니 다른 이메일로 가입해 주세요.</p>
     </div>
   );
 }
@@ -205,6 +271,7 @@ export function JoinGate({ me }) {
       {me.needEmpNo ? <Status icon="idcard" title="사번 발급 대기 중입니다">승인은 되었지만 아직 사번이 없습니다.<br />대표 · 관리자가 사번을 주면 바로 들어갈 수 있습니다.</Status>
         : st === "pending" ? <Status icon="hourglass" title="가입 신청이 접수되었습니다">대표 · 관리자가 승인하면서 사번을 드립니다.<br />승인되면 사번으로도 로그인할 수 있습니다.<br /><span className="text-[#7A8AA8]">{me.user.email}</span></Status>
           : st === "off" ? <Status icon="shield" title="사용이 중지된 계정입니다">관리자에게 문의해 주세요.</Status>
+            : me.logisweb ? <Status icon="shield" title="로지스웹 계정으로는 들어올 수 없습니다">사내 인트라넷은 PnK PROJECT 직원 전용입니다.<br />로그아웃한 뒤 [회원가입]에서 직원으로 가입해 주세요.</Status>
             : (
               <div className="space-y-3">
                 <div className="text-[15px] font-black text-navy-950">PnK PROJECT 구성원 가입 요청</div>

@@ -2363,13 +2363,17 @@ service cloud.firestore {
     function pnkTM() {
       return pnkIsTM() && pnkMfaOk();
     }
+    // 로지스웹 계정(users 문서가 있음) — 사내 인트라넷은 인트라넷 회원가입한 직원만(최고관리자 · 부관리자 예외)
+    function pnkLogisweb() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
     function pnkStaff() {
       return isSignedIn() && (pnkIsTM() ? pnkMfaOk()
-        : (exists(pnkDoc()) && get(pnkDoc()).data.get('status', '') == 'active' && get(pnkDoc()).data.get('empNo', '') != ''));
+        : (!pnkLogisweb() && exists(pnkDoc()) && get(pnkDoc()).data.get('status', '') == 'active' && get(pnkDoc()).data.get('empNo', '') != ''));
     }
     function pnkAdmin() {
       return isSignedIn() && (pnkIsTM() ? pnkMfaOk()
-        : (exists(pnkDoc()) && get(pnkDoc()).data.get('status', '') == 'active' && get(pnkDoc()).data.get('empNo', '') != ''
+        : (!pnkLogisweb() && exists(pnkDoc()) && get(pnkDoc()).data.get('status', '') == 'active' && get(pnkDoc()).data.get('empNo', '') != ''
           && get(pnkDoc()).data.get('role', '') in ['owner', 'admin']));
     }
     function pnkOnly(keys) {
@@ -2380,7 +2384,7 @@ service cloud.firestore {
       allow read: if isSignedIn() && (request.auth.uid == uid || pnkStaff());
       allow create: if isSignedIn() && (
         (request.auth.uid == uid && request.resource.data.uid == uid && request.resource.data.status == 'pending' && request.resource.data.role == 'staff'
-          && request.resource.data.get('mailId', '') == '' && request.resource.data.get('empNo', '') == '')
+          && request.resource.data.get('mailId', '') == '' && request.resource.data.get('empNo', '') == '' && !pnkLogisweb())
         || (request.auth.uid == uid && pnkTM())
         || (pnkAdmin() && request.resource.data.get('role', '') != 'owner'));
       allow update: if isSignedIn() && (
@@ -2464,11 +2468,10 @@ service cloud.firestore {
     match /pnkUiHistory/{id} {
       allow read, write: if isSignedIn() && pnkTM();
     }
-    // 🏢 PnK 인트라넷 — 사번 색인(사번 → 로그인 이메일). 로그인 화면이 사번으로 이메일을 찾는다(문서 하나 읽기만, 목록은 구성원만)
-    //  같은 사번은 두 번 못 만든다(이미 있으면 create 가 아니라 update 라 막힘)
+    // 🏢 PnK 인트라넷 — 사번 색인(사번 → uid). 같은 사번은 두 번 못 만든다(이미 있으면 create 가 아니라 update 라 막힘)
+    //  로그인은 사번 + 이메일 + 비밀번호 — 로그인한 뒤 본인 구성원 문서의 사번과 맞춰 본다(로그인 전에는 아무것도 못 읽음)
     match /pnkEmpIndex/{empNo} {
-      allow get: if true;
-      allow list: if pnkStaff();
+      allow read: if pnkStaff();
       allow create: if isSignedIn() && (pnkAdmin() || (pnkTM() && request.resource.data.uid == request.auth.uid));
       allow delete: if pnkAdmin();
     }

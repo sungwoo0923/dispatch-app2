@@ -79,3 +79,19 @@ import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/
 export const functions = getFunctions(app, "us-central1");
 if (USE_EMU) { try { connectFunctionsEmulator(functions, "127.0.0.1", Number(import.meta.env.VITE_EMU_FN_PORT || 5001)); } catch { /* 무시 */ } }
 export const callFn = (name) => httpsCallable(functions, name);
+
+// 가입 신청 상태 확인 전용 — 본 로그인(auth)에 영향을 주지 않는 두 번째 연결(확인하고 바로 로그아웃)
+import { initializeApp as initApp2, getApps as getApps2 } from "firebase/app";
+import { getAuth as getAuth2, connectAuthEmulator as connectAuthEmu2, inMemoryPersistence, setPersistence as setPersistence2 } from "firebase/auth";
+import { getFirestore as getFs2, connectFirestoreEmulator as connectFsEmu2 } from "firebase/firestore";
+let side = null;
+export function sideConn() {
+  if (side) return side;
+  const a = getApps2().find((x) => x.name === "pnk-status") || initApp2(firebaseConfig, "pnk-status");
+  const sAuth = getAuth2(a);
+  setPersistence2(sAuth, inMemoryPersistence).catch(() => {});
+  const sDb = getFs2(a);
+  if (USE_EMU) { try { connectAuthEmu2(sAuth, `http://127.0.0.1:${EMU_AUTH}`, { disableWarnings: true }); connectFsEmu2(sDb, "127.0.0.1", EMU_FS); } catch { /* 무시 */ } }
+  side = { auth: sAuth, db: sDb };
+  return side;
+}

@@ -177,15 +177,6 @@ export async function assignEmpNo(member, empNo) {
   if (member.empNo && member.empNo !== no) await deleteDoc(doc(db, "pnkEmpIndex", member.empNo)).catch(() => {});
   return no;
 }
-// 로그인 칸에 사번을 넣으면 이메일로 바꾼다
-export async function emailOfLogin(v) {
-  const t = String(v || "").trim();
-  if (t.includes("@")) return t;
-  const s = await getDoc(doc(db, "pnkEmpIndex", normEmpNo(t)));
-  if (!s.exists()) throw Object.assign(new Error("등록되지 않은 사번입니다"), { code: "pnk/no-empno" });
-  return s.data().email;
-}
-
 // ───────────────────────── 로그인 · 내 구성원 정보 ─────────────────────────
 // 반환: { loading, stage(0~4, 로딩 화면 단계), user, member, owner, isOwner, isAdmin, active, needEmpNo }
 //  · 대표(최고관리자) · 부관리자는 처음 들어오면 구성원 문서 + 사번이 자동으로 생긴다
@@ -203,9 +194,9 @@ export function useMe() {
       setSt((p) => ({ ...p, loading: true, stage: 1, user, mfa: null }));
       let owner = OWNER_EMAILS.includes(String(user.email || "").toLowerCase());
       let sub = false;
-      if (!owner) {
-        try { const u = await getDoc(doc(db, "users", user.uid)); const d = u.exists() ? u.data() : {}; if (d.role === "totalMaster") { owner = true; sub = d.subAdmin === true; } } catch { /* 권한 없음 = 대표 아님 */ }
-      }
+      let logisweb = false; // 로지스웹 계정(users 문서 있음) — 최고관리자 · 부관리자가 아니면 인트라넷에 못 들어온다
+      try { const u = await getDoc(doc(db, "users", user.uid)); const d = u.exists() ? u.data() : {}; logisweb = u.exists(); if (d.role === "totalMaster") { owner = true; sub = d.subAdmin === true; } } catch { /* 권한 없음 */ }
+      if (owner) logisweb = false;
       setSt((p) => ({ ...p, stage: 2 }));
       const startMember = () => {
         const ref = doc(db, "pnkMembers", user.uid);
@@ -225,8 +216,8 @@ export function useMe() {
             } catch (e) { console.warn("[PnK] 자동 등록 실패", e); setSt({ loading: false, stage: 4, user, owner, sub, member: s.exists() ? { id: s.id, ...s.data() } : null }); }
             return;
           }
-          setSt({ loading: false, stage: 4, user, owner, sub, mfa: owner ? "ok" : null, member: s.exists() ? { id: s.id, ...s.data() } : null });
-        }, () => setSt({ loading: false, stage: 4, user, owner, sub, member: null }));
+          setSt({ loading: false, stage: 4, user, owner, sub, logisweb, mfa: owner ? "ok" : null, member: s.exists() ? { id: s.id, ...s.data() } : null });
+        }, () => setSt({ loading: false, stage: 4, user, owner, sub, logisweb, member: null }));
       };
       // 🔐 최고관리자 · 부관리자 — 2차 인증(8자리)을 마쳐야 인트라넷 데이터를 연다(규칙도 같은 기준 — functions/pnkMfa.js)
       if (owner) {
@@ -248,7 +239,7 @@ export function useMe() {
   const passMfa = React.useCallback(() => { setSt((p) => ({ ...p, loading: true, mfa: "ok", stage: 3 })); resume.current?.(); }, []);
   const m = st.member;
   const hasNo = !!m?.empNo;
-  const active = st.mfa !== "need" && m?.status === "active" && hasNo;
+  const active = st.mfa !== "need" && !st.logisweb && m?.status === "active" && hasNo;
   const isAdmin = active && (!!st.owner || m?.role === "owner" || m?.role === "admin");
   return { ...st, passMfa, needMfa: st.mfa === "need", active, isAdmin, isOwner: active && (!!st.owner || m?.role === "owner"), needEmpNo: m?.status === "active" && !hasNo };
 }
