@@ -57,6 +57,8 @@ export const SWITCH_ROLES = {
   hrAcct: { storage: "kpHrAcctView", views: [["acct", "test", "경리"], ["hr", "hrManager", "인사"]] },
   // 💼 2026-11-10 통합관리자 — 영업 화면 추가(운송 · 영업 · 경리 · 인사)
   allMgr: { storage: "kpAllMgrView", views: [["dispatch", "admin", "운송"], ["sales", "salesMgr", "영업"], ["acct", "test", "경리"], ["hr", "hrManager", "인사"]] },
+  // 👑 2026-11-10 최고관리자도 통합으로 — 운송 화면은 지금까지와 똑같이 최고관리자 화면 그대로(관리센터 등), 영업·경리·인사는 그 팀 화면
+  totalMaster: { storage: "kpMasterView", views: [["dispatch", "totalMaster", "운송"], ["sales", "salesMgr", "영업"], ["acct", "test", "경리"], ["hr", "hrManager", "인사"]] },
 };
 // 부서 화면을 쓰는 사무원 — 그 부서 화면(경리관리자·인사관리자 화면)으로 동작하되 메뉴는 이 역할 설정을 따른다
 export const BASED_ROLES = { acctStaff: "test", hrStaff: "hrManager", salesStaff: "salesMgr" }; // 💼 영업사무원 → 영업 화면

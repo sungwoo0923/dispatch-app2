@@ -169,7 +169,7 @@ function PreviewApp() {
   const co = (qs.get("co") || "").trim() || "우리 회사";
   const plan = PREVIEW_PLAN_NAME[qs.get("plan")] ? qs.get("plan") : "standard";
   // 개발 중에만 — 부서 화면(경리 test · 인사 hrManager) 미리보기
-  const pvRole = import.meta.env.DEV && ["test", "hrManager", "hrAcct", "allMgr", "acctStaff", "hrStaff", "salesMgr", "salesStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "user", "viewer"].includes(qs.get("role")) ? qs.get("role") : "admin";
+  const pvRole = import.meta.env.DEV && ["totalMaster", "test", "hrManager", "hrAcct", "allMgr", "acctStaff", "hrStaff", "salesMgr", "salesStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "user", "viewer"].includes(qs.get("role")) ? qs.get("role") : "admin";
   const pvExec = import.meta.env.DEV && qs.get("role") === "exec";
   setPreviewMode(true); setPreviewPlan(plan); setTenant(co);
   try { window.__kpPreviewDemo = true; } catch { /* 무시 */ } // ⭐ 2026-11-06 모바일 미리보기 iframe이 진짜 로그인 계정을 받아가지 않게
