@@ -34,7 +34,7 @@ export const HISTORY_KEEP = 20;
 const STORAGE_BUCKET = "dispatch-app-9b92f.firebasestorage.app";
 
 // ───────────────────────── 역할 · 기기 · 화면 ─────────────────────────
-export const ROLE_GROUPS = [["admin", "관리자"], ["staff", "직원"], ["acct", "경리"], ["hr", "인사"], ["exec", "임원"], ["driver", "기사"], ["shipper", "화주"]];
+export const ROLE_GROUPS = [["admin", "관리자"], ["staff", "직원"], ["acct", "경리"], ["hr", "인사"], ["sales", "영업"], ["exec", "임원"], ["driver", "기사"], ["shipper", "화주"]];
 const ROLE_KEYS = new Set(ROLE_GROUPS.map(([k]) => k));
 const ctx = { role: null, email: "", dept: null, screen: "" };
 let previewAs = null; // { role: "acct" | null, dev: "pc" | "m" | null } — 미리보기 모드(보이기 규칙만 그 사람처럼)
@@ -46,12 +46,14 @@ export function roleGroupsOf(role, dept) {
   else if (r === "test" || r === "acctStaff") out.add("acct");
   else if (r === "hrManager" || r === "hrStaff") out.add("hr");
   else if (r === "hrAcct") { out.add("hr"); out.add("acct"); }
+  else if (r === "salesMgr" || r === "salesStaff") out.add("sales"); // 💼 2026-11-10 영업팀
   else if (r === "exec") out.add("exec");
   else if (r === "driver") out.add("driver");
   else if (r === "shipper") out.add("shipper");
   else if (r && r !== "totalMaster") out.add("staff");
   if (dept === "acct") out.add("acct");
   if (dept === "hr") out.add("hr");
+  if (dept === "sales") out.add("sales");
   if (dept === "exec") out.add("exec");
   return out;
 }

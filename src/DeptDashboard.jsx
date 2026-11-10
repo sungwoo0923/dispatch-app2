@@ -837,9 +837,14 @@ function HrDashboard({ company, onGo, me, att }) {
 export default function DeptDashboard({ mode, company, dispatchData, onGo, pastCache, liveStart, me, att = null }) {
   if (mode === "exec") return <ExecDashboard company={company} dispatchData={dispatchData} onGo={onGo} pastCache={pastCache} liveStart={liveStart} me={me} att={att} />;
   if (mode === "acct") return <AcctDashboard company={company} dispatchData={dispatchData} onGo={onGo} me={me} att={att} />;
+  // 💼 2026-11-10 영업팀 — 영업 대시보드(처음 열 때 받는다)
+  if (mode === "sales") return <React.Suspense fallback={<Deck><Muted t="영업 현황을 불러오는 중…" h={320} /></Deck>}><SalesDashboard company={company} dispatchData={dispatchData} onGo={onGo} me={me} att={att} /></React.Suspense>;
   return <HrDashboard company={company} onGo={onGo} me={me} att={att} />;
 }
+const SalesDashboard = React.lazy(() => import("./SalesDashboard"));
+// 💼 2026-11-10 영업 대시보드(SalesDashboard.jsx)가 같은 데크 부품을 쓴다
+export { Deck, DeckHead, KTile, DPanel, Muted, SubHead, Line2, TodoPanel, Donut, Legend, HBar, DarkTip, DBadge, WARN };
 // 경리(경리/회계 권한) · 인사(인사관리자) — 커스텀 권한은 제외
 // ⚠ 관리자메뉴 › 권한 설정에서 내장 권한(경리·인사관리자)을 편집하면 customRoles에 같은 키(test·hrManager)로 저장된다 —
 //   그건 "커스텀 권한"이 아니라 내장 권한이므로 부서 화면은 그대로 켠다(예전엔 이 때문에 PC에서 배차 화면이 떴다).
-export const deptModeOf = (role) => (role === "test" ? "acct" : role === "hrManager" ? "hr" : null);
+export const deptModeOf = (role) => (role === "test" ? "acct" : role === "hrManager" ? "hr" : role === "salesMgr" ? "sales" : null); // 💼 2026-11-10 영업관리자(salesMgr) → 영업 화면

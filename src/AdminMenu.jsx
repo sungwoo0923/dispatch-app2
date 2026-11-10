@@ -278,7 +278,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     || (isCompanyMaster && !u.isMaster && u.id !== me?.uid && u.employmentStatus !== "퇴사" && !["driver", "shipper", "totalMaster"].includes(u.role) && (u.companyName || DEFAULT_COMPANY) === effectiveCompany));
   // team — 고른 부서에 맞는 역할만(지금 역할 cur는 늘 남김)
   function assignableRoles(cur, team) {
-    const base0 = canAdmin ? ROLES : isHrMgr ? ROLES.filter((r) => r !== "totalMaster") : myRoleEff === "admin" ? ["admin", "user", "test", "acctStaff", "hrManager", "hrStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer"] : ["user", "test", "acctStaff", "hrStaff", "viewer"];
+    const base0 = canAdmin ? ROLES : isHrMgr ? ROLES.filter((r) => r !== "totalMaster") : myRoleEff === "admin" ? ["admin", "user", "test", "acctStaff", "hrManager", "hrStaff", "salesMgr", "salesStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer"] : ["user", "test", "acctStaff", "hrStaff", "salesStaff", "viewer"];
     const all0 = base0.filter((k) => k === "totalMaster" || k === "driver" || k === "shipper" || ROLES.includes(k));
     // ⭐ 2026-11-05 회사 마스터는 부서와 상관없이 전체 권한(부서에 맞는 권한을 앞에)
     const base = isCompanyMaster ? (() => { const fit = byTeam(all0, team); return [...fit, ...all0.filter((k) => !fit.includes(k))]; })() : byTeam(all0, team);
@@ -388,7 +388,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     );
   }, [users, isTotalMaster, effectiveCompany, shipperLinkCompanies, tenantNow]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const ROLE_ORDER = ["totalMaster", "allMgr", "hrAcct", "admin", "user", "test", "acctStaff", "hrManager", "hrStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer", "driver", "shipper"];
+  const ROLE_ORDER = ["totalMaster", "allMgr", "hrAcct", "admin", "user", "test", "acctStaff", "hrManager", "hrStaff", "salesMgr", "salesStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer", "driver", "shipper"];
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return visibleUsers

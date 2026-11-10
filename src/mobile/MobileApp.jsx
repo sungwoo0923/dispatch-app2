@@ -13,7 +13,8 @@ import { AttendanceQuickButton, officeRadii, CheckoutReminderHost } from "../att
 import { PersonalTodayHost } from "../PersonalSchedule";
 import { makeClientMatcher } from "../clientMatch"; // ⭐ 2026-11-03 거래처 검색
 import { useCompanyBiz, BizPicker, bizColorOf, bizOf, BizSelect, resolveBiz, rememberBizFor, normBizKey } from "../companyBiz"; // ⭐ 2026-11-03 여러 사업자
-import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus } from "../customRoles";
+import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus, ROLE_LABELS as ROLE_LABELS_SW } from "../customRoles";
+import { ViewPickerDialog } from "../ViewSwitcher"; // 🔀 2026-11-10 화면 전환 창(PC와 같은 것)
 import { usePayrollAccess } from "../payrollAccess"; // ⭐ 2026-11-06 직원 급여·연차 촉진
 import { useReadOnlyGuard } from "../readOnlyGuard";
 import { useDriverEditChoice, DriverEditButton, SamePlateChips, pickDriverFor, isRegisteredCombo, saveDriverChoice } from "../DriverEditChoice"; // ⭐ 2026-11-05 매칭된 기사 이름·전화 [수정]
@@ -2203,13 +2204,13 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const customRoleM = findCustomRole(customRolesM, role);
   const isExecM = forceExec || roleScreen(customRoleM) === "exec";
   // 운송사별 권한 설정으로 켠 부서 메뉴(예: A운송사 관리자 → 인사관리부)
-  const DEPT_PAGE_MENU = { "dept:hr": "인사관리부", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:assets": "비품관리", "dept:cert": "증명서발급", "dept:schedule": "직원일정", "dept:leave": "인사관리부" };
+  const DEPT_PAGE_MENU = { "dept:hr": "인사관리부", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:assets": "비품관리", "dept:cert": "증명서발급", "dept:schedule": "직원일정", "dept:leave": "인사관리부", "dept:sales": "영업관리" };
   const deptOkM = (m) => !!customRoleM && getMenuAccess(customRolesM, role, m) !== "hidden";
   const menuOkM = React.useCallback((m) => !customRoleM || getMenuAccess(customRolesM, role, m) !== "hidden", [customRoleM, customRolesM, role]);
   // 🔒 2026-11-01 조회만 허락된 화면에서 수정·저장·삭제를 누르면 바로 "권한 없음"
-  const PAGE_MENU_M = { drivers: "기사관리", clients: "거래처관리", list: "배차현황", detail: "배차현황", canceled: "배차현황", form: "배차관리", unassigned: "배차관리", fleet: "지입차관리", sales: "매출관리", ratecard: "단가표", fare: "운임조회", intel: "인사이트", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:funds": "자금관리", "dept:assets": "비품관리", "dept:hr": "인사관리부", "dept:cert": "증명서발급", "dept:driverdocs": "기사관리" }; // ⭐ 2026-11-03 가입 승인(staff)은 기사관리 조회권한과 별개 — PC처럼 관리자·경리·인사는 승인·거절 가능
+  const PAGE_MENU_M = { drivers: "기사관리", clients: "거래처관리", list: "배차현황", detail: "배차현황", canceled: "배차현황", form: "배차관리", unassigned: "배차관리", fleet: "지입차관리", sales: "매출관리", ratecard: "단가표", fare: "운임조회", intel: "인사이트", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:funds": "자금관리", "dept:assets": "비품관리", "dept:hr": "인사관리부", "dept:cert": "증명서발급", "dept:driverdocs": "기사관리", "dept:sales": "영업관리" }; // ⭐ 2026-11-03 가입 승인(staff)은 기사관리 조회권한과 별개 — PC처럼 관리자·경리·인사는 승인·거절 가능
   const [execFull, setExecFull] = useState(() => { try { return localStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
-  const deptMode = role === "test" ? "acct" : role === "hrManager" ? "hr" : isExecM && !execFull ? "exec" : null;
+  const deptMode = role === "test" ? "acct" : role === "hrManager" ? "hr" : role === "salesMgr" ? "sales" : isExecM && !execFull ? "exec" : null; // 💼 2026-11-10 영업관리자(영업사무원 포함) → 영업 화면
   // 📊 2026-11-06 일일 경영 보고 — 기존 임원 판정(isExecM) 그대로(src/dailyReport.js canSeeBriefing)
   const briefCompanyM = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
   const canBriefingM = canSeeBriefing({ isExec: isExecM });
@@ -2220,6 +2221,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   useReadOnlyGuard((!!pageMenuM && (role === "viewer" || (!!customRoleM && getMenuAccess(customRolesM, role, pageMenuM) === "read"))) || (role === "viewer" && ["staff", "drvacc", "fixedroute"].includes(page)));
   // 경리는 메뉴의 [배차현황]으로만 오더 목록(등록내역)을 볼 수 있다 — 그 밖에 목록으로 돌아오면 부서 홈으로
   const deptListOkRef = useRef(false);
+  const [viewPick, setViewPick] = useState(false); // 🔀 2026-11-10 화면 전환 창
   // ⭐ 2026-11-07 급여명세서 · 연차 사용 계획은 내정보 안 탭으로 — 예전 주소(dept:payslip · dept:leaveplan)는 내정보로 돌린다
   useEffect(() => {
     if (page !== "dept:payslip" && page !== "dept:leaveplan") return;
@@ -2228,7 +2230,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   }, [page]);
   useEffect(() => {
     if (!["list", "detail", "form"].includes(page)) deptListOkRef.current = false;
-    if (deptMode && page === "list" && !(deptMode === "acct" && deptListOkRef.current)) setPage("dept");
+    if (deptMode && page === "list" && !((deptMode === "acct" || deptMode === "sales") && deptListOkRef.current)) setPage("dept"); // 💼 영업도 메뉴의 [배차현황]으로 오더 목록 조회
     if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:settle" && page !== "dept:driverdocs" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:board" && page !== "dept:farerules" && page !== "dept:myresume" && !["dept:payslip", "dept:leaveplan", "dept:payroll", "dept:leavepromo"].includes(page) && !(page === "dept:briefing" && canBriefingM) /* ⭐ 2026-11-06 급여·연차 촉진(화면이 권한 확인) */ && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
   }, [deptMode, page]);
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setPage(v ? "list" : "dept"); };
@@ -5506,8 +5508,8 @@ const title =
   : page === "clients" ? "거래처관리"
   : page === "fixedroute" ? "고정노선현황"
   : page === "perms" ? "권한 관리"
-  : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "hr" ? "인사관리" : "경리·회계")
-  : String(page).startsWith("dept:") ? ({ "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서", "dept:payroll": "급여 계산", "dept:payslip": "급여명세서", "dept:leaveplan": "연차 사용 계획", "dept:leavepromo": "연차 관리", "dept:briefing": "일일 경영 보고" , "dept:analysis": "경영 분석", "dept:apqueue": "결재 대기", "dept:staffinfo": "직원 정보"}[page] || "")
+  : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "hr" ? "인사관리" : deptMode === "sales" ? "영업" : "경리·회계")
+  : String(page).startsWith("dept:") ? ({ "dept:sales": "영업관리", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서", "dept:payroll": "급여 계산", "dept:payslip": "급여명세서", "dept:leaveplan": "연차 사용 계획", "dept:leavepromo": "연차 관리", "dept:briefing": "일일 경영 보고" , "dept:analysis": "경영 분석", "dept:apqueue": "결재 대기", "dept:staffinfo": "직원 정보"}[page] || "")
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
   : page === "canceled" ? "취소내역"
@@ -6142,7 +6144,7 @@ onGoAttendance={() => {
           deptOk={deptOkM}
           roleViews={roleView.views}
           roleViewCur={roleView.view}
-          onRoleView={(v) => { roleView.setView(v); setPage(v === "dispatch" ? "list" : "dept"); setShowMenu(false); }}
+          onRoleView={(v) => { setShowMenu(false); setViewPick(true); void v; }}
           isCeo={forceExec || ["대표", "대표이사", "사장"].includes(String(myProfM?.position || "").trim())}
           canBriefing={canBriefingM}
           execFull={execFull}
@@ -6945,10 +6947,14 @@ setOpenMemo={setOpenMemo}
           />
           </div>
         )}
+{viewPick && roleView.views && (
+  <ViewPickerDialog views={roleView.views} current={roleView.view} roleLabel={ROLE_LABELS_SW[realRole] || ""} onClose={() => setViewPick(false)}
+    onPick={(v) => { setViewPick(false); if (v === roleView.view) return; roleView.setView(v); setPage(v === "dispatch" ? "list" : "dept"); }} />
+)}
 {(page === "dept" || String(page).startsWith("dept:")) && (
   <React.Suspense fallback={null}>
     <MobilePcView key={page} kind={page} deptMode={deptMode} dispatchData={allOrders} drivers={drivers} fixedRows={fixedClientRows} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe} loadRange={loadRange} loadFullHistory={loadFullHistory}
-      onGo={(k) => { const [m0, id] = String(k).split(":"); if (k === "배차현황") deptListOkRef.current = true; if (m0 === "결재함" && id) { try { sessionStorage.setItem("kpExecApOpen", id); } catch { /* 무시 */ } } setPage({ 결재함: "approval", 직원일정: "dept:schedule", 자금현황: "dept:funds", 스케줄: "dept:execsched", 실시간배차현황: "unassigned", 인사이트: "intel", 정산관리: "dept:settle", "정산관리:지급관리": "dept:settle", 회계관리: "dept:acct", 매출관리: "sales", 인사관리부: "dept:hr", 출근기록부: "attendance", 연차관리: "dept:leave", 입퇴사관리: "dept:onboarding", 증명서발급: "dept:cert", 수입지출: "dept:cashbook", 비품관리: "dept:assets", 전자결재: "approval", 배차현황: "list", 관리자메뉴: "staff", 직원관리: "staff", 기사서류: "dept:driverdocs", 기사관리: "dept:driverdocs", 자금관리: "dept:cashbook", "자금관리:book": "dept:cashbook", "인사관리부:leave": "dept:leave", 기사승인: "drvacc" /* ⭐ 2026-11-05 기사 가입 승인 → 기사 앱 계정 */ }[m0 === "결재함" ? "결재함" : k] || "dept"); /* ⭐ 2026-11-02 점검 — 경리·인사 홈 바로가기 키(자금관리·연차·기사승인) 추가 */ }} />
+      onGo={(k) => { const [m0, id] = String(k).split(":"); if (k === "배차현황") deptListOkRef.current = true; if (m0 === "결재함" && id) { try { sessionStorage.setItem("kpExecApOpen", id); } catch { /* 무시 */ } } if (m0 === "영업관리") { try { if (id) sessionStorage.setItem("kpSalesTab", id); } catch { /* 무시 */ } setPage("dept:sales"); return; } setPage({ 결재함: "approval", 직원일정: "dept:schedule", 자금현황: "dept:funds", 스케줄: "dept:execsched", 실시간배차현황: "unassigned", 인사이트: "intel", 정산관리: "dept:settle", "정산관리:지급관리": "dept:settle", 회계관리: "dept:acct", 매출관리: "sales", 인사관리부: "dept:hr", 출근기록부: "attendance", 연차관리: "dept:leave", 입퇴사관리: "dept:onboarding", 증명서발급: "dept:cert", 수입지출: "dept:cashbook", 비품관리: "dept:assets", 전자결재: "approval", 배차현황: "list", 관리자메뉴: "staff", 직원관리: "staff", 기사서류: "dept:driverdocs", 기사관리: "dept:driverdocs", 자금관리: "dept:cashbook", "자금관리:book": "dept:cashbook", "인사관리부:leave": "dept:leave", 기사승인: "drvacc" /* ⭐ 2026-11-05 기사 가입 승인 → 기사 앱 계정 */, 거래처관리: "clients" /* 💼 2026-11-10 영업관리 › 거래처 담당 */ }[m0 === "결재함" ? "결재함" : k] || "dept"); /* ⭐ 2026-11-02 점검 — 경리·인사 홈 바로가기 키(자금관리·연차·기사승인) 추가 */ }} />
   </React.Suspense>
 )}
 {page === "sales" && (
@@ -8129,9 +8135,21 @@ function MobileSideMenu({
               {isAdminRole && <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />}
             </MenuSection>
           )}
+          {deptMode === "sales" && (
+            <MenuSection title="영업" en="SALES" dark={dark} alwaysOpen>
+              <MenuItem label="영업 홈" icon="dashboard" onClick={() => onGo?.("dept")} dark={dark} />
+              {ok("영업관리") && <MenuItem label="영업관리" icon="trend" onClick={() => onGo?.("dept:sales")} dark={dark} />}
+              {ok("거래처관리") && <MenuItem label="거래처관리" icon="building" onClick={() => onGo?.("clients")} dark={dark} />}
+              {ok("단가표") && <MenuItem label="단가표" icon="money" onClick={() => onGo?.("ratecard")} dark={dark} />}
+              {ok("운임조회") && <MenuItem label="운임조회" icon="globe" onClick={() => onGo?.("fare")} dark={dark} />}
+              {ok("배차현황") && <MenuItem label="배차현황" icon="list" onClick={() => onGo?.("list")} dark={dark} />}
+              {ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
+            </MenuSection>
+          )}
+          {/* 🔀 2026-11-10 화면 전환 — 한 줄만, 누르면 어느 팀 화면으로 볼지 고르는 창 */}
           {roleViews && (
-            <MenuSection title="화면 전환" en={roleViews.length > 2 ? "DISPATCH · ACCOUNTING · HR" : "HR · ACCOUNTING"} dark={dark} alwaysOpen>
-              {roleViews.filter(([k]) => k !== roleViewCur).map(([k, , lb]) => <MenuItem key={k} label={`${lb} 화면으로 전환`} icon="refresh" onClick={() => onRoleView?.(k)} dark={dark} />)}
+            <MenuSection title="화면 전환" en="SWITCH VIEW" dark={dark} alwaysOpen>
+              <MenuItem label={`화면 전환 · 지금 ${(roleViews.find(([k]) => k === roleViewCur) || roleViews[0])[2]} 화면`} icon="refresh" onClick={() => onRoleView?.(roleViewCur)} dark={dark} />
             </MenuSection>
           )}
           {isExec && (
@@ -8160,10 +8178,11 @@ function MobileSideMenu({
             {ok("지입차관리") && <MenuItem label="지입차관리" icon="route" onClick={onGoFleet} badge={alertCounts?.drvSos || null} dark={dark} />}{/* ⭐ 2026-11-03 배차관리 안으로 */}
           </MenuSection>
           )}
-          {!deptMode && (["인사관리부", "회계관리", "자금관리", "비품관리", "증명서발급"].some(deptOk) || payM.canView || payM.leaveViewer) && (
+          {!deptMode && (["영업관리", "인사관리부", "회계관리", "자금관리", "비품관리", "증명서발급"].some(deptOk) || payM.canView || payM.leaveViewer) && (
             <MenuSection title="부서 업무" en="DEPARTMENT" dark={dark} alwaysOpen>
               {payM.canView && <MenuItem label="급여 계산" icon="money" onClick={() => onGo?.("dept:payroll")} dark={dark} />}{/* ⭐ 2026-11-07 경리·회계 부서만 */}
               {payM.leaveViewer && <MenuItem label="연차 관리" icon="flag" onClick={() => onGo?.("dept:leavepromo")} dark={dark} />}
+              {deptOk("영업관리") && <MenuItem label="영업관리" icon="trend" onClick={() => onGo?.("dept:sales")} dark={dark} />}{/* 💼 2026-11-10 */}
               {deptOk("인사관리부") && <MenuItem label="인사관리부" icon="idcard" onClick={() => onGo?.("dept:hr")} dark={dark} />}
               {deptOk("회계관리") && <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />}
               {deptOk("자금관리") && <MenuItem label="자금 관리" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />}
@@ -22707,6 +22726,10 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
       W("결재결과", "결재 결과", "내가 올린 문서(인사발령 품의 등)가 승인·반려되면"),
       W("가입신청", "가입 신청", "새 직원·기사가 가입을 신청하면 바로 승인할 수 있게"),
     ],
+    sales: [ // 💼 2026-11-10 영업팀
+      W("결재요청", "결재 요청", "내가 결재할 차례가 되면"),
+      W("결재결과", "결재 결과", "내가 올린 문서(견적·품의·지출결의)가 승인·반려되면"),
+    ],
     exec: [
       W("결재요청", "결재 요청", "대표·임원 결재가 필요한 문서가 오면"),
       W("결재결과", "결재 결과", "내가 올린 문서가 승인·반려되면"),
@@ -22729,7 +22752,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
   const teamKey = role === "hrAcct" ? "hr" : (deptMode || "dispatch");
   const PUSH_GROUPS = [
     ...(teamKey === "dispatch" ? [{ title: "배차 알림", items: DISPATCH_PUSH }] : []),
-    { title: { acct: "경리·회계 알림", hr: "인사 알림", exec: "임원 알림", dispatch: "업무 알림" }[teamKey], items: TEAM_PUSH[teamKey] },
+    { title: { acct: "경리·회계 알림", hr: "인사 알림", sales: "영업 알림", exec: "임원 알림", dispatch: "업무 알림" }[teamKey], items: TEAM_PUSH[teamKey] },
     { title: "공통 알림", items: COMMON_PUSH },
   ];
   const PUSH_PREF_TYPES = PUSH_GROUPS.flatMap((g) => g.items);

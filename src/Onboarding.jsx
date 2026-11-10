@@ -34,6 +34,11 @@ const TEAM_SLIDES = {
     { en: "ACCOUNTING", title: "회계관리 · 자금관리", desc: "장부 · 부가세 · 원가와 통장 · 카드 잔액, 고정비를 관리합니다.", points: ["지출결의 최종 승인 → 장부 자동 기록", "고정비는 납부일이 지나면 자동 반영", "통장별 자동 연동(기사운임 · 입금 · 지출)"] },
     { en: "ASSETS", title: "비품관리 · 퇴직 정산 · 요금제", desc: "회사 비품과 퇴직금·연차수당 정산, 요금제 변경 요청은 경리팀이 맡습니다.", points: ["비품 구입가는 장부에 자동 기록", "퇴직 정산 — 퇴직금 · 미사용 연차수당 계산", "사업자등록증 · 직인 · 정산계좌 등록(회사관리)"] },
   ],
+  sales: [ // 💼 2026-11-10 영업팀
+    { en: "SALES", title: "영업관리 — 내 실적과 인센티브", desc: "내가 수주한 거래처의 매출 · 매출이익과 이번 달 예상 인센티브를 한눈에 봅니다.", points: ["영업 현황 — 담당 매출 · 목표 달성 · 인센티브 구간", "인센티브 — 거래처별 계산 내역 · 수금 완료분 확정 / 미수 보류", "수주 시뮬레이터 — 새 화주를 따면 인센티브가 얼마나 늘지 미리 계산"] },
+    { en: "PIPELINE", title: "영업 기회 · 영업 활동", desc: "새 화주를 발굴 → 접촉 → 견적 → 협상 → 수주까지 단계별로 관리하고, 방문·전화 기록과 다음 일정을 달력으로 챙깁니다.", points: ["다음 연락일을 넣어 두면 대시보드 「오늘 처리할 일」에 뜹니다", "수주 처리하면 거래처 담당에 자동 등록", "거래처 담당 — 급감 · 휴면 거래처를 먼저 알려 줍니다"] },
+    { en: "RATE", title: "거래처 · 단가표 · 운임조회", desc: "견적을 낼 때 단가표와 전국 운임, 지난 운임을 바로 확인합니다.", points: ["거래처관리 — 수주한 화주를 거래처로 등록", "단가표 — 노선별 단가표 발행", "배차현황 — 내 거래처 오더 진행 확인(조회)"] },
+  ],
   hr: [
     { en: "HR · RECORDS", title: "인사관리부 — 인사관리", desc: "이력서 · 근태/근속 · 인사발령을 한 곳에서 관리합니다.", points: ["인사관리 › 이력서 / 근태·근속 / 인사발령 / 발령 이력", "직원 등록(계정 없는 직원도 기록)", "직책 · 부서 설정은 회사별로 추가 · 숨김"] },
     { en: "STAFF", title: "직원관리 · 퇴사 · 입사일", desc: "직원의 부서 · 직책 · 권한 · 재직 상태와 입사일은 인사팀만 바꿀 수 있습니다.", points: ["휴직 · 육아휴직 · 출산휴가 기간 관리", "퇴사 · 권고사직 처리(합의서 인쇄)", "입사일 = 연차 · 퇴직금 계산 기준"] },
@@ -312,7 +317,7 @@ export default function OnboardingHost({ role, realRole, userCompany, dept = nul
   const company = companyKey(userCompany);
   const rr = realRole || role;
   const isTM = rr === "totalMaster";
-  const team = dept === "acct" ? "acct" : dept === "hr" ? "hr" : dept === "exec" ? "exec" : "dispatch";
+  const team = dept === "acct" ? "acct" : dept === "hr" ? "hr" : dept === "sales" ? "sales" : dept === "exec" ? "exec" : "dispatch"; // 💼 2026-11-10 영업팀
   const isDispatchAdmin = rr === "admin" || rr === "allMgr" || isTM;
   const wizardTeam = team === "dispatch" ? (isDispatchAdmin ? "dispatch" : null)
     : team === "acct" ? (["test", "hrAcct", "allMgr"].includes(rr) || isTM ? "acct" : null)

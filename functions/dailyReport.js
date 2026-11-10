@@ -20,7 +20,7 @@ const md = (ymd) => `${Number(ymd.slice(5, 7))}.${ymd.slice(8, 10)}`;
 const range = (a, b) => { const o = []; for (let d = a; d <= b && o.length < 400; d = addDay(d, 1)) o.push(d); return o; };
 const fmt = (n) => Math.round(n || 0).toLocaleString("en-US");
 const man = (w) => Math.round((w || 0) / 1e4);
-const BUILTIN = new Set(["admin", "allMgr", "hrManager", "hrAcct", "hrStaff", "user", "test", "acctStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer", "totalMaster", "driver", "shipper", "cafeUser"]);
+const BUILTIN = new Set(["admin", "allMgr", "hrManager", "hrAcct", "hrStaff", "user", "test", "acctStaff", "salesMgr", "salesStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer", "totalMaster", "driver", "shipper", "cafeUser"]);
 
 function mergePrefs(p) {
   const x = p || {};

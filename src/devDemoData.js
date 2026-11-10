@@ -299,6 +299,15 @@ export function demoDocsFor(col) {
   if (col === "notices") return [0, 1, 2].map((i) => fakeDoc(col, `demo-nt-${i}`, { companyName: "", title: ["11월 배차 운영 안내 — 연말 물량 증가에 따른 야간 배차 인력 보강", "차량 점검 일정", "신규 거래처 등록 절차 변경"][i], content: "내용입니다.", createdAt: new Date(Date.now() - i * 86400000), author: NAMES[i], readBy: ["preview"] }))
     // ⭐ 2026-11-07 팝업 알림 설정 점검 — notifyDemo=1 이면 안 읽은 공지 1건(가운데 팝업이 뜨는지 확인)
     .concat(new URLSearchParams(window.location.search).get("notifyDemo") === "1" ? [fakeDoc(col, "demo-nt-new", { title: "연말 배차 운영 안내", content: "12월 한 달 동안 야간 배차 담당을 2명으로 늘립니다.", category: "공지사항", createdAt: new Date(Date.now() - 3600000), author: NAMES[3], readBy: [] })] : []);
+  // 💼 2026-11-10 영업팀 화면 점검(/preview?role=salesMgr&demo=1) — 거래처 담당 · 영업 기회 · 활동
+  if (col === "salesAccounts") return CLIENTS.slice(0, 6).map((n, i) => fakeDoc(col, `demo-sa-${i}`, { client: n, uid: i % 3 === 2 ? "demo-s2" : "preview", name: i % 3 === 2 ? "박영업" : "둘러보기", since: i === 1 ? ymd(-40) : "2025-03-01" }));
+  if (col === "salesLeads") return [
+    ["(주)새한식품", "lead", 8000000, 12, "이천 → 부산", "5톤 윙바디", ymd(0), "첫 통화"], ["동원로지스 안성", "contact", 15000000, 10, "안성 → 광주", "11톤 윙바디", ymd(2), "방문 미팅"],
+    ["오성전자 구미", "quote", 22000000, 14, "구미 → 평택항", "25톤 카고", ymd(-2), "견적 회신 확인"], ["한솔제지 대전", "nego", 30000000, 9, "대전 → 인천", "11톤 카고", ymd(5), "단가 재협의"],
+    ["그린팜 냉동", "quote", 6000000, 2, "김해 → 서울", "2.5톤 냉동탑", ymd(1), "견적서 발송"], ["미래건설자재", "won", 12000000, 13, "화성 → 세종", "5톤 카고", "", ""], ["대성유통", "lost", 9000000, 8, "", "", "", ""],
+  ].map(([name, stage, monthlyRevenue, marginRate, route, vehicle, nextDate, nextAction], i) => fakeDoc(col, `demo-sl-${i}`, { name, stage, monthlyRevenue, marginRate, monthlyOrders: 20 + i * 4, prob: "", route, vehicle, nextDate, nextAction, contact: "김담당 과장", phone: "010-1234-5678", ownerUid: i % 3 === 2 ? "demo-s2" : "preview", ownerName: i % 3 === 2 ? "박영업" : "둘러보기", touchedAt: ymd(i === 1 ? -20 : -3), createdDay: ymd(-30), wonAt: stage === "won" ? ymd(-4) : "", lostReason: stage === "lost" ? "단가" : "" }));
+  if (col === "salesActivities") return [[-1, "방문", "오성전자 구미", "물류팀 미팅 — 월 60대 규모, 견적 요청"], [-3, "전화", "(주)새한식품", "담당자 부재 — 내일 재통화"], [-6, "견적 제출", "한솔제지 대전", "11톤 기준 견적서 발송"], [0, "미팅", CLIENTS[0], "분기 물량 계획 공유"], [-9, "방문", "동원로지스 안성", "센터 답사"]]
+    .map(([off, type, target, summary], i) => fakeDoc(col, `demo-act-${i}`, { date: ymd(off), type, target, summary, result: "", nextDate: i === 0 ? ymd(3) : "", nextAction: i === 0 ? "견적 회신 확인" : "", ownerUid: i === 4 ? "demo-s2" : "preview", ownerName: i === 4 ? "박영업" : "둘러보기" }));
   return null;
 }
 

@@ -14,7 +14,7 @@ export const ALL_POSITION_OPTIONS = [...new Set([...EXEC_POSITION_OPTIONS, ...PO
 export const positionsForTeam = (team) => (team === EXEC_TEAM ? EXEC_POSITION_OPTIONS : team ? POSITION_OPTIONS : ALL_POSITION_OPTIONS);
 
 export const TEAM_OPTIONS = [
-  EXEC_TEAM, "운영팀", "운송팀", "경리/회계팀", "개발팀", "법무팀", "인사팀",
+  EXEC_TEAM, "운영팀", "운송팀", "영업팀", "경리/회계팀", "개발팀", "법무팀", "인사팀", // 💼 2026-11-10 영업팀 추가
 ];
 
 // 임원으로 보는 직책(예전에 쓰던 대표이사·사장·상무 등도 포함)
@@ -39,6 +39,7 @@ export function suggestRole({ team = "", position = "" } = {}) {
   if (/인사/.test(t)) return junior ? "hrStaff" : "hrManager";
   if (/법무/.test(t)) return MANAGER_RANKS.includes(p) ? "legalMgr" : "legalStaff";
   if (/개발/.test(t)) return MANAGER_RANKS.includes(p) ? "devMgr" : "devStaff";
+  if (/영업/.test(t)) return MANAGER_RANKS.includes(p) ? "salesMgr" : "salesStaff"; // 💼 2026-11-10 영업팀 — 과장 이상 영업관리자 / 그 외 영업사무원
   if (MANAGER_RANKS.includes(p)) return "admin";
   return "user";
 }

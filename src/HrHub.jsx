@@ -42,8 +42,10 @@ const ROLE_DESC = {
   admin: "운송 업무 전체 — 배차·운임·정산·매출·기사·거래처 관리 + 관리자메뉴(직원 승인 등). 임원 화면은 「임원 화면」 역할에서",
   hrManager: "인사관리부 화면 — 인사 기록·발령·근태·입퇴사·직원 승인",
   test: "경리 화면 — 정산·회계·자금·비품·퇴직 정산",
-  hrAcct: "경리 + 인사 — 상단 버튼으로 경리 화면 ↔ 인사 화면 전환",
-  allMgr: "운송 + 경리 + 인사 — 상단 버튼으로 운송 · 경리 · 인사 화면 전환",
+  hrAcct: "경리 + 인사 — 상단 [화면 전환]으로 경리 화면 ↔ 인사 화면 전환",
+  allMgr: "운송 + 영업 + 경리 + 인사 — 상단 [화면 전환]으로 운송 · 영업 · 경리 · 인사 화면 전환",
+  salesMgr: "영업관리자 — 영업 화면(영업관리·거래처·단가표·매출, 인센티브 규정·거래처 담당 지정)",
+  salesStaff: "영업사무원 — 영업 화면(본인 실적·인센티브·영업 기회, 권한 관리에서 조정)",
   acctStaff: "경리사무원 — 경리 화면(자금·매출 제외, 권한 관리에서 조정)",
   hrStaff: "인사사무원 — 인사 화면(기사 승인 제외, 권한 관리에서 조정)",
   legalMgr: "법무관리자 — 전자결재·계약서·회사관리 + 거래처 조회(권한 관리에서 조정)",
@@ -529,7 +531,7 @@ export function HrSettingsPanel({ company, canManage }) {
           {ro.options.map(([r, l]) => <div key={r} className="rounded-xl border border-[#E3E8F0] px-3.5 py-2.5"><div className="text-[14px] font-black text-[#0F1A30]">{l}{!ROLE_DESC[r] && <span className="ml-1.5 text-[10.5px] font-black px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#2D4C82]">직접 만든 역할</span>}</div><div className="text-[12px] text-[#7A879C]">{ROLE_DESC[r] || (ro.execKeys.includes(r) ? "임원 화면(경영 브리핑) — 메뉴 범위는 권한 관리 설정" : "메뉴 범위는 권한 관리 설정을 따릅니다")}</div></div>)}
         </div>
         <div className="mt-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3.5 py-2.5 text-[12.5px] text-[#5B6B85] leading-relaxed">
-          역할 추가·이름 변경·메뉴 범위 수정은 <b className="text-[#0F1A30]">최고관리자 › 관리자메뉴 › 권한 관리</b>에서 합니다. 여기서 만든 역할은 직원 정보·인사발령·직원관리의 권한 목록에 바로 나타납니다. 부서·직책을 고르면 권한이 자동 추천됩니다(임원 → 임원 화면 역할, 경리/회계팀 → 경리, 인사팀 → 인사관리자, 과장 이상 → 관리자, 그 외 → 실무자).
+          역할 추가·이름 변경·메뉴 범위 수정은 <b className="text-[#0F1A30]">최고관리자 › 관리자메뉴 › 권한 관리</b>에서 합니다. 여기서 만든 역할은 직원 정보·인사발령·직원관리의 권한 목록에 바로 나타납니다. 부서·직책을 고르면 권한이 자동 추천됩니다(임원 → 임원 화면 역할, 경리/회계팀 → 경리, 인사팀 → 인사관리자, 영업팀 → 영업관리자·영업사무원, 과장 이상 → 관리자, 그 외 → 실무자).
         </div>
       </BookCard>
     </div>

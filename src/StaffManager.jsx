@@ -111,7 +111,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
   // 재직 직원 — 팀별로
   const teamGroups = (() => {
     const g = {}; L.forEach((u) => { const t = u.team || "미배정"; (g[t] = g[t] || []).push(u); });
-    const order = ["임원", "운영팀", "운송팀", "경리/회계팀", "인사팀", "개발팀", "법무팀"];
+    const order = ["임원", "운영팀", "운송팀", "영업팀", "경리/회계팀", "인사팀", "개발팀", "법무팀"];
     return Object.entries(g).sort((x, y) => { const a = order.indexOf(x[0]); const c = order.indexOf(y[0]); return (a < 0 ? 99 : a) - (c < 0 ? 99 : c) || x[0].localeCompare(y[0]); })
       .map(([t, us]) => [t, us.sort((x, y) => String(x.name || "").localeCompare(String(y.name || ""), "ko"))]);
   })();

@@ -122,9 +122,9 @@ function cleanFields(obj) {
 }
 
 // ─────────────────────────── 권한(메뉴 접근) — src/customRoles.js 와 같은 규칙 ───────────────────────────
-const CUSTOMIZABLE_MENUS = ["HOME", "전자결재", "배차관리", "실시간배차현황", "배차현황", "단가표", "운임조회", "기사관리", "거래처관리", "지입차관리", "매출관리", "정산관리", "인사이트", "회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급", "직원일정", "회사관리", "급여관리"];
-const DEPT_ONLY_MENUS = ["전자결재", "회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급", "직원일정", "급여관리"];
-const BUILTIN = ["allMgr", "hrAcct", "admin", "user", "test", "acctStaff", "hrManager", "hrStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer"];
+const CUSTOMIZABLE_MENUS = ["HOME", "전자결재", "배차관리", "실시간배차현황", "배차현황", "단가표", "운임조회", "기사관리", "거래처관리", "지입차관리", "매출관리", "정산관리", "인사이트", "회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급", "직원일정", "회사관리", "급여관리", "영업관리"];
+const DEPT_ONLY_MENUS = ["전자결재", "회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급", "직원일정", "급여관리", "영업관리"];
+const BUILTIN = ["allMgr", "hrAcct", "admin", "user", "test", "acctStaff", "hrManager", "hrStaff", "salesMgr", "salesStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer"];
 const RANK = { hidden: 0, read: 1, write: 2 };
 function builtinDefault(role) {
   const only = (list, readList = []) => Object.fromEntries(CUSTOMIZABLE_MENUS.map((k) => [k, list.includes(k) ? "write" : readList.includes(k) ? "read" : "hidden"]));
@@ -134,7 +134,9 @@ function builtinDefault(role) {
   if (role === "acctStaff") return only(["HOME", "전자결재", "배차현황", "정산관리", "회계관리", "비품관리", "회사관리"], ["기사관리"]);
   if (role === "hrStaff") return only(["HOME", "전자결재", "인사관리부", "증명서발급", "회사관리"]);
   if (role === "hrAcct") return union("test", "hrManager");
-  if (role === "allMgr") return union("admin", "test", "hrManager");
+  if (role === "salesMgr") return only(["HOME", "전자결재", "영업관리", "거래처관리", "단가표", "운임조회", "매출관리", "회사관리"], ["배차현황"]); // 💼 2026-11-10 영업팀(src/customRoles.js와 같게)
+  if (role === "salesStaff") return only(["HOME", "전자결재", "영업관리", "거래처관리", "단가표", "운임조회", "회사관리"], ["배차현황"]);
+  if (role === "allMgr") return union("admin", "test", "hrManager", "salesMgr");
   if (role === "legalMgr") return only(["HOME", "전자결재", "회사관리"], ["거래처관리", "지입차관리", "배차현황", "직원일정"]);
   if (role === "legalStaff") return only(["HOME", "전자결재", "회사관리"], ["거래처관리"]);
   if (role === "devMgr") return only(["HOME", "전자결재", "회사관리"], ["배차관리", "실시간배차현황", "배차현황", "단가표", "운임조회", "기사관리", "거래처관리", "지입차관리"]);

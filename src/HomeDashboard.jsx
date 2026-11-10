@@ -929,7 +929,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     <KpSubNav noBleed code="HOME" title="홈" icon="dashboard" active={boardTab}
       onSelect={(k) => { if (String(k).startsWith("lock:")) { openPlanLock(String(k).slice(5)); return; } setBoardTab(k); }} bodyClass="px-5 py-4"
       groups={lockHomeGroups(planId, [
-        { label: dept === "exec" ? "경영" : dept ? "부서" : "관제", items: [{ key: "대시보드", label: dept === "exec" ? "경영 브리핑" : "대시보드", en: dept === "exec" ? "EXECUTIVE" : dept === "acct" ? "ACCOUNTING" : dept === "hr" ? "HUMAN RESOURCES" : "OPERATIONS", icon: dept === "acct" ? "money" : dept === "hr" ? "idcard" : dept === "exec" ? "star" : "pulse" }] },
+        { label: dept === "exec" ? "경영" : dept ? "부서" : "관제", items: [{ key: "대시보드", label: dept === "exec" ? "경영 브리핑" : "대시보드", en: dept === "exec" ? "EXECUTIVE" : dept === "acct" ? "ACCOUNTING" : dept === "hr" ? "HUMAN RESOURCES" : dept === "sales" ? "SALES" : "OPERATIONS", icon: dept === "acct" ? "money" : dept === "hr" ? "idcard" : dept === "sales" ? "trend" : dept === "exec" ? "star" : "pulse" }] },
         { label: "사내 게시판", items: [
           { key: "공지사항", label: "공지사항", en: "NOTICE", icon: "bell", badge: unreadNoticeN, badgeTitle: "안 읽은 공지" },
           ...Object.entries(BOARDS).filter(([b]) => canSeeBoard(b, meHome)).map(([b, B]) => ({ key: `board:${b}`, label: B.label, en: B.en, icon: B.icon, badge: isBoardNew(`board:${b}`) ? "N" : 0, badgeTitle: "새 글" })),

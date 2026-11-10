@@ -29,7 +29,7 @@ const MAX_BYTES = 900; // Firebase 한도 1,000바이트 — 여유를 둔다
 // firestore.rules와 같은 목록
 const EXEC_POSITIONS = ["이사", "상무", "전무", "부사장", "사장", "대표", "대표이사", "본부장", "임원"];
 const CEO_POSITIONS = ["대표", "대표이사", "사장"];
-const EXEC_BUILTIN = ["admin", "allMgr", "hrManager", "hrAcct", "hrStaff", "user", "test", "acctStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer", "totalMaster", "driver", "shipper"];
+const EXEC_BUILTIN = ["admin", "allMgr", "hrManager", "hrAcct", "hrStaff", "user", "test", "acctStaff", "salesMgr", "salesStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer", "totalMaster", "driver", "shipper"];
 const FUNDS_BUILTIN = ["admin", "allMgr", "hrManager", "hrAcct", "user", "test", "viewer", "totalMaster", "driver", "shipper"];
 
 const isMap = (v) => v !== null && typeof v === "object" && !Array.isArray(v) && !(v instanceof Date) && typeof v.toDate !== "function";

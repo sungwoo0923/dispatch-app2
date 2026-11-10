@@ -14,11 +14,13 @@ export const CUSTOMIZABLE_MENUS = [
   "HOME", "전자결재", "배차관리", "실시간배차현황", "배차현황", "단가표", "운임조회",
   "기사관리", "거래처관리", "지입차관리", "매출관리", "정산관리", "인사이트",
   "회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급", "직원일정", "회사관리",
+  // 💼 2026-11-10 영업관리(영업 현황·영업 기회·거래처 담당·인센티브) — 영업팀 화면. 다른 역할은 권한 관리에서 켜면 보인다
+  "영업관리",
   // ⭐ 2026-11-06 직원 급여(급여 계산·명세서 발행) — 화면은 회계관리·인사관리부·회사관리 안의 [급여] 탭. 보안 규칙(payrollLevel)도 이 값을 본다
   "급여관리",
 ];
 // 부서·임원 전용 메뉴 — 내장 권한은 원래 쓰던 화면 기준 기본값, 직접 만든 권한은 켜면 그 메뉴가 보인다
-export const DEPT_ONLY_MENUS = ["전자결재", "회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급", "직원일정", "급여관리"];
+export const DEPT_ONLY_MENUS = ["전자결재", "회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급", "직원일정", "급여관리", "영업관리"];
 
 export function defaultMenuAccess() {
   const m = {};
@@ -33,6 +35,7 @@ export const ROLE_LABELS = {
   admin: "운송관리자", user: "운송사무원",
   test: "경리관리자", acctStaff: "경리사무원",
   hrManager: "인사관리자", hrStaff: "인사사무원",
+  salesMgr: "영업관리자", salesStaff: "영업사무원", // 💼 2026-11-10 영업팀
   legalMgr: "법무관리자", legalStaff: "법무사무원",
   devMgr: "개발관리자", devStaff: "개발사무원",
   viewer: "조회전용", driver: "기사", shipper: "화주",
@@ -44,7 +47,7 @@ export const ROLE_LABELS = {
 // 별도의 모바일/화주 앱을 쓰므로 여기서는 제외한다.
 // ⭐ 2026-11-04 통합관리자(allMgr)·통합인사관리자(hrAcct)도 기본 역할로(메뉴 편집 가능) + 부서별 사무원·법무·개발 역할 추가
 export const BUILTIN_EDITABLE_ROLES = [
-  "allMgr", "hrAcct", "admin", "user", "test", "acctStaff", "hrManager", "hrStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer",
+  "allMgr", "hrAcct", "admin", "user", "test", "acctStaff", "hrManager", "hrStaff", "salesMgr", "salesStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer",
 ].map((key) => ({ key, label: ROLE_LABELS[key] }));
 const isBuiltinKey = (k) => BUILTIN_EDITABLE_ROLES.some((b) => b.key === k);
 
@@ -52,12 +55,20 @@ const isBuiltinKey = (k) => BUILTIN_EDITABLE_ROLES.some((b) => b.key === k);
 //  views: [화면 키, 화면 역할, 버튼 이름]
 export const SWITCH_ROLES = {
   hrAcct: { storage: "kpHrAcctView", views: [["acct", "test", "경리"], ["hr", "hrManager", "인사"]] },
-  allMgr: { storage: "kpAllMgrView", views: [["dispatch", "admin", "운송"], ["acct", "test", "경리"], ["hr", "hrManager", "인사"]] },
+  // 💼 2026-11-10 통합관리자 — 영업 화면 추가(운송 · 영업 · 경리 · 인사)
+  allMgr: { storage: "kpAllMgrView", views: [["dispatch", "admin", "운송"], ["sales", "salesMgr", "영업"], ["acct", "test", "경리"], ["hr", "hrManager", "인사"]] },
 };
 // 부서 화면을 쓰는 사무원 — 그 부서 화면(경리관리자·인사관리자 화면)으로 동작하되 메뉴는 이 역할 설정을 따른다
-export const BASED_ROLES = { acctStaff: "test", hrStaff: "hrManager" };
+export const BASED_ROLES = { acctStaff: "test", hrStaff: "hrManager", salesStaff: "salesMgr" }; // 💼 영업사무원 → 영업 화면
 // 메뉴 설정만으로 동작하는 역할(저장한 설정이 없으면 아래 기본값) — 전용 화면 없이 메뉴 권한대로
-export const MENU_DRIVEN_ROLES = ["acctStaff", "hrStaff", "legalMgr", "legalStaff", "devMgr", "devStaff"];
+export const MENU_DRIVEN_ROLES = ["acctStaff", "hrStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "salesMgr", "salesStaff"];
+// 🔀 화면 전환 창(ViewSwitcher)에 보이는 화면 설명 — [영문 표식, 설명, 아이콘]
+export const VIEW_INFO = {
+  dispatch: ["DISPATCH", "배차 · 운임 · 기사 · 거래처 · 지입차", "truck"],
+  sales: ["SALES", "영업 현황 · 영업 기회 · 거래처 담당 · 인센티브", "trend"],
+  acct: ["ACCOUNTING", "정산 · 회계 · 자금 · 비품", "money"],
+  hr: ["HUMAN RESOURCES", "인사 기록 · 근태 · 연차 · 증명서", "idcard"],
+};
 export function readSwitchView(realRole) {
   const sw = SWITCH_ROLES[realRole];
   if (!sw) return "";
@@ -94,9 +105,12 @@ export function builtinDefaultMenuAccess(roleKey) {
   // 경리사무원 — 경리 화면에서 자금·매출은 빼고 / 인사사무원 — 인사 화면에서 기사관리(기사 승인)는 빼고
   if (roleKey === "acctStaff") return only(["HOME", "전자결재", "배차현황", "정산관리", "회계관리", "비품관리", "회사관리"], ["기사관리"]);
   if (roleKey === "hrStaff") return only(["HOME", "전자결재", "인사관리부", "증명서발급", "회사관리"]);
+  // 💼 2026-11-10 영업 — 영업관리·거래처·단가표·운임조회 + 배차현황 조회. 영업관리자는 매출관리까지(영업사무원은 본인 실적만)
+  if (roleKey === "salesMgr") return only(["HOME", "전자결재", "영업관리", "거래처관리", "단가표", "운임조회", "매출관리", "회사관리"], ["배차현황"]);
+  if (roleKey === "salesStaff") return only(["HOME", "전자결재", "영업관리", "거래처관리", "단가표", "운임조회", "회사관리"], ["배차현황"]);
   // 통합 역할 — 각 화면 역할 기본값을 합친 것(설정에서 숨기거나 조회로 낮출 수 있다)
   if (roleKey === "hrAcct") return union("test", "hrManager");
-  if (roleKey === "allMgr") return union("admin", "test", "hrManager");
+  if (roleKey === "allMgr") return union("admin", "test", "hrManager", "salesMgr");
   // ⚖ 법무 — 결재(계약서 보관함 포함)·회사관리 + 거래처·지입차 조회 / 💻 개발 — 결재·회사관리 + 운송 업무 조회
   if (roleKey === "legalMgr") return only(["HOME", "전자결재", "회사관리"], ["거래처관리", "지입차관리", "배차현황", "직원일정"]);
   if (roleKey === "legalStaff") return only(["HOME", "전자결재", "회사관리"], ["거래처관리"]);
@@ -131,7 +145,11 @@ export function applyRoleMenus(customRoles = [], realRole, viewRole) {
     if (own || !driven) return customRoles;
     return [...customRoles, { key: realRole, label: ROLE_LABELS[realRole] || realRole, menus: ownMenus, synthetic: true }];
   }
-  if (!own && !driven) return customRoles;
+  if (!own && !driven) {
+    // 💼 2026-11-10 통합관리자 › 영업 화면 — 영업관리자(메뉴 설정으로 동작하는 역할)는 저장한 설정이 없어도 기본 메뉴로 그 화면을 연다
+    if (MENU_DRIVEN_ROLES.includes(viewRole) && !findCustomRole(customRoles, viewRole)) return [...customRoles, { key: viewRole, label: ROLE_LABELS[realRole] || realRole, menus: builtinDefaultMenuAccess(viewRole), viaRole: realRole, synthetic: true }];
+    return customRoles;
+  }
   const viewSaved = findCustomRole(customRoles, viewRole);
   const viewMenus = { ...builtinDefaultMenuAccess(viewRole), ...(viewSaved?.menus || {}) };
   const menus = Object.fromEntries(CUSTOMIZABLE_MENUS.map((m) => [m, minLv(ownMenus[m], viewMenus[m])]));
@@ -152,6 +170,7 @@ export const DEPT_ROLE_RULES = [
   { re: /임원/, keys: ["allMgr"], exec: true }, // ⭐ 2026-11-05 임원도 통합관리자 고를 수 있게(임원 화면 역할 다음)
   { re: /경리|회계|재무/, keys: ["test", "acctStaff", "hrAcct", "allMgr"], label: /경리|회계|재무/ },
   { re: /인사/, keys: ["hrManager", "hrStaff", "hrAcct", "allMgr"], label: /인사/ },
+  { re: /영업/, keys: ["salesMgr", "salesStaff", "allMgr"], label: /영업/ }, // 💼 2026-11-10 영업팀
   { re: /운송|배차/, keys: ["admin", "user", "allMgr"], label: /운송|배차/ },
   // 운영팀 — 운송사 운영팀은 배차·차량 운영을 같이 하므로 운송 역할을 그대로 쓴다(관리자 화면·보안 규칙이 admin 기준이라 따로 만들면 빠지는 곳이 생김)
   { re: /운영/, keys: ["admin", "user", "allMgr"], label: /운영|운송|배차/ },
