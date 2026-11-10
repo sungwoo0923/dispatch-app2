@@ -130,11 +130,20 @@ jobs:
       # 다운로드 링크가 생긴다. 태그를 고정해서(driver-apk-latest) 매번 같은
       # 링크를 북마크해두고 쓸 수 있게 한다.
       # ⭐ 2026-11-05 앱 안 "앱 업데이트가 있어요" 안내용 — 이번 APK의 versionCode(build.gradle과 같은 규칙: 실행번호+1)
+      # ⭐ 2026-11-10 기사님이 다운로드 폴더에서 알아보기 쉽게 — LogisWeb-Driver.apk(영문: 릴리즈 파일 이름에 한글을 쓰면 깨질 수 있다)
+      #  예전 이름(app-debug.apk)도 같이 올린다 — 이미 설치된 앱의 "앱 업데이트가 있어요" 주소가 예전 이름이라서
+      - name: APK 이름 바꾸기(LogisWeb-Driver.apk)
+        run: |
+          SRC=$(ls android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/release/app-release-unsigned.apk 2>/dev/null | head -1)
+          mkdir -p android/app/build/outputs/named
+          cp "$SRC" android/app/build/outputs/named/LogisWeb-Driver.apk
+          ls -la android/app/build/outputs/named
+
       - name: APK 버전 정보(version.json)
         run: |
           VC=$(( GITHUB_RUN_NUMBER + 1 ))
           mkdir -p android/app/build/outputs
-          echo "{\"versionCode\":$VC,\"versionName\":\"1.1.$GITHUB_RUN_NUMBER\",\"sha\":\"$GITHUB_SHA\",\"builtAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"apk\":\"https://github.com/$GITHUB_REPOSITORY/releases/download/driver-apk-latest/app-debug.apk\"}" > android/app/build/outputs/version.json
+          echo "{\"versionCode\":$VC,\"versionName\":\"1.1.$GITHUB_RUN_NUMBER\",\"sha\":\"$GITHUB_SHA\",\"builtAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"apk\":\"https://github.com/$GITHUB_REPOSITORY/releases/download/driver-apk-latest/LogisWeb-Driver.apk\"}" > android/app/build/outputs/version.json
           echo "APK_VERSION_CODE=$VC" >> "$GITHUB_ENV"
           cat android/app/build/outputs/version.json
 
@@ -145,9 +154,10 @@ jobs:
           name: "KP-Flow 기사앱 (최신 빌드)"
           # ⭐ versionCode 줄은 기사앱이 GitHub API로 읽어 새 APK가 있는지 비교한다(지우지 말 것)
           body: |
-            커밋 ${{ github.sha }} 기준 자동 빌드. 안드로이드 폰에서 이 APK 파일을 눌러 다운로드한 뒤 설치하세요.
+            커밋 ${{ github.sha }} 기준 자동 빌드. 안드로이드 폰에서 LogisWeb-Driver.apk 를 눌러 다운로드한 뒤 설치하세요.
             versionCode: ${{ env.APK_VERSION_CODE }}
           files: |
+            android/app/build/outputs/named/LogisWeb-Driver.apk
             android/app/build/outputs/apk/**/*.apk
             android/app/build/outputs/version.json
           prerelease: true
