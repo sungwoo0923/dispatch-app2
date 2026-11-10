@@ -7435,15 +7435,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
 
       <div className="px-4 pt-4 space-y-4">
         {/* 전월 대비 배너 */}
-        {/* ⭐ 월 비교 분석 — 두 달 전체 데이터를 비교해 매출·수익 변화 원인을 알려준다 */}
-        <button onClick={() => setCompareOpen(true)}
-          className="w-full flex items-center justify-between rounded-xl px-4 py-3 bg-[#1B2B4B] text-white active:scale-[0.99] transition">
-          <span className="text-left">
-            <span className="block text-[15px] font-bold">월 비교 분석</span>
-            <span className="block text-[12px] text-white/70 mt-0.5">매출은 늘었는데 수익은 왜 그대로인지 등 원인 분석</span>
-          </span>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-        </button>
+        {/* ⭐ 2026-11-10 월 비교 분석 버튼은 뺐다(요청) */}
         {compareOpen && (
           <MonthCompareAnalysis
             compact

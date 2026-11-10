@@ -48458,9 +48458,8 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
       groups={[{ label: "분석", items: Object.entries(RV_PAGES).map(([key, v]) => ({ key, ...v })) }]}
       actionsLabel="리포트 도구"
       actions={[
-        { key: "a1", label: "월 비교 분석", icon: "compare", onClick: () => setMonthCompareOpen(true) },
+        // ⭐ 2026-11-10 월 비교 분석 · 월 마감 점검은 메뉴에서 뺐다(요청)
         { key: "a2", label: "월간 경영 보고서", icon: "file", onClick: () => setMarginReportOpen(true) },
-        { key: "a3", label: "월 마감 점검", icon: "check", onClick: () => setMonthCloseOpen(true) },
         ...(canSeeStaffPerf ? [{ key: "a4", label: "담당자별 실적", icon: "users", onClick: () => setStaffPerfOpen(true) }] : []),
       ]}>
     {/* ⭐ 2026-10-29 — 최대폭(1560px) 제한을 없애 넓은 모니터에서도 좌우 여백 없이 꽉 채운다 */}
