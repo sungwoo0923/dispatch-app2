@@ -18,7 +18,7 @@
 |---|---|---|
 | 소개 홈페이지 | https://dispatch-app2-vskk.vercel.app | `dispatch-app2-vskk` (Root Directory `landing-site`, 빌드 없음, 정적) |
 | 배차프로그램(웹) | https://dispatch-app2.vercel.app | 배차프로그램 프로젝트(저장소 루트, Vite) |
-| 기사앱 APK | https://github.com/sungwoo0923/dispatch-app2/releases/download/driver-apk-latest/app-debug.apk | GitHub Actions `.github/workflows/build-android-apk.yml`가 main push마다 빌드 |
+| 기사앱 APK | https://github.com/sungwoo0923/dispatch-app2/releases/download/driver-apk-latest/LogisWeb-Driver.apk | GitHub Actions `.github/workflows/build-android-apk.yml`가 main push마다 빌드 |
 
 - **`main`에 push하면 자동 배포.** `claude/*` 브랜치는 배포 안 됨(`vercel.json`의 `deploymentEnabled`).
 - main에 push하면 저장소 자동화가 곧바로 `chore: version 1.3.xxx` 커밋(`package.json` 버전만)을 뒤에 붙인다.

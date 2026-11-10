@@ -12,7 +12,7 @@ import { onlyDigits } from "./bankUtil";
 import { VehicleSetupWizard } from "./VehicleCarePanel";
 import { kpPrompt } from "./kpDialog";
 
-export const DRIVER_APK_URL = "https://github.com/sungwoo0923/dispatch-app2/releases/download/driver-apk-latest/app-debug.apk"; // ⭐ 2026-11-03 누르면 바로 APK 파일 다운로드(예전: 릴리즈 페이지에서 파일을 찾아 눌러야 했음)
+export const DRIVER_APK_URL = "https://github.com/sungwoo0923/dispatch-app2/releases/download/driver-apk-latest/LogisWeb-Driver.apk"; // ⭐ 2026-11-03 누르면 바로 APK 파일 다운로드(예전: 릴리즈 페이지에서 파일을 찾아 눌러야 했음)
 const lab = "block text-[14px] font-semibold text-[#5B6B85] mb-1";
 const inp = "border border-[#DCE3EE] rounded-lg px-3 py-2 text-[14px] w-full focus:border-[#2D4C82] outline-none bg-white";
 const fmtBiz = (v) => { const d = onlyDigits(v).slice(0, 10); return d.length > 5 ? `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}` : d.length > 3 ? `${d.slice(0, 3)}-${d.slice(3)}` : d; };

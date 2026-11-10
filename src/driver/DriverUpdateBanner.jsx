@@ -12,7 +12,7 @@ import { useNewVersion } from "../VersionCheck";
 import { hardReloadForUpdate } from "../UpdateBanner";
 
 // FleetDriverExtra.jsx의 DRIVER_APK_URL과 같은 주소(누르면 바로 APK 파일 다운로드)
-const APK_URL = "https://github.com/sungwoo0923/dispatch-app2/releases/download/driver-apk-latest/app-debug.apk";
+const APK_URL = "https://github.com/sungwoo0923/dispatch-app2/releases/download/driver-apk-latest/LogisWeb-Driver.apk";
 const RELEASE_API = "https://api.github.com/repos/sungwoo0923/dispatch-app2/releases/tags/driver-apk-latest";
 const CACHE_KEY = "kpApkLatest";
 const CACHE_MS = 6 * 3600e3; // GitHub API 호출 제한(시간당 60회/IP) — 6시간에 한 번만 확인
