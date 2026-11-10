@@ -135,7 +135,7 @@ export function scanDropDate(patch, info, formPickDate) {
   return { 하차일: shiftDay(formPickDate, info.dropRel) };
 }
 
-export default function OrderScanModal({ onClose, onApply, places: placesRaw = [], clients = [], initial = null, applyLabel = "배차관리에 적용", ai = null }) {
+export default function OrderScanModal({ onClose, onApply, places: placesRaw = [], clients = [], initial = null, applyLabel = "오더등록에 적용", ai = null }) {
   const places = React.useMemo(() => normPlaces(placesRaw), [placesRaw]);
   const [stage, setStage] = React.useState("input"); // input | scanning | result
   const [src, setSrc] = React.useState(null); // { type: "text", text } | { type: "image", url, w, h }

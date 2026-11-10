@@ -148,7 +148,7 @@ export function RecurringManagerModal({ form, onClose }) {
     <ModalShell eyebrow="RECURRING" title="정기오더" desc="매주 같은 노선은 한 번만 등록해 두면 정한 요일·시각에 자동으로 만들어집니다" onClose={onClose}>
       <Box title="지금 입력한 오더로 등록">
         {!ready ? (
-          <div className="text-[13.5px] text-[#7A879C] leading-relaxed">배차관리에 <b className="text-[#0F1A30]">거래처·상차지·하차지</b>를 먼저 입력한 뒤 눌러 주세요. 운임·시간·화물·경유지까지 그대로 등록됩니다.</div>
+          <div className="text-[13.5px] text-[#7A879C] leading-relaxed">오더등록에 <b className="text-[#0F1A30]">거래처·상차지·하차지</b>를 먼저 입력한 뒤 눌러 주세요. 운임·시간·화물·경유지까지 그대로 등록됩니다.</div>
         ) : (
           <>
             <div className="px-3.5 py-2.5 rounded-xl bg-[#F5F8FD] text-[13px] text-[#3A4A66] leading-relaxed">

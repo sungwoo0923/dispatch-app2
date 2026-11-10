@@ -61,7 +61,7 @@ export default function MasterChecklist({ user, userCompany }) {
     { k: "drivers", done: st.drivers > 0, title: "기사 · 차량 등록", desc: "기사관리에서 직접 또는 엑셀 대용량 업로드(양식 제공) · 지입차는 등급을 '지입'으로", act: "기사관리", to: () => go("기사관리") },
     { k: "clients", done: st.clients > 0 || st.places > 0, title: "거래처 · 하차지 등록", desc: "거래처관리에서 기본거래처·하차지를 엑셀로 한 번에 올릴 수 있습니다", act: "거래처관리", to: () => go("거래처관리") },
     { k: "setup", done: !!settings?.onboarding?.setupDone || !!settings?.copyTemplates, title: "기본 설정 (단위·결제일·기사 전달 문구)", desc: "관리자메뉴 › 환경 설정 › 초기 설정에서 우리 회사 방식에 맞춥니다", act: "환경 설정", to: () => go("관리자메뉴") },
-    { k: "order", done: st.orders > 0, title: "첫 오더 등록", desc: "배차관리에서 첫 오더를 등록하고 기사복사로 기사에게 전달해 보세요", act: "배차관리", to: () => go("배차관리") },
+    { k: "order", done: st.orders > 0, title: "첫 오더 등록", desc: "오더등록에서 첫 오더를 등록하고 기사복사로 기사에게 전달해 보세요", act: "배차관리", to: () => go("배차관리") },
     { k: "plan", done: !!planId, title: `요금제 확인${planName ? ` · 지금 ${planName}` : ""}`, desc: "관리자메뉴 › 구독·결제에서 요금제·청구서·입금 안내를 봅니다", act: "구독·결제", to: () => go("관리자메뉴") },
   ].filter((x) => x.k !== "plan" || billingAccess(me).view); // 💳 구독·결제는 경리·재무·임원·대표만 보이므로 그 외 마스터에게는 이 항목을 뺀다
   const doneN = items.filter((x) => x.done).length;

@@ -16,6 +16,7 @@ const MAX_FAILS = 5;
 const LOCK_STEPS_MIN = [10, 30, 60];
 const PW_MIN = 6;
 const PW_MAX = 32;
+const RESET_REAUTH_SEC = 5 * 60; // 재설정 전 로그인 비밀번호 다시 확인 — 5분 안
 
 const safeId = (s) => String(s || "").replace(/[/\s#?[\]]/g, "_").slice(0, 80);
 function isPayrollStaff(u = {}, email = "") {
@@ -134,13 +135,31 @@ function makePayrollPw({ db, FieldValue, Timestamp, HttpsError }) {
     return { ok: true, expiresAt, mustChange: noPw };
   }
 
+  // ⭐ 2026-11-10 급여 비밀번호를 잊었을 때 — 경리 관리자급이 "로그인 비밀번호로 방금 다시 로그인"했으면 지금 비밀번호 없이 새로 정한다
+  //  · 화면이 reauthenticate 후 새 토큰을 받아 부른다 → 토큰의 auth_time(마지막 로그인 확인 시각)이 5분 안이어야 한다
+  //  · 바꾸면 다른 사람의 잠금 해제는 모두 풀리고, 틀린 횟수도 지운다 · 기록(history)에 "reset"으로 남긴다
+  async function resetPw(data, context) {
+    const w = await who(context, data);
+    if (!w.admin) throw err("permission-denied", "급여 비밀번호 재설정은 경리 관리자(경리관리자·통합인사관리자·통합관리자·회사 마스터)만 할 수 있어요");
+    const authTime = Number(context.auth.token?.auth_time) || 0; // 초
+    if (!authTime || Date.now() / 1000 - authTime > RESET_REAUTH_SEC) throw err("unauthenticated", "본인 확인 시간이 지났어요. 로그인 비밀번호를 다시 넣어 주세요");
+    const p = pwProblem(data?.newPassword);
+    if (p) throw err("invalid-argument", p);
+    const h = hashPw(data.newPassword);
+    await secretRef(w.key).set({ companyName: w.company, ...h, updatedAt: FieldValue.serverTimestamp(), updatedAtMs: Date.now(), updatedBy: w.uid, updatedByName: w.u.name || w.email || "", history: FieldValue.arrayUnion({ at: Date.now(), by: w.uid, byName: w.u.name || w.email || "", action: "reset" }) }, { merge: true });
+    await revokeCompany(w.company, w.uid);
+    await attemptRef(w.key, w.uid).delete().catch(() => {});
+    const expiresAt = await issueUnlock(w);
+    return { ok: true, expiresAt };
+  }
+
   async function lock(data, context) {
     const uid = context?.auth?.uid;
     if (!uid) throw err("unauthenticated", "로그인이 필요합니다");
     await unlockRef(uid).delete().catch(() => {});
     return { ok: true };
   }
-  return { status, setPw, verify, lock };
+  return { status, setPw, verify, lock, resetPw };
 }
 
 module.exports = { DEFAULT_PW, makePayrollPw, isPayrollStaff, isPayrollAdmin, pwProblem, hashPw, checkPw, lockMinutesFor, UNLOCK_MS, MAX_FAILS };

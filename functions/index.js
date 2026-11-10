@@ -47,7 +47,7 @@ async function getAllTokens() {
 // 나머지(배차등록/배차완료/재배차/배차취소)는 사용자가 모바일에서 직접 켜야 온다.
 const PUSH_TYPES = ["배차등록", "긴급배차", "배차완료", "재배차", "미배차", "배차취소"];
 // ⭐ 2026-11-01 팀별 알림 — 업무 알림(결재·공지·메일·메신저·가입신청·인사발령·마감보고)은 기본 켜짐, 끈 사람만 안 보낸다
-const PUSH_TYPES_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일", "인수인계", "기사퇴근"]; // ⭐ 2026-11-03 인수인계(notifyHandover) · ⭐ 2026-11-10 담당 기사 퇴근(notifyDriverCheckout)
+const PUSH_TYPES_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일", "인수인계", "기사출퇴근"]; // ⭐ 2026-11-03 인수인계(notifyHandover) · ⭐ 2026-11-10 담당 기사 출근·퇴근(notifyDriverCheckout)
 function isPushTypeEnabled(prefs, type) {
   const v = prefs?.[type];
   if (v === true || v === false) return v;
@@ -5202,13 +5202,13 @@ exports.notifyHandover = functions.firestore.document("handovers/{id}").onCreate
   return null;
 });
 
-// ⭐ 2026-11-10 담당 기사 퇴근 → 그 기사의 담당자(기사관리에서 정한 drivers/{uid}.담당자.uid)에게 휴대폰 푸시
-//  · 기사앱이 직접 퇴근(퇴근·최종퇴근)한 기록만 — 운송사가 대신 [퇴근처리]한 것(auto)은 보내지 않는다
-//  · 담당자는 기록에 적힌 값이 아니라 서버가 기사 문서에서 다시 읽는다 · 같은 회사 · 재직 · "기사퇴근" 알림을 끈 사람 제외
+// ⭐ 2026-11-10 담당 기사 출근·퇴근 → 그 기사의 담당자(기사관리에서 정한 drivers/{uid}.담당자.uid)에게 휴대폰 푸시
+//  · 기사앱이 직접 출근·퇴근(최종퇴근 포함)한 기록만 — 운송사가 대신 [퇴근처리]한 것(auto)은 보내지 않는다
+//  · 담당자는 기록에 적힌 값이 아니라 서버가 기사 문서에서 다시 읽는다 · 같은 회사 · 재직 · "기사출퇴근" 알림을 끈 사람 제외
 //  · 화면(PC·모바일) 알림창·종은 src/driverEvents.jsx useDriverCheckoutFeed
 exports.notifyDriverCheckout = functions.firestore.document("driver_logs/{id}").onCreate(async (snap) => {
   const l = snap.data() || {};
-  if (l.status !== "퇴근" && l.status !== "최종퇴근") return null;
+  if (l.status !== "출근" && l.status !== "퇴근" && l.status !== "최종퇴근") return null; // ⭐ 2026-11-10 출근도
   if (l.auto || l._seed || !l.uid) return null;
   try {
     const dSnap = await db.collection("drivers").doc(String(l.uid)).get();
@@ -5221,14 +5221,15 @@ exports.notifyDriverCheckout = functions.firestore.document("driver_logs/{id}").
     const company = String(l.companyName || drv.companyName || PUSH_DEFAULT_COMPANY).trim();
     if (u.approved === false || u.employmentStatus === "퇴사" || NON_STAFF_ROLES.has(u.role)) return null;
     if (u.role !== "totalMaster" && String(u.companyName || PUSH_DEFAULT_COMPANY).trim() !== company) return null;
-    if (!isPushTypeEnabled(u.pushPrefs, "기사퇴근")) return null;
+    if (!isPushTypeEnabled(u.pushPrefs, "기사출퇴근")) return null;
     const name = String(l.driverName || drv.name || drv.이름 || "기사");
     const car = String(l.carNo || drv.carNo || drv.차량번호 || "");
     const ms = l.timestamp && typeof l.timestamp.toMillis === "function" ? l.timestamp.toMillis() : Date.now();
     const hm = new Date(ms + 9 * 3600e3).toISOString().slice(11, 16);
     const km = Number(l.odometer) || 0;
-    const body = [car, `${hm} ${l.status === "최종퇴근" ? "최종 " : ""}퇴근`, km ? `계기판 ${km.toLocaleString("ko-KR")}km` : ""].filter(Boolean).join(" · ");
-    await sendPushAndCleanup(userTokens(u), { notification: { title: `🏁 담당 기사 퇴근 · ${name}`, body }, data: { kind: "driverCheckout", driverUid: String(l.uid) }, android: { priority: "high" } }, "기사퇴근");
+    const isIn = l.status === "출근";
+    const body = [car, `${hm} ${isIn ? "출근" : `${l.status === "최종퇴근" ? "최종 " : ""}퇴근`}`, !isIn && km ? `계기판 ${km.toLocaleString("ko-KR")}km` : ""].filter(Boolean).join(" · ");
+    await sendPushAndCleanup(userTokens(u), { notification: { title: `${isIn ? "🚚 담당 기사 출근" : "🏁 담당 기사 퇴근"} · ${name}`, body }, data: { kind: isIn ? "driverCheckin" : "driverCheckout", driverUid: String(l.uid) }, android: { priority: "high" } }, "기사출퇴근");
   } catch (e) { console.error("기사 퇴근 푸시 실패:", e); }
   return null;
 });
@@ -6818,7 +6819,7 @@ exports.dailyReportPush = functions.runWith({ secrets: PLATFORM_MAIL_SECRETS, ti
 
 /* ==================================================================
    💰 2026-11-07 급여관리 비밀번호(한 번 더 확인) — 설명은 functions/payrollPw.js 맨 위
-   호출형 4개: payrollPwStatus · payrollPwSet · payrollPwVerify · payrollLock
+   호출형 5개: payrollPwStatus · payrollPwSet · payrollPwVerify · payrollLock · payrollPwReset(잊었을 때)
    비밀번호는 payrollSecrets(서버만) · 잠금 해제는 payrollUnlocks/{uid}(30분) — firestore.rules가 급여 문서마다 확인
 ================================================================== */
 const _payrollPw = require("./payrollPw").makePayrollPw({ db, FieldValue, Timestamp, HttpsError: functions.https.HttpsError });
@@ -6833,6 +6834,7 @@ exports.payrollPwStatus = payCall(_payrollPw.status);
 exports.payrollPwSet = payCall(_payrollPw.setPw);
 exports.payrollPwVerify = payCall(_payrollPw.verify);
 exports.payrollLock = payCall(_payrollPw.lock);
+exports.payrollPwReset = payCall(_payrollPw.resetPw); // ⭐ 2026-11-10 급여 비밀번호 잊었을 때(로그인 비밀번호로 본인 확인 후)
 
 /* ==================================================================
    ✉️ 2026-11-08 운송사별 발신 메일 — 설명은 functions/companyMail.js 맨 위

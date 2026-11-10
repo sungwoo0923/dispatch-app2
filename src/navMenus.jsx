@@ -6,6 +6,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { SWITCH_ROLES, readSwitchView } from "./customRoles";
 import { approvalSubs } from "./menuTree";
+import { menuName } from "./execMenus"; // 🏷 2026-11-10 배차관리 → 오더등록(보이는 이름)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 
@@ -154,7 +155,7 @@ export function NavHover({ menu, label, disabled = false, onOpenMenu, badges = n
           <div className="rounded-2xl overflow-hidden shadow-[0_24px_60px_rgba(5,10,25,0.45)] ring-1 ring-white/10" style={{ background: "linear-gradient(160deg,#0F1A30 0%,#152340 60%,#1B2B4B 100%)" }}>
             <div className="px-4 pt-3 pb-2 border-b border-white/10">
               <div className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{conf.code}</div>
-              <div className="text-[14px] font-black text-white mt-0.5">{label || menu}</div>
+              <div className="text-[14px] font-black text-white mt-0.5">{label || menuName(menu)}</div>
             </div>
             <div className="p-1.5 overflow-y-auto" style={{ maxHeight: "min(70vh, 520px)", overscrollBehavior: "contain" }}>
               {conf.items.map(([key, l], i) => (

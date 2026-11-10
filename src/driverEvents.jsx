@@ -8,7 +8,7 @@
 //     거절하면 차량번호·이름·전화번호가 지워지므로 기사 이름은 타임라인에서 꺼낸다.
 //   · 기사 서류 업로드 — driver_documents { status:"제출", uploadedAt, driverId, docLabel }
 //   · 긴급상황(SOS) — emergency_alerts { resolved:false, timestamp, driverName, carNo }
-//   · ⭐ 2026-11-10 담당 기사 퇴근 — driver_logs { status:"퇴근"|"최종퇴근", managerUid(= 기사의 담당자), logDate(오늘) }
+//   · ⭐ 2026-11-10 담당 기사 출근·퇴근 — driver_logs { status:"출근"|"퇴근"|"최종퇴근", managerUid(= 기사의 담당자), logDate(오늘) }
 //     기사앱이 퇴근할 때 담당자 uid를 같이 적는다 → 나(담당자) + 오늘 것만 구독(같음 조건 2개라 색인 추가 없음)
 //     휴대폰 푸시는 서버(functions notifyDriverCheckout)가 따로 보낸다
 //
@@ -303,10 +303,10 @@ export function useDriverCheckoutFeed(uid, company) {
       const list = [];
       s.docs.forEach((x) => {
         const d = x.data() || {};
-        if (d.status !== "퇴근" && d.status !== "최종퇴근") return;
+        if (d.status !== "출근" && d.status !== "퇴근" && d.status !== "최종퇴근") return; // ⭐ 2026-11-10 출근도
         if (d.auto) return; // 운송사가 대신 퇴근처리한 것은 제외
         const at = tsMs(d.timestamp) || Date.now();
-        list.push({ key: `out:${x.id}`, id: x.id, at, kind: "checkout", driverId: d.uid || "", driver: d.driverName || "", carNo: d.carNo || "", km: Number(d.odometer) || 0, final: d.status === "최종퇴근" });
+        list.push({ key: `out:${x.id}`, id: x.id, at, kind: "checkout", driverId: d.uid || "", driver: d.driverName || "", carNo: d.carNo || "", km: Number(d.odometer) || 0, final: d.status === "최종퇴근", checkin: d.status === "출근" });
       });
       list.sort((a, b) => b.at - a.at);
       S.checkout = list;
@@ -409,7 +409,7 @@ const KIND_UI = {
   reject: { label: "기사 거절", en: "REJECTED", c: "#FF6B61", bg: "rgba(255,59,48,.16)" },
   doc: { label: "서류 제출", en: "DOCUMENT", c: "#8FB0F0", bg: "rgba(143,176,240,.16)" },
   sos: { label: "긴급 상황", en: "EMERGENCY", c: "#FF6B61", bg: "rgba(255,59,48,.2)" },
-  checkout: { label: "기사 퇴근", en: "CHECK-OUT", c: "#CFE0FF", bg: "rgba(143,176,240,.18)" },
+  checkout: { label: "기사 출퇴근", en: "CHECK-IN · OUT", c: "#CFE0FF", bg: "rgba(143,176,240,.18)" },
 };
 const hm = (ms) => new Date(ms).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
 function orderSummary(r) {
@@ -421,7 +421,7 @@ export function driverEventText(e) {
   if (e.kind === "accept") return { head: `${e.driver || "기사"}님이 오더를 수락했습니다`, sub: orderSummary(e.row) };
   if (e.kind === "reject") return { head: `${e.driver || "기사"}님이 오더를 거절했습니다`, sub: orderSummary(e.row), reason: e.reason };
   if (e.kind === "doc") return { head: `${e.driver || "기사"}님이 ${e.label}을(를) 올렸습니다`, sub: "기사관리 › 기사 제출 서류에서 확인" };
-  if (e.kind === "checkout") return { head: `${e.driver || "기사"}님이 ${e.final ? "최종 " : ""}퇴근했습니다`, sub: [e.carNo, e.km ? `계기판 ${e.km.toLocaleString()}km` : "", "담당 기사"].filter(Boolean).join(" · ") };
+  if (e.kind === "checkout") return { head: `${e.driver || "기사"}님이 ${e.checkin ? "출근" : `${e.final ? "최종 " : ""}퇴근`}했습니다`, sub: [e.carNo, e.km ? `계기판 ${e.km.toLocaleString()}km` : "", "담당 기사"].filter(Boolean).join(" · ") };
   return { head: `긴급 상황 · ${e.driver || ""} ${e.carNo || ""}`.trim(), sub: "지입차관리 › 관제현황에서 위치 확인" };
 }
 

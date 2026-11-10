@@ -32,7 +32,7 @@ export const seenKey = (uid, menu) => `kpTourSeen:${uid || "anon"}:${menu}`;
 export const MENU_TOURS = {
   HOME: [
     { title: "LogisWeb에 오신 걸 환영합니다", text: "처음 들어가는 메뉴마다 핵심 버튼을 2~3개씩 짚어 드려요. 언제든 왼쪽 아래 [사용법 다시 보기]로 다시 볼 수 있어요." },
-    { tour: "nav-menu", title: "메뉴", text: "위쪽(또는 ☰) 메뉴에서 배차관리 · 배차현황 · 기사관리 · 정산 등으로 이동해요. F1 배차관리 · F2 실시간 · F3 배차현황." },
+    { tour: "nav-menu", title: "메뉴", text: "위쪽(또는 ☰) 메뉴에서 오더등록 · 배차현황 · 기사관리 · 정산 등으로 이동해요. F1 오더등록 · F2 실시간 · F3 배차현황." },
     { find: "출근하기", title: "출근", text: "브라우저를 켜면 자동 출근돼요. 안 됐으면 여기서 눌러 주세요." },
   ],
   배차관리: [

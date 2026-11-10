@@ -25,7 +25,7 @@ const SLIDE_WELCOME = { en: "WELCOME", title: "LogisWeb에 오신 것을 환영�
 const SLIDE_COMMON = { en: "COMMON", title: "모든 팀이 같이 쓰는 기능", desc: "홈 화면의 시계 옆 [출근하기] 버튼과 전자결재 · 회사관리는 모든 팀이 함께 씁니다.", points: ["출근·퇴근 버튼 — 잘못 누른 퇴근은 [되돌리기]", "전자결재 — 휴가·지출결의·품의·보고", "회사관리 — 회사정보 · 조직도 · 내정보 · 출근기록부", "이 안내는 관리자메뉴 › 환경 설정에서 다시 볼 수 있어요"] };
 const TEAM_SLIDES = {
   dispatch: [
-    { en: "DISPATCH", title: "배차관리 · 실시간 배차현황", desc: "상단 메뉴의 배차관리에서 오더를 등록하고, 실시간 배차현황에서 오늘 오더를 한눈에 관리합니다.", points: ["Tab 키만으로 빠르게 입력 (드롭다운·날짜 자동 열림)", "차량번호 입력 시 기사 자동 매칭", "상태(배차중/배차완료) 즉시 변경"] },
+    { en: "DISPATCH", title: "오더등록 · 실시간 배차현황", desc: "상단 메뉴의 오더등록에서 오더를 등록하고, 실시간 배차현황에서 오늘 오더를 한눈에 관리합니다.", points: ["Tab 키만으로 빠르게 입력 (드롭다운·날짜 자동 열림)", "차량번호 입력 시 기사 자동 매칭", "상태(배차중/배차완료) 즉시 변경"] },
     { en: "COPY", title: "기사복사 · 업로드 링크", desc: "오더를 선택하고 기사복사를 누르면 카톡용 문구가 복사됩니다. 기사 전달용에는 서류 업로드 링크가 붙어, 기사님이 사진만 찍어 올리면 끝.", points: ["전체 상세 / 기사 전달용 문구는 회사별로 수정 가능", "업로드되면 오더에 자동으로 첨부", "고정노선은 정해진 요일에 오더가 자동 생성"] },
     { en: "SETTLEMENT", title: "정산 · 매출", desc: "청구·지급 운임과 수수료가 자동 계산되고, 매출 대시보드에서 목표 대비 실적을 확인합니다.", points: ["거래처별 청구 · 기사별 지급 관리", "결제일 규칙에 따라 지급 예정일 자동 계산", "연간 매출목표 대비 진행률"] },
   ],
@@ -302,7 +302,7 @@ function DoneCard({ onClose, msg = "" }) {
       <div className="mx-auto w-16 h-16 rounded-2xl border border-[#8FB0F0]/40 bg-white/5 flex items-center justify-center text-[28px] text-[#8FB0F0]">✓</div>
       <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mt-5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ALL SET</div>
       <div className="text-[22px] font-black mt-1">설정이 완료되었습니다</div>
-      <div className="text-[13.5px] text-white/60 mt-2">{msg || "이제 배차관리에서 첫 오더를 등록해 보세요."}</div>
+      <div className="text-[13.5px] text-white/60 mt-2">{msg || "이제 오더등록에서 첫 오더를 등록해 보세요."}</div>
       <button type="button" onClick={onClose} className="mt-6 h-11 px-7 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black">시작하기</button>
     </div>
   );

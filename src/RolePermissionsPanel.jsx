@@ -28,6 +28,7 @@ import {
   rolesForTeam,
 } from "./customRoles";
 import { CustomSelect } from "./CustomSelect";
+import { menuName } from "./execMenus"; // 🏷 2026-11-10 배차관리 → 오더등록(보이는 이름)
 
 const genRoleKey = () => `role_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
@@ -306,7 +307,7 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
                   <tr className="bg-gray-50"><td colSpan={allEditable.length + 2} className="px-4 py-1.5 text-[11.5px] font-black text-gray-500 tracking-wide">{g.title}</td></tr>
                   {g.menus.map((m) => (
                     <tr key={m} className="border-t border-gray-100">
-                      <td className="px-4 py-2.5"><b className="text-gray-800">{m}</b> <span className="text-[11.5px] text-gray-400">{MENU_DESC[m]}</span></td>
+                      <td className="px-4 py-2.5"><b className="text-gray-800">{menuName(m)}</b> <span className="text-[11.5px] text-gray-400">{MENU_DESC[m]}</span></td>
                       <td className="px-3 py-2.5 text-center"><span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-bold bg-[#1B2B4B] text-white">수정</span></td>
                       {allEditable.map((r) => {
                         const v = effectiveMenus(r.key, customRoles)[m] || "hidden";
@@ -454,7 +455,7 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
                           {g.menus.map((m) => (
                             <div key={m} className="flex items-center gap-3 px-4 py-2.5">
                               <div className="min-w-0 flex-1">
-                                <div className="text-[13.5px] font-bold text-gray-800">{m}</div>
+                                <div className="text-[13.5px] font-bold text-gray-800">{menuName(m)}</div>
                                 <div className="text-[11.5px] text-gray-500">{MENU_DESC[m]}</div>
                               </div>
                               <LevelSwitch value={draft.menus[m] || "hidden"} onChange={(v) => setMenu(m, v)} />

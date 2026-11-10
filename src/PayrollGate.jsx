@@ -6,6 +6,7 @@
 //  · 둘러보기(/preview)는 서버 없이 이 브라우저 안에서만 흉내 낸다(실제 데이터는 규칙이 지킨다)
 import React from "react";
 import { doc, onSnapshot } from "firebase/firestore";
+import { EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import { db, auth, FUNCTIONS_BASE } from "./firebase";
 import { isPreviewMode } from "./fsTenant";
 
@@ -13,8 +14,8 @@ export const IDLE_MS = 10 * 60 * 1000;
 const NUMS = { fontVariantNumeric: "tabular-nums" };
 const demo = () => { try { return isPreviewMode() || window.location.pathname === "/preview"; } catch { return false; } };
 
-async function call(name, data) {
-  const token = await auth.currentUser?.getIdToken?.();
+async function call(name, data, force = false) {
+  const token = await auth.currentUser?.getIdToken?.(force);
   const res = await fetch(`${FUNCTIONS_BASE}/${name}`, { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ data }) });
   let j = {};
   try { j = await res.json(); } catch { /* 무시 */ }
@@ -28,12 +29,15 @@ const demoApi = {
   set: ({ newPassword, currentPassword }) => { const cur = sessionStorage.getItem(DK); if (cur && cur !== currentPassword) throw new Error("지금 비밀번호가 맞지 않아요"); if (String(newPassword).length < 6) throw new Error("비밀번호는 6자 이상으로 정해 주세요"); sessionStorage.setItem(DK, newPassword); const until = Date.now() + 30 * 60000; sessionStorage.setItem(`${DK}:until`, String(until)); return { ok: true, expiresAt: until, changed: !!cur }; },
   verify: ({ password }) => { const cur = sessionStorage.getItem(DK) || ""; const ok = cur ? cur === password : password === "000000"; if (!ok) return { ok: false, left: 4 }; const until = Date.now() + 30 * 60000; sessionStorage.setItem(`${DK}:until`, String(until)); return { ok: true, expiresAt: until, mustChange: !cur }; },
   lock: () => { sessionStorage.removeItem(`${DK}:until`); return { ok: true }; },
+  reset: ({ newPassword }) => { if (String(newPassword).length < 6) throw new Error("비밀번호는 6자 이상으로 정해 주세요"); sessionStorage.setItem(DK, newPassword); const until = Date.now() + 30 * 60000; sessionStorage.setItem(`${DK}:until`, String(until)); return { ok: true, expiresAt: until }; },
 };
 const api = {
   status: (company) => (demo() ? Promise.resolve(demoApi.status()) : call("payrollPwStatus", { company })),
   set: (company, newPassword, currentPassword) => (demo() ? Promise.resolve().then(() => demoApi.set({ newPassword, currentPassword })) : call("payrollPwSet", { company, newPassword, currentPassword })),
   verify: (company, password) => (demo() ? Promise.resolve(demoApi.verify({ password })) : call("payrollPwVerify", { company, password })),
   lock: (company) => (demo() ? Promise.resolve(demoApi.lock()) : call("payrollLock", { company })),
+  // ⭐ 2026-11-10 잊었을 때 — 로그인 비밀번호로 방금 다시 확인한 새 토큰(force)으로 부른다(서버가 확인 시각 5분 안인지 본다)
+  reset: (company, newPassword) => (demo() ? Promise.resolve().then(() => demoApi.reset({ newPassword })) : call("payrollPwReset", { company, newPassword }, true)),
 };
 
 // ⭐ 2026-11-09 급여관리 바로 열기 — 잠금 상태(서버 함수) 응답을 기다리지 않게
@@ -102,6 +106,46 @@ function PwForm({ company, mode, onDone, onCancel }) {
   );
 }
 
+// ⭐ 2026-11-10 급여 비밀번호를 잊었을 때 — 경리 관리자급이 로그인 비밀번호로 본인 확인 → 새 급여 비밀번호
+function ResetForm({ company, onDone, onCancel }) {
+  const [login, setLogin] = React.useState("");
+  const [a, setA] = React.useState("");
+  const [b, setB] = React.useState("");
+  const [msg, setMsg] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const submit = async (e) => {
+    e?.preventDefault?.();
+    setMsg("");
+    if (!demo() && !login) return setMsg("로그인 비밀번호를 넣어 주세요");
+    if (a.length < 6) return setMsg("새 급여 비밀번호는 6자 이상으로 정해 주세요");
+    if (a !== b) return setMsg("두 번 입력한 비밀번호가 달라요");
+    setBusy(true);
+    try {
+      if (!demo()) {
+        const u = auth.currentUser;
+        if (!u?.email) throw new Error("로그인 정보를 찾지 못했어요. 다시 로그인해 주세요");
+        try { await reauthenticateWithCredential(u, EmailAuthProvider.credential(u.email, login)); }
+        catch (er) { const c = String(er?.code || ""); throw new Error(/wrong-password|invalid-credential|invalid-login/.test(c) ? "로그인 비밀번호가 맞지 않아요" : /too-many/.test(c) ? "여러 번 틀려서 잠시 막혔어요. 조금 뒤 다시 해 주세요" : "본인 확인을 하지 못했어요"); }
+      }
+      const r = await api.reset(company, a);
+      onDone?.(r);
+    } catch (er) { setMsg(er.message || "바꾸지 못했어요"); } finally { setBusy(false); }
+  };
+  return (
+    <form onSubmit={submit} className="space-y-3" data-testid="payroll-pw-reset">
+      <div className="rounded-xl bg-[#F5F8FD] border border-[#DCE3EE] px-3.5 py-2.5 text-[14px] font-bold text-[#1B2B4B] leading-relaxed">지금 쓰는 <b>로그인 비밀번호</b>로 본인 확인을 한 뒤 새 급여 비밀번호를 정합니다. 바꾸면 다른 담당자는 새 비밀번호로 다시 열어야 해요.</div>
+      <label className="block"><span className="block mb-1.5 text-[14px] font-black text-[#3A4A66]">로그인 비밀번호</span><input type="password" autoComplete="current-password" value={login} onChange={(e) => setLogin(e.target.value)} className={inp} data-testid="reset-login" autoFocus /></label>
+      <label className="block"><span className="block mb-1.5 text-[14px] font-black text-[#3A4A66]">새 급여 비밀번호 <span className="font-bold text-[#7A879C]">6자 이상</span></span><input type="password" autoComplete="new-password" value={a} onChange={(e) => setA(e.target.value)} className={inp} data-testid="reset-new" /></label>
+      <label className="block"><span className="block mb-1.5 text-[14px] font-black text-[#3A4A66]">한 번 더</span><input type="password" autoComplete="new-password" value={b} onChange={(e) => setB(e.target.value)} className={inp} data-testid="reset-new2" /></label>
+      {msg && <div className="rounded-xl bg-[#FEF3F2] border border-[#FECDCA] px-3.5 py-2.5 text-[14px] font-bold text-[#B42318]" role="alert">{msg}</div>}
+      <div className="flex gap-2 pt-1">
+        <button type="button" onClick={onCancel} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[15px] font-black text-[#3A4A66]">취소</button>
+        <button type="submit" disabled={busy} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50" data-testid="reset-save">{busy ? "확인 중…" : "본인 확인하고 바꾸기"}</button>
+      </div>
+    </form>
+  );
+}
+
 function GateCard({ title, desc, children }) {
   return (
     <div className="min-h-[calc(100vh-220px)] w-full grid place-items-center px-3 py-10" data-testid="payroll-gate">
@@ -127,6 +171,7 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
   const [msg, setMsg] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [changing, setChanging] = React.useState(false);
+  const [resetting, setResetting] = React.useState(false); // ⭐ 2026-11-10 비밀번호 잊었을 때
   const [now, setNow] = React.useState(Date.now());
   const lastAct = React.useRef(Date.now());
   const load = React.useCallback((force = false) => prefetchPayrollStatus(company, { force }).then((r) => { setSt(r); if (demo() || !uid) setUntil(r.unlockedUntil || 0); }).catch((e) => setSt({ error: e.message })), [company, uid]);
@@ -173,6 +218,14 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
       ? <GateCard title="급여 비밀번호를 정해 주세요" desc="급여관리를 열 때마다 한 번 더 확인합니다. 경리 담당자에게만 알려 주세요."><PwForm company={company} mode="set" onDone={(r) => { lastAct.current = Date.now(); setSt((s) => ({ ...s, hasPassword: true })); setNow(Date.now()); setUntil(r.expiresAt); }} /></GateCard>
       : <GateCard title="아직 급여 비밀번호가 없어요" desc="경리 관리자가 먼저 비밀번호를 정하면 열 수 있어요." />;
   }
+  const isPayAdmin = !!(st?.admin || canAdmin);
+  if (!open && resetting) {
+    return (
+      <GateCard title="급여 비밀번호 재설정" desc="비밀번호를 잊었을 때 — 경리 관리자만 할 수 있어요">
+        <ResetForm company={company} onCancel={() => setResetting(false)} onDone={(r) => { lastAct.current = Date.now(); setResetting(false); setMsg(""); setSt((s) => ({ ...s, hasPassword: true, usingDefault: false })); stPending.clear(); setNow(Date.now()); setUntil(r.expiresAt); }} />
+      </GateCard>
+    );
+  }
   if (!open) {
     return (
       <GateCard title="급여관리 잠금" desc="급여 비밀번호를 넣으면 30분 동안 열려요.">
@@ -180,7 +233,8 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
           <input type="password" autoComplete="current-password" autoFocus value={pw} onChange={(e) => setPw(e.target.value)} placeholder="급여 비밀번호" className={inp} data-testid="payroll-pw" aria-label="급여 비밀번호" />
           {msg && <div className={`rounded-xl px-3.5 py-2.5 text-[14px] font-bold border ${/틀|잠겼어요|맞지/.test(msg) && !/다시 잠갔/.test(msg) ? "bg-[#FEF3F2] border-[#FECDCA] text-[#B42318]" : "bg-[#F5F8FD] border-[#DCE3EE] text-[#1B2B4B]"}`} role="status">{msg}</div>}
           <button type="submit" disabled={busy || !pw} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-40" data-testid="payroll-unlock">{busy ? "확인 중…" : "잠금 해제"}</button>
-          <div className="text-[14px] font-bold text-[#7A879C] leading-relaxed">{st.usingDefault ? "처음 비밀번호는 000000이에요. 들어가면 바로 새 비밀번호로 바꿔 주세요." : "비밀번호를 잊었으면 경리 관리자에게 바꿔 달라고 하세요."}</div>
+          <div className="text-[14px] font-bold text-[#7A879C] leading-relaxed">{st.usingDefault ? "처음 비밀번호는 000000이에요. 들어가면 바로 새 비밀번호로 바꿔 주세요." : isPayAdmin ? "비밀번호를 잊었으면 아래 [비밀번호를 잊었어요]로 다시 정할 수 있어요." : "비밀번호를 잊었으면 경리 관리자에게 바꿔 달라고 하세요."}</div>
+          {isPayAdmin && !st.usingDefault && <button type="button" onClick={() => { setMsg(""); setResetting(true); }} className="w-full h-11 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-black text-[#1B2B4B]" data-testid="payroll-forgot">비밀번호를 잊었어요</button>}
         </form>
       </GateCard>
     );
