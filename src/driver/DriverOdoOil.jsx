@@ -86,10 +86,31 @@ async function saveChange(uid, by, kind, value, date) {
 }
 
 // ─── 공통 UI ───
+// ⭐ 2026-11-10 키보드에 가려지던 문제 — iOS는 키보드가 떠도 화면(fixed) 바닥이 그대로라 아래에서 올라온 창이 키보드 뒤로 숨었다.
+//  보이는 영역(visualViewport)의 높이·위치를 따라 창을 키보드 바로 위에 붙이고, 입력칸이 보이게 스크롤한다
+function useVisibleBox() {
+  const read = () => { const vv = typeof window !== "undefined" ? window.visualViewport : null; return vv ? { top: vv.offsetTop, h: vv.height } : null; };
+  const [box, setBox] = useState(read);
+  React.useEffect(() => {
+    const vv = window.visualViewport; if (!vv) return undefined;
+    const on = () => setBox(read());
+    vv.addEventListener("resize", on); vv.addEventListener("scroll", on);
+    return () => { vv.removeEventListener("resize", on); vv.removeEventListener("scroll", on); };
+  }, []);
+  return box;
+}
 function Sheet({ children, onClose }) {
+  const box = useVisibleBox();
+  const kb = box && typeof window !== "undefined" ? window.innerHeight - box.h > 120 : false; // 키보드가 떠 있음
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!kb) return;
+    const el = document.activeElement;
+    if (el && ref.current?.contains(el)) setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 60);
+  }, [kb, box?.h]);
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 10060, background: "rgba(8,14,28,0.62)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center", fontFamily: FONT }}>
-      <div className="kpd-sheet" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 520, maxHeight: "min(92vh, calc(100dvh - 16px - env(safe-area-inset-top, 0px)))", overflowY: "auto", overscrollBehavior: "contain", background: "#fff", borderRadius: "28px 28px 0 0", boxShadow: "0 -20px 60px rgba(8,14,28,.45)", paddingBottom: "max(18px, env(safe-area-inset-bottom))" }}>
+    <div onClick={onClose} style={{ position: "fixed", left: 0, right: 0, ...(box ? { top: box.top, height: box.h } : { top: 0, bottom: 0 }), zIndex: 10060, background: "rgba(8,14,28,0.62)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center", fontFamily: FONT }}>
+      <div ref={ref} className="kpd-sheet" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 520, maxHeight: kb ? "calc(100% - 8px)" : "min(92vh, calc(100% - 16px - env(safe-area-inset-top, 0px)))", overflowY: "auto", overscrollBehavior: "contain", background: "#fff", borderRadius: "28px 28px 0 0", boxShadow: "0 -20px 60px rgba(8,14,28,.45)", paddingBottom: kb ? 12 : "max(18px, env(safe-area-inset-bottom))" }}>
         {children}
       </div>
     </div>
@@ -270,18 +291,44 @@ export function ChangeRecordSheet({ uid, driver, kind = "oil", by, onClose, onDo
 }
 
 // ─── 4) 홈 카드 — 주행거리 · 엔진오일 · 타이어 ───
+// ⭐ 2026-11-10 홈 맨 아래 · 접힌 한 줄(현재 km · 오일/타이어 남은 거리) → 누르면 지금처럼 펼침(기억함)
+const FOLD_KEY = "kpdOilTireOpen";
 export function OilTireCard({ driver, onRecord }) {
   const o = oilInfo(driver);
   const t = tireInfo(driver);
+  const [open, setOpen0] = useState(() => { try { return localStorage.getItem(FOLD_KEY) === "1"; } catch { return false; } });
+  const setOpen = (v) => { setOpen0(v); try { localStorage.setItem(FOLD_KEY, v ? "1" : "0"); } catch { /* 무시 */ } };
   const oilPct = o.lastKm && o.odo ? Math.max(0, Math.min(1, o.used / OIL_INTERVAL_KM)) : 0;
   const oilColor = o.level === 2 ? "#F04438" : o.level === 1 ? "#F5A524" : "#6FA0FF";
+  const warn = o.level >= 1 || t.level >= 1;
+  const oilTxt = !o.lastKm ? "기록 없음" : o.left == null ? "-" : o.left < 0 ? `${km(-o.left)} 초과` : `${km(o.left)} 남음`;
+  const tireTxt = !(t.lastKm || t.lastDate) ? "기록 없음" : t.left == null ? "기록 있음" : t.left < 0 ? `${km(-t.left)} 초과` : `${km(t.left)} 남음`;
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} data-kp="oil-tire-fold"
+        style={{ fontFamily: FONT, width: "100%", textAlign: "left", marginBottom: 14, padding: "14px 16px", borderRadius: 20, cursor: "pointer", display: "flex", alignItems: "center", gap: 12,
+          background: "#fff", border: `1px solid ${warn ? oilColor : "#E6EBF3"}`, boxShadow: "0 1px 2px rgba(15,26,48,.04), 0 6px 18px rgba(15,26,48,.05)" }}>
+        <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: "grid", placeItems: "center", background: "linear-gradient(160deg,#070D1C,#1F3A6E)", color: "#9DBDFF", fontSize: 11, fontWeight: 900, letterSpacing: "0.04em" }}>OIL</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: 17, fontWeight: 900, color: INK }}>엔진오일 · 타이어 <span style={{ fontSize: 14.5, fontWeight: 800, color: "#7D8BA3" }}>· 현재 {o.odo ? km(o.odo) : "미입력"}</span></span>
+          <span style={{ display: "block", fontSize: 14.5, fontWeight: 800, color: "#5B6B85", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            오일 <b style={{ color: o.level >= 1 ? (o.level === 2 ? "#D92D20" : "#B54708") : INK }}>{oilTxt}</b> · 타이어 <b style={{ color: t.level >= 1 ? (t.level === 2 ? "#D92D20" : "#B54708") : INK }}>{tireTxt}</b>
+          </span>
+        </span>
+        <span style={{ fontSize: 14, fontWeight: 900, color: BLUE, flexShrink: 0 }}>펼치기 ▾</span>
+      </button>
+    );
+  }
   return (
     <div style={{ fontFamily: FONT, borderRadius: 24, overflow: "hidden", marginBottom: 14, background: "#fff", border: "1px solid #E6EBF3", boxShadow: "0 1px 2px rgba(15,26,48,.04), 0 10px 28px rgba(15,26,48,.06)" }}>
       {/* 엔진오일 — 디지털 게이지 */}
       <div style={{ position: "relative", padding: "18px 18px 16px", color: "#fff", background: "radial-gradient(360px 160px at 92% -20px, rgba(111,160,255,0.40), transparent 70%), linear-gradient(160deg, #070D1C 0%, #0F1D3A 55%, #1F3A6E 100%)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: "0.16em", color: "#9DBDFF" }}>ENGINE OIL</span>
-          <span style={{ fontSize: 15, fontWeight: 800, color: "rgba(255,255,255,.75)" }}>현재 {o.odo ? km(o.odo) : "미입력"}</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 800, color: "rgba(255,255,255,.75)" }}>현재 {o.odo ? km(o.odo) : "미입력"}</span>
+            <button type="button" onClick={() => setOpen(false)} style={{ height: 30, padding: "0 10px", borderRadius: 10, border: "1px solid rgba(160,190,255,.4)", background: "rgba(255,255,255,.1)", color: "#fff", fontSize: 13.5, fontWeight: 900, cursor: "pointer", fontFamily: FONT }}>접기 ▴</button>
+          </span>
         </div>
         <div style={{ fontSize: 20, fontWeight: 900, marginTop: 4 }}>엔진오일</div>
         {o.has && o.lastKm ? (

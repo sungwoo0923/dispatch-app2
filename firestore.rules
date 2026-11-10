@@ -1925,6 +1925,29 @@ service cloud.firestore {
     match /payrollPwAttempts/{id} {
       allow read, write: if false;
     }
+    // 🔒 2026-11-10 비공개 청구운임 — 직원들이 아는 청구운임과 따로, 정한 사람만 보는 "실제 청구 금액"
+    //  privateFareSettings/{회사 키} = { companyName, viewers:[uid], clients:[{ name, mode, value }], updatedAt, updatedBy }
+    //  privateFareSettings/{회사 키}/fares/{오더 id} = { orderId, client, date, base(그때 공개 청구운임), amount, memo, updatedAt, updatedBy }
+    //  · 금액(fares)은 viewers에 든 사람만 읽고 쓴다 — 회사 마스터·관리자·최고관리자도 viewers가 아니면 못 본다
+    //  · 설정 처음 만들기: 같은 회사 마스터(또는 관리자)가 자기 회사 문서로 · 그 뒤 고치기는 viewers만(마스터가 몰래 자기를 넣지 못하게)
+    //  · 설정 문서 읽기: viewers만(어느 거래처가 비공개인지도 알면 안 되므로) · 지우기 없음
+    //  · 문서가 없을 때 "없음"만 확인하는 읽기는 승인된 직원 허용(화면이 메뉴를 보일지 판단)
+    match /privateFareSettings/{co} {
+      allow get: if isSignedIn() && (resource == null ? isApproved() : request.auth.uid in resource.data.get('viewers', []));
+      allow list: if false;
+      allow create: if isApproved() && !isShipperUser()
+        && request.resource.data.get('companyName', '') == myCo()
+        && (myIsMaster() || myRole() == 'admin')
+        && request.resource.data.viewers is list && request.resource.data.viewers.size() > 0 && request.resource.data.viewers.size() <= 10;
+      allow update: if isSignedIn() && request.auth.uid in resource.data.get('viewers', [])
+        && request.resource.data.get('companyName', '') == resource.data.get('companyName', '')
+        && request.resource.data.viewers is list && request.resource.data.viewers.size() > 0 && request.resource.data.viewers.size() <= 10;
+      allow delete: if false;
+      match /fares/{oid} {
+        allow read, write: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/privateFareSettings/$(co)).data.get('viewers', []);
+      }
+    }
     match /payrollUnlocks/{uid} {
       allow read: if isSignedIn() && request.auth.uid == uid;
       allow write: if false;
@@ -2366,6 +2389,8 @@ service cloud.firestore {
         'payrollSettings', 'payrollEmployees', 'payrollRuns', 'payslips', 'hrNotices', 'leavePromotions',
         // 🔐 2026-11-07 급여 비밀번호 · 잠금 해제 · 틀린 횟수 — 위에서 따로 정함(서버만 쓴다)
         'payrollSecrets', 'payrollUnlocks', 'payrollPwAttempts',
+        // 🔒 2026-11-10 비공개 청구운임 — 위에서 따로 정함(빠지면 같은 회사 직원 누구나 실제 청구 금액을 읽는다)
+        'privateFareSettings',
         // 🤖 2026-11-06 AI 팀 사용 기록 — 위에서 따로 정함
         'aiTeamLogs',
         // 📊 2026-11-06 일일 경영 보고 — 위에서 따로 정함

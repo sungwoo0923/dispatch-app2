@@ -14,7 +14,7 @@ import * as XLSX from "xlsx";
 import { db, auth } from "./firebase";
 import { kpConfirm } from "./kpDialog";
 import {
-  VL_COL, PURPOSE_PRESETS, REPAIR_KINDS, TON_OPTS, INSURER_OPTS, FUEL_CARD_OPTS, HIPASS_OPTS, GPS_OPTS, COVER_OPTS, BOX_OPTS, LEDGER_TYPE_EXTRA, EQUIP, today, uid, won, num, normPlate, plateCore, vehicleDocId, hasEquip, fmtPhone, normDate,
+  VL_COL, PURPOSE_PRESETS, REPAIR_KINDS, TON_OPTS, INSURER_OPTS, INSURER_PHONES, FUEL_CARD_OPTS, HIPASS_OPTS, GPS_OPTS, COVER_OPTS, BOX_OPTS, LEDGER_TYPE_EXTRA, EQUIP, today, uid, won, num, normPlate, plateCore, vehicleDocId, hasEquip, fmtPhone, normDate,
   currentDriver, parseSheetRows, saveEvidence, loadEvidence, deleteEvidence, dataUrlToBlobUrl, repairVat, ledgerPrintHtml, printHtml, sanitizeLedger,
 } from "./vehicleLedgerData";
 import VehicleCarePanel from "./VehicleCarePanel";
@@ -214,7 +214,7 @@ const EqDot = ({ on, label }) => (
 );
 
 // ── 기본 정보 입력 폼(등록·수정 공용) ──
-const BASIC_KEYS = ["차량번호", "용도", "톤수", "제조사", "모델", "연식", "회사", "차대번호", "보험사", "차주명", "유류카드사", "유류카드번호", "하이패스", "하이패스카드사", "하이패스카드번호", "하이패스유효기간", "하이패스구분", "하이패스단말기", "하이패스명의", "GPS", "덮개", "박스", "박스메모", "메모", "보험만기", "검사만기", "할부만기", "보험료"];
+const BASIC_KEYS = ["차량번호", "용도", "톤수", "제조사", "모델", "연식", "회사", "차대번호", "보험사", "보험사전화", "차주명", "유류카드사", "유류카드번호", "하이패스", "하이패스카드사", "하이패스카드번호", "하이패스유효기간", "하이패스구분", "하이패스단말기", "하이패스명의", "GPS", "덮개", "박스", "박스메모", "메모", "보험만기", "검사만기", "할부만기", "보험료"];
 // 📅 2026-11-09 만기 자동 알림 — 보험·정기검사·할부(리스) 만기일 → 남은 일수(D-day). 30일 안이면 목록·대장에 표시
 const DUE_KEYS = [["보험만기", "보험"], ["검사만기", "정기검사"], ["할부만기", "할부·리스"]];
 const daysLeft = (d) => { const t = Date.parse(`${String(d || "").slice(0, 10)}T00:00:00+09:00`); if (!Number.isFinite(t)) return null; const k = new Date(Date.now() + 9 * 3600e3); const today0 = Date.UTC(k.getUTCFullYear(), k.getUTCMonth(), k.getUTCDate()) - 9 * 3600e3; return Math.round((t - today0) / 864e5); };
@@ -256,6 +256,8 @@ function BasicForm({ v, set, purposeOpts, companyOpts, isNew, company }) {
         <Field label="회사(소속)">{sel("회사", companyOpts, { customPlaceholder: "소속·차주 회사" })}</Field>
         <Field label="차주명"><input {...f("차주명")} placeholder="차주 이름" /></Field>
         <Field label="보험사">{sel("보험사", INSURER_OPTS, { customPlaceholder: "보험사 이름" })}</Field>
+        {/* 🚨 2026-11-10 기사앱 › 연락처 › 교통사고 접수에 뜨는 번호 — 비우면 보험사 대표 사고접수 번호 */}
+        <Field label="보험사 사고접수 전화"><input {...f("보험사전화")} inputMode="tel" placeholder={INSURER_PHONES[v.보험사] ? `비우면 ${INSURER_PHONES[v.보험사]}` : "기사앱 교통사고 접수 번호"} /></Field>
         <Field label="연 보험료(원)"><input {...f("보험료")} value={v.보험료 ? won(num(v.보험료)) : ""} onChange={(e) => set({ ...v, 보험료: e.target.value.replace(/[^\d]/g, "") })} inputMode="numeric" placeholder="월 비용 리포트에 ÷12로 반영" style={{ ...inp, textAlign: "right", fontVariantNumeric: "tabular-nums" }} /></Field>
         <Field label="보험 만기일"><DateField value={v.보험만기 || ""} onChange={(x) => set({ ...v, 보험만기: x })} placeholder="만기일 선택" /></Field>
         <Field label="정기검사 만료일"><DateField value={v.검사만기 || ""} onChange={(x) => set({ ...v, 검사만기: x })} placeholder="만료일 선택" /></Field>

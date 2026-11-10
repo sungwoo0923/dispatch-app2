@@ -8232,6 +8232,7 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
     if (!e) return;
     if (e.kind === "doc") { set기사관리Tab("docs:driver"); handleMenuClick("기사관리"); markDriverSeen("docs"); return; }
     if (e.kind === "sos") { handleMenuClick("지입차관리"); markDriverSeen("sos"); setTimeout(() => emitSubnav("FLEET CONTROL", "tracking"), 0); return; }
+    if (e.kind === "checkout") { handleMenuClick("지입차관리"); markDriverSeen("checkout"); setTimeout(() => emitSubnav("FLEET CONTROL", "tracking"), 0); return; } // ⭐ 2026-11-10 담당 기사 퇴근 → 관제현황
     markDriverSeen("orders");
     if (e.row?.배차표Id) { handleMenuClick("배차현황"); setTimeout(() => emitSubnav("DISPATCH", "고정노선현황"), 0); return; }
     if (!["실시간배차현황", "배차관리"].includes(menu)) handleMenuClick("실시간배차현황");
@@ -47944,6 +47945,25 @@ const isKrHoliday = (dateStr) => {
 };
 
 // ===================== DispatchApp.jsx (PART 6/8 — Settlement Premium) — START =====================
+// 🔒 2026-11-10 비공개 청구운임 — 창은 열 때만 받는다 · 권한 확인은 가벼운 문서 하나 읽기
+const PrivateFaresModal = React.lazy(() => import("./PrivateFares"));
+function usePrivateFareAccessLazy(company, ver = 0) {
+  const [st, setSt] = React.useState({ loading: true, exists: false, viewer: false, settings: null });
+  React.useEffect(() => {
+    const uid = auth.currentUser?.uid || "";
+    if (!company || !uid) { setSt({ loading: false, exists: false, viewer: false, settings: null }); return undefined; }
+    const ref = doc(db, "privateFareSettings", company.replace(/\//g, "_"));
+    let unsub = null; let off = false;
+    getDoc(ref).then((s) => {
+      if (off) return;
+      if (!s.exists()) { setSt({ loading: false, exists: false, viewer: false, settings: null }); return; }
+      unsub = onSnapshot(ref, (x) => { const d = x.exists() ? x.data() : null; setSt({ loading: false, exists: true, viewer: !!d && (d.viewers || []).includes(uid), settings: d }); },
+        () => setSt({ loading: false, exists: true, viewer: false, settings: null }));
+    }).catch(() => { if (!off) setSt({ loading: false, exists: true, viewer: false, settings: null }); }); // 권한 없음 = 켜져 있지만 담당자가 아님
+    return () => { off = true; unsub?.(); };
+  }, [company, ver]);
+  return st;
+}
 function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], isViewer = false, role, userCompany = "", showAlert = (m) => alert(m) }) {
   const fareRS = useFareRules(getTenant() || userCompany); // ⭐ 2026-11-02 운임규칙 — 운임구분별 합계·내보내기(규칙 사용 회사만)
 
@@ -47983,6 +48003,13 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const [marginReportOpen, setMarginReportOpen] = React.useState(false); // ★ 매익률 원인 보고서
   const [monthCloseOpen, setMonthCloseOpen] = React.useState(false); // ★ 월 마감 점검
   const [staffPerfOpen, setStaffPerfOpen] = React.useState(false); // ★ 배차담당자별 실적(관리자 전용)
+  // 🔒 2026-11-10 비공개 청구운임 — 정한 담당자만(처음 켜기는 관리자) · 금액은 별도 보관(src/PrivateFares.jsx · firestore.rules)
+  const pfCompany = String(userCompany || "").trim();
+  const [pfVer, setPfVer] = React.useState(0);
+  React.useEffect(() => { const h = () => setPfVer((n) => n + 1); window.addEventListener("kp-private-fare-changed", h); return () => window.removeEventListener("kp-private-fare-changed", h); }, []);
+  const pfAccess = usePrivateFareAccessLazy(pfCompany, pfVer);
+  const [pfOpen, setPfOpen] = React.useState(false);
+  const pfShow = !pfAccess.loading && (pfAccess.viewer || (!pfAccess.exists && role === "admin" && !isViewer));
   // ⭐ 매출관리 — 선택한 연도 전체 + 고른 달 기준 3개월 전(전월 비교·마감 점검·담당자 실적)까지만 불러온다.
   // 월 비교 분석은 아무 달이나 고를 수 있어 열 때 전체를 불러온다.
   {
@@ -48384,7 +48411,9 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
         // ⭐ 2026-11-10 월 비교 분석 · 월 마감 점검은 메뉴에서 뺐다(요청)
         { key: "a2", label: "월간 경영 보고서", icon: "file", onClick: () => setMarginReportOpen(true) },
         ...(canSeeStaffPerf ? [{ key: "a4", label: "담당자별 실적", icon: "users", onClick: () => setStaffPerfOpen(true) }] : []),
+        ...(pfShow ? [{ key: "a5", label: pfAccess.exists ? "비공개 청구" : "비공개 청구 켜기", icon: "key", onClick: () => setPfOpen(true) }] : []),
       ]}>
+    {pfOpen && pfShow && <React.Suspense fallback={null}><PrivateFaresModal company={pfCompany} dispatchData={dispatchData} clients={clients} access={pfAccess} onClose={() => setPfOpen(false)} /></React.Suspense>}
     {/* ⭐ 2026-10-29 — 최대폭(1560px) 제한을 없애 넓은 모니터에서도 좌우 여백 없이 꽉 채운다 */}
     <div id="settlement-capture" className="kp-rv-zoom w-full">
 
