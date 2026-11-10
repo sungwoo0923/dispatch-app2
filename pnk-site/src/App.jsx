@@ -10,6 +10,8 @@ import { cx } from "./ui";
 import Icon from "./icons";
 import BootScreen from "./BootScreen";
 import { JoinGate, Login, MfaGate } from "./Auth";
+import * as UI from "./editor/uiStore";
+const EditLayer = React.lazy(() => import("./editor/EditLayer"));
 const Home = React.lazy(() => import("./pages/Home"));
 const Board = React.lazy(() => import("./pages/Board"));
 const Mail = React.lazy(() => import("./pages/Mail"));
@@ -71,7 +73,7 @@ export default function App() {
   }, [me.loading, me.active, pre]);
   const stage = me.loading ? me.stage : !me.active ? 4 : pre ? 4 : 3;
   if (!booted && (me.loading || me.active)) return <BootScreen stage={stage} name={me.member?.name} onDone={() => setBooted(true)} />;
-  if (!me.user) return <Login />;
+  if (!me.user) { UI.setRoute("login"); return <Login />; }
   if (me.needMfa) return <MfaGate me={me} />;
   if (!me.active) return <JoinGate me={me} />;
   return (
@@ -111,7 +113,10 @@ function Shell({ children }) {
   const me = useMeCtx();
   const loc = useLocation();
   const [open, setOpen] = React.useState(false);
-  React.useEffect(() => { setOpen(false); window.scrollTo(0, 0); }, [loc.pathname]);
+  React.useEffect(() => { setOpen(false); window.scrollTo(0, 0); UI.setRoute(loc.pathname); }, [loc.pathname]);
+  const [, bump] = React.useState(0);
+  React.useEffect(() => UI.subscribe(() => bump((x) => x + 1)), []);
+  const cfg = UI.current();
   const uid = me.user.uid;
   const [pending] = useCol(me.isAdmin ? "pnkMembers" : null, [where("status", "==", "pending")], [me.isAdmin]);
   const [mails] = useCol("pnkMail", [where("toUids", "array-contains", uid)], [uid]);
@@ -123,15 +128,15 @@ function Shell({ children }) {
     pending: (pending || []).length,
     mail: (mails || []).filter((m) => !m.readBy?.[uid] && !m.trashBy?.[uid]).length,
   };
-  const groups = MENU.map((g) => ({ ...g, items: g.items.filter((it) => (!it.admin || me.isAdmin) && (!it.owner || me.owner)) })).filter((g) => g.items.length);
+  const groups = UI.menuOf(cfg, MENU).map((g) => ({ ...g, items: g.items.filter((it) => (!it.admin || me.isAdmin) && (!it.owner || me.owner) && (!it.hidden || UI.isEditing())) })).filter((g) => g.items.length);
 
   const side = (
-    <aside className="w-[236px] shrink-0 h-full flex flex-col text-white" style={{ background: "linear-gradient(180deg, #16264A 0%, #1B2B4B 55%, #14213D 100%)" }}>
+    <aside id="pnk-side" className="w-[236px] shrink-0 h-full flex flex-col text-white" style={{ background: "linear-gradient(180deg, #16264A 0%, #1B2B4B 55%, #14213D 100%)" }}>
       <div className="px-5 pt-6 pb-5 border-b border-white/10 flex items-center gap-3">
         <img src="/brand/pnk-mark-192.png" alt="" className="w-10 h-10 rounded-xl bg-white shrink-0" />
         <div className="min-w-0">
-          <div className="text-[10.5px] font-extrabold tracking-[0.18em] text-blue-200/70">INTRANET</div>
-          <div className="text-[15px] font-black truncate">PnK PROJECT</div>
+          <div className="text-[10.5px] font-extrabold tracking-[0.18em] text-blue-200/70">{cfg.theme?.brandSub || "INTRANET"}</div>
+          <div className="text-[15px] font-black truncate">{cfg.theme?.brandTitle || "PnK PROJECT"}</div>
         </div>
       </div>
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5 no-scrollbar">
@@ -147,7 +152,7 @@ function Shell({ children }) {
                       isActive ? "bg-white text-navy shadow-[0_6px_16px_rgba(0,0,0,0.18)]" : "text-blue-50/80 hover:bg-white/[0.08] hover:text-white")}>
                     {({ isActive }) => (<>
                       <Icon name={it.icon} size={18} className={isActive ? "text-navy" : "text-blue-200/80"} />
-                      <span className="flex-1 text-left truncate">{it.label}</span>
+                      <span className={cx("flex-1 text-left truncate", it.hidden && "line-through opacity-50")}>{it.label}</span>
                       {b > 0 && <span className="min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-extrabold flex items-center justify-center" style={{ background: "#FF3B30", color: "#fff" }}>{b}</span>}
                     </>)}
                   </NavLink>
@@ -186,9 +191,10 @@ function Shell({ children }) {
           <div className="flex-1 bg-black/40" />
         </div>
       )}
-      <main className="flex-1 min-w-0 md:h-full md:overflow-y-auto px-4 md:px-7 py-5 md:py-6">
+      <main id="pnk-main" className="flex-1 min-w-0 md:h-full md:overflow-y-auto px-4 md:px-7 py-5 md:py-6">
         <div className="w-full max-w-[1600px] mx-auto">{children}</div>
       </main>
+      {me.owner && <React.Suspense fallback={null}><EditLayer me={me} menu={MENU} /></React.Suspense>}
     </div>
   );
 }

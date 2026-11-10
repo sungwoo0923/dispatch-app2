@@ -2456,6 +2456,14 @@ service cloud.firestore {
         && pnkOnly(['readBy', 'trashBy', 'starBy', 'updatedAt']);
     }
 
+    // 🎨 PnK 인트라넷 — 화면 편집(글자 · 모양 · 메뉴 · 테마). 로그인 화면 문구도 바꾸므로 누구나 읽기 · 쓰기는 최고관리자 · 부관리자(2차 인증 후)만
+    match /pnkUi/{id} {
+      allow read: if true;
+      allow write: if isSignedIn() && pnkTM();
+    }
+    match /pnkUiHistory/{id} {
+      allow read, write: if isSignedIn() && pnkTM();
+    }
     // 🏢 PnK 인트라넷 — 사번 색인(사번 → 로그인 이메일). 로그인 화면이 사번으로 이메일을 찾는다(문서 하나 읽기만, 목록은 구성원만)
     //  같은 사번은 두 번 못 만든다(이미 있으면 create 가 아니라 update 라 막힘)
     match /pnkEmpIndex/{empNo} {
@@ -2513,7 +2521,7 @@ service cloud.firestore {
         // 🏢 2026-11-10 PnK PROJECT 사내 인트라넷 — 위에서 따로 정함(빠지면 로지스웹 고객사 직원이 읽고 쓸 수 있다)
         'pnkMembers', 'pnkPosts', 'pnkFiles', 'pnkTasks', 'pnkEvents', 'pnkSales', 'pnkServices', 'pnkReleases', 'pnkCompany', 'pnkFinance', 'pnkMail',
         //  사번 색인 · 전자결재 · 출퇴근 · 메일 서버 비밀값(서버만) · 외부 발송 횟수(서버만)
-        'pnkEmpIndex', 'pnkApprovals', 'pnkAttendance', 'pnkMailSecrets', 'pnkMailUsage', 'pnkMfaSecrets', 'pnkMfaSessions',
+        'pnkEmpIndex', 'pnkApprovals', 'pnkAttendance', 'pnkMailSecrets', 'pnkMailUsage', 'pnkMfaSecrets', 'pnkMfaSessions', 'pnkUi', 'pnkUiHistory',
         'adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'resetLocks', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'driverContracts', 'fixedRoutes', 'routeBoards', 'personalSchedules', 'publicCompanies', 'companyContracts',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
         'orders', 'dispatch', 'dispatch_test', 'fixedClients', 'drivers', 'clients', 'places', 'recurringOrders', 'deletedOrders',
