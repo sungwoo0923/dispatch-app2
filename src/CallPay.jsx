@@ -1,8 +1,12 @@
 // ======================= src/CallPay.jsx =======================
 // 💳 2026-11-11 오더별 정산 표시(계산서 · 지급 · 입금) — 시험 기능(테스트운송사 + 관리센터에서 켠 운송사만)
 //  화물운송은 오더가 두 방향이다.
-//   · 올린 콜  : 우리가 오더를 등록(콜에 올림) → 용차 기사가 잡음 → 기사가 우리에게 계산서 발행 → 우리가 기사에게 지급
-//   · 잡은 콜  : 우리가 콜 프로그램(24시 · 인성 · 화물맨…)에서 오더를 잡음 → 지입 기사에게 줌 → 우리가 콜 올린 업체(= 거래처)에 계산서 발행 → 그 업체가 우리에게 입금
+//   · IN  (우리 오더) : 우리가 오더를 등록(콜에 올림) → 용차 기사가 잡음 → 기사가 우리에게 계산서 발행 → 우리가 기사에게 지급
+//   · OUT (외부 콜)   : 우리가 콜 프로그램(24시 · 인성 · 화물맨…)에서 오더를 잡음 → 우리 기사에게 줌 → 우리가 콜 올린 업체(= 거래처)에 계산서 발행 → 그 업체가 우리에게 입금
+//  ⭐ 2026-11-11 화면 표기는 IN / OUT(예전 "올린 콜 / 잡은 콜"). 저장값 콜구분: "OUT" | "IN" | ""(= IN) — 예전 값 "잡은콜"도 OUT으로 읽는다
+//  · OUT 방식(어디서 잡았나) 목록은 회사별로 추가 · 삭제(선택 목록 "아웃콜방식" — 배차방식 목록과 같은 방식)
+//  · 계산서 금액 = 운임(공급가액) + 부가세 10% — 정산 창 · 입금 확인에 함께 보여 준다
+//  · 모든 창은 바깥을 눌러도 닫히지 않는다(닫기 단추로만)
 //  배차현황에 칸을 여러 개 늘리지 않고 [정산] 칸 하나에 지금 단계만 알약으로 보여 주고, 누르면 날짜가 모두 나온다.
 //  오더(dispatch 문서)에 적는 값 — 모두 선택 값이라 예전 오더는 그대로 "올린 콜"로 본다
 //   콜구분: "잡은콜" | ""          콜플랫폼: "24시" | "인성" | "화물맨" | "기타"
@@ -22,9 +26,40 @@ import { db } from "./firebase";
 import { upsertAutoEntry } from "./ledgerAuto";
 import { pdCall } from "./publicDataMain";
 import { subscribeBankTxns } from "./popbillAuto";
+import CustomDatePicker from "./CustomDatePicker";
+import { CompanyOptionPicker } from "./companyOptionPicker";
+import { kpConfirm } from "./kpDialog";
 
 export const BETA_COMPANY = "테스트운송사";
-export const CALL_PLATFORMS = ["24시", "인성", "화물맨", "기타"];
+export const OUT_KEY = "아웃콜방식"; // 회사별 선택 목록(companyDropdownOptions) — 기본: 24시 · 인성 · 화물맨
+export const vatOf = (v) => { const a = Number(String(v ?? "").replace(/[^\d.-]/g, "")) || 0; const vat = Math.round(a * 0.1); return { supply: a, vat, total: a + vat }; };
+// 날짜 글자 다듬기 — 20261111 · 26.11.11 · 11/11 · 11-11 → YYYY-MM-DD (못 알아보면 "")
+export function normDate(v, base = "") {
+  const t = String(v || "").trim(); if (!t) return "";
+  const y0 = (base || new Date(Date.now() + 9 * 3600e3).toISOString()).slice(0, 4);
+  let m = /^(\d{4})[-./ ]?(\d{1,2})[-./ ]?(\d{1,2})$/.exec(t) || null;
+  if (!m) { const m2 = /^(\d{2})[-./ ](\d{1,2})[-./ ](\d{1,2})$/.exec(t); if (m2) m = [0, `20${m2[1]}`, m2[2], m2[3]]; }
+  if (!m) { const m3 = /^(\d{1,2})[-./ ](\d{1,2})$/.exec(t) || /^(\d{2})(\d{2})$/.exec(t); if (m3) m = [0, y0, m3[1], m3[2]]; }
+  if (!m) return "";
+  const mo = Number(m[2]); const d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return "";
+  return `${m[1]}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+// 날짜 칸 — 직접 입력(Enter · 칸을 벗어나면 다듬어 적용) + 프로그램 달력
+export function DateField({ value, onChange, disabled = false, placeholder = "날짜", width = 150 }) {
+  const [txt, setTxt] = React.useState(value || "");
+  React.useEffect(() => { setTxt(value || ""); }, [value]);
+  const commit = () => { const t = txt.trim(); if (!t) { if (value) onChange(""); return; } const n = normDate(t, value); if (n) { setTxt(n); if (n !== value) onChange(n); } else setTxt(value || ""); };
+  return (
+    <span className="inline-flex items-stretch rounded-lg border border-[#DCE3EE] bg-white overflow-hidden focus-within:border-[#1B2B4B]" style={{ width, opacity: disabled ? 0.55 : 1 }} data-date-field>
+      <input value={txt} disabled={disabled} placeholder={placeholder} autoComplete="off" inputMode="numeric" onChange={(e) => setTxt(e.target.value)} onBlur={commit}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } }}
+        className="flex-1 min-w-0 h-9 pl-2.5 pr-1 text-[13px] font-bold text-[#0F1A30] outline-none bg-transparent" style={NUM} />
+      <CustomDatePicker value={value || ""} onChange={(e) => onChange(e.target.value)} disabled={disabled} showIcon displayOverride=" " openOnFocus={false}
+        className="h-9 w-9 shrink-0 border-l border-[#EEF2F8] text-[#5B6B85] hover:bg-[#F4F6FA] !justify-center" />
+    </span>
+  );
+}
 const NUM = { fontVariantNumeric: "tabular-nums" };
 const today = () => { const d = new Date(Date.now() + 9 * 3600e3); return d.toISOString().slice(0, 10); };
 const md = (s) => { const m = /^\d{4}-(\d{2})-(\d{2})/.exec(String(s || "")); return m ? `${Number(m[1])}/${Number(m[2])}` : ""; };
@@ -38,7 +73,8 @@ export function useBetaOn(company) {
   return co === BETA_COMPANY || f.callPay === true;
 }
 
-export const isCaughtCall = (r) => r?.콜구분 === "잡은콜";
+export const isCaughtCall = (r) => r?.콜구분 === "OUT" || r?.콜구분 === "잡은콜"; // OUT = 외부 콜을 잡은 오더
+export const callDir = (r) => (isCaughtCall(r) ? "OUT" : "IN");
 // 지금 단계 — { kind, label, tone, date }
 export function payStage(r) {
   if (!r) return null;
@@ -65,10 +101,10 @@ export function PayBadge({ row, onOpen }) {
   if (!s) return <button type="button" onClick={onOpen} title="정산 정보 보기" className="text-[12px] font-bold text-[#C2CBDB] hover:text-[#1B2B4B] px-2">–</button>;
   const t = TONE[s.tone];
   return (
-    <button type="button" onClick={onOpen} title={`${caught ? "잡은 콜" : "올린 콜"} · 눌러서 날짜 보기`} data-pay-badge={s.label}
+    <button type="button" onClick={onOpen} title={`${caught ? "OUT · 외부 콜을 잡은 오더" : "IN · 우리 오더"} — 눌러서 정산 정보 보기`} data-pay-badge={s.label}
       className="inline-flex items-center gap-1 h-7 px-2 rounded-full text-[12px] font-black whitespace-nowrap hover:brightness-95"
       style={{ background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, ...NUM }}>
-      {caught && <span className="text-[10px] font-black px-1 rounded" style={{ background: s.tone === "done" ? "rgba(255,255,255,.18)" : "#1B2B4B", color: "#fff" }}>잡은</span>}
+      <span className="text-[9.5px] font-black px-1 rounded tracking-wide" style={caught ? { background: s.tone === "done" ? "rgba(255,255,255,.2)" : "#1B2B4B", color: "#fff" } : { background: s.tone === "done" ? "rgba(255,255,255,.14)" : "#EEF2F8", color: s.tone === "done" ? "#CFE0FF" : "#7A8AA8" }}>{caught ? "OUT" : "IN"}</span>
       {s.label}{s.tone === "done" && s.date ? <span className="font-bold opacity-80">{md(s.date)}</span> : null}
     </button>
   );
@@ -166,92 +202,99 @@ export function queuePayNotice({ row, date, company, patchDispatch }) {
   }, 1500);
 }
 
-// 배차현황 [정산] 알약을 누르면 뜨는 창
+// 배차현황 [정산] 알약 · 입금 확인 [입금처리]를 누르면 뜨는 창 — 고친 내용은 아래 [저장] / [입금완료]를 눌러야 반영된다
 export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company = "" }) {
   const id = row?._id || row?.id;
-  const caught = isCaughtCall(row);
+  const init = () => ({ dir: callDir(row), platform: row?.콜플랫폼 || "", inv: row?.계산서일 || "", depDate: row?.입금일 || today(), depName: row?.입금자명 || "" });
+  const [f, setF] = React.useState(init);
   const [busy, setBusy] = React.useState(false);
-  const [inv, setInv] = React.useState(row?.계산서일 || "");
-  const [depDate, setDepDate] = React.useState(row?.입금일 || today());
-  const [depName, setDepName] = React.useState(row?.입금자명 || "");
-  React.useEffect(() => { setInv(row?.계산서일 || ""); setDepDate(row?.입금일 || today()); setDepName(row?.입금자명 || ""); }, [row?.계산서일, row?.입금일, row?.입금자명]);
-  const save = async (patch) => {
-    if (!canEdit || !id || !patchDispatch) return;
-    setBusy(true);
-    try { await patchDispatch(id, { ...patch, __system: true }); } catch (e) { window.alert(`저장하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); }
-  };
+  React.useEffect(() => { setF(init()); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const out = f.dir === "OUT";
+  const deposited = row?.입금상태 === "입금완료";
+  const basePatch = () => ({ 콜구분: f.dir, 콜플랫폼: out ? f.platform : "", 계산서일: f.inv });
+  const dirty = f.dir !== callDir(row) || (out ? f.platform : "") !== (row?.콜플랫폼 || "") || f.inv !== (row?.계산서일 || "")
+    || (deposited && out && (f.depDate !== (row?.입금일 || "") || f.depName !== (row?.입금자명 || "")));
+  const run = async (fn) => { if (!canEdit || !id || !patchDispatch) return; setBusy(true); try { await fn(); } catch (e) { window.alert(`저장하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); } };
+  const save = () => run(async () => {
+    if (deposited && !out) { await setCallDeposit({ row, done: false, patchDispatch, company }); } // IN으로 바꾸면 입금 기록도 지운다
+    await patchDispatch(id, { ...basePatch(), ...(deposited && out ? { 입금일: f.depDate || today(), 입금자명: f.depName.trim().slice(0, 40) } : {}), __system: true });
+    if (deposited && out && f.depDate !== (row?.입금일 || "")) await setCallDeposit({ row, done: true, date: f.depDate, name: f.depName, txnId: row?.입금거래id || "", patchDispatch, company }); // 장부 날짜도 맞춘다
+  });
+  const deposit = () => run(async () => {
+    await patchDispatch(id, { ...basePatch(), ...(f.inv ? {} : { 계산서일: f.depDate || today() }), __system: true });
+    await setCallDeposit({ row, done: true, date: f.depDate, name: f.depName, patchDispatch, company });
+    onClose?.();
+  });
+  const undo = () => run(async () => { if (!(await kpConfirm("입금완료를 취소할까요? 수입·지출 장부에 자동으로 들어간 줄도 함께 지워집니다."))) return; await setCallDeposit({ row, done: false, patchDispatch, company }); });
+  const amt = vatOf(out ? row?.청구운임 : row?.기사운임);
   const s = payStage(row);
+  const seg = "px-4 h-9 rounded-lg text-[13px] font-black tracking-wide whitespace-nowrap";
   return createPortal(
-    <div className="fixed inset-0 z-[99999] bg-black/45 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="w-full max-w-[460px] bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()} data-pay-popup>
-        <div className="px-5 py-4 text-white flex items-center gap-3" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
+    <div className="fixed inset-0 z-[99999] bg-black/45 flex items-center justify-center p-4">
+      <div className="w-full max-w-[500px] max-h-[92vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col" data-pay-popup>
+        <div className="px-5 py-4 text-white flex items-center gap-3 shrink-0" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
           <div className="min-w-0 flex-1">
             <div className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">SETTLE · 정산</div>
             <div className="text-[16px] font-black truncate">{row?.거래처명 || "-"}</div>
-            <div className="text-[12px] text-white/60 truncate" style={NUM}>{row?.상차일 || ""} · {row?.상차지명 || ""} → {row?.하차지명 || ""}{row?.이름 || row?.기사명 ? ` · ${row.이름 || row.기사명}` : ""}</div>
+            <div className="text-[12px] text-white/60 truncate" style={NUM}>{row?.상차일 || ""} · {row?.상차지명 || ""} → {row?.하차지명 || ""}{row?.이름 || row?.기사명 ? ` · ${row.이름 || row.기사명}` : ""}{row?.차량번호 ? ` · ${row.차량번호}` : ""}</div>
           </div>
-          <button type="button" onClick={onClose} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[16px]">✕</button>
+          <button type="button" onClick={onClose} aria-label="닫기" className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[16px] shrink-0">✕</button>
         </div>
-        <div className="px-5 py-3">
+        <div className="px-5 py-3 overflow-y-auto">
           <Row label="오더 구분">
             <div className="inline-flex rounded-xl bg-[#F1F4F9] p-1">
-              {[["", "올린 콜"], ["잡은콜", "잡은 콜"]].map(([v, l]) => (
-                <button key={l} type="button" disabled={!canEdit || busy} onClick={() => save({ 콜구분: v, ...(v ? {} : { 콜플랫폼: "" }) })}
-                  className={`px-3.5 h-8 rounded-lg text-[12.5px] font-black whitespace-nowrap ${(row?.콜구분 || "") === v ? "bg-white text-[#0F1A30] shadow-sm" : "text-[#7A8AA8]"}`}>{l}</button>
+              {[["IN", "IN"], ["OUT", "OUT"]].map(([v, l]) => (
+                <button key={v} type="button" disabled={!canEdit || busy} onClick={() => set("dir", v)} data-dir={v}
+                  className={`${seg} ${f.dir === v ? "bg-[#0F1A30] text-white shadow-sm" : "text-[#7A8AA8]"}`}>{l}</button>
               ))}
             </div>
-            <span className="text-[11.5px] font-semibold text-[#9AA9C3]">{caught ? "콜을 잡아 우리 기사에게 준 오더" : "우리가 등록해 기사가 잡은 오더"}</span>
+            <span className="text-[11.5px] font-semibold text-[#9AA9C3]">{out ? "외부 콜을 잡아 우리 기사에게 준 오더" : "우리가 등록해 기사가 잡은 오더"}</span>
           </Row>
-          {caught && (
-            <Row label="잡은 곳">
-              {CALL_PLATFORMS.map((p) => (
-                <button key={p} type="button" disabled={!canEdit || busy} onClick={() => save({ 콜플랫폼: row?.콜플랫폼 === p ? "" : p })}
-                  className={`px-3 h-8 rounded-lg border text-[12.5px] font-black whitespace-nowrap ${row?.콜플랫폼 === p ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "bg-white border-[#DCE3EE] text-[#3A4A66]"}`}>{p}</button>
-              ))}
+          {out && (
+            <Row label="OUT 방식">
+              <CompanyOptionPicker optKey={OUT_KEY} title="OUT 방식" placeholder="선택" noneLabel="선택 안 함" disabled={!canEdit || busy} userCompany={company}
+                className="h-9 min-w-[150px] px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#0F1A30] bg-white" value={f.platform} onChange={(v) => set("platform", v)} />
+              <span className="text-[11.5px] font-semibold text-[#9AA9C3]">목록에서 추가 · 삭제할 수 있어요</span>
             </Row>
           )}
-          <Row label={caught ? "계산서 발행일" : "계산서 받은 날"}>
-            <input type="date" value={inv} disabled={!canEdit || busy} onChange={(e) => setInv(e.target.value)} className={dateCls} style={NUM} />
-            {canEdit && inv !== (row?.계산서일 || "") && <button type="button" disabled={busy} onClick={() => save({ 계산서일: inv })} className="h-9 px-3 rounded-lg bg-[#1B2B4B] text-white text-[12.5px] font-black">저장</button>}
-            {canEdit && !row?.계산서일 && inv === "" && <button type="button" disabled={busy} onClick={() => save({ 계산서일: today() })} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B]">오늘</button>}
-            {canEdit && row?.계산서일 && inv === row.계산서일 && <button type="button" disabled={busy} onClick={() => save({ 계산서일: "" })} className="text-[12px] font-bold text-[#9AA9C3] hover:text-red-600">지우기</button>}
+          <Row label={out ? "계산서 발행일" : "계산서 받은 날"}>
+            <DateField value={f.inv} onChange={(v) => set("inv", v)} disabled={!canEdit || busy} placeholder="미발행" />
+            {canEdit && !f.inv && <button type="button" disabled={busy} onClick={() => set("inv", today())} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B]">오늘</button>}
+            {canEdit && f.inv && <button type="button" disabled={busy} onClick={() => set("inv", "")} className="text-[12px] font-bold text-[#9AA9C3] hover:text-red-600">지우기</button>}
           </Row>
-          {caught ? (
-            <>
-              <Row label="받을 금액"><span style={NUM}>{won(row?.청구운임)}원</span><span className="text-[11.5px] font-semibold text-[#9AA9C3]">청구운임</span></Row>
-              <Row label="입금">
-                {row?.입금상태 === "입금완료" ? (
-                  <>
-                    <span className="inline-flex items-center h-7 px-2.5 rounded-full bg-[#0F1A30] text-white text-[12px] font-black">입금완료</span>
-                    <span style={NUM}>{row.입금일 || ""}</span>
-                    {row.입금자명 && <span className="text-[12.5px] font-semibold text-[#5B6B85]">{row.입금자명}</span>}
-                    {canEdit && <button type="button" disabled={busy} onClick={async () => { setBusy(true); try { await setCallDeposit({ row, done: false, patchDispatch, company }); } finally { setBusy(false); } }} className="text-[12px] font-bold text-[#9AA9C3] hover:text-red-600">취소</button>}
-                  </>
-                ) : canEdit ? (
-                  <>
-                    <input type="date" value={depDate} disabled={busy} onChange={(e) => setDepDate(e.target.value)} className={dateCls} style={NUM} />
-                    <input value={depName} disabled={busy} onChange={(e) => setDepName(e.target.value)} placeholder="입금자명(선택)" className={`${dateCls} w-[120px]`} />
-                    <button type="button" disabled={busy} onClick={async () => { setBusy(true); try { await setCallDeposit({ row, done: true, date: depDate, name: depName, patchDispatch, company }); } catch (e) { window.alert(`저장하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); } }}
-                      className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black whitespace-nowrap">입금완료</button>
-                  </>
-                ) : <span className="text-[#7A8AA8]">아직 입금 전</span>}
-              </Row>
-            </>
+          <Row label={out ? "받을 금액" : "줄 금액"}>
+            <div className="w-full rounded-xl border border-[#E3E8F0] bg-[#F7F9FC] px-3.5 py-2.5 grid grid-cols-3 gap-2 text-center" style={NUM} data-vat>
+              {[[out ? "운임(청구운임)" : "운임(기사운임)", amt.supply, false], ["부가세 10%", amt.vat, false], ["계산서 합계", amt.total, true]].map(([l, v, strong]) => (
+                <div key={l}><div className="text-[11px] font-bold text-[#7A8AA8]">{l}</div><div className={`${strong ? "text-[15px] font-black text-[#0F1A30]" : "text-[13.5px] font-bold text-[#3A4A66]"}`}>{won(v)}</div></div>
+              ))}
+            </div>
+            <span className="text-[11.5px] font-semibold text-[#9AA9C3]">세금계산서는 운임에 부가세 10%를 더한 금액으로 발행합니다(간이 · 면세는 운임만).</span>
+          </Row>
+          {out ? (
+            <Row label="입금">
+              {deposited && <span className="inline-flex items-center h-7 px-2.5 rounded-full bg-[#0F1A30] text-white text-[12px] font-black">입금완료</span>}
+              <DateField value={f.depDate} onChange={(v) => set("depDate", v || today())} disabled={!canEdit || busy} placeholder="입금일" />
+              <input value={f.depName} disabled={!canEdit || busy} onChange={(e) => set("depName", e.target.value)} placeholder="입금자명(선택)" autoComplete="off"
+                className="h-9 w-[130px] px-2.5 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#0F1A30] outline-none focus:border-[#1B2B4B] bg-white" />
+              {!deposited && <span className="basis-full text-[11.5px] font-semibold text-[#9AA9C3]">입금일은 오늘로 들어가 있습니다. 직접 입력하거나 달력에서 고르세요.</span>}
+            </Row>
           ) : (
-            <>
-              <Row label="줄 금액"><span style={NUM}>{won(row?.기사운임)}원</span><span className="text-[11.5px] font-semibold text-[#9AA9C3]">기사운임</span></Row>
-              <Row label="기사 지급">
-                {row?.지급상태 === "지급완료"
-                  ? <><span className="inline-flex items-center h-7 px-2.5 rounded-full bg-[#0F1A30] text-white text-[12px] font-black">지급완료</span><span style={NUM}>{row.지급일 || ""}</span></>
-                  : <span className="inline-flex items-center h-7 px-2.5 rounded-full bg-[#EEF3FB] text-[#1B2B4B] text-[12px] font-black border border-[#C9D6EC]">{s ? "지급중" : "기사 미정"}</span>}
-                {row?.지급알림 && <span className="text-[12px] font-bold text-[#2D4C82]" style={NUM}>기사 문자 보냄 {md(row.지급알림)}</span>}
-                <span className="basis-full text-[11.5px] font-semibold text-[#9AA9C3]">지급 처리는 정산관리 › 용차지급관리에서 합니다.</span>
-              </Row>
-            </>
+            <Row label="기사 지급">
+              {row?.지급상태 === "지급완료"
+                ? <><span className="inline-flex items-center h-7 px-2.5 rounded-full bg-[#0F1A30] text-white text-[12px] font-black">지급완료</span><span style={NUM}>{row.지급일 || ""}</span></>
+                : <span className="inline-flex items-center h-7 px-2.5 rounded-full bg-[#EEF3FB] text-[#1B2B4B] text-[12px] font-black border border-[#C9D6EC]">{s ? "지급중" : "기사 미정"}</span>}
+              {row?.지급알림 && <span className="text-[12px] font-bold text-[#2D4C82]" style={NUM}>기사 문자 보냄 {md(row.지급알림)}</span>}
+              <span className="basis-full text-[11.5px] font-semibold text-[#9AA9C3]">지급 처리 · 지급일 수정은 정산관리 › 용차지급관리에서 합니다.</span>
+            </Row>
           )}
         </div>
-        <div className="px-5 py-3 bg-[#F7F9FC] border-t border-[#EEF2F8] text-[11.5px] font-semibold text-[#7A8AA8] leading-relaxed">
-          사무실에서 첨부에 [계산서로 올리기]로 올리면 계산서 날짜가 자동으로 들어갑니다(여기서 고칠 수 있어요).
+        <div className="px-5 py-3.5 bg-[#F7F9FC] border-t border-[#EEF2F8] flex items-center gap-2 shrink-0">
+          <span className="flex-1 min-w-0 text-[11.5px] font-semibold text-[#7A8AA8] leading-snug">{dirty ? <b className="text-[#B54708]">저장하지 않은 변경이 있습니다</b> : "첨부에서 [계산서로 올리기]를 하면 계산서 날짜가 자동으로 들어갑니다."}</span>
+          {canEdit && out && deposited && <button type="button" disabled={busy} onClick={undo} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#9A1F15] whitespace-nowrap">입금 취소</button>}
+          <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#3A4A66]">닫기</button>
+          {canEdit && <button type="button" disabled={busy || !dirty} onClick={save} data-pay-save className="h-10 px-5 rounded-xl border border-[#1B2B4B] bg-white text-[13px] font-black text-[#1B2B4B] disabled:opacity-40">{busy ? "저장 중…" : "저장"}</button>}
+          {canEdit && out && !deposited && <button type="button" disabled={busy} onClick={deposit} data-pay-deposit className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-40 whitespace-nowrap">입금완료</button>}
         </div>
       </div>
     </div>,
@@ -260,7 +303,8 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
 }
 
 // 정산관리 › 입금 확인 — 잡은 콜의 입금을 경리가 확인해 [입금완료] 처리(배차현황 [정산] 칸에 바로 보인다)
-export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, company = "", testTxns = null }) {
+export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, company = "", testTxns = null, onAttach = null }) {
+  const [popId, setPopId] = React.useState(""); // 목록에서 [입금처리]를 누른 오더
   const [filter, setFilter] = React.useState("wait"); // wait | done | all
   const [q, setQ] = React.useState("");
   const [sel, setSel] = React.useState(() => new Set());
@@ -302,10 +346,9 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
     <div className="p-4 space-y-3" data-call-deposit>
       <div className="rounded-2xl px-5 py-4 text-white flex flex-wrap items-center gap-4" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
         <div className="min-w-0">
-          <div className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">DEPOSIT · 잡은 콜 입금 확인</div>
+          <div className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">DEPOSIT · OUT 오더 입금 확인</div>
           <div className="text-[20px] font-black">입금 확인</div>
-          <div className="text-[12px] text-white/60">콜을 잡아 우리 기사에게 준 오더 — 콜 올린 업체에서 돈이 들어오면 [입금완료] 처리하세요. 배차현황 [정산] 칸에 바로 보입니다.</div>
-          <div className="text-[11.5px] text-white/45">은행 입금 연동(팝빌)을 쓰는 회사는 금액이 같은 입금을 "은행 입금 후보"로 찾아 줍니다.</div>
+          <div className="text-[12px] text-white/60">외부 콜을 잡아 우리 기사에게 준 오더 목록입니다. 업체 입금 완료 시 입금처리 하시면 배차현황 정산에 적용됩니다.</div>
         </div>
         <div className="ml-auto flex gap-2" style={NUM}>
           {[["입금 대기", `${waitAll.length}건`, `${won(sum(waitAll))}원`], ["30일 넘음", `${old.length}건`, `${won(sum(old))}원`]].map(([l, a, b]) => (
@@ -325,21 +368,21 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="거래처 · 기사 · 상하차지 검색" autoComplete="off" className="h-9 w-[230px] px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold outline-none focus:border-[#1B2B4B]" />
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <span className="text-[12.5px] font-bold text-[#5B6B85]" style={NUM}>선택 {picked.length}건 · {won(sum(picked))}원</span>
-          {filter !== "done" && <><span className="text-[12.5px] font-bold text-[#5B6B85]">입금일</span><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={dateCls} style={NUM} />
-            <button type="button" disabled={busy || isViewer} onClick={() => run(picked.filter((r) => r.입금상태 !== "입금완료"), true)} className="h-9 px-4 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-40">{busy ? "처리 중…" : "입금완료"}</button></>}
+          {filter !== "done" && <><span className="text-[12.5px] font-bold text-[#5B6B85]">선택 건 입금일</span><DateField value={date} onChange={(v) => setDate(v || today())} />
+            <button type="button" disabled={busy || isViewer} onClick={() => run(picked.filter((r) => r.입금상태 !== "입금완료"), true)} className="h-9 px-4 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-40 whitespace-nowrap">{busy ? "처리 중…" : "선택 건 입금완료"}</button></>}
           {filter !== "done" && sugg.size > 0 && <button type="button" disabled={busy || isViewer} data-sugg-all onClick={() => applySugg(rows.filter((r) => sugg.get(idOf(r))?.nameHit))} title="입금자명까지 맞는 후보만 한 번에 입금완료 처리합니다"
             className="h-9 px-3.5 rounded-lg border border-[#2D4C82] text-[13px] font-black text-[#2D4C82] disabled:opacity-40 whitespace-nowrap">은행 입금 후보 {[...sugg.values()].filter((g) => g.nameHit).length}건 적용</button>}
-          {filter !== "wait" && <button type="button" disabled={busy || isViewer} onClick={() => run(picked.filter((r) => r.입금상태 === "입금완료"), false)} className="h-9 px-4 rounded-lg border border-[#DCE3EE] text-[13px] font-black text-[#3A4A66] disabled:opacity-40">입금 취소</button>}
+          {filter !== "wait" && <button type="button" disabled={busy || isViewer} onClick={() => run(picked.filter((r) => r.입금상태 === "입금완료"), false)} className="h-9 px-4 rounded-lg border border-[#DCE3EE] text-[13px] font-black text-[#3A4A66] disabled:opacity-40 whitespace-nowrap">선택 건 입금 취소</button>}
         </div>
       </div>
       <div className="bg-white rounded-2xl border border-[#E3E8F0] overflow-x-auto">
         <table className="w-full min-w-max">
           <thead className="bg-[#1B2B4B]"><tr>
             <th className={th}><input type="checkbox" checked={rows.length > 0 && rows.every((r) => sel.has(idOf(r)))} onChange={(e) => setSel(e.target.checked ? new Set(rows.map(idOf)) : new Set())} /></th>
-            {["상차일", "잡은 곳", "콜 올린 업체(거래처)", "상차지 → 하차지", "기사", "받을 금액", "계산서 발행일", "입금", "입금일 · 은행 입금 후보"].map((h) => <th key={h} className={th}>{h}</th>)}
+            {["상차일", "OUT 방식", "업체(거래처)", "상차지 → 하차지", "기사", "운임", "부가세 포함", "계산서 발행일", "첨부", "입금", "입금일 · 은행 입금 후보", "처리"].map((h) => <th key={h} className={th}>{h}</th>)}
           </tr></thead>
           <tbody>
-            {rows.length === 0 && <tr><td colSpan={10} className="py-14 text-center text-[13px] font-semibold text-[#9AA9C3]">{all.length ? "해당하는 오더가 없습니다." : "잡은 콜로 표시한 오더가 아직 없습니다. 배차현황 [정산] 칸을 눌러 '잡은 콜'로 바꿔 주세요."}</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={13} className="py-14 text-center text-[13px] font-semibold text-[#9AA9C3]">{all.length ? "해당하는 오더가 없습니다." : "OUT 오더가 아직 없습니다. 배차현황 [정산] 칸을 누르거나 선택수정에서 IN/OUT을 OUT으로 바꿔 주세요."}</td></tr>}
             {rows.map((r) => {
               const done = r.입금상태 === "입금완료";
               return (
@@ -350,8 +393,16 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
                   <td className={`${td} font-bold`}>{r.거래처명 || "-"}</td>
                   <td className={td}>{r.상차지명 || ""} → {r.하차지명 || ""}</td>
                   <td className={td}>{r.이름 || r.기사명 || "-"}</td>
-                  <td className={`${td} font-black`} style={NUM}>{won(r.청구운임)}</td>
+                  <td className={td} style={NUM}>{won(r.청구운임)}</td>
+                  <td className={`${td} font-black`} style={NUM}>{won(vatOf(r.청구운임).total)}</td>
                   <td className={td} style={NUM}>{r.계산서일 || <span className="text-[#C2CBDB]">미발행</span>}</td>
+                  <td className={td}>
+                    <button type="button" onClick={() => onAttach?.(r)} disabled={!onAttach} title="첨부 보기 · 올리기(배차현황 첨부와 같은 파일)" data-desk-attach
+                      className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-[#F1F4F9]">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={(r.attachCount || 0) > 0 ? ((r.officeAttach || 0) > 0 ? "#2563EB" : "#059669") : "#cbd5e1"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
+                      {(r.attachCount || 0) > 0 && <span className={`absolute -top-1 -right-1 min-w-[16px] h-[16px] ${(r.officeAttach || 0) > 0 ? "bg-blue-600" : "bg-emerald-500"} text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none`}>{r.attachCount}</span>}
+                    </button>
+                  </td>
                   <td className={td}>{done ? <span className="inline-flex items-center h-6 px-2 rounded-full bg-[#0F1A30] text-white text-[11.5px] font-black">입금완료</span> : <span className="inline-flex items-center h-6 px-2 rounded-full bg-[#EEF3FB] text-[#1B2B4B] text-[11.5px] font-black border border-[#C9D6EC]">대기</span>}</td>
                   <td className={td} style={NUM}>
                     {r.입금일 || ""}{r.입금자명 ? <span className="ml-1 text-[12px] text-[#7A8AA8]">{r.입금자명}</span> : null}
@@ -364,12 +415,19 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
                       </span>
                     ); })()}
                   </td>
+                  <td className={td}>
+                    {done
+                      ? <span className="inline-flex gap-1.5"><button type="button" onClick={() => setPopId(idOf(r))} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] text-[12px] font-black text-[#3A4A66] whitespace-nowrap">수정</button>
+                        <button type="button" disabled={busy || isViewer} data-row-undo onClick={async () => { if (await kpConfirm(`${r.거래처명 || "이 오더"} 입금완료를 취소할까요?`)) run([r], false); }} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] text-[12px] font-black text-[#9A1F15] whitespace-nowrap disabled:opacity-40">입금 취소</button></span>
+                      : <button type="button" disabled={isViewer} data-row-deposit onClick={() => setPopId(idOf(r))} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black whitespace-nowrap disabled:opacity-40">입금처리</button>}
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      {popId && (() => { const pr = (orders || []).find((x) => idOf(x) === popId); return pr ? <PayPopup row={pr} onClose={() => setPopId("")} patchDispatch={patchDispatch} canEdit={!isViewer} company={company} /> : null; })()}
     </div>
   );
 }

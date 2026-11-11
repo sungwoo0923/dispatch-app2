@@ -1799,12 +1799,17 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
       init[id] = {};
       for (const f of BULK_EDIT_FIELDS) init[id][f.key] = r[f.key] ?? "";
       init[id].운임구분 = r.운임구분 ?? ""; init[id].운임수동 = !!r.운임수동; // ⭐ 2026-11-02 운임규칙
+      init[id].콜구분 = r.콜구분 ?? ""; init[id].콜플랫폼 = r.콜플랫폼 ?? ""; // 💳 2026-11-11 IN/OUT(시험 기능)
     }
     return init;
   });
   // ⭐ 2026-11-02 운임규칙 — 규칙 사용 회사만 "운임구분" 열 + 청구운임 → 기사운임 자동
   const fareRb = useFareRules();
-  const FIELDS = fareRb.on ? [...BULK_EDIT_FIELDS, { key: "운임구분", label: "운임구분", type: "fare" }] : BULK_EDIT_FIELDS;
+  // 💳 2026-11-11 IN/OUT · OUT 방식 — 여러 오더를 한 번에 OUT(외부 콜을 잡은 오더)으로 바꾼다(시험 기능이 켜진 운송사만)
+  const betaBulk = useBetaOn(getTenant());
+  const outOptsBulk = useCompanyDropdownOptions(OUT_KEY);
+  const FIELDS = [...BULK_EDIT_FIELDS, ...(fareRb.on ? [{ key: "운임구분", label: "운임구분", type: "fare" }] : []),
+    ...(betaBulk ? [{ key: "콜구분", label: "IN/OUT", type: "select", options: ["IN", "OUT"] }, { key: "콜플랫폼", label: "OUT 방식", type: "select", options: outOptsBulk }] : [])];
   const fareCell = (r, cur, key, value) => {
     const n = fareFormChange({ ...r, ...cur }, key, value, fareRb.rules, { withFee: false });
     return { ...cur, 청구운임: n.청구운임 ?? "", 기사운임: n.기사운임 ?? "", 운임구분: n.운임구분 || "", 운임수동: !!n.운임수동, ...(n.운임구분수수료율 !== undefined ? { 운임구분수수료율: n.운임구분수수료율 } : {}) };
@@ -2951,7 +2956,7 @@ import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChang
 import { SpecialFareButton, ForkliftChip, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount } from "./forklift"; // 🏗 2026-11-09 지게차비용
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
-import { useBetaOn, PayBadge, PayPopup, CallDepositDesk, PayNoticeToggle, queuePayNotice } from "./CallPay"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
+import { useBetaOn, PayBadge, PayPopup, CallDepositDesk, PayNoticeToggle, queuePayNotice, DateField, OUT_KEY } from "./CallPay"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
 import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
 import { DriverGuideSendModal, GUIDE_BTN, guideSentLabel, isFleetGrade } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
 // ⭐ 2026-11-06 로지스웹 허브(운송사 간 오더 거래소) — [저장 + 허브 등록]
@@ -7715,6 +7720,7 @@ useEffect(() => {
   const [거래처관리Tab, set거래처관리Tab] = useState("하차지거래처");
   const [기사관리Tab, set기사관리Tab] = useState("d:전체"); // ▸ 기사관리 허브 — d:등급 / docs:driver / docs:penalty
   const [정산관리Tab, set정산관리Tab] = useState("거래처정산");
+  const [deskAttachId, setDeskAttachId] = useState("");
   const betaPayOn = useBetaOn(getTenant() || userCompany); // 💳 2026-11-11 정산관리 › 입금 확인(시험 기능 — 테스트운송사)
   // ⭐ 내 정보 패널 ON/OFF
   const [showMyInfo, setShowMyInfo] = useState(false);
@@ -9262,7 +9268,12 @@ return (
             />
           </div>
           {정산관리Tab === "지게차지급" && <ForkliftPayouts orders={settleRows} patchDispatch={patchDispatchSafe} isViewer={isViewer} />}
-          {정산관리Tab === "입금확인" && betaPayOn && <CallDepositDesk orders={settleRows} patchDispatch={patchDispatchSafe} isViewer={isViewer} company={userCompany} />}
+          {정산관리Tab === "입금확인" && betaPayOn && <CallDepositDesk orders={settleRows} patchDispatch={patchDispatchSafe} isViewer={isViewer} company={userCompany} onAttach={(r) => setDeskAttachId(r._id || r.id)} />}
+          {/* 📎 입금 확인의 첨부 — 배차현황 첨부와 같은 창 · 같은 파일 */}
+          {deskAttachId && (() => { const ar = (settleRows || []).find((x) => (x._id || x.id) === deskAttachId); return ar ? (
+            <AttachmentViewer row={ar} db={db} onClose={() => setDeskAttachId("")} isViewer={isViewer} isViewed={ar.attachViewed === true}
+              onToggleViewed={() => patchDispatchSafe(ar._id, { attachViewed: !ar.attachViewed, __system: true })} onSaved={() => {}} />
+          ) : null; })()}
           {정산관리Tab === "지입정산관리" && (
             <FleetSettlementMenu dispatchData={settleRows} companyName={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} />
           )}
@@ -56205,6 +56216,12 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     // 📩 2026-11-11 지급완료 → 기사에게 입금 안내 문자(시험 기능 · 스위치를 켠 경우만 · 같은 기사는 한 통으로 묶음)
     if (nextStatus === "지급완료" && !wasPaid && payNoticeBeta) queuePayNotice({ row, date: nextDate, company: co, patchDispatch });
   };
+  // 지급일만 고치기(지급완료 상태 그대로)
+  const changePayDate = async (row, d) => {
+    if (!patchDispatch || !row || !d || d === (row.지급일 || "")) return;
+    await patchDispatch(row._id, { 지급일: d, __system: true });
+    syncPayLedger(row, "지급완료", d);
+  };
   const pay = async (id, status) => {
     if (!patchDispatch) return alert("patchDispatch 미연결");
     const row = (dispatchData || []).find((r) => r._id === id);
@@ -56599,7 +56616,12 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                           {isDone ? "✓ 지급완료" : "미지급"}
                         </button>
                       </td>
-                      <td className="px-3 py-2.5 text-center text-gray-500 border-b border-gray-100">{r.지급일 || "-"}</td>
+                      <td className="px-3 py-2.5 text-center text-gray-500 border-b border-gray-100">
+                        {/* 💳 2026-11-11 지급완료한 뒤에도 지급일을 고칠 수 있다(직접 입력 · 달력) — 장부의 지급 합계도 그 날짜로 옮긴다 */}
+                        {payNoticeBeta && (r.지급상태 || "지급중") === "지급완료"
+                          ? <DateField value={r.지급일 || ""} width={140} onChange={(d) => changePayDate(r, d)} />
+                          : (r.지급일 || "-")}
+                      </td>
                     </tr>
                   );
                 })}
