@@ -66,7 +66,7 @@ const md = (s) => { const m = /^\d{4}-(\d{2})-(\d{2})/.exec(String(s || "")); re
 const won = (v) => (Number(String(v ?? "").replace(/[^\d.-]/g, "")) || 0).toLocaleString("ko-KR");
 const coNow = (company) => String(company || getTenant() || "").trim() || (() => { try { return String(localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim(); } catch { return ""; } })();
 
-// 시험 기능이 켜진 운송사인가 — 테스트운송사는 늘 켜짐, 다른 운송사는 관리센터 › 회사별 기능 "정산 표시(시험)"을 켠 곳만
+// 정산 표시 · IN/OUT이 켜진 운송사인가 — ⭐ 2026-11-11 모든 운송사 기본 켜짐(관리센터 › 회사별 기능에서 끈 곳만 꺼짐). 테스트운송사는 늘 켜짐
 export function useBetaOn(company) {
   const co = coNow(company);
   const f = useCompanyFeatures(co);
