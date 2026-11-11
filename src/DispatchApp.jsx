@@ -3881,11 +3881,17 @@ async function pcUpsertClient({ role, userCompany, places = [] }, client) {
       : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
     // ⭐ 2026-11-01 새 거래처 문서 이름은 회사별로(다른 운송사의 같은 거래처명 문서를 덮어쓰던 문제)
     const id = client.id || (client.거래처명 ? coDocKey(viewCompany, client.거래처명) : crypto.randomUUID());
-    await setDoc(
-      doc(db, COLL.clients, id),
-      { ...client, id, companyName: client.companyName || viewCompany },
-      { merge: true }
-    );
+    // ⭐ 2026-11-11 저장이 실패하면 이유를 알려 준다(예전엔 아무 말 없이 창만 그대로 남았다)
+    try {
+      await setDoc(
+        doc(db, COLL.clients, id),
+        { ...client, id, companyName: client.companyName || viewCompany },
+        { merge: true }
+      );
+    } catch (e) {
+      window.alert(`거래처를 저장하지 못했습니다.\n${e?.code === "permission-denied" ? "저장 권한이 없습니다." : e?.message || e}`);
+      throw e;
+    }
 
     // ═══════════════════════════════════════════════════
     // 기본거래처 ↔ 하차지거래처 동기화 — 같은 이름의 하차지거래처가 있으면 주소/담당자/
@@ -30410,11 +30416,11 @@ const head = isDark
   onMouseDown={copyPanelStyle === "B" ? handleCopyPanelDragStart : undefined}
   style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)", ...(copyPanelStyle === "B" ? { cursor: "grab" } : {}) }}
 >
-  <div className="min-w-0">
+  <div className="min-w-0 flex-1">
     <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>ORDER · COPY / EDIT</div>
-    <h2 className="text-[18px] font-black leading-tight"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /> <span className="ml-1 text-[13.5px] font-semibold text-white/60">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</span></h2>
+    <h2 className="text-[18px] font-black leading-tight truncate"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /> <span className="ml-1 text-[13.5px] font-semibold text-white/60">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</span></h2>
   </div>
-  <div className="flex gap-2 items-center">
+  <div className="flex gap-2 items-center shrink-0 [&_button]:whitespace-nowrap [&_button]:shrink-0">{/* ⭐ 2026-11-11 좁은 화면에서 단추 글자가 두 줄로 꺾이지 않게(제목이 대신 줄어든다) */}
     {/* A/B 스타일 전환 */}
     <button type="button" onClick={toggleCopyPanelStyle}
       className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-[13px] font-bold transition"
@@ -41849,11 +41855,11 @@ return (
   onMouseDown={copyPanelStyle === "B" ? handleCopyPanelDragStart : undefined}
   style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)", ...(copyPanelStyle === "B" ? { cursor: "grab" } : {}) }}
 >
-  <div className="min-w-0">
+  <div className="min-w-0 flex-1">
     <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>ORDER · COPY / EDIT</div>
-    <h2 className="text-[18px] font-black leading-tight"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /> <span className="ml-1 text-[13.5px] font-semibold text-white/60">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</span></h2>
+    <h2 className="text-[18px] font-black leading-tight truncate"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /> <span className="ml-1 text-[13.5px] font-semibold text-white/60">{copyTarget?.거래처명} · {copyTarget?.상차지명} → {copyTarget?.하차지명}</span></h2>
   </div>
-  <div className="flex gap-2 items-center">
+  <div className="flex gap-2 items-center shrink-0 [&_button]:whitespace-nowrap [&_button]:shrink-0">{/* ⭐ 2026-11-11 좁은 화면에서 단추 글자가 두 줄로 꺾이지 않게(제목이 대신 줄어든다) */}
     {/* A/B 스타일 전환 */}
     <button type="button" onClick={toggleCopyPanelStyle}
       className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-[13px] font-bold transition"
@@ -50651,11 +50657,11 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
 
               {/* 패널 헤더 */}
               <div className="sticky top-0 z-20 -mx-5 mb-1 flex justify-between items-center gap-3 px-5 py-2.5 text-white shadow-[0_6px_18px_rgba(11,20,40,0.25)]" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>ORDER · COPY / EDIT</div>
-                  <h2 className="text-[18px] font-black leading-tight"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /> <span className="ml-1 text-[13.5px] font-semibold text-white/60">{copyTarget.거래처명} · {copyTarget.상차지명} → {copyTarget.하차지명}</span></h2>
+                  <h2 className="text-[18px] font-black leading-tight truncate"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /> <span className="ml-1 text-[13.5px] font-semibold text-white/60">{copyTarget.거래처명} · {copyTarget.상차지명} → {copyTarget.하차지명}</span></h2>
                 </div>
-                <div className="flex gap-2 items-center">
+                <div className="flex gap-2 items-center shrink-0 [&_button]:whitespace-nowrap [&_button]:shrink-0">
                   <button
                     onClick={async () => {
                       if (isViewer) { showToast("조회전용 권한으로는 수정할 수 없습니다.", "err"); return; }
@@ -63021,7 +63027,8 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
     if (isViewer || !client) return;
     const co = companyName || DEFAULT_COMPANY;
     const id = client.id || (client.거래처명 ? coDocKey(co, client.거래처명) : crypto.randomUUID());
-    await setDoc(doc(db, COLL.clients, id), { ...client, id, companyName: client.companyName || co }, { merge: true });
+    try { await setDoc(doc(db, COLL.clients, id), { ...client, id, companyName: client.companyName || co }, { merge: true }); }
+    catch (e) { window.alert(`거래처를 저장하지 못했습니다.\n${e?.message || e}`); throw e; }
   }, [companyName, isViewer]);
   // 명함 이미지(거래명세서에 붙는 것) — PC와 같은 본인 프로필 값
   const [cardImage, setCardImage] = React.useState(null);

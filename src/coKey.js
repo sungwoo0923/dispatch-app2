@@ -5,5 +5,7 @@
 import { DEFAULT_COMPANY } from "./firebase";
 export const coDocKey = (company, key) => {
   const co = String(company || "").trim();
-  return co && co !== DEFAULT_COMPANY ? `${co}__${key}` : key;
+  // ⭐ 2026-11-11 이름에 "/" 가 들어가면(예: "대한종합물류/결제 5.15.말/041-…") Firestore가 폴더 구분으로 읽어 저장이 실패했다 → 문서 이름에서만 "_" 로 바꾼다(화면에 보이는 이름은 그대로)
+  const k = String(key ?? "").replace(/\//g, "_");
+  return co && co !== DEFAULT_COMPANY ? `${co.replace(/\//g, "_")}__${k}` : k;
 };
