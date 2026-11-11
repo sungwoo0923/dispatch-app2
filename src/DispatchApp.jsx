@@ -2951,6 +2951,7 @@ import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChang
 import { SpecialFareButton, ForkliftChip, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount } from "./forklift"; // 🏗 2026-11-09 지게차비용
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
+import { useBetaOn, PayBadge, PayPopup, CallDepositDesk } from "./CallPay"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
 import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
 import { DriverGuideSendModal, GUIDE_BTN, guideSentLabel, isFleetGrade } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
 // ⭐ 2026-11-06 로지스웹 허브(운송사 간 오더 거래소) — [저장 + 허브 등록]
@@ -7714,6 +7715,7 @@ useEffect(() => {
   const [거래처관리Tab, set거래처관리Tab] = useState("하차지거래처");
   const [기사관리Tab, set기사관리Tab] = useState("d:전체"); // ▸ 기사관리 허브 — d:등급 / docs:driver / docs:penalty
   const [정산관리Tab, set정산관리Tab] = useState("거래처정산");
+  const betaPayOn = useBetaOn(getTenant() || userCompany); // 💳 2026-11-11 정산관리 › 입금 확인(시험 기능 — 테스트운송사)
   // ⭐ 내 정보 패널 ON/OFF
   const [showMyInfo, setShowMyInfo] = useState(false);
   // ⭐ 내 정보 — 이름/연락처 수정용 임시 입력값(패널 열 때마다 현재 값으로 초기화)
@@ -9235,7 +9237,7 @@ return (
         {정산관리Visited && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
           <div style={{ display: menu === "정산관리" ? undefined : "none" }}>
           <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={정산관리Tab} onSelect={set정산관리Tab}
-            items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
+            items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOn ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
           <DetailScope data={salesDispatchData} getters={mainDetailGet} title="세부검색 · 정산관리">{(settleRows, settleBtn) => (<>
           {/* 🔎 2026-11-03 세부검색 — 거래처정산·용차지급·지입정산 모두 이 조건으로 */}
           {/* ⭐ 2026-11-07 세부검색 버튼은 왼쪽 메뉴 윗줄(오른쪽 끝)로 — 머리 높이·왼쪽 끝 정렬 */}
@@ -9260,6 +9262,7 @@ return (
             />
           </div>
           {정산관리Tab === "지게차지급" && <ForkliftPayouts orders={settleRows} patchDispatch={patchDispatchSafe} isViewer={isViewer} />}
+          {정산관리Tab === "입금확인" && betaPayOn && <CallDepositDesk orders={settleRows} patchDispatch={patchDispatchSafe} isViewer={isViewer} company={userCompany} />}
           {정산관리Tab === "지입정산관리" && (
             <FleetSettlementMenu dispatchData={settleRows} companyName={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} />
           )}
@@ -21557,6 +21560,7 @@ function attachMirrorTargetOf(row) {
 // ── 첨부파일 뷰어 컴포넌트 ──
 // ── 첨부파일 뷰어 컴포넌트 ──
 function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, onSaved, isViewer = false }) {
+  const payOnAv = useBetaOn(getTenant() || row?.companyName); // 💳 2026-11-11 시험 기능 — 사무실 첨부 표시 · [계산서로 올리기]
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [selected, setSelected] = React.useState(null);
@@ -21807,7 +21811,7 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, onSaved,
     try {
       const col = row.__col || "orders";
       // ⭐ 2026-11-05 삭제 진행 창 + 사진 삭제·첨부 수 감소를 한 묶음으로
-      await runDelete({ label: "사진", task: () => commitDeletes(db, [doc(db, col, row._id, "attachments", item.id), (b) => b.update(doc(db, col, row._id), { attachCount: increment(-1) })]) });
+      await runDelete({ label: "사진", task: () => commitDeletes(db, [doc(db, col, row._id, "attachments", item.id), (b) => b.update(doc(db, col, row._id), { attachCount: increment(-1), ...(payOnAv && item.uploadedBy === "dispatch" && (row.officeAttach || 0) > 0 ? { officeAttach: increment(-1) } : {}) })]) });
       const mirror = getMirrorTarget();
       if (mirror) {
         try {
@@ -21858,7 +21862,7 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, onSaved,
     } catch (e) { alert("잠금 설정 실패: " + e.message); }
   };
 
-  const handleUpload = async (files) => {
+  const handleUpload = async (files, asInvoice = false) => {
     if (isViewer) { alert("조회전용 권한으로는 업로드할 수 없습니다."); return; }
     if (!files?.length) return;
     const col = row.__col || "orders";
@@ -21881,12 +21885,14 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, onSaved,
           size: file.size,
           sizeKB: Math.round(String(base64).length * 0.75 / 1024),
           uploadedBy: "dispatch",
+          ...(asInvoice ? { kind: "invoice" } : {}),
           createdAt: serverTimestamp(),
         };
         // 원본/전송카피 양쪽에서 동일한 첨부 ID를 공유하도록 클라이언트에서 ID 미리 생성
         const newId = doc(collection(db, col, row._id, "attachments")).id;
         await setDoc(doc(db, col, row._id, "attachments", newId), payload);
-        await updateDoc(doc(db, col, row._id), { attachCount: increment(1) });
+        // 💳 2026-11-11 사무실이 올린 첨부 수(아이콘 파란색) · [계산서로 올리기]면 계산서 날짜가 비어 있을 때 오늘로(정산 창에서 고칠 수 있다)
+        await updateDoc(doc(db, col, row._id), { attachCount: increment(1), ...(payOnAv ? { officeAttach: increment(1) } : {}), ...(payOnAv && asInvoice && !row.계산서일 ? { 계산서일: todayKST() } : {}) });
         if (mirror) {
           try {
             await setDoc(doc(db, mirror.col, mirror.id, "attachments", newId), payload);
@@ -21928,6 +21934,13 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, onSaved,
                 파일 추가
                 <input autoComplete="off" type="file" multiple accept="image/*,.pdf" className="hidden"
                   onChange={e => handleUpload(Array.from(e.target.files))} />
+              </label>
+            )}
+            {!isViewer && payOnAv && (
+              <label title="계산서 파일을 올리고, 계산서 날짜를 오늘로 기록합니다(정산 창에서 고칠 수 있어요)" className="px-3 py-1.5 bg-blue-600 text-white text-[12px] font-bold rounded-lg hover:opacity-90 transition cursor-pointer whitespace-nowrap shrink-0">
+                계산서로 올리기
+                <input autoComplete="off" type="file" multiple accept="image/*,.pdf" className="hidden"
+                  onChange={e => { handleUpload(Array.from(e.target.files), true); e.target.value = ""; }} />
               </label>
             )}
             {items.length > 1 && (
@@ -35613,6 +35626,9 @@ useFleetLivePublish(drivers); // ⭐ 2026-11-05 실시간 관제 색인(같은 �
 // ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 / 수정 창 / 운임구분 열(규칙 사용 회사만)
 const fareR = useFareRules(getTenant() || userCompany);
 const fareOn = fareR.on;
+// 💳 2026-11-11 정산 칸(계산서 · 지급 · 입금) — 시험 기능이 켜진 운송사만(고정노선현황 표는 제외)
+const payOn = useBetaOn(getTenant() || userCompany) && !fixedForm;
+const [payPopId, setPayPopId] = React.useState("");
 const cpCargoTypeOptions = useCompanyDropdownOptions("화물타입", role, userCompany); // 오더복사 수정 창 단위(회사별 설정)
 const cpTonTypeOptions = useCompanyDropdownOptions("톤수타입", role, userCompany);
 const dsTableWrapRef = React.useRef(null);
@@ -40064,7 +40080,7 @@ return (
                 "선택", "순번", ...(dsMgrMap ? ["배차담당자"] : []), "등록일", "상차일", "상차시간", "하차일", "하차시간",
                 "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소",
                 "화물내용", "차량종류", "차량톤수", "혼적", "차량번호", "기사명", "전화번호",
-               "배차상태", "청구운임", "기사운임", "수수료", ...(fareOn ? ["운임구분"] : []), "지급방식", "배차방식", "메모", "전달사항", "첨부", "전달상태",
+               "배차상태", "청구운임", "기사운임", "수수료", ...(fareOn ? ["운임구분"] : []), "지급방식", "배차방식", "메모", "전달사항", "첨부", ...(payOn ? ["정산"] : []), "전달상태",
 
               ]).map((h) => {
                 return (
@@ -40341,7 +40357,10 @@ return (
   );
 })() : key === "거래처명" && isUrgentOrder(row) ? (
   /* ⭐ 2026-11-06 긴급 알약 */
-  <span className="inline-flex items-center gap-1 whitespace-nowrap"><UrgentBadge row={row} />{row[key]}</span>
+  <span className="inline-flex items-center gap-1 whitespace-nowrap"><UrgentBadge row={row} />{payOn && String(row[key] || "").length > 10 ? <AddressCell text={row[key]} max={10} popupTitle="거래처명" /> : row[key]}</span>
+) : key === "거래처명" && payOn && String(row[key] || "").length > 10 ? (
+  /* 💳 2026-11-11 거래처명이 10자를 넘으면 더보기 */
+  <AddressCell text={row[key]} max={10} popupTitle="거래처명" />
 ) : (
   row[key]
 )}
@@ -40489,14 +40508,15 @@ return (
                       title="첨부파일 보기"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                      stroke={row.attachViewed ? "#1B2B4B" : (row.attachCount || 0) > 0 ? "#059669" : "#cbd5e1"}
+                      stroke={row.attachViewed ? "#1B2B4B" : (row.attachCount || 0) > 0 ? (payOn && (row.officeAttach || 0) > 0 ? "#2563EB" : "#059669") : "#cbd5e1"}
                         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
                       </svg>
                       {(row.attachCount || 0) > 0 && (
                        <span
-                         className="absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none"
+                         title={payOn && (row.officeAttach || 0) > 0 ? `사무실에서 올린 첨부 ${row.officeAttach}개 포함` : undefined}
+                         className={`absolute -top-1.5 -right-1.5 min-w-[16px] h-[16px] ${payOn && (row.officeAttach || 0) > 0 ? "bg-blue-600" : "bg-emerald-500"} text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none`}
                          style={!row.attachViewed ? { animation: "cancelSlowBlink 1.6s ease-in-out infinite" } : undefined}
                        >
                           {row.attachCount}
@@ -40521,6 +40541,8 @@ return (
                       </button>
                     )}
                   </td>
+                  {/* 💳 정산 — 계산서 · 지급 · 입금 단계(누르면 날짜) */}
+                  {payOn && <td className="border text-center whitespace-nowrap px-2"><PayBadge row={row} onOpen={() => setPayPopId(id)} /></td>}
                   {/* 전달상태 (슬라이드 토글) */}
                   <td className="border text-center whitespace-nowrap px-2">
                     {(() => {
@@ -40555,6 +40577,7 @@ return (
         </table>
       </div>
       <StickyHScrollbar targetRef={dsTableWrapRef} />
+      {payOn && payPopId && (() => { const pr = (dispatchData || []).find((x) => getId(x) === payPopId); return pr ? <PayPopup row={pr} onClose={() => setPayPopId("")} patchDispatch={patchDispatch} canEdit={!isViewer} company={userCompany} /> : null; })()}
       {dsLongPress.selectMode && (
         <KpSelectModeBar count={selected.size} onSelectAll={() => setSelected(new Set(pageRows.map((r) => getId(r))))} onClear={() => setSelected(new Set())} onExit={() => dsLongPress.setSelectMode(false)} />
       )}

@@ -453,7 +453,7 @@ function MobileAiFab({ onOpen, children }) {
  *  onNavigate(menu) — 없으면 kp-go-menu 이벤트(PC 메뉴 이동)
  *  variant "pc" | "mobile"
  */
-export default function AiAssistant({ dispatches = [], clients = [], places = [], drivers = [], controlledOpen, onOpenChange, mode = null, company = "", uid = "", userName = "", orderApi = null, onNavigate = null, variant = "pc", screen = "" }) {
+export default function AiAssistant({ dispatches = [], clients = [], places = [], drivers = [], controlledOpen, onOpenChange, mode = null, company = "", uid = "", userName = "", orderApi = null, onNavigate = null, variant = "pc", screen = "", hideLauncher = false }) {
   const M = AI_MODES[mode] || null;
   const mobile = variant === "mobile";
   const hello = M ? `${M.hello}\n궁금한 것을 편하게 물어보세요.` : "안녕하세요, 배차 AI 비서예요.\n오더 수정·등록, 매출·미배차 질문, 기사 안내 문자까지 말로 시켜 주세요.\n카톡 캡처나 오더 글을 붙여넣으면 바로 등록 카드로 만들어 드려요.";
@@ -815,7 +815,7 @@ export default function AiAssistant({ dispatches = [], clients = [], places = []
       {/* ⭐ 2026-11-09 모바일 전체 화면 비서 위로 달력·선택 목록(본문에 띄우는 창)이 보이게 */}
       {mobile && open && <style>{`[class~="z-[999999]"]{z-index:2147481000 !important}`}</style>}
       {mobile ? (
-        !open && <MobileAiFab onOpen={() => setOpen(true)}>{sparkle}</MobileAiFab>
+        !open && !hideLauncher && <MobileAiFab onOpen={() => setOpen(true)}>{sparkle}</MobileAiFab> /* ⭐ 2026-11-11 hideLauncher — 모바일 + 버튼에 합친 화면에서는 따로 띄우지 않는다 */
       ) : (
         <FabButton bottom={24} active={open} title="AI 비서" onClick={() => setOpen(!open)}>{sparkle}</FabButton>
       )}

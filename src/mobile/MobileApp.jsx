@@ -148,6 +148,7 @@ import { useFixedRouteAutoDispatch } from "../FixedRoutes"; // ⭐ 2026-11-05 �
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { LogisMark, LogisWordmark, LogisTag, LogisLockup } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 import AiAssistant from "../AiAssistant"; // 🤖 2026-11-07 AI 비서
+import { useBetaOn } from "../CallPay"; // ⭐ 2026-11-11 시험 기능(테스트운송사)
 import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "../liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
 import { useUiScreen, uiMenuItem, useUiConfigVersion } from "../uiConfig"; // ⭐ 2026-11-07 화면 편집 모드 — 메뉴 이름·순서·숨기기(권한은 그대로)
 import MyInfoTabs from "../MyInfoTabs"; // ⭐ 2026-11-07 내정보 안 탭(급여명세서 · 연차 사용 계획)
@@ -5560,6 +5561,14 @@ const title =
       return "opened";
     },
   };
+  // ⭐ 2026-11-11 + 버튼에 AI 비서 합치기(시험 기능 — 테스트운송사) · 목록 화면에서만 합치고, 다른 화면은 AI 비서 버튼 그대로
+  const fabMergeOn = useBetaOn(userCompany);
+  const [aiOpenM, setAiOpenM] = useState(false);
+  const [fabMenu, setFabMenu] = useState(false);
+  const fabGoRef = useRef(false);
+  const fabPlusRef = useRef(null);
+  const fabMerged = fabMergeOn && page === "list" && !showMenu && !multiSelectMode;
+  useEffect(() => { if (!fabMerged) setFabMenu(false); }, [fabMerged]);
   const aiGoMenuM = (m) => setPage({ 배차관리: "form", 매출관리: "sales", 지입차관리: "fleet", HOME: "list" }[m] || "list");
 
   // ------------------------------------------------------------------
@@ -6007,7 +6016,8 @@ const title =
 {/* 🤖 2026-11-07 AI 비서 — 등록 화면에서는 버튼을 숨긴다(등록 버튼을 가리지 않게) */}
 {!deptMode && page !== "form" && (
   <AiAssistant variant="mobile" dispatches={allOrders} clients={clients} places={places} drivers={drivers} company={userCompany || localStorage.getItem("userCompany") || ""}
-    uid={user?.uid || ""} userName={myRealName || ""} screen={page} orderApi={aiOrderApiM} onNavigate={aiGoMenuM} />
+    uid={user?.uid || ""} userName={myRealName || ""} screen={page} orderApi={aiOrderApiM} onNavigate={aiGoMenuM}
+    controlledOpen={aiOpenM} onOpenChange={setAiOpenM} hideLauncher={fabMerged} />
 )}
       {showMenu && (
         <MobileSideMenu
@@ -7152,7 +7162,11 @@ setOpenMemo={setOpenMemo}
 
       {page === "list" && !showMenu && !multiSelectMode && (
         <button
+          ref={fabPlusRef}
           onClick={() => {
+            // ⭐ 2026-11-11 + 버튼에 AI 비서를 합친 화면(시험 기능) — 누르면 [AI 비서 · 오더등록] 메뉴, [오더등록]을 고르면 아래 원래 동작
+            if (fabMergeOn && !fabGoRef.current) { setFabMenu((v) => !v); return; }
+            fabGoRef.current = false; setFabMenu(false);
             setForm({
               거래처명: "",
               상차일: todayKST(),
@@ -7195,8 +7209,26 @@ setOpenMemo={setOpenMemo}
               : "bg-blue-500 shadow-lg"
           }`}
         >
-          +
+          <span style={{ display: "inline-block", transition: "transform .18s", transform: fabMergeOn && fabMenu ? "rotate(45deg)" : "none" }}>+</span>
         </button>
+      )}
+      {fabMerged && fabMenu && (
+        <>
+          <div className="fixed inset-0 z-[39]" style={{ background: "rgba(11,20,40,0.28)" }} onClick={() => setFabMenu(false)} />
+          <div className="fixed right-6 z-40 flex flex-col items-end gap-2.5" style={{ bottom: "calc(92px + env(safe-area-inset-bottom, 0px))" }} data-fab-menu>
+            {[["AI 비서", () => { setFabMenu(false); setAiOpenM(true); }, "ai"], ["오더등록", () => { fabGoRef.current = true; fabPlusRef.current?.click(); }, "order"]].map(([label, fn, k]) => (
+              <button key={k} type="button" onClick={fn} data-fab-item={k}
+                className="h-12 pl-4 pr-5 rounded-full bg-white text-[#0F1A30] text-[15px] font-black shadow-[0_8px_24px_rgba(15,26,48,0.28)] border border-[#E3E8F0] flex items-center gap-2.5 active:scale-95 transition-transform whitespace-nowrap">
+                <span className="w-8 h-8 rounded-full flex items-center justify-center text-white" style={{ background: "linear-gradient(145deg,#0B1428,#1B2B4B 55%,#2D4C82)" }}>
+                  {k === "ai"
+                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" /></svg>
+                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>}
+                </span>
+                {label}
+              </button>
+            ))}
+          </div>
+        </>
       )}
       {/* ⭐⭐⭐ 글씨 크기 wrapper 닫힘 */}
   </div>
