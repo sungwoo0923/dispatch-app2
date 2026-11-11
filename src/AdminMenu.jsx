@@ -254,7 +254,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const canAdmin = isTotalMaster || isCompanyMaster;
   // ⭐ 2026-11-04 권한 관리 — 최고관리자가 "마스터 권한 관리"를 켠 회사(예: 태진)만 마스터에게도 보인다(자기 회사 전용으로만)
   const coFeat = useCompanyFeatures(effectiveCompany);
-  const masterPerms = isCompanyMaster && coFeat.masterRolePerms === true;
+  const masterPerms = isCompanyMaster && coFeat.masterRolePerms !== false; // ⭐ 2026-11-11 모든 운송사 마스터에게 기본으로(최고관리자가 끈 회사만 숨김)
   const hrOpt = useHrOptions(effectiveCompany);
   const positionsForTeam = hrOpt.positionsFor;
   const TEAM_OPTIONS = hrOpt.teams;

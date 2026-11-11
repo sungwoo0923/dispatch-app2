@@ -1819,10 +1819,10 @@ service cloud.firestore {
       // ⭐ 2026-11-07 보안 — 우리 회사 권한 설정만(예전엔 승인된 누구나 모든 회사 것)
       allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
       allow write: if isTotalMasterUser();
-      // ⭐ 2026-11-04 최고관리자가 "마스터 권한 관리"를 켠 회사(companyFeatures/{회사}.masterRolePerms)는 그 회사 마스터도 자기 회사 것만
+      // ⭐ 2026-11-11 모든 운송사 마스터가 자기 회사 권한을 바꾼다(기본 켜짐) — 최고관리자가 끈 회사(companyFeatures/{회사}.masterRolePerms == false)만 막는다
       allow write: if isApproved() && myCo() == co && myIsMaster()
-        && exists(/databases/$(database)/documents/companyFeatures/$(co))
-        && get(/databases/$(database)/documents/companyFeatures/$(co)).data.get('masterRolePerms', false) == true
+        && (!exists(/databases/$(database)/documents/companyFeatures/$(co))
+          || get(/databases/$(database)/documents/companyFeatures/$(co)).data.get('masterRolePerms', true) != false)
         && request.resource.data.get('companyName', co) == co;
     }
     // 공통 권한(역할별 메뉴) — 최고관리자만 바꾼다(예전엔 승인된 누구나 쓸 수 있었음)

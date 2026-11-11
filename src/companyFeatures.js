@@ -11,7 +11,7 @@ import { getTenant } from "./fsTenant";
 export const COMPANY_FEATURES = [
   { key: "fareRules", label: "운임 규칙", desc: "운임구분(일대·월대 등)별 수수료 자동 계산 — 모든 운송사 기본 켜짐(안 쓰는 곳만 끔)", defaultOn: true },
   { key: "vehicleLedger", label: "차량 관리대장", desc: "차량별 정비·변경·기사 탑승 이력, 장비(유류카드·하이패스·GPS·덮개·박스) 관리" },
-  { key: "masterRolePerms", label: "마스터 권한 관리", desc: "회사 마스터가 관리자메뉴 › 권한 관리에서 자기 회사 역할별 메뉴(숨김·조회·수정)를 직접 설정" },
+  { key: "masterRolePerms", label: "마스터 권한 관리", desc: "회사 마스터가 관리자메뉴 › 권한 관리에서 자기 회사 역할별 메뉴(숨김·조회·수정)를 직접 설정 — 모든 운송사 기본 켜짐(막을 곳만 끔)", defaultOn: true }, // ⭐ 2026-11-11 모든 운송사 마스터에게 기본으로 연다
   { key: "orderManagerCol", label: "배차표 배차담당자 칸", desc: "실시간·배차현황·미배차 표에 오더 등록 직원 이름 표시" },
   // ⭐ 2026-11-08 업체 요청 — 기사앱 퇴근 키로수 입력 + 엔진오일(교환 후 5만km, 4만km부터 알림 확인해야 출퇴근)·타이어 표시
   { key: "driverOdoOil", label: "기사 퇴근 키로수·오일 관리", desc: "기사앱 퇴근 시 키로수 입력 필수 · 엔진오일 교환 시점/다음 교환(5만km)·타이어 표시 · 4만km부터 오일 알림 확인해야 출퇴근" },

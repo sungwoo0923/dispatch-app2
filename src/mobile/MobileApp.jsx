@@ -8003,7 +8003,7 @@ function MobileSideMenu({
   const canAdminMenu = isAdminRole || role === "viewer";
   // ⭐ 2026-11-04 권한 관리 — 최고관리자가 켠 회사의 마스터만(자기 회사 것만)
   const coFeatM = useCompanyFeatures();
-  const canPermsM = role !== "totalMaster" && mobileUsers?.find((u) => u.id === currentUser?.uid)?.isMaster === true && coFeatM.masterRolePerms === true;
+  const canPermsM = role !== "totalMaster" && mobileUsers?.find((u) => u.id === currentUser?.uid)?.isMaster === true && coFeatM.masterRolePerms !== false; // ⭐ 2026-11-11 기본 켜짐
   // ⭐ 2026-11-09 계정 표시는 이름이 기본(회사 직원 목록에 없으면 내 프로필 이름 → 계정 표시 이름 → 아이디)
   const myProfDrawer = useMyProfile(currentUser?.uid);
   const myName =
