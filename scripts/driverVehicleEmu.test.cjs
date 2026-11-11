@@ -1,0 +1,177 @@
+// ⭐ 2026-11-11 기사 차량 변경(driverChangeVehicle) · 휴대폰번호 로그인(driverPhoneLogin) — 에뮬레이터 통합 테스트
+//  Firestore + Auth 에뮬레이터 필요:
+//   firebase emulators:exec --only firestore,auth --project demo-kpflow "node scripts/driverVehicleEmu.test.cjs"
+const path = require("path");
+const assert = require("assert");
+const ROOT = process.env.HUB_REPO || path.resolve(__dirname, "..");
+process.env.GCLOUD_PROJECT = process.env.GCLOUD_PROJECT || "demo-kpflow";
+const req_ = require("module").createRequire(path.join(ROOT, "functions/index.js"));
+const { initializeApp } = req_("firebase-admin/app");
+const { getFirestore, FieldValue, Timestamp } = req_("firebase-admin/firestore");
+const { getAuth } = req_("firebase-admin/auth");
+const functions = req_("firebase-functions/v1");
+initializeApp({ projectId: process.env.GCLOUD_PROJECT });
+const db = getFirestore();
+const UA = require(path.join(ROOT, "functions/uploadAccess.js"))({ functions, db, getAuth, FieldValue, Timestamp });
+const DV = require(path.join(ROOT, "functions/driverVehicle.js"))({ functions, db, getAuth, FieldValue, helpers: UA });
+const V = require(path.join(ROOT, "functions/driverVehicleCore.js"));
+
+let pass = 0, fail = 0;
+async function t(name, fn) {
+  try { await fn(); pass += 1; console.log(`PASS ${name}`); } catch (e) { fail += 1; console.log(`FAIL ${name} :: ${e?.stack || e}`.slice(0, 600)); }
+}
+let ipSeq = 0;
+function call(handler, { method = "POST", body = {}, headers = {}, ip } = {}) {
+  return new Promise((resolve, reject) => {
+    const res = {
+      statusCode: 200, headers: {}, body: undefined,
+      status(c) { this.statusCode = c; return this; },
+      set(k, v) { this.headers[k] = v; return this; },
+      json(b) { this.body = b; resolve(this); return this; },
+      send(b) { this.body = b; resolve(this); return this; },
+    };
+    const req = { method, body, query: {}, headers: { "x-forwarded-for": ip || `10.1.0.${(ipSeq++ % 250) + 1}`, ...headers }, get(k) { return this.headers[String(k).toLowerCase()]; } };
+    Promise.resolve(handler(req, res)).catch(reject);
+  });
+}
+const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+const idp = async (pathName, body) => {
+  const r = await fetch(`http://${authHost}/identitytoolkit.googleapis.com/v1/accounts:${pathName}?key=fake`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, returnSecureToken: true }) });
+  return r.json();
+};
+const signUp = async (email, password) => { const j = await idp("signUp", { email, password }); if (!j.idToken) throw new Error(JSON.stringify(j)); return j; };
+const canSignIn = async (email, password) => !!(await idp("signInWithPassword", { email, password })).idToken;
+
+// 기사앱에 가입한 기사 한 명 만들기(로그인 계정 + users + drivers/{uid})
+async function makeDriver({ co, plate, name, phone, email, extra = {} }) {
+  const u = await signUp(email || V.legacyEmail(plate), plate);
+  await db.doc(`users/${u.localId}`).set({ uid: u.localId, email: u.email, role: "driver", name, carNo: plate, phone, companyName: co, approved: true, createdAt: Timestamp.now() });
+  await db.doc(`drivers/${u.localId}`).set({ uid: u.localId, name, carNo: plate, phone, 이름: name, 차량번호: plate, 전화번호: phone, companyName: co, 등급: "지입", approved: true, ...extra });
+  return u.localId;
+}
+
+(async () => {
+  if (!authHost) { console.log("SKIP — FIREBASE_AUTH_EMULATOR_HOST 없음"); process.exit(1); }
+  const CO = "에이운송";
+  const staff = await signUp("staff@a.test", "pw-staff-1");
+  await db.doc(`users/${staff.localId}`).set({ role: "user", companyName: CO, approved: true, name: "배차" });
+  const other = await signUp("staff@b.test", "pw-staff-2");
+  await db.doc(`users/${other.localId}`).set({ role: "user", companyName: "비운송", approved: true });
+  const H = { authorization: `Bearer ${staff.idToken}` };
+  const today = V.kstDay();
+  const yest = V.addDays(today, -1);
+
+  const A = await makeDriver({ co: CO, plate: "34바3333", name: "이태훈", phone: "010-1111-2222" });
+  const B = await makeDriver({ co: CO, plate: "34바3434", name: "김철수", phone: "01033334444" });
+
+  await t("차량 변경: 토큰 없으면 401 · 다른 회사 직원 403 · 기사 본인 403", async () => {
+    assert.strictEqual((await call(DV.driverChangeVehicle, { body: { driverId: A, carNo: "55다5555" } })).statusCode, 401);
+    assert.strictEqual((await call(DV.driverChangeVehicle, { headers: { authorization: `Bearer ${other.idToken}` }, body: { driverId: A, carNo: "55다5555" } })).statusCode, 403);
+    const me = await idp("signInWithPassword", { email: V.legacyEmail("34바3333"), password: "34바3333" });
+    assert.strictEqual((await call(DV.driverChangeVehicle, { headers: { authorization: `Bearer ${me.idToken}` }, body: { driverId: A, carNo: "55다5555" } })).statusCode, 403);
+  });
+  await t("차량 변경: 형식 틀린 차량번호 · 내일 날짜는 거절", async () => {
+    assert.strictEqual((await call(DV.driverChangeVehicle, { headers: H, body: { driverId: A, carNo: "3333" } })).body.code, "BAD_PLATE");
+    assert.strictEqual((await call(DV.driverChangeVehicle, { headers: H, body: { driverId: A, carNo: "55다5555", date: V.addDays(today, 1) } })).body.code, "BAD_DATE");
+  });
+  await t("차량 변경: 빈 차량으로 — 문서·이력·로그인 계정이 새 차량번호로", async () => {
+    const r = await call(DV.driverChangeVehicle, { headers: H, body: { driverId: A, carNo: "55다 5555" } });
+    assert.strictEqual(r.statusCode, 200, JSON.stringify(r.body));
+    assert.strictEqual(r.body.ok, true); assert.strictEqual(r.body.carNo, "55다5555");
+    const drv = (await db.doc(`drivers/${A}`).get()).data();
+    assert.strictEqual(drv.차량번호, "55다5555"); assert.strictEqual(drv.carNo, "55다5555");
+    assert.deepStrictEqual(drv.차량이력.map((e) => [e.차량번호, e.시작, e.종료]), [["34바3333", "", yest], ["55다5555", today, ""]]);
+    const usr = (await db.doc(`users/${A}`).get()).data();
+    assert.strictEqual(usr.carNo, "55다5555"); assert.strictEqual(usr.email, "55다5555@driver.run25.kr");
+    assert.ok(await canSignIn("55다5555@driver.run25.kr", "55다5555"), "새 차량번호로 로그인");
+    assert.ok(!(await canSignIn("34바3333@driver.run25.kr", "34바3333")), "예전 차량번호 계정은 비어 있어야");
+  });
+  await t("차량 변경: 예전 차량번호(3333)는 다른 기사가 새로 가입할 수 있다", async () => {
+    const C = await makeDriver({ co: CO, plate: "34바3333", name: "박새로", phone: "010-5555-6666" });
+    assert.ok(await canSignIn("34바3333@driver.run25.kr", "34바3333"));
+    await getAuth().deleteUser(C); await db.doc(`users/${C}`).delete(); await db.doc(`drivers/${C}`).delete();
+  });
+  await t("차량 변경: 다른 기사가 타는 차량이면 HOLDER(아무것도 안 바뀜)", async () => {
+    const r = await call(DV.driverChangeVehicle, { headers: H, body: { driverId: A, carNo: "34바3434" } });
+    assert.deepStrictEqual(r.body, { ok: false, code: "HOLDER", holder: { name: "김철수", carNo: "34바3434" }, canSwap: true });
+    assert.strictEqual((await db.doc(`drivers/${A}`).get()).data().차량번호, "55다5555");
+    assert.ok(await canSignIn("34바3434@driver.run25.kr", "34바3434"));
+  });
+  await t("차량 변경: 맞교환 — 두 기사 차량·계정이 서로 바뀐다", async () => {
+    const r = await call(DV.driverChangeVehicle, { headers: H, body: { driverId: A, carNo: "34바3434", holderAction: "swap" } });
+    assert.strictEqual(r.body.ok, true, JSON.stringify(r.body));
+    assert.deepStrictEqual(r.body.holder, { name: "김철수", carNo: "55다5555" });
+    assert.strictEqual((await db.doc(`drivers/${A}`).get()).data().차량번호, "34바3434");
+    const b = (await db.doc(`drivers/${B}`).get()).data();
+    assert.strictEqual(b.차량번호, "55다5555");
+    assert.deepStrictEqual(b.차량이력.map((e) => [e.차량번호, e.시작, e.종료]), [["34바3434", "", yest], ["55다5555", today, ""]]);
+    assert.strictEqual((await getAuth().getUser(A)).email, "34바3434@driver.run25.kr");
+    assert.strictEqual((await getAuth().getUser(B)).email, "55다5555@driver.run25.kr");
+    assert.ok(await canSignIn("34바3434@driver.run25.kr", "34바3434")); assert.ok(await canSignIn("55다5555@driver.run25.kr", "55다5555"));
+    assert.strictEqual((await db.doc(`users/${B}`).get()).data().carNo, "55다5555");
+  });
+  await t("차량 변경: 미배정 — 원래 타던 기사는 차량 없음(휴대폰번호로만 로그인)", async () => {
+    const r = await call(DV.driverChangeVehicle, { headers: H, body: { driverId: B, carNo: "34바3434", holderAction: "unassign" } });
+    assert.strictEqual(r.body.ok, true, JSON.stringify(r.body));
+    assert.deepStrictEqual(r.body.holder, { name: "이태훈", carNo: "" });
+    const a = (await db.doc(`drivers/${A}`).get()).data();
+    assert.strictEqual(a.차량번호, ""); assert.strictEqual(a.carNo, "");
+    assert.strictEqual((await getAuth().getUser(A)).email, V.nocarEmail(A));
+    assert.ok(await canSignIn(V.nocarEmail(A), V.nocarLocal(A)));
+    const p = await call(DV.driverPhoneLogin, { body: { companyName: CO, phone: "01011112222", name: "이태훈" } });
+    assert.deepStrictEqual(p.body, { ok: true, email: V.nocarEmail(A), carNo: "" });
+  });
+  await t("차량 변경: 미배정 기사에게 다시 차량 배정", async () => {
+    const r = await call(DV.driverChangeVehicle, { headers: H, body: { driverId: A, carNo: "34바3333" } });
+    assert.strictEqual(r.body.ok, true, JSON.stringify(r.body));
+    assert.ok(await canSignIn("34바3333@driver.run25.kr", "34바3333"));
+    const a = (await db.doc(`drivers/${A}`).get()).data();
+    assert.strictEqual(a.차량이력[a.차량이력.length - 1].차량번호, "34바3333");
+  });
+  await t("차량 변경: 다른 운송사에 같은 차량번호 기사가 있으면 회사별 계정으로", async () => {
+    const X = await makeDriver({ co: "비운송", plate: "77사7777", name: "남의기사", phone: "010-9999-0000" });
+    const r = await call(DV.driverChangeVehicle, { headers: H, body: { driverId: A, carNo: "77사7777" } });
+    assert.strictEqual(r.body.ok, true, JSON.stringify(r.body));
+    assert.strictEqual((await getAuth().getUser(A)).email, V.scopedEmail(CO, "77사7777"));
+    assert.strictEqual((await getAuth().getUser(X)).email, "77사7777@driver.run25.kr");
+    assert.ok(await canSignIn(V.scopedEmail(CO, "77사7777"), "77사7777"));
+  });
+  await t("차량 변경: 앱 미가입 기사는 문서만", async () => {
+    await db.doc(`drivers/${CO}__88아8888`).set({ companyName: CO, 이름: "미가입", 전화번호: "01077778888", 차량번호: "88아8888", 등급: "지입" });
+    const r = await call(DV.driverChangeVehicle, { headers: H, body: { driverId: `${CO}__88아8888`, carNo: "99자9999", date: yest } });
+    assert.strictEqual(r.body.ok, true); assert.strictEqual(r.body.account, false);
+    const d = (await db.doc(`drivers/${CO}__88아8888`).get()).data();
+    assert.strictEqual(d.차량번호, "99자9999"); assert.strictEqual(d.carNo, "99자9999");
+    assert.strictEqual(d.차량이력[1].시작, yest);
+  });
+
+  await t("휴대폰 로그인: 번호 형식이 달라도 찾는다 + 지금 계정을 돌려준다", async () => {
+    const r1 = await call(DV.driverPhoneLogin, { body: { companyName: CO, phone: "010-1111-2222", name: "이태훈" } });
+    assert.deepStrictEqual(r1.body, { ok: true, email: V.scopedEmail(CO, "77사7777"), carNo: "77사7777" });
+    const r2 = await call(DV.driverPhoneLogin, { body: { companyName: CO, phone: "010-3333-4444", name: "김철수" } });
+    assert.deepStrictEqual(r2.body, { ok: true, email: "34바3434@driver.run25.kr", carNo: "34바3434" });
+  });
+  await t("휴대폰 로그인: 없는 번호 · 회사 다름 · 이름 다름 · 일부만 입력", async () => {
+    assert.strictEqual((await call(DV.driverPhoneLogin, { body: { companyName: CO, phone: "01000000000", name: "이태훈" } })).body.code, "NOT_FOUND");
+    assert.strictEqual((await call(DV.driverPhoneLogin, { body: { companyName: "씨운송", phone: "01011112222", name: "이태훈" } })).body.code, "COMPANY_MISMATCH");
+    assert.strictEqual((await call(DV.driverPhoneLogin, { body: { companyName: CO, phone: "01011112222", name: "엉뚱이" } })).body.code, "NAME_MISMATCH");
+    assert.strictEqual((await call(DV.driverPhoneLogin, { body: { companyName: CO, phone: "2222", name: "이태훈" } })).statusCode, 400);
+  });
+  await t("휴대폰 로그인: 기사관리에만 등록된 기사는 차량번호만 알려준다", async () => {
+    const r = await call(DV.driverPhoneLogin, { body: { companyName: CO, phone: "010-7777-8888", name: "미가입" } });
+    assert.deepStrictEqual(r.body, { ok: true, pre: true, carNo: "99자9999" });
+  });
+  await t("휴대폰 로그인: 기사관리에서만 번호를 고친 기사(users.phone은 옛 번호)도 찾는다", async () => {
+    await db.doc(`drivers/${B}`).update({ 전화번호: "01012120000" });
+    const r = await call(DV.driverPhoneLogin, { body: { companyName: CO, phone: "01012120000", name: "김철수" } });
+    assert.strictEqual(r.body.email, "34바3434@driver.run25.kr");
+  });
+  await t("휴대폰 로그인: 같은 번호로 계속 시도하면 429", async () => {
+    let last = 200;
+    for (let i = 0; i < 14; i++) last = (await call(DV.driverPhoneLogin, { body: { companyName: CO, phone: "01055550000", name: "x" } })).statusCode;
+    assert.strictEqual(last, 429);
+  });
+
+  console.log(`\n${pass} passed, ${fail} failed`);
+  process.exit(fail ? 1 : 0);
+})();

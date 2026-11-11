@@ -52,7 +52,7 @@ export function buildGuideMessage({ company = "", name = "" } = {}) {
     `  설치 그림: ${GUIDE_URL}#iphone`,
     "",
     `가입할 때 회사명은 "${co}"로 입력해 주세요.`,
-    "승인되면 차량번호로 로그인됩니다.",
+    "승인되면 휴대폰번호(또는 차량번호)로 로그인됩니다.",
   ].join("\n");
 }
 

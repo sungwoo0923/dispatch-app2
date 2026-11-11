@@ -60,6 +60,7 @@ import { subscribeUsersLive } from "./usersLive";
 import { useUserProfiles } from "./userProfilesLive"; // 🔒 2026-11-07 인사 프로필은 우리 회사 직원 한 건씩
 const AdminMenu = lazyView(() => import("./AdminMenu"));
 import FleetExtraFields from "./FleetDriverExtra";
+import DriverVehicleChangeModal from "./DriverVehicleChange"; // ⭐ 2026-11-11 기사 차량 변경(계정은 그대로)
 import { useFixedRouteAutoDispatch, FixedRouteEditNotice } from "./FixedRoutes";
 import { isMasterKey } from "./monthCompare"; // ⭐ 2026-11-03 최고관리자 계정은 담당자 이름 대신 "최고관리자"
 import { deptModeOf } from "./DeptDashboard";
@@ -56921,6 +56922,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
   const [page, setPage] = React.useState(1);
   const perPage = 20;
   const [editDriverModal, setEditDriverModal] = React.useState(null); // 더블클릭 수정 팝업
+  const [vehicleChangeFor, setVehicleChangeFor] = React.useState(null); // ⭐ 2026-11-11 차량 변경 창(계정은 그대로, 차량만)
   const [drvCtx, setDrvCtx] = React.useState(null); // 🖱 2026-11-10 오른쪽 클릭 메뉴 { x, y, rows }
   const [drvToast, setDrvToast] = React.useState("");
   // 체크한 기사 — 화면 표 순서대로(검색으로 안 보이는 체크 기사는 뒤에)
@@ -57670,6 +57672,15 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
       </div>
 
       {guideFor && <DriverGuideSendModal drivers={guideFor} company={userCompany} onClose={() => setGuideFor(null)} />}
+      {/* ⭐ 2026-11-11 차량 변경 창 — 끝나면 수정 팝업의 값도 새 차량으로 맞춘다(저장 때 예전 번호로 덮어쓰지 않게) */}
+      {vehicleChangeFor && mPop(
+        <DriverVehicleChangeModal driver={vehicleChangeFor} onClose={() => setVehicleChangeFor(null)}
+          onDone={(patch, r) => {
+            setEditDriverModal(p => (p && p.id === vehicleChangeFor.id ? { ...p, ...patch } : p));
+            setVehicleChangeFor(null);
+            showAlert(`차량을 ${patch.차량번호}(으)로 바꿨습니다.${r?.holder ? `\n${r.holder.name || "기존"} 기사님은 ${r.holder.carNo || "차량 미배정"}(으)로 바뀌었습니다.` : ""}${r?.account ? "\n기사님은 휴대폰번호 또는 새 차량번호로 로그인하면 됩니다." : ""}`);
+          }} />
+      )}
       {/* ===== 기사 수정 팝업 (더블클릭) ===== */}
       {editDriverModal && mPop(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
@@ -57696,9 +57707,20 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
             <div className={`${mobile ? "px-4 grid-cols-1" : "px-6 grid-cols-2"} py-5 grid gap-4`}>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">차량번호 *</label>
-                <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
-                  value={editDriverModal.차량번호||""}
-                  onChange={(e) => setEditDriverModal(p => ({ ...p, 차량번호: e.target.value }))} />
+                {/* ⭐ 2026-11-11 기사앱 가입 기사 · 지입/직영/임대 기사는 [차량 변경]으로 바꾼다 — 로그인 계정·차량이력(정산)이 같이 맞춰진다.
+                    (예전엔 여기서 번호만 고치면 기사앱은 예전 차량번호로만 로그인되고 정산도 차량번호별로 갈렸다) */}
+                {(editDriverModal.uid || ["지입", "직영", "임대"].includes(editDriverModal.등급)) ? (
+                  <div className="flex gap-2">
+                    <input readOnly className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full min-w-0 bg-gray-50 text-gray-700 font-bold outline-none"
+                      value={editDriverModal.차량번호 || "미배정"} />
+                    <button type="button" data-testid="open-vehicle-change" onClick={() => setVehicleChangeFor(editDriverModal)}
+                      className="shrink-0 h-[38px] px-3 rounded-lg text-white text-[12.5px] font-bold whitespace-nowrap" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>차량 변경</button>
+                  </div>
+                ) : (
+                  <input autoComplete="off" className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full focus:border-[#1B2B4B] outline-none"
+                    value={editDriverModal.차량번호||""}
+                    onChange={(e) => setEditDriverModal(p => ({ ...p, 차량번호: e.target.value }))} />
+                )}
               </div>
               <div>
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">이름</label>

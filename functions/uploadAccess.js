@@ -358,5 +358,6 @@ module.exports = function makeUploadAccess({ functions, db, getAuth, FieldValue,
     }
   });
 
-  return { uploadAccess, driverSearch, driverLoginLink, rateLimit, limited, clientIp, _crypto: crypto };
+  // ⭐ 2026-11-11 cors · bearerUser · isStaffOf — 기사 차량 변경(driverVehicle.js)이 같이 쓴다
+  return { uploadAccess, driverSearch, driverLoginLink, rateLimit, limited, clientIp, cors, bearerUser, isStaffOf, _crypto: crypto };
 };

@@ -7,7 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { readPublicCompanies } from "../publicCompanies"; // ⭐ 2026-11-10 소속 운송사명 검색 드롭다운
 import BigCheck from "../components/BigCheck";
 import { LogisMark, LogisWordmark, LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
-import { legacyDriverEmail, scopedDriverEmail, signInDriver } from "./driverEmail";
+import { legacyDriverEmail, scopedDriverEmail, signInDriver, isPhoneLoginId, isPartialPhone, phoneDigits, resolveDriverPhone, signInDriverAccount } from "./driverEmail"; // ⭐ 2026-11-11 휴대폰번호 로그인
 import { isDriverAppContext, peekDriverAppOnlyKick, clearDriverAppOnlyKick, DRIVER_APP_ONLY_ERROR } from "./driverAppContext"; // ⭐ 2026-11-08 기사앱은 기사 계정만
 import { checkDriverUserDoc, describeDriverLoginError, driverLoginError, keepDriverLoginError, takeDriverLoginError, setDriverBusy } from "./driverLoginErrors"; // ⭐ 2026-11-05 실패 사유 안내
 
@@ -32,7 +32,7 @@ export default function DriverLogin() {
   const saved = loadSaved();
   const keep = saved && saved.remember !== false;
   const [companyNameState, setCompanyName] = useState(keep ? saved.companyName || "" : "");
-  const [carNoState, setCarNo] = useState(keep ? saved.carNo || "" : "");
+  const [carNoState, setCarNo] = useState(keep ? saved.loginId || saved.carNo || saved.phone || "" : ""); // ⭐ 2026-11-11 휴대폰번호 또는 차량번호
   const [nameState, setName] = useState(keep ? saved.name || "" : "");
   // ⭐ 2026-11-10 소속 운송사명 — 가입 화면처럼 입력하면 공개 운송사 목록에서 찾아 고른다(목록에 없어도 입력값 그대로 로그인 가능)
   const [coList, setCoList] = useState([]);
@@ -69,7 +69,7 @@ export default function DriverLogin() {
       sessionStorage.removeItem("driverJustLoggedOut");
       const sv = loadSaved();
       // 방금 실패 안내가 떠 있으면 자동 로그인으로 다시 시도하지 않는다(같은 실패가 반복되며 안내가 사라짐)
-      if (!justLoggedOut && !restoredErrRef.current && sv?.autoLogin && sv.companyName && sv.carNo && sv.name) login(sv);
+      if (!justLoggedOut && !restoredErrRef.current && sv?.autoLogin && sv.companyName && (sv.carNo || sv.phone) && sv.name) login(sv);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -83,28 +83,59 @@ export default function DriverLogin() {
   const login = async (override) => {
     // override: 자동 로그인 시 저장된 값(아직 state 반영 전일 수 있어 직접 받는다)
     const companyName = String(override?.companyName ?? companyNameState).trim();
-    const carNo = String(override?.carNo ?? carNoState).trim();
     const name = String(override?.name ?? nameState).trim();
+    // ⭐ 2026-11-11 휴대폰번호(전체) 또는 차량번호 — 한 칸에 어느 쪽을 넣어도 된다.
+    //  자동 로그인은 저장된 차량번호로 먼저(빠름), 안 되면 저장된 휴대폰번호로(차량이 바뀐 경우) 한 번 더 확인한다.
+    const typed = String(carNoState).trim();
+    const ids = override
+      ? [...new Set([String(override.carNo || "").trim(), isPhoneLoginId(override.phone) ? phoneDigits(override.phone) : ""].filter(Boolean))]
+      : [typed];
     if (busyRef.current) return;
-    const ctx = { companyName, carNo, name };
+    const ctx = { companyName, carNo: isPhoneLoginId(ids[0]) ? "" : ids[0] || "", phone: isPhoneLoginId(ids[0]) ? phoneDigits(ids[0]) : "", name };
     setError(null);
-    const empty = [!companyName && "소속 운송사명", !carNo && "차량번호", !name && "이름"].filter(Boolean);
+    const empty = [!companyName && "소속 운송사명", !ids[0] && "휴대폰번호(또는 차량번호)", !name && "이름"].filter(Boolean);
     if (empty.length) {
       setError(describeDriverLoginError(driverLoginError("driver/empty", { field: empty.join(" · ") }), ctx));
       return;
     }
+    if (!override && isPartialPhone(typed)) {
+      setError(describeDriverLoginError(driverLoginError("driver/phone-incomplete"), ctx));
+      return;
+    }
 
-    let email = legacyDriverEmail(carNo);
-    const password = carNo;
-
-    busyRef.current = true;
-    setLoggingIn(true);
-    setDriverBusy(true);
-    let ok = false;
-    try {
-      if (typeof navigator !== "undefined" && navigator.onLine === false) throw driverLoginError("driver/network");
+    // 한 가지 정보(휴대폰번호 또는 차량번호)로 로그인 확인 — 성공: { uid, carNo, u } / 실패: 사유 코드를 던짐
+    const attempt = async (idRaw) => {
+      const usePhone = isPhoneLoginId(idRaw);
+      let carNo = usePhone ? "" : idRaw;
+      ctx.carNo = carNo;
+      ctx.phone = usePhone ? phoneDigits(idRaw) : "";
       let uid;
-      try {
+      if (usePhone) {
+        const pr = await resolveDriverPhone(FUNCTIONS_BASE, { companyName, phone: idRaw, name });
+        if (pr?.error === "rate") throw Object.assign(new Error("too many"), { code: "auth/too-many-requests" });
+        if (pr?.error) throw driverLoginError("driver/network", { cause: pr.cause });
+        if (pr?.ok && pr.email) {
+          carNo = String(pr.carNo || "");
+          ctx.carNo = carNo;
+          try {
+            uid = (await signInDriverAccount(auth, pr.email, carNo)).user.uid;
+          } catch (e) {
+            if (["auth/network-request-failed", "auth/too-many-requests", "auth/user-disabled"].includes(e?.code)) throw e;
+            throw driverLoginError("driver/phone-not-registered", { cause: e });
+          }
+        } else if (pr?.ok && pr.pre && pr.carNo) {
+          // PC 기사관리에 미리 등록만 된 기사 — 그 차량번호로 아래 연결 절차를 탄다
+          carNo = String(pr.carNo);
+          ctx.carNo = carNo;
+        } else if (pr?.code === "NAME_MISMATCH") throw driverLoginError("driver/name-mismatch");
+        else if (pr?.code === "COMPANY_MISMATCH") throw driverLoginError("driver/company-mismatch");
+        else if (pr?.code === "DISABLED") throw Object.assign(new Error("disabled"), { code: "auth/user-disabled" });
+        else throw driverLoginError("driver/phone-not-registered");
+      }
+
+      let email = legacyDriverEmail(carNo);
+      const password = carNo;
+      if (!uid) try {
         // ⭐ 2026-11-01 예전 계정 → 회사별 계정 순서로 로그인(다른 운송사 같은 차량번호 대응)
         const r = await signInDriver(auth, db, companyName, carNo);
         uid = r.uid;
@@ -172,14 +203,40 @@ export default function DriverLogin() {
       const u = snap.exists() ? snap.data() : null;
       const bad = checkDriverUserDoc(u, { name, companyName });
       if (bad) throw driverLoginError(bad, { reason: u?.rejectReason || u?.rejectedReason || u?.거절사유 || "" });
+      return { uid, carNo, u };
+    };
+
+    busyRef.current = true;
+    setLoggingIn(true);
+    setDriverBusy(true);
+    let ok = false;
+    try {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) throw driverLoginError("driver/network");
+      // 계정 상태(승인 대기·정지 등)나 연결 문제로 막힌 것이면 다른 정보로 다시 시도하지 않는다
+      const STOP = ["driver/network", "auth/network-request-failed", "auth/too-many-requests", "auth/user-disabled", "driver/pending", "driver/rejected", "driver/retired", "driver/suspended"];
+      let done = null;
+      let lastErr = null;
+      for (const id of ids) {
+        try { done = await attempt(id); break; } catch (e) {
+          lastErr = e;
+          await signOut(auth).catch(() => {});
+          if (STOP.includes(e?.code)) break;
+        }
+      }
+      if (!done) throw lastErr;
+      const { uid, u } = done;
 
       localStorage.setItem("role", "driver");
       localStorage.setItem("uid", uid);
       try {
         const remember = override ? true : rememberInfo;
         const auto = override ? true : autoLogin;
+        // 지금 차량번호 · 휴대폰번호를 같이 저장 — 다음 자동 로그인 때 차량이 바뀌어 있어도 휴대폰번호로 이어진다
+        const carNo = String(u?.carNo || done.carNo || "").trim();
+        const phone = isPhoneLoginId(u?.phone) ? phoneDigits(u.phone) : (ctx.phone || (isPhoneLoginId(override?.phone) ? phoneDigits(override.phone) : ""));
+        const loginId = override ? (override.loginId || override.carNo || "") : typed;
         localStorage.setItem(SAVED_KEY, JSON.stringify(remember
-          ? { remember: true, autoLogin: auto, companyName, carNo, name }
+          ? { remember: true, autoLogin: auto, companyName, carNo, name, phone, loginId: isPhoneLoginId(loginId) ? loginId : carNo || loginId }
           : { remember: false, autoLogin: false }));
       } catch { /* 저장 실패 무시 */ }
       ok = true;
@@ -275,7 +332,7 @@ export default function DriverLogin() {
           <div className="bg-white rounded-[26px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_24px_60px_rgba(15,26,48,0.10)] px-5 sm:px-10 pt-6 sm:pt-9 pb-6 sm:pb-8">
             <div className="text-[13.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]">DRIVER SIGN IN</div>
             <h1 className="mt-1 text-[23px] sm:text-[26px] font-black text-[#0F1A30] tracking-tight">기사 로그인</h1>
-            <p className="text-[14.5px] sm:text-[15.5px] text-[#7A879C] mt-1 mb-5 sm:mb-7">소속 회사 · 차량번호 · 이름으로 로그인하세요</p>
+            <p className="text-[14.5px] sm:text-[15.5px] text-[#7A879C] mt-1 mb-5 sm:mb-7">소속 회사 · 휴대폰번호 · 이름으로 로그인하세요</p>
 
             {field("company", "소속 운송사명", (
               <div className="relative">
@@ -298,8 +355,9 @@ export default function DriverLogin() {
                 )}
               </div>
             ))}
-            {field("car", "차량번호", (
-              <input value={carNoState} onChange={(e) => setCarNo(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} placeholder="예: 경기97가1234" className={inputCls} />
+            {/* ⭐ 2026-11-11 휴대폰번호(전체) 또는 차량번호 — 차량이 바뀌어도 휴대폰번호로는 그대로 로그인된다 */}
+            {field("car", "휴대폰번호 (또는 차량번호)", (
+              <input value={carNoState} onChange={(e) => setCarNo(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} placeholder="예: 01012345678" autoComplete="off" autoCorrect="off" spellCheck={false} className={inputCls} data-testid="login-id-input" />
             ))}
             {field("name", "기사 이름", (
               <input value={nameState} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && login()} placeholder="이름" className={inputCls} />

@@ -3703,6 +3703,10 @@ exports.driverSearch = _uploadAccess.driverSearch;
 exports.driverLoginLink = _uploadAccess.driverLoginLink;
 const _publicLimited = _uploadAccess.limited;
 const _publicIp = _uploadAccess.clientIp;
+// ⭐ 2026-11-11 기사 차량 변경(계정은 그대로, 차량번호만) · 휴대폰번호 로그인 — functions/driverVehicle.js
+const _driverVehicle = require("./driverVehicle")({ functions, db, getAuth, FieldValue, helpers: _uploadAccess });
+exports.driverChangeVehicle = _driverVehicle.driverChangeVehicle;
+exports.driverPhoneLogin = _driverVehicle.driverPhoneLogin;
 
 // 📧 가입 화면 이메일 중복확인 — 로그인 전 화면은 보안 규칙상 users 목록을 못 읽어서
 //  "사용 중 여부"만 서버가 대신 알려준다(문서 내용은 돌려주지 않음). 삭제·탈퇴 계정은 재가입 허용.

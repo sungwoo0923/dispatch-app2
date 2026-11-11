@@ -370,7 +370,7 @@ export default function DriverRegister() {
       mark("연결확인");
       if (link?.linked) {
         created = null;
-        try { localStorage.setItem(SAVED_LOGIN_KEY, JSON.stringify({ remember: true, autoLogin: false, companyName: co, carNo: plate, name: name.trim() })); } catch { /* 저장 실패 무시 */ }
+        try { localStorage.setItem(SAVED_LOGIN_KEY, JSON.stringify({ remember: true, autoLogin: false, companyName: co, carNo: plate, name: name.trim(), phone: onlyDigits(phone) })); } catch { /* 저장 실패 무시 */ }
         // ⭐ 2026-11-05 사진 저장은 완료 화면을 띄운 뒤 뒤에서 마저 한다
         finishInBackground([bizDoc(uid)]);
         setPhase(4);
@@ -672,7 +672,7 @@ export default function DriverRegister() {
           <div className="mt-2 rounded-xl bg-[#F5F8FD] border border-[#C9D6EE] px-3.5 py-2.5 text-[15.5px] font-bold text-[#1B2B4B]">입력한 이름 '{companyName.trim()}'(으)로 신청합니다. 운송사 정식 이름과 다르면 승인이 늦어질 수 있습니다.</div>
         )}
       </Field>
-      <Field label="차량번호" req hint="띄어쓰기 없이 저장되며, 로그인할 때도 차량번호를 씁니다.">
+      <Field label="차량번호" req hint="띄어쓰기 없이 저장됩니다. 로그인은 휴대폰번호(또는 차량번호)로 합니다.">
         <input value={carNo} onChange={(e) => setCarNo(plateOf(e.target.value))} onKeyDown={onEnter} placeholder="예: 경기97가1234" className={inputCls} />
       </Field>
       <Field label="이름" req>

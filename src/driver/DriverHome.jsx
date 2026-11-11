@@ -1,5 +1,6 @@
 // DriverHome.jsx — 지입기사 전용 앱 (리뉴얼)
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { platePeriods, periodFor, normPlate as histPlate } from "../driverVehicleHistory"; // ⭐ 2026-11-11 차량이력
 import { pickCompanyLoc } from "../officeLocSync"; // 📍 2026-11-09 출근지 한 곳 관리
 import { kpConfirm } from "../kpDialog";
 import { deleteDocsAtomic } from "../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
@@ -1227,21 +1228,44 @@ export default function DriverHome() {
   // 각각 구독해 합치고, 각 오더에 실제 컬렉션명(__col)을 태깅해서 이후
   // 수락/거절/완료/첨부 쓰기가 같은 문서를 정확히 가리키게 한다.
   const [myOrdersByCol, setMyOrdersByCol] = useState({ orders: [], dispatch: [] });
+  // ⭐ 2026-11-11 차량이 바뀐 기사(차량이력 있음) — 예전에 타던 차량번호 오더도 같이 받아, 내가 탄 기간의 건만 남긴다.
+  //  (예전엔 지금 차량번호만 봐서, 차량을 옮기면 내 지난 운행이 운행일지에서 사라지고 그 차량을 전에 타던 기사 건이 보였다)
+  const plateHistKey = JSON.stringify(driver?.차량이력 || null);
   useEffect(() => {
     if (driver?.등급 !== "지입") { setMyOrdersByCol({ orders: [], dispatch: [] }); return; }
     const plate = driver?.차량번호 || driver?.carNo || "";
-    if (!plate) { setMyOrdersByCol({ orders: [], dispatch: [] }); return; }
+    const hist = Array.isArray(driver?.차량이력) && driver.차량이력.length > 0;
+    const plates = [...new Set([plate, ...(hist ? platePeriods(driver).slice(-8).map((x) => x.plate) : [])].filter(Boolean))].slice(0, 10);
+    if (!plates.length) { setMyOrdersByCol({ orders: [], dispatch: [] }); return; }
+    const curKey = histPlate(plate);
+    // 지금 차량의 진행 중 오더는 날짜와 상관없이 보여준다(놓치면 안 됨). 완료 건 · 예전 차량 건은 내가 탄 기간만.
+    const mine = (o) => !hist || (histPlate(o.차량번호) === curKey && o.기사확인상태 !== "완료") || !!periodFor(driver, o.차량번호, o.상차일 || "");
     const unsubs = ["orders", "dispatch"].map((col) => {
-      const q = query(collection(db, col), where("차량번호", "==", plate));
+      const q = query(collection(db, col), plates.length === 1 ? where("차량번호", "==", plates[0]) : where("차량번호", "in", plates));
       return onSnapshot(q, (snap) => {
         setMyOrdersByCol(prev => ({
           ...prev,
-          [col]: snap.docs.map(d => ({ _id: d.id, __col: col, ...d.data() })),
+          [col]: snap.docs.map(d => ({ _id: d.id, __col: col, ...d.data() })).filter(mine),
         }));
       }, () => {});
     });
     return () => unsubs.forEach(u => u());
-  }, [driver?.등급, driver?.차량번호, driver?.carNo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driver?.등급, driver?.차량번호, driver?.carNo, plateHistKey]);
+  // ⭐ 2026-11-11 배차자가 내 차량을 바꾸면, 이 폰에 저장된 로그인 정보(자동 로그인)도 새 차량번호 · 휴대폰번호로 맞춰 둔다
+  useEffect(() => {
+    if (!driver) return;
+    try {
+      const sv = JSON.parse(localStorage.getItem("driverLoginSaved") || "null");
+      if (!sv || sv.remember === false) return;
+      const p = String(driver.carNo ?? driver.차량번호 ?? "").trim();
+      const ph = String(driver.phone || driver.전화번호 || "").replace(/\D/g, "");
+      const next = { ...sv };
+      if (/^01[016789]\d{7,8}$/.test(ph) && !sv.phone) next.phone = ph;
+      if (sv.carNo !== p) { if (sv.loginId === sv.carNo || !sv.loginId) next.loginId = p || next.phone || ""; next.carNo = p; }
+      if (JSON.stringify(next) !== JSON.stringify(sv)) localStorage.setItem("driverLoginSaved", JSON.stringify(next));
+    } catch { /* 저장 불가 — 무시 */ }
+  }, [driver?.carNo, driver?.차량번호, driver?.phone, driver?.전화번호]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     setMyOrders([...myOrdersByCol.orders, ...myOrdersByCol.dispatch]);
   }, [myOrdersByCol]);

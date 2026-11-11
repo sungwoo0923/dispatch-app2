@@ -27,6 +27,7 @@ import { TimeSelect, korTimeLabel, MonthPicker, kstYm } from "./kpInputs";
 import { scanPenaltyImage, parsePenaltyText } from "./penaltyScan";
 import { savePng as savePngA4, savePdf as savePdfA4, printA4 } from "./a4Export";
 import { fmtPhone } from "./formatInput";
+import { makeTripOwner, platePeriods } from "./driverVehicleHistory"; // ⭐ 2026-11-11 차량이 바뀐 기사도 한 명으로 정산
 import useNarrow from "./useNarrow"; // ⭐ 2026-11-06 휴대폰 폭 카드 목록
 
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
@@ -162,11 +163,15 @@ function useStatements({ drivers, dispatchData, co, ym, vatMode, includeEmpty = 
     if (!co) return undefined;
     return onSnapshot(query(collection(db, "fleetPenalties"), where("companyName", "==", co)), (s) => setPenalties(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setPenalties([]));
   }, [co]);
+  // ⭐ 2026-11-11 차량이력 — 기사님이 달 중간에 차량을 바꿔도(3333 → 3434) 두 차량 운행분이 이 기사 한 명에게 묶인다.
+  //  그 날짜에 그 차량을 탄 기사에게만 넣으므로, 3333을 이어받은 다른 기사 명세서에 예전 기사 운행분이 섞이지 않는다.
+  const tripOwner = React.useMemo(() => makeTripOwner(drivers), [drivers]);
   const rows = React.useMemo(() => drivers.map((d) => {
     const plate = String(d.차량번호 || "").trim(); const name = String(d.이름 || "").trim();
+    const noPlate = !platePeriods(d).length;
     const trips = (dispatchData || []).filter((r) => {
-      const rp = String(r.차량번호 || "").trim(); const rn = String(r.이름 || "").trim();
-      if (!((plate && plate !== "-" && rp === plate) || ((!plate || plate === "-") && name && rn === name))) return false;
+      const rp = normPlate(r.차량번호); const rn = String(r.이름 || "").trim();
+      if (!((!noPlate && rp && tripOwner(d.id, rp, r.상차일 || "")) || (noPlate && name && rn === name))) return false;
       if (CANCELED.includes(r.배차상태 || "") || CANCELED.includes(r.상태 || "")) return false;
       // 기사님이 아직 수락하지 않았거나(승인대기) 거절한 오더는 정산에 넣지 않는다
       if (r.배차상태 === "승인대기" || ["대기", "거절"].includes(r.기사확인상태 || "")) return false;
@@ -192,7 +197,7 @@ function useStatements({ drivers, dispatchData, co, ym, vatMode, includeEmpty = 
       key: d.id, d, trips, gross, vat, auto, deductions, deductTotal, extra, penIds: penList.map((p) => p.id), net: gross + vat - deductTotal, bankCheck,
       st: { companyName: co, driverId: d.appUid || d.id, driverKey: d.id, driverName: name, joinType: d.등급 || "", carNo: plate, phone: d.전화번호 || "", period: ym, from, to, trips, gross, vat, deductions, deductTotal, net: gross + vat - deductTotal, bank: d.정산계좌 || null, bizNo: d.사업자번호 || "", bizName: d.사업자상호 || "" },
     };
-  }).filter((r) => includeEmpty || r.trips.length || r.deductTotal), [drivers, dispatchData, from, to, ym, vatMode, penalties, edits, JSON.stringify(defDeds), co, includeEmpty]); // eslint-disable-line react-hooks/exhaustive-deps
+  }).filter((r) => includeEmpty || r.trips.length || r.deductTotal), [drivers, tripOwner, dispatchData, from, to, ym, vatMode, penalties, edits, JSON.stringify(defDeds), co, includeEmpty]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const send = async (list) => {
     if (!list.length) { kpAlert("보낼 기사님을 선택해 주세요."); return false; }
@@ -1021,7 +1026,7 @@ export function useFleetDrivers() {
     .map((raw) => ({
       id: raw.id, 이름: String(raw.이름 || raw.name || "").trim() || "-", 차량번호: String(raw.차량번호 || raw.carNo || "").trim() || "-",
       전화번호: String(raw.전화번호 || raw.phone || "").trim() || "-", 등급: raw.등급, 차량종류: raw.차량종류 || "", 차량톤수: String(raw.차량톤수 || raw.톤수 || ""),
-      정산계좌: raw.정산계좌 || null, 사업자번호: raw.사업자번호 || "", 사업자상호: raw.사업자상호 || "", appUid: raw.uid || "", 공제항목: raw.공제항목 || null,
+      정산계좌: raw.정산계좌 || null, 사업자번호: raw.사업자번호 || "", 사업자상호: raw.사업자상호 || "", appUid: raw.uid || "", 공제항목: raw.공제항목 || null, 차량이력: Array.isArray(raw.차량이력) ? raw.차량이력 : null,
     })).sort((a, b) => a.이름.localeCompare(b.이름, "ko"))), () => setList([])), []);
   return list;
 }

@@ -68,3 +68,36 @@ export async function legacyOwnerCompany(auth, db, carNo) {
     return "";
   }
 }
+
+// ⭐ 2026-11-11 휴대폰번호 로그인 — 차량이 바뀌어도 기사님은 같은 정보(운송사 · 휴대폰번호 · 이름)로 로그인한다.
+//  서버(driverPhoneLogin)가 그 기사의 지금 로그인 계정을 찾아 주고, 화면은 그 계정으로 로그인한다.
+export const phoneDigits = (v) => String(v || "").replace(/\D/g, "");
+// 입력값이 휴대폰번호인지(한글이 없고 01x로 시작하는 10~11자리) — 아니면 차량번호로 본다
+export const isPhoneLoginId = (v) => !/[가-힣A-Za-z]/.test(String(v || "")) && /^01[016789]\d{7,8}$/.test(phoneDigits(v));
+// 숫자만 넣다 만 휴대폰번호인지(안내용) — 01로 시작하는 숫자뿐인데 자릿수가 모자라거나 넘침
+export const isPartialPhone = (v) => !/[가-힣A-Za-z]/.test(String(v || "")) && /^01\d*$/.test(phoneDigits(v)) && !isPhoneLoginId(v);
+
+// 결과: { ok:true, email, carNo } | { ok:true, pre:true, carNo } | { ok:false, code } | { error: "network" | "rate" | "server" }
+export async function resolveDriverPhone(base, { companyName, phone, name }) {
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 20000);
+    const r = await fetch(`${base}/driverPhoneLogin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ companyName, phone: phoneDigits(phone), name }),
+      signal: ctl.signal,
+    }).finally(() => clearTimeout(timer));
+    if (!r.ok) return { error: r.status === 429 ? "rate" : "server" };
+    return await r.json();
+  } catch (cause) {
+    return { error: "network", cause };
+  }
+}
+
+// 서버가 알려준 계정으로 로그인 — 비밀번호는 차량번호(미배정 계정은 메일 앞부분)
+export async function signInDriverAccount(auth, email, carNo) {
+  const local = String(email || "").split("@")[0];
+  if (/^nocar\./i.test(local)) return signInWithEmailAndPassword(auth, email, local.toLowerCase());
+  return signInAnyPassword(auth, email, carNo);
+}

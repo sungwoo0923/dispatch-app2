@@ -27,7 +27,7 @@ export function appStatusOf(d = {}) {
   return { key: "idle", label: "가입·승인됨", desc: seen ? `마지막 접속 ${new Date(seen).toLocaleDateString("ko-KR")}` : "아직 접속 기록 없음" };
 }
 export function appInviteText(company, d = {}) {
-  return `[${company || "운송사"}] 기사앱 설치 안내\n\n1) 아래 주소에서 앱(APK)을 받아 설치해 주세요\n${DRIVER_APK_URL}\n\n2) 앱에서 [기사 등록]\n· 소속 회사명: ${company || ""}\n· 차량번호: ${d.차량번호 || ""}\n· 이름: ${d.이름 || ""}\n· 정산 받을 계좌도 함께 입력해 주세요\n\n3) 승인되면 차량번호로 로그인됩니다.`;
+  return `[${company || "운송사"}] 기사앱 설치 안내\n\n1) 아래 주소에서 앱(APK)을 받아 설치해 주세요\n${DRIVER_APK_URL}\n\n2) 앱에서 [기사 등록]\n· 소속 회사명: ${company || ""}\n· 차량번호: ${d.차량번호 || ""}\n· 이름: ${d.이름 || ""}\n· 정산 받을 계좌도 함께 입력해 주세요\n\n3) 승인되면 휴대폰번호(또는 차량번호)로 로그인됩니다.`;
 }
 export function AppStatusBadge({ d, company, big = false }) {
   const s = appStatusOf(d);

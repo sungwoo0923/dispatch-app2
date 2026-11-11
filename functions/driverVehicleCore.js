@@ -1,0 +1,83 @@
+// functions/driverVehicleCore.js
+// ⭐ 2026-11-11 기사 차량 변경 · 휴대폰번호 로그인 — 계산만(서버 연결 없이 단위 시험 가능)
+//  · 기사 계정은 사람 기준으로 하나, 차량번호는 바뀌는 값. 차량이 바뀌면 로그인 계정(차량번호@…)도 새 차량번호로 맞춘다.
+//  · 차량이력: drivers/{id}.차량이력 = [{ 차량번호, 시작:"YYYY-MM-DD"|"", 종료:"YYYY-MM-DD"|"", by, at }] (정산이 날짜별로 어느 기사 건인지 판단)
+"use strict";
+
+const DOMAIN = "driver.run25.kr";
+const DEFAULT_CO = "돌캐";
+const HISTORY_MAX = 60;
+
+const plateOf = (v) => String(v || "").replace(/\s+/g, "");
+const normText = (v) => String(v || "").replace(/\s+/g, "").toLowerCase();
+const digits = (v) => String(v || "").replace(/\D/g, "");
+// 휴대폰번호 전체(01x로 시작하는 10~11자리)
+const phoneValid = (v) => /^01[016789]\d{7,8}$/.test(digits(v));
+// 저장 형식이 섞여 있다(가입: 010-1234-5678 / PC 등록: 01012345678) — 둘 다 찾는다
+function phoneVariants(v) {
+  const d = digits(v);
+  if (!d) return [];
+  const hy = d.length < 8 ? d : `${d.slice(0, 3)}-${d.slice(3, d.length - 4)}-${d.slice(-4)}`;
+  return [...new Set([d, hy])];
+}
+// 차량번호 형식 — 한글·숫자·영문만, 6~12자(로그인 비밀번호로도 쓰여 6자 이상)
+const plateValid = (v) => /^[0-9A-Za-z가-힣]{6,12}$/.test(plateOf(v));
+
+// 화면(src/driver/driverEmail.js)과 같은 계산이어야 한다
+const coHash = (co) => {
+  let h = 5381;
+  for (const ch of String(co || "").replace(/\s+/g, "")) h = (Math.imul(h, 33) ^ ch.codePointAt(0)) >>> 0;
+  return h.toString(36);
+};
+const legacyEmail = (plate) => `${plateOf(plate)}@${DOMAIN}`.toLowerCase();
+const scopedEmail = (co, plate) => `${plateOf(plate)}.c${coHash(co)}@${DOMAIN}`.toLowerCase();
+// 차량 미배정 계정 — 휴대폰번호로만 로그인(비밀번호 = 메일 앞부분)
+const nocarLocal = (uid) => `nocar.${String(uid || "").toLowerCase()}`;
+const nocarEmail = (uid) => `${nocarLocal(uid)}@${DOMAIN}`;
+const isNocarEmail = (e) => /^nocar\.[^@]+@driver\.run25\.kr$/i.test(String(e || ""));
+
+const coOf = (v) => String(v || "").trim() || DEFAULT_CO;
+const sameCo = (a, b) => normText(coOf(a)) === normText(coOf(b));
+
+const kstDay = (ms = Date.now()) => new Date(ms + 9 * 3600e3).toISOString().slice(0, 10);
+const dayValid = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`));
+const addDays = (day, n) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
+
+// 차량이력 갱신 — oldPlate를 date 전날까지로 닫고 newPlate를 date부터 연다(newPlate가 ""면 닫기만 = 미배정)
+function applyHistory(hist, { oldPlate, newPlate, date, by = "", at = Date.now() }) {
+  const h = (Array.isArray(hist) ? hist : []).filter((e) => e && plateOf(e.차량번호)).map((e) => ({ ...e, 차량번호: plateOf(e.차량번호), 시작: e.시작 || "", 종료: e.종료 || "" }));
+  const op = plateOf(oldPlate);
+  const np = plateOf(newPlate);
+  // 이력이 처음이면 지금까지 타던 차량을 "처음부터"로 남긴다
+  if (!h.length && op) h.push({ 차량번호: op, 시작: "", 종료: "" });
+  const prev = addDays(date, -1);
+  const out = [];
+  for (const e of h) {
+    if (e.종료) { out.push(e); continue; }
+    // 같은 날 다시 바꾸면(시작이 적용일 이후) 그 구간은 실제로 탄 적이 없으니 지운다
+    if (e.시작 && e.시작 >= date) continue;
+    out.push({ ...e, 종료: prev });
+  }
+  if (np) out.push({ 차량번호: np, 시작: date, 종료: "", by: String(by || "").slice(0, 80), at });
+  return out.slice(-HISTORY_MAX);
+}
+
+// 휴대폰번호로 찾은 후보 중 로그인할 기사 고르기
+//  cands: [{ uid?, pre?, companyName, name, carNo, approved, retired, createdAt(ms) }]
+//  결과: { ok:true, pick } | { ok:false, code: NOT_FOUND | COMPANY_MISMATCH | NAME_MISMATCH }
+function pickPhoneMatch(cands, { companyName, name }) {
+  const list = (cands || []).filter(Boolean);
+  if (!list.length) return { ok: false, code: "NOT_FOUND" };
+  const inCo = list.filter((c) => sameCo(c.companyName, companyName));
+  if (!inCo.length) return { ok: false, code: "COMPANY_MISMATCH" };
+  const named = inCo.filter((c) => normText(c.name) === normText(name));
+  if (!named.length) return { ok: false, code: "NAME_MISMATCH" };
+  const score = (c) => (c.pre ? 0 : 100) + (c.retired ? 0 : 10) + (c.approved ? 1 : 0);
+  named.sort((a, b) => score(b) - score(a) || Number(b.createdAt || 0) - Number(a.createdAt || 0));
+  return { ok: true, pick: named[0] };
+}
+
+module.exports = {
+  DOMAIN, DEFAULT_CO, plateOf, normText, digits, phoneValid, phoneVariants, plateValid, coHash, legacyEmail, scopedEmail,
+  nocarLocal, nocarEmail, isNocarEmail, coOf, sameCo, kstDay, dayValid, addDays, applyHistory, pickPhoneMatch,
+};
