@@ -28,7 +28,7 @@ import { pdCall } from "./publicDataMain";
 import { subscribeBankTxns } from "./popbillAuto";
 import CustomDatePicker from "./CustomDatePicker";
 import { CompanyOptionPicker } from "./companyOptionPicker";
-import { kpConfirm } from "./kpDialog";
+import { kpConfirm, kpPrompt } from "./kpDialog";
 import { EvidenceBox, EvidenceViewer } from "./InvoiceEvidence"; // 🧾 2026-11-11 증빙서류 자동 스캔
 
 export const BETA_COMPANY = "테스트운송사";
@@ -79,10 +79,11 @@ export const callDir = (r) => (isCaughtCall(r) ? "OUT" : "IN");
 // 지금 단계 — { kind, label, tone, date }
 export function payStage(r) {
   if (!r) return null;
+  // 🎨 2026-11-12 OUT(콜잡이 24시 · 원콜 등 · 외부 운송사 오더) — 미청구(빨강, 기본) → 청구완료(연주황, 메모) → 입금완료(파랑, 메모)
   if (isCaughtCall(r)) {
-    if (r.입금상태 === "입금완료") return { kind: "in", label: "입금완료", tone: "done", date: r.입금일 || "" };
-    if (r.계산서일) return { kind: "in", label: "입금대기", tone: "wait", date: r.계산서일 };
-    return { kind: "in", label: "계산서 미발행", tone: "todo", date: "" };
+    if (r.입금상태 === "입금완료") return { kind: "in", label: "입금완료", tone: "outPaid", date: r.입금일 || "", memo: r.입금메모 || "" };
+    if (r.계산서일) return { kind: "in", label: "청구완료", tone: "outBilled", date: r.계산서일, memo: r.청구메모 || "" };
+    return { kind: "in", label: "미청구", tone: "outTodo", date: "" };
   }
   if (r.지급상태 === "지급완료") return { kind: "out", label: "지급완료", tone: "done", date: r.지급일 || "" };
   if (!String(r.차량번호 || "").trim() && !String(r.이름 || r.기사명 || "").trim()) return null; // 아직 기사가 없으면 표시할 게 없다
@@ -93,7 +94,11 @@ const TONE = {
   done: { bg: "#0F1A30", fg: "#fff", bd: "#0F1A30" },
   wait: { bg: "#EEF3FB", fg: "#1B2B4B", bd: "#C9D6EC" },
   todo: { bg: "#fff", fg: "#7A8AA8", bd: "#DCE3EE" },
+  outTodo: { bg: "#FEE4E2", fg: "#B42318", bd: "#F97066", tag: "#D92D20" },   // 미청구 — 빨강
+  outBilled: { bg: "#FFEAD5", fg: "#B93815", bd: "#FDB022", tag: "#F79009" }, // 청구완료 — 연주황
+  outPaid: { bg: "#2563EB", fg: "#fff", bd: "#2563EB", tag: "rgba(255,255,255,.25)" }, // 입금완료 — 파랑
 };
+export const OUT_STAGE_COLORS = { 미청구: TONE.outTodo, 청구완료: TONE.outBilled, 입금완료: TONE.outPaid };
 
 // 배차현황 [정산] 칸 알약
 export function PayBadge({ row, onOpen }) {
@@ -102,11 +107,12 @@ export function PayBadge({ row, onOpen }) {
   if (!s) return <button type="button" onClick={onOpen} title="정산 정보 보기" className="text-[12px] font-bold text-[#C2CBDB] hover:text-[#1B2B4B] px-2">–</button>;
   const t = TONE[s.tone];
   return (
-    <button type="button" onClick={onOpen} title={`${caught ? "OUT · 외부 콜을 잡은 오더" : "IN · 우리 오더"} — 눌러서 정산 정보 보기`} data-pay-badge={s.label}
+    <button type="button" onClick={onOpen} title={`${caught ? "OUT · 외부 콜을 잡은 오더" : "IN · 우리 오더"}${s.memo ? ` · 메모: ${s.memo}` : ""} — 눌러서 정산 정보 보기`} data-pay-badge={s.label}
       className="inline-flex items-center gap-1 h-7 px-2 rounded-full text-[12px] font-black whitespace-nowrap hover:brightness-95"
       style={{ background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, ...NUM }}>
-      <span className="text-[9.5px] font-black px-1 rounded tracking-wide" style={caught ? { background: s.tone === "done" ? "rgba(255,255,255,.2)" : "#1B2B4B", color: "#fff" } : { background: s.tone === "done" ? "rgba(255,255,255,.14)" : "#EEF2F8", color: s.tone === "done" ? "#CFE0FF" : "#7A8AA8" }}>{caught ? "OUT" : "IN"}</span>
-      {s.label}{s.tone === "done" && s.date ? <span className="font-bold opacity-80">{md(s.date)}</span> : null}
+      <span className="text-[9.5px] font-black px-1 rounded tracking-wide" style={caught ? { background: t.tag || "#1B2B4B", color: "#fff" } : { background: s.tone === "done" ? "rgba(255,255,255,.14)" : "#EEF2F8", color: s.tone === "done" ? "#CFE0FF" : "#7A8AA8" }}>{caught ? "OUT" : "IN"}</span>
+      {s.label}{(s.tone === "done" || s.tone === "outBilled" || s.tone === "outPaid") && s.date ? <span className="font-bold opacity-80">{md(s.date)}</span> : null}
+      {s.memo ? <span aria-hidden className="w-1.5 h-1.5 rounded-full" style={{ background: "currentColor", opacity: 0.7 }} /> : null}
     </button>
   );
 }
@@ -120,11 +126,11 @@ const Row = ({ label, children }) => (
 const dateCls = "h-9 px-2.5 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#0F1A30] outline-none focus:border-[#1B2B4B] bg-white";
 
 // 입금완료 처리(잡은 콜) — 오더에 기록 + 수입·지출 장부(수입)에 한 줄(같은 오더는 한 줄만, 취소하면 지운다)
-export async function setCallDeposit({ row, done, date, name = "", patchDispatch, company, by = "", txnId = "" }) {
+export async function setCallDeposit({ row, done, date, name = "", patchDispatch, company, by = "", txnId = "", memo }) {
   const id = row?._id || row?.id;
   if (!id || !patchDispatch) return;
   const d = done ? (date || today()) : "";
-  await patchDispatch(id, { 입금상태: done ? "입금완료" : "", 입금일: d, 입금자명: done ? String(name || "").trim().slice(0, 40) : "", 입금처리자: done ? by : "", 입금거래id: done ? String(txnId || "") : "", __system: true });
+  await patchDispatch(id, { 입금상태: done ? "입금완료" : "", 입금일: d, 입금자명: done ? String(name || "").trim().slice(0, 40) : "", 입금처리자: done ? by : "", 입금거래id: done ? String(txnId || "") : "", ...(memo !== undefined || !done ? { 입금메모: done ? String(memo || "").trim().slice(0, 200) : "" } : {}), __system: true });
   const amt = done ? Number(String(row.청구운임 ?? "").replace(/[^\d.-]/g, "")) || 0 : 0;
   upsertAutoEntry(db, `calldep_${id}`, {
     company: coNow(company), date: d, type: "수입", account: "운송수입", item: `잡은 콜 입금 · ${row.거래처명 || ""}`, amount: amt, vendor: row.거래처명 || "",
@@ -263,25 +269,31 @@ export function queuePayNotice({ row, date, company, patchDispatch }) {
 // 배차현황 [정산] 알약 · 입금 확인 [입금처리]를 누르면 뜨는 창 — 고친 내용은 아래 [저장] / [입금완료]를 눌러야 반영된다
 export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company = "", evidenceApi }) {
   const id = row?._id || row?.id;
-  const init = () => ({ dir: callDir(row), platform: row?.콜플랫폼 || "", inv: row?.계산서일 || "", depDate: row?.입금일 || row?.입금증빙?.date || today(), depName: row?.입금자명 || row?.입금증빙?.payer || row?.계산서스캔?.payer || "" });
+  const init = () => ({ dir: callDir(row), platform: row?.콜플랫폼 || "", inv: row?.계산서일 || "", depDate: row?.입금일 || row?.입금증빙?.date || today(), depName: row?.입금자명 || row?.입금증빙?.payer || row?.계산서스캔?.payer || "", billMemo: row?.청구메모 || "", depMemo: row?.입금메모 || "" });
   const [f, setF] = React.useState(init);
   const [busy, setBusy] = React.useState(false);
   React.useEffect(() => { setF(init()); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const out = f.dir === "OUT";
   const deposited = row?.입금상태 === "입금완료";
-  const basePatch = () => ({ 콜구분: f.dir, 콜플랫폼: out ? f.platform : "", 계산서일: f.inv });
+  const basePatch = () => ({ 콜구분: f.dir, 콜플랫폼: out ? f.platform : "", 계산서일: f.inv, ...(out ? { 청구메모: f.inv ? f.billMemo.trim().slice(0, 200) : "" } : {}) });
   const dirty = f.dir !== callDir(row) || (out ? f.platform : "") !== (row?.콜플랫폼 || "") || f.inv !== (row?.계산서일 || "")
-    || (deposited && out && (f.depDate !== (row?.입금일 || "") || f.depName !== (row?.입금자명 || "")));
+    || (out && f.billMemo !== (row?.청구메모 || ""))
+    || (deposited && out && (f.depDate !== (row?.입금일 || "") || f.depName !== (row?.입금자명 || "") || f.depMemo !== (row?.입금메모 || "")));
+  // 🎨 OUT: 청구완료(계산서 발행일) · 입금완료는 메모를 꼭 남긴다
+  const needMemo = (k, label) => { if (out && !String(f[k] || "").trim()) { window.alert(`${label} 메모를 입력해 주세요.`); return true; } return false; };
   const run = async (fn) => { if (!canEdit || !id || !patchDispatch) return; setBusy(true); try { await fn(); } catch (e) { window.alert(`저장하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); } };
   const save = () => run(async () => {
+    if (out && f.inv && needMemo("billMemo", "청구완료")) return;
+    if (out && deposited && needMemo("depMemo", "입금완료")) return;
     if (deposited && !out) { await setCallDeposit({ row, done: false, patchDispatch, company }); } // IN으로 바꾸면 입금 기록도 지운다
-    await patchDispatch(id, { ...basePatch(), ...(deposited && out ? { 입금일: f.depDate || today(), 입금자명: f.depName.trim().slice(0, 40) } : {}), __system: true });
-    if (deposited && out && f.depDate !== (row?.입금일 || "")) await setCallDeposit({ row, done: true, date: f.depDate, name: f.depName, txnId: row?.입금거래id || "", patchDispatch, company }); // 장부 날짜도 맞춘다
+    await patchDispatch(id, { ...basePatch(), ...(deposited && out ? { 입금일: f.depDate || today(), 입금자명: f.depName.trim().slice(0, 40), 입금메모: f.depMemo.trim().slice(0, 200) } : {}), __system: true });
+    if (deposited && out && f.depDate !== (row?.입금일 || "")) await setCallDeposit({ row, done: true, date: f.depDate, name: f.depName, txnId: row?.입금거래id || "", memo: f.depMemo, patchDispatch, company }); // 장부 날짜도 맞춘다
   });
   const deposit = () => run(async () => {
-    await patchDispatch(id, { ...basePatch(), ...(f.inv ? {} : { 계산서일: f.depDate || today() }), __system: true });
-    await setCallDeposit({ row, done: true, date: f.depDate, name: f.depName, patchDispatch, company });
+    if (needMemo("depMemo", "입금완료")) return;
+    await patchDispatch(id, { ...basePatch(), ...(f.inv ? {} : { 계산서일: f.depDate || today() }), ...(f.billMemo.trim() ? {} : { 청구메모: "입금으로 확인" }), __system: true });
+    await setCallDeposit({ row, done: true, date: f.depDate, name: f.depName, memo: f.depMemo, patchDispatch, company });
     onClose?.();
   });
   const undo = () => run(async () => { if (!(await kpConfirm("입금완료를 취소할까요? 수입·지출 장부에 자동으로 들어간 줄도 함께 지워집니다."))) return; await setCallDeposit({ row, done: false, patchDispatch, company }); });
@@ -290,15 +302,17 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
   const onScanned = async (scan) => {
     const keep = { kind: scan.kind, date: scan.date || "", supply: scan.supply || 0, vat: scan.vat || 0, total: scan.total || 0, supplier: scan.supplier || "", buyer: scan.buyer || "", payer: scan.payer || "", at: today() };
     const transfer = scan.kind === "이체확인증";
+    const autoBill = `계산서 스캔 · ${scan.kind} ${scan.date || ""} 합계 ${won(scan.total)}원`.slice(0, 200); // 🎨 청구완료 메모(스캔으로 자동)
     setF((p) => ({
       ...p,
       ...(!transfer && scan.date ? { inv: scan.date } : {}),
       ...(transfer && scan.date ? { depDate: scan.date } : {}),
       ...(out && scan.payer && (!deposited || !p.depName) ? { depName: scan.payer.slice(0, 40) } : {}),
+      ...(out && !transfer && scan.date && !p.billMemo ? { billMemo: autoBill } : {}),
     }));
     if (!canEdit || !id || !patchDispatch) return;
     try {
-      await patchDispatch(id, transfer ? { 입금증빙: keep, __system: true } : { ...(scan.date ? { 계산서일: scan.date } : {}), 계산서스캔: keep, __system: true });
+      await patchDispatch(id, transfer ? { 입금증빙: keep, __system: true } : { ...(scan.date ? { 계산서일: scan.date } : {}), ...(out && scan.date && !row?.청구메모 && !f.billMemo ? { 청구메모: autoBill } : {}), 계산서스캔: keep, __system: true });
     } catch (e) { console.warn("[증빙 스캔] 저장 실패:", e?.message || e); }
   };
   const s = payStage(row);
@@ -335,7 +349,14 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
             <DateField value={f.inv} onChange={(v) => set("inv", v)} disabled={!canEdit || busy} placeholder="미발행" />
             {canEdit && !f.inv && <button type="button" disabled={busy} onClick={() => set("inv", today())} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B]">오늘</button>}
             {canEdit && f.inv && <button type="button" disabled={busy} onClick={() => set("inv", "")} className="text-[12px] font-bold text-[#9AA9C3] hover:text-red-600">지우기</button>}
+            {out && (() => { const lb = deposited ? "입금완료" : f.inv ? "청구완료" : "미청구"; const c = OUT_STAGE_COLORS[lb]; return <span data-out-stage={lb} className="ml-auto inline-flex items-center h-7 px-2.5 rounded-full text-[12px] font-black" style={{ background: c.bg, color: c.fg, border: `1px solid ${c.bd}` }}>{lb}</span>; })()}
           </Row>
+          {out && f.inv && (
+            <Row label="청구 메모">
+              <input value={f.billMemo} disabled={!canEdit || busy} onChange={(e) => set("billMemo", e.target.value)} placeholder="청구완료 메모(필수) — 예: 11/12 메일로 계산서 발행" autoComplete="off" data-bill-memo
+                className={`h-9 flex-1 min-w-[200px] px-2.5 rounded-lg border text-[13px] font-bold text-[#0F1A30] outline-none focus:border-[#1B2B4B] ${f.billMemo.trim() ? "border-[#DCE3EE] bg-white" : "border-[#FDB022] bg-[#FFFAEB]"}`} />
+            </Row>
+          )}
           <Row label={out ? "받을 금액" : "줄 금액"}>
             <div className="w-full rounded-xl border border-[#E3E8F0] bg-[#F7F9FC] px-3.5 py-2.5 grid grid-cols-3 gap-2 text-center" style={NUM} data-vat>
               {[[out ? "운임(청구운임)" : "운임(기사운임)", amt.supply, false], ["부가세 10%", amt.vat, false], ["계산서 합계", amt.total, true]].map(([l, v, strong]) => (
@@ -346,11 +367,13 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
           </Row>
           {out ? (
             <Row label="입금">
-              {deposited && <span className="inline-flex items-center h-7 px-2.5 rounded-full bg-[#0F1A30] text-white text-[12px] font-black">입금완료</span>}
+              {deposited && <span className="inline-flex items-center h-7 px-2.5 rounded-full bg-[#2563EB] text-white text-[12px] font-black">입금완료</span>}
               <DateField value={f.depDate} onChange={(v) => set("depDate", v || today())} disabled={!canEdit || busy} placeholder="입금일" />
               <input value={f.depName} disabled={!canEdit || busy} onChange={(e) => set("depName", e.target.value)} placeholder="입금자명(선택)" autoComplete="off"
                 className="h-9 w-[130px] px-2.5 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#0F1A30] outline-none focus:border-[#1B2B4B] bg-white" />
-              {!deposited && <span className="basis-full text-[11.5px] font-semibold text-[#9AA9C3]">입금일은 오늘로 들어가 있습니다. 직접 입력하거나 달력에서 고르세요.</span>}
+              <input value={f.depMemo} disabled={!canEdit || busy} onChange={(e) => set("depMemo", e.target.value)} placeholder="입금 메모(필수) — 예: 농협 입금 확인" autoComplete="off" data-dep-memo
+                className={`h-9 basis-full px-2.5 rounded-lg border text-[13px] font-bold text-[#0F1A30] outline-none focus:border-[#1B2B4B] ${f.depMemo.trim() ? "border-[#DCE3EE] bg-white" : "border-[#93C5FD] bg-[#EFF6FF]"}`} />
+              {!deposited && <span className="basis-full text-[11.5px] font-semibold text-[#9AA9C3]">입금일은 오늘로 들어가 있습니다. [입금완료]를 누르려면 입금 메모를 남겨 주세요.</span>}
             </Row>
           ) : (
             <Row label="기사 지급">
@@ -407,7 +430,7 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
   const applySugg = async (list) => {
     if (isViewer) return window.alert("조회전용 권한으로는 처리할 수 없습니다.");
     setBusy(true);
-    try { for (const r of list) { const g = sugg.get(r._id || r.id); if (g) await setCallDeposit({ row: r, done: true, date: g.txn.date || today(), name: g.txn.name || "", txnId: g.txn.id, patchDispatch, company }); } }
+    try { for (const r of list) { const g = sugg.get(r._id || r.id); if (g) await setCallDeposit({ row: r, done: true, date: g.txn.date || today(), name: g.txn.name || "", txnId: g.txn.id, memo: `은행 입금 확인 · ${g.txn.name || ""} ${won(g.txn.amount)}원`, patchDispatch, company }); } }
     catch (e) { window.alert(`처리하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); }
   };
   // 조회 조건(검색어 · 기간)에 맞는 오더 — 상태 단추 숫자도 이걸로 센다
@@ -429,8 +452,15 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
   const run = async (list, done) => {
     if (isViewer) return window.alert("조회전용 권한으로는 처리할 수 없습니다.");
     if (!list.length) return window.alert("오더를 골라 주세요.");
+    // 🎨 입금완료는 메모를 남긴다(선택한 건에 같은 메모)
+    let memo;
+    if (done) {
+      memo = await kpPrompt(`선택한 ${list.length}건 입금 메모(필수)`, "", { title: "입금완료 메모", placeholder: "예: 11/12 농협 입금 확인", okText: "입금완료" });
+      if (memo == null) return;
+      if (!String(memo).trim()) return window.alert("입금 메모를 입력해 주세요.");
+    }
     setBusy(true);
-    try { for (const r of list) await setCallDeposit({ row: r, done, date, name: done ? (r.입금자명 || r.입금증빙?.payer || r.계산서스캔?.payer || "") : "", patchDispatch, company }); setSel(new Set()); }
+    try { for (const r of list) await setCallDeposit({ row: r, done, date, name: done ? (r.입금자명 || r.입금증빙?.payer || r.계산서스캔?.payer || "") : "", memo, patchDispatch, company }); setSel(new Set()); }
     catch (e) { window.alert(`처리하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); }
   };
   const picked = rows.filter((r) => sel.has(idOf(r)));
@@ -529,7 +559,9 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
                       {(r.attachCount || 0) > 0 && <span className={`absolute -top-1 -right-1 min-w-[16px] h-[16px] ${(r.officeAttach || 0) > 0 ? "bg-blue-600" : "bg-emerald-500"} text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none`}>{r.attachCount}</span>}
                     </button>
                   </td>
-                  <td className={td}>{done ? <span className="inline-flex items-center h-6 px-2 rounded-full bg-[#0F1A30] text-white text-[11.5px] font-black">입금완료</span> : <span className="inline-flex items-center h-6 px-2 rounded-full bg-[#EEF3FB] text-[#1B2B4B] text-[11.5px] font-black border border-[#C9D6EC]">대기</span>}</td>
+                  <td className={td}>{(() => { const lb = done ? "입금완료" : r.계산서일 ? "청구완료" : "미청구"; const c = OUT_STAGE_COLORS[lb]; const memo = done ? r.입금메모 : r.청구메모;
+                    return <span title={memo ? `메모: ${memo}` : ""} data-desk-stage={lb} className="inline-flex items-center h-6 px-2 rounded-full text-[11.5px] font-black" style={{ background: c.bg, color: c.fg, border: `1px solid ${c.bd}` }}>{lb}</span>; })()}
+                    {(done ? r.입금메모 : r.청구메모) ? <div className="text-[11px] font-semibold text-[#5B6B85] max-w-[160px] truncate mx-auto">{done ? r.입금메모 : r.청구메모}</div> : null}</td>
                   <td className={td} style={NUM}>
                     {r.입금일 || ""}{r.입금자명 ? <span className="ml-1 text-[12px] text-[#7A8AA8]">{r.입금자명}</span> : null}
                     {!done && sugg.get(idOf(r)) && (() => { const g = sugg.get(idOf(r)); return (

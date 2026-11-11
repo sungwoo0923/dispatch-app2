@@ -35960,6 +35960,27 @@ const [liveLocViewer, setLiveLocViewer] = React.useState(null);
 const [orderInfoRow5, setOrderInfoRow5] = React.useState(null);
 const [workDatesEditRow, setWorkDatesEditRow] = React.useState(null); // 근무일(묶음) 수정 팝업이 열린 행
 const [localOverrides, setLocalOverrides] = React.useState({});
+// ⭐ 2026-11-12 "배차방식을 바꿔도 안 바뀐다"(수정 창으로 저장했던 오더만) — 수정 창 저장 뒤 화면을 바로 바꾸려고 둔 덮어쓰기(localOverrides)가
+//  세션 내내 남아, 그 뒤 표에서 바꾼 배차방식 · 정산 등 새 값이 서버에는 저장돼도 화면에선 예전 값으로 가려졌다(F5 해야 보임).
+//  덮어쓰기는 서버 값이 돌아올 때까지만 — 실시간 데이터가 새로 오면 2초 넘은 덮어쓰기는 지운다.
+const ovAtRef = React.useRef({});
+React.useEffect(() => {
+  const now = Date.now(); const at = ovAtRef.current;
+  Object.keys(localOverrides).forEach((id) => { if (!at[id]) at[id] = now; });
+  Object.keys(at).forEach((id) => { if (!localOverrides[id]) delete at[id]; });
+  if (!Object.keys(localOverrides).length) return undefined;
+  // 실시간 데이터가 안 와도 4초 뒤에는 서버 값(이미 반영된 화면 데이터)을 보이게
+  const t = setTimeout(() => {
+    const n2 = Date.now(); const stale = Object.keys(at).filter((id) => n2 - at[id] > 3500);
+    if (stale.length) setLocalOverrides((prev) => { const n = { ...prev }; stale.forEach((id) => { delete n[id]; delete at[id]; }); return n; });
+  }, 4000);
+  return () => clearTimeout(t);
+}, [localOverrides]);
+React.useEffect(() => {
+  const now = Date.now(); const at = ovAtRef.current;
+  const stale = Object.keys(at).filter((id) => now - at[id] > 2000);
+  if (stale.length) setLocalOverrides((prev) => { const n = { ...prev }; stale.forEach((id) => { delete n[id]; delete at[id]; }); return n; });
+}, [dispatchData]); // eslint-disable-line react-hooks/exhaustive-deps
 const showAlert = (msg) => setAlertMsg(msg);
 const [newClientModalOpen, setNewClientModalOpen] = React.useState(false);
 const [newClientModalData, setNewClientModalData] = React.useState({ name: "", addr: "", manager: "", phone: "", email: "", memo: "", grade: "일반" });
