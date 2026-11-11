@@ -42,20 +42,37 @@ const anyLayout = () => !!DRAFT || Object.keys(MINE).length > 0 || Object.keys(C
 
 const myName = () => { try { return localStorage.getItem("userName") || auth?.currentUser?.displayName || auth?.currentUser?.email || ""; } catch { return ""; } };
 const err = (e) => { console.warn("[colLayouts] 저장 실패", e?.code || e); try { window.dispatchEvent(new CustomEvent("kp-collayout-error")); } catch { /* 무시 */ } };
+// ⭐ 2026-11-12 F5를 누르면 컬럼 배치 · 화면 맞춤이 원래대로 돌아가던 문제
+//  예전엔 서버 문서가 오면 이 PC에 기억한 값을 통째로 덮어썼다 — 서버 저장이 한 번이라도 안 됐으면(거절 · 끊김 · 저장 전에 새로고침)
+//  새로고침하는 순간 서버의 예전 값(또는 빈 값)으로 돌아갔다. 이제 표마다 · 설정마다 "더 나중에 바꾼 쪽"을 쓰고,
+//  이 PC 값이 더 새로우면 서버에 다시 한 번 저장한다.
+let PREFS_AT = 0; // 화면 설정을 마지막으로 바꾼 시각(이 PC)
+const lsPrefAtKey = () => `kpUiPrefsAt:v1:${UID}`;
+const writeDoc = () => setDoc(doc(db, "colLayouts", UID), { uid: UID, companyName: CO, layouts: MINE, prefs: PREFS, prefsAt: PREFS_AT, updatedAt: serverTimestamp() });
 const saveMine = () => {
   cacheMine(); notify();
   if (!UID) return Promise.resolve();
-  return setDoc(doc(db, "colLayouts", UID), { uid: UID, companyName: CO, layouts: MINE, prefs: PREFS, updatedAt: serverTimestamp() }).catch(err);
+  return writeDoc().catch(err);
 };
 // 계정별 화면 설정 — 어느 PC에서 로그인해도 같은 설정
 const lsPrefKey = () => `kpUiPrefs:v1:${UID}`;
 export const getPref = (k) => PREFS[k];
 export function setPref(k, v) {
-  PREFS = { ...PREFS, [k]: v };
-  try { localStorage.setItem(lsPrefKey(), JSON.stringify(PREFS)); } catch { /* 무시 */ }
+  PREFS = { ...PREFS, [k]: v }; PREFS_AT = Date.now();
+  try { localStorage.setItem(lsPrefKey(), JSON.stringify(PREFS)); localStorage.setItem(lsPrefAtKey(), String(PREFS_AT)); } catch { /* 무시 */ }
   prefSubs.forEach((f) => f());
-  if (UID) setDoc(doc(db, "colLayouts", UID), { uid: UID, companyName: CO, layouts: MINE, prefs: PREFS, updatedAt: serverTimestamp() }).catch(err);
+  if (UID) writeDoc().catch(err);
 }
+// 서버 값과 이 PC 값 합치기 — 표마다 at(바꾼 시각)이 더 큰 쪽. 이 PC 쪽이 이긴 게 있으면 true
+export function mergeLayouts(local = {}, server = {}) {
+  const out = { ...server }; let localWins = false;
+  Object.entries(local || {}).forEach(([k, v]) => {
+    const sv = server?.[k];
+    if (!sv || (Number(v?.at) || 0) > (Number(sv?.at) || 0)) { out[k] = v; if (JSON.stringify(sv ?? null) !== JSON.stringify(v)) localWins = true; }
+  });
+  return { merged: out, localWins };
+}
+const pushedOnce = new Set(); // 같은 내용을 서버에 거듭 보내지 않게(저장이 계속 거절돼도 한 번만)
 export function usePref(k) {
   const [, f] = React.useReducer((x) => x + 1, 0);
   React.useEffect(() => { prefSubs.add(f); return () => prefSubs.delete(f); }, []);
@@ -71,7 +88,7 @@ export function saveMyLayout(tkey, order, hidden) {
 export function resetMyLayout(tkey) {
   const c = COMP[tkey];
   const next = { ...MINE };
-  if (c) next[tkey] = { order: [], hidden: [], base: Number(c.v) || 0, reset: true, at: Date.now() }; else delete next[tkey];
+  next[tkey] = { order: [], hidden: [], base: Number(c?.v) || 0, reset: true, at: Date.now() }; // 지운 표시도 남긴다(서버의 예전 배치가 되살아나지 않게)
   MINE = next;
   return saveMine();
 }
@@ -83,7 +100,7 @@ export async function applyCompanyLayout(tkey, order, hidden) {
   COMP = { ...COMP, [tkey]: entry }; cacheComp();
   MINE = { ...MINE, [tkey]: { order: [...order], hidden: [...hidden], base: v, at: v } }; cacheMine(); notify();
   await setDoc(doc(db, "colLayoutsCompany", CO), { companyName: CO, layouts: { [tkey]: entry }, updatedAt: serverTimestamp(), updatedBy: auth?.currentUser?.email || "" }, { merge: true });
-  if (UID) await setDoc(doc(db, "colLayouts", UID), { uid: UID, companyName: CO, layouts: MINE, prefs: PREFS, updatedAt: serverTimestamp() }).catch(err);
+  if (UID) await writeDoc().catch(err);
 }
 // 회사 공통 배치 해제 — 각자 저장한 배치는 그대로, 따로 저장 안 한 사람은 기본으로
 export async function clearCompanyLayout(tkey) {
@@ -211,14 +228,30 @@ export function useColumnLayoutHost(company) {
     UID = uid;
     try { MINE = uid ? JSON.parse(localStorage.getItem(lsKey()) || "{}") || {} : {}; } catch { MINE = {}; }
     try { PREFS = uid ? JSON.parse(localStorage.getItem(lsPrefKey()) || "{}") || {} : {}; } catch { PREFS = {}; }
+    try { PREFS_AT = uid ? Number(localStorage.getItem(lsPrefAtKey()) || 0) || 0 : 0; } catch { PREFS_AT = 0; }
     notify(); prefSubs.forEach((f) => f());
     if (!uid) return undefined;
     let un = null;
     try {
       un = onSnapshot(doc(db, "colLayouts", uid), (s) => {
+        if (s.metadata?.hasPendingWrites) return; // 방금 내가 쓴 값(아직 서버 전) — 이미 화면에 있다
         const d = s.exists() ? s.data() || {} : {};
-        MINE = d.layouts && typeof d.layouts === "object" ? d.layouts : {}; cacheMine(); notify();
-        if (s.exists() && d.prefs && typeof d.prefs === "object") { PREFS = d.prefs; try { localStorage.setItem(lsPrefKey(), JSON.stringify(PREFS)); } catch { /* 무시 */ } prefSubs.forEach((f) => f()); }
+        const server = d.layouts && typeof d.layouts === "object" ? d.layouts : {};
+        const { merged, localWins } = mergeLayouts(MINE, server);
+        MINE = merged; cacheMine(); notify();
+        const sp = d.prefs && typeof d.prefs === "object" ? d.prefs : null;
+        const sAt = Number(d.prefsAt) || 0;
+        let prefsWin = false;
+        if (sp && (sAt >= PREFS_AT || !PREFS_AT)) {
+          PREFS = sp; PREFS_AT = Math.max(PREFS_AT, sAt);
+          try { localStorage.setItem(lsPrefKey(), JSON.stringify(PREFS)); localStorage.setItem(lsPrefAtKey(), String(PREFS_AT)); } catch { /* 무시 */ }
+          prefSubs.forEach((f) => f());
+        } else if (PREFS_AT && JSON.stringify(sp || {}) !== JSON.stringify(PREFS)) prefsWin = true;
+        // 이 PC 값이 더 새로우면(예전에 서버 저장이 안 된 것) 서버에 다시 저장 — 같은 내용은 한 번만
+        if (localWins || prefsWin) {
+          const sig = JSON.stringify([MINE, PREFS]);
+          if (!pushedOnce.has(sig)) { pushedOnce.add(sig); writeDoc().catch(err); }
+        }
       }, (e) => console.warn("[colLayouts] 읽기 실패", e?.code || e));
     } catch { /* 무시 */ }
     return () => { try { un?.(); } catch { /* 무시 */ } };
