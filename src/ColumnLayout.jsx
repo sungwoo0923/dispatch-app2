@@ -95,13 +95,28 @@ export function setDraft(d) { DRAFT = d; notify(); }
 
 // ── 표에 입히기 ──
 let lidSeq = 0;
-const tagCells = (cells) => {
-  let have = 0; for (const c of cells) if (c.dataset.kpci != null) have++;
-  if (have === cells.length) return;
+// ⭐ 2026-11-11 칸이 나중에 생기거나 사라지는 표(예: 회사 기능 "배차담당자 칸"이 늦게 켜짐)에서 칸이 왔다 갔다 하던 문제
+//  예전엔 나중에 끼어든 칸에 "남는 번호(맨 끝)"를 줘서, 머리글은 그 칸을 맨 끝 칸으로, 새로 그려진 줄은 2번째 칸으로 알아 서로 어긋났다
+//  (표 이름도 그 번호 순서로 만들기 때문에 들어올 때마다 다른 배치가 적용됐다).
+//  · React는 새 칸을 "원래 순서의 다음 칸" 바로 앞에 끼운다 → 그 칸의 번호를 물려받고, 그 뒤 칸들은 한 칸씩 민다(맨 끝에 붙었으면 마지막 번호)
+//  · 칸이 사라져 번호가 비면 순서는 그대로 두고 0부터 다시 매긴다
+export const tagCells = (cells) => {
+  const n = cells.length;
+  const val = cells.map((c) => (c.dataset.kpci != null && c.dataset.kpci !== "" ? Number(c.dataset.kpci) : null));
+  const have = val.filter((v) => v != null).length;
   if (!have) { cells.forEach((c, i) => { c.dataset.kpci = String(i); }); return; }
-  const used = new Set(); cells.forEach((c) => { if (c.dataset.kpci != null) used.add(Number(c.dataset.kpci)); });
-  const free = []; for (let i = 0; i < cells.length; i++) if (!used.has(i)) free.push(i);
-  let j = 0; cells.forEach((c) => { if (c.dataset.kpci == null) c.dataset.kpci = String(free[j++] ?? cells.length + j); });
+  if (have === n) {
+    const seen = new Set(val);
+    if (seen.size === n && val.every((v) => v >= 0 && v < n)) return; // 그대로
+  } else {
+    for (let i = n - 1; i >= 0; i--) {
+      if (val[i] != null) continue;
+      const nx = i + 1 < n ? val[i + 1] : null;
+      if (nx == null) { let mx = -1; for (const v of val) if (v != null && v > mx) mx = v; val[i] = mx + 1; }
+      else { for (let k = 0; k < n; k++) if (k !== i && val[k] != null && val[k] >= nx) val[k] += 1; val[i] = nx; }
+    }
+  }
+  val.map((v, i) => [v, i]).sort((x, y) => x[0] - y[0] || x[1] - y[1]).forEach(([, i], rank) => { cells[i].dataset.kpci = String(rank); });
 };
 // 표 이름은 머리글 글자가 바뀔 때만 다시 계산(innerText는 느리다)
 const keyOf = (t) => { const hr = headRow(t); if (!hr) return ""; let sig = ""; for (const c of hr.cells) sig += `${c.textContent}\u0001`; if (t._kpSig !== sig || !t._kpKey) { t._kpSig = sig; t._kpKey = tableKey(t); } return t._kpKey; };
@@ -128,6 +143,7 @@ function processTable(t, rows) {
   if (!touched && !anyLayout()) return false;
   if (!canLayout(t)) return false;
   const hr = headRow(t);
+  if (touched) tagCells([...hr.cells]); // ⭐ 2026-11-11 표 이름은 "원래 순서"로 만든다 — 새로 끼어든 칸에 번호를 먼저 매겨야 이름이 흔들리지 않는다
   const key = keyOf(t);
   const lay = layoutOf(key);
   if (!lay && !touched) return false;
