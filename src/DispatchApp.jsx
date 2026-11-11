@@ -57678,7 +57678,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
           onDone={(patch, r) => {
             setEditDriverModal(p => (p && p.id === vehicleChangeFor.id ? { ...p, ...patch } : p));
             setVehicleChangeFor(null);
-            showAlert(`차량을 ${patch.차량번호}(으)로 바꿨습니다.${r?.holder ? `\n${r.holder.name || "기존"} 기사님은 ${r.holder.carNo || "차량 미배정"}(으)로 바뀌었습니다.` : ""}${r?.account ? "\n기사님은 휴대폰번호 또는 새 차량번호로 로그인하면 됩니다." : ""}`);
+            showAlert(`차량을 ${patch.차량번호}(으)로 바꿨습니다.${r?.holder ? `\n${r.holder.name || "기존"} 기사님은 ${r.holder.carNo || "차량미배정"}(으)로 바뀌었습니다.` : ""}${r?.account ? "\n기사님 폰은 로그아웃되지 않습니다. 다음 로그인은 휴대폰번호로 하면 됩니다." : ""}`);
           }} />
       )}
       {/* ===== 기사 수정 팝업 (더블클릭) ===== */}
@@ -57712,7 +57712,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                 {(editDriverModal.uid || ["지입", "직영", "임대"].includes(editDriverModal.등급)) ? (
                   <div className="flex gap-2">
                     <input readOnly className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full min-w-0 bg-gray-50 text-gray-700 font-bold outline-none"
-                      value={editDriverModal.차량번호 || "미배정"} />
+                      value={editDriverModal.차량번호 || "차량미배정"} />
                     <button type="button" data-testid="open-vehicle-change" onClick={() => setVehicleChangeFor(editDriverModal)}
                       className="shrink-0 h-[38px] px-3 rounded-lg text-white text-[12.5px] font-bold whitespace-nowrap" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>차량 변경</button>
                   </div>

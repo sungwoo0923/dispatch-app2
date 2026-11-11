@@ -228,6 +228,7 @@ export default function DriverLogin() {
 
       localStorage.setItem("role", "driver");
       localStorage.setItem("uid", uid);
+      try { localStorage.setItem("driverLoginV2", "1"); } catch { /* 무시 */ } // ⭐ 2026-11-11 새 로그인 방식으로 로그인함(DriverHome이 다시 묻지 않음)
       try {
         const remember = override ? true : rememberInfo;
         const auto = override ? true : autoLogin;
@@ -422,7 +423,7 @@ export default function DriverLogin() {
             <div className="flex items-center gap-3">
               <ErrBadge tone={error.tone} size={44} dark />
               <div className="min-w-0">
-                <div className="text-[13.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">{error.tone === "wait" ? "PENDING" : error.tone === "net" ? "NETWORK" : "LOGIN FAILED"}</div>
+                <div className="text-[13.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">{error.code === "driver/relogin" ? "NOTICE" : error.tone === "wait" ? "PENDING" : error.tone === "net" ? "NETWORK" : "LOGIN FAILED"}</div>
                 <div id="dlErrTitle" className="text-[22px] font-black leading-tight">{error.title}</div>
               </div>
             </div>

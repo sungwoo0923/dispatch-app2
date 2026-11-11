@@ -74,19 +74,33 @@ async function makeDriver({ co, plate, name, phone, email, extra = {} }) {
     assert.strictEqual((await call(DV.driverChangeVehicle, { headers: H, body: { driverId: A, carNo: "3333" } })).body.code, "BAD_PLATE");
     assert.strictEqual((await call(DV.driverChangeVehicle, { headers: H, body: { driverId: A, carNo: "55다5555", date: V.addDays(today, 1) } })).body.code, "BAD_DATE");
   });
-  await t("차량 변경: 빈 차량으로 — 문서·이력·로그인 계정이 새 차량번호로", async () => {
+  const phoneLogin = (phone, name, co = CO) => call(DV.driverPhoneLogin, { body: { companyName: co, phone, name } }).then((r) => r.body);
+  const tokensValidAfter = async (uid) => (await getAuth().getUser(uid)).tokensValidAfterTime;
+
+  await t("차량 변경: 빈 차량으로 — 문서·이력만 바뀌고, 로그인 계정은 그대로(기사 폰 로그아웃 안 됨)", async () => {
+    const before = await tokensValidAfter(A);
     const r = await call(DV.driverChangeVehicle, { headers: H, body: { driverId: A, carNo: "55다 5555" } });
     assert.strictEqual(r.statusCode, 200, JSON.stringify(r.body));
-    assert.strictEqual(r.body.ok, true); assert.strictEqual(r.body.carNo, "55다5555");
+    assert.strictEqual(r.body.ok, true); assert.strictEqual(r.body.carNo, "55다5555"); assert.strictEqual(r.body.account, true);
     const drv = (await db.doc(`drivers/${A}`).get()).data();
     assert.strictEqual(drv.차량번호, "55다5555"); assert.strictEqual(drv.carNo, "55다5555");
     assert.deepStrictEqual(drv.차량이력.map((e) => [e.차량번호, e.시작, e.종료]), [["34바3333", "", yest], ["55다5555", today, ""]]);
     const usr = (await db.doc(`users/${A}`).get()).data();
-    assert.strictEqual(usr.carNo, "55다5555"); assert.strictEqual(usr.email, "55다5555@driver.run25.kr");
-    assert.ok(await canSignIn("55다5555@driver.run25.kr", "55다5555"), "새 차량번호로 로그인");
-    assert.ok(!(await canSignIn("34바3333@driver.run25.kr", "34바3333")), "예전 차량번호 계정은 비어 있어야");
+    assert.strictEqual(usr.carNo, "55다5555"); assert.strictEqual(usr.loginSync, true);
+    assert.strictEqual((await getAuth().getUser(A)).email, "34바3333@driver.run25.kr", "로그인 계정은 아직 그대로");
+    assert.strictEqual(await tokensValidAfter(A), before, "로그인 세션이 끊기지 않아야");
   });
-  await t("차량 변경: 예전 차량번호(3333)는 다른 기사가 새로 가입할 수 있다", async () => {
+  await t("휴대폰 로그인: 차량 변경 뒤 첫 로그인 때 계정이 새 차량번호로 맞춰진다", async () => {
+    const p = await phoneLogin("01011112222", "이태훈");
+    assert.deepStrictEqual(p, { ok: true, email: "55다5555@driver.run25.kr", carNo: "55다5555" });
+    assert.ok(await canSignIn("55다5555@driver.run25.kr", "55다5555"), "새 차량번호 계정으로 로그인");
+    assert.ok(!(await canSignIn("34바3333@driver.run25.kr", "34바3333")), "예전 차량번호 계정은 비어 있어야");
+    const usr = (await db.doc(`users/${A}`).get()).data();
+    assert.strictEqual(usr.loginSync, false); assert.strictEqual(usr.email, "55다5555@driver.run25.kr");
+    // 두 번째 로그인은 그대로
+    assert.deepStrictEqual(await phoneLogin("01011112222", "이태훈"), p);
+  });
+  await t("차량 변경: 비워진 차량번호(3333)는 다른 기사가 새로 가입할 수 있다", async () => {
     const C = await makeDriver({ co: CO, plate: "34바3333", name: "박새로", phone: "010-5555-6666" });
     assert.ok(await canSignIn("34바3333@driver.run25.kr", "34바3333"));
     await getAuth().deleteUser(C); await db.doc(`users/${C}`).delete(); await db.doc(`drivers/${C}`).delete();
@@ -95,9 +109,10 @@ async function makeDriver({ co, plate, name, phone, email, extra = {} }) {
     const r = await call(DV.driverChangeVehicle, { headers: H, body: { driverId: A, carNo: "34바3434" } });
     assert.deepStrictEqual(r.body, { ok: false, code: "HOLDER", holder: { name: "김철수", carNo: "34바3434" }, canSwap: true });
     assert.strictEqual((await db.doc(`drivers/${A}`).get()).data().차량번호, "55다5555");
-    assert.ok(await canSignIn("34바3434@driver.run25.kr", "34바3434"));
+    assert.strictEqual((await db.doc(`drivers/${B}`).get()).data().차량번호, "34바3434");
   });
-  await t("차량 변경: 맞교환 — 두 기사 차량·계정이 서로 바뀐다", async () => {
+  await t("차량 변경: 맞교환 — 두 기사 차량이 서로 바뀌고, 둘 다 로그아웃되지 않는다", async () => {
+    const [ta, tb] = [await tokensValidAfter(A), await tokensValidAfter(B)];
     const r = await call(DV.driverChangeVehicle, { headers: H, body: { driverId: A, carNo: "34바3434", holderAction: "swap" } });
     assert.strictEqual(r.body.ok, true, JSON.stringify(r.body));
     assert.deepStrictEqual(r.body.holder, { name: "김철수", carNo: "55다5555" });
@@ -105,34 +120,45 @@ async function makeDriver({ co, plate, name, phone, email, extra = {} }) {
     const b = (await db.doc(`drivers/${B}`).get()).data();
     assert.strictEqual(b.차량번호, "55다5555");
     assert.deepStrictEqual(b.차량이력.map((e) => [e.차량번호, e.시작, e.종료]), [["34바3434", "", yest], ["55다5555", today, ""]]);
-    assert.strictEqual((await getAuth().getUser(A)).email, "34바3434@driver.run25.kr");
-    assert.strictEqual((await getAuth().getUser(B)).email, "55다5555@driver.run25.kr");
-    assert.ok(await canSignIn("34바3434@driver.run25.kr", "34바3434")); assert.ok(await canSignIn("55다5555@driver.run25.kr", "55다5555"));
     assert.strictEqual((await db.doc(`users/${B}`).get()).data().carNo, "55다5555");
+    assert.strictEqual(await tokensValidAfter(A), ta); assert.strictEqual(await tokensValidAfter(B), tb);
   });
-  await t("차량 변경: 미배정 — 원래 타던 기사는 차량 없음(휴대폰번호로만 로그인)", async () => {
+  await t("휴대폰 로그인: 맞교환 뒤 — 먼저 로그인한 기사는 전용 계정, 나중 기사는 새 차량번호 계정(서로 안 끊김)", async () => {
+    // A가 먼저 로그인: 3434 메일은 아직 B(다시 로그인 전) 계정이 쓰는 중 → B를 건드리지 않고 A 전용 메일
+    const tb = await tokensValidAfter(B);
+    const pa = await phoneLogin("01011112222", "이태훈");
+    assert.strictEqual(pa.email, V.uniqueEmail("34바3434", A)); assert.strictEqual(pa.carNo, "34바3434");
+    assert.ok(await canSignIn(pa.email, "34바3434"));
+    assert.strictEqual(await tokensValidAfter(B), tb, "B는 로그아웃되지 않아야");
+    // B가 로그인: 55다5555 메일은 A가 비웠으므로 그대로 쓴다
+    const pb = await phoneLogin("01033334444", "김철수");
+    assert.deepStrictEqual(pb, { ok: true, email: "55다5555@driver.run25.kr", carNo: "55다5555" });
+    assert.ok(await canSignIn("55다5555@driver.run25.kr", "55다5555"));
+  });
+  await t("차량 변경: 차량미배정 — 원래 타던 기사는 차량 없음(휴대폰번호로 로그인)", async () => {
     const r = await call(DV.driverChangeVehicle, { headers: H, body: { driverId: B, carNo: "34바3434", holderAction: "unassign" } });
     assert.strictEqual(r.body.ok, true, JSON.stringify(r.body));
     assert.deepStrictEqual(r.body.holder, { name: "이태훈", carNo: "" });
     const a = (await db.doc(`drivers/${A}`).get()).data();
     assert.strictEqual(a.차량번호, ""); assert.strictEqual(a.carNo, "");
-    assert.strictEqual((await getAuth().getUser(A)).email, V.nocarEmail(A));
+    assert.strictEqual(a.차량이력[a.차량이력.length - 1].종료, yest);
+    const p = await phoneLogin("01011112222", "이태훈");
+    assert.deepStrictEqual(p, { ok: true, email: V.nocarEmail(A), carNo: "" });
     assert.ok(await canSignIn(V.nocarEmail(A), V.nocarLocal(A)));
-    const p = await call(DV.driverPhoneLogin, { body: { companyName: CO, phone: "01011112222", name: "이태훈" } });
-    assert.deepStrictEqual(p.body, { ok: true, email: V.nocarEmail(A), carNo: "" });
   });
-  await t("차량 변경: 미배정 기사에게 다시 차량 배정", async () => {
+  await t("차량 변경: 차량미배정 기사에게 다시 차량 배정 → 로그인하면 그 차량번호 계정", async () => {
     const r = await call(DV.driverChangeVehicle, { headers: H, body: { driverId: A, carNo: "34바3333" } });
     assert.strictEqual(r.body.ok, true, JSON.stringify(r.body));
-    assert.ok(await canSignIn("34바3333@driver.run25.kr", "34바3333"));
     const a = (await db.doc(`drivers/${A}`).get()).data();
     assert.strictEqual(a.차량이력[a.차량이력.length - 1].차량번호, "34바3333");
+    assert.deepStrictEqual(await phoneLogin("01011112222", "이태훈"), { ok: true, email: "34바3333@driver.run25.kr", carNo: "34바3333" });
+    assert.ok(await canSignIn("34바3333@driver.run25.kr", "34바3333"));
   });
-  await t("차량 변경: 다른 운송사에 같은 차량번호 기사가 있으면 회사별 계정으로", async () => {
+  await t("차량 변경: 다른 운송사에 같은 차량번호 기사가 있으면 회사별 계정으로(그 기사는 그대로)", async () => {
     const X = await makeDriver({ co: "비운송", plate: "77사7777", name: "남의기사", phone: "010-9999-0000" });
     const r = await call(DV.driverChangeVehicle, { headers: H, body: { driverId: A, carNo: "77사7777" } });
     assert.strictEqual(r.body.ok, true, JSON.stringify(r.body));
-    assert.strictEqual((await getAuth().getUser(A)).email, V.scopedEmail(CO, "77사7777"));
+    assert.strictEqual((await phoneLogin("01011112222", "이태훈")).email, V.scopedEmail(CO, "77사7777"));
     assert.strictEqual((await getAuth().getUser(X)).email, "77사7777@driver.run25.kr");
     assert.ok(await canSignIn(V.scopedEmail(CO, "77사7777"), "77사7777"));
   });

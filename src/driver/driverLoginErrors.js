@@ -26,12 +26,15 @@ export function keepDriverLoginError(info) {
     else sessionStorage.removeItem(DRIVER_ERR_KEY);
   } catch { /* 무시 */ }
 }
+// ⭐ 2026-11-11 꺼낸 값을 잠깐(1.5초) 기억한다 — 화면이 처음 그려질 때 연달아 두 번 꺼내면 두 번째는 빈 값이 되어 안내가 사라졌다
+let lastTaken = null;
 export function takeDriverLoginError() {
   try {
     const v = JSON.parse(sessionStorage.getItem(DRIVER_ERR_KEY) || "null");
     sessionStorage.removeItem(DRIVER_ERR_KEY);
     // 2분이 지난 안내는 버린다(다음 날 앱을 열었는데 어제 실패 안내가 뜨는 일 방지)
-    if (v && Date.now() - (v.at || 0) < 120000) return v;
+    if (v && Date.now() - (v.at || 0) < 120000) { lastTaken = { v, t: Date.now() }; return v; }
+    if (lastTaken && Date.now() - lastTaken.t < 1500) return lastTaken.v;
   } catch { /* 무시 */ }
   return null;
 }
@@ -91,6 +94,6 @@ export function describeDriverLoginError(err, ctx = {}) {
   if (code === "driver/phone-incomplete") return { ...base, tone: "error", title: "휴대폰번호를 끝까지 입력해 주세요", message: "휴대폰번호는 010부터 전체 번호를 넣어야 합니다.", hint: "예: 01012345678 (차량번호로 로그인하시려면 차량번호 전체를 넣어주세요.)" };
   if (code === "driver/phone-not-registered") return { ...base, tone: "error", title: "등록된 휴대폰번호가 없습니다", message: `${phText ? `휴대폰번호 '${phText}'` : "입력하신 휴대폰번호"}로 가입된 기사 정보를 찾지 못했습니다.`, hint: "가입할 때 적은 휴대폰번호인지 확인해 주세요. 번호가 바뀌셨다면 차량번호로 로그인하거나 운송사 관리자에게 문의해 주세요." };
   if (code === "driver/not-registered" || code === "auth/invalid-credential" || code === "auth/user-not-found" || code === "auth/wrong-password" || code === "auth/invalid-login-credentials" || code === "auth/invalid-email")
-    return { ...base, code: "driver/not-registered", tone: "error", title: "등록된 차량번호가 없습니다", message: `${plate ? `차량번호 '${plate}'` : "입력하신 차량번호"}로 가입된 기사 정보를 찾지 못했습니다.`, hint: "차량번호를 다시 확인해 주세요(예: 경기97가1234). 아직 가입하지 않으셨다면 아래 '기사 등록하기'를 눌러주세요." };
+    return { ...base, code: "driver/not-registered", tone: "error", title: "등록된 차량번호가 없습니다", message: `${plate ? `차량번호 '${plate}'` : "입력하신 차량번호"}로 가입된 기사 정보를 찾지 못했습니다.`, hint: "차량번호를 다시 확인해 주세요(예: 경기97가1234). 차량이 바뀌셨다면 휴대폰번호로 로그인해 주세요. 아직 가입하지 않으셨다면 아래 '기사 등록하기'를 눌러주세요." };
   return { ...base, tone: "error", title: "로그인하지 못했습니다", message: "알 수 없는 이유로 로그인 확인에 실패했습니다.", hint: `잠시 후 다시 시도해 주세요. 계속되면 운송사 관리자에게 문의해 주세요.${code ? ` (오류: ${code})` : ""}` };
 }

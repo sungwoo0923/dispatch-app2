@@ -2,7 +2,8 @@
 // ⭐ 2026-11-11 기사 차량 변경 — 기사 계정은 그대로 두고 타는 차량만 바꾼다(이번 주 3333 → 다음 주 3434).
 //  서버(driverChangeVehicle)가 기사관리 문서 · 차량이력 · 기사앱 로그인 계정을 한 번에 맞춘다.
 //  · 기사님은 휴대폰번호로 그대로 로그인(새 차량번호로도 로그인됨), 정산은 차량이력 기준으로 기사 한 명으로 묶인다.
-//  · 새 차량을 다른 기사(앱 가입)가 타고 있으면 맞교환 / 그 기사 미배정 중에 고른다.
+//  · 새 차량을 다른 기사(앱 가입)가 타고 있으면 맞교환 / 차량미배정 중에 고른다.
+//  · 이때 기사님 폰은 로그아웃되지 않는다(운행 중 관제 유지) — 로그인 계정은 그 기사가 다음에 로그인할 때 맞춰진다.
 import React from "react";
 import { auth, FUNCTIONS_BASE } from "./firebase";
 import CustomDatePicker from "./CustomDatePicker";
@@ -79,13 +80,13 @@ export default function DriverVehicleChangeModal({ driver, onClose, onDone }) {
         </div>
         <div className="px-6 py-5 space-y-4">
           <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-4 py-3 text-[13px] text-[#3A4A66] leading-relaxed">
-            기사 계정은 그대로 두고 <b>타는 차량만</b> 바꿉니다. 기사님은 <b>휴대폰번호</b>로 그대로 로그인하고(새 차량번호로도 가능),
+            기사 계정은 그대로 두고 <b>타는 차량만</b> 바꿉니다. 기사님 폰은 <b>로그아웃되지 않고</b>, 다음에 로그인할 때는 <b>휴대폰번호</b>로 하면 됩니다.
             정산은 날짜별 차량이력으로 이 기사 한 명에게 묶입니다.
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-[12px] font-semibold text-gray-500 mb-1">지금 차량</label>
-              <div className={`${inp} bg-gray-50 text-gray-600 font-bold`}>{cur || "미배정"}</div>
+              <div className={`${inp} bg-gray-50 text-gray-600 font-bold`}>{cur || "차량미배정"}</div>
             </div>
             <div>
               <label className="block text-[12px] font-semibold text-gray-500 mb-1">새 차량번호 *</label>
@@ -110,7 +111,7 @@ export default function DriverVehicleChangeModal({ driver, onClose, onDone }) {
                   </button>
                 )}
                 <button type="button" disabled={busy} onClick={() => submit("unassign")} className="h-10 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[13.5px] font-bold hover:bg-[#EEF3FC] disabled:opacity-60">
-                  {holder.name || "그 기사"}님은 차량 미배정으로 (나중에 따로 배정)
+                  차량미배정 — {holder.name || "그 기사"}님은 차량 없이 두기 (나중에 따로 배정)
                 </button>
               </div>
             </div>

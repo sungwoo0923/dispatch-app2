@@ -34,6 +34,8 @@ const scopedEmail = (co, plate) => `${plateOf(plate)}.c${coHash(co)}@${DOMAIN}`.
 // 차량 미배정 계정 — 휴대폰번호로만 로그인(비밀번호 = 메일 앞부분)
 const nocarLocal = (uid) => `nocar.${String(uid || "").toLowerCase()}`;
 const nocarEmail = (uid) => `${nocarLocal(uid)}@${DOMAIN}`;
+// 새 차량번호 메일을 다른 기사 계정이 아직 쓰고 있을 때 — 이 기사 전용 메일(휴대폰번호 로그인으로 찾아 들어온다)
+const uniqueEmail = (plate, uid) => `${plateOf(plate)}.u${String(uid || "").toLowerCase()}@${DOMAIN}`.toLowerCase();
 const isNocarEmail = (e) => /^nocar\.[^@]+@driver\.run25\.kr$/i.test(String(e || ""));
 
 const coOf = (v) => String(v || "").trim() || DEFAULT_CO;
@@ -79,5 +81,5 @@ function pickPhoneMatch(cands, { companyName, name }) {
 
 module.exports = {
   DOMAIN, DEFAULT_CO, plateOf, normText, digits, phoneValid, phoneVariants, plateValid, coHash, legacyEmail, scopedEmail,
-  nocarLocal, nocarEmail, isNocarEmail, coOf, sameCo, kstDay, dayValid, addDays, applyHistory, pickPhoneMatch,
+  nocarLocal, nocarEmail, uniqueEmail, isNocarEmail, coOf, sameCo, kstDay, dayValid, addDays, applyHistory, pickPhoneMatch,
 };

@@ -26,6 +26,7 @@ import {
 } from "firebase/firestore";
 import { setDoc, updateDoc } from "../orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { keepDriverLoginError } from "./driverLoginErrors"; // ⭐ 2026-11-11 로그인 방식 변경 안내
 import { registerPlugin } from "@capacitor/core";
 import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo, getCachedGeo, isPickupVisited, sortActiveOrders, isLoaded } from "../fleetGeo";
 import { snapshotOrder, changedFields, changedLabels, changeDiff } from "../orderChange";
@@ -1218,6 +1219,32 @@ export default function DriverHome() {
     if (!uid || !driver || vehicleSetupCheckedRef.current) return;
     vehicleSetupCheckedRef.current = true;
     if (shouldShowSetup(uid, driver)) setVehicleSetup(true);
+  }, [uid, driver]);
+  // ⭐ 2026-11-11 로그인 방식 변경(휴대폰번호) — 예전 방식으로 로그인돼 있던 폰은, 앱을 "다시 열었을 때" 한 번만 새 방식으로 다시 로그인하게 한다.
+  //  · 쓰고 있는 도중에는 절대 내보내지 않는다(앱을 연 그 순간 한 번만 확인).
+  //  · 출근·운행 중이면 미룬다(관제가 끊기지 않게) — 퇴근/대기 상태로 앱을 열 때 안내한다.
+  //  · 같은 계정으로 다시 들어오므로 운행일지·서류·알림 등 기록은 그대로다. 로그인 칸은 휴대폰번호로 미리 채워 둔다.
+  //  · 자동 로그인을 켜 둔 기사님은 휴대폰번호만 저장해 두고 그대로 둔다(다시 로그인할 일이 없음).
+  const reloginCheckedRef = useRef(false);
+  useEffect(() => {
+    if (!uid || !driver || reloginCheckedRef.current) return;
+    reloginCheckedRef.current = true;
+    try {
+      if (localStorage.getItem("driverLoginV2") === "1") return;
+      const ph = String(driver.phone || driver.전화번호 || "").replace(/\D/g, "");
+      const sv = JSON.parse(localStorage.getItem("driverLoginSaved") || "null");
+      if (!/^01[016789]\d{7,8}$/.test(ph) || sv?.autoLogin === true) { localStorage.setItem("driverLoginV2", "1"); return; }
+      const st0 = String(driver.status || "");
+      const idle = driver.active !== true && (!st0 || ["퇴근", "대기", "휴차"].includes(st0));
+      if (!idle) return; // 다음에 앱을 열 때 다시 본다
+      const carNo = String(driver.carNo ?? driver.차량번호 ?? "").trim();
+      localStorage.setItem("driverLoginSaved", JSON.stringify({ remember: true, autoLogin: false, companyName: driver.companyName || sv?.companyName || "", carNo, name: driver.name || driver.이름 || sv?.name || "", phone: ph, loginId: ph }));
+      const notice = { code: "driver/relogin", tone: "wait", title: "로그인 방식이 바뀌었습니다", message: "이제 휴대폰번호로 로그인합니다. 아래 정보를 확인하고 [로그인]을 눌러 주세요.", hint: "운행 기록 · 서류 · 알림은 그대로 남아 있습니다. 차량이 바뀌어도 휴대폰번호로 계속 로그인됩니다." };
+      // 로그아웃되는 순간 App이 먼저 로그인 화면을 그리며 안내를 꺼내 갈 수 있어, 화면을 새로 열기 직전에 다시 넣어 둔다
+      const arm = () => { try { keepDriverLoginError(notice); sessionStorage.setItem("driverJustLoggedOut", "1"); } catch { /* 무시 */ } };
+      arm();
+      signOut(auth).catch(() => {}).finally(() => { arm(); window.location.href = "/driver-login"; });
+    } catch { /* 저장소를 못 쓰면 그대로 둔다 */ }
   }, [uid, driver]);
 
   // 내 차량번호로 배정된 오더 구독 (지입 전용 오더수락/거절 플로우)

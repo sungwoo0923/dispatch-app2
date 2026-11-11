@@ -4,8 +4,9 @@
 //         로그인이 안 되고, 새로 가입하면 정산을 차량번호별로 따로 봐야 했다.
 //  ① driverChangeVehicle : 배차자(그 운송사 직원)가 기사의 차량을 바꾼다. 계정은 그대로 두고
 //       · drivers/{id} 차량번호·carNo + 차량이력(언제부터 어느 차량) · users/{uid}.carNo
-//       · 로그인 계정(메일·비밀번호)을 새 차량번호로 → 새 차량번호로도 바로 로그인된다
-//       · 새 차량을 이미 다른 기사 계정이 쓰고 있으면 HOLDER 로 알려주고, holderAction("swap" 맞교환 | "unassign" 미배정)을 받아 처리
+//       · 로그인 계정(메일·비밀번호)은 이때 바꾸지 않는다(바꾸면 그 폰이 로그아웃돼 운행 중 관제가 끊김) — users.loginSync 표시만 남기고
+//         그 기사가 다음에 로그인할 때(②) 새 차량번호로 맞춘다
+//       · 새 차량을 이미 다른 기사(앱 가입)가 타고 있으면 HOLDER 로 알려주고, holderAction("swap" 맞교환 | "unassign" 차량미배정)을 받아 처리
 //  ② driverPhoneLogin   : 기사앱 로그인 — 소속 운송사 + 휴대폰번호(전체) + 이름으로 그 기사의 로그인 계정을 찾아 준다.
 //       차량이 바뀌어도 휴대폰번호는 그대로라 기사님은 늘 같은 정보로 로그인한다. (로그인 전 공개 함수 — 요청 수 제한)
 "use strict";
@@ -57,87 +58,63 @@ module.exports = function makeDriverVehicle({ functions, db, getAuth, FieldValue
       if (oldPlate === newPlate) { res.status(200).json({ ok: true, same: true, carNo: newPlate, 차량이력: d.차량이력 || [] }); return; }
       const by = String(tok.name || tok.email || tok.uid);
       const now = FieldValue.serverTimestamp();
-      const auth = getAuth();
 
-      // 기사앱 계정이 있는지 — drivers/{uid}(가입·연결된 기사) + users/{uid}(role driver) + 로그인 계정
+      // 기사앱 계정이 있는지 — drivers/{uid}(가입·연결된 기사) + users/{uid}(role driver)
       const uid = String(d.uid || driverId);
-      const [uSnap, aUser] = await Promise.all([db.collection("users").doc(uid).get(), auth.getUser(uid).catch(() => null)]);
-      const hasAccount = !!aUser && uSnap.exists && uSnap.data().role === "driver" && String(aUser.email || "").toLowerCase().endsWith(`@${V.DOMAIN}`);
+      const uSnap = await db.collection("users").doc(uid).get();
+      const hasAccount = uSnap.exists && uSnap.data().role === "driver";
 
-      const hist = V.applyHistory(d.차량이력, { oldPlate, newPlate, date, by });
-      if (!hasAccount) {
-        // 앱 미가입 기사 — 문서만 바꾼다
-        await ref.update({ 차량번호: newPlate, carNo: newPlate, 차량이력: hist, updatedAt: now });
-        console.log(`🚚 차량 변경(앱 미가입): ${co} ${driverId} ${oldPlate} → ${newPlate}`);
-        res.status(200).json({ ok: true, carNo: newPlate, 차량이력: hist, account: false });
+      // 새 차량을 지금 타고 있는 같은 회사 기사(앱 가입) — 기사관리 문서 기준
+      const hs = await db.collection("drivers").where("차량번호", "==", newPlate).get();
+      const holders = hs.docs.filter((x) => x.id !== driverId && x.data().uid && V.sameCo(x.data().companyName, co));
+      if (holders.length && !holderAction) {
+        const h0 = holders[0].data();
+        res.status(200).json({ ok: false, code: "HOLDER", holder: { name: h0.이름 || h0.name || "", carNo: newPlate }, canSwap: !!oldPlate });
         return;
       }
 
-      const r = await resolveEmail(newPlate, uid, co);
-      let holder = null; // { uid, name, plate, ref, data }
-      if (r.holder) {
-        const [hu, hd] = await Promise.all([db.collection("users").doc(r.holder).get(), db.collection("drivers").doc(r.holder).get()]);
-        holder = { uid: r.holder, name: (hd.exists && (hd.data().이름 || hd.data().name)) || (hu.exists && hu.data().name) || "", hasUser: hu.exists, drv: hd.exists ? hd : null };
-        if (!holderAction) {
-          res.status(200).json({ ok: false, code: "HOLDER", holder: { name: holder.name, carNo: newPlate }, canSwap: !!oldPlate });
-          return;
-        }
-      }
-
-      const prevLogin = { email: aUser.email };
-      let holderPlate = "";
-      let holderEmail = "";
-      if (holder) {
-        // ① 그 차량을 쓰던 기사를 먼저 미배정 계정으로 비운다
-        const hAuth = await auth.getUser(holder.uid);
-        holderEmail = V.nocarEmail(holder.uid);
-        await auth.updateUser(holder.uid, { email: holderEmail, password: V.nocarLocal(holder.uid) });
-        try {
-          // ② 이 기사를 새 차량으로
-          await auth.updateUser(uid, { email: r.email, password: newPlate });
-        } catch (e) {
-          await auth.updateUser(holder.uid, { email: hAuth.email, password: newPlate }).catch(() => {});
-          throw e;
-        }
-        // ③ 맞교환이면 그 기사를 이 기사가 타던 차량으로(안 되면 미배정으로 둔다)
-        if (holderAction === "swap" && V.plateValid(oldPlate)) {
-          const hr = await resolveEmail(oldPlate, holder.uid, co);
-          if (!hr.holder) {
-            try { await auth.updateUser(holder.uid, { email: hr.email, password: oldPlate }); holderPlate = oldPlate; holderEmail = hr.email; } catch (e) { console.warn("맞교환 계정 변경 실패(미배정으로 둠):", e?.message || e); }
-          }
-        }
-      } else {
-        await auth.updateUser(uid, { email: r.email, password: newPlate });
-      }
-
+      // ⚠ 여기서는 로그인 계정(메일·비밀번호)을 바꾸지 않는다 — 바꾸면 그 기사 폰이 로그아웃돼 운행 중 관제가 끊긴다.
+      //   users.loginSync 표시만 남기고, 그 기사가 다음에 로그인할 때(driverPhoneLogin) 계정을 새 차량번호로 맞춘다.
+      const hist = V.applyHistory(d.차량이력, { oldPlate, newPlate, date, by });
       const batch = db.batch();
       batch.update(ref, { 차량번호: newPlate, carNo: newPlate, 차량이력: hist, updatedAt: now });
-      batch.update(uSnap.ref, { carNo: newPlate, email: r.email });
-      if (holder) {
-        if (holder.hasUser) batch.update(db.collection("users").doc(holder.uid), { carNo: holderPlate, email: holderEmail });
-        if (holder.drv) {
-          const hd = holder.drv.data() || {};
-          const hHist = V.applyHistory(hd.차량이력, { oldPlate: V.plateOf(hd.차량번호 || hd.carNo) || newPlate, newPlate: holderPlate, date, by });
-          batch.update(holder.drv.ref, { 차량번호: holderPlate, carNo: holderPlate, 차량이력: hHist, updatedAt: now });
-        }
+      if (hasAccount) batch.update(uSnap.ref, { carNo: newPlate, loginSync: true });
+      let holderOut = null;
+      for (let i = 0; i < holders.length; i++) {
+        const hd = holders[i].data() || {};
+        // 맞교환이면 첫 번째 기사만 이 기사가 타던 차량으로, 나머지는 차량미배정
+        const hp = i === 0 && holderAction === "swap" && V.plateValid(oldPlate) ? oldPlate : "";
+        const hHist = V.applyHistory(hd.차량이력, { oldPlate: newPlate, newPlate: hp, date, by });
+        batch.update(holders[i].ref, { 차량번호: hp, carNo: hp, 차량이력: hHist, updatedAt: now });
+        const hu = await db.collection("users").doc(String(hd.uid)).get();
+        if (hu.exists && hu.data().role === "driver") batch.update(hu.ref, { carNo: hp, loginSync: true });
+        if (i === 0) holderOut = { name: hd.이름 || hd.name || "", carNo: hp };
       }
-      try {
-        await batch.commit();
-      } catch (e) {
-        // 문서를 못 바꿨으면 이 기사의 로그인 계정은 되돌린다
-        if (!holder) await auth.updateUser(uid, { email: prevLogin.email, password: oldPlate || V.nocarLocal(uid) }).catch(() => {});
-        throw e;
-      }
-      console.log(`🚚 차량 변경: ${co} ${uid} ${oldPlate} → ${newPlate}${holder ? ` (기존 ${holder.uid} → ${holderPlate || "미배정"})` : ""}`);
-      res.status(200).json({
-        ok: true, carNo: newPlate, 차량이력: hist, account: true,
-        holder: holder ? { name: holder.name, carNo: holderPlate } : null,
-      });
+      await batch.commit();
+      console.log(`🚚 차량 변경: ${co} ${driverId} ${oldPlate} → ${newPlate}${holderOut ? ` (기존 ${holders[0].id} → ${holderOut.carNo || "차량미배정"})` : ""}`);
+      res.status(200).json({ ok: true, carNo: newPlate, 차량이력: hist, account: hasAccount, holder: holderOut });
     } catch (e) {
       console.error("driverChangeVehicle 실패:", e);
       res.status(500).json({ error: "FAILED" });
     }
   });
+
+  // 로그인할 때 계정을 지금 차량번호로 맞춘다(차량 변경 뒤 첫 로그인) — 이 순간엔 기사님이 로그인 화면에 있어 끊길 운행이 없다.
+  //  새 차량번호 메일을 아직 다른 기사(다시 로그인 전) 계정이 쓰고 있으면, 그 기사를 건드리지 않고 이 기사 전용 메일을 쓴다.
+  async function syncLogin(uid, co, carNo, au) {
+    const plate = V.plateOf(carNo);
+    let email;
+    let password;
+    if (!V.plateValid(plate)) { email = V.nocarEmail(uid); password = V.nocarLocal(uid); }
+    else {
+      const r = await resolveEmail(plate, uid, co);
+      email = r.holder ? V.uniqueEmail(plate, uid) : r.email;
+      password = plate;
+    }
+    if (String(au.email || "").toLowerCase() !== email) await getAuth().updateUser(uid, { email, password });
+    await db.collection("users").doc(uid).update({ email, loginSync: false });
+    return email;
+  }
 
   const driverPhoneLogin = functions.https.onRequest(async (req, res) => {
     if (cors(req, res)) return;
@@ -176,7 +153,7 @@ module.exports = function makeDriverVehicle({ functions, db, getAuth, FieldValue
       }));
       const cands = [...users].filter(([, u]) => u.role === "driver").map(([id, u]) => ({
         uid: id, companyName: u.companyName, name: u.name, carNo: String(u.carNo || ""), approved: u.approved === true,
-        retired: String(u.employmentStatus || "").trim() === "퇴사", createdAt: toMs(u.createdAt),
+        retired: String(u.employmentStatus || "").trim() === "퇴사", createdAt: toMs(u.createdAt), loginSync: u.loginSync === true,
       })).concat(pres.filter((p) => p.carNo));
       const m = V.pickPhoneMatch(cands, { companyName: co, name });
       if (!m.ok) { res.status(200).json({ ok: false, code: m.code }); return; }
@@ -184,7 +161,9 @@ module.exports = function makeDriverVehicle({ functions, db, getAuth, FieldValue
       const au = await getAuth().getUser(m.pick.uid).catch(() => null);
       if (!au?.email) { res.status(200).json({ ok: false, code: "NOT_FOUND" }); return; }
       if (au.disabled) { res.status(200).json({ ok: false, code: "DISABLED" }); return; }
-      res.status(200).json({ ok: true, email: au.email, carNo: m.pick.carNo });
+      // 차량이 바뀐 뒤 첫 로그인이면 계정을 새 차량번호로 맞춘 다음 알려준다
+      const email = m.pick.loginSync ? await syncLogin(m.pick.uid, co, m.pick.carNo, au) : au.email;
+      res.status(200).json({ ok: true, email, carNo: V.isNocarEmail(email) ? "" : m.pick.carNo });
     } catch (e) {
       console.error("driverPhoneLogin 실패:", e);
       res.status(500).json({ error: "FAILED" });

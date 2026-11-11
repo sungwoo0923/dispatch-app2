@@ -29,6 +29,9 @@ async function signInAnyPassword(auth, email, carNo) {
   throw err;
 }
 
+const plateKey = (v) => plate(v).toLowerCase();
+const isStalePlate = (snap, carNo) => !!snap?.exists() && snap.data().role === "driver" && snap.data().carNo !== undefined && plateKey(snap.data().carNo) !== plateKey(carNo);
+
 export async function signInDriver(auth, db, companyName, carNo) {
   const co = String(companyName || "").trim();
   let lastErr = null;
@@ -42,6 +45,13 @@ export async function signInDriver(auth, db, companyName, carNo) {
       if (owner && !sameCo(owner, co)) {
         await signOut(auth).catch(() => {});
         otherCoErr = Object.assign(new Error("other company"), { code: "driver/other-company" });
+        continue;
+      }
+      // ⭐ 2026-11-11 이 계정 기사가 지금은 다른 차량을 탄다(차량 변경 뒤 아직 다시 로그인 전) — 이 차량번호의 계정이 아니다.
+      //  (그 기사는 휴대폰번호로 로그인하면 계정이 새 차량번호로 맞춰진다. 이 차량을 이어받은 기사는 회사별 계정으로 넘어간다)
+      if (isStalePlate(snap, carNo)) {
+        await signOut(auth).catch(() => {});
+        lastErr = Object.assign(new Error("moved"), { code: "auth/user-not-found" });
         continue;
       }
       return { uid: res.user.uid, email };
@@ -63,6 +73,8 @@ export async function legacyOwnerCompany(auth, db, carNo) {
     const snap = await getDoc(doc(db, "users", res.user.uid)).catch(() => null);
     const owner = (snap?.exists() ? snap.data().companyName || "" : "").trim();
     await signOut(auth).catch(() => {});
+    // ⭐ 2026-11-11 그 계정 기사가 다른 차량으로 옮겼으면(아직 다시 로그인 전) 이 차량번호는 비어 있는 것 — 회사별 계정으로 가입시킨다
+    if (isStalePlate(snap, carNo)) return "";
     return owner;
   } catch {
     return "";
