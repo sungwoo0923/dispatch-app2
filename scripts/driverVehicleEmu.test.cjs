@@ -236,7 +236,7 @@ async function makeDriver({ co, plate, name, phone, email, extra = {} }) {
     const r = await call(DV.driverMerge, { headers: HM, body: { keepId: K2, oldId: K1, date: "2026-10-20" } });
     assert.strictEqual(r.body.ok, true, JSON.stringify(r.body));
     const k = (await db.doc(`drivers/${K2}`).get()).data();
-    assert.deepStrictEqual(k.차량이력.map((e) => [e.차량번호, e.시작, e.종료]), [["전남89바1019", "", "2026-10-19"], ["전남80바4931", "2026-10-20", ""]]);
+    assert.deepStrictEqual(k.차량이력.map((e) => [e.차량번호, e.시작, e.종료]), [["전남89바1019", "", "2026-10-19"], ["전남80바4931", "", ""]]);
     assert.strictEqual(k.차량번호, "전남80바4931");
     assert.deepStrictEqual(k.정산계좌, { bank: "국민", acct: "123", holder: "김영욱" }, "비어 있던 정산계좌는 예전 줄에서 가져온다");
     assert.ok(!(await db.doc(`drivers/${K1}`).get()).exists); assert.ok(!(await db.doc(`users/${K1}`).get()).exists);

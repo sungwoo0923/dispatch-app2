@@ -149,7 +149,7 @@ export default function DriverVehicleChangeModal({ driver, onClose, onDone }) {
 // ═════════════════════ 기사 합치기(최고관리자) ═════════════════════
 // ⭐ 2026-11-11 같은 기사가 두 줄일 때(예: 예전에 1019로 쓰던 계정 + 4931로 기사앱에 다시 가입한 계정) 하나로 합친다.
 //  · 오더(배차기록)의 차량번호는 그대로 둔다 — 1019로 운행한 건은 계속 1019로 남는다.
-//  · 남길 기사에 차량이력(1019: 처음 ~ 기준일 전날 / 4931: 기준일 ~ 현재)을 붙여, 정산·운행일지가 한 기사로 묶인다.
+//  · 남길 기사에 차량이력(1019: 처음 ~ 기준일 전날)을 붙여, 정산·운행일지가 한 기사로 묶인다. 줄이 셋 이상이면 한 줄씩 합친다.
 //  · 지울 기사 줄과 그 기사앱 계정은 삭제된다(서류·명세서·과태료·출퇴근 기록은 남길 기사로 옮김).
 export async function requestDriverMerge({ keepId, oldId, date }) {
   try {
@@ -169,10 +169,6 @@ export async function requestDriverMerge({ keepId, oldId, date }) {
   }
 }
 
-const dayOf = (ts) => {
-  const ms = ts?.toMillis ? ts.toMillis() : ts?.seconds ? ts.seconds * 1000 : 0;
-  return ms ? new Date(ms + 9 * 3600e3).toISOString().slice(0, 10) : "";
-};
 const digitsOf = (v) => String(v || "").replace(/\D/g, "");
 const nameKey = (v) => String(v || "").replace(/\s+/g, "");
 
@@ -187,7 +183,7 @@ export function DriverMergeModal({ driver, drivers = [], onClose, onDone }) {
   }, [drivers, driver, coKey]);
   const [oldId, setOldId] = React.useState(() => (cands[0]?.s ? cands[0].d.id : ""));
   const [q, setQ] = React.useState("");
-  const [date, setDate] = React.useState(() => dayOf(driver?.createdAt) || kstToday());
+  const [date, setDate] = React.useState(() => kstToday()); // 기본은 오늘(= 어제까지의 운행분 전부)
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
   const [sure, setSure] = React.useState(false);
@@ -241,7 +237,7 @@ export function DriverMergeModal({ driver, drivers = [], onClose, onDone }) {
             </div>
           </div>
           <div>
-            <label className="block text-[12px] font-semibold text-gray-500 mb-1">기준일 — {keepPlate || "지금 차량"} 운행을 시작한 날 (그 전날까지는 {oldPlate || "예전 차량"} 운행분)</label>
+            <label className="block text-[12px] font-semibold text-gray-500 mb-1">기준일 — 이 날 전날까지의 {oldPlate || "합칠 줄"} 운행분을 이 기사 것으로 정산</label>
             <CustomDatePicker value={date} onChange={(e) => setDate(e.target.value)} className={inp} showIcon />
           </div>
           {old && (

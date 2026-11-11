@@ -80,8 +80,8 @@ function pickPhoneMatch(cands, { companyName, name }) {
 }
 
 // 기사 합치기 — 같은 기사가 두 줄(예: 예전 차량 1019로 쓰던 계정 + 새 차량 4931로 다시 가입한 계정)일 때
-//  남길 기사(keep)의 차량이력 앞에 지울 기사(old)의 차량 구간을 붙인다. date = 남길 기사가 지금 차량을 타기 시작한 날.
-//  오더의 차량번호는 그대로 두고, 이 이력으로 "date 전날까지 old 차량 운행분 = 이 기사 건"이 된다.
+//  남길 기사(keep)의 차량이력 앞에 지울 기사(old)의 차량 구간을 붙인다. date = 기준일(그 전날까지의 old 차량 운행분을 이 기사 건으로 본다).
+//  오더의 차량번호는 그대로 둔다. 줄이 셋 이상이면 한 줄씩 여러 번 합친다.
 function mergeHistory(keep, old, date) {
   const periods = (d) => {
     const h = (Array.isArray(d?.차량이력) ? d.차량이력 : []).filter((e) => e && plateOf(e.차량번호)).map((e) => ({ ...e, 차량번호: plateOf(e.차량번호), 시작: e.시작 || "", 종료: e.종료 || "" }));
@@ -95,8 +95,9 @@ function mergeHistory(keep, old, date) {
     // 남길 기사가 이미 같은 구간을 갖고 있으면 겹치게 넣지 않는다
     .filter((e) => !(e.시작 && e.시작 >= date))
     .map((e) => ({ ...e, 종료: e.종료 && e.종료 < prev ? e.종료 : prev }));
-  // 남길 기사의 "처음부터" 구간은 date부터로 좁힌다(그 전은 예전 기사 줄의 구간)
-  const kk = kp.map((e) => (e.시작 ? e : { ...e, 시작: date })).filter((e) => !e.종료 || e.종료 >= e.시작);
+  // 남길 기사의 구간은 그대로 둔다 — 한 기사가 줄 여러 개(차량번호 오타 줄 포함)였던 경우라 기간이 겹쳐도 모두 이 기사 운행분이다.
+  //  (예전엔 남길 기사 구간을 date부터로 좁혀서, 두 번째 줄을 합칠 때 먼저 합친 줄의 구간이 사라졌다)
+  const kk = kp;
   const samePlateOnly = op.length && kk.length && op.every((e) => kk.some((k) => k.차량번호 === e.차량번호)) && new Set([...op, ...kk].map((e) => e.차량번호)).size === 1;
   if (samePlateOnly) return Array.isArray(keep?.차량이력) ? keep.차량이력 : []; // 같은 차량 중복 줄 — 이력을 만들 필요 없음
   return [...op, ...kk].slice(-HISTORY_MAX);
