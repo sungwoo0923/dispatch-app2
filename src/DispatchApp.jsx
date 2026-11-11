@@ -2951,7 +2951,7 @@ import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChang
 import { SpecialFareButton, ForkliftChip, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount } from "./forklift"; // 🏗 2026-11-09 지게차비용
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
-import { useBetaOn, PayBadge, PayPopup, CallDepositDesk } from "./CallPay"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
+import { useBetaOn, PayBadge, PayPopup, CallDepositDesk, PayNoticeToggle, queuePayNotice } from "./CallPay"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
 import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
 import { DriverGuideSendModal, GUIDE_BTN, guideSentLabel, isFleetGrade } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
 // ⭐ 2026-11-06 로지스웹 허브(운송사 간 오더 거래소) — [저장 + 허브 등록]
@@ -56038,6 +56038,7 @@ const handleBatchSettle = async (targetStatus) => {
 // ===================== DispatchApp.jsx (PART 9/9) — START =====================
 function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], drivers: driversProp = null, companyName = "", canEditPayDay = false, mobile = false }) {
   const fareRP = useFareRules(companyName); // ⭐ 2026-11-02 운임규칙 — 엑셀에 운임구분 열(규칙 사용 회사만)
+  const payNoticeBeta = useBetaOn(getTenant() || companyName); // 📩 2026-11-11 지급 시 기사 자동 문자(시험 기능)
 
   const todayStr9 = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   const thisMonthStr = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
@@ -56201,6 +56202,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     const co = companyName || row.companyName || "";
     if (wasPaid) bumpDriverPayout(db, { date: row.지급일 || todayStr9(), amount: -amt, count: -1, company: co }).catch(() => {});
     if (nextStatus === "지급완료") bumpDriverPayout(db, { date: nextDate, amount: amt, count: 1, company: co }).catch(() => {});
+    // 📩 2026-11-11 지급완료 → 기사에게 입금 안내 문자(시험 기능 · 스위치를 켠 경우만 · 같은 기사는 한 통으로 묶음)
+    if (nextStatus === "지급완료" && !wasPaid && payNoticeBeta) queuePayNotice({ row, date: nextDate, company: co, patchDispatch });
   };
   const pay = async (id, status) => {
     if (!patchDispatch) return alert("patchDispatch 미연결");
@@ -56431,6 +56434,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
         </div>
         <div className="flex gap-2 items-center flex-wrap">
           <PaymentDateRuleChip companyName={companyName} canEdit={canEditPayDay} />
+          {payNoticeBeta && <PayNoticeToggle company={getTenant() || companyName} />}
           <div className="flex items-center gap-1.5 rounded-xl px-3 h-10 bg-white/10 border border-white/20 text-[12px]">
             <span className="text-white/70 font-bold">산재보험료율</span>
             <input autoComplete="off" type="number" min={0} max={10} step={0.01}

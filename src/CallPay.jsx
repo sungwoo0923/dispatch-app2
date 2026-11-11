@@ -9,6 +9,10 @@
 //   계산서일: "YYYY-MM-DD"         (올린 콜 = 기사 계산서 받은 날 · 잡은 콜 = 우리가 발행한 날) — 사무실이 첨부에 [계산서]로 올리면 자동, 여기서 고칠 수 있다
 //   입금상태: "입금완료" | ""       입금일 · 입금자명 · 입금처리자   (잡은 콜 — 정산관리 › 입금 확인에서 경리가 처리)
 //   지급상태 · 지급일               (올린 콜 — 예전부터 있는 값. 정산관리 › 용차지급관리에서 경리가 처리)
+//   입금거래id                      은행 입금 후보를 적용한 경우 그 입금(bankTxns) id — 같은 입금을 두 오더에 쓰지 않는다
+//   지급알림: "YYYY-MM-DD"          지급완료 때 기사에게 자동 문자를 보낸 날
+//  📩 기사 자동 문자 — 용차지급관리에서 [지급완료] 하면 기사에게 "○월○일 ○○원 입금" 문자(회사 번호 문자 = 팝빌 연결 필요 · 보낸 만큼 청구되므로 스위치를 켠 회사만)
+//  🏦 은행 입금 후보 — 은행 입금 연동(팝빌)이 받아 둔 입금 가운데 금액(청구운임 또는 부가세 포함)이 같은 것을 입금 확인 화면에서 제안한다(적용은 사람이 누른다)
 //   officeAttach: 숫자              사무실(운송사)이 올린 첨부 수 → 첨부 아이콘을 파란색으로(기사가 올린 것은 초록)
 import React from "react";
 import { createPortal } from "react-dom";
@@ -16,6 +20,8 @@ import { useCompanyFeatures } from "./companyFeatures";
 import { getTenant } from "./fsTenant";
 import { db } from "./firebase";
 import { upsertAutoEntry } from "./ledgerAuto";
+import { pdCall } from "./publicDataMain";
+import { subscribeBankTxns } from "./popbillAuto";
 
 export const BETA_COMPANY = "테스트운송사";
 export const CALL_PLATFORMS = ["24시", "인성", "화물맨", "기타"];
@@ -77,16 +83,87 @@ const Row = ({ label, children }) => (
 const dateCls = "h-9 px-2.5 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#0F1A30] outline-none focus:border-[#1B2B4B] bg-white";
 
 // 입금완료 처리(잡은 콜) — 오더에 기록 + 수입·지출 장부(수입)에 한 줄(같은 오더는 한 줄만, 취소하면 지운다)
-export async function setCallDeposit({ row, done, date, name = "", patchDispatch, company, by = "" }) {
+export async function setCallDeposit({ row, done, date, name = "", patchDispatch, company, by = "", txnId = "" }) {
   const id = row?._id || row?.id;
   if (!id || !patchDispatch) return;
   const d = done ? (date || today()) : "";
-  await patchDispatch(id, { 입금상태: done ? "입금완료" : "", 입금일: d, 입금자명: done ? String(name || "").trim().slice(0, 40) : "", 입금처리자: done ? by : "", __system: true });
+  await patchDispatch(id, { 입금상태: done ? "입금완료" : "", 입금일: d, 입금자명: done ? String(name || "").trim().slice(0, 40) : "", 입금처리자: done ? by : "", 입금거래id: done ? String(txnId || "") : "", __system: true });
   const amt = done ? Number(String(row.청구운임 ?? "").replace(/[^\d.-]/g, "")) || 0 : 0;
   upsertAutoEntry(db, `calldep_${id}`, {
     company: coNow(company), date: d, type: "수입", account: "운송수입", item: `잡은 콜 입금 · ${row.거래처명 || ""}`, amount: amt, vendor: row.거래처명 || "",
     memo: "정산관리 › 입금 확인 [입금완료] — 자동 반영", auto: "calldep", purpose: "collect",
   }).catch(() => {});
+}
+
+// ── 🏦 은행 입금 후보 ──
+const normName = (v) => String(v || "").replace(/\(주\)|주식회사|㈜|\s|[()（）.,·-]/g, "").toLowerCase();
+const toAmt = (v) => Number(String(v ?? "").replace(/[^\d.-]/g, "")) || 0;
+// 입금 대기 오더마다 후보 1건 — 금액이 청구운임(또는 부가세 포함)과 같은 입금. 입금자명이 거래처와 비슷한 것, 날짜가 계산서 뒤인 것을 먼저. 한 입금은 한 오더에만
+export function suggestDeposits(waitRows, txns, usedIds = new Set()) {
+  const out = new Map(); const taken = new Set(usedIds);
+  const list = (txns || []).filter((t) => t && t.id && toAmt(t.amount) > 0 && t.status !== "auto");
+  const scored = [];
+  (waitRows || []).forEach((r) => {
+    const amt = toAmt(r.청구운임); if (!amt) return;
+    const vat = Math.round(amt * 1.1); const cn = normName(r.거래처명);
+    list.forEach((t) => {
+      const ta = toAmt(t.amount); if (ta !== amt && ta !== vat) return;
+      const tn = normName(t.name);
+      const nameHit = !!cn && !!tn && (cn.includes(tn) || tn.includes(cn) || (tn.length >= 2 && cn.includes(tn.slice(0, 3))));
+      const after = !r.계산서일 || !t.date || String(t.date) >= String(r.계산서일);
+      scored.push({ r, t, score: (nameHit ? 10 : 0) + (after ? 2 : 0) + (ta === vat ? 1 : 0), nameHit, vat: ta === vat && ta !== amt });
+    });
+  });
+  scored.sort((a, b) => b.score - a.score || String(b.t.date || "").localeCompare(String(a.t.date || "")));
+  scored.forEach((x) => { const id = x.r._id || x.r.id; if (out.has(id) || taken.has(x.t.id)) return; taken.add(x.t.id); out.set(id, { txn: x.t, nameHit: x.nameHit, vat: x.vat }); });
+  return out;
+}
+
+// ── 📩 기사 자동 문자(지급완료) ──
+const noticeKey = (co) => `kpPayNotice:${coNow(co)}`;
+export const payNoticeOn = (co) => { try { return localStorage.getItem(noticeKey(co)) === "1"; } catch { return false; } };
+export function PayNoticeToggle({ company }) {
+  const [on, setOn] = React.useState(() => payNoticeOn(company));
+  return (
+    <button type="button" data-pay-notice={on ? "on" : "off"} title="켜 두면 [지급완료] 처리할 때 기사에게 입금 안내 문자를 자동으로 보냅니다(회사 번호 문자 = 팝빌 · 보낸 건수만큼 청구)"
+      onClick={() => { const n = !on; try { localStorage.setItem(noticeKey(company), n ? "1" : "0"); } catch { /* 무시 */ } setOn(n); }}
+      className="h-10 px-3.5 rounded-xl bg-white/10 border border-white/20 text-white text-[12.5px] font-black inline-flex items-center gap-2 whitespace-nowrap">
+      지급 시 기사 문자
+      <span className="relative w-9 h-5 rounded-full transition-colors" style={{ background: on ? "#8FB0F0" : "rgba(255,255,255,.25)" }}><span className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform" style={{ transform: on ? "translateX(16px)" : "none" }} /></span>
+    </button>
+  );
+}
+export const payNoticeText = ({ company, name, items, date }) => {
+  const total = items.reduce((s, r) => s + toAmt(r.기사운임), 0);
+  const f = items[0];
+  const what = `${md(f.상차일)} ${f.상차지명 || ""}→${f.하차지명 || ""}${items.length > 1 ? ` 외 ${items.length - 1}건` : ""}`.trim();
+  return `[${company}] ${name ? `${name} 기사님, ` : ""}${what} 운임 ${won(total)}원이 ${md(date) || "오늘"} 입금되었습니다.`;
+};
+let noticeQ = []; let noticeT = null; let noticeOffWarned = false;
+// [지급완료] 처리 때 부른다 — 한꺼번에 여러 건이면 기사(전화번호)별로 묶어 한 통씩
+export function queuePayNotice({ row, date, company, patchDispatch }) {
+  const co = coNow(company);
+  if (!row || !payNoticeOn(co)) return;
+  const phone = String(row.전화번호 || "").replace(/[^\d]/g, "");
+  if (phone.length < 10 || !toAmt(row.기사운임) || row.지급알림) return;
+  noticeQ.push({ row, date, co, phone, patchDispatch });
+  clearTimeout(noticeT);
+  noticeT = setTimeout(async () => {
+    const q = noticeQ; noticeQ = [];
+    const by = new Map();
+    q.forEach((x) => { const k = `${x.co}|${x.phone}|${x.date}`; if (!by.has(k)) by.set(k, []); by.get(k).push(x); });
+    let sent = 0;
+    for (const list of by.values()) {
+      const f = list[0];
+      const content = payNoticeText({ company: f.co, name: f.row.이름 || f.row.기사명 || "", items: list.map((x) => x.row), date: f.date });
+      try {
+        const r = await pdCall("smsSend", { to: [{ phone: f.phone, name: f.row.이름 || f.row.기사명 || "" }], content }, 60000);
+        if (r?.status === "off") { if (!noticeOffWarned) { noticeOffWarned = true; window.alert(`기사 자동 문자를 보내지 못했어요.\n${r.reason || "회사 번호 문자(팝빌)가 아직 연결되지 않았습니다"}\n회사정보 › 문자 보내기에서 팝빌 연결을 확인해 주세요.`); } return; }
+        if (r?.status === "sent" || (r?.sent || 0) > 0) { sent += 1; list.forEach((x) => x.patchDispatch?.(x.row._id || x.row.id, { 지급알림: today(), __system: true })?.catch?.(() => {})); }
+      } catch (e) { console.warn("[지급 문자] 실패", e?.message || e); }
+    }
+    if (sent) try { window.dispatchEvent(new CustomEvent("kp-pay-notice-sent", { detail: { sent } })); } catch { /* 무시 */ }
+  }, 1500);
 }
 
 // 배차현황 [정산] 알약을 누르면 뜨는 창
@@ -167,6 +244,7 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
                 {row?.지급상태 === "지급완료"
                   ? <><span className="inline-flex items-center h-7 px-2.5 rounded-full bg-[#0F1A30] text-white text-[12px] font-black">지급완료</span><span style={NUM}>{row.지급일 || ""}</span></>
                   : <span className="inline-flex items-center h-7 px-2.5 rounded-full bg-[#EEF3FB] text-[#1B2B4B] text-[12px] font-black border border-[#C9D6EC]">{s ? "지급중" : "기사 미정"}</span>}
+                {row?.지급알림 && <span className="text-[12px] font-bold text-[#2D4C82]" style={NUM}>기사 문자 보냄 {md(row.지급알림)}</span>}
                 <span className="basis-full text-[11.5px] font-semibold text-[#9AA9C3]">지급 처리는 정산관리 › 용차지급관리에서 합니다.</span>
               </Row>
             </>
@@ -182,13 +260,23 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
 }
 
 // 정산관리 › 입금 확인 — 잡은 콜의 입금을 경리가 확인해 [입금완료] 처리(배차현황 [정산] 칸에 바로 보인다)
-export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, company = "" }) {
+export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, company = "", testTxns = null }) {
   const [filter, setFilter] = React.useState("wait"); // wait | done | all
   const [q, setQ] = React.useState("");
   const [sel, setSel] = React.useState(() => new Set());
   const [date, setDate] = React.useState(today());
   const [busy, setBusy] = React.useState(false);
   const all = React.useMemo(() => (orders || []).filter(isCaughtCall), [orders]);
+  // 🏦 은행 입금 후보(팝빌 은행 연동이 받아 둔 입금 — 아직 거래처정산에 쓰이지 않은 것)
+  const [txns, setTxns] = React.useState(testTxns || []);
+  React.useEffect(() => { if (testTxns) return undefined; return subscribeBankTxns(coNow(company), setTxns); }, [company, testTxns]);
+  const sugg = React.useMemo(() => suggestDeposits(all.filter((r) => r.입금상태 !== "입금완료"), txns, new Set((orders || []).map((r) => r.입금거래id).filter(Boolean))), [all, txns, orders]);
+  const applySugg = async (list) => {
+    if (isViewer) return window.alert("조회전용 권한으로는 처리할 수 없습니다.");
+    setBusy(true);
+    try { for (const r of list) { const g = sugg.get(r._id || r.id); if (g) await setCallDeposit({ row: r, done: true, date: g.txn.date || today(), name: g.txn.name || "", txnId: g.txn.id, patchDispatch, company }); } }
+    catch (e) { window.alert(`처리하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); }
+  };
   const rows = React.useMemo(() => {
     const k = q.trim();
     return all
@@ -217,6 +305,7 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
           <div className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">DEPOSIT · 잡은 콜 입금 확인</div>
           <div className="text-[20px] font-black">입금 확인</div>
           <div className="text-[12px] text-white/60">콜을 잡아 우리 기사에게 준 오더 — 콜 올린 업체에서 돈이 들어오면 [입금완료] 처리하세요. 배차현황 [정산] 칸에 바로 보입니다.</div>
+          <div className="text-[11.5px] text-white/45">은행 입금 연동(팝빌)을 쓰는 회사는 금액이 같은 입금을 "은행 입금 후보"로 찾아 줍니다.</div>
         </div>
         <div className="ml-auto flex gap-2" style={NUM}>
           {[["입금 대기", `${waitAll.length}건`, `${won(sum(waitAll))}원`], ["30일 넘음", `${old.length}건`, `${won(sum(old))}원`]].map(([l, a, b]) => (
@@ -238,6 +327,8 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
           <span className="text-[12.5px] font-bold text-[#5B6B85]" style={NUM}>선택 {picked.length}건 · {won(sum(picked))}원</span>
           {filter !== "done" && <><span className="text-[12.5px] font-bold text-[#5B6B85]">입금일</span><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={dateCls} style={NUM} />
             <button type="button" disabled={busy || isViewer} onClick={() => run(picked.filter((r) => r.입금상태 !== "입금완료"), true)} className="h-9 px-4 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-40">{busy ? "처리 중…" : "입금완료"}</button></>}
+          {filter !== "done" && sugg.size > 0 && <button type="button" disabled={busy || isViewer} data-sugg-all onClick={() => applySugg(rows.filter((r) => sugg.get(idOf(r))?.nameHit))} title="입금자명까지 맞는 후보만 한 번에 입금완료 처리합니다"
+            className="h-9 px-3.5 rounded-lg border border-[#2D4C82] text-[13px] font-black text-[#2D4C82] disabled:opacity-40 whitespace-nowrap">은행 입금 후보 {[...sugg.values()].filter((g) => g.nameHit).length}건 적용</button>}
           {filter !== "wait" && <button type="button" disabled={busy || isViewer} onClick={() => run(picked.filter((r) => r.입금상태 === "입금완료"), false)} className="h-9 px-4 rounded-lg border border-[#DCE3EE] text-[13px] font-black text-[#3A4A66] disabled:opacity-40">입금 취소</button>}
         </div>
       </div>
@@ -245,7 +336,7 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
         <table className="w-full min-w-max">
           <thead className="bg-[#1B2B4B]"><tr>
             <th className={th}><input type="checkbox" checked={rows.length > 0 && rows.every((r) => sel.has(idOf(r)))} onChange={(e) => setSel(e.target.checked ? new Set(rows.map(idOf)) : new Set())} /></th>
-            {["상차일", "잡은 곳", "콜 올린 업체(거래처)", "상차지 → 하차지", "기사", "받을 금액", "계산서 발행일", "입금", "입금일"].map((h) => <th key={h} className={th}>{h}</th>)}
+            {["상차일", "잡은 곳", "콜 올린 업체(거래처)", "상차지 → 하차지", "기사", "받을 금액", "계산서 발행일", "입금", "입금일 · 은행 입금 후보"].map((h) => <th key={h} className={th}>{h}</th>)}
           </tr></thead>
           <tbody>
             {rows.length === 0 && <tr><td colSpan={10} className="py-14 text-center text-[13px] font-semibold text-[#9AA9C3]">{all.length ? "해당하는 오더가 없습니다." : "잡은 콜로 표시한 오더가 아직 없습니다. 배차현황 [정산] 칸을 눌러 '잡은 콜'로 바꿔 주세요."}</td></tr>}
@@ -262,7 +353,17 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
                   <td className={`${td} font-black`} style={NUM}>{won(r.청구운임)}</td>
                   <td className={td} style={NUM}>{r.계산서일 || <span className="text-[#C2CBDB]">미발행</span>}</td>
                   <td className={td}>{done ? <span className="inline-flex items-center h-6 px-2 rounded-full bg-[#0F1A30] text-white text-[11.5px] font-black">입금완료</span> : <span className="inline-flex items-center h-6 px-2 rounded-full bg-[#EEF3FB] text-[#1B2B4B] text-[11.5px] font-black border border-[#C9D6EC]">대기</span>}</td>
-                  <td className={td} style={NUM}>{r.입금일 || ""}{r.입금자명 ? <span className="ml-1 text-[12px] text-[#7A8AA8]">{r.입금자명}</span> : null}</td>
+                  <td className={td} style={NUM}>
+                    {r.입금일 || ""}{r.입금자명 ? <span className="ml-1 text-[12px] text-[#7A8AA8]">{r.입금자명}</span> : null}
+                    {!done && sugg.get(idOf(r)) && (() => { const g = sugg.get(idOf(r)); return (
+                      <span className="inline-flex items-center gap-1.5" data-sugg>
+                        <span className={`inline-flex items-center h-6 px-2 rounded-full text-[11.5px] font-black border ${g.nameHit ? "bg-[#EEF3FB] text-[#1B2B4B] border-[#C9D6EC]" : "bg-white text-[#7A8AA8] border-[#DCE3EE]"}`} title={g.nameHit ? "금액 · 입금자명이 맞습니다" : "금액만 같습니다 — 입금자명을 확인해 주세요"}>
+                          {md(g.txn.date)} {g.txn.name || "입금자 없음"} {won(g.txn.amount)}{g.vat ? " (부가세 포함)" : ""}{g.nameHit ? "" : " · 금액만"}
+                        </span>
+                        <button type="button" disabled={busy || isViewer} onClick={() => applySugg([r])} className="h-6 px-2 rounded-md bg-[#0F1A30] text-white text-[11.5px] font-black disabled:opacity-40">적용</button>
+                      </span>
+                    ); })()}
+                  </td>
                 </tr>
               );
             })}
