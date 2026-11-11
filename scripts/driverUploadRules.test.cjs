@@ -45,6 +45,8 @@ const PRE_A = `${A}__12가3456`;
     // 오더·첨부
     await setDoc(doc(db, "orders/oA"), { companyName: A, 상차일: "2026-11-08", 업로드토큰: "tokA", attachCount: 0 });
     await setDoc(doc(db, "orders/oA/attachments/x1"), { base64: "data:image/png;base64,AA" });
+    await setDoc(doc(db, "orders/oA/evidence/e1"), { base64: "data:image/png;base64,AA", kind: "invoice" });
+    await setDoc(doc(db, "orders/oS/evidence/e2"), { base64: "data:image/png;base64,AA", kind: "invoice" });
     await setDoc(doc(db, "orders/oS"), { companyName: A, shipperCompany: "에스상사", 상차일: "2026-11-08" });
     await setDoc(doc(db, "dispatch/dA"), { companyName: A, 상차일: "2026-11-08" });
     await setDoc(doc(db, "fixedClients/fA"), { companyName: A, 날짜: "2026-11-08" });
@@ -126,6 +128,28 @@ const PRE_A = `${A}__12가3456`;
   });
   await t("attachments: 같은 회사 기사(기사앱) 올리기", () => assertSucceeds(setDoc(doc(DA, "orders/oA/attachments/d1"), { base64: "x" })));
   await t("attachments: 그 오더 화주 읽기", () => assertSucceeds(getDocs(collection(SS, "orders/oS/attachments"))));
+  // 🧾 2026-11-12 정산 증빙서류(evidence) — 그 오더 회사의 사무 직원만
+  await t("증빙서류: 같은 회사 직원 읽기·목록·올리기·고치기·지우기", async () => {
+    await assertSucceeds(getDoc(doc(UA, "orders/oA/evidence/e1")));
+    await assertSucceeds(getDocs(collection(UA, "orders/oA/evidence")));
+    await assertSucceeds(setDoc(doc(UA, "orders/oA/evidence/e3"), { base64: "x", kind: "invoice" }));
+    await assertSucceeds(updateDoc(doc(UA, "orders/oA/evidence/e3"), { scan: { total: 1 } }));
+    await assertSucceeds(deleteDoc(doc(UA, "orders/oA/evidence/e3")));
+  });
+  await t("증빙서류: 최고관리자 읽기", () => assertSucceeds(getDoc(doc(M, "orders/oA/evidence/e1"))));
+  await t("증빙서류: 같은 회사 기사 읽기·목록·올리기·지우기 거절", async () => {
+    await assertFails(getDoc(doc(DA, "orders/oA/evidence/e1")));
+    await assertFails(getDocs(collection(DA, "orders/oA/evidence")));
+    await assertFails(setDoc(doc(DA, "orders/oA/evidence/d"), { base64: "x" }));
+    await assertFails(deleteDoc(doc(DA, "orders/oA/evidence/e1")));
+  });
+  await t("증빙서류: 그 오더 화주 · 다른 회사 · 허브 · 로그인 안 함 거절", async () => {
+    await assertFails(getDoc(doc(SS, "orders/oS/evidence/e2")));
+    await assertFails(getDocs(collection(SS, "orders/oS/evidence")));
+    await assertFails(getDoc(doc(UB, "orders/oA/evidence/e1")));
+    await assertFails(getDoc(doc(HUB, "orders/oA/evidence/e1")));
+    await assertFails(getDoc(doc(ANON, "orders/oA/evidence/e1")));
+  });
   await t("attachments: 회사명 없는 수동 업로드 — 사무 직원 한 건 읽기 / 로그인 안 함·화주·허브 거절", async () => {
     await assertSucceeds(getDoc(doc(UA, "driver_uploads/mu1/attachments/m1")));
     await assertFails(getDoc(doc(ANON, "driver_uploads/mu1/attachments/m1")));

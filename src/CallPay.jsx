@@ -430,7 +430,7 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
     if (isViewer) return window.alert("조회전용 권한으로는 처리할 수 없습니다.");
     if (!list.length) return window.alert("오더를 골라 주세요.");
     setBusy(true);
-    try { for (const r of list) await setCallDeposit({ row: r, done, date, patchDispatch, company }); setSel(new Set()); }
+    try { for (const r of list) await setCallDeposit({ row: r, done, date, name: done ? (r.입금자명 || r.입금증빙?.payer || r.계산서스캔?.payer || "") : "", patchDispatch, company }); setSel(new Set()); }
     catch (e) { window.alert(`처리하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); }
   };
   const picked = rows.filter((r) => sel.has(idOf(r)));
@@ -518,7 +518,9 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M4 2h16v20l-3-2-3 2-3-2-3 2-4-2z" /><path d="M8 7h8M8 11h8M8 15h5" /></svg>
                         {sc.kind === "이체확인증" ? "이체" : "계산서"} {okAmt ? "✓" : "!"}
                       </button>); })()
-                      : <button type="button" onClick={() => setPopId(idOf(r))} className="text-[11.5px] font-bold text-[#C2CBDB] hover:text-[#1B2B4B]" title="정산 창에서 증빙서류를 올립니다">+ 올리기</button>}
+                      : (r.증빙수 || 0) > 0
+                        ? <button type="button" onClick={() => setEvRow(r)} className="inline-flex items-center h-7 px-2 rounded-full text-[11.5px] font-black border bg-white text-[#1B2B4B] border-[#C9D6EC]" title="올린 증빙서류 보기(자동으로 읽지 못한 파일)">증빙 {r.증빙수}</button>
+                        : <button type="button" onClick={() => setPopId(idOf(r))} className="text-[11.5px] font-bold text-[#7A8AA8] hover:text-[#1B2B4B]" title="정산 창에서 증빙서류를 올립니다">+ 올리기</button>}
                   </td>
                   <td className={td}>
                     <button type="button" onClick={() => onAttach?.(r)} disabled={!onAttach} title="첨부 보기 · 올리기(배차현황 첨부와 같은 파일)" data-desk-attach

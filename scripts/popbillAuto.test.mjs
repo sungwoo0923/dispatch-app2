@@ -17,7 +17,7 @@ const throwsCode = async (name, fn, code) => { try { await fn(); has(name, false
 
 // ───────── 가짜 Firestore(create · update 점 경로 · delete · where ==/in/>=) ─────────
 const DEL = { __del: true };
-const FieldValue = { serverTimestamp: () => ({ __ts: true }), delete: () => DEL };
+const FieldValue = { serverTimestamp: () => ({ __ts: true }), delete: () => DEL, increment: (n) => ({ __inc: n }) };
 function setPath(obj, path, v) {
   const ks = path.split("."); let o = obj;
   for (let i = 0; i < ks.length - 1; i++) { o[ks[i]] = o[ks[i]] && typeof o[ks[i]] === "object" ? { ...o[ks[i]] } : {}; o = o[ks[i]]; }

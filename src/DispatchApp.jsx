@@ -63100,8 +63100,12 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
   const patchDispatch = React.useCallback(async (_id, patch, knownPrev) => {
     if (!_id) return;
     const row = knownPrev || dispatchData.find((d) => d._id === _id || d.id === _id);
-    await updateDoc(doc(db, row?.__col || "dispatch", _id), { ...patch, updatedAt: serverTimestamp() });
+    // ⭐ 2026-11-12 점검 — __system · __col 같은 화면용 표시는 문서에 쓰지 않는다(예전엔 그대로 저장됐다)
+    const clean = {}; Object.entries(patch || {}).forEach(([k, v]) => { if (!k.startsWith("__")) clean[k] = v; });
+    await updateDoc(doc(db, patch?.__col || row?.__col || "dispatch", _id), { ...clean, updatedAt: serverTimestamp() });
   }, [dispatchData]);
+  const betaPayOnM = useBetaOn(getTenant() || companyName); // 💳 입금 확인 탭(PC와 같은 조건)
+  const [deskAttachId, setDeskAttachId] = React.useState("");
   // 거래처정산 › 거래처 정보(계좌·담당자 등) 저장 — PC upsertClient와 같은 문서(회사별 문서 이름)
   const upsertClient = React.useCallback(async (client) => {
     if (isViewer || !client) return;
@@ -63119,7 +63123,7 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
   }, []);
   return (
     <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={tab} onSelect={setTab}
-      items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
+      items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOnM ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
       {tab === "거래처정산"
         ? <ClientSettlement dispatchData={dispatchData} setDispatchData={() => {}} userCompany={companyName} clients={clients}
             setClients={(next) => (next || []).forEach(upsertClient)} upsertClient={upsertClient} showAlert={(m) => window.alert(m)}
@@ -63129,7 +63133,13 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
         ? <PaymentManagement mobile dispatchData={dispatchData} patchDispatch={isViewer ? async () => {} : patchDispatch} companyName={companyName} canEditPayDay={role === "admin" || role === "totalMaster"} />
         : tab === "지게차지급"
         ? <ForkliftPayouts orders={dispatchData} patchDispatch={isViewer ? async () => {} : patchDispatch} isViewer={isViewer} />
+        : tab === "입금확인" && betaPayOnM
+        ? <CallDepositDesk orders={dispatchData} patchDispatch={isViewer ? async () => {} : patchDispatch} isViewer={isViewer} company={companyName} onAttach={(r) => setDeskAttachId(r._id || r.id)} />
         : <FleetSettlementMenu dispatchData={dispatchData} companyName={companyName} />}
+      {deskAttachId && (() => { const ar = (dispatchData || []).find((x) => (x._id || x.id) === deskAttachId); return ar ? (
+        <AttachmentViewer row={ar} db={db} onClose={() => setDeskAttachId("")} isViewer={isViewer} isViewed={ar.attachViewed === true}
+          onToggleViewed={() => (isViewer ? null : patchDispatch(ar._id, { attachViewed: !ar.attachViewed }))} onSaved={() => {}} />
+      ) : null; })()}
     </KpSubNav>
   );
 }

@@ -3,11 +3,11 @@
 //  · 이미지 → 서버 글자 인식(orderScanOcr = 오더 스캔과 같은 Google Vision) → 안 되면 브라우저 인식(tesseract)
 //  · 글 → src/invoiceScan.js 가 종류(전자세금계산서 · 계산서 · 거래명세서 · 이체확인증 …) · 작성일자 · 공급가액/세액/합계 · 공급자/공급받는자 · 입금자명을 뽑는다
 //  · 뽑은 값은 정산 창에 바로 반영(계산서 발행일 · 입금자명) + 운임과 금액이 맞는지 표시 + 오더에 계산서스캔으로 저장
-//  · 파일은 오더 첨부(attachments)에 kind: "invoice" 로 저장 → 배차현황 첨부 · 정산관리 › 입금 확인에서 같은 파일이 보인다
+//  · 파일은 오더의 evidence 하위 목록에 저장(사무 직원만) → 배차현황 [정산] 창 · 정산관리 › 입금 확인 [증빙] 칸에서 같은 파일이 보인다
 //  · 계산서 글(메일 본문 등)을 붙여넣어도 같은 방법으로 읽는다(파일은 남지 않는다)
 import React from "react";
 import { createPortal } from "react-dom";
-import { collection, doc, setDoc, deleteDoc, updateDoc, increment, onSnapshot, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, doc, setDoc, deleteDoc, updateDoc, increment, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase";
 import { parseInvoiceText, checkAmount } from "./invoiceScan";
 
@@ -17,24 +17,26 @@ const md = (s) => { const m = /^\d{4}-(\d{2})-(\d{2})/.exec(String(s || "")); re
 
 // ── 저장소(기본 = Firestore 오더 첨부). 미리보기 · 점검에서는 api를 바꿔 끼운다 ──
 const colOf = (row) => row?.__col || "orders";
+//  ⭐ 2026-11-12 증빙서류는 첨부(attachments)가 아니라 오더의 evidence 하위 목록에 둔다 — 사무 직원만 읽고 쓴다(firestore.rules).
+//   계산서에 청구운임 · 기사운임이 적혀 있어 기사앱 · 화주 화면(첨부를 읽고 옮기는 곳)에는 나가지 않게. 오더에는 증빙수만 센다
 export const firestoreEvidenceApi = {
   subscribe(row, cb) {
     const id = row?._id || row?.id; if (!id) { cb([]); return () => {}; }
-    return onSnapshot(query(collection(db, colOf(row), id, "attachments"), where("kind", "==", "invoice")),
+    return onSnapshot(collection(db, colOf(row), id, "evidence"),
       (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0))), () => cb([]));
   },
   async upload(row, payload) {
     const id = row._id || row.id; const col = colOf(row);
-    const ref = doc(collection(db, col, id, "attachments"));
-    await setDoc(ref, { ...payload, kind: "invoice", uploadedBy: "dispatch", createdAt: serverTimestamp() });
-    await updateDoc(doc(db, col, id), { attachCount: increment(1), officeAttach: increment(1) });
+    const ref = doc(collection(db, col, id, "evidence"));
+    await setDoc(ref, { ...payload, kind: "invoice", uploadedBy: "dispatch", companyName: row.companyName || "", createdAt: serverTimestamp() });
+    await updateDoc(doc(db, col, id), { 증빙수: increment(1) });
     return ref.id;
   },
-  async update(row, attId, patch) { await updateDoc(doc(db, colOf(row), row._id || row.id, "attachments", attId), patch); },
+  async update(row, attId, patch) { await updateDoc(doc(db, colOf(row), row._id || row.id, "evidence", attId), patch); },
   async remove(row, attId) {
     const id = row._id || row.id; const col = colOf(row);
-    await deleteDoc(doc(db, col, id, "attachments", attId));
-    await updateDoc(doc(db, col, id), { attachCount: increment(-1), officeAttach: increment(-1) });
+    await deleteDoc(doc(db, col, id, "evidence", attId));
+    await updateDoc(doc(db, col, id), { 증빙수: increment(-1) });
   },
 };
 
@@ -152,8 +154,9 @@ export function EvidenceLightbox({ items, start = 0, onClose, expect }) {
 export function EvidenceViewer({ row, onClose, api = firestoreEvidenceApi, expect }) {
   const [items, setItems] = React.useState(null);
   React.useEffect(() => api.subscribe(row, setItems), [row, api]);
-  if (items === null) return null;
-  if (!items.length) { setTimeout(() => { window.alert("올린 증빙서류가 없습니다."); onClose?.(); }, 0); return null; }
+  const empty = items !== null && items.length === 0;
+  React.useEffect(() => { if (empty) { window.alert("올린 증빙서류가 없습니다."); onClose?.(); } }, [empty]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (items === null || empty) return null;
   return <EvidenceLightbox items={items} onClose={onClose} expect={expect} />;
 }
 
@@ -212,6 +215,7 @@ export function EvidenceBox({ row, canEdit = true, expect, onScanned, api = fire
   React.useEffect(() => {
     if (!canEdit) return undefined;
     const h = (e) => {
+      if (e.defaultPrevented) return; // 다른 창(메신저 등)이 이미 받은 붙여넣기
       const t = e.target;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       const files = [...(e.clipboardData?.files || [])];

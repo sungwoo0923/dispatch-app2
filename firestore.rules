@@ -489,6 +489,12 @@ service cloud.firestore {
       allow get: if attParentOk(col, orderId) || attLegacyParentGet(col, orderId);
       allow list, create, update, delete: if attParentOk(col, orderId);
     }
+    // 🧾 2026-11-12 정산 증빙서류(계산서 · 이체확인증 — 정산 창 › 증빙서류에서 올림) — 그 오더 회사의 사무 직원만.
+    //  계산서에는 청구운임(OUT) · 기사운임(IN)이 적혀 있어 기사 · 화주는 못 본다. 첨부(attachments)와 따로 둬서
+    //  화주 화면 · 기사앱이 첨부를 읽고 옮기는 흐름은 그대로 둔다.
+    match /{col}/{orderId}/evidence/{eid} {
+      allow read, write: if attParentOk(col, orderId) && (isTotalMasterUser() || !(myRole() in ['driver', 'shipper']));
+    }
 
     // 수동 업로드(오더 id 없이 들어온 기사) — 새 메타 문서 생성만 허용, 조회는 로그인 사용자만.
     //  읽기·수정은 아래 기사 기록 공용 규칙(looseRead — 잠금 후 같은 회사)
