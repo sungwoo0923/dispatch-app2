@@ -16132,7 +16132,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
               </div>
               <div>
                 <label className={mrLabelCls}><EditableText id="orderForm.multi.label.배차방식" defaultText="배차방식" /></label>
-                <CompanyOptionPicker optKey="배차방식" placeholder="선택" noneLabel="선택" className={mrInputCls} value={currentMultiSlot.배차방식 || ""} onChange={(__v) => (e => updateMultiSlot("배차방식", e.target.value))({ target: { value: __v } })} />
+                <DispatchWayPicker className={mrInputCls} value={currentMultiSlot.배차방식 || ""} dir={currentMultiSlot.콜구분 || ""} onPick={(pk) => Object.entries(pk).forEach(([k, v]) => updateMultiSlot(k, v))} />
               </div>
 
               <div className="col-span-2 relative">
@@ -20001,7 +20001,7 @@ className={`
           <button
             className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition"
             onClick={async () => {
-              const patch = { [confirmChange.key]: confirmChange.after };
+              const patch = { [confirmChange.key]: confirmChange.after, ...(confirmChange.extra || {}) }; // 💳 extra = 배차방식과 함께 바뀌는 IN/OUT
               // ⭐ 이미 화면에 있는 행 데이터를 알고 있으니(rows.find), patchDispatch가
               // 다시 캐시/서버 조회를 하지 않도록 knownPrev로 바로 넘긴다 — 이 팝업의
               // "변경" 버튼을 눌렀을 때 느껴지던 지연의 유력한 원인이었다.
@@ -29533,17 +29533,12 @@ const openDailyCloseIssueDetail = (rowId) => {
       // 이미 저장된 옛 데이터도 여기서 같이 정규화해 "선택"이 보이게 한다.
       const dispatchVal = val === "선택없음" ? "" : (val || "");
       return (
-        <CompanyOptionPicker optKey="배차방식" placeholder="선택" noneLabel="선택" className="border rounded px-1 py-0.5 w-full text-center" value={dispatchVal} onChange={(__v) => ((e) => {
-            const next = e.target.value;
-            if (next === dispatchVal) return;
-
-            setConfirmChange({
-              rowId,
-              key: "배차방식",
-              before: dispatchVal,
-              after: next,
-            });
-          })({ target: { value: __v } })} />
+        <DispatchWayPicker className="border rounded px-1 py-0.5 w-full text-center" value={dispatchVal} dir={(rows || []).find((r) => r._id === rowId)?.콜구분 || ""} onPick={(pk) => {
+            const next = pk.배차방식 ?? "";
+            const extra = pk.콜구분 !== undefined ? { 콜구분: pk.콜구분, 콜플랫폼: pk.콜플랫폼 || "" } : null; // 💳 IN/OUT도 같이 저장
+            if (next === dispatchVal && !extra) return;
+            setConfirmChange({ rowId, key: "배차방식", before: dispatchVal, after: next, ...(extra ? { extra } : {}) });
+          }} />
       );
     }
     if (key === "차량종류") {
@@ -33203,8 +33198,8 @@ value={copyTarget?.화물수량 || ""}
 
               <div>
                 <label>배차방식</label>
-                <CompanyOptionPicker optKey="배차방식" placeholder="선택 없음" noneLabel="선택 없음" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" value={editTarget.배차방식 === "선택없음" ? "" : (editTarget.배차방식 || "")} onChange={(__v) => ((e) =>
-                    setEditTarget((p) => ({ ...p, 배차방식: e.target.value })))({ target: { value: __v } })} />
+                <DispatchWayPicker placeholder="선택 없음" noneLabel="선택 없음" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" value={editTarget.배차방식 === "선택없음" ? "" : (editTarget.배차방식 || "")} dir={editTarget.콜구분 || ""}
+                    onPick={(pk) => setEditTarget((p) => ({ ...p, ...pk }))} />
               </div>
             </div>
 
@@ -34550,7 +34545,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
                 <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition"
                   onClick={() => {
                    const patch = {
-                      [confirmChange.key]: confirmChange.after,
+                      [confirmChange.key]: confirmChange.after, ...(confirmChange.extra || {}),
                       updatedAt: Date.now(),
                     };
                     // ⭐ 이미 화면에 있는 행 데이터를 알고 있으니(dispatchData.find),
@@ -38399,18 +38394,11 @@ if (mode === "driver") {
     user: "관리자", // ▲ 나중에 로그인 사용자로 교체 가능
   });
   // ⚡ select 즉시 변경 → 확인 팝업용
-  const handleImmediateSelectChange = (row, field, nextValue) => {
+  const handleImmediateSelectChange = (row, field, nextValue, extra = null) => {
     const id = getId(row);
     const before = row[field] ?? "";
-
-    if (before === nextValue) return;
-
-    setConfirmChange({
-      id,
-      field,
-      before,
-      after: nextValue,
-    });
+    if (before === nextValue && !extra) return;
+    setConfirmChange({ id, field, before, after: nextValue, ...(extra ? { extra } : {}) }); // 💳 extra = 배차방식과 함께 바뀌는 IN/OUT
   };
   // =============================================
   // ✅ 대용량 업로드 (엑셀 → Firestore)
@@ -40493,8 +40481,8 @@ return (
 
 
                   <td className="border text-center">
-                    <CompanyOptionPicker optKey="배차방식" placeholder="선택없음" noneLabel="선택없음" className="border rounded px-1 py-0.5 w-full text-center" value={row.배차방식 === "선택없음" ? "" : (row.배차방식 || "")} onChange={(__v) => ((e) =>
-                        handleImmediateSelectChange(row, "배차방식", e.target.value))({ target: { value: __v } })} />
+                    <DispatchWayPicker placeholder="선택없음" noneLabel="선택없음" className="border rounded px-1 py-0.5 w-full text-center" value={row.배차방식 === "선택없음" ? "" : (row.배차방식 || "")} dir={row.콜구분 || ""}
+                      onPick={(pk) => handleImmediateSelectChange(row, "배차방식", pk.배차방식 ?? "", pk.콜구분 !== undefined ? { 콜구분: pk.콜구분, 콜플랫폼: pk.콜플랫폼 || "" } : null)} />
                   </td>
 
                   {/* 메모 */}
@@ -41555,8 +41543,8 @@ return (
 
               <div>
                 <label>배차방식</label>
-                <CompanyOptionPicker optKey="배차방식" placeholder="선택 없음" noneLabel="선택 없음" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" value={editTarget.배차방식 === "선택없음" ? "" : (editTarget.배차방식 || "")} onChange={(__v) => ((e) =>
-                    setEditTarget((p) => ({ ...p, 배차방식: e.target.value })))({ target: { value: __v } })} />
+                <DispatchWayPicker placeholder="선택 없음" noneLabel="선택 없음" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" value={editTarget.배차방식 === "선택없음" ? "" : (editTarget.배차방식 || "")} dir={editTarget.콜구분 || ""}
+                    onPick={(pk) => setEditTarget((p) => ({ ...p, ...pk }))} />
               </div>
             </div>
 
@@ -44029,7 +44017,7 @@ setCopyPlaceOptions(list);
             if (e.key === "Escape") { e.preventDefault(); setConfirmChange(null); return; }
             if (e.key === "Enter") {
               e.preventDefault();
-              const patch = { [confirmChange.field]: confirmChange.after };
+              const patch = { [confirmChange.field]: confirmChange.after, ...(confirmChange.extra || {}) }; // 💳 extra = 배차방식과 함께 바뀌는 IN/OUT
               if (confirmChange.field === "업체전달상태") {
                 patch.업체전달일시 = confirmChange.after === "전달완료" ? Date.now() : null;
                 patch.업체전달방법 = confirmChange.after === "전달완료" ? "수동" : null;
@@ -44065,7 +44053,7 @@ setCopyPlaceOptions(list);
               <div className="flex gap-2">
                 <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600 hover:bg-gray-50 transition" onClick={() => setConfirmChange(null)}><EditableText id="misc.btn.40198.취소" defaultText="취소" /></button>
                 <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition" onClick={() => {
-                  const patch = { [confirmChange.field]: confirmChange.after };
+                  const patch = { [confirmChange.field]: confirmChange.after, ...(confirmChange.extra || {}) }; // 💳 extra = 배차방식과 함께 바뀌는 IN/OUT
                   if (confirmChange.field === "업체전달상태") {
                     patch.업체전달일시 = confirmChange.after === "전달완료" ? Date.now() : null;
                     patch.업체전달방법 = confirmChange.after === "전달완료" ? "수동" : null;
@@ -45754,7 +45742,7 @@ function NewOrderPopup({
 
             <div>
               <label>배차방식</label>
-              <CompanyOptionPicker optKey="배차방식" placeholder="선택없음" noneLabel="선택없음" className="border p-2 rounded w-full" value={newOrder.배차방식 === "선택없음" ? "" : newOrder.배차방식} onChange={(__v) => ((e) => handleChange("배차방식", e.target.value))({ target: { value: __v } })} />
+              <DispatchWayPicker placeholder="선택없음" noneLabel="선택없음" className="border p-2 rounded w-full" value={newOrder.배차방식 === "선택없음" ? "" : newOrder.배차방식} dir={newOrder.콜구분 || ""} onPick={(pk) => Object.entries(pk).forEach(([k, v]) => handleChange(k, v))} />
             </div>
 
           </div>

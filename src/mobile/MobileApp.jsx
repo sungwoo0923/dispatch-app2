@@ -148,7 +148,7 @@ import { useFixedRouteAutoDispatch } from "../FixedRoutes"; // ⭐ 2026-11-05 �
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { LogisMark, LogisWordmark, LogisTag, LogisLockup } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 import AiAssistant from "../AiAssistant"; // 🤖 2026-11-07 AI 비서
-import { useBetaOn } from "../CallPay"; // ⭐ 2026-11-11 시험 기능(테스트운송사)
+import { useBetaOn, DispatchWayPicker } from "../CallPay"; // ⭐ 2026-11-11 시험 기능(테스트운송사)
 import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "../liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
 import { useUiScreen, uiMenuItem, useUiConfigVersion } from "../uiConfig"; // ⭐ 2026-11-07 화면 편집 모드 — 메뉴 이름·순서·숨기기(권한은 그대로)
 import MyInfoTabs from "../MyInfoTabs"; // ⭐ 2026-11-07 내정보 안 탭(급여명세서 · 연차 사용 계획)
@@ -10875,6 +10875,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
   };
   const [payType, setPayType] = useState(order.지급방식 || "");
   const [dispType, setDispType] = useState(order.배차방식 || "");
+  const [dispWay, setDispWay] = useState({}); // 💳 2026-11-11 배차방식과 함께 고른 IN/OUT
   const [deliverState, setDeliverState] = useState(order.업체전달상태 || "미전달");
   const [saving, setSaving] = useState(false);
   // ⭐ 등록되지 않은 차량번호를 입력했을 때 — 상세보기/등록폼과 동일하게 "신규 기사"
@@ -11007,7 +11008,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
         기사운임: Number(String(fee).replace(/[^\d]/g, "")) || 0,
         ...(fareRK.on && (fareT.운임구분 || order.운임구분) ? { 운임구분: fareT.운임구분 || "", 운임수동: !!fareT.운임수동, ...(fareT.운임구분 && String(fareT.운임구분수수료율 ?? "") !== "" ? { 운임구분수수료율: Number(fareT.운임구분수수료율) || 0 } : {}) } : {}), // ⭐ 2026-11-02 운임규칙 · 2026-11-09 오더별 수수료율
         ...(isShipperOrder ? {} : { 지급방식: payType }),
-        배차방식: dispType,
+        배차방식: dispType, ...dispWay,
         업체전달상태: deliverState,
         정보전달상태: deliverState,
         정보전달완료: deliverState === "전달완료",
@@ -11139,7 +11140,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
           </div>
           <div>
             <label className={labelCls}>배차방식</label>
-            <CompanyOptionPicker optKey="배차방식" placeholder="선택" noneLabel="선택" style={{ minHeight: 40 }} className={inputCls} value={dispType} onChange={(__v) => (e => setDispType(e.target.value))({ target: { value: __v } })} />
+            <DispatchWayPicker style={{ minHeight: 40 }} className={inputCls} value={dispType} dir={dispWay.콜구분 ?? (order.콜구분 || "")} onPick={(pk) => { setDispType(pk.배차방식 ?? ""); if (pk.콜구분 !== undefined) setDispWay({ 콜구분: pk.콜구분, 콜플랫폼: pk.콜플랫폼 || "" }); }} />
           </div>
         </div>
 
@@ -12169,7 +12170,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
               </MobileSelect>
             </QuickField>
             <QuickField label="배차방식">
-              <CompanyOptionPicker optKey="배차방식" placeholder="선택없음" noneLabel="선택없음" style={{ minHeight: 40 }} className={inp} value={f.배차방식} onChange={(__v) => (set("배차방식"))({ target: { value: __v } })} />
+              <DispatchWayPicker placeholder="선택없음" noneLabel="선택없음" style={{ minHeight: 40 }} className={inp} value={f.배차방식} dir={f.콜구분 || ""} onPick={(pk) => setF((p) => ({ ...p, ...pk }))} />
             </QuickField>
             <QuickField label="지급방식">
               <CompanyOptionPicker optKey="지급방식" placeholder="선택없음" noneLabel="선택없음" style={{ minHeight: 40 }} className={inp} value={f.지급방식} onChange={(__v) => (set("지급방식"))({ target: { value: __v } })} />
@@ -16518,7 +16519,7 @@ const pickDrop = (c) => {
                     requiredErrors.has("지급방식") ? "border-red-500 ring-2 ring-red-300 animate-pulse" : "border-gray-300 focus:border-[var(--reg-accent)]"
                   }`} value={form.지급방식} onChange={(__v) => ((e) => update("지급방식", e.target.value))({ target: { value: __v } })} />
               </fieldset>
-              <CompanyOptionPicker optKey="배차방식" placeholder="배차방식" noneLabel="배차방식" style={{ minHeight: 40 }} className="flex-1 min-w-[90px] border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition" value={form.배차방식} onChange={(__v) => ((e) => update("배차방식", e.target.value))({ target: { value: __v } })} />
+              <DispatchWayPicker wrapClassName="flex-1 min-w-[90px]" placeholder="배차방식" noneLabel="배차방식" style={{ minHeight: 40 }} className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition" value={form.배차방식} dir={form.콜구분 || ""} onPick={(pk) => Object.entries(pk).forEach(([k, v]) => update(k, v))} />
             </div>
           }
         />

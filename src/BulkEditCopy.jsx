@@ -12,6 +12,7 @@ import { CustomSelect } from "./CustomSelect";
 import { subscribeUsersLive } from "./usersLive"; // 👤 2026-11-09 복사본 배차담당자
 import { staffOptionsOf, ownerOfOrder, matchOwner } from "./orderOwner"; // ⭐ 2026-11-09 브라우저 기본 select 대신 프로그램 드롭다운
 import { CompanyOptionPicker } from "./companyOptionPicker"; // 지급방식·배차방식은 회사 목록(배차관리와 같은 목록)
+import { DispatchWayPicker } from "./CallPay"; // 💳 2026-11-11 배차방식 — 먼저 IN/OUT, 그다음 방식(시험 기능이 꺼진 운송사는 예전 그대로)
 
 const pad = (n) => String(n).padStart(2, "0");
 const ymdOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -66,11 +67,15 @@ const EDIT_FIELDS = [
   { key: "기사운임", label: "기사운임", type: "money", row: 2, span: 2 },
   { key: "지급방식", label: "지급방식", type: "pay", row: 2, span: 2 },
   { key: "배차방식", label: "배차방식", type: "dispatch", row: 2, span: 2 },
+  // 💳 배차방식과 함께 바뀌는 값(칸은 따로 없다 — 배차방식 칸에서 IN/OUT을 먼저 고른다)
+  { key: "콜구분", label: "IN/OUT", type: "hidden" },
+  { key: "콜플랫폼", label: "OUT 방식", type: "hidden" },
   { key: "메모", label: "메모", type: "text", row: 2, span: 2 },
 ];
 
-function FieldInput({ f, value, onChange, opts }) {
+function FieldInput({ f, value, onChange, opts, dir = "", onWay = null }) {
   const v = value ?? "";
+  if (f.type === "dispatch" && onWay) return <DispatchWayPicker placeholder="-" noneLabel="- (비움)" className={`${sel} text-left`} value={v} dir={dir} onPick={(pk) => { onChange(pk.배차방식 ?? ""); if (pk.콜구분 !== undefined) onWay({ 콜구분: pk.콜구분, 콜플랫폼: pk.콜플랫폼 || "" }); }} />;
   if (f.type === "date") return <CustomDatePicker value={v} onChange={(e) => onChange(e.target.value)} className={`${inp} text-left`} openOnFocus={false} />;
   if (f.type === "pay" || f.type === "dispatch") return <CompanyOptionPicker optKey={f.type === "pay" ? "지급방식" : "배차방식"} placeholder="-" noneLabel="- (비움)" className={`${sel} text-left`} value={v} onChange={(x) => onChange(x)} />;
   const list = f.type === "time" ? opts.times : f.type === "vehicle" ? opts.vehicles : f.type === "ton" ? opts.tons : f.type === "pay" ? opts.pays : f.type === "dispatch" ? opts.dispatches : null;
@@ -164,6 +169,7 @@ function EditTab({ rows, opts, drivers, patchDispatch, onClose, onDateShift, onL
   const [checked, setChecked] = React.useState(() => new Set(rows.map(idOf)));
   const [bulkKey, setBulkKey] = React.useState("상차일");
   const [bulkVal, setBulkVal] = React.useState("");
+  const [bulkWay, setBulkWay] = React.useState(null); // 💳 일괄 입력 칸에서 배차방식과 함께 고른 IN/OUT
   const [busy, setBusy] = React.useState(false);
   const setCell = (id, key, value) => setEdited((p) => {
     const row = { ...p[id], [key]: value };
@@ -179,7 +185,7 @@ function EditTab({ rows, opts, drivers, patchDispatch, onClose, onDateShift, onL
   const applyBulk = () => {
     const ids = [...checked];
     if (!ids.length) return;
-    ids.forEach((id) => setCell(id, bulkKey, bulkVal));
+    ids.forEach((id) => { setCell(id, bulkKey, bulkVal); if (bulkKey === "배차방식" && bulkWay) { setCell(id, "콜구분", bulkWay.콜구분); setCell(id, "콜플랫폼", bulkWay.콜플랫폼); } });
   };
   const changedOf = (r) => {
     const id = idOf(r); const cur = edited[id] || {};
@@ -219,11 +225,11 @@ function EditTab({ rows, opts, drivers, patchDispatch, onClose, onDateShift, onL
         <div className="text-[12px] font-black text-[#1B2B4B] mr-1 self-center">선택 칸 일괄 입력</div>
         <div className="w-[150px]">
           <span className={lab}>칸</span>
-          <CustomSelect className={`${sel} text-left`} value={bulkKey} onChange={(e) => { setBulkKey(e.target.value); setBulkVal(""); }}>
-            {EDIT_FIELDS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+          <CustomSelect className={`${sel} text-left`} value={bulkKey} onChange={(e) => { setBulkKey(e.target.value); setBulkVal(""); setBulkWay(null); }}>
+            {EDIT_FIELDS.filter((f) => f.type !== "hidden").map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
           </CustomSelect>
         </div>
-        <div className="w-[220px]"><span className={lab}>값</span><FieldInput f={bulkField} value={bulkVal} onChange={setBulkVal} opts={opts} /></div>
+        <div className="w-[220px]"><span className={lab}>값</span><FieldInput f={bulkField} value={bulkVal} onChange={setBulkVal} opts={opts} dir={bulkWay?.콜구분 || ""} onWay={setBulkWay} /></div>
         <button type="button" onClick={applyBulk} disabled={!checked.size} className="h-[34px] px-4 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-black disabled:opacity-40">체크한 {checked.size}건에 적용</button>
         <div className="flex-1" />
         {onDateShift && <button type="button" onClick={onDateShift} className="h-[34px] px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-bold text-[#1B2B4B]">날짜 일괄 이동</button>}
@@ -251,7 +257,7 @@ function EditTab({ rows, opts, drivers, patchDispatch, onClose, onDateShift, onL
                     return (
                       <div key={f.key} style={{ gridColumn: `span ${f.span} / span ${f.span}` }} className={changed ? "[&_input]:!bg-[#EEF3FC] [&_select]:!bg-[#EEF3FC] [&_button]:!bg-[#EEF3FC] [&_input]:!border-[#4B6CB7] [&_select]:!border-[#4B6CB7]" : ""}>
                         <span className={lab}>{f.label}</span>
-                        <FieldInput f={f} value={cur[f.key]} onChange={(v) => setCell(id, f.key, v)} opts={opts} />
+                        <FieldInput f={f} value={cur[f.key]} onChange={(v) => setCell(id, f.key, v)} opts={opts} dir={cur.콜구분 || ""} onWay={(w) => { setCell(id, "콜구분", w.콜구분); setCell(id, "콜플랫폼", w.콜플랫폼); }} />
                       </div>
                     );
                   })}
