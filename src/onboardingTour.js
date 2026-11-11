@@ -8,12 +8,15 @@
 //  · 본 기록: localStorage kpTourSeen:{uid}:{메뉴} (사용자·메뉴별 1회, 기기마다)
 //  ⚠ node 테스트에서도 읽을 수 있게 다른 파일을 가져오지 않는다.
 
-// 회사 이름별 임시 기간(KST 날짜, 양끝 포함) — 바꾸려면 여기만 고치면 된다
-export const TOUR_WINDOWS = {
-  "큐런네트웍스 주식회사": { from: "2026-11-10", to: "2026-11-10" }, // 어제(11/9) 가입 — 오늘 하루만
-  "테스트운송사": { from: "2026-11-09", to: "2026-11-17" },         // 사용자 테스트용
-};
-export const AUTO_HOURS = 24; // 그 밖의 회사 — 승인 후 이 시간 동안만
+// ⭐ 2026-11-11 사용자 요청 — "이제부터 신규로 가입하는 운송사만, 1번만"
+//  · 테스트운송사 · 큐런네트웍스 등 예전 임시 기간은 모두 뺐다(TOUR_WINDOWS 비움 → 안내 · [사용법 다시 보기] 버튼 모두 안 보임)
+//  · NEW_SINCE 이후에 승인된 운송사만 안내가 켜진다(승인 뒤 ACTIVE_DAYS일 동안 [사용법 다시 보기] 버튼이 보인다)
+//  · 메뉴마다 사용자별 딱 1번 자동으로 뜨고, 본 기록은 서버(userProfiles/{uid}.tourSeen)에도 남겨 다른 PC · 휴대폰에서도 다시 안 뜬다
+//    (그다음부터는 [사용법 다시 보기]를 눌렀을 때만)
+export const TOUR_WINDOWS = {};
+export const NEW_SINCE = Date.parse("2026-11-12T00:00:00+09:00"); // 이 시각 이후 승인된 운송사 = 신규
+export const ACTIVE_DAYS = 14;
+export const AUTO_HOURS = ACTIVE_DAYS * 24; // (예전 이름 호환)
 
 export const kstYmd = (ms = Date.now()) => new Date(ms + 9 * 3600e3).toISOString().slice(0, 10);
 
@@ -23,7 +26,8 @@ export function tourActive(company, approvedMs = 0, now = Date.now()) {
   if (!co) return false;
   const w = TOUR_WINDOWS[co];
   if (w) { const d = kstYmd(now); return d >= w.from && d <= w.to; }
-  return !!approvedMs && now >= approvedMs && now - approvedMs < AUTO_HOURS * 3600e3;
+  if (!approvedMs || approvedMs < NEW_SINCE) return false; // 예전부터 쓰던 운송사(테스트운송사 포함)는 안 띄운다
+  return now >= approvedMs && now - approvedMs < ACTIVE_DAYS * 86400e3;
 }
 
 export const seenKey = (uid, menu) => `kpTourSeen:${uid || "anon"}:${menu}`;

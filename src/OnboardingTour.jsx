@@ -1,10 +1,10 @@
 // ======================= src/OnboardingTour.jsx =======================
 // 🧭 2026-11-10 첫 방문 안내(메뉴별 말풍선) + [?] 도움말 — PC·모바일 공용 Host
 //  <TourHost company menu uid />  · 설정(기간·단계·문구)은 src/onboardingTour.js
-//  · 기간 안에만 동작 · 메뉴마다 사용자별 1회 · [사용법 다시 보기] 버튼(왼쪽 아래)
+//  · 기간 안에만 동작(2026-11-12 이후 승인된 신규 운송사만) · 메뉴마다 사용자별 1회(서버에도 기록) · [사용법 다시 보기] 버튼(왼쪽 아래)
 //  · 튜토리얼·초기 설정 마법사(Onboarding.jsx, [data-kp-onboarding])가 떠 있으면 끝날 때까지 기다린다
 import React from "react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { MENU_TOURS, HELP_TEXT, tourActive, seenKey } from "./onboardingTour";
 
@@ -33,29 +33,41 @@ function useApprovedMs(company) {
   return ms;
 }
 
+// 본 기록(서버) — userProfiles/{uid}.tourSeen.{메뉴} = true. 기기를 바꿔도 다시 안 뜨게
+function useServerSeen(uid, on) {
+  const [seen, setSeen] = React.useState(null); // null = 아직 모름(그동안 자동으로 띄우지 않는다)
+  React.useEffect(() => {
+    if (!uid || !on) { setSeen(null); return undefined; }
+    return onSnapshot(doc(db, "userProfiles", uid), (s) => setSeen(s.data()?.tourSeen || {}), () => setSeen({}));
+  }, [uid, on]);
+  return seen;
+}
+
 export function TourHost({ company = "", menu = "", uid = "" }) {
   const co = String(company || "").trim();
   const approvedMs = useApprovedMs(co);
   const [now, setNow] = React.useState(Date.now());
   React.useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(t); }, []);
   const active = tourActive(co, approvedMs, now);
+  const serverSeen = useServerSeen(uid, active);
+  const isSeen = React.useCallback((m) => lsGet(seenKey(uid, m)) === "1" || !!serverSeen?.[m], [uid, serverSeen]);
   const [run, setRun] = React.useState(null); // { menu, steps:[{...step, el}], i }
   const [rect, setRect] = React.useState(null);
 
   const start = React.useCallback((m, force = false) => {
     const all = MENU_TOURS[m];
     if (!all?.length) return false;
-    if (!force && lsGet(seenKey(uid, m)) === "1") return false;
+    if (!force && isSeen(m)) return false;
     const steps = all.map((s) => ({ ...s, el: (s.tour || s.find) ? findTarget(s) : null })).filter((s) => s.el || (!s.tour && !s.find));
     if (!steps.length) return false;
     setRun({ menu: m, steps, i: 0 });
     return true;
-  }, [uid]);
+  }, [isSeen]);
 
   // 메뉴에 처음 들어오면(화면이 다 그려진 뒤) 시작 — 튜토리얼이 떠 있으면 끝날 때까지 기다린다
   React.useEffect(() => {
-    if (!active || !menu || run) return undefined;
-    if (!MENU_TOURS[menu] || lsGet(seenKey(uid, menu)) === "1") return undefined;
+    if (!active || !menu || run || serverSeen === null) return undefined;
+    if (!MENU_TOURS[menu] || isSeen(menu)) return undefined;
     let tries = 0;
     const t = setInterval(() => {
       tries += 1;
@@ -65,7 +77,7 @@ export function TourHost({ company = "", menu = "", uid = "" }) {
       start(menu);
     }, 900);
     return () => clearInterval(t);
-  }, [active, menu, uid, run, start]);
+  }, [active, menu, uid, run, start, serverSeen, isSeen]);
   // 메뉴를 옮기면 진행 중인 안내는 닫는다
   React.useEffect(() => { setRun((r) => (r && r.menu !== menu ? null : r)); }, [menu]);
   // 다시 보기
@@ -86,7 +98,13 @@ export function TourHost({ company = "", menu = "", uid = "" }) {
     return () => { clearInterval(t); window.removeEventListener("resize", upd); window.removeEventListener("scroll", upd, true); };
   }, [step]);
 
-  const finish = () => { if (run) lsSet(seenKey(uid, run.menu), "1"); setRun(null); };
+  const finish = () => {
+    if (run) {
+      lsSet(seenKey(uid, run.menu), "1");
+      if (uid) setDoc(doc(db, "userProfiles", uid), { tourSeen: { [run.menu]: true } }, { merge: true }).catch(() => {});
+    }
+    setRun(null);
+  };
   const next = () => { if (!run) return; if (run.i + 1 >= run.steps.length) finish(); else setRun({ ...run, i: run.i + 1 }); };
   React.useEffect(() => {
     if (!run) return undefined;

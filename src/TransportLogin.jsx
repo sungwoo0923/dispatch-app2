@@ -12,6 +12,7 @@ import { Loader2 } from "lucide-react";
 import { useMfaPrompt, mfaErrorText } from "./MfaModal";
 import { LogisMark, LogisWordmark, LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { MARKET_NAME } from "./orderMarketConfig"; // ⭐ 2026-11-06 허브(예전 배차마당) 이름
+import { AdminLoginGate, adminAuthTime, isAdminGatePassed, ADMIN_GATE_EVENT } from "./AdminGate"; // 🔐 2026-11-11 2차 비밀번호를 로그인 카드 안에서
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
@@ -47,6 +48,11 @@ export default function TransportLogin() {
   const [codeResults, setCodeResults] = useState([]);
   const [codeSearching, setCodeSearching] = useState(false);
   const [showPw, setShowPw] = useState(false);
+  // 🔐 2026-11-11 최고관리자 · 부관리자 — 1차(비밀번호)를 통과하면 화면이 넘어가지 않고 이 카드 안에 2차 비밀번호 키패드가 뜬다
+  //  window.__kpGateInline 이 켜져 있는 동안 App.jsx의 전체 화면 보안 확인은 숨는다(새로고침하면 꺼져 예전처럼 전체 화면으로)
+  const [gate, setGate] = useState(null); // { user, authTime, sub }
+  const gateRef = React.useRef(null);
+  gateRef.current = gate;
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
   const navigate = useNavigate();
@@ -80,8 +86,34 @@ export default function TransportLogin() {
   useEffect(() => {
     return () => {
       sessionStorage.removeItem("transportValidating");
+      if (window.__kpGateInline) { window.__kpGateInline = false; window.dispatchEvent(new Event(ADMIN_GATE_EVENT)); }
     };
   }, []);
+  const finishLogin = () => {
+    sessionStorage.removeItem("transportValidating");
+    sessionStorage.setItem("skipLoginPopup", "true");
+    setLoginTime(new Date().toLocaleString("ko-KR"));
+    setShowPopup(true);
+    setCountdown(3);
+  };
+  // 2차 비밀번호(· 처음 보는 기기 문자)를 통과하면 → 로그인 완료 창
+  useEffect(() => {
+    const h = () => {
+      const g = gateRef.current;
+      if (!g || !isAdminGatePassed(g.user.uid, g.authTime)) return;
+      window.__kpGateInline = false;
+      setGate(null);
+      finishLogin();
+    };
+    window.addEventListener(ADMIN_GATE_EVENT, h);
+    return () => window.removeEventListener(ADMIN_GATE_EVENT, h);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const cancelGate = async () => {
+    window.__kpGateInline = false;
+    setGate(null); setPw("");
+    sessionStorage.removeItem("transportValidating");
+    await signOut(auth).catch(() => {});
+  };
 
   // ⭐ transportApplications는 로그인해야 읽을 수 있는 컬렉션이라(Firestore 규칙),
   // 로그인 "전" 화면인 여기서 직접 조회하면 항상 권한 오류로 막혀 결과가 비어
@@ -167,6 +199,7 @@ export default function TransportLogin() {
       setLoading(true);
       // Semaphore set BEFORE auth so App.jsx won't redirect while we validate
       sessionStorage.setItem("transportValidating", "true");
+      window.__kpGateInline = true; // 최고관리자면 이 화면에서 2차 비밀번호를 받는다(아래)
       // 자동 로그인: 체크하면 브라우저/앱을 껐다 켜도 로그인 유지, 해제하면 닫을 때 로그아웃
       await setPersistence(auth, autoLogin ? browserLocalPersistence : browserSessionPersistence).catch(() => {});
 
@@ -191,12 +224,14 @@ export default function TransportLogin() {
       const inputEmail = email.trim().toLowerCase();
       const inputCompanyName = companyName.trim();
       const inputCompanyCode = companyCode.trim();
+      let needGate = inputEmail === TOTAL_MASTER_EMAIL;
 
       if (inputEmail !== TOTAL_MASTER_EMAIL) {
         const userSnap = await getDoc(doc(db, "users", uid));
 
         if (!userSnap.exists()) {
           sessionStorage.removeItem("transportValidating");
+          window.__kpGateInline = false;
           await signOut(auth);
           setError("등록된 계정 정보가 없습니다.");
           return;
@@ -209,6 +244,7 @@ export default function TransportLogin() {
         const OTHER_LOGIN = { shipper: "화주사 로그인", driver: "기사앱", cafeUser: MARKET_NAME };
         if (OTHER_LOGIN[userData.role]) {
           sessionStorage.removeItem("transportValidating");
+          window.__kpGateInline = false;
           await signOut(auth);
           setError(`운송사 계정이 아닙니다. ${OTHER_LOGIN[userData.role]} 화면에서 로그인해주세요.`);
           return;
@@ -216,8 +252,10 @@ export default function TransportLogin() {
 
         // ⭐ 2026-11-05 부관리자(role totalMaster) — 최고관리자처럼 아무 운송사로나 들어간다(회사명·코드 확인 생략)
         const isSubAdmin = userData.role === "totalMaster" && userData.subAdmin === true && userData.userStatus !== "banned" && userData.userStatus !== "suspended";
+        needGate = userData.role === "totalMaster";
         if (!isSubAdmin && (userData.companyName || "") !== inputCompanyName) {
           sessionStorage.removeItem("transportValidating");
+          window.__kpGateInline = false;
           await signOut(auth);
           setError("회사명이 일치하지 않습니다. 가입한 회사명을 정확히 입력해주세요.");
           return;
@@ -228,7 +266,8 @@ export default function TransportLogin() {
           const plan = await getDoc(doc(db, "companyPlans", String(userData.companyName || "돌캐").trim() || "돌캐")).catch(() => null);
           if (plan?.exists() && plan.data()?.status === "ended") {
             sessionStorage.removeItem("transportValidating");
-            await signOut(auth);
+            window.__kpGateInline = false;
+          await signOut(auth);
             setError("계약이 종료되었습니다. 관리자에게 문의해 주세요.");
             return;
           }
@@ -236,6 +275,7 @@ export default function TransportLogin() {
 
         if (userData.userStatus === "banned") {
           sessionStorage.removeItem("transportValidating");
+          window.__kpGateInline = false;
           await signOut(auth);
           setError("영구 정지된 계정입니다. 관리자에게 문의하세요.");
           return;
@@ -243,6 +283,7 @@ export default function TransportLogin() {
 
         if (userData.userStatus === "suspended") {
           sessionStorage.removeItem("transportValidating");
+          window.__kpGateInline = false;
           await signOut(auth);
           setError("사용 정지된 계정입니다. 관리자에게 문의하세요.");
           return;
@@ -250,6 +291,7 @@ export default function TransportLogin() {
 
         if (!userData.approved) {
           sessionStorage.removeItem("transportValidating");
+          window.__kpGateInline = false;
           await signOut(auth);
           setPreviewInfo({ co: userData.companyName || "", plan: userData.requestedPlan || "" });
           setError("관리자 승인 대기 중입니다. 승인 후 로그인이 가능합니다.");
@@ -259,13 +301,15 @@ export default function TransportLogin() {
         if (userData.companyCode && !isSubAdmin) {
           if (!inputCompanyCode) {
             sessionStorage.removeItem("transportValidating");
-            await signOut(auth);
+            window.__kpGateInline = false;
+          await signOut(auth);
             setError("회사코드를 입력해주세요. 코드는 가입 승인 시 이메일로 안내받으셨습니다.");
             return;
           }
           if (userData.companyCode !== inputCompanyCode) {
             sessionStorage.removeItem("transportValidating");
-            await signOut(auth);
+            window.__kpGateInline = false;
+          await signOut(auth);
             setError("회사코드가 일치하지 않습니다. 승인 안내 이메일을 확인해주세요.");
             return;
           }
@@ -290,14 +334,20 @@ export default function TransportLogin() {
           ? { remember: true, autoLogin, companyCode: inputCompanyCode, companyName: inputCompanyName, email: email.trim() }
           : { remember: false, autoLogin }));
       } catch { /* 저장 실패 무시 */ }
+      // 🔐 최고관리자 · 부관리자 — 같은 카드에서 2차 비밀번호(키패드)
+      if (needGate) {
+        const authTime = await adminAuthTime(credential.user);
+        if (!isAdminGatePassed(uid, authTime)) {
+          try { document.activeElement?.blur?.(); } catch { /* 무시 */ }
+          setGate({ user: credential.user, authTime, sub: inputEmail !== TOTAL_MASTER_EMAIL });
+          return;
+        }
+      }
+      window.__kpGateInline = false;
       // Validation done — switch from validation semaphore to popup semaphore
-      sessionStorage.removeItem("transportValidating");
-      sessionStorage.setItem("skipLoginPopup", "true");
-
-      setLoginTime(new Date().toLocaleString("ko-KR"));
-      setShowPopup(true);
-      setCountdown(3);
+      finishLogin();
     } catch (err) {
+      window.__kpGateInline = false;
       sessionStorage.removeItem("transportValidating");
       const code = err.code;
       if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
@@ -422,8 +472,23 @@ export default function TransportLogin() {
           <div className="bg-white rounded-[26px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_24px_60px_rgba(15,26,48,0.10)] px-5 sm:px-10 pt-6 sm:pt-9 pb-6 sm:pb-8">
             <div className="text-[11.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]">TRANSPORT SIGN IN</div>
             <h1 className="mt-1 text-[22px] sm:text-[26px] font-black text-[#0F1A30] tracking-tight">운송사 로그인</h1>
-            <p className="text-[12.5px] sm:text-[13.5px] text-[#7A879C] mt-1 mb-5 sm:mb-7">승인 메일로 받은 회사코드로 로그인하세요</p>
+            <p className="text-[12.5px] sm:text-[13.5px] text-[#7A879C] mt-1 mb-5 sm:mb-7">{gate ? `${gate.sub ? "부관리자" : "최고관리자"} 계정 — 2차 비밀번호를 넣어 주세요` : "승인 메일로 받은 회사코드로 로그인하세요"}</p>
 
+            {gate ? (
+              <div data-login-gate>
+                {/* ① 1차 — 방금 넣은 정보(확인 완료) */}
+                <div className="flex items-center gap-3 rounded-[14px] bg-[#F5F7FB] border border-[#E3E8F0] px-3.5 py-3 mb-4">
+                  <span className="w-6 h-6 rounded-full bg-emerald-500 text-white grid place-items-center shrink-0"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5 9-10" /></svg></span>
+                  <div className="flex-1 min-w-0 leading-tight">
+                    <div className="text-[11px] font-extrabold tracking-[0.12em] text-[#7A879C]">1차 비밀번호 확인 완료</div>
+                    <div className="text-[13.5px] font-black text-[#0F1A30] truncate">{email}</div>
+                  </div>
+                  <span className="text-[11.5px] font-bold text-[#9AA9C3] truncate max-w-[110px]">{companyName}</span>
+                </div>
+                {/* ② 2차 — 화면 키패드(같은 카드 안) */}
+                <AdminLoginGate inline key={`${gate.user.uid}:${gate.authTime}`} user={gate.user} authTime={gate.authTime} sub={gate.sub} onCancel={cancelGate} />
+              </div>
+            ) : (<>
             {field("code", "회사코드", (
               <input type="text" placeholder="승인 후 발급된 코드" value={companyCode} onChange={(e) => setCompanyCode(e.target.value.toUpperCase())} onKeyDown={handleKeyDown}
                 className={`${inputCls} ${companyCode ? "tracking-[0.12em] tabular-nums" : ""}`} />
@@ -477,6 +542,7 @@ export default function TransportLogin() {
               <Link to="/signup" className="h-11 rounded-xl border border-[#0F1A30] text-[#0F1A30] text-[13.5px] font-black flex items-center justify-center hover:bg-[#0F1A30] hover:text-white transition">운송사 회원가입</Link>
               <Link to="/login" className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[13.5px] font-bold flex items-center justify-center hover:bg-[#F5F7FB] transition">다른 유형 로그인</Link>
             </div>
+            </>)}
           </div>
           <div className="flex justify-center mt-5 text-[11px] font-bold tracking-[0.2em] text-[#B4BFD0]"><LogisTag height={7.5} chip text="LOGISTICS" /></div>
         </div>

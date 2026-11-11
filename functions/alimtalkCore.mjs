@@ -53,6 +53,24 @@ export const ALIMTALK_TEMPLATES = {
   },
 };
 
+// 💸 2026-11-11 기사 운임 지급 안내(용차지급관리 [지급완료]) — 카카오 검수용 문안. 검수 통과 후 받은 템플릿 코드를 넣으면
+//  지금 문자로 가는 "지급 시 기사 문자"(src/CallPay.jsx queuePayNotice)를 알림톡으로 바꿔 보낼 수 있다(실패하면 문자).
+export const ALIMTALK_PAYOUT_TEMPLATE = {
+  name: "운임 지급 안내",
+  text: [
+    "[#{회사명}] 운임 지급 안내",
+    "",
+    "#{기사명} 기사님, 운임이 입금되었습니다.",
+    "",
+    "- 지급일: #{지급일}",
+    "- 운행: #{운행내역}",
+    "- 지급액: #{지급액}원",
+    "",
+    "문의: #{회사연락처}",
+  ].join("\n"),
+  vars: ["회사명", "기사명", "지급일", "운행내역", "지급액", "회사연락처"],
+};
+
 export const DEFAULT_ALIMTALK = { enabled: false, toClient: true, toDriver: true, templates: { client: "", driver: "" }, senderNumber: "", contactPhone: "", smsFallback: true };
 export function alimtalkSettingsOf(doc) {
   const a = (doc && typeof doc === "object" ? doc.alimtalk || doc : {}) || {};

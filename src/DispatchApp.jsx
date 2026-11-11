@@ -2957,7 +2957,7 @@ import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChang
 import { SpecialFareButton, ForkliftChip, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount } from "./forklift"; // 🏗 2026-11-09 지게차비용
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
-import { useBetaOn, PayBadge, PayPopup, CallDepositDesk, PayNoticeToggle, queuePayNotice, DateField, OUT_KEY, DispatchWayPicker } from "./CallPay"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
+import { useBetaOn, PayBadge, PayPopup, CallDepositDesk, PayNoticeToggle, queuePayNotice, DateField, OUT_KEY, DispatchWayPicker, isCaughtCall } from "./CallPay"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
 import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
 import { DriverGuideSendModal, GUIDE_BTN, guideSentLabel, isFleetGrade } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
 // ⭐ 2026-11-06 로지스웹 허브(운송사 간 오더 거래소) — [저장 + 허브 등록]
@@ -21950,13 +21950,7 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, onSaved,
                   onChange={e => handleUpload(Array.from(e.target.files))} />
               </label>
             )}
-            {!isViewer && payOnAv && (
-              <label title="계산서 파일을 올리고, 계산서 날짜를 오늘로 기록합니다(정산 창에서 고칠 수 있어요)" className="px-3 py-1.5 bg-blue-600 text-white text-[12px] font-bold rounded-lg hover:opacity-90 transition cursor-pointer whitespace-nowrap shrink-0">
-                계산서로 올리기
-                <input autoComplete="off" type="file" multiple accept="image/*,.pdf" className="hidden"
-                  onChange={e => { handleUpload(Array.from(e.target.files), true); e.target.value = ""; }} />
-              </label>
-            )}
+            {/* 💳 2026-11-11 [계산서로 올리기]는 없앴다 — 계산서는 배차현황 [정산] 창 › 증빙서류에서 올리면 자동 스캔(src/InvoiceEvidence.jsx) */}
             {items.length > 1 && (
               <button
                 onClick={handleDownloadAll}
@@ -56117,8 +56111,9 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   }, [payDrivers]);
   const driversReady = Array.isArray(payDrivers); // 기사 목록이 오기 전엔 지입 차량을 가려낼 수 없어 잠깐 비워 둔다
   const base = useMemo(
-    () => (!driversReady ? [] : (Array.isArray(dispatchData) ? dispatchData : []).filter(r => (r.배차상태 || "") === "배차완료" && !fleetPlates.has(normalizePlate(r.차량번호 || "")))),
-    [dispatchData, fleetPlates, driversReady]
+    // 💳 2026-11-11 IN(우리 오더를 용차 기사가 잡은 것)만 — OUT(외부 콜을 잡은 오더)은 정산관리 › 입금 확인에서 본다(시험 기능 운송사)
+    () => (!driversReady ? [] : (Array.isArray(dispatchData) ? dispatchData : []).filter(r => (r.배차상태 || "") === "배차완료" && !fleetPlates.has(normalizePlate(r.차량번호 || "")) && !(payNoticeBeta && isCaughtCall(r)))),
+    [dispatchData, fleetPlates, driversReady, payNoticeBeta]
   );
 
   const filtered = useMemo(() => {
@@ -56224,6 +56219,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 
   const bulkPay = async (ids, status) => {
     if (!ids.length) return alert("선택 항목 없음");
+    if (!(await kpConfirm(`${ids.length}건을 ${status === "지급완료" ? "지급완료" : status}하시겠습니까?`, { title: status, okText: "네", cancelText: "취소" }))) return;
     await Promise.all(ids.map(id => pay(id, status)));
     setSelectedIds(new Set());
     alert(`${status} 처리: ${ids.length}건`);
@@ -56602,7 +56598,14 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.지급방식 || ""}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.배차방식 || ""}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">
-                        <button onClick={() => pay(r._id, isDone ? "지급중" : "지급완료")}
+                        <button data-pay-toggle onClick={async () => {
+                          // 💳 2026-11-11 화면 가운데 확인 창 — Enter · [네] = 바로 적용, Esc · [취소] = 닫기
+                          const who = `${r.이름 || "기사"}${r.차량번호 ? ` (${r.차량번호})` : ""}`;
+                          const ok = isDone
+                            ? await kpConfirm(`지급완료를 취소하시겠습니까?\n${who} · ${won(r.기사운임)}원 → 미지급으로 돌립니다`, { title: "지급 취소", okText: "네", cancelText: "취소", danger: true })
+                            : await kpConfirm(`지급완료하시겠습니까?\n${who} · ${r.상차일 || ""} ${r.상차지명 || ""} → ${r.하차지명 || ""}\n기사운임 ${won(r.기사운임)}원 · 지급일 ${selectedPayDate || todayStr9()}`, { title: "지급완료", okText: "네", cancelText: "취소" });
+                          if (ok) pay(r._id, isDone ? "지급중" : "지급완료");
+                        }}
                           className={`px-3 py-1 rounded-lg text-[11px] font-bold text-white transition ${isDone ? "bg-[#0F1A30] hover:bg-[#1B2B4B]" : "bg-[#2D4C82] hover:bg-[#1B2B4B]"}`}>
                           {isDone ? "✓ 지급완료" : "미지급"}
                         </button>

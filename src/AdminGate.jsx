@@ -35,7 +35,20 @@ function markPassed(uid, authTime) {
   window.dispatchEvent(new Event(ADMIN_GATE_EVENT));
 }
 
-const Shell = ({ label, children, foot }) => createPortal(
+// inline: 운송사 로그인 카드 안에 그대로 띄운다(화면이 넘어가지 않게) — 2026-11-11
+const InlineCtx = React.createContext(false);
+const Shell = ({ label, children, foot }) => React.useContext(InlineCtx) ? (
+  <div className="w-full" data-admin-gate="inline" style={{ animation: "kpGateIn .35s cubic-bezier(.2,.8,.2,1) both" }}>
+    <style>{`@keyframes kpGateIn { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }`}</style>
+    <div className="flex items-center gap-2 mb-3">
+      <span className="w-6 h-6 rounded-full bg-[#0F1A30] text-white text-[11px] font-black grid place-items-center shrink-0">2</span>
+      <span className="text-[11.5px] font-extrabold tracking-[0.14em] text-[#4B6CB7]">{label}</span>
+      <span className="flex-1 h-px bg-[#EEF1F6]" />
+    </div>
+    {children}
+    {foot}
+  </div>
+) : createPortal(
   <div className="fixed inset-0 z-[100002] overflow-y-auto" style={{ background: "linear-gradient(135deg, #061832 0%, #0B2554 50%, #0D2B66 100%)" }} data-admin-gate>
     <div className="min-h-full flex items-center justify-center p-4">
       <div className="flex flex-col items-center w-full max-w-[400px]">
@@ -50,7 +63,10 @@ const Shell = ({ label, children, foot }) => createPortal(
 );
 
 // step: load → code(setup1 → setup2 | verify) → sms(phone → code) → 통과
-export function AdminLoginGate({ user, authTime, sub = false, onCancel }) {
+export function AdminLoginGate({ user, authTime, sub = false, onCancel, inline = false }) {
+  return <InlineCtx.Provider value={inline}><GateBody user={user} authTime={authTime} sub={sub} onCancel={onCancel} inline={inline} /></InlineCtx.Provider>;
+}
+function GateBody({ user, authTime, sub, onCancel, inline }) {
   const who = sub ? "부관리자" : "최고관리자";
   const [step, setStep] = React.useState("load");
   const [setup, setSetup] = React.useState(false);
@@ -90,12 +106,14 @@ export function AdminLoginGate({ user, authTime, sub = false, onCancel }) {
     finally { setBusy(false); }
   };
 
-  const cancel = <button type="button" onClick={onCancel} className="mt-4 text-[13px] font-semibold text-white/60 hover:text-white">다른 계정으로 로그인</button>;
+  const cancel = <div className={inline ? "text-center" : ""}><button type="button" onClick={onCancel} className={inline ? "mt-3 text-[12.5px] font-bold text-[#9AA9C3] hover:text-[#0F1A30]" : "mt-4 text-[13px] font-semibold text-white/60 hover:text-white"}>다른 계정으로 로그인</button></div>;
+  const card = inline ? "w-full" : "w-full bg-white rounded-2xl shadow-2xl";
+  const note = inline ? "mt-3 text-[11.5px] text-[#9AA9C3] text-center leading-relaxed" : "mt-4 text-[12px] text-white/50 text-center leading-relaxed";
 
   if (step === "load" || step === "error") {
     return (
       <Shell label={`${who} 보안 확인`} foot={cancel}>
-        <div className="w-full bg-white rounded-2xl shadow-2xl px-6 py-7 text-center">
+        <div className={`${card} ${inline ? "py-4" : "px-6 py-7"} text-center`}>
           {step === "load" ? <div className="text-[14px] font-bold text-[#5B6B85]">확인하는 중…</div> : (
             <>
               <div className="text-[14px] font-bold text-red-600 leading-relaxed">{msg}</div>
@@ -127,7 +145,7 @@ export function AdminLoginGate({ user, authTime, sub = false, onCancel }) {
             onCancel={phone ? undefined : () => setPhoneGo(false)}
           />
         ) : (
-          <div className="w-full bg-white rounded-2xl shadow-2xl px-6 py-6 space-y-3">
+          <div className={`${card} ${inline ? "" : "px-6 py-6"} space-y-3`}>
             <div className="text-[16px] font-black text-[#1B2B4B]">휴대폰 번호 등록</div>
             <div className="text-[12.5px] text-gray-500 leading-relaxed">처음 로그인하는 기기에서는 문자 인증을 한 번 합니다. 인증번호를 받을 본인 휴대폰 번호를 넣어 주세요. 이 번호가 계정에 등록됩니다.</div>
             <input value={newPhone} onChange={(e) => setNewPhone(fmtPhone(e.target.value))} inputMode="tel" placeholder="010-0000-0000" autoFocus
@@ -136,14 +154,14 @@ export function AdminLoginGate({ user, authTime, sub = false, onCancel }) {
           </div>
         )}
         <div ref={holderRef} />
-        <p className="mt-4 text-[12px] text-white/50 text-center leading-relaxed">문자 인증은 처음 로그인하는 기기에서만 합니다.<br />다음부터 이 기기에서는 2차 비밀번호만 확인합니다.</p>
+        <p className={note}>문자 인증은 처음 로그인하는 기기에서만 합니다.<br />다음부터 이 기기에서는 2차 비밀번호만 확인합니다.</p>
       </Shell>
     );
   }
 
   return (
     <Shell label={`${who} 보안 확인 · 2단계`} foot={cancel}>
-      <div className="w-full bg-white rounded-2xl shadow-2xl px-4 pt-5 pb-4">
+      <div className={`${card} ${inline ? "" : "px-4 pt-5 pb-4"}`}>
         <div className="text-center mb-2">
           <div className="text-[16.5px] font-black text-[#1B2B4B]">{setup ? (first ? "한 번 더 넣어 주세요" : "2차 비밀번호 만들기") : "2차 비밀번호"}</div>
           <div className="text-[12.5px] text-gray-500 mt-1 leading-relaxed">
@@ -153,7 +171,7 @@ export function AdminLoginGate({ user, authTime, sub = false, onCancel }) {
         <SecureKeypad value={code} onChange={setCode} onSubmit={submit} disabled={busy} submitLabel={busy ? "확인 중…" : setup ? (first ? "정하고 들어가기" : "다음") : "확인"} />
         {msg && <div className="mt-3 text-[12.5px] font-semibold text-red-600 bg-red-50 rounded-xl px-3 py-2 text-center leading-relaxed">{msg}</div>}
       </div>
-      <p className="mt-4 text-[12px] text-white/50 text-center leading-relaxed">2차 비밀번호를 잊으면 {sub ? "최고관리자에게 초기화를 요청하세요." : "개발 담당에게 초기화를 요청하세요."}<br />PnK 인트라넷과 같은 2차 비밀번호를 씁니다.</p>
+      <p className={note}>2차 비밀번호를 잊으면 {sub ? "최고관리자에게 초기화를 요청하세요." : "개발 담당에게 초기화를 요청하세요."}<br />PnK 인트라넷과 같은 2차 비밀번호를 씁니다.</p>
     </Shell>
   );
 }

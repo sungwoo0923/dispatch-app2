@@ -938,7 +938,7 @@ export default function App() {
       )}
 
       {/* 🔐 최고관리자 · 부관리자 보안 확인 — 통과 전까지 프로그램을 가린다(2차 비밀번호 → 처음 보는 기기만 문자) */}
-      {needPcMfa && !sessionConflict && (adminAuthAt === null
+      {needPcMfa && !sessionConflict && !(window.__kpGateInline && window.location.pathname === "/transport-login") && (adminAuthAt === null
         ? <div className="fixed inset-0 z-[100002]" style={{ background: "linear-gradient(135deg, #061832 0%, #0B2554 50%, #0D2B66 100%)" }} />
         : <AdminLoginGate key={`${user.uid}:${adminAuthAt}`} user={user} authTime={adminAuthAt} sub={user.email !== TOTAL_MASTER_EMAIL} onCancel={() => signOut(auth).catch(() => {})} />)}
 

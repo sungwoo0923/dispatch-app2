@@ -29,6 +29,7 @@ import { subscribeBankTxns } from "./popbillAuto";
 import CustomDatePicker from "./CustomDatePicker";
 import { CompanyOptionPicker } from "./companyOptionPicker";
 import { kpConfirm } from "./kpDialog";
+import { EvidenceBox, EvidenceViewer } from "./InvoiceEvidence"; // 🧾 2026-11-11 증빙서류 자동 스캔
 
 export const BETA_COMPANY = "테스트운송사";
 export const OUT_KEY = "아웃콜방식"; // 회사별 선택 목록(companyDropdownOptions) — 기본: 24시 · 인성 · 화물맨
@@ -260,9 +261,9 @@ export function queuePayNotice({ row, date, company, patchDispatch }) {
 }
 
 // 배차현황 [정산] 알약 · 입금 확인 [입금처리]를 누르면 뜨는 창 — 고친 내용은 아래 [저장] / [입금완료]를 눌러야 반영된다
-export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company = "" }) {
+export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company = "", evidenceApi }) {
   const id = row?._id || row?.id;
-  const init = () => ({ dir: callDir(row), platform: row?.콜플랫폼 || "", inv: row?.계산서일 || "", depDate: row?.입금일 || today(), depName: row?.입금자명 || "" });
+  const init = () => ({ dir: callDir(row), platform: row?.콜플랫폼 || "", inv: row?.계산서일 || "", depDate: row?.입금일 || row?.입금증빙?.date || today(), depName: row?.입금자명 || row?.입금증빙?.payer || row?.계산서스캔?.payer || "" });
   const [f, setF] = React.useState(init);
   const [busy, setBusy] = React.useState(false);
   React.useEffect(() => { setF(init()); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -285,11 +286,26 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
   });
   const undo = () => run(async () => { if (!(await kpConfirm("입금완료를 취소할까요? 수입·지출 장부에 자동으로 들어간 줄도 함께 지워집니다."))) return; await setCallDeposit({ row, done: false, patchDispatch, company }); });
   const amt = vatOf(out ? row?.청구운임 : row?.기사운임);
+  // 🧾 증빙서류 스캔 결과 → 정산 창에 바로 반영 + 오더에 저장(계산서 발행일 · 계산서스캔 / 이체확인증이면 입금일 · 입금자명)
+  const onScanned = async (scan) => {
+    const keep = { kind: scan.kind, date: scan.date || "", supply: scan.supply || 0, vat: scan.vat || 0, total: scan.total || 0, supplier: scan.supplier || "", buyer: scan.buyer || "", payer: scan.payer || "", at: today() };
+    const transfer = scan.kind === "이체확인증";
+    setF((p) => ({
+      ...p,
+      ...(!transfer && scan.date ? { inv: scan.date } : {}),
+      ...(transfer && scan.date ? { depDate: scan.date } : {}),
+      ...(out && scan.payer && (!deposited || !p.depName) ? { depName: scan.payer.slice(0, 40) } : {}),
+    }));
+    if (!canEdit || !id || !patchDispatch) return;
+    try {
+      await patchDispatch(id, transfer ? { 입금증빙: keep, __system: true } : { ...(scan.date ? { 계산서일: scan.date } : {}), 계산서스캔: keep, __system: true });
+    } catch (e) { console.warn("[증빙 스캔] 저장 실패:", e?.message || e); }
+  };
   const s = payStage(row);
   const seg = "px-4 h-9 rounded-lg text-[13px] font-black tracking-wide whitespace-nowrap";
   return createPortal(
     <div className="fixed inset-0 z-[99999] bg-black/45 flex items-center justify-center p-4">
-      <div className="w-full max-w-[500px] max-h-[92vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col" data-pay-popup>
+      <div className="w-full max-w-[540px] max-h-[92vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col" data-pay-popup>
         <div className="px-5 py-4 text-white flex items-center gap-3 shrink-0" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
           <div className="min-w-0 flex-1">
             <div className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">SETTLE · 정산</div>
@@ -345,9 +361,11 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
               <span className="basis-full text-[11.5px] font-semibold text-[#9AA9C3]">지급 처리 · 지급일 수정은 정산관리 › 용차지급관리에서 합니다.</span>
             </Row>
           )}
+          {/* 🧾 증빙서류 — 올리면 자동 스캔(오더 스캔과 같은 정밀 인식) */}
+          <EvidenceBox row={row} {...(evidenceApi ? { api: evidenceApi } : {})} canEdit={canEdit} expect={out ? row?.청구운임 : row?.기사운임} onScanned={onScanned} known={[coNow(company), row?.거래처명, row?.이름 || row?.기사명].filter(Boolean)} self={coNow(company)} selfIs={out ? "supplier" : "buyer"} />
         </div>
         <div className="px-5 py-3.5 bg-[#F7F9FC] border-t border-[#EEF2F8] flex items-center gap-2 shrink-0">
-          <span className="flex-1 min-w-0 text-[11.5px] font-semibold text-[#7A8AA8] leading-snug">{dirty ? <b className="text-[#B54708]">저장하지 않은 변경이 있습니다</b> : "첨부에서 [계산서로 올리기]를 하면 계산서 날짜가 자동으로 들어갑니다."}</span>
+          <span className="flex-1 min-w-0 text-[11.5px] font-semibold text-[#7A8AA8] leading-snug">{dirty ? <b className="text-[#B54708]">저장하지 않은 변경이 있습니다</b> : "아래 증빙서류에 계산서를 올리면 발행일 · 금액 · 입금자명이 자동으로 들어갑니다."}</span>
           {canEdit && out && deposited && <button type="button" disabled={busy} onClick={undo} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#9A1F15] whitespace-nowrap">입금 취소</button>}
           <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#3A4A66]">닫기</button>
           {canEdit && <button type="button" disabled={busy || !dirty} onClick={save} data-pay-save className="h-10 px-5 rounded-xl border border-[#1B2B4B] bg-white text-[13px] font-black text-[#1B2B4B] disabled:opacity-40">{busy ? "저장 중…" : "저장"}</button>}
@@ -360,10 +378,24 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
 }
 
 // 정산관리 › 입금 확인 — 잡은 콜의 입금을 경리가 확인해 [입금완료] 처리(배차현황 [정산] 칸에 바로 보인다)
-export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, company = "", testTxns = null, onAttach = null }) {
+export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, company = "", testTxns = null, onAttach = null, evidenceApi }) {
   const [popId, setPopId] = React.useState(""); // 목록에서 [입금처리]를 누른 오더
   const [filter, setFilter] = React.useState("wait"); // wait | done | all
-  const [q, setQ] = React.useState("");
+  // 🔎 2026-11-11 검색 — 입력만으로는 안 바뀌고 [조회](또는 Enter)를 눌러야 적용된다 · 기간(시작일 ~ 종료일, 프로그램 달력) · 기준 날짜
+  const [qd, setQd] = React.useState(""); const [fromD, setFromD] = React.useState(""); const [toD, setToD] = React.useState(""); const [basisD, setBasisD] = React.useState("상차일");
+  const [ap, setAp] = React.useState({ q: "", from: "", to: "", basis: "상차일" });
+  const q = ap.q;
+  const search = () => { if (fromD && toD && fromD > toD) { window.alert("시작일이 종료일보다 늦습니다."); return; } setAp({ q: qd.trim(), from: fromD, to: toD, basis: basisD }); setSel(new Set()); };
+  const quick = (k) => {
+    const t = today(); const [y, m] = t.split("-").map(Number);
+    const ymd = (yy, mm, dd) => `${yy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+    const last = (yy, mm) => new Date(yy, mm, 0).getDate();
+    if (k === "this") { setFromD(ymd(y, m, 1)); setToD(t); }
+    if (k === "prev") { const py = m === 1 ? y - 1 : y; const pm = m === 1 ? 12 : m - 1; setFromD(ymd(py, pm, 1)); setToD(ymd(py, pm, last(py, pm))); }
+    if (k === "3m") { const d = new Date(y, m - 1 - 2, 1); setFromD(ymd(d.getFullYear(), d.getMonth() + 1, 1)); setToD(t); }
+    if (k === "all") { setFromD(""); setToD(""); }
+  };
+  const [evRow, setEvRow] = React.useState(null); // 증빙서류 보기
   const [sel, setSel] = React.useState(() => new Set());
   const [date, setDate] = React.useState(today());
   const [busy, setBusy] = React.useState(false);
@@ -378,13 +410,18 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
     try { for (const r of list) { const g = sugg.get(r._id || r.id); if (g) await setCallDeposit({ row: r, done: true, date: g.txn.date || today(), name: g.txn.name || "", txnId: g.txn.id, patchDispatch, company }); } }
     catch (e) { window.alert(`처리하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); }
   };
-  const rows = React.useMemo(() => {
+  // 조회 조건(검색어 · 기간)에 맞는 오더 — 상태 단추 숫자도 이걸로 센다
+  const found = React.useMemo(() => {
     const k = q.trim();
+    const dOf = (r) => String((ap.basis === "계산서일" ? r.계산서일 : ap.basis === "입금일" ? r.입금일 : r.상차일) || "").slice(0, 10);
     return all
-      .filter((r) => (filter === "all" ? true : filter === "done" ? r.입금상태 === "입금완료" : r.입금상태 !== "입금완료"))
-      .filter((r) => !k || [r.거래처명, r.상차지명, r.하차지명, r.이름, r.기사명, r.차량번호, r.콜플랫폼].some((v) => String(v || "").includes(k)))
-      .sort((a, b) => String(b.상차일 || "").localeCompare(String(a.상차일 || "")));
-  }, [all, filter, q]);
+      .filter((r) => !k || [r.거래처명, r.상차지명, r.하차지명, r.이름, r.기사명, r.차량번호, r.콜플랫폼, r.입금자명].some((v) => String(v || "").includes(k)))
+      .filter((r) => { if (!ap.from && !ap.to) return true; const d = dOf(r); if (!d) return false; return (!ap.from || d >= ap.from) && (!ap.to || d <= ap.to); });
+  }, [all, q, ap]);
+  const counts = React.useMemo(() => { const done = found.filter((r) => r.입금상태 === "입금완료").length; return { wait: found.length - done, done, all: found.length }; }, [found]);
+  const rows = React.useMemo(() => found
+    .filter((r) => (filter === "all" ? true : filter === "done" ? r.입금상태 === "입금완료" : r.입금상태 !== "입금완료"))
+    .sort((a, b) => String(b.상차일 || "").localeCompare(String(a.상차일 || ""))), [found, filter]);
   const idOf = (r) => r._id || r.id;
   const sum = (list) => list.reduce((s, r) => s + (Number(String(r.청구운임 ?? "").replace(/[^\d.-]/g, "")) || 0), 0);
   const waitAll = all.filter((r) => r.입금상태 !== "입금완료");
@@ -417,12 +454,33 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
         </div>
       </div>
       <div className="bg-white rounded-2xl border border-[#E3E8F0] px-4 py-3 flex flex-wrap items-center gap-2">
-        <div className="inline-flex rounded-xl bg-[#F1F4F9] p-1">
+        <div className="inline-flex rounded-xl bg-[#F1F4F9] p-1" data-dep-filter>
           {[["wait", "입금 대기"], ["done", "입금완료"], ["all", "전체"]].map(([k, l]) => (
-            <button key={k} type="button" onClick={() => { setFilter(k); setSel(new Set()); }} className={`px-3.5 h-8 rounded-lg text-[12.5px] font-black ${filter === k ? "bg-white text-[#0F1A30] shadow-sm" : "text-[#7A8AA8]"}`}>{l}</button>
+            <button key={k} type="button" onClick={() => { setFilter(k); setSel(new Set()); }} data-filter={k} className={`px-3 h-8 rounded-lg text-[12.5px] font-black inline-flex items-center gap-1.5 ${filter === k ? "bg-white text-[#0F1A30] shadow-sm" : "text-[#7A8AA8]"}`}>
+              {l}<span className={`min-w-[22px] h-5 px-1.5 rounded-full text-[11px] font-black inline-flex items-center justify-center ${filter === k ? (k === "wait" ? "bg-[#C2453D] text-white" : "bg-[#0F1A30] text-white") : "bg-[#DCE3EE] text-[#5B6B85]"}`} style={NUM}>{counts[k]}</span>
+            </button>
           ))}
         </div>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="거래처 · 기사 · 상하차지 검색" autoComplete="off" className="h-9 w-[230px] px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold outline-none focus:border-[#1B2B4B]" />
+        {/* 기간 — 기준 날짜 · 시작일 ~ 종료일(프로그램 달력) */}
+        <div className="inline-flex items-center gap-1.5" data-dep-range>
+          <select value={basisD} onChange={(e) => setBasisD(e.target.value)} className="h-9 px-2 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] bg-white outline-none">
+            {["상차일", "계산서일", "입금일"].map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
+          <DateField value={fromD} onChange={setFromD} placeholder="시작일" width={138} />
+          <span className="text-[#9AA9C3] font-black">~</span>
+          <DateField value={toD} onChange={setToD} placeholder="종료일" width={138} />
+          <span className="inline-flex rounded-lg border border-[#DCE3EE] overflow-hidden">
+            {[["this", "이번 달"], ["prev", "지난 달"], ["3m", "3개월"], ["all", "전체"]].map(([k, l]) => <button key={k} type="button" onClick={() => quick(k)} className="h-9 px-2 text-[11.5px] font-black text-[#5B6B85] hover:bg-[#F4F6FA] border-l first:border-l-0 border-[#EEF2F8]">{l}</button>)}
+          </span>
+        </div>
+        {/* 검색창 — 안에 [조회] */}
+        <div className="inline-flex items-center h-9 w-[300px] rounded-lg border border-[#DCE3EE] bg-white overflow-hidden focus-within:border-[#1B2B4B]" data-dep-search>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9AA9C3" strokeWidth="2.2" strokeLinecap="round" className="ml-2.5 shrink-0"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+          <input value={qd} onChange={(e) => setQd(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); search(); } }} placeholder="거래처 · 기사 · 상하차지 · 입금자" autoComplete="off" className="flex-1 min-w-0 h-full px-2 text-[13px] font-semibold outline-none bg-transparent" />
+          <button type="button" onClick={search} data-dep-search-go className="h-7 mr-1 px-3.5 rounded-md bg-[#0F1A30] text-white text-[12.5px] font-black shrink-0 hover:bg-[#1B2B4B]">조회</button>
+        </div>
+        {(ap.q || ap.from || ap.to) && <span className="text-[11.5px] font-bold text-[#2D4C82]" style={NUM}>조회 중: {ap.q ? `"${ap.q}" ` : ""}{ap.from || ap.to ? `${ap.basis} ${ap.from || "처음"} ~ ${ap.to || "오늘"}` : ""} <button type="button" onClick={() => { setQd(""); setFromD(""); setToD(""); setAp({ q: "", from: "", to: "", basis: basisD }); }} className="ml-1 text-[#9AA9C3] hover:text-red-600">✕</button></span>}
+        <div className="basis-full h-0" />
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <span className="text-[12.5px] font-bold text-[#5B6B85]" style={NUM}>선택 {picked.length}건 · {won(sum(picked))}원</span>
           {filter !== "done" && <><span className="text-[12.5px] font-bold text-[#5B6B85]">선택 건 입금일</span><DateField value={date} onChange={(v) => setDate(v || today())} />
@@ -436,10 +494,10 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
         <table className="w-full min-w-max">
           <thead className="bg-[#1B2B4B]"><tr>
             <th className={th}><input type="checkbox" checked={rows.length > 0 && rows.every((r) => sel.has(idOf(r)))} onChange={(e) => setSel(e.target.checked ? new Set(rows.map(idOf)) : new Set())} /></th>
-            {["상차일", "OUT 방식", "업체(거래처)", "상차지 → 하차지", "기사", "운임", "부가세 포함", "계산서 발행일", "첨부", "입금", "입금일 · 은행 입금 후보", "처리"].map((h) => <th key={h} className={th}>{h}</th>)}
+            {["상차일", "OUT 방식", "업체(거래처)", "상차지 → 하차지", "기사", "운임", "부가세 포함", "계산서 발행일", "증빙", "첨부", "입금", "입금일 · 은행 입금 후보", "처리"].map((h) => <th key={h} className={th}>{h}</th>)}
           </tr></thead>
           <tbody>
-            {rows.length === 0 && <tr><td colSpan={13} className="py-14 text-center text-[13px] font-semibold text-[#9AA9C3]">{all.length ? "해당하는 오더가 없습니다." : "OUT 오더가 아직 없습니다. 배차현황 [정산] 칸을 누르거나 선택수정에서 IN/OUT을 OUT으로 바꿔 주세요."}</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={14} className="py-14 text-center text-[13px] font-semibold text-[#9AA9C3]">{all.length ? "해당하는 오더가 없습니다." : "OUT 오더가 아직 없습니다. 배차현황 [정산] 칸을 누르거나 선택수정에서 IN/OUT을 OUT으로 바꿔 주세요."}</td></tr>}
             {rows.map((r) => {
               const done = r.입금상태 === "입금완료";
               return (
@@ -453,6 +511,15 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
                   <td className={td} style={NUM}>{won(r.청구운임)}</td>
                   <td className={`${td} font-black`} style={NUM}>{won(vatOf(r.청구운임).total)}</td>
                   <td className={td} style={NUM}>{r.계산서일 || <span className="text-[#C2CBDB]">미발행</span>}</td>
+                  <td className={td}>
+                    {r.계산서스캔 || r.입금증빙 ? (() => { const sc = r.계산서스캔 || r.입금증빙; const okAmt = [vatOf(r.청구운임).supply, vatOf(r.청구운임).total].some((v) => v && (Math.abs(v - (sc.supply || 0)) <= 10 || Math.abs(v - (sc.total || 0)) <= 10)); return (
+                      <button type="button" onClick={() => setEvRow(r)} data-desk-evidence title={`${sc.kind || "증빙"} · ${sc.date || ""} · 합계 ${won(sc.total)}원${sc.payer ? ` · ${sc.payer}` : ""}`}
+                        className={`inline-flex items-center gap-1 h-7 px-2 rounded-full text-[11.5px] font-black border ${okAmt ? "bg-[#ECFDF3] text-[#067647] border-[#ABEFC6]" : "bg-[#FFFAEB] text-[#B54708] border-[#FEDF89]"}`}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M4 2h16v20l-3-2-3 2-3-2-3 2-4-2z" /><path d="M8 7h8M8 11h8M8 15h5" /></svg>
+                        {sc.kind === "이체확인증" ? "이체" : "계산서"} {okAmt ? "✓" : "!"}
+                      </button>); })()
+                      : <button type="button" onClick={() => setPopId(idOf(r))} className="text-[11.5px] font-bold text-[#C2CBDB] hover:text-[#1B2B4B]" title="정산 창에서 증빙서류를 올립니다">+ 올리기</button>}
+                  </td>
                   <td className={td}>
                     <button type="button" onClick={() => onAttach?.(r)} disabled={!onAttach} title="첨부 보기 · 올리기(배차현황 첨부와 같은 파일)" data-desk-attach
                       className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-[#F1F4F9]">
@@ -484,7 +551,8 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
           </tbody>
         </table>
       </div>
-      {popId && (() => { const pr = (orders || []).find((x) => idOf(x) === popId); return pr ? <PayPopup row={pr} onClose={() => setPopId("")} patchDispatch={patchDispatch} canEdit={!isViewer} company={company} /> : null; })()}
+      {popId && (() => { const pr = (orders || []).find((x) => idOf(x) === popId); return pr ? <PayPopup row={pr} onClose={() => setPopId("")} patchDispatch={patchDispatch} canEdit={!isViewer} company={company} evidenceApi={evidenceApi} /> : null; })()}
+      {evRow && <EvidenceViewer row={evRow} expect={evRow.청구운임} onClose={() => setEvRow(null)} {...(evidenceApi ? { api: evidenceApi } : {})} />}
     </div>
   );
 }
