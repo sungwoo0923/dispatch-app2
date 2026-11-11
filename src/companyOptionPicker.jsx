@@ -39,11 +39,13 @@ export const CompanyOptionPicker = React.forwardRef(function CompanyOptionPicker
   optKey, value, onChange, className = "", style, disabled = false,
   placeholder = "선택", noneLabel, noneValue = "", allowNone = true, allowAdd = true,
   title, role, userCompany, compact = false, align = "left", id, buttonProps = {}, labelOf: labelOf0,
+  openSignal = 0, // ⭐ 2026-11-11 숫자가 바뀌면 목록을 연다(배차방식 IN/OUT 먼저 고르기 — src/CallPay.jsx DispatchWayPicker)
 }, ref) {
   useUiConfigVersion();
   const labelOf = labelOf0 || ((v) => uiOptionLabel(optKey, v));
   const [open, setOpen] = React.useState(false);
   const btn = React.useRef(null);
+  React.useEffect(() => { if (openSignal && !disabled) setOpen(true); }, [openSignal]); // eslint-disable-line react-hooks/exhaustive-deps
   React.useImperativeHandle(ref, () => ({
     focus: () => btn.current?.focus(),
     scrollIntoView: (o) => btn.current?.scrollIntoView(o),

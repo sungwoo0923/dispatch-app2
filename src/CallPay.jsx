@@ -131,6 +131,63 @@ export async function setCallDeposit({ row, done, date, name = "", patchDispatch
   }).catch(() => {});
 }
 
+// ── 배차방식 고르기: 먼저 IN / OUT → 그다음 방식 ──
+//  오더등록 · 오더 복사/수정 패널의 배차방식 칸. 누르면 IN(우리 오더) / OUT(외부 콜을 잡은 오더)부터 고르고,
+//  IN이면 배차방식 목록, OUT이면 OUT 방식 목록(24시 · 인성 · 화물맨…)이 이어서 열린다.
+//  저장: 배차방식 = 고른 값(필수 칸 그대로) · 콜구분 = "IN" | "OUT" · 콜플랫폼 = OUT일 때 고른 값
+//  시험 기능이 꺼진 운송사는 예전 배차방식 선택 그대로다.
+export function DispatchWayPicker({ value = "", dir = "", onPick, className = "", placeholder = "선택", noneLabel = "선택", role, userCompany, disabled = false }) {
+  const beta = useBetaOn(userCompany);
+  const cur = dir === "OUT" || dir === "잡은콜" ? "OUT" : "IN";
+  const [pend, setPend] = React.useState(cur); // 방금 고른 IN/OUT(목록을 고르기 전)
+  const [ask, setAsk] = React.useState(null); // IN/OUT 고르는 작은 창 위치
+  const [sig, setSig] = React.useState(0);
+  const armed = React.useRef(false);
+  const wrap = React.useRef(null);
+  React.useEffect(() => { setPend(cur); }, [cur, value]);
+  React.useEffect(() => {
+    if (!ask) return undefined;
+    const off = (e) => { if (!e.target.closest?.("[data-way-ask]")) setAsk(null); };
+    const esc = (e) => { if (e.key === "Escape") setAsk(null); };
+    const t = setTimeout(() => { window.addEventListener("mousedown", off, true); window.addEventListener("keydown", esc, true); }, 0);
+    return () => { clearTimeout(t); window.removeEventListener("mousedown", off, true); window.removeEventListener("keydown", esc, true); };
+  }, [ask]);
+  const v = value === "선택없음" ? "" : (value || "");
+  if (!beta) return <CompanyOptionPicker optKey="배차방식" placeholder={placeholder} noneLabel={noneLabel} className={className} value={v} disabled={disabled} role={role} userCompany={userCompany} onChange={(x) => onPick?.({ 배차방식: x })} />;
+  const openAsk = (e) => {
+    if (disabled) return;
+    if (armed.current) { armed.current = false; return; } // IN/OUT을 고른 직후 — 목록이 열리게 둔다
+    e.preventDefault(); e.stopPropagation();
+    const r = wrap.current?.getBoundingClientRect(); if (!r) return;
+    const w = Math.max(r.width, 250); const up = window.innerHeight - r.bottom < 150;
+    setAsk({ left: Math.max(8, Math.min(r.left, window.innerWidth - w - 8)), width: w, ...(up ? { bottom: window.innerHeight - r.top + 6 } : { top: r.bottom + 6 }) });
+  };
+  const choose = (d) => { setAsk(null); setPend(d); armed.current = true; setTimeout(() => { setSig((n) => n + 1); setTimeout(() => { armed.current = false; }, 300); }, 0); };
+  return (
+    <span ref={wrap} style={{ display: "block", minWidth: 0 }} data-way-picker={cur}
+      onClickCapture={(e) => { if (e.target.closest?.("button[data-opt-picker]")) openAsk(e); }}
+      onKeyDownCapture={(e) => { if ((e.key === "Enter" || e.key === " " || e.key === "ArrowDown") && e.target.closest?.("button[data-opt-picker]") && e.target.getAttribute("aria-expanded") !== "true") openAsk(e); }}>
+      <CompanyOptionPicker key={pend} optKey={pend === "OUT" ? OUT_KEY : "배차방식"} title={pend === "OUT" ? "OUT 방식" : "배차방식 (IN)"} placeholder={placeholder} noneLabel={noneLabel} className={className}
+        value={pend === cur ? v : ""} disabled={disabled} role={role} userCompany={userCompany} openSignal={sig}
+        labelOf={(x) => `${pend} · ${x}`}
+        onChange={(x) => onPick?.({ 배차방식: x, 콜구분: x ? pend : "", 콜플랫폼: x && pend === "OUT" ? x : "" })} />
+      {ask && createPortal(
+        <div data-way-ask style={{ position: "fixed", zIndex: 2147483000, left: ask.left, width: ask.width, top: ask.top, bottom: ask.bottom, background: "#fff", borderRadius: 14, border: "1px solid #DCE3EE", boxShadow: "0 18px 40px rgba(15,26,48,.22)", padding: 10 }}>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.22em", color: "#7A8AA8", margin: "2px 4px 8px" }}>DISPATCH · 먼저 IN / OUT을 고르세요</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {[["IN", "우리가 등록한 오더"], ["OUT", "외부 콜을 잡은 오더"]].map(([d, sub]) => (
+              <button key={d} type="button" data-way={d} autoFocus={d === cur} onClick={() => choose(d)}
+                style={{ borderRadius: 12, padding: "10px 8px", cursor: "pointer", textAlign: "center", border: `1.5px solid ${d === cur && v ? "#0F1A30" : "#DCE3EE"}`, background: d === cur && v ? "#0F1A30" : "#fff", color: d === cur && v ? "#fff" : "#0F1A30" }}>
+                <div style={{ fontSize: 17, fontWeight: 900, letterSpacing: "0.06em" }}>{d}</div>
+                <div style={{ fontSize: 11.5, fontWeight: 700, opacity: 0.7, marginTop: 2 }}>{sub}</div>
+              </button>
+            ))}
+          </div>
+        </div>, document.body)}
+    </span>
+  );
+}
+
 // ── 🏦 은행 입금 후보 ──
 const normName = (v) => String(v || "").replace(/\(주\)|주식회사|㈜|\s|[()（）.,·-]/g, "").toLowerCase();
 const toAmt = (v) => Number(String(v ?? "").replace(/[^\d.-]/g, "")) || 0;

@@ -2956,7 +2956,7 @@ import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChang
 import { SpecialFareButton, ForkliftChip, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount } from "./forklift"; // 🏗 2026-11-09 지게차비용
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
-import { useBetaOn, PayBadge, PayPopup, CallDepositDesk, PayNoticeToggle, queuePayNotice, DateField, OUT_KEY } from "./CallPay"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
+import { useBetaOn, PayBadge, PayPopup, CallDepositDesk, PayNoticeToggle, queuePayNotice, DateField, OUT_KEY, DispatchWayPicker } from "./CallPay"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
 import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
 import { DriverGuideSendModal, GUIDE_BTN, guideSentLabel, isFleetGrade } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
 // ⭐ 2026-11-06 로지스웹 허브(운송사 간 오더 거래소) — [저장 + 허브 등록]
@@ -18160,7 +18160,9 @@ className={`
 
   <div>
     <label className={labelCls}><EditableText id="orderForm.label.배차방식" defaultText="배차방식" /><DropdownOptionsManageButton optKey="배차방식" label="배차방식" role={role} userCompany={userCompany} /></label>
-    <CompanyOptionPicker optKey="배차방식" placeholder="선택" noneLabel="선택" className={inputCls} value={form.배차방식} onChange={(__v) => ((e) => onChange("배차방식", e.target.value))({ target: { value: __v } })} />
+    {/* 💳 2026-11-11 배차방식 — 먼저 IN/OUT, 그다음 방식(시험 기능이 꺼진 운송사는 예전 그대로) */}
+    <DispatchWayPicker className={inputCls} value={form.배차방식} dir={form.콜구분 || ""} role={role} userCompany={userCompany}
+      onPick={(p) => Object.entries(p).forEach(([k, v]) => onChange(k, v))} />
   </div>
 
 {/* ===============================
@@ -31421,7 +31423,7 @@ value={copyTarget?.화물수량 || ""}
 )}
 
 <CpField label="배차방식">
-  <CompanyOptionPicker optKey="배차방식" placeholder="선택" noneLabel="선택" className={cpInputStyle} value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value})))({ target: { value: __v } })} />
+  <DispatchWayPicker className={cpInputStyle} value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} dir={copyTarget?.콜구분 || ""} onPick={(pk) => setCopyTarget((p) => ({ ...p, ...pk }))} />
 </CpField>
           </div>
         </div>
@@ -42847,7 +42849,7 @@ setCopyPlaceOptions(list);
 )}
 
 <CpField label="배차방식">
-  <CompanyOptionPicker optKey="배차방식" placeholder="선택" noneLabel="선택" className={cpInputStyle} value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 배차방식:e.target.value})))({ target: { value: __v } })} />
+  <DispatchWayPicker className={cpInputStyle} value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} dir={copyTarget?.콜구분 || ""} onPick={(pk) => setCopyTarget((p) => ({ ...p, ...pk }))} />
 </CpField>
           </div>
 </div>
@@ -51195,7 +51197,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       </CpField>
                     )}
                     <CpField label="배차방식">
-                      <CompanyOptionPicker optKey="배차방식" placeholder="선택" noneLabel="선택" className={cpInputStyle} value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} onChange={(__v) => ((e) => setCopyTarget(p => ({...p, 배차방식: e.target.value})))({ target: { value: __v } })} />
+                      <DispatchWayPicker className={cpInputStyle} value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} dir={copyTarget?.콜구분 || ""} onPick={(pk) => setCopyTarget((p) => ({ ...p, ...pk }))} />
                     </CpField>
                   </div>
                 </div>
