@@ -79,7 +79,38 @@ function pickPhoneMatch(cands, { companyName, name }) {
   return { ok: true, pick: named[0] };
 }
 
+// 기사 합치기 — 같은 기사가 두 줄(예: 예전 차량 1019로 쓰던 계정 + 새 차량 4931로 다시 가입한 계정)일 때
+//  남길 기사(keep)의 차량이력 앞에 지울 기사(old)의 차량 구간을 붙인다. date = 남길 기사가 지금 차량을 타기 시작한 날.
+//  오더의 차량번호는 그대로 두고, 이 이력으로 "date 전날까지 old 차량 운행분 = 이 기사 건"이 된다.
+function mergeHistory(keep, old, date) {
+  const periods = (d) => {
+    const h = (Array.isArray(d?.차량이력) ? d.차량이력 : []).filter((e) => e && plateOf(e.차량번호)).map((e) => ({ ...e, 차량번호: plateOf(e.차량번호), 시작: e.시작 || "", 종료: e.종료 || "" }));
+    if (h.length) return h;
+    const cur = plateOf(d?.차량번호 || d?.carNo);
+    return cur ? [{ 차량번호: cur, 시작: "", 종료: "" }] : [];
+  };
+  const prev = addDays(date, -1);
+  const kp = periods(keep);
+  const op = periods(old)
+    // 남길 기사가 이미 같은 구간을 갖고 있으면 겹치게 넣지 않는다
+    .filter((e) => !(e.시작 && e.시작 >= date))
+    .map((e) => ({ ...e, 종료: e.종료 && e.종료 < prev ? e.종료 : prev }));
+  // 남길 기사의 "처음부터" 구간은 date부터로 좁힌다(그 전은 예전 기사 줄의 구간)
+  const kk = kp.map((e) => (e.시작 ? e : { ...e, 시작: date })).filter((e) => !e.종료 || e.종료 >= e.시작);
+  const samePlateOnly = op.length && kk.length && op.every((e) => kk.some((k) => k.차량번호 === e.차량번호)) && new Set([...op, ...kk].map((e) => e.차량번호)).size === 1;
+  if (samePlateOnly) return Array.isArray(keep?.차량이력) ? keep.차량이력 : []; // 같은 차량 중복 줄 — 이력을 만들 필요 없음
+  return [...op, ...kk].slice(-HISTORY_MAX);
+}
+// 지울 기사 줄에서 남길 기사 줄로 옮겨 올 값(남길 쪽이 비어 있을 때만)
+const MERGE_FILL = ["정산계좌", "사업자번호", "사업자상호", "공제항목", "담당자", "근무요일", "메모", "거주지", "차량종류", "차량톤수", "vehicleType", "입사일", "hireDate"];
+function mergeFill(keep, old) {
+  const out = {};
+  const empty = (v) => v === undefined || v === null || v === "" || (Array.isArray(v) && !v.length);
+  MERGE_FILL.forEach((k) => { if (empty(keep?.[k]) && !empty(old?.[k])) out[k] = old[k]; });
+  return out;
+}
+
 module.exports = {
   DOMAIN, DEFAULT_CO, plateOf, normText, digits, phoneValid, phoneVariants, plateValid, coHash, legacyEmail, scopedEmail,
-  nocarLocal, nocarEmail, uniqueEmail, isNocarEmail, coOf, sameCo, kstDay, dayValid, addDays, applyHistory, pickPhoneMatch,
+  nocarLocal, nocarEmail, uniqueEmail, isNocarEmail, coOf, sameCo, kstDay, dayValid, addDays, applyHistory, pickPhoneMatch, mergeHistory, mergeFill, MERGE_FILL,
 };

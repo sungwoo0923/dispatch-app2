@@ -2541,6 +2541,8 @@ service cloud.firestore {
         'siteConfig', 'platformConfig', 'platformUsage', 'usageCounters',
         // ⭐ 2026-11-05 기사 가입 처리 기록 — 위에서 따로 정함
         'driverSignupLogs',
+        // ⭐ 2026-11-11 기사 합치기 기록 — 서버만 쓴다(여기에 넣어 화면에서는 읽기·쓰기 모두 막음)
+        'driverMergeLog',
         // 🧯 2026-11-10 오류 신고 · 🛡 보안 알림 — 위에서 따로 정함(빠지면 승인된 직원이 회사명 없는 문서를 만들거나 고칠 수 있다)
         'errorReports', 'securityEvents', 'securityProfiles',
         // ⭐ 2026-11-06 문구 편집 모드 — 위에서 따로 정함(쓰기는 최고관리자만)

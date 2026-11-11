@@ -170,5 +170,124 @@ module.exports = function makeDriverVehicle({ functions, db, getAuth, FieldValue
     }
   });
 
-  return { driverChangeVehicle, driverPhoneLogin };
+  // ③ driverMerge : 같은 기사가 두 줄일 때 하나로 합친다 — 최고관리자만.
+  //    · 남길 기사(keepId)에 지울 기사(oldId)의 차량 구간을 차량이력으로 붙인다(오더의 차량번호는 그대로 — 정산·운행일지가 이력으로 묶인다)
+  //    · 지울 기사 앞으로 쌓인 기록(서류 · 지급명세서 · 과태료 · 운행 완료 보관 · 출퇴근 기록 · 사진 기록)을 남길 기사로 옮긴다
+  //    · 지울 기사 줄과 그 기사앱 계정을 지운다(지우기 전 내용은 driverMergeLog에 남긴다)
+  const MASTER = "tjddnqkf@naver.com";
+  const isTotalMaster = async (tok) => {
+    if (!tok) return false;
+    if (tok.email === MASTER) return true;
+    const u = await db.collection("users").doc(tok.uid).get().catch(() => null);
+    return !!u?.exists && u.data().role === "totalMaster";
+  };
+  const MOVE = [["driver_documents", ["driverId"]], ["driverStatements", ["driverId", "driverKey"]], ["fleetPenalties", ["driverId", "driverKey"]],
+    ["driver_completed_archive", ["driverId"]], ["driver_logs", ["uid"]], ["driver_photo_logs", ["uid"]]];
+  const driverMerge = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).https.onRequest(async (req, res) => {
+    if (cors(req, res)) return;
+    if (req.method !== "POST") { res.status(405).json({ error: "POST_ONLY" }); return; }
+    try {
+      const tok = await bearerUser(req);
+      if (!tok) { res.status(401).json({ error: "NO_TOKEN" }); return; }
+      if (!(await isTotalMaster(tok))) { res.status(403).json({ error: "FORBIDDEN" }); return; }
+      const b = req.body && typeof req.body === "object" ? req.body : {};
+      const okId = (v) => v && v.length <= 200 && !v.includes("/");
+      const keepId = String(b.keepId || "").trim();
+      const oldId = String(b.oldId || "").trim();
+      if (!okId(keepId) || !okId(oldId) || keepId === oldId) { res.status(400).json({ error: "BAD_PARAMS" }); return; }
+      const [ks, os] = await Promise.all([db.collection("drivers").doc(keepId).get(), db.collection("drivers").doc(oldId).get()]);
+      if (!ks.exists || !os.exists) { res.status(404).json({ error: "NOT_FOUND" }); return; }
+      const keep = ks.data() || {};
+      const old = os.data() || {};
+      if (!V.sameCo(keep.companyName, old.companyName)) { res.status(200).json({ ok: false, code: "OTHER_COMPANY" }); return; }
+      const today = V.kstDay();
+      const date = String(b.date || "");
+      if (!V.dayValid(date) || date > today) { res.status(200).json({ ok: false, code: "BAD_DATE" }); return; }
+      const keepUid = String(keep.uid || keepId);
+      const oldUid = String(old.uid || oldId);
+      const by = String(tok.name || tok.email || tok.uid);
+      const hist = V.mergeHistory(keep, old, date);
+      const oldUser = oldUid !== keepUid ? await db.collection("users").doc(oldUid).get() : null;
+
+      // 지우기 전 내용을 남긴다(되돌릴 때 참고)
+      await db.collection("driverMergeLog").add({
+        companyName: V.coOf(keep.companyName), keepId, oldId, date, by, at: FieldValue.serverTimestamp(),
+        oldDriver: old, oldUser: oldUser?.exists ? oldUser.data() : null, keepHistoryBefore: keep.차량이력 || null,
+      });
+      await ks.ref.update({ ...V.mergeFill(keep, old), 차량이력: hist, mergedFrom: FieldValue.arrayUnion(oldId), updatedAt: FieldValue.serverTimestamp() });
+
+      // 기록 옮기기 — 지울 기사 id · uid 로 적힌 값을 남길 기사 것으로
+      const moved = {};
+      const fromIds = [...new Set([oldId, oldUid])];
+      for (const [col, fields] of MOVE) {
+        let n = 0;
+        for (const f of fields) {
+          const to = f === "driverKey" ? keepId : keepUid;
+          for (const from of fromIds) {
+            if (from === to) continue;
+            for (let guard = 0; guard < 10; guard++) {
+              const q = await db.collection(col).where(f, "==", from).limit(400).get();
+              if (q.empty) break;
+              const batch = db.batch();
+              q.docs.forEach((x) => batch.update(x.ref, { [f]: to }));
+              await batch.commit();
+              n += q.size;
+              if (q.size < 400) break;
+            }
+          }
+        }
+        if (n) moved[col] = n;
+      }
+
+      // 지울 기사 줄 + 그 기사앱 계정
+      await os.ref.delete();
+      if (oldUser?.exists && oldUser.data().role === "driver") {
+        await oldUser.ref.delete();
+        await getAuth().deleteUser(oldUid).catch(() => {});
+      }
+      console.log(`🧩 기사 합치기: ${V.coOf(keep.companyName)} ${oldId}(${V.plateOf(old.차량번호 || old.carNo)}) → ${keepId}(${V.plateOf(keep.차량번호 || keep.carNo)}) 기준일 ${date}`, moved);
+      res.status(200).json({ ok: true, 차량이력: hist, moved });
+    } catch (e) {
+      console.error("driverMerge 실패:", e);
+      res.status(500).json({ error: "FAILED" });
+    }
+  });
+
+  // ④ driverPhoneCheck : 기사 가입 때 — 같은 운송사에 이 휴대폰번호로 이미 가입한 기사 계정이 있는지(중복 가입 방지).
+  //    방금 만든 기사 로그인 계정의 토큰이 있어야 하고, 있다/없다만 알려준다.
+  const driverPhoneCheck = functions.https.onRequest(async (req, res) => {
+    if (cors(req, res)) return;
+    if (req.method !== "POST") { res.status(405).json({ error: "POST_ONLY" }); return; }
+    try {
+      const tok = await bearerUser(req);
+      if (!tok) { res.status(401).json({ error: "NO_TOKEN" }); return; }
+      if (!String(tok.email || "").toLowerCase().endsWith(`@${V.DOMAIN}`)) { res.status(403).json({ error: "NOT_DRIVER_ACCOUNT" }); return; }
+      if (await limited(res, [[`dpc:uid:${tok.uid}`, 10, 10 * 60e3], [`dpc:ip:${clientIp(req)}`, 60, 10 * 60e3]])) return;
+      const b = req.body && typeof req.body === "object" ? req.body : {};
+      const co = String(b.companyName || "").trim().slice(0, 100);
+      const phone = V.digits(String(b.phone || "").slice(0, 30));
+      if (!co || phone.length < 10) { res.status(400).json({ error: "BAD_PARAMS" }); return; }
+      const vars = V.phoneVariants(phone);
+      const [us, ds] = await Promise.all([
+        db.collection("users").where("phone", "in", vars).get(),
+        db.collection("drivers").where("전화번호", "in", vars).get(),
+      ]);
+      const live = (u) => u && u.role === "driver" && V.sameCo(u.companyName, co) && String(u.employmentStatus || "").trim() !== "퇴사";
+      let taken = us.docs.some((s) => s.id !== tok.uid && live(s.data()));
+      if (!taken) {
+        // 기사관리에서만 번호를 고친 기사(앱 계정 연결됨)
+        const linked = [...new Set(ds.docs.map((s) => String(s.data().uid || "")).filter((u) => u && u !== tok.uid))].slice(0, 10);
+        for (const id of linked) {
+          const s = await db.collection("users").doc(id).get();
+          if (s.exists && live(s.data())) { taken = true; break; }
+        }
+      }
+      res.status(200).json({ taken });
+    } catch (e) {
+      console.error("driverPhoneCheck 실패:", e);
+      res.status(500).json({ error: "FAILED" });
+    }
+  });
+
+  return { driverChangeVehicle, driverPhoneLogin, driverMerge, driverPhoneCheck };
 };

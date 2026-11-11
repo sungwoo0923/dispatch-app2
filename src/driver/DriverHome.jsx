@@ -5,7 +5,7 @@ import { pickCompanyLoc } from "../officeLocSync"; // 📍 2026-11-09 출근지 
 import { kpConfirm } from "../kpDialog";
 import { deleteDocsAtomic } from "../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { html2canvas } from "../lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
-import { db, auth, DEFAULT_COMPANY } from "../firebase";
+import { db, auth, DEFAULT_COMPANY, FUNCTIONS_BASE } from "../firebase";
 import {
   doc,
   getDoc,
@@ -1242,8 +1242,14 @@ export default function DriverHome() {
       const notice = { code: "driver/relogin", tone: "wait", title: "로그인 방식이 바뀌었습니다", message: "이제 휴대폰번호로 로그인합니다. 아래 정보를 확인하고 [로그인]을 눌러 주세요.", hint: "운행 기록 · 서류 · 알림은 그대로 남아 있습니다. 차량이 바뀌어도 휴대폰번호로 계속 로그인됩니다." };
       // 로그아웃되는 순간 App이 먼저 로그인 화면을 그리며 안내를 꺼내 갈 수 있어, 화면을 새로 열기 직전에 다시 넣어 둔다
       const arm = () => { try { keepDriverLoginError(notice); sessionStorage.setItem("driverJustLoggedOut", "1"); } catch { /* 무시 */ } };
-      arm();
-      signOut(auth).catch(() => {}).finally(() => { arm(); window.location.href = "/driver-login"; });
+      // 휴대폰번호 로그인 서버가 준비돼 있을 때만 안내한다(서버가 아직 없거나 연결이 안 되면 그대로 두고 다음에 앱을 열 때 다시 본다)
+      fetch(`${FUNCTIONS_BASE}/driverPhoneLogin`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+        .then((r) => {
+          if (r.status !== 400) return;
+          arm();
+          signOut(auth).catch(() => {}).finally(() => { arm(); window.location.href = "/driver-login"; });
+        })
+        .catch(() => {});
     } catch { /* 저장소를 못 쓰면 그대로 둔다 */ }
   }, [uid, driver]);
 

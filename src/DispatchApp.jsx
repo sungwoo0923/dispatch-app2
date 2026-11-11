@@ -60,7 +60,7 @@ import { subscribeUsersLive } from "./usersLive";
 import { useUserProfiles } from "./userProfilesLive"; // 🔒 2026-11-07 인사 프로필은 우리 회사 직원 한 건씩
 const AdminMenu = lazyView(() => import("./AdminMenu"));
 import FleetExtraFields from "./FleetDriverExtra";
-import DriverVehicleChangeModal from "./DriverVehicleChange"; // ⭐ 2026-11-11 기사 차량 변경(계정은 그대로)
+import DriverVehicleChangeModal, { DriverMergeModal } from "./DriverVehicleChange"; // ⭐ 2026-11-11 기사 차량 변경(계정은 그대로)
 import { useFixedRouteAutoDispatch, FixedRouteEditNotice } from "./FixedRoutes";
 import { isMasterKey } from "./monthCompare"; // ⭐ 2026-11-03 최고관리자 계정은 담당자 이름 대신 "최고관리자"
 import { deptModeOf } from "./DeptDashboard";
@@ -56923,6 +56923,8 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
   const perPage = 20;
   const [editDriverModal, setEditDriverModal] = React.useState(null); // 더블클릭 수정 팝업
   const [vehicleChangeFor, setVehicleChangeFor] = React.useState(null); // ⭐ 2026-11-11 차량 변경 창(계정은 그대로, 차량만)
+  const [mergeFor, setMergeFor] = React.useState(null); // ⭐ 2026-11-11 기사 합치기 창(최고관리자만)
+  const isTotalMasterUser = React.useMemo(() => { try { return localStorage.getItem("role") === "totalMaster"; } catch { return false; } }, []);
   const [drvCtx, setDrvCtx] = React.useState(null); // 🖱 2026-11-10 오른쪽 클릭 메뉴 { x, y, rows }
   const [drvToast, setDrvToast] = React.useState("");
   // 체크한 기사 — 화면 표 순서대로(검색으로 안 보이는 체크 기사는 뒤에)
@@ -57681,6 +57683,15 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
             showAlert(`차량을 ${patch.차량번호}(으)로 바꿨습니다.${r?.holder ? `\n${r.holder.name || "기존"} 기사님은 ${r.holder.carNo || "차량미배정"}(으)로 바뀌었습니다.` : ""}${r?.account ? "\n기사님 폰은 로그아웃되지 않습니다. 다음 로그인은 휴대폰번호로 하면 됩니다." : ""}`);
           }} />
       )}
+      {/* ⭐ 2026-11-11 기사 합치기(최고관리자) — 같은 기사 두 줄을 하나로. 끝나면 수정 팝업의 차량이력을 맞춘다 */}
+      {mergeFor && isTotalMasterUser && mPop(
+        <DriverMergeModal driver={mergeFor} drivers={driversRaw} onClose={() => setMergeFor(null)}
+          onDone={(patch, old) => {
+            setEditDriverModal(p => (p && p.id === mergeFor.id ? { ...p, ...patch } : p));
+            setMergeFor(null);
+            showAlert(`${old?.이름 || ""} · ${old?.차량번호 || ""} 줄을 합쳤습니다.\n예전 차량 배차기록은 그대로 남고, 정산은 이 기사로 묶입니다.`);
+          }} />
+      )}
       {/* ===== 기사 수정 팝업 (더블클릭) ===== */}
       {editDriverModal && mPop(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
@@ -57700,6 +57711,11 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                       setTimeout(() => { window.dispatchEvent(new Event("kp-fm-vehicle")); window.dispatchEvent(new Event("kp-vl-open")); }, 60);
                     }}
                     className="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/20 border border-white/25 text-white text-[12.5px] font-bold whitespace-nowrap inline-flex items-center gap-1.5"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="1" y="6" width="14" height="10" rx="1.5" /><path d="M15 10h4l3 3v3h-7z" /><circle cx="6" cy="18" r="1.8" /><circle cx="18" cy="18" r="1.8" /></svg>차량관리</button>
+                )}
+                {/* ⭐ 2026-11-11 기사 합치기 — 최고관리자에게만 보인다(같은 기사가 두 줄일 때) */}
+                {isTotalMasterUser && editDriverModal.id && (
+                  <button type="button" data-testid="open-driver-merge" title="같은 기사가 두 줄일 때 하나로 합치기(최고관리자)" onClick={() => setMergeFor(editDriverModal)}
+                    className="h-8 px-3 rounded-lg bg-white/10 hover:bg-white/20 border border-white/25 text-white text-[12.5px] font-bold whitespace-nowrap">기사 합치기</button>
                 )}
                 <button onClick={() => setEditDriverModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
               </div>

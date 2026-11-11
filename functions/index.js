@@ -3707,6 +3707,8 @@ const _publicIp = _uploadAccess.clientIp;
 const _driverVehicle = require("./driverVehicle")({ functions, db, getAuth, FieldValue, helpers: _uploadAccess });
 exports.driverChangeVehicle = _driverVehicle.driverChangeVehicle;
 exports.driverPhoneLogin = _driverVehicle.driverPhoneLogin;
+exports.driverMerge = _driverVehicle.driverMerge; // 최고관리자: 같은 기사 두 줄 합치기
+exports.driverPhoneCheck = _driverVehicle.driverPhoneCheck; // 기사 가입: 같은 휴대폰번호 중복 가입 방지
 
 // 📧 가입 화면 이메일 중복확인 — 로그인 전 화면은 보안 규칙상 users 목록을 못 읽어서
 //  "사용 중 여부"만 서버가 대신 알려준다(문서 내용은 돌려주지 않음). 삭제·탈퇴 계정은 재가입 허용.

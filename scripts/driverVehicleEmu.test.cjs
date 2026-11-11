@@ -198,6 +198,61 @@ async function makeDriver({ co, plate, name, phone, email, extra = {} }) {
     assert.strictEqual(last, 429);
   });
 
+  // ── 가입 중복 확인 · 기사 합치기 ──
+  await t("가입 중복 확인: 같은 운송사에 같은 휴대폰번호 기사 계정이 있으면 taken", async () => {
+    const n = await signUp("12가1212@driver.run25.kr", "12가1212");
+    const HN = { authorization: `Bearer ${n.idToken}` };
+    assert.deepStrictEqual((await call(DV.driverPhoneCheck, { headers: HN, body: { companyName: CO, phone: "010-1111-2222" } })).body, { taken: true });
+    assert.deepStrictEqual((await call(DV.driverPhoneCheck, { headers: HN, body: { companyName: CO, phone: "01012120000" } })).body, { taken: true }, "기사관리에서만 고친 번호");
+    assert.deepStrictEqual((await call(DV.driverPhoneCheck, { headers: HN, body: { companyName: CO, phone: "01088889999" } })).body, { taken: false });
+    assert.deepStrictEqual((await call(DV.driverPhoneCheck, { headers: HN, body: { companyName: "씨운송", phone: "01011112222" } })).body, { taken: false }, "다른 운송사는 따로");
+    assert.deepStrictEqual((await call(DV.driverPhoneCheck, { headers: HN, body: { companyName: CO, phone: "010-7777-8888" } })).body, { taken: false }, "기사관리에만 등록된(앱 미가입) 번호는 가입 가능");
+    assert.strictEqual((await call(DV.driverPhoneCheck, { body: { companyName: CO, phone: "01011112222" } })).statusCode, 401);
+    assert.strictEqual((await call(DV.driverPhoneCheck, { headers: H, body: { companyName: CO, phone: "01011112222" } })).statusCode, 403, "기사 계정 토큰만");
+    await getAuth().deleteUser(n.localId);
+  });
+  // 김영욱: 예전에 1019로 쓰던 계정(K1) + 4931로 다시 가입한 계정(K2)
+  const K1 = await makeDriver({ co: CO, plate: "전남89바1019", name: "김영욱", phone: "010-2020-3030", extra: { 정산계좌: { bank: "국민", acct: "123", holder: "김영욱" } } });
+  const K2 = await makeDriver({ co: CO, plate: "전남80바4931", name: "김영욱", phone: "010-2020-3030" });
+  await db.doc("orders/k1").set({ companyName: CO, 상차일: "2026-10-05", 차량번호: "전남89바1019", 이름: "김영욱", 기사운임: 100000 });
+  await db.doc("driver_documents/kd1").set({ driverId: K1, companyName: CO, docType: "bizReg" });
+  await db.doc(`driverStatements/${K1}_2026-10`).set({ companyName: CO, driverId: K1, driverKey: K1, period: "2026-10" });
+  await db.doc("driver_logs/kl1").set({ uid: K1, status: "출근" });
+  const master = await signUp("tm@a.test", "pw-master-1");
+  await db.doc(`users/${master.localId}`).set({ role: "totalMaster", companyName: CO, approved: true });
+  const HM = { authorization: `Bearer ${master.idToken}` };
+  await t("기사 합치기: 최고관리자만(일반 직원 403 · 토큰 없음 401)", async () => {
+    assert.strictEqual((await call(DV.driverMerge, { headers: H, body: { keepId: K2, oldId: K1, date: "2026-10-20" } })).statusCode, 403);
+    assert.strictEqual((await call(DV.driverMerge, { body: { keepId: K2, oldId: K1, date: "2026-10-20" } })).statusCode, 401);
+    assert.ok((await db.doc(`drivers/${K1}`).get()).exists);
+  });
+  await t("기사 합치기: 다른 운송사 기사 · 내일 날짜 · 같은 줄은 거절", async () => {
+    const X = (await db.collection("drivers").where("companyName", "==", "비운송").limit(1).get()).docs[0].id;
+    assert.strictEqual((await call(DV.driverMerge, { headers: HM, body: { keepId: K2, oldId: X, date: "2026-10-20" } })).body.code, "OTHER_COMPANY");
+    assert.strictEqual((await call(DV.driverMerge, { headers: HM, body: { keepId: K2, oldId: K1, date: V.addDays(today, 1) } })).body.code, "BAD_DATE");
+    assert.strictEqual((await call(DV.driverMerge, { headers: HM, body: { keepId: K2, oldId: K2, date: "2026-10-20" } })).statusCode, 400);
+  });
+  await t("기사 합치기: 차량이력이 붙고 · 기록이 옮겨지고 · 예전 줄과 계정이 지워진다(오더는 그대로)", async () => {
+    const r = await call(DV.driverMerge, { headers: HM, body: { keepId: K2, oldId: K1, date: "2026-10-20" } });
+    assert.strictEqual(r.body.ok, true, JSON.stringify(r.body));
+    const k = (await db.doc(`drivers/${K2}`).get()).data();
+    assert.deepStrictEqual(k.차량이력.map((e) => [e.차량번호, e.시작, e.종료]), [["전남89바1019", "", "2026-10-19"], ["전남80바4931", "2026-10-20", ""]]);
+    assert.strictEqual(k.차량번호, "전남80바4931");
+    assert.deepStrictEqual(k.정산계좌, { bank: "국민", acct: "123", holder: "김영욱" }, "비어 있던 정산계좌는 예전 줄에서 가져온다");
+    assert.ok(!(await db.doc(`drivers/${K1}`).get()).exists); assert.ok(!(await db.doc(`users/${K1}`).get()).exists);
+    assert.strictEqual(await getAuth().getUser(K1).catch(() => null), null, "예전 로그인 계정도 삭제");
+    assert.strictEqual((await db.doc("orders/k1").get()).data().차량번호, "전남89바1019", "오더는 손대지 않는다");
+    assert.strictEqual((await db.doc("driver_documents/kd1").get()).data().driverId, K2);
+    const st = (await db.doc(`driverStatements/${K1}_2026-10`).get()).data();
+    assert.strictEqual(st.driverId, K2); assert.strictEqual(st.driverKey, K2);
+    assert.strictEqual((await db.doc("driver_logs/kl1").get()).data().uid, K2);
+    assert.deepStrictEqual(r.body.moved, { driver_documents: 1, driverStatements: 2, driver_logs: 1 });
+    const log = (await db.collection("driverMergeLog").get()).docs[0].data();
+    assert.strictEqual(log.oldId, K1); assert.strictEqual(log.oldDriver.차량번호, "전남89바1019");
+    // 합친 뒤 휴대폰번호 로그인은 남긴 계정 하나로
+    assert.deepStrictEqual((await call(DV.driverPhoneLogin, { body: { companyName: CO, phone: "01020203030", name: "김영욱" } })).body, { ok: true, email: "전남80바4931@driver.run25.kr", carNo: "전남80바4931" });
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

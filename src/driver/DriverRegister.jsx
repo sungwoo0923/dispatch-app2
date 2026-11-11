@@ -184,6 +184,26 @@ async function tryAutoLink(user, payload) {
   }
 }
 
+// ⭐ 2026-11-11 같은 운송사에 이 휴대폰번호로 이미 가입한 기사 계정이 있는지(중복 가입 방지) — 서버가 있다/없다만 알려준다.
+//  서버에 닿지 못하면 가입을 막지 않는다(null).
+async function phoneTaken(user, companyName, phone) {
+  try {
+    const token = await user.getIdToken();
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 12000);
+    const r = await fetch(`${FUNCTIONS_BASE}/driverPhoneCheck`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ companyName, phone }),
+      signal: ctl.signal,
+    }).finally(() => clearTimeout(timer));
+    if (!r.ok) return null;
+    return (await r.json())?.taken === true;
+  } catch {
+    return null;
+  }
+}
+
 const SAVED_LOGIN_KEY = "driverLoginSaved"; // DriverLogin과 같은 키 — 연결되면 로그인 칸을 미리 채워 둔다
 
 export default function DriverRegister() {
@@ -354,6 +374,16 @@ export default function DriverRegister() {
       const uid = res.user.uid;
       mark("계정");
       setPhase(2);
+
+      // ⭐ 2026-11-11 같은 휴대폰번호로 이미 가입한 기사가 있으면 새로 가입시키지 않는다(같은 기사가 두 줄로 생기는 것 방지)
+      if (await phoneTaken(res.user, co, phoneStr)) {
+        await res.user.delete().catch(() => {});
+        created = null;
+        await signOut(auth).catch(() => {});
+        setDriverBusy(false);
+        setError("이미 가입된 휴대폰번호입니다. 로그인 화면에서 휴대폰번호로 로그인해 주세요. (차량이 바뀌셨다면 운송사에 차량 변경을 요청해 주세요.)");
+        return;
+      }
 
       // ⭐ 2026-11-03 기사관리에 같은 차량번호 + (같은 휴대폰번호 또는 같은 이름) 기사가 있으면 서버가 연결·승인
       // ⭐ 2026-11-05 [원인 ②] 서버 연결 확인 → 선등록 문서 조회(2건)를 차례로 기다렸다 — 서로 상관없는 일이라 동시에 한다
