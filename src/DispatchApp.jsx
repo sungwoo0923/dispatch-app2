@@ -12713,7 +12713,9 @@ const submitMultiRegister = async () => {
         지급방식: s.지급방식 || "", 배차방식: s.배차방식 || "",
         차량번호: s.차량번호 || "", 이름: s.이름 || "", 전화번호: s.전화번호 || "",
         청구운임: s.청구운임 || "", 기사운임: s.기사운임 || "",
-        수수료: String((parseInt(s.청구운임 || 0, 10) || 0) - (parseInt(s.기사운임 || 0, 10) || 0)),
+        // 🏗 2026-11-12 다중등록 [특수운임 적용](지게차 등)이 저장되지 않던 문제 — 슬롯에 적용한 칸을 그대로 넣고, 수수료 = 청구 − 기사 − 회사가 따로 주는 돈
+        ...Object.fromEntries(MULTI_SPECIAL_KEYS.filter((k) => s[k] !== undefined).map((k) => [k, s[k]])),
+        수수료: String((parseInt(s.청구운임 || 0, 10) || 0) - (parseInt(s.기사운임 || 0, 10) || 0) - paidOut(s)),
         메모: s.메모 || "",
         긴급: !!s.긴급,
         혼적: !!s.혼적, 독차: dokchaOn({ 혼적: !!s.혼적, 운행유형: s.운행유형 || "편도" }), // 🚚 2026-11-09 다중등록 혼적
@@ -12736,6 +12738,8 @@ const submitMultiRegister = async () => {
   }
 };
 
+// 🏗 다중등록 슬롯에서 저장할 지게차 · 특수운임 칸(src/forkliftCore.js 칸 설명)
+const MULTI_SPECIAL_KEYS = ["지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", "특수운임", "특수기사차감", "특수청구추가", "외부지급합"];
 const mrLabelCls = "flex items-center h-[20px] overflow-visible text-[13px] font-semibold text-gray-700 mb-1";
 const mrInputCls = "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent focus:outline-none focus:border-[#1B2B4B] transition";
 const mrTextareaCls = "w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-2 text-[13px] font-bold text-gray-900 bg-transparent resize-none focus:outline-none focus:border-[#1B2B4B] transition";

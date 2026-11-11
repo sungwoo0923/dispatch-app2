@@ -142,7 +142,7 @@ import OrderScanModal, { scanDropDate } from "../OrderScanModal";
 import { mainScanAi } from "../orderScanApi"; // 🧠 2026-11-07 오더 스캔 정밀 인식(서버 글자 인식 · AI 칸 정리 · 회사별 학습)
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동)
 import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange } from "../fareRules";
-import { SpecialFareButton, forkliftApply } from "../forklift"; import { isViewerNow } from "../blind"; // 🏗 2026-11-09 지게차비용
+import { SpecialFareButton, forkliftApply, paidOut } from "../forklift"; import { isViewerNow } from "../blind"; // 🏗 2026-11-09 지게차비용
 import DetailFilterButton, { applyDetailFilter } from "../DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { useFixedRouteAutoDispatch } from "../FixedRoutes"; // ⭐ 2026-11-05 고정노선 배차 이어서 만들기
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
@@ -4680,7 +4680,12 @@ const groupedByDate = useMemo(() => {
 
     const 청구운임 = toNumber(form.청구운임);
     const 기사운임 = toNumber(form.기사운임);
-    const 수수료 = 청구운임 - 기사운임;
+    // 🏗 2026-11-12 [특수운임 적용](지게차 등)이 모바일 등록에서 저장되지 않던 문제 — 폼에 적용한 칸(수정이면 원래 오더 값)을 함께 저장,
+    //  수수료 = 청구 − 기사 − 회사가 따로 주는 돈(지게차 · 외부 특수운임)
+    const SPECIAL_SAVE_KEYS = ["지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", "특수운임", "특수기사차감", "특수청구추가", "외부지급합"];
+    const pickSp = (o) => Object.fromEntries(SPECIAL_SAVE_KEYS.filter((k) => o && o[k] !== undefined).map((k) => [k, o[k]]));
+    const special = { ...(form._editId ? pickSp(selectedOrder) : {}), ...pickSp(form) };
+    const 수수료 = 청구운임 - 기사운임 - paidOut(special);
     const today = todayStr();
 
     // 공통 데이터 (PC 호환 필드 포함)
@@ -4743,6 +4748,7 @@ const groupedByDate = useMemo(() => {
       청구운임,
       기사운임,
       수수료,
+      ...special,
       // ⭐ 2026-11-02 운임규칙 — 운임구분을 고른 적이 있거나(규칙 사용 회사) 원래 있던 오더만
       ...(form.운임구분 !== undefined ? { 운임구분: form.운임구분 || "", 운임수동: !!form.운임수동, ...(form.운임구분 && String(form.운임구분수수료율 ?? "") !== "" ? { 운임구분수수료율: Number(form.운임구분수수료율) || 0 } : {}) } : {}),
 
