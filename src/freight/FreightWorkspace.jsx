@@ -6,6 +6,8 @@ import { useFreightJobs } from "./freightStore";
 import FreightForm from "./FreightForm";
 import FreightBoard, { LegDrawer } from "./FreightBoard";
 import { ModeDashboard, DeadlineBoard, PnlPage, GroupOverview, JobTimeline, Clients360 } from "./FreightDash";
+import { SettlePage, StaffBizPage } from "./FreightSettle";
+import { enrichInland, orderIdOf } from "./freightCore";
 import { PageHead, Btn } from "./ui";
 
 const DESC = {
@@ -15,15 +17,23 @@ const DESC = {
   deadline: "넘기면 비용이 나가는 마감을 시간순으로",
   pnl: "Job · 거래처별 매출 · 매입 · 이익",
   handoff: "다른 팀이 넘긴 건을 받아 이어서 진행",
+  settle: "계산서 · 입금 · 지급을 건별로 확인",
+  staff: "직원마다 볼 수 있는 업무와 처음 화면",
   overview: "전 사업부 건수 · 마감 · 손익",
   jobs: "화물 하나가 팀을 거쳐 가는 흐름",
   clients: "거래처별 이용 사업부와 영업 기회",
 };
 
-export default function FreightWorkspace({ menuKey, modules = [], me = "", canEdit = true, inlandRows = [], clients = [], drivers = [], places = [], onMenu, onBiz }) {
+export default function FreightWorkspace({ menuKey, modules = [], me = "", canEdit = true, inlandRows = [], clients = [], drivers = [], places = [], onMenu, onBiz, onCreateInlandOrder = null, bare = false, canManage = false }) {
   const { biz, page } = parseBizMenu(menuKey);
   const info = bizInfo(biz);
-  const { jobs, loaded } = useFreightJobs();
+  const { jobs: rawJobs, loaded } = useFreightJobs();
+  // 배차 오더와 연결된 내륙 구간은 그 오더의 기사 · 금액 · 상태를 따라간다
+  const jobs = React.useMemo(() => {
+    if (!rawJobs.some((j) => j.dispatchId)) return rawJobs;
+    const byId = new Map(); inlandRows.forEach((r) => { const k = orderIdOf(r); if (k) byId.set(k, r); });
+    return rawJobs.map((j) => (j.mode === "inland" && j.dispatchId ? enrichInland(j, byId.get(String(j.dispatchId))) : j));
+  }, [rawJobs, inlandRows]);
   const [openId, setOpenId] = React.useState("");
   const [edit, setEdit] = React.useState(null);
   React.useEffect(() => { setEdit(null); setOpenId(""); }, [menuKey]);
@@ -45,9 +55,9 @@ export default function FreightWorkspace({ menuKey, modules = [], me = "", canEd
   const formProps = { jobs, clients: clientNames, drivers, places: placeNames, modules, me };
   const open = openId ? jobs.find((j) => j.id === openId) : null;
   const onOpen = (j) => setOpenId(j.id);
-  const drawer = <LegDrawer job={open} jobs={jobs} modules={modules} me={me} canEdit={canEdit} onClose={() => setOpenId("")} onEdit={(j) => { setOpenId(""); setEdit(j); }} onOpenLeg={onOpen} />;
+  const drawer = <LegDrawer job={open} jobs={jobs} modules={modules} me={me} canEdit={canEdit} onCreateInlandOrder={onCreateInlandOrder} onClose={() => setOpenId("")} onEdit={(j) => { setOpenId(""); setEdit(j); }} onOpenLeg={onOpen} />;
 
-  const head = (
+  const head = bare ? null : (
     <PageHead mode={biz} en={`${info.en} · ${String(page || "").toUpperCase()}`} title={biz === "group" ? bizMenuLabel(menuKey) : biz === "inland" ? "내륙 인계함" : `${info.short} ${bizMenuLabel(menuKey)}`} desc={DESC[page]}
       right={biz !== "group" && biz !== "inland" && page !== "new" && canEdit ? <Btn kind="primary" onClick={() => go("new")}>+ {bizMenuLabel(bizMenuKey(biz, "new"))}</Btn> : null} />
   );
@@ -70,14 +80,16 @@ export default function FreightWorkspace({ menuKey, modules = [], me = "", canEd
     else if (page === "jobs") body = <JobTimeline jobs={jobs} onOpen={onOpen} />;
     else if (page === "deadline") body = <DeadlineBoard jobs={jobs} onOpen={onOpen} />;
     else if (page === "pnl") body = <PnlPage jobs={jobs} inlandRows={modules.includes("inland") ? inlandRows : null} onOpen={onOpen} />;
+    else if (page === "staff") body = <StaffBizPage modules={modules} canEdit={canManage} />;
     else body = <Clients360 jobs={jobs} inlandRows={inlandRows} modules={modules} />;
   } else if (page === "dash") body = <ModeDashboard mode={biz} jobs={jobs} onOpen={onOpen} go={go} canEdit={canEdit} />;
   else if (page === "new") body = canEdit ? <FreightForm key={biz} {...formProps} mode={biz} onGoList={() => go("list")} /> : <div className="py-16 text-center text-[13.5px] font-bold text-[#9AA9C3]">조회 전용 계정은 등록할 수 없습니다.</div>;
   else if (page === "list") body = <FreightBoard mode={biz} jobs={jobs} allJobs={jobs} modules={modules} me={me} canEdit={canEdit} formProps={formProps} onNew={biz === "inland" ? null : () => go("new")} />;
-  else if (page === "handoff" && biz === "inland") body = <FreightBoard mode="inland" jobs={jobs} allJobs={jobs} modules={modules} me={me} canEdit={canEdit} formProps={formProps} />;
+  else if (page === "handoff" && biz === "inland") body = <FreightBoard mode="inland" jobs={jobs} allJobs={jobs} modules={modules} me={me} canEdit={canEdit} formProps={formProps} onCreateInlandOrder={onCreateInlandOrder} />;
   else if (page === "handoff") body = <FreightBoard mode={biz} jobs={jobs} allJobs={jobs} handoffOnly modules={modules} me={me} canEdit={canEdit} formProps={formProps} />;
   else if (page === "deadline") body = <DeadlineBoard jobs={jobs} mode={biz} onOpen={onOpen} />;
   else if (page === "pnl") body = <PnlPage jobs={jobs} mode={biz} onOpen={onOpen} />;
+  else if (page === "settle") body = <SettlePage jobs={jobs} mode={biz} me={me} canEdit={canEdit} onOpen={onOpen} />;
 
   return <div data-testid={`freight-${biz}-${page}`}>{head}{body}{drawer}</div>;
 }

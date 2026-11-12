@@ -115,10 +115,10 @@ export function ModeDashboard({ mode, jobs, onOpen, go, canEdit }) {
 
 // ── 마감보드 ─────────────────────────────────────────────────────────
 const LANES = [
-  { key: "over", title: "마감 지남", en: "OVERDUE", bar: "#E5484D" },
-  { key: "urgent", title: "24시간 안", en: "WITHIN 24H", bar: "#E5484D" },
-  { key: "soon", title: "3일 안", en: "WITHIN 3 DAYS", bar: "#E08A00" },
-  { key: "ok", title: "그 이후", en: "LATER", bar: "#4B6CB7" },
+  { key: "over", title: "마감 지남", en: "OVERDUE", fg: "#C2362B" },
+  { key: "urgent", title: "24시간 안", en: "WITHIN 24H", fg: "#C2362B" },
+  { key: "soon", title: "3일 안", en: "WITHIN 3 DAYS", fg: "#B26A00" },
+  { key: "ok", title: "그 이후", en: "LATER", fg: "#0F1A30" },
 ];
 export function DeadlineBoard({ jobs, mode = "", onOpen }) {
   const [only, setOnly] = React.useState("전체");
@@ -136,14 +136,14 @@ export function DeadlineBoard({ jobs, mode = "", onOpen }) {
       <div className="flex items-center gap-3 flex-wrap">
         <Seg size="sm" value={only} onChange={setOnly} options={["전체", "비용 발생"]} />
         <span className="text-[12.5px] font-semibold text-[#7A89A3]">비용 발생 = 넘기면 돈이 나가는 마감(반입 마감 · 반납 기한 · 프리타임 · 서류 마감)</span>
-        {overTotal > 0 && <span className="ml-auto h-8 px-3 rounded-xl bg-[#FDECEA] text-[#C2362B] text-[12.5px] font-black inline-flex items-center tabular-nums">예상 초과 비용 {won(overTotal)}원</span>}
+        {overTotal > 0 && <span className="ml-auto h-8 px-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] text-[#C2362B] text-[12.5px] font-black inline-flex items-center tabular-nums">예상 초과 비용 {won(overTotal)}원</span>}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-4 gap-4 items-start">
         {LANES.map((lane) => { const l = items.filter((x) => x.d.level === lane.key); return (
           <section key={lane.key} className="rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_6px_20px_rgba(15,26,48,0.05)] overflow-hidden min-w-0">
-            <div className="h-1" style={{ background: lane.bar }} />
+            <div className="h-1 bg-[#0F1A30]" />
             <div className="px-4 h-12 flex items-center gap-2 border-b border-[#EEF1F6]">
-              <span className="text-[14.5px] font-black text-[#0F1A30]">{lane.title}</span>
+              <span className="text-[14.5px] font-black" style={{ color: lane.fg }}>{lane.title}</span>
               <span className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]" style={{ fontFamily: MONO }}>{lane.en}</span>
               <span className="ml-auto min-w-[26px] h-6 px-1.5 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black grid place-items-center tabular-nums">{l.length}</span>
             </div>
@@ -172,7 +172,7 @@ export function PnlPage({ jobs, mode = "", inlandRows = null, onOpen }) {
   const [view, setView] = React.useState("Job");
   const inMonth = jobs.filter((j) => ymOf(kstYmd(j.createdAtMs)) === ym);
   const scoped = inMonth.filter((j) => !mode || j.mode === mode);
-  const tot = sumPnl(scoped);
+  const tot = sumPnl(inlandRows ? scoped.filter((j) => !j._linked) : scoped); // 배차 오더와 연결된 내륙 구간은 내륙 매출에 이미 들어 있다
   // Job 단위 — 같은 Job 의 모든 구간(다른 팀 구간 포함)을 합쳐 실제 이익을 본다
   const jobNos = new Set(scoped.map((j) => j.jobNo));
   const groups = groupByJob(jobs.filter((j) => jobNos.has(j.jobNo)));
@@ -281,7 +281,7 @@ export function GroupOverview({ jobs, modules, inlandRows, onOpen, goBiz }) {
         </div>
       </div>
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] gap-4">
-        <Card title="전사 급한 마감" en="RISK" right={overTotal > 0 ? <span className="h-7 px-2.5 rounded-lg bg-[#FDECEA] text-[#C2362B] text-[12px] font-black inline-flex items-center tabular-nums">예상 초과 비용 {won(overTotal)}원</span> : null}>
+        <Card title="전사 급한 마감" en="RISK" right={overTotal > 0 ? <span className="h-7 px-2.5 rounded-lg bg-[#F5F8FD] border border-[#E3E8F0] text-[#C2362B] text-[12px] font-black inline-flex items-center tabular-nums">예상 초과 비용 {won(overTotal)}원</span> : null}>
           {dues.length === 0 ? <Empty mode="group" title="3일 안에 닥친 마감이 없습니다" /> : <div className="space-y-1.5">{dues.map((x) => <DueRow key={x.job.id} {...x} onOpen={onOpen} />)}</div>}
         </Card>
         <Card title="팀 사이 인계 대기" en="HANDOFF QUEUE">
@@ -372,7 +372,7 @@ export function Clients360({ jobs, inlandRows, modules }) {
                     {modules.map((m) => <td key={m} className={`${TD} text-center`}>{r.by[m] ? <span className="inline-flex items-center justify-center min-w-[44px] h-7 px-2 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black tabular-nums">{r.by[m].count}건</span> : <span className="inline-block w-7 h-7 rounded-lg border border-dashed border-[#C3CCDB]" />}</td>)}
                     <td className={`${TD} text-right tabular-nums font-bold`}>{r.count}</td><td className={`${TD} text-right tabular-nums font-bold`}>{won(r.sale)}</td>
                     <td className={`${TD} text-right tabular-nums font-black ${r.profit < 0 ? "text-[#C2362B]" : "text-[#0F1A30]"}`}>{won(r.profit)}</td>
-                    <td className={TD}><div className="flex gap-1">{r.missing.map((m) => <span key={m} className="h-6 px-2 rounded-lg bg-[#FFF4E0] text-[#B26A00] text-[11.5px] font-extrabold inline-flex items-center">{MODE_NAME[m]} 제안</span>)}</div></td>
+                    <td className={TD}><div className="flex gap-1">{r.missing.map((m) => <span key={m} className="h-6 px-2 rounded-lg bg-[#F5F8FD] border border-[#E3E8F0] text-[#B26A00] text-[11.5px] font-extrabold inline-flex items-center">{MODE_NAME[m]} 제안</span>)}</div></td>
                   </tr>
                 ))}
               </tbody>

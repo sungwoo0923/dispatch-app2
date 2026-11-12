@@ -308,3 +308,74 @@ export function clientMatrix(jobs, inlandRows = [], modules = MODES) {
   (inlandRows || []).forEach((r) => { const s = num(r.청구운임); put(get(r.거래처명), "inland", s, s - num(r.기사운임)); });
   return [...m.values()].map((o) => ({ ...o, missing: (modules || []).filter((k) => !o.by[k]) })).sort((a, b) => b.sale - a.sale);
 }
+
+// ── 내륙 구간 ↔ 기존 배차 오더 연결 ─────────────────────────────────────
+//  인계받은 내륙 구간을 배차 오더로 등록하면(dispatchId) 기사 · 금액 · 상태는 그 오더를 따라간다
+export const orderIdOf = (r) => String(r?._id || r?.id || "");
+export function inlandOrderRecord(leg, today = todayYmd()) {
+  const lines = (l) => sumLines(l);
+  return {
+    거래처명: leg.client || "", 상차지명: leg.pickupPlace || "", 상차지주소: "", 하차지명: leg.dropPlace || "", 하차지주소: "",
+    상차일: leg.pickupDate || today, 상차시간: leg.pickupTime || "", 하차일: leg.pickupDate || today, 하차시간: "",
+    차량종류: leg.carType || "", 차량톤수: leg.carTon || "", 화물내용: leg.cargo || "",
+    청구운임: lines(leg.sales) + num(leg.saleAmt), 기사운임: lines(leg.costs) + num(leg.costAmt),
+    차량번호: leg.carNo || "", 이름: leg.driver || "", 전화번호: leg.driverPhone || "",
+    배차상태: String(leg.carNo || "").trim() ? "배차완료" : "배차중", 등록일: today, 지급방식: "계산서", 배차방식: "선택없음", 혼적여부: "독차",
+    메모: [`[${leg.jobNo}] ${leg.fromMode ? `${{ sea: "해상", air: "항공", container: "컨테이너" }[leg.fromMode] || ""} ${leg.fromRef || ""} 인계` : "인계"}`, leg.memo].filter(Boolean).join(" · "),
+    freightJobNo: leg.jobNo || "", freightLegId: leg.id || "", freightRefNo: leg.refNo || "",
+  };
+}
+export function enrichInland(leg, row, today = todayYmd()) {
+  if (!leg || leg.mode !== "inland" || !leg.dispatchId) return leg;
+  if (!row) return { ...leg, _linked: true, _orderMissing: true };
+  const assigned = !!String(row.차량번호 || "").trim();
+  const status = leg.status === "정산완료" ? "정산완료" : /취소/.test(String(row.배차상태 || "")) ? "접수" : !assigned ? "접수" : String(row.하차일 || row.상차일 || "") < today ? "운송완료" : String(row.상차일 || "") <= today ? "운송중" : "배차완료";
+  return {
+    ...leg, _linked: true, status, driver: row.이름 || "", carNo: row.차량번호 || "", driverPhone: row.전화번호 || "",
+    pickupPlace: row.상차지명 || leg.pickupPlace, dropPlace: row.하차지명 || leg.dropPlace, pickupDate: row.상차일 || leg.pickupDate, pickupTime: row.상차시간 || leg.pickupTime,
+    carType: row.차량종류 || leg.carType, carTon: row.차량톤수 || leg.carTon,
+    sales: [], costs: [], saleAmt: num(row.청구운임), costAmt: num(row.기사운임),
+  };
+}
+
+// ── 정산(청구 · 입금 · 지급) ───────────────────────────────────────────
+//  구간마다 billedAt(계산서 발행) · collectedAt(입금) / 지급 줄마다 paidAt(지급)
+export function settleSummary(jobs) {
+  const o = { sale: 0, unbilled: 0, receivable: 0, collected: 0, cost: 0, unpaid: 0, paid: 0 };
+  (jobs || []).forEach((j) => {
+    const sale = sumLines(j.sales) + num(j.saleAmt);
+    o.sale += sale;
+    if (j.collectedAt) o.collected += sale; else if (j.billedAt) o.receivable += sale; else o.unbilled += sale;
+    (Array.isArray(j.costs) ? j.costs : []).forEach((l) => { const v = lineKrw(l); o.cost += v; if (l.paidAt) o.paid += v; else o.unpaid += v; });
+  });
+  return o;
+}
+// 지급처별 지급 줄 — [{ vendor, total, unpaid, lines: [{ job, idx, line, krw }] }]
+export function payables(jobs) {
+  const m = new Map();
+  (jobs || []).forEach((j) => (Array.isArray(j.costs) ? j.costs : []).forEach((line, idx) => {
+    const vendor = String(line.vendor || "").trim() || "(지급처 없음)";
+    const o = m.get(vendor) || { vendor, total: 0, unpaid: 0, lines: [] };
+    const krw = lineKrw(line); o.total += krw; if (!line.paidAt) o.unpaid += krw; o.lines.push({ job: j, idx, line, krw });
+    m.set(vendor, o);
+  }));
+  return [...m.values()].sort((a, b) => b.unpaid - a.unpaid || b.total - a.total);
+}
+// 거래처별 청구 — [{ client, sale, unbilled, receivable, legs }]
+export function receivables(jobs) {
+  const m = new Map();
+  (jobs || []).forEach((j) => {
+    const sale = sumLines(j.sales) + num(j.saleAmt); if (!sale) return;
+    const k = j.client || "(거래처 없음)";
+    const o = m.get(k) || { client: k, sale: 0, unbilled: 0, receivable: 0, legs: [] };
+    o.sale += sale; if (!j.billedAt) o.unbilled += sale; else if (!j.collectedAt) o.receivable += sale; o.legs.push(j);
+    m.set(k, o);
+  });
+  return [...m.values()].sort((a, b) => (b.unbilled + b.receivable) - (a.unbilled + a.receivable) || b.sale - a.sale);
+}
+// 직원 업무 담당 — bizAccess(배열)가 있으면 그 업무만, 없으면 회사가 쓰는 업무 전부
+export function allowedModules(companyList, bizAccess, seeAll = false) {
+  if (seeAll || !Array.isArray(bizAccess) || !bizAccess.length) return companyList;
+  const l = (companyList || []).filter((k) => bizAccess.includes(k));
+  return l.length ? l : companyList;
+}

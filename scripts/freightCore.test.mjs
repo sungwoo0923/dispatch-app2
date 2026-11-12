@@ -54,3 +54,31 @@ assert.equal(g.length, 2); assert.equal(g.find((x) => x.jobNo === "J1").legs[0].
 const m = c.clientMatrix([{ client: "A", mode: "sea", sales: [{ cur: "KRW", amount: "100" }] }], [{ 거래처명: "A", 청구운임: 50, 기사운임: 30 }, { 거래처명: "B", 청구운임: 10, 기사운임: 5 }], ["inland", "sea", "air"]);
 assert.equal(m[0].client, "A"); assert.equal(m[0].sale, 150); assert.deepEqual(m[0].missing, ["air"]); assert.deepEqual(m[1].missing, ["sea", "air"]);
 console.log("freightCore OK");
+// 내륙 오더 연결
+{
+  const leg = { id: "L", mode: "inland", jobNo: "JB-1", refNo: "IN-1", client: "A", pickupPlace: "P", dropPlace: "D", pickupDate: "2026-11-13", fromMode: "container", fromRef: "CT-1", sales: [{ cur: "KRW", amount: "300000" }], costs: [] };
+  const rec = c.inlandOrderRecord(leg, "2026-11-12");
+  assert.equal(rec.거래처명, "A"); assert.equal(rec.청구운임, 300000); assert.equal(rec.배차상태, "배차중"); assert.equal(rec.freightLegId, "L"); assert.match(rec.메모, /JB-1/);
+  const linked = { ...leg, dispatchId: "o1", status: "접수" };
+  const e = c.enrichInland(linked, { _id: "o1", 상차일: "2026-11-13", 차량번호: "12가3456", 이름: "김", 청구운임: 350000, 기사운임: 280000, 배차상태: "배차완료" }, "2026-11-12");
+  assert.equal(e.status, "배차완료"); assert.equal(e.driver, "김"); assert.deepEqual(c.legPnl(e), { sale: 350000, cost: 280000, profit: 70000, margin: 20 });
+  assert.equal(c.enrichInland(linked, { 상차일: "2026-11-10", 차량번호: "1" }, "2026-11-12").status, "운송완료");
+  assert.equal(c.enrichInland(linked, { 상차일: "2026-11-13", 차량번호: "" }, "2026-11-12").status, "접수");
+  assert.equal(c.enrichInland(linked, null)._orderMissing, true);
+  assert.equal(c.enrichInland(leg, {}), leg);
+}
+// 정산
+{
+  const js = [
+    { client: "A", sales: [{ cur: "KRW", amount: "100" }], costs: [{ cur: "KRW", amount: "60", vendor: "V1", paidAt: 1 }, { cur: "KRW", amount: "10", vendor: "V2" }] },
+    { client: "A", sales: [{ cur: "KRW", amount: "50" }], billedAt: 1, costs: [] },
+    { client: "B", sales: [{ cur: "KRW", amount: "30" }], billedAt: 1, collectedAt: 2, costs: [{ cur: "KRW", amount: "5" }] },
+  ];
+  assert.deepEqual(c.settleSummary(js), { sale: 180, unbilled: 100, receivable: 50, collected: 30, cost: 75, unpaid: 15, paid: 60 });
+  assert.equal(c.receivables(js)[0].client, "A"); assert.equal(c.receivables(js)[0].unbilled, 100);
+  assert.equal(c.payables(js).find((x) => x.vendor === "V1").unpaid, 0); assert.equal(c.payables(js)[0].unpaid, 10);
+}
+assert.deepEqual(c.allowedModules(["inland", "sea"], ["sea", "air"]), ["sea"]);
+assert.deepEqual(c.allowedModules(["inland", "sea"], ["air"]), ["inland", "sea"]);
+assert.deepEqual(c.allowedModules(["inland", "sea"], ["sea"], true), ["inland", "sea"]);
+console.log("freightCore 2 OK");

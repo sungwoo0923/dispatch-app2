@@ -57,7 +57,7 @@ export const isBizMenu = (m) => typeof m === "string" && m.startsWith("biz:");
 export const bizMenuKey = (biz, page) => `biz:${biz}:${page}`;
 export const parseBizMenu = (m) => { const [, biz, page] = String(m || "").split(":"); return { biz, page }; };
 const PAGE_LABEL = {
-  dash: "대시보드", new: "오더등록", list: "운송현황", deadline: "마감보드", pnl: "손익", handoff: "인계함",
+  dash: "대시보드", new: "오더등록", list: "운송현황", deadline: "마감보드", pnl: "손익", settle: "정산", handoff: "인계함", staff: "업무 담당",
   overview: "통합 현황", jobs: "Job 타임라인", clients: "거래처 360",
 };
 const PAGE_LABEL_BY_BIZ = {
@@ -70,9 +70,9 @@ export function bizMenuLabel(m) {
   const { biz, page } = parseBizMenu(m);
   return PAGE_LABEL_BY_BIZ[biz]?.[page] || PAGE_LABEL[page] || "";
 }
-export const BIZ_MENU_ICON = { dash: "dashboard", new: "truck", list: "sheet", deadline: "clock", pnl: "money", handoff: "link", overview: "chart", jobs: "route", clients: "building" };
-const FREIGHT_PAGES = ["dash", "new", "list", "deadline", "pnl", "handoff"];
-const GROUP_PAGES = ["overview", "jobs", "deadline", "pnl", "clients"];
+export const BIZ_MENU_ICON = { dash: "dashboard", new: "truck", list: "sheet", deadline: "clock", pnl: "money", settle: "inbox", handoff: "link", staff: "users", overview: "chart", jobs: "route", clients: "building" };
+const FREIGHT_PAGES = ["dash", "new", "list", "deadline", "pnl", "settle", "handoff"];
+const GROUP_PAGES = ["overview", "jobs", "deadline", "pnl", "clients", "staff"];
 // 그 업무 영역의 상단 메뉴 목록(내륙은 기존 목록을 그대로 쓰므로 null)
 export function bizTopMenus(biz) {
   if (biz === "group") return ["HOME", ...GROUP_PAGES.map((p) => bizMenuKey("group", p)), "회사관리", "관리자메뉴"];
@@ -94,3 +94,9 @@ export const bizFirstMenu = (biz) => (biz === "inland" ? "HOME" : bizMenuKey(biz
 const LS = (uid) => `kpBiz:${uid || "me"}`;
 export function readBiz(uid) { try { return localStorage.getItem(LS(uid)) || ""; } catch { return ""; } }
 export function writeBiz(uid, biz) { try { localStorage.setItem(LS(uid), biz); } catch { /* 무시 */ } }
+
+// 그 업무의 화면 목록(모바일 탭) — [[메뉴 키, 이름]]
+export function bizPages(biz) {
+  const pages = biz === "group" ? GROUP_PAGES : biz === "inland" ? ["handoff"] : FREIGHT_PAGES;
+  return pages.map((p) => { const k = bizMenuKey(biz, p); return [k, biz === "inland" ? "내륙 인계함" : bizMenuLabel(k)]; });
+}

@@ -79,7 +79,7 @@ export function Kpi({ label, value, unit, sub, tone = "", dark = false, onClick 
 export function Btn({ children, onClick, kind = "ghost", size = "md", disabled = false, type = "button", title, className = "" }) {
   const h = size === "sm" ? "h-8 px-3 text-[12.5px]" : size === "lg" ? "h-12 px-6 text-[15px]" : "h-10 px-4 text-[13.5px]";
   const k = kind === "primary" ? "bg-[#0F1A30] text-white hover:bg-[#1B2B4B] shadow-[0_6px_16px_rgba(15,26,48,.22)]"
-    : kind === "danger" ? "bg-white text-[#C2362B] border border-[#F0C9C5] hover:bg-[#FDF3F2]"
+    : kind === "danger" ? "bg-white text-[#C2362B] border border-[#DCE3EE] hover:bg-[#F5F8FD]"
     : kind === "soft" ? "bg-[#EEF3FB] text-[#1B2B4B] hover:bg-[#E2EAF7]"
     : "bg-white text-[#1B2B4B] border border-[#DCE3EE] hover:border-[#2D4C82]";
   return <button type={type} title={title} onClick={onClick} disabled={disabled} className={`inline-flex items-center justify-center gap-1.5 rounded-xl font-extrabold whitespace-nowrap transition disabled:opacity-40 disabled:cursor-not-allowed ${h} ${k} ${className}`}>{children}</button>;
@@ -204,22 +204,24 @@ export function StatusChip({ job }) {
   const pct = progressPct(job);
   const done = pct >= 100;
   return (
-    <span className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-lg text-[11.5px] font-extrabold whitespace-nowrap ${req ? "bg-[#FFF4E0] text-[#B26A00]" : done ? "bg-[#0F1A30] text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${req ? "bg-[#E08A00] animate-pulse" : done ? "bg-[#8FB0F0]" : "bg-[#4B6CB7]"}`} />{job.status || "-"}
+    <span className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-lg text-[11.5px] font-extrabold whitespace-nowrap ${req ? "bg-[#F5F8FD] border border-[#E3E8F0] text-[#B26A00]" : done ? "bg-[#0F1A30] text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${req ? "bg-[#B26A00] animate-pulse" : done ? "bg-[#8FB0F0]" : "bg-[#4B6CB7]"}`} />{job.status || "-"}
     </span>
   );
 }
+// 🎨 2026-11-12 알록달록 금지 — 바탕은 모두 같은 옅은 남색, 급한 정도는 글씨 색으로만
+const DUE_BG = "#F5F8FD";
 const DUE_STYLE = {
-  over: { bg: "#FDECEA", fg: "#C2362B", dot: "#E5484D" },
-  urgent: { bg: "#FDECEA", fg: "#C2362B", dot: "#E5484D" },
-  soon: { bg: "#FFF4E0", fg: "#B26A00", dot: "#E08A00" },
-  ok: { bg: "#EEF3FB", fg: "#2D4C82", dot: "#4B6CB7" },
+  over: { bg: DUE_BG, fg: "#C2362B", dot: "#C2362B" },
+  urgent: { bg: DUE_BG, fg: "#C2362B", dot: "#C2362B" },
+  soon: { bg: DUE_BG, fg: "#B26A00", dot: "#B26A00" },
+  ok: { bg: DUE_BG, fg: "#2D4C82", dot: "#4B6CB7" },
 };
 export function DueChip({ due, showLabel = true }) {
   if (!due) return <span className="text-[12px] text-[#C3CCDB]">-</span>;
   const s = DUE_STYLE[due.level] || DUE_STYLE.ok;
   return (
-    <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-lg text-[11.5px] font-extrabold whitespace-nowrap tabular-nums" style={{ background: s.bg, color: s.fg }}>
+    <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-lg text-[11.5px] font-extrabold whitespace-nowrap tabular-nums" style={{ background: s.bg, color: s.fg, boxShadow: "inset 0 0 0 1px #E3E8F0" }}>
       <span className={`w-1.5 h-1.5 rounded-full ${due.level === "over" || due.level === "urgent" ? "animate-pulse" : ""}`} style={{ background: s.dot }} />
       {showLabel && <span className="opacity-80">{due.label}</span>}{due.text}
     </span>

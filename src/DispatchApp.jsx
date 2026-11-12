@@ -2967,6 +2967,8 @@ import { useCompanyFeatures } from "./companyFeatures";
 import { useBizModules, isBizMenu, parseBizMenu, bizTopMenus, bizSideGroups, bizFirstMenu, bizMenuKey, readBiz, writeBiz, BIZ_MENU_ICON } from "./bizModules";
 import BizSwitcher from "./freight/BizSwitcher";
 const FreightWorkspace = React.lazy(() => import("./freight/FreightWorkspace"));
+const FreightRevenueStrip = React.lazy(() => import("./freight/FreightSettle").then((m) => ({ default: m.FreightRevenueStrip })));
+import { allowedModules } from "./freight/freightCore";
 import { useBetaOn, PayBadge, PayPopup, CallDepositDesk, PayNoticeToggle, queuePayNotice, DateField, OUT_KEY, DispatchWayPicker, isCaughtCall } from "./CallPay"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
 import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
 import { DriverGuideSendModal, GUIDE_BTN, guideSentLabel, isFleetGrade } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
@@ -8233,7 +8235,11 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   const deptCompany = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
   // 🧭 2026-11-12 업무 영역 — 회사가 쓰는 영역(내륙 · 컨테이너 · 해상 · 항공) 중 지금 보는 것. 내륙뿐인 회사는 예전 화면 그대로
   //  통합 현황(group)은 임원 · 관리자 · 마스터만. 고른 업무는 계정마다 기억하고, 처음엔 가입 때 고른 담당 업무(users.bizHome)
-  const bizMods = useBizModules(deptCompany);
+  const bizModsAll = useBizModules(deptCompany);
+  const bizSeeAll = isExec || role === "admin" || role === "totalMaster" || realRole === "allMgr" || myProfileDoc?.isMaster === true;
+  // 👤 직원 업무 담당(통합 › 업무 담당에서 정함) — 정해진 직원은 그 업무만 본다
+  const bizAllowKey = allowedModules(bizModsAll.list, myProfileDoc?.bizAccess, bizSeeAll).join(",");
+  const bizMods = React.useMemo(() => ({ ...bizModsAll, list: bizAllowKey.split(",").filter(Boolean) }), [bizAllowKey, bizModsAll.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
   const canBizGroup = bizMods.list.length >= 2 && (isExec || role === "admin" || role === "totalMaster" || realRole === "allMgr" || myProfileDoc?.isMaster === true);
   const [bizRaw, setBizRaw] = React.useState(() => readBiz(user?.uid));
   const bizWant = bizRaw || myProfileDoc?.bizHome || "";
@@ -8951,7 +8957,8 @@ return (
         {isBizMenu(menu) && (
           <React.Suspense fallback={<div className="py-20 text-center text-[13.5px] font-bold text-[#9AA9C3]">불러오는 중…</div>}>
             <FreightWorkspace menuKey={menu} modules={bizMods.list} me={myRealName || user?.displayName || ""} canEdit={!isViewer && role !== "viewer"}
-              inlandRows={salesDispatchData} clients={clients} drivers={drivers} places={places} onMenu={handleMenuClick} onBiz={pickBiz} />
+              inlandRows={salesDispatchData} clients={clients} drivers={drivers} places={places} onMenu={handleMenuClick} onBiz={pickBiz}
+              canManage={bizSeeAll && !isViewer} onCreateInlandOrder={bizModsAll.list.includes("inland") ? (rec) => addDispatchSafe({ ...rec, 등록자명: myRealName || "" }) : null} />
           </React.Suspense>
         )}
         {menu === "HOME" && (
@@ -9215,6 +9222,8 @@ return (
 
         {menu === "매출관리" && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
           (revenueUnlocked || DEV_DEMO_REVENUE) ? (
+            <>
+            {bizMods.list.length > 1 && <React.Suspense fallback={null}><FreightRevenueStrip modules={bizMods.list} onOpenGroup={canBizGroup ? () => { setBizRaw("group"); writeBiz(user?.uid, "group"); setMenu(bizMenuKey("group", "pnl")); } : null} /></React.Suspense>}
             <DetailScope data={salesDispatchData} getters={mainDetailGet} title="세부검색 · 매출관리">{(detRows, detBtn) => (
             <BizScope company={getTenant() || userCompany || localStorage.getItem("userCompany") || ""} data={detRows} extra={detBtn}>{(bizRows, bizSel) => (
             <Settlement
@@ -9227,6 +9236,7 @@ return (
               role={role}
               userCompany={userCompany}
             />)}</BizScope>)}</DetailScope>
+            </>
           ) : (
             <div className="flex items-center justify-center" style={{ minHeight: "60vh" }}>
               <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 w-[360px]">

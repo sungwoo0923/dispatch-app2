@@ -3,9 +3,9 @@
 import React from "react";
 import {
   statusList, HANDOFF_STATUS, nextStatus, isDone, progressPct, topDeadline, deadlinesOf, dueInfo, overCost, legPnl, sumPnl, won, fmtDT, fmtCntrNo, fmtAwb,
-  portLabel, airportLabel, airline, legTitle, handoffTargets, cntrType,
+  portLabel, airportLabel, airline, legTitle, handoffTargets, cntrType, inlandOrderRecord,
 } from "./freightCore";
-import { setLegStatus, removeLeg, requestHandoff } from "./freightStore";
+import { setLegStatus, removeLeg, requestHandoff, updateLeg } from "./freightStore";
 import FreightForm from "./FreightForm";
 import { Card, Btn, Sel, Seg, Empty, StatusChip, DueChip, Stepper, Drawer, ContainerArt, RouteArt, routeEnds, ModeChip, MODE_NAME, MONO } from "./ui";
 
@@ -65,7 +65,7 @@ function facts(j) {
   ];
 }
 
-export function LegDrawer({ job, jobs, modules, me, canEdit, onClose, onEdit, onOpenLeg }) {
+export function LegDrawer({ job, jobs, modules, me, canEdit, onClose, onEdit, onOpenLeg, onCreateInlandOrder }) {
   const [busy, setBusy] = React.useState(false);
   const [confirmDel, setConfirmDel] = React.useState(false);
   React.useEffect(() => { setConfirmDel(false); }, [job?.id]);
@@ -80,6 +80,14 @@ export function LegDrawer({ job, jobs, modules, me, canEdit, onClose, onEdit, on
   const targets = handoffTargets(job, modules).filter((t) => !siblings.some((s) => s.mode === t && s.fromLeg === job.id));
   const run = async (fn) => { setBusy(true); try { await fn(); } catch (e) { window.alert(`처리하지 못했습니다. ${e?.message || ""}`); } setBusy(false); };
   const ends = routeEnds(job);
+  const linked = !!job._linked;
+  // 내륙 구간 → 기존 배차 오더로 등록(배차현황 · 기사앱 · 정산으로 이어진다). 등록 뒤 기사 · 금액 · 상태는 그 오더를 따라간다
+  const canMakeOrder = job.mode === "inland" && !job.dispatchId && canEdit && !!onCreateInlandOrder;
+  const makeOrder = () => run(async () => {
+    const id = await onCreateInlandOrder(inlandOrderRecord(job));
+    if (!id) return;
+    await updateLeg(job, { dispatchId: id, status: job.status === HANDOFF_STATUS ? "접수" : job.status }, "배차 오더로 등록", me);
+  });
   return (
     <Drawer open onClose={onClose} sub={`${job.jobNo} · ${MODE_NAME[job.mode]}`} title={`${job.refNo} · ${job.client || "거래처 없음"}`}
       footer={canEdit ? (<>
@@ -87,8 +95,9 @@ export function LegDrawer({ job, jobs, modules, me, canEdit, onClose, onEdit, on
           ? <><span className="text-[12.5px] font-bold text-[#C2362B]">이 건을 삭제할까요?</span><Btn kind="danger" size="sm" disabled={busy} onClick={() => run(async () => { await removeLeg(job); onClose(); })}>삭제</Btn><Btn size="sm" onClick={() => setConfirmDel(false)}>취소</Btn></>
           : <Btn kind="danger" size="sm" onClick={() => setConfirmDel(true)}>삭제</Btn>}
         <div className="ml-auto flex gap-2">
-          <Btn onClick={() => onEdit(job)}>{job.status === HANDOFF_STATUS ? "내용 채우고 접수" : "수정"}</Btn>
-          {next && job.status !== HANDOFF_STATUS && <Btn kind="primary" disabled={busy} onClick={() => run(() => setLegStatus(job, next, me))}>다음 단계 · {next}</Btn>}
+          {!linked && <Btn onClick={() => onEdit(job)}>{job.status === HANDOFF_STATUS ? "내용 채우고 접수" : "수정"}</Btn>}
+          {canMakeOrder && <Btn kind="primary" disabled={busy} onClick={makeOrder}>배차 오더로 등록</Btn>}
+          {!linked && !canMakeOrder && next && job.status !== HANDOFF_STATUS && <Btn kind="primary" disabled={busy} onClick={() => run(() => setLegStatus(job, next, me))}>다음 단계 · {next}</Btn>}
         </div>
       </>) : null}>
       <div className="rounded-2xl p-4 text-white flex flex-col items-center" style={{ background: "linear-gradient(135deg,#0B1428 0%,#14203A 45%,#1B2B4B 75%,#2D4C82 100%)" }}>
@@ -101,14 +110,19 @@ export function LegDrawer({ job, jobs, modules, me, canEdit, onClose, onEdit, on
         </div>
       </div>
 
-      <Card title="진행 단계" en="PROGRESS" right={canEdit && job.status !== HANDOFF_STATUS ? (
+      <Card title="진행 단계" en="PROGRESS" right={canEdit && !linked && job.status !== HANDOFF_STATUS ? (
         <div className="w-[150px]"><Sel value={job.status} onChange={(v) => v && v !== job.status && run(() => setLegStatus(job, v, me))} options={statusList(job.mode)} /></div>
       ) : null}>
         <Stepper job={job} />
       </Card>
 
+      {linked && (
+        <div className="rounded-2xl px-4 py-3 border border-[#E3E8F0] bg-white text-[13px] font-bold text-[#3A4A66]">
+          {job._orderMissing ? "연결된 배차 오더를 찾지 못했습니다(삭제됐거나 조회 기간 밖)." : "배차 오더와 연결된 건입니다. 기사 · 금액 · 진행 상태는 배차현황에서 바꾸면 여기에 자동으로 반영됩니다."}
+        </div>
+      )}
       {over.days > 0 && (
-        <div className="rounded-2xl px-4 py-3 border border-[#F0C9C5] bg-[#FDF3F2] text-[13px] font-bold text-[#C2362B]">
+        <div className="rounded-2xl px-4 py-3 border border-[#E3E8F0] bg-[#F5F8FD] text-[13px] font-bold text-[#C2362B]">
           {job.mode === "container" ? "반납 기한" : "프리타임"}을 {over.days}일 넘겼습니다{over.cost > 0 ? ` · 예상 초과 비용 ${won(over.cost)}원` : " · 하루 비용을 넣으면 예상 금액이 나옵니다"}.
         </div>
       )}
@@ -185,7 +199,7 @@ export function LegDrawer({ job, jobs, modules, me, canEdit, onClose, onEdit, on
 }
 
 // 운송현황 · 인계함 공용 표
-export default function FreightBoard({ mode, jobs, allJobs, handoffOnly = false, modules, me, canEdit, formProps, onNew }) {
+export default function FreightBoard({ mode, jobs, allJobs, handoffOnly = false, modules, me, canEdit, formProps, onNew, onCreateInlandOrder }) {
   const [q, setQ] = React.useState("");
   const [st, setSt] = React.useState("");
   const [scope, setScope] = React.useState("진행");
@@ -236,7 +250,19 @@ export default function FreightBoard({ mode, jobs, allJobs, handoffOnly = false,
         {rows.length === 0 ? (
           <Empty mode={mode} title={handoffOnly ? "받은 인계 요청이 없습니다" : "조건에 맞는 건이 없습니다"} desc={handoffOnly ? "다른 팀이 인계를 요청하면 여기에 뜹니다." : "검색 · 상태 조건을 바꿔 보세요."} action={onNew && canEdit && !handoffOnly ? <Btn kind="primary" onClick={onNew}>+ 새로 등록</Btn> : null} />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* 휴대폰 — 표 대신 카드 */}
+          <div className="md:hidden divide-y divide-[#EEF1F6]">
+            {rows.map((j) => { const due = topDeadline(j, now); const p = legPnl(j); return (
+              <button key={j.id} type="button" onClick={() => setOpenId(j.id)} className="w-full text-left px-4 py-3 active:bg-[#F5F8FD]">
+                <div className="flex items-center gap-2"><span className="text-[12.5px] font-black text-[#0F1A30]" style={mono}>{j.refNo}</span><span className="text-[11px] font-bold text-[#9AA9C3]" style={mono}>{j.jobNo}</span><span className="ml-auto"><StatusChip job={j} /></span></div>
+                <div className="mt-1 text-[14px] font-black text-[#0F1A30] truncate">{j.client || "-"}</div>
+                <div className="text-[12.5px] font-semibold text-[#5B6B85] truncate">{legTitle(j) || "-"}</div>
+                <div className="mt-1.5 flex items-center gap-2"><Stepper job={j} compact /><span className="ml-auto flex items-center gap-2">{due && <DueChip due={due} />}{(p.sale || p.cost) ? <span className={`text-[12px] font-black tabular-nums ${p.profit < 0 ? "text-[#C2362B]" : "text-[#0F1A30]"}`}>{won(p.profit)}</span> : null}</span></div>
+              </button>
+            ); })}
+          </div>
+          <div className="overflow-x-auto hidden md:block">
             <table className="w-full border-collapse min-w-[980px]">
               <thead style={{ background: "#0F1A30" }}>
                 <tr>
@@ -262,9 +288,10 @@ export default function FreightBoard({ mode, jobs, allJobs, handoffOnly = false,
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Card>
-      <LegDrawer job={open} jobs={allJobs} modules={modules} me={me} canEdit={canEdit} onClose={() => setOpenId("")} onEdit={(j) => { setOpenId(""); setEdit(j); }} onOpenLeg={(s) => setOpenId(s.id)} />
+      <LegDrawer job={open} jobs={allJobs} modules={modules} me={me} canEdit={canEdit} onCreateInlandOrder={onCreateInlandOrder} onClose={() => setOpenId("")} onEdit={(j) => { setOpenId(""); setEdit(j); }} onOpenLeg={(s) => setOpenId(s.id)} />
     </>
   );
 }

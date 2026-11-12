@@ -6,8 +6,11 @@ import { createPortal } from "react-dom";
 import { BIZ, GROUP } from "../bizModules";
 import { ModeIcon, MONO } from "./ui";
 
-export default function BizSwitcher({ modules = [], current = "inland", canGroup = false, onPick }) {
-  const [open, setOpen] = React.useState(false);
+export default function BizSwitcher({ modules = [], current = "inland", canGroup = false, onPick, hideButton = false, open: openProp, onOpenChange }) {
+  // 모바일 메뉴처럼 바깥에서 여닫는 경우(open · onOpenChange) — 버튼 없이 고르는 창만 쓴다
+  const [openSelf, setOpenSelf] = React.useState(false);
+  const open = openProp !== undefined ? openProp : openSelf;
+  const setOpen = (v) => { if (onOpenChange) onOpenChange(v); else setOpenSelf(v); };
   React.useEffect(() => {
     if (!open) return undefined;
     const k = (e) => { if (e.key === "Escape") setOpen(false); };
@@ -19,13 +22,13 @@ export default function BizSwitcher({ modules = [], current = "inland", canGroup
   const cur = current === "group" ? GROUP : BIZ[current] || BIZ.inland;
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} data-testid="biz-switch" title="업무 전환"
+      {!hideButton && <button type="button" onClick={() => setOpen(true)} data-testid="biz-switch" title="업무 전환"
         className="h-[34px] pl-2.5 pr-2 rounded-xl inline-flex items-center gap-1.5 bg-white text-[#0F1A30] text-[12.5px] font-black whitespace-nowrap shadow-[0_4px_12px_rgba(0,0,0,.25)] hover:bg-[#EEF3FB] transition">
         <ModeIcon mode={cur.key} size={14} />{cur.short}
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
-      </button>
+      </button>}
       {open && createPortal(
-        <div className="fixed inset-0 z-[2147482500] bg-[#0B1428]/60 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+        <div className="kp-pc-pop fixed inset-0 z-[2147482500] bg-[#0B1428]/60 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
           <div className="w-full sm:max-w-[620px] rounded-t-[26px] sm:rounded-[24px] overflow-hidden shadow-[0_30px_80px_rgba(5,10,25,0.55)] ring-1 ring-white/10" style={{ background: "linear-gradient(160deg,#0F1A30 0%,#152340 60%,#1B2B4B 100%)" }}>
             <div className="px-5 sm:px-6 pt-5 pb-4 flex items-start gap-3 border-b border-white/10">
               <div className="min-w-0 flex-1">

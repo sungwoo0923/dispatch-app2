@@ -5,9 +5,10 @@ import {
   CNTR_TYPES, cntrType, CNTR_TRIPS, CNTR_FARE_KINDS, CNTR_CAR_KINDS, CHASSIS, LINES, TERMINALS, checkCntrNo, cleanCntrNo, fmtCntrNo,
   SEA_TYPES, INCOTERMS, SERVICE_TERMS, BL_TYPES, FREIGHT_TERMS, PKG_UNITS, PORTS, portName,
   AIRPORTS, AIRLINES, airline, AIR_WAREHOUSES, checkAwb, cleanAwb, fmtAwb, volumeWeight, chargeableWeight, cbmOf, revenueTon,
-  CHARGE_ITEMS, CURRENCIES, DEFAULT_RATE, lineKrw, sumLines, won, DIRECTIONS, statusList, HANDOFF_STATUS, toMs, handoffTargets,
+  CHARGE_ITEMS, CURRENCIES, lineKrw, sumLines, won, DIRECTIONS, statusList, HANDOFF_STATUS, toMs, handoffTargets,
 } from "./freightCore";
 import { createLegs, updateLeg, requestHandoff } from "./freightStore";
+import { rateOf, loadRates, ratesInfo } from "./fxRates"; // 💱 오늘 환율(못 받으면 기본값)
 import { Card, Field, Grid, Sel, Combo, DateIn, TimeIn, DateTimeIn, TextIn, NumIn, Seg, Btn, ContainerArt, RouteArt, ModeChip, MODE_NAME, MONO, NAVY, GRID } from "./ui";
 
 const QTY = Array.from({ length: 20 }, (_, i) => [String(i + 1), `${i + 1}대`]);
@@ -30,7 +31,7 @@ const blank = (mode) => {
 
 // 운임 줄(청구 · 지급) 편집
 function Lines({ title, mode, lines, onChange, vendor = false }) {
-  const set = (i, k, v) => onChange(lines.map((l, j) => (j === i ? { ...l, [k]: v, ...(k === "cur" ? { rate: v === "KRW" ? "" : String(DEFAULT_RATE[v] || "") } : {}) } : l)));
+  const set = (i, k, v) => onChange(lines.map((l, j) => (j === i ? { ...l, [k]: v, ...(k === "cur" ? { rate: v === "KRW" ? "" : String(rateOf(v) || "") } : {}) } : l)));
   const add = () => onChange([...lines, { item: CHARGE_ITEMS[mode][lines.length ? Math.min(lines.length, CHARGE_ITEMS[mode].length - 1) : 0], cur: "KRW", amount: "", rate: "", vendor: "" }]);
   return (
     <div className="min-w-0">
@@ -55,7 +56,7 @@ function Lines({ title, mode, lines, onChange, vendor = false }) {
               )}
             </div>
             {vendor && <TextIn value={l.vendor} onChange={(v) => set(i, "vendor", v)} placeholder="지급처" />}
-            <button type="button" onClick={() => onChange(lines.filter((_, j) => j !== i))} aria-label="삭제" className="w-8 h-10 rounded-lg text-[#9AA9C3] hover:text-[#C2362B] hover:bg-[#FDF3F2] grid place-items-center text-[14px] font-black">✕</button>
+            <button type="button" onClick={() => onChange(lines.filter((_, j) => j !== i))} aria-label="삭제" className="w-8 h-10 rounded-lg text-[#9AA9C3] hover:text-[#C2362B] hover:bg-[#F5F8FD] grid place-items-center text-[14px] font-black">✕</button>
           </div>
         ))}
       </div>
@@ -72,6 +73,8 @@ export default function FreightForm({ mode, initial = null, jobs = [], clients =
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
   const [saved, setSaved] = React.useState(null);
+  const [fx, setFx] = React.useState(ratesInfo);
+  React.useEffect(() => { let on = true; loadRates().then(() => { if (on) setFx(ratesInfo()); }); return () => { on = false; }; }, []);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const patch = (o) => setF((p) => ({ ...p, ...o }));
 
@@ -159,7 +162,7 @@ export default function FreightForm({ mode, initial = null, jobs = [], clients =
   return (
     <div className="space-y-4">
       {accepting && (
-        <div className="rounded-2xl px-4 py-3 border border-[#F3D9A4] bg-[#FFF8EA] text-[13px] font-bold text-[#8A5A00] flex items-center gap-2 flex-wrap">
+        <div className="rounded-2xl px-4 py-3 border border-[#E3E8F0] bg-[#F5F8FD] text-[13px] font-bold text-[#3A4A66] flex items-center gap-2 flex-wrap">
           <ModeChip mode={initial.fromMode} /> 팀이 인계한 건입니다({initial.fromRef}). 비어 있는 칸을 채우고 [접수]를 누르면 진행 건으로 바뀝니다.
         </div>
       )}
@@ -365,7 +368,7 @@ export default function FreightForm({ mode, initial = null, jobs = [], clients =
       )}
 
       {/* ── 운임 ── */}
-      <Card title="운임" en="CHARGES" right={<span className={`text-[13px] font-black tabular-nums ${profit < 0 ? "text-[#C2362B]" : "text-[#0F1A30]"}`}>이익 {won(profit)}원{sale > 0 ? ` · ${Math.round((profit / sale) * 1000) / 10}%` : ""}</span>}>
+      <Card title="운임" en={fx.live ? `CHARGES · ${fx.day} 환율 자동` : "CHARGES · 기본 환율"} right={<span className={`text-[13px] font-black tabular-nums ${profit < 0 ? "text-[#C2362B]" : "text-[#0F1A30]"}`}>이익 {won(profit)}원{sale > 0 ? ` · ${Math.round((profit / sale) * 1000) / 10}%` : ""}</span>}>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <Lines title="청구 (매출)" mode={mode} lines={f.sales || []} onChange={(v) => set("sales", v)} />
           <Lines title="지급 (매입)" mode={mode} lines={f.costs || []} onChange={(v) => set("costs", v)} vendor />
