@@ -79,6 +79,7 @@ import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf, fixedLookOf, useR
 import { carrierOf } from "./routeCarriers"; // ⭐ 2026-11-06 고정노선현황 운송사 검색
 import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 정산·매출에서 뺀다
 import ColumnStyleHost from "./ColumnStyle"; // 🎨 2026-11-03 컬럼명 오른쪽 클릭 → 색 변경 // ⭐ 2026-11-03 배차현황 › 고정노선현황
+import { splitContactCell, isCleanPhone } from "./contactCell"; // ☎ 담당자번호 칸에는 번호만
 import { isJyCompany } from "./jyOnly"; // 🏷 JY로지스틱스 전용 기능(단가표 자동 입력 등)
 import QuickNav, { QuickSearchButton } from "./QuickNav"; // 🔎 2026-11-12 통합 검색(Ctrl+K) · 자주 쓰는 메뉴 · 도움말 센터
 import { useScreenFit, ScreenFitButton, BrowserZoomNotice } from "./ScreenFit"; // 🖥 2026-11-10 화면 맞춤 · 브라우저 확대 안내
@@ -5623,6 +5624,11 @@ const upsertPlace = async (place) => {
         } else {
           mergedContacts = [...existingContacts, { name: newName, phone: newPhone, isPrimary: existingContacts.length === 0 }];
         }
+      } else if (newPhone) {
+        // ☎ 2026-11-12 이름 없이 번호만 온 경우 — 예전엔 담당자 목록에 안 들어가 수정 창에서 번호가 비어 보였다
+        if (!existingContacts.length) mergedContacts = [{ name: "", phone: newPhone, isPrimary: true }];
+        else if (existingContacts.length === 1 && !(existingContacts[0].phone || "").trim()) mergedContacts = [{ ...existingContacts[0], phone: newPhone, isPrimary: true }];
+        else mergedContacts = existingContacts;
       } else {
         mergedContacts = existingContacts;
       }
@@ -59308,21 +59314,39 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
         const addrMap = new Map();
         for (const p of placeRows) { const k = normalizePlace(p.주소 || ""); if (k) addrMap.set(k, p); }
+        // ☎ 2026-11-12 담당자번호 칸에는 번호만 — "김해룡총괄: 010-…" · "010-… / 안전목 + 고임목"처럼 섞여 있으면 이름 · 번호 · 메모로 나눈다(src/contactCell.js)
+        const rowOf = (r) => {
+          const 업체명 = (r.업체명||r["하차지명"]||r["상호"]||"").toString().trim();
+          const 주소 = (r.주소||r["하차지주소"]||"").toString().trim();
+          const c = splitContactCell((r.담당자||"").toString(), (r.담당자번호||r["전화번호"]||"").toString());
+          const memo0 = (r.메모||"").toString().trim();
+          return { 업체명, 주소, 담당자: c.name, 담당자번호: c.phone, 메모: [memo0, c.extra].filter((x) => x && !memo0.includes(c.extra || "\u0000")).join(" / ") || memo0, 등급: "일반" };
+        };
+        // 이미 등록된 곳인데 번호 칸에 글자가 섞여 있거나 담당자 칸이 비어 보이는 곳 → 이 파일 값으로 번호만 바로잡는다
+        const fixes = [];
+        json.forEach((r) => {
+          const x = rowOf(r); const k = normalizePlace(x.주소); const ex = k ? addrMap.get(k) : null;
+          if (!ex || !(ex.id || ex._id) || !x.담당자번호) return;
+          const exPhone = String(ex.담당자번호 || "").trim();
+          const exContacts = Array.isArray(ex._rawContacts) ? ex._rawContacts : Array.isArray(ex.contacts) ? ex.contacts : [];
+          const noContact = !exContacts.some((c) => (c?.phone || "").trim());
+          if (!isCleanPhone(exPhone) || (noContact && exPhone)) fixes.push({ _id: ex.id || ex._id, 업체명: ex.업체명, 주소: ex.주소, contacts: [{ name: x.담당자 || (isCleanPhone(String(ex.담당자 || "")) ? "" : String(ex.담당자 || "").trim()), phone: x.담당자번호, isPrimary: true }], 메모: [String(ex.메모 || "").trim(), x.메모].filter((v, i, a) => v && a.indexOf(v) === i).join(" / ") });
+        });
         let ok = 0;
         const newRows = json.filter((r) => { const n = (r.업체명||r["하차지명"]||r["상호"]||"").toString().trim(); const k = normalizePlace((r.주소||r["하차지주소"]||"").toString().trim()); return n && k && !addrMap.has(k); });
-        if (!newRows.length) { showAlert("새로 등록할 상하차지가 없습니다.\n(업체명·주소가 비었거나, 이미 같은 주소로 등록된 상하차지입니다)"); return; }
-        if (!await kpConfirm(`상하차지 ${newRows.length}곳을 새로 등록할까요?${json.length - newRows.length ? `\n(빈 줄·주소 없음·이미 등록된 ${json.length - newRows.length}줄은 건너뜁니다)` : ""}`)) return;
-        // 📥 2026-11-12 같은 주소는 먼저 걸러 두고(파일 안 중복 포함), 가운데 로딩 창 + 묶음으로 동시에 등록
+        if (!newRows.length && !fixes.length) { showAlert("새로 등록할 상하차지가 없습니다.\n(업체명·주소가 비었거나, 이미 같은 주소로 등록된 상하차지입니다)"); return; }
+        if (!await kpConfirm(`${newRows.length ? `상하차지 ${newRows.length}곳을 새로 등록` : ""}${newRows.length && fixes.length ? "하고, " : ""}${fixes.length ? `이미 등록된 ${fixes.length}곳의 담당자번호를 번호만 남기게 정리` : ""}할까요?${json.length - newRows.length - fixes.length > 0 ? `\n(빈 줄·주소 없음·이미 등록된 ${json.length - newRows.length - fixes.length}줄은 건너뜁니다)` : ""}`)) return;
+        // 📥 같은 주소는 먼저 걸러 두고(파일 안 중복 포함), 가운데 로딩 창 + 묶음으로 동시에 등록
         const uniq = [];
         for (const r of newRows) {
-          const 업체명 = (r.업체명||r["하차지명"]||r["상호"]||"").toString().trim(); if (!업체명) continue;
-          const 주소 = (r.주소||r["하차지주소"]||"").toString().trim();
-          const k = normalizePlace(주소); if (!k || addrMap.has(k)) continue;
-          addrMap.set(k, { 업체명, 주소 });
-          uniq.push({ 업체명, 주소, 담당자: (r.담당자||"").toString().trim(), 담당자번호: (r.담당자번호||r["전화번호"]||"").toString().trim(), 메모: (r.메모||"").toString().trim(), 등급: "일반" });
+          const x = rowOf(r); if (!x.업체명) continue;
+          const k = normalizePlace(x.주소); if (!k || addrMap.has(k)) continue;
+          addrMap.set(k, { 업체명: x.업체명, 주소: x.주소 });
+          uniq.push(x);
         }
-        ok = (await runUpload({ items: uniq, label: "상하차지", each: (x) => upsertPlace?.(x) })).ok;
-        showAlert(`총 ${ok}건 신규 반영`);
+        const up = await runUpload({ items: [...uniq, ...fixes], label: "상하차지", each: (x) => upsertPlace?.(x) });
+        ok = Math.min(uniq.length, up.ok);
+        showAlert(`신규 ${uniq.length}건 반영${fixes.length ? ` · 담당자번호 정리 ${fixes.length}곳` : ""}`);
       } catch (err) { showAlert("엑셀 처리 오류"); } finally { e.target.value = ""; }
     };
     reader.readAsArrayBuffer(file);

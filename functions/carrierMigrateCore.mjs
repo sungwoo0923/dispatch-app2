@@ -76,8 +76,9 @@ export const PRESET_SUGGESTIONS = {
     multiDropStops: true,
     extrasAsSpecial: true,
     // 프로그램의 배차방식 이름은 "24시" · 분양 = 지입
-    dispatchAliases: { 분양: "지입", 전국특송: "24시", "24시콜": "24시", "24": "24시", "24시": "24시" },
-    vehicleGrades: { 분양: "지입" },
+    //  운송사 칸 "JY" = 제이와이 자차(정선태 기사 등) → 직영차
+    dispatchAliases: { 분양: "지입", 전국특송: "24시", "24시콜": "24시", "24": "24시", "24시": "24시", JY: "직영차" },
+    vehicleGrades: { 분양: "지입", JY: "직영" },
     optionMinCount: 1,
   },
 };
