@@ -11,6 +11,7 @@ import { usePref, setPref } from "./ColumnLayout";
 import { subItemsOf } from "./navMenus";
 import { menuName } from "./execMenus";
 import { MENU_TOURS } from "./onboardingTour";
+import { HELP_DETAIL, HELP_COMMON, helpTextOf } from "./helpContent"; // 📖 메뉴별 자세한 사용법
 
 const FONT = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const MASTER_MENUS = new Set(["관리센터"]);
@@ -185,7 +186,7 @@ function Palette({ index, favs, onGo, onHelp, onClose }) {
 // ───────────────────────── 도움말 센터 ─────────────────────────
 function HelpCenter({ index, initial, onGo, onClose }) {
   const menus = React.useMemo(() => index.filter((e) => !e.sub && !MASTER_MENUS.has(e.menu)), [index]);
-  const [sel, setSel] = React.useState(initial?.menu || "__new");
+  const [sel, setSel] = React.useState(initial?.menu || "__common");
   const [q, setQ] = React.useState(initial?.q || "");
   const updates = useUpdates(true);
   const nq = norm(q);
@@ -207,7 +208,21 @@ function HelpCenter({ index, initial, onGo, onClose }) {
       </div>));
   };
   const searching = !!nq;
-  const foundMenus = searching ? index.filter((e) => !MASTER_MENUS.has(e.menu) && (hit(titleOf(e), nq) || (!e.sub && hit(descOf(e.menu), nq)) || (!e.sub && (MENU_TOURS[e.menu] || []).some((s) => hit(`${s.title} ${s.text}`, nq))))) : [];
+  // 자세한 사용법 한 묶음 — "버튼 — 설명" 줄은 버튼 이름을 굵게
+  const Sections = ({ list, only }) => (list || []).map((sec, si) => {
+    const items = only ? sec.items.filter((t) => hit(`${sec.title} ${t}`, only)) : sec.items;
+    if (!items.length) return null;
+    return (
+      <div key={si} className="mb-4 rounded-xl border border-[#E6EBF3] bg-white overflow-hidden">
+        <div className="px-3.5 py-2 bg-[#F7F9FC] border-b border-[#E6EBF3] text-[13px] font-black text-[#0F1A30]">{sec.title}</div>
+        <ul className="px-3.5 py-2 space-y-1.5">{items.map((t, i) => { const k = t.indexOf(" — "); return (
+          <li key={i} className="text-[13px] leading-relaxed text-[#2A3852] pl-3 relative"><span className="absolute left-0 top-[9px] w-1 h-1 rounded-full bg-[#9AA9C3]" />
+            {k > 0 ? <><b className="text-[#0F1A30]">{t.slice(0, k)}</b>{t.slice(k)}</> : t}</li>); })}</ul>
+      </div>);
+  });
+  const visibleMenus = new Set(menus.map((e) => e.menu));
+  const foundDetail = searching && !isCho(nq) ? [["__common", "공통 사용법", HELP_COMMON], ...Object.keys(HELP_DETAIL).filter((m) => visibleMenus.has(m)).map((m) => [m, menuName(m), HELP_DETAIL[m]])].filter(([, , list]) => list.some((sec) => sec.items.some((t) => hit(`${sec.title} ${t}`, nq)))) : [];
+  const foundMenus = searching ? index.filter((e) => !MASTER_MENUS.has(e.menu) && (hit(titleOf(e), nq) || (!e.sub && hit(descOf(e.menu), nq)) || (!e.sub && hit(helpTextOf(e.menu), nq)) || (!e.sub && (MENU_TOURS[e.menu] || []).some((s) => hit(`${s.title} ${s.text}`, nq))))) : [];
   const foundUpd = searching && !isCho(nq) ? (updates || []).filter((x) => hit(x.s, nq)) : [];
   const go = (e) => { onClose(); onGo(e); };
   return createPortal(
@@ -229,6 +244,7 @@ function HelpCenter({ index, initial, onGo, onClose }) {
         <div className="flex-1 min-h-0 flex">
           <div className="w-[210px] shrink-0 overflow-y-auto border-r border-[#E1E7F0] bg-white p-2">
             <button type="button" onClick={() => { setSel("__new"); setQ(""); }} className={`w-full text-left px-3 h-9 rounded-lg text-[13px] font-black mb-1 ${!searching && sel === "__new" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>새 기능 · 바뀐 점</button>
+            <button type="button" onClick={() => { setSel("__common"); setQ(""); }} className={`w-full text-left px-3 h-9 rounded-lg text-[13px] font-black mb-1 ${!searching && sel === "__common" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>처음이신가요? · 공통 사용법</button>
             <div className="px-3 pt-2 pb-1 text-[10.5px] font-black tracking-[0.14em] text-[#8FA0BD]">메뉴별 사용법</div>
             {menus.map((e) => (
               <button key={e.id} type="button" onClick={() => { setSel(e.menu); setQ(""); }} className={`w-full text-left px-3 h-8 rounded-lg text-[13px] font-bold ${!searching && sel === e.menu ? "bg-[#0F1A30] text-white" : "text-[#2A3852] hover:bg-[#EEF3FB]"}`}>{e.label}</button>
@@ -246,8 +262,19 @@ function HelpCenter({ index, initial, onGo, onClose }) {
                       <div className="text-[12px] text-[#7A89A3] truncate">{e.sub ? "누르면 이 화면으로 이동" : descOf(e.menu) || "누르면 이 화면으로 이동"}</div>
                     </button>))}</div>
                 </div>}
-                <div className="text-[11px] font-black tracking-[0.12em] text-[#8FA0BD] mb-1.5">기능 설명 · 바뀐 점</div>
+                {foundDetail.map(([m, label, list]) => (
+                  <div key={m} className="mb-2">
+                    <div className="text-[11px] font-black tracking-[0.12em] text-[#8FA0BD] mb-1.5">사용법 · {label}</div>
+                    <Sections list={list} only={nq} />
+                  </div>))}
+                <div className="text-[11px] font-black tracking-[0.12em] text-[#8FA0BD] mb-1.5">새 기능 · 바뀐 점</div>
                 <UpdateList list={foundUpd} />
+              </>
+            ) : sel === "__common" ? (
+              <>
+                <div className="text-[18px] font-black text-[#0F1A30]">처음이신가요? · 공통 사용법</div>
+                <div className="text-[12.5px] text-[#7A89A3] mb-4">어느 화면에서나 똑같이 쓰는 기능입니다. 메뉴별 사용법은 왼쪽에서 메뉴를 고르세요.</div>
+                <Sections list={HELP_COMMON} />
               </>
             ) : sel === "__new" ? (
               <>
@@ -265,7 +292,11 @@ function HelpCenter({ index, initial, onGo, onClose }) {
                     <button type="button" onClick={() => go(e)} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black hover:bg-[#1B2B4B]">이 메뉴 열기</button>
                   </div>
                   {descOf(sel) && <div className="text-[13.5px] text-[#2A3852] leading-relaxed mb-4">{descOf(sel)}</div>}
-                  {!!steps.length && <div className="mb-5">
+                  {!!(HELP_DETAIL[sel] || []).length && <div className="mb-3">
+                    <div className="text-[11px] font-black tracking-[0.12em] text-[#8FA0BD] mb-1.5">자세한 사용법 — 화면 · 버튼 하나씩</div>
+                    <Sections list={HELP_DETAIL[sel]} />
+                  </div>}
+                  {!!steps.length && !(HELP_DETAIL[sel] || []).length && <div className="mb-5">
                     <div className="text-[11px] font-black tracking-[0.12em] text-[#8FA0BD] mb-1.5">이렇게 써요</div>
                     <div className="space-y-2">{steps.map((s, i) => (
                       <div key={i} className="rounded-xl border border-[#E6EBF3] bg-white px-3.5 py-2.5">
