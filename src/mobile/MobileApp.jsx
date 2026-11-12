@@ -2219,7 +2219,10 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   useUiScreen(page, deptMode); // ⭐ 2026-11-07 화면 편집 — 지금 화면("이 화면만")·부서(역할별 보이기)
   const pageMenuM = PAGE_MENU_M[page];
   // ⭐ 2026-11-08 QA — 조회전용(viewer)은 직원 관리·기사 앱 계정(가입 승인)·고정노선현황에서도 막는다(PC 관리자메뉴·배차현황과 같게)
-  useReadOnlyGuard((!!pageMenuM && (role === "viewer" || (!!customRoleM && getMenuAccess(customRolesM, role, pageMenuM) === "read"))) || (role === "viewer" && ["staff", "drvacc", "fixedroute"].includes(page)));
+  // 🔓 2026-11-12 PC와 같게 — 마스터는 어디서나, 경리(경리관리자 · 경리사무원 · 통합)는 배차현황에서 "조회" 설정이어도 수정 가능
+  const _editFreeM = (realRole || role) === "totalMaster" || myProfM?.isMaster === true
+    || (pageMenuM === "배차현황" && ["test", "acctStaff", "hrAcct", "allMgr"].includes(realRole || role));
+  useReadOnlyGuard((!!pageMenuM && (role === "viewer" || (!_editFreeM && !!customRoleM && getMenuAccess(customRolesM, role, pageMenuM) === "read"))) || (role === "viewer" && ["staff", "drvacc", "fixedroute"].includes(page)));
   // 경리는 메뉴의 [배차현황]으로만 오더 목록(등록내역)을 볼 수 있다 — 그 밖에 목록으로 돌아오면 부서 홈으로
   const deptListOkRef = useRef(false);
   const [viewPick, setViewPick] = useState(false); // 🔀 2026-11-10 화면 전환 창
