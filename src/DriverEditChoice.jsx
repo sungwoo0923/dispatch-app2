@@ -12,6 +12,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { coDocKey } from "./coKey";
+import CustomSelect from "./CustomSelect";
 
 // ── 비교용 정규화 ──
 export const drvPlateKey = (s = "") => String(s || "").replace(/[\s-]/g, "").toUpperCase();
@@ -240,23 +241,32 @@ export function useDriverEditChoice({ drivers, upsertDriver, company = "", notif
   return { editing, isLocked, begin, finish, revert, reset, modal };
 }
 
-// ── 같은 차량번호 기사가 여러 명일 때 고르는 칩(별도 추가된 기사 포함) ──
+// ── 같은 차량번호 기사가 여러 명일 때 고르는 드롭다운(별도 추가된 기사 포함) ──
+//  🔽 2026-11-12 칩 여러 개 → 드롭다운 하나(기사가 많아도 한 줄)
 export function SamePlateChips({ drivers, plate, name, phone, onPick, className = "" }) {
   const list = driversOfPlate(drivers, plate);
   if (list.length < 2) return null;
   const nm = nName(name), ph = nDigits(phone);
+  const keyOf = (d, i) => String(d.id || `${d.이름}-${d.전화번호}-${i}`);
+  const curIdx = list.findIndex((d) => nName(d.이름) === nm && nDigits(d.전화번호) === ph);
+  const pick = (e) => { const i = list.findIndex((d, k) => keyOf(d, k) === e.target.value); if (i >= 0) onPick(list[i]); };
+  const phone_ = () => { try { return window.innerWidth < 768; } catch { return false; } };
   return (
-    <div className={`flex flex-wrap items-center gap-1.5 text-[12px] ${className}`} data-driver-same-plate>
+    <div className={`flex flex-wrap items-center gap-2 text-[12px] ${className}`} data-driver-same-plate>
       <span className="font-semibold text-[#5B6B85]">같은 차량번호 기사 {list.length}명</span>
-      {list.map((d) => {
-        const on = nName(d.이름) === nm && nDigits(d.전화번호) === ph;
-        return (
-          <button key={d.id || `${d.이름}-${d.전화번호}`} type="button" onClick={() => onPick(d)}
-            className={`px-2.5 py-1 rounded-xl border font-bold transition ${on ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : "bg-white border-[#C9D5EA] text-[#1B2B4B] hover:bg-[#EEF3FC] active:bg-[#EEF3FC]"}`}>
-            {d.이름 || "-"} <span className={on ? "text-white/70 font-semibold" : "text-slate-500 font-semibold"}>{fmtTel(d.전화번호)}</span>
-          </button>
-        );
-      })}
+      {phone_() ? (
+        /* 휴대폰은 기본 선택창(손가락으로 고르기 쉬움) */
+        <select className="h-9 min-w-[200px] px-2 rounded-xl border border-[#C9D5EA] bg-white text-[13px] font-bold text-[#1B2B4B]"
+          value={curIdx >= 0 ? keyOf(list[curIdx], curIdx) : ""} onChange={pick}>
+          {curIdx < 0 && <option value="">기사 선택</option>}
+          {list.map((d, i) => <option key={keyOf(d, i)} value={keyOf(d, i)}>{`${d.이름 || "-"}  ${fmtTel(d.전화번호)}`}</option>)}
+        </select>
+      ) : (
+        <CustomSelect className="h-8 min-w-[210px] px-2.5 rounded-xl border border-[#C9D5EA] bg-white text-[12.5px] font-bold text-[#1B2B4B] text-left"
+          value={curIdx >= 0 ? keyOf(list[curIdx], curIdx) : ""} placeholder="기사 선택" onChange={pick}>
+          {list.map((d, i) => <option key={keyOf(d, i)} value={keyOf(d, i)}>{`${d.이름 || "-"}  ${fmtTel(d.전화번호)}`}</option>)}
+        </CustomSelect>
+      )}
     </div>
   );
 }
