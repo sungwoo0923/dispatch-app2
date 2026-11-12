@@ -2919,7 +2919,11 @@ import {
   serverTimestamp,
   where,
   deleteField,
+  FieldValue, Timestamp, GeoPoint, DocumentReference, Bytes,
 } from "firebase/firestore";
+// 🛠 2026-11-13 Firestore 전용 값(serverTimestamp() · deleteField() · Timestamp 등) 판별 — 예전엔 클래스 "이름"으로 가렸는데,
+//  배포본은 코드 압축으로 이름이 바뀌어 못 알아봤다 → 서버 시각이 { _methodName: "serverTimestamp" }라는 쓰레기 값으로 저장됐다(배차한 시간이 안 나오던 원인).
+const isFsSpecialValue = (o) => o instanceof Date || o instanceof FieldValue || o instanceof Timestamp || o instanceof GeoPoint || o instanceof DocumentReference || o instanceof Bytes;
 import { writeOrderDeletedNotice } from "./driverDeleteNotice"; // ⭐ 2026-11-05 기사앱 삭제 오더 팝업
 import { setDoc, updateDoc } from "./orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import KpBootScreen from "./KpBootScreen";
@@ -4798,8 +4802,7 @@ const addDispatch = async (recordIn) => {
   const stripUndefinedDeep = (obj) => {
     if (obj === null || typeof obj !== "object") return obj;
 
-    const ctorName = obj.constructor?.name || "";
-    if (obj instanceof Date || /FieldValue|Timestamp|GeoPoint/i.test(ctorName)) return obj;
+    if (isFsSpecialValue(obj)) return obj; // 🛠 2026-11-13 클래스 이름이 아니라 실제 타입으로 판별(배포본에서도 동작)
 
     if (Array.isArray(obj)) {
       return obj.filter((v) => v !== undefined).map((v) => stripUndefinedDeep(v));
@@ -5156,7 +5159,8 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     if (!historyValuesEqual(prevValue, cleanPatch[key])) {
       histories.push(makeDispatchHistory({
         userEmail: auth.currentUser?.email,
-        field: key, before: prevValue ?? null, after: cleanPatch[key] ?? null,
+        // 🛠 2026-11-13 서버 시각 · 삭제 표시 같은 Firestore 전용 값은 배열(이력) 안에 넣을 수 없다(저장 자체가 실패) → 이력에는 지금 시각/빈 값으로 남긴다
+        field: key, before: prevValue ?? null, after: cleanPatch[key] instanceof FieldValue ? (/일시$|At$/.test(key) ? Date.now() : null) : (cleanPatch[key] ?? null),
       }));
     }
   });
