@@ -8279,7 +8279,10 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   // 부서 모드에서 볼 수 없는 메뉴에 머물러 있으면 홈으로
   React.useEffect(() => { if (deptMode && !DEPT_MENUS[deptMode].includes(menu)) setMenu("HOME"); }, [deptMode, menu]);
   // viewer(조회전용): 관리센터 제외 모든 메뉴 조회 가능, 수정/등록 불가
-  const isViewer = role === "viewer" || (!!customRole && getMenuAccess(customRoles, role, menu) === "read");
+  // 🔓 2026-11-12 권한 관리에 "조회"로 저장돼 있어도 — 마스터(최고관리자 · 회사 마스터)는 어디서나, 경리(경리관리자 · 경리사무원 · 통합)는 배차현황에서 오더를 고칠 수 있다
+  const _editFree = (realRole || role) === "totalMaster" || myProfileDoc?.isMaster === true
+    || (menu === "배차현황" && ["test", "acctStaff", "hrAcct", "allMgr"].includes(realRole || role));
+  const isViewer = role === "viewer" || (!_editFree && !!customRole && getMenuAccess(customRoles, role, menu) === "read");
   const _viewerBlock = () => showAlert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다.");
   // 🔒 2026-11-01 조회만 허락된 메뉴에서는 수정·저장·삭제 버튼과 표 두 번 누르기(수정 창)를 바로 막는다
   //  (HOME·전자결재·회사관리(내정보)는 본인 업무라 제외)
