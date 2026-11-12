@@ -165,7 +165,12 @@ export default function CarrierMigratePanel({ companies = [] }) {
       setProgress({ pct: 2, step: "회사 설정 저장 중" });
       const cs = { companyName: co, migrationPreset: { ...preset, dispatchAliases: parseAlias(aliasDraft) }, migrationAt: serverTimestamp() };
       delete cs.migrationPreset.year;
-      if (opts.saveOptions && optValues.length) cs.dropdownOptions = { 배차방식: optValues };
+      if (opts.saveOptions && optValues.length) {
+        // 🚚 2026-11-12 먼저 가져온 탭에서 만든 배차방식 목록을 지우지 않게 합친다 · preset.dropOptions(예: JY "직접배차")는 뺀다
+        const prevOpts = (await getDoc(doc(db, "companySettings", co)).catch(() => null))?.data()?.dropdownOptions?.배차방식;
+        const drop = new Set(preset.dropOptions || []);
+        cs.dropdownOptions = { 배차방식: [...new Set([...(Array.isArray(prevOpts) ? prevOpts : []), ...optValues])].filter((v) => v && !drop.has(v)) };
+      }
       const extraGrades = result.grades.filter((g) => !["지입", "직영", "임대"].includes(g));
       if (extraGrades.length) cs.fleetGrades = extraGrades;
       await setDoc(doc(db, "companySettings", co), cs, { merge: true });
@@ -297,6 +302,29 @@ export default function CarrierMigratePanel({ companies = [] }) {
               <Stat label="고정노선 후보" value={result.routes.length} sub="운행 OFF로 만듦" />
               <Stat label="단가표" value={(result.rateSheets || []).length} sub={`${won((result.rateSheets || []).reduce((a, r) => a + r.rows.length, 0))}곳`} />
             </div>
+            {/* ⚡ 2026-11-12 가져올 탭 빨리 고르기 — 탭 이름을 눌러 켜고 끄기 · 전체 선택 · 전체 해제 · [이 탭만] */}
+            {(() => {
+              const ot = result.tabs.filter((t) => t.kind === "orders" || preset.skipTabs?.includes(t.title));
+              const names = result.tabs.filter((t) => t.kind !== "places" && t.kind !== "drivers" && t.kind !== "skip" || preset.skipTabs?.includes(t.title)).map((t) => t.title);
+              const on = (n) => !preset.skipTabs?.includes(n);
+              const setOnly = (list) => recalc({ skipTabs: names.filter((n) => !list.includes(n)) });
+              return (
+                <div data-kp="cm-tabpick" className="mb-4 rounded-2xl border border-[#DCE3EE] bg-[#F7F9FC] px-4 py-3">
+                  <div className="flex items-center gap-2 flex-wrap mb-2">
+                    <span className="text-[13.5px] font-black text-[#0F1A30]">가져올 탭 고르기</span>
+                    <span className="text-[12.5px] text-gray-500">{names.filter(on).length} / {names.length}개 선택 · 탭 이름을 누르면 켜고 꺼집니다</span>
+                    <button onClick={() => setOnly(names)} className="ml-auto h-8 px-3 rounded-lg bg-white border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] hover:bg-[#EEF3FB]">전체 선택</button>
+                    <button onClick={() => setOnly([])} className="h-8 px-3 rounded-lg bg-white border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] hover:bg-[#EEF3FB]">전체 해제</button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {names.map((n) => { const t = ot.find((x) => x.title === n); return (
+                      <button key={n} onClick={() => toggleSkip(n)} onDoubleClick={() => setOnly([n])} title="한 번 누르면 켜고 끄기 · 두 번 누르면 이 탭만"
+                        className={`h-8 px-3 rounded-full text-[12.5px] font-bold border transition ${on(n) ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : "bg-white border-[#DCE3EE] text-[#8FA0BD] line-through"}`}>
+                        {n}{on(n) && t?.orders != null ? <span className="ml-1 opacity-70 tabular-nums">{won(t.orders)}</span> : null}
+                      </button>); })}
+                  </div>
+                </div>);
+            })()}
             <div className="space-y-2.5">
               {result.tabs.map((t) => {
                 const skip = preset.skipTabs?.includes(t.title);
@@ -315,6 +343,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
                           </label>
                         </>
                       )}
+                      {(t.kind === "orders" || skip) && <button onClick={() => recalc({ skipTabs: result.tabs.filter((x) => (x.kind === "orders" || preset.skipTabs?.includes(x.title)) && x.title !== t.title).map((x) => x.title) })} className="text-[12.5px] font-bold text-[#2D4C82] underline">이 탭만</button>}
                       <button onClick={() => toggleSkip(t.title)} className="text-[12.5px] font-bold text-gray-500 underline">{skip ? "가져오기" : "빼기"}</button>
                       {t.kind === "orders" && !skip && <button onClick={() => setOpenTab(open ? "" : t.title)} className="text-[12.5px] font-bold text-[#2D4C82] underline">{open ? "접기" : "자세히"}</button>}
                     </div>

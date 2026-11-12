@@ -39,6 +39,10 @@ export const DEFAULT_PRESET = {
   // ⚠ 아래 규칙들은 기본이 모두 꺼짐 — 회사별 시작 설정(PRESET_SUGGESTIONS)에서 켠 회사(JY로지스틱스)에만 적용된다
   multiDropStops: false, // 하차지명에 여러 곳("롯데상사,의왕") → 첫 곳 = 하차지 · 나머지 = 하차 경유지
   extrasAsSpecial: false, // 매출에만 있는 추가비용 · 금액이 다른 추가비용도 특수운임으로(청구만 · 회사 부담으로 나눠서)
+  placeAliases: {}, // { 탭이름: { 시트의 이름: 통일할 이름 } } — 출발지 · 도착지 · 납품처 이름 통일(예: 에이제이 탭 "베베숲 평택" → "평택초저온")
+  arrivalDateTabs: [], // 날짜 칸이 상차일이 아니라 하차일인 탭 — 당착 = 같은 날 상차 · 야상 = 전날 18시 이후 상차 · 금상차월하차 = 그 전 금요일 상차
+  unknownExtraName: "", // 이름을 알 수 없는 추가비용의 이름(예: "기타") — 비우면 "추가비용"
+  dropOptions: [], // 회사 배차방식 목록에서 뺄 이름(예: JY는 "직접배차" 대신 "기사직통")
   fromDate: "", // 이 날짜(YYYY-MM-DD)부터의 줄만 가져온다(비우면 전부)
   tabCargo: {}, // { 탭이름: 화물내용 } — 그 탭의 화물내용을 이 글자로(예: 만세보령 = "쌀")
   weightTonTabs: [], // 중량(kg) 칸을 톤수로 바꿔 차량톤수에 넣는 탭(소계 · 중량 칸 ÷ 1,000)
@@ -50,7 +54,13 @@ export const DEFAULT_PRESET = {
 export const PRESET_SUGGESTIONS = {
   JY로지스틱스: {
     // 에이제이 탭 매출 H~K · 매입 L~O 사이 칸은 머리줄 이름이 없다(비고의 "대행료/50,000"과 같은 금액)
-    extraNames: { 에이제이: { I: "야상", J: "대행료", M: "대행료", N: "추가비용" } },
+    //  2026-11-12: I칸(매출 2만원)은 이름을 정하지 않는다 — 입고시간이 야상인 줄이면 "야상", 아니면 "기타"
+    extraNames: { 에이제이: { J: "대행료", M: "대행료" } },
+    // 에이제이 탭: 상차일자 칸 = 하차일 · 베베숲 평택 = 평택초저온 · 에이제이 후문 = 에이제이 · 기사직통을 배차방식으로(직접배차는 뺌)
+    arrivalDateTabs: ["에이제이"],
+    placeAliases: { 에이제이: { "베베숲 평택": "평택초저온", 베베숲평택: "평택초저온", "평택 초저온": "평택초저온", "에이제이 후문": "에이제이", "구성리 창고": "구성리창고" } },
+    unknownExtraName: "기타",
+    dropOptions: ["직접배차"],
     // 만세보령 탭: 출발지 "보령" = 만세보령(거래처도 만세보령) · 입고시간이 비면 내일착
     fromAliases: { 만세보령: { 보령: "만세보령" } },
     nextDayTabs: ["만세보령"],
@@ -539,7 +549,9 @@ function rowToOrder(r, L, ctx) {
   };
   const S = money(L.sale), B = money(L.buy);
   const plate = normPlate(g(L.cols.plate));
-  const to = g(L.cols.to), consignee = g(L.cols.consignee), from = g(L.cols.from);
+  const pa = ctx.preset.placeAliases?.[ctx.tab] || {};
+  const alias = (v) => cell(pa[v] ?? pa[v.replace(/\s+/g, "")] ?? v);
+  const to = alias(g(L.cols.to)), consignee = alias(g(L.cols.consignee)), from = alias(g(L.cols.from));
   const anything = to || consignee || plate || S.total || B.total || g(L.cols.name);
   if (!anything) return { skip: "빈 줄" };
   const memo = [];
@@ -608,6 +620,18 @@ function rowToOrder(r, L, ctx) {
     else if (parseDate(v, ctx.year)) 하차일 = parseDate(v, ctx.year);
     else tags.push(v);
   }
+  // 🚚 2026-11-12 날짜 칸이 하차일인 탭(preset.arrivalDateTabs · 에이제이): 하차일 = 그 날짜, 상차일을 거꾸로 정한다
+  //  · 당착(또는 빈칸) = 같은 날 상차 · 야상 = 전날 오후 6시 이후 상차 · "금상차월하차" = 그 전 금요일 상차 · 월착 = 그 전 금요일 상차
+  let 상차일 = date, 상차시간기준 = "";
+  if ((ctx.preset.arrivalDateTabs || []).includes(ctx.tab)) {
+    const av = [g(L.cols.arriveDay), g(L.cols.arriveTime)].join(" ");
+    const noteAll = [...L.memo.map((c) => g(c)), ...L.notes.map((c) => g(c))].join(" ");
+    const prevFri = () => { const dow = new Date(`${date}T00:00:00Z`).getUTCDay(); return addDays(date, -(((dow + 2) % 7) || 7)); };
+    하차일 = date;
+    if (/금\s*상차\s*월\s*하차/.test(noteAll) || /월착/.test(av)) 상차일 = prevFri();
+    else if (/야상|야간/.test(av)) { 상차일 = addDays(date, -1); if (!상차시간) { 상차시간 = "18:00"; 상차시간기준 = "이후"; } }
+    else 상차일 = date;
+  }
   // 입고시간 칸이 있는 탭인데 비어 있으면 다음 날 도착(preset.nextDayTabs)
   if ((ctx.preset.nextDayTabs || []).includes(ctx.tab) && (L.cols.arriveDay >= 0 || L.cols.arriveTime >= 0) && !g(L.cols.arriveDay) && !g(L.cols.arriveTime) && !g(L.cols.arriveDate)) 하차일 = addDays(date, 1);
   // 차량 · 화물
@@ -649,7 +673,9 @@ function rowToOrder(r, L, ctx) {
     const b = p.buy.reduce((s0, c) => s0 + parseMoney(g(c)).n, 0);
     let n = p.name;
     // 이름 없는 추가비용 → 비고에 적힌 말로(계근비 · 대행료 · 경유 …). 비고에 없으면 오더 꼬리표(경유 등), 그래도 없으면 "추가비용"
-    if (/^추가비용\d*$/.test(n)) { const hit = MEMO_FEE.find(([re]) => re.test(noteText)) || MEMO_FEE.find(([re]) => re.test(memoText)); n = hit ? hit[1] : "추가비용"; }
+    // (같은 줄에서 이름 있는 칸이 이미 쓴 이름 — 예: 대행료 칸에 금액이 있으면 — 은 다시 쓰지 않는다)
+    const taken = new Set(L.pairs.filter((q) => q !== p && !/^추가비용\d*$/.test(q.name) && (q.sale.some((c) => parseMoney(g(c)).n) || q.buy.some((c) => parseMoney(g(c)).n))).map((q) => q.name));
+    if (/^추가비용\d*$/.test(n)) { const free = MEMO_FEE.filter(([, nm2]) => !taken.has(nm2)); const hit = free.find(([re]) => re.test(noteText)) || free.find(([re]) => re.test(memoText)); n = hit ? hit[1] : (cell(ctx.preset.unknownExtraName) || "추가비용"); }
     const kind = (ctx.preset.etcExtraTabs || []).includes(ctx.tab) ? "기타" : SPECIAL_KIND(n);
     const won = (x) => x.toLocaleString("ko-KR");
     // 🧾 2026-11-12 매출(거래처 청구) · 매입(기사 지급) 추가비용을 그대로 특수운임으로
@@ -675,7 +701,7 @@ function rowToOrder(r, L, ctx) {
   const closeRaw = g(L.cols.close);
   const 마감월 = parseMonth(closeRaw, ctx.year);
   const rec = {
-    상차일: date, 상차시간, 하차일, 하차시간, 등록일: date,
+    상차일, 상차시간, 하차일, 하차시간, 등록일: 상차일,
     거래처명: client, 상차지명, 상차지주소, 하차지명, 하차지주소,
     화물내용: fixedCargo || cargo.join(" · "), 차량톤수: veh.ton, 차량종류: veh.kind,
     차량번호: plate, 이름: nameSplit.name, 전화번호: fmtPhone(g(L.cols.phone)),
@@ -683,9 +709,10 @@ function rowToOrder(r, L, ctx) {
     지급방식, 배차방식: carrier, 배차상태,
     메모: uniq([...tags, ...memo]).join(" · "),
   };
+  if (상차시간기준) rec.상차시간기준 = 상차시간기준;
   if (경유하차.length) { rec.경유하차목록 = 경유하차; rec.경유지_하차 = 경유하차; }
   if (items.length) Object.assign(rec, { 특수운임: items, 특수기사차감: D, 특수청구추가: C, 외부지급합: 0 });
-  if (마감월) { rec.마감월 = 마감월; if (마감월 !== date.slice(0, 7)) rec.마감이월 = true; }
+  if (마감월) { rec.마감월 = 마감월; if (마감월 !== date.slice(0, 7)) rec.마감이월 = true; } // 날짜 칸의 달과 다르면 이월
   if (nameSplit.affiliation) rec.기사소속 = nameSplit.affiliation;
   if (grade) rec.차량구분 = cell(carrierRaw);
   return { rec, driver: plate ? { plate, name: nameSplit.name, phone: rec.전화번호, affiliation: nameSplit.affiliation, grade, vehicleClass: grade ? cell(carrierRaw) : "" } : null, checkSale: S.hasTotal ? S.total : null };
@@ -796,7 +823,7 @@ export function buildMigration(tabs, presetIn = {}) {
   const routes = findRouteCandidates(orders, preset);
   // 8) 회사 배차방식 · 지급방식 목록(이 회사 시트에 나온 값 · 많이 쓴 순)
   const dc = new Map(); orders.forEach((o) => { if (o.배차방식) dc.set(o.배차방식, (dc.get(o.배차방식) || 0) + 1); });
-  const dispatchOptions = [...dc.entries()].sort((a, b) => b[1] - a[1]).map(([v, n]) => ({ value: v, n, use: n >= (preset.optionMinCount || 1) && !(preset.optionMinCount <= 1 && PLATE_RE.test(normPlate(v))) })); // 운송사 칸에 잘못 적힌 차량번호는 목록에 넣지 않는다
+  const dispatchOptions = [...dc.entries()].sort((a, b) => b[1] - a[1]).filter(([v]) => !(preset.dropOptions || []).includes(v)).map(([v, n]) => ({ value: v, n, use: n >= (preset.optionMinCount || 1) && !(preset.optionMinCount <= 1 && PLATE_RE.test(normPlate(v))) })); // 운송사 칸에 잘못 적힌 차량번호는 목록에 넣지 않는다
   const pc = new Map(); orders.forEach((o) => { if (o.지급방식) pc.set(o.지급방식, (pc.get(o.지급방식) || 0) + 1); });
   const payOptions = [...pc.entries()].sort((a, b) => b[1] - a[1]).map(([v, n]) => ({ value: v, n }));
   const grades = uniq(drivers.map((d) => d.등급)).filter((g) => g !== "일반");
