@@ -2,7 +2,7 @@
 //  실제 운송사 시트로도 돌려 보려면: JY_WORKBOOK=<{tabs:[{title,rows}]} JSON 경로> node scripts/carrierMigrate.test.mjs
 //  (실제 시트는 기사 연락처가 들어 있어 저장소에 넣지 않는다 — 아래는 같은 모양으로 만든 가짜 데이터)
 import fs from "node:fs";
-import { buildMigration, parseDate, parseTime, parseMonth, parseMoney, splitDriverName, splitVehicle, looksAddress, looksRegion, forOrderDoc, forRateSheetDoc, rateTonLabel } from "../functions/carrierMigrateCore.mjs";
+import { PRESET_SUGGESTIONS, buildMigration, parseDate, parseTime, parseMonth, parseMoney, splitDriverName, splitVehicle, looksAddress, looksRegion, forOrderDoc, forRateSheetDoc, rateTonLabel } from "../functions/carrierMigrateCore.mjs";
 import { sfTotals, orderProfit } from "../src/forkliftCore.js";
 
 let pass = 0, fail = 0;
@@ -192,17 +192,33 @@ if (real && fs.existsSync(real)) {
   const row = (o) => ["2026. 6. 24", "보령", "", o.to || "대전", o.name || "대전유통", o.arr ?? "", "20", "1000", "20,000", o.carrier || "전국특송", "세종86바3203", "고운환", "010-4469-0000", "", "510,000", o.extra || "", "510,000", "480,000", o.extra || "", "480,000", "30,000", "26년07월"];
   const 주소2 = [...주소, ["롯데상사", "경기 안성시 원곡면 승량길 100", "", "", ""], ["의왕", "경기 의왕시 오전공업길 15", "", "", ""], ["대전유통", "대전 대덕구 대덕대로 1234", "", "", ""]];
   const R3 = buildMigration([{ title: "만세보령", rows: [...head, row({ arr: "당착" }), row({}), row({ arr: "월착" }), row({ name: "롯데상사,의왕", to: "안성", arr: "당착" }), row({ extra: "30,000", arr: "당착" })] }, { title: "상하차지 정보", rows: 주소2 }],
-    { year: 2026, fromAliases: { 만세보령: { 보령: "만세보령" } }, nextDayTabs: ["만세보령"] });
+    { year: 2026, ...PRESET_SUGGESTIONS.JY로지스틱스 });
   const o = R3.orders;
   eq([o[0].거래처명, o[0].상차지명, o[0].상차지주소], ["만세보령", "만세보령", "충청남도 보령시 남포면 월전로 383"], "출발지 보령 → 거래처 · 상차지 만세보령");
   eq([o[0].하차지명, o[0].하차지주소], ["대전유통", "대전 대덕구 대덕대로 1234"], "도착지 옆 칸 = 하차지명 · 상하차지 정보에서 주소");
   eq([o[0].하차일, o[1].하차일, o[2].하차일], ["2026-06-24", "2026-06-25", "2026-06-29"], "당착 = 같은 날 · 빈칸 = 내일착 · 월착 = 다음 월요일");
-  eq(o[0].배차방식, "24시콜", "전국특송 → 24시콜");
+  eq(o[0].배차방식, "24시", "전국특송 → 24시");
   eq([o[3].하차지명, o[3].하차지주소], ["롯데상사", "경기 안성시 원곡면 승량길 100"], "여러 곳: 첫 곳 = 하차지");
   eq(o[3].경유하차목록, [{ 업체명: "의왕", 주소: "경기 의왕시 오전공업길 15", 담당자: "", 담당자번호: "" }], "여러 곳: 나머지 = 하차 경유지(주소 매칭)");
-  eq(o[4].특수운임.map((x) => [x.종류, x.금액]), [["기타", 30000]], "추가비용 → 특수운임 기타");
+  eq(o[4].특수운임.map((x) => [x.종류, x.금액, x.받는사람, x.부담]), [["기타", 30000, "기사", "청구"]], "매출 · 매입 추가비용 같은 금액 → 특수운임(기사 지급 · 청구)");
+  // 10월부터 · 쌀 · 중량 → 톤수 · 분양 = 지입 · 매출만 / 매입만 / 금액이 다른 추가비용
+  const rowX = (d, sx, bx, carrier) => [d, "보령", "", "대전", "대전유통", "당착", "20", "600", "12,000", carrier || "분양", "세종86바3203", "고운환", "010-4469-0000", "대기 2시간", "510,000", sx, "", "480,000", bx, "", "30,000", "26년11월"];
+  const R5 = buildMigration([{ title: "만세보령", rows: [...head, rowX("2026. 9. 30", "", ""), rowX("2026. 10. 1", "30,000", ""), rowX("2026. 10. 2", "", "20,000"), rowX("2026. 10. 3", "50,000", "30,000", "서천차량")] }],
+    { year: 2026, fromDate: "2026-10-01", ...PRESET_SUGGESTIONS.JY로지스틱스 });
+  const q = R5.orders;
+  eq(q.map((x) => x.상차일), ["2026-10-01", "2026-10-02", "2026-10-03"], "10월 1일부터만");
+  eq([q[0].화물내용, q[0].차량톤수, q[0].배차방식], ["쌀", "12톤", "지입"], "화물 쌀 · 소계 12,000kg → 12톤 · 분양 → 지입");
+  eq(q[0].특수운임.map((x) => [x.이름, x.금액, x.받는사람, x.부담]), [["대기료", 30000, "없음", "청구"]], "매출만 추가비용 → 청구만(이름은 비고에서)");
+  eq([q[0].청구운임, q[0].기사운임, q[0].특수청구추가, q[0].특수기사차감], ["540000", "480000", 30000, 0], "매출만: 청구 합계 540,000 · 기사 그대로");
+  eq(q[1].특수운임.map((x) => [x.금액, x.받는사람, x.부담]), [[20000, "기사", "회사"]], "매입만 추가비용 → 기사 지급 · 회사 부담");
+  eq(q[2].특수운임.map((x) => [x.금액, x.받는사람, x.부담]), [[30000, "기사", "청구"], [20000, "없음", "청구"]], "매출 50,000 · 매입 30,000 → 30,000 기사 지급+청구 · 20,000 청구만");
+  eq(q[2].메모.includes("대기 2시간"), true, "비고는 메모로");
+  ok(R5.dispatchOptions.some((d) => d.value === "서천차량"), "한 번 나온 운송사도 배차방식 목록에");
   const R4 = buildMigration([{ title: "만세보령", rows: [...head, row({})] }], { year: 2026 });
-  eq([R4.orders[0].상차지명 === "만세보령", R4.orders[0].하차일], [false, "2026-06-24"], "규칙을 안 켠 회사는 예전 그대로");
+  eq([R4.orders[0].상차지명 === "만세보령", R4.orders[0].하차일, R4.orders[0].배차방식, R4.orders[0].화물내용 === "쌀"], [false, "2026-06-24", "24시콜", false], "규칙을 안 켠 회사는 예전 그대로");
+  const R6 = buildMigration([{ title: "만세보령", rows: [...head, row({ name: "롯데상사,의왕", arr: "당착" }), rowX("2026. 10. 1", "30,000", "")] }], { year: 2026 });
+  const s6 = R6.orders.find((x) => x.상차일 === "2026-10-01");
+  eq([R6.orders.some((x) => x.경유하차목록), !!s6.특수운임, s6.메모.includes("(청구)")], [false, false, true], "다른 회사: 경유지로 나누지 않음 · 매출만 추가비용은 메모");
 }
 console.log(`carrierMigrate: ${pass} 통과 · ${fail} 실패`);
 if (fail) process.exit(1);

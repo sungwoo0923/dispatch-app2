@@ -84,10 +84,12 @@ export default function CarrierMigratePanel({ companies = [] }) {
     getDoc(doc(db, "companySettings", co)).then((s) => {
       if (!alive) return;
       const saved = s.exists() ? s.data().migrationPreset : null;
-      // 저장된 설정이 있어도, 나중에 생긴 회사별 시작 규칙(출발지 이름 바꾸기 · 내일착 탭)은 비어 있으면 채운다
+      // 저장된 설정이 있어도 회사별 시작 규칙(PRESET_SUGGESTIONS — 지금은 JY로지스틱스만)은 그 위에 덮는다:
+      //  배차방식 별칭 · 차량 구분은 낱개로 합치고(시작 규칙의 값이 이김), 나머지 규칙(내일착 탭 · 경유지 · 추가비용 · 화물 · 톤수 …)은 시작 규칙 그대로
       const sug = PRESET_SUGGESTIONS[co] || {};
-      const base = saved ? { ...saved, fromAliases: { ...(sug.fromAliases || {}), ...(saved.fromAliases || {}) }, nextDayTabs: saved.nextDayTabs || sug.nextDayTabs || [], etcExtraTabs: saved.etcExtraTabs || sug.etcExtraTabs || [] } : sug;
-      const p = { ...DEFAULT_PRESET, ...base, dispatchAliases: { ...DEFAULT_PRESET.dispatchAliases, ...(base.dispatchAliases || {}) } };
+      const base = saved ? { ...saved, ...sug, extraNames: { ...(sug.extraNames || {}), ...(saved.extraNames || {}) }, placeOverrides: saved.placeOverrides || {}, tabClients: saved.tabClients || {}, skipTabs: saved.skipTabs || [],
+        dispatchAliases: { ...(saved.dispatchAliases || {}), ...(sug.dispatchAliases || {}) }, vehicleGrades: { ...(saved.vehicleGrades || {}), ...(sug.vehicleGrades || {}) } } : sug;
+      const p = { ...DEFAULT_PRESET, ...base, dispatchAliases: { ...DEFAULT_PRESET.dispatchAliases, ...(base.dispatchAliases || {}) }, vehicleGrades: { ...DEFAULT_PRESET.vehicleGrades, ...(base.vehicleGrades || {}) } };
       setPreset(p); setAliasDraft(aliasText(p.dispatchAliases)); setOvDraft(p.placeOverrides || {}); setResult(null);
     }).catch(() => {});
     return () => { alive = false; };
@@ -182,7 +184,12 @@ export default function CarrierMigratePanel({ companies = [] }) {
       };
       const registered = {};
       registered.clients = await createMissing("clients", result.clients, (c) => coDocKey(co, c.거래처명), (c) => ({ id: coDocKey(co, c.거래처명), 거래처명: c.거래처명, 등급: "일반", 메모: c.메모 || "", 등록경로: "구글시트 이전", ...base }), "거래처", 3, 6);
-      registered.places = await createMissing("places", result.places, (p) => coDocKey(co, placeKey(p.업체명)), (p) => ({
+      // 🚚 2026-11-12 이미 등록된 상하차지(대용량 업로드 · 직접 등록 포함)는 다시 만들지 않는다 — 이름 또는 주소가 같으면 건너뜀
+      const nk = (v) => String(v || "").normalize("NFC").toLowerCase().replace(/\s+/g, "").replace(/[^\w가-힣-]/g, "");
+      const havePlaces = (await getDocs(query(collection(db, "places"), where("companyName", "==", co)))).docs.map((d) => d.data());
+      const haveName = new Set(havePlaces.map((x) => nk(x.업체명)).filter(Boolean)), haveAddr = new Set(havePlaces.map((x) => nk(x.주소)).filter(Boolean));
+      const newPlaces = result.places.filter((p) => !haveName.has(nk(p.업체명)) && !(nk(p.주소) && haveAddr.has(nk(p.주소))));
+      registered.places = await createMissing("places", newPlaces, (p) => coDocKey(co, placeKey(p.업체명)), (p) => ({
         업체명: p.업체명, 주소: p.주소, 담당자: p.담당자 || "", 담당자번호: p.담당자번호 || "",
         contacts: p.담당자 || p.담당자번호 ? [{ name: p.담당자 || "", phone: p.담당자번호 || "", isPrimary: true }] : [],
         메모: p.메모 || "", 등급: "일반", 팝업표시: true, isActive: true, 등록경로: "구글시트 이전", ...base, createdAt: serverTimestamp(),
@@ -205,8 +212,10 @@ export default function CarrierMigratePanel({ companies = [] }) {
       }
       // 3-2) 단가표 → 단가표 메뉴 › 다목적지 단가표
       if (opts.rates && rates.length) {
+        // 같은 기준지 이름의 단가표가 이미 있으면 다시 만들지 않는다
+        const haveBase = new Set((await getDocs(query(collection(db, "multiRateSheets"), where("companyName", "==", co)))).docs.map((d) => nk(d.data().baseName)));
         const b = writeBatch(db);
-        rates.forEach((rt) => b.set(doc(db, "multiRateSheets", newId()), { ...forRateSheetDoc(rt, { company: co, batchId }), createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+        rates.filter((rt) => !haveBase.has(nk(rt.baseName))).forEach((rt) => b.set(doc(db, "multiRateSheets", newId()), { ...forRateSheetDoc(rt, { company: co, batchId }), createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
         await b.commit();
         registered.rateSheets = rates.length;
       }

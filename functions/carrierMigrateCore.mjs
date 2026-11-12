@@ -36,6 +36,12 @@ export const DEFAULT_PRESET = {
   // 🚚 2026-11-12 탭별 규칙(만세보령 등)
   fromAliases: {}, // { 탭이름: { 시트의 출발지: 상차지명 } } — 예) 만세보령 탭의 "보령" → "만세보령"
   etcExtraTabs: [], // 추가비용 칸을 특수운임 "기타"로만 넣는 탭
+  // ⚠ 아래 규칙들은 기본이 모두 꺼짐 — 회사별 시작 설정(PRESET_SUGGESTIONS)에서 켠 회사(JY로지스틱스)에만 적용된다
+  multiDropStops: false, // 하차지명에 여러 곳("롯데상사,의왕") → 첫 곳 = 하차지 · 나머지 = 하차 경유지
+  extrasAsSpecial: false, // 매출에만 있는 추가비용 · 금액이 다른 추가비용도 특수운임으로(청구만 · 회사 부담으로 나눠서)
+  fromDate: "", // 이 날짜(YYYY-MM-DD)부터의 줄만 가져온다(비우면 전부)
+  tabCargo: {}, // { 탭이름: 화물내용 } — 그 탭의 화물내용을 이 글자로(예: 만세보령 = "쌀")
+  weightTonTabs: [], // 중량(kg) 칸을 톤수로 바꿔 차량톤수에 넣는 탭(소계 · 중량 칸 ÷ 1,000)
   nextDayTabs: [], // 입고시간(당착 · 월착) 칸이 비어 있으면 다음 날 도착으로 보는 탭
   placeOverrides: {}, // { "탭이름|약칭": "주소" } · "*|약칭" = 모든 탭 — 시트에 주소가 없는 곳을 화면에서 직접 넣은 값
 };
@@ -48,7 +54,15 @@ export const PRESET_SUGGESTIONS = {
     // 만세보령 탭: 출발지 "보령" = 만세보령(거래처도 만세보령) · 입고시간이 비면 내일착
     fromAliases: { 만세보령: { 보령: "만세보령" } },
     nextDayTabs: ["만세보령"],
-    etcExtraTabs: ["만세보령"],
+    // 만세보령: 화물은 전부 쌀 · 소계(중량) kg → 톤수 · 운송사 칸 "분양" = 지입 · 한 번만 나온 운송사도 배차방식 목록에
+    tabCargo: { 만세보령: "쌀" },
+    weightTonTabs: ["만세보령"],
+    multiDropStops: true,
+    extrasAsSpecial: true,
+    // 프로그램의 배차방식 이름은 "24시" · 분양 = 지입
+    dispatchAliases: { 분양: "지입", 전국특송: "24시", "24시콜": "24시", "24": "24시", "24시": "24시" },
+    vehicleGrades: { 분양: "지입" },
+    optionMinCount: 1,
   },
 };
 
@@ -513,6 +527,7 @@ function rowToOrder(r, L, ctx) {
   const date = parseDate(g(L.cols.date), ctx.year);
   if (!date) return { skip: g(L.cols.date) ? "날짜 아님" : "빈 줄" };
   ctx.year = +date.slice(0, 4);
+  if (ctx.preset.fromDate && date < ctx.preset.fromDate) return { skip: "기간 밖" };
   const money = (grp) => {
     if (!grp) return { base: 0, extras: [], total: 0, notes: [] };
     const notes = [];
@@ -564,7 +579,8 @@ function rowToOrder(r, L, ctx) {
   if (!하차지명) 하차지명 = 하차지주소 ? 하차지주소.split(/\s+/).slice(0, 3).join(" ") : "";
   // 🚚 2026-11-12 하차지명에 여러 곳("롯데상사,의왕")이 적혀 있으면 첫 곳 = 하차지, 나머지 = 하차 경유지(주소는 상하차지 정보에서 찾음)
   let 경유하차 = [];
-  if (multi(하차지명)) {
+  if (multi(하차지명) && !ctx.preset.multiDropStops) tags.push(`경유 ${하차지명}`); // 다른 회사는 예전 그대로(메모만)
+  else if (multi(하차지명)) {
     const parts = 하차지명.split(/[,，+]/).map((x) => x.trim()).filter(Boolean);
     const toPlaces = ctx.memo.places.filter((p) => p.role !== "상차");
     // 도착지 칸도 같은 순서로 여러 지역("화성,의왕")이면 주소를 못 찾은 곳은 그 지역이라도 넣는다 · "창동식/회수 80포" → 이름 창동식 + 메모
@@ -598,6 +614,13 @@ function rowToOrder(r, L, ctx) {
   const veh = splitVehicle(g(L.cols.vehicle));
   if (/회차/.test(veh.kind)) { tags.push("회차"); veh.kind = veh.kind.replace(/회차/g, "").replace(/^[\s/]+|[\s/]+$/g, ""); }
   const cargo = L.cargo.map((c) => { const v = g(c.col); if (!v || isZeroish(v)) return ""; const h = cell(c.name).replace(/\s+/g, ""); return /^\d[\d,.]*$/.test(v) ? `${h} ${v}` : v; }).filter(Boolean);
+  // 탭 화물내용(쌀 등) · 중량(kg) → 톤수
+  const fixedCargo = cell(ctx.preset.tabCargo?.[ctx.tab]);
+  if ((ctx.preset.weightTonTabs || []).includes(ctx.tab) && !veh.ton) {
+    const wc = L.cargo.filter((c) => /소계|총중량|중량/.test(cell(c.name))).pop();
+    const kg = wc ? parseMoney(g(wc.col)).n : 0;
+    if (kg > 0) veh.ton = `${String(Math.round(kg / 10) / 100)}톤`; // 12,000kg → 12톤 · 6,300kg → 6.3톤
+  }
   // 메모
   L.memo.forEach((c) => { const v = g(c); if (v) memo.push(v); });
   L.notes.forEach((c) => { const v = g(c); if (v) memo.push(v); });
@@ -618,29 +641,43 @@ function rowToOrder(r, L, ctx) {
   if (/착불/.test(codTxt)) { 지급방식 = "착불"; const c = g(L.cols.cod); if (c) memo.push(c.replace(/[\u{1F300}-\u{1FAFF}☀-➿️🔺]/gu, "").trim()); }
   [...S.notes, ...B.notes].forEach((n) => { if (n && !/착불/.test(n)) tags.push(n); });
   // 특수운임 — 매출 추가 칸과 매입 추가 칸을 짝지어(같은 이름끼리, 남은 칸은 순서대로 · pairExtras)
-  const memoText = [...L.memo.map((c) => g(c)), ...tags].join(" ");
+  const noteText = [...L.memo.map((c) => g(c)), ...L.notes.map((c) => g(c))].join(" ");
+  const memoText = [noteText, ...tags].join(" ");
   const items = [];
   (L.pairs || (L.pairs = pairExtras(L))).forEach((p) => {
     const a = p.sale.reduce((s0, c) => s0 + parseMoney(g(c)).n, 0);
     const b = p.buy.reduce((s0, c) => s0 + parseMoney(g(c)).n, 0);
     let n = p.name;
-    if (/^추가비용\d*$/.test(n)) { const hit = MEMO_FEE.find(([re]) => re.test(memoText)); if (hit) n = hit[1]; else n = "추가비용"; }
-    // 추가비용의 이유를 모르는 탭(preset.etcExtraTabs)은 종류를 모두 "기타"로(이름은 비고에서 찾은 계근비 · 경유 등 그대로)
+    // 이름 없는 추가비용 → 비고에 적힌 말로(계근비 · 대행료 · 경유 …). 비고에 없으면 오더 꼬리표(경유 등), 그래도 없으면 "추가비용"
+    if (/^추가비용\d*$/.test(n)) { const hit = MEMO_FEE.find(([re]) => re.test(noteText)) || MEMO_FEE.find(([re]) => re.test(memoText)); n = hit ? hit[1] : "추가비용"; }
     const kind = (ctx.preset.etcExtraTabs || []).includes(ctx.tab) ? "기타" : SPECIAL_KIND(n);
-    if (b > 0) items.push({ 종류: kind, 이름: n, 금액: b, 받는사람: "기사", 부담: a > 0 ? "청구" : "회사", 메모: a > 0 && a !== b ? `구글시트 이전 · 청구 ${a.toLocaleString("ko-KR")}` : "구글시트 이전" });
-    else if (a > 0) tags.push(`${n} +${a.toLocaleString("ko-KR")}(청구)`);
-    else if (b < 0 || a < 0) tags.push(`${n} ${(a || b).toLocaleString("ko-KR")}`);
+    const won = (x) => x.toLocaleString("ko-KR");
+    // 🧾 2026-11-12 매출(거래처 청구) · 매입(기사 지급) 추가비용을 그대로 특수운임으로
+    //  · 둘 다 있으면: 겹치는 금액 = 기사에게 주고 거래처에 청구 · 매출이 더 크면 남는 금액 = 청구만(지급 없음) · 매입이 더 크면 남는 금액 = 회사 부담
+    //  · 매출만: 청구만(지급 없음) · 매입만: 기사에게 주고 회사 부담
+    if (!ctx.preset.extrasAsSpecial) {
+      // 예전 그대로: 매입 추가비용이 있을 때만 특수운임, 매출에만 있으면 메모
+      if (b > 0) items.push({ 종류: kind, 이름: n, 금액: b, 받는사람: "기사", 부담: a > 0 ? "청구" : "회사", 메모: a > 0 && a !== b ? `구글시트 이전 · 청구 ${won(a)}` : "구글시트 이전" });
+      else if (a > 0) tags.push(`${n} +${won(a)}(청구)`);
+      else if (b < 0 || a < 0) tags.push(`${n} ${won(a || b)}`);
+      return;
+    }
+    const both = Math.min(Math.max(a, 0), Math.max(b, 0));
+    if (both > 0) items.push({ 종류: kind, 이름: n, 금액: both, 받는사람: "기사", 부담: "청구", 메모: "구글시트 이전" });
+    if (a > both) items.push({ 종류: kind, 이름: n, 금액: a - both, 받는사람: "없음", 부담: "청구", 메모: both ? `구글시트 이전 · 청구 ${won(a)} 중 기사 지급 ${won(both)}` : "구글시트 이전 · 청구만" });
+    if (b > both) items.push({ 종류: kind, 이름: n, 금액: b - both, 받는사람: "기사", 부담: "회사", 메모: both ? `구글시트 이전 · 기사 지급 ${won(b)} 중 청구 ${won(both)}` : "구글시트 이전 · 회사 부담" });
+    if (b < 0 || a < 0) tags.push(`${n} ${won(a < 0 ? a : b)}`);
   });
   if (items.some((it) => /야상/.test(it.이름)) || tags.some((t) => /^야상 [+-]/.test(t))) { const i = tags.indexOf("야상"); if (i >= 0) tags.splice(i, 1); }
   let D = 0, C = 0;
-  items.forEach((it) => { D -= it.금액; if (it.부담 === "청구") C += it.금액; });
+  items.forEach((it) => { if (it.받는사람 !== "없음") D -= it.금액; if (it.부담 === "청구") C += it.금액; });
   // 마감월
   const closeRaw = g(L.cols.close);
   const 마감월 = parseMonth(closeRaw, ctx.year);
   const rec = {
     상차일: date, 상차시간, 하차일, 하차시간, 등록일: date,
     거래처명: client, 상차지명, 상차지주소, 하차지명, 하차지주소,
-    화물내용: cargo.join(" · "), 차량톤수: veh.ton, 차량종류: veh.kind,
+    화물내용: fixedCargo || cargo.join(" · "), 차량톤수: veh.ton, 차량종류: veh.kind,
     차량번호: plate, 이름: nameSplit.name, 전화번호: fmtPhone(g(L.cols.phone)),
     청구운임: String(S.total), 기사운임: String(B.total), 수수료: String(S.total - B.total),
     지급방식, 배차방식: carrier, 배차상태,
@@ -759,7 +796,7 @@ export function buildMigration(tabs, presetIn = {}) {
   const routes = findRouteCandidates(orders, preset);
   // 8) 회사 배차방식 · 지급방식 목록(이 회사 시트에 나온 값 · 많이 쓴 순)
   const dc = new Map(); orders.forEach((o) => { if (o.배차방식) dc.set(o.배차방식, (dc.get(o.배차방식) || 0) + 1); });
-  const dispatchOptions = [...dc.entries()].sort((a, b) => b[1] - a[1]).map(([v, n]) => ({ value: v, n, use: n >= (preset.optionMinCount || 1) }));
+  const dispatchOptions = [...dc.entries()].sort((a, b) => b[1] - a[1]).map(([v, n]) => ({ value: v, n, use: n >= (preset.optionMinCount || 1) && !(preset.optionMinCount <= 1 && PLATE_RE.test(normPlate(v))) })); // 운송사 칸에 잘못 적힌 차량번호는 목록에 넣지 않는다
   const pc = new Map(); orders.forEach((o) => { if (o.지급방식) pc.set(o.지급방식, (pc.get(o.지급방식) || 0) + 1); });
   const payOptions = [...pc.entries()].sort((a, b) => b[1] - a[1]).map(([v, n]) => ({ value: v, n }));
   const grades = uniq(drivers.map((d) => d.등급)).filter((g) => g !== "일반");
