@@ -11,6 +11,7 @@ import { ShellIcon } from "./AdminShell";
 import { confirmLeave } from "./leaveGuard";
 import { useSubnavTarget } from "./navMenus";
 import { useNewVersion, openUpdatePopup } from "./VersionCheck";
+import { usePref, setPref } from "./ColumnLayout"; // 📂 2026-11-12 메뉴 묶음 접기(계정별 기억)
 /* global __APP_VERSION__ */
 const APP_VER = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
 // ⭐ 2026-11-03 red: true인 항목(사내메일 등)은 카톡처럼 진한 빨강 바탕 + 흰 숫자(테마가 rose를 남색으로 바꿔도 그대로)
@@ -137,6 +138,11 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
       ...subnavActs.filter((a) => !/^a\d+$/.test(a.key)).map((a) => [a.key, a.label])].filter(([k]) => !String(k).startsWith("lock:")));
   // 하위메뉴(사내메일함 등) 접기 — 펼쳐진 부모를 한 번 더 누르면 접히고, 다시 누르면 펼쳐진다(보던 화면은 그대로)
   const [folded, setFolded] = useState({});
+  // 📂 2026-11-12 묶음(사내 게시판 · 전자결재 · 커뮤니케이션 센터 …) 접기 — 묶음 이름을 누르면 그 안의 메뉴가 접히고, 다시 누르면 펴진다
+  //  접어 둔 상태는 계정마다 기억(다른 PC에서 로그인해도 그대로) — prefs.navFold = { "화면코드|묶음이름": true }
+  const navFold = usePref("navFold") || {};
+  const gKey = (g) => `${code}|${g.label}`;
+  const toggleGroup = (g) => { const k = gKey(g); const next = { ...navFold }; if (next[k]) delete next[k]; else next[k] = true; setPref("navFold", next); };
 
   const hasBadge = (b) => (typeof b === "string" ? !!b : b > 0);
   const badgeTxt = (b) => (typeof b === "number" && b > 99 ? "99+" : b);
@@ -202,8 +208,21 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
         <nav className={`flex-1 overflow-y-auto py-4 space-y-5 no-scrollbar ${collapsed ? "px-2" : "px-3"}`}>
           {gs.map((g, gi) => (
             <div key={g.label || gi}>
-              {g.label && !collapsed && <div className="px-3 mb-1.5 text-[11px] font-bold text-blue-200/75">{g.label}</div>}
-              <div className="space-y-1">
+              {g.label && !collapsed && (() => {
+                const shut = !!navFold[gKey(g)];
+                const all = g.items.flatMap((it) => [it, ...(kidsOf(it) || [])]);
+                const hot = shut && all.some((x) => x.key === active); // 접힌 묶음 안의 화면을 보고 있으면 표시
+                const num = all.reduce((n, x) => n + (typeof x.badge === "number" ? x.badge : 0), 0);
+                const hasN = all.some((x) => typeof x.badge === "string" && x.badge);
+                return (
+                  <button type="button" data-kp="subnav-group" aria-expanded={!shut} onClick={() => toggleGroup(g)} title={shut ? "펴기" : "접기"}
+                    className={`w-full px-3 mb-1.5 h-6 rounded-lg flex items-center gap-1.5 text-[11px] font-bold hover:bg-white/[0.07] transition ${hot ? "text-white" : "text-blue-200/75"}`}>
+                    <span className="flex-1 min-w-0 text-left truncate">{g.label}</span>
+                    {shut && (num > 0 || hasN) && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#FF3B30] text-white text-[10px] font-black flex items-center justify-center tabular-nums">{num > 0 ? (num > 99 ? "99+" : num) : "N"}</span>}
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-70" style={{ transform: shut ? "none" : "rotate(180deg)", transition: "transform .2s" }}><path d="M6 9l6 6 6-6" /></svg>
+                  </button>);
+              })()}
+              <div className="space-y-1" style={g.label && !collapsed && navFold[gKey(g)] ? { display: "none" } : undefined}>
                 {g.items.map((it) => {
                   const kids = kidsOf(it);
                   const inside = !!kids && (it.key === active || kids.some((x) => x.key === active));

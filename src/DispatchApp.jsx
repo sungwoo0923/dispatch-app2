@@ -1780,6 +1780,8 @@ function ScheduleChartModal({ rows, companyName, authorName, onClose }) {
    처리하고 저장할 수 있다.
 --------------------------------------------------*/
 const BULK_EDIT_FIELDS = [
+  { key: "차량종류", label: "차량종류", type: "vehicle" }, // 🚚 2026-11-12 차량종류 · 톤수 추가
+  { key: "차량톤수", label: "톤수", type: "text" },
   { key: "청구운임", label: "청구운임", type: "money" },
   { key: "기사운임", label: "기사운임", type: "money" },
   { key: "지급방식", label: "지급방식", type: "select", options: ["계산서", "착불", "선불", "계좌이체"] },
@@ -1917,100 +1919,91 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
           </div>
         </div>
       )}
-      <div className="bg-white rounded-2xl shadow-2xl w-[980px] max-h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between bg-[#1B2B4B] px-5 py-3 shrink-0">
-          <h3 className="text-white font-bold text-[15px]"><EditableText id="bulkEdit.title" defaultText="선택 오더 일괄수정" /> <span className="text-white/60 font-semibold text-[12px] ml-1">({rows.length}건)</span></h3>
+      {/* 🗂 2026-11-12 보기 편하게 다시 그림 — 위: 한 번에 넣기(칸마다 [전체 적용]) · 아래: 오더 카드(왼쪽 요약 + 오른쪽 칸) */}
+      <div className="rounded-2xl shadow-[0_30px_80px_rgba(6,12,26,.5)] w-[min(1280px,96vw)] max-h-[92vh] flex flex-col overflow-hidden bg-[#F4F6FA]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 h-[62px] shrink-0 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+          <div className="min-w-0">
+            <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">BULK EDIT</div>
+            <h3 className="text-[18px] font-black leading-tight"><EditableText id="bulkEdit.title" defaultText="선택 오더 일괄수정" /> <span className="text-white/60 font-semibold text-[13px] ml-1">{rows.length}건</span></h3>
+          </div>
           <div className="flex items-center gap-2">
-            {/* ⭐ 날짜 일괄 이동 — 우클릭 메뉴에 따로 두지 않고, 일괄수정 안에서
-                바로 열 수 있게 버튼으로 넣었다. 지금 선택한 오더 그대로
-                날짜이동 팝업이 뜬다(일괄수정 팝업은 뒤에 그대로 유지). */}
             {onDateShift && (
               <button type="button" onClick={onDateShift}
-                className="px-3 py-1.5 rounded-lg bg-white text-[#1B2B4B] text-[12px] font-bold hover:bg-gray-100 transition flex items-center gap-1.5">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 15l3 3 5-5"/></svg>
+                className="px-3.5 h-9 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/25 text-white text-[13px] font-bold transition flex items-center gap-1.5">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
                 <EditableText id="bulkEdit.날짜일괄이동" defaultText="날짜 일괄 이동" />
               </button>
             )}
-            <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
+            <button type="button" onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 text-white text-lg font-bold transition">×</button>
           </div>
         </div>
-        <div className="px-5 py-2.5 border-b border-gray-100 bg-amber-50 text-[12px] font-semibold text-amber-700">
-          맨 윗줄(일괄입력)에 값을 넣고 "전체적용"을 누르면 아래 선택한 오더 전체에 같은 값이 채워집니다. 각 오더 칸은 따로 다시 고칠 수 있어요.
-        </div>
-        <div className="flex-1 overflow-auto p-5">
-          <table className="w-full text-[12px] border-collapse">
-            <thead>
-              <tr>
-                <th className="border border-gray-200 bg-gray-100 px-2.5 py-2 font-bold text-gray-600 text-left w-[230px]"><EditableText id="bulkEdit.table.header.오더" defaultText="오더" /></th>
-                {FIELDS.map(f => (
-                  <th key={f.key} className="border border-gray-200 bg-gray-100 px-2 py-2 font-bold text-gray-600 min-w-[130px]"><EditableText id={`bulkEdit.table.header.${f.key}`} defaultText={f.label} /></th>
-                ))}
-              </tr>
-              <tr>
-                <td className="border border-gray-200 px-2.5 py-1.5 text-[11px] font-extrabold text-gray-500 bg-gray-50"><EditableText id="bulkEdit.table.일괄입력" defaultText="일괄입력" /></td>
-                {FIELDS.map(f => (
-                  <td key={f.key} className="border border-gray-200 px-2 py-1.5 bg-gray-50">
-                    <div className="flex gap-1">
-                      {f.type === "fare" ? (
-                        <FareTypeSelect compact className="flex-1" rules={fareRb.rules} value={bulkValues[f.key] ?? ""} onChange={(v) => setBulkValues(p => ({ ...p, [f.key]: v }))} />
-                      ) : f.type === "select" && (f.key === "배차방식" || f.key === "지급방식") ? (
-                        <CompanyOptionPicker optKey={f.key} placeholder="-" noneLabel="- (비움)" className="flex-1 min-w-0 border border-gray-300 rounded px-1 py-1 text-[11px] bg-white" value={bulkValues[f.key] ?? ""} onChange={(v) => setBulkValues(p => ({ ...p, [f.key]: v }))} />
-                      ) : f.type === "select" ? (
-                        <CustomSelect className="flex-1 border border-gray-300 rounded px-1 py-1 text-[11px]" value={bulkValues[f.key] ?? ""} onChange={(e) => setBulkValues(v => ({ ...v, [f.key]: e.target.value }))}>
-                          <option value="">-</option>
-                          {f.options.map(o => <option key={o} value={o}>{o}</option>)}
-                        </CustomSelect>
-                      ) : f.type === "money" ? (
-                        <MoneyInput value={bulkValues[f.key]} onChange={(v) => setBulkValues(p => ({ ...p, [f.key]: v }))} />
-                      ) : (
-                        <input autoComplete="off" className="flex-1 border border-gray-300 rounded px-1 py-1 text-[11px]" value={bulkValues[f.key] ?? ""} onChange={(e) => setBulkValues(v => ({ ...v, [f.key]: e.target.value }))} />
-                      )}
-                      <button type="button" onClick={() => applyBulk(f.key)} className="px-1.5 py-1 rounded bg-[#1B2B4B] text-white text-[10px] font-bold shrink-0 hover:opacity-90 transition"><EditableText id="bulkEdit.전체적용" defaultText="전체적용" /></button>
+        {(() => {
+          const inp = "w-full h-9 px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[13px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#2D4C82]";
+          const wide = (f) => (f.key === "메모" || f.key === "전달사항" ? "col-span-2" : "");
+          // 칸 하나(일괄 입력 줄과 오더 카드가 같이 쓴다) — 함수로만 불러 입력 중 포커스가 빠지지 않는다
+          const field = (f, value, onVal, r) => (
+            f.type === "fare" ? <FareTypeSelect compact className="w-full" rules={fareRb.rules} value={value ?? ""} onChange={onVal} />
+            : f.type === "vehicle" ? <VehicleTypePicker className={`${inp} text-left`} value={value ?? ""} onChange={onVal} placeholder="-" noneLabel="- (비움)" />
+            : f.type === "select" && (f.key === "배차방식" || f.key === "지급방식") ? <CompanyOptionPicker optKey={f.key} placeholder="-" noneLabel="- (비움)" className={inp} value={value ?? ""} onChange={onVal} />
+            : f.type === "select" ? <CustomSelect className={`${inp} text-left`} value={value ?? ""} onChange={(e) => onVal(e.target.value)}><option value="">-</option>{f.options.map(o => <option key={o} value={o}>{o}</option>)}</CustomSelect>
+            : f.type === "money" ? <input autoComplete="off" className={`${inp} text-right tabular-nums`} placeholder="0" value={value ? Number(String(value).replace(/[^\d]/g, "")).toLocaleString() : ""} onChange={(e) => onVal(e.target.value.replace(/[^\d]/g, ""))} />
+            : <input autoComplete="off" className={inp} value={value ?? ""} onChange={(e) => onVal(e.target.value)} placeholder={f.key === "차량톤수" ? "예: 11톤" : ""} />
+          );
+          const lbl = "block text-[11px] font-extrabold text-[#5B6B85] mb-1";
+          return (
+            <>
+              <div className="shrink-0 px-6 py-4 bg-white border-b border-[#E1E7F0]">
+                <div className="flex items-baseline gap-2 mb-2.5">
+                  <span className="text-[14px] font-black text-[#0F1A30]"><EditableText id="bulkEdit.table.일괄입력" defaultText="한 번에 넣기" /></span>
+                  <span className="text-[12.5px] text-[#7A89A3]">값을 넣고 [전체 적용]을 누르면 아래 오더 {rows.length}건에 같은 값이 들어갑니다. 오더마다 따로 고칠 수도 있어요.</span>
+                </div>
+                <div className="grid grid-cols-4 gap-x-3 gap-y-2.5">
+                  {FIELDS.map((f) => (
+                    <div key={f.key} className={wide(f)}>
+                      <label className={lbl}><EditableText id={`bulkEdit.table.header.${f.key}`} defaultText={f.label} /></label>
+                      <div className="flex gap-1.5">
+                        <div className="flex-1 min-w-0">{field(f, bulkValues[f.key], (v) => setBulkValues((p) => ({ ...p, [f.key]: v })))}</div>
+                        <button type="button" onClick={() => applyBulk(f.key)} className="shrink-0 h-9 px-2.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-black hover:bg-[#2D4C82] transition whitespace-nowrap"><EditableText id="bulkEdit.전체적용" defaultText="전체 적용" /></button>
+                      </div>
                     </div>
-                  </td>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const id = r._id || r.id;
-                return (
-                  <tr key={id}>
-                    <td className="border border-gray-200 px-2.5 py-1.5 align-top">
-                      <div className="font-bold text-[#1B2B4B]">{r.상차일 || "-"} {r.상차시간 || "즉시"}</div>
-                      <div className="text-gray-600 text-[11px]">{r.상차지명 || "-"} → {r.하차지명 || "-"}</div>
-                      <div className="text-gray-500 text-[11px]">{r.이름 || "기사 미배정"}{r.차량번호 ? ` · ${r.차량번호}` : ""}</div>
-                    </td>
-                    {FIELDS.map((f) => (
-                      <td key={f.key} className="border border-gray-200 px-2 py-1.5">
-                        {f.type === "fare" ? (
-                          <div className="flex flex-col gap-0.5">
-                            <FareTypeSelect compact className="w-full" rules={fareRb.rules} value={edited[id]?.운임구분 ?? ""} onChange={(v) => setCell(id, "운임구분", v)} />
-                            <FareRuleHint form={{ ...r, ...(edited[id] || {}) }} rules={fareRb.rules} onReapply={() => { setEdited(prev => ({ ...prev, [id]: fareCell(r, prev[id] || {}, "__reapply", null) })); }} />
+                  ))}
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2.5">
+                {rows.map((r, idx) => {
+                  const id = r._id || r.id;
+                  const dirty = FIELDS.some((f) => String(edited[id]?.[f.key] ?? "") !== String(r[f.key] ?? ""));
+                  return (
+                    <div key={id} className={`rounded-2xl border bg-white flex overflow-hidden ${dirty ? "border-[#2D4C82]" : "border-[#E1E7F0]"}`}>
+                      <div className={`w-[250px] shrink-0 px-4 py-3 border-r border-[#EEF1F6] ${dirty ? "bg-[#EEF4FF]" : "bg-[#F9FAFC]"}`}>
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-full bg-[#1B2B4B] text-white text-[11px] font-black flex items-center justify-center tabular-nums">{idx + 1}</span>
+                          <span className="text-[13.5px] font-black text-[#0F1A30] tabular-nums">{r.상차일 || "-"} <span className="font-bold text-[#5B6B85]">{r.상차시간 || "즉시"}</span></span>
+                          {dirty && <span className="ml-auto px-1.5 h-5 inline-flex items-center rounded-full bg-[#2D4C82] text-white text-[10px] font-black">수정됨</span>}
+                        </div>
+                        <div className="mt-1.5 text-[13px] font-bold text-[#1B2B4B] leading-snug">{r.거래처명 || "-"}</div>
+                        <div className="text-[12.5px] text-[#3A4A66] leading-snug">{r.상차지명 || "-"} → {r.하차지명 || "-"}</div>
+                        <div className="mt-1 text-[12px] text-[#7A89A3]">{r.이름 || "기사 미배정"}{r.차량번호 ? ` · ${r.차량번호}` : ""}</div>
+                      </div>
+                      <div className="flex-1 min-w-0 px-4 py-3 grid grid-cols-4 gap-x-3 gap-y-2">
+                        {FIELDS.map((f) => (
+                          <div key={f.key} className={wide(f)}>
+                            <label className={lbl}>{f.label}</label>
+                            {field(f, f.type === "fare" ? edited[id]?.운임구분 : edited[id]?.[f.key], (v) => setCell(id, f.type === "fare" ? "운임구분" : f.key, v), r)}
+                            {f.type === "fare" && <FareRuleHint form={{ ...r, ...(edited[id] || {}) }} rules={fareRb.rules} onReapply={() => { setEdited(prev => ({ ...prev, [id]: fareCell(r, prev[id] || {}, "__reapply", null) })); }} />}
                           </div>
-                        ) : f.type === "select" && (f.key === "배차방식" || f.key === "지급방식") ? (
-                          <CompanyOptionPicker optKey={f.key} placeholder="-" noneLabel="- (비움)" className="w-full border border-gray-300 rounded px-1 py-1 text-[12px] bg-white" value={edited[id]?.[f.key] ?? ""} onChange={(v) => setCell(id, f.key, v)} />
-                        ) : f.type === "select" ? (
-                          <CustomSelect className="w-full border border-gray-300 rounded px-1 py-1 text-[12px]" value={edited[id]?.[f.key] ?? ""} onChange={(e) => setCell(id, f.key, e.target.value)}>
-                            <option value="">-</option>
-                            {f.options.map(o => <option key={o} value={o}>{o}</option>)}
-                          </CustomSelect>
-                        ) : f.type === "money" ? (
-                          <MoneyInput value={edited[id]?.[f.key]} onChange={(v) => setCell(id, f.key, v)} />
-                        ) : (
-                          <input autoComplete="off" className="w-full border border-gray-300 rounded px-1 py-1 text-[12px]" value={edited[id]?.[f.key] ?? ""} onChange={(e) => setCell(id, f.key, e.target.value)} />
-                        )}
-                      </td>
-                    ))}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100 bg-white shrink-0">
-          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"><EditableText id="bulkEdit.취소" defaultText="취소" /></button>
-          <button type="button" disabled={saving} onClick={handleSave} className="px-5 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:opacity-90 transition disabled:opacity-50">
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          );
+        })()}
+        <div className="flex items-center justify-end gap-2 px-6 py-3 border-t border-[#E1E7F0] bg-white shrink-0">
+          <button type="button" onClick={onClose} className="px-5 h-10 rounded-xl border border-[#DCE3EE] text-[#3A4A66] text-[13.5px] font-bold hover:bg-[#F4F6FA] transition"><EditableText id="bulkEdit.취소" defaultText="취소" /></button>
+          <button type="button" disabled={saving} onClick={handleSave} className="px-6 h-10 rounded-xl bg-[#1B2B4B] text-white text-[13.5px] font-black hover:bg-[#2D4C82] transition disabled:opacity-50">
             {saving ? <EditableText id="bulkEdit.저장중" defaultText="저장 중..." /> : `${rows.length}건 저장`}
           </button>
         </div>
@@ -14285,7 +14278,8 @@ const ROUND_DISCOUNT = 0.9; // ★ 10% 할인 (조정 가능)
     //  · 후보가 여러 개인데 금액이 서로 다르면 넣지 않는다(단가표 버튼으로 직접 확인)
     const autoRate = React.useMemo(() => {
       if (!isJyCompany(userCompany)) return null; // 🏷 JY로지스틱스만
-      const ton = normRateText(form.차량톤수);
+      // 톤수 칸이 비어 있고 차량종류 칸에 톤수("11톤")를 골랐으면 그 톤수로 찾는다
+      const ton = normRateText(form.차량톤수) || (/^\d+(\.\d+)?\s*톤/.test(String(form.차량종류 || "").trim()) ? normRateText(form.차량종류) : "");
       const drop = normRateText(form.하차지명);
       if (!ton || !drop) return null;
       const bases = [form.거래처명, form.상차지명].map(normRateText).filter(Boolean);
@@ -14307,7 +14301,7 @@ const ROUND_DISCOUNT = 0.9; // ★ 10% 할인 (조정 가능)
       const best = cands.filter((c) => rank(c) === top);
       if (new Set(best.map((c) => `${c.sale}/${c.buy}`)).size > 1) return null;
       return best[0];
-    }, [rateSheetMatches, form.차량톤수, form.하차지명, form.거래처명, form.상차지명]);
+    }, [rateSheetMatches, form.차량톤수, form.차량종류, form.하차지명, form.거래처명, form.상차지명]);
     const autoRateRef = React.useRef({ sale: "", buy: "" }); // 마지막으로 자동 입력한 금액(사람이 고쳤는지 구분)
     React.useEffect(() => {
       if (!autoRate || !canMoney) return;
@@ -31336,7 +31330,7 @@ checkWarningStatus(c.거래처명, "거래처");
   <div className="grid grid-cols-3 gap-x-6 gap-y-1.5">
 
     <CpField label="차량종류">
-      <VehicleTypePicker className={cpInputStyle} value={copyTarget?.차량종류 ?? ""} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value})))({ target: { value: __v } })} />
+      <VehicleTypePicker className={cpInputStyle} value={copyTarget?.차량종류 ?? ""} ton={copyTarget?.차량톤수 || ""} onTon={(v) => setCopyTarget((p) => ({ ...p, 차량톤수: v, 톤수값: (String(v).match(/[\d.]+/) || [""])[0], 톤수타입: "톤" }))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value})))({ target: { value: __v } })} />
     </CpField>
 
 <CpField label="차량톤수">
@@ -40350,7 +40344,7 @@ return (
       <span className="font-extrabold text-[#1B2B4B]">{row.차량종류 || "-"}</span>
 
     ) : key === "차량종류" ? (
-      <VehicleTypePicker className="border rounded px-1 py-0.5 w-full text-center font-extrabold text-[#1B2B4B]" value={row.차량종류 || ""} base={["라보/다마스", "카고", "윙/카고", "윙바디", "리프트", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "오토바이", "기타"]} placeholder="선택없음" noneLabel="선택없음" onChange={(__v) => ((e) =>
+      <VehicleTypePicker className="border rounded px-1 py-0.5 w-full text-center font-extrabold text-[#1B2B4B]" value={row.차량종류 || ""} ton={row.차량톤수 || ""} onTon={(v) => handleImmediateSelectChange(row, "차량톤수", v)} base={["라보/다마스", "카고", "윙/카고", "윙바디", "리프트", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "오토바이", "기타"]} placeholder="선택없음" noneLabel="선택없음" onChange={(__v) => ((e) =>
           handleImmediateSelectChange(row, "차량종류", e.target.value))({ target: { value: __v } })} />
 
     ) : key === "상차지주소" || key === "하차지주소" ? (
@@ -42797,7 +42791,7 @@ setCopyPlaceOptions(list);
   <div className="grid grid-cols-3 gap-x-6 gap-y-1.5">
 
     <CpField label="차량종류">
-      <VehicleTypePicker className={cpInputStyle} value={copyTarget?.차량종류 ?? ""} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value})))({ target: { value: __v } })} />
+      <VehicleTypePicker className={cpInputStyle} value={copyTarget?.차량종류 ?? ""} ton={copyTarget?.차량톤수 || ""} onTon={(v) => setCopyTarget((p) => ({ ...p, 차량톤수: v, 톤수값: (String(v).match(/[\d.]+/) || [""])[0], 톤수타입: "톤" }))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 차량종류:e.target.value})))({ target: { value: __v } })} />
     </CpField>
 
  <CpField label="차량톤수">
@@ -51239,7 +51233,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 <div className="px-5 py-3">
                   <div className="grid grid-cols-3 gap-x-6 gap-y-1.5">
                     <CpField label="차량종류">
-                      <VehicleTypePicker className={cpInputStyle} value={copyTarget?.차량종류 ?? ""} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e) => setCopyTarget(p => ({...p, 차량종류: e.target.value})))({ target: { value: __v } })} />
+                      <VehicleTypePicker className={cpInputStyle} value={copyTarget?.차량종류 ?? ""} ton={copyTarget?.차량톤수 || ""} onTon={(v) => setCopyTarget((p) => ({ ...p, 차량톤수: v, 톤수값: (String(v).match(/[\d.]+/) || [""])[0], 톤수타입: "톤" }))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="선택" noneLabel="선택" onChange={(__v) => ((e) => setCopyTarget(p => ({...p, 차량종류: e.target.value})))({ target: { value: __v } })} />
                     </CpField>
                     <CpField label="차량톤수">
                       <div className="flex items-center border rounded-lg overflow-hidden bg-white">

@@ -12,6 +12,11 @@ import { auth, db } from "./firebase";
 import { getTenant } from "./fsTenant";
 import { uiOptionList, uiOptionLabel, useUiConfigVersion } from "./uiConfig"; // ⭐ 2026-11-07 화면 편집 — 차량종류 기본 목록 · 보이는 이름
 import { kpConfirm } from "./kpDialog";
+import { isJyCompany } from "./jyOnly"; // 🏷 JY로지스틱스 전용 — 차량종류 칸에서 먼저 [톤수 | 차량종류] 고르기
+
+// 🏷 2026-11-12 JY로지스틱스는 차종을 톤수로 적는다 — 톤수 쪽을 고르면 1톤부터 25톤까지
+export const JY_TON_LIST = ["1톤", "1.4톤", "2.5톤", "3.5톤", "5톤", "5톤장축", "5톤축", "8톤", "11톤", "11톤장축", "11톤축", "15톤", "18톤", "25톤"];
+export const looksTon = (v) => /^\d+(\.\d+)?\s*톤/.test(String(v || "").trim());
 
 // 프로그램 공통 기본 목록(화면에서 base를 따로 안 주면 이걸 쓴다)
 export const VT_DEFAULTS = ["라보/다마스", "카고", "윙/카고", "윙바디", "리프트", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "오토바이"];
@@ -132,7 +137,8 @@ const chev = (open) => h("svg", { width: 10, height: 10, viewBox: "0 0 24 24", f
 
 // 🚚 차량종류 선택 — 버튼(원래 칸 모양 그대로 className/style) + 떠 있는 목록(검색 · ↑↓ Enter · ＋ 차량종류 추가)
 //  onChange(값) — 값은 글자. 빈 글자 = 선택 안 함
-export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company, className = "", style, disabled = false, placeholder = "선택", noneLabel, allowAdd = true, id, align = "left", buttonProps = {} }) {
+export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company, className = "", style, disabled = false, placeholder = "선택", noneLabel, allowAdd = true, id, align = "left", buttonProps = {}, onTon, ton = "" }) {
+  // 🏷 onTon(톤수) · ton(지금 톤수): JY로지스틱스에서 [톤수] 쪽을 고르면 차량종류가 아니라 톤수 칸에 저장한다(이 둘을 넘긴 화면에서만 톤수 고르기가 보인다)
   const vt = useVehicleTypes(company, base);
   const cur = clean(value);
   const [open, setOpen] = React.useState(false);
@@ -148,7 +154,10 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
   const searchRef = React.useRef(null);
   const addRef = React.useRef(null);
 
-  const list = vt.all;
+  const jy = typeof onTon === "function" && isJyCompany(company);
+  const [mode, setMode] = React.useState("ton"); // JY만: "ton"(톤수) | "type"(차량종류)
+  const list = jy && mode === "ton" ? JY_TON_LIST : vt.all;
+  const canEdit = allowAdd && !(jy && mode === "ton"); // 톤수 목록은 고정(추가 · 삭제 없음)
   const nq = q.replace(/\s/g, "").toLowerCase();
   const filtered = nq ? list.filter((v) => v.replace(/\s/g, "").toLowerCase().includes(nq)) : list;
   const opts = [...(nq ? [] : [{ v: "", none: true }]), ...(cur && !list.includes(cur) && !nq ? [{ v: cur, legacy: true }] : []), ...filtered.map((v) => ({ v, custom: vt.custom.includes(v) && !(base || []).includes(v) }))];
@@ -168,6 +177,7 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
   const openIt = () => {
     if (disabled) return;
     place(); setQ(""); setAdding(false); setErr("");
+    if (jy) setMode(!cur ? "ton" : "type"); // 차량종류가 비어 있으면 톤수 쪽부터
     const i = Math.max(0, [{ v: "" }, ...(cur && !list.includes(cur) ? [{ v: cur }] : []), ...list.map((v) => ({ v }))].findIndex((o) => o.v === cur));
     setAct(i); setOpen(true);
     // 휴대폰은 자판이 바로 올라오지 않게(찾기 칸을 누르면 그때)
@@ -175,7 +185,7 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
     setTimeout(() => (touch ? menu.current : searchRef.current)?.focus?.(), 20);
   };
   const close = (refocus = true) => { setOpen(false); setAdding(false); if (refocus) setTimeout(() => btn.current?.focus(), 0); };
-  const pick = (v) => { close(); if (v !== cur) onChange?.(v); };
+  const pick = (v) => { close(); if (jy && mode === "ton") { if (v !== clean(ton)) onTon(v); return; } if (v !== cur) onChange?.(v); };
   const doAdd = async (name) => {
     const v = clean(name);
     if (!v) { setErr("이름을 입력해 주세요"); return; }
@@ -221,7 +231,7 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
     }
   };
 
-  const label = cur ? uiOptionLabel("차량종류", cur) : placeholder;
+  const label = cur ? uiOptionLabel("차량종류", cur) : (jy && clean(ton) ? clean(ton) : placeholder);
   const btnEl = h("button", {
     ...buttonProps,
     id, ref: btn, type: "button", disabled,
@@ -232,11 +242,11 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
     className: `${className} text-left disabled:cursor-not-allowed`,
     style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, ...(style || {}) },
     title: cur ? `차량종류: ${cur}` : "차량종류 선택",
-  }, h("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, opacity: cur ? 1 : 0.55 } }, label), chev(open));
+  }, h("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, opacity: cur || (jy && clean(ton)) ? 1 : 0.55 } }, label), chev(open));
 
   if (!open || !pos) return btnEl;
   const row = (o, i) => {
-    const sel = o.v === cur;
+    const sel = jy && mode === "ton" ? o.v === clean(ton) : o.v === cur;
     return h("div", {
       key: `${o.v}_${i}`, role: "option", "aria-selected": sel, "data-vt-idx": i,
       onMouseEnter: () => setAct(i), onMouseDown: (e) => e.preventDefault(), onClick: () => pick(o.v),
@@ -248,7 +258,7 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
     o.custom ? h("span", { title: "우리 회사에서 추가한 차량종류", style: { flexShrink: 0, fontSize: 12, fontWeight: 800, lineHeight: "20px", padding: "0 8px", borderRadius: 999, background: "#EEF3FC", border: "1px solid #C9D5EA", color: "#1B2B4B", whiteSpace: "nowrap" } }, "회사 추가") : null,
     o.legacy ? h("span", { style: { fontSize: 12, fontWeight: 800, color: "#B54708" } }, "직접 입력값") : null,
     // ⭐ 2026-11-06 🗑 항목 삭제(회사 공용 · 기본 항목도) — 확인 후
-    allowAdd && !o.none && !o.legacy ? h("button", {
+    canEdit && !o.none && !o.legacy ? h("button", {
       type: "button", title: `${o.v} 삭제`, "aria-label": `${o.v} 삭제`, "data-vt-del": "1", disabled: busy,
       onMouseDown: (e) => { e.preventDefault(); e.stopPropagation(); },
       onClick: (e) => { e.preventDefault(); e.stopPropagation(); doRemove(o.v); },
@@ -263,6 +273,12 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
     style: { position: "fixed", outline: "none", left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, zIndex: 2147483000, background: "#fff", border: "1px solid #E3E8F0", borderRadius: 16, boxShadow: "0 18px 44px rgba(15,26,48,0.22)", overflow: "hidden", fontFamily: "'Pretendard','Noto Sans KR',sans-serif", display: "flex", flexDirection: "column", maxHeight: Math.max(200, Math.min(400, pos.maxH || 400)) },
   },
   h("div", { style: { padding: "10px 12px 8px", background: "#F7F9FC", borderBottom: "1px solid #EEF2F7" } },
+    // 🏷 JY로지스틱스만 — 먼저 [톤수 | 차량종류]를 고른다(배차방식의 IN/OUT처럼)
+    jy ? h("div", { "data-vt-mode": mode, style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, padding: 3, marginBottom: 8, borderRadius: 11, background: "#fff", border: "1px solid #DCE3EE" } },
+      [["ton", "톤수"], ["type", "차량종류"]].map(([k, l]) => h("button", {
+        key: k, type: "button", onMouseDown: (e) => e.preventDefault(), onClick: (e) => { e.preventDefault(); e.stopPropagation(); setMode(k); setQ(""); setAct(0); setAdding(false); },
+        style: { height: 32, borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13.5, fontWeight: 900, background: mode === k ? "#0F1A30" : "transparent", color: mode === k ? "#fff" : "#3A4A66" },
+      }, l))) : null,
     h("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 } },
       // ⭐ 2026-11-02 글씨가 눌려 안 보인다는 의견 — 한글 제목은 일반 글꼴·큰 글씨, 영문 꼬리표만 작게
       h("span", { style: { display: "inline-flex", alignItems: "baseline", gap: 6, whiteSpace: "nowrap" } },
@@ -276,11 +292,11 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
     })),
   h("div", { style: { overflowY: "auto", padding: "4px 0", flex: 1, minHeight: 0 } },
     opts.length ? opts.map(row) : h("div", { style: { padding: "14px 16px", fontSize: 13.5, fontWeight: 700, color: "#9AA9C3" } }, "찾는 차량종류가 없습니다"),
-    nq && !exact && allowAdd ? h("div", {
+    nq && !exact && canEdit ? h("div", {
       onMouseDown: (e) => e.preventDefault(), onClick: () => doAdd(q),
       style: { margin: "4px 6px 2px", padding: "0 10px", height: 38, borderRadius: 10, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", background: "#FFF8E6", color: "#7A5300", fontSize: 14, fontWeight: 900 },
     }, "＋", h("span", null, `“${clean(q)}” 차량종류로 추가하고 선택`)) : null),
-  allowAdd ? h("div", { style: { borderTop: "1px solid #EEF2F7", padding: 8, background: "#FBFCFE" } },
+  canEdit ? h("div", { style: { borderTop: "1px solid #EEF2F7", padding: 8, background: "#FBFCFE" } },
     adding
       ? h("div", null,
         h("div", { style: { display: "flex", gap: 6 } },
