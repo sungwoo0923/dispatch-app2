@@ -7,6 +7,10 @@ import { RichHtml } from "../richText"; // ⭐ 2026-11-03 공지 꾸민 글 보�
 import { isMasterKey } from "../monthCompare"; // ⭐ 2026-11-03 최고관리자 계정은 "최고관리자"로
 import { useMyProfile } from "../userNames";
 import { useCompanyFeatures } from "../companyFeatures"; // ⭐ 2026-11-04 마스터 권한 관리(회사별)
+// 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합) — 모바일은 기존 화면 위에 업무 화면을 덮어 띄운다(src/freight/FreightMobile.jsx)
+import { useBizModules, readBiz, writeBiz, bizInfo } from "../bizModules";
+import { allowedModules } from "../freight/freightCore";
+import BizSwitcher from "../freight/BizSwitcher";
 import { useCompanyDropdownSync, dropdownList } from "../companyDropdownOptions";
 import { CompanyOptionPicker } from "../companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 import { AttendanceQuickButton, officeRadii, CheckoutReminderHost } from "../attendanceQuick";
@@ -48,6 +52,7 @@ import { withCo, getTenant } from "../fsTenant";
 // 📱 PC와 같은 화면(매출관리·운임조회·단가표·지입차관리·전자결재·직원관리) — 메뉴를 열 때만 불러온다
 import { runMobileBack } from "../mobileBack"; // 🔙 2026-11-10 덮어 뜬 창 뒤로가기로 닫기
 const MobilePcView = React.lazy(() => import("./MobilePcViews"));
+const FreightMobile = React.lazy(() => import("../freight/FreightMobile"));
 import { useMobileAlerts } from "./mobileAlerts";
 import { useRouteBoardIds } from "../routeBoardIds"; // ⭐ 2026-11-05 고정노선 미배차 메뉴 숫자
 import { useRouteCarrierFilter } from "../routeCarriers"; // ⭐ 2026-11-06 운송업체 설정 — 숨긴 업체 오더는 모바일 어디에도 안 보이게
@@ -2215,6 +2220,19 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   // 📊 2026-11-06 일일 경영 보고 — 기존 임원 판정(isExecM) 그대로(src/dailyReport.js canSeeBriefing)
   const briefCompanyM = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
   const canBriefingM = canSeeBriefing({ isExec: isExecM });
+  // 🧭 2026-11-12 업무 영역 — PC와 같은 규칙(회사가 쓰는 업무 ∩ 직원 업무 담당 · 통합은 임원 · 관리자 · 마스터)
+  const bizCoM = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim();
+  const bizModsAllM = useBizModules(bizCoM);
+  const bizSeeAllM = isExecM || role === "admin" || role === "totalMaster" || realRole === "allMgr" || myProfM?.isMaster === true;
+  const bizListM = allowedModules(bizModsAllM.list, myProfM?.bizAccess, bizSeeAllM);
+  const canBizGroupM = bizListM.length >= 2 && bizSeeAllM;
+  const [bizRawM, setBizRawM] = useState(() => readBiz(user?.uid));
+  const [bizPickM, setBizPickM] = useState(false);
+  const [bizHandoffM, setBizHandoffM] = useState(false);
+  const bizWantM = bizRawM || myProfM?.bizHome || "";
+  const bizM = bizWantM === "group" ? (canBizGroupM ? "group" : bizListM[0]) : (bizListM.includes(bizWantM) ? bizWantM : bizListM[0]);
+  const pickBizM = (k) => { setBizRawM(k); writeBiz(user?.uid, k); setBizHandoffM(false); setShowMenu(false); };
+  const bizOverlayM = bizModsAllM.loaded && (bizM !== "inland" || bizHandoffM) ? (bizM !== "inland" ? bizM : "inland") : "";
   const [page, setPage] = useState(deptMode ? "dept" : "list");
   useUiScreen(page, deptMode); // ⭐ 2026-11-07 화면 편집 — 지금 화면("이 화면만")·부서(역할별 보이기)
   const pageMenuM = PAGE_MENU_M[page];
@@ -6163,6 +6181,7 @@ onGoAttendance={() => {
           isExec={isExecM}
           menuOk={menuOkM}
           deptOk={deptOkM}
+          bizMenu={bizListM.length > 1 || canBizGroupM ? { label: `업무 전환 · 지금 ${bizInfo(bizM).short}`, onSwitch: () => { setShowMenu(false); setBizPickM(true); }, onHandoff: bizListM.includes("inland") ? () => { setShowMenu(false); setBizHandoffM(true); } : null } : null}
           roleViews={roleView.views}
           roleViewCur={roleView.view}
           onRoleView={(v) => { setShowMenu(false); setViewPick(true); void v; }}
@@ -6968,6 +6987,16 @@ setOpenMemo={setOpenMemo}
           />
           </div>
         )}
+{/* 🧭 2026-11-12 업무 전환 창 · 업무 화면(컨테이너 · 해상 · 항공 · 통합 · 내륙 인계함) */}
+<BizSwitcher hideButton open={bizPickM} onOpenChange={setBizPickM} modules={bizListM} current={bizM} canGroup={canBizGroupM} onPick={pickBizM} />
+{bizOverlayM && (
+  <React.Suspense fallback={null}>
+    <FreightMobile biz={bizOverlayM} modules={bizListM} canGroup={canBizGroupM} onBiz={pickBizM}
+      onClose={() => { if (bizM !== "inland" && bizListM.includes("inland")) pickBizM("inland"); else if (bizM !== "inland") setBizPickM(true); else setBizHandoffM(false); }}
+      me={myRealName || user?.displayName || ""} canEdit={role !== "viewer"} canManage={bizSeeAllM && role !== "viewer"}
+      inlandRows={allOrders} clients={clients} drivers={drivers} places={places} />
+  </React.Suspense>
+)}
 {viewPick && roleView.views && (
   <ViewPickerDialog views={roleView.views} current={roleView.view} roleLabel={ROLE_LABELS_SW[realRole] || ""} onClose={() => setViewPick(false)}
     onPick={(v) => { setViewPick(false); if (v === roleView.view) return; roleView.setView(v); setPage(v === "dispatch" ? "list" : "dept"); }} />
@@ -7995,6 +8024,7 @@ function MobileSideMenu({
   listUnseenCount = 0, // ⭐ 2026-11-06 등록내역 — 안 본 미배차
   deptMode = null,
   isExec = false,
+  bizMenu = null, // 🧭 2026-11-12 업무 전환 · 내륙 인계함
   roleViews = null,
   roleViewCur = "",
   onRoleView,
@@ -8206,6 +8236,12 @@ function MobileSideMenu({
               {ok("운임조회") && <MenuItem label="운임조회" icon="globe" onClick={() => onGo?.("fare")} dark={dark} />}
               {ok("배차현황") && <MenuItem label="배차현황" icon="list" onClick={() => onGo?.("list")} dark={dark} />}
               {ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
+            </MenuSection>
+          )}
+          {bizMenu && (
+            <MenuSection title="업무 영역" en="WORKSPACE" dark={dark} alwaysOpen>
+              <MenuItem label={bizMenu.label} icon="refresh" onClick={bizMenu.onSwitch} dark={dark} />
+              {bizMenu.onHandoff && <MenuItem label="내륙 인계함 (다른 팀이 넘긴 건)" icon="list" onClick={bizMenu.onHandoff} dark={dark} />}
             </MenuSection>
           )}
           {/* 🔀 2026-11-10 화면 전환 — 한 줄만, 누르면 어느 팀 화면으로 볼지 고르는 창 */}

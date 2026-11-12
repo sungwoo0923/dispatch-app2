@@ -7,6 +7,7 @@ import React from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { getTenant } from "./fsTenant";
+import { presetFeatures } from "./bizModules"; // 🧭 2026-11-12 업무 영역 — 저장값이 없어도 통합으로 여는 회사
 
 export const COMPANY_FEATURES = [
   { key: "fareRules", label: "운임 규칙", desc: "운임구분(일대·월대 등)별 수수료 자동 계산 — 모든 운송사 기본 켜짐(안 쓰는 곳만 끔)", defaultOn: true },
@@ -17,6 +18,11 @@ export const COMPANY_FEATURES = [
   { key: "orderManagerCol", label: "배차표 배차담당자 칸", desc: "실시간·배차현황·미배차 표에 오더 등록 직원 이름 표시" },
   // ⭐ 2026-11-08 업체 요청 — 기사앱 퇴근 키로수 입력 + 엔진오일(교환 후 5만km, 4만km부터 알림 확인해야 출퇴근)·타이어 표시
   { key: "driverOdoOil", label: "기사 퇴근 키로수·오일 관리", desc: "기사앱 퇴근 시 키로수 입력 필수 · 엔진오일 교환 시점/다음 교환(5만km)·타이어 표시 · 4만km부터 오일 알림 확인해야 출퇴근" },
+  // 🧭 2026-11-12 업무 영역 — 가입할 때 고른 값(src/bizModules.js). 예전 운송사는 내륙만
+  { key: "modInland", label: "업무 영역 · 내륙운송", desc: "내륙 배차(기존 배차 프로그램) — 기본 켜짐", defaultOn: true },
+  { key: "modContainer", label: "업무 영역 · 컨테이너운송", desc: "컨테이너 오더등록 · 운송현황 · 마감보드 · 손익" },
+  { key: "modSea", label: "업무 영역 · 해상", desc: "해상 선적등록(B/L) · 선적현황 · 마감보드 · 손익" },
+  { key: "modAir", label: "업무 영역 · 항공", desc: "항공 등록(AWB) · 항공현황 · 마감보드 · 손익" },
 ];
 
 const resolveCompany = (company) => {
@@ -49,9 +55,12 @@ function start(co, s) {
       COMPANY_FEATURES.forEach((f) => { o[f.key] = f.defaultOn ? d[f.key] !== false : d[f.key] === true; }); // defaultOn = 끈(false) 회사만 꺼짐
       // 배열에 아직 없는 키도 true면 그대로 노출(다른 기능이 먼저 저장한 경우)
       Object.keys(d).forEach((k) => { if (!(k in o) && typeof d[k] === "boolean") o[k] = d[k]; });
+      // 🧭 2026-11-12 업무 영역 기본값(JY로지스틱스 · 테스트운송사 = 통합) — 관리센터에서 저장한 값이 있으면 그 값이 우선
+      const pre = presetFeatures(co);
+      if (pre) Object.keys(pre).forEach((k) => { if (typeof d[k] !== "boolean") o[k] = pre[k]; });
       s.state = o; emit(s);
-    }, () => { s.state = { ...blank(), loaded: true }; emit(s); });
-  } catch { s.state = { ...blank(), loaded: true }; emit(s); }
+    }, () => { s.state = { ...blank(), ...(presetFeatures(co) || {}), loaded: true }; emit(s); });
+  } catch { s.state = { ...blank(), ...(presetFeatures(co) || {}), loaded: true }; emit(s); }
 }
 
 // { fareRules, vehicleLedger, …, loaded }

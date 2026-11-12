@@ -1,4 +1,5 @@
 // src/CompanyApplications.jsx
+import { modulesToFeatures, modulesLabel } from "./bizModules"; // 🧭 2026-11-12 업무 영역
 import { useRoleOptions } from "./customRoles";
 import { guardSeat } from "./plans"; // 👥 2026-11-09 직원 계정 한도
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
@@ -412,6 +413,10 @@ export default function CompanyApplications() {
           await setDoc(doc(db, "companyPlans", app.companyName.trim()), { planId: pid, since: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), updatedAt: serverTimestamp() }, { merge: true });
           await updateDoc(doc(db, "transportApplications", app.id), { approvedPlan: pid });
         } catch (_) {}
+      }
+      // 🧭 2026-11-12 업무 영역 — 가입할 때 고른 영역(내륙 · 컨테이너 · 해상 · 항공)을 회사 기능으로 저장. 안 고른 예전 신청서는 내륙만(기본값)이라 쓰지 않는다
+      if (app.type !== "기존" && app.companyName && Array.isArray(app.requestedModules) && app.requestedModules.length) {
+        try { await setDoc(doc(db, "companyFeatures", app.companyName.trim()), { companyName: app.companyName.trim(), ...modulesToFeatures(app.requestedModules), updatedAt: Date.now(), updatedBy: auth.currentUser?.email || "" }, { merge: true }); } catch (_) {}
       }
       // 🚀 신규 운송사 → 그 회사 관리자가 처음 들어올 때 튜토리얼 + 초기 설정 마법사를 띄운다(Onboarding.jsx)
       if (app.type !== "기존" && app.companyName) {
@@ -941,8 +946,8 @@ export default function CompanyApplications() {
                 const sel = planDraft || curPlan?.planId || "";
                 return (
                   <Sec title="요금제" en="PLAN" right={curPlan?.since && <span className="text-[11.5px] text-[#7A89A3] whitespace-nowrap">{curPlan.since}부터</span>}>
-                    <div className="px-4 py-3 grid grid-cols-3 gap-2">
-                      {[["신청한 요금제", managingApp.type === "기존" ? "-" : planName(managingApp.requestedPlan || "standard")], ["현재 요금제", curPlan?.planId ? planName(curPlan.planId) : "미지정"], ["변경 이력", `${(curPlan?.history || []).length}회`]].map(([k, v]) => (
+                    <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[["신청한 요금제", managingApp.type === "기존" ? "-" : planName(managingApp.requestedPlan || "standard")], ["신청한 업무 영역", managingApp.type === "기존" ? (managingApp.bizHome ? `담당: ${modulesLabel([managingApp.bizHome])}` : "-") : modulesLabel(managingApp.requestedModules || ["inland"])], ["현재 요금제", curPlan?.planId ? planName(curPlan.planId) : "미지정"], ["변경 이력", `${(curPlan?.history || []).length}회`]].map(([k, v]) => (
                         <div key={k} className="rounded-xl bg-[#F7F9FC] border border-[#EEF1F6] px-3 py-2 min-w-0">
                           <div className="text-[11px] text-[#7A89A3] whitespace-nowrap">{k}</div>
                           <div className="text-[15px] font-black text-[#0F1A30] whitespace-nowrap">{v}</div>
