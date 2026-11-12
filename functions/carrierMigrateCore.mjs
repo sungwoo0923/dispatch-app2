@@ -40,6 +40,9 @@ export const DEFAULT_PRESET = {
   multiDropStops: false, // 하차지명에 여러 곳("롯데상사,의왕") → 첫 곳 = 하차지 · 나머지 = 하차 경유지
   extrasAsSpecial: false, // 매출에만 있는 추가비용 · 금액이 다른 추가비용도 특수운임으로(청구만 · 회사 부담으로 나눠서)
   placeAliases: {}, // { 탭이름: { 시트의 이름: 통일할 이름 } } — 출발지 · 도착지 · 납품처 이름 통일(예: 에이제이 탭 "베베숲 평택" → "평택초저온")
+  extraPlaces: [], // 프로그램에 이미 등록된 상하차지 [{ name, address, phone, person, memo }] — 시트에 주소가 없어도 여기서 찾는다(화면이 넣어 준다)
+  unifyNames: false, // 띄어쓰기 · 기호만 다른 이름("평택 초저온" · "평택초저온")을 한 이름으로 — 상하차지 정보에 있는 이름이 먼저, 없으면 가장 많이 쓴 표기
+  lookupAliases: {}, // { 탭이름: { 오더에 적힌 이름: 상하차지 정보에 적힌 이름 } } — 이름은 그대로 두고 주소만 그 이름으로 찾는다(예: "에브리데이 여주" → "트레이더스 여주")
   arrivalDateTabs: [], // 날짜 칸이 상차일이 아니라 하차일인 탭 — 당착 = 같은 날 상차 · 야상 = 전날 18시 이후 상차 · 금상차월하차 = 그 전 금요일 상차
   unknownExtraName: "", // 이름을 알 수 없는 추가비용의 이름(예: "기타") — 비우면 "추가비용"
   dropOptions: [], // 회사 배차방식 목록에서 뺄 이름(예: JY는 "직접배차" 대신 "기사직통")
@@ -60,8 +63,12 @@ export const PRESET_SUGGESTIONS = {
     extraNames: { 에이제이: { J: "대행료", M: "대행료" } },
     // 에이제이 탭: 상차일자 칸 = 하차일 · 베베숲 평택 = 평택초저온 · 에이제이 후문 = 에이제이 · 기사직통을 배차방식으로(직접배차는 뺌)
     arrivalDateTabs: ["에이제이"],
-    placeAliases: { 에이제이: { "베베숲 평택": "평택초저온", 베베숲평택: "평택초저온", "평택 초저온": "평택초저온", "에이제이 후문": "에이제이", "구성리 창고": "구성리창고" } },
+    placeAliases: { 에이제이: { "베베숲 평택": "평택초저온", 베베숲평택: "평택초저온", "평택 초저온": "평택초저온", "에이제이 후문": "에이제이", "에이제이 정문": "에이제이", "구성리 창고": "구성리창고", 구성리: "구성리창고", 구성창고: "구성리창고",
+      그린피엔티: "그린피앤티", "마켓컬리 창원/8층": "마켓컬리 창원", "쿠팡밀크런-안성5센터": "쿠팡 안성5센터", 제이와이로지스: "JY로지스틱스" } },
+    // 주소 찾기용 다른 이름 — 상하차지 정보 탭(에이제이주소)에는 이 이름으로 적혀 있다(같은 물류센터)
+    lookupAliases: { 에이제이: { 평택초저온: "베베숲 평택", "에브리데이 여주": "트레이더스 여주", "에브리데이 시화": "트레이더스 시화", "트레이더스 평택": "에브리데이평택", "에브리데이 평택": "에브리데이평택", "이마트 평택": "에브리데이평택", 유심물류: "유심물류(전원물류)" } },
     unknownExtraName: "기타",
+    unifyNames: true,
     // 녹수셔틀 탭: 한 줄 = 한 번 운행 → 같은 날 같은 구간은 한 오더(왕복 N회전) · 유류지원비 줄 = 유류지원비 오더 · 봉산/덕산/고덕 = 공장 주소
     groupTripsTabs: ["녹수셔틀"],
     feeRowNames: ["유류지원비"],
@@ -76,11 +83,21 @@ export const PRESET_SUGGESTIONS = {
     multiDropStops: true,
     extrasAsSpecial: true,
     // 프로그램의 배차방식 이름은 "24시" · 분양 = 지입
-    dispatchAliases: { 분양: "지입", 전국특송: "24시", "24시콜": "24시", "24": "24시", "24시": "24시" },
-    vehicleGrades: { 분양: "지입" },
+    //  운송사 칸 "JY" = 제이와이 자차(정선태 기사 등) → 직영차
+    dispatchAliases: { 분양: "지입", 전국특송: "24시", "24시콜": "24시", "24": "24시", "24시": "24시", JY: "직영차" },
+    vehicleGrades: { 분양: "지입", JY: "직영" },
     optionMinCount: 1,
   },
 };
+
+// 회사 이름으로 시작 설정 찾기 — 띄어쓰기 · (주) · 한글 표기("제이와이로지스틱스")가 달라도 같은 회사로 본다
+const coKeyOf = (v) => String(v || "").toLowerCase().replace(/\(주\)|㈜|주식회사/g, "").replace(/[^0-9a-z가-힣]/g, "").replace(/제이와이/g, "jy");
+export function presetSuggestionFor(company) {
+  const k = coKeyOf(company);
+  if (!k) return null;
+  const hit = Object.keys(PRESET_SUGGESTIONS).find((n) => coKeyOf(n) === k);
+  return hit ? PRESET_SUGGESTIONS[hit] : null;
+}
 
 // ── 작은 도구 ─────────────────────────────────────────────
 const cell = (v) => String(v ?? "").replace(/ /g, " ").trim();
@@ -556,7 +573,9 @@ function rowToOrder(r, L, ctx) {
   const S = money(L.sale), B = money(L.buy);
   const plate = normPlate(g(L.cols.plate));
   const pa = ctx.preset.placeAliases?.[ctx.tab] || {};
-  const alias = (v) => cell(pa[v] ?? pa[v.replace(/\s+/g, "")] ?? v);
+  // 이름 통일: ① 정해 둔 이름(placeAliases — 띄어쓰기가 달라도) ② 띄어쓰기 · 기호만 다른 표기는 한 이름으로(ctx.canon)
+  const paN = ctx.paNorm || (ctx.paNorm = new Map(Object.entries(pa).map(([k, v]) => [nm(k), v])));
+  const alias = (v0) => { const v = cell(v0); if (!v) return v; const a = cell(pa[v] ?? paN.get(nm(v)) ?? v); return ctx.canon?.get(nm(a)) || a; };
   const to = alias(g(L.cols.to)), consignee = alias(g(L.cols.consignee)), from = alias(g(L.cols.from));
   const anything = to || consignee || plate || S.total || B.total || g(L.cols.name);
   if (!anything) return { skip: "빈 줄" };
@@ -583,16 +602,30 @@ function rowToOrder(r, L, ctx) {
   const D0 = ctx.memo.defaultFrom;
   const useDefault = !상차지주소 && D0 && !localHit && ((ctx.fewFrom && !memoFrom.some((p) => p.role === "상차")) || !상차지명 || nm(fromName) === ctx.topFrom || matchScore(fromName, ctx.client) >= 2 || inDefault(fromName, D0));
   const fromOv = ctx.override(fromName);
-  const fp = 상차지명 && !useDefault && !fromOv ? ctx.resolve(fromName, memoFrom, ctx.owner) : null;
+  // 🔎 2026-11-12 주소 찾기 — 그 이름으로 없으면 "주소 찾기용 다른 이름"(preset.lookupAliases)으로 한 번 더
+  const la = ctx.preset.lookupAliases?.[ctx.tab] || {};
+  const find = (name, list) => ctx.resolve(name, list, ctx.owner) || (la[cell(name)] ? ctx.resolve(la[cell(name)], list, ctx.owner) : null);
+  // 출발지가 거래처 자신이 아니고 상하차지 정보에 그 이름의 주소가 따로 있으면, 탭의 기본 상차지보다 그 주소가 먼저다(예: 에이제이 탭의 평택초저온)
+  //  (이름이 똑같거나 "주소 찾기용 다른 이름"으로 찾은 곳만 — 비슷한 이름으로 잘못 붙지 않게)
+  const ownHit = 상차지명 && !fromOv && nm(fromName) !== nm(ctx.client) ? find(fromName, memoFrom) : null;
+  const own = ownHit && (nm(ownHit.name) === nm(fromName) || la[cell(fromName)]) ? ownHit : null;
+  const fp = own || (상차지명 && !useDefault && !fromOv ? find(fromName, memoFrom) : null);
   if (fromOv && !상차지주소) 상차지주소 = fromOv;
   else if (fp) { 상차지주소 = 상차지주소 || fp.address; ctx.used.add(fp); }
   else if (useDefault) 상차지주소 = D0.address;
   if (!상차지명) 상차지명 = fp?.name || (상차지주소 ? 상차지주소.split(/\s+/).slice(0, 3).join(" ") : "");
   if (multi(상차지명)) tags.push(`상차 ${상차지명}`);
   const toOv = 하차지명 ? ctx.override(하차지명.split(/[,，+]/)[0]) : "";
-  const tp = 하차지명 && !toOv ? ctx.resolve(하차지명.split(/[,，+]/)[0], ctx.memo.places.filter((p) => p.role !== "상차"), ctx.owner) : null;
+  const tp = 하차지명 && !toOv ? find(하차지명.split(/[,，+]/)[0], ctx.memo.places.filter((p) => p.role !== "상차")) : null;
   if (toOv && !하차지주소) 하차지주소 = toOv;
   else if (tp) { 하차지주소 = 하차지주소 || tp.address; ctx.used.add(tp); }
+  // 하차지가 이 탭의 거래처 자신(예: 에이제이로 돌아오는 오더)이면 탭 위쪽에 적힌 그 회사 주소
+  else if (!하차지주소 && D0 && 하차지명 && (nm(하차지명) === nm(ctx.client) || nm(하차지명) === ctx.topFrom)) 하차지주소 = D0.address;
+  // 이름 칸에 주소가 괄호로 같이 적힌 경우 — "비엠솔루션 ( 구미시 화신로4길57 010-4053-6610)" → 이름 비엠솔루션 · 주소 구미시 화신로4길57
+  if (!하차지주소 && 하차지명) {
+    const pm = 하차지명.match(/^(.{2,}?)\s*\(\s*([^()]*?(?:로|길|동|리)\s*\d[^()]*)\)\s*$/);
+    if (pm) { 하차지명 = pm[1].trim(); 하차지주소 = pm[2].split(/\s*\/\s*|\s+0\d{1,2}[-\s]?\d{3,4}/)[0].trim(); }
+  }
   if (!하차지주소 && 하차지역) 하차지주소 = 하차지역; // 주소를 못 찾으면 지역이라도(대전 학하동 · 경기도 시흥시 목감동)
   if (!하차지명) 하차지명 = 하차지주소 ? 하차지주소.split(/\s+/).slice(0, 3).join(" ") : "";
   // 🚚 2026-11-12 하차지명에 여러 곳("롯데상사,의왕")이 적혀 있으면 첫 곳 = 하차지, 나머지 = 하차 경유지(주소는 상하차지 정보에서 찾음)
@@ -605,7 +638,7 @@ function rowToOrder(r, L, ctx) {
     const regions = multi(to) ? to.split(/[,，+]/).map((x) => x.trim()) : [];
     경유하차 = parts.slice(1).map((raw, i) => {
       const [n, ...rest] = raw.split("/").map((x) => x.trim()); if (rest.join("")) tags.push(`${n} ${rest.join("/")}`);
-      const o = ctx.override(n); const hit = o ? null : ctx.resolve(n, toPlaces, ctx.owner); if (hit) ctx.used.add(hit);
+      const o = ctx.override(n); const hit = o ? null : find(n, toPlaces); if (hit) ctx.used.add(hit);
       return { 업체명: n || raw, 주소: o || hit?.address || regions[i + 1] || "", 담당자: "", 담당자번호: "" };
     });
     tags.push(`경유 ${하차지명}`);
@@ -748,7 +781,11 @@ export function buildMigration(tabs, presetIn = {}) {
     t.rows.slice(x.L.headerRow + 1).forEach((r) => { const v = normCarrier(r?.[x.L.cols.carrier], preset); if (v && !preset.vehicleGrades[cell(r?.[x.L.cols.carrier])]) carrierCount.set(v, (carrierCount.get(v) || 0) + 1); });
   });
   const carriers = [...carrierCount.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v).filter((v) => !/^\d|^[가-힣]{0,3}\d{2,3}[가-힣]\d{4}$/.test(v));
-  const resolve = makePlaceResolver(book);
+  // 🏢 2026-11-12 프로그램에 이미 등록된 상하차지도 주소 찾기에 쓴다(시트의 상하차지 정보가 먼저)
+  const known = (preset.extraPlaces || []).filter((p) => p && cell(p.name) && cell(p.address)).map((p) => ({ name: cell(p.name), address: cell(p.address), phone: cell(p.phone), person: cell(p.person), memo: "", owner: "", registered: true }));
+  const bookN = new Set(book.map((p) => nm(p.name)));
+  const lookBook = [...book, ...known.filter((p) => !bookN.has(nm(p.name)))];
+  const resolve = makePlaceResolver(lookBook);
   // 3) 오더
   const orders = []; const tabSummary = []; const issues = [];
   const driverMap = new Map();
@@ -777,7 +814,22 @@ export function buildMigration(tabs, presetIn = {}) {
     // 화면에서 직접 넣은 주소(preset.placeOverrides["탭|이름"]) — 시트 어디에도 주소가 없는 약칭(녹수 내수 "예산" 등)
     const ov = preset.placeOverrides || {};
     const override = (name) => cell(ov[`${t.title}|${cell(name)}`] || ov[`*|${cell(name)}`] || "");
-    const ctx = { year: preset.year || new Date().getFullYear(), client, owner: client, memo, resolve, preset, carriers, used: new Set(), override, tab: t.title, fewFrom: fromVals.size > 0 && fromVals.size <= 4, topFrom: topN / Math.max(1, fromList.length) >= 0.8 ? topV : "" };
+    // 🔤 2026-11-12 이름 통일표(preset.unifyNames) — 이 탭의 출발지 · 도착지 · 납품처에서 띄어쓰기 · 기호만 다른 표기를 한 이름으로
+    let canon = null;
+    if (preset.unifyNames) {
+      const pa0 = preset.placeAliases?.[t.title] || {}; const paN0 = new Map(Object.entries(pa0).map(([k, v]) => [nm(k), v]));
+      const seen = new Map(); // nm → Map(표기 → 횟수)
+      t.rows.slice(L.headerRow + 1).forEach((r) => [L.cols.from, L.cols.to, L.cols.consignee].forEach((c) => {
+        if (c === undefined || c < 0) return;
+        const raw = cell(r?.[c]); if (!raw || /[,，+]/.test(raw)) return;
+        const v = cell(pa0[raw] ?? paN0.get(nm(raw)) ?? raw); const k = nm(v); if (!k) return;
+        if (!seen.has(k)) seen.set(k, new Map()); const m = seen.get(k); m.set(v, (m.get(v) || 0) + 1);
+      }));
+      const bookName = new Map(lookBook.map((p) => [nm(p.name), cell(p.name)]));
+      canon = new Map();
+      seen.forEach((m, k) => { const best = bookName.get(k) && m.size > 1 ? ([...m.keys()].find((x) => x === bookName.get(k)) || [...m.entries()].sort((a, b) => b[1] - a[1])[0][0]) : [...m.entries()].sort((a, b) => b[1] - a[1])[0][0]; if (m.size > 1) canon.set(k, best); });
+    }
+    const ctx = { canon, year: preset.year || new Date().getFullYear(), client, owner: client, memo, resolve, preset, carriers, used: new Set(), override, tab: t.title, fewFrom: fromVals.size > 0 && fromVals.size <= 4, topFrom: topN / Math.max(1, fromList.length) >= 0.8 ? topV : "" };
     let made = 0; const skipped = {}; let mismatch = 0; const unresolved = new Map();
     t.rows.slice(L.headerRow + 1).forEach((r, k) => {
       const out = rowToOrder(r || [], L, ctx);
@@ -799,6 +851,14 @@ export function buildMigration(tabs, presetIn = {}) {
     });
     if (!L.sale) issues.push(`${t.title}: 매출 · 매입 칸을 찾지 못했어요(운임 없이 가져옴)`);
   });
+  // 3-1) 🔤 같은 이름인데 어떤 줄은 주소를 찾고 어떤 줄은 못 찾은 경우(예: 한 줄에만 괄호로 주소가 적힌 "비엠솔루션") — 찾은 주소를 같은 이름 줄에 채운다
+  if (preset.unifyNames) {
+    const full = (a) => /\d/.test(String(a || ""));
+    const addrOf = new Map();
+    orders.forEach((o) => { if (full(o.상차지주소) && o.상차지명) addrOf.set(nm(o.상차지명), o.상차지주소); if (full(o.하차지주소) && o.하차지명) addrOf.set(nm(o.하차지명), o.하차지주소); });
+    orders.forEach((o) => { if (!full(o.상차지주소) && addrOf.has(nm(o.상차지명))) o.상차지주소 = addrOf.get(nm(o.상차지명)); if (!full(o.하차지주소) && addrOf.has(nm(o.하차지명))) o.하차지주소 = addrOf.get(nm(o.하차지명)); });
+    tabSummary.forEach((ts) => { if (Array.isArray(ts.unresolved)) ts.unresolved = ts.unresolved.filter((u) => !addrOf.has(nm(u.name))); });
+  }
   // 3-2) 🚚 2026-11-12 회전 운행 묶기(preset.groupTripsTabs · 녹수셔틀) — 시트는 한 줄이 한 번 운행이라, 같은 날 같은 구간을 한 오더(왕복 N회전)로
   //   · 묶는 기준: 상차일 · 상차지 · 하차지 · 한 번 운임(청구 · 기사) · 차량번호 · 메모가 모두 같은 줄
   //   · 운임은 합계(청구 = 한 번 운임 × N, 기사도 같게) · 메모 맨 앞에 "N회전 왕복 오더 입니다"(프로그램의 회전 표시와 같은 문구)
@@ -848,7 +908,7 @@ export function buildMigration(tabs, presetIn = {}) {
     if (!cur.메모 && extra.memo) cur.메모 = extra.memo;
     placeMap.set(k, cur);
   };
-  book.forEach((p) => addPlace(p.name, p.address, p));
+  book.forEach((p) => addPlace(p.name, p.address, p)); // (이미 등록된 곳 known은 넣지 않는다 — 새로 만들 목록이므로)
   Object.entries(preset.placeOverrides || {}).forEach(([k, a]) => { const n = k.split("|").slice(1).join("|"); if (n && cell(a)) addPlace(n, cell(a), { memo: "직접 입력한 주소" }); });
   // 오더에서 나온 곳은 이름이 업체명일 때만(지역 · 주소를 이름으로 쓴 줄은 장소로 만들지 않는다)
   const goodName = (n, a) => n && a && nm(n) !== nm(a) && !looksAddress(n) && !looksRegion(n) && !nm(a).startsWith(nm(n)) && looksAddress(a);
