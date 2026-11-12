@@ -79,6 +79,7 @@ import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf, fixedLookOf, useR
 import { carrierOf } from "./routeCarriers"; // ⭐ 2026-11-06 고정노선현황 운송사 검색
 import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 정산·매출에서 뺀다
 import ColumnStyleHost from "./ColumnStyle"; // 🎨 2026-11-03 컬럼명 오른쪽 클릭 → 색 변경 // ⭐ 2026-11-03 배차현황 › 고정노선현황
+import QuickNav, { QuickSearchButton } from "./QuickNav"; // 🔎 2026-11-12 통합 검색(Ctrl+K) · 자주 쓰는 메뉴 · 도움말 센터
 import { useScreenFit, ScreenFitButton, BrowserZoomNotice } from "./ScreenFit"; // 🖥 2026-11-10 화면 맞춤 · 브라우저 확대 안내
 import { usePendingSignups, isPendingSignupDriver } from "./pendingSignups";
 import { NavHover, emitSubnav } from "./navMenus";
@@ -8801,6 +8802,8 @@ return (
             {/* ⭐ 2026-11-01 출근·퇴근 버튼 — 일반 화면은 홈 관제 데크(시계 옆)에, 부서 화면(경리·인사·임원)은 홈 데크가 없어 여기 */}
             {/* 출근·퇴근 버튼은 각 팀 홈 대시보드(시계 옆)에 있다 */}
 
+            {/* 🔎 2026-11-12 통합 검색(Ctrl + K) — 메뉴 · 세부 화면 · 도움말 찾기 */}
+            <QuickSearchButton />
             {/* 🖥 2026-11-10 화면 맞춤 — 표 전체가 한 화면에 보이게 자동 배율 */}
             <ScreenFitButton fit={screenFit} />
 
@@ -8816,6 +8819,10 @@ return (
 
         </div>
       </header>
+      {/* ★ 2026-11-12 자주 쓰는 메뉴(접었다 펴기) · 통합 검색 창 · 도움말 센터 — 지금 이 계정에 보이는 메뉴로 자동 구성 */}
+      <QuickNav menu={menu}
+        menus={uiMenuList("pc", deptMode ? DEPT_MENUS[deptMode] : KP_SIDE_GROUPS.flatMap((g) => g.items)).filter((m) => menuState(m) === "ok")}
+        onGo={(m, code, key) => { handleMenuClick(m); if (code && key) setTimeout(() => emitSubnav(code, key), 0); }} />
 
 
       {/* 화주사 푸시 알림 — 상차 예정시각이 임박했는데 미처리인 오더를 화주사가 푸시하면 중앙에 확인 전까지 표시 */}

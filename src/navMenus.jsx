@@ -68,6 +68,14 @@ function registeredItems(code) {
   try { const k = REG_KEY(code); const j = _reg[k] || localStorage.getItem(k); const v = j ? cleanFor(code, JSON.parse(j)) : null; return v && v.length ? v : null; } catch { return null; }
 }
 
+// 🔎 2026-11-12 통합 검색 · 도움말 센터(src/QuickNav.jsx) — 상단 메뉴의 세부 메뉴 { code, items }(이 계정이 실제로 본 목록이 있으면 그것)
+export function subItemsOf(menu) {
+  const base = MENU_SUBS[menu];
+  if (!base) return null;
+  const reg = registeredItems(base.code);
+  return { code: base.code, items: reg && reg.length ? reg : cleanFor(base.code, base.items) };
+}
+
 // 세부 메뉴 이동 요청 — 화면이 아직 안 열렸으면 열린 뒤(3초 안) 적용
 export function emitSubnav(code, key) {
   try { window.__kpPendingSub = { code, key, at: Date.now() }; } catch { /* 무시 */ } // 화면이 늦게 열려도(처음 불러오기) 10초 안이면 적용
