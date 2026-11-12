@@ -43,6 +43,7 @@ function naturalWidth(t) {
   return w;
 }
 let BIG = false; // 크게 보기 — 칸 안쪽 여백을 줄여 같은 폭에 더 크게
+let XL = false; // 🔍 2026-11-12 더 크게 — 글씨를 100% 아래로 줄이지 않는다(칸이 많으면 표를 옆으로 넘겨 본다)
 export function fitNow() {
   const t = mainTable();
   if (!t) return null;
@@ -52,10 +53,11 @@ export function fitNow() {
   const nat = naturalWidth(t);
   if (!nat || !avail) return null;
   let z = Math.min(MAX, Math.max(MIN, avail / nat));
+  if (XL) z = Math.max(z, 1);
   if (Math.abs(z - zoomOf(t)) < 0.015) z = zoomOf(t);
   setTableZoom(t, z);
   // 칸이 너무 많아 최소 배율로도 다 안 들어가면 — 안 쓰는 칸 숨기기 안내(화면마다 한 번)
-  if (avail / nat < MIN) {
+  if (!XL && avail / nat < MIN) {
     const k = `kpFitHint:${t.tHead?.rows?.[0]?.cells?.length || 0}:${location.pathname}`;
     try { if (!sessionStorage.getItem(k)) { sessionStorage.setItem(k, "1"); window.dispatchEvent(new CustomEvent("kp-col-toast", { detail: `칸이 많아 ${Math.round(MIN * 100)}%로 줄여도 옆으로 조금 넘쳐요 · 컬럼명 오른쪽 클릭 › 이 칸 숨기기로 안 쓰는 칸을 숨기면 한 화면에 들어와요` })); } } catch { /* 무시 */ }
   }
@@ -66,14 +68,16 @@ export function fitNow() {
 export function useScreenFit(menu) {
   const on = usePref("fit") === true;
   const big = usePref("fitBig") === true;
-  BIG = on && big;
+  const xl = usePref("fitXl") === true;
+  BIG = on && (big || xl);
+  XL = on && xl;
   // 크게 보기 켤 때 왼쪽 메뉴 접기 · 끌 때 원래대로
   const prevBig = React.useRef(null);
   React.useEffect(() => {
-    const now = on && big;
+    const now = on && (big || xl);
     if (prevBig.current !== null && prevBig.current !== now) { try { window.dispatchEvent(new CustomEvent("kp-subnav-collapse", { detail: now })); } catch { /* 무시 */ } }
     prevBig.current = now;
-  }, [on, big]);
+  }, [on, big, xl]);
   const [pct, setPct] = React.useState(() => Math.round(zoomNow() * 100));
   React.useEffect(() => { const h = () => setPct(Math.round(zoomNow() * 100)); window.addEventListener("kp-screen-fit", h); return () => window.removeEventListener("kp-screen-fit", h); }, []);
   React.useEffect(() => {
@@ -88,10 +92,16 @@ export function useScreenFit(menu) {
     let mt = 0; const mo = new MutationObserver(() => { if (mt) return; mt = setTimeout(() => { mt = 0; const t = mainTable(); if (t && t !== last) run(); }, 1500); });
     const r = rootEl(); if (r) mo.observe(r, { childList: true, subtree: true });
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(rt); clearTimeout(mt); clearFit(); window.removeEventListener("resize", onResize); window.removeEventListener("kp-collayout-applied", onResize); mo.disconnect(); };
-  }, [on, big, menu]);
+  }, [on, big, xl, menu]);
   const toggle = () => setPref("fit", !on);
-  const toggleBig = () => { if (!on) setPref("fit", true); setPref("fitBig", !(on && big)); };
-  return { on, big: on && big, pct, toggle, toggleBig };
+  // 누를 때마다: 끔 → 크게 보기(한 화면 그대로) → 더 크게(글씨 100% 이상 · 옆으로 넘김) → 끔
+  const toggleBig = () => {
+    if (!on) { setPref("fit", true); setPref("fitBig", true); setPref("fitXl", false); return; }
+    if (xl) { setPref("fitXl", false); setPref("fitBig", false); return; }
+    if (big) { setPref("fitXl", true); return; }
+    setPref("fitBig", true);
+  };
+  return { on, big: on && (big || xl), xl: on && xl, pct, toggle, toggleBig };
 }
 
 export function ScreenFitButton({ fit }) {
@@ -104,9 +114,9 @@ export function ScreenFitButton({ fit }) {
         {fit.on ? <span className="tabular-nums">맞춤 {fit.pct}%</span> : "화면 맞춤"}
       </button>
       <button type="button" onClick={fit.toggleBig} data-kp="screen-fit-big"
-        title={fit.big ? "크게 보기 켜짐 — 칸 여백을 줄이고 왼쪽 메뉴를 접어 표 글씨를 더 크게(누르면 끄기)" : "한 화면은 그대로, 칸 여백을 줄이고 왼쪽 메뉴를 접어 표 글씨를 더 크게 봅니다"}
+        title={fit.xl ? "더 크게 켜짐 — 글씨를 100% 아래로 줄이지 않습니다. 칸이 많으면 표를 옆으로 넘겨 보세요(누르면 끄기)" : fit.big ? "크게 보기 켜짐 — 칸 여백을 줄이고 왼쪽 메뉴를 접어 표 글씨를 더 크게(한 번 더 누르면 '더 크게': 글씨 100% 이상 · 옆으로 넘김)" : "한 화면은 그대로, 칸 여백을 줄이고 왼쪽 메뉴를 접어 표 글씨를 더 크게 봅니다"}
         className={`kp-chip-btn text-[12px] transition inline-flex items-center gap-1 ${fit.big ? "!bg-white !text-[#0F1A30] !border-white" : ""}`}>
-        <span className="font-black text-[13px] leading-none">가</span><span className="font-black text-[10px] leading-none -ml-0.5">+</span>크게 보기
+        <span className="font-black text-[13px] leading-none">가</span><span className="font-black text-[10px] leading-none -ml-0.5">{fit.xl ? "++" : "+"}</span>{fit.xl ? "더 크게" : "크게 보기"}
       </button>
     </div>
   );
