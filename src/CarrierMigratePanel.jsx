@@ -13,6 +13,7 @@ import { collection, doc, getDoc, getDocs, query, where, writeBatch, setDoc, ser
 import { applyMerges } from "../functions/sheetProfileCore.mjs";
 import { buildMigration, DEFAULT_PRESET, PRESET_SUGGESTIONS, forOrderDoc, forRouteDoc, forRateSheetDoc, nm } from "../functions/carrierMigrateCore.mjs";
 import { coDocKey } from "./coKey";
+import { pushTenantBypass } from "./fsTenant"; // 🔒 가져오는 동안만 "지금 회사" 거르기를 끈다(조회는 대상 회사 조건으로 직접)
 import { kpConfirm } from "./kpDialog";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 날짜는 프로그램 달력으로
 
@@ -149,6 +150,11 @@ export default function CarrierMigratePanel({ companies = [] }) {
     const me = auth.currentUser?.email || "";
     const base = { companyName: co, importBatchId: batchId };
     setErr(""); setProgress({ pct: 1, step: "준비 중" });
+    // 🔒 2026-11-12 다른 운송사와 섞이지 않게 —
+    //  · 저장하는 문서마다 companyName = 대상 회사를 직접 적는다(앱의 회사 자동 기입은 회사명이 없을 때만 동작)
+    //  · 최고관리자가 들어가 있는 회사(예: 돌캐) 기준 거르기가 조회 결과를 비우면 "이미 옮긴 줄 건너뛰기"가 안 되므로,
+    //    가져오는 동안만 거르기를 끄고 모든 조회에 where("companyName", "==", 대상 회사)를 직접 붙인다(사용량도 내 회사로 안 셈)
+    const releaseTenant = pushTenantBypass();
     try {
       await setDoc(doc(db, "importBatches", batchId), { companyName: co, by: me, at: serverTimestamp(), source: book.source === "excel" ? "excel" : "carrierMigrate", sheetTitle: book.title || "", spreadsheetId: (url.match(/\/d\/([a-zA-Z0-9_-]+)/) || [])[1] || "", tabs: result.tabs.filter((t) => t.kind === "orders").map((t) => t.title), status: "importing", count: 0 });
       // 1) 회사 설정 — 배차방식 목록 · 기사 등급(분양 등) · 이전 설정(다음에 같은 시트를 다시 옮길 때)
@@ -227,6 +233,8 @@ export default function CarrierMigratePanel({ companies = [] }) {
     } catch (e) {
       await setDoc(doc(db, "importBatches", batchId), { status: "error", error: String(e?.message || e) }, { merge: true }).catch(() => {});
       setProgress({ pct: 0, step: "", error: `가져오기 실패: ${e?.message || e} — 일부만 저장됐다면 아래 [가져오기 기록]에서 [가져오기 취소]로 지울 수 있습니다.` });
+    } finally {
+      releaseTenant();
     }
   };
 
