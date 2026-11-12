@@ -11,7 +11,7 @@ import * as XLSX from "xlsx";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { collection, doc, getDoc, getDocs, query, where, writeBatch, setDoc, serverTimestamp } from "firebase/firestore";
 import { applyMerges } from "../functions/sheetProfileCore.mjs";
-import { buildMigration, DEFAULT_PRESET, PRESET_SUGGESTIONS, forOrderDoc, forRouteDoc, forRateSheetDoc, nm } from "../functions/carrierMigrateCore.mjs";
+import { buildMigration, DEFAULT_PRESET, PRESET_SUGGESTIONS, presetSuggestionFor, forOrderDoc, forRouteDoc, forRateSheetDoc, nm } from "../functions/carrierMigrateCore.mjs";
 import { coDocKey } from "./coKey";
 import { pushTenantBypass } from "./fsTenant"; // 🔒 가져오는 동안만 "지금 회사" 거르기를 끈다(조회는 대상 회사 조건으로 직접)
 import { kpConfirm } from "./kpDialog";
@@ -62,6 +62,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
   const [company, setCompany] = React.useState("");
   const [url, setUrl] = React.useState("");
   const [book, setBook] = React.useState(null); // { title, tabs:[{title, rows}] }
+  const bookRef = React.useRef(null); bookRef.current = book; // 설정이 늦게 와도 이미 읽은 시트를 그 설정으로 다시 계산
   const [preset, setPreset] = React.useState(DEFAULT_PRESET);
   const [aliasDraft, setAliasDraft] = React.useState(aliasText(DEFAULT_PRESET.dispatchAliases));
   const [result, setResult] = React.useState(null);
@@ -81,29 +82,51 @@ export default function CarrierMigratePanel({ companies = [] }) {
   React.useEffect(() => {
     if (!co) return;
     let alive = true;
-    getDoc(doc(db, "companySettings", co)).then((s) => {
-      if (!alive) return;
-      const saved = s.exists() ? s.data().migrationPreset : null;
-      // 저장된 설정이 있어도 회사별 시작 규칙(PRESET_SUGGESTIONS — 지금은 JY로지스틱스만)은 그 위에 덮는다:
-      //  배차방식 별칭 · 차량 구분은 낱개로 합치고(시작 규칙의 값이 이김), 나머지 규칙(내일착 탭 · 경유지 · 추가비용 · 화물 · 톤수 …)은 시작 규칙 그대로
-      const sug = PRESET_SUGGESTIONS[co] || {};
-      const base = saved ? { ...saved, ...sug, extraNames: { ...(sug.extraNames || {}), ...(saved.extraNames || {}) }, placeOverrides: saved.placeOverrides || {}, tabClients: saved.tabClients || {}, skipTabs: saved.skipTabs || [],
+    // 🚚 2026-11-12 회사별 시작 규칙(PRESET_SUGGESTIONS — 지금은 JY로지스틱스만)을 먼저 바로 적용한다
+    //  예전엔 저장된 설정을 읽은 뒤에만 넣어서, 그 읽기가 늦거나 실패하면 규칙 없이(이름 통일 · 회전 묶기 · 하차일 기준 없이) 계산됐다
+    //  저장된 설정이 있으면: 배차방식 별칭 · 차량 구분은 낱개로 합치고(시작 규칙이 이김), 나머지 규칙은 시작 규칙 그대로
+    const sug = presetSuggestionFor(co) || {};
+    const apply = (saved) => {
+      const base = saved ? { ...saved, ...sug, extraNames: { ...(sug.extraNames || {}), ...(saved.extraNames || {}) }, placeOverrides: { ...(sug.placeOverrides || {}), ...(saved.placeOverrides || {}) }, tabClients: saved.tabClients || {}, skipTabs: saved.skipTabs || [],
         dispatchAliases: { ...(saved.dispatchAliases || {}), ...(sug.dispatchAliases || {}) }, vehicleGrades: { ...(saved.vehicleGrades || {}), ...(sug.vehicleGrades || {}) } } : sug;
       const p = { ...DEFAULT_PRESET, ...base, dispatchAliases: { ...DEFAULT_PRESET.dispatchAliases, ...(base.dispatchAliases || {}) }, vehicleGrades: { ...DEFAULT_PRESET.vehicleGrades, ...(base.vehicleGrades || {}) } };
-      setPreset(p); setAliasDraft(aliasText(p.dispatchAliases)); setOvDraft(p.placeOverrides || {}); setResult(null);
-    }).catch(() => {});
+      setPreset(p); setAliasDraft(aliasText(p.dispatchAliases)); setOvDraft(p.placeOverrides || {});
+      if (bookRef.current) runRef.current?.(bookRef.current.tabs, p); else setResult(null); // 이미 읽은 시트가 있으면 새 설정으로 바로 다시 계산
+    };
+    apply(null);
+    getDoc(doc(db, "companySettings", co)).then((s) => { if (alive && s.exists() && s.data().migrationPreset) apply(s.data().migrationPreset); }).catch(() => {});
     return () => { alive = false; };
   }, [co]);
 
   const run = React.useCallback((tabs, p) => {
     try {
-      const r = buildMigration(tabs, p);
+      // 🏢 이 회사에 이미 등록된 상하차지도 주소 찾기에 쓴다(시트에 주소가 없어도 등록된 곳이면 "주소 못 찾음"에 뜨지 않는다)
+      const r = buildMigration(tabs, { ...p, extraPlaces: coPlacesRef.current });
       setResult(r);
       setRouteOn(Object.fromEntries(r.routes.map((_, i) => [i, true])));
       setRateOn(Object.fromEntries((r.rateSheets || []).map((_, i) => [i, true])));
       setOptOn(Object.fromEntries(r.dispatchOptions.map((d) => [d.value, d.use])));
     } catch (e) { setErr(`변환 중 오류: ${e?.message || e}`); }
   }, []);
+
+  const runRef = React.useRef(null); runRef.current = run;
+  // 🏢 2026-11-12 회사를 고르면 그 회사에 등록된 상하차지를 읽어 둔다 → 읽은 뒤 이미 열어 둔 시트가 있으면 다시 계산
+  const coPlacesRef = React.useRef([]);
+  const [coPlaceCount, setCoPlaceCount] = React.useState(0);
+  const presetRef = React.useRef(preset); presetRef.current = preset;
+  React.useEffect(() => {
+    coPlacesRef.current = []; setCoPlaceCount(0);
+    if (!co) return undefined;
+    let alive = true;
+    const release = pushTenantBypass();
+    getDocs(query(collection(db, "places"), where("companyName", "==", co))).then((snap) => {
+      if (!alive) return;
+      coPlacesRef.current = snap.docs.map((d) => { const x = d.data() || {}; const c = (Array.isArray(x.contacts) && (x.contacts.find((k) => k.isPrimary) || x.contacts[0])) || {}; return { name: x.업체명 || "", address: x.주소 || "", phone: c.phone || x.담당자번호 || "", person: c.name || x.담당자 || "" }; }).filter((x) => x.name && x.address);
+      setCoPlaceCount(coPlacesRef.current.length);
+      if (bookRef.current) runRef.current?.(bookRef.current.tabs, presetRef.current);
+    }).catch(() => {}).finally(() => release());
+    return () => { alive = false; };
+  }, [co]);
 
   const openSheet = async () => {
     if (!url.trim()) return setErr("구글시트 주소를 붙여넣어 주세요.");
@@ -164,7 +187,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
       // 1) 회사 설정 — 배차방식 목록 · 기사 등급(분양 등) · 이전 설정(다음에 같은 시트를 다시 옮길 때)
       setProgress({ pct: 2, step: "회사 설정 저장 중" });
       const cs = { companyName: co, migrationPreset: { ...preset, dispatchAliases: parseAlias(aliasDraft) }, migrationAt: serverTimestamp() };
-      delete cs.migrationPreset.year;
+      delete cs.migrationPreset.year; delete cs.migrationPreset.extraPlaces;
       if (opts.saveOptions && optValues.length) {
         // 🚚 2026-11-12 먼저 가져온 탭에서 만든 배차방식 목록을 지우지 않게 합친다 · preset.dropOptions(예: JY "직접배차")는 뺀다
         const prevOpts = (await getDoc(doc(db, "companySettings", co)).catch(() => null))?.data()?.dropdownOptions?.배차방식;
@@ -297,7 +320,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
             <div className="flex flex-wrap gap-3 mb-5">
               <Stat label="오더" value={won(orders.length)} sub={opts.from || opts.to ? `전체 ${won(result.orders.length)} 중 기간 안` : `${orderTabs.length}개 탭`} />
               <Stat label="거래처" value={won(result.clients.length)} />
-              <Stat label="상하차지" value={won(result.places.length)} sub="주소 있는 곳" />
+              <Stat label="상하차지" value={won(result.places.length)} sub={coPlaceCount ? `주소 있는 곳 · 이미 등록 ${won(coPlaceCount)}곳 참고` : "주소 있는 곳"} />
               <Stat label="기사" value={won(result.drivers.length)} sub={Object.entries(gradeCount).filter(([g]) => g !== "일반").map(([g, n]) => `${g} ${n}`).join(" · ") || "일반"} />
               <Stat label="고정노선 후보" value={result.routes.length} sub="운행 OFF로 만듦" />
               <Stat label="단가표" value={(result.rateSheets || []).length} sub={`${won((result.rateSheets || []).reduce((a, r) => a + r.rows.length, 0))}곳`} />

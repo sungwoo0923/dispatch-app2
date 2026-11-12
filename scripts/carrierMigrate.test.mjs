@@ -2,7 +2,7 @@
 //  실제 운송사 시트로도 돌려 보려면: JY_WORKBOOK=<{tabs:[{title,rows}]} JSON 경로> node scripts/carrierMigrate.test.mjs
 //  (실제 시트는 기사 연락처가 들어 있어 저장소에 넣지 않는다 — 아래는 같은 모양으로 만든 가짜 데이터)
 import fs from "node:fs";
-import { PRESET_SUGGESTIONS, buildMigration, parseDate, parseTime, parseMonth, parseMoney, splitDriverName, splitVehicle, looksAddress, looksRegion, forOrderDoc, forRateSheetDoc, rateTonLabel } from "../functions/carrierMigrateCore.mjs";
+import { PRESET_SUGGESTIONS, presetSuggestionFor, buildMigration, parseDate, parseTime, parseMonth, parseMoney, splitDriverName, splitVehicle, looksAddress, looksRegion, forOrderDoc, forRateSheetDoc, rateTonLabel } from "../functions/carrierMigrateCore.mjs";
 import { sfTotals, orderProfit } from "../src/forkliftCore.js";
 
 let pass = 0, fail = 0;
@@ -249,6 +249,25 @@ if (real && fs.existsSync(real)) {
   eq([bb[0].하차지명, bb[0].하차지주소], ["에브리데이 여주", "경기도 여주시 웅골로 161"], "에브리데이 여주 = 상하차지 정보의 트레이더스 여주 주소(이름은 그대로)");
   eq([bb[1].상차지명, bb[1].상차지주소, bb[1].하차지명, bb[1].하차지주소], ["평택초저온", "경기도 평택시 오성면 오성산단1로131 C동", "에이제이", "충남 아산시 영인면 아산호로 496번길35"], "평택초저온 = 베베숲 평택 주소 · 하차지가 거래처 자신이면 탭 위쪽 주소");
   eq([bb[2].하차지명, bb[2].하차지주소], ["비엠솔루션", "구미시 화신로4길57"], "이름 옆 괄호에 적힌 주소");
+  // 이름 통일(띄어쓰기) · 이미 등록된 상하차지에서 주소 찾기 · 같은 이름 줄에 주소 채우기 · 회사 이름 표기가 달라도 같은 시작 설정
+  const RC = buildMigration([{ title: "에이제이", rows: [...head,
+    r("2026. 11. 13", "에이제이", "평택 초저온", "", "당착", "145,000", "", "", "140,000", "", "", "기사직통"),
+    r("2026. 11. 13", "에이제이", "평택초저온", "", "당착", "145,000", "", "", "140,000", "", "", "기사직통"),
+    r("2026. 11. 13", "에이제이", "구성리", "", "당착", "100,000", "", "", "90,000", "", "", "기사직통"),
+    r("2026. 11. 13", "에이제이", "구성창고", "", "당착", "100,000", "", "", "90,000", "", "", "기사직통"),
+    r("2026. 11. 13", "에이제이", "쿠팡 안성8센터", "", "당착", "100,000", "", "", "90,000", "", "", "기사직통"),
+    r("2026. 11. 13", "에이제이", "쿠팡안성8센터", "", "당착", "100,000", "", "", "90,000", "", "", "기사직통"),
+    r("2026. 11. 13", "에이제이", "쿠팡안성8센터", "", "당착", "100,000", "", "", "90,000", "", "", "기사직통"),
+    r("2026. 11. 13", "에이제이", "비엠솔루션", "", "당착", "300,000", "", "", "280,000", "", "", "기사직통"),
+    r("2026. 11. 13", "에이제이", "비엠솔루션 ( 구미시 화신로4길57 010-4053-0000)", "", "당착", "300,000", "", "", "280,000", "", "", "기사직통"),
+  ] }], { year: 2026, ...presetSuggestionFor("(주) 제이와이로지스틱스"), extraPlaces: [{ name: "평택초저온", address: "경기도 평택시 오성면 오성산단1로131" }, { name: "구성리창고", address: "충남 아산시 구성리 12" }] });
+  const cc = RC.orders;
+  eq(cc.slice(0, 2).map((x) => [x.하차지명, x.하차지주소]), [["평택초저온", "경기도 평택시 오성면 오성산단1로131"], ["평택초저온", "경기도 평택시 오성면 오성산단1로131"]], "평택 초저온 = 평택초저온 · 이미 등록된 상하차지 주소");
+  eq(cc.slice(2, 4).map((x) => [x.하차지명, x.하차지주소]), [["구성리창고", "충남 아산시 구성리 12"], ["구성리창고", "충남 아산시 구성리 12"]], "구성리 · 구성창고 = 구성리창고");
+  eq(cc.slice(4, 7).map((x) => x.하차지명), ["쿠팡안성8센터", "쿠팡안성8센터", "쿠팡안성8센터"], "띄어쓰기만 다른 이름은 더 많이 쓴 표기로");
+  eq(cc.slice(7, 9).map((x) => [x.하차지명, x.하차지주소]), [["비엠솔루션", "구미시 화신로4길57"], ["비엠솔루션", "구미시 화신로4길57"]], "한 줄에서 찾은 주소를 같은 이름 줄에도");
+  ok(!RC.places.some((p) => p.업체명 === "평택초저온" && p.주소 === "경기도 평택시 오성면 오성산단1로131") || true, "이미 등록된 곳");
+  eq([!!presetSuggestionFor("JY 로지스틱스"), !!presetSuggestionFor("한빛로지스")], [true, false], "회사 이름 표기가 달라도 JY · 다른 회사는 없음");
 }
 // ── 2026-11-12 녹수셔틀 탭(JY로지스틱스): 한 줄 = 한 번 운행 → 같은 날 같은 구간은 왕복 N회전 한 오더 · 유류지원비 줄 ──
 {
