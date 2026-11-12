@@ -1,4 +1,5 @@
 // src/mobile/MobileFleetView.jsx — 지입차량 관제 (모바일)
+import { isFleetGrade } from "../fleetGradesCore"; // 🚛 지입차 구분 한 곳
 import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import "leaflet/dist/leaflet.css";
@@ -802,7 +803,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
   // 보이고, GPS/위치는 가입된 기사만 자연히 채워지는 식으로 둔다.
   const drivers = useMemo(() => {
     return driversRaw
-      .filter(raw => raw.등급 === "지입" || raw.등급 === "직영" || raw.등급 === "임대")
+      .filter(raw => isFleetGrade(raw.등급))
       .map(raw => {
         const u = usersMap[raw.id] || {};
         return {

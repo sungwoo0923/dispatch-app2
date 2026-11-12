@@ -6198,6 +6198,27 @@ exports.sheetImport = functions
       const me = await requireTotalMaster(req);
       const action = body.action;
 
+      // 🚚 2026-11-12 운송사 일괄 이전 — 고른 탭(없으면 전체)을 맨 윗줄부터 그대로 + 병합 칸 정보(화면이 applyMerges로 펼침)
+      //  위쪽 메모(상차지 · 하차지 주소 · 담당자)까지 읽어야 해서 머리줄 기준으로 자르지 않는다. 규칙: functions/carrierMigrateCore.mjs
+      if (action === "readRaw") {
+        const id = parseSpreadsheetId(body.url);
+        if (!id) { res.status(400).json({ error: "구글시트 주소가 올바르지 않습니다." }); return; }
+        const meta = await sheetsApiFor(id, "GET", `?fields=${encodeURIComponent("properties.title,sheets(properties(title,index,gridProperties(rowCount,columnCount)),merges)")}`);
+        const all = (meta.sheets || []).sort((a, b) => a.properties.index - b.properties.index);
+        const want = Array.isArray(body.tabs) && body.tabs.length ? new Set(body.tabs.map(String)) : null;
+        const pick = all.filter((s) => !want || want.has(s.properties.title));
+        if (!pick.length) { res.status(400).json({ error: "읽을 탭이 없습니다." }); return; }
+        const out = [];
+        for (let i = 0; i < pick.length; i += 10) { // 한 번에 10개 탭씩
+          const part = pick.slice(i, i + 10);
+          const got = await sheetsApiFor(id, "GET",
+            `/values:batchGet?${part.map((s) => `ranges=${encodeURIComponent(quoteTab(s.properties.title))}`).join("&")}&valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`);
+          part.forEach((s, k) => out.push({ title: s.properties.title, rows: got.valueRanges?.[k]?.values || [], merges: s.merges || [] }));
+        }
+        res.json({ title: meta.properties?.title || "", tabs: out, allTabs: all.map((s) => s.properties.title) });
+        return;
+      }
+
       if (action === "inspect" || action === "read") {
         const id = parseSpreadsheetId(body.url);
         if (!id) { res.status(400).json({ error: "구글시트 주소가 올바르지 않습니다." }); return; }
@@ -6256,7 +6277,7 @@ exports.sheetImport = functions
             }
           }
           const writer = db.bulkWriter();
-          for (const col of ["orders", "dispatch", "clients", "places", "drivers"]) {
+          for (const col of ["orders", "dispatch", "clients", "places", "drivers", "fixedRoutes", "multiRateSheets"]) { // 🚚 2026-11-12 일괄 이전의 고정노선 후보 · 단가표도
             const snap = await db.collection(col).where("importBatchId", "==", batchId).get();
             snap.docs.forEach((d) => { writer.delete(d.ref); removed += 1; });
           }
@@ -7017,7 +7038,7 @@ exports.vehicleMaintReminders = functions.runWith({ timeoutSeconds: 300, memory:
     const FC = await import("./fleetCareCore.mjs");
     const today = kstDateStr();
     const [drvSnap, vlSnap, setSnap] = await Promise.all([
-      db.collection("drivers").where("등급", "in", ["지입", "직영", "임대"]).get(),
+      db.collection("drivers").where("등급", "in", ["지입", "직영", "임대", "분양"]).get() /* 🚛 분양 = 회사 전용 지입차 구분(src/fleetGradesCore.js) */,
       db.collection("vehicleLedger").get(),
       db.collection("vehicleCareSettings").get(),
     ]);

@@ -1,4 +1,5 @@
 // ======================= FleetManagement.jsx =======================
+import { isFleetGrade } from "./fleetGradesCore"; // 🚛 지입차 구분(지입·직영·임대·분양) 한 곳
 import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { pickCompanyLoc } from "./officeLocSync"; // 📍 2026-11-09 출근지 한 곳 관리
 import useNarrow from "./useNarrow"; // ⭐ 2026-11-06 휴대폰 폭 카드 목록
@@ -1210,7 +1211,7 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
       .filter(([, u]) => !myCompanyName || !u.companyName || u.companyName === myCompanyName)
       // ⭐ 2026-11-10 기사 등록 관리는 지입·직영·임대 기사만(화면 설명과 같게) — 예전엔 기사앱 계정만 있으면 다 보여서
       //  기사관리에서 지운 기사(기사관리 문서 없음)도 등급 "일반"으로 남아 보였다
-      .filter(([uid, u]) => { const r = rawOf(uid, u); return !!r && ["지입", "직영", "임대"].includes(r.등급); })
+      .filter(([uid, u]) => { const r = rawOf(uid, u); return !!r && isFleetGrade(r.등급); })
       .map(([uid, u]) => {
         const raw = rawOf(uid, u) || {};
         const vt = String(u.vehicleType || raw.vehicleType || "").trim();
@@ -1234,7 +1235,7 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
     // ⭐ 기사관리에서 지입·직영으로 지정했지만 아직 기사앱에 가입하지 않은 기사도 목록에 보인다(앱 미가입 표시 + 가입 안내 복사)
     const joinedPlates = new Set(list.map((d) => String(d.차량번호 || "").replace(/\s+/g, "").toUpperCase()));
     const extra = driversRaw
-      .filter((r) => (r.등급 === "지입" || r.등급 === "직영" || r.등급 === "임대") && !usersMap[r.id] && !(r.uid && usersMap[r.uid]))
+      .filter((r) => isFleetGrade(r.등급) && !usersMap[r.id] && !(r.uid && usersMap[r.uid]))
       .filter((r) => !myCompanyName || !r.companyName || r.companyName === myCompanyName)
       .filter((r) => !joinedPlates.has(String(r.차량번호 || "").replace(/\s+/g, "").toUpperCase()))
       .map((r) => ({
@@ -6677,7 +6678,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
   // 이 화면들(관제현황/이력조회/출근기록부/온도관제/적재함카메라/기사등록관리/노선관리)에
   // 자동으로 반영/제외된다.
   const drivers = useMemo(
-    () => allFleetDrivers.filter(d => d.등급 === "지입" || d.등급 === "직영" || d.등급 === "임대"),
+    () => allFleetDrivers.filter(d => isFleetGrade(d.등급)),
     [allFleetDrivers]
   );
 
@@ -6690,7 +6691,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
   // 필터링한다.
   const routeDrivers = useMemo(() => {
     return driversRaw
-      .filter(raw => raw.등급 === "지입" || raw.등급 === "직영" || raw.등급 === "임대")
+      .filter(raw => isFleetGrade(raw.등급))
       .map(raw => ({
         id: raw.id,
         이름: String(raw.이름 || raw.name || "").trim() || "-", // ⭐ 2026-11-09 엑셀로 들어온 숫자 값(전화번호 등)도 안전하게

@@ -10,6 +10,7 @@
 //
 // [과태료·사고 서류] 회사로 날아온 과태료·범칙금·사고·보험 할증 우편을 서류로 만든다
 //  F4 = 서류 작성 · 고지서 자동 스캔(사진/Ctrl+V) → 칸 자동 채움 · 기사앱에서 열면 "기사 확인" → 기사님이 [납부 완료]/[이의 신청]
+import { FLEET_GRADES as ALL_FLEET_GRADES } from "./fleetGradesCore"; // 🚛 지입차 구분 한 곳
 import React from "react";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { kpConfirm, kpAlert } from "./kpDialog";
@@ -1018,7 +1019,7 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
 export { korTimeLabel };
 
 // ═════════════════════ 정산관리 › 지입정산관리 — 지입·직영·임대 기사님 정산(일괄 / 개별) ═════════════════════
-const FLEET_GRADES = ["지입", "직영", "임대"];
+const FLEET_GRADES = ALL_FLEET_GRADES;
 export function useFleetDrivers() {
   const [list, setList] = React.useState([]);
   React.useEffect(() => onSnapshot(collection(db, "drivers"), (s) => setList(s.docs.map((d) => ({ id: d.id, ...d.data() }))

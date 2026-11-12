@@ -4,6 +4,7 @@
 //    한 개의 짧은 주소로 설치(안드로이드·아이폰) · 로그인 · 메뉴 설명 · 오더 받기/취소까지 모두 본다
 //  · DriverGuideSendModal: 기사관리 / 지입차관리 › 기사 등록 관리의 [앱 안내 보내기]
 //    문자 보내기(sms: 링크) · 카카오톡 공유(휴대폰 공유창) · 복사 — 보내면 기사 문서에 "안내 보냄" 시각을 남긴다
+import { FLEET_GRADES } from "./fleetGradesCore"; // 🚛 지입차 구분 한 곳
 import React from "react";
 import { createPortal } from "react-dom";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
@@ -25,7 +26,7 @@ export const GUIDE_SECTIONS = [
   { id: "expense", title: "영수증 · 차량 사진 올리기", img: "/guide/driver-expense.jpg" },
 ];
 
-const FLEET = ["지입", "직영", "임대"];
+const FLEET = FLEET_GRADES;
 export const isFleetGrade = (g) => FLEET.includes(String(g || "").trim());
 const digits = (p) => String(p || "").replace(/\D/g, "");
 const isIOS = () => { try { return /iPhone|iPad|iPod/i.test(navigator.userAgent); } catch { return false; } };
