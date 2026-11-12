@@ -46,7 +46,7 @@ const kst = (offsetDays = 0) => new Date(Date.now() + 9 * 3600e3 + offsetDays * 
 const dayOf = (ymd) => DAYS[(new Date(`${ymd}T00:00:00Z`).getUTCDay() + 6) % 7];
 const korTime = (hm) => { if (!hm) return ""; const [h, m] = hm.split(":").map(Number); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${String(m).padStart(2, "0")}`; };
 const card = "rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)]";
-const inp = "h-12 w-full px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[15px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15";
+const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15";
 const lab = "flex items-center gap-1.5 text-[14px] font-black text-[#3A4A66] mb-1.5 whitespace-nowrap"; // ⭐ 2026-11-05 라벨 14px
 const norm = (v) => String(v || "").toLowerCase().replace(/\(주\)|㈜/g, "").replace(/\s+/g, "");
 const placeKey = (name) => norm(name).replace(/[^\uAC00-\uD7A3a-z0-9]/gi, "");
@@ -196,8 +196,8 @@ function NewClientModal({ data, setData, busy, onClose, onSave }) {
           {f("memo", "메모", "메모 (선택)")}
         </div>
         <div className="px-6 pb-6 flex gap-2">
-          <button type="button" onClick={onClose} className="flex-1 h-12 rounded-xl border border-[#DCE3EE] text-[14.5px] font-bold text-[#5B6B85]">취소</button>
-          <button type="button" onClick={onSave} disabled={busy} className="flex-[1.4] h-12 rounded-xl bg-[#0F1A30] text-white text-[14.5px] font-black disabled:opacity-50">등록 완료</button>
+          <button type="button" onClick={onClose} className="flex-1 h-11 rounded-xl border border-[#DCE3EE] text-[14.5px] font-bold text-[#5B6B85]">취소</button>
+          <button type="button" onClick={onSave} disabled={busy} className="flex-[1.4] h-11 rounded-xl bg-[#0F1A30] text-white text-[14.5px] font-black disabled:opacity-50">등록 완료</button>
         </div>
       </div>
     </div>
@@ -1201,7 +1201,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
           <label className={lab}>화물내용 · 수량</label>
           <div className="flex min-w-0">
             <input value={v.cargo || ""} onChange={(e) => on({ cargo: v.cargoType ? e.target.value.replace(/[^\d.]/g, "") : e.target.value })} placeholder={v.cargoType ? "수량" : "예: 2 또는 변압기"} className={`${inp} !rounded-r-none min-w-0`} />
-            <CustomSelect value={v.cargoType || ""} onChange={(e) => on({ cargoType: e.target.value, cargo: e.target.value ? String(v.cargo || "").replace(/[^\d.]/g, "") : v.cargo })} className="h-12 w-[88px] shrink-0 px-2 rounded-r-xl bg-[#1B2B4B] text-white text-[14px] font-black">
+            <CustomSelect value={v.cargoType || ""} onChange={(e) => on({ cargoType: e.target.value, cargo: e.target.value ? String(v.cargo || "").replace(/[^\d.]/g, "") : v.cargo })} className="h-11 w-[88px] shrink-0 px-2 rounded-r-xl bg-[#1B2B4B] text-white text-[14px] font-black">
               <option value="">없음</option>{cargoTypes.map((x) => <option key={x} value={x}>{x}</option>)}
             </CustomSelect>
           </div>
@@ -1210,7 +1210,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
           <label className={lab}>{main ? <>차량톤수 <span className="text-[13px] font-bold text-[#2D4C82]">배차 톤수로 들어갑니다</span></> : "톤수 · 중량"}</label>
           <div className="flex min-w-0" {...(main ? { "data-fr-main-ton": "1" } : {})}>
             <input value={v.tonVal || ""} onChange={(e) => on({ tonVal: v.tonType ? e.target.value.replace(/[^\d.]/g, "") : e.target.value })} placeholder={v.tonType ? "예: 1" : "예: 5톤 또는 1톤 탑"} inputMode={v.tonType ? "decimal" : "text"} className={`${inp} !rounded-r-none min-w-0`} />
-            <CustomSelect value={v.tonType || ""} onChange={(e) => on({ tonType: e.target.value, tonVal: e.target.value ? String(v.tonVal || "").replace(/[^\d.]/g, "") : v.tonVal })} className="h-12 w-[88px] shrink-0 px-2 rounded-r-xl bg-[#1B2B4B] text-white text-[14px] font-black">
+            <CustomSelect value={v.tonType || ""} onChange={(e) => on({ tonType: e.target.value, tonVal: e.target.value ? String(v.tonVal || "").replace(/[^\d.]/g, "") : v.tonVal })} className="h-11 w-[88px] shrink-0 px-2 rounded-r-xl bg-[#1B2B4B] text-white text-[14px] font-black">
               <option value="">없음</option>{tonTypes.map((x) => <option key={x} value={x}>{x}</option>)}
             </CustomSelect>
           </div>
@@ -1260,7 +1260,8 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
           </div>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_400px]">
+        {/* 🧩 2026-11-12 입력 쪽이 너무 넓어져 입력칸이 길게 늘어나던 것 → 큰 화면에서는 입력 · 미리보기 반반 */}
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-2">
           <div className="space-y-5 min-w-0">
             {/* 01 기본 정보 */}
             <StepCard n={1} anchor="info" title="기본 정보" sub="노선 이름과 운임을 청구할 거래처" done={steps[0][2]}>
@@ -1270,7 +1271,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                   <label className={lab}>거래처(청구처) {clientNew && <NewTag />}</label>
                   <div className="flex gap-1.5 min-w-0">
                     <Suggest value={form.client} onChange={(v) => set("client", v)} items={clients} k="거래처명" sub={clientSub} title="기본거래처" placeholder="거래처명 검색" onPick={(c) => set("client", c.거래처명 || c.id)} />
-                    <button type="button" tabIndex={-1} onClick={() => setNewClient({ name: form.client.trim(), addr: "", manager: "", phone: "", email: "", memo: "", grade: "일반" })} className="h-12 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B] whitespace-nowrap hover:bg-[#F5F8FD]">+ 신규</button>
+                    <button type="button" tabIndex={-1} onClick={() => setNewClient({ name: form.client.trim(), addr: "", manager: "", phone: "", email: "", memo: "", grade: "일반" })} className="h-11 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B] whitespace-nowrap hover:bg-[#F5F8FD]">+ 신규</button>
                   </div>
                 </div>
                 <div className="md:col-span-2 min-w-0">
@@ -1333,7 +1334,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
               <div className="mt-1 pl-[42px] grid grid-cols-2 gap-2" data-fr-add="1">
                 {[["경유", "경유지"], ["거점", "거점지"]].map(([t, l]) => (
                   <button tabIndex={-1} key={t} type="button" data-fr-add-type={t} onClick={() => setForm((p) => { const a = [...p.stops]; a.splice(Math.max(0, a.length - 1), 0, blankStop(t)); return { ...p, stops: a }; })}
-                    className="h-12 rounded-xl border-2 border-dashed border-[#C9D6EE] bg-white text-[14.5px] font-black text-[#2D4C82] hover:bg-[#F3F7FE] hover:border-[#8FB0F0] whitespace-nowrap">+ {l} 추가</button>
+                    className="h-11 rounded-xl border-2 border-dashed border-[#C9D6EE] bg-white text-[14.5px] font-black text-[#2D4C82] hover:bg-[#F3F7FE] hover:border-[#8FB0F0] whitespace-nowrap">+ {l} 추가</button>
                 ))}
               </div>
               <div className="text-[14px] text-[#5B6B85] mt-3 leading-relaxed">시간을 비우면 <b className="text-[#1B2B4B]">즉시</b>. 경유·거점은 하차지 바로 앞에 들어갑니다. <NewTag /> 표시된 곳은 저장할 때 거래처관리에 등록됩니다.</div>
@@ -1480,7 +1481,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
             {/* 06 스케줄 */}
             <StepCard n={6} anchor="schedule" title="스케줄" sub="운행 요일 · 출발 시간 · 기간" done={steps[5][2]} data-fr-days="1">
               <div className="grid grid-cols-7 gap-1.5 mb-3">
-                {DAYS.map((d) => { const on = (form.days || []).includes(d); return <button tabIndex={-1} key={d} type="button" onClick={() => set("days", on ? form.days.filter((x) => x !== d) : DAYS.filter((x) => x === d || (form.days || []).includes(x)))} className={`h-12 rounded-xl text-[16px] font-black transition ${on ? "bg-[#0F1A30] text-white shadow" : "bg-white border border-[#DCE3EE] text-[#5B6B85]"} ${isWeekend(d) ? (on ? "" : "!text-[#C4262C]/70") : ""}`}>{d}</button>; })}
+                {DAYS.map((d) => { const on = (form.days || []).includes(d); return <button tabIndex={-1} key={d} type="button" onClick={() => set("days", on ? form.days.filter((x) => x !== d) : DAYS.filter((x) => x === d || (form.days || []).includes(x)))} className={`h-11 rounded-xl text-[16px] font-black transition ${on ? "bg-[#0F1A30] text-white shadow" : "bg-white border border-[#DCE3EE] text-[#5B6B85]"} ${isWeekend(d) ? (on ? "" : "!text-[#C4262C]/70") : ""}`}>{d}</button>; })}
               </div>
               <div className="flex flex-wrap gap-1.5 mb-4">
                 {[["평일", ["월", "화", "수", "목", "금"]], ["월~토", ["월", "화", "수", "목", "금", "토"]], ["매일", DAYS], ["월수금", ["월", "수", "금"]], ["화목", ["화", "목"]]].map(([l, ds]) => <button tabIndex={-1} key={l} type="button" onClick={() => set("days", ds)} className="h-10 px-4 rounded-lg bg-[#F3F6FA] text-[14px] font-bold text-[#3A4A66] hover:bg-[#EAF0F8]">{l}</button>)}
@@ -1532,8 +1533,8 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                 <span className="hidden sm:inline"> · </span><span className="block sm:inline tabular-nums truncate">청구 {won(T.client)}원{T.client ? <span className="text-[#5B6B85] font-bold"> · 수수료 {won(T.client - T.driver)}</span> : null}</span>
               </div>
             </div>
-            <button type="button" tabIndex={-1} onClick={() => setForm(null)} className="hidden md:inline-flex items-center h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[15px] font-bold text-[#3A4A66] whitespace-nowrap">취소</button>
-            <button type="button" tabIndex={-1} onClick={askSave} disabled={busy} data-fr-save="1" className="shrink-0 h-12 px-5 md:px-8 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50 whitespace-nowrap">{form.id ? "수정 저장" : "고정노선 저장"}</button>
+            <button type="button" tabIndex={-1} onClick={() => setForm(null)} className="hidden md:inline-flex items-center h-11 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[15px] font-bold text-[#3A4A66] whitespace-nowrap">취소</button>
+            <button type="button" tabIndex={-1} onClick={askSave} disabled={busy} data-fr-save="1" className="shrink-0 h-11 px-5 md:px-8 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50 whitespace-nowrap">{form.id ? "수정 저장" : "고정노선 저장"}</button>
           </div>
         </div>
         {review && (() => {
@@ -1613,8 +1614,8 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                 </div>
                 <div className="shrink-0 px-4 md:px-6 py-3 md:py-4 bg-white border-t border-[#E3E8F0] flex items-center gap-2" style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 12px)" }}>
                   <span className="hidden md:inline text-[14px] font-bold text-[#5B6B85]">내용을 확인하고 최종 저장하세요</span>
-                  <button tabIndex={-1} type="button" onClick={() => setReview(false)} className="md:ml-auto flex-1 md:flex-none h-12 px-5 rounded-xl border border-[#DCE3EE] text-[14.5px] font-black text-[#1B2B4B] whitespace-nowrap">수정하기</button>
-                  <button tabIndex={-1} type="button" onClick={save} disabled={busy} className="flex-[2] md:flex-none h-12 px-7 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50 whitespace-nowrap">{busy ? "저장 중…" : "최종 저장"}</button>
+                  <button tabIndex={-1} type="button" onClick={() => setReview(false)} className="md:ml-auto flex-1 md:flex-none h-11 px-5 rounded-xl border border-[#DCE3EE] text-[14.5px] font-black text-[#1B2B4B] whitespace-nowrap">수정하기</button>
+                  <button tabIndex={-1} type="button" onClick={save} disabled={busy} className="flex-[2] md:flex-none h-11 px-7 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50 whitespace-nowrap">{busy ? "저장 중…" : "최종 저장"}</button>
                 </div>
               </div>
             </div>

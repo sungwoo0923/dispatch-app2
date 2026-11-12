@@ -79,7 +79,7 @@ import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf, fixedLookOf, useR
 import { carrierOf } from "./routeCarriers"; // ⭐ 2026-11-06 고정노선현황 운송사 검색
 import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 정산·매출에서 뺀다
 import ColumnStyleHost from "./ColumnStyle"; // 🎨 2026-11-03 컬럼명 오른쪽 클릭 → 색 변경 // ⭐ 2026-11-03 배차현황 › 고정노선현황
-import { splitContactCell, isCleanPhone } from "./contactCell"; // ☎ 담당자번호 칸에는 번호만
+import { splitContactCell, isCleanPhone, cleanPlaceContacts } from "./contactCell"; // ☎ 담당자번호 칸에는 번호만
 import { isJyCompany } from "./jyOnly"; // 🏷 JY로지스틱스 전용 기능(단가표 자동 입력 등)
 import QuickNav, { QuickSearchButton } from "./QuickNav"; // 🔎 2026-11-12 통합 검색(Ctrl+K) · 자주 쓰는 메뉴 · 도움말 센터
 import { useScreenFit, ScreenFitButton, BrowserZoomNotice } from "./ScreenFit"; // 🖥 2026-11-10 화면 맞춤 · 브라우저 확대 안내
@@ -59352,6 +59352,16 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     reader.readAsArrayBuffer(file);
   };
 
+  // 🧹 2026-11-12 [담당자 정리] — 등록된 상하차지 전체를 살펴 고칠 곳만 한 번에 고친다(규칙: src/contactCell.js cleanPlaceContacts)
+  const cleanPlaceContactsAll = async () => {
+    const jobs = (placeRows || []).filter((p) => p.id).map((p) => ({ p, r: cleanPlaceContacts(p) })).filter((x) => x.r.changed);
+    if (!jobs.length) { showAlert("정리할 곳이 없습니다.\n담당자번호는 번호만, 담당자는 이름만 들어 있습니다."); return; }
+    const sample = jobs.slice(0, 6).map(({ p, r }) => `· ${p.업체명}: ${r.before.replace(/^\|\s*/, "").slice(0, 34) || "(빈칸)"} → ${r.after.replace(/^\|\s*/, "") || "(비움)"}`).join("\n");
+    if (!await kpConfirm(`상하차지 ${jobs.length}곳의 담당자 · 담당자번호를 정리할까요?\n\n· 담당자번호 = 번호만(하이픈 넣기)\n· 담당자 = 이름만(님 · 직함 떼기)\n· 이름 · 번호가 아닌 글은 메모로 옮김\n\n${sample}${jobs.length > 6 ? `\n… 외 ${jobs.length - 6}곳` : ""}`)) return;
+    const up = await runUpload({ items: jobs, label: "담당자 정리", each: ({ p, r }) => upsertPlace?.({ _id: p.id, 업체명: p.업체명, 주소: p.주소, contacts: r.contacts, 메모: r.메모 }) });
+    showAlert(`${up.ok}곳을 정리했습니다.${up.fail ? `\n실패 ${up.fail}곳` : ""}`);
+  };
+
   const downloadPlaceExcel = () => {
     const data = filteredPlaces.length > 0 ? filteredPlaces : placeRows;
     if (!data.length) return showAlert("다운로드할 데이터가 없습니다.");
@@ -59437,6 +59447,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               {!mobile && <button type="button" onClick={() => setClientBulkKind("place")} className={`${KP_BTN} cursor-pointer inline-flex items-center`}>
                 <EditableText id="client.dropPlace.toolbar.엑셀업로드" defaultText="대용량 업로드" />
               </button>}
+              {/* 🧹 2026-11-12 [담당자 정리] — 담당자번호는 번호만(하이픈 넣기), 담당자는 이름만(님 · 직함 떼기), 이름이 아닌 글은 메모로 · 🏷 JY로지스틱스만 */}
+              {!mobile && isJyCompany(userCompany) && <button type="button" data-kp="place-contact-clean" onClick={cleanPlaceContactsAll} className={`${KP_BTN} cursor-pointer inline-flex items-center`} title="담당자번호 칸에는 번호만, 담당자 칸에는 이름만 남기고 나머지는 메모로 옮깁니다">담당자 정리</button>}
               {!mobile && <button onClick={downloadPlaceExcel}
                 className={KP_BTN}><EditableText id="client.dropPlace.toolbar.다운로드" defaultText="다운로드" /></button>}
               <button onClick={() => { setPlaceDupOpen(true); setPlaceDupDone(false); setPlaceDupSelected(new Set()); }}
