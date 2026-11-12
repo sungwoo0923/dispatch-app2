@@ -40,6 +40,7 @@ export const DEFAULT_PRESET = {
   multiDropStops: false, // 하차지명에 여러 곳("롯데상사,의왕") → 첫 곳 = 하차지 · 나머지 = 하차 경유지
   extrasAsSpecial: false, // 매출에만 있는 추가비용 · 금액이 다른 추가비용도 특수운임으로(청구만 · 회사 부담으로 나눠서)
   placeAliases: {}, // { 탭이름: { 시트의 이름: 통일할 이름 } } — 출발지 · 도착지 · 납품처 이름 통일(예: 에이제이 탭 "베베숲 평택" → "평택초저온")
+  lookupAliases: {}, // { 탭이름: { 오더에 적힌 이름: 상하차지 정보에 적힌 이름 } } — 이름은 그대로 두고 주소만 그 이름으로 찾는다(예: "에브리데이 여주" → "트레이더스 여주")
   arrivalDateTabs: [], // 날짜 칸이 상차일이 아니라 하차일인 탭 — 당착 = 같은 날 상차 · 야상 = 전날 18시 이후 상차 · 금상차월하차 = 그 전 금요일 상차
   unknownExtraName: "", // 이름을 알 수 없는 추가비용의 이름(예: "기타") — 비우면 "추가비용"
   dropOptions: [], // 회사 배차방식 목록에서 뺄 이름(예: JY는 "직접배차" 대신 "기사직통")
@@ -60,7 +61,9 @@ export const PRESET_SUGGESTIONS = {
     extraNames: { 에이제이: { J: "대행료", M: "대행료" } },
     // 에이제이 탭: 상차일자 칸 = 하차일 · 베베숲 평택 = 평택초저온 · 에이제이 후문 = 에이제이 · 기사직통을 배차방식으로(직접배차는 뺌)
     arrivalDateTabs: ["에이제이"],
-    placeAliases: { 에이제이: { "베베숲 평택": "평택초저온", 베베숲평택: "평택초저온", "평택 초저온": "평택초저온", "에이제이 후문": "에이제이", "구성리 창고": "구성리창고" } },
+    placeAliases: { 에이제이: { "베베숲 평택": "평택초저온", 베베숲평택: "평택초저온", "평택 초저온": "평택초저온", "에이제이 후문": "에이제이", "에이제이 정문": "에이제이", "구성리 창고": "구성리창고", 구성리: "구성리창고", 구성창고: "구성리창고" } },
+    // 주소 찾기용 다른 이름 — 상하차지 정보 탭(에이제이주소)에는 이 이름으로 적혀 있다(같은 물류센터)
+    lookupAliases: { 에이제이: { 평택초저온: "베베숲 평택", "에브리데이 여주": "트레이더스 여주", "에브리데이 시화": "트레이더스 시화", "트레이더스 평택": "에브리데이평택", "에브리데이 평택": "에브리데이평택", "이마트 평택": "에브리데이평택", 유심물류: "유심물류(전원물류)" } },
     unknownExtraName: "기타",
     // 녹수셔틀 탭: 한 줄 = 한 번 운행 → 같은 날 같은 구간은 한 오더(왕복 N회전) · 유류지원비 줄 = 유류지원비 오더 · 봉산/덕산/고덕 = 공장 주소
     groupTripsTabs: ["녹수셔틀"],
@@ -584,16 +587,30 @@ function rowToOrder(r, L, ctx) {
   const D0 = ctx.memo.defaultFrom;
   const useDefault = !상차지주소 && D0 && !localHit && ((ctx.fewFrom && !memoFrom.some((p) => p.role === "상차")) || !상차지명 || nm(fromName) === ctx.topFrom || matchScore(fromName, ctx.client) >= 2 || inDefault(fromName, D0));
   const fromOv = ctx.override(fromName);
-  const fp = 상차지명 && !useDefault && !fromOv ? ctx.resolve(fromName, memoFrom, ctx.owner) : null;
+  // 🔎 2026-11-12 주소 찾기 — 그 이름으로 없으면 "주소 찾기용 다른 이름"(preset.lookupAliases)으로 한 번 더
+  const la = ctx.preset.lookupAliases?.[ctx.tab] || {};
+  const find = (name, list) => ctx.resolve(name, list, ctx.owner) || (la[cell(name)] ? ctx.resolve(la[cell(name)], list, ctx.owner) : null);
+  // 출발지가 거래처 자신이 아니고 상하차지 정보에 그 이름의 주소가 따로 있으면, 탭의 기본 상차지보다 그 주소가 먼저다(예: 에이제이 탭의 평택초저온)
+  //  (이름이 똑같거나 "주소 찾기용 다른 이름"으로 찾은 곳만 — 비슷한 이름으로 잘못 붙지 않게)
+  const ownHit = 상차지명 && !fromOv && nm(fromName) !== nm(ctx.client) ? find(fromName, memoFrom) : null;
+  const own = ownHit && (nm(ownHit.name) === nm(fromName) || la[cell(fromName)]) ? ownHit : null;
+  const fp = own || (상차지명 && !useDefault && !fromOv ? find(fromName, memoFrom) : null);
   if (fromOv && !상차지주소) 상차지주소 = fromOv;
   else if (fp) { 상차지주소 = 상차지주소 || fp.address; ctx.used.add(fp); }
   else if (useDefault) 상차지주소 = D0.address;
   if (!상차지명) 상차지명 = fp?.name || (상차지주소 ? 상차지주소.split(/\s+/).slice(0, 3).join(" ") : "");
   if (multi(상차지명)) tags.push(`상차 ${상차지명}`);
   const toOv = 하차지명 ? ctx.override(하차지명.split(/[,，+]/)[0]) : "";
-  const tp = 하차지명 && !toOv ? ctx.resolve(하차지명.split(/[,，+]/)[0], ctx.memo.places.filter((p) => p.role !== "상차"), ctx.owner) : null;
+  const tp = 하차지명 && !toOv ? find(하차지명.split(/[,，+]/)[0], ctx.memo.places.filter((p) => p.role !== "상차")) : null;
   if (toOv && !하차지주소) 하차지주소 = toOv;
   else if (tp) { 하차지주소 = 하차지주소 || tp.address; ctx.used.add(tp); }
+  // 하차지가 이 탭의 거래처 자신(예: 에이제이로 돌아오는 오더)이면 탭 위쪽에 적힌 그 회사 주소
+  else if (!하차지주소 && D0 && 하차지명 && (nm(하차지명) === nm(ctx.client) || nm(하차지명) === ctx.topFrom)) 하차지주소 = D0.address;
+  // 이름 칸에 주소가 괄호로 같이 적힌 경우 — "비엠솔루션 ( 구미시 화신로4길57 010-4053-6610)" → 이름 비엠솔루션 · 주소 구미시 화신로4길57
+  if (!하차지주소 && 하차지명) {
+    const pm = 하차지명.match(/^(.{2,}?)\s*\(\s*([^()]*?(?:로|길|동|리)\s*\d[^()]*)\)\s*$/);
+    if (pm) { 하차지명 = pm[1].trim(); 하차지주소 = pm[2].split(/\s*\/\s*|\s+0\d{1,2}[-\s]?\d{3,4}/)[0].trim(); }
+  }
   if (!하차지주소 && 하차지역) 하차지주소 = 하차지역; // 주소를 못 찾으면 지역이라도(대전 학하동 · 경기도 시흥시 목감동)
   if (!하차지명) 하차지명 = 하차지주소 ? 하차지주소.split(/\s+/).slice(0, 3).join(" ") : "";
   // 🚚 2026-11-12 하차지명에 여러 곳("롯데상사,의왕")이 적혀 있으면 첫 곳 = 하차지, 나머지 = 하차 경유지(주소는 상하차지 정보에서 찾음)
@@ -606,7 +623,7 @@ function rowToOrder(r, L, ctx) {
     const regions = multi(to) ? to.split(/[,，+]/).map((x) => x.trim()) : [];
     경유하차 = parts.slice(1).map((raw, i) => {
       const [n, ...rest] = raw.split("/").map((x) => x.trim()); if (rest.join("")) tags.push(`${n} ${rest.join("/")}`);
-      const o = ctx.override(n); const hit = o ? null : ctx.resolve(n, toPlaces, ctx.owner); if (hit) ctx.used.add(hit);
+      const o = ctx.override(n); const hit = o ? null : find(n, toPlaces); if (hit) ctx.used.add(hit);
       return { 업체명: n || raw, 주소: o || hit?.address || regions[i + 1] || "", 담당자: "", 담당자번호: "" };
     });
     tags.push(`경유 ${하차지명}`);
