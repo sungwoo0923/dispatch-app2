@@ -28,12 +28,22 @@ export function setupAppCheck({ app, sdk, siteKey, debug, functionsBase, disable
 }
 
 // 토큰 받기(최대 3초) — 실패하면 빈 값(요청은 그대로 보낸다: 서버 monitor 모드에서는 로그만, enforce 에서는 401)
+// ⏱ 2026-11-12 토큰을 한 번 못 받으면(토큰 서버 503 등) 1분 동안은 기다리지 않고 바로 보낸다
+//  — 예전엔 서버 함수를 부를 때마다 3초씩 기다려서 가입 화면 이메일 확인 · 가입 신청이 느렸다
+let lastFailAt = 0;
 export async function appCheckTokenOf(appCheck, getToken, ms = 3000) {
   if (!appCheck) return "";
+  if (Date.now() - lastFailAt < 60000) {
+    // 기다리지 않고, 뒤에서 다시 받아 둔다(다음 요청부터 붙음)
+    try { Promise.resolve(getToken(appCheck, false)).then((r) => { if (r && !r.error && r.token) lastFailAt = 0; }).catch(() => {}); } catch { /* 무시 */ }
+    return "";
+  }
   try {
     const r = await Promise.race([getToken(appCheck, false), new Promise((ok) => setTimeout(() => ok(null), ms))]);
-    return r && !r.error && r.token ? r.token : "";
-  } catch { return ""; }
+    const tok = r && !r.error && r.token ? r.token : "";
+    if (!tok) lastFailAt = Date.now();
+    return tok;
+  } catch { lastFailAt = Date.now(); return ""; }
 }
 
 function installFunctionsHeader(appCheck, getToken, base) {
