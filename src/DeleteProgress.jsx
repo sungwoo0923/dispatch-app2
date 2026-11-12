@@ -29,11 +29,15 @@ const getState = () => state;
 function DeleteProgressModal() {
   const s = React.useSyncExternalStore(subscribe, getState, getState);
   if (!s) return null;
-  const { phase, count = 0, done = 0, label = "", message = "" } = s;
+  const { phase, count = 0, done = 0, label = "", message = "", mode = "delete" } = s;
+  // 📥 2026-11-12 대용량 업로드도 같은 창을 쓴다(mode: "upload") — 가운데 로딩 창 · 다 올린 뒤 한 번에 목록에 반영
+  const W = mode === "upload"
+    ? { tag: "UPLOAD", ok: "등록 완료", fail: "등록 실패", run: "등록 중…", tOk: "등록 완료", tErr: "오류", tRun: "등록 중", done: "등록했습니다", ing: "등록하는 중", err: "등록하지 못했습니다. 잠시 후 다시 시도해 주세요.", hint: "창을 닫지 말고 잠시만 기다려 주세요 · 모두 올린 뒤 목록에 반영됩니다" }
+    : { tag: "DELETE", ok: "삭제 완료", fail: "삭제 실패", run: "삭제 중…", tOk: "삭제 완료", tErr: "오류", tRun: "삭제 중", done: "삭제했습니다", ing: "삭제하는 중", err: "삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", hint: "모두 지운 뒤 한 번에 목록에 반영됩니다" };
   const total = Math.max(1, count);
   const pct = phase === "done" ? 100 : Math.min(98, Math.round((done / total) * 100));
   const unit = label ? `${label} ` : "";
-  const title = phase === "done" ? "삭제 완료" : phase === "error" ? "삭제 실패" : "삭제 중…";
+  const title = phase === "done" ? W.ok : phase === "error" ? W.fail : W.run;
   return (
     <div data-kp-delete-progress="1" role="alertdialog" aria-live="assertive" aria-busy={phase === "run"}
       style={{ position: "fixed", inset: 0, zIndex: 2147483645, background: "rgba(11,20,40,.62)", backdropFilter: "blur(3px)", WebkitBackdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Noto Sans KR',sans-serif" }}
@@ -42,7 +46,7 @@ function DeleteProgressModal() {
       <div style={{ width: "min(360px,100%)", borderRadius: 18, overflow: "hidden", background: "#fff", boxShadow: "0 30px 80px rgba(11,20,40,.45)", animation: "kpdelin .16s ease-out" }}>
         <div style={{ padding: "16px 20px 14px", color: "#fff", background: "linear-gradient(120deg,#0F1A30 0%,#1B2B4B 62%,#2D4C82 100%)" }}>
           <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>
-            {phase === "done" ? "DELETE · 삭제 완료" : phase === "error" ? "DELETE · 오류" : "DELETE · 삭제 중"}
+            {`${W.tag} · ${phase === "done" ? W.tOk : phase === "error" ? W.tErr : W.tRun}`}
           </div>
           <div style={{ fontSize: 18, fontWeight: 900, marginTop: 2 }}>{title}</div>
         </div>
@@ -58,15 +62,15 @@ function DeleteProgressModal() {
           )}
           <div style={{ fontSize: 15, fontWeight: 800, color: "#0F1A30", textAlign: "center", wordBreak: "keep-all" }}>
             {phase === "error"
-              ? (message || "삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.")
-              : <>{unit}<span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{count.toLocaleString()}</span>건 {phase === "done" ? "삭제했습니다" : "삭제하는 중"}</>}
+              ? (message || W.err)
+              : <>{unit}<span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{count.toLocaleString()}</span>건 {phase === "done" ? W.done : W.ing}{mode === "upload" && phase === "run" && done > 0 ? ` (${done.toLocaleString()} / ${count.toLocaleString()})` : ""}</>}
           </div>
           {phase !== "error" && (
             <div style={{ width: "100%", height: 8, borderRadius: 999, background: "#E4EBF7", overflow: "hidden" }}>
               <div style={{ width: `${phase === "run" && pct < 8 ? 8 : pct}%`, height: "100%", borderRadius: 999, transition: "width .25s ease", background: phase === "done" ? "#2D4C82" : "repeating-linear-gradient(45deg,#2D4C82 0 10px,#4B6CB7 10px 20px)", backgroundSize: "40px 100%", animation: phase === "run" ? "kpdelbar .7s linear infinite" : "none" }} />
             </div>
           )}
-          {phase === "run" && <div style={{ fontSize: 12, fontWeight: 700, color: "#7A879C" }}>모두 지운 뒤 한 번에 목록에 반영됩니다</div>}
+          {phase === "run" && <div style={{ fontSize: 12, fontWeight: 700, color: "#7A879C" }}>{W.hint}</div>}
         </div>
       </div>
     </div>
@@ -95,7 +99,7 @@ let closeTimer = null;
  * @param {{count?:number, label?:string, task:(progress:(done:number)=>void)=>Promise<any>, minMs?:number}} opts
  * @returns task의 결과(실패하면 오류를 그대로 던진다)
  */
-export async function runDelete({ count = 1, label = "", task, minMs = 450 } = {}) {
+export async function runDelete({ count = 1, label = "", task, minMs = 450, mode = "delete", slowMs = 12000 } = {}) {
   if (typeof task !== "function") return undefined;
   // 이미 창이 떠 있으면(안쪽 호출) 창은 그대로 두고 일만 한다
   if (depth > 0) return task(() => {});
@@ -103,23 +107,23 @@ export async function runDelete({ count = 1, label = "", task, minMs = 450 } = {
   ensureHost();
   if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
   const n = Math.max(1, Number(count) || 1);
-  setState({ phase: "run", count: n, done: 0, label });
+  setState({ phase: "run", count: n, done: 0, label, mode });
   const progress = (done) => { if (state?.phase === "run") setState({ ...state, done: Math.min(n, Number(done) || 0) }); };
   const started = Date.now();
   const work = Promise.resolve().then(() => task(progress));
   // 오프라인 등으로 서버 확인이 늦어도 창이 계속 화면을 막지 않게(로컬 반영은 이미 끝난 상태)
   const SLOW = {};
   try {
-    const r = await Promise.race([work, wait(12000).then(() => SLOW)]);
+    const r = await Promise.race([work, wait(slowMs).then(() => SLOW)]);
     const left = minMs - (Date.now() - started);
     if (left > 0) await wait(left);
-    setState({ phase: "done", count: n, done: n, label });
+    setState({ phase: "done", count: n, done: n, label, mode });
     closeTimer = setTimeout(() => { setState(null); closeTimer = null; }, 650);
     depth -= 1;
     if (r === SLOW) return work; // 결과는 끝날 때 돌려준다
     return r;
   } catch (e) {
-    setState({ phase: "error", count: n, done: 0, label, message: e?.message ? `삭제하지 못했습니다 — ${e.message}` : "" });
+    setState({ phase: "error", count: n, done: 0, label, mode, message: e?.message ? `${mode === "upload" ? "등록" : "삭제"}하지 못했습니다 — ${e.message}` : "" });
     closeTimer = setTimeout(() => { setState(null); closeTimer = null; }, 1800);
     depth -= 1;
     throw e;
@@ -169,3 +173,26 @@ export function deleteOrdersWithLogAtomic(items, { label = "오더", modal = tru
 
 /** 테스트용 — 지금 창 상태 */
 export const _deleteProgressState = () => state;
+
+/**
+ * 📥 2026-11-12 대용량 업로드 진행 창 — 화면 가운데 로딩 창을 띄우고, 줄들을 묶음으로 동시에 등록한다(한 줄씩 툭툭 생기지 않게).
+ * @param {{items:any[], label?:string, each:(item:any, index:number)=>Promise<any>, chunk?:number}} opts
+ * @returns {{ok:number, fail:number, errors:any[]}} each가 false를 돌려주면 "건너뜀"(ok에 세지 않음)
+ */
+export async function runUpload({ items = [], label = "", each, chunk = 40 } = {}) {
+  const list = Array.isArray(items) ? items : [];
+  const out = { ok: 0, fail: 0, errors: [] };
+  if (!list.length || typeof each !== "function") return out;
+  await runDelete({
+    count: list.length, label, mode: "upload", slowMs: 15 * 60 * 1000, minMs: 600,
+    task: async (progress) => {
+      for (let i = 0; i < list.length; i += chunk) {
+        const part = list.slice(i, i + chunk);
+        const rs = await Promise.allSettled(part.map((x, k) => each(x, i + k)));
+        rs.forEach((r) => { if (r.status === "fulfilled") { if (r.value !== false) out.ok += 1; } else { out.fail += 1; out.errors.push(r.reason); } });
+        progress(Math.min(list.length, i + chunk));
+      }
+    },
+  });
+  return out;
+}
