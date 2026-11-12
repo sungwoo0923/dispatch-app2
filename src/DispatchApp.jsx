@@ -5167,7 +5167,12 @@ const patchDispatch = async (_id, patch, knownPrev) => {
   // ⭐ 2026-11-03 배차담당자(최초 등록자)는 수정해도 절대 안 바뀜 — 예전엔 고칠 때마다 작성자 칸이 "고친 사람"으로 덮여서
   //  경리 직원이 금액만 고쳐도 배차담당자가 그 직원으로 바뀌었다. 등록자 칸은 원래 값이 있으면 건드리지 않고, 고친 사람은 최종수정자에 따로 남긴다.
   // 👤 단, 배차담당자를 직접 고른 경우(_ownerPick)는 그 값으로 바꾼다(예전 uid는 지워 새 담당자로 보이게)
-  if (_ownerPick) { if (String(prev.createdByUid || "").trim()) cleanPatch.createdByUid = null; if (String(prev.createdBy || "").trim()) cleanPatch.createdBy = null; }
+  if (_ownerPick) {
+    if (String(prev.createdByUid || "").trim()) cleanPatch.createdByUid = null; if (String(prev.createdBy || "").trim()) cleanPatch.createdBy = null;
+    // 예전 형식 칸(등록자 · 등록자이메일)이 남아 있는 오더는 그 칸도 새 담당자로 맞춘다
+    if (String(prev.등록자 || "").trim()) cleanPatch.등록자 = _ownerPick.name;
+    if (String(prev.등록자이메일 || "").trim() && _ownerPick.email) cleanPatch.등록자이메일 = _ownerPick.email;
+  }
   else for (const k of ORDER_CREATOR_FIELDS) { if (k in cleanPatch && String(prev[k] ?? "").trim()) delete cleanPatch[k]; }
   const _updatePayload = {
     ...cleanPatch,
