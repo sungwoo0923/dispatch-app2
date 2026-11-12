@@ -35,6 +35,7 @@ export const DEFAULT_PRESET = {
   extraNames: {}, // { 탭이름: { 열글자: "이름" } } — 머리줄 이름이 없는 추가 칸
   // 🚚 2026-11-12 탭별 규칙(만세보령 등)
   fromAliases: {}, // { 탭이름: { 시트의 출발지: 상차지명 } } — 예) 만세보령 탭의 "보령" → "만세보령"
+  etcExtraTabs: [], // 추가비용 칸을 특수운임 "기타"로만 넣는 탭
   nextDayTabs: [], // 입고시간(당착 · 월착) 칸이 비어 있으면 다음 날 도착으로 보는 탭
   placeOverrides: {}, // { "탭이름|약칭": "주소" } · "*|약칭" = 모든 탭 — 시트에 주소가 없는 곳을 화면에서 직접 넣은 값
 };
@@ -47,6 +48,7 @@ export const PRESET_SUGGESTIONS = {
     // 만세보령 탭: 출발지 "보령" = 만세보령(거래처도 만세보령) · 입고시간이 비면 내일착
     fromAliases: { 만세보령: { 보령: "만세보령" } },
     nextDayTabs: ["만세보령"],
+    etcExtraTabs: ["만세보령"],
   },
 };
 
@@ -565,9 +567,16 @@ function rowToOrder(r, L, ctx) {
   if (multi(하차지명)) {
     const parts = 하차지명.split(/[,，+]/).map((x) => x.trim()).filter(Boolean);
     const toPlaces = ctx.memo.places.filter((p) => p.role !== "상차");
-    경유하차 = parts.slice(1).map((n) => { const o = ctx.override(n); const hit = o ? null : ctx.resolve(n, toPlaces, ctx.owner); if (hit) ctx.used.add(hit); return { 업체명: n, 주소: o || hit?.address || "", 담당자: "", 담당자번호: "" }; });
+    // 도착지 칸도 같은 순서로 여러 지역("화성,의왕")이면 주소를 못 찾은 곳은 그 지역이라도 넣는다 · "창동식/회수 80포" → 이름 창동식 + 메모
+    const regions = multi(to) ? to.split(/[,，+]/).map((x) => x.trim()) : [];
+    경유하차 = parts.slice(1).map((raw, i) => {
+      const [n, ...rest] = raw.split("/").map((x) => x.trim()); if (rest.join("")) tags.push(`${n} ${rest.join("/")}`);
+      const o = ctx.override(n); const hit = o ? null : ctx.resolve(n, toPlaces, ctx.owner); if (hit) ctx.used.add(hit);
+      return { 업체명: n || raw, 주소: o || hit?.address || regions[i + 1] || "", 담당자: "", 담당자번호: "" };
+    });
     tags.push(`경유 ${하차지명}`);
     하차지명 = parts[0] || 하차지명;
+    if (regions.length && 하차지주소 === 하차지역) 하차지주소 = regions[0] || 하차지주소; // 주소를 못 찾은 첫 하차지 = 첫 지역만
   }
   // 시간 · 하차일
   let 상차시간 = parseTime(g(L.cols.time)), 하차일 = date, 하차시간 = "";
@@ -616,7 +625,8 @@ function rowToOrder(r, L, ctx) {
     const b = p.buy.reduce((s0, c) => s0 + parseMoney(g(c)).n, 0);
     let n = p.name;
     if (/^추가비용\d*$/.test(n)) { const hit = MEMO_FEE.find(([re]) => re.test(memoText)); if (hit) n = hit[1]; else n = "추가비용"; }
-    const kind = SPECIAL_KIND(n);
+    // 추가비용의 이유를 모르는 탭(preset.etcExtraTabs)은 종류를 모두 "기타"로(이름은 비고에서 찾은 계근비 · 경유 등 그대로)
+    const kind = (ctx.preset.etcExtraTabs || []).includes(ctx.tab) ? "기타" : SPECIAL_KIND(n);
     if (b > 0) items.push({ 종류: kind, 이름: n, 금액: b, 받는사람: "기사", 부담: a > 0 ? "청구" : "회사", 메모: a > 0 && a !== b ? `구글시트 이전 · 청구 ${a.toLocaleString("ko-KR")}` : "구글시트 이전" });
     else if (a > 0) tags.push(`${n} +${a.toLocaleString("ko-KR")}(청구)`);
     else if (b < 0 || a < 0) tags.push(`${n} ${(a || b).toLocaleString("ko-KR")}`);
