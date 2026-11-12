@@ -17,6 +17,8 @@ import {
 } from "firebase/firestore";
 import { fmtPhone } from "./formatInput";
 import { LogisMark } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
+import { BIZ, BIZ_KEYS, packModules, isAllModules, modulesLabel } from "./bizModules"; // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공)
+import { ModeIcon } from "./freight/ui";
 
 // 운송사 목록 — 가입 화면이 열릴 때 한 번 받아 두고, 입력할 때마다 바로 거른다(드롭다운 즉시)
 let companyListPromise = null;
@@ -170,6 +172,11 @@ function SignupForm({ signupType, onBack }) {
   const [businessNumber, setBusinessNumber] = useState("");
   // 💳 신규 운송사 — 쓰실 요금제(승인할 때 이 요금제로 열린다. 관리자가 승인 때 바꿀 수 있음)
   const [planId, setPlanId] = useState("standard");
+  // 🧭 2026-11-12 업무 영역 — 신규 운송사: 회사가 쓰는 영역(3개 이상 = 통합) · 기존 운송사 합류: 내 담당 업무
+  const [bizSel, setBizSel] = useState(["inland"]);
+  const [bizHome, setBizHome] = useState("");
+  const bizPacked = packModules(bizSel);
+  const toggleBiz = (k) => setBizSel((p) => { const n = p.includes(k) ? p.filter((x) => x !== k) : [...p, k]; return n.length ? (n.length >= 3 ? [...BIZ_KEYS] : n) : p; });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
@@ -364,6 +371,7 @@ function SignupForm({ signupType, onBack }) {
         approved: false,
         isMaster: false,
         requestedPlan: signupType === "신규" ? planId : "",
+        ...(signupType === "신규" ? { requestedModules: bizPacked, bizHome: bizPacked[0] } : (bizHome ? { bizHome } : {})),
         status: null,
         createdAt: serverTimestamp(),
       });
@@ -379,6 +387,7 @@ function SignupForm({ signupType, onBack }) {
         companyName: companyName.trim(),
         businessNumber: signupType === "신규" ? businessNumber.trim() : "",
         requestedPlan: signupType === "신규" ? planId : "",
+        ...(signupType === "신규" ? { requestedModules: bizPacked } : (bizHome ? { bizHome } : {})),
         email: email.trim(),
         name: name.trim(),
         phone: phone.trim(),
@@ -572,6 +581,40 @@ function SignupForm({ signupType, onBack }) {
                 ))}
               </div>
               <div className="text-[12.5px] text-[#7A89A3] mt-1.5">승인되면 고른 요금제의 메뉴로 열립니다. 쓰면서 언제든 바꿀 수 있습니다.</div>
+            </Field>
+          )}
+
+          {signupType === "신규" && (
+            <Field label="업무 영역" required full>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-testid="signup-biz">
+                {BIZ_KEYS.map((k) => { const on = bizSel.includes(k); const b = BIZ[k]; return (
+                  <button key={k} type="button" onClick={() => toggleBiz(k)} aria-pressed={on}
+                    className={`rounded-xl border px-3.5 py-3 text-left transition ${on ? "border-[#1B2B4B] bg-[#1B2B4B] text-white" : "border-[#DCE3EE] text-[#1B2B4B] hover:border-[#2D4C82]"}`}>
+                    <div className="flex items-center gap-1.5 text-[14px] font-black whitespace-nowrap"><ModeIcon mode={k} size={15} />{b.label}</div>
+                    <div className={`text-[11.5px] font-semibold mt-0.5 leading-snug ${on ? "text-white/70" : "text-[#7A89A3]"}`}>{b.desc}</div>
+                  </button>
+                ); })}
+              </div>
+              <button type="button" onClick={() => setBizSel(isAllModules(bizSel) ? ["inland"] : [...BIZ_KEYS])} aria-pressed={isAllModules(bizSel)}
+                className={`mt-2 w-full rounded-xl border px-3.5 py-3 text-left transition flex items-center gap-3 ${isAllModules(bizSel) ? "border-[#0F1A30] bg-[#0F1A30] text-white" : "border-[#DCE3EE] text-[#1B2B4B] hover:border-[#2D4C82]"}`}>
+                <ModeIcon mode="group" size={18} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[14px] font-black">통합 (종합물류)</span>
+                  <span className={`block text-[11.5px] font-semibold ${isAllModules(bizSel) ? "text-white/70" : "text-[#7A89A3]"}`}>내륙 · 컨테이너 · 해상 · 항공을 모두 쓰고, 화물 한 건이 팀 사이로 이어지며, 임원은 전 사업부를 한 화면에서 봅니다</span>
+                </span>
+                <span className={`text-[11.5px] font-black whitespace-nowrap ${isAllModules(bizSel) ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`}>{isAllModules(bizSel) ? "선택됨" : "3개 이상 = 통합"}</span>
+              </button>
+              <div className="text-[12.5px] text-[#7A89A3] mt-1.5">선택: <b className="text-[#1B2B4B]">{modulesLabel(bizPacked)}</b> · 2개까지는 고른 업무만, 3개 이상은 통합으로 열립니다. 승인 뒤에도 바꿀 수 있습니다.</div>
+            </Field>
+          )}
+          {signupType === "기존" && (
+            <Field label="담당 업무">
+              <CustomSelect value={bizHome} onChange={(e) => setBizHome(e.target.value)} placeholder="담당 업무 선택 (선택사항)"
+                className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] bg-white">
+                <option value="">담당 업무 선택 (선택사항)</option>
+                {BIZ_KEYS.map((k) => <option key={k} value={k}>{BIZ[k].label}</option>)}
+              </CustomSelect>
+              <p className="text-[12.5px] text-[#7A89A3] mt-1.5 pl-1">로그인하면 이 업무 화면이 먼저 열립니다(회사가 쓰는 업무일 때).</p>
             </Field>
           )}
 

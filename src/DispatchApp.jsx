@@ -2963,6 +2963,10 @@ import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChang
 import { SpecialFareButton, ForkliftChip, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount } from "./forklift"; // 🏗 2026-11-09 지게차비용
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
+// 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합 현황) — 회사가 쓰는 영역에 따라 상단 메뉴가 바뀐다(src/bizModules.js)
+import { useBizModules, isBizMenu, parseBizMenu, bizTopMenus, bizSideGroups, bizFirstMenu, bizMenuKey, readBiz, writeBiz, BIZ_MENU_ICON } from "./bizModules";
+import BizSwitcher from "./freight/BizSwitcher";
+const FreightWorkspace = React.lazy(() => import("./freight/FreightWorkspace"));
 import { useBetaOn, PayBadge, PayPopup, CallDepositDesk, PayNoticeToggle, queuePayNotice, DateField, OUT_KEY, DispatchWayPicker, isCaughtCall } from "./CallPay"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
 import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
 import { DriverGuideSendModal, GUIDE_BTN, guideSentLabel, isFleetGrade } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
@@ -3460,6 +3464,7 @@ const KP_SIDE_ICONS = {
   자금관리: "wallet", 비품관리: "list", 연차관리: "flag", 입퇴사관리: "check", 증명서발급: "stamp",
   결재함: "stamp", 직원일정: "clock", 자금현황: "wallet", 스케줄: "pin", 전자결재: "stamp", 일일경영보고: "chart", 경영분석: "chart", 결재대기: "stamp", 직원정보: "users",
 };
+const kpNavIcon = (m) => KP_SIDE_ICONS[m] || (isBizMenu(m) ? BIZ_MENU_ICON[parseBizMenu(m).page] : undefined);
 function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, company, email, myName = "", groups = KP_SIDE_GROUPS }) {
   React.useEffect(() => {
     if (!open) return undefined;
@@ -3522,7 +3527,7 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
                         }`}
                         style={{ opacity: 1 }}
                       >
-                        <ShellIcon name={KP_SIDE_ICONS[m]} size={18} className={on ? "text-[#1B2B4B]" : "text-blue-200/80"} />
+                        <ShellIcon name={kpNavIcon(m)} size={18} className={on ? "text-[#1B2B4B]" : "text-blue-200/80"} />
                         <span className="flex-1 text-left truncate">{uiMenuLabel("pc", m, m === BRIEF_MENU ? BRIEF_LABEL : execMenuLabel(m))}</span>
                         {st === "locked" && <span className="opacity-60"><LockIcon size={12} /></span>}
                         {on && <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7]" />}
@@ -8226,6 +8231,23 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   const deptMode = deptModeOf(role, customRole) || (isExec && !execFull ? "exec" : null);
   useUiScreen(menu, deptMode); // ⭐ 2026-11-07 화면 편집 — 지금 메뉴("이 화면만")·부서(역할별 보이기)
   const deptCompany = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
+  // 🧭 2026-11-12 업무 영역 — 회사가 쓰는 영역(내륙 · 컨테이너 · 해상 · 항공) 중 지금 보는 것. 내륙뿐인 회사는 예전 화면 그대로
+  //  통합 현황(group)은 임원 · 관리자 · 마스터만. 고른 업무는 계정마다 기억하고, 처음엔 가입 때 고른 담당 업무(users.bizHome)
+  const bizMods = useBizModules(deptCompany);
+  const canBizGroup = bizMods.list.length >= 2 && (isExec || role === "admin" || role === "totalMaster" || realRole === "allMgr" || myProfileDoc?.isMaster === true);
+  const [bizRaw, setBizRaw] = React.useState(() => readBiz(user?.uid));
+  const bizWant = bizRaw || myProfileDoc?.bizHome || "";
+  const biz = bizWant === "group" ? (canBizGroup ? "group" : bizMods.list[0]) : (bizMods.list.includes(bizWant) ? bizWant : bizMods.list[0]);
+  const bizMenus = bizTopMenus(biz); // 내륙은 null(기존 메뉴)
+  const pickBiz = (k) => { setBizRaw(k); writeBiz(user?.uid, k); setMenu(bizFirstMenu(k)); };
+  const bizLandedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!bizMods.loaded) return;
+    // 처음 들어올 때 — 내륙이 아닌 업무를 보던 계정은 그 업무 대시보드로
+    if (!bizLandedRef.current) { bizLandedRef.current = true; if (biz !== "inland" && menu === "HOME") setMenu(bizFirstMenu(biz)); return; }
+    // 업무 영역이 꺼졌거나 바뀌어 지금 메뉴가 그 업무 것이 아니면 홈으로
+    if (isBizMenu(menu) && parseBizMenu(menu).biz !== biz) setMenu(bizFirstMenu(biz));
+  }, [bizMods.loaded, biz, menu]); // eslint-disable-line react-hooks/exhaustive-deps
   // 📊 2026-11-06 일일 경영 보고 — 임원 화면 역할(isExec: 권한 관리 › "임원 화면")만(src/dailyReport.js canSeeBriefing)
   const canBriefing = canSeeBriefing({ isExec });
   // 🔢 2026-11-02 상단 메뉴 숫자 — 새로 온 것(결재 차례·안 읽은 메일·공지·인수인계·가입 신청)을 메뉴와 세부 메뉴에 표시
@@ -8502,6 +8524,7 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   // ---------------- 메뉴 UI ----------------
   // 메뉴 보이기 규칙(상단 메뉴·왼쪽 메뉴 공용) — "hidden" | "blocked" | "ok"
   const menuState = (m) => {
+    if (isBizMenu(m)) return parseBizMenu(m).biz === biz ? "ok" : "hidden"; // 🧭 2026-11-12 업무 영역 메뉴(컨테이너 · 해상 · 항공 · 통합)
     // 💳 2026-11-09 요금제 잠금을 맨 먼저 — 예전엔 부서 메뉴(인사관리부·회계관리 등)·임원 메뉴가 아래에서 먼저 "ok"로 끝나 요금제와 상관없이 열렸다
     if (MENU_FEATURE[m] && !planIncludes(planId, MENU_FEATURE[m])) return "locked";
     // 📊 2026-11-06 일일 경영 보고 — 임원 화면 역할만(기존 임원 판정 isExec 그대로)
@@ -8577,7 +8600,7 @@ return (
         company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")}
         email={user?.email}
         myName={myRealName || user?.displayName || ""}
-        groups={deptMode ? DEPT_SIDE_GROUPS[deptMode] : KP_SIDE_GROUPS}
+        groups={bizSideGroups(biz) || (deptMode ? DEPT_SIDE_GROUPS[deptMode] : (bizMods.list.length > 1 ? [...KP_SIDE_GROUPS.slice(0, 1).map((g) => ({ ...g, items: [...g.items, bizMenuKey("inland", "handoff")] })), ...KP_SIDE_GROUPS.slice(1)] : KP_SIDE_GROUPS))}
       />
       <BannerCenter />
       {/* ✉️ 2026-11-08 발신 메일 — 보내다가 "설정 없음"이면 안내 창 · 예전 공용 계정을 쓰던 회사 관리자에게 등록 안내 */}
@@ -8668,11 +8691,12 @@ return (
             }}
           >
             <div className="kp-nav-track inline-flex items-center gap-0.5 min-[2050px]:gap-1 p-1 rounded-[14px] shrink-0">
-            {uiMenuList("pc", deptMode ? DEPT_MENUS[deptMode] : [
+            {uiMenuList("pc", bizMenus || (deptMode ? DEPT_MENUS[deptMode] : [
               "HOME",
               "배차관리",
               "실시간배차현황",
               "배차현황",
+              ...(bizMods.list.length > 1 ? [bizMenuKey("inland", "handoff")] : []), // 🧭 다른 팀(해상 · 항공 · 컨테이너)이 넘긴 내륙 구간
               "단가표",
               "운임조회",
               "기사관리",
@@ -8692,7 +8716,7 @@ return (
               "회사관리",
               "관리자메뉴",
               "관리센터",
-            ]).map((m) => {
+            ])).map((m) => {
               const st = menuState(m);
               if (st === "hidden") return null;
               const isBlocked = st === "blocked";
@@ -8730,7 +8754,7 @@ return (
                         : "text-white/70 font-semibold hover:text-white hover:bg-white/[0.08]"
                     }`}
                 >
-                  <ShellIcon name={KP_SIDE_ICONS[m] || "dashboard"} size={14} className={`kp-nav-ico shrink-0 ${isActive ? "" : "opacity-70"} ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "" : "hidden min-[2050px]:inline-block"}`} />
+                  <ShellIcon name={kpNavIcon(m) || "dashboard"} size={14} className={`kp-nav-ico shrink-0 ${isActive ? "" : "opacity-70"} ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "" : "hidden min-[2050px]:inline-block"}`} />
                   <EditableText id={`nav.${m}`} defaultText={uiMenuLabel("pc", m, m === BRIEF_MENU ? BRIEF_LABEL : execMenuLabel(m))} />
                   {navN > 0 && st !== "locked" && <KakaoBadge n={navN} size="sm" className="ml-1 align-middle" title={m === "관리자메뉴" ? `가입 승인 대기 ${navN}명` : m === "실시간배차현황" ? `기사 수락/거절 ${navN}건` : m === "배차현황" ? [drvCounts.orders && `기사 수락/거절 ${drvCounts.orders}건`, (unseenList || unseenUnassigned) && `새 미배차 ${Math.max(unseenList, unseenUnassigned)}건`, unseenFixed && `새 고정노선 미배차 ${unseenFixed}건`].filter(Boolean).join(" · ") : m === "지입차관리" ? `긴급 상황 ${navN}건` : `새 소식 ${navN}건`} />}
                   {st === "locked" && <span className="ml-1 opacity-60"><LockIcon /></span>}
@@ -8785,6 +8809,7 @@ return (
             )}
 
             {/* 🔀 2026-11-10 화면 전환(통합인사관리자: 경리·인사 / 통합관리자: 운송·영업·경리·인사) — 버튼 하나, 누르면 어느 팀 화면으로 볼지 고르는 창 */}
+            <BizSwitcher modules={bizMods.list} current={biz} canGroup={canBizGroup} onPick={pickBiz} />
             {roleView.views && <ViewSwitcher views={roleView.views} current={roleView.view} roleLabel={ROLE_LABELS[realRole] || ""} onPick={(k) => { roleView.setView(k); setMenu("HOME"); }} />}
             {/* 👔 임원 — 임원 화면 ↔ 전체 메뉴(관리자 권한일 때만) */}
             {isExec && (
@@ -8922,6 +8947,13 @@ return (
       <BrowserZoomNotice fit={screenFit} />
       <main className={`kp-main ${menu === "HOME" || menu === BRIEF_MENU || EXEC_MENUS.includes(menu) ? "kp-main-bare" : ""} rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
         {!darkMode && <KpPageHeader menu={menu} />}
+        {/* 🧭 2026-11-12 컨테이너 · 해상 · 항공 · 통합 현황 화면 */}
+        {isBizMenu(menu) && (
+          <React.Suspense fallback={<div className="py-20 text-center text-[13.5px] font-bold text-[#9AA9C3]">불러오는 중…</div>}>
+            <FreightWorkspace menuKey={menu} modules={bizMods.list} me={myRealName || user?.displayName || ""} canEdit={!isViewer && role !== "viewer"}
+              inlandRows={salesDispatchData} clients={clients} drivers={drivers} places={places} onMenu={handleMenuClick} onBiz={pickBiz} />
+          </React.Suspense>
+        )}
         {menu === "HOME" && (
           <HomeDashboard
             role={role}

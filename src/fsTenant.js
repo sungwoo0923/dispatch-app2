@@ -28,6 +28,7 @@ const STRICT = new Set([
   "acctFunds", "retireCases", // 경리 — 자금(통장·현금) · 퇴직 정산
   "execSchedules", "companyRules", "hrSettings", "approvalSettings", // 임원 일정 · 사내 규정 · 인사 설정(직책·부서) · 결재 설정
   "forkliftDrivers", "forkliftPresets", // 🏗 2026-11-09 지게차 기사 · 거래처+상차지별 지게차 기본값
+  "freightJobs", // 🚢 2026-11-12 컨테이너 · 해상 · 항공 구간(src/freight)
   "routeBoards", // ⭐ 2026-11-03 고정노선 배차표 양식(구글시트 연동) — 운송사마다 완전히 따로
 ]);
 // 회사명이 있을 때만 비교하는 컬렉션 — 서버(Cloud Functions)·기사앱 네이티브가 회사명 없이 쓰는 기록
