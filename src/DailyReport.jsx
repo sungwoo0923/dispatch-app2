@@ -11,6 +11,7 @@
 //           자금 = acctFunds(통장·현금·카드·대출, src/fundsCalc.js computeFunds) · acctLedger(수입·지출 장부) · acctRecurring(고정비) · acctPayments(수금)
 //           목표 = companySettings.매출목표.순수매출목표(연간) ÷ 12
 //  · 받기 설정(DailyReportSettings) · 아침 요약 팝업(DailyReportPopupHost)도 이 파일에.
+import { isFleetGrade } from "./fleetGradesCore"; // 🚛 지입차 구분(지입·직영·임대·분양) 한 곳
 import React from "react";
 import { planIncludes, useCompanyPlanId } from "./plans"; // 💳 2026-11-09 요금제 잠금
 import { doc, onSnapshot, collection, query, where } from "firebase/firestore";
@@ -290,7 +291,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
   const moves = React.useMemo(() => clientMoves(report.byClientDay, mSpan.cur, mSpan.prev, 4), [report.byClientDay, mSpan]);
 
   // 차량 가동률 추이(최근 14영업일 · 운행 = 그날 오더에 배정된 소속 차량)
-  const fleet = React.useMemo(() => drivers.filter((d) => ["지입", "직영", "임대"].includes(String(d.등급 || "").trim())), [drivers]);
+  const fleet = React.useMemo(() => drivers.filter((d) => isFleetGrade(d.등급)), [drivers]);
   const fleetPlates = React.useMemo(() => new Set(fleet.map((d) => normPlate(d.차량번호)).filter(Boolean)), [fleet]);
   const utilTrend = React.useMemo(() => {
     if (!fleetPlates.size) return [];

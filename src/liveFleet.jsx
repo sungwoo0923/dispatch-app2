@@ -11,6 +11,7 @@
 //  onSnapshot으로 구독하고, 창을 닫으면 바로 끊는다.
 //
 //  미배차현황(UnassignedStatus·MobileUnassignedList)에는 넣지 않는다(배차완료 오더 전용).
+import { FLEET_GRADES as ALL_FLEET_GRADES } from "./fleetGradesCore"; // 🚛 지입차 구분 한 곳
 import React from "react";
 import { createPortal } from "react-dom";
 import { LIVE_MONO, liveTsMs, LIVE_FRESH_MS, LIVE_RECENT_MS, LIVE_HIDE_MS, liveState, liveAgeText, LIVE_COLORS, useLiveNow, ensureLiveStyles } from "./liveCore";
@@ -19,7 +20,7 @@ export { LIVE_MONO, liveTsMs, LIVE_FRESH_MS, LIVE_RECENT_MS, LIVE_HIDE_MS, liveS
 
 const LiveFleetMaps = React.lazy(() => import("./LiveFleetMaps"));
 
-export const FLEET_GRADES = new Set(["지입", "직영", "임대"]);
+export const FLEET_GRADES = new Set(ALL_FLEET_GRADES);
 export const normLivePlate = (v) => String(v || "").replace(/[\s-]/g, "").toUpperCase();
 
 

@@ -1,4 +1,5 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
+import { useCompanyFleetGrades } from "./fleetGrades"; // 🚛 지입차 구분(지입·직영·임대 + 회사 전용 분양)
 import { isViewerNow } from "./blind"; // 🧾 특수운임 버튼(조회전용 숨김)
 import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon, usePlan } from "./plans";
 import { kpConfirm, kpPrompt } from "./kpDialog";
@@ -56133,7 +56134,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const fleetPlates = useMemo(() => {
     const set = new Set();
     (payDrivers || []).forEach((d) => {
-      if (!["지입", "직영", "임대"].includes(String(d.등급 || "").trim())) return;
+      if (!isFleetGrade(d.등급)) return;
       const pl = normalizePlate(d.차량번호 || d.carNo || "");
       if (pl && pl !== "-") set.add(pl);
     });
@@ -56920,6 +56921,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 // ===================== DispatchApp.jsx (PART 10/10) — START =====================
 function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, showAlert = (m) => alert(m), userCompany = "", grade = "", onGrade, mobile = false }) {
   // ⭐ 2026-11-06 mobile — 모바일 앱(기사관리)에서: 버튼은 기사등록·기사정리·선택삭제만, 표 대신 카드 목록(누르면 상세 시트)
+  const extraFleet = useCompanyFleetGrades(userCompany); // 🚛 2026-11-12 회사 전용 지입차 구분(분양 등) — 그 회사만 선택 목록에
   const [guideFor, setGuideFor] = React.useState(null); // ⭐ 2026-11-06 [앱 안내 보내기] 대상 기사 배열
   const [mSheet, setMSheet] = React.useState(null); // 모바일 카드 상세 시트
   // 이름·차량번호·연락처가 모두 빈 문서(예전 직원 승인 때 잘못 생긴 빈 기사)는 목록에서 뺀다
@@ -57096,7 +57098,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
   const drvOnSort = React.useCallback((k) => { drvSort.toggle(k); setPage(1); }, [drvSort.toggle]);
   const sortedDrivers = React.useMemo(() => sortRows(filtered, drvSort.sort, (r, key, i) => {
     const g = r.등급 || "일반";
-    const fleet = g === "지입" || g === "직영" || g === "임대";
+    const fleet = isFleetGrade(g);
     switch (key) {
       case "순번": return i;
       case "등록일": return displayRegDate(r);
@@ -57149,7 +57151,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
   const addNew = async () => {
     const 차량번호 = (newForm.차량번호||"").replace(/\s+/g,"");
     if (!차량번호) return showAlert("차량번호는 필수입니다.");
-    const isFleet = newForm.등급 === "지입" || newForm.등급 === "직영" || newForm.등급 === "임대";
+    const isFleet = isFleetGrade(newForm.등급);
     // ⭐ 버그수정 — 여기서 항상 새 랜덤 id를 강제로 지정했더니, 이미 기사앱으로
     // 가입해 실제 위치/상태가 쌓이고 있는 기사의 차량번호를 여기서 다시 입력하면
     // (예: 지입 등급만 뒤늦게 지정) 완전히 별개의 빈 문서가 하나 더 생겼다 —
@@ -57249,6 +57251,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
     직영: drivers.filter(d=>d.등급==="직영").length,
     지입: drivers.filter(d=>d.등급==="지입").length,
     임대: drivers.filter(d=>d.등급==="임대").length,
+    분양: drivers.filter(d=>d.등급==="분양").length, // 🚛 2026-11-12 회사 전용 구분(켠 회사만 카드로 보임)
     블랙: drivers.filter(d=>d.등급==="블랙").length,
   }), [drivers]);
 
@@ -57256,13 +57259,14 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
     <div className={mobile ? "p-1" : "p-4"}>
 
       {/* ⭐ 2026-10-28 디지털 리디자인 — 숫자 타일(누르면 등급별 보기) + 한 줄 검색바 + 오른쪽 작업 버튼 */}
-      <div className={`grid ${mobile ? "grid-cols-3 gap-2 mb-3" : "grid-cols-6 gap-3 mb-4"}`}>
+      <div className={`grid ${mobile ? "grid-cols-3 gap-2 mb-3" : `${extraFleet.includes("분양") ? "grid-cols-7" : "grid-cols-6"} gap-3 mb-4`}`}>
         {[
           {label:"전체", en:"ALL", val:kpi.전체, key:"전체"},
           {label:"일반", en:"GENERAL", val:kpi.일반, key:"일반"},
           {label:"직영", en:"DIRECT", val:kpi.직영, key:"직영"},
           {label:"지입", en:"CONSIGNED", val:kpi.지입, key:"지입"},
           {label:"임대", en:"LEASE", val:kpi.임대, key:"임대"},
+          ...(extraFleet.includes("분양") ? [{label:"분양", en:"SOLD", val:kpi.분양, key:"분양"}] : []),
           {label:"블랙", en:"BLOCKED", val:kpi.블랙, key:"블랙"},
         ].map(({label,en,val,key}) => {
           const on = gradeFilter===key && (showAll || searched);
@@ -57396,11 +57400,12 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   <option value="지입">지입</option>
                   <option value="직영">직영</option>
                   <option value="임대">임대</option>
+                  {extraFleet.map((g) => <option key={g} value={g}>{g}</option>)}
                   <option value="블랙">블랙</option>
                 </CustomSelect>
               </div>
               {/* 지입/직영 기사 전용 — 거주지 / 근무가능요일 (노선관리 관제에 연동) */}
-              {(newForm.등급 === "지입" || newForm.등급 === "직영" || newForm.등급 === "임대") && (
+              {isFleetGrade(newForm.등급) && (
                 <>
                   <div>
                     <label className="text-[11px] font-semibold text-gray-500 mb-1 block"><EditableText id="driver.addForm.label.거주지" defaultText="거주지" /></label>
@@ -57522,7 +57527,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               {paged.length === 0 && <div className="rounded-[18px] bg-white border border-[#E3E8F0] py-14 text-center text-[14px] font-bold text-[#5B6B85]">{q.trim() ? "검색 결과가 없습니다." : "데이터가 없습니다."}</div>}
               {paged.map((r) => {
                 const g = r.등급 || "일반";
-                const fleet = g === "지입" || g === "직영" || g === "임대";
+                const fleet = isFleetGrade(g);
                 const on = selected.has(r.id);
                 const sent = guideSentLabel(r);
                 return (
@@ -57551,7 +57556,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
           {mobile && mSheet && (() => {
             const r = drivers.find((d) => d.id === mSheet.id) || mSheet;
             const g = r.등급 || "일반";
-            const fleet = g === "지입" || g === "직영" || g === "임대";
+            const fleet = isFleetGrade(g);
             const ph = String(r.전화번호 || "").replace(/\D/g, "");
             const rows = [["차량번호", r.차량번호], ["이름", r.이름], ["전화번호", formatPhone(r.전화번호)], ["등급", g], ["차량", [r.차량톤수, r.차량종류].filter(Boolean).join(" ")], ["등록일", displayRegDate(r)],
               ...(fleet ? [["담당자", r.담당자?.name], ["거주지", r.거주지], ["근무요일", Array.isArray(r.근무요일) ? r.근무요일.join(",") : ""], ["요청사항", r.요청사항]] : []),
@@ -57728,9 +57733,9 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
       {/* ===== 기사 수정 팝업 (더블클릭) ===== */}
       {editDriverModal && mPop(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
-          <div className={`bg-white rounded-2xl shadow-2xl ${(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영" || editDriverModal.등급 === "임대") ? "w-[640px]" : "w-[480px]"} max-w-[96vw] max-h-[92vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
+          <div className={`bg-white rounded-2xl shadow-2xl ${isFleetGrade(editDriverModal.등급) ? "w-[640px]" : "w-[480px]"} max-w-[96vw] max-h-[92vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 flex items-center justify-between sticky top-0 z-10" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
-              <h3 className="text-white font-bold text-[15px]">기사 수정 — {editDriverModal.차량번호}{(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영" || editDriverModal.등급 === "임대") ? <span className="ml-2 px-2 py-0.5 rounded-md bg-white/15 text-[11.5px] font-black">{editDriverModal.등급}</span> : null}</h3>
+              <h3 className="text-white font-bold text-[15px]">기사 수정 — {editDriverModal.차량번호}{isFleetGrade(editDriverModal.등급) ? <span className="ml-2 px-2 py-0.5 rounded-md bg-white/15 text-[11.5px] font-black">{editDriverModal.등급}</span> : null}</h3>
               <div className="flex items-center gap-2">
                 {/* ⭐ 2026-11-09 차량관리로 바로 가기 — 지입차관리 › 차량 관리에서 이 차량 정보를 연다 */}
                 {String(editDriverModal.차량번호 || "").trim() && (
@@ -57758,7 +57763,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                 <label className="block text-[12px] font-semibold text-gray-500 mb-1">차량번호 *</label>
                 {/* ⭐ 2026-11-11 기사앱 가입 기사 · 지입/직영/임대 기사는 [차량 변경]으로 바꾼다 — 로그인 계정·차량이력(정산)이 같이 맞춰진다.
                     (예전엔 여기서 번호만 고치면 기사앱은 예전 차량번호로만 로그인되고 정산도 차량번호별로 갈렸다) */}
-                {(editDriverModal.uid || ["지입", "직영", "임대"].includes(editDriverModal.등급)) ? (
+                {(editDriverModal.uid || isFleetGrade(editDriverModal.등급)) ? (
                   <div className="flex gap-2">
                     <input readOnly className="border border-gray-200 rounded-lg px-3 py-2 text-[13px] w-full min-w-0 bg-gray-50 text-gray-700 font-bold outline-none"
                       value={editDriverModal.차량번호 || "차량미배정"} />
@@ -57792,11 +57797,12 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   <option value="지입">지입</option>
                   <option value="직영">직영</option>
                   <option value="임대">임대</option>
+                  {extraFleet.map((g) => <option key={g} value={g}>{g}</option>)}
                   <option value="블랙">블랙</option>
                 </CustomSelect>
               </div>
               {/* 지입/직영 기사 전용 — 거주지 / 근무가능요일 (노선관리 관제에 연동) */}
-              {(editDriverModal.등급 === "지입" || editDriverModal.등급 === "직영" || editDriverModal.등급 === "임대") && (
+              {isFleetGrade(editDriverModal.등급) && (
                 <>
                   <div>
                     <label className="block text-[12px] font-semibold text-gray-500 mb-1">거주지</label>

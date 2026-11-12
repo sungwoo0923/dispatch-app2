@@ -2,6 +2,7 @@
 // 🖱 2026-11-10 기사관리 목록 오른쪽 클릭 메뉴(고정노선현황 메뉴와 같은 모양)
 //  · 기사 복사 ▸ 차량번호 · 이름 · 전화번호 / 배차 안내용(여러 줄) / 차량번호만 / 이름만 / 전화번호만 — 여러 명 선택이면 한 줄에 한 명씩
 //  · 수정 · 등급 변경 ▸ · 앱 안내 보내기(지입·직영·임대) · 전화 걸기 · 선택 삭제
+import { FLEET_GRADES, useCompanyFleetGrades } from "./fleetGrades"; // 🚛 지입차 구분 한 곳(회사 전용 분양 포함)
 import React from "react";
 import { createPortal } from "react-dom";
 
@@ -34,10 +35,12 @@ export async function copyToClipboard(t) {
 }
 
 const GRADES = ["일반", "지입", "직영", "임대", "블랙"];
-const FLEET = ["지입", "직영", "임대"];
+const FLEET = FLEET_GRADES;
 
 export default function DriverContextMenu({ x, y, rows = [], readOnly = false, onClose, onCopied, onEdit, onGrade, onGuide, onDelete }) {
   const [sub, setSub] = React.useState(""); // "" | copy | grade
+  const extraFleet = useCompanyFleetGrades(); // 🚛 2026-11-12 회사 전용 구분(분양 등) — 지금 회사가 켰을 때만
+  const gradeList = [...GRADES.slice(0, -1), ...extraFleet, GRADES[GRADES.length - 1]];
   const ref = React.useRef(null);
   React.useEffect(() => {
     const down = (e) => { if (!ref.current?.contains(e.target)) onClose(); };
@@ -106,7 +109,7 @@ export default function DriverContextMenu({ x, y, rows = [], readOnly = false, o
       {sub === "grade" && (
         <div data-kp="drv-ctx-grade-menu">
           <div className="flex items-center gap-1.5 px-1 pb-1">{back}<span className="text-[12px] font-black text-[#5B6B85]">등급 변경{cnt}</span></div>
-          {GRADES.map((g) => {
+          {gradeList.map((g) => {
             const now = !many && (first.등급 || "일반") === g;
             return (
               <button key={g} type="button" className={item} disabled={now} onClick={() => { onClose(); onGrade?.(rows, g); }}>

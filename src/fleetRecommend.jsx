@@ -2,6 +2,7 @@
 // ⭐ 5) 오더 등록 시: 지금 배차가 없고 상차지에서 가까운 지입·직영 기사를 거리순으로 추천
 // ⭐ 4) 지입차관리: 기사님이 하차할 곳(또는 현재 위치) 근처에서 출발하는 미배차 오더를 거리순으로 추천
 // 거리는 지도상 직선거리(빠르게 비교용)이며, 주소 좌표는 fleetGeo 캐시를 함께 쓴다.
+import { isFleetGrade } from "./fleetGradesCore"; // 🚛 지입차 구분(지입·직영·임대·분양) 한 곳
 import React, { useEffect, useMemo, useState } from "react";
 import { prefetchGeo } from "./fleetGeo";
 import { haversineKm } from "./tmapFareCalc";
@@ -53,7 +54,7 @@ export function useIdleFleet({ drivers = [], dispatchData = [], pickupAddr = "" 
   const pg = pickupAddr ? geoMap[String(pickupAddr).trim()] : null;
   const list = useMemo(() => {
     return (drivers || [])
-      .filter((d) => d.등급 === "지입" || d.등급 === "직영" || d.등급 === "임대")
+      .filter((d) => isFleetGrade(d.등급))
       .filter((d) => d.status !== "휴차" && d.mainStatus !== "휴차")
       .map((d) => {
         const plate = (d.차량번호 || d.carNo || "").trim();

@@ -15,6 +15,7 @@ import {
 } from "firebase/firestore";
 import { CustomSelect } from "./CustomSelect";
 import SheetPlaceDriverImport from "./SheetPlaceDriverImport"; // ⭐ 2026-11-02 상하차지·기사 가져오기
+import CarrierMigratePanel from "./CarrierMigratePanel"; // 🚚 2026-11-12 운송사 일괄 이전(시트 전체 · 탭별 모양 자동 인식)
 import { kpConfirm } from "./kpDialog";
 
 const SERVICE_EMAIL = "dispatch-app-9b92f@appspot.gserviceaccount.com";
@@ -156,7 +157,7 @@ export default function SheetImportPanel() {
   const [progress, setProgress] = React.useState(null); // { pct, step, done, result, error }
   const [batches, setBatches] = React.useState([]);
   const excelRef = React.useRef(null);
-  const [mode, setMode] = React.useState("orders"); // ⭐ 2026-11-02 orders | placesDrivers
+  const [mode, setMode] = React.useState("migrate"); // ⭐ 2026-11-02 orders | placesDrivers
 
   React.useEffect(() => {
     callApi("companyReset", { action: "companies" }).then((d) => setCompanies(d.companies || [])).catch(() => {});
@@ -376,15 +377,61 @@ export default function SheetImportPanel() {
   const dups = checked ? checked.rows.filter((r) => r.__dup && inRange(r)) : [];
   const outOfRange = checked ? checked.rows.filter((r) => !inRange(r)).length : 0;
 
+  // 가져오기 기록(오더 가져오기 · 운송사 일괄 이전 공용)
+  const historyCard = (
+      <section className={`${CARD} overflow-hidden`}>
+        <div className="px-6 pt-6"><Head eyebrow="HISTORY" title="가져오기 기록" desc="잘못 가져왔으면 [가져오기 취소]로 그 묶음(오더·자동 등록된 거래처/상하차지/기사)을 한 번에 지울 수 있습니다." /></div>
+        {batches.length === 0 ? (
+          <div className="text-[14px] text-gray-500 text-center pb-10">아직 가져온 기록이 없습니다.</div>
+        ) : (
+          <table className="w-full text-[14px]">
+            <thead>
+              <tr className="bg-[#F5F8FD] text-gray-600 border-y border-[#E3E8F0]">
+                {["운송사", "일시", "가져온 곳", "오더", "자동 등록", "상태", ""].map((h) => <th key={h} className="px-4 py-3 text-center font-bold whitespace-nowrap">{h}</th>)}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#EEF1F6]">
+              {batches.map((b) => (
+                <tr key={b.id}>
+                  <td className="px-4 py-3 text-center font-bold text-[#0F1A30]">{b.companyName}</td>
+                  <td className="px-4 py-3 text-center text-gray-700 whitespace-nowrap">{fmtTime(b.at)}</td>
+                  <td className="px-4 py-3 text-center text-gray-600 max-w-[260px] truncate">{b.source === "excel" ? "엑셀" : b.source === "carrierMigrate" ? "일괄 이전" : "구글시트"} · {b.sheetTitle}</td>
+                  <td className="px-4 py-3 text-center font-semibold">{(b.count || 0).toLocaleString()}건</td>
+                  <td className="px-4 py-3 text-center text-gray-600 whitespace-nowrap">{b.registered ? `거래처 ${b.registered.clients} · 상하차지 ${b.registered.places} · 기사 ${b.registered.drivers ?? 0}${b.registered.routes ? ` · 고정노선 ${b.registered.routes}` : ""}` : "-"}</td>
+                  <td className="px-4 py-3 text-center whitespace-nowrap">
+                    {b.status === "done" ? <span className="px-3 py-1 rounded-full text-[12.5px] font-bold bg-emerald-100 text-emerald-700">완료</span>
+                      : b.status === "canceled" ? <span className="px-3 py-1 rounded-full text-[12.5px] font-bold bg-gray-100 text-gray-500">취소됨</span>
+                        : b.status === "error" ? <span className="px-3 py-1 rounded-full text-[12.5px] font-bold bg-red-100 text-red-700">실패</span>
+                          : <span className="px-3 py-1 rounded-full text-[12.5px] font-bold bg-amber-100 text-amber-700">진행 중</span>}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {b.status === "done" && b.source !== "excel" && b.source !== "carrierMigrate" && (
+                      <button onClick={() => linkBatch(b)} disabled={busy === `link_${b.id}`} title="시트의 원래 줄과 연결 — 이후 프로그램에서 수정·삭제하면 시트에도 반영"
+                        className="mr-2 px-3.5 py-1.5 rounded-xl bg-[#0F1A30] text-white text-[13px] font-bold disabled:opacity-60">
+                        {busy === `link_${b.id}` ? "연결 중…" : b.gsheetLinked ? `시트 연결됨 ${b.gsheetLinked}건` : "시트와 연결"}
+                      </button>
+                    )}
+                    {b.status !== "canceled" && <button onClick={() => cancelBatch(b)} disabled={busy === `cancel_${b.id}`} className="px-3.5 py-1.5 rounded-xl border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 disabled:opacity-60">{busy === `cancel_${b.id}` ? "지우는 중…" : "가져오기 취소"}</button>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+  );
+
   // ⭐ 2026-11-02 가져오기 종류 고르기(오더 / 상하차지·기사)
   const modeTabs = (
-    <div className="inline-flex rounded-xl bg-gray-100 p-1">
-      {[["orders", "오더 가져오기"], ["placesDrivers", "상하차지 · 기사 가져오기"]].map(([k, l]) => (
+    <div className="inline-flex rounded-xl bg-gray-100 p-1 flex-wrap">
+      {[["migrate", "운송사 일괄 이전"], ["orders", "오더 가져오기"], ["placesDrivers", "상하차지 · 기사 가져오기"]].map(([k, l]) => (
         <button key={k} onClick={() => setMode(k)} className={`px-5 py-2 rounded-lg text-[14px] font-bold ${mode === k ? "bg-white text-[#1B2B4B] shadow-sm" : "text-gray-500"}`}>{l}</button>
       ))}
     </div>
   );
   if (mode === "placesDrivers") return <div className="space-y-6">{modeTabs}<SheetPlaceDriverImport companies={companies} url={url} /></div>;
+  // 🚚 2026-11-12 운송사 일괄 이전 — 가져오기 기록(아래 표 · [가져오기 취소])은 오더 가져오기 화면과 같은 곳
+  if (mode === "migrate") return <div className="space-y-6">{modeTabs}<CarrierMigratePanel companies={companies} />{historyCard}</div>;
 
   return (
     <div className="space-y-6">
@@ -559,47 +606,7 @@ export default function SheetImportPanel() {
         </section>
       )}
 
-      {/* 가져오기 기록 */}
-      <section className={`${CARD} overflow-hidden`}>
-        <div className="px-6 pt-6"><Head eyebrow="HISTORY" title="가져오기 기록" desc="잘못 가져왔으면 [가져오기 취소]로 그 묶음(오더·자동 등록된 거래처/상하차지/기사)을 한 번에 지울 수 있습니다." /></div>
-        {batches.length === 0 ? (
-          <div className="text-[14px] text-gray-500 text-center pb-10">아직 가져온 기록이 없습니다.</div>
-        ) : (
-          <table className="w-full text-[14px]">
-            <thead>
-              <tr className="bg-[#F5F8FD] text-gray-600 border-y border-[#E3E8F0]">
-                {["운송사", "일시", "가져온 곳", "오더", "자동 등록", "상태", ""].map((h) => <th key={h} className="px-4 py-3 text-center font-bold whitespace-nowrap">{h}</th>)}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#EEF1F6]">
-              {batches.map((b) => (
-                <tr key={b.id}>
-                  <td className="px-4 py-3 text-center font-bold text-[#0F1A30]">{b.companyName}</td>
-                  <td className="px-4 py-3 text-center text-gray-700 whitespace-nowrap">{fmtTime(b.at)}</td>
-                  <td className="px-4 py-3 text-center text-gray-600 max-w-[260px] truncate">{b.source === "excel" ? "엑셀" : "구글시트"} · {b.sheetTitle}</td>
-                  <td className="px-4 py-3 text-center font-semibold">{(b.count || 0).toLocaleString()}건</td>
-                  <td className="px-4 py-3 text-center text-gray-600 whitespace-nowrap">{b.registered ? `거래처 ${b.registered.clients} · 상하차지 ${b.registered.places} · 기사 ${b.registered.drivers}` : "-"}</td>
-                  <td className="px-4 py-3 text-center whitespace-nowrap">
-                    {b.status === "done" ? <span className="px-3 py-1 rounded-full text-[12.5px] font-bold bg-emerald-100 text-emerald-700">완료</span>
-                      : b.status === "canceled" ? <span className="px-3 py-1 rounded-full text-[12.5px] font-bold bg-gray-100 text-gray-500">취소됨</span>
-                        : b.status === "error" ? <span className="px-3 py-1 rounded-full text-[12.5px] font-bold bg-red-100 text-red-700">실패</span>
-                          : <span className="px-3 py-1 rounded-full text-[12.5px] font-bold bg-amber-100 text-amber-700">진행 중</span>}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {b.status === "done" && b.source !== "excel" && (
-                      <button onClick={() => linkBatch(b)} disabled={busy === `link_${b.id}`} title="시트의 원래 줄과 연결 — 이후 프로그램에서 수정·삭제하면 시트에도 반영"
-                        className="mr-2 px-3.5 py-1.5 rounded-xl bg-[#0F1A30] text-white text-[13px] font-bold disabled:opacity-60">
-                        {busy === `link_${b.id}` ? "연결 중…" : b.gsheetLinked ? `시트 연결됨 ${b.gsheetLinked}건` : "시트와 연결"}
-                      </button>
-                    )}
-                    {b.status !== "canceled" && <button onClick={() => cancelBatch(b)} disabled={busy === `cancel_${b.id}`} className="px-3.5 py-1.5 rounded-xl border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 disabled:opacity-60">{busy === `cancel_${b.id}` ? "지우는 중…" : "가져오기 취소"}</button>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+      {historyCard}
 
       {/* 진행률 창 */}
       {progress && (

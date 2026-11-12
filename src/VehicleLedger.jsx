@@ -5,6 +5,7 @@
 //  ② 관리대장(차량 한 대): 기본 정보 · 수리·정비 이력(부가세 10% 자동, 연·월 합계, 증빙) · 구조변경 · 기사 탑승 이력 ·
 //     기본정보 변경·기타 이력 — 한 페이지에서 한눈에, A4 인쇄·엑셀 저장
 //  휴대폰(좁은 화면)에서는 표 대신 카드로 그린다.
+import { isFleetGrade } from "./fleetGradesCore"; // 🚛 지입차 구분(지입·직영·임대·분양) 한 곳
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { createPortal } from "react-dom";
@@ -1110,11 +1111,11 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
   }, [co]);
 
   // 기사관리(drivers) 연결 — 번호판으로(지역명 유무 무시)
-  const fleetDrivers = useMemo(() => drivers.filter((d) => ["지입", "직영", "임대"].includes(d.등급)), [drivers]);
+  const fleetDrivers = useMemo(() => drivers.filter((d) => isFleetGrade(d.등급)), [drivers]);
   const drvByPlate = useMemo(() => {
     const m = new Map();
     // 같은 번호판이 여럿이면: 기사앱 가입(uid 있는) 문서 > 지입·직영·임대 > 나머지 — 기사앱이 쓰는 문서와 같은 곳을 본다
-    const rank = (d) => (d.uid ? 2 : 0) + (["지입", "직영", "임대"].includes(d.등급) ? 1 : 0);
+    const rank = (d) => (d.uid ? 2 : 0) + (isFleetGrade(d.등급) ? 1 : 0);
     drivers.forEach((d) => { const p = d.차량번호 || d.carNo; const k = plateCore(p); if (!k) return; const ex = m.get(k); if (!ex || rank(d) >= rank(ex)) m.set(k, d); });
     return m;
   }, [drivers]);
