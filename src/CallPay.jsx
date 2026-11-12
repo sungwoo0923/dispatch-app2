@@ -284,8 +284,8 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
   const needMemo = (k, label) => { if (out && !String(f[k] || "").trim()) { window.alert(`${label} 메모를 입력해 주세요.`); return true; } return false; };
   const run = async (fn) => { if (!canEdit || !id || !patchDispatch) return; setBusy(true); try { await fn(); } catch (e) { window.alert(`저장하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); } };
   const save = () => run(async () => {
-    if (out && f.inv && needMemo("billMemo", "청구완료")) return;
-    if (out && deposited && needMemo("depMemo", "입금완료")) return;
+    // 새로 청구완료로 바꿀 때(또는 발행일을 바꿀 때)만 메모를 묻는다 — 예전에 메모 없이 청구완료된 오더도 다른 칸은 그대로 고칠 수 있게
+    if (out && f.inv && f.inv !== (row?.계산서일 || "") && needMemo("billMemo", "청구완료")) return;
     if (deposited && !out) { await setCallDeposit({ row, done: false, patchDispatch, company }); } // IN으로 바꾸면 입금 기록도 지운다
     await patchDispatch(id, { ...basePatch(), ...(deposited && out ? { 입금일: f.depDate || today(), 입금자명: f.depName.trim().slice(0, 40), 입금메모: f.depMemo.trim().slice(0, 200) } : {}), __system: true });
     if (deposited && out && f.depDate !== (row?.입금일 || "")) await setCallDeposit({ row, done: true, date: f.depDate, name: f.depName, txnId: row?.입금거래id || "", memo: f.depMemo, patchDispatch, company }); // 장부 날짜도 맞춘다
