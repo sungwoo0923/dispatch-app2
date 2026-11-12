@@ -4,6 +4,7 @@ import { PLAN_DEFAULTS } from "./plans";
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { checkEmailAvailable, warmSignupFunctions } from "./emailCheck";
+import { fetchT, withTimeout } from "./fetchTimeout"; // ⏱ 2026-11-12 서버가 늦으면 "처리 중…"에서 멈추지 않게
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from "firebase/auth";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { freeDeletedEmail } from "./freeEmail";
@@ -12,7 +13,7 @@ import CustomSelect from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker";
 import { BirthSelect } from "./ResumeInputs";
 import {
-  doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc, updateDoc,
+  doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, addDoc, updateDoc, limit,
 } from "firebase/firestore";
 import { fmtPhone } from "./formatInput";
 import { LogisMark } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
@@ -23,7 +24,7 @@ function loadCompanyList() {
   if (!companyListPromise) {
     // ① 공개 목록(로그인 전 읽기 가능) ② 서버 함수 — 둘을 합친다(어느 한쪽만 돼도 검색됨)
     const pub = readPublicCompanies().catch(() => []);
-    const fn = fetch(`${FUNCTIONS_BASE}/findCompany?all=1`).then((r) => (r.ok ? r.json() : null))
+    const fn = fetchT(`${FUNCTIONS_BASE}/findCompany?all=1`, 8000).then((r) => (r.ok ? r.json() : null))
       .then((j) => (Array.isArray(j?.results) ? j.results : [])).catch(() => []);
     companyListPromise = Promise.all([pub, fn]).then(([a, b]) => {
       const m = new Map();
@@ -45,7 +46,7 @@ async function findCompanies(q, exact = false) {
   }
   const key = String(q || "").trim().toLowerCase();
   try {
-    const r = await fetch(`${FUNCTIONS_BASE}/findCompany?q=${encodeURIComponent(key)}${exact ? "&exact=1" : ""}`);
+    const r = await fetchT(`${FUNCTIONS_BASE}/findCompany?q=${encodeURIComponent(key)}${exact ? "&exact=1" : ""}`, 6000);
     if (r.ok) { const j = await r.json(); if (Array.isArray(j.results)) return j.results; }
   } catch { /* 함수 배포 전 */ }
   const snap = await getDocs(query(collection(db, "transportApplications"), where("type", "==", "신규"), where("status", "==", "approved")));
@@ -289,7 +290,7 @@ function SignupForm({ signupType, onBack }) {
     if (!n) { if (!silent) setCoDupMsg({ text: "회사명을 입력해주세요.", type: "error", name: n }); return "empty"; }
     setCoDupChecking(true);
     try {
-      const r = await fetch(`${FUNCTIONS_BASE}/findCompany?dup=1&q=${encodeURIComponent(n)}`);
+      const r = await fetchT(`${FUNCTIONS_BASE}/findCompany?dup=1&q=${encodeURIComponent(n)}`, 6000);
       const j = r.ok ? await r.json() : null;
       if (!j || typeof j.used !== "boolean") { if (!silent) setCoDupMsg({ text: "지금은 확인할 수 없습니다. 그대로 신청하면 관리자가 확인합니다.", type: "ok", name: n }); return "unknown"; }
       if (j.used) {
@@ -323,7 +324,9 @@ function SignupForm({ signupType, onBack }) {
     if (!companyName.trim()) return setError("회사명을 입력해주세요.");
     if (signupType === "신규" && !businessNumber.trim()) return setError("사업자번호를 입력해주세요.");
     if (signupType === "신규") {
+      setLoading(true); // 회사명 확인(최대 6초) 동안에도 눌린 게 보이게
       const st = await checkCompanyDup(true);
+      setLoading(false);
       if (st === "used") return setError("이미 등록(또는 신청)된 회사명입니다. 회사명 중복확인 안내를 확인해 주세요.");
     }
     if (!name.trim()) return setError("이름을 입력해주세요.");
@@ -367,6 +370,10 @@ function SignupForm({ signupType, onBack }) {
       if (hireDate) {
         await setDoc(doc(db, "userProfiles", uid), { hireDate }, { merge: true }).catch(() => {});
       }
+      await writeApplication(uid);
+    };
+    // 가입 신청서(관리자 승인 대기) — 계정 · 사용자 문서는 만들어졌는데 신청서만 못 쓴 채 끊긴 경우 다시 누르면 이것만 쓴다
+    const writeApplication = async (uid) => {
       await addDoc(collection(db, "transportApplications"), {
         type: signupType,
         companyName: companyName.trim(),
@@ -395,15 +402,16 @@ function SignupForm({ signupType, onBack }) {
 
     try {
       let res;
+      // ⏱ 2026-11-12 단계마다 시간 제한 — 서버가 답이 없으면 어느 단계인지 알려 주고 다시 누를 수 있게(이어서 처리됨)
       try {
-        res = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        res = await withTimeout(createUserWithEmailAndPassword(auth, email.trim(), password), 30000, "계정 만들기");
       } catch (e1) {
         // ⭐ 2026-11-01 삭제된 계정의 이메일이면 서버가 정리해 준 뒤 다시 가입
         if (e1?.code !== "auth/email-already-in-use" || !(await freeDeletedEmail(email))) throw e1;
-        res = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        res = await withTimeout(createUserWithEmailAndPassword(auth, email.trim(), password), 30000, "계정 만들기");
       }
-      await writeUserDocs(res.user.uid);
-      await signOut(auth);
+      await withTimeout(writeUserDocs(res.user.uid), 30000, "가입 정보 저장");
+      await signOut(auth).catch(() => {});
       setSuccess(true);
     } catch (err) {
       const code = err.code || "";
@@ -411,29 +419,45 @@ function SignupForm({ signupType, onBack }) {
         // 관리자가 계정을 삭제했는지 확인 — 로그인 전에는 users 목록을 못 읽으므로
         // 입력한 비밀번호로 먼저 로그인해 "내 문서"만 확인한다(본인 문서는 읽기 허용).
         try {
-          const reLogin = await signInWithEmailAndPassword(auth, email.trim(), password);
+          const reLogin = await withTimeout(signInWithEmailAndPassword(auth, email.trim(), password), 30000, "로그인 확인");
           const mine = await getDoc(doc(db, "users", reLogin.user.uid)).catch(() => null);
           const d = mine?.exists() ? mine.data() : null;
           const isDeleted = !d || d.status === "deleted" || d.status === "withdrawn";
+          // ⏱ 2026-11-12 지난번 가입이 중간에 끊겼으면(사용자 문서는 있고 승인 전) — 신청서가 없을 때만 신청서를 쓰고 완료
+          const pendingMine = d && d.approved === false && !d.status;
+          const myApps = pendingMine ? await getDocs(query(collection(db, "transportApplications"), where("userId", "==", reLogin.user.uid), limit(1))).catch(() => null) : null;
           if (isDeleted) {
-            await writeUserDocs(reLogin.user.uid);
+            await withTimeout(writeUserDocs(reLogin.user.uid), 30000, "가입 정보 저장");
             await signOut(auth);
             setSuccess(true);
+          } else if (pendingMine && myApps && myApps.empty) {
+            await withTimeout(writeApplication(reLogin.user.uid), 30000, "가입 정보 저장");
+            await signOut(auth);
+            setSuccess(true);
+          } else if (pendingMine) {
+            await signOut(auth);
+            setError("이미 가입 신청이 접수돼 있어요. 관리자 승인 후 로그인할 수 있습니다.");
           } else {
             await signOut(auth);
             setError("이미 가입된 이메일입니다. 로그인 화면에서 로그인해 주세요.");
           }
         } catch (e2) {
+          if (e2?.code === "kp/timeout") { setError(`"${e2.step}" 단계에서 서버 응답이 30초 넘게 없습니다. 잠시 후 [가입 신청]을 다시 눌러 주세요.`); return; }
           setError(e2?.code === "auth/user-disabled"
             ? "삭제(정리) 중인 예전 계정의 이메일입니다. 잠시 후 다시 가입 신청해 주세요. 계속 안 되면 관리자에게 알려 주세요."
             : "이미 가입된 이메일입니다. 예전에 쓰던 계정이면 그때 비밀번호를 입력하거나, 로그인 화면의 비밀번호 재설정을 이용해 주세요.");
         }
+      } else if (code === "kp/timeout") {
+        setError(`"${err.step}" 단계에서 서버 응답이 30초 넘게 없습니다. 인터넷 연결을 확인하고 [가입 신청]을 다시 눌러 주세요. (이미 만들어진 부분은 이어서 처리돼요)`);
+      } else if (code === "auth/network-request-failed") {
+        setError("서버에 연결하지 못했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.");
       } else if (code === "auth/invalid-email") {
         setError("올바른 이메일 형식을 입력해주세요.");
       } else if (code === "auth/weak-password") {
         setError("비밀번호는 6자 이상이어야 합니다.");
       } else {
-        setError("가입 신청 중 오류가 발생했습니다. 다시 시도해주세요.");
+        console.error("[가입 신청 오류]", code, err?.message || err);
+        setError(`가입 신청 중 오류가 발생했습니다. 다시 시도해주세요.${code ? ` (${code})` : ""}`);
       }
     } finally {
       setLoading(false);

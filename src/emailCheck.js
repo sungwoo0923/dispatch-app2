@@ -5,6 +5,7 @@
 // 확인 보류로 통과(가입 버튼을 누를 때 Firebase가 중복 이메일을 한 번 더 막는다).
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
 import { db, auth, FUNCTIONS_BASE } from "./firebase";
+import { fetchT } from "./fetchTimeout"; // ⏱ 6초 안에 답이 없으면 확인 보류로 통과
 
 export async function checkEmailAvailable(email) {
   const e = String(email || "").trim();
@@ -14,7 +15,7 @@ export async function checkEmailAvailable(email) {
     return snap.empty ? "free" : "used";
   } catch { /* 로그인 전 — 서버로 */ }
   try {
-    const r = await fetch(`${FUNCTIONS_BASE}/checkEmail?e=${encodeURIComponent(e)}`);
+    const r = await fetchT(`${FUNCTIONS_BASE}/checkEmail?e=${encodeURIComponent(e)}`, 6000);
     if (r.ok) { const j = await r.json(); if (typeof j.used === "boolean") return j.used ? "used" : "free"; }
   } catch { /* 서버 함수 배포 전 */ }
   return "unknown";
