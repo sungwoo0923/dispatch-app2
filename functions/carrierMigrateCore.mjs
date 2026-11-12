@@ -33,6 +33,9 @@ export const DEFAULT_PRESET = {
   skipTabs: [], // 가져오지 않을 탭
   routeMinCount: 30, // 같은 구간 · 같은 운임이 이만큼 이상이면 고정노선 후보
   extraNames: {}, // { 탭이름: { 열글자: "이름" } } — 머리줄 이름이 없는 추가 칸
+  // 🚚 2026-11-12 탭별 규칙(만세보령 등)
+  fromAliases: {}, // { 탭이름: { 시트의 출발지: 상차지명 } } — 예) 만세보령 탭의 "보령" → "만세보령"
+  nextDayTabs: [], // 입고시간(당착 · 월착) 칸이 비어 있으면 다음 날 도착으로 보는 탭
   placeOverrides: {}, // { "탭이름|약칭": "주소" } · "*|약칭" = 모든 탭 — 시트에 주소가 없는 곳을 화면에서 직접 넣은 값
 };
 
@@ -41,6 +44,9 @@ export const PRESET_SUGGESTIONS = {
   JY로지스틱스: {
     // 에이제이 탭 매출 H~K · 매입 L~O 사이 칸은 머리줄 이름이 없다(비고의 "대행료/50,000"과 같은 금액)
     extraNames: { 에이제이: { I: "야상", J: "대행료", M: "대행료", N: "추가비용" } },
+    // 만세보령 탭: 출발지 "보령" = 만세보령(거래처도 만세보령) · 입고시간이 비면 내일착
+    fromAliases: { 만세보령: { 보령: "만세보령" } },
+    nextDayTabs: ["만세보령"],
   },
 };
 
@@ -526,7 +532,7 @@ function rowToOrder(r, L, ctx) {
   const clientRaw = cell(g(L.cols.client));
   const client = clientRaw.split("/")[0].trim() || ctx.client;
   if (clientRaw.includes("/")) tags.push(clientRaw.split("/").slice(1).join("/").trim());
-  let 상차지명 = from, 상차지주소 = "";
+  let 상차지명 = cell(ctx.preset.fromAliases?.[ctx.tab]?.[from]) || from, 상차지주소 = "";
   let 하차지명 = to, 하차지주소 = "";
   const fromAddr = looksAddress(from);
   if (fromAddr) { 상차지주소 = from; 상차지명 = ""; }
@@ -554,7 +560,15 @@ function rowToOrder(r, L, ctx) {
   else if (tp) { 하차지주소 = 하차지주소 || tp.address; ctx.used.add(tp); }
   if (!하차지주소 && 하차지역) 하차지주소 = 하차지역; // 주소를 못 찾으면 지역이라도(대전 학하동 · 경기도 시흥시 목감동)
   if (!하차지명) 하차지명 = 하차지주소 ? 하차지주소.split(/\s+/).slice(0, 3).join(" ") : "";
-  if (multi(하차지명)) tags.push(`경유 ${하차지명}`);
+  // 🚚 2026-11-12 하차지명에 여러 곳("롯데상사,의왕")이 적혀 있으면 첫 곳 = 하차지, 나머지 = 하차 경유지(주소는 상하차지 정보에서 찾음)
+  let 경유하차 = [];
+  if (multi(하차지명)) {
+    const parts = 하차지명.split(/[,，+]/).map((x) => x.trim()).filter(Boolean);
+    const toPlaces = ctx.memo.places.filter((p) => p.role !== "상차");
+    경유하차 = parts.slice(1).map((n) => { const o = ctx.override(n); const hit = o ? null : ctx.resolve(n, toPlaces, ctx.owner); if (hit) ctx.used.add(hit); return { 업체명: n, 주소: o || hit?.address || "", 담당자: "", 담당자번호: "" }; });
+    tags.push(`경유 ${하차지명}`);
+    하차지명 = parts[0] || 하차지명;
+  }
   // 시간 · 하차일
   let 상차시간 = parseTime(g(L.cols.time)), 하차일 = date, 하차시간 = "";
   const ad = g(L.cols.arriveDate); if (ad) { const d = parseDate(ad, ctx.year); if (d) 하차일 = d; }
@@ -569,6 +583,8 @@ function rowToOrder(r, L, ctx) {
     else if (parseDate(v, ctx.year)) 하차일 = parseDate(v, ctx.year);
     else tags.push(v);
   }
+  // 입고시간 칸이 있는 탭인데 비어 있으면 다음 날 도착(preset.nextDayTabs)
+  if ((ctx.preset.nextDayTabs || []).includes(ctx.tab) && (L.cols.arriveDay >= 0 || L.cols.arriveTime >= 0) && !g(L.cols.arriveDay) && !g(L.cols.arriveTime) && !g(L.cols.arriveDate)) 하차일 = addDays(date, 1);
   // 차량 · 화물
   const veh = splitVehicle(g(L.cols.vehicle));
   if (/회차/.test(veh.kind)) { tags.push("회차"); veh.kind = veh.kind.replace(/회차/g, "").replace(/^[\s/]+|[\s/]+$/g, ""); }
@@ -620,6 +636,7 @@ function rowToOrder(r, L, ctx) {
     지급방식, 배차방식: carrier, 배차상태,
     메모: uniq([...tags, ...memo]).join(" · "),
   };
+  if (경유하차.length) { rec.경유하차목록 = 경유하차; rec.경유지_하차 = 경유하차; }
   if (items.length) Object.assign(rec, { 특수운임: items, 특수기사차감: D, 특수청구추가: C, 외부지급합: 0 });
   if (마감월) { rec.마감월 = 마감월; if (마감월 !== date.slice(0, 7)) rec.마감이월 = true; }
   if (nameSplit.affiliation) rec.기사소속 = nameSplit.affiliation;

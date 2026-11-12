@@ -84,7 +84,9 @@ export default function CarrierMigratePanel({ companies = [] }) {
     getDoc(doc(db, "companySettings", co)).then((s) => {
       if (!alive) return;
       const saved = s.exists() ? s.data().migrationPreset : null;
-      const base = saved || PRESET_SUGGESTIONS[co] || {};
+      // 저장된 설정이 있어도, 나중에 생긴 회사별 시작 규칙(출발지 이름 바꾸기 · 내일착 탭)은 비어 있으면 채운다
+      const sug = PRESET_SUGGESTIONS[co] || {};
+      const base = saved ? { ...saved, fromAliases: { ...(sug.fromAliases || {}), ...(saved.fromAliases || {}) }, nextDayTabs: saved.nextDayTabs || sug.nextDayTabs || [] } : sug;
       const p = { ...DEFAULT_PRESET, ...base, dispatchAliases: { ...DEFAULT_PRESET.dispatchAliases, ...(base.dispatchAliases || {}) } };
       setPreset(p); setAliasDraft(aliasText(p.dispatchAliases)); setOvDraft(p.placeOverrides || {}); setResult(null);
     }).catch(() => {});

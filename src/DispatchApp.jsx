@@ -79,6 +79,7 @@ import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf, fixedLookOf, useR
 import { carrierOf } from "./routeCarriers"; // ⭐ 2026-11-06 고정노선현황 운송사 검색
 import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 정산·매출에서 뺀다
 import ColumnStyleHost from "./ColumnStyle"; // 🎨 2026-11-03 컬럼명 오른쪽 클릭 → 색 변경 // ⭐ 2026-11-03 배차현황 › 고정노선현황
+import QuickNav, { QuickSearchButton } from "./QuickNav"; // 🔎 2026-11-12 통합 검색(Ctrl+K) · 자주 쓰는 메뉴 · 도움말 센터
 import { useScreenFit, ScreenFitButton, BrowserZoomNotice } from "./ScreenFit"; // 🖥 2026-11-10 화면 맞춤 · 브라우저 확대 안내
 import { usePendingSignups, isPendingSignupDriver } from "./pendingSignups";
 import { NavHover, emitSubnav } from "./navMenus";
@@ -8801,6 +8802,8 @@ return (
             {/* ⭐ 2026-11-01 출근·퇴근 버튼 — 일반 화면은 홈 관제 데크(시계 옆)에, 부서 화면(경리·인사·임원)은 홈 데크가 없어 여기 */}
             {/* 출근·퇴근 버튼은 각 팀 홈 대시보드(시계 옆)에 있다 */}
 
+            {/* 🔎 2026-11-12 통합 검색(Ctrl + K) — 메뉴 · 세부 화면 · 도움말 찾기 */}
+            <QuickSearchButton />
             {/* 🖥 2026-11-10 화면 맞춤 — 표 전체가 한 화면에 보이게 자동 배율 */}
             <ScreenFitButton fit={screenFit} />
 
@@ -8816,6 +8819,10 @@ return (
 
         </div>
       </header>
+      {/* ★ 2026-11-12 자주 쓰는 메뉴(접었다 펴기) · 통합 검색 창 · 도움말 센터 — 지금 이 계정에 보이는 메뉴로 자동 구성 */}
+      <QuickNav menu={menu}
+        menus={uiMenuList("pc", deptMode ? DEPT_MENUS[deptMode] : KP_SIDE_GROUPS.flatMap((g) => g.items)).filter((m) => menuState(m) === "ok")}
+        onGo={(m, code, key) => { handleMenuClick(m); if (code && key) setTimeout(() => emitSubnav(code, key), 0); }} />
 
 
       {/* 화주사 푸시 알림 — 상차 예정시각이 임박했는데 미처리인 오더를 화주사가 푸시하면 중앙에 확인 전까지 표시 */}
@@ -14268,6 +14275,47 @@ const ROUND_DISCOUNT = 0.9; // ★ 10% 할인 (조정 가능)
       });
       return results;
     }, [form.하차지명, form.하차지주소, multiRateSheets]);
+    // 💰 2026-11-12 단가표 자동 입력 — 단가표(다목적지 단가표)에 "기준지(거래처 · 상차지) → 하차지 · 톤수" 단가가 있으면
+    //  청구운임을 자동으로 넣는다(단가표 줄에 매입 단가 buyPrices가 있으면 기사운임도). 사람이 직접 넣은 금액은 덮어쓰지 않는다.
+    //  · 맞는 줄 고르기: 하차지명이 같고(이름 일치) 톤수 칸이 똑같은 것 → 기준지가 거래처명 · 상차지명과 맞는 것 우선
+    //  · 후보가 여러 개인데 금액이 서로 다르면 넣지 않는다(단가표 버튼으로 직접 확인)
+    const autoRate = React.useMemo(() => {
+      const ton = normRateText(form.차량톤수);
+      const drop = normRateText(form.하차지명);
+      if (!ton || !drop) return null;
+      const bases = [form.거래처명, form.상차지명].map(normRateText).filter(Boolean);
+      const cands = [];
+      rateSheetMatches.forEach(({ sheet, row, nameHit }) => {
+        if (!nameHit) return;
+        const col = (sheet.columns || []).find((c) => normRateText(c.label) === ton);
+        const sale = col ? Number(String(row.prices?.[col.id] ?? "").replace(/[^\d]/g, "")) || 0 : 0;
+        if (!sale) return;
+        const buy = Number(String(row.buyPrices?.[col.id] ?? "").replace(/[^\d]/g, "")) || 0;
+        const bn = normRateText(sheet.baseName);
+        const baseHit = !!bn && bases.some((x) => x.includes(bn) || bn.includes(x));
+        const exact = normRateText(row.name) === drop;
+        cands.push({ sale, buy, baseHit, exact, label: `${sheet.baseName || ""} → ${row.name} · ${col.label}` });
+      });
+      if (!cands.length) return null;
+      const rank = (c) => (c.baseHit ? 2 : 0) + (c.exact ? 1 : 0);
+      const top = Math.max(...cands.map(rank));
+      const best = cands.filter((c) => rank(c) === top);
+      if (new Set(best.map((c) => `${c.sale}/${c.buy}`)).size > 1) return null;
+      return best[0];
+    }, [rateSheetMatches, form.차량톤수, form.하차지명, form.거래처명, form.상차지명]);
+    const autoRateRef = React.useRef({ sale: "", buy: "" }); // 마지막으로 자동 입력한 금액(사람이 고쳤는지 구분)
+    React.useEffect(() => {
+      if (!autoRate || !canMoney) return;
+      const curSale = String(form.청구운임 ?? "").replace(/[^\d]/g, "");
+      const curBuy = String(form.기사운임 ?? "").replace(/[^\d]/g, "");
+      const last = autoRateRef.current;
+      const saleFree = !curSale || curSale === last.sale; // 비어 있거나 지난번 자동 입력 값 그대로
+      const buyFree = !curBuy || curBuy === last.buy;
+      if (saleFree && curSale !== String(autoRate.sale)) { autoRateRef.current = { ...autoRateRef.current, sale: String(autoRate.sale) }; onChange("청구운임", String(autoRate.sale)); }
+      // 지난번에 자동으로 넣은 기사운임인데 이번 단가표 줄에는 매입 단가가 없으면 비운다(다른 하차지 금액이 남지 않게)
+      if (!autoRate.buy && curBuy && curBuy === last.buy) { autoRateRef.current = { ...autoRateRef.current, buy: "" }; setTimeout(() => onChange("기사운임", ""), 0); }
+      if (autoRate.buy && buyFree && curBuy !== String(autoRate.buy)) { autoRateRef.current = { ...autoRateRef.current, buy: String(autoRate.buy) }; setTimeout(() => onChange("기사운임", String(autoRate.buy)), 0); }
+    }, [autoRate?.sale, autoRate?.buy, autoRate?.label]); // eslint-disable-line react-hooks/exhaustive-deps
     // ⭐ 운임조회 팝업 상태
     const [fareModalOpen, setFareModalOpen] = React.useState(false);
 const [fare3Filter, setFare3Filter] = React.useState("all");
