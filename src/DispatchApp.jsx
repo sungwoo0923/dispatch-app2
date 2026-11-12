@@ -41,6 +41,7 @@ import { isUrgentOrder, UrgentBadge, urgentRowStyle } from "./urgentOrder"; // �
 import BulkEditCopyModal from "./BulkEditCopy"; // 🗂 2026-11-09 우클릭 [일괄수정·복사]
 const ReceiptCenter = React.lazy(() => import("./ReceiptCenter")); // 🧾 2026-11-09 배차현황 › 인수증관리
 import { applyOwner } from "./orderOwner"; // 👤 2026-11-09 복사본 배차담당자
+import OrderStaffFields from "./OrderStaffFields"; // 👤 2026-11-12 배차담당자 · 차량배정자 바꾸기
 import { askCopyDates } from "./CopyCountDialog"; // ⭐ 2026-11-06 복사 등록 — 몇 건·건별 날짜
 import { dispatchStatusOf, payTypeStatusPatch } from "./dispatchStatus"; // 🚚 2026-11-07 배차상태 공용 규칙
 import { requestRouteSheetPush } from "./routeSheetPush"; // 💰 2026-11-06 고정노선 오더 고치면 바로 시트에
@@ -2817,6 +2818,9 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
   }
   // 👤 2026-11-09 배차담당자 — 복사 창에서 고른 사람(처음엔 원본 담당자 그대로)
   if (copyTarget._owner) applyOwner(payload, copyTarget._owner);
+  // 👤 2026-11-12 차량배정자를 직접 고른 경우 그 사람으로(안 골랐으면 위처럼 지금 복사한 사람)
+  delete payload._assignerSet;
+  if (copyTarget._assignerSet) { if (String(copyTarget.배차확정자 || "").trim()) payload.배차확정자 = String(copyTarget.배차확정자).trim(); else delete payload.배차확정자; }
   // 💬 2026-11-08 알림톡은 화면에서 뺐다 — 복사본은 보내지 않고, 원본 발송 결과도 넘기지 않는다
   payload.알림톡 = false;
   delete payload._알림톡;
@@ -2845,7 +2849,8 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
 // ⭐ 2026-11-06 [복사 등록] — "몇 건 복사?" 창(건마다 상차일·하차일, 처음엔 모두 오늘) → 그 수만큼 submitCopyOrderPC
 //   (지난 날짜 → 오늘, 화주사 전송 포인터 제거 등 submitCopyOrderPC 규칙은 그대로) · 취소/실패면 false, 성공이면 건수
 const submitCopyOrdersPC = async (copyTarget, approvedShippers, cargoOverride) => {
-  const plan = await askCopyDates({ order: copyTarget, title: "복사 등록", sub: `${copyTarget?.거래처명 || ""} ${copyTarget?.상차지명 ? `· ${copyTarget.상차지명} → ${copyTarget.하차지명 || ""}` : ""}`.trim() || undefined });
+  // 👤 2026-11-12 패널에서 배차담당자를 골랐으면 "몇 건 복사?" 창도 그 사람으로 시작
+  const plan = await askCopyDates({ order: copyTarget?._owner && !copyTarget._owner.orig ? applyOwner({ ...copyTarget }, copyTarget._owner) : copyTarget, title: "복사 등록", sub: `${copyTarget?.거래처명 || ""} ${copyTarget?.상차지명 ? `· ${copyTarget.상차지명} → ${copyTarget.하차지명 || ""}` : ""}`.trim() || undefined });
   if (!plan || !plan.length) return false;
   let n = 0;
   for (const d of plan) {
@@ -4865,6 +4870,10 @@ const patchDispatch = async (_id, patch, knownPrev) => {
   delete patch.등록일시;
   delete patch.등록시간;
   delete patch.createdTime;
+  // 👤 2026-11-12 배차담당자 · 차량배정자 바꾸기(src/OrderStaffFields.jsx) — 화면용 표시는 문서에 쓰지 않는다
+  const _ownerPick = patch._owner && !patch._owner.orig ? patch._owner : null; delete patch._owner;
+  const _assignerSet = patch._assignerSet === true; delete patch._assignerSet;
+  if (_ownerPick) applyOwner(patch, _ownerPick);
 
   // ★ 메모리 캐시에서 먼저 찾기 (getDoc 완전 제거 → 딜레이 없음)
   // (역순 날짜 검증은 prev를 구한 다음, 최신 상/하차일 기준으로 아래에서 수행한다)
@@ -5053,6 +5062,7 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     const nextStatus = patch.배차상태 !== undefined ? patch.배차상태 : prev?.배차상태;
     if (nextStatus === "배차완료" && prev?.배차상태 !== "배차완료") {
       patch.배차확정일시 = serverTimestamp();
+      if (_assignerSet) { /* 차량배정자를 직접 고른 경우 그 사람 그대로 */ } else
       // ⭐ "배차완료" 뱃지 팝업(모바일)/등록일 툴팁(PC)에서 배차한 사람 이름을
       // 보여주기 위한 필드 — PC/모바일 어느 쪽에서 확정했든 같은 필드를 쓴다.
       patch.배차확정자 = myRealName || user?.displayName || user?.email?.split("@")[0] || "";
@@ -5155,7 +5165,9 @@ const patchDispatch = async (_id, patch, knownPrev) => {
   // Firestore는 백그라운드에서 처리
   // ⭐ 2026-11-03 배차담당자(최초 등록자)는 수정해도 절대 안 바뀜 — 예전엔 고칠 때마다 작성자 칸이 "고친 사람"으로 덮여서
   //  경리 직원이 금액만 고쳐도 배차담당자가 그 직원으로 바뀌었다. 등록자 칸은 원래 값이 있으면 건드리지 않고, 고친 사람은 최종수정자에 따로 남긴다.
-  for (const k of ORDER_CREATOR_FIELDS) { if (k in cleanPatch && String(prev[k] ?? "").trim()) delete cleanPatch[k]; }
+  // 👤 단, 배차담당자를 직접 고른 경우(_ownerPick)는 그 값으로 바꾼다(예전 uid는 지워 새 담당자로 보이게)
+  if (_ownerPick) { if (String(prev.createdByUid || "").trim()) cleanPatch.createdByUid = null; if (String(prev.createdBy || "").trim()) cleanPatch.createdBy = null; }
+  else for (const k of ORDER_CREATOR_FIELDS) { if (k in cleanPatch && String(prev[k] ?? "").trim()) delete cleanPatch[k]; }
   const _updatePayload = {
     ...cleanPatch,
     ...(String(prev.작성자 || "").trim() ? {} : { 작성자: prev.createdByEmail || auth.currentUser?.email || "" }),
@@ -31411,6 +31423,7 @@ value={copyTarget?.화물수량 || ""}
               ); })()}
             </CpField>
             <div className="col-span-full"><SpecialFareButton form={copyTarget} setForm={setCopyTarget} /></div>{/* 🏗 2026-11-09 지게차비용 */}
+            <div className="col-span-full"><OrderStaffFields order={copyTarget} setOrder={setCopyTarget} disabled={isViewerNow()} /></div>{/* 👤 2026-11-12 배차담당자 · 차량배정자 */}
 <CpField label="지급방식">
   <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"} className={cpInputStyle} value={copyTarget?.지급방식 ?? ""} onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 지급방식:e.target.value})))({ target: { value: __v } })} />
 </CpField>
@@ -33189,6 +33202,7 @@ value={copyTarget?.화물수량 || ""}
             )}
             {/* 🏗 2026-11-09 지게차비용 */}
             <div className="mb-3"><SpecialFareButton form={editTarget} setForm={(fn) => setEditTarget((p) => { const n = typeof fn === "function" ? fn(p) : fn; return { ...n, 수수료: Number(n.수수료) || 0 }; })} /></div>
+            <div className="mb-3"><OrderStaffFields order={editTarget} setOrder={setEditTarget} disabled={isViewerNow()} /></div>{/* 👤 2026-11-12 배차담당자 · 차량배정자 */}
 
             {/* ------------------------------------------------ */}
             {/* 🔵 지급/배차 방식 */}
@@ -33352,6 +33366,7 @@ const ALLOWED_FIELDS = [
   "운임구분", "운임수동", // ⭐ 2026-11-02 운임규칙
   "지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", "특수운임", "특수기사차감", "특수청구추가", "외부지급합", // 🏗 2026-11-09 지게차비용
   "지급방식", "배차방식", "콜구분", "콜플랫폼", // 💳 2026-11-12 IN/OUT도 같이 저장(예전엔 빠져서 수정 창에서 OUT을 골라도 IN으로 남았다)
+  "_owner", "_assignerSet", "배차확정자", // 👤 2026-11-12 배차담당자 · 차량배정자 바꾸기(patchDispatch가 처리)
   "메모",
   "메모중요도",
   "전달사항",
@@ -41555,6 +41570,7 @@ return (
             )}
             {/* 🏗 2026-11-09 지게차비용 */}
             <div className="mb-3"><SpecialFareButton form={editTarget} setForm={(fn) => setEditTarget((p) => { const n = typeof fn === "function" ? fn(p) : fn; return { ...n, 수수료: Number(n.수수료) || 0 }; })} /></div>
+            <div className="mb-3"><OrderStaffFields order={editTarget} setOrder={setEditTarget} disabled={isViewerNow()} /></div>{/* 👤 2026-11-12 배차담당자 · 차량배정자 */}
 
             {/* ------------------------------------------------ */}
             {/* 🔵 지급/배차 방식 */}
@@ -41719,6 +41735,7 @@ return (
       "운임구분", "운임수동", // ⭐ 2026-11-02 운임규칙
       "지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", "특수운임", "특수기사차감", "특수청구추가", "외부지급합", // 🏗 2026-11-09 지게차비용
       "지급방식", "배차방식", "콜구분", "콜플랫폼", // 💳 2026-11-12 IN/OUT도 같이 저장(예전엔 빠져서 수정 창에서 OUT을 골라도 IN으로 남았다)
+  "_owner", "_assignerSet", "배차확정자", // 👤 2026-11-12 배차담당자 · 차량배정자 바꾸기(patchDispatch가 처리)
       "메모",
       "메모중요도",
       "전달사항",
@@ -42851,6 +42868,7 @@ setCopyPlaceOptions(list);
               ); })()}
             </CpField>
             <div className="col-span-full"><SpecialFareButton form={copyTarget} setForm={setCopyTarget} /></div>{/* 🏗 2026-11-09 지게차비용 */}
+            <div className="col-span-full"><OrderStaffFields order={copyTarget} setOrder={setCopyTarget} disabled={isViewerNow()} /></div>{/* 👤 2026-11-12 배차담당자 · 차량배정자 */}
 <CpField label="지급방식">
   <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"} className={cpInputStyle} value={copyTarget?.지급방식 ?? ""} onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 지급방식:e.target.value})))({ target: { value: __v } })} />
 </CpField>
@@ -51200,6 +51218,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       </div>
                     </CpField>
                     <div className="col-span-full"><SpecialFareButton form={copyTarget} setForm={setCopyTarget} /></div>{/* 🏗 2026-11-09 지게차비용 */}
+                    <div className="col-span-full"><OrderStaffFields order={copyTarget} setOrder={setCopyTarget} disabled={isViewerNow()} /></div>{/* 👤 2026-11-12 배차담당자 · 차량배정자 */}
                     <CpField label="지급방식">
                       <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" className={cpInputStyle} value={copyTarget?.지급방식 ?? ""} onChange={(__v) => ((e) => setCopyTarget(p => ({...p, 지급방식: e.target.value})))({ target: { value: __v } })} disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"} />
                     </CpField>
