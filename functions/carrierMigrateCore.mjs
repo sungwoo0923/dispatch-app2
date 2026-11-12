@@ -43,6 +43,8 @@ export const DEFAULT_PRESET = {
   arrivalDateTabs: [], // 날짜 칸이 상차일이 아니라 하차일인 탭 — 당착 = 같은 날 상차 · 야상 = 전날 18시 이후 상차 · 금상차월하차 = 그 전 금요일 상차
   unknownExtraName: "", // 이름을 알 수 없는 추가비용의 이름(예: "기타") — 비우면 "추가비용"
   dropOptions: [], // 회사 배차방식 목록에서 뺄 이름(예: JY는 "직접배차" 대신 "기사직통")
+  groupTripsTabs: [], // 같은 날 · 같은 구간 · 같은 운임 · 같은 차량 줄을 한 오더로 묶는 탭(녹수셔틀) — N줄이면 왕복 N회전, 운임은 합계
+  feeRowNames: [], // 출발지 · 도착지 · 입고시간 칸에 이 글자가 적힌 줄은 운행이 아니라 따로 받는 돈(예: "유류지원비") — 그 이름의 오더 한 건으로
   fromDate: "", // 이 날짜(YYYY-MM-DD)부터의 줄만 가져온다(비우면 전부)
   tabCargo: {}, // { 탭이름: 화물내용 } — 그 탭의 화물내용을 이 글자로(예: 만세보령 = "쌀")
   weightTonTabs: [], // 중량(kg) 칸을 톤수로 바꿔 차량톤수에 넣는 탭(소계 · 중량 칸 ÷ 1,000)
@@ -60,6 +62,10 @@ export const PRESET_SUGGESTIONS = {
     arrivalDateTabs: ["에이제이"],
     placeAliases: { 에이제이: { "베베숲 평택": "평택초저온", 베베숲평택: "평택초저온", "평택 초저온": "평택초저온", "에이제이 후문": "에이제이", "구성리 창고": "구성리창고" } },
     unknownExtraName: "기타",
+    // 녹수셔틀 탭: 한 줄 = 한 번 운행 → 같은 날 같은 구간은 한 오더(왕복 N회전) · 유류지원비 줄 = 유류지원비 오더 · 봉산/덕산/고덕 = 공장 주소
+    groupTripsTabs: ["녹수셔틀"],
+    feeRowNames: ["유류지원비"],
+    placeOverrides: { "녹수셔틀|봉산": "충남 예산군 봉산면 황금뜰로 67 봉산공장", "녹수셔틀|덕산": "충남 예산군 덕산면 남은들로 177 덕산공장", "녹수셔틀|고덕": "충남 예산군 고덕면 삽교평야로 467 고덕공장" },
     dropOptions: ["직접배차"],
     // 만세보령 탭: 출발지 "보령" = 만세보령(거래처도 만세보령) · 입고시간이 비면 내일착
     fromAliases: { 만세보령: { 보령: "만세보령" } },
@@ -792,6 +798,35 @@ export function buildMigration(tabs, presetIn = {}) {
       mismatch,
     });
     if (!L.sale) issues.push(`${t.title}: 매출 · 매입 칸을 찾지 못했어요(운임 없이 가져옴)`);
+  });
+  // 3-2) 🚚 2026-11-12 회전 운행 묶기(preset.groupTripsTabs · 녹수셔틀) — 시트는 한 줄이 한 번 운행이라, 같은 날 같은 구간을 한 오더(왕복 N회전)로
+  //   · 묶는 기준: 상차일 · 상차지 · 하차지 · 한 번 운임(청구 · 기사) · 차량번호 · 메모가 모두 같은 줄
+  //   · 운임은 합계(청구 = 한 번 운임 × N, 기사도 같게) · 메모 맨 앞에 "N회전 왕복 오더 입니다"(프로그램의 회전 표시와 같은 문구)
+  //   · 입고시간 칸에 "4회전"처럼 적힌 줄은 그 줄 하나가 이미 N회전 합계 — 운임은 그대로 두고 회전수만 넣는다
+  //   · 유류지원비 줄(preset.feeRowNames)은 묶지 않고 그 이름의 오더 한 건으로(화물내용 = 그 이름)
+  (preset.groupTripsTabs || []).forEach((title) => {
+    const fee = (o) => (preset.feeRowNames || []).find((n) => [o.상차지명, o.하차지명, o.메모].some((v) => String(v || "").includes(n)));
+    const mine = orders.filter((o) => o.__tab === title); if (!mine.length) return;
+    const groups = new Map(); const out = [];
+    mine.forEach((o) => {
+      const f = fee(o);
+      if (f) { out.push({ ...o, 상차지명: f, 하차지명: f, 상차지주소: "", 하차지주소: "", 화물내용: f, 메모: uniq(String(o.메모 || "").split(" · ").filter((x) => x && x !== f)).join(" · ") }); return; }
+      const m = String(o.메모 || "").match(/(\d+)\s*회전/);
+      if (m) { const n = +m[1]; out.push({ ...o, 운행유형: "왕복", 회전수: n, 회전방식: "묶기", 메모: [`${n}회전 왕복 오더 입니다`, String(o.메모).replace(/\s*·?\s*\d+\s*회전/, "").replace(/^\s*·\s*/, "").trim()].filter(Boolean).join(" ") }); return; }
+      const k = [o.상차일, o.상차지명, o.하차지명, o.청구운임, o.기사운임, o.차량번호, o.메모, o.배차방식].join("|");
+      if (!groups.has(k)) { const g = { first: o, n: 0 }; groups.set(k, g); out.push(g); }
+      groups.get(k).n += 1;
+    });
+    const merged = out.map((x) => {
+      if (!x.first) return x;
+      const o = x.first, n = x.n;
+      if (n <= 1) return o;
+      const sale = +o.청구운임 * n, buy = +o.기사운임 * n;
+      return { ...o, 운행유형: "왕복", 회전수: n, 회전방식: "묶기", 청구운임: String(sale), 기사운임: String(buy), 수수료: String(sale - buy), 메모: [`${n}회전 왕복 오더 입니다`, o.메모].filter(Boolean).join(" "), 이전줄수: n };
+    });
+    const rest = orders.filter((o) => o.__tab !== title);
+    orders.length = 0; orders.push(...rest, ...merged);
+    const ts = tabSummary.find((x) => x.title === title); if (ts) { ts.rowsRead = ts.orders; ts.orders = merged.length; }
   });
   // 4) 기사(오더 + 기사 탭)
   driverBook.forEach((d) => { const sp = splitDriverName(d.rawName, carriers); addDriver({ plate: d.plate, name: sp.name, phone: d.phone, affiliation: sp.affiliation, grade: d.grade, vehicleClass: d.vehicleClass, memo: [d.vehicleClass && `구분 ${d.vehicleClass}`, d.memo].filter(Boolean).join(" / ") }, "book"); });
