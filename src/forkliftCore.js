@@ -56,9 +56,11 @@ export const SPECIAL_MODES = [
 export const SPECIAL_KEYS = ["특수운임", "특수기사차감", "특수청구추가", "외부지급합"];
 export const sfType = (k) => SPECIAL_TYPES.find((t) => t.key === k) || SPECIAL_TYPES[SPECIAL_TYPES.length - 1];
 export const sfItems = (o) => (Array.isArray(o?.특수운임) ? o.특수운임 : []).filter((x) => x && fkNum(x.금액) > 0);
-export const sfPayee = (it) => (it?.받는사람 === "외부" || it?.받는사람 === "기사" ? it.받는사람 : sfType(it?.종류).payee);
+// 🧾 2026-11-12 받는사람 "없음" = 거래처에 추가 청구만 하고 따로 주는 돈은 없음(청구운임 +금액 · 기사운임 그대로 · 수익 +금액)
+export const sfPayee = (it) => (it?.받는사람 === "외부" || it?.받는사람 === "기사" || it?.받는사람 === "없음" ? it.받는사람 : sfType(it?.종류).payee);
 export const sfMode = (it) => {
   const m = ["기사", "회사", "청구"].includes(it?.부담) ? it.부담 : sfType(it?.종류).mode;
+  if (sfPayee(it) === "없음") return "청구"; // 주는 돈이 없으면 청구만
   return sfPayee(it) === "기사" && m === "기사" ? "청구" : m; // 기사에게 주는 돈을 기사에게서 뺄 수는 없다
 };
 export const sfName = (it) => (String(it?.이름 || "").trim() || sfType(it?.종류).label);
@@ -66,6 +68,7 @@ export function sfTotals(o) {
   let D = 0, C = 0, ext = 0;
   for (const it of sfItems(o)) {
     const a = Math.max(0, fkNum(it.금액)); const m = sfMode(it);
+    if (sfPayee(it) === "없음") { C += a; continue; } // 청구만(지급 없음)
     if (sfPayee(it) === "기사") D -= a; else { ext += a; if (m === "기사") D += a; }
     if (m === "청구") C += a;
   }
@@ -81,7 +84,7 @@ export function specialLines(o) {
   const c = (n) => Math.round(n).toLocaleString("ko-KR");
   const out = [];
   if (hasForklift(o)) out.push(`지게차 ${c(fkAmount(o))} (${fkModeLabel(o)}${o.지게차기사명 ? ` · ${o.지게차기사명}` : ""})`);
-  for (const it of sfItems(o)) out.push(`${sfName(it)} ${c(fkNum(it.금액))} (${(SPECIAL_MODES.find((m) => m.key === sfMode(it)) || {}).short || ""}${sfPayee(it) === "외부" ? " · 따로 지급" : ""}${it.메모 ? ` · ${it.메모}` : ""})`);
+  for (const it of sfItems(o)) out.push(`${sfName(it)} ${c(fkNum(it.금액))} (${(SPECIAL_MODES.find((m) => m.key === sfMode(it)) || {}).short || ""}${sfPayee(it) === "외부" ? " · 따로 지급" : sfPayee(it) === "없음" ? " · 지급 없음" : ""}${it.메모 ? ` · ${it.메모}` : ""})`);
   return out;
 }
 

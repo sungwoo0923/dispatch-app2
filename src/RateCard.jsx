@@ -3,6 +3,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { kpConfirm } from "./kpDialog";
 import * as XLSX from "xlsx";
+import { isJyCompany } from "./jyOnly"; // 🏷 JY로지스틱스 전용
 import { parseRateMatrix } from "./rateSheetImport"; // 💰 회사 단가표 엑셀 그대로 읽기
 import { useLoadFullOrderHistory } from "./orderHistory";
 import { db } from "./firebase";
@@ -497,7 +498,7 @@ const [detailModal, setDetailModal] = useState(null);
         if (!rows.length) { alert("빈 파일입니다."); return; }
         // 💰 2026-11-12 회사에서 쓰던 단가표 그대로(머리줄이 맨 위가 아니거나 주소 칸이 없어도 · 매입 단가 묶음 포함) — src/rateSheetImport.js
         const isTemplate = /하차지/.test(String(rows[0]?.[0] || "")) && /주소/.test(String(rows[0]?.[1] || "")) && new Set(rows[0].slice(2).map((h) => normColLabel(h)).filter(Boolean)).size === rows[0].slice(2).filter((h) => String(h || "").trim()).length;
-        const mx = isTemplate ? null : parseRateMatrix(rows);
+        const mx = isTemplate || !isJyCompany(userCompany) ? null : parseRateMatrix(rows);
         if (mx && mx.rows.length) {
           let columns = [...(selectedSheet.columns || [])];
           const colOf = (label) => { let col = columns.find(c => normColLabel(c.label) === normColLabel(label)); if (!col) { col = { id: uid(), label, isDefault: false }; columns = [...columns, col]; } return col; };
@@ -1250,12 +1251,12 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                 className="w-full h-11 mt-3 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-black hover:bg-[#2D4C82] transition disabled:opacity-50">
                 + 새 단가표 만들기
               </button>
-              {/* 📚 2026-11-12 엑셀 한 파일(시트 여러 장)로 단가표 여러 개를 한 번에 */}
-              <button type="button" onClick={() => bulkFileRef.current?.click()} disabled={multiSaving} data-kp="rate-bulk"
+              {/* 📚 2026-11-12 엑셀 한 파일(시트 여러 장)로 단가표 여러 개를 한 번에 — 🏷 JY로지스틱스만 */}
+              {isJyCompany(userCompany) && <button type="button" onClick={() => bulkFileRef.current?.click()} disabled={multiSaving} data-kp="rate-bulk"
                 title="엑셀 파일의 시트 하나가 단가표 하나가 됩니다(시트 이름 = 기준지). 같은 이름의 단가표가 있으면 내용을 바꿉니다."
                 className="w-full h-9 mt-2 rounded-xl border border-[#C9D5EA] bg-white text-[#1B2B4B] text-[12.5px] font-black hover:bg-[#EEF3FB] transition disabled:opacity-50">
                 엑셀 한 파일로 여러 개 등록
-              </button>
+              </button>}
               <input autoComplete="off" ref={bulkFileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => handleBulkWorkbook(e.target.files?.[0])} />
             </div>
             <div className="p-3 max-h-[calc(100vh-360px)] overflow-y-auto">

@@ -3,7 +3,7 @@ import { useCompanyFleetGrades } from "./fleetGrades"; // 🚛 지입차 구분(
 import { isViewerNow } from "./blind"; // 🧾 특수운임 버튼(조회전용 숨김)
 import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon, usePlan } from "./plans";
 import { kpConfirm, kpPrompt } from "./kpDialog";
-import { runDelete, commitDeletes, deleteDocsAtomic } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제(writeBatch)
+import { runDelete, commitDeletes, deleteDocsAtomic, runUpload } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제(writeBatch)
 import ProInsight from "./ProInsight";
 import NameIdToggle from "./NameIdToggle"; // ⭐ 2026-11-09 계정 이름 ↔ 아이디
 import DailyReport, { DailyReportPopupHost } from "./DailyReport"; // 📊 2026-11-06 일일 경영 보고(임원 화면 · 대표·임원 일일 보고서)
@@ -79,6 +79,7 @@ import FixedRouteStatusHost, { FixedRouteCells, fixedHeaderOf, fixedLookOf, useR
 import { carrierOf } from "./routeCarriers"; // ⭐ 2026-11-06 고정노선현황 운송사 검색
 import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 정산·매출에서 뺀다
 import ColumnStyleHost from "./ColumnStyle"; // 🎨 2026-11-03 컬럼명 오른쪽 클릭 → 색 변경 // ⭐ 2026-11-03 배차현황 › 고정노선현황
+import { isJyCompany } from "./jyOnly"; // 🏷 JY로지스틱스 전용 기능(단가표 자동 입력 등)
 import QuickNav, { QuickSearchButton } from "./QuickNav"; // 🔎 2026-11-12 통합 검색(Ctrl+K) · 자주 쓰는 메뉴 · 도움말 센터
 import { useScreenFit, ScreenFitButton, BrowserZoomNotice } from "./ScreenFit"; // 🖥 2026-11-10 화면 맞춤 · 브라우저 확대 안내
 import { usePendingSignups, isPendingSignupDriver } from "./pendingSignups";
@@ -14270,7 +14271,7 @@ const ROUND_DISCOUNT = 0.9; // ★ 10% 할인 (조정 가능)
           const rAddr = normRateText(r.address).slice(0, 12);
           // 💰 2026-11-12 낱말 순서만 다른 이름도 같은 곳("용인 네이버" = "네이버용인")
           const tok = (v) => String(v || "").trim().split(/\s+/).map(normRateText).filter(Boolean).sort().join("|");
-          const wordHit = !!(dropName && rName && dropName.length === rName.length && tok(form.하차지명).includes("|") && [...tok(form.하차지명).split("|")].every((w) => rName.includes(w)));
+          const wordHit = isJyCompany(userCompany) && !!(dropName && rName && dropName.length === rName.length && tok(form.하차지명).includes("|") && [...tok(form.하차지명).split("|")].every((w) => rName.includes(w)));
           const nameHit = !!(dropName && rName && (rName.includes(dropName) || dropName.includes(rName))) || wordHit;
           const addrHit = !!(dropAddr && rAddr && dropAddr.length >= 6 && rAddr.length >= 6 && (rAddr.includes(dropAddr) || dropAddr.includes(rAddr)));
           if (nameHit || addrHit) results.push({ sheet, row: r, nameHit, addrHit });
@@ -14283,6 +14284,7 @@ const ROUND_DISCOUNT = 0.9; // ★ 10% 할인 (조정 가능)
     //  · 맞는 줄 고르기: 하차지명이 같고(이름 일치) 톤수 칸이 똑같은 것 → 기준지가 거래처명 · 상차지명과 맞는 것 우선
     //  · 후보가 여러 개인데 금액이 서로 다르면 넣지 않는다(단가표 버튼으로 직접 확인)
     const autoRate = React.useMemo(() => {
+      if (!isJyCompany(userCompany)) return null; // 🏷 JY로지스틱스만
       const ton = normRateText(form.차량톤수);
       const drop = normRateText(form.하차지명);
       if (!ton || !drop) return null;
@@ -38647,7 +38649,8 @@ if (mode === "driver") {
         // ⭐ 새 오더는 addDispatch로 "생성"해야 한다 — 예전엔 patchDispatch(기존 문서 수정)를 써서
         // 문서가 없다는 이유로 아무것도 저장되지 않았다.
         let ok = 0, fail = 0;
-        for (const item of mapped) {
+        // 📥 2026-11-12 한 건씩 툭툭 생기지 않게 — 가운데 로딩 창 + 묶음으로 동시에 등록
+        const upO = await runUpload({ items: mapped, label: "오더", chunk: 25, each: async (item) => {
           const { _id: _tmpId, ...rec } = item; void _tmpId;
           const r = await addDispatch({
             ...rec,
@@ -38658,8 +38661,9 @@ if (mode === "driver") {
             // 대량 등록 중 휴차 확인 팝업이 건마다 뜨지 않게 미리 확인 처리
             ...(rec.차량번호 ? { _restAck: restAckKey(rec.차량번호, rec.상차일) } : {}),
           });
-          if (r === false) fail++; else ok++;
-        }
+          if (r === false) { fail++; return false; }
+        } });
+        ok = upO.ok; fail += upO.fail;
         showAlert(fail ? `✓ ${ok}건 등록 완료 · ⚠ ${fail}건 실패(하차일이 상차일보다 빠른 줄 등)` : `✓ 대용량 업로드 완료 — ${ok}건 등록되었습니다.`);
       } catch (err) {
         console.error(err);
@@ -57288,9 +57292,10 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
         const valid = json.filter((r) => String(r.차량번호||r["차량 번호"]||"").replace(/\s+/g,""));
         if (!valid.length) { showAlert("등록할 기사님이 없습니다. (차량번호 열을 확인해 주세요)"); return; }
         if (!await kpConfirm(`기사 ${valid.length}명을 등록·갱신할까요?${json.length - valid.length ? `\n(차량번호가 없는 ${json.length - valid.length}줄은 건너뜁니다)` : ""}`)) return;
-        for (const r of valid) {
+        // 📥 2026-11-12 한 명씩 툭툭 생기지 않게 — 가운데 로딩 창 + 묶음으로 동시에 등록(src/DeleteProgress.jsx runUpload)
+        const upD = await runUpload({ items: valid, label: "기사", each: async (r) => {
           const 차량번호 = String(r.차량번호||r["차량 번호"]||"").replace(/\s+/g,"");
-          if (!차량번호) continue;
+          if (!차량번호) return false;
           // ⭐ addNew와 동일한 이유로 id를 강제로 새로 만들지 않는다 — 이미 기사앱으로
           // 가입된 차량번호면 그 문서를 그대로 재사용(merge)해야 등급이 실제 위치/상태가
           // 쌓이는 문서에 붙는다.
@@ -57305,8 +57310,8 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
           if (gr) patch.등급 = gr;
           else if (!(driversRaw || []).some((d) => normP(d.차량번호) === normP(차량번호))) patch.등급 = "일반";
           await upsertDriver(patch);
-          ok++;
-        }
+        } });
+        ok = upD.ok;
         showAlert(`총 ${ok}건 반영`);
       } catch(err) {
         console.error(err); showAlert("엑셀 처리 중 오류");
@@ -59027,9 +59032,9 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         if (!await kpConfirm(`거래처 ${validC.length}곳을 등록·갱신할까요?${json.length - validC.length ? `\n(거래처명이 없는 ${json.length - validC.length}줄은 건너뜁니다)` : ""}`)) return;
         // ⭐ 2026-11-02 점검 — 문서 id를 거래처명 그대로 쓰지 않음(회사별 키 coDocKey 사용). 같은 이름의 기존 거래처가 있으면 그 문서를 갱신. 한 줄이 실패해도 나머지는 계속 반영
         const failC = [];
-        for (const r of validC) {
+        const upC = await runUpload({ items: validC, label: "거래처", each: async (r) => { // 📥 2026-11-12 가운데 로딩 창 + 묶음 등록
           const 거래처명 = String(r.거래처명 || r["상호"] || r["회사명"] || "").trim();
-          if (!거래처명) continue;
+          if (!거래처명) return false;
           const existC = (clients || []).find((c) => normalizeCompanyKey(c.거래처명 || "") === normalizeCompanyKey(거래처명));
           try {
           await upsertClient?.({
@@ -59046,9 +59051,9 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             오더메모: String(r.오더메모 || "").trim(),
             ...(existC?.id ? { id: existC.id } : {}),
           });
-          ok++;
-          } catch (rowErr) { failC.push(거래처명); }
-        }
+          } catch (rowErr) { failC.push(거래처명); return false; }
+        } });
+        ok = upC.ok;
         showAlert(`총 ${ok}건 반영 완료${failC.length ? `\n반영 실패 ${failC.length}건: ${failC.slice(0, 5).join(", ")}${failC.length > 5 ? " 외" : ""}` : ""}`);
       } catch (err) { showAlert("엑셀 처리 오류"); } finally { e.target.value = ""; }
     };
@@ -59313,13 +59318,16 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         const newRows = json.filter((r) => { const n = (r.업체명||r["하차지명"]||r["상호"]||"").toString().trim(); const k = normalizePlace((r.주소||r["하차지주소"]||"").toString().trim()); return n && k && !addrMap.has(k); });
         if (!newRows.length) { showAlert("새로 등록할 상하차지가 없습니다.\n(업체명·주소가 비었거나, 이미 같은 주소로 등록된 상하차지입니다)"); return; }
         if (!await kpConfirm(`상하차지 ${newRows.length}곳을 새로 등록할까요?${json.length - newRows.length ? `\n(빈 줄·주소 없음·이미 등록된 ${json.length - newRows.length}줄은 건너뜁니다)` : ""}`)) return;
+        // 📥 2026-11-12 같은 주소는 먼저 걸러 두고(파일 안 중복 포함), 가운데 로딩 창 + 묶음으로 동시에 등록
+        const uniq = [];
         for (const r of newRows) {
           const 업체명 = (r.업체명||r["하차지명"]||r["상호"]||"").toString().trim(); if (!업체명) continue;
           const 주소 = (r.주소||r["하차지주소"]||"").toString().trim();
           const k = normalizePlace(주소); if (!k || addrMap.has(k)) continue;
-          await upsertPlace?.({ 업체명, 주소, 담당자: (r.담당자||"").toString().trim(), 담당자번호: (r.담당자번호||r["전화번호"]||"").toString().trim(), 메모: (r.메모||"").toString().trim(), 등급: "일반" });
-          addrMap.set(k, { 업체명, 주소 }); ok++;
+          addrMap.set(k, { 업체명, 주소 });
+          uniq.push({ 업체명, 주소, 담당자: (r.담당자||"").toString().trim(), 담당자번호: (r.담당자번호||r["전화번호"]||"").toString().trim(), 메모: (r.메모||"").toString().trim(), 등급: "일반" });
         }
+        ok = (await runUpload({ items: uniq, label: "상하차지", each: (x) => upsertPlace?.(x) })).ok;
         showAlert(`총 ${ok}건 신규 반영`);
       } catch (err) { showAlert("엑셀 처리 오류"); } finally { e.target.value = ""; }
     };
