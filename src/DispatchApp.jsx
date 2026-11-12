@@ -14268,7 +14268,10 @@ const ROUND_DISCOUNT = 0.9; // ★ 10% 할인 (조정 가능)
         (sheet.rows || []).forEach(r => {
           const rName = normRateText(r.name);
           const rAddr = normRateText(r.address).slice(0, 12);
-          const nameHit = !!(dropName && rName && (rName.includes(dropName) || dropName.includes(rName)));
+          // 💰 2026-11-12 낱말 순서만 다른 이름도 같은 곳("용인 네이버" = "네이버용인")
+          const tok = (v) => String(v || "").trim().split(/\s+/).map(normRateText).filter(Boolean).sort().join("|");
+          const wordHit = !!(dropName && rName && dropName.length === rName.length && tok(form.하차지명).includes("|") && [...tok(form.하차지명).split("|")].every((w) => rName.includes(w)));
+          const nameHit = !!(dropName && rName && (rName.includes(dropName) || dropName.includes(rName))) || wordHit;
           const addrHit = !!(dropAddr && rAddr && dropAddr.length >= 6 && rAddr.length >= 6 && (rAddr.includes(dropAddr) || dropAddr.includes(rAddr)));
           if (nameHit || addrHit) results.push({ sheet, row: r, nameHit, addrHit });
         });
