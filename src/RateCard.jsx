@@ -3,6 +3,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { kpConfirm } from "./kpDialog";
 import * as XLSX from "xlsx";
+import { parseRateMatrix } from "./rateSheetImport"; // 💰 회사 단가표 엑셀 그대로 읽기
 import { useLoadFullOrderHistory } from "./orderHistory";
 import { db } from "./firebase";
 import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, serverTimestamp } from "firebase/firestore";
@@ -452,6 +453,25 @@ const [detailModal, setDetailModal] = useState(null);
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
         if (!rows.length) { alert("빈 파일입니다."); return; }
+        // 💰 2026-11-12 회사에서 쓰던 단가표 그대로(머리줄이 맨 위가 아니거나 주소 칸이 없어도 · 매입 단가 묶음 포함) — src/rateSheetImport.js
+        const isTemplate = /하차지/.test(String(rows[0]?.[0] || "")) && /주소/.test(String(rows[0]?.[1] || "")) && new Set(rows[0].slice(2).map((h) => normColLabel(h)).filter(Boolean)).size === rows[0].slice(2).filter((h) => String(h || "").trim()).length;
+        const mx = isTemplate ? null : parseRateMatrix(rows);
+        if (mx && mx.rows.length) {
+          let columns = [...(selectedSheet.columns || [])];
+          const colOf = (label) => { let col = columns.find(c => normColLabel(c.label) === normColLabel(label)); if (!col) { col = { id: uid(), label, isDefault: false }; columns = [...columns, col]; } return col; };
+          const newRows = mx.rows.map((r) => {
+            const prices = {}; Object.entries(r.prices).forEach(([l, n]) => { prices[colOf(l).id] = String(n); });
+            const buyPrices = {}; Object.entries(r.buy).forEach(([l, n]) => { buyPrices[colOf(l).id] = String(n); });
+            return { id: uid(), name: r.name, address: r.address, prices, ...(Object.keys(buyPrices).length ? { buyPrices } : {}) };
+          });
+          const doReplace = (selectedSheet.rows || []).length === 0 || window.confirm(`기존에 등록된 하차지 ${selectedSheet.rows.length}곳이 있습니다.\n확인: 업로드한 내용으로 전체 교체 / 취소: 기존 목록 뒤에 추가`);
+          const patch = { columns, rows: doReplace ? newRows : [...(selectedSheet.rows || []), ...newRows] };
+          if (mx.baseHint && (!selectedSheet.baseName || selectedSheet.baseName === "새 기준지")) patch.baseName = mx.baseHint;
+          patchSheet(selectedSheet.id, patch);
+          setMultiUploadOpen(false);
+          alert(`하차지 ${newRows.length}곳 · 톤수 ${mx.labels.length}칸을 읽었습니다.${mx.hasBuy ? "\n매입(기사) 단가도 함께 저장했습니다." : ""}\n오더등록에서 기준지(거래처 · 상차지) → 하차지 · 톤수가 맞으면 청구운임이 자동으로 들어갑니다.`);
+          return;
+        }
         const header = rows[0].map(h => String(h || "").trim());
         const headerLabels = header.slice(2).filter(h => h);
         if (!headerLabels.length) { alert("3번째 열부터 톤수(구간) 이름이 있어야 합니다. 업로드 양식을 먼저 다운로드해 사용해주세요."); return; }
