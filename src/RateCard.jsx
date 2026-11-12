@@ -363,6 +363,48 @@ const [detailModal, setDetailModal] = useState(null);
     } finally { setMultiSaving(false); }
   };
 
+  // 📚 2026-11-12 엑셀 한 파일로 단가표 여러 개 — 시트(탭) 하나 = 단가표 하나(시트 이름 = 기준지)
+  //  · 같은 기준지 이름의 단가표가 이미 있으면 그 단가표의 하차지 목록을 새 내용으로 바꾼다(두 번 올려도 겹치지 않음)
+  //  · 시트 모양은 한 장짜리 업로드와 같다(머리줄 위치 · 주소 칸 유무 자유 · 같은 톤수 묶음이 두 번이면 두 번째 = 매입 단가)
+  const bulkFileRef = useRef(null);
+  const handleBulkWorkbook = (file) => {
+    const co = (userCompany || "").trim();
+    if (!file || !co) return;
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
+        const found = [];
+        wb.SheetNames.forEach((name) => {
+          const mx = parseRateMatrix(XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: "" }));
+          if (mx && mx.rows.length) found.push({ name: String(name).trim() || mx.baseHint || "단가표", mx });
+        });
+        if (!found.length) { alert("단가표로 읽을 수 있는 시트가 없습니다.\n(톤수 이름이 적힌 머리줄과 하차지 · 금액이 있어야 합니다)"); return; }
+        const norm = (v) => String(v || "").replace(/\s+/g, "").toLowerCase();
+        const exist = (n) => multiSheets.find((x) => norm(x.baseName) === norm(n));
+        const msg = found.map((f) => `· ${f.name} — 하차지 ${f.mx.rows.length}곳${f.mx.hasBuy ? " · 매입 단가 포함" : ""}${exist(f.name) ? " (이미 있음 → 내용 교체)" : ""}`).join("\n");
+        if (!await kpConfirm(`단가표 ${found.length}개를 등록할까요?\n\n${msg}`)) return;
+        setMultiSaving(true);
+        for (const f of found) {
+          const cur = exist(f.name);
+          let columns = cur ? [...(cur.columns || [])] : STANDARD_TON_LABELS.map((label) => ({ id: uid(), label, isDefault: true }));
+          const colOf = (label) => { let col = columns.find((c) => normColLabel(c.label) === normColLabel(label)); if (!col) { col = { id: uid(), label, isDefault: false }; columns = [...columns, col]; } return col; };
+          const rows = f.mx.rows.map((r) => {
+            const prices = {}; Object.entries(r.prices).forEach(([l, n]) => { prices[colOf(l).id] = String(n); });
+            const buyPrices = {}; Object.entries(r.buy).forEach(([l, n]) => { buyPrices[colOf(l).id] = String(n); });
+            return { id: uid(), name: r.name, address: r.address, prices, ...(Object.keys(buyPrices).length ? { buyPrices } : {}) };
+          });
+          if (cur) await updateDoc(doc(db, "multiRateSheets", cur.id), { columns, rows, updatedAt: serverTimestamp() });
+          else await addDoc(collection(db, "multiRateSheets"), { companyName: co, baseName: f.name, baseAddress: "", note: "", columns, rows, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        }
+        alert(`단가표 ${found.length}개를 등록했습니다.`);
+      } catch (e) {
+        console.error(e); alert("엑셀을 읽는 중 오류가 발생했습니다.\n" + (e?.message || ""));
+      } finally { setMultiSaving(false); if (bulkFileRef.current) bulkFileRef.current.value = ""; }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   const patchSheet = (id, patch) => {
     updateDoc(doc(db, "multiRateSheets", id), { ...patch, updatedAt: serverTimestamp() }).catch(e => console.error(e));
   };
@@ -1208,6 +1250,13 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                 className="w-full h-11 mt-3 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-black hover:bg-[#2D4C82] transition disabled:opacity-50">
                 + 새 단가표 만들기
               </button>
+              {/* 📚 2026-11-12 엑셀 한 파일(시트 여러 장)로 단가표 여러 개를 한 번에 */}
+              <button type="button" onClick={() => bulkFileRef.current?.click()} disabled={multiSaving} data-kp="rate-bulk"
+                title="엑셀 파일의 시트 하나가 단가표 하나가 됩니다(시트 이름 = 기준지). 같은 이름의 단가표가 있으면 내용을 바꿉니다."
+                className="w-full h-9 mt-2 rounded-xl border border-[#C9D5EA] bg-white text-[#1B2B4B] text-[12.5px] font-black hover:bg-[#EEF3FB] transition disabled:opacity-50">
+                엑셀 한 파일로 여러 개 등록
+              </button>
+              <input autoComplete="off" ref={bulkFileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => handleBulkWorkbook(e.target.files?.[0])} />
             </div>
             <div className="p-3 max-h-[calc(100vh-360px)] overflow-y-auto">
               {multiSheets.length === 0 ? (

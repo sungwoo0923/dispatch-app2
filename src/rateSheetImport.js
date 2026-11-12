@@ -14,7 +14,9 @@ export function parseRateMatrix(rows = []) {
   for (let i = 0; i < Math.min(rows.length, 40); i++) { if ((rows[i] || []).filter((c) => tonKey(c)).length >= 2) { hi = i; break; } }
   if (hi < 0) return null;
   const head = rows[hi] || [];
-  const tonCols = []; head.forEach((c, i) => { const k = tonKey(c); if (k) tonCols.push({ i, label: k }); });
+  // 프로그램 양식(1열 하차지 · 2열 주소)이면 3열부터는 톤수 모양이 아니어도 단가 칸으로 본다(예: "F/C·T/C")
+  const tpl = /하차지/.test(cell(head[0])) && /주소/.test(cell(head[1]));
+  const tonCols = []; head.forEach((c, i) => { const k = tonKey(c) || (tpl && i >= 2 ? cell(c) : ""); if (k) tonCols.push({ i, label: k }); });
   // 같은 톤수가 다시 나오면 그때부터 매입 묶음
   const seen = new Set(); const sale = []; const buy = []; let inBuy = false;
   tonCols.forEach((c) => { if (!inBuy && seen.has(c.label)) inBuy = true; if (inBuy) buy.push(c); else { seen.add(c.label); sale.push(c); } });
