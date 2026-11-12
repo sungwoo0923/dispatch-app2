@@ -870,7 +870,7 @@ export function buildMigration(tabs, presetIn = {}) {
     const groups = new Map(); const out = [];
     mine.forEach((o) => {
       const f = fee(o);
-      if (f) { out.push({ ...o, 상차지명: f, 하차지명: f, 상차지주소: "", 하차지주소: "", 화물내용: f, 메모: uniq(String(o.메모 || "").split(" · ").filter((x) => x && x !== f)).join(" · ") }); return; }
+      if (f) { out.push({ ...o, 배차상태: "배차완료" /* 운행이 아니라 받는 돈 — 차량이 비어 있어도 미배차로 두지 않는다 */, 상차지명: f, 하차지명: f, 상차지주소: "", 하차지주소: "", 화물내용: f, 메모: uniq(String(o.메모 || "").split(" · ").filter((x) => x && x !== f)).join(" · ") }); return; }
       const m = String(o.메모 || "").match(/(\d+)\s*회전/);
       if (m) { const n = +m[1]; out.push({ ...o, 운행유형: "왕복", 회전수: n, 회전방식: "묶기", 메모: [`${n}회전 왕복 오더 입니다`, String(o.메모).replace(/\s*·?\s*\d+\s*회전/, "").replace(/^\s*·\s*/, "").trim()].filter(Boolean).join(" ") }); return; }
       const k = [o.상차일, o.상차지명, o.하차지명, o.청구운임, o.기사운임, o.차량번호, o.메모, o.배차방식].join("|");
