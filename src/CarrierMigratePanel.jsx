@@ -11,7 +11,7 @@ import * as XLSX from "xlsx";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { collection, doc, getDoc, getDocs, query, where, writeBatch, setDoc, serverTimestamp } from "firebase/firestore";
 import { applyMerges } from "../functions/sheetProfileCore.mjs";
-import { buildMigration, DEFAULT_PRESET, PRESET_SUGGESTIONS, forOrderDoc, forRouteDoc, nm } from "../functions/carrierMigrateCore.mjs";
+import { buildMigration, DEFAULT_PRESET, PRESET_SUGGESTIONS, forOrderDoc, forRouteDoc, forRateSheetDoc, nm } from "../functions/carrierMigrateCore.mjs";
 import { coDocKey } from "./coKey";
 import { kpConfirm } from "./kpDialog";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 날짜는 프로그램 달력으로
@@ -66,7 +66,9 @@ export default function CarrierMigratePanel({ companies = [] }) {
   const [result, setResult] = React.useState(null);
   const [routeOn, setRouteOn] = React.useState({}); // 고정노선 후보 index → 만들지
   const [optOn, setOptOn] = React.useState({}); // 배차방식 값 → 회사 목록에 넣을지
-  const [opts, setOpts] = React.useState({ from: "", to: "", skipDup: true, saveOptions: true, makeRoutes: true, registerDrivers: true });
+  const [rateOn, setRateOn] = React.useState({}); // 단가표 index → 가져올지
+  const [ovDraft, setOvDraft] = React.useState({}); // "탭|이름" → 직접 입력한 주소(적용 전)
+  const [opts, setOpts] = React.useState({ from: "", to: "", skipDup: true, saveOptions: true, makeRoutes: true, registerDrivers: true, rates: true });
   const [openTab, setOpenTab] = React.useState("");
   const [busy, setBusy] = React.useState("");
   const [err, setErr] = React.useState("");
@@ -83,7 +85,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
       const saved = s.exists() ? s.data().migrationPreset : null;
       const base = saved || PRESET_SUGGESTIONS[co] || {};
       const p = { ...DEFAULT_PRESET, ...base, dispatchAliases: { ...DEFAULT_PRESET.dispatchAliases, ...(base.dispatchAliases || {}) } };
-      setPreset(p); setAliasDraft(aliasText(p.dispatchAliases)); setResult(null);
+      setPreset(p); setAliasDraft(aliasText(p.dispatchAliases)); setOvDraft(p.placeOverrides || {}); setResult(null);
     }).catch(() => {});
     return () => { alive = false; };
   }, [co]);
@@ -93,6 +95,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
       const r = buildMigration(tabs, p);
       setResult(r);
       setRouteOn(Object.fromEntries(r.routes.map((_, i) => [i, true])));
+      setRateOn(Object.fromEntries((r.rateSheets || []).map((_, i) => [i, true])));
       setOptOn(Object.fromEntries(r.dispatchOptions.map((d) => [d.value, d.use])));
     } catch (e) { setErr(`변환 중 오류: ${e?.message || e}`); }
   }, []);
@@ -123,7 +126,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
     } catch (e) { setErr(`엑셀 파일을 읽지 못했습니다: ${e?.message || e}`); } finally { setBusy(""); }
   };
   const recalc = (patch = {}) => {
-    const p = { ...preset, ...patch, dispatchAliases: parseAlias(aliasDraft) };
+    const p = { ...preset, ...patch, dispatchAliases: parseAlias(aliasDraft), placeOverrides: Object.fromEntries(Object.entries(ovDraft).filter(([, v]) => String(v || "").trim())) };
     setPreset(p);
     if (book) run(book.tabs, p);
   };
@@ -134,13 +137,14 @@ export default function CarrierMigratePanel({ companies = [] }) {
   const orders = result ? result.orders.filter(inRange) : [];
   const routes = result ? result.routes.filter((_, i) => routeOn[i]) : [];
   const optValues = result ? result.dispatchOptions.filter((d) => optOn[d.value]).map((d) => d.value) : [];
+  const rates = result ? (result.rateSheets || []).filter((_, i) => rateOn[i]) : [];
 
   // ── 저장 ──
   const runImport = async () => {
     if (!co) return setErr("가져올 운송사 이름을 정해 주세요.");
     if (!orders.length) return setErr("가져올 오더가 없습니다.");
     const known = companies.some((c) => c.name === co);
-    if (!(await kpConfirm(`${co}${known ? "" : "(새 운송사)"}에 한 번에 가져올까요?\n\n오더 ${won(orders.length)}건 · 거래처 ${won(result.clients.length)} · 상하차지 ${won(result.places.length)} · 기사 ${opts.registerDrivers ? won(result.drivers.length) : 0} · 고정노선 후보 ${opts.makeRoutes ? routes.length : 0}(운행 OFF)\n\n알림은 보내지 않고, 아래 [가져오기 기록]에서 한 번에 되돌릴 수 있어요.`))) return;
+    if (!(await kpConfirm(`${co}${known ? "" : "(새 운송사)"}에 한 번에 가져올까요?\n\n오더 ${won(orders.length)}건 · 거래처 ${won(result.clients.length)} · 상하차지 ${won(result.places.length)} · 기사 ${opts.registerDrivers ? won(result.drivers.length) : 0} · 고정노선 후보 ${opts.makeRoutes ? routes.length : 0}(운행 OFF) · 단가표 ${opts.rates ? rates.length : 0}\n\n알림은 보내지 않고, 아래 [가져오기 기록]에서 한 번에 되돌릴 수 있어요.`))) return;
     const batchId = `imp_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     const me = auth.currentUser?.email || "";
     const base = { companyName: co, importBatchId: batchId };
@@ -150,6 +154,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
       // 1) 회사 설정 — 배차방식 목록 · 기사 등급(분양 등) · 이전 설정(다음에 같은 시트를 다시 옮길 때)
       setProgress({ pct: 2, step: "회사 설정 저장 중" });
       const cs = { companyName: co, migrationPreset: { ...preset, dispatchAliases: parseAlias(aliasDraft) }, migrationAt: serverTimestamp() };
+      delete cs.migrationPreset.year;
       if (opts.saveOptions && optValues.length) cs.dropdownOptions = { 배차방식: optValues };
       const extraGrades = result.grades.filter((g) => !["지입", "직영", "임대"].includes(g));
       if (extraGrades.length) cs.fleetGrades = extraGrades;
@@ -189,6 +194,13 @@ export default function CarrierMigratePanel({ companies = [] }) {
         routes.forEach((rt) => b.set(doc(db, "fixedRoutes", newId()), { ...forRouteDoc(rt, { company: co, batchId, me, payMethod: preset.defaultPayMethod || "계산서" }), createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
         await b.commit();
         registered.routes = routes.length;
+      }
+      // 3-2) 단가표 → 단가표 메뉴 › 다목적지 단가표
+      if (opts.rates && rates.length) {
+        const b = writeBatch(db);
+        rates.forEach((rt) => b.set(doc(db, "multiRateSheets", newId()), { ...forRateSheetDoc(rt, { company: co, batchId }), createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+        await b.commit();
+        registered.rateSheets = rates.length;
       }
       // 4) 오더(이미 옮긴 줄은 건너뜀: 같은 탭!줄 · 상차일 · 차량번호)
       let list = orders;
@@ -264,6 +276,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
               <Stat label="상하차지" value={won(result.places.length)} sub="주소 있는 곳" />
               <Stat label="기사" value={won(result.drivers.length)} sub={Object.entries(gradeCount).filter(([g]) => g !== "일반").map(([g, n]) => `${g} ${n}`).join(" · ") || "일반"} />
               <Stat label="고정노선 후보" value={result.routes.length} sub="운행 OFF로 만듦" />
+              <Stat label="단가표" value={(result.rateSheets || []).length} sub={`${won((result.rateSheets || []).reduce((a, r) => a + r.rows.length, 0))}곳`} />
             </div>
             <div className="space-y-2.5">
               {result.tabs.map((t) => {
@@ -291,7 +304,26 @@ export default function CarrierMigratePanel({ companies = [] }) {
                         {t.memo.places.length > 0 && <div>📍 위쪽 메모 주소: {t.memo.places.map((p) => `${p.role ? `${p.role} ` : ""}${p.name}(${p.address})`).join(" · ")}</div>}
                         {t.memo.defaultFrom && <div>🏭 기본 상차지: {t.memo.defaultFrom.address}</div>}
                         {t.memo.blocked.length > 0 && <div className="text-[#B42318]">⚠ {t.memo.blocked.join(" · ")} (거래처 메모에 남김)</div>}
-                        {t.unresolved.length > 0 && <div className="text-[#B45309]">주소 못 찾음: {t.unresolved.slice(0, 6).map((u) => `${u.role} ${u.name}(${u.n})`).join(" · ")}{t.unresolved.length > 6 ? ` 외 ${t.unresolved.length - 6}곳` : ""}</div>}
+                        {t.unresolved.length > 0 && (
+                          <div className="mt-1.5 rounded-xl border border-[#F5D9B0] bg-[#FFF8EE] px-3 py-2">
+                            <div className="text-[#B45309] font-bold">주소 못 찾음 {t.unresolved.length}곳 — 시트 어디에도 주소가 없는 이름이에요. 아는 곳은 주소를 넣고 [주소 적용]을 눌러 주세요.</div>
+                            <div className="mt-1.5 grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                              {t.unresolved.slice(0, 12).map((u) => {
+                                const k = `${t.title}|${u.name}`;
+                                return (
+                                  <label key={k} className="flex items-center gap-2 min-w-0">
+                                    <span className="shrink-0 w-[150px] truncate font-semibold text-[#3A4A66]" title={u.name}>{u.role} {u.name} <span className="text-gray-400">{u.n}건</span></span>
+                                    <input value={ovDraft[k] || ""} onChange={(e) => setOvDraft((m) => ({ ...m, [k]: e.target.value }))} placeholder="주소 입력" className="flex-1 min-w-0 border border-[#DCE3EE] rounded-lg px-2 py-1 text-[12.5px] bg-white" />
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                              <button onClick={() => recalc()} className="h-8 px-3 rounded-lg bg-[#B45309] text-white text-[12.5px] font-black">주소 적용</button>
+                              {t.unresolved.length > 12 && <span className="text-gray-500">외 {t.unresolved.length - 12}곳은 지역 이름 그대로 넣어요</span>}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                     {open && (
@@ -360,6 +392,25 @@ export default function CarrierMigratePanel({ companies = [] }) {
                 </div>
               </div>
             </div>
+            {(result.rateSheets || []).length > 0 && (
+              <div className="mt-6">
+                <div className="text-[14px] font-black text-[#0F1A30] mb-1.5">단가표 <span className="text-[12.5px] font-semibold text-gray-500">탭 오른쪽에 붙어 있는 톤수별 운임표 → 단가표 메뉴 › 다목적지 단가표(기준지 = 그 탭 상차지)</span></div>
+                <div className="space-y-2">
+                  {result.rateSheets.map((rt, i) => (
+                    <label key={rt.baseName + i} className={`block rounded-xl border px-3.5 py-2.5 cursor-pointer ${rateOn[i] ? "border-[#1B2B4B] bg-[#F5F8FD]" : "border-gray-200"}`}>
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <input type="checkbox" checked={!!rateOn[i]} onChange={(e) => setRateOn((m) => ({ ...m, [i]: e.target.checked }))} />
+                        <span className="text-[14px] font-black text-[#0F1A30]">{rt.baseName}</span>
+                        <span className="text-[12.5px] font-bold text-[#2D4C82]">{won(rt.rows.length)}곳 · {rt.labels.join(" · ")}</span>
+                        {rt.groups.length > 0 && <span className="text-[12px] text-gray-500">{rt.groups.join(" · ")}</span>}
+                      </div>
+                      <div className="mt-1 text-[12px] text-gray-500 line-clamp-2">{rt.note}</div>
+                      <div className="mt-1.5 flex flex-wrap gap-1">{rt.rows.slice(0, 4).map((r) => <span key={r.name + r.group} className="px-2 py-0.5 rounded-md bg-white border border-[#E3E8F0] text-[11.5px] text-[#3A4A66]">{r.name} {Object.entries(r.prices).slice(0, 3).map(([l, n]) => `${l} ${won(n)}`).join(" · ")}</span>)}</div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="mt-6">
               <div className="text-[14px] font-black text-[#0F1A30] mb-1.5">고정노선 후보 <span className="text-[12.5px] font-semibold text-gray-500">같은 구간 · 같은 운임이 {preset.routeMinCount}건 이상 — 운행 OFF로 만들고, 요일 · 기사를 확인한 뒤 고정노선 화면에서 켜요</span></div>
               <div className="overflow-x-auto rounded-xl border border-[#E3E8F0]">
@@ -387,10 +438,10 @@ export default function CarrierMigratePanel({ companies = [] }) {
 
           {/* STEP 4 가져오기 */}
           <section className={`${CARD} p-6`}>
-            <Head eyebrow="STEP 4" title="한 번에 가져오기" desc="오더 · 거래처 · 상하차지 · 기사 · 고정노선 후보 · 회사 배차방식 목록을 한꺼번에 저장합니다." />
+            <Head eyebrow="STEP 4" title="한 번에 가져오기" desc="오더 · 거래처 · 상하차지 · 기사 · 고정노선 후보 · 단가표 · 회사 배차방식 목록을 한꺼번에 저장합니다." />
             <div className="flex flex-wrap gap-x-6 gap-y-3 items-center text-[14px] font-semibold text-gray-700">
               <span className="flex items-center gap-2">상차일 <CustomDatePicker showIcon value={opts.from} onChange={(e) => setOpts((o) => ({ ...o, from: e.target.value }))} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30]" /> ~ <CustomDatePicker showIcon value={opts.to} onChange={(e) => setOpts((o) => ({ ...o, to: e.target.value }))} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30]" /> <span className="text-[12.5px] text-gray-400">비우면 전체</span></span>
-              {[["skipDup", "이미 옮긴 줄 건너뛰기"], ["registerDrivers", "기사 등록"], ["makeRoutes", "고정노선 후보 만들기"], ["saveOptions", "배차방식 목록 저장"]].map(([k, l]) => (
+              {[["skipDup", "이미 옮긴 줄 건너뛰기"], ["registerDrivers", "기사 등록"], ["makeRoutes", "고정노선 후보 만들기"], ["rates", "단가표 옮기기"], ["saveOptions", "배차방식 목록 저장"]].map(([k, l]) => (
                 <label key={k} className="flex items-center gap-2"><input type="checkbox" checked={opts[k]} onChange={(e) => setOpts((o) => ({ ...o, [k]: e.target.checked }))} className="w-[18px] h-[18px]" />{l}</label>
               ))}
             </div>
@@ -404,7 +455,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
                   <>
                     <div className="h-3 rounded-full bg-[#EEF1F6] overflow-hidden"><div className="h-full bg-[#1B2B4B] transition-all" style={{ width: `${progress.pct}%` }} /></div>
                     <div className="mt-2 text-[13.5px] font-bold text-[#3A4A66]">{progress.step}</div>
-                    {progress.done && <div className="mt-2 rounded-xl bg-[#E8F7EF] border border-[#BFE6CF] px-4 py-3 text-[14px] font-bold text-[#0F7A43]">오더 {won(progress.result.count)}건 저장{progress.result.skippedDup ? ` · 이미 옮긴 ${won(progress.result.skippedDup)}건 건너뜀` : ""} · 거래처 {won(progress.result.registered.clients)} · 상하차지 {won(progress.result.registered.places)} · 기사 {won(progress.result.registered.drivers || 0)} · 고정노선 {progress.result.registered.routes || 0}(운행 OFF)</div>}
+                    {progress.done && <div className="mt-2 rounded-xl bg-[#E8F7EF] border border-[#BFE6CF] px-4 py-3 text-[14px] font-bold text-[#0F7A43]">오더 {won(progress.result.count)}건 저장{progress.result.skippedDup ? ` · 이미 옮긴 ${won(progress.result.skippedDup)}건 건너뜀` : ""} · 거래처 {won(progress.result.registered.clients)} · 상하차지 {won(progress.result.registered.places)} · 기사 {won(progress.result.registered.drivers || 0)} · 고정노선 {progress.result.registered.routes || 0}(운행 OFF) · 단가표 {progress.result.registered.rateSheets || 0}</div>}
                   </>
                 )}
               </div>

@@ -397,7 +397,7 @@ export default function SheetImportPanel() {
                   <td className="px-4 py-3 text-center text-gray-700 whitespace-nowrap">{fmtTime(b.at)}</td>
                   <td className="px-4 py-3 text-center text-gray-600 max-w-[260px] truncate">{b.source === "excel" ? "엑셀" : b.source === "carrierMigrate" ? "일괄 이전" : "구글시트"} · {b.sheetTitle}</td>
                   <td className="px-4 py-3 text-center font-semibold">{(b.count || 0).toLocaleString()}건</td>
-                  <td className="px-4 py-3 text-center text-gray-600 whitespace-nowrap">{b.registered ? `거래처 ${b.registered.clients} · 상하차지 ${b.registered.places} · 기사 ${b.registered.drivers ?? 0}${b.registered.routes ? ` · 고정노선 ${b.registered.routes}` : ""}` : "-"}</td>
+                  <td className="px-4 py-3 text-center text-gray-600 whitespace-nowrap">{b.registered ? `거래처 ${b.registered.clients} · 상하차지 ${b.registered.places} · 기사 ${b.registered.drivers ?? 0}${b.registered.routes ? ` · 고정노선 ${b.registered.routes}` : ""}${b.registered.rateSheets ? ` · 단가표 ${b.registered.rateSheets}` : ""}` : "-"}</td>
                   <td className="px-4 py-3 text-center whitespace-nowrap">
                     {b.status === "done" ? <span className="px-3 py-1 rounded-full text-[12.5px] font-bold bg-emerald-100 text-emerald-700">완료</span>
                       : b.status === "canceled" ? <span className="px-3 py-1 rounded-full text-[12.5px] font-bold bg-gray-100 text-gray-500">취소됨</span>

@@ -6277,7 +6277,7 @@ exports.sheetImport = functions
             }
           }
           const writer = db.bulkWriter();
-          for (const col of ["orders", "dispatch", "clients", "places", "drivers", "fixedRoutes"]) { // 🚚 2026-11-12 일괄 이전의 고정노선 후보도
+          for (const col of ["orders", "dispatch", "clients", "places", "drivers", "fixedRoutes", "multiRateSheets"]) { // 🚚 2026-11-12 일괄 이전의 고정노선 후보 · 단가표도
             const snap = await db.collection(col).where("importBatchId", "==", batchId).get();
             snap.docs.forEach((d) => { writer.delete(d.ref); removed += 1; });
           }

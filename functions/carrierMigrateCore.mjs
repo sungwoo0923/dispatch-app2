@@ -33,6 +33,7 @@ export const DEFAULT_PRESET = {
   skipTabs: [], // 가져오지 않을 탭
   routeMinCount: 30, // 같은 구간 · 같은 운임이 이만큼 이상이면 고정노선 후보
   extraNames: {}, // { 탭이름: { 열글자: "이름" } } — 머리줄 이름이 없는 추가 칸
+  placeOverrides: {}, // { "탭이름|약칭": "주소" } · "*|약칭" = 모든 탭 — 시트에 주소가 없는 곳을 화면에서 직접 넣은 값
 };
 
 // 처음 이전할 때 쓰는 회사별 시작 설정(화면에서 고칠 수 있고, 고친 설정은 migrationPresets/{회사}에 저장)
@@ -74,7 +75,9 @@ export const looksRegion = (v) => {
   const s = cell(v);
   if (!s || s.length > 30 || /\d/.test(s)) return false;
   const toks = s.split(/\s+/);
-  return toks.length >= 2 && new RegExp(`^${PROVINCE}`).test(toks[0]) && toks.slice(1).every((t) => /(시|군|구|읍|면|동|리)$/.test(t) || /^[가-힣]{2,4}$/.test(t));
+  const admin = (t) => /^[가-힣]{1,6}(시|군|구|읍|면|동|리|가)$/.test(t);
+  if (toks.length === 1) return /^[가-힣]{1,5}(시|군|구)$/.test(toks[0]); // "목포시" · "강남구"
+  return (new RegExp(`^${PROVINCE}`).test(toks[0]) && toks.slice(1).every((t) => admin(t) || /^[가-힣]{2,4}$/.test(t))) || (admin(toks[0]) && /(시|군|구)$/.test(toks[0]) && toks.slice(1).every(admin)); // "하남시 감일동"
 };
 
 // 날짜 → YYYY-MM-DD ("2026. 7. 1" · "2026-07-01" · "26.7.1" · "7/1"(hint 연도) · 엑셀 일련번호)
@@ -295,7 +298,7 @@ export function parseMemoArea(rows, hi) {
     const first = addrLine(lines[0]);
     if (looksAddress(first)) {
       // "주소, 이름" · "주소 이름(공장/센터/창고)" · 이름이 없으면 탭 기본 상차지 주소
-      const named = first.match(/^(.*?(?:\d+(?:-\d+)?|번지))\s*[,，]?\s*([가-힣A-Za-z()]+(?:공장|센터|창고|물류센터|물류))\s*$/);
+      const named = first.match(/^(.*?(?:\d+(?:-\d+)?|번지))\s*[,，]?\s*((?:\(주\)|㈜)?\s*[가-힣A-Za-z()]+(?:공장|센터|창고|물류센터|물류))\s*$/);
       if (named) places.push({ role: "", name: named[2], address: named[1].trim(), phone: "", person: "" });
       else if (!defaultFrom) defaultFrom = { address: first.replace(/\s*\(.*$/, "").trim(), memo: [first.match(/\((.*)\)/)?.[1], ...lines.slice(1)].filter(Boolean).join(" / ") };
       else notes.push(t.replace(/\s+/g, " "));
@@ -433,7 +436,7 @@ export function makePlaceResolver(globalBook = []) {
       const s = matchScore(q, p.name);
       if (s > 0 && s + bonus > bestS) { best = p; bestS = s + bonus; }
     });
-    consider(local, 1);
+    consider(local, 10); // 이 탭 위쪽 메모에 적힌 곳이 언제나 먼저(녹수 내수 "고덕" = 그 탭의 고덕면 주소, 녹수 탭 고덕공장 아님)
     consider(globalBook.filter((p) => owner && (matchScore(owner, p.owner) >= 2 || matchScore(p.owner, owner) >= 2)), 0.5);
     if (bestS < 2.5) consider(globalBook.filter((p) => matchScore(q, p.name) >= 3), 0); // 전체 목록은 거의 같은 이름일 때만
     return bestS >= 2 ? best : null;
@@ -538,13 +541,17 @@ function rowToOrder(r, L, ctx) {
   const localHit = 상차지명 && memoFrom.some((p) => matchScore(fromName, p.name) >= 2);
   const D0 = ctx.memo.defaultFrom;
   const useDefault = !상차지주소 && D0 && !localHit && ((ctx.fewFrom && !memoFrom.some((p) => p.role === "상차")) || !상차지명 || nm(fromName) === ctx.topFrom || matchScore(fromName, ctx.client) >= 2 || inDefault(fromName, D0));
-  const fp = 상차지명 && !useDefault ? ctx.resolve(fromName, memoFrom, ctx.owner) : null;
-  if (fp) { 상차지주소 = 상차지주소 || fp.address; ctx.used.add(fp); }
+  const fromOv = ctx.override(fromName);
+  const fp = 상차지명 && !useDefault && !fromOv ? ctx.resolve(fromName, memoFrom, ctx.owner) : null;
+  if (fromOv && !상차지주소) 상차지주소 = fromOv;
+  else if (fp) { 상차지주소 = 상차지주소 || fp.address; ctx.used.add(fp); }
   else if (useDefault) 상차지주소 = D0.address;
   if (!상차지명) 상차지명 = fp?.name || (상차지주소 ? 상차지주소.split(/\s+/).slice(0, 3).join(" ") : "");
   if (multi(상차지명)) tags.push(`상차 ${상차지명}`);
-  const tp = 하차지명 ? ctx.resolve(하차지명.split(/[,，+]/)[0], ctx.memo.places.filter((p) => p.role !== "상차"), ctx.owner) : null;
-  if (tp) { 하차지주소 = 하차지주소 || tp.address; ctx.used.add(tp); }
+  const toOv = 하차지명 ? ctx.override(하차지명.split(/[,，+]/)[0]) : "";
+  const tp = 하차지명 && !toOv ? ctx.resolve(하차지명.split(/[,，+]/)[0], ctx.memo.places.filter((p) => p.role !== "상차"), ctx.owner) : null;
+  if (toOv && !하차지주소) 하차지주소 = toOv;
+  else if (tp) { 하차지주소 = 하차지주소 || tp.address; ctx.used.add(tp); }
   if (!하차지주소 && 하차지역) 하차지주소 = 하차지역; // 주소를 못 찾으면 지역이라도(대전 학하동 · 경기도 시흥시 목감동)
   if (!하차지명) 하차지명 = 하차지주소 ? 하차지주소.split(/\s+/).slice(0, 3).join(" ") : "";
   if (multi(하차지명)) tags.push(`경유 ${하차지명}`);
@@ -670,7 +677,10 @@ export function buildMigration(tabs, presetIn = {}) {
     const fromVals = new Set(fromList);
     const fc = new Map(); fromList.forEach((v) => fc.set(v, (fc.get(v) || 0) + 1));
     const [topV, topN] = [...fc.entries()].sort((a, b) => b[1] - a[1])[0] || ["", 0];
-    const ctx = { year: preset.year || new Date().getFullYear(), client, owner: client, memo, resolve, preset, carriers, used: new Set(), fewFrom: fromVals.size > 0 && fromVals.size <= 4, topFrom: topN / Math.max(1, fromList.length) >= 0.8 ? topV : "" };
+    // 화면에서 직접 넣은 주소(preset.placeOverrides["탭|이름"]) — 시트 어디에도 주소가 없는 약칭(녹수 내수 "예산" 등)
+    const ov = preset.placeOverrides || {};
+    const override = (name) => cell(ov[`${t.title}|${cell(name)}`] || ov[`*|${cell(name)}`] || "");
+    const ctx = { year: preset.year || new Date().getFullYear(), client, owner: client, memo, resolve, preset, carriers, used: new Set(), override, tab: t.title, fewFrom: fromVals.size > 0 && fromVals.size <= 4, topFrom: topN / Math.max(1, fromList.length) >= 0.8 ? topV : "" };
     let made = 0; const skipped = {}; let mismatch = 0; const unresolved = new Map();
     t.rows.slice(L.headerRow + 1).forEach((r, k) => {
       const out = rowToOrder(r || [], L, ctx);
@@ -713,6 +723,7 @@ export function buildMigration(tabs, presetIn = {}) {
     placeMap.set(k, cur);
   };
   book.forEach((p) => addPlace(p.name, p.address, p));
+  Object.entries(preset.placeOverrides || {}).forEach(([k, a]) => { const n = k.split("|").slice(1).join("|"); if (n && cell(a)) addPlace(n, cell(a), { memo: "직접 입력한 주소" }); });
   // 오더에서 나온 곳은 이름이 업체명일 때만(지역 · 주소를 이름으로 쓴 줄은 장소로 만들지 않는다)
   const goodName = (n, a) => n && a && nm(n) !== nm(a) && !looksAddress(n) && !looksRegion(n) && !nm(a).startsWith(nm(n)) && looksAddress(a);
   orders.forEach((o) => { if (goodName(o.상차지명, o.상차지주소)) addPlace(o.상차지명, o.상차지주소); if (goodName(o.하차지명, o.하차지주소)) addPlace(o.하차지명, o.하차지주소); });
@@ -725,7 +736,52 @@ export function buildMigration(tabs, presetIn = {}) {
   const pc = new Map(); orders.forEach((o) => { if (o.지급방식) pc.set(o.지급방식, (pc.get(o.지급방식) || 0) + 1); });
   const payOptions = [...pc.entries()].sort((a, b) => b[1] - a[1]).map(([v, n]) => ({ value: v, n }));
   const grades = uniq(drivers.map((d) => d.등급)).filter((g) => g !== "일반");
-  return { tabs: tabSummary, orders, clients, places, drivers, routes, dispatchOptions, payOptions, grades, carriers, issues };
+  // 9) 단가표 — 오더 탭은 오더 칸 오른쪽에서, 이름에 "단가"가 들어간 탭은 전체에서
+  const rateSheets = [];
+  tabs.forEach((t, i) => {
+    if (preset.skipTabs?.includes(t.title)) return;
+    let minCol = -1; let client = cell(preset.tabClients?.[t.title]) || t.title; let base = "";
+    if (kinds[i] === "orders") {
+      const { L, memo } = layouts[i];
+      const used = [...Object.values(L.cols), ...L.cargo.map((c) => c.col), ...L.memo, ...L.notes, L.sale?.base ?? -1, L.buy?.total ?? -1, L.buy?.base ?? -1, ...(L.buy?.extras || []).map((e) => e.col)];
+      minCol = Math.max(...used) + 1;
+      const fc = new Map(); orders.filter((o) => o.__tab === t.title && o.상차지주소).forEach((o) => fc.set(o.상차지주소, (fc.get(o.상차지주소) || 0) + 1));
+      base = memo.defaultFrom?.address || [...fc.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+    } else if (/단가|운임표|요율/.test(t.title)) minCol = 0;
+    if (minCol < 0) return;
+    const tbs = parseRateTables(t.rows, { minCol });
+    const first = tbs[0];
+    // 표 옆 설명 글(경유비 · 중량별 적용 · 추가 운임 규칙) → 첫 표 메모에 "참고"로
+    const inTable = (c) => tbs.some((x) => c >= x.nameCol && c <= Math.max(...x.tonCols.map((y) => y.col)));
+    const side = [];
+    if (first) {
+      const r0 = Math.min(...tbs.map((x) => x.startRow)) - 2, r1 = Math.max(...tbs.map((x) => x.lastRow));
+      for (let r = Math.max(0, r0); r <= r1; r++) {
+        let prev = "";
+        (t.rows[r] || []).forEach((v, c) => { const x = cell(v).replace(/\s+/g, " "); if (c < minCol || inTable(c) || !x || x === prev) { prev = x; return; } prev = x; if (!side.includes(x) && side.length < 60) side.push(x); });
+      }
+    }
+    tbs.forEach((tb, k) => {
+      const labels = uniq(tb.tonCols.map((x) => x.label));
+      const notes = [`구글시트 "${t.title}" 탭 ${colLetter(tb.nameCol)}열 단가표`];
+      if (tb.title) notes.unshift(tb.title);
+      if (k > 0 && first) { // 첫 표와 금액 차이가 늘 같으면 적어 둔다(대원전선 오른쪽 표 = 5,000원 낮음)
+        const diffs = new Set();
+        tb.rows.forEach((r) => { const f = first.rows.find((x) => x.name === r.name && x.group === r.group); if (f) Object.entries(r.prices).forEach(([l, n]) => { if (f.prices[l]) diffs.add(n - f.prices[l]); }); });
+        if (diffs.size === 1) { const d = [...diffs][0]; if (d) notes.push(`${first.title || "첫 번째 표"}보다 ${Math.abs(d).toLocaleString("ko-KR")}원 ${d < 0 ? "낮음" : "높음"}`); }
+      }
+      // 제목 없는 표 이름: 다음 표가 "○○부터 적용"이면 그 전 단가 · 첫 표와 금액 차이가 늘 같으면 그 차이
+      const nextT = tbs[k + 1]?.title || "";
+      const since = nextT.match(/(\d{4}[-.]\s*\d{1,2}[-.]\s*\d{1,2}).*부터/);
+      const diffNote = notes.find((x) => /보다 .*원 (낮음|높음)$/.test(x));
+      const label = tb.title || (since ? `${since[1]} 전 단가` : diffNote || (tbs.length > 1 ? `단가표 ${k + 1}` : "단가표"));
+      if (!tb.title && since) notes.unshift(`${since[1]} 전까지 쓰던 단가`);
+      const name = `${client} · ${label}`;
+      if (k === 0 && side.length) notes.push(`참고: ${side.join(" / ")}`.slice(0, 1500));
+      rateSheets.push({ tab: t.title, baseName: name.slice(0, 60), baseAddress: base, note: notes.join(" · "), labels, rows: tb.rows, groups: uniq(tb.groups) });
+    });
+  });
+  return { tabs: tabSummary, orders, clients, places, drivers, routes, dispatchOptions, payOptions, grades, carriers, issues, rateSheets };
 }
 
 export function describeLayout(L) {
@@ -805,5 +861,92 @@ export function forRouteDoc(rt, { company, batchId, me = "", payMethod = "계산
     startDate: "", endDate: "", autoDispatch: false, active: false,
     memo: `구글시트 이전 후보 — ${rt.from} ~ ${rt.to} ${rt.count}건(하루 평균 ${rt.avgPerDay}대) · 같은 운임 ${rt.fareShare}%. 요일 · 기사 확인 후 운행을 켜 주세요.`,
     importBatchId: batchId, updatedBy: me,
+  };
+}
+
+// ── 단가표(오른쪽에 붙어 있는 톤수별 운임표) → 단가표 메뉴 › 다목적지 단가표(multiRateSheets) ──
+//  머리줄 = 톤수 글자("1T" · "2.5톤" · "11TON" · "F/C,T/C")가 옆으로 3개 이상 이어진 줄. 그 왼쪽 칸 = 하차지(지역) 이름 칸.
+//  같은 칸 위치에서 머리줄이 다시 나오면(충청남도 · 충청북도 … 지역 묶음) 같은 표로 이어 붙이고, 묶음 이름은 하차지 주소 칸에.
+//  표 위 3줄 안의 글(예: "JY사용 시 (청구, 하불 동일)" · "2026-10-01 상차분부터 적용")이 표 제목.
+// 단가표 메뉴 표준 톤수(src/RateCard.jsx STANDARD_TON_LABELS와 같아야 함 — 기본 칸으로 만든다)
+export const RATE_STANDARD_TONS = ["다마스/라보", "1톤", "1.4톤", "2.5톤", "3.5톤", "3.5톤광폭", "5톤", "5톤축", "5톤플축", "8톤", "11톤", "11톤축", "15톤", "18톤", "25톤"];
+const TON_CELL = /^\s*(\d+(?:\.\d+)?)\s*(t|톤|ton)\s*$/i;
+export function rateTonLabel(v) {
+  const s = cell(v);
+  const m = s.match(TON_CELL);
+  if (m) return `${+m[1]}톤`;
+  if (/^(f\/c|t\/c)/i.test(s)) return s.replace(/\s+/g, "").replace(/,/g, "·").toUpperCase();
+  if (/다마스|라보/.test(s)) return "다마스/라보";
+  return "";
+}
+export function parseRateTables(rows, { minCol = 0 } = {}) {
+  const tables = new Map(); // 열 위치(이름 칸) → 표
+  for (let ri = 0; ri < rows.length; ri++) {
+    const r = (rows[ri] || []).map(cell);
+    for (let c = minCol; c < r.length; c++) {
+      if (!rateTonLabel(r[c])) continue;
+      // 톤수 칸이 이어진 묶음
+      let e = c; const labels = [];
+      while (e < r.length && rateTonLabel(r[e])) { labels.push(rateTonLabel(r[e])); e++; }
+      const distinct = new Set(labels);
+      if (distinct.size >= 3) {
+        // 이름 칸: 바로 왼쪽부터 글자가 있는 칸 · 병합으로 같은 글자가 이어지면 그 시작 칸
+        let n = c - 1; while (n >= minCol && !r[n]) n--;
+        if (n >= minCol) {
+          while (n - 1 >= minCol && r[n - 1] === r[n]) n--;
+          const key = `${n}`;
+          const group = /^하차지|^지역|^도착지/.test(r[n]) ? "" : r[n];
+          let tb = tables.get(key);
+          if (!tb) {
+            let title = "";
+            for (let up = 1; up <= 3 && !title; up++) { const above = (rows[ri - up] || []).map(cell); for (let k = n; k < e && !title; k++) if (above[k] && !rateTonLabel(above[k]) && !/^\(단위/.test(above[k])) title = above[k]; }
+            tb = { nameCol: n, tonCols: [], title, startRow: ri, rows: [], groups: [] };
+            tables.set(key, tb);
+          } else if (ri - tb.lastRow > 3 && (() => {
+            // 같은 자리에 떨어져서 다시 나온 표 — 위에 제목이 있으면 새 표(롯데: "2026-10-01 상차분부터 적용"), 없으면 지역 묶음(대원전선 충청남도 …)
+            for (let up = 1; up <= 3; up++) { const above = (rows[ri - up] || []).map(cell); for (let k = n; k < e; k++) if (above[k] && !rateTonLabel(above[k]) && !/^\(단위/.test(above[k])) return true; }
+            return false;
+          })()) {
+            let title = "";
+            for (let up = 1; up <= 3 && !title; up++) { const above = (rows[ri - up] || []).map(cell); for (let k = n; k < e && !title; k++) if (above[k] && !rateTonLabel(above[k]) && !/^\(단위/.test(above[k])) title = above[k]; }
+            const old = tb;
+            tables.set(`${key}@${old.startRow}`, old);
+            tb = { nameCol: n, tonCols: [], title, startRow: ri, rows: [], groups: [], prevTitle: old.title };
+            tables.set(key, tb);
+          }
+          for (let k = c; k < e; k++) if (!tb.tonCols.some((x) => x.col === k)) tb.tonCols.push({ col: k, label: rateTonLabel(r[k]) });
+          if (group) tb.groups.push(group);
+          tb.curGroup = group; tb.lastRow = ri;
+          // 아래 줄들 = 값
+          let rr = ri + 1;
+          for (; rr < rows.length; rr++) {
+            const x = (rows[rr] || []).map(cell);
+            const name = x[n];
+            if (!name) break;
+            if (rateTonLabel(x[c])) break; // 다음 머리줄
+            const prices = {};
+            tb.tonCols.filter((t) => t.col >= c && t.col < e).forEach((t) => { const p = parseMoney(x[t.col]); if (p.n > 0) prices[t.label] = p.n; });
+            if (!Object.keys(prices).length) continue;
+            tb.rows.push({ name, group: tb.curGroup, prices });
+            tb.lastRow = rr;
+          }
+          ri = Math.max(ri, 0); // 같은 줄의 다른 표도 보도록 줄은 그대로
+        }
+      }
+      c = e;
+    }
+  }
+  return [...tables.values()].filter((t) => t.rows.length >= 3).sort((a, b) => a.startRow - b.startRow || a.nameCol - b.nameCol);
+}
+// 단가표 → multiRateSheets 문서(표준 톤수 칸은 늘 만들고, 시트에만 있는 칸(9톤 · F/C·T/C …)은 추가 칸)
+export function forRateSheetDoc(rt, { company, batchId, uid = () => Math.random().toString(36).slice(2, 10) }) {
+  const columns = RATE_STANDARD_TONS.map((label) => ({ id: uid(), label, isDefault: true }));
+  rt.labels.forEach((l) => { if (!columns.some((c) => c.label === l)) columns.push({ id: uid(), label: l, isDefault: false }); });
+  const idOf = Object.fromEntries(columns.map((c) => [c.label, c.id]));
+  return {
+    companyName: company, baseName: rt.baseName, baseAddress: rt.baseAddress || "", note: rt.note || "",
+    columns,
+    rows: rt.rows.map((r) => ({ id: uid(), name: r.name, address: r.group || "", prices: Object.fromEntries(Object.entries(r.prices).map(([l, n]) => [idOf[l], String(n)])) })),
+    importBatchId: batchId,
   };
 }

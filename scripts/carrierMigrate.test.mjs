@@ -2,7 +2,7 @@
 //  실제 운송사 시트로도 돌려 보려면: JY_WORKBOOK=<{tabs:[{title,rows}]} JSON 경로> node scripts/carrierMigrate.test.mjs
 //  (실제 시트는 기사 연락처가 들어 있어 저장소에 넣지 않는다 — 아래는 같은 모양으로 만든 가짜 데이터)
 import fs from "node:fs";
-import { buildMigration, parseDate, parseTime, parseMonth, parseMoney, splitDriverName, splitVehicle, looksAddress, looksRegion, forOrderDoc } from "../functions/carrierMigrateCore.mjs";
+import { buildMigration, parseDate, parseTime, parseMonth, parseMoney, splitDriverName, splitVehicle, looksAddress, looksRegion, forOrderDoc, forRateSheetDoc, rateTonLabel } from "../functions/carrierMigrateCore.mjs";
 import { sfTotals, orderProfit } from "../src/forkliftCore.js";
 
 let pass = 0, fail = 0;
@@ -142,6 +142,38 @@ eq(R.routes[0] && [R.routes[0].client, R.routes[0].stops[0].name, R.routes[0].st
 const doc = forOrderDoc(last, { company: "JY로지스틱스", batchId: "imp_x", me: "a@b.c" });
 eq([doc.companyName, doc.importBatchId, doc.__tab, doc.등록기기], ["JY로지스틱스", "imp_x", undefined, "구글시트 이전"], "오더 문서");
 
+// ── 탭 메모 주소가 다른 탭보다 먼저 · 직접 입력한 주소 · 단가표 ──
+const pad = (r, n) => [...r, ...Array(Math.max(0, n - r.length)).fill("")];
+const W = 12; // 오더 칸 A~L, 단가표는 N열부터
+const 내수 = [
+  pad(["▣ 녹수", "고덕면", "예산군 고덕면 용고길 189"], W),
+  pad(["", "신암면", "예산군 신암면 오신로 688"], W),
+  [...pad(["", "", "", "매출", "매출", "매입", "매입"], W), "", "", "", ""],
+  [...pad(["상차일자", "출발지", "도착지", "운송료", "합계", "운송료", "합계", "이익", "운송사", "차량번호", "이름", "연락처"], W), "", "하차지", "1T", "2.5T", "5T", "F/C,T/C"],
+  [...pad(["2026. 6. 1", "고덕", "경기도 시흥시 목감동", "150,000", "150,000", "140,000", "140,000", "10,000", "원콜", "충남91아1531", "박능식", "010-6800-0000"], W), "", "서울1구역", "131,000", "153,000", "175,000", "328,000"],
+  [...pad(["2026. 6. 1", "예산", "광주광역시 북구", "210,000", "210,000", "270,000", "270,000", "-60,000", "24시콜", "전북90사1824", "유계상", "010-8623-0000"], W), "", "서울2구역", "142,000", "165,000", "187,000", "350,000"],
+  [...pad([], W), "", "가평군", "197,000", "208,000", "241,000", "459,000"],
+  [], [],
+  [...pad([], W), "", "2026-10-01 상차분부터 적용"],
+  [...pad([], W), "", "하차지", "1T", "2.5T", "5T", "F/C,T/C"],
+  [...pad([], W), "", "서울1구역", "136,000", "158,000", "180,000", "333,000"],
+  [...pad([], W), "", "서울2구역", "147,000", "170,000", "192,000", "355,000"],
+  [...pad([], W), "", "가평군", "202,000", "213,000", "246,000", "464,000"],
+];
+const R2 = buildMigration([{ title: "녹수", rows: [pad(["▣ 녹수", "", "상차지 고덕공장\n충남 예산군 고덕면 삽교평야로467"], 4), ["", "", "", "매출", "", "매입"], ["상차일자", "출발지", "도착지", "운송료", "합계", "운송료", "합계", "운송사", "차량번호", "이름"]] }, { title: "녹수 내수", rows: 내수 }],
+  { year: 2026, placeOverrides: { "녹수 내수|예산": "충남 예산군 예산읍 테스트로 1" } });
+const ns = R2.orders.filter((o) => o.__tab === "녹수 내수");
+eq(ns[0].상차지주소, "예산군 고덕면 용고길 189", "탭 메모(고덕면)가 다른 탭(녹수 고덕공장)보다 먼저");
+eq(ns[1].상차지주소, "충남 예산군 예산읍 테스트로 1", "주소 직접 입력(예산)");
+eq(ns[0].하차지주소, "경기도 시흥시 목감동", "지역 이름은 주소 칸으로");
+eq(rateTonLabel("F/C,T/C"), "F/C·T/C", "단가표 톤수 F/C·T/C");
+eq(rateTonLabel("11TON"), "11톤", "단가표 톤수 11TON");
+eq(R2.rateSheets.map((x) => [x.baseName, x.rows.length]), [["녹수 내수 · 2026-10-01 전 단가", 3], ["녹수 내수 · 2026-10-01 상차분부터 적용", 3]], "단가표 두 벌(적용일 전 · 후)");
+eq(R2.rateSheets[1].rows[0].prices, { "1톤": 136000, "2.5톤": 158000, "5톤": 180000, "F/C·T/C": 333000 }, "단가표 값");
+const rd = forRateSheetDoc(R2.rateSheets[0], { company: "JY로지스틱스", batchId: "imp_x" });
+const fc = rd.columns.find((c) => c.label === "F/C·T/C");
+eq([rd.companyName, rd.columns.filter((c) => c.isDefault).length, !!fc && !fc.isDefault, rd.rows[0].prices[fc.id], rd.importBatchId], ["JY로지스틱스", 15, true, "328000", "imp_x"], "단가표 문서(표준 톤수 15칸 + 추가 칸)");
+
 // ── 실제 시트(있을 때만) ──
 const real = process.env.JY_WORKBOOK;
 if (real && fs.existsSync(real)) {
@@ -150,7 +182,8 @@ if (real && fs.existsSync(real)) {
   const bad = r.orders.filter((o) => +o.청구운임 - +o.기사운임 !== +o.수수료 || orderProfit(o) !== +o.수수료);
   eq(bad.length, 0, "실제 시트: 모든 오더 수익 = 청구 − 기사");
   eq(r.tabs.filter((t) => t.kind === "orders").every((t) => t.mismatch === 0), true, "실제 시트: 시트 합계 칸과 청구운임 같음");
-  console.log(`  실제 시트: 오더 ${r.orders.length} · 거래처 ${r.clients.length} · 상하차지 ${r.places.length} · 기사 ${r.drivers.length} · 노선 후보 ${r.routes.length}`);
+  eq(r.rateSheets.map((x) => x.rows.length), [195, 195, 28, 28], "실제 시트: 단가표 4벌(대원전선 2 · 롯데 2)");
+  console.log(`  실제 시트: 단가표 ${r.rateSheets.length} · 오더 ${r.orders.length} · 거래처 ${r.clients.length} · 상하차지 ${r.places.length} · 기사 ${r.drivers.length} · 노선 후보 ${r.routes.length}`);
 }
 
 console.log(`carrierMigrate: ${pass} 통과 · ${fail} 실패`);
