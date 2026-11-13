@@ -8925,11 +8925,10 @@ return (
                 <NavGroupHover key={`g-${g.group}`} code={String(g.group || "").toUpperCase()} label={g.label} members={members} onOpen={(m) => handleMenuClick(m)}>
                   <button type="button" data-kp-navgroup={g.group} data-on={on ? "1" : "0"} onClick={() => { if (!on && first) handleMenuClick(first.menu); }}
                     title={`${g.label}: ${members.map((x) => x.label).join(" · ")}`}
-                    className={`kp-nav-btn relative inline-flex items-center gap-1.5 px-3.5 h-[34px] rounded-[10px] text-[12.75px] min-[1700px]:text-[13px] tracking-[-0.01em] transition-all duration-150 whitespace-nowrap shrink-0 ${on ? "kp-nav-on font-extrabold" : "text-white/70 font-semibold hover:text-white hover:bg-white/[0.08]"}`}>
+                    className={`kp-nav-btn relative inline-flex items-center gap-1.5 px-3 h-[34px] rounded-[10px] text-[12.75px] min-[1700px]:text-[13.5px] min-[2050px]:text-[14px] whitespace-nowrap transition-all flex-shrink-0 ${on ? "kp-nav-on font-extrabold" : "text-white/70 font-semibold hover:text-white hover:bg-white/[0.08]"}`}>
+                    <ShellIcon name={kpNavIcon(first?.menu || g.menus[0]) || "dashboard"} size={14} className={`kp-nav-ico shrink-0 hidden min-[2050px]:inline-block ${on ? "" : "opacity-70"}`} />
                     <span>{g.label}</span>
-                    {on && <span className="text-[11.5px] font-bold opacity-60">· {navLabelOf(menu)}</span>}
                     {sum > 0 && <KakaoBadge n={sum} size="sm" className="ml-1 align-middle" />}
-                    <svg width="9" height="9" viewBox="0 0 10 10" fill="none" className="opacity-50"><path d="M2 3.5 5 6.5 8 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   </button>
                 </NavGroupHover>
               );
@@ -8937,7 +8936,7 @@ return (
             })()}
             <button type="button" data-kp="nav-flat-toggle" onClick={() => { const v = !navFlat; try { localStorage.setItem("kpNavFlat", v ? "1" : "0"); } catch { /* 무시 */ } setNavFlat(v); }}
               title={navFlat ? "메뉴를 묶어서 보기" : "메뉴를 예전처럼 한 줄로 펼쳐 보기"} aria-label="상단 메뉴 묶기/펼치기"
-              className="ml-0.5 w-7 h-[34px] rounded-[10px] grid place-items-center text-white/45 hover:text-white hover:bg-white/[0.08] shrink-0">
+              className="ml-0.5 w-6 h-[34px] rounded-[10px] grid place-items-center text-white/25 hover:text-white hover:bg-white/[0.08] shrink-0">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">{navFlat ? <><rect x="2" y="3" width="5" height="4" rx="1" /><rect x="9" y="3" width="5" height="4" rx="1" /><rect x="2" y="9" width="5" height="4" rx="1" /><rect x="9" y="9" width="5" height="4" rx="1" /></> : <><path d="M2 4h12M2 8h12M2 12h12" /></>}</svg>
             </button>
             </div>
