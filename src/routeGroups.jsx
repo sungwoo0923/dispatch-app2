@@ -34,9 +34,12 @@ export function useRouteGroupFilter({ enabled, uid, profile }) {
   return { enabled: !!enabled, sel, setSel, mine, saveMine, filter, active };
 }
 
-const chip = (on, extra = "") => `h-8 px-3 rounded-lg border text-[13px] font-black whitespace-nowrap ${on ? "border-[#1B2B4B] bg-[#1B2B4B] text-white" : "border-[#DCE3EE] bg-white text-[#3A4A66] hover:border-[#9FB3D9]"} ${extra}`;
-
-// 화면 위 버튼 줄 — rows: 거르기 전 오더(묶음 이름 · 건수용)
+// 화면 위 탭 줄(B안 · 구글시트 탭 모양) — rows: 거르기 전 오더(묶음 이름 · 건수용)
+//  · 탭을 누르면 그 묶음만 · Ctrl(⌘)+누르면 여러 개를 같이 · [내 담당] [전체]는 맨 앞에 고정
+//  · [내 담당 설정]을 누르면 탭이 체크 모드로 바뀌어 맡은 묶음을 고르고 저장한다
+const tabCls = (on, dark) => `relative shrink-0 h-10 px-3.5 flex items-center gap-1.5 text-[14px] whitespace-nowrap rounded-t-lg border border-b-0 -mb-px transition-colors ${on
+  ? (dark ? "bg-gray-900 border-gray-600 text-white font-black" : "bg-white border-[#DCE3EE] text-[#0F1A30] font-black")
+  : (dark ? "border-transparent text-gray-400 font-bold hover:text-gray-200" : "border-transparent text-[#7A879C] font-bold hover:text-[#1B2B4B] hover:bg-white/60")}`;
 export function RouteGroupBar({ rg, rows = [], role, userCompany, dark = false }) {
   const opt = useCompanyOptionList("담당노선구분", role, userCompany);
   const [edit, setEdit] = React.useState(false);
@@ -46,30 +49,39 @@ export function RouteGroupBar({ rg, rows = [], role, userCompany, dark = false }
   const groups = React.useMemo(() => { const out = []; const seen = new Set(); [...(opt.customized ? opt.list : []), ...[...counts.keys()].filter((g) => g !== RG_NONE).sort((a, b) => (counts.get(b) || 0) - (counts.get(a) || 0)), ...rg.mine].forEach((g) => { if (g && g !== RG_NONE && !seen.has(g)) { seen.add(g); out.push(g); } }); if (counts.has(RG_NONE)) out.push(RG_NONE); return out; }, [opt.list, opt.customized, counts, rg.mine]);
   if (!rg.enabled) return null;
   const picked = Array.isArray(rg.sel) ? rg.sel : [];
-  const toggle = (g) => {
+  const onPick = (g, e) => {
     if (edit) return setDraft((d) => (d.includes(g) ? d.filter((x) => x !== g) : [...d, g]));
-    const next = picked.includes(g) ? picked.filter((x) => x !== g) : [...picked, g];
-    rg.setSel(next.length ? next : "all");
+    if (e && (e.ctrlKey || e.metaKey || e.shiftKey)) { const base = rg.sel === "mine" ? rg.mine : picked; const next = base.includes(g) ? base.filter((x) => x !== g) : [...base, g]; return rg.setSel(next.length ? next : "all"); }
+    rg.setSel(picked.length === 1 && picked[0] === g ? "all" : [g]);
   };
   const onOf = (g) => (edit ? draft.includes(g) : rg.sel === "mine" ? rg.mine.includes(g) : picked.includes(g));
+  const total = (rows || []).length;
+  const mineN = rg.mine.reduce((a, g) => a + (counts.get(g) || 0), 0);
+  const num = (n) => <span className={`text-[12px] tabular-nums ${dark ? "text-gray-500" : "text-[#A9B6CC]"} font-bold`}>{Number(n || 0).toLocaleString()}</span>;
+  const bar = (on) => (on ? <span className="absolute left-2 right-2 top-0 h-[3px] rounded-b bg-[#1B2B4B]" /> : null);
   return (
-    <div data-kp="route-group-bar" className={`mb-2 rounded-xl border px-3 py-2 flex items-center gap-1.5 flex-wrap ${dark ? "border-gray-700 bg-gray-900" : "border-[#E3E8F0] bg-white"}`}>
-      <span className="text-[11px] font-extrabold tracking-[0.16em] text-[#94A3B8] mr-1 whitespace-nowrap">담당노선구분</span>
-      {!edit && <>
-        <button type="button" className={chip(rg.sel === "all")} onClick={() => rg.setSel("all")}>전체</button>
-        <button type="button" className={chip(rg.sel === "mine", rg.mine.length ? "" : "opacity-60")} title={rg.mine.length ? rg.mine.join(" · ") : "오른쪽 [내 담당 설정]에서 먼저 정해 주세요"} onClick={() => (rg.mine.length ? rg.setSel("mine") : (setDraft([]), setEdit(true)))}>내 담당{rg.mine.length ? ` ${rg.mine.length}` : ""}</button>
-        <span className="w-px h-5 bg-[#E3E8F0] mx-1" />
-      </>}
-      {edit && <span className="text-[13px] font-black text-[#1B2B4B] mr-1">내가 맡은 묶음을 고르세요</span>}
-      {groups.map((g) => (
-        <button key={g} type="button" aria-pressed={onOf(g)} className={chip(onOf(g))} onClick={() => toggle(g)}>{g}{counts.get(g) ? <span className="ml-1.5 font-bold opacity-60 tabular-nums">{counts.get(g).toLocaleString()}</span> : null}</button>))}
-      {groups.length === 0 && <span className="text-[13px] text-[#7A879C]">아직 구분된 오더가 없습니다(구글시트에서 가져오면 탭 이름으로 나뉩니다)</span>}
-      <span className="ml-auto flex items-center gap-1.5">
+    <div data-kp="route-group-bar" className={`mb-2 flex items-end gap-2 border-b ${dark ? "border-gray-600" : "border-[#DCE3EE]"}`}>
+      <div className="flex items-end gap-0.5 min-w-0 overflow-x-auto" style={{ scrollbarWidth: "thin" }} title="탭을 누르면 그 노선만 · Ctrl+누르면 여러 개를 같이 봅니다">
+        {!edit && <>
+          <button type="button" className={tabCls(rg.sel === "mine", dark)} title={rg.mine.length ? rg.mine.join(" · ") : "오른쪽 [내 담당 설정]에서 먼저 정해 주세요"} onClick={() => (rg.mine.length ? rg.setSel("mine") : (setDraft([]), setEdit(true)))}>{bar(rg.sel === "mine")}<span className={rg.sel === "mine" ? "" : "text-[#2D4C82]"}>내 담당</span>{rg.mine.length ? num(mineN) : null}</button>
+          <button type="button" className={tabCls(rg.sel === "all", dark)} onClick={() => rg.setSel("all")}>{bar(rg.sel === "all")}전체{num(total)}</button>
+          <span className={`shrink-0 w-px h-5 mb-2.5 mx-1 ${dark ? "bg-gray-600" : "bg-[#DCE3EE]"}`} />
+        </>}
+        {edit && <span className="shrink-0 h-10 flex items-center pr-2 text-[13.5px] font-black text-[#1B2B4B]">내가 맡은 노선을 고르세요</span>}
+        {groups.map((g) => { const on = onOf(g); return (
+          <button key={g} type="button" aria-pressed={on} className={tabCls(on, dark)} onClick={(e) => onPick(g, e)}>
+            {bar(on && !edit)}
+            {edit && <span className={`w-4 h-4 rounded border-2 grid place-items-center ${on ? "bg-[#1B2B4B] border-[#1B2B4B]" : "border-[#C9D5EA] bg-white"}`}>{on && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}</span>}
+            {g}{num(counts.get(g))}
+          </button>); })}
+        {groups.length === 0 && <span className="h-10 flex items-center px-2 text-[13px] text-[#7A879C]">아직 구분된 오더가 없습니다(구글시트에서 가져오면 탭 이름으로 나뉩니다)</span>}
+      </div>
+      <span className="ml-auto shrink-0 flex items-center gap-1.5 pb-1.5">
         {!edit && <SheetLiveChip role={role} userCompany={userCompany} />}
         {edit ? <>
           <button type="button" disabled={busy} className="h-8 px-3 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-black" onClick={async () => { setBusy(true); try { await rg.saveMine(draft); rg.setSel(draft.length ? "mine" : "all"); setEdit(false); } catch { /* 권한 등 */ } finally { setBusy(false); } }}>{busy ? "저장 중…" : "저장"}</button>
           <button type="button" className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[13px] font-bold text-[#5B6B85]" onClick={() => setEdit(false)}>취소</button>
-        </> : <button type="button" className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-bold text-[#5B6B85]" onClick={() => { setDraft(rg.mine); setEdit(true); }}>내 담당 설정</button>}
+        </> : <button type="button" className="h-8 px-2.5 rounded-lg text-[12.5px] font-bold text-[#7A879C] hover:text-[#1B2B4B] hover:bg-white" onClick={() => { setDraft(rg.mine); setEdit(true); }}>내 담당 설정</button>}
       </span>
     </div>
   );

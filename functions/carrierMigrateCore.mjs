@@ -594,7 +594,10 @@ function rowToOrder(r, L, ctx) {
     if (!grp) return { base: 0, extras: [], total: 0, notes: [] };
     const notes = [];
     const b = parseMoney(g(grp.base)); if (b.note) notes.push(b.note);
-    const extras = grp.extras.map((e) => { const p = parseMoney(g(e.col)); if (p.note && !/^[-–]$/.test(p.note)) notes.push(`${e.name} ${p.note}`); return { name: e.name, n: p.n, raw: g(e.col) }; }).filter((e) => e.n);
+    // 💸 2026-11-13 "180,000 착불" — 착불은 기사가 도착지에서 직접 받는 돈이라 거래처 청구(매출)가 아니다. 시트도 그 줄의 합계를 비워 둔다
+    //  → 금액은 청구 · 특수운임에 넣지 않고 메모("착불 180,000원")와 지급방식 "착불"로만 남긴다(예전엔 청구에 더해져 시트 합계보다 커졌다)
+    const cods = [];
+    const extras = grp.extras.map((e) => { const p = parseMoney(g(e.col)); if (/착불/.test(p.note)) { if (p.n) cods.push(p.n); notes.push(`착불 ${p.n ? `${p.n.toLocaleString("ko-KR")}원` : ""}`.trim()); return { name: e.name, n: 0, raw: "" }; } if (p.note && !/^[-–]$/.test(p.note)) notes.push(`${e.name} ${p.note}`); return { name: e.name, n: p.n, raw: g(e.col) }; }).filter((e) => e.n);
     const t = grp.total >= 0 ? parseMoney(g(grp.total)) : { n: 0 };
     const sum = b.n + extras.reduce((a, e) => a + e.n, 0);
     return { base: b.n, extras, total: t.n || sum, notes, hasTotal: grp.total >= 0 && !!t.n };
@@ -731,14 +734,17 @@ function rowToOrder(r, L, ctx) {
   let 지급방식 = ctx.preset.defaultPayMethod || "";
   const codTxt = [g(L.cols.cod), ...S.notes, ...B.notes].join(" ");
   if (/착불/.test(codTxt)) { 지급방식 = "착불"; const c = g(L.cols.cod); if (c) memo.push(c.replace(/[\u{1F300}-\u{1FAFF}☀-➿️🔺]/gu, "").trim()); }
-  [...S.notes, ...B.notes].forEach((n) => { if (n && !/착불/.test(n)) tags.push(n); });
+  // 💸 착불 줄인데 시트의 매출 합계 칸이 비어 있으면 청구 0(시트 그대로) — 운송료 칸의 금액은 단가 표시라 메모로만 남긴다
+  if (지급방식 === "착불" && L.sale && L.sale.total >= 0 && !S.hasTotal && S.total) { memo.push(`운송료 ${S.total.toLocaleString("ko-KR")}원(착불 · 청구 안 함)`); S.total = 0; S.base = 0; S.extras = []; }
+  [...S.notes, ...B.notes].forEach((n) => { if (!n) return; if (/착불/.test(n)) { if (/\d/.test(n) && !memo.includes(n)) memo.push(n); } else tags.push(n); });
   // 특수운임 — 매출 추가 칸과 매입 추가 칸을 짝지어(같은 이름끼리, 남은 칸은 순서대로 · pairExtras)
   const noteText = [...L.memo.map((c) => g(c)), ...L.notes.map((c) => g(c))].join(" ");
   const memoText = [noteText, ...tags].join(" ");
   const items = [];
   (L.pairs || (L.pairs = pairExtras(L))).forEach((p) => {
-    const a = p.sale.reduce((s0, c) => s0 + parseMoney(g(c)).n, 0);
-    const b = p.buy.reduce((s0, c) => s0 + parseMoney(g(c)).n, 0);
+    const amt = (c) => { const m = parseMoney(g(c)); return /착불/.test(m.note) ? 0 : m.n; }; // 착불 금액은 특수운임(청구)에 넣지 않는다
+    const a = p.sale.reduce((s0, c) => s0 + amt(c), 0);
+    const b = p.buy.reduce((s0, c) => s0 + amt(c), 0);
     let n = p.name;
     // 이름 없는 추가비용 → 비고에 적힌 말로(계근비 · 대행료 · 경유 …). 비고에 없으면 오더 꼬리표(경유 등), 그래도 없으면 "추가비용"
     // (같은 줄에서 이름 있는 칸이 이미 쓴 이름 — 예: 대행료 칸에 금액이 있으면 — 은 다시 쓰지 않는다)
