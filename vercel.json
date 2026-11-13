@@ -87,13 +87,6 @@
       "dest": "/api/upload-page"
     },
     {
-      "src": "/",
-      "headers": {
-        "cache-control": "no-store, must-revalidate"
-      },
-      "dest": "/api/shell?f=index"
-    },
-    {
       "handle": "filesystem"
     },
     {
@@ -105,14 +98,14 @@
       "headers": {
         "cache-control": "no-store, must-revalidate"
       },
-      "dest": "/api/shell?f=driver"
+      "dest": "/driver.html"
     },
     {
       "src": "/(.*)",
       "headers": {
         "cache-control": "no-store, must-revalidate"
       },
-      "dest": "/api/shell?f=index"
+      "dest": "/index.html"
     }
   ]
 }

@@ -81,14 +81,18 @@ export default async function handler(req, res) {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store, must-revalidate");
     let html = ""; let served = "latest";
+    let cacheable = false;
     if (!wantsLatest(req)) {
       const pin = await readPin();
-      if (pin && pin.url !== process.env.VERCEL_URL) {
-        try { html = await getHtml(`https://${pin.url}`, file, bypass()); served = "pinned"; } catch { html = ""; }
+      // b = 화면(시작 스크립트)이 기억하고 있는 배포 버전 — 지금 배포 버전과 다르면(그새 바뀜) 예전 화면을 주지 않는다
+      if (pin && pin.url !== process.env.VERCEL_URL && (!q.b || String(q.b) === pin.build)) {
+        try { html = await getHtml(`https://${pin.url}`, file, bypass()); served = "pinned"; cacheable = !!q.b; } catch { html = ""; }
       }
     }
     if (!html) html = await getHtml(self, file);
     res.setHeader("X-Kp-Release", served);
+    // 같은 배포 버전(b)의 첫 화면은 바뀌지 않는다 → CDN 에 잠깐 두어 이 함수가 매번 불리지 않게
+    if (cacheable) res.setHeader("Cache-Control", "public, max-age=0, s-maxage=600");
     res.status(200).send(html);
   } catch (e) {
     // 어떤 경우에도 화면은 떠야 한다 — 최신 화면 파일로 바로 보낸다

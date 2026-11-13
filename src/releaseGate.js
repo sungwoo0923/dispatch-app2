@@ -26,8 +26,10 @@ export function syncReleaseChannel(isAdmin) {
 }
 
 const pinOf = (d) => (d && d.enabled !== false && d.url && d.build ? { url: d.url, version: d.version || "", build: d.build } : null);
+// 첫 화면의 시작 스크립트(vite.config.js)가 읽는 값 — 이 PC가 따라갈 배포 버전(없으면 지운다)
+const rememberPin = (pin) => { try { if (pin) localStorage.setItem("kpPin", JSON.stringify({ build: pin.build, version: pin.version })); else localStorage.removeItem("kpPin"); } catch { /* 무시 */ } };
 export async function readPin() {
-  try { const s = await getDoc(RELEASE_REF()); return s.exists() ? pinOf(s.data()) : null; }
+  try { const s = await getDoc(RELEASE_REF()); const pin = s.exists() ? pinOf(s.data()) : null; rememberPin(pin); return pin; }
   catch (e) { return String(e?.code || "").includes("permission") ? null : undefined; } // 규칙 배포 전(권한 없음) = 잠금 없음으로 · undefined = 잠깐 못 읽음
 }
 // 이 브라우저가 따라가야 할 버전 — { version, build } (없으면 null)
