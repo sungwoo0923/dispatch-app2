@@ -8219,6 +8219,8 @@ useEffect(() => {
  // ⭐ 2026-11-14 새 버전 자동 새로고침 뒤에는 보던 메뉴로 돌아온다(대시보드로 튕기지 않게 — ErrorBoundary.reloadOnce가 남긴 값, 1분 안)
  const [navFlat, setNavFlat] = useState(() => navFlatPref()); // ⭐ 2026-11-14 상단 메뉴 묶음(기본) / 예전처럼 한 줄(펼침)
  const [menu, setMenu] = useState(() => { try { const j = JSON.parse(sessionStorage.getItem("kpReloadMenu") || "null"); sessionStorage.removeItem("kpReloadMenu"); if (j && j.menu && Date.now() - j.at < 60000) return j.menu; } catch { /* 무시 */ } return "HOME"; });
+  // 🗂 2026-11-14 담당노선구분 탭 — 매출관리는 들어갈 때마다 [전체]부터(다른 화면에서 고른 탭 때문에 매출이 일부만 보이던 문제 · src/routeGroups.jsx)
+  React.useEffect(() => { rg.setScreen(menu); }, [menu, rg.setScreen]); // eslint-disable-line react-hooks/exhaustive-deps
  useEffect(() => { try { window.__kpMenu = menu; } catch { /* 무시 */ } }, [menu]);
  // 📍 2026-11-13 지금 보는 화면을 로그인 기록에 적는다(관리센터 실시간 표시 — src/screenReport.js)
  useEffect(() => { installScreenVisibility(); reportScreen(isBizMenu(menu) ? `${bizInfoOf(parseBizMenu(menu).biz).short} · ${bizMenuLabelOf(menu)}` : (menu === "HOME" ? "홈" : menu), "pc"); }, [menu]);
