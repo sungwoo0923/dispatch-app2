@@ -19,7 +19,7 @@ export const MENU_SUBS = {
   기사관리: { code: "DRIVERS", items: [["d:전체", "기사관리 › 전체 기사"], ["d:일반", "기사관리 › 일반"], ["d:직영", "기사관리 › 직영"], ["d:지입", "기사관리 › 지입"], ["d:임대", "기사관리 › 임대"], ["d:블랙", "기사관리 › 블랙"], ["acc:pending", "기사 앱 계정 › 가입 승인"], ["acc:drivers", "기사 앱 계정 › 승인된 기사"], ["fork", "지게차 기사"], ["docs:driver", "서류관리 › 기사 제출 서류"], ["docs:penalty", "서류관리 › 과태료 · 사고 서류"]] }, // ⭐ 2026-11-10 메뉴 통일 — 기사관리 왼쪽 메뉴(KpSubNav DRIVERS)와 같게
   거래처관리: { code: "CLIENTS", items: [["하차지거래처", "상하차지거래처"], ["기본거래처", "기본거래처"]] }, // ⭐ 2026-11-02 고정거래처관리 메뉴 제거 · 하차지거래처 → 상하차지거래처(key는 그대로)
   매출관리: { code: "REVENUE", items: [["dashboard", "매출 대시보드"], ["target", "목표·전망"], ["clients", "거래처 순위·신규"], ["trend", "거래처 동향 분석"], ["yearly", "연간 요약"], ["query", "거래처 기간 조회"]] },
-  정산관리: { code: "SETTLEMENT", items: [["거래처정산", "거래처정산"], ["지급관리", "용차지급관리"], ["지입정산관리", "지입정산관리"], ["지게차지급", "지게차 지급"]] }, // ⭐ 2026-11-10 지게차 지급 추가
+  정산관리: { code: "SETTLEMENT", items: [["홈", "정산 홈"], ["거래처정산", "거래처정산"], ["지급관리", "용차지급관리"], ["지입정산관리", "지입정산관리"], ["지게차지급", "지게차 지급"]] }, // ⭐ 2026-11-10 지게차 지급 추가
   전자결재: { code: "E-APPROVAL", items: approvalSubs() }, // ⭐ 2026-11-10 메뉴 통일 — src/menuTree.js 한 곳(계약서 포함)
   회계관리: { code: "ACCOUNTING", items: [["overview", "회계 개요"], ["book", "회계 장부"], ["payroll", "급여 계산"], ["retire", "퇴직 정산"]] }, // ⭐ 2026-11-10 급여 계산 추가(화면 왼쪽 메뉴와 같게)
   영업관리: { code: "SALES", items: [["overview", "영업 현황"], ["incentive", "인센티브"], ["ranking", "팀 순위"], ["pipeline", "영업 기회"], ["accounts", "거래처 담당"], ["activity", "영업 활동"], ["policy", "목표 · 규정"]] }, // 💼 2026-11-10 영업팀
@@ -28,7 +28,7 @@ export const MENU_SUBS = {
   회사관리: { code: "COMPANY", items: [["회사정보", "회사정보"], ["조직도", "조직도"], ["운임 규칙", "운임 규칙"], ["내정보", "내정보"], ["내 이력서", "내 이력서"], ["출근기록부", "출근기록부"]] }, // ⭐ 2026-11-10 메뉴 통일 — 회사관리 왼쪽 메뉴와 같게(요금제·권한에 따라 빠지는 칸은 화면을 열면 맞춰짐)
   운임조회: { code: "FARE LOOKUP", items: [["전국운임조회", "전국운임조회"], ["자사운임표", "자사운임표"]] },
   지입차관리: { code: "FLEET CONTROL", items: [["tracking", "관제현황"], ["route", "노선관리"], ["fixed", "고정노선"], ["history", "이력 조회"], ["attendance", "출근기록부"], ["vehicle", "차량 관리"], ["expense", "차량 비용 영수증"], ["photos", "정기 차량 사진"], ["registration", "기사 등록 관리"]] },
-  관리자메뉴: { code: "ADMIN", items: [["members", "회원 관리"], ["linked", "연동 화주사"], ["loginSessions", "로그인 관리"], ["setup", "초기 설정 · 튜토리얼"]] }, // 관리자메뉴는 권한마다 칸이 크게 달라 공통 칸만 — 화면을 한 번 열면 그 사람이 실제로 보는 칸으로 맞춰진다(registerSubnav)
+  관리자메뉴: { code: "ADMIN", items: [["members", "회원 관리"], ["linked", "연동 화주사"], ["transmit", "화주사 전송"], ["inquiries", "화주사 문의"], ["loginSessions", "로그인 관리"], ["billing", "구독 · 결제"], ["setup", "초기 설정 · 튜토리얼"], ["copyTemplate", "기사복사 문구"]] }, // 관리자메뉴는 권한마다 칸이 크게 달라 공통 칸만 — 화면을 한 번 열면 그 사람이 실제로 보는 칸으로 맞춰진다(registerSubnav)
 };
 
 // ⭐ 2026-11-06 점검 — 없어진 세부 메뉴가 상단 메뉴에 계속 보이던 문제
@@ -109,7 +109,7 @@ export function NavHover({ menu, label, disabled = false, onOpenMenu, badges = n
   const base = MENU_SUBS[menu];
   const reg = base ? registeredItems(base.code) : null;
   // ⭐ 2026-11-01 세부 메뉴가 있는 메뉴는 처음부터 항상 펼친다(한 번 연 화면은 그 사람이 실제로 보는 항목으로)
-  const conf = base ? { code: base.code, items: reg && reg.length ? reg : base.items } : null;
+  const conf = base ? { code: base.code, items: reg && reg.length ? reg : cleanFor(base.code, base.items) } : null;
   const anchorRef = React.useRef(null);
   const panelRef = React.useRef(null);
   const [open, setOpen] = React.useState(false);

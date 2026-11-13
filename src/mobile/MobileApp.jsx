@@ -5531,7 +5531,7 @@ const pcViewCompany = (localStorage.getItem("loginCompany") || userCompany || lo
 const pcViewMeDoc = mobileUsers.find((u) => u.id === currentUser?.uid) || {};
 const pcViewMe = { uid: currentUser?.uid || user?.uid, name: pcViewMeDoc.name || currentUser?.displayName || (currentUser?.email || "").split("@")[0] || "", team: pcViewMeDoc.team || "", position: pcViewMeDoc.position || "", role: role || pcViewMeDoc.role || "", isMaster: pcViewMeDoc.isMaster === true };
 const title =
-  page === "list" ? "등록내역"
+  page === "list" ? "배차현황"
   : page === "ratecard" ? "단가표"
   : page === "form" ? (form._editId ? "수정하기" : "오더등록")
   : page === "notice" ? "공지사항"
@@ -7664,7 +7664,7 @@ const RED_PILL = { background: "#FF3B30", color: "#fff", fontWeight: 800 }; // �
 const MobileHeader = React.memo(function MobileHeader({ title, onBack, onRefresh, onValidateOrders, onMenu, menuBadge = 0, notifCount = 0, onNotifClick, cardVersionB = false, messengerUnread = 0, onMessengerClick, mailCompany = "", mailName = "", attUid = "", attRole = "", attEmail = "" }) {
   const newVer = useNewVersion(); // ★ 새 버전 배포 시 메뉴 버튼에 점 표시
   // ⭐ 2026-10-22 디자인 개선 — A형: 반투명 흰 머리줄 / B형: 남색 그라데이션 머리줄. 버튼은 둥근 네모 타일.
-  const isListPage = title === "등록내역" || (!!onMenu && !onBack); // 부서 홈(경리·인사)도 메뉴 버튼
+  const isListPage = title === "배차현황" || (!!onMenu && !onBack); // 부서 홈(경리·인사)도 메뉴 버튼
   const iconColor = cardVersionB ? "#ffffff" : "#1B2B4B";
   const countCls = `absolute -top-1 -right-1 min-w-[17px] h-[17px] text-[10px] font-extrabold rounded-full flex items-center justify-center px-1 leading-none ring-2 ${
     cardVersionB ? "bg-white text-[#1B2B4B] ring-[#1B2B4B]" : "bg-[#1B2B4B] text-white ring-white"
@@ -8217,7 +8217,7 @@ function MobileSideMenu({
               {ok("거래처관리") && <MenuItem label="거래처관리" icon="building" onClick={() => onGo?.("clients")} dark={dark} />}{/* ⭐ 2026-11-05 PC 경리(test)도 거래처관리를 본다 */}
             </MenuSection>
             <MenuSection title="자금 · 총무" en="FINANCE · OFFICE" dark={dark} alwaysOpen>
-              {ok("자금관리") && <MenuItem label="자금 관리" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />}
+              {ok("자금관리") && <MenuItem label="자금관리" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />}
               {ok("비품관리") && <MenuItem label="비품·자산" icon="list" onClick={() => onGo?.("dept:assets")} dark={dark} />}
             </MenuSection>
           </>)}
@@ -8288,7 +8288,7 @@ function MobileSideMenu({
           {!deptMode && (
           <MenuSection title="일반배차관리" en="DISPATCH" dark={dark} alwaysOpen>
             {role !== "test" && ok("배차관리") && <MenuItem label="오더등록" icon="truck" onClick={onGoCreate} dark={dark} />}
-            {ok("배차현황") && <MenuItem label="등록내역" icon="list" onClick={onGoList} badge={((alertCounts?.drvOrders || 0) + (listUnseenCount || 0)) || null} dark={dark} />}{/* ⭐ 2026-11-06 기사 수락/거절(본 시각 기준) + 안 본 미배차 */}
+            {ok("배차현황") && <MenuItem label="배차현황" icon="list" onClick={onGoList} badge={((alertCounts?.drvOrders || 0) + (listUnseenCount || 0)) || null} dark={dark} />}{/* ⭐ 2026-11-06 기사 수락/거절(본 시각 기준) + 안 본 미배차 */}
             {ok("배차관리") && <MenuItem label="미배차현황" icon="alert" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />}
             {/* ⭐ 2026-11-05 PC·모바일 일치 — PC 기사관리와 같은 화면(PC에서 그 메뉴를 보는 권한만) */}
             {PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리") && <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} badge={staffSignupOk ? (alertCounts?.signupDriver || null) : null} dark={dark} />}
@@ -8303,7 +8303,7 @@ function MobileSideMenu({
           )}
           {!deptMode && (<>
           <MenuSection title="운임" en="FARE" dark={dark} alwaysOpen>
-            {ok("운임조회") && <MenuItem label="통합운임조회" icon="globe" onClick={onGoNationalFare} dark={dark} />}
+            {ok("운임조회") && <MenuItem label="운임조회" icon="globe" onClick={onGoNationalFare} dark={dark} />}
             {role !== "test" && ok("단가표") && <MenuItem label="단가표" icon="money" onClick={onGoRateCard} dark={dark} />}
           </MenuSection>
           <MenuSection title="매출 · 거래처" en="REVENUE" dark={dark} alwaysOpen>
@@ -8321,7 +8321,7 @@ function MobileSideMenu({
               {deptOk("영업관리") && <MenuItem label="영업관리" icon="trend" onClick={() => onGo?.("dept:sales")} dark={dark} />}{/* 💼 2026-11-10 */}
               {deptOk("인사관리부") && <MenuItem label="인사관리부" icon="idcard" onClick={() => onGo?.("dept:hr")} dark={dark} />}
               {deptOk("회계관리") && <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />}
-              {deptOk("자금관리") && <MenuItem label="자금 관리" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />}
+              {deptOk("자금관리") && <MenuItem label="자금관리" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />}
               {deptOk("비품관리") && <MenuItem label="비품·자산" icon="list" onClick={() => onGo?.("dept:assets")} dark={dark} />}
               {deptOk("증명서발급") && <MenuItem label="증명서 발급" icon="stamp" onClick={() => onGo?.("dept:cert")} dark={dark} />}
             </MenuSection>
