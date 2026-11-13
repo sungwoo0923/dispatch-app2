@@ -88,27 +88,27 @@ export function ScanCard({ scan, expect, compact = false }) {
   const tone = chk.level === "ok" || chk.level === "vat" ? { bg: "#ECFDF3", fg: "#067647", bd: "#ABEFC6", ic: "✓" } : chk.level === "warn" ? { bg: "#FFFAEB", fg: "#B54708", bd: "#FEDF89", ic: "!" } : { bg: "#F7F9FC", fg: "#7A8AA8", bd: "#E3E8F0", ic: "–" };
   return (
     <div className="rounded-xl border border-[#E3E8F0] bg-white overflow-hidden" data-scan-card>
-      <div className="flex items-center gap-2 px-3 py-2 bg-[#F7F9FC] border-b border-[#EEF2F8]">
-        <span className="h-6 px-2 rounded-md text-[11.5px] font-black text-white inline-flex items-center" style={{ background: KIND_TONE[scan.kind] || "#1B2B4B" }}>{scan.kind}</span>
-        {scan.date && <span className="text-[12.5px] font-black text-[#0F1A30]" style={NUM}>작성일자 {scan.date}</span>}
-        <span className="ml-auto inline-flex items-center gap-1 h-6 px-2 rounded-full text-[11.5px] font-black border" style={{ background: tone.bg, color: tone.fg, borderColor: tone.bd }} data-amount-check={chk.level}>
+      <div className="flex items-center gap-x-2.5 gap-y-1.5 flex-wrap px-3.5 py-2.5 bg-[#F7F9FC] border-b border-[#EEF2F8]">
+        <span className="h-7 px-2.5 rounded-md text-[13px] font-black text-white inline-flex items-center whitespace-nowrap shrink-0" style={{ background: KIND_TONE[scan.kind] || "#1B2B4B" }}>{scan.kind}</span>
+        {scan.date && <span className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap shrink-0" style={NUM}>작성일자 {scan.date}</span>}
+        <span className="ml-auto inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[13px] font-black border whitespace-nowrap shrink-0" style={{ background: tone.bg, color: tone.fg, borderColor: tone.bd }} data-amount-check={chk.level}>
           <span>{tone.ic}</span>{chk.level === "ok" || chk.level === "vat" ? "금액 일치" : chk.level === "warn" ? "금액 다름" : "금액 확인 필요"}
         </span>
       </div>
       <div className={`grid grid-cols-3 gap-2 px-3 ${compact ? "py-2" : "py-2.5"} text-center`} style={NUM}>
         {[["공급가액", scan.supply], [scan.taxFree ? "세액(면세)" : "세액", scan.vat], ["합계", scan.total]].map(([l, v], i) => (
-          <div key={l}><div className="text-[10.5px] font-bold text-[#7A8AA8]">{l}</div><div className={`${i === 2 ? "text-[14.5px] font-black text-[#0F1A30]" : "text-[13px] font-bold text-[#3A4A66]"}`}>{v ? won(v) : "-"}</div></div>
+          <div key={l} className="min-w-0"><div className="text-[12.5px] font-bold text-[#7A8AA8] whitespace-nowrap">{l}</div><div className={`whitespace-nowrap ${i === 2 ? "text-[17px] font-black text-[#0F1A30]" : "text-[15.5px] font-bold text-[#3A4A66]"}`}>{v ? won(v) : "-"}</div></div>
         ))}
       </div>
       <div className="px-3 pb-2.5 space-y-1">
         {(scan.supplier || scan.buyer) && (
-          <div className="flex items-center gap-1.5 text-[12px] font-bold text-[#3A4A66] min-w-0">
-            <span className="text-[10.5px] font-black text-[#9AA9C3] shrink-0">공급자</span><span className="truncate">{scan.supplier || "-"}</span>
+          <div className="flex items-center gap-1.5 text-[13.5px] font-bold text-[#3A4A66] min-w-0">
+            <span className="text-[12px] font-black text-[#9AA9C3] shrink-0">공급자</span><span className="truncate">{scan.supplier || "-"}</span>
             <span className="text-[#C2CBDB] shrink-0">→</span>
-            <span className="text-[10.5px] font-black text-[#9AA9C3] shrink-0">받는자</span><span className="truncate">{scan.buyer || "-"}</span>
+            <span className="text-[12px] font-black text-[#9AA9C3] shrink-0">받는자</span><span className="truncate">{scan.buyer || "-"}</span>
           </div>
         )}
-        <div className="text-[11.5px] font-semibold" style={{ color: tone.fg }}>{chk.text}</div>
+        <div className="text-[13.5px] font-semibold leading-snug" style={{ color: tone.fg }}>{chk.text}</div>
       </div>
     </div>
   );
@@ -126,23 +126,23 @@ export function EvidenceLightbox({ items, start = 0, onClose, expect }) {
   const isPdf = /pdf/i.test(it.type || "") || /^data:application\/pdf/.test(String(src || ""));
   return createPortal(
     <div className="fixed inset-0 z-[100001] bg-[#060D1C]/85 flex items-center justify-center p-4" data-evidence-lightbox>
-      <div className="w-full max-w-[980px] max-h-[92vh] bg-white rounded-2xl overflow-hidden flex flex-col md:flex-row shadow-2xl">
+      <div className="w-full max-w-[1280px] max-h-[94vh] bg-white rounded-2xl overflow-hidden flex flex-col md:flex-row shadow-2xl">
         <div className="flex-1 min-h-[300px] bg-[#0F1A30] flex items-center justify-center relative">
           {isPdf ? <a href={src} download={it.name || "증빙.pdf"} className="text-white font-black underline">PDF 내려받기 · {it.name}</a>
             : <img src={src} alt={it.name || "증빙"} className="max-w-full max-h-[86vh] object-contain" />}
           {items.length > 1 && <div className="absolute bottom-3 left-1/2 -translate-x-1/2 text-white/80 text-[12px] font-black bg-black/40 rounded-full px-3 py-1" style={NUM}>{i + 1} / {items.length}</div>}
         </div>
-        <div className="w-full md:w-[320px] shrink-0 p-4 space-y-3 overflow-y-auto">
+        <div className="w-full md:w-[440px] shrink-0 p-5 space-y-4 overflow-y-auto">
           <div className="flex items-center gap-2">
-            <div className="min-w-0 flex-1"><div className="text-[10px] font-extrabold tracking-[0.24em] text-[#4B6CB7]">EVIDENCE · 증빙서류</div><div className="text-[14px] font-black text-[#0F1A30] truncate">{it.name || "증빙"}</div></div>
-            <button type="button" onClick={onClose} className="w-8 h-8 rounded-lg bg-[#F1F4F9] text-[#3A4A66] font-black">✕</button>
+            <div className="min-w-0 flex-1"><div className="text-[11.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]">EVIDENCE · 증빙서류</div><div className="text-[17px] font-black text-[#0F1A30] truncate">{it.name || "증빙"}</div></div>
+            <button type="button" onClick={onClose} className="w-10 h-10 rounded-lg bg-[#F1F4F9] text-[#3A4A66] text-[16px] font-black">✕</button>
           </div>
-          {it.scan ? <ScanCard scan={it.scan} expect={expect} /> : <div className="text-[12.5px] font-semibold text-[#9AA9C3]">스캔 결과가 없는 파일입니다.</div>}
+          {it.scan ? <ScanCard scan={it.scan} expect={expect} /> : <div className="text-[14px] font-semibold text-[#9AA9C3]">스캔 결과가 없는 파일입니다.</div>}
           <div className="flex gap-2">
-            <button type="button" disabled={i === 0} onClick={() => setI(i - 1)} className="flex-1 h-9 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black disabled:opacity-40">← 이전</button>
-            <button type="button" disabled={i >= items.length - 1} onClick={() => setI(i + 1)} className="flex-1 h-9 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black disabled:opacity-40">다음 →</button>
+            <button type="button" disabled={i === 0} onClick={() => setI(i - 1)} className="flex-1 h-11 rounded-lg border border-[#DCE3EE] text-[14px] font-black disabled:opacity-40">← 이전</button>
+            <button type="button" disabled={i >= items.length - 1} onClick={() => setI(i + 1)} className="flex-1 h-11 rounded-lg border border-[#DCE3EE] text-[14px] font-black disabled:opacity-40">다음 →</button>
           </div>
-          {!isPdf && <a href={src} download={it.name || "증빙.jpg"} className="block text-center h-9 leading-9 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">이미지 저장</a>}
+          {!isPdf && <a href={src} download={it.name || "증빙.jpg"} className="block text-center h-11 leading-[44px] rounded-lg bg-[#0F1A30] text-white text-[14.5px] font-black">이미지 저장</a>}
         </div>
       </div>
     </div>,

@@ -37,7 +37,6 @@ import { CustomSelect } from "./CustomSelect";
 import RolePermissionsPanel from "./RolePermissionsPanel";
 import { AdminSessionsPanel } from "./LoginManager";
 import SheetConnectHub from "./SheetConnectHub"; // 🔗 2026-11-07 구글시트 연동 한곳(가져오기 · 전송 · 연결 마법사)
-import TrashPanel from "./TrashPanel";
 const DataCheckPanel = React.lazy(() => import("./DataCheckPanel")); // 🩺 2026-11-10 데이터 점검(모양이 이상한 값 찾아 고치기)
 import { useCustomRoles, roleScreen, ROLE_LABELS, roleOptionsFrom, rolesForTeam } from "./customRoles";
 import { useCompanyFeatures } from "./companyFeatures"; // ⭐ 2026-11-04 마스터 권한 관리(회사별로 켬)
@@ -891,7 +890,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const tabGroups = [
     { key: "members", label: "회원 관리", tabs: ["members"] },
     { key: "shipperMgmt", label: "화주사 관리", tabs: ["linked", "transmit", "inquiries", "landingInquiries"] },
-    { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "permissions", "sheetHub", "trash", "dataCheck"] }, // ⭐ 2026-11-06 운송사 초기화는 관리자 관리센터(보안·데이터 › 운송사 초기화)로만 옮김 · 🔗 2026-11-07 구글시트 메뉴 셋 → "구글시트 연동" 하나 · 블라인드 모드 · 화주사 강제 업데이트는 뺌(강제 업데이트는 관리센터에 남음)
+    { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "permissions", "sheetHub", "dataCheck"] }, // ⭐ 2026-11-06 운송사 초기화는 관리자 관리센터(보안·데이터 › 운송사 초기화)로만 옮김 · 🔗 2026-11-07 구글시트 메뉴 셋 → "구글시트 연동" 하나 · 블라인드 모드 · 화주사 강제 업데이트는 뺌(강제 업데이트는 관리센터에 남음)
     { key: "settings", label: "환경 설정", tabs: ["billing", "setup", "copyTemplate", "landingEdit", "notifTemplate"] },
   ]
     .map((g) => ({ ...g, tabs: g.tabs.filter((t) => (!REQUIRES_MASTER_TABS.has(t) || isTotalMaster || (t === "permissions" && masterPerms)) && (t !== "billing" || billingAcc.view) && (t !== "sheetHub" || isTotalMaster || ["admin", "allMgr"].includes(myRoleEff)) && (t !== "dataCheck" || isTotalMaster || ["admin", "allMgr"].includes(myRoleEff))) })) // 💳 구독·결제는 경리·재무·임원·대표만(billingAccess.js)
@@ -1505,7 +1504,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 
           {/* ====== 구글시트 연동(연결된 시트 · 가져오기 · 보내기 · 매핑 수정) ====== */}
           {adminTab === "sheetHub" && (isTotalMaster || ["admin", "allMgr"].includes(myRoleEff)) && <SheetConnectHub company={effectiveCompany} isTotalMaster={isTotalMaster} />}
-          {adminTab === "trash" && <TrashPanel company={autoCompany} />}
+          {/* 🗑 2026-11-14 휴지통 메뉴를 없앴다(사용자 요청) — 지운 오더는 보관하지 않는다 */}
           {adminTab === "dataCheck" && <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}><DataCheckPanel company={autoCompany} /></React.Suspense>}
 
           {/* ====== 접속이력 탭 (최고관리자 전용) ====== */}

@@ -710,7 +710,7 @@ function ForeignOrdersCard({ list, disabled }) {
     <div className="rounded-2xl border border-[#F7C97A] bg-[#FFF8EC] px-5 py-4 flex items-center gap-4 flex-wrap">
       <div className="min-w-0">
         <div className="text-[14.5px] font-black text-[#8A4B08]">다른 회사 구글시트 오더가 이 회사에 잘못 저장됨 · {list.length}건</div>
-        <div className="text-[12.5px] text-[#9A6B2E] mt-0.5">운송사 분리 전에 다른 회사의 고정노선(구글시트) 오더가 이 회사 이름으로 저장된 것입니다. 이 회사 배차표 양식이 아니라 고정노선현황엔 안 보이지만 매출·정산 합계에는 섞일 수 있습니다. [정리]를 누르면 이 회사에서만 지워지고, 원래 회사 오더·구글시트는 그대로입니다(휴지통 7일 보관).</div>
+        <div className="text-[12.5px] text-[#9A6B2E] mt-0.5">운송사 분리 전에 다른 회사의 고정노선(구글시트) 오더가 이 회사 이름으로 저장된 것입니다. 이 회사 배차표 양식이 아니라 고정노선현황엔 안 보이지만 매출·정산 합계에는 섞일 수 있습니다. [정리]를 누르면 이 회사에서만 지워지고, 원래 회사 오더·구글시트는 그대로입니다.</div>
       </div>
       {!disabled && <button type="button" disabled={busy} onClick={clean} className="ml-auto h-10 px-4 rounded-xl bg-[#8A4B08] text-white text-[13px] font-black disabled:opacity-60">{busy ? "정리 중…" : "이 회사에서 정리"}</button>}
     </div>

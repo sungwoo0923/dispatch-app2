@@ -4719,6 +4719,8 @@ async function requireStaff(req, body) {
 exports.archiveDeletedOrder = functions.firestore.document("{col}/{orderId}").onDelete(async (snap, ctx) => {
   const { col, orderId } = ctx.params;
   if (!["orders", "dispatch"].includes(col)) return;
+  return; // 🗑 2026-11-14 사용자 요청 — 휴지통 기능을 없앴다. 지운 오더를 더는 보관하지 않는다(남아 있던 보관분은 매시간 정리 때 모두 지운다)
+  // eslint-disable-next-line no-unreachable
   const data = snap.data();
   if (!data || data.source === "transport_transmit") return; // 화주사 전송 사본은 원본이 따로 있다
   if (data._seed) return; // 🧪 테스트 데이터는 휴지통에 넣지 않는다
@@ -5008,7 +5010,8 @@ exports.hourlyJobs = functions.runWith({ timeoutSeconds: 300, memory: "512MB" })
     const date = tp.createWhen === "same" ? today : addDaysStr(today, 1);
     await generateRecurringOrders(date, { ids: [t.id] }).catch((e) => console.error("정기오더 실패:", t.id, e));
   }
-  const old = await db.collection("orderTrash").where("expireAt", "<", Timestamp.now()).limit(400).get();
+  // 🗑 2026-11-14 휴지통 폐지 — 남아 있는 보관분을 기한과 상관없이 모두 지운다(한 번에 400건씩, 비워질 때까지 매시간)
+  const old = await db.collection("orderTrash").limit(400).get();
   if (!old.empty) { const wb = db.batch(); old.docs.forEach((d) => wb.delete(d.ref)); await wb.commit(); }
   // ⭐ 2026-11-02 관리자센터 — 매일 4시 한 번만 집계하니 그 뒤 가입한 직원·접속이 다음 날까지 안 보였다.
   //   낮 시간(06~23시)은 매시간 다시 집계하고, 데이터량(문서 수 count)은 비용 때문에 새벽 4시 전체 집계 때만 새로 센다.
