@@ -220,16 +220,20 @@ function fitEdits(ctx, title, rowNo, baseRow, target, fields, env) {
   fields.forEach((k) => {
     const e = fieldEdits(k, target, env); if (!e) return;
     const usable = [];
-    for (const x of e) { if (isFormula(ctx, title, rowNo, x.c)) { if (x.optional) continue; return; } usable.push(x); }
+    // 수식 칸: 꼭 써야 하는 칸이면 이 값은 못 옮긴다. 합계처럼 시트가 계산해 주는 칸(optional)은 쓰지는 않고, 계산될 값으로 미리 읽어만 본다(virtual)
+    for (const x of e) { if (isFormula(ctx, title, rowNo, x.c)) { if (x.optional) { usable.push({ ...x, virtual: true }); continue; } return; } usable.push(x); }
     byField.set(k, usable);
   });
   for (;;) {
     const row = [...baseRow];
     byField.forEach((list) => list.forEach((x) => { row[x.c] = x.v; }));
     const d = deriveWith(ctx, title, rowNo, row);
-    if (!d.o) return { row, d, fields: [...byField.keys()] }; // 줄 자체가 오더로 읽히지 않는다 — 부른 쪽이 되돌린다
+    // writeRow = 실제로 시트에 쓸 줄(수식 칸은 원래 값 그대로)
+    const writeRow = [...baseRow];
+    byField.forEach((list) => list.forEach((x) => { if (!x.virtual) writeRow[x.c] = x.v; }));
+    if (!d.o) return { row, writeRow, d, fields: [...byField.keys()] }; // 줄 자체가 오더로 읽히지 않는다 — 부른 쪽이 되돌린다
     const bad = [...byField.keys()].filter((k) => !sameValue(k, d.o[k], target[k]));
-    if (!bad.length) return { row, d, fields: [...byField.keys()] };
+    if (!bad.length) return { row, writeRow, d, fields: [...byField.keys()] };
     d.undo();
     bad.forEach((k) => byField.delete(k));
   }
@@ -255,9 +259,10 @@ export function planUpdate(ctx, before, after, opts = {}) {
   const pk = new Set(Array.isArray(before._programKeys) ? before._programKeys : []);
   const sb = { ...(before._sheetBase || {}) };
   changed.forEach((k) => { if (sameValue(k, o[k], after[k])) { pk.delete(k); delete sb[k]; } else { pk.add(k); sb[k] = o[k] ?? ""; } });
-  const cells = cellsOf(title, rowNo, base, fit.row);
+  const cells = cellsOf(title, rowNo, base, fit.writeRow);
   return { ok: true, kind: "update", tab: title, row: rowNo, cells, pushed: fit.fields.filter((k) => sameValue(k, o[k], after[k])), unpushed: changed.filter((k) => !sameValue(k, o[k], after[k])),
-    docPatch: { 이전출처: `${title}!${rowNo}`, _programKeys: [...pk], _sheetBase: sb } };
+    // _sheetKeys: 지금 시트에서 읽히는 칸 — 프로그램에서 배차해 시트에 쓴 차량 · 기사를 나중에 시트에서 지우면 프로그램에서도 비워지게(없으면 "시트에 원래 없던 값"으로 보고 남겨 뒀다)
+    docPatch: { 이전출처: `${title}!${rowNo}`, _programKeys: [...pk], _sheetBase: sb, _sheetKeys: uniq([...(Array.isArray(before._sheetKeys) ? before._sheetKeys : []), ...Object.keys(o).filter((k) => !k.startsWith("__") && !empty(o[k]))]) } };
 }
 
 // ── 등록(프로그램에서 만든 오더 → 탭 맨 아래 빈 줄) ───────────────────────────
@@ -289,7 +294,7 @@ export function planCreate(ctx, order, title, { rowCount = 0 } = {}) {
   const pk = []; const sb = {};
   // 시트에서 읽히는 값이 프로그램 값과 다른 칸은 프로그램 값을 둔다(등록일 · 하차일 · 거래처명 등) — 탭에서 오는 값(이전출처 · 담당노선구분)만 시트를 따른다
   keys.forEach((k) => { if (k === "이전출처" || k === "담당노선구분") return; if (!sameValue(k, order[k], o[k])) { pk.push(k); sb[k] = o[k]; } });
-  return { ok: true, kind: "create", tab: title, row: rowNo, cells: cellsOf(title, rowNo, base, fit.row), pushed: fit.fields.filter((k) => sameValue(k, o[k], order[k])), unpushed: fields.filter((k) => !sameValue(k, o[k], order[k])),
+  return { ok: true, kind: "create", tab: title, row: rowNo, cells: cellsOf(title, rowNo, base, fit.writeRow), pushed: fit.fields.filter((k) => sameValue(k, o[k], order[k])), unpushed: fields.filter((k) => !sameValue(k, o[k], order[k])),
     docPatch: { 이전출처: `${title}!${rowNo}`, 담당노선구분: title, 시트연동: true, _sheetKeys: keys, _programKeys: pk, _sheetBase: sb } };
 }
 
