@@ -9,6 +9,7 @@ import { auth, db } from "./firebase";
 import { BANK_NAMES, formatAccount, onlyDigits, parseBankText, validateAccount } from "./bankUtil";
 import { uiOptionList, uiOptionLabel, useUiConfigVersion } from "./uiConfig"; // ⭐ 2026-11-07 화면 편집 — 은행 목록(더하기·숨기기·순서·보이는 이름)
 import { CustomSelect } from "./CustomSelect";
+import { useListKeys } from "./useListKeys";
 
 const inp = "h-10 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
 
@@ -35,6 +36,10 @@ export default function BankAccountInput({ value, onChange, compact = false, sta
   const [remember, setRemember] = React.useState(false);
   const [label, setLabel] = React.useState("");
   const boxRef = React.useRef(null);
+  const favBtnRef = React.useRef(null);
+  // ⌨ ↑/↓ · Enter · Esc
+  const favKeys = useListKeys({ open, count: favs.length, triggerRef: favBtnRef, onOpen: () => setOpen(true), onClose: () => setOpen(false),
+    onPick: (i) => { const f = favs[i]; if (f) { onChange({ bank: f.bank, acct: f.acct, holder: f.holder }); setOpen(false); } } });
   React.useEffect(() => {
     if (!open) return undefined;
     const h = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
@@ -55,17 +60,17 @@ export default function BankAccountInput({ value, onChange, compact = false, sta
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[11.5px] font-bold text-[#7A89A3]">은행 · 계좌번호 · 예금주</span>
-        {!noFav && <div className="relative" ref={boxRef}>
-          <button type="button" onClick={() => setOpen((o) => !o)}
+        {!noFav && <div className="relative" ref={boxRef} onKeyDown={favKeys.onKeyDown}>
+          <button ref={favBtnRef} type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)}
             className="h-7 px-2.5 rounded-lg border border-[#C9D6EE] bg-[#F3F6FA] text-[12px] font-black text-[#1B2B4B] hover:bg-[#EEF3FC] whitespace-nowrap">
             + 자주 쓰는 계좌{favs.length ? ` ${favs.length}` : ""}
           </button>
           {open && (
-            <div className="absolute right-0 top-full mt-1 z-50 w-[300px] max-h-[280px] overflow-y-auto rounded-xl border border-[#DCE3EE] bg-white shadow-[0_14px_34px_rgba(15,26,48,0.18)] p-1">
+            <div ref={favKeys.listRef} className="absolute right-0 top-full mt-1 z-50 w-[300px] max-h-[280px] overflow-y-auto rounded-xl border border-[#DCE3EE] bg-white shadow-[0_14px_34px_rgba(15,26,48,0.18)] p-1">
               {favs.length === 0 ? (
                 <div className="px-3 py-4 text-[12.5px] text-[#7A89A3] text-center">아직 등록한 계좌가 없습니다<br />입력 후 "자주 쓰는 계좌로 등록"을 체크하세요</div>
-              ) : favs.map((f) => (
-                <div key={f.id} className="flex items-center gap-1 rounded-lg hover:bg-[#F3F6FA]">
+              ) : favs.map((f, i) => (
+                <div key={f.id} {...favKeys.itemProps(i)} className={`flex items-center gap-1 rounded-lg hover:bg-[#F3F6FA] ${favKeys.active(i) ? "bg-[#F3F6FA]" : ""}`}>
                   <button type="button" onClick={() => { onChange({ bank: f.bank, acct: f.acct, holder: f.holder }); setOpen(false); }} className="flex-1 min-w-0 text-left px-2.5 py-2">
                     <div className="text-[13px] font-black text-[#0F1A30] truncate">{f.label}</div>
                     <div className="text-[12px] text-[#5B6B85] truncate tabular-nums">{f.bank} {formatAccount(f.bank, f.acct)} · {f.holder}</div>

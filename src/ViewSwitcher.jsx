@@ -6,12 +6,15 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { ShellIcon } from "./AdminShell";
 import { VIEW_INFO } from "./customRoles";
+import { arrowFocus } from "./useListKeys";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 
 export function ViewPickerDialog({ views = [], current = "", roleLabel = "", onPick, onClose }) {
+  const gridRef = React.useRef(null);
   React.useEffect(() => {
-    const k = (e) => { if (e.key === "Escape") onClose?.(); };
+    // ⌨ 방향키로 화면 카드 사이 이동(Enter = 그 화면) · Esc 닫기
+    const k = (e) => { if (e.key === "Escape") onClose?.(); else arrowFocus(e, gridRef.current, { cols: window.innerWidth >= 640 ? 2 : 1 }); };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, [onClose]);
@@ -26,12 +29,12 @@ export function ViewPickerDialog({ views = [], current = "", roleLabel = "", onP
           </div>
           <button type="button" onClick={onClose} className="w-10 h-10 rounded-xl bg-white/10 border border-white/15 text-white shrink-0" aria-label="닫기">✕</button>
         </div>
-        <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5 overflow-y-auto" style={{ maxHeight: "min(70vh, 560px)", paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)" }}>
+        <div ref={gridRef} className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5 overflow-y-auto" style={{ maxHeight: "min(70vh, 560px)", paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)" }}>
           {views.map(([k, , label]) => {
             const [en, desc, icon] = VIEW_INFO[k] || [String(k).toUpperCase(), "", "dashboard"];
             const on = k === current;
             return (
-              <button key={k} type="button" onClick={() => onPick?.(k)} data-testid={`view-pick-${k}`}
+              <button key={k} type="button" data-cur={on ? "1" : undefined} onClick={() => onPick?.(k)} data-testid={`view-pick-${k}`}
                 className={`text-left rounded-2xl px-4 py-3.5 border transition flex items-center gap-3 ${on ? "bg-white border-white text-[#0F1A30] shadow-[0_10px_26px_rgba(0,0,0,0.3)]" : "bg-white/[0.06] border-white/12 text-white hover:bg-white/[0.12] hover:border-[#8FB0F0]/60"}`}>
                 <span className={`w-11 h-11 rounded-xl grid place-items-center shrink-0 ${on ? "bg-[#EEF3FB]" : "bg-white/[0.08]"}`}><ShellIcon name={icon} size={20} className={on ? "text-[#1B2B4B]" : "text-[#8FB0F0]"} /></span>
                 <span className="min-w-0 flex-1">
@@ -53,11 +56,14 @@ export function ViewPickerDialog({ views = [], current = "", roleLabel = "", onP
 // 상단 버튼(PC) — "화면 전환 · 영업"
 export default function ViewSwitcher({ views, current, roleLabel = "", onPick, className = "kp-chip-btn text-[12px] transition" }) {
   const [open, setOpen] = React.useState(false);
+  const btnRef = React.useRef(null);
+  const wasOpen = React.useRef(false);
+  React.useEffect(() => { if (wasOpen.current && !open) btnRef.current?.focus?.(); wasOpen.current = open; }, [open]); // 닫히면 버튼으로 포커스 복귀
   if (!views || views.length < 2) return null;
   const cur = (views.find(([k]) => k === current) || views[0])[2];
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className={`${className} inline-flex items-center gap-1.5`} title={`${roleLabel ? `${roleLabel} — ` : ""}어느 팀 화면으로 볼지 고릅니다`} data-testid="view-switch">
+      <button ref={btnRef} type="button" onKeyDown={(e) => { if (!open && e.key === "ArrowDown") { e.preventDefault(); setOpen(true); } }} onClick={() => setOpen(true)} className={`${className} inline-flex items-center gap-1.5`} title={`${roleLabel ? `${roleLabel} — ` : ""}어느 팀 화면으로 볼지 고릅니다`} data-testid="view-switch">
         <ShellIcon name="refresh" size={13} />화면 전환<span className="px-1.5 rounded bg-white text-[#0F1A30] font-black">{cur}</span>
       </button>
       {open && <ViewPickerDialog views={views} current={current} roleLabel={roleLabel} onClose={() => setOpen(false)} onPick={(k) => { setOpen(false); if (k !== current) onPick?.(k); }} />}

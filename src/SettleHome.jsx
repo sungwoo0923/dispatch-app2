@@ -83,7 +83,13 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
       <section className={`${CARD} p-5`}>
         <div className="flex items-end justify-between gap-3 flex-wrap mb-4">
           <div><Eyebrow>MONTH CLOSE</Eyebrow><div className="text-[17px] font-black text-[#0F1A30]">{`${Number(ym.slice(5))}월 정산 진행 현황`}</div></div>
-          <div className="text-[13.5px] font-bold text-[#5B6B85]">{firstTodo < 0 ? "당월 정산 완료" : `다음 단계: ${S.steps[firstTodo].label}`}</div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[13.5px] font-bold text-[#5B6B85] mr-1">{firstTodo < 0 ? "당월 정산 완료" : `다음 단계: ${S.steps[firstTodo].label}`}</span>
+            <button type="button" data-kp="settle-bulk" onClick={() => onGo?.("거래처정산", { tab: "invoice", board: true })} title="거래처를 여러 곳 선택해 작성 · 발송 · 계산서 발행 · 마감을 한 번에 처리"
+              className="h-9 px-3.5 rounded-xl border border-[#D5DDEA] bg-white text-[13px] font-black text-[#1B2B4B] hover:bg-[#EEF3FB]">명세서 일괄 처리</button>
+            <button type="button" data-kp="settle-bank" onClick={() => onGo?.("거래처정산", { tab: "unsettledMonth", bank: true })} title="은행 거래내역 엑셀을 올리면 미수금과 자동 대사"
+              className="h-9 px-3.5 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black hover:bg-[#1B2B4B]">입금내역 자동 대사</button>
+          </div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2.5">
           {S.steps.map((s, i) => { const done = s.left === 0; const pct = s.total ? Math.round(((s.total - s.left) / s.total) * 100) : 100; const next = i === firstTodo; return (
@@ -95,7 +101,7 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
               </div>
               <div className="mt-2.5 flex items-baseline gap-1" style={NUM}>
                 <span className={`text-[26px] font-black leading-none ${done ? "text-[#9AA9C3]" : "text-[#0F1A30]"}`}>{done ? "완료" : s.left.toLocaleString()}</span>
-                {!done && <span className="text-[13px] font-bold text-[#5B6B85]">{s.unit} 남음</span>}
+                {!done && <span className="text-[13px] font-bold text-[#5B6B85]">{s.unit} 미처리</span>}
               </div>
               <div className="mt-1 h-[18px] text-[12.5px] font-bold text-[#7A879C] truncate" style={NUM}>{done ? `${s.total.toLocaleString()}${s.unit} 완료` : s.amount ? `${short(s.amount)}원 · ${s.hint}` : s.hint}</div>
               <div className="mt-2.5 h-1.5 rounded-full bg-[#EEF1F6] overflow-hidden"><div className="h-full rounded-full bg-[#1B2B4B] transition-all" style={{ width: `${pct}%` }} /></div>
@@ -120,7 +126,7 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
               {S.aging.slice(0, 40).map((a) => (
                 <button key={a.client} type="button" onClick={() => setClient(a.client)} className="w-full flex items-center gap-3 px-1 py-2 border-b border-[#EEF1F6] text-left hover:bg-[#F7F9FC]">
                   <span className="flex-1 min-w-0 truncate text-[14.5px] font-bold text-[#0F1A30]">{a.client}</span>
-                  {a.over + a.d90 > 0 && <span className="text-[12.5px] font-black text-[#B4342A] whitespace-nowrap" style={NUM}>60일 넘음 {short(a.over + a.d90)}</span>}
+                  {a.over + a.d90 > 0 && <span className="text-[12.5px] font-black text-[#B4342A] whitespace-nowrap" style={NUM}>60일 초과 {short(a.over + a.d90)}</span>}
                   <span className="w-[110px] text-right text-[14.5px] font-black text-[#0F1A30] whitespace-nowrap" style={NUM}>{won(a.total)}</span>
                 </button>))}
             </div>)}

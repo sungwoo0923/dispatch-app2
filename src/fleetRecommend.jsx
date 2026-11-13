@@ -4,6 +4,7 @@
 // 거리는 지도상 직선거리(빠르게 비교용)이며, 주소 좌표는 fleetGeo 캐시를 함께 쓴다.
 import { isFleetGrade } from "./fleetGradesCore"; // 🚛 지입차 구분(지입·직영·임대·분양) 한 곳
 import React, { useEffect, useMemo, useState } from "react";
+import { useListKeys } from "./useListKeys";
 import { prefetchGeo } from "./fleetGeo";
 import { haversineKm } from "./tmapFareCalc";
 
@@ -71,9 +72,11 @@ export function useIdleFleet({ drivers = [], dispatchData = [], pickupAddr = "" 
 export function IdleFleetButton({ drivers, dispatchData, pickupAddr, onPick }) {
   const [open, setOpen] = useState(false);
   const { list, hasPickup } = useIdleFleet({ drivers, dispatchData, pickupAddr });
+  // ⌨ ↑/↓ · Enter · Esc
+  const keys = useListKeys({ open, count: list.length, onOpen: () => setOpen(true), onClose: () => setOpen(false), onPick: (i) => { if (list[i]) { onPick?.(list[i]); setOpen(false); } } });
   return (
     <span style={{ position: "relative", display: "inline-block" }}>
-      <button type="button" onClick={() => setOpen((v) => !v)}
+      <button type="button" aria-haspopup="listbox" aria-expanded={open} onKeyDown={keys.onKeyDown} onClick={() => setOpen((v) => !v)}
         title="오늘 배차가 없는 지입·직영 기사를 상차지와 가까운 순으로 보여줍니다"
         style={{ height: 24, padding: "0 9px", borderRadius: 6, border: `1px solid ${NAVY}`, background: open ? NAVY : "#fff", color: open ? "#fff" : NAVY, fontSize: 12, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>
         빈 지입차 {list.length}
@@ -83,12 +86,12 @@ export function IdleFleetButton({ drivers, dispatchData, pickupAddr, onPick }) {
           <div style={{ background: NAVY, color: "#fff", padding: "9px 12px", fontSize: 13, fontWeight: 800 }}>
             오늘 배차 없는 지입차 {list.length}대 · {hasPickup ? "상차지 가까운 순" : "상차지 주소를 입력하면 거리순 정렬"}
           </div>
-          <div style={{ maxHeight: 320, overflowY: "auto" }}>
+          <div ref={keys.listRef} style={{ maxHeight: 320, overflowY: "auto" }}>
             {list.length === 0 && <div style={{ padding: 16, fontSize: 14, fontWeight: 700, color: "#4b5563", textAlign: "center" }}>지금 비어 있는 지입차가 없습니다</div>}
-            {list.map((x) => (
+            {list.map((x, i) => (
               <div key={x.d.id || x.plate} onMouseDown={() => { onPick?.(x); setOpen(false); }}
-                style={{ padding: "10px 12px", borderBottom: "1px solid #eef1f6", cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "#eef4ff"; }} onMouseLeave={(e) => { e.currentTarget.style.background = "#fff"; }}>
+                style={{ padding: "10px 12px", borderBottom: "1px solid #eef1f6", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, background: keys.active(i) ? "#eef4ff" : "#fff" }}
+                {...keys.itemProps(i)} onMouseLeave={() => keys.setIndex(-1)}>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 15, fontWeight: 900, color: "#111827" }}>{x.name || "-"} <span style={{ fontSize: 13, fontWeight: 800, color: "#374151", border: "1.5px solid #111827", borderRadius: 4, padding: "0 5px", marginLeft: 4 }}>{x.plate}</span></div>
                   <div style={{ fontSize: 12, fontWeight: 700, color: "#4b5563", marginTop: 2 }}>{x.loc ? (x.upd ? `위치 ${ago(x.upd)} 갱신` : "위치 있음") : "위치 정보 없음"}{x.d.등급 === "직영" ? " · 직영" : ""}</div>
