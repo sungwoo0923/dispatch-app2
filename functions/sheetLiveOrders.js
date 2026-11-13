@@ -95,6 +95,8 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
       // 삭제 기록(deletedOrders)을 같이 남긴다 — 열려 있는 PC · 모바일 화면과 PC 보관본에서 그 오더가 바로 빠진다
       if (r.missing.length <= limit) { r.missing.forEach((e) => { ops.push((b) => b.delete(db.collection("orders").doc(e.id))); ops.push((b) => b.set(db.collection("deletedOrders").doc(`orders_${e.id}`), { col: "orders", id: e.id, at: FieldValue.serverTimestamp(), by: by, companyName: co })); }); removed = r.missing.length; } else heldBack = r.missing.length;
     }
+    // ⏸ 쓰기 직전에 다시 확인 — 그사이 관리센터에서 껐으면(수동 가져오기 중) 아무것도 쓰지 않는다(같은 줄을 양쪽이 동시에 만들던 중복 방지)
+    if (!force && ops.length) { const cur = (await ref(co).get()).data() || {}; if (cur.enabled !== true) return { skipped: "paused" }; }
     for (let i = 0; i < ops.length; i += 400) { const b = db.batch(); ops.slice(i, i + 400).forEach((f) => f(b)); await b.commit(); }
     // 시트에서 온 새 차량종류(톤수 섞인 이름 제외)는 회사 차량종류 목록에
     const kinds = [...new Set(incoming.map((o) => String(o.차량종류 || "").trim()).filter((k) => k && !/\d+(\.\d+)?\s*(톤|t\b)/i.test(k)))];
