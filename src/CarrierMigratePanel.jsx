@@ -728,7 +728,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
               </div>
             )}
             <div className="mt-6">
-              <div className="text-[14px] font-black text-[#0F1A30] mb-1.5">고정노선 후보 <span className="text-[12.5px] font-semibold text-gray-500">같은 구간 · 같은 운임이 {preset.routeMinCount}건 이상 — 운행 OFF로 만들고, 요일 · 기사를 확인한 뒤 고정노선 화면에서 켜요</span></div>
+              <div className="flex items-center gap-2 flex-wrap mb-1.5"><div className="text-[14px] font-black text-[#0F1A30]">고정노선 후보 <span className="text-[12.5px] font-semibold text-gray-500">같은 구간 · 같은 운임이 {preset.routeMinCount}건 이상 — 운행 OFF로 만들고, 요일 · 기사를 확인한 뒤 고정노선 화면에서 켜요</span></div>{/* ☑ 2026-11-14 전체 선택 · 해제 */}<span className="ml-auto text-[12.5px] font-bold text-[#5B6B85]">{result.routes.filter((_, i) => routeOn[i]).length} / {result.routes.length} 선택</span><button type="button" onClick={() => setRouteOn(Object.fromEntries(result.routes.map((_, i) => [i, true])))} className="h-8 px-3 rounded-lg border border-[#C9D5EA] bg-white text-[12.5px] font-black text-[#1B2B4B]">전체 선택</button><button type="button" onClick={() => setRouteOn({})} className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#5B6B85]">전체 해제</button></div>
               <div className="overflow-x-auto rounded-xl border border-[#E3E8F0]">
                 <table className="min-w-full text-[13px]">
                   <thead className="bg-[#F4F6FA] text-[#5B6B85]"><tr>{["", "노선", "건수", "하루 평균", "청구", "기사", "같은 운임", "요일", "기사"].map((h, i) => <th key={i} className="px-2.5 py-2 text-left font-bold whitespace-nowrap">{h}</th>)}</tr></thead>
