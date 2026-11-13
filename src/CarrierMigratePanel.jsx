@@ -63,17 +63,19 @@ const Stat = ({ label, value, sub }) => (
 // 🔁 2026-11-13 실시간 반영 — 시트에서만 입력 · 수정하는 운송사. 서버가 1분마다 시트를 보고 바뀐 줄만 오더에 반영한다(functions/sheetLiveOrders.js)
 const LIVE_DAYS = [[7, "최근 7일"], [14, "최근 14일"], [31, "최근 1개월"], [62, "최근 2개월"], [93, "최근 3개월"]];
 const agoText = (ms) => { if (!ms) return "아직 없음"; const s = Math.max(0, Math.round((Date.now() - ms) / 1000)); return s < 60 ? "방금" : s < 3600 ? `${Math.floor(s / 60)}분 전` : s < 86400 ? `${Math.floor(s / 3600)}시간 전` : `${Math.floor(s / 86400)}일 전`; };
+// 서버 기능이 아직 배포되지 않았으면 예전 서버가 "알 수 없는 요청"이라고 답한다 → 무엇을 해야 하는지 알려 준다
+const liveErr = (m) => (/알 수 없는 요청/.test(String(m || "")) ? "서버 기능이 아직 배포되지 않았습니다. GitHub › Actions › Firebase 배포에서 \"전부(규칙+색인+저장소+functions)\"를 실행한 뒤 다시 열어 주세요." : m);
 function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
   const [live, setLive] = React.useState(undefined); // undefined 읽는 중 · null 없음
   const [busy, setBusy] = React.useState("");
   const [msg, setMsg] = React.useState("");
-  const load = React.useCallback(() => { if (!co) return; callApi("sheetImport", { action: "liveGet", company: co }).then((d) => { setLive(d.live || null); if (d.live?.url) setUrl((u) => u || d.live.url); }).catch((e) => { setLive(null); setMsg(e.message); }); }, [co, setUrl]);
+  const load = React.useCallback(() => { if (!co) return; callApi("sheetImport", { action: "liveGet", company: co }).then((d) => { setLive(d.live || null); if (d.live?.url) setUrl((u) => u || d.live.url); }).catch((e) => { setLive(null); setMsg(liveErr(e.message)); }); }, [co, setUrl]);
   React.useEffect(() => { setLive(undefined); setMsg(""); load(); }, [load]);
   React.useEffect(() => { if (!live?.enabled) return undefined; const t = setInterval(load, 30000); return () => clearInterval(t); }, [live?.enabled, load]);
   if (!co) return null;
   const set = async (patch, label) => {
     setBusy(label); setMsg("");
-    try { const d = await callApi("sheetImport", { action: "liveSet", company: co, ...patch }); setLive(d.live); } catch (e) { setMsg(e.message); } finally { setBusy(""); }
+    try { const d = await callApi("sheetImport", { action: "liveSet", company: co, ...patch }); setLive(d.live); } catch (e) { setMsg(liveErr(e.message)); } finally { setBusy(""); }
   };
   const turnOn = async () => {
     const u = (url || live?.url || "").trim();
@@ -84,7 +86,7 @@ function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
   };
   const runNow = async () => {
     setBusy("run"); setMsg("");
-    try { const d = await callApi("sheetImport", { action: "liveRun", company: co }); setLive(d.live); const r = d.result || {}; setMsg(`반영 완료 — 새로 ${won(r.created || 0)}건 · 고침 ${won(r.updated || 0)}건 · 삭제 ${won(r.removed || 0)}건 · 그대로 ${won(r.same || 0)}건${r.heldBack ? ` · 시트에 없는 오더 ${won(r.heldBack)}건은 너무 많아 지우지 않았습니다(시트 확인)` : ""}`); } catch (e) { setMsg(e.message); } finally { setBusy(""); }
+    try { const d = await callApi("sheetImport", { action: "liveRun", company: co }); setLive(d.live); const r = d.result || {}; setMsg(`반영 완료 — 새로 ${won(r.created || 0)}건 · 고침 ${won(r.updated || 0)}건 · 삭제 ${won(r.removed || 0)}건 · 그대로 ${won(r.same || 0)}건${r.heldBack ? ` · 시트에 없는 오더 ${won(r.heldBack)}건은 너무 많아 지우지 않았습니다(시트 확인)` : ""}`); } catch (e) { setMsg(liveErr(e.message)); } finally { setBusy(""); }
   };
   const on = !!live?.enabled;
   const r = live?.lastResult;
@@ -159,7 +161,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
     //  저장된 설정이 있으면: 배차방식 별칭 · 차량 구분은 낱개로 합치고(시작 규칙이 이김), 나머지 규칙은 시작 규칙 그대로
     const sug = presetSuggestionFor(co) || {};
     const apply = (saved) => {
-      const base = saved ? { ...saved, ...sug, extraNames: { ...(sug.extraNames || {}), ...(saved.extraNames || {}) }, placeOverrides: { ...(sug.placeOverrides || {}), ...(saved.placeOverrides || {}) }, tabClients: saved.tabClients || {}, skipTabs: [...new Set([...(saved.skipTabs || []), ...(sug.skipTabs || [])])],
+      const base = saved ? { ...saved, ...sug, extraNames: { ...(sug.extraNames || {}), ...(saved.extraNames || {}) }, placeOverrides: { ...(sug.placeOverrides || {}), ...(saved.placeOverrides || {}) }, tabClients: saved.tabClients || {}, skipTabs: [...new Set([...(saved.skipTabs || []), ...(sug.skipTabs || [])])].filter((t) => !(sug.includeTabs || []).includes(t)),
         dispatchAliases: { ...(saved.dispatchAliases || {}), ...(sug.dispatchAliases || {}) }, vehicleGrades: { ...(saved.vehicleGrades || {}), ...(sug.vehicleGrades || {}) } } : sug;
       const p = { ...DEFAULT_PRESET, ...base, dispatchAliases: { ...DEFAULT_PRESET.dispatchAliases, ...(base.dispatchAliases || {}) }, vehicleGrades: { ...DEFAULT_PRESET.vehicleGrades, ...(base.vehicleGrades || {}) } };
       setPreset(p); setAliasDraft(aliasText(p.dispatchAliases)); setOvDraft(p.placeOverrides || {});
