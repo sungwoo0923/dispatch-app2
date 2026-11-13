@@ -2590,6 +2590,9 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
     company: companyAll,
     hidden: hiddenL,
   };
+  // 🛠 2026-11-14 '전체'가 비어 보이던 문제 — 결재선에는 없지만 내가 지급 처리하는 문서(경리 · 재무의 지급 대기 · 지급완료)도 전체에 넣는다
+  //  (예전엔 지급 대기 3 · 지급완료 31인데 전체는 0건이었다 — 전체 = 다른 상태 탭에 보이는 문서를 모두 합친 것)
+  sets.all = [...new Map([...inboxStatus.all, ...sets.paywait, ...sets.paid].map((d) => [d.id, d])).values()].sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
   const mineL = L.filter((d) => d.drafterUid === uid);
   const mineSets = apStatusSets(mineL);
   const redraft = (d) => { setOpen(null); setPreset({ ...d, editId: null }); setPage(d.cat); };

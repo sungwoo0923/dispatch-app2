@@ -931,7 +931,7 @@ export default function RouteBoard({ companyName = "" }) {
     setBusy((b) => b || "sync");
     try {
       const r = await sheetApi({ action: "sync", url: form.sheetUrl, boardId: form.id });
-      if (!quiet || r.created || r.updated || r.gone || r.deleted) setMsg(`시트와 맞췄습니다 — 새 오더 ${r.created || 0}건 · 화주 입력 반영 ${r.updated || 0}건${r.deleted ? ` · 시트에서 지운 줄 ${r.deleted}건 삭제(휴지통 7일 보관)` : ""}${r.gone ? ` · 시트에서 지워진 줄 ${r.gone}건(확인 필요)` : ""}`);
+      if (!quiet || r.created || r.updated || r.gone || r.deleted) setMsg(`시트와 맞췄습니다 — 새 오더 ${r.created || 0}건 · 화주 입력 반영 ${r.updated || 0}건${r.deleted ? ` · 시트에서 지운 줄 ${r.deleted}건 삭제` : ""}${r.gone ? ` · 시트에서 지워진 줄 ${r.gone}건(확인 필요)` : ""}`);
       setTimeout(() => checkRef.current(true), 800);
     } catch (e) { if (!quiet) kpAlert(`시트와 맞추지 못했습니다: ${e?.message || e}`); }
     finally { setBusy((b) => (b === "sync" ? "" : b)); }
