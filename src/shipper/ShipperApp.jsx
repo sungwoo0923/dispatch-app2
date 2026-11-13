@@ -2,6 +2,7 @@
 import PlatformNoticeBanner from "../PlatformNoticeBanner";
 import React, { useEffect, useState, useRef } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
+import { reportScreen, installScreenVisibility, shipperScreenLabel } from "../screenReport";
 import { signOut } from "firebase/auth";
 import { auth, db } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -72,6 +73,8 @@ export default function ShipperApp() {
   const [userData, setUserData] = useState(null);
   const [companyName, setCompanyName] = useState("");
 const location = useLocation();
+  // 📍 2026-11-13 지금 보는 화면(관리센터 실시간 표시)
+  useEffect(() => { installScreenVisibility(); reportScreen(shipperScreenLabel(location.pathname.replace(/^\/shipper\/?/, "").split("/")[0] || "home"), "shipper"); }, [location.pathname]);
 const [myInfoOpen, setMyInfoOpen] = useState(false);
 const [transportMenuOpen, setTransportMenuOpen] = useState(false);
 const [liveEvents, setLiveEvents] = useState([]);

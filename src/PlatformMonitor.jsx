@@ -13,7 +13,7 @@ import { COMPANY_FEATURES, useCompanyFeatures, setCompanyFeature } from "./compa
 import CompanyApplications from "./CompanyApplications";
 import { PricingEditor, QuoteBuilder, QuoteHistory, useSalesPricing, applyPlanBill } from "./SalesQuote";
 // ⭐ 2026-11-02 관리자센터 — 실시간 계정·접속(users·loginSessions) + 운영 위젯
-import { usePlatformLive, mergeCompanies, mergeShippers, StatsStamp, LiveNowPanel, SignupTimeline, PendingPanel, DupeWarning, HealthCard, StaffList, Spark, PLAN_NAMES } from "./PlatformLive";
+import { usePlatformLive, ScreenChip, mergeCompanies, mergeShippers, StatsStamp, LiveNowPanel, SignupTimeline, PendingPanel, DupeWarning, HealthCard, StaffList, Spark, PLAN_NAMES } from "./PlatformLive";
 import { CustomSelect } from "./CustomSelect";
 import { useHelpAcks, helpNeededOf, ackHelpNeeded } from "./helpNeeded"; // 🆘 2026-11-09 신규 운송사 "도움 필요"
 import { fmtMoney, parseMoney } from "./formatInput";
@@ -628,7 +628,11 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
                   <div style={td}>{s.linked || "-"}</div>
                   <div style={td}>{s.linkStatus === "approved" ? "연동됨" : s.linked ? "연동 대기" : "-"}</div>
                   <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{s.users || 0}</div>
-                  <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: s.onlineNow ? NAVY : "#9ca3af" }}>{s.onlineNow || 0}</div>
+                  <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: s.onlineNow ? NAVY : "#9ca3af" }}>{s.onlineNow || 0}
+                    {/* 📍 2026-11-13 지금 접속한 화주 계정이 보는 화면 */}
+                    {(live?.onlineList || []).filter((p) => p.isShipper && p.now && p.company === s.name && p.screen).slice(0, 4).map((p) => (
+                      <span key={p.uid} style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 4, fontSize: 12.5, fontWeight: 700, color: "#3A4A66", fontFamily: "inherit", whiteSpace: "nowrap" }}>{p.name}<ScreenChip p={p} now={live.now} /></span>))}
+                  </div>
                   <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{s.online || 0}<span style={{ display: "block", fontSize: 13, color: "#6b7280", fontFamily: "inherit" }}>{ago(s.lastSeen)}</span></div>
                   <div style={{ ...td, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14 }}>{ymdOf(s.appliedAt)}</div>
                 </React.Fragment>

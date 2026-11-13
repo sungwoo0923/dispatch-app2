@@ -124,7 +124,7 @@ export default defineConfig({
         }
         // ⭐ 접속 버전 확인용 — 화면(VersionCheck)이 이 파일과 자기 빌드 시각을 비교한다
         if (fs.existsSync("./dist")) {
-          fs.writeFileSync("./dist/version.json", JSON.stringify({ version: getAppVersion(), build: BUILD_TIME }));
+          fs.writeFileSync("./dist/version.json", JSON.stringify({ version: getAppVersion(), build: BUILD_TIME, url: process.env.VERCEL_URL || "" }));
         }
       },
     },
@@ -142,5 +142,6 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(getAppVersion()),
     __BUILD_TIME__: JSON.stringify(BUILD_TIME),
+    __DEPLOY_URL__: JSON.stringify(process.env.VERCEL_URL || ""), // 🚦 이 빌드의 Vercel 배포 주소(업데이트 배포 잠금 — api/shell.js)
   },
 });

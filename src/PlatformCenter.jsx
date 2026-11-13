@@ -29,6 +29,7 @@ import CompanyResetPanel from "./CompanyResetPanel";
 const SecurityEventsPanel = React.lazy(() => import("./SecurityEventsPanel")); // 🛡 2026-11-09 보안 알림
 const ErrorReportsPanel = React.lazy(() => import("./ErrorReportsPanel")); // 🧯 2026-11-10 오류 신고([오류 보내기])
 const TestSeedPanel = React.lazy(() => import("./TestSeedPanel")); // 🧪 2026-11-08 테스트운송사 가짜 데이터
+import ReleasePanel from "./ReleasePanel"; // 🚦 업데이트 배포 잠금
 import { ContractLifecyclePanel, SubAdminPanel } from "./ContractLifecycle"; // ⭐ 2026-11-06 이용 계약 · 부관리자
 import SheetImportPanel from "./SheetImportPanel";
 import NoticeBoard from "./NoticeBoard";
@@ -96,6 +97,7 @@ const SECTIONS = [
     { key: "integrations", label: "연동 설정", en: "INTEGRATIONS", icon: "link" }, // 🔌 2026-11-07 국세청 · 기상청 · 팝빌
   ] },
   { key: "data", label: "보안·데이터", en: "SECURITY", icon: "shield", items: [
+    { key: "release", label: "업데이트 배포", en: "RELEASE", icon: "key" }, // 🚦 2026-11-13 여기서 눌러야 가입자 화면이 바뀐다
     { key: "tenancy", label: "운송사 분리", en: "ISOLATION", icon: "shield" },
     { key: "sessions", label: "로그인 관리", en: "SESSIONS", icon: "key" },
     { key: "sessionLogs", label: "접속 이력", en: "AUDIT LOG", icon: "history" },
@@ -1320,6 +1322,7 @@ function PlatformCenterInner({ user }) {
   else if (tab === "companyReset") body = <><Hero en="DATA · RESET" title="운송사 초기화" desc="운송사 데이터를 모두 지웁니다 — 7일 동안 보관함에서 복원할 수 있습니다. 계약을 끝내며 지우려면 계약 › 이용 계약·만료를 쓰세요." right={<button type="button" onClick={() => setTab("contract:life")} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/20 text-[14px] font-black whitespace-nowrap">이용 계약·만료 ›</button>} /><CompanyResetPanel /></>;
   else if (tab === "testSeed") body = <><Hero en="DATA · TEST DATA" title="테스트 데이터" desc="테스트운송사에 가짜 데이터를 채우거나 다시 채워요. 다른 운송사에는 넣을 수 없어요." /><React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중</div>}><TestSeedPanel /></React.Suspense></>;
   else if (tab === "contract:life") body = <><Hero en="CONTRACTS · LIFECYCLE" title="이용 계약·만료" desc="운송사별 계약 기간을 정하고, 만료 30·7·1일 전 안내를 보냅니다. 계약종료하면 데이터는 남기고 그 회사 사람은 접속할 수 없습니다." right={<Clock />} /><ContractLifecyclePanel openCompany={openCompany} /></>;
+  else if (tab === "release") body = <><Hero en="RELEASE · GATE" title="업데이트 배포" desc="새 화면을 올려도 여기서 배포해야 가입자 화면이 바뀝니다. 최고관리자 · 부관리자는 항상 최신 화면을 먼저 봅니다." /><ReleasePanel /></>;
   else if (tab === "subAdmin") body = <><Hero en="SECURITY · SUB ADMIN" title="부관리자" desc="최고관리자와 같은 권한을 가진 부관리자(1명)를 보고 지정·해제합니다." /><SubAdminPanel /></>;
 
   if (phone) return <PlatformMobileShell user={user} sections={sectionsView} section={sectionView} tab={tab} setTab={setTab} toApp={toApp} logout={logout} secBadge={secBadge}>{body}</PlatformMobileShell>;

@@ -109,6 +109,8 @@ export function PlatformLiveProvider({ children }) {
       });
       p.lastSeen = Math.max(p.lastSeen, seen);
       p[kind] = Math.max(p[kind], seen);
+      // 📍 2026-11-13 지금 보는 화면 — 가장 최근에 화면을 바꾼 기기 기준(src/screenReport.js)
+      if (s.screen && Number(s.screenAt || 0) >= (p.screenAt || 0)) { p.screen = s.screen; p.screenAt = Number(s.screenAt || 0); p.screenApp = s.screenApp || kind; p.screenHidden = !!s.screenHidden; p.ver = s.appVer || ""; p.build = s.appBuild || ""; }
       p.devices.push({ kind, device: s.device || "", seen });
     });
     const plist = Object.values(people);
@@ -125,7 +127,7 @@ export function PlatformLiveProvider({ children }) {
         if (now - p.pc < DAY_MS) t.onlinePc += 1;
         if (now - p.mobile < DAY_MS) t.onlineMobile += 1;
         const st = t.staffList.find((x) => x.uid === p.uid);
-        if (st) Object.assign(st, { lastSeen: p.lastSeen, now: p.now, pc: p.pc, mobile: p.mobile });
+        if (st) Object.assign(st, { lastSeen: p.lastSeen, now: p.now, pc: p.pc, mobile: p.mobile, screen: p.screen, screenAt: p.screenAt, screenApp: p.screenApp, screenHidden: p.screenHidden });
       }
     });
     const onlineList = plist.filter((p) => p.day).sort((a, b) => b.lastSeen - a.lastSeen);
@@ -326,6 +328,21 @@ export function StatsStamp({ updatedAtMs, busy, onRefresh, dark = true }) {
   );
 }
 
+// 📍 지금 보는 화면 칩 — 접속 중일 때만. "배차현황 · 3분째" / 창을 가리면 "자리 비움"
+const stayText = (ms, now) => { const s = Math.max(0, Math.round((now - ms) / 1000)); return s < 60 ? "방금" : s < 3600 ? `${Math.floor(s / 60)}분째` : `${Math.floor(s / 3600)}시간째`; };
+export function ScreenChip({ p, now }) {
+  if (!p?.screen || !p.now) return null;
+  const app = p.screenApp === "mobile" ? "모바일" : p.screenApp === "shipper" ? "화주" : "PC";
+  return (
+    <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-[#DCE3EE] bg-white text-[12px] font-black whitespace-nowrap max-w-full" title={`${app} · ${p.screen}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${p.screenHidden ? "bg-[#C3CDDD]" : "bg-[#1B2B4B]"}`} />
+      <span className={`truncate ${p.screenHidden ? "text-[#94A3B8]" : "text-[#1B2B4B]"}`}>{p.screen}</span>
+      <span className="text-[#94A3B8] font-bold">{p.screenHidden ? "자리 비움" : stayText(p.screenAt, now)}</span>
+      {p.ver ? <span className="text-[#B6C2D6] font-bold tabular-nums">v{p.ver}</span> : null}
+    </span>
+  );
+}
+
 // ═══════════════════════ 지금 접속 중 ═══════════════════════
 export function LiveNowPanel({ compact = false, onMore, onCompany }) {
   const live = usePlatformLive();
@@ -365,6 +382,7 @@ export function LiveNowPanel({ compact = false, onMore, onCompany }) {
                   </div>
                   <button type="button" onClick={() => onCompany?.(p.company)} className="block max-w-full mt-0.5 text-left text-[13.5px] font-semibold text-[#5B6B85] truncate hover:underline leading-tight">{p.isShipper ? "화주 · " : ""}{p.company}</button>
                 </div>
+                <div className="hidden sm:block shrink min-w-0"><ScreenChip p={p} now={now} /></div>
                 <div className="shrink-0 flex items-center gap-2.5 sm:gap-3">
                   <KindChips p={p} now={now} />
                   <span className={`min-w-[64px] text-right text-[14.5px] font-black whitespace-nowrap tabular-nums ${p.now ? "text-[#1B2B4B]" : "text-[#94A3B8]"}`}>{agoText(p.lastSeen, now)}</span>
@@ -560,6 +578,7 @@ export function StaffList({ list = [] }) {
               {!s.approved && <Pill tone="line">승인 대기</Pill>}
             </div>
             <div className="text-[12px] text-[#7A879C] font-semibold truncate">{[s.team, s.position].filter(Boolean).join(" · ") || s.email}{s.createdAt ? ` · 가입 ${ymdOf(s.createdAt).slice(2)}` : ""}</div>
+            <div className="mt-1"><ScreenChip p={s} now={now} /></div>
           </div>
           <div className="text-right shrink-0">
             <div className="flex justify-end"><KindChips p={s} now={now} /></div>

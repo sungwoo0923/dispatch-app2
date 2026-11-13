@@ -11,6 +11,8 @@ installAlertShim(); // 브라우저 기본 알림창 대신 프로그램 디자�
 import { safeLocalSet } from "./safeStorage";
 import UpdateBanner from "./UpdateBanner";
 import VersionCheck from "./VersionCheck";
+import { syncReleaseChannel, targetVersion, CUR_BUILD } from "./releaseGate";
+import { hardReloadForUpdate } from "./UpdateBanner";
 import TextOverrideLayer from "./TextOverrideLayer"; // ⭐ 2026-11-06 문구 편집 모드(최고관리자) — 모든 화면의 글자 덮어쓰기
 import {
   BrowserRouter as Router,
@@ -202,6 +204,14 @@ function EntryGate({ children }) {
 export default function App() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
+  // 🚦 2026-11-13 업데이트 배포 잠금 — 최고관리자 · 부관리자 브라우저는 항상 최신 화면(쿠키 kp_ch) · 그 밖은 배포한 버전(src/releaseGate.js)
+  React.useEffect(() => {
+    if (!role) return;
+    const admin = role === "totalMaster";
+    if (!syncReleaseChannel(admin) || !admin) return;
+    // 방금 관리자로 확인됐고 지금 화면이 예전(배포 버전)이면 최신 화면으로 한 번 바꾼다
+    targetVersion().then((v) => { if (v?.build && CUR_BUILD && v.build > CUR_BUILD) hardReloadForUpdate(); }).catch(() => {});
+  }, [role]);
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState(false);
   const [userCompany, setUserCompany] = useState("");

@@ -71,8 +71,34 @@ jobs:
         if: contains(steps.t.outputs.only, 'functions')
         run: npm ci --prefix functions
 
-      - name: Firebase 배포
-        run: npx -y firebase-tools@13 deploy --only "${{ steps.t.outputs.only }}" --project dispatch-app-9b92f --non-interactive --force
+      # 🛠 2026-11-13 규칙(·색인·저장소)과 서버 기능을 따로 올린다
+      #  규칙이 이미 최신일 때 firebase-tools 가 "Release … cloud.firestore already exists"(409)로 멈추면서
+      #  뒤따르는 서버 기능까지 못 올라가던 문제 — 이 409 는 "이미 올라가 있음"이라 성공으로 보고 넘어간다
+      - name: Firebase 배포 (규칙 · 색인 · 저장소)
+        env:
+          ONLY: ${{ steps.t.outputs.only }}
+        run: |
+          PART=$(printf '%s' "$ONLY" | tr ',' '\n' | grep -v '^functions' | paste -sd, - || true)
+          if [ -z "$PART" ]; then echo "규칙 쪽 대상 없음 — 건너뜀"; exit 0; fi
+          set +e
+          npx -y firebase-tools@13 deploy --only "$PART" --project dispatch-app-9b92f --non-interactive --force 2>&1 | tee "$RUNNER_TEMP/rules.log"
+          CODE=${PIPESTATUS[0]}
+          set -e
+          if [ "$CODE" -ne 0 ]; then
+            if grep -q "HTTP Error: 409" "$RUNNER_TEMP/rules.log" && grep -q "already exists" "$RUNNER_TEMP/rules.log"; then
+              echo "::warning::규칙이 이미 최신이라 다시 올리지 않았습니다(409 already exists) — 계속 진행합니다."
+            else
+              exit "$CODE"
+            fi
+          fi
+
+      - name: Firebase 배포 (서버 기능)
+        env:
+          ONLY: ${{ steps.t.outputs.only }}
+        run: |
+          PART=$(printf '%s' "$ONLY" | tr ',' '\n' | grep '^functions' | paste -sd, - || true)
+          if [ -z "$PART" ]; then echo "서버 기능 대상 없음 — 건너뜀"; exit 0; fi
+          npx -y firebase-tools@13 deploy --only "$PART" --project dispatch-app-9b92f --non-interactive --force
 
       - name: 정리
         if: always()

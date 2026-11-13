@@ -6,6 +6,7 @@
 //    모바일 메뉴 버튼/버전칸)에 "NEW" 표시만 하고, 그걸 누르면(openUpdatePopup) 새 버전 안내 카드가 뜬다.
 import React, { useCallback, useEffect, useState } from "react";
 import { hardReloadForUpdate } from "./UpdateBanner";
+import { targetVersion } from "./releaseGate"; // 🚦 2026-11-13 가입자는 "배포한 버전" 기준, 관리자는 최신 기준
 
 /* global __APP_VERSION__, __BUILD_TIME__ */
 const CUR_VER = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
@@ -36,9 +37,7 @@ export default function VersionCheck() {
 
   const check = useCallback(async (first) => {
     try {
-      const r = await fetch(`/version.json?t=${Date.now()}`, { cache: "no-store" });
-      if (!r.ok) return;
-      const latest = await r.json();
+      const latest = await targetVersion();
       if (!latest?.build) return;
       const old = CUR_BUILD && latest.build > CUR_BUILD; // 서버 빌드가 더 새로우면 이전 버전
       if (old) { setState({ kind: "old", latest }); setNewVer(latest); return; }
