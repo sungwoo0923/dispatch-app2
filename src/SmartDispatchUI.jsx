@@ -47,19 +47,19 @@ export function TodayTodo({ rows = [], onGo }) {
   const fare = t.noFare + t.noDriverFare;
   const cells = [
     { k: "unassigned", code: "PENDING", label: "미배차", n: t.unassigned, tone: t.unassigned ? TD.warn : "#fff",
-      sub: t.unassigned ? ([t.unassignedToday ? `오늘 상차 ${t.unassignedToday}건` : "", t.overdue ? `지난 날짜 ${t.overdue}건` : ""].filter(Boolean).join(" · ") || "기사를 정해 주세요") : "모두 배차됐습니다", go: "배차현황:미배차현황" },
+      sub: t.unassigned ? ([t.unassignedToday ? `오늘 상차 ${t.unassignedToday}건` : "", t.overdue ? `상차일 경과 ${t.overdue}건` : ""].filter(Boolean).join(" · ") || "배차 대기") : "전건 배차 완료", go: "배차현황:미배차현황" },
     { k: "today", code: "TODAY", label: "오늘 상차", n: t.today, tone: "#fff",
       sub: t.today ? `배차 완료 ${t.todayDone} / ${t.today}` : "오늘 상차 오더 없음", bar: t.today ? t.todayDone / t.today : null, go: "실시간배차현황" },
     { k: "tomorrow", code: "TOMORROW", label: "내일 상차", n: t.tomorrow, tone: "#fff",
-      sub: t.tomorrowOpen ? `아직 미배차 ${t.tomorrowOpen}건` : t.tomorrow ? "모두 배차됐습니다" : "내일 상차 오더 없음", warn: !!t.tomorrowOpen, go: "배차현황:미배차현황" },
+      sub: t.tomorrowOpen ? `미배차 ${t.tomorrowOpen}건` : t.tomorrow ? "전건 배차 완료" : "내일 상차 오더 없음", warn: !!t.tomorrowOpen, go: "배차현황:미배차현황" },
     { k: "fare", code: "FARE", label: "운임 미입력", n: fare, tone: fare ? TD.amber : "#fff",
-      sub: fare ? `청구 ${t.noFare} · 기사 ${t.noDriverFare} (최근 30일)` : "빠진 운임이 없습니다", go: "배차현황:배차현황" },
+      sub: fare ? `청구 ${t.noFare} · 기사 ${t.noDriverFare} (최근 30일)` : "미입력 없음", go: "배차현황:배차현황" },
   ];
   return (
     <div data-kp="today-todo" style={{ position: "relative", display: "flex", alignItems: "stretch", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
       <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 6px 0 2px", minWidth: 84 }}>
         <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.22em", color: TD.glow }}>TO-DO</span>
-        <span style={{ fontSize: 15, fontWeight: 900, color: "#fff", letterSpacing: "-0.01em", whiteSpace: "nowrap" }}>오늘 할 일</span>
+        <span style={{ fontSize: 15, fontWeight: 900, color: "#fff", letterSpacing: "-0.01em", whiteSpace: "nowrap" }}>업무 현황</span>
       </div>
       {cells.map((c) => (
         <button key={c.k} type="button" onClick={() => onGo?.(c.go)} title={`${c.label} 화면 열기`} className="hd-tile kp-todo"
@@ -242,9 +242,9 @@ export function DriverSuggestCell({ order, pick, onAssign, drivers = [], disable
               }}
               className="mt-2 w-full h-9 rounded-lg border border-[#DCE3EE] px-3 text-[13px] font-semibold text-[#0F1A30] placeholder:text-[#A6B3C8] placeholder:font-medium outline-none" />
           </div>
-          <div className="px-3 py-1.5 text-[10.5px] font-black tracking-[0.1em] text-[#8FA0BD] bg-[#F8FAFD] border-b border-[#EDF1F7]">{q.trim() ? `검색 결과 ${shown.length}명` : `추천순 ${shown.length}명 · 같은 구간을 많이 뛴 순`}</div>
+          <div className="px-3 py-1.5 text-[10.5px] font-black tracking-[0.1em] text-[#8FA0BD] bg-[#F8FAFD] border-b border-[#EDF1F7]">{q.trim() ? `검색 결과 ${shown.length}명` : `추천순 ${shown.length}명 · 동일 구간 운행 횟수 기준`}</div>
           <div className="max-h-[264px] overflow-y-auto">
-            {shown.length === 0 && <div className="px-4 py-5 text-[12.5px] text-[#7C8BA5]">{q.trim() ? "맞는 기사가 없습니다." : "이 구간을 뛴 기록이 없습니다. 위에서 검색해 주세요."}</div>}
+            {shown.length === 0 && <div className="px-4 py-5 text-[12.5px] text-[#7C8BA5]">{q.trim() ? "검색 결과가 없습니다." : "동일 구간 운행 이력이 없습니다. 검색해 주세요."}</div>}
             {shown.map((d, i) => (
               <button key={d.차량번호} data-i={i} type="button" tabIndex={-1} onMouseEnter={() => setIdx(i)} onClick={() => choose(d)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 text-left border-b border-[#F1F4F9] last:border-b-0 ${i === idx ? "bg-[#F1F5FC]" : "bg-white"}`}>
@@ -254,7 +254,7 @@ export function DriverSuggestCell({ order, pick, onAssign, drivers = [], disable
                   <span className="block text-[11px] text-[#8FA0BD] font-semibold truncate" style={NUM}>{d.other ? (d.전화번호 || "등록 기사") : `${d.last ? `최근 ${md(d.last)}` : ""}${d.ton ? ` · ${d.ton}` : ""}${d.kind ? ` ${d.kind}` : ""}`}</span>
                 </span>
                 <span className="shrink-0 text-right text-[11.5px] font-black" style={NUM}>
-                  {d.busy ? <span className="text-[#C8372D]">이 날 배차됨</span> : d.same ? <span className="text-[#1B2B4B]">같은 구간 {d.same}회</span> : d.near ? <span className="text-[#7C8BA5]">비슷한 구간 {d.near}회</span> : <span className="text-[#B8C4D8]">기록 없음</span>}
+                  {d.busy ? <span className="text-[#C8372D]">당일 배차</span> : d.same ? <span className="text-[#1B2B4B]">동일 구간 {d.same}회</span> : d.near ? <span className="text-[#7C8BA5]">유사 구간 {d.near}회</span> : <span className="text-[#B8C4D8]">이력 없음</span>}
                 </span>
               </button>
             ))}
@@ -285,7 +285,7 @@ export function AssignConfirm({ target, onCancel, onOk, busy = false }) {
       <div className="relative w-[440px] max-w-[92vw] rounded-2xl bg-white shadow-[0_30px_70px_rgba(11,20,40,0.35)] overflow-hidden">
         <div className="px-6 pt-5 pb-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div className="text-[10px] font-black tracking-[0.24em] text-[#8FB0F0]">QUICK ASSIGN</div>
-          <div className="mt-1 text-[18px] font-black">이 기사로 배정할까요?</div>
+          <div className="mt-1 text-[18px] font-black">기사 배정 확인</div>
         </div>
         <div className="px-6 py-4 space-y-3">
           <div className="rounded-xl border border-[#E6EBF3] px-4 py-3">
@@ -296,10 +296,10 @@ export function AssignConfirm({ target, onCancel, onOk, busy = false }) {
           <div className="rounded-xl border border-[#1B2B4B] px-4 py-3">
             <div className="text-[11px] font-black text-[#8FA0BD]">기사</div>
             <div className="mt-0.5 flex items-baseline gap-2"><span className="text-[16px] font-black text-[#0F1A30]">{d.이름}</span><span className="text-[13px] font-bold text-[#1B2B4B]" style={NUM}>{d.차량번호}</span></div>
-            <div className="text-[12px] text-[#5B6B86] font-semibold" style={NUM}>{d.전화번호 || "전화번호 없음"} · 같은 구간 {d.same}회{d.near ? ` · 비슷한 구간 ${d.near}회` : ""}{d.last ? ` · 최근 ${d.last}` : ""}</div>
-            {d.busy && <div className="mt-1.5 text-[12px] font-black text-[#C8372D]">이 날 다른 오더에 이미 배차되어 있습니다. 그래도 배정하려면 [배정]을 누르세요.</div>}
+            <div className="text-[12px] text-[#5B6B86] font-semibold" style={NUM}>{d.전화번호 || "전화번호 없음"} · 동일 구간 {d.same}회{d.near ? ` · 유사 구간 ${d.near}회` : ""}{d.last ? ` · 최근 ${d.last}` : ""}</div>
+            {d.busy && <div className="mt-1.5 text-[12px] font-black text-[#C8372D]">당일 다른 오더에 배차된 기사입니다. 중복 배정하려면 [배정]을 누르세요.</div>}
           </div>
-          <div className="text-[11.5px] text-[#8FA0BD] font-semibold">운임은 바꾸지 않습니다. Enter 배정 · Esc 취소 · ←→ 이동</div>
+          <div className="text-[11.5px] text-[#8FA0BD] font-semibold">운임은 변경되지 않습니다. Enter 배정 · Esc 취소 · ←→ 이동</div>
         </div>
         <div className="px-6 pb-5 flex justify-end gap-2">
           <button type="button" onClick={onCancel} className={`h-10 px-4 rounded-xl border text-[13.5px] font-black text-[#5B6B86] hover:bg-[#F6F8FC] ${sel === 0 ? "border-[#1B2B4B] shadow-[0_0_0_3px_rgba(27,43,75,0.12)]" : "border-[#DCE3EE]"}`}>취소</button>
