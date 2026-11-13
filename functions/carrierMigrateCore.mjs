@@ -53,6 +53,7 @@ export const DEFAULT_PRESET = {
   weightTonTabs: [], // 중량(kg) 칸을 톤수로 바꿔 차량톤수에 넣는 탭(소계 · 중량 칸 ÷ 1,000)
   nextDayTabs: [], // 입고시간(당착 · 월착) 칸이 비어 있으면 다음 날 도착으로 보는 탭
   sumOverTotal: false, // 금액 = 운송료 + 추가 칸(야상 · 경유 …)을 더한 값. 합계 칸은 운송료 칸이 없는(또는 비어 있는) 경우에만 쓴다
+  buyTotalFirst: false, // 기사운임 = 매입 합계 칸(숫자가 있을 때). 합계 칸이 비었으면 운송료 + 추가 칸 — sumOverTotal 보다 먼저(매입에만)
   blankTotalZero: false, // 합계 칸이 있는데 비어 있는 줄은 0원으로(시트 합계 그대로) — 운송료 칸 금액은 메모로
   defaultVehicleKind: "", // 차종 칸에 차량종류가 없으면(톤수만 적힌 줄) 넣을 차량종류
   forceVehicleKind: "", // 시트에 뭐라고 적혀 있든 차량종류를 이 값으로 — 예: JY "윙바디"(차종 칸에 적힌 말은 톤수만 쓴다)
@@ -103,6 +104,8 @@ export const PRESET_SUGGESTIONS = {
     // 💰 2026-11-14 사용자 확정 — 금액 기준은 "운송료 + 야상(추가) 칸을 더한 값". 합계만 있는 곳은 합계 그대로
     //  (시트의 합계 칸이 운송료와 다르게 적힌 줄 · "-"인 줄이 있어도 운송료 + 추가를 따른다. "180,000 착불"처럼 글자가 섞인 칸은 엑셀 합계처럼 더하지 않는다)
     sumOverTotal: true,
+    // 💰 2026-11-14 사용자 확정 — 기사운임 = 매입 합계(운송료와 다르면 합계). 매출(청구운임)은 위 기준 그대로
+    buyTotalFirst: true,
     // 📅 2026-11-14 사용자 요청 — 2026년 10월 1일 상차분부터만 가져온다(그 전 줄은 "기간 밖"으로 빼고, 가져오기 · 비교 · 실시간 반영 모두 같은 기준)
     fromDate: "2026-10-01",
     skipTabs: ["카고LCL"],
@@ -617,6 +620,8 @@ function rowToOrder(r, L, ctx) {
     //  preset.blankTotalZero 를 켠 회사(JY)는 시트 합계 그대로 0으로 넣고, 운송료 칸의 금액은 메모로 남긴다(예전엔 운송료를 넣어 시트 합계보다 컸다)
     //  합계 칸에 "-"가 찍힌 줄만 해당 — 칸이 아예 빈 줄(아직 합계를 안 넣은 줄)은 운송료 그대로
     if (ctx.preset.blankTotalZero && grp.total >= 0 && !t.n && /^[-–—]$/.test(g(grp.total)) && sum > 0 && !cods.length) { notes.push(`${grp === L.sale ? "매출" : "매입"} 합계 칸 비어 있음 · 운송료 ${sum.toLocaleString("ko-KR")}원`); return { base: 0, extras: [], total: 0, notes, hasTotal: false, blanked: sum }; }
+    // 💰 2026-11-14 사용자 확정 — 매입(기사운임)은 합계 칸이 기준: 운송료와 합계가 다르게 적힌 줄은 합계를 따른다(합계가 비었으면 운송료 + 추가)
+    if (ctx.preset.buyTotalFirst && grp === L.buy && t.n) return { base: b.n, extras, total: t.n, notes, hasTotal: true };
     if (ctx.preset.sumOverTotal) return { base: b.n, extras, total: sum || t.n, notes, hasTotal: grp.total >= 0 && !!t.n && !sum };
     return { base: b.n, extras, total: t.n || sum, notes, hasTotal: grp.total >= 0 && !!t.n };
   };
@@ -1351,7 +1356,13 @@ export function reconcileOrders(existing = [], incoming = [], { keepKeys = ["imp
     const before = new Set([...(Array.isArray(e.data._sheetKeys) ? e.data._sheetKeys : SHEET_CORE_KEYS)]);
     before.forEach((k) => { if (!(k in next) && !keepKeys.includes(k) && e.data[k] != null && e.data[k] !== "" && !(Array.isArray(e.data[k]) && !e.data[k].length) && !held(k, "")) patch[k] = Array.isArray(e.data[k]) ? [] : (typeof e.data[k] === "number" ? 0 : typeof e.data[k] === "boolean" ? false : ""); });
     if (pkChanged) { patch._programKeys = [...pk]; patch._sheetBase = Object.fromEntries(Object.entries(sb).filter(([k]) => pk.has(k))); }
-    if (Object.keys(patch).length) update.push({ id: e.id, rec: o, patch: { ...patch, _sheetKeys: Object.keys(next) } }); else sameN += 1;
+    // 🧹 2026-11-14 시트에는 기사가 없고(미배차) 프로그램 오더도 배차중인데 차량 · 기사만 남아 있는 줄 — 시트에서 기사를 지웠는데 프로그램에 남던 오더를 바로잡는다
+    if (!next.차량번호 && (next.배차상태 || e.data.배차상태) === "배차중" && e.data.배차상태 === "배차중") ["차량번호", "이름", "전화번호"].forEach((k) => { if (!(k in next) && e.data[k] && !held(k, "")) patch[k] = ""; });
+    // 값은 같아도 시트에 새로 생긴 칸(프로그램에서 넣어 시트에 쓴 차량 · 기사 등)은 "시트에서 온 칸"으로 적어 둔다 — 나중에 시트에서 지우면 프로그램에서도 비워지게
+    const grew = Array.isArray(e.data._sheetKeys) && Object.keys(next).some((k) => !e.data._sheetKeys.includes(k));
+    if (Object.keys(patch).length) update.push({ id: e.id, rec: o, patch: { ...patch, _sheetKeys: [...new Set([...(Array.isArray(e.data._sheetKeys) ? e.data._sheetKeys.filter((k) => pk.has(k)) : []), ...Object.keys(next)])] } });
+    else if (grew) update.push({ id: e.id, rec: o, patch: { _sheetKeys: [...new Set([...e.data._sheetKeys, ...Object.keys(next)])] } });
+    else sameN += 1;
   });
   return { create, update, same: sameN, missing: [...left.values()] };
 }

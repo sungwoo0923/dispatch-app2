@@ -243,4 +243,34 @@ async function world(mode, opts = {}) {
   assert.equal(find().차량번호, "경기66바6666");
   console.log("live(시트에서 기사 삭제) OK");
 }
+{
+  // 프로그램에서 배차(→ 시트에 씀) → 시트에서 그 기사를 지움 → 프로그램 오더에서도 차량 · 기사가 빠진다
+  const { makeSheetLive } = require("../functions/sheetLiveOrders.js");
+  const w = await world("on");
+  let mt = 1;
+  const live = makeSheetLive({ db: w.db, FieldValue: { serverTimestamp: () => TS, delete: () => DEL, arrayUnion: (...v) => v }, sheetsApiFor: w.sh.api, parseSpreadsheetId: (u) => (u ? "sid" : ""), quoteTab: (t) => `'${t}'`, sheetModifiedTime: async () => String(mt), bumpDataVersion: async () => {}, push: w.push });
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const [y, m, d] = today.split("-").map(Number);
+  w.tabs["아산 내수"].push([`${y}. ${m}. ${d}`, "신봉길101", "평택시 포승읍", "", "", "10", "1톤", "80,000", "", "80,000", "", "", "0", "", "", "", "", "", "", "", ""]);
+  await w.db.collection("sheetLive").doc(CO).set({ ...w.cfg, days: 14 });
+  const cfg = () => w.db.data("sheetLive", CO);
+  const find = () => w.db.ids("orders").map((id) => ({ id, ...w.db.data("orders", id) })).find((o) => o.상차일 === today);
+  await live.runOne(CO, cfg());
+  assert.deepEqual([find().배차상태, find().차량번호 || ""], ["배차중", ""]);
+  // 프로그램에서 배차
+  const o0 = find(); const { id, ...doc0 } = o0;
+  await w.write(id, { ...doc0, 차량번호: "충남89바6045", 이름: "김기사", 전화번호: "010-5427-4535", 기사운임: "70000", 배차상태: "배차완료" });
+  await w.run(); mt += 1;
+  const row = w.tabs["아산 내수"][w.tabs["아산 내수"].length - 1];
+  assert.deepEqual([row[16], row[17], row[10]], ["충남89바6045", "김기사", "70000"]);
+  assert.ok(find()._sheetKeys.includes("차량번호") && find()._sheetKeys.includes("이름"));
+  await live.runOne(CO, cfg());
+  assert.equal(find().차량번호, "충남89바6045");
+  // 시트에서 그 기사를 지운다
+  row[16] = ""; row[17] = ""; row[18] = ""; row[10] = ""; mt += 1;
+  const r = await live.runOne(CO, cfg());
+  assert.equal(r.updated, 1, JSON.stringify(r));
+  assert.deepEqual([find().차량번호, find().이름, find().전화번호, find().배차상태, Number(find().기사운임)], ["", "", "", "배차중", 0]);
+  console.log("live(프로그램 배차 → 시트에서 기사 삭제) OK");
+}
 console.log("sheetPush: 모두 통과");

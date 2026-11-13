@@ -110,7 +110,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     const batchId = `live_${kstYmd(now).replace(/-/g, "")}`;
     const ops = [];
     r.update.forEach((u) => ops.push((b) => b.set(db.collection("orders").doc(u.id), { ...u.patch, _lastModified: now, 최종수정자: by, 시트반영일시: FieldValue.serverTimestamp() }, { merge: true })));
-    r.create.forEach((o) => { const d = db.collection("orders").doc(); ops.push((b) => b.set(d, { ...M.forOrderDoc(o, { company: co, batchId, me: by }), _id: d.id, _lastModified: now, createdAt: FieldValue.serverTimestamp(), 시트반영일시: FieldValue.serverTimestamp() })); });
+    r.create.forEach((o) => { const d = db.collection("orders").doc(); ops.push((b) => b.set(d, { ...M.forOrderDoc(o, { company: co, batchId, me: by }), _id: d.id, _lastModified: now, 최종수정자: by, createdAt: FieldValue.serverTimestamp(), 시트반영일시: FieldValue.serverTimestamp() })); }); // 최종수정자 = 서버 — 방금 시트에서 만든 오더를 "프로그램에서 방금 고친 오더"로 잘못 보고 미루지 않게
     // 시트에서 지운 줄 — 한 번에 너무 많이 없어지면(탭을 잘못 읽었을 수 있다) 지우지 않고 알려만 준다
     let removed = 0; let heldBack = 0;
     if (cfg.removeMissing !== false && r.missing.length) {
@@ -125,7 +125,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     const kinds = [...new Set(incoming.map((o) => String(o.차량종류 || "").trim()).filter((k) => k && !/\d+(\.\d+)?\s*(톤|t\b)/i.test(k)))];
     if (kinds.length && r.create.length) await db.collection("vehicleTypes").doc(co).set({ companyName: co, custom: FieldValue.arrayUnion(...kinds) }, { merge: true }).catch(() => {});
     const result = { created: r.create.length, updated: r.update.length, removed, heldBack, same: r.same, total: incoming.length, from };
-    await ref(co).set({ ...stamp, lastHash: heldBack || again ? "" : hash, lastResult: result, ...(ops.length ? { lastChangeAt: now } : {}) }, { merge: true });
+    await ref(co).set({ ...stamp, ...(again ? { lastMt: "" } : {}), lastHash: heldBack || again ? "" : hash, lastResult: result, ...(ops.length ? { lastChangeAt: now } : {}) }, { merge: true });
     await writeStatus(co, { enabled: true, error: "", ...(ops.length ? { changedAt: now, created: result.created, updated: result.updated, removed: result.removed } : {}), heldBack }, { force: ops.length > 0 || force });
     // ⚠ 2026-11-13 여기서 dataVersion 을 올리지 않는다 — 올리면 열려 있는 모든 PC가 13개월 오더 전체를 다시 받는다(1분마다 반복될 수 있었다)
     //   바뀐 오더는 _lastModified · createdAt, 지운 오더는 deletedOrders 기록으로 화면에 반영된다
