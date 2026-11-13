@@ -75,22 +75,31 @@ jobs:
       #  규칙이 이미 최신일 때 firebase-tools 가 "Release … cloud.firestore already exists"(409)로 멈추면서
       #  뒤따르는 서버 기능까지 못 올라가던 문제 — 이 409 는 "이미 올라가 있음"이라 성공으로 보고 넘어간다
       - name: Firebase 배포 (규칙 · 색인 · 저장소)
+        id: rules
+        continue-on-error: true   # 규칙 쪽이 실패해도 서버 기능은 올린다(맨 끝에서 실패로 표시)
         env:
           ONLY: ${{ steps.t.outputs.only }}
         run: |
           PART=$(printf '%s' "$ONLY" | tr ',' '\n' | grep -v '^functions' | paste -sd, - || true)
           if [ -z "$PART" ]; then echo "규칙 쪽 대상 없음 — 건너뜀"; exit 0; fi
-          set +e
-          npx -y firebase-tools@13 deploy --only "$PART" --project dispatch-app-9b92f --non-interactive --force 2>&1 | tee "$RUNNER_TEMP/rules.log"
-          CODE=${PIPESTATUS[0]}
-          set -e
-          if [ "$CODE" -ne 0 ]; then
+          # 구글 규칙 서버가 잠깐 응답하지 않는 경우(503 · 500 · 429)가 있어 최대 4번 다시 시도한다
+          for i in 1 2 3 4; do
+            set +e
+            npx -y firebase-tools@13 deploy --only "$PART" --project dispatch-app-9b92f --non-interactive --force 2>&1 | tee "$RUNNER_TEMP/rules.log"
+            CODE=${PIPESTATUS[0]}
+            set -e
+            if [ "$CODE" -eq 0 ]; then exit 0; fi
             if grep -q "HTTP Error: 409" "$RUNNER_TEMP/rules.log" && grep -q "already exists" "$RUNNER_TEMP/rules.log"; then
               echo "::warning::규칙이 이미 최신이라 다시 올리지 않았습니다(409 already exists) — 계속 진행합니다."
-            else
-              exit "$CODE"
+              exit 0
             fi
-          fi
+            if grep -Eq "HTTP Error: (503|500|502|504|429)|currently unavailable|ETIMEDOUT|ECONNRESET" "$RUNNER_TEMP/rules.log" && [ "$i" -lt 4 ]; then
+              echo "::warning::구글 서버가 잠깐 응답하지 않습니다 — $((i * 20))초 뒤 다시 시도합니다($i/4)."
+              sleep $((i * 20))
+              continue
+            fi
+            exit "$CODE"
+          done
 
       - name: Firebase 배포 (서버 기능)
         env:
@@ -99,6 +108,12 @@ jobs:
           PART=$(printf '%s' "$ONLY" | tr ',' '\n' | grep '^functions' | paste -sd, - || true)
           if [ -z "$PART" ]; then echo "서버 기능 대상 없음 — 건너뜀"; exit 0; fi
           npx -y firebase-tools@13 deploy --only "$PART" --project dispatch-app-9b92f --non-interactive --force
+
+      - name: 규칙 배포 결과 확인
+        if: steps.rules.outcome == 'failure'
+        run: |
+          echo "::error::규칙 · 색인 · 저장소 배포가 실패했습니다(서버 기능은 위에서 따로 올렸습니다). 잠시 뒤 '규칙+색인+저장소만'으로 다시 실행해 주세요."
+          exit 1
 
       - name: 정리
         if: always()
