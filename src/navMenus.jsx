@@ -234,8 +234,8 @@ export function NavGroupHover({ code, label, members = [], onOpen, children }) {
   const clear = () => { clearTimeout(tIn.current); clearTimeout(tOut.current); };
   const cols = members.map((mb) => { const s = mb.disabled ? null : subItemsOf(mb.menu); return { ...mb, code: s?.code, items: s?.items || [] }; });
   const flat = []; cols.forEach((c, ci) => { flat.push({ ci, head: true }); c.items.forEach((it) => flat.push({ ci, key: it[0] })); });
-  const W = Math.min(cols.length * 212 + 12, (typeof window !== "undefined" ? window.innerWidth : 1600) - 16);
-  const show = () => { const r = anchorRef.current?.getBoundingClientRect(); if (r) setPos({ left: Math.max(8, Math.min(window.innerWidth - W - 8, r.left)), top: r.bottom + 8 }); setOpen(true); requestAnimationFrame(() => setShown(true)); };
+  const W = 248;
+  const show = () => { const r = anchorRef.current?.getBoundingClientRect(); if (r) setPos({ left: Math.max(8, Math.min(window.innerWidth - W - 8, r.left + r.width / 2 - W / 2)), top: r.bottom + 8 }); setOpen(true); requestAnimationFrame(() => setShown(true)); };
   const close = () => { clear(); setShown(false); setOpen(false); };
   const enter = () => { clear(); tIn.current = setTimeout(show, 120); };
   const leave = () => { clear(); tOut.current = setTimeout(() => { setShown(false); tOut.current = setTimeout(() => setOpen(false), 180); }, 140); };
@@ -259,30 +259,30 @@ export function NavGroupHover({ code, label, members = [], onOpen, children }) {
       {children}
       {open && createPortal(
         <div ref={panelRef} data-kp="nav-group-panel" onMouseEnter={() => clear()} onMouseLeave={leave} onWheel={(e) => e.stopPropagation()}
-          style={{ position: "fixed", left: pos.left, top: pos.top, width: W, zIndex: 2147482000, opacity: shown ? 1 : 0, transform: shown ? "translateY(0) scale(1)" : "translateY(-6px) scale(0.98)", transformOrigin: "20% 0", transition: "opacity 180ms ease, transform 200ms cubic-bezier(.2,.8,.2,1)", pointerEvents: shown ? "auto" : "none" }}>
+          style={{ position: "fixed", left: pos.left, top: pos.top, width: W, zIndex: 2147482000, opacity: shown ? 1 : 0, transform: shown ? "translateY(0) scale(1)" : "translateY(-6px) scale(0.98)", transformOrigin: "50% 0", transition: "opacity 180ms ease, transform 200ms cubic-bezier(.2,.8,.2,1)", pointerEvents: shown ? "auto" : "none" }}>
           <div style={{ position: "absolute", top: -8, left: 0, right: 0, height: 8 }} />
           <div className="rounded-2xl overflow-hidden shadow-[0_24px_60px_rgba(5,10,25,0.45)] ring-1 ring-white/10" style={{ background: "linear-gradient(160deg,#0F1A30 0%,#152340 60%,#1B2B4B 100%)" }}>
             <div className="px-4 pt-3 pb-2 border-b border-white/10">
               <div className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{code}</div>
               <div className="text-[14px] font-black text-white mt-0.5">{label}</div>
             </div>
-            <div className="flex items-start p-1.5 overflow-auto" style={{ maxHeight: "min(72vh, 560px)", overscrollBehavior: "contain" }}>
+            {/* 기존 속메뉴 창과 같은 모양 — 메뉴 이름(굵게) 아래에 그 메뉴의 속메뉴를 들여 쓴다 */}
+            <div className="p-1.5 overflow-y-auto" style={{ maxHeight: "min(74vh, 600px)", overscrollBehavior: "contain" }}>
               {cols.map((c, ci) => {
                 const hi = ++fi;
                 return (
-                  <div key={c.menu} className={`w-[212px] shrink-0 px-1 ${ci ? "border-l border-white/[0.07]" : ""}`}>
+                  <div key={c.menu} className={ci ? "mt-1 pt-1 border-t border-white/[0.07]" : ""}>
                     <button type="button" disabled={c.disabled} {...keys.itemProps(hi)} onClick={() => go(c)}
-                      className={`w-full flex items-center gap-2 px-3 h-10 rounded-xl text-left text-[14px] font-black transition ${c.disabled ? "text-white/25 cursor-not-allowed" : keys.active(hi) ? "text-white bg-white/[0.1]" : "text-white hover:bg-white/[0.08]"}`}>
+                      className={`w-full flex items-center gap-2.5 px-3 h-10 rounded-xl text-left text-[13.5px] font-black transition ${c.disabled ? "text-white/25 cursor-not-allowed" : keys.active(hi) ? "text-white bg-white/[0.1]" : "text-white hover:bg-white/[0.08]"}`}>
+                      <span className={`w-1.5 h-1.5 rotate-45 shrink-0 ${c.disabled ? "bg-white/20" : "bg-[#8FB0F0]"}`} />
                       <span className="truncate flex-1">{c.label}</span>
-                      {c.badge > 0 && <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-[#FF3B30] text-white text-[11px] font-extrabold grid place-items-center tabular-nums">{c.badge > 99 ? "99+" : c.badge}</span>}
-                      <span className="text-white/35 text-[12px]">→</span>
+                      {c.badge > 0 && !c.items.length && <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-[#FF3B30] text-white text-[11px] font-extrabold grid place-items-center tabular-nums">{c.badge > 99 ? "99+" : c.badge}</span>}
                     </button>
                     {c.items.map(([key, l]) => {
                       const ii = ++fi; const b = c.subBadges?.[key]; const on = typeof b === "string" ? !!b : b > 0;
                       return (
                         <button key={key} type="button" {...keys.itemProps(ii)} onClick={() => go(c, key)}
-                          className={`w-full flex items-center gap-2.5 pl-4 pr-3 h-9 rounded-xl text-left text-[13px] font-bold hover:text-white hover:bg-white/[0.08] transition ${keys.active(ii) ? "text-white bg-white/[0.08]" : "text-white/70"}`}>
-                          <span className="w-1 h-1 rotate-45 bg-[#8FB0F0]/60 shrink-0" />
+                          className={`w-full flex items-center gap-2.5 pl-[30px] pr-3 h-9 rounded-xl text-left text-[13px] font-semibold hover:text-white hover:bg-white/[0.08] transition ${keys.active(ii) ? "text-white bg-white/[0.08]" : "text-white/65"}`}>
                           <span className="truncate flex-1">{l}</span>
                           {on && <span className="shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-[#FF3B30] text-white text-[11px] font-extrabold grid place-items-center tabular-nums">{typeof b === "string" ? b : b > 99 ? "99+" : b}</span>}
                         </button>
