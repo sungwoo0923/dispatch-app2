@@ -302,6 +302,33 @@ export default function CarrierMigratePanel({ companies = [] }) {
     } catch (e) { setErr(`비교하지 못했습니다: ${e?.message || e}`); } finally { release(); setBusy(""); }
   };
 
+  // 🧹 2026-11-14 구글시트에서 가져온 오더만 전부 지우기 — 처음부터 다시 가져오려는 경우
+  //  오더(등록기기 "구글시트 이전")만 지운다. 거래처 · 상하차지 · 기사 · 단가표 · 프로그램에서 직접 등록한 오더는 그대로
+  //  지우는 동안 실시간 반영이 다시 만들지 않게 먼저 끈다(끄기는 서버 기능이 있을 때만 — 없으면 건너뜀)
+  const [wipe, setWipe] = React.useState(null); // { done, total } | { finished: n }
+  const wipeImported = async () => {
+    if (!co) return setErr("운송사를 정해 주세요.");
+    setErr("");
+    const release = pushTenantBypass();
+    try {
+      const snap = await getDocs(query(collection(db, "orders"), where("companyName", "==", co), where("등록기기", "==", "구글시트 이전")));
+      const ids = snap.docs.map((d) => d.id);
+      if (!ids.length) { setWipe({ finished: 0 }); return; }
+      if (!(await kpConfirm(`${co} — 구글시트에서 가져온 오더 ${won(ids.length)}건을 전부 지울까요?\n\n· 오더만 지웁니다(거래처 · 상하차지 · 기사 · 단가표는 그대로)\n· 프로그램에서 직접 등록한 오더는 지우지 않습니다\n· 되돌릴 수 없습니다 — 지운 뒤 아래에서 다시 [가져오기]를 하세요\n· 실시간 반영은 꺼집니다(다시 가져온 뒤 켜 주세요)`))) return;
+      if (!(await kpConfirm(`한 번 더 확인합니다.\n${co} 오더 ${won(ids.length)}건 삭제를 시작할까요?`))) return;
+      await callApi("sheetImport", { action: "liveSet", company: co, enabled: false }).catch(() => {});
+      const me = auth.currentUser?.email || "";
+      setWipe({ done: 0, total: ids.length });
+      for (let i = 0; i < ids.length; i += 200) {
+        const b = writeBatch(db);
+        ids.slice(i, i + 200).forEach((id) => { b.delete(doc(db, "orders", id)); b.set(doc(db, "deletedOrders", `orders_${id}`), { col: "orders", id, at: serverTimestamp(), by: me, companyName: co }); });
+        await b.commit();
+        setWipe({ done: Math.min(ids.length, i + 200), total: ids.length });
+      }
+      setWipe({ finished: ids.length }); setCmp(null);
+    } catch (e) { setErr(`지우지 못했습니다: ${e?.message || e}`); setWipe(null); } finally { release(); }
+  };
+
   // ── 저장 ──
   const runImport = async () => {
     if (!co) return setErr("가져올 운송사 이름을 정해 주세요.");
@@ -515,12 +542,20 @@ export default function CarrierMigratePanel({ companies = [] }) {
                 <div className="mt-3 text-[13px] text-[#5B6B85] leading-relaxed">
                   <b className="text-[#1B2B4B]">프로그램에만 있음</b> = 시트에 짝이 없는 오더(예전에 두 번 들어간 중복 · 시트에서 지운 줄) — 가져오기 때 [시트에 없는 오더 지우기]로 정리됩니다. <b className="text-[#1B2B4B]">이번에 가져오지 않는 탭</b>(대원전선 · 카고LCL 등)의 오더는 그대로 남습니다.
                 </div>
+                <span />
                 {cmp.missingEg.length > 0 && (
                   <details className="mt-3"><summary className="cursor-pointer text-[13.5px] font-black text-[#1B2B4B]">프로그램에만 있는 오더 보기 (처음 {cmp.missingEg.length}건)</summary>
                     <ul className="mt-2 text-[13px] text-[#3A4A66] space-y-1">{cmp.missingEg.map((m) => <li key={m.id} className="tabular-nums">{m.tab} · {m.d} · {m.from} → {m.to} · {m.car} {m.name} · {won(m.sale)}원</li>)}</ul>
                   </details>)}
               </>
             )}
+          </section>
+
+          {/* 🧹 처음부터 다시 — 가져온 오더만 전부 지우기 */}
+          <section className={`${CARD} p-6`} data-kp="mig-wipe">
+            <Head eyebrow="RESET" title="가져온 오더만 전부 지우기" desc="구글시트에서 가져온 오더만 지웁니다(거래처 · 상하차지 · 기사 · 단가표 · 직접 등록한 오더는 그대로). 지운 뒤 아래에서 다시 가져오세요."
+              right={<button onClick={wipeImported} disabled={!!wipe && wipe.total > 0 && wipe.done < wipe.total} className={`${btn} border border-[#E7B7B0] bg-white text-[#B4342A]`}>{wipe?.total && wipe.done < wipe.total ? `지우는 중 ${won(wipe.done)} / ${won(wipe.total)}` : "가져온 오더 전부 지우기"}</button>} />
+            {wipe?.finished != null && <div className="text-[14px] font-bold text-[#1B2B4B]">{wipe.finished ? `${won(wipe.finished)}건을 지웠습니다. 이제 아래에서 [가져오기]를 누르세요. 실시간 반영은 꺼 두었으니 가져온 뒤 다시 켜 주세요.` : "지울 오더가 없습니다."}</div>}
           </section>
 
           {/* STEP 2 탭별 결과 */}
