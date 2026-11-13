@@ -2971,7 +2971,8 @@ import { SpecialFareButton, ForkliftChip, paidOut, hasSpecial, ForkliftDriverMan
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합 현황) — 회사가 쓰는 영역에 따라 상단 메뉴가 바뀐다(src/bizModules.js)
-import { useBizModules, isBizMenu, parseBizMenu, bizTopMenus, bizSideGroups, bizFirstMenu, bizMenuKey, readBiz, writeBiz, BIZ_MENU_ICON } from "./bizModules";
+import { useBizModules, isBizMenu, parseBizMenu, bizTopMenus, bizSideGroups, bizFirstMenu, bizMenuKey, readBiz, writeBiz, BIZ_MENU_ICON, bizInfo as bizInfoOf, bizMenuLabel as bizMenuLabelOf } from "./bizModules";
+import { reportScreen, installScreenVisibility } from "./screenReport";
 import BizSwitcher from "./freight/BizSwitcher";
 const FreightWorkspace = React.lazy(() => import("./freight/FreightWorkspace"));
 const FreightRevenueStrip = React.lazy(() => import("./freight/FreightSettle").then((m) => ({ default: m.FreightRevenueStrip })));
@@ -8119,6 +8120,8 @@ useEffect(() => {
   const tonOptions = useMemo(() => Array.from({ length: 25 }, (_, i) => `${i + 1}톤`), []);
 
  const [menu, setMenu] = useState("HOME");
+ // 📍 2026-11-13 지금 보는 화면을 로그인 기록에 적는다(관리센터 실시간 표시 — src/screenReport.js)
+ useEffect(() => { installScreenVisibility(); reportScreen(isBizMenu(menu) ? `${bizInfoOf(parseBizMenu(menu).biz).short} · ${bizMenuLabelOf(menu)}` : (menu === "HOME" ? "홈" : menu), "pc"); }, [menu]);
  const screenFit = useScreenFit(menu); // 🖥 2026-11-10 화면 맞춤(계정별 기억)
  // 🔔 전자결재 배너를 누르면 홈으로 옮긴다 — 문서 열기는 HomeDashboard가 window.__kpOpenApproval을 받아서 한다
  useEffect(() => {

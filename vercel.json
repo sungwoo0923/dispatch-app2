@@ -46,6 +46,12 @@
       "regions": [
         "icn1"
       ]
+    },
+    "api/shell.js": {
+      "maxDuration": 15,
+      "regions": [
+        "icn1"
+      ]
     }
   },
   "routes": [
@@ -58,7 +64,7 @@
       "headers": {
         "cache-control": "public, max-age=31536000, immutable"
       },
-      "dest": "/assets/$1"
+      "continue": true
     },
     {
       "src": "/manifest.json",
@@ -81,21 +87,32 @@
       "dest": "/api/upload-page"
     },
     {
+      "src": "/",
+      "headers": {
+        "cache-control": "no-store, must-revalidate"
+      },
+      "dest": "/api/shell?f=index"
+    },
+    {
       "handle": "filesystem"
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "/api/shell?asset=$1"
     },
     {
       "src": "/driver-(login|register|home|signup)(.*)",
       "headers": {
         "cache-control": "no-store, must-revalidate"
       },
-      "dest": "/driver.html"
+      "dest": "/api/shell?f=driver"
     },
     {
       "src": "/(.*)",
       "headers": {
         "cache-control": "no-store, must-revalidate"
       },
-      "dest": "/index.html"
+      "dest": "/api/shell?f=index"
     }
   ]
 }

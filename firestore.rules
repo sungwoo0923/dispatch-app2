@@ -1281,6 +1281,11 @@ service cloud.firestore {
       allow write: if isTotalMasterUser();
     }
     // 💳 공개 요금(가격·포함량·입금 계좌) — 고객사 화면의 요금 비교·결제 안내용
+    // 🚦 2026-11-13 업데이트 배포 잠금 — 가입자에게 보여 줄 화면 버전(api/shell.js · 로그인 전 화면도 읽는다). 쓰기는 최고관리자 · 부관리자
+    match /publicRelease/{id} {
+      allow read: if true;
+      allow write: if isTotalMasterUser();
+    }
     match /publicPricing/{id} {
       allow read: if isSignedIn();
       allow write: if isTotalMasterUser();
@@ -2545,6 +2550,7 @@ service cloud.firestore {
         'pnkMembers', 'pnkPosts', 'pnkFiles', 'pnkTasks', 'pnkEvents', 'pnkSales', 'pnkServices', 'pnkReleases', 'pnkCompany', 'pnkFinance', 'pnkMail',
         //  사번 색인 · 전자결재 · 출퇴근 · 메일 서버 비밀값(서버만) · 외부 발송 횟수(서버만)
         'pnkEmpIndex', 'pnkApprovals', 'pnkAttendance', 'pnkMailSecrets', 'pnkMailUsage', 'pnkMfaSecrets', 'pnkMfaSessions', 'pnkUi', 'pnkUiHistory',
+        'publicRelease',
         'sheetLive', // 🔁 구글시트 실시간 반영 설정(서버만)
         'adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'resetLocks', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'driverContracts', 'fixedRoutes', 'routeBoards', 'freightJobs', 'personalSchedules', 'publicCompanies', 'companyContracts',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)

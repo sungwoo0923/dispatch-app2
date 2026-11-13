@@ -1,6 +1,7 @@
 // ======================= src/mobile/ShipperMobileApp.jsx =======================
 import CustomDatePicker from "../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { reportScreen, installScreenVisibility, shipperScreenLabel } from "../screenReport";
 import { signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import { auth, db } from "../firebase";
 import { readTransportListForShipper } from "../publicCompanies"; // 🔒 2026-11-07 운송사 목록은 공개 목록 + 연동 운송사 코드만
@@ -469,6 +470,7 @@ function buildHistoryEntries(prev, next, userEmail) {
 // ======================================================================
 export default function ShipperMobileApp() {
   const [page, setPage] = useState("home");
+  useEffect(() => { installScreenVisibility(); reportScreen(shipperScreenLabel(page), "shipper"); }, [page]); // 📍 지금 보는 화면
   const [user, setUser] = useState(null);
   const [userData, setUserData] = useState(null);
   const [orders, setOrders] = useState([]);

@@ -9,6 +9,7 @@ import { useMyProfile } from "../userNames";
 import { useCompanyFeatures } from "../companyFeatures"; // ⭐ 2026-11-04 마스터 권한 관리(회사별)
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합) — 모바일은 기존 화면 위에 업무 화면을 덮어 띄운다(src/freight/FreightMobile.jsx)
 import { useBizModules, readBiz, writeBiz, bizInfo } from "../bizModules";
+import { reportScreen, installScreenVisibility, mobileScreenLabel } from "../screenReport";
 import { allowedModules } from "../freight/freightCore";
 import BizSwitcher from "../freight/BizSwitcher";
 import { useCompanyDropdownSync, dropdownList } from "../companyDropdownOptions";
@@ -2234,6 +2235,8 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const pickBizM = (k) => { setBizRawM(k); writeBiz(user?.uid, k); setBizHandoffM(false); setShowMenu(false); };
   const bizOverlayM = bizModsAllM.loaded && (bizM !== "inland" || bizHandoffM) ? (bizM !== "inland" ? bizM : "inland") : "";
   const [page, setPage] = useState(deptMode ? "dept" : "list");
+  // 📍 2026-11-13 지금 보는 화면(관리센터 실시간 표시)
+  useEffect(() => { installScreenVisibility(); reportScreen(String(page).startsWith("biz:") ? "업무 영역 화면" : mobileScreenLabel(page), "mobile"); }, [page]);
   useUiScreen(page, deptMode); // ⭐ 2026-11-07 화면 편집 — 지금 화면("이 화면만")·부서(역할별 보이기)
   const pageMenuM = PAGE_MENU_M[page];
   // ⭐ 2026-11-08 QA — 조회전용(viewer)은 직원 관리·기사 앱 계정(가입 승인)·고정노선현황에서도 막는다(PC 관리자메뉴·배차현황과 같게)
