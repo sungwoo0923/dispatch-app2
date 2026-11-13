@@ -9,6 +9,7 @@ import { CopyTemplateEditor } from "./CopyTemplateEditor";
 import { openSetupWizard, openTutorial } from "./Onboarding";
 import AdminShell from "./AdminShell";
 import React, { useEffect, useState, useMemo } from "react";
+import { WORK_SCOPES, normScope, workScopeLabel } from "./workScope";
 import { subscribeUsersLive, getUsersLiveList } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { auth, db, storage, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
 import { getTenant, isPreviewMode } from "./fsTenant"; // ⭐ 2026-11-02 회사 분리 — 지금 거르는 회사(최고관리자 회사 전환 포함)
@@ -101,6 +102,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editRole, setEditRole] = useState("");
+  const [editScope, setEditScope] = useState(""); // 🗂 2026-11-13 업무 범위(배차 포함 / 사내업무만 / 사내업무 + 경리) — src/workScope.js
   const [editCompany, setEditCompany] = useState("");
   const [editPosition, setEditPosition] = useState("");
   const [editTeam, setEditTeam] = useState("");
@@ -697,6 +699,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     // ⭐ 2026-11-02 가입 승인 대기자는 부서·직책 기준 추천 권한으로 시작 — 임원(대표·전무·이사)이 가입하면 "관리자"로 들어와
     //  권한 필터 "임원관리자"에 안 잡히던 문제(가입 화면은 회사별 권한 목록을 몰라 관리자로 저장됨)
     setEditRole(u.approved === false && u.employmentStatus !== "퇴사" && u.role !== "totalMaster" ? suggestR(u) : (u.role || "user"));
+    setEditScope(normScope(u.workScope));
     setEditCompany(u.companyName || "");
     setEditPosition(u.position || "");
     setEditTeam(u.team || "");
@@ -735,11 +738,13 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (prevTeam !== nextTeam && nextTeam) {
       history.push({ date: todayStr(), type: "부서변경", detail: `${prevTeam || "미배정"} → ${nextTeam}` });
     }
+    if (normScope(manageUser.workScope) !== editScope) history.push({ date: todayStr(), type: "업무 범위 변경", detail: `${workScopeLabel(manageUser.workScope)} → ${workScopeLabel(editScope)}` });
     if ((manageUser.role || "") !== editRole) history.push({ date: todayStr(), type: "권한변경", detail: `${roleLabels[manageUser.role] || manageUser.role || "-"} → ${roleLabels[editRole] || editRole}` });
     const payload = {
       name: editName.trim(),
       phone: editPhone.trim(),
       role: editRole,
+      workScope: editScope,
       companyName: isTotalMaster ? editCompany.trim() : (manageUser.companyName || effectiveCompany),
       position: nextPosition,
       team: nextTeam,
@@ -1194,6 +1199,14 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                               </CustomSelect>
                               <p className="mt-1 text-[11px] font-bold text-[#7A879C]">{`추천: ${roleLabels[suggestR({ team: editTeam, position: editPosition })] || ROLE_NAME[suggestR({ team: editTeam, position: editPosition })]} (부서·직책 기준)`}</p>
                             </div>
+                            <div>
+                              <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">업무 범위</label>
+                              <CustomSelect value={editScope} onChange={e => setEditScope(e.target.value)} disabled={!canEditMember(u)}
+                                className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
+                                {WORK_SCOPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                              </CustomSelect>
+                              <p className="mt-1 text-[11px] font-bold text-[#7A879C]">{(WORK_SCOPES.find(([k]) => k === editScope) || WORK_SCOPES[0])[2]}</p>
+                            </div>
                           </div>
                           <div className="flex gap-2">
                             <button onClick={() => setEditMode(false)}
@@ -1212,7 +1225,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         <MemberManageModal
                           u={u} me={me} isTotalMaster={isTotalMaster} roles={assignableRoles(editRole, editTeam)} roleLabels={roleLabels}
                           canMaster={isTotalMaster} canAccount={isTotalMaster} canDelete={isTotalMaster} hrOpt={hrOpt} hrLock={hrLocked(u)}
-                          f={{ editName, setEditName, editPhone, setEditPhone, editRole, setEditRole, editCompany, setEditCompany, editWorkStart, setEditWorkStart, editWorkEnd, setEditWorkEnd, editPosition, setEditPosition: onPositionChange, editTeam, setEditTeam: onTeamChange, suggestR }}
+                          f={{ editScope, setEditScope, editName, setEditName, editPhone, setEditPhone, editRole, setEditRole, editCompany, setEditCompany, editWorkStart, setEditWorkStart, editWorkEnd, setEditWorkEnd, editPosition, setEditPosition: onPositionChange, editTeam, setEditTeam: onTeamChange, suggestR }}
                           onClose={() => { setMemberModal(false); setEditMode(false); }}
                           onSave={async () => { await saveEdit(); setMemberModal(false); }}
                           onApprove={async () => {
@@ -2170,6 +2183,11 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
                   {roles.map((r) => <option key={r} value={r}>{roleLabels[r] || r}</option>)}
                 </CustomSelect>
                 <p className="mt-1 text-[11px] font-bold text-[#7A879C]">{`추천: ${roleLabels[f.suggestR({ team: f.editTeam, position: f.editPosition })] || ROLE_NAME[f.suggestR({ team: f.editTeam, position: f.editPosition })]} · 부서·직책 기준`}</p></div>
+              <div><label className={lab}>업무 범위</label>
+                <CustomSelect value={f.editScope || ""} onChange={(e) => f.setEditScope(e.target.value)} className={inp}>
+                  {WORK_SCOPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </CustomSelect>
+                <p className="mt-1 text-[11px] font-bold text-[#7A879C]">{(WORK_SCOPES.find(([k]) => k === (f.editScope || "")) || WORK_SCOPES[0])[2]}</p></div>
               <div><label className={lab}>회사명</label><input value={f.editCompany} onChange={(e) => f.setEditCompany(e.target.value)} disabled={!isTotalMaster} className={inp} /></div>
               {/* ⭐ 2026-11-02 출근·퇴근 시간 — 자동 출근 시간대·지각·반차 기준(직원마다 다르게) */}
               <div><label className={lab}>출근 시간</label>

@@ -834,8 +834,64 @@ function HrDashboard({ company, onGo, me, att }) {
   );
 }
 
+// ═══════════════════════ 🗂 사내업무 대시보드(2026-11-13) ═══════════════════════
+//  업무 범위가 "사내업무만 / 사내업무 + 경리"인 계정의 홈 — 배차 숫자 없이 결재 · 메일 · 공지 · 게시판만(src/workScope.js)
+function useQ(make, deps) {
+  const [rows, setRows] = React.useState(null);
+  React.useEffect(() => { let q; try { q = make(); } catch { q = null; } if (!q) { setRows([]); return undefined; } return onSnapshot(q, (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setRows([])); }, deps); // eslint-disable-line react-hooks/exhaustive-deps
+  return rows;
+}
+const dayText = (v) => { const ms = tsMs(v); if (!ms) return ""; const k = new Date(ms + 9 * 3600e3).toISOString(); return `${k.slice(5, 7)}.${k.slice(8, 10)}`; };
+function OfficeDashboard({ company, onGo, me, att }) {
+  const uid = auth?.currentUser?.uid || "";
+  const myAp = useQ(() => (uid ? query(collection(db, "approvals"), where("participants", "array-contains", uid)) : null), [uid]) || [];
+  const mails = useQ(() => (uid ? query(collection(db, "internalMails"), where("to", "array-contains", uid)) : null), [uid]) || [];
+  const posts = useQ(() => (company ? query(collection(db, "boardPosts"), where("company", "==", company)) : null), [company]) || [];
+  const notices = (useCol("notices", company) || []).filter((n) => !n.deleted && (!n.publishAt || n.publishAt <= Date.now()));
+  const waitMine = myAp.filter((a) => a.status === "pending" && a.line?.[a.step]?.uid === uid).sort((a, b) => tsMs(a.createdAt) - tsMs(b.createdAt));
+  const myDrafts = myAp.filter((a) => a.drafterUid === uid && a.status === "pending");
+  const myReturned = myAp.filter((a) => a.drafterUid === uid && a.status === "rejected");
+  const inbox = mails.filter((m) => (m.status || "sent") === "sent" && !(m.deletedBy || []).includes(uid)).sort((a, b) => tsMs(b.at) - tsMs(a.at));
+  const unread = inbox.filter((m) => !(m.readBy || []).includes(uid));
+  const weekAgo = Date.now() - 7 * 86400000;
+  const noticeList = [...notices].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || tsMs(b.createdAt) - tsMs(a.createdAt));
+  const newNotices = noticeList.filter((n) => tsMs(n.createdAt) > weekAgo);
+  const postList = [...posts].sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt));
+  const newPosts = postList.filter((p) => tsMs(p.createdAt) > weekAgo && !(p.readBy || []).includes(uid));
+  const none = (t) => <Muted t={t} h={150} />;
+  return (
+    <Deck>
+      <DeckHead code="OFFICE · WORKSPACE" title={me?.name ? `${me.name}님, 오늘의 사내 업무` : "오늘의 사내 업무"} sub={`결재 대기 ${waitMine.length}건 · 안 읽은 메일 ${unread.length}통 · 새 공지 ${newNotices.length}건`} att={att} />
+      <div className="dd-kpi">
+        <KTile code="APPROVAL" label="내가 결재할 문서" value={waitMine.length} unit="건" foot={waitMine.length ? `가장 오래된 문서 ${dayText(waitMine[0].createdAt)}` : "대기 없음"} primary={waitMine.length > 0} warn={waitMine.length > 0} />
+        <KTile code="MY DOCS" label="내가 올린 문서" value={myDrafts.length} unit="건" foot={myReturned.length ? `반려 ${myReturned.length}건` : "진행 중"} warn={myReturned.length > 0} />
+        <KTile code="MAIL" label="안 읽은 메일" value={unread.length} unit="통" foot={`받은 메일 ${inbox.length}통`} primary={unread.length > 0} />
+        <KTile code="NOTICE" label="새 공지 (7일)" value={newNotices.length} unit="건" foot={`전체 ${noticeList.length}건`} />
+        <KTile code="BOARD" label="새 게시글 (7일)" value={newPosts.length} unit="건" foot={`전체 ${postList.length}건`} />
+      </div>
+      <div className="dd-row r2">
+        <DPanel code="APPROVAL" title="결재 대기" right={<button type="button" className="dd-link" onClick={() => onGo?.("전자결재")}>전자결재 열기</button>}>
+          {waitMine.length === 0 ? none("내가 결재할 문서가 없습니다") : waitMine.slice(0, 6).map((a) => <Line2 key={a.id} l={a.title || a.formName || "결재 문서"} sub={`${a.drafterName || ""} · ${dayText(a.createdAt)} 올림`} v="결재 대기" tone="warn" />)}
+        </DPanel>
+        <DPanel code="MAIL" title="받은 메일">
+          {inbox.length === 0 ? none("받은 메일이 없습니다") : inbox.slice(0, 6).map((m) => { const un = !(m.readBy || []).includes(uid); return <Line2 key={m.id} l={m.subject || "(제목 없음)"} sub={`${m.fromName || ""} · ${dayText(m.at)}`} v={un ? "안 읽음" : "읽음"} tone={un ? "hi" : undefined} />; })}
+        </DPanel>
+      </div>
+      <div className="dd-row r2">
+        <DPanel code="NOTICE" title="공지">
+          {noticeList.length === 0 ? none("공지가 없습니다") : noticeList.slice(0, 6).map((n) => <Line2 key={n.id} l={`${n.pinned ? "[고정] " : ""}${n.title || ""}`} sub={`${n.author || ""} · ${n.category || "공지"}`} v={dayText(n.createdAt)} />)}
+        </DPanel>
+        <DPanel code="BOARD" title="사내 게시판">
+          {postList.length === 0 ? none("게시글이 없습니다") : postList.slice(0, 6).map((p) => <Line2 key={p.id} l={p.title || ""} sub={`${p.authorName || ""}${p.board ? ` · ${p.board}` : ""}`} v={dayText(p.createdAt)} tone={!(p.readBy || []).includes(uid) && tsMs(p.createdAt) > weekAgo ? "hi" : undefined} />)}
+        </DPanel>
+      </div>
+    </Deck>
+  );
+}
+
 export default function DeptDashboard({ mode, company, dispatchData, onGo, pastCache, liveStart, me, att = null }) {
   if (mode === "exec") return <ExecDashboard company={company} dispatchData={dispatchData} onGo={onGo} pastCache={pastCache} liveStart={liveStart} me={me} att={att} />;
+  if (mode === "office") return <OfficeDashboard company={company} onGo={onGo} me={me} att={att} />;
   if (mode === "acct") return <AcctDashboard company={company} dispatchData={dispatchData} onGo={onGo} me={me} att={att} />;
   // 💼 2026-11-10 영업팀 — 영업 대시보드(처음 열 때 받는다)
   if (mode === "sales") return <React.Suspense fallback={<Deck><Muted t="영업 현황을 불러오는 중…" h={320} /></Deck>}><SalesDashboard company={company} dispatchData={dispatchData} onGo={onGo} me={me} att={att} /></React.Suspense>;
