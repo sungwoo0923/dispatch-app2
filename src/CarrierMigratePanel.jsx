@@ -65,6 +65,13 @@ const LIVE_DAYS = [[7, "최근 7일"], [14, "최근 14일"], [31, "최근 1개�
 const agoText = (ms) => { if (!ms) return "아직 없음"; const s = Math.max(0, Math.round((Date.now() - ms) / 1000)); return s < 60 ? "방금" : s < 3600 ? `${Math.floor(s / 60)}분 전` : s < 86400 ? `${Math.floor(s / 3600)}시간 전` : `${Math.floor(s / 86400)}일 전`; };
 // 서버 기능이 아직 배포되지 않았으면 예전 서버가 "알 수 없는 요청"이라고 답한다 → 무엇을 해야 하는지 알려 준다
 const liveErr = (m) => (/알 수 없는 요청/.test(String(m || "")) ? "서버 기능이 아직 배포되지 않았습니다. GitHub › Actions › Firebase 배포에서 \"전부(규칙+색인+저장소+functions)\"를 실행한 뒤 다시 열어 주세요." : m);
+// 이 회사의 시트 줄과 이어진 오더 — 시트에서 가져온 오더 + 프로그램에서 등록해 시트에 줄을 만든 오더(시트연동)
+async function sheetOrdersOf(co) {
+  const base = collection(db, "orders");
+  const [a, b] = await Promise.all([getDocs(query(base, where("companyName", "==", co), where("등록기기", "==", "구글시트 이전"))), getDocs(query(base, where("companyName", "==", co), where("시트연동", "==", true))).catch(() => ({ docs: [] }))]);
+  const out = new Map(); [...a.docs, ...b.docs].forEach((d) => { if (!out.has(d.id)) out.set(d.id, { id: d.id, data: d.data() }); });
+  return [...out.values()];
+}
 function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
   const [live, setLive] = React.useState(undefined); // undefined 읽는 중 · null 없음
   const [busy, setBusy] = React.useState("");
@@ -80,7 +87,7 @@ function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
   const turnOn = async () => {
     const u = (url || live?.url || "").trim();
     if (!u) return setMsg("위 칸에 구글시트 주소를 먼저 붙여넣어 주세요.");
-    if (!(await kpConfirm(`${co} — 구글시트 실시간 반영을 켤까요?\n\n· 1분마다 시트를 확인해 새 줄은 오더로 만들고, 고친 줄은 그 오더를 고칩니다\n· 시트에서 지운 줄은 프로그램 오더도 지웁니다(아래에서 끌 수 있음)\n· 프로그램에서 직접 고친 값은 다음 반영 때 시트 값으로 돌아갑니다 — 입력 · 수정은 시트에서만 하세요`))) return;
+    if (!(await kpConfirm(`${co} — 구글시트 실시간 반영을 켤까요?\n\n· 1분마다 시트를 확인해 새 줄은 오더로 만들고, 고친 줄은 그 오더를 고칩니다\n· 시트에서 지운 줄은 프로그램 오더도 지웁니다(아래에서 끌 수 있음)\n· 프로그램에서 직접 고친 값은 다음 반영 때 시트 값으로 돌아갑니다(아래 [프로그램 → 시트 반영]을 켜면 시트에도 씁니다) — 입력 · 수정은 시트에서만 하세요`))) return;
     await set({ url: u, enabled: true, days: live?.days || 14, tabs: pickedTabs }, "on");
     runNow();
   };
@@ -126,6 +133,91 @@ function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
         </div>
         {live && <div className="mt-3 text-[13px] text-[#5B6B85]">마지막 확인 <b className="text-[#1B2B4B]">{agoText(live.lastRunAt)}</b> · 마지막으로 바뀐 때 <b className="text-[#1B2B4B]">{agoText(live.lastChangeAt)}</b>{r ? ` · 최근 반영: 새로 ${won(r.created || 0)} · 고침 ${won(r.updated || 0)} · 삭제 ${won(r.removed || 0)} (대상 ${won(r.total || 0)}건)` : ""}</div>}
         {live?.lastError && <div className="mt-2 text-[13px] font-bold text-[#B4342A]">오류: {live.lastError}</div>}
+        {msg && <div className="mt-2 text-[13px] font-bold text-[#1B2B4B]">{msg}</div>}
+      </div>
+    </section>
+  );
+}
+
+// 🔁 2026-11-14 프로그램 → 시트 반영 — 프로그램에서 오더를 등록 · 수정 · 삭제하면 시트의 그 탭 줄에도 쓴다(functions/sheetPushOrders.js)
+//  끔 · 점검(무엇을 쓸지만 기록 — 시트는 그대로) · 켬. 실시간 반영이 켜져 있을 때만 동작한다
+const PUSH_MODES = [["off", "끔"], ["dry", "점검만(시트는 그대로)"], ["on", "켬(시트에 쓰기)"]];
+const PUSH_KIND = { create: "등록", update: "수정", delete: "삭제" };
+const PUSH_STATE = { pending: ["대기", "#5B6B85"], done: ["시트에 씀", "#0F7A43"], dry: ["점검(안 씀)", "#2D4C82"], held: ["보류", "#B26A00"], failed: ["못 씀", "#B4342A"], needTab: ["탭 미정", "#B26A00"], skipped: ["건너뜀", "#7A879C"] };
+function SheetPushCard({ co }) {
+  const [push, setPush] = React.useState(undefined); // undefined 읽는 중 · null 서버 기능 없음
+  const [busy, setBusy] = React.useState("");
+  const [msg, setMsg] = React.useState("");
+  const [open, setOpen] = React.useState(false);
+  const load = React.useCallback(() => { if (!co) return; callApi("sheetImport", { action: "pushGet", company: co }).then((d) => setPush(d.push || null)).catch((e) => { setPush(null); setMsg(liveErr(e.message)); }); }, [co]);
+  React.useEffect(() => { setPush(undefined); setMsg(""); load(); }, [load]);
+  React.useEffect(() => { if (!push || push.mode === "off") return undefined; const t = setInterval(load, 30000); return () => clearInterval(t); }, [push?.mode, load]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!co) return null;
+  const setMode = async (mode) => {
+    if (mode === push?.mode) return;
+    if (mode === "on" && !(await kpConfirm(`${co} — 프로그램에서 바꾼 오더를 구글시트에 쓰기 시작할까요?\n\n· 수정: 그 오더의 줄에서 바뀐 칸만 고칩니다(수식 칸은 건드리지 않음)\n· 등록: 담당노선구분(= 시트 탭)의 맨 아래 빈 줄에 넣습니다\n· 삭제: 그 줄의 값만 비웁니다(줄은 남김). 한꺼번에 20건 넘게 지우면 보류하고 여기서 확인받습니다\n· 시트 양식으로 옮길 수 없는 값은 프로그램에만 남고, 아래 기록에 표시됩니다\n\n먼저 [점검만]으로 며칠 지켜본 뒤 켜는 것을 권합니다.`))) return;
+    setBusy(mode); setMsg("");
+    try { const d = await callApi("sheetImport", { action: "pushSet", company: co, mode }); setPush(d.push); } catch (e) { setMsg(liveErr(e.message)); } finally { setBusy(""); }
+  };
+  const resolve = async (ids, go, label) => {
+    if (!ids.length) return;
+    if (!(await kpConfirm(label))) return;
+    setBusy("res"); setMsg("");
+    try { const d = await callApi("sheetImport", { action: "pushResolve", company: co, ids, go }); setPush(d.push); } catch (e) { setMsg(liveErr(e.message)); } finally { setBusy(""); }
+  };
+  const items = push?.items || [];
+  const idsOf = (st) => items.filter((x) => x.state === st).map((x) => x.id);
+  const mode = push?.mode || "off";
+  return (
+    <section className="mt-5 rounded-2xl border border-[#DCE3EE] bg-white overflow-hidden" data-kp="sheet-push">
+      <div className="px-5 py-4 flex items-center gap-3 flex-wrap border-b border-[#E8EDF4] bg-[#F7F9FC]">
+        <span className="text-[11px] font-extrabold tracking-[0.2em] text-[#94A3B8]">WRITE</span>
+        <span className="text-[16px] font-black text-[#0F1A30]">프로그램 → 시트 반영</span>
+        <span className={`text-[13px] font-black ${mode === "on" ? "text-[#0F7A43]" : mode === "dry" ? "text-[#2D4C82]" : "text-[#7A879C]"}`}>{push === undefined ? "확인 중" : push === null ? "서버 기능 없음" : mode === "on" ? "켜짐 · 1분 안에 시트에 씀" : mode === "dry" ? "점검 중 · 시트는 그대로" : "꺼짐"}</span>
+        <div className="ml-auto flex items-center gap-1.5">
+          {PUSH_MODES.map(([v, l]) => <button key={v} type="button" disabled={!!busy || !push} aria-pressed={mode === v} onClick={() => setMode(v)}
+            className={`h-10 px-3.5 rounded-xl border text-[13.5px] font-black disabled:opacity-50 ${mode === v ? "border-[#1B2B4B] bg-[#1B2B4B] text-white" : "border-[#C9D5EA] bg-white text-[#5B6B85]"}`}>{busy === v ? "바꾸는 중…" : l}</button>)}
+        </div>
+      </div>
+      <div className="px-5 py-4 text-[13.5px] text-[#3A4A66] leading-relaxed">
+        <div>프로그램에서 오더를 등록 · 수정 · 삭제하면 시트의 그 탭 줄에도 반영합니다. 위 [구글시트 실시간 반영]이 켜져 있어야 동작하고, 새 오더는 <b className="text-[#1B2B4B]">담당노선구분</b>(= 시트 탭 이름)을 고른 탭에 들어갑니다. 수식이 든 칸(합계 · 이익 · 자동 운임 등)은 쓰지 않습니다.</div>
+        {push && !push.liveOn && mode !== "off" && <div className="mt-2 font-bold text-[#B26A00]">실시간 반영이 꺼져 있어 지금은 동작하지 않습니다.</div>}
+        {push?.error && <div className="mt-2 font-bold text-[#B4342A]">오류: {push.error}</div>}
+        {push && <div className="mt-3 flex items-center gap-2 flex-wrap text-[13px] text-[#5B6B85]">
+          <span>대기 <b className="text-[#1B2B4B]">{won(push.pending)}</b> · 보류 <b className="text-[#1B2B4B]">{won(push.held)}</b> · 못 씀 <b className="text-[#1B2B4B]">{won(push.failed)}</b> · 탭 미정 <b className="text-[#1B2B4B]">{won(push.needTab)}</b> · 마지막으로 시트에 쓴 때 <b className="text-[#1B2B4B]">{agoText(push.lastPushAt)}</b></span>
+          <button type="button" onClick={() => { setOpen((v) => !v); load(); }} className="ml-auto h-9 px-3 rounded-lg border border-[#C9D5EA] bg-white text-[13px] font-black text-[#1B2B4B]">{open ? "기록 접기" : `기록 보기 (${won(items.length)})`}</button>
+        </div>}
+        {push && push.held > 0 && <div className="mt-3 rounded-xl border border-[#F0D9A8] bg-[#FFF8E8] px-4 py-3 flex items-center gap-2 flex-wrap">
+          <span className="font-bold text-[#7A4B00]">삭제 {won(push.held)}건을 보류했습니다 — 한꺼번에 많이 지워져 시트는 건드리지 않았습니다.</span>
+          <span className="ml-auto flex gap-1.5">
+            <button type="button" disabled={!!busy} onClick={() => resolve(idsOf("held"), true, `보류한 삭제 ${won(push.held)}건의 시트 줄을 비울까요?\n(줄의 값만 지웁니다 — 시트 버전 기록으로 되살릴 수 있습니다)`)} className="h-9 px-3 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-black disabled:opacity-50">시트에서도 비우기</button>
+            <button type="button" disabled={!!busy} onClick={() => resolve(idsOf("held"), false, `보류한 삭제 ${won(push.held)}건을 버릴까요?\n시트 줄은 그대로 두고, 다음 실시간 반영 때 그 줄이 다시 오더로 들어옵니다.`)} className="h-9 px-3 rounded-lg border border-[#C9D5EA] bg-white text-[13px] font-black text-[#5B6B85] disabled:opacity-50">버리기(시트 그대로)</button>
+          </span>
+        </div>}
+        {open && <div className="mt-3 overflow-x-auto rounded-xl border border-[#E8EDF4]">
+          {items.length === 0 ? <div className="px-4 py-6 text-center text-[13px] text-[#7A879C]">아직 기록이 없습니다.</div> : (
+            <table className="w-full text-[13px]">
+              <thead><tr className="bg-[#F7F9FC] text-[#5B6B85]">{["때", "구분", "오더", "결과", "시트에 쓴(쓸) 칸", ""].map((h, i) => <th key={i} className="px-3 py-2.5 text-left font-black whitespace-nowrap">{h}</th>)}</tr></thead>
+              <tbody>{items.map((x) => { const st = PUSH_STATE[x.state] || [x.state, "#5B6B85"]; const r = x.result || {}; return (
+                <tr key={x.id} className="border-t border-[#EEF2F7] align-top">
+                  <td className="px-3 py-2.5 whitespace-nowrap text-[#5B6B85]">{agoText(x.doneAt || x.at)}</td>
+                  <td className="px-3 py-2.5 whitespace-nowrap font-bold text-[#1B2B4B]">{PUSH_KIND[x.kind] || x.kind}</td>
+                  <td className="px-3 py-2.5 text-[#1B2B4B]">{x.label}</td>
+                  <td className="px-3 py-2.5 whitespace-nowrap font-black" style={{ color: st[1] }}>{st[0]}</td>
+                  <td className="px-3 py-2.5 text-[#3A4A66]">
+                    {r.tab ? <div className="font-bold text-[#1B2B4B]">{r.tab} {r.row ? `${r.row}행` : ""}</div> : null}
+                    {(r.cells || []).length > 0 && <div className="break-all">{r.cells.map((c) => `${c.a1}: ${c.was || "(빈칸)"} → ${c.value || "(비움)"}`).join(" · ")}</div>}
+                    {(r.unpushed || []).length > 0 && <div className="text-[#B26A00]">시트에 못 옮긴 값(프로그램에만): {r.unpushed.join(" · ")}</div>}
+                    {(r.reason || x.lastError) && <div className="text-[#B4342A]">{r.reason || x.lastError}</div>}
+                    {(r.candidates || []).length > 0 && <div className="text-[#5B6B85]">후보 탭: {r.candidates.join(" · ")}</div>}
+                  </td>
+                  <td className="px-3 py-2.5 whitespace-nowrap text-right">
+                    {x.state === "failed" && x.kind !== "create" && <button type="button" disabled={!!busy} onClick={() => resolve([x.id], true, "이 건을 다시 시도할까요?")} className="h-8 px-2.5 rounded-lg border border-[#C9D5EA] bg-white text-[12.5px] font-black text-[#1B2B4B] mr-1">다시</button>}
+                    {["failed", "held", "needTab"].includes(x.state) && <button type="button" disabled={!!busy} onClick={() => resolve([x.id], false, "이 기록을 버릴까요?\n시트는 건드리지 않습니다.")} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-bold text-[#7A879C]">버리기</button>}
+                  </td>
+                </tr>); })}</tbody>
+            </table>)}
+        </div>}
         {msg && <div className="mt-2 text-[13px] font-bold text-[#1B2B4B]">{msg}</div>}
       </div>
     </section>
@@ -279,7 +371,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
     setErr(""); setBusy("cmp"); setCmp(null);
     const release = pushTenantBypass();
     try {
-      const ex = (await getDocs(query(collection(db, "orders"), where("companyName", "==", co), where("등록기기", "==", "구글시트 이전")))).docs.map((d) => ({ id: d.id, data: d.data() }));
+      const ex = await sheetOrdersOf(co);
       const tabOf = (v) => String(v || "").split("!")[0];
       const dates = orders.map((o) => o.상차일).filter(Boolean).sort();
       const lo = dates[0] || "", hi = dates[dates.length - 1] || "";
@@ -316,6 +408,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
       if (!ids.length) { setWipe({ finished: 0 }); return; }
       if (!(await kpConfirm(`${co} — 구글시트에서 가져온 오더 ${won(ids.length)}건을 전부 지울까요?\n\n· 오더만 지웁니다(거래처 · 상하차지 · 기사 · 단가표는 그대로)\n· 프로그램에서 직접 등록한 오더는 지우지 않습니다\n· 되돌릴 수 없습니다 — 지운 뒤 아래에서 다시 [가져오기]를 하세요\n· 실시간 반영은 꺼집니다(다시 가져온 뒤 켜 주세요)`))) return;
       if (!(await kpConfirm(`한 번 더 확인합니다.\n${co} 오더 ${won(ids.length)}건 삭제를 시작할까요?`))) return;
+      await callApi("sheetImport", { action: "pushSet", company: co, mode: "off" }).catch(() => {}); // 🔁 지우는 오더가 시트 줄까지 비우지 않게 시트 쓰기를 먼저 끈다
       await callApi("sheetImport", { action: "liveSet", company: co, enabled: false }).catch(() => {});
       const me = auth.currentUser?.email || "";
       setWipe({ done: 0, total: ids.length });
@@ -431,12 +524,12 @@ export default function CarrierMigratePanel({ companies = [] }) {
       let skippedDup = 0; let updated = 0; let missing = 0; let removed = 0;
       if (opts.skipDup) {
         setProgress({ pct: 19, step: "이미 가져온 오더와 비교 중" });
-        const ex = await getDocs(query(collection(db, "orders"), where("companyName", "==", co), where("등록기기", "==", "구글시트 이전")));
+        const ex = await sheetOrdersOf(co); // 프로그램에서 등록해 시트에 줄을 만든 오더(시트연동)도 같이 — 빼면 그 줄이 새 오더로 또 들어온다
         // 이번에 읽은 탭의 오더만 비교한다(다른 탭 · 기간 밖 오더는 그대로 둔다)
         const tabs = new Set(orders.map((o) => String(o.이전출처 || "").split("!")[0]));
         const dates = orders.map((o) => o.상차일).filter(Boolean).sort();
         const inRange = (d) => tabs.has(String(d.이전출처 || "").split("!")[0]) && (!dates.length || (d.상차일 >= dates[0] && d.상차일 <= dates[dates.length - 1]));
-        const r = reconcileOrders(ex.docs.map((d) => ({ id: d.id, data: d.data() })).filter((e) => inRange(e.data)), orders);
+        const r = reconcileOrders(ex.filter((e) => inRange(e.data)), orders);
         list = r.create; skippedDup = r.same; missing = r.missing.length;
         // 🧹 2026-11-13 시트에 없는 오더(예전에 두 번 들어간 중복 · 시트에서 지운 줄) 정리 — 몇 건인지 보여 주고 물어본 뒤 지운다
         if (opts.removeMissing && r.missing.length) {
@@ -515,6 +608,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
       </section>
 
       <SheetLiveCard co={co} url={url} setUrl={setUrl} tabNames={result ? result.tabs.filter((t) => t.kind === "orders" && t.orders > 0).map((t) => t.title) : []} />
+      <SheetPushCard co={co} />
 
       {result && (
         <>

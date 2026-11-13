@@ -12,7 +12,9 @@ const kstYmd = (ms = Date.now()) => new Date(ms + 9 * 3600 * 1000).toISOString()
 const FULL_EVERY_MS = 30 * 60 * 1000; // 시트 수정 시각이 같아도 30분에 한 번은 전체 비교
 const NO_META_EVERY_MS = 5 * 60 * 1000; // 수정 시각을 못 읽으면 5분마다
 
-function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab, sheetModifiedTime, bumpDataVersion }) {
+const RECENT_EDIT_MS = 90 * 1000; // 방금 프로그램에서 고친 오더는 한 차례 건너뛴다(그 변경이 시트로 먼저 간다 — functions/sheetPushOrders.js)
+
+function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab, sheetModifiedTime, bumpDataVersion, push = null }) {
   const ref = (co) => db.collection("sheetLive").doc(co);
   // 📡 2026-11-13 직원 화면(배차현황 · 모바일)에 "구글시트 실시간 · n분 전 반영"을 보여 주기 위한 상태 — companySettings/{회사}.sheetLiveStatus
   //  (sheetLive 설정 문서는 서버만 읽는다) 바뀐 것이 있을 때와 10분마다 한 번만 적는다(매분 적으면 모든 화면이 매분 다시 읽는다)
@@ -52,16 +54,23 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     let snap;
     try { snap = await base.where("상차일", ">=", from).get(); } // 색인(companyName · 등록기기 · 상차일)이 있으면 범위만 읽는다
     catch { snap = await base.get(); }
-    return snap.docs.map((d) => ({ id: d.id, data: d.data() || {} })).filter((e) => String(e.data.상차일 || "") >= from);
+    const out = new Map(snap.docs.map((d) => [d.id, { id: d.id, data: d.data() || {} }]));
+    // 🔁 2026-11-14 프로그램에서 등록해 시트에 줄을 만든 오더(시트연동)도 같은 줄로 맞춘다 — 빼면 그 줄이 새 오더로 한 번 더 만들어진다
+    const linked = await db.collection("orders").where("companyName", "==", co).where("시트연동", "==", true).get().catch(() => null);
+    (linked?.docs || []).forEach((d) => { if (!out.has(d.id)) out.set(d.id, { id: d.id, data: d.data() || {} }); });
+    return [...out.values()].filter((e) => String(e.data.상차일 || "") >= from);
   }
+  const placesFor = async (co) => (await db.collection("places").where("companyName", "==", co).get()).docs.map((d) => { const x = d.data() || {}; const c = (Array.isArray(x.contacts) && (x.contacts.find((k) => k.isPrimary) || x.contacts[0])) || {}; return { name: x.업체명 || "", address: x.주소 || "", phone: c.phone || x.담당자번호 || "", person: c.name || x.담당자 || "" }; }).filter((p) => p.name);
+  const pushOn = (cfg) => !!push && cfg.enabled === true && cfg.pushMode === "on";
 
   // 한 회사 반영 — force: 수정 시각 · 내용이 같아도 비교한다
-  async function runOne(co, cfg, { force = false, by = "구글시트 실시간" } = {}) {
+  //  sheetWritten: 방금 프로그램 변경을 시트에 썼다 → 시트 수정 시각이 같아 보여도 다시 읽는다
+  async function runOne(co, cfg, { force = false, by = "구글시트 실시간", sheetWritten = false } = {}) {
     const id = parseSpreadsheetId(cfg.url);
     if (!id) throw new Error("구글시트 주소가 올바르지 않습니다.");
     const now = Date.now();
     const mt = await sheetModifiedTime(id);
-    if (!force) {
+    if (!force && !sheetWritten) {
       if (mt && mt === String(cfg.lastMt || "") && now - Number(cfg.lastFullAt || 0) < FULL_EVERY_MS) return { skipped: "unchanged" };
       if (!mt && now - Number(cfg.lastRunAt || 0) < NO_META_EVERY_MS) return { skipped: "wait" };
     }
@@ -71,7 +80,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     if (!raw.length) throw new Error("읽을 탭이 없습니다.");
     const tabs = raw.map((t) => ({ title: t.title, rows: P.applyMerges(t.rows, t.merges) }));
     const preset = await presetFor(co, M);
-    const places = (await db.collection("places").where("companyName", "==", co).get()).docs.map((d) => { const x = d.data() || {}; const c = (Array.isArray(x.contacts) && (x.contacts.find((k) => k.isPrimary) || x.contacts[0])) || {}; return { name: x.업체명 || "", address: x.주소 || "", phone: c.phone || x.담당자번호 || "", person: c.name || x.담당자 || "" }; }).filter((p) => p.name);
+    const places = await placesFor(co);
     const built = M.buildMigration(tabs, { ...preset, extraPlaces: places });
     const days = Math.max(1, Math.min(400, Number(cfg.days) || 14));
     const from = kstYmd(now - days * 86400000);
@@ -84,6 +93,16 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     const tabSet = new Set(incoming.map((o) => String(o.이전출처 || "").split("!")[0]));
     const existing = (await existingOrders(co, from)).filter((e) => tabSet.has(String(e.data.이전출처 || "").split("!")[0]));
     const r = M.reconcileOrders(existing, incoming);
+    let again = false; // 이번에 미룬 것이 있으면 다음 차례에 다시 비교한다(내용이 같아도)
+    if (pushOn(cfg)) {
+      // 프로그램에서 지웠는데 시트 줄이 아직 남은 오더(대기 · 보류 · 실패)는 다시 만들지 않는다
+      const gone = await push.pendingDeletes(co).catch(() => []);
+      if (gone.length) { const C = await import("./sheetPushCore.mjs"); const n0 = r.create.length; r.create = r.create.filter((o) => !gone.some((b) => C.matchesDeleted(b, o))); if (r.create.length !== n0) again = true; }
+      // 방금 프로그램에서 고친 오더는 이번엔 건드리지 않는다(그 변경이 아직 시트로 가는 중일 수 있다)
+      const n1 = r.update.length; const byId = new Map(existing.map((e) => [e.id, e.data]));
+      r.update = r.update.filter((u) => { const d = byId.get(u.id) || {}; return !(now - Number(d._lastModified || 0) < RECENT_EDIT_MS && d.최종수정자 !== by); });
+      if (r.update.length !== n1) again = true;
+    }
     const batchId = `live_${kstYmd(now).replace(/-/g, "")}`;
     const ops = [];
     r.update.forEach((u) => ops.push((b) => b.set(db.collection("orders").doc(u.id), { ...u.patch, _lastModified: now, 최종수정자: by, 시트반영일시: FieldValue.serverTimestamp() }, { merge: true })));
@@ -102,7 +121,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     const kinds = [...new Set(incoming.map((o) => String(o.차량종류 || "").trim()).filter((k) => k && !/\d+(\.\d+)?\s*(톤|t\b)/i.test(k)))];
     if (kinds.length && r.create.length) await db.collection("vehicleTypes").doc(co).set({ companyName: co, custom: FieldValue.arrayUnion(...kinds) }, { merge: true }).catch(() => {});
     const result = { created: r.create.length, updated: r.update.length, removed, heldBack, same: r.same, total: incoming.length, from };
-    await ref(co).set({ ...stamp, lastHash: heldBack ? "" : hash, lastResult: result, ...(ops.length ? { lastChangeAt: now } : {}) }, { merge: true });
+    await ref(co).set({ ...stamp, lastHash: heldBack || again ? "" : hash, lastResult: result, ...(ops.length ? { lastChangeAt: now } : {}) }, { merge: true });
     await writeStatus(co, { enabled: true, error: "", ...(ops.length ? { changedAt: now, created: result.created, updated: result.updated, removed: result.removed } : {}), heldBack }, { force: ops.length > 0 || force });
     // ⚠ 2026-11-13 여기서 dataVersion 을 올리지 않는다 — 올리면 열려 있는 모든 PC가 13개월 오더 전체를 다시 받는다(1분마다 반복될 수 있었다)
     //   바뀐 오더는 _lastModified · createdAt, 지운 오더는 deletedOrders 기록으로 화면에 반영된다
@@ -112,10 +131,13 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
   // 1분마다 — 켜 둔 회사 전부
   async function runAll() {
     const snap = await db.collection("sheetLive").where("enabled", "==", true).get();
+    if (push) { await push.purgeInactive(new Set(snap.docs.filter((d) => ["dry", "on"].includes((d.data() || {}).pushMode)).map((d) => (d.data() || {}).companyName || d.id))).catch(() => {}); await push.sweep().catch(() => {}); }
     for (const d of snap.docs) {
       const cfg = d.data() || {}; const co = cfg.companyName || d.id;
       try {
-        const r = await runOne(co, cfg);
+        // 🔁 프로그램에서 바뀐 오더를 먼저 시트에 쓴다(켜 둔 회사만) → 그다음 시트를 읽어 맞춘다
+        const pr = push && cfg.pushMode && cfg.pushMode !== "off" ? await push.process(co, cfg, { presetFor, placesFor }).catch((e) => { console.error(`[시트 쓰기 실패] ${co}:`, e?.message || e); return {}; }) : {};
+        const r = await runOne(co, cfg, { sheetWritten: !!pr.wrote });
         if (r.skipped) await writeStatus(co, { enabled: true, error: "" });
         if (!r.skipped && (r.created || r.updated || r.removed || r.heldBack)) console.log(`[시트 실시간] ${co}`, JSON.stringify(r));
       } catch (e) {
@@ -146,6 +168,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     if (action === "liveRun") {
       const cfg = (await ref(co).get()).data();
       if (!cfg?.url) throw Object.assign(new Error("먼저 실시간 반영할 시트를 저장해 주세요."), { status: 400 });
+      if (push && cfg.enabled === true && cfg.pushMode && cfg.pushMode !== "off") await push.process(co, cfg, { presetFor, placesFor }).catch(() => {});
       const result = await runOne(co, cfg, { force: true });
       return { result, live: pub((await ref(co).get()).data()) };
     }
