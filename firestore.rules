@@ -24,8 +24,14 @@ service cloud.firestore {
     function tk(k, d) {
       return request.auth.token.get(k, d);
     }
-    function myRole() {
+    // 👑 2026-11-13 회사 마스터는 원래 권한과 상관없이 통합관리자(allMgr)로 본다(화면 src/App.jsx 와 같은 기준).
+    //  마스터를 넘기면(isMaster 해제) 원래 권한으로 돌아간다 · 최고관리자 · 기사 · 화주 계정은 그대로
+    function myRoleRaw() {
       return ck() ? tk('r', '') : myUser().get('role', '');
+    }
+    function myRole() {
+      let r = myRoleRaw();
+      return (r in ['totalMaster', 'driver', 'shipper', 'cafeUser'] || !myIsMaster()) ? r : 'allMgr';
     }
     // 회사명 그대로(없으면 '') — myCo()는 없으면 기본 회사 '돌캐'(토큰은 회사명이 있는 문서에만 생긴다)
     function myCoRaw() {
