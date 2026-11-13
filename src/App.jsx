@@ -735,7 +735,11 @@ export default function App() {
             setLoading(false);
             return;
           }
-          const dataRole = isMasterEmail ? "totalMaster" : (data.role || "user");
+          // 👑 2026-11-13 회사 마스터는 원래 권한과 상관없이 통합관리자(운송 · 영업 · 경리 · 인사 화면 전환)로 동작한다.
+          //  마스터를 다른 사람에게 넘기면(isMaster 해제) 이 문서가 바뀌는 즉시 원래 권한으로 돌아가고 화면 전환도 사라진다.
+          //  서버 규칙도 같은 기준(firestore.rules myRole) — 기사 · 화주 계정은 제외
+          const ownRole = data.role || "user";
+          const dataRole = isMasterEmail ? "totalMaster" : (data.isMaster === true && !["totalMaster", "driver", "shipper", "cafeUser"].includes(ownRole) ? "allMgr" : ownRole);
           setRole(dataRole);
           setContractCo(["totalMaster", "cafeUser"].includes(dataRole) ? ""
             : dataRole === "shipper" ? String(data.linkedTransportCompany?.companyName || "").trim()

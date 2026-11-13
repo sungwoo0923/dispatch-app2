@@ -258,7 +258,7 @@ function HelpCenter({ index, initial, onGo, onClose }) {
         <div className="flex-1 min-h-0 flex">
           <div className="w-[268px] shrink-0 overflow-y-auto border-r border-[#E1E7F0] bg-white p-3 hidden sm:block">
             <button type="button" onClick={() => { setSel("__new"); setQ(""); }} className={`w-full text-left px-3.5 h-11 rounded-xl text-[14.5px] font-black mb-1 whitespace-nowrap ${!searching && sel === "__new" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>새 기능 · 바뀐 점</button>
-            <button type="button" onClick={() => { setSel("__common"); setQ(""); }} className={`w-full text-left px-3.5 h-11 rounded-xl text-[14.5px] font-black mb-1 whitespace-nowrap ${!searching && sel === "__common" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>처음이신가요? 공통 사용법</button>
+            <button type="button" onClick={() => { setSel("__common"); setQ(""); }} className={`w-full text-left px-3.5 h-11 rounded-xl text-[14.5px] font-black mb-1 whitespace-nowrap ${!searching && sel === "__common" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>처음 사용 안내 · 공통 사용법</button>
             <div className="px-3.5 pt-4 pb-2 mt-2 border-t border-[#EEF1F6] text-[12px] font-black tracking-[0.14em] text-[#8FA0BD]">메뉴별 사용법</div>
             {menus.map((e) => (
               <button key={e.id} type="button" onClick={() => { setSel(e.menu); setQ(""); }} className={`w-full text-left px-3.5 h-10 rounded-xl text-[14.5px] font-bold whitespace-nowrap mb-0.5 ${!searching && sel === e.menu ? "bg-[#0F1A30] text-white" : "text-[#2A3852] hover:bg-[#EEF3FB]"}`}>{e.label}</button>
@@ -286,7 +286,7 @@ function HelpCenter({ index, initial, onGo, onClose }) {
               </>
             ) : sel === "__common" ? (
               <>
-                <div className="text-[24px] font-black text-[#0F1A30] tracking-tight">처음이신가요? 공통 사용법</div>
+                <div className="text-[24px] font-black text-[#0F1A30] tracking-tight">처음 사용 안내 · 공통 사용법</div>
                 <div className="text-[15px] text-[#4A5A75] mt-1 mb-6">어느 화면에서나 똑같이 쓰는 기능입니다. 메뉴별 사용법은 왼쪽에서 메뉴를 고르세요.</div>
                 <Sections list={HELP_COMMON} />
               </>
@@ -298,7 +298,7 @@ function HelpCenter({ index, initial, onGo, onClose }) {
               </>
             ) : (() => {
               const e = menus.find((x) => x.menu === sel); if (!e) return null;
-              const steps = (MENU_TOURS[sel] || []); const subs = subsOf(sel); const rel = related(sel);
+              const steps = (MENU_TOURS[sel] || []); const subs = subsOf(sel); // 🛠 2026-11-13 메뉴별 '바뀐 점' 목록은 뺐다(사용법만)
               return (
                 <>
                   <div className="flex items-center gap-3 mb-1">
@@ -323,8 +323,6 @@ function HelpCenter({ index, initial, onGo, onClose }) {
                     <div className="flex flex-wrap gap-1.5">{subs.map((x) => (
                       <button key={x.id} type="button" onClick={() => go(x)} title="누르면 이 화면으로 이동" className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-bold text-[#1B2B4B] hover:border-[#2D4C82] hover:bg-[#F7FAFF]">{x.sub}</button>))}</div>
                   </div>}
-                  <div className="text-[11px] font-black tracking-[0.12em] text-[#8FA0BD] mb-1.5">이 메뉴의 기능 설명 · 바뀐 점 ({rel.length})</div>
-                  <UpdateList list={rel} limit={60} />
                 </>);
             })()}
           </div>
