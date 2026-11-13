@@ -610,7 +610,8 @@ function rowToOrder(r, L, ctx) {
     const sum = b.n + extras.reduce((a, e) => a + e.n, 0);
     // 🧮 2026-11-13 합계 칸이 있는데 비어 있는 줄("-") — 시트는 그 줄을 0으로 센다(유류지원비 · 합계를 일부러 비운 줄).
     //  preset.blankTotalZero 를 켠 회사(JY)는 시트 합계 그대로 0으로 넣고, 운송료 칸의 금액은 메모로 남긴다(예전엔 운송료를 넣어 시트 합계보다 컸다)
-    if (ctx.preset.blankTotalZero && grp.total >= 0 && !t.n && sum > 0 && !cods.length) { notes.push(`${grp === L.sale ? "매출" : "매입"} 합계 칸 비어 있음 · 운송료 ${sum.toLocaleString("ko-KR")}원`); return { base: 0, extras: [], total: 0, notes, hasTotal: false, blanked: sum }; }
+    //  합계 칸에 "-"가 찍힌 줄만 해당 — 칸이 아예 빈 줄(아직 합계를 안 넣은 줄)은 운송료 그대로
+    if (ctx.preset.blankTotalZero && grp.total >= 0 && !t.n && /^[-–—]$/.test(g(grp.total)) && sum > 0 && !cods.length) { notes.push(`${grp === L.sale ? "매출" : "매입"} 합계 칸 비어 있음 · 운송료 ${sum.toLocaleString("ko-KR")}원`); return { base: 0, extras: [], total: 0, notes, hasTotal: false, blanked: sum }; }
     return { base: b.n, extras, total: t.n || sum, notes, hasTotal: grp.total >= 0 && !!t.n };
   };
   const S = money(L.sale), B = money(L.buy);
