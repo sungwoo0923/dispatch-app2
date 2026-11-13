@@ -16266,7 +16266,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
               </div>
               <div>
                 <label className={mrLabelCls}><EditableText id="orderForm.multi.label.배차방식" defaultText="배차방식" /></label>
-                <DispatchWayPicker className={mrInputCls} value={currentMultiSlot.배차방식 || ""} dir={currentMultiSlot.콜구분 || ""} onPick={(pk) => Object.entries(pk).forEach(([k, v]) => updateMultiSlot(k, v))} />
+                <DispatchWayPicker scope={[currentMultiSlot?.거래처명, currentMultiSlot?.상차지명, currentMultiSlot?.하차지명]} className={mrInputCls} value={currentMultiSlot.배차방식 || ""} dir={currentMultiSlot.콜구분 || ""} onPick={(pk) => Object.entries(pk).forEach(([k, v]) => updateMultiSlot(k, v))} />
               </div>
 
               <div className="col-span-2 relative">
@@ -18295,7 +18295,7 @@ className={`
   <div>
     <label className={labelCls}><EditableText id="orderForm.label.배차방식" defaultText="배차방식" /><DropdownOptionsManageButton optKey="배차방식" label="배차방식" role={role} userCompany={userCompany} /></label>
     {/* 💳 2026-11-11 배차방식 — 먼저 IN/OUT, 그다음 방식(시험 기능이 꺼진 운송사는 예전 그대로) */}
-    <DispatchWayPicker className={inputCls} value={form.배차방식} dir={form.콜구분 || ""} role={role} userCompany={userCompany}
+    <DispatchWayPicker scope={[form?.거래처명, form?.상차지명, form?.하차지명]} className={inputCls} value={form.배차방식} dir={form.콜구분 || ""} role={role} userCompany={userCompany}
       onPick={(p) => Object.entries(p).forEach(([k, v]) => onChange(k, v))} />
   </div>
 
@@ -29670,7 +29670,7 @@ const openDailyCloseIssueDetail = (rowId) => {
       // 이미 저장된 옛 데이터도 여기서 같이 정규화해 "선택"이 보이게 한다.
       const dispatchVal = val === "선택없음" ? "" : (val || "");
       return (
-        <DispatchWayPicker className="border rounded px-1 py-0.5 w-full text-center" value={dispatchVal} dir={(rows || []).find((r) => r._id === rowId)?.콜구분 || ""} onPick={(pk) => {
+        <DispatchWayPicker scope={(() => { const o = (rows || []).find((r) => r._id === rowId); return [o?.거래처명, o?.상차지명, o?.하차지명]; })()} className="border rounded px-1 py-0.5 w-full text-center" value={dispatchVal} dir={(rows || []).find((r) => r._id === rowId)?.콜구분 || ""} onPick={(pk) => {
             const next = pk.배차방식 ?? "";
             const extra = pk.콜구분 !== undefined ? { 콜구분: pk.콜구분, 콜플랫폼: pk.콜플랫폼 || "" } : null; // 💳 IN/OUT도 같이 저장
             if (next === dispatchVal && !extra) return;
@@ -31557,7 +31557,7 @@ value={copyTarget?.화물수량 || ""}
 )}
 
 <CpField label="배차방식">
-  <DispatchWayPicker className={cpInputStyle} value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} dir={copyTarget?.콜구분 || ""} onPick={(pk) => setCopyTarget((p) => ({ ...p, ...pk }))} />
+  <DispatchWayPicker scope={[copyTarget?.거래처명, copyTarget?.상차지명, copyTarget?.하차지명]} className={cpInputStyle} value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} dir={copyTarget?.콜구분 || ""} onPick={(pk) => setCopyTarget((p) => ({ ...p, ...pk }))} />
 </CpField>
           </div>
         </div>
@@ -33338,7 +33338,7 @@ value={copyTarget?.화물수량 || ""}
 
               <div>
                 <label>배차방식</label>
-                <DispatchWayPicker placeholder="선택 없음" noneLabel="선택 없음" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" value={editTarget.배차방식 === "선택없음" ? "" : (editTarget.배차방식 || "")} dir={editTarget.콜구분 || ""}
+                <DispatchWayPicker scope={[editTarget?.거래처명, editTarget?.상차지명, editTarget?.하차지명]} placeholder="선택 없음" noneLabel="선택 없음" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" value={editTarget.배차방식 === "선택없음" ? "" : (editTarget.배차방식 || "")} dir={editTarget.콜구분 || ""}
                     onPick={(pk) => setEditTarget((p) => ({ ...p, ...pk }))} />
               </div>
             </div>
@@ -40655,7 +40655,7 @@ return (
 
 
                   <td className="border text-center">
-                    <DispatchWayPicker placeholder="선택없음" noneLabel="선택없음" className="border rounded px-1 py-0.5 w-full text-center" value={row.배차방식 === "선택없음" ? "" : (row.배차방식 || "")} dir={row.콜구분 || ""}
+                    <DispatchWayPicker scope={[row?.거래처명, row?.상차지명, row?.하차지명]} placeholder="선택없음" noneLabel="선택없음" className="border rounded px-1 py-0.5 w-full text-center" value={row.배차방식 === "선택없음" ? "" : (row.배차방식 || "")} dir={row.콜구분 || ""}
                       onPick={(pk) => handleImmediateSelectChange(row, "배차방식", pk.배차방식 ?? "", pk.콜구분 !== undefined ? { 콜구분: pk.콜구분, 콜플랫폼: pk.콜플랫폼 || "" } : null)} />
                   </td>
 
@@ -41718,7 +41718,7 @@ return (
 
               <div>
                 <label>배차방식</label>
-                <DispatchWayPicker placeholder="선택 없음" noneLabel="선택 없음" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" value={editTarget.배차방식 === "선택없음" ? "" : (editTarget.배차방식 || "")} dir={editTarget.콜구분 || ""}
+                <DispatchWayPicker scope={[editTarget?.거래처명, editTarget?.상차지명, editTarget?.하차지명]} placeholder="선택 없음" noneLabel="선택 없음" className="border p-2 rounded w-full disabled:bg-gray-100 disabled:text-gray-500" value={editTarget.배차방식 === "선택없음" ? "" : (editTarget.배차방식 || "")} dir={editTarget.콜구분 || ""}
                     onPick={(pk) => setEditTarget((p) => ({ ...p, ...pk }))} />
               </div>
             </div>
@@ -43015,7 +43015,7 @@ setCopyPlaceOptions(list);
 )}
 
 <CpField label="배차방식">
-  <DispatchWayPicker className={cpInputStyle} value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} dir={copyTarget?.콜구분 || ""} onPick={(pk) => setCopyTarget((p) => ({ ...p, ...pk }))} />
+  <DispatchWayPicker scope={[copyTarget?.거래처명, copyTarget?.상차지명, copyTarget?.하차지명]} className={cpInputStyle} value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} dir={copyTarget?.콜구분 || ""} onPick={(pk) => setCopyTarget((p) => ({ ...p, ...pk }))} />
 </CpField>
           </div>
 </div>
@@ -45923,7 +45923,7 @@ function NewOrderPopup({
 
             <div>
               <label>배차방식</label>
-              <DispatchWayPicker placeholder="선택없음" noneLabel="선택없음" className="border p-2 rounded w-full" value={newOrder.배차방식 === "선택없음" ? "" : newOrder.배차방식} dir={newOrder.콜구분 || ""} onPick={(pk) => Object.entries(pk).forEach(([k, v]) => handleChange(k, v))} />
+              <DispatchWayPicker scope={[newOrder?.거래처명, newOrder?.상차지명, newOrder?.하차지명]} placeholder="선택없음" noneLabel="선택없음" className="border p-2 rounded w-full" value={newOrder.배차방식 === "선택없음" ? "" : newOrder.배차방식} dir={newOrder.콜구분 || ""} onPick={(pk) => Object.entries(pk).forEach(([k, v]) => handleChange(k, v))} />
             </div>
 
           </div>
@@ -51367,7 +51367,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       </CpField>
                     )}
                     <CpField label="배차방식">
-                      <DispatchWayPicker className={cpInputStyle} value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} dir={copyTarget?.콜구분 || ""} onPick={(pk) => setCopyTarget((p) => ({ ...p, ...pk }))} />
+                      <DispatchWayPicker scope={[copyTarget?.거래처명, copyTarget?.상차지명, copyTarget?.하차지명]} className={cpInputStyle} value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} dir={copyTarget?.콜구분 || ""} onPick={(pk) => setCopyTarget((p) => ({ ...p, ...pk }))} />
                     </CpField>
                   </div>
                 </div>

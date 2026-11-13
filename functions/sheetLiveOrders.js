@@ -33,7 +33,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
   async function presetFor(co, M) {
     const sug = M.presetSuggestionFor(co) || {};
     const saved = (await db.collection("companySettings").doc(co).get().catch(() => null))?.data()?.migrationPreset || null;
-    const base = saved ? { ...saved, ...sug, extraNames: { ...(sug.extraNames || {}), ...(saved.extraNames || {}) }, placeOverrides: { ...(sug.placeOverrides || {}), ...(saved.placeOverrides || {}) }, tabClients: saved.tabClients || {}, skipTabs: saved.skipTabs || [],
+    const base = saved ? { ...saved, ...sug, extraNames: { ...(sug.extraNames || {}), ...(saved.extraNames || {}) }, placeOverrides: { ...(sug.placeOverrides || {}), ...(saved.placeOverrides || {}) }, tabClients: saved.tabClients || {}, skipTabs: [...new Set([...(saved.skipTabs || []), ...(sug.skipTabs || [])])],
       dispatchAliases: { ...(saved.dispatchAliases || {}), ...(sug.dispatchAliases || {}) }, vehicleGrades: { ...(saved.vehicleGrades || {}), ...(sug.vehicleGrades || {}) } } : sug;
     return { ...M.DEFAULT_PRESET, ...base, dispatchAliases: { ...M.DEFAULT_PRESET.dispatchAliases, ...(base.dispatchAliases || {}) }, vehicleGrades: { ...M.DEFAULT_PRESET.vehicleGrades, ...(base.vehicleGrades || {}) } };
   }
@@ -58,7 +58,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     }
     const M = await import("./carrierMigrateCore.mjs");
     const P = await import("./sheetProfileCore.mjs");
-    const raw = await readTabs(id, cfg.tabs);
+    const raw = await readTabs(id, null); // 주소 찾기에 상하차지 · 기사 탭도 필요해서 전부 읽고, 오더만 고른 탭으로 거른다
     if (!raw.length) throw new Error("읽을 탭이 없습니다.");
     const tabs = raw.map((t) => ({ title: t.title, rows: P.applyMerges(t.rows, t.merges) }));
     const preset = await presetFor(co, M);
@@ -66,7 +66,8 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     const built = M.buildMigration(tabs, { ...preset, extraPlaces: places });
     const days = Math.max(1, Math.min(400, Number(cfg.days) || 14));
     const from = kstYmd(now - days * 86400000);
-    const incoming = built.orders.filter((o) => String(o.상차일 || "") >= from);
+    const wantTabs = Array.isArray(cfg.tabs) && cfg.tabs.length ? new Set(cfg.tabs.map(String)) : null;
+    const incoming = built.orders.filter((o) => String(o.상차일 || "") >= from && (!wantTabs || wantTabs.has(String(o.이전출처 || "").split("!")[0])));
     const hash = crypto.createHash("sha1").update(JSON.stringify(incoming)).digest("hex");
     const stamp = { lastMt: mt || "", lastRunAt: now, lastFullAt: now, lastError: "" };
     if (!force && hash === cfg.lastHash) { await ref(co).set({ ...stamp, lastCheckedAt: now }, { merge: true }); return { skipped: "same" }; }

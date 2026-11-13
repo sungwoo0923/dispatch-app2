@@ -8,7 +8,7 @@
 //  · onChange(값) — 값은 글자. 빈 글자(또는 noneValue) = 선택 안 함 / 필터는 noneValue="전체"
 import React from "react";
 import { createPortal } from "react-dom";
-import { addCompanyDropdownOption, removeCompanyDropdownOption, useCompanyOptionList } from "./companyDropdownOptions";
+import { addCompanyDropdownOption, removeCompanyDropdownOption, useCompanyOptionList, filterByScope } from "./companyDropdownOptions";
 import { uiOptionLabel, useUiConfigVersion } from "./uiConfig"; // ⭐ 2026-11-07 화면 편집 — 보이는 이름만 바꾸기(저장값 그대로)
 import { kpConfirm } from "./kpDialog";
 
@@ -39,6 +39,7 @@ export const CompanyOptionPicker = React.forwardRef(function CompanyOptionPicker
   optKey, value, onChange, className = "", style, disabled = false,
   placeholder = "선택", noneLabel, noneValue = "", allowNone = true, allowAdd = true,
   title, role, userCompany, compact = false, align = "left", id, buttonProps = {}, labelOf: labelOf0,
+  scope, // 🧩 2026-11-13 [거래처명, 상차지명, 하차지명] — 넘기면 그 오더에 맞는 전용 항목만(공통은 항상)
   openSignal = 0, // ⭐ 2026-11-11 숫자가 바뀌면 목록을 연다(배차방식 IN/OUT 먼저 고르기 — src/CallPay.jsx DispatchWayPicker)
 }, ref) {
   useUiConfigVersion();
@@ -77,7 +78,7 @@ export const CompanyOptionPicker = React.forwardRef(function CompanyOptionPicker
         <OptionMenu
           anchor={btn} optKey={optKey} cur={isNone ? "" : raw} meta={meta} ttl={ttl}
           noneLabel={noneLabel || placeholder} noneValue={noneValue} allowNone={allowNone} allowAdd={allowAdd}
-          role={role} userCompany={userCompany} align={align} labelOf={labelOf}
+          role={role} userCompany={userCompany} align={align} labelOf={labelOf} scope={scope}
           onPick={(v) => { close(); const next = v === "" ? noneValue : v; if (next !== (isNone ? noneValue : raw)) onChange?.(next); }}
           onClose={close}
         />
@@ -101,7 +102,7 @@ export function OptTrash({ onClick, title = "삭제", disabled = false, size = 2
 }
 
 // ─────────────── 떠 있는 목록(열었을 때만 그린다) ───────────────
-function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allowAdd, role, userCompany, align, labelOf, onPick, onClose }) {
+function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allowAdd, role, userCompany, align, labelOf, scope, onPick, onClose }) {
   const co = useCompanyOptionList(optKey, role, userCompany);
   const sheet = React.useMemo(() => isNarrow(), []);
   const touch = React.useMemo(() => isTouch(), []);
@@ -115,7 +116,7 @@ function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allo
   const menu = React.useRef(null);
   const searchRef = React.useRef(null);
 
-  const list = co.list;
+  const list = React.useMemo(() => filterByScope(co.list, co.scopes, scope, cur), [co.list, co.scopes, scope, cur]); // eslint-disable-line react-hooks/exhaustive-deps
   const nq = q.replace(/\s/g, "").toLowerCase();
   const filtered = nq ? list.filter((v) => v.replace(/\s/g, "").toLowerCase().includes(nq)) : list;
   const opts = [
