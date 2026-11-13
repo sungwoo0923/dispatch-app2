@@ -37,6 +37,7 @@ import ContractStudio from "./ContractStudio";
 import BoardPage, { BOARDS, canSeeBoard, useBoardLatest } from "./BoardPosts";
 import { NoticeWriter, HandoverWriter, NOTICE_WRITER_ROLES, handoverReceivers, useNoticePolicy, canWriteNoticeFor, NoticePolicyPicker } from "./HomeWriters";
 import { CustomSelect } from "./CustomSelect";
+import { TodayTodo } from "./SmartDispatchUI"; // ⭐ 2026-11-13 오늘 할 일
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 
 /* ===== 공통 Modal ===== */
@@ -420,7 +421,7 @@ function lockHomeGroups(planId, groups) {
   return out;
 }
 
-export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData: allDispatchData = [], onOrderDoubleClick, dept = null, onDeptGo }) {
+export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData: allDispatchData = [], onOrderDoubleClick, dept = null, onDeptGo, onTodoGo }) {
   // ⭐ 년 매출·당월 매출·누적 오더 — 예전엔 새로고침할 때마다 올해 오더 전체(수천~만 건)를 서버에서 다시 받아
   // 새로고침이 느리고 버벅였다. "실시간 범위(최근 7일) 이전" 기간의 합계는 하루 동안 거의 안 바뀌므로
   // 하루 1번만 받아 계산해 PC에 저장해 두고(homePastStats), 최근 7일~은 실시간 데이터로 더한다.
@@ -981,6 +982,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       })()}
 
       {/* 🌦 2026-11-07 오늘 오더가 있는 지역 날씨 · 기상특보(키가 없거나 자료가 없으면 안 보임) */}
+      {boardTab === "대시보드" && !dept && onTodoGo && <TodayTodo rows={allDispatchData} onGo={onTodoGo} />}
       {boardTab === "대시보드" && !dept && <OrdersWeatherStrip orders={dispatchData} />}
       {/* ===== 관제 데크 — 오늘 실적 · 매출 추이 · 매익률 · 담당자 순위 · 거래처 Top (2026-10-28 리디자인, 미배차 현황은 뺌) ===== */}
       {boardTab === "대시보드" && !dept && <HomeDeck
