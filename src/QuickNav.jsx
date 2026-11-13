@@ -12,6 +12,7 @@ import { subItemsOf } from "./navMenus";
 import { menuName } from "./execMenus";
 import { MENU_TOURS } from "./onboardingTour";
 import { HELP_DETAIL, HELP_COMMON, helpTextOf } from "./helpContent"; // 📖 메뉴별 자세한 사용법
+import { HelpDemo, hasHelpDemo } from "./HelpDemos"; // 🎬 2026-11-13 움직이는 예시 화면
 
 const FONT = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const MASTER_MENUS = new Set(["관리센터"]);
@@ -208,18 +209,31 @@ function HelpCenter({ index, initial, onGo, onClose }) {
       </div>));
   };
   const searching = !!nq;
-  // 자세한 사용법 한 묶음 — "버튼 — 설명" 줄은 버튼 이름을 굵게
-  const Sections = ({ list, only }) => (list || []).map((sec, si) => {
+  // 📖 2026-11-13 자세한 사용법 한 묶음 = 카드 하나(번호 · 제목 · 한 줄 소개 · 움직이는 예시 화면 · [이름 | 설명] 표)
+  //  items 의 "이름 — 설명"은 두 칸으로 나눠 보여 준다(— 는 화면에 나오지 않는다). 검색 중(only)에는 맞는 줄만
+  const Sections = ({ list, only }) => { let no = 0; return (list || []).map((sec, si) => {
     const items = only ? sec.items.filter((t) => hit(`${sec.title} ${t}`, only)) : sec.items;
     if (!items.length) return null;
+    no += 1;
     return (
-      <div key={si} className="mb-4 rounded-xl border border-[#E6EBF3] bg-white overflow-hidden">
-        <div className="px-3.5 py-2 bg-[#F7F9FC] border-b border-[#E6EBF3] text-[13px] font-black text-[#0F1A30]">{sec.title}</div>
-        <ul className="px-3.5 py-2 space-y-1.5">{items.map((t, i) => { const k = t.indexOf(" — "); return (
-          <li key={i} className="text-[13px] leading-relaxed text-[#2A3852] pl-3 relative"><span className="absolute left-0 top-[9px] w-1 h-1 rounded-full bg-[#9AA9C3]" />
-            {k > 0 ? <><b className="text-[#0F1A30]">{t.slice(0, k)}</b>{t.slice(k)}</> : t}</li>); })}</ul>
-      </div>);
-  });
+      <section key={si} className="mb-6 rounded-2xl border border-[#DCE3EE] bg-white overflow-hidden shadow-[0_4px_14px_rgba(15,26,48,.05)]">
+        <header className="px-5 py-4 bg-[#F7F9FC] border-b border-[#E6EBF3] flex items-start gap-3">
+          <span className="shrink-0 w-8 h-8 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black grid place-items-center tabular-nums">{no}</span>
+          <div className="min-w-0">
+            <h3 className="text-[17px] font-black text-[#0F1A30] leading-tight">{sec.title}</h3>
+            {sec.intro && !only && <p className="text-[14px] text-[#4A5A75] leading-relaxed mt-1">{sec.intro}</p>}
+          </div>
+        </header>
+        {sec.demo && !only && hasHelpDemo(sec.demo) && <div className="px-5 pt-5"><HelpDemo id={sec.demo} /></div>}
+        <dl className="px-5 py-3">
+          {items.map((t, i) => { const k = t.indexOf(" — "); const name = k > 0 ? t.slice(0, k) : ""; const desc = k > 0 ? t.slice(k + 3) : t; return (
+            <div key={i} className={`grid grid-cols-1 sm:grid-cols-[minmax(170px,230px)_minmax(0,1fr)] gap-x-5 gap-y-1 py-3.5 ${i ? "border-t border-[#EEF1F6]" : ""}`}>
+              {name ? <dt className="text-[14.5px] font-black text-[#0F1A30] leading-snug flex items-start gap-2"><span className="mt-[7px] w-1.5 h-1.5 rotate-45 bg-[#2D4C82] shrink-0" />{name}</dt> : <dt className="hidden sm:block" />}
+              <dd className="text-[14.5px] leading-[1.75] text-[#2A3852]">{desc}</dd>
+            </div>); })}
+        </dl>
+      </section>);
+  }); };
   const visibleMenus = new Set(menus.map((e) => e.menu));
   const foundDetail = searching && !isCho(nq) ? [["__common", "공통 사용법", HELP_COMMON], ...Object.keys(HELP_DETAIL).filter((m) => visibleMenus.has(m)).map((m) => [m, menuName(m), HELP_DETAIL[m]])].filter(([, , list]) => list.some((sec) => sec.items.some((t) => hit(`${sec.title} ${t}`, nq)))) : [];
   const foundMenus = searching ? index.filter((e) => !MASTER_MENUS.has(e.menu) && (hit(titleOf(e), nq) || (!e.sub && hit(descOf(e.menu), nq)) || (!e.sub && hit(helpTextOf(e.menu), nq)) || (!e.sub && (MENU_TOURS[e.menu] || []).some((s) => hit(`${s.title} ${s.text}`, nq))))) : [];
@@ -228,29 +242,29 @@ function HelpCenter({ index, initial, onGo, onClose }) {
   return createPortal(
     <div data-kp-dialog data-kp="help-center" className="fixed inset-0 z-[2147482900] flex items-center justify-center p-4" style={{ fontFamily: FONT }}>
       <div className="absolute inset-0 bg-[#060C1A]/55 backdrop-blur-[2px]" onClick={onClose} />
-      <div className="relative w-[min(1040px,96vw)] h-[min(760px,90vh)] rounded-2xl bg-[#F4F6FA] shadow-[0_30px_80px_rgba(6,12,26,.5)] overflow-hidden flex flex-col">
-        <div className="flex items-center gap-3 px-5 h-[60px] text-white shrink-0" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+      <div className="relative w-[min(1360px,97vw)] h-[min(920px,94vh)] rounded-2xl bg-[#F4F6FA] shadow-[0_30px_80px_rgba(6,12,26,.5)] overflow-hidden flex flex-col">
+        <div className="flex items-center gap-3 px-6 h-[68px] text-white shrink-0" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div className="min-w-0">
             <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">HELP CENTER</div>
-            <div className="text-[17px] font-black leading-tight">도움말 센터</div>
+            <div className="text-[19px] font-black leading-tight whitespace-nowrap">도움말 센터</div>
           </div>
-          <div className="ml-4 flex-1 max-w-[420px] flex items-center gap-2 h-9 px-3 rounded-xl bg-white/10 ring-1 ring-white/20">
+          <div className="ml-4 flex-1 max-w-[520px] flex items-center gap-2 h-11 px-3.5 rounded-xl bg-white/10 ring-1 ring-white/20">
             <SearchIco />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="궁금한 기능을 검색하세요 (예: 인수증, 복사, 정산)" autoComplete="off" className="flex-1 bg-transparent outline-none text-[13.5px] font-bold placeholder:text-white/45" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="궁금한 기능을 검색하세요 (예: 인수증, 복사, 정산)" autoComplete="off" className="flex-1 bg-transparent outline-none text-[15px] font-bold placeholder:text-white/45" />
             {q && <button type="button" onClick={() => setQ("")} className="text-white/60 hover:text-white text-[12px] font-black">지우기</button>}
           </div>
-          <button type="button" onClick={onClose} className="ml-auto h-8 px-3 rounded-lg bg-white/10 hover:bg-white/20 ring-1 ring-white/25 text-[12.5px] font-black">닫기</button>
+          <button type="button" onClick={onClose} className="ml-auto h-10 px-4 rounded-xl bg-white/10 hover:bg-white/20 ring-1 ring-white/25 text-[14px] font-black whitespace-nowrap">닫기</button>
         </div>
         <div className="flex-1 min-h-0 flex">
-          <div className="w-[210px] shrink-0 overflow-y-auto border-r border-[#E1E7F0] bg-white p-2">
-            <button type="button" onClick={() => { setSel("__new"); setQ(""); }} className={`w-full text-left px-3 h-9 rounded-lg text-[13px] font-black mb-1 ${!searching && sel === "__new" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>새 기능 · 바뀐 점</button>
-            <button type="button" onClick={() => { setSel("__common"); setQ(""); }} className={`w-full text-left px-3 h-9 rounded-lg text-[13px] font-black mb-1 ${!searching && sel === "__common" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>처음이신가요? · 공통 사용법</button>
-            <div className="px-3 pt-2 pb-1 text-[10.5px] font-black tracking-[0.14em] text-[#8FA0BD]">메뉴별 사용법</div>
+          <div className="w-[268px] shrink-0 overflow-y-auto border-r border-[#E1E7F0] bg-white p-3 hidden sm:block">
+            <button type="button" onClick={() => { setSel("__new"); setQ(""); }} className={`w-full text-left px-3.5 h-11 rounded-xl text-[14.5px] font-black mb-1 whitespace-nowrap ${!searching && sel === "__new" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>새 기능 · 바뀐 점</button>
+            <button type="button" onClick={() => { setSel("__common"); setQ(""); }} className={`w-full text-left px-3.5 h-11 rounded-xl text-[14.5px] font-black mb-1 whitespace-nowrap ${!searching && sel === "__common" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>처음이신가요? 공통 사용법</button>
+            <div className="px-3.5 pt-4 pb-2 mt-2 border-t border-[#EEF1F6] text-[12px] font-black tracking-[0.14em] text-[#8FA0BD]">메뉴별 사용법</div>
             {menus.map((e) => (
-              <button key={e.id} type="button" onClick={() => { setSel(e.menu); setQ(""); }} className={`w-full text-left px-3 h-8 rounded-lg text-[13px] font-bold ${!searching && sel === e.menu ? "bg-[#0F1A30] text-white" : "text-[#2A3852] hover:bg-[#EEF3FB]"}`}>{e.label}</button>
+              <button key={e.id} type="button" onClick={() => { setSel(e.menu); setQ(""); }} className={`w-full text-left px-3.5 h-10 rounded-xl text-[14.5px] font-bold whitespace-nowrap mb-0.5 ${!searching && sel === e.menu ? "bg-[#0F1A30] text-white" : "text-[#2A3852] hover:bg-[#EEF3FB]"}`}>{e.label}</button>
             ))}
           </div>
-          <div className="flex-1 min-w-0 overflow-y-auto p-5">
+          <div className="flex-1 min-w-0 overflow-y-auto px-6 sm:px-8 py-6">
             {searching ? (
               <>
                 <div className="text-[15px] font-black text-[#0F1A30] mb-3">"{q.trim()}" 검색 결과</div>
@@ -272,14 +286,14 @@ function HelpCenter({ index, initial, onGo, onClose }) {
               </>
             ) : sel === "__common" ? (
               <>
-                <div className="text-[18px] font-black text-[#0F1A30]">처음이신가요? · 공통 사용법</div>
-                <div className="text-[12.5px] text-[#7A89A3] mb-4">어느 화면에서나 똑같이 쓰는 기능입니다. 메뉴별 사용법은 왼쪽에서 메뉴를 고르세요.</div>
+                <div className="text-[24px] font-black text-[#0F1A30] tracking-tight">처음이신가요? 공통 사용법</div>
+                <div className="text-[15px] text-[#4A5A75] mt-1 mb-6">어느 화면에서나 똑같이 쓰는 기능입니다. 메뉴별 사용법은 왼쪽에서 메뉴를 고르세요.</div>
                 <Sections list={HELP_COMMON} />
               </>
             ) : sel === "__new" ? (
               <>
-                <div className="text-[18px] font-black text-[#0F1A30]">새 기능 · 바뀐 점</div>
-                <div className="text-[12.5px] text-[#7A89A3] mb-4">프로그램이 바뀔 때마다 자동으로 쌓입니다. 왼쪽에서 메뉴를 고르면 그 메뉴의 사용법과 관련 내용만 볼 수 있어요.</div>
+                <div className="text-[24px] font-black text-[#0F1A30] tracking-tight">새 기능 · 바뀐 점</div>
+                <div className="text-[15px] text-[#4A5A75] mt-1 mb-6">프로그램이 바뀔 때마다 자동으로 쌓입니다. 왼쪽에서 메뉴를 고르면 그 메뉴의 사용법과 관련 내용만 볼 수 있어요.</div>
                 <UpdateList list={updates || []} limit={120} />
               </>
             ) : (() => {
@@ -288,12 +302,12 @@ function HelpCenter({ index, initial, onGo, onClose }) {
               return (
                 <>
                   <div className="flex items-center gap-3 mb-1">
-                    <div className="text-[18px] font-black text-[#0F1A30]">{e.label}</div>
-                    <button type="button" onClick={() => go(e)} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black hover:bg-[#1B2B4B]">이 메뉴 열기</button>
+                    <div className="text-[24px] font-black text-[#0F1A30] tracking-tight">{e.label}</div>
+                    <button type="button" onClick={() => go(e)} className="h-9 px-4 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black hover:bg-[#1B2B4B]">이 메뉴 열기</button>
                   </div>
-                  {descOf(sel) && <div className="text-[13.5px] text-[#2A3852] leading-relaxed mb-4">{descOf(sel)}</div>}
+                  {descOf(sel) && <div className="text-[15px] text-[#4A5A75] leading-relaxed mb-6">{String(descOf(sel)).replace(/\s+—\s+/g, ": ")}</div>}
                   {!!(HELP_DETAIL[sel] || []).length && <div className="mb-3">
-                    <div className="text-[11px] font-black tracking-[0.12em] text-[#8FA0BD] mb-1.5">자세한 사용법 — 화면 · 버튼 하나씩</div>
+                    <div className="text-[12.5px] font-black tracking-[0.12em] text-[#8FA0BD] mb-2.5">자세한 사용법</div>
                     <Sections list={HELP_DETAIL[sel]} />
                   </div>}
                   {!!steps.length && !(HELP_DETAIL[sel] || []).length && <div className="mb-5">
