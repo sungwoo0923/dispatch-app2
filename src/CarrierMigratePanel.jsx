@@ -328,11 +328,15 @@ export default function CarrierMigratePanel({ companies = [] }) {
       delete cs.migrationPreset.tabRules; delete cs.migrationPreset.commonOptions; delete cs.migrationPreset.includeTabs;
       // 🧩 탭 전용 배차방식 묶음(그 탭의 상차지 · 거래처 오더에서만 보임) — src/companyOptionPicker.jsx 가 읽는다
       if (opts.saveOptions && result.dispatchScopes && Object.keys(result.dispatchScopes).length) cs.optionScopes = { 배차방식: result.dispatchScopes };
+      // 🗂 담당노선구분 목록 = 가져온 탭 이름(먼저 있던 것과 합침)
+      { const prevRg = (await getDoc(doc(db, "companySettings", co)).catch(() => null))?.data()?.dropdownOptions?.담당노선구분;
+        const rgList = [...new Set([...(Array.isArray(prevRg) ? prevRg : []), ...orders.map((o) => o.담당노선구분).filter(Boolean)])];
+        if (rgList.length) cs.dropdownOptions = { ...(cs.dropdownOptions || {}), 담당노선구분: rgList }; }
       if (opts.saveOptions && optValues.length) {
         // 🚚 2026-11-12 먼저 가져온 탭에서 만든 배차방식 목록을 지우지 않게 합친다 · preset.dropOptions(예: JY "직접배차")는 뺀다
         const prevOpts = (await getDoc(doc(db, "companySettings", co)).catch(() => null))?.data()?.dropdownOptions?.배차방식;
         const drop = new Set(preset.dropOptions || []);
-        cs.dropdownOptions = { 배차방식: [...new Set([...(Array.isArray(prevOpts) ? prevOpts : []), ...optValues])].filter((v) => v && !drop.has(v)) };
+        cs.dropdownOptions = { ...(cs.dropdownOptions || {}), 배차방식: [...new Set([...(Array.isArray(prevOpts) ? prevOpts : []), ...optValues])].filter((v) => v && !drop.has(v)) };
       }
       const extraGrades = result.grades.filter((g) => !["지입", "직영", "임대"].includes(g));
       if (extraGrades.length) cs.fleetGrades = extraGrades;

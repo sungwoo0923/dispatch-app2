@@ -2973,6 +2973,7 @@ import { useCompanyFeatures } from "./companyFeatures";
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합 현황) — 회사가 쓰는 영역에 따라 상단 메뉴가 바뀐다(src/bizModules.js)
 import { useBizModules, isBizMenu, parseBizMenu, bizTopMenus, bizSideGroups, bizFirstMenu, bizMenuKey, readBiz, writeBiz, BIZ_MENU_ICON, bizInfo as bizInfoOf, bizMenuLabel as bizMenuLabelOf } from "./bizModules";
 import { reportScreen, installScreenVisibility } from "./screenReport";
+import { useRouteGroupFilter, RouteGroupBar, routeGroupOf } from "./routeGroups";
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "./orderHistoryCache";
 import { normScope, scopeAllows, isOfficeBaseMenu } from "./workScope";
 import BizSwitcher from "./freight/BizSwitcher";
@@ -7881,8 +7882,12 @@ useEffect(() => {
   //   목록·건수·배지·검색·미배차·실시간·지입차관리·대시보드·엑셀이 모두 아래 dispatchData를 쓰므로 그대로 따른다.
   //   정산·매출은 원래부터 같은 기준으로 빠졌고, 시트 연동은 서버가 그대로 한다(오더는 저장소에 남음).
   const routeCarrierF = useRouteCarrierFilter(getTenant() || userCompany || localStorage.getItem("userCompany") || "");
-  const dispatchData = useMemo(() => routeCarrierF.filter(dispatchDataAll) || [], [dispatchDataAll, routeCarrierF]);
-  const recentDispatchData = useMemo(() => routeCarrierF.filter(recentDispatchDataAll) || [], [recentDispatchDataAll, routeCarrierF]);
+  // 🗂 2026-11-13 담당노선구분 — 화면 위 버튼 줄에서 고른 묶음만(배차현황 · 실시간 · 정산 · 매출 등 아래 dispatchData 를 쓰는 모든 화면이 따른다 · src/routeGroups.jsx)
+  const rgProfile = useMyProfile(user?.uid);
+  const rg = useRouteGroupFilter({ enabled: useCompanyFeatures(getTenant() || userCompany).routeGroups === true, uid: user?.uid, profile: rgProfile });
+  const dispatchDataPreRG = useMemo(() => routeCarrierF.filter(dispatchDataAll) || [], [dispatchDataAll, routeCarrierF]);
+  const dispatchData = useMemo(() => rg.filter(dispatchDataPreRG) || [], [dispatchDataPreRG, rg.filter]);
+  const recentDispatchData = useMemo(() => rg.filter(routeCarrierF.filter(recentDispatchDataAll) || []) || [], [recentDispatchDataAll, routeCarrierF, rg.filter]);
   const orderHistoryApi = React.useMemo(() => ({ loadRange, loadFullHistory }), [loadRange, loadFullHistory]);
   const [pcBootDone, setPcBootDone] = useState(false);
   // 🛣 고정노선 — 정해진 요일의 배차를 미리 만들어 배차현황·실시간배차현황·기사앱에 보이게
@@ -9013,6 +9018,7 @@ return (
       {/* ---------------- 화면 렌더링 ---------------- */}
       <ColumnStyleHost company={userCompany || localStorage.getItem("userCompany") || ""} />
       <BrowserZoomNotice fit={screenFit} />
+      {rg.enabled && !workScope && !isBizMenu(menu) && !["회사관리", "관리자메뉴", "관리센터", "전자결재"].includes(menu) && <RouteGroupBar rg={rg} rows={dispatchDataPreRG} role={role} userCompany={userCompany} dark={darkMode} />}
       <main className={`kp-main ${menu === "HOME" || menu === BRIEF_MENU || EXEC_MENUS.includes(menu) ? "kp-main-bare" : ""} rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
         {!darkMode && <KpPageHeader menu={menu} />}
         {/* 🧭 2026-11-12 컨테이너 · 해상 · 항공 · 통합 현황 화면 */}
@@ -14929,6 +14935,17 @@ const [copyShowMore, setCopyShowMore] = React.useState(false);
 const [copyDateHint, setCopyDateHint] = React.useState(null); // {origPickup, origDrop}
 // ⭐ 오더복사·운임 추천/비교·운임조회는 예전 오더 전체가 필요 — 복사창을 열거나 상·하차지를 다 입력하면 1회 불러온다
 useLoadFullOrderHistory(copyOpen || !!(String(form.상차지명 || "").trim() && String(form.하차지명 || "").trim()));
+// 🗂 2026-11-13 담당노선구분(켠 운송사만) — 거래처 · 상차지를 넣으면 그 조합으로 가장 많이 쓴 구분을 자동으로 넣는다(비어 있을 때만 · 바꿀 수 있음)
+const rgFormOn = useCompanyFeatures(getTenant() || userCompany).routeGroups === true;
+const rgSuggest = React.useMemo(() => {
+  if (!rgFormOn) return "";
+  const c = String(form.거래처명 || "").trim(), f = String(form.상차지명 || "").trim();
+  if (!c || !f) return "";
+  const m = new Map();
+  (Array.isArray(dispatchData) ? dispatchData : []).forEach((r) => { if (String(r.거래처명 || "").trim() !== c || String(r.상차지명 || "").trim() !== f) return; const g = routeGroupOf(r); if (g) m.set(g, (m.get(g) || 0) + 1); });
+  return [...m.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+}, [rgFormOn, form.거래처명, form.상차지명, dispatchData]);
+React.useEffect(() => { if (rgSuggest && !String(form.담당노선구분 || "").trim()) onChange("담당노선구분", rgSuggest); }, [rgSuggest]); // eslint-disable-line react-hooks/exhaustive-deps
 // 예전 날짜로 등록하면(순번·중복 확인용) 그 날짜 오더를 불러온다
 useLoadOrderRange(form.상차일 && form.상차일 < pcLiveWindowStart() ? form.상차일 : null, form.상차일);
 const [showAmPmError, setShowAmPmError] = React.useState(false);
@@ -18346,6 +18363,13 @@ className={`
     <DispatchWayPicker scope={[form?.거래처명, form?.상차지명, form?.하차지명]} className={inputCls} value={form.배차방식} dir={form.콜구분 || ""} role={role} userCompany={userCompany}
       onPick={(p) => Object.entries(p).forEach(([k, v]) => onChange(k, v))} />
   </div>
+  {/* 🗂 2026-11-13 담당노선구분(켠 운송사만) — 시트 탭처럼 나눠 보는 묶음. 비워 두면 미지정 */}
+  {rgFormOn && (
+    <div>
+      <label className={labelCls}>담당노선구분<DropdownOptionsManageButton optKey="담당노선구분" label="담당노선구분" role={role} userCompany={userCompany} /></label>
+      <CompanyOptionPicker optKey="담당노선구분" placeholder="미지정" noneLabel="미지정" className={inputCls} value={form.담당노선구분 || ""} role={role} userCompany={userCompany} onChange={(v) => onChange("담당노선구분", v)} />
+    </div>
+  )}
 
 {/* ===============================
     메모 / 전달사항 — ⭐ 2026-11-03 카드형으로 정리(작은 영문 머리글 · 중요도 칩 · 고정 토글 · 글자 수)

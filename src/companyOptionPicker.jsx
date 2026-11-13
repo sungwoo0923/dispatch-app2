@@ -21,6 +21,7 @@ export const OPTION_META = {
   상하차방법: { title: "상/하차방법", tag: "LOADING", eg: "예: 호이스트" },
   화물타입: { title: "화물타입", tag: "CARGO", eg: "예: 마대" },
   톤수타입: { title: "톤수타입", tag: "UNIT", eg: "예: 대" },
+  담당노선구분: { title: "담당노선구분", tag: "ROUTE GROUP", eg: "예: 아산 KDF" }, // 🗂 2026-11-13
   아웃콜방식: { title: "OUT 방식", tag: "OUT CALL", eg: "예: 원콜" }, // 💳 2026-11-11 외부 콜을 잡은 곳
 };
 
