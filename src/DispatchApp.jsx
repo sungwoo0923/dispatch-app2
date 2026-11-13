@@ -2973,6 +2973,7 @@ import { useCompanyFeatures } from "./companyFeatures";
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합 현황) — 회사가 쓰는 영역에 따라 상단 메뉴가 바뀐다(src/bizModules.js)
 import { useBizModules, isBizMenu, parseBizMenu, bizTopMenus, bizSideGroups, bizFirstMenu, bizMenuKey, readBiz, writeBiz, BIZ_MENU_ICON, bizInfo as bizInfoOf, bizMenuLabel as bizMenuLabelOf } from "./bizModules";
 import { reportScreen, installScreenVisibility } from "./screenReport";
+import { normScope, scopeAllows, isOfficeBaseMenu } from "./workScope";
 import BizSwitcher from "./freight/BizSwitcher";
 const FreightWorkspace = React.lazy(() => import("./freight/FreightWorkspace"));
 const FreightRevenueStrip = React.lazy(() => import("./freight/FreightSettle").then((m) => ({ default: m.FreightRevenueStrip })));
@@ -8246,6 +8247,9 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   const [execFull, setExecFull] = React.useState(() => { try { return localStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setMenu("HOME"); };
   const deptMode = deptModeOf(role, customRole) || (isExec && !execFull ? "exec" : null);
+  // 🗂 2026-11-13 업무 범위(사내업무만 / 사내업무 + 경리) — 배차 메뉴 없이 사내업무 화면만(src/workScope.js). 최고관리자는 해당 없음
+  const workScope = role === "totalMaster" ? "" : normScope(myProfileDoc?.workScope);
+  useEffect(() => { if (workScope && !scopeAllows(workScope, menu) && !isBizMenu(menu)) setMenu("HOME"); else if (workScope && isBizMenu(menu)) setMenu("HOME"); }, [workScope, menu]);
   useUiScreen(menu, deptMode); // ⭐ 2026-11-07 화면 편집 — 지금 메뉴("이 화면만")·부서(역할별 보이기)
   const deptCompany = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
   // 🧭 2026-11-12 업무 영역 — 회사가 쓰는 영역(내륙 · 컨테이너 · 해상 · 항공) 중 지금 보는 것. 내륙뿐인 회사는 예전 화면 그대로
@@ -8253,7 +8257,7 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   const bizModsAll = useBizModules(deptCompany);
   const bizSeeAll = isExec || role === "admin" || role === "totalMaster" || realRole === "allMgr" || myProfileDoc?.isMaster === true;
   // 👤 직원 업무 담당(통합 › 업무 담당에서 정함) — 정해진 직원은 그 업무만 본다
-  const bizAllowKey = allowedModules(bizModsAll.list, myProfileDoc?.bizAccess, bizSeeAll).join(",");
+  const bizAllowKey = workScope ? "inland" : allowedModules(bizModsAll.list, myProfileDoc?.bizAccess, bizSeeAll).join(","); // 🗂 사내업무 계정은 업무 영역 전환 없음
   const bizMods = React.useMemo(() => ({ ...bizModsAll, list: bizAllowKey.split(",").filter(Boolean) }), [bizAllowKey, bizModsAll.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
   const canBizGroup = bizMods.list.length >= 2 && (isExec || role === "admin" || role === "totalMaster" || realRole === "allMgr" || myProfileDoc?.isMaster === true);
   const [bizRaw, setBizRaw] = React.useState(() => readBiz(user?.uid));
@@ -8547,6 +8551,7 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   const menuState = (m) => {
     // 💳 2026-11-09 요금제 잠금을 맨 먼저 — 예전엔 부서 메뉴(인사관리부·회계관리 등)·임원 메뉴가 아래에서 먼저 "ok"로 끝나 요금제와 상관없이 열렸다
     if (MENU_FEATURE[m] && !planIncludes(planId, MENU_FEATURE[m])) return "locked";
+    if (workScope) { if (!scopeAllows(workScope, m)) return "hidden"; if (isOfficeBaseMenu(m)) return "ok"; } // 🗂 업무 범위 — 사내업무 계정은 배차 메뉴를 모두 숨긴다(경리 메뉴는 아래 권한 판정 그대로)
     if (isBizMenu(m)) return parseBizMenu(m).biz === biz ? "ok" : "hidden"; // 🧭 2026-11-12 업무 영역 메뉴(컨테이너 · 해상 · 항공 · 통합)
     // 📊 2026-11-06 일일 경영 보고 — 임원 화면 역할만(기존 임원 판정 isExec 그대로)
     if (m === BRIEF_MENU) return canBriefing ? "ok" : "hidden";
@@ -8832,7 +8837,7 @@ return (
             )}
 
             {/* 🔀 2026-11-10 화면 전환(통합인사관리자: 경리·인사 / 통합관리자: 운송·영업·경리·인사) — 버튼 하나, 누르면 어느 팀 화면으로 볼지 고르는 창 */}
-            <BizSwitcher modules={bizMods.list} current={biz} canGroup={canBizGroup} onPick={pickBiz} />
+            <BizSwitcher modules={workScope ? ["inland"] : bizMods.list} current={biz} canGroup={canBizGroup} onPick={pickBiz} />
             {roleView.views && <ViewSwitcher views={roleView.views} current={roleView.view} roleLabel={ROLE_LABELS[realRole] || ""} onPick={(k) => { roleView.setView(k); setMenu("HOME"); }} />}
             {/* 👔 임원 — 임원 화면 ↔ 전체 메뉴(관리자 권한일 때만) */}
             {isExec && (
@@ -8987,9 +8992,9 @@ return (
             myStats={myStats}
             pending={pendingToday}
             delayed={0}
-            dispatchData={dispatchDataFiltered}
+            dispatchData={workScope ? [] : dispatchDataFiltered}
             onOrderDoubleClick={(order) => setHomeClickedOrder(order)}
-            dept={deptMode}
+            dept={workScope ? "office" : deptMode}
             onDeptGo={(k) => { const [m, t] = String(k).split(":"); if (m === "정산관리" && t) set정산관리Tab(t); if (m === "출근기록부" || (m === "인사관리부" && t)) { try { sessionStorage.setItem("kpHrTab", m === "출근기록부" ? "attendance" : t); } catch { /* 무시 */ } handleMenuClick("인사관리부"); return; } if (m === "기사서류") { set기사관리Tab("docs:driver"); handleMenuClick("기사관리"); return; } if (m === "기사승인") { set기사관리Tab("acc:pending"); handleMenuClick("기사관리"); return; } if (m === "자금관리" && t) { try { sessionStorage.setItem("kpFundsTab", t); } catch { /* 무시 */ } } if (m === "영업관리" && t) { try { sessionStorage.setItem("kpSalesTab", t); } catch { /* 무시 */ } } if (m === "결재함") { window.__kpOpenApproval = t ? { id: t, page: "inbox" } : { page: "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; } handleMenuClick(m); }}
           />
         )}

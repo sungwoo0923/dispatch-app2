@@ -10,6 +10,7 @@ import { useCompanyFeatures } from "../companyFeatures"; // ⭐ 2026-11-04 마�
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합) — 모바일은 기존 화면 위에 업무 화면을 덮어 띄운다(src/freight/FreightMobile.jsx)
 import { useBizModules, readBiz, writeBiz, bizInfo } from "../bizModules";
 import { reportScreen, installScreenVisibility, mobileScreenLabel } from "../screenReport";
+import { normScope } from "../workScope";
 import { allowedModules } from "../freight/freightCore";
 import BizSwitcher from "../freight/BizSwitcher";
 import { useCompanyDropdownSync, dropdownList } from "../companyDropdownOptions";
@@ -2217,7 +2218,9 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   // 🔒 2026-11-01 조회만 허락된 화면에서 수정·저장·삭제를 누르면 바로 "권한 없음"
   const PAGE_MENU_M = { drivers: "기사관리", clients: "거래처관리", list: "배차현황", detail: "배차현황", canceled: "배차현황", form: "배차관리", unassigned: "배차관리", fleet: "지입차관리", sales: "매출관리", ratecard: "단가표", fare: "운임조회", intel: "인사이트", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:funds": "자금관리", "dept:assets": "비품관리", "dept:hr": "인사관리부", "dept:cert": "증명서발급", "dept:driverdocs": "기사관리", "dept:sales": "영업관리" }; // ⭐ 2026-11-03 가입 승인(staff)은 기사관리 조회권한과 별개 — PC처럼 관리자·경리·인사는 승인·거절 가능
   const [execFull, setExecFull] = useState(() => { try { return localStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
-  const deptMode = role === "test" ? "acct" : role === "hrManager" ? "hr" : role === "salesMgr" ? "sales" : isExecM && !execFull ? "exec" : null; // 💼 2026-11-10 영업관리자(영업사무원 포함) → 영업 화면
+  // 🗂 2026-11-13 업무 범위(사내업무만 / 사내업무 + 경리) — 배차 화면 없이 사내업무 홈으로(src/workScope.js)
+  const workScopeM = role === "totalMaster" ? "" : normScope(myProfM?.workScope);
+  const deptMode = workScopeM ? "office" : role === "test" ? "acct" : role === "hrManager" ? "hr" : role === "salesMgr" ? "sales" : isExecM && !execFull ? "exec" : null; // 💼 2026-11-10 영업관리자(영업사무원 포함) → 영업 화면
   // 📊 2026-11-06 일일 경영 보고 — 기존 임원 판정(isExecM) 그대로(src/dailyReport.js canSeeBriefing)
   const briefCompanyM = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
   const canBriefingM = canSeeBriefing({ isExec: isExecM });
@@ -5540,7 +5543,7 @@ const title =
   : page === "clients" ? "거래처관리"
   : page === "fixedroute" ? "고정노선현황"
   : page === "perms" ? "권한 관리"
-  : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "hr" ? "인사관리" : deptMode === "sales" ? "영업" : "경리·회계")
+  : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "office" ? "사내업무" : deptMode === "hr" ? "인사관리" : deptMode === "sales" ? "영업" : "경리·회계")
   : String(page).startsWith("dept:") ? ({ "dept:sales": "영업관리", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서", "dept:payroll": "급여 계산", "dept:payslip": "급여명세서", "dept:leaveplan": "연차 사용 계획", "dept:leavepromo": "연차 관리", "dept:briefing": "일일 경영 보고" , "dept:analysis": "경영 분석", "dept:apqueue": "결재 대기", "dept:staffinfo": "직원 정보"}[page] || "")
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
@@ -6052,6 +6055,7 @@ const title =
 )}
       {showMenu && (
         <MobileSideMenu
+  officeAcct={workScopeM === "officeAcct"}
   staffSignupOk={!["acctStaff", "hrStaff"].includes(realRole)}
   onClose={() => setShowMenu(false)}
   currentUser={currentUser}
@@ -8026,6 +8030,7 @@ function MobileSideMenu({
   fixedUnassignedCount = 0,
   listUnseenCount = 0, // ⭐ 2026-11-06 등록내역 — 안 본 미배차
   deptMode = null,
+  officeAcct = false,
   isExec = false,
   bizMenu = null, // 🧭 2026-11-12 업무 전환 · 내륙 인계함
   roleViews = null,
@@ -8191,6 +8196,12 @@ function MobileSideMenu({
               최고관리자 전용(관리센터·구글시트·블라인드·회사코드조회)은 최고관리자만.
               일정(휴가)·인수인계는 전자결재 안으로, 자사운임표는 통합운임조회 안으로 합쳤다(중복 메뉴 정리). */}
           {/* 🏢 경리·인사 권한 — 배차·운임·지입차 메뉴 대신 부서 업무 메뉴 */}
+          {deptMode === "office" && (
+            <MenuSection title="사내업무" en="OFFICE" dark={dark} alwaysOpen>
+              <MenuItem label="사내업무 홈" icon="dashboard" onClick={() => onGo?.("dept")} dark={dark} />
+              {officeAcct && ok("회계관리") && <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />}
+            </MenuSection>
+          )}
           {deptMode === "acct" && (<>
             <MenuSection title="경리 · 회계" en="ACCOUNTING" dark={dark} alwaysOpen>
               <MenuItem label="경리 홈" icon="dashboard" onClick={() => onGo?.("dept")} dark={dark} />
