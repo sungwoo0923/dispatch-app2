@@ -47,11 +47,11 @@ export function summarizeSettle(orders, ym, stageOf = () => "미작성", today =
   const unpaidDrv = payable.filter((o) => (o.지급상태 || "지급중") !== "지급완료");
   const steps = [
     { key: "orders", label: "오더 확정", go: "거래처정산", total: mine.length, left: new Set([...noFare, ...unassigned].map((o) => o._id || o.id || o)).size, unit: "건", hint: `운임 미입력 ${noFare.length} · 미배차 ${unassigned.length}`, amount: 0 },
-    { key: "send", label: "명세서 발송", go: "거래처정산", total, left: needSend.length, unit: "곳", hint: "보내기 전", amount: sumOf(needSend) },
-    { key: "tax", label: "계산서 발행", go: "거래처정산", total, left: needTax.length, unit: "곳", hint: "발행 전", amount: sumOf(needTax) },
+    { key: "send", label: "명세서 발송", go: "거래처정산", total, left: needSend.length, unit: "곳", hint: "미발송", amount: sumOf(needSend) },
+    { key: "tax", label: "계산서 발행", go: "거래처정산", total, left: needTax.length, unit: "곳", hint: "미발행", amount: sumOf(needTax) },
     { key: "deposit", label: "입금 확인", go: "입금확인", total, left: unpaidClients.length, unit: "곳", hint: "미입금", amount: unpaidClients.reduce((a, c) => a + unpaidOf(c), 0) },
     { key: "payout", label: "기사 지급", go: "지급관리", total: payable.length, left: unpaidDrv.length, unit: "건", hint: "미지급", amount: unpaidDrv.reduce((a, o) => a + n(o.기사운임), 0) },
-    { key: "close", label: "마감", go: "거래처정산", total, left: needClose.length, unit: "곳", hint: "마감 전", amount: sumOf(needClose) },
+    { key: "close", label: "마감", go: "거래처정산", total, left: needClose.length, unit: "곳", hint: "미마감", amount: sumOf(needClose) },
   ];
   const sale = sumOf(clients), buy = payable.reduce((a, o) => a + n(o.기사운임), 0);
   // 미수 경과(전체 기간) — 입금 안 됐고 그 달을 마감하지 않은 청구

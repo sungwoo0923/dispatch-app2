@@ -17,6 +17,7 @@ export function reloadOnce() {
     const last = Number(sessionStorage.getItem("kpChunkReloadAt") || 0);
     if (Date.now() - last < 30000) return false; // 30초 안에 또 실패하면 무한 새로고침 방지 — 안내 화면 그대로
     sessionStorage.setItem("kpChunkReloadAt", String(Date.now()));
+    if (window.__kpMenu) sessionStorage.setItem("kpReloadMenu", JSON.stringify({ menu: window.__kpMenu, at: Date.now() })); // 새로고침 뒤 보던 메뉴로
   } catch { /* 저장 실패해도 진행 */ }
   window.location.reload();
   return true;
