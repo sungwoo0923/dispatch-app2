@@ -8,6 +8,8 @@ import React from "react";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { useCompanyOptionList } from "./companyDropdownOptions";
+import { useCompanyFeatures } from "./companyFeatures";
+import { CompanyOptionPicker } from "./companyOptionPicker";
 
 export const RG_NONE = "(미지정)";
 export const routeGroupOf = (row) => String(row?.담당노선구분 || String(row?.이전출처 || "").split("!")[0] || "").trim();
@@ -70,4 +72,12 @@ export function RouteGroupBar({ rg, rows = [], role, userCompany, dark = false }
       </span>
     </div>
   );
+}
+
+// 오더 복사 · 수정 패널의 담당노선구분 칸 — 켠 운송사에서만 보인다. Field = 그 패널의 칸 틀(label 을 받는 컴포넌트)
+export function RouteGroupField({ Field, row, onChange, className = "", role, userCompany }) {
+  const on = useCompanyFeatures(userCompany).routeGroups === true;
+  if (!on) return null;
+  const el = <CompanyOptionPicker optKey="담당노선구분" placeholder="미지정" noneLabel="미지정" className={className} value={routeGroupOf(row)} role={role} userCompany={userCompany} onChange={onChange} />;
+  return Field ? <Field label="담당노선구분">{el}</Field> : el;
 }

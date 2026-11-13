@@ -2973,7 +2973,7 @@ import { useCompanyFeatures } from "./companyFeatures";
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합 현황) — 회사가 쓰는 영역에 따라 상단 메뉴가 바뀐다(src/bizModules.js)
 import { useBizModules, isBizMenu, parseBizMenu, bizTopMenus, bizSideGroups, bizFirstMenu, bizMenuKey, readBiz, writeBiz, BIZ_MENU_ICON, bizInfo as bizInfoOf, bizMenuLabel as bizMenuLabelOf } from "./bizModules";
 import { reportScreen, installScreenVisibility } from "./screenReport";
-import { useRouteGroupFilter, RouteGroupBar, routeGroupOf } from "./routeGroups";
+import { useRouteGroupFilter, RouteGroupBar, routeGroupOf, RouteGroupField } from "./routeGroups";
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "./orderHistoryCache";
 import { normScope, scopeAllows, isOfficeBaseMenu } from "./workScope";
 import BizSwitcher from "./freight/BizSwitcher";
@@ -3433,6 +3433,50 @@ const ExecAnalysis = React.lazy(() => import("./ExecAnalytics"));
 const ExecApprovalQueue = React.lazy(() => import("./ExecAnalytics").then((m) => ({ default: m.ExecApprovalQueue })));
 const ExecStaffInfo = React.lazy(() => import("./ExecStaffInfo"));
 // 🏢 부서 모드 메뉴 — 경리·회계(test) / 인사관리자(hrManager)
+// ⚡ 2026-11-13 거래명세서 미리보기 줄 — 한 달 수백 줄을 한꺼번에 그리면 정산관리를 열 때 2초 넘게 멈췄다
+//  화면에는 처음 80줄만 그리고 [나머지 펼치기]로 모두 본다. 인쇄 · PDF · 엑셀 · 메일 첨부는 화면(#invoiceArea)을 그대로 쓰므로
+//  내보내기 직전에 expandInvoicePreview()로 전부 펼친 뒤 진행한다(합계 줄은 언제나 전체 기준)
+const INVOICE_PREVIEW_ROWS = 80;
+let _invoiceExpand = null;
+export async function expandInvoicePreview() { if (_invoiceExpand) await _invoiceExpand(); }
+function InvoicePreviewRows({ mapped, rows, onOpen, docTd, docNum, DOC, won }) {
+  const [full, setFull] = React.useState(false);
+  const key = mapped.length ? `${mapped.length}|${mapped[0]?.idx}|${mapped[0]?.상차일}|${mapped[mapped.length - 1]?.상차일}` : "";
+  React.useEffect(() => { setFull(false); }, [key]);
+  const fullRef = React.useRef(full); fullRef.current = full;
+  React.useEffect(() => {
+    _invoiceExpand = () => new Promise((res) => { if (fullRef.current || mapped.length <= INVOICE_PREVIEW_ROWS) return res(); setFull(true); requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(res, 30))); });
+    return () => { _invoiceExpand = null; };
+  }, [mapped.length]);
+  const list = full ? mapped : mapped.slice(0, INVOICE_PREVIEW_ROWS);
+  return (
+    <>
+      {list.map((m, i) => (
+        <tr key={m.idx} className="cursor-pointer hover:bg-[#F4F6FA]" onClick={() => onOpen(rows[i])} title="클릭하여 상세보기">
+          <td style={{ ...docTd, color: DOC.mute, fontFamily: DOC.mono }}>{m.idx}</td>
+          <td style={{ ...docTd, fontFamily: DOC.mono, whiteSpace: "nowrap" }}>{m.상차일}</td>
+          <td style={docTd}>{m.상차지}</td>
+          <td style={docTd}>{m.하차지}</td>
+          <td style={docTd}>{m.경유지}</td>
+          <td style={docTd}>{m.화물명}</td>
+          <td style={docTd}>{m.기사명}</td>
+          <td style={{ ...docTd, fontSize: 10.5 }}>{m.차량번호}</td>
+          <td style={{ ...docNum, fontWeight: 700 }}>{won(m.공급가액)}</td>
+          <td style={{ ...docNum, color: DOC.sub }}>{won(m.세액)}</td>
+          <td style={{ ...docNum, fontWeight: 900 }}>{won(m.공급가액 + m.세액)}</td>
+        </tr>
+      ))}
+      {!full && mapped.length > INVOICE_PREVIEW_ROWS && (
+        <tr data-html2canvas-ignore="true">
+          <td colSpan={11} style={{ ...docTd, padding: "10px 6px" }}>
+            <button type="button" onClick={() => setFull(true)} style={{ height: 34, padding: "0 16px", borderRadius: 9, border: "1px solid #C9D5EA", background: "#fff", color: "#1B2B4B", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>나머지 {(mapped.length - INVOICE_PREVIEW_ROWS).toLocaleString()}줄 펼치기 (전체 {mapped.length.toLocaleString()}줄 · 합계는 전체 기준)</button>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
 const DEPT_MENUS = {
   // 경리: 돈(정산·회계·자금) + 확인용 배차현황 — 배차관리·실시간배차현황은 빼고
   acct: ["HOME", "전자결재", "배차현황", "정산관리", "매출관리", "회계관리", "자금관리", "비품관리", "기사관리", "관리자메뉴", "회사관리"],
@@ -31631,6 +31675,7 @@ value={copyTarget?.화물수량 || ""}
 <CpField label="배차방식">
   <DispatchWayPicker scope={[copyTarget?.거래처명, copyTarget?.상차지명, copyTarget?.하차지명]} className={cpInputStyle} value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} dir={copyTarget?.콜구분 || ""} onPick={(pk) => setCopyTarget((p) => ({ ...p, ...pk }))} />
 </CpField>
+<RouteGroupField Field={CpField} className={cpInputStyle} row={copyTarget} onChange={(v) => setCopyTarget((p) => ({ ...p, 담당노선구분: v }))} />
           </div>
         </div>
 {/* ================= 메모 + 전달사항 ================= */}
@@ -43089,6 +43134,7 @@ setCopyPlaceOptions(list);
 <CpField label="배차방식">
   <DispatchWayPicker scope={[copyTarget?.거래처명, copyTarget?.상차지명, copyTarget?.하차지명]} className={cpInputStyle} value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} dir={copyTarget?.콜구분 || ""} onPick={(pk) => setCopyTarget((p) => ({ ...p, ...pk }))} />
 </CpField>
+<RouteGroupField Field={CpField} className={cpInputStyle} row={copyTarget} onChange={(v) => setCopyTarget((p) => ({ ...p, 담당노선구분: v }))} />
           </div>
 </div>
 {/* ================= 메모 + 전달사항 ================= */}
@@ -51441,6 +51487,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     <CpField label="배차방식">
                       <DispatchWayPicker scope={[copyTarget?.거래처명, copyTarget?.상차지명, copyTarget?.하차지명]} className={cpInputStyle} value={copyTarget?.배차방식 === "선택없음" ? "" : (copyTarget?.배차방식 ?? "")} dir={copyTarget?.콜구분 || ""} onPick={(pk) => setCopyTarget((p) => ({ ...p, ...pk }))} />
                     </CpField>
+<RouteGroupField Field={CpField} className={cpInputStyle} row={copyTarget} onChange={(v) => setCopyTarget((p) => ({ ...p, 담당노선구분: v }))} />
                   </div>
                 </div>
               </div>
@@ -52012,18 +52059,18 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   };
 
   const savePDF = async () => {
-    const area = document.getElementById("invoiceArea");
+    await expandInvoicePreview(); const area = document.getElementById("invoiceArea");
     const canvas = await html2canvas(area, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
     const pdf = new (await loadJsPDF())("p", "mm", "a4");
     addCanvasAsMultiPagePdf(pdf, canvas, { format: "PNG" });
     pdf.save(`${client || "거래명세서"}.pdf`);
   };
 
-  const downloadInvoiceExcel = () => {
+  const downloadInvoiceExcel = async () => {
     if (!searched || !rowsInvoice.length) return showAlert("먼저 조회를 실행하세요.");
 
     // ★ 화면 그대로 엑셀로 내보내기 (HTML → xls)
-    const area = document.getElementById("invoiceArea");
+    await expandInvoicePreview(); const area = document.getElementById("invoiceArea");
     if (!area) return showAlert("내용이 없습니다.");
 
     const styles = `
@@ -52065,8 +52112,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   };
 
   // ★ 인쇄 기능
-  const handlePrint = () => {
-    const area = document.getElementById("invoiceArea");
+  const handlePrint = async () => {
+    await expandInvoicePreview(); const area = document.getElementById("invoiceArea");
     if (!area) return showAlert("인쇄할 내용이 없습니다.");
     const win = window.open("", "_blank");
     win.document.write(`
@@ -53915,21 +53962,7 @@ const handleBatchSettle = async (targetStatus) => {
                               {mapped.length === 0 ? (
                                 <tr><td colSpan={11} style={{ ...docTd, padding: "28px 6px", color: DOC.mute, fontSize: 12 }}>조회 결과가 없습니다. (청구운임 0원인 오더는 제외됩니다)</td></tr>
                               ) : (
-                                mapped.map((m, i) => (
-                                  <tr key={m.idx} className="cursor-pointer hover:bg-[#F4F6FA]" onClick={() => openOrderPopup(selectedRowsInvoice[i])} title="클릭하여 상세보기">
-                                    <td style={{ ...docTd, color: DOC.mute, fontFamily: DOC.mono }}>{m.idx}</td>
-                                    <td style={{ ...docTd, fontFamily: DOC.mono, whiteSpace: "nowrap" }}>{m.상차일}</td>
-                                    <td style={docTd}>{m.상차지}</td>
-                                    <td style={docTd}>{m.하차지}</td>
-                                    <td style={docTd}>{m.경유지}</td>
-                                    <td style={docTd}>{m.화물명}</td>
-                                    <td style={docTd}>{m.기사명}</td>
-                                    <td style={{ ...docTd, fontSize: 10.5 }}>{m.차량번호}</td>
-                                    <td style={{ ...docNum, fontWeight: 700 }}>{won(m.공급가액)}</td>
-                                    <td style={{ ...docNum, color: DOC.sub }}>{won(m.세액)}</td>
-                                    <td style={{ ...docNum, fontWeight: 900 }}>{won(m.공급가액 + m.세액)}</td>
-                                  </tr>
-                                ))
+                                <InvoicePreviewRows mapped={mapped} rows={selectedRowsInvoice} onOpen={openOrderPopup} docTd={docTd} docNum={docNum} DOC={DOC} won={won} />
                               )}
                               {mapped.length > 0 && (
                                 <tr>
@@ -54720,7 +54753,7 @@ const handleBatchSettle = async (targetStatus) => {
 
                       // 1) PDF
                       try {
-                        const area = document.getElementById("invoiceArea");
+                        await expandInvoicePreview(); const area = document.getElementById("invoiceArea");
                         if (area) {
                           const canvas = await html2canvas(area, { scale: 1.5, backgroundColor: "#ffffff", useCORS: true });
                           const pdf = new (await loadJsPDF())("p", "mm", "a4");

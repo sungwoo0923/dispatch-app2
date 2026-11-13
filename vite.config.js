@@ -114,6 +114,27 @@ export default defineConfig({
           fs.writeFileSync(swPath, content);
           console.log("✅ sw.js VERSION updated:", buildId);
         }
+        // 🚦 2026-11-13 업데이트 배포 잠금 — 첫 화면(index.html)은 다시 정적 파일로 바로 준다(서버 함수를 거치지 않아 빠르다)
+        //  화면이 쓸 묶음(시작 스크립트 · 스타일) 두 줄을 HTML에 직접 두지 않고, 아래 작은 스크립트가 써 넣는다:
+        //   · 최고관리자 · 부관리자(쿠키 kp_ch=latest) 또는 잠금 없음 → 이 빌드의 묶음(예전과 같은 속도)
+        //   · 그 밖: 이 PC에 기억된 "배포한 버전"(localStorage kpPin — src/releaseGate.js 가 적어 둔다)이 이 빌드보다 예전이면
+        //     /api/shell 에서 그 버전의 첫 화면을 받아 그 버전의 묶음 두 줄을 대신 써 넣는다(그 버전 파일은 /assets 없는 파일 대리로 받는다)
+        //   · 어떤 경우든 실패하면 이 빌드의 묶음으로(화면은 반드시 뜬다)
+        if (fs.existsSync("./dist/index.html")) {
+          let html = fs.readFileSync("./dist/index.html", "utf-8");
+          const css = html.match(/[ \t]*<link rel="stylesheet"[^>]*href="\/assets\/[^"]+"[^>]*>\n?/g) || [];
+          const js = html.match(/[ \t]*<script type="module"[^>]*src="\/assets\/[^"]+"[^>]*><\/script>\n?/g) || [];
+          if (js.length === 1 && !html.includes('id="kp-entry"')) {
+            const tags = [...css, ...js].map((t) => t.trim()).join("");
+            const safe = (v) => JSON.stringify(v).replace(/</g, "\\u003c");
+            const boot = `<script id="kp-entry" type="application/json">${safe({ build: BUILD_TIME, tags })}</script>`
+              + `<script>(function(){var B=${JSON.stringify(BUILD_TIME)},T=${safe(tags)};try{if(!/(?:^|;\\s*)kp_ch=latest(?:;|$)/.test(document.cookie)){var p=JSON.parse(localStorage.getItem("kpPin")||"null");if(p&&p.build&&p.build<B){var x=new XMLHttpRequest();x.open("GET","/api/shell?f=index&b="+encodeURIComponent(p.build),false);x.send();if(x.status===200&&x.getResponseHeader("X-Kp-Release")==="pinned"){var h=x.responseText,m=h.match(/<script id="kp-entry" type="application\\/json">([\\s\\S]*?)<\\/script>/),t="";if(m){t=JSON.parse(m[1]).tags}else{var a=h.match(/<link rel="stylesheet"[^>]*href="\\/assets\\/[^"]+"[^>]*>/g)||[],s=h.match(/<script type="module"[^>]*src="\\/assets\\/[^"]+"[^>]*><\\/script>/g)||[];if(s.length===1)t=a.join("")+s.join("")}if(t){T=t;window.__kpPinned=p.build}}}}}catch(e){}document.write(T)})();</script>`;
+            css.forEach((t) => { html = html.replace(t, ""); });
+            html = html.replace(js[0], `    ${boot}\n`);
+            fs.writeFileSync("./dist/index.html", html);
+            console.log("✅ index.html 시작 스크립트(배포 잠금) 적용");
+          } else console.warn("⚠ index.html 시작 묶음을 찾지 못해 배포 잠금 스크립트를 넣지 않았습니다");
+        }
         // ⭐ 2026-11-08 기사앱 홈 화면 추가(아이폰) — 사파리는 처음 받은 HTML의 manifest·제목을 쓰므로
         //  /driver-* 주소에는 처음부터 기사용 manifest가 박힌 driver.html을 준다(vercel.json routes)
         if (fs.existsSync("./dist/index.html")) {
