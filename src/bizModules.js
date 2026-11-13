@@ -17,7 +17,8 @@ export const GROUP = { key: "group", label: "통합 현황", short: "통합", en
 export const bizInfo = (k) => BIZ[k] || (k === "group" ? GROUP : BIZ.inland);
 
 // 저장값이 없어도 통합으로 여는 회사(사용자 요청 2026-11-12) — 관리센터에서 끄면 그 값이 우선
-export const BIZ_PRESET = { JY로지스틱스: BIZ_KEYS, 테스트운송사: BIZ_KEYS };
+// 🛠 2026-11-13 사용자 요청 — 업무 영역을 고르기 전에 가입한 운송사는 전부 내륙만. 통합 · 컨테이너 등은 관리센터에서 회사별로 켠다
+export const BIZ_PRESET = {};
 export function presetFeatures(company) {
   const p = BIZ_PRESET[String(company || "").trim()];
   if (!p) return null;

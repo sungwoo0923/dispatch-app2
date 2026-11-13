@@ -8542,6 +8542,7 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   const menuState = (m) => {
     if (isBizMenu(m)) return parseBizMenu(m).biz === biz ? "ok" : "hidden"; // 🧭 2026-11-12 업무 영역 메뉴(컨테이너 · 해상 · 항공 · 통합)
     // 💳 2026-11-09 요금제 잠금을 맨 먼저 — 예전엔 부서 메뉴(인사관리부·회계관리 등)·임원 메뉴가 아래에서 먼저 "ok"로 끝나 요금제와 상관없이 열렸다
+    if (m === "인사이트" && MENU_FEATURE[m] && !planIncludes(planId, MENU_FEATURE[m])) return "hidden"; // 🛠 2026-11-13 인사이트는 요금제에 없으면 메뉴 자체를 안 보이게
     if (MENU_FEATURE[m] && !planIncludes(planId, MENU_FEATURE[m])) return "locked";
     // 📊 2026-11-06 일일 경영 보고 — 임원 화면 역할만(기존 임원 판정 isExec 그대로)
     if (m === BRIEF_MENU) return canBriefing ? "ok" : "hidden";

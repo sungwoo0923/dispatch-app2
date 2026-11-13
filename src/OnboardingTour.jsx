@@ -50,6 +50,11 @@ export function TourHost({ company = "", menu = "", uid = "" }) {
   React.useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(t); }, []);
   const active = tourActive(co, approvedMs, now);
   const serverSeen = useServerSeen(uid, active);
+  // 🛠 2026-11-13 [다시 보지 않기] — 누르면 이 계정은 어느 메뉴에서도 안내 · ? 도움말이 안 뜬다(기기에 기억 + 서버 기록)
+  const offKey = `kpTourOff:${uid || "anon"}`;
+  const [offLocal, setOffLocal] = React.useState(() => lsGet(offKey) === "1");
+  React.useEffect(() => { setOffLocal(lsGet(offKey) === "1"); }, [offKey]);
+  const off = offLocal || serverSeen?.__off === true;
   const isSeen = React.useCallback((m) => lsGet(seenKey(uid, m)) === "1" || !!serverSeen?.[m], [uid, serverSeen]);
   const [run, setRun] = React.useState(null); // { menu, steps:[{...step, el}], i }
   const [rect, setRect] = React.useState(null);
@@ -66,7 +71,7 @@ export function TourHost({ company = "", menu = "", uid = "" }) {
 
   // 메뉴에 처음 들어오면(화면이 다 그려진 뒤) 시작 — 튜토리얼이 떠 있으면 끝날 때까지 기다린다
   React.useEffect(() => {
-    if (!active || !menu || run || serverSeen === null) return undefined;
+    if (!active || off || !menu || run || serverSeen === null) return undefined;
     if (!MENU_TOURS[menu] || isSeen(menu)) return undefined;
     let tries = 0;
     const t = setInterval(() => {
@@ -77,7 +82,7 @@ export function TourHost({ company = "", menu = "", uid = "" }) {
       start(menu);
     }, 900);
     return () => clearInterval(t);
-  }, [active, menu, uid, run, start, serverSeen, isSeen]);
+  }, [active, off, menu, uid, run, start, serverSeen, isSeen]);
   // 메뉴를 옮기면 진행 중인 안내는 닫는다
   React.useEffect(() => { setRun((r) => (r && r.menu !== menu ? null : r)); }, [menu]);
   // 다시 보기
@@ -105,6 +110,11 @@ export function TourHost({ company = "", menu = "", uid = "" }) {
     }
     setRun(null);
   };
+  const neverAgain = () => {
+    lsSet(offKey, "1"); setOffLocal(true);
+    if (uid) setDoc(doc(db, "userProfiles", uid), { tourSeen: { __off: true } }, { merge: true }).catch(() => {});
+    setRun(null);
+  };
   const next = () => { if (!run) return; if (run.i + 1 >= run.steps.length) finish(); else setRun({ ...run, i: run.i + 1 }); };
   React.useEffect(() => {
     if (!run) return undefined;
@@ -112,7 +122,7 @@ export function TourHost({ company = "", menu = "", uid = "" }) {
     window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
   });
 
-  if (!active) return null;
+  if (!active || off) return null;
   const vw = typeof window !== "undefined" ? window.innerWidth : 1200, vh = typeof window !== "undefined" ? window.innerHeight : 800;
   const bw = Math.min(340, vw - 24);
   let bubble = { left: (vw - bw) / 2, top: vh / 2 - 90 };
@@ -123,26 +133,28 @@ export function TourHost({ company = "", menu = "", uid = "" }) {
   return (
     <>
       {!run && <HelpDots />}
-      {!run && (
-        <button type="button" data-kp-tour="replay" onClick={() => window.dispatchEvent(new Event("kp:tourReplay"))}
-          className="fixed left-3 z-[9000] h-9 px-3 rounded-full bg-[#0F1A30] text-white text-[12.5px] font-black shadow-[0_8px_20px_rgba(15,26,48,0.35)] ring-1 ring-white/20 hover:bg-[#1B2B4B]"
-          style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 84px)" }} title="이 메뉴의 사용법을 다시 봅니다">? 사용법 다시 보기</button>
-      )}
       {run && (
         <div data-kp-tour="overlay" className="fixed inset-0 z-[100050]" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
           {rect
             ? <div className="absolute rounded-[12px] pointer-events-none transition-all duration-200" style={{ left: rect.x - 6, top: rect.y - 6, width: rect.w + 12, height: rect.h + 12, boxShadow: "0 0 0 9999px rgba(11,20,40,0.62)", border: "2px solid #8FB0F0" }} />
             : <div className="absolute inset-0 bg-[#0B1428]/62" style={{ background: "rgba(11,20,40,0.62)" }} />}
           <div className="absolute rounded-2xl bg-white shadow-[0_24px_60px_rgba(0,0,0,0.35)] overflow-hidden" style={{ left: bubble.left, top: bubble.top, width: bw }}>
-            <div className="px-4 pt-3 pb-2" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
-              <div className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">GUIDE · {run.i + 1}/{run.steps.length}</div>
-              <div className="text-[15px] font-black text-white mt-0.5">{step.title}</div>
+            <div className="px-4 pt-3 pb-2 flex items-start gap-2.5" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+              <span className="mt-0.5 w-6 h-6 rounded-full bg-white/15 ring-1 ring-white/25 text-white text-[13px] font-black grid place-items-center shrink-0" aria-hidden="true">?</span>
+              <div className="min-w-0">
+                <div className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">GUIDE · {run.i + 1}/{run.steps.length}</div>
+                <div className="text-[15px] font-black text-white mt-0.5">{step.title}</div>
+              </div>
             </div>
             <div className="px-4 py-3 text-[13.5px] leading-relaxed text-[#1B2B4B] font-semibold">{step.text}</div>
             <div className="px-4 pb-3 flex items-center gap-2">
               <div className="flex gap-1">{run.steps.map((_, k) => <span key={k} className={`w-1.5 h-1.5 rounded-full ${k === run.i ? "bg-[#1B2B4B]" : "bg-[#C9D5EA]"}`} />)}</div>
               <button type="button" onClick={finish} className="ml-auto h-9 px-3 rounded-xl border border-[#DCE3EE] text-[12.5px] font-black text-[#5B6B85]">건너뛰기</button>
               <button type="button" onClick={next} className="h-9 px-4 rounded-xl bg-[#0F1A30] text-white text-[12.5px] font-black">{run.i + 1 >= run.steps.length ? "확인" : "다음 →"}</button>
+            </div>
+            <div className="px-4 py-2 border-t border-[#EEF1F6] bg-[#F5F8FD] flex items-center">
+              <button type="button" data-kp-tour="never" onClick={neverAgain} className="text-[12px] font-bold text-[#5B6B85] hover:text-[#0F1A30] underline underline-offset-2" title="이 계정에서는 어느 메뉴에서도 안내가 다시 뜨지 않습니다">다시 보지 않기</button>
+              <span className="ml-auto text-[11px] font-semibold text-[#9AA9C3]">모든 메뉴의 안내를 끕니다</span>
             </div>
           </div>
         </div>
