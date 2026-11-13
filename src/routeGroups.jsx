@@ -117,14 +117,14 @@ export function SheetLiveChip({ role, userCompany, compact = false }) {
   const main = st.error ? st.error : late ? `확인 지연 · 마지막 확인 ${agoK(st.checkedAt, now)}` : st.changedAt ? `${agoK(st.changedAt, now)} 반영` : "대기 중";
   const detail = !bad && st.changedAt ? [st.created ? `새 ${st.created}` : "", st.updated ? `고침 ${st.updated}` : "", st.removed ? `삭제 ${st.removed}` : ""].filter(Boolean).join(" · ") : "";
   return (
-    <span data-kp="sheet-live-chip" title={`구글시트 실시간 반영 — 1분마다 시트를 확인합니다${st.checkedAt ? `\n마지막 확인 ${new Date(st.checkedAt).toLocaleString("ko-KR", { hour12: false })}` : ""}${st.heldBack ? `\n시트에 없는 오더 ${st.heldBack}건은 너무 많아 지우지 않았습니다` : ""}`}
+    <span data-kp="sheet-live-chip" title={`구글시트 실시간 반영 — 약 10초마다 시트를 확인합니다${st.checkedAt ? `\n마지막 확인 ${new Date(st.checkedAt).toLocaleString("ko-KR", { hour12: false })}` : ""}${st.heldBack ? `\n시트에 없는 오더 ${st.heldBack}건은 너무 많아 지우지 않았습니다` : ""}`}
       className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-[12.5px] font-bold whitespace-nowrap ${bad ? "border-[#E7B7B0] text-[#B4342A] bg-white" : "border-[#DCE3EE] text-[#3A4A66] bg-white"}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${bad ? "bg-[#B4342A]" : "bg-[#1F7A4D]"}`} />
       {!compact && <span className="text-[#94A3B8] font-extrabold tracking-[0.08em]">구글시트</span>}
       <span>{main}</span>
       {detail && !compact && <span className="text-[#94A3B8] tabular-nums">{detail}</span>}
       {/* 🔁 2026-11-14 프로그램 → 시트 반영: 어느 탭에 넣을지 못 정한 오더(담당노선구분을 고르면 들어간다) · 확인이 필요한 건(보류 · 못 씀 — 관리센터에서 처리) */}
-      {st.needTab > 0 && <span className="text-[#B26A00] font-black" title="프로그램에서 등록했는데 시트의 어느 탭에 넣을지 정하지 못한 오더입니다. 그 오더의 담당노선구분을 고르면 1분 안에 그 탭에 들어갑니다.">· 시트 탭 미정 {st.needTab}건</span>}
+      {st.needTab > 0 && <span className="text-[#B26A00] font-black" title="프로그램에서 등록했는데 시트의 어느 탭에 넣을지 정하지 못한 오더입니다. 그 오더의 담당노선구분을 고르면 곧바로 그 탭에 들어갑니다.">· 시트 탭 미정 {st.needTab}건</span>}
       {st.pushIssue > 0 && !compact && <span className="text-[#B4342A] font-black" title="시트에 쓰지 못했거나 보류한 건이 있습니다. 관리센터 › 배차일지 가져오기 › 프로그램 → 시트 반영에서 확인해 주세요.">· 시트 반영 확인 {st.pushIssue}건</span>}
     </span>
   );

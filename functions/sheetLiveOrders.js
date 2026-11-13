@@ -9,10 +9,14 @@
 const crypto = require("crypto");
 
 const kstYmd = (ms = Date.now()) => new Date(ms + 9 * 3600 * 1000).toISOString().slice(0, 10);
-const FULL_EVERY_MS = 30 * 60 * 1000; // 시트 수정 시각이 같아도 30분에 한 번은 전체 비교
-const NO_META_EVERY_MS = 5 * 60 * 1000; // 수정 시각을 못 읽으면 5분마다
+// ⚡ 2026-11-14 더 빨리 — 스케줄은 1분마다지만 그 1분 동안 약 8초마다 확인한다(runLoop). 시트가 바뀐 표시(수정 시각 · 버전)가 달라졌거나
+//  프로그램에서 바뀐 오더가 대기 중이면 바로 처리한다. 표시가 늦게 바뀌는 경우에 대비해 2분에 한 번은 표시와 상관없이 직접 읽어 비교한다
+const FULL_EVERY_MS = 2 * 60 * 1000; // 바뀐 표시가 없어도 2분에 한 번은 시트를 직접 읽어 비교
+const NO_META_EVERY_MS = 60 * 1000; // 바뀐 표시를 못 읽으면 1분마다
+const TICK_MS = 8000; // 확인 간격
+const LOOP_MS = 50 * 1000; // 한 번 불렸을 때 확인을 이어 가는 시간(다음 스케줄 전에 끝낸다)
 
-const RECENT_EDIT_MS = 90 * 1000; // 방금 프로그램에서 고친 오더는 한 차례 건너뛴다(그 변경이 시트로 먼저 간다 — functions/sheetPushOrders.js)
+const RECENT_EDIT_MS = 30 * 1000; // 방금 프로그램에서 고친 오더는 한 차례 건너뛴다(그 변경이 시트로 먼저 간다 — functions/sheetPushOrders.js)
 
 function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab, sheetModifiedTime, bumpDataVersion, push = null }) {
   const ref = (co) => db.collection("sheetLive").doc(co);
@@ -129,9 +133,9 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
   }
 
   // 1분마다 — 켜 둔 회사 전부
-  async function runAll() {
+  async function runAll({ housekeeping = true } = {}) {
     const snap = await db.collection("sheetLive").where("enabled", "==", true).get();
-    if (push) { await push.purgeInactive(new Set(snap.docs.filter((d) => ["dry", "on"].includes((d.data() || {}).pushMode)).map((d) => (d.data() || {}).companyName || d.id))).catch(() => {}); await push.sweep().catch(() => {}); }
+    if (push && housekeeping) { await push.purgeInactive(new Set(snap.docs.filter((d) => ["dry", "on"].includes((d.data() || {}).pushMode)).map((d) => (d.data() || {}).companyName || d.id))).catch(() => {}); await push.sweep().catch(() => {}); }
     for (const d of snap.docs) {
       const cfg = d.data() || {}; const co = cfg.companyName || d.id;
       try {
@@ -146,6 +150,20 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
         await writeStatus(co, { enabled: true, error: "시트를 읽지 못했습니다" }, { force: true });
       }
     }
+  }
+
+  // ⚡ 스케줄(1분)마다 한 번 불려서, 그 1분 동안 TICK_MS 간격으로 확인을 되풀이한다 — 바뀐 것이 없으면 수정 표시만 보고 지나간다(가볍다)
+  async function runLoop({ loopMs = LOOP_MS, tickMs = TICK_MS, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+    const t0 = Date.now(); let n = 0;
+    for (;;) {
+      const started = Date.now();
+      await runAll({ housekeeping: n === 0 }).catch((e) => console.error("[시트 실시간 실패]", e?.message || e));
+      n += 1;
+      const wait = Math.max(0, tickMs - (Date.now() - started));
+      if (Date.now() - t0 + wait >= loopMs) break;
+      await sleep(wait);
+    }
+    return n;
   }
 
   // 관리센터 요청(최고관리자) — liveGet · liveSet · liveRun
@@ -175,7 +193,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     return null;
   }
 
-  return { runOne, runAll, handle };
+  return { runOne, runAll, runLoop, handle };
 }
 
 module.exports = { makeSheetLive };
