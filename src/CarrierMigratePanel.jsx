@@ -63,7 +63,7 @@ const Stat = ({ label, value, sub }) => (
 // 🔁 2026-11-13 실시간 반영 — 시트에서만 입력 · 수정하는 운송사. 서버가 1분마다 시트를 보고 바뀐 줄만 오더에 반영한다(functions/sheetLiveOrders.js)
 const LIVE_DAYS = [[7, "최근 7일"], [14, "최근 14일"], [31, "최근 1개월"], [62, "최근 2개월"], [93, "최근 3개월"]];
 const agoText = (ms) => { if (!ms) return "아직 없음"; const s = Math.max(0, Math.round((Date.now() - ms) / 1000)); return s < 60 ? "방금" : s < 3600 ? `${Math.floor(s / 60)}분 전` : s < 86400 ? `${Math.floor(s / 3600)}시간 전` : `${Math.floor(s / 86400)}일 전`; };
-function SheetLiveCard({ co, url, setUrl }) {
+function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
   const [live, setLive] = React.useState(undefined); // undefined 읽는 중 · null 없음
   const [busy, setBusy] = React.useState("");
   const [msg, setMsg] = React.useState("");
@@ -79,7 +79,7 @@ function SheetLiveCard({ co, url, setUrl }) {
     const u = (url || live?.url || "").trim();
     if (!u) return setMsg("위 칸에 구글시트 주소를 먼저 붙여넣어 주세요.");
     if (!(await kpConfirm(`${co} — 구글시트 실시간 반영을 켤까요?\n\n· 1분마다 시트를 확인해 새 줄은 오더로 만들고, 고친 줄은 그 오더를 고칩니다\n· 시트에서 지운 줄은 프로그램 오더도 지웁니다(아래에서 끌 수 있음)\n· 프로그램에서 직접 고친 값은 다음 반영 때 시트 값으로 돌아갑니다 — 입력 · 수정은 시트에서만 하세요`))) return;
-    await set({ url: u, enabled: true, days: live?.days || 14 }, "on");
+    await set({ url: u, enabled: true, days: live?.days || 14, tabs: pickedTabs }, "on");
     runNow();
   };
   const runNow = async () => {
@@ -88,6 +88,11 @@ function SheetLiveCard({ co, url, setUrl }) {
   };
   const on = !!live?.enabled;
   const r = live?.lastResult;
+  // 🧩 반영할 탭 — 저장된 것이 없으면 지금 읽은 시트의 오더 탭 전부(제외한 탭은 빠져 있다)
+  const savedTabs = Array.isArray(live?.tabs) ? live.tabs : [];
+  const allTabs = [...new Set([...tabNames, ...savedTabs])];
+  const pickedTabs = savedTabs.length ? savedTabs : tabNames;
+  const toggleTab = (t) => { const next = pickedTabs.includes(t) ? pickedTabs.filter((x) => x !== t) : [...pickedTabs, t]; if (!next.length) return setMsg("탭을 하나 이상 골라 주세요."); set({ tabs: next }, "tabs"); };
   return (
     <section className="mt-5 rounded-2xl border border-[#DCE3EE] bg-white overflow-hidden" data-kp="sheet-live">
       <div className="px-5 py-4 flex items-center gap-3 flex-wrap border-b border-[#E8EDF4] bg-[#F7F9FC]">
@@ -107,6 +112,15 @@ function SheetLiveCard({ co, url, setUrl }) {
           <label className="flex items-center gap-2"><span className="font-bold text-[#5B6B85]">반영 범위(상차일)</span>
             <select value={live?.days || 14} disabled={!live || !!busy} onChange={(e) => set({ days: Number(e.target.value) }, "days")} className="h-10 px-3 rounded-lg border border-[#DCE3EE] bg-white font-bold text-[#1B2B4B]">{LIVE_DAYS.map(([v, l]) => <option key={v} value={v}>{l}부터</option>)}</select></label>
           <label className="flex items-center gap-2 font-bold text-[#3A4A66]"><input type="checkbox" checked={live ? live.removeMissing !== false : true} disabled={!live || !!busy} onChange={(e) => set({ removeMissing: e.target.checked }, "rm")} className="w-4 h-4 accent-[#1B2B4B]" />시트에서 지운 줄은 오더도 지우기</label>
+        </div>
+        <div className="mt-4">
+          <div className="text-[12.5px] font-black text-[#5B6B85] mb-1.5">실시간으로 가져올 탭 {allTabs.length ? `(${pickedTabs.length} / ${allTabs.length})` : ""}</div>
+          {allTabs.length === 0 ? <div className="text-[13px] text-[#7A879C]">위에서 시트를 열면 탭 목록이 나옵니다.</div> : (
+            <div className="flex flex-wrap gap-1.5" data-kp="sheet-live-tabs">
+              {allTabs.map((t) => { const sel = pickedTabs.includes(t); return (
+                <button key={t} type="button" disabled={!!busy || live === undefined} onClick={() => toggleTab(t)} aria-pressed={sel}
+                  className={`h-9 px-3 rounded-lg border text-[13px] font-black ${sel ? "border-[#1B2B4B] bg-[#1B2B4B] text-white" : "border-[#DCE3EE] bg-white text-[#7A879C]"}`}>{t}</button>); })}
+            </div>)}
         </div>
         {live && <div className="mt-3 text-[13px] text-[#5B6B85]">마지막 확인 <b className="text-[#1B2B4B]">{agoText(live.lastRunAt)}</b> · 마지막으로 바뀐 때 <b className="text-[#1B2B4B]">{agoText(live.lastChangeAt)}</b>{r ? ` · 최근 반영: 새로 ${won(r.created || 0)} · 고침 ${won(r.updated || 0)} · 삭제 ${won(r.removed || 0)} (대상 ${won(r.total || 0)}건)` : ""}</div>}
         {live?.lastError && <div className="mt-2 text-[13px] font-bold text-[#B4342A]">오류: {live.lastError}</div>}
@@ -145,7 +159,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
     //  저장된 설정이 있으면: 배차방식 별칭 · 차량 구분은 낱개로 합치고(시작 규칙이 이김), 나머지 규칙은 시작 규칙 그대로
     const sug = presetSuggestionFor(co) || {};
     const apply = (saved) => {
-      const base = saved ? { ...saved, ...sug, extraNames: { ...(sug.extraNames || {}), ...(saved.extraNames || {}) }, placeOverrides: { ...(sug.placeOverrides || {}), ...(saved.placeOverrides || {}) }, tabClients: saved.tabClients || {}, skipTabs: saved.skipTabs || [],
+      const base = saved ? { ...saved, ...sug, extraNames: { ...(sug.extraNames || {}), ...(saved.extraNames || {}) }, placeOverrides: { ...(sug.placeOverrides || {}), ...(saved.placeOverrides || {}) }, tabClients: saved.tabClients || {}, skipTabs: [...new Set([...(saved.skipTabs || []), ...(sug.skipTabs || [])])],
         dispatchAliases: { ...(saved.dispatchAliases || {}), ...(sug.dispatchAliases || {}) }, vehicleGrades: { ...(saved.vehicleGrades || {}), ...(sug.vehicleGrades || {}) } } : sug;
       const p = { ...DEFAULT_PRESET, ...base, dispatchAliases: { ...DEFAULT_PRESET.dispatchAliases, ...(base.dispatchAliases || {}) }, vehicleGrades: { ...DEFAULT_PRESET.vehicleGrades, ...(base.vehicleGrades || {}) } };
       setPreset(p); setAliasDraft(aliasText(p.dispatchAliases)); setOvDraft(p.placeOverrides || {});
@@ -246,6 +260,8 @@ export default function CarrierMigratePanel({ companies = [] }) {
       setProgress({ pct: 2, step: "회사 설정 저장 중" });
       const cs = { companyName: co, migrationPreset: { ...preset, dispatchAliases: parseAlias(aliasDraft) }, migrationAt: serverTimestamp() };
       delete cs.migrationPreset.year; delete cs.migrationPreset.extraPlaces;
+      // 🧩 탭 전용 배차방식 묶음(그 탭의 상차지 · 거래처 오더에서만 보임) — src/companyOptionPicker.jsx 가 읽는다
+      if (opts.saveOptions && result.dispatchScopes && Object.keys(result.dispatchScopes).length) cs.optionScopes = { 배차방식: result.dispatchScopes };
       if (opts.saveOptions && optValues.length) {
         // 🚚 2026-11-12 먼저 가져온 탭에서 만든 배차방식 목록을 지우지 않게 합친다 · preset.dropOptions(예: JY "직접배차")는 뺀다
         const prevOpts = (await getDoc(doc(db, "companySettings", co)).catch(() => null))?.data()?.dropdownOptions?.배차방식;
@@ -383,7 +399,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
         {err && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-semibold text-red-700 whitespace-pre-line">{err}</div>}
       </section>
 
-      <SheetLiveCard co={co} url={url} setUrl={setUrl} />
+      <SheetLiveCard co={co} url={url} setUrl={setUrl} tabNames={result ? result.tabs.filter((t) => t.kind === "orders" && t.orders > 0).map((t) => t.title) : []} />
 
       {result && (
         <>

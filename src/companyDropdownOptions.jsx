@@ -58,7 +58,7 @@ function startStore(co, st) {
   try {
     st.unsub = onSnapshot(doc(db, "companySettings", co), (snap) => {
       const d = (snap.exists() && snap.data()?.dropdownOptions) || {};
-      st.state = { loaded: true, opts: d };
+      st.state = { loaded: true, opts: d, scopes: (snap.exists() && snap.data()?.optionScopes) || {} }; // 🧩 2026-11-13 탭(상차지 · 거래처) 전용 항목
       emit(st);
     }, () => { st.state = { loaded: true, opts: {} }; emit(st); });
   } catch { st.state = { loaded: true, opts: {} }; }
@@ -92,6 +92,16 @@ export function listFromStored(stored, key, fallback) {
   return fallback && fallback.length ? fallback : uiOptionList(key, DEFAULT_DROPDOWN_OPTIONS[key] || []);
 }
 
+// 🧩 2026-11-13 전용 항목 거르기 — optionScopes.{key} = { 항목: [상차지명 · 거래처명…] }
+//  · 여기에 없는 항목 = 공통(어디서나) · scope(지금 오더의 거래처 · 상차지 · 하차지)가 비어 있으면 전부 보여 준다
+const sk = (v) => String(v ?? "").toLowerCase().replace(/[^0-9a-z가-힣]/g, "");
+export function filterByScope(list, scopes, scope, current) {
+  if (!scopes || !Array.isArray(scope)) return list;
+  const mine = new Set(scope.map(sk).filter(Boolean));
+  if (!mine.size) return list;
+  return list.filter((v) => { const s = scopes[v]; return !Array.isArray(s) || !s.length || v === current || s.some((x) => mine.has(sk(x))); });
+}
+
 // 훅 — { company, loaded, list, customized }
 export function useCompanyOptionList(key, role, userCompany) {
   const co = resolveCompanyKey(role, userCompany);
@@ -104,7 +114,8 @@ export function useCompanyOptionList(key, role, userCompany) {
     company: co, loaded: st.loaded,
     list: listFromStored(stored, key),
     customized: Array.isArray(stored) && stored.length > 0,
-  }), [co, st.loaded, stored, key, uv]); // eslint-disable-line react-hooks/exhaustive-deps
+    scopes: st.scopes?.[key] || null,
+  }), [co, st.loaded, stored, key, uv, st.scopes]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /**

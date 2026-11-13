@@ -54,6 +54,10 @@ export const DEFAULT_PRESET = {
   nextDayTabs: [], // 입고시간(당착 · 월착) 칸이 비어 있으면 다음 날 도착으로 보는 탭
   defaultVehicleKind: "", // 차종 칸에 차량종류가 없으면(톤수만 적힌 줄) 넣을 차량종류
   forceVehicleKind: "", // 시트에 뭐라고 적혀 있든 차량종류를 이 값으로 — 예: JY "윙바디"(차종 칸에 적힌 말은 톤수만 쓴다)
+  // 🧩 2026-11-13 탭별 규칙 — 양식이 탭마다 다른 시트(JY)용. 한 줄을 오더로 만든 뒤 마지막에 적용한다(applyTabRule)
+  //  { 탭이름: { client, fromFixed, toNameCol, toAddrCol, cargo:[[칸,단위]], tonCol, vehicleKind, places:{시트이름:[이름,주소]}, viaAlias, splitVia, shortAddrName, feeRow, maxCol } }
+  tabRules: {},
+  commonOptions: [], // 어느 탭에서나 쓰는 배차방식(탭 전용으로 묶지 않는다)
   placeOverrides: {}, // { "탭이름|약칭": "주소" } · "*|약칭" = 모든 탭 — 시트에 주소가 없는 곳을 화면에서 직접 넣은 값
 };
 
@@ -91,6 +95,25 @@ export const PRESET_SUGGESTIONS = {
     optionMinCount: 1,
     // 🛠 2026-11-13 차종 칸에 톤수만 있는 줄은 윙바디(차량종류가 적힌 줄은 그대로 — 예: "11톤장축" → 장축)
     forceVehicleKind: "윙바디", // 2026-11-13 사용자 요청 — JY 시트에서 오는 오더는 일단 전부 윙바디
+    // 🧩 2026-11-13 사용자가 탭마다 설명한 규칙
+    //  · 대원전선 · 카고LCL 은 아직 가져오지 않는다(확인할 것이 남음)
+    //  · 녹수 · 아산 KDF · 보령 KDF · 녹수 내수 · 아산 내수 · 보령 내수 · 녹수셔틀 = 거래처는 모두 "녹수"(탭 이름은 상/하차지)
+    skipTabs: ["대원전선", "카고LCL"],
+    commonOptions: ["기사직통", "화물맨", "24시", "원콜", "개인콜", "지입", "직영차", "고정차", "임대", "고정기사"],
+    tabRules: {
+      // 상차지 = 롯데베르살리스(탭 위쪽 주소) · 화주 칸 = 하차지명 · 하차지 칸 = 하차지주소 · BOX = 화물내용 · TON = 톤수 · 지역/청구 요율 톤수는 안 씀
+      롯데베르살리스: { client: "롯데베르살리스", fromFixed: "롯데베르살리스", toNameCol: "화주", toAddrCol: "하차지", cargo: [["BOX", "박스"]], tonCol: "TON", maxCol: "청구월" },
+      "보령 KDF": { client: "녹수", places: { 보령: ["보령공장"], 팬스타: ["팬스타 물류센터"] } },
+      "아산 KDF": { client: "녹수", places: { 아산: ["아산공장-KDF"], 대진: ["대진공장-KDF", "충남 아산시 음봉면 연암율금로 176-10"], 팬스타: ["팬스타 물류센터"] } },
+      녹수: { client: "녹수", places: { 고덕: ["고덕공장"], 덕산: ["덕산공장", "충남 예산군 덕산면 남은들로 177"], 칼트SKU: ["칼트 SKU"], 칼트비유디: ["칼트 비유디"] } },
+      // 출발지 "예산"(7월까지) = "고덕"(8월부터) = 고덕면 · "예산+신암" = 고덕면 상차 → 신암면 경유 · "경유" = 같은 뜻
+      //  박스 · 롤 = 화물내용("700박스+24롤") · 차종 = 톤수 · 차량종류는 카고 · 도착지가 주소뿐이면 "구 동 번지"를 하차지명으로 · 유류비 지원금 줄은 그 이름의 오더
+      "녹수 내수": { client: "녹수", vehicleKind: "카고", maxCol: "특이사항", cargo: [["박스", "박스"], ["롤", "롤"]], splitVia: true, viaAlias: { 경유: "고덕+신암" }, shortAddrName: true, feeRow: "유류비\\s*지원금", memoDrop: "^(\\S \\S|행선지|녹수 (롤|박스).*운송비)$",
+        places: { 예산: ["고덕면", "충남 예산군 고덕면 용고길 189"], 고덕: ["고덕면", "충남 예산군 고덕면 용고길 189"], 사리: ["고덕면", "충남 예산군 고덕면 용고길 189"], 신암: ["신암면", "충남 예산군 신암면 오신로 688"], 덕산: ["덕산공장", "충남 예산군 덕산면 남은들로 177"], 봉산: ["봉산공장", "충남 예산군 봉산면 황금뜰로 67"] } },
+      "아산 내수": { client: "녹수", shortAddrName: true },
+      "보령 내수": { client: "녹수", shortAddrName: true },
+      녹수셔틀: { client: "녹수" },
+    },
   },
 };
 
@@ -761,8 +784,74 @@ function rowToOrder(r, L, ctx) {
   return { rec, driver: plate ? { plate, name: nameSplit.name, phone: rec.전화번호, affiliation: nameSplit.affiliation, grade, vehicleClass: grade ? cell(carrierRaw) : "" } : null, checkSale: S.hasTotal ? S.total : null };
 }
 
+// ── 🧩 탭별 규칙(preset.tabRules) — 한 줄을 오더로 만든 뒤 그 탭의 양식에 맞게 고친다 ─────────────────
+// 주소뿐인 도착지의 짧은 이름: "서울특별시 은평구 녹번동 197" → "은평구 녹번동 197" · "경기도 하남시 감일동 361-7" → "하남시 감일동 361-7"
+const SIDO_RE = /^(서울특별시|서울시|서울|부산광역시|부산시|부산|대구광역시|대구시|대구|인천광역시|인천시|인천|광주광역시|광주시|광주|대전광역시|대전시|대전|울산광역시|울산시|울산|세종특별자치시|세종시|세종|경기도|경기|강원특별자치도|강원도|강원|충청북도|충북|충청남도|충남|전북특별자치도|전라북도|전북|전라남도|전남|경상북도|경북|경상남도|경남|제주특별자치도|제주도|제주)\s+/;
+export function shortAddressName(addr) {
+  const a = cell(addr).replace(/\s+/g, " ").replace(/번지$/, "");
+  if (!/\d/.test(a)) return "";
+  const cut = a.replace(SIDO_RE, "");
+  return (cut.split(" ").length >= 2 ? cut : a).slice(0, 40);
+}
+export function applyTabRule(rec, r, L, rule, ctx) {
+  if (!rule) return rec;
+  const col = (name) => (name ? L.header.findIndex((h) => nm(h) === nm(name)) : -1);
+  const g = (name) => { const c = col(name); return c < 0 ? "" : cell(r[c]); };
+  const memo = String(rec.메모 || "").split(" · ").filter(Boolean);
+  if (rule.client) rec.거래처명 = rule.client;
+  // 유류비 지원금처럼 운행이 아닌 줄 → 그 이름의 오더 한 건
+  if (rule.feeRow) {
+    const re = new RegExp(rule.feeRow); const hit = [rec.하차지명, rec.상차지명, ...memo].find((v) => re.test(String(v || "")));
+    if (hit) { const n = (String(hit).match(re) || [""])[0].replace(/\s+/g, " "); Object.assign(rec, { 상차지명: n, 하차지명: n, 상차지주소: "", 하차지주소: "", 화물내용: cell(hit), 차량종류: "", 차량톤수: "" }); return rec; }
+  }
+  // 상차지 고정(탭 위쪽 주소) — 상차지 칸에 다른 주소가 적힌 줄(회차 등)은 그 주소를 그대로
+  if (rule.fromFixed) {
+    const base = cell(ctx.memo?.defaultFrom?.address);
+    const cur = cell(rec.상차지주소);
+    if (!cur || !base || nm(cur) === nm(base)) { rec.상차지명 = rule.fromFixed; rec.상차지주소 = cur || base; }
+    else rec.상차지명 = shortAddressName(cur) || rec.상차지명;
+  }
+  // 하차지명 = 이름 칸(비면 빈칸) · 하차지주소 = 주소 칸
+  if (rule.toNameCol) {
+    rec.하차지명 = g(rule.toNameCol); if (rule.toAddrCol) rec.하차지주소 = g(rule.toAddrCol);
+    // 회차(하차지 칸이 탭의 기본 상차지 주소) → 하차지 = 그 상차지, 화주 칸에 적힌 말은 메모로
+    const base = cell(ctx.memo?.defaultFrom?.address);
+    if (rule.fromFixed && base && nm(rec.하차지주소) === nm(base)) { if (rec.하차지명) memo.push(rec.하차지명); rec.하차지명 = rule.fromFixed; }
+  }
+  if (rule.memoDrop) { const re = new RegExp(rule.memoDrop); for (let i = memo.length - 1; i >= 0; i -= 1) if (re.test(memo[i])) memo.splice(i, 1); }
+  // 화물내용: 박스 · 롤 → "700박스+24롤"
+  if (rule.cargo) rec.화물내용 = rule.cargo.map(([c, unit]) => { const v = g(c).replace(/,/g, ""); return v && !isZeroish(v) ? (/^[\d.]+$/.test(v) ? `${Number(v).toLocaleString("ko-KR")}${unit}` : v) : ""; }).filter(Boolean).join("+");
+  if (rule.tonCol) { const v = g(rule.tonCol).replace(/,/g, ""); rec.차량톤수 = v && !isZeroish(v) ? (/^[\d.]+$/.test(v) ? `${v}톤` : v) : ""; }
+  if (rule.vehicleKind) rec.차량종류 = rule.vehicleKind;
+  // 이름 정리 + 경유("예산+신암" → 상차지 고덕면 · 상차 경유지 신암면)
+  const P = rule.places || {};
+  const fix = (name, addr) => { const h = P[cell(name)] || P[cell(name).replace(/\s+/g, "")]; return h ? { n: h[0], a: h[1] || addr } : { n: name, a: addr }; };
+  let from = cell(rule.viaAlias?.[cell(rec.상차지명)] || rec.상차지명);
+  if (rule.splitVia && /[+,，]/.test(from)) {
+    const parts = from.split(/[+,，]/).map((x) => x.trim()).filter(Boolean);
+    const first = fix(parts[0], ""); rec.상차지명 = first.n; rec.상차지주소 = first.a || (parts[0] === rec.상차지명 ? rec.상차지주소 : "");
+    const via = parts.slice(1).map((x) => { const f = fix(x, ""); return { 업체명: f.n, 주소: f.a || "", 담당자: "", 담당자번호: "" }; });
+    if (via.length) { rec.경유상차목록 = via; rec.경유지_상차 = via; }
+    const i = memo.findIndex((m) => /^상차 /.test(m)); if (i >= 0) memo.splice(i, 1);
+    memo.unshift(`경유 ${[rec.상차지명, ...via.map((v) => v.업체명)].join(" → ")}`);
+  } else { const f = fix(from, rec.상차지주소); rec.상차지명 = f.n; rec.상차지주소 = f.a; }
+  { const f = fix(rec.하차지명, rec.하차지주소); rec.하차지명 = f.n; rec.하차지주소 = f.a; }
+  // 도착지가 주소뿐인 줄: 하차지명 = "구 동 번지"(짧게) · 하차지주소 = 전체 주소
+  if (rule.shortAddrName && /\d/.test(rec.하차지주소 || "") && looksAddress(rec.하차지주소) && (!rec.하차지명 || nm(rec.하차지주소).startsWith(nm(rec.하차지명)) || looksAddress(rec.하차지명))) rec.하차지명 = shortAddressName(rec.하차지주소) || rec.하차지명;
+  rec.메모 = uniq(memo).join(" · ");
+  return rec;
+}
+// 탭 오른쪽에 붙은 표(단가표 등)가 메모로 섞이지 않게 — rule.maxCol 칸까지만 오더로 읽는다
+function trimTabRows(t, rule) {
+  if (!rule?.maxCol) return t;
+  const hi = findHeaderRow(t.rows); const c = (t.rows[hi] || []).findIndex((h) => nm(h) === nm(rule.maxCol));
+  return c < 0 ? t : { ...t, rows: t.rows.map((r) => (r || []).slice(0, c + 1)) };
+}
+
 // ── 전체 ────────────────────────────────────────────────
-export function buildMigration(tabs, presetIn = {}) {
+export function buildMigration(tabsIn, presetIn = {}) {
+  const fullTabs = tabsIn;
+  const tabs = tabsIn.map((t) => trimTabRows(t, presetIn.tabRules?.[t.title]));
   const preset = { ...DEFAULT_PRESET, ...presetIn, dispatchAliases: { ...DEFAULT_PRESET.dispatchAliases, ...(presetIn.dispatchAliases || {}) }, vehicleGrades: { ...DEFAULT_PRESET.vehicleGrades, ...(presetIn.vehicleGrades || {}) } };
   const kinds = tabs.map((t) => (preset.skipTabs?.includes(t.title) ? "skip" : classifyTab(t)));
   // 1) 상하차지 · 기사 탭
@@ -838,6 +927,7 @@ export function buildMigration(tabs, presetIn = {}) {
     t.rows.slice(L.headerRow + 1).forEach((r, k) => {
       const out = rowToOrder(r || [], L, ctx);
       if (out.skip) { skipped[out.skip] = (skipped[out.skip] || 0) + 1; return; }
+      applyTabRule(out.rec, r || [], L, preset.tabRules?.[t.title], ctx);
       const rowNo = L.headerRow + 2 + k;
       out.rec.이전출처 = `${t.title}!${rowNo}`;
       out.rec.__tab = t.title; out.rec.__row = rowNo;
@@ -923,12 +1013,28 @@ export function buildMigration(tabs, presetIn = {}) {
   // 8) 회사 배차방식 · 지급방식 목록(이 회사 시트에 나온 값 · 많이 쓴 순)
   const dc = new Map(); orders.forEach((o) => { if (o.배차방식) dc.set(o.배차방식, (dc.get(o.배차방식) || 0) + 1); });
   const dispatchOptions = [...dc.entries()].sort((a, b) => b[1] - a[1]).filter(([v]) => !(preset.dropOptions || []).includes(v)).map(([v, n]) => ({ value: v, n, use: n >= (preset.optionMinCount || 1) && !(preset.optionMinCount <= 1 && PLATE_RE.test(normPlate(v))) })); // 운송사 칸에 잘못 적힌 차량번호는 목록에 넣지 않는다
+  // 8-1) 🧩 탭 전용 배차방식 — 그 탭에서만 쓰는 운송사(오창길 · 이도원…)는 그 탭의 상차지 · 거래처 오더에서만 보이게(공통은 어디서나)
+  //   dispatchScopes = { 배차방식: [상차지명 · 거래처명…] } — 여기에 없는 배차방식은 공통
+  const dispatchScopes = {};
+  {
+    const common = new Set(preset.commonOptions || []);
+    const byTab = new Map(); // 탭 → { n, from: Map, client: Map, opts: Map }
+    orders.forEach((o) => { const t = byTab.get(o.__tab) || { n: 0, from: new Map(), client: new Map(), opts: new Set() }; t.n += 1; if (o.상차지명) t.from.set(o.상차지명, (t.from.get(o.상차지명) || 0) + 1); if (o.거래처명) t.client.set(o.거래처명, (t.client.get(o.거래처명) || 0) + 1); if (o.배차방식) t.opts.add(o.배차방식); byTab.set(o.__tab, t); });
+    const clientTabs = new Map(); byTab.forEach((t, title) => t.client.forEach((_, c) => clientTabs.set(c, (clientTabs.get(c) || new Set()).add(title))));
+    const keysOf = (t) => [...[...t.from.entries()].filter(([, n]) => n >= Math.max(2, t.n * 0.03)).map(([v]) => v), ...[...t.client.keys()].filter((c) => clientTabs.get(c).size === 1)];
+    const optTabs = new Map(); byTab.forEach((t, title) => t.opts.forEach((v) => optTabs.set(v, (optTabs.get(v) || new Set()).add(title))));
+    if (Object.keys(preset.tabRules || {}).length) optTabs.forEach((ts, v) => {
+      if (common.has(v) || ts.size >= 4 || PLATE_RE.test(normPlate(v))) return;
+      const keys = uniq([...ts].flatMap((title) => keysOf(byTab.get(title))));
+      if (keys.length) dispatchScopes[v] = keys;
+    });
+  }
   const pc = new Map(); orders.forEach((o) => { if (o.지급방식) pc.set(o.지급방식, (pc.get(o.지급방식) || 0) + 1); });
   const payOptions = [...pc.entries()].sort((a, b) => b[1] - a[1]).map(([v, n]) => ({ value: v, n }));
   const grades = uniq(drivers.map((d) => d.등급)).filter((g) => g !== "일반");
   // 9) 단가표 — 오더 탭은 오더 칸 오른쪽에서, 이름에 "단가"가 들어간 탭은 전체에서
   const rateSheets = [];
-  tabs.forEach((t, i) => {
+  fullTabs.forEach((t, i) => {
     if (preset.skipTabs?.includes(t.title)) return;
     let minCol = -1; let client = cell(preset.tabClients?.[t.title]) || t.title; let base = "";
     if (kinds[i] === "orders") {
@@ -971,7 +1077,7 @@ export function buildMigration(tabs, presetIn = {}) {
       rateSheets.push({ tab: t.title, baseName: name.slice(0, 60), baseAddress: base, note: notes.join(" · "), labels, rows: tb.rows, groups: uniq(tb.groups) });
     });
   });
-  return { tabs: tabSummary, orders, clients, places, drivers, routes, dispatchOptions, payOptions, grades, carriers, issues, rateSheets };
+  return { tabs: tabSummary, orders, clients, places, drivers, routes, dispatchOptions, dispatchScopes, payOptions, grades, carriers, issues, rateSheets };
 }
 
 export function describeLayout(L) {

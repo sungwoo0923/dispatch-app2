@@ -11186,7 +11186,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
           </div>
           <div>
             <label className={labelCls}>배차방식</label>
-            <DispatchWayPicker style={{ minHeight: 40 }} className={inputCls} value={dispType} dir={dispWay.콜구분 ?? (order.콜구분 || "")} onPick={(pk) => { setDispType(pk.배차방식 ?? ""); if (pk.콜구분 !== undefined) setDispWay({ 콜구분: pk.콜구분, 콜플랫폼: pk.콜플랫폼 || "" }); }} />
+            <DispatchWayPicker scope={[order?.거래처명, order?.상차지명, order?.하차지명]} style={{ minHeight: 40 }} className={inputCls} value={dispType} dir={dispWay.콜구분 ?? (order.콜구분 || "")} onPick={(pk) => { setDispType(pk.배차방식 ?? ""); if (pk.콜구분 !== undefined) setDispWay({ 콜구분: pk.콜구분, 콜플랫폼: pk.콜플랫폼 || "" }); }} />
           </div>
         </div>
 
@@ -12217,7 +12217,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
               </MobileSelect>
             </QuickField>
             <QuickField label="배차방식">
-              <DispatchWayPicker placeholder="선택없음" noneLabel="선택없음" style={{ minHeight: 40 }} className={inp} value={f.배차방식} dir={f.콜구분 || ""} onPick={(pk) => setF((p) => ({ ...p, ...pk }))} />
+              <DispatchWayPicker scope={[f?.거래처명, f?.상차지명, f?.하차지명]} placeholder="선택없음" noneLabel="선택없음" style={{ minHeight: 40 }} className={inp} value={f.배차방식} dir={f.콜구분 || ""} onPick={(pk) => setF((p) => ({ ...p, ...pk }))} />
             </QuickField>
             <QuickField label="지급방식">
               <CompanyOptionPicker optKey="지급방식" placeholder="선택없음" noneLabel="선택없음" style={{ minHeight: 40 }} className={inp} value={f.지급방식} onChange={(__v) => (set("지급방식"))({ target: { value: __v } })} />
@@ -16566,7 +16566,7 @@ const pickDrop = (c) => {
                     requiredErrors.has("지급방식") ? "border-red-500 ring-2 ring-red-300 animate-pulse" : "border-gray-300 focus:border-[var(--reg-accent)]"
                   }`} value={form.지급방식} onChange={(__v) => ((e) => update("지급방식", e.target.value))({ target: { value: __v } })} />
               </fieldset>
-              <DispatchWayPicker wrapClassName="flex-1 min-w-[90px]" placeholder="배차방식" noneLabel="배차방식" style={{ minHeight: 40 }} className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition" value={form.배차방식} dir={form.콜구분 || ""} onPick={(pk) => Object.entries(pk).forEach(([k, v]) => update(k, v))} />
+              <DispatchWayPicker scope={[form?.거래처명, form?.상차지명, form?.하차지명]} wrapClassName="flex-1 min-w-[90px]" placeholder="배차방식" noneLabel="배차방식" style={{ minHeight: 40 }} className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition" value={form.배차방식} dir={form.콜구분 || ""} onPick={(pk) => Object.entries(pk).forEach(([k, v]) => update(k, v))} />
             </div>
           }
         />

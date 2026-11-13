@@ -143,7 +143,7 @@ export async function setCallDeposit({ row, done, date, name = "", patchDispatch
 //  IN이면 배차방식 목록, OUT이면 OUT 방식 목록(24시 · 인성 · 화물맨…)이 이어서 열린다.
 //  저장: 배차방식 = 고른 값(필수 칸 그대로) · 콜구분 = "IN" | "OUT" · 콜플랫폼 = OUT일 때 고른 값
 //  시험 기능이 꺼진 운송사는 예전 배차방식 선택 그대로다.
-export function DispatchWayPicker({ value = "", dir = "", onPick, className = "", placeholder = "선택", noneLabel = "선택", role, userCompany, disabled = false, style, wrapClassName = "" }) {
+export function DispatchWayPicker({ value = "", dir = "", onPick, className = "", placeholder = "선택", noneLabel = "선택", role, userCompany, disabled = false, style, wrapClassName = "", scope }) {
   const beta = useBetaOn(userCompany);
   const cur = dir === "OUT" || dir === "잡은콜" ? "OUT" : "IN";
   const [pend, setPend] = React.useState(cur); // 방금 고른 IN/OUT(목록을 고르기 전)
@@ -160,7 +160,7 @@ export function DispatchWayPicker({ value = "", dir = "", onPick, className = ""
     return () => { clearTimeout(t); window.removeEventListener("mousedown", off, true); window.removeEventListener("keydown", esc, true); };
   }, [ask]);
   const v = value === "선택없음" ? "" : (value || "");
-  if (!beta) return <CompanyOptionPicker optKey="배차방식" placeholder={placeholder} noneLabel={noneLabel} className={wrapClassName ? `${wrapClassName} ${className.replace(/\bw-full\b/, "")}` : className} style={style} value={v} disabled={disabled} role={role} userCompany={userCompany} onChange={(x) => onPick?.({ 배차방식: x })} />;
+  if (!beta) return <CompanyOptionPicker optKey="배차방식" placeholder={placeholder} noneLabel={noneLabel} className={wrapClassName ? `${wrapClassName} ${className.replace(/\bw-full\b/, "")}` : className} style={style} value={v} disabled={disabled} role={role} userCompany={userCompany} scope={scope} onChange={(x) => onPick?.({ 배차방식: x })} />;
   const openAsk = (e) => {
     if (disabled) return;
     if (armed.current) { armed.current = false; return; } // IN/OUT을 고른 직후 — 목록이 열리게 둔다
@@ -175,7 +175,7 @@ export function DispatchWayPicker({ value = "", dir = "", onPick, className = ""
       onClickCapture={(e) => { if (e.target.closest?.("button[data-opt-picker]")) openAsk(e); }}
       onKeyDownCapture={(e) => { if ((e.key === "Enter" || e.key === " " || e.key === "ArrowDown") && e.target.closest?.("button[data-opt-picker]") && e.target.getAttribute("aria-expanded") !== "true") openAsk(e); }}>
       <CompanyOptionPicker key={pend} optKey={pend === "OUT" ? OUT_KEY : "배차방식"} title={pend === "OUT" ? "OUT 방식" : "배차방식 (IN)"} placeholder={placeholder} noneLabel={noneLabel} className={className} style={style}
-        value={pend === cur ? v : ""} disabled={disabled} role={role} userCompany={userCompany} openSignal={sig}
+        value={pend === cur ? v : ""} disabled={disabled} role={role} userCompany={userCompany} openSignal={sig} scope={pend === "OUT" ? undefined : scope}
         labelOf={(x) => `${pend} · ${x}`}
         onChange={(x) => onPick?.({ 배차방식: x, 콜구분: x ? pend : "", 콜플랫폼: x && pend === "OUT" ? x : "" })} />
       {ask && createPortal(
