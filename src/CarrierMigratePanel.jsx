@@ -344,6 +344,10 @@ export default function CarrierMigratePanel({ companies = [] }) {
     //  · 최고관리자가 들어가 있는 회사(예: 돌캐) 기준 거르기가 조회 결과를 비우면 "이미 옮긴 줄 건너뛰기"가 안 되므로,
     //    가져오는 동안만 거르기를 끄고 모든 조회에 where("companyName", "==", 대상 회사)를 직접 붙인다(사용량도 내 회사로 안 셈)
     const releaseTenant = pushTenantBypass();
+    // ⏸ 2026-11-14 가져오는 동안 실시간 반영을 잠깐 멈춘다 — 켜 둔 채 가져오면 서버와 이 화면이 같은 줄을 동시에 만들어 중복이 생겼다(495건)
+    //  끝나면(성공 · 실패 모두) 원래 켜져 있던 경우에만 다시 켠다
+    let liveWasOn = false;
+    try { const lv = await callApi("sheetImport", { action: "liveGet", company: co }); liveWasOn = !!lv?.live?.enabled; if (liveWasOn) { await callApi("sheetImport", { action: "liveSet", company: co, enabled: false }); await new Promise((r) => setTimeout(r, 4000)); } } catch { /* 서버 기능이 없으면 건너뜀 */ }
     try {
       await setDoc(doc(db, "importBatches", batchId), { companyName: co, by: me, at: serverTimestamp(), source: book.source === "excel" ? "excel" : "carrierMigrate", sheetTitle: book.title || "", spreadsheetId: (url.match(/\/d\/([a-zA-Z0-9_-]+)/) || [])[1] || "", tabs: result.tabs.filter((t) => t.kind === "orders").map((t) => t.title), status: "importing", count: 0 });
       // 1) 회사 설정 — 배차방식 목록 · 기사 등급(분양 등) · 이전 설정(다음에 같은 시트를 다시 옮길 때)
@@ -472,6 +476,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
       setProgress({ pct: 0, step: "", error: `가져오기 실패: ${e?.message || e} — 일부만 저장됐다면 아래 [가져오기 기록]에서 [가져오기 취소]로 지울 수 있습니다.` });
     } finally {
       releaseTenant();
+      if (liveWasOn) await callApi("sheetImport", { action: "liveSet", company: co, enabled: true }).catch(() => {});
     }
   };
 
