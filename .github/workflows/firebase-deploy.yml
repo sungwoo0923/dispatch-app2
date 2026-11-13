@@ -8,12 +8,13 @@ on:
       target:
         description: "무엇을 올릴까요?"
         type: choice
-        default: "허브(규칙+색인+저장소+허브알림)"
+        # 🛠 2026-11-13 기본값을 "전부"로 — 예전 기본값(허브)은 서버 기능을 하나만 올려서, 그대로 실행하면 새 서버 기능이 안 올라갔다
+        default: "전부(규칙+색인+저장소+functions)"
         options:
-          - "허브(규칙+색인+저장소+허브알림)"
+          - "전부(규칙+색인+저장소+functions)"
           - "규칙+색인+저장소만"
           - "서버 기능 전체(functions)"
-          - "전부(규칙+색인+저장소+functions)"
+          - "허브(규칙+색인+저장소+허브알림)"
       custom:
         description: "직접 입력(채우면 위 선택 무시) 예: firestore:rules,functions:dailyReportPush"
         type: string
