@@ -6186,7 +6186,10 @@ const _sheetConnectHandler = makeSheetConnect({
 exports.sheetConnect = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 540, memory: "1GB" }).https.onRequest(async (req, res) => { if (!(await appCheckGate(req, res, "sheetConnect"))) return; return sheetCaller.run({}, () => _sheetConnectHandler(req, res)); }); // 🛡 App Check
 
 // 🔁 2026-11-13 구글시트 실시간 반영(시트에서만 입력하는 운송사 — 지금은 JY로지스틱스) — 설명은 functions/sheetLiveOrders.js 맨 위
-const _sheetLive = require("./sheetLiveOrders").makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab, sheetModifiedTime, bumpDataVersion });
+// 🔁 2026-11-14 프로그램 → 구글시트 반영(오더 등록 · 수정 · 삭제를 시트의 그 탭 줄에) — 설명은 functions/sheetPushOrders.js 맨 위
+const _sheetPush = require("./sheetPushOrders").makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab });
+exports.queueOrderSheetPush = functions.firestore.document("orders/{orderId}").onWrite((change, context) => _sheetPush.onOrderWrite(change, context).catch((e) => { console.error("[시트 쓰기 대기열 실패]", context.params.orderId, e?.message || e); return null; }));
+const _sheetLive = require("./sheetLiveOrders").makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab, sheetModifiedTime, bumpDataVersion, push: _sheetPush });
 exports.syncSheetOrders = functions.runWith({ timeoutSeconds: 300, memory: "1GB", maxInstances: 1 }).pubsub.schedule("every 1 minutes").timeZone("Asia/Seoul").onRun(async () => { await _sheetLive.runAll(); return null; });
 
 exports.sheetImport = functions
@@ -6207,6 +6210,8 @@ exports.sheetImport = functions
 
       // 🔁 2026-11-13 실시간 반영 설정 · 지금 반영
       if (action === "liveGet" || action === "liveSet" || action === "liveRun") { res.json(await _sheetLive.handle(action, body, me)); return; }
+      // 🔁 2026-11-14 프로그램 → 시트 반영 설정 · 기록 · 보류 처리
+      if (action === "pushGet" || action === "pushSet" || action === "pushResolve") { res.json(await _sheetPush.handle(action, body, me)); return; }
 
       // 🚚 2026-11-12 운송사 일괄 이전 — 고른 탭(없으면 전체)을 맨 윗줄부터 그대로 + 병합 칸 정보(화면이 applyMerges로 펼침)
       //  위쪽 메모(상차지 · 하차지 주소 · 담당자)까지 읽어야 해서 머리줄 기준으로 자르지 않는다. 규칙: functions/carrierMigrateCore.mjs

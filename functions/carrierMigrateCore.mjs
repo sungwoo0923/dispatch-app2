@@ -103,6 +103,8 @@ export const PRESET_SUGGESTIONS = {
     // 💰 2026-11-14 사용자 확정 — 금액 기준은 "운송료 + 야상(추가) 칸을 더한 값". 합계만 있는 곳은 합계 그대로
     //  (시트의 합계 칸이 운송료와 다르게 적힌 줄 · "-"인 줄이 있어도 운송료 + 추가를 따른다. "180,000 착불"처럼 글자가 섞인 칸은 엑셀 합계처럼 더하지 않는다)
     sumOverTotal: true,
+    // 📅 2026-11-14 사용자 요청 — 2026년 10월 1일 상차분부터만 가져온다(그 전 줄은 "기간 밖"으로 빼고, 가져오기 · 비교 · 실시간 반영 모두 같은 기준)
+    fromDate: "2026-10-01",
     skipTabs: ["카고LCL"],
     // 예전에 [제외]로 저장해 둔 탭이라도 아래 탭은 다시 가져온다(사용자가 양식을 설명한 탭)
     includeTabs: ["롯데베르살리스", "보령 KDF", "아산 KDF", "녹수", "녹수 내수", "대원전선"],
@@ -883,11 +885,20 @@ export function memoContacts(rows, headerRow) {
   return out;
 }
 // 탭 오른쪽에 붙은 표(단가표 등)가 메모로 섞이지 않게 — rule.maxCol 칸까지만 오더로 읽는다
-function trimTabRows(t, rule) {
+export function trimTabRows(t, rule) {
   if (!rule?.maxCol) return t;
   const hi = findHeaderRow(t.rows); const H = t.rows[hi] || [];
   const c = rule.maxColLast ? H.reduce((a, h, i) => (nm(h) === nm(rule.maxCol) ? i : a), -1) : H.findIndex((h) => nm(h) === nm(rule.maxCol)); // maxColLast: 같은 이름 칸이 여러 개면 맨 오른쪽 것까지
   return c < 0 ? t : { ...t, rows: t.rows.map((r) => (r || []).slice(0, c + 1)) };
+}
+
+// 한 탭의 칸 배치 — buildMigration 과 같은 방법으로(탭 규칙의 maxCol 자르기 · 이름 없는 추가 칸 · 직접 정한 칸). 오더 탭이 아니면 null
+//  (프로그램 → 시트 쓰기(functions/sheetPushCore.mjs)가 같은 칸을 찾을 때 쓴다)
+export function tabLayout(t, presetIn = {}) {
+  const tt = trimTabRows(t, presetIn.tabRules?.[t.title]);
+  const hi = findHeaderRow(tt.rows);
+  if (hi < 0) return null;
+  return detectLayout(tt.rows, hi, { extraNames: presetIn.extraNames?.[t.title] || {}, columns: presetIn.columns?.[t.title] || {} });
 }
 
 // ── 전체 ────────────────────────────────────────────────
@@ -1331,10 +1342,15 @@ export function reconcileOrders(existing = [], incoming = [], { keepKeys = ["imp
     if (!e) { create.push(o); return; }
     const next = {}; Object.entries(o).forEach(([k, v]) => { if (!k.startsWith("__") && v !== "" && v != null) next[k] = v; });
     const patch = {};
-    Object.entries(next).forEach(([k, v]) => { if (!keepKeys.includes(k) && !same(e.data[k], v)) patch[k] = v; });
+    // 🔁 2026-11-14 프로그램에서 고친 값(_programKeys · functions/sheetPushCore.mjs) — 시트의 그 칸이 그때 읽은 값(_sheetBase) 그대로면 프로그램 값을 둔다
+    //  시트에서 그 칸을 고치면(그때 값과 달라지면) 다시 시트 값을 따르고, 그 칸은 목록에서 뺀다
+    const pk = new Set(Array.isArray(e.data._programKeys) ? e.data._programKeys : []); const sb = e.data._sheetBase || {}; let pkChanged = false;
+    const held = (k, v) => { if (!pk.has(k)) return false; if (same(sb[k], v)) return true; pk.delete(k); pkChanged = true; return false; };
+    Object.entries(next).forEach(([k, v]) => { if (!keepKeys.includes(k) && !same(e.data[k], v) && !held(k, v)) patch[k] = v; });
     // 시트에서 사라진 값 → 비운다
     const before = new Set([...(Array.isArray(e.data._sheetKeys) ? e.data._sheetKeys : SHEET_CORE_KEYS)]);
-    before.forEach((k) => { if (!(k in next) && !keepKeys.includes(k) && e.data[k] != null && e.data[k] !== "" && !(Array.isArray(e.data[k]) && !e.data[k].length)) patch[k] = Array.isArray(e.data[k]) ? [] : (typeof e.data[k] === "number" ? 0 : typeof e.data[k] === "boolean" ? false : ""); });
+    before.forEach((k) => { if (!(k in next) && !keepKeys.includes(k) && e.data[k] != null && e.data[k] !== "" && !(Array.isArray(e.data[k]) && !e.data[k].length) && !held(k, "")) patch[k] = Array.isArray(e.data[k]) ? [] : (typeof e.data[k] === "number" ? 0 : typeof e.data[k] === "boolean" ? false : ""); });
+    if (pkChanged) { patch._programKeys = [...pk]; patch._sheetBase = Object.fromEntries(Object.entries(sb).filter(([k]) => pk.has(k))); }
     if (Object.keys(patch).length) update.push({ id: e.id, rec: o, patch: { ...patch, _sheetKeys: Object.keys(next) } }); else sameN += 1;
   });
   return { create, update, same: sameN, missing: [...left.values()] };

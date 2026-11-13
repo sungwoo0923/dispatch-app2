@@ -86,7 +86,7 @@ import { isJyCompany } from "./jyOnly"; // 🏷 JY로지스틱스 전용 기능(
 import QuickNav, { QuickSearchButton } from "./QuickNav"; // 🔎 2026-11-12 통합 검색(Ctrl+K) · 자주 쓰는 메뉴 · 도움말 센터
 import { useScreenFit, ScreenFitButton, BrowserZoomNotice } from "./ScreenFit"; // 🖥 2026-11-10 화면 맞춤 · 브라우저 확대 안내
 import { usePendingSignups, isPendingSignupDriver } from "./pendingSignups";
-import { NavHover, emitSubnav } from "./navMenus";
+import { NavHover, emitSubnav, NavGroupHover, groupNavMenus, navFlatPref } from "./navMenus";
 import { publishDriverOrderRows, useDriverEventFeeds, useDriverEventCounts, setDriverSeenServer, setDriverToastsMuted, markDriverSeen, focusOrderRow, DriverEventToasts, DriverEventBell, DriverAckChip, KakaoBadge } from "./driverEvents"; // ⭐ 2026-11-05 기사앱 수락/거절·서류·긴급 알림(토스트·빨간 숫자·종)
 import { PeriodPicker as ResumePeriodPicker, DateField as ResumeDateField, SelectField as ResumeSelectField, AddressField as ResumeAddressField, BirthSelect as ResumeBirthSelect, EDU_STATUS as RESUME_EDU_STATUS, FAMILY_REL as RESUME_FAMILY_REL } from "./ResumeInputs";
 import { useHrOptions } from "./hrConstants";
@@ -3424,12 +3424,16 @@ function KpPageHeader({ menu }) {
 // ⭐ 왼쪽 접이식 메뉴(2026-10-22) — 평소엔 왼쪽 끝 작은 손잡이만 보이고, 누르면 회사관리 메뉴와 같은 디자인의 메뉴가 펼쳐진다.
 //    상단 메뉴와 같은 목록·같은 권한 규칙을 쓴다(목록은 DispatchApp이 넘겨준다).
 const KP_SIDE_GROUPS = [
-  { label: "배차", items: ["HOME", "배차관리", "실시간배차현황", "배차현황"] },
+  { label: "홈", items: ["HOME"] },
+  { label: "배차", items: ["배차관리", "실시간배차현황", "배차현황"] },
   { label: "운임", items: ["단가표", "운임조회"] },
-  { label: "기사 · 거래처", items: ["기사관리", "거래처관리", "지입차관리"] },
-  { label: "매출 · 정산", items: ["매출관리", "정산관리", "인사이트"] },
+  { label: "기사관리", items: ["기사관리"] },
+  { label: "거래처", items: ["거래처관리"] },
+  { label: "매출", items: ["매출관리", "인사이트"] },
+  { label: "정산", items: ["정산관리"] },
+  { label: "지입차관리", items: ["지입차관리"] },
   { label: "부서 업무", items: ["전자결재", "영업관리", "회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급"] },
-  { label: "관리", items: ["회사관리", "관리자메뉴", "관리센터"] },
+  { label: "회사관리", items: ["회사관리", "관리자메뉴", "관리센터"] },
 ];
 // 📈 2026-11-08 임원 화면 · 경영 분석 · 결재 대기 · 직원 정보(처음 열 때 받는다)
 const ExecAnalysis = React.lazy(() => import("./ExecAnalytics"));
@@ -8213,6 +8217,7 @@ useEffect(() => {
   const tonOptions = useMemo(() => Array.from({ length: 25 }, (_, i) => `${i + 1}톤`), []);
 
  // ⭐ 2026-11-14 새 버전 자동 새로고침 뒤에는 보던 메뉴로 돌아온다(대시보드로 튕기지 않게 — ErrorBoundary.reloadOnce가 남긴 값, 1분 안)
+ const [navFlat, setNavFlat] = useState(() => navFlatPref()); // ⭐ 2026-11-14 상단 메뉴 묶음(기본) / 예전처럼 한 줄(펼침)
  const [menu, setMenu] = useState(() => { try { const j = JSON.parse(sessionStorage.getItem("kpReloadMenu") || "null"); sessionStorage.removeItem("kpReloadMenu"); if (j && j.menu && Date.now() - j.at < 60000) return j.menu; } catch { /* 무시 */ } return "HOME"; });
  useEffect(() => { try { window.__kpMenu = menu; } catch { /* 무시 */ } }, [menu]);
  // 📍 2026-11-13 지금 보는 화면을 로그인 기록에 적는다(관리센터 실시간 표시 — src/screenReport.js)
@@ -8813,7 +8818,7 @@ return (
             }}
           >
             <div className="kp-nav-track inline-flex items-center gap-0.5 min-[2050px]:gap-1 p-1 rounded-[14px] shrink-0">
-            {uiMenuList("pc", bizMenus || (deptMode ? DEPT_MENUS[deptMode] : [
+            {(() => { const navList = uiMenuList("pc", bizMenus || (deptMode ? DEPT_MENUS[deptMode] : [
               "HOME",
               "배차관리",
               "실시간배차현황",
@@ -8838,7 +8843,31 @@ return (
               "회사관리",
               "관리자메뉴",
               "관리센터",
-            ])).map((m) => {
+            ]));
+            const navNOf = (m) => {
+              const apSep = (deptMode ? DEPT_MENUS[deptMode].includes("전자결재") : true) && menuState("전자결재") !== "hidden";
+              const apN = (apCountsNav.todo || 0) + (apCountsNav.mineNew || 0);
+              return m === "HOME" ? (mailCountsNav.unread || 0) + (alertsNav.handover || 0) + (apSep ? 0 : apN)
+                : m === "전자결재" ? apN + (alertsNav.handover || 0)
+                : m === "기사관리" ? (canApproveSignup ? alertsNav.signupDriver || 0 : 0) + drvCounts.docs
+                : m === "실시간배차현황" ? drvCounts.orders
+                : m === "배차현황" ? drvCounts.orders + unseenDispatchTotal
+                : m === "지입차관리" ? drvCounts.sos
+                : m === "관리자메뉴" ? pendingStaffSignups : 0;
+            };
+            const subBadgesOf = (m) => {
+              const apSep = (deptMode ? DEPT_MENUS[deptMode].includes("전자결재") : true) && menuState("전자결재") !== "hidden";
+              return ({
+                HOME: { 공지사항: alertsNav.notice || 0, "ap:inbox": apSep ? 0 : apCountsNav.todo, teamsched: 0 },
+                전자결재: { inbox: apCountsNav.todo, mine: apCountsNav.mineNew, handover: alertsNav.handover },
+                기사관리: { "acc:pending": canApproveSignup ? alertsNav.signupDriver : 0, "docs:driver": drvCounts.docs },
+                배차현황: { 배차현황: drvCounts.orders + unseenList, 미배차현황: unseenUnassigned, 고정노선현황: unseenFixed },
+                지입차관리: { tracking: drvCounts.sos },
+                관리자메뉴: { members: pendingStaffSignups },
+              })[m];
+            };
+            const navLabelOf = (m) => uiMenuLabel("pc", m, m === BRIEF_MENU ? BRIEF_LABEL : execMenuLabel(m));
+            const renderOne = (m) => {
               const st = menuShown(m);
               if (st === "hidden") return null;
               const isBlocked = st === "blocked";
@@ -8884,7 +8913,33 @@ return (
                 </button>
                 </NavHover>
               );
-            })}
+            };
+            // ⭐ 2026-11-14 상단 메뉴 묶음 — 홈/배차/운임/기사관리/거래처/매출/정산/지입차관리/회사관리(권한으로 보이는 메뉴만 · 1개면 그대로)
+            if (navFlat || bizMenus) return navList.map(renderOne);
+            return groupNavMenus(navList.filter((m) => menuShown(m) !== "hidden")).map((g) => {
+              if (g.menus.length === 1) return renderOne(g.menus[0]);
+              const members = g.menus.map((m) => { const st = menuShown(m); return { menu: m, label: navLabelOf(m), disabled: st === "blocked" || st === "locked", badge: st === "locked" ? 0 : navNOf(m), subBadges: subBadgesOf(m) }; });
+              const on = g.menus.includes(menu); const sum = members.reduce((a, x) => a + (x.badge || 0), 0);
+              const first = members.find((x) => !x.disabled);
+              return (
+                <NavGroupHover key={`g-${g.group}`} code={String(g.group || "").toUpperCase()} label={g.label} members={members} onOpen={(m) => handleMenuClick(m)}>
+                  <button type="button" data-kp-navgroup={g.group} data-on={on ? "1" : "0"} onClick={() => { if (!on && first) handleMenuClick(first.menu); }}
+                    title={`${g.label}: ${members.map((x) => x.label).join(" · ")}`}
+                    className={`kp-nav-btn relative inline-flex items-center gap-1.5 px-3.5 h-[34px] rounded-[10px] text-[12.75px] min-[1700px]:text-[13px] tracking-[-0.01em] transition-all duration-150 whitespace-nowrap shrink-0 ${on ? "kp-nav-on font-extrabold" : "text-white/70 font-semibold hover:text-white hover:bg-white/[0.08]"}`}>
+                    <span>{g.label}</span>
+                    {on && <span className="text-[11.5px] font-bold opacity-60">· {navLabelOf(menu)}</span>}
+                    {sum > 0 && <KakaoBadge n={sum} size="sm" className="ml-1 align-middle" />}
+                    <svg width="9" height="9" viewBox="0 0 10 10" fill="none" className="opacity-50"><path d="M2 3.5 5 6.5 8 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  </button>
+                </NavGroupHover>
+              );
+            });
+            })()}
+            <button type="button" data-kp="nav-flat-toggle" onClick={() => { const v = !navFlat; try { localStorage.setItem("kpNavFlat", v ? "1" : "0"); } catch { /* 무시 */ } setNavFlat(v); }}
+              title={navFlat ? "메뉴를 묶어서 보기" : "메뉴를 예전처럼 한 줄로 펼쳐 보기"} aria-label="상단 메뉴 묶기/펼치기"
+              className="ml-0.5 w-7 h-[34px] rounded-[10px] grid place-items-center text-white/45 hover:text-white hover:bg-white/[0.08] shrink-0">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">{navFlat ? <><rect x="2" y="3" width="5" height="4" rx="1" /><rect x="9" y="3" width="5" height="4" rx="1" /><rect x="2" y="9" width="5" height="4" rx="1" /><rect x="9" y="9" width="5" height="4" rx="1" /></> : <><path d="M2 4h12M2 8h12M2 12h12" /></>}</svg>
+            </button>
             </div>
           </nav>
           {/* ⭐ 2026-11-02 화면 점검 — 넘칠 때만 보이는 좌우 흐림·스크롤 버튼 */}
@@ -53273,7 +53328,7 @@ const handleBatchSettle = async (targetStatus) => {
   const [pipeMonth, setPipeMonth] = useState(() => kstYm(-1));
   // ⭐ 2026-11-14 정산 홈 바로가기 — 명세서 일괄 처리(단계 보드) · 입금내역 자동 대사(미수금관리 + 올리기 창)
   useEffect(() => {
-    const h = (e) => { const d = e.detail || {}; if (d.tab) setTab(d.tab); if (d.board) setInvView("board"); if (d.bank) setTimeout(() => setBankBulkOpen(true), 200); };
+    const h = (e) => { const d = e.detail || {}; if (d.tab) setTab(d.tab); if (d.board) setInvView("board"); if (d.bank) setTimeout(() => setBankBulkOpen(true), 200); if (d.client && d.ym) settleOpenRef.current?.(d.client, d.ym); };
     window.addEventListener("kp-settle-open", h); return () => window.removeEventListener("kp-settle-open", h);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [invView, setInvView] = useState("edit"); // ⭐ 2026-11-09 기본 = 2분할 명세서 편집(왼쪽 거래처 목록) · board(단계 보드)는 버튼으로
@@ -53319,6 +53374,8 @@ const handleBatchSettle = async (targetStatus) => {
     if (stageIdx(stmtDocOf(c, ym)?.stage) >= 2) return;
     setStmtStage(c, ym, "발송").catch(() => {});
   };
+  const settleOpenRef = useRef(null); // 정산 홈 → 그 거래처 · 그 달 명세서 바로 열기
+  useEffect(() => { settleOpenRef.current = (c, ym) => openStmt(c, ym); });
   const openStmt = (c, ym, { send = false } = {}) => {
     const d = stmtDocOf(c, ym);
     stmtExRef.current = d?.excludedIds || [];

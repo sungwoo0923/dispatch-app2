@@ -155,7 +155,7 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
                     </tr>))}</tbody>
                 </table>
               </div>)}
-          {client && <div className="mt-3 flex justify-end"><button type="button" onClick={() => go("거래처정산")} className="h-10 px-4 rounded-xl border border-[#C9D5EA] bg-white text-[13.5px] font-black text-[#1B2B4B]">거래처정산에서 명세서 열기</button></div>}
+          {client && <div className="mt-3 flex justify-end"><button type="button" onClick={() => onGo?.("거래처정산", { tab: "invoice", client, ym: ledger.some((x) => x.ym === ym) ? ym : (ledger[ledger.length - 1]?.ym || ym) })} className="h-10 px-4 rounded-xl border border-[#C9D5EA] bg-white text-[13.5px] font-black text-[#1B2B4B]">{client} 명세서 열기</button></div>}
         </section>
       </div>
 

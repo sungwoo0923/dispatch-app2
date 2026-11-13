@@ -2552,6 +2552,7 @@ service cloud.firestore {
         'pnkEmpIndex', 'pnkApprovals', 'pnkAttendance', 'pnkMailSecrets', 'pnkMailUsage', 'pnkMfaSecrets', 'pnkMfaSessions', 'pnkUi', 'pnkUiHistory',
         'publicRelease',
         'sheetLive', // 🔁 구글시트 실시간 반영 설정(서버만)
+        'sheetPushQueue', // 🔁 프로그램 → 구글시트 반영 대기열 · 기록(서버만)
         'adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'resetLocks', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'driverContracts', 'fixedRoutes', 'routeBoards', 'freightJobs', 'personalSchedules', 'publicCompanies', 'companyContracts',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
         'orders', 'dispatch', 'dispatch_test', 'fixedClients', 'drivers', 'clients', 'places', 'recurringOrders', 'deletedOrders',

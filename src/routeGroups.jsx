@@ -114,6 +114,9 @@ export function SheetLiveChip({ role, userCompany, compact = false }) {
       {!compact && <span className="text-[#94A3B8] font-extrabold tracking-[0.08em]">구글시트</span>}
       <span>{main}</span>
       {detail && !compact && <span className="text-[#94A3B8] tabular-nums">{detail}</span>}
+      {/* 🔁 2026-11-14 프로그램 → 시트 반영: 어느 탭에 넣을지 못 정한 오더(담당노선구분을 고르면 들어간다) · 확인이 필요한 건(보류 · 못 씀 — 관리센터에서 처리) */}
+      {st.needTab > 0 && <span className="text-[#B26A00] font-black" title="프로그램에서 등록했는데 시트의 어느 탭에 넣을지 정하지 못한 오더입니다. 그 오더의 담당노선구분을 고르면 1분 안에 그 탭에 들어갑니다.">· 시트 탭 미정 {st.needTab}건</span>}
+      {st.pushIssue > 0 && !compact && <span className="text-[#B4342A] font-black" title="시트에 쓰지 못했거나 보류한 건이 있습니다. 관리센터 › 배차일지 가져오기 › 프로그램 → 시트 반영에서 확인해 주세요.">· 시트 반영 확인 {st.pushIssue}건</span>}
     </span>
   );
 }
