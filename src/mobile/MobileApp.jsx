@@ -5541,14 +5541,14 @@ const title =
   : page === "company-fare" ? "운임조회"
   : page === "sales" ? "매출관리"
   : page === "approval" ? "전자결재"
-  : page === "staff" ? "직원 관리"
+  : page === "staff" ? "회원 관리"
   : page === "drvacc" ? "기사 앱 계정"
   : page === "drivers" ? "기사관리"
   : page === "clients" ? "거래처관리"
   : page === "fixedroute" ? "고정노선현황"
   : page === "perms" ? "권한 관리"
   : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "office" ? "사내업무" : deptMode === "hr" ? "인사관리" : deptMode === "sales" ? "영업" : "경리·회계")
-  : String(page).startsWith("dept:") ? ({ "dept:sales": "영업관리", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서", "dept:payroll": "급여 계산", "dept:payslip": "급여명세서", "dept:leaveplan": "연차 사용 계획", "dept:leavepromo": "연차 관리", "dept:briefing": "일일 경영 보고" , "dept:analysis": "경영 분석", "dept:apqueue": "결재 대기", "dept:staffinfo": "직원 정보"}[page] || "")
+  : String(page).startsWith("dept:") ? ({ "dept:sales": "영업관리", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 제출 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서", "dept:payroll": "급여 계산", "dept:payslip": "급여명세서", "dept:leaveplan": "연차 사용 계획", "dept:leavepromo": "연차 관리", "dept:briefing": "일일 경영 보고" , "dept:analysis": "경영 분석", "dept:apqueue": "결재 대기", "dept:staffinfo": "직원 정보"}[page] || "")
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
   : page === "canceled" ? "취소내역"
@@ -8242,7 +8242,7 @@ function MobileSideMenu({
               <MenuItem label="임원 스케줄" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />
               {(canRevenue || isExec) && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
               {(isAdminRole || isExec) && ok("인사이트") && <MenuItem label="경영인텔리전스" icon="trend" onClick={onGoIntel} dark={dark} />}
-              {isAdminRole && <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />}
+              {isAdminRole && <MenuItem label="회원 관리" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />}
               {isAdminRole && <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />}
             </MenuSection>
           )}
@@ -8280,42 +8280,42 @@ function MobileSideMenu({
               {staffSignupOk && <MenuItem label="직원 가입 승인" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />}
               {staffSignupOk && <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />}
               {ok("기사관리") && <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} badge={staffSignupOk ? (alertCounts?.signupDriver || null) : null} dark={dark} />}{/* ⭐ 2026-11-05 PC 경리·인사도 기사관리를 본다 */}
-              {(staffSignupOk || ok("기사관리")) && <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />}{/* ⭐ 2026-11-10 PC처럼 기사관리를 보면 기사 서류도 본다 */}
+              {(staffSignupOk || ok("기사관리")) && <MenuItem label="기사 제출 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />}{/* ⭐ 2026-11-10 PC처럼 기사관리를 보면 기사 서류도 본다 */}
             </MenuSection>
           )}
-          {/* ⭐ 2026-11-10 메뉴 정리 — 일반배차관리(용차·외부기사 오더와 기사) · 지입차관리(고정노선·지입차·기사 서류)로 나눔
-              기사 서류는 PC처럼 기사관리를 볼 수 있으면 보인다(PC 기사관리 › 서류관리 · 관리자 전용 아님) */}
-          {!deptMode && (
-          <MenuSection title="일반배차관리" en="DISPATCH" dark={dark} alwaysOpen>
-            {role !== "test" && ok("배차관리") && <MenuItem label="오더등록" icon="truck" onClick={onGoCreate} dark={dark} />}
-            {ok("배차현황") && <MenuItem label="배차현황" icon="list" onClick={onGoList} badge={((alertCounts?.drvOrders || 0) + (listUnseenCount || 0)) || null} dark={dark} />}{/* ⭐ 2026-11-06 기사 수락/거절(본 시각 기준) + 안 본 미배차 */}
-            {ok("배차관리") && <MenuItem label="미배차현황" icon="alert" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />}
-            {/* ⭐ 2026-11-05 PC·모바일 일치 — PC 기사관리와 같은 화면(PC에서 그 메뉴를 보는 권한만) */}
-            {PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리") && <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} badge={staffSignupOk ? (alertCounts?.signupDriver || null) : null} dark={dark} />}
-          </MenuSection>
-          )}
-          {!deptMode && ((ok("배차현황")) || ok("지입차관리") || (PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리"))) && (
-          <MenuSection title="지입차관리" en="FLEET" dark={dark} alwaysOpen>
-            {ok("배차현황") && <MenuItem label="고정노선현황" icon="route" onClick={() => onGo?.("fixedroute")} badge={fixedUnassignedCount > 0 ? fixedUnassignedCount : null} dark={dark} />}
-            {ok("지입차관리") && <MenuItem label="지입차관리" icon="truck" onClick={onGoFleet} badge={alertCounts?.drvSos || null} dark={dark} />}
-            {PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리") && <MenuItem label="기사 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />}
-          </MenuSection>
-          )}
+          {/* ⭐ 2026-11-14 PC와 같은 묶음 · 같은 이름 · 같은 순서 — 배차 / 운임 / 기사 · 거래처 / 매출 · 정산 (PC 왼쪽 ≡ 메뉴)
+              배차만 펴 두고 나머지는 접어 둔다(누르면 펴지고 이 휴대폰에 기억). 접힌 묶음은 알림 숫자 합을 제목 옆에 보여 준다. */}
           {!deptMode && (<>
-          <MenuSection title="운임" en="FARE" dark={dark} alwaysOpen>
-            {ok("운임조회") && <MenuItem label="운임조회" icon="globe" onClick={onGoNationalFare} dark={dark} />}
-            {role !== "test" && ok("단가표") && <MenuItem label="단가표" icon="money" onClick={onGoRateCard} dark={dark} />}
+          <MenuSection title="배차" en="DISPATCH" dark={dark} fold openDefault badge={(alertCounts?.drvOrders || 0) + (listUnseenCount || 0) + (unassignedCount || 0) + (fixedUnassignedCount || 0)}>
+            {role !== "test" && ok("배차관리") && <MenuItem label="오더등록" icon="truck" onClick={onGoCreate} dark={dark} />}
+            {ok("배차현황") && <MenuItem label="배차현황" icon="list" onClick={onGoList} badge={((alertCounts?.drvOrders || 0) + (listUnseenCount || 0)) || null} dark={dark} />}
+            {ok("배차관리") && <MenuItem label="미배차현황" icon="alert" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />}
+            {ok("배차현황") && <MenuItem label="고정노선현황" icon="route" onClick={() => onGo?.("fixedroute")} badge={fixedUnassignedCount > 0 ? fixedUnassignedCount : null} dark={dark} />}
           </MenuSection>
-          <MenuSection title="매출 · 거래처" en="REVENUE" dark={dark} alwaysOpen>
-            {canRevenue && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
-            {/* ⭐ 2026-11-05 PC·모바일 일치 — PC 매출·정산 묶음의 정산관리·인사이트(PC와 같은 권한·요금제) */}
-            {(canRevenue || /^role_/.test(String(role || ""))) && ok("정산관리") && <MenuItem label="정산관리" icon="receipt" onClick={() => onGo?.("dept:settle")} dark={dark} />}
+          {(ok("단가표") || ok("운임조회")) && (
+          <MenuSection title="운임" en="FARE" dark={dark} fold>
+            {role !== "test" && ok("단가표") && <MenuItem label="단가표" icon="money" onClick={onGoRateCard} dark={dark} />}
+            {ok("운임조회") && <MenuItem label="운임조회" icon="globe" onClick={onGoNationalFare} dark={dark} />}
+          </MenuSection>
+          )}
+          {((PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리")) || (PC_CLIENT_MENU_ROLES.has(role) && ok("거래처관리")) || ok("지입차관리")) && (
+          <MenuSection title="기사 · 거래처" en="PARTNERS" dark={dark} fold badge={(staffSignupOk ? (alertCounts?.signupDriver || 0) : 0) + (alertCounts?.drvDocs || 0) + (alertCounts?.drvSos || 0)}>
+            {PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리") && <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} badge={staffSignupOk ? (alertCounts?.signupDriver || null) : null} dark={dark} />}
+            {PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리") && <MenuItem label="기사 제출 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />}
             {PC_CLIENT_MENU_ROLES.has(role) && ok("거래처관리") && <MenuItem label="거래처관리" icon="building" onClick={() => onGo?.("clients")} dark={dark} />}
+            {ok("지입차관리") && <MenuItem label="지입차관리" icon="truck" onClick={onGoFleet} badge={alertCounts?.drvSos || null} dark={dark} />}
+          </MenuSection>
+          )}
+          {((canRevenue && ok("매출관리")) || ((canRevenue || /^role_/.test(String(role || ""))) && ok("정산관리"))) && (
+          <MenuSection title="매출 · 정산" en="REVENUE" dark={dark} fold>
+            {canRevenue && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
+            {(canRevenue || /^role_/.test(String(role || ""))) && ok("정산관리") && <MenuItem label="정산관리" icon="receipt" onClick={() => onGo?.("dept:settle")} dark={dark} />}
             {(role === "admin" || role === "totalMaster") && ok("인사이트") && planIncludes(planIdM, "insight") && <MenuItem label="인사이트" icon="trend" onClick={onGoIntel} dark={dark} />}
           </MenuSection>
+          )}
           </>)}
           {!deptMode && (["영업관리", "인사관리부", "회계관리", "자금관리", "비품관리", "증명서발급"].some(deptOk) || payM.canView || payM.leaveViewer) && (
-            <MenuSection title="부서 업무" en="DEPARTMENT" dark={dark} alwaysOpen>
+            <MenuSection title="부서 업무" en="DEPARTMENT" dark={dark} fold>
               {payM.canView && <MenuItem label="급여 계산" icon="money" onClick={() => onGo?.("dept:payroll")} dark={dark} />}{/* ⭐ 2026-11-07 경리·회계 부서만 */}
               {payM.leaveViewer && <MenuItem label="연차 관리" icon="flag" onClick={() => onGo?.("dept:leavepromo")} dark={dark} />}
               {deptOk("영업관리") && <MenuItem label="영업관리" icon="trend" onClick={() => onGo?.("dept:sales")} dark={dark} />}{/* 💼 2026-11-10 */}
@@ -8326,25 +8326,26 @@ function MobileSideMenu({
               {deptOk("증명서발급") && <MenuItem label="증명서 발급" icon="stamp" onClick={() => onGo?.("dept:cert")} dark={dark} />}
             </MenuSection>
           )}
-          <MenuSection title="사내 업무" en="WORKSPACE" dark={dark} alwaysOpen>
-            {/* ⭐ 2026-11-03 순서: 공지사항 → 게시판 → 일정 → 나머지 · "개인 일정"은 직원 일정 안의 [개인일정] 스위치로(메뉴에서 뺌) */}
-            <MenuItem label="공지사항" icon="bell" onClick={onGoNotice} badge={alertCounts?.notice || null} dark={dark} />{/* ⭐ 2026-11-03 숫자는 글마다 읽음(readBy) 기준 — 예전 "NEW"(공지 화면을 연 시각 기준)는 팝업으로 읽어도 남아 있어서 뺐다 */}
+          {/* ⭐ 2026-11-14 PC HOME 왼쪽 메뉴와 같은 순서 — 공지 → 게시판 → 임원 일정 → 직원 일정 → 사내 규정 → 전자결재 */}
+          <MenuSection title="사내 업무" en="HOME" dark={dark} fold={!deptMode} alwaysOpen={!!deptMode} openDefault badge={(alertCounts?.notice || 0) + (alertCounts?.approval || 0) + (alertCounts?.mineNew || 0) + (alertCounts?.handover || 0)}>
+            <MenuItem label="공지사항" icon="bell" onClick={onGoNotice} badge={alertCounts?.notice || null} dark={dark} />
             <MenuItem label="사내 게시판" icon="chat" onClick={() => onGo?.("dept:board")} dark={dark} />
-            {/* ⭐ 2026-11-01 직원 일정(연차·외근 등 부재 달력)은 모든 직원이 본다 — PC 홈 › 사내 게시판과 같게 */}
-            <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />
             {deptMode !== "exec" && <MenuItem label="임원 일정" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />}
-            {ok("전자결재") && <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.mineNew || 0) + (alertCounts?.handover || 0) || null} dark={dark} />}
-            <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />
+            <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />
             <MenuItem label="사내 규정" icon="list" onClick={() => onGo?.("dept:rules")} dark={dark} />
-            {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}{/* ⭐ 2026-11-02 운임규칙 */}
+            {ok("전자결재") && <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.mineNew || 0) + (alertCounts?.handover || 0) || null} dark={dark} />}
           </MenuSection>
-          {canAdminMenu && !deptMode && (
-            <MenuSection title="관리자 전용" en="ADMIN" dark={dark} alwaysOpen>
-              <MenuItem label="직원 관리" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />
-              <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />
-              {canPermsM && <MenuItem label="권한 관리" icon="key" onClick={() => onGo?.("perms")} dark={dark} />}
-            </MenuSection>
-          )}
+          {/* ⭐ 2026-11-14 관리 = PC 회사관리(운임 규칙 · 내정보 · 내 이력서 · 출근기록부) + 관리자메뉴(회원 관리 · 권한 관리) */}
+          <MenuSection title="관리" en="COMPANY" dark={dark} fold badge={canAdminMenu && !deptMode ? (alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) : 0}>
+            {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}
+            <MenuItem label="내정보" icon="idcard" onClick={onGoMyInfo} dark={dark} />
+            <MenuItem label="내 이력서" icon="file" onClick={() => onGo?.("dept:myresume")} dark={dark} />
+            <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />
+            {canAdminMenu && !deptMode && <MenuItem label="회원 관리" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />}
+            {canAdminMenu && !deptMode && <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />}
+            {canAdminMenu && !deptMode && canPermsM && <MenuItem label="권한 관리" icon="key" onClick={() => onGo?.("perms")} dark={dark} />}
+            <MenuItem label="설정" icon="key" onClick={onGoSettings} dark={dark} />
+          </MenuSection>
           {role === "totalMaster" && (
             <MenuSection title="최고관리자 전용" en="MASTER" dark={dark}>
               {/* PC 상단 "관리센터 ↗"와 같은 역할 — 플랫폼 운영 화면(/platform)으로 전환 */}
@@ -8353,14 +8354,6 @@ function MobileSideMenu({
               <MenuItem label="회사코드조회" icon="key" onClick={openCodeLookup} dark={dark} />
             </MenuSection>
           )}
-          <MenuSection title="내 계정" en="ACCOUNT" dark={dark} alwaysOpen={dark}>
-            <MenuItem label="내정보" icon="idcard" onClick={onGoMyInfo} dark={dark} />
-            <MenuItem label="내 이력서" icon="file" onClick={() => onGo?.("dept:myresume")} dark={dark} />
-            {/* ⭐ 2026-11-07 본인 급여명세서 · 연차 사용 계획은 내정보 안 탭으로 옮김 */}
-            <MenuItem label="설정" icon="key" onClick={onGoSettings} dark={dark} />
-            {/* ⭐ 2026-11-02 원격지원 — 사용이 어려울 때 관리자에게 요청 */}
-            {/* ⭐ 2026-11-03 원격 지원 요청은 PC 전용 */}
-          </MenuSection>
 
           {dark ? (
             <KpmDrawerControls alarmEnabled={alarmEnabled} toggleAlarm={toggleAlarm} uiScale={uiScale} setUiScale={setUiScale} cardVersionB={cardVersionB} onToggleCardVersion={onToggleCardVersion} />
@@ -8592,22 +8585,31 @@ function KpmDrawerControls({ alarmEnabled, toggleAlarm, uiScale, setUiScale, car
 
 const MenuTapCtx = React.createContext(null); // ⭐ 2026-11-10 메뉴 잘못 눌림 방지(MobileSideMenu tapGuard)
 const MENU_SECTION_OPEN = {}; // ⭐ 2026-11-04 펼친 메뉴 묶음 기억(메뉴를 다시 열어도 그대로)
-function MenuSection({ title, en, children, dark, alwaysOpen = false }) {
-  const [open, setOpen0] = useState(() => !!MENU_SECTION_OPEN[title]);
-  const setOpen = (v) => setOpen0((p) => { const n = typeof v === "function" ? v(p) : v; MENU_SECTION_OPEN[title] = n; return n; });
+// ⭐ 2026-11-14 fold — PC 왼쪽 ≡ 메뉴와 같은 묶음(배차 · 운임 · 기사·거래처 · 매출·정산 · 관리). 접어 둘 수 있고 이 휴대폰에 기억한다.
+//   접혀 있을 때는 묶음 안의 알림 숫자 합(badge)을 제목 옆에 보여 준다.
+const readMenuFold = () => { try { return JSON.parse(localStorage.getItem("kpmMenuFold") || "{}") || {}; } catch { return {}; } };
+function MenuSection({ title, en, children, dark, alwaysOpen = false, fold = false, openDefault = false, badge = 0 }) {
+  const [open, setOpen0] = useState(() => { if (!fold) return !!MENU_SECTION_OPEN[title]; const m = readMenuFold(); return m[title] === undefined ? openDefault : !!m[title]; });
+  const setOpen = (v) => setOpen0((p) => { const n = typeof v === "function" ? v(p) : v; MENU_SECTION_OPEN[title] = n; if (fold) { try { const m = readMenuFold(); m[title] = n; localStorage.setItem("kpmMenuFold", JSON.stringify(m)); } catch { /* 무시 */ } } return n; });
   if (dark) {
     // B형 — 영문 코드 + 한글 제목 + 가는 선, 항목은 카드처럼 묶어서
+    const head = (<>
+      <span className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>{en || title}</span>
+      <span className={`text-[11px] font-bold ${fold ? "text-white/70" : "text-white/40"}`}>{title}</span>
+      <span className="flex-1 h-px bg-gradient-to-r from-white/15 to-transparent" />
+      {fold && !open && badge > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#E5484D] text-white text-[10px] font-black flex items-center justify-center" style={{ fontVariantNumeric: "tabular-nums" }}>{badge > 99 ? "99+" : badge}</span>}
+      {fold && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8FB0F0" strokeWidth="3" strokeLinecap="round" style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .15s" }}><path d="M6 9l6 6 6-6" /></svg>}
+    </>);
     return (
       <div className="px-3 pt-3.5">
-        <div className="px-2 pb-2 flex items-center gap-2">
-          <span className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>{en || title}</span>
-          <span className="text-[11px] font-bold text-white/40">{title}</span>
-          <span className="flex-1 h-px bg-gradient-to-r from-white/15 to-transparent" />
-        </div>
-        <div className="rounded-2xl bg-white/[0.035] ring-1 ring-white/[0.07] p-1 flex flex-col gap-0.5">{children}</div>
+        {fold
+          ? <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="w-full px-2 pb-2 flex items-center gap-2 text-left">{head}</button>
+          : <div className="px-2 pb-2 flex items-center gap-2">{head}</div>}
+        {(!fold || open) && <div className="rounded-2xl bg-white/[0.035] ring-1 ring-white/[0.07] p-1 flex flex-col gap-0.5">{children}</div>}
       </div>
     );
   }
+  if (fold) alwaysOpen = false;
   if (alwaysOpen) {
     return (
       <div className="mt-1 mb-1">
@@ -8625,7 +8627,7 @@ function MenuSection({ title, en, children, dark, alwaysOpen = false }) {
         onClick={() => setOpen(v => !v)}
         className={`w-full flex items-center justify-between px-5 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-widest ${dark ? "text-[#8FB0F0]/70" : "text-[#4B6CB7]"}`}
       >
-        <span>{title}</span>
+        <span className="flex items-center gap-2">{title}{fold && !open && badge > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#E5484D] text-white text-[10px] font-black inline-flex items-center justify-center">{badge > 99 ? "99+" : badge}</span>}</span>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
           style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .15s" }}>
           <path d="M6 9l6 6 6-6" />
