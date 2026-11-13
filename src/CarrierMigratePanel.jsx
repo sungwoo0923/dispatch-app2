@@ -11,7 +11,9 @@ import * as XLSX from "xlsx";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { collection, doc, getDoc, getDocs, query, where, writeBatch, setDoc, serverTimestamp } from "firebase/firestore";
 import { applyMerges } from "../functions/sheetProfileCore.mjs";
-import { buildMigration, DEFAULT_PRESET, PRESET_SUGGESTIONS, presetSuggestionFor, forOrderDoc, forRouteDoc, forRateSheetDoc, nm } from "../functions/carrierMigrateCore.mjs";
+import { buildMigration, DEFAULT_PRESET, PRESET_SUGGESTIONS, presetSuggestionFor, forOrderDoc, forRouteDoc, forRateSheetDoc, nm, reconcileOrders } from "../functions/carrierMigrateCore.mjs";
+import { arrayUnion } from "firebase/firestore";
+import { VT_DEFAULTS, hasTon } from "./vehicleTypes";
 import { coDocKey } from "./coKey";
 import { pushTenantBypass } from "./fsTenant"; // 🔒 가져오는 동안만 "지금 회사" 거르기를 끈다(조회는 대상 회사 조건으로 직접)
 import { kpConfirm } from "./kpDialog";
@@ -247,15 +249,29 @@ export default function CarrierMigratePanel({ companies = [] }) {
         await b.commit();
         registered.rateSheets = rates.length;
       }
-      // 4) 오더(이미 옮긴 줄은 건너뜀: 같은 탭!줄 · 상차일 · 차량번호)
+      // 3-3) 🚚 2026-11-13 시트에서 온 차량종류 중 기본 목록에 없는 것(예: 장축)은 회사 차량종류 목록에 넣는다 — 다른 화면 드롭다운에도 나온다
+      const newKinds = [...new Set(orders.map((o) => String(o.차량종류 || "").trim()).filter((k) => k && !VT_DEFAULTS.includes(k) && !hasTon(k)))];
+      if (newKinds.length) await setDoc(doc(db, "vehicleTypes", co), { companyName: co, custom: arrayUnion(...newKinds), updatedAt: serverTimestamp(), updatedBy: me }, { merge: true }).catch(() => {});
+      // 4) 오더 — 🔁 2026-11-13 이미 가져온 줄은 새로 만들지 않고 시트 내용으로 고친다(reconcileOrders: 같은 줄 찾기 → 바뀐 칸만 수정)
+      //    [이미 옮긴 줄 건너뛰기]를 끄면 예전처럼 모두 새로 만든다
       let list = orders;
-      let skippedDup = 0;
+      let skippedDup = 0; let updated = 0; let missing = 0;
       if (opts.skipDup) {
-        setProgress({ pct: 19, step: "이미 옮긴 오더 확인 중" });
+        setProgress({ pct: 19, step: "이미 가져온 오더와 비교 중" });
         const ex = await getDocs(query(collection(db, "orders"), where("companyName", "==", co), where("등록기기", "==", "구글시트 이전")));
-        const keys = new Set(ex.docs.map((d) => { const x = d.data(); return `${x.이전출처}|${x.상차일}|${x.차량번호 || ""}`; }));
-        list = orders.filter((o) => !keys.has(`${o.이전출처}|${o.상차일}|${o.차량번호 || ""}`));
-        skippedDup = orders.length - list.length;
+        // 이번에 읽은 탭의 오더만 비교한다(다른 탭 · 기간 밖 오더는 그대로 둔다)
+        const tabs = new Set(orders.map((o) => String(o.이전출처 || "").split("!")[0]));
+        const dates = orders.map((o) => o.상차일).filter(Boolean).sort();
+        const inRange = (d) => tabs.has(String(d.이전출처 || "").split("!")[0]) && (!dates.length || (d.상차일 >= dates[0] && d.상차일 <= dates[dates.length - 1]));
+        const r = reconcileOrders(ex.docs.map((d) => ({ id: d.id, data: d.data() })).filter((e) => inRange(e.data)), orders);
+        list = r.create; skippedDup = r.same; missing = r.missing.length;
+        for (let i = 0; i < r.update.length; i += 400) {
+          const b = writeBatch(db);
+          r.update.slice(i, i + 400).forEach((u) => b.set(doc(db, "orders", u.id), { ...u.patch, _lastModified: Date.now(), 최종수정자: me, 시트반영일시: serverTimestamp() }, { merge: true }));
+          await b.commit();
+          updated = Math.min(r.update.length, i + 400);
+          setProgress({ pct: 19, step: `바뀐 오더 고치는 중 ${won(updated)} / ${won(r.update.length)}` });
+        }
       }
       let done = 0;
       for (let i = 0; i < list.length; i += 400) {
@@ -265,7 +281,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
         done = Math.min(list.length, i + 400);
         setProgress({ pct: 20 + Math.round((done / Math.max(1, list.length)) * 78), step: `오더 저장 중 ${won(done)} / ${won(list.length)}` });
       }
-      const res = { count: done, skippedDup, registered };
+      const res = { count: done, updated, skippedDup, missing, registered };
       await setDoc(doc(db, "importBatches", batchId), { status: "done", ...res }, { merge: true });
       await setDoc(doc(db, "systemConfig", "dataVersion"), { [co]: serverTimestamp() }, { merge: true }).catch(() => {});
       setProgress({ pct: 100, step: "완료", done: true, result: res });
@@ -512,7 +528,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
             <Head eyebrow="STEP 4" title="한 번에 가져오기" desc="오더 · 거래처 · 상하차지 · 기사 · 고정노선 후보 · 단가표 · 회사 배차방식 목록을 한꺼번에 저장합니다." />
             <div className="flex flex-wrap gap-x-6 gap-y-3 items-center text-[14px] font-semibold text-gray-700">
               <span className="flex items-center gap-2">상차일 <CustomDatePicker showIcon value={opts.from} onChange={(e) => setOpts((o) => ({ ...o, from: e.target.value }))} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30]" /> ~ <CustomDatePicker showIcon value={opts.to} onChange={(e) => setOpts((o) => ({ ...o, to: e.target.value }))} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30]" /> <span className="text-[12.5px] text-gray-400">비우면 전체</span></span>
-              {[["skipDup", "이미 옮긴 줄 건너뛰기"], ["registerDrivers", "기사 등록"], ["makeRoutes", "고정노선 후보 만들기"], ["rates", "단가표 옮기기"], ["saveOptions", "배차방식 목록 저장"]].map(([k, l]) => (
+              {[["skipDup", "이미 가져온 줄은 고치기(새로 만들지 않음)"], ["registerDrivers", "기사 등록"], ["makeRoutes", "고정노선 후보 만들기"], ["rates", "단가표 옮기기"], ["saveOptions", "배차방식 목록 저장"]].map(([k, l]) => (
                 <label key={k} className="flex items-center gap-2"><input type="checkbox" checked={opts[k]} onChange={(e) => setOpts((o) => ({ ...o, [k]: e.target.checked }))} className="w-[18px] h-[18px]" />{l}</label>
               ))}
             </div>
@@ -526,7 +542,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
                   <>
                     <div className="h-3 rounded-full bg-[#EEF1F6] overflow-hidden"><div className="h-full bg-[#1B2B4B] transition-all" style={{ width: `${progress.pct}%` }} /></div>
                     <div className="mt-2 text-[13.5px] font-bold text-[#3A4A66]">{progress.step}</div>
-                    {progress.done && <div className="mt-2 rounded-xl bg-[#E8F7EF] border border-[#BFE6CF] px-4 py-3 text-[14px] font-bold text-[#0F7A43]">오더 {won(progress.result.count)}건 저장{progress.result.skippedDup ? ` · 이미 옮긴 ${won(progress.result.skippedDup)}건 건너뜀` : ""} · 거래처 {won(progress.result.registered.clients)} · 상하차지 {won(progress.result.registered.places)} · 기사 {won(progress.result.registered.drivers || 0)} · 고정노선 {progress.result.registered.routes || 0}(운행 OFF) · 단가표 {progress.result.registered.rateSheets || 0}</div>}
+                    {progress.done && <div className="mt-2 rounded-xl bg-[#E8F7EF] border border-[#BFE6CF] px-4 py-3 text-[14px] font-bold text-[#0F7A43]">오더 새로 {won(progress.result.count)}건{progress.result.updated ? ` · 고침 ${won(progress.result.updated)}건` : ""}{progress.result.skippedDup ? ` · 그대로 ${won(progress.result.skippedDup)}건` : ""}{progress.result.missing ? ` · 시트에 없는 오더 ${won(progress.result.missing)}건(그대로 둠)` : ""} · 거래처 {won(progress.result.registered.clients)} · 상하차지 {won(progress.result.registered.places)} · 기사 {won(progress.result.registered.drivers || 0)} · 고정노선 {progress.result.registered.routes || 0}(운행 OFF) · 단가표 {progress.result.registered.rateSheets || 0}</div>}
                   </>
                 )}
               </div>

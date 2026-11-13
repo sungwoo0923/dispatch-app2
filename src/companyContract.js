@@ -11,6 +11,7 @@
 import React from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase";
+import { trialStateOf } from "./contractTerms.js"; // 📑 2026-11-13 무료 이용(계약 전에 먼저 써 보는 기간)
 
 export const CONTRACT_NOTICE_DAYS = [30, 7, 1];
 export const CONTRACT_TERMS = [[12, "1년"], [24, "2년"], [36, "3년"], [0, "직접 입력"]];
@@ -36,6 +37,9 @@ export const addMonthsYmd = (ymd, months) => {
 export function contractStateOf(p, today = kstToday()) {
   if (!p) return { key: "none", label: "미설정", dLeft: null };
   if (p.status === "ended") return { key: "ended", label: "계약종료", dLeft: null };
+  // 📑 2026-11-13 계약 기간이 아직 없고 무료 이용 기간만 정해진 회사(companyPlans.trialStart · trialEnd)
+  const trial = trialStateOf(p, today);
+  if (trial) return trial;
   const end = String(p.contractEnd || "");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(end)) return { key: "none", label: "기간 미설정", dLeft: null };
   const dLeft = daysBetween(today, end);
@@ -82,11 +86,14 @@ export function ContractExpiryBanner({ company = "", me = null, mobile = false }
   const [closed, setClosed] = React.useState(() => { try { return sessionStorage.getItem(`kpContractBannerClosed:${company}`) || ""; } catch { return ""; } });
   if (!info || !isContractNoticeTarget(me)) return null;
   const st = contractStateOf(info);
-  if (!["soon", "expired"].includes(st.key)) return null;
-  const key = `${info.contractEnd}`;
+  if (!["soon", "expired", "trialSoon", "trialOver"].includes(st.key)) return null;
+  const isTrial = st.key.startsWith("trial");
+  const key = `${isTrial ? `t:${info.trialEnd}` : info.contractEnd}`;
   if (closed === key) return null;
   const close = () => { try { sessionStorage.setItem(`kpContractBannerClosed:${company}`, key); } catch { /* 무시 */ } setClosed(key); };
-  const text = st.key === "expired"
+  const text = isTrial
+    ? (st.key === "trialOver" ? `무료 이용 기간(~${info.trialEnd})이 지났습니다. 계속 이용하려면 운영팀에 계약을 요청해 주세요.` : `무료 이용 기간이 ${info.trialEnd}에 끝납니다(${st.label}). 계속 이용하려면 운영팀에 계약을 요청해 주세요.`)
+    : st.key === "expired"
     ? `이용 계약 기간(~${info.contractEnd})이 지났습니다. 계속 이용하려면 운영팀에 연장을 요청해 주세요.`
     : `이용 계약이 ${info.contractEnd}에 끝납니다(${st.label}). 계속 이용하려면 운영팀에 연장을 요청해 주세요.`;
   return React.createElement("div", { "data-contract-banner": "1", style: { display: "flex", alignItems: "center", gap: 10, padding: mobile ? "9px 12px" : "9px 16px", color: "#fff", fontSize: 14, fontWeight: 800,

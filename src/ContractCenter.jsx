@@ -13,6 +13,11 @@ import { useSalesPricing } from "./SalesQuote";
 import { CustomSelect } from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker";
 import { fmtBizNo, fmtPhone } from "./formatInput";
+// 📑 2026-11-13 계약 조건 — 고르면 금액 · 기간이 자동으로 계산되고, 저장하면 이용 계약·만료에도 반영된다(src/contractTerms.js)
+import { TERM_MONTHS, BILLING, PAY_DAYS, FREE_MONTH_OPTIONS, DRIVER_APP_TIERS, blankTerms, calcTerms, termsToVars, termsToPlanPatch, defaultFreeMonths } from "./contractTerms.js";
+import { usePlatformLive } from "./PlatformLive";
+import { arrayUnion } from "firebase/firestore";
+import { auth } from "./firebase";
 
 export const C_MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
@@ -306,9 +311,20 @@ const supplierOf = (cfg, vars) => {
   const s = cfg?.supplier || {};
   return { ...s, name: vars.공급자상호 || s.name || "", ceo: vars.공급자대표 || s.ceo || "", bizNo: vars.공급자사업자번호 || s.bizNo || "", address: vars.공급자주소 || s.address || "", phone: vars.공급자연락처 || s.phone || "" };
 };
+// 견적에서 불러온 값 → 계약 조건(고르는 값)
+const termsFromQuote = (q, cfg, cur) => {
+  const i2 = q?.input || {};
+  const plan = (q?.pricing?.plans || cfg?.plans || []).find((p) => p.name === q?.plan) || {};
+  const billing = ["monthly", "semi", "annual"].includes(i2.billing) ? i2.billing : "monthly";
+  return { ...cur, planId: plan.id || cur.planId, staff: Number(i2.staff) || 0, fleet: Number(i2.fleet) || 0, modules: Number(i2.modules) || 1, billing, months: Number(i2.contractMonths) || 12, freeTouched: false, monthlyOverride: "", setupOverride: "" };
+};
 export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
   const tpl = useContractTemplates();
   const cfg = useSalesPricing();
+  const live = usePlatformLive();
+  const [terms, setTerms] = React.useState(() => initial?.terms || { ...blankTerms(initial?.vars?.시작일 || ymd()), ...(initial?.vars?.계약기간 ? { months: Number(initial.vars.계약기간) || 12 } : {}) });
+  const [applyPlan, setApplyPlan] = React.useState(true);
+  const setT = (patch) => setTerms((p) => ({ ...p, ...patch }));
   const [quotes, setQuotes] = React.useState([]);
   React.useEffect(() => onSnapshot(query(collection(db, "salesQuotes"), orderBy("createdAt", "desc")), (s) => setQuotes(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => {}), []);
   const [tplId, setTplId] = React.useState(initial?.templateId || "kp-service");
@@ -319,6 +335,7 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
   const applyQuote = React.useCallback((q) => {
     if (!q) return;
     setVars((v) => ({ ...v, ...fromQuote(q, cfg) }));
+    setTerms((t) => termsFromQuote(q, cfg, t));
     setMonthly(Number(q.monthly) || 0); setQuoteNo(q.no || "");
   }, [cfg]);
   React.useEffect(() => { if (fromQuoteDoc && cfg) applyQuote(fromQuoteDoc); }, [fromQuoteDoc, cfg, applyQuote]);
@@ -328,7 +345,11 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
     const s = cfg.supplier || {};
     setVars((v) => ({ ...v, 공급자상호: v.공급자상호 || s.name || "", 공급자대표: v.공급자대표 || s.ceo || "", 공급자사업자번호: v.공급자사업자번호 || s.bizNo || "", 공급자주소: v.공급자주소 || s.address || "", 공급자연락처: v.공급자연락처 || s.phone || "" }));
   }, [cfg]);
-  React.useEffect(() => { if (vars.시작일 && vars.계약기간) setVars((v) => ({ ...v, 종료일: addMonths(v.시작일, v.계약기간) })); }, [vars.시작일, vars.계약기간]);
+  // 계약 조건 → 금액 · 기간 자동 계산 → 계약서 글자 값(요금제 · 월 이용료 · 종료일 · 추가 옵션 …)
+  const calc = React.useMemo(() => calcTerms(terms, { plans: cfg?.plans, cfg: cfg || {} }), [terms, cfg]);
+  React.useEffect(() => { if (!cfg) return; setVars((v) => ({ ...v, ...termsToVars(terms, calc) })); setMonthly(calc.monthly); }, [calc, cfg]); // eslint-disable-line react-hooks/exhaustive-deps
+  const companyNames = React.useMemo(() => [...new Set([...Object.keys(live?.companies || {}), ...Object.keys(live?.planMap || {})].filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko")), [live]);
+  const matched = companyNames.includes(String(vars.고객사 || "").trim());
   if (!tpl || !cfg) return <div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>;
   const template = tpl.templates.find((t) => t.id === tplId) || tpl.templates[0];
   const set = (k, v) => setVars((p) => ({ ...p, [k]: v }));
@@ -340,11 +361,18 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
       const d = new Date();
       const no = initial?.no || `C-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${String(d.getHours() * 60 + d.getMinutes()).padStart(4, "0")}`;
       const data = {
-        no, title: `${template.name} — ${vars.고객사}`, templateId: template.id, templateName: template.name, vars, monthly: Number(monthly) || 0, quoteNo,
+        no, title: `${template.name} — ${vars.고객사}`, templateId: template.id, templateName: template.name, vars, terms, monthly: Number(monthly) || 0, quoteNo,
         bodyHtml: renderContractHtml(template.body, vars), supplier: supplierOf(cfg, vars), supplierSeal: tpl.supplierSeal || "",
         status: send ? "발송" : "작성", updatedAt: serverTimestamp(), ...(initial?.id ? {} : { createdAt: serverTimestamp() }), ...(send ? { sentAt: serverTimestamp() } : {}),
       };
       await setDoc(doc(db, "contracts", id), data, { merge: true });
+      // 📑 이용 계약·만료에 반영 — 고객사 이름이 등록된 운송사와 같을 때만(요금제 · 기간 · 서비스 기간 · 추가 계정)
+      const co = String(vars.고객사 || "").trim();
+      if (applyPlan && matched && co) {
+        const by = auth.currentUser?.email || "";
+        await setDoc(doc(db, "companyPlans", co), { ...termsToPlanPatch(terms, calc, { contractNo: no, contractId: id }), contractUpdatedAt: serverTimestamp(), contractUpdatedBy: by,
+          contractHistory: arrayUnion({ at: Date.now(), by, type: "계약서 반영", detail: `${no} · ${calc.plan.name} · ${terms.start || "-"} ~ ${calc.serviceEnd || calc.end || "-"}${calc.freeMonths ? ` · 서비스 ${calc.freeMonths}개월` : ""}` }) }, { merge: true });
+      }
       if (send) {
         try { await navigator.clipboard.writeText(signUrlOf(id)); window.alert(`서명 요청 링크를 복사했습니다.\n고객에게 문자·메일로 보내 주세요.\n\n${signUrlOf(id)}`); }
         catch { (await kpPrompt("서명 링크를 복사해 고객에게 보내 주세요", signUrlOf(id))); }
@@ -376,6 +404,11 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
         </Card>
         <Card code="CUSTOMER" title="고객사 정보">
           <div className="grid grid-cols-2 gap-2.5">
+            <div className="col-span-2"><label className="block"><span className="text-[12px] font-bold text-[#7A879C]">등록된 운송사에서 고르기</span>
+              <CustomSelect value={matched ? vars.고객사 : ""} onChange={(e) => { const n = e.target.value; if (!n) return; const c = live?.companies?.[n] || {}; const p = live?.planMap?.[n] || {}; set("고객사", n); setT({ staff: Number(c.staff) || terms.staff, ...(p.planId ? { planId: p.planId } : {}), ...(Number(p.moduleCount) ? { modules: Number(p.moduleCount) } : {}) }); }} className={`${inp} mt-1`}>
+                <option value="">{companyNames.length ? "운송사 선택… (직원 수 · 요금제 자동)" : "불러오는 중…"}</option>
+                {companyNames.map((n) => <option key={n} value={n}>{n}{live?.companies?.[n]?.staff ? ` · 직원 ${live.companies[n].staff}명` : ""}</option>)}
+              </CustomSelect></label></div>
             <div className="col-span-2">{F({ k: "고객사", label: "고객사 상호 *" })}</div>
             {F({ k: "고객대표", label: "대표자" })}{F({ k: "고객사업자번호", label: "사업자번호" })}
             <div className="col-span-2">{F({ k: "고객주소", label: "주소" })}</div>
@@ -391,22 +424,56 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
             <div className="col-span-2">{F({ k: "공급자연락처", label: "연락처" })}</div>
           </div>
         </Card>
-        <Card code="TERMS" title="계약 조건">
-          <div className="grid grid-cols-2 gap-2.5">
-            {F({ k: "요금제", label: "요금제" })}{F({ k: "월이용료", label: "월 이용료", ph: "199,000원" })}
-            {F({ k: "직원계정", label: "포함 직원 계정" })}{F({ k: "포함오더", label: "포함 오더(월)" })}
-            {F({ k: "초기비용", label: "초기 비용" })}{F({ k: "결제방식", label: "결제 방식" })}
-            {F({ k: "시작일", label: "서비스 시작일", type: "date" })}
-            <label className="block"><span className="text-[12px] font-bold text-[#7A879C]">계약 기간</span>
-              <CustomSelect value={vars.계약기간 || "12"} onChange={(e) => set("계약기간", e.target.value)} className={`${inp} mt-1`}>{["6", "12", "24", "36"].map((m) => <option key={m} value={m}>{m}개월</option>)}</CustomSelect></label>
-            {F({ k: "종료일", label: "종료일(자동)", type: "date" })}{F({ k: "결제일", label: "매월 결제일", ph: "말일 / 10일" })}
-            <div className="col-span-2">{F({ k: "추가옵션", label: "추가 옵션" })}</div>
-            <div className="col-span-2"><label className="block"><span className="text-[12px] font-bold text-[#7A879C]">특약 사항</span>
-              <textarea value={vars.특약 || ""} onChange={(e) => set("특약", e.target.value)} rows={3} className={`${inp} h-auto py-2 mt-1 leading-relaxed`} /></label></div>
-            {F({ k: "계약일", label: "계약일", type: "date" })}
-            <label className="block"><span className="text-[12px] font-bold text-[#7A879C]">월 금액(집계용, 숫자)</span>
-              <input inputMode="numeric" value={monthly ? Number(monthly).toLocaleString() : ""} onChange={(e) => setMonthly(Number(e.target.value.replace(/[^\d]/g, "")) || 0)} className={`${inp} mt-1 text-right`} style={{ fontFamily: C_MONO, fontVariantNumeric: "tabular-nums" }} /></label>
-          </div>
+        <Card code="TERMS" title="계약 조건" right={<span className="text-[11.5px] font-bold text-[#7A879C] whitespace-nowrap">고르면 자동 계산</span>}>
+          {(() => {
+            const L = (label, child, hint) => <label className="block min-w-0"><span className="text-[12px] font-bold text-[#7A879C]">{label}{hint ? <span className="font-medium text-[#9AA9C3]"> · {hint}</span> : null}</span>{child}</label>;
+            const Sel = (value, onChange, options) => <CustomSelect value={String(value)} onChange={(e) => onChange(e.target.value)} className={`${inp} mt-1`}>{options.map(([v, l]) => <option key={v} value={String(v)}>{l}</option>)}</CustomSelect>;
+            const Num = (value, onChange, unit, ph = "0") => <div className="relative mt-1"><input inputMode="numeric" value={value === "" || value == null ? "" : Number(value).toLocaleString()} placeholder={ph} onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))} className={`${inp} pr-9 text-right tabular-nums`} /><span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] font-bold text-[#9AA9C3]">{unit}</span></div>;
+            const plans = cfg.plans || [];
+            const Row = ({ k, v, strong }) => <div className="flex items-baseline justify-between gap-3 py-1"><span className="text-[12.5px] font-bold text-[#5A6A85]">{k}</span><span className={`tabular-nums ${strong ? "text-[16px] font-black text-[#0F1A30]" : "text-[13.5px] font-bold text-[#1B2B4B]"}`}>{v}</span></div>;
+            return (
+              <div className="space-y-3" data-contract-terms>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {L("요금제", Sel(terms.planId, (v) => setT({ planId: v }), plans.map((p) => [p.id, `${p.name} · 월 ${Number(p.price).toLocaleString()}원 · ${p.seats}명`])))}
+                  {L("업무 영역", Sel(terms.modules, (v) => setT({ modules: Number(v) }), [[1, "1개 (기본 포함)"], [2, "2개"], [3, "3개"], [4, "통합 (4개)"]]))}
+                  {L("직원 수", Num(terms.staff || "", (v) => setT({ staff: Number(v) || 0 }), "명", String(calc.plan.seats)), `포함 ${calc.plan.seats}명`)}
+                  {L("지입차 (GPS 관리)", Num(terms.fleet || "", (v) => setT({ fleet: Number(v) || 0 }), "대"), `포함 ${Number(calc.plan.fleet) || 0}대`)}
+                  {L("기사앱 사용자 수", Sel(terms.driverApp, (v) => setT({ driverApp: v }), DRIVER_APP_TIERS.map((t) => [t.key, `${t.label}${t.fee ? ` · 세팅비 ${t.fee.toLocaleString()}원` : ""}`])))}
+                  {L("결제 방식", Sel(terms.billing, (v) => setT({ billing: v, freeTouched: false, freeMonths: defaultFreeMonths(v, cfg) }), BILLING))}
+                  {L("서비스 시작일", <CustomDatePicker value={terms.start || ""} onChange={(e) => setT({ start: e.target.value })} className={`${inp} mt-1 w-full tabular-nums whitespace-nowrap`} showIcon />)}
+                  {L("계약 기간", Sel(terms.months, (v) => setT({ months: Number(v) }), TERM_MONTHS.map((m) => [m, `${m}개월`])))}
+                  {L("서비스 기간 (무상)", Sel(calc.freeMonths, (v) => setT({ freeMonths: Number(v), freeTouched: true }), FREE_MONTH_OPTIONS.map((m) => [m, m ? `${m}개월` : "없음"])), terms.billing === "annual" && !terms.freeTouched ? "연간 선결제 자동" : "직접 변경 가능")}
+                  {L("매월 결제일", Sel(terms.payDay, (v) => setT({ payDay: v }), PAY_DAYS.map((d) => [d, d])))}
+                </div>
+                <div className="rounded-xl border border-[#DCE3EE] bg-[#F7F9FC] px-3.5 py-2.5">
+                  <Row k={`기본료 (${calc.plan.name})`} v={won(calc.plan.price)} />
+                  {calc.moduleFee > 0 && <Row k={`업무 영역 추가 ${calc.modules - 1}개`} v={`+ ${won(calc.moduleFee)}`} />}
+                  {calc.extraSeats > 0 && <Row k={`추가 직원 계정 ${calc.extraSeats}명 (포함 ${calc.plan.seats}명 초과)`} v={`+ ${won(calc.seatFee)}`} />}
+                  {calc.extraFleet > 0 && <Row k={`지입차 추가 ${calc.extraFleet}대`} v={`+ ${won(calc.fleetFee)}`} />}
+                  <div className="border-t border-[#DCE3EE] mt-1 pt-1"><Row k="월 이용료 (VAT 별도)" v={won(calc.monthly)} strong /></div>
+                  <Row k={`초기 비용 (1회)${calc.setupBase === 0 && calc.months >= 12 ? " · 12개월 이상 도입비 면제" : ""}`} v={won(calc.setup)} />
+                  {calc.prepay > 0 && <Row k={terms.billing === "annual" ? "연간 선결제 금액" : `6개월 선결제 금액 (${calc.semiRate}% 할인)`} v={won(calc.prepay)} />}
+                  <Row k="계약 기간" v={`${terms.start || "-"} ~ ${calc.end || "-"}`} />
+                  {calc.freeMonths > 0 && <Row k={`서비스 기간 ${calc.freeMonths}개월 포함 종료일`} v={calc.serviceEnd || "-"} />}
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {L("월 이용료 직접 지정", Num(terms.monthlyOverride, (v) => setT({ monthlyOverride: v }), "원", `자동 ${calc.monthlyAuto.toLocaleString()}`), "비우면 자동")}
+                  {L("초기 비용 직접 지정", Num(terms.setupOverride, (v) => setT({ setupOverride: v }), "원", `자동 ${calc.setupAuto.toLocaleString()}`), "비우면 자동")}
+                  {F({ k: "계약일", label: "계약일", type: "date" })}
+                  <div />
+                  <div className="col-span-2"><label className="block"><span className="text-[12px] font-bold text-[#7A879C]">추가 옵션 (자동)</span>
+                    <div className={`${inp} h-auto min-h-10 py-2 mt-1 leading-relaxed bg-[#F7F9FC]`}>{vars.추가옵션 || "없음"}</div></label></div>
+                  <div className="col-span-2"><label className="block"><span className="text-[12px] font-bold text-[#7A879C]">특약 사항</span>
+                    <textarea value={vars.특약 || ""} onChange={(e) => set("특약", e.target.value)} rows={3} className={`${inp} h-auto py-2 mt-1 leading-relaxed`} /></label></div>
+                </div>
+                <label className={`flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 ${matched ? "border-[#1B2B4B] bg-white" : "border-[#E3E8F0] bg-[#F7F9FC]"}`}>
+                  <input type="checkbox" checked={applyPlan && matched} disabled={!matched} onChange={(e) => setApplyPlan(e.target.checked)} className="mt-0.5 w-[18px] h-[18px] accent-[#1B2B4B]" />
+                  <span className="text-[13px] leading-relaxed text-[#3A4A66]"><b className="text-[#0F1A30]">저장할 때 이용 계약·만료에 반영</b><br />
+                    {matched ? `${vars.고객사}의 요금제 · 계약 기간 · 서비스 기간 · 추가 계정(${calc.extraSeats}명)이 관리센터 › 이용 계약·만료와 실제 사용 범위에 바로 적용됩니다.` : "고객사 상호가 등록된 운송사 이름과 같을 때만 반영됩니다(위에서 운송사를 고르세요)."}</span>
+                </label>
+              </div>
+            );
+          })()}
         </Card>
         <div className="flex gap-2">
           <button type="button" onClick={() => save(false)} disabled={busy} className="flex-1 h-12 rounded-2xl border border-[#1B2B4B] text-[#1B2B4B] text-[14px] font-black disabled:opacity-50">{initial?.id ? "수정 저장" : "작성 저장"}</button>

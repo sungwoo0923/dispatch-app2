@@ -187,8 +187,14 @@ export function PlatformLiveProvider({ children }) {
     const invoiceMap = {}; (invoices || []).forEach((v) => { if (v.month === month) invoiceMap[normCo(v.company)] = v; });
     const planReqMap = {}; openPlanReqs.forEach((r) => { const n = normCo(r.company); (planReqMap[n] || (planReqMap[n] = [])).push(r); });
 
+    // 🛠 2026-11-13 화주사 가입 · 연동 상태는 실시간 문서 기준 — 삭제 · 연동 해제하면 화주사 관제에서 바로 빠진다(집계본은 1시간마다라 늦다)
+    const shipperApps = cApps ? {} : null;
+    (cApps || []).forEach((a) => { if (!a.companyName || a.status === "rejected") return; const n = normCo(a.companyName); const cur = shipperApps[n];
+      const rec = { status: a.status || "pending", code: a.companyCode || "", linked: a.linkedTransportCompany?.companyName || "", linkStatus: a.transportApprovalStatus || "", rep: a.name || "", phone: a.phone || a.phoneNumber || "" };
+      if (!cur || (rec.linkStatus === "approved" && cur.linkStatus !== "approved") || (!cur.linked && rec.linked)) shipperApps[n] = rec; });
+
     return {
-      ready, now, companies, shippers, onlineList, totals, appInfo, signups, dupes,
+      ready, now, companies, shippers, shipperApps, onlineList, totals, appInfo, signups, dupes,
       pending: { transport: pendingT, shipper: pendingC, planReqs: openPlanReqs, inquiries: newInquiries, staffByCo: pendingStaffByCo, support: pendingSupport,
         total: pendingT.length + pendingC.length + openPlanReqs.length + newInquiries.length + pendingSupport.length },
       planMap, invoiceMap, planReqMap, month,
@@ -230,10 +236,13 @@ export function mergeCompanies(statsCompanies, live) {
   });
 }
 export function mergeShippers(statsShippers, live) {
-  const base = (statsShippers || []).map((s) => ({ ...s, name: normCo(s.name) }));
+  let base = (statsShippers || []).map((s) => ({ ...s, name: normCo(s.name) }));
   if (!live?.ready) return base;
   const names = new Set(base.map((s) => s.name));
   Object.values(live.shippers).forEach((s) => { if (!names.has(s.name) && s.users) base.push({ name: s.name, kind: "shipper", status: "approved", users: 0, online: 0, lastSeen: 0 }); });
+  // 가입 문서가 지워진 화주사(계정도 없음)는 뺀다 · 연동 상태는 지금 문서 값으로
+  const apps = live.shipperApps;
+  if (apps) base = base.filter((s) => apps[s.name] || live.shippers[s.name]?.users).map((s) => (apps[s.name] ? { ...s, ...apps[s.name] } : { ...s, linked: "", linkStatus: "" }));
   return base.map((s) => { const l = live.shippers[s.name]; return l ? { ...s, users: l.users, online: l.online24h, onlineNow: l.onlineNow, lastSeen: Math.max(s.lastSeen || 0, l.lastSeen) } : { ...s, users: 0, online: 0, onlineNow: 0 }; });
 }
 
