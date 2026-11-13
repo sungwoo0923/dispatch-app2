@@ -52,6 +52,7 @@ export const DEFAULT_PRESET = {
   tabCargo: {}, // { 탭이름: 화물내용 } — 그 탭의 화물내용을 이 글자로(예: 만세보령 = "쌀")
   weightTonTabs: [], // 중량(kg) 칸을 톤수로 바꿔 차량톤수에 넣는 탭(소계 · 중량 칸 ÷ 1,000)
   nextDayTabs: [], // 입고시간(당착 · 월착) 칸이 비어 있으면 다음 날 도착으로 보는 탭
+  blankTotalZero: false, // 합계 칸이 있는데 비어 있는 줄은 0원으로(시트 합계 그대로) — 운송료 칸 금액은 메모로
   defaultVehicleKind: "", // 차종 칸에 차량종류가 없으면(톤수만 적힌 줄) 넣을 차량종류
   forceVehicleKind: "", // 시트에 뭐라고 적혀 있든 차량종류를 이 값으로 — 예: JY "윙바디"(차종 칸에 적힌 말은 톤수만 쓴다)
   // 🧩 2026-11-13 탭별 규칙 — 양식이 탭마다 다른 시트(JY)용. 한 줄을 오더로 만든 뒤 마지막에 적용한다(applyTabRule)
@@ -98,6 +99,7 @@ export const PRESET_SUGGESTIONS = {
     // 🧩 2026-11-13 사용자가 탭마다 설명한 규칙
     //  · 대원전선 · 카고LCL 은 아직 가져오지 않는다(확인할 것이 남음)
     //  · 녹수 · 아산 KDF · 보령 KDF · 녹수 내수 · 아산 내수 · 보령 내수 · 녹수셔틀 = 거래처는 모두 "녹수"(탭 이름은 상/하차지)
+    blankTotalZero: true, // 2026-11-13 사용자 확인 — 프로그램 금액은 시트의 매출 · 매입 "합계" 칸과 같아야 한다
     skipTabs: ["카고LCL"],
     // 예전에 [제외]로 저장해 둔 탭이라도 아래 탭은 다시 가져온다(사용자가 양식을 설명한 탭)
     includeTabs: ["롯데베르살리스", "보령 KDF", "아산 KDF", "녹수", "녹수 내수", "대원전선"],
@@ -606,6 +608,10 @@ function rowToOrder(r, L, ctx) {
     const extras = grp.extras.map((e) => { const p = parseMoney(g(e.col)); if (/착불/.test(p.note)) { if (p.n) cods.push(p.n); notes.push(`착불 ${p.n ? `${p.n.toLocaleString("ko-KR")}원` : ""}`.trim()); return { name: e.name, n: 0, raw: "" }; } if (p.note && !/^[-–]$/.test(p.note)) notes.push(`${e.name} ${p.note}`); return { name: e.name, n: p.n, raw: g(e.col) }; }).filter((e) => e.n);
     const t = grp.total >= 0 ? parseMoney(g(grp.total)) : { n: 0 };
     const sum = b.n + extras.reduce((a, e) => a + e.n, 0);
+    // 🧮 2026-11-13 합계 칸이 있는데 비어 있는 줄("-") — 시트는 그 줄을 0으로 센다(유류지원비 · 합계를 일부러 비운 줄).
+    //  preset.blankTotalZero 를 켠 회사(JY)는 시트 합계 그대로 0으로 넣고, 운송료 칸의 금액은 메모로 남긴다(예전엔 운송료를 넣어 시트 합계보다 컸다)
+    //  합계 칸에 "-"가 찍힌 줄만 해당 — 칸이 아예 빈 줄(아직 합계를 안 넣은 줄)은 운송료 그대로
+    if (ctx.preset.blankTotalZero && grp.total >= 0 && !t.n && /^[-–—]$/.test(g(grp.total)) && sum > 0 && !cods.length) { notes.push(`${grp === L.sale ? "매출" : "매입"} 합계 칸 비어 있음 · 운송료 ${sum.toLocaleString("ko-KR")}원`); return { base: 0, extras: [], total: 0, notes, hasTotal: false, blanked: sum }; }
     return { base: b.n, extras, total: t.n || sum, notes, hasTotal: grp.total >= 0 && !!t.n };
   };
   const S = money(L.sale), B = money(L.buy);
