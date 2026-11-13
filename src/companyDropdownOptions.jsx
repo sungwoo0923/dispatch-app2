@@ -58,7 +58,7 @@ function startStore(co, st) {
   try {
     st.unsub = onSnapshot(doc(db, "companySettings", co), (snap) => {
       const d = (snap.exists() && snap.data()?.dropdownOptions) || {};
-      st.state = { loaded: true, opts: d, scopes: (snap.exists() && snap.data()?.optionScopes) || {} }; // 🧩 2026-11-13 탭(상차지 · 거래처) 전용 항목
+      st.state = { loaded: true, opts: d, scopes: (snap.exists() && snap.data()?.optionScopes) || {}, sheetLive: (snap.exists() && snap.data()?.sheetLiveStatus) || null }; // 🧩 2026-11-13 탭(상차지 · 거래처) 전용 항목
       emit(st);
     }, () => { st.state = { loaded: true, opts: {} }; emit(st); });
   } catch { st.state = { loaded: true, opts: {} }; }
@@ -90,6 +90,14 @@ export function listFromStored(stored, key, fallback) {
     if (out.length) return out;
   }
   return fallback && fallback.length ? fallback : uiOptionList(key, DEFAULT_DROPDOWN_OPTIONS[key] || []);
+}
+
+// 📡 2026-11-13 구글시트 실시간 반영 상태(서버가 companySettings/{회사}.sheetLiveStatus 에 적는다) — 같은 구독을 나눠 쓴다
+export function useSheetLiveStatus(role, userCompany) {
+  const co = resolveCompanyKey(role, userCompany);
+  const subscribe = React.useCallback((cb) => subscribeCompanyOptions(co, cb), [co]);
+  const getSnap = React.useCallback(() => companyOptionsSnapshot(co), [co]);
+  return React.useSyncExternalStore(subscribe, getSnap, getSnap).sheetLive || null;
 }
 
 // 🧩 2026-11-13 전용 항목 거르기 — optionScopes.{key} = { 항목: [상차지명 · 거래처명…] }

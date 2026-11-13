@@ -14,6 +14,15 @@ const NO_META_EVERY_MS = 5 * 60 * 1000; // 수정 시각을 못 읽으면 5분�
 
 function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab, sheetModifiedTime, bumpDataVersion }) {
   const ref = (co) => db.collection("sheetLive").doc(co);
+  // 📡 2026-11-13 직원 화면(배차현황 · 모바일)에 "구글시트 실시간 · n분 전 반영"을 보여 주기 위한 상태 — companySettings/{회사}.sheetLiveStatus
+  //  (sheetLive 설정 문서는 서버만 읽는다) 바뀐 것이 있을 때와 10분마다 한 번만 적는다(매분 적으면 모든 화면이 매분 다시 읽는다)
+  const statusAt = new Map();
+  async function writeStatus(co, patch, { force = false } = {}) {
+    const now = Date.now();
+    if (!force && now - (statusAt.get(co) || 0) < 10 * 60 * 1000) return;
+    statusAt.set(co, now);
+    await db.collection("companySettings").doc(co).set({ sheetLiveStatus: { checkedAt: now, ...patch } }, { merge: true }).catch(() => {});
+  }
 
   async function readTabs(id, wanted) {
     const meta = await sheetsApiFor(id, "GET", `?fields=${encodeURIComponent("properties.title,sheets(properties(title,index),merges)")}`);
@@ -70,7 +79,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     const incoming = built.orders.filter((o) => String(o.상차일 || "") >= from && (!wantTabs || wantTabs.has(String(o.이전출처 || "").split("!")[0])));
     const hash = crypto.createHash("sha1").update(JSON.stringify(incoming)).digest("hex");
     const stamp = { lastMt: mt || "", lastRunAt: now, lastFullAt: now, lastError: "" };
-    if (!force && hash === cfg.lastHash) { await ref(co).set({ ...stamp, lastCheckedAt: now }, { merge: true }); return { skipped: "same" }; }
+    if (!force && hash === cfg.lastHash) { await ref(co).set({ ...stamp, lastCheckedAt: now }, { merge: true }); await writeStatus(co, { enabled: true, error: "" }); return { skipped: "same" }; }
 
     const tabSet = new Set(incoming.map((o) => String(o.이전출처 || "").split("!")[0]));
     const existing = (await existingOrders(co, from)).filter((e) => tabSet.has(String(e.data.이전출처 || "").split("!")[0]));
@@ -92,6 +101,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     if (kinds.length && r.create.length) await db.collection("vehicleTypes").doc(co).set({ companyName: co, custom: FieldValue.arrayUnion(...kinds) }, { merge: true }).catch(() => {});
     const result = { created: r.create.length, updated: r.update.length, removed, heldBack, same: r.same, total: incoming.length, from };
     await ref(co).set({ ...stamp, lastHash: heldBack ? "" : hash, lastResult: result, ...(ops.length ? { lastChangeAt: now } : {}) }, { merge: true });
+    await writeStatus(co, { enabled: true, error: "", ...(ops.length ? { changedAt: now, created: result.created, updated: result.updated, removed: result.removed } : {}), heldBack }, { force: ops.length > 0 || force });
     // ⚠ 2026-11-13 여기서 dataVersion 을 올리지 않는다 — 올리면 열려 있는 모든 PC가 13개월 오더 전체를 다시 받는다(1분마다 반복될 수 있었다)
     //   바뀐 오더는 _lastModified · createdAt, 지운 오더는 deletedOrders 기록으로 화면에 반영된다
     return result;
@@ -104,10 +114,12 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
       const cfg = d.data() || {}; const co = cfg.companyName || d.id;
       try {
         const r = await runOne(co, cfg);
+        if (r.skipped) await writeStatus(co, { enabled: true, error: "" });
         if (!r.skipped && (r.created || r.updated || r.removed || r.heldBack)) console.log(`[시트 실시간] ${co}`, JSON.stringify(r));
       } catch (e) {
         console.error(`[시트 실시간 실패] ${co}:`, e?.message || e);
         await d.ref.set({ lastRunAt: Date.now(), lastError: String(e?.message || e).slice(0, 300) }, { merge: true }).catch(() => {});
+        await writeStatus(co, { enabled: true, error: "시트를 읽지 못했습니다" }, { force: true });
       }
     }
   }
@@ -126,6 +138,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
       if (body.days != null) { patch.days = Math.max(1, Math.min(400, Number(body.days) || 14)); patch.lastHash = ""; }
       if (body.removeMissing != null) patch.removeMissing = !!body.removeMissing;
       await ref(co).set(patch, { merge: true });
+      if (body.enabled != null) await writeStatus(co, { enabled: !!body.enabled, error: "" }, { force: true });
       return { live: pub((await ref(co).get()).data()) };
     }
     if (action === "liveRun") {

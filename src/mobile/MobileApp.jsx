@@ -11,6 +11,7 @@ import { useCompanyFeatures } from "../companyFeatures"; // ⭐ 2026-11-04 마�
 import { useBizModules, readBiz, writeBiz, bizInfo } from "../bizModules";
 import { reportScreen, installScreenVisibility, mobileScreenLabel } from "../screenReport";
 import { normScope } from "../workScope";
+import { useRouteGroupFilter, RouteGroupDropdown, SheetLiveChip } from "../routeGroups";
 import { allowedModules } from "../freight/freightCore";
 import BizSwitcher from "../freight/BizSwitcher";
 import { useCompanyDropdownSync, dropdownList } from "../companyDropdownOptions";
@@ -2858,7 +2859,10 @@ const quickRange = (days) => {
       canceled: [...canceledOrders, ...extraSplit.canceled.filter(notLive)],
     };
   }, [orders, canceledOrders, extraSplit, extraMap.size]);
-  const allOrders = allOrdersCombined.orders;
+  // 🗂 2026-11-13 담당노선구분(켠 운송사만) — 고른 묶음만(목록 · 미배차 · 매출 등 아래 allOrders 를 쓰는 화면이 모두 따른다 · src/routeGroups.jsx)
+  const rgM = useRouteGroupFilter({ enabled: useCompanyFeatures(userCompany).routeGroups === true, uid: user?.uid, profile: myProfM });
+  const allOrdersPreRG = allOrdersCombined.orders;
+  const allOrders = useMemo(() => rgM.filter(allOrdersPreRG) || [], [allOrdersPreRG, rgM.filter]);
   // ⭐ 2026-11-04 고정노선(구글시트 배차표) 오더는 고정노선현황에서만 — 일반 배차현황·미배차·정보미전달에는 넣지 않는다(PC와 같음)
   const listOrders = useMemo(() => allOrders.filter((o) => !o?.배차표Id), [allOrders]);
   const allCanceledOrders = allOrdersCombined.canceled;
@@ -6933,6 +6937,7 @@ onGoAttendance={() => {
             예전엔 뒤로갈 때마다 목록 카드 수백 장을 새로 만들어 한 박자 늦게 나왔다 */}
         {(page === "list" || page === "detail") && ordersLoaded && initLoadDone && bootDone && (
           <div style={page === "list" ? undefined : { display: "none" }}>
+          <RouteGroupDropdown rg={rgM} rows={allOrdersPreRG} role={role} userCompany={userCompany} right={<SheetLiveChip role={role} userCompany={userCompany} compact />} />
           <MobileOrderList
             renderAllFirst={listScrollYRef.current > 0}
             allOrders={listOrders}
