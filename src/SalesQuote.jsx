@@ -4,6 +4,7 @@
 //  - 저장한 견적: salesQuotes 컬렉션(최고관리자만) — 다시 열어 고치거나 인쇄(PDF 저장)
 //  - "요금·청구"(가입사 월 청구 계산, siteConfig/platformPricing)와는 별개 — 그쪽은 이미 쓰는 고객 청구용, 이쪽은 영업 제안용.
 //  ⭐ 알록달록 금지 — 네이비 계열만.
+import { moduleAddonFee, moduleAddonLabel } from "./planCore.js";
 import React from "react";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
@@ -77,7 +78,8 @@ export function monthlyOf(plan, cfg, inp) {
   const orders = Math.max(0, num(inp.orders) - num(plan.orders)) * num(cfg.extraOrder);
   const fleet = Math.max(0, num(inp.fleet) - num(plan.fleet)) * num(cfg.fleetPerVehicle); // ⭐ 2026-11-04 요금제 포함 대수 차감(예전 저장값은 0대 포함 = 예전과 같음)
   const storage = Math.max(0, num(inp.storageGB) - planStorageGB(plan, cfg)) * num(cfg.storagePerGB);
-  return { base: num(plan.price), seats, orders, fleet, storage, total: num(plan.price) + seats + orders + fleet + storage };
+  const modules = moduleAddonFee(plan.id, num(inp.modules) || 1, cfg.moduleAddon); // 🧭 2026-11-13 업무 영역 추가(2개째부터)
+  return { base: num(plan.price), seats, orders, fleet, storage, modules, total: num(plan.price) + seats + orders + fleet + storage + modules };
 }
 // ⭐ 2026-11-02 관리자센터2 — 요금제별 초기 도입비(비우면 공통값)·기본 프로모션. 견적서·인쇄·요금 안내서가 모두 이 함수로 읽는다
 const hasVal = (v) => v !== "" && v != null && !Number.isNaN(Number(v));
@@ -233,6 +235,7 @@ export function quoteHtml(cfg, inp, q, no) {
     ...(m.seats ? [["추가 직원 계정", `${num(inp.staff) - num(p.seats)}명 × ${won(cfg.extraSeat)}`, num(inp.staff) - num(p.seats), m.seats]] : []),
     ...(m.orders ? [["초과 오더", `${(num(inp.orders) - num(p.orders)).toLocaleString()}건 × ${won(cfg.extraOrder)}`, "", m.orders]] : []),
     ...(m.fleet ? [["지입차 관리", `${Math.max(0, num(inp.fleet) - num(p.fleet))}대 × ${won(cfg.fleetPerVehicle)} (GPS · 운행기록 · 사진${num(p.fleet) ? ` · ${num(p.fleet)}대 포함 초과분` : ""})`, Math.max(0, num(inp.fleet) - num(p.fleet)), m.fleet]] : []),
+    ...(m.modules ? [["업무 영역 추가", `${moduleAddonLabel(inp.modules)} · 기본 1개 포함, 추가 ${Math.min(3, num(inp.modules) - 1)}개`, "", m.modules]] : []),
     ...(m.storage ? [["추가 저장 용량", `${num(inp.storageGB) - planStorageGB(p, cfg)}GB × ${won(cfg.storagePerGB)}`, "", m.storage]] : []),
   ];
   const trs = (list) => list.map(([a, b, c, d]) => `<tr><td>${esc(a)}</td><td>${esc(b)}</td><td class="c">${c === "" ? "-" : c}</td><td class="r mono">${won(d)}</td></tr>`).join("");
@@ -517,7 +520,7 @@ export function PricingEditor() {
 // ⭐ 2026-11-02 관리자센터2 — 견적 금액이 요금제 관리와 다르게 보이던 원인: 사용 규모가 "직원 8명 · 오더 2,500건"으로 고정돼 있어
 //  라이트(2명·500건 포함)·베이직(5명·1,500건 포함)에 초과 요금이 자동으로 붙었다(라이트 99,000 → 289,000 등).
 //  이제 새 견적은 추천 요금제의 포함량으로 시작하고, 요금제를 바꾸면 사용 규모·프로모션도 그 요금제 기본값으로 바뀐다(직접 고친 칸은 유지).
-const BLANK_INPUT = { customer: "", contact: "", phone: "", staff: 0, orders: 0, seeded: false, staffTouched: false, ordersTouched: false, promoTouched: false, fleet: 0, storageGB: 0, planId: "auto", contractMonths: 12, billing: "monthly", waiveSetup: true, migration: false, training: 0, devDays: 0, devDesc: "", promoMonths: 0, promoRate: 0, extraDiscount: 0, memo: "" };
+const BLANK_INPUT = { customer: "", contact: "", phone: "", staff: 0, orders: 0, seeded: false, staffTouched: false, ordersTouched: false, promoTouched: false, fleet: 0, storageGB: 0, modules: 1, planId: "auto", contractMonths: 12, billing: "monthly", waiveSetup: true, migration: false, training: 0, devDays: 0, devDesc: "", promoMonths: 0, promoRate: 0, extraDiscount: 0, memo: "" };
 export function QuoteBuilder({ initial, onSaved }) {
   const cfg = useSalesPricing();
   const [inp, setInp] = React.useState(() => {
@@ -574,7 +577,7 @@ export function QuoteBuilder({ initial, onSaved }) {
         </Card>
         <Card code="USAGE" title="사용 규모" right={(inp.staffTouched || inp.ordersTouched) && q.chosen ? <button type="button" onClick={() => setInp((p) => ({ ...p, staffTouched: false, ordersTouched: false, staff: num(q.chosen.plan.seats), orders: num(q.chosen.plan.orders) }))} className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B] whitespace-nowrap">↺ {q.chosen.plan.name} 포함량으로</button> : null}>
           <div className="space-y-2">
-            {[["staff", "직원 계정 수", "명"], ["orders", "월 예상 오더", "건"], ["fleet", "지입차(GPS 관리) 대수", "대"], ["storageGB", "예상 사진·파일 용량", "GB"]].map(([k, l, u]) => (
+            {[["staff", "직원 계정 수", "명"], ["orders", "월 예상 오더", "건"], ["fleet", "지입차(GPS 관리) 대수", "대"], ["storageGB", "예상 사진·파일 용량", "GB"], ["modules", "업무 영역 수 (내륙 · 컨테이너 · 해상 · 항공 · 4 = 통합)", "개"]].map(([k, l, u]) => (
               <div key={k} className="flex items-center justify-between gap-3"><span className="text-[14px] font-bold text-[#3A4A66]">{l}</span><NumIn value={inp[k]} onChange={(v) => set({ [k]: v, ...(k === "staff" ? { staffTouched: true } : k === "orders" ? { ordersTouched: true } : {}) })} unit={u} w="w-28" /></div>
             ))}
             <div className="text-[12px] text-[#9AA9C3]">요금제를 고르면 직원·오더는 그 요금제 포함량으로 채워집니다(직접 고친 칸은 유지). 포함량을 넘으면 초과 요금이 붙습니다. 일반 기사의 기사앱 · 화주사 포털은 무료.</div>

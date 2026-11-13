@@ -82,3 +82,17 @@ assert.deepEqual(c.allowedModules(["inland", "sea"], ["sea", "air"]), ["sea"]);
 assert.deepEqual(c.allowedModules(["inland", "sea"], ["air"]), ["inland", "sea"]);
 assert.deepEqual(c.allowedModules(["inland", "sea"], ["sea"], true), ["inland", "sea"]);
 console.log("freightCore 2 OK");
+// 📋 기사복사 간단 목록
+{
+  const s = await import("../src/copySimple.js");
+  assert.equal(s.hourOf("18:30"), 18); assert.equal(s.hourOf("오후 6시 30분"), 18); assert.equal(s.hourOf("오전 7시"), 7); assert.equal(s.hourOf("즉시"), null);
+  assert.equal(s.dayTag({ 상차일: "2026-11-12", 상차시간: "19:00", 하차일: "2026-11-13" }), "야상");
+  assert.equal(s.dayTag({ 상차일: "2026-11-13", 상차시간: "09:00", 하차일: "2026-11-13" }), "당착");
+  assert.equal(s.dayTag({ 상차일: "2026-11-13", 상차시간: "09:00", 하차일: "2026-11-14" }), "익착");
+  assert.equal(s.dayTag({ 상차일: "2026-11-13", 상차시간: "09:00", 하차일: "2026-11-16" }), "11/16착");
+  const base = { 상차일: "2026-11-12", 상차시간: "오후 8시", 하차일: "2026-11-13", 상차지명: "에이제이", 하차지명: "베베숲 평택" };
+  const t = s.buildSimpleList([{ ...base, 차량번호: "대전88아8987", 이름: "김영관", 전화번호: "01052517468" }, { ...base, 차량번호: "충북84아1177", 이름: "이준희", 전화번호: "010-6349-7054" }, { 상차일: "2026-11-13", 하차일: "2026-11-13", 상차지명: "A", 하차지명: "B", 차량번호: "", 이름: "" }]);
+  assert.equal(t, "11/13 에이제이-베베숲 평택 야상\n대전88아8987  김영관  010-5251-7468\n충북84아1177  이준희  010-6349-7054\n\n11/13 A-B 당착\n(미배차)");
+  assert.equal(s.buildSimpleList([{ ...base, 차량번호: "1", 이름: "a", 차량톤수: "5톤" }], { header: "{구분} {건수}대", line: "{차량번호} {톤수}" }), "야상 1대\n1 5톤");
+}
+console.log("copySimple OK");

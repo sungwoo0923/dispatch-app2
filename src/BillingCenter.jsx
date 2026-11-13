@@ -7,6 +7,8 @@
 //  ① 지금 요금제 + 비교(다른 요금제로 변경 요청 → 관리센터 '오늘 할 일'에 뜸)
 //  ② 월 청구서(관리센터 › 청구 › 수납 관리에서 확정한 금액) + "입금했어요" 알림
 //  ③ 결제 수단: 무통장 입금(지금 바로) · 카드 자동결제(PG 계약 후 켜짐) · 세금계산서
+import { useBizModules } from "./bizModules";
+import { moduleAddonFee, moduleAddonLabel } from "./planCore.js";
 import React from "react";
 import { addDoc, collection, doc, getCountFromServer, onSnapshot, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
 import { ResponsiveContainer, ComposedChart, BarChart, Bar, Area, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from "recharts";
@@ -138,6 +140,7 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
   }, [usage, plan, days, dayNo, ym]);
 
   // ── 이번 달 예상 청구(VAT 별도) — 공개 요금 단가로 계산. 단가를 모르는 항목은 더하지 않고 "별도"로 표시 ──
+  const bizCount = useBizModules(company).list.length; // 🧭 회사가 켠 업무 영역 수
   const bill = React.useMemo(() => {
     if (!plan) return null;
     const exSeats = staff == null ? 0 : Math.max(0, staff - num(plan.seats));
@@ -146,13 +149,14 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
     const fleetRate = pricing.fleetPerVehicle != null ? num(pricing.fleetPerVehicle) : null;
     const rows = [
       { k: "기본료", v: num(plan.price) },
+      { k: `${moduleAddonLabel(bizCount)} 추가 요금`, v: moduleAddonFee(planId, bizCount, pricing.moduleAddon), hide: bizCount <= 1 }, // 🧭 2026-11-13 업무 영역(내륙 외 컨테이너 · 해상 · 항공)
       { k: `직원 계정 추가 ${exSeats}명`, v: exSeats * num(pricing.extraSeat || 15000), hide: !exSeats },
       { k: `오더 초과 ${exOrders.toLocaleString()}건(월말 예상)`, v: exOrders * num(pricing.extraOrder || 50), hide: !exOrders },
       // ⭐ 2026-11-04 요금제 포함 대수(plan.fleet)를 넘는 지입차만
       { k: `지입차 관리 ${Math.max(0, (fleet || 0) - num(plan.fleet))}대${num(plan.fleet) ? `(포함 ${num(plan.fleet)}대 초과)` : ""}`, v: hasFleet && fleetRate != null ? Math.max(0, (fleet || 0) - num(plan.fleet)) * fleetRate : null, hide: !hasFleet || Math.max(0, (fleet || 0) - num(plan.fleet)) === 0 },
     ].filter((x) => !x.hide);
     return { rows, total: rows.reduce((a, x) => a + (x.v || 0), 0), unknown: rows.some((x) => x.v == null) };
-  }, [plan, planId, staff, usage, fleet, pricing]);
+  }, [plan, planId, staff, usage, fleet, pricing, bizCount]);
   // ⭐ 2026-11-04 이달 청구서(관리센터 수납 관리에서 만든 것) — 기본료·초과 + 추가 항목(세금계산서·문자·개발 등) 줄을 그대로 보여준다
   const thisInv = (invoices || []).find((v) => v.month === ym) || null;
   const invRows = thisInv && (Array.isArray(thisInv.lines) || Array.isArray(thisInv.items))

@@ -20,6 +20,22 @@ export const ADMIN_GATE_EVENT = "kp-admin-gate-ok";
 const call = fetchCaller(FUNCTIONS_BASE, () => auth.currentUser);
 const mfa = (data) => call("pnkMfa", { app: "logis", dev: adminDeviceId(), ...data });
 
+// ⚡ 2026-11-13 보안 확인이 느리던 문제 — 로그인 화면이 열릴 때 미리 준비해 둔다
+//  ① 2차 비밀번호 서버(pnkMfa)를 미리 깨운다(쉬고 있던 서버가 켜지는 데 몇 초 걸렸다) ② 문자 인증에 쓰는 구글 확인(reCAPTCHA) 주소에 미리 연결해 둔다
+let _warmed = 0;
+export function warmAdminGate() {
+  if (Date.now() - _warmed < 4 * 60 * 1000) return; // 4분 안에는 다시 안 함
+  _warmed = Date.now();
+  try { fetch(`${FUNCTIONS_BASE}/pnkMfa`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: { app: "logis", action: "ping" } }) }).catch(() => {}); } catch { /* 무시 */ }
+  try {
+    ["https://www.google.com", "https://www.gstatic.com", "https://identitytoolkit.googleapis.com", "https://www.recaptcha.net"].forEach((h) => {
+      if (document.querySelector(`link[data-kp-warm="${h}"]`)) return;
+      const l = document.createElement("link"); l.rel = "preconnect"; l.href = h; l.crossOrigin = "anonymous"; l.setAttribute("data-kp-warm", h); document.head.appendChild(l);
+    });
+    if (!document.querySelector('link[data-kp-warm="recaptcha-js"]')) { const p = document.createElement("link"); p.rel = "preload"; p.as = "script"; p.href = "https://www.google.com/recaptcha/api.js?render=explicit"; p.setAttribute("data-kp-warm", "recaptcha-js"); document.head.appendChild(p); }
+  } catch { /* 무시 */ }
+}
+
 export async function adminAuthTime(user) {
   const fb = String(user?.metadata?.lastSignInTime || "login"); // 토큰을 못 읽으면 마지막 로그인 시각으로 대신 구분
   try { return Number((await user.getIdTokenResult()).claims?.auth_time) || fb; } catch { return fb; }
@@ -68,7 +84,8 @@ export function AdminLoginGate({ user, authTime, sub = false, onCancel, inline =
 }
 function GateBody({ user, authTime, sub, onCancel, inline }) {
   const who = sub ? "부관리자" : "최고관리자";
-  const [step, setStep] = React.useState("load");
+  const [step, setStep] = React.useState("code"); // ⚡ 2026-11-13 서버 확인을 기다리지 않고 2차 비밀번호 칸을 바로 띄운다(확인은 뒤에서)
+  const [checking, setChecking] = React.useState(true);
   const [setup, setSetup] = React.useState(false);
   const [first, setFirst] = React.useState(""); // 만들 때 첫 번째로 넣은 값
   const [code, setCode] = React.useState("");
@@ -81,16 +98,18 @@ function GateBody({ user, authTime, sub, onCancel, inline }) {
   const { send, confirm } = usePhoneCheck(holderRef);
 
   const load = React.useCallback(async () => {
-    setStep("load"); setMsg("");
+    setChecking(true); setMsg("");
     try {
       const r = await Promise.race([mfa({ action: "status" }), new Promise((_, no) => setTimeout(() => no(new Error("서버 응답이 늦습니다")), 12000))]);
       if (r.required === false) { markPassed(user.uid, authTime); return; }
+      if (!r.hasCode) { setCode(""); setFirst(""); } // 아직 2차 비밀번호가 없는 계정 — 만들기 화면으로(미리 친 값은 지운다)
       setSetup(!r.hasCode);
       if (r.locked) setMsg("여러 번 틀려 잠겼습니다. 10분 뒤 다시 해 주세요.");
       setStep("code");
     } catch (e) { setMsg(e.message || "서버에 연결하지 못했습니다"); setStep("error"); }
+    finally { setChecking(false); }
   }, [user.uid, authTime]);
-  React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => { warmAdminGate(); load(); }, [load]);
 
   const submit = async (v) => {
     setMsg("");
@@ -168,7 +187,7 @@ function GateBody({ user, authTime, sub, onCancel, inline }) {
             {setup ? (first ? "방금 정한 2차 비밀번호를 똑같이 넣어 주세요." : "영문 · 숫자 8자 이상으로 정해 주세요. 로그인 비밀번호와 다르게 정하세요.") : user.email}
           </div>
         </div>
-        <SecureKeypad value={code} onChange={setCode} onSubmit={submit} disabled={busy} submitLabel={busy ? "확인 중…" : setup ? (first ? "정하고 들어가기" : "다음") : "확인"} />
+        <SecureKeypad value={code} onChange={setCode} onSubmit={(v) => { if (checking) { setMsg("확인하는 중입니다. 잠시 뒤 다시 눌러 주세요."); return; } submit(v); }} disabled={busy} submitLabel={busy ? "확인 중…" : setup ? (first ? "정하고 들어가기" : "다음") : "확인"} />
         {msg && <div className="mt-3 text-[12.5px] font-semibold text-red-600 bg-red-50 rounded-xl px-3 py-2 text-center leading-relaxed">{msg}</div>}
       </div>
       <p className={note}>2차 비밀번호를 잊으면 {sub ? "최고관리자에게 초기화를 요청하세요." : "개발 담당에게 초기화를 요청하세요."}<br />PnK 인트라넷과 같은 2차 비밀번호를 씁니다.</p>

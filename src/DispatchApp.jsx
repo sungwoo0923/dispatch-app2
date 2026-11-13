@@ -42,6 +42,8 @@ import { isUrgentOrder, UrgentBadge, urgentRowStyle } from "./urgentOrder"; // �
 import BulkEditCopyModal from "./BulkEditCopy"; // 🗂 2026-11-09 우클릭 [일괄수정·복사]
 const ReceiptCenter = React.lazy(() => import("./ReceiptCenter")); // 🧾 2026-11-09 배차현황 › 인수증관리
 import { applyOwner } from "./orderOwner"; // 👤 2026-11-09 복사본 배차담당자
+import { buildSimpleList } from "./copySimple"; // 📋 2026-11-13 기사복사 간단 목록(여러 오더 한 번에)
+import { getSimpleTpl } from "./copyTemplates";
 import OrderStaffFields from "./OrderStaffFields"; // 👤 2026-11-12 배차담당자 · 차량배정자 바꾸기
 import { askCopyDates } from "./CopyCountDialog"; // ⭐ 2026-11-06 복사 등록 — 몇 건·건별 날짜
 import { dispatchStatusOf, payTypeStatusPatch } from "./dispatchStatus"; // 🚚 2026-11-07 배차상태 공용 규칙
@@ -8540,10 +8542,9 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   // ---------------- 메뉴 UI ----------------
   // 메뉴 보이기 규칙(상단 메뉴·왼쪽 메뉴 공용) — "hidden" | "blocked" | "ok"
   const menuState = (m) => {
-    if (isBizMenu(m)) return parseBizMenu(m).biz === biz ? "ok" : "hidden"; // 🧭 2026-11-12 업무 영역 메뉴(컨테이너 · 해상 · 항공 · 통합)
     // 💳 2026-11-09 요금제 잠금을 맨 먼저 — 예전엔 부서 메뉴(인사관리부·회계관리 등)·임원 메뉴가 아래에서 먼저 "ok"로 끝나 요금제와 상관없이 열렸다
-    if (m === "인사이트" && MENU_FEATURE[m] && !planIncludes(planId, MENU_FEATURE[m])) return "hidden"; // 🛠 2026-11-13 인사이트는 요금제에 없으면 메뉴 자체를 안 보이게
     if (MENU_FEATURE[m] && !planIncludes(planId, MENU_FEATURE[m])) return "locked";
+    if (isBizMenu(m)) return parseBizMenu(m).biz === biz ? "ok" : "hidden"; // 🧭 2026-11-12 업무 영역 메뉴(컨테이너 · 해상 · 항공 · 통합)
     // 📊 2026-11-06 일일 경영 보고 — 임원 화면 역할만(기존 임원 판정 isExec 그대로)
     if (m === BRIEF_MENU) return canBriefing ? "ok" : "hidden";
     if (EXEC_MENUS.includes(m)) return deptMode === "exec" ? "ok" : "hidden"; // 📈 2026-11-08 임원 화면만
@@ -8577,6 +8578,8 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
     if (isBlocked && (role === "test" || isViewer)) return "hidden";
     return isBlocked ? "blocked" : "ok";
   };
+  // 🛠 2026-11-13 인사이트는 요금제에 없으면 잠금 표시 대신 메뉴 자체를 안 보이게(상단 · 왼쪽 메뉴)
+  const menuShown = (m) => { const st = menuState(m); return m === "인사이트" && st === "locked" ? "hidden" : st; };
 return (
     <PlanValueProvider planId={planId} company={planCompany}>
     <OrderHistoryContext.Provider value={orderHistoryApi}>
@@ -8611,7 +8614,7 @@ return (
         open={sideMenuOpen}
         onOpen={() => setSideMenuOpen(true)}
         onClose={closeSideMenu}
-        menuState={menuState}
+        menuState={menuShown}
         active={menu}
         onSelect={handleMenuClick}
         company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")}
@@ -8734,7 +8737,7 @@ return (
               "관리자메뉴",
               "관리센터",
             ])).map((m) => {
-              const st = menuState(m);
+              const st = menuShown(m);
               if (st === "hidden") return null;
               const isBlocked = st === "blocked";
               const isActive = menu === m;
@@ -25971,7 +25974,16 @@ const buildContactLine = (name0, phone) => {
     : `담당자 : ${name}`;
 };
 
+// 📋 2026-11-13 간단 목록 — 고른 오더(여러 건)를 "머리말 + 기사 한 줄씩"으로 복사(⚙ 문구 설정 › 간단 목록에서 틀 변경)
+const copySimpleList = () => {
+  const list = selected.map((id) => rows.find((x) => x._id === id)).filter(Boolean);
+  if (!list.length) { showAlert("복사할 오더를 선택하세요."); return; }
+  navigator.clipboard.writeText(buildSimpleList(list, getSimpleTpl()));
+  setCopyModalOpen(false); setSelected([]);
+  showAlert(`오더 ${list.length}건을 간단 목록으로 복사했습니다.`);
+};
 const copyMessage = (mode) => {
+  if (mode === "simple") return copySimpleList();
   if (!selected.length) {
     showAlert("복사할 항목을 선택하세요.");
     return;
@@ -30251,7 +30263,7 @@ const head = isDark
   </CustomSelect>
 
   <div className="ml-auto flex items-center gap-1 flex-shrink-0 flex-wrap justify-end">
-    <button onClick={()=>{if(!selected.length)return showAlert("복사할 오더를 선택하세요.");if(selected.length>1)return showAlert("복사는 1개의 오더만 가능합니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.기사복사" defaultText="기사복사" /></button>
+    <button onClick={()=>{if(!selected.length)return showAlert("복사할 오더를 선택하세요.");if(selected.length>1)return copySimpleList();setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.기사복사" defaultText="기사복사" /></button>
     <button onClick={()=>{
   const selRows = rows.filter(r => selected.includes(r._id));
   const phones = [...new Set(selRows.map(r => String(r.전화번호||"").replace(/[^\d]/g,"")).filter(Boolean))];
@@ -30732,6 +30744,8 @@ flashRow(savedId);
     onClick={() => setCopyTarget(p => ({ ...p, 긴급: !p.긴급 }))}
     className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${copyTarget.긴급 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.27005.긴급" defaultText="긴급" /></button>
+  {/* 👤 2026-11-13 담당자 변경 — 오더 유형 줄 오른쪽 끝 */}
+  <OrderStaffFields className="ml-auto" order={copyTarget} setOrder={setCopyTarget} disabled={isViewerNow()} />
 </div>
 
 
@@ -31532,7 +31546,6 @@ value={copyTarget?.화물수량 || ""}
               ); })()}
             </CpField>
             <div className="col-span-full"><SpecialFareButton form={copyTarget} setForm={setCopyTarget} /></div>{/* 🏗 2026-11-09 지게차비용 */}
-            <div className="col-span-full"><OrderStaffFields order={copyTarget} setOrder={setCopyTarget} disabled={isViewerNow()} /></div>{/* 👤 2026-11-12 배차담당자 · 차량배정자 */}
 <CpField label="지급방식">
   <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"} className={cpInputStyle} value={copyTarget?.지급방식 ?? ""} onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 지급방식:e.target.value})))({ target: { value: __v } })} />
 </CpField>
@@ -33311,7 +33324,7 @@ value={copyTarget?.화물수량 || ""}
             )}
             {/* 🏗 2026-11-09 지게차비용 */}
             <div className="mb-3"><SpecialFareButton form={editTarget} setForm={(fn) => setEditTarget((p) => { const n = typeof fn === "function" ? fn(p) : fn; return { ...n, 수수료: Number(n.수수료) || 0 }; })} /></div>
-            <div className="mb-3"><OrderStaffFields order={editTarget} setOrder={setEditTarget} disabled={isViewerNow()} /></div>{/* 👤 2026-11-12 배차담당자 · 차량배정자 */}
+            <div className="mb-3 flex justify-end"><OrderStaffFields order={editTarget} setOrder={setEditTarget} disabled={isViewerNow()} /></div>{/* 👤 2026-11-12 배차담당자 · 차량배정자 */}
 
             {/* ------------------------------------------------ */}
             {/* 🔵 지급/배차 방식 */}
@@ -34610,6 +34623,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           { type: "fare", label: "운임 포함", desc: "부가세 / 선불 / 착불 형식", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> },
           { type: "full", label: "전체 상세", desc: "상하차 + 화물 + 기사 정보", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> },
           { type: "driver", label: "기사 전달용", desc: "운행 정보 + 전달 문구(⚙ 문구 설정에서 변경)", primary: true, icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><path d="M19 8v6M22 11h-6"/></svg> },
+          { type: "simple", label: "간단 목록", desc: "날짜 · 구간 · 야상/당착 + 차량 · 기사 · 연락처 한 줄 (여러 건은 체크 후 기사복사)", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg> },
         ];
         return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
@@ -37759,7 +37773,16 @@ const getPalletCount = (text = "") => {
   // ===============================
   // 📋 기사복사 (PART 5 최종)
   // ===============================
+  // 📋 2026-11-13 간단 목록 — 고른 오더(여러 건)를 "머리말 + 기사 한 줄씩"으로 복사
+  const copySimpleList = () => {
+    const list = [...selected].map((id) => dispatchData.find((d) => getId(d) === id)).filter(Boolean);
+    if (!list.length) { showAlert("복사할 항목을 선택하세요."); return; }
+    navigator.clipboard.writeText(buildSimpleList(list, getSimpleTpl()));
+    setCopyModalOpen(false); setSelected(new Set());
+    showAlert(`오더 ${list.length}건을 간단 목록으로 복사했습니다.`);
+  };
   const copyMessage = async (mode) => {
+    if (mode === "simple") return copySimpleList();
     if (!selected.size) {
       showAlert("복사할 항목을 선택하세요.");
       return;
@@ -40172,7 +40195,7 @@ return (
           {/* ⭐ 2026-11-05 실시간 관제 — 예전 세부검색 자리(오른쪽)로 옮김 · 고정노선현황은 위 고정노선 머리띠에 같은 버튼이 있다 */}
           {!fixedForm && <FleetLiveButton rows={filtered} size="md" />}
           {/* ⭐ 2026-11-06 [운임구분 전체] 필터 버튼은 없앴다 — 검색 항목(통합 ▾)의 "운임구분"·세부검색·통합 검색으로 찾는다 */}
-          <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return showAlert("1개만 선택할 수 있습니다.");setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="status.toolbar.기사복사" defaultText="기사복사" /></button>
+          <button onClick={()=>{if(selected.size===0)return showAlert("복사할 항목을 선택하세요.");if(selected.size>1)return copySimpleList();setCopyModalOpen(true);}} className="px-2 py-1 rounded-lg bg-gray-800 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="status.toolbar.기사복사" defaultText="기사복사" /></button>
           <button onClick={()=>{
   const selArr=[...selected];
   const selRows = filtered.filter(r => selected.has(getId(r)));
@@ -41681,7 +41704,7 @@ return (
             )}
             {/* 🏗 2026-11-09 지게차비용 */}
             <div className="mb-3"><SpecialFareButton form={editTarget} setForm={(fn) => setEditTarget((p) => { const n = typeof fn === "function" ? fn(p) : fn; return { ...n, 수수료: Number(n.수수료) || 0 }; })} /></div>
-            <div className="mb-3"><OrderStaffFields order={editTarget} setOrder={setEditTarget} disabled={isViewerNow()} /></div>{/* 👤 2026-11-12 배차담당자 · 차량배정자 */}
+            <div className="mb-3 flex justify-end"><OrderStaffFields order={editTarget} setOrder={setEditTarget} disabled={isViewerNow()} /></div>{/* 👤 2026-11-12 배차담당자 · 차량배정자 */}
 
             {/* ------------------------------------------------ */}
             {/* 🔵 지급/배차 방식 */}
@@ -42218,6 +42241,8 @@ return (
     onClick={() => setCopyTarget(p => ({ ...p, 긴급: !p.긴급 }))}
     className={`px-4 py-1.5 rounded-lg text-[13px] font-bold border transition-all ${copyTarget.긴급 ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"}`}
   ><EditableText id="misc.btn.38158.긴급" defaultText="긴급" /></button>
+  {/* 👤 2026-11-13 담당자 변경 — 오더 유형 줄 오른쪽 끝 */}
+  <OrderStaffFields className="ml-auto" order={copyTarget} setOrder={setCopyTarget} disabled={isViewerNow()} />
 </div>
 {/* ================= 거래처 정보 ================= */}
 <section className="bg-white rounded-xl border border-[#E3E8F0]">
@@ -42979,7 +43004,6 @@ setCopyPlaceOptions(list);
               ); })()}
             </CpField>
             <div className="col-span-full"><SpecialFareButton form={copyTarget} setForm={setCopyTarget} /></div>{/* 🏗 2026-11-09 지게차비용 */}
-            <div className="col-span-full"><OrderStaffFields order={copyTarget} setOrder={setCopyTarget} disabled={isViewerNow()} /></div>{/* 👤 2026-11-12 배차담당자 · 차량배정자 */}
 <CpField label="지급방식">
   <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"} className={cpInputStyle} value={copyTarget?.지급방식 ?? ""} onChange={(__v) => ((e)=>setCopyTarget(p=>({...p, 지급방식:e.target.value})))({ target: { value: __v } })} />
 </CpField>
@@ -43980,6 +44004,9 @@ setCopyPlaceOptions(list);
             <div className="p-4 space-y-2">
               <button onClick={() => copyMessage("basic")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
                 차량번호 / 기사명 / 전화번호
+              </button>
+              <button onClick={() => copyMessage("simple")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition" title="여러 건은 체크한 뒤 [기사복사]를 누르면 한 번에 복사됩니다">
+                간단 목록 (날짜 · 구간 · 야상/당착 + 기사 한 줄)
               </button>
               <button onClick={() => copyMessage("fare")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
                 운임 포함 (부가세/선불/착불)
@@ -51329,7 +51356,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       </div>
                     </CpField>
                     <div className="col-span-full"><SpecialFareButton form={copyTarget} setForm={setCopyTarget} /></div>{/* 🏗 2026-11-09 지게차비용 */}
-                    <div className="col-span-full"><OrderStaffFields order={copyTarget} setOrder={setCopyTarget} disabled={isViewerNow()} /></div>{/* 👤 2026-11-12 배차담당자 · 차량배정자 */}
+                    <div className="col-span-full flex justify-end"><OrderStaffFields order={copyTarget} setOrder={setCopyTarget} disabled={isViewerNow()} /></div>{/* 👤 2026-11-12 배차담당자 · 차량배정자 */}
                     <CpField label="지급방식">
                       <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" className={cpInputStyle} value={copyTarget?.지급방식 ?? ""} onChange={(__v) => ((e) => setCopyTarget(p => ({...p, 지급방식: e.target.value})))({ target: { value: __v } })} disabled={copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile"} />
                     </CpField>

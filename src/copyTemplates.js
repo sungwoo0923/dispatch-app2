@@ -52,6 +52,9 @@ export function getCopyTpl(mode) {
   return { ...c, includeUpload: typeof c.includeUpload === "boolean" ? c.includeUpload : COPY_DEFAULTS[mode].includeUpload };
 }
 
+// 📋 2026-11-13 간단 목록(여러 오더 한 번에) 틀 — { header, line } (src/copySimple.js)
+export const getSimpleTpl = () => cache?.simple || {};
+
 // 회사 설정을 실시간으로 받아 둔다(DispatchApp 최상단에서 한 번 호출). 편집기에서는 반환값을 쓴다.
 export function useCopyTemplates(company) {
   const [cfg, setCfg] = useState(cache);

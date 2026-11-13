@@ -10,8 +10,8 @@ import { kpAlert, kpConfirm } from "./kpDialog";
 import { db } from "./firebase";
 
 // ⭐ 2026-11-09 요금제 데이터·잠금 규칙은 planCore.js(순수 JS — 가상 테스트 scripts/planGateTest.mjs가 그대로 읽는다)
-import { PLAN_IDS, RECOMMENDED_PLAN_VERSION, PLAN_DEFAULTS, PLAN_RATES, FEATURE_ROWS, FEATURE_BY_KEY, MENU_FEATURE, homeItemFeature, planIncludes, countsAsSeat, seatCheck } from "./planCore.js";
-export { PLAN_IDS, RECOMMENDED_PLAN_VERSION, PLAN_DEFAULTS, PLAN_RATES, FEATURE_ROWS, FEATURE_BY_KEY, MENU_FEATURE, homeItemFeature, planIncludes, countsAsSeat, seatCheck };
+import { PLAN_IDS, RECOMMENDED_PLAN_VERSION, PLAN_DEFAULTS, PLAN_RATES, FEATURE_ROWS, FEATURE_BY_KEY, MENU_FEATURE, homeItemFeature, planIncludes, countsAsSeat, seatCheck, MODULE_ADDON, MODULE_BUNDLE, moduleAddonFee, moduleAddonLabel } from "./planCore.js";
+export { PLAN_IDS, RECOMMENDED_PLAN_VERSION, PLAN_DEFAULTS, PLAN_RATES, FEATURE_ROWS, FEATURE_BY_KEY, MENU_FEATURE, homeItemFeature, planIncludes, countsAsSeat, seatCheck, MODULE_ADDON, MODULE_BUNDLE, moduleAddonFee, moduleAddonLabel };
 const rank = (id) => PLAN_IDS.indexOf(id);
 // 플랜별 "새로 추가되는 기능" 목록(견적서·요금 안내의 카드 설명용)
 export function planFeatureLines(planId) {

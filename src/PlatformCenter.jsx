@@ -6,7 +6,7 @@
 //  최고관리자가 로그인하면 /choose 에서 "배차 프로그램 / 관리자 관리센터" 중 고른다.
 //  ⭐ 알록달록 금지 — 네이비 계열만.
 import Pager, { pageCount, pageSlice } from "./Pager";
-import UpdateDigestCard, { markUpdatesNoticed } from "./UpdateDigest"; // 📝 2026-11-09 업데이트 보관함(AI 작성함)
+import { markUpdatesNoticed } from "./UpdateDigest"; // 📝 2026-11-09 업데이트 보관함(AI 작성함)
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import React from "react";
 import { useNavigate } from "react-router-dom";
@@ -892,7 +892,7 @@ function NoticesPanel() {
     <div className="space-y-4">
       <Hero en="OPERATIONS · BROADCAST" title="플랫폼 공지" desc="대상 회사의 홈 › 공지사항(PC·모바일)에 '플랫폼 공지'로 올라가고, 화면 맨 위 띠 배너·푸시 알림으로도 알립니다."
         right={<button type="button" onClick={() => { setF(blank); setEditId(null); setWriting(true); }} className="h-11 px-5 rounded-xl bg-white text-[#0F1A30] text-[14.5px] font-black inline-flex items-center gap-2 whitespace-nowrap"><ShellIcon name="pen" size={15} />새 공지 작성</button>} />
-      <UpdateDigestCard onCompose={(d) => { setF({ ...blank, title: d.title, bodyHtml: d.bodyHtml, level: "업데이트" }); setEditId(null); setWriting(true); }} />{/* 📝 2026-11-09 AI 작성함 */}
+      {/* 🛠 2026-11-13 AI 작성함 · 업데이트 보관함 카드는 뺐다(사용자 요청) */}
       <Card code="POSTED" title={`게시한 공지 ${(list || []).length}건`} bodyClass="p-0">
         <div className="px-4 sm:px-5 py-3 border-b border-[#EEF1F6]"><div className="inline-flex items-center gap-1 p-1 rounded-xl bg-[#EEF2F8]">{[["all", "전체", (list || []).length], ["live", "게시 중", liveN], ["off", "내림·종료", (list || []).length - liveN]].map(([k, l, n]) => (
           <button key={k} type="button" onClick={() => setFilter(k)} className={`h-9 px-3.5 rounded-lg text-[13.5px] font-black whitespace-nowrap ${filter === k ? "bg-[#1B2B4B] text-white" : "text-[#5B6B85]"}`}>{l} <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{n}</span></button>))}</div></div>
