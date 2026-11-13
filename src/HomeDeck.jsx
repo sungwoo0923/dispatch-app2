@@ -177,7 +177,7 @@ function Seg({ value, onChange, items }) {
 }
 
 // ─── 본체 ──────────────────────────────────────────────────────────────────────
-export default function HomeDeck({ dispatchData = [], pastCache, liveStart, users = [], myName = "", isMaster = false, att = null }) {
+export default function HomeDeck({ dispatchData = [], pastCache, liveStart, users = [], myName = "", isMaster = false, att = null, todo = null }) {
   const today = kstToday();
   const thisMonth = today.slice(0, 7);
   const [range, setRange] = useState("30d");
@@ -354,6 +354,8 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
         </div>
       </div>
 
+      {/* ⭐ 2026-11-13 오늘 할 일 — 미배차 · 오늘/내일 상차 · 운임 미입력(누르면 그 화면) */}
+      {todo}
       {/* ── KPI 타일 ── */}
       {/* ⭐ 2026-11-04 폴더블(펼친 화면 884px)·태블릿 — 본문이 좁으면 5칸을 억지로 한 줄에 넣지 않고 줄을 나눈다(글자가 한 자씩 세로로 쪼개졌다) */}
       <div style={{ position: "relative", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 14 }}>
