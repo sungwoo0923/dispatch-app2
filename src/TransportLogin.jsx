@@ -12,7 +12,7 @@ import { Loader2 } from "lucide-react";
 import { useMfaPrompt, mfaErrorText } from "./MfaModal";
 import { LogisMark, LogisWordmark, LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { MARKET_NAME } from "./orderMarketConfig"; // ⭐ 2026-11-06 허브(예전 배차마당) 이름
-import { AdminLoginGate, adminAuthTime, isAdminGatePassed, ADMIN_GATE_EVENT } from "./AdminGate"; // 🔐 2026-11-11 2차 비밀번호를 로그인 카드 안에서
+import { AdminLoginGate, adminAuthTime, isAdminGatePassed, ADMIN_GATE_EVENT, warmAdminGate } from "./AdminGate"; // 🔐 2026-11-11 2차 비밀번호를 로그인 카드 안에서
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
@@ -55,6 +55,7 @@ export default function TransportLogin() {
   gateRef.current = gate;
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
+  useEffect(() => { warmAdminGate(); }, []); // ⚡ 2026-11-13 최고관리자 보안 확인(2차 비밀번호 · 문자)을 미리 준비
   const navigate = useNavigate();
 
   // Enter key in popup

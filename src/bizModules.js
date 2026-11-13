@@ -1,7 +1,7 @@
 // ======================= src/bizModules.js =======================
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공) — 운송사마다 쓰는 업무가 다르다.
 //  · 가입할 때 고른다(Signup.jsx) → 승인하면 companyFeatures/{회사} 에 modInland · modContainer · modSea · modAir 로 저장
-//  · 3개 이상 고르면 "통합(종합물류)" = 4개 모두
+//  · 4개를 모두 고르면 "통합(종합물류)" — 1~3개는 고른 영역만(2026-11-13 사용자 요청: 3개도 개별)
 //  · 예전부터 쓰던 운송사는 내륙만(기본값). 아래 PRESET 회사는 저장값이 없어도 통합
 //  · 메뉴 키: "biz:<영역>:<화면>" — 상단 메뉴 · 왼쪽 메뉴 · menuState가 이 키를 그대로 쓴다
 import { useCompanyFeatures } from "./companyFeatures";
@@ -27,10 +27,9 @@ export function presetFeatures(company) {
   return o;
 }
 
-// 가입 화면 규칙 — 1~2개는 고른 그대로, 3개 이상은 통합(4개 모두). 아무것도 안 고르면 내륙
+// 가입 화면 규칙 — 고른 그대로(4개 모두 = 통합). 아무것도 안 고르면 내륙
 export function packModules(selected) {
   const s = BIZ_KEYS.filter((k) => (selected || []).includes(k));
-  if (s.length >= 3) return [...BIZ_KEYS];
   return s.length ? s : ["inland"];
 }
 export const isAllModules = (list) => BIZ_KEYS.every((k) => (list || []).includes(k));

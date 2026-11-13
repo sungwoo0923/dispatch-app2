@@ -4,10 +4,18 @@
 //  - 열기 신호: window.dispatchEvent(new CustomEvent("kp:copyTplOpen"))
 import React from "react";
 import { COPY_DEFAULTS, COPY_VARS, SAMPLE_BODY, SAMPLE_VARS, saveCopyTemplates, useCopyTemplates } from "./copyTemplates";
+import { SIMPLE_DEFAULT, SIMPLE_VARS, buildSimpleList } from "./copySimple";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
-const MODES = [["driver", "기사 전달용", "DRIVER"], ["full", "전체 상세", "FULL"]];
-const draftOf = (cfg) => Object.fromEntries(MODES.map(([m]) => [m, { ...COPY_DEFAULTS[m], ...(cfg?.[m] || {}) }]));
+const MODES = [["driver", "기사 전달용", "DRIVER"], ["full", "전체 상세", "FULL"], ["simple", "간단 목록", "SIMPLE"]];
+// 📋 2026-11-13 간단 목록 — 머리말 한 줄 + 기사 한 줄씩(오더 여러 건을 한 번에). 틀: { header, line }
+const DEF = (m) => (m === "simple" ? SIMPLE_DEFAULT : COPY_DEFAULTS[m]);
+const draftOf = (cfg) => Object.fromEntries(MODES.map(([m]) => [m, { ...DEF(m), ...(cfg?.[m] || {}) }]));
+const SIMPLE_SAMPLE = [
+  { 상차일: "2026-11-12", 상차시간: "오후 8시", 하차일: "2026-11-13", 상차지명: "에이제이", 하차지명: "베베숲 평택", 거래처명: "에이제이", 차량번호: "대전88아8987", 이름: "김영관", 전화번호: "010-5251-7468", 차량톤수: "11톤", 차량종류: "윙바디", 청구운임: 350000 },
+  { 상차일: "2026-11-12", 상차시간: "오후 8시", 하차일: "2026-11-13", 상차지명: "에이제이", 하차지명: "베베숲 평택", 거래처명: "에이제이", 차량번호: "충북84아1177", 이름: "이준희", 전화번호: "010-6349-7054", 차량톤수: "11톤", 차량종류: "윙바디", 청구운임: 350000 },
+  { 상차일: "2026-11-12", 상차시간: "오후 8시", 하차일: "2026-11-13", 상차지명: "에이제이", 하차지명: "베베숲 평택", 거래처명: "에이제이", 차량번호: "충남80바8090", 이름: "맹동주", 전화번호: "010-2784-5000", 차량톤수: "11톤", 차량종류: "윙바디", 청구운임: 350000 },
+];
 
 export function CopyTemplateEditor({ canEdit = true, onSaved, compact = false }) {
   const cfg = useCopyTemplates();
@@ -17,6 +25,7 @@ export function CopyTemplateEditor({ canEdit = true, onSaved, compact = false })
   const [busy, setBusy] = React.useState(false);
   const [msg, setMsg] = React.useState("");
   const focus = React.useRef({ key: "top", el: null });
+  React.useEffect(() => { focus.current = { key: mode === "simple" ? "line" : "top", el: null }; }, [mode]);
   React.useEffect(() => { if (!dirty) setDraft(draftOf(cfg)); }, [cfg, dirty]);
 
   const d = draft[mode];
@@ -34,7 +43,8 @@ export function CopyTemplateEditor({ canEdit = true, onSaved, compact = false })
     try { await saveCopyTemplates(draft); setDirty(false); setMsg("저장했습니다 — 다음 복사부터 바로 적용됩니다."); onSaved?.(); }
     catch (e) { setMsg(`저장 실패: ${e.message}`); } finally { setBusy(false); }
   };
-  const preview = (() => {
+  const isSimple = mode === "simple";
+  const preview = isSimple ? buildSimpleList(SIMPLE_SAMPLE, d) : (() => {
     // 미리보기는 편집 중인 값으로 조립(캐시와 별개)
     const fill = (t) => String(t || "").replace(/\{([^{}\s]+)\}/g, (m, k) => (k in SAMPLE_VARS ? SAMPLE_VARS[k] : m)).trim();
     const up = d.includeUpload ? fill(d.uploadBlock) : "";
@@ -65,6 +75,15 @@ export function CopyTemplateEditor({ canEdit = true, onSaved, compact = false })
           ))}
         </div>
 
+        {isSimple && (<>
+          <div className="rounded-xl border border-[#DCE3EE] bg-white px-4 py-3 text-[12.5px] leading-relaxed text-[#3A4A66]">
+            <b className="text-[#0F1A30]">업체에 짧게 보내는 문구</b>입니다. 오더를 <b className="text-[#0F1A30]">여러 개 체크하고 [기사복사]</b>를 누르면 이 틀로 한 번에 복사됩니다(1개만 골랐을 때는 복사 방식에서 [간단 목록]).
+            날짜 · 상차지 · 하차지 · 구분이 같은 오더는 머리말 하나 아래로 묶입니다. <b className="text-[#0F1A30]">구분</b>은 시간으로 자동 판단합니다 — 야상: 전날 18시 이후(또는 새벽 5시 전) 상차 · 당착: 상차한 날 도착 · 익착: 다음 날 도착.
+          </div>
+          {area("header", "① 머리말 (묶음마다 한 줄)", "예: 11/13 에이제이-베베숲 평택 야상", 2)}
+          {area("line", "② 기사 줄 (오더마다 한 줄)", "예: 대전88아8987  김영관  010-5251-7468", 2)}
+        </>)}
+        {!isSimple && (<>
         <div className="flex items-center justify-between gap-3 rounded-xl border border-[#DCE3EE] bg-white px-4 py-3">
           <div><div className="text-[13.5px] font-black text-[#0F1A30]">업로드 링크 넣기</div><div className="text-[11.5px] text-[#7A89A3]">기사님이 파렛전표·명세서를 올리는 링크를 문구에 포함합니다.</div></div>
           <button type="button" disabled={!canEdit} onClick={() => set({ includeUpload: !d.includeUpload })} aria-pressed={d.includeUpload}
@@ -79,11 +98,12 @@ export function CopyTemplateEditor({ canEdit = true, onSaved, compact = false })
           <span className="font-black text-[#1B2B4B]">오더 본문</span> — 날짜 · 상차/하차 · 경유지 · 화물 · 결제방법은 프로그램이 자동으로 채웁니다.
         </div>
         {area("bottom", d.includeUpload ? "③ 본문 아래 문구" : "② 본문 아래 문구", "마지막에 붙음", 5)}
+        </>)}
 
         <div>
           <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>VARIABLES · 눌러서 커서 위치에 넣기</div>
           <div className="flex flex-wrap gap-1.5 mt-1.5">
-            {COPY_VARS.map(([k, desc]) => (
+            {(isSimple ? SIMPLE_VARS : COPY_VARS).map(([k, desc]) => (
               <button key={k} type="button" disabled={!canEdit} title={desc} onClick={() => insertVar(k)}
                 className="h-7 px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-bold text-[#1B2B4B] hover:border-[#2D4C82] hover:bg-[#F2F6FC]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{`{${k}}`}</button>
             ))}
@@ -91,7 +111,7 @@ export function CopyTemplateEditor({ canEdit = true, onSaved, compact = false })
         </div>
 
         <div className="flex items-center gap-2 pt-1">
-          {canEdit && <button type="button" onClick={() => { set({ ...COPY_DEFAULTS[mode] }); }} className="h-10 px-4 rounded-xl border border-[#DCE3EE] text-[13px] font-black text-[#3A4A66] hover:bg-[#F5F7FB]">이 형식 기본값으로</button>}
+          {canEdit && <button type="button" onClick={() => { set({ ...DEF(mode) }); }} className="h-10 px-4 rounded-xl border border-[#DCE3EE] text-[13px] font-black text-[#3A4A66] hover:bg-[#F5F7FB]">이 형식 기본값으로</button>}
           <div className="flex-1 text-[12.5px] font-bold text-[#2D4C82]">{msg || (dirty ? "저장하지 않은 변경 사항이 있습니다." : "")}</div>
           {canEdit ? <button type="button" onClick={save} disabled={busy || !dirty} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-40">{busy ? "저장 중…" : "저장"}</button>
             : <span className="text-[12px] text-[#8A97AD]">관리자만 수정할 수 있습니다.</span>}

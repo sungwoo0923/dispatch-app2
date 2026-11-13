@@ -1,6 +1,6 @@
 // src/Signup.jsx  —  운송사 회원가입
 import { EXEC_TEAM, isExecPosition, suggestRole } from "./hrConstants";
-import { PLAN_DEFAULTS } from "./plans";
+import { PLAN_DEFAULTS, moduleAddonFee, MODULE_ADDON } from "./plans";
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { checkEmailAvailable, warmSignupFunctions } from "./emailCheck";
@@ -172,11 +172,13 @@ function SignupForm({ signupType, onBack }) {
   const [businessNumber, setBusinessNumber] = useState("");
   // 💳 신규 운송사 — 쓰실 요금제(승인할 때 이 요금제로 열린다. 관리자가 승인 때 바꿀 수 있음)
   const [planId, setPlanId] = useState("standard");
-  // 🧭 2026-11-12 업무 영역 — 신규 운송사: 회사가 쓰는 영역(3개 이상 = 통합) · 기존 운송사 합류: 내 담당 업무
+  // 🧭 2026-11-12 업무 영역 — 신규 운송사: 회사가 쓰는 영역(4개 모두 = 통합) · 기존 운송사 합류: 내 담당 업무
   const [bizSel, setBizSel] = useState(["inland"]);
   const [bizHome, setBizHome] = useState("");
   const bizPacked = packModules(bizSel);
-  const toggleBiz = (k) => setBizSel((p) => { const n = p.includes(k) ? p.filter((x) => x !== k) : [...p, k]; return n.length ? (n.length >= 3 ? [...BIZ_KEYS] : n) : p; });
+  const toggleBiz = (k) => setBizSel((p) => { const n = p.includes(k) ? p.filter((x) => x !== k) : [...p, k]; return n.length ? n : p; }); // 1~3개는 고른 그대로, 4개 = 통합
+  const bizFee = moduleAddonFee(planId, bizPacked.length);
+  const planPrice = (PLAN_DEFAULTS.find((p) => p.id === planId) || {}).price || 0;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
@@ -602,9 +604,17 @@ function SignupForm({ signupType, onBack }) {
                   <span className="block text-[14px] font-black">통합 (종합물류)</span>
                   <span className={`block text-[11.5px] font-semibold ${isAllModules(bizSel) ? "text-white/70" : "text-[#7A89A3]"}`}>내륙 · 컨테이너 · 해상 · 항공을 모두 쓰고, 화물 한 건이 팀 사이로 이어지며, 임원은 전 사업부를 한 화면에서 봅니다</span>
                 </span>
-                <span className={`text-[11.5px] font-black whitespace-nowrap ${isAllModules(bizSel) ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`}>{isAllModules(bizSel) ? "선택됨" : "3개 이상 = 통합"}</span>
+                <span className={`text-[11.5px] font-black whitespace-nowrap ${isAllModules(bizSel) ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`}>{isAllModules(bizSel) ? "선택됨" : "4개 모두 = 통합"}</span>
               </button>
-              <div className="text-[12.5px] text-[#7A89A3] mt-1.5">선택: <b className="text-[#1B2B4B]">{modulesLabel(bizPacked)}</b> · 2개까지는 고른 업무만, 3개 이상은 통합으로 열립니다. 승인 뒤에도 바꿀 수 있습니다.</div>
+              <div className="mt-2 rounded-xl border border-[#DCE3EE] bg-[#F5F8FD] px-3.5 py-3" data-testid="signup-biz-fee">
+                <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                  <span className="text-[13px] font-bold text-[#3A4A66]">선택: <b className="text-[#0F1A30]">{modulesLabel(bizPacked)}</b></span>
+                  <span className="text-[13px] font-bold text-[#3A4A66]">월 <b className="text-[17px] font-black text-[#0F1A30] tabular-nums">{(planPrice + bizFee).toLocaleString()}</b>원 <span className="text-[#7A89A3]">· VAT 별도</span></span>
+                </div>
+                <div className="text-[12.5px] text-[#7A89A3] mt-1 leading-relaxed">
+                  기본료 {planPrice.toLocaleString()}원(업무 영역 1개 포함){bizFee > 0 ? ` + 업무 영역 추가 ${bizPacked.length - 1}개 ${bizFee.toLocaleString()}원` : ""} · 영역을 1개 더 쓸 때마다 월 {(MODULE_ADDON[planId] || 0).toLocaleString()}원(2개 추가 10% · 통합 20% 할인). 승인 뒤에도 바꿀 수 있습니다.
+                </div>
+              </div>
             </Field>
           )}
           {signupType === "기존" && (

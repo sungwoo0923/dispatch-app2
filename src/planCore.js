@@ -10,6 +10,21 @@ export const PLAN_IDS = ["lite", "basic", "standard", "pro"];
 // 월 추가 옵션 기본 단가(요금제 관리 SALES_DEFAULT가 이 값을 쓴다)
 export const PLAN_RATES = { extraSeat: 20000, extraOrder: 50, fleetPerVehicle: 7000, storagePerGB: 3000 };
 export const RECOMMENDED_PLAN_VERSION = "2026-11b";
+// 🧭 2026-11-13 업무 영역 추가 요금 — 기본료에는 업무 영역 1개(내륙 · 컨테이너 · 해상 · 항공 중 하나)가 들어 있고, 영역을 더 쓰면 요금제별 추가 요금이 붙는다
+//  · 1개 추가 단가(월): 기본료의 약 30%(라이트 3만 · 베이직 6만 · 스탠다드 10만 · 프로 17만)
+//  · 여러 개 묶음 할인: 2개째 추가부터 10%, 통합(4개 모두 = 3개 추가)은 20% → 1개 ×1.0 · 2개 ×1.8 · 3개(통합) ×2.4
+//  · 근거: 해외 포워딩 전용 프로그램이 사용자 1명당 월 75~200달러(약 10~28만 원) 선. 스탠다드 통합(349,000 + 240,000 = 589,000원 / 10명)은 1명당 약 5.9만 원으로
+//    그보다 낮게 잡았다(통관 · EDI 연동이 없는 일정 · 마감 · 손익 관리 범위이기 때문)
+export const MODULE_ADDON = { lite: 30000, basic: 60000, standard: 100000, pro: 170000 };
+export const MODULE_BUNDLE = [0, 1, 1.8, 2.4]; // 추가 영역 수 → 단가 배수
+export const MODULE_NAMES = { inland: "내륙", container: "컨테이너", sea: "해상", air: "항공" };
+// 업무 영역 수(1~4) → 월 추가 요금. addon: 요금제 관리에서 바꾼 단가가 있으면 그 값
+export function moduleAddonFee(planId, moduleCount, addon = MODULE_ADDON) {
+  const extra = Math.max(0, Math.min(3, Math.floor(Number(moduleCount) || 1) - 1));
+  const unit = Number((addon || MODULE_ADDON)[planId] ?? MODULE_ADDON[planId] ?? 0) || 0;
+  return Math.round((unit * MODULE_BUNDLE[extra]) / 1000) * 1000;
+}
+export const moduleAddonLabel = (moduleCount) => { const n = Math.max(1, Math.min(4, Math.floor(Number(moduleCount) || 1))); return n >= 4 ? "통합(4개 영역)" : n > 1 ? `업무 영역 ${n}개` : "업무 영역 1개"; };
 export const PLAN_DEFAULTS = [
   { id: "lite", name: "라이트", en: "LITE", price: 89000, seats: 3, orders: 1000, fleet: 0, storageGB: 10, setupFee: 0, target: "1인 주선 · 2~3인 (일 30건 안팎)" },
   { id: "basic", name: "베이직", en: "BASIC", price: 199000, seats: 6, orders: 3000, fleet: 0, storageGB: 30, setupFee: 300000, target: "소규모 운송사 · 4~6인 (일 100건 안팎)" },

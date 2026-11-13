@@ -16,7 +16,7 @@ export function staffOptionsOf(list = []) {
     const key = email || `name:${name}`;
     if (seen.has(key)) return;
     seen.add(key);
-    out.push({ key, name, email });
+    out.push({ key, name, email, team: String(u.team || "").trim(), position: String(u.position || "").trim() }); // 부서 · 직책은 [담당자 변경] 목록 표시용
   });
   return out.sort((a, b) => a.name.localeCompare(b.name, "ko"));
 }
