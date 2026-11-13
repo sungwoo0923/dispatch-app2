@@ -11,7 +11,7 @@ import * as XLSX from "xlsx";
 import { useFareRules, findFareRule, applyFareRule } from "./fareRules";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import {
-  collection, doc, getDoc, getDocs, query, where, writeBatch, setDoc, onSnapshot, orderBy, limit, serverTimestamp,
+  collection, doc, getDoc, getDocs, query, where, writeBatch, setDoc, deleteDoc, onSnapshot, orderBy, limit, serverTimestamp,
 } from "firebase/firestore";
 import { CustomSelect } from "./CustomSelect";
 import SheetPlaceDriverImport from "./SheetPlaceDriverImport"; // ⭐ 2026-11-02 상하차지·기사 가져오기
@@ -372,6 +372,16 @@ export default function SheetImportPanel() {
     try { const r = await callApi("sheetImport", { action: "cancel", batchId: b.id }); alert(`${r.removed.toLocaleString()}건을 지웠습니다.`); } catch (e) { alert(e.message); } finally { setBusy(""); }
   };
 
+  // 🗑 2026-11-13 기록 줄만 지우기 — 가져온 오더는 그대로(지우려면 먼저 [가져오기 취소]). 실패 · 취소된 줄 정리용
+  const removeBatch = async (b) => {
+    const live = b.status === "done" && (b.count || 0) > 0;
+    if (!(await kpConfirm(live
+      ? `${fmtTime(b.at)} ${b.companyName} 기록을 목록에서 지울까요?\n\n가져온 오더 ${(b.count || 0).toLocaleString()}건은 그대로 남고, 이 기록을 지우면 나중에 [가져오기 취소]로 한 번에 지울 수 없게 됩니다.`
+      : `${fmtTime(b.at)} ${b.companyName} 기록을 목록에서 지울까요?`))) return;
+    setBusy(`del_${b.id}`);
+    try { await deleteDoc(doc(db, "importBatches", b.id)); } catch (e) { alert(e?.message?.includes("permission") ? "지울 권한이 없습니다." : (e?.message || "지우지 못했습니다.")); } finally { setBusy(""); }
+  };
+
   const input = "w-full border border-[#DCE3EE] rounded-xl px-3.5 py-2.5 text-[14.5px] outline-none focus:border-[#1B2B4B] bg-white";
   const problems = checked ? checked.rows.filter((r) => r.__problems.length && inRange(r)) : [];
   const dups = checked ? checked.rows.filter((r) => r.__dup && inRange(r)) : [];
@@ -412,6 +422,7 @@ export default function SheetImportPanel() {
                       </button>
                     )}
                     {b.status !== "canceled" && <button onClick={() => cancelBatch(b)} disabled={busy === `cancel_${b.id}`} className="px-3.5 py-1.5 rounded-xl border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 disabled:opacity-60">{busy === `cancel_${b.id}` ? "지우는 중…" : "가져오기 취소"}</button>}
+                    <button onClick={() => removeBatch(b)} disabled={busy === `del_${b.id}`} title="이 기록 줄만 목록에서 지웁니다(가져온 오더는 그대로)" className="ml-2 px-3 py-1.5 rounded-xl border border-[#DCE3EE] text-[#5B6B85] text-[13px] font-bold hover:bg-gray-50 disabled:opacity-60">{busy === `del_${b.id}` ? "지우는 중…" : "기록 삭제"}</button>
                   </td>
                 </tr>
               ))}
