@@ -9399,8 +9399,8 @@ return (
           (revenueUnlocked || DEV_DEMO_REVENUE) ? (
             <>
             {bizMods.list.length > 1 && <React.Suspense fallback={null}><FreightRevenueStrip modules={bizMods.list} onOpenGroup={canBizGroup ? () => { setBizRaw("group"); writeBiz(user?.uid, "group"); setMenu(bizMenuKey("group", "pnl")); } : null} /></React.Suspense>}
-            <DetailScope data={salesDispatchData} getters={mainDetailGet} title="세부검색 · 매출관리">{(detRows, detBtn) => (
-            <BizScope company={getTenant() || userCompany || localStorage.getItem("userCompany") || ""} data={detRows} extra={detBtn}>{(bizRows, bizSel) => (
+            <DetailScope data={salesDispatchData} getters={mainDetailGet} title="세부검색 · 매출관리">{(detRows) => ( /* 🔎 2026-11-14 세부검색 버튼은 매출관리에서 뺐다(사용자 요청) */
+            <BizScope company={getTenant() || userCompany || localStorage.getItem("userCompany") || ""} data={detRows}>{(bizRows, bizSel) => (
             <Settlement
               key={`settle-${bizSel || "all"}`}
               dispatchData={bizRows}
@@ -9489,10 +9489,8 @@ return (
           <div style={{ display: menu === "정산관리" ? undefined : "none" }}>
           <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={정산관리Tab} onSelect={set정산관리Tab}
             items={[{ key: "홈", label: "정산 홈", en: "OVERVIEW", icon: "dashboard" }, { key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOn ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
-          <DetailScope data={salesDispatchData} getters={mainDetailGet} title="세부검색 · 정산관리">{(settleRows, settleBtn) => (<>
-          {/* 🔎 2026-11-03 세부검색 — 거래처정산·용차지급·지입정산 모두 이 조건으로 */}
-          {/* ⭐ 2026-11-07 세부검색 버튼은 왼쪽 메뉴 윗줄(오른쪽 끝)로 — 머리 높이·왼쪽 끝 정렬 */}
-          <SubNavBar side="right" order={9}>{settleBtn}</SubNavBar>
+          <DetailScope data={salesDispatchData} getters={mainDetailGet} title="세부검색 · 정산관리">{(settleRows) => (<>
+          {/* 🔎 2026-11-14 세부검색 버튼은 정산관리에서 뺐다(사용자 요청) */}
           {/* 거래명세서 검색/선택 상태 유지를 위해 지급관리 탭으로 전환해도 언마운트하지 않고 숨기기만 한다 */}
           <div style={{ display: 정산관리Tab === "거래처정산" ? undefined : "none" }}>
             <ClientSettlement

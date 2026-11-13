@@ -292,7 +292,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
     else if (deptMode === "exec" && ["analysis", "apqueue", "staffinfo"].includes(k)) body = <React.Suspense fallback={<Loading />}>{k === "analysis" ? <ExecAnalysis company={userCompany} dispatchData={salesData} drivers={drivers || []} loadRange={loadRange} canCash={isCeoPosition(me?.position || prof?.position)} /> : k === "apqueue" ? <ExecApprovalQueue company={userCompany} me={me} /> : <ExecStaffInfo company={userCompany} />}</React.Suspense>; // 📈 2026-11-08 임원 화면만(메뉴도 임원 화면에만)
     else if (k === "approvals") body = <div className="kp-m-pc kp-m-approval"><ExecApprovals company={userCompany} me={me} /></div>;
     else if (k === "schedule") body = wrap(<TeamSchedule company={userCompany} />);
-    else if (k === "settle") body = lazy(<DetailScope data={salesData} getters={detGet} title="세부검색 · 정산관리">{(detRows, detBtn) => <><div className="px-3 pt-3 flex justify-end">{detBtn}</div><PcSettleMobile dispatchData={detRows} companyName={userCompany} role={role} isViewer={isViewer} clients={clients} /></>}</DetailScope>);
+    else if (k === "settle") body = lazy(<DetailScope data={salesData} getters={detGet} title="세부검색 · 정산관리">{(detRows) => <><PcSettleMobile dispatchData={detRows} companyName={userCompany} role={role} isViewer={isViewer} clients={clients} /></>}</DetailScope>);
     else if (k === "acct") body = lazy(<PcAccounting company={userCompany} fixedRows={fixedRows} clients={clients} drivers={drivers || []} isViewer={isViewer} role={role} />);
     else if (k === "payroll") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><PayrollCenter company={userCompany} role={role} /></div></React.Suspense>;
     else if (k === "payslip") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><MyPayslips company={userCompany} uid={me?.uid} /></div></React.Suspense>;
@@ -317,7 +317,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
   }
   else if (kind === "revenue") body = (
     <React.Suspense fallback={<Loading />}>
-      <div className="kp-m-pc px-2 pt-2"><DetailScope data={salesData} getters={detGet} title="세부검색 · 매출관리">{(detRows, detBtn) => <BizScope company={userCompany} data={detRows} extra={detBtn}>{(bizRows, bizSel) => <PcSettlement key={`ms-${bizSel || "all"}`} dispatchData={bizRows} fixedRows={fixedRows} clients={clients} places={places} role={role} isViewer={role === "viewer"} userCompany={userCompany} />}</BizScope>}</DetailScope></div>
+      <div className="kp-m-pc px-2 pt-2"><DetailScope data={salesData} getters={detGet} title="세부검색 · 매출관리">{(detRows) => <BizScope company={userCompany} data={detRows}>{(bizRows, bizSel) => <PcSettlement key={`ms-${bizSel || "all"}`} dispatchData={bizRows} fixedRows={fixedRows} clients={clients} places={places} role={role} isViewer={role === "viewer"} userCompany={userCompany} />}</BizScope>}</DetailScope></div>
     </React.Suspense>
   );
   return <OrderHistoryContext.Provider value={history}>{body}</OrderHistoryContext.Provider>;

@@ -15,7 +15,7 @@ export const RG_NONE = "(미지정)";
 // 🗂 2026-11-14 담당노선구분이 없는 오더(구글시트와 이어지지 않은, 프로그램에서 직접 등록한 오더)의 탭 이름 — 화면에는 "일반오더"로 보인다(저장되는 값은 그대로)
 export const rgLabel = (g) => (g === RG_NONE ? "일반오더" : g);
 // 들어갈 때마다 [전체]부터 보는 화면 — 여기서 고른 탭은 그 화면에 있는 동안만 쓰고, 다른 화면의 선택(내 담당 등)은 그대로 둔다
-const RG_ALL_FIRST = ["매출관리"];
+const RG_ALL_FIRST = ["매출관리", "정산관리"];
 export const routeGroupOf = (row) => String(row?.담당노선구분 || String(row?.이전출처 || "").split("!")[0] || "").trim();
 const LS = (uid) => `kpRouteGroup:${uid || "me"}`;
 const readSel = (uid) => { try { const v = JSON.parse(localStorage.getItem(LS(uid)) || "null"); return v === "all" || v === "mine" || Array.isArray(v) ? v : null; } catch { return null; } };
