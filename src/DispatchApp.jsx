@@ -2975,6 +2975,7 @@ import { useBizModules, isBizMenu, parseBizMenu, bizTopMenus, bizSideGroups, biz
 import { reportScreen, installScreenVisibility } from "./screenReport";
 import { useRouteGroupFilter, RouteGroupBar, routeGroupOf, RouteGroupField, SheetLiveChip } from "./routeGroups";
 import { settleStartTab } from "./settleStart";
+import { QuickOrderLine, useDriverSuggest, DriverSuggestCell, AssignConfirm } from "./SmartDispatchUI"; // ⭐ 2026-11-13 빠른 등록 · 추천 기사
 const SettleHome = React.lazy(() => import("./SettleHome")); // 🧭 정산 홈(처음 열 때 받는다)
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "./orderHistoryCache";
 import { normScope, scopeAllows, isOfficeBaseMenu } from "./workScope";
@@ -9088,6 +9089,7 @@ return (
             dispatchData={workScope ? [] : dispatchDataFiltered}
             onOrderDoubleClick={(order) => setHomeClickedOrder(order)}
             dept={workScope ? "office" : deptMode}
+            onTodoGo={(k) => { const [m, t] = String(k).split(":"); if (m === "배차현황" && t) set배차현황Tab(t); handleMenuClick(m); }}
             onDeptGo={(k) => { const [m, t] = String(k).split(":"); if (m === "정산관리" && t) set정산관리Tab(t); if (m === "출근기록부" || (m === "인사관리부" && t)) { try { sessionStorage.setItem("kpHrTab", m === "출근기록부" ? "attendance" : t); } catch { /* 무시 */ } handleMenuClick("인사관리부"); return; } if (m === "기사서류") { set기사관리Tab("docs:driver"); handleMenuClick("기사관리"); return; } if (m === "기사승인") { set기사관리Tab("acc:pending"); handleMenuClick("기사관리"); return; } if (m === "자금관리" && t) { try { sessionStorage.setItem("kpFundsTab", t); } catch { /* 무시 */ } } if (m === "영업관리" && t) { try { sessionStorage.setItem("kpSalesTab", t); } catch { /* 무시 */ } } if (m === "결재함") { window.__kpOpenApproval = t ? { id: t, page: "inbox" } : { page: "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; } handleMenuClick(m); }}
           />
         )}
@@ -15602,6 +15604,13 @@ React.useEffect(() => {
 // (예전 "오더 붙여넣기" 글 분석기는 OrderScanModal + orderScanParser.js로 옮겼다 — 2026-10-28)
     const renderForm = () => (
       <>
+        {/* ⭐ 2026-11-13 한 줄 빠른 등록 — 지난 노선을 찾아 오더복사와 같은 방식으로 채운다 */}
+        {!isViewer && <QuickOrderLine rows={dispatchData} userCompany={userCompany} canMoney={canMoney} onApply={(row, o) => {
+          applyCopy(row);
+          setForm((p) => ({ ...p, ...(o.date ? { 상차일: o.date, 하차일: o.date } : {}), ...(o.ton ? { 차량톤수: o.ton, 톤수값: o.ton.replace("톤", ""), 톤수타입: "톤" } : {}), ...(o.kind ? { 차량종류: o.kind } : {}) }));
+          if (o.kind) setVehicleQuery(o.kind);
+          if (o.fare > 0 && canMoney) onChange("청구운임", String(o.fare));
+        }} />}
         <div className="flex items-center gap-4 mb-3">
 
   <h2 className="text-lg font-bold"><EditableText id="popup.title.배차관리 폼" defaultText="오더등록" /></h2>
@@ -50202,6 +50211,21 @@ function UnassignedStatus({ dispatchData, setDispatchData = () => {}, drivers = 
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   };
+  // ⭐ 2026-11-13 추천 기사 — 같은 구간을 뛰어 본 기사를 눌러 바로 배정
+  const pickDrivers = useDriverSuggest(dispatchData, userCompany);
+  const [assignAsk, setAssignAsk] = React.useState(null);
+  const [assignBusy, setAssignBusy] = React.useState(false);
+  const doAssign = async () => {
+    if (!assignAsk || assignBusy) return;
+    const { order: o, driver: d } = assignAsk;
+    setAssignBusy(true);
+    try {
+      const patch = { 차량번호: d.차량번호, 이름: d.이름, 전화번호: formatPhone(d.전화번호 || ""), 배차상태: "배차완료", updatedAt: Date.now() };
+      const ok = await patchDispatch(o._id, { ...patch, __col: o.__col });
+      if (ok !== false) showToast(`${d.이름} 기사 배정 완료`);
+    } catch (e) { console.error(e); showToast("배정 중 오류가 났습니다.", "err"); }
+    setAssignBusy(false); setAssignAsk(null);
+  };
   // ⭐ 2026-11-05 매칭된 기사 이름·전화 [수정] — 미배차현황 오더 복사/수정 패널
   const cpDrvEdit = useDriverEditChoice({ drivers, upsertDriver, company: userCompany, notify: (m) => showToast(m) });
   React.useEffect(() => { cpDrvEdit.reset(); }, [copyPanelOpen, copyTarget?._id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -50435,7 +50459,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
 
   const unMgrMap = useOrderStaffName(userNameMap, userCompany); // ⭐ 배차담당자 칸(회사별 기능 꺼지면 null)
   const headers = [
-    "순번", ...(unMgrMap ? ["배차담당자"] : []), "등록일","경과","상차일","상차시간","하차일","하차시간","거래처명",
+    "순번", ...(isViewer ? [] : ["추천 기사"]), ...(unMgrMap ? ["배차담당자"] : []), "등록일","경과","상차일","상차시간","하차일","하차시간","거래처명",
     "상차지명","상차지주소","하차지명","하차지주소",
     "차량종류","차량톤수","화물내용","경유","배차상태","메모",
   ];
@@ -50507,6 +50531,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
           {toast.msg}
         </div>
       )}
+      <AssignConfirm target={assignAsk} busy={assignBusy} onCancel={() => setAssignAsk(null)} onOk={doAssign} />
 
       {/* 페이지 헤더 */}
       <div className="flex items-center justify-between mb-4">
@@ -50576,7 +50601,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   </th>
                 )}
                 {headers.map((h) => (
-                  <SortTh key={h} k={h === "경유" ? "" : h} sort={unSort.sort} onSort={unSort.toggle} className={headBase}><EditableText id={`generic.table.header.${h}`} defaultText={h} /></SortTh>
+                  <SortTh key={h} k={h === "경유" || h === "추천 기사" ? "" : h} sort={unSort.sort} onSort={unSort.toggle} className={headBase}><EditableText id={`generic.table.header.${h}`} defaultText={h} /></SortTh>
                 ))}
               </tr>
             </thead>
@@ -50619,6 +50644,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         </td>
                       )}
                       <td className={cellBase}>{i + 1}</td>
+                      {!isViewer && <td className={cellBase}><DriverSuggestCell order={r} pick={pickDrivers} drivers={drivers} onAssign={(o, d) => setAssignAsk({ order: o, driver: d })} /></td>}
                       {unMgrMap && <td className={cellBase}><MgrBadge row={r} name={orderMgrName(unMgrMap, r)} empty={ORDER_MGR_EMPTY} /></td>}
                       <td className={cellBase}>{displayRegDate(r)}</td>
                       <td className={cellBase}>

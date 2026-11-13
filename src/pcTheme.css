@@ -92,6 +92,8 @@
   border-color: var(--kp-accent) !important;
   box-shadow: 0 0 0 3px rgba(75, 108, 183, 0.16) !important;
 }
+/* 빠른 등록 한 줄 — 바깥 틀이 테두리를 그리므로 안쪽 입력칸은 테두리·그림자 없음 */
+.kp-pc [data-kp="quick-order"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):focus { box-shadow: none !important; }
 
 /* ── 표 머리줄(남색) → 진한 남색 + 글자 간격 ── */
 .kp-pc thead[class~="bg-[#1B2B4B]"] th,
