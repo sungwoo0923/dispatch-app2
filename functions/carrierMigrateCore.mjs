@@ -98,9 +98,9 @@ export const PRESET_SUGGESTIONS = {
     // 🧩 2026-11-13 사용자가 탭마다 설명한 규칙
     //  · 대원전선 · 카고LCL 은 아직 가져오지 않는다(확인할 것이 남음)
     //  · 녹수 · 아산 KDF · 보령 KDF · 녹수 내수 · 아산 내수 · 보령 내수 · 녹수셔틀 = 거래처는 모두 "녹수"(탭 이름은 상/하차지)
-    skipTabs: ["대원전선", "카고LCL"],
+    skipTabs: ["카고LCL"],
     // 예전에 [제외]로 저장해 둔 탭이라도 아래 탭은 다시 가져온다(사용자가 양식을 설명한 탭)
-    includeTabs: ["롯데베르살리스", "보령 KDF", "아산 KDF", "녹수", "녹수 내수"],
+    includeTabs: ["롯데베르살리스", "보령 KDF", "아산 KDF", "녹수", "녹수 내수", "대원전선"],
     commonOptions: ["기사직통", "화물맨", "24시", "원콜", "개인콜", "지입", "직영차", "고정차", "임대", "고정기사"],
     tabRules: {
       // 상차지 = 롯데베르살리스(탭 위쪽 주소) · 화주 칸 = 하차지명 · 하차지 칸 = 하차지주소 · BOX = 화물내용 · TON = 톤수 · 지역/청구 요율 톤수는 안 씀
@@ -115,6 +115,12 @@ export const PRESET_SUGGESTIONS = {
       "아산 내수": { client: "녹수", shortAddrName: true },
       "보령 내수": { client: "녹수", shortAddrName: true },
       녹수셔틀: { client: "녹수" },
+      // 🧩 2026-11-13 대원전선 — 거래처는 대원전선 · 출발지(자동차전선 · 시판/직판 · 한전/수출 …) = 상차지명(주소는 모두 탭 위쪽의 대원전선 주소)
+      //  거래처 칸 = 하차지명 · 도착지 칸 = 하차지주소 · 파렛트 = 화물내용 · 차종 = 톤수 · 야상 = 상차일 상차 → 다음 날 하차 · 오른쪽 단가표는 가져오지 않는다
+      //  상차지 담당자 이름 · 전화번호는 코드에 적지 않고, 탭 맨 위 메모("○○ 상차 담당자 / 이름 010-…")에서 읽는다(memoContacts)
+      대원전선: { client: "대원전선", toNameCol: "거래처", toAddrCol: "도착지", cargo: [["파렛트", ""]], maxCol: "비고", maxColLast: true, yasangNextDay: true, noRates: true,
+        fromAddress: "충남 예산군 고덕면 오추리 134-7",
+        fromContactsFromMemo: true },
     },
   },
 };
@@ -819,6 +825,11 @@ export function applyTabRule(rec, r, L, rule, ctx) {
     if (!cur || !base || nm(cur) === nm(base)) { rec.상차지명 = rule.fromFixed; rec.상차지주소 = cur || base; }
     else rec.상차지명 = shortAddressName(cur) || rec.상차지명;
   }
+  // 상차지 주소 통일(이름은 시트의 출발지 그대로) + 상차지 담당자
+  if (rule.fromAddress && rec.상차지명 && !looksAddress(rec.상차지명) && !looksRegion(rec.상차지명)) rec.상차지주소 = rule.fromAddress; // 출발지에 다른 지역 · 주소가 적힌 줄은 그대로
+  if (rule.fromContactsFromMemo && ctx.fromContacts) { const c = ctx.fromContacts[nm(rec.상차지명)]; if (c) { rec.상차지담당자 = c[0]; rec.상차지담당자번호 = c[1]; } }
+  // 야상 = 상차일에 상차 → 다음 날 하차(당착 = 같은 날)
+  if (rule.yasangNextDay && /야상|야간/.test(g("입고시간")) && rec.하차일 === rec.상차일) rec.하차일 = addDays(rec.상차일, 1);
   // 하차지명 = 이름 칸(비면 빈칸) · 하차지주소 = 주소 칸
   if (rule.toNameCol) {
     rec.하차지명 = g(rule.toNameCol); if (rule.toAddrCol) rec.하차지주소 = g(rule.toAddrCol);
@@ -849,10 +860,23 @@ export function applyTabRule(rec, r, L, rule, ctx) {
   rec.메모 = uniq(memo).join(" · ");
   return rec;
 }
+// 탭 맨 위 메모에서 상차지 담당자 읽기 — "자동차전선 상차 담당자 ⏎ 홍길동기사 010-1234-5678" · "한전/수출 상차 담당자 ⏎ 김철수 기사님 : 010-…"
+//  → { 자동차전선: [이름, 전화], "한전/수출": […], 한전: […], 수출: […] } (키는 nm() 으로 맞춘다)
+export function memoContacts(rows, headerRow) {
+  const out = {};
+  (rows || []).slice(0, Math.max(0, headerRow)).forEach((r) => (r || []).forEach((c) => {
+    const m = cell(c).replace(/\s+/g, " ").match(/^(.+?)\s*상차\s*담당자\s*[:：]?\s*(.+?)\s*(?:기사님|기사|님)?\s*[:：]?\s*(01\d[-\s]?\d{3,4}[-\s]?\d{4})/);
+    if (!m) return;
+    const v = [m[2].trim(), fmtPhone(m[3])];
+    [m[1], ...m[1].split("/")].map((k) => nm(k)).filter(Boolean).forEach((k) => { out[k] = v; });
+  }));
+  return out;
+}
 // 탭 오른쪽에 붙은 표(단가표 등)가 메모로 섞이지 않게 — rule.maxCol 칸까지만 오더로 읽는다
 function trimTabRows(t, rule) {
   if (!rule?.maxCol) return t;
-  const hi = findHeaderRow(t.rows); const c = (t.rows[hi] || []).findIndex((h) => nm(h) === nm(rule.maxCol));
+  const hi = findHeaderRow(t.rows); const H = t.rows[hi] || [];
+  const c = rule.maxColLast ? H.reduce((a, h, i) => (nm(h) === nm(rule.maxCol) ? i : a), -1) : H.findIndex((h) => nm(h) === nm(rule.maxCol)); // maxColLast: 같은 이름 칸이 여러 개면 맨 오른쪽 것까지
   return c < 0 ? t : { ...t, rows: t.rows.map((r) => (r || []).slice(0, c + 1)) };
 }
 
@@ -930,7 +954,8 @@ export function buildMigration(tabsIn, presetIn = {}) {
       canon = new Map();
       seen.forEach((m, k) => { const best = bookName.get(k) && m.size > 1 ? ([...m.keys()].find((x) => x === bookName.get(k)) || [...m.entries()].sort((a, b) => b[1] - a[1])[0][0]) : [...m.entries()].sort((a, b) => b[1] - a[1])[0][0]; if (m.size > 1) canon.set(k, best); });
     }
-    const ctx = { canon, year: preset.year || new Date().getFullYear(), client, owner: client, memo, resolve, preset, carriers, used: new Set(), override, tab: t.title, fewFrom: fromVals.size > 0 && fromVals.size <= 4, topFrom: topN / Math.max(1, fromList.length) >= 0.8 ? topV : "" };
+    const fromContacts = preset.tabRules?.[t.title]?.fromContactsFromMemo ? memoContacts(fullTabs[i].rows, L.headerRow) : null;
+    const ctx = { fromContacts, canon, year: preset.year || new Date().getFullYear(), client, owner: client, memo, resolve, preset, carriers, used: new Set(), override, tab: t.title, fewFrom: fromVals.size > 0 && fromVals.size <= 4, topFrom: topN / Math.max(1, fromList.length) >= 0.8 ? topV : "" };
     let made = 0; const skipped = {}; let mismatch = 0; const unresolved = new Map();
     t.rows.slice(L.headerRow + 1).forEach((r, k) => {
       const out = rowToOrder(r || [], L, ctx);
@@ -1015,7 +1040,7 @@ export function buildMigration(tabsIn, presetIn = {}) {
   Object.entries(preset.placeOverrides || {}).forEach(([k, a]) => { const n = k.split("|").slice(1).join("|"); if (n && cell(a)) addPlace(n, cell(a), { memo: "직접 입력한 주소" }); });
   // 오더에서 나온 곳은 이름이 업체명일 때만(지역 · 주소를 이름으로 쓴 줄은 장소로 만들지 않는다)
   const goodName = (n, a) => n && a && nm(n) !== nm(a) && !looksAddress(n) && !looksRegion(n) && !nm(a).startsWith(nm(n)) && looksAddress(a);
-  orders.forEach((o) => { if (goodName(o.상차지명, o.상차지주소)) addPlace(o.상차지명, o.상차지주소); if (goodName(o.하차지명, o.하차지주소)) addPlace(o.하차지명, o.하차지주소); });
+  orders.forEach((o) => { if (goodName(o.상차지명, o.상차지주소)) addPlace(o.상차지명, o.상차지주소, { person: o.상차지담당자, phone: o.상차지담당자번호 }); if (goodName(o.하차지명, o.하차지주소)) addPlace(o.하차지명, o.하차지주소); });
   const places = [...placeMap.values()];
   // 7) 고정노선 후보 — 같은 거래처 · 상차지 · 하차지 · 청구/기사 운임이 반복되는 구간
   const routes = findRouteCandidates(orders, preset);
@@ -1044,7 +1069,7 @@ export function buildMigration(tabsIn, presetIn = {}) {
   // 9) 단가표 — 오더 탭은 오더 칸 오른쪽에서, 이름에 "단가"가 들어간 탭은 전체에서
   const rateSheets = [];
   fullTabs.forEach((t, i) => {
-    if (preset.skipTabs?.includes(t.title)) return;
+    if (preset.skipTabs?.includes(t.title) || preset.tabRules?.[t.title]?.noRates) return; // noRates: 그 탭의 단가표는 가져오지 않는다(대원전선)
     let minCol = -1; let client = cell(preset.tabClients?.[t.title]) || t.title; let base = "";
     if (kinds[i] === "orders") {
       const { L, memo } = layouts[i];
