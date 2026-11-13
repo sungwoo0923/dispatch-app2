@@ -932,6 +932,7 @@ export function buildMigration(tabsIn, presetIn = {}) {
       applyTabRule(out.rec, r || [], L, preset.tabRules?.[t.title], ctx);
       const rowNo = L.headerRow + 2 + k;
       out.rec.이전출처 = `${t.title}!${rowNo}`;
+      out.rec.담당노선구분 = t.title; // 🗂 2026-11-13 시트 탭 = 담당노선구분(src/routeGroups.jsx)
       out.rec.__tab = t.title; out.rec.__row = rowNo;
       orders.push(out.rec); made += 1;
       if (out.driver) addDriver(out.driver, "order");

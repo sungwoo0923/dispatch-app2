@@ -19,6 +19,7 @@ export const COMPANY_FEATURES = [
   // ⭐ 2026-11-08 업체 요청 — 기사앱 퇴근 키로수 입력 + 엔진오일(교환 후 5만km, 4만km부터 알림 확인해야 출퇴근)·타이어 표시
   { key: "driverOdoOil", label: "기사 퇴근 키로수·오일 관리", desc: "기사앱 퇴근 시 키로수 입력 필수 · 엔진오일 교환 시점/다음 교환(5만km)·타이어 표시 · 4만km부터 오일 알림 확인해야 출퇴근" },
   // 🧭 2026-11-12 업무 영역 — 가입할 때 고른 값(src/bizModules.js). 예전 운송사는 내륙만
+  { key: "routeGroups", label: "담당노선구분", desc: "거래처가 같아도 시트 탭처럼 묶음(녹수 · 아산 KDF …)으로 나눠 보기 · 화면 위 버튼 줄 · 직원별 내 담당" }, // 🗂 2026-11-13 JY로지스틱스용
   { key: "modInland", label: "업무 영역 · 내륙운송", desc: "내륙 배차(기존 배차 프로그램) — 기본 켜짐", defaultOn: true },
   { key: "modContainer", label: "업무 영역 · 컨테이너운송", desc: "컨테이너 오더등록 · 운송현황 · 마감보드 · 손익" },
   { key: "modSea", label: "업무 영역 · 해상", desc: "해상 선적등록(B/L) · 선적현황 · 마감보드 · 손익" },
