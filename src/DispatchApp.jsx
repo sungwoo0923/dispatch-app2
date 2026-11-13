@@ -2974,6 +2974,8 @@ import { useCompanyFeatures } from "./companyFeatures";
 import { useBizModules, isBizMenu, parseBizMenu, bizTopMenus, bizSideGroups, bizFirstMenu, bizMenuKey, readBiz, writeBiz, BIZ_MENU_ICON, bizInfo as bizInfoOf, bizMenuLabel as bizMenuLabelOf } from "./bizModules";
 import { reportScreen, installScreenVisibility } from "./screenReport";
 import { useRouteGroupFilter, RouteGroupBar, routeGroupOf, RouteGroupField, SheetLiveChip } from "./routeGroups";
+import { settleStartTab } from "./settleStart";
+const SettleHome = React.lazy(() => import("./SettleHome")); // 🧭 정산 홈(처음 열 때 받는다)
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "./orderHistoryCache";
 import { normScope, scopeAllows, isOfficeBaseMenu } from "./workScope";
 import BizSwitcher from "./freight/BizSwitcher";
@@ -7844,7 +7846,7 @@ useEffect(() => {
   const [배차현황Tab, set배차현황Tab] = useState("배차현황");
   const [거래처관리Tab, set거래처관리Tab] = useState("하차지거래처");
   const [기사관리Tab, set기사관리Tab] = useState("d:전체"); // ▸ 기사관리 허브 — d:등급 / docs:driver / docs:penalty
-  const [정산관리Tab, set정산관리Tab] = useState("거래처정산");
+  const [정산관리Tab, set정산관리Tab] = useState(() => settleStartTab()); // 🧭 2026-11-14 정산 홈이 첫 화면(예전처럼 거래처정산부터 보려면 정산 홈 아래 체크)
   const [deskAttachId, setDeskAttachId] = useState("");
   const betaPayOn = useBetaOn(getTenant() || userCompany); // 💳 2026-11-11 정산관리 › 입금 확인(시험 기능 — 테스트운송사)
   // ⭐ 내 정보 패널 ON/OFF
@@ -9426,7 +9428,7 @@ return (
         {정산관리Visited && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
           <div style={{ display: menu === "정산관리" ? undefined : "none" }}>
           <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={정산관리Tab} onSelect={set정산관리Tab}
-            items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOn ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
+            items={[{ key: "홈", label: "정산 홈", en: "OVERVIEW", icon: "dashboard" }, { key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOn ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
           <DetailScope data={salesDispatchData} getters={mainDetailGet} title="세부검색 · 정산관리">{(settleRows, settleBtn) => (<>
           {/* 🔎 2026-11-03 세부검색 — 거래처정산·용차지급·지입정산 모두 이 조건으로 */}
           {/* ⭐ 2026-11-07 세부검색 버튼은 왼쪽 메뉴 윗줄(오른쪽 끝)로 — 머리 높이·왼쪽 끝 정렬 */}
@@ -9450,6 +9452,8 @@ return (
               active={정산관리Tab === "거래처정산"}
             />
           </div>
+          {/* 🧭 정산 홈 — 월 마감 진행판 · 미수 경과 · 거래처 원장(기존 화면은 그대로, 여기서 바로 간다) */}
+          {정산관리Tab === "홈" && <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><SettleHome orders={settleRows} company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} onGo={set정산관리Tab} depositOn={betaPayOn} /></React.Suspense>}
           {정산관리Tab === "지게차지급" && <ForkliftPayouts orders={settleRows} patchDispatch={patchDispatchSafe} isViewer={isViewer} />}
           {정산관리Tab === "입금확인" && betaPayOn && <CallDepositDesk orders={settleRows} patchDispatch={patchDispatchSafe} isViewer={isViewer} company={userCompany} onAttach={(r) => setDeskAttachId(r._id || r.id)} />}
           {/* 📎 입금 확인의 첨부 — 배차현황 첨부와 같은 창 · 같은 파일 */}
