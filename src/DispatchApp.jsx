@@ -2973,6 +2973,7 @@ import { useCompanyFeatures } from "./companyFeatures";
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합 현황) — 회사가 쓰는 영역에 따라 상단 메뉴가 바뀐다(src/bizModules.js)
 import { useBizModules, isBizMenu, parseBizMenu, bizTopMenus, bizSideGroups, bizFirstMenu, bizMenuKey, readBiz, writeBiz, BIZ_MENU_ICON, bizInfo as bizInfoOf, bizMenuLabel as bizMenuLabelOf } from "./bizModules";
 import { reportScreen, installScreenVisibility } from "./screenReport";
+import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "./orderHistoryCache";
 import { normScope, scopeAllows, isOfficeBaseMenu } from "./workScope";
 import BizSwitcher from "./freight/BizSwitcher";
 const FreightWorkspace = React.lazy(() => import("./freight/FreightWorkspace"));
@@ -3992,6 +3993,7 @@ function useRealtimeCollections(user, userCompany, role) {
   const [historyEpoch, setHistoryEpoch] = useState(0);
   const fullLoadedRef = React.useRef(false);
   const fullLoadingRef = React.useRef(null);
+  const rawSinkRef = React.useRef(null); // 전체 이력을 새로 받을 때 원본 문서를 모아 이 PC에 보관(src/orderHistoryCache.js)
   const fetchHistoryRows = React.useCallback(async (makeQuery) => {
     setHistoryLoading(n => n + 1);
     try {
@@ -4009,8 +4011,12 @@ function useRealtimeCollections(user, userCompany, role) {
         }
         return out;
       };
-      const parts = await Promise.all(["orders", "dispatch"].map(col =>
-        getDocs(makeQuery(collection(db, col))).then(snap => toRows(col, snap))));
+      // ⚡ 2026-11-13 makeQuery 대신 { raw: [{col,id,data}] }를 주면 이미 받아 둔 문서(이 PC 보관본)로 같은 변환을 한다
+      const rawIn = makeQuery && typeof makeQuery === "object" ? makeQuery.raw : null;
+      const parts = rawIn
+        ? await Promise.all(["orders", "dispatch"].map(col => toRows(col, { docs: rawIn.filter(x => x.col === col).map(x => ({ id: x.id, data: () => x.data })) })))
+        : await Promise.all(["orders", "dispatch"].map(col =>
+          getDocs(makeQuery(collection(db, col))).then(snap => { if (rawSinkRef.current) snap.docs.forEach(d => rawSinkRef.current.push({ col, id: d.id, data: d.data() || {} })); return toRows(col, snap); })));
       // 실시간 목록과 같은 기준으로 제외(화주 전송 사본·취소건)
       const rows = parts.flat().filter(row =>
         row.source !== "transport_transmit" &&
@@ -4045,9 +4051,43 @@ function useRealtimeCollections(user, userCompany, role) {
     if (fullLoadingRef.current) return fullLoadingRef.current;
     // 예전 PC와 같은 최근 13개월(그보다 예전 기간은 날짜 조회 시 그 기간만 따로 불러온다)
     const hStart = historyStartDate();
-    fullLoadingRef.current = fetchHistoryRows(c => query(c, where("상차일", ">=", hStart), where("상차일", "<", pcLiveWindowStart())))
-      .then((rows) => { if (rows !== null) { fullLoadedRef.current = true; loadedRangesRef.current.push([hStart, pcPrevDay(pcLiveWindowStart())]); } })
-      .finally(() => { fullLoadingRef.current = null; });
+    const liveStart = pcLiveWindowStart();
+    const done = (rows) => { if (rows !== null) { fullLoadedRef.current = true; loadedRangesRef.current.push([hStart, pcPrevDay(liveStart)]); } };
+    // ⚡ 2026-11-13 이 PC에 보관해 둔 13개월 오더가 있으면 그것을 쓰고, 그 뒤에 바뀐 것만 받는다(없거나 오래됐으면 전체를 받아 보관)
+    const co = String(getTenant() || userCompany || localStorage.getItem("userCompany") || "").trim();
+    const fullFetch = async (dv) => {
+      const sink = []; const startedAt = Date.now();
+      rawSinkRef.current = sink;
+      let rows;
+      try { rows = await fetchHistoryRows(c => query(c, where("상차일", ">=", hStart), where("상차일", "<", liveStart))); } finally { rawSinkRef.current = null; }
+      if (rows !== null && co) writeHistoryCache(co, { savedAt: startedAt, fullAt: startedAt, dv, hStart, liveStart }, sink);
+      return rows;
+    };
+    fullLoadingRef.current = (async () => {
+      let dv = 0;
+      try { const t = (await getDoc(doc(db, "systemConfig", "dataVersion"))).data()?.[co]; dv = t?.toMillis ? t.toMillis() : 0; } catch { dv = -1; }
+      const cache = co && dv >= 0 ? await readHistoryCache(co) : null;
+      const usable = cache && cache.dv === dv && cache.hStart <= hStart && Date.now() - cache.fullAt < HISTORY_CACHE_MAX_AGE && cache.liveStart <= liveStart;
+      if (!usable) return fullFetch(dv < 0 ? 0 : dv);
+      try {
+        const startedAt = Date.now();
+        const delta = await fetchHistoryDelta({ since: cache.savedAt, gapFrom: cache.liveStart, gapTo: liveStart });
+        const map = new Map(cache.docs.map((x) => [`${x.col}/${x.id}`, x]));
+        delta.changed.forEach((x) => map.set(`${x.col}/${x.id}`, x));
+        delta.deleted.forEach((k) => map.delete(k));
+        // 보관 범위 = 13개월 전 ~ 실시간 범위 시작 전(그 밖으로 옮겨진 오더는 뺀다 — 최근 7일은 실시간이 맡는다)
+        const docs = [...map.values()].filter((x) => { const d = String(x.data?.상차일 || ""); return d >= hStart && d < liveStart; });
+        const rows = await fetchHistoryRows({ raw: docs });
+        if (rows !== null) {
+          // 보관본에서 빠진 오더(지워짐 · 최근 범위로 옮겨짐)를 화면 보관소에서도 뺀다
+          const keep = new Set(docs.map((x) => `${x.col}/${x.id}`));
+          const gone = [...delta.deleted, ...delta.changed.map((x) => `${x.col}/${x.id}`).filter((k) => !keep.has(k))];
+          if (gone.length) setHistoryMap((prev) => { let next = null; gone.forEach((k) => { if (prev.has(k)) { next = next || new Map(prev); next.delete(k); } }); return next || prev; });
+          writeHistoryCache(co, { savedAt: startedAt, fullAt: cache.fullAt, dv, hStart: cache.hStart, liveStart }, docs);
+        }
+        return rows;
+      } catch (e) { console.warn("[예전 오더 보관본] 바뀐 것만 받기 실패 → 전체 다시 받기", e?.code || e); return fullFetch(dv); }
+    })().then(done).finally(() => { fullLoadingRef.current = null; });
     return fullLoadingRef.current;
   }, [fetchHistoryRows, historyEpoch]); // eslint-disable-line react-hooks/exhaustive-deps
   React.useEffect(() => {

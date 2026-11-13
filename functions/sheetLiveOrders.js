@@ -83,7 +83,8 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     let removed = 0; let heldBack = 0;
     if (cfg.removeMissing !== false && r.missing.length) {
       const limit = Math.max(10, Math.ceil(existing.length * 0.2));
-      if (r.missing.length <= limit) { r.missing.forEach((e) => ops.push((b) => b.delete(db.collection("orders").doc(e.id)))); removed = r.missing.length; } else heldBack = r.missing.length;
+      // 삭제 기록(deletedOrders)을 같이 남긴다 — 열려 있는 PC · 모바일 화면과 PC 보관본에서 그 오더가 바로 빠진다
+      if (r.missing.length <= limit) { r.missing.forEach((e) => { ops.push((b) => b.delete(db.collection("orders").doc(e.id))); ops.push((b) => b.set(db.collection("deletedOrders").doc(`orders_${e.id}`), { col: "orders", id: e.id, at: FieldValue.serverTimestamp(), by: by, companyName: co })); }); removed = r.missing.length; } else heldBack = r.missing.length;
     }
     for (let i = 0; i < ops.length; i += 400) { const b = db.batch(); ops.slice(i, i + 400).forEach((f) => f(b)); await b.commit(); }
     // 시트에서 온 새 차량종류(톤수 섞인 이름 제외)는 회사 차량종류 목록에
@@ -91,7 +92,8 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     if (kinds.length && r.create.length) await db.collection("vehicleTypes").doc(co).set({ companyName: co, custom: FieldValue.arrayUnion(...kinds) }, { merge: true }).catch(() => {});
     const result = { created: r.create.length, updated: r.update.length, removed, heldBack, same: r.same, total: incoming.length, from };
     await ref(co).set({ ...stamp, lastHash: heldBack ? "" : hash, lastResult: result, ...(ops.length ? { lastChangeAt: now } : {}) }, { merge: true });
-    if (ops.length && bumpDataVersion) await bumpDataVersion(co);
+    // ⚠ 2026-11-13 여기서 dataVersion 을 올리지 않는다 — 올리면 열려 있는 모든 PC가 13개월 오더 전체를 다시 받는다(1분마다 반복될 수 있었다)
+    //   바뀐 오더는 _lastModified · createdAt, 지운 오더는 deletedOrders 기록으로 화면에 반영된다
     return result;
   }
 

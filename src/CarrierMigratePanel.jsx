@@ -407,11 +407,11 @@ export default function CarrierMigratePanel({ companies = [] }) {
         if (opts.removeMissing && r.missing.length) {
           const eg = r.missing.slice(0, 8).map((e) => `· ${e.data.상차일 || ""} ${e.data.상차지명 || ""} → ${e.data.하차지명 || ""} ${e.data.차량번호 || ""} ${e.data.이름 || ""}`).join("\n");
           if (await kpConfirm(`시트에는 없는데 프로그램에만 있는 오더가 ${won(r.missing.length)}건 있습니다(같은 탭 · 같은 기간).\n예전에 두 번 들어간 중복이거나 시트에서 지운 줄입니다. 지울까요?\n\n${eg}${r.missing.length > 8 ? `\n… 외 ${won(r.missing.length - 8)}건` : ""}\n\n[취소]를 누르면 지우지 않고 계속 가져옵니다.`)) {
-            for (let i = 0; i < r.missing.length; i += 400) {
+            for (let i = 0; i < r.missing.length; i += 200) {
               const b = writeBatch(db);
-              r.missing.slice(i, i + 400).forEach((e) => b.delete(doc(db, "orders", e.id)));
+              r.missing.slice(i, i + 200).forEach((e) => { b.delete(doc(db, "orders", e.id)); b.set(doc(db, "deletedOrders", `orders_${e.id}`), { col: "orders", id: e.id, at: serverTimestamp(), by: me, companyName: co }); }); // 삭제 기록 — 열려 있는 다른 화면 · PC 보관본에서도 빠지게
               await b.commit();
-              setProgress({ pct: 19, step: `시트에 없는 오더 지우는 중 ${won(Math.min(r.missing.length, i + 400))} / ${won(r.missing.length)}` });
+              setProgress({ pct: 19, step: `시트에 없는 오더 지우는 중 ${won(Math.min(r.missing.length, i + 200))} / ${won(r.missing.length)}` });
             }
             removed = r.missing.length; missing = 0;
           }
