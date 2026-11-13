@@ -86,7 +86,7 @@ function DriversView({ drivers, userCompany, role, myName, dispatchData }) {
   const [tab, setTab] = React.useState("drv");
   return (
     <KpSubNav code="DRIVERS" title="기사관리" icon="user" active={tab} onSelect={setTab}
-      groups={[{ label: "기사관리", items: [{ key: "drv", label: "기사관리", en: "DRIVERS", icon: "user" }, { key: "penalty", label: "과태료·사고 서류", en: "DOC", icon: "file" }] }]}>
+      groups={[{ label: "기사관리", items: [{ key: "drv", label: "기사관리", en: "DRIVERS", icon: "user" }, { key: "penalty", label: "과태료 · 사고 서류", en: "DOC", icon: "file" }] }]}>
       {tab === "drv"
         ? <React.Suspense fallback={<Loading />}><style>{KP_M_CM_CSS}</style><div className="kp-m-pc kp-m-cm"><PcDriverMobile drivers={drivers || []} userCompany={userCompany} role={role} isViewer={role === "viewer"} myName={myName} /></div></React.Suspense>
         : <div className="kp-m-pc"><FleetManagement dispatchData={dispatchData} role={role} forceTab="penalty" hideChrome /></div>}
@@ -109,8 +109,8 @@ function Loading() {
 const FareView = React.memo(function FareView({ initialTab = "전국운임조회" }) {
   const [tab, setTab] = React.useState(initialTab);
   return (
-    <KpSubNav code="FARE LOOKUP" title="통합운임조회" icon="globe" active={tab} onSelect={setTab}
-      groups={[{ label: "통합운임조회", items: [
+    <KpSubNav code="FARE LOOKUP" title="운임조회" icon="globe" active={tab} onSelect={setTab}
+      groups={[{ label: "운임조회", items: [
         { key: "전국운임조회", label: "전국운임조회", en: "NATIONAL", icon: "globe" },
         { key: "자사운임표", label: "자사운임표", en: "COMPANY", icon: "money" },
       ] }]}>
