@@ -271,6 +271,37 @@ export default function CarrierMigratePanel({ companies = [] }) {
   const optValues = result ? result.dispatchOptions.filter((d) => optOn[d.value]).map((d) => d.value) : [];
   const rates = result ? (result.rateSheets || []).filter((_, i) => rateOn[i]) : [];
 
+  // 🔍 2026-11-13 시트 ↔ 프로그램 비교 — 가져오기 전에 탭별 건수 · 금액이 얼마나 다른지, 프로그램에만 있는 오더(중복 의심)가 몇 건인지 본다
+  //  읽기만 한다(아무것도 바꾸지 않음). 프로그램 쪽은 이 회사의 "구글시트에서 가져온 오더"만 센다(직접 등록한 오더 제외)
+  const [cmp, setCmp] = React.useState(null);
+  const runCompare = async () => {
+    if (!co) return setErr("운송사를 정해 주세요.");
+    setErr(""); setBusy("cmp"); setCmp(null);
+    const release = pushTenantBypass();
+    try {
+      const ex = (await getDocs(query(collection(db, "orders"), where("companyName", "==", co), where("등록기기", "==", "구글시트 이전")))).docs.map((d) => ({ id: d.id, data: d.data() }));
+      const tabOf = (v) => String(v || "").split("!")[0];
+      const dates = orders.map((o) => o.상차일).filter(Boolean).sort();
+      const lo = dates[0] || "", hi = dates[dates.length - 1] || "";
+      const inDates = (d) => !lo || (String(d.상차일 || "") >= lo && String(d.상차일 || "") <= hi);
+      const sheetTabs = new Set(orders.map((o) => tabOf(o.이전출처)));
+      const scoped = ex.filter((e) => inDates(e.data));
+      const r = reconcileOrders(scoped.filter((e) => sheetTabs.has(tabOf(e.data.이전출처))), orders);
+      const rows = new Map();
+      const row = (t) => rows.get(t) || rows.set(t, { tab: t, sN: 0, sSale: 0, sBuy: 0, pN: 0, pSale: 0, pBuy: 0, create: 0, update: 0, missing: 0, inSheet: sheetTabs.has(t) }).get(t);
+      // 회전 묶음(녹수셔틀)은 시트 여러 줄이 오더 한 건 — 금액은 합계라 그대로 비교된다
+      orders.forEach((o) => { const x = row(tabOf(o.이전출처)); x.sN += 1; x.sSale += Number(o.청구운임) || 0; x.sBuy += Number(o.기사운임) || 0; });
+      scoped.forEach((e) => { const x = row(tabOf(e.data.이전출처) || "(탭 정보 없음)"); x.pN += 1; x.pSale += Number(e.data.청구운임) || 0; x.pBuy += Number(e.data.기사운임) || 0; });
+      r.create.forEach((o) => { row(tabOf(o.이전출처)).create += 1; });
+      r.update.forEach((u) => { row(tabOf(u.rec.이전출처)).update += 1; });
+      r.missing.forEach((e) => { row(tabOf(e.data.이전출처)).missing += 1; });
+      const list = [...rows.values()].sort((a, b) => (b.inSheet - a.inSheet) || b.pN - a.pN);
+      const sum = (k) => list.reduce((a, x) => a + x[k], 0);
+      setCmp({ list, lo, hi, total: { sN: sum("sN"), sSale: sum("sSale"), pN: sum("pN"), pSale: sum("pSale"), missing: sum("missing"), create: sum("create"), update: sum("update") },
+        missingEg: r.missing.slice(0, 30).map((e) => ({ id: e.id, tab: tabOf(e.data.이전출처), d: e.data.상차일 || "", from: e.data.상차지명 || "", to: e.data.하차지명 || "", car: e.data.차량번호 || "", name: e.data.이름 || "", sale: Number(e.data.청구운임) || 0 })) });
+    } catch (e) { setErr(`비교하지 못했습니다: ${e?.message || e}`); } finally { release(); setBusy(""); }
+  };
+
   // ── 저장 ──
   const runImport = async () => {
     if (!co) return setErr("가져올 운송사 이름을 정해 주세요.");
@@ -451,6 +482,43 @@ export default function CarrierMigratePanel({ companies = [] }) {
 
       {result && (
         <>
+          {/* 🔍 시트 ↔ 프로그램 비교(읽기만) */}
+          <section className={`${CARD} p-6`} data-kp="mig-compare">
+            <Head eyebrow="CHECK" title="시트와 프로그램 비교" desc="가져오기 전에 탭별 건수 · 금액 차이와 프로그램에만 있는 오더(중복 의심)를 확인합니다. 아무것도 바꾸지 않습니다."
+              right={<button onClick={runCompare} disabled={busy === "cmp"} className={`${btn} bg-[#1B2B4B] text-white`}>{busy === "cmp" ? "비교 중…" : "프로그램과 비교"}</button>} />
+            {cmp && (
+              <>
+                <div className="text-[13.5px] font-bold text-[#3A4A66] mb-3">기간 {cmp.lo} ~ {cmp.hi} · 시트 {won(cmp.total.sN)}건 {won(cmp.total.sSale)}원 · 프로그램 {won(cmp.total.pN)}건 {won(cmp.total.pSale)}원 · 차이 <span className={cmp.total.pSale !== cmp.total.sSale ? "text-[#B4342A]" : "text-[#0F7A43]"}>{won(cmp.total.pSale - cmp.total.sSale)}원</span></div>
+                <div className="overflow-x-auto rounded-xl border border-[#E3E8F0]">
+                  <table className="w-full text-[13.5px] whitespace-nowrap">
+                    <thead><tr className="bg-[#F7F9FC] text-[#5B6B85]">{["탭", "시트 건수", "프로그램 건수", "시트 청구합", "프로그램 청구합", "청구 차이", "프로그램에만 있음", "새로 들어올 줄", "고쳐질 줄"].map((h) => <th key={h} className="px-3 py-2.5 text-right first:text-left font-black">{h}</th>)}</tr></thead>
+                    <tbody>
+                      {cmp.list.map((x) => { const diff = x.pSale - x.sSale; return (
+                        <tr key={x.tab} className="border-t border-[#EEF1F6]">
+                          <td className="px-3 py-2.5 font-black text-[#0F1A30]">{x.tab}{!x.inSheet && <span className="ml-2 text-[12px] font-bold text-[#7A879C]">이번에 가져오지 않는 탭</span>}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums">{won(x.sN)}</td>
+                          <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${x.inSheet && x.pN !== x.sN ? "text-[#B4342A]" : ""}`}>{won(x.pN)}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums">{won(x.sSale)}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums">{won(x.pSale)}</td>
+                          <td className={`px-3 py-2.5 text-right tabular-nums font-bold ${x.inSheet && diff ? "text-[#B4342A]" : "text-[#7A879C]"}`}>{x.inSheet ? won(diff) : "-"}</td>
+                          <td className={`px-3 py-2.5 text-right tabular-nums font-black ${x.missing ? "text-[#B4342A]" : "text-[#7A879C]"}`}>{x.inSheet ? won(x.missing) : "-"}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums">{x.inSheet ? won(x.create) : "-"}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums">{x.inSheet ? won(x.update) : "-"}</td>
+                        </tr>); })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-3 text-[13px] text-[#5B6B85] leading-relaxed">
+                  <b className="text-[#1B2B4B]">프로그램에만 있음</b> = 시트에 짝이 없는 오더(예전에 두 번 들어간 중복 · 시트에서 지운 줄) — 가져오기 때 [시트에 없는 오더 지우기]로 정리됩니다. <b className="text-[#1B2B4B]">이번에 가져오지 않는 탭</b>(대원전선 · 카고LCL 등)의 오더는 그대로 남습니다.
+                </div>
+                {cmp.missingEg.length > 0 && (
+                  <details className="mt-3"><summary className="cursor-pointer text-[13.5px] font-black text-[#1B2B4B]">프로그램에만 있는 오더 보기 (처음 {cmp.missingEg.length}건)</summary>
+                    <ul className="mt-2 text-[13px] text-[#3A4A66] space-y-1">{cmp.missingEg.map((m) => <li key={m.id} className="tabular-nums">{m.tab} · {m.d} · {m.from} → {m.to} · {m.car} {m.name} · {won(m.sale)}원</li>)}</ul>
+                  </details>)}
+              </>
+            )}
+          </section>
+
           {/* STEP 2 탭별 결과 */}
           <section className={`${CARD} p-6`}>
             <Head eyebrow="STEP 2" title="탭별로 읽은 결과" desc={`${book.title} — 거래처는 우선 탭 이름으로 넣어요(줄에 "화주" 칸이 있으면 그 값). 고친 뒤 [다시 계산]을 눌러 주세요.`}
