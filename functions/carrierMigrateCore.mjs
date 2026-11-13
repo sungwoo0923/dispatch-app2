@@ -1274,7 +1274,13 @@ export function reconcileOrders(existing = [], incoming = [], { keepKeys = ["imp
   const full = (x) => (x.이전출처 ? [x.이전출처, x.상차일, n(x.상차지명), n(x.하차지명), n(x.차량번호)].join("|") : "");
   pass(full, full); // ⓪ 줄 · 날짜 · 구간 · 차량이 모두 같다(안 바뀐 줄을 먼저 묶어 둔다)
   pass((o) => [tabOf(o.이전출처), o.상차일, n(o.상차지명), n(o.하차지명), n(o.차량번호)].join("|"), (d) => [tabOf(d.이전출처), d.상차일, n(d.상차지명), n(d.하차지명), n(d.차량번호)].join("|"));
+  // 🛠 2026-11-13 이름 규칙이 바뀌고(보령 → 보령공장) 줄도 밀린 경우 — 이름을 빼고 탭 · 날짜 · 차량 · 운임으로 찾는다(같은 조건이 여러 줄이면 위에서부터 차례로)
+  //  이 단계가 없으면 그런 줄이 새 오더로 또 만들어져 중복이 생겼다
+  const veh = (x) => [tabOf(x.이전출처), x.상차일, n(x.차량번호), String(x.청구운임 ?? ""), String(x.기사운임 ?? "")].join("|");
+  pass(veh, veh);
   pass((o) => (o.이전출처 ? `${o.이전출처}|${o.상차일}` : ""), (d) => (d.이전출처 ? `${d.이전출처}|${d.상차일}` : ""));
+  const veh2 = (x) => (n(x.차량번호) ? [tabOf(x.이전출처), x.상차일, n(x.차량번호)].join("|") : "");
+  pass(veh2, veh2);
   pass((o) => [tabOf(o.이전출처), o.상차일, n(o.상차지명), n(o.하차지명)].join("|"), (d) => [tabOf(d.이전출처), d.상차일, n(d.상차지명), n(d.하차지명)].join("|"));
   pass((o) => o.이전출처 || "", (d) => d.이전출처 || "");
   const create = []; const update = []; let sameN = 0;
