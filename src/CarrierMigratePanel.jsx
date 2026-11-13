@@ -262,6 +262,9 @@ export default function CarrierMigratePanel({ companies = [] }) {
       setProgress({ pct: 2, step: "회사 설정 저장 중" });
       const cs = { companyName: co, migrationPreset: { ...preset, dispatchAliases: parseAlias(aliasDraft) }, migrationAt: serverTimestamp() };
       delete cs.migrationPreset.year; delete cs.migrationPreset.extraPlaces;
+      // 🛠 2026-11-13 탭별 규칙 · 공통 배차방식 · 다시 포함할 탭은 코드(회사별 시작 규칙)에서 오므로 저장하지 않는다
+      //  (tabRules.cargo 가 배열 안의 배열이라 Firestore 가 "Nested arrays are not supported"로 저장을 거부했다)
+      delete cs.migrationPreset.tabRules; delete cs.migrationPreset.commonOptions; delete cs.migrationPreset.includeTabs;
       // 🧩 탭 전용 배차방식 묶음(그 탭의 상차지 · 거래처 오더에서만 보임) — src/companyOptionPicker.jsx 가 읽는다
       if (opts.saveOptions && result.dispatchScopes && Object.keys(result.dispatchScopes).length) cs.optionScopes = { 배차방식: result.dispatchScopes };
       if (opts.saveOptions && optValues.length) {
