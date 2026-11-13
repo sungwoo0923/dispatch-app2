@@ -153,7 +153,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
   const [optOn, setOptOn] = React.useState({}); // 배차방식 값 → 회사 목록에 넣을지
   const [rateOn, setRateOn] = React.useState({}); // 단가표 index → 가져올지
   const [ovDraft, setOvDraft] = React.useState({}); // "탭|이름" → 직접 입력한 주소(적용 전)
-  const [opts, setOpts] = React.useState({ from: "", to: "", skipDup: true, saveOptions: true, makeRoutes: true, registerDrivers: true, rates: true, ...(draft0.opts || {}) });
+  const [opts, setOpts] = React.useState({ from: "", to: "", skipDup: true, removeMissing: true, saveOptions: true, makeRoutes: true, registerDrivers: true, rates: true, ...(draft0.opts || {}) });
   const [openTab, setOpenTab] = React.useState("");
   const [busy, setBusy] = React.useState("");
   const [err, setErr] = React.useState("");
@@ -362,7 +362,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
       // 4) 오더 — 🔁 2026-11-13 이미 가져온 줄은 새로 만들지 않고 시트 내용으로 고친다(reconcileOrders: 같은 줄 찾기 → 바뀐 칸만 수정)
       //    [이미 옮긴 줄 건너뛰기]를 끄면 예전처럼 모두 새로 만든다
       let list = orders;
-      let skippedDup = 0; let updated = 0; let missing = 0;
+      let skippedDup = 0; let updated = 0; let missing = 0; let removed = 0;
       if (opts.skipDup) {
         setProgress({ pct: 19, step: "이미 가져온 오더와 비교 중" });
         const ex = await getDocs(query(collection(db, "orders"), where("companyName", "==", co), where("등록기기", "==", "구글시트 이전")));
@@ -372,6 +372,19 @@ export default function CarrierMigratePanel({ companies = [] }) {
         const inRange = (d) => tabs.has(String(d.이전출처 || "").split("!")[0]) && (!dates.length || (d.상차일 >= dates[0] && d.상차일 <= dates[dates.length - 1]));
         const r = reconcileOrders(ex.docs.map((d) => ({ id: d.id, data: d.data() })).filter((e) => inRange(e.data)), orders);
         list = r.create; skippedDup = r.same; missing = r.missing.length;
+        // 🧹 2026-11-13 시트에 없는 오더(예전에 두 번 들어간 중복 · 시트에서 지운 줄) 정리 — 몇 건인지 보여 주고 물어본 뒤 지운다
+        if (opts.removeMissing && r.missing.length) {
+          const eg = r.missing.slice(0, 8).map((e) => `· ${e.data.상차일 || ""} ${e.data.상차지명 || ""} → ${e.data.하차지명 || ""} ${e.data.차량번호 || ""} ${e.data.이름 || ""}`).join("\n");
+          if (await kpConfirm(`시트에는 없는데 프로그램에만 있는 오더가 ${won(r.missing.length)}건 있습니다(같은 탭 · 같은 기간).\n예전에 두 번 들어간 중복이거나 시트에서 지운 줄입니다. 지울까요?\n\n${eg}${r.missing.length > 8 ? `\n… 외 ${won(r.missing.length - 8)}건` : ""}\n\n[취소]를 누르면 지우지 않고 계속 가져옵니다.`)) {
+            for (let i = 0; i < r.missing.length; i += 400) {
+              const b = writeBatch(db);
+              r.missing.slice(i, i + 400).forEach((e) => b.delete(doc(db, "orders", e.id)));
+              await b.commit();
+              setProgress({ pct: 19, step: `시트에 없는 오더 지우는 중 ${won(Math.min(r.missing.length, i + 400))} / ${won(r.missing.length)}` });
+            }
+            removed = r.missing.length; missing = 0;
+          }
+        }
         for (let i = 0; i < r.update.length; i += 400) {
           const b = writeBatch(db);
           r.update.slice(i, i + 400).forEach((u) => b.set(doc(db, "orders", u.id), { ...u.patch, _lastModified: Date.now(), 최종수정자: me, 시트반영일시: serverTimestamp() }, { merge: true }));
@@ -388,7 +401,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
         done = Math.min(list.length, i + 400);
         setProgress({ pct: 20 + Math.round((done / Math.max(1, list.length)) * 78), step: `오더 저장 중 ${won(done)} / ${won(list.length)}` });
       }
-      const res = { count: done, updated, skippedDup, missing, registered };
+      const res = { count: done, updated, skippedDup, missing, removed, registered };
       await setDoc(doc(db, "importBatches", batchId), { status: "done", ...res }, { merge: true });
       await setDoc(doc(db, "systemConfig", "dataVersion"), { [co]: serverTimestamp() }, { merge: true }).catch(() => {});
       setProgress({ pct: 100, step: "완료", done: true, result: res });
@@ -637,7 +650,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
             <Head eyebrow="STEP 4" title="한 번에 가져오기" desc="오더 · 거래처 · 상하차지 · 기사 · 고정노선 후보 · 단가표 · 회사 배차방식 목록을 한꺼번에 저장합니다." />
             <div className="flex flex-wrap gap-x-6 gap-y-3 items-center text-[14px] font-semibold text-gray-700">
               <span className="flex items-center gap-2">상차일 <CustomDatePicker showIcon value={opts.from} onChange={(e) => setOpts((o) => ({ ...o, from: e.target.value }))} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30]" /> ~ <CustomDatePicker showIcon value={opts.to} onChange={(e) => setOpts((o) => ({ ...o, to: e.target.value }))} className="h-10 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-semibold text-[#0F1A30]" /> <span className="text-[12.5px] text-gray-400">비우면 전체</span></span>
-              {[["skipDup", "이미 가져온 줄은 고치기(새로 만들지 않음)"], ["registerDrivers", "기사 등록"], ["makeRoutes", "고정노선 후보 만들기"], ["rates", "단가표 옮기기"], ["saveOptions", "배차방식 목록 저장"]].map(([k, l]) => (
+              {[["skipDup", "이미 가져온 줄은 고치기(새로 만들지 않음)"], ["removeMissing", "시트에 없는 오더 지우기(중복 정리 · 물어봄)"], ["registerDrivers", "기사 등록"], ["makeRoutes", "고정노선 후보 만들기"], ["rates", "단가표 옮기기"], ["saveOptions", "배차방식 목록 저장"]].map(([k, l]) => (
                 <label key={k} className="flex items-center gap-2"><input type="checkbox" checked={opts[k]} onChange={(e) => setOpts((o) => ({ ...o, [k]: e.target.checked }))} className="w-[18px] h-[18px]" />{l}</label>
               ))}
             </div>
@@ -651,7 +664,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
                   <>
                     <div className="h-3 rounded-full bg-[#EEF1F6] overflow-hidden"><div className="h-full bg-[#1B2B4B] transition-all" style={{ width: `${progress.pct}%` }} /></div>
                     <div className="mt-2 text-[13.5px] font-bold text-[#3A4A66]">{progress.step}</div>
-                    {progress.done && <div className="mt-2 rounded-xl bg-[#E8F7EF] border border-[#BFE6CF] px-4 py-3 text-[14px] font-bold text-[#0F7A43]">오더 새로 {won(progress.result.count)}건{progress.result.updated ? ` · 고침 ${won(progress.result.updated)}건` : ""}{progress.result.skippedDup ? ` · 그대로 ${won(progress.result.skippedDup)}건` : ""}{progress.result.missing ? ` · 시트에 없는 오더 ${won(progress.result.missing)}건(그대로 둠)` : ""} · 거래처 {won(progress.result.registered.clients)} · 상하차지 {won(progress.result.registered.places)} · 기사 {won(progress.result.registered.drivers || 0)} · 고정노선 {progress.result.registered.routes || 0}(운행 OFF) · 단가표 {progress.result.registered.rateSheets || 0}</div>}
+                    {progress.done && <div className="mt-2 rounded-xl bg-[#E8F7EF] border border-[#BFE6CF] px-4 py-3 text-[14px] font-bold text-[#0F7A43]">오더 새로 {won(progress.result.count)}건{progress.result.updated ? ` · 고침 ${won(progress.result.updated)}건` : ""}{progress.result.skippedDup ? ` · 그대로 ${won(progress.result.skippedDup)}건` : ""}{progress.result.removed ? ` · 시트에 없어 지움 ${won(progress.result.removed)}건` : ""}{progress.result.missing ? ` · 시트에 없는 오더 ${won(progress.result.missing)}건(그대로 둠)` : ""} · 거래처 {won(progress.result.registered.clients)} · 상하차지 {won(progress.result.registered.places)} · 기사 {won(progress.result.registered.drivers || 0)} · 고정노선 {progress.result.registered.routes || 0}(운행 OFF) · 단가표 {progress.result.registered.rateSheets || 0}</div>}
                   </>
                 )}
               </div>

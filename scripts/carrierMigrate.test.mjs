@@ -356,3 +356,20 @@ if (fail) process.exit(1);
   assert3.deepEqual(R.clients.map((c) => c.거래처명).sort(), ["녹수", "롯데베르살리스"]);
   console.log("tabRules OK");
 }
+
+// 🛠 2026-11-13 이름 규칙이 바뀌고 줄도 밀린 경우 + 예전에 두 번 들어간 중복 정리
+{
+  const { reconcileOrders, forOrderDoc: fod } = await import("../functions/carrierMigrateCore.mjs");
+  const assert4 = (await import("node:assert/strict")).default;
+  const mk = (row, from, car, o = {}) => ({ 이전출처: `아산 KDF!${row}`, 상차일: "2026-11-13", 상차지명: from, 하차지명: from === "아산" ? "팬스타" : "팬스타 물류센터", 차량번호: car, 청구운임: "559000", 기사운임: "500000", ...o });
+  const ex = [mk(468, "아산", "대구80바9559"), mk(469, "아산", "경남81아7965"), mk(470, "아산", "")].map((o, i) => ({ id: `x${i}`, data: fod(o, { company: "JY", batchId: "b" }) }));
+  // 한 줄씩 밀리고 이름이 새 규칙으로
+  let r = reconcileOrders(ex, [mk(469, "아산공장-KDF", "대구80바9559"), mk(470, "아산공장-KDF", "경남81아7965"), mk(471, "아산공장-KDF", "")]);
+  assert4.equal(r.create.length, 0, "새로 만들지 않는다"); assert4.equal(r.update.length, 3); assert4.equal(r.missing.length, 0);
+  assert4.equal(r.update.find((u) => u.id === "x0").patch.상차지명, "아산공장-KDF");
+  // 예전에 같은 줄이 두 번 들어가 있던 경우 → 하나만 짝짓고 나머지는 missing(지울 대상)
+  const dup = [...ex, { id: "dup", data: { ...ex[0].data, 이전출처: "아산 KDF!460" } }];
+  r = reconcileOrders(dup, [mk(469, "아산공장-KDF", "대구80바9559"), mk(470, "아산공장-KDF", "경남81아7965"), mk(471, "아산공장-KDF", "")]);
+  assert4.equal(r.create.length, 0); assert4.equal(r.missing.length, 1);
+  console.log("reconcile(이름 변경 · 중복) OK");
+}
