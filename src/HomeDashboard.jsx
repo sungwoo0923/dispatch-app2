@@ -8,7 +8,6 @@ import DeptDashboard from "./DeptDashboard";
 import { ExecScheduleBoard, TeamSchedule, canWriteExecSchedule } from "./ExecSuite";
 import { CompanyRules } from "./HrHub";
 import React, { useMemo, useState, useRef, useEffect } from "react";
-import MasterChecklist from "./MasterChecklist";
 import { homeItemFeature, openPlanLock, planIncludes, usePlan } from "./plans";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
@@ -951,7 +950,6 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         ] },
       ])}>
     <div className="space-y-5">
-      {boardTab === "대시보드" && (!dept || dept === "exec") && <MasterChecklist user={user} userCompany={userCompany} />}
       {/* 🏢 경리·인사 권한 — 대시보드 내용만 부서 업무로 */}
       {boardTab === "대시보드" && dept && <DeptDashboard mode={dept} company={getViewCompany()} dispatchData={dispatchData} onGo={onDeptGo} pastCache={pastCache} liveStart={liveStartStr} me={meHome}
         att={{ company: homeCompany, uid: user?.uid, name: meHome.name, role, email: user?.email }} />}
@@ -982,10 +980,10 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       })()}
 
       {/* 🌦 2026-11-07 오늘 오더가 있는 지역 날씨 · 기상특보(키가 없거나 자료가 없으면 안 보임) */}
-      {boardTab === "대시보드" && !dept && onTodoGo && <TodayTodo rows={allDispatchData} onGo={onTodoGo} />}
       {boardTab === "대시보드" && !dept && <OrdersWeatherStrip orders={dispatchData} />}
       {/* ===== 관제 데크 — 오늘 실적 · 매출 추이 · 매익률 · 담당자 순위 · 거래처 Top (2026-10-28 리디자인, 미배차 현황은 뺌) ===== */}
       {boardTab === "대시보드" && !dept && <HomeDeck
+        todo={onTodoGo ? <TodayTodo rows={allDispatchData} onGo={onTodoGo} /> : null}
         dispatchData={dispatchData}
         pastCache={pastCache}
         liveStart={liveStartStr}

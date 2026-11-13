@@ -40,42 +40,43 @@ export function useOrderHistoryLite(liveRows, userCompany = "") {
 }
 
 // ══════════════════════ ① 오늘 할 일 ══════════════════════
+// 홈 관제 데크(남색) 안에 한 줄로 들어간다 — 데크 타일과 같은 결(반투명 남색 · 가는 테두리)
+const TD = { sub: "rgba(207,224,255,.8)", dim: "rgba(207,224,255,.6)", line: "rgba(143,176,240,.16)", glow: "#8FB0F0", warn: "#FF9C8F", amber: "#F2C879" };
 export function TodayTodo({ rows = [], onGo }) {
   const t = React.useMemo(() => todayTodo(rows, ymd(new Date())), [rows]);
+  const fare = t.noFare + t.noDriverFare;
   const cells = [
-    { k: "unassigned", label: "미배차", n: t.unassigned, tone: t.unassigned ? "#C8372D" : "#1B2B4B",
-      sub: t.unassigned ? [t.unassignedToday ? `오늘 상차 ${t.unassignedToday}건` : "", t.overdue ? `지난 날짜 ${t.overdue}건` : ""].filter(Boolean).join(" · ") || "기사를 정해 주세요" : "모두 배차됐습니다", go: "배차현황:미배차현황" },
-    { k: "today", label: "오늘 상차", n: t.today, tone: "#1B2B4B",
-      sub: t.today ? `배차 완료 ${t.todayDone} / ${t.today}` : "오늘 상차 오더 없음", bar: t.today ? t.todayDone / t.today : 0, go: "실시간배차현황" },
-    { k: "tomorrow", label: "내일 상차", n: t.tomorrow, tone: "#1B2B4B",
+    { k: "unassigned", code: "PENDING", label: "미배차", n: t.unassigned, tone: t.unassigned ? TD.warn : "#fff",
+      sub: t.unassigned ? ([t.unassignedToday ? `오늘 상차 ${t.unassignedToday}건` : "", t.overdue ? `지난 날짜 ${t.overdue}건` : ""].filter(Boolean).join(" · ") || "기사를 정해 주세요") : "모두 배차됐습니다", go: "배차현황:미배차현황" },
+    { k: "today", code: "TODAY", label: "오늘 상차", n: t.today, tone: "#fff",
+      sub: t.today ? `배차 완료 ${t.todayDone} / ${t.today}` : "오늘 상차 오더 없음", bar: t.today ? t.todayDone / t.today : null, go: "실시간배차현황" },
+    { k: "tomorrow", code: "TOMORROW", label: "내일 상차", n: t.tomorrow, tone: "#fff",
       sub: t.tomorrowOpen ? `아직 미배차 ${t.tomorrowOpen}건` : t.tomorrow ? "모두 배차됐습니다" : "내일 상차 오더 없음", warn: !!t.tomorrowOpen, go: "배차현황:미배차현황" },
-    { k: "fare", label: "운임 미입력", n: t.noFare + t.noDriverFare, tone: t.noFare + t.noDriverFare ? "#B26A00" : "#1B2B4B",
-      sub: t.noFare + t.noDriverFare ? `청구 ${t.noFare}건 · 기사 ${t.noDriverFare}건 (최근 30일)` : "빠진 운임이 없습니다", go: "배차현황:배차현황" },
+    { k: "fare", code: "FARE", label: "운임 미입력", n: fare, tone: fare ? TD.amber : "#fff",
+      sub: fare ? `청구 ${t.noFare} · 기사 ${t.noDriverFare} (최근 30일)` : "빠진 운임이 없습니다", go: "배차현황:배차현황" },
   ];
   return (
-    <div data-kp="today-todo" className="rounded-2xl border border-[#DCE3EE] bg-white shadow-[0_1px_2px_rgba(15,26,48,0.04)] overflow-hidden">
-      <div className="flex items-center gap-2.5 px-5 pt-3.5 pb-2">
-        <span className="h-[18px] w-[3px] rounded-full bg-[#1B2B4B]" />
-        <span className="text-[14px] font-black text-[#0F1A30] tracking-tight">오늘 할 일</span>
-        <span className="text-[11.5px] text-[#8FA0BD] font-semibold">숫자를 누르면 그 화면으로 갑니다</span>
+    <div data-kp="today-todo" style={{ position: "relative", display: "flex", alignItems: "stretch", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 6px 0 2px", minWidth: 84 }}>
+        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.22em", color: TD.glow }}>TO-DO</span>
+        <span style={{ fontSize: 15, fontWeight: 900, color: "#fff", letterSpacing: "-0.01em", whiteSpace: "nowrap" }}>오늘 할 일</span>
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4">
-        {cells.map((c, i) => (
-          <button key={c.k} type="button" onClick={() => onGo?.(c.go)} title={`${c.label} 화면 열기`}
-            className={`group relative text-left px-5 py-3.5 transition hover:bg-[#F6F8FC] focus:outline-none focus-visible:bg-[#F0F4FB] ${i ? "lg:border-l border-[#EDF1F7]" : ""} ${i >= 2 ? "border-t lg:border-t-0 border-[#EDF1F7]" : ""} ${i === 1 ? "border-l border-[#EDF1F7]" : ""} ${i === 3 ? "border-l border-[#EDF1F7]" : ""}`}>
-            <div className="flex items-center justify-between">
-              <span className="text-[12px] font-bold text-[#5B6B86]">{c.label}</span>
-              <span className="text-[13px] text-[#B8C4D8] transition group-hover:translate-x-0.5 group-hover:text-[#1B2B4B]">→</span>
-            </div>
-            <div className="mt-0.5 flex items-baseline gap-1">
-              <span className="text-[30px] leading-none font-black tracking-tight" style={{ ...NUM, color: c.tone }}>{c.n.toLocaleString()}</span>
-              <span className="text-[12px] font-bold text-[#8FA0BD]">건</span>
-            </div>
-            {c.bar !== undefined && <div className="mt-2 h-[3px] rounded-full bg-[#EDF1F7] overflow-hidden"><div className="h-full rounded-full bg-[#1B2B4B] transition-all" style={{ width: `${Math.round((c.bar || 0) * 100)}%` }} /></div>}
-            <div className={`mt-1.5 text-[11.5px] font-semibold truncate ${c.warn ? "text-[#C8372D]" : "text-[#7C8BA5]"}`}>{c.sub}</div>
-          </button>
-        ))}
-      </div>
+      {cells.map((c) => (
+        <button key={c.k} type="button" onClick={() => onGo?.(c.go)} title={`${c.label} 화면 열기`} className="hd-tile kp-todo"
+          style={{ flex: "1 1 190px", minWidth: 0, borderRadius: 14, padding: "9px 14px", display: "flex", alignItems: "center", gap: 12, textAlign: "left", cursor: "pointer", position: "relative", overflow: "hidden" }}>
+          <span style={{ ...NUM, fontSize: 26, fontWeight: 800, lineHeight: 1, color: c.tone, letterSpacing: "-0.02em", minWidth: 34, textAlign: "right" }}>{c.n.toLocaleString()}</span>
+          <span style={{ minWidth: 0, flex: 1 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 800, color: TD.sub, whiteSpace: "nowrap" }}>{c.label}</span>
+              <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: "0.16em", color: "rgba(207,224,255,.38)" }}>{c.code}</span>
+            </span>
+            <span style={{ ...NUM, display: "block", marginTop: 2, fontSize: 12, fontWeight: 600, color: c.warn ? TD.warn : TD.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.sub}</span>
+          </span>
+          <span className="kp-todo-go" style={{ fontSize: 13, color: "rgba(207,224,255,.4)" }}>→</span>
+          {c.bar !== null && c.bar !== undefined && <span style={{ position: "absolute", left: 0, bottom: 0, height: 2, width: `${Math.round(c.bar * 100)}%`, background: TD.glow, opacity: 0.8 }} />}
+        </button>
+      ))}
+      <style>{`.kp-todo:hover .kp-todo-go{color:#fff;transform:translateX(2px)} .kp-todo-go{transition:transform .15s,color .15s} .kp-todo:focus-visible{outline:2px solid #8FB0F0;outline-offset:2px}`}</style>
     </div>
   );
 }
