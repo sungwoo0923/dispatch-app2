@@ -10,7 +10,7 @@ import React from "react";
 // 🛠 2026-11-14 새 버전이 올라간 뒤 예전 화면에서 아직 안 받은 메뉴(예: 인수증관리)를 열면 그 조각 파일이 서버에 없다(404).
 //  preloadError 를 막아 둔 탓에 import 가 빈 값으로 끝나 "Cannot read properties of undefined (reading 'default')"로 나타난다
 //  → 조각 파일을 못 받은 직후의 이 오류도 같은 경우로 보고 한 번 새로고침한다(새 버전 화면으로 열린다)
-const isStaleLazyError = (e) => { try { return /reading 'default'|undefined is not an object \(evaluating '[^']*\.default'\)|\.default is undefined/i.test(String(e?.message || e || "")) && Date.now() - Number(window.__kpPreloadFailed || 0) < 60000; } catch { return false; } };
+const isStaleLazyError = (e) => { try { return /Cannot read propert(y|ies) of undefined \(reading '|undefined is not an object \(evaluating '|\.default is undefined|is undefined$/i.test(String(e?.message || e || "")) && Date.now() - Number(window.__kpPreloadFailed || 0) < 60000; } catch { return false; } };
 export const isChunkLoadError = (e) => isStaleLazyError(e) || /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|ChunkLoadError|Loading chunk [\w-]+ failed|Unable to preload CSS/i.test(String(e?.message || e || ""));
 export function reloadOnce() {
   try {
