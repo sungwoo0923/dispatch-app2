@@ -5969,6 +5969,20 @@ async function sheetModifiedTime(sid) {
     return "";
   }
 }
+// ⚡ 2026-11-14 시트가 바뀌었는지 알아보는 표시(수정 시각 + 파일 버전) — 구글시트 실시간 반영이 약 8초마다 본다(functions/sheetLiveOrders.js)
+//  수정 시각만 보면 늦게 바뀌는 경우가 있어 버전 번호(바뀔 때마다 올라감)도 같이 본다. 못 읽으면 ""(실시간 반영이 1분마다 직접 읽는다)
+async function sheetChangeToken(sid) {
+  if (!sid || Date.now() < _driveMetaOffUntil) return "";
+  try {
+    if (!_driveMetaClient) _driveMetaClient = await new GoogleAuth({ scopes: DRIVE_META_SCOPES }).getClient();
+    const r = await _driveMetaClient.request({ url: `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(sid)}?fields=modifiedTime,version&supportsAllDrives=true`, method: "GET" });
+    return r?.data?.modifiedTime ? `${r.data.modifiedTime}#${r.data.version || ""}` : "";
+  } catch (e) {
+    const st = e?.response?.status;
+    if (st === 403 || st === 401) _driveMetaOffUntil = Date.now() + 30 * 60 * 1000;
+    return "";
+  }
+}
 // 📗 2026-11-07 엑셀(xlsx) 파일 시트 — Sheets API가 거절하는 Office 파일은 Drive에서 받아 SheetJS로 읽는다(functions/officeSheet.js)
 //  · 읽기는 그대로(값 · 수식 · 병합 칸 · 탭) · 쓰기는 code "office-file" 오류 · [구글 시트로 변환] = Drive files.copy
 const { makeOfficeSheets } = require("./officeSheet");
@@ -6189,8 +6203,8 @@ exports.sheetConnect = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeo
 // 🔁 2026-11-14 프로그램 → 구글시트 반영(오더 등록 · 수정 · 삭제를 시트의 그 탭 줄에) — 설명은 functions/sheetPushOrders.js 맨 위
 const _sheetPush = require("./sheetPushOrders").makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab });
 exports.queueOrderSheetPush = functions.firestore.document("orders/{orderId}").onWrite((change, context) => _sheetPush.onOrderWrite(change, context).catch((e) => { console.error("[시트 쓰기 대기열 실패]", context.params.orderId, e?.message || e); return null; }));
-const _sheetLive = require("./sheetLiveOrders").makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab, sheetModifiedTime, bumpDataVersion, push: _sheetPush });
-exports.syncSheetOrders = functions.runWith({ timeoutSeconds: 300, memory: "1GB", maxInstances: 1 }).pubsub.schedule("every 1 minutes").timeZone("Asia/Seoul").onRun(async () => { await _sheetLive.runAll(); return null; });
+const _sheetLive = require("./sheetLiveOrders").makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab, sheetModifiedTime: sheetChangeToken, bumpDataVersion, push: _sheetPush });
+exports.syncSheetOrders = functions.runWith({ timeoutSeconds: 300, memory: "1GB", maxInstances: 1 }).pubsub.schedule("every 1 minutes").timeZone("Asia/Seoul").onRun(async () => { await _sheetLive.runLoop(); return null; }); // ⚡ 1분 동안 약 8초마다 확인(시트 변경 · 프로그램 변경 모두)
 
 exports.sheetImport = functions
   .runWith({ timeoutSeconds: 540, memory: "1GB" })

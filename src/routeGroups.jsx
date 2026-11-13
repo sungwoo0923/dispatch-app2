@@ -12,6 +12,10 @@ import { useCompanyFeatures } from "./companyFeatures";
 import { CompanyOptionPicker } from "./companyOptionPicker";
 
 export const RG_NONE = "(미지정)";
+// 🗂 2026-11-14 담당노선구분이 없는 오더(구글시트와 이어지지 않은, 프로그램에서 직접 등록한 오더)의 탭 이름 — 화면에는 "일반오더"로 보인다(저장되는 값은 그대로)
+export const rgLabel = (g) => (g === RG_NONE ? "일반오더" : g);
+// 들어갈 때마다 [전체]부터 보는 화면 — 여기서 고른 탭은 그 화면에 있는 동안만 쓰고, 다른 화면의 선택(내 담당 등)은 그대로 둔다
+const RG_ALL_FIRST = ["매출관리", "정산관리"];
 export const routeGroupOf = (row) => String(row?.담당노선구분 || String(row?.이전출처 || "").split("!")[0] || "").trim();
 const LS = (uid) => `kpRouteGroup:${uid || "me"}`;
 const readSel = (uid) => { try { const v = JSON.parse(localStorage.getItem(LS(uid)) || "null"); return v === "all" || v === "mine" || Array.isArray(v) ? v : null; } catch { return null; } };
@@ -21,8 +25,13 @@ export function useRouteGroupFilter({ enabled, uid, profile }) {
   const mine = React.useMemo(() => (Array.isArray(profile?.routeGroups) ? profile.routeGroups.filter(Boolean) : []), [profile?.routeGroups]); // eslint-disable-line react-hooks/exhaustive-deps
   const [selRaw, setSelRaw] = React.useState(() => readSel(uid));
   React.useEffect(() => { setSelRaw(readSel(uid)); }, [uid]);
-  const sel = selRaw ?? (mine.length ? "mine" : "all");
-  const setSel = React.useCallback((v) => { setSelRaw(v); try { localStorage.setItem(LS(uid), JSON.stringify(v)); } catch { /* 무시 */ } }, [uid]);
+  // 지금 보는 화면(setScreen 으로 알려 준다) — 매출관리는 들어갈 때마다 [전체]
+  const [screen, setScreenRaw] = React.useState("");
+  const [tmpSel, setTmpSel] = React.useState("all");
+  const setScreen = React.useCallback((sc) => { setScreenRaw(String(sc || "")); setTmpSel("all"); }, []);
+  const allFirst = RG_ALL_FIRST.includes(screen);
+  const sel = allFirst ? tmpSel : (selRaw ?? (mine.length ? "mine" : "all"));
+  const setSel = React.useCallback((v) => { if (allFirst) return setTmpSel(v); setSelRaw(v); try { localStorage.setItem(LS(uid), JSON.stringify(v)); } catch { /* 무시 */ } }, [uid, allFirst]);
   const active = !enabled || sel === "all" ? null : sel === "mine" ? (mine.length ? mine : null) : (sel.length ? sel : null);
   const key = active ? active.join("\u0001") : "";
   const filter = React.useCallback((rows) => {
@@ -31,7 +40,7 @@ export function useRouteGroupFilter({ enabled, uid, profile }) {
     return rows.filter((r) => set.has(routeGroupOf(r) || RG_NONE));
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   const saveMine = React.useCallback((list) => (uid ? setDoc(doc(db, "users", uid), { routeGroups: list }, { merge: true }) : Promise.resolve()), [uid]);
-  return { enabled: !!enabled, sel, setSel, mine, saveMine, filter, active };
+  return { enabled: !!enabled, sel, setSel, mine, saveMine, filter, active, setScreen };
 }
 
 // 화면 위 탭 줄(B안 · 구글시트 탭 모양) — rows: 거르기 전 오더(묶음 이름 · 건수용)
@@ -63,7 +72,7 @@ export function RouteGroupBar({ rg, rows = [], role, userCompany, dark = false }
     <div data-kp="route-group-bar" className={`mb-2 flex items-end gap-2 border-b ${dark ? "border-gray-600" : "border-[#DCE3EE]"}`}>
       <div className="flex items-end gap-0.5 min-w-0 overflow-x-auto" style={{ scrollbarWidth: "thin" }} title="탭을 누르면 그 노선만 · Ctrl+누르면 여러 개를 같이 봅니다">
         {!edit && <>
-          <button type="button" className={tabCls(rg.sel === "mine", dark)} title={rg.mine.length ? rg.mine.join(" · ") : "오른쪽 [내 담당 설정]에서 먼저 정해 주세요"} onClick={() => (rg.mine.length ? rg.setSel("mine") : (setDraft([]), setEdit(true)))}>{bar(rg.sel === "mine")}<span className={rg.sel === "mine" ? "" : "text-[#2D4C82]"}>내 담당</span>{rg.mine.length ? num(mineN) : null}</button>
+          <button type="button" className={tabCls(rg.sel === "mine", dark)} title={rg.mine.length ? rg.mine.map(rgLabel).join(" · ") : "오른쪽 [내 담당 설정]에서 먼저 정해 주세요"} onClick={() => (rg.mine.length ? rg.setSel("mine") : (setDraft([]), setEdit(true)))}>{bar(rg.sel === "mine")}<span className={rg.sel === "mine" ? "" : "text-[#2D4C82]"}>내 담당</span>{rg.mine.length ? num(mineN) : null}</button>
           <button type="button" className={tabCls(rg.sel === "all", dark)} onClick={() => rg.setSel("all")}>{bar(rg.sel === "all")}전체{num(total)}</button>
           <span className={`shrink-0 w-px h-5 mb-2.5 mx-1 ${dark ? "bg-gray-600" : "bg-[#DCE3EE]"}`} />
         </>}
@@ -72,9 +81,9 @@ export function RouteGroupBar({ rg, rows = [], role, userCompany, dark = false }
           <button key={g} type="button" aria-pressed={on} className={tabCls(on, dark)} onClick={(e) => onPick(g, e)}>
             {bar(on && !edit)}
             {edit && <span className={`w-4 h-4 rounded border-2 grid place-items-center ${on ? "bg-[#1B2B4B] border-[#1B2B4B]" : "border-[#C9D5EA] bg-white"}`}>{on && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}</span>}
-            {g}{num(counts.get(g))}
+            {rgLabel(g)}{num(counts.get(g))}
           </button>); })}
-        {groups.length === 0 && <span className="h-10 flex items-center px-2 text-[13px] text-[#7A879C]">아직 구분된 오더가 없습니다(구글시트에서 가져오면 탭 이름으로 나뉩니다)</span>}
+        {groups.length === 0 && <span className="h-10 flex items-center px-2 text-[13px] text-[#7A879C]">아직 구분된 오더가 없습니다(구글시트에서 가져오면 탭 이름으로, 직접 등록한 오더는 일반오더로 나뉩니다)</span>}
       </div>
       <span className="ml-auto shrink-0 flex items-center gap-1.5 pb-1.5">
         {!edit && <SheetLiveChip role={role} userCompany={userCompany} />}
@@ -108,14 +117,14 @@ export function SheetLiveChip({ role, userCompany, compact = false }) {
   const main = st.error ? st.error : late ? `확인 지연 · 마지막 확인 ${agoK(st.checkedAt, now)}` : st.changedAt ? `${agoK(st.changedAt, now)} 반영` : "대기 중";
   const detail = !bad && st.changedAt ? [st.created ? `새 ${st.created}` : "", st.updated ? `고침 ${st.updated}` : "", st.removed ? `삭제 ${st.removed}` : ""].filter(Boolean).join(" · ") : "";
   return (
-    <span data-kp="sheet-live-chip" title={`구글시트 실시간 반영 — 1분마다 시트를 확인합니다${st.checkedAt ? `\n마지막 확인 ${new Date(st.checkedAt).toLocaleString("ko-KR", { hour12: false })}` : ""}${st.heldBack ? `\n시트에 없는 오더 ${st.heldBack}건은 너무 많아 지우지 않았습니다` : ""}`}
+    <span data-kp="sheet-live-chip" title={`구글시트 실시간 반영 — 약 10초마다 시트를 확인합니다${st.checkedAt ? `\n마지막 확인 ${new Date(st.checkedAt).toLocaleString("ko-KR", { hour12: false })}` : ""}${st.heldBack ? `\n시트에 없는 오더 ${st.heldBack}건은 너무 많아 지우지 않았습니다` : ""}`}
       className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-[12.5px] font-bold whitespace-nowrap ${bad ? "border-[#E7B7B0] text-[#B4342A] bg-white" : "border-[#DCE3EE] text-[#3A4A66] bg-white"}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${bad ? "bg-[#B4342A]" : "bg-[#1F7A4D]"}`} />
       {!compact && <span className="text-[#94A3B8] font-extrabold tracking-[0.08em]">구글시트</span>}
       <span>{main}</span>
       {detail && !compact && <span className="text-[#94A3B8] tabular-nums">{detail}</span>}
       {/* 🔁 2026-11-14 프로그램 → 시트 반영: 어느 탭에 넣을지 못 정한 오더(담당노선구분을 고르면 들어간다) · 확인이 필요한 건(보류 · 못 씀 — 관리센터에서 처리) */}
-      {st.needTab > 0 && <span className="text-[#B26A00] font-black" title="프로그램에서 등록했는데 시트의 어느 탭에 넣을지 정하지 못한 오더입니다. 그 오더의 담당노선구분을 고르면 1분 안에 그 탭에 들어갑니다.">· 시트 탭 미정 {st.needTab}건</span>}
+      {st.needTab > 0 && <span className="text-[#B26A00] font-black" title="프로그램에서 등록했는데 시트의 어느 탭에 넣을지 정하지 못한 오더입니다. 그 오더의 담당노선구분을 고르면 곧바로 그 탭에 들어갑니다.">· 시트 탭 미정 {st.needTab}건</span>}
       {st.pushIssue > 0 && !compact && <span className="text-[#B4342A] font-black" title="시트에 쓰지 못했거나 보류한 건이 있습니다. 관리센터 › 배차일지 가져오기 › 프로그램 → 시트 반영에서 확인해 주세요.">· 시트 반영 확인 {st.pushIssue}건</span>}
     </span>
   );
@@ -130,7 +139,7 @@ export function RouteGroupDropdown({ rg, rows = [], role, userCompany, right = n
   const groups = React.useMemo(() => { const out = []; const seen = new Set(); [...(opt.customized ? opt.list : []), ...[...counts.keys()].filter((g) => g !== RG_NONE).sort((a, b) => (counts.get(b) || 0) - (counts.get(a) || 0)), ...rg.mine].forEach((g) => { if (g && g !== RG_NONE && !seen.has(g)) { seen.add(g); out.push(g); } }); if (counts.has(RG_NONE)) out.push(RG_NONE); return out; }, [opt.list, opt.customized, counts, rg.mine]);
   if (!rg.enabled) return right ? <div className="px-3 pt-2 flex justify-end">{right}</div> : null;
   const cur = rg.sel === "all" ? [] : rg.sel === "mine" ? rg.mine : rg.sel;
-  const label = rg.sel === "all" || !cur.length ? "전체" : rg.sel === "mine" ? `내 담당 ${cur.length}` : cur.length === 1 ? cur[0] : `${cur[0]} 외 ${cur.length - 1}`;
+  const label = rg.sel === "all" || !cur.length ? "전체" : rg.sel === "mine" ? `내 담당 ${cur.length}` : cur.length === 1 ? rgLabel(cur[0]) : `${rgLabel(cur[0])} 외 ${cur.length - 1}`;
   const openIt = () => { setDraft(cur); setOpen(true); };
   const toggle = (g) => setDraft((d) => (d.includes(g) ? d.filter((x) => x !== g) : [...d, g]));
   const apply = () => { const same = draft.length && draft.length === rg.mine.length && draft.every((g) => rg.mine.includes(g)); rg.setSel(!draft.length ? "all" : same ? "mine" : draft); setOpen(false); };
@@ -157,7 +166,7 @@ export function RouteGroupDropdown({ rg, rows = [], role, userCompany, right = n
               {groups.map((g) => { const on = draft.includes(g); return (
                 <button key={g} type="button" onClick={() => toggle(g)} className="w-full min-h-[52px] px-3 flex items-center gap-3 border-b border-[#EEF1F6] text-left">
                   <span className={`w-6 h-6 rounded-md border-2 grid place-items-center shrink-0 ${on ? "bg-[#1B2B4B] border-[#1B2B4B]" : "border-[#C9D5EA] bg-white"}`}>{on && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}</span>
-                  <span className="flex-1 min-w-0 truncate text-[16px] font-bold text-[#0F1A30]">{g}</span>
+                  <span className="flex-1 min-w-0 truncate text-[16px] font-bold text-[#0F1A30]">{rgLabel(g)}</span>
                   <span className="text-[13.5px] font-bold text-[#94A3B8] tabular-nums">{(counts.get(g) || 0).toLocaleString()}</span>
                 </button>); })}
             </div>

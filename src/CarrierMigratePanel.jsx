@@ -87,7 +87,7 @@ function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
   const turnOn = async () => {
     const u = (url || live?.url || "").trim();
     if (!u) return setMsg("위 칸에 구글시트 주소를 먼저 붙여넣어 주세요.");
-    if (!(await kpConfirm(`${co} — 구글시트 실시간 반영을 켤까요?\n\n· 1분마다 시트를 확인해 새 줄은 오더로 만들고, 고친 줄은 그 오더를 고칩니다\n· 시트에서 지운 줄은 프로그램 오더도 지웁니다(아래에서 끌 수 있음)\n· 프로그램에서 직접 고친 값은 다음 반영 때 시트 값으로 돌아갑니다(아래 [프로그램 → 시트 반영]을 켜면 시트에도 씁니다) — 입력 · 수정은 시트에서만 하세요`))) return;
+    if (!(await kpConfirm(`${co} — 구글시트 실시간 반영을 켤까요?\n\n· 약 10초마다 시트를 확인해 새 줄은 오더로 만들고, 고친 줄은 그 오더를 고칩니다\n· 시트에서 지운 줄은 프로그램 오더도 지웁니다(아래에서 끌 수 있음)\n· 프로그램에서 직접 고친 값은 다음 반영 때 시트 값으로 돌아갑니다(아래 [프로그램 → 시트 반영]을 켜면 시트에도 씁니다) — 입력 · 수정은 시트에서만 하세요`))) return;
     await set({ url: u, enabled: true, days: live?.days || 14, tabs: pickedTabs }, "on");
     runNow();
   };
@@ -107,7 +107,7 @@ function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
       <div className="px-5 py-4 flex items-center gap-3 flex-wrap border-b border-[#E8EDF4] bg-[#F7F9FC]">
         <span className="text-[11px] font-extrabold tracking-[0.2em] text-[#94A3B8]">LIVE</span>
         <span className="text-[16px] font-black text-[#0F1A30]">구글시트 실시간 반영</span>
-        <span className={`text-[13px] font-black ${on ? "text-[#0F7A43]" : "text-[#7A879C]"}`}>{live === undefined ? "확인 중" : on ? "켜짐 · 1분마다 확인" : "꺼짐"}</span>
+        <span className={`text-[13px] font-black ${on ? "text-[#0F7A43]" : "text-[#7A879C]"}`}>{live === undefined ? "확인 중" : on ? "켜짐 · 약 10초마다 확인" : "꺼짐"}</span>
         <div className="ml-auto flex items-center gap-2">
           {on && <button type="button" onClick={runNow} disabled={!!busy} className={`${btn} h-10 px-4 border border-[#C9D5EA] bg-white text-[#1B2B4B] text-[13.5px]`}>{busy === "run" ? "반영 중…" : "지금 반영"}</button>}
           {on
@@ -173,7 +173,7 @@ function SheetPushCard({ co }) {
       <div className="px-5 py-4 flex items-center gap-3 flex-wrap border-b border-[#E8EDF4] bg-[#F7F9FC]">
         <span className="text-[11px] font-extrabold tracking-[0.2em] text-[#94A3B8]">WRITE</span>
         <span className="text-[16px] font-black text-[#0F1A30]">프로그램 → 시트 반영</span>
-        <span className={`text-[13px] font-black ${mode === "on" ? "text-[#0F7A43]" : mode === "dry" ? "text-[#2D4C82]" : "text-[#7A879C]"}`}>{push === undefined ? "확인 중" : push === null ? "서버 기능 없음" : mode === "on" ? "켜짐 · 1분 안에 시트에 씀" : mode === "dry" ? "점검 중 · 시트는 그대로" : "꺼짐"}</span>
+        <span className={`text-[13px] font-black ${mode === "on" ? "text-[#0F7A43]" : mode === "dry" ? "text-[#2D4C82]" : "text-[#7A879C]"}`}>{push === undefined ? "확인 중" : push === null ? "서버 기능 없음" : mode === "on" ? "켜짐 · 바꾸면 곧바로(약 10~20초) 시트에 씀" : mode === "dry" ? "점검 중 · 시트는 그대로" : "꺼짐"}</span>
         <div className="ml-auto flex items-center gap-1.5">
           {PUSH_MODES.map(([v, l]) => <button key={v} type="button" disabled={!!busy || !push} aria-pressed={mode === v} onClick={() => setMode(v)}
             className={`h-10 px-3.5 rounded-xl border text-[13.5px] font-black disabled:opacity-50 ${mode === v ? "border-[#1B2B4B] bg-[#1B2B4B] text-white" : "border-[#C9D5EA] bg-white text-[#5B6B85]"}`}>{busy === v ? "바꾸는 중…" : l}</button>)}
@@ -544,6 +544,16 @@ export default function CarrierMigratePanel({ companies = [] }) {
             removed = r.missing.length; missing = 0;
           }
         }
+        // 🕒 2026-11-14 예전에 등록 · 수정 시각 없이 들어온 오더(이번에 고칠 것이 없는 줄) — 수정 시각만 한 번 찍어 준다
+        //  열려 있는 PC · 모바일과 PC 보관본은 "그 뒤에 바뀐 오더"만 받아 오는데, 시각이 없으면 영영 받지 못한다(매출 · 정산에 안 나오던 원인)
+        const fixing = new Set(r.update.map((u) => u.id));
+        const noStamp = ex.filter((e) => inRange(e.data) && !fixing.has(e.id) && !e.data._lastModified && !e.data.createdAt && !e.data.updatedAt);
+        for (let i = 0; i < noStamp.length; i += 400) {
+          const b = writeBatch(db);
+          noStamp.slice(i, i + 400).forEach((e) => b.set(doc(db, "orders", e.id), { _lastModified: Date.now() }, { merge: true }));
+          await b.commit();
+          setProgress({ pct: 19, step: `예전에 가져온 오더 다른 화면에 알리는 중 ${won(Math.min(noStamp.length, i + 400))} / ${won(noStamp.length)}` });
+        }
         for (let i = 0; i < r.update.length; i += 400) {
           const b = writeBatch(db);
           r.update.slice(i, i + 400).forEach((u) => b.set(doc(db, "orders", u.id), { ...u.patch, _lastModified: Date.now(), 최종수정자: me, 시트반영일시: serverTimestamp() }, { merge: true }));
@@ -555,7 +565,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
       let done = 0;
       for (let i = 0; i < list.length; i += 400) {
         const b = writeBatch(db);
-        list.slice(i, i + 400).forEach((o) => { const _id = newId(); b.set(doc(db, "orders", _id), { ...forOrderDoc(o, { company: co, batchId, me }), _id }); });
+        list.slice(i, i + 400).forEach((o) => { const _id = newId(); b.set(doc(db, "orders", _id), { ...forOrderDoc(o, { company: co, batchId, me }), _id, _lastModified: Date.now(), createdAt: serverTimestamp() }); }); // 🕒 2026-11-14 등록 · 수정 시각 — 없으면 열려 있는 PC · 모바일과 이 PC 보관본이 "새로 생긴 오더"로 받지 못해 매출 · 정산 등 지난 기간 화면에 안 나왔다
         await b.commit();
         done = Math.min(list.length, i + 400);
         setProgress({ pct: 20 + Math.round((done / Math.max(1, list.length)) * 78), step: `오더 저장 중 ${won(done)} / ${won(list.length)}` });

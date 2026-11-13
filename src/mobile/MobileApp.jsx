@@ -2861,6 +2861,7 @@ const quickRange = (days) => {
   }, [orders, canceledOrders, extraSplit, extraMap.size]);
   // 🗂 2026-11-13 담당노선구분(켠 운송사만) — 고른 묶음만(목록 · 미배차 · 매출 등 아래 allOrders 를 쓰는 화면이 모두 따른다 · src/routeGroups.jsx)
   const rgM = useRouteGroupFilter({ enabled: useCompanyFeatures(userCompany).routeGroups === true, uid: user?.uid, profile: myProfM });
+  useEffect(() => { rgM.setScreen(page === "sales" ? "매출관리" : page === "dept" ? "정산관리" : page); }, [page, rgM.setScreen]); // eslint-disable-line react-hooks/exhaustive-deps — 🗂 매출관리 · 정산(경리 · 임원 화면)은 들어갈 때마다 [전체]부터
   const allOrdersPreRG = allOrdersCombined.orders;
   const allOrders = useMemo(() => rgM.filter(allOrdersPreRG) || [], [allOrdersPreRG, rgM.filter]);
   // ⭐ 2026-11-04 고정노선(구글시트 배차표) 오더는 고정노선현황에서만 — 일반 배차현황·미배차·정보미전달에는 넣지 않는다(PC와 같음)

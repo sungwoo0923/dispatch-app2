@@ -206,4 +206,41 @@ async function world(mode, opts = {}) {
   assert.equal(w.db.data("sheetPushQueue", "o아6"), undefined);
   console.log("server(권한 없음 · 끔) OK");
 }
+{
+  // 시트 → 프로그램(실시간 반영): 시트에서 배차했다가 기사를 지우면 프로그램 오더에서도 기사 · 차량이 빠진다
+  const { makeSheetLive } = require("../functions/sheetLiveOrders.js");
+  const w = await world("off");
+  let mt = 1;
+  const live = makeSheetLive({ db: w.db, FieldValue: { serverTimestamp: () => TS, delete: () => DEL, arrayUnion: (...v) => v }, sheetsApiFor: w.sh.api, parseSpreadsheetId: (u) => (u ? "sid" : ""), quoteTab: (t) => `'${t}'`, sheetModifiedTime: async () => String(mt), bumpDataVersion: async () => {}, push: w.push });
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const [y, m, d] = today.split("-").map(Number);
+  // 오늘 날짜 줄 하나를 시트에 넣는다(미배차) → 새 오더
+  w.tabs["아산 내수"].push([`${y}. ${m}. ${d}`, "신봉길101", "평택시 포승읍", "", "", "10", "1톤", "80,000", "", "80,000", "70,000", "", "70,000", "10,000", "", "원콜", "", "", "", "", ""]);
+  await w.db.collection("sheetLive").doc(CO).set({ ...w.cfg, pushMode: "off", days: 14 });
+  const cfg = () => w.db.data("sheetLive", CO);
+  const find = () => w.db.ids("orders").map((id) => ({ id, ...w.db.data("orders", id) })).find((o) => o.상차일 === today);
+  // 가져오기 설정은 저장된 것이 없어 회사 시작 규칙(JY)을 쓴다
+  let r = await live.runOne(CO, cfg());
+  assert.equal(r.created, 1, JSON.stringify(r));
+  assert.equal(find().배차상태, "배차중");
+  // 시트에서 배차(차량 · 기사 입력)
+  const row = w.tabs["아산 내수"][w.tabs["아산 내수"].length - 1];
+  row[16] = "경기55마5555"; row[17] = "오기사"; row[18] = "010-5555-6666"; mt += 1;
+  r = await live.runOne(CO, cfg());
+  assert.equal(r.updated, 1, JSON.stringify(r));
+  assert.deepEqual([find().차량번호, find().이름, find().배차상태], ["경기55마5555", "오기사", "배차완료"]);
+  // 시트에서 기사 삭제
+  row[16] = ""; row[17] = ""; row[18] = ""; mt += 1;
+  r = await live.runOne(CO, cfg());
+  assert.equal(r.updated, 1, JSON.stringify(r));
+  assert.deepEqual([find().차량번호, find().이름, find().전화번호, find().배차상태], ["", "", "", "배차중"]);
+  // 시트 수정 시각이 그대로면 건너뛴다(값을 다시 읽지 않는다)
+  assert.deepEqual(await live.runOne(CO, cfg()), { skipped: "unchanged" });
+  // 1분 동안 여러 번 확인(runLoop) — 그 사이 시트가 바뀌면 다음 확인 때 바로 반영된다
+  let slept = 0;
+  const n = await live.runLoop({ loopMs: 40, tickMs: 10, sleep: async (ms) => { slept += 1; if (slept === 2) { row[16] = "경기66바6666"; mt += 1; } await new Promise((r2) => setTimeout(r2, ms)); } });
+  assert.ok(n >= 3, `확인 ${n}번`);
+  assert.equal(find().차량번호, "경기66바6666");
+  console.log("live(시트에서 기사 삭제) OK");
+}
 console.log("sheetPush: 모두 통과");
