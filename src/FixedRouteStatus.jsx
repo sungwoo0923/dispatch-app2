@@ -4,6 +4,7 @@
 //    배차현황(DispatchStatus)을 그대로 쓰고, 표의 열만 그 양식(시트 제목줄) 순서로 바꾼다(fixedForm).
 //  · 화면을 열어 두면 30초마다 서버가 시트와 맞춘다(새 날짜 탭·새 줄 → 오더, 시트에서 바뀐 칸 → 프로그램, 프로그램에서 바꾼 칸 → 시트)
 import React from "react";
+import { useListKeys } from "./useListKeys";
 import { collection, onSnapshot, query, where, doc, setDoc, updateDoc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { createPortal } from "react-dom";
@@ -729,9 +730,12 @@ function FormPicker({ forms = [], value, countOf, onChange }) {
     return () => { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", esc); };
   }, [open]);
   const cur = forms.find((f) => f.id === value) || forms[0];
+  // ⌨ ↑/↓ · Enter · Esc
+  const keys = useListKeys({ open, count: forms.length, initial: Math.max(0, forms.findIndex((f) => f.id === cur?.id)), triggerRef: ref, onOpen: () => setOpen(true), onClose: () => setOpen(false),
+    onPick: (i) => { if (forms[i]) { onChange(forms[i].id); setOpen(false); } } });
   if (!cur) return null;
   return (
-    <div ref={ref} className="relative" data-kp="frs-form-picker">
+    <div ref={ref} className="relative" data-kp="frs-form-picker" onKeyDown={keys.onKeyDown}>
       <button type="button" onClick={() => setOpen((v) => !v)} aria-haspopup="listbox" aria-expanded={open} title="배차표 양식 고르기"
         className="h-10 pl-3.5 pr-3 rounded-xl inline-flex items-center gap-2 bg-white text-[#0F1A30] border border-white text-[14px] font-black whitespace-nowrap hover:bg-[#EEF2F8] max-w-[260px]">
         <span className="text-[10.5px] font-extrabold tracking-[0.18em] text-[#4B6CB7]">양식</span>
@@ -740,12 +744,12 @@ function FormPicker({ forms = [], value, countOf, onChange }) {
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${open ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6" /></svg>
       </button>
       {open && (
-        <div role="listbox" className="absolute left-0 top-[calc(100%+6px)] z-[60] min-w-[240px] max-h-[360px] overflow-auto rounded-2xl bg-white border border-[#E3E8F0] shadow-[0_18px_44px_rgba(15,26,48,0.28)] py-1.5">
-          {forms.map((f) => {
+        <div ref={keys.listRef} role="listbox" className="absolute left-0 top-[calc(100%+6px)] z-[60] min-w-[240px] max-h-[360px] overflow-auto rounded-2xl bg-white border border-[#E3E8F0] shadow-[0_18px_44px_rgba(15,26,48,0.28)] py-1.5">
+          {forms.map((f, i) => {
             const on = f.id === cur.id;
             return (
-              <button key={f.id} type="button" role="option" aria-selected={on} onClick={() => { onChange(f.id); setOpen(false); }}
-                className={`w-full px-3.5 h-10 flex items-center gap-2.5 text-left text-[14px] font-extrabold ${on ? "bg-[#EEF3FC] text-[#0F1A30]" : "text-[#2A3852] hover:bg-[#F5F8FD]"}`}>
+              <button key={f.id} type="button" role="option" aria-selected={on} {...keys.itemProps(i)} onClick={() => { onChange(f.id); setOpen(false); }}
+                className={`w-full px-3.5 h-10 flex items-center gap-2.5 text-left text-[14px] font-extrabold ${on ? "bg-[#EEF3FC] text-[#0F1A30]" : `text-[#2A3852] hover:bg-[#F5F8FD] ${keys.active(i) ? "bg-[#F5F8FD]" : ""}`}`}>
                 <span className={`w-4 h-4 rounded-full border-2 grid place-items-center shrink-0 ${on ? "border-[#1B2B4B] bg-[#1B2B4B]" : "border-[#C9D5EA]"}`}>{on && <span className="w-1.5 h-1.5 rounded-full bg-white" />}</span>
                 <span className="flex-1 truncate">{f.name}</span>
                 <span className="text-[12px] tabular-nums font-bold text-[#7A8AA6]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{countOf(f)}건</span>

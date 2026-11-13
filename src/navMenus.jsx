@@ -6,6 +6,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { SWITCH_ROLES, readSwitchView } from "./customRoles";
 import { approvalSubs } from "./menuTree";
+import { useListKeys } from "./useListKeys";
 import { menuName } from "./execMenus"; // 🏷 2026-11-10 배차관리 → 오더등록(보이는 이름)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
@@ -120,13 +121,21 @@ export function NavHover({ menu, label, disabled = false, onOpenMenu, badges = n
   const enter = () => {
     if (!conf || disabled) return;
     clear();
-    tIn.current = setTimeout(() => {
-      const r = anchorRef.current?.getBoundingClientRect();
-      if (r) setPos({ left: Math.max(8, Math.min(window.innerWidth - 248, r.left + r.width / 2 - 120)), top: r.bottom + 8 });
-      setOpen(true);
-      requestAnimationFrame(() => setShown(true));
-    }, 120);
+    tIn.current = setTimeout(show, 120);
   };
+  const show = () => {
+    const r = anchorRef.current?.getBoundingClientRect();
+    if (r) setPos({ left: Math.max(8, Math.min(window.innerWidth - 248, r.left + r.width / 2 - 120)), top: r.bottom + 8 });
+    setOpen(true);
+    requestAnimationFrame(() => setShown(true));
+  };
+  const kbd = React.useRef(false); // 키보드로 펼쳤을 때만 포커스가 떠나면 닫는다(마우스 동작은 그대로)
+  React.useEffect(() => { if (!open) kbd.current = false; }, [open]);
+  // ⌨ 2026-11-13 키보드 — 상단 메뉴 버튼에 포커스가 있을 때 ↓ 로 펼치고(첫 항목 강조) ↑/↓ 이동 · Enter 이동 · Esc 닫기
+  const keys = useListKeys({ open: open && !!conf, count: conf ? conf.items.length : 0, loop: true, containerRef: panelRef, triggerRef: anchorRef,
+    onOpen: conf && !disabled ? () => { clear(); show(); } : undefined,
+    onClose: () => { clear(); setShown(false); setOpen(false); },
+    onPick: (i) => { const it = conf?.items[i]; if (it) pick(it[0]); } });
   const leave = () => {
     clear();
     tOut.current = setTimeout(() => { setShown(false); tOut.current = setTimeout(() => setOpen(false), 180); }, 140);
@@ -142,7 +151,8 @@ export function NavHover({ menu, label, disabled = false, onOpenMenu, badges = n
   }, [open]);
   const pick = (key) => { clear(); setShown(false); setOpen(false); onOpenMenu?.(); setTimeout(() => emitSubnav(conf.code, key), 0); };
   return (
-    <span ref={anchorRef} className="inline-flex" onMouseEnter={enter} onMouseLeave={leave}
+    <span ref={anchorRef} className="inline-flex" onMouseEnter={enter} onMouseLeave={leave} onKeyDown={(e) => { if (keys.onKeyDown(e)) kbd.current = true; }}
+      onBlur={(e) => { const to = e.relatedTarget; if (kbd.current && !panelRef.current?.matches?.(":hover") && !(to instanceof Node && (anchorRef.current?.contains(to) || panelRef.current?.contains(to)))) leave(); }}
       onClickCapture={(e) => {
         // ⭐ 2026-11-01 버그수정 — 세부 메뉴(포털) 안을 눌러도 이 캡처가 먼저 돌아 패널을 지워 버려, 세부 메뉴 버튼의 onClick이 실행되지 않았다(어느 메뉴든 이동 안 됨)
         if (panelRef.current && e.target instanceof Node && panelRef.current.contains(e.target)) return;
@@ -167,8 +177,8 @@ export function NavHover({ menu, label, disabled = false, onOpenMenu, badges = n
             </div>
             <div className="p-1.5 overflow-y-auto" style={{ maxHeight: "min(70vh, 520px)", overscrollBehavior: "contain" }}>
               {conf.items.map(([key, l], i) => (
-                <button key={key} type="button" onClick={() => pick(key)}
-                  className="w-full flex items-center gap-2.5 px-3 h-10 rounded-xl text-left text-[13.5px] font-bold text-white/80 hover:text-white hover:bg-white/[0.08] transition"
+                <button key={key} type="button" {...keys.itemProps(i)} onClick={() => pick(key)}
+                  className={`w-full flex items-center gap-2.5 px-3 h-10 rounded-xl text-left text-[13.5px] font-bold hover:text-white hover:bg-white/[0.08] transition ${keys.active(i) ? "text-white bg-white/[0.08]" : "text-white/80"}`}
                   style={{ transitionDelay: shown ? `${i * 18}ms` : "0ms" }}>
                   <span className="w-1.5 h-1.5 rotate-45 bg-[#8FB0F0]/70 shrink-0" />
                   <span className="truncate flex-1">{l}</span>

@@ -6,6 +6,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { CustomSelect } from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker";
+import { arrowFocus } from "./useListKeys";
 
 const pad = (n) => String(n).padStart(2, "0");
 export const korTimeLabel = (hm, empty = "즉시") => { if (!hm) return empty; const [h, m] = hm.split(":").map(Number); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${pad(m)}`; };
@@ -63,12 +64,21 @@ export function MonthPicker({ value, onChange, dark = false, quick = true, class
   React.useEffect(() => {
     if (!open) return undefined;
     const close = (e) => { if (!e.target.closest?.("[data-kp-monthpop]") && !btnRef.current?.contains(e.target)) setOpen(false); };
-    const esc = (e) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); } };
+    const esc = (e) => { if (e.key === "Escape") { e.stopPropagation(); setOpen(false); btnRef.current?.focus?.(); } };
     document.addEventListener("mousedown", close); window.addEventListener("keydown", esc, true);
     return () => { document.removeEventListener("mousedown", close); window.removeEventListener("keydown", esc, true); };
   }, [open]);
   const [y, m] = String(value || "").split("-");
   const cur = kstYm(); const prev = kstYm(-1);
+  // ⌨ 버튼에서 ↓ 로 열고(고른 달 · 이번 달 칸으로) 방향키로 달 이동 · Enter 고르기 · Esc 닫기
+  const popRef = React.useRef(null);
+  const monthSel = "button[data-m]:not([disabled])";
+  const onBtnKey = (e) => {
+    if (e.key !== "ArrowDown" || disabled) return;
+    e.preventDefault();
+    if (!open) toggle();
+    setTimeout(() => { const p = popRef.current; (p?.querySelector('[data-cur="1"]:not([disabled])') || p?.querySelector('[data-now="1"]:not([disabled])') || p?.querySelector(monthSel))?.focus(); }, 0);
+  };
   const chip = (label, ym) => (
     <button type="button" onClick={() => onChange(ym)} className={`h-10 px-3.5 rounded-xl text-[13.5px] font-black whitespace-nowrap transition ${value === ym
       ? (dark ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white")
@@ -76,7 +86,7 @@ export function MonthPicker({ value, onChange, dark = false, quick = true, class
   );
   return (
     <div className={`inline-flex items-center gap-1.5 ${className}`}>
-      <button ref={btnRef} type="button" onClick={toggle} disabled={disabled}
+      <button ref={btnRef} type="button" onClick={toggle} onKeyDown={onBtnKey} aria-haspopup="true" aria-expanded={open} disabled={disabled}
         className={triggerClassName ? `inline-flex items-center gap-2 whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed ${triggerClassName}` : `h-10 pl-3.5 pr-3 rounded-xl inline-flex items-center gap-2 text-[15px] font-black whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed ${dark ? "bg-white/10 border border-white/25 text-white" : "bg-white border border-[#DCE3EE] text-[#0F1A30]"}`}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M3 10h18M8 3v4M16 3v4" /></svg>
         {y ? `${y}년 ${Number(m)}월` : placeholder}
@@ -85,7 +95,7 @@ export function MonthPicker({ value, onChange, dark = false, quick = true, class
       {quick && chip("당월", cur)}
       {quick && chip("전월", prev)}
       {open && rect && createPortal(
-        <div data-kp-monthpop="1" data-kp-popup="1" style={{ position: "fixed", left: rect.left, top: rect.top, zIndex: 2147483000 }}
+        <div ref={popRef} data-kp-monthpop="1" data-kp-popup="1" onKeyDown={(e) => arrowFocus(e, e.currentTarget, { cols: 4, selector: monthSel })} style={{ position: "fixed", left: rect.left, top: rect.top, zIndex: 2147483000 }}
           className="w-[290px] rounded-2xl bg-white border border-[#DCE3EE] shadow-[0_22px_50px_rgba(11,20,40,.25)] overflow-hidden">
           <div className="px-3 py-2.5 flex items-center justify-between text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
             <button type="button" onClick={() => setYear((v) => v - 1)} className="w-8 h-8 rounded-lg hover:bg-white/10 text-[16px] font-black">‹</button>
@@ -96,7 +106,7 @@ export function MonthPicker({ value, onChange, dark = false, quick = true, class
             {Array.from({ length: 12 }, (_, i) => {
               const ym = `${year}-${pad(i + 1)}`; const on = ym === value; const isCur = ym === cur;
               const off = (!!min && ym < min) || (!!max && ym > max);
-              return <button key={ym} type="button" disabled={off} onClick={() => { if (off) return; onChange(ym); setOpen(false); }}
+              return <button key={ym} type="button" data-m={i + 1} data-cur={on ? "1" : undefined} data-now={isCur ? "1" : undefined} disabled={off} onClick={() => { if (off) return; onChange(ym); setOpen(false); if (popRef.current?.contains(document.activeElement)) btnRef.current?.focus?.(); }}
                 className={`h-11 rounded-xl text-[14px] font-black transition disabled:opacity-25 disabled:cursor-not-allowed ${on ? "bg-[#0F1A30] text-white" : isCur ? "border-2 border-[#2D4C82] text-[#0F1A30]" : "text-[#3A4A66] hover:bg-[#EEF3FC]"}`}>{i + 1}월</button>;
             })}
           </div>

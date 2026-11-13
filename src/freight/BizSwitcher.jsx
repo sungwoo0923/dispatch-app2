@@ -5,6 +5,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { BIZ, GROUP } from "../bizModules";
 import { ModeIcon, MONO } from "./ui";
+import { arrowFocus } from "../useListKeys";
 
 export default function BizSwitcher({ modules = [], current = "inland", canGroup = false, onPick, hideButton = false, open: openProp, onOpenChange }) {
   // 모바일 메뉴처럼 바깥에서 여닫는 경우(open · onOpenChange) — 버튼 없이 고르는 창만 쓴다
@@ -13,16 +14,21 @@ export default function BizSwitcher({ modules = [], current = "inland", canGroup
   const setOpen = (v) => { if (onOpenChange) onOpenChange(v); else setOpenSelf(v); };
   React.useEffect(() => {
     if (!open) return undefined;
-    const k = (e) => { if (e.key === "Escape") setOpen(false); };
+    // ⌨ 방향키로 업무 카드 사이 이동(Enter = 그 업무) · Esc 닫기
+    const k = (e) => { if (e.key === "Escape") setOpen(false); else arrowFocus(e, gridRef.current, { cols: window.innerWidth >= 640 ? 2 : 1 }); };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, [open]);
+  const gridRef = React.useRef(null);
+  const btnRef = React.useRef(null);
+  const wasOpen = React.useRef(false);
+  React.useEffect(() => { if (wasOpen.current && !open) btnRef.current?.focus?.(); wasOpen.current = open; }, [open]); // 닫히면 버튼으로 포커스 복귀
   const items = [...modules.map((k) => BIZ[k]).filter(Boolean), ...(canGroup ? [GROUP] : [])];
   if (items.length < 2) return null;
   const cur = current === "group" ? GROUP : BIZ[current] || BIZ.inland;
   return (
     <>
-      {!hideButton && <button type="button" onClick={() => setOpen(true)} data-testid="biz-switch" title="업무 전환"
+      {!hideButton && <button ref={btnRef} type="button" onKeyDown={(e) => { if (!open && e.key === "ArrowDown") { e.preventDefault(); setOpen(true); } }} onClick={() => setOpen(true)} data-testid="biz-switch" title="업무 전환"
         className="h-[34px] pl-2.5 pr-2 rounded-xl inline-flex items-center gap-1.5 bg-white text-[#0F1A30] text-[12.5px] font-black whitespace-nowrap shadow-[0_4px_12px_rgba(0,0,0,.25)] hover:bg-[#EEF3FB] transition">
         <ModeIcon mode={cur.key} size={14} />{cur.short}
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
@@ -38,9 +44,9 @@ export default function BizSwitcher({ modules = [], current = "inland", canGroup
               </div>
               <button type="button" onClick={() => setOpen(false)} className="w-10 h-10 rounded-xl bg-white/10 border border-white/15 text-white shrink-0" aria-label="닫기">✕</button>
             </div>
-            <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5 overflow-y-auto" style={{ maxHeight: "min(70vh, 560px)" }}>
+            <div ref={gridRef} className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5 overflow-y-auto" style={{ maxHeight: "min(70vh, 560px)" }}>
               {items.map((it) => { const on = it.key === current; return (
-                <button key={it.key} type="button" data-testid={`biz-pick-${it.key}`} onClick={() => { setOpen(false); onPick?.(it.key); }}
+                <button key={it.key} type="button" data-cur={on ? "1" : undefined} data-testid={`biz-pick-${it.key}`} onClick={() => { setOpen(false); onPick?.(it.key); }}
                   className={`text-left rounded-2xl px-4 py-3.5 border transition flex items-center gap-3 ${it.key === "group" ? "sm:col-span-2" : ""} ${on ? "bg-white border-white text-[#0F1A30] shadow-[0_10px_26px_rgba(0,0,0,0.3)]" : "bg-white/[0.06] border-white/10 text-white hover:bg-white/[0.12]"}`}>
                   <span className={`w-11 h-11 rounded-xl grid place-items-center shrink-0 ${on ? "bg-[#EEF3FB] text-[#1B2B4B]" : "bg-white/[0.08] text-[#8FB0F0]"}`}><ModeIcon mode={it.key} size={20} /></span>
                   <span className="min-w-0 flex-1">

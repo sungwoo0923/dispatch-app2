@@ -371,6 +371,7 @@ export function StatementBoard({ month, setMonth, recentMonths = [], groups, onO
             <div className="ml-auto flex items-center gap-1.5 flex-wrap">
               <button type="button" onClick={() => onBulk("작성", selGroups)} className="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-[14px] font-black">일괄 작성</button>
               <button type="button" onClick={() => onBulk("발송", selGroups)} className="h-9 px-3 rounded-lg bg-white text-[#0F1A30] text-[14px] font-black inline-flex items-center gap-1.5"><Ico d={IC.send} size={14} />일괄 발송</button>
+              <button type="button" onClick={() => onBulk("계산서발행", selGroups)} className="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-[14px] font-black" title="선택한 거래처를 계산서 발행 단계로 기록(발행 자체는 각 명세서에서)">일괄 발행 기록</button>
               <button type="button" onClick={() => onBulk("마감", selGroups)} className="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-[14px] font-black">일괄 마감</button>
               <button type="button" onClick={() => setSel(new Set())} className="h-9 px-2.5 rounded-lg text-white/70 hover:text-white text-[14px] font-bold">해제</button>
             </div>

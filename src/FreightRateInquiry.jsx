@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { imeFocusRef } from "./imeFocus";
+import { useListKeys } from "./useListKeys";
 import { useSubnavTarget } from "./navMenus";
 import southKorea from "@svg-maps/south-korea";
 import StandardFare from "./StandardFare";
@@ -606,6 +607,9 @@ function NationalFareTab() {
   const [subDistrictLoading,setSubDistrictLoading]=useState(false);
   const fromRef=useRef(null);
   const toRef=useRef(null);
+  // ⌨ 주소 추천 목록 ↑/↓ · Enter · Esc
+  const fromKeys=useListKeys({open:fromResults.length>0,count:fromResults.length,containerRef:fromRef,onClose:()=>setFromResults([]),onPick:(i)=>{if(fromResults[i])selectFrom(fromResults[i]);}});
+  const toKeys=useListKeys({open:toResults.length>0,count:toResults.length,containerRef:toRef,onClose:()=>setToResults([]),onPick:(i)=>{if(toResults[i])selectTo(toResults[i]);}});
   const viaTimers=useRef({});
   const fromSelectedRef=useRef(false);
   const toSelectedRef=useRef(false);
@@ -976,6 +980,7 @@ function NationalFareTab() {
                     className="flex-1 min-w-0 text-[14px] bg-transparent !border-0 !shadow-none outline-none text-[#0F1A30] font-bold placeholder:text-[#9AA9C3] placeholder:font-medium"
                     placeholder="지역명 또는 주소 검색"
                     value={fromSearch}
+                    onKeyDown={fromKeys.onKeyDown}
                     onChange={e=>{setFromSearch(e.target.value);if(!e.target.value){setFromP(null);setFromC(null);}}}
                     onFocus={()=>{setStep("from");}}
                   />
@@ -987,8 +992,8 @@ function NationalFareTab() {
               {fromResults.length>0&&(
                 <div className="absolute left-0 right-0 top-full bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden mt-1">
                   {fromResults.map((r,i)=>(
-                    <button key={i} onClick={()=>selectFrom(r)}
-                      className="w-full px-4 py-2.5 text-left hover:bg-[#F2F6FC] transition border-b border-gray-50 last:border-0">
+                    <button key={i} {...fromKeys.itemProps(i)} onClick={()=>selectFrom(r)}
+                      className={`w-full px-4 py-2.5 text-left hover:bg-[#F2F6FC] transition border-b border-gray-50 last:border-0 ${fromKeys.active(i)?"bg-[#F2F6FC]":""}`}>
                       <div className="text-[12px] font-bold text-[#1B2B4B]">{r.name}</div>
                       <div className="text-[11px] text-gray-500">{r.full}</div>
                     </button>
@@ -1040,6 +1045,7 @@ function NationalFareTab() {
                     className="flex-1 min-w-0 text-[14px] bg-transparent !border-0 !shadow-none outline-none text-[#0F1A30] font-bold placeholder:text-[#9AA9C3] placeholder:font-medium"
                     placeholder="지역명 또는 주소 검색"
                     value={toSearch}
+                    onKeyDown={toKeys.onKeyDown}
                     onChange={e=>{setToSearch(e.target.value);if(!e.target.value){setToP(null);setToC(null);}}}
                     onFocus={()=>{if(fromC||fromSearch)setStep("to");}}
                     disabled={!fromC&&!fromSearch}
@@ -1052,8 +1058,8 @@ function NationalFareTab() {
               {toResults.length>0&&(
                 <div className="absolute left-0 right-0 top-full bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden mt-1">
                   {toResults.map((r,i)=>(
-                    <button key={i} onClick={()=>selectTo(r)}
-                      className="w-full px-4 py-2.5 text-left hover:bg-[#F2F6FC] transition border-b border-gray-50 last:border-0">
+                    <button key={i} {...toKeys.itemProps(i)} onClick={()=>selectTo(r)}
+                      className={`w-full px-4 py-2.5 text-left hover:bg-[#F2F6FC] transition border-b border-gray-50 last:border-0 ${toKeys.active(i)?"bg-[#F2F6FC]":""}`}>
                       <div className="text-[12px] font-bold text-[#1B2B4B]">{r.name}</div>
                       <div className="text-[11px] text-gray-500">{r.full}</div>
                     </button>

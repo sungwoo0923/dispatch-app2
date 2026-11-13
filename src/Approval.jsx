@@ -19,6 +19,7 @@ import { defaultFundId } from "./ledgerAuto";
 import { syncExpensesWithApproval, syncExpensesPaid } from "./vehicleExpense"; // 🧾 2026-11-10 차량 비용 영수증 ↔ 지출결의 상태
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import React from "react";
+import { useListKeys } from "./useListKeys";
 import { kpConfirm, kpPrompt } from "./kpDialog";
 import BankAccountInput, { ReasonTemplates } from "./BankAccountInput";
 import { createPortal } from "react-dom";
@@ -914,13 +915,19 @@ function PickPopover({ anchorRef, options, selected = [], multi, onPick, onDirec
   }, [anchorRef]);
   React.useEffect(() => {
     const out = (e) => { if (boxRef.current?.contains(e.target) || anchorRef.current?.contains(e.target)) return; onClose(); };
-    const key = (e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    const key = (e) => { if (keysRef.current?.(e)) return; if (e.key === "Escape") { e.stopPropagation(); onClose(); } }; // ⌨ ↑/↓ · Enter · Esc
     document.addEventListener("pointerdown", out, true); window.addEventListener("keydown", key, true);
     return () => { document.removeEventListener("pointerdown", out, true); window.removeEventListener("keydown", key, true); };
   }, [anchorRef, onClose]);
   const qq = q.trim().toLowerCase();
   const list = React.useMemo(() => (qq ? options.filter((o) => `${o.label} ${o.sub || ""} ${o.group || ""}`.toLowerCase().includes(qq)) : options).slice(0, 300), [options, qq]);
   const showSearch = options.length > 7;
+  // ⌨ 0번 줄 = 선택 안 함(있을 때) · 여는 버튼에 포커스가 있어도 ↑/↓ · Enter 가 먹게 window 에서 받는다
+  const off = allowClear && !multi ? 1 : 0;
+  const keys = useListKeys({ open: true, count: list.length + off, resetKey: qq, containerRef: boxRef, triggerRef: anchorRef, onClose,
+    onPick: (i) => { if (off && i === 0) onPick(""); else if (list[i - off]) onPick(list[i - off].value); } });
+  const keysRef = React.useRef(null);
+  keysRef.current = keys.onKeyDown;
   if (!pos) return null;
   let lastGroup = null;
   return createPortal(
@@ -934,15 +941,15 @@ function PickPopover({ anchorRef, options, selected = [], multi, onPick, onDirec
         </div>
       )}
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-1">
-        {allowClear && !multi && <button type="button" onClick={() => onPick("")} className="w-full px-3.5 py-2 text-left text-[13.5px] font-bold text-[#8E9BB2] hover:bg-[#F5F8FD]">선택 안 함</button>}
-        {list.map((o) => {
+        {allowClear && !multi && <button type="button" {...keys.itemProps(0)} onClick={() => onPick("")} className={`w-full px-3.5 py-2 text-left text-[13.5px] font-bold text-[#8E9BB2] hover:bg-[#F5F8FD] ${keys.active(0) ? "bg-[#F5F8FD]" : ""}`}>선택 안 함</button>}
+        {list.map((o, i) => {
           const on = selected.includes(o.value);
           const head = o.group && o.group !== lastGroup ? o.group : null;
           if (o.group) lastGroup = o.group;
           return (
             <React.Fragment key={`${o.group || ""}|${o.value}`}>
               {head && <div className="px-3.5 pt-2 pb-1 text-[11.5px] font-extrabold tracking-[0.08em] text-[#4B6CB7]">{head}</div>}
-              <button type="button" onClick={() => onPick(o.value)} className={`w-full min-h-[40px] px-3.5 py-1.5 text-left flex items-center gap-2 ${on ? "bg-[#EEF3FC]" : "hover:bg-[#F5F8FD]"}`}>
+              <button type="button" {...keys.itemProps(i + off)} onClick={() => onPick(o.value)} className={`w-full min-h-[40px] px-3.5 py-1.5 text-left flex items-center gap-2 ${on ? "bg-[#EEF3FC]" : "hover:bg-[#F5F8FD]"} ${keys.active(i + off) ? (on ? "ring-2 ring-inset ring-[#9AB0D6]" : "bg-[#F5F8FD]") : ""}`}>
                 {multi && <span className={`w-5 h-5 shrink-0 rounded-md border-2 grid place-items-center text-[11px] font-black ${on ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "border-[#9AB0D6] text-transparent"}`}>✓</span>}
                 <span className="flex-1 min-w-0"><span className={`block truncate text-[14px] text-[#0F1A30] ${on ? "font-black" : "font-bold"}`}>{o.label}</span>{o.sub && <span className="block truncate text-[12px] font-semibold text-[#5B6B85]">{o.sub}</span>}</span>
                 {!multi && on && <span className="text-[13px] font-black text-[#2D4C82]">✓</span>}
@@ -972,7 +979,7 @@ function PickInput({ value, onChange, options, placeholder = "선택", multi = f
     return (
       <div ref={anchorRef} className="flex items-center gap-1.5">
         <input ref={inputRef} value={v} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={`${inp} flex-1 min-w-0`} />
-        <button type="button" onClick={() => setOpen((o) => !o)} className="h-11 px-3 shrink-0 rounded-xl border border-[#9AB0D6] bg-[#F5F8FD] text-[13.5px] font-black text-[#1B2B4B] whitespace-nowrap hover:bg-[#EEF3FC]">{addLabel}</button>
+        <button type="button" onClick={() => setOpen((o) => !o)} onKeyDown={(e) => { if (!open && e.key === "ArrowDown") { e.preventDefault(); setOpen(true); } }} className="h-11 px-3 shrink-0 rounded-xl border border-[#9AB0D6] bg-[#F5F8FD] text-[13.5px] font-black text-[#1B2B4B] whitespace-nowrap hover:bg-[#EEF3FC]">{addLabel}</button>
         {open && <PickPopover anchorRef={anchorRef} options={options} selected={names} multi onClose={close}
           onPick={(x) => onChange((names.includes(x) ? names.filter((n) => n !== x) : [...names, x]).join(", "))}
           onDirect={(t) => { setOpen(false); if (t && !names.includes(t)) onChange([...names, t].join(", ")); else setTimeout(() => inputRef.current?.focus(), 0); }} />}
@@ -985,7 +992,7 @@ function PickInput({ value, onChange, options, placeholder = "선택", multi = f
     return (
       <div ref={anchorRef} className="flex items-center gap-1.5">
         <input ref={inputRef} autoFocus={!v} value={v} onChange={(e) => onChange(e.target.value)} placeholder={`${placeholder} · 직접 입력`} className={`${inp} flex-1 min-w-0`} />
-        <button type="button" onClick={() => setOpen((o) => !o)} title="목록에서 고르기" className="h-11 px-2.5 shrink-0 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#3A4A66] whitespace-nowrap hover:border-[#4B6CB7]">목록 ▾</button>
+        <button type="button" onClick={() => setOpen((o) => !o)} onKeyDown={(e) => { if (!open && e.key === "ArrowDown") { e.preventDefault(); setOpen(true); } }} title="목록에서 고르기" className="h-11 px-2.5 shrink-0 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#3A4A66] whitespace-nowrap hover:border-[#4B6CB7]">목록 ▾</button>
         {open && <PickPopover anchorRef={anchorRef} options={options} selected={[v]} allowClear onClose={close} onPick={(x) => { setOpen(false); setDirect(false); onChange(x); }} onDirect={(t) => { setOpen(false); if (t) onChange(t); setTimeout(() => inputRef.current?.focus(), 0); }} />}
       </div>
     );
@@ -993,7 +1000,7 @@ function PickInput({ value, onChange, options, placeholder = "선택", multi = f
   const cur = options.find((o) => o.value === v);
   return (
     <div ref={anchorRef}>
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="listbox" aria-expanded={open} className={`${inp} flex items-center gap-2 text-left`}>
+      <button type="button" onClick={() => setOpen((o) => !o)} onKeyDown={(e) => { if (!open && e.key === "ArrowDown") { e.preventDefault(); setOpen(true); } }} aria-haspopup="listbox" aria-expanded={open} className={`${inp} flex items-center gap-2 text-left`}>
         <span className={`flex-1 min-w-0 truncate ${cur ? "" : "text-[#8E9BB2] font-semibold"}`}>{cur ? cur.label : placeholder}{cur?.sub ? <span className="ml-1.5 text-[12.5px] font-bold text-[#5B6B85]">{cur.sub}</span> : null}</span>
         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" className={`shrink-0 opacity-80 transition ${open ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6" /></svg>
       </button>

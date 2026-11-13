@@ -1,5 +1,6 @@
 // ===================== FixedClients.jsx =====================
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useListKeys } from "./useListKeys";
 import { withCo } from "./fsTenant";
 import * as XLSX from "xlsx";
 import { db, DEFAULT_COMPANY } from "./firebase";
@@ -166,6 +167,9 @@ function DriverSearchInput({ value, onChange, onSelect, drivers, placeholder = "
       (d.이름 || "").toLowerCase().includes(q)
     ).slice(0, 8);
   }, [query, drivers]);
+  // ⌨ ↑/↓ · Enter · Esc
+  const keys = useListKeys({ open: open && suggestions.length > 0, count: suggestions.length, initial: 0, resetKey: query, onOpen: () => setOpen(true), onClose: () => setOpen(false),
+    onPick: (i) => { const d = suggestions[i]; if (d) { onSelect(d); setQuery(d.차량번호); setOpen(false); } } });
 
   return (
     <div ref={wrapperRef} className={`relative ${className}`}>
@@ -176,15 +180,17 @@ function DriverSearchInput({ value, onChange, onSelect, drivers, placeholder = "
         onChange={e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }}
         onFocus={() => { if (query) setOpen(true); }}
         onKeyDown={e => {
+          if (keys.onKeyDown(e)) return;
+          if (e.nativeEvent?.isComposing) return;
           if (e.key === "Enter" && suggestions.length > 0) {
             onSelect(suggestions[0]); setQuery(suggestions[0].차량번호); setOpen(false);
           }
         }}
       />
       {open && suggestions.length > 0 && (
-        <div className="absolute z-50 left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto min-w-[200px]">
+        <div ref={keys.listRef} className="absolute z-50 left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto min-w-[200px]">
           {suggestions.map((d, i) => (
-            <div key={i} className="px-3 py-2 hover:bg-blue-50 cursor-pointer flex items-center gap-2 text-[12px]"
+            <div key={i} {...keys.itemProps(i)} className={`px-3 py-2 hover:bg-blue-50 cursor-pointer flex items-center gap-2 text-[12px] ${keys.active(i) ? "bg-blue-50" : ""}`}
               onMouseDown={() => { onSelect(d); setQuery(d.차량번호); setOpen(false); }}>
               <span className="font-bold text-[#1B2B4B]">{d.이름}</span>
               <span className="text-gray-400">|</span>
@@ -270,6 +276,9 @@ function ClientNameInput({ value, onChange, onSelect, rows, getClientConfigs, pl
     onSelect?.(name);
     onChange?.(name);
   };
+  // ⌨ ↑/↓ · Enter · Esc
+  const keys = useListKeys({ open: open && filtered.length > 0, count: filtered.length, resetKey: query, onOpen: () => setOpen(true), onClose: () => setOpen(false),
+    onPick: (i) => { if (filtered[i] != null) handleSelect(filtered[i]); } });
 
   return (
     <div ref={wrapperRef} className="relative">
@@ -280,11 +289,12 @@ function ClientNameInput({ value, onChange, onSelect, rows, getClientConfigs, pl
         placeholder={placeholder}
         onChange={e => { setQuery(e.target.value); onChange?.(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
+        onKeyDown={keys.onKeyDown}
       />
       {open && filtered.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
-          {filtered.map(name => (
-            <button key={name} type="button" className="w-full text-left px-3 py-2 text-[13px] hover:bg-blue-50 hover:text-blue-700 transition" onClick={() => handleSelect(name)}>
+        <div ref={keys.listRef} className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+          {filtered.map((name, i) => (
+            <button key={name} type="button" {...keys.itemProps(i)} className={`w-full text-left px-3 py-2 text-[13px] hover:bg-blue-50 hover:text-blue-700 transition ${keys.active(i) ? "bg-blue-50 text-blue-700" : ""}`} onClick={() => handleSelect(name)}>
               {name}
             </button>
           ))}
@@ -314,6 +324,9 @@ function FastRowCard({ idx, row, drivers, rows, getClientConfigs, onUpdate, onSe
       (r.차량번호 || "").toLowerCase().replace(/\s/g, "").includes(q)
     ).slice(0, 8);
   }, [searchQ, rows]);
+  // ⌨ ↑/↓ · Enter · Esc
+  const keys = useListKeys({ open: searchOpen && searchResults.length > 0, count: searchResults.length, resetKey: searchQ, onOpen: () => setSearchOpen(true), onClose: () => setSearchOpen(false),
+    onPick: (i) => { if (searchResults[i]) copyFrom(searchResults[i]); } });
 
   const copyFrom = (r) => {
     const configs = getClientConfigs();
@@ -352,12 +365,13 @@ function FastRowCard({ idx, row, drivers, rows, getClientConfigs, onUpdate, onSe
                 value={searchQ}
                 onChange={e => { setSearchQ(e.target.value); setSearchOpen(true); }}
                 onFocus={() => setSearchOpen(true)}
+                onKeyDown={keys.onKeyDown}
               />
             </div>
             {searchOpen && searchResults.length > 0 && (
-              <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-xl max-h-48 overflow-y-auto min-w-[260px]">
+              <div ref={keys.listRef} className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-xl max-h-48 overflow-y-auto min-w-[260px]">
                 {searchResults.map((r, i) => (
-                  <div key={i} className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-[12px] flex items-center gap-2"
+                  <div key={i} {...keys.itemProps(i)} className={`px-3 py-2 hover:bg-blue-50 cursor-pointer text-[12px] flex items-center gap-2 ${keys.active(i) ? "bg-blue-50" : ""}`}
                     onMouseDown={() => copyFrom(r)}>
                     <span className="font-semibold text-[#1B2B4B] truncate max-w-[80px]">{r.거래처명}</span>
                     <span className="text-gray-400">|</span>

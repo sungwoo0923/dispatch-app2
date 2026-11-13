@@ -7,6 +7,7 @@
 //  · 직원 일정(TeamSchedule): 연차·반차·외근·출장·병가·경조사를 달력으로(결재 완료 = 확정, 진행 중 = 점선)
 //  매출 통계는 홈과 같은 방식 — 올해 지난 기간 합계(하루 1번 계산·저장, homePastStats v4) + 최근 실시간 오더.
 import React from "react";
+import { arrowFocus } from "./useListKeys";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, AreaChart, Area } from "recharts";
@@ -725,17 +726,25 @@ function TimePick({ value, onChange }) {
   const set = (nh, nm) => onChange(`${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}`);
   const chip = (on) => `h-9 rounded-lg text-[13.5px] font-black tabular-nums ${on ? "text-[#1A1405]" : "bg-white/[0.06] text-white/80 hover:bg-white/[0.12]"}`;
   const gold = { background: `linear-gradient(180deg,#F1DFB4,${GOLD})` };
+  // ⌨ 버튼에서 ↓ 로 열고(지금 시 칸으로) 방향키로 칸 이동 · Enter 고르기 · Esc 닫기
+  const btnRef = React.useRef(null); const popRef = React.useRef(null);
+  const onKey = (e) => {
+    if (e.nativeEvent?.isComposing) return;
+    if (!open) { if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setTimeout(() => popRef.current?.querySelector('[data-cur="1"]')?.focus(), 0); } return; }
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setOpen(false); btnRef.current?.focus(); return; }
+    arrowFocus(e, popRef.current, { cols: 6 });
+  };
   return (
-    <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen((o) => !o)} className="h-12 w-full px-3.5 rounded-xl bg-white/[0.06] border border-white/15 text-left flex items-center gap-2 hover:border-[#D7BC82]">
+    <div ref={ref} className="relative" onKeyDown={onKey}>
+      <button ref={btnRef} type="button" aria-haspopup="true" aria-expanded={open} onClick={() => setOpen((o) => !o)} className="h-12 w-full px-3.5 rounded-xl bg-white/[0.06] border border-white/15 text-left flex items-center gap-2 hover:border-[#D7BC82]">
         <span className="text-[15px]" style={{ color: GOLD }}>◷</span>
         <span className="text-[15px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{hmLabel(value)}</span>
       </button>
       {open && (
-        <div className="absolute z-[100001] left-0 right-0 mt-1.5 rounded-2xl p-3 shadow-[0_20px_44px_rgba(0,0,0,0.5)] border border-white/15" style={{ background: SHELL_BG, minWidth: 260 }}>
+        <div ref={popRef} className="absolute z-[100001] left-0 right-0 mt-1.5 rounded-2xl p-3 shadow-[0_20px_44px_rgba(0,0,0,0.5)] border border-white/15" style={{ background: SHELL_BG, minWidth: 260 }}>
           <div className="grid grid-cols-2 gap-1 mb-2">{[["오전", 0], ["오후", 12]].map(([l, base]) => <button key={l} type="button" onClick={() => set((h % 12) + base, m)} className={chip((h < 12) === (base === 0))} style={(h < 12) === (base === 0) ? gold : undefined}>{l}</button>)}</div>
           <div className="text-[11px] font-extrabold tracking-[0.2em] text-white/45 mb-1" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>HOUR</div>
-          <div className="grid grid-cols-6 gap-1 mb-2">{Array.from({ length: 12 }, (_, i) => i).map((i) => { const hh = (h < 12 ? 0 : 12) + i; return <button key={i} type="button" onClick={() => set(hh, m)} className={chip(hh === h)} style={hh === h ? gold : undefined}>{i === 0 ? 12 : i}</button>; })}</div>
+          <div className="grid grid-cols-6 gap-1 mb-2">{Array.from({ length: 12 }, (_, i) => i).map((i) => { const hh = (h < 12 ? 0 : 12) + i; return <button key={i} type="button" data-cur={hh === h ? "1" : undefined} onClick={() => set(hh, m)} className={chip(hh === h)} style={hh === h ? gold : undefined}>{i === 0 ? 12 : i}</button>; })}</div>
           <div className="text-[11px] font-extrabold tracking-[0.2em] text-white/45 mb-1" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>MINUTE</div>
           <div className="grid grid-cols-6 gap-1">{[0, 10, 20, 30, 40, 50].map((mm) => <button key={mm} type="button" onClick={() => { set(h, mm); setOpen(false); }} className={chip(mm === m)} style={mm === m ? gold : undefined}>{String(mm).padStart(2, "0")}</button>)}</div>
         </div>

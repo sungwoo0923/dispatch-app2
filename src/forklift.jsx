@@ -7,6 +7,7 @@
 //  · ForkliftPayouts        정산관리 › 지게차 지급 (지게차 기사별 합계 · 지급완료 · 엑셀)
 //  저장: forkliftDrivers/{id} · forkliftPresets/{회사__거래처__상차지} — 회사명은 fsTenant가 붙이고 거른다
 import React from "react";
+import { useListKeys } from "./useListKeys";
 import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
 import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
@@ -224,20 +225,24 @@ function ForkliftPicker({ value, name, onPick, disabled }) {
   }, [open]);
   const cur = list.find((d) => d.id === value);
   const shown = list.filter((d) => d.사용 !== false || d.id === value).filter((d) => !q.trim() || `${d.이름} ${d.전화번호} ${d.지게차회사}`.includes(q.trim()));
+  // ⌨ ↑/↓ · Enter · Esc (0번 줄 = 선택 안 함)
+  const btnRef = React.useRef(null);
+  const keys = useListKeys({ open, count: shown.length + 1, resetKey: q, triggerRef: btnRef, onOpen: () => setOpen(true), onClose: () => setOpen(false),
+    onPick: (i) => { onPick(i === 0 ? { id: "", 이름: "", 전화번호: "", 지게차회사: "" } : shown[i - 1]); setOpen(false); setQ(""); setTimeout(() => btnRef.current?.focus(), 0); } });
   return (
     <div className="relative min-w-0" ref={box}>
-      <button type="button" disabled={disabled} onClick={() => setOpen((o) => !o)} className="h-9 w-full min-w-[150px] px-2.5 rounded-lg border border-[#C9D5EA] bg-white text-left text-[13px] font-bold text-[#0F1A30] flex items-center gap-1.5">
+      <button ref={btnRef} type="button" disabled={disabled} aria-haspopup="listbox" aria-expanded={open} onKeyDown={keys.onKeyDown} onClick={() => setOpen((o) => !o)} className="h-9 w-full min-w-[150px] px-2.5 rounded-lg border border-[#C9D5EA] bg-white text-left text-[13px] font-bold text-[#0F1A30] flex items-center gap-1.5">
         <span className="truncate flex-1">{cur ? `${cur.이름}${cur.지게차회사 ? ` · ${cur.지게차회사}` : ""}` : name || <span className="text-[#9AA9C3]">지게차 기사 선택</span>}</span>
         <span className="text-[#7A89A3]">▾</span>
       </button>
       {open && (
-        <div className="absolute z-[100030] mt-1 w-[280px] rounded-xl bg-white border border-[#DCE3EE] shadow-[0_18px_40px_rgba(15,26,48,0.18)] p-1.5">
+        <div onKeyDown={keys.onKeyDown} className="absolute z-[100030] mt-1 w-[280px] rounded-xl bg-white border border-[#DCE3EE] shadow-[0_18px_40px_rgba(15,26,48,0.18)] p-1.5">
           <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름·전화·회사 검색" className="h-9 w-full px-2.5 rounded-lg border border-[#E3E8F0] text-[13px] mb-1" />
-          <div className="max-h-[220px] overflow-y-auto">
-            <button type="button" onClick={() => { onPick({ id: "", 이름: "", 전화번호: "", 지게차회사: "" }); setOpen(false); setQ(""); }} className={`w-full text-left px-2.5 py-2 rounded-lg hover:bg-[#EEF3FC] text-[13px] font-bold text-[#7A89A3] ${!value && !name ? "bg-[#EEF3FC]" : ""}`}>선택 안 함 · 나중에 정하기</button>
+          <div ref={keys.listRef} className="max-h-[220px] overflow-y-auto">
+            <button type="button" {...keys.itemProps(0)} onClick={() => { onPick({ id: "", 이름: "", 전화번호: "", 지게차회사: "" }); setOpen(false); setQ(""); }} className={`w-full text-left px-2.5 py-2 rounded-lg hover:bg-[#EEF3FC] text-[13px] font-bold text-[#7A89A3] ${(!value && !name) || keys.active(0) ? "bg-[#EEF3FC]" : ""}`}>선택 안 함 · 나중에 정하기</button>
             {shown.length === 0 && <div className="py-4 text-center text-[12.5px] text-[#9AA9C3]">{list.length ? "검색 결과 없음" : "등록된 지게차 기사가 없습니다"}</div>}
-            {shown.map((d) => (
-              <button key={d.id} type="button" onClick={() => { onPick(d); setOpen(false); setQ(""); }} className={`w-full text-left px-2.5 py-2 rounded-lg hover:bg-[#EEF3FC] ${d.id === value ? "bg-[#EEF3FC]" : ""}`}>
+            {shown.map((d, i) => (
+              <button key={d.id} type="button" {...keys.itemProps(i + 1)} onClick={() => { onPick(d); setOpen(false); setQ(""); }} className={`w-full text-left px-2.5 py-2 rounded-lg hover:bg-[#EEF3FC] ${d.id === value || keys.active(i + 1) ? "bg-[#EEF3FC]" : ""}`}>
                 <div className="text-[13.5px] font-black text-[#0F1A30]">{d.이름} <span className="text-[12px] font-bold text-[#7A89A3]">{d.지게차회사 || ""}</span></div>
                 <div className="text-[11.5px] text-[#7A89A3] tabular-nums">{fmtPhone(d.전화번호)}{d.은행 ? ` · ${d.은행}` : ""}</div>
               </button>
