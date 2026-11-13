@@ -16,6 +16,7 @@ import { isJyCompany } from "./jyOnly"; // 🏷 JY로지스틱스 전용 — 차
 
 // 🏷 2026-11-12 JY로지스틱스는 차종을 톤수로 적는다 — 톤수 쪽을 고르면 1톤부터 25톤까지
 export const JY_TON_LIST = ["1톤", "1.4톤", "2.5톤", "3.5톤", "5톤", "5톤장축", "5톤축", "8톤", "11톤", "11톤장축", "11톤축", "15톤", "18톤", "25톤"];
+export const hasTon = (v) => /\d+(\.\d+)?\s*(톤|t\b)/i.test(String(v || ""));
 export const looksTon = (v) => /^\d+(\.\d+)?\s*톤/.test(String(v || "").trim());
 
 // 프로그램 공통 기본 목록(화면에서 base를 따로 안 주면 이걸 쓴다)
@@ -40,7 +41,8 @@ function startStore(co, s) {
   if (s.unsub || !co) return;
   try {
     s.unsub = onSnapshot(doc(db, "vehicleTypes", co), (snap) => {
-      const list = snap.exists() && Array.isArray(snap.data().custom) ? snap.data().custom.map(clean).filter(Boolean) : [];
+      // 🛠 2026-11-13 차량종류에는 차량종류만 — 톤수가 섞인 이름("11톤" · "5톤장축")은 목록에서 뺀다
+      const list = snap.exists() && Array.isArray(snap.data().custom) ? snap.data().custom.map(clean).filter((v) => v && !hasTon(v)) : [];
       const hid = snap.exists() && Array.isArray(snap.data().hidden) ? snap.data().hidden.map(clean).filter(Boolean) : [];
       s.state = { loaded: true, custom: [...new Set(list)], hidden: [...new Set(hid)] };
       s.listeners.forEach((fn) => fn());
@@ -154,7 +156,7 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
   const searchRef = React.useRef(null);
   const addRef = React.useRef(null);
 
-  const jy = typeof onTon === "function" && isJyCompany(company);
+  const jy = false && typeof onTon === "function" && isJyCompany(company); // 🛠 2026-11-13 사용자 요청 — 차량종류 칸에는 차량종류만(톤수 고르기 뺌 · 톤수는 톤수 칸에서)
   const [mode, setMode] = React.useState("ton"); // JY만: "ton"(톤수) | "type"(차량종류)
   const list = jy && mode === "ton" ? JY_TON_LIST : vt.all;
   const canEdit = allowAdd && !(jy && mode === "ton"); // 톤수 목록은 고정(추가 · 삭제 없음)
@@ -189,6 +191,7 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
   const doAdd = async (name) => {
     const v = clean(name);
     if (!v) { setErr("이름을 입력해 주세요"); return; }
+    if (hasTon(v)) { setErr("톤수는 톤수 칸에 적어 주세요(차량종류만)"); return; }
     if (list.includes(v)) { pick(v); return; }
     setBusy(true); setErr("");
     try { await addVehicleType(vt.company, v); pick(v); setNewName(""); } catch (e) { setErr(e?.message?.includes("permission") ? "추가 권한이 없습니다" : (e?.message || "추가하지 못했습니다")); } finally { setBusy(false); }

@@ -9,6 +9,8 @@ import { arrayUnion, collection, doc, onSnapshot, query, serverTimestamp, setDoc
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { usePlatformLive, PLAN_NAMES } from "./PlatformLive";
 import { CONTRACT_TERMS, addMonthsYmd, contractStateOf, kstToday } from "./companyContract";
+import { BILLING, billingLabel, FREE_MONTH_OPTIONS, TRIAL_MONTH_OPTIONS, addMonthsEnd, nextDay, defaultFreeMonths } from "./contractTerms.js"; // 📑 2026-11-13 서비스 기간 · 무료 이용 · 결제 방식
+import { CustomSelect } from "./CustomSelect";
 import { DangerConfirm, ResetProgressModal, newJobId, callReset } from "./CompanyResetPanel";
 import { ROLE_LABELS } from "./customRoles";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
@@ -21,6 +23,7 @@ const me = () => auth.currentUser?.email || auth.currentUser?.uid || "";
 const STATE_CHIP = {
   active: "bg-[#EEF2F8] text-[#1B2B4B]", soon: "bg-[#2D4C82] text-white", expired: "bg-[#0F1A30] text-white",
   ended: "bg-[#0B1428] text-[#8FB0F0]", none: "bg-[#F1F4F9] text-[#7A879C]",
+  trial: "bg-white text-[#1B2B4B] border border-[#1B2B4B]", trialSoon: "bg-[#2D4C82] text-white", trialOver: "bg-[#0F1A30] text-white",
 };
 function Head({ code, title, desc, right }) {
   return (
@@ -81,28 +84,39 @@ export function ContractLifecyclePanel({ openCompany }) {
     }).sort((a, b) => (a.st.dLeft ?? 99999) - (b.st.dLeft ?? 99999) || a.name.localeCompare(b.name, "ko"));
   }, [live, today]);
   const count = (k) => rows.filter((r) => r.st.key === k).length;
-  const FILTERS = [["all", "전체"], ["soon", "30일 내 만료"], ["expired", "기간 지남"], ["ended", "계약종료"], ["none", "기간 미설정"], ["active", "이용 중"]];
-  const list = rows.filter((r) => (filter === "all" || r.st.key === filter) && (!q.trim() || r.name.includes(q.trim())));
+  const FILTERS = [["all", "전체"], ["soon", "30일 내 만료"], ["expired", "기간 지남"], ["trial", "무료 이용"], ["ended", "계약종료"], ["none", "기간 미설정"], ["active", "이용 중"]];
+  const inFilter = (k) => filter === "all" || k === filter || (filter === "trial" && k.startsWith("trial"));
+  const list = rows.filter((r) => inFilter(r.st.key) && (!q.trim() || r.name.includes(q.trim())));
   const cur = sel ? rows.find((r) => r.name === sel) || { name: sel, p: null, st: contractStateOf(null) } : null;
 
   React.useEffect(() => {
     if (!cur) { setForm(null); return; }
     const p = cur.p || {};
-    setForm({ start: p.contractStart || "", term: p.contractTerm ?? 12, end: p.contractEnd || "", billingEmail: p.billingEmail || "", memo: p.contractMemo || "" });
+    setForm({ start: p.contractStart || "", term: p.contractTerm ?? 12, end: p.contractEnd || "", billingEmail: p.billingEmail || "", memo: p.contractMemo || "",
+      billing: p.billing || "monthly", free: Number(p.freeMonths) || 0, trialStart: p.trialStart || "", trialEnd: p.trialEnd || "", trialMonths: 0 });
     setMsg("");
   }, [sel]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const setStart = (start) => setForm((f) => ({ ...f, start, end: f.term ? addMonthsYmd(start, f.term) || f.end : f.end }));
-  const setTerm = (term) => setForm((f) => ({ ...f, term, end: term && f.start ? addMonthsYmd(f.start, term) : f.end }));
+  // 종료일 = 시작일 + 계약 기간 + 서비스 기간(무상). 어느 칸을 바꿔도 다시 계산하고, 종료일은 직접 고칠 수도 있다
+  const endOf = (start, term, free) => { const paid = term && start ? addMonthsYmd(start, term) : ""; return paid && free ? addMonthsEnd(nextDay(paid), free) : paid; };
+  const setStart = (start) => setForm((f) => ({ ...f, start, end: endOf(start, f.term, f.free) || f.end }));
+  const setTerm = (term) => setForm((f) => ({ ...f, term, end: endOf(f.start, term, f.free) || f.end }));
+  const setFree = (free) => setForm((f) => ({ ...f, free, end: endOf(f.start, f.term, free) || f.end }));
+  const setBilling = (billing) => setForm((f) => { const free = defaultFreeMonths(billing); return { ...f, billing, free, end: endOf(f.start, f.term, free) || f.end }; });
+  const setTrialStart = (trialStart) => setForm((f) => ({ ...f, trialStart, trialEnd: f.trialMonths && trialStart ? addMonthsEnd(trialStart, f.trialMonths) : f.trialEnd }));
+  const setTrialMonths = (m) => setForm((f) => ({ ...f, trialMonths: m, trialEnd: m && (f.trialStart || today) ? addMonthsEnd(f.trialStart || today, m) : f.trialEnd, trialStart: f.trialStart || (m ? today : "") }));
   const save = async () => {
     if (!cur || !form) return;
     if (form.start && form.end && form.end < form.start) return setMsg("종료일이 시작일보다 빠릅니다.");
+    if (form.trialStart && form.trialEnd && form.trialEnd < form.trialStart) return setMsg("무료 이용 종료일이 시작일보다 빠릅니다.");
     try {
       await setDoc(doc(db, "companyPlans", cur.name), {
         contractStart: form.start || null, contractEnd: form.end || null, contractTerm: Number(form.term) || 0,
         billingEmail: String(form.billingEmail || "").trim(), contractMemo: form.memo || "",
+        billing: form.billing || "monthly", freeMonths: Number(form.free) || 0, paidEnd: form.term && form.start ? addMonthsYmd(form.start, form.term) : (form.end || null),
+        trialStart: form.trialStart || null, trialEnd: form.trialEnd || null,
         contractUpdatedAt: serverTimestamp(), contractUpdatedBy: me(),
-        contractHistory: arrayUnion({ at: Date.now(), by: me(), type: "기간 설정", detail: `${form.start || "-"} ~ ${form.end || "-"}` }),
+        contractHistory: arrayUnion({ at: Date.now(), by: me(), type: "기간 설정", detail: `${form.start || "-"} ~ ${form.end || "-"}${Number(form.free) ? ` · 서비스 ${form.free}개월` : ""}${form.trialEnd ? ` · 무료 이용 ${form.trialStart || "?"} ~ ${form.trialEnd}` : ""}` }),
       }, { merge: true });
       setMsg("저장했습니다.");
     } catch (e) { setMsg(`저장 실패: ${e?.code || e?.message || e}`); }
@@ -143,11 +157,12 @@ export function ContractLifecyclePanel({ openCompany }) {
 
   return (
     <div className="space-y-4" data-contract-panel="1">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2.5">
         <Stat dark label="30일 내 만료" value={count("soon")} foot="30·7·1일 전 자동 안내" on={filter === "soon"} onClick={() => setFilter("soon")} />
         <Stat label="기간 지남" value={count("expired")} foot="연장 또는 계약종료 필요" on={filter === "expired"} onClick={() => setFilter("expired")} />
         <Stat label="계약종료" value={count("ended")} foot="접속 차단 중" on={filter === "ended"} onClick={() => setFilter("ended")} />
         <Stat label="이용 중" value={count("active")} on={filter === "active"} onClick={() => setFilter("active")} />
+        <Stat label="무료 이용" value={rows.filter((r) => r.st.key.startsWith("trial")).length} foot="계약 전 · 먼저 써 보는 곳" on={filter === "trial"} onClick={() => setFilter("trial")} />
         <Stat label="기간 미설정" value={count("none")} on={filter === "none"} onClick={() => setFilter("none")} />
       </div>
 
@@ -170,7 +185,7 @@ export function ContractLifecyclePanel({ openCompany }) {
                     <tr key={r.name} onClick={() => setSel(r.name)} data-contract-row={r.name} className={`cursor-pointer border-t border-[#EEF1F6] ${on ? "bg-[#EEF3FB]" : "hover:bg-[#F7F9FC]"}`}>
                       <td className="px-3 py-3"><div className="font-black text-[#0F1A30]">{r.name}</div><div className="text-[13px] text-[#7A879C]">직원 {r.staff} · 기사 {r.drivers}</div></td>
                       <td className="px-3 py-3 whitespace-nowrap text-[#1B2B4B] font-bold">{r.p?.planId ? (PLAN_NAMES?.[r.p.planId] || r.p.planId) : "-"}</td>
-                      <td className="px-3 py-3 whitespace-nowrap tabular-nums">{r.p?.contractStart || r.p?.contractEnd ? `${r.p.contractStart || "?"} ~ ${r.p.contractEnd || "?"}` : <span className="text-[#94A3B8]">미설정</span>}</td>
+                      <td className="px-3 py-3 whitespace-nowrap tabular-nums">{r.p?.contractStart || r.p?.contractEnd ? <>{`${r.p.contractStart || "?"} ~ ${r.p.contractEnd || "?"}`}{Number(r.p?.freeMonths) ? <span className="ml-1.5 text-[12.5px] font-bold text-[#5B6B85]">서비스 {r.p.freeMonths}개월 포함</span> : null}</> : r.p?.trialEnd ? <span className="text-[#1B2B4B] font-bold">무료 {r.p.trialStart || "?"} ~ {r.p.trialEnd}</span> : <span className="text-[#94A3B8]">미설정</span>}</td>
                       <td className="px-3 py-3 whitespace-nowrap tabular-nums font-bold text-[#0F1A30]">{r.st.dLeft == null ? "-" : r.st.dLeft >= 0 ? `${r.st.dLeft}일` : `${-r.st.dLeft}일 지남`}</td>
                       <td className="px-3 py-3"><span className={`px-2.5 h-7 inline-flex items-center rounded-full text-[13px] font-black whitespace-nowrap ${STATE_CHIP[r.st.key]}`}>{r.st.label}</span></td>
                       <td className="px-3 py-3 whitespace-nowrap text-[13.5px] text-[#5B6B85]">{sent.length ? sent.map((x) => `D-${x.t}${x.status === "mail-failed" ? "(메일 실패)" : ""}`).join(" · ") : "-"}</td>
@@ -199,17 +214,47 @@ export function ContractLifecyclePanel({ openCompany }) {
                     <label className="block"><span className="text-[13.5px] font-bold text-[#3A4A66]">계약 시작일</span>
                       <CustomDatePicker showIcon value={form.start} onChange={(e) => setStart(e.target.value)} className={`${INPUT} mt-1`} data-contract-start /></label>
                     <label className="block"><span className="text-[13.5px] font-bold text-[#3A4A66]">계약 기간</span>
-                      <select value={form.term} onChange={(e) => setTerm(Number(e.target.value))} className={`${INPUT} mt-1`} data-contract-term>
-                        {CONTRACT_TERMS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                      </select></label>
+                      <CustomSelect value={String(form.term)} onChange={(e) => setTerm(Number(e.target.value))} className={`${INPUT} mt-1 text-left`} data-contract-term>
+                        {CONTRACT_TERMS.map(([v, l]) => <option key={v} value={String(v)}>{l}</option>)}
+                      </CustomSelect></label>
+                    <label className="block"><span className="text-[13.5px] font-bold text-[#3A4A66]">결제 방식</span>
+                      <CustomSelect value={form.billing} onChange={(e) => setBilling(e.target.value)} className={`${INPUT} mt-1 text-left`} data-contract-billing>
+                        {BILLING.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </CustomSelect></label>
+                    <label className="block"><span className="text-[13.5px] font-bold text-[#3A4A66]">서비스 기간 <span className="font-medium text-[#7A879C]">(무상)</span></span>
+                      <CustomSelect value={String(form.free)} onChange={(e) => setFree(Number(e.target.value))} className={`${INPUT} mt-1 text-left`} data-contract-free>
+                        {FREE_MONTH_OPTIONS.map((v) => <option key={v} value={String(v)}>{v ? `${v}개월` : "없음"}</option>)}
+                      </CustomSelect></label>
                   </div>
+                  <div className="text-[13px] text-[#7A879C] leading-relaxed -mt-1">연간 선결제를 고르면 서비스 기간 2개월이 자동으로 들어가고, 언제든 바꿀 수 있습니다. 종료일 = 시작일 + 계약 기간 + 서비스 기간.</div>
+                  {(cur.p?.contractNo || cur.p?.monthlyFee != null) && (
+                    <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3.5 py-2.5 text-[13.5px] text-[#3A4A66] leading-relaxed" data-contract-linked>
+                      <b className="text-[#0F1A30]">연결된 계약서</b> {cur.p?.contractNo || "-"} · {billingLabel(cur.p?.billing)} · 월 {Number(cur.p?.monthlyFee || 0).toLocaleString()}원
+                      {Number(cur.p?.extraSeats) ? ` · 추가 계정 ${cur.p.extraSeats}명` : ""}{Number(cur.p?.moduleCount) > 1 ? ` · 업무 영역 ${cur.p.moduleCount}개` : ""}
+                    </div>
+                  )}
                   <label className="block"><span className="text-[13.5px] font-bold text-[#3A4A66]">계약 종료일 {form.term ? <span className="font-medium text-[#7A879C]">(시작일 + 기간으로 자동 — 바꿔도 됩니다)</span> : null}</span>
                     <CustomDatePicker showIcon value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} className={`${INPUT} mt-1`} data-contract-end /></label>
+                  <div className="rounded-2xl border border-[#DCE3EE] overflow-hidden" data-contract-trial>
+                    <div className="px-4 py-2.5 bg-[#F7F9FC] border-b border-[#E3E8F0] text-[13.5px] font-extrabold tracking-[0.12em] text-[#5B6B85]">무료 이용 (계약 전에 먼저 써 보는 기간)</div>
+                    <div className="p-4 grid grid-cols-2 gap-2.5">
+                      <label className="block"><span className="text-[13.5px] font-bold text-[#3A4A66]">무료 시작일</span>
+                        <CustomDatePicker showIcon value={form.trialStart} onChange={(e) => setTrialStart(e.target.value)} className={`${INPUT} mt-1`} /></label>
+                      <label className="block"><span className="text-[13.5px] font-bold text-[#3A4A66]">무료 기간</span>
+                        <CustomSelect value={String(form.trialMonths)} onChange={(e) => setTrialMonths(Number(e.target.value))} className={`${INPUT} mt-1 text-left`}>
+                          <option value="0">직접 입력</option>
+                          {TRIAL_MONTH_OPTIONS.map((v) => <option key={v} value={String(v)}>{v}개월</option>)}
+                        </CustomSelect></label>
+                      <label className="block col-span-2"><span className="text-[13.5px] font-bold text-[#3A4A66]">무료 종료일</span>
+                        <CustomDatePicker showIcon value={form.trialEnd} onChange={(e) => setForm({ ...form, trialEnd: e.target.value, trialMonths: 0 })} className={`${INPUT} mt-1`} /></label>
+                      <div className="col-span-2 text-[13px] text-[#7A879C] leading-relaxed">계약 기간을 정하기 전까지 목록에 "무료 이용 중 D-n"으로 표시되고, 끝나기 7일 전부터 그 회사 대표 · 경리 · 마스터 화면에 안내 띠가 뜹니다. 기간이 지나도 접속은 막지 않습니다(막으려면 아래 계약종료). 계약 기간을 저장하면 계약 기준으로 바뀝니다.</div>
+                    </div>
+                  </div>
                   <label className="block"><span className="text-[13.5px] font-bold text-[#3A4A66]">청구·안내 메일 <span className="font-medium text-[#7A879C]">(만료 안내를 함께 받을 회사 메일)</span></span>
                     <input value={form.billingEmail} onChange={(e) => setForm({ ...form, billingEmail: e.target.value })} placeholder="billing@회사.co.kr" className={`${INPUT} mt-1`} /></label>
                   <label className="block"><span className="text-[13.5px] font-bold text-[#3A4A66]">메모</span>
                     <input value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} placeholder="예: 2년 약정 · 자동 연장 아님" className={`${INPUT} mt-1`} /></label>
-                  <button type="button" onClick={save} className="w-full h-11 rounded-xl bg-[#1B2B4B] text-white text-[15px] font-black" data-contract-save>기간 저장</button>
+                  <button type="button" onClick={save} className="w-full h-11 rounded-xl bg-[#1B2B4B] text-white text-[15px] font-black" data-contract-save>저장</button>
                   {msg && <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3.5 py-2.5 text-[14px] font-bold text-[#1B2B4B]" data-contract-msg>{msg}</div>}
                   {(() => { const s = sentKeys(cur.p); return s.length ? <div className="text-[13.5px] text-[#5B6B85]">보낸 만료 안내: {s.map((x) => `D-${x.t} (알림 ${x.users ?? "-"}명 · 메일 ${x.mails ?? "-"}곳${x.status === "mail-failed" ? ` · 메일 실패: ${x.mailError || ""}` : ""})`).join(" / ")}</div> : null; })()}
                 </div>

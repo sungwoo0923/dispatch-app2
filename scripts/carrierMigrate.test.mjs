@@ -293,3 +293,28 @@ if (real && fs.existsSync(real)) {
 }
 console.log(`carrierMigrate: ${pass} 통과 · ${fail} 실패`);
 if (fail) process.exit(1);
+
+// 🔁 2026-11-13 다시 가져오기 = 시트 그대로 맞추기(reconcileOrders)
+{
+  const { reconcileOrders, forOrderDoc: fod } = await import("../functions/carrierMigrateCore.mjs");
+  const assert2 = (await import("node:assert/strict")).default;
+  const mk = (row, o) => ({ 이전출처: `에이제이!${row}`, 상차일: "2026-11-12", 상차지명: "에이제이", 하차지명: "평택초저온", 차량번호: "", 청구운임: "350000", 기사운임: "300000", ...o });
+  const first = [mk(5, { 차량번호: "대전88아8987" }), mk(6, { 차량번호: "충북84아1177" }), mk(7, {})];
+  const ex = first.map((o, i) => ({ id: `d${i}`, data: { ...fod(o, { company: "JY", batchId: "b1" }), 첨부: ["x"], 기사확인상태: "수락" } }));
+  // 그대로 다시 → 전부 같음
+  let r = reconcileOrders(ex, first); assert2.equal(r.create.length, 0); assert2.equal(r.update.length, 0); assert2.equal(r.same, 3); assert2.equal(r.missing.length, 0);
+  // 운임 수정 + 차량 배정 + 새 줄 추가
+  r = reconcileOrders(ex, [mk(5, { 차량번호: "대전88아8987", 청구운임: "400000" }), mk(6, { 차량번호: "충북84아1177" }), mk(7, { 차량번호: "충남80바8090" }), mk(8, { 차량번호: "경기95자1693" })]);
+  assert2.equal(r.create.length, 1); assert2.equal(r.update.length, 2); assert2.equal(r.same, 1);
+  assert2.equal(r.update.find((u) => u.id === "d0").patch.청구운임, "400000"); assert2.equal(r.update.find((u) => u.id === "d2").patch.차량번호, "충남80바8090");
+  assert2.ok(!("첨부" in r.update[0].patch) && !("기사확인상태" in r.update[0].patch), "프로그램에서 생긴 칸은 건드리지 않는다");
+  // 위에 줄이 끼어 줄 번호가 밀림 → 새로 만들지 않고 같은 오더로
+  r = reconcileOrders(ex, [mk(6, { 차량번호: "대전88아8987" }), mk(7, { 차량번호: "충북84아1177" }), mk(8, {})]);
+  assert2.equal(r.create.length, 0); assert2.equal(r.missing.length, 0); assert2.equal(r.update.length, 3); assert2.deepEqual(Object.keys(r.update[0].patch).sort(), ["_sheetKeys", "이전출처"]);
+  // 차량번호를 지움 → 빈 값으로
+  r = reconcileOrders(ex, [mk(5, {}), mk(6, { 차량번호: "충북84아1177" }), mk(7, {})]);
+  assert2.equal(r.update.length, 1); assert2.equal(r.update[0].patch.차량번호, "");
+  // 시트에서 줄이 없어짐 → missing 으로 알려 준다(지우지는 않는다)
+  r = reconcileOrders(ex, [mk(5, { 차량번호: "대전88아8987" })]); assert2.equal(r.missing.length, 2);
+  console.log("reconcileOrders OK");
+}

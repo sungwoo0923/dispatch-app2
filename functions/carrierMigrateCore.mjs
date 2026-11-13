@@ -52,6 +52,8 @@ export const DEFAULT_PRESET = {
   tabCargo: {}, // { 탭이름: 화물내용 } — 그 탭의 화물내용을 이 글자로(예: 만세보령 = "쌀")
   weightTonTabs: [], // 중량(kg) 칸을 톤수로 바꿔 차량톤수에 넣는 탭(소계 · 중량 칸 ÷ 1,000)
   nextDayTabs: [], // 입고시간(당착 · 월착) 칸이 비어 있으면 다음 날 도착으로 보는 탭
+  defaultVehicleKind: "", // 차종 칸에 차량종류가 없으면(톤수만 적힌 줄) 넣을 차량종류
+  forceVehicleKind: "", // 시트에 뭐라고 적혀 있든 차량종류를 이 값으로 — 예: JY "윙바디"(차종 칸에 적힌 말은 톤수만 쓴다)
   placeOverrides: {}, // { "탭이름|약칭": "주소" } · "*|약칭" = 모든 탭 — 시트에 주소가 없는 곳을 화면에서 직접 넣은 값
 };
 
@@ -87,6 +89,8 @@ export const PRESET_SUGGESTIONS = {
     dispatchAliases: { 분양: "지입", 전국특송: "24시", "24시콜": "24시", "24": "24시", "24시": "24시", JY: "직영차" },
     vehicleGrades: { 분양: "지입", JY: "직영" },
     optionMinCount: 1,
+    // 🛠 2026-11-13 차종 칸에 톤수만 있는 줄은 윙바디(차량종류가 적힌 줄은 그대로 — 예: "11톤장축" → 장축)
+    forceVehicleKind: "윙바디", // 2026-11-13 사용자 요청 — JY 시트에서 오는 오더는 일단 전부 윙바디
   },
 };
 
@@ -742,7 +746,7 @@ function rowToOrder(r, L, ctx) {
   const rec = {
     상차일, 상차시간, 하차일, 하차시간, 등록일: 상차일,
     거래처명: client, 상차지명, 상차지주소, 하차지명, 하차지주소,
-    화물내용: fixedCargo || cargo.join(" · "), 차량톤수: veh.ton, 차량종류: veh.kind,
+    화물내용: fixedCargo || cargo.join(" · "), 차량톤수: veh.ton, 차량종류: ctx.preset.forceVehicleKind || veh.kind || ctx.preset.defaultVehicleKind || "",
     차량번호: plate, 이름: nameSplit.name, 전화번호: fmtPhone(g(L.cols.phone)),
     청구운임: String(S.total), 기사운임: String(B.total), 수수료: String(S.total - B.total),
     지급방식, 배차방식: carrier, 배차상태,
@@ -1034,7 +1038,7 @@ export function forOrderDoc(o, { company, batchId, me = "" }) {
     if (k.startsWith("__") || v === "" || v == null) continue;
     out[k] = v;
   }
-  return { ...out, companyName: company, 작성자: me, 등록기기: "구글시트 이전", importBatchId: batchId };
+  return { ...out, companyName: company, 작성자: me, 등록기기: "구글시트 이전", importBatchId: batchId, _sheetKeys: Object.keys(out) }; // _sheetKeys: 시트에서 온 칸(다시 가져올 때 비교)
 }
 // 고정노선 후보 → fixedRoutes 문서(운행 OFF로 만든다 — 요일 · 기사 확인 후 사람이 켠다)
 export function forRouteDoc(rt, { company, batchId, me = "", payMethod = "계산서" }) {
@@ -1135,4 +1139,47 @@ export function forRateSheetDoc(rt, { company, batchId, uid = () => Math.random(
     rows: rt.rows.map((r) => ({ id: uid(), name: r.name, address: r.group || "", prices: Object.fromEntries(Object.entries(r.prices).map(([l, n]) => [idOf[l], String(n)])) })),
     importBatchId: batchId,
   };
+}
+
+// ── 🔁 2026-11-13 다시 가져오기 = 시트 그대로 맞추기 ─────────────────────────
+//  시트에서만 입력 · 수정하는 회사: 같은 시트를 다시 가져오면 새로 만들지 않고, 이미 가져온 오더를 시트 내용으로 고친다.
+//  같은 줄 찾는 순서(앞에서 못 찾은 것만 다음 단계로):
+//   ① 탭!줄 번호 + 상차일이 같다 ② 탭 + 상차일 + 상차지 + 하차지 + 차량번호가 같다(줄이 밀린 경우)
+//   ③ 탭 + 상차일 + 상차지 + 하차지가 같다(차량 · 운임을 고친 경우 — 같은 구간이 여러 줄이면 위에서부터 차례로) ④ 탭!줄 번호만 같다(날짜를 고친 경우)
+//  고칠 칸 = 시트에서 온 칸만(첨부 · 기사 수락 기록 · 정산 표시처럼 프로그램에서 생긴 칸은 건드리지 않는다)
+//  시트에서 지워진 값(예: 차량번호를 지움)은 빈 값으로 — 지난번에 시트에서 왔던 칸(_sheetKeys)을 기억해 두고 비교한다
+export const SHEET_CORE_KEYS = ["차량번호", "이름", "전화번호", "청구운임", "기사운임", "수수료", "메모", "특수운임", "특수기사차감", "특수청구추가", "외부지급합", "경유하차목록", "경유지_하차", "상차시간", "하차시간", "차량종류", "차량톤수", "화물내용", "배차방식", "지급방식", "배차상태", "마감월", "마감이월"];
+const tabOf = (src) => String(src || "").split("!")[0];
+const same = (a, b) => JSON.stringify(a ?? "") === JSON.stringify(b ?? "");
+// existing: [{ id, data }] (이 회사의 "구글시트 이전" 오더) · incoming: forOrderDoc 을 거치기 전 오더(rec) 목록
+// → { create: [rec], update: [{ id, rec, patch }], same: n, missing: [{ id, data }] }
+export function reconcileOrders(existing = [], incoming = [], { keepKeys = ["importBatchId", "작성자", "등록기기", "companyName", "_id"] } = {}) {
+  const left = new Map(existing.map((e) => [e.id, e]));
+  const pairs = new Map(); // incoming index → existing
+  const take = (i, e) => { pairs.set(i, e); left.delete(e.id); };
+  const pass = (keyIn, keyEx) => {
+    const idx = new Map();
+    [...left.values()].forEach((e) => { const k = keyEx(e.data); if (!k) return; if (!idx.has(k)) idx.set(k, []); idx.get(k).push(e); });
+    incoming.forEach((o, i) => { if (pairs.has(i)) return; const k = keyIn(o); const l = k ? idx.get(k) : null; if (l && l.length) take(i, l.shift()); });
+  };
+  const n = (v) => String(v ?? "").replace(/\s+/g, "");
+  const full = (x) => (x.이전출처 ? [x.이전출처, x.상차일, n(x.상차지명), n(x.하차지명), n(x.차량번호)].join("|") : "");
+  pass(full, full); // ⓪ 줄 · 날짜 · 구간 · 차량이 모두 같다(안 바뀐 줄을 먼저 묶어 둔다)
+  pass((o) => [tabOf(o.이전출처), o.상차일, n(o.상차지명), n(o.하차지명), n(o.차량번호)].join("|"), (d) => [tabOf(d.이전출처), d.상차일, n(d.상차지명), n(d.하차지명), n(d.차량번호)].join("|"));
+  pass((o) => (o.이전출처 ? `${o.이전출처}|${o.상차일}` : ""), (d) => (d.이전출처 ? `${d.이전출처}|${d.상차일}` : ""));
+  pass((o) => [tabOf(o.이전출처), o.상차일, n(o.상차지명), n(o.하차지명)].join("|"), (d) => [tabOf(d.이전출처), d.상차일, n(d.상차지명), n(d.하차지명)].join("|"));
+  pass((o) => o.이전출처 || "", (d) => d.이전출처 || "");
+  const create = []; const update = []; let sameN = 0;
+  incoming.forEach((o, i) => {
+    const e = pairs.get(i);
+    if (!e) { create.push(o); return; }
+    const next = {}; Object.entries(o).forEach(([k, v]) => { if (!k.startsWith("__") && v !== "" && v != null) next[k] = v; });
+    const patch = {};
+    Object.entries(next).forEach(([k, v]) => { if (!keepKeys.includes(k) && !same(e.data[k], v)) patch[k] = v; });
+    // 시트에서 사라진 값 → 비운다
+    const before = new Set([...(Array.isArray(e.data._sheetKeys) ? e.data._sheetKeys : SHEET_CORE_KEYS)]);
+    before.forEach((k) => { if (!(k in next) && !keepKeys.includes(k) && e.data[k] != null && e.data[k] !== "" && !(Array.isArray(e.data[k]) && !e.data[k].length)) patch[k] = Array.isArray(e.data[k]) ? [] : (typeof e.data[k] === "number" ? 0 : typeof e.data[k] === "boolean" ? false : ""); });
+    if (Object.keys(patch).length) update.push({ id: e.id, rec: o, patch: { ...patch, _sheetKeys: Object.keys(next) } }); else sameN += 1;
+  });
+  return { create, update, same: sameN, missing: [...left.values()] };
 }
