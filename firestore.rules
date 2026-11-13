@@ -2545,6 +2545,7 @@ service cloud.firestore {
         'pnkMembers', 'pnkPosts', 'pnkFiles', 'pnkTasks', 'pnkEvents', 'pnkSales', 'pnkServices', 'pnkReleases', 'pnkCompany', 'pnkFinance', 'pnkMail',
         //  사번 색인 · 전자결재 · 출퇴근 · 메일 서버 비밀값(서버만) · 외부 발송 횟수(서버만)
         'pnkEmpIndex', 'pnkApprovals', 'pnkAttendance', 'pnkMailSecrets', 'pnkMailUsage', 'pnkMfaSecrets', 'pnkMfaSessions', 'pnkUi', 'pnkUiHistory',
+        'sheetLive', // 🔁 구글시트 실시간 반영 설정(서버만)
         'adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'resetLocks', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'driverContracts', 'fixedRoutes', 'routeBoards', 'freightJobs', 'personalSchedules', 'publicCompanies', 'companyContracts',
         // 🔒 회사별로 잠근 컬렉션(위에서 따로 정함)
         'orders', 'dispatch', 'dispatch_test', 'fixedClients', 'drivers', 'clients', 'places', 'recurringOrders', 'deletedOrders',

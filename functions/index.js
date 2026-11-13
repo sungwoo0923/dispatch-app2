@@ -6182,6 +6182,10 @@ const _sheetConnectHandler = makeSheetConnect({
 });
 exports.sheetConnect = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 540, memory: "1GB" }).https.onRequest(async (req, res) => { if (!(await appCheckGate(req, res, "sheetConnect"))) return; return sheetCaller.run({}, () => _sheetConnectHandler(req, res)); }); // 🛡 App Check
 
+// 🔁 2026-11-13 구글시트 실시간 반영(시트에서만 입력하는 운송사 — 지금은 JY로지스틱스) — 설명은 functions/sheetLiveOrders.js 맨 위
+const _sheetLive = require("./sheetLiveOrders").makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab, sheetModifiedTime, bumpDataVersion });
+exports.syncSheetOrders = functions.runWith({ timeoutSeconds: 300, memory: "1GB", maxInstances: 1 }).pubsub.schedule("every 1 minutes").timeZone("Asia/Seoul").onRun(async () => { await _sheetLive.runAll(); return null; });
+
 exports.sheetImport = functions
   .runWith({ timeoutSeconds: 540, memory: "1GB" })
   .https.onRequest(async (req, res) => {
@@ -6197,6 +6201,9 @@ exports.sheetImport = functions
     try {
       const me = await requireTotalMaster(req);
       const action = body.action;
+
+      // 🔁 2026-11-13 실시간 반영 설정 · 지금 반영
+      if (action === "liveGet" || action === "liveSet" || action === "liveRun") { res.json(await _sheetLive.handle(action, body, me)); return; }
 
       // 🚚 2026-11-12 운송사 일괄 이전 — 고른 탭(없으면 전체)을 맨 윗줄부터 그대로 + 병합 칸 정보(화면이 applyMerges로 펼침)
       //  위쪽 메모(상차지 · 하차지 주소 · 담당자)까지 읽어야 해서 머리줄 기준으로 자르지 않는다. 규칙: functions/carrierMigrateCore.mjs
