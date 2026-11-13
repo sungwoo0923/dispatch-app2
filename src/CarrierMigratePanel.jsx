@@ -132,9 +132,18 @@ function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
   );
 }
 
+// 💾 2026-11-13 이 화면에서 정해 둔 것(운송사 · 시트 주소 · 옵션 · 탭 설정)을 이 PC에 기억한다 — 새로고침하거나 가져오기가 실패해도 다시 맞출 필요 없게
+const DRAFT_KEY = "kpMigDraft";
+const readDraft = () => { try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || "null") || {}; } catch { return {}; } };
+const writeDraft = (patch) => { try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...readDraft(), ...patch })); } catch { /* 무시 */ } };
+const presetKey = (co) => `kpMigPreset:${co}`;
+const readPresetDraft = (co) => { try { return JSON.parse(localStorage.getItem(presetKey(co)) || "null"); } catch { return null; } };
+const leanPreset = (p) => { const x = { ...p }; ["year", "extraPlaces", "tabRules", "commonOptions", "includeTabs"].forEach((k) => delete x[k]); return x; };
+
 export default function CarrierMigratePanel({ companies = [] }) {
-  const [company, setCompany] = React.useState("");
-  const [url, setUrl] = React.useState("");
+  const draft0 = React.useMemo(readDraft, []);
+  const [company, setCompany] = React.useState(draft0.company || "");
+  const [url, setUrl] = React.useState(draft0.url || "");
   const [book, setBook] = React.useState(null); // { title, tabs:[{title, rows}] }
   const bookRef = React.useRef(null); bookRef.current = book; // 설정이 늦게 와도 이미 읽은 시트를 그 설정으로 다시 계산
   const [preset, setPreset] = React.useState(DEFAULT_PRESET);
@@ -144,7 +153,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
   const [optOn, setOptOn] = React.useState({}); // 배차방식 값 → 회사 목록에 넣을지
   const [rateOn, setRateOn] = React.useState({}); // 단가표 index → 가져올지
   const [ovDraft, setOvDraft] = React.useState({}); // "탭|이름" → 직접 입력한 주소(적용 전)
-  const [opts, setOpts] = React.useState({ from: "", to: "", skipDup: true, saveOptions: true, makeRoutes: true, registerDrivers: true, rates: true });
+  const [opts, setOpts] = React.useState({ from: "", to: "", skipDup: true, saveOptions: true, makeRoutes: true, registerDrivers: true, rates: true, ...(draft0.opts || {}) });
   const [openTab, setOpenTab] = React.useState("");
   const [busy, setBusy] = React.useState("");
   const [err, setErr] = React.useState("");
@@ -167,10 +176,30 @@ export default function CarrierMigratePanel({ companies = [] }) {
       setPreset(p); setAliasDraft(aliasText(p.dispatchAliases)); setOvDraft(p.placeOverrides || {});
       if (bookRef.current) runRef.current?.(bookRef.current.tabs, p); else setResult(null); // 이미 읽은 시트가 있으면 새 설정으로 바로 다시 계산
     };
-    apply(null);
-    getDoc(doc(db, "companySettings", co)).then((s) => { if (alive && s.exists() && s.data().migrationPreset) apply(s.data().migrationPreset); }).catch(() => {});
+    // 이 PC에 기억해 둔 설정(아직 저장 전 · 가져오기 실패 포함)이 있으면 그것이 먼저, 없으면 서버에 저장된 설정
+    const local = readPresetDraft(co);
+    apply(local);
+    presetLoadedRef.current = co;
+    if (!local) getDoc(doc(db, "companySettings", co)).then((s) => { if (alive && s.exists() && s.data().migrationPreset) apply(s.data().migrationPreset); }).catch(() => {});
     return () => { alive = false; };
   }, [co]);
+
+  // 💾 정해 둔 것 기억 — 운송사 · 주소 · 옵션 / 탭 설정(회사별)
+  const presetLoadedRef = React.useRef("");
+  React.useEffect(() => { writeDraft({ company, url, opts }); }, [company, url, opts]);
+  React.useEffect(() => {
+    if (!co || presetLoadedRef.current !== co) return;
+    try { localStorage.setItem(presetKey(co), JSON.stringify({ ...leanPreset(preset), dispatchAliases: parseAlias(aliasDraft), placeOverrides: Object.fromEntries(Object.entries(ovDraft).filter(([, v]) => String(v || "").trim())) })); } catch { /* 무시 */ }
+  }, [co, preset, aliasDraft, ovDraft]);
+  // 새로고침 뒤: 기억해 둔 운송사 · 주소가 있으면 시트를 바로 다시 연다(한 번만)
+  const autoOpenRef = React.useRef(false);
+  React.useEffect(() => {
+    if (autoOpenRef.current || !draft0.company || !draft0.url) return;
+    autoOpenRef.current = true;
+    const t = setTimeout(() => openSheetRef.current?.(), 600);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const openSheetRef = React.useRef(null);
 
   const run = React.useCallback((tabs, p) => {
     try {
@@ -212,6 +241,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
       run(tabs, preset);
     } catch (e) { setErr(e.message); } finally { setBusy(""); }
   };
+  openSheetRef.current = openSheet;
   const openExcel = async (file) => {
     if (!file) return;
     setErr(""); setBusy("open"); setResult(null); setProgress(null);
@@ -617,7 +647,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
             </div>
             {progress && (
               <div className="mt-5">
-                {progress.error ? <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-semibold text-red-700">{progress.error}</div> : (
+                {progress.error ? <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-semibold text-red-700 flex items-center gap-3 flex-wrap"><span className="flex-1 min-w-[240px]">{progress.error}</span><button type="button" onClick={runImport} className="h-9 px-4 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-black whitespace-nowrap">다시 시도</button></div> : (
                   <>
                     <div className="h-3 rounded-full bg-[#EEF1F6] overflow-hidden"><div className="h-full bg-[#1B2B4B] transition-all" style={{ width: `${progress.pct}%` }} /></div>
                     <div className="mt-2 text-[13.5px] font-bold text-[#3A4A66]">{progress.step}</div>
