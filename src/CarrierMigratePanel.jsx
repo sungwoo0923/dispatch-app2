@@ -60,6 +60,62 @@ const Stat = ({ label, value, sub }) => (
   </div>
 );
 
+// 🔁 2026-11-13 실시간 반영 — 시트에서만 입력 · 수정하는 운송사. 서버가 1분마다 시트를 보고 바뀐 줄만 오더에 반영한다(functions/sheetLiveOrders.js)
+const LIVE_DAYS = [[7, "최근 7일"], [14, "최근 14일"], [31, "최근 1개월"], [62, "최근 2개월"], [93, "최근 3개월"]];
+const agoText = (ms) => { if (!ms) return "아직 없음"; const s = Math.max(0, Math.round((Date.now() - ms) / 1000)); return s < 60 ? "방금" : s < 3600 ? `${Math.floor(s / 60)}분 전` : s < 86400 ? `${Math.floor(s / 3600)}시간 전` : `${Math.floor(s / 86400)}일 전`; };
+function SheetLiveCard({ co, url, setUrl }) {
+  const [live, setLive] = React.useState(undefined); // undefined 읽는 중 · null 없음
+  const [busy, setBusy] = React.useState("");
+  const [msg, setMsg] = React.useState("");
+  const load = React.useCallback(() => { if (!co) return; callApi("sheetImport", { action: "liveGet", company: co }).then((d) => { setLive(d.live || null); if (d.live?.url) setUrl((u) => u || d.live.url); }).catch((e) => { setLive(null); setMsg(e.message); }); }, [co, setUrl]);
+  React.useEffect(() => { setLive(undefined); setMsg(""); load(); }, [load]);
+  React.useEffect(() => { if (!live?.enabled) return undefined; const t = setInterval(load, 30000); return () => clearInterval(t); }, [live?.enabled, load]);
+  if (!co) return null;
+  const set = async (patch, label) => {
+    setBusy(label); setMsg("");
+    try { const d = await callApi("sheetImport", { action: "liveSet", company: co, ...patch }); setLive(d.live); } catch (e) { setMsg(e.message); } finally { setBusy(""); }
+  };
+  const turnOn = async () => {
+    const u = (url || live?.url || "").trim();
+    if (!u) return setMsg("위 칸에 구글시트 주소를 먼저 붙여넣어 주세요.");
+    if (!(await kpConfirm(`${co} — 구글시트 실시간 반영을 켤까요?\n\n· 1분마다 시트를 확인해 새 줄은 오더로 만들고, 고친 줄은 그 오더를 고칩니다\n· 시트에서 지운 줄은 프로그램 오더도 지웁니다(아래에서 끌 수 있음)\n· 프로그램에서 직접 고친 값은 다음 반영 때 시트 값으로 돌아갑니다 — 입력 · 수정은 시트에서만 하세요`))) return;
+    await set({ url: u, enabled: true, days: live?.days || 14 }, "on");
+    runNow();
+  };
+  const runNow = async () => {
+    setBusy("run"); setMsg("");
+    try { const d = await callApi("sheetImport", { action: "liveRun", company: co }); setLive(d.live); const r = d.result || {}; setMsg(`반영 완료 — 새로 ${won(r.created || 0)}건 · 고침 ${won(r.updated || 0)}건 · 삭제 ${won(r.removed || 0)}건 · 그대로 ${won(r.same || 0)}건${r.heldBack ? ` · 시트에 없는 오더 ${won(r.heldBack)}건은 너무 많아 지우지 않았습니다(시트 확인)` : ""}`); } catch (e) { setMsg(e.message); } finally { setBusy(""); }
+  };
+  const on = !!live?.enabled;
+  const r = live?.lastResult;
+  return (
+    <section className="mt-5 rounded-2xl border border-[#DCE3EE] bg-white overflow-hidden" data-kp="sheet-live">
+      <div className="px-5 py-4 flex items-center gap-3 flex-wrap border-b border-[#E8EDF4] bg-[#F7F9FC]">
+        <span className="text-[11px] font-extrabold tracking-[0.2em] text-[#94A3B8]">LIVE</span>
+        <span className="text-[16px] font-black text-[#0F1A30]">구글시트 실시간 반영</span>
+        <span className={`text-[13px] font-black ${on ? "text-[#0F7A43]" : "text-[#7A879C]"}`}>{live === undefined ? "확인 중" : on ? "켜짐 · 1분마다 확인" : "꺼짐"}</span>
+        <div className="ml-auto flex items-center gap-2">
+          {on && <button type="button" onClick={runNow} disabled={!!busy} className={`${btn} h-10 px-4 border border-[#C9D5EA] bg-white text-[#1B2B4B] text-[13.5px]`}>{busy === "run" ? "반영 중…" : "지금 반영"}</button>}
+          {on
+            ? <button type="button" onClick={() => set({ enabled: false }, "off")} disabled={!!busy} className={`${btn} h-10 px-4 border border-[#C9D5EA] bg-white text-[#5B6B85] text-[13.5px]`}>끄기</button>
+            : <button type="button" onClick={turnOn} disabled={!!busy || live === undefined} className={`${btn} h-10 px-5 bg-[#1B2B4B] text-white text-[13.5px]`}>{busy === "on" ? "켜는 중…" : "실시간 반영 켜기"}</button>}
+        </div>
+      </div>
+      <div className="px-5 py-4 text-[13.5px] text-[#3A4A66] leading-relaxed">
+        <div>시트에서 입력 · 수정하면 배차현황 · 실시간 배차현황 · 정산 등 오더를 보는 모든 화면에 그대로 반영됩니다. 먼저 아래에서 한 번 [가져오기]를 해서 탭 · 거래처 설정을 저장해 두세요.</div>
+        <div className="mt-3 flex items-center gap-4 flex-wrap">
+          <label className="flex items-center gap-2"><span className="font-bold text-[#5B6B85]">반영 범위(상차일)</span>
+            <select value={live?.days || 14} disabled={!live || !!busy} onChange={(e) => set({ days: Number(e.target.value) }, "days")} className="h-10 px-3 rounded-lg border border-[#DCE3EE] bg-white font-bold text-[#1B2B4B]">{LIVE_DAYS.map(([v, l]) => <option key={v} value={v}>{l}부터</option>)}</select></label>
+          <label className="flex items-center gap-2 font-bold text-[#3A4A66]"><input type="checkbox" checked={live ? live.removeMissing !== false : true} disabled={!live || !!busy} onChange={(e) => set({ removeMissing: e.target.checked }, "rm")} className="w-4 h-4 accent-[#1B2B4B]" />시트에서 지운 줄은 오더도 지우기</label>
+        </div>
+        {live && <div className="mt-3 text-[13px] text-[#5B6B85]">마지막 확인 <b className="text-[#1B2B4B]">{agoText(live.lastRunAt)}</b> · 마지막으로 바뀐 때 <b className="text-[#1B2B4B]">{agoText(live.lastChangeAt)}</b>{r ? ` · 최근 반영: 새로 ${won(r.created || 0)} · 고침 ${won(r.updated || 0)} · 삭제 ${won(r.removed || 0)} (대상 ${won(r.total || 0)}건)` : ""}</div>}
+        {live?.lastError && <div className="mt-2 text-[13px] font-bold text-[#B4342A]">오류: {live.lastError}</div>}
+        {msg && <div className="mt-2 text-[13px] font-bold text-[#1B2B4B]">{msg}</div>}
+      </div>
+    </section>
+  );
+}
+
 export default function CarrierMigratePanel({ companies = [] }) {
   const [company, setCompany] = React.useState("");
   const [url, setUrl] = React.useState("");
@@ -326,6 +382,8 @@ export default function CarrierMigratePanel({ companies = [] }) {
         </div>
         {err && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-semibold text-red-700 whitespace-pre-line">{err}</div>}
       </section>
+
+      <SheetLiveCard co={co} url={url} setUrl={setUrl} />
 
       {result && (
         <>

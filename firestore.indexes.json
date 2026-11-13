@@ -426,6 +426,24 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "companyName",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "`등록기기`",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "`상차일`",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [
