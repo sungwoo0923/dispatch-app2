@@ -57,6 +57,10 @@ for size, name in [(192, "pwa-192.png"), (512, "pwa-512.png"), (180, "apple-touc
                    (192, "icon-192x192.png"), (512, "icon-512x512.png"), (96, "icon-96x96.png")]:
     save(fit(full, size), "public", "icons", name)
 save(fit(full, 180), "landing-site", "icons", "apple-touch-icon.png")
+# 🛠 안드로이드에 '앱으로 설치'(PWA)하면 maskable 아이콘은 가운데 약 2/3 만 보이게 잘린다(동그라미 · 둥근 네모)
+#  → 원본을 꽉 채우면 LOGISWEB 글자 양끝이 잘렸다. maskable 은 원본을 64% 로 줄여 가운데에 두고 둘레는 원본 남색
+for size in (192, 512):
+    save(on_bg(full, (size, size), 0.64), "public", "icons", f"pwa-maskable-{size}.png")
 
 # 파비콘 · 작은 아이콘 — 마크만(32px 에서도 알아보게)
 save(fit(mark, 512), "public", "icons", "sflow-icon.png")
