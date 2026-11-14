@@ -2088,7 +2088,7 @@ const formatPhoneLive = (phone) => {
 // ⭐ 로그아웃/초기화해도 "로그인 정보 저장" 설정은 남긴다(다음 로그인 때 회사코드·회사명 자동 입력)
 const clearLocalStorageKeepLogin = () => {
   const keep = {};
-  ["transportLoginSaved", "driverLoginSaved"].forEach((k) => {
+  ["transportLoginSaved", "driverLoginSaved", "kpPin", "kpAdminDev", "kpBioHere"].forEach((k) => { // 🚦 kpPin = 배포 버전(지우면 가입자가 최신 화면을 받았다)
     const v = localStorage.getItem(k);
     if (v != null) keep[k] = v;
   });
@@ -23033,7 +23033,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
               showSuccess(ok === false ? "새로고침 실패 (네트워크 확인)" : "새로고침 완료 · 최신 상태 반영됨");
             }}
             right={go(manualRefreshing ? "갱신 중…" : "실행")} />
-          <KpmRow label="캐시 초기화" sub="이 기기에 임시 저장된 데이터 삭제" onClick={() => { /* ⭐ 2026-11-02 점검 — 로그인·FCM 토큰 키는 남기고 비움(로그아웃 시 기기 알림 해제 유지) */ const keep = ["kpFcmToken", "loginCompany", "userCompany", "role", "kpHrAcctView", "transportLoginSaved", "driverLoginSaved"]; const saved = keep.map((k) => [k, localStorage.getItem(k)]); localStorage.clear(); saved.forEach(([k, v]) => { if (v != null) { try { localStorage.setItem(k, v); } catch { /* 무시 */ } } }); showSuccess("초기화 완료"); }} right={go("실행")} />
+          <KpmRow label="캐시 초기화" sub="이 기기에 임시 저장된 데이터 삭제" onClick={() => { /* ⭐ 2026-11-02 점검 — 로그인·FCM 토큰 키는 남기고 비움(로그아웃 시 기기 알림 해제 유지) */ const keep = ["kpFcmToken", "loginCompany", "userCompany", "role", "kpHrAcctView", "transportLoginSaved", "driverLoginSaved", "kpPin", "kpAdminDev", "kpBioHere"]; const saved = keep.map((k) => [k, localStorage.getItem(k)]); localStorage.clear(); saved.forEach(([k, v]) => { if (v != null) { try { localStorage.setItem(k, v); } catch { /* 무시 */ } } }); showSuccess("초기화 완료"); }} right={go("실행")} />
         </KpmCard>
 
         {isTotalMaster && (

@@ -64,6 +64,20 @@ export default async function handler(req, res) {
       if (pin) { try { const r = await withTimeout(`https://${pin.url}/index.html`, { headers: bypass() }); out.status = r.status; out.ok = r.ok && (r.headers.get("content-type") || "").includes("text/html"); } catch (e) { out.ok = false; out.error = String(e?.message || e); } }
       res.setHeader("Cache-Control", "no-store"); res.status(200).json(out); return;
     }
+    // 🚦 2026-11-14 관리센터 › 예전 버전 고정 — Vercel 배포 주소의 버전 정보(version.json)를 대신 읽어 준다(화면에서 직접 읽으면 막힘)
+    if (q.probe) {
+      const h = String(q.probe).trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "").toLowerCase();
+      res.setHeader("Cache-Control", "no-store");
+      if (!HOST_OK.test(h)) { res.status(200).json({ ok: false, error: "Vercel 배포 주소(….vercel.app)만 넣을 수 있습니다" }); return; }
+      try {
+        const r = await withTimeout(`https://${h}/version.json?t=${Date.now()}`, { headers: bypass() }, 5000);
+        const ct = r.headers.get("content-type") || "";
+        if (!r.ok || !ct.includes("json")) { res.status(200).json({ ok: false, status: r.status, error: r.status === 401 || r.status === 403 ? "Vercel이 이 주소를 로그인으로 막고 있습니다(아래 동작 점검 안내 참고)" : "이 주소에서 버전 정보를 찾지 못했습니다" }); return; }
+        const j = await r.json();
+        res.status(200).json({ ok: !!j.build, version: String(j.version || ""), build: String(j.build || ""), url: h });
+      } catch (e) { res.status(200).json({ ok: false, error: String(e?.message || e) }); }
+      return;
+    }
     // 예전 버전 화면의 파일(/assets/*) — 최신 배포에 없는 것만 여기로 온다
     if (q.asset) {
       const pin = await readPin();

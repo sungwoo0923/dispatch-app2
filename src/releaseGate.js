@@ -55,3 +55,31 @@ export const setReleaseLock = (enabled) => setDoc(RELEASE_REF(), { enabled: !!en
 // 예전 버전으로 되돌리기(기록에서 고름)
 export const rollbackRelease = (rec) => setDoc(RELEASE_REF(), { enabled: true, url: rec.url, version: rec.version || "", build: rec.build, releasedAt: Date.now(), releasedBy: auth.currentUser?.email || "", note: `되돌림 → v${rec.version}` }, { merge: true });
 export async function checkRelease() { const r = await fetch(`/api/shell?check=1&t=${Date.now()}`, { cache: "no-store" }); return r.json(); }
+
+// 🚦 2026-11-14 가입자 화면 버전 고르기 — 올라간 화면(빌드)을 관리자가 열 때마다 기록해 두고(publicRelease/builds), 관리센터에서 골라 고정한다
+//  · 예전엔 [업데이트 배포]를 한 번도 누르지 않으면 "잠금 없음"이라 가입자도 최신을 봤다 → 고정할 버전을 고를 수 있게
+export const BUILDS_REF = () => doc(db, "publicRelease", "builds");
+export async function registerBuild() {
+  if (!CUR_URL || !CUR_BUILD || CUR_VER === "dev") return;
+  try {
+    const k = `b_${CUR_BUILD.replace(/[^0-9A-Za-z]/g, "")}`;
+    await setDoc(BUILDS_REF(), { [k]: { version: CUR_VER, build: CUR_BUILD, url: CUR_URL, at: Date.now() } }, { merge: true });
+  } catch { /* 권한 없음(가입자) · 오프라인 — 무시 */ }
+}
+export const watchBuilds = (cb) => onSnapshot(BUILDS_REF(), (s) => cb(s.exists() ? Object.values(s.data() || {}).filter((x) => x && x.build && x.url).sort((a, b) => (b.build > a.build ? 1 : -1)) : []), () => cb([]));
+// Vercel 배포 주소를 직접 넣어 고정 — 서버(api/shell.js ?probe=)가 그 주소의 버전 정보를 읽어 준다
+export async function probeDeploy(host) { const r = await fetch(`/api/shell?probe=${encodeURIComponent(host)}&t=${Date.now()}`, { cache: "no-store" }); return r.json(); }
+export const pinRelease = (rec, note = "") => {
+  const by = auth.currentUser?.email || "";
+  const r = { url: rec.url, version: rec.version || "", build: rec.build, at: Date.now(), by, note: String(note || "").slice(0, 200) };
+  return setDoc(RELEASE_REF(), { enabled: true, url: r.url, version: r.version, build: r.build, releasedAt: r.at, releasedBy: by, note: r.note, history: arrayUnion(r) }, { merge: true });
+};
+// 가입자 브라우저가 배포 버전보다 새 화면을 보고 있으면(첫 방문 · 저장값이 지워진 뒤 등) 한 번 새로고침해 배포 버전으로 맞춘다
+export async function enforcePin() {
+  if (isLatestChannel() || CUR_VER === "dev") return;
+  const pin = await readPin(); // 이 PC에 kpPin 을 적어 둔다 → 새로고침하면 시작 스크립트가 배포 버전 화면을 연다
+  if (!pin || !pin.build || !CUR_BUILD || pin.build >= CUR_BUILD) return;
+  if (typeof window !== "undefined" && window.__kpPinned) return; // 이미 배포 버전 화면
+  try { const k = `kpPinFix:${pin.build}`; if (sessionStorage.getItem(k)) return; sessionStorage.setItem(k, "1"); } catch { return; }
+  window.location.reload();
+}

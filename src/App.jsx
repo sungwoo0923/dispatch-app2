@@ -11,7 +11,7 @@ installAlertShim(); // 브라우저 기본 알림창 대신 프로그램 디자�
 import { safeLocalSet } from "./safeStorage";
 import UpdateBanner from "./UpdateBanner";
 import VersionCheck from "./VersionCheck";
-import { syncReleaseChannel, targetVersion, CUR_BUILD } from "./releaseGate";
+import { syncReleaseChannel, targetVersion, CUR_BUILD, registerBuild, enforcePin } from "./releaseGate";
 import { hardReloadForUpdate } from "./UpdateBanner";
 import TextOverrideLayer from "./TextOverrideLayer"; // ⭐ 2026-11-06 문구 편집 모드(최고관리자) — 모든 화면의 글자 덮어쓰기
 import {
@@ -207,11 +207,24 @@ export default function App() {
   const [role, setRole] = useState(null);
   // 🚦 2026-11-13 업데이트 배포 잠금 — 최고관리자 · 부관리자 브라우저는 항상 최신 화면(쿠키 kp_ch) · 그 밖은 배포한 버전(src/releaseGate.js)
   React.useEffect(() => {
-    if (!role) return;
+    if (!role) return undefined;
     const admin = role === "totalMaster";
-    if (!syncReleaseChannel(admin) || !admin) return;
-    // 방금 관리자로 확인됐고 지금 화면이 예전(배포 버전)이면 최신 화면으로 한 번 바꾼다
-    targetVersion().then((v) => { if (v?.build && CUR_BUILD && v.build > CUR_BUILD) hardReloadForUpdate(); }).catch(() => {});
+    const changed = syncReleaseChannel(admin);
+    if (admin) registerBuild(); // 🚦 2026-11-14 이 빌드를 관리센터에서 "고를 수 있는 버전"으로 기록
+    // 🛠 2026-11-14 새로고침은 로그인 · 보안 확인(2차 비밀번호 · 문자)이 다 끝난 뒤에만 —
+    //  예전엔 2차 비밀번호를 넣는 도중에 "관리자는 최신 화면으로" 새로고침이 일어나 처음부터 다시 넣어야 했다(처음 쓰는 PC · 예전 화면이 남은 브라우저)
+    let t = null; let stop = false;
+    const busy = () => { try { return sessionStorage.getItem("transportValidating") === "true" || sessionStorage.getItem("skipLoginPopup") === "true" || !!window.__kpGateInline || !!document.querySelector("[data-admin-gate],[data-user-gate],[data-mfa-ask],[data-login-gate]"); } catch { return false; } };
+    const go = () => {
+      if (stop) return;
+      if (busy()) { t = setTimeout(go, 1500); return; }
+      if (!admin) { enforcePin().catch(() => {}); return; } // 가입자는 배포한 버전으로 맞춘다(새 화면을 먼저 받아 버린 경우)
+      if (!changed) return;
+      // 방금 관리자로 확인됐고 지금 화면이 예전(배포 버전)이면 최신 화면으로 한 번 바꾼다
+      targetVersion().then((v) => { if (!stop && v?.build && CUR_BUILD && v.build > CUR_BUILD) hardReloadForUpdate(); }).catch(() => {});
+    };
+    t = setTimeout(go, 800);
+    return () => { stop = true; clearTimeout(t); };
   }, [role]);
   const [loading, setLoading] = useState(true);
   const [approved, setApproved] = useState(false);
@@ -986,7 +999,7 @@ export default function App() {
       {mfaAsk && user && !needUserMfa && !sessionConflict && window.location.pathname !== "/transport-login" && <MfaAskModal user={user} mode={mfaAsk} onClose={() => setMfaAsk("")} />}
 
       {/* ⭐ 최고관리자 2차 인증 등록 안내 */}
-      {mfaNag && !needPcMfa && !sessionConflict && user && (
+      {mfaNag && masterPcPhone === "" && !needPcMfa && !sessionConflict && user && ( /* 🛠 2026-11-14 문자 인증(3단계)에서 번호를 등록하면 바로 사라진다 — 예전엔 인증을 마친 뒤 "번호를 등록해 주세요"가 또 떴다 */
         <div className="fixed inset-0 z-[100000] bg-black/55 flex items-center justify-center p-5">
           <div className="w-full max-w-[400px] bg-white rounded-2xl shadow-2xl overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-5 text-white">

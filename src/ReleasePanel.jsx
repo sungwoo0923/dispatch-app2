@@ -3,7 +3,7 @@
 //  · 최고관리자 · 부관리자는 항상 최신 화면(먼저 써 보고 확인) → 괜찮으면 배포 → 그때 모든 가입자에게 "새 버전" 안내
 //  · 서버: api/shell.js · 화면: src/releaseGate.js · 저장: publicRelease/current
 import React from "react";
-import { CUR_VER, CUR_BUILD, watchRelease, latestVersion, publishRelease, setReleaseLock, rollbackRelease, checkRelease } from "./releaseGate";
+import { CUR_VER, CUR_BUILD, watchRelease, latestVersion, publishRelease, setReleaseLock, rollbackRelease, checkRelease, watchBuilds, registerBuild, probeDeploy, pinRelease } from "./releaseGate";
 import { hardReloadForUpdate } from "./UpdateBanner";
 import { usePlatformLive } from "./PlatformLive";
 import { kpConfirm } from "./kpDialog";
@@ -28,6 +28,11 @@ export default function ReleasePanel() {
   const [msg, setMsg] = React.useState("");
   const [note, setNote] = React.useState("");
   React.useEffect(() => watchRelease(setRel), []);
+  // 🚦 2026-11-14 고정할 버전 고르기 — 관리자가 열어 본 빌드 목록(publicRelease/builds) + Vercel 배포 주소 직접 넣기
+  const [builds, setBuilds] = React.useState([]);
+  React.useEffect(() => { registerBuild(); return watchBuilds(setBuilds); }, []);
+  const [addr, setAddr] = React.useState("");
+  const [probe, setProbe] = React.useState(null);
   const refresh = React.useCallback(() => { latestVersion().then(setLatest).catch(() => setLatest(null)); checkRelease().then(setChk).catch(() => setChk({ error: true })); }, []);
   React.useEffect(() => { refresh(); const t = setInterval(refresh, 60000); return () => clearInterval(t); }, [refresh]);
 
@@ -70,6 +75,40 @@ export default function ReleasePanel() {
         </div>
         {noUrl && <div className="mt-3 text-[13px] font-bold text-[#B4342A]">이 배포의 주소(VERCEL_URL)를 알 수 없어 배포 버튼을 쓸 수 없습니다. Vercel › Settings › Environment Variables 에서 시스템 환경변수 자동 노출이 켜져 있는지 확인해 주세요.</div>}
         {msg && <div className="mt-3 text-[13.5px] font-bold text-[#1B2B4B]">{msg}</div>}
+      </section>
+
+      {rel !== undefined && !locked && (
+        <div className="rounded-2xl border-2 border-[#E8B4AE] bg-[#FDF3F2] px-5 py-4 text-[13.5px] text-[#7A1F15] leading-relaxed" data-kp="release-unlocked">
+          <b className="text-[14.5px]">지금은 가입자도 최신 화면(v{latest?.version || "?"})을 보고 있습니다.</b><br />
+          [업데이트 배포]를 한 번도 누르지 않아 "가입자에게 보여 줄 버전"이 정해져 있지 않기 때문입니다. 아래 <b>가입자 화면 버전 고르기</b>에서 버전을 하나 고정하면 그때부터 잠금이 켜집니다.
+        </div>
+      )}
+
+      <section className="rounded-2xl border border-[#DCE3EE] bg-white p-5" data-kp="release-pick">
+        <div className="text-[15px] font-black text-[#0F1A30]">가입자 화면 버전 고르기</div>
+        <div className="mt-1 text-[13px] text-[#5B6B85] leading-relaxed">새 화면이 올라올 때마다 관리자가 열어 본 버전이 아래에 쌓입니다. 가입자에게 보여 줄 버전 옆 [이 버전으로 고정]을 누르세요. 목록에 없는 예전 버전은 Vercel › Deployments 에서 그 배포의 주소(….vercel.app)를 복사해 넣으면 됩니다.</div>
+        {builds.length > 0 && (
+          <ul className="mt-3 divide-y divide-[#EEF1F6] rounded-xl border border-[#E3E8F0]">
+            {builds.slice(0, 15).map((b) => { const cur = locked && b.build === rel.build; return (
+              <li key={b.build} className="flex items-center gap-3 px-3.5 py-2.5 flex-wrap">
+                <span className="text-[15px] font-black tabular-nums text-[#0F1A30] w-[84px]">v{b.version}</span>
+                <span className="text-[13px] font-semibold text-[#5B6B85] tabular-nums">올림 {stamp(b.build)}</span>
+                <span className="text-[12px] text-[#9AA9C3] truncate flex-1 min-w-0">{b.url}</span>
+                {cur ? <span className="text-[12.5px] font-black text-[#0F7A43]">지금 가입자 화면</span>
+                  : <button type="button" disabled={!!busy} onClick={async () => { if (await kpConfirm(`가입자 화면을 v${b.version} (${stamp(b.build)}) 으로 고정할까요?\n\n최고관리자 · 부관리자는 계속 최신 화면을 봅니다.`)) run("pin", () => pinRelease(b, "버전 고정"), `가입자 화면을 v${b.version} 으로 고정했습니다`); }} className="h-8 px-3 rounded-lg border border-[#C9D5EA] bg-white text-[12.5px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD]">이 버전으로 고정</button>}
+              </li>); })}
+          </ul>
+        )}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <input value={addr} onChange={(e) => { setAddr(e.target.value); setProbe(null); }} placeholder="예전 배포 주소 — 예: dispatch-app2-abc123-xxxx.vercel.app" className="h-10 flex-1 min-w-[260px] px-3 rounded-xl border border-[#DCE3EE] text-[13.5px] outline-none focus:border-[#1B2B4B]" />
+          <button type="button" disabled={!addr.trim() || busy === "probe"} onClick={async () => { setBusy("probe"); setProbe(null); try { setProbe(await probeDeploy(addr)); } catch (e) { setProbe({ ok: false, error: e.message }); } finally { setBusy(""); } }} className="h-10 px-4 rounded-xl border border-[#C9D5EA] bg-white text-[13.5px] font-black text-[#1B2B4B]">{busy === "probe" ? "확인 중…" : "버전 확인"}</button>
+        </div>
+        {probe && (probe.ok ? (
+          <div className="mt-2 flex items-center gap-3 flex-wrap text-[13.5px]">
+            <span className="font-black text-[#0F1A30]">v{probe.version}</span><span className="text-[#5B6B85]">올림 {stamp(probe.build)}</span>
+            <button type="button" disabled={!!busy} onClick={async () => { if (await kpConfirm(`가입자 화면을 v${probe.version} 으로 고정할까요?`)) run("pin", () => pinRelease(probe, "주소로 고정"), `가입자 화면을 v${probe.version} 으로 고정했습니다`); }} className="h-8 px-3 rounded-lg bg-[#1B2B4B] text-white text-[12.5px] font-black">이 버전으로 고정</button>
+          </div>
+        ) : <div className="mt-2 text-[13px] font-bold text-[#B4342A]">{probe.error || "확인하지 못했습니다"}</div>)}
       </section>
 
       <section className="rounded-2xl border border-[#DCE3EE] bg-white p-5">
