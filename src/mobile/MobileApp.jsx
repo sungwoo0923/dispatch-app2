@@ -22,7 +22,7 @@ import { AttendanceQuickButton, officeRadii, CheckoutReminderHost } from "../att
 import { PersonalTodayHost } from "../PersonalSchedule";
 import { makeClientMatcher } from "../clientMatch"; // ⭐ 2026-11-03 거래처 검색
 import { useCompanyBiz, BizPicker, bizColorOf, bizOf, BizSelect, resolveBiz, rememberBizFor, normBizKey } from "../companyBiz"; // ⭐ 2026-11-03 여러 사업자
-import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus, ROLE_LABELS as ROLE_LABELS_SW, hiddenInSwitchView } from "../customRoles";
+import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus, ROLE_LABELS as ROLE_LABELS_SW, hiddenInSwitchView, builtinHidesMenu } from "../customRoles";
 import { ViewPickerDialog } from "../ViewSwitcher"; // 🔀 2026-11-10 화면 전환 창(PC와 같은 것)
 import { usePayrollAccess } from "../payrollAccess"; // ⭐ 2026-11-06 직원 급여·연차 촉진
 import { useReadOnlyGuard } from "../readOnlyGuard";
@@ -2218,7 +2218,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const DEPT_PAGE_MENU = { "dept:hr": "인사관리부", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:assets": "비품관리", "dept:cert": "증명서발급", "dept:schedule": "직원일정", "dept:leave": "인사관리부", "dept:sales": "영업관리" };
   const deptOkM = (m) => !!customRoleM && getMenuAccess(customRolesM, role, m) !== "hidden";
   // 🧾 2026-11-14 통합 · 최고관리자 운송 화면엔 정산관리 없음(경리 화면에서) — PC와 같은 규칙(customRoles.js hiddenInSwitchView)
-  const menuOkM = React.useCallback((m) => !hiddenInSwitchView(realRole, roleView.view, m) && (!customRoleM || getMenuAccess(customRolesM, role, m) !== "hidden"), [customRoleM, customRolesM, role, realRole, roleView.view]);
+  const menuOkM = React.useCallback((m) => !hiddenInSwitchView(realRole, roleView.view, m) && !builtinHidesMenu(role, m, !!customRoleM) && (!customRoleM || getMenuAccess(customRolesM, role, m) !== "hidden"), [customRoleM, customRolesM, role, realRole, roleView.view]);
   // 🔒 2026-11-01 조회만 허락된 화면에서 수정·저장·삭제를 누르면 바로 "권한 없음"
   const PAGE_MENU_M = { drivers: "기사관리", clients: "거래처관리", list: "배차현황", detail: "배차현황", canceled: "배차현황", form: "배차관리", unassigned: "배차관리", fleet: "지입차관리", sales: "매출관리", ratecard: "단가표", fare: "운임조회", intel: "인사이트", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:funds": "자금관리", "dept:assets": "비품관리", "dept:hr": "인사관리부", "dept:cert": "증명서발급", "dept:driverdocs": "기사관리", "dept:sales": "영업관리" }; // ⭐ 2026-11-03 가입 승인(staff)은 기사관리 조회권한과 별개 — PC처럼 관리자·경리·인사는 승인·거절 가능
   const [execFull, setExecFull] = useState(() => { try { return localStorage.getItem("kpExecFull") === "1"; } catch { return false; } });

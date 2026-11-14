@@ -130,7 +130,7 @@ import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnable
 import { PopupPrefsSection } from "./popupPrefs"; // ⭐ 2026-11-07 팝업 알림 켜고 끄기(계정별)
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare, geocodeAddress, haversineKm, specialSurcharge } from "./tmapFareCalc";
-import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus, ROLE_LABELS, hiddenInSwitchView, switchViewFor } from "./customRoles";
+import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus, ROLE_LABELS, hiddenInSwitchView, switchViewFor, builtinHidesMenu } from "./customRoles";
 import { useReadOnlyGuard } from "./readOnlyGuard";
 import { confirmLeave } from "./leaveGuard";
 import RouteMapModal from "./RouteMapModal";
@@ -8424,7 +8424,7 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   };
   // 부서 모드에서 볼 수 없는 메뉴에 머물러 있으면 홈으로
   React.useEffect(() => { if (deptMode && !DEPT_MENUS[deptMode].includes(menu)) setMenu("HOME"); }, [deptMode, menu]);
-  React.useEffect(() => { if (hiddenInSwitchView(realRole, roleView.view, menu)) setMenu("HOME"); }, [realRole, roleView.view, menu]); // 🧾 운송 화면에 정산관리가 남아 있으면 홈으로
+  React.useEffect(() => { if (hiddenInSwitchView(realRole, roleView.view, menu) || builtinHidesMenu(role, menu, !!customRole)) setMenu("HOME"); }, [realRole, roleView.view, role, menu, customRole]); // 🧾 운송 화면에 정산관리가 남아 있으면 홈으로
   // viewer(조회전용): 관리센터 제외 모든 메뉴 조회 가능, 수정/등록 불가
   // 🔓 2026-11-12 권한 관리에 "조회"로 저장돼 있어도 — 마스터(최고관리자 · 회사 마스터)는 어디서나, 경리(경리관리자 · 경리사무원 · 통합)는 배차현황에서 오더를 고칠 수 있다
   const _editFree = (realRole || role) === "totalMaster" || myProfileDoc?.isMaster === true
@@ -8659,7 +8659,7 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   const menuState = (m) => {
     // 💳 2026-11-09 요금제 잠금을 맨 먼저 — 예전엔 부서 메뉴(인사관리부·회계관리 등)·임원 메뉴가 아래에서 먼저 "ok"로 끝나 요금제와 상관없이 열렸다
     if (MENU_FEATURE[m] && !planIncludes(planId, MENU_FEATURE[m])) return "locked";
-    if (hiddenInSwitchView(realRole, roleView.view, m)) return "hidden"; // 🧾 2026-11-14 통합 · 최고관리자 운송 화면엔 정산관리 없음(경리 화면에서)
+    if (hiddenInSwitchView(realRole, roleView.view, m) || builtinHidesMenu(role, m, !!customRole)) return "hidden"; // 🧾 2026-11-14 통합 · 최고관리자 운송 화면엔 정산관리 없음(경리 화면에서)
     if (workScope) { if (!scopeAllows(workScope, m)) return "hidden"; if (isOfficeBaseMenu(m)) return "ok"; } // 🗂 업무 범위 — 사내업무 계정은 배차 메뉴를 모두 숨긴다(경리 메뉴는 아래 권한 판정 그대로)
     if (isBizMenu(m)) return parseBizMenu(m).biz === biz ? "ok" : "hidden"; // 🧭 2026-11-12 업무 영역 메뉴(컨테이너 · 해상 · 항공 · 통합)
     // 📊 2026-11-06 일일 경영 보고 — 임원 화면 역할만(기존 임원 판정 isExec 그대로)

@@ -46,10 +46,11 @@ export const ROLE_LABELS = {
 // 편집 대상에서 계속 제외한다. driver/shipper는 이 PC 화면(DispatchApp)이 아니라
 // 별도의 모바일/화주 앱을 쓰므로 여기서는 제외한다.
 // ⭐ 2026-11-04 통합관리자(allMgr)·통합인사관리자(hrAcct)도 기본 역할로(메뉴 편집 가능) + 부서별 사무원·법무·개발 역할 추가
-export const BUILTIN_EDITABLE_ROLES = [
-  "allMgr", "hrAcct", "admin", "user", "test", "acctStaff", "hrManager", "hrStaff", "salesMgr", "salesStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer",
-].map((key) => ({ key, label: ROLE_LABELS[key] }));
-const isBuiltinKey = (k) => BUILTIN_EDITABLE_ROLES.some((b) => b.key === k);
+// 🗑 2026-11-14 조회전용(viewer)은 고를 수 있는 권한에서 뺐다 — 이미 조회전용인 계정은 권한을 바꿀 때까지 예전처럼 보기만 된다
+export const RETIRED_ROLES = ["viewer"];
+const ALL_BUILTIN_KEYS = ["allMgr", "hrAcct", "admin", "user", "test", "acctStaff", "hrManager", "hrStaff", "salesMgr", "salesStaff", "legalMgr", "legalStaff", "devMgr", "devStaff", "viewer"];
+export const BUILTIN_EDITABLE_ROLES = ALL_BUILTIN_KEYS.filter((k) => !RETIRED_ROLES.includes(k)).map((key) => ({ key, label: ROLE_LABELS[key] }));
+const isBuiltinKey = (k) => ALL_BUILTIN_KEYS.includes(k);
 
 // 🔀 화면 전환 역할 — 상단 버튼(모바일은 메뉴)으로 화면을 바꾼다. 각 화면은 그 화면 역할로 동작
 //  views: [화면 키, 화면 역할, 버튼 이름]
@@ -74,6 +75,12 @@ export const VIEW_INFO = {
 // 🧾 2026-11-14 화면 전환 역할(통합관리자 · 최고관리자 · 회사 마스터)은 운송 화면에서 정산관리를 숨긴다 — 정산은 경리 화면 메뉴(PC · 모바일 같음)
 //  정산관리로 가는 바로가기를 누르면 경리 화면으로 바꿔서 연다(switchViewFor)
 export const VIEW_ONLY_MENUS = { 정산관리: "acct" };
+// 🚚 2026-11-14 운송 역할(운송관리자 · 운송사무원)은 운송 메뉴만 — 정산관리는 경리 메뉴라 기본으로 숨긴다
+//  (권한 관리에서 운송관리자에게 정산관리를 켜 두면 그 설정대로 보인다 — hasSaved: 저장한 설정이 있는지)
+export function builtinHidesMenu(role, menu, hasSaved = false) {
+  if (hasSaved) return false;
+  return (role === "admin" || role === "user") && menu === "정산관리";
+}
 export function hiddenInSwitchView(realRole, view, menu) {
   const sw = SWITCH_ROLES[realRole];
   const home = VIEW_ONLY_MENUS[menu];
@@ -131,9 +138,8 @@ export function builtinDefaultMenuAccess(roleKey) {
   if (roleKey === "devMgr") return only(["HOME", "전자결재", "회사관리"], ["배차관리", "실시간배차현황", "배차현황", "단가표", "운임조회", "기사관리", "거래처관리", "지입차관리"]);
   if (roleKey === "devStaff") return only(["HOME", "전자결재", "회사관리"], ["실시간배차현황", "배차현황", "기사관리", "거래처관리"]);
   if (roleKey === "admin") {
-    // 관리자는 기본적으로 모든 메뉴에 전체 접근 — 여기서 직접 "숨김"으로 바꾸지 않는
-    // 이상 지금까지와 동일하게 전 메뉴를 다 쓸 수 있다.
-    return write;
+    // 운송관리자는 운송 메뉴 전체 — 정산관리는 경리 메뉴라 기본 숨김(2026-11-14). 권한 관리에서 켤 수 있다
+    return { ...write, 정산관리: "hidden" };
   }
 
   if (roleKey === "viewer") {
@@ -178,7 +184,7 @@ export function useRoleView(realRole) {
 }
 
 // 🏢 2026-11-04 부서 → 고를 수 있는 권한(회원 관리·직원 관리·인사관리부·권한 관리 소속 직원 공용)
-//  부서 이름의 낱말로 고른다(인사관리부 › 직책·부서 설정의 부서 목록 그대로). 조회전용은 늘 포함.
+//  부서 이름의 낱말로 고른다(인사관리부 › 직책·부서 설정의 부서 목록 그대로). (조회전용은 2026-11-14 권한 목록에서 뺐다)
 //  맞는 규칙이 없는 부서(미배정 포함)는 전체 권한. 직접 만든 역할은 이름에 그 부서 낱말이 들어가면 함께(임원은 "임원 화면" 역할).
 export const DEPT_ROLE_RULES = [
   { re: /임원/, keys: ["allMgr"], exec: true }, // ⭐ 2026-11-05 임원도 통합관리자 고를 수 있게(임원 화면 역할 다음)
@@ -191,7 +197,7 @@ export const DEPT_ROLE_RULES = [
   { re: /법무/, keys: ["legalMgr", "legalStaff"], label: /법무/ },
   { re: /개발/, keys: ["devMgr", "devStaff"], label: /개발/ },
 ];
-// options: [[key, label], …] → 그 부서에 맞는 것만(규칙 순서대로, 조회전용은 맨 뒤)
+// options: [[key, label], …] → 그 부서에 맞는 것만(규칙 순서대로)
 export function rolesForTeam(team, options = [], customRoles = []) {
   const t = String(team || "").trim();
   const rule = t ? DEPT_ROLE_RULES.find((r) => r.re.test(t)) : null;
@@ -209,8 +215,7 @@ export function rolesForTeam(team, options = [], customRoles = []) {
   });
   if (!picked.length) return options;
   if (rule.exec && !picked.some(([k]) => !rule.keys.includes(k))) return options; // 임원 화면 역할이 없는 회사는 예전처럼 전체 // 그 부서용 역할이 아직 없으면(예: 임원 화면 역할을 안 만든 회사) 전체
-  const viewer = options.find(([k]) => k === "viewer");
-  return viewer ? [...picked, viewer] : picked;
+  return picked;
 }
 
 // 전체 운송사 공통 설정(customRoles) — 권한 관리 화면이 직접 편집
@@ -303,7 +308,7 @@ export function roleOptionsFrom(customRoles = []) {
   // 회사에서 같은 이름(예: 경리사무원)의 역할을 이미 만들어 쓰고 있으면 새 기본 역할은 목록에서 뺀다(이름 중복 방지)
   const dupLabel = (k) => NEW_STAFF_KEYS.includes(k) && real.some((r) => !isBuiltinKey(r.key) && String(r.label || "").trim() === ROLE_LABELS[k]);
   const base = BASE_ROLE_OPTIONS.filter(([k]) => !dupLabel(k)).map(([k, l]) => [k, real.find((r) => r.key === k)?.label || l]);
-  const own = real.filter((r) => !BASE_ROLE_OPTIONS.some(([k]) => k === r.key) && !["totalMaster", "driver", "shipper"].includes(r.key)).map((r) => [r.key, `${r.label || r.key}${roleScreen(r) === "exec" ? " · 임원 화면" : ""}`]);
+  const own = real.filter((r) => !BASE_ROLE_OPTIONS.some(([k]) => k === r.key) && !["totalMaster", "driver", "shipper", ...RETIRED_ROLES].includes(r.key)).map((r) => [r.key, `${r.label || r.key}${roleScreen(r) === "exec" ? " · 임원 화면" : ""}`]);
   return [...base, ...own];
 }
 export function useRoleOptions() {
