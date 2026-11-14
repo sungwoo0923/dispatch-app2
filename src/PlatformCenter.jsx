@@ -28,7 +28,8 @@ import { AdminSessionsPanel } from "./LoginManager";
 import CompanyResetPanel from "./CompanyResetPanel";
 const SecurityEventsPanel = React.lazy(() => import("./SecurityEventsPanel")); // 🛡 2026-11-09 보안 알림
 const ErrorReportsPanel = React.lazy(() => import("./ErrorReportsPanel")); // 🧯 2026-11-10 오류 신고([오류 보내기])
-const TestSeedPanel = React.lazy(() => import("./TestSeedPanel")); // 🧪 2026-11-08 테스트운송사 가짜 데이터
+const TestSeedPanel = React.lazy(() => import("./TestSeedPanel"));
+const MobilePreviewPanelLazy = React.lazy(() => import("./MobilePreviewFrame").then((m) => ({ default: m.MobilePreviewPanel }))); // 📱 2026-11-14 관리센터 › 운영 › 모바일 화면
 import ReleasePanel from "./ReleasePanel"; // 🚦 업데이트 배포 잠금
 import { ContractLifecyclePanel, SubAdminPanel } from "./ContractLifecycle"; // ⭐ 2026-11-06 이용 계약 · 부관리자
 import SheetImportPanel from "./SheetImportPanel";
@@ -92,6 +93,7 @@ const SECTIONS = [
     { key: "notices", label: "플랫폼 공지", en: "BROADCAST", icon: "bell" },
     { key: "notifTemplate", label: "알림 문구", en: "MESSAGES", icon: "chat" },
     { key: "forceUpdate", label: "화주사 강제 업데이트", en: "UPDATE", icon: "refresh" },
+    { key: "mobilePreview", label: "모바일 화면", en: "MOBILE", icon: "phone" }, // 📱 2026-11-14 관리자메뉴에서 옮김 — 크게(기기 · 확대 고르기)
     { key: "homepage", label: "홈페이지", en: "HOMEPAGE", icon: "globe" }, // ⭐ 2026-11-03 소개 홈페이지 전체 편집기
     { key: "landingEdit", label: "랜딩페이지 편집", en: "LANDING", icon: "globe" },
     { key: "integrations", label: "연동 설정", en: "INTEGRATIONS", icon: "link" }, // 🔌 2026-11-07 국세청 · 기상청 · 팝빌
@@ -1312,6 +1314,7 @@ function PlatformCenterInner({ user }) {
     : <React.Suspense fallback={<div className="p-6 text-[13px] text-[#7A879C]">편집기를 여는 중…</div>}><HomepageEditor /></React.Suspense>;
   else if (tab === "integrations") body = <><Hero en="OPERATIONS · INTEGRATIONS" title="연동 설정" desc="국세청 · 기상청 · 팝빌 연동 상태를 보고 시험해요. 키는 Firebase 비밀값에만 두고 화면에는 보이지 않아요." /><React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중</div>}><IntegrationSettings /></React.Suspense></>;
   else if (tab === "landingEdit") body = <><Hero en="OPERATIONS · LANDING" title="랜딩페이지 편집" desc="로그인 전 홈페이지 문구·이미지를 바꿉니다." /><LandingPageEditPanel /></>;
+  else if (tab === "mobilePreview") body = <><Hero en="OPERATIONS · MOBILE" title="모바일 화면" desc="지금 로그인한 계정의 모바일 화면을 휴대폰 크기 그대로, 크게 확인해요." /><React.Suspense fallback={null}><MobilePreviewPanelLazy /></React.Suspense></>;
   else if (tab === "sessions") body = <><Hero en="SECURITY · SESSIONS" title="로그인 관리" desc="지금 로그인 중인 모든 기기를 보고, 필요하면 강제로 내보냅니다." /><AdminSessionsPanel isTotalMaster company="" /></>;
   else if (tab === "sessionLogs") body = <SessionLogsPanel />;
   else if (tab === "errorReports") body = <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}><ErrorReportsPanel /></React.Suspense>;

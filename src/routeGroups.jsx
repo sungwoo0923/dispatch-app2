@@ -17,7 +17,7 @@ export const rgLabel = (g) => (g === RG_NONE ? "일반오더" : g);
 // 들어갈 때마다 [전체]부터 보는 화면 — 여기서 고른 탭은 그 화면에 있는 동안만 쓰고, 다른 화면의 선택(내 담당 등)은 그대로 둔다
 const RG_ALL_FIRST = ["매출관리", "정산관리"];
 // 🗂 2026-11-14 탭 줄이 보이고 거르는 화면 — 배차 · 정산 · 매출에서만. 다른 화면(기사관리 · 지입차관리 · 홈 …)은 탭 없이 전체 오더
-export const RG_SCREENS = ["배차관리", "실시간배차현황", "배차현황", "정산관리", "매출관리"];
+export const RG_SCREENS = ["실시간배차현황", "배차현황", "정산관리", "매출관리"]; // 🛠 2026-11-14 오더등록(배차관리)에서는 탭 줄을 보이지 않는다(사용자 요청)
 export const rgOnScreen = (sc) => RG_SCREENS.includes(String(sc || ""));
 export const routeGroupOf = (row) => String(row?.담당노선구분 || String(row?.이전출처 || "").split("!")[0] || "").trim();
 const LS = (uid) => `kpRouteGroup:${uid || "me"}`;
@@ -117,7 +117,8 @@ export function SheetLiveChip({ role, userCompany, compact = false }) {
   if (!st?.enabled) return null;
   const late = now - (st.checkedAt || 0) > 15 * 60 * 1000;
   const bad = !!st.error || late;
-  const main = st.error ? st.error : late ? `확인 지연 · 마지막 확인 ${agoK(st.checkedAt, now)}` : st.changedAt ? `${agoK(st.changedAt, now)} 반영` : "대기 중";
+  // 🛠 2026-11-14 "14시간 전 반영"이 확인이 멈춘 것처럼 보였다 — 실제로는 마지막으로 바뀐 것이 있던 시각. 확인 시각을 앞에 같이 보여 준다
+  const main = st.error ? st.error : late ? `확인 지연 · 마지막 확인 ${agoK(st.checkedAt, now)}` : `${agoK(st.checkedAt, now)} 확인${st.changedAt ? ` · 마지막 변경 ${agoK(st.changedAt, now)}` : ""}`;
   const detail = !bad && st.changedAt ? [st.created ? `새 ${st.created}` : "", st.updated ? `고침 ${st.updated}` : "", st.removed ? `삭제 ${st.removed}` : ""].filter(Boolean).join(" · ") : "";
   return (
     <span data-kp="sheet-live-chip" title={`구글시트 실시간 반영 — 약 10초마다 시트를 확인합니다${st.checkedAt ? `\n마지막 확인 ${new Date(st.checkedAt).toLocaleString("ko-KR", { hour12: false })}` : ""}${st.heldBack ? `\n시트에 없는 오더 ${st.heldBack}건은 너무 많아 지우지 않았습니다` : ""}`}

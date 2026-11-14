@@ -110,7 +110,6 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const [editWorkEnd, setEditWorkEnd] = useState("18:00");
   const [editMode, setEditMode] = useState(false);
   const [memberModal, setMemberModal] = useState(false); // 회원 관리 창(승인·거절·정보수정·마스터·퇴사·삭제)
-  const [showMobilePreview, setShowMobilePreview] = useState(false);
 
   // 연동 운송사 탭 state
   const [managingLinkedApp, setManagingLinkedApp] = useState(null);
@@ -928,7 +927,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       onSelect={setAdminTab}
       heroTitle={`안녕하세요, ${myDisplayName}님`}
       heroSubtitle={deptMode ? (pendingUserCount > 0 ? `가입 승인 대기 ${pendingUserCount}명이 있어요 — 회원 관리에서 직책·부서·권한을 정하고 승인해 주세요` : `${deptMode === "hr" ? "인사" : "경리"} 관리자메뉴 — 가입 승인 대기가 없습니다`) : todoCount > 0 ? `처리할 일이 ${todoCount}건 있어요 — 승인 대기 ${pendingUserCount} · 연동 대기 ${linkedPendingCount || 0} · 미답변 문의 ${unansweredInquiryCount || 0}` : "처리할 일이 모두 끝났어요. 수고하셨어요!"}
-      heroActions={[{ label: showMobilePreview ? "모바일 미리보기 닫기" : "모바일 미리보기", icon: "phone", active: showMobilePreview, onClick: () => setShowMobilePreview((v) => !v) }]}
+      heroActions={[] /* 📱 2026-11-14 모바일 미리보기는 관리센터 › 운영 › 모바일 화면으로 옮겼다 */}
       stats={[
         { label: "전체 사용자", value: visibleUsers.length, icon: "users", tone: "navy" },
         { label: "승인 완료", value: visibleUsers.filter((u) => u.approved !== false).length /* ⭐ 2026-11-02 점검 — approved 필드 없는 예전 계정도 승인 완료로 */, icon: "check", tone: "green" },
@@ -1666,23 +1665,6 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
           )}
         </div>
 
-        {/* 모바일 미리보기 */}
-        {showMobilePreview && (
-          <div className="w-[420px] shrink-0">
-            <div className="sticky top-4 bg-white border border-gray-200 rounded-2xl shadow-lg overflow-hidden">
-              <div className="bg-[#1B2B4B] px-4 py-3 flex items-center justify-between">
-                <span className="text-white font-semibold text-[14px]"><EditableText id="adminMenu.mobilePreview.title" defaultText="모바일 미리보기" /></span>
-                <button onClick={() => setShowMobilePreview(false)} className="text-white/60 hover:text-white text-lg">✕</button>
-              </div>
-              <div className="p-3">
-                {/* ⭐ 2026-11-06 모바일 미리보기 — 예전 주소(/mobile)는 없는 화면이라 로그인 확인 → 로그인 화면 → /app 으로 몇 번 튕겼고,
-                    iframe이 저장소에 남은 다른 계정(최고관리자 등)을 먼저 집어 사무원 계정인데 최고관리자 화면이 보였다.
-                    이제 /app?kpmpv=1 로 바로 열고, iframe은 "지금 이 창에 로그인한 계정"만 받아 쓴다(firebase.js IS_MOBILE_PREVIEW). */}
-                <MobilePreviewFrame />
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* ====== 연동 화주사 관리 팝업 ====== */}
@@ -2600,19 +2582,3 @@ export function ShipperForceUpdatePanel({ currentVersion }) {
 }
 
 
-// ⭐ 2026-11-06 관리자메뉴 › 모바일 미리보기 iframe — 현재 계정(uid)이 바뀌면 새로 연다 · 다 열릴 때까지 로딩 표시
-function MobilePreviewFrame() {
-  const uid = auth.currentUser?.uid || "anon";
-  const [loaded, setLoaded] = useState(false);
-  const src = React.useMemo(() => {
-    if (isPreviewMode()) { const q = new URLSearchParams(window.location.search); q.set("kpmpv", "1"); return `/preview?${q.toString()}`; }
-    return `/app?kpmpv=1&u=${encodeURIComponent(uid.slice(0, 8))}`;
-  }, [uid]);
-  useEffect(() => { setLoaded(false); }, [src]);
-  return (
-    <div className="relative">
-      <iframe key={src} src={src} title="mobile-preview" onLoad={() => setLoaded(true)} className="w-full h-[760px] border border-gray-200 rounded-xl bg-[#0F1A30]" />
-      {!loaded && <div className="absolute inset-0 rounded-xl flex items-center justify-center bg-[#0F1A30] text-[#CFE0FF] text-[14px] font-bold">모바일 화면을 여는 중…</div>}
-    </div>
-  );
-}

@@ -83,8 +83,8 @@ jobs:
         run: |
           PART=$(printf '%s' "$ONLY" | tr ',' '\n' | grep -v '^functions' | paste -sd, - || true)
           if [ -z "$PART" ]; then echo "규칙 쪽 대상 없음 — 건너뜀"; exit 0; fi
-          # 구글 규칙 서버가 잠깐 응답하지 않는 경우(503 · 500 · 429)가 있어 최대 4번 다시 시도한다
-          for i in 1 2 3 4; do
+          # 구글 규칙 서버가 잠깐 응답하지 않는 경우(503 · 500 · 429)가 있어 최대 7번 다시 시도한다(🛠 2026-11-14 4번 → 7번, 간격도 길게 — 503 이 몇 분 이어진 적이 있다)
+          for i in 1 2 3 4 5 6 7; do
             set +e
             npx -y firebase-tools@13 deploy --only "$PART" --project dispatch-app-9b92f --non-interactive --force 2>&1 | tee "$RUNNER_TEMP/rules.log"
             CODE=${PIPESTATUS[0]}
@@ -94,9 +94,9 @@ jobs:
               echo "::warning::규칙이 이미 최신이라 다시 올리지 않았습니다(409 already exists) — 계속 진행합니다."
               exit 0
             fi
-            if grep -Eq "HTTP Error: (503|500|502|504|429)|currently unavailable|ETIMEDOUT|ECONNRESET" "$RUNNER_TEMP/rules.log" && [ "$i" -lt 4 ]; then
-              echo "::warning::구글 서버가 잠깐 응답하지 않습니다 — $((i * 20))초 뒤 다시 시도합니다($i/4)."
-              sleep $((i * 20))
+            if grep -Eq "HTTP Error: (503|500|502|504|429)|currently unavailable|ETIMEDOUT|ECONNRESET" "$RUNNER_TEMP/rules.log" && [ "$i" -lt 7 ]; then
+              echo "::warning::구글 서버가 잠깐 응답하지 않습니다 — $((i * 30))초 뒤 다시 시도합니다($i/7)."
+              sleep $((i * 30))
               continue
             fi
             exit "$CODE"
@@ -108,7 +108,20 @@ jobs:
         run: |
           PART=$(printf '%s' "$ONLY" | tr ',' '\n' | grep '^functions' | paste -sd, - || true)
           if [ -z "$PART" ]; then echo "서버 기능 대상 없음 — 건너뜀"; exit 0; fi
-          npx -y firebase-tools@13 deploy --only "$PART" --project dispatch-app-9b92f --non-interactive --force
+          # 🛠 2026-11-14 서버 기능이 200개가 넘어 한꺼번에 올리면 구글이 일부를 "Quota Exceeded"로 거절한다
+          #  → 실패한 기능 이름만 골라 잠시 쉰 뒤 그것만 다시 올린다(최대 4번)
+          for i in 1 2 3 4; do
+            set +e
+            npx -y firebase-tools@13 deploy --only "$PART" --project dispatch-app-9b92f --non-interactive --force 2>&1 | tee "$RUNNER_TEMP/fn.log"
+            CODE=${PIPESTATUS[0]}
+            set -e
+            if [ "$CODE" -eq 0 ]; then exit 0; fi
+            FAILED=$(sed 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/fn.log" | grep -oE "Failed to (update|create) function [A-Za-z0-9_-]+" | awk '{print "functions:"$NF}' | sort -u | paste -sd, - || true)
+            if [ -z "$FAILED" ] || [ "$i" -ge 4 ]; then exit "$CODE"; fi
+            echo "::warning::서버 기능 일부가 구글 한도에 걸렸습니다 — $((i * 90))초 뒤 그것만 다시 올립니다($i/4): $FAILED"
+            PART="$FAILED"
+            sleep $((i * 90))
+          done
 
       - name: 규칙 배포 결과 확인
         if: steps.rules.outcome == 'failure'

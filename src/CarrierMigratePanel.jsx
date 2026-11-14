@@ -61,7 +61,7 @@ const Stat = ({ label, value, sub }) => (
 );
 
 // 🔁 2026-11-13 실시간 반영 — 시트에서만 입력 · 수정하는 운송사. 서버가 1분마다 시트를 보고 바뀐 줄만 오더에 반영한다(functions/sheetLiveOrders.js)
-const LIVE_DAYS = [[7, "최근 7일"], [14, "최근 14일"], [31, "최근 1개월"], [62, "최근 2개월"], [93, "최근 3개월"]];
+const LIVE_DAYS = [[7, "최근 7일"], [14, "최근 14일"], [31, "최근 1개월"], [62, "최근 2개월"], [93, "최근 3개월"], [400, "가져오기 시작일"]]; // 🛠 2026-11-14 가져오기 시작일(JY 10/1)이 있으면 서버는 그날부터 늘 비교한다
 const agoText = (ms) => { if (!ms) return "아직 없음"; const s = Math.max(0, Math.round((Date.now() - ms) / 1000)); return s < 60 ? "방금" : s < 3600 ? `${Math.floor(s / 60)}분 전` : s < 86400 ? `${Math.floor(s / 3600)}시간 전` : `${Math.floor(s / 86400)}일 전`; };
 // 서버 기능이 아직 배포되지 않았으면 예전 서버가 "알 수 없는 요청"이라고 답한다 → 무엇을 해야 하는지 알려 준다
 const liveErr = (m) => (/알 수 없는 요청/.test(String(m || "")) ? "서버 기능이 아직 배포되지 않았습니다. GitHub › Actions › Firebase 배포에서 \"전부(규칙+색인+저장소+functions)\"를 실행한 뒤 다시 열어 주세요." : m);
