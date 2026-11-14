@@ -71,6 +71,18 @@ export const VIEW_INFO = {
   acct: ["ACCOUNTING", "정산 · 회계 · 자금 · 비품", "money"],
   hr: ["HUMAN RESOURCES", "인사 기록 · 근태 · 연차 · 증명서", "idcard"],
 };
+// 🧾 2026-11-14 화면 전환 역할(통합관리자 · 최고관리자 · 회사 마스터)은 운송 화면에서 정산관리를 숨긴다 — 정산은 경리 화면 메뉴(PC · 모바일 같음)
+//  정산관리로 가는 바로가기를 누르면 경리 화면으로 바꿔서 연다(switchViewFor)
+export const VIEW_ONLY_MENUS = { 정산관리: "acct" };
+export function hiddenInSwitchView(realRole, view, menu) {
+  const sw = SWITCH_ROLES[realRole];
+  const home = VIEW_ONLY_MENUS[menu];
+  if (!sw || !home || !sw.views.some(([k]) => k === home)) return false;
+  return (view || sw.views[0][0]) === "dispatch";
+}
+export function switchViewFor(realRole, view, menu) {
+  return hiddenInSwitchView(realRole, view, menu) ? VIEW_ONLY_MENUS[menu] : "";
+}
 export function readSwitchView(realRole) {
   const sw = SWITCH_ROLES[realRole];
   if (!sw) return "";
