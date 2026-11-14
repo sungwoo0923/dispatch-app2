@@ -23,8 +23,10 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
   // 📡 2026-11-13 직원 화면(배차현황 · 모바일)에 "구글시트 실시간 · n분 전 반영"을 보여 주기 위한 상태 — companySettings/{회사}.sheetLiveStatus
   //  (sheetLive 설정 문서는 서버만 읽는다) 바뀐 것이 있을 때와 10분마다 한 번만 적는다(매분 적으면 모든 화면이 매분 다시 읽는다)
   const statusAt = new Map();
+  const pushModeOf = new Map(); // 🛠 2026-11-14 화면에 "프로그램 → 시트 쓰기" 상태(off · dry · on)도 보여 준다 — 꺼져 있어 시트에 안 써지는데 알 수 없었다
   async function writeStatus(co, patch, { force = false } = {}) {
     const now = Date.now();
+    if (pushModeOf.has(co)) patch = { pushMode: pushModeOf.get(co), ...patch };
     if (!force && now - (statusAt.get(co) || 0) < 60 * 1000) return; // 🛠 2026-11-14 10분 → 1분(화면의 "마지막 확인"이 실제와 맞게)
     statusAt.set(co, now);
     await db.collection("companySettings").doc(co).set({ sheetLiveStatus: { checkedAt: now, ...patch } }, { merge: true }).catch(() => {});
@@ -141,6 +143,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     if (push && housekeeping) { await push.purgeInactive(new Set(snap.docs.filter((d) => ["dry", "on"].includes((d.data() || {}).pushMode)).map((d) => (d.data() || {}).companyName || d.id))).catch(() => {}); await push.sweep().catch(() => {}); }
     for (const d of snap.docs) {
       const cfg = d.data() || {}; const co = cfg.companyName || d.id;
+      pushModeOf.set(co, ["dry", "on"].includes(cfg.pushMode) ? cfg.pushMode : "off");
       try {
         // 🔁 프로그램에서 바뀐 오더를 먼저 시트에 쓴다(켜 둔 회사만) → 그다음 시트를 읽어 맞춘다
         const pr = push && cfg.pushMode && cfg.pushMode !== "off" ? await push.process(co, cfg, { presetFor, placesFor }).catch((e) => { console.error(`[시트 쓰기 실패] ${co}:`, e?.message || e); return {}; }) : {};
