@@ -192,6 +192,7 @@ function SignupForm({ signupType, onBack }) {
   const [addressPopupOpen, setAddressPopupOpen] = useState(false);
   const addressBoxRef = useRef(null);
   const [termsAgreed, setTermsAgreed] = useState(false);
+  const [mfaChoice, setMfaChoice] = useState(""); // 🔐 2026-11-14 2차 인증 사용 여부(yes | no) — 승인 뒤 첫 로그인 때 반영(src/UserSecurity.jsx)
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
 
   const [loading, setLoading] = useState(false);
@@ -344,6 +345,7 @@ function SignupForm({ signupType, onBack }) {
     if (!email.trim()) return setError("이메일을 입력해주세요.");
     if (password.length < 6) return setError("비밀번호는 6자 이상 입력해주세요.");
     if (password !== passwordConfirm) return setError("비밀번호가 일치하지 않습니다.");
+    if (!mfaChoice) return setError("로그인 보안에서 2차 인증 사용 여부를 골라 주세요.");
     if (!termsAgreed || !privacyAgreed) return setError("이용약관 및 개인정보처리방침에 모두 동의해주세요.");
 
     if (signupType === "기존") {
@@ -375,6 +377,8 @@ function SignupForm({ signupType, onBack }) {
         requestedPlan: signupType === "신규" ? planId : "",
         ...(signupType === "신규" ? { requestedModules: bizPacked, bizHome: bizPacked[0] } : (bizHome ? { bizHome } : {})),
         status: null,
+        // 🔐 2026-11-14 가입할 때 고른 2차 인증 — yes: 첫 로그인 때 바로 만들기 / no: 30일 뒤 다시 묻기
+        mfaAsk: { answer: mfaChoice === "yes" ? "yes" : "no", at: Date.now(), from: "signup" },
         createdAt: serverTimestamp(),
       });
       if (hireDate) {
@@ -705,6 +709,24 @@ function SignupForm({ signupType, onBack }) {
               placeholder="비밀번호 다시 입력"
               className="w-full h-12 border border-[#DCE3EE] rounded-xl px-4 text-[15px] font-semibold text-[#0F1A30] placeholder:text-[#8E9BB2] focus:outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/15" />
           </Field>
+
+          {/* 🔐 2026-11-14 로그인 보안 — 2차 인증 사용 여부 */}
+          <SectionLabel>로그인 보안</SectionLabel>
+          <div className="md:col-span-2" data-signup-mfa>
+            <div className="grid gap-2.5 sm:grid-cols-2">
+              {[["yes", "2차 인증 사용", "로그인할 때 비밀번호 다음에 숫자 8자리 PIN(또는 키패드)을 한 번 더 확인합니다. 승인 뒤 첫 로그인 때 정합니다."], ["no", "비밀번호만 사용", "비밀번호만으로 로그인합니다. 나중에 내 정보 › 로그인 · 보안에서 언제든 켤 수 있습니다."]].map(([k, t, d]) => (
+                <button key={k} type="button" onClick={() => setMfaChoice(k)}
+                  className={`text-left rounded-xl border-2 px-4 py-3 transition ${mfaChoice === k ? "border-[#0F1A30] bg-[#F5F8FD]" : "border-[#DCE3EE] bg-white hover:border-[#9AB0D6]"}`}>
+                  <div className="flex items-center gap-2 text-[14.5px] font-black text-[#0F1A30]">
+                    <span className={`w-[18px] h-[18px] rounded-full border-2 grid place-items-center ${mfaChoice === k ? "border-[#0F1A30]" : "border-[#C9D3E3]"}`}>{mfaChoice === k && <span className="w-2 h-2 rounded-full bg-[#0F1A30]" />}</span>
+                    {t}{k === "yes" && <span className="text-[11px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-white">권장</span>}
+                  </div>
+                  <div className="text-[12.5px] text-[#5B6B85] mt-1 leading-relaxed pl-[26px]">{d}</div>
+                </button>
+              ))}
+            </div>
+            <div className="mt-2 text-[12px] text-[#8E9BB2]">휴대폰에서는 승인 뒤 Face ID · 지문 로그인도 등록할 수 있습니다.</div>
+          </div>
 
           {/* 약관 */}
           <SectionLabel>약관 동의</SectionLabel>

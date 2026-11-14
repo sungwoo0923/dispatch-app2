@@ -1444,7 +1444,7 @@ service cloud.firestore {
     //  운송사 직원은 부서·직책도(경리·인사·임원 권한이 부서/직책 이름으로 정해진다) — 인사·관리자는 예외
     function selfKeepOk() {
       return resource == null || resource.data.get('approved', true) == false || isTotalMasterUser()
-        || (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['companyName', 'linkedTransportCompany', 'permissions', 'subAdmin', 'subAdminPrevRole', 'employmentStatus', 'companyCode', 'resignedAt', 'workScope'])
+        || (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['companyName', 'linkedTransportCompany', 'permissions', 'subAdmin', 'subAdminPrevRole', 'employmentStatus', 'companyCode', 'resignedAt', 'workScope', 'mfaOpt', 'mfaKind', 'bioKeys'])
           // ⭐ 2026-11-09 마스터 위임 — 본인 마스터는 "내려놓기(true → false)"만 스스로 할 수 있다(예전엔 막혀 위임 후 마스터가 2명 남았다)
           && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['isMaster']) || request.resource.data.get('isMaster', false) == false)
           && (resource.data.get('role', '') in ['shipper', 'cafeUser'] || isHrStaff() || isCompanyAdmin(myCo())
@@ -2550,6 +2550,7 @@ service cloud.firestore {
         'pnkMembers', 'pnkPosts', 'pnkFiles', 'pnkTasks', 'pnkEvents', 'pnkSales', 'pnkServices', 'pnkReleases', 'pnkCompany', 'pnkFinance', 'pnkMail',
         //  사번 색인 · 전자결재 · 출퇴근 · 메일 서버 비밀값(서버만) · 외부 발송 횟수(서버만)
         'pnkEmpIndex', 'pnkApprovals', 'pnkAttendance', 'pnkMailSecrets', 'pnkMailUsage', 'pnkMfaSecrets', 'pnkMfaSessions', 'pnkUi', 'pnkUiHistory',
+        'logisPasskeys', 'logisPasskeyChal', // 👆 얼굴 · 지문 로그인 공개키 · 한 번 쓰는 확인값(서버만 — functions/logisPasskey.js)
         'publicRelease',
         'sheetLive', // 🔁 구글시트 실시간 반영 설정(서버만)
         'sheetPushQueue', // 🔁 프로그램 → 구글시트 반영 대기열 · 기록(서버만)

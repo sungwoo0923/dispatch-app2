@@ -6935,6 +6935,16 @@ exports.pnkMfa = functions.runWith({ timeoutSeconds: 30, memory: "256MB", ...app
   }
 });
 
+// 👆 2026-11-14 얼굴 인증 · 지문 로그인(WebAuthn) — 설명은 functions/logisPasskey.js 맨 위
+const _logisPasskey = require("./logisPasskey").makeLogisPasskey({ db, HttpsError: functions.https.HttpsError, createCustomToken: (uid) => getAuth().createCustomToken(uid), same: require("./pnkMfa").same });
+exports.logisPasskey = functions.runWith({ timeoutSeconds: 30, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
+  try { return await _logisPasskey(data || {}, context); } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error("[얼굴 · 지문 로그인] 실패:", e);
+    throw new functions.https.HttpsError("internal", "잠시 뒤 다시 해 주세요");
+  }
+});
+
 // 🏛 2026-11-07 공공데이터(국세청 사업자 상태 · 기상청 예보 · 기상특보) + 팝빌 어댑터 — 설명은 functions/publicData.js · functions/popbill.js 맨 위
 //  키: Firebase 비밀값 DATA_GO_KR_KEY(공공데이터포털 일반 인증키, 아직 없으면 "none"으로 두면 화면이 조용히 숨긴다)
 //   등록: firebase functions:secrets:set DATA_GO_KR_KEY

@@ -23047,7 +23047,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         <KpmCard en="ACCOUNT" title="계정" flush>
           <KpmRow label="회사" value={userCompany || "-"} />
           <KpmRow label="권한" value={ROLE_KO[role] || role || "-"} />
-          <KpmRow label="로그인 관리" sub="로그인된 기기 확인·연결 끊기 · 비밀번호 변경" onClick={() => setLoginMgrOpen(true)} right={go("열기")} />
+          <KpmRow label="로그인 · 보안" sub="2차 인증 · Face ID/지문 로그인 · 로그인된 기기 · 비밀번호" onClick={() => setLoginMgrOpen(true)} right={go("열기")} />
           {/* ⭐ 2026-11-02 원격지원 — */}
           {/* ⭐ 2026-11-03 원격 지원 요청은 PC 전용 */}
           {loginMgrOpen && <LoginManagerModal user={currentUser} onClose={() => setLoginMgrOpen(false)} />}

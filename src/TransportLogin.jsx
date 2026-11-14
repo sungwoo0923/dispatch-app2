@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import { imeFocusRef } from "./imeFocus";
 import { safeLocalSet, isQuota, freeLocalStorage, trimLocalStorage } from "./safeStorage";
 import { auth, db } from "./firebase";
-import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence, getAuth, multiFactor } from "firebase/auth";
+import { signInWithEmailAndPassword, signInWithCustomToken, sendPasswordResetEmail, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence, getAuth, multiFactor } from "firebase/auth";
 import { initializeApp, getApps } from "firebase/app";
 import BigCheck from "./components/BigCheck";
 import { doc, getDoc, getFirestore, collection, getDocs, query, where } from "firebase/firestore";
@@ -12,7 +12,8 @@ import { Loader2 } from "lucide-react";
 import { useMfaPrompt, mfaErrorText } from "./MfaModal";
 import { LogisMark, LogisWordmark, LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { MARKET_NAME } from "./orderMarketConfig"; // ⭐ 2026-11-06 허브(예전 배차마당) 이름
-import { AdminLoginGate, adminAuthTime, isAdminGatePassed, ADMIN_GATE_EVENT, warmAdminGate } from "./AdminGate"; // 🔐 2026-11-11 2차 비밀번호를 로그인 카드 안에서
+import { AdminLoginGate, adminAuthTime, isAdminGatePassed, markAdminGatePassed, ADMIN_GATE_EVENT, warmAdminGate } from "./AdminGate"; // 🔐 2026-11-11 2차 비밀번호를 로그인 카드 안에서
+import { UserLoginGate, BioLoginButton } from "./UserSecurity"; // 🔐 2026-11-14 일반 계정 2차 인증(선택) · 얼굴 · 지문 로그인
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
@@ -226,6 +227,7 @@ export default function TransportLogin() {
       const inputCompanyName = companyName.trim();
       const inputCompanyCode = companyCode.trim();
       let needGate = inputEmail === TOTAL_MASTER_EMAIL;
+      let userMfa = ""; // 일반 계정이 켠 2차 인증 방식(pin | keypad)
 
       if (inputEmail !== TOTAL_MASTER_EMAIL) {
         const userSnap = await getDoc(doc(db, "users", uid));
@@ -254,6 +256,7 @@ export default function TransportLogin() {
         // ⭐ 2026-11-05 부관리자(role totalMaster) — 최고관리자처럼 아무 운송사로나 들어간다(회사명·코드 확인 생략)
         const isSubAdmin = userData.role === "totalMaster" && userData.subAdmin === true && userData.userStatus !== "banned" && userData.userStatus !== "suspended";
         needGate = userData.role === "totalMaster";
+        if (userData.mfaOpt === true) userMfa = userData.mfaKind === "keypad" ? "keypad" : "pin";
         if (!isSubAdmin && (userData.companyName || "") !== inputCompanyName) {
           sessionStorage.removeItem("transportValidating");
           window.__kpGateInline = false;
@@ -335,6 +338,15 @@ export default function TransportLogin() {
           ? { remember: true, autoLogin, companyCode: inputCompanyCode, companyName: inputCompanyName, email: email.trim() }
           : { remember: false, autoLogin }));
       } catch { /* 저장 실패 무시 */ }
+      // 🔐 2026-11-14 일반 계정 — 2차 인증을 켠 계정만 같은 카드에서 PIN · 키패드
+      if (!needGate && userMfa) {
+        const authTime = await adminAuthTime(credential.user);
+        if (!isAdminGatePassed(uid, authTime)) {
+          try { document.activeElement?.blur?.(); } catch { /* 무시 */ }
+          setGate({ user: credential.user, authTime, general: true, kind: userMfa });
+          return;
+        }
+      }
       // 🔐 최고관리자 · 부관리자 — 같은 카드에서 2차 비밀번호(키패드)
       if (needGate) {
         const authTime = await adminAuthTime(credential.user);
@@ -373,6 +385,37 @@ export default function TransportLogin() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // 👆 얼굴 · 지문 로그인 — 서버가 확인하고 준 로그인 토큰으로 들어온다(2차 비밀번호 · 회사코드는 묻지 않는다)
+  //  최고관리자는 어느 운송사로 들어갈지 정해야 해서 지금 화면에 적힌(저장된) 회사명을 쓴다
+  const bioSignIn = async (r) => {
+    setError(null); setLoading(true);
+    try {
+      sessionStorage.setItem("transportValidating", "true");
+      window.__kpGateInline = true; // 전체 화면 보안 확인이 잠깐 뜨지 않게(아래에서 통과 표시)
+      await setPersistence(auth, browserLocalPersistence).catch(() => {});
+      trimLocalStorage();
+      const cred = await signInWithCustomToken(auth, r.token);
+      const co = r.email === TOTAL_MASTER_EMAIL || r.sub ? (companyName.trim() || localStorage.getItem("loginCompany") || "") : r.companyName;
+      if ((r.email === TOTAL_MASTER_EMAIL || r.sub) && !co) {
+        sessionStorage.removeItem("transportValidating");
+        await signOut(auth).catch(() => {});
+        setError("들어갈 회사명을 먼저 적어 주세요.");
+        return;
+      }
+      safeLocalSet("loginCompany", co);
+      safeLocalSet("userCompany", co);
+      if (r.companyCode) safeLocalSet("transportCode", r.companyCode);
+      window.dispatchEvent(new CustomEvent("kp:loginCompany", { detail: co }));
+      markAdminGatePassed(cred.user.uid, await adminAuthTime(cred.user)); // 얼굴 · 지문 = 2단계 확인 완료
+      window.__kpGateInline = false;
+      finishLogin();
+    } catch (e) {
+      window.__kpGateInline = false;
+      sessionStorage.removeItem("transportValidating");
+      setError(e?.message || "얼굴 · 지문으로 로그인하지 못했습니다");
+    } finally { setLoading(false); }
   };
 
   const resetPw = async () => {
@@ -473,7 +516,7 @@ export default function TransportLogin() {
           <div className="bg-white rounded-[26px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_24px_60px_rgba(15,26,48,0.10)] px-5 sm:px-10 pt-6 sm:pt-9 pb-6 sm:pb-8">
             <div className="text-[11.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]">TRANSPORT SIGN IN</div>
             <h1 className="mt-1 text-[22px] sm:text-[26px] font-black text-[#0F1A30] tracking-tight">운송사 로그인</h1>
-            <p className="text-[12.5px] sm:text-[13.5px] text-[#7A879C] mt-1 mb-5 sm:mb-7">{gate ? `${gate.sub ? "부관리자" : "최고관리자"} 계정 — 2차 비밀번호를 넣어 주세요` : "승인 메일로 받은 회사코드로 로그인하세요"}</p>
+            <p className="text-[12.5px] sm:text-[13.5px] text-[#7A879C] mt-1 mb-5 sm:mb-7">{gate ? (gate.general ? "2차 인증을 켠 계정입니다 — 한 번 더 확인합니다" : `${gate.sub ? "부관리자" : "최고관리자"} 계정 — 2차 비밀번호를 넣어 주세요`) : "승인 메일로 받은 회사코드로 로그인하세요"}</p>
 
             {gate ? (
               <div data-login-gate>
@@ -487,9 +530,13 @@ export default function TransportLogin() {
                   <span className="text-[11.5px] font-bold text-[#9AA9C3] truncate max-w-[110px]">{companyName}</span>
                 </div>
                 {/* ② 2차 — 화면 키패드(같은 카드 안) */}
-                <AdminLoginGate inline key={`${gate.user.uid}:${gate.authTime}`} user={gate.user} authTime={gate.authTime} sub={gate.sub} onCancel={cancelGate} />
+                {gate.general
+                  ? <UserLoginGate inline key={`${gate.user.uid}:${gate.authTime}`} user={gate.user} authTime={gate.authTime} kind={gate.kind} onCancel={cancelGate} />
+                  : <AdminLoginGate inline key={`${gate.user.uid}:${gate.authTime}`} user={gate.user} authTime={gate.authTime} sub={gate.sub} onCancel={cancelGate} />}
               </div>
             ) : (<>
+            {/* 👆 2026-11-14 이 기기에 얼굴 · 지문을 등록한 계정 — 맨 위에서 비밀번호 없이 바로(등록 안 한 기기에는 안 보인다) */}
+            <BioLoginButton onToken={bioSignIn} disabled={loading} divider={<div className="flex items-center gap-3 my-4"><span className="flex-1 h-px bg-[#EEF1F6]" /><span className="text-[11.5px] font-bold text-[#9AA9C3]">또는 비밀번호로 로그인</span><span className="flex-1 h-px bg-[#EEF1F6]" /></div>} />
             {field("code", "회사코드", (
               <input type="text" placeholder="승인 후 발급된 코드" value={companyCode} onChange={(e) => setCompanyCode(e.target.value.toUpperCase())} onKeyDown={handleKeyDown}
                 className={`${inputCls} ${companyCode ? "tracking-[0.12em] tabular-nums" : ""}`} />

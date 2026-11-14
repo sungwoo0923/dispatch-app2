@@ -15,10 +15,21 @@
 //     받은 토큰(idToken)을 action "trust" 로 보낸다 → 서버가 토큰의 전화번호 = 등록 번호(users/{uid}.pcVerifyPhone)인지 확인하고 기기를 등록한다
 //   · 등록된 번호가 아직 없으면 그때 인증한 번호를 등록한다(처음 한 번)
 //   · app: "logis" 는 인트라넷 문(pnkMfaSessions)을 건드리지 않는다(로지스웹과 인트라넷은 로그인이 따로라 서로 밀어내면 안 된다)
+// 🔐 2026-11-14 일반 계정도 2차 인증(선택) — 최고관리자 · 부관리자가 아닌 계정은 본인이 켤 때만 묻는다(app: "logis")
+//   · 방식(kind): "pin" = 숫자 8자리 / "keypad" = 화면 키패드(영문 · 숫자 8자 이상, 최고관리자와 같은 방식)
+//   · 켜기: action "setup" { code, kind } → pnkMfaSecrets/{uid} { opt: true, kind, h, salt } + users/{uid}.mfaOpt = true(화면이 로그인 때 물을지 판단)
+//   · 끄기: action "off" { code } → 비밀번호를 지우고 users/{uid}.mfaOpt = false, mfaAsk = { answer: "no", at }(한 달 뒤 다시 물어봄)
+//   · 일반 계정은 처음 보는 기기 문자 인증을 하지 않는다(문자는 최고관리자 · 부관리자만)
+//   · users/{uid}.mfaOpt · mfaKind 는 서버만 바꾼다(firestore.rules selfKeepOk)
 const crypto = require("crypto");
 
 const SUPER_EMAIL = "tjddnqkf@naver.com";
 const CODE_RE = /^[A-Za-z0-9!@#$%^&*._-]{8,20}$/;
+const PIN_RE = /^\d{8}$/;
+const EASY_RE = /^(\d)\1+$|^(01234567|12345678|23456789|87654321|98765432|abcdefgh|11111111|00000000|password)/i;
+const kindOf = (k) => (k === "pin" ? "pin" : "keypad");
+const codeOk = (kind, code) => (kindOf(kind) === "pin" ? PIN_RE.test(code) : CODE_RE.test(code));
+const codeRule = (kind) => (kindOf(kind) === "pin" ? "숫자 8자리로 정해 주세요" : "영문 · 숫자 8자 이상으로 정해 주세요");
 const MAX_FAIL = 5;
 const LOCK_MS = 10 * 60 * 1000;
 const PENDING_MS = 10 * 60 * 1000; // 2차 비밀번호 확인 뒤 문자 인증을 마칠 때까지
@@ -46,12 +57,69 @@ function makePnkMfa({ db, HttpsError, Timestamp, now = () => Date.now(), verifyI
     const d = u?.exists ? u.data() : {};
     const phone = String(d.pcVerifyPhone || "");
     if (email === SUPER_EMAIL) return { uid, required: true, superMain: true, phone };
-    return { uid, required: d.role === "totalMaster", superMain: false, sub: d.subAdmin === true, phone };
+    return { uid, required: d.role === "totalMaster", superMain: false, sub: d.subAdmin === true, phone, email };
   }
   const authTime = (context) => Number(context.auth.token?.auth_time || 0);
   async function openSession(uid, context, remember) {
     const ms = remember ? 30 * 86400e3 : 12 * 3600e3;
     await db.doc(`pnkMfaSessions/${uid}`).set({ authTime: authTime(context), until: Timestamp.fromMillis(now() + ms), at: Timestamp.fromMillis(now()), remember: !!remember });
+  }
+
+  // 틀린 횟수 · 잠금 — 맞으면 true, 틀리면 오류를 던진다
+  async function checkCode(secRef, sec, code) {
+    const locked = sec?.lockUntil && sec.lockUntil > now() ? sec.lockUntil : 0;
+    if (locked) throw new HttpsError("resource-exhausted", `여러 번 틀려 잠겼습니다. ${Math.ceil((locked - now()) / 60000)}분 뒤 다시 해 주세요`);
+    if (!same(String(code || ""), sec)) {
+      const fails = (sec.fails || 0) + 1;
+      await secRef.set({ fails: fails >= MAX_FAIL ? 0 : fails, lockUntil: fails >= MAX_FAIL ? now() + LOCK_MS : 0 }, { merge: true });
+      throw new HttpsError("permission-denied", fails >= MAX_FAIL ? "5번 틀려 10분 동안 잠겼습니다" : `2차 비밀번호가 맞지 않습니다 (${fails}/${MAX_FAIL})`);
+    }
+    if (sec.fails || sec.lockUntil) await secRef.set({ fails: 0, lockUntil: 0 }, { merge: true });
+    return true;
+  }
+  const userFlag = (uid, v) => db.doc(`users/${uid}`).set(v, { merge: true }).catch(() => {});
+
+  // 일반 계정(선택) — 위 설명
+  async function generalUser(me, data, action, secRef) {
+    const sec = (await secRef.get()).data() || null;
+    const on = !!(sec?.opt && sec?.h);
+    const kind = kindOf(sec?.kind);
+    if (action === "status") {
+      const locked = sec?.lockUntil && sec.lockUntil > now() ? sec.lockUntil : 0;
+      return { required: on, optional: true, opt: on, hasCode: on, kind, locked, v: 3 };
+    }
+    if (action === "setup") {
+      if (on) throw new HttpsError("already-exists", "이미 2차 인증을 쓰고 있습니다");
+      const k = kindOf(data.kind);
+      const code = String(data.code || "");
+      if (!codeOk(k, code)) throw new HttpsError("invalid-argument", `2차 비밀번호는 ${codeRule(k)}`);
+      if (EASY_RE.test(code)) throw new HttpsError("invalid-argument", "너무 쉬운 2차 비밀번호입니다");
+      await secRef.set({ ...hashCode(code), opt: true, kind: k, fails: 0, lockUntil: 0, setAt: now() });
+      await userFlag(me.uid, { mfaOpt: true, mfaKind: k, mfaAsk: { answer: "yes", at: now() } });
+      return { ok: true, opt: true, kind: k, v: 3 };
+    }
+    if (action === "verify" || action === "change" || action === "off") {
+      if (!on && action === "verify") return { ok: true, required: false };
+      if (!on) throw new HttpsError("failed-precondition", "2차 인증을 쓰고 있지 않습니다");
+      await checkCode(secRef, sec, data.code);
+      if (action === "off") {
+        await secRef.delete();
+        await userFlag(me.uid, { mfaOpt: false, mfaKind: null, mfaAsk: { answer: "no", at: now() } });
+        return { ok: true, opt: false };
+      }
+      if (action === "change") {
+        const k = data.kind ? kindOf(data.kind) : kind;
+        const nc = String(data.newCode || "");
+        if (!codeOk(k, nc)) throw new HttpsError("invalid-argument", `새 2차 비밀번호는 ${codeRule(k)}`);
+        if (EASY_RE.test(nc)) throw new HttpsError("invalid-argument", "너무 쉬운 2차 비밀번호입니다");
+        await secRef.set({ ...hashCode(nc), kind: k, fails: 0, lockUntil: 0, setAt: now() }, { merge: true });
+        await userFlag(me.uid, { mfaKind: k });
+        return { ok: true, kind: k };
+      }
+      return { ok: true, v: 3 };
+    }
+    if (action === "trust") return { ok: true };
+    throw new HttpsError("invalid-argument", "알 수 없는 요청");
   }
 
   return async function pnkMfa(data, context) {
@@ -65,7 +133,23 @@ function makePnkMfa({ db, HttpsError, Timestamp, now = () => Date.now(), verifyI
       await Promise.all([db.doc(`pnkMfaSecrets/${target}`).delete(), db.doc(`pnkMfaSessions/${target}`).delete()]);
       return { ok: true };
     }
-    if (!me.required) return { required: false, ok: true };
+    // 🔐 2026-11-14 일반 계정 2차 인증 초기화 — 그 회사 관리자(관리자 · 통합관리자 · 인사관리 · 회사 마스터) · 최고관리자 · 부관리자
+    //  최고관리자 · 부관리자 계정의 2차 비밀번호는 여기서 못 지운다(위 "reset" — 최고관리자 본 계정만)
+    if (action === "userReset") {
+      const target = String(data.uid || "");
+      if (!target || target === me.uid) throw new HttpsError("invalid-argument", "대상을 확인해 주세요");
+      const [meDoc, tDoc] = await Promise.all([db.doc(`users/${me.uid}`).get(), db.doc(`users/${target}`).get()]);
+      const md = meDoc.exists ? meDoc.data() : {};
+      const td = tDoc.exists ? tDoc.data() : null;
+      if (!td) throw new HttpsError("not-found", "계정을 찾지 못했습니다");
+      if (td.role === "totalMaster") throw new HttpsError("permission-denied", "최고관리자 · 부관리자 계정은 여기서 초기화할 수 없습니다");
+      const coAdmin = (md.isMaster === true || ["admin", "allMgr", "hrManager", "hrAcct"].includes(md.role)) && String(md.companyName || "") === String(td.companyName || "") && !!md.companyName;
+      if (!(me.required || coAdmin)) throw new HttpsError("permission-denied", "회사 관리자만 초기화할 수 있습니다");
+      await db.doc(`pnkMfaSecrets/${target}`).delete().catch(() => {});
+      await userFlag(target, { mfaOpt: false, mfaKind: null, mfaAsk: { answer: "no", at: now(), resetBy: me.uid } });
+      return { ok: true };
+    }
+    if (!me.required) return generalUser(me, data, action, secRef);
     const sec = (await secRef.get()).data() || null;
     const ses = (await db.doc(`pnkMfaSessions/${me.uid}`).get()).data() || null;
     const locked = sec?.lockUntil && sec.lockUntil > now() ? sec.lockUntil : 0;
@@ -85,7 +169,7 @@ function makePnkMfa({ db, HttpsError, Timestamp, now = () => Date.now(), verifyI
     };
     if (action === "status") {
       const valid = !!ses && ses.authTime === authTime(context) && ses.until?.toMillis?.() > now();
-      return { required: true, hasCode: !!sec?.h, valid, locked, trusted, v: 2 };
+      return { required: true, admin: true, kind: "keypad", hasCode: !!sec?.h, valid, locked, trusted, v: 2 };
     }
     // 3차 문자 인증 확인 → 이 기기를 등록하고 문을 연다
     if (action === "trust") {
@@ -135,4 +219,4 @@ function makePnkMfa({ db, HttpsError, Timestamp, now = () => Date.now(), verifyI
   };
 }
 
-module.exports = { makePnkMfa, hashCode, same };
+module.exports = { makePnkMfa, hashCode, same, devKey };

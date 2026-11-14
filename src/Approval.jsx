@@ -2160,9 +2160,35 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
 }
 
 // ─────────────────────────── 문서 목록 ───────────────────────────
-function DocList({ docs, onOpen, empty, uid, compact = false }) {
+// ⚡ 2026-11-14 결재함 '전체'가 느리던 문제 — 문서가 많으면 한 번에 다 그리지 않고 처음 60건만, 끝에 닿으면 60건씩 더 그린다
+const AP_PAGE = 60;
+function DocList({ docs, onOpen, empty, uid, compact = false, more = false }) {
   const [sortMode, setSortMode] = React.useState(() => { try { return localStorage.getItem("kpApSort") || "status"; } catch { return "status"; } });
   const pickSort = (m) => { setSortMode(m); try { localStorage.setItem("kpApSort", m); } catch { /* 무시 */ } };
+  const [shown, setShown] = React.useState(AP_PAGE);
+  const total = docs ? docs.length : 0;
+  React.useEffect(() => { setShown(AP_PAGE); }, [docs === null, sortMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  const endRef = React.useRef(null);
+  React.useEffect(() => {
+    const el = endRef.current;
+    if (!el || shown >= total || typeof IntersectionObserver === "undefined") return undefined;
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) setShown((n) => n + AP_PAGE); }, { rootMargin: "600px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [shown, total]);
+  // 날짜 묶음 · 정렬은 문서 목록이 바뀔 때만 다시 계산(예전엔 화면이 다시 그려질 때마다 전부 다시 묶었다)
+  const sorted = React.useMemo(() => {
+    if (!docs || !docs.length) return [];
+    const rankOf = (d) => {
+      if (myTurn(d, uid)) return 0;
+      if (d.status === "pending" || d.cancel?.status === "pending") return 1;
+      if (d.status === "approved") return payState(d) === "wait" ? 2 : 3;
+      if (d.status === "rejected") return 4;
+      return 5;
+    };
+    return docs.map((d) => { const ms = toMs(d.createdAt); return { d, ms, k: ymd(ms), r: sortMode === "status" ? rankOf(d) : 0 }; })
+      .sort((a, b) => b.k.localeCompare(a.k) || a.r - b.r || b.ms - a.ms);
+  }, [docs, sortMode, uid]);
   if (docs === null) return <div className="py-16 text-center text-[14.5px] text-[#5B6B85]">불러오는 중…</div>;
   if (!docs.length) return (
     <div className="py-16 text-center">
@@ -2174,17 +2200,11 @@ function DocList({ docs, onOpen, empty, uid, compact = false }) {
   // ⭐ 2026-11-07 같은 날짜 안에서는 처리할 것 먼저 — 내 차례 → 진행 중 → 지급 대기 → 결재 완료 → 반려 → 취소·회수 (같은 단계는 최신순)
   //  위쪽 [진행 중 먼저 | 최신순] 으로 바꿀 수 있고, 고른 값은 이 기기에 기억
   const WD = "일월화수목금토";
-  const rankOf = (d) => {
-    if (myTurn(d, uid)) return 0;
-    if (d.status === "pending" || d.cancel?.status === "pending") return 1;
-    if (d.status === "approved") return payState(d) === "wait" ? 2 : 3;
-    if (d.status === "rejected") return 4;
-    return 5; // cancelled · withdrawn 등
-  };
+  // 순서: 내 차례 → 진행 중 → 지급 대기 → 결재 완료 → 반려 → 취소·회수 (같은 단계는 최신순) — 위 sorted
+  const dayCount = new Map();
+  sorted.forEach((x) => dayCount.set(x.k, (dayCount.get(x.k) || 0) + 1));
   const groups = [];
-  docs.forEach((d) => { const k = ymd(toMs(d.createdAt)); const g = groups.find((x) => x.k === k); if (g) g.list.push(d); else groups.push({ k, list: [d] }); });
-  groups.sort((a, b) => b.k.localeCompare(a.k));
-  groups.forEach((g) => g.list.sort((a, b) => (sortMode === "status" ? rankOf(a) - rankOf(b) : 0) || toMs(b.createdAt) - toMs(a.createdAt)));
+  sorted.slice(0, shown).forEach((x) => { const g = groups[groups.length - 1]; if (g && g.k === x.k) g.list.push(x.d); else groups.push({ k: x.k, n: dayCount.get(x.k), list: [x.d] }); });
   return (
     <div>
       <div className="flex items-center justify-end gap-1.5 px-3.5 md:px-5 py-2 border-b border-[#EEF1F6] bg-white" data-ap-sort>
@@ -2199,7 +2219,7 @@ function DocList({ docs, onOpen, empty, uid, compact = false }) {
       <div className="sticky top-0 z-[1] px-3.5 md:px-5 py-1.5 bg-[#F5F8FD] border-y border-[#EEF1F6] flex items-center gap-2">
         <span className="text-[12.5px] font-black text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{g.k.replaceAll("-", ".")}</span>
         <span className="text-[12px] font-bold text-[#7A879C]">{WD[new Date(g.k + "T00:00:00").getDay()]}요일</span>
-        <span className="ml-auto text-[11.5px] font-bold text-[#9AA9C3]">{g.list.length}건</span>
+        <span className="ml-auto text-[11.5px] font-bold text-[#9AA9C3]">{g.n}건</span>
       </div>
       <div className="divide-y divide-[#F1F4F9]">
       {g.list.map((d) => (
@@ -2237,6 +2257,12 @@ function DocList({ docs, onOpen, empty, uid, compact = false }) {
       </div>
       </div>
       ))}
+      {shown < total && (
+        <div ref={endRef} className="py-3 text-center">
+          <button type="button" onClick={() => setShown((n) => n + AP_PAGE)} className="h-9 px-4 rounded-lg border border-[#DCE3EE] bg-white text-[13px] font-bold text-[#3A4A66] hover:bg-[#F5F8FD]">더 보기 ({shown.toLocaleString()} / {total.toLocaleString()}건)</button>
+        </div>
+      )}
+      {more && <div className="py-2.5 text-center text-[12.5px] font-bold text-[#9AA9C3]" data-ap-more>회사 문서를 더 불러오는 중…</div>}
     </div>
   );
 }
@@ -2638,7 +2664,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
             return (<>
               <Tabs tab={tab} setTab={setTab} tabs={keys.map((k) => [k, label[k], F(k).length, k === "cc" ? F(k).filter((d) => ccUnread(d, uid)).length : 0])} />
               <ListTools f={lf} setF={setLf} drafters={drafters} />
-              <DocList compact={wide} uid={uid} docs={list === null || (admin && companyAll === null) ? null : F(tab)} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from || lf.who ? "조건에 맞는 문서가 없습니다" : tab === "pending" ? "진행 중인 문서가 없습니다" : tab === "paywait" ? "지급을 기다리는 문서가 없습니다" : "문서가 없습니다"} />
+              <DocList compact={wide} uid={uid} docs={list === null ? null : F(tab)} more={admin && companyAll === null} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from || lf.who ? "조건에 맞는 문서가 없습니다" : tab === "pending" ? "진행 중인 문서가 없습니다" : tab === "paywait" ? "지급을 기다리는 문서가 없습니다" : "문서가 없습니다"} />
             </>);
           })()}
         </div>
