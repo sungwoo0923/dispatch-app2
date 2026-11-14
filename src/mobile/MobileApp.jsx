@@ -11,7 +11,9 @@ import { useCompanyFeatures } from "../companyFeatures"; // ⭐ 2026-11-04 마�
 import { useBizModules, readBiz, writeBiz, bizInfo } from "../bizModules";
 import { reportScreen, installScreenVisibility, mobileScreenLabel } from "../screenReport";
 import { normScope } from "../workScope";
-import { useRouteGroupFilter, RouteGroupDropdown, SheetLiveChip } from "../routeGroups";
+import { useRouteGroupFilter, RouteGroupDropdown, SheetLiveChip, RouteGroupField } from "../routeGroups";
+import OrderStaffFields from "../OrderStaffFields"; // 🧭 2026-11-14 PC와 같게 — 수정할 때 [담당자 변경](배차담당자 · 차량배정자)
+import { RecurringManagerModal } from "../AutomationPanels"; // 🧭 2026-11-14 PC와 같게 — 정기오더
 import { allowedModules } from "../freight/freightCore";
 import BizSwitcher from "../freight/BizSwitcher";
 import { useCompanyDropdownSync, dropdownList } from "../companyDropdownOptions";
@@ -4757,6 +4759,8 @@ const groupedByDate = useMemo(() => {
       회전수: form.운행유형 === "왕복" ? Math.max(1, Number(form.회전수) || 1) : 1, // ★ 회전 운행(왕복일 때만)
       적요: form.적요 || "",
       메모: form.적요 || "",
+      ...((!form._editId || form.메모중요도) ? { 메모중요도: form.메모중요도 || "NORMAL" } : {}), // 🧭 2026-11-14 PC와 같게(예전 오더를 고칠 땐 값이 있을 때만 — 수정 이력에 빈 변경이 남지 않게)
+      ...(form.담당노선구분 !== undefined ? { 담당노선구분: form.담당노선구분 || "" } : {}), // 🧭 2026-11-14 담당노선구분(켠 운송사)
       전달사항: form.전달사항 || "",
       전달사항고정: form.전달사항고정 === true,
       // 💬 2026-11-08 알림톡은 화면에서 뺐다 — 새 오더는 보내지 않음
@@ -4860,6 +4864,13 @@ const groupedByDate = useMemo(() => {
       if (historyEntries.length > 0) {
         docData.history = arrayUnion(...historyEntries);
       }
+    }
+
+    // 👤 2026-11-14 PC와 같게 — 수정 창 [담당자 변경]으로 고른 배차담당자 · 차량배정자(src/OrderStaffFields.jsx)
+    if (form._editId) {
+      const ownerPick = form._owner && !form._owner.orig ? form._owner : null;
+      if (ownerPick) applyOwner(docData, ownerPick);
+      if (form._assignerSet) docData.배차확정자 = String(form.배차확정자 || "").trim();
     }
 
     // 🔹 수정 모드
@@ -9965,12 +9976,7 @@ const summary = useMemo(() => {
                           )}
                         </button>
                       )}
-                      <SwipeableRow
-                        disabled={multiSelectMode}
-                        onDelete={() => setDeleteConfirmOrder(o)}
-                        onCopyOrder={() => onCopyOrder?.(o)}
-                        onCopyDriver={() => setCopyModalOrder(o)}
-                      >
+                      {/* 🧹 2026-11-14 밀어서 나오던 오더복사 · 기사복사 · 취소는 뺐다(사용자 요청 — 잘못 밀어 취소되는 일 방지). 복사 · 취소는 오더를 눌러 상세에서 */}
                         <MobileOrderCard
                           order={o}
                           showUndeliveredOnly={false}
@@ -9982,7 +9988,6 @@ const summary = useMemo(() => {
                           cardVersionB={cardVersionB}
                           dispatcherName={dispatcherName}
                         />
-                      </SwipeableRow>
                     </div>
                   );
                 })}
@@ -10850,10 +10855,10 @@ function MobileOrderInfoModal({ order: row, onClose }) {
 function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriver, onCopyOrder, onDelete, onUploadLink, onOrderInfo }) {
   const mountTimeRef = useRef(Date.now());
   const menuItems = [
-    {
+    { // 🧹 2026-11-14 빠른 수정(일부 수정)은 뺐다 — onEdit 이 없으면 메뉴에서 숨긴다
       label: "일부 수정",
       desc: "운임·기사·배차방식 빠른 수정",
-      action: onEdit,
+      action: null,
       svg: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
     },
     {
@@ -10902,7 +10907,7 @@ function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriv
         <div className={`px-4 pb-2 text-[12px] ${bStyle ? "font-bold text-[#1B2B4B]/50 tracking-wide uppercase" : "font-semibold text-blue-600/60 tracking-wide uppercase"}`}>
           {order.상차지명 || "-"} → {order.하차지명 || "-"}
         </div>
-        {menuItems.map((item, i) => (
+        {menuItems.filter((it) => typeof it.action === "function").map((item, i) => (
           <button
             key={i}
             className={`w-full flex items-center gap-3 px-4 py-3.5 text-left border-t ${
@@ -13215,9 +13220,8 @@ const handleAssignClick = () => {
       </div>
     )}
 
-    {/* 버튼 — 빠른수정 · 수정 · 취소 */}
-    <div className="mt-3.5 grid grid-cols-3 gap-1.5">
-      <button onClick={() => setShowQuickEdit(true)} className={`h-10 rounded-xl text-[13px] font-extrabold ${cardVersionB ? "bg-white/10 text-white border border-white/20" : "bg-[#F1F4F9] text-[#0F1A30] border border-[#E3E8F0]"}`}>빠른수정</button>
+    {/* 버튼 — 수정 · 취소 (🧹 2026-11-14 빠른수정은 사용자 요청으로 뺐다 — 수정은 [수정] 한 곳에서) */}
+    <div className="mt-3.5 grid grid-cols-2 gap-1.5">
       <button onClick={handleGoToEdit} className={`h-10 rounded-xl text-[13px] font-extrabold ${cardVersionB ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white"}`}>수정</button>
       <button onClick={onCancelOrder} className={`h-10 rounded-xl text-[13px] font-extrabold ${cardVersionB ? "text-white/80 border border-white/20" : "text-[#5B6B85] border border-[#E3E8F0] bg-white"}`}>오더취소</button>
     </div>
@@ -14708,6 +14712,8 @@ function MobileOrderForm({
   setOrderDropDates,
 }) {
   const mBiz = useCompanyBiz(getTenant() || localStorage.getItem("userCompany") || ""); // ⭐ 2026-11-03 여러 사업자
+  const [formRouteMap, setFormRouteMap] = useState(false); // 🧭 2026-11-14 경로보기(PC 운임추천 바와 같게)
+  const [formRecurring, setFormRecurring] = useState(false); // 🧭 2026-11-14 정기오더
   // ⭐ 2026-11-03 청구 사업자 자동 맞춤 — 거래처·상차지·하차지가 채워지면 지난번에 같은 구간으로 쓴 사업자 → 그 거래처로 쓴 사업자 → 거래처 기본 사업자
   //    · 직접 고르면 거래처가 바뀌기 전까지 그대로 · 수정 중인 오더는 건드리지 않는다
   const mBizManualRef = useRef(null);
@@ -15834,6 +15840,15 @@ const pickDrop = (c) => {
   return (
     <div className={`kp-m-form px-3.5 py-3 space-y-3 ${cardVersionB ? "kp-m-form-b" : "kp-m-form-a"}`} style={{ "--reg-accent": cardVersionB ? "#1B2B4B" : "#0F1A30" }}>
       {form._editId && <MobileFixedRouteNotice order={form} />}
+      {/* 🧭 2026-11-14 PC 오더등록과 같게 — 경로보기 · 정기오더 · (수정할 때) 담당자 변경 */}
+      <div className="flex items-center gap-1.5 flex-wrap" data-m-form-tools>
+        <button type="button" disabled={!(form.상차지주소 && form.하차지주소)} onClick={() => setFormRouteMap(true)}
+          className="h-9 px-3 rounded-xl border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B] disabled:opacity-40">경로보기</button>
+        {!form._editId && <button type="button" onClick={() => setFormRecurring(true)} className="h-9 px-3 rounded-xl border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B]">정기오더</button>}
+        {form._editId && <div className="ml-auto"><OrderStaffFields order={form} setOrder={setForm} /></div>}
+      </div>
+      {formRouteMap && <RouteMapModal pickupAddr={form.상차지주소} dropAddr={form.하차지주소} pickupName={form.상차지명} dropName={form.하차지명} onClose={() => setFormRouteMap(false)} />}
+      {formRecurring && createPortal(<RecurringManagerModal form={form} onClose={() => setFormRecurring(false)} />, document.body)}
       {isLockedShipperEdit && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-800 font-semibold">
           화주사가 등록한 오더입니다. 배차 관련 정보(차량/기사/운임)만 수정할 수 있으며, 주소·시간·화물 정보는 변경할 수 없습니다.
@@ -15945,6 +15960,7 @@ const pickDrop = (c) => {
           onClearWorkDates={() => update("근무일자목록", [])}
           displayOverride={isMultiWorkForm && formWorkDates.length > 1 ? `${form.상차일 || ""} 외 ${formWorkDates.length - 1}일` : undefined}
         />
+        <DateQuick onPick={(d) => update("상차일", d)} mon="월상" />
         <MobileSelect
           className="flex-1 min-w-[90px] border rounded px-1 py-1 text-sm"
           value={form.상차시간}
@@ -15986,6 +16002,7 @@ const pickDrop = (c) => {
           value={form.하차일}
           onChange={(e) => update("하차일", e.target.value)}
         />
+        <DateQuick onPick={(d) => update("하차일", d)} mon="월착" />
         <MobileSelect
           className="flex-1 min-w-[90px] border rounded px-1 py-1 text-sm"
           value={form.하차시간}
@@ -16909,6 +16926,13 @@ const pickDrop = (c) => {
             />
           }
         />
+      </div>
+
+      {/* 🧭 2026-11-14 PC와 같게 — 메모 중요도(일반 · 중요 · 긴급) · 담당노선구분(켠 운송사만) */}
+      <div className="border-t border-gray-100">
+        <RowLabelInput label="메모 중요도" input={<MemoPriority value={form.메모중요도 || "NORMAL"} onChange={(v) => update("메모중요도", v)} />} />
+        <RouteGroupField Field={RgFormRow} row={form} onChange={(v) => update("담당노선구분", v)}
+          className="w-full h-9 px-2 rounded-lg border border-[#E3E8F0] bg-white text-[13px] font-bold text-[#0F1A30]" role={role} userCompany={getTenant() || localStorage.getItem("userCompany") || ""} />
       </div>
 
       {/* 전달사항 */}
@@ -19242,6 +19266,31 @@ ${coreBlockMd}${order.전달사항?.trim() ? `\n\n◆ 전달사항\n${order.전�
 // ======================================================================
 // 공통 RowLabelInput
 // ======================================================================
+const RgFormRow = ({ label, children }) => <RowLabelInput label={label} input={children} />; // 담당노선구분 칸 틀(밖에 둬야 입력 중 다시 그려지지 않는다)
+// 🧭 2026-11-14 PC 오더등록과 같은 날짜 빠른 버튼 — 당일 · 내일 · 다음 월요일(월상 / 월착)
+const ymdLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function DateQuick({ onPick, mon = "월상" }) {
+  const pick = (k) => { const d = new Date(); if (k === 1) d.setDate(d.getDate() + 1); if (k === 2) { const day = d.getDay(); d.setDate(d.getDate() + (day === 0 ? 1 : 8 - day)); } onPick(ymdLocal(d)); };
+  return (
+    <div className="flex gap-1 w-full">
+      {[["당일", 0], ["내일", 1], [mon, 2]].map(([l, k]) => (
+        <button key={l} type="button" onClick={() => pick(k)} className="flex-1 h-8 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-black text-[#1B2B4B] active:bg-[#EEF3FB]">{l}</button>
+      ))}
+    </div>
+  );
+}
+// 🧭 2026-11-14 PC와 같은 메모 중요도 — NORMAL 일반 · HIGH 중요 · CRITICAL 긴급(목록에서 메모 표시가 달라진다)
+function MemoPriority({ value = "NORMAL", onChange }) {
+  return (
+    <div className="flex gap-1">
+      {[["NORMAL", "일반"], ["HIGH", "중요"], ["CRITICAL", "긴급"]].map(([k, l]) => (
+        <button key={k} type="button" onClick={() => onChange(k)}
+          className={`flex-1 h-8 rounded-lg text-[12px] font-black border ${value === k ? (k === "CRITICAL" ? "bg-[#0F1A30] text-white border-[#0F1A30]" : k === "HIGH" ? "bg-[#2D4C82] text-white border-[#2D4C82]" : "bg-[#EEF3FB] text-[#0F1A30] border-[#C9D5EA]") : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>{l}</button>
+      ))}
+    </div>
+  );
+}
+
 function RowLabelInput({ label, input, right, labelClassName = "" }) {
   return (
     <div className="flex border-b border-[#EEF1F6] last:border-b-0 overflow-hidden">
@@ -22911,6 +22960,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     return PUSH_PREF_DEFAULT_ON.includes(key);
   };
   const [pushPrefsOpen, setPushPrefsOpen] = useState(false);
+  const [pushPrefsTab, setPushPrefsTab] = useState("push"); // push = 휴대폰 푸시 · popup = 화면 가운데 팝업
   const [pushPrefs, setPushPrefs] = useState(null); // null=로딩중
   useEffect(() => {
     if (!currentUser?.uid) return;
@@ -23011,16 +23061,9 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
               } catch (e) { alert(e?.message || "알림 연결 실패"); }
             }}
             right={go("연결")} />
-          <KpmRow label="알림 종류별 설정" sub={`${PUSH_GROUPS.map((g) => g.title).join("·")} · 지금 ${pushOnCount}/${PUSH_PREF_TYPES.length}종 켜짐`} onClick={() => setPushPrefsOpen(true)} right={go("설정")} />
+          {/* 🧹 2026-11-14 정리 — 예전엔 '알림 종류별 설정(휴대폰 푸시)'과 '팝업 알림' 카드가 따로 있어 같은 종류(결재 · 공지 · 인사 …)가 두 번 보였다 → 한 줄로, 안에서 [휴대폰 푸시 | 화면 팝업] 탭 */}
+          <KpmRow label="알림 종류별 설정" sub={`휴대폰 푸시 ${pushOnCount}/${PUSH_PREF_TYPES.length}종 켜짐 · 화면 가운데 팝업`} onClick={() => { setPushPrefsTab("push"); setPushPrefsOpen(true); }} right={go("설정")} />
         </KpmCard>
-
-        {/* ⭐ 2026-11-07 팝업 알림 — 가운데 팝업을 종류별로 켜고 끄기(계정에 저장 · PC와 같이 바뀜) */}
-        {(popupUid || currentUser?.uid) && (
-          <KpmCard en="POPUP" title="팝업 알림" flush>
-            <div className="px-4 pt-2.5 pb-2 text-[11.5px] text-[#7A879C] leading-snug border-b border-[#EEF1F6]">끄면 화면 가운데에 뜨지 않아요. 내용은 목록과 메뉴 숫자에 그대로 남아요.</div>
-            <PopupPrefsSection uid={popupUid || currentUser.uid} showBriefing={canBriefing} flush />
-          </KpmCard>
-        )}
 
         <KpmCard en="DATA" title="데이터" flush>
           <KpmRow label="앱 새로고침" sub="서버에서 가장 최신 상태를 다시 불러옵니다"
@@ -23051,13 +23094,16 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
           {/* ⭐ 2026-11-02 원격지원 — */}
           {/* ⭐ 2026-11-03 원격 지원 요청은 PC 전용 */}
           {loginMgrOpen && <LoginManagerModal user={currentUser} onClose={() => setLoginMgrOpen(false)} />}
-          <KpmRow label="로그아웃" danger onClick={() => setShowLogoutConfirm(true)} />
         </KpmCard>
 
         <KpmCard en="ABOUT" title="앱 정보" flush>
           <KpmRow label="버전" sub="LogisWeb 배차관리" right={<div className="flex items-center gap-1.5"><span className="text-[12px] text-[#5B6B85] font-bold" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>v{appVersion}</span><span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-[#EEF3FC] text-[#1B2B4B]">최신</span></div>} />
           <KpmRow label="제작" value="LogisWeb" />
         </KpmCard>
+
+        {/* 🧹 2026-11-14 로그아웃은 맨 아래(앱 정보 밑) */}
+        <button type="button" onClick={() => setShowLogoutConfirm(true)} data-kpm-logout
+          className="w-full h-[52px] rounded-[20px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04)] text-[14.5px] font-black text-[#B4342A] active:bg-[#FFF5F4]">로그아웃</button>
 
       </div>
 
@@ -23125,12 +23171,18 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
             </div>
             <div className="px-5 pb-2">
               <div className="font-bold text-[15px] text-gray-900">알림 종류별 설정</div>
-              <div className="text-[12px] text-gray-400 mt-1 leading-relaxed">
-                원하는 알림만 켜두면, 꺼둔 종류는 이 기기로 푸시가 오지 않습니다.
+              <div className="mt-2.5 grid grid-cols-2 p-1 rounded-xl bg-[#F4F6FA] border border-[#E3E8F0]">
+                {[["push", "휴대폰 푸시"], ["popup", "화면 가운데 팝업"]].map(([k, l]) => (
+                  <button key={k} type="button" onClick={() => setPushPrefsTab(k)} className={`h-9 rounded-lg text-[13px] font-black ${pushPrefsTab === k ? "bg-[#0F1A30] text-white" : "text-[#5B6B85]"}`}>{l}</button>
+                ))}
+              </div>
+              <div className="text-[12px] text-gray-400 mt-2 leading-relaxed">
+                {pushPrefsTab === "push" ? "앱을 꺼 둬도 휴대폰으로 오는 알림이에요. 꺼 둔 종류는 이 기기로 오지 않아요." : "앱을 쓰는 중에 화면 가운데 뜨는 창이에요. 꺼도 내용은 목록과 메뉴 숫자에 그대로 남아요(PC와 같이 바뀌어요)."}
               </div>
             </div>
             <div className="max-h-[62vh] overflow-y-auto">
-              {PUSH_GROUPS.map((g) => (
+              {pushPrefsTab === "popup" && (popupUid || currentUser?.uid) && <div className="mx-5 mt-3 rounded-2xl overflow-hidden border border-gray-100"><PopupPrefsSection uid={popupUid || currentUser.uid} showBriefing={canBriefing} flush /></div>}
+              {pushPrefsTab === "push" && PUSH_GROUPS.map((g) => (
                 <div key={g.title} className="mx-5 mt-3">
                   <div className="px-1 pb-1.5 text-[11.5px] font-black text-[#3A4A66] tracking-wide">{g.title}</div>
                   <div className="rounded-2xl overflow-hidden border border-gray-100">
