@@ -186,9 +186,9 @@ const TOOLS = {
   },
   get_session_logs: {
     description: "로그인·로그아웃 기록(최근 최대 600건). 회사·이름·이메일·기기·IP·구분(event). 보안 점검용.",
-    input_schema: { type: "object", properties: { days: { type: "integer", description: "최근 며칠(기본 1, 최대 14)" }, event: { type: "string" }, company: { type: "string" } } },
+    input_schema: { type: "object", properties: { days: { type: "integer", description: "최근 며칠(기본 1, 최대 7 — 접속 이력은 7일 지나면 자동 삭제)" }, event: { type: "string" }, company: { type: "string" } } },
     async run(db, { days = 1, event, company } = {}) {
-      const since = Date.now() - Math.min(14, Math.max(1, Number(days) || 1)) * 864e5;
+      const since = Date.now() - Math.min(7, Math.max(1, Number(days) || 1)) * 864e5;
       let list = docs(await db.collection("sessionLogs").orderBy("at", "desc").limit(600).get()).filter((l) => tsMs(l.at) >= since);
       if (event) list = list.filter((l) => l.event === event);
       if (company) list = list.filter((l) => normCo(l.companyName) === normCo(company));

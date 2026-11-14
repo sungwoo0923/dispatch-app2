@@ -50,6 +50,7 @@ import "./pcTheme.css";
 import { fmtPhone } from "./formatInput";
 import { LogisMark, LogisWordmark, LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { kpConfirm, kpPrompt } from "./kpDialog";
+import { withinAccessLogWindow, ACCESS_LOG_DAYS } from "./accessLogRetention";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const pad = (n) => String(n).padStart(2, "0");
@@ -1162,7 +1163,8 @@ function ClaimsBackfill() {
 
 // ═══════════════════════ 접속 이력 ═══════════════════════
 function SessionLogsPanel() {
-  const list = useCol("sessionLogs", "at", 400);
+  const all = useCol("sessionLogs", "at", 500);
+  const list = all && all.filter((l) => withinAccessLogWindow(l.at)); // 🧹 2026-11-14 7일 보관(서버가 매일 새벽 정리)
   const [q, setQ] = React.useState("");
   const [ev, setEv] = React.useState("all");
   const [page, setPage] = React.useState(1);
@@ -1172,7 +1174,7 @@ function SessionLogsPanel() {
   const events = [...new Set(list.map((l) => l.event).filter(Boolean))];
   return (
     <div className="space-y-4">
-      <Hero en="SECURITY · AUDIT LOG" title="접속 이력" desc="최근 400건의 로그인·로그아웃 기록입니다. 회사·이름·기기로 찾을 수 있습니다." />
+      <Hero en="SECURITY · AUDIT LOG" title="접속 이력" desc={`최근 ${ACCESS_LOG_DAYS}일 로그인·로그아웃 기록입니다. ${ACCESS_LOG_DAYS}일이 지나면 매일 새벽 자동으로 지워져요. 회사·이름·기기로 찾을 수 있습니다.`} />
       <Card code="LOG" title={`${rows.length}건`} bodyClass="p-0" right={
         <div className="flex gap-2">
           <CustomSelect value={ev} onChange={(e) => setEv(e.target.value)} className="h-9 px-2 rounded-lg border border-[#DCE3EE] text-[13px] font-bold"><option value="all">전체</option>{events.map((e) => <option key={e} value={e}>{e}</option>)}</CustomSelect>

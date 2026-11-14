@@ -44,6 +44,7 @@ import { useCompanyFeatures } from "./companyFeatures"; // ⭐ 2026-11-04 마스
 import { EditableText } from "./EditMode";
 import { useLoadOrderRange, monthEnd, monthStart } from "./orderHistory";
 import { fmtBizNo, fmtPhone } from "./formatInput";
+import { withinAccessLogWindow, ACCESS_LOG_DAYS } from "./accessLogRetention";
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
 // 전화번호 하이픈 — 공용 규칙(src/formatInput.js: 02·031·010·1588 등, 입력 중에도 적용)
@@ -190,9 +191,10 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // 최고관리자 전용 접속이력(로그인/로그아웃) — 탭을 열었을 때만 구독한다.
   useEffect(() => {
     if (!isTotalMaster || adminTab !== "sessionLogs") return;
-    const q = query(collection(db, "sessionLogs"), orderBy("at", "desc"), limit(200));
+    // 🧹 2026-11-14 7일 보관 — 7일 지난 기록은 서버가 매일 새벽 지우고, 화면도 7일 안의 것만 보여준다
+    const q = query(collection(db, "sessionLogs"), orderBy("at", "desc"), limit(500));
     const unsub = onSnapshot(q, (snap) => {
-      setSessionLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setSessionLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((l) => withinAccessLogWindow(l.at)));
     });
     return () => unsub();
   }, [isTotalMaster, adminTab]);
@@ -1519,7 +1521,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
             return (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
-                <span className="text-[13px] font-semibold text-gray-600">최근 200건 중 {filteredLogs.length}건 · 20건씩 표시</span>
+                <span className="text-[13px] font-semibold text-gray-600">최근 {ACCESS_LOG_DAYS}일 {filteredLogs.length}건 · 20건씩 표시 · {ACCESS_LOG_DAYS}일 지나면 자동 삭제</span>
                 <CustomSelect
                   value={sessionLogEventFilter}
                   onChange={e => { setSessionLogEventFilter(e.target.value); setSessionLogPage(1); }}

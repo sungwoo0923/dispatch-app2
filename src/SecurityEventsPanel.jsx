@@ -5,6 +5,7 @@
 import React from "react";
 import { collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, writeBatch } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import { withinAccessLogWindow } from "./accessLogRetention";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const TYPE = { new_device: "새 기기 로그인", foreign_ip: "해외 IP 접속", night_login: "새벽 접속", bulk_download: "대량 다운로드", resign_block: "퇴사자 차단", rehire_unblock: "복직 허용" };
@@ -15,7 +16,7 @@ export default function SecurityEventsPanel() {
   const [rows, setRows] = React.useState(null);
   const [f, setF] = React.useState({ level: "", type: "", co: "", unacked: true, q: "" });
   React.useEffect(() => onSnapshot(query(collection(db, "securityEvents"), orderBy("atMs", "desc"), limit(500)),
-    (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setRows([])), []);
+    (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((r) => withinAccessLogWindow(r.atMs))), () => setRows([])), []); // 🧹 2026-11-14 7일 보관
   const list = (rows || []).filter((r) => (!f.level || r.level === f.level) && (!f.type || r.type === f.type) && (!f.co || r.company === f.co)
     && (!f.unacked || !r.ack) && (!f.q || [r.name, r.email, r.ip, r.detail].filter(Boolean).join(" ").includes(f.q)));
   const companies = [...new Set((rows || []).map((r) => r.company).filter(Boolean))].sort();
@@ -35,7 +36,7 @@ export default function SecurityEventsPanel() {
       <div className="rounded-[20px] px-6 py-5 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 65%,#2D4C82)" }}>
         <div className="text-[10.5px] font-extrabold tracking-[0.28em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>SECURITY · THREATS</div>
         <div className="text-[20px] font-black mt-1">보안 알림</div>
-        <div className="text-[13px] text-white/65 mt-1">새 기기 로그인 · 해외 IP · 새벽 접속 · 10분 안 대량 다운로드 · 퇴사자 계정 차단. 높음·보통은 최고관리자 휴대폰으로 푸시가 갑니다. AI 팀 › 보안팀도 이 기록을 봅니다.</div>
+        <div className="text-[13px] text-white/65 mt-1">새 기기 로그인 · 해외 IP · 새벽 접속 · 10분 안 대량 다운로드 · 퇴사자 계정 차단. 높음·보통은 최고관리자 휴대폰으로 푸시가 갑니다. AI 팀 › 보안팀도 이 기록을 봅니다. 7일이 지나면 매일 새벽 자동으로 지워져요.</div>
       </div>
       <div className="grid grid-cols-3 gap-3">
         {["high", "medium", "low"].map((lv) => (

@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 520" role="img" aria-labelledby="t d">
+  <title id="t">LogisWeb을 만들기 전, 배차 실무자의 하루</title>
+  <desc id="d">엑셀 배차일지에 오더를 한 줄씩 입력하고, 중복 배차와 빠진 오더를 확인하고, 문자로 인수증을 받아 업체에 다시 보내고, 기사에게 위치를 전화로 묻는 장면</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#13213D"/><stop offset="1" stop-color="#0B1428"/></linearGradient>
+    <linearGradient id="win" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F4F7FC"/><stop offset="1" stop-color="#E7EDF7"/></linearGradient>
+    <linearGradient id="ph" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1B2B4B"/><stop offset="1" stop-color="#0F1A30"/></linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#000" flood-opacity=".45"/></filter>
+    <filter id="sh2" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000" flood-opacity=".35"/></filter>
+    <style>
+      text{font-family:"Pretendard","Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+      .m{font-family:"JetBrains Mono","SF Mono",Menlo,Consolas,monospace}
+    </style>
+  </defs>
+  <rect width="720" height="520" rx="28" fill="url(#bg)"/>
+  <circle cx="610" cy="70" r="160" fill="#4F8BFF" opacity=".08"/>
+  <circle cx="90" cy="470" r="140" fill="#2D4C82" opacity=".25"/>
+
+  <!-- 엑셀 배차일지 -->
+  <g filter="url(#sh)">
+    <rect x="34" y="62" width="452" height="372" rx="14" fill="url(#win)"/>
+    <rect x="34" y="62" width="452" height="38" rx="14" fill="#1B2B4B"/>
+    <rect x="34" y="86" width="452" height="14" fill="#1B2B4B"/>
+    <circle cx="56" cy="81" r="5" fill="#fff" opacity=".55"/><circle cx="72" cy="81" r="5" fill="#fff" opacity=".55"/><circle cx="88" cy="81" r="5" fill="#fff" opacity=".55"/>
+    <text x="108" y="86" font-size="13.5" font-weight="700" fill="#fff">배차일지_11월_최종_진짜최종.xlsx</text>
+  </g>
+  <!-- 표 머리 -->
+  <rect x="48" y="114" width="424" height="28" rx="4" fill="#DCE5F2"/>
+  <g font-size="11.5" font-weight="800" fill="#1B2B4B">
+    <text x="58" y="132">날짜</text><text x="106" y="132">상차지</text><text x="186" y="132">하차지</text><text x="266" y="132">차량</text><text x="326" y="132">기사</text><text x="392" y="132">배차</text>
+  </g>
+  <!-- 줄 -->
+  <g font-size="11.5" fill="#33425E">
+    <g><rect x="48" y="146" width="424" height="30" fill="#fff"/><text x="58" y="166" class="m">11/14</text><text x="106" y="166">평택 물류</text><text x="186" y="166">부산 신항</text><text x="266" y="166">25t 윙</text><text x="326" y="166">김기사</text><text x="392" y="166" fill="#1B2B4B" font-weight="800">완료</text></g>
+    <g><rect x="48" y="178" width="424" height="30" fill="#E3ECFB"/><rect x="48" y="178" width="4" height="30" fill="#2D5BD8"/><text x="58" y="198" class="m">11/14</text><text x="106" y="198">이천 센터</text><text x="186" y="198">대구 성서</text><text x="266" y="198">11t 카고</text><text x="326" y="198">박기사</text><text x="392" y="198" fill="#2D4C82" font-weight="800">완료</text></g>
+    <g><rect x="48" y="210" width="424" height="30" fill="#E3ECFB"/><rect x="48" y="210" width="4" height="30" fill="#2D5BD8"/><text x="58" y="230" class="m">11/14</text><text x="106" y="230">이천 센터</text><text x="186" y="230">대구 성서</text><text x="266" y="230">11t 카고</text><text x="326" y="230">이기사</text><text x="392" y="230" fill="#2D4C82" font-weight="800">완료</text></g>
+    <g><rect x="48" y="242" width="424" height="30" fill="#fff"/><text x="58" y="262" class="m">11/14</text><text x="106" y="262">안산 공장</text><text x="186" y="262">광주 하남</text><text x="266" y="262">5t 윙</text><text x="326" y="262" fill="#9AA9C3">-</text><rect x="388" y="250" width="40" height="16" rx="4" fill="#E3ECFB"/><text x="394" y="262" fill="#2D5BD8" font-weight="800">???</text></g>
+    <g><rect x="48" y="274" width="424" height="30" fill="#fff"/><text x="58" y="294" class="m">11/14</text><text x="106" y="294">화성 창고</text><text x="186" y="294">울산 온산</text><text x="266" y="294">25t 윙</text><text x="326" y="294">최기사</text><text x="392" y="294" fill="#1B2B4B" font-weight="800">완료</text></g>
+    <g><rect x="48" y="306" width="424" height="30" fill="#fff"/><text x="58" y="326" class="m">11/14</text><text x="106" y="326">평택 물류</text><text x="186" y="326">부산 신</text><rect x="235" y="314" width="2" height="16" fill="#2D5BD8"><animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/></rect></g>
+    <g opacity=".55"><rect x="48" y="338" width="424" height="30" fill="#fff"/><rect x="48" y="370" width="424" height="30" fill="#fff"/></g>
+  </g>
+  <!-- 중복 표시 -->
+  <g filter="url(#sh2)">
+    <rect x="360" y="190" width="104" height="34" rx="10" fill="#2D5BD8"/>
+    <text x="412" y="212" font-size="13" font-weight="900" fill="#fff" text-anchor="middle">중복 배차!</text>
+  </g>
+  <text x="58" y="424" font-size="12" font-weight="700" fill="#5B6B85">어제와 같은 오더도 오늘 또 한 글자씩 입력…</text>
+
+  <!-- 휴대폰: 인수증 · 위치 문자 -->
+  <g filter="url(#sh)">
+    <rect x="512" y="104" width="178" height="334" rx="26" fill="url(#ph)" stroke="#2D4C82" stroke-width="2"/>
+    <rect x="574" y="116" width="54" height="7" rx="3.5" fill="#0B1428"/>
+  </g>
+  <text x="528" y="150" font-size="11.5" font-weight="800" fill="#A9C0EC">문자 · 박기사</text>
+  <g>
+    <rect x="526" y="160" width="112" height="70" rx="12" fill="#22375F"/>
+    <rect x="536" y="170" width="92" height="40" rx="6" fill="#D3DFF5"/>
+    <path d="M540 206l18-16 12 10 10-8 18 14z" fill="#8FB0F0"/>
+    <text x="536" y="224" font-size="10.5" font-weight="700" fill="#D3DFF5">인수증 사진.jpg</text>
+  </g>
+  <g>
+    <rect x="556" y="240" width="122" height="36" rx="12" fill="#2D5BD8"/>
+    <text x="567" y="262" font-size="11" font-weight="700" fill="#fff">업체에 다시 전달 →</text>
+  </g>
+  <g>
+    <rect x="526" y="286" width="140" height="36" rx="12" fill="#22375F"/>
+    <text x="537" y="308" font-size="11" font-weight="700" fill="#D3DFF5">사진 한 장 더 보냅니다</text>
+  </g>
+  <g>
+    <rect x="540" y="332" width="138" height="36" rx="12" fill="#2D5BD8"/>
+    <text x="551" y="354" font-size="11" font-weight="700" fill="#fff">기사님 지금 어디세요?</text>
+  </g>
+  <rect x="526" y="390" width="150" height="30" rx="15" fill="#0B1428" stroke="#2D4C82"/>
+  <text x="540" y="410" font-size="10.5" fill="#8FB0F0">메시지 입력</text>
+
+  <!-- 부재중 전화 -->
+  <g filter="url(#sh2)">
+    <rect x="566" y="40" width="132" height="44" rx="22" fill="#22375F" stroke="#2D4C82"/>
+    <path d="M588 54c2 6 6 10 12 12l3-3c1-1 2-1 3 0l3 2c1 1 1 2 0 3l-2 2c-2 2-6 2-10 0-5-3-9-7-12-12-2-4-2-8 0-10l2-2c1-1 2-1 3 0l2 3c1 1 1 2 0 3z" fill="#fff"/>
+    <text x="616" y="67" font-size="12.5" font-weight="900" fill="#fff">위치 확인 12통</text>
+  </g>
+
+  <!-- 메모지 -->
+  <g filter="url(#sh2)" transform="rotate(-5 120 470)">
+    <rect x="44" y="446" width="170" height="52" rx="8" fill="#22375F" stroke="#2D4C82"/>
+    <text x="58" y="469" font-size="12.5" font-weight="900" fill="#FFFFFF">마감 엑셀 또 만들기</text>
+    <text x="58" y="488" font-size="11" font-weight="700" fill="#A9C0EC">월말 · 거래처별로 따로</text>
+  </g>
+  <g filter="url(#sh2)" transform="rotate(4 330 474)">
+    <rect x="246" y="450" width="168" height="50" rx="8" fill="#22375F" stroke="#2D4C82"/>
+    <text x="260" y="472" font-size="12.5" font-weight="900" fill="#FFFFFF">빠진 오더 없나?</text>
+    <text x="260" y="490" font-size="11" font-weight="700" fill="#A9C0EC">카톡방 다시 훑어보기</text>
+  </g>
+  <g filter="url(#sh2)" transform="rotate(-3 520 476)">
+    <rect x="440" y="452" width="160" height="50" rx="8" fill="#22375F" stroke="#2D4C82"/>
+    <text x="454" y="474" font-size="12.5" font-weight="900" fill="#FFFFFF">이번 달 매출 = ?</text>
+    <text x="454" y="492" font-size="11" font-weight="700" fill="#A9C0EC">장부 합쳐 봐야 앎</text>
+  </g>
+
+  <!-- 시계 -->
+  <g filter="url(#sh2)">
+    <rect x="34" y="16" width="148" height="34" rx="17" fill="#0B1428" stroke="#2D4C82"/>
+    <circle cx="54" cy="33" r="8" fill="none" stroke="#8FB0F0" stroke-width="2"/>
+    <path d="M54 28v5l3 2" stroke="#8FB0F0" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <text x="70" y="38" font-size="13" font-weight="800" fill="#fff" class="m">23:40</text>
+    <text x="118" y="38" font-size="11.5" font-weight="700" fill="#8FB0F0">또 야근</text>
+  </g>
+</svg>

@@ -4430,6 +4430,19 @@ exports.purgeExpiredResetBackups = functions
     return null;
   });
 
+// 🧹 2026-11-14 매일 새벽 — 7일 지난 접속 이력(로그인·로그아웃 기록 · 끝난 로그인 · 보안 알림)을 지운다(functions/accessLogPurge.js)
+const _accessLogPurge = require("./accessLogPurge");
+exports.purgeOldAccessLogs = functions
+  .runWith({ timeoutSeconds: 540, memory: "512MB" })
+  .pubsub.schedule("every day 04:25")
+  .timeZone("Asia/Seoul")
+  .onRun(async () => {
+    const t0 = Date.now();
+    const r = await _accessLogPurge.purgeAccessLogs({ db, Timestamp, deadline: () => Date.now() - t0 > 8 * 60000 });
+    console.log(`🧹 접속 이력 정리(${_accessLogPurge.RETENTION_DAYS}일 지난 것) — 접속기록 ${r.sessionLogs.n}, 끝난 로그인 ${r.loginSessions.n}, 보안 알림 ${r.securityEvents.n}`);
+    return null;
+  });
+
 // ⭐ 2026-11-07 보관함 지금 영구 삭제 · 이력 지우기 (최고관리자 + 초기화 비밀번호 + 확인 문구)
 //  POST .../companyResetPurge  (Authorization: Bearer <ID 토큰>)
 //   { mode: "purge" | "history", backupId?: 보관함ID, all?: true, password, confirmText }

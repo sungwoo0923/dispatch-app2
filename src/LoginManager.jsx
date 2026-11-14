@@ -18,6 +18,7 @@ import {
   SESSIONS_COLL, KIND_LABEL, END_REASON_LABEL, getMySessionId, endSessions, sessionLastMs, timeAgo, getDeviceLabel, isTotalMasterRole,
 } from "./loginSessions";
 import { kpConfirm } from "./kpDialog";
+import { withinAccessLogWindow } from "./accessLogRetention";
 
 const tsMs = (t) => (t?.toMillis ? t.toMillis() : t?.seconds ? t.seconds * 1000 : 0);
 const fmt = (ms) => (ms ? new Date(ms).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-");
@@ -130,7 +131,7 @@ export default function LoginManager({ user }) {
   const [busyId, setBusyId] = React.useState(null);
   const active = (list || []).filter((s) => s.active !== false).sort((a, b) => (a.id === myId ? -1 : b.id === myId ? 1 : sessionLastMs(b) - sessionLastMs(a)));
   const others = active.filter((s) => s.id !== myId);
-  const history = (list || []).filter((s) => s.active === false).sort((a, b) => tsMs(b.endedAt) - tsMs(a.endedAt)).slice(0, 10);
+  const history = (list || []).filter((s) => s.active === false && withinAccessLogWindow(s.endedAt)).sort((a, b) => tsMs(b.endedAt) - tsMs(a.endedAt)).slice(0, 10);
 
   const kick = async (ids) => {
     if (!ids.length) return;
@@ -198,7 +199,7 @@ export default function LoginManager({ user }) {
         <PasswordChange otherIds={others.map((s) => s.id)} />
       </Section>
 
-      <Section title="최근 로그인 기록" desc="최근 끝난 로그인 10건 — 모르는 기기가 있으면 비밀번호를 바꿔주세요.">
+      <Section title="최근 로그인 기록" desc="최근 7일 안에 끝난 로그인 10건(7일 지나면 자동 삭제) — 모르는 기기가 있으면 비밀번호를 바꿔주세요.">
         {history.length === 0 ? (
           <div className="text-[13px] text-gray-500 py-3 text-center">기록이 없습니다.</div>
         ) : (

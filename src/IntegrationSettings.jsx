@@ -16,7 +16,7 @@ function StatusChip({ s }) {
 }
 const ago = (ms) => { if (!ms) return ""; const m = Math.round((Date.now() - ms) / 60000); return m < 1 ? "방금" : m < 60 ? `${m}분 전` : m < 1440 ? `${Math.round(m / 60)}시간 전` : `${Math.round(m / 1440)}일 전`; };
 
-function Row({ title, en, status, desc, needs, last, onTest, testing, detail, children }) {
+function Row({ title, en, status, desc, needs, last, onTest, testing, detail, hint, children }) {
   return (
     <div className="rounded-[18px] border border-[#E3E8F0] bg-white p-5" data-testid="int-row">
       <div className="flex items-start gap-3 flex-wrap">
@@ -34,6 +34,7 @@ function Row({ title, en, status, desc, needs, last, onTest, testing, detail, ch
         {needs.map((n) => <div key={n} className="flex gap-2 text-[13.5px] text-[#5B6B85]"><span className="mt-[7px] w-1 h-1 rounded-full bg-[#9AA9C3] shrink-0" />{n}</div>)}
       </div>
       {(detail || last) && <div className="mt-3 text-[13px] font-semibold text-[#7A879C]">{[detail, last && `마지막 받은 자료 ${last}`].filter(Boolean).join(" · ")}</div>}
+      {status === "error" && hint && <div className="mt-2 rounded-xl bg-[#FFF7E8] border border-[#F6DFB0] px-3.5 py-2.5 text-[13px] text-[#7A4B00] leading-relaxed" data-testid="int-hint"><b className="font-black">이렇게 확인해 보세요</b> · {hint}</div>}
       {children}
     </div>
   );
@@ -66,11 +67,11 @@ export default function IntegrationSettings() {
       <Row title="국세청 사업자 상태조회" en="NTS · BUSINESS STATUS" status={pdStatus("nts")} testing={testing === "nts"} onTest={() => test("nts")}
         desc="거래처 · 회사정보 · 허브 가입에서 사업자번호의 계속 · 휴업 · 폐업을 확인해요. 같은 번호는 하루 동안 저장해 둔 결과를 써요."
         needs={["공공데이터포털 \"국세청_사업자등록정보 진위확인 및 상태조회 서비스\" 활용신청", "Firebase 비밀값 DATA_GO_KR_KEY (일반 인증키 Decoding)", "함수 bizStatusCheck 배포"]}
-        detail={pd?.nts?.detail} last={ago(pd?.nts?.lastAt)} />
+        detail={pd?.nts?.detail || (pdErr && pdErr !== "unavailable" ? `연동 함수 호출 실패 — ${pdErr}` : "")} hint={pd?.nts?.hint || (pdErr && pdErr !== "unavailable" ? "함수 integrationStatus 가 배포됐는지, 로그인이 풀리지 않았는지 확인한 뒤 새로 고쳐 주세요" : "")} last={ago(pd?.nts?.lastAt)} />
       <Row title="기상청 단기예보 · 기상특보" en="KMA · FORECAST" status={pdStatus("kma")} testing={testing === "kma"} onTest={() => test("kma")}
         desc="오늘 · 내일 오더의 상하차 지역 날씨를 3시간마다 받아 두고, 배차현황 · 홈 · 경영 보고에 비 · 눈 · 강풍 · 특보를 보여줘요. 키가 없으면 날씨는 숨겨요."
         needs={["공공데이터포털 \"기상청_단기예보 조회서비스\" · \"기상청_기상특보 조회서비스\" 활용신청", "같은 비밀값 DATA_GO_KR_KEY", "함수 weatherFor · weatherRefresh(3시간마다) 배포"]}
-        detail={pd?.kma?.detail} last={ago(pd?.kma?.lastAt)} />
+        detail={pd?.kma?.detail || (pdErr && pdErr !== "unavailable" ? `연동 함수 호출 실패 — ${pdErr}` : "")} hint={pd?.kma?.hint} last={ago(pd?.kma?.lastAt)} />
       <Row title="팝빌 세금계산서 · 알림톡 · 계좌조회 · 홈택스" en="POPBILL" status={pbStatus} testing={testing === "popbill"} onTest={pb?.enabled ? () => test("popbill") : null}
         desc="사업자 등록과 팝빌 연동 계약이 끝나면 켜요. 운송사마다 팝빌 연동회원(사업자번호)을 회사정보에서 등록해요."
         needs={["팝빌 연동 신청 후 LinkID · SecretKey 받기", "Firebase 비밀값 POPBILL_LINK_ID · POPBILL_SECRET_KEY", "functions/.env 에 POPBILL_ENABLED=true 넣고 popbillAdmin 다시 배포", "아래 스위치로 켜기(처음엔 테스트 환경)"]}

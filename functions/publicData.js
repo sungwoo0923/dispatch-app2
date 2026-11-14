@@ -34,8 +34,12 @@ let corePromise = null;
 const loadCore = () => (corePromise || (corePromise = import("./publicDataCore.mjs")));
 
 // 공공데이터포털 키 — Decoding 키를 넣으면 주소용으로 한 번 인코딩, 이미 인코딩된 키(%2B 등)는 그대로
-const keyOk = (k) => !!k && String(k).trim() !== "" && String(k).trim().toLowerCase() !== "none";
-const encKey = (k) => { const s = String(k).trim(); return /%[0-9A-F]{2}/i.test(s) ? s : encodeURIComponent(s); };
+// ⭐ 2026-11-14 비밀값에 따옴표 · 줄바꿈 · 공백이 같이 들어가 "등록되지 않은 인증키"가 나던 경우를 막는다
+const cleanKey = (k) => String(k || "").replace(/\s+/g, "").replace(/^["']+|["']+$/g, "");
+const keyOk = (k) => { const s = cleanKey(k); return s !== "" && s.toLowerCase() !== "none"; };
+const encKey = (k) => { const s = cleanKey(k); return /%[0-9A-F]{2}/i.test(s) ? s : encodeURIComponent(s); };
+// 헤더용 원래 키(Decoding) — 인코딩된 키(%2B 등)를 넣었으면 풀어서 쓴다
+const rawKey = (k) => { const s = cleanKey(k); try { return /%[0-9A-F]{2}/i.test(s) ? decodeURIComponent(s) : s; } catch { return s; } };
 
 // 로그인한 사람 → { uid, tier, co, isTM, isAdmin }
 async function callerOf(db, auth, { allowSignup = false } = {}) {
@@ -78,7 +82,11 @@ async function fetchJson(fetchFn, url, opts = {}, ms = 9000) {
   const ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timer = ctl ? setTimeout(() => ctl.abort(), ms) : null;
   try {
-    const res = await fetchFn(url, { ...opts, signal: ctl?.signal });
+    const res = await fetchFn(url, { ...opts, signal: ctl?.signal }).catch((e) => {
+      // 시간 초과 · 연결 거절은 원인을 알아볼 수 있게 문구를 바꾼다
+      const aborted = e?.name === "AbortError" || /abort/i.test(String(e?.message || ""));
+      throw Object.assign(new Error(aborted ? `공공데이터포털이 ${Math.round(ms / 1000)}초 안에 답하지 않았어요` : `공공데이터포털에 연결하지 못했어요(${e?.cause?.code || e?.message || e})`), { network: true });
+    });
     const text = await res.text();
     let json = null;
     try { json = JSON.parse(text); } catch { json = null; }
@@ -92,6 +100,22 @@ async function fetchJson(fetchFn, url, opts = {}, ms = 9000) {
 }
 
 function makePublicData({ db, fetch: fetchFn, getKey, now: nowFn = () => Date.now() }) {
+  // 국세청(odcloud) — 주소에 키를 붙여 부르고, "등록되지 않은 인증키"면 헤더(Authorization: Infuser 키)로 한 번 더
+  //  (키 인코딩이 꼬였을 때 헤더 방식은 원래 키를 그대로 보내서 통과하는 경우가 많다)
+  async function ntsPost(key, bNos) {
+    const body = JSON.stringify({ b_no: bNos });
+    const first = await fetchJson(fetchFn, `${NTS_URL}?serviceKey=${encKey(key)}&returnType=JSON`, {
+      method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body,
+    });
+    const C = await loadCore();
+    const p = C.parseNtsStatus(first.json);
+    if (p.ok || !(p.keyError || first.status === 401)) return first;
+    const second = await fetchJson(fetchFn, `${NTS_URL}?returnType=JSON`, {
+      method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Infuser ${rawKey(key)}` }, body,
+    }).catch(() => null);
+    return second && C.parseNtsStatus(second.json).ok ? second : first;
+  }
+
   // ─────────────── 국세청 사업자 상태 ───────────────
   async function bizStatusCheck(data, auth) {
     const C = await loadCore();
@@ -121,9 +145,7 @@ function makePublicData({ db, fetch: fetchFn, getKey, now: nowFn = () => Date.no
       return { results, disabled: true, reason: "no-key" };
     }
     await takeQuota(db, "bizStatusUsage", who.uid, "count", need.length, tier.perDay, now);
-    const { status, json } = await fetchJson(fetchFn, `${NTS_URL}?serviceKey=${encKey(key)}&returnType=JSON`, {
-      method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ b_no: need }),
-    }).catch((e) => ({ status: 0, json: { msg: String(e?.message || e) } }));
+    const { status, json } = await ntsPost(key, need).catch((e) => ({ status: 0, json: { msg: String(e?.message || e) } }));
     const parsed = C.parseNtsStatus(json);
     if (!parsed.ok) {
       console.error("[국세청 조회] 실패:", status, parsed.error);
@@ -254,28 +276,32 @@ function makePublicData({ db, fetch: fetchFn, getKey, now: nowFn = () => Date.no
   }
 
   // ─────────────── 연동 설정(관리센터) ───────────────
+  // ⭐ 2026-11-14 "오류"만 보이고 이유를 몰랐다 → 포털이 돌려준 원래 문구 · HTTP 상태 · 확인할 것(hint)을 같이 돌려준다
+  const KEY_HINT = "① 공공데이터포털 마이페이지 › 활용신청 현황에서 이 서비스가 \"승인\"인지 ② 승인 직후면 1~2시간 뒤 다시 시험 ③ 비밀값을 \"일반 인증키(Decoding)\"로 넣었는지 ④ 비밀값을 바꿨다면 함수를 다시 배포했는지";
+  const NET_HINT = "공공데이터포털 서버 점검 · 장애일 수 있어요. 잠시 뒤 다시 시험하고, 계속 같으면 data.go.kr 공지사항을 확인해 주세요";
+  const errOut = (what, e, extra = "") => ({ status: "error", detail: `${what} — ${String(e?.message || e)}`, hint: e?.network ? NET_HINT : extra });
   async function testNts(key) {
     if (!keyOk(key)) return { status: "nokey" };
     try {
-      const { status, json } = await fetchJson(fetchFn, `${NTS_URL}?serviceKey=${encKey(key)}&returnType=JSON`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ b_no: ["1208147521"] }),
-      });
+      const { status, json } = await ntsPost(key, ["1208147521"]);
       const C = await loadCore();
       const p = C.parseNtsStatus(json);
-      return p.ok ? { status: "ok" } : { status: "error", detail: p.keyError || status === 401 ? "키가 맞지 않거나 활용신청 승인 전이에요" : p.error };
-    } catch (e) { return { status: "error", detail: String(e?.message || e) }; }
+      if (p.ok) return { status: "ok" };
+      const keyErr = p.keyError || status === 401 || status === 403;
+      return { status: "error", detail: `국세청 응답(HTTP ${status || "-"}): ${p.error || "알 수 없음"}`, hint: keyErr ? KEY_HINT.replace("이 서비스", "\"국세청_사업자등록정보 진위확인 및 상태조회 서비스\"") : status >= 500 ? NET_HINT : "" };
+    } catch (e) { return errOut("국세청 연결 실패", e); }
   }
   async function testKma(key) {
     if (!keyOk(key)) return { status: "nokey" };
     try {
       const C = await loadCore();
-      const { json } = await fetchJson(fetchFn, kmaUrl(KMA_ULTRA, { numOfRows: "10", ...C.ultraBase(nowFn()), nx: "60", ny: "127" }, key));
+      const { status, json } = await fetchJson(fetchFn, kmaUrl(KMA_ULTRA, { numOfRows: "10", ...C.ultraBase(nowFn()), nx: "60", ny: "127" }, key));
       const r = C.kmaItems(json);
-      if (!r.ok) return { status: "error", detail: r.keyError ? "키가 맞지 않거나 단기예보 활용신청 전이에요" : r.error };
-      const { json: wj } = await fetchJson(fetchFn, kmaUrl(KMA_PWN, { numOfRows: "1" }, key));
+      if (!r.ok) return { status: "error", detail: `단기예보 응답(HTTP ${status || "-"}): ${r.error || "알 수 없음"}`, hint: r.keyError || status === 401 || status === 403 ? KEY_HINT.replace("이 서비스", "\"기상청_단기예보 조회서비스\"") : NET_HINT };
+      const { status: ws, json: wj } = await fetchJson(fetchFn, kmaUrl(KMA_PWN, { numOfRows: "1" }, key));
       const w = C.kmaItems(wj);
-      return w.ok ? { status: "ok" } : { status: "error", detail: w.keyError ? "기상특보 활용신청이 필요해요" : w.error };
-    } catch (e) { return { status: "error", detail: String(e?.message || e) }; }
+      return w.ok ? { status: "ok" } : { status: "error", detail: `기상특보 응답(HTTP ${ws || "-"}): ${w.error || "알 수 없음"} — 단기예보는 정상이에요`, hint: w.keyError || ws === 401 || ws === 403 ? KEY_HINT.replace("이 서비스", "\"기상청_기상특보 조회서비스\"") : NET_HINT };
+    } catch (e) { return errOut("기상청 연결 실패", e); }
   }
   async function integrationStatus(data, auth) {
     const who = await callerOf(db, auth);
@@ -297,4 +323,4 @@ function makePublicData({ db, fetch: fetchFn, getKey, now: nowFn = () => Date.no
   return { bizStatusCheck, weatherFor, weatherRefresh, integrationStatus, refreshWarnings, ensureRegions };
 }
 
-module.exports = { makePublicData, PdError, callerOf, keyOk, encKey, BIZ_TIER, NTS_URL, KMA_VIL, KMA_ULTRA, KMA_PWN };
+module.exports = { makePublicData, PdError, callerOf, keyOk, encKey, rawKey, cleanKey, BIZ_TIER, NTS_URL, KMA_VIL, KMA_ULTRA, KMA_PWN };

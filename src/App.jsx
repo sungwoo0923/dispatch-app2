@@ -40,7 +40,8 @@ import { DRIVER_BUSY_EVENT, isDriverBusy } from "./driver/driverLoginErrors"; //
 import { initDriverAppContext, markDriverAppOnlyKick } from "./driver/driverAppContext"; // ⭐ 2026-11-08 기사앱(APK·홈 화면 기사앱)은 기사 계정만
 // ⭐ 2026-11-08 기사앱 안인지 — 안드로이드 APK 또는 기사 화면에서 "홈 화면에 추가"한 기사앱(실행 중 standalone). 열릴 때 한 번 정한다
 const DRIVER_APP = !IS_MOBILE_PREVIEW && initDriverAppContext();
-import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, orderBy, limit, getDocs, getDoc, deleteDoc } from "firebase/firestore";
+import { doc, onSnapshot, addDoc, collection, serverTimestamp, query, orderBy, limit, getDocs, getDoc, deleteDoc, where, Timestamp } from "firebase/firestore";
+import { accessLogCutoffMs } from "./accessLogRetention";
 
 // 역할별 대형 화면은 지연 로딩(code-splitting)한다 — 이전에는 전부 하나의 번들로
 // 즉시 로드되어, 로그인 화면 하나만 보려 해도 운송사/화주사/모바일 프로그램 전체
@@ -701,15 +702,14 @@ export default function App() {
   //  일반적인 한계가 있음 — 명시적 로그아웃/세션 종료 시에만 기록된다.)
   const sessionLogRef = useRef({ uid: null, info: null });
 
-  // 접속이력이 무한정 쌓이지 않도록, 기록을 남길 때마다 최신 50건만 남기고
-  // 과거순으로 초과분을 정리한다.
+  // 🧹 2026-11-14 접속이력은 7일 보관 — 매일 새벽 서버(purgeOldAccessLogs)가 지우고,
+  //  최고관리자가 로그인·로그아웃할 때도 7일 지난 기록을 바로 정리한다(다른 계정은 지울 권한이 없어 건너뛴다).
+  //  (예전엔 "최신 50건만" 남겼는데 최고관리자 외에는 지우지 못해 실제로는 계속 쌓였다)
   const pruneSessionLogs = async () => {
+    if (sessionLogRef.current.info?.role !== "totalMaster") return;
     try {
-      const snap = await getDocs(query(collection(db, "sessionLogs"), orderBy("at", "desc"), limit(200)));
-      const excess = snap.docs.slice(50);
-      if (excess.length) {
-        await Promise.all(excess.map((d) => deleteDoc(doc(db, "sessionLogs", d.id))));
-      }
+      const snap = await getDocs(query(collection(db, "sessionLogs"), where("at", "<", Timestamp.fromMillis(accessLogCutoffMs())), limit(200)));
+      if (!snap.empty) await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
     } catch {}
   };
 
