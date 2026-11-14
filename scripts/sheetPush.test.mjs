@@ -252,7 +252,10 @@ async function world(mode, opts = {}) {
   await w.db.collection("sheetLiveLock").doc(CO).set({ until: Date.now() + 60000, by: "other" });
   assert.equal(await live.kick(CO, "sheet"), "queued");
   assert.equal(w.db.data("sheetLiveLock", CO).need, 2);
-  await w.db.collection("sheetLiveLock").doc(CO).set({ until: 0, by: "" }, { merge: true });
+  await w.db.collection("sheetLiveLock").doc(CO).set({ until: 0, by: "" }, { merge: true }); // 하던 쪽이 횟수를 다 쓰고 놓음 — 기다리는 일은 남아 있다
+  row[18] = "010-1212-3434";
+  assert.equal(await live.kick(CO, "safety"), "ran"); // 다음에 잡은 쪽이 남은 일(시트 읽기)을 같이 한다
+  assert.equal(find().전화번호, "010-1212-3434");
   // 시트 알림이 설치된 회사의 안전장치는 시트를 직접 읽지 않는다(수정 시각만 본다)
   const calls0 = w.sh.calls.length;
   assert.equal(await live.kick(CO, "safety"), "ran");
@@ -263,6 +266,25 @@ async function world(mode, opts = {}) {
   // 새 열쇠로 바꾸면 예전 열쇠는 안 통한다
   await live.handle("pingScript", { company: CO, renew: true }, {});
   assert.equal((await live.onPing(key)).status, 404);
+  // ⚡ 고친 탭만 알려 오면 그 탭만 읽는다(읽기 한도를 가장 덜 씀) — 다른 탭의 오더는 건드리지 않는다
+  const k2 = ((await live.handle("pingScript", { company: CO }, {})).script.match(/\?k=([0-9a-f]{32})/) || [])[1];
+  assert.match((await live.handle("pingScript", { company: CO }, {})).script, /onEdit\(\)[\s\S]*onChange\(\)/);
+  const before = w.db.ids("orders").length;
+  row[17] = "칠기사";
+  const c1 = w.sh.calls.length;
+  assert.equal((await live.onPing(k2, { tab: "아산 내수" })).body.result, "ran");
+  const got = w.sh.calls.slice(c1).filter((c) => c.includes("batchGet")).map((c) => [...c.matchAll(/ranges=([^&]+)/g)].map((m) => decodeURIComponent(m[1]))).flat();
+  assert.deepEqual(got, ["'아산 내수'"], got.join(" / "));
+  assert.equal(find().이름, "칠기사");
+  assert.equal(w.db.ids("orders").length, before); // 다른 탭 오더는 그대로(지워지지 않음)
+  // 고친 탭의 줄 값을 지우면(onEdit) 그 오더만 지워진다
+  const saved = [...row]; row.splice(0, row.length, ...row.map(() => ""));
+  assert.equal((await live.onPing(k2, { tab: "아산 내수" })).body.result, "ran");
+  assert.equal(find(), undefined);
+  assert.equal(w.db.ids("orders").length, before - 1);
+  row.splice(0, row.length, ...saved); // 되살리기 → 줄 추가 알림(full)
+  assert.equal((await live.onPing(k2, { full: true, type: "INSERT_ROW" })).body.result, "ran");
+  assert.equal(find().이름, "칠기사");
   // 아래부터는 시트 알림이 없을 때(최근 줄 직접 비교) 동작
   await w.db.collection("sheetLive").doc(CO).set({ pingAt: 0 }, { merge: true });
   // ⚡ 구글이 수정 시각을 늦게 바꿔도(mt 그대로) 최근 줄을 직접 읽어 바로 반영한다 — 차량번호 먼저, 몇 초 뒤 기사명 · 전화번호

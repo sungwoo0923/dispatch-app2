@@ -6228,7 +6228,8 @@ exports.sheetPushKick = functions.runWith({ timeoutSeconds: 300, memory: "1GB" }
 // ⚡ 2026-11-14 시트 알림 — 시트에 붙인 Apps Script(onChange)가 "바뀜"을 알리면 바로 시트를 읽어 맞춘다(열쇠 = sheetLive/{회사}.pingKey)
 exports.sheetLivePing = functions.runWith({ timeoutSeconds: 300, memory: "1GB" }).https.onRequest(async (req, res) => {
   try {
-    const r = await _sheetLive.onPing(req.query?.k || req.body?.k);
+    let b = req.body; if (typeof b === "string") { try { b = JSON.parse(b); } catch { b = {}; } }
+    const r = await _sheetLive.onPing(req.query?.k || b?.k, b || {});
     res.status(r.status).json(r.body);
   } catch (e) { console.error("[시트 알림 실패]", e?.message || e); res.status(500).json({ error: "failed" }); }
 });
