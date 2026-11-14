@@ -2,21 +2,25 @@
 // 🔁 2026-11-13 구글시트 실시간 반영 — 시트에서만 입력 · 수정하는 운송사(지금은 JY로지스틱스)
 //  · 설정: sheetLive/{회사} = { companyName, url, tabs[], enabled, days, removeMissing, lastMt, lastHash, lastRunAt, lastResult, lastError }
 //    (관리센터 › 배차일지 가져오기 › [실시간 반영]에서 켠다 — 서버만 읽고 쓴다)
-//  · 1분마다(syncSheetOrders): 시트가 바뀌었을 때만(Drive 수정 시각) 읽어서 → carrierMigrateCore.buildMigration → reconcileOrders
+//  · 약 4초마다(syncSheetOrders · runLoop): 최근 줄이 바뀌었거나 Drive 수정 시각이 바뀌었을 때 · 1분마다 한 번은 무조건 읽어서 → carrierMigrateCore.buildMigration → reconcileOrders
 //    → orders 에 새 줄은 만들고, 바뀐 줄은 바뀐 칸만 고치고, 시트에서 지운 줄은 지운다(removeMissing)
 //  · orders 문서가 바뀌므로 배차현황 · 실시간 · 정산 등 오더를 보는 모든 화면에 바로 반영된다(화면은 onSnapshot)
 //  · 반영 범위: 상차일이 오늘 − days 이후인 줄(지난 달 정산 끝난 오더는 건드리지 않는다)
 const crypto = require("crypto");
 
 const kstYmd = (ms = Date.now()) => new Date(ms + 9 * 3600 * 1000).toISOString().slice(0, 10);
-// ⚡ 2026-11-14 더 빨리 — 스케줄은 1분마다지만 그 1분 동안 약 8초마다 확인한다(runLoop). 시트가 바뀐 표시(수정 시각 · 버전)가 달라졌거나
-//  프로그램에서 바뀐 오더가 대기 중이면 바로 처리한다. 표시가 늦게 바뀌는 경우에 대비해 2분에 한 번은 표시와 상관없이 직접 읽어 비교한다
-const FULL_EVERY_MS = 2 * 60 * 1000; // 바뀐 표시가 없어도 2분에 한 번은 시트를 직접 읽어 비교
-const NO_META_EVERY_MS = 60 * 1000; // 바뀐 표시를 못 읽으면 1분마다
-const TICK_MS = 8000; // 확인 간격
-const LOOP_MS = 50 * 1000; // 한 번 불렸을 때 확인을 이어 가는 시간(다음 스케줄 전에 끝낸다)
+// ⚡ 2026-11-14 더 빨리 — 스케줄은 1분마다지만 그 1분 동안 약 4초마다 확인한다(runLoop)
+// ⚡ 2026-11-14(2) 바로바로 — 예전엔 Drive "수정 시각 · 버전"으로 바뀐 걸 알아봤는데, 구글이 이 표시를 1~2분 늦게 바꿔서
+//  시트에서 기사명 · 전화번호를 넣어도 한참 뒤(2분 안전장치 때)에야 들어왔다.
+//  이제 확인할 때마다 최근 며칠치 줄(PEEK_DAYS · 새로 붙는 맨 아래 줄 포함)만 직접 읽어 비교한다(가볍다 — 한 번에 수십~수백 줄)
+//  → 바뀌었으면 바로 전체를 읽어 맞춘다. 그보다 오래된 줄은 수정 시각이 바뀌거나 1분마다 하는 전체 비교 때 들어온다
+const FULL_EVERY_MS = 60 * 1000; // 바뀐 표시가 없어도 1분에 한 번은 시트 전체를 읽어 비교
+const TICK_MS = 4000; // 확인 간격(시트 읽기 한도 — 서버 계정 1분 60회 — 안에서)
+const LOOP_MS = 52 * 1000; // 한 번 불렸을 때 확인을 이어 가는 시간(다음 스케줄 전에 끝낸다)
+const PEEK_DAYS = 3; // 매번 직접 읽어 보는 범위: 상차일이 오늘 − 3일 이후인 줄부터 맨 아래까지
 
-const RECENT_EDIT_MS = 30 * 1000; // 방금 프로그램에서 고친 오더는 한 차례 건너뛴다(그 변경이 시트로 먼저 간다 — functions/sheetPushOrders.js)
+const RECENT_EDIT_MS = 10 * 1000; // 방금 프로그램에서 고친 오더는 잠깐 건너뛴다(그 변경이 시트로 먼저 간다 — functions/sheetPushOrders.js)
+//  시트로 가길 기다리는 오더(sheetPushQueue 대기)도 건너뛴다 — 예전엔 30초를 통째로 기다려서 시트에서 바로 고쳐도 늦게 들어왔다
 
 function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab, sheetModifiedTime, bumpDataVersion, push = null }) {
   const ref = (co) => db.collection("sheetLive").doc(co);
@@ -44,6 +48,28 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
       part.forEach((s, k) => out.push({ title: s.properties.title, rows: got.valueRanges?.[k]?.values || [], merges: s.merges || [] }));
     }
     return out;
+  }
+
+  // 👀 최근 줄만 빨리 읽어 지문(해시)을 만든다 — ranges: [{ tab, row }] → 그 탭의 row 줄부터 맨 아래까지
+  const peekOf = new Map(); // 회사 → { url, ranges, fp }
+  async function peek(id, ranges) {
+    if (!ranges.length) return "";
+    const got = await sheetsApiFor(id, "GET", `/values:batchGet?${ranges.map((r) => `ranges=${encodeURIComponent(`${quoteTab(r.tab)}!A${r.row}:ZZ`)}`).join("&")}&valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`);
+    return crypto.createHash("sha1").update(JSON.stringify((got.valueRanges || []).map((v) => v.values || []))).digest("hex");
+  }
+  // 전체를 읽은 뒤 — 탭마다 "최근 줄 첫 줄"(없으면 마지막 오더 줄)을 정해 둔다(그 아래로 새 줄이 붙는다)
+  function peekRanges(orders, wantTabs, now) {
+    const cut = kstYmd(now - PEEK_DAYS * 86400000);
+    const by = new Map();
+    orders.forEach((o) => {
+      const tab = String(o.__tab || String(o.이전출처 || "").split("!")[0]); const row = Number(o.__row || String(o.이전출처 || "").split("!")[1]) || 0;
+      if (!tab || !row || (wantTabs && !wantTabs.has(tab))) return;
+      const x = by.get(tab) || { recent: 0, last: 0 };
+      if (String(o.상차일 || "") >= cut && (!x.recent || row < x.recent)) x.recent = row;
+      if (row > x.last) x.last = row;
+      by.set(tab, x);
+    });
+    return [...by.entries()].map(([tab, x]) => ({ tab, row: x.recent || x.last })).sort((a, b) => (a.tab < b.tab ? -1 : a.tab > b.tab ? 1 : 0));
   }
 
   // 화면(CarrierMigratePanel)과 같은 규칙으로 설정을 합친다 — 저장된 설정 + 회사별 시작 규칙(시작 규칙이 이김)
@@ -76,10 +102,19 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     if (!id) throw new Error("구글시트 주소가 올바르지 않습니다.");
     const now = Date.now();
     const mt = await sheetModifiedTime(id);
-    if (!force && !sheetWritten) {
-      if (mt && mt === String(cfg.lastMt || "") && now - Number(cfg.lastFullAt || 0) < FULL_EVERY_MS) return { skipped: "unchanged" };
-      if (!mt && now - Number(cfg.lastRunAt || 0) < NO_META_EVERY_MS) return { skipped: "wait" };
-    }
+    const pk = peekOf.get(co); const pkOk = !!pk && pk.url === cfg.url;
+    let fp; // 이번에 읽은 최근 줄 지문(전체를 읽기 "전에" 잡는다 — 읽는 사이 고친 것은 다음 확인 때 다시 걸린다)
+    if (!force && !sheetWritten && now - Number(cfg.lastFullAt || 0) < FULL_EVERY_MS) {
+      let changed = !!mt && mt !== String(cfg.lastMt || "");
+      if (!changed) {
+        if (!pkOk) changed = true; // 서버가 막 켜져 기준이 없다 → 한 번 전체를 읽는다
+        else {
+          fp = await peek(id, pk.ranges).catch((e) => { console.warn(`[시트 실시간] ${co} 빠른 확인 실패:`, e?.message || e); return undefined; });
+          changed = fp !== undefined && fp !== pk.fp;
+        }
+      }
+      if (!changed) return { skipped: "unchanged" };
+    } else if (pkOk && !force) fp = await peek(id, pk.ranges).catch(() => undefined);
     const M = await import("./carrierMigrateCore.mjs");
     const P = await import("./sheetProfileCore.mjs");
     const raw = await readTabs(id, null); // 주소 찾기에 상하차지 · 기사 탭도 필요해서 전부 읽고, 오더만 고른 탭으로 거른다
@@ -95,6 +130,11 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     const from = preset.fromDate && /^\d{4}-\d{2}-\d{2}$/.test(preset.fromDate) && preset.fromDate < daysFrom ? preset.fromDate : daysFrom;
     const wantTabs = Array.isArray(cfg.tabs) && cfg.tabs.length ? new Set(cfg.tabs.map(String)) : null;
     const incoming = built.orders.filter((o) => String(o.상차일 || "") >= from && (!wantTabs || wantTabs.has(String(o.이전출처 || "").split("!")[0])));
+    // 다음 빠른 확인의 기준 — 범위가 그대로면 위에서 잡은 지문을, 바뀌었으면(날이 바뀜 · 줄이 늘어남) 새 범위로 한 번 읽어 둔다
+    const ranges = peekRanges(built.orders, wantTabs, now);
+    const sameRanges = pkOk && JSON.stringify(pk.ranges) === JSON.stringify(ranges);
+    const baseFp = sameRanges && fp !== undefined ? fp : await peek(id, ranges).catch(() => undefined);
+    if (baseFp === undefined) peekOf.delete(co); else peekOf.set(co, { url: cfg.url, ranges, fp: baseFp });
     const hash = crypto.createHash("sha1").update(JSON.stringify(incoming)).digest("hex");
     const stamp = { lastMt: mt || "", lastRunAt: now, lastFullAt: now, lastError: "" };
     if (!force && hash === cfg.lastHash) { await ref(co).set({ ...stamp, lastCheckedAt: now }, { merge: true }); await writeStatus(co, { enabled: true, error: "" }); return { skipped: "same" }; }
@@ -109,7 +149,8 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
       if (gone.length) { const C = await import("./sheetPushCore.mjs"); const n0 = r.create.length; r.create = r.create.filter((o) => !gone.some((b) => C.matchesDeleted(b, o))); if (r.create.length !== n0) again = true; }
       // 방금 프로그램에서 고친 오더는 이번엔 건드리지 않는다(그 변경이 아직 시트로 가는 중일 수 있다)
       const n1 = r.update.length; const byId = new Map(existing.map((e) => [e.id, e.data]));
-      r.update = r.update.filter((u) => { const d = byId.get(u.id) || {}; return !(now - Number(d._lastModified || 0) < RECENT_EDIT_MS && d.최종수정자 !== by); });
+      const waiting = push.pendingIds ? await push.pendingIds(co).catch(() => new Set()) : new Set();
+      r.update = r.update.filter((u) => { const d = byId.get(u.id) || {}; return !waiting.has(u.id) && !(now - Number(d._lastModified || 0) < RECENT_EDIT_MS && d.최종수정자 !== by); });
       if (r.update.length !== n1) again = true;
     }
     const batchId = `live_${kstYmd(now).replace(/-/g, "")}`;
@@ -130,6 +171,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     const kinds = [...new Set(incoming.map((o) => String(o.차량종류 || "").trim()).filter((k) => k && !/\d+(\.\d+)?\s*(톤|t\b)/i.test(k)))];
     if (kinds.length && r.create.length) await db.collection("vehicleTypes").doc(co).set({ companyName: co, custom: FieldValue.arrayUnion(...kinds) }, { merge: true }).catch(() => {});
     const result = { created: r.create.length, updated: r.update.length, removed, heldBack, same: r.same, total: incoming.length, from, at: now };
+    if (again) peekOf.delete(co); // 미룬 것이 있으면 다음 확인 때 바로 다시 전체를 읽는다
     await ref(co).set({ ...stamp, ...(again ? { lastMt: "" } : {}), lastHash: heldBack || again ? "" : hash, lastResult: result, ...(ops.length ? { lastChangeAt: now } : {}) }, { merge: true });
     await writeStatus(co, { enabled: true, error: "", ...(ops.length ? { changedAt: now, created: result.created, updated: result.updated, removed: result.removed } : {}), heldBack }, { force: ops.length > 0 || force });
     // ⚠ 2026-11-13 여기서 dataVersion 을 올리지 않는다 — 올리면 열려 있는 모든 PC가 13개월 오더 전체를 다시 받는다(1분마다 반복될 수 있었다)
@@ -158,7 +200,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     }
   }
 
-  // ⚡ 스케줄(1분)마다 한 번 불려서, 그 1분 동안 TICK_MS 간격으로 확인을 되풀이한다 — 바뀐 것이 없으면 수정 표시만 보고 지나간다(가볍다)
+  // ⚡ 스케줄(1분)마다 한 번 불려서, 그 1분 동안 TICK_MS(4초) 간격으로 확인을 되풀이한다 — 바뀐 것이 없으면 수정 표시만 보고 지나간다(가볍다)
   async function runLoop({ loopMs = LOOP_MS, tickMs = TICK_MS, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
     const t0 = Date.now(); let n = 0;
     for (;;) {

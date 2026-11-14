@@ -6217,7 +6217,7 @@ exports.sheetConnect = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeo
 const _sheetPush = require("./sheetPushOrders").makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab });
 exports.queueOrderSheetPush = functions.firestore.document("orders/{orderId}").onWrite((change, context) => _sheetPush.onOrderWrite(change, context).catch((e) => { console.error("[시트 쓰기 대기열 실패]", context.params.orderId, e?.message || e); return null; }));
 const _sheetLive = require("./sheetLiveOrders").makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab, sheetModifiedTime: sheetChangeToken, bumpDataVersion, push: _sheetPush });
-exports.syncSheetOrders = functions.runWith({ timeoutSeconds: 300, memory: "1GB", maxInstances: 1 }).pubsub.schedule("every 1 minutes").timeZone("Asia/Seoul").onRun(async () => { await _sheetLive.runLoop(); return null; }); // ⚡ 1분 동안 약 8초마다 확인(시트 변경 · 프로그램 변경 모두)
+exports.syncSheetOrders = functions.runWith({ timeoutSeconds: 300, memory: "1GB", maxInstances: 1 }).pubsub.schedule("every 1 minutes").timeZone("Asia/Seoul").onRun(async () => { await _sheetLive.runLoop(); return null; }); // ⚡ 1분 동안 약 4초마다 확인(시트 최근 줄 직접 비교 · 프로그램 변경 모두)
 
 exports.sheetImport = functions
   .runWith({ timeoutSeconds: 540, memory: "1GB" })

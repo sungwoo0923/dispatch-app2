@@ -60,7 +60,7 @@ const Stat = ({ label, value, sub }) => (
   </div>
 );
 
-// 🔁 2026-11-13 실시간 반영 — 시트에서만 입력 · 수정하는 운송사. 서버가 1분마다 시트를 보고 바뀐 줄만 오더에 반영한다(functions/sheetLiveOrders.js)
+// 🔁 2026-11-13 실시간 반영 — 시트에서만 입력 · 수정하는 운송사. 서버가 약 4초마다 시트를 보고 바뀐 줄만 오더에 반영한다(functions/sheetLiveOrders.js)
 const LIVE_DAYS = [[7, "최근 7일"], [14, "최근 14일"], [31, "최근 1개월"], [62, "최근 2개월"], [93, "최근 3개월"], [400, "가져오기 시작일"]]; // 🛠 2026-11-14 가져오기 시작일(JY 10/1)이 있으면 서버는 그날부터 늘 비교한다
 const agoText = (ms) => { if (!ms) return "아직 없음"; const s = Math.max(0, Math.round((Date.now() - ms) / 1000)); return s < 60 ? "방금" : s < 3600 ? `${Math.floor(s / 60)}분 전` : s < 86400 ? `${Math.floor(s / 3600)}시간 전` : `${Math.floor(s / 86400)}일 전`; };
 // 서버 기능이 아직 배포되지 않았으면 예전 서버가 "알 수 없는 요청"이라고 답한다 → 무엇을 해야 하는지 알려 준다
@@ -87,7 +87,7 @@ function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
   const turnOn = async () => {
     const u = (url || live?.url || "").trim();
     if (!u) return setMsg("위 칸에 구글시트 주소를 먼저 붙여넣어 주세요.");
-    if (!(await kpConfirm(`${co} — 구글시트 실시간 반영을 켤까요?\n\n· 약 10초마다 시트를 확인해 새 줄은 오더로 만들고, 고친 줄은 그 오더를 고칩니다\n· 시트에서 지운 줄은 프로그램 오더도 지웁니다(아래에서 끌 수 있음)\n· 프로그램에서 직접 고친 값은 다음 반영 때 시트 값으로 돌아갑니다(아래 [프로그램 → 시트 반영]을 켜면 시트에도 씁니다) — 입력 · 수정은 시트에서만 하세요`))) return;
+    if (!(await kpConfirm(`${co} — 구글시트 실시간 반영을 켤까요?\n\n· 약 4초마다 시트를 확인해 새 줄은 오더로 만들고, 고친 줄은 그 오더를 고칩니다\n· 시트에서 지운 줄은 프로그램 오더도 지웁니다(아래에서 끌 수 있음)\n· 프로그램에서 직접 고친 값은 다음 반영 때 시트 값으로 돌아갑니다(아래 [프로그램 → 시트 반영]을 켜면 시트에도 씁니다) — 입력 · 수정은 시트에서만 하세요`))) return;
     await set({ url: u, enabled: true, days: live?.days || 14, tabs: pickedTabs }, "on");
     runNow();
   };
@@ -107,7 +107,7 @@ function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
       <div className="px-5 py-4 flex items-center gap-3 flex-wrap border-b border-[#E8EDF4] bg-[#F7F9FC]">
         <span className="text-[11px] font-extrabold tracking-[0.2em] text-[#94A3B8]">LIVE</span>
         <span className="text-[16px] font-black text-[#0F1A30]">구글시트 실시간 반영</span>
-        <span className={`text-[13px] font-black ${on ? "text-[#0F7A43]" : "text-[#7A879C]"}`}>{live === undefined ? "확인 중" : on ? "켜짐 · 약 10초마다 확인" : "꺼짐"}</span>
+        <span className={`text-[13px] font-black ${on ? "text-[#0F7A43]" : "text-[#7A879C]"}`}>{live === undefined ? "확인 중" : on ? "켜짐 · 약 4초마다 확인" : "꺼짐"}</span>
         <div className="ml-auto flex items-center gap-2">
           {on && <button type="button" onClick={runNow} disabled={!!busy} className={`${btn} h-10 px-4 border border-[#C9D5EA] bg-white text-[#1B2B4B] text-[13.5px]`}>{busy === "run" ? "반영 중…" : "지금 반영"}</button>}
           {on

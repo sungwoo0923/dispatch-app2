@@ -94,7 +94,7 @@ function fakeSheet(tabs, { denyWrite = false } = {}) {
   const ranges = (path) => [...path.matchAll(/ranges=([^&]+)/g)].map((m) => decodeURIComponent(m[1]).replace(/^'|'$/g, ""));
   const api = async (id, method, path, opts = {}) => {
     if (method === "GET" && path.startsWith("?fields=")) return { sheets: titles().map((t, i) => ({ properties: { sheetId: i + 1, title: t, index: i, gridProperties: { rowCount: 100 } }, merges: [] })) };
-    if (method === "GET" && path.startsWith("/values:batchGet")) { const f = /FORMULA/.test(path) ? formulasOf(tabs) : tabs; return { valueRanges: ranges(path).map((t) => ({ values: f[t] })) }; }
+    if (method === "GET" && path.startsWith("/values:batchGet")) { const f = /FORMULA/.test(path) ? formulasOf(tabs) : tabs; return { valueRanges: ranges(path).map((t) => { const m = t.match(/^(.+)'!A(\d+):ZZ$/); return { values: m ? (f[m[1]] || []).slice(+m[2] - 1).map((r) => [...r]) : f[t] }; }) }; }
     if (method === "GET" && path.startsWith("/values/")) return { values: [[tabs[titles()[0]][0][0]]] };
     if (method === "POST" && path === "/values:batchUpdate") {
       if (denyWrite) throw Object.assign(new Error("The caller does not have permission"), { response: { status: 403 } });
@@ -241,7 +241,17 @@ async function world(mode, opts = {}) {
   const n = await live.runLoop({ loopMs: 40, tickMs: 10, sleep: async (ms) => { slept += 1; if (slept === 2) { row[16] = "경기66바6666"; mt += 1; } await new Promise((r2) => setTimeout(r2, ms)); } });
   assert.ok(n >= 3, `확인 ${n}번`);
   assert.equal(find().차량번호, "경기66바6666");
-  console.log("live(시트에서 기사 삭제) OK");
+  // ⚡ 구글이 수정 시각을 늦게 바꿔도(mt 그대로) 최근 줄을 직접 읽어 바로 반영한다 — 차량번호 먼저, 몇 초 뒤 기사명 · 전화번호
+  row[17] = "육기사"; row[18] = "010-6666-7777";
+  r = await live.runOne(CO, cfg());
+  assert.equal(r.updated, 1, JSON.stringify(r));
+  assert.deepEqual([find().이름, find().전화번호], ["육기사", "010-6666-7777"]);
+  assert.deepEqual(await live.runOne(CO, cfg()), { skipped: "unchanged" });
+  // 시트 맨 아래에 새 줄을 붙여도(mt 그대로) 바로 오더가 된다
+  w.tabs["아산 내수"].push([`${y}. ${m}. ${d}`, "신봉길101", "평택시 포승읍", "", "", "10", "1톤", "90,000", "", "90,000", "70,000", "", "70,000", "20,000", "", "원콜", "", "", "", "", ""]);
+  r = await live.runOne(CO, cfg());
+  assert.equal(r.created, 1, JSON.stringify(r));
+  console.log("live(시트에서 기사 삭제 · 수정 시각이 늦어도 바로 반영) OK");
 }
 {
   // 🛠 2026-11-14 비교 범위 — 반영 범위가 "최근 14일"이어도 가져오기 시작일(JY 10/1) 이후 줄은 시트에서 고치면 반영된다

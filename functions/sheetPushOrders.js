@@ -3,7 +3,7 @@
 //  · 설정: sheetLive/{회사}.pushMode = "off"(기본) · "dry"(점검 — 무엇을 쓸지만 기록, 시트는 그대로) · "on"(시트에 쓴다)
 //    실시간 반영(enabled)이 켜져 있을 때만 동작한다. 관리센터 › 배차일지 가져오기 › [프로그램 → 시트 반영]에서 바꾼다
 //  · 오더가 바뀌면(queueOrderSheetPush — orders 문서 트리거) sheetPushQueue/{오더ID} 에 적어 두고,
-//    1분마다 도는 실시간 반영(syncSheetOrders)이 시트를 읽기 전에 먼저 처리한다(같은 함수 안에서 차례로 → 서로 엇갈리지 않는다)
+//    약 4초마다 확인하는 실시간 반영(syncSheetOrders)이 시트를 읽기 전에 먼저 처리한다(같은 함수 안에서 차례로 → 서로 엇갈리지 않는다)
 //  · 무엇을 어느 칸에 쓸지는 functions/sheetPushCore.mjs(쓰기 전에 가져오기 규칙으로 다시 읽어 확인 · 수식 칸은 안 건드림)
 //  · 삭제 = 그 줄의 값만 비운다. 한꺼번에 20건 넘게 지워지면 시트는 건드리지 않고 보류(관리센터에서 확인 후 진행 · 버리기)
 //  · 새 오더 = 그 오더의 담당노선구분(= 시트 탭 이름 · 오더 화면에서 고른다)이 있으면 그 탭, 없으면 같은 거래처 · 상차지 · 하차지가 이미 있는 탭 — 의 맨 아래 빈 줄
@@ -181,6 +181,12 @@ function makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     return snap.docs.map((d) => d.data()).filter((x) => ["pending", "held", "failed"].includes(x.state) && x.before).map((x) => x.before);
   }
 
+  // 시트로 아직 못 간 프로그램 변경(대기 중)이 있는 오더 — 실시간 반영이 그 오더를 옛 시트 값으로 되돌리지 않게
+  async function pendingIds(co) {
+    const snap = await q().where("companyName", "==", co).where("state", "==", "pending").limit(300).get();
+    return new Set(snap.docs.map((d) => d.id));
+  }
+
   // 실시간 반영을 끈 회사 · 시트 쓰기를 끈 회사의 대기 건은 버린다(나중에 다시 켰을 때 묵은 변경이 한꺼번에 시트로 가지 않게)
   async function purgeInactive(activeCompanies) {
     const snap = await q().where("state", "==", "pending").limit(300).get().catch(() => null);
@@ -241,7 +247,7 @@ function makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     return null;
   }
 
-  return { onOrderWrite, process, pendingDeletes, purgeInactive, sweep, handle, modeFor };
+  return { onOrderWrite, process, pendingDeletes, pendingIds, purgeInactive, sweep, handle, modeFor };
 }
 
 module.exports = { makeSheetPush };
