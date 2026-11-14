@@ -221,7 +221,7 @@ function SheetPushCard({ co }) {
         </div>
       </div>
       <div className="px-5 py-4 text-[13.5px] text-[#3A4A66] leading-relaxed">
-        <div>프로그램에서 오더를 등록 · 수정 · 삭제하면 시트의 그 탭 줄에도 반영합니다. 위 [구글시트 실시간 반영]이 켜져 있어야 동작하고, 새 오더는 <b className="text-[#1B2B4B]">담당노선구분</b>(= 시트 탭 이름)을 고른 탭에 들어갑니다. 수식이 든 칸(합계 · 이익 · 자동 운임 등)은 쓰지 않습니다.</div>
+        <div>프로그램에서 오더를 등록 · 수정 · 삭제하면 시트의 그 탭 줄에도 반영합니다. 위 [구글시트 실시간 반영]이 켜져 있어야 동작하고, 새 오더는 <b className="text-[#1B2B4B]">담당노선구분</b>(= 시트 탭 이름)을 고른 탭의 <b className="text-[#1B2B4B]">날짜 순서 자리</b>에 들어가요(더 늦은 날짜 줄이 있으면 그 날짜 마지막 줄 아래에 줄을 끼워 넣어요). 오더를 지우면 시트의 그 줄도 줄째로 지워요(여러 줄에 걸쳐 병합된 줄은 값만 비워요). 수식이 든 칸(합계 · 이익 · 자동 운임 등)은 쓰지 않습니다.</div>
         {push && !push.liveOn && mode !== "off" && <div className="mt-2 font-bold text-[#B26A00]">실시간 반영이 꺼져 있어 지금은 동작하지 않습니다.</div>}
         {push?.error && <div className="mt-2 font-bold text-[#B4342A]">오류: {push.error}</div>}
         {push && <div className="mt-3 flex items-center gap-2 flex-wrap text-[13px] text-[#5B6B85]">

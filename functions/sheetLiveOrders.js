@@ -201,12 +201,14 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
   async function work(co, cfg, reason, scope = {}) {
     pushModeOf.set(co, ["dry", "on"].includes(cfg.pushMode) ? cfg.pushMode : "off");
     const pr = push && cfg.pushMode && cfg.pushMode !== "off" ? await push.process(co, cfg, { presetFor, placesFor }).catch((e) => { console.error(`[시트 쓰기 실패] ${co}:`, e?.message || e); return {}; }) : {};
-    if (reason === "program") { await writeStatus(co, { enabled: true, error: "" }); return { pushed: !!pr.wrote }; }
+    // 줄을 끼우거나 지웠으면(아래 줄 번호가 밀림) 바로 시트 전체를 다시 읽어 오더의 줄 위치를 맞춘다
+    if (reason === "program" && !pr.structural) { await writeStatus(co, { enabled: true, error: "" }); return { pushed: !!pr.wrote, more: !!pr.more }; }
+    if (pr.structural) { const r0 = await runOne(co, cfg, { sheetWritten: true, usePeek: false }); return { ...r0, more: !!pr.more }; }
     const pinged = now0() - Number(cfg.pingAt || 0) < PING_FRESH_MS;
     const r = await runOne(co, cfg, reason === "sheet" ? { sheetWritten: true, usePeek: !pinged, onlyTabs: scope.full || !scope.tabs?.length ? null : scope.tabs } : pinged ? { fullEvery: SAFETY_FULL_MS, usePeek: false, sheetWritten: !!pr.wrote } : { sheetWritten: !!pr.wrote });
     if (r.skipped) await writeStatus(co, { enabled: true, error: "" });
     if (!r.skipped && (r.created || r.updated || r.removed || r.heldBack)) console.log(`[시트 실시간] ${co} (${reason})`, JSON.stringify(r));
-    return r;
+    return { ...r, more: !!pr.more };
   }
   const now0 = () => Date.now();
   const lockRef = (co) => db.collection("sheetLiveLock").doc(co);
@@ -239,12 +241,14 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
         const startedAt = Date.now();
         const cfg = (await ref(co).get()).data() || {};
         if (cfg.enabled !== true) return "off";
-        try { await work(co, cfg, LEVEL[job.need] || "safety", { tabs: job.tabs, full: job.full }); }
+        let res = null;
+        try { res = await work(co, cfg, LEVEL[job.need] || "safety", { tabs: job.tabs, full: job.full }); }
         catch (e) {
           console.error(`[시트 실시간 실패] ${co}:`, e?.message || e);
           await ref(co).set({ lastRunAt: Date.now(), lastError: String(e?.message || e).slice(0, 300) }, { merge: true }).catch(() => {});
           await writeStatus(co, { enabled: true, error: "시트를 읽지 못했습니다" }, { force: true });
         }
+        if (res?.more && round + 1 < MAX_ROUNDS) { job = { need: 1, full: false, tabs: [] }; await lockRef(co).set({ until: Date.now() + LOCK_MS }, { merge: true }); continue; } // 시트에 쓸 대기 건이 더 남았다
         // 도는 사이 또 바뀌었나? — 바뀌었으면 잠금을 쥔 채 한 번 더, 아니면 놓는다(확인과 놓기를 한 번에 해서 그 틈에 온 알림을 놓치지 않는다)
         //  횟수를 다 썼으면 기다리는 일은 남겨 둔 채 놓는다 → 다음 알림 · 스케줄(1분)이 이어서 한다
         const again = await db.runTransaction(async (tx) => {

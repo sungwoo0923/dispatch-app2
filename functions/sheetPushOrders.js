@@ -5,8 +5,8 @@
 //  · 오더가 바뀌면(queueOrderSheetPush — orders 문서 트리거) sheetPushQueue/{오더ID} 에 적어 두고,
 //    약 4초마다 확인하는 실시간 반영(syncSheetOrders)이 시트를 읽기 전에 먼저 처리한다(같은 함수 안에서 차례로 → 서로 엇갈리지 않는다)
 //  · 무엇을 어느 칸에 쓸지는 functions/sheetPushCore.mjs(쓰기 전에 가져오기 규칙으로 다시 읽어 확인 · 수식 칸은 안 건드림)
-//  · 삭제 = 그 줄의 값만 비운다. 한꺼번에 20건 넘게 지워지면 시트는 건드리지 않고 보류(관리센터에서 확인 후 진행 · 버리기)
-//  · 새 오더 = 그 오더의 담당노선구분(= 시트 탭 이름 · 오더 화면에서 고른다)이 있으면 그 탭, 없으면 같은 거래처 · 상차지 · 하차지가 이미 있는 탭 — 의 맨 아래 빈 줄
+//  · 삭제 = 그 줄을 지운다(2026-11-14 — 병합된 줄 · 줄 지우기 실패 때는 값만 비운다). 한꺼번에 20건 넘게 지워지면 시트는 건드리지 않고 보류(관리센터에서 확인 후 진행 · 버리기)
+//  · 새 오더 = 날짜 순서 자리(더 늦은 날짜 줄이 있으면 그 날짜 마지막 줄 아래에 줄을 끼움 · 아니면 맨 아래 빈 줄) · 탭은 그 오더의 담당노선구분(= 시트 탭 이름 · 오더 화면에서 고른다)이 있으면 그 탭, 없으면 같은 거래처 · 상차지 · 하차지가 이미 있는 탭 — 의 맨 아래 빈 줄
 //    탭을 못 정하면 오더에 시트탭필요 · 시트탭후보 를 적어 두고, 오더에서 담당노선구분을 고르면 그 탭에 넣는다
 const QUEUE = "sheetPushQueue";
 const MAX_PER_RUN = 20; // 한 번(1분)에 처리할 오더 수 — 한 건마다 시트 전체를 가져오기 규칙으로 두 번쯤 다시 읽는다
@@ -105,8 +105,13 @@ function makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     const C = await core(); const M = await import("./carrierMigrateCore.mjs"); const P = await import("./sheetProfileCore.mjs");
     const preset = { ...(await deps.presetFor(co, M)), extraPlaces: await deps.placesFor(co) };
     const pushTabs = Array.isArray(cfg.tabs) ? cfg.tabs.map(String) : [];
-    const book = await readAll(id, null);
-    const ctx = C.makePushContext(book.tabs.map((t) => ({ title: t.title, rows: P.applyMerges(t.rows, t.merges) })), preset, book.formulas);
+    let book = await readAll(id, null);
+    const ctxOf = (bk) => C.makePushContext(bk.tabs.map((t) => ({ title: t.title, rows: P.applyMerges(t.rows, t.merges) })), preset, bk.formulas);
+    let ctx = ctxOf(book);
+    // 🗑 2026-11-14 지운 오더의 줄은 줄째로 지운다 — 줄 번호가 밀리지 않게 이번 차례 맨 끝에 아래 줄부터 한 번에(dropRows)
+    //  날짜 칸 등이 여러 줄에 걸쳐 병합된 줄은 줄을 지우면 병합 값이 사라질 수 있어 예전처럼 값만 비운다
+    const merged = (tab, row) => ((book.tabs.find((t) => t.title === tab) || {}).merges || []).some((m) => m.endRowIndex - m.startRowIndex > 1 && m.startRowIndex <= row - 1 && row - 1 < m.endRowIndex);
+    const dropRows = []; let structural = false;
     const done = (it, state, result, extra = {}) => it.ref.set({ state, doneAt: Date.now(), result: result || null, ...extra }, { merge: true });
     const summary = (p) => ({ tab: p.tab || "", row: p.row || 0, cells: (p.cells || []).slice(0, 40).map((c) => ({ a1: c.a1, was: String(c.was ?? "").slice(0, 80), value: String(c.value ?? "").slice(0, 80) })), pushed: p.pushed || [], unpushed: p.unpushed || [], reason: p.reason || "" });
     // 삭제가 한꺼번에 많으면(전체 지우기 · 회사 초기화 등) 시트는 건드리지 않고 보류 — 관리센터에서 확인한 것(approved)만 진행
@@ -136,7 +141,15 @@ function makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
               if (mode === "on") await doc.ref.set({ 시트탭필요: true, 시트탭후보: (pk.candidates || []).slice(0, 30), 시트기록일시: FieldValue.serverTimestamp() }, { merge: true });
               await done(it, "needTab", { reason: "어느 탭에 넣을지 정하지 못했습니다(오더에서 탭을 골라 주세요)", candidates: (pk.candidates || []).slice(0, 30) }); continue;
             } }
-          plan = C.planCreate(ctx, after, tab, { rowCount: book.grid[tab]?.rowCount || 0 });
+          // 🗓 그 날짜보다 늦은 줄이 이미 있으면(12일까지 있는데 11일 오더) 11일 마지막 줄 바로 아래에 줄을 끼워 넣는다
+          const at = mode === "on" ? C.insertRowFor(ctx, after, tab) : 0;
+          if (at) {
+            await sheetsApiFor(id, "POST", ":batchUpdate", { data: { requests: [{ insertDimension: { range: { sheetId: book.grid[tab].sheetId, dimension: "ROWS", startIndex: at - 1, endIndex: at }, inheritFromBefore: true } }] } });
+            wrote = true; structural = true;
+            dropRows.forEach((d) => { if (d.tab === tab && d.row >= at) d.row += 1; }); // 이번 차례에 지울 줄이 아래에 있으면 한 줄 밀린다
+            book = await readAll(id, null); ctx = ctxOf(book); taken.clear(); // 줄 번호가 바뀌었으니 다시 읽는다
+            plan = C.planCreate(ctx, after, tab, { rowCount: book.grid[tab]?.rowCount || 0, atRow: at });
+          } else plan = C.planCreate(ctx, after, tab, { rowCount: book.grid[tab]?.rowCount || 0 });
           if (!plan.ok && plan.needRows && mode === "on") { // 탭에 빈 줄이 없으면 200줄 늘리고 다시
             await sheetsApiFor(id, "POST", ":batchUpdate", { data: { requests: [{ appendDimension: { sheetId: book.grid[tab].sheetId, dimension: "ROWS", length: 200 } }] } });
             book.grid[tab].rowCount += 200; wrote = true;
@@ -147,6 +160,7 @@ function makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
         if (!plan.ok) { await done(it, "failed", summary(plan)); continue; }
         if (plan.tab && plan.row) taken.add(`${plan.tab}!${plan.row}`);
         if (mode === "dry") { await done(it, "dry", summary(plan)); continue; }
+        if (it.kind === "delete" && plan.tab && plan.row && plan.cells?.length && book.grid[plan.tab] && !merged(plan.tab, plan.row)) { dropRows.push({ it, plan, tab: plan.tab, row: plan.row }); continue; }
         if (plan.cells && plan.cells.length) {
           try { await writeCells(id, plan.tab, plan.cells); wrote = true; }
           catch (e) { // 못 썼다 — 이번 차례는 여기서 멈춘다(나머지는 다음에). 권한 문제면 화면에 그대로 알린다
@@ -163,9 +177,25 @@ function makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
         await it.ref.set({ tries: (it.tries || 0) + 1, lastError: String(e?.message || e).slice(0, 200), ...(it.tries >= 4 ? { state: "failed", doneAt: Date.now(), result: { reason: String(e?.message || e).slice(0, 200) } } : {}) }, { merge: true }).catch(() => {});
       }
     }
+    // 🗑 지울 줄 — 아래 줄부터 한 번에 지운다(위에서부터 지우면 아래 줄 번호가 밀린다). 못 지우면 예전처럼 값만 비운다
+    if (dropRows.length) {
+      const reqs = [...dropRows].sort((x, y) => y.row - x.row).map((d) => ({ deleteDimension: { range: { sheetId: book.grid[d.tab].sheetId, dimension: "ROWS", startIndex: d.row - 1, endIndex: d.row } } }));
+      try {
+        await sheetsApiFor(id, "POST", ":batchUpdate", { data: { requests: reqs } });
+        wrote = true; structural = true;
+        for (const d of dropRows) await done(d.it, "done", { ...summary(d.plan), reason: "줄 삭제" });
+      } catch (e) {
+        console.warn(`[시트 쓰기] ${co} 줄 삭제 실패 — 값만 비움:`, e?.message || e);
+        for (const d of dropRows) {
+          try { await writeCells(id, d.plan.tab, d.plan.cells); wrote = true; await done(d.it, "done", summary(d.plan)); }
+          catch (e2) { await d.it.ref.set({ tries: (d.it.tries || 0) + 1, lastError: writeErr(e2) }, { merge: true }).catch(() => {}); }
+        }
+      }
+    }
     if (wrote) await db.collection("sheetLive").doc(co).set({ pushError: "", lastPushAt: Date.now() }, { merge: true });
     await writeIssueCount(co).catch(() => {});
-    return { wrote };
+    // structural: 줄을 끼우거나 지웠다 → 아래 줄 번호가 밀렸으니 부른 쪽이 시트를 다시 읽어 오더의 줄 위치를 맞춘다 · more: 남은 대기 건이 있다
+    return { wrote, structural, more: n >= MAX_PER_RUN };
   }
 
   // 직원 화면의 "구글시트" 표시(src/routeGroups.jsx SheetLiveChip)에 알릴 것 — 탭을 못 정한 오더 수 · 확인이 필요한 건수(보류 · 실패)

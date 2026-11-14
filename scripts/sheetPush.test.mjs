@@ -102,6 +102,15 @@ function fakeSheet(tabs, { denyWrite = false } = {}) {
       opts.data.data.forEach((u) => { const [, t, colL, row] = u.range.match(/^'(.+)'!([A-Z]+)(\d+)$/); const c = colL.split("").reduce((a, ch) => a * 26 + ch.charCodeAt(0) - 64, 0) - 1; const rows = tabs[t]; while (rows.length < +row) rows.push([]); const r = rows[+row - 1]; while (r.length <= c) r.push(""); r[c] = u.values[0][0]; writes.push(`${t}!${colL}${row}=${u.values[0][0]}`); });
       return {};
     }
+    if (method === "POST" && path === ":batchUpdate") { // 줄 끼우기 · 지우기 · 늘리기
+      (opts.data.requests || []).forEach((rq) => {
+        const g = rq.insertDimension || rq.deleteDimension; if (!g) return;
+        const t = titles()[g.range.sheetId - 1]; const rows = tabs[t]; const { startIndex: a, endIndex: b } = g.range;
+        if (rq.insertDimension) { while (rows.length < a) rows.push([]); rows.splice(a, 0, ...Array.from({ length: b - a }, () => [])); writes.push(`${t}!+${a + 1}`); }
+        else { rows.splice(a, b - a); writes.push(`${t}!-${a + 1}`); }
+      });
+      return {};
+    }
     throw new Error(`fake sheet: ${method} ${path}`);
   };
   return { api, writes, calls };
@@ -128,7 +137,7 @@ async function world(mode, opts = {}) {
   const d0 = w.db.data("orders", "o아6");
   await w.write("o아6", { ...d0, 청구운임: "130000", 차량번호: "서울99바9999" });
   assert.equal(w.db.data("sheetPushQueue", "o아6").kind, "update");
-  assert.deepEqual(await w.run(), { wrote: true });
+  assert.deepEqual(await w.run(), { wrote: true, structural: false, more: false });
   assert.deepEqual(w.sh.writes, ["아산 내수!H6=130000", "아산 내수!Q6=서울99바9999"]);
   assert.equal(w.db.data("sheetPushQueue", "o아6").state, "done");
   assert.ok(w.db.data("orders", "o아6").시트기록일시);
@@ -149,11 +158,26 @@ async function world(mode, opts = {}) {
   await w.write("new2", { ...w.db.data("orders", "new2"), 담당노선구분: "아산 내수" });
   await w.run();
   assert.equal(w.db.data("orders", "new2").이전출처, "아산 내수!7"); assert.equal(w.db.data("orders", "new2").시트탭필요, undefined);
-  // 삭제: 그 줄의 값만 비운다(수식 칸은 그대로)
+  // 🗓 상황 2: 시트에 11/3 · 11/4 · 11/14 가 있는데 11/4 오더를 등록 → 11/4 줄(6행) 바로 아래 7행에 줄을 끼워 넣는다(맨 아래 아님)
+  w.sh.writes.length = 0;
+  await w.write("mid", { companyName: CO, 등록기기: "PC", 거래처명: "녹수", 담당노선구분: "아산 내수", 상차일: "2026-11-04", 상차지명: "신봉길101", 하차지명: "천안시 성정동 12", 청구운임: "77000", 기사운임: "66000" });
+  const rm = await w.run();
+  assert.equal(rm.structural, true);
+  assert.equal(w.sh.writes[0], "아산 내수!+7", w.sh.writes.join(" "));
+  assert.ok(w.sh.writes.includes("아산 내수!A7=2026-11-04"), w.sh.writes.join(" "));
+  assert.deepEqual(ctxOf(w.tabs).built.orders.filter((o) => o.__tab === "아산 내수").map((o) => [o.__row, o.상차일]), [[5, "2026-11-03"], [6, "2026-11-04"], [7, "2026-11-04"], [8, "2026-11-14"]]);
+  assert.equal(w.db.data("orders", "mid").이전출처, "아산 내수!7");
+  // 🗓 상황 1: 가장 늦은 날짜 이후(11/20) → 끼우지 않고 맨 아래 빈 줄(8행 11/14 다음 9행)
+  w.sh.writes.length = 0;
+  await w.write("late", { companyName: CO, 등록기기: "PC", 거래처명: "녹수", 담당노선구분: "아산 내수", 상차일: "2026-11-20", 상차지명: "신봉길101", 하차지명: "충주시", 청구운임: "50000" });
+  assert.equal((await w.run()).structural, false);
+  assert.ok(!w.sh.writes.some((x) => x.includes("!+")) && w.sh.writes.includes("아산 내수!A9=2026-11-20"), w.sh.writes.join(" "));
+  // 🗑 삭제: 그 줄을 줄째로 지운다 → 아래 줄이 한 칸씩 올라온다
   w.sh.writes.length = 0;
   await w.write("o아5", null);
-  await w.run();
-  assert.ok(w.sh.writes.includes("아산 내수!A5=") && !w.sh.writes.some((x) => /!J5=|!M5=|!N5=/.test(x)), w.sh.writes.join(" "));
+  assert.equal((await w.run()).structural, true);
+  assert.deepEqual(w.sh.writes, ["아산 내수!-5"]);
+  assert.deepEqual(ctxOf(w.tabs).built.orders.filter((o) => o.__tab === "아산 내수").map((o) => [o.__row, o.상차일]), [[5, "2026-11-04"], [6, "2026-11-04"], [7, "2026-11-14"], [8, "2026-11-20"]]);
   assert.deepEqual(await w.push.pendingDeletes(CO), []);
   // 10월 이전 오더는 시트와 맞추지 않는다
   await w.write("old", { companyName: CO, 등록기기: "PC", 거래처명: "녹수", 담당노선구분: "아산 내수", 상차일: "2026-09-30", 상차지명: "신봉길101", 하차지명: "충주시" });
@@ -166,7 +190,7 @@ async function world(mode, opts = {}) {
   const w = await world("dry");
   const d0 = w.db.data("orders", "o아6");
   await w.write("o아6", { ...d0, 청구운임: "130000" });
-  assert.deepEqual(await w.run(), { wrote: false });
+  assert.deepEqual(await w.run(), { wrote: false, structural: false, more: false });
   assert.deepEqual(w.sh.writes, []);
   const qd = w.db.data("sheetPushQueue", "o아6");
   assert.equal(qd.state, "dry"); assert.deepEqual(qd.result.cells.map((c) => [c.a1, c.value]), [["H6", "130000"]]);
@@ -191,6 +215,7 @@ async function world(mode, opts = {}) {
   await w.run(); await w.run();
   assert.equal(w.db.ids("sheetPushQueue").filter((id) => w.db.data("sheetPushQueue", id).state === "done").length, 25);
   assert.equal(ctxOf(w.tabs).built.orders.filter((o) => o.__tab === "아산 내수" && o.__row >= 8).length, 0);
+  assert.equal(w.tabs["아산 내수"].length, 7, "확인한 삭제 25건은 줄째로 지워졌다");
   console.log("server(hold) OK");
 }
 {
@@ -352,5 +377,17 @@ async function world(mode, opts = {}) {
   assert.equal(r.updated, 1, JSON.stringify(r));
   assert.deepEqual([find().차량번호, find().이름, find().전화번호, find().배차상태, Number(find().기사운임)], ["", "", "", "배차중", 0]);
   console.log("live(프로그램 배차 → 시트에서 기사 삭제) OK");
+  // 🗓🗑 줄을 끼우고 지운 뒤에도 프로그램 오더 = 시트 줄(중복 · 엉뚱한 줄 없음) — 밀린 줄 위치(이전출처)를 바로 다시 맞춘다
+  const sheetIds = () => w.db.ids("orders").filter((i) => w.db.data("orders", i).이전출처).map((i) => w.db.data("orders", i));
+  await w.write("midL", { companyName: CO, 등록기기: "PC", 거래처명: "녹수", 담당노선구분: "아산 내수", 상차일: "2026-11-03", 상차지명: "신봉길101", 하차지명: "천안시 성정동 99", 청구운임: "61000", 기사운임: "51000" });
+  assert.equal(await live.kick(CO, "program"), "ran");
+  await w.write("o아6", null);
+  assert.equal(await live.kick(CO, "program"), "ran");
+  const fresh = ctxOf(w.tabs).built.orders.filter((o) => o.상차일 >= "2026-10-01");
+  const progs = sheetIds();
+  assert.equal(progs.length, fresh.length, `${progs.length} vs ${fresh.length}`);
+  fresh.forEach((o) => { const p = progs.find((x) => x.이전출처 === o.이전출처); assert.ok(p, o.이전출처); assert.equal(p.상차일, o.상차일); assert.equal(p.하차지명, o.하차지명); });
+  assert.equal(progs.find((x) => x.하차지명 === "천안시 성정동 99").이전출처, "아산 내수!6"); // 11/3 줄(5행) 바로 아래
+  console.log("live(줄 끼우기 · 지우기 뒤에도 프로그램 = 시트) OK");
 }
 console.log("sheetPush: 모두 통과");

@@ -265,18 +265,35 @@ export function planUpdate(ctx, before, after, opts = {}) {
     docPatch: { 이전출처: `${title}!${rowNo}`, _programKeys: [...pk], _sheetBase: sb, _sheetKeys: uniq([...(Array.isArray(before._sheetKeys) ? before._sheetKeys : []), ...Object.keys(o).filter((k) => !k.startsWith("__") && !empty(o[k]))]) } };
 }
 
-// ── 등록(프로그램에서 만든 오더 → 탭 맨 아래 빈 줄) ───────────────────────────
-export function planCreate(ctx, order, title, { rowCount = 0 } = {}) {
+// 🗓 2026-11-14 새 오더를 날짜 순서에 맞는 자리에 — 그 날짜보다 늦은 줄이 이미 있으면(예: 12일까지 있는데 11일 오더)
+//  그 날짜(이하) 마지막 줄 바로 아래에 줄을 끼워 넣을 번호를 돌려준다. 가장 늦은 날짜(이후)면 0 = 지금처럼 맨 아래 빈 줄
+//  날짜 칸이 하차일인 탭(arrivalDateTabs · 에이제이)은 하차일로 견준다
+export function insertRowFor(ctx, order, title) {
+  const arrival = (ctx.preset.arrivalDateTabs || []).includes(title);
+  const dk = arrival ? "하차일" : "상차일";
+  const want = String((arrival ? order.하차일 || order.상차일 : order.상차일) || "");
+  if (!want) return 0;
+  const rows = ctx.built.orders.filter((o) => o.__tab === title && o[dk]);
+  const before = rows.filter((o) => String(o[dk]) <= want);
+  if (!before.length) return 0; // 가장 이른 날짜보다도 앞 — 머리줄 근처에 끼우지 않고 맨 아래에
+  const last = Math.max(...before.map((o) => o.__row + Math.max(0, (Number(o.이전줄수) || 1) - 1)));
+  if (!rows.some((o) => String(o[dk]) > want && o.__row > last)) return 0; // 아래에 더 늦은 날짜 줄이 없다 → 맨 아래 빈 줄
+  return last + 1;
+}
+
+// ── 등록(프로그램에서 만든 오더 → 탭 맨 아래 빈 줄 · atRow: 방금 끼워 넣은 줄) ───────────────────────────
+export function planCreate(ctx, order, title, { rowCount = 0, atRow = 0 } = {}) {
   const L = layoutOf(ctx, title);
   if (!L) return fail(`"${title}" 탭의 칸 배치를 읽지 못했습니다`);
   const t = tabIn(ctx, title);
   const width = L.header.length;
   let last = L.headerRow;
   t.rows.forEach((r, i) => { if (i > L.headerRow && parseDate(r?.[L.cols.date])) last = i; });
-  let i = last + 1;
+  let i = atRow ? atRow - 1 : last + 1;
   // 빈 줄 = 날짜 · 구간 · 차량 · 운임 칸에 사람이 넣은 값이 없는 줄(미리 깔아 둔 수식 · 체크박스만 있는 줄은 빈 줄로 본다)
   const keyCols = [L.cols.date, L.cols.from, L.cols.to, L.cols.consignee, L.cols.plate, L.cols.name, L.sale?.base, L.buy?.base].filter((c) => c !== undefined && c >= 0);
   const busy = (r) => keyCols.some((c) => cell(r?.[c]) && !isFormula(ctx, title, i + 1, c));
+  if (atRow && busy(t.rows[i])) return fail("끼워 넣은 줄이 비어 있지 않습니다");
   while (busy(t.rows[i])) i += 1;
   const rowNo = i + 1;
   if (rowCount && rowNo > rowCount) return fail("탭에 빈 줄이 없습니다", { needRows: rowNo - rowCount });
