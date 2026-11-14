@@ -24,9 +24,10 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
 <link rel="stylesheet" href="home.css" />
-<style id="kp-pre">body{opacity:0}</style>
-<noscript><style>body{opacity:1!important}</style></noscript>
-<script>setTimeout(function(){var s=document.getElementById("kp-pre");if(s)s.remove()},2500)</script>
+<!-- 🔎 2026-11-14 검색 노출 — 예전엔 body 를 처음부터 투명(opacity:0)으로 두어, 스크립트를 실행하지 않는 검색 로봇(네이버 Yeti 등)에게는 글이 숨겨진 페이지로 보였다.
+     이제 스크립트가 도는 브라우저에서만 잠깐(편집본 적용 전) 숨기고, 로봇 · 스크립트 꺼진 화면에서는 처음부터 보인다 -->
+<style>html.kp-pre body{opacity:0}</style>
+<script>document.documentElement.classList.add("kp-pre");setTimeout(function(){document.documentElement.classList.remove("kp-pre")},2500)</script>
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"SoftwareApplication","name":"LogisWeb","alternateName":["로지스웹","logisweb"],"applicationCategory":"BusinessApplication","operatingSystem":"Web, Windows, macOS, Android, iOS","description":"화물 운송사를 위한 배차관리·실시간 관제·정산 ERP·전자결재 프로그램","url":"https://www.logisweb.co.kr/","inLanguage":"ko-KR","offers":{"@type":"Offer","price":"0","priceCurrency":"KRW","description":"무료 체험"}}
 </script>
@@ -407,27 +408,27 @@
       <div data-k="e2013" class="shot clip-box"><video data-k="e2014" class="clip" autoplay muted loop playsinline preload="metadata" poster="video/gw-messenger.jpg" aria-label="사내메신저, 창을 옮기고 @멘션으로 메시지를 보낸 뒤 자주 쓰는 문구로 답하는 실제 화면" style="aspect-ratio:1440/860"><source data-k="e2015" src="video/gw-messenger.mp4" type="video/mp4" /><source data-k="e2016" src="video/gw-messenger.webm" type="video/webm" /></video><span data-k="e2017" class="clip-live">실제 화면</span></div>
       <div data-k="e2018"><span data-k="e2019" class="tag">MESSENGER</span><h3 data-k="e2020">배차팀 단체방에 오더를 그대로 공유</h3><p data-k="e2021">메신저 창은 원하는 곳에 두고, 오더는 카드로&nbsp;· 운임표는 파일로 보냅니다.</p>
         <ul data-k="e2022" class="checks">
-          <li data-k="e2023"><svg data-k="e2024" class="i"><use href="#i-check"/></svg><span data-k="e2025">1:1&nbsp;· 그룹 채팅, <b>@이름 멘션</b>으로 담당자를 바로 부르기</span></li>
-          <li data-k="e2026"><svg data-k="e2027" class="i"><use href="#i-check"/></svg><span data-k="e2028">오더를 <b>카드로 공유</b>하면 상하차지&nbsp;· 차량&nbsp;· 운임이 한눈에</span></li>
-          <li data-k="e2029"><svg data-k="e2030" class="i"><use href="#i-check"/></svg><span data-k="e2031"><b>자주 쓰는 문구</b>로 한 번에 답장, 엑셀&nbsp;· 사진 파일도 바로 전송</span></li>
+          <li data-k="e2023"><svg data-k="e2024" class="i"><use href="#i-check"/></svg><span data-k="e2025">1:1&nbsp;· 그룹 채팅, <b data-k="e2074">@이름 멘션</b>으로 담당자를 바로 부르기</span></li>
+          <li data-k="e2026"><svg data-k="e2027" class="i"><use href="#i-check"/></svg><span data-k="e2028">오더를 <b data-k="e2075">카드로 공유</b>하면 상하차지&nbsp;· 차량&nbsp;· 운임이 한눈에</span></li>
+          <li data-k="e2029"><svg data-k="e2030" class="i"><use href="#i-check"/></svg><span data-k="e2031"><b data-k="e2076">자주 쓰는 문구</b>로 한 번에 답장, 엑셀&nbsp;· 사진 파일도 바로 전송</span></li>
         </ul></div>
     </div>
     <div data-k="e2032" class="panel" data-p="gw-att">
       <div data-k="e2033" class="shot clip-box"><video data-k="e2034" class="clip" autoplay muted loop playsinline preload="metadata" poster="video/gw-attendance.jpg" aria-label="출퇴근기록, 홈 화면에서 출근하기를 누르고 출근기록부에서 이번 달 기록을 보는 실제 화면" style="aspect-ratio:1440/860"><source data-k="e2035" src="video/gw-attendance.mp4" type="video/mp4" /><source data-k="e2036" src="video/gw-attendance.webm" type="video/webm" /></video><span data-k="e2037" class="clip-live">실제 화면</span></div>
       <div data-k="e2038"><span data-k="e2039" class="tag">ATTENDANCE</span><h3 data-k="e2040">출근은 버튼 한 번, 기록은 자동으로</h3><p data-k="e2041">직원별 근무시간 기준으로 출근·지각·퇴근을 기록합니다. 앱이 켜져 있으면 자동으로 찍힙니다.</p>
         <ul data-k="e2042" class="checks">
-          <li data-k="e2043"><svg data-k="e2044" class="i"><use href="#i-check"/></svg><span data-k="e2045">홈 화면 <b>[출근하기]&nbsp;· [퇴근하기]</b>, 잘못 누른 퇴근은 되돌리기</span></li>
-          <li data-k="e2046"><svg data-k="e2047" class="i"><use href="#i-check"/></svg><span data-k="e2048">PC를 켜면 자동 출근, 출근지 반경을 벗어나면 <b>자동 퇴근</b></span></li>
-          <li data-k="e2049"><svg data-k="e2050" class="i"><use href="#i-check"/></svg><span data-k="e2051">출근기록부에 <b>지각&nbsp;· 외근&nbsp;· 연차&nbsp;· 반차</b>가 한 달 표로, 휴가 신청은 전자결재로</span></li>
+          <li data-k="e2043"><svg data-k="e2044" class="i"><use href="#i-check"/></svg><span data-k="e2045">홈 화면 <b data-k="e2077">[출근하기]&nbsp;· [퇴근하기]</b>, 잘못 누른 퇴근은 되돌리기</span></li>
+          <li data-k="e2046"><svg data-k="e2047" class="i"><use href="#i-check"/></svg><span data-k="e2048">PC를 켜면 자동 출근, 출근지 반경을 벗어나면 <b data-k="e2078">자동 퇴근</b></span></li>
+          <li data-k="e2049"><svg data-k="e2050" class="i"><use href="#i-check"/></svg><span data-k="e2051">출근기록부에 <b data-k="e2079">지각&nbsp;· 외근&nbsp;· 연차&nbsp;· 반차</b>가 한 달 표로, 휴가 신청은 전자결재로</span></li>
         </ul></div>
     </div>
     <div data-k="e2052" class="panel" data-p="gw-mail">
       <div data-k="e2053" class="shot clip-box"><video data-k="e2054" class="clip" autoplay muted loop playsinline preload="metadata" poster="video/gw-mail.jpg" aria-label="사내메일, 받은 메일을 읽고 이름으로 받는 사람을 찾아 메일을 쓰고 보내는 실제 화면" style="aspect-ratio:1440/860"><source data-k="e2055" src="video/gw-mail.mp4" type="video/mp4" /><source data-k="e2056" src="video/gw-mail.webm" type="video/webm" /></video><span data-k="e2057" class="clip-live">실제 화면</span></div>
       <div data-k="e2058"><span data-k="e2059" class="tag">INTERNAL MAIL</span><h3 data-k="e2060">공지와 업무 공유는 사내메일로</h3><p data-k="e2061">이름만 검색해 보내고, 누가 읽었는지 확인합니다.</p>
         <ul data-k="e2062" class="checks">
-          <li data-k="e2063"><svg data-k="e2064" class="i"><use href="#i-check"/></svg><span data-k="e2065">이름&nbsp;· 부서로 받는 사람 검색, <b>참조</b>와 <b>중요 표시</b></span></li>
-          <li data-k="e2066"><svg data-k="e2067" class="i"><use href="#i-check"/></svg><span data-k="e2068">보낸 메일 <b>읽음 확인</b>, 예약 발송&nbsp;· 임시보관&nbsp;· 서명</span></li>
-          <li data-k="e2069"><svg data-k="e2070" class="i"><use href="#i-check"/></svg><span data-k="e2071">자주 쓰는 내용은 <b>양식으로 저장</b>해 다시 불러오기</span></li>
+          <li data-k="e2063"><svg data-k="e2064" class="i"><use href="#i-check"/></svg><span data-k="e2065">이름&nbsp;· 부서로 받는 사람 검색, <b data-k="e2080">참조</b>와 <b data-k="e2081">중요 표시</b></span></li>
+          <li data-k="e2066"><svg data-k="e2067" class="i"><use href="#i-check"/></svg><span data-k="e2068">보낸 메일 <b data-k="e2082">읽음 확인</b>, 예약 발송&nbsp;· 임시보관&nbsp;· 서명</span></li>
+          <li data-k="e2069"><svg data-k="e2070" class="i"><use href="#i-check"/></svg><span data-k="e2071">자주 쓰는 내용은 <b data-k="e2083">양식으로 저장</b>해 다시 불러오기</span></li>
         </ul></div>
     </div>
   </div>

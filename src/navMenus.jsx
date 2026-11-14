@@ -207,7 +207,9 @@ export const NAV_GROUPS = [
   { key: "revenue", label: "매출", items: ["매출관리", "인사이트"] },
   { key: "settle", label: "정산", items: ["정산관리"] },
   { key: "fleet", label: "지입차관리", items: ["지입차관리"] },
-  { key: "company", label: "회사관리", items: ["회사관리", "관리자메뉴", "관리센터"] },
+  // 🧭 2026-11-14 관리자메뉴는 회사관리 안에서 빼서 바로 옆에 따로(최고관리자의 관리센터는 관리자메뉴 묶음 안)
+  { key: "company", label: "회사관리", items: ["회사관리"] },
+  { key: "admin", label: "관리자메뉴", items: ["관리자메뉴", "관리센터"] },
 ];
 // 보이는 메뉴 목록 → [{ group, label, menus:[...] }] (묶음에 없는 메뉴는 제자리에 하나짜리로)
 export function groupNavMenus(menus) {
@@ -217,7 +219,7 @@ export function groupNavMenus(menus) {
   const slots = [];
   NAV_GROUPS.forEach((g) => { const ms = menus.filter((m) => gOf(m) === g); if (ms.length) { slots.push({ group: g.key, label: g.label, menus: ms }); ms.forEach((m) => used.add(m)); } });
   const rest = menus.filter((m) => !used.has(m)).map((m) => ({ group: null, label: null, menus: [m] }));
-  const ci = slots.findIndex((s) => s.group === "company");
+  const ci = slots.findIndex((s) => s.group === "company" || s.group === "admin");
   const merged = ci < 0 ? slots.concat(rest) : slots.slice(0, ci).concat(rest, slots.slice(ci));
   merged.forEach((s) => { out.push(s); at.set(s.group, s); });
   return out;
