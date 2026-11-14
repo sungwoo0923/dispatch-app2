@@ -13,7 +13,8 @@ import { useMfaPrompt, mfaErrorText } from "./MfaModal";
 import { LogisMark, LogisWordmark, LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { MARKET_NAME } from "./orderMarketConfig"; // ⭐ 2026-11-06 허브(예전 배차마당) 이름
 import { AdminLoginGate, adminAuthTime, isAdminGatePassed, markAdminGatePassed, ADMIN_GATE_EVENT, warmAdminGate } from "./AdminGate"; // 🔐 2026-11-11 2차 비밀번호를 로그인 카드 안에서
-import { UserLoginGate, BioLoginButton } from "./UserSecurity"; // 🔐 2026-11-14 일반 계정 2차 인증(선택) · 얼굴 · 지문 로그인
+import { UserLoginGate, BioLoginButton } from "./UserSecurity";
+import PasswordResetSms from "./PasswordResetSms"; // 🔑 2026-11-14 비밀번호 찾기 = 가입한 휴대폰 문자 인증 // 🔐 2026-11-14 일반 계정 2차 인증(선택) · 얼굴 · 지문 로그인
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 
@@ -45,6 +46,8 @@ export default function TransportLogin() {
   const [countdown, setCountdown] = useState(3);
   const [loginTime, setLoginTime] = useState("");
   const [showCodeLookup, setShowCodeLookup] = useState(false);
+  const [pwReset, setPwReset] = useState(false);
+  const [codeMode, setCodeMode] = useState("all"); // 🔎 2026-11-14 all = 최고관리자 · 부관리자(모든 회사 검색) · mine = 일반 계정(내 회사만)
   const [codeLookupQ, setCodeLookupQ] = useState("");
   const [codeResults, setCodeResults] = useState([]);
   const [codeSearching, setCodeSearching] = useState(false);
@@ -155,8 +158,11 @@ export default function TransportLogin() {
       const lookupApp = getApps().find(a => a.name === "codeLookup") || initializeApp(auth.app.options, "codeLookup");
       lookupAuth = getAuth(lookupApp);
       const cred = await signInMfa(lookupAuth);
-      if ((cred.user.email || "").toLowerCase() !== TOTAL_MASTER_EMAIL) {
-        setCodeError("최고관리자만 사용할 수 있습니다.");
+      const ldb0 = getFirestore(lookupApp);
+      const isSuper = (cred.user.email || "").toLowerCase() === TOTAL_MASTER_EMAIL;
+      const meDoc = isSuper ? null : await getDoc(doc(ldb0, "users", cred.user.uid)).catch(() => null);
+      if (!isSuper && meDoc?.data()?.role !== "totalMaster") { // 🔎 다른 회사 코드는 최고관리자 · 부관리자만 검색
+        setCodeError("내 회사 코드만 볼 수 있습니다.");
         setCodeResults([]);
         return;
       }
@@ -189,11 +195,42 @@ export default function TransportLogin() {
     }
   };
 
+  // 🔎 2026-11-14 회사코드 찾기 — 모든 계정. 이메일 · 비밀번호를 넣어야 눌린다
+  //  · 일반 계정: 그 계정으로 확인한 뒤 "내 회사" 코드만 바로 보여 준다(다른 회사 코드는 누구도 못 봄 — 서버 규칙도 내 문서만 읽힘)
+  //  · 최고관리자 · 부관리자: 예전처럼 회사명으로 모든 회사 검색
+  const codeReady = !!email.trim() && !!pw;
+  const openCodeLookup = async () => {
+    if (!codeReady) return;
+    setCodeError(""); setCodeResults([]); setCodeLookupQ("");
+    if (isMasterEmail) { setCodeMode("all"); setShowCodeLookup(true); return; }
+    setCodeMode("mine"); setShowCodeLookup(true); setCodeSearching(true);
+    let lookupAuth = null;
+    try {
+      const lookupApp = getApps().find(a => a.name === "codeLookup") || initializeApp(auth.app.options, "codeLookup");
+      lookupAuth = getAuth(lookupApp);
+      const cred = await signInMfa(lookupAuth);
+      const snap = await getDoc(doc(getFirestore(lookupApp), "users", cred.user.uid));
+      const u = snap.exists() ? snap.data() : null;
+      if (!u) { setCodeError("등록된 계정 정보가 없습니다."); return; }
+      if (u.role === "totalMaster") { setCodeMode("all"); return; } // 부관리자 — 모든 회사 검색
+      setCodeLookupQ(String(u.companyName || ""));
+      if (!u.companyCode) { setCodeError(u.approved === false ? "아직 승인 전이라 회사코드가 없습니다. 승인 메일을 기다려 주세요." : "이 계정에 회사코드가 없습니다. 회사 관리자에게 문의해 주세요."); return; }
+      setCodeResults([{ companyName: String(u.companyName || ""), companyCode: String(u.companyCode) }]);
+    } catch (e) {
+      const c = String(e?.code || "");
+      setCodeError(c === "auth/wrong-password" || c === "auth/invalid-credential" || c === "auth/user-not-found" ? "이메일 또는 비밀번호가 맞지 않습니다." : c === "auth/too-many-requests" ? "시도가 너무 많습니다. 잠시 뒤 다시 해 주세요." : `확인하지 못했습니다: ${e?.message || e}`);
+    } finally {
+      if (lookupAuth) signOut(lookupAuth).catch(() => {});
+      setCodeSearching(false);
+    }
+  };
+
   const login = async () => {
     setError(null); setPreviewInfo(null);
     setMsg(null);
 
-    if (!companyCode.trim()) return setError("회사코드는 필수 항목입니다. 승인 안내 이메일을 확인해주세요.");
+    // 🛠 2026-11-14 회사코드는 로그인 뒤 계정 확인에서 따진다 — 최고관리자 · 부관리자는 코드 없이(아무 운송사로나 들어간다),
+    //  일반 계정은 "회사코드를 입력해주세요"로 막힌다(예전엔 최고관리자도 새 PC에서 코드부터 찾아야 했다)
     if (!companyName.trim()) return setError("회사명을 입력해주세요.");
     if (!email.trim() || !pw.trim()) return setError("이메일과 비밀번호를 입력해주세요.");
 
@@ -418,10 +455,11 @@ export default function TransportLogin() {
     } finally { setLoading(false); }
   };
 
-  const resetPw = async () => {
-    if (!email.trim()) return setError("이메일을 먼저 입력해주세요.");
+  // 이메일 재설정 링크(휴대폰 번호가 바뀐 사람용 — 문자 인증 창 아래 작은 글씨)
+  const resetPw = async (em = email) => {
+    if (!String(em || "").trim()) return setError("이메일을 먼저 입력해주세요.");
     try {
-      await sendPasswordResetEmail(auth, email.trim());
+      await sendPasswordResetEmail(auth, String(em).trim());
       setMsg("재설정 링크를 이메일로 발송했습니다.");
       setError(null);
     } catch {
@@ -443,9 +481,10 @@ export default function TransportLogin() {
     <div className="mb-3.5">
       <div className="flex items-center justify-between mb-1.5">
         <label className="text-[11.5px] font-extrabold tracking-[0.12em] text-[#7A879C]">{label}</label>
-        {key === "code" && isMasterEmail && (
-          <button type="button" onClick={() => { setShowCodeLookup(true); setCodeLookupQ(""); setCodeResults([]); setCodeError(""); }}
-            className="text-[11.5px] text-[#4B6CB7] font-extrabold hover:underline">회사코드 찾기</button>
+        {key === "code" && (
+          <button type="button" onClick={openCodeLookup} disabled={!codeReady} data-code-lookup
+            title={codeReady ? "가입한 계정으로 확인한 뒤 내 회사코드를 보여 드립니다" : "아래 이메일 · 비밀번호를 먼저 넣어 주세요"}
+            className={`text-[11.5px] font-extrabold ${codeReady ? "text-[#4B6CB7] hover:underline" : "text-[#C2CBD9] cursor-not-allowed"}`}>회사코드 찾기</button>
         )}
       </div>
       <div className="group flex items-center gap-2.5 h-[46px] sm:h-[50px] px-3.5 sm:px-4 rounded-[13px] bg-[#F5F7FB] border border-[#E3E8F0] transition focus-within:bg-white focus-within:border-[#2D4C82] focus-within:shadow-[0_0_0_4px_rgba(45,76,130,0.10)]">
@@ -580,7 +619,7 @@ export default function TransportLogin() {
 
             {!loading && (
               <div className="text-center mt-3.5">
-                <button onClick={resetPw} className="text-[12.5px] font-bold text-[#9AA9C3] hover:text-[#0F1A30] transition">비밀번호를 잊으셨나요?</button>
+                <button onClick={() => { setError(null); setMsg(null); setPwReset(true); }} className="text-[12.5px] font-bold text-[#9AA9C3] hover:text-[#0F1A30] transition" data-pw-forgot>비밀번호를 잊으셨나요?</button>
               </div>
             )}
 
@@ -652,6 +691,11 @@ export default function TransportLogin() {
       )}
 
       {/* 회사코드 찾기 모달 */}
+      {pwReset && (
+        <PasswordResetSms initialEmail={email.trim()} onClose={() => setPwReset(false)}
+          onDone={(em) => { setPwReset(false); if (em) setEmail(em); setPw(""); setMsg("비밀번호를 바꿨습니다. 새 비밀번호로 로그인해 주세요."); }}
+          onEmailLink={(em) => { setPwReset(false); resetPw(em); }} />
+      )}
       {showCodeLookup && (
         <div className="fixed inset-0 bg-black/50 z-[999] flex items-center justify-center"
           onClick={() => setShowCodeLookup(false)}>
@@ -660,7 +704,7 @@ export default function TransportLogin() {
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
               <div>
                 <h3 className="text-white font-bold text-[15px]">회사코드 찾기</h3>
-                <p className="text-white/60 text-[12px] mt-0.5">회사명으로 코드를 검색합니다</p>
+                <p className="text-white/60 text-[12px] mt-0.5">{codeMode === "mine" ? "가입한 계정의 회사코드만 보여 드립니다" : "회사명으로 코드를 검색합니다"}</p>
               </div>
               <button onClick={() => setShowCodeLookup(false)} className="text-white/60 hover:text-white text-lg">✕</button>
             </div>
@@ -670,18 +714,19 @@ export default function TransportLogin() {
                   ref={imeFocusRef}
                   value={codeLookupQ}
                   onChange={e => setCodeLookupQ(e.target.value)}
-                  onKeyUp={e => { if (e.key === "Enter") searchCompanyCode(); }}
-                  placeholder="회사명을 입력하세요"
+                  onKeyUp={e => { if (e.key === "Enter" && codeMode === "all") searchCompanyCode(); }}
+                  readOnly={codeMode === "mine"}
+                  placeholder={codeMode === "mine" ? (codeSearching ? "계정 확인 중…" : "내 회사") : "회사명을 입력하세요"}
                   className="flex-1 border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-[#1B2B4B] transition"
                 />
-                <button
+                {codeMode === "all" && <button
                   onClick={searchCompanyCode}
                   disabled={codeSearching || !codeLookupQ.trim()}
                   className="px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white disabled:opacity-50 transition"
                   style={{ background: "#1B2B4B" }}
                 >
                   {codeSearching ? "검색 중..." : "검색"}
-                </button>
+                </button>}
               </div>
               {codeError && (
                 <div className="mb-3 text-[13px] text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{codeError}</div>

@@ -6935,6 +6935,21 @@ exports.pnkMfa = functions.runWith({ timeoutSeconds: 30, memory: "256MB", ...app
   }
 });
 
+// 🔑 2026-11-14 비밀번호 찾기 — 가입한 휴대폰 문자 인증 → 새 비밀번호 · 설명은 functions/passwordResetSms.js 맨 위
+const _pwResetSms = require("./passwordResetSms").makePasswordResetSms({
+  db, HttpsError: functions.https.HttpsError,
+  getUserByEmail: (e) => getAuth().getUserByEmail(e), verifyIdToken: (t) => getAuth().verifyIdToken(t),
+  updatePassword: (uid, password) => getAuth().updateUser(uid, { password }), revoke: (uid) => getAuth().revokeRefreshTokens(uid),
+  deleteUser: async (uid) => { const u = await getAuth().getUser(uid); if (!u.email && u.providerData.every((p) => p.providerId === "phone")) await getAuth().deleteUser(uid); },
+});
+exports.resetPasswordSms = functions.runWith({ timeoutSeconds: 30, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data) => {
+  try { return await _pwResetSms(data || {}); } catch (e) {
+    if (e instanceof functions.https.HttpsError) throw e;
+    console.error("[비밀번호 찾기 문자] 실패:", e);
+    throw new functions.https.HttpsError("internal", "잠시 뒤 다시 해 주세요");
+  }
+});
+
 // 👆 2026-11-14 얼굴 인증 · 지문 로그인(WebAuthn) — 설명은 functions/logisPasskey.js 맨 위
 const _logisPasskey = require("./logisPasskey").makeLogisPasskey({ db, HttpsError: functions.https.HttpsError, createCustomToken: (uid) => getAuth().createCustomToken(uid), same: require("./pnkMfa").same });
 exports.logisPasskey = functions.runWith({ timeoutSeconds: 30, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {

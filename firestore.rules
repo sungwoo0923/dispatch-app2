@@ -2550,7 +2550,7 @@ service cloud.firestore {
         'pnkMembers', 'pnkPosts', 'pnkFiles', 'pnkTasks', 'pnkEvents', 'pnkSales', 'pnkServices', 'pnkReleases', 'pnkCompany', 'pnkFinance', 'pnkMail',
         //  사번 색인 · 전자결재 · 출퇴근 · 메일 서버 비밀값(서버만) · 외부 발송 횟수(서버만)
         'pnkEmpIndex', 'pnkApprovals', 'pnkAttendance', 'pnkMailSecrets', 'pnkMailUsage', 'pnkMfaSecrets', 'pnkMfaSessions', 'pnkUi', 'pnkUiHistory',
-        'logisPasskeys', 'logisPasskeyChal', // 👆 얼굴 · 지문 로그인 공개키 · 한 번 쓰는 확인값(서버만 — functions/logisPasskey.js)
+        'logisPasskeys', 'logisPasskeyChal', 'passwordResetSms', // 👆 얼굴 · 지문 로그인 공개키 · 한 번 쓰는 확인값(서버만 — functions/logisPasskey.js)
         'publicRelease',
         'sheetLive', // 🔁 구글시트 실시간 반영 설정(서버만)
         'sheetPushQueue', // 🔁 프로그램 → 구글시트 반영 대기열 · 기록(서버만)
