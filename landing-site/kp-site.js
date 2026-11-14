@@ -194,7 +194,7 @@
     if (window.kpPageInit) window.kpPageInit();
     if (ED) afterRenderEdit();
   }
-  function reveal() { var h = document.getElementById("kp-pre"); if (h) h.remove(); }
+  function reveal() { var h = document.getElementById("kp-pre"); if (h) h.remove(); document.documentElement.classList.remove("kp-pre"); }
 
   // ───────────── 방문자 화면 ─────────────
   function readLive() {
