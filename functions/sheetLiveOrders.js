@@ -25,7 +25,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
   const statusAt = new Map();
   async function writeStatus(co, patch, { force = false } = {}) {
     const now = Date.now();
-    if (!force && now - (statusAt.get(co) || 0) < 10 * 60 * 1000) return;
+    if (!force && now - (statusAt.get(co) || 0) < 60 * 1000) return; // 🛠 2026-11-14 10분 → 1분(화면의 "마지막 확인"이 실제와 맞게)
     statusAt.set(co, now);
     await db.collection("companySettings").doc(co).set({ sheetLiveStatus: { checkedAt: now, ...patch } }, { merge: true }).catch(() => {});
   }
@@ -87,7 +87,10 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     const places = await placesFor(co);
     const built = M.buildMigration(tabs, { ...preset, extraPlaces: places });
     const days = Math.max(1, Math.min(400, Number(cfg.days) || 14));
-    const from = kstYmd(now - days * 86400000);
+    // 🛠 2026-11-14 비교 범위 — 예전엔 "최근 n일(기본 14일)"만 봐서, 그보다 앞선 줄(예: JY 10월분)의 금액 · 기사를 시트에서 고쳐도 프로그램에 안 들어왔다.
+    //  가져오기 시작일(preset.fromDate · JY 2026-10-01)이 있으면 그날부터 전부 비교한다(관리센터에서 고른 범위가 더 길면 그쪽)
+    const daysFrom = kstYmd(now - days * 86400000);
+    const from = preset.fromDate && /^\d{4}-\d{2}-\d{2}$/.test(preset.fromDate) && preset.fromDate < daysFrom ? preset.fromDate : daysFrom;
     const wantTabs = Array.isArray(cfg.tabs) && cfg.tabs.length ? new Set(cfg.tabs.map(String)) : null;
     const incoming = built.orders.filter((o) => String(o.상차일 || "") >= from && (!wantTabs || wantTabs.has(String(o.이전출처 || "").split("!")[0])));
     const hash = crypto.createHash("sha1").update(JSON.stringify(incoming)).digest("hex");
@@ -124,7 +127,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     // 시트에서 온 새 차량종류(톤수 섞인 이름 제외)는 회사 차량종류 목록에
     const kinds = [...new Set(incoming.map((o) => String(o.차량종류 || "").trim()).filter((k) => k && !/\d+(\.\d+)?\s*(톤|t\b)/i.test(k)))];
     if (kinds.length && r.create.length) await db.collection("vehicleTypes").doc(co).set({ companyName: co, custom: FieldValue.arrayUnion(...kinds) }, { merge: true }).catch(() => {});
-    const result = { created: r.create.length, updated: r.update.length, removed, heldBack, same: r.same, total: incoming.length, from };
+    const result = { created: r.create.length, updated: r.update.length, removed, heldBack, same: r.same, total: incoming.length, from, at: now };
     await ref(co).set({ ...stamp, ...(again ? { lastMt: "" } : {}), lastHash: heldBack || again ? "" : hash, lastResult: result, ...(ops.length ? { lastChangeAt: now } : {}) }, { merge: true });
     await writeStatus(co, { enabled: true, error: "", ...(ops.length ? { changedAt: now, created: result.created, updated: result.updated, removed: result.removed } : {}), heldBack }, { force: ops.length > 0 || force });
     // ⚠ 2026-11-13 여기서 dataVersion 을 올리지 않는다 — 올리면 열려 있는 모든 PC가 13개월 오더 전체를 다시 받는다(1분마다 반복될 수 있었다)

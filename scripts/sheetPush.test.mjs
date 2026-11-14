@@ -244,6 +244,30 @@ async function world(mode, opts = {}) {
   console.log("live(시트에서 기사 삭제) OK");
 }
 {
+  // 🛠 2026-11-14 비교 범위 — 반영 범위가 "최근 14일"이어도 가져오기 시작일(JY 10/1) 이후 줄은 시트에서 고치면 반영된다
+  const { makeSheetLive } = require("../functions/sheetLiveOrders.js");
+  const w = await world("off");
+  let mt = 1;
+  const live = makeSheetLive({ db: w.db, FieldValue: { serverTimestamp: () => TS, delete: () => DEL, arrayUnion: (...v) => v }, sheetsApiFor: w.sh.api, parseSpreadsheetId: (u) => (u ? "sid" : ""), quoteTab: (t) => `'${t}'`, sheetModifiedTime: async () => String(mt), bumpDataVersion: async () => {}, push: w.push });
+  const old = new Date(Date.now() + 9 * 3600e3 - 25 * 86400e3).toISOString().slice(0, 10); // 25일 전(14일 범위 밖)
+  const [y, m, d] = old.split("-").map(Number);
+  w.tabs["아산 내수"].push([`${y}. ${m}. ${d}`, "신봉길101", "평택시 포승읍", "", "", "10", "1톤", "80,000", "", "80,000", "70,000", "", "70,000", "10,000", "", "원콜", "", "", "", "", ""]);
+  await w.db.collection("sheetLive").doc(CO).set({ ...w.cfg, pushMode: "off", days: 14 });
+  const cfg = () => w.db.data("sheetLive", CO);
+  const find = () => w.db.ids("orders").map((id) => ({ id, ...w.db.data("orders", id) })).find((o) => o.상차일 === old);
+  let r = await live.runOne(CO, cfg());
+  if (old >= "2026-10-01") {
+    assert.equal(r.created, 1, JSON.stringify(r));
+    const row = w.tabs["아산 내수"][w.tabs["아산 내수"].length - 1];
+    row[7] = "95,000"; row[9] = "95,000"; row[16] = "경기77사7777"; row[17] = "박기사"; mt += 1;
+    r = await live.runOne(CO, cfg());
+    assert.equal(r.updated, 1, JSON.stringify(r));
+    assert.deepEqual([find().청구운임, find().차량번호, find().이름], ["95000", "경기77사7777", "박기사"]);
+    assert.equal(r.from, "2026-10-01");
+  }
+  console.log("live(14일보다 오래된 줄도 가져오기 시작일부터 반영) OK");
+}
+{
   // 프로그램에서 배차(→ 시트에 씀) → 시트에서 그 기사를 지움 → 프로그램 오더에서도 차량 · 기사가 빠진다
   const { makeSheetLive } = require("../functions/sheetLiveOrders.js");
   const w = await world("on");
