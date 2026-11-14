@@ -36,6 +36,7 @@ import { EMPLOYMENT_STATUS_OPTIONS, suggestRole, ROLE_NAME, isExecProfile, useHr
 import { CustomSelect } from "./CustomSelect";
 import RolePermissionsPanel from "./RolePermissionsPanel";
 import { AdminSessionsPanel } from "./LoginManager";
+import { MfaResetPanel } from "./UserSecurity"; // 🔐 2026-11-14 직원 2차 인증 초기화
 import SheetConnectHub from "./SheetConnectHub"; // 🔗 2026-11-07 구글시트 연동 한곳(가져오기 · 전송 · 연결 마법사)
 const DataCheckPanel = React.lazy(() => import("./DataCheckPanel")); // 🩺 2026-11-10 데이터 점검(모양이 이상한 값 찾아 고치기)
 import { useCustomRoles, roleScreen, ROLE_LABELS, roleOptionsFrom, rolesForTeam } from "./customRoles";
@@ -1497,7 +1498,10 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 
           {/* ====== 로그인 관리 탭 — 지금 로그인 중인 기기(관리자는 자기 회사만) ====== */}
           {adminTab === "loginSessions" && (
-            <AdminSessionsPanel isTotalMaster={isTotalMaster} company={effectiveCompany} roleLabels={roleLabels} />
+            <>
+              <AdminSessionsPanel isTotalMaster={isTotalMaster} company={effectiveCompany} roleLabels={roleLabels} />
+              <MfaResetPanel isTotalMaster={isTotalMaster} company={effectiveCompany} />
+            </>
           )}
 
           {/* ⭐ 2026-11-06 운송사 초기화 탭 제거 — 관리자 관리센터에서만(계약종료 + 초기화 포함) */}

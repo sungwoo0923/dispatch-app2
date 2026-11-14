@@ -1,5 +1,5 @@
 // ======================= src/LoginManager.jsx =======================
-// ⭐ 로그인 관리 화면(2026-10-22 요청) — PC·모바일 공용
+// ⭐ 로그인 관리 화면(2026-10-22 요청) — PC·모바일 공용 · 🔐 2026-11-14 "로그인 · 보안"으로 — 2차 인증(선택) · 얼굴 · 지문 로그인을 맨 위에(src/UserSecurity.jsx)
 //  - 내 로그인 기기 목록 + 기기별 "연결 끊기" + "다른 기기 모두 로그아웃"
 //  - 비밀번호 변경(변경 후 다른 기기 자동 로그아웃 선택)
 //  - 최근 로그인 기록(로그아웃·끊김 사유)
@@ -13,6 +13,7 @@ import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 
 import { useMfaPrompt, PcVerifySection, MASTER_EMAIL, mfaErrorText } from "./MfaModal";
 import { doc as fsDoc } from "firebase/firestore";
 import { AdminCodeChange } from "./AdminGate"; // 🔐 2026-11-10 2차 비밀번호 바꾸기
+import { SecurityPanel } from "./UserSecurity"; // 🔐 2026-11-14 2차 인증(선택) · 얼굴 · 지문 로그인
 import {
   SESSIONS_COLL, KIND_LABEL, END_REASON_LABEL, getMySessionId, endSessions, sessionLastMs, timeAgo, getDeviceLabel, isTotalMasterRole,
 } from "./loginSessions";
@@ -140,6 +141,7 @@ export default function LoginManager({ user }) {
 
   return (
     <div className="space-y-4 text-gray-800">
+      <SecurityPanel user={user} isAdmin={isMaster} Section={Section} />
       <Section
         title="로그인된 기기"
         desc="한 계정은 PC 1대 + 모바일 1대까지 동시에 로그인할 수 있습니다. 같은 종류 기기로 새로 로그인하면 기존 기기는 끊깁니다."
@@ -226,7 +228,7 @@ export function LoginManagerModal({ user, onClose }) {
       <div className="bg-[#F4F6FA] w-full sm:max-w-[560px] max-h-[94vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 z-10 bg-[#1B2B4B] text-white px-5 py-4 flex items-center justify-between sm:rounded-t-2xl rounded-t-2xl">
           <div>
-            <div className="text-[17px] font-black">로그인 관리</div>
+            <div className="text-[17px] font-black">로그인 · 보안</div>
             <div className="text-[12px] text-white/65">{user?.email || auth.currentUser?.email}</div>
           </div>
           <button onClick={onClose} className="text-white/80 hover:text-white text-[26px] leading-none px-2">×</button>

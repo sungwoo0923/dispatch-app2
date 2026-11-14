@@ -9709,12 +9709,14 @@ return (
               </button>
             </div>
 
-            {/* ⭐ 로그인 관리(로그인된 기기·연결 끊기·비밀번호 변경) */}
+            {/* ⭐ 로그인 · 보안(2차 인증 · 얼굴/지문 로그인 · 로그인된 기기 · 비밀번호 변경) — 🔐 2026-11-14 src/UserSecurity.jsx */}
             <button
               onClick={() => setLoginMgrOpen(true)}
-              className="w-full py-2.5 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#1B2B4B] hover:text-white transition"
+              className="w-full py-2.5 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#1B2B4B] hover:text-white transition inline-flex items-center justify-center gap-1.5"
+              data-open-security
             >
-              로그인 관리 · 비밀번호 변경
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 4 6v6c0 4.4 3.4 8.3 8 9 4.6-.7 8-4.6 8-9V6Z" /><path d="m9 12 2 2 4-4" /></svg>
+              로그인 · 보안 (2차 인증 · 얼굴/지문 · 비밀번호)
             </button>
             {loginMgrOpen && <LoginManagerModal user={user} onClose={() => setLoginMgrOpen(false)} />}
 
@@ -61597,7 +61599,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
             <div className="w-11 h-11 rounded-xl bg-[#1B2B4B] text-white flex items-center justify-center shrink-0"><Ico d={<><path d="M12 3 5 6v6c0 4.5 3 7.7 7 9 4-1.3 7-4.5 7-9V6z" /><path d="m9 12 2 2 4-4" /></>} /></div>
             <div className="min-w-0"><div className="text-[15px] font-black text-[#0F1A30]">계정 보안</div><div className="text-[13px] text-[#7A879C]">기기 · 비밀번호 관리</div></div>
           </div>
-          <button onClick={() => setLoginMgrOpen(true)} className="h-10 px-4 shrink-0 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13.5px] font-bold hover:bg-[#1B2B4B] hover:text-white transition whitespace-nowrap">로그인 관리</button>
+          <button onClick={() => setLoginMgrOpen(true)} className="h-10 px-4 shrink-0 rounded-xl bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[13.5px] font-bold hover:bg-[#1B2B4B] hover:text-white transition whitespace-nowrap">로그인 · 보안</button>
           {loginMgrOpen && <LoginManagerModal user={user} onClose={() => setLoginMgrOpen(false)} />}
         </section>
       </aside>
