@@ -13,6 +13,7 @@ import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, C
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05
 import { BookHero, BookCard, Chip, Sheet, MONO } from "./OfficeBooks";
+import { ManualButton, GlossaryButton } from "./WorkManual"; // 📖 2026-11-14 회계용어 · 회계 매뉴얼
 import { isTMUser } from "./staffFilter";
 import { leaveEntitlement, leaveUseOf } from "./approvalForms";
 import { CustomSelect } from "./CustomSelect";
@@ -99,6 +100,7 @@ export function AccountingOverview({ company, orders, drivers = [] }) {
   return (
     <div className="space-y-4">
       <BookHero en={`ACCOUNTING · ${y}`} title="회계 개요" desc="배차완료 기준 매출·매입과 미수·미지급·부가세를 한 화면에서"
+        right={<div className="flex items-center gap-2 flex-wrap"><GlossaryButton dark /><ManualButton menu="회계관리" section="overview" dark /></div>}
         kpis={[["올해 매출(공급가)", `${short(sale)}원`, `${orders.length.toLocaleString()}건`], ["매출총이익", `${short(sale - buy)}원`, `이익률 ${sale ? (((sale - buy) / sale) * 100).toFixed(1) : 0}%`], ["미수금 / 미지급", `${short(arSum)} / ${short(apSum)}`, "미수금은 부가세 포함"], ["예상 부가세(추정)", `${short(vat)}원`, `매출세액 ${short(vatE.saleVat)} − 매입세액 ${short(vatE.buyVat)}`]]} />
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-4">
         <BookCard en="MONTHLY" title="월별 매출 · 매입 · 이익률">

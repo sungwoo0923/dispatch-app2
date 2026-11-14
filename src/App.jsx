@@ -34,7 +34,8 @@ import {
 } from "./loginSessions";
 import { LoginManagerModal } from "./LoginManager";
 import { AdminLoginGate, isAdminGatePassed, adminAuthTime, ADMIN_GATE_EVENT } from "./AdminGate";
-import { UserLoginGate, MfaAskModal, mfaAskState } from "./UserSecurity"; // 🔐 2026-11-14 일반 계정 2차 인증(선택) · 로그인 때 사용 여부 묻기 // 🔐 2026-11-10 2차 비밀번호(키패드) + 처음 보는 기기만 문자
+import { UserLoginGate, MfaAskModal, mfaAskState } from "./UserSecurity";
+const ManualHost = React.lazy(() => import("./WorkManual").then((m) => ({ default: m.ManualHost }))); // 📘 2026-11-14 업무 매뉴얼 · 회계용어 창(PC · 모바일 어디서든 이벤트로)
 import { DRIVER_BUSY_EVENT, isDriverBusy } from "./driver/driverLoginErrors"; // ⭐ 2026-11-05 기사 로그인 확인 중 표시
 import { initDriverAppContext, markDriverAppOnlyKick } from "./driver/driverAppContext"; // ⭐ 2026-11-08 기사앱(APK·홈 화면 기사앱)은 기사 계정만
 // ⭐ 2026-11-08 기사앱 안인지 — 안드로이드 APK 또는 기사 화면에서 "홈 화면에 추가"한 기사앱(실행 중 standalone). 열릴 때 한 번 정한다
@@ -991,6 +992,7 @@ export default function App() {
         ? <div className="fixed inset-0 z-[100002]" style={{ background: "linear-gradient(135deg, #061832 0%, #0B2554 50%, #0D2B66 100%)" }} />
         : <AdminLoginGate key={`${user.uid}:${adminAuthAt}`} user={user} authTime={adminAuthAt} sub={user.email !== TOTAL_MASTER_EMAIL} onCancel={() => signOut(auth).catch(() => {})} />)}
 
+      {user && <React.Suspense fallback={null}><ManualHost /></React.Suspense>}
       {/* 🔐 2026-11-14 일반 계정 2차 인증(켠 계정만) — 로그인 화면 밖에서 들어온 경우(자동 로그인 · 다른 로그인 화면) */}
       {needUserMfa && !sessionConflict && !(window.__kpGateInline && window.location.pathname === "/transport-login") && (userAuthAt === null
         ? <div className="fixed inset-0 z-[100002]" style={{ background: "linear-gradient(135deg, #061832 0%, #0B2554 50%, #0D2B66 100%)" }} />

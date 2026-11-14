@@ -21,9 +21,13 @@ import { fetchCaller } from "./claimsSync";
 import SecureKeypad, { adminDeviceId } from "./SecureKeypad";
 import { markAdminGatePassed, adminAuthTime } from "./AdminGate";
 
-const call = fetchCaller(FUNCTIONS_BASE, () => auth.currentUser);
+const call0 = fetchCaller(FUNCTIONS_BASE, () => auth.currentUser);
+// 🛠 2026-11-14 서버에 닿지 못하면(아이폰 사파리 "Load failed" · 크롬 "Failed to fetch") 알아볼 수 있는 말로 — 서버 기능이 아직 안 올라갔거나 인터넷이 끊긴 경우
+const netErr = (e) => /load failed|failed to fetch|networkerror|network request failed|요청 실패\((404|5\d\d)\)/i.test(String(e?.message || e));
+const guard = (fn) => async (...a) => { try { return await fn(...a); } catch (e) { if (netErr(e)) throw new Error("서버에 연결하지 못했어요. 이 기능의 서버가 아직 준비되지 않았거나 인터넷이 불안정해요. 잠시 뒤 다시 해 주세요."); throw e; } };
+const call = guard(call0);
 export const mfaCall = (data) => call("pnkMfa", { app: "logis", dev: adminDeviceId(), ...data });
-const pkCall = (data, withAuth = true) => (withAuth ? call : fetchCaller(FUNCTIONS_BASE, () => null))("logisPasskey", { origin: window.location.origin, dev: adminDeviceId(), ua: navigator.userAgent, ...data });
+const pkCall = (data, withAuth = true) => (withAuth ? call : guard(fetchCaller(FUNCTIONS_BASE, () => null)))("logisPasskey", { origin: window.location.origin, dev: adminDeviceId(), ua: navigator.userAgent, ...data });
 
 export const ASK_AGAIN_MS = 30 * 86400e3; // [사용 안 함] 뒤 다시 묻기까지
 const NAVY = "#1B2B4B";
@@ -60,8 +64,29 @@ const cancelled = (e) => /NotAllowedError|AbortError|cancel|취소|timed out|not
 const bioErr = (e) => (cancelled(e) ? "" : e?.message || "얼굴 · 지문을 확인하지 못했습니다");
 export const bioName = () => (/iPhone|iPad|Macintosh/.test(navigator.userAgent) ? "Face ID · Touch ID" : /Android/.test(navigator.userAgent) ? "얼굴 · 지문" : "Windows Hello · 지문");
 
+// 📱 2026-11-14 아이폰 사파리는 얼굴 인증 창을 "누른 바로 그 순간"에만 열어 준다 — 서버에 먼저 물어보고(기다림) 창을 열면 막힌다.
+//  그래서 서버 준비값(확인값 · 옵션)을 화면이 열릴 때 미리 받아 두고(bioPrepare), 버튼을 누르면 곧바로 창을 연다.
+//  준비값은 한 번만 쓰고(서버도 한 번만 받음) 4분이 지나면 새로 받는다(서버 유효 5분)
+const PREP_MS = 4 * 60 * 1000;
+const prepared = new Map(); // kind → { at, p: Promise<{options, chal}> }
+const ACTION = { reg: "regOptions", login: "loginOptions", auth: "authOptions" };
+export function bioPrepare(kind, code = "") {
+  const cur = prepared.get(kind);
+  if (cur && Date.now() - cur.at < PREP_MS && kind !== "reg") return cur.p;
+  const p = pkCall({ action: ACTION[kind], code }, kind !== "login");
+  p.catch(() => { if (prepared.get(kind)?.p === p) prepared.delete(kind); });
+  prepared.set(kind, { at: Date.now(), p });
+  return p;
+}
+const takePrepared = async (kind, code = "") => {
+  const cur = prepared.get(kind); prepared.delete(kind);
+  if (cur && Date.now() - cur.at < PREP_MS) { try { return await cur.p; } catch { /* 아래에서 새로 받는다 */ } }
+  return pkCall({ action: ACTION[kind], code }, kind !== "login");
+};
+export const bioPrepared = (kind) => { const c = prepared.get(kind); return !!c && Date.now() - c.at < PREP_MS; };
+
 export async function bioRegister(code = "") {
-  const r = await pkCall({ action: "regOptions", code });
+  const r = await takePrepared("reg", code);
   const response = await startRegistration({ optionsJSON: r.options });
   const v = await pkCall({ action: "regVerify", chal: r.chal, response });
   setBioHere(auth.currentUser?.uid, auth.currentUser?.email, true);
@@ -69,15 +94,24 @@ export async function bioRegister(code = "") {
 }
 // 로그인 화면 — 성공하면 { token, uid, admin, sub, email, companyName, companyCode }
 export async function bioLogin() {
-  const r = await pkCall({ action: "loginOptions" }, false);
+  const r = await takePrepared("login");
   const response = await startAuthentication({ optionsJSON: r.options });
   return pkCall({ action: "login", chal: r.chal, response }, false);
 }
 // 2차 비밀번호 대신 — { ok } 또는 { needSms, phone }(최고관리자 · 부관리자 · 처음 보는 기기)
 export async function bioUnlock() {
-  const r = await pkCall({ action: "authOptions" });
+  const r = await takePrepared("auth");
   const response = await startAuthentication({ optionsJSON: r.options });
   return pkCall({ action: "authVerify", chal: r.chal, response });
+}
+// 화면이 열려 있는 동안 준비값을 미리(그리고 4분마다 새로) 받아 둔다
+function usePrepare(kind, on) {
+  React.useEffect(() => {
+    if (!on) return undefined;
+    bioPrepare(kind).catch(() => {});
+    const t = setInterval(() => { prepared.delete(kind); bioPrepare(kind).catch(() => {}); }, PREP_MS - 15000);
+    return () => clearInterval(t);
+  }, [kind, on]);
 }
 
 const FaceIcon = ({ size = 20 }) => (
@@ -93,6 +127,7 @@ export function BioUnlockButton({ uid, onDone, onSms, dark = false, compact = fa
   const ok = useBioSupported();
   const [busy, setBusy] = React.useState(false);
   const [msg, setMsg] = React.useState("");
+  usePrepare("auth", ok && bioHereFor(uid));
   if (!ok || !bioHereFor(uid)) return null;
   const go = async () => {
     setBusy(true); setMsg("");
@@ -268,7 +303,7 @@ export function MfaAskModal({ user, mode = "ask", onClose }) {
             <SetupFlow initialKind="pin" cancelLabel={mode === "setup" ? "다음에 하기(30일 뒤 다시 묻기)" : "뒤로"}
               onCancel={mode === "setup" ? decline : () => setStep("ask")}
               run={async (v) => { await markHere(user); const r = await mfaCall({ action: "setup", ...v }); justSet.current = v.code; return r; }}
-              onDone={(_r, kind) => setDone(kind)} />
+              onDone={(_r, kind) => { setDone(kind); if (bio && justSet.current) bioPrepare("reg", justSet.current).catch(() => {}); }} />
           ) : (
             <div className="space-y-2.5">
               {[["pin", "숫자 8자리 PIN", "은행 앱처럼 숫자판으로 빠르게"], ["keypad", "화면 키패드", "영문 · 숫자 8자 이상 — 더 안전하게"]].map(([k, t, s]) => (
@@ -337,6 +372,7 @@ export function BioLoginButton({ onToken, disabled = false, divider = null }) {
   const ok = useBioSupported();
   const [busy, setBusy] = React.useState(false);
   const [msg, setMsg] = React.useState("");
+  usePrepare("login", ok && bioHereList().length > 0);
   if (!ok || !bioHereList().length) return null;
   const go = async () => {
     setBusy(true); setMsg("");
@@ -389,6 +425,14 @@ export function SecurityPanel({ user, isAdmin = false, Section }) {
     catch (e) { setMsg({ t: e.message || "끄지 못했습니다" }); setCode(""); } finally { setBusy(false); }
   };
   const [chOld, setChOld] = React.useState("");
+  const [bioBusy, setBioBusy] = React.useState(false);
+  // 2차 비밀번호가 없는 계정은 화면이 열릴 때 등록 준비값을 미리 받아 둔다(아이폰 — 누르는 순간 바로 창을 열어야 한다)
+  React.useEffect(() => {
+    if (!bio || !st || st.error || hereKey || isAdmin || st.required) return undefined;
+    bioPrepare("reg").catch(() => {});
+    const t = setInterval(() => bioPrepare("reg").catch(() => {}), PREP_MS - 15000);
+    return () => clearInterval(t);
+  }, [bio, st, hereKey, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
   const addBio = async (c = "") => {
     setBioMsg({ t: "" });
     try { await bioRegister(c); setBioStep(""); setBioCode(""); setBioMsg({ t: "이 기기를 등록했습니다. 다음부터 로그인 화면에서 바로 들어옵니다.", ok: true }); load(); }
@@ -451,9 +495,14 @@ export function SecurityPanel({ user, isAdmin = false, Section }) {
           ) : !hereKey && (bioStep === "code" ? (
             <div className="space-y-2">
               <div className="text-[13px] font-bold text-[#3A4A66] text-center">등록하려면 2차 비밀번호를 한 번 넣어 주세요</div>
-              <CodePad kind={isAdmin ? "keypad" : st?.kind} value={bioCode} onChange={setBioCode} onSubmit={(v) => addBio(v)} submitLabel="확인하고 등록" />
+              <CodePad kind={isAdmin ? "keypad" : st?.kind} value={bioCode} onChange={setBioCode} disabled={bioBusy} submitLabel={bioBusy ? "확인 중…" : "확인"}
+                onSubmit={async (v) => { setBioBusy(true); setBioMsg({ t: "" }); try { await bioPrepare("reg", v); setBioStep("ready"); } catch (e) { setBioMsg({ t: bioErr(e) || "확인하지 못했어요" }); setBioCode(""); } finally { setBioBusy(false); } }} />
               <button type="button" onClick={() => { setBioStep(""); setBioCode(""); }} className="w-full text-[13px] font-bold text-[#7A879C] py-1">취소</button>
             </div>
+          ) : bioStep === "ready" ? (
+            <button type="button" onClick={() => addBio(bioCode)} className="w-full h-12 rounded-xl bg-[#1B2B4B] text-white text-[14.5px] font-black inline-flex items-center justify-center gap-2 hover:bg-[#243a60]" data-bio-go>
+              <FaceIcon />확인됐어요 — 지금 {bioName()} 등록하기
+            </button>
           ) : (
             <button type="button" onClick={() => (needCodeForBio ? setBioStep("code") : addBio(""))} className="w-full h-12 rounded-xl bg-[#1B2B4B] text-white text-[14.5px] font-black inline-flex items-center justify-center gap-2 hover:bg-[#243a60]" data-bio-add>
               <FaceIcon />이 기기에 {bioName()} 등록

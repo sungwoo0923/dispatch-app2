@@ -8,6 +8,7 @@
 //  계산은 아래 summarizeSettle() 한 곳(순수 함수) — scripts/settleHome.test.mjs
 import React from "react";
 import { CustomSelect } from "./CustomSelect";
+import { ManualButton } from "./WorkManual"; // 📘 2026-11-14 정산 매뉴얼
 import { useArDesk, stageLabel } from "./SettleDesk";
 import { n, won, short, kstYm, monthOf, stageFinder, summarizeSettle, clientLedger } from "./settleCore";
 export { summarizeSettle, clientLedger } from "./settleCore";
@@ -73,6 +74,7 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
         <CustomSelect value={ym} onChange={(e) => setYm(e.target.value)} className="h-11 w-[150px] rounded-xl border border-white/25 bg-white/10 px-3 text-[15.5px] font-black text-white" title="정산월">
           {months.map((m) => <option key={m} value={m}>{`${m.slice(0, 4)}년 ${Number(m.slice(5))}월`}</option>)}
         </CustomSelect>
+        <ManualButton menu="정산관리" section="home" dark label="정산 매뉴얼" />
         <div className="flex items-center gap-6 flex-wrap ml-auto" style={NUM}>
           {[["청구", S.sale], ["기사 지급", S.buy], ["수수료", S.profit]].map(([l, v]) => (
             <div key={l}><div className="text-[12px] font-bold text-[#B9C8E6]">{l}</div><div className="text-[20px] font-black whitespace-nowrap">{won(v)}<span className="text-[13px] font-bold text-[#B9C8E6] ml-0.5">원</span></div></div>))}

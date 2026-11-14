@@ -9,6 +9,7 @@ import React from "react";
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where, arrayUnion } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import KpSubNav from "./KpSubNav";
+import { ManualButton } from "./WorkManual"; // 📘 2026-11-14 자금 매뉴얼
 import { BookHero, BookCard, Chip, Sheet, MONO, CashBook, BookSkeleton } from "./OfficeBooks";
 import { useCompanyRows } from "./companyColStore";
 import CustomDatePicker from "./CustomDatePicker";
@@ -201,7 +202,7 @@ export function FundsBoard({ company, canEdit = true }) {
   return (
     <div className="space-y-4">
       <BookHero en="FINANCE · TREASURY" title="자금 현황" desc="통장·카드·현금·예금·대출 잔액과 현금 흐름 — 장부에서 통장·카드를 고르면 자동으로 늘고 줄어듭니다"
-        right={canEdit && funds.length > 0 && <button type="button" onClick={() => setAcc({})} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black whitespace-nowrap">+ 통장·카드 등록</button>}
+        right={<div className="flex items-center gap-2 flex-wrap"><ManualButton menu="자금관리" section="funds" dark />{canEdit && funds.length > 0 && <button type="button" onClick={() => setAcc({})} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black whitespace-nowrap">+ 통장·카드 등록</button>}</div>}
         kpis={[
           ["보유 자금", `${won(S.cash)}원`, `${assetList.length}개 계좌·현금`],
           ["이번 달 순현금흐름", `${net >= 0 ? "+" : ""}${short(net)}원`, `수입 ${short(S.thisMonth.in)} · 지출 ${short(S.thisMonth.out)}`],
@@ -275,7 +276,7 @@ export function FundsBoard({ company, canEdit = true }) {
 export function FundsWorkspace({ company, isViewer = false }) {
   const [tab, setTab] = React.useState(() => { try { const v = sessionStorage.getItem("kpFundsTab"); sessionStorage.removeItem("kpFundsTab"); return v || "funds"; } catch { return "funds"; } });
   return (
-    <KpSubNav code="FINANCE" title="자금관리" icon="wallet" active={tab} onSelect={setTab}
+    <KpSubNav code="FINANCE" title="자금관리" icon="wallet" active={tab} onSelect={setTab} actions={[{ key: "manual", label: "자금 매뉴얼", icon: "doc", onClick: () => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu: "자금관리", section: tab } })) }]}
       items={[{ key: "funds", label: "자금 현황", en: "TREASURY", icon: "wallet" }, { key: "book", label: "수입·지출 장부", en: "CASH BOOK", icon: "sheet" }]}>
       {tab === "funds" ? <FundsBoard company={company} canEdit={!isViewer} /> : <CashBook company={company} isViewer={isViewer} />}
     </KpSubNav>
