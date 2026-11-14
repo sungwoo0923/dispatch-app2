@@ -121,7 +121,7 @@ export function SheetLiveChip({ role, userCompany, compact = false }) {
   const main = st.error ? st.error : late ? `확인 지연 · 마지막 확인 ${agoK(st.checkedAt, now)}` : `${agoK(st.checkedAt, now)} 확인${st.changedAt ? ` · 마지막 변경 ${agoK(st.changedAt, now)}` : ""}`;
   const detail = !bad && st.changedAt ? [st.created ? `새 ${st.created}` : "", st.updated ? `고침 ${st.updated}` : "", st.removed ? `삭제 ${st.removed}` : ""].filter(Boolean).join(" · ") : "";
   return (
-    <span data-kp="sheet-live-chip" title={`구글시트 실시간 반영 — 약 4초마다 시트를 확인합니다${st.checkedAt ? `\n마지막 확인 ${new Date(st.checkedAt).toLocaleString("ko-KR", { hour12: false })}` : ""}${st.heldBack ? `\n시트에 없는 오더 ${st.heldBack}건은 너무 많아 지우지 않았습니다` : ""}`}
+    <span data-kp="sheet-live-chip" title={`구글시트 실시간 반영 — 시트 · 프로그램이 바뀌면 바로 반영합니다${st.checkedAt ? `\n마지막 확인 ${new Date(st.checkedAt).toLocaleString("ko-KR", { hour12: false })}` : ""}${st.heldBack ? `\n시트에 없는 오더 ${st.heldBack}건은 너무 많아 지우지 않았습니다` : ""}`}
       className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-[12.5px] font-bold whitespace-nowrap ${bad ? "border-[#E7B7B0] text-[#B4342A] bg-white" : "border-[#DCE3EE] text-[#3A4A66] bg-white"}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${bad ? "bg-[#B4342A]" : "bg-[#1F7A4D]"}`} />
       {!compact && <span className="text-[#94A3B8] font-extrabold tracking-[0.08em]">구글시트</span>}

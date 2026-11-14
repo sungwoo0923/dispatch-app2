@@ -2,22 +2,26 @@
 // 🔁 2026-11-13 구글시트 실시간 반영 — 시트에서만 입력 · 수정하는 운송사(지금은 JY로지스틱스)
 //  · 설정: sheetLive/{회사} = { companyName, url, tabs[], enabled, days, removeMissing, lastMt, lastHash, lastRunAt, lastResult, lastError }
 //    (관리센터 › 배차일지 가져오기 › [실시간 반영]에서 켠다 — 서버만 읽고 쓴다)
-//  · 약 4초마다(syncSheetOrders · runLoop): 최근 줄이 바뀌었거나 Drive 수정 시각이 바뀌었을 때 · 1분마다 한 번은 무조건 읽어서 → carrierMigrateCore.buildMigration → reconcileOrders
+//  · 바뀌었을 때만(아래 "이벤트 방식" — 시트 알림 · 프로그램 변경) + 1분마다 안전장치(syncSheetOrders): → carrierMigrateCore.buildMigration → reconcileOrders
 //    → orders 에 새 줄은 만들고, 바뀐 줄은 바뀐 칸만 고치고, 시트에서 지운 줄은 지운다(removeMissing)
 //  · orders 문서가 바뀌므로 배차현황 · 실시간 · 정산 등 오더를 보는 모든 화면에 바로 반영된다(화면은 onSnapshot)
 //  · 반영 범위: 상차일이 오늘 − days 이후인 줄(지난 달 정산 끝난 오더는 건드리지 않는다)
 const crypto = require("crypto");
 
 const kstYmd = (ms = Date.now()) => new Date(ms + 9 * 3600 * 1000).toISOString().slice(0, 10);
-// ⚡ 2026-11-14 더 빨리 — 스케줄은 1분마다지만 그 1분 동안 약 4초마다 확인한다(runLoop)
-// ⚡ 2026-11-14(2) 바로바로 — 예전엔 Drive "수정 시각 · 버전"으로 바뀐 걸 알아봤는데, 구글이 이 표시를 1~2분 늦게 바꿔서
-//  시트에서 기사명 · 전화번호를 넣어도 한참 뒤(2분 안전장치 때)에야 들어왔다.
-//  이제 확인할 때마다 최근 며칠치 줄(PEEK_DAYS · 새로 붙는 맨 아래 줄 포함)만 직접 읽어 비교한다(가볍다 — 한 번에 수십~수백 줄)
-//  → 바뀌었으면 바로 전체를 읽어 맞춘다. 그보다 오래된 줄은 수정 시각이 바뀌거나 1분마다 하는 전체 비교 때 들어온다
-const FULL_EVERY_MS = 60 * 1000; // 바뀐 표시가 없어도 1분에 한 번은 시트 전체를 읽어 비교
-const TICK_MS = 4000; // 확인 간격(시트 읽기 한도 — 서버 계정 1분 60회 — 안에서)
-const LOOP_MS = 52 * 1000; // 한 번 불렸을 때 확인을 이어 가는 시간(다음 스케줄 전에 끝낸다)
-const PEEK_DAYS = 3; // 매번 직접 읽어 보는 범위: 상차일이 오늘 − 3일 이후인 줄부터 맨 아래까지
+// ⚡ 2026-11-14 바뀔 때만 바로 반영(이벤트 방식) — 계속 들여다보지 않는다
+//  · 프로그램에서 오더가 바뀌면: orders 트리거 → sheetPushQueue 에 적힘 → 그 대기열 트리거가 바로 kick(회사) → 시트에 쓴다
+//  · 시트에서 사람이 고치면: 시트에 붙인 Apps Script(onChange)가 sheetLivePing 을 부른다 → 바로 kick(회사) → 시트를 읽어 맞춘다
+//    (스크립트는 관리센터 › 배차일지 가져오기 › 실시간 반영 › [시트 알림 설치]에서 복사 — pingScript)
+//  · 한 회사에 한 번에 하나만 돈다(sheetLiveLock) — 도는 중에 또 바뀌면 "다시" 표시만 남기고, 하던 쪽이 끝나자마자 한 번 더 돈다
+//  · 1분마다 도는 스케줄은 안전장치 — 시트 알림이 설치된 회사는 Drive 수정 시각만 보고(시트 읽기 한도를 안 쓴다) 15분에 한 번 전체 비교,
+//    설치 전 회사는 최근 줄을 1분마다 직접 읽어 비교(PEEK) · 2분에 한 번 전체 비교
+const FULL_EVERY_MS = 2 * 60 * 1000; // 시트 알림 설치 전: 바뀐 표시가 없어도 2분에 한 번은 전체 비교
+const SAFETY_FULL_MS = 15 * 60 * 1000; // 시트 알림 설치 후: 15분에 한 번 전체 비교(놓친 알림 대비)
+const PING_FRESH_MS = 3 * 86400000; // 최근 3일 안에 시트 알림이 온 적 있으면 "설치됨"으로 본다
+const PEEK_DAYS = 3; // 직접 읽어 보는 범위: 상차일이 오늘 − 3일 이후인 줄부터 맨 아래까지
+const LOCK_MS = 4 * 60 * 1000; // 하던 쪽이 죽어도 4분 뒤엔 다른 쪽이 이어받는다
+const MAX_ROUNDS = 8; // 한 번 잡았을 때 "다시"를 이어 도는 최대 횟수(넘으면 다음 알림 · 스케줄이 이어 간다)
 
 const RECENT_EDIT_MS = 10 * 1000; // 방금 프로그램에서 고친 오더는 잠깐 건너뛴다(그 변경이 시트로 먼저 간다 — functions/sheetPushOrders.js)
 //  시트로 가길 기다리는 오더(sheetPushQueue 대기)도 건너뛴다 — 예전엔 30초를 통째로 기다려서 시트에서 바로 고쳐도 늦게 들어왔다
@@ -97,16 +101,17 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
 
   // 한 회사 반영 — force: 수정 시각 · 내용이 같아도 비교한다
   //  sheetWritten: 방금 프로그램 변경을 시트에 썼다 → 시트 수정 시각이 같아 보여도 다시 읽는다
-  async function runOne(co, cfg, { force = false, by = "구글시트 실시간", sheetWritten = false } = {}) {
+  //  fullEvery: 이 시간이 지나면 바뀐 표시가 없어도 전체 비교 · usePeek: 최근 줄을 직접 읽어 비교할지(시트 알림 설치 전)
+  async function runOne(co, cfg, { force = false, by = "구글시트 실시간", sheetWritten = false, fullEvery = FULL_EVERY_MS, usePeek = true } = {}) {
     const id = parseSpreadsheetId(cfg.url);
     if (!id) throw new Error("구글시트 주소가 올바르지 않습니다.");
     const now = Date.now();
     const mt = await sheetModifiedTime(id);
     const pk = peekOf.get(co); const pkOk = !!pk && pk.url === cfg.url;
     let fp; // 이번에 읽은 최근 줄 지문(전체를 읽기 "전에" 잡는다 — 읽는 사이 고친 것은 다음 확인 때 다시 걸린다)
-    if (!force && !sheetWritten && now - Number(cfg.lastFullAt || 0) < FULL_EVERY_MS) {
+    if (!force && !sheetWritten && now - Number(cfg.lastFullAt || 0) < fullEvery) {
       let changed = !!mt && mt !== String(cfg.lastMt || "");
-      if (!changed) {
+      if (!changed && usePeek) {
         if (!pkOk) changed = true; // 서버가 막 켜져 기준이 없다 → 한 번 전체를 읽는다
         else {
           fp = await peek(id, pk.ranges).catch((e) => { console.warn(`[시트 실시간] ${co} 빠른 확인 실패:`, e?.message || e); return undefined; });
@@ -114,7 +119,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
         }
       }
       if (!changed) return { skipped: "unchanged" };
-    } else if (pkOk && !force) fp = await peek(id, pk.ranges).catch(() => undefined);
+    } else if (pkOk && !force && usePeek) fp = await peek(id, pk.ranges).catch(() => undefined);
     const M = await import("./carrierMigrateCore.mjs");
     const P = await import("./sheetProfileCore.mjs");
     const raw = await readTabs(id, null); // 주소 찾기에 상하차지 · 기사 탭도 필요해서 전부 읽고, 오더만 고른 탭으로 거른다
@@ -133,7 +138,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     // 다음 빠른 확인의 기준 — 범위가 그대로면 위에서 잡은 지문을, 바뀌었으면(날이 바뀜 · 줄이 늘어남) 새 범위로 한 번 읽어 둔다
     const ranges = peekRanges(built.orders, wantTabs, now);
     const sameRanges = pkOk && JSON.stringify(pk.ranges) === JSON.stringify(ranges);
-    const baseFp = sameRanges && fp !== undefined ? fp : await peek(id, ranges).catch(() => undefined);
+    const baseFp = !usePeek ? undefined : sameRanges && fp !== undefined ? fp : await peek(id, ranges).catch(() => undefined);
     if (baseFp === undefined) peekOf.delete(co); else peekOf.set(co, { url: cfg.url, ranges, fp: baseFp });
     const hash = crypto.createHash("sha1").update(JSON.stringify(incoming)).digest("hex");
     const stamp = { lastMt: mt || "", lastRunAt: now, lastFullAt: now, lastError: "" };
@@ -179,47 +184,114 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     return result;
   }
 
-  // 1분마다 — 켜 둔 회사 전부
-  async function runAll({ housekeeping = true } = {}) {
-    const snap = await db.collection("sheetLive").where("enabled", "==", true).get();
-    if (push && housekeeping) { await push.purgeInactive(new Set(snap.docs.filter((d) => ["dry", "on"].includes((d.data() || {}).pushMode)).map((d) => (d.data() || {}).companyName || d.id))).catch(() => {}); await push.sweep().catch(() => {}); }
-    for (const d of snap.docs) {
-      const cfg = d.data() || {}; const co = cfg.companyName || d.id;
-      pushModeOf.set(co, ["dry", "on"].includes(cfg.pushMode) ? cfg.pushMode : "off");
-      try {
-        // 🔁 프로그램에서 바뀐 오더를 먼저 시트에 쓴다(켜 둔 회사만) → 그다음 시트를 읽어 맞춘다
-        const pr = push && cfg.pushMode && cfg.pushMode !== "off" ? await push.process(co, cfg, { presetFor, placesFor }).catch((e) => { console.error(`[시트 쓰기 실패] ${co}:`, e?.message || e); return {}; }) : {};
-        const r = await runOne(co, cfg, { sheetWritten: !!pr.wrote });
-        if (r.skipped) await writeStatus(co, { enabled: true, error: "" });
-        if (!r.skipped && (r.created || r.updated || r.removed || r.heldBack)) console.log(`[시트 실시간] ${co}`, JSON.stringify(r));
-      } catch (e) {
-        console.error(`[시트 실시간 실패] ${co}:`, e?.message || e);
-        await d.ref.set({ lastRunAt: Date.now(), lastError: String(e?.message || e).slice(0, 300) }, { merge: true }).catch(() => {});
-        await writeStatus(co, { enabled: true, error: "시트를 읽지 못했습니다" }, { force: true });
+  // ── 한 회사 처리(잠금 안에서) — 프로그램 변경을 시트에 먼저 쓰고 → 필요하면 시트를 읽어 맞춘다 ─────────────
+  //  reason: "sheet"(시트 알림 — 바로 읽는다) · "program"(프로그램 변경 — 시트에 쓰기만) · "safety"(스케줄 안전장치)
+  async function work(co, cfg, reason) {
+    pushModeOf.set(co, ["dry", "on"].includes(cfg.pushMode) ? cfg.pushMode : "off");
+    const pr = push && cfg.pushMode && cfg.pushMode !== "off" ? await push.process(co, cfg, { presetFor, placesFor }).catch((e) => { console.error(`[시트 쓰기 실패] ${co}:`, e?.message || e); return {}; }) : {};
+    if (reason === "program") { await writeStatus(co, { enabled: true, error: "" }); return { pushed: !!pr.wrote }; }
+    const pinged = now0() - Number(cfg.pingAt || 0) < PING_FRESH_MS;
+    const r = await runOne(co, cfg, reason === "sheet" ? { sheetWritten: true } : pinged ? { fullEvery: SAFETY_FULL_MS, usePeek: false, sheetWritten: !!pr.wrote } : { sheetWritten: !!pr.wrote });
+    if (r.skipped) await writeStatus(co, { enabled: true, error: "" });
+    if (!r.skipped && (r.created || r.updated || r.removed || r.heldBack)) console.log(`[시트 실시간] ${co} (${reason})`, JSON.stringify(r));
+    return r;
+  }
+  const now0 = () => Date.now();
+  const lockRef = (co) => db.collection("sheetLiveLock").doc(co);
+
+  // 🔔 바뀐 게 있을 때 부른다 — 아무도 안 돌고 있으면 잡아서 바로 돌고, 누가 돌고 있으면 "다시" 표시만(하던 쪽이 끝나고 한 번 더 돈다)
+  //  → "ran" · "queued"(다른 쪽이 이어서 함) · "off"(실시간 반영 꺼짐)
+  async function kick(co, reason = "sheet") {
+    const me = `${reason}_${Math.random().toString(36).slice(2, 10)}`;
+    const got = await db.runTransaction(async (tx) => {
+      const x = (await tx.get(lockRef(co))).data() || {};
+      const need = Math.max(Number(x.need || 0), reason === "sheet" ? 2 : reason === "program" ? 1 : 0); // 2: 시트 읽기까지 · 1: 시트 쓰기만 · 0: 안전장치
+      if (Number(x.until || 0) > Date.now()) { tx.set(lockRef(co), { dirtyAt: Date.now(), need }, { merge: true }); return false; }
+      tx.set(lockRef(co), { until: Date.now() + LOCK_MS, by: me, dirtyAt: 0, need: 0 }, { merge: true });
+      return true;
+    });
+    if (!got) return "queued";
+    let level = reason;
+    try {
+      for (let round = 0; round < MAX_ROUNDS; round += 1) {
+        const startedAt = Date.now();
+        const cfg = (await ref(co).get()).data() || {};
+        if (cfg.enabled !== true) return "off";
+        try { await work(co, cfg, level); }
+        catch (e) {
+          console.error(`[시트 실시간 실패] ${co}:`, e?.message || e);
+          await ref(co).set({ lastRunAt: Date.now(), lastError: String(e?.message || e).slice(0, 300) }, { merge: true }).catch(() => {});
+          await writeStatus(co, { enabled: true, error: "시트를 읽지 못했습니다" }, { force: true });
+        }
+        // 도는 사이 또 바뀌었나? — 바뀌었으면 잠금을 쥔 채 한 번 더, 아니면 놓는다(확인과 놓기를 한 번에 해서 그 틈에 온 알림을 놓치지 않는다)
+        const again = await db.runTransaction(async (tx) => {
+          const x = (await tx.get(lockRef(co))).data() || {};
+          if (x.by !== me) return null; // 너무 오래 걸려 다른 쪽이 이어받았다
+          if (Number(x.dirtyAt || 0) >= startedAt - 2000 && round + 1 < MAX_ROUNDS) { tx.set(lockRef(co), { until: Date.now() + LOCK_MS, dirtyAt: 0, need: 0 }, { merge: true }); return Number(x.need || 0); }
+          tx.set(lockRef(co), { until: 0, by: "" }, { merge: true });
+          return null;
+        });
+        if (again == null) { level = null; break; }
+        level = again >= 2 ? "sheet" : again === 1 ? "program" : "safety";
       }
+    } finally {
+      if (level) await lockRef(co).set({ until: 0, by: "" }, { merge: true }).catch(() => {}); // 횟수를 다 쓴 경우 — 잠금만 푼다(다음 알림 · 스케줄이 이어 간다)
+    }
+    return "ran";
+  }
+
+  // ⏱ 1분마다 — 안전장치(놓친 알림 · 알림 설치 전 회사) + 대기열 정리
+  async function runScheduled() {
+    const snap = await db.collection("sheetLive").where("enabled", "==", true).get();
+    if (push) { await push.purgeInactive(new Set(snap.docs.filter((d) => ["dry", "on"].includes((d.data() || {}).pushMode)).map((d) => (d.data() || {}).companyName || d.id))).catch(() => {}); await push.sweep().catch(() => {}); }
+    for (const d of snap.docs) {
+      const co = (d.data() || {}).companyName || d.id;
+      await kick(co, "safety").catch((e) => console.error(`[시트 실시간 실패] ${co}:`, e?.message || e));
     }
   }
 
-  // ⚡ 스케줄(1분)마다 한 번 불려서, 그 1분 동안 TICK_MS(4초) 간격으로 확인을 되풀이한다 — 바뀐 것이 없으면 수정 표시만 보고 지나간다(가볍다)
-  async function runLoop({ loopMs = LOOP_MS, tickMs = TICK_MS, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
-    const t0 = Date.now(); let n = 0;
-    for (;;) {
-      const started = Date.now();
-      await runAll({ housekeeping: n === 0 }).catch((e) => console.error("[시트 실시간 실패]", e?.message || e));
-      n += 1;
-      const wait = Math.max(0, tickMs - (Date.now() - started));
-      if (Date.now() - t0 + wait >= loopMs) break;
-      await sleep(wait);
-    }
-    return n;
+  // 📨 시트 알림(Apps Script) — 열쇠로 회사를 찾아 바로 맞춘다
+  async function onPing(key) {
+    const k = String(key || "").trim();
+    if (!/^[0-9a-f]{32}$/.test(k)) return { status: 400, body: { error: "bad key" } };
+    const snap = await db.collection("sheetLive").where("pingKey", "==", k).limit(1).get();
+    if (snap.empty) return { status: 404, body: { error: "unknown key" } };
+    const d = snap.docs[0]; const cfg = d.data() || {}; const co = cfg.companyName || d.id;
+    await d.ref.set({ pingAt: Date.now() }, { merge: true });
+    if (cfg.enabled !== true) return { status: 200, body: { ok: true, off: true } };
+    return { status: 200, body: { ok: true, result: await kick(co, "sheet") } };
   }
+
+  // 시트에 붙일 Apps Script — 시트가 바뀌면(값 입력 · 줄 추가 · 줄 삭제 · 붙여넣기) 서버에 "바뀜"만 알린다(내용은 안 보낸다)
+  const pingUrl = () => `https://us-central1-${process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "dispatch-app-9b92f"}.cloudfunctions.net/sheetLivePing`;
+  const scriptFor = (key) => [
+    "// LogisWeb 실시간 연동 — 이 시트가 바뀌면 LogisWeb 에 바로 알립니다(시트 내용은 보내지 않습니다)",
+    "// 처음 한 번: 위 메뉴에서 '설치' 함수를 고르고 [실행] → 권한 허용",
+    `var LOGISWEB_URL = '${pingUrl()}?k=${key}';`,
+    "function logiswebPing(e) {",
+    "  try { UrlFetchApp.fetch(LOGISWEB_URL, { method: 'post', contentType: 'application/json', payload: '{}', muteHttpExceptions: true }); } catch (err) {}",
+    "}",
+    "function 설치() {",
+    "  var ss = SpreadsheetApp.getActive();",
+    "  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'logiswebPing') ScriptApp.deleteTrigger(t); });",
+    "  ScriptApp.newTrigger('logiswebPing').forSpreadsheet(ss).onChange().create();",
+    "  logiswebPing();",
+    "}",
+    "",
+  ].join("\n");
 
   // 관리센터 요청(최고관리자) — liveGet · liveSet · liveRun
   async function handle(action, body, me) {
     const co = String(body.company || "").trim();
     if (!co) throw Object.assign(new Error("운송사를 골라 주세요."), { status: 400 });
-    const pub = (x) => (x ? { enabled: !!x.enabled, url: x.url || "", tabs: x.tabs || [], days: x.days || 14, removeMissing: x.removeMissing !== false, lastRunAt: x.lastRunAt || 0, lastChangeAt: x.lastChangeAt || 0, lastResult: x.lastResult || null, lastError: x.lastError || "" } : null);
+    const pub = (x) => (x ? { enabled: !!x.enabled, url: x.url || "", tabs: x.tabs || [], days: x.days || 14, removeMissing: x.removeMissing !== false, lastRunAt: x.lastRunAt || 0, lastChangeAt: x.lastChangeAt || 0, lastResult: x.lastResult || null, lastError: x.lastError || "", pingAt: x.pingAt || 0, pingReady: !!x.pingKey } : null);
     if (action === "liveGet") return { live: pub((await ref(co).get()).data()) };
+    if (action === "pingScript") { // 시트 알림 스크립트 — 열쇠가 없으면 만든다(renew: 새 열쇠 — 예전 스크립트는 더 이상 안 통한다)
+      const x = (await ref(co).get()).data() || {};
+      let key = x.pingKey;
+      if (!key || body.renew) { key = crypto.randomBytes(16).toString("hex"); await ref(co).set({ companyName: co, pingKey: key, ...(body.renew ? { pingAt: 0 } : {}) }, { merge: true }); }
+      return { script: scriptFor(key), live: pub((await ref(co).get()).data()) };
+    }
     if (action === "liveSet") {
       const patch = { companyName: co, updatedAt: Date.now(), updatedBy: me?.email || "" };
       if (body.url != null) { if (!parseSpreadsheetId(body.url)) throw Object.assign(new Error("구글시트 주소가 올바르지 않습니다."), { status: 400 }); patch.url = String(body.url).trim(); patch.lastMt = ""; patch.lastHash = ""; }
@@ -235,13 +307,13 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
       const cfg = (await ref(co).get()).data();
       if (!cfg?.url) throw Object.assign(new Error("먼저 실시간 반영할 시트를 저장해 주세요."), { status: 400 });
       if (push && cfg.enabled === true && cfg.pushMode && cfg.pushMode !== "off") await push.process(co, cfg, { presetFor, placesFor }).catch(() => {});
-      const result = await runOne(co, cfg, { force: true });
+      const result = await runOne(co, cfg, { force: true }); // [지금 반영] — 잠금 없이 바로(관리자가 직접 누름)
       return { result, live: pub((await ref(co).get()).data()) };
     }
     return null;
   }
 
-  return { runOne, runAll, runLoop, handle };
+  return { runOne, kick, runScheduled, onPing, handle, scriptFor };
 }
 
 module.exports = { makeSheetLive };

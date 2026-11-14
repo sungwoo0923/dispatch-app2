@@ -6217,7 +6217,21 @@ exports.sheetConnect = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeo
 const _sheetPush = require("./sheetPushOrders").makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab });
 exports.queueOrderSheetPush = functions.firestore.document("orders/{orderId}").onWrite((change, context) => _sheetPush.onOrderWrite(change, context).catch((e) => { console.error("[시트 쓰기 대기열 실패]", context.params.orderId, e?.message || e); return null; }));
 const _sheetLive = require("./sheetLiveOrders").makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab, sheetModifiedTime: sheetChangeToken, bumpDataVersion, push: _sheetPush });
-exports.syncSheetOrders = functions.runWith({ timeoutSeconds: 300, memory: "1GB", maxInstances: 1 }).pubsub.schedule("every 1 minutes").timeZone("Asia/Seoul").onRun(async () => { await _sheetLive.runLoop(); return null; }); // ⚡ 1분 동안 약 4초마다 확인(시트 최근 줄 직접 비교 · 프로그램 변경 모두)
+exports.syncSheetOrders = functions.runWith({ timeoutSeconds: 300, memory: "1GB", maxInstances: 1 }).pubsub.schedule("every 1 minutes").timeZone("Asia/Seoul").onRun(async () => { await _sheetLive.runScheduled(); return null; }); // ⏱ 안전장치 — 평소엔 아래 두 이벤트가 바로 처리한다
+// ⚡ 2026-11-14 프로그램에서 오더가 바뀌어 시트 쓰기 대기열에 들어오면 바로 처리(1분 · 몇 초 기다리지 않는다)
+exports.sheetPushKick = functions.runWith({ timeoutSeconds: 300, memory: "1GB" }).firestore.document("sheetPushQueue/{qid}").onWrite(async (change) => {
+  const a = change.after.exists ? change.after.data() : null; const b = change.before.exists ? change.before.data() : null;
+  if (!a || a.state !== "pending" || (b && b.state === "pending" && b.at === a.at)) return null;
+  await _sheetLive.kick(String(a.companyName || ""), "program").catch((e) => console.error("[시트 쓰기 바로 처리 실패]", e?.message || e));
+  return null;
+});
+// ⚡ 2026-11-14 시트 알림 — 시트에 붙인 Apps Script(onChange)가 "바뀜"을 알리면 바로 시트를 읽어 맞춘다(열쇠 = sheetLive/{회사}.pingKey)
+exports.sheetLivePing = functions.runWith({ timeoutSeconds: 300, memory: "1GB" }).https.onRequest(async (req, res) => {
+  try {
+    const r = await _sheetLive.onPing(req.query?.k || req.body?.k);
+    res.status(r.status).json(r.body);
+  } catch (e) { console.error("[시트 알림 실패]", e?.message || e); res.status(500).json({ error: "failed" }); }
+});
 
 exports.sheetImport = functions
   .runWith({ timeoutSeconds: 540, memory: "1GB" })
@@ -6236,7 +6250,7 @@ exports.sheetImport = functions
       const action = body.action;
 
       // 🔁 2026-11-13 실시간 반영 설정 · 지금 반영
-      if (action === "liveGet" || action === "liveSet" || action === "liveRun") { res.json(await _sheetLive.handle(action, body, me)); return; }
+      if (action === "liveGet" || action === "liveSet" || action === "liveRun" || action === "pingScript") { res.json(await _sheetLive.handle(action, body, me)); return; }
       // 🔁 2026-11-14 프로그램 → 시트 반영 설정 · 기록 · 보류 처리
       if (action === "pushGet" || action === "pushSet" || action === "pushResolve") { res.json(await _sheetPush.handle(action, body, me)); return; }
 

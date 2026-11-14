@@ -60,7 +60,7 @@ const Stat = ({ label, value, sub }) => (
   </div>
 );
 
-// 🔁 2026-11-13 실시간 반영 — 시트에서만 입력 · 수정하는 운송사. 서버가 약 4초마다 시트를 보고 바뀐 줄만 오더에 반영한다(functions/sheetLiveOrders.js)
+// 🔁 2026-11-13 실시간 반영 — 시트에서만 입력 · 수정하는 운송사. 바뀔 때만 바로 반영한다(시트 알림 · 프로그램 변경 — functions/sheetLiveOrders.js)
 const LIVE_DAYS = [[7, "최근 7일"], [14, "최근 14일"], [31, "최근 1개월"], [62, "최근 2개월"], [93, "최근 3개월"], [400, "가져오기 시작일"]]; // 🛠 2026-11-14 가져오기 시작일(JY 10/1)이 있으면 서버는 그날부터 늘 비교한다
 const agoText = (ms) => { if (!ms) return "아직 없음"; const s = Math.max(0, Math.round((Date.now() - ms) / 1000)); return s < 60 ? "방금" : s < 3600 ? `${Math.floor(s / 60)}분 전` : s < 86400 ? `${Math.floor(s / 3600)}시간 전` : `${Math.floor(s / 86400)}일 전`; };
 // 서버 기능이 아직 배포되지 않았으면 예전 서버가 "알 수 없는 요청"이라고 답한다 → 무엇을 해야 하는지 알려 준다
@@ -87,7 +87,7 @@ function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
   const turnOn = async () => {
     const u = (url || live?.url || "").trim();
     if (!u) return setMsg("위 칸에 구글시트 주소를 먼저 붙여넣어 주세요.");
-    if (!(await kpConfirm(`${co} — 구글시트 실시간 반영을 켤까요?\n\n· 약 4초마다 시트를 확인해 새 줄은 오더로 만들고, 고친 줄은 그 오더를 고칩니다\n· 시트에서 지운 줄은 프로그램 오더도 지웁니다(아래에서 끌 수 있음)\n· 프로그램에서 직접 고친 값은 다음 반영 때 시트 값으로 돌아갑니다(아래 [프로그램 → 시트 반영]을 켜면 시트에도 씁니다) — 입력 · 수정은 시트에서만 하세요`))) return;
+    if (!(await kpConfirm(`${co} — 구글시트 실시간 반영을 켤까요?\n\n· 시트가 바뀌면 바로 새 줄은 오더로 만들고, 고친 줄은 그 오더를 고칩니다(아래 [시트 알림 설치]를 해 두면 몇 초 안에)\n· 시트에서 지운 줄은 프로그램 오더도 지웁니다(아래에서 끌 수 있음)\n· 프로그램에서 직접 고친 값은 다음 반영 때 시트 값으로 돌아갑니다(아래 [프로그램 → 시트 반영]을 켜면 시트에도 씁니다) — 입력 · 수정은 시트에서만 하세요`))) return;
     await set({ url: u, enabled: true, days: live?.days || 14, tabs: pickedTabs }, "on");
     runNow();
   };
@@ -97,6 +97,7 @@ function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
   };
   const on = !!live?.enabled;
   const r = live?.lastResult;
+  const pingOk = !!live?.pingAt && Date.now() - live.pingAt < 3 * 86400000; // 최근 3일 안에 시트 알림이 왔다(서버 PING_FRESH_MS 와 같게)
   // 🧩 반영할 탭 — 저장된 것이 없으면 지금 읽은 시트의 오더 탭 전부(제외한 탭은 빠져 있다)
   const savedTabs = Array.isArray(live?.tabs) ? live.tabs : [];
   const allTabs = [...new Set([...tabNames, ...savedTabs])];
@@ -107,7 +108,7 @@ function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
       <div className="px-5 py-4 flex items-center gap-3 flex-wrap border-b border-[#E8EDF4] bg-[#F7F9FC]">
         <span className="text-[11px] font-extrabold tracking-[0.2em] text-[#94A3B8]">LIVE</span>
         <span className="text-[16px] font-black text-[#0F1A30]">구글시트 실시간 반영</span>
-        <span className={`text-[13px] font-black ${on ? "text-[#0F7A43]" : "text-[#7A879C]"}`}>{live === undefined ? "확인 중" : on ? "켜짐 · 약 4초마다 확인" : "꺼짐"}</span>
+        <span className={`text-[13px] font-black ${on ? "text-[#0F7A43]" : "text-[#7A879C]"}`}>{live === undefined ? "확인 중" : !on ? "꺼짐" : pingOk ? "켜짐 · 바뀌면 바로 반영" : "켜짐 · 시트 알림 미설치(1분마다 확인)"}</span>
         <div className="ml-auto flex items-center gap-2">
           {on && <button type="button" onClick={runNow} disabled={!!busy} className={`${btn} h-10 px-4 border border-[#C9D5EA] bg-white text-[#1B2B4B] text-[13.5px]`}>{busy === "run" ? "반영 중…" : "지금 반영"}</button>}
           {on
@@ -134,8 +135,48 @@ function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
         {live && <div className="mt-3 text-[13px] text-[#5B6B85]">마지막 확인 <b className="text-[#1B2B4B]">{agoText(live.lastRunAt)}</b> · 마지막으로 바뀐 때 <b className="text-[#1B2B4B]">{agoText(live.lastChangeAt)}</b>{r ? ` · 최근 반영: 새로 ${won(r.created || 0)} · 고침 ${won(r.updated || 0)} · 삭제 ${won(r.removed || 0)} (대상 ${won(r.total || 0)}건)` : ""}</div>}
         {live?.lastError && <div className="mt-2 text-[13px] font-bold text-[#B4342A]">오류: {live.lastError}</div>}
         {msg && <div className="mt-2 text-[13px] font-bold text-[#1B2B4B]">{msg}</div>}
+        {on && <SheetPingBox co={co} live={live} pingOk={pingOk} onDone={load} />}
       </div>
     </section>
+  );
+}
+
+// 🔔 2026-11-14 시트 알림 설치 — 시트에 작은 스크립트를 붙이면 시트가 바뀔 때만 서버에 "바뀜"을 알린다 → 몇 초 안에 반영
+//  (계속 들여다보지 않아서 시트 읽기 한도도 덜 쓴다 — functions/sheetLiveOrders.js scriptFor · onPing)
+function SheetPingBox({ co, live, pingOk, onDone }) {
+  const [script, setScript] = React.useState("");
+  const [busy, setBusy] = React.useState("");
+  const [note, setNote] = React.useState("");
+  const get = async (renew = false) => {
+    if (renew && !(await kpConfirm("새 열쇠로 바꿀까요?\n예전에 붙인 스크립트는 더 이상 동작하지 않아요. 새 스크립트로 바꿔 붙이고 '설치'를 다시 실행해 주세요."))) return;
+    setBusy(renew ? "renew" : "get"); setNote("");
+    try { const d = await callApi("sheetImport", { action: "pingScript", company: co, renew }); setScript(d.script || ""); onDone?.(); } catch (e) { setNote(liveErr(e.message)); } finally { setBusy(""); }
+  };
+  const copy = async () => { try { await navigator.clipboard.writeText(script); setNote("복사했어요. 시트에 붙여 넣어 주세요."); } catch { setNote("복사하지 못했어요. 아래 글을 직접 골라 복사해 주세요."); } };
+  return (
+    <div className="mt-4 rounded-xl border border-[#DCE3EE] bg-[#F7F9FC] p-4" data-kp="sheet-ping">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[14px] font-black text-[#0F1A30]">시트 알림</span>
+        <span className={`text-[13px] font-black ${pingOk ? "text-[#0F7A43]" : "text-[#B26A00]"}`}>{pingOk ? `설치됨 · 마지막 알림 ${agoText(live.pingAt)}` : live?.pingAt ? `최근 알림 없음(마지막 ${agoText(live.pingAt)})` : "아직 설치 안 됨"}</span>
+        <div className="ml-auto flex gap-2">
+          <button type="button" onClick={() => get(false)} disabled={!!busy} className={`${btn} h-9 px-3 bg-[#1B2B4B] text-white text-[13px]`}>{busy === "get" ? "만드는 중…" : script ? "다시 불러오기" : "시트 알림 설치"}</button>
+          {live?.pingReady && <button type="button" onClick={() => get(true)} disabled={!!busy} className={`${btn} h-9 px-3 border border-[#C9D5EA] bg-white text-[#5B6B85] text-[13px]`}>열쇠 바꾸기</button>}
+        </div>
+      </div>
+      <div className="mt-2 text-[13px] text-[#3A4A66] leading-relaxed">시트를 고치면 그때만 서버에 알려서 몇 초 안에 프로그램에 들어와요. 설치 안 하면 1분마다 확인해요. 프로그램에서 고친 건 설치와 상관없이 바로 시트에 써요.</div>
+      {script && (
+        <div className="mt-3">
+          <ol className="list-decimal pl-5 text-[13px] text-[#3A4A66] leading-relaxed space-y-0.5">
+            <li>구글시트 위 메뉴 <b>확장 프로그램 › Apps Script</b>를 눌러요.</li>
+            <li>있던 글을 지우고 아래 글을 붙여 넣은 뒤 <b>저장</b>해요.</li>
+            <li>위쪽 함수 고르기에서 <b>설치</b>를 고르고 <b>실행</b> → 구글 계정 권한을 허용하면 돼요.</li>
+            <li>이 화면에 "설치됨"이 뜨면 끝이에요. 시트 주인 계정으로 한 번만 하면 돼요.</li>
+          </ol>
+          <div className="mt-2 flex gap-2"><button type="button" onClick={copy} className={`${btn} h-9 px-3 bg-[#1B2B4B] text-white text-[13px]`}>스크립트 복사</button></div>
+          <textarea readOnly value={script} onFocus={(e) => e.target.select()} className="mt-2 w-full h-40 p-2 rounded-lg border border-[#DCE3EE] bg-white font-mono text-[12px] text-[#1B2B4B]" />
+        </div>)}
+      {note && <div className="mt-2 text-[13px] font-bold text-[#1B2B4B]">{note}</div>}
+    </div>
   );
 }
 

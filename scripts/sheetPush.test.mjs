@@ -89,10 +89,11 @@ function fakeDb() {
     runTransaction: async (fn) => fn({ get: (r) => r.get(), set: (r, d, o) => r.set(d, o), delete: (r) => r.delete() }), data: (n, id) => col(n).get(id), ids: (n) => [...col(n).keys()] };
 }
 function fakeSheet(tabs, { denyWrite = false } = {}) {
-  const writes = [];
+  const writes = []; const calls = [];
   const titles = () => Object.keys(tabs);
   const ranges = (path) => [...path.matchAll(/ranges=([^&]+)/g)].map((m) => decodeURIComponent(m[1]).replace(/^'|'$/g, ""));
   const api = async (id, method, path, opts = {}) => {
+    calls.push(`${method} ${path}`);
     if (method === "GET" && path.startsWith("?fields=")) return { sheets: titles().map((t, i) => ({ properties: { sheetId: i + 1, title: t, index: i, gridProperties: { rowCount: 100 } }, merges: [] })) };
     if (method === "GET" && path.startsWith("/values:batchGet")) { const f = /FORMULA/.test(path) ? formulasOf(tabs) : tabs; return { valueRanges: ranges(path).map((t) => { const m = t.match(/^(.+)'!A(\d+):ZZ$/); return { values: m ? (f[m[1]] || []).slice(+m[2] - 1).map((r) => [...r]) : f[t] }; }) }; }
     if (method === "GET" && path.startsWith("/values/")) return { values: [[tabs[titles()[0]][0][0]]] };
@@ -103,7 +104,7 @@ function fakeSheet(tabs, { denyWrite = false } = {}) {
     }
     throw new Error(`fake sheet: ${method} ${path}`);
   };
-  return { api, writes };
+  return { api, writes, calls };
 }
 const CO = "JY로지스틱스";
 async function world(mode, opts = {}) {
@@ -236,11 +237,34 @@ async function world(mode, opts = {}) {
   assert.deepEqual([find().차량번호, find().이름, find().전화번호, find().배차상태], ["", "", "", "배차중"]);
   // 시트 수정 시각이 그대로면 건너뛴다(값을 다시 읽지 않는다)
   assert.deepEqual(await live.runOne(CO, cfg()), { skipped: "unchanged" });
-  // 1분 동안 여러 번 확인(runLoop) — 그 사이 시트가 바뀌면 다음 확인 때 바로 반영된다
-  let slept = 0;
-  const n = await live.runLoop({ loopMs: 40, tickMs: 10, sleep: async (ms) => { slept += 1; if (slept === 2) { row[16] = "경기66바6666"; mt += 1; } await new Promise((r2) => setTimeout(r2, ms)); } });
-  assert.ok(n >= 3, `확인 ${n}번`);
+  // ⚡ 2026-11-14 이벤트 방식 — 시트 알림(onPing)이 오면 바로 맞춘다. 잘못된 열쇠는 거절
+  const sc = await live.handle("pingScript", { company: CO }, {});
+  const key = (sc.script.match(/\?k=([0-9a-f]{32})/) || [])[1];
+  assert.ok(key && /onChange\(\)/.test(sc.script) && sc.live.pingReady, sc.script);
+  assert.equal((await live.onPing("0".repeat(32))).status, 404);
+  assert.equal((await live.onPing("nope")).status, 400);
+  row[16] = "경기66바6666"; // 수정 시각(mt)은 그대로 — 알림으로만 안다
+  const pg = await live.onPing(key);
+  assert.deepEqual([pg.status, pg.body.result], [200, "ran"]);
   assert.equal(find().차량번호, "경기66바6666");
+  assert.ok(cfg().pingAt > 0);
+  // 다른 쪽이 돌고 있으면(잠금) "다시"만 남긴다 → 하던 쪽이 끝나고 한 번 더 돈다
+  await w.db.collection("sheetLiveLock").doc(CO).set({ until: Date.now() + 60000, by: "other" });
+  assert.equal(await live.kick(CO, "sheet"), "queued");
+  assert.equal(w.db.data("sheetLiveLock", CO).need, 2);
+  await w.db.collection("sheetLiveLock").doc(CO).set({ until: 0, by: "" }, { merge: true });
+  // 시트 알림이 설치된 회사의 안전장치는 시트를 직접 읽지 않는다(수정 시각만 본다)
+  const calls0 = w.sh.calls.length;
+  assert.equal(await live.kick(CO, "safety"), "ran");
+  assert.equal(w.sh.calls.length, calls0, w.sh.calls.slice(calls0).join(" / "));
+  assert.equal(w.db.data("sheetLiveLock", CO).until, 0);
+  // 같은 내용으로 다시 알림 → 읽기는 하지만 바뀐 것 없음
+  assert.equal((await live.onPing(key)).body.result, "ran");
+  // 새 열쇠로 바꾸면 예전 열쇠는 안 통한다
+  await live.handle("pingScript", { company: CO, renew: true }, {});
+  assert.equal((await live.onPing(key)).status, 404);
+  // 아래부터는 시트 알림이 없을 때(최근 줄 직접 비교) 동작
+  await w.db.collection("sheetLive").doc(CO).set({ pingAt: 0 }, { merge: true });
   // ⚡ 구글이 수정 시각을 늦게 바꿔도(mt 그대로) 최근 줄을 직접 읽어 바로 반영한다 — 차량번호 먼저, 몇 초 뒤 기사명 · 전화번호
   row[17] = "육기사"; row[18] = "010-6666-7777";
   r = await live.runOne(CO, cfg());
@@ -294,7 +318,7 @@ async function world(mode, opts = {}) {
   // 프로그램에서 배차
   const o0 = find(); const { id, ...doc0 } = o0;
   await w.write(id, { ...doc0, 차량번호: "충남89바6045", 이름: "김기사", 전화번호: "010-5427-4535", 기사운임: "70000", 배차상태: "배차완료" });
-  await w.run(); mt += 1;
+  assert.equal(await live.kick(CO, "program"), "ran"); mt += 1; // ⚡ 대기열에 들어오면 바로 처리(sheetPushKick)
   const row = w.tabs["아산 내수"][w.tabs["아산 내수"].length - 1];
   assert.deepEqual([row[16], row[17], row[10]], ["충남89바6045", "김기사", "70000"]);
   assert.ok(find()._sheetKeys.includes("차량번호") && find()._sheetKeys.includes("이름"));
