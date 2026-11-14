@@ -158,8 +158,8 @@
   }
   function applyPage(st) {
     var p = st.page || {};
-    if (p.title) document.title = p.title;
-    if (p.description) { var m = $('meta[name="description"]'); if (m) m.setAttribute("content", p.description); }
+    if (p.title) document.title = String(p.title).slice(0, 40); // 네이버: 제목 40자 · 설명 80자 이내
+    if (p.description) { var m = $('meta[name="description"]'); if (m) m.setAttribute("content", String(p.description).slice(0, 80)); }
     var tag = document.getElementById("kp-site-style");
     if (!tag) { tag = document.createElement("style"); tag.id = "kp-site-style"; document.head.appendChild(tag); }
     tag.textContent = styleText(st);

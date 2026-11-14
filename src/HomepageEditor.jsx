@@ -464,8 +464,9 @@ export default function HomepageEditor() {
       return (
         <div>
           <Sec title="검색 · 브라우저 탭">
-            <Row label="페이지 제목"><LazyInput value={p.title || ""} placeholder={meta?.title} onCommit={(v) => setPage({ title: v })} /></Row>
-            <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">검색 설명</div><LazyInput textarea rows={3} value={p.description || ""} placeholder={meta?.description} onCommit={(v) => setPage({ description: v })} /></div>
+            <Row label="페이지 제목"><LazyInput value={p.title || ""} placeholder={meta?.title} onCommit={(v) => setPage({ title: String(v || "").slice(0, 40) })} /></Row>
+            {/* 🔎 2026-11-14 네이버 서치어드바이저 — 제목 40자 · 설명 80자 이내(넘으면 사이트 간단 체크에서 경고) */}
+            <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">검색 설명</div><LazyInput textarea rows={3} value={p.description || ""} placeholder={meta?.description} onCommit={(v) => setPage({ description: String(v || "").slice(0, 80) })} /><div className="text-[11px] text-[#9AA9C3] mt-1">네이버 기준: 제목 40자 · 설명 80자 이내(넘는 글자는 잘려요)</div></div>
           </Sec>
           <Sec title="색상" right={Object.keys(vars).length > 0 && <button className="text-[11.5px] font-bold text-[#B42318]" onClick={() => setPage({ vars: {} })}>색 원래대로</button>}>
             {COLORS.map(([v, l, d]) => <Row key={v} label={l}><ColorInput value={vars[v] || ""} fallback={d} onCommit={(val) => setPage({ vars: { ...vars, [v]: val } })} /></Row>)}
