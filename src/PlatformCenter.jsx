@@ -89,28 +89,34 @@ const SECTIONS = [
     { key: "msgUsage", label: "문자·알림톡 사용량", en: "MESSAGES", icon: "chat" }, // 💬 2026-11-10 운송사별 월 사용량 → 월말 청구 // ⭐ 2026-11-03 요금제 한도 대비 사용량·초과 요금
     { key: "cost", label: "비용·손익", en: "COST · P&L", icon: "trend" }, // 💰 2026-11-04 매출 vs 서버·운영 지출 · 운송사별 원가 · 손익분기
   ] },
+  // 🧹 2026-11-14 메뉴 정리(사용자 요청) — 업데이트 배포를 운영 맨 앞으로(화주사 강제 업데이트는 그 화면 안으로 합침) ·
+  //  보안(로그인 · 접속 · 알림 · 오류 · 부관리자)과 데이터(분리 · 가져오기 · 초기화 · 테스트)를 나눔 · 랜딩페이지 편집 → 로그인 화면 꾸미기
+  //  · phoneHide: 휴대폰에서는 쓸 수 없어 숨기는 메뉴(모바일 화면 미리보기 · 홈페이지 편집기)
   { key: "ops", label: "운영", en: "OPERATIONS", icon: "server", items: [
+    { key: "release", label: "업데이트 배포", en: "RELEASE", icon: "key" }, // 🚦 2026-11-13 여기서 눌러야 가입자 화면이 바뀐다
     { key: "notices", label: "플랫폼 공지", en: "BROADCAST", icon: "bell" },
     { key: "notifTemplate", label: "알림 문구", en: "MESSAGES", icon: "chat" },
-    { key: "forceUpdate", label: "화주사 강제 업데이트", en: "UPDATE", icon: "refresh" },
-    { key: "mobilePreview", label: "모바일 화면", en: "MOBILE", icon: "phone" }, // 📱 2026-11-14 관리자메뉴에서 옮김 — 크게(기기 · 확대 고르기)
-    { key: "homepage", label: "홈페이지", en: "HOMEPAGE", icon: "globe" }, // ⭐ 2026-11-03 소개 홈페이지 전체 편집기
-    { key: "landingEdit", label: "랜딩페이지 편집", en: "LANDING", icon: "globe" },
     { key: "integrations", label: "연동 설정", en: "INTEGRATIONS", icon: "link" }, // 🔌 2026-11-07 국세청 · 기상청 · 팝빌
+    { key: "homepage", label: "홈페이지", en: "HOMEPAGE", icon: "globe", phoneHide: true }, // ⭐ 2026-11-03 소개 홈페이지 전체 편집기
+    { key: "landingEdit", label: "로그인 화면 꾸미기", en: "LOGIN SCREEN", icon: "globe" },
+    { key: "mobilePreview", label: "모바일 화면", en: "MOBILE", icon: "phone", phoneHide: true }, // 📱 2026-11-14 관리자메뉴에서 옮김 — 크게(기기 · 확대 고르기)
   ] },
-  { key: "data", label: "보안·데이터", en: "SECURITY", icon: "shield", items: [
-    { key: "release", label: "업데이트 배포", en: "RELEASE", icon: "key" }, // 🚦 2026-11-13 여기서 눌러야 가입자 화면이 바뀐다
-    { key: "tenancy", label: "운송사 분리", en: "ISOLATION", icon: "shield" },
+  { key: "security", label: "보안", en: "SECURITY", icon: "shield", items: [
     { key: "sessions", label: "로그인 관리", en: "SESSIONS", icon: "key" },
     { key: "sessionLogs", label: "접속 이력", en: "AUDIT LOG", icon: "history" },
-    { key: "errorReports", label: "오류 신고", en: "ERRORS", icon: "shield" }, // 🧯 2026-11-10 오류 화면 [오류 보내기]
     { key: "securityEvents", label: "보안 알림", en: "THREATS", icon: "shield" }, // 🛡 2026-11-09 새 기기·해외 IP·새벽 접속·대량 다운로드·퇴사자 차단
-    { key: "sheetImport", label: "배차일지 가져오기", en: "IMPORT", icon: "sheet" },
+    { key: "errorReports", label: "오류 신고", en: "ERRORS", icon: "shield" }, // 🧯 2026-11-10 오류 화면 [오류 보내기]
     { key: "subAdmin", label: "부관리자", en: "SUB ADMIN", icon: "key" }, // ⭐ 2026-11-06 부관리자 목록 · 지정/해제
+  ] },
+  { key: "data", label: "데이터", en: "DATA", icon: "sheet", items: [
+    { key: "sheetImport", label: "배차일지 가져오기", en: "IMPORT", icon: "sheet" },
+    { key: "tenancy", label: "운송사 분리", en: "ISOLATION", icon: "shield" },
     { key: "companyReset", label: "운송사 초기화", en: "RESET", icon: "trash" },
     { key: "testSeed", label: "테스트 데이터", en: "TEST DATA", icon: "sheet" }, // 🧪 2026-11-08 테스트운송사 가짜 데이터
   ] },
 ];
+// 예전 메뉴 이름(이 기기에 기억된 마지막 화면) → 지금 자리
+const TAB_ALIAS = { forceUpdate: "release" };
 const sectionOf = (tab) => SECTIONS.find((s) => s.items.some((i) => i.key === tab)) || SECTIONS[0];
 const MONITOR_TABS = ["overview", "companies", "shippers", "applications", "billing", "sales:plans", "sales:quote", "sales:history"];
 
@@ -420,7 +426,7 @@ function UsagePanel() {
         right={<button type="button" onClick={refresh} disabled={busy} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/25 text-white text-[13px] font-black disabled:opacity-60">{busy ? "집계 중…" : "지금 갱신"}</button>} />
       {!locked && (
         <div className="rounded-2xl border border-[#F7C97A] bg-[#FFF8EC] px-5 py-3.5 text-[13px] text-[#8A4B08]">
-          <b>서버 분리가 아직 꺼져 있습니다.</b> 사용량은 모든 문서의 회사명 기준으로 세므로 회사명이 정확하면 지금도 맞습니다. 다만 회사명이 빈 예전 문서는 돌캐로 잡히니, <b>보안·데이터 › 운송사 분리</b>에서 1단계(회사명 채우기)를 먼저 해 두면 더 정확합니다.
+          <b>서버 분리가 아직 꺼져 있습니다.</b> 사용량은 모든 문서의 회사명 기준으로 세므로 회사명이 정확하면 지금도 맞습니다. 다만 회사명이 빈 예전 문서는 돌캐로 잡히니, <b>데이터 › 운송사 분리</b>에서 1단계(회사명 채우기)를 먼저 해 두면 더 정확합니다.
         </div>
       )}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1081,8 +1087,8 @@ function TenancyPanel() {
             모든 화면이 "우리 회사" 조건을 붙여 조회합니다. 직원들은 새로고침 한 번이면 적용됩니다.
             <button type="button" onClick={() => toggle(!cfg?.serverFilter)} className={`mt-3 w-full h-10 rounded-xl text-[13.5px] font-black ${cfg?.serverFilter ? "border border-[#DCE3EE] text-[#3A4A66]" : "bg-[#0F1A30] text-white"}`}>{cfg?.serverFilter ? "끄기" : "켜기"}</button>
           </>)}
-          {step(3, "PC에서 규칙·색인 배포", false, <>
-            켠 뒤 10분쯤 지나(직원 화면이 새 버전으로 바뀐 뒤) PC에서:<br /><code className="text-[12px] font-bold text-[#1B2B4B]">firebase deploy --only firestore</code>
+          {step(3, "규칙 · 색인 배포", false, <>
+            규칙 · 색인은 main 에 올리면 자동으로 배포돼요(GitHub Actions). 따로 할 일은 없어요.
           </>)}
         </div>
         {msg && <div className="mt-3 rounded-xl bg-[#0F1A30] text-white px-4 py-2.5 text-[13px] font-bold">{msg}</div>}
@@ -1141,7 +1147,7 @@ function ClaimsBackfill() {
     <Card code="CLAIMS" title="로그인 토큰 권한 채우기(보안 규칙 속도 개선)">
       <div className="text-[13px] text-[#5B6B85] leading-relaxed">
         보안 규칙이 요청마다 직원 문서(users)를 읽지 않고 로그인 토큰의 회사·역할·승인 값으로 판단하게 합니다(읽기 비용 · 속도 개선).
-        순서: <b>① 서버 함수 배포</b> → <b>② 여기서 실행</b> → <b>③ PC에서 규칙 배포</b>(<code className="text-[12px] font-bold text-[#1B2B4B]">firebase deploy --only firestore:rules,storage</code>).
+        순서: <b>① 여기서 실행</b> → <b>② 끝</b>(서버 함수 · 규칙은 main 에 올리면 자동 배포돼요).
         이후 새 직원·역할 변경은 서버가 자동으로 처리합니다.
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -1254,12 +1260,18 @@ export default function PlatformCenter({ user }) {
 function PlatformCenterInner({ user }) {
   const navigate = useNavigate();
   const live = usePlatformLive();
-  const [tab, setTabState] = React.useState(() => { try { return localStorage.getItem("pcTab") || "todo"; } catch { return "todo"; } });
+  const [tab, setTabState] = React.useState(() => { try { const t = localStorage.getItem("pcTab") || "todo"; return TAB_ALIAS[t] || t; } catch { return "todo"; } });
   const setTab = React.useCallback((t) => { setTabState(t); try { localStorage.setItem("pcTab", t); } catch { /* 무시 */ } }, []);
   const [contractCtx, setContractCtx] = React.useState({ initial: null, fromQuote: null, key: 0 });
   const [focusCompany, setFocusCompany] = React.useState(null);
   const section = sectionOf(tab);
   const phone = usePhone();
+  // 🧹 없어진 메뉴 · 휴대폰에서 숨긴 메뉴를 기억하고 있으면 그 묶음의 첫 메뉴로
+  React.useEffect(() => {
+    const item = SECTIONS.flatMap((x) => x.items).find((i) => i.key === tab);
+    if (!item) { setTab("todo"); return; }
+    if (phone && item.phoneHide) setTab(sectionOf(tab).items.find((i) => !i.phoneHide)?.key || "todo");
+  }, [tab, phone, setTab]);
   React.useEffect(() => { document.title = "LogisWeb 관리자 관리센터"; }, []);
   const toApp = () => { try { sessionStorage.setItem("kpEntry", "app"); } catch { /* 무시 */ } navigate("/app"); };
   const logout = async () => { if (!(await kpConfirm("로그아웃할까요?"))) return; try { sessionStorage.removeItem("kpEntry"); } catch { /* 무시 */ } await signOut(auth).catch(() => {}); navigate("/login"); };
@@ -1281,7 +1293,7 @@ function PlatformCenterInner({ user }) {
     hubMembers: hubPending,
   };
   const liveBadge = live?.ready ? live.totals.onlineNow : 0;
-  const sectionsView = SECTIONS.map((s) => ({ ...s, items: s.items.map((it) => (it.key === "live" ? { ...it, badge: liveBadge, soft: true } : badges[it.key] ? { ...it, badge: badges[it.key] } : it)) }));
+  const sectionsView = SECTIONS.map((s) => ({ ...s, items: s.items.filter((it) => !(phone && it.phoneHide)).map((it) => (it.key === "live" ? { ...it, badge: liveBadge, soft: true } : badges[it.key] ? { ...it, badge: badges[it.key] } : it)) }));
   const sectionView = sectionsView.find((s) => s.key === section.key) || sectionsView[0];
   const secBadge = (s) => s.items.reduce((a, it) => a + (it.key !== "live" && typeof it.badge === "number" ? it.badge : 0), 0);
 
@@ -1308,12 +1320,11 @@ function PlatformCenterInner({ user }) {
   else if (tab === "cost") body = <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><CostPanel openUsage={() => setTab("usage")} /></React.Suspense>;
   else if (tab === "notices") body = <NoticesPanel />;
   else if (tab === "notifTemplate") body = <><Hero en="OPERATIONS · MESSAGES" title="알림 문구" desc="배차 알림 등 자동 발송 문구를 관리합니다." /><NotifTemplatePanel /></>;
-  else if (tab === "forceUpdate") body = <><Hero en="OPERATIONS · UPDATE" title="화주사 강제 업데이트" desc="화주사 화면을 최신 버전으로 새로고침시킵니다." /><ShipperForceUpdatePanel currentVersion={typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : ""} /></>;
-  else if (tab === "homepage") body = phone
+    else if (tab === "homepage") body = phone
     ? <><Hero en="OPERATIONS · HOMEPAGE" title="홈페이지" desc="" /><div className="rounded-2xl bg-white border border-[#E3E8F0] p-5 text-[14px] text-[#3A4A66] leading-relaxed">홈페이지 편집은 PC 화면에서 해 주세요. 사진·글자 위치를 끌어서 옮기는 편집이라 넓은 화면이 필요합니다.<br /><a className="font-black text-[#2D5BD8]" href="https://www.logisweb.co.kr/" target="_blank" rel="noopener noreferrer">지금 홈페이지 보기 ↗</a></div></>
     : <React.Suspense fallback={<div className="p-6 text-[13px] text-[#7A879C]">편집기를 여는 중…</div>}><HomepageEditor /></React.Suspense>;
   else if (tab === "integrations") body = <><Hero en="OPERATIONS · INTEGRATIONS" title="연동 설정" desc="국세청 · 기상청 · 팝빌 연동 상태를 보고 시험해요. 키는 Firebase 비밀값에만 두고 화면에는 보이지 않아요." /><React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중</div>}><IntegrationSettings /></React.Suspense></>;
-  else if (tab === "landingEdit") body = <><Hero en="OPERATIONS · LANDING" title="랜딩페이지 편집" desc="로그인 전 홈페이지 문구·이미지를 바꿉니다." /><LandingPageEditPanel /></>;
+  else if (tab === "landingEdit") body = <><Hero en="OPERATIONS · LOGIN SCREEN" title="로그인 화면 꾸미기" desc="계정을 고르는 첫 화면(트럭이 지나가는 화면)의 배경 사진 · 영상 · 글꼴 · 아래 문구를 바꿔요." /><LandingPageEditPanel /></>;
   else if (tab === "mobilePreview") body = <><Hero en="OPERATIONS · MOBILE" title="모바일 화면" desc="지금 로그인한 계정의 모바일 화면을 휴대폰 크기 그대로, 크게 확인해요." /><React.Suspense fallback={null}><MobilePreviewPanelLazy /></React.Suspense></>;
   else if (tab === "sessions") body = <><Hero en="SECURITY · SESSIONS" title="로그인 관리" desc="지금 로그인 중인 모든 기기를 보고, 필요하면 강제로 내보냅니다." /><AdminSessionsPanel isTotalMaster company="" /></>;
   else if (tab === "sessionLogs") body = <SessionLogsPanel />;
@@ -1325,7 +1336,9 @@ function PlatformCenterInner({ user }) {
   else if (tab === "companyReset") body = <><Hero en="DATA · RESET" title="운송사 초기화" desc="운송사 데이터를 모두 지웁니다 — 7일 동안 보관함에서 복원할 수 있습니다. 계약을 끝내며 지우려면 계약 › 이용 계약·만료를 쓰세요." right={<button type="button" onClick={() => setTab("contract:life")} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/20 text-[14px] font-black whitespace-nowrap">이용 계약·만료 ›</button>} /><CompanyResetPanel /></>;
   else if (tab === "testSeed") body = <><Hero en="DATA · TEST DATA" title="테스트 데이터" desc="테스트운송사에 가짜 데이터를 채우거나 다시 채워요. 다른 운송사에는 넣을 수 없어요." /><React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중</div>}><TestSeedPanel /></React.Suspense></>;
   else if (tab === "contract:life") body = <><Hero en="CONTRACTS · LIFECYCLE" title="이용 계약·만료" desc="운송사별 계약 기간을 정하고, 만료 30·7·1일 전 안내를 보냅니다. 계약종료하면 데이터는 남기고 그 회사 사람은 접속할 수 없습니다." right={<Clock />} /><ContractLifecyclePanel openCompany={openCompany} /></>;
-  else if (tab === "release") body = <><Hero en="RELEASE · GATE" title="업데이트 배포" desc="새 화면을 올려도 여기서 배포해야 가입자 화면이 바뀝니다. 최고관리자 · 부관리자는 항상 최신 화면을 먼저 봅니다." /><ReleasePanel /></>;
+  else if (tab === "release") body = <><Hero en="OPERATIONS · RELEASE" title="업데이트 배포" desc="새 화면을 올려도 여기서 배포해야 가입자 화면이 바뀝니다. 최고관리자 · 부관리자는 항상 최신 화면을 먼저 봅니다." /><ReleasePanel />
+    {/* 🧹 2026-11-14 '화주사 강제 업데이트' 메뉴를 여기로 합침 — 화주사 화면은 따로 새로고침 신호를 보낸다 */}
+    <div className="mt-5"><div className="text-[15px] font-black text-[#1B2B4B] mb-2">화주사 화면 강제 업데이트</div><ShipperForceUpdatePanel currentVersion={typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : ""} /></div></>;
   else if (tab === "subAdmin") body = <><Hero en="SECURITY · SUB ADMIN" title="부관리자" desc="최고관리자와 같은 권한을 가진 부관리자(1명)를 보고 지정·해제합니다." /><SubAdminPanel /></>;
 
   if (phone) return <PlatformMobileShell user={user} sections={sectionsView} section={sectionView} tab={tab} setTab={setTab} toApp={toApp} logout={logout} secBadge={secBadge}>{body}</PlatformMobileShell>;

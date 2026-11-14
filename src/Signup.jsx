@@ -725,7 +725,6 @@ function SignupForm({ signupType, onBack }) {
                 </button>
               ))}
             </div>
-            <div className="mt-2 text-[12px] text-[#8E9BB2]">휴대폰에서는 승인 뒤 Face ID · 지문 로그인도 등록할 수 있습니다.</div>
           </div>
 
           {/* 약관 */}

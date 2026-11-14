@@ -9712,14 +9712,14 @@ return (
               </button>
             </div>
 
-            {/* ⭐ 로그인 · 보안(2차 인증 · 얼굴/지문 로그인 · 로그인된 기기 · 비밀번호 변경) — 🔐 2026-11-14 src/UserSecurity.jsx */}
+            {/* ⭐ 로그인 · 보안(2차 인증 · 로그인된 기기 · 비밀번호 변경) — 🔐 2026-11-14 src/UserSecurity.jsx */}
             <button
               onClick={() => setLoginMgrOpen(true)}
               className="w-full py-2.5 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#1B2B4B] hover:text-white transition inline-flex items-center justify-center gap-1.5"
               data-open-security
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 4 6v6c0 4.4 3.4 8.3 8 9 4.6-.7 8-4.6 8-9V6Z" /><path d="m9 12 2 2 4-4" /></svg>
-              로그인 · 보안 (2차 인증 · 얼굴/지문 · 비밀번호)
+              로그인 · 보안 (2차 인증 · 비밀번호)
             </button>
             {loginMgrOpen && <LoginManagerModal user={user} onClose={() => setLoginMgrOpen(false)} />}
 

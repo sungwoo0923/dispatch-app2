@@ -35,7 +35,7 @@ function MobilePinGate({ onVerified, accent = NAVY }) {
   const [error, setError] = useState("");
   const [animKey, setAnimKey] = useState(0);
   const [hasBiometric, setHasBiometric] = useState(() => !!localStorage.getItem(BIOMETRIC_KEY));
-  const [biometricSupported] = useState(() => !!(window.PublicKeyCredential));
+  const biometricSupported = false; // ✂ 2026-11-14 얼굴 · 지문 기능 전부 뺌(사용자 요청) — 비밀번호로만
   const [bioLoading, setBioLoading] = useState(false);
   const [bioAuto, setBioAuto] = useState(() => localStorage.getItem(BIOMETRIC_AUTO_KEY) === "1");
   const autoTriggered = useRef(false);

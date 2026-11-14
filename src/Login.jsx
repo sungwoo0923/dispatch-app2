@@ -4,7 +4,7 @@
 // "누가 어떤 걸 누르면 되는지" 바로 보이게 큰 선택 카드 3개로 정리했다.
 //  - 마지막에 쓴 계정 종류를 기억해 맨 위 카드처럼 강조(흰색 + "최근 로그인")
 //  - 회원가입은 맨 아래 한 줄로(계정 종류별)
-//  - 배경 영상/이미지·글꼴·하단 문구는 지금처럼 관리자메뉴 > 랜딩페이지 편집 값을 그대로 쓴다
+//  - 배경 영상/이미지·글꼴·하단 문구는 지금처럼 관리센터 › 운영 › 로그인 화면 꾸미기 값을 그대로 쓴다
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { db, doc, onSnapshot } from "./firebase";
@@ -70,7 +70,7 @@ const ROLES = [
 ];
 
 export default function Login() {
-  // siteConfig/landing — 관리자메뉴 > 랜딩페이지 편집 값(배경·글꼴·하단 문구)을 실시간으로 반영
+  // siteConfig/landing — 관리센터 › 운영 › 로그인 화면 꾸미기 값(배경·글꼴·하단 문구)을 실시간으로 반영
   const [config, setConfig] = useState(null);
   useEffect(() => {
     const unsub = onSnapshot(

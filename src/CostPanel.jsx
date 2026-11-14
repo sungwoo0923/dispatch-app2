@@ -551,8 +551,7 @@ function ServerView({ d, model, saved, onRefresh, busy }) {
           <div className="text-[15.5px] font-black mt-0.5">{perm ? "서버 사용량을 읽을 권한이 없습니다" : "아직 실측 사용량이 없습니다"}</div>
           {perm && st?.errors?.reads && <div className="mt-1 text-[12px] text-[#7A879C] break-all" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{st.errors.reads}</div>}
           <ol className="mt-2 list-decimal pl-5 space-y-1">
-            <li>터미널에서 함수 배포: <code className="px-1.5 py-0.5 rounded bg-[#F2F5FA]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>firebase deploy --only functions:platformUsageHourly,functions:platformUsageNow</code> (한 번)</li>
-            <li>구글 클라우드 콘솔(console.cloud.google.com) → 프로젝트 <b>dispatch-app-9b92f</b> → 왼쪽 메뉴 <b>IAM 및 관리자 › IAM</b></li>
+                        <li>구글 클라우드 콘솔(console.cloud.google.com) → 프로젝트 <b>dispatch-app-9b92f</b> → 왼쪽 메뉴 <b>IAM 및 관리자 › IAM</b></li>
             <li><b>dispatch-app-9b92f@appspot.gserviceaccount.com</b> 줄의 연필(수정) → <b>다른 역할 추가</b> → <b>모니터링 뷰어(Monitoring Viewer)</b> → 저장 (이미 '편집자'면 필요 없음)</li>
             <li>콘솔 위 검색창에 "Cloud Monitoring API" → <b>사용</b>(이미 켜져 있으면 그대로)</li>
             <li>이 화면 위 <b>[사용량 지금 가져오기]</b> — 이달 1일부터 채워집니다. 그다음부터는 매시간 20분에 자동.</li>

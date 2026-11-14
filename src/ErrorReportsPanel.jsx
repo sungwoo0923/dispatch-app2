@@ -1,5 +1,5 @@
 // ======================= src/ErrorReportsPanel.jsx =======================
-// 🧯 2026-11-10 관리자 관리센터 › 보안·데이터 › 오류 신고 — 오류 화면의 [오류 보내기]로 들어온 것(errorReports)
+// 🧯 2026-11-10 관리자 관리센터 › 보안 › 오류 신고 — 오류 화면의 [오류 보내기]로 들어온 것(errorReports)
 //  · 회사·상태·검색으로 거르고, 줄을 누르면 오류 내용(스택)을 펼쳐 본다 · [처리완료]/[다시 열기] · 최고관리자만(보안 규칙)
 import React from "react";
 import { collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from "firebase/firestore";

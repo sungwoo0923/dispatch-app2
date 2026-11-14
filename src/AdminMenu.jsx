@@ -881,7 +881,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     trash: "휴지통",
     dataCheck: "데이터 점검",
     permissions: "권한 관리",
-    landingEdit: "랜딩페이지 편집",
+    landingEdit: "로그인 화면 꾸미기",
     notifTemplate: "알림 문구 설정",
     setup: "초기 설정 · 튜토리얼",
     billing: "구독 · 결제",
@@ -891,7 +891,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     { key: "members", label: "회원 관리", tabs: ["members"] },
     { key: "shipperMgmt", label: "화주사 관리", tabs: ["linked", "transmit", "inquiries", "landingInquiries"] },
     { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "permissions", "sheetHub", "dataCheck"] }, // ⭐ 2026-11-06 운송사 초기화는 관리자 관리센터(보안·데이터 › 운송사 초기화)로만 옮김 · 🔗 2026-11-07 구글시트 메뉴 셋 → "구글시트 연동" 하나 · 블라인드 모드 · 화주사 강제 업데이트는 뺌(강제 업데이트는 관리센터에 남음)
-    { key: "settings", label: "환경 설정", tabs: ["billing", "setup", "copyTemplate", "landingEdit", "notifTemplate"] },
+    { key: "settings", label: "환경 설정", tabs: ["billing", "setup", "copyTemplate"] }, // 🧹 2026-11-14 로그인 화면 꾸미기 · 알림 문구는 관리센터 › 운영에서만(같은 화면이 두 곳에 있었다)
   ]
     .map((g) => ({ ...g, tabs: g.tabs.filter((t) => (!REQUIRES_MASTER_TABS.has(t) || isTotalMaster || (t === "permissions" && masterPerms)) && (t !== "billing" || billingAcc.view) && (t !== "sheetHub" || isTotalMaster || ["admin", "allMgr"].includes(myRoleEff)) && (t !== "dataCheck" || isTotalMaster || ["admin", "allMgr"].includes(myRoleEff))) })) // 💳 구독·결제는 경리·재무·임원·대표만(billingAccess.js)
     // 🏢 부서 관리자메뉴 — 경리: 회원 승인 + 구독·결제 / 인사: 회원(인사권) + 로그인 관리. 배차용(기사복사 문구·화주사 등)은 뺀다

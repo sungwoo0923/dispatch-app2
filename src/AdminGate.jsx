@@ -14,7 +14,6 @@ import { MfaCodeBox, usePhoneCheck, toE164, maskPhone } from "./MfaModal";
 import SecureKeypad, { adminDeviceId } from "./SecureKeypad";
 import { LogisMark } from "./brand";
 import { fmtPhone } from "./formatInput";
-import { BioUnlockButton, rememberCode } from "./UserSecurity"; // 👆 2026-11-14 2차 비밀번호 대신 얼굴 · 지문
 
 export const ADMIN_GATE_KEY = "kpAdminGateOk";
 export const ADMIN_GATE_EVENT = "kp-admin-gate-ok";
@@ -47,7 +46,7 @@ export function isAdminGatePassed(uid, authTime) {
     return !!v && !!authTime && v.uid === uid && v.authTime === authTime;
   } catch { return false; }
 }
-export function markAdminGatePassed(uid, authTime) { markPassed(uid, authTime); } // 일반 계정 2차 인증 · 얼굴 로그인도 같은 표시를 쓴다(src/UserSecurity.jsx)
+export function markAdminGatePassed(uid, authTime) { markPassed(uid, authTime); } // 일반 계정 2차 인증도 같은 표시를 쓴다(src/UserSecurity.jsx)
 function markPassed(uid, authTime) {
   try { localStorage.setItem(ADMIN_GATE_KEY, JSON.stringify({ uid, authTime, at: Date.now() })); } catch { /* 무시 */ }
   window.dispatchEvent(new Event(ADMIN_GATE_EVENT));
@@ -120,7 +119,6 @@ function GateBody({ user, authTime, sub, onCancel, inline }) {
     setBusy(true);
     try {
       const r = await mfa({ action: setup ? "setup" : "verify", code: v });
-      rememberCode(v); // 🔐 2026-11-14 이어서 Face ID 를 등록할 때 다시 묻지 않게(5분 · 메모리만)
       setCode(""); setFirst("");
       if (r.needSms) { setSetup(false); setPhone(r.phone || ""); setStep("sms"); }
       else markPassed(user.uid, authTime);
@@ -192,7 +190,6 @@ function GateBody({ user, authTime, sub, onCancel, inline }) {
         </div>
         <SecureKeypad value={code} onChange={setCode} onSubmit={(v) => { if (checking) { setMsg("확인하는 중입니다. 잠시 뒤 다시 눌러 주세요."); return; } submit(v); }} disabled={busy} submitLabel={busy ? "확인 중…" : setup ? (first ? "정하고 들어가기" : "다음") : "확인"} />
         {msg && <div className="mt-3 text-[12.5px] font-semibold text-red-600 bg-red-50 rounded-xl px-3 py-2 text-center leading-relaxed">{msg}</div>}
-        {!setup && <BioUnlockButton uid={user.uid} onDone={() => markPassed(user.uid, authTime)} onSms={(r) => { setPhone(r.phone || ""); setStep("sms"); }} />}
       </div>
       <p className={note}>2차 비밀번호를 잊으면 {sub ? "최고관리자에게 초기화를 요청하세요." : "개발 담당에게 초기화를 요청하세요."}<br />PnK 인트라넷과 같은 2차 비밀번호를 씁니다.</p>
     </Shell>

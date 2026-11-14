@@ -178,9 +178,11 @@ export function quoteOf(cfg, inp) {
   ];
   const oneTimeTotal = oneTime.reduce((a, x) => a + x.amount, 0);
   const monthly = chosen.m.total;
-  // 1년차 이용료 — 연간 선결제면 무료 개월 차감, 프로모션(첫 N개월 X% 할인)은 실제 내는 달에만
-  const year = Math.min(12, months);
-  const free = inp.billing === "annual" ? Math.min(num(cfg.annualFreeMonths), year) : 0;
+  // 🛠 2026-11-14 약정 기간 전체로 계산 — 예전엔 24개월을 골라도 12개월(1년차)까지만 더해 견적서가 약정과 안 맞았다(사용자 요청)
+  //  · 연간 선결제 무료 개월은 1년마다(24개월 = 2년 × 무료 개월) · 프로모션(첫 N개월 X%)은 실제 내는 달에만 · 특별 할인은 한 번
+  const year = months; // 견적 기간 = 약정 기간
+  const yearsN = Math.max(1, Math.floor(months / 12));
+  const free = inp.billing === "annual" ? Math.min(num(cfg.annualFreeMonths) * yearsN, months) : 0;
   const paidMonths = year - free;
   const promoMonths = Math.min(num(inp.promoMonths), paidMonths);
   const promoDiscount = Math.round(monthly * promoMonths * (num(inp.promoRate) / 100));
@@ -188,8 +190,21 @@ export function quoteOf(cfg, inp) {
   const semiDiscount = inp.billing === "semi" ? Math.round((monthly * paidMonths - promoDiscount) * (num(cfg.semiDiscountRate) / 100)) : 0;
   const extraDiscount = num(inp.extraDiscount);
   const firstYearUse = monthly * paidMonths - promoDiscount - semiDiscount - extraDiscount;
-  const firstYear = Math.max(0, firstYearUse) + oneTimeTotal;
-  return { periodLabel: year >= 12 ? "1년차" : `약정 ${year}개월`, semiDiscount, byPlan, best, chosen, monthly, oneTime, oneTimeTotal, waived, year, free, paidMonths, promoMonths, promoDiscount, extraDiscount, firstYearUse: Math.max(0, firstYearUse), firstYear, vat: Math.round(firstYear * 0.1), avgMonthly: Math.round(firstYear / year) };
+  const firstYear = Math.max(0, firstYearUse) + oneTimeTotal; // (이름은 예전 그대로 — 약정 기간 총액)
+  // 2년 이상이면 연도별 금액도(1년차 = 도입비 · 프로모션 · 특별 할인 포함, 2년차부터 = 이용료만)
+  const yearRows = [];
+  if (months > 12) {
+    for (let y = 0; y * 12 < months; y += 1) {
+      const m = Math.min(12, months - y * 12);
+      const f = inp.billing === "annual" && m === 12 ? Math.min(num(cfg.annualFreeMonths), m) : 0;
+      const pm = m - f;
+      const pr = y === 0 ? promoDiscount : 0;
+      const sd = inp.billing === "semi" ? Math.round((monthly * pm - pr) * (num(cfg.semiDiscountRate) / 100)) : 0;
+      yearRows.push({ label: `${y + 1}년차`, months: m, amount: Math.max(0, monthly * pm - pr - sd - (y === 0 ? extraDiscount : 0)) + (y === 0 ? oneTimeTotal : 0) });
+    }
+  }
+  const periodLabel = months === 12 ? "1년" : months % 12 === 0 ? `약정 ${months}개월(${months / 12}년)` : `약정 ${months}개월`;
+  return { periodLabel, semiDiscount, byPlan, best, chosen, monthly, oneTime, oneTimeTotal, waived, year, free, paidMonths, promoMonths, promoDiscount, extraDiscount, firstYearUse: Math.max(0, firstYearUse), firstYear, vat: Math.round(firstYear * 0.1), avgMonthly: Math.round(firstYear / year), yearRows };
 }
 
 // ─── 인쇄용 문서(새 창 → 인쇄 / PDF로 저장) ───
@@ -271,7 +286,8 @@ export function quoteHtml(cfg, inp, q, no) {
       <tr><th>${q.periodLabel} 합계 (VAT 별도)</th><th class="r mono">${won(q.firstYear)}</th></tr>
       <tr><td>부가세 10%</td><td class="r mono">${won(q.vat)}</td></tr>
       <tr><th>${q.periodLabel} 합계 (VAT 포함)</th><th class="r mono" style="font-size:15px">${won(q.firstYear + q.vat)}</th></tr>
-      <tr><td colspan="2" style="color:#5B6B85">→ ${q.periodLabel === "1년차" ? "1년" : q.periodLabel} 평균 월 ${won(q.avgMonthly)} (VAT 별도)</td></tr>
+      ${q.yearRows.length ? q.yearRows.map((y) => `<tr><td style="color:#5B6B85">· ${y.label} (${y.months}개월)</td><td class="r mono" style="color:#5B6B85">${won(y.amount)}</td></tr>`).join("") : ""}
+      <tr><td colspan="2" style="color:#5B6B85">→ ${q.periodLabel} 평균 월 ${won(q.avgMonthly)} (VAT 별도)</td></tr>
     </tbody></table>
     <h3>요금제별 사용 범위 (선택: ${esc(p.name)})</h3>${planMatrixHtml(cfg.plans, PLAN_IDS.includes(p.id) ? p.id : null)}
     <h3>${esc(p.name)} 요금제 포함 기능</h3><ul>${(p.features || []).map((f) => `<li>${esc(f)}</li>`).join("")}<li>${esc(cfg.messaging)}</li>${num(p.fleet) ? `<li>지입차(GPS·운행기록·사진) ${num(p.fleet)}대 포함</li>` : ""}<li>사진 · 파일 저장 ${planStorageGB(p, cfg)}GB 기본 제공</li></ul>
@@ -402,7 +418,7 @@ export function PricingEditor() {
     </div>
   );
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)] items-start" data-pricing-editor="1">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)] items-start" data-pricing-editor="1">
       {/* ── 왼쪽: 편집 ── */}
       <div className="space-y-4">
         <Card code="PLANS" title="요금제 고르기" right={<Btn onClick={addPlan}>+ 요금제 추가</Btn>}>
@@ -461,7 +477,7 @@ export function PricingEditor() {
         <div className="rounded-[20px] p-5 text-white shadow-[0_16px_34px_rgba(11,20,40,0.3)]" style={{ background: "linear-gradient(rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(150deg,#0B1428,#16264A)" }}>
           <div className="flex items-center justify-between gap-3 min-w-0">
             <div className="text-[11.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0] whitespace-nowrap">PRICING · {cfg.recommendedVersion || "CUSTOM"}</div>
-            <div className={`text-[13px] font-bold whitespace-nowrap ${dirty ? "text-white" : "text-white/55"}`}>{dirty ? "● 저장하지 않은 수정이 있습니다" : "저장됨 · 견적서에 그대로 적용"}</div>
+            <div className={`text-[13px] font-bold truncate min-w-0 ${dirty ? "text-white" : "text-white/55"}`}>{dirty ? "● 저장하지 않은 수정이 있습니다" : "저장됨 · 견적서에 그대로 적용"}</div>
           </div>
           <div className="mt-1.5 text-[14px] text-white/70">요금제는 여기서만 고치면 됩니다. 견적서·요금 안내서·고객사 구독 화면이 이 값을 씁니다(기존 고객 청구는 청구 › 수납 관리).</div>
           <div className="mt-4 flex gap-2 flex-wrap">
@@ -604,7 +620,7 @@ export function QuoteBuilder({ initial, onSaved }) {
               <div className="flex gap-1.5 mt-2">{[[0, 0, "없음"], [1, 100, "첫 달 무료"], [3, 50, "3개월 50%"]].map(([m, r, l]) => (
                 <button key={l} type="button" onClick={() => set({ promoMonths: m, promoRate: r, promoTouched: true })} className={`h-8 px-3 rounded-lg text-[12.5px] font-black border ${num(inp.promoMonths) === m && num(inp.promoRate) === r ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#DCE3EE] text-[#3A4A66]"}`}>{l}</button>))}</div>
             </div>
-            <div className="flex items-center justify-between"><span className="text-[14px] font-bold text-[#3A4A66]">특별 할인 (1년차 금액에서)</span><NumIn value={inp.extraDiscount} onChange={(v) => set({ extraDiscount: v })} unit="원" /></div>
+            <div className="flex items-center justify-between"><span className="text-[14px] font-bold text-[#3A4A66]">특별 할인 (약정 총액에서 한 번)</span><NumIn value={inp.extraDiscount} onChange={(v) => set({ extraDiscount: v })} unit="원" /></div>
             <div><L>견적서 특약 (선택)</L><input value={inp.memo} onChange={(e) => set({ memo: e.target.value })} className={inpCls} placeholder="예: 사용 후기·사례 공개 동의 조건" /></div>
           </div>
         </Card>
@@ -668,6 +684,7 @@ export function QuoteBuilder({ initial, onSaved }) {
                 <tr key={l} className="border-t border-[#EEF1F6]"><td className="py-2 text-[#3A4A66] font-semibold">{l}</td><td className="py-2 text-right font-black text-[#0F1A30]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v < 0 ? `- ${won(-v)}` : won(v)}</td></tr>
               ))}
               <tr className="border-t-2 border-[#1B2B4B]"><td className="py-2.5 font-black text-[#0F1A30]">{q.periodLabel} 합계 (VAT 별도)</td><td className="py-2.5 text-right font-black text-[16px] text-[#1B2B4B]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(q.firstYear)}</td></tr>
+              {q.yearRows.map((y) => <tr key={y.label}><td className="py-1.5 pl-3 text-[13px] text-[#7A879C] font-semibold">· {y.label} ({y.months}개월){y.label === "1년차" ? " — 초기 비용 포함" : ""}</td><td className="py-1.5 text-right text-[13px] font-bold text-[#5B6B85]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(y.amount)}</td></tr>)}
             </tbody>
           </table>
         </Card>
@@ -699,7 +716,7 @@ export function QuoteHistory({ onOpen, onContract }) {
         {list.length === 0 ? <div className="py-12 text-center text-[#9AA9C3]">저장한 견적이 없습니다 — 견적서 작성에서 '견적 저장'을 누르면 여기에 쌓입니다.</div> : (
           <div className="overflow-x-auto -m-5">
             <table className="w-full text-[14px] border-collapse" style={{ minWidth: 960 }}>
-              <thead><tr className="bg-[#1B2B4B] text-white">{["견적번호", "고객사", "요금제", "월 이용료", "초기 비용", "1년차 총액", "상태", "작성일", ""].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold whitespace-nowrap">{h}</th>)}</tr></thead>
+              <thead><tr className="bg-[#1B2B4B] text-white">{["견적번호", "고객사", "요금제", "월 이용료", "초기 비용", "약정 총액", "상태", "작성일", ""].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold whitespace-nowrap">{h}</th>)}</tr></thead>
               <tbody>
                 {list.map((x) => (
                   <tr key={x.id} className="border-t border-[#EEF1F6] hover:bg-[#F5F8FD]">

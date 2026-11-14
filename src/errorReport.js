@@ -1,6 +1,6 @@
 // ======================= src/errorReport.js =======================
 // 🧯 2026-11-10 오류 보내기 — 오류 화면의 [오류 보내기] 버튼이 errorReports에 한 줄을 남긴다
-//  · 보내기: 로그인한 누구나(직원·기사·화주) · 보기·처리: 최고관리자(관리센터 › 보안·데이터 › 오류 신고)만 — firestore.rules
+//  · 보내기: 로그인한 누구나(직원·기사·화주) · 보기·처리: 최고관리자(관리센터 › 보안 › 오류 신고)만 — firestore.rules
 //  · 보낸 뒤 화면에 짧은 오류 번호(문서 ID 앞 6자리)를 보여 준다 — 전화로 "오류 번호 ○○○○○○" 하고 말하면 바로 찾는다
 /* global __APP_VERSION__ */
 import { addDoc, collection, doc, getDoc, serverTimestamp } from "firebase/firestore";

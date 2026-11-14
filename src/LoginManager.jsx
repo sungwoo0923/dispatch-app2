@@ -1,5 +1,5 @@
 // ======================= src/LoginManager.jsx =======================
-// ⭐ 로그인 관리 화면(2026-10-22 요청) — PC·모바일 공용 · 🔐 2026-11-14 "로그인 · 보안"으로 — 2차 인증(선택) · 얼굴 · 지문 로그인을 맨 위에(src/UserSecurity.jsx)
+// ⭐ 로그인 관리 화면(2026-10-22 요청) — PC·모바일 공용 · 🔐 2026-11-14 "로그인 · 보안"으로 — 2차 인증(선택)을 맨 위에(src/UserSecurity.jsx)
 //  - 내 로그인 기기 목록 + 기기별 "연결 끊기" + "다른 기기 모두 로그아웃"
 //  - 비밀번호 변경(변경 후 다른 기기 자동 로그아웃 선택)
 //  - 최근 로그인 기록(로그아웃·끊김 사유)
@@ -13,7 +13,7 @@ import { updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 
 import { useMfaPrompt, PcVerifySection, MASTER_EMAIL, mfaErrorText } from "./MfaModal";
 import { doc as fsDoc } from "firebase/firestore";
 import { AdminCodeChange } from "./AdminGate"; // 🔐 2026-11-10 2차 비밀번호 바꾸기
-import { SecurityPanel } from "./UserSecurity"; // 🔐 2026-11-14 2차 인증(선택) · 얼굴 · 지문 로그인
+import { SecurityPanel } from "./UserSecurity"; // 🔐 2026-11-14 2차 인증(선택)
 import {
   SESSIONS_COLL, KIND_LABEL, END_REASON_LABEL, getMySessionId, endSessions, sessionLastMs, timeAgo, getDeviceLabel, isTotalMasterRole,
 } from "./loginSessions";

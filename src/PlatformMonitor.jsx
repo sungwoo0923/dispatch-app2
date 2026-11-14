@@ -298,7 +298,6 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
     <Card code="SETUP" title="아직 오더 집계가 없습니다" style={{ marginBottom: 14 }}>
       <div style={{ fontSize: 15, color: "#374151", lineHeight: 1.7 }}>
         위의 <b>다시 집계</b>를 누르면 가입사별 오더·운송액을 바로 모읍니다. 이후에는 낮 시간(06~23시) 매시간 자동으로 갱신됩니다. 계정·접속 숫자는 집계와 상관없이 실시간입니다.<br />
-        <span style={{ color: "#6b7280", fontSize: 14.5 }}>※ 처음 한 번은 PC에서 서버 배포(firebase deploy --only functions)가 필요합니다.</span>
       </div>
     </Card>
   );

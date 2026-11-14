@@ -2090,7 +2090,7 @@ const formatPhoneLive = (phone) => {
 // ⭐ 로그아웃/초기화해도 "로그인 정보 저장" 설정은 남긴다(다음 로그인 때 회사코드·회사명 자동 입력)
 const clearLocalStorageKeepLogin = () => {
   const keep = {};
-  ["transportLoginSaved", "driverLoginSaved", "kpPin", "kpAdminDev", "kpBioHere"].forEach((k) => { // 🚦 kpPin = 배포 버전(지우면 가입자가 최신 화면을 받았다)
+  ["transportLoginSaved", "driverLoginSaved", "kpPin", "kpAdminDev"].forEach((k) => { // 🚦 kpPin = 배포 버전(지우면 가입자가 최신 화면을 받았다)
     const v = localStorage.getItem(k);
     if (v != null) keep[k] = v;
   });
@@ -23077,7 +23077,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
               showSuccess(ok === false ? "새로고침 실패 (네트워크 확인)" : "새로고침 완료 · 최신 상태 반영됨");
             }}
             right={go(manualRefreshing ? "갱신 중…" : "실행")} />
-          <KpmRow label="캐시 초기화" sub="이 기기에 임시 저장된 데이터 삭제" onClick={() => { /* ⭐ 2026-11-02 점검 — 로그인·FCM 토큰 키는 남기고 비움(로그아웃 시 기기 알림 해제 유지) */ const keep = ["kpFcmToken", "loginCompany", "userCompany", "role", "kpHrAcctView", "transportLoginSaved", "driverLoginSaved", "kpPin", "kpAdminDev", "kpBioHere"]; const saved = keep.map((k) => [k, localStorage.getItem(k)]); localStorage.clear(); saved.forEach(([k, v]) => { if (v != null) { try { localStorage.setItem(k, v); } catch { /* 무시 */ } } }); showSuccess("초기화 완료"); }} right={go("실행")} />
+          <KpmRow label="캐시 초기화" sub="이 기기에 임시 저장된 데이터 삭제" onClick={() => { /* ⭐ 2026-11-02 점검 — 로그인·FCM 토큰 키는 남기고 비움(로그아웃 시 기기 알림 해제 유지) */ const keep = ["kpFcmToken", "loginCompany", "userCompany", "role", "kpHrAcctView", "transportLoginSaved", "driverLoginSaved", "kpPin", "kpAdminDev"]; const saved = keep.map((k) => [k, localStorage.getItem(k)]); localStorage.clear(); saved.forEach(([k, v]) => { if (v != null) { try { localStorage.setItem(k, v); } catch { /* 무시 */ } } }); showSuccess("초기화 완료"); }} right={go("실행")} />
         </KpmCard>
 
         {isTotalMaster && (
@@ -23091,7 +23091,6 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         <KpmCard en="ACCOUNT" title="계정" flush>
           <KpmRow label="회사" value={userCompany || "-"} />
           <KpmRow label="권한" value={ROLE_KO[role] || role || "-"} />
-          <KpmRow label="Face ID · 지문 로그인" sub="등록하면 다음부터 비밀번호 없이 얼굴 · 지문으로 바로 로그인" onClick={() => setLoginMgrOpen(true)} right={go("설정")} />{/* 📱 2026-11-14 설정에서 바로 보이게(예전엔 로그인 · 보안 안에만 있었다) */}
           <KpmRow label="2차 인증 · 로그인 보안" sub="2차 인증(PIN · 키패드) · 로그인된 기기 · 비밀번호" onClick={() => setLoginMgrOpen(true)} right={go("열기")} />
           {/* ⭐ 2026-11-02 원격지원 — */}
           {/* ⭐ 2026-11-03 원격 지원 요청은 PC 전용 */}

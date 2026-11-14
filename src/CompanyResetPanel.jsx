@@ -1,5 +1,5 @@
 // ======================= src/CompanyResetPanel.jsx =======================
-// ⭐ 2026-11-06 운송사 초기화 — 관리자 관리센터(보안·데이터 › 운송사 초기화) 전용으로 옮기고 화면을 새로 정리했다.
+// ⭐ 2026-11-06 운송사 초기화 — 관리자 관리센터(데이터 › 운송사 초기화) 전용으로 옮기고 화면을 새로 정리했다.
 //  (배차 프로그램 관리자메뉴의 "운송사 초기화" 탭은 없앴다 — PC·모바일 모두)
 //  ① 운송사 고르기(검색) → ② 미리 세어 보기(지울 문서 수) → ③ 회사명 직접 입력 + 초기화 비밀번호 → 실행
 //  진행 상황은 서버가 resetJobs/{작업ID}에 적고, 이 화면이 실시간으로 읽는다.
@@ -33,7 +33,7 @@ export async function callReset(body, fn = "companyReset") {
   let data = {};
   try { data = await res.json(); } catch { /* 무시 */ }
   if (!res.ok) {
-    if (res.status === 404) throw new Error("서버에 초기화 기능이 아직 배포되지 않았습니다. PC에서 firebase deploy --only functions를 실행해 주세요.");
+    if (res.status === 404) throw new Error("서버 초기화 기능이 아직 준비되지 않았어요. 잠시 뒤 다시 해 주세요.");
     throw Object.assign(new Error(data.error || `요청 실패 (${res.status})`), { status: res.status, step: data.step || "" });
   }
   return data;

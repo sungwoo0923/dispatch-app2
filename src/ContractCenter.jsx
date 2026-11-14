@@ -519,7 +519,7 @@ export function ContractTemplates() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap rounded-[18px] px-5 py-3.5 bg-[#0F1A30] text-white">
         <div className="text-[13.5px]"><b>계약서 양식은 언제든 고칠 수 있습니다.</b> <span className="text-white/60">이미 서명된 계약서는 서명 당시 내용 그대로 보관됩니다.</span></div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button type="button" onClick={() => { const id = `t${Date.now()}`; setSt((s) => ({ ...s, templates: [...s.templates, { id, name: `${t.name} (복사본)`, body: t.body }] })); setCur(st.templates.length); setDirty(true); }} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/25 text-[13px] font-black">복제</button>
           <button type="button" onClick={async () => { if ((await kpConfirm("이 양식을 기본 문구로 되돌릴까요?"))) upd({ body: DEFAULT_TEMPLATE_BODY }); }} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/25 text-[13px] font-black">기본 문구로</button>
           <button type="button" title="데이터 보호 조치 · 보안 사고 72시간 통지 · 재위탁 고지 조항을 비밀유지 조항 앞에 넣습니다" onClick={() => {

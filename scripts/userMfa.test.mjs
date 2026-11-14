@@ -2,7 +2,6 @@
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const { makePnkMfa } = require("../functions/pnkMfa.js");
-const { makeLogisPasskey } = require("../functions/logisPasskey.js");
 
 class HttpsError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
 const Timestamp = { fromMillis: (ms) => ({ ms, toMillis: () => ms }) };
@@ -54,60 +53,6 @@ await db.doc("users/a1").set({ role: "totalMaster", subAdmin: true, pcVerifyPhon
 const dev = "dev_abcdefghijklmnopqrstuvwxyz";
 eq((await mfa({ action: "status", app: "logis", dev }, ctx("a1"))).required, true, "부관리자는 늘 필요");
 eq((await mfa({ action: "setup", app: "logis", dev, code: "Zx9pQ7wa" }, ctx("a1"))).needSms, true, "부관리자 처음 기기 = 문자 인증");
-
-// ── 얼굴 · 지문 ──
-const fakeW = {
-  generateRegistrationOptions: async (o) => ({ challenge: "C-reg", rp: { id: o.rpID }, user: { name: o.userName }, excludeCredentials: o.excludeCredentials }),
-  verifyRegistrationResponse: async (o) => ({ verified: o.response.ok === true && o.expectedChallenge === "C-reg", registrationInfo: { credential: { id: o.response.id, publicKey: new Uint8Array([1, 2, 3]), counter: 0 } } }),
-  generateAuthenticationOptions: async (o) => ({ challenge: "C-auth", allowCredentials: o.allowCredentials }),
-  verifyAuthenticationResponse: async (o) => ({ verified: o.response.ok === true && o.expectedChallenge === "C-auth", authenticationInfo: { newCounter: 1 } }),
-};
-const { same } = require("../functions/pnkMfa.js");
-let tokens = 0;
-const pk = makeLogisPasskey({ db, HttpsError, now: () => t, webauthn: fakeW, same, createCustomToken: async (uid) => { tokens++; return `tok-${uid}`; } });
-const O = "https://dispatch-app2.vercel.app";
-await rejects(pk({ action: "loginOptions", origin: "https://evil.example" }, {}), /쓸 수 없습니다/, "다른 주소는 거절");
-// 일반 계정(2차 인증 없음) 등록
-const r1 = await pk({ action: "regOptions", origin: O, dev }, ctx("u1"));
-eq(r1.options.rp.id, "dispatch-app2.vercel.app", "등록 옵션 — 주소별 rpID");
-eq((await pk({ action: "regVerify", origin: O, chal: r1.chal, dev, response: { id: "cred_u1_aaaaaaaaaaaa", ok: true } }, ctx("u1"))).count, 1, "등록 완료");
-eq(db.m.get("users/u1").bioKeys, 1, "users.bioKeys 개수 기록");
-await rejects(pk({ action: "regVerify", origin: O, chal: r1.chal, response: { id: "cred_u1_aaaaaaaaaaaa", ok: true } }, ctx("u1")), /시간이 지났/, "확인값은 한 번만");
-// 로그인
-const l1 = await pk({ action: "loginOptions", origin: O }, {});
-const lr = await pk({ action: "login", origin: O, chal: l1.chal, dev, response: { id: "cred_u1_aaaaaaaaaaaa", ok: true } }, {});
-eq([lr.token, lr.companyName, lr.admin], ["tok-u1", "JY", false], "얼굴 로그인 → 로그인 토큰");
-const l2 = await pk({ action: "loginOptions", origin: O }, {});
-await rejects(pk({ action: "login", origin: O, chal: l2.chal, response: { id: "cred_u1_aaaaaaaaaaaa", ok: false } }, {}), /확인하지 못했습니다/, "서명이 틀리면 거절");
-const l3 = await pk({ action: "loginOptions", origin: O }, {});
-await rejects(pk({ action: "login", origin: O, chal: l3.chal, response: { id: "cred_unknown_aaaaaaa", ok: true } }, {}), /등록되지 않은/, "모르는 열쇠 거절");
-// 2단계 대신
-const a1 = await pk({ action: "authOptions", origin: O }, ctx("u1"));
-eq(a1.options.allowCredentials.length, 1, "2단계 대신 — 내 열쇠만");
-eq((await pk({ action: "authVerify", origin: O, chal: a1.chal, response: { id: "cred_u1_aaaaaaaaaaaa", ok: true } }, ctx("u1"))).ok, true, "2단계 대신 통과");
-// 부관리자: 문자 인증 안 한 기기는 등록 · 로그인 불가
-await rejects(pk({ action: "regOptions", origin: O, dev, code: "Zx9pQ7wa" }, ctx("a1")), /문자 인증을 마친 기기/, "부관리자 — 처음 기기에선 등록 불가");
-// 문자 인증을 마친 기기로 만든 뒤
-const { devKey } = require("../functions/pnkMfa.js");
-await db.doc("pnkMfaSecrets/a1").set({ devices: { [devKey(dev)]: { at: t } } }, { merge: true });
-await rejects(pk({ action: "regOptions", origin: O, dev, code: "wrongpass1" }, ctx("a1")), /2차 비밀번호가 맞지/, "부관리자 등록은 2차 비밀번호 확인");
-const r2 = await pk({ action: "regOptions", origin: O, dev, code: "Zx9pQ7wa" }, ctx("a1"));
-await pk({ action: "regVerify", origin: O, chal: r2.chal, dev, response: { id: "cred_a1_bbbbbbbbbbbb", ok: true } }, ctx("a1"));
-const l4 = await pk({ action: "loginOptions", origin: O }, {});
-eq((await pk({ action: "login", origin: O, chal: l4.chal, dev, response: { id: "cred_a1_bbbbbbbbbbbb", ok: true } }, {})).sub, true, "부관리자 — 아는 기기면 얼굴로 바로");
-const l5 = await pk({ action: "loginOptions", origin: O }, {});
-await rejects(pk({ action: "login", origin: O, chal: l5.chal, dev: "dev_otherdeviceotherdevice00", response: { id: "cred_a1_bbbbbbbbbbbb", ok: true } }, {}), /처음 로그인하는 기기/, "부관리자 — 새 기기면 얼굴 로그인 거절(비밀번호 → 문자)");
-const a2 = await pk({ action: "authOptions", origin: O }, ctx("a1"));
-eq((await pk({ action: "authVerify", origin: O, chal: a2.chal, dev: "dev_otherdeviceotherdevice00", response: { id: "cred_a1_bbbbbbbbbbbb", ok: true } }, ctx("a1"))).needSms, true, "부관리자 — 새 기기에서 2단계 대신 쓰면 문자 인증으로");
-// 지우기
-eq((await pk({ action: "remove", origin: O, id: "cred_u1_aaaaaaaaaaaa" }, ctx("u1"))).left, 0, "등록 지우기");
-await rejects(pk({ action: "remove", origin: O, id: "cred_a1_bbbbbbbbbbbb" }, ctx("u1")), /이미 지웠/, "남의 열쇠는 못 지움");
-// 정지된 계정
-await db.doc("users/u1").set({ userStatus: "suspended" }, { merge: true });
-const r3 = await pk({ action: "regOptions", origin: O, dev }, ctx("u1"));
-await pk({ action: "regVerify", origin: O, chal: r3.chal, response: { id: "cred_u1_cccccccccccc", ok: true } }, ctx("u1"));
-const l6 = await pk({ action: "loginOptions", origin: O }, {});
-await rejects(pk({ action: "login", origin: O, chal: l6.chal, response: { id: "cred_u1_cccccccccccc", ok: true } }, {}), /사용할 수 없는/, "정지된 계정은 얼굴 로그인 불가");
 
 // ── 회사 관리자의 2차 인증 초기화 ──
 await db.doc("users/u2").set({ role: "user", companyName: "JY" });

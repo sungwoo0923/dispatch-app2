@@ -273,7 +273,7 @@ export function ContractLifecyclePanel({ openCompany }) {
                       </div>
                     )}
                     <div className="p-4 border-t border-[#EEF1F6] space-y-2.5">
-                      <button type="button" onClick={() => (resetPw === false ? alert("먼저 보안·데이터 › 운송사 초기화에서 초기화 비밀번호를 설정해 주세요.") : setAsk("endReset"))} className="w-full h-11 rounded-xl border-2 border-[#0B1428] text-[#0B1428] text-[15px] font-black" data-contract-endreset>계약종료 + 초기화 (데이터 삭제)</button>
+                      <button type="button" onClick={() => (resetPw === false ? alert("먼저 데이터 › 운송사 초기화에서 초기화 비밀번호를 설정해 주세요.") : setAsk("endReset"))} className="w-full h-11 rounded-xl border-2 border-[#0B1428] text-[#0B1428] text-[15px] font-black" data-contract-endreset>계약종료 + 초기화 (데이터 삭제)</button>
                       <div className="text-[13.5px] text-[#5B6B85] leading-relaxed">접속을 먼저 막은 뒤 이 회사 데이터를 모두 지웁니다. 7일 동안은 보관함에서 복원할 수 있습니다.</div>
                     </div>
                   </div>
@@ -325,7 +325,7 @@ export function ContractLifecyclePanel({ openCompany }) {
       )}
       {ask === "endReset" && cur && (
         <DangerConfirm en="CONTRACT END · RESET" title={`${cur.name} 계약종료 + 초기화`} company={cur.name} actionLabel="계약종료하고 데이터 삭제" onCancel={() => setAsk(null)} onRun={startEndReset}
-          lines={["먼저 계약종료로 접속을 막습니다.", `그다음 ${cur.name}의 오더·거래처·기사·설정·첨부파일을 모두 지웁니다.`, "7일 동안 보관함(보안·데이터 › 운송사 초기화)에서 복원할 수 있습니다."]}>
+          lines={["먼저 계약종료로 접속을 막습니다.", `그다음 ${cur.name}의 오더·거래처·기사·설정·첨부파일을 모두 지웁니다.`, "7일 동안 보관함(데이터 › 운송사 초기화)에서 복원할 수 있습니다."]}>
           <label className="flex items-start gap-2.5 text-[14.5px] text-[#1B2B4B] font-bold cursor-pointer">
             <input type="checkbox" checked={delAcc} onChange={(e) => setDelAcc(e.target.checked)} className="mt-0.5 w-[18px] h-[18px] accent-[#1B2B4B]" />
             <span>로그인 계정까지 삭제<span className="block font-medium text-[13.5px] text-[#5B6B85]">체크 안 하면 계정은 남아 로그인 시 "계약이 종료되었습니다" 화면을 봅니다</span></span>
