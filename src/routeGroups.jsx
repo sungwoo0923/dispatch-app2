@@ -2,7 +2,7 @@
 // 🗂 2026-11-13 담당노선구분 — 거래처는 같아도(녹수) 시트 탭처럼 나눠 보는 묶음(녹수 · 아산 KDF · 보령 KDF …)
 //  · 켜기: 관리센터 › 운송사 기능 "담당노선구분"(companyFeatures.routeGroups) — 지금은 JY로지스틱스용
 //  · 값: 오더의 `담당노선구분` 칸. 구글시트에서 가져온 오더는 칸이 없어도 가져온 탭 이름(이전출처 "탭!줄")을 쓴다
-//  · 화면 위 버튼 줄에서 고르면 배차현황 · 실시간 · 정산 · 매출 등 오더를 쓰는 모든 화면이 그 묶음만 본다(데이터 입구에서 한 번 거른다)
+//  · 화면 위 버튼 줄은 배차(배차관리 · 실시간 · 배차현황) · 정산 · 매출에서만 보이고, 그 화면에서만 고른 묶음으로 거른다(RG_SCREENS)
 //  · 내 담당: 직원마다 맡은 묶음(users/{uid}.routeGroups — 본인이 정함). 정해 두면 로그인했을 때 내 담당만 먼저 보인다. [전체]는 누구나 볼 수 있다
 import React from "react";
 import { doc, setDoc } from "firebase/firestore";
@@ -16,6 +16,9 @@ export const RG_NONE = "(미지정)";
 export const rgLabel = (g) => (g === RG_NONE ? "일반오더" : g);
 // 들어갈 때마다 [전체]부터 보는 화면 — 여기서 고른 탭은 그 화면에 있는 동안만 쓰고, 다른 화면의 선택(내 담당 등)은 그대로 둔다
 const RG_ALL_FIRST = ["매출관리", "정산관리"];
+// 🗂 2026-11-14 탭 줄이 보이고 거르는 화면 — 배차 · 정산 · 매출에서만. 다른 화면(기사관리 · 지입차관리 · 홈 …)은 탭 없이 전체 오더
+export const RG_SCREENS = ["배차관리", "실시간배차현황", "배차현황", "정산관리", "매출관리"];
+export const rgOnScreen = (sc) => RG_SCREENS.includes(String(sc || ""));
 export const routeGroupOf = (row) => String(row?.담당노선구분 || String(row?.이전출처 || "").split("!")[0] || "").trim();
 const LS = (uid) => `kpRouteGroup:${uid || "me"}`;
 const readSel = (uid) => { try { const v = JSON.parse(localStorage.getItem(LS(uid)) || "null"); return v === "all" || v === "mine" || Array.isArray(v) ? v : null; } catch { return null; } };
@@ -32,7 +35,7 @@ export function useRouteGroupFilter({ enabled, uid, profile }) {
   const allFirst = RG_ALL_FIRST.includes(screen);
   const sel = allFirst ? tmpSel : (selRaw ?? (mine.length ? "mine" : "all"));
   const setSel = React.useCallback((v) => { if (allFirst) return setTmpSel(v); setSelRaw(v); try { localStorage.setItem(LS(uid), JSON.stringify(v)); } catch { /* 무시 */ } }, [uid, allFirst]);
-  const active = !enabled || sel === "all" ? null : sel === "mine" ? (mine.length ? mine : null) : (sel.length ? sel : null);
+  const active = !enabled || !rgOnScreen(screen) || sel === "all" ? null : sel === "mine" ? (mine.length ? mine : null) : (sel.length ? sel : null);
   const key = active ? active.join("\u0001") : "";
   const filter = React.useCallback((rows) => {
     if (!active || !Array.isArray(rows)) return rows;

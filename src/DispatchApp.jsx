@@ -2973,7 +2973,7 @@ import { useCompanyFeatures } from "./companyFeatures";
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합 현황) — 회사가 쓰는 영역에 따라 상단 메뉴가 바뀐다(src/bizModules.js)
 import { useBizModules, isBizMenu, parseBizMenu, bizTopMenus, bizSideGroups, bizFirstMenu, bizMenuKey, readBiz, writeBiz, BIZ_MENU_ICON, bizInfo as bizInfoOf, bizMenuLabel as bizMenuLabelOf } from "./bizModules";
 import { reportScreen, installScreenVisibility } from "./screenReport";
-import { useRouteGroupFilter, RouteGroupBar, routeGroupOf, RouteGroupField, SheetLiveChip } from "./routeGroups";
+import { useRouteGroupFilter, RouteGroupBar, routeGroupOf, RouteGroupField, SheetLiveChip, rgOnScreen } from "./routeGroups";
 import { settleStartTab } from "./settleStart";
 import { QuickOrderLine, useDriverSuggest, DriverSuggestCell, AssignConfirm } from "./SmartDispatchUI"; // ⭐ 2026-11-13 빠른 등록 · 추천 기사
 const SettleHome = React.lazy(() => import("./SettleHome")); // 🧭 정산 홈(처음 열 때 받는다)
@@ -7933,7 +7933,7 @@ useEffect(() => {
   //   목록·건수·배지·검색·미배차·실시간·지입차관리·대시보드·엑셀이 모두 아래 dispatchData를 쓰므로 그대로 따른다.
   //   정산·매출은 원래부터 같은 기준으로 빠졌고, 시트 연동은 서버가 그대로 한다(오더는 저장소에 남음).
   const routeCarrierF = useRouteCarrierFilter(getTenant() || userCompany || localStorage.getItem("userCompany") || "");
-  // 🗂 2026-11-13 담당노선구분 — 화면 위 버튼 줄에서 고른 묶음만(배차현황 · 실시간 · 정산 · 매출 등 아래 dispatchData 를 쓰는 모든 화면이 따른다 · src/routeGroups.jsx)
+  // 🗂 2026-11-13 담당노선구분 — 화면 위 버튼 줄에서 고른 묶음만(배차 · 정산 · 매출 화면에서만 거른다. 그 밖의 화면은 전체 · src/routeGroups.jsx RG_SCREENS)
   const rgProfile = useMyProfile(user?.uid);
   const rg = useRouteGroupFilter({ enabled: useCompanyFeatures(getTenant() || userCompany).routeGroups === true, uid: user?.uid, profile: rgProfile });
   const dispatchDataPreRG = useMemo(() => routeCarrierF.filter(dispatchDataAll) || [], [dispatchDataAll, routeCarrierF]);
@@ -9123,7 +9123,7 @@ return (
       {/* ---------------- 화면 렌더링 ---------------- */}
       <ColumnStyleHost company={userCompany || localStorage.getItem("userCompany") || ""} />
       <BrowserZoomNotice fit={screenFit} />
-      {rg.enabled && !workScope && !isBizMenu(menu) && !["회사관리", "관리자메뉴", "관리센터", "전자결재"].includes(menu) && <RouteGroupBar rg={rg} rows={dispatchDataPreRG} role={role} userCompany={userCompany} dark={darkMode} />}
+      {rg.enabled && !workScope && rgOnScreen(menu) && <RouteGroupBar rg={rg} rows={dispatchDataPreRG} role={role} userCompany={userCompany} dark={darkMode} />}
       {!rg.enabled && ["배차현황", "실시간배차현황"].includes(menu) && <div className="mb-1 flex justify-end empty:hidden"><SheetLiveChip role={role} userCompany={userCompany} /></div>}
       <main className={`kp-main ${menu === "HOME" || menu === BRIEF_MENU || EXEC_MENUS.includes(menu) ? "kp-main-bare" : ""} rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
         {!darkMode && <KpPageHeader menu={menu} />}
