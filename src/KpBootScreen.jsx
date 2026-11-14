@@ -3,7 +3,6 @@
 // 4단계가 차례대로 0 → 100% 채워진다. 전부 100%가 되면 부드럽게 사라지며 최신 상태로 열린다.
 // targets: 단계별 목표 %(0~100) 4개 / subs: 단계 옆에 보일 보조 문구 / variant: "mobile" | "pc"
 import React, { useState, useEffect, useRef } from "react";
-import KpTruck3D from "./KpTruck3D";
 import KpTruckSide from "./KpTruckSide";
 import { LogisMark, LogisWordmark } from "./brand";
 
@@ -30,7 +29,7 @@ const SIZE = {
   },
 };
 
-export default function KpBootScreen({ targets, subs = [], onAllDone, variant = "mobile", steps: stepsProp, zIndex, onSkip, team = "dispatch", truckDesign }) {
+export default function KpBootScreen({ targets, subs = [], onAllDone, variant = "mobile", steps: stepsProp, zIndex, onSkip, team = "dispatch" }) {
   const TXT = BOOT_TEXT[team] || BOOT_TEXT.dispatch;
   const steps = stepsProp || TXT.steps;
   const Z = SIZE[variant] || SIZE.mobile;
@@ -115,7 +114,7 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
 
   const activeIdx = completed.findIndex((c) => !c);
   const bar = (v) => ({ transform: `scaleX(${v / 100})`, transformOrigin: "0 50%", transition: `transform ${STEP_MS}ms ease-out`, willChange: "transform" });
-  const truckW = truckDesign ? 40 * Z.truck * 3.2 : 30 * Z.truck * 3.2;
+  const truckW = 40 * Z.truck * 3.2;
   const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
   const pc = variant === "pc";
   return (
@@ -178,7 +177,7 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
             {["0", "25", "50", "75", "100"].map((t) => <span key={t}>{t}</span>)}
           </div>
           <div className="absolute left-0 bottom-[16px]" style={{ width: `calc(100% - ${truckW}px)`, transform: `translateX(${overall}%)`, transition: `transform ${STEP_MS}ms ease-out`, willChange: "transform" }}>
-            {truckDesign ? <KpTruckSide width={truckW} design={truckDesign} /> : <KpTruck3D width={truckW} />}
+            <KpTruckSide width={truckW} />
           </div>
         </div>
 

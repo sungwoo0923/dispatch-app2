@@ -8,7 +8,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { db, doc, onSnapshot } from "./firebase";
-import KpTruck3D from "./KpTruck3D";
+import KpTruckSide from "./KpTruckSide";
 import { LogisMark, LogisWordmark } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { isDesktopBrowser } from "./driver/driverAppContext"; // 🖥 2026-11-10 PC에서는 차주(기사) 로그인 숨김
 
@@ -165,7 +165,7 @@ export default function Login() {
                 <span key={k} className="absolute bottom-[21px] left-0 w-1.5 h-1.5 rounded-full bg-[#CFE0FF]" style={{ "--d": "460px", animation: `kpPacket 2.4s linear ${k * 0.8}s infinite`, boxShadow: "0 0 8px #8FB0F0" }} />
               ))}
               <div className="absolute left-1/2 -translate-x-1/2 bottom-[16px] lg:bottom-[14px]">
-                <KpTruck3D width={typeof window !== "undefined" && window.innerWidth >= 1024 ? 220 : 170} />
+                <KpTruckSide width={typeof window !== "undefined" && window.innerWidth >= 1024 ? 250 : 190} />
               </div>
             </div>
             <div className="lg:hidden mt-1 text-center">

@@ -24,7 +24,7 @@ const Txt = ({ r, children, cls = "" }) => <div style={pos(...r)} className={`fl
 function TopBar({ on = "", items = ["HOME", "오더등록", "실시간배차현황", "배차현황", "기사관리", "정산관리"], hi = "" }) {
   return (
     <div style={{ ...pos(0, 0, 100, 13), background: NAVY }} className="flex items-center gap-1 px-2">
-      <span className="text-[10px] font-black tracking-[0.18em] text-[#8FB0F0] mr-1">LOGISWEB</span>
+      <img src="/brand/logisweb-wordmark-light.png" alt="LOGISWEB" className="h-[9px] w-auto mr-1.5 shrink-0" />
       {items.map((m) => <span key={m} className={`px-1.5 h-[62%] rounded-md flex items-center text-[12px] font-bold whitespace-nowrap transition-all ${on === m ? "bg-white text-[#0F1A30]" : "text-white/70"} ${hi === m ? "ring-2 ring-[#8FB0F0]" : ""}`}>{m}</span>)}
       <span className="ml-auto px-1.5 h-[62%] rounded-md bg-white/10 text-white/80 text-[11.5px] font-bold flex items-center">검색 Ctrl K</span>
     </div>

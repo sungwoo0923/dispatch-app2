@@ -2,6 +2,7 @@
 // 🚚 2026-11-14 옆모습 트럭(사진 트럭을 프로그램용으로 다시 그림) — 로딩 화면 · 계정 선택 화면
 //  · 짐칸 가로 골판 · 로고 판 · 큰 창 운전석 · 검은 차대 · 바퀴(휠 회전)를 사진 비율대로
 //  · design: "white"(사진 그대로 흰 차) | "navy"(흰 짐칸 + 남색 로고 판 · 남색 운전석) | "dark"(어두운 화면에 맞춘 남색 메탈) | "line"(빛나는 선)
+//  · 🎲 design="random"(기본): 새로고침 · 로그인 화면이 열릴 때마다 A~D 중 하나 — 바로 전에 나온 것은 피한다(사용자 요청)
 //  · 움직임은 CSS transform 만(저사양 폰에서도 부드럽게)
 import React from "react";
 
@@ -36,9 +37,19 @@ const THEMES = {
   },
 };
 
+const KEYS = ["white", "navy", "dark", "line"];
+export function pickTruckDesign() {
+  let last = ""; try { last = localStorage.getItem("kpTruckLast") || ""; } catch { /* 무시 */ }
+  const pool = KEYS.filter((k) => k !== last);
+  const k = pool[Math.floor(Math.random() * pool.length)];
+  try { localStorage.setItem("kpTruckLast", k); } catch { /* 무시 */ }
+  return k;
+}
+
 let uid = 0;
-export default function KpTruckSide({ width = 160, design = "navy", moving = true, beam: beamProp, className = "", style }) {
+export default function KpTruckSide({ width = 160, design: designProp = "random", moving = true, beam: beamProp, className = "", style }) {
   const id = React.useMemo(() => `kps${(uid += 1)}`, []);
+  const [design] = React.useState(() => (designProp === "random" ? pickTruckDesign() : designProp));
   const T = THEMES[design] || THEMES.navy;
   const beam = beamProp ?? T.beam;
   const ol = T.outline;
