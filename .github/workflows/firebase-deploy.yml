@@ -3,6 +3,16 @@
 name: Firebase 배포
 
 on:
+  # 🚀 2026-11-14 사용자 요청 — main 에 서버 쪽 파일(functions · 보안 규칙 · 색인 · 저장소 규칙)이 바뀌어 올라오면 자동으로 "전부" 배포
+  #  (화면만 바뀐 커밋 · 버전 번호 커밋은 돌지 않는다) · 손으로 돌릴 때는 예전처럼 Actions › Run workflow
+  push:
+    branches: [main]
+    paths:
+      - "functions/**"
+      - "firestore.rules"
+      - "firestore.indexes.json"
+      - "storage.rules"
+      - "firebase.json"
   workflow_dispatch:
     inputs:
       target:
