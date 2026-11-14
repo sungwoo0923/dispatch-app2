@@ -41,7 +41,8 @@ export default function TransportLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [previewInfo, setPreviewInfo] = useState(null); // 승인 대기 계정 — 둘러보기 버튼
-  const [msg, setMsg] = useState(null);
+  // 📱 2026-11-14 휴대폰에서 2차 인증 사용 여부를 정하려고 한 번 로그아웃시킨 경우(App.jsx) — 안내
+  const [msg, setMsg] = useState(() => { try { if (sessionStorage.getItem("kpReloginMsg")) { sessionStorage.removeItem("kpReloginMsg"); return "보안 설정(2차 인증 · Face ID)을 위해 한 번만 다시 로그인해 주세요."; } } catch { /* 무시 */ } return null; });
   const [showPopup, setShowPopup] = useState(false);
   const [countdown, setCountdown] = useState(3);
   const [loginTime, setLoginTime] = useState("");

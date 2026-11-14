@@ -194,6 +194,18 @@ export function PinPad({ value = "", onChange, onSubmit, length = 8, disabled = 
   );
 }
 
+// 🛠 2026-11-14 방금 확인한 2차 비밀번호를 잠깐(5분, 화면 메모리에만) 기억 — 이어서 Face ID 를 등록할 때 다시 묻지 않게
+let _recent = { code: "", at: 0 };
+export const rememberCode = (code) => { _recent = { code: String(code || ""), at: Date.now() }; };
+export const recentCode = () => (Date.now() - _recent.at < 5 * 60 * 1000 ? _recent.code : "");
+// 🛠 2026-11-14 켜기 확인 — 예전 서버(배포 전)는 저장하지 않고 "ok"만 돌려줘, 켠 줄 알았는데 다음 로그인 때 또 물어봤다
+async function setupChecked(v) {
+  const r = await mfaCall({ action: "setup", ...v });
+  if (r?.opt !== true) throw new Error("서버가 아직 준비되지 않아 2차 인증을 저장하지 못했어요. 잠시 뒤 다시 해 주세요.");
+  rememberCode(v.code);
+  return r;
+}
+
 // 켜는 그 순간 이 로그인은 이미 확인한 것으로(켜자마자 2차 인증 화면이 뜨지 않게) — 다른 기기 · 다음 로그인부터 묻는다
 async function markHere(u) { if (u) markAdminGatePassed(u.uid, await adminAuthTime(u)); }
 
@@ -288,7 +300,7 @@ export function MfaAskModal({ user, mode = "ask", onClose }) {
           {done ? (
             <div className="space-y-3">
               <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-4 py-3 text-[13px] text-[#3A4A66]">방식: <b className="text-[#0F1A30]">{MFA_KIND_LABEL[done]}</b><br />바꾸거나 끄려면 <b>로그인 · 보안</b> 메뉴에서 합니다.</div>
-              {bio && !bioHereFor(user.uid) && (
+              {bio && isPhoneDevice() && !bioHereFor(user.uid) && (
                 <div className="rounded-xl border border-[#E3E8F0] px-4 py-3">
                   <div className="text-[13.5px] font-black text-[#0F1A30]">이 기기에서 {bioName()}로 로그인</div>
                   <div className="text-[12px] text-[#7A879C] mt-0.5">등록하면 다음부터 비밀번호 없이 얼굴 · 지문으로 바로 들어옵니다.</div>
@@ -302,7 +314,7 @@ export function MfaAskModal({ user, mode = "ask", onClose }) {
           ) : step === "setup" ? (
             <SetupFlow initialKind="pin" cancelLabel={mode === "setup" ? "다음에 하기(30일 뒤 다시 묻기)" : "뒤로"}
               onCancel={mode === "setup" ? decline : () => setStep("ask")}
-              run={async (v) => { await markHere(user); const r = await mfaCall({ action: "setup", ...v }); justSet.current = v.code; return r; }}
+              run={async (v) => { await markHere(user); const r = await setupChecked(v); justSet.current = v.code; return r; }}
               onDone={(_r, kind) => { setDone(kind); if (bio && justSet.current) bioPrepare("reg", justSet.current).catch(() => {}); }} />
           ) : (
             <div className="space-y-2.5">
@@ -338,7 +350,7 @@ export function UserLoginGate({ user, authTime, kind = "pin", inline = false, on
   }, [user.uid, authTime]);
   const submit = async (v) => {
     setBusy(true); setMsg("");
-    try { await mfaCall({ action: "verify", code: v }); markAdminGatePassed(user.uid, authTime); }
+    try { await mfaCall({ action: "verify", code: v }); rememberCode(v); markAdminGatePassed(user.uid, authTime); }
     catch (e) { setMsg(e.message || "확인하지 못했습니다"); setCode(""); }
     finally { setBusy(false); }
   };
@@ -451,7 +463,7 @@ export function SecurityPanel({ user, isAdmin = false, Section }) {
           <div data-sec-mfa>
             {!st ? <div className="text-[13px] text-gray-500">확인하는 중…</div>
               : st.error ? <div className="text-[13px] text-red-600">{st.error}</div>
-                : mode === "setup" ? <SetupFlow initialKind="pin" onCancel={() => setMode("")} run={async (v) => { await markHere(auth.currentUser); return mfaCall({ action: "setup", ...v }); }} onDone={(_r, k) => { setMode(""); setMsg({ t: `2차 인증을 켰습니다(${MFA_KIND_LABEL[k]}).`, ok: true }); load(); }} />
+                : mode === "setup" ? <SetupFlow initialKind="pin" onCancel={() => setMode("")} run={async (v) => { await markHere(auth.currentUser); return setupChecked(v); }} onDone={(_r, k) => { setMode(""); setMsg({ t: `2차 인증을 켰습니다(${MFA_KIND_LABEL[k]}).`, ok: true }); load(); }} />
                   : mode === "off" ? (
                     <div className="space-y-2">
                       <div className="text-[13px] font-bold text-[#3A4A66] text-center">끄려면 지금 2차 비밀번호를 넣어 주세요</div>
@@ -564,5 +576,51 @@ export function MfaResetPanel({ isTotalMaster = false, company = "" }) {
       )}
       {msg && <div className="mt-2 text-[13px] font-semibold text-[#1B2B4B]">{msg}</div>}
     </div>
+  );
+}
+
+// ─────────────────────────── 📱 로그인 직후 Face ID · 지문 등록 권하기(휴대폰만) ───────────────────────────
+//  🔐 2026-11-14 사용자 요청 — 비밀번호 → 2차 인증(관리자는 처음 기기면 문자까지)을 마친 바로 다음, 이 휴대폰에 아직 등록 안 했으면 한 번 묻는다
+//   [등록] → Face ID · 지문 창 → 다음 로그인부터 로그인 화면 [Face ID로 로그인] 한 번이면 끝 / [다음에] → 그냥 들어가고 30일 동안 다시 묻지 않는다
+//   PC 에서는 묻지 않는다(PC 는 2차 인증까지만)
+export const isPhoneDevice = () => {
+  try {
+    const ua = navigator.userAgent.toLowerCase();
+    if ((navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) || ua.includes("ipad") || ua.includes("tablet")) return false;
+    return /iphone|ipod|android/.test(ua);
+  } catch { return false; }
+};
+const OFFER_KEY = (uid) => `kpBioOffer:${uid}`;
+export function bioOfferDeclinedRecently(uid) { try { return Date.now() - Number(localStorage.getItem(OFFER_KEY(uid)) || 0) < 30 * 86400e3; } catch { return false; } }
+export function BioOfferModal({ user, onClose }) {
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState("");
+  const [done, setDone] = React.useState(false);
+  const code = React.useRef(recentCode());
+  // 준비값을 미리 받아 둔다 — 아이폰은 누르는 순간 바로 창을 열어야 한다
+  React.useEffect(() => { bioPrepare("reg", code.current).catch((e) => setMsg(bioErr(e) || "")); }, []);
+  const later = () => { try { localStorage.setItem(OFFER_KEY(user.uid), String(Date.now())); } catch { /* 무시 */ } onClose?.(); };
+  const go = async () => {
+    setBusy(true); setMsg("");
+    try { await bioRegister(code.current); setDone(true); code.current = ""; } catch (e) { setMsg(bioErr(e)); } finally { setBusy(false); }
+  };
+  return createPortal(
+    <div className="fixed inset-0 z-[100001] bg-[#061832]/70 flex items-end sm:items-center justify-center sm:p-5" data-bio-offer>
+      <div className="w-full sm:max-w-[400px] bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        <div className="px-6 pt-7 pb-5 text-center" style={{ background: "linear-gradient(135deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-white/12 grid place-items-center text-white"><FaceIcon size={34} /></div>
+          <div className="mt-3 text-[19px] font-black text-white">{done ? "등록했어요" : `${bioName()}로 로그인할까요?`}</div>
+          <div className="mt-1 text-[13px] text-white/70 leading-relaxed">{done ? "다음부터 로그인 화면에서 한 번만 누르면 바로 들어와요." : "등록하면 다음부터 비밀번호 · 2차 인증 없이 얼굴이나 지문으로 바로 들어와요. 얼굴 · 지문 정보는 휴대폰 밖으로 나가지 않아요."}</div>
+        </div>
+        <div className="px-6 py-5 space-y-2">
+          {done ? <button type="button" onClick={onClose} className="w-full h-12 rounded-xl bg-[#1B2B4B] text-white text-[15px] font-black">시작하기</button> : (<>
+            <button type="button" onClick={go} disabled={busy} className="w-full h-12 rounded-xl bg-[#1B2B4B] text-white text-[15px] font-black inline-flex items-center justify-center gap-2 disabled:opacity-60" data-bio-offer-go><FaceIcon />{busy ? "확인하는 중…" : `${bioName()} 등록하기`}</button>
+            <button type="button" onClick={later} disabled={busy} className="w-full h-11 rounded-xl text-[13.5px] font-bold text-[#5B6B85]">다음에 · 그냥 들어가기</button>
+            {msg && <div className="text-[12.5px] font-semibold text-red-600 text-center leading-relaxed">{msg}</div>}
+          </>)}
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

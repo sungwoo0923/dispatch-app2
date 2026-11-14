@@ -61,7 +61,7 @@ export function Icon({ name, size = 18, className = "", strokeWidth = 2, fill = 
 function Wordmark({ height = 16, color = "#fff" }) {
   return (
     <span aria-label="LogisWeb" role="img" className="block shrink-0"
-      style={{ height, width: height * (13085.8 / 1490), backgroundColor: color, WebkitMask: "url(/brand/logisweb-wordmark.svg) no-repeat center / contain", mask: "url(/brand/logisweb-wordmark.svg) no-repeat center / contain" }} />
+      style={{ height, width: height * (8.0256 /* 🔷 2026-11-14 새 글자 로고 가로세로 비율 */), backgroundColor: color, WebkitMask: "url(/brand/logisweb-wordmark.svg) no-repeat center / contain", mask: "url(/brand/logisweb-wordmark.svg) no-repeat center / contain" }} />
   );
 }
 // 로고 — 로지스웹 마크 + 워드마크 + HUB

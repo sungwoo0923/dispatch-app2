@@ -14,7 +14,7 @@ import { MfaCodeBox, usePhoneCheck, toE164, maskPhone } from "./MfaModal";
 import SecureKeypad, { adminDeviceId } from "./SecureKeypad";
 import { LogisMark } from "./brand";
 import { fmtPhone } from "./formatInput";
-import { BioUnlockButton } from "./UserSecurity"; // 👆 2026-11-14 2차 비밀번호 대신 얼굴 · 지문
+import { BioUnlockButton, rememberCode } from "./UserSecurity"; // 👆 2026-11-14 2차 비밀번호 대신 얼굴 · 지문
 
 export const ADMIN_GATE_KEY = "kpAdminGateOk";
 export const ADMIN_GATE_EVENT = "kp-admin-gate-ok";
@@ -120,6 +120,7 @@ function GateBody({ user, authTime, sub, onCancel, inline }) {
     setBusy(true);
     try {
       const r = await mfa({ action: setup ? "setup" : "verify", code: v });
+      rememberCode(v); // 🔐 2026-11-14 이어서 Face ID 를 등록할 때 다시 묻지 않게(5분 · 메모리만)
       setCode(""); setFirst("");
       if (r.needSms) { setSetup(false); setPhone(r.phone || ""); setStep("sms"); }
       else markPassed(user.uid, authTime);

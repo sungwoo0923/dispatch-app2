@@ -3,7 +3,6 @@
 //  옆면·윗면·앞면을 다른 밝기로 칠해 입체감을 주고, 유리·헤드라이트·바닥 그림자·바퀴 회전을 넣었다.
 //  움직임은 전부 CSS transform이라 저사양 폰에서도 부드럽다.
 import React from "react";
-import { WORD } from "./brandAssets"; // 🔷 2026-11-04 짐칸 로고 = LogisWeb 글자 로고(흰색·하늘색, 남색 칩 위)
 
 let uid = 0;
 export default function KpTruck3D({ width = 120, moving = true, beam = true, className = "", style }) {
@@ -51,10 +50,8 @@ export default function KpTruck3D({ width = 120, moving = true, beam = true, cla
         <rect x="6" y="38" width="68" height="2.6" fill="#1B2B4B" />
         <rect x="6" y="40.6" width="68" height="1" fill="#6E95E8" />
         <rect x="11" y="22.5" width="44" height="9" rx="2.2" fill="#0F1A30" />
-        <g transform={`translate(14 ${27 - (WORD.cap * 38 / (WORD.lw + WORD.gap + WORD.ww)) / 2}) scale(${38 / (WORD.lw + WORD.gap + WORD.ww)}) translate(0 ${-WORD.top})`}>
-          <g fill="#FFFFFF">{WORD.logis.map((d, i) => <path key={i} d={d} />)}</g>
-          <g fill="#8FB0F0" transform={`translate(${WORD.lw + WORD.gap} 0)`}>{WORD.web.map((d, i) => <path key={i} d={d} />)}</g>
-        </g>
+        {/* 🔷 2026-11-14 새 글자 로고(투명 PNG) */}
+        <image href="/brand/logisweb-wordmark.png" x="14" y={27 - 38 / 8.0256 / 2} width="38" height={38 / 8.0256} preserveAspectRatio="xMidYMid meet" />
         <rect x="12" y="33.5" width="22" height="1.3" rx="0.6" fill="#4B6CB7" />
 
         {/* 운전석 — 옆면 / 윗면 / 앞면 / 유리 */}

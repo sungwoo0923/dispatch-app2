@@ -8079,9 +8079,9 @@ function MobileSideMenu({
     const isItem = (n) => n.nodeType === 1 && (n.matches?.(".kp-m-drawer-item") || n.querySelector?.(".kp-m-drawer-item"));
     const mo = new MutationObserver((ms) => { if (ms.some((m) => [...m.addedNodes, ...m.removedNodes].some(isItem))) tapGuard.current.shiftAt = Date.now(); });
     mo.observe(el, { childList: true, subtree: true });
-    const onScroll = () => { tapGuard.current.shiftAt = Date.now(); };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => { mo.disconnect(); el.removeEventListener("scroll", onScroll); };
+    // 🛠 2026-11-14 스크롤은 더 이상 "목록이 밀림"으로 보지 않는다 — 살짝 스크롤한 뒤 바로 누르면 첫 탭이 무시돼 두 번 눌러야 했다
+    //  (누르는 동안 줄이 실제로 움직였는지는 MenuItemBase 가 따로 본다)
+    return () => { mo.disconnect(); };
   }, []);
   const isAdminRole = ["admin", "totalMaster", "superadmin"].includes(role);
   // ⭐ 2026-11-06 직원 급여·연차 촉진 메뉴 — 권한은 users 문서 역할 기준(payrollAccess.js · 보안 규칙과 같음)
@@ -8673,7 +8673,8 @@ function MenuItemBase({ label, onClick: onClick0, badge, dark, icon, uiKey, uiSt
     if (guard && d) {
       const sh = guard.current.shiftAt;
       const moved = Math.abs(e.currentTarget.getBoundingClientRect().top - d.top) > 4 || (e.clientY && Math.abs(e.clientY - d.y) > 12);
-      if (moved || (sh && sh >= d.at - 450)) return;
+      // 🛠 2026-11-14 0.45초 → 0.2초 · 누른 뒤에 생긴 변화(배지 숫자 등)는 보지 않는다 — 첫 탭이 자주 무시돼 두 번 눌러야 들어가던 문제
+      if (moved || (sh && sh >= d.at - 200 && sh <= d.at)) return;
     }
     onClick0(e);
   } : onClick0;
@@ -23090,7 +23091,8 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         <KpmCard en="ACCOUNT" title="계정" flush>
           <KpmRow label="회사" value={userCompany || "-"} />
           <KpmRow label="권한" value={ROLE_KO[role] || role || "-"} />
-          <KpmRow label="로그인 · 보안" sub="2차 인증 · Face ID/지문 로그인 · 로그인된 기기 · 비밀번호" onClick={() => setLoginMgrOpen(true)} right={go("열기")} />
+          <KpmRow label="Face ID · 지문 로그인" sub="등록하면 다음부터 비밀번호 없이 얼굴 · 지문으로 바로 로그인" onClick={() => setLoginMgrOpen(true)} right={go("설정")} />{/* 📱 2026-11-14 설정에서 바로 보이게(예전엔 로그인 · 보안 안에만 있었다) */}
+          <KpmRow label="2차 인증 · 로그인 보안" sub="2차 인증(PIN · 키패드) · 로그인된 기기 · 비밀번호" onClick={() => setLoginMgrOpen(true)} right={go("열기")} />
           {/* ⭐ 2026-11-02 원격지원 — */}
           {/* ⭐ 2026-11-03 원격 지원 요청은 PC 전용 */}
           {loginMgrOpen && <LoginManagerModal user={currentUser} onClose={() => setLoginMgrOpen(false)} />}

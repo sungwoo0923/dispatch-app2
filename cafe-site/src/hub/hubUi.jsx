@@ -273,7 +273,7 @@ export function HubMark({ size = 36, dark = true, label = true }) {
       {label && (
         <span className="flex flex-col leading-none gap-1">
           <span className="flex items-center gap-1.5">
-            <span aria-label="LogisWeb" role="img" className="block" style={{ height: Math.round(size * 0.36), width: Math.round(size * 0.36) * (13085.8 / 1490), backgroundColor: dark ? "#fff" : "#0F1A30", WebkitMask: "url(/brand/logisweb-wordmark.svg) no-repeat center / contain", mask: "url(/brand/logisweb-wordmark.svg) no-repeat center / contain" }} />
+            <span aria-label="LogisWeb" role="img" className="block" style={{ height: Math.round(size * 0.36), width: Math.round(size * 0.36) * (8.0256 /* 🔷 2026-11-14 새 글자 로고 가로세로 비율 */), backgroundColor: dark ? "#fff" : "#0F1A30", WebkitMask: "url(/brand/logisweb-wordmark.svg) no-repeat center / contain", mask: "url(/brand/logisweb-wordmark.svg) no-repeat center / contain" }} />
             <span className="font-extrabold rounded-md px-1.5 h-[18px] text-[13px] inline-flex items-center" style={{ background: dark ? "#8FB0F0" : "#1B2B4B", color: dark ? "#0B1428" : "#fff", letterSpacing: "0.06em" }}>HUB</span>
           </span>
           <span className={`text-[13px] font-semibold ${dark ? "text-white/55" : "text-[#5F6E87]"}`}>로지스웹 허브, 화물 콜</span>

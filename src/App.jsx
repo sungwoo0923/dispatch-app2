@@ -34,7 +34,7 @@ import {
 } from "./loginSessions";
 import { LoginManagerModal } from "./LoginManager";
 import { AdminLoginGate, isAdminGatePassed, adminAuthTime, ADMIN_GATE_EVENT } from "./AdminGate";
-import { UserLoginGate, MfaAskModal, mfaAskState } from "./UserSecurity";
+import { UserLoginGate, MfaAskModal, mfaAskState, BioOfferModal, isPhoneDevice, bioHereFor, bioOfferDeclinedRecently, bioSupported } from "./UserSecurity";
 const ManualHost = React.lazy(() => import("./WorkManual").then((m) => ({ default: m.ManualHost }))); // 📘 2026-11-14 업무 매뉴얼 · 회계용어 창(PC · 모바일 어디서든 이벤트로)
 import { DRIVER_BUSY_EVENT, isDriverBusy } from "./driver/driverLoginErrors"; // ⭐ 2026-11-05 기사 로그인 확인 중 표시
 import { initDriverAppContext, markDriverAppOnlyKick } from "./driver/driverAppContext"; // ⭐ 2026-11-08 기사앱(APK·홈 화면 기사앱)은 기사 계정만
@@ -373,6 +373,40 @@ export default function App() {
   }, [adminGateOn, user]);
   const isPcDevice = !isSmartPhone();
   const needPcMfa = adminGateOn && pcMfaTick >= 0 && (adminAuthAt === null || !isAdminGatePassed(user.uid, adminAuthAt));
+  // 📱 2026-11-14 휴대폰 — 비밀번호 → 2차 인증(관리자는 처음 기기면 문자까지)을 막 마쳤고, 이 휴대폰에 Face ID · 지문이 없으면 등록을 권한다(PC 는 안 물음)
+  //  2차 인증을 켠 계정 · 최고관리자 · 부관리자만. [다음에]는 30일 동안 다시 묻지 않는다(src/UserSecurity.jsx BioOfferModal)
+  const [bioOffer, setBioOffer] = useState(false);
+  useEffect(() => {
+    if (!user || !role || role === "driver" || IS_MOBILE_PREVIEW || isPreviewMode() || !isPhoneDevice()) return undefined;
+    if (needPcMfa || needUserMfa || mfaAsk || sessionConflict) return undefined;
+    if (!(role === "totalMaster" || secProfile?.mfaOpt === true)) return undefined;
+    if (bioHereFor(user.uid) || bioOfferDeclinedRecently(user.uid)) return undefined;
+    try { if (sessionStorage.getItem("kpBioOffered") === user.uid) return undefined; } catch { return undefined; }
+    let alive = true;
+    (async () => {
+      const t = await adminAuthTime(user);
+      const fresh = typeof t === "number" && Date.now() / 1000 - t < 15 * 60; // 방금 로그인한 경우만(자동 로그인으로 열 때마다 묻지 않게)
+      if (!alive || !fresh || !(await bioSupported())) return;
+      try { sessionStorage.setItem("kpBioOffered", user.uid); } catch { /* 무시 */ }
+      setBioOffer(true);
+    })();
+    return () => { alive = false; };
+  }, [user, role, secProfile, needPcMfa, needUserMfa, mfaAsk, sessionConflict]);
+  // 📱 2026-11-14 휴대폰에서 이미 로그인해 쓰던 계정이 아직 2차 인증 사용 여부를 안 정했으면 — 한 번 로그아웃시키고
+  //  다시 로그인할 때(비밀번호 → 2차 인증 사용 여부 → 켜면 만들기 → Face ID 등록) 정하게 한다(사용자 요청)
+  useEffect(() => {
+    if (!user || !role || ["totalMaster", "driver"].includes(role) || !secProfile || IS_MOBILE_PREVIEW || isPreviewMode() || !isPhoneDevice()) return;
+    if (!mfaAskState(secProfile)) return;
+    const key = `kpMfaRelogin:${user.uid}`;
+    try { if (localStorage.getItem(key)) return; } catch { return; }
+    (async () => {
+      const t = await adminAuthTime(user);
+      try { localStorage.setItem(key, String(Date.now())); } catch { /* 무시 */ }
+      if (typeof t === "number" && Date.now() / 1000 - t < 10 * 60) return; // 방금 로그인했으면 그대로 묻는다
+      try { sessionStorage.setItem("kpReloginMsg", "1"); } catch { /* 무시 */ }
+      signOut(auth).catch(() => {});
+    })();
+  }, [user, role, secProfile]);
   // 아직 번호를 등록하지 않았으면(PC에서) 로그인할 때 한 번 안내한다
   const [mfaNag, setMfaNag] = useState(false);
   const [mfaSetupOpen, setMfaSetupOpen] = useState(false);
@@ -999,6 +1033,7 @@ export default function App() {
         : <UserLoginGate key={`${user.uid}:${userAuthAt}`} user={user} authTime={userAuthAt} kind={secProfile?.mfaKind || "pin"} onCancel={() => signOut(auth).catch(() => {})} />)}
       {/* 로그인했을 때 2차 인증을 쓸지 묻기 */}
       {mfaAsk && user && !needUserMfa && !sessionConflict && window.location.pathname !== "/transport-login" && <MfaAskModal user={user} mode={mfaAsk} onClose={() => setMfaAsk("")} />}
+      {bioOffer && user && !needPcMfa && !needUserMfa && !mfaAsk && !sessionConflict && window.location.pathname !== "/transport-login" && <BioOfferModal user={user} onClose={() => setBioOffer(false)} />}
 
       {/* ⭐ 최고관리자 2차 인증 등록 안내 */}
       {mfaNag && masterPcPhone === "" && !needPcMfa && !sessionConflict && user && ( /* 🛠 2026-11-14 문자 인증(3단계)에서 번호를 등록하면 바로 사라진다 — 예전엔 인증을 마친 뒤 "번호를 등록해 주세요"가 또 떴다 */
