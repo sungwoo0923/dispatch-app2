@@ -6907,6 +6907,10 @@ const mailCall = (fn, opts = {}) => functions.runWith({ secrets: ["MAIL_CRED_KEY
 });
 exports.mailSettings = mailCall(_companyMail.mailSettings, { timeoutSeconds: 45 });
 exports.sendCompanyMail = mailCall(_companyMail.sendCompanyMail, { timeoutSeconds: 120, memory: "512MB" });
+// 📥 2026-11-14 회사 메일함 › 받은메일(IMAP · 읽기 전용) — 설명은 functions/companyMailInbox.js 맨 위
+const _companyMailInbox = require("./companyMailInbox").makeCompanyMailInbox({ HttpsError: functions.https.HttpsError, mail: _companyMail,
+  getImapFlow: () => require("imapflow").ImapFlow, getParser: () => require("mailparser").simpleParser });
+exports.companyMailInbox = mailCall(_companyMailInbox, { timeoutSeconds: 60, memory: "512MB" });
 
 /* ==================================================================
    🏢 2026-11-10 PnK PROJECT 인트라넷 사내메일 — 외부 보내기 · 받기(설명은 functions/pnkMail.js 맨 위)

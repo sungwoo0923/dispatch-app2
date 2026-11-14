@@ -304,6 +304,7 @@ function HelpCenter({ index, initial, onGo, onClose }) {
                   <div className="flex items-center gap-3 mb-1">
                     <div className="text-[24px] font-black text-[#0F1A30] tracking-tight">{e.label}</div>
                     <button type="button" onClick={() => go(e)} className="h-9 px-4 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black hover:bg-[#1B2B4B]">이 메뉴 열기</button>
+                    {["정산관리", "회계관리", "자금관리", "비품관리"].includes(sel) && <button type="button" data-help-manual onClick={() => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu: sel } }))} className="h-9 px-4 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-[13.5px] font-black hover:bg-[#F5F8FD]">📘 업무 매뉴얼 열기</button>}
                   </div>
                   {descOf(sel) && <div className="text-[15px] text-[#4A5A75] leading-relaxed mb-6">{String(descOf(sel)).replace(/\s+—\s+/g, ": ")}</div>}
                   {!!(HELP_DETAIL[sel] || []).length && <div className="mb-3">

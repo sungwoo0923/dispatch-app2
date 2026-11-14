@@ -749,6 +749,41 @@ export function ArAccrualMap({ rows, months, onSel, sel }) {
 }
 
 // 상세 패널 — 거래처 요약 · 빠른 입금 · 다음 할 일 · 타임라인 · 월별 원장
+// 💡 2026-11-14 미수금 — 경과일 단계별 추천 행동(회수 순서: 안내 → 확인 전화 → 독촉 → 공식 독촉 · 거래 조정)
+export const AR_PLAYBOOK = [
+  { max: 0, tone: "#0F7A43", title: "기한 전이에요", act: "입금 예정일만 적어 두면 돼요. 기한 2~3일 전에 안내 메일을 한 번 보내면 좋아요." },
+  { max: 30, tone: "#2D4C82", title: "가볍게 안내할 때예요", act: "명세서와 계좌를 다시 보내며 정중하게 확인을 부탁해요. [독촉 메일] 또는 아래 문구를 복사해 문자로 보내요." },
+  { max: 60, tone: "#B7791F", title: "전화로 확인할 때예요", act: "담당자에게 전화해서 결재 상황과 입금 예정일을 받아 [약속]으로 기록해요. 결재 라인이 바뀌었는지도 물어봐요." },
+  { max: 90, tone: "#C05621", title: "공식적으로 독촉할 때예요", act: "독촉 메일을 다시 보내고 [미수금 보고서]를 붙여요. 대표님께도 공유하고, 새 오더는 선입금이나 한도를 정해 받는 걸 검토해요." },
+  { max: Infinity, tone: "#B4342A", title: "회수 조치를 검토할 때예요", act: "새 오더를 잠시 멈추고 내용증명 · 지급명령(전자소송) 같은 법적 절차를 상담해요. 끝내 못 받으면 회계에서 대손으로 처리해요." },
+];
+export function ArNextAction({ data, expectDate, onRemind }) {
+  const [copied, setCopied] = React.useState(false);
+  if (!data || !(data.out > 0)) return null;
+  const over = Number(data.over) || 0;
+  const step = AR_PLAYBOOK.find((p) => over <= p.max) || AR_PLAYBOOK[AR_PLAYBOOK.length - 1];
+  const today = kstToday();
+  const late = expectDate && expectDate < today ? Math.round((new Date(`${today}T00:00:00Z`) - new Date(`${expectDate}T00:00:00Z`)) / 864e5) : 0;
+  const msg = `[${data.client}] 안녕하세요. ${data.oldest ? `${ymLabel(data.oldest)}부터 ` : ""}운송료 ${won(data.out)}원(부가세 포함)이 아직 입금 전으로 확인돼요. 확인 부탁드리며, 입금 예정일을 알려 주시면 감사하겠습니다.`;
+  const copy = async () => { try { await navigator.clipboard.writeText(msg); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { window.prompt("아래 문구를 복사해 주세요", msg); } };
+  return (
+    <div className="px-4 pt-4" data-ar-next>
+      <div className="rounded-2xl border px-4 py-3" style={{ borderColor: `${step.tone}55`, background: `${step.tone}0D` }}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[12px] font-black px-2 py-0.5 rounded-md text-white" style={{ background: step.tone }}>추천 다음 할 일</span>
+          <span className="text-[15px] font-black text-[#0F1A30]">{over > 0 ? `${over}일 지났어요 · ` : ""}{step.title}</span>
+          {late > 0 && <span className="text-[12.5px] font-black px-2 py-0.5 rounded-md bg-[#B4342A] text-white">입금 약속 {late}일 지남</span>}
+        </div>
+        <div className="mt-1.5 text-[14px] leading-[1.6] text-[#2B3A55]">{late > 0 ? `약속한 입금일(${expectDate.slice(5).replace("-", "/")})이 지났어요. 오늘 바로 전화로 확인하고 새 약속일을 기록해 주세요. ` : ""}{step.act}</div>
+        <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
+          <button type="button" onClick={copy} className="h-9 px-3 rounded-lg bg-white border border-[#C9D5EA] text-[#1B2B4B] text-[13px] font-black">{copied ? "복사했어요 ✓" : "독촉 문구 복사(문자 · 카톡용)"}</button>
+          {onRemind && <button type="button" onClick={onRemind} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black">독촉 메일 보내기</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ArDetail({ data, note, onSaveNote, onQuickPay, quickPreview, onRemind, onReport, onClose, ledger, info, isViewer }) {
   const [tab, setTab] = React.useState("timeline");
   const [amt, setAmt] = React.useState("");
@@ -800,6 +835,9 @@ export function ArDetail({ data, note, onSaveNote, onQuickPay, quickPreview, onR
         </div>
       </div>
 
+      {/* 💡 2026-11-14 다음 할 일 추천 · 입금 약속 지남 · 독촉 문구 복사 — 경과일에 맞춰 무엇을 하면 좋은지 */}
+      <ArNextAction data={data} expectDate={n.expectDate} onRemind={onRemind} />
+
       {/* 빠른 입금 처리 — 오래된 달부터 채움(입금 엑셀 자동 매칭과 같은 규칙) */}
       <div className="p-4 border-b border-[#E3E8F0]">
         <div className="flex items-center justify-between mb-2">
@@ -849,7 +887,7 @@ export function ArDetail({ data, note, onSaveNote, onQuickPay, quickPreview, onR
               <input autoComplete="off" disabled={isViewer} value={logText} onChange={(e) => setLogText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && logText.trim()) { onSaveNote({ addLog: { type: logType, text: logText.trim() } }); setLogText(""); } }} placeholder="기록 남기기 (Enter)" className={`${sdInp} h-9`} />
             </div>
             {!tl.length ? <div className="py-6 text-center text-[14px] text-[#9AA9C3]">기록이 없어요</div> : (
-              <ol className="relative pl-5 max-h-[360px] overflow-y-auto">
+              <ol className="relative pl-5 max-h-[360px] xl:max-h-[620px] overflow-y-auto">
                 <span className="absolute left-[7px] top-1 bottom-1 w-[2px] bg-[#EEF2F8]" />
                 {tl.map((t, i) => (
                   <li key={i} className="relative pb-3 last:pb-0">

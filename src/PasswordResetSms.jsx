@@ -16,6 +16,7 @@ const smsErr = (e) => {
   if (c === "auth/code-expired") return "인증번호 시간이 지났습니다. 다시 받아 주세요.";
   if (c === "auth/too-many-requests") return "문자를 너무 많이 요청했습니다. 잠시 뒤 다시 해 주세요.";
   if (c === "auth/invalid-phone-number") return "휴대폰 번호를 확인해 주세요.";
+  if (/load failed|failed to fetch|networkerror|요청 실패\((404|5\d\d)\)/i.test(String(e?.message || ""))) return "서버에 연결하지 못했어요. 비밀번호 찾기 서버가 아직 준비되지 않았거나 인터넷이 불안정해요. 잠시 뒤 다시 해 주세요.";
   return e?.message || "처리하지 못했습니다.";
 };
 

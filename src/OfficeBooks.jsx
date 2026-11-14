@@ -571,6 +571,7 @@ export function AssetManager({ company, isViewer = false }) {
   return (
     <div className="space-y-4">
       <BookHero en="ACCOUNTING · OFFICE ASSETS" title="비품·자산 관리" desc="사무가구·IT기기·소모품의 수량·위치·담당자·구입가를 관리하고 소모품 재고 부족을 알려줍니다"
+        right={<button type="button" data-manual-btn="비품관리" onClick={() => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu: "비품관리", section: "assets" } }))} className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl text-[13.5px] font-black whitespace-nowrap bg-white/12 text-white border border-white/25 hover:bg-white/20">📘 비품 매뉴얼</button>}
         kpis={[["관리 품목", `${active.length}종`, `폐기 ${L.length - active.length}`], ["자산 금액", `${won(value)}원`, "구입가 기준"], ["재고 부족", `${low.length}종`, "최소 수량 이하 소모품"], ["수리중", `${repair.length}건`, ""]]} />
       <BookCard flush>
         <div className="px-3.5 md:px-4 py-3 border-b border-[#EEF1F6] flex items-center gap-2 overflow-x-auto no-scrollbar">

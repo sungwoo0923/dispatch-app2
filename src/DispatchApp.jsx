@@ -83,7 +83,8 @@ import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고�
 import ColumnStyleHost from "./ColumnStyle"; // 🎨 2026-11-03 컬럼명 오른쪽 클릭 → 색 변경 // ⭐ 2026-11-03 배차현황 › 고정노선현황
 import { splitContactCell, isCleanPhone, cleanPlaceContacts } from "./contactCell"; // ☎ 담당자번호 칸에는 번호만
 import { isJyCompany } from "./jyOnly"; // 🏷 JY로지스틱스 전용 기능(단가표 자동 입력 등)
-import QuickNav, { QuickSearchButton } from "./QuickNav"; // 🔎 2026-11-12 통합 검색(Ctrl+K) · 자주 쓰는 메뉴 · 도움말 센터
+import QuickNav, { QuickSearchButton } from "./QuickNav";
+import { ManualHost } from "./WorkManual"; // 📘 2026-11-14 업무 매뉴얼 · 회계용어 창(정산 · 회계 · 자금 · 비품) // 🔎 2026-11-12 통합 검색(Ctrl+K) · 자주 쓰는 메뉴 · 도움말 센터
 import { useScreenFit, ScreenFitButton, BrowserZoomNotice } from "./ScreenFit"; // 🖥 2026-11-10 화면 맞춤 · 브라우저 확대 안내
 import { usePendingSignups, isPendingSignupDriver } from "./pendingSignups";
 import { NavHover, emitSubnav, NavGroupHover, groupNavMenus, navFlatPref } from "./navMenus";
@@ -96,6 +97,7 @@ import { AccountingOverview, RetireDesk, useYearOrders } from "./AcctSuite";
 import HrHub from "./HrHub";
 import { usePayrollAccess } from "./payrollAccess"; // ⭐ 2026-11-06 직원 급여·연차 촉진 권한
 const PayrollCenterLazy = React.lazy(() => import("./Payroll"));
+const CompanyInboxLazy = React.lazy(() => import("./CompanyInbox")); // 📥 2026-11-14 메일함 › 받은메일
 // ⭐ 2026-11-07 급여명세서 · 연차 사용 계획은 내정보 안 탭(MyInfoTabs) · 연차 사용 촉진은 인사관리부 › 연차 관리 안(LeaveArea)
 import { myInfoExtraTabs, initialMyInfoTab, useMyInfoTabLink } from "./MyInfoTabs";
 import LeaveArea from "./LeaveArea";
@@ -9487,7 +9489,7 @@ return (
 
         {정산관리Visited && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
           <div style={{ display: menu === "정산관리" ? undefined : "none" }}>
-          <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={정산관리Tab} onSelect={set정산관리Tab}
+          <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={정산관리Tab} onSelect={set정산관리Tab} actions={[{ key: "manual", label: "정산 매뉴얼", icon: "doc", onClick: () => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu: "정산관리", section: { 홈: "home", 거래처정산: "billing", 지급관리: "payout", 입금확인: "deposit", 지입정산관리: "fleet", 지게차지급: "forklift" }[정산관리Tab] || "" } })) }]}
             items={[{ key: "홈", label: "정산 홈", en: "OVERVIEW", icon: "dashboard" }, { key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOn ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
           <DetailScope data={salesDispatchData} getters={mainDetailGet} title="세부검색 · 정산관리">{(settleRows) => (<>
           {/* 🔎 2026-11-14 세부검색 버튼은 정산관리에서 뺐다(사용자 요청) */}
@@ -52623,6 +52625,7 @@ const [includeCardAr, setIncludeCardAr] = useState(true);
   const [sentMailboxOpen, setSentMailboxOpen] = useState(false);
   const [selectedMail, setSelectedMail] = useState(null);
   const [mailTypeFilter, setMailTypeFilter] = useState("전체");
+  const [mailFolder, setMailFolder] = useState("sent"); // 📥 2026-11-14 메일함 — sent 보낸메일 · inbox 받은메일 · failed 발송 실패
   const [mailSearch, setMailSearch] = useState("");
   const [mailSort, setMailSort] = useState("newest");
   const [selectedMails, setSelectedMails] = useState(new Set());
@@ -53308,6 +53311,7 @@ const handleBatchSettle = async (targetStatus) => {
   const filteredMails = useMemo(() => {
     let logs = [...emailLogs];
     if (mailTypeFilter !== "전체") logs = logs.filter(l => l.type === mailTypeFilter);
+    if (mailFolder === "failed") logs = logs.filter(l => l.status === "failed");
     if (mailSearch.trim()) {
       const q = mailSearch.toLowerCase();
       logs = logs.filter(l =>
@@ -53319,7 +53323,7 @@ const handleBatchSettle = async (targetStatus) => {
     }
     logs.sort((a, b) => mailSort === "newest" ? (b.sentAt || 0) - (a.sentAt || 0) : (a.sentAt || 0) - (b.sentAt || 0));
     return logs;
-  }, [emailLogs, mailTypeFilter, mailSearch, mailSort]);
+  }, [emailLogs, mailTypeFilter, mailSearch, mailSort, mailFolder]);
 
   // ══════════ ⭐ 2026-11-07 거래명세서 단계 보드 · 미수금 데스크 ══════════
   //  금액은 위의 식(거래명세서 mapInvoiceRows · 미수금 buildMonthRows · 입금 배분 allocArDeposit)을 그대로 쓴다
@@ -53665,10 +53669,10 @@ const handleBatchSettle = async (targetStatus) => {
       {active && <SubNavBar side="left" order={0} fallbackClass="mb-3 flex items-center gap-3 flex-wrap rounded-2xl px-4 py-2.5 text-white bg-[#1B2B4B]">
         <div className="leading-tight shrink-0 hidden sm:block">
           <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontVariantNumeric: "tabular-nums" }}>{tab === "invoice" ? "STATEMENT" : tab === "unsettledMonth" ? "RECEIVABLES" : "OUTBOX"}</div>
-          <div className="text-[16px] font-black text-white">{tab === "invoice" ? "거래명세서" : tab === "unsettledMonth" ? "미수금관리" : "보낸메일함"}</div>
+          <div className="text-[16px] font-black text-white">{tab === "invoice" ? "거래명세서" : tab === "unsettledMonth" ? "미수금관리" : "메일함"}</div>
         </div>
         <div className="inline-flex p-1 rounded-xl bg-white/[0.08] border border-white/15 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
-          {[["invoice", "거래명세서", pipeRecent.find(r => r.ym === pipeMonth)?.open || 0], ["unsettledMonth", "미수금관리", arOpenClients.length], ["sentmails", "보낸메일함", 0]].map(([key, label, badge]) => (
+          {[["invoice", "거래명세서", pipeRecent.find(r => r.ym === pipeMonth)?.open || 0], ["unsettledMonth", "미수금관리", arOpenClients.length], ["sentmails", "메일함", 0]].map(([key, label, badge]) => (
             <button key={key} type="button" onClick={() => setTab(key)}
               className={`h-8 px-3.5 rounded-lg text-[14px] font-black transition inline-flex items-center gap-1.5 whitespace-nowrap ${tab === key ? "bg-white text-[#0F1A30] shadow-sm" : "text-white/70 hover:text-white"}`}>
               {label}
@@ -55074,7 +55078,8 @@ const handleBatchSettle = async (targetStatus) => {
           <ArOverview total={arKpi.total} supplyTotal={arKpi.supplyTotal} overdue={arKpi.overdue} clientCount={arKpi.clientCount} avgDays={arKpi.avgDays}
             aging={arKpi.aging} trend={arKpi.trend} months={arKpi.months} bucket={arBucket} setBucket={setArBucket} />
 
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_440px] gap-3 items-start">
+          {/* 🖥 2026-11-14 왼쪽 목록 : 오른쪽 상세 = 반반(예전엔 오른쪽이 440px 로 좁아 이력이 잘 안 보였다) · 오른쪽은 화면에 붙어 따라온다 */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
             <div className={`${csCard} overflow-hidden min-w-0`}>
               <div className="flex items-center gap-2 px-4 py-3 border-b border-[#E3E8F0] flex-wrap">
                 <div className="inline-flex p-1 rounded-xl bg-[#F4F6FA] border border-[#E3E8F0]">
@@ -56129,16 +56134,25 @@ const handleBatchSettle = async (targetStatus) => {
         </div>
       )}
 
-      {/* ══════════════ 보낸메일함 탭 ══════════════ */}
+      {/* ══════════════ 메일함 탭(📥 2026-11-14 보낸메일함 → 메일함: 보낸메일 · 받은메일 · 발송 실패) ══════════════ */}
       {tab === "sentmails" && (
         <div>
+          <div className="flex items-center gap-1.5 mb-3 flex-wrap" data-mail-folders>
+            {[["sent", "보낸메일", emailLogs.length], ["inbox", "받은메일", null], ["failed", "발송 실패", emailLogs.filter(l => l.status === "failed").length]].map(([k, l, c]) => (
+              <button key={k} type="button" onClick={() => { setMailFolder(k); setSelectedMails(new Set()); }}
+                className={`h-10 px-4 rounded-xl text-[14px] font-black inline-flex items-center gap-1.5 border transition ${mailFolder === k ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#D5DDEA] hover:border-[#1B2B4B]"}`}>
+                {l}{c != null && <span className={`text-[12px] tabular-nums ${mailFolder === k ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`}>{c}</span>}
+              </button>
+            ))}
+          </div>
+          {mailFolder === "inbox" ? <React.Suspense fallback={<div className="py-16 text-center text-[13.5px] text-[#7A89A3]">불러오는 중…</div>}><CompanyInboxLazy company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim()} /></React.Suspense> : (<div>
           {/* 상단 툴바 */}
           <div className="bg-white rounded-xl border border-[#E3E8F0] shadow-sm p-4 mb-4">
             <div className="flex flex-wrap items-center gap-3">
               {/* 제목 + 통계 */}
               <div className="flex items-center gap-3 mr-auto">
                 <div>
-                  <div className="text-[15px] font-extrabold text-[#1B2B4B]">보낸메일함</div>
+                  <div className="text-[15px] font-extrabold text-[#1B2B4B]">{mailFolder === "failed" ? "발송 실패" : "보낸메일"}</div>
                   <div className="text-[11px] text-[#7A89A3] mt-0.5">총 {emailLogs.length}건 · 성공 {emailLogs.filter(l=>l.status==="success").length}건 · 실패 {emailLogs.filter(l=>l.status==="failed").length}건</div>
                 </div>
                 {/* 유형별 카운트 배지 */}
@@ -56352,6 +56366,7 @@ const handleBatchSettle = async (targetStatus) => {
               )}
             </div>
           </div>
+          </div>)}
         </div>
       )}
     </div>
@@ -63625,7 +63640,7 @@ function AccountingWorkspace({ company, fixedRows = [], clients = [], drivers = 
     return () => { if (typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(id); else clearTimeout(id); };
   }, [payAcc.canView, company]);
   return (
-    <KpSubNav code="ACCOUNTING" title="회계관리" icon="money" active={tab} onSelect={setTab}
+    <KpSubNav code="ACCOUNTING" title="회계관리" icon="money" active={tab} onSelect={setTab} actions={[{ key: "manual", label: "회계 매뉴얼", icon: "doc", onClick: () => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu: "회계관리", section: tab } })) }, { key: "glossary", label: "회계용어", icon: "doc", onClick: () => window.dispatchEvent(new CustomEvent("kp-open-glossary")) }]}
       items={[{ key: "overview", label: "회계 개요", en: "OVERVIEW", icon: "chart" }, { key: "book", label: "회계 장부", en: "LEDGER", icon: "sheet" }, ...(payAcc.canView ? [{ key: "payroll", label: "급여 계산", en: "PAYROLL", icon: "money" }] : []), { key: "retire", label: "퇴직 정산", en: "RETIREMENT", icon: "user" }]}>
       {tab === "payroll" && payAcc.canView && <React.Suspense fallback={<div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">급여 화면 불러오는 중…</div>}><PayrollCenterLazy company={company} role={role} /></React.Suspense>}
       {tab === "overview" && <AccountingOverview company={company} orders={yearRows} drivers={drivers} />}
