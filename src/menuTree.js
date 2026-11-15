@@ -8,6 +8,7 @@ export const APPROVAL_MENU = [
   { key: "expense", label: "비용·지출 결의", en: "EXPENSE", icon: "wallet" },
   { key: "draft", label: "업무 기안·품의", en: "PROPOSAL", icon: "file" },
   { key: "report", label: "업무 보고·인사", en: "REPORT", icon: "list" },
+  { key: "teamreport", label: "팀 실적 보고서", en: "TEAM REPORT", icon: "chart" }, // 📑 2026-11-15 대표에게 내는 팀 실적(그래프 · PDF · PPT · 전자결재) — src/TeamReport.jsx
   { key: "contract", label: "계약서", en: "CONTRACT", icon: "pen" },
   { key: "handover", label: "인수인계", en: "HANDOVER", icon: "link" },
   { key: "mine", label: "내 기안함", en: "MY DOCUMENTS", icon: "send" },

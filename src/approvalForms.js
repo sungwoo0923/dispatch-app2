@@ -371,6 +371,15 @@ export const APPROVAL_FORMS = [
       { k: "plan", label: "다음 주 업무 계획", type: "textarea", rows: 4, tpl: "■ 할 일\n· \n· \n\n■ 확인 · 협의할 일\n· " },
     ],
     summary: (d) => `${d.date || ""} 업무일지` },
+  // 📑 2026-11-15 팀 실적 보고서 — 전자결재 › 팀 실적 보고서 화면에서 [전자결재로 올리기]를 누르면 숫자 요약 · 작성자 의견이 채워지고 그래프 보고서(PDF · PPT)가 첨부된다
+  { key: "teamreport", cat: "report", label: "팀 실적 보고서", title: "팀 실 적 보 고 서", code: "RK",
+    fields: [
+      { k: "team", label: "팀", type: "text", required: true, half: true },
+      { k: "periodLabel", label: "기간", type: "text", required: true, half: true },
+      { k: "body", label: "실적 요약", type: "textarea", rows: 12, required: true },
+      { k: "opinion", label: "작성자 의견", type: "textarea", rows: 8 },
+    ],
+    summary: (d) => `${d.team || ""} ${d.periodLabel || ""} 실적 보고` },
   { key: "workreport", cat: "report", label: "업무 보고서", title: "업 무 보 고 서", code: "RW",
     fields: [
       { k: "period", label: "보고 기간", type: "select", options: ["주간", "월간", "분기", "수시"], def: "주간", half: true, direct: true },

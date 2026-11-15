@@ -1546,6 +1546,7 @@ async function fitApprovalImages(images, limit = 700000) {
 }
 // 📝 2026-11-15 이어 쓰는 임시저장 문서도 작성일(업무일 · 날짜 · 시행일)은 오늘로(지난 날 저장한 날짜가 남지 않게 · 바꿀 수 있다)
 const refreshDates = (form, d) => { const n = { ...(d || {}) }; (form.fields || []).forEach((f) => { if (f.type === "date" && ["date", "workDate", "effective"].includes(f.k) && n[f.k] && n[f.k] < todayYmd()) n[f.k] = todayYmd(); }); return n; };
+const TeamReportLazy = React.lazy(() => import("./TeamReport")); // 📑 2026-11-15 팀 실적 보고서(전자결재 › 팀 실적 보고서)
 function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myDocs = [], canHr = false }) {
   const apSettings = useApprovalSettings(company);
   const editId = preset?.editId || null;
@@ -1564,7 +1565,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
   const [cc, setCc] = React.useState(init?.cc || []);
   const [images, setImages] = React.useState(init?.images || []);
   // 📎 2026-11-08 첨부 파일(Storage) — 새 문서는 문서 id를 미리 정해 그 폴더(approvals/{회사}/{id}/)에 올린다(임시저장에도 id를 같이 남김)
-  const [docId] = React.useState(() => editId || (draft?.docId && draft.formKey ? draft.docId : doc(collection(db, "approvals")).id));
+  const [docId] = React.useState(() => editId || preset?.docId || (draft?.docId && draft.formKey ? draft.docId : doc(collection(db, "approvals")).id)); // 📑 2026-11-15 다른 화면이 첨부를 미리 올린 문서 번호(preset.docId — 팀 실적 보고서)
   const [files, setFiles] = React.useState(() => (Array.isArray(init?.files) ? init.files.filter((f) => f?.path) : []));
   const savedPaths = React.useRef(new Set(editId ? (preset?.files || []).map((f) => f.path) : []));
   const [removed, setRemoved] = React.useState([]); // 수정 중 뺀 저장된 파일 — [수정 저장] 뒤에 지운다
@@ -2758,6 +2759,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
         </div>
       ) : <>{page === "inbox" && inboxList}{page === "mine" && mineList}</>}
       {page === "lines" && <LinesPage company={company} me={meFull} staff={staff} />}
+      {page === "teamreport" && <React.Suspense fallback={<div className="py-16 text-center text-[14px] font-bold text-[#7A879C]">보고서 화면을 여는 중…</div>}><TeamReportLazy company={company} me={meFull} /></React.Suspense>}
       {signOpen && <SignatureModal me={meFull} onClose={() => setSignOpen(false)} />}
 
       {cur && !(wide && (page === "inbox" || page === "mine")) && <Viewer canHr={canHr} d={cur} me={meFull} staff={staff} company={company} onClose={() => setOpen(null)} onRedraft={redraft} onEdit={edit} />}
