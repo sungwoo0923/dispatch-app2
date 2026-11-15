@@ -37,7 +37,7 @@ import { isExecProfile, isExecPosition, useHrOptions } from "./hrConstants";
 import { isHrStaffUser } from "./hrHandover";
 import { useLeaveGuard, draftStore, confirmLeave } from "./leaveGuard";
 import {
-  APPROVAL_CATS, APPROVAL_FORMS, formOf, formsOfCat, initialData, missingFields, fieldText, suggestLine,
+  APPROVAL_CATS, APPROVAL_FORMS, formOf, formsOfCat, initialData, todayYmd, missingFields, fieldText, suggestLine,
   itemsTotal, costsTotal, fmtWon, dayDiff, bizDays, leaveEntitlement, leaveUseOf,
   blankSpendRow, spendRowTotal, spendLinesOf, spendTotals, wonKorean, rowsOf, ACCOUNTS,
 } from "./approvalForms";
@@ -1218,10 +1218,11 @@ function FieldInput({ f, value, onChange, staff, meUid, ctx }) {
   if (f.type === "timerange") {
     const v = value || {};
     return (
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <TimeSelect value={v.start || ""} onChange={(x) => onChange({ ...v, start: x })} emptyLabel="시작" minuteStep={10} />
-        <span className="text-[#5B6B85] font-black">~</span>
-        <TimeSelect value={v.end || ""} onChange={(x) => onChange({ ...v, end: x })} emptyLabel="종료" minuteStep={10} />
+      // 🛠 2026-11-15 한 줄로(예전엔 오전 · 9시 · 00분이 줄바꿈되어 칸을 많이 먹었다) — 아주 좁은 화면만 옆으로 밀어 본다
+      <div className="flex items-center gap-1.5 flex-nowrap overflow-x-auto">
+        <TimeSelect compact value={v.start || ""} onChange={(x) => onChange({ ...v, start: x })} emptyLabel="시작" minuteStep={10} />
+        <span className="text-[#5B6B85] font-black shrink-0">~</span>
+        <TimeSelect compact value={v.end || ""} onChange={(x) => onChange({ ...v, end: x })} emptyLabel="종료" minuteStep={10} />
       </div>
     );
   }
@@ -1577,6 +1578,8 @@ async function fitApprovalImages(images, limit = 700000) {
   if (imgs.join("").length > limit) throw new Error("첨부 이미지가 너무 큽니다. 장수를 줄여 주세요.");
   return imgs;
 }
+// 📝 2026-11-15 이어 쓰는 임시저장 문서도 작성일(업무일 · 날짜 · 시행일)은 오늘로(지난 날 저장한 날짜가 남지 않게 · 바꿀 수 있다)
+const refreshDates = (form, d) => { const n = { ...(d || {}) }; (form.fields || []).forEach((f) => { if (f.type === "date" && ["date", "workDate", "effective"].includes(f.k) && n[f.k] && n[f.k] < todayYmd()) n[f.k] = todayYmd(); }); return n; };
 function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myDocs = [], canHr = false }) {
   const apSettings = useApprovalSettings(company);
   const editId = preset?.editId || null;
@@ -1589,7 +1592,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
   const init = draft && formOf(draft.formKey)?.cat === cat ? draft : preset;
   const [formKey, setFormKey] = React.useState(inForms(init?.form) ? init.form : inForms(init?.formKey) ? init.formKey : forms[0].key);
   const form = formOf(formKey);
-  const [data, setData] = React.useState(() => { const d0 = init?.data && (init.form === formKey || init.formKey === formKey) ? init.data : initialData(form); return form.normalize ? form.normalize(d0) : d0; }); // ⭐ 2026-11-02 예전 지출결의(지출처 1곳)도 지출 내역 행으로
+  const [data, setData] = React.useState(() => { const d0 = init?.data && (init.form === formKey || init.formKey === formKey) ? (draft && init === draft ? refreshDates(form, init.data) : init.data) : initialData(form, { team: me?.team }); return form.normalize ? form.normalize(d0) : d0; }); // ⭐ 2026-11-02 예전 지출결의(지출처 1곳)도 지출 내역 행으로
   const [title, setTitle] = React.useState(init?.title || "");
   const [line, setLine] = React.useState(init?.line || []);
   const [cc, setCc] = React.useState(init?.cc || []);
@@ -1600,7 +1603,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
   const savedPaths = React.useRef(new Set(editId ? (preset?.files || []).map((f) => f.path) : []));
   const [removed, setRemoved] = React.useState([]); // 수정 중 뺀 저장된 파일 — [수정 저장] 뒤에 지운다
   const [restored, setRestored] = React.useState(!!draft);
-  const dirty = !editId && JSON.stringify({ data, title, images, cc, files }) !== JSON.stringify({ data: initialData(form), title: "", images: [], cc: [], files: [] });
+  const dirty = !editId && JSON.stringify({ data, title, images, cc, files }) !== JSON.stringify({ data: initialData(form, { team: me?.team }), title: "", images: [], cc: [], files: [] });
   useLeaveGuard(dirty, {
     label: form.label,
     onSave: () => { if (!draftStore.set(draftKey, { formKey, data, title, line, cc, images, files, docId })) draftStore.set(draftKey, { formKey, data, title, line, cc, images: [], files, docId }); },
@@ -1624,13 +1627,13 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
     const nf = formOf(k);
     // 📑 사업계획서로(또는 사업계획서에서) 바꾸면 결재선을 그 양식 규칙에 맞게 다시 추천
     if (needsBizLine(nf.key) !== needsBizLine(form.key) && staff && staff.length) setLine(suggestFor(nf, staff, me));
-    setFormKey(k); setData(initialData(nf)); setTitle(""); setMsg(""); setMissing([]);
+    setFormKey(k); setData(initialData(nf, { team: me?.team })); setTitle(""); setMsg(""); setMissing([]);
   };
   // 입력 초기화 — 같은 양식을 처음 상태로(제목·내용·첨부·결재선 추천값). 저장된 문서에는 영향 없음
   const resetAll = async () => {
     if (!await kpConfirm("입력한 내용을 모두 지우고 처음 상태로 되돌릴까요?")) return;
     files.filter((f) => inDocDir(f, company, docId) && !savedPaths.current.has(f.path)).forEach((f) => removeApFile(f).catch(() => {}));
-    setData(initialData(form)); setTitle(""); setImages([]); setFiles([]); setCc([]); setMsg(""); draftStore.del(draftKey); setRestored(false);
+    setData(initialData(form, { team: me?.team })); setTitle(""); setImages([]); setFiles([]); setCc([]); setMsg(""); draftStore.del(draftKey); setRestored(false);
     setLine(staff && staff.length ? suggestFor(form, staff, me) : []);
   };
   const [missing, setMissing] = React.useState([]);
@@ -1738,7 +1741,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
       <div className="mb-3 rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-4 py-2.5 flex items-center gap-3 text-[13.5px] font-bold text-[#1B2B4B]">
         <span className="text-[11px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>DRAFT</span>
         <span className="flex-1 min-w-0 truncate">임시저장한 내용을 불러왔습니다{draft?.savedAt ? ` · ${new Date(draft.savedAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}</span>
-        <button type="button" onClick={() => { draftStore.del(draftKey); setRestored(false); setData(initialData(form)); setTitle(""); setImages([]); setCc([]); }} className="h-8 px-3 rounded-lg border border-[#C9D6EE] bg-white text-[12.5px] font-black text-[#B42318] shrink-0">지우고 새로 쓰기</button>
+        <button type="button" onClick={() => { draftStore.del(draftKey); setRestored(false); setData(initialData(form, { team: me?.team })); setTitle(""); setImages([]); setCc([]); }} className="h-8 px-3 rounded-lg border border-[#C9D6EE] bg-white text-[12.5px] font-black text-[#B42318] shrink-0">지우고 새로 쓰기</button>
       </div>
     )}
     {editId && <div className="mb-3 rounded-xl bg-[#0F1A30] text-white px-4 py-2.5 text-[14px] font-bold">문서 수정 중 · {preset.docNo} — 결재자가 열어보기 전까지만 고칠 수 있습니다. 결재선·참조자는 바꿀 수 없습니다(바꾸려면 회수 후 재기안).</div>}
@@ -2183,6 +2186,8 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
                 const finished = d.status !== "pending" && !(d.status === "approved" && d.cancel?.status === "pending");
                 if (hidden) return <button type="button" onClick={() => updateDoc(doc(db, "approvals", d.id), { hiddenBy: arrayRemove(me.uid) }).catch((e) => window.alert(e.message))} className="h-9 px-3.5 rounded-lg border border-[#0F1A30] text-[13.5px] font-black text-[#0F1A30]">보관함으로 되돌리기</button>;
                 if (!finished || !((d.participants || []).includes(me.uid) || isAdminRole(me.role))) return null;
+                // 💸 2026-11-15 지급 대기인 지출결의는 지급할 사람이 숨기지 못하게(목록에서 빠져 지급을 놓치지 않게) — 지급완료 뒤에는 숨길 수 있다
+                if (payable && pstate === "wait") return <span className="h-9 px-3 inline-flex items-center rounded-lg bg-[#F5F8FD] text-[12.5px] font-bold text-[#7A879C]" title="지급 완료 처리 뒤 삭제할 수 있어요">지급 대기 중 · 삭제 불가</span>;
                 return <button type="button" onClick={async () => { if (!await kpConfirm("내 보관함에서 이 문서를 삭제할까요?\n(회사 기록 원본은 남고, 결재함 › 삭제한 문서에서 되돌릴 수 있습니다)")) return; await updateDoc(doc(db, "approvals", d.id), { hiddenBy: arrayUnion(me.uid) }).catch((e) => window.alert(e.message)); onClose(); }} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#5B6B85]">삭제</button>;
               })()}
               <button type="button" onClick={print} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#3A4A66]">인쇄</button>

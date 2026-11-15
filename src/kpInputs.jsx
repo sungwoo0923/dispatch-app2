@@ -11,7 +11,7 @@ import { arrowFocus } from "./useListKeys";
 const pad = (n) => String(n).padStart(2, "0");
 export const korTimeLabel = (hm, empty = "즉시") => { if (!hm) return empty; const [h, m] = hm.split(":").map(Number); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${pad(m)}`; };
 
-export function TimeSelect({ value = "", onChange, emptyLabel = "즉시", className = "", minuteStep = 10 }) {
+export function TimeSelect({ value = "", onChange, emptyLabel = "즉시", className = "", minuteStep = 10, compact = false }) {
   const [h, m] = value ? value.split(":").map(Number) : [null, null];
   const ap = h == null ? "" : h < 12 ? "오전" : "오후";
   const h12 = h == null ? "" : String(h % 12 || 12);
@@ -23,17 +23,18 @@ export function TimeSelect({ value = "", onChange, emptyLabel = "즉시", classN
   const box = `h-10 px-2.5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#0F1A30] ${className}`;
   const mins = Array.from({ length: Math.ceil(60 / minuteStep) }, (_, i) => i * minuteStep);
   return (
-    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-      <CustomSelect value={ap} onChange={(e) => set(e.target.value, h12 || "9", m ?? 0)} className={`${box} w-[92px]`}>
+    // 🛠 2026-11-15 compact — 칸을 줄여 한 줄로(전자결재 근무 시간처럼 시작 ~ 종료 두 개를 나란히 둘 때)
+    <div className={`flex items-center gap-1.5 min-w-0 ${compact ? "flex-nowrap" : "flex-wrap"}`}>
+      <CustomSelect value={ap} onChange={(e) => set(e.target.value, h12 || "9", m ?? 0)} className={`${box} ${compact ? "w-[74px] !px-2" : "w-[92px]"}`}>
         <option value="">{emptyLabel}</option>
         <option value="오전">오전</option>
         <option value="오후">오후</option>
       </CustomSelect>
       {ap && <>
-        <CustomSelect value={h12} onChange={(e) => set(ap, e.target.value, m ?? 0)} className={`${box} w-[76px]`}>
+        <CustomSelect value={h12} onChange={(e) => set(ap, e.target.value, m ?? 0)} className={`${box} ${compact ? "w-[66px] !px-2" : "w-[76px]"}`}>
           {Array.from({ length: 12 }, (_, i) => String(i + 1)).map((x) => <option key={x} value={x}>{x}시</option>)}
         </CustomSelect>
-        <CustomSelect value={String(m ?? 0)} onChange={(e) => set(ap, h12, e.target.value)} className={`${box} w-[76px]`}>
+        <CustomSelect value={String(m ?? 0)} onChange={(e) => set(ap, h12, e.target.value)} className={`${box} ${compact ? "w-[68px] !px-2" : "w-[76px]"}`}>
           {(mins.includes(m ?? 0) ? mins : [...mins, m].sort((a, b) => a - b)).map((x) => <option key={x} value={String(x)}>{pad(x)}분</option>)}
         </CustomSelect>
       </>}
