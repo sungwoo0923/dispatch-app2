@@ -77,7 +77,7 @@ export function BookCard({ en, title, right, children, flush = false }) {
 export const Chip = ({ on, children, onClick }) => (
   <button type="button" onClick={onClick} className={`h-9 px-3.5 rounded-full text-[13px] font-black border whitespace-nowrap shrink-0 ${on ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>{children}</button>
 );
-const Label = ({ children }) => <div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5 whitespace-nowrap">{children}</div>;
+const Label = ({ children }) => <div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5 break-keep">{children}</div>;
 export function Sheet({ title, en, onClose, children, footer, side = false }) {
   // ⭐ 2026-10-31 side — 등록·수정 창을 화면 오른쪽 넓은 사이드 패널로(팝업보다 크게 잘 보이게)
   if (side) return (
@@ -468,7 +468,7 @@ export function CashBook({ company, isViewer = false }) {
               );
             })()}
           </div>
-          <div><Label>통장 · 카드 · 현금 <span className="font-semibold text-[#9AA9C3]">(고르면 자금 현황 잔액이 그만큼 {edit.type === "지출" ? "줄어듭니다" : "늘어납니다"})</span></Label>
+          <div><Label>통장 · 카드 · 현금 <span className="block md:inline font-semibold text-[#9AA9C3]">(고르면 자금 현황 잔액이 그만큼 {edit.type === "지출" ? "줄어듭니다" : "늘어납니다"})</span></Label>
             {fundOpts.length === 0 ? (
               <div className="rounded-xl border border-dashed border-[#C9D2E0] bg-white px-3 py-3 text-[12.5px] font-bold text-[#7A879C]">등록된 통장·카드가 없습니다 — 자금관리 › 자금 현황에서 먼저 등록해 주세요</div>
             ) : (

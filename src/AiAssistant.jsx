@@ -399,7 +399,7 @@ function ScheduleCard({ msg, onSave, onCancel }) {
 // 📱 2026-11-11 모바일 AI 비서 버튼 — 손가락으로 끌어 옮길 수 있다(밑에 깔린 버튼을 누를 수 있게). 놓은 자리는 이 기기에 기억.
 //  살짝 누르면 열기, 6px 넘게 움직이면 옮기기. 화면 확대(#root zoom)와 상관없이 손가락 위치 그대로 따라오게 body에 직접 그린다.
 const AI_FAB_KEY = "kpAiFabPos";
-const AI_FAB = 56;
+const AI_FAB = 48; // 📱 2026-11-15 56 → 48(화면 내용을 덜 가리게)
 function MobileAiFab({ onOpen, children }) {
   const clamp = (p) => {
     const w = window.innerWidth; const h = window.innerHeight;
@@ -410,6 +410,14 @@ function MobileAiFab({ onOpen, children }) {
     return null; // 처음엔 오른쪽 아래(예전 자리)
   });
   const [drag, setDrag] = useState(false);
+  // 📱 2026-11-15 스크롤하는 동안은 옆으로 비켜 있다가(내용 · 버튼을 가리지 않게) 멈추면 0.9초 뒤 다시 나온다
+  const [away, setAway] = useState(false);
+  useEffect(() => {
+    let t = null;
+    const on = () => { setAway(true); clearTimeout(t); t = setTimeout(() => setAway(false), 900); };
+    window.addEventListener("scroll", on, { capture: true, passive: true });
+    return () => { window.removeEventListener("scroll", on, { capture: true }); clearTimeout(t); };
+  }, []);
   const st = useRef(null);
   useEffect(() => {
     const on = () => setPos((p) => (p ? clamp(p) : p));
@@ -441,8 +449,8 @@ function MobileAiFab({ onOpen, children }) {
       onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={() => { st.current = null; setDrag(false); }}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } }}
       style={{ position: "fixed", ...place, width: AI_FAB, height: AI_FAB, borderRadius: 18, border: "none", zIndex: 9990, color: "#fff", touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none",
-        background: "linear-gradient(145deg,#0B1428,#1B2B4B 55%,#2D4C82)", boxShadow: drag ? "0 16px 34px rgba(15,26,48,0.5)" : "0 10px 24px rgba(15,26,48,0.35)", transform: drag ? "scale(1.08)" : "none", opacity: drag ? 0.92 : 1,
-        transition: drag ? "none" : "transform .15s, box-shadow .15s", display: "flex", alignItems: "center", justifyContent: "center" }}>{children}</button>,
+        background: "linear-gradient(145deg,#0B1428,#1B2B4B 55%,#2D4C82)", boxShadow: drag ? "0 16px 34px rgba(15,26,48,0.5)" : "0 10px 24px rgba(15,26,48,0.35)", transform: drag ? "scale(1.08)" : away ? `translateX(${(pos ? window.innerWidth - pos.x : 24) + 8}px)` : "none", opacity: drag ? 0.92 : away ? 0 : 1, pointerEvents: away ? "none" : "auto",
+        transition: drag ? "none" : "transform .22s ease, opacity .22s ease, box-shadow .15s", display: "flex", alignItems: "center", justifyContent: "center" }}>{children}</button>,
     document.body);
 }
 

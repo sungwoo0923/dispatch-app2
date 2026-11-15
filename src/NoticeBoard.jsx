@@ -199,7 +199,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
     <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
       <div className="px-3 md:px-4 py-3 border-b border-[#EEF1F6] flex items-center gap-3">
         <div className="relative flex-1 min-w-0 max-w-[360px]">
-          <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="제목·내용·작성자 검색"
+          <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="제목·내용 검색"
             className="w-full h-10 pl-9 pr-3 rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] text-[13.5px] text-[#0F1A30] outline-none focus:border-[#2D4C82]" />
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9AA9C3]" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
         </div>

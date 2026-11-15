@@ -2242,6 +2242,8 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const pickBizM = (k) => { setBizRawM(k); writeBiz(user?.uid, k); setBizHandoffM(false); setShowMenu(false); };
   const bizOverlayM = bizModsAllM.loaded && (bizM !== "inland" || bizHandoffM) ? (bizM !== "inland" ? bizM : "inland") : "";
   const [page, setPage] = useState(deptMode ? "dept" : "list");
+  // 🧪 개발 전용 — 화면 점검 스크립트가 페이지를 바꿀 수 있게(배포 빌드에는 빠진다)
+  if (import.meta.env.DEV) { try { window.__kpSetPage = setPage; } catch { /* 무시 */ } }
   // 📍 2026-11-13 지금 보는 화면(관리센터 실시간 표시)
   useEffect(() => { installScreenVisibility(); reportScreen(String(page).startsWith("biz:") ? "업무 영역 화면" : mobileScreenLabel(page), "mobile"); }, [page]);
   useUiScreen(page, deptMode); // ⭐ 2026-11-07 화면 편집 — 지금 화면("이 화면만")·부서(역할별 보이기)
@@ -2296,6 +2298,9 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
       const y = unassignedScrollYRef.current;
       requestAnimationFrame(() => { window.scrollTo(0, y); });
     }
+    // 📱 2026-11-15 다른 메뉴로 옮기면 맨 위부터 — 왼쪽 메뉴 · 부서 홈 바로가기로 옮길 때 앞 화면의 스크롤 위치가 남아 새 화면이 중간부터(머리가 안 보이게) 열렸다
+    const restoring = (page === "list" && listScrollYRef.current > 0) || (page === "unassigned" && unassignedScrollYRef.current > 0);
+    if (!restoring) { window.scrollTo(0, 0); document.querySelectorAll(".kp-m-scroll-reset, .flex-1.overflow-y-auto.pb-24").forEach((el) => { el.scrollTop = 0; }); }
   }, [page]);
   // localStorage 용량 초과 방지: 오래된 첨부파일 캐시 정리
   // (예전엔 화면이 다시 그려질 때마다 실행돼 저장소 전체를 훑었다 — 앱 시작 시 1번만)
