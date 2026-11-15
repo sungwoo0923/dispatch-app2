@@ -24,6 +24,7 @@ import { usePayrollAccess } from "./payrollAccess"; // ⭐ 2026-11-06 연차 사
 // ⭐ 2026-11-07 급여 대장은 인사관리부에서 뺐다 — 급여는 돈을 내보내는 경리 업무(회계관리 › 급여 계산 · 비밀번호 잠금)라
 //  인사는 근태·연차까지만 본다. 연차 사용 촉진은 연차 관리 안의 탭(LeaveArea)으로 합쳤다
 import LeaveArea from "./LeaveArea";
+import { HrFleetPanel, HR_FLEET_KINDS } from "./HrFleet"; // 🚛 2026-11-15 지입관리(전체 · 지입 · 직영 · 임대)
 import { kpConfirm } from "./kpDialog";
 
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -622,7 +623,7 @@ const REC_VIEWS = [
   { view: "인사발령 이력", label: "인사발령 이력", en: "HISTORY", icon: "history" },
 ];
 const REC_FIRST = `rec:${REC_VIEWS[0].view}`;
-export default function HrHub({ company, canManage, renderRecord, renderAttendance, me = {}, role = "" }) {
+export default function HrHub({ company, canManage, renderRecord, renderAttendance, me = {}, role = "", drivers = [] }) {
   // 예전 키 leavepromo(연차 사용 촉진) · payroll(급여 대장)은 연차 관리로
   const hrKey = (v) => { if (v === "leavepromo") { try { sessionStorage.setItem("kpLeaveTab", "promo"); } catch { /* 무시 */ } return "leave"; } return !v || v === "record" || v === "payroll" ? REC_FIRST : v; };
   const [tab, setTabRaw] = React.useState(() => { try { const v = sessionStorage.getItem("kpHrTab"); sessionStorage.removeItem("kpHrTab"); return hrKey(v); } catch { return REC_FIRST; } });
@@ -648,6 +649,9 @@ export default function HrHub({ company, canManage, renderRecord, renderAttendan
           { key: "record", label: "인사관리", en: "PERSONNEL", icon: "idcard", badge: newResumes, badgeTitle: "새로 제출된 이력서",
             // ⭐ 2026-11-01 직원 정보·퇴사 → "직원관리"로 이름을 바꿔 인사관리 안 맨 앞에
             children: [{ key: "edit", label: "직원관리", en: "STAFF", icon: "users" }, ...REC_VIEWS.filter((x) => !x.manage || canManage).map((x) => ({ key: `rec:${x.view}`, label: x.label, en: x.en, icon: x.icon }))] },
+          // 🚛 2026-11-15 지입관리 — 직원관리 아래. 우리 회사 소속 기사(지입 · 직영 · 임대)만, 속메뉴로 구분을 고른다(일반 용차는 인사가 볼 필요 없음)
+          { key: "fleet", label: "지입관리", en: "FLEET", icon: "truck",
+            children: HR_FLEET_KINDS.map((k) => ({ key: `fleet:${k}`, label: k, en: k === "전체" ? "ALL" : k, icon: k === "전체" ? "list" : "truck" })) },
           { key: "register", label: "직원 등록", en: "REGISTER", icon: "user" },
         ] },
         { label: "근태", items: [
@@ -661,6 +665,8 @@ export default function HrHub({ company, canManage, renderRecord, renderAttendan
         ] },
       ]}>
       {recView && (() => { const el = renderRecord?.(focusUid, recView); return React.isValidElement(el) ? React.cloneElement(el, { view: recView }) : el; })()}
+      {tab.startsWith("fleet") && <HrFleetPanel company={company} drivers={drivers} kind={tab.split(":")[1] || "전체"} onKind={(k) => setTab(`fleet:${k}`)} canManage={canManage}
+        onOrder={(d) => { try { sessionStorage.setItem("kpHrDriverFocus", d.id); } catch { /* 무시 */ } setTab("rec:인사발령"); }} />}
       {tab === "register" && <StaffRegister company={company} onDone={(id) => { setFocusUid(id); setTab("record"); }} />}
       {(tab === "edit" || tab === "resign") && <StaffInfoBoard company={company} canManage={canManage} />}
       {tab === "leave" && <LeaveArea company={company} canManage={canManage} promoManage={canManage || payAcc.leaveManager} showPromo={canManage || payAcc.leaveViewer} />}

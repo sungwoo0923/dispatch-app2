@@ -22,6 +22,12 @@ ok("한 줄 해석 — 날짜·톤수·차량·금액·낱말", () => {
   assert.equal(parseQuickLine("3일 가나", T).date, "2026-12-03");
   assert.equal(parseQuickLine("모레 2.5t", T).ton, "2.5톤");
   assert.deepEqual(parseQuickLine("5톤집 가나", T).words, ["5톤집", "가나"]);
+  // 2026-11-15 화물내용 · 차종 줄임말 · 붙여 쓴 톤수+차종 · 상차→하차
+  const q = parseQuickLine("가나 평택→이천 5톤윙 10파레트 혼적", T);
+  assert.equal(q.ton, "5톤"); assert.equal(q.kind, "윙바디"); assert.equal(q.cargo, "10파레트 혼적"); assert.equal(q.from, "평택"); assert.equal(q.to, "이천");
+  assert.equal(parseQuickLine("가나 냉탑 PLT 12", T).cargo, "12파레트");
+  assert.equal(parseQuickLine("가나 냉탑", T).kind, "냉동탑");
+  assert.equal(parseQuickLine("가나 1톤 화물: 기계 2대", T).cargo, "기계 2대");
 });
 ok("지난 노선 찾기 — 낱말이 모두 맞는 노선만, 많이 한 순", () => {
   const routes = buildRoutes(rows, T);

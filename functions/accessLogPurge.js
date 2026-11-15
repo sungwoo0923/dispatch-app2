@@ -1,8 +1,8 @@
 // ======================= functions/accessLogPurge.js =======================
 // 🧹 2026-11-14 접속 이력 7일 보관 — 일주일이 지난 접속 기록은 매일 새벽 자동으로 지운다(PC · 모바일 · 관리센터 모두 같은 기록)
 //  · sessionLogs     로그인 · 로그아웃 기록(관리자메뉴 › 접속이력, 관리센터 › 접속 이력)
-//  · loginSessions   끝난 로그인(active:false)만 — 끝난 지 7일 지난 것. 지금 로그인 중인 기기는 건드리지 않는다
-//                    (문서를 지우면 그 기기가 로그아웃되므로)
+//  · loginSessions   끝난 지 7일 지난 로그인 + 🧹 2026-11-15 7일 넘게 한 번도 쓰지 않은 "로그인 중" 기기
+//                    (창을 닫기만 하고 로그아웃하지 않은 기기가 계속 쌓였다 — 다음에 열면 새 로그인으로 다시 잡힌다)
 //  · securityEvents  새 기기 · 해외 IP · 새벽 접속 같은 보안 알림(관리센터 › 보안 알림)
 //  화면 규칙(7일)은 src/accessLogRetention.js 와 같다.
 const RETENTION_DAYS = 7;
@@ -29,6 +29,8 @@ async function purgeAccessLogs({ db, Timestamp, now = Date.now(), deadline = () 
   const out = {};
   out.sessionLogs = await deleteQuery(db, () => db.collection("sessionLogs").where("at", "<", cut), deadline);
   out.loginSessions = await deleteQuery(db, () => db.collection("loginSessions").where("endedAt", "<", cut), deadline);
+  const idle = await deleteQuery(db, () => db.collection("loginSessions").where("lastSeen", "<", cut), deadline);
+  out.loginSessions = { n: out.loginSessions.n + idle.n, more: out.loginSessions.more || idle.more };
   out.securityEvents = await deleteQuery(db, () => db.collection("securityEvents").where("atMs", "<", cutMs), deadline);
   return out;
 }

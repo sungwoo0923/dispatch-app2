@@ -1,5 +1,5 @@
 // 🤖 2026-11-07 배차 AI 비서(화면 쪽 순수 계산) 단위 테스트 — 실행: node scripts/aiAssistantCore.test.mjs
-import { buildUpdate, buildCreateRecord, normValue, localEditProposal, localAnswer, intentOf, parseKakao, splitPasted, pickerRows, mdBlocks, mdInline, serializeChat, deserializeChat, scanValsToFields, looksLikeOrderText, missingOf } from "../src/aiAssistantCore.js";
+import { buildUpdate, buildCreateRecord, normValue, localEditProposal, localAnswer, intentOf, menuWhere, parseKakao, splitPasted, pickerRows, mdBlocks, mdInline, serializeChat, deserializeChat, scanValsToFields, looksLikeOrderText, missingOf } from "../src/aiAssistantCore.js";
 import { splitOrders, parseOrderScan } from "../src/orderScanParser.js";
 
 let pass = 0, fail = 0;
@@ -56,6 +56,13 @@ eq("오더수정 해야해", intentOf("오더수정 해야해"), "pick_edit");
 eq("오더 수정", intentOf("오더 수정"), "pick_edit");
 eq("수정할게", intentOf("수정할게"), "pick_edit");
 eq("오더 삭제", intentOf("오더 삭제"), "pick_delete");
+// 2026-11-15 메뉴 위치 묻기 — '현황' · '등록'이 들어가도 요약 · 등록 안내로 새지 않는다
+eq("배차현황 어딨어", menuWhere("배차현황은 어딨어?")?.menu, "배차현황");
+eq("배차현황 메뉴 어디", menuWhere("배차현황 메뉴가 어디있냐구")?.menu, "배차현황");
+eq("오더등록 메뉴 어딨어", menuWhere("오더등록 메뉴 어딨어")?.menu, "배차관리");
+eq("미배차는 어디서", /미배차현황/.test(menuWhere("미배차는 어디서 봐?")?.path || ""), true);
+eq("위치 질문 아니면 null", menuWhere("오늘 미배차 몇 건?"), null);
+eq("'현황' 들어간 질문은 요약 아님", localAnswer("배차현황은 어딨어?", { dispatches: [], clients: [] }), null);
 eq("구체적 수정은 바로 AI로", intentOf("삼진 오더 운임 수정해줘 25만"), null);
 
 // 기본 답변

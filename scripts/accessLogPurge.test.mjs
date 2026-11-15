@@ -24,7 +24,7 @@ const db = {
 };
 const r = await purgeAccessLogs({ db, Timestamp, now });
 ok("7일 지난 접속기록 삭제", store.sessionLogs.map((d) => d.id).join() === "b" && r.sessionLogs.n === 1);
-ok("끝난 지 7일 지난 로그인만 삭제 · 로그인 중 기기는 그대로", store.loginSessions.map((d) => d.id).join() === "d,e");
+ok("끝난 지 7일 지난 로그인 · 7일 넘게 안 쓴 로그인 삭제, 최근 것은 그대로", store.loginSessions.map((d) => d.id).join() === "e");
 ok("7일 지난 보안 알림 삭제", store.securityEvents.map((d) => d.id).join() === "g");
 ok("화면: 6일 전은 보임", withinAccessLogWindow(ts(Date.now() - 6 * DAY)));
 ok("화면: 8일 전은 숨김", !withinAccessLogWindow(ts(Date.now() - 8 * DAY)));

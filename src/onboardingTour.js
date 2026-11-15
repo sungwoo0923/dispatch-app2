@@ -1,38 +1,8 @@
 // ======================= src/onboardingTour.js =======================
-// 🧭 2026-11-10 첫 방문 안내(메뉴별 말풍선) · [?] 도움말 — 설정 표(이 파일 한 곳)
-//  · 보이는 기간: TOUR_WINDOWS(회사 이름별 임시 기간) → 없으면 회사 승인 후 24시간(companySettings/{회사}.onboarding.approvedAt)
-//  · 단계: MENU_TOURS[메뉴] = [{ tour, find, title, text }]
-//      tour: data-tour="키" 요소를 먼저 찾고, 없으면 find(버튼 글자)가 들어간 보이는 버튼을 찾는다. 둘 다 없으면 그 단계는 건너뜀.
-//      tour·find 둘 다 없는 단계 = 화면 가운데 안내(메뉴 소개).
-//  · [?] 도움말: HELP_TEXT[키] — 기간 안에는 data-tour 요소 오른쪽 위에 작은 ?가 붙는다(누르면 한 줄 설명).
-//  · 본 기록: localStorage kpTourSeen:{uid}:{메뉴} (사용자·메뉴별 1회, 기기마다)
+//  MENU_TOURS[메뉴] = [{ tour, find, title, text }] — 빠른 메뉴 찾기(QuickNav)에 보이는 메뉴별 사용법 글
 //  ⚠ node 테스트에서도 읽을 수 있게 다른 파일을 가져오지 않는다.
+// 🧹 2026-11-15 메뉴 첫 방문 말풍선(GUIDE 팝업) · [?] 도움말은 모두 뺐다(사용자 요청). 이 파일은 빠른 메뉴 찾기(QuickNav)의 메뉴 설명 글로만 쓴다.
 
-// ⭐ 2026-11-11 사용자 요청 — "이제부터 신규로 가입하는 운송사만, 1번만"
-//  · 테스트운송사 · 큐런네트웍스 등 예전 임시 기간은 모두 뺐다(TOUR_WINDOWS 비움 → 안내 · [사용법 다시 보기] 버튼 모두 안 보임)
-//  · NEW_SINCE 이후에 승인된 운송사만 안내가 켜진다(승인 뒤 ACTIVE_DAYS일 동안 [사용법 다시 보기] 버튼이 보인다)
-//  · 메뉴마다 사용자별 딱 1번 자동으로 뜨고, 본 기록은 서버(userProfiles/{uid}.tourSeen)에도 남겨 다른 PC · 휴대폰에서도 다시 안 뜬다
-//    (그다음부터는 [사용법 다시 보기]를 눌렀을 때만)
-export const TOUR_WINDOWS = {};
-export const NEW_SINCE = Date.parse("2026-11-12T00:00:00+09:00"); // 이 시각 이후 승인된 운송사 = 신규
-export const ACTIVE_DAYS = 14;
-export const AUTO_HOURS = ACTIVE_DAYS * 24; // (예전 이름 호환)
-
-export const kstYmd = (ms = Date.now()) => new Date(ms + 9 * 3600e3).toISOString().slice(0, 10);
-
-// 지금 안내를 보여 줄지 — company: 회사 이름, approvedMs: 회사 승인 시각(ms, 모르면 0)
-export function tourActive(company, approvedMs = 0, now = Date.now()) {
-  const co = String(company || "").trim();
-  if (!co) return false;
-  const w = TOUR_WINDOWS[co];
-  if (w) { const d = kstYmd(now); return d >= w.from && d <= w.to; }
-  if (!approvedMs || approvedMs < NEW_SINCE) return false; // 예전부터 쓰던 운송사(테스트운송사 포함)는 안 띄운다
-  return now >= approvedMs && now - approvedMs < ACTIVE_DAYS * 86400e3;
-}
-
-export const seenKey = (uid, menu) => `kpTourSeen:${uid || "anon"}:${menu}`;
-
-// 메뉴별 단계(PC·모바일 공용 — 모바일은 화면에 있는 것만 보인다)
 export const MENU_TOURS = {
   HOME: [
     { title: "LogisWeb에 오신 걸 환영합니다", text: "처음 들어가는 메뉴마다 핵심 버튼을 2~3개씩 짚어 드려요. 필요 없으면 아래 [다시 보지 않기]를 누르면 다른 메뉴에서도 더 안 떠요." },
@@ -87,9 +57,3 @@ export const MENU_TOURS = {
 };
 
 // [?] 도움말 — data-tour 키별 한 줄 설명
-export const HELP_TEXT = {
-  "nav-menu": "메뉴를 눌러 화면을 바꿔요. 자물쇠가 있는 메뉴는 요금제에 없는 기능이에요.",
-  "order-client": "거래처명을 입력하면 등록된 거래처가 목록으로 떠요.",
-  "order-save": "입력한 오더를 저장해요. 저장 후 기사를 고르면 기사앱으로 배차돼요.",
-  "special-fare": "지게차·대기료·할증 같은 특별 비용을 넣어요.",
-};

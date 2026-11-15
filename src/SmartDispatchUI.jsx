@@ -99,12 +99,15 @@ export function QuickOrderLine({ rows = [], userCompany = "", canMoney = false, 
     const onKey = (e) => { if (e.altKey && !e.ctrlKey && String(e.key).toLowerCase() === "q") { e.preventDefault(); ref.current?.focus(); } };
     window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey);
   }, []);
+  const extra = { date: parsed.date, ton: parsed.ton, kind: parsed.kind, cargo: parsed.cargo, fare: parsed.fare, from: parsed.from, to: parsed.to };
+  const hasExtra = !!(parsed.date || parsed.ton || parsed.kind || parsed.cargo || parsed.fare || parsed.from || parsed.to);
+  // 지난 노선을 고르면 그 노선 + 적은 값으로, 맞는 노선이 없으면 적은 값(날짜 · 톤수 · 차종 · 화물 · 운임 · 상차→하차)만 채운다
   const apply = (e) => {
-    if (!e) return;
-    onApply?.(e.row, { date: parsed.date, ton: parsed.ton, kind: parsed.kind, fare: parsed.fare });
+    if (!e && !hasExtra) return;
+    onApply?.(e ? e.row : null, extra);
     setText(""); setOpen(false); ref.current?.blur();
   };
-  const chips = [parsed.dateWord && { l: "상차일", v: `${parsed.dateWord} (${md(parsed.date)})` }, parsed.ton && { l: "톤수", v: parsed.ton }, parsed.kind && { l: "차량", v: parsed.kind }, parsed.fare > 0 && canMoney && { l: "청구운임", v: `${parsed.fare.toLocaleString()}원` }].filter(Boolean);
+  const chips = [parsed.dateWord && { l: "상차일", v: `${parsed.dateWord} (${md(parsed.date)})` }, parsed.from && { l: "상차", v: parsed.from }, parsed.to && { l: "하차", v: parsed.to }, parsed.ton && { l: "톤수", v: parsed.ton }, parsed.kind && { l: "차량", v: parsed.kind }, parsed.cargo && { l: "화물", v: parsed.cargo }, parsed.fare > 0 && canMoney && { l: "청구운임", v: `${parsed.fare.toLocaleString()}원` }].filter(Boolean);
   const show = open && text.trim().length > 0;
   return (
     <div data-kp="quick-order" className="relative mb-3">
@@ -121,7 +124,7 @@ export function QuickOrderLine({ rows = [], userCompany = "", canMoney = false, 
             else if (e.key === "Enter") { e.preventDefault(); if (open) apply(list[idx]); else setOpen(true); }
             else if (e.key === "Escape") { e.preventDefault(); if (open && text) setOpen(false); else { setText(""); setOpen(false); ref.current?.blur(); } }
           }}
-          placeholder="예) 내일 대한 평택 5톤   —   거래처·상차지·하차지 이름 일부만 쳐도 지난 노선을 찾아 한 번에 채웁니다"
+          placeholder="예) 내일 대한 평택→이천 5톤윙 10파레트 35만 — 거래처 · 상하차지 · 차종 · 톤수 · 화물 · 운임을 한 줄로"
           style={{ border: 0, boxShadow: "none", outline: "none", background: "transparent" }} className="flex-1 min-w-0 h-full bg-transparent text-[14px] font-semibold text-[#0F1A30] placeholder:text-[#A6B3C8] placeholder:font-medium outline-none" />
         {chips.map((c) => (
           <span key={c.l} className="shrink-0 hidden md:inline-flex items-center gap-1 h-6 px-2 rounded-md border border-[#DCE3EE] text-[11.5px]">
@@ -134,7 +137,8 @@ export function QuickOrderLine({ rows = [], userCompany = "", canMoney = false, 
         <div ref={listRef} className="absolute left-0 right-0 top-[50px] z-40 rounded-xl border border-[#DCE3EE] bg-white shadow-[0_18px_40px_rgba(15,26,48,0.16)] overflow-hidden">
           {list.length === 0 ? (
             <div className="px-4 py-4 text-[13px] text-[#7C8BA5]">
-              {parsed.words.length ? <>지난 오더에서 <b className="text-[#1B2B4B]">{parsed.words.join(" ")}</b> 노선을 찾지 못했습니다. 아래 칸에 직접 입력해 주세요.</> : "거래처나 상·하차지 이름을 함께 적어 주세요."}
+              {parsed.words.length ? <>지난 오더에서 <b className="text-[#1B2B4B]">{parsed.words.join(" ")}</b> 노선을 찾지 못했어요.</> : "거래처나 상·하차지 이름을 함께 적으면 지난 노선을 찾아 줘요."}
+              {hasExtra && <button type="button" onMouseDown={(ev) => ev.preventDefault()} onClick={() => apply(null)} className="ml-2 h-8 px-3 rounded-lg bg-[#1B2B4B] text-white text-[12.5px] font-black">적은 값만 채우기 (Enter)</button>}
             </div>
           ) : (
             <>

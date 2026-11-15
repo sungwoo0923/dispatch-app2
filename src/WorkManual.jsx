@@ -7,6 +7,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { MANUALS } from "./workManuals";
+import { HELP_DETAIL } from "./helpContent";
 import { GLOSSARY, glossaryCount } from "./acctGlossary";
 import { HelpDemo, hasHelpDemo } from "./HelpDemos";
 
@@ -22,8 +23,30 @@ const AbcIcon = ({ size = 16 }) => (
 );
 const btnCls = (dark) => `inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl text-[13.5px] font-black whitespace-nowrap transition ${dark ? "bg-white/12 text-white border border-white/25 hover:bg-white/20" : "bg-white text-[#1B2B4B] border border-[#C9D5EA] hover:bg-[#F5F8FD]"}`;
 
+// 🧭 2026-11-15 모든 메뉴에 매뉴얼 — 따로 쓴 매뉴얼(정산 · 회계 · 자금 · 비품)이 없으면 도움말 센터 글(HELP_DETAIL)로 같은 모양의 매뉴얼을 만든다
+const MENU_TITLE = { HOME: "홈", 배차관리: "오더등록" };
+export const manualName = (menu) => MENU_TITLE[menu] || menu;
+const josa = (w) => { const c = String(w).charCodeAt(String(w).length - 1); return c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 ? "은" : "는"; };
+export function manualFor(menu) {
+  if (MANUALS[menu]) return MANUALS[menu];
+  const H = HELP_DETAIL[menu];
+  if (!H?.length) return null;
+  const name = manualName(menu);
+  const split = (t) => { const i = String(t).indexOf(" — "); return i > 0 ? [t.slice(0, i), t.slice(i + 3)] : [null, t]; };
+  return {
+    title: `${name} 매뉴얼`, updated: "2026-11-15", generated: true,
+    intro: H[0].intro || `${name}에서 하는 일을 순서대로 정리했어요.`,
+    flow: H.slice(0, 6).map((h) => ({ label: h.title.replace(/\s*\(.*\)\s*$/, "").slice(0, 14), desc: (h.intro || "").split(/[.。]/)[0].slice(0, 30) })),
+    sections: H.map((h, i) => {
+      const rows = h.items.map(split);
+      return { id: `s${i}`, tab: h.title, title: h.title, demo: h.demo, what: h.intro || "",
+        steps: rows.filter(([b]) => !b).map(([, d]) => d), buttons: rows.filter(([b]) => b) };
+    }),
+  };
+}
+
 export function ManualButton({ menu, section = "", dark = false, label }) {
-  return <button type="button" data-manual-btn={menu} onClick={() => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu, section } }))} className={btnCls(dark)}><BookIcon />{label || `${menu.replace("관리", "")} 매뉴얼`}</button>;
+  return <button type="button" data-manual-btn={menu} onClick={() => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu, section } }))} className={btnCls(dark)}><BookIcon />{label || `${MANUALS[menu] ? menu.replace("관리", "") : manualName(menu)} 매뉴얼`}</button>;
 }
 export function GlossaryButton({ dark = false }) {
   return <button type="button" data-glossary-btn onClick={() => window.dispatchEvent(new CustomEvent("kp-open-glossary"))} className={btnCls(dark)}><AbcIcon />회계용어</button>;
@@ -66,7 +89,7 @@ const Shell = ({ title, sub, onClose, children, side }) => createPortal(
 
 // ─────────────────────────── 매뉴얼 ───────────────────────────
 export function WorkManualModal({ menu, section = "", onClose }) {
-  const M = MANUALS[menu];
+  const M = manualFor(menu);
   const bodyRef = React.useRef(null);
   const [cur, setCur] = React.useState(section || "intro");
   const go = (id) => { setCur(id); const el = document.getElementById(`wm-${id}`); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); };
@@ -95,7 +118,7 @@ export function WorkManualModal({ menu, section = "", onClose }) {
 
         <section id="wm-intro" className="bg-white rounded-3xl border border-[#E3E8F0] p-5 sm:p-8">
           <div className="text-[14px] font-extrabold tracking-[0.18em] text-[#4B6CB7]">GUIDE</div>
-          <h2 className="mt-1 text-[25px] sm:text-[28px] font-black text-[#0F1A30]">{menu}은 이런 곳이에요</h2>
+          <h2 className="mt-1 text-[25px] sm:text-[28px] font-black text-[#0F1A30]">{manualName(menu)}{josa(manualName(menu))} 이런 곳이에요</h2>
           <p className="mt-3 text-[17.5px] sm:text-[19px] leading-[1.8] text-[#1F2D47]" style={{ textWrap: "pretty" }}>{M.intro}</p>
           <div className="mt-6 text-[17px] font-black text-[#0F1A30]">한눈에 보는 순서</div>
           {/* 단계는 한 줄로 — 넓은 화면은 칸을 나눠 꽉 채우고, 좁으면 옆으로 밀어서 본다(줄바꿈 없음) */}
@@ -119,7 +142,7 @@ export function WorkManualModal({ menu, section = "", onClose }) {
               <span className="w-9 h-9 rounded-full bg-[#0F1A30] text-white text-[16px] font-black grid place-items-center tabular-nums shrink-0">{k + 1}</span>
               <h3 className="text-[23px] sm:text-[26px] font-black text-[#0F1A30] leading-snug">{s.title}</h3>
             </div>
-            <div className="mt-2 text-[15px] font-bold text-[#5B6B85]">왼쪽 메뉴 › <b className="text-[#1B2B4B]">{menu} › {s.tab}</b></div>
+            {!M.generated && <div className="mt-2 text-[15px] font-bold text-[#5B6B85]">왼쪽 메뉴 › <b className="text-[#1B2B4B]">{menu} › {s.tab}</b></div>}
             <p className="mt-3 text-[17.5px] sm:text-[19px] leading-[1.8] text-[#1F2D47]" style={{ textWrap: "pretty" }}>{s.what}</p>
 
             {s.demo && hasHelpDemo(s.demo) && (
@@ -129,7 +152,7 @@ export function WorkManualModal({ menu, section = "", onClose }) {
               </div>
             )}
 
-            <div className="mt-7 text-[19px] font-black text-[#0F1A30]">이렇게 하면 돼요</div>
+            {s.steps.length > 0 && <><div className="mt-7 text-[19px] font-black text-[#0F1A30]">이렇게 하면 돼요</div>
             <ol className="mt-3 space-y-2.5">
               {s.steps.map((t, i) => (
                 <li key={i} className="flex gap-3 items-start">
@@ -137,9 +160,9 @@ export function WorkManualModal({ menu, section = "", onClose }) {
                   <span className="text-[17px] sm:text-[18px] leading-[1.75] text-[#1F2D47]" style={{ textWrap: "pretty" }}>{t}</span>
                 </li>
               ))}
-            </ol>
+            </ol></>}
 
-            <div className="mt-7 text-[19px] font-black text-[#0F1A30]">화면에 있는 버튼, 누르면 이렇게 돼요</div>
+            {s.buttons.length > 0 && <><div className="mt-7 text-[19px] font-black text-[#0F1A30]">화면에 있는 버튼, 누르면 이렇게 돼요</div>
             <div className="mt-3 rounded-2xl border border-[#E3E8F0] overflow-hidden divide-y divide-[#EEF1F6]">
               {s.buttons.map(([b, d]) => (
                 <div key={b} className="flex flex-col sm:flex-row sm:items-start gap-1.5 sm:gap-5 px-5 py-3.5">
@@ -147,7 +170,7 @@ export function WorkManualModal({ menu, section = "", onClose }) {
                   <div className="text-[17px] leading-[1.7] text-[#1F2D47]" style={{ textWrap: "pretty" }}>{d}</div>
                 </div>
               ))}
-            </div>
+            </div></>}
 
             {s.links?.length > 0 && (<>
               <div className="mt-7 text-[19px] font-black text-[#0F1A30]">어디랑 연결되나요?</div>

@@ -5,7 +5,8 @@
 import React from "react";
 import { collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, writeBatch } from "firebase/firestore";
 import { auth, db } from "./firebase";
-import { withinAccessLogWindow } from "./accessLogRetention";
+import { withinAccessLogWindow, deleteAllDocs } from "./accessLogRetention";
+import { kpConfirm } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const TYPE = { new_device: "새 기기 로그인", foreign_ip: "해외 IP 접속", night_login: "새벽 접속", bulk_download: "대량 다운로드", resign_block: "퇴사자 차단", rehire_unblock: "복직 허용" };
@@ -28,6 +29,13 @@ export default function SecurityEventsPanel() {
     const b = writeBatch(db);
     t.forEach((r) => b.update(doc(db, "securityEvents", r.id), { ack: true, ackBy: by, ackAt: serverTimestamp() }));
     await b.commit().catch((e) => window.alert(e.message));
+  };
+  // 🧹 2026-11-15 보안 알림 전체 삭제
+  const [wiping, setWiping] = React.useState(false);
+  const wipe = async () => {
+    if (!(await kpConfirm("보안 알림을 모두 지울까요?\n지운 기록은 되돌릴 수 없어요."))) return;
+    setWiping(true);
+    try { await deleteAllDocs("securityEvents"); } catch (e) { window.alert(e.message); } finally { setWiping(false); }
   };
   const cnt = (lv) => (rows || []).filter((r) => !r.ack && r.level === lv).length;
   const sel = "h-9 px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[13px] font-bold text-[#1B2B4B]";
@@ -54,6 +62,7 @@ export default function SecurityEventsPanel() {
           <label className="inline-flex items-center gap-1.5 text-[13px] font-bold text-[#1B2B4B]"><input type="checkbox" checked={f.unacked} onChange={(e) => setF((p) => ({ ...p, unacked: e.target.checked }))} />확인 안 한 것만</label>
           <input value={f.q} onChange={(e) => setF((p) => ({ ...p, q: e.target.value }))} placeholder="이름·이메일·IP 검색" className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] flex-1 min-w-[160px]" />
           <button type="button" onClick={ackAll} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">보이는 것 모두 확인</button>
+          <button type="button" onClick={wipe} disabled={wiping || !rows?.length} className="h-9 px-3 rounded-lg border border-[#E8B4AE] bg-white text-[12.5px] font-black text-[#B4342A] disabled:opacity-40">{wiping ? "지우는 중…" : "전체 삭제"}</button>
         </div>
         {rows === null ? <div className="py-14 text-center text-[#9AA9C3]">불러오는 중…</div> : list.length === 0 ? <div className="py-14 text-center text-[#9AA9C3]">해당하는 보안 알림이 없습니다.</div> : (
           <div className="overflow-x-auto"><table className="w-full text-[13px]" style={{ minWidth: 980 }}>

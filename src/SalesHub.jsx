@@ -18,6 +18,7 @@ import { CustomSelect } from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker";
 import { kpConfirm, kpAlert } from "./kpDialog";
 import { useSalesBoard, useSalesMe, targetOf } from "./salesData";
+const TeamReport = React.lazy(() => import("./TeamReport")); // 📑 2026-11-15 영업팀 실적 보고서(매출관리와 같은 화면)
 import { ymOf, kstDay, toInt, cName, dayGap, LEAD_STAGES, OPEN_STAGES, stageOf, leadProb, leadWeighted, pipelineSummary, simulateWin, HEALTH, baseLabel, DEFAULT_POLICY, normPolicy, tierAmount } from "./salesCore";
 
 const won = (n) => Math.round(Number(n) || 0).toLocaleString("ko-KR");
@@ -199,7 +200,7 @@ function Pipeline({ B, who, company, isViewer }) {
     try { await updateDoc(doc(db, "salesLeads", l.id), { stage: next, touchedAt: today, updatedAt: serverTimestamp() }); } catch (e) { kpAlert(`옮기지 못했습니다.\n${e?.message || e}`); }
   };
   const win = async () => {
-    if (!(await kpConfirm(`「${edit.name}」을(를) 수주 처리할까요?\n\n· 거래처 담당에 ${edit.ownerName || who.name}님 거래처로 등록됩니다(수주일 오늘).\n· 거래처관리에 같은 이름으로 거래처를 등록하고 오더를 넣으면 실적·인센티브가 자동으로 잡힙니다.`, { title: "수주 처리", okText: "수주 처리" }))) return;
+    if (!(await kpConfirm(`「${edit.name}」을(를) 수주 처리할까요?\n\n· 거래처 담당에 ${edit.ownerName || who.name}님 거래처로 등록됩니다(수주일 오늘).\n· 배차팀이 같은 이름의 거래처로 오더를 넣으면 실적·인센티브가 자동으로 잡힙니다.`, { title: "수주 처리", okText: "수주 처리" }))) return;
     save({ stage: "won", wonAt: today });
   };
   const remove = async () => {
@@ -354,8 +355,7 @@ function Accounts({ B, who, company, isViewer, onGo }) {
   const cnt = (fn) => scope.filter(fn).length;
   return (
     <div className="space-y-4">
-      <BookHero en="SALES · ACCOUNTS" title="거래처 담당" desc="거래처마다 영업 담당자와 수주일을 정합니다 — 수주일 이후 오더가 그 사람의 실적·인센티브로 잡힙니다"
-        right={<button type="button" data-ro-allow onClick={() => onGo?.("거래처관리")} className="h-9 px-3.5 rounded-xl bg-white/10 border border-white/15 text-[13.5px] font-black whitespace-nowrap">거래처관리 열기 ›</button>}
+      <BookHero en="SALES · ACCOUNTS" title={who.canManage ? "거래처 담당" : "내 거래처"} desc="내가 영업해서 데려온 거래처의 매출 · 매출이익 · 상태를 봐요. 수주일 이후 오더가 담당자의 실적 · 인센티브로 잡혀요"
         kpis={[[who.canManage ? "담당 있는 거래처" : "내 거래처", `${cnt((h) => !!h.uid)}곳`, who.canManage ? `담당 없음 ${cnt((h) => !h.uid)}곳` : "수주일 이후 오더만 실적"], ["이번 달 매출", `${short(scope.filter((h) => h.uid).reduce((s, h) => s + h.cur, 0))}원`, "담당 있는 거래처 합계"], ["급감 · 휴면", `${cnt((h) => h.uid && (h.state === "drop" || h.state === "sleep"))}곳`, "최근 30일 −30% · 30일 무오더"], ["지난달 미수", `${cnt((h) => h.uid && h.unpaid)}곳`, "수금되면 인센티브 확정"]]} />
       <BookCard flush>
         <div className="px-3.5 md:px-4 py-3 border-b border-[#EEF1F6] flex items-center gap-2 flex-wrap">
@@ -785,7 +785,8 @@ export default function SalesHub({ company, dispatchData = [], clients = null, i
     <KpSubNav code="SALES" title="영업관리" icon="trend" active={tab} onSelect={setTab}
       groups={[
         { label: "실적", items: [{ key: "overview", label: "영업 현황", en: "OVERVIEW", icon: "pulse" }, { key: "incentive", label: "인센티브", en: "INCENTIVE", icon: "money" }, { key: "ranking", label: "팀 순위", en: "RANKING", icon: "star" }] },
-        { label: "영업", items: [{ key: "pipeline", label: "영업 기회", en: "PIPELINE", icon: "trend", badge: due || undefined, badgeTitle: "오늘·지난 연락 일정" }, { key: "accounts", label: "거래처 담당", en: "ACCOUNTS", icon: "building" }, { key: "activity", label: "영업 활동", en: "ACTIVITY", icon: "clock" }] },
+        { label: "영업", items: [{ key: "pipeline", label: "영업 기회", en: "PIPELINE", icon: "trend", badge: due || undefined, badgeTitle: "오늘·지난 연락 일정" }, { key: "accounts", label: who.canManage ? "거래처 담당" : "내 거래처", en: "ACCOUNTS", icon: "building" }, { key: "activity", label: "영업 활동", en: "ACTIVITY", icon: "clock" }] },
+        { label: "보고", items: [{ key: "teamreport", label: "팀 실적 보고서", en: "TEAM REPORT", icon: "file" }] }, // 📑 2026-11-15 영업팀은 매출관리가 없어 여기서
         { label: "설정", items: [{ key: "policy", label: "목표 · 규정", en: "PLAN", icon: "flag" }] },
       ]}>
       {!B.ready ? <BookSkeleton rows={7} /> : tab === "overview" ? <Overview B={B} who={who} onTab={setTab} />
@@ -794,6 +795,7 @@ export default function SalesHub({ company, dispatchData = [], clients = null, i
             : tab === "activity" ? <Activity B={B} who={who} company={company} isViewer={isViewer} />
               : tab === "incentive" ? <Incentive B={B} who={who} company={company} isViewer={isViewer} />
                 : tab === "ranking" ? <Ranking B={B} who={who} />
+                  : tab === "teamreport" ? <React.Suspense fallback={<BookSkeleton rows={5} />}><TeamReport company={company} me={{ uid: who.uid, name: who.name }} /></React.Suspense>
                   : <Policy B={B} who={who} company={company} isViewer={isViewer} />}
     </KpSubNav>
   );

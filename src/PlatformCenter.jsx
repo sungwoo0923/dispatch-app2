@@ -33,7 +33,7 @@ const BrandStudioLazy = React.lazy(() => import("./BrandStudio")); // 🎨 2026-
 const MobilePreviewPanelLazy = React.lazy(() => import("./MobilePreviewFrame").then((m) => ({ default: m.MobilePreviewPanel }))); // 📱 2026-11-14 관리센터 › 운영 › 모바일 화면
 import ReleasePanel from "./ReleasePanel"; // 🚦 업데이트 배포 잠금
 import { ContractLifecyclePanel, SubAdminPanel } from "./ContractLifecycle"; // ⭐ 2026-11-06 이용 계약 · 부관리자
-import SheetImportPanel from "./SheetImportPanel";
+import SheetConnectHub from "./SheetConnectHub"; // 🧹 2026-11-15 관리자메뉴 › 구글시트 연동을 관리센터로 합침(배차일지 가져오기 포함)
 import NoticeBoard from "./NoticeBoard";
 import { toBoardNotice } from "./PlatformNoticeBanner";
 import { compressImage } from "./InternalMail";
@@ -51,7 +51,7 @@ import "./pcTheme.css";
 import { fmtPhone } from "./formatInput";
 import { LogisMark, LogisWordmark, LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { kpConfirm, kpPrompt } from "./kpDialog";
-import { withinAccessLogWindow, ACCESS_LOG_DAYS } from "./accessLogRetention";
+import { withinAccessLogWindow, ACCESS_LOG_DAYS, deleteAllDocs } from "./accessLogRetention";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const pad = (n) => String(n).padStart(2, "0");
@@ -112,7 +112,7 @@ const SECTIONS = [
     { key: "subAdmin", label: "부관리자", en: "SUB ADMIN", icon: "key" }, // ⭐ 2026-11-06 부관리자 목록 · 지정/해제
   ] },
   { key: "data", label: "데이터", en: "DATA", icon: "sheet", items: [
-    { key: "sheetImport", label: "배차일지 가져오기", en: "IMPORT", icon: "sheet" },
+    { key: "sheetImport", label: "구글시트 연동", en: "SHEETS", icon: "sheet" }, // 🧹 2026-11-15 배차 프로그램 관리자메뉴의 구글시트 연동을 여기로 합침
     { key: "tenancy", label: "운송사 분리", en: "ISOLATION", icon: "shield" },
     { key: "companyReset", label: "운송사 초기화", en: "RESET", icon: "trash" },
     { key: "testSeed", label: "테스트 데이터", en: "TEST DATA", icon: "sheet" }, // 🧪 2026-11-08 테스트운송사 가짜 데이터
@@ -1164,16 +1164,43 @@ function ClaimsBackfill() {
 }
 
 // ═══════════════════════ 접속 이력 ═══════════════════════
+// 🔗 2026-11-15 관리센터 › 데이터 › 구글시트 연동 — 운송사를 먼저 고르고, 그 회사의 시트 연결(가져오기 · 보내기 · 처음 옮기기)
+function SheetHubForCompany() {
+  const live = usePlatformLive();
+  const names = Object.keys(live?.companies || {}).filter(Boolean).sort((a, b) => a.localeCompare(b, "ko"));
+  const [co, setCo] = React.useState(() => { try { return localStorage.getItem("kpSheetHubCo") || ""; } catch { return ""; } });
+  const pick = (v) => { setCo(v); try { localStorage.setItem("kpSheetHubCo", v); } catch { /* 무시 */ } };
+  return (
+    <div className="space-y-4">
+      <div className="rounded-[18px] bg-white border border-[#E3E8F0] px-5 py-4 flex flex-wrap items-center gap-3">
+        <span className="text-[14px] font-black text-[#0F1A30]">운송사</span>
+        <CustomSelect value={co} onChange={(e) => pick(e.target.value)} className="h-10 min-w-[220px] px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-bold">
+          <option value="">운송사를 고르세요</option>
+          {names.map((n) => <option key={n} value={n}>{n}</option>)}
+        </CustomSelect>
+      </div>
+      {co ? <SheetConnectHub key={co} company={co} isTotalMaster /> : <div className="py-16 text-center text-[#9AA9C3] text-[14px]">운송사를 고르면 그 회사의 시트 연결이 보여요.</div>}
+    </div>
+  );
+}
+
 function SessionLogsPanel() {
   const all = useCol("sessionLogs", "at", 500);
   const list = all && all.filter((l) => withinAccessLogWindow(l.at)); // 🧹 2026-11-14 7일 보관(서버가 매일 새벽 정리)
   const [q, setQ] = React.useState("");
   const [ev, setEv] = React.useState("all");
   const [page, setPage] = React.useState(1);
+  const [wiping, setWiping] = React.useState(false);
   React.useEffect(() => { setPage(1); }, [q, ev]);
   if (!list) return <div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>;
   const rows = list.filter((l) => (ev === "all" || l.event === ev) && (!q || [l.name, l.email, l.companyName, l.device, l.ip].some((v) => String(v || "").includes(q))));
   const events = [...new Set(list.map((l) => l.event).filter(Boolean))];
+  // 🧹 2026-11-15 접속 이력 전체 삭제
+  const wipe = async () => {
+    if (!(await kpConfirm("접속 이력을 모두 지울까요?\n지운 기록은 되돌릴 수 없어요."))) return;
+    setWiping(true);
+    try { const n = await deleteAllDocs("sessionLogs"); alert(`접속 이력 ${n}건을 지웠어요.`); } catch (e) { alert(`실패: ${e?.message || e}`); } finally { setWiping(false); }
+  };
   return (
     <div className="space-y-4">
       <Hero en="SECURITY · AUDIT LOG" title="접속 이력" desc={`최근 ${ACCESS_LOG_DAYS}일 로그인·로그아웃 기록입니다. ${ACCESS_LOG_DAYS}일이 지나면 매일 새벽 자동으로 지워져요. 회사·이름·기기로 찾을 수 있습니다.`} />
@@ -1181,6 +1208,7 @@ function SessionLogsPanel() {
         <div className="flex gap-2">
           <CustomSelect value={ev} onChange={(e) => setEv(e.target.value)} className="h-9 px-2 rounded-lg border border-[#DCE3EE] text-[13px] font-bold"><option value="all">전체</option>{events.map((e) => <option key={e} value={e}>{e}</option>)}</CustomSelect>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색" className="h-9 w-28 sm:w-48 px-3 rounded-lg border border-[#DCE3EE] text-[13px]" />
+          <button type="button" onClick={wipe} disabled={wiping || !all?.length} className="h-9 px-3 rounded-lg border border-[#E8B4AE] bg-white text-[13px] font-black text-[#B4342A] disabled:opacity-40">{wiping ? "지우는 중…" : "전체 삭제"}</button>
         </div>}>
         <div className="overflow-x-auto"><table className="w-full text-[13.5px]" style={{ minWidth: 820 }}>
           <thead className="sticky top-0"><tr className="bg-[#1B2B4B] text-white">{["시각", "구분", "회사", "이름", "이메일", "기기"].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold">{h}</th>)}</tr></thead>
@@ -1336,14 +1364,14 @@ function PlatformCenterInner({ user }) {
   else if (tab === "errorReports") body = <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}><ErrorReportsPanel /></React.Suspense>;
   else if (tab === "securityEvents") body = <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}><SecurityEventsPanel /></React.Suspense>;
   else if (tab === "tenancy") body = <TenancyPanel />;
-  else if (tab === "sheetImport") body = <><Hero en="DATA · IMPORT" title="배차일지 가져오기" desc="구글시트·엑셀 배차일지를 운송사 데이터로 옮깁니다(초기 세팅용)." /><SheetImportPanel /></>;
+  else if (tab === "sheetImport") body = <><Hero en="DATA · SHEETS" title="구글시트 연동" desc="운송사를 고르면 연결된 시트를 보고 가져오기 · 보내기 · 칸 맞추기를 해요. 처음 세팅할 때 쓰던 배차일지를 옮기는 것도 여기서 해요." /><SheetHubForCompany /></>;
   // ⭐ 2026-11-06 운송사 초기화는 이제 관리센터에서만(배차 프로그램 관리자메뉴에서 뺐다) — 계약종료 + 초기화는 계약 › 이용 계약·만료
   else if (tab === "companyReset") body = <><Hero en="DATA · RESET" title="운송사 초기화" desc="운송사 데이터를 모두 지웁니다 — 7일 동안 보관함에서 복원할 수 있습니다. 계약을 끝내며 지우려면 계약 › 이용 계약·만료를 쓰세요." right={<button type="button" onClick={() => setTab("contract:life")} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/20 text-[14px] font-black whitespace-nowrap">이용 계약·만료 ›</button>} /><CompanyResetPanel /></>;
   else if (tab === "testSeed") body = <><Hero en="DATA · TEST DATA" title="테스트 데이터" desc="테스트운송사에 가짜 데이터를 채우거나 다시 채워요. 다른 운송사에는 넣을 수 없어요." /><React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중</div>}><TestSeedPanel /></React.Suspense></>;
   else if (tab === "contract:life") body = <><Hero en="CONTRACTS · LIFECYCLE" title="이용 계약·만료" desc="운송사별 계약 기간을 정하고, 만료 30·7·1일 전 안내를 보냅니다. 계약종료하면 데이터는 남기고 그 회사 사람은 접속할 수 없습니다." right={<Clock />} /><ContractLifecyclePanel openCompany={openCompany} /></>;
-  else if (tab === "release") body = <><Hero en="OPERATIONS · RELEASE" title="업데이트 배포" desc="새 화면을 올려도 여기서 배포해야 가입자 화면이 바뀝니다. 최고관리자 · 부관리자는 항상 최신 화면을 먼저 봅니다." /><ReleasePanel />
-    {/* 🧹 2026-11-14 '화주사 강제 업데이트' 메뉴를 여기로 합침 — 화주사 화면은 따로 새로고침 신호를 보낸다 */}
-    <div className="mt-5"><div className="text-[15px] font-black text-[#1B2B4B] mb-2">화주사 화면 강제 업데이트</div><ShipperForceUpdatePanel currentVersion={typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : ""} /></div></>;
+  else if (tab === "release") body = <><Hero en="OPERATIONS · RELEASE" title="업데이트 배포" desc="새 화면을 올려도 여기서 배포해야 가입자 화면이 바뀝니다. 최고관리자 · 부관리자는 항상 최신 화면을 먼저 봅니다." /><ReleasePanel>
+    {/* 🧹 2026-11-14 '화주사 강제 업데이트' — 2026-11-15 고급 설정 안으로 */}
+    <div><div className="text-[14px] font-black text-[#0F1A30] mb-2">화주사 화면 강제 업데이트</div><ShipperForceUpdatePanel currentVersion={typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : ""} /></div></ReleasePanel></>;
   else if (tab === "subAdmin") body = <><Hero en="SECURITY · SUB ADMIN" title="부관리자" desc="최고관리자와 같은 권한을 가진 부관리자(1명)를 보고 지정·해제합니다." /><SubAdminPanel /></>;
 
   if (phone) return <PlatformMobileShell user={user} sections={sectionsView} section={sectionView} tab={tab} setTab={setTab} toApp={toApp} logout={logout} secBadge={secBadge}>{body}</PlatformMobileShell>;

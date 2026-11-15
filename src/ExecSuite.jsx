@@ -537,7 +537,6 @@ export function ExecApprovals({ company, me }) {
         { key: "inbox", label: "결재함", en: "INBOX", icon: "stamp", badge: counts.todo },
         { key: "mine", label: "내 기안함", en: "MY DOCUMENTS", icon: "send", badge: counts.mineNew },
         { key: "draft", label: "업무 기안·품의", en: "PROPOSAL", icon: "file" },
-        { key: "teamreport", label: "팀 실적 보고서", en: "TEAM REPORT", icon: "chart" },
         { key: "handover", label: "인수인계", en: "HANDOVER", icon: "link", badge: hoUnread },
         { key: "lines", label: "결재선 관리", en: "LINES", icon: "route" },
       ] }]}>

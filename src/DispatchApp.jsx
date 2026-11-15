@@ -14,7 +14,6 @@ import BulkUploadChooser, { downloadTemplateXlsx } from "./BulkUploadChooser";
 import { buildCopyText, getCopyTpl, useCopyTemplates } from "./copyTemplates";
 import { CopyTemplateHost, openCopyTemplateEditor } from "./CopyTemplateEditor";
 import OnboardingHost from "./Onboarding";
-import TourHost from "./OnboardingTour"; // 🧭 2026-11-10 첫 방문 안내
 import PlatformNoticeBanner from "./PlatformNoticeBanner";
 import { loadTmap } from "./tmapLoader";
 import { imeFocusRef } from "./imeFocus";
@@ -85,7 +84,7 @@ import ColumnStyleHost from "./ColumnStyle"; // 🎨 2026-11-03 컬럼명 오른
 import { splitContactCell, isCleanPhone, cleanPlaceContacts } from "./contactCell"; // ☎ 담당자번호 칸에는 번호만
 import { isJyCompany } from "./jyOnly"; // 🏷 JY로지스틱스 전용 기능(단가표 자동 입력 등)
 import QuickNav, { QuickSearchButton } from "./QuickNav";
-import { ManualHost } from "./WorkManual"; // 📘 2026-11-14 업무 매뉴얼 · 회계용어 창(정산 · 회계 · 자금 · 비품) // 🔎 2026-11-12 통합 검색(Ctrl+K) · 자주 쓰는 메뉴 · 도움말 센터
+import { ManualHost, ManualButton } from "./WorkManual"; // 📘 2026-11-14 업무 매뉴얼 · 회계용어 창(정산 · 회계 · 자금 · 비품) // 🔎 2026-11-12 통합 검색(Ctrl+K) · 자주 쓰는 메뉴 · 도움말 센터
 import { useScreenFit, ScreenFitButton, BrowserZoomNotice } from "./ScreenFit"; // 🖥 2026-11-10 화면 맞춤 · 브라우저 확대 안내
 import { usePendingSignups, isPendingSignupDriver } from "./pendingSignups";
 import { NavHover, emitSubnav, NavGroupHover, groupNavMenus, navFlatPref } from "./navMenus";
@@ -3441,6 +3440,8 @@ const KP_SIDE_GROUPS = [
 ];
 // 📈 2026-11-08 임원 화면 · 경영 분석 · 결재 대기 · 직원 정보(처음 열 때 받는다)
 const ExecAnalysis = React.lazy(() => import("./ExecAnalytics"));
+const RevenueTeamReport = React.lazy(() => import("./TeamReport")); // 📑 2026-11-15 매출관리 › 팀 실적 보고서
+import { HrFleetPanel, DriverOrderPanel, TeamPicker, companyFleet } from "./HrFleet"; // 🚛 2026-11-15 인사관리부 › 지입관리 · 기사 인사발령 · 팀 고르기
 const ExecApprovalQueue = React.lazy(() => import("./ExecAnalytics").then((m) => ({ default: m.ExecApprovalQueue })));
 const ExecStaffInfo = React.lazy(() => import("./ExecStaffInfo"));
 // 🏢 부서 모드 메뉴 — 경리·회계(test) / 인사관리자(hrManager)
@@ -3493,9 +3494,11 @@ const DEPT_MENUS = {
   acct: ["HOME", "전자결재", "배차현황", "정산관리", "매출관리", "회계관리", "자금관리", "비품관리", "기사관리", "관리자메뉴", "회사관리"],
   // 인사: 사람(인사관리부·출근기록부를 회사관리에서 상단으로) — 매출·정산은 빼고
   // 연차관리·직원 정보·퇴사는 인사관리부 안으로, 직원 승인은 관리자메뉴, 기사 승인은 기사관리 안으로(2026-10-31 중복 정리)
-  hr: ["HOME", "전자결재", "인사관리부", "증명서발급", "기사관리", "관리자메뉴", "회사관리"],
+  // 🚛 2026-11-15 기사관리(배차자용)는 인사 화면에서 뺐다 — 소속 기사는 인사관리부 › 인사관리 › 지입관리에서 본다
+  hr: ["HOME", "전자결재", "인사관리부", "증명서발급", "관리자메뉴", "회사관리"],
   // 💼 2026-11-10 영업: 영업관리(실적·인센티브·영업 기회) + 거래처·단가·운임 + 확인용 배차현황 — 배차 등록·정산은 빼고
-  sales: ["HOME", "전자결재", "영업관리", "거래처관리", "단가표", "운임조회", "배차현황", "매출관리", "회사관리"],
+  // 🧹 2026-11-15 영업은 홈 · 전자결재 · 영업관리 · 회사관리만 — 배차현황 · 운임 · 배차자용 거래처관리 · 배차 기준 매출관리는 뺐다(내 매출 · 인센 · 내 거래처는 영업관리 안에서)
+  sales: ["HOME", "전자결재", "영업관리", "회사관리"],
   // 👔 임원(대표·전무·이사) — 보고·결재·매출 중심
   // 결재는 홈 › 전자결재에 다 있어 상단에서 뺐다(2026-10-31)
   exec: ["HOME", "일일경영보고", "경영분석", "결재대기", "직원정보", "자금현황", "스케줄", "매출관리", "영업관리", "인사이트", "관리자메뉴", "회사관리"], // 📊 2026-11-06 일일 경영 보고 — 임원 홈(경영 브리핑) 바로 다음 // 직원일정은 HOME › 사내 게시판으로(2026-11-01)
@@ -3510,13 +3513,11 @@ const DEPT_SIDE_GROUPS = {
   ],
   hr: [
     { label: "인사", items: ["HOME", "전자결재", "인사관리부", "증명서발급"] },
-    { label: "기사", items: ["기사관리"] },
     { label: "관리", items: ["관리자메뉴", "회사관리"] },
   ],
   sales: [
     { label: "영업", items: ["HOME", "전자결재", "영업관리"] },
-    { label: "거래처 · 운임", items: ["거래처관리", "단가표", "운임조회"] },
-    { label: "확인 · 관리", items: ["배차현황", "매출관리", "회사관리"] },
+    { label: "관리", items: ["회사관리"] },
   ],
   exec: [
     { label: "경영", items: ["HOME", "일일경영보고", "경영분석", "결재대기", "직원정보", "자금현황", "매출관리", "영업관리", "인사이트"] },
@@ -8409,14 +8410,15 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   useBadgeSeenSync(user?.uid, myProfileDoc?.badgeSeen);
   const pcUnassigned = useMemo(() => pickUnassignedOrders(listDispatchData), [listDispatchData]);
   const pcFixedUnassigned = useMemo(() => pickUnassignedOrders(dispatchDataFiltered.filter((r) => r.배차표Id && myRouteBoardIds.has(r.배차표Id))), [dispatchDataFiltered, myRouteBoardIds]); // ⭐ 이 회사 양식의 오더만
-  const unseenListArr = useUnseenItems("list", pcUnassigned);
   const unseenUnassignedArr = useUnseenItems("unassigned", pcUnassigned);
   const unseenFixedArr = useUnseenItems("fixed", pcFixedUnassigned);
-  const unseenList = unseenListArr.length, unseenUnassigned = unseenUnassignedArr.length, unseenFixed = unseenFixedArr.length;
-  const unseenDispatchTotal = unionCount(unseenListArr, unseenUnassignedArr, unseenFixedArr); // 상단 메뉴 합계 — 같은 오더는 한 번
-  useMarkSeenOnView(menu === "배차현황" && 배차현황Tab === "배차현황", "list", pcUnassigned);
-  useMarkSeenOnView(menu === "배차현황" && 배차현황Tab === "미배차현황", "unassigned", pcUnassigned);
-  useMarkSeenOnView(menu === "배차현황" && 배차현황Tab === "고정노선현황", "fixed", pcFixedUnassigned);
+  const unseenUnassigned = unseenUnassignedArr.length, unseenFixed = unseenFixedArr.length;
+  // 🔢 2026-11-15 상단 숫자가 확인 뒤에도 다시 뜨던 문제 — 같은 미배차 오더를 "배차현황(list)"과 "미배차현황(unassigned)" 두 기록으로 따로 셌다.
+  //  미배차현황에서 확인해도 list 기록이 남아 다른 메뉴로 가면 숫자가 되살아났다 → PC는 미배차현황 하나로만 세고, 어느 탭에서 보든 두 기록을 같이 지운다
+  const unseenDispatchTotal = unionCount(unseenUnassignedArr, unseenFixedArr); // 상단 메뉴 합계 — 같은 오더는 한 번
+  useMarkSeenOnView(menu === "배차현황" && (배차현황Tab === "배차현황" || 배차현황Tab === "미배차현황"), "list", pcUnassigned, 800);
+  useMarkSeenOnView(menu === "배차현황" && 배차현황Tab === "미배차현황", "unassigned", pcUnassigned, 800);
+  useMarkSeenOnView(menu === "배차현황" && 배차현황Tab === "고정노선현황", "fixed", pcFixedUnassigned, 800);
   React.useEffect(() => { setDriverToastsMuted(!notificationsEnabled); }, [notificationsEnabled]);
   // 그 화면을 보고 있으면 "봤음"으로(토스트·줄 칩 맥박은 그대로 보이고 4초 뒤 숫자만 사라짐)
   React.useEffect(() => {
@@ -8787,8 +8789,6 @@ return (
       <PlanValueSync planId={planId} />
       <PlanLockHost userEmail={user?.email || ""} userName={myRealName || ""} canRequest={role === "totalMaster" || ["test", "hrAcct", "allMgr"].includes(realRole) || /경리|회계/.test(String(myProfileDoc?.team || ""))} />
       <OnboardingHost role={role} realRole={realRole} userCompany={userCompany} dept={deptMode} uid={user?.uid} myDoc={myProfileDoc} />
-      {/* 🧭 2026-11-10 첫 방문 안내(메뉴별 말풍선·[?] 도움말) — 기간·단계는 src/onboardingTour.js */}
-      <TourHost company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || "")} menu={menu} uid={user?.uid} />
       {/* ===== 통합 헤더 네비 ===== */}
       <header className={`kp-topnav ${deptMode === "exec" ? "kp-topnav-exec" : ""} sticky top-0 z-50 mb-6 w-full`}>
 
@@ -8882,10 +8882,10 @@ return (
             const subBadgesOf = (m) => {
               const apSep = (deptMode ? DEPT_MENUS[deptMode].includes("전자결재") : true) && menuState("전자결재") !== "hidden";
               return ({
-                HOME: { 공지사항: alertsNav.notice || 0, "ap:inbox": apSep ? 0 : apCountsNav.todo, teamsched: 0 },
+                HOME: { 공지사항: alertsNav.notice || 0, "ap:inbox": apSep ? 0 : apCountsNav.todo, "ap:mine": apSep ? 0 : apCountsNav.mineNew, "ap:handover": alertsNav.handover || 0, mail: mailCountsNav.unread || 0, teamsched: 0 }, // 🔢 2026-11-15 상단 HOME 숫자(사내메일 · 인수인계 · 내 기안)가 어느 속메뉴 것인지 보이게
                 전자결재: { inbox: apCountsNav.todo, mine: apCountsNav.mineNew, handover: alertsNav.handover },
                 기사관리: { "acc:pending": canApproveSignup ? alertsNav.signupDriver : 0, "docs:driver": drvCounts.docs },
-                배차현황: { 배차현황: drvCounts.orders + unseenList, 미배차현황: unseenUnassigned, 고정노선현황: unseenFixed },
+                배차현황: { 배차현황: drvCounts.orders, 미배차현황: unseenUnassigned, 고정노선현황: unseenFixed },
                 지입차관리: { tracking: drvCounts.sos },
                 관리자메뉴: { members: pendingStaffSignups },
               })[m];
@@ -8908,10 +8908,10 @@ return (
                 : m === "지입차관리" ? drvCounts.sos
                 : m === "관리자메뉴" ? pendingStaffSignups : 0;
               const subBadges = {
-                HOME: { 공지사항: alertsNav.notice || 0, "ap:inbox": apSep ? 0 : apCountsNav.todo, teamsched: 0 },
+                HOME: { 공지사항: alertsNav.notice || 0, "ap:inbox": apSep ? 0 : apCountsNav.todo, "ap:mine": apSep ? 0 : apCountsNav.mineNew, "ap:handover": alertsNav.handover || 0, mail: mailCountsNav.unread || 0, teamsched: 0 }, // 🔢 2026-11-15 상단 HOME 숫자(사내메일 · 인수인계 · 내 기안)가 어느 속메뉴 것인지 보이게
                 전자결재: { inbox: apCountsNav.todo, mine: apCountsNav.mineNew, handover: alertsNav.handover },
                 기사관리: { "acc:pending": canApproveSignup ? alertsNav.signupDriver : 0, "docs:driver": drvCounts.docs },
-                배차현황: { 배차현황: drvCounts.orders + unseenList, 미배차현황: unseenUnassigned, 고정노선현황: unseenFixed }, // ⭐ 2026-11-06 안 본 것만
+                배차현황: { 배차현황: drvCounts.orders, 미배차현황: unseenUnassigned, 고정노선현황: unseenFixed }, // ⭐ 2026-11-06 안 본 것만
                 지입차관리: { tracking: drvCounts.sos },
                 관리자메뉴: { members: pendingStaffSignups },
               }[m];
@@ -8931,7 +8931,7 @@ return (
                 >
                   <ShellIcon name={kpNavIcon(m) || "dashboard"} size={14} className={`kp-nav-ico shrink-0 ${isActive ? "" : "opacity-70"} ${deptMode && DEPT_MENUS[deptMode].length <= 8 ? "" : "hidden min-[2050px]:inline-block"}`} />
                   <EditableText id={`nav.${m}`} defaultText={uiMenuLabel("pc", m, m === BRIEF_MENU ? BRIEF_LABEL : execMenuLabel(m))} />
-                  {navN > 0 && st !== "locked" && <KakaoBadge n={navN} size="sm" className="ml-1 align-middle" title={m === "관리자메뉴" ? `가입 승인 대기 ${navN}명` : m === "실시간배차현황" ? `기사 수락/거절 ${navN}건` : m === "배차현황" ? [drvCounts.orders && `기사 수락/거절 ${drvCounts.orders}건`, (unseenList || unseenUnassigned) && `새 미배차 ${Math.max(unseenList, unseenUnassigned)}건`, unseenFixed && `새 고정노선 미배차 ${unseenFixed}건`].filter(Boolean).join(" · ") : m === "지입차관리" ? `긴급 상황 ${navN}건` : `새 소식 ${navN}건`} />}
+                  {navN > 0 && st !== "locked" && <KakaoBadge n={navN} size="sm" className="ml-1 align-middle" title={m === "관리자메뉴" ? `가입 승인 대기 ${navN}명` : m === "실시간배차현황" ? `기사 수락/거절 ${navN}건` : m === "배차현황" ? [drvCounts.orders && `기사 수락/거절 ${drvCounts.orders}건`, unseenUnassigned && `새 미배차 ${unseenUnassigned}건`, unseenFixed && `새 고정노선 미배차 ${unseenFixed}건`].filter(Boolean).join(" · ") : m === "지입차관리" ? `긴급 상황 ${navN}건` : `새 소식 ${navN}건`} />}
                   {st === "locked" && <span className="ml-1 opacity-60"><LockIcon /></span>}
                   {m === "인사이트" && st !== "locked" && <span className="ml-1 px-1 py-px rounded bg-[#8FB0F0]/20 text-[#8FB0F0] text-[9px] font-black tracking-wider align-middle">PRO</span>}
                 </button>
@@ -9261,7 +9261,7 @@ return (
 
         {menu === "배차현황" && (
           <KpSubNav code="DISPATCH" title="배차현황" icon="truck" active={배차현황Tab} onSelect={set배차현황Tab}
-            items={(() => { const n = unseenUnassigned, ln = unseenList, fx = unseenFixed; /* ⭐ 2026-11-06 계정별 안 본 것만(전체 미배차 건수는 각 화면 안에 그대로) */ return [{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list", badge: drvCounts.orders + ln, badgeTitle: [drvCounts.orders && `기사 수락/거절 ${drvCounts.orders}건`, `새 미배차 ${ln}건 (전체 ${pcUnassigned.length}건)`].filter(Boolean).join(" · ") }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass", badge: n, badgeTitle: `새 미배차 ${n}건 (전체 ${pcUnassigned.length}건)` }, { key: "고정노선현황", label: "고정노선현황", en: "FIXED ROUTE", icon: "route", badge: fx, badgeTitle: `새 고정노선 미배차 ${fx}건 (전체 ${pcFixedUnassigned.length}건)` }, { key: "인수증관리", label: "인수증관리", en: "RECEIPTS", icon: "receipt" }]; })()}>
+            items={(() => { const n = unseenUnassigned, fx = unseenFixed; /* ⭐ 2026-11-06 계정별 안 본 것만(전체 미배차 건수는 각 화면 안에 그대로) */ return [{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list", badge: drvCounts.orders, badgeTitle: drvCounts.orders ? `기사 수락/거절 ${drvCounts.orders}건` : "" }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass", badge: n, badgeTitle: `새 미배차 ${n}건 (전체 ${pcUnassigned.length}건)` }, { key: "고정노선현황", label: "고정노선현황", en: "FIXED ROUTE", icon: "route", badge: fx, badgeTitle: `새 고정노선 미배차 ${fx}건 (전체 ${pcFixedUnassigned.length}건)` }, { key: "인수증관리", label: "인수증관리", en: "RECEIPTS", icon: "receipt" }]; })()}>
             {배차현황Tab === "배차현황" && (
               <DispatchStatus
                 key={`ds-${viewResetKey}`}
@@ -9576,7 +9576,8 @@ return (
         {menu === "비품관리" && menuState("비품관리") === "ok" && <AssetManager company={deptCompany} isViewer={isViewer} />}
         {menu === "인사관리부" && menuState("인사관리부") === "ok" && (
           <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || ["hrAcct", "allMgr"].includes(realRole) || (/인사/.test(String(myProfileDoc?.team || "")) && role !== "viewer") || masterHrMain || (!!customRole && getMenuAccess(customRoles, role, "인사관리부") === "write")} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "" }} role={realRole || role}
-            renderRecord={(focusUid) => <HRManagementPage userCompany={deptCompany} role={role} userId={auth?.currentUser?.uid || ""} focusUid={focusUid} />}
+            drivers={drivers}
+            renderRecord={(focusUid) => <HRManagementPage userCompany={deptCompany} role={role} userId={auth?.currentUser?.uid || ""} focusUid={focusUid} drivers={drivers} />}
             renderAttendance={() => <AttendanceBoard userCompany={deptCompany} role={role} user={user} />} />
         )}
         {menu === "출근기록부" && menuState("출근기록부") === "ok" && <AttendanceBoard userCompany={deptCompany} role={role} user={user} />}
@@ -15687,14 +15688,17 @@ React.useEffect(() => {
       <>
         {/* ⭐ 2026-11-13 한 줄 빠른 등록 — 지난 노선을 찾아 오더복사와 같은 방식으로 채운다 */}
         {!isViewer && <QuickOrderLine rows={dispatchData} userCompany={userCompany} canMoney={canMoney} onApply={(row, o) => {
-          applyCopy(row);
-          setForm((p) => ({ ...p, ...(o.date ? { 상차일: o.date, 하차일: o.date } : {}), ...(o.ton ? { 차량톤수: o.ton, 톤수값: o.ton.replace("톤", ""), 톤수타입: "톤" } : {}), ...(o.kind ? { 차량종류: o.kind } : {}) }));
+          if (row) applyCopy(row);
+          // 🚚 2026-11-15 화물내용 · 상차→하차 이름도 한 줄에서(지난 노선이 없어도 적은 값은 채운다)
+          setForm((p) => ({ ...p, ...(o.date ? { 상차일: o.date, 하차일: o.date } : {}), ...(o.ton ? { 차량톤수: o.ton, 톤수값: o.ton.replace("톤", ""), 톤수타입: "톤" } : {}), ...(o.kind ? { 차량종류: o.kind } : {}), ...(o.cargo ? { 화물내용: o.cargo } : {}), ...(!row && o.from ? { 상차지명: o.from } : {}), ...(!row && o.to ? { 하차지명: o.to } : {}) }));
           if (o.kind) setVehicleQuery(o.kind);
           if (o.fare > 0 && canMoney) onChange("청구운임", String(o.fare));
         }} />}
         <div className="flex items-center gap-4 mb-3">
 
   <h2 className="text-lg font-bold"><EditableText id="popup.title.배차관리 폼" defaultText="오더등록" /></h2>
+  {/* 📘 2026-11-15 오더등록 매뉴얼 — 정산관리의 [정산 매뉴얼]과 같은 창 */}
+  <ManualButton menu="배차관리" label="오더등록 매뉴얼" />
 
   <FuelSlideWidget />
 
@@ -23959,31 +23963,6 @@ function CpMemoNoteCards({ target, setTarget }) {
     </div>
   );
 }
-// ⭐ 2026-11-06 오더 복사/수정 패널 — 기사 스마트검색 "?" 도움말(눌러서 열고 닫기)
-function SmartSearchHelp() {
-  const [open, setOpen] = React.useState(false);
-  const ref = React.useRef(null);
-  React.useEffect(() => {
-    if (!open) return undefined;
-    const close = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
-    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", close); document.addEventListener("keydown", esc);
-    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", esc); };
-  }, [open]);
-  return (
-    <span ref={ref} className="relative inline-flex">
-      <button type="button" onClick={() => setOpen((v) => !v)} aria-label="기사 스마트검색 도움말" aria-expanded={open} data-kp="smart-help"
-        className={`ml-0.5 w-[18px] h-[18px] rounded-full inline-flex items-center justify-center text-[11px] font-black border transition ${open ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#2D4C82] border-[#9FB2D3] hover:border-[#1B2B4B]"}`}>?</button>
-      {open && (
-        <span role="tooltip" className="absolute left-0 top-[calc(100%+6px)] z-[60] w-[290px] rounded-xl bg-[#0F1A30] text-white px-3.5 py-3 shadow-[0_14px_34px_rgba(6,12,26,.35)] text-[12.5px] font-semibold leading-[1.6] whitespace-normal" data-kp="smart-help-tip">
-          <span className="block">• 등록된 기사는 <b className="text-[#8FB0F0]">이름만</b> 입력해도 찾아요</span>
-          <span className="block">• 차량번호 / 이름 / 휴대폰 중 아무거나 입력 가능</span>
-          <span className="block">• 새 기사는 차량번호·이름·전화번호를 넣으면 <b className="text-[#8FB0F0]">기사관리에 자동 등록</b>돼요</span>
-        </span>
-      )}
-    </span>
-  );
-}
 // ⭐ 2026-11-06 오더 복사/수정 패널 — 상차·하차시간 옆 이전/이후(시간구분) · 등록창(3파트)과 같은 값(상차시간기준/하차시간기준)
 function TimeBasisToggle({ value, onChange, disabled = false }) {
   return (
@@ -31491,7 +31470,7 @@ checkWarningStatus(c.거래처명, "거래처");
 </section>
 {/* ===== 스마트 기사 검색 (복사패널) ===== */}
 <section className="bg-white rounded-xl border border-[#E3E8F0] divide-y divide-gray-100 overflow-hidden">
-  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색<SmartSearchHelp />{/* ⭐ 2026-11-06 도움말 */}</h3></div>
+  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색</h3></div>
 <div className="px-4 py-2">
     <div className="relative" style={{overflow: "visible"}}>
       <input autoComplete="off"
@@ -42962,7 +42941,7 @@ setCopyPlaceOptions(list);
 </section>
 {/* ===== 스마트 기사 검색 (복사패널) ===== */}
 <section className="bg-white rounded-xl border border-[#E3E8F0] divide-y divide-gray-100 overflow-hidden">
-  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색<SmartSearchHelp />{/* ⭐ 2026-11-06 도움말 */}</h3></div>
+  <div className="px-5 pt-3.5 pb-0"><h3 className="text-[14px] font-bold text-[#1B2B4B] flex items-center gap-1.5"><span className="w-1 h-3.5 bg-[#1B2B4B] rounded-full inline-block"></span>기사 스마트 검색</h3></div>
   <div className="px-4 py-2">
     <div className="relative">
       <input autoComplete="off"
@@ -48826,7 +48805,9 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
     yearly: { label: "연간 요약", en: "YEARLY", icon: "chart" },
     query: { label: "거래처 기간 조회", en: "QUERY", icon: "history" },
   };
-  const rvPage = RV_PAGES[activeTab] ? activeTab : "dashboard";
+  // 📑 2026-11-15 팀 실적 보고서 — 전자결재에서 매출관리로 옮겼다(사용자 요청). [전자결재로 올리기]를 누르면 결재 작성 화면이 열린다
+  const RV_REPORT = { teamreport: { label: "팀 실적 보고서", en: "TEAM REPORT", icon: "file" } };
+  const rvPage = RV_PAGES[activeTab] || RV_REPORT[activeTab] ? activeTab : "dashboard";
   const exportCsv = () => {
     const headers = ["상차일","거래처명","상차지명","하차지명","청구운임","기사운임","수수료",...(fareRS.on ? ["운임구분"] : []),"배차상태"];
                 const csvRows = [headers.join(",")];
@@ -48843,7 +48824,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const rvBtn = "h-9 px-3.5 rounded-[10px] text-[13px] font-bold border transition inline-flex items-center gap-1.5";
   return (
     <KpSubNav code="REVENUE" title="매출관리" icon="chart" active={rvPage} onSelect={setActiveTab}
-      groups={[{ label: "분석", items: Object.entries(RV_PAGES).map(([key, v]) => ({ key, ...v })) }]}
+      groups={[{ label: "분석", items: Object.entries(RV_PAGES).map(([key, v]) => ({ key, ...v })) }, { label: "보고", items: Object.entries(RV_REPORT).map(([key, v]) => ({ key, ...v })) }]}
       actionsLabel="리포트 도구"
       actions={[
         // ⭐ 2026-11-10 월 비교 분석 · 월 마감 점검은 메뉴에서 뺐다(요청)
@@ -48852,7 +48833,12 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
         ...(pfShow ? [{ key: "a5", label: pfAccess.exists ? "비공개 청구" : "비공개 청구 켜기", icon: "key", onClick: () => setPfOpen(true) }] : []),
       ]}>
     {pfOpen && pfShow && <React.Suspense fallback={null}><PrivateFaresModal company={pfCompany} dispatchData={dispatchData} clients={clients} access={pfAccess} onClose={() => setPfOpen(false)} /></React.Suspense>}
-    {/* ⭐ 2026-10-29 — 최대폭(1560px) 제한을 없애 넓은 모니터에서도 좌우 여백 없이 꽉 채운다 */}
+    {rvPage === "teamreport" ? (
+      <React.Suspense fallback={<div className="py-16 text-center text-[14px] font-bold text-[#7A879C]">보고서 화면을 여는 중…</div>}>
+        <RevenueTeamReport company={userCompany || localStorage.getItem("userCompany") || ""} me={{ uid: auth.currentUser?.uid || "", name: auth.currentUser?.displayName || "" }} />
+      </React.Suspense>
+    ) : (
+    /* ⭐ 2026-10-29 — 최대폭(1560px) 제한을 없애 넓은 모니터에서도 좌우 여백 없이 꽉 채운다 */
     <div id="settlement-capture" className="kp-rv-zoom w-full">
 
       {/* ── 머리줄: 화면 제목 + 기준 월 + 내보내기 ── */}
@@ -48960,6 +48946,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
           />
         )}
     </div>
+    )}
     </KpSubNav>
   );
 }
@@ -51453,7 +51440,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                 <div className="px-5 py-3 space-y-1.5">
 
                   {/* 스마트 검색 */}
-                  <CpField label={<>스마트 검색<SmartSearchHelp />{/* ⭐ 2026-11-06 도움말 */}</>}>
+                  <CpField label={<>스마트 검색</>}>
                     <div className="relative">
                       <textarea
                         ref={smart7Ref}
@@ -61845,7 +61832,7 @@ function HRAttendancePrintButton({ row }) {
   );
 }
 
-function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly = false, view = null }) {
+function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly = false, view = null, drivers = [] }) {
   const company = userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
   const now = new Date();
   const [members, setMembers] = React.useState([]);
@@ -61872,6 +61859,10 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
   React.useEffect(() => { if (view) { setActiveTab(view); setDraft(null); setEditMode(false); } }, [view]);
   const [teamFilter, setTeamFilter] = React.useState("전체");
   const [search, setSearch] = React.useState("");
+  // 🚛 2026-11-15 인사발령 — 소속 기사(지입 · 직영 · 임대)도 발령할 수 있게(지입관리 › [인사발령 작성]에서 오면 그 기사를 골라 둔다)
+  const [hrWho, setHrWho] = React.useState(() => { try { return sessionStorage.getItem("kpHrDriverFocus") ? "driver" : "staff"; } catch { return "staff"; } });
+  const [drvSelId, setDrvSelId] = React.useState(() => { try { const v = sessionStorage.getItem("kpHrDriverFocus"); sessionStorage.removeItem("kpHrDriverFocus"); return v || null; } catch { return null; } });
+  const hrFleet = React.useMemo(() => companyFleet(drivers), [drivers]);
   const [editMode, setEditMode] = React.useState(false);
   const [draft, setDraft] = React.useState(null);
   const [photoUploading, setPhotoUploading] = React.useState(false);
@@ -62166,19 +62157,32 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
         <div className="px-4 pt-4 pb-3 border-b border-[#EEF1F6]">
           <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">PEOPLE</div>
           <h2 className="text-[17px] font-black text-[#0F1A30] mb-2.5 flex items-center gap-2"><EditableText id="hr.title" defaultText="인사관리부" />{newResumeCount > 0 && <span className="h-6 px-2 rounded-full bg-[#D92D20] text-white text-[12px] font-black grid place-items-center" title="직원이 새로 제출한 이력서">새 이력서 {newResumeCount}</span>}</h2>
-          <div className="flex items-center gap-2 h-10 px-3 rounded-xl border border-[#DCE3EE] bg-white focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 transition mb-2.5">
+          {activeTab === "인사발령" && canManage && (
+            <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-[#EEF2F8] border border-[#E3E8F0] mb-2.5" role="tablist">
+              {[["staff", "직원"], ["driver", `소속 기사 ${hrFleet.length}`]].map(([k, l]) => <button key={k} type="button" onClick={() => setHrWho(k)} className={`h-8 rounded-[9px] text-[12.5px] ${hrWho === k ? "bg-white text-[#0F1A30] font-black shadow-sm" : "text-[#5B6B85] font-bold"}`}>{l}</button>)}
+            </div>
+          )}
+          {/* 🧭 2026-11-15 팀은 버튼 대신 입력형 드롭다운으로 먼저 고르고, 그 아래에서 이름 · 직책을 찾는다 */}
+          {!(activeTab === "인사발령" && hrWho === "driver") && <div className="mb-2"><TeamPicker value={teamFilter} onChange={setTeamFilter} teams={[...hrOpt.teams, "미배정"]} /></div>}
+          <div className="flex items-center gap-2 h-10 px-3 rounded-xl border border-[#DCE3EE] bg-white focus-within:border-[#4B6CB7] focus-within:ring-4 focus-within:ring-[#4B6CB7]/10 transition">
             <svg className="w-4 h-4 text-[#9AA9C3] shrink-0" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            <input autoComplete="off" value={search} onChange={e => setSearch(e.target.value)} placeholder="이름/직책 검색"
+            <input autoComplete="off" value={search} onChange={e => setSearch(e.target.value)} placeholder={activeTab === "인사발령" && hrWho === "driver" ? "이름/차량번호 검색" : "이름/직책 검색"}
               className="flex-1 min-w-0 text-[13px] font-semibold text-[#0F1A30] outline-none bg-transparent placeholder:text-[#A7B3C6]" />
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {["전체", ...hrOpt.teams, "미배정"].map(t => (
-              <button key={t} onClick={() => setTeamFilter(t)}
-                className={`h-7 px-2.5 rounded-full text-[11.5px] font-extrabold transition ${teamFilter === t ? "bg-[#0F1A30] text-white" : "bg-[#F5F8FD] text-[#5B6B85] border border-[#E3E8F0] hover:text-[#0F1A30]"}`}>{t}</button>
-            ))}
           </div>
         </div>
         <div className="overflow-y-auto flex-1 p-2">
+          {activeTab === "인사발령" && canManage && hrWho === "driver" ? (
+            !hrFleet.length ? <div className="py-16 px-4 text-center text-[13px] text-[#9AA9C3] leading-relaxed">소속 기사가 없습니다<br />기사관리에서 등급을 지입 · 직영 · 임대로 정해 주세요</div>
+            : ["지입", "직영", "임대", "분양"].map((g) => { const list = hrFleet.filter((d) => String(d.등급 || "").trim() === g && (!search || `${d.이름 || d.name || ""} ${d.차량번호 || d.carNo || ""}`.includes(search.trim()))); return list.length ? (
+              <div key={g} className="mb-2">
+                <div className="px-2 pt-2 pb-1 flex items-center justify-between"><span className="text-[11px] font-extrabold tracking-[0.12em] text-[#7A879C]">{g}</span><span className="text-[11px] font-bold text-[#9AA9C3] tabular-nums">{list.length}명</span></div>
+                {list.map((d) => { const on = drvSelId === d.id; return (
+                  <button key={d.id} type="button" onClick={() => setDrvSelId(d.id)} className={`w-full text-left flex items-center gap-3 px-2.5 py-2 rounded-2xl transition mb-0.5 ${on ? "bg-[#0F1A30] text-white" : "hover:bg-[#F5F8FD]"}`}>
+                    <div className={`w-10 h-10 rounded-[14px] flex-shrink-0 flex items-center justify-center text-[14px] font-black ${on ? "bg-white text-[#0F1A30]" : "text-white"}`} style={on ? undefined : { background: "linear-gradient(135deg, #1B2B4B 0%, #2D4C82 100%)" }}>{(d.이름 || d.name || "?").slice(0, 1)}</div>
+                    <div className="min-w-0 flex-1"><div className={`text-[14px] font-extrabold truncate ${on ? "text-white" : "text-[#0F1A30]"}`}>{d.이름 || d.name || "-"}</div><div className={`text-[11.5px] truncate ${on ? "text-white/60" : "text-[#7A879C]"}`}>{d.차량번호 || d.carNo || "-"}</div></div>
+                  </button>); })}
+              </div>) : null; })
+          ) : (<>
           {Object.keys(grouped).length === 0 && <div className="py-16 text-center text-[13px] text-[#9AA9C3]">인원이 없습니다</div>}
           {Object.entries(grouped).map(([team, members2]) => (
             <div key={team} className="mb-2">
@@ -62206,12 +62210,17 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
               })}
             </div>
           ))}
+          </>)}
         </div>
       </div>
 
       {/* 우측: 상세 패널 */}
       <div className="flex-1 flex flex-col min-w-0 gap-4">
-        {!selected ? (
+        {activeTab === "인사발령" && canManage && hrWho === "driver" ? (
+          hrFleet.find((d) => d.id === drvSelId)
+            ? <DriverOrderPanel company={company} driver={hrFleet.find((d) => d.id === drvSelId)} myName={members.find(m => m.uid === userId)?.name || auth.currentUser?.email?.split("@")[0] || ""} />
+            : <div className={`flex-1 flex flex-col items-center justify-center py-28 ${hrCard}`}><div className="text-[15px] font-extrabold text-[#0F1A30]">기사를 선택하세요</div><div className="text-[13px] text-[#7A879C] mt-1">왼쪽에서 고르면 구분 변경 · 채용 · 휴직 · 계약 해지 발령을 낼 수 있어요</div></div>
+        ) : !selected ? (
           <div className={`flex-1 flex flex-col items-center justify-center py-28 ${hrCard}`}>
             <div className="w-14 h-14 rounded-2xl bg-[#EEF3FB] text-[#1B2B4B] flex items-center justify-center mb-3">
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="9" cy="11" r="2.2" /><path d="M5.5 16c.5-1.6 1.9-2.5 3.5-2.5s3 .9 3.5 2.5M15 10h3M15 13h3" /></svg>

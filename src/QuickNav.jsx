@@ -11,6 +11,7 @@ import { usePref, setPref } from "./ColumnLayout";
 import { subItemsOf } from "./navMenus";
 import { menuName } from "./execMenus";
 import { MENU_TOURS } from "./onboardingTour";
+import { manualFor, manualName } from "./WorkManual"; // 📘 2026-11-15 모든 메뉴 매뉴얼
 import { HELP_DETAIL, HELP_COMMON, helpTextOf } from "./helpContent"; // 📖 메뉴별 자세한 사용법
 import { HelpDemo, hasHelpDemo } from "./HelpDemos"; // 🎬 2026-11-13 움직이는 예시 화면
 
@@ -380,6 +381,13 @@ export default function QuickNav({ menus = [], menu = "", onGo }) {
           <button type="button" onClick={() => setPal(true)} className="h-7 px-2.5 rounded-full text-[12px] font-bold text-[#5B6B85] hover:text-[#0F1A30] hover:bg-white inline-flex items-center gap-1"><SearchIco size={11} />찾아서 넣기</button>
           <button type="button" data-kp="help-open" onClick={() => setHelp({ menu: curId && !MASTER_MENUS.has(curId) ? curId : undefined })} className="ml-auto h-7 px-3 rounded-full bg-white border border-[#DCE3EE] text-[12px] font-black text-[#1B2B4B] hover:border-[#2D4C82]">도움말 센터</button>
         </>}
+        {/* 📘 2026-11-15 지금 메뉴의 매뉴얼 — 정산관리의 [정산 매뉴얼]처럼 모든 메뉴에서 연다(접혀 있어도 보인다) */}
+        {manualFor(menu) && (
+          <button type="button" data-kp="menu-manual" onClick={() => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu } }))}
+            className={`${open ? "" : "ml-auto "}inline-flex items-center gap-1 rounded-full bg-[#0F1A30] text-white font-black hover:bg-[#1B2B4B] ${open ? "h-7 px-3 text-[12px]" : "h-[20px] px-2 text-[10.5px]"}`}>
+            <svg width={open ? 12 : 10} height={open ? 12 : 10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z" /><path d="M4 19V5M8 7h7M8 11h5" /></svg>
+            {manualName(menu)} 매뉴얼
+          </button>)}
       </div>
       {pal && <Palette index={index} favs={favs} onGo={go} onHelp={(init) => { setPal(false); setHelp(init || {}); }} onClose={() => setPal(false)} />}
       {help && <HelpCenter index={index} initial={help} onGo={go} onClose={() => setHelp(null)} />}

@@ -4,7 +4,7 @@
 //    url = 가입자에게 보여 줄 버전의 Vercel 배포 주소 · enabled:false 또는 문서 없음 = 잠금 안 함(올리면 바로 모두에게)
 //  · 최고관리자 · 부관리자 브라우저에는 쿠키 kp_ch=latest → 서버가 항상 최신 화면을 준다
 //  · "새 버전이 나왔습니다" 안내(VersionCheck)는 가입자에게는 배포한 버전 기준, 관리자에게는 최신 기준
-import { doc, getDoc, onSnapshot, setDoc, arrayUnion } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, setDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
 
 /* global __APP_VERSION__, __BUILD_TIME__, __DEPLOY_URL__ */
@@ -46,14 +46,9 @@ export async function targetVersion() {
 export const watchRelease = (cb) => onSnapshot(RELEASE_REF(), (s) => cb(s.exists() ? s.data() : null), () => cb(null));
 export async function latestVersion() { const r = await fetch(`/version.json?t=${Date.now()}`, { cache: "no-store" }); return r.json(); }
 // 지금 내 화면(최신) 버전을 모든 가입자에게 배포
-export async function publishRelease(latest, note = "") {
-  const by = auth.currentUser?.email || "";
-  const rec = { url: latest.url, version: latest.version || "", build: latest.build, at: Date.now(), by, note: String(note || "").slice(0, 200) };
-  await setDoc(RELEASE_REF(), { enabled: true, url: rec.url, version: rec.version, build: rec.build, releasedAt: rec.at, releasedBy: by, note: rec.note, history: arrayUnion(rec) }, { merge: true });
-}
+//  🧹 2026-11-15 배포하면 예전 버전 기록은 남기지 않는다(사용자 요청) — 기록은 지금 배포한 것 하나만, 고를 버전 목록도 이보다 예전 것은 지운다
+export async function publishRelease(latest, note = "") { return pinRelease(latest, note); }
 export const setReleaseLock = (enabled) => setDoc(RELEASE_REF(), { enabled: !!enabled, lockChangedAt: Date.now(), lockChangedBy: auth.currentUser?.email || "" }, { merge: true });
-// 예전 버전으로 되돌리기(기록에서 고름)
-export const rollbackRelease = (rec) => setDoc(RELEASE_REF(), { enabled: true, url: rec.url, version: rec.version || "", build: rec.build, releasedAt: Date.now(), releasedBy: auth.currentUser?.email || "", note: `되돌림 → v${rec.version}` }, { merge: true });
 export async function checkRelease() { const r = await fetch(`/api/shell?check=1&t=${Date.now()}`, { cache: "no-store" }); return r.json(); }
 
 // 🚦 2026-11-14 가입자 화면 버전 고르기 — 올라간 화면(빌드)을 관리자가 열 때마다 기록해 두고(publicRelease/builds), 관리센터에서 골라 고정한다
@@ -69,11 +64,22 @@ export async function registerBuild() {
 export const watchBuilds = (cb) => onSnapshot(BUILDS_REF(), (s) => cb(s.exists() ? Object.values(s.data() || {}).filter((x) => x && x.build && x.url).sort((a, b) => (b.build > a.build ? 1 : -1)) : []), () => cb([]));
 // Vercel 배포 주소를 직접 넣어 고정 — 서버(api/shell.js ?probe=)가 그 주소의 버전 정보를 읽어 준다
 export async function probeDeploy(host) { const r = await fetch(`/api/shell?probe=${encodeURIComponent(host)}&t=${Date.now()}`, { cache: "no-store" }); return r.json(); }
-export const pinRelease = (rec, note = "") => {
+export async function pinRelease(rec, note = "") {
   const by = auth.currentUser?.email || "";
   const r = { url: rec.url, version: rec.version || "", build: rec.build, at: Date.now(), by, note: String(note || "").slice(0, 200) };
-  return setDoc(RELEASE_REF(), { enabled: true, url: r.url, version: r.version, build: r.build, releasedAt: r.at, releasedBy: by, note: r.note, history: arrayUnion(r) }, { merge: true });
-};
+  await setDoc(RELEASE_REF(), { enabled: true, url: r.url, version: r.version, build: r.build, releasedAt: r.at, releasedBy: by, note: r.note, history: [r] }, { merge: true });
+  await pruneBuilds(r.build).catch(() => {});
+}
+// 배포한 버전보다 예전에 올린 화면은 목록에서 지운다(배포한 버전 · 그 뒤에 올린 것만 남김)
+export async function pruneBuilds(keepFromBuild) {
+  if (!keepFromBuild) return;
+  const s = await getDoc(BUILDS_REF());
+  if (!s.exists()) return;
+  const all = s.data() || {};
+  const keep = Object.fromEntries(Object.entries(all).filter(([, b]) => b && b.build && b.build > keepFromBuild));
+  if (Object.keys(keep).length === Object.keys(all).length) return;
+  await setDoc(BUILDS_REF(), keep);
+}
 // 가입자 브라우저가 배포 버전보다 새 화면을 보고 있으면(첫 방문 · 저장값이 지워진 뒤 등) 한 번 새로고침해 배포 버전으로 맞춘다
 export async function enforcePin() {
   if (isLatestChannel() || CUR_VER === "dev") return;

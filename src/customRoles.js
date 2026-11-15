@@ -122,13 +122,15 @@ export function builtinDefaultMenuAccess(roleKey) {
   const union = (...keys) => Object.fromEntries(CUSTOMIZABLE_MENUS.map((k) => [k, keys.reduce((lv, r) => maxLv(lv, builtinDefaultMenuAccess(r)[k]), "hidden")]));
   if (roleKey === "test") return only(["HOME", "전자결재", "배차현황", "정산관리", "매출관리", "회계관리", "자금관리", "비품관리", "기사관리", "회사관리", "급여관리"]);
   // ⭐ 2026-11-06 인사관리자는 급여를 "조회"만(권한 관리에서 수정으로 올리거나 숨길 수 있다)
-  if (roleKey === "hrManager") return only(["HOME", "전자결재", "인사관리부", "증명서발급", "기사관리", "회사관리"], ["급여관리"]);
-  // 경리사무원 — 경리 화면에서 자금·매출은 빼고 / 인사사무원 — 인사 화면에서 기사관리(기사 승인)는 빼고
-  if (roleKey === "acctStaff") return only(["HOME", "전자결재", "배차현황", "정산관리", "회계관리", "비품관리", "회사관리"], ["기사관리"]);
+  if (roleKey === "hrManager") return only(["HOME", "전자결재", "인사관리부", "증명서발급", "회사관리"], ["급여관리"]); // 🚛 2026-11-15 기사관리 → 인사관리부 › 지입관리
+  // 경리사무원 — 경리 화면에서 자금은 빼고 / 인사사무원 — 인사 화면에서 기사관리(기사 승인)는 빼고
+  //  🧾 2026-11-15 매출관리는 경리 업무(매출 확인 · 계산서 · 미수)라 기본으로 보이게(조회). 운송사가 권한 관리에서 숨겼으면 그 설정대로
+  if (roleKey === "acctStaff") return only(["HOME", "전자결재", "배차현황", "정산관리", "회계관리", "비품관리", "회사관리"], ["기사관리", "매출관리"]);
   if (roleKey === "hrStaff") return only(["HOME", "전자결재", "인사관리부", "증명서발급", "회사관리"]);
-  // 💼 2026-11-10 영업 — 영업관리·거래처·단가표·운임조회 + 배차현황 조회. 영업관리자는 매출관리까지(영업사무원은 본인 실적만)
-  if (roleKey === "salesMgr") return only(["HOME", "전자결재", "영업관리", "거래처관리", "단가표", "운임조회", "매출관리", "회사관리"], ["배차현황"]);
-  if (roleKey === "salesStaff") return only(["HOME", "전자결재", "영업관리", "거래처관리", "단가표", "운임조회", "회사관리"], ["배차현황"]);
+  // 💼 2026-11-15 영업 — 홈 · 전자결재 · 영업관리 · 회사관리만(사용자 요청). 배차현황 · 운임 · 배차자용 거래처관리 · 배차 매출관리는 영업 일이 아니다.
+  //  내 매출 · 인센티브 · 내가 데려온 거래처는 영업관리 안에서 본다
+  if (roleKey === "salesMgr") return only(["HOME", "전자결재", "영업관리", "회사관리"]);
+  if (roleKey === "salesStaff") return only(["HOME", "전자결재", "영업관리", "회사관리"]);
   // 통합 역할 — 각 화면 역할 기본값을 합친 것(설정에서 숨기거나 조회로 낮출 수 있다)
   if (roleKey === "hrAcct") return union("test", "hrManager");
   if (roleKey === "allMgr") return union("admin", "test", "hrManager", "salesMgr");

@@ -192,7 +192,10 @@ export default function TeamReport({ company, me }) {
         ...(ceo ? { line: [{ uid: ceo.uid || ceo.id, name: ceo.name || "", position: ceo.position || "", team: ceo.team || "", kind: "결재" }] } : {}),
       };
       try { sessionStorage.setItem("kpApPreset", JSON.stringify(preset)); } catch { /* 무시 */ }
-      window.dispatchEvent(new Event("kp-ap-preset"));
+      // 📑 2026-11-15 매출관리에서 만들면 전자결재 화면이 없으니 먼저 연다(열리면 작성 화면이 자동으로 뜬다)
+      window.__kpOpenApproval = { page: "report" };
+      window.dispatchEvent(new Event("kp-open-approval"));
+      setTimeout(() => window.dispatchEvent(new Event("kp-ap-preset")), 60);
     } catch (e) { kpAlert(`전자결재로 올릴 준비를 하지 못했어요: ${e?.message || e}`); } finally { setBusy(""); }
   };
 

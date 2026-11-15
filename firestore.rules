@@ -1325,7 +1325,8 @@ service cloud.firestore {
       allow read: if isTotalMasterUser();
       allow update: if isTotalMasterUser()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ack', 'ackBy', 'ackAt']);
-      allow create, delete: if false;
+      allow delete: if isTotalMasterUser(); // 🧹 2026-11-15 관리센터 › 보안 알림 [전체 삭제]
+      allow create: if false;
     }
     match /securityProfiles/{uid} {
       allow read, write: if false;

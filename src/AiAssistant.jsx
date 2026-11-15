@@ -23,7 +23,7 @@ import { VehicleTypePicker } from "./vehicleTypes";
 import { dropdownList } from "./companyDropdownOptions";
 import { remindAtOf } from "./PersonalSchedule";
 import {
-  buildUpdate, buildCreateRecord, scanValsToFields, splitPasted, looksLikeOrderText, intentOf, pickerRows, localEditProposal, localAnswer,
+  buildUpdate, buildCreateRecord, scanValsToFields, splitPasted, looksLikeOrderText, intentOf, menuWhere, pickerRows, localEditProposal, localAnswer,
   mdBlocks, mdInline, serializeChat, deserializeChat, labelOf, fmtVal, CREATE_FIELDS, missingOf, todayYmd, isUnassigned, won,
 } from "./aiAssistantCore";
 
@@ -618,6 +618,9 @@ export default function AiAssistant({ dispatches = [], clients = [], places = []
     setMessages((p) => [...p, { id: uidGen(), role: "user", kind: "text", content: text.length > 600 ? `${text.slice(0, 600)}…` : text }]);
     // 1) 오더 글을 붙여넣었으면 → 등록 카드
     if (!opts.noIntake && looksLikeOrderText(text) && (text.split("\n").length >= 3 || text.length > 80)) { await intakeText(text); return; }
+    // 🧭 2026-11-15 "○○ 메뉴 어디 있어?" — 메뉴 위치는 서버 없이 바로, 정확하게(예전엔 '현황'이면 매출 요약, '등록'이면 등록 안내로 엉뚱하게 답했다)
+    const where = menuWhere(text);
+    if (where) { push({ content: where.answer }); push({ kind: "navigate", data: { menu: where.menu, label: `${where.path.replace(/^상단 메뉴 /, "").split(" (")[0]} 열기` } }); note(`사용자가 메뉴 위치를 물어 "${where.path}"로 안내함`); return; }
     // 2) "오더 수정해야 해"처럼 대상이 없으면 → 고르기 목록(서버 없이 바로)
     const it = intentOf(text);
     if (it === "pick_edit" || it === "pick_delete" || it === "pick_assign") {

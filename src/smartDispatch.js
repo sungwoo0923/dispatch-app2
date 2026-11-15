@@ -10,13 +10,40 @@ const CANCELED = ["취소", "배차취소", "오더취소", "취소됨"];
 const isCanceled = (r) => CANCELED.includes(String(r?.상태 || "").trim()) || CANCELED.includes(String(r?.배차상태 || "").trim()) || r?.지급방식 === "취소";
 
 export const VEHICLE_WORDS = ["윙바디", "카고", "탑차", "탑", "냉장", "냉동", "리프트", "라보", "다마스", "오토바이", "초장축", "츄레라", "트레일러", "평판"];
+// 🚚 2026-11-15 차량종류 — 줄임말까지(윙 · 냉탑 · 냉동윙 …) 프로그램 차량종류 이름으로 바꾼다. 긴 것부터 맞춘다
+const KIND_ALIAS = [
+  ["냉장/냉동탑", "냉장/냉동탑"], ["냉장/냉동윙", "냉장/냉동윙"], ["윙/카고", "윙/카고"], ["라보/다마스", "라보/다마스"],
+  ["냉동윙바디", "냉동윙"], ["냉장윙바디", "냉장윙"], ["냉동탑차", "냉동탑"], ["냉장탑차", "냉장탑"],
+  ["냉동윙", "냉동윙"], ["냉장윙", "냉장윙"], ["냉동탑", "냉동탑"], ["냉장탑", "냉장탑"], ["냉탑", "냉동탑"], ["냉윙", "냉동윙"],
+  ["윙바디", "윙바디"], ["윙카고", "윙/카고"], ["카고", "카고"], ["탑차", "탑차"], ["리프트", "리프트"], ["호루", "카고"],
+  ["라보", "라보/다마스"], ["다마스", "라보/다마스"], ["오토바이", "오토바이"], ["초장축", "카고"], ["츄레라", "트레일러"], ["트레일러", "트레일러"], ["평판", "카고"],
+  ["냉동", "냉동탑"], ["냉장", "냉장탑"], ["윙", "윙바디"], ["탑", "탑차"],
+];
+const kindOf = (t) => { const k = KIND_ALIAS.find(([a]) => t === a); return k ? k[1] : ""; };
+// 화물 수량 — "10파레트" "10plt" "3박스" "500kg" "20롤" "팔레트10" 처럼 숫자 + 단위
+const CARGO_UNIT = "파레트|빠레트|팔레트|파렛트|plt|PLT|p|P|박스|box|BOX|kg|KG|키로|롤|포|개|ea|EA|짐|마대|드럼|통|묶음|대분";
+const CARGO_RE = new RegExp(`^(\\d+(?:\\.\\d+)?)\\s*(${CARGO_UNIT})$`);
+const CARGO_RE2 = new RegExp(`^(${CARGO_UNIT})\\s*(\\d+(?:\\.\\d+)?)$`);
+const UNIT_FIX = { 빠레트: "파레트", 팔레트: "파레트", 파렛트: "파레트", plt: "파레트", PLT: "파레트", p: "파레트", P: "파레트", box: "박스", BOX: "박스", KG: "kg", 키로: "kg", ea: "개", EA: "개" };
+// 그 밖에 화물로 보는 말(숫자 없이 써도) — 혼적 · 독차 · 지게차 · 수작업 · 냉동 화물 이름 등
+const CARGO_WORDS = ["혼적", "독차", "지게차", "수작업", "수하역", "깔판", "기계", "철판", "목재", "농산물", "식품", "가구", "가전", "이사짐", "이삿짐"];
 
-// "내일 대한 평택 5톤 35만" → { date, dateWord, ton, kind, fare, words:["대한","평택"] }
+// "내일 대한 평택→이천 5톤윙 10파레트 35만" → { date, dateWord, ton, kind, cargo, fare, from, to, words:["대한"] }
 export function parseQuickLine(text, today = ymd(new Date())) {
-  const out = { date: "", dateWord: "", ton: "", kind: "", fare: 0, words: [] };
-  for (const raw of String(text || "").trim().split(/\s+/).filter(Boolean)) {
+  const out = { date: "", dateWord: "", ton: "", kind: "", cargo: "", fare: 0, from: "", to: "", words: [] };
+  const cargo = [];
+  // "화물: 기계 2대" 처럼 화물: 뒤는 통째로 화물내용
+  let src = String(text || "").trim();
+  const cm = src.match(/(?:화물|화물내용|품목)\s*[:：]\s*(.+)$/);
+  if (cm) { cargo.push(cm[1].trim()); src = src.slice(0, cm.index).trim(); }
+  // "평택→이천" · "평택->이천" · "평택 > 이천" → 상차지 · 하차지 이름
+  src = src.replace(/\s*(?:→|->|>|~)\s*/g, "→");
+  // "PLT 12" · "12 파레트" 처럼 띄어 쓴 수량도 한 덩어리로
+  src = src.replace(new RegExp(`(^|\\s)(${CARGO_UNIT})\\s+(\\d+(?:\\.\\d+)?)(?=\\s|$)`, "g"), "$1$2$3").replace(new RegExp(`(^|\\s)(\\d+(?:\\.\\d+)?)\\s+(${CARGO_UNIT})(?=\\s|$)`, "g"), "$1$2$3");
+  for (const raw of src.split(/\s+/).filter(Boolean)) {
     const t = raw.replace(/[,]/g, "");
     let m;
+    if (t.includes("→")) { const [a, b] = t.split("→"); if (a) { out.from = a; out.words.push(a); } if (b) { out.to = b; out.words.push(b); } continue; }
     if (t === "오늘") { out.date = today; out.dateWord = t; continue; }
     if (t === "내일") { out.date = addDays(today, 1); out.dateWord = t; continue; }
     if (t === "모레") { out.date = addDays(today, 2); out.dateWord = t; continue; }
@@ -37,13 +64,22 @@ export function parseQuickLine(text, today = ymd(new Date())) {
         out.date = d; out.dateWord = `${da}일`; continue;
       }
     }
-    if ((m = t.match(/^(\d+(?:\.\d+)?)(톤|t)$/i))) { out.ton = `${m[1]}톤`; continue; }
+    // 톤수 + 차종이 붙은 말 — "5톤윙" "1톤카고" "11t냉동탑" "2.5톤"
+    if ((m = t.match(/^(\d+(?:\.\d+)?)(?:톤|t|T)(.*)$/)) && (!m[2] || kindOf(m[2]))) {
+      out.ton = `${m[1]}톤`;
+      if (m[2]) out.kind = kindOf(m[2]);
+      continue;
+    }
     if ((m = t.match(/^(\d+(?:\.\d+)?)만원?$/))) { out.fare = Math.round(parseFloat(m[1]) * 10000); continue; }
     if ((m = t.match(/^(\d{5,8})원$/))) { out.fare = +m[1]; continue; }
-    const v = VEHICLE_WORDS.find((w) => w === t);
-    if (v) { out.kind = v === "탑" ? "탑차" : v; continue; }
+    if ((m = t.match(CARGO_RE))) { cargo.push(`${m[1]}${UNIT_FIX[m[2]] || m[2]}`); continue; }
+    if ((m = t.match(CARGO_RE2))) { cargo.push(`${m[2]}${UNIT_FIX[m[1]] || m[1]}`); continue; }
+    if (CARGO_WORDS.includes(t)) { cargo.push(t); continue; }
+    const k = kindOf(t);
+    if (k) { out.kind = k; continue; }
     out.words.push(raw);
   }
+  out.cargo = cargo.join(" ");
   return out;
 }
 

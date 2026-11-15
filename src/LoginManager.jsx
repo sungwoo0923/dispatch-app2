@@ -18,7 +18,7 @@ import {
   SESSIONS_COLL, KIND_LABEL, END_REASON_LABEL, getMySessionId, endSessions, sessionLastMs, timeAgo, getDeviceLabel, isTotalMasterRole,
 } from "./loginSessions";
 import { kpConfirm } from "./kpDialog";
-import { withinAccessLogWindow } from "./accessLogRetention";
+import { withinAccessLogWindow, deleteAllDocs } from "./accessLogRetention";
 
 const tsMs = (t) => (t?.toMillis ? t.toMillis() : t?.seconds ? t.seconds * 1000 : 0);
 const fmt = (ms) => (ms ? new Date(ms).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-");
@@ -256,6 +256,7 @@ export function AdminSessionsPanel({ isTotalMaster, company, roleLabels = {} }) 
     (snap) => setList(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setList([])), [isTotalMaster, company]);
   const myId = getMySessionId();
   const rows = (list || [])
+    .filter((s) => withinAccessLogWindow(sessionLastMs(s))) // 🧹 2026-11-15 7일 넘게 안 쓴 로그인은 숨김(서버가 매일 새벽 지움)
     .filter((s) => isTotalMaster || (s.companyName || DEFAULT_COMPANY) === company)
     // ⭐ 최고관리자는 실무자가 아니라 프로그램 관리 계정 — 다른 사람 화면에는 접속 상태를 보이지 않는다
     .filter((s) => isTotalMaster || !isTotalMasterRole(s.role, s.email))
@@ -269,11 +270,18 @@ export function AdminSessionsPanel({ isTotalMaster, company, roleLabels = {} }) 
     setBusy(s.id);
     try { await endSessions([s.id], "admin", auth.currentUser?.email || ""); } catch (e) { alert(`실패: ${e?.message || e}`); } finally { setBusy(null); }
   };
+  // 🧹 2026-11-15 로그인 기록 전체 삭제 — 이 기기만 남기고 모두 지운다(다른 기기는 다음 화면부터 다시 로그인)
+  const wipeAll = async () => {
+    if (!(await kpConfirm("로그인 기록을 모두 지울까요?\n\n· 지금 이 기기만 남아요\n· 다른 기기는 모두 로그아웃돼요(다시 로그인하면 돼요)"))) return;
+    setBusy("all");
+    try { const n = await deleteAllDocs(SESSIONS_COLL, (d) => d.id === myId); alert(`로그인 기록 ${n}건을 지웠어요.`); } catch (e) { alert(`실패: ${e?.message || e}`); } finally { setBusy(null); }
+  };
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-100">
         <span className="text-[13px] font-semibold text-gray-600">지금 로그인 중 {rows.length}대 {isTotalMaster ? "(전체 회사)" : `(${company})`}</span>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름 · 이메일 · 회사 검색" className="ml-auto h-[32px] px-3 rounded-lg text-[12.5px] border border-gray-300 outline-none focus:border-[#1B2B4B]" />
+        {isTotalMaster && <button type="button" disabled={busy === "all"} onClick={wipeAll} className="h-[32px] px-3 rounded-lg border border-[#E8B4AE] bg-white text-[12.5px] font-black text-[#B4342A] hover:bg-[#FDF3F2] disabled:opacity-50">{busy === "all" ? "지우는 중…" : "전체 삭제"}</button>}
       </div>
       {list === null ? (
         <div className="text-[13px] text-gray-500 text-center py-16">불러오는 중…</div>

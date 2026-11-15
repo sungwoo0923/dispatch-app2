@@ -1,6 +1,5 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import { MonthPicker } from "../kpInputs"; // 📅 2026-11-07 월 선택은 프로그램 달력으로
-import TourHost from "../OnboardingTour"; // 🧭 2026-11-10 첫 방문 안내
 import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { runDelete, deleteOrdersWithLogAtomic } from "../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { RichHtml } from "../richText"; // ⭐ 2026-11-03 공지 꾸민 글 보여주기
@@ -3978,6 +3977,20 @@ useEffect(() => {
   };
   // 위치 변화 감지(앱이 화면에 켜져 있는 동안)
   const watchId = navigator.geolocation.watchPosition(judge, () => {}, { enableHighAccuracy: true, maximumAge: 30000, timeout: 20000 });
+  // 📍 2026-11-15 백그라운드 자동 출근 — 휴대폰 브라우저는 앱이 뒤로 가면 위치를 주지 않아(웹 표준 제한) 다시 열 때만 출근됐다.
+  //  LogisWeb 앱(APK) 안에서 열었으면 앱에 들어 있는 백그라운드 위치 기능으로 화면이 꺼져 있어도 반경에 들어오면 출근 처리한다
+  //  (알림창에 "출근 위치 확인 중"이 떠 있는 동안). 브라우저에서는 지금처럼 다시 열 때 바로 확인한다.
+  let bgWatcher = null; let bgAlive = true;
+  try {
+    const Cap = typeof window !== "undefined" ? window.Capacitor : null;
+    if (Cap?.isNativePlatform?.() && Cap.isPluginAvailable?.("BackgroundGeolocation")) {
+      const BG = Cap.registerPlugin ? Cap.registerPlugin("BackgroundGeolocation") : Cap.Plugins?.BackgroundGeolocation;
+      // ⚠ 플러그인 객체는 thenable처럼 보여 Promise로 넘기면 멈춘다(DriverHome 주석) — 바로 메서드만 부른다
+      BG?.addWatcher?.({ backgroundTitle: "LogisWeb 출근 확인", backgroundMessage: "출근지 반경에 들어오면 자동으로 출근 처리해요.", requestPermissions: true, stale: false, distanceFilter: 25 },
+        (loc, err) => { if (err || !loc) return; judge({ coords: { latitude: loc.latitude, longitude: loc.longitude, accuracy: loc.accuracy } }); })
+        ?.then?.((id) => { if (bgAlive) bgWatcher = { BG, id }; else BG.removeWatcher({ id }); })?.catch?.(() => {});
+    }
+  } catch { /* 앱 기능 없음 — 화면이 켜져 있을 때만 */ }
 
   geoWatchIdRef.current = watchId;
   // 앱 시작 시 1회 즉시 위치 체크
@@ -3992,6 +4005,8 @@ useEffect(() => {
   return () => {
     document.removeEventListener("visibilitychange", onVis);
     window.removeEventListener("focus", onVis);
+    bgAlive = false;
+    try { if (bgWatcher) bgWatcher.BG.removeWatcher({ id: bgWatcher.id }); } catch { /* 무시 */ }
     if (geoWatchIdRef.current != null) {
       navigator.geolocation.clearWatch(geoWatchIdRef.current);
       geoWatchIdRef.current = null;
@@ -5978,8 +5993,6 @@ const title =
         </div>
       )}
       <CheckoutReminderHost uid={user?.uid} role={realRole} email={user?.email} />{/* ⭐ 2026-11-03 퇴근 10분 전 알림 */}
-      {/* 🧭 2026-11-10 첫 방문 안내(메뉴별 말풍선·[?] 도움말) — 기간·단계는 src/onboardingTour.js */}
-      {!["driver", "shipper"].includes(role) && <TourHost company={briefCompanyM} menu={page === "home" || page === "list" ? (page === "list" ? "배차현황" : "HOME") : (PAGE_MENU_M[page] || (page === "approval" ? "전자결재" : ""))} uid={user?.uid} />}
       <PersonalTodayHost uid={user?.uid} mobile />{/* ⭐ 2026-11-03 오늘 개인 일정 — 위쪽 알림줄 */}
       {/* ⭐ 2026-11-02 원격지원 — 요청 상태 막대 · 승인 배너 · 포인터 */}
       <RemoteSupportHost user={user} profile={myProfM} company={userCompany || localStorage.getItem("userCompany") || ""} mobile />
@@ -8267,11 +8280,7 @@ function MobileSideMenu({
             <MenuSection title="영업" en="SALES" dark={dark} alwaysOpen>
               <MenuItem label="영업 홈" icon="dashboard" onClick={() => onGo?.("dept")} dark={dark} />
               {ok("영업관리") && <MenuItem label="영업관리" icon="trend" onClick={() => onGo?.("dept:sales")} dark={dark} />}
-              {ok("거래처관리") && <MenuItem label="거래처관리" icon="building" onClick={() => onGo?.("clients")} dark={dark} />}
-              {ok("단가표") && <MenuItem label="단가표" icon="money" onClick={() => onGo?.("ratecard")} dark={dark} />}
-              {ok("운임조회") && <MenuItem label="운임조회" icon="globe" onClick={() => onGo?.("fare")} dark={dark} />}
-              {ok("배차현황") && <MenuItem label="배차현황" icon="list" onClick={() => onGo?.("list")} dark={dark} />}
-              {ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
+              {/* 🧹 2026-11-15 영업은 홈 · 전자결재 · 영업관리 · 회사관리만(배차현황 · 운임 · 거래처관리 · 매출관리는 PC와 같이 뺐다) */}
             </MenuSection>
           )}
           {bizMenu && (

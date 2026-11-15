@@ -37,14 +37,12 @@ import { CustomSelect } from "./CustomSelect";
 import RolePermissionsPanel from "./RolePermissionsPanel";
 import { AdminSessionsPanel } from "./LoginManager";
 import { MfaResetPanel } from "./UserSecurity"; // 🔐 2026-11-14 직원 2차 인증 초기화
-import SheetConnectHub from "./SheetConnectHub"; // 🔗 2026-11-07 구글시트 연동 한곳(가져오기 · 전송 · 연결 마법사)
-const DataCheckPanel = React.lazy(() => import("./DataCheckPanel")); // 🩺 2026-11-10 데이터 점검(모양이 이상한 값 찾아 고치기)
 import { useCustomRoles, roleScreen, ROLE_LABELS, roleOptionsFrom, rolesForTeam } from "./customRoles";
 import { useCompanyFeatures } from "./companyFeatures"; // ⭐ 2026-11-04 마스터 권한 관리(회사별로 켬)
 import { EditableText } from "./EditMode";
 import { useLoadOrderRange, monthEnd, monthStart } from "./orderHistory";
 import { fmtBizNo, fmtPhone } from "./formatInput";
-import { withinAccessLogWindow, ACCESS_LOG_DAYS } from "./accessLogRetention";
+import { withinAccessLogWindow, ACCESS_LOG_DAYS, deleteAllDocs } from "./accessLogRetention";
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
 // 전화번호 하이픈 — 공용 규칙(src/formatInput.js: 02·031·010·1588 등, 입력 중에도 적용)
@@ -170,7 +168,6 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     ? (String(parentCompany || localStorage.getItem("loginCompany") || myCompany || DEFAULT_COMPANY).trim() || DEFAULT_COMPANY)
     : (myCompany || parentCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
   // 휴지통이 다루는 회사 — 최고관리자는 지금 들어가 있는 회사
-  const autoCompany = (isTotalMaster && localStorage.getItem("loginCompany")) || effectiveCompany;
 
   useEffect(() => {
     if (!me) return;
@@ -880,9 +877,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     landingInquiries: "도입 문의",
     loginSessions: "로그인 관리",
     sessionLogs: "접속이력",
-    sheetHub: "구글시트 연동",
     trash: "휴지통",
-    dataCheck: "데이터 점검",
     permissions: "권한 관리",
     landingEdit: "로그인 화면 꾸미기",
     notifTemplate: "알림 문구 설정",
@@ -893,10 +888,10 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const tabGroups = [
     { key: "members", label: "회원 관리", tabs: ["members"] },
     { key: "shipperMgmt", label: "화주사 관리", tabs: ["linked", "transmit", "inquiries", "landingInquiries"] },
-    { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "permissions", "sheetHub", "dataCheck"] }, // ⭐ 2026-11-06 운송사 초기화는 관리자 관리센터(보안·데이터 › 운송사 초기화)로만 옮김 · 🔗 2026-11-07 구글시트 메뉴 셋 → "구글시트 연동" 하나 · 블라인드 모드 · 화주사 강제 업데이트는 뺌(강제 업데이트는 관리센터에 남음)
+    { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "permissions"] }, // 🧹 2026-11-15 구글시트 연동 → 관리센터 › 데이터 › 구글시트 연동으로 합침 · 데이터 점검 뺌 · ⭐ 2026-11-06 운송사 초기화는 관리자 관리센터(보안·데이터 › 운송사 초기화)로만 옮김 · 🔗 2026-11-07 구글시트 메뉴 셋 → "구글시트 연동" 하나 · 블라인드 모드 · 화주사 강제 업데이트는 뺌(강제 업데이트는 관리센터에 남음)
     { key: "settings", label: "환경 설정", tabs: ["billing", "setup", "copyTemplate"] }, // 🧹 2026-11-14 로그인 화면 꾸미기 · 알림 문구는 관리센터 › 운영에서만(같은 화면이 두 곳에 있었다)
   ]
-    .map((g) => ({ ...g, tabs: g.tabs.filter((t) => (!REQUIRES_MASTER_TABS.has(t) || isTotalMaster || (t === "permissions" && masterPerms)) && (t !== "billing" || billingAcc.view) && (t !== "sheetHub" || isTotalMaster || ["admin", "allMgr"].includes(myRoleEff)) && (t !== "dataCheck" || isTotalMaster || ["admin", "allMgr"].includes(myRoleEff))) })) // 💳 구독·결제는 경리·재무·임원·대표만(billingAccess.js)
+    .map((g) => ({ ...g, tabs: g.tabs.filter((t) => (!REQUIRES_MASTER_TABS.has(t) || isTotalMaster || (t === "permissions" && masterPerms)) && (t !== "billing" || billingAcc.view)) })) // 💳 구독·결제는 경리·재무·임원·대표만(billingAccess.js)
     // 🏢 부서 관리자메뉴 — 경리: 회원 승인 + 구독·결제 / 인사: 회원(인사권) + 로그인 관리. 배차용(기사복사 문구·화주사 등)은 뺀다
     .map((g) => (deptMode ? { ...g, tabs: g.tabs.filter((t) => (DEPT_ADMIN_TABS[deptMode] || []).includes(t) || (t === "billing" && billingAcc.view)) } : g))
     .filter((g) => g.tabs.length > 0);
@@ -909,7 +904,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // ⭐ 디자인 개편 — 왼쪽 메뉴바(그룹별) + 상단 인사 카드 + 숫자 카드(AdminShell 공용 레이아웃)
   const TAB_ICONS = {
     members: "users", linked: "link", transmit: "send", inquiries: "chat", landingInquiries: "inbox",
-    loginSessions: "phone", companyReset: "trash", sheetHub: "sheet", trash: "trash", sessionLogs: "history", permissions: "key", dataCheck: "check",
+    loginSessions: "phone", companyReset: "trash", trash: "trash", sessionLogs: "history", permissions: "key",
     landingEdit: "globe", notifTemplate: "bell", setup: "check", copyTemplate: "list", billing: "money",
   };
   const shellGroups = tabGroups.map((g) => ({
@@ -1517,10 +1512,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
 
           {/* ⭐ 2026-11-06 운송사 초기화 탭 제거 — 관리자 관리센터에서만(계약종료 + 초기화 포함) */}
 
-          {/* ====== 구글시트 연동(연결된 시트 · 가져오기 · 보내기 · 매핑 수정) ====== */}
-          {adminTab === "sheetHub" && (isTotalMaster || ["admin", "allMgr"].includes(myRoleEff)) && <SheetConnectHub company={effectiveCompany} isTotalMaster={isTotalMaster} />}
           {/* 🗑 2026-11-14 휴지통 메뉴를 없앴다(사용자 요청) — 지운 오더는 보관하지 않는다 */}
-          {adminTab === "dataCheck" && <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}><DataCheckPanel company={autoCompany} /></React.Suspense>}
 
           {/* ====== 접속이력 탭 (최고관리자 전용) ====== */}
           {adminTab === "sessionLogs" && isTotalMaster && (() => {
@@ -1541,6 +1533,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   <option value="login">로그인만</option>
                   <option value="logout">로그아웃만</option>
                 </CustomSelect>
+                <button type="button" onClick={async () => { if (!(await kpConfirm("접속 이력을 모두 지울까요?\n지운 기록은 되돌릴 수 없어요."))) return; try { const n = await deleteAllDocs("sessionLogs"); setSessionLogs([]); alert(`접속 이력 ${n}건을 지웠어요.`); } catch (e) { alert(`실패: ${e?.message || e}`); } }} className="h-[32px] px-3 rounded-lg border border-[#E8B4AE] bg-white text-[12px] font-black text-[#B4342A] hover:bg-[#FDF3F2]">전체 삭제</button>
               </div>
               {filteredLogs.length === 0 ? (
                 <div className="text-[13px] text-gray-500 text-center py-16">접속 이력이 없습니다.</div>

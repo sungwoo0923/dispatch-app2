@@ -660,7 +660,7 @@ function HrDashboard({ company, onGo, me, att }) {
   const leavePending = approvals.filter((a) => a.cat === "leave" && myTurnDoc(a));
   const reportPending = approvals.filter((a) => a.cat === "report" && myTurnDoc(a));
   const noHire = active.filter((u) => !hireOf(u));
-  const docIssueDrivers = drivers.filter((d) => { const p = docProblems(docsBy?.[d.id]); return p.missing || p.bad; }).length;
+  const fleetN = drivers.filter((d) => ["지입", "직영", "임대", "분양"].includes(String(d.등급 || "").trim())).length;
   // 이번 달 연차 사용 — 승인된 휴가(시작일 기준) · 일별 부재 인원
   const monthUse = approvals.filter((a) => a.status === "approved").map((a) => ({ a, x: leaveUseOf(a) })).filter(({ x }) => x && String(x.date).startsWith(ym));
   const usedDays = monthUse.reduce((s, { x }) => s + x.days, 0);
@@ -696,11 +696,10 @@ function HrDashboard({ company, onGo, me, att }) {
     ["휴가·근태 결재 대기", "전자결재 › 근태·휴가 신청", `${leavePending.length}건`, leavePending.length, "전자결재"],
     ["인사·보고 결재 대기", "전자결재 › 업무 보고·인사", `${reportPending.length}건`, reportPending.length, "전자결재"],
     ["직원 가입 승인", "관리자메뉴 › 회원 관리", `${pendingStaff.length}명`, pendingStaff.length, "관리자메뉴"],
-    ["기사 가입 승인", "기사관리 › 기사 앱 계정", `${pendingDrivers.length}명`, pendingDrivers.length, "기사승인"],
     ["입사일 미등록", "연차 자동 계산이 안 됩니다", `${noHire.length}명`, noHire.length, "인사관리부"],
     ["퇴사 예정 처리", resignPlanned[0] ? `가장 빠른 퇴직일 ${resignPlanned[0].resignPlan.date}` : "", `${resignPlanned.length}명`, resignPlanned.filter((u) => String(u.resignPlan.date) <= addMonths(today, 1)).length, "인사관리부"],
     ["연차 사용 촉진 대상", "잔여 3일 이상 · 회기 종료 6개월 이내", `${promote.length}명`, promote.length, "인사관리부:leave"],
-    ["기사 서류 미비", "미제출·반려·만료", `${docIssueDrivers}명`, docIssueDrivers, "기사서류"],
+    ["소속 기사", "인사관리부 › 지입관리(지입 · 직영 · 임대)", `${fleetN}명`, 0, "인사관리부:fleet:전체"], // 🚛 2026-11-15 기사관리는 인사 화면에서 뺐다
   ];
   const ORDER = ["late", "none", "away", "leave", "in"];
   const myName = me?.name || "";
