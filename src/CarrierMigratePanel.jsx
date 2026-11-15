@@ -148,7 +148,7 @@ function SheetPingBox({ co, live, pingOk, onDone }) {
   const [busy, setBusy] = React.useState("");
   const [note, setNote] = React.useState("");
   const get = async (renew = false) => {
-    if (renew && !(await kpConfirm("새 열쇠로 바꿀까요?\n예전에 붙인 스크립트는 더 이상 동작하지 않아요. 새 스크립트로 바꿔 붙이고 '설치'를 다시 실행해 주세요."))) return;
+    if (renew && !(await kpConfirm("새 열쇠로 바꿀까요?\n예전에 붙인 스크립트는 더 이상 동작하지 않아요. 새 스크립트로 바꿔 붙이고 'logiswebInstall'을 다시 실행해 주세요."))) return;
     setBusy(renew ? "renew" : "get"); setNote("");
     try { const d = await callApi("sheetImport", { action: "pingScript", company: co, renew }); setScript(d.script || ""); onDone?.(); } catch (e) { setNote(liveErr(e.message)); } finally { setBusy(""); }
   };
@@ -169,7 +169,7 @@ function SheetPingBox({ co, live, pingOk, onDone }) {
           <ol className="list-decimal pl-5 text-[13px] text-[#3A4A66] leading-relaxed space-y-0.5">
             <li>구글시트 위 메뉴 <b>확장 프로그램 › Apps Script</b>를 눌러요.</li>
             <li>왼쪽 <b>파일 +</b> › <b>스크립트</b>로 새 파일(이름: LogisWeb)을 만들고, 아래 글을 붙여 넣은 뒤 <b>저장</b>해요. 이미 있던 다른 파일 · 코드는 지우지 마세요.</li>
-            <li>위쪽 함수 고르기에서 <b>설치</b>를 고르고 <b>실행</b> → 구글 계정 권한을 허용하면 돼요.</li>
+            <li>위쪽 함수 고르기에서 <b>logiswebInstall</b>을 고르고 <b>실행</b> → 구글 계정 권한을 허용하면 돼요. 태블릿 · 휴대폰에서는 권한 창이 안 열려 "알 수 없는 오류"가 날 수 있어요 — PC에서 해 주세요.</li>
             <li>이 화면에 "설치됨"이 뜨면 끝이에요. 시트 주인 계정으로 한 번만 하면 돼요.</li>
           </ol>
           <div className="mt-2 flex gap-2"><button type="button" onClick={copy} className={`${btn} h-9 px-3 bg-[#1B2B4B] text-white text-[13px]`}>스크립트 복사</button></div>

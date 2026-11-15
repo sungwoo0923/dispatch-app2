@@ -298,7 +298,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
   //  🛠 2026-11-15 시트에 붙은 스크립트가 아니어도(따로 만든 프로젝트 · 다른 코드가 이미 있는 프로젝트) 되게 — 시트 ID로 트리거를 건다
   const scriptFor = (key, sheetId = "") => [
     "// LogisWeb 실시간 연동 — 이 시트가 바뀌면 LogisWeb 에 바로 알립니다(시트 내용은 보내지 않고, 고친 탭 이름만 보냅니다)",
-    "// 처음 한 번: 위에서 '설치' 함수를 고르고 [실행] → 권한 허용",
+    "// 처음 한 번: 위에서 'logiswebInstall' 함수를 고르고 [실행] → 권한 허용(PC에서 하면 권한 창이 잘 열립니다)",
     "// 이미 다른 코드가 있으면 지우지 말고, 왼쪽 [파일 +] › 스크립트로 새 파일(LogisWeb)을 만들어 거기에 붙여 넣으세요",
     `var LOGISWEB_URL = '${pingUrl()}?k=${key}';`,
     `var LOGISWEB_SHEET_ID = '${sheetId}';`,
@@ -315,7 +315,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     "  if (t === 'EDIT' || t === 'FORMAT') return; // 값 고침은 logiswebEdit 가 보낸다 · 서식만 바뀐 건 무시",
     "  logiswebSend({ full: true, type: t });",
     "}",
-    "function 설치() {",
+    "function logiswebInstall() {",
     "  var ss = LOGISWEB_SHEET_ID || SpreadsheetApp.getActive();",
     "  ScriptApp.getProjectTriggers().forEach(function (t) { if (/^logisweb/.test(t.getHandlerFunction())) ScriptApp.deleteTrigger(t); });",
     "  ScriptApp.newTrigger('logiswebEdit').forSpreadsheet(ss).onEdit().create();",
