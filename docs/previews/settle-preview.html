@@ -1,0 +1,556 @@
+<title>정산관리 개편 시안</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: 바탕색 없음 — 흰 바탕 하나에 선(border)으로만 나누고, 상태는 글씨색으로만 구분 */
+:root{
+  --bg:#FFFFFF; --line:#DCE2EC; --fg:#16233D; --sub:#5A6781; --mute:#8D97AB;
+  --accent:#2457D6; --ok:#0F7A52; --warn:#B25F00; --bad:#C62F25;
+  --paper-fg:#1A1F2B; --paper-line:#C9D0DC;
+  --sans:"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121826; --line:#2C3750; --fg:#E8EDF7; --sub:#A3AEC4; --mute:#6F7B93;
+  --accent:#7EA2FF; --ok:#53C99A; --warn:#F0AE52; --bad:#FF8379; --paper-fg:#E8EDF7; --paper-line:#3A4661;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121826; --line:#2C3750; --fg:#E8EDF7; --sub:#A3AEC4; --mute:#6F7B93;
+  --accent:#7EA2FF; --ok:#53C99A; --warn:#F0AE52; --bad:#FF8379; --paper-fg:#E8EDF7; --paper-line:#3A4661;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.55}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.app{border-bottom:1px solid var(--line)}
+header.app .wrap{display:flex;align-items:center;gap:14px;padding-block:14px;flex-wrap:wrap}
+.brand{font-weight:900;letter-spacing:.02em}
+.brand small{font-weight:500;color:var(--mute);margin-left:8px;font-size:12px}
+.tabs{display:flex;gap:18px;margin-left:auto;flex-wrap:wrap}
+.tabs a{color:var(--mute);text-decoration:none;padding:4px 0;font-weight:700;font-size:14px}
+.tabs a[aria-current="page"]{color:var(--accent)}
+.tabs a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+main{padding-block:22px 60px}
+h1{font-size:22px;font-weight:900;margin:0;text-wrap:balance}
+h2{font-size:16.5px;font-weight:900;margin:0;text-wrap:balance}
+.lede{color:var(--sub);margin:6px 0 0;max-width:68ch}
+.idea{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:16px 0 20px;font-size:13.5px}
+.idea b{color:var(--accent);white-space:nowrap}
+.idea ul{margin:0;padding-left:18px}
+button{font-family:inherit;cursor:pointer}
+.btn{display:inline-flex;align-items:center;text-decoration:none;height:38px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--fg);font-weight:700;font-size:13.5px}
+.btn.primary{border-color:var(--accent);color:var(--accent);font-weight:900}
+.btn.danger{color:var(--bad);border-color:var(--bad)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.sm{height:30px;padding:0 11px;font-size:12.5px;border-radius:8px}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:700;white-space:nowrap}
+.pill.ok{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.bad{color:var(--bad)} .pill.idle{color:var(--mute)} .pill.blue{color:var(--accent)}
+.panel{border:1px solid var(--line);border-radius:14px}
+.muted{color:var(--sub)} .tiny{font-size:12px;color:var(--mute)}
+
+/* ---------- 정산 홈 ---------- */
+.monthbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px}
+.monthbar .m{font-size:15px;font-weight:900}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;font-weight:700;margin-left:auto}
+.todo{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px}
+.todo .card{border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px}
+.todo .step{font-size:12px;font-weight:700;color:var(--mute);letter-spacing:.04em}
+.todo .big{font-size:28px;font-weight:600}
+.todo .big small{font-size:14px;font-family:var(--sans);font-weight:700;color:var(--sub);margin-left:4px}
+.todo .card .btn{margin-top:auto;align-self:flex-start}
+.todo .card.hot .step,.todo .card.hot .big{color:var(--accent)}
+.cols2{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:12px;margin-top:12px}
+.list{list-style:none;margin:0;padding:0}
+.list li{display:flex;align-items:center;gap:10px;padding:11px 16px;border-top:1px solid var(--line)}
+.list li:first-child{border-top:0}
+.list .grow{flex:1;min-width:0}
+.list .pill{min-width:44px}
+.panel-h{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px 10px}
+.before-after{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.ba{padding:14px 16px}
+.ba h3{margin:0 0 8px;font-size:13.5px}
+.ba ol{margin:0;padding-left:18px;color:var(--sub);font-size:13px}
+.ba.after h3{color:var(--accent)}
+.ba.after ol{color:var(--fg)}
+
+/* ---------- 명세서 양식 ---------- */
+.inv{display:grid;grid-template-columns:330px minmax(0,1fr);gap:14px;align-items:start}
+.side{padding:14px;display:flex;flex-direction:column;gap:16px;position:sticky;top:12px}
+.side h3{font-size:13px;margin:0 0 8px;color:var(--sub);font-weight:700}
+.field{display:flex;flex-direction:column;gap:4px}
+select,input[type=text]{height:36px;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--fg);padding:0 10px;font-family:inherit;font-size:13.5px;width:100%}
+select option{background:var(--bg);color:var(--fg)}
+.presets{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.preset{border:1px solid var(--line);background:transparent;color:var(--sub);border-radius:10px;padding:8px 10px;text-align:left;font-size:12.5px}
+.preset b{display:block;font-size:13px;color:var(--fg)}
+.preset[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.preset[aria-pressed="true"] b{color:var(--accent)}
+.colrow{display:flex;align-items:center;gap:8px;padding:6px 2px}
+.colrow label{flex:1;display:flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer}
+.colrow input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
+.colrow .mv{width:26px;height:26px;border:1px solid var(--line);background:transparent;color:var(--sub);border-radius:6px;font-size:12px;padding:0}
+.colrow.off label{color:var(--mute);text-decoration:line-through}
+.opt{display:flex;align-items:center;gap:8px;font-size:13.5px;padding:4px 0;cursor:pointer}
+.opt input{width:16px;height:16px;accent-color:var(--accent)}
+.savebar{display:flex;gap:8px;flex-wrap:wrap}
+.toast{font-size:12.5px;color:var(--ok);font-weight:700;min-height:18px}
+.sheetwrap{overflow-x:auto;border-radius:14px;border:1px solid var(--line);padding:18px}
+.sheet{color:var(--paper-fg);min-width:640px;max-width:860px;margin:0 auto;padding:10px 12px}
+.sheet h4{text-align:center;font-size:22px;letter-spacing:.5em;margin:0 0 14px;font-weight:900}
+.sheet .meta{display:flex;justify-content:space-between;gap:16px;font-size:12px;margin-bottom:12px}
+.sheet .meta div{display:grid;grid-template-columns:auto 1fr;gap:2px 10px}
+.sheet .meta dt{color:var(--mute)}
+.sheet .meta dd{margin:0;font-weight:700}
+.sheet table{width:100%;border-collapse:collapse;font-size:11.5px}
+.sheet th{border:1px solid var(--paper-line);border-bottom-width:2px;padding:5px 6px;font-weight:900;white-space:nowrap}
+.sheet td{border:1px solid var(--paper-line);padding:5px 6px}
+.sheet td.r{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.sheet tr.sum td{font-weight:900;border-top-width:2px}
+.sheet tr.grp td{font-weight:700;color:var(--sub)}
+.sheet .foot{display:flex;justify-content:space-between;align-items:flex-end;margin-top:14px;font-size:12px;gap:12px}
+.sheet .total{font-size:15px;font-weight:900}
+.sheet .note{color:var(--mute);font-size:11.5px;margin-top:8px}
+.badge-tpl{font-size:12px;color:var(--sub);margin-bottom:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+/* ---------- 2단계 마감 ---------- */
+.flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:16px 0 20px;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.flow > div{padding:14px 16px;position:relative;border-left:1px solid var(--line)}
+.flow > div:first-child{border-left:0}
+.flow .who{font-size:12px;font-weight:700;color:var(--mute)}
+.flow .what{font-weight:900;margin-top:2px}
+.flow .desc{font-size:12.5px;color:var(--sub);margin-top:4px}
+.flow .cnt{position:absolute;top:12px;right:14px;font-size:15px}
+.roles{display:inline-flex;gap:18px;flex-wrap:wrap}
+.roles button{border:0;background:transparent;color:var(--mute);font-weight:700;padding:6px 0;font-size:14px}
+.roles button[aria-pressed="true"]{color:var(--accent)}
+.closebar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:12px}
+.ctable{overflow-x:auto}
+table.c{width:100%;border-collapse:collapse;font-size:13.5px;min-width:760px}
+table.c th{text-align:left;font-size:12px;color:var(--mute);font-weight:700;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.c th.r{text-align:right}
+table.c td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.c tr:last-child td{border-bottom:0}
+table.c td.r{text-align:right}
+table.c tr.sel td:first-child b{color:var(--accent)}
+table.c tr.sel td:first-child b::before{content:"▸ "}
+.checks{display:flex;gap:10px;flex-wrap:wrap}
+.detail{margin-top:12px;padding:16px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.detail h3{margin:0 0 8px;font-size:14px}
+.ck{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line);font-size:13.5px}
+.ck:first-of-type{border-top:0}
+.ck .mark{width:20px;flex:none;text-align:center;font-size:14px;font-weight:900}
+.ck .mark.ok{color:var(--ok)} .ck .mark.bad{color:var(--bad)} .ck .mark.warn{color:var(--warn)}
+.reason{margin:6px 0 10px;font-size:13.5px;color:var(--bad)}
+.reason b{margin-right:8px}
+.log{list-style:none;margin:0;padding:0;font-size:13px}
+.log li{padding:6px 0;border-top:1px dashed var(--line);display:flex;gap:10px}
+.log li:first-child{border-top:0}
+.log time{color:var(--mute);font-family:var(--mono);font-size:12px;white-space:nowrap}
+textarea{width:100%;min-height:64px;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--fg);padding:8px 10px;font-family:inherit;font-size:13.5px}
+.rules{margin-top:20px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.rules div{padding:14px 16px}
+.rules h3{margin:0 0 6px;font-size:13.5px}
+.rules p{margin:0;font-size:13px;color:var(--sub)}
+
+@media (max-width:900px){
+  .inv{grid-template-columns:1fr}.side{position:static}
+  .cols2,.before-after,.detail,.rules{grid-template-columns:1fr}
+  .flow{grid-template-columns:1fr 1fr}.flow > div:nth-child(3){border-left:0}
+  .flow > div:nth-child(n+3){border-top:1px solid var(--line)}
+  .legend{margin-left:0}
+}
+@media (max-width:620px){.todo{grid-template-columns:1fr}.tabs{margin-left:0}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<header class="app">
+  <div class="wrap">
+    <div class="brand">LogisWeb · 정산관리 <small>개편 시안 (미리보기)</small></div>
+    <nav class="tabs" aria-label="시안 화면">
+      <a href="#home" data-v="home">① 정산 홈</a>
+      <a href="#invoice" data-v="invoice">② 명세서 양식</a>
+      <a href="#close" data-v="close">③ 2단계 마감</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- ================= ① 정산 홈 ================= -->
+<section id="v-home">
+  <h1>정산 홈 — 오늘 할 일 3개만 보여요</h1>
+  <p class="lede">지금은 단계 6개 · 버튼 6개가 한꺼번에 보여서 처음 온 사람이 어디부터 눌러야 할지 몰라요. 할 일을 <b>검증 → 청구 → 받기·지급</b> 3묶음으로 줄이고, 지금 해야 할 카드 하나에만 파란 글씨를 써요.</p>
+
+  <div class="monthbar">
+    <button class="btn sm" type="button" aria-label="이전 달">‹</button>
+    <span class="m">2026년 11월</span>
+    <button class="btn sm" type="button" aria-label="다음 달">›</button>
+    <div class="legend"><span class="pill ok">마감 끝 18곳</span><span class="pill blue">청구 중 9곳</span><span class="pill warn">검증 중 6곳</span><span class="pill idle">아직 7곳</span></div>
+  </div>
+
+  <div class="todo">
+    <div class="card hot">
+      <div class="step">1 · 검증</div>
+      <h2>경리 확인을 기다려요</h2>
+      <div class="big num" id="homeQueue">3<small>곳</small></div>
+      <div class="muted">배차자가 1차 마감한 거래처예요. 확인하면 바로 청구로 넘어가요.</div>
+      <a class="btn primary" href="#close">검증하러 가기</a>
+    </div>
+    <div class="card">
+      <div class="step">2 · 청구</div>
+      <h2>보낼 명세서</h2>
+      <div class="big num">9<small>곳</small></div>
+      <div class="muted">검증이 끝난 곳만 모여요. 거래처 양식대로 만들어져요.</div>
+      <a class="btn" href="#invoice">명세서 보내기</a>
+    </div>
+    <div class="card">
+      <div class="step">3 · 받기 · 지급</div>
+      <h2>못 받은 돈</h2>
+      <div class="big num">48,320,000<small>원</small></div>
+      <div class="muted">60일 넘은 곳 2곳 · 기사 미지급 14건</div>
+      <button class="btn" type="button">미수금 보기</button>
+    </div>
+  </div>
+
+  <div class="cols2">
+    <div class="panel">
+      <div class="panel-h"><h2>먼저 챙길 거래처</h2><span class="tiny">오래된 순</span></div>
+      <ul class="list">
+        <li><span class="pill bad num">92일</span><span class="grow"><b>동해페이퍼</b> <span class="tiny">· 담당 박민수</span></span><span class="num">6,820,000</span></li>
+        <li><span class="pill warn">64일</span><span class="grow"><b>세진로지스</b> <span class="tiny">· 담당 이지은</span></span><span class="num">3,140,000</span></li>
+        <li><span class="pill warn">반려</span><span class="grow"><b>대성식품</b> <span class="tiny">· 경리가 고쳐 달라고 돌려보냈어요</span></span><button class="btn sm" type="button">사유 보기</button></li>
+        <li><span class="pill idle">미마감</span><span class="grow"><b>우리마트 물류센터</b> <span class="tiny">· 배차자 1차 마감 전</span></span><span class="tiny">D-3</span></li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="panel-h"><h2>메뉴 줄이기</h2></div>
+      <ul class="list">
+        <li><span class="grow"><b>위쪽 탭</b><br><span class="tiny">정산 홈 · 마감 검증 · 명세서 · 미수금 · 지급 — 5개로</span></span></li>
+        <li><span class="grow"><b>더보기 안으로</b><br><span class="tiny">지입정산 · 지게차 지급 · 메일함 · 메일 예약 · 직접 조회</span></span></li>
+        <li><span class="grow"><b>버튼은 화면당 큰 버튼 1개</b><br><span class="tiny">나머지는 줄 오른쪽 ⋯ 메뉴로</span></span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="before-after">
+    <div class="panel ba"><h3 class="muted">지금</h3><ol><li>정산 홈에서 6단계 숫자를 읽어요</li><li>거래처정산으로 가서 체크박스로 골라요</li><li>일괄 작성 → 일괄 발송 → 일괄 발행 기록 → 일괄 마감</li><li>금액이 틀리면 경리가 배차자에게 따로 물어봐요</li></ol></div>
+    <div class="panel ba after"><h3>바뀐 뒤</h3><ol><li>배차자가 내 거래처를 1차 마감해요 (금액 책임은 배차자)</li><li>경리는 파란 글씨 카드 하나만 눌러 승인 · 반려해요</li><li>승인되면 거래처 양식으로 명세서가 바로 준비돼요</li><li>발송 · 입금은 정산 홈 3번 카드에서 이어서 해요</li></ol></div>
+  </div>
+</section>
+
+<!-- ================= ② 명세서 양식 ================= -->
+<section id="v-invoice" hidden>
+  <h1>거래명세서 양식 — 거래처마다 원래 쓰던 모양으로</h1>
+  <p class="lede">칸을 켜고 끄고, 순서를 바꾸면 오른쪽 명세서가 바로 바뀌어요. 한 번 저장하면 그 거래처 명세서는 다음 달부터 이 양식으로 만들어져요.</p>
+  <div class="idea"><b>아이디어</b><ul><li>양식은 <b>회사 기본 1개 + 거래처 전용 여러 개</b>. 거래처에 양식이 없으면 회사 기본으로 나가요.</li><li>칸만 고르는 게 아니라 <b>칸 이름</b>도 바꿀 수 있어요 (예: 화물명 → 품목, 기사명 → 운전원).</li><li>숨긴 칸도 데이터는 그대로 있어요. 금액 합계는 칸을 꺼도 바뀌지 않아요.</li></ul></div>
+
+  <div class="inv">
+    <aside class="panel side" aria-label="양식 설정">
+      <div class="field">
+        <h3>거래처</h3>
+        <select id="invClient">
+          <option value="한빛물산">한빛물산 (전용 양식 있음)</option>
+          <option value="대성식품">대성식품 (전용 양식 있음)</option>
+          <option value="세진로지스">세진로지스 (회사 기본)</option>
+        </select>
+      </div>
+      <div>
+        <h3>빠른 양식</h3>
+        <div class="presets" id="presets"></div>
+      </div>
+      <div>
+        <h3>보여 줄 칸 <span class="tiny">· 이름을 눌러 바꿔요</span></h3>
+        <div id="colList"></div>
+      </div>
+      <div>
+        <h3>옵션</h3>
+        <label class="opt"><input type="checkbox" id="optTax" checked>세액 · 합계 칸</label>
+        <label class="opt"><input type="checkbox" id="optGroup">날짜별로 묶어서 소계</label>
+        <label class="opt"><input type="checkbox" id="optNote" checked>계좌 · 비고 표시</label>
+      </div>
+      <div>
+        <div class="savebar">
+          <button class="btn primary" type="button" id="saveTpl">이 거래처 양식으로 저장</button>
+          <button class="btn" type="button" id="resetTpl">기본으로</button>
+        </div>
+        <div class="toast" id="toast" role="status"></div>
+      </div>
+    </aside>
+
+    <div style="min-width:0">
+      <div class="badge-tpl" id="tplBadge"></div>
+      <div class="sheetwrap"><div class="sheet" id="sheet"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ③ 2단계 마감 ================= -->
+<section id="v-close" hidden>
+  <h1>2단계 마감 — 배차자가 먼저, 경리가 마지막</h1>
+  <p class="lede">내가 배차한 오더, 내 거래처는 내가 가장 잘 알아요. 배차자가 먼저 숫자를 맞춰 1차 마감하고, 경리팀은 확인된 데이터만 다시 보고 업체에 넘겨요. 위에서 역할을 바꿔 가며 눌러 보세요.</p>
+
+  <div class="flow" id="flow"></div>
+
+  <div class="closebar">
+    <div class="roles" role="group" aria-label="역할 바꾸기">
+      <button type="button" data-role="disp" aria-pressed="true">배차자 화면 · 이지은</button>
+      <button type="button" data-role="acct" aria-pressed="false">경리팀 화면 · 최경리</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <select id="closeUnit" style="width:auto"><option>월 마감 · 2026년 11월</option><option>일 마감 · 11월 14일</option></select>
+      <button class="btn sm" type="button" id="resetDemo">시안 처음으로</button>
+    </div>
+  </div>
+
+  <div class="panel ctable"><table class="c" id="ctable"></table></div>
+  <div class="panel detail" id="detail"></div>
+
+  <div class="rules">
+    <div class="panel"><h3>1차 마감하면 잠겨요</h3><p>배차자가 1차 마감한 오더는 운임을 못 고쳐요. 고쳐야 하면 [마감 풀기]를 누르고 사유를 남겨요. 경리 승인 뒤에는 경리만 풀 수 있어요.</p></div>
+    <div class="panel"><h3>반려는 이유와 함께</h3><p>경리가 반려하면 어떤 오더가 왜 틀렸는지 표시돼서 배차자에게 알림이 가요. 고치고 다시 올리면 바뀐 줄만 따로 표시돼요.</p></div>
+    <div class="panel"><h3>자동 검사 4가지</h3><p>청구운임 빈칸 · 기사운임이 청구보다 큼 · 같은 날 같은 구간 중복 · 지난달보다 금액 30% 넘게 차이 — 걸리면 1차 마감 버튼 옆에 먼저 보여요.</p></div>
+  </div>
+</section>
+
+</main>
+
+<script>
+(function(){
+const won = n => n.toLocaleString("ko-KR");
+/* ---------------- routing ---------------- */
+const views = ["home","invoice","close"];
+function route(){
+  const v = views.includes(location.hash.slice(1)) ? location.hash.slice(1) : "home";
+  views.forEach(k => document.getElementById("v-"+k).hidden = k!==v);
+  document.querySelectorAll(".tabs a").forEach(a => { if(a.dataset.v===v) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
+  window.scrollTo(0,0);
+}
+window.addEventListener("hashchange", route); route();
+
+/* ---------------- ② 명세서 양식 ---------------- */
+const ROWS = [
+  {d:"11-03",from:"인천 남동공단",to:"평택 물류센터",via:"",cargo:"복사용지 16팔레트",ton:"11톤 윙",drv:"김성호",car:"경기88바1234",amt:420000},
+  {d:"11-03",from:"인천 남동공단",to:"천안 직영점",via:"아산",cargo:"복사용지 6팔레트",ton:"5톤 카고",drv:"정우진",car:"인천90사5521",amt:310000},
+  {d:"11-05",from:"시흥 정왕동",to:"대전 유성구",via:"",cargo:"골판지 원지 12롤",ton:"11톤 윙",drv:"김성호",car:"경기88바1234",amt:560000},
+  {d:"11-07",from:"인천 남동공단",to:"평택 물류센터",via:"",cargo:"복사용지 16팔레트",ton:"11톤 윙",drv:"한도윤",car:"서울87아3310",amt:420000},
+  {d:"11-07",from:"안산 반월공단",to:"수원 권선구",via:"",cargo:"포장재 박스 80개",ton:"1톤 탑",drv:"오민재",car:"경기80자7782",amt:95000},
+  {d:"11-10",from:"인천 남동공단",to:"광주 하남산단",via:"전주",cargo:"복사용지 20팔레트",ton:"25톤 윙",drv:"정우진",car:"인천90사5521",amt:980000},
+];
+const COLS = [
+  {k:"d",name:"상차일"},{k:"from",name:"상차지"},{k:"to",name:"하차지"},{k:"via",name:"경유지"},
+  {k:"cargo",name:"화물명"},{k:"ton",name:"차종/톤수"},{k:"drv",name:"기사명"},{k:"car",name:"차량번호"},
+];
+const PRESETS = {
+  기본형:{desc:"지금 쓰는 칸 그대로",on:["d","from","to","via","cargo","drv","car"],tax:true,group:false},
+  간단형:{desc:"날짜 · 구간 · 금액만",on:["d","from","to"],tax:true,group:false},
+  차량중심:{desc:"톤수 · 차량 위주",on:["d","to","ton","car","drv"],tax:true,group:false},
+  날짜묶음:{desc:"일자별 소계",on:["d","from","to","cargo","ton"],tax:false,group:true},
+};
+const CLIENT_TPL = {
+  한빛물산:{name:"한빛물산 전용",order:["d","from","to","ton","cargo","drv","car","via"],on:["d","from","to","ton"],rename:{cargo:"품목"},tax:true,group:false,note:true},
+  대성식품:{name:"대성식품 전용",order:["d","to","from","drv","car","cargo","ton","via"],on:["d","to","drv","car"],rename:{drv:"운전원"},tax:false,group:true,note:false},
+};
+let st;
+function fromTpl(t){
+  const order = t.order || COLS.map(c=>c.k);
+  return {order:[...order], on:new Set(t.on), rename:{...(t.rename||{})}, tax:t.tax, group:t.group, note:t.note!==false, tplName:t.name||"회사 기본", preset:t.preset||null};
+}
+function loadClient(c){
+  st = fromTpl(CLIENT_TPL[c] || {...PRESETS.기본형, name:"회사 기본"});
+  renderInv();
+}
+const colName = k => st.rename[k] || COLS.find(c=>c.k===k).name;
+function renderPresets(){
+  const box = document.getElementById("presets"); box.innerHTML="";
+  Object.entries(PRESETS).forEach(([n,p])=>{
+    const b=document.createElement("button"); b.type="button"; b.className="preset";
+    b.setAttribute("aria-pressed", st.preset===n); b.innerHTML=`<b>${n}</b>${p.desc}`;
+    b.onclick=()=>{ st.on=new Set(p.on); st.tax=p.tax; st.group=p.group; st.preset=n; st.tplName="편집 중 ("+n+" 기반)"; renderInv(); };
+    box.appendChild(b);
+  });
+}
+function renderCols(){
+  const box=document.getElementById("colList"); box.innerHTML="";
+  st.order.forEach((k,i)=>{
+    const row=document.createElement("div"); row.className="colrow"+(st.on.has(k)?"":" off");
+    row.innerHTML=`<label><input type="checkbox" id="col-${k}" ${st.on.has(k)?"checked":""}><span class="nm">${colName(k)}</span></label>
+      <button class="mv" type="button" aria-label="${colName(k)} 위로" ${i===0?"disabled":""}>▲</button>
+      <button class="mv" type="button" aria-label="${colName(k)} 아래로" ${i===st.order.length-1?"disabled":""}>▼</button>`;
+    row.querySelector("input").onchange=e=>{ e.target.checked?st.on.add(k):st.on.delete(k); dirty(); };
+    const nm=row.querySelector(".nm");
+    nm.title="눌러서 칸 이름 바꾸기";
+    nm.onclick=e=>{ e.preventDefault(); const inp=document.createElement("input"); inp.type="text"; inp.value=colName(k); inp.style.height="28px"; inp.id="rn-"+k;
+      nm.replaceWith(inp); inp.focus(); inp.select();
+      const done=()=>{ const v=inp.value.trim(); if(v && v!==COLS.find(c=>c.k===k).name) st.rename[k]=v; else delete st.rename[k]; dirty(); };
+      inp.onblur=done; inp.onkeydown=ev=>{ if(ev.key==="Enter") inp.blur(); }; };
+    const [up,down]=row.querySelectorAll(".mv");
+    up.onclick=()=>{ [st.order[i-1],st.order[i]]=[st.order[i],st.order[i-1]]; dirty(); };
+    down.onclick=()=>{ [st.order[i+1],st.order[i]]=[st.order[i],st.order[i+1]]; dirty(); };
+    box.appendChild(row);
+  });
+}
+function dirty(){ st.preset=null; if(!st.tplName.startsWith("편집 중")) st.tplName="편집 중 ("+st.tplName+" 기반)"; renderInv(); }
+function renderSheet(){
+  const client=document.getElementById("invClient").value;
+  const cols=st.order.filter(k=>st.on.has(k));
+  const money=st.tax?["공급가액","세액","합계"]:["금액"];
+  const span=1+cols.length;
+  let body="", n=0, sup=0, lastD=null, sub=0;
+  const flush=()=>{ if(st.group && lastD!==null){ body+=`<tr class="grp"><td colspan="${span}">${lastD} 소계</td>${st.tax?`<td class="r">${won(sub)}</td><td class="r">${won(sub/10)}</td><td class="r">${won(sub*1.1)}</td>`:`<td class="r">${won(sub)}</td>`}</tr>`; } sub=0; };
+  ROWS.forEach(r=>{
+    if(st.group && r.d!==lastD){ flush(); lastD=r.d; }
+    n++; sup+=r.amt; sub+=r.amt;
+    body+=`<tr><td class="r">${n}</td>${cols.map(k=>`<td${k==="d"?' class="r"':""}>${r[k]||""}</td>`).join("")}${st.tax?`<td class="r">${won(r.amt)}</td><td class="r">${won(r.amt/10)}</td><td class="r">${won(r.amt*1.1)}</td>`:`<td class="r">${won(r.amt)}</td>`}</tr>`;
+  });
+  flush();
+  const total = st.tax?sup*1.1:sup;
+  document.getElementById("sheet").innerHTML=`
+    <h4>거래명세서</h4>
+    <div class="meta">
+      <dl><div><dt>받는 곳</dt><dd>${client} 귀하</dd><dt>기간</dt><dd>2026.11.01 ~ 11.30</dd></div></dl>
+      <dl><div><dt>공급자</dt><dd>로지스운송(주)</dd><dt>사업자번호</dt><dd class="num">123-45-67890</dd></div></dl>
+    </div>
+    <table><thead><tr><th>No</th>${cols.map(k=>`<th>${colName(k)}</th>`).join("")}${money.map(m=>`<th>${m}</th>`).join("")}</tr></thead>
+    <tbody>${body}<tr class="sum"><td colspan="${span}">합계 (${ROWS.length}건)</td>${st.tax?`<td class="r">${won(sup)}</td><td class="r">${won(sup/10)}</td><td class="r">${won(sup*1.1)}</td>`:`<td class="r">${won(sup)}</td>`}</tr></tbody></table>
+    <div class="foot"><div>${st.note?`입금 계좌 · 기업은행 <span class="num">012-345678-01-011</span> 로지스운송(주)`:""}</div><div class="total">청구 금액 <span class="num">${won(total)}</span>원${st.tax?"":" <span style='font-size:11px;font-weight:500;color:var(--mute)'>(VAT 별도)</span>"}</div></div>
+    ${st.note?`<div class="note">비고 · 대기료 · 수작업비는 별도 청구됩니다.</div>`:""}`;
+  document.getElementById("tplBadge").innerHTML=`<span class="pill ${st.tplName.startsWith("편집")?"warn":"blue"}">${st.tplName}</span><span>보이는 칸 ${cols.length}개 · 숨긴 칸 ${COLS.length-cols.length}개 · 합계는 칸과 상관없이 같아요</span>`;
+}
+function renderInv(){
+  document.getElementById("optTax").checked=st.tax;
+  document.getElementById("optGroup").checked=st.group;
+  document.getElementById("optNote").checked=st.note;
+  renderPresets(); renderCols(); renderSheet();
+}
+document.getElementById("invClient").onchange=e=>{ document.getElementById("toast").textContent=""; loadClient(e.target.value); };
+document.getElementById("optTax").onchange=e=>{ st.tax=e.target.checked; dirty(); };
+document.getElementById("optGroup").onchange=e=>{ st.group=e.target.checked; dirty(); };
+document.getElementById("optNote").onchange=e=>{ st.note=e.target.checked; dirty(); };
+document.getElementById("saveTpl").onclick=()=>{
+  const c=document.getElementById("invClient").value;
+  CLIENT_TPL[c]={name:c+" 전용",order:[...st.order],on:[...st.on],rename:{...st.rename},tax:st.tax,group:st.group,note:st.note};
+  st.tplName=c+" 전용"; renderInv();
+  document.getElementById("toast").textContent=`저장했어요. ${c} 명세서는 이제 이 양식으로 만들어져요.`;
+};
+document.getElementById("resetTpl").onclick=()=>{ st=fromTpl({...PRESETS.기본형,name:"회사 기본",preset:"기본형"}); renderInv(); document.getElementById("toast").textContent=""; };
+loadClient("한빛물산");
+
+/* ---------------- ③ 2단계 마감 ---------------- */
+const SEED = () => [
+  {c:"한빛물산",n:42,amt:18460000,owner:"이지은",st:"draft",checks:{blank:0,neg:0,dup:0,diff:false},log:[]},
+  {c:"대성식품",n:27,amt:9320000,owner:"이지은",st:"rejected",checks:{blank:0,neg:0,dup:1,diff:false},reason:"11/12 시흥→대전 같은 오더가 두 번 들어가 있어요. 한 건 지워 주세요.",log:[["11-14 17:20","최경리","반려 · 중복 1건"],["11-14 10:05","이지은","1차 마감"]]},
+  {c:"세진로지스",n:18,amt:6110000,owner:"이지은",st:"draft",checks:{blank:2,neg:0,dup:0,diff:false},log:[]},
+  {c:"동해페이퍼",n:35,amt:14200000,owner:"박민수",st:"submitted",checks:{blank:0,neg:0,dup:0,diff:true},log:[["11-14 16:40","박민수","1차 마감 · 지난달보다 34% 많음 — 신규 노선 추가"]]},
+  {c:"우리마트 물류센터",n:51,amt:21870000,owner:"박민수",st:"submitted",checks:{blank:0,neg:0,dup:0,diff:false},log:[["11-14 18:02","박민수","1차 마감"]]},
+  {c:"그린팩토리",n:12,amt:3980000,owner:"정하늘",st:"submitted",checks:{blank:0,neg:1,dup:0,diff:false},log:[["11-15 09:12","정하늘","1차 마감 · 기사운임 역마진 1건 확인함(긴급 배차)"]]},
+  {c:"태광전자",n:64,amt:30450000,owner:"정하늘",st:"approved",checks:{blank:0,neg:0,dup:0,diff:false},log:[["11-15 09:40","최경리","2차 승인"],["11-13 19:00","정하늘","1차 마감"]]},
+];
+let CL=SEED(), role="disp", selC="한빛물산";
+const ME="이지은";
+const STATUS={draft:["배차자 확인 중","idle"],rejected:["반려됨","bad"],submitted:["경리 검증 대기","warn"],approved:["승인 · 발송 준비","ok"],sent:["업체 발송","blue"]};
+const issues = x => x.checks.blank + x.checks.neg + x.checks.dup + (x.checks.diff?1:0);
+const now = () => { const d=new Date(); return `11-15 ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; };
+function renderFlow(){
+  const c = s => CL.filter(x=>x.st===s).length;
+  const steps=[
+    ["배차자","내 거래처 정리","운임 · 기사 · 중복을 자동 검사로 맞춰요", c("draft")+c("rejected"), "idle"],
+    ["배차자","1차 마감","올리면 그 달 오더가 잠겨요", null],
+    ["경리팀","2차 검증","승인하거나 사유를 적어 반려해요", c("submitted"), "warn"],
+    ["경리팀","업체에 발송","거래처 양식으로 명세서를 보내요", c("approved")+c("sent"), "ok"],
+  ];
+  document.getElementById("flow").innerHTML = steps.map(s=>`<div><div class="who">${s[0]}</div><div class="what">${s[1]}</div><div class="desc">${s[2]}</div>${s[3]!=null?`<span class="pill ${s[4]} cnt num">${s[3]}</span>`:""}</div>`).join("");
+}
+function checkPills(x){
+  const p=[];
+  if(x.checks.blank) p.push(`<span class="pill bad">청구 빈칸 ${x.checks.blank}</span>`);
+  if(x.checks.dup) p.push(`<span class="pill bad">중복 ${x.checks.dup}</span>`);
+  if(x.checks.neg) p.push(`<span class="pill warn">역마진 ${x.checks.neg}</span>`);
+  if(x.checks.diff) p.push(`<span class="pill warn">전월 대비 +34%</span>`);
+  return p.length?p.join(""):`<span class="pill ok">이상 없음</span>`;
+}
+function rows(){
+  return role==="disp" ? CL.filter(x=>x.owner===ME) : CL.filter(x=>x.st!=="draft");
+}
+function renderTable(){
+  const list=rows();
+  if(!list.find(x=>x.c===selC)) selC=list[0]?.c;
+  const head = role==="disp"
+    ? `<tr><th>내 거래처</th><th class="r">오더</th><th class="r">청구 합계</th><th>자동 검사</th><th>상태</th><th></th></tr>`
+    : `<tr><th>거래처</th><th>1차 마감한 사람</th><th class="r">오더</th><th class="r">청구 합계</th><th>자동 검사</th><th>상태</th><th></th></tr>`;
+  const body = list.map(x=>{
+    const [lab,cls]=STATUS[x.st];
+    let act="";
+    if(role==="disp"){
+      if(x.st==="draft"||x.st==="rejected") act=`<button class="btn sm ${issues(x)&&(x.checks.blank||x.checks.dup)?"":"primary"}" data-act="submit" data-c="${x.c}" type="button">1차 마감</button>`;
+      else if(x.st==="submitted") act=`<button class="btn sm" data-act="unlock" data-c="${x.c}" type="button">마감 풀기</button>`;
+      else act=`<span class="tiny">경리 확인 끝</span>`;
+    } else {
+      if(x.st==="submitted") act=`<button class="btn sm primary" data-act="approve" data-c="${x.c}" type="button">승인</button>`;
+      else if(x.st==="approved") act=`<button class="btn sm" data-act="send" data-c="${x.c}" type="button">명세서 발송</button>`;
+      else if(x.st==="rejected") act=`<span class="tiny">배차자 수정 중</span>`;
+      else act=`<span class="tiny">보냈어요</span>`;
+    }
+    return `<tr class="${x.c===selC?"sel":""}" data-row="${x.c}" style="cursor:pointer">
+      <td><b>${x.c}</b></td>${role==="acct"?`<td>${x.owner}</td>`:""}
+      <td class="r num">${x.n}</td><td class="r num">${won(x.amt)}</td>
+      <td><div class="checks">${checkPills(x)}</div></td>
+      <td><span class="pill ${cls}">${lab}</span></td><td class="r">${act}</td></tr>`;
+  }).join("");
+  document.getElementById("ctable").innerHTML=`<thead>${head}</thead><tbody>${body}</tbody>`;
+}
+function renderDetail(){
+  const x=CL.find(y=>y.c===selC); const box=document.getElementById("detail");
+  if(!x){ box.innerHTML=`<div class="muted">거래처를 골라 주세요.</div>`; return; }
+  const ck=(ok,t,d,lvl)=>`<div class="ck"><span class="mark ${ok?"ok":lvl||"bad"}">${ok?"✓":"✕"}</span><div><b>${t}</b><div class="tiny">${d}</div></div></div>`;
+  const blocking = x.checks.blank || x.checks.dup;
+  let action="";
+  if(role==="disp" && (x.st==="draft"||x.st==="rejected")){
+    action = blocking
+      ? `<div class="tiny" style="color:var(--bad);margin:10px 0 6px">빨간 글씨 항목을 먼저 고쳐야 1차 마감할 수 있어요.</div><button class="btn" type="button" data-act="fix" data-c="${x.c}">고쳤어요 (시안: 자동 해결)</button>`
+      : `<div style="margin-top:10px"><button class="btn primary" type="button" data-act="submit" data-c="${x.c}">${x.st==="rejected"?"고쳐서 다시 올리기":"1차 마감하고 경리팀에 넘기기"}</button></div>`;
+  }
+  if(role==="acct" && x.st==="submitted"){
+    action = `<div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+      <label for="rj" class="tiny">반려할 때 사유 (배차자에게 알림이 가요)</label>
+      <textarea id="rj" placeholder="예: 11/12 세진로지스 대기료가 빠졌어요"></textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" type="button" data-act="approve" data-c="${x.c}">2차 승인</button><button class="btn danger" type="button" data-act="reject" data-c="${x.c}">반려</button><a class="btn" href="#invoice">명세서 미리보기</a></div></div>`;
+  }
+  box.innerHTML=`
+    <div>
+      <h3>${x.c} · <span class="muted" style="font-weight:500">${x.n}건 · <span class="num">${won(x.amt)}</span>원</span></h3>
+      ${x.st==="rejected"&&x.reason?`<div class="reason"><b>반려 사유</b>${x.reason}</div>`:""}
+      ${ck(!x.checks.blank,"청구운임 빈칸",x.checks.blank?`${x.checks.blank}건 비어 있어요`:"모두 들어 있어요")}
+      ${ck(!x.checks.dup,"같은 날 같은 구간 중복",x.checks.dup?`${x.checks.dup}건 겹쳐요`:"겹치는 오더가 없어요")}
+      ${ck(!x.checks.neg,"기사운임이 청구보다 큰 오더",x.checks.neg?`${x.checks.neg}건 · 사유를 남기면 넘어갈 수 있어요`:"없어요","warn")}
+      ${ck(!x.checks.diff,"지난달과 금액 차이",x.checks.diff?"34% 늘었어요 · 배차자 메모를 확인해요":"30% 안이에요","warn")}
+      ${action}
+    </div>
+    <div>
+      <h3>기록</h3>
+      ${x.log.length?`<ul class="log">${x.log.map(l=>`<li><time>${l[0]}</time><span><b>${l[1]}</b> · ${l[2]}</span></li>`).join("")}</ul>`:`<div class="tiny">아직 기록이 없어요. 1차 마감하면 누가 언제 했는지 남아요.</div>`}
+    </div>`;
+}
+function renderClose(){
+  document.querySelectorAll(".roles button").forEach(b=>b.setAttribute("aria-pressed", b.dataset.role===role));
+  renderFlow(); renderTable(); renderDetail();
+  document.getElementById("homeQueue").innerHTML = CL.filter(x=>x.st==="submitted").length+"<small>곳</small>";
+}
+document.querySelector(".roles").onclick=e=>{ const b=e.target.closest("button"); if(!b) return; role=b.dataset.role; selC = role==="acct" ? (CL.find(x=>x.st==="submitted")||{}).c : null; renderClose(); };
+document.getElementById("resetDemo").onclick=()=>{ CL=SEED(); role="disp"; selC="한빛물산"; renderClose(); };
+document.getElementById("v-close").addEventListener("click",e=>{
+  const a=e.target.closest("[data-act]");
+  if(a){
+    const x=CL.find(y=>y.c===a.dataset.c); const act=a.dataset.act;
+    if(act==="submit"){ if(x.checks.blank||x.checks.dup){ selC=x.c; renderClose(); return; } x.st="submitted"; x.log.unshift([now(),x.owner,"1차 마감"+(x.reason?" · 수정해서 다시 올림":"")]); delete x.reason; }
+    if(act==="fix"){ x.checks.blank=0; x.checks.dup=0; x.log.unshift([now(),x.owner,"자동 검사 항목 수정"]); }
+    if(act==="unlock"){ x.st="draft"; x.log.unshift([now(),x.owner,"마감 풀기 · 운임 수정 필요"]); }
+    if(act==="approve"){ x.st="approved"; x.log.unshift([now(),"최경리","2차 승인"]); }
+    if(act==="reject"){ const t=(document.getElementById("rj")?.value||"").trim(); if(!t){ document.getElementById("rj").focus(); document.getElementById("rj").placeholder="반려 사유를 꼭 적어 주세요"; return; } x.st="rejected"; x.reason=t; x.log.unshift([now(),"최경리","반려 · "+t]); }
+    if(act==="send"){ x.st="sent"; x.log.unshift([now(),"최경리","명세서 발송 ("+(CLIENT_TPL[x.c]?.name||"회사 기본")+" 양식)"]); }
+    selC=x.c; renderClose(); return;
+  }
+  const r=e.target.closest("[data-row]"); if(r){ selC=r.dataset.row; renderTable(); renderDetail(); }
+});
+renderClose();
+})();
+</script>
