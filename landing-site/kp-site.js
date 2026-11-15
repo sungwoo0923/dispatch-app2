@@ -337,9 +337,10 @@
         '<div data-h="move" title="끌어서 옮기기" style="pointer-events:auto;position:absolute;left:-9px;top:-9px;width:18px;height:18px;border-radius:50%;background:#0F1A30;border:2px solid #fff;cursor:move"></div>' +
       '</div>' +
       '<div data-r="bar" style="position:fixed;display:none;pointer-events:auto;background:#0F1A30;border-radius:12px;padding:5px;gap:3px;box-shadow:0 10px 30px rgba(0,0,0,.3);align-items:center"></div>' +
+      '<div data-r="guides" style="position:fixed;inset:0;pointer-events:none"></div>' +
       '<div data-r="tip" style="position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:rgba(15,26,48,.92);color:#fff;font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:10px;display:none;white-space:nowrap"></div>';
     document.documentElement.appendChild(host);
-    ui = { host: host, hover: $('[data-r="hover"]', host), sel: $('[data-r="sel"]', host), tag: $('[data-r="tag"]', host), bar: $('[data-r="bar"]', host), tip: $('[data-r="tip"]', host) };
+    ui = { host: host, guides: $('[data-r="guides"]', host), hover: $('[data-r="hover"]', host), sel: $('[data-r="sel"]', host), tag: $('[data-r="tag"]', host), bar: $('[data-r="bar"]', host), tip: $('[data-r="tip"]', host) };
     var B = function (cmd, label, title) { return '<button data-c="' + cmd + '" title="' + (title || label) + '" style="all:unset;cursor:pointer;color:#fff;font-size:12px;font-weight:800;padding:6px 9px;border-radius:8px;white-space:nowrap">' + label + "</button>"; };
     ui.bar.innerHTML = B("parent", "↖ 상위", "감싸는 요소 고르기") + B("edit", "글 수정", "두 번 눌러도 됩니다") + B("smaller", "가−", "글자 작게") + B("bigger", "가+", "글자 크게") + B("up", "▲", "앞으로(위로) 옮기기") + B("down", "▼", "뒤로(아래로) 옮기기") + B("dup", "복제") + B("hide", "숨기기") + B("del", "삭제");
     ui.bar.addEventListener("mousedown", function (e) { e.preventDefault(); e.stopPropagation(); });
@@ -399,6 +400,97 @@
     if (before !== html) commit("글 수정");
   }
 
+  // 📐 2026-11-15 맞춤 안내선(스마트 가이드) — 옮기거나 크기를 바꿀 때 화면 가운데 · 섹션 가운데 · 내용 양쪽 끝 ·
+  //  같은 섹션 안 다른 글/사진의 왼쪽 · 가운데 · 오른쪽 · 위 · 가운데 · 아래에 6px 안으로 오면 착 붙고 분홍 선이 보인다.
+  //  Alt를 누르고 끌면 붙지 않는다(자유 이동) · Shift는 예전처럼 10px 단위
+  var SNAP = 6, GUIDE = "#FF3D7F";
+  function sectionOf(el) { var t = el; while (t && t.parentElement && t.parentElement !== document.body) t = t.parentElement; return t && t !== document.body ? t : null; }
+  function snapTargets(el) {
+    var sec = sectionOf(el), xs = [], ys = [];
+    // p: 우선순위 — 가운데 선은 3px 더 가까운 것처럼 본다(가까이 있으면 다른 요소 모서리보다 가운데에 먼저 붙게)
+    var add = function (arr, v, r, label, p) { arr.push({ v: v, r: r, label: label || "", p: p || 0 }); };
+    var vw = document.documentElement.clientWidth;
+    add(xs, vw / 2, { top: 0, bottom: innerHeight, left: vw / 2, right: vw / 2 }, "화면 가운데", 3);
+    if (sec) {
+      var sr = sec.getBoundingClientRect();
+      add(xs, sr.left + sr.width / 2, sr, "섹션 가운데", 3);
+      var wrap = $(".wrap", sec);
+      if (wrap) {
+        var wr = wrap.getBoundingClientRect(), cs = getComputedStyle(wrap);
+        add(xs, wr.left + (parseFloat(cs.paddingLeft) || 0), wr, "내용 왼쪽 끝");
+        add(xs, wr.right - (parseFloat(cs.paddingRight) || 0), wr, "내용 오른쪽 끝");
+      }
+      $$("[data-k]", sec).forEach(function (o) {
+        if (o === el || o.contains(el) || el.contains(o)) return;
+        var r = o.getBoundingClientRect();
+        if (r.width < 8 || r.height < 8 || r.bottom < -200 || r.top > innerHeight + 200) return;
+        add(xs, r.left, r, "왼쪽 맞춤"); add(xs, r.left + r.width / 2, r, "가운데 맞춤"); add(xs, r.right, r, "오른쪽 맞춤");
+        add(ys, r.top, r, "위 맞춤"); add(ys, r.top + r.height / 2, r, "높이 가운데"); add(ys, r.bottom, r, "아래 맞춤");
+      });
+    }
+    return { xs: xs, ys: ys };
+  }
+  // 움직이는 상자의 기준선들과 가장 가까운 목표 — 6px 안이면 { d: 더 옮길 양, hits: [...] }
+  function bestSnap(lines, targets) {
+    var best = null;
+    lines.forEach(function (l) {
+      targets.forEach(function (t) {
+        var d = t.v - l, ad = Math.abs(d), sc = ad - t.p;
+        if (ad > SNAP) return;
+        if (!best || sc < best.sc - 0.5) best = { d: d, sc: sc, hits: [t] };
+        else if (Math.abs(sc - best.sc) <= 0.5 && Math.abs(d - best.d) <= 0.5) best.hits.push(t);
+      });
+    });
+    return best;
+  }
+  function drawGuides(list) {
+    if (!ui || !ui.guides) return;
+    var html = "";
+    list.forEach(function (g) {
+      var line = g.dir === "v"
+        ? "left:" + (Math.round(g.at) - 1) + "px;top:" + g.a + "px;height:" + Math.max(2, g.b - g.a) + "px;width:2px"
+        : "top:" + (Math.round(g.at) - 1) + "px;left:" + g.a + "px;width:" + Math.max(2, g.b - g.a) + "px;height:2px";
+      html += '<div style="position:fixed;' + line + ";background:" + GUIDE + ';box-shadow:0 0 6px rgba(255,61,127,.75)"></div>';
+      if (g.label) {
+        var pos = g.dir === "v" ? "left:" + (g.at + 6) + "px;top:" + Math.max(4, g.a + 4) + "px" : "left:" + g.a + "px;top:" + (g.at + 6) + "px";
+        html += '<div style="position:fixed;' + pos + ";background:" + GUIDE + ';color:#fff;font-size:11px;font-weight:800;padding:2px 6px;border-radius:5px;white-space:nowrap">' + g.label + "</div>";
+      }
+    });
+    ui.guides.innerHTML = html;
+  }
+  function guidesFor(hitsX, hitsY, box) {
+    var out = [], seen = {};
+    (hitsX || []).forEach(function (t) {
+      var key = "v" + Math.round(t.v); if (seen[key]) return; seen[key] = 1;
+      out.push({ dir: "v", at: t.v, a: Math.min(box.top, t.r.top), b: Math.max(box.bottom, t.r.bottom), label: t.label });
+    });
+    (hitsY || []).forEach(function (t) {
+      var key = "h" + Math.round(t.v); if (seen[key]) return; seen[key] = 1;
+      out.push({ dir: "h", at: t.v, a: Math.min(box.left, t.r.left), b: Math.max(box.right, t.r.right), label: t.label });
+    });
+    return out;
+  }
+  // 끈 만큼(dx, dy) → 안내선에 맞춘 dx, dy (+ 안내선 그리기)
+  function snapDrag(d, dx, dy, ev) {
+    if (ev.altKey || ev.shiftKey || !d.r0) { drawGuides([]); return [dx, dy]; }
+    if (!d.targets) d.targets = snapTargets(d.el);
+    var r = d.r0, box, hx = null, hy = null;
+    if (d.mode === "move") {
+      var L = r.left + dx, T = r.top + dy;
+      hx = bestSnap([L, L + r.width / 2, L + r.width], d.targets.xs);
+      hy = bestSnap([T, T + r.height / 2, T + r.height], d.targets.ys);
+      if (hx) dx += hx.d;
+      if (hy) dy += hy.d;
+      box = { left: r.left + dx, right: r.right + dx, top: r.top + dy, bottom: r.bottom + dy };
+    } else {
+      if (d.mode === "e" || d.mode === "se") { hx = bestSnap([r.right + dx], d.targets.xs.filter(function (t) { return t.v > r.left + 20; })); if (hx) dx += hx.d; }
+      if (d.mode === "s" || d.mode === "se") { hy = bestSnap([r.bottom + dy], d.targets.ys.filter(function (t) { return t.v > r.top + 10; })); if (hy) dy += hy.d; }
+      box = { left: r.left, right: r.right + dx, top: r.top, bottom: r.bottom + dy };
+    }
+    drawGuides(guidesFor(hx && hx.hits, hy && hy.hits, box));
+    return [dx, dy];
+  }
+
   // 끌어서 옮기기 · 크기 조절
   var drag = null;
   function parseTranslate(el, mobile) {
@@ -412,7 +504,7 @@
     if (!sel) return; ev.preventDefault(); ev.stopPropagation();
     var h = ev.currentTarget.getAttribute("data-h");
     var r = sel.getBoundingClientRect();
-    drag = { mode: h, x: ev.clientX, y: ev.clientY, w: r.width, h: r.height, t: parseTranslate(sel, mobileView()), el: sel, moved: false };
+    drag = { mode: h, x: ev.clientX, y: ev.clientY, w: r.width, h: r.height, t: parseTranslate(sel, mobileView()), el: sel, moved: false, r0: r };
   }
   document.addEventListener("mousemove", function (ev) {
     if (!ED || previewOnly) return;
@@ -421,6 +513,7 @@
       if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
       drag.moved = true;
       if (ev.shiftKey) { dx = Math.round(dx / 10) * 10; dy = Math.round(dy / 10) * 10; }
+      var sn = snapDrag(drag, dx, dy, ev); dx = sn[0]; dy = sn[1]; drag.last = sn; // 📐 맞춤 안내선
       var el = drag.el;
       if (drag.mode === "move") el.style.setProperty("translate", (drag.t[0] + dx) + "px " + (drag.t[1] + dy) + "px", "important");
       if (drag.mode === "e" || drag.mode === "se") { el.style.setProperty("width", Math.max(20, drag.w + dx) + "px", "important"); el.style.setProperty("max-width", "none", "important"); }
@@ -433,11 +526,12 @@
   }, true);
   document.addEventListener("mouseup", function (ev) {
     if (!drag) return;
-    var d = drag; drag = null;
+    var d = drag; drag = null; drawGuides([]);
     if (!d.moved) { if (d.mode === "pending") return; return; }
     var k = d.el.getAttribute("data-k"), bag = styleBag(k);
     var dx = ev.clientX - d.x, dy = ev.clientY - d.y;
     if (ev.shiftKey) { dx = Math.round(dx / 10) * 10; dy = Math.round(dy / 10) * 10; }
+    if (d.last) { dx = d.last[0]; dy = d.last[1]; } // 📐 안내선에 붙은 자리 그대로
     if (d.mode === "move") bag.translate = Math.round(d.t[0] + dx) + "px " + Math.round(d.t[1] + dy) + "px";
     if (d.mode === "e" || d.mode === "se") { bag.width = Math.round(Math.max(20, d.w + dx)) + "px"; bag.maxWidth = "none"; }
     if (d.mode === "s" || (d.mode === "se" && d.el.tagName !== "IMG")) bag.height = Math.round(Math.max(10, d.h + dy)) + "px";
@@ -453,7 +547,7 @@
     var t = keyed(ev.target);
     if (t && sel && t === sel && !/^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) {
       var r = sel.getBoundingClientRect();
-      drag = { mode: "move", x: ev.clientX, y: ev.clientY, w: r.width, h: r.height, t: parseTranslate(sel, mobileView()), el: sel, moved: false };
+      drag = { mode: "move", x: ev.clientX, y: ev.clientY, w: r.width, h: r.height, t: parseTranslate(sel, mobileView()), el: sel, moved: false, r0: r };
       ev.preventDefault();
     }
   }, true);
