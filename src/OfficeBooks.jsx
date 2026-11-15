@@ -16,6 +16,7 @@ import { computeFunds, isCard, isCredit, last4, fundBadge } from "./fundsCalc";
 import { upsertAutoEntry } from "./ledgerAuto";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { kpConfirm } from "./kpDialog";
+import { suggestAccount, evidenceOf, vatSplit } from "./acctSuggest"; // 🧾 2026-11-15 전표 자동화 — 계정과목 추천 · 증빙 · 부가세
 
 export const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 export const HERO_BG = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
@@ -143,6 +144,7 @@ export function CashBook({ company, isViewer = false }) {
   const recurring = useCompanyCol("acctRecurring", company);
   const funds = useCompanyCol("acctFunds", company);
   const [customAcc, setCustomAcc] = React.useState(false);
+  const [scanMsg, setScanMsg] = React.useState(""); // 🧾 영수증 읽기 상태
   const [photo, setPhoto] = React.useState(null); // 증빙 사진 보기·저장
   const [ym, setYm] = React.useState(kstDay().slice(0, 7));
   const [type, setType] = React.useState("전체");
@@ -160,6 +162,34 @@ export function CashBook({ company, isViewer = false }) {
   }, [company, isViewer, ledgerReady]);
   const F = React.useMemo(() => computeFunds(funds || [], rows || []), [funds, rows]);
   const fundOpts = React.useMemo(() => F.list.filter((f) => f.kind !== "대출"), [F]);
+  // 🧾 2026-11-15 계정과목 자동 추천 — 거래처 · 내용을 적으면 ① 예전에 같은 거래처에 고른 값 ② 낱말 규칙으로 골라 둔다.
+  //  사람이 계정과목을 직접 누르면(accTouched) 더는 바꾸지 않고, 저장한 값이 다음 추천의 ①이 된다
+  const sug = React.useMemo(() => (edit ? suggestAccount({ type: edit.type, vendor: edit.vendor, item: edit.item, memo: edit.memo }, rows || []) : null), [edit?.type, edit?.vendor, edit?.item, edit?.memo, rows]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => {
+    if (!edit || edit.accTouched || !sug || edit.account === sug.account) return;
+    setEdit((p) => (p && !p.accTouched ? { ...p, account: sug.account, accAuto: sug.from } : p));
+    setCustomAcc(false);
+  }, [sug?.account]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => { if (!edit) setScanMsg(""); }, [!!edit]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 🧾 영수증 사진 → 날짜 · 금액 · 사용처 · 증빙 종류 · 품목 자동 채우기(빈 칸만 · 금액은 비었을 때만)
+  const readReceipt = async (img) => {
+    setScanMsg("영수증을 읽고 있어요…");
+    try {
+      const { scanReceipt } = await import("./vehicleExpense");
+      const r = await scanReceipt(img, (m) => setScanMsg(`${m}…`));
+      if (!r || !r.count) { setScanMsg("영수증 글자를 읽지 못했어요. 직접 적어 주세요."); return; }
+      const ev = evidenceOf(r);
+      setEdit((p) => p && ({ ...p,
+        date: r.date || p.date,
+        amount: toInt(p.amount) ? p.amount : String(r.amount || ""),
+        vendor: p.vendor || r.vendor || "",
+        item: p.item || (r.items || [])[0] || "",
+        evidence: p.evidence || ev,
+        method: ev === "카드전표" && !["법인카드", "개인카드(정산)"].includes(p.method) ? "법인카드" : p.method,
+        scan: { vendor: r.vendor || "", amount: r.amount || 0, date: r.date || "", bizNo: r.bizNo || "", cardApproval: r.cardApproval || "" } }));
+      setScanMsg(`영수증에서 ${[r.date && "날짜", r.amount && "금액", r.vendor && "사용처", ev && "증빙"].filter(Boolean).join(" · ")}을(를) 읽었어요. 맞는지 확인해 주세요.`);
+    } catch { setScanMsg("영수증을 읽지 못했어요. 직접 적어 주세요."); }
+  };
   // ⭐ 2026-11-06 속도 — 이 달 계산(합계·계정별·일별·누계)은 장부·달이 바뀔 때만(검색 글자를 칠 때마다 다시 계산하지 않음)
   const M = React.useMemo(() => {
     const month = (rows || []).filter((r) => String(r.date || "").startsWith(ym));
@@ -194,7 +224,9 @@ export function CashBook({ company, isViewer = false }) {
     if (!toInt(e.amount)) return alert("금액을 입력해 주세요.");
     setBusy(true);
     try {
-      const data = { date: e.date, type: e.type, account: String(e.account || "").trim() || "기타", fundId: e.fundId || "", item: e.item.trim(), amount: toInt(e.amount), method: e.method, vendor: e.vendor.trim(), memo: e.memo.trim(), evidence: e.evidence, receipt: e.receipt || "", companyName: company };
+      const vs = vatSplit(e.amount, !["세금계산서", "카드전표", "현금영수증"].includes(e.evidence));
+      const data = { date: e.date, type: e.type, account: String(e.account || "").trim() || "기타", fundId: e.fundId || "", item: e.item.trim(), amount: toInt(e.amount), method: e.method, vendor: e.vendor.trim(), memo: e.memo.trim(), evidence: e.evidence, receipt: e.receipt || "", companyName: company,
+        supply: vs.supply, vat: vs.vat, accountAuto: e.accTouched ? "" : (e.accAuto || ""), ...(e.scan ? { scan: e.scan } : {}) }; // 🧾 2026-11-15 공급가 · 부가세 · 자동 추천 여부
       if (e.id) await updateDoc(doc(db, "acctLedger", e.id), { ...data, updatedAt: serverTimestamp() });
       else await addDoc(collection(db, "acctLedger"), { ...data, createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" });
       setEdit(null);
@@ -244,8 +276,8 @@ export function CashBook({ company, isViewer = false }) {
     } finally { setBusy(false); }
   };
   const csv = () => {
-    const head = ["날짜", "구분", "계정과목", "내용", "거래처", "결제수단", "금액", "증빙", "메모"];
-    const lines = [head.join(","), ...list.map((r) => [r.date, r.type, r.account, r.item, r.vendor, r.method, r.amount, r.receipt ? "영수증" : r.evidence || "", r.memo].map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))];
+    const head = ["날짜", "구분", "계정과목", "내용", "거래처", "결제수단", "금액", "공급가", "부가세", "증빙", "메모"]; // 🧾 2026-11-15 공급가 · 부가세(세무사 전달용)
+    const lines = [head.join(","), ...list.map((r) => { const v = r.supply != null ? { supply: r.supply, vat: r.vat } : vatSplit(r.amount, !["세금계산서", "카드전표", "현금영수증"].includes(r.evidence)); return [r.date, r.type, r.account, r.item, r.vendor, r.method, r.amount, v.supply, v.vat, r.evidence || (r.receipt ? "영수증" : ""), r.memo]; }).map((x) => x.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))];
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + lines.join("\n")], { type: "text/csv" })); a.download = `수입지출_${ym}.csv`; a.click();
   };
 
@@ -308,7 +340,7 @@ export function CashBook({ company, isViewer = false }) {
                     {ledgerRows.map((r, i) => {
                       const newDay = i === 0 || ledgerRows[i - 1].date !== r.date;
                       return (
-                        <tr key={r.id} onClick={() => !isViewer && setEdit({ ...blankEntry(r.type), ...r, amount: String(r.amount || "") })} className={`cursor-pointer hover:bg-[#F2F6FD] ${newDay && i ? "border-t-2 border-[#DCE3EE]" : "border-t border-[#EEF2F8]"} ${i % 2 ? "bg-[#FBFCFE]" : "bg-white"}`}>
+                        <tr key={r.id} onClick={() => !isViewer && setEdit({ ...blankEntry(r.type), ...r, amount: String(r.amount || ""), accTouched: true })} className={`cursor-pointer hover:bg-[#F2F6FD] ${newDay && i ? "border-t-2 border-[#DCE3EE]" : "border-t border-[#EEF2F8]"} ${i % 2 ? "bg-[#FBFCFE]" : "bg-white"}`}>
                           <td className="px-3 py-2 font-black text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{newDay ? String(r.date).slice(5).replace("-", ".") : ""}</td>
                           <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded-md text-[11px] font-black ${r.type === "수입" ? "bg-[#EEF3FC] text-[#2D4C82]" : "bg-[#0F1A30] text-white"}`}>{r.type}</span></td>
                           <td className="px-3 py-2 font-bold text-[#3A4A66] truncate max-w-[120px]">{r.account}</td>
@@ -334,7 +366,7 @@ export function CashBook({ company, isViewer = false }) {
               {/* 휴대폰 — 장부 줄 카드 */}
               {narrow && <div className="divide-y divide-[#EEF2F8]">
                 {ledgerRows.map((r) => (
-                  <button key={r.id} type="button" onClick={() => !isViewer && setEdit({ ...blankEntry(r.type), ...r, amount: String(r.amount || "") })} className="w-full text-left px-3.5 py-2.5 flex items-center gap-2.5">
+                  <button key={r.id} type="button" onClick={() => !isViewer && setEdit({ ...blankEntry(r.type), ...r, amount: String(r.amount || ""), accTouched: true })} className="w-full text-left px-3.5 py-2.5 flex items-center gap-2.5">
                     <span className="w-11 text-center shrink-0"><span className="block text-[13px] font-black text-[#1B2B4B] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{String(r.date).slice(8)}</span><span className={`block text-[10px] font-black ${r.type === "수입" ? "text-[#2D4C82]" : "text-[#7A879C]"}`}>{r.type}</span></span>
                     <span className="flex-1 min-w-0"><span className="block text-[14px] font-black text-[#0F1A30] truncate">{r.item || r.vendor || r.account}</span><span className="block text-[11.5px] text-[#7A879C] truncate">{r.account}{r.vendor ? ` · ${r.vendor}` : ""}{F.byId[r.fundId] ? ` · ${F.byId[r.fundId].name}` : ""}</span></span>
                     {r.receipt && <span onClick={(e) => { e.stopPropagation(); setPhoto(r); }} className="w-8 h-8 rounded-lg border border-[#DCE3EE] bg-cover bg-center shrink-0" style={{ backgroundImage: `url(${r.receipt})` }} />}
@@ -398,13 +430,27 @@ export function CashBook({ company, isViewer = false }) {
         <Sheet side en={`CASH BOOK · ${edit.id ? "EDIT" : "NEW"}`} title={`${edit.type} ${edit.id ? "수정" : "등록"}`} onClose={() => { setEdit(null); setCustomAcc(false); }}
           footer={<>{edit.id && <button type="button" onClick={() => remove(edit)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">삭제</button>}<button type="button" onClick={() => setEdit(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" disabled={busy} onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-50">{busy ? "저장 중…" : "저장"}</button></>}>
           <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-white border border-[#E3E8F0]">
-            {["지출", "수입"].map((t) => <button key={t} type="button" onClick={() => setEdit((p) => ({ ...p, type: t, account: LEDGER_ACCOUNTS[t][0] }))} className={`h-10 rounded-lg text-[14px] font-black ${edit.type === t ? "bg-[#0F1A30] text-white" : "text-[#5B6B85]"}`}>{t}</button>)}
+            {["지출", "수입"].map((t) => <button key={t} type="button" onClick={() => setEdit((p) => ({ ...p, type: t, account: LEDGER_ACCOUNTS[t][0], accTouched: false, accAuto: "" }))} className={`h-10 rounded-lg text-[14px] font-black ${edit.type === t ? "bg-[#0F1A30] text-white" : "text-[#5B6B85]"}`}>{t}</button>)}
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div><Label>날짜</Label><CustomDatePicker value={edit.date} onChange={(e) => setEdit((p) => ({ ...p, date: e.target.value }))} className={inp} showIcon /></div>
-            <div><Label>금액(원)</Label><input inputMode="numeric" value={edit.amount ? won(edit.amount) : ""} onChange={(e) => setEdit((p) => ({ ...p, amount: e.target.value.replace(/[^\d]/g, "") }))} className={`${inp} text-right tabular-nums`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} placeholder="0" /></div>
+            <div><Label>금액(원)</Label><input inputMode="numeric" value={edit.amount ? won(edit.amount) : ""} onChange={(e) => setEdit((p) => ({ ...p, amount: e.target.value.replace(/[^\d]/g, "") }))} className={`${inp} text-right tabular-nums`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} placeholder="0" />
+              {toInt(edit.amount) > 0 && ["세금계산서", "카드전표", "현금영수증"].includes(edit.evidence) && (() => { const v = vatSplit(edit.amount); return <div className="mt-1 text-right text-[11.5px] font-bold text-[#7A879C] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>공급가 {won(v.supply)} · 부가세 {won(v.vat)}</div>; })()}
+            </div>
           </div>
+          {/* 🧾 2026-11-15 영수증 먼저 — 찍으면 날짜 · 금액 · 사용처 · 증빙을 읽어 채운다 */}
+          {!edit.id && !edit.receipt && <button type="button" onClick={() => fileRef.current?.click()} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black" data-kp="receipt-first">▤ 영수증 사진으로 자동 채우기</button>}
+          {scanMsg && <div className="rounded-xl bg-[#F5F8FD] border border-[#DCE3EE] px-3 py-2 text-[12.5px] font-bold text-[#1B2B4B]">{scanMsg}</div>}
           <div><Label>계정과목</Label>
+            {/* 🧾 2026-11-15 자동 추천 — 왜 골랐는지 · 다른 후보 */}
+            {sug && !edit.accTouched && edit.account === sug.account && (
+              <div className="mb-2 rounded-xl border border-[#C9D5EA] bg-[#F5F8FD] px-3 py-2 text-[12.5px] text-[#1B2B4B] flex items-center gap-2 flex-wrap" data-kp="acct-suggest">
+                <span className="h-6 px-2 rounded-md bg-[#0F1A30] text-white text-[11.5px] font-black inline-flex items-center">자동 추천</span>
+                <span className="font-bold">{sug.why}</span>
+                {sug.alts.length > 0 && <span className="text-[#7A879C] font-bold">다른 후보:</span>}
+                {sug.alts.map((a) => <button key={a} type="button" onClick={() => setEdit((p) => ({ ...p, account: a, accTouched: true }))} className="h-6 px-2 rounded-md border border-[#C9D5EA] bg-white text-[11.5px] font-black">{a}</button>)}
+              </div>
+            )}
             {(() => {
               // 기본 계정 + 이 회사가 직접 입력해 쓴 계정
               const base = LEDGER_ACCOUNTS[edit.type];
@@ -414,8 +460,8 @@ export function CashBook({ company, isViewer = false }) {
               return (
                 <>
                   <div className="flex flex-wrap gap-1.5">
-                    {all.map((a) => <Chip key={a} on={!isCustom && edit.account === a} onClick={() => { setCustomAcc(false); setEdit((p) => ({ ...p, account: a })); }}>{a}</Chip>)}
-                    <Chip on={isCustom} onClick={() => { setCustomAcc(true); setEdit((p) => ({ ...p, account: "" })); }}>✎ 직접입력</Chip>
+                    {all.map((a) => <Chip key={a} on={!isCustom && edit.account === a} onClick={() => { setCustomAcc(false); setEdit((p) => ({ ...p, account: a, accTouched: true })); }}>{a}</Chip>)}
+                    <Chip on={isCustom} onClick={() => { setCustomAcc(true); setEdit((p) => ({ ...p, account: "", accTouched: true })); }}>✎ 직접입력</Chip>
                   </div>
                   {isCustom && <input autoFocus value={edit.account} onChange={(e) => setEdit((p) => ({ ...p, account: e.target.value }))} className={`${inp} mt-2`} placeholder="계정과목을 직접 입력 (예: 차량리스료, 협회비)" />}
                 </>
@@ -457,7 +503,7 @@ export function CashBook({ company, isViewer = false }) {
             {edit.receipt ? (
               <div className="relative rounded-xl overflow-hidden border border-[#E3E8F0] bg-white"><img src={edit.receipt} alt="" className="w-full max-h-72 object-contain" /><div className="absolute top-2 right-2 flex gap-1.5"><button type="button" onClick={() => saveImage(edit.receipt, `증빙_${edit.date}_${edit.item || edit.vendor || edit.account}`)} className="h-8 px-3 rounded-lg bg-white/90 text-[#0F1A30] text-[12px] font-black border border-[#DCE3EE]">⬇ 사진 저장</button><button type="button" onClick={() => setEdit((p) => ({ ...p, receipt: "" }))} className="h-8 px-3 rounded-lg bg-[#0F1A30]/80 text-white text-[12px] font-bold">사진 빼기</button></div></div>
             ) : <button type="button" onClick={() => fileRef.current?.click()} className="w-full h-16 rounded-xl border-2 border-dashed border-[#C9D2E0] bg-white text-[13px] font-bold text-[#5B6B85]">▤ 영수증 사진 찍기·올리기</button>}
-            <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) { const r = await compressImage(f, 1400, 0.8).catch(() => ""); setEdit((p) => ({ ...p, receipt: r })); } }} />
+            <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) { const r = await compressImage(f, 1400, 0.8).catch(() => ""); setEdit((p) => ({ ...p, receipt: r })); if (r) readReceipt(r); } }} />
           </div>
           <div><Label>메모</Label><input value={edit.memo} onChange={(e) => setEdit((p) => ({ ...p, memo: e.target.value }))} className={inp} placeholder="선택" /></div>
         </Sheet>
