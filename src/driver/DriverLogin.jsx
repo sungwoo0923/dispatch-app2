@@ -322,7 +322,7 @@ export default function DriverLogin() {
         <div className="kp-login-in w-full max-w-[420px]">
           {/* 모바일 머리 */}
           <div className="lg:hidden flex flex-col items-center mb-4">
-            <LogisMark size={52} style={{ filter: "drop-shadow(0 10px 24px rgba(15,26,48,0.25))" }} />
+            <LogisMark size={52} light style={{ filter: "drop-shadow(0 10px 24px rgba(15,26,48,0.25))" }} />
             <div className="mt-2.5 mb-1"><LogisTag height={13} chip /></div>
             <div className="text-[13.5px] font-bold tracking-[0.3em] text-[#9AA9C3]">DRIVER APP</div>
             <div className="mt-2 flex items-center gap-2 h-7 px-3 rounded-full bg-white border border-[#E3E8F0] text-[14.5px] font-bold text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>

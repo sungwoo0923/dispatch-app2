@@ -276,7 +276,7 @@ export default function ShipperLogin() {
       <div className="flex-1 min-w-0 flex items-center justify-center px-4 py-10 relative">
         <div className="kp-login-in w-full max-w-[420px]">
           <div className="lg:hidden flex flex-col items-center mb-7">
-            <LogisMark size={64} style={{ filter: "drop-shadow(0 10px 24px rgba(15,26,48,0.25))" }} />
+            <LogisMark size={64} light style={{ filter: "drop-shadow(0 10px 24px rgba(15,26,48,0.25))" }} />
             <div className="mt-3 mb-1.5"><LogisTag height={15} chip /></div>
             <div className="text-[10.5px] font-bold tracking-[0.3em] text-[#9AA9C3]">SHIPPER PORTAL</div>
           </div>

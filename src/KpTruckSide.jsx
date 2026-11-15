@@ -8,7 +8,7 @@ import React from "react";
 
 const WM_LIGHT = "/brand/logisweb-wordmark-light.png";
 const WM_DARK = "/brand/logisweb-wordmark-dark.png";
-const WM_RATIO = 8.0256;
+const WM_RATIO = 8.8736;
 
 const THEMES = {
   white: {

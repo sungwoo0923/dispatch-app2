@@ -516,7 +516,7 @@ export default function TransportLogin() {
         <div className="kp-login-in w-full max-w-[420px]">
           {/* 모바일 머리 */}
           <div className="lg:hidden flex flex-col items-center mb-4">
-            <LogisMark size={52} style={{ filter: "drop-shadow(0 10px 24px rgba(15,26,48,0.25))" }} />
+            <LogisMark size={52} light style={{ filter: "drop-shadow(0 10px 24px rgba(15,26,48,0.25))" }} />
             <div className="mt-2.5"><LogisTag height={13} chip /></div>
             <div className="mt-1.5 text-[10.5px] font-bold tracking-[0.3em] text-[#9AA9C3]">LOGISTICS DISPATCH NETWORK</div>
           </div>

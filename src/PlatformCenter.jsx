@@ -840,7 +840,7 @@ function NoticesPanel() {
             </div>
           </div>
           <div className="justify-self-start flex items-center gap-2.5 h-[50px] px-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0]">
-            <LogisMark size={36} />
+            <LogisMark size={36} light />
             <div className="leading-tight"><div className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap">LogisWeb 운영팀</div><div className="text-[12px] text-[#7A879C]">작성자 · 자동</div></div>
           </div>
         </div>
