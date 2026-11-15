@@ -171,7 +171,7 @@ export default function ExecAnalysis({ company, dispatchData = [], drivers = [],
   const data = useExecData({ company, dispatchData, drivers, loadRange, cash: canCash });
   return (
     <ExecShell testId="exec-analysis" en="MANAGEMENT ANALYTICS" title="경영 분석" sub={`${company || ""} · 오더·장부·자금 기준 · ${mdDow(data.today)} 현재`}
-      right={<div data-testid="exa-tabs"><Seg dark value={tab} onChange={go} items={tabs} /></div>}>
+      right={<div data-testid="exa-tabs" style={{ maxWidth: "100%", overflowX: "auto", scrollbarWidth: "none" }} /* 📱 2026-11-15 휴대폰에서 탭 7개가 화면 밖으로 — 옆으로 밀어서 보기 */><Seg dark value={tab} onChange={go} items={tabs} /></div>}>
       {(v) => (
         tab === "pl" ? <PlTab {...data} {...v} />
           : tab === "client" ? <ClientTab {...data} {...v} />

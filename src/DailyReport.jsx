@@ -729,7 +729,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
       <style>{CSS}</style>
       {header}
       {W > 0 && <>
-        <main style={{ ...inner, paddingTop: compact ? 16 : 28, paddingBottom: 24, display: "grid", gap: g }}>
+        <main style={{ ...inner, paddingTop: compact ? 16 : 28, paddingBottom: 24, display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: g }} /* 📱 2026-11-15 휴대폰에서 카드가 화면 밖으로(530px) 나가던 문제 — 칸 너비를 화면에 맞춘다 */>
           {kpis}
           {/* 🌦 2026-11-07 오늘 운행 지역 날씨 · 기상특보(키 없거나 자료 없으면 안 보임) */}
           <OrdersWeatherStrip orders={dispatchData} title="오늘 운행 지역 날씨 · 특보" large={!compact} />

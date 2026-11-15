@@ -191,7 +191,7 @@ export default function BoardPage({ company, me, board }) {
         <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
           <div className="px-5 py-3.5 border-b border-[#EEF1F6] flex items-center gap-3">
             <div className="relative flex-1 max-w-[360px]">
-              <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="제목·내용·작성자 검색" className={`${inp} h-10 pl-9 bg-[#F8FAFD]`} />
+              <input value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder="제목·내용 검색" className={`${inp} h-10 pl-9 bg-[#F8FAFD]`} />
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9AA9C3]" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
             </div>
             <span className="ml-auto text-[12.5px] font-bold text-[#9AA9C3]">{sorted.length}개의 글</span>
