@@ -168,7 +168,7 @@ function SheetPingBox({ co, live, pingOk, onDone }) {
         <div className="mt-3">
           <ol className="list-decimal pl-5 text-[13px] text-[#3A4A66] leading-relaxed space-y-0.5">
             <li>구글시트 위 메뉴 <b>확장 프로그램 › Apps Script</b>를 눌러요.</li>
-            <li>있던 글을 지우고 아래 글을 붙여 넣은 뒤 <b>저장</b>해요.</li>
+            <li>왼쪽 <b>파일 +</b> › <b>스크립트</b>로 새 파일(이름: LogisWeb)을 만들고, 아래 글을 붙여 넣은 뒤 <b>저장</b>해요. 이미 있던 다른 파일 · 코드는 지우지 마세요.</li>
             <li>위쪽 함수 고르기에서 <b>설치</b>를 고르고 <b>실행</b> → 구글 계정 권한을 허용하면 돼요.</li>
             <li>이 화면에 "설치됨"이 뜨면 끝이에요. 시트 주인 계정으로 한 번만 하면 돼요.</li>
           </ol>

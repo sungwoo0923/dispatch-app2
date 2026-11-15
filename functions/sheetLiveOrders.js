@@ -295,10 +295,13 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
   const pingUrl = () => `https://us-central1-${process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || "dispatch-app-9b92f"}.cloudfunctions.net/sheetLivePing`;
   //  값 입력 · 붙여넣기 · 지우기(onEdit) → 고친 탭 이름만 보낸다(서버는 그 탭만 읽는다)
   //  줄 추가 · 줄 삭제 · 정렬 · 탭 추가 등(onChange) → "전체"(줄 번호가 밀리니 전부 읽어 맞춘다)
-  const scriptFor = (key) => [
+  //  🛠 2026-11-15 시트에 붙은 스크립트가 아니어도(따로 만든 프로젝트 · 다른 코드가 이미 있는 프로젝트) 되게 — 시트 ID로 트리거를 건다
+  const scriptFor = (key, sheetId = "") => [
     "// LogisWeb 실시간 연동 — 이 시트가 바뀌면 LogisWeb 에 바로 알립니다(시트 내용은 보내지 않고, 고친 탭 이름만 보냅니다)",
     "// 처음 한 번: 위에서 '설치' 함수를 고르고 [실행] → 권한 허용",
+    "// 이미 다른 코드가 있으면 지우지 말고, 왼쪽 [파일 +] › 스크립트로 새 파일(LogisWeb)을 만들어 거기에 붙여 넣으세요",
     `var LOGISWEB_URL = '${pingUrl()}?k=${key}';`,
+    `var LOGISWEB_SHEET_ID = '${sheetId}';`,
     "function logiswebSend(p) {",
     "  try { UrlFetchApp.fetch(LOGISWEB_URL, { method: 'post', contentType: 'application/json', payload: JSON.stringify(p), muteHttpExceptions: true }); } catch (err) {}",
     "}",
@@ -313,7 +316,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     "  logiswebSend({ full: true, type: t });",
     "}",
     "function 설치() {",
-    "  var ss = SpreadsheetApp.getActive();",
+    "  var ss = LOGISWEB_SHEET_ID || SpreadsheetApp.getActive();",
     "  ScriptApp.getProjectTriggers().forEach(function (t) { if (/^logisweb/.test(t.getHandlerFunction())) ScriptApp.deleteTrigger(t); });",
     "  ScriptApp.newTrigger('logiswebEdit').forSpreadsheet(ss).onEdit().create();",
     "  ScriptApp.newTrigger('logiswebChange').forSpreadsheet(ss).onChange().create();",
@@ -332,7 +335,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
       const x = (await ref(co).get()).data() || {};
       let key = x.pingKey;
       if (!key || body.renew) { key = crypto.randomBytes(16).toString("hex"); await ref(co).set({ companyName: co, pingKey: key, ...(body.renew ? { pingAt: 0 } : {}) }, { merge: true }); }
-      return { script: scriptFor(key), live: pub((await ref(co).get()).data()) };
+      return { script: scriptFor(key, parseSpreadsheetId(x.url || "") || ""), live: pub((await ref(co).get()).data()) };
     }
     if (action === "liveSet") {
       const patch = { companyName: co, updatedAt: Date.now(), updatedBy: me?.email || "" };

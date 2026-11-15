@@ -293,7 +293,7 @@ async function world(mode, opts = {}) {
   assert.equal((await live.onPing(key)).status, 404);
   // ⚡ 고친 탭만 알려 오면 그 탭만 읽는다(읽기 한도를 가장 덜 씀) — 다른 탭의 오더는 건드리지 않는다
   const k2 = ((await live.handle("pingScript", { company: CO }, {})).script.match(/\?k=([0-9a-f]{32})/) || [])[1];
-  assert.match((await live.handle("pingScript", { company: CO }, {})).script, /onEdit\(\)[\s\S]*onChange\(\)/);
+  const sc2 = (await live.handle("pingScript", { company: CO }, {})).script; assert.match(sc2, /onEdit\(\)[\s\S]*onChange\(\)/); assert.match(sc2, /LOGISWEB_SHEET_ID = 'sid'/);
   const before = w.db.ids("orders").length;
   row[17] = "칠기사";
   const c1 = w.sh.calls.length;
