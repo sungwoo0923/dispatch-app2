@@ -163,11 +163,12 @@ function ApprovalView({ company, me, initialPage = "inbox" }) {
     window.addEventListener("kp-m-approval-open", h);
     return () => window.removeEventListener("kp-m-approval-open", h);
   }, []);
-  const counts = useApprovalCounts();
+  // 💸 2026-11-15 경리(경리 화면 포함)는 지급 대기 지출결의도 결재함 숫자에(PC와 같게)
+  const counts = useApprovalCounts({ role: me?.role, team: me?.team, company, view: (() => { try { return `${localStorage.getItem("kpAllMgrView")}|${localStorage.getItem("kpHrAcctView")}`; } catch { return ""; } })() });
   const hoUnread = useHandoverUnread(me?.uid);
   return (
     <KpSubNav code="E-APPROVAL" title="전자결재" icon="stamp" active={page} onSelect={setPage}
-      groups={[{ label: "전자결재", items: approvalNavItems("", { inbox: { badge: counts.todo }, handover: { badge: hoUnread }, mine: { badge: counts.mineNew } }) }]}>{/* ⭐ 2026-11-10 메뉴 통일(menuTree) */}
+      groups={[{ label: "전자결재", items: approvalNavItems("", { inbox: { badge: (counts.todo || 0) + (counts.payTodo || 0) }, handover: { badge: hoUnread }, mine: { badge: counts.mineNew } }) }]}>{/* ⭐ 2026-11-10 메뉴 통일(menuTree) */}
       <div className="kp-m-pc kp-m-approval">
         {page === "contract"
           ? <React.Suspense fallback={null}><ContractStudioM company={company} me={me} /></React.Suspense>

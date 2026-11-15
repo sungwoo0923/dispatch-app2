@@ -84,21 +84,8 @@ const goPersonnelOrder = (targetUid) => {
 //  대상: cat=="expense" && 금액>0 (법인카드 사용보고는 이미 카드로 결제된 건이라 제외)
 //  누를 수 있는 사람: 아래 FIN_ROLES·재무 부서(2026-11-07 정리 — 운송 관리자(admin)·최종 결재자는 이제 못 누른다)
 //  (firestore.rules › approvals 의 "⭐ 2026-11-04 전자결재 서명" 규칙과 같은 조건)
-const PAY_SKIP_FORMS = ["card"];
-export const isPayDoc = (d) => d?.cat === "expense" && !PAY_SKIP_FORMS.includes(d?.form) && Number(d?.amount) > 0;
-// ⭐ 2026-11-07 지급 처리 권한 정리 — 지급은 경리 업무
-//  · 경리(test)·경리사무원(acctStaff)·최고관리자 / 재무·경리·회계·총무 부서
-//  · 통합관리자(allMgr)·통합인사관리자(hrAcct)는 "경리 화면"으로 전환했을 때만(운송·인사 화면에서는 안 됨)
-//  · 운송 관리자(admin)·최종 결재자는 지급 처리 불가(예전엔 가능했음)
-const FIN_ROLES = ["test", "acctStaff", "totalMaster"];
-const FIN_TEAM = /재무|경리|회계|총무/;
-const MULTI_VIEW = { allMgr: "kpAllMgrView", hrAcct: "kpHrAcctView" };
-const acctViewOn = (role) => {
-  const key = MULTI_VIEW[role];
-  if (!key) return false;
-  try { const v = localStorage.getItem(key); return role === "hrAcct" ? v !== "hr" : v === "acct"; } catch { return false; }
-};
-const isFinUser = (me) => FIN_ROLES.includes(me?.role) || acctViewOn(me?.role) || FIN_TEAM.test(String(me?.team || ""));
+import { isPayDoc, payState, isFinUser, FIN_TEAM, usePayFlags, fallbackPayer, usePayTodo } from "./approvalPay"; // 💸 2026-11-15 지급 규칙은 공용(모바일 숫자도 같이)
+export { isPayDoc, payState, usePayFlags, fallbackPayer };
 // ⭐ 2026-11-09 계정과목은 경리 권한만 정한다 — 경리관리자·경리사무원·통합관리자·통합인사관리자·최고관리자·경리/회계/재무/총무 부서
 //  (통합관리자·통합인사관리자는 화면 전환과 상관없이 — 계정 분류는 지급 처리와 달리 화면을 바꿀 필요 없음. 보안 규칙의 지급 권한과 같은 역할 목록)
 //  그 외 직원이 올린 지출결의는 계정과목이 비어 있고, 경리가 [지급 완료] 때 고른다(장부에도 반영)
@@ -108,22 +95,11 @@ export const rememberAccounts = (docs) => { (docs || []).forEach((d) => { [d?.da
 export const accountOptions = () => [...new Set([...ACCOUNTS, ..._usedAccounts])];
 export const isAcctEditor = (me) => ["test", "acctStaff", "allMgr", "hrAcct", "totalMaster"].includes(me?.role) || FIN_TEAM.test(String(me?.team || ""));
 // null(지급 대상 아님) | "wait"(지급 대기) | "paid"(지급완료)
-export const payState = (d) => (!isPayDoc(d) || d.status !== "approved" ? null : d.paid?.at ? "paid" : "wait");
 // ⭐ 2026-11-07 지급완료된 지출결의는 결재 취소 요청을 막는다(경리가 지급완료를 먼저 취소) — firestore.rules apCancelReqOk와 같은 조건
 export const PAID_CANCEL_MSG = "지급완료를 먼저 취소해 주세요";
 export const cancelBlockedByPaid = (d) => payState(d) === "paid";
 // 💸 2026-11-15 이 회사에 지급 처리할 사람(경리 · 통합관리자 · 통합인사관리자 · 마스터)이 아무도 없으면 — 최종 결재자가 지급 처리
 //  companyPayFlags/{회사}는 서버가 센다(functions/index.js recomputePayFlags · firestore.rules 같은 조건). 경리가 들어오면 표시가 꺼져 버튼이 사라진다
-export function usePayFlags(company) {
-  const [f, setF] = React.useState(null);
-  React.useEffect(() => {
-    if (!company) { setF(null); return undefined; }
-    return onSnapshot(doc(db, "companyPayFlags", String(company)), (s) => setF(s.exists() ? s.data() : null), () => setF(null));
-  }, [company]);
-  return f;
-}
-const lastApprover = (d) => (Array.isArray(d?.line) && d.line.length ? d.line[d.line.length - 1].uid : "");
-export const fallbackPayer = (d, me, flags) => flags?.payFallback === true && !!me?.uid && lastApprover(d) === me.uid;
 const canPay = (d, me, flags = null) => !!payState(d) && d.cancel?.status !== "pending" && (isFinUser(me) || fallbackPayer(d, me, flags));
 // 최종 승인 직후 "지급 처리도 할까요?"를 물을지 — 전담 경리가 없고, 내가 지금 바로 지급할 수 있을 때(보안 규칙이 허용하는 사람)
 const canPayNow = (d, me, flags) => isFinUser(me) || ["allMgr", "hrAcct"].includes(me?.role) || fallbackPayer(d, me, flags);
@@ -465,19 +441,9 @@ const canEdit = (d, uid) => d.drafterUid === uid && d.status === "pending" && !(
 export function useApprovalCounts(pay = null) {
   const uid = auth.currentUser?.uid;
   const list = useApprovals(uid);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const finOn = React.useMemo(() => !!pay && isFinUser({ role: pay.role, team: pay.team }), [pay?.role, pay?.team, pay?.view]);
-  const flags = usePayFlags(pay?.company || "");
-  const [pool, setPool] = React.useState([]);
-  React.useEffect(() => {
-    if (!finOn || !pay?.company) { setPool([]); return undefined; }
-    return onSnapshot(query(collection(db, "approvals"), where("company", "==", pay.company), where("cat", "==", "expense")),
-      (s) => setPool(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setPool([]));
-  }, [finOn, pay?.company]);
+  const payTodo = usePayTodo(pay ? { ...pay, uid } : null);
   return React.useMemo(() => {
     const l = (list || []).filter((d) => !(d.hiddenBy || []).includes(uid));
-    const waiting = (d) => payState(d) === "wait" && d.cancel?.status !== "pending" && !(d.hiddenBy || []).includes(uid);
-    const payTodo = finOn ? pool.filter(waiting).length : l.filter((d) => waiting(d) && fallbackPayer(d, { uid }, flags)).length;
     return {
       todo: l.filter((d) => myTurn(d, uid)).length,
       mineNew: l.filter((d) => mineUnread(d, uid)).length,
@@ -485,7 +451,7 @@ export function useApprovalCounts(pay = null) {
       myPending: l.filter((d) => d.drafterUid === uid && d.status === "pending").length,
       payTodo,
     };
-  }, [list, uid, finOn, pool, flags]);
+  }, [list, uid, payTodo]);
 }
 
 // ─────────────────────────── 결재 문서(미리보기·보기 공용) ───────────────────────────

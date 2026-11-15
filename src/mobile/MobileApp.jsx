@@ -11,6 +11,7 @@ import { useCompanyFeatures } from "../companyFeatures"; // ⭐ 2026-11-04 마�
 import { useBizModules, readBiz, writeBiz, bizInfo } from "../bizModules";
 import { reportScreen, installScreenVisibility, mobileScreenLabel } from "../screenReport";
 import { effectiveScope } from "../workScope";
+import { usePayTodo } from "../approvalPay"; // 💸 2026-11-15 지급 대기 지출결의 → 전자결재 숫자(PC와 같게)
 import { useRouteGroupFilter, RouteGroupDropdown, SheetLiveChip, RouteGroupField } from "../routeGroups";
 import OrderStaffFields from "../OrderStaffFields"; // 🧭 2026-11-14 PC와 같게 — 수정할 때 [담당자 변경](배차담당자 · 차량배정자)
 import { RecurringManagerModal } from "../AutomationPanels"; // 🧭 2026-11-14 PC와 같게 — 정기오더
@@ -2633,6 +2634,7 @@ const quickRange = (days) => {
     // ⭐ 2026-11-02 점검 — 결재 요청은 BannerCenter가 이미 띄우므로 위쪽 배너 중복 표시 안 함
     onAlert: (msg, key, id) => { if (key === "approval") return; showTopOrderBanner(msg, key === "notice" ? id : null); },
   });
+  const payTodoM = usePayTodo({ uid: user?.uid, role: realRole || role, team: myProfM?.team || "", company: (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim(), view: roleView.view });
   // ⭐ 2026-11-05 기사앱 이벤트(PC와 같은 기준) — 수락/거절은 이미 받은 오더(orders)에서, 서류(검토 대기)·긴급(미처리)은 작은 구독 1개씩
   const drvCompanyM = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim();
   const drvCounts = useDriverEventCounts();
@@ -6021,7 +6023,7 @@ const title =
   onRefresh={page === "list" ? handleRefresh : undefined}
   onValidateOrders={undefined /* ⭐ 2026-11-04 오더검증 버튼 없앰 */}
   onMenu={page === "list" || page === "dept" ? () => setShowMenu(true) : undefined}
-  menuBadge={(alertCounts.approval || 0) + (alertCounts.mineNew || 0) + (alertCounts.handover || 0) + (alertCounts.notice || 0) + ((["admin", "totalMaster", "superadmin", "viewer"].includes(role) || deptMode) ? (alertCounts.signupStaff || 0) + (alertCounts.signupDriver || 0) : 0) + drvCounts.orders + drvCounts.docs + drvCounts.sos /* ⭐ 2026-11-05 기사앱 이벤트 */ + unseenDispatchTotal /* ⭐ 2026-11-06 안 본 미배차·고정노선 미배차 */}
+  menuBadge={(alertCounts.approval || 0) + (payTodoM || 0) + (alertCounts.mineNew || 0) + (alertCounts.handover || 0) + (alertCounts.notice || 0) + ((["admin", "totalMaster", "superadmin", "viewer"].includes(role) || deptMode) ? (alertCounts.signupStaff || 0) + (alertCounts.signupDriver || 0) : 0) + drvCounts.orders + drvCounts.docs + drvCounts.sos /* ⭐ 2026-11-05 기사앱 이벤트 */ + unseenDispatchTotal /* ⭐ 2026-11-06 안 본 미배차·고정노선 미배차 */}
   notifCount={unreadCount}
   onNotifClick={() => { setShowNotifPanel(true); markAllRead(); }}
   messengerUnread={messengerUnread}
@@ -6214,7 +6216,7 @@ onGoAttendance={() => {
           canBriefing={canBriefingM}
           execFull={execFull}
           onToggleExec={() => { toggleExecFull(); setShowMenu(false); }}
-          alertCounts={{ ...alertCounts, drvOrders: drvCounts.orders, drvDocs: drvCounts.docs, drvSos: drvCounts.sos }}
+          alertCounts={{ ...alertCounts, payTodo: payTodoM, drvOrders: drvCounts.orders, drvDocs: drvCounts.docs, drvSos: drvCounts.sos }}
           unassignedCount={unseenUnassignedOrders.length /* ⭐ 2026-11-06 안 본 것만 */}
           listUnseenCount={unseenListOrders.length}
           fixedUnassignedCount={unseenFixedOrders.length}
@@ -8343,13 +8345,13 @@ function MobileSideMenu({
             </MenuSection>
           )}
           {/* ⭐ 2026-11-14 PC HOME 왼쪽 메뉴와 같은 순서 — 공지 → 게시판 → 임원 일정 → 직원 일정 → 사내 규정 → 전자결재 */}
-          <MenuSection title="사내 업무" en="HOME" dark={dark} fold={!deptMode} alwaysOpen={!!deptMode} openDefault badge={(alertCounts?.notice || 0) + (alertCounts?.approval || 0) + (alertCounts?.mineNew || 0) + (alertCounts?.handover || 0)}>
+          <MenuSection title="사내 업무" en="HOME" dark={dark} fold={!deptMode} alwaysOpen={!!deptMode} openDefault badge={(alertCounts?.notice || 0) + (alertCounts?.approval || 0) + (alertCounts?.payTodo || 0) + (alertCounts?.mineNew || 0) + (alertCounts?.handover || 0)}>
             <MenuItem label="공지사항" icon="bell" onClick={onGoNotice} badge={alertCounts?.notice || null} dark={dark} />
             <MenuItem label="사내 게시판" icon="chat" onClick={() => onGo?.("dept:board")} dark={dark} />
             {deptMode !== "exec" && <MenuItem label="임원 일정" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />}
             <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />
             <MenuItem label="사내 규정" icon="list" onClick={() => onGo?.("dept:rules")} dark={dark} />
-            {ok("전자결재") && <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.mineNew || 0) + (alertCounts?.handover || 0) || null} dark={dark} />}
+            {ok("전자결재") && <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.mineNew || 0) + (alertCounts?.handover || 0) + (alertCounts?.payTodo || 0) || null} dark={dark} />}
           </MenuSection>
           {/* ⭐ 2026-11-14 관리 = PC 회사관리(운임 규칙 · 내정보 · 내 이력서 · 출근기록부) + 관리자메뉴(회원 관리 · 권한 관리) */}
           <MenuSection title="회사관리" en="COMPANY" dark={dark} fold badge={canAdminMenu && !deptMode ? (alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) : 0}>
