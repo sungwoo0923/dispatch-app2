@@ -108,7 +108,10 @@ export default function TransportLogin() {
       if (!g || !isAdminGatePassed(g.user.uid, g.authTime)) return;
       window.__kpGateInline = false;
       setGate(null);
-      finishLogin();
+      // ⚡ 2026-11-15 2차 인증까지 끝냈으면 "로그인 완료" 3초 창 없이 바로 들어간다(2차 인증 로그인이 너무 오래 걸리던 문제)
+      sessionStorage.removeItem("transportValidating");
+      sessionStorage.removeItem("skipLoginPopup");
+      navigate("/app", { replace: true });
     };
     window.addEventListener(ADMIN_GATE_EVENT, h);
     return () => window.removeEventListener(ADMIN_GATE_EVENT, h);
@@ -214,8 +217,16 @@ export default function TransportLogin() {
       if (!u) { setCodeError("등록된 계정 정보가 없습니다."); return; }
       if (u.role === "totalMaster") { setCodeMode("all"); return; } // 부관리자 — 모든 회사 검색
       setCodeLookupQ(String(u.companyName || ""));
-      if (!u.companyCode) { setCodeError(u.approved === false ? "아직 승인 전이라 회사코드가 없습니다. 승인 메일을 기다려 주세요." : "이 계정에 회사코드가 없습니다. 회사 관리자에게 문의해 주세요."); return; }
-      setCodeResults([{ companyName: String(u.companyName || ""), companyCode: String(u.companyCode) }]);
+      // 🛠 2026-11-15 직원 계정(회사에 나중에 가입)은 계정에 코드가 없다 → 그 회사의 코드(가입 신청 승인 기록)를 찾아 보여 준다
+      //  회사에도 코드가 없으면(관리센터에서 만든 운송사 등) 코드 없이 로그인하면 된다고 알려 준다(로그인은 계정에 코드가 있을 때만 코드를 확인한다)
+      let code = String(u.companyCode || "");
+      if (!code && u.approved !== false && u.companyName) {
+        const apps = await getDocs(query(collection(getFirestore(lookupApp), "transportApplications"), where("companyName", "==", String(u.companyName)))).catch(() => null);
+        const hit = (apps?.docs || []).map((d) => d.data()).find((a) => (a.status === "approved" || a.status === "승인") && a.companyCode);
+        code = String(hit?.companyCode || "");
+      }
+      if (!code) { setCodeError(u.approved === false ? "아직 승인 전이라 회사코드가 없습니다. 승인 메일을 기다려 주세요." : "이 계정은 회사코드 없이 로그인해요. 회사코드 칸은 비워 두고 회사명 · 이메일 · 비밀번호만 넣으면 돼요."); return; }
+      setCodeResults([{ companyName: String(u.companyName || ""), companyCode: code }]);
     } catch (e) {
       const c = String(e?.code || "");
       setCodeError(c === "auth/wrong-password" || c === "auth/invalid-credential" || c === "auth/user-not-found" ? "이메일 또는 비밀번호가 맞지 않습니다." : c === "auth/too-many-requests" ? "시도가 너무 많습니다. 잠시 뒤 다시 해 주세요." : `확인하지 못했습니다: ${e?.message || e}`);

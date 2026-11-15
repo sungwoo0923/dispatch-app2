@@ -1052,11 +1052,12 @@ export function buildMigration(tabsIn, presetIn = {}) {
     const memos = tabSummary.filter((s) => c.탭.has(s.title) && s.client === c.거래처명).flatMap((s) => [...s.memo.contacts, ...s.memo.blocked.map((b) => `⚠ ${b}`)]);
     return { 거래처명: c.거래처명, 건수: c.건수, 탭: [...c.탭], 메모: uniq(memos).join("\n") };
   });
-  // 6) 상하차지(주소가 있는 곳만 · 이름 기준 하나)
+  // 6) 상하차지(이름 기준 하나) — 🛠 2026-11-15 주소가 없어도 업체 이름이면 등록(주소는 나중에 상하차지거래처에서 넣는다 · 예: CJ ENM 물류센터(인천))
   const placeMap = new Map();
   const addPlace = (name, address, extra = {}) => {
-    const n = cell(name); if (!n || !address) return;
-    const k = nm(n); const cur = placeMap.get(k) || { 업체명: n, 주소: address, 담당자: "", 담당자번호: "", 메모: "" };
+    const n = cell(name); if (!n || (!address && !extra.noAddr)) return;
+    const k = nm(n); const cur = placeMap.get(k) || { 업체명: n, 주소: address || "", 담당자: "", 담당자번호: "", 메모: "" };
+    if (!cur.주소 && address) cur.주소 = address;
     if (!cur.담당자 && extra.person) cur.담당자 = extra.person;
     if (!cur.담당자번호 && extra.phone) cur.담당자번호 = extra.phone;
     if (!cur.메모 && extra.memo) cur.메모 = extra.memo;
@@ -1067,6 +1068,9 @@ export function buildMigration(tabsIn, presetIn = {}) {
   // 오더에서 나온 곳은 이름이 업체명일 때만(지역 · 주소를 이름으로 쓴 줄은 장소로 만들지 않는다)
   const goodName = (n, a) => n && a && nm(n) !== nm(a) && !looksAddress(n) && !looksRegion(n) && !nm(a).startsWith(nm(n)) && looksAddress(a);
   orders.forEach((o) => { if (goodName(o.상차지명, o.상차지주소)) addPlace(o.상차지명, o.상차지주소, { person: o.상차지담당자, phone: o.상차지담당자번호 }); if (goodName(o.하차지명, o.하차지주소)) addPlace(o.하차지명, o.하차지주소); });
+  // 주소를 못 찾은 곳 — 이름이 주소 · 지역 모양이 아니면 이름만으로 등록(주소 칸은 비워 둔다)
+  const nameOnly = (n, a) => !!cell(n) && !cell(a) && !looksAddress(n) && !looksRegion(n) && !/^\d+$/.test(cell(n));
+  orders.forEach((o) => { if (nameOnly(o.상차지명, o.상차지주소)) addPlace(o.상차지명, "", { noAddr: true }); if (nameOnly(o.하차지명, o.하차지주소)) addPlace(o.하차지명, "", { noAddr: true }); });
   const places = [...placeMap.values()];
   // 7) 고정노선 후보 — 같은 거래처 · 상차지 · 하차지 · 청구/기사 운임이 반복되는 구간
   const routes = findRouteCandidates(orders, preset);

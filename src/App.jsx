@@ -34,7 +34,7 @@ import {
 } from "./loginSessions";
 import { LoginManagerModal } from "./LoginManager";
 import { AdminLoginGate, isAdminGatePassed, adminAuthTime, ADMIN_GATE_EVENT } from "./AdminGate";
-import { UserLoginGate, MfaAskModal, mfaAskState } from "./UserSecurity";
+import { UserLoginGate, MfaAskModal, mfaAskState, mfaCall } from "./UserSecurity";
 const ManualHost = React.lazy(() => import("./WorkManual").then((m) => ({ default: m.ManualHost }))); // 📘 2026-11-14 업무 매뉴얼 · 회계용어 창(PC · 모바일 어디서든 이벤트로)
 import { DRIVER_BUSY_EVENT, isDriverBusy } from "./driver/driverLoginErrors"; // ⭐ 2026-11-05 기사 로그인 확인 중 표시
 import { initDriverAppContext, markDriverAppOnlyKick } from "./driver/driverAppContext"; // ⭐ 2026-11-08 기사앱(APK·홈 화면 기사앱)은 기사 계정만
@@ -364,7 +364,10 @@ export default function App() {
     const st = mfaAskState(secProfile);
     if (!st) return;
     try { if (sessionStorage.getItem("kpMfaAsked") === user.uid) return; sessionStorage.setItem("kpMfaAsked", user.uid); } catch { /* 무시 */ }
-    setMfaAsk(st);
+    // 🛠 2026-11-15 묻기 전에 서버에 한 번 더 확인 — 이미 켜 둔 계정이면 묻지 않는다(서버가 계정 표시도 고친다 · functions/pnkMfa.js status)
+    //  (프로필 문서가 자주 다시 와도 한 번만 묻는다 — 위 sessionStorage. 그사이 다른 계정으로 바뀌었으면 띄우지 않는다)
+    const uid0 = user.uid; const still = () => auth.currentUser?.uid === uid0;
+    mfaCall({ action: "status" }).then((r) => { if (still() && r?.opt !== true) setMfaAsk(st); }).catch(() => { if (still()) setMfaAsk(st); });
   }, [user, role, secProfile]);
   useEffect(() => {
     if (!adminGateOn) { setAdminAuthAt(null); return undefined; }

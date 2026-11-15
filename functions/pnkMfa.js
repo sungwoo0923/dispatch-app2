@@ -57,7 +57,7 @@ function makePnkMfa({ db, HttpsError, Timestamp, now = () => Date.now(), verifyI
     const d = u?.exists ? u.data() : {};
     const phone = String(d.pcVerifyPhone || "");
     if (email === SUPER_EMAIL) return { uid, required: true, superMain: true, phone };
-    return { uid, required: d.role === "totalMaster", superMain: false, sub: d.subAdmin === true, phone, email };
+    return { uid, required: d.role === "totalMaster", superMain: false, sub: d.subAdmin === true, phone, email, flagOpt: d.mfaOpt === true };
   }
   const authTime = (context) => Number(context.auth.token?.auth_time || 0);
   async function openSession(uid, context, remember) {
@@ -86,6 +86,8 @@ function makePnkMfa({ db, HttpsError, Timestamp, now = () => Date.now(), verifyI
     const kind = kindOf(sec?.kind);
     if (action === "status") {
       const locked = sec?.lockUntil && sec.lockUntil > now() ? sec.lockUntil : 0;
+      // 🛠 2026-11-15 켜 두었는데 계정 표시(users.mfaOpt)가 빠져 있으면 고친다 — 표시가 없으면 로그인 때마다 "2차 인증을 사용할까요?"가 다시 떴다
+      if (on && !me.flagOpt) await userFlag(me.uid, { mfaOpt: true, mfaKind: kind, mfaAsk: { answer: "yes", at: now() } });
       return { required: on, optional: true, opt: on, hasCode: on, kind, locked, v: 3 };
     }
     if (action === "setup") {

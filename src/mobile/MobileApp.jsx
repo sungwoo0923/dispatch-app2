@@ -10,7 +10,7 @@ import { useCompanyFeatures } from "../companyFeatures"; // ⭐ 2026-11-04 마�
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합) — 모바일은 기존 화면 위에 업무 화면을 덮어 띄운다(src/freight/FreightMobile.jsx)
 import { useBizModules, readBiz, writeBiz, bizInfo } from "../bizModules";
 import { reportScreen, installScreenVisibility, mobileScreenLabel } from "../screenReport";
-import { normScope } from "../workScope";
+import { effectiveScope } from "../workScope";
 import { useRouteGroupFilter, RouteGroupDropdown, SheetLiveChip, RouteGroupField } from "../routeGroups";
 import OrderStaffFields from "../OrderStaffFields"; // 🧭 2026-11-14 PC와 같게 — 수정할 때 [담당자 변경](배차담당자 · 차량배정자)
 import { RecurringManagerModal } from "../AutomationPanels"; // 🧭 2026-11-14 PC와 같게 — 정기오더
@@ -2223,7 +2223,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const PAGE_MENU_M = { drivers: "기사관리", clients: "거래처관리", list: "배차현황", detail: "배차현황", canceled: "배차현황", form: "배차관리", unassigned: "배차관리", fleet: "지입차관리", sales: "매출관리", ratecard: "단가표", fare: "운임조회", intel: "인사이트", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:funds": "자금관리", "dept:assets": "비품관리", "dept:hr": "인사관리부", "dept:cert": "증명서발급", "dept:driverdocs": "기사관리", "dept:sales": "영업관리" }; // ⭐ 2026-11-03 가입 승인(staff)은 기사관리 조회권한과 별개 — PC처럼 관리자·경리·인사는 승인·거절 가능
   const [execFull, setExecFull] = useState(() => { try { return localStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
   // 🗂 2026-11-13 업무 범위(사내업무만 / 사내업무 + 경리) — 배차 화면 없이 사내업무 홈으로(src/workScope.js)
-  const workScopeM = role === "totalMaster" ? "" : normScope(myProfM?.workScope);
+  const workScopeM = role === "totalMaster" || realRole === "totalMaster" ? "" : effectiveScope(realRole, myProfM?.workScope, myProfM?.isMaster === true); // 🛠 2026-11-15 권한 기준(src/workScope.js)
   const deptMode = workScopeM ? "office" : role === "test" ? "acct" : role === "hrManager" ? "hr" : role === "salesMgr" ? "sales" : isExecM && !execFull ? "exec" : null; // 💼 2026-11-10 영업관리자(영업사무원 포함) → 영업 화면
   // 📊 2026-11-06 일일 경영 보고 — 기존 임원 판정(isExecM) 그대로(src/dailyReport.js canSeeBriefing)
   const briefCompanyM = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
@@ -6072,6 +6072,7 @@ const title =
 )}
       {showMenu && (
         <MobileSideMenu
+  realRole={realRole}
   officeAcct={workScopeM === "officeAcct"}
   staffSignupOk={!["acctStaff", "hrStaff"].includes(realRole)}
   onClose={() => setShowMenu(false)}
@@ -8011,6 +8012,7 @@ function MobileLoadingScreen({ loaded = 0, total = null, cacheDone = false, onAl
 
 let SIDE_MENU_SCROLL = 0; // 사이드 메뉴 스크롤 위치(앱이 켜져 있는 동안 기억)
 function MobileSideMenu({
+  realRole = "", // 🛠 2026-11-15 화면을 바꿔도 관리센터 바로가기가 보이게(실제 권한)
   onClose,
   onGoList,
   onGoCreate,
@@ -8360,7 +8362,7 @@ function MobileSideMenu({
             {canAdminMenu && !deptMode && canPermsM && <MenuItem label="권한 관리" icon="key" onClick={() => onGo?.("perms")} dark={dark} />}
             <MenuItem label="설정" icon="key" onClick={onGoSettings} dark={dark} />
           </MenuSection>
-          {role === "totalMaster" && (
+          {(role === "totalMaster" || realRole === "totalMaster") && (
             <MenuSection title="최고관리자 전용" en="MASTER" dark={dark}>
               {/* PC 상단 "관리센터 ↗"와 같은 역할 — 플랫폼 운영 화면(/platform)으로 전환 */}
               <MenuItem label="관리자 관리센터로 전환 ↗" icon="shield" onClick={() => { try { sessionStorage.setItem("kpEntry", "platform"); } catch { /* 무시 */ } window.location.assign("/platform"); }} dark={dark} />

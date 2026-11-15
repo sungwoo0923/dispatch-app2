@@ -20,3 +20,29 @@ export function scopeAllows(scope, menu) {
   if (!s) return true;
   return OFFICE_BASE.includes(menu) || (s === "officeAcct" && OFFICE_ACCT.includes(menu));
 }
+
+// 🗂 2026-11-15 권한마다 고를 수 있는 업무 범위 — 권한과 맥락이 맞게(사용자 요청)
+//  · 통합관리자(회사 마스터 포함) = 전체 업무 고정(운송 · 영업 · 경리 · 인사 화면을 바꿔 가며 다 본다)
+//  · 통합인사관리자 = 경리 + 인사 고정 · 운송관리자 · 운송사무원 = 배차 업무 고정
+//  · 경리관리자 · 경리사무원만 고를 수 있다: 경리 업무(기본 — 정산 · 배차현황 확인 포함) / 사내업무 + 경리(배차 · 정산 제외)
+//  · 인사 · 영업 · 법무 · 개발 = 권한 관리에서 정한 메뉴 고정(배차 포함 / 사내업무만 같은 선택이 필요 없다)
+//  예전에 맞지 않게 저장된 값(예: 통합관리자인데 사내업무만)은 무시하고 권한 기준으로 동작한다(effectiveScope)
+const FIXED = {
+  totalMaster: ["전체 업무 (최고관리자)", "모든 메뉴"],
+  allMgr: ["전체 업무 (고정)", "운송 · 영업 · 경리 · 인사 화면을 바꿔 가며 모두 봐요"],
+  hrAcct: ["경리 + 인사 (고정)", "경리 · 인사 화면을 바꿔 가며 봐요"],
+  admin: ["배차 업무 (고정)", "배차 · 운임 · 기사 · 거래처 등 운송 메뉴"],
+  user: ["배차 업무 (고정)", "배차 · 운임 · 기사 · 거래처 등 운송 메뉴"],
+};
+const ACCT_ROLES = ["test", "acctStaff"];
+export function scopeOptionsFor(role, isMaster = false) {
+  const r = isMaster && !["totalMaster", "driver", "shipper"].includes(role) ? "allMgr" : role;
+  if (FIXED[r]) return [["", FIXED[r][0], FIXED[r][1]]];
+  if (ACCT_ROLES.includes(r)) return [["", "경리 업무 (기본)", "정산 · 회계 · 자금 · 비품 + 배차현황 확인"], ["officeAcct", "사내업무 + 경리", "회계 · 자금 · 비품 + 사내업무 (배차 · 정산 제외)"]];
+  return [["", "권한에 정한 메뉴 (고정)", "권한 관리에서 이 권한에 켠 메뉴만 보여요"]];
+}
+// 실제로 적용할 업무 범위 — 그 권한에서 고를 수 없는 값이면 기본("")
+export function effectiveScope(role, scope, isMaster = false) {
+  const s = normScope(scope);
+  return scopeOptionsFor(role, isMaster).some(([k]) => k === s) ? s : "";
+}

@@ -5013,7 +5013,45 @@ exports.birthdayReminders = functions.pubsub.schedule("10 9 * * *").timeZone("As
   return null;
 });
 
+// 💸 2026-11-15 회사별 "지급 처리할 사람" 표시 — companyPayFlags/{회사} { finStaff, finCapable, payFallback }
+//  · finStaff: 경리관리자 · 경리사무원 · 재무/경리/회계/총무 부서 직원 수(전담 경리)
+//  · finCapable: 위 + 통합관리자 · 통합인사관리자 · 회사 마스터(경리 화면으로 지급 처리 가능)
+//  · payFallback: finCapable 이 0명 → 지출결의의 최종 결재자가 지급 완료를 할 수 있다(firestore.rules approvals · src/Approval.jsx canPay)
+//  직원 계정의 권한 · 부서 · 승인 · 퇴사 · 회사가 바뀔 때만 다시 센다
+const PAY_FIN_TEAM = /재무|경리|회계|총무/;
+const PAY_FLAG_KEYS = ["role", "team", "isMaster", "approved", "employmentStatus", "companyName"];
+async function recomputePayFlags(co) {
+  if (!co) return;
+  const snap = await db.collection("users").where("companyName", "==", co).get();
+  let finStaff = 0; let finCapable = 0;
+  snap.docs.forEach((d) => {
+    const u = d.data() || {};
+    if (u.approved === false || u.employmentStatus === "퇴사" || ["driver", "shipper", "totalMaster", "cafeUser"].includes(u.role)) return;
+    const staff = ["test", "acctStaff"].includes(u.role) || PAY_FIN_TEAM.test(String(u.team || ""));
+    if (staff) finStaff += 1;
+    if (staff || ["hrAcct", "allMgr"].includes(u.role) || u.isMaster === true) finCapable += 1;
+  });
+  await db.collection("companyPayFlags").doc(co).set({ finStaff, finCapable, payFallback: finCapable === 0, at: Date.now() });
+}
+exports.companyPayFlagsSync = functions.firestore.document("users/{uid}").onWrite(async (ch) => {
+  const b = ch.before.exists ? ch.before.data() : null; const a = ch.after.exists ? ch.after.data() : null;
+  if (b && a && PAY_FLAG_KEYS.every((k) => JSON.stringify(b[k] ?? null) === JSON.stringify(a[k] ?? null))) return null;
+  const cos = [...new Set([b?.companyName, a?.companyName].map((c) => String(c || "").trim()).filter(Boolean))];
+  for (const co of cos) await recomputePayFlags(co).catch((e) => console.error("[지급 처리 표시]", co, e?.message || e));
+  return null;
+});
+
 exports.hourlyJobs = functions.runWith({ timeoutSeconds: 300, memory: "512MB" }).pubsub.schedule("5 * * * *").timeZone("Asia/Seoul").onRun(async () => {
+  // 💸 2026-11-15 처음 한 번 — 모든 회사의 지급 처리 표시를 만든다(그 뒤로는 직원 계정이 바뀔 때마다 companyPayFlagsSync)
+  try {
+    const meta = await db.collection("companyPayFlags").doc("_meta").get();
+    if (!meta.exists || meta.data().v !== 1) {
+      const all = await db.collection("users").select("companyName").get();
+      const cos = [...new Set(all.docs.map((d) => String(d.get("companyName") || "").trim()).filter((c) => c && c !== "_meta"))];
+      for (const co of cos) await recomputePayFlags(co).catch(() => {});
+      await db.collection("companyPayFlags").doc("_meta").set({ v: 1, at: Date.now(), companies: cos.length });
+    }
+  } catch (e) { console.error("[지급 처리 표시 초기화]", e?.message || e); }
   const hour = new Date(Date.now() + KST_MS).getUTCHours();
   const today = kstDateStr();
   const tpls = await db.collection("recurringOrders").where("active", "==", true).get();
@@ -6959,7 +6997,8 @@ exports.pnkMailInbound = functions.runWith({ timeoutSeconds: 120, memory: "512MB
   _pnkMail.inbound(req, res).catch((e) => { console.error("[PnK 메일] 받기 오류", e); res.status(500).send("error"); }));
 // 🏢 2026-11-10 PnK 인트라넷 — 최고관리자 · 부관리자 2차 인증(8자리 2차 비밀번호) · 설명은 functions/pnkMfa.js 맨 위
 const _pnkMfa = require("./pnkMfa").makePnkMfa({ db, HttpsError: functions.https.HttpsError, Timestamp: require("firebase-admin/firestore").Timestamp, verifyIdToken: (t) => getAuth().verifyIdToken(t) });
-exports.pnkMfa = functions.runWith({ timeoutSeconds: 30, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
+// ⚡ 2026-11-15 로그인 2차 인증이 느리던 문제 — 늘 한 대는 켜 두고(처음 부를 때 서버를 새로 띄우느라 몇 초 걸렸다) · 비밀번호 확인 계산이 빠르게 512MB
+exports.pnkMfa = functions.runWith({ timeoutSeconds: 30, memory: "512MB", minInstances: 1, ...appCheckCallOpts() }).https.onCall(async (data, context) => {
   try { return await _pnkMfa(data || {}, context); } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;
     console.error("[PnK 2차 인증] 실패:", e);

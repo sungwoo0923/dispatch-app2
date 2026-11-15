@@ -112,7 +112,21 @@ export const payState = (d) => (!isPayDoc(d) || d.status !== "approved" ? null :
 // ⭐ 2026-11-07 지급완료된 지출결의는 결재 취소 요청을 막는다(경리가 지급완료를 먼저 취소) — firestore.rules apCancelReqOk와 같은 조건
 export const PAID_CANCEL_MSG = "지급완료를 먼저 취소해 주세요";
 export const cancelBlockedByPaid = (d) => payState(d) === "paid";
-const canPay = (d, me) => !!payState(d) && d.cancel?.status !== "pending" && isFinUser(me);
+// 💸 2026-11-15 이 회사에 지급 처리할 사람(경리 · 통합관리자 · 통합인사관리자 · 마스터)이 아무도 없으면 — 최종 결재자가 지급 처리
+//  companyPayFlags/{회사}는 서버가 센다(functions/index.js recomputePayFlags · firestore.rules 같은 조건). 경리가 들어오면 표시가 꺼져 버튼이 사라진다
+export function usePayFlags(company) {
+  const [f, setF] = React.useState(null);
+  React.useEffect(() => {
+    if (!company) { setF(null); return undefined; }
+    return onSnapshot(doc(db, "companyPayFlags", String(company)), (s) => setF(s.exists() ? s.data() : null), () => setF(null));
+  }, [company]);
+  return f;
+}
+const lastApprover = (d) => (Array.isArray(d?.line) && d.line.length ? d.line[d.line.length - 1].uid : "");
+export const fallbackPayer = (d, me, flags) => flags?.payFallback === true && !!me?.uid && lastApprover(d) === me.uid;
+const canPay = (d, me, flags = null) => !!payState(d) && d.cancel?.status !== "pending" && (isFinUser(me) || fallbackPayer(d, me, flags));
+// 최종 승인 직후 "지급 처리도 할까요?"를 물을지 — 전담 경리가 없고, 내가 지금 바로 지급할 수 있을 때(보안 규칙이 허용하는 사람)
+const canPayNow = (d, me, flags) => isFinUser(me) || ["allMgr", "hrAcct"].includes(me?.role) || fallbackPayer(d, me, flags);
 
 // 🖼 2026-11-04 첨부 보기·저장 — 첨부는 base64 data URL이라 <a target="_blank">로는 크롬이 새 탭을 막아 아무 일도 안 일어났다.
 //  화면 안 보기(라이트박스)로 열고, 저장은 blob으로 바꿔 내려받는다(휴대폰은 공유 시트 → 사진 저장).
@@ -446,18 +460,32 @@ const ccUnread = (d, uid) => (d.ccUids || []).includes(uid) && d.status === "app
 // 첫 결재자가 열어보기 전이면 수정 가능
 const canEdit = (d, uid) => d.drafterUid === uid && d.status === "pending" && !(d.line || []).some((s) => s.status !== "wait" && s.status !== "pending") && !d.line?.[0]?.viewedAt;
 // 사이드바 숫자
-export function useApprovalCounts() {
+//  pay: { role, team, company, view } — 💸 2026-11-15 지급 처리할 수 있는 사람(경리 · 경리 화면의 통합관리자 등 · 경리 없는 회사의 최종 결재자)은
+//   지급 대기 지출결의 수(payTodo)도 센다 → 전자결재 숫자에 더한다(운송 화면에서는 경리 일이 아니라 0)
+export function useApprovalCounts(pay = null) {
   const uid = auth.currentUser?.uid;
   const list = useApprovals(uid);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const finOn = React.useMemo(() => !!pay && isFinUser({ role: pay.role, team: pay.team }), [pay?.role, pay?.team, pay?.view]);
+  const flags = usePayFlags(pay?.company || "");
+  const [pool, setPool] = React.useState([]);
+  React.useEffect(() => {
+    if (!finOn || !pay?.company) { setPool([]); return undefined; }
+    return onSnapshot(query(collection(db, "approvals"), where("company", "==", pay.company), where("cat", "==", "expense")),
+      (s) => setPool(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setPool([]));
+  }, [finOn, pay?.company]);
   return React.useMemo(() => {
     const l = (list || []).filter((d) => !(d.hiddenBy || []).includes(uid));
+    const waiting = (d) => payState(d) === "wait" && d.cancel?.status !== "pending" && !(d.hiddenBy || []).includes(uid);
+    const payTodo = finOn ? pool.filter(waiting).length : l.filter((d) => waiting(d) && fallbackPayer(d, { uid }, flags)).length;
     return {
       todo: l.filter((d) => myTurn(d, uid)).length,
       mineNew: l.filter((d) => mineUnread(d, uid)).length,
       ccNew: l.filter((d) => ccUnread(d, uid)).length,
       myPending: l.filter((d) => d.drafterUid === uid && d.status === "pending").length,
+      payTodo,
     };
-  }, [list, uid]);
+  }, [list, uid, finOn, pool, flags]);
 }
 
 // ─────────────────────────── 결재 문서(미리보기·보기 공용) ───────────────────────────
@@ -1823,6 +1851,7 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
   React.useEffect(() => { setPaidLocal(undefined); }, [d0?.id]);
   const d = React.useMemo(() => (paidLocal === undefined ? d0 : { ...d0, paid: paidLocal }), [d0, paidLocal]);
   const apCfg = useApprovalSettings(company);
+  const payFlags = usePayFlags(company); // 💸 2026-11-15 지급 처리할 사람 표시(경리 없는 회사)
   const form = formOf(d.form);
   const [comment, setComment] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -1830,6 +1859,7 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
   const [lightbox, setLightbox] = React.useState(null); // ⭐ 2026-11-04 첨부 크게 보기(번호)
   const [signOpen, setSignOpen] = React.useState(false); // ✍ 내 서명·결재 표시 설정
   const [payAsk, setPayAsk] = React.useState(null); // 💸 { date, memo }
+  const [payOffer, setPayOffer] = React.useState(false); // 💸 2026-11-15 최종 승인 직후 지급 결정 · 보류 창
   const paperRef = React.useRef(null);
   const turn = myTurn(d, me.uid);
   const cTurn = cancelTurn(d, me.uid);
@@ -1896,6 +1926,8 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
       }
       await updateDoc(doc(db, "approvals", d.id), patch);
       if (patch.status === "approved") runApprovedHooks(d, company, me);
+      // 💸 2026-11-15 최종 승인한 지출결의 — 전담 경리가 없고 내가 지급할 수 있으면 바로 "지급 처리도 할까요?"
+      if (patch.status === "approved" && isPayDoc(d) && payFlags && Number(payFlags.finStaff || 0) === 0 && canPayNow(d, me, payFlags)) setPayOffer(true);
       if (Array.isArray(d.data?.vexIds) && d.data.vexIds.length && ["rejected", "withdrawn", "cancelled"].includes(patch.status)) syncExpensesWithApproval(d, patch.status); // 🧾 영수증 → 다시 결의할 수 있게
       // ⭐ 2026-11-02 점검 — 결재 취소가 최종 승인되면 승인 때 자동 연동한 것을 되돌린다(지출 장부 줄 삭제·사직 퇴사예정·인사발령 대기 해제). 육아휴직·출산휴가 재직 상태는 이전 값을 몰라 인사관리부에서 직접 바꿔야 함
       if (patch.status === "cancelled") {
@@ -1919,14 +1951,14 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
     } catch (e) { window.alert(`처리 실패: ${e.message}`); } finally { setBusy(false); }
   };
   // 💸 2026-11-04 지급완료 처리·취소 — 기안자에게 알림(가운데 팝업 drafterUnread + 서버 notifyApproval 푸시 + 공문함 기록)
-  const payable = canPay(d, me);
+  const payable = canPay(d, me, payFlags);
   const pstate = payState(d);
-  const doPay = async () => {
+  const doPay = async (opts = {}) => {
     const date = payAsk?.date || kstToday();
     const memo = String(payAsk?.memo || "").trim();
     const account = String(payAsk?.account || d.data?.account || "").trim(); // ⭐ 2026-11-09 계정과목(경리가 지급 때 지정)
     if (payState(d) === "paid") return; // 이미 지급완료(두 번 처리 방지)
-    if (!await kpConfirm(`「${d.title}」\n${fmtWon(d.amount)}을 ${date} 지급 완료로 처리할까요?\n기안자(${d.drafter?.name || ""})에게 알림이 갑니다.`)) return;
+    if (!opts.skip && !await kpConfirm(`「${d.title}」\n${fmtWon(d.amount)}을 ${date} 지급 완료로 처리할까요?\n기안자(${d.drafter?.name || ""})에게 알림이 갑니다.`)) return;
     setBusy(true);
     try {
       const now = Date.now();
@@ -2038,6 +2070,26 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
                 </div>
               );
             })()}
+            {/* 💸 2026-11-15 최종 승인 직후 — 전담 경리가 없으면 결재한 사람이 바로 지급 결정 · 보류(보류해도 아래 [지급 완료 처리]로 언제든) */}
+            {payOffer && createPortal(
+              <div className="fixed inset-0 z-[100003] bg-[#061832]/60 flex items-center justify-center p-4" data-pay-offer>
+                <div className="w-full max-w-[400px] rounded-3xl bg-white shadow-2xl overflow-hidden">
+                  <div className="px-6 pt-6 pb-4" style={{ background: "linear-gradient(135deg,#0F1A30,#1B2B4B 60%,#2D4C82)" }}>
+                    <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#8FB0F0]">PAYMENT</div>
+                    <div className="text-[18px] font-black text-white mt-1">지급 처리까지 할까요?</div>
+                    <div className="text-[12.5px] text-white/75 mt-1 leading-relaxed">{payFlags?.payFallback ? "이 회사에는 아직 경리 담당자가 없어요. 최종 결재자가 지급 처리를 할 수 있어요." : "이 회사에는 아직 경리팀 직원이 없어요. 지금 바로 지급 처리할 수 있어요."}</div>
+                  </div>
+                  <div className="px-6 py-5 space-y-3">
+                    <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-4 py-3 text-[13.5px] text-[#3A4A66]">
+                      <div className="font-black text-[#0F1A30] truncate">{d.title}</div>
+                      <div className="mt-0.5">금액 <b className="text-[#0F1A30]">{fmtWon(d.amount)}</b> · 지급일 <b className="text-[#0F1A30]">{kstToday()}</b></div>
+                    </div>
+                    <button type="button" disabled={busy} onClick={async () => { setPayOffer(false); await doPay({ skip: true }); }} className="w-full h-12 rounded-xl bg-[#1B2B4B] text-white text-[15px] font-black disabled:opacity-50" data-pay-go>지급 결정 · 지급완료 도장</button>
+                    <button type="button" disabled={busy} onClick={() => setPayOffer(false)} className="w-full h-11 rounded-xl border border-[#DCE3EE] text-[13.5px] font-bold text-[#5B6B85]" data-pay-hold>보류 · 나중에 하기</button>
+                    <p className="text-[11.5px] text-[#9AA9C3] text-center leading-relaxed">보류하면 「지급 대기」로 남아요. 문서 아래 <b className="text-[#5B6B85]">₩ 지급 완료 처리</b>로 언제든 할 수 있어요.</p>
+                  </div>
+                </div>
+              </div>, document.body)}
             {/* 💸 2026-11-04 지급완료 — 최종 승인된 지출 문서 */}
             {pstate && (
               <div className={`rounded-2xl p-4 space-y-2.5 ${pstate === "paid" ? "border border-[#E8C9C5] bg-[#FDF6F5]" : payable ? "border-2 border-[#1B2B4B] bg-white" : "border border-[#DCE3EE] bg-[#F8FAFD]"}`} data-ap-pay>
@@ -2572,6 +2624,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   }, [admin, page, company]);
   // 💸 2026-11-04 지급 대기 — 경리(test)·관리자 역할은 참여하지 않은 지출 문서도 볼 수 있어(규칙상 읽기 허용) 회사 지출 결의를 따로 구독
   const payReader = isFinUser(me); // ⭐ 2026-11-07 지급 권한과 같은 기준
+  const payFlagsInbox = usePayFlags(company); // 💸 2026-11-15 경리 없는 회사 — 최종 결재자도 지급 대기 · 지급완료 목록에
   const [payPool, setPayPool] = React.useState([]);
   React.useEffect(() => {
     if (!payReader || !company) return undefined;
@@ -2616,9 +2669,9 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
     todo: L.filter((d) => myTurn(d, uid)),
     ...inboxStatus,
     // 💸 지급 대기·지급완료 — 내가 결재선에 있는 문서 + 내가 지급 처리할 수 있는 회사 지출 결의(경리·재무, 오래된 것부터)
-    paywait: [...new Map([...inboxStatus.paywait, ...payMine.filter((d) => payState(d) === "wait" && canPay(d, meFull))].map((d) => [d.id, d])).values()]
+    paywait: [...new Map([...inboxStatus.paywait, ...payMine.filter((d) => payState(d) === "wait" && canPay(d, meFull, payFlagsInbox))].map((d) => [d.id, d])).values()]
       .sort((a, b) => toMs(a.updatedAt || a.createdAt) - toMs(b.updatedAt || b.createdAt)),
-    paid: [...new Map([...inboxStatus.paid, ...payMine.filter((d) => payState(d) === "paid" && canPay(d, meFull))].map((d) => [d.id, d])).values()],
+    paid: [...new Map([...inboxStatus.paid, ...payMine.filter((d) => payState(d) === "paid" && canPay(d, meFull, payFlagsInbox))].map((d) => [d.id, d])).values()],
     cc: L.filter((d) => (d.ccUids || []).includes(uid)),
     company: companyAll,
     hidden: hiddenL,

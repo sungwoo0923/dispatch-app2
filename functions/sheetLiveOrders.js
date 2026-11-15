@@ -99,6 +99,27 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     return [...out.values()].filter((e) => String(e.data.상차일 || "") >= from);
   }
   const placesFor = async (co) => (await db.collection("places").where("companyName", "==", co).get()).docs.map((d) => { const x = d.data() || {}; const c = (Array.isArray(x.contacts) && (x.contacts.find((k) => k.isPrimary) || x.contacts[0])) || {}; return { name: x.업체명 || "", address: x.주소 || "", phone: c.phone || x.담당자번호 || "", person: c.name || x.담당자 || "" }; }).filter((p) => p.name);
+  const nkP = (v) => String(v || "").normalize("NFC").toLowerCase().replace(/\s+/g, "").replace(/[^\w가-힣-]/g, "");
+  const placeDocId = (co, name, nm) => { const k = String(nm(name) || "").replace(/\//g, "_"); return co && co !== "돌캐" ? `${co.replace(/\//g, "_")}__${k}` : k; }; // src/coKey.js coDocKey + CarrierMigratePanel placeKey 와 같게
+  async function registerPlaces(co, cfg, list, have, nm) {
+    if (!list.length) return 0;
+    const seen = new Set(Array.isArray(cfg.placeSeen) ? cfg.placeSeen : []);
+    const haveName = new Set(have.map((p) => nkP(p.name))); const haveAddr = new Set(have.map((p) => nkP(p.address)).filter(Boolean));
+    const fresh = list.filter((p) => { const k = nkP(p.업체명); return k && !seen.has(k) && !haveName.has(k) && !(nkP(p.주소) && haveAddr.has(nkP(p.주소))); }).slice(0, 200);
+    const mark = list.map((p) => nkP(p.업체명)).filter((k) => k && !seen.has(k) && haveName.has(k)); // 이미 있는 곳도 "봤음"으로(나중에 지워도 다시 안 만든다)
+    if (!fresh.length && !mark.length) return 0;
+    const b = db.batch();
+    fresh.forEach((p) => b.set(db.collection("places").doc(placeDocId(co, p.업체명, nm)), {
+      업체명: p.업체명, 주소: p.주소 || "", 담당자: p.담당자 || "", 담당자번호: p.담당자번호 || "",
+      contacts: p.담당자 || p.담당자번호 ? [{ name: p.담당자 || "", phone: p.담당자번호 || "", isPrimary: true }] : [],
+      메모: p.메모 || (p.주소 ? "" : "구글시트에서 이름만 들어옴 — 주소를 넣어 주세요"), 등급: "일반", 팝업표시: true, isActive: true, 등록경로: "구글시트 실시간", companyName: co, createdAt: FieldValue.serverTimestamp(),
+    }, { merge: true }));
+    const next = [...new Set([...seen, ...fresh.map((p) => nkP(p.업체명)), ...mark])].slice(-3000);
+    b.set(ref(co), { placeSeen: next }, { merge: true });
+    await b.commit();
+    if (fresh.length) console.log(`[시트 실시간] ${co} 상하차지 ${fresh.length}곳 등록`);
+    return fresh.length;
+  }
   const pushOn = (cfg) => !!push && cfg.enabled === true && cfg.pushMode === "on";
 
   // 한 회사 반영 — force: 수정 시각 · 내용이 같아도 비교한다
@@ -184,6 +205,9 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     // ⏸ 쓰기 직전에 다시 확인 — 그사이 관리센터에서 껐으면(수동 가져오기 중) 아무것도 쓰지 않는다(같은 줄을 양쪽이 동시에 만들던 중복 방지)
     if (!force && ops.length) { const cur = (await ref(co).get()).data() || {}; if (cur.enabled !== true) return { skipped: "paused" }; }
     for (let i = 0; i < ops.length; i += 400) { const b = db.batch(); ops.slice(i, i + 400).forEach((f) => f(b)); await b.commit(); }
+    // 📍 2026-11-15 시트에 새로 나온 상하차지 이름을 상하차지거래처에 등록(주소가 없어도 이름으로 — 주소는 나중에 사람이 넣는다)
+    //  한 번 등록한 이름은 sheetLive/{회사}.placeSeen 에 적어 둔다 → 사람이 지운 곳을 다시 만들지 않는다
+    await registerPlaces(co, cfg, built.places || [], places, M.nm).catch((e) => console.warn(`[시트 실시간] ${co} 상하차지 등록 실패:`, e?.message || e));
     // 시트에서 온 새 차량종류(톤수 섞인 이름 제외)는 회사 차량종류 목록에
     const kinds = [...new Set(incoming.map((o) => String(o.차량종류 || "").trim()).filter((k) => k && !/\d+(\.\d+)?\s*(톤|t\b)/i.test(k)))];
     if (kinds.length && r.create.length) await db.collection("vehicleTypes").doc(co).set({ companyName: co, custom: FieldValue.arrayUnion(...kinds) }, { merge: true }).catch(() => {});

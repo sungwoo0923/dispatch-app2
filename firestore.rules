@@ -1684,6 +1684,11 @@ service cloud.firestore {
       allow update: if coMatch(resource.data) && coKeep() && approvalSettingsWriteOk(co);
       allow delete: if coMatch(resource.data) && isCompanyAdmin(co);
     }
+    // 💸 2026-11-15 회사별 지급 처리 표시(서버만 쓴다 · functions/index.js recomputePayFlags)
+    match /companyPayFlags/{co} {
+      allow read: if isApproved() && (myCoRaw() == co || isTotalMasterUser());
+      allow write: if false;
+    }
     match /approvals/{id} {
       // 📑 2026-11-08 사업계획서 읽기 — 조회 하나의 규칙 계산 한도(1000)를 넘지 않게 이 두 줄을 맨 앞에, 싼 조건(문서 칸)부터 둔다
       //  ① 같은 회사 사무 직원은 최종 승인된 사업계획서를 읽는다(지출결의 "관련 사업계획" 고르기 · 조회는 company + form "bizplan" + status "approved")
@@ -1721,6 +1726,15 @@ service cloud.firestore {
         // ⭐ 2026-11-07 운송 관리자(admin)·최종 결재자는 지급 처리 불가 — 경리 역할·재무 부서만(통합관리자·통합인사관리자는 화면 전환으로 앱에서 한 번 더 막음)
         && (myRole() in ['test', 'acctStaff', 'hrAcct', 'allMgr', 'totalMaster'] || myTeamPay())
         && (myCoRaw() == resource.data.get('company', '') || isTotalMasterUser());
+      // 💸 2026-11-15 이 회사에 지급 처리할 사람(경리 · 통합관리자 · 통합인사관리자 · 마스터)이 아무도 없으면 — 최종 결재자가 지급 완료(서버가 센 companyPayFlags)
+      allow update: if isApproved()
+        && resource.data.get('status', '') == 'approved'
+        && resource.data.get('cat', '') == 'expense'
+        && resource.data.get('cancel', {}).get('status', '') != 'pending'
+        && apAff().hasOnly(['paid', 'history', 'updatedAt', 'drafterUnread'])
+        && myCoRaw() == resource.data.get('company', '')
+        && resource.data.line[resource.data.line.size() - 1].uid == request.auth.uid
+        && get(/databases/$(database)/documents/companyPayFlags/$(resource.data.get('company', ''))).data.get('payFallback', false) == true;
       // 기안자·참여자 수정 — 기안자·참여자 목록과 회사는 못 바꾼다(결재 진행·회수·의견·읽음)
       // ⭐ 2026-11-02 점검 — 참조자·기안자가 status/line을 직접 바꿔 스스로 최종 승인하던 문제:
       //  읽음·의견·보관함 표시는 참여자 누구나, 결재선(line/step)·승인은 "지금 내 차례"인 결재자만,

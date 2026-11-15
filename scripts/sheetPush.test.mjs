@@ -389,5 +389,17 @@ async function world(mode, opts = {}) {
   fresh.forEach((o) => { const p = progs.find((x) => x.이전출처 === o.이전출처); assert.ok(p, o.이전출처); assert.equal(p.상차일, o.상차일); assert.equal(p.하차지명, o.하차지명); });
   assert.equal(progs.find((x) => x.하차지명 === "천안시 성정동 99").이전출처, "아산 내수!6"); // 11/3 줄(5행) 바로 아래
   console.log("live(줄 끼우기 · 지우기 뒤에도 프로그램 = 시트) OK");
+  // 📍 시트에 처음 나온 하차지 이름(주소 없음) → 상하차지거래처에 이름만으로 등록 · 사람이 지우면 다시 안 만든다
+  const [yy, mm, dd] = today.split("-").map(Number);
+  w.tabs["아산 내수"].push([`${yy}. ${mm}. ${dd}`, "신봉길101", "CJ ENM 물류센터(인천)", "", "", "10", "1톤", "80,000", "", "80,000", "70,000", "", "70,000", "10,000", "", "원콜", "", "", "", "", ""]);
+  await live.runOne(CO, cfg(), { force: true });
+  const cj = w.db.ids("places").map((i) => w.db.data("places", i)).find((p) => p.업체명 === "CJ ENM 물류센터(인천)");
+  assert.ok(cj, w.db.ids("places").join(","));
+  assert.equal(cj.주소, ""); assert.equal(cj.companyName, CO);
+  assert.ok(!w.db.ids("places").map((i) => w.db.data("places", i)).some((p) => p.업체명 === "평택시 포승읍"), "지역 이름은 장소로 만들지 않는다");
+  w.db.ids("places").filter((i) => w.db.data("places", i).업체명 === "CJ ENM 물류센터(인천)").forEach((i) => w.db.collection("places").doc(i).delete());
+  await live.runOne(CO, cfg(), { force: true });
+  assert.ok(!w.db.ids("places").some((i) => w.db.data("places", i).업체명 === "CJ ENM 물류센터(인천)"), "지운 곳은 다시 만들지 않는다");
+  console.log("live(새 상하차지 이름만 등록) OK");
 }
 console.log("sheetPush: 모두 통과");

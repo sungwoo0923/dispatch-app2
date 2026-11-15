@@ -715,7 +715,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
             <div className="flex flex-wrap gap-3 mb-5">
               <Stat label="오더" value={won(orders.length)} sub={opts.from || opts.to ? `전체 ${won(result.orders.length)} 중 기간 안` : `${orderTabs.length}개 탭`} />
               <Stat label="거래처" value={won(result.clients.length)} />
-              <Stat label="상하차지" value={won(result.places.length)} sub={coPlaceCount ? `주소 있는 곳 · 이미 등록 ${won(coPlaceCount)}곳 참고` : "주소 있는 곳"} />
+              <Stat label="상하차지" value={won(result.places.length)} sub={coPlaceCount ? `주소 없는 곳 포함 · 이미 등록 ${won(coPlaceCount)}곳 참고` : "주소 없는 곳 포함"} />
               <Stat label="기사" value={won(result.drivers.length)} sub={Object.entries(gradeCount).filter(([g]) => g !== "일반").map(([g, n]) => `${g} ${n}`).join(" · ") || "일반"} />
               <Stat label="고정노선 후보" value={result.routes.length} sub="운행 OFF로 만듦" />
               <Stat label="단가표" value={(result.rateSheets || []).length} sub={`${won((result.rateSheets || []).reduce((a, r) => a + r.rows.length, 0))}곳`} />

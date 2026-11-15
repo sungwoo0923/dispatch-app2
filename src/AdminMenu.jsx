@@ -9,7 +9,7 @@ import { CopyTemplateEditor } from "./CopyTemplateEditor";
 import { openSetupWizard, openTutorial } from "./Onboarding";
 import AdminShell from "./AdminShell";
 import React, { useEffect, useState, useMemo } from "react";
-import { WORK_SCOPES, normScope, workScopeLabel } from "./workScope";
+import { normScope, workScopeLabel, scopeOptionsFor, effectiveScope } from "./workScope";
 import { subscribeUsersLive, getUsersLiveList } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { auth, db, storage, FUNCTIONS_BASE, DEFAULT_COMPANY } from "./firebase";
 import { getTenant, isPreviewMode } from "./fsTenant"; // ⭐ 2026-11-02 회사 분리 — 지금 거르는 회사(최고관리자 회사 전환 포함)
@@ -739,13 +739,14 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (prevTeam !== nextTeam && nextTeam) {
       history.push({ date: todayStr(), type: "부서변경", detail: `${prevTeam || "미배정"} → ${nextTeam}` });
     }
-    if (normScope(manageUser.workScope) !== editScope) history.push({ date: todayStr(), type: "업무 범위 변경", detail: `${workScopeLabel(manageUser.workScope)} → ${workScopeLabel(editScope)}` });
+    const nextScope = effectiveScope(editRole, editScope, manageUser.isMaster === true); // 🗂 2026-11-15 권한에 맞는 업무 범위만 저장(src/workScope.js)
+    if (normScope(manageUser.workScope) !== nextScope) history.push({ date: todayStr(), type: "업무 범위 변경", detail: `${workScopeLabel(manageUser.workScope)} → ${workScopeLabel(nextScope)}` });
     if ((manageUser.role || "") !== editRole) history.push({ date: todayStr(), type: "권한변경", detail: `${roleLabels[manageUser.role] || manageUser.role || "-"} → ${roleLabels[editRole] || editRole}` });
     const payload = {
       name: editName.trim(),
       phone: editPhone.trim(),
       role: editRole,
-      workScope: editScope,
+      workScope: nextScope,
       companyName: isTotalMaster ? editCompany.trim() : (manageUser.companyName || effectiveCompany),
       position: nextPosition,
       team: nextTeam,
@@ -1095,7 +1096,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                           </div>
                           {/* ⭐ 승인·수정·퇴사·삭제는 최고관리자만. 그 외에는 본인 이름·핸드폰번호만 수정 */}
                           {!canEditMember(u) && me?.uid === u.id && !editMode && (
-                            <button onClick={() => setEditMode(true)} className="h-10 px-4 rounded-xl text-[13px] font-extrabold bg-[#0F1A30] text-white hover:bg-[#1B2B4B] transition">수정</button>
+                            <button onClick={() => { openManage(u); setMemberModal(true); }} className="h-10 px-4 rounded-xl text-[13px] font-extrabold bg-[#0F1A30] text-white hover:bg-[#1B2B4B] transition">수정</button>
                           )}
                           {!canEditMember(u) && me?.uid !== u.id && !editMode && (
                             <span className="text-[12px] font-bold text-[#9AA9C3]">직책·부서·권한 변경은 인사관리부 › 인사발령</span>
@@ -1202,11 +1203,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             </div>
                             <div>
                               <label className="block text-[11.5px] font-bold text-[#7A879C] mb-1.5">업무 범위</label>
-                              <CustomSelect value={editScope} onChange={e => setEditScope(e.target.value)} disabled={!canEditMember(u)}
+                              {(() => { const opts = scopeOptionsFor(editRole, u.isMaster === true); const cur = effectiveScope(editRole, editScope, u.isMaster === true); return (<>
+                              <CustomSelect value={cur} onChange={e => setEditScope(e.target.value)} disabled={!canEditMember(u) || opts.length < 2}
                                 className="w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] focus:outline-none focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 bg-white">
-                                {WORK_SCOPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                                {opts.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                               </CustomSelect>
-                              <p className="mt-1 text-[11px] font-bold text-[#7A879C]">{(WORK_SCOPES.find(([k]) => k === editScope) || WORK_SCOPES[0])[2]}</p>
+                              <p className="mt-1 text-[11px] font-bold text-[#7A879C]">{(opts.find(([k]) => k === cur) || opts[0])[2]}</p></>); })()}
                             </div>
                           </div>
                           <div className="flex gap-2">
@@ -1222,6 +1224,14 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         </div>
                       )}
                       </div>
+                      {/* 🛠 2026-11-15 본인(마스터 포함) 수정도 다른 계정처럼 창으로 — 본인은 이름 · 핸드폰번호만 */}
+                      {memberModal && !canEditMember(u) && me?.uid === u.id && (
+                        <MemberManageModal selfOnly
+                          u={u} me={me} isTotalMaster={false} roles={[editRole]} roleLabels={roleLabels} canMaster={false} canAccount={false} canDelete={false} hrOpt={hrOpt} hrLock
+                          f={{ editScope, setEditScope, editName, setEditName, editPhone, setEditPhone, editRole, setEditRole, editCompany, setEditCompany, editWorkStart, setEditWorkStart, editWorkEnd, setEditWorkEnd, editPosition, setEditPosition: onPositionChange, editTeam, setEditTeam: onTeamChange, suggestR }}
+                          onClose={() => { setMemberModal(false); setEditMode(false); }}
+                          onSave={async () => { await saveEdit(); setMemberModal(false); }} />
+                      )}
                       {memberModal && canEditMember(u) && canManage && (
                         <MemberManageModal
                           u={u} me={me} isTotalMaster={isTotalMaster} roles={assignableRoles(editRole, editTeam)} roleLabels={roleLabels}
@@ -2121,7 +2131,7 @@ const LANDING_FONT_OPTIONS = [
 ];
 
 // 👤 회원 관리 창 — 버튼 하나로 열고, 그 안에서 승인·거절·정보수정·마스터·퇴사·삭제(모두 확인창)
-function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose, onSave, onApprove, onUnapprove, onReject, onMaster, onResign, onDelete, canSubAdmin = false, onSubAdmin, canMaster = true, canAccount = true, canDelete = true, hrOpt, hrLock = false }) {
+function MemberManageModal({ selfOnly = false, u, me, isTotalMaster, roles, roleLabels, f, onClose, onSave, onApprove, onUnapprove, onReject, onMaster, onResign, onDelete, canSubAdmin = false, onSubAdmin, canMaster = true, canAccount = true, canDelete = true, hrOpt, hrLock = false }) {
   const positionsForTeam = hrOpt.positionsFor; const TEAM_OPTIONS = hrOpt.teams;
   const [busy, setBusy] = useState(false);
   const pending = u.approved === false && u.employmentStatus !== "퇴사"; // ⭐ 2026-11-02 점검 — 예전 계정(approved 없음)은 승인으로 보고 거절 버튼을 띄우지 않음
@@ -2145,7 +2155,8 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
         <div className="p-5 space-y-4">
           <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4">
             <div className="text-[13px] font-black text-[#0F1A30] mb-3">정보 {pending ? "확인 · 지정" : "수정"} <span className="text-[11.5px] font-bold text-[#9AA9C3]">직책 · 부서 · 권한</span></div>
-            {hrLock && <div className="mb-3 rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-3 py-2 text-[12px] font-bold text-[#1B2B4B]">인사 담당자가 있어 부서·직책·퇴사는 인사팀(인사관리부 › 인사관리 › 직원관리)에서 바꿉니다. 승인·권한 지정은 그대로 할 수 있습니다.</div>}
+            {selfOnly && <div className="mb-3 rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-3 py-2 text-[12px] font-bold text-[#1B2B4B]">본인 계정은 이름 · 핸드폰번호만 고칠 수 있어요. 직책 · 부서 · 권한은 인사관리부 › 인사발령에서 바꿔요.</div>}
+            {hrLock && !selfOnly && <div className="mb-3 rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-3 py-2 text-[12px] font-bold text-[#1B2B4B]">인사 담당자가 있어 부서·직책·퇴사는 인사팀(인사관리부 › 인사관리 › 직원관리)에서 바꿉니다. 승인·권한 지정은 그대로 할 수 있습니다.</div>}
             <div className="grid grid-cols-2 gap-3">
               <div><label className={lab}>이름</label><input value={f.editName} onChange={(e) => f.setEditName(e.target.value)} className={inp} /></div>
               <div><label className={lab}>핸드폰번호</label><input value={f.editPhone} inputMode="tel" onChange={(e) => f.setEditPhone(fmtPhone(e.target.value))} className={inp} /></div>
@@ -2161,21 +2172,22 @@ function MemberManageModal({ u, me, isTotalMaster, roles, roleLabels, f, onClose
                   {TEAM_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
                 </CustomSelect></div>
               <div><label className={lab}>권한</label>
-                <CustomSelect value={f.editRole} onChange={(e) => f.setEditRole(e.target.value)} className={inp}>
+                <CustomSelect value={f.editRole} onChange={(e) => f.setEditRole(e.target.value)} disabled={selfOnly} className={inp}>
                   {roles.map((r) => <option key={r} value={r}>{roleLabels[r] || r}</option>)}
                 </CustomSelect>
                 <p className="mt-1 text-[11px] font-bold text-[#7A879C]">{`추천: ${roleLabels[f.suggestR({ team: f.editTeam, position: f.editPosition })] || ROLE_NAME[f.suggestR({ team: f.editTeam, position: f.editPosition })]} · 부서·직책 기준`}</p></div>
               <div><label className={lab}>업무 범위</label>
-                <CustomSelect value={f.editScope || ""} onChange={(e) => f.setEditScope(e.target.value)} className={inp}>
-                  {WORK_SCOPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                {(() => { const opts = scopeOptionsFor(f.editRole, u.isMaster === true); const cur = effectiveScope(f.editRole, f.editScope, u.isMaster === true); return (<>
+                <CustomSelect value={cur} onChange={(e) => f.setEditScope(e.target.value)} disabled={selfOnly || opts.length < 2} className={inp}>
+                  {opts.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                 </CustomSelect>
-                <p className="mt-1 text-[11px] font-bold text-[#7A879C]">{(WORK_SCOPES.find(([k]) => k === (f.editScope || "")) || WORK_SCOPES[0])[2]}</p></div>
+                <p className="mt-1 text-[11px] font-bold text-[#7A879C]">{(opts.find(([k]) => k === cur) || opts[0])[2]}{opts.length < 2 ? " · 권한에 따라 정해져요" : ""}</p></>); })()}</div>
               <div><label className={lab}>회사명</label><input value={f.editCompany} onChange={(e) => f.setEditCompany(e.target.value)} disabled={!isTotalMaster} className={inp} /></div>
               {/* ⭐ 2026-11-02 출근·퇴근 시간 — 자동 출근 시간대·지각·반차 기준(직원마다 다르게) */}
               <div><label className={lab}>출근 시간</label>
-                <CustomSelect value={f.editWorkStart} onChange={(e) => f.setEditWorkStart(e.target.value)} className={`${inp} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</CustomSelect></div>
+                <CustomSelect value={f.editWorkStart} onChange={(e) => f.setEditWorkStart(e.target.value)} disabled={selfOnly} className={`${inp} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</CustomSelect></div>
               <div><label className={lab}>퇴근 시간</label>
-                <CustomSelect value={f.editWorkEnd} onChange={(e) => f.setEditWorkEnd(e.target.value)} className={`${inp} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</CustomSelect></div>
+                <CustomSelect value={f.editWorkEnd} onChange={(e) => f.setEditWorkEnd(e.target.value)} disabled={selfOnly} className={`${inp} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</CustomSelect></div>
             </div>
             {canSubAdmin && (
               <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#C9D6EE] bg-[#F5F8FD] px-3.5 py-2.5" data-subadmin>

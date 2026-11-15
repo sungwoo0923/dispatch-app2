@@ -2980,7 +2980,7 @@ import { settleStartTab } from "./settleStart";
 import { QuickOrderLine, useDriverSuggest, DriverSuggestCell, AssignConfirm } from "./SmartDispatchUI"; // ⭐ 2026-11-13 빠른 등록 · 추천 기사
 const SettleHome = React.lazy(() => import("./SettleHome")); // 🧭 정산 홈(처음 열 때 받는다)
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "./orderHistoryCache";
-import { normScope, scopeAllows, isOfficeBaseMenu } from "./workScope";
+import { effectiveScope, scopeAllows, isOfficeBaseMenu } from "./workScope";
 import BizSwitcher from "./freight/BizSwitcher";
 const FreightWorkspace = React.lazy(() => import("./freight/FreightWorkspace"));
 const FreightRevenueStrip = React.lazy(() => import("./freight/FreightSettle").then((m) => ({ default: m.FreightRevenueStrip })));
@@ -8352,7 +8352,8 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setMenu("HOME"); };
   const deptMode = deptModeOf(role, customRole) || (isExec && !execFull ? "exec" : null);
   // 🗂 2026-11-13 업무 범위(사내업무만 / 사내업무 + 경리) — 배차 메뉴 없이 사내업무 화면만(src/workScope.js). 최고관리자는 해당 없음
-  const workScope = role === "totalMaster" ? "" : normScope(myProfileDoc?.workScope);
+  // 🛠 2026-11-15 실제 권한 기준(화면을 바꿔도 같다) · 그 권한에서 고를 수 없는 값은 무시(통합관리자 = 전체 고정 등 · src/workScope.js effectiveScope)
+  const workScope = role === "totalMaster" || realRole === "totalMaster" ? "" : effectiveScope(realRole, myProfileDoc?.workScope, myProfileDoc?.isMaster === true);
   useEffect(() => { if (workScope && !scopeAllows(workScope, menu) && !isBizMenu(menu)) setMenu("HOME"); else if (workScope && isBizMenu(menu)) setMenu("HOME"); }, [workScope, menu]);
   useUiScreen(menu, deptMode); // ⭐ 2026-11-07 화면 편집 — 지금 메뉴("이 화면만")·부서(역할별 보이기)
   const deptCompany = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
@@ -8380,7 +8381,19 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   // 📊 2026-11-06 일일 경영 보고 — 임원 화면 역할(isExec: 권한 관리 › "임원 화면")만(src/dailyReport.js canSeeBriefing)
   const canBriefing = canSeeBriefing({ isExec });
   // 🔢 2026-11-02 상단 메뉴 숫자 — 새로 온 것(결재 차례·안 읽은 메일·공지·인수인계·가입 신청)을 메뉴와 세부 메뉴에 표시
-  const apCountsNav = useApprovalCounts();
+  // 💸 2026-11-15 경리 화면(통합관리자 등이 경리로 바꾼 때 포함) — 지급 대기 지출결의도 전자결재 숫자에 더한다
+  const apCountsRaw = useApprovalCounts({ role: realRole || role, team: myProfileDoc?.team || "", company: deptCompany, view: roleView.view });
+  const apCountsNav = React.useMemo(() => ({ ...apCountsRaw, todo: (apCountsRaw.todo || 0) + (apCountsRaw.payTodo || 0) }), [apCountsRaw]);
+  // 경리 화면으로 바꿨을 때 지급 대기가 있으면 한 번 알린다
+  const payToastRef = React.useRef("");
+  React.useEffect(() => {
+    const n = apCountsRaw.payTodo || 0;
+    const key = `${roleView.view || ""}`;
+    if (!n || payToastRef.current === key) return;
+    if (roleView.view && roleView.view !== "acct") { payToastRef.current = ""; return; }
+    payToastRef.current = key;
+    try { window.__sflowShowToast?.(`💸 지급 대기 지출결의 ${n}건 — 전자결재 › 결재함 › 지급 대기에서 처리해 주세요`, "info"); } catch { /* 무시 */ }
+  }, [roleView.view, apCountsRaw.payTodo]);
   const mailCountsNav = useMailCounts();
   const alertsNav = useMobileAlerts({ uid: user?.uid, role: realRole || role, team: myProfileDoc?.team || "", company: deptCompany });
   // ⭐ 2026-11-05 기사앱 이벤트 — 수락/거절은 이미 구독 중인 어제~내일 오더(recentDispatchDataFiltered)에서 꺼낸다(추가 구독 없음).
@@ -8988,8 +9001,9 @@ return (
             {/* ⭐ 2026-11-05 종 — 기사 알림함(수락/거절·서류·긴급 숫자) · 알림 켜기/끄기·알림음은 패널 안으로 */}
             <DriverEventBell enabled={notificationsEnabled} onToggleEnabled={setNotificationsEnabled} onView={onDriverEventView} isAdmin={drvMe.isAdmin} />
 
-            {/* ⭐ 최고관리자 — 관리자 관리센터(플랫폼 운영 화면)로 바로 전환 */}
-            {role === "totalMaster" && (
+            {/* ⭐ 최고관리자 · 부관리자 — 관리자 관리센터(플랫폼 운영 화면)로 바로 전환
+                 🛠 2026-11-15 경리 · 영업 · 인사 화면으로 바꿔도 보이게(지금 화면 역할이 아니라 실제 권한으로 본다) */}
+            {(realRole === "totalMaster" || role === "totalMaster") && (
               <button type="button" onClick={() => { try { sessionStorage.setItem("kpEntry", "platform"); } catch { /* 무시 */ } navigate("/platform"); }}
                 className="kp-chip-btn text-[12px] transition" title="관리자 관리센터로 전환">관리센터 ↗</button>
             )}
