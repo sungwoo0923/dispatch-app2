@@ -70,15 +70,15 @@ function DailyChart({ daily }) {
   const pts = daily.map((x, i) => `${L + bw * i + bw / 2},${y(x.profit)}`).join(" ");
   return (
     <div ref={ref} style={{ width: "100%" }}>
-      {W > 0 && <svg width={W} height={H} style={{ display: "block" }} role="img" aria-label="일별 매출 · 수익">
+      {W > 0 && <svg width={W} height={H} style={{ display: "block" }} role="img" aria-label="일별 매출 · 이익 추이">
         {[0, 1, 2, 3, 4].map((k) => <g key={k}><line x1={L} x2={W - R} y1={y(step * k)} y2={y(step * k)} stroke={C.grid} /><text x={L - 6} y={y(step * k) + 4} fontSize="11" fill={C.t3} textAnchor="end">{man(step * k)}</text></g>)}
-        {daily.map((x, i) => <rect key={x.d} x={L + bw * i + bw * 0.15} y={y(x.sale)} width={Math.max(1, bw * 0.7)} height={Math.max(0, H - B - y(x.sale))} rx={Math.min(3, bw * 0.2)} fill={x.off ? "#B9C6DD" : C.n2}><title>{`${x.d} 매출 ${wonTxt(x.sale)} · 수익 ${wonTxt(x.profit)} · ${x.cnt}건`}</title></rect>)}
+        {daily.map((x, i) => <rect key={x.d} x={L + bw * i + bw * 0.15} y={y(x.sale)} width={Math.max(1, bw * 0.7)} height={Math.max(0, H - B - y(x.sale))} rx={Math.min(3, bw * 0.2)} fill={x.off ? "#B9C6DD" : C.n2}><title>{`${x.d} 매출액 ${wonTxt(x.sale)} · 매출총이익 ${wonTxt(x.profit)} · ${x.cnt}건`}</title></rect>)}
         <polyline points={pts} fill="none" stroke={C.sky} strokeWidth="2.5" strokeLinejoin="round" />
         {daily.map((x, i) => (i % every === 0 ? <text key={`l${x.d}`} x={L + bw * i + bw / 2} y={H - 10} fontSize="11" fill={C.t3} textAnchor="middle">{`${Number(x.d.slice(5, 7))}/${Number(x.d.slice(8, 10))}`}</text> : null))}
       </svg>}
       <div style={{ display: "flex", gap: 16, fontSize: 13.5, color: C.t2, marginTop: 6 }}>
-        <span><i style={{ display: "inline-block", width: 12, height: 12, borderRadius: 3, background: C.n2, marginRight: 6, verticalAlign: -1 }} />매출(만원)</span>
-        <span><i style={{ display: "inline-block", width: 14, height: 3, background: C.sky, marginRight: 6, verticalAlign: 3 }} />수익</span>
+        <span><i style={{ display: "inline-block", width: 12, height: 12, borderRadius: 3, background: C.n2, marginRight: 6, verticalAlign: -1 }} />매출액</span>
+        <span><i style={{ display: "inline-block", width: 14, height: 3, background: C.sky, marginRight: 6, verticalAlign: 3 }} />매출총이익</span>
         <span><i style={{ display: "inline-block", width: 12, height: 12, borderRadius: 3, background: "#B9C6DD", marginRight: 6, verticalAlign: -1 }} />주말 · 공휴일</span>
       </div>
     </div>
@@ -113,6 +113,8 @@ const CSS = `
 .tr table{width:100%;border-collapse:collapse;font-size:14.5px}
 .tr th{background:${C.n2};color:#fff;font-weight:800;padding:9px 10px;white-space:nowrap}
 .tr td{border-bottom:1px solid ${C.line};padding:9px 10px;white-space:nowrap}
+.tr th,.tr td{text-align:center!important;vertical-align:middle}
+.tr td.tr-wrap{white-space:normal;min-width:160px;max-width:320px}
 .tr .tr-btn{height:42px;padding:0 16px;border-radius:12px;font-size:14.5px;font-weight:800;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
 .tr .tr-chip{height:34px;padding:0 13px;border-radius:999px;font-size:14px;font-weight:800;border:1px solid ${C.line};background:#fff;color:${C.t2}}
 .tr .tr-chip.on{background:${C.n2};border-color:${C.n2};color:#fff}
@@ -240,14 +242,14 @@ export default function TeamReport({ company, me }) {
             <h1 style={{ fontSize: 30, fontWeight: 900, marginTop: 6, letterSpacing: "-0.03em" }}>{team} 실적 보고서</h1>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px", marginTop: 10, fontSize: 15, color: "rgba(255,255,255,.85)" }}>
               <span>기간 <b style={{ color: "#fff" }}>{period.label}</b> ({period.from.replace(/-/g, ".")} ~ {period.to.replace(/-/g, ".")})</span>
-              <span>비교 {period.prevLabel}</span><span>작성 {author}</span><span>작성일 {made}</span><span>팀원 {members.length}명</span>
+              <span>비교 기간 {period.prevLabel}</span><span>작성 {author}</span><span>작성일 {made}</span><span>구성원 {members.length}명</span>
             </div>
           </section>
 
           {/* 핵심 숫자 */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))", gap: 12 }}>
-            {[["매출", `${man(c.sale)}`, "만원", <Delta key="a" v={rep.d.sale} />], ["수익", `${man(c.profit)}`, "만원", <Delta key="b" v={rep.d.profit} />], ["수익률", c.margin.toFixed(1), "%", <Delta key="c" v={rep.d.margin} unit="%p" />],
-              ["건수", c.cnt.toLocaleString("ko-KR"), "건", <Delta key="d" v={rep.d.cnt} />], ["건당 수익", Math.round(c.perOrder).toLocaleString("ko-KR"), "원", <Delta key="e" v={rep.d.perOrder} />]].map(([l, v, u, d]) => (
+            {[["매출액", `${man(c.sale)}`, "만원", <Delta key="a" v={rep.d.sale} />], ["매출총이익", `${man(c.profit)}`, "만원", <Delta key="b" v={rep.d.profit} />], ["매출총이익률", c.margin.toFixed(1), "%", <Delta key="c" v={rep.d.margin} unit="%p" />],
+              ["운송 건수", c.cnt.toLocaleString("ko-KR"), "건", <Delta key="d" v={rep.d.cnt} />], ["건당 이익", Math.round(c.perOrder).toLocaleString("ko-KR"), "원", <Delta key="e" v={rep.d.perOrder} />]].map(([l, v, u, d]) => (
               <div key={l} className="tr-card" style={{ padding: "18px 20px" }}>
                 <div style={{ fontSize: 14.5, fontWeight: 700, color: C.t2 }}>{l}</div>
                 <div style={{ marginTop: 4 }}><span className="tr-num" style={{ fontSize: 30 }}>{v}</span><span style={{ fontSize: 15, fontWeight: 700, color: C.t2, marginLeft: 3 }}>{u}</span></div>
@@ -256,54 +258,54 @@ export default function TeamReport({ company, me }) {
             ))}
           </div>
           <div className="tr-card" style={{ padding: "16px 22px", fontSize: 15.5, color: C.t1, display: "flex", flexWrap: "wrap", gap: "6px 22px" }}>
-            <span>회사 전체 매출 중 <b className="tr-num">{rep.companyShare.toFixed(1)}%</b></span>
-            <span>영업일 평균 매출 <b className="tr-num">{man(rep.avgPerBizDay)}만원</b></span>
-            {rep.best && <span>가장 많이 한 팀원 <b>{rep.best.name}</b> ({man(rep.best.sale)}만원)</span>}
-            <span>거래처 <b className="tr-num">{rep.clients.count}</b>곳 · 새 거래처 <b className="tr-num">{rep.clients.newClients.length}</b>곳</span>
+            <span>전사 매출 비중 <b className="tr-num">{rep.companyShare.toFixed(1)}%</b></span>
+            <span>영업일 평균 매출액 <b className="tr-num">{man(rep.avgPerBizDay)}만원</b></span>
+            {rep.best && <span>최우수 실적자 <b>{rep.best.name}</b> ({man(rep.best.sale)}만원)</span>}
+            <span>거래처 <b className="tr-num">{rep.clients.count}</b>곳 · 신규 거래처 <b className="tr-num">{rep.clients.newClients.length}</b>곳</span>
           </div>
 
-          <Card title="일별 매출 · 수익" sub="막대 = 매출 · 선 = 수익 (만원)"><DailyChart daily={rep.daily} /></Card>
+          <Card title="일별 매출 · 이익 추이" sub="막대 = 매출액 · 선 = 매출총이익 (단위: 만원)"><DailyChart daily={rep.daily} /></Card>
 
           <div className="tr-grid2">
-            <Card title="팀원별 실적" sub="막대 = 매출 · 안쪽 하늘색 = 수익 · % = 팀 매출 중 비중">{rep.members.length ? <MemberBars members={rep.members} /> : <p style={{ color: C.t2 }}>팀원이 없어요. 회원관리에서 부서를 정해 주세요.</p>}</Card>
-            <Card title="팀원별 표">
+            <Card title="담당자별 실적 기여도" sub="막대 = 매출액 · 안쪽 = 매출총이익 · % = 팀 내 매출 기여율">{rep.members.length ? <MemberBars members={rep.members} /> : <p style={{ color: C.t2 }}>구성원이 없어요. 회원관리에서 부서를 정해 주세요.</p>}</Card>
+            <Card title="담당자별 실적 현황">
               <div style={{ overflowX: "auto" }}><table>
-                <thead><tr><th>이름</th><th>매출</th><th>수익</th><th>수익률</th><th>건수</th><th>{period.prevLabel} 대비</th></tr></thead>
+                <thead><tr><th>담당자</th><th>매출액</th><th>매출총이익</th><th>이익률</th><th>건수</th><th>전기 대비</th></tr></thead>
                 <tbody>{rep.members.map((m) => <tr key={m.name}><td style={{ fontWeight: 800 }}>{m.name}{m.position ? <span style={{ color: C.t3, fontWeight: 600 }}> {m.position}</span> : null}</td><td className="tr-num" style={{ textAlign: "right" }}>{man(m.sale)}만</td><td className="tr-num" style={{ textAlign: "right" }}>{man(m.profit)}만</td><td className="tr-num" style={{ textAlign: "right" }}>{m.margin.toFixed(1)}%</td><td className="tr-num" style={{ textAlign: "right" }}>{m.cnt}</td><td style={{ textAlign: "right" }}><Delta v={m.d} size={14} /></td></tr>)}</tbody>
               </table></div>
             </Card>
           </div>
 
           <div className="tr-grid2">
-            <Card title="거래처 TOP 8">
+            <Card title="매출 상위 거래처 (Top 8)">
               <div style={{ overflowX: "auto" }}><table>
-                <thead><tr><th>#</th><th style={{ textAlign: "left" }}>거래처</th><th>매출</th><th>수익률</th><th>증감</th></tr></thead>
+                <thead><tr><th>순위</th><th>거래처</th><th>매출액</th><th>이익률</th><th>전기 대비</th></tr></thead>
                 <tbody>{rep.clients.top.map((x, i) => <tr key={x.n}><td className="tr-num" style={{ textAlign: "center" }}>{i + 1}</td><td style={{ fontWeight: 700 }}>{x.n}</td><td className="tr-num" style={{ textAlign: "right" }}>{man(x.sale)}만</td><td className="tr-num" style={{ textAlign: "right" }}>{x.margin.toFixed(1)}%</td><td style={{ textAlign: "right" }}>{x.prevSale ? <Delta v={x.d} size={14} /> : <b style={{ color: C.n3 }}>신규</b>}</td></tr>)}</tbody>
               </table></div>
             </Card>
-            <Card title="늘어난 · 줄어든 거래처" sub={`${period.prevLabel} 대비 매출 차이`}>
+            <Card title="거래처별 매출 증감" sub={`비교 기간(${period.prevLabel}) 대비 매출액 증감`}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                {[["늘어난 곳", rep.clients.up, C.up], ["줄어든 곳", rep.clients.down, C.down]].map(([t, list, col]) => (
+                {[["매출 증가 거래처", rep.clients.up, C.up], ["매출 감소 거래처", rep.clients.down, C.down]].map(([t, list, col]) => (
                   <div key={t}><div style={{ fontSize: 15, fontWeight: 800, color: col, marginBottom: 6 }}>{t}</div>
-                    {list.length ? list.map((x) => <div key={x.n} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 14.5, padding: "5px 0", borderBottom: `1px solid ${C.grid}` }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.n}</span><b className="tr-num" style={{ color: col, whiteSpace: "nowrap" }}>{x.diff > 0 ? "+" : "−"}{man(Math.abs(x.diff))}만</b></div>) : <div style={{ color: C.t3, fontSize: 14.5 }}>없음</div>}
+                    {list.length ? list.map((x) => <div key={x.n} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 14.5, padding: "5px 0", borderBottom: `1px solid ${C.grid}` }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.n}</span><b className="tr-num" style={{ color: col, whiteSpace: "nowrap" }}>{x.diff > 0 ? "+" : "−"}{man(Math.abs(x.diff))}만</b></div>) : <div style={{ color: C.t3, fontSize: 14.5 }}>해당 없음</div>}
                   </div>
                 ))}
               </div>
             </Card>
           </div>
 
-          <Card title="확인할 점" sub="손실 · 수익률 5% 미만 · 아직 배차 안 된 오더">
+          <Card title="리스크 점검" sub="역마진 · 저마진(이익률 5% 미만) · 미배차 오더 — 손실 사유는 배차현황에서 손실 금액을 눌러 적거나 메모에 적은 내용이에요">
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: rep.risks.loss.length ? 14 : 0 }}>
-              {[["손실 오더", rep.risks.lossCount], ["수익률 5% 미만", rep.risks.lowCount], ["미배차", rep.risks.unassigned]].map(([l, v]) => <div key={l} style={{ background: C.page, borderRadius: 14, padding: "12px 16px" }}><div style={{ fontSize: 14, fontWeight: 700, color: C.t2 }}>{l}</div><div className="tr-num" style={{ fontSize: 24, color: v ? C.t1 : C.t3 }}>{v}<span style={{ fontSize: 14, color: C.t2 }}>건</span></div></div>)}
+              {[["역마진 오더", rep.risks.lossCount], ["저마진 오더 (5% 미만)", rep.risks.lowCount], ["미배차 오더", rep.risks.unassigned]].map(([l, v]) => <div key={l} style={{ background: C.page, borderRadius: 14, padding: "12px 16px" }}><div style={{ fontSize: 14, fontWeight: 700, color: C.t2 }}>{l}</div><div className="tr-num" style={{ fontSize: 24, color: v ? C.t1 : C.t3 }}>{v}<span style={{ fontSize: 14, color: C.t2 }}>건</span></div></div>)}
             </div>
             {rep.risks.loss.length > 0 && <div style={{ overflowX: "auto" }}><table>
-              <thead><tr><th>날짜</th><th style={{ textAlign: "left" }}>거래처</th><th style={{ textAlign: "left" }}>구간</th><th>매출</th><th>손익</th><th>담당</th></tr></thead>
-              <tbody>{rep.risks.loss.map((x, i) => <tr key={i}><td>{x.d.slice(5).replace("-", "/")}</td><td>{x.client}</td><td>{x.route}</td><td className="tr-num" style={{ textAlign: "right" }}>{man(x.sale)}만</td><td className="tr-num" style={{ textAlign: "right", color: C.down }}>{man(x.profit)}만</td><td>{x.who}</td></tr>)}</tbody>
+              <thead><tr><th>상차일</th><th>거래처</th><th>구간</th><th>매출액</th><th>손실액</th><th>담당자</th><th>손실 사유</th></tr></thead>
+              <tbody>{rep.risks.loss.map((x, i) => <tr key={i}><td>{x.d.slice(5).replace("-", "/")}</td><td>{x.client}</td><td>{x.route}</td><td className="tr-num" style={{ textAlign: "right" }}>{man(x.sale)}만</td><td className="tr-num" style={{ textAlign: "right", color: C.down }}>{man(x.profit)}만</td><td>{x.who}</td><td className="tr-wrap" style={{ color: x.reason ? C.t1 : C.t3 }}>{x.reason || "미기재"}</td></tr>)}</tbody>
             </table></div>}
           </Card>
 
           {/* 작성자 의견 — 화면에서는 고치고, 인쇄 · PDF에는 글만 */}
-          <Card title="작성자 의견" sub="넣을 칸을 고르고 생각을 적어 주세요. 비워 둔 칸은 보고서에서 빠져요."
+          <Card title="작성자 의견" sub="넣을 항목을 고르고 의견을 적어 주세요. 고르지 않은 항목은 보고서에서 빠져요."
             right={<div data-html2canvas-ignore="true" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{OPINION_SECTIONS.map(([k, l]) => <button key={k} type="button" className={`tr-chip ${onSecs.includes(k) ? "on" : ""}`} onClick={() => setOnSecs((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]))}>{l}</button>)}</div>}>
             <div style={{ display: "grid", gap: 14 }}>
               {OPINION_SECTIONS.filter(([k]) => onSecs.includes(k)).map(([k, l]) => (
@@ -315,7 +317,7 @@ export default function TeamReport({ company, me }) {
               {!onSecs.length && <p style={{ color: C.t3 }}>위에서 넣을 칸을 골라 주세요.</p>}
             </div>
           </Card>
-          <div style={{ textAlign: "right", fontSize: 13, color: C.t3, padding: "0 6px" }}>숫자 기준: 배차 오더(취소 · 운송사 전송 제외) · 매출 = 청구운임 · 수익 = 청구운임 − 기사운임 − 외부 지급 · 담당 = 오더를 등록한 직원</div>
+          <div style={{ textAlign: "right", fontSize: 13, color: C.t3, padding: "0 6px" }}>산출 기준: 배차 오더(취소 · 운송사 전송 제외) · 매출액 = 청구운임 · 매출총이익 = 청구운임 − 기사운임 − 외부 지급 · 담당자 = 오더 등록 직원</div>
         </div>
       )}
     </div>

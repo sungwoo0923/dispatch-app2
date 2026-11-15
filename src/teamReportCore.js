@@ -107,7 +107,8 @@ export function buildTeamReport({ rows, members, period: p, staffOf }) {
   const up = moves.filter((x) => x.diff > 0).sort((a, b) => b.diff - a.diff).slice(0, 5);
   const down = moves.filter((x) => x.diff < 0).sort((a, b) => a.diff - b.diff).slice(0, 5);
   const newClients = clientsAll.filter((c) => !clPrev[c.n]).map((c) => c.n);
-  const short = (r) => ({ d: dateOf(r), client: String(r.거래처명 || ""), route: `${String(r.상차지명 || "").trim()} → ${String(r.하차지명 || "").trim()}`, sale: saleOf(r), profit: profitOf(r), who: String(staffOf(r) || "") });
+  // 손실 사유 = 손실사유(배차현황에서 손실 금액을 눌러 적음)가 먼저, 없으면 메모 — src/lossReason.js 와 같은 규칙
+  const short = (r) => ({ d: dateOf(r), client: String(r.거래처명 || ""), route: `${String(r.상차지명 || "").trim()} → ${String(r.하차지명 || "").trim()}`, sale: saleOf(r), profit: profitOf(r), who: String(staffOf(r) || ""), reason: String(r.손실사유 || "").trim() || String(r.메모 || "").trim() });
   const bizDays = daily.filter((x) => !x.off).length || 1;
   return {
     period: p, cur: C, prev: P,
@@ -122,11 +123,11 @@ export function buildTeamReport({ rows, members, period: p, staffOf }) {
 
 // 작성자 의견 칸(켜고 끌 수 있다) — 기본 틀
 export const OPINION_SECTIONS = [
-  ["summary", "한 줄 요약", "■ 이번 기간 한 줄 요약\n· "],
-  ["good", "잘된 점", "■ 잘된 점\n· \n· "],
-  ["issue", "문제점 · 원인", "■ 문제점\n· \n\n■ 원인\n· "],
-  ["plan", "다음 계획", "■ 다음 기간 목표\n· \n\n■ 할 일\n· "],
-  ["ask", "요청 · 건의", "■ 대표님께 요청 · 건의\n· "],
+  ["summary", "총평", "■ 총평(Executive Summary)\n· "],
+  ["good", "주요 성과", "■ 주요 성과\n· \n· "],
+  ["issue", "이슈 및 원인 분석", "■ 주요 이슈\n· \n\n■ 원인 분석\n· "],
+  ["plan", "향후 추진 계획", "■ 차기 목표\n· \n\n■ 추진 과제\n· "],
+  ["ask", "협조 요청 사항", "■ 경영진 협조 요청 사항\n· "],
 ];
 // 숫자를 글로(전자결재 본문 · PPT 메모용) — 만원 단위
 const man = (won) => `${Math.round((won || 0) / 1e4).toLocaleString("ko-KR")}만원`;
@@ -134,16 +135,19 @@ const pct = (v) => (v == null || !Number.isFinite(v) ? "-" : `${v > 0 ? "▲" : 
 export function reportText(rep, team) {
   const c = rep.cur;
   const lines = [
-    `■ ${team} · ${rep.period.label} 실적 (비교: ${rep.period.prevLabel})`,
-    `· 매출 ${man(c.sale)} (${pct(rep.d.sale)}) · 수익 ${man(c.profit)} (${pct(rep.d.profit)}) · 수익률 ${c.margin.toFixed(1)}% · ${c.cnt.toLocaleString("ko-KR")}건`,
-    `· 회사 전체 매출 중 ${rep.companyShare.toFixed(1)}%`,
+    `■ ${team} · ${rep.period.label} 실적 (비교 기간: ${rep.period.prevLabel})`,
+    `· 매출액 ${man(c.sale)} (${pct(rep.d.sale)}) · 매출총이익 ${man(c.profit)} (${pct(rep.d.profit)}) · 매출총이익률 ${c.margin.toFixed(1)}% · 운송 ${c.cnt.toLocaleString("ko-KR")}건`,
+    `· 전사 매출 비중 ${rep.companyShare.toFixed(1)}%`,
     "",
-    "■ 팀원별",
-    ...rep.members.map((m) => `· ${m.name}${m.position ? ` ${m.position}` : ""} — 매출 ${man(m.sale)} · 수익 ${man(m.profit)} · ${m.cnt}건 (${pct(m.d)})`),
+    "■ 담당자별 실적",
+    ...rep.members.map((m) => `· ${m.name}${m.position ? ` ${m.position}` : ""} — 매출액 ${man(m.sale)} · 매출총이익 ${man(m.profit)} · ${m.cnt}건 (${pct(m.d)})`),
     "",
-    "■ 거래처 TOP",
+    "■ 매출 상위 거래처",
     ...rep.clients.top.slice(0, 5).map((x, i) => `${i + 1}. ${x.n} — ${man(x.sale)} (${pct(x.d)})`),
   ];
-  if (rep.risks.lossCount || rep.risks.lowCount || rep.risks.unassigned) lines.push("", `■ 확인할 점 · 손실 ${rep.risks.lossCount}건 · 수익률 5% 미만 ${rep.risks.lowCount}건 · 미배차 ${rep.risks.unassigned}건`);
+  if (rep.risks.lossCount || rep.risks.lowCount || rep.risks.unassigned) {
+    lines.push("", `■ 리스크 점검 · 역마진 ${rep.risks.lossCount}건 · 저마진(5% 미만) ${rep.risks.lowCount}건 · 미배차 ${rep.risks.unassigned}건`);
+    rep.risks.loss.forEach((x) => lines.push(`· ${x.d.slice(5)} ${x.client} ${man(x.profit)} — 손실 사유: ${x.reason || "미기재"}`));
+  }
   return lines.join("\n");
 }

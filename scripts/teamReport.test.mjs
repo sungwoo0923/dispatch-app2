@@ -29,4 +29,9 @@ assert.equal(rep.clients.top[0].n, "대원"); assert.deepEqual(rep.clients.newCl
 assert.equal(Math.round(rep.companyShare), Math.round((450000 / 1449999) * 100));
 assert.equal(rep.daily.length, 15);
 assert.match(reportText(rep, "운송팀"), /운송팀 · 2026년 11월 실적/);
+// 손실 사유: 손실사유 칸이 먼저, 없으면 메모
+{ const r2 = buildTeamReport({ rows: [o(11, "2026-11-03", "김일", 100000, 120000, { 메모: "메모 사유" }), o(12, "2026-11-04", "김일", 100000, 130000, { 메모: "메모", 손실사유: "긴급 배차" }), o(13, "2026-11-05", "김일", 100000, 110000)], members, period: periodOf("thisMonth", "2026-11-15"), staffOf: (r) => r.who });
+  const by = Object.fromEntries(r2.risks.loss.map((x) => [x.d, x.reason]));
+  assert.deepEqual(by, { "2026-11-03": "메모 사유", "2026-11-04": "긴급 배차", "2026-11-05": "" });
+  assert.match(reportText(r2, "운송팀"), /손실 사유: 긴급 배차/); assert.match(reportText(r2, "운송팀"), /손실 사유: 미기재/); }
 console.log("teamReport: 모두 통과");

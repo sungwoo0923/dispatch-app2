@@ -3,6 +3,7 @@ import { useCompanyFleetGrades } from "./fleetGrades"; // 🚛 지입차 구분(
 import { isViewerNow } from "./blind"; // 🧾 특수운임 버튼(조회전용 숨김)
 import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon, usePlan } from "./plans";
 import { kpConfirm, kpPrompt } from "./kpDialog";
+import { editLossReason, lossReasonOf } from "./lossReason"; // 📑 2026-11-15 손실 오더 손실 사유
 import { runDelete, commitDeletes, deleteDocsAtomic, runUpload } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제(writeBatch)
 import ProInsight from "./ProInsight";
 import NameIdToggle from "./NameIdToggle"; // ⭐ 2026-11-09 계정 이름 ↔ 아이디
@@ -25083,9 +25084,17 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                     {fareRules && !canEdit("청구운임", r._id) && r.운임구분 ? (
                       <span className="inline-block align-middle mr-1 px-1.5 rounded bg-[#EAF0FB] text-[#2D4C82] text-[11.5px] font-extrabold whitespace-nowrap" data-fare-chip="1">{r.운임구분}</span>
                     ) : null}
-                    <span className={`font-bold whitespace-nowrap ${fee < 0 ? "text-red-600" : "text-blue-600"}`}>
-                      {formatComma(fee)}
-                    </span>
+                    {/* 📑 2026-11-15 손실이면 눌러서 손실 사유 적기(src/lossReason.js) */}
+                    {fee < 0 ? (
+                      <button type="button" onClick={() => editLossReason(r, fee, (v) => patchDispatch(r._id, { 손실사유: v, __col: r.__col }))}
+                        title={lossReasonOf(r) ? `손실 사유: ${lossReasonOf(r)}` : "눌러서 손실 사유 적기"} className="font-bold whitespace-nowrap text-red-600 underline decoration-dotted underline-offset-2 hover:text-red-700">
+                        {formatComma(fee)}{r.손실사유 ? <span className="ml-1 text-[10.5px] px-1 rounded bg-red-50 border border-red-200">사유</span> : null}
+                      </button>
+                    ) : (
+                      <span className={`font-bold whitespace-nowrap ${fee < 0 ? "text-red-600" : "text-blue-600"}`}>
+                        {formatComma(fee)}
+                      </span>
+                    )}
                     {/* ⭐ 2026-11-02 운임규칙 — 운임구분(수정모드면 선택, 아니면 작은 표시) */}
                     {fareRules && canEdit("청구운임", r._id) ? (
                       <div className="mt-0.5 flex flex-col items-end gap-0.5">
@@ -40840,7 +40849,13 @@ return (
                   ))}
 
                 <td className="border text-right pr-2">
-                    <span className={`font-bold ${fee < 0 ? "text-red-500" : "text-blue-600"}`}>{fee.toLocaleString()}</span>
+                    {/* 📑 2026-11-15 손실(음수)이면 눌러서 손실 사유 적기 — 팀 실적 보고서 리스크 점검에 들어간다(src/lossReason.js) */}
+                    {fee < 0 && !isViewer ? (
+                      <button type="button" onClick={() => editLossReason(row, fee, (v) => patchDispatch(r._id || id, { 손실사유: v, ...(r.__col ? { __col: r.__col } : {}) }))}
+                        title={lossReasonOf(row) ? `손실 사유: ${lossReasonOf(row)}` : "눌러서 손실 사유 적기"} className="font-bold text-red-500 underline decoration-dotted underline-offset-2 hover:text-red-700">
+                        {fee.toLocaleString()}{row.손실사유 ? <span className="ml-1 text-[10.5px] no-underline px-1 rounded bg-red-50 border border-red-200">사유</span> : null}
+                      </button>
+                    ) : <span className={`font-bold ${fee < 0 ? "text-red-500" : "text-blue-600"}`}>{fee.toLocaleString()}</span>}
                   </td>
                   {/* ⭐ 2026-11-02 운임규칙 — 운임구분 열(규칙 사용 회사만) */}
                   {fareOn && (
