@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1440 1440" width="256" height="256"><defs>
+<linearGradient id="m92l" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22396A"/><stop offset="1" stop-color="#14213D"/></linearGradient>
+<linearGradient id="m92w" x1="0" y1="0" x2=".6" y2="1"><stop offset="0" stop-color="#4C6BAE"/><stop offset="1" stop-color="#33508C"/></linearGradient>
+<linearGradient id="m92g" gradientUnits="userSpaceOnUse" x1="190" y1="0" x2="1240" y2="0"><stop offset="0" stop-color="#D0951F" stop-opacity="0"/><stop offset=".45" stop-color="#D0951F"/><stop offset="1" stop-color="#D0951F"/></linearGradient>
+<radialGradient id="m92d"><stop offset="0" stop-color="#D0951F" stop-opacity=".7"/><stop offset="1" stop-color="#D0951F" stop-opacity="0"/></radialGradient>
+</defs><g>
+<polyline points="190,982 867,1358 1240,1145" fill="none" stroke="url(#m92g)" stroke-width="8"/>
+<circle cx="1240" cy="1145" r="60" fill="url(#m92d)"/><circle cx="1240" cy="1145" r="17" fill="#D0951F"/>
+<path d="M216 270 L367 186 L367 797 L552 902 L552 1076 L216 884 Z" fill="url(#m92l)"/>
+<path d="M552 440 L709 350 L709 988 L789 1030 L789 302 L945 212 L945 1025 L1024 983 L1024 168 L1182 77 L1182 1078 L867 1258 L552 1076 Z" fill="url(#m92w)" stroke="#253F6E" stroke-width="7" stroke-linejoin="miter"/>
+</g></svg>

@@ -129,7 +129,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
           <h2 className="mt-2 text-[20px] sm:text-[24px] font-black text-[#0F1A30] leading-snug break-words">{cur.title || "공지사항"}</h2>
           <div className="mt-3 flex items-center gap-3">
             {cur._platform
-              ? <LogisMark size={40} />
+              ? <LogisMark size={40} light />
               : <span className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-black" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>{String(cur.author || "?").slice(0, 1)}</span>}
             <div className="leading-tight">
               <div className="text-[14px] font-black text-[#0F1A30]">{cur.author || "-"}</div>

@@ -8175,7 +8175,7 @@ function MobileSideMenu({
     <MenuTapCtx.Provider value={tapGuard}>
     <div className="fixed inset-0 z-40">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className={`absolute left-0 top-0 bottom-0 ${dark ? "w-[84vw] max-w-[330px]" : "w-[78vw] max-w-[300px]"} shadow-[12px_0_40px_rgba(15,26,48,0.3)] flex flex-col rounded-r-[24px] overflow-hidden ${
+      <div data-kp-spot={dark ? "mobileMenuDark" : "mobileMenu"} className={`absolute left-0 top-0 bottom-0 ${dark ? "w-[84vw] max-w-[330px]" : "w-[78vw] max-w-[300px]"} shadow-[12px_0_40px_rgba(15,26,48,0.3)] flex flex-col rounded-r-[24px] overflow-hidden ${
         dark ? "text-white" : "bg-white"
       }`} style={{ paddingTop: "env(safe-area-inset-top, 0px)", background: dark ? "linear-gradient(rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(170deg, #060E1F 0%, #0F1A30 45%, #1B2B4B 100%)" : undefined }}>
 
@@ -8186,7 +8186,7 @@ function MobileSideMenu({
         }`}>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2.5">
-              <LogisLockup mark={34} word={12} sub="dispatch" chip={!dark} />
+              <LogisLockup mark={34} word={12} sub="dispatch" chip={!dark} spot={dark ? "mobileMenuDark" : "mobileMenu"} />
             </div>
             {/* 이름·접속시각 — 좁은 화면에서도 글자가 쪼개지지 않게 이름 한 줄, 시각 한 줄로 */}
             <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-xl max-w-full ${dark ? "bg-white/[0.08] border border-white/10" : "bg-[#F5F8FD] border border-[#E3E8F0]"}`}>
@@ -8525,10 +8525,10 @@ function KpmDrawerHead({ myName, myId = "", role, loginTime, onClose, fmtLoginTi
   return (
     <div className="px-4 pt-4 pb-3">
       <div className="flex items-center gap-2.5">
-        <LogisMark size={36} />
+        <LogisMark size={36} spot="mobileMenuDark" />
         <div className="min-w-0 flex-1">
           <div className="text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>DISPATCH · CONSOLE</div>
-          <div className="mt-1.5"><LogisWordmark height={12} /></div>
+          <div className="mt-1.5"><LogisWordmark height={12} spot="mobileMenuDark" /></div>
         </div>
         <button type="button" onClick={onClose} aria-label="닫기" className="w-9 h-9 rounded-[11px] bg-white/[0.07] ring-1 ring-white/10 grid place-items-center text-white/80">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>

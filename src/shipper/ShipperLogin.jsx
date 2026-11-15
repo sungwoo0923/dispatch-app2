@@ -240,16 +240,16 @@ export default function ShipperLogin() {
       .kp-login-in { animation: kpLoginIn .5s cubic-bezier(.2,.8,.2,1) both; }
       .kp-pulse { animation: kpPulse 1.6s ease-in-out infinite; }
     `}</style>
-    <div className="min-h-screen w-full flex items-stretch bg-[#F2F4F8]">
+    <div data-kp-spot="loginForm" className="min-h-screen w-full flex items-stretch bg-[#F2F4F8]">
       {/* 왼쪽 — 브랜드 패널(PC) */}
-      <div className="hidden lg:flex relative flex-col justify-between w-[46%] max-w-[720px] overflow-hidden px-14 py-12 text-white"
+      <div data-kp-spot="loginPanel" className="hidden lg:flex relative flex-col justify-between w-[46%] max-w-[720px] overflow-hidden px-14 py-12 text-white"
         style={{ background: "linear-gradient(150deg, #060E1F 0%, #0F1A30 45%, #1B2B4B 100%)" }}>
         <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)", backgroundSize: "44px 44px" }} />
         <div className="absolute -right-40 -top-40 w-[520px] h-[520px] rounded-full" style={{ background: "radial-gradient(circle, rgba(110,149,232,0.22), transparent 65%)" }} />
         <div className="relative flex items-center gap-3">
-          <LogisMark size={46} />
+          <LogisMark size={46} spot="loginPanel" />
           <div>
-            <div className="mb-2"><LogisWordmark height={16} /></div>
+            <div className="mb-2"><LogisWordmark height={16} spot="loginPanel" /></div>
             <div className="text-[10.5px] font-bold tracking-[0.3em] text-white/45">SHIPPER PORTAL</div>
           </div>
         </div>
@@ -276,8 +276,8 @@ export default function ShipperLogin() {
       <div className="flex-1 min-w-0 flex items-center justify-center px-4 py-10 relative">
         <div className="kp-login-in w-full max-w-[420px]">
           <div className="lg:hidden flex flex-col items-center mb-7">
-            <LogisMark size={64} style={{ filter: "drop-shadow(0 10px 24px rgba(15,26,48,0.25))" }} />
-            <div className="mt-3 mb-1.5"><LogisTag height={15} chip /></div>
+            <LogisMark size={64} spot="loginForm" style={{ filter: "drop-shadow(0 10px 24px rgba(15,26,48,0.25))" }} />
+            <div className="mt-3 mb-1.5"><LogisTag height={15} chip spot="loginForm" /></div>
             <div className="text-[10.5px] font-bold tracking-[0.3em] text-[#9AA9C3]">SHIPPER PORTAL</div>
           </div>
 
@@ -334,7 +334,7 @@ export default function ShipperLogin() {
               <Link to="/login" className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[13.5px] font-bold flex items-center justify-center hover:bg-[#F5F7FB] transition">다른 유형 로그인</Link>
             </div>
           </div>
-          <div className="flex justify-center mt-5 text-[11px] font-bold tracking-[0.2em] text-[#B4BFD0]"><LogisTag height={7.5} chip text="SHIPPER" /></div>
+          <div className="flex justify-center mt-5 text-[11px] font-bold tracking-[0.2em] text-[#B4BFD0]"><LogisTag height={7.5} chip spot="loginForm" text="SHIPPER" /></div>
         </div>
       </div>
 

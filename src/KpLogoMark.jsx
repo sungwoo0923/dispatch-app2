@@ -4,8 +4,8 @@
 import React from "react";
 import { LogisMark } from "./brand";
 
-export default function KpLogoMark({ size = 96, animate = true }) {
-  return <span className={animate ? "kp-mark" : ""} style={{ display: "inline-block", lineHeight: 0 }}><LogisMark size={size} /></span>;
+export default function KpLogoMark({ size = 96, animate = true, spot = null }) {
+  return <span className={animate ? "kp-mark" : ""} style={{ display: "inline-block", lineHeight: 0 }}><LogisMark size={size} spot={spot} /></span>;
 }
 
 // 스플래시 공용 CSS(애니메이션)

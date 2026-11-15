@@ -3562,9 +3562,9 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
         style={{ background: "linear-gradient(180deg, #16264A 0%, #1B2B4B 55%, #14213D 100%)" }}
       >
         <div className="px-5 pt-6 pb-5 border-b border-white/10 flex items-center gap-3">
-          <LogisMark size={40} />
+          <LogisMark size={40} spot="sidemenu" />
           <div className="min-w-0 flex-1">
-            <div className="text-[10.5px] font-extrabold tracking-[0.18em] text-blue-200/70"><LogisTag height={8} text="MENU" /></div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.18em] text-blue-200/70"><LogisTag height={8} text="MENU" spot="sidemenu" /></div>
             <div className="text-[15px] font-bold truncate mt-0.5">{company || BRAND}</div>
           </div>
           <button onClick={onClose} title="메뉴 접기" className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center shrink-0" style={{ opacity: 1 }}>
@@ -8806,8 +8806,8 @@ return (
                 </button>
                 {/* ⭐ 2026-11-03 로고·LogisWeb을 누르면 회사 홈페이지로 (2026-11-04 LogisWeb 마크 + 글자 로고) */}
                 <a href="https://www.logisweb.co.kr/" title="LogisWeb 홈페이지로" className="flex items-center gap-2.5 shrink-0 rounded-xl hover:opacity-90 transition">
-                  <LogisMark size={32} style={{ filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.25))" }} />
-                  <LogisWordmark height={12} sub="dispatch" />
+                  <LogisMark size={32} spot="topnav" style={{ filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.25))" }} />
+                  <LogisWordmark height={12} sub="dispatch" spot="topnav" />
                 </a>
                 {co && (
                   // ⭐ 2026-11-10 긴 운송사명도 잘리지 않게(길면 글씨만 살짝 작게)

@@ -29,6 +29,7 @@ import CompanyResetPanel from "./CompanyResetPanel";
 const SecurityEventsPanel = React.lazy(() => import("./SecurityEventsPanel")); // 🛡 2026-11-09 보안 알림
 const ErrorReportsPanel = React.lazy(() => import("./ErrorReportsPanel")); // 🧯 2026-11-10 오류 신고([오류 보내기])
 const TestSeedPanel = React.lazy(() => import("./TestSeedPanel"));
+const BrandStudioLazy = React.lazy(() => import("./BrandStudio")); // 🎨 2026-11-15 브랜드 디자인
 const MobilePreviewPanelLazy = React.lazy(() => import("./MobilePreviewFrame").then((m) => ({ default: m.MobilePreviewPanel }))); // 📱 2026-11-14 관리센터 › 운영 › 모바일 화면
 import ReleasePanel from "./ReleasePanel"; // 🚦 업데이트 배포 잠금
 import { ContractLifecyclePanel, SubAdminPanel } from "./ContractLifecycle"; // ⭐ 2026-11-06 이용 계약 · 부관리자
@@ -100,6 +101,7 @@ const SECTIONS = [
     { key: "integrations", label: "연동 설정", en: "INTEGRATIONS", icon: "link" }, // 🔌 2026-11-07 국세청 · 기상청 · 팝빌
     { key: "homepage", label: "홈페이지", en: "HOMEPAGE", icon: "globe", phoneHide: true }, // ⭐ 2026-11-03 소개 홈페이지 전체 편집기
     { key: "landingEdit", label: "로그인 화면 꾸미기", en: "LOGIN SCREEN", icon: "globe" },
+    { key: "brand", label: "브랜드 디자인", en: "BRAND", icon: "spark", phoneHide: true }, // 🎨 2026-11-15 로고 올리기 · 부분 색/굵기 · 자리별 바탕 · 앱 아이콘(src/BrandStudio.jsx)
     { key: "mobilePreview", label: "모바일 화면", en: "MOBILE", icon: "phone", phoneHide: true }, // 📱 2026-11-14 관리자메뉴에서 옮김 — 크게(기기 · 확대 고르기)
   ] },
   { key: "security", label: "보안", en: "SECURITY", icon: "shield", items: [
@@ -840,7 +842,7 @@ function NoticesPanel() {
             </div>
           </div>
           <div className="justify-self-start flex items-center gap-2.5 h-[50px] px-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0]">
-            <LogisMark size={36} />
+            <LogisMark size={36} light />
             <div className="leading-tight"><div className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap">LogisWeb 운영팀</div><div className="text-[12px] text-[#7A879C]">작성자 · 자동</div></div>
           </div>
         </div>
@@ -1327,6 +1329,7 @@ function PlatformCenterInner({ user }) {
     : <React.Suspense fallback={<div className="p-6 text-[13px] text-[#7A879C]">편집기를 여는 중…</div>}><HomepageEditor /></React.Suspense>;
   else if (tab === "integrations") body = <><Hero en="OPERATIONS · INTEGRATIONS" title="연동 설정" desc="국세청 · 기상청 · 팝빌 연동 상태를 보고 시험해요. 키는 Firebase 비밀값에만 두고 화면에는 보이지 않아요." /><React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중</div>}><IntegrationSettings /></React.Suspense></>;
   else if (tab === "landingEdit") body = <><Hero en="OPERATIONS · LOGIN SCREEN" title="로그인 화면 꾸미기" desc="계정을 고르는 첫 화면(트럭이 지나가는 화면)의 배경 사진 · 영상 · 글꼴 · 아래 문구를 바꿔요." /><LandingPageEditPanel /></>;
+  else if (tab === "brand") body = <><Hero en="OPERATIONS · BRAND" title="브랜드 디자인" desc="로고를 올리고 부분마다 색 · 굵기를 고쳐요. 로고가 들어가는 자리마다 바탕도 바꿔 보며 미리 볼 수 있어요." /><React.Suspense fallback={null}><BrandStudioLazy /></React.Suspense></>;
   else if (tab === "mobilePreview") body = <><Hero en="OPERATIONS · MOBILE" title="모바일 화면" desc="지금 로그인한 계정의 모바일 화면을 휴대폰 크기 그대로, 크게 확인해요." /><React.Suspense fallback={null}><MobilePreviewPanelLazy /></React.Suspense></>;
   else if (tab === "sessions") body = <><Hero en="SECURITY · SESSIONS" title="로그인 관리" desc="지금 로그인 중인 모든 기기를 보고, 필요하면 강제로 내보냅니다." /><AdminSessionsPanel isTotalMaster company="" /></>;
   else if (tab === "sessionLogs") body = <SessionLogsPanel />;
@@ -1351,9 +1354,9 @@ function PlatformCenterInner({ user }) {
       {/* ── 상단 바 ── ⭐ 2026-11-02 관리자센터: 메뉴 버튼 h-10 · 14px · 아이콘 · 처리 대기 배지 · 좁으면 가로 스크롤 */}
       <header className="kp-pc-head sticky top-0 z-40 h-16 flex items-center gap-3 px-4 2xl:px-6 text-white">
         <div className="flex items-center gap-2.5 shrink-0">
-          <LogisMark size={36} />
+          <LogisMark size={36} spot="admin" />
           <div className="leading-none">
-            <LogisWordmark height={12} />
+            <LogisWordmark height={12} spot="admin" />
             <div className="text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mt-1.5 whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>PLATFORM ADMIN</div>
           </div>
         </div>
@@ -1456,9 +1459,9 @@ function PlatformMobileShell({ user, sections = SECTIONS, section, tab, setTab, 
   return (
     <div className="kp-pm min-h-screen bg-[#EEF1F6]">
       <style>{PM_MOBILE_CSS}</style>
-      <header className="sticky top-0 z-40 text-white shadow-[0_6px_18px_rgba(11,20,40,0.28)]" style={{ background: "linear-gradient(90deg,#0B1428 0%,#13213F 55%,#1B2B4B 100%)", paddingTop: "env(safe-area-inset-top, 0px)" }}>
+      <header data-kp-spot="admin" className="sticky top-0 z-40 text-white shadow-[0_6px_18px_rgba(11,20,40,0.28)]" style={{ background: "linear-gradient(90deg,#0B1428 0%,#13213F 55%,#1B2B4B 100%)", paddingTop: "env(safe-area-inset-top, 0px)" }}>
         <div className="h-[56px] flex items-center gap-2 px-3">
-          <LogisMark size={30} />
+          <LogisMark size={30} spot="admin" />
           <div className="min-w-0 flex-1 leading-none">
             <div className="text-[14px] font-black whitespace-nowrap">관리자 관리센터</div>
             <div className="text-[9px] font-extrabold tracking-[0.26em] text-[#8FB0F0] mt-1 truncate whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{user?.email || "PLATFORM"}</div>
