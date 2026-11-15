@@ -285,16 +285,16 @@ export default function DriverLogin() {
       .kp-login-in { animation: kpLoginIn .5s cubic-bezier(.2,.8,.2,1) both; }
       .kp-pulse { animation: kpPulse 1.6s ease-in-out infinite; }
     `}</style>
-    <div className="min-h-screen w-full flex items-stretch bg-[#F2F4F8]">
+    <div data-kp-spot="loginForm" className="min-h-screen w-full flex items-stretch bg-[#F2F4F8]">
       {/* 왼쪽 — 브랜드 패널(PC) */}
-      <div className="hidden lg:flex relative flex-col justify-between w-[46%] max-w-[720px] overflow-hidden px-14 py-12 text-white"
+      <div data-kp-spot="loginPanel" className="hidden lg:flex relative flex-col justify-between w-[46%] max-w-[720px] overflow-hidden px-14 py-12 text-white"
         style={{ background: "linear-gradient(150deg, #060E1F 0%, #0F1A30 45%, #1B2B4B 100%)" }}>
         <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)", backgroundSize: "44px 44px" }} />
         <div className="absolute -right-40 -top-40 w-[520px] h-[520px] rounded-full" style={{ background: "radial-gradient(circle, rgba(110,149,232,0.22), transparent 65%)" }} />
         <div className="relative flex items-center gap-3">
-          <LogisMark size={46} />
+          <LogisMark size={46} spot="loginPanel" />
           <div>
-            <div className="mb-2"><LogisWordmark height={16} /></div>
+            <div className="mb-2"><LogisWordmark height={16} spot="loginPanel" /></div>
             <div className="text-[13.5px] font-bold tracking-[0.3em] text-white/45">DRIVER APP</div>
           </div>
         </div>
@@ -322,8 +322,8 @@ export default function DriverLogin() {
         <div className="kp-login-in w-full max-w-[420px]">
           {/* 모바일 머리 */}
           <div className="lg:hidden flex flex-col items-center mb-4">
-            <LogisMark size={52} light style={{ filter: "drop-shadow(0 10px 24px rgba(15,26,48,0.25))" }} />
-            <div className="mt-2.5 mb-1"><LogisTag height={13} chip /></div>
+            <LogisMark size={52} spot="loginForm" style={{ filter: "drop-shadow(0 10px 24px rgba(15,26,48,0.25))" }} />
+            <div className="mt-2.5 mb-1"><LogisTag height={13} chip spot="loginForm" /></div>
             <div className="text-[13.5px] font-bold tracking-[0.3em] text-[#9AA9C3]">DRIVER APP</div>
             <div className="mt-2 flex items-center gap-2 h-7 px-3 rounded-full bg-white border border-[#E3E8F0] text-[14.5px] font-bold text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>
               <span className="w-1.5 h-1.5 rounded-full bg-[#4B6CB7] kp-pulse" />{pad(now.getHours())}:{pad(now.getMinutes())}<span className="text-[#9AA9C3]">:{pad(now.getSeconds())}</span>
@@ -399,7 +399,7 @@ export default function DriverLogin() {
               {!driverApp && <button onClick={() => navigate("/login")} className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[15.5px] font-bold flex items-center justify-center hover:bg-[#F5F7FB] transition">다른 유형 로그인</button>}
             </div>
           </div>
-          <div className="flex justify-center mt-4 text-[13.5px] font-bold tracking-[0.2em] text-[#B4BFD0]"><LogisTag height={7.5} chip text="DRIVER" /></div>
+          <div className="flex justify-center mt-4 text-[13.5px] font-bold tracking-[0.2em] text-[#B4BFD0]"><LogisTag height={7.5} chip spot="loginForm" text="DRIVER" /></div>
         </div>
       </div>
     </div>

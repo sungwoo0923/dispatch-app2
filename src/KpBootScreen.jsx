@@ -118,7 +118,7 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
   const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
   const pc = variant === "pc";
   return (
-    <div
+    <div data-kp-spot="splash"
       className="fixed inset-0 z-[100001] flex flex-col items-center justify-center px-6 select-none overflow-hidden"
       style={{
         background: "radial-gradient(90% 60% at 50% 0%, #22396A 0%, #0F1A30 55%, #060D1C 100%)",
@@ -145,9 +145,9 @@ export default function KpBootScreen({ targets, subs = [], onAllDone, variant = 
       <div className={`relative w-full ${Z.box} flex flex-col min-w-0`}>
         {/* 로고 */}
         <div className={`flex items-center justify-center gap-3 ${pc ? "mb-10" : "mb-7"}`}>
-          <LogisMark size={pc ? 52 : 44} style={{ filter: "drop-shadow(0 8px 24px rgba(0,0,0,0.35))" }} />
+          <LogisMark size={pc ? 52 : 44} spot="splash" style={{ filter: "drop-shadow(0 8px 24px rgba(0,0,0,0.35))" }} />
           <div className="leading-tight text-left">
-            <LogisWordmark height={pc ? 19 : 16} />
+            <LogisWordmark height={pc ? 19 : 16} spot="splash" />
             <div className={`mt-1.5 font-bold tracking-[0.26em] text-white/40 whitespace-nowrap ${pc ? "text-[10.5px]" : "text-[9px]"}`}>LOGISTICS DISPATCH NETWORK</div>
           </div>
         </div>

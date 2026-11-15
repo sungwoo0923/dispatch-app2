@@ -475,18 +475,18 @@ export default function TransportLogin() {
       .kp-login-in { animation: kpLoginIn .5s cubic-bezier(.2,.8,.2,1) both; }
       .kp-pulse { animation: kpPulse 1.6s ease-in-out infinite; }
     `}</style>
-    <div className="min-h-screen w-full flex items-stretch bg-[#F2F4F8]">
+    <div data-kp-spot="loginForm" className="min-h-screen w-full flex items-stretch bg-[#F2F4F8]">
       {/* 왼쪽 — 브랜드 패널(PC) */}
-      <div className="hidden lg:flex relative flex-col justify-between w-[46%] max-w-[720px] overflow-hidden px-14 py-12 text-white"
+      <div data-kp-spot="loginPanel" className="hidden lg:flex relative flex-col justify-between w-[46%] max-w-[720px] overflow-hidden px-14 py-12 text-white"
         style={{ background: "linear-gradient(150deg, #060E1F 0%, #0F1A30 45%, #1B2B4B 100%)" }}>
         <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)", backgroundSize: "44px 44px" }} />
         <div className="absolute -right-40 -top-40 w-[520px] h-[520px] rounded-full" style={{ background: "radial-gradient(circle, rgba(110,149,232,0.22), transparent 65%)" }} />
         <div className="absolute -left-24 bottom-[-180px] w-[460px] h-[460px] rounded-full" style={{ background: "radial-gradient(circle, rgba(75,108,183,0.18), transparent 65%)" }} />
 
         <div className="relative flex items-center gap-3">
-          <LogisMark size={46} />
+          <LogisMark size={46} spot="loginPanel" />
           <div>
-            <div className="mb-2"><LogisWordmark height={16} /></div>
+            <div className="mb-2"><LogisWordmark height={16} spot="loginPanel" /></div>
             <div className="text-[10.5px] font-bold tracking-[0.3em] text-white/45">LOGISTICS DISPATCH NETWORK</div>
           </div>
         </div>
@@ -516,8 +516,8 @@ export default function TransportLogin() {
         <div className="kp-login-in w-full max-w-[420px]">
           {/* 모바일 머리 */}
           <div className="lg:hidden flex flex-col items-center mb-4">
-            <LogisMark size={52} light style={{ filter: "drop-shadow(0 10px 24px rgba(15,26,48,0.25))" }} />
-            <div className="mt-2.5"><LogisTag height={13} chip /></div>
+            <LogisMark size={52} spot="loginForm" style={{ filter: "drop-shadow(0 10px 24px rgba(15,26,48,0.25))" }} />
+            <div className="mt-2.5"><LogisTag height={13} chip spot="loginForm" /></div>
             <div className="mt-1.5 text-[10.5px] font-bold tracking-[0.3em] text-[#9AA9C3]">LOGISTICS DISPATCH NETWORK</div>
           </div>
 
@@ -598,7 +598,7 @@ export default function TransportLogin() {
             </div>
             </>)}
           </div>
-          <div className="flex justify-center mt-5 text-[11px] font-bold tracking-[0.2em] text-[#B4BFD0]"><LogisTag height={7.5} chip text="LOGISTICS" /></div>
+          <div className="flex justify-center mt-5 text-[11px] font-bold tracking-[0.2em] text-[#B4BFD0]"><LogisTag height={7.5} chip spot="loginForm" text="LOGISTICS" /></div>
         </div>
       </div>
 

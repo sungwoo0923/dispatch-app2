@@ -126,13 +126,26 @@
 
   <body>
 
-    <div id="root"><div id="kp-boot">
+    <div id="root"><div id="kp-boot" data-kp-spot="splash">
       <div class="glow"></div>
       <img class="mk" src="/brand/logisweb-mark.svg" width="92" height="92" alt="LogisWeb" />
       <img class="wm" src="/brand/logisweb-wordmark-tag.svg" width="210" height="41" alt="LogisWeb — LOGISTICS DISPATCH NETWORK" />
       <div class="bar"><i></i></div>
       <div class="t3" id="kp-boot-msg"></div>
     </div></div>
+    <!-- 🎨 2026-11-15 브랜드 디자인(관리자센터)에서 로고 · 첫 화면 바탕을 바꿨으면 지난번에 받아 둔 그림으로(src/brandConfig.js BOOT_KEY) -->
+    <script>
+      try {
+        var kb = JSON.parse(localStorage.getItem("kpBrandBoot:v1") || "null");
+        if (kb) {
+          var be = document.getElementById("kp-boot");
+          if (kb.bg) be.style.background = kb.bg;
+          var bm = be.querySelector(".mk"), bw = be.querySelector(".wm");
+          if (kb.mk && bm) { var ms = document.createElement("span"); ms.className = "mk"; ms.style.lineHeight = "0"; ms.innerHTML = kb.mk; bm.replaceWith(ms); }
+          if (kb.wm && bw) { var ws = document.createElement("span"); ws.className = "wm"; ws.style.cssText = "width:auto;display:flex;flex-direction:column;align-items:center;gap:9px;line-height:0"; ws.innerHTML = kb.wm + '<span style="font:700 9px Arial,sans-serif;letter-spacing:4px;color:rgba(207,214,228,.6);line-height:1">LOGISTICS DISPATCH NETWORK</span>'; bw.replaceWith(ws); }
+        }
+      } catch (e) { /* 그대로 */ }
+    </script>
     <script>
       // ⭐ 2026-11-03 새 버전이 올라온 뒤 처음 들어올 때 — "최신 버전으로 업데이트 중" 안내(프로그램 파일을 새로 받느라 조금 오래 걸림)
       (function () {

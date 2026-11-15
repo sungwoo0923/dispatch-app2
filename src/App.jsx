@@ -142,14 +142,14 @@ function KpSplash() {
   React.useEffect(() => { const t = setTimeout(() => setSlow(true), 2500); return () => clearTimeout(t); }, []);
   const msg = upd ? ["최신 버전으로 업데이트 중입니다", "처음 한 번은 다소 시간이 걸릴 수 있습니다"] : slow ? ["불러오는 중입니다", "잠시만 기다려 주세요"] : null;
   return (
-    <div style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "radial-gradient(90% 60% at 50% 0%, #22396A 0%, #0F1A30 55%, #060D1C 100%)", userSelect: "none", WebkitUserSelect: "none", overflow: "hidden" }}>
+    <div data-kp-spot="splash" style={{ position: "fixed", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "radial-gradient(90% 60% at 50% 0%, #22396A 0%, #0F1A30 55%, #060D1C 100%)", userSelect: "none", WebkitUserSelect: "none", overflow: "hidden" }}>
       <style>{KP_MARK_CSS + `
         @keyframes kpSplashUp { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
         @keyframes kpSplashBar { 0% { transform: translateX(-100%) } 100% { transform: translateX(250%) } }
       `}</style>
       <div style={{ position: "absolute", left: "50%", top: "50%", width: 360, height: 360, transform: "translate(-50%,-58%)", borderRadius: "50%", background: "radial-gradient(circle, rgba(110,149,232,0.22), transparent 65%)" }} />
-      <div style={{ position: "relative", filter: "drop-shadow(0 14px 30px rgba(0,0,0,0.45))" }}><KpLogoMark size={92} /></div>
-      <div style={{ position: "relative", marginTop: 24, animation: "kpSplashUp .45s ease .15s both" }}><LogisWordmark height={20} tag /></div>
+      <div style={{ position: "relative", filter: "drop-shadow(0 14px 30px rgba(0,0,0,0.45))" }}><KpLogoMark size={92} spot="splash" /></div>
+      <div style={{ position: "relative", marginTop: 24, animation: "kpSplashUp .45s ease .15s both" }}><LogisWordmark height={20} tag spot="splash" /></div>
       <div style={{ position: "relative", marginTop: 28, width: 120, height: 2, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden", animation: "kpSplashUp .45s ease .3s both" }}>
         <div style={{ width: "40%", height: "100%", borderRadius: 2, background: "linear-gradient(90deg, transparent, #CFE0FF, transparent)", animation: "kpSplashBar 1.1s ease-in-out infinite" }} />
       </div>
