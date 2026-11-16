@@ -373,12 +373,12 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
             {out && (() => { const lb = deposited ? "입금완료" : f.inv ? "청구완료" : "미청구"; const c = OUT_STAGE_COLORS[lb]; return <span data-out-stage={lb} className="ml-auto inline-flex items-center h-7 px-2.5 rounded-full text-[12px] font-black" style={{ background: c.bg, color: c.fg, border: `1px solid ${c.bd}` }}>{lb}</span>; })()}
           </Row>
           {otherRows.length > 0 && (
-            <Row label="같이 바꾸기">
+            <Row label="같이">
               <label className="inline-flex items-center gap-2 text-[13px] font-bold text-[#0F1A30] cursor-pointer" data-pay-many>
                 <input type="checkbox" checked={withOthers} disabled={!canEdit || busy} onChange={(e) => setWithOthers(e.target.checked)} className="w-4 h-4 accent-[#1B2B4B]" />
-                체크한 다른 오더 {otherRows.length}건도 같이 바꾸기
+                체크한 {otherRows.length}건 같이
               </label>
-              <span className="basis-full text-[11.5px] font-semibold text-[#9AA9C3]">[저장] 계산서 날짜 → {bulkRows.length + 1}건{out ? ` · [입금완료] → ${depMany.length + 1}건` : ""}{undoMany.length ? ` · [입금 취소] → ${undoMany.length + (deposited ? 1 : 0)}건` : ""}이 한 번에 바뀌어요. 이미 끝난 단계의 오더는 그 버튼에서 빠져요.</span>
+              <span className="text-[11.5px] font-semibold text-[#9AA9C3]">끝난 건은 빠져요</span>
             </Row>
           )}
           {out && f.inv && (
