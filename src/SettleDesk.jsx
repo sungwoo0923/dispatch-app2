@@ -111,7 +111,11 @@ export function useArDesk(company) {
   const configId = arDeskId(co, "config");
   const config = React.useMemo(() => all.find((d) => d.id === configId) || null, [all, configId]);
   const saveConfig = React.useCallback((patch) => save(configId, { kind: "config", ...patch }), [save, configId]);
-  return { stmts, notes, save, config, saveConfig, company: co };
+  // ✅ 2026-11-16 2단계 마감(kind "close" · 거래처 × 월) · 일 마감(kind "dayclose") · 🧾 거래처별 명세서 양식(kind "form")
+  const closes = React.useMemo(() => { const m = new Map(); all.filter((d) => d.kind === "close").forEach((d) => m.set(`${d.client}|${d.yyyymm}`, d)); return m; }, [all]);
+  const dayCloses = React.useMemo(() => { const m = new Map(); all.filter((d) => d.kind === "dayclose").forEach((d) => m.set(`${d.by}|${d.date}`, d)); return m; }, [all]);
+  const forms = React.useMemo(() => { const m = new Map(); all.filter((d) => d.kind === "form").forEach((d) => m.set(String(d.client ?? ""), d)); return m; }, [all]);
+  return { stmts, notes, save, config, saveConfig, company: co, closes, dayCloses, forms };
 }
 
 // ───────────────────────── 단계 표시 ─────────────────────────

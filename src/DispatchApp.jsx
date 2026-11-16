@@ -2979,6 +2979,9 @@ import { useRouteGroupFilter, RouteGroupBar, routeGroupOf, RouteGroupField, Shee
 import { settleStartTab } from "./settleStart";
 import { QuickOrderLine, useDriverSuggest, DriverSuggestCell, AssignConfirm } from "./SmartDispatchUI"; // ⭐ 2026-11-13 빠른 등록 · 추천 기사
 const SettleHome = React.lazy(() => import("./SettleHome")); // 🧭 정산 홈(처음 열 때 받는다)
+const CloseFlow = React.lazy(() => import("./CloseFlow"));
+const InvoiceFormEditor = React.lazy(() => import("./InvoiceFormEditor")); // 🧾 2026-11-16 거래처별 명세서 양식
+import { pickForm, visibleCols, headerLabels } from "./invoiceForm"; // ✅ 2026-11-16 2단계 마감 — 배차현황 › 월 마감(배차자 1차) · 정산관리 › 마감 검증(경리 2차)
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "./orderHistoryCache";
 import { effectiveScope, scopeAllows, isOfficeBaseMenu } from "./workScope";
 import BizSwitcher from "./freight/BizSwitcher";
@@ -3451,7 +3454,11 @@ const ExecStaffInfo = React.lazy(() => import("./ExecStaffInfo"));
 const INVOICE_PREVIEW_ROWS = 80;
 let _invoiceExpand = null;
 export async function expandInvoicePreview() { if (_invoiceExpand) await _invoiceExpand(); }
-function InvoicePreviewRows({ mapped, rows, onOpen, docTd, docNum, DOC, won }) {
+function InvoicePreviewRows({ mapped, rows, onOpen, docTd, docNum, DOC, won, form }) {
+  // 🧾 2026-11-16 거래처 양식(form) — 고른 칸만 · 고른 순서로, 세액 칸은 끌 수 있다
+  const cols = visibleCols(form);
+  const tax = form?.tax !== false;
+  const span = 1 + cols.length + (tax ? 3 : 1);
   const [full, setFull] = React.useState(false);
   const key = mapped.length ? `${mapped.length}|${mapped[0]?.idx}|${mapped[0]?.상차일}|${mapped[mapped.length - 1]?.상차일}` : "";
   React.useEffect(() => { setFull(false); }, [key]);
@@ -3466,21 +3473,15 @@ function InvoicePreviewRows({ mapped, rows, onOpen, docTd, docNum, DOC, won }) {
       {list.map((m, i) => (
         <tr key={m.idx} className="cursor-pointer hover:bg-[#F4F6FA]" onClick={() => onOpen(rows[i])} title="클릭하여 상세보기">
           <td style={{ ...docTd, color: DOC.mute, fontFamily: DOC.mono }}>{m.idx}</td>
-          <td style={{ ...docTd, fontFamily: DOC.mono, whiteSpace: "nowrap" }}>{m.상차일}</td>
-          <td style={docTd}>{m.상차지}</td>
-          <td style={docTd}>{m.하차지}</td>
-          <td style={docTd}>{m.경유지}</td>
-          <td style={docTd}>{m.화물명}</td>
-          <td style={docTd}>{m.기사명}</td>
-          <td style={{ ...docTd, fontSize: 10.5 }}>{m.차량번호}</td>
+          {cols.map((c) => <td key={c.k} style={c.mono ? { ...docTd, fontFamily: DOC.mono, whiteSpace: "nowrap" } : c.small ? { ...docTd, fontSize: 10.5 } : docTd}>{m[c.k]}</td>)}
           <td style={{ ...docNum, fontWeight: 700 }}>{won(m.공급가액)}</td>
-          <td style={{ ...docNum, color: DOC.sub }}>{won(m.세액)}</td>
-          <td style={{ ...docNum, fontWeight: 900 }}>{won(m.공급가액 + m.세액)}</td>
+          {tax && <td style={{ ...docNum, color: DOC.sub }}>{won(m.세액)}</td>}
+          {tax && <td style={{ ...docNum, fontWeight: 900 }}>{won(m.공급가액 + m.세액)}</td>}
         </tr>
       ))}
       {!full && mapped.length > INVOICE_PREVIEW_ROWS && (
         <tr data-html2canvas-ignore="true">
-          <td colSpan={11} style={{ ...docTd, padding: "10px 6px" }}>
+          <td colSpan={span} style={{ ...docTd, padding: "10px 6px" }}>
             <button type="button" onClick={() => setFull(true)} style={{ height: 34, padding: "0 16px", borderRadius: 9, border: "1px solid #C9D5EA", background: "#fff", color: "#1B2B4B", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>나머지 {(mapped.length - INVOICE_PREVIEW_ROWS).toLocaleString()}줄 펼치기 (전체 {mapped.length.toLocaleString()}줄 · 합계는 전체 기준)</button>
           </td>
         </tr>
@@ -9261,7 +9262,16 @@ return (
 
         {menu === "배차현황" && (
           <KpSubNav code="DISPATCH" title="배차현황" icon="truck" active={배차현황Tab} onSelect={set배차현황Tab}
-            items={(() => { const n = unseenUnassigned, fx = unseenFixed; /* ⭐ 2026-11-06 계정별 안 본 것만(전체 미배차 건수는 각 화면 안에 그대로) */ return [{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list", badge: drvCounts.orders, badgeTitle: drvCounts.orders ? `기사 수락/거절 ${drvCounts.orders}건` : "" }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass", badge: n, badgeTitle: `새 미배차 ${n}건 (전체 ${pcUnassigned.length}건)` }, { key: "고정노선현황", label: "고정노선현황", en: "FIXED ROUTE", icon: "route", badge: fx, badgeTitle: `새 고정노선 미배차 ${fx}건 (전체 ${pcFixedUnassigned.length}건)` }, { key: "인수증관리", label: "인수증관리", en: "RECEIPTS", icon: "receipt" }]; })()}>
+            items={(() => { const n = unseenUnassigned, fx = unseenFixed; /* ⭐ 2026-11-06 계정별 안 본 것만(전체 미배차 건수는 각 화면 안에 그대로) */ return [{ key: "배차현황", label: "배차현황", en: "ALL ORDERS", icon: "list", badge: drvCounts.orders, badgeTitle: drvCounts.orders ? `기사 수락/거절 ${drvCounts.orders}건` : "" }, { key: "미배차현황", label: "미배차현황", en: "PENDING", icon: "hourglass", badge: n, badgeTitle: `새 미배차 ${n}건 (전체 ${pcUnassigned.length}건)` }, { key: "고정노선현황", label: "고정노선현황", en: "FIXED ROUTE", icon: "route", badge: fx, badgeTitle: `새 고정노선 미배차 ${fx}건 (전체 ${pcFixedUnassigned.length}건)` }, { key: "인수증관리", label: "인수증관리", en: "RECEIPTS", icon: "receipt" }, ...(isViewer ? [] : [{ key: "월마감", label: "월 마감", en: "MONTH CLOSE", icon: "check" }])]; })()}>
+            {/* ✅ 2026-11-16 월 마감(배차자 1차) — 내가 등록한 오더의 거래처를 맞춰서 경리팀에 넘긴다 */}
+            {배차현황Tab === "월마감" && (
+              <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}>
+                <CloseFlow mode="disp" orders={listDispatchData} isViewer={isViewer}
+                  company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()}
+                  me={{ email: user?.email || "", uid: user?.uid || "", name: userNameMap.get(user?.uid) || userNameMap.get(String(user?.email || "").toLowerCase()) || user?.displayName || user?.email || "" }}
+                  onOpenOrder={(o) => { set배차현황Tab("배차현황"); setFocusOrderId(o._id || o.id); }} />
+              </React.Suspense>
+            )}
             {배차현황Tab === "배차현황" && (
               <DispatchStatus
                 key={`ds-${viewResetKey}`}
@@ -9510,8 +9520,8 @@ return (
 
         {정산관리Visited && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
           <div style={{ display: menu === "정산관리" ? undefined : "none" }}>
-          <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={정산관리Tab} onSelect={set정산관리Tab} actions={[{ key: "manual", label: "정산 매뉴얼", icon: "doc", onClick: () => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu: "정산관리", section: { 홈: "home", 거래처정산: "billing", 지급관리: "payout", 입금확인: "deposit", 지입정산관리: "fleet", 지게차지급: "forklift" }[정산관리Tab] || "" } })) }]}
-            items={[{ key: "홈", label: "정산 홈", en: "OVERVIEW", icon: "dashboard" }, { key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOn ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
+          <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={정산관리Tab} onSelect={set정산관리Tab} actions={[{ key: "manual", label: "정산 매뉴얼", icon: "doc", onClick: () => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu: "정산관리", section: { 홈: "home", 마감검증: "review", 거래처정산: "billing", 지급관리: "payout", 입금확인: "deposit", 지입정산관리: "fleet", 지게차지급: "forklift" }[정산관리Tab] || "" } })) }]}
+            items={[{ key: "홈", label: "정산 홈", en: "OVERVIEW", icon: "dashboard" }, { key: "마감검증", label: "마감 검증", en: "REVIEW", icon: "check" }, { key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOn ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
           <DetailScope data={salesDispatchData} getters={mainDetailGet} title="세부검색 · 정산관리">{(settleRows) => (<>
           {/* 🔎 2026-11-14 세부검색 버튼은 정산관리에서 뺐다(사용자 요청) */}
           {/* 거래명세서 검색/선택 상태 유지를 위해 지급관리 탭으로 전환해도 언마운트하지 않고 숨기기만 한다 */}
@@ -9535,6 +9545,11 @@ return (
           </div>
           {/* 🧭 정산 홈 — 월 마감 진행판 · 미수 경과 · 거래처 원장(기존 화면은 그대로, 여기서 바로 간다) */}
           {정산관리Tab === "홈" && <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><SettleHome orders={settleRows} company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} onGo={(k, d) => { set정산관리Tab(k); if (d) setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: d })), 60); }} depositOn={betaPayOn} /></React.Suspense>}
+          {/* ✅ 2026-11-16 마감 검증(경리 2차) — 배차자가 1차 마감한 거래처를 승인 · 반려 */}
+          {정산관리Tab === "마감검증" && <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><CloseFlow mode="acct" orders={settleRows} isViewer={isViewer} staffName={(o) => mainDetailGet.배차담당자(o)}
+            company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()}
+            me={{ email: user?.email || "", uid: user?.uid || "", name: userNameMap.get(user?.uid) || userNameMap.get(String(user?.email || "").toLowerCase()) || user?.displayName || user?.email || "" }}
+            onOpenInvoice={(client, ym) => { set정산관리Tab("거래처정산"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: { tab: "invoice", client, ym } })), 60); }} /></React.Suspense>}
           {정산관리Tab === "지게차지급" && <ForkliftPayouts orders={settleRows} patchDispatch={patchDispatchSafe} isViewer={isViewer} />}
           {정산관리Tab === "입금확인" && betaPayOn && <CallDepositDesk orders={settleRows} patchDispatch={patchDispatchSafe} isViewer={isViewer} company={userCompany} onAttach={(r) => setDeskAttachId(r._id || r.id)} />}
           {/* 📎 입금 확인의 첨부 — 배차현황 첨부와 같은 창 · 같은 파일 */}
@@ -51957,6 +51972,9 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     };
   });
   const mapped = mapInvoiceRows(selectedRowsInvoice);
+  // 🧾 2026-11-16 거래처별 명세서 양식(거래처 전용 → 회사 기본 → 기본형)
+  const invForm = useMemo(() => pickForm(desk.forms, client), [desk.forms, client]);
+  const [invFormOpen, setInvFormOpen] = useState(false);
 
   const 합계공급가 = mapped.reduce((a, b) => a + b.공급가액, 0);
   const 합계세액 = mapped.reduce((a, b) => a + b.세액, 0);
@@ -52088,19 +52106,17 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     const supplyFields = [["사업자번호",cp.bizNo],["주소",cp.addr],["업태",cp.type],["종목",cp.item],["연락처",cp.contact]];
     const td = `padding:6px 6px;font-size:11px;color:${INK};border-bottom:1px solid ${HAIR};text-align:center;vertical-align:middle`;
     const tdNum = `${td};text-align:right;font-family:${MONO};white-space:nowrap`;
+    // 🧾 2026-11-16 거래처 양식 — 화면 미리보기와 같은 칸 · 순서 · 이름
+    const bForm = pickForm(desk.forms, item.name);
+    const bCols = visibleCols(bForm);
+    const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
     const rowsHtml = rows.map((m, i) => `
       <tr>
         <td style="${td};color:${MUTE};font-family:${MONO}">${i+1}</td>
-        <td style="${td};font-family:${MONO};white-space:nowrap">${m.상차일||""}</td>
-        <td style="${td}">${m.상차지||""}</td>
-        <td style="${td}">${m.하차지||""}</td>
-        <td style="${td}">${m.경유지||""}</td>
-        <td style="${td}">${m.화물명||""}</td>
-        <td style="${td}">${m.기사명||""}</td>
-        <td style="${td};font-size:10.5px">${m.차량번호||""}</td>
+        ${bCols.map((c) => `<td style="${td}${c.mono ? `;font-family:${MONO};white-space:nowrap` : c.small ? ";font-size:10.5px" : ""}">${esc(m[c.k])}</td>`).join("")}
         <td style="${tdNum};font-weight:700">${(m.공급가액||0).toLocaleString()}</td>
-        <td style="${tdNum};color:${SUB}">${(m.세액||0).toLocaleString()}</td>
-        <td style="${tdNum};font-weight:900">${((m.공급가액||0)+(m.세액||0)).toLocaleString()}</td>
+        ${bForm.tax ? `<td style="${tdNum};color:${SUB}">${(m.세액||0).toLocaleString()}</td>
+        <td style="${tdNum};font-weight:900">${((m.공급가액||0)+(m.세액||0)).toLocaleString()}</td>` : ""}
       </tr>`).join("");
     const infoRow = (k, v, i) => `<tr><td style="padding:5px 10px;width:70px;color:${SUB};font-weight:700;font-size:11px;white-space:nowrap;border-top:${i?`1px solid ${HAIR}`:"none"}">${k}</td><td style="padding:5px 10px 5px 0;color:${INK};font-weight:600;font-size:11.5px;border-top:${i?`1px solid ${HAIR}`:"none"}">${v||"-"}</td></tr>`;
     const partyHead = (ko, en) => `<div style="background:${SOFT};padding:7px 10px;border-bottom:1px solid ${LINE};display:flex;justify-content:space-between;align-items:center"><span style="font-size:11.5px;font-weight:900;color:${INK};letter-spacing:0.08em">${ko}</span><span style="font-family:${MONO};font-size:8.5px;font-weight:800;letter-spacing:0.22em;color:${MUTE}">${en}</span></div>`;
@@ -52151,16 +52167,16 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
       <table style="width:100%;border-collapse:collapse;margin-top:12px">
         <thead>
           <tr>
-            ${["No","날짜","상차지","하차지","경유지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h=>`<th style="background:${INK};color:#fff;font-size:10.5px;font-weight:800;padding:7px 6px;text-align:center;white-space:nowrap">${h}</th>`).join("")}
+            ${headerLabels(bForm).map(h=>`<th style="background:${INK};color:#fff;font-size:10.5px;font-weight:800;padding:7px 6px;text-align:center;white-space:nowrap">${h}</th>`).join("")}
           </tr>
         </thead>
         <tbody>${rowsHtml}</tbody>
         <tfoot>
           <tr>
-            <td colspan="8" style="${td};${foot};font-weight:900;letter-spacing:0.4em">소 계</td>
+            <td colspan="${1 + bCols.length}" style="${td};${foot};font-weight:900;letter-spacing:0.4em">소 계</td>
             <td style="${tdNum};${foot};font-weight:800">${sup.toLocaleString()}</td>
-            <td style="${tdNum};${foot};font-weight:800;color:${SUB}">${tax.toLocaleString()}</td>
-            <td style="${tdNum};${foot};font-weight:900">${total.toLocaleString()}</td>
+            ${bForm.tax ? `<td style="${tdNum};${foot};font-weight:800;color:${SUB}">${tax.toLocaleString()}</td>
+            <td style="${tdNum};${foot};font-weight:900">${total.toLocaleString()}</td>` : ""}
           </tr>
         </tfoot>
       </table>
@@ -53928,6 +53944,9 @@ const handleBatchSettle = async (targetStatus) => {
                     <div className="text-[13.5px] font-black text-[#0F1A30] mt-1 leading-none truncate">미리보기{searched && client ? <span className="ml-1.5 text-[#5B6B85] font-bold">· {client}</span> : null}</div>
                   </div>
                   <button type="button" onClick={() => { setEditInfo({ ...cInfo }); setShowEdit(true); }} className={csBtn}><EditableText id="misc.btn.49404.거래처 정보" defaultText="거래처 정보" /></button>
+                  {/* 🧾 2026-11-16 거래처별 명세서 양식 — 칸 켜고 끄기 · 순서 · 이름 */}
+                  <button type="button" data-kp="inv-form" onClick={() => setInvFormOpen(true)} className={csBtn} title="이 거래처 명세서에 보일 칸을 고르고 순서 · 이름을 바꿔요">양식{invForm.source === "client" ? " · 전용" : ""}</button>
+                  {invFormOpen && <React.Suspense fallback={null}><InvoiceFormEditor open onClose={() => setInvFormOpen(false)} desk={desk} client={client && client !== AR_ALL ? client : ""} sample={mapped} isViewer={isViewer} /></React.Suspense>}
                   <span className="w-px h-5 bg-[#E3E8F0]" />
                   <button type="button" disabled={!searched} onClick={downloadInvoiceExcel} className={csBtn}><EditableText id="misc.btn.49332.엑셀다운로드" defaultText="엑셀" /></button>
                   <button type="button" disabled={!searched} onClick={savePDF} className={csBtn}>PDF</button>
@@ -54075,23 +54094,23 @@ const handleBatchSettle = async (targetStatus) => {
                           <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
                             <thead>
                               <tr>
-                                {["No","날짜","상차지","하차지","경유지","화물명","기사명","차량번호","공급가액","세액(10%)","합계"].map(h => (
+                                {headerLabels(invForm).map(h => (
                                   <th key={h} style={docTh}><EditableText id={`taxInvoice.table.header.${h}`} defaultText={h} /></th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody>
                               {mapped.length === 0 ? (
-                                <tr><td colSpan={11} style={{ ...docTd, padding: "28px 6px", color: DOC.mute, fontSize: 12 }}>조회 결과가 없습니다. (청구운임 0원인 오더는 제외됩니다)</td></tr>
+                                <tr><td colSpan={headerLabels(invForm).length} style={{ ...docTd, padding: "28px 6px", color: DOC.mute, fontSize: 12 }}>조회 결과가 없습니다. (청구운임 0원인 오더는 제외됩니다)</td></tr>
                               ) : (
-                                <InvoicePreviewRows mapped={mapped} rows={selectedRowsInvoice} onOpen={openOrderPopup} docTd={docTd} docNum={docNum} DOC={DOC} won={won} />
+                                <InvoicePreviewRows mapped={mapped} rows={selectedRowsInvoice} onOpen={openOrderPopup} docTd={docTd} docNum={docNum} DOC={DOC} won={won} form={invForm} />
                               )}
                               {mapped.length > 0 && (
                                 <tr>
-                                  <td colSpan={8} style={{ ...docTd, background: DOC.soft, borderTop: `2px solid ${DOC.ink}`, borderBottom: `1px solid ${DOC.line}`, fontWeight: 900, letterSpacing: "0.4em", padding: "8px 6px" }}>소 계</td>
+                                  <td colSpan={1 + visibleCols(invForm).length} style={{ ...docTd, background: DOC.soft, borderTop: `2px solid ${DOC.ink}`, borderBottom: `1px solid ${DOC.line}`, fontWeight: 900, letterSpacing: "0.4em", padding: "8px 6px" }}>소 계</td>
                                   <td style={{ ...docNum, background: DOC.soft, borderTop: `2px solid ${DOC.ink}`, borderBottom: `1px solid ${DOC.line}`, fontWeight: 800, padding: "8px 6px" }}>{won(합계공급가)}</td>
-                                  <td style={{ ...docNum, background: DOC.soft, borderTop: `2px solid ${DOC.ink}`, borderBottom: `1px solid ${DOC.line}`, fontWeight: 800, color: DOC.sub, padding: "8px 6px" }}>{won(합계세액)}</td>
-                                  <td style={{ ...docNum, background: DOC.soft, borderTop: `2px solid ${DOC.ink}`, borderBottom: `1px solid ${DOC.line}`, fontWeight: 900, padding: "8px 6px" }}>{won(합계공급가 + 합계세액)}</td>
+                                  {invForm.tax && <td style={{ ...docNum, background: DOC.soft, borderTop: `2px solid ${DOC.ink}`, borderBottom: `1px solid ${DOC.line}`, fontWeight: 800, color: DOC.sub, padding: "8px 6px" }}>{won(합계세액)}</td>}
+                                  {invForm.tax && <td style={{ ...docNum, background: DOC.soft, borderTop: `2px solid ${DOC.ink}`, borderBottom: `1px solid ${DOC.line}`, fontWeight: 900, padding: "8px 6px" }}>{won(합계공급가 + 합계세액)}</td>}
                                 </tr>
                               )}
                             </tbody>
@@ -63609,8 +63628,12 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
   }, []);
   return (
     <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={tab} onSelect={setTab}
-      items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOnM ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
-      {tab === "거래처정산"
+      items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "마감검증", label: "마감 검증", en: "REVIEW", icon: "check" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOnM ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
+      {tab === "마감검증"
+        ? <React.Suspense fallback={null}><CloseFlow mode="acct" orders={dispatchData} isViewer={isViewer} company={companyName}
+            me={{ email: auth.currentUser?.email || "", uid: auth.currentUser?.uid || "", name: auth.currentUser?.displayName || auth.currentUser?.email || "" }}
+            onOpenInvoice={(client, ym) => { setTab("거래처정산"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: { tab: "invoice", client, ym } })), 60); }} /></React.Suspense>
+        : tab === "거래처정산"
         ? <ClientSettlement dispatchData={dispatchData} setDispatchData={() => {}} userCompany={companyName} clients={clients}
             setClients={(next) => (next || []).forEach(upsertClient)} upsertClient={upsertClient} showAlert={(m) => window.alert(m)}
             patchDispatch={isViewer ? async () => {} : patchDispatch} cardImage={cardImage} setCardImage={setCardImage}

@@ -27,6 +27,12 @@ const btnCls = (dark) => `inline-flex items-center gap-1.5 h-10 px-3.5 rounded-x
 const MENU_TITLE = { HOME: "홈", 배차관리: "오더등록" };
 export const manualName = (menu) => MENU_TITLE[menu] || menu;
 const josa = (w) => { const c = String(w).charCodeAt(String(w).length - 1); return c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 ? "은" : "는"; };
+const flowDesc = (t) => {
+  const first = (String(t).match(/^.*?(?:[다요]\.|[.。!?](?=\s|$))/) || [String(t)])[0].replace(/[.。]$/, "").trim();
+  if (first.length <= 48) return first;
+  const cut = first.slice(0, 48); const sp = cut.lastIndexOf(" ");
+  return `${(sp > 24 ? cut.slice(0, sp) : cut).trim()}…`;
+};
 export function manualFor(menu) {
   if (MANUALS[menu]) return MANUALS[menu];
   const H = HELP_DETAIL[menu];
@@ -36,7 +42,8 @@ export function manualFor(menu) {
   return {
     title: `${name} 매뉴얼`, updated: "2026-11-15", generated: true,
     intro: H[0].intro || `${name}에서 하는 일을 순서대로 정리했어요.`,
-    flow: H.slice(0, 6).map((h) => ({ label: h.title.replace(/\s*\(.*\)\s*$/, "").slice(0, 14), desc: (h.intro || "").split(/[.。]/)[0].slice(0, 30) })),
+    // 🛠 2026-11-16 글자 수로 자르면 낱말 중간에서 끊겨(“수정 창이 열”) — 첫 문장을 통째로, 길면 낱말 경계에서 … 를 붙인다 · 설명이 없으면 첫 항목 글
+    flow: H.slice(0, 6).map((h) => ({ label: h.title.replace(/\s*\(.*\)\s*$/, "").split(" — ")[0], desc: flowDesc(h.intro || split(h.items?.[0] || "")[1] || "") })),
     sections: H.map((h, i) => {
       const rows = h.items.map(split);
       return { id: `s${i}`, tab: h.title, title: h.title, demo: h.demo, what: h.intro || "",
@@ -121,19 +128,16 @@ export function WorkManualModal({ menu, section = "", onClose }) {
           <h2 className="mt-1 text-[25px] sm:text-[28px] font-black text-[#0F1A30]">{manualName(menu)}{josa(manualName(menu))} 이런 곳이에요</h2>
           <p className="mt-3 text-[17.5px] sm:text-[19px] leading-[1.8] text-[#1F2D47]" style={{ textWrap: "pretty" }}>{M.intro}</p>
           <div className="mt-6 text-[17px] font-black text-[#0F1A30]">한눈에 보는 순서</div>
-          {/* 단계는 한 줄로 — 넓은 화면은 칸을 나눠 꽉 채우고, 좁으면 옆으로 밀어서 본다(줄바꿈 없음) */}
-          <div className="mt-3 flex flex-nowrap items-stretch gap-1.5 overflow-x-auto pb-1" data-manual-flow>
+          {/* 🛠 2026-11-16 칸이 좁아 제목 · 설명이 잘리던 문제 — 칸 너비를 최소 170px로 두고 넘치면 다음 줄로(제목도 줄바꿈) */}
+          <ol className="mt-3 grid gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))" }} data-manual-flow>
             {M.flow.map((f, k) => (
-              <React.Fragment key={f.label}>
-                <div className="shrink-0 w-[150px] lg:w-auto lg:flex-1 lg:min-w-0 rounded-2xl bg-[#F5F8FD] border border-[#DCE3EE] px-3.5 py-3">
-                  <div className="text-[13.5px] font-black text-[#4B6CB7] tabular-nums">STEP {k + 1}</div>
-                  <div className="mt-0.5 text-[17.5px] font-black text-[#0F1A30] whitespace-nowrap">{f.label}</div>
-                  <div className="mt-1 text-[14.5px] leading-[1.5] text-[#3A4A66]">{f.desc}</div>
-                </div>
-                {k < M.flow.length - 1 && <span className="shrink-0 self-center text-[#9AB0D6] text-[22px] font-black">›</span>}
-              </React.Fragment>
+              <li key={f.label} className="min-w-0 rounded-2xl border border-[#DCE3EE] px-3.5 py-3">
+                <div className="text-[13.5px] font-black text-[#4B6CB7] tabular-nums">STEP {k + 1}</div>
+                <div className="mt-0.5 text-[17px] font-black leading-snug text-[#0F1A30] break-keep">{f.label}</div>
+                {f.desc && <div className="mt-1 text-[14.5px] leading-[1.55] text-[#3A4A66] break-keep">{f.desc}</div>}
+              </li>
             ))}
-          </div>
+          </ol>
         </section>
 
         {M.sections.map((s, k) => (
