@@ -509,6 +509,11 @@ export function DriverEventBell({ enabled, onToggleEnabled, onView, isAdmin = fa
     window.addEventListener("touchstart", h, true);
     return () => { window.removeEventListener("mousedown", h, true); window.removeEventListener("touchstart", h, true); };
   }, [open]);
+  // 🧭 2026-11-16 상단바 [내 메뉴] › 알림 내역 — 다른 버튼이 이 알림함을 열 수 있게(detail: { top, right })
+  React.useEffect(() => {
+    const h = (e) => { const d = e.detail || {}; setPos({ top: d.top ?? 60, right: d.right ?? 16 }); setOpen(true); if (c.checkout) setTimeout(() => markDriverSeen("checkout"), 1500); };
+    window.addEventListener("kp-open-driver-bell", h); return () => window.removeEventListener("kp-open-driver-bell", h);
+  }, [c.checkout]);
   const toggle = () => {
     const r = btn.current?.getBoundingClientRect();
     if (r) setPos({ top: r.bottom + 8, right: Math.max(8, window.innerWidth - r.right) });

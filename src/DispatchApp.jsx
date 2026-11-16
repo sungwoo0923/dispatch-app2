@@ -2984,6 +2984,9 @@ const InvoiceFormEditor = React.lazy(() => import("./InvoiceFormEditor")); // �
 import { pickForm, visibleCols, headerLabels } from "./invoiceForm";
 import { closeBoard as closeBoardOf, approvePatch as closeApprovePatch, rejectPatch as closeRejectPatch } from "./closeFlow"; // ✅ 2026-11-16 배차 마감 → 거래처정산
 import { CloseStrip } from "./SettleDesk";
+import UserHub from "./UserHub"; // 🧭 2026-11-16 상단바 [내 메뉴] 하나로(메일 · 알림 · 내 정보 · 원격 지원)
+import { useNewVersion } from "./VersionCheck";
+import { hardReloadForUpdate } from "./UpdateBanner";
 import { textifyOrder } from "./orderText"; // 🛠 2026-11-16 숫자로 저장된 글자 칸(차량번호 등) → 글자 // ✅ 2026-11-16 2단계 마감 — 배차현황 › 월 마감(배차자 1차) · 정산관리 › 마감 검증(경리 2차)
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "./orderHistoryCache";
 import { effectiveScope, scopeAllows, isOfficeBaseMenu } from "./workScope";
@@ -7870,6 +7873,7 @@ useEffect(() => {
   const [배차현황Tab, set배차현황Tab] = useState("배차현황");
   const [거래처관리Tab, set거래처관리Tab] = useState("하차지거래처");
   const [기사관리Tab, set기사관리Tab] = useState("d:전체"); // ▸ 기사관리 허브 — d:등급 / docs:driver / docs:penalty
+  const hdrNewVer = useNewVersion(); // 🧭 2026-11-16 새 버전 → 상단바 회사명 칸이 [업데이트]로
   const [정산관리Tab, set정산관리Tab] = useState(() => { const t = settleStartTab(); return t === "마감검증" ? "거래처정산" : t; }); // 🧭 2026-11-14 정산 홈이 첫 화면(예전처럼 거래처정산부터 보려면 정산 홈 아래 체크)
   const [deskAttachId, setDeskAttachId] = useState("");
   const betaPayOn = useBetaOn(getTenant() || userCompany); // 💳 2026-11-11 정산관리 › 입금 확인(시험 기능 — 테스트운송사)
@@ -8816,18 +8820,20 @@ return (
               : (userCompany || localStorage.getItem("userCompany") || "");
             return (
               <div className="flex items-center gap-2.5 min-w-0 shrink-0">
-                <button onClick={() => setSideMenuOpen(true)} title="전체 메뉴" className="kp-icon-btn transition">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
-                </button>
                 {/* ⭐ 2026-11-03 로고·LogisWeb을 누르면 회사 홈페이지로 (2026-11-04 LogisWeb 마크 + 글자 로고) */}
                 <a href="https://www.logisweb.co.kr/" title="LogisWeb 홈페이지로" className="flex items-center gap-2.5 shrink-0 rounded-xl hover:opacity-90 transition">
                   <LogisMark size={32} spot="topnav" style={{ filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.25))" }} />
                   <LogisWordmark height={12} sub="dispatch" spot="topnav" />
                 </a>
-                {co && (
-                  // ⭐ 2026-11-10 긴 운송사명도 잘리지 않게(길면 글씨만 살짝 작게)
-                  <span title={co} data-kp="hdr-company" className={`ml-1 px-2.5 h-7 inline-flex items-center rounded-lg bg-white/[0.07] border border-white/10 font-bold text-white/90 whitespace-nowrap shrink-0 ${co.length > 8 ? "text-[12px]" : "text-[13px]"}`}>
-                    {co}
+                {/* 🧭 2026-11-16 회사명 + 내 이름 · 직급 한 칸. 새 버전이 나오면 이 칸이 [업데이트]로 바뀌고, 누르면 바로 업데이트 */}
+                {hdrNewVer ? (
+                  <button type="button" onClick={() => hardReloadForUpdate()} data-kp="hdr-update" title={`새 버전 v${hdrNewVer.version || ""} — 눌러서 업데이트`}
+                    className="ml-1 px-3 h-7 inline-flex items-center gap-2 rounded-lg border border-[#8FB0F0]/70 bg-white/[0.08] hover:bg-white/[0.16] text-[12.5px] font-black text-white whitespace-nowrap shrink-0">
+                    <span className="kp-subnav-newdot w-1.5 h-1.5 rounded-full bg-[#CFE0FF]" />새 버전{hdrNewVer.version ? ` v${hdrNewVer.version}` : ""} · 눌러서 업데이트
+                  </button>
+                ) : (co || myRealName) && (
+                  <span title={[co, myRealName, myProfileDoc?.position].filter(Boolean).join(" ")} data-kp="hdr-company" className={`ml-1 px-2.5 h-7 inline-flex items-center gap-1.5 rounded-lg bg-white/[0.07] border border-white/10 font-bold text-white/90 whitespace-nowrap shrink-0 ${co.length > 8 ? "text-[12px]" : "text-[13px]"}`}>
+                    {co}{(myRealName || user?.displayName) && <span className="text-white/60 font-semibold">{myRealName || user?.displayName}{myProfileDoc?.position ? ` ${myProfileDoc.position}` : ""}</span>}
                   </span>
                 )}
                 {/* 🛰 2026-11-10 버전 표시·새 버전 안내는 왼쪽 메뉴(KpSubNav) 머리·맨 아래로 옮김 */}
@@ -8995,26 +9001,12 @@ return (
 
           {/* 우측 유저 영역 */}
           <div className="flex items-center gap-2 shrink-0 justify-end min-[1800px]:min-w-[180px]">
-            <NameIdToggle name={myRealName || user?.displayName || ""} id={user?.email || ""} className="text-white/60 hover:text-white text-[12px] font-semibold hidden min-[1800px]:block max-w-[150px]" />
-            <MailHeaderButton company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY) : (userCompany || DEFAULT_COMPANY)} myName={myRealName} />
-            {/* ⭐ 2026-11-02 원격지원 — 머리말 도움 버튼 */}
-            {role !== "totalMaster" && (
-              <button onClick={openRemoteSupport} className="kp-icon-btn transition" title="원격 지원 요청" aria-label="원격 지원 요청" data-testid="support-open-header">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{SUPPORT_ICON}</svg>
-              </button>
-            )}
-            <button
-              onClick={() => { setMyInfoNameDraft(myRealName); setMyInfoPhoneDraft(myPhone); setShowMyInfo(true); }}
-              className="kp-icon-btn transition"
-              title="내 정보"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="8" r="4" />
-                <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
-              </svg>
-            </button>
-            {/* ⭐ 2026-11-05 종 — 기사 알림함(수락/거절·서류·긴급 숫자) · 알림 켜기/끄기·알림음은 패널 안으로 */}
-            <DriverEventBell enabled={notificationsEnabled} onToggleEnabled={setNotificationsEnabled} onView={onDriverEventView} isAdmin={drvMe.isAdmin} />
+            {/* 🧭 2026-11-16 메일 · 원격 지원 · 내 정보 · 기사 알림 → [내 메뉴] 버튼 하나(마우스를 올리면 목록). 메일함 · 알림함 창은 그대로(버튼만 숨김) */}
+            <MailHeaderButton company={role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || DEFAULT_COMPANY) : (userCompany || DEFAULT_COMPANY)} myName={myRealName} className="hidden" />
+            <DriverEventBell enabled={notificationsEnabled} onToggleEnabled={setNotificationsEnabled} onView={onDriverEventView} isAdmin={drvMe.isAdmin} className="hidden" />
+            <UserHub name={[myRealName || user?.displayName || "", myProfileDoc?.position || ""].filter(Boolean).join(" ")} mailUnread={mailCountsNav.unread || 0}
+              showSupport={role !== "totalMaster"} onSupport={openRemoteSupport}
+              onMyInfo={() => { setMyInfoNameDraft(myRealName); setMyInfoPhoneDraft(myPhone); setShowMyInfo(true); }} />
 
             {/* ⭐ 최고관리자 · 부관리자 — 관리자 관리센터(플랫폼 운영 화면)로 바로 전환
                  🛠 2026-11-15 경리 · 영업 · 인사 화면으로 바꿔도 보이게(지금 화면 역할이 아니라 실제 권한으로 본다) */}
