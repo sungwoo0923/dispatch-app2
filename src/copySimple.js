@@ -3,11 +3,13 @@
 //  예)  11/13 에이제이-베베숲 평택 야상
 //       대전88아8987  김영관  010-5251-7468
 //       충북84아1177  이준희  010-6349-7054
-//  · 머리말 한 줄(날짜 · 상차지-하차지 · 구분) 아래에 기사 줄을 이어 붙인다. 날짜 · 구간 · 구분이 같은 오더는 한 묶음
+//  · 머리말 한 줄(날짜 · 상차지-하차지 · 구분 · 톤수 · 대수) 아래에 기사 줄을 이어 붙인다. 날짜 · 거래처 · 구간 · 구분 · 톤수가 같은 오더는 한 묶음
 //  · 구분은 시간으로 자동 판단(dayTag) — 야상: 전날 18시 이후(또는 새벽 5시 전) 상차 · 당착: 상차한 날 도착 · 익착: 다음 날 도착
 //  · 문구 틀은 회사마다 바꿀 수 있다: companySettings/{회사}.copyTemplates.simple = { header, line }
 //  ⚠ 다른 파일을 가져오지 않는다(테스트에서 그대로 읽음)
-export const SIMPLE_DEFAULT = { header: "{날짜} {상차지}-{하차지} {구분}", line: "{차량번호}  {기사명}  {연락처}" };
+// 🛠 2026-11-16 머리말에 톤수 · 대수("11톤 7대") · 줄은 한 칸씩 띄움. 같은 날짜 · 거래처 · 구간 · 구분 · 톤수끼리 한 묶음
+export const SIMPLE_DEFAULT = { header: "{날짜} {상차지}-{하차지} {구분} {톤수} {건수}대", line: "{차량번호} {기사명} {연락처}" };
+const OLD_HEADER = "{날짜} {상차지}-{하차지} {구분}"; // 예전 기본 틀은 새 기본으로 올린다
 export const SIMPLE_VARS = [["날짜", "월/일 (야상은 도착하는 날)"], ["상차지", "상차지명"], ["하차지", "하차지명"], ["구분", "야상 · 당착 · 익착 (시간으로 자동)"], ["거래처", "거래처명"], ["건수", "그 묶음의 오더 수"],
   ["차량번호", "차량번호"], ["기사명", "기사 이름"], ["연락처", "기사 연락처"], ["톤수", "차량톤수"], ["차종", "차량종류"], ["상차시간", "상차시간"], ["하차시간", "하차시간"], ["운임", "청구운임"]];
 
@@ -36,24 +38,25 @@ export function dayTag(o) {
 }
 // 머리말에 쓰는 날짜 — 야상은 도착하는 날(하차일), 그 밖에는 상차일
 export const headDate = (o) => (dayTag(o) === "야상" ? md(o?.하차일) : md(o?.상차일 || o?.하차일));
-const fill = (tpl, vars) => String(tpl || "").replace(/\{([^{}\s]+)\}/g, (m, k) => (k in vars ? String(vars[k] ?? "") : m)).replace(/[ \t]+$/gm, "").replace(/ {3,}/g, "  ");
+const fill = (tpl, vars) => String(tpl || "").replace(/\{([^{}\s]+)\}/g, (m, k) => (k in vars ? String(vars[k] ?? "") : m)).replace(/[ \t]+$/gm, "").replace(/ {2,}/g, " "); // 빈칸은 한 칸
+const tonText = (t) => { const v = String(t || "").trim(); return /^\d+(\.\d+)?$/.test(v) ? `${v}톤` : v; };
 const fmtPhone = (p) => { const d = String(p || "").replace(/\D/g, ""); return d.length === 11 ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}` : d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}` : String(p || ""); };
 const won = (v) => { const n = Number(String(v ?? "").replace(/[^\d.-]/g, "")); return Number.isFinite(n) && n ? n.toLocaleString("ko-KR") : ""; };
 export function simpleVars(o) {
   return {
     날짜: headDate(o), 상차지: String(o?.상차지명 || "").trim(), 하차지: String(o?.하차지명 || "").trim(), 구분: dayTag(o), 거래처: String(o?.거래처명 || "").trim(),
     차량번호: String(o?.차량번호 || "").trim() || "(미배차)", 기사명: String(o?.이름 || o?.기사명 || "").trim(), 연락처: fmtPhone(o?.전화번호),
-    톤수: String(o?.차량톤수 || "").trim(), 차종: String(o?.차량종류 || "").trim(), 상차시간: String(o?.상차시간 || "").trim(), 하차시간: String(o?.하차시간 || "").trim(), 운임: won(o?.청구운임),
+    톤수: tonText(o?.차량톤수), 차종: String(o?.차량종류 || "").trim(), 상차시간: String(o?.상차시간 || "").trim(), 하차시간: String(o?.하차시간 || "").trim(), 운임: won(o?.청구운임),
   };
 }
 // orders: 고른 오더(고른 순서) · tpl: { header, line } (비면 기본 틀)
 export function buildSimpleList(orders, tpl = {}) {
-  const header = typeof tpl?.header === "string" && tpl.header.trim() ? tpl.header : SIMPLE_DEFAULT.header;
+  const header = typeof tpl?.header === "string" && tpl.header.trim() && tpl.header.trim() !== OLD_HEADER ? tpl.header : SIMPLE_DEFAULT.header;
   const line = typeof tpl?.line === "string" && tpl.line.trim() ? tpl.line : SIMPLE_DEFAULT.line;
   const groups = [];
   (orders || []).filter(Boolean).forEach((o) => {
     const v = simpleVars(o);
-    const key = [v.날짜, v.상차지, v.하차지, v.구분].join("|");
+    const key = [v.날짜, v.거래처, v.상차지, v.하차지, v.구분, v.톤수].join("|");
     let g = groups.find((x) => x.key === key);
     if (!g) { g = { key, head: v, lines: [] }; groups.push(g); }
     g.lines.push(v);

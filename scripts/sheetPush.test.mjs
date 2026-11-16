@@ -21,6 +21,26 @@ const sheet = () => ({
 const formulasOf = (tabs) => Object.fromEntries(Object.entries(tabs).map(([t, rows]) => [t, rows.map((r, i) => r.map((v, c) => (t === "아산 내수" && i >= 4 && [9, 12, 13].includes(c) ? `=X${i + 1}` : v)))]));
 const ctxOf = (tabs = sheet()) => makePushContext(Object.entries(tabs).map(([title, rows]) => ({ title, rows })), JY, formulasOf(tabs));
 
+// 🗓 2026-11-16 입고시간(당착 · 월착 · 시간) · 마감월(26년11월) · 운송사 칸(이미 적힌 업체는 덮지 않음 → 프로그램 값 우선)
+{
+  const tabs = { "평택 내수": [["▣ 평택"], [""], ["", "", "", "", "매출", "", "매입"], ["상차일자", "출발지", "도착지", "입고시간", "운송료", "합계", "운송료", "합계", "마감월", "운송사", "차량번호", "이름", "연락처"],
+    ["2026. 11. 5", "평택", "이천", "", "88,000", "88,000", "60,000", "60,000", "26년11월", "전국특송", "경기33다3333", "박삼", "010-3333-4444"]] };
+  const ctx = makePushContext(Object.entries(tabs).map(([title, rows]) => ({ title, rows })), JY, {});
+  const doc = forOrderDoc(ctx.built.orders[0], { company: "JY로지스틱스", batchId: "t" });
+  assert.equal(doc.배차방식 ? true : true, true);
+  const u = planUpdate(ctx, doc, { ...doc, 배차방식: "기사직통" });
+  assert.equal(u.ok, true); assert.ok(!u.cells.some((c) => c.a1.startsWith("J")), "운송사 칸(전국특송)은 그대로");
+  assert.ok(u.docPatch._programKeys.includes("배차방식"), "배차방식은 프로그램 값 우선(_programKeys)");
+  const c = planCreate(ctx, { 상차일: "2026-11-14", 하차일: "2026-11-14", 상차지명: "평택", 하차지명: "이천", 청구운임: "90000", 기사운임: "70000", 배차방식: "기사직통" }, "평택 내수", { rowCount: 100 });
+  const m = Object.fromEntries(c.cells.map((x) => [x.a1, x.value]));
+  assert.equal(c.ok, true); assert.equal(m.D6, "당착"); assert.equal(m.I6, "26년11월"); assert.equal(m.J6, "기사직통");
+  const c2 = planCreate(ctx, { 상차일: "2026-11-13", 하차일: "2026-11-16", 상차지명: "평택", 하차지명: "이천", 청구운임: "90000", 기사운임: "70000" }, "평택 내수", { rowCount: 100 });
+  assert.equal(Object.fromEntries(c2.cells.map((x) => [x.a1, x.value])).D7, "월착", "금요일 상차 · 월요일 하차 = 월착");
+  const c3 = planCreate(ctx, { 상차일: "2026-11-15", 하차일: "2026-11-15", 하차시간: "14:00", 상차지명: "평택", 하차지명: "이천", 청구운임: "90000", 기사운임: "70000" }, "평택 내수", { rowCount: 100 });
+  assert.equal(Object.fromEntries(c3.cells.map((x) => [x.a1, x.value])).D8, "14:00", "시간이 있으면 시간");
+  console.log("입고시간 · 마감월 · 운송사 OK");
+}
+
 // ── 계산(core) ─────────────────────────────────────────────
 {
   const ctx = ctxOf();
@@ -44,7 +64,7 @@ const ctxOf = (tabs = sheet()) => makePushContext(Object.entries(tabs).map(([tit
   assert.deepEqual(pickTab(ctx, neu, []), { tab: "아산 내수" }); // 같은 거래처 · 상차지가 이 탭에만
   const c = planCreate(ctx, neu, "아산 내수", { rowCount: 100 });
   assert.equal(c.ok, true); assert.equal(c.row, 7);
-  assert.deepEqual(Object.fromEntries(c.cells.map((x) => [x.a1, x.value])), { A7: "2026-11-14", B7: "신봉길101", C7: "충남 천안시 성정동 12", H7: "90000", K7: "80000", P7: "원콜", Q7: "충남77사7777", R7: "최사", S7: "01055556666", U7: "신규" });
+  assert.deepEqual(Object.fromEntries(c.cells.map((x) => [x.a1, x.value])), { A7: "2026-11-14", B7: "신봉길101", C7: "충남 천안시 성정동 12", H7: "90000", K7: "80000", O7: "26년11월", P7: "원콜", Q7: "충남77사7777", R7: "최사", S7: "01055556666", U7: "신규" });
   assert.equal(c.docPatch.이전출처, "아산 내수!7"); assert.equal(c.docPatch.시트연동, true);
   assert.ok(!c.docPatch._programKeys.includes("청구운임") && !c.docPatch._programKeys.includes("차량번호"));
   assert.equal(planCreate(ctx, neu, "아산 내수", { rowCount: 7 }).needRows, 1); // 다음 빈 줄(8행)이 없으면 줄을 늘려야 한다

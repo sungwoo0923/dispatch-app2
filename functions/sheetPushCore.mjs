@@ -15,7 +15,26 @@ const uniq = (a) => [...new Set(a)];
 const empty = (v) => v == null || v === "" || (Array.isArray(v) && !v.length);
 
 // 시트에 쓸 수 있는 칸(탭 양식에 그 칸이 있을 때)
-export const PUSH_FIELDS = ["상차일", "하차일", "상차시간", "하차시간", "상차지명", "상차지주소", "하차지명", "하차지주소", "화물내용", "차량톤수", "차량종류", "차량번호", "이름", "전화번호", "청구운임", "기사운임", "배차방식", "배차상태", "메모"];
+export const PUSH_FIELDS = ["상차일", "하차일", "상차시간", "하차시간", "상차지명", "상차지주소", "하차지명", "하차지주소", "화물내용", "차량톤수", "차량종류", "차량번호", "이름", "전화번호", "청구운임", "기사운임", "배차방식", "배차상태", "메모", "마감월"];
+
+// 🗓 2026-11-16 입고시간 칸 — 시간이 있으면 시간, 없으면 날짜로 당착 · 야상 · 월착 · 익착(시트에서 읽는 규칙과 같은 말)
+const dayN = (a, b) => { const A = Date.parse(`${a}T00:00:00Z`), B = Date.parse(`${b}T00:00:00Z`); return Number.isFinite(A) && Number.isFinite(B) ? Math.round((B - A) / 86400000) : null; };
+const dowOf = (d) => new Date(`${d}T00:00:00Z`).getUTCDay();
+const hourOf = (t) => { const m = /^(\d{1,2}):/.exec(cell(t)); return m ? Number(m[1]) : null; };
+export function arriveTag(o, arrival = false) {
+  const up = cell(o?.상차일), down = cell(o?.하차일 || o?.상차일);
+  const d = up && down ? dayN(up, down) : null;
+  if (d === 0) return "당착";
+  const h = hourOf(o?.상차시간);
+  if (d === 1 && arrival && h != null && (h >= 18 || h < 5)) return "야상";
+  if (d === 3 && dowOf(up) === 5 && dowOf(down) === 1) return "월착";
+  if (d === 1) return arrival ? "야상" : "익착";
+  return "";
+}
+// 마감월 "2026-11" → 시트 글 "26년11월"
+export const closeLabel = (ym) => { const m = /^(\d{4})-(\d{2})$/.exec(cell(ym)); return m ? `${m[1].slice(2)}년${Number(m[2])}월` : ""; };
+// 시트 줄에 넣을 오더 — 마감월이 없으면 그 날짜 칸의 달(해당 월)로
+const withClose = (o, arrival) => (cell(o?.마감월) ? o : { ...o, 마감월: String((arrival ? o?.하차일 || o?.상차일 : o?.상차일) || "").slice(0, 7) });
 // 바뀌어도 시트와 견주지 않는 칸(연동 표시 · 탭 이름에서 오는 값)
 const NOT_WATCHED = new Set(["이전출처", "담당노선구분", "등록일", "_sheetKeys", "_programKeys", "_sheetBase", "importBatchId", "작성자", "등록기기", "companyName", "_id"]);
 const MONEY = new Set(["청구운임", "기사운임", "수수료", "특수기사차감", "특수청구추가", "외부지급합"]);
@@ -129,11 +148,20 @@ function fieldEdits(k, o, env) {
     case "상차일": return arrival ? null : one(L.cols.date, o.상차일);
     case "하차일": return arrival ? one(L.cols.date, o.하차일) : one(L.cols.arriveDate, o.하차일);
     case "상차시간": return one(L.cols.time, o.상차시간);
-    case "하차시간": { const c = col(L.cols.arriveTime); if (c == null) return null; const cur = cell(row[c]); return cur && !parseTime(cur) ? null : [{ c, v: cell(o.하차시간) }]; } // "당착" · "야상" 같은 글자가 적힌 칸은 건드리지 않는다
+    case "하차시간": { // 🗓 2026-11-16 시간이면 시간, 아니면 날짜로 당착 · 야상 · 월착(프로그램 날짜가 기준)
+      const c = col(L.cols.arriveTime); if (c == null) return null; // 입고시간 칸이 있는 탭만
+      const v = cell(o.하차시간) || arriveTag(o, arrival);
+      if (!v) { const cur = cell(row[c]); return cur && !parseTime(cur) ? null : [{ c, v: "" }]; }
+      return [{ c, v }];
+    }
+    case "마감월": { const v = closeLabel(o.마감월); return v ? one(L.cols.close, v) : null; }
     case "차량번호": return one(L.cols.plate, o.차량번호);
     case "이름": return one(L.cols.name, o.이름);
     case "전화번호": return one(L.cols.phone, o.전화번호);
-    case "배차방식": return one(L.cols.carrier, o.배차방식);
+    case "배차방식": { // 🟪 2026-11-16 시트 운송사 칸에 이미 업체가 적혀 있으면 덮지 않는다 — 프로그램 값이 우선(오더에 _programKeys로 남고 화면에 보라색)
+      const c = col(L.cols.carrier); if (c == null) return null;
+      return cell(row[c]) ? null : [{ c, v: cell(o.배차방식) }];
+    }
     case "배차상태": return one(L.cols.status, o.배차상태);
     case "청구운임": return fareEdits(L.sale, row, o.청구운임);
     case "기사운임": return fareEdits(L.buy, row, o.기사운임);
@@ -232,7 +260,7 @@ function fitEdits(ctx, title, rowNo, baseRow, target, fields, env) {
     const writeRow = [...baseRow];
     byField.forEach((list) => list.forEach((x) => { if (!x.virtual) writeRow[x.c] = x.v; }));
     if (!d.o) return { row, writeRow, d, fields: [...byField.keys()] }; // 줄 자체가 오더로 읽히지 않는다 — 부른 쪽이 되돌린다
-    const bad = [...byField.keys()].filter((k) => !sameValue(k, d.o[k], target[k]));
+    const bad = [...byField.keys()].filter((k) => !sameValue(k, d.o[k], target[k]) || (k === "하차시간" && (!sameValue("하차일", d.o.하차일, target.하차일) || !sameValue("상차일", d.o.상차일, target.상차일))));
     if (!bad.length) return { row, writeRow, d, fields: [...byField.keys()] };
     d.undo();
     bad.forEach((k) => byField.delete(k));
@@ -251,7 +279,9 @@ export function planUpdate(ctx, before, after, opts = {}) {
   const base = padRow(tabIn(ctx, title).rows[rowNo - 1], layoutOf(ctx, title)?.header.length || 0);
   const env = envFor(ctx, title, rowNo, base, cur);
   if (!env) return fail("이 탭의 칸 배치를 읽지 못했습니다");
-  const fit = fitEdits(ctx, title, rowNo, base, after, changed.filter((k) => PUSH_FIELDS.includes(k)), env);
+  const pushKeys = changed.filter((k) => PUSH_FIELDS.includes(k));
+  if ((changed.includes("상차일") || changed.includes("하차일") || changed.includes("상차시간")) && !pushKeys.includes("하차시간")) pushKeys.push("하차시간"); // 날짜가 바뀌면 입고시간(당착 · 야상 · 월착)도
+  const fit = fitEdits(ctx, title, rowNo, base, after, pushKeys, env);
   if (!fit || !fit.d.o) { fit?.d.undo(); return fail("고친 값을 쓰면 시트의 그 줄을 오더로 읽을 수 없게 됩니다"); }
   ctx.built = fit.d.built;
   const o = fit.d.o;
@@ -299,9 +329,10 @@ export function planCreate(ctx, order, title, { rowCount = 0, atRow = 0 } = {}) 
   if (rowCount && rowNo > rowCount) return fail("탭에 빈 줄이 없습니다", { needRows: rowNo - rowCount });
   const base = padRow(t.rows[i], width);
   const env = envFor(ctx, title, rowNo, base, null);
-  const fields = PUSH_FIELDS.filter((k) => !empty(order[k]) || k === "상차일");
-  const fit = fitEdits(ctx, title, rowNo, base, order, fields, env);
   const arrival = (ctx.preset.arrivalDateTabs || []).includes(title);
+  const order0 = order; order = withClose(order, arrival); // 마감월 = 해당 월(26년11월)
+  const fields = PUSH_FIELDS.filter((k) => !empty(order[k]) || k === "상차일" || k === "하차시간");
+  const fit = fitEdits(ctx, title, rowNo, base, order, fields, env);
   if (!fit || !fit.d.o) { fit?.d.undo(); return fail("이 탭에 줄을 만들지 못했습니다(날짜 · 구간을 시트 양식으로 옮길 수 없음)"); }
   const o = fit.d.o;
   if (!arrival && o.상차일 !== order.상차일) { fit.d.undo(); return fail("상차일을 시트에 그대로 쓸 수 없습니다"); }
@@ -312,7 +343,7 @@ export function planCreate(ctx, order, title, { rowCount = 0, atRow = 0 } = {}) 
   // 시트에서 읽히는 값이 프로그램 값과 다른 칸은 프로그램 값을 둔다(등록일 · 하차일 · 거래처명 등) — 탭에서 오는 값(이전출처 · 담당노선구분)만 시트를 따른다
   keys.forEach((k) => { if (k === "이전출처" || k === "담당노선구분") return; if (!sameValue(k, order[k], o[k])) { pk.push(k); sb[k] = o[k]; } });
   return { ok: true, kind: "create", tab: title, row: rowNo, cells: cellsOf(title, rowNo, base, fit.writeRow), pushed: fit.fields.filter((k) => sameValue(k, o[k], order[k])), unpushed: fields.filter((k) => !sameValue(k, o[k], order[k])),
-    docPatch: { 이전출처: `${title}!${rowNo}`, 담당노선구분: title, 시트연동: true, _sheetKeys: keys, _programKeys: pk, _sheetBase: sb } };
+    docPatch: { 이전출처: `${title}!${rowNo}`, 담당노선구분: title, 시트연동: true, _sheetKeys: keys, _programKeys: pk, _sheetBase: sb, ...(!cell(order0.마감월) && cell(o.마감월) === cell(order.마감월) ? { 마감월: order.마감월 } : {}) } };
 }
 
 // ── 삭제(그 줄의 값만 비운다 · 수식 칸은 그대로) ──────────────────────────

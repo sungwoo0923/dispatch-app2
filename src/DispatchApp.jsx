@@ -2984,7 +2984,11 @@ const InvoiceFormEditor = React.lazy(() => import("./InvoiceFormEditor")); // �
 import { pickForm, visibleCols, headerLabels } from "./invoiceForm";
 import { closeBoard as closeBoardOf, approvePatch as closeApprovePatch, rejectPatch as closeRejectPatch } from "./closeFlow"; // ✅ 2026-11-16 배차 마감 → 거래처정산
 import { CloseStrip, viewStage } from "./SettleDesk";
-import UserHub from "./UserHub"; // 🧭 2026-11-16 상단바 [내 메뉴] 하나로(메일 · 알림 · 내 정보 · 원격 지원)
+import UserHub from "./UserHub";
+// 🟪 2026-11-16 구글시트(운송사 칸)와 다른 배차방식을 프로그램에서 고른 오더 — 프로그램 값 우선 · 칸을 보라색으로
+const sheetWayDiff = (o) => !!o && !!o.이전출처 && Array.isArray(o._programKeys) && o._programKeys.includes("배차방식");
+const SHEET_DIFF_STYLE = { background: "#EDE4FF", borderColor: "#8B5CF6", color: "#5B21B6", fontWeight: 800 };
+const sheetWayTitle = (o) => `구글시트 운송사: ${o?._sheetBase?.배차방식 || "-"} · 프로그램 값(${o?.배차방식 || "-"})을 씁니다`; // 🧭 2026-11-16 상단바 [내 메뉴] 하나로(메일 · 알림 · 내 정보 · 원격 지원)
 import { useNewVersion } from "./VersionCheck";
 import { hardReloadForUpdate } from "./UpdateBanner";
 import { textifyOrder } from "./orderText"; // 🛠 2026-11-16 숫자로 저장된 글자 칸(차량번호 등) → 글자 // ✅ 2026-11-16 2단계 마감 — 배차현황 › 월 마감(배차자 1차) · 정산관리 › 마감 검증(경리 2차)
@@ -16021,14 +16025,14 @@ React.useEffect(() => {
       onChange={(e) => onChange("하차일", e.target.value)}
     />
     {copyDateHint && (
-      <div className="absolute z-50 left-0 top-[calc(100%+8px)] w-72 bg-white border-2 border-[#1B2B4B] rounded-xl shadow-2xl">
+      <div className="absolute z-50 left-0 top-[calc(100%+8px)] w-[340px] whitespace-normal bg-white border-2 border-[#1B2B4B] rounded-xl shadow-2xl">{/* 🛠 2026-11-16 글이 상자 밖으로 넘어가지 않게(부모 nowrap 무시) */}
         <div className="absolute -top-[9px] left-4 w-4 h-4 bg-white border-l-2 border-t-2 border-[#1B2B4B] rotate-45" />
         <div className="flex items-center justify-between px-4 pt-3 pb-1.5">
           <span className="text-[13px] font-bold text-[#1B2B4B]">하차일 확인</span>
           <button type="button" onClick={() => setCopyDateHint(null)} className="text-gray-500 hover:text-gray-600 text-base w-6 h-6 flex items-center justify-center">×</button>
         </div>
         <div className="px-4 pb-4">
-          <p className="text-[12px] text-gray-600 mb-3 leading-relaxed">
+          <p className="text-[12.5px] text-gray-600 mb-3 leading-relaxed whitespace-normal break-keep">
             원본 오더는 <span className="font-bold text-[#1B2B4B]">{copyDateHint.origDrop}</span> 하차였습니다. 현재 하차일을 확인해 주세요.
           </p>
           <div className="flex gap-2">
@@ -29893,12 +29897,14 @@ const openDailyCloseIssueDetail = (rowId) => {
       // 이미 저장된 옛 데이터도 여기서 같이 정규화해 "선택"이 보이게 한다.
       const dispatchVal = val === "선택없음" ? "" : (val || "");
       return (
-        <DispatchWayPicker scope={(() => { const o = (rows || []).find((r) => r._id === rowId); return [o?.거래처명, o?.상차지명, o?.하차지명]; })()} className="border rounded px-1 py-0.5 w-full text-center" value={dispatchVal} dir={(rows || []).find((r) => r._id === rowId)?.콜구분 || ""} onPick={(pk) => {
+        <span className="block" title={sheetWayDiff((rows || []).find((r) => r._id === rowId)) ? sheetWayTitle((rows || []).find((r) => r._id === rowId)) : undefined}>
+        <DispatchWayPicker scope={(() => { const o = (rows || []).find((r) => r._id === rowId); return [o?.거래처명, o?.상차지명, o?.하차지명]; })()} className="border rounded px-1 py-0.5 w-full text-center" style={sheetWayDiff((rows || []).find((r) => r._id === rowId)) ? SHEET_DIFF_STYLE : undefined} value={dispatchVal} dir={(rows || []).find((r) => r._id === rowId)?.콜구분 || ""} onPick={(pk) => {
             const next = pk.배차방식 ?? "";
             const extra = pk.콜구분 !== undefined ? { 콜구분: pk.콜구분, 콜플랫폼: pk.콜플랫폼 || "" } : null; // 💳 IN/OUT도 같이 저장
             if (next === dispatchVal && !extra) return;
             setConfirmChange({ rowId, key: "배차방식", before: dispatchVal, after: next, ...(extra ? { extra } : {}) });
           }} />
+        </span>
       );
     }
     if (key === "차량종류") {
@@ -30426,7 +30432,7 @@ const head = isDark
   </div>
   <div className="flex items-center gap-2 bg-white border border-[#1B2B4B]/20 px-4 py-2 rounded-xl shadow-sm">
     <span className="text-[12px] font-medium text-gray-500">수수료</span>
-    <span className="text-[15px] font-extrabold text-[#1B2B4B]">{kpi.fee.toLocaleString()}원</span>
+    <span className="text-[15px] font-extrabold" style={{ color: kpi.fee < 0 ? "#2457D6" : kpi.fee > 0 ? "#D92D20" : "#1B2B4B" }}>{kpi.fee.toLocaleString()}원</span>{/* 🎨 2026-11-16 수수료 — 플러스 빨강 · 마이너스 파랑 */}
   </div>
 </div>
 
@@ -34287,7 +34293,8 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           <button
             className="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold text-[#2A3852] hover:bg-[#0F1A30] hover:text-white flex items-center gap-2.5 transition-colors"
             onClick={() => {
-              setSelected([contextMenu.row._id]);
+              // 📋 2026-11-16 여러 건을 골라 둔 상태면 그대로(1건만 복사되던 문제)
+              if (!(selected.length > 1 && selected.includes(contextMenu.row._id))) setSelected([contextMenu.row._id]);
               setCopyModalOpen(true);
               setContextMenu(null);
             }}
@@ -34851,7 +34858,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
         ];
         return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-            <div className="bg-white w-full max-w-md rounded-t-2xl pb-8 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="bg-white w-full max-w-[540px] rounded-t-2xl pb-8 shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="flex justify-center pt-3 pb-2"><div className="w-10 h-1 rounded-full bg-gray-200" /></div>
               <div className="px-5 pb-3 border-b border-gray-100 flex items-center justify-between">
                 <div className="font-bold text-[15px] text-[#1B2B4B]">복사 형식 선택</div>
@@ -40331,7 +40338,7 @@ return (
         </div>
         <div className="flex items-center gap-2 bg-white border border-[#1B2B4B]/20 px-4 py-2 rounded-xl shadow-sm">
           <span className="text-[12px] font-medium text-gray-500">수수료</span>
-          <span className="text-[15px] font-extrabold text-[#1B2B4B]">{summary.totalFee.toLocaleString()}원</span>
+          <span className="text-[15px] font-extrabold" style={{ color: summary.totalFee < 0 ? "#2457D6" : summary.totalFee > 0 ? "#D92D20" : "#1B2B4B" }}>{summary.totalFee.toLocaleString()}원</span>
         </div>
         {/* 구분선 */}
         <div className="w-px h-8 bg-gray-300 mx-1 shrink-0" />
@@ -40885,7 +40892,7 @@ return (
 
 
                   <td className="border text-center">
-                    <DispatchWayPicker scope={[row?.거래처명, row?.상차지명, row?.하차지명]} placeholder="선택없음" noneLabel="선택없음" className="border rounded px-1 py-0.5 w-full text-center" value={row.배차방식 === "선택없음" ? "" : (row.배차방식 || "")} dir={row.콜구분 || ""}
+                    <DispatchWayPicker scope={[row?.거래처명, row?.상차지명, row?.하차지명]} placeholder="선택없음" noneLabel="선택없음" className="border rounded px-1 py-0.5 w-full text-center" style={sheetWayDiff(row) ? SHEET_DIFF_STYLE : undefined} title={sheetWayDiff(row) ? sheetWayTitle(row) : undefined} value={row.배차방식 === "선택없음" ? "" : (row.배차방식 || "")} dir={row.콜구분 || ""}
                       onPick={(pk) => handleImmediateSelectChange(row, "배차방식", pk.배차방식 ?? "", pk.콜구분 !== undefined ? { 콜구분: pk.콜구분, 콜플랫폼: pk.콜플랫폼 || "" } : null)} />
                   </td>
 
@@ -44226,7 +44233,7 @@ setCopyPlaceOptions(list);
       {/* 기사복사 선택 모달 */}
       {copyModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-          <div className="bg-white rounded-2xl shadow-2xl w-[320px] overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl w-[min(480px,calc(100vw-32px))] overflow-hidden">
             <div className="bg-[#1B2B4B] px-5 py-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.복사 방식 선택" defaultText="복사 방식 선택" /></h3>
@@ -44990,7 +44997,7 @@ setCopyPlaceOptions(list);
             onCopyDriver={() => {
               const rawCargo = String(r.화물내용 || ""); const rawTon = String(r.차량톤수 || ""); const tonMatch = rawTon.match(/([\d.]+)(.*)/);
               setCopyTarget({ ...r, 화물내용: rawCargo, 화물수량: rawCargo, 화물타입: "", 톤수값: tonMatch ? tonMatch[1] : "", 톤수타입: tonMatch ? tonMatch[2] : "" });
-              setSelected(new Set([_id])); setCopyModalOpen(true);
+              setSelected((p) => (p.size > 1 && p.has(_id) ? p : new Set([_id]))); setCopyModalOpen(true);
             }}
             onInfo={() => setOrderInfoRow5(r)}
             onOpenSheet={fixedActions?.sheetUrl ? () => window.open(fixedActions.sheetUrl, "_blank", "noopener") : null}
@@ -45029,7 +45036,7 @@ setCopyPlaceOptions(list);
               const rawTon = String(r.차량톤수 || "");
               const tonMatch = rawTon.match(/([\d.]+)(.*)/);
               setCopyTarget({ ...r, 화물내용: rawCargo, 화물수량: _cNum, 화물타입: _cType, 톤수값: tonMatch ? tonMatch[1] : "", 톤수타입: tonMatch ? tonMatch[2] : "" });
-              setSelected(new Set([getId(r)]));
+              setSelected((p) => (p.size > 1 && p.has(getId(r)) ? p : new Set([getId(r)])));
               setCopyModalOpen(true);
               setContextMenuDS(null);
             }}>
