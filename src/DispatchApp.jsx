@@ -2982,7 +2982,8 @@ const SettleHome = React.lazy(() => import("./SettleHome")); // 🧭 정산 홈(
 const CloseFlow = React.lazy(() => import("./CloseFlow"));
 const MonthClose = React.lazy(() => import("./MonthClose")); // ✅ 2026-11-16 월 마감 리디자인(배차자 1차 — 범위 고르기 · 시각화 · 그 자리에서 고치기)
 const InvoiceFormEditor = React.lazy(() => import("./InvoiceFormEditor")); // 🧾 2026-11-16 거래처별 명세서 양식
-import { pickForm, visibleCols, headerLabels } from "./invoiceForm"; // ✅ 2026-11-16 2단계 마감 — 배차현황 › 월 마감(배차자 1차) · 정산관리 › 마감 검증(경리 2차)
+import { pickForm, visibleCols, headerLabels } from "./invoiceForm";
+import { textifyOrder } from "./orderText"; // 🛠 2026-11-16 숫자로 저장된 글자 칸(차량번호 등) → 글자 // ✅ 2026-11-16 2단계 마감 — 배차현황 › 월 마감(배차자 1차) · 정산관리 › 마감 검증(경리 2차)
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "./orderHistoryCache";
 import { effectiveScope, scopeAllows, isOfficeBaseMenu } from "./workScope";
 import BizSwitcher from "./freight/BizSwitcher";
@@ -4062,7 +4063,7 @@ function useRealtimeCollections(user, userCompany, role) {
         const docs = snap.docs; const out = new Array(docs.length);
         for (let i = 0; i < docs.length; i++) {
           if (i && i % 400 === 0) await new Promise((r) => setTimeout(r, 0));
-          const d = docs[i]; const data = d.data() || {};
+          const d = docs[i]; const data = textifyOrder(d.data() || {});
           out[i] = {
             __col: col, ...data, _id: d.id,
             경유지_상차: parseWaypointsShared(data.경유지_상차) || parseWaypointsShared(data.경유상차목록) || [],
@@ -4187,7 +4188,8 @@ function useRealtimeCollections(user, userCompany, role) {
         if (!outside.length && !staleInside.length) return prev;
         const next = new Map(prev);
         staleInside.forEach(({ col, id }) => next.delete(`${col}/${id}`)); // 최근 범위로 옮겨온 오더는 실시간 쪽만 남김
-        outside.forEach(({ col, id, data }) => {
+        outside.forEach(({ col, id, data: data0 }) => {
+          const data = textifyOrder(data0);
           const key = `${col}/${id}`;
           const excluded = data.source === "transport_transmit" || data.배차상태 === "배차취소" ||
             ["취소", "배차취소", "오더취소", "취소됨"].includes(data.상태);
@@ -4413,7 +4415,7 @@ const liveWindowStart = pcLiveWindowStart(); // ★ 13개월 → 최근 7일~(�
     }
     return null;
   };
-  const buildOrderRow = (id, data) => ({
+  const buildOrderRow = (id, data0, data = textifyOrder(data0)) => ({ // 🛠 2026-11-16 숫자 글자 칸 맞추기
     __col: collName,
     ...data,
     _id: id, // ★ 실제 문서 번호가 항상 이긴다(복사로 딸려 온 _id 무시)
@@ -4622,7 +4624,7 @@ const liveWindowStart = pcLiveWindowStart(); // ★ 13개월 → 최근 7일~(�
   const dispatchRowMap = new Map();
   const dispatchRawPrev = new Map();
   // ⭐ 2026-10-29: 문서 안의 _id(복사로 딸려 온 값)가 실제 문서 번호를 덮지 않게 실제 번호를 마지막에 둔다
-  const buildDispatchRow = (id, data) => ({
+  const buildDispatchRow = (id, data0, data = textifyOrder(data0)) => ({ // 🛠 2026-11-16 숫자 글자 칸 맞추기
     __col: "dispatch",
     ...data,
     _id: id,

@@ -37,6 +37,7 @@ import { LoginManagerModal } from "../LoginManager";
 import { useCompanyInfo } from "../companyInfo"; // ⭐ 2026-11-02 속도 — RateCard(엑셀 라이브러리 포함) 대신 작은 파일에서
 // ⭐ 2026-11-02 속도 — 안 쓰던 import(지입차 지도·지도운임·팔레트) 제거 → leaflet·지도 데이터가 첫 로딩에서 빠짐. 자주 안 여는 화면은 열 때 받는다
 import { lazyView } from "../lazyLoad";
+import { textifyOrder } from "../orderText"; // 🛠 2026-11-16 숫자로 저장된 글자 칸(차량번호 등) → 글자
 const MonthCloseM = lazyView(() => import("../MonthClose")); // ✅ 2026-11-16 월 마감(배차자 1차) — 휴대폰 화면(PC와 같은 화면 · 카드 · 아래에서 올라오는 고치기 창)
 const MobileAttendanceBoard = lazyView(() => import("./MobileAttendanceBoard"));
 const MobileIntelView = lazyView(() => import("./MobileIntelView"));
@@ -2740,13 +2741,13 @@ const quickRange = (days) => {
     //    이어서 서버에서 최신본을 받아 덮어쓴다(삭제·수정된 오더도 서버 기준으로 맞춰짐).
     Promise.all(["dispatch", "orders"].map((col) =>
       getDocsFromCache(makeQuery(collection(db, col))).then((snap) =>
-        snap.docs.map((d) => ({ __col: col, ...d.data(), _id: d.id, id: d.id }))).catch(() => [])))
+        snap.docs.map((d) => ({ __col: col, ...textifyOrder(d.data()), _id: d.id, id: d.id }))).catch(() => [])))
       .then((parts) => { const rows = parts.flat().filter((o) => o.source !== "transport_transmit"); if (rows.length) mergeExtra(rows, { urgent }); })
       .catch(() => {});
     try {
       const snaps = await Promise.all(["dispatch", "orders"].map((col) =>
         getDocs(makeQuery(collection(db, col))).then((snap) =>
-          snap.docs.map((d) => ({ __col: col, ...d.data(), _id: d.id, id: d.id })))));
+          snap.docs.map((d) => ({ __col: col, ...textifyOrder(d.data()), _id: d.id, id: d.id })))));
       const rows = snaps.flat().filter((o) => o.source !== "transport_transmit");
       mergeExtra(rows, { urgent });
       return rows;
@@ -2810,7 +2811,7 @@ const quickRange = (days) => {
         outside.forEach(({ col, id, data }) => {
           const key = `${col}/${id}`;
           if (data.source === "transport_transmit") { next.delete(key); return; }
-          next.set(key, { __col: col, ...data, _id: id, id });
+          next.set(key, { __col: col, ...textifyOrder(data), _id: id, id });
         });
         return next;
       })),
@@ -3123,9 +3124,9 @@ collections.forEach((name) => {
       //  덮어쓰면 원본·복사본이 같은 번호가 되어 카드가 겹쳐 여러 장 보였다 — 실제 문서 번호를 항상 마지막에 둔다.
       snap.docChanges().forEach((ch) => {
         if (ch.type === "removed") objCache.delete(ch.doc.id);
-        else objCache.set(ch.doc.id, { __col: name, ...ch.doc.data(), _id: ch.doc.id, id: ch.doc.id });
+        else objCache.set(ch.doc.id, { __col: name, ...textifyOrder(ch.doc.data()), _id: ch.doc.id, id: ch.doc.id });
       });
-      const allMapped = snap.docs.map((d) => objCache.get(d.id) || { __col: name, ...d.data(), _id: d.id, id: d.id })
+      const allMapped = snap.docs.map((d) => objCache.get(d.id) || { __col: name, ...textifyOrder(d.data()), _id: d.id, id: d.id })
         .filter((o) => o.source !== "transport_transmit");
       const list = allMapped.filter((o) => !isCancelledOrder(o));
       // ⭐ 취소내역 화면용 — 같은 스냅샷에서 취소 상태인 것만 따로 모은다(리스너 중복 없이).
@@ -3328,7 +3329,7 @@ const refreshFromServer = React.useCallback(async ({ force = false, since, manua
     let failed = 0;
     let doneJobs = 0;
     const results = await Promise.all(jobs.map((j) => getDocsFromServer(j.q)
-      .then((snap) => ({ j, rows: snap.docs.map((d) => ({ __col: j.col, ...d.data(), _id: d.id, id: d.id })) }))
+      .then((snap) => ({ j, rows: snap.docs.map((d) => ({ __col: j.col, ...textifyOrder(d.data()), _id: d.id, id: d.id })) }))
       .catch(() => { failed += 1; return { j, rows: [] }; })
       .finally(() => { doneJobs += 1; stage({ server: Math.round((doneJobs / jobs.length) * 100) }); })));
     if (failed === jobs.length) throw new Error("all failed");
