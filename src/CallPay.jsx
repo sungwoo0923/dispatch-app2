@@ -267,8 +267,10 @@ export function queuePayNotice({ row, date, company, patchDispatch }) {
 }
 
 // 배차현황 [정산] 알약 · 입금 확인 [입금처리]를 누르면 뜨는 창 — 고친 내용은 아래 [저장] / [입금완료]를 눌러야 반영된다
-export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company = "", evidenceApi }) {
+//  🧾 2026-11-16 others = 배차현황에서 같이 체크한 다른 오더 — 계산서 날짜를 바꾸면 체크한 오더 모두에 똑같이 넣는다(업체 요청)
+export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company = "", evidenceApi, others = [] }) {
   const id = row?._id || row?.id;
+  const [withOthers, setWithOthers] = React.useState(true);
   const init = () => ({ dir: callDir(row), platform: row?.콜플랫폼 || "", inv: row?.계산서일 || "", depDate: row?.입금일 || row?.입금증빙?.date || today(), depName: row?.입금자명 || row?.입금증빙?.payer || row?.계산서스캔?.payer || "", billMemo: row?.청구메모 || "", depMemo: row?.입금메모 || "" });
   const [f, setF] = React.useState(init);
   const [busy, setBusy] = React.useState(false);
@@ -289,6 +291,10 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
     if (deposited && !out) { await setCallDeposit({ row, done: false, patchDispatch, company }); } // IN으로 바꾸면 입금 기록도 지운다
     await patchDispatch(id, { ...basePatch(), ...(deposited && out ? { 입금일: f.depDate || today(), 입금자명: f.depName.trim().slice(0, 40), 입금메모: f.depMemo.trim().slice(0, 200) } : {}), __system: true });
     if (deposited && out && f.depDate !== (row?.입금일 || "")) await setCallDeposit({ row, done: true, date: f.depDate, name: f.depName, txnId: row?.입금거래id || "", memo: f.depMemo, patchDispatch, company }); // 장부 날짜도 맞춘다
+    if (invMany && f.inv !== (row?.계산서일 || "")) { // 체크한 다른 오더도 같은 계산서 날짜로
+      for (const o of bulkRows) await patchDispatch(o._id || o.id, { 계산서일: f.inv, ...(isCaughtCall(o) ? { 청구메모: f.inv ? (f.billMemo.trim() || "계산서 일괄 발행").slice(0, 200) : "" } : {}), __system: true });
+      onClose?.();
+    }
   });
   const deposit = () => run(async () => {
     if (needMemo("depMemo", "입금완료")) return;
@@ -297,6 +303,9 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
     onClose?.();
   });
   const undo = () => run(async () => { if (!(await kpConfirm("입금완료를 취소할까요? 수입·지출 장부에 자동으로 들어간 줄도 함께 지워집니다."))) return; await setCallDeposit({ row, done: false, patchDispatch, company }); });
+  // 같이 체크한 오더 — 입금완료 · 지급완료 건은 빼고 계산서 날짜만 맞춘다
+  const bulkRows = (others || []).filter((o) => (o._id || o.id) !== id && o.입금상태 !== "입금완료" && o.지급상태 !== "지급완료");
+  const invMany = withOthers && bulkRows.length > 0;
   const amt = vatOf(out ? row?.청구운임 : row?.기사운임);
   // 🧾 증빙서류 스캔 결과 → 정산 창에 바로 반영 + 오더에 저장(계산서 발행일 · 계산서스캔 / 이체확인증이면 입금일 · 입금자명)
   const onScanned = async (scan) => {
@@ -351,6 +360,15 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
             {canEdit && f.inv && <button type="button" disabled={busy} onClick={() => set("inv", "")} className="text-[12px] font-bold text-[#9AA9C3] hover:text-red-600">지우기</button>}
             {out && (() => { const lb = deposited ? "입금완료" : f.inv ? "청구완료" : "미청구"; const c = OUT_STAGE_COLORS[lb]; return <span data-out-stage={lb} className="ml-auto inline-flex items-center h-7 px-2.5 rounded-full text-[12px] font-black" style={{ background: c.bg, color: c.fg, border: `1px solid ${c.bd}` }}>{lb}</span>; })()}
           </Row>
+          {bulkRows.length > 0 && (
+            <Row label="같이 바꾸기">
+              <label className="inline-flex items-center gap-2 text-[13px] font-bold text-[#0F1A30] cursor-pointer" data-pay-many>
+                <input type="checkbox" checked={withOthers} disabled={!canEdit || busy} onChange={(e) => setWithOthers(e.target.checked)} className="w-4 h-4 accent-[#1B2B4B]" />
+                체크한 다른 오더 {bulkRows.length}건도 같은 계산서 날짜로 바꾸기
+              </label>
+              <span className="basis-full text-[11.5px] font-semibold text-[#9AA9C3]">입금완료 · 지급완료 오더는 빼요. 날짜를 정하고 [저장]을 누르면 {bulkRows.length + 1}건이 한 번에 바뀌어요.</span>
+            </Row>
+          )}
           {out && f.inv && (
             <Row label="청구 메모">
               <input value={f.billMemo} disabled={!canEdit || busy} onChange={(e) => set("billMemo", e.target.value)} placeholder="청구완료 메모(필수) — 예: 11/12 메일로 계산서 발행" autoComplete="off" data-bill-memo
@@ -391,7 +409,7 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
           <span className="flex-1 min-w-0 text-[11.5px] font-semibold text-[#7A8AA8] leading-snug">{dirty ? <b className="text-[#B54708]">저장하지 않은 변경이 있습니다</b> : "아래 증빙서류에 계산서를 올리면 발행일 · 금액 · 입금자명이 자동으로 들어갑니다."}</span>
           {canEdit && out && deposited && <button type="button" disabled={busy} onClick={undo} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#9A1F15] whitespace-nowrap">입금 취소</button>}
           <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#3A4A66]">닫기</button>
-          {canEdit && <button type="button" disabled={busy || !dirty} onClick={save} data-pay-save className="h-10 px-5 rounded-xl border border-[#1B2B4B] bg-white text-[13px] font-black text-[#1B2B4B] disabled:opacity-40">{busy ? "저장 중…" : "저장"}</button>}
+          {canEdit && <button type="button" disabled={busy || !dirty} onClick={save} data-pay-save className="h-10 px-5 rounded-xl border border-[#1B2B4B] bg-white text-[13px] font-black text-[#1B2B4B] disabled:opacity-40">{busy ? "저장 중…" : invMany && f.inv !== (row?.계산서일 || "") ? `${bulkRows.length + 1}건 저장` : "저장"}</button>}
           {canEdit && out && !deposited && <button type="button" disabled={busy} onClick={deposit} data-pay-deposit className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-40 whitespace-nowrap">입금완료</button>}
         </div>
       </div>

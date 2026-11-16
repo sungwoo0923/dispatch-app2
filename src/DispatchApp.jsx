@@ -40993,7 +40993,8 @@ return (
         </table>
       </div>
       <StickyHScrollbar targetRef={dsTableWrapRef} />
-      {payOn && payPopId && (() => { const pr = (dispatchData || []).find((x) => getId(x) === payPopId); return pr ? <PayPopup row={pr} onClose={() => setPayPopId("")} patchDispatch={patchDispatch} canEdit={!isViewer} company={userCompany} /> : null; })()}
+      {payOn && payPopId && (() => { const pr = (dispatchData || []).find((x) => getId(x) === payPopId); return pr ? <PayPopup row={pr} onClose={() => setPayPopId("")} patchDispatch={patchDispatch} canEdit={!isViewer} company={userCompany}
+        others={selected.has(payPopId) && selected.size > 1 ? (dispatchData || []).filter((x) => selected.has(getId(x))) : []} /> : null; })()}
       {dsLongPress.selectMode && (
         <KpSelectModeBar count={selected.size} onSelectAll={() => setSelected(new Set(pageRows.map((r) => getId(r))))} onClear={() => setSelected(new Set())} onExit={() => dsLongPress.setSelectMode(false)} />
       )}
