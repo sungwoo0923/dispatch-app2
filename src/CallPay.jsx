@@ -300,11 +300,23 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
     if (needMemo("depMemo", "입금완료")) return;
     await patchDispatch(id, { ...basePatch(), ...(f.inv ? {} : { 계산서일: f.depDate || today() }), ...(f.billMemo.trim() ? {} : { 청구메모: "입금으로 확인" }), __system: true });
     await setCallDeposit({ row, done: true, date: f.depDate, name: f.depName, memo: f.depMemo, patchDispatch, company });
+    if (withOthers) for (const o of depMany) { // 체크한 다른 OUT 오더도 같이 입금완료
+      await patchDispatch(o._id || o.id, { ...(o.계산서일 ? {} : { 계산서일: f.inv || f.depDate || today() }), ...(o.청구메모 ? {} : { 청구메모: f.billMemo.trim().slice(0, 200) || "입금으로 확인" }), __system: true });
+      await setCallDeposit({ row: o, done: true, date: f.depDate, name: f.depName, memo: f.depMemo, patchDispatch, company });
+    }
     onClose?.();
   });
-  const undo = () => run(async () => { if (!(await kpConfirm("입금완료를 취소할까요? 수입·지출 장부에 자동으로 들어간 줄도 함께 지워집니다."))) return; await setCallDeposit({ row, done: false, patchDispatch, company }); });
+  const undo = () => run(async () => {
+    const n2 = withOthers ? undoMany.length : 0;
+    if (!(await kpConfirm(`입금완료를 취소할까요?${n2 ? `\n체크한 다른 오더 ${n2}건도 같이 취소돼요.` : ""} 수입·지출 장부에 자동으로 들어간 줄도 함께 지워집니다.`))) return;
+    await setCallDeposit({ row, done: false, patchDispatch, company });
+    if (n2) { for (const o of undoMany) await setCallDeposit({ row: o, done: false, patchDispatch, company }); onClose?.(); }
+  });
   // 같이 체크한 오더 — 입금완료 · 지급완료 건은 빼고 계산서 날짜만 맞춘다
-  const bulkRows = (others || []).filter((o) => (o._id || o.id) !== id && o.입금상태 !== "입금완료" && o.지급상태 !== "지급완료");
+  const otherRows = (others || []).filter((o) => (o._id || o.id) !== id);
+  const bulkRows = otherRows.filter((o) => o.입금상태 !== "입금완료" && o.지급상태 !== "지급완료");
+  const depMany = otherRows.filter((o) => isCaughtCall(o) && o.입금상태 !== "입금완료"); // [입금완료] 같이 — OUT 오더만
+  const undoMany = otherRows.filter((o) => o.입금상태 === "입금완료"); // [입금 취소] 같이
   const invMany = withOthers && bulkRows.length > 0;
   const amt = vatOf(out ? row?.청구운임 : row?.기사운임);
   // 🧾 증빙서류 스캔 결과 → 정산 창에 바로 반영 + 오더에 저장(계산서 발행일 · 계산서스캔 / 이체확인증이면 입금일 · 입금자명)
@@ -360,13 +372,13 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
             {canEdit && f.inv && <button type="button" disabled={busy} onClick={() => set("inv", "")} className="text-[12px] font-bold text-[#9AA9C3] hover:text-red-600">지우기</button>}
             {out && (() => { const lb = deposited ? "입금완료" : f.inv ? "청구완료" : "미청구"; const c = OUT_STAGE_COLORS[lb]; return <span data-out-stage={lb} className="ml-auto inline-flex items-center h-7 px-2.5 rounded-full text-[12px] font-black" style={{ background: c.bg, color: c.fg, border: `1px solid ${c.bd}` }}>{lb}</span>; })()}
           </Row>
-          {bulkRows.length > 0 && (
+          {otherRows.length > 0 && (
             <Row label="같이 바꾸기">
               <label className="inline-flex items-center gap-2 text-[13px] font-bold text-[#0F1A30] cursor-pointer" data-pay-many>
                 <input type="checkbox" checked={withOthers} disabled={!canEdit || busy} onChange={(e) => setWithOthers(e.target.checked)} className="w-4 h-4 accent-[#1B2B4B]" />
-                체크한 다른 오더 {bulkRows.length}건도 같은 계산서 날짜로 바꾸기
+                체크한 다른 오더 {otherRows.length}건도 같이 바꾸기
               </label>
-              <span className="basis-full text-[11.5px] font-semibold text-[#9AA9C3]">입금완료 · 지급완료 오더는 빼요. 날짜를 정하고 [저장]을 누르면 {bulkRows.length + 1}건이 한 번에 바뀌어요.</span>
+              <span className="basis-full text-[11.5px] font-semibold text-[#9AA9C3]">[저장] 계산서 날짜 → {bulkRows.length + 1}건{out ? ` · [입금완료] → ${depMany.length + 1}건` : ""}{undoMany.length ? ` · [입금 취소] → ${undoMany.length + (deposited ? 1 : 0)}건` : ""}이 한 번에 바뀌어요. 이미 끝난 단계의 오더는 그 버튼에서 빠져요.</span>
             </Row>
           )}
           {out && f.inv && (
@@ -407,10 +419,10 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
         </div>
         <div className="px-5 py-3.5 bg-[#F7F9FC] border-t border-[#EEF2F8] flex items-center gap-2 shrink-0">
           <span className="flex-1 min-w-0 text-[11.5px] font-semibold text-[#7A8AA8] leading-snug">{dirty ? <b className="text-[#B54708]">저장하지 않은 변경이 있습니다</b> : "아래 증빙서류에 계산서를 올리면 발행일 · 금액 · 입금자명이 자동으로 들어갑니다."}</span>
-          {canEdit && out && deposited && <button type="button" disabled={busy} onClick={undo} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#9A1F15] whitespace-nowrap">입금 취소</button>}
+          {canEdit && out && deposited && <button type="button" disabled={busy} onClick={undo} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#9A1F15] whitespace-nowrap">{withOthers && undoMany.length ? `${undoMany.length + 1}건 입금 취소` : "입금 취소"}</button>}
           <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#3A4A66]">닫기</button>
           {canEdit && <button type="button" disabled={busy || !dirty} onClick={save} data-pay-save className="h-10 px-5 rounded-xl border border-[#1B2B4B] bg-white text-[13px] font-black text-[#1B2B4B] disabled:opacity-40">{busy ? "저장 중…" : invMany && f.inv !== (row?.계산서일 || "") ? `${bulkRows.length + 1}건 저장` : "저장"}</button>}
-          {canEdit && out && !deposited && <button type="button" disabled={busy} onClick={deposit} data-pay-deposit className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-40 whitespace-nowrap">입금완료</button>}
+          {canEdit && out && !deposited && <button type="button" disabled={busy} onClick={deposit} data-pay-deposit className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-40 whitespace-nowrap">{withOthers && depMany.length ? `${depMany.length + 1}건 입금완료` : "입금완료"}</button>}
         </div>
       </div>
     </div>,
