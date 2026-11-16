@@ -24,12 +24,12 @@ const row = (c) => B.find((r) => r.client === c);
 assert.deepEqual(B.map((r) => r.client).sort(), ["가나상사", "다라물산", "마바"]);
 assert.equal(row("가나상사").sale, 200000, "취소 · 다른 달 제외");
 assert.equal(row("가나상사").prevSale, 100000); assert.equal(row("가나상사").bigDiff, true, "지난달보다 100% → 알림");
-assert.deepEqual([row("다라물산").checks.blank.length, row("다라물산").checks.dup.length], [1, 1], "손실은 빈칸에서 뺀다 · 중복 1건");
+assert.deepEqual([row("다라물산").checks.blank.length, row("다라물산").checks.dup], [1, undefined], "손실은 빈칸에서 뺀다 · 같은 날 같은 구간은 검사하지 않는다(흔한 일)");
 assert.deepEqual([row("마바").checks.noDriver.length, row("마바").checks.unassigned.length], [1, 1]);
-assert.deepEqual([row("가나상사").block, row("다라물산").block, row("마바").block, row("마바").warn], [0, 2, 1, 1]);
+assert.deepEqual([row("가나상사").block, row("다라물산").block, row("마바").block, row("마바").warn], [0, 1, 1, 1]);
 assert.deepEqual(B.filter((r) => r.mine).map((r) => r.client).sort(), ["가나상사", "마바"], "내 거래처 = 내가 등록한 오더가 있는 곳");
 // 흐름: 1차 마감 → 승인 / 반려 → 다시 마감
-assert.ok(canVerify(row("가나상사")) && !canVerify(row("다라물산")), "고칠 것이 있으면 검증 못 함");
+assert.ok(canVerify(row("가나상사")) && canVerify(row("다라물산")), "확인할 것이 있어도 검증할 수 있다(화면이 묻는다)");
 assert.ok(!canSubmit(row("가나상사")), "검증 전에는 1차 마감 못 함");
 const docs = new Map();
 const closeOf = (c, m) => docs.get(`${c}|${m}`) || null;
@@ -62,7 +62,7 @@ assert.equal(ap.status, "approved"); assert.equal(unlockPatch(row("가나상사"
 assert.deepEqual(closeCounts(closeBoard(orders, "2026-10", { me, today, closeOf })), { none: 2, verified: 0, submitted: 1, rejected: 0, approved: 0 });
 // 일 마감 — 그날 내 오더만
 const D = dayBoard(orders, "2026-10-05", me, today);
-assert.deepEqual([D.count, D.sale, D.block, D.warn], [2, 150000, 1, 1], "같은 날 같은 구간 · 같은 차량은 거래처가 달라도 중복 · 기사운임 빈칸은 알림");
+assert.deepEqual([D.count, D.sale, D.block, D.warn], [2, 150000, 0, 1], "같은 날 같은 구간은 검사 안 함 · 기사운임 빈칸은 알림");
 assert.equal(closeChecks([o({ 상차일: "2026-12-01", 배차상태: "배차중" })], today).unassigned.length, 0, "앞으로 올 날짜는 미배차 아님");
 
 // 거래명세서 양식

@@ -15,11 +15,12 @@ export const CLOSE_STATUS = {
 };
 export const statusOf = (doc) => (doc && CLOSE_STATUS[doc.status] ? doc.status : "none");
 
-// 자동 검사 — block 은 고치기 전까지 1차 마감을 못 하고, warn 은 표시만 한다
+// 자동 검사 — 🛠 2026-11-16 모두 "확인할 것"(막지 않음). 그대로 맞는 오더도 있어서 검증은 확인 후 언제든 할 수 있다.
+//  같은 날 같은 구간 중복 검사는 뺐다(하루에 같은 구간을 여러 번 도는 일이 흔하다 — 사용자 요청)
+//  block: true 는 빨강(꼭 봐야 할 것) · false 는 주황 — 표시 색만 다르다
 export const CLOSE_RULES = [
   { key: "blank", label: "청구운임 빈칸", desc: "청구운임이 0원이에요", block: true },
   { key: "unassigned", label: "배차 미완료", desc: "지난 날짜인데 아직 배차완료가 아니에요", block: true },
-  { key: "dup", label: "같은 날 같은 구간 중복", desc: "날짜 · 상차지 · 하차지 · 차량이 같은 오더가 또 있어요", block: true },
   { key: "noDriver", label: "기사운임 빈칸", desc: "청구운임은 있는데 기사운임이 0원이에요", block: false }, // 🧹 2026-11-16 역마진 검사는 뺐다(사용자 요청)
 ];
 export const DIFF_LIMIT = 0.3; // 지난달보다 30% 넘게 차이 나면 알려 준다
@@ -43,18 +44,12 @@ export const isMine = (o, me) => {
 
 // 한 묶음(거래처 × 월 또는 배차자 × 날짜) 오더의 자동 검사
 export function closeChecks(rows, today = kstToday()) {
-  const out = { blank: [], unassigned: [], dup: [], noDriver: [] };
-  const seen = new Map();
+  const out = { blank: [], unassigned: [], noDriver: [] };
   (rows || []).forEach((o) => {
     const pay = String(o.지급방식 || "");
     if (n(o.청구운임) <= 0 && !/손실|착불/.test(pay)) out.blank.push(o);
     if ((o.배차상태 || "") !== "배차완료" && String(o.상차일 || "") < today) out.unassigned.push(o);
     if (n(o.청구운임) > 0 && n(o.기사운임) <= 0 && !/손실|착불/.test(pay)) out.noDriver.push(o);
-    const car = String(o.차량번호 || "").replace(/\s/g, "");
-    if (car) {
-      const k = [o.상차일, o.상차지명 || o.상차지, o.하차지명 || o.하차지, car].map((x) => String(x || "").replace(/\s/g, "")).join("|");
-      if (seen.has(k)) out.dup.push(o); else seen.set(k, o);
-    }
   });
   return out;
 }
@@ -98,9 +93,9 @@ export function closeBoard(orders, ym, { closeOf = () => null, me = null, today 
 
 // 지금 할 수 있는 일
 // 검증: 고칠 것이 없고(검증 전 · 반려 · 검증 뒤 금액이 바뀜 · 마감 뒤 금액이 바뀜)
-export const canVerify = (row) => !!row && row.block === 0 && (row.status === "none" || row.status === "rejected" || ((row.status === "verified" || row.status === "submitted") && row.changed));
+export const canVerify = (row) => !!row && (row.status === "none" || row.status === "rejected" || ((row.status === "verified" || row.status === "submitted") && row.changed)); // 확인할 것이 있어도 된다(화면이 한 번 묻는다)
 // 1차 마감: 검증 완료이고 그 뒤로 금액이 그대로일 때만
-export const canSubmit = (row) => !!row && row.block === 0 && row.status === "verified" && !row.changed;
+export const canSubmit = (row) => !!row && row.status === "verified" && !row.changed;
 export const canApprove = (row) => !!row && row.status === "submitted" && !row.changed;
 export const canReject = (row) => !!row && (row.status === "submitted" || row.status === "approved");
 export const canUnlock = (row, mode) => !!row && (mode === "acct" ? row.status === "approved" || row.status === "submitted" : row.status === "submitted" || row.status === "verified");

@@ -464,6 +464,19 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
     catch (e) { window.alert(`처리하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); }
   };
   const picked = rows.filter((r) => sel.has(idOf(r)));
+  // 🧾 2026-11-16 계산서 발행 한 번에 — 고른 오더(없으면 지금 조회된 기간 · 업체의 미발행 오더 전부)에 계산서 발행일을 넣는다(업체 요청)
+  const issueInvoices = async () => {
+    if (isViewer) return window.alert("조회전용 권한으로는 처리할 수 없습니다.");
+    const base = picked.length ? picked : rows;
+    const list = base.filter((r) => !r.계산서일 && r.입금상태 !== "입금완료");
+    if (!list.length) return window.alert(picked.length ? "고른 오더는 이미 계산서가 발행됐어요." : "계산서를 발행할 오더가 없어요.");
+    const scope = picked.length ? `고른 ${list.length}건` : `지금 조회된 ${ap.q ? `"${ap.q}" ` : ""}${ap.from || ap.to ? `${ap.basis} ${ap.from || "처음"} ~ ${ap.to || "오늘"} ` : ""}미발행 ${list.length}건 전부`;
+    const memo = await kpPrompt(`${scope}을 계산서 발행(${date})으로 바꿀까요?\n청구 메모(선택)`, "계산서 일괄 발행", { title: "계산서 발행", placeholder: "예: 11월분 세금계산서 발행", okText: `${list.length}건 발행` });
+    if (memo == null) return;
+    setBusy(true);
+    try { for (const r of list) await patchDispatch(idOf(r), { 계산서일: date, 청구메모: String(memo || "").trim().slice(0, 200) || "계산서 일괄 발행", __system: true }); setSel(new Set()); }
+    catch (e) { window.alert(`처리하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); }
+  };
   const th = "px-3 py-2.5 text-[12.5px] font-bold text-white whitespace-nowrap text-center";
   const td = "px-3 py-2.5 text-[13px] text-[#0F1A30] whitespace-nowrap text-center border-t border-[#EEF2F8]";
   return (
@@ -513,7 +526,9 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
         <div className="basis-full h-0" />
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <span className="text-[12.5px] font-bold text-[#5B6B85]" style={NUM}>선택 {picked.length}건 · {won(sum(picked))}원</span>
-          {filter !== "done" && <><span className="text-[12.5px] font-bold text-[#5B6B85]">선택 건 입금일</span><DateField value={date} onChange={(v) => setDate(v || today())} />
+          {filter !== "done" && <><span className="text-[12.5px] font-bold text-[#5B6B85]">처리 날짜</span><DateField value={date} onChange={(v) => setDate(v || today())} />
+            <button type="button" disabled={busy || isViewer} data-dep-invoice onClick={issueInvoices} title="고른 오더(고르지 않으면 지금 조회된 기간 · 업체의 미발행 오더 전부)를 계산서 발행으로 바꿔요 — 발행일은 왼쪽 날짜"
+              className="h-9 px-4 rounded-lg border border-[#0F1A30] text-[#0F1A30] text-[13px] font-black disabled:opacity-40 whitespace-nowrap">{picked.length ? `선택 ${picked.length}건 계산서 발행` : "조회된 건 계산서 발행"}</button>
             <button type="button" disabled={busy || isViewer} onClick={() => run(picked.filter((r) => r.입금상태 !== "입금완료"), true)} className="h-9 px-4 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-40 whitespace-nowrap">{busy ? "처리 중…" : "선택 건 입금완료"}</button></>}
           {filter !== "done" && sugg.size > 0 && <button type="button" disabled={busy || isViewer} data-sugg-all onClick={() => applySugg(rows.filter((r) => sugg.get(idOf(r))?.nameHit))} title="입금자명까지 맞는 후보만 한 번에 입금완료 처리합니다"
             className="h-9 px-3.5 rounded-lg border border-[#2D4C82] text-[13px] font-black text-[#2D4C82] disabled:opacity-40 whitespace-nowrap">은행 입금 후보 {[...sugg.values()].filter((g) => g.nameHit).length}건 적용</button>}

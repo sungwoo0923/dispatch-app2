@@ -70,6 +70,9 @@ export const PRESET_SUGGESTIONS = {
     // 에이제이 탭 매출 H~K · 매입 L~O 사이 칸은 머리줄 이름이 없다(비고의 "대행료/50,000"과 같은 금액)
     //  2026-11-12: I칸(매출 2만원)은 이름을 정하지 않는다 — 입고시간이 야상인 줄이면 "야상", 아니면 "기타"
     extraNames: { 에이제이: { J: "대행료", M: "대행료" } },
+    // 🏗 2026-11-16 "대행료"(비고 "대행료/35,000")는 지게차비 — 거래처에 청구하고 지게차 기사에게 그대로 준다(지게차부담 "청구")
+    //  매출 · 매입에 같은 금액이 있으면 지게차비용으로, 기사운임(매입 합계)에서는 그 금액을 뺀다(배차 기사 몫이 아님)
+    forkliftExtraNames: ["대행료"],
     // 에이제이 탭: 상차일자 칸 = 하차일 · 베베숲 평택 = 평택초저온 · 에이제이 후문 = 에이제이 · 기사직통을 배차방식으로(직접배차는 뺌)
     arrivalDateTabs: ["에이제이"],
     placeAliases: { 에이제이: { "베베숲 평택": "평택초저온", 베베숲평택: "평택초저온", "평택 초저온": "평택초저온", "에이제이 후문": "에이제이", "에이제이 정문": "에이제이", "구성리 창고": "구성리창고", 구성리: "구성리창고", 구성창고: "구성리창고",
@@ -764,6 +767,7 @@ function rowToOrder(r, L, ctx) {
   const noteText = [...L.memo.map((c) => g(c)), ...L.notes.map((c) => g(c))].join(" ");
   const memoText = [noteText, ...tags].join(" ");
   const items = [];
+  let fk = 0; // 🏗 지게차비로 옮긴 금액(preset.forkliftExtraNames)
   (L.pairs || (L.pairs = pairExtras(L))).forEach((p) => {
     const amt = (c) => { const m = parseMoney(g(c)); return /착불/.test(m.note) ? 0 : m.n; }; // 착불 금액은 특수운임(청구)에 넣지 않는다
     const a = p.sale.reduce((s0, c) => s0 + amt(c), 0);
@@ -786,7 +790,8 @@ function rowToOrder(r, L, ctx) {
       return;
     }
     const both = Math.min(Math.max(a, 0), Math.max(b, 0));
-    if (both > 0) items.push({ 종류: kind, 이름: n, 금액: both, 받는사람: "기사", 부담: "청구", 메모: "구글시트 이전" });
+    if (both > 0 && (ctx.preset.forkliftExtraNames || []).includes(n)) fk += both; // 🏗 지게차비(거래처 청구 · 지게차 기사 지급)
+    else if (both > 0) items.push({ 종류: kind, 이름: n, 금액: both, 받는사람: "기사", 부담: "청구", 메모: "구글시트 이전" });
     if (a > both) items.push({ 종류: kind, 이름: n, 금액: a - both, 받는사람: "없음", 부담: "청구", 메모: both ? `구글시트 이전 · 청구 ${won(a)} 중 기사 지급 ${won(both)}` : "구글시트 이전 · 청구만" });
     if (b > both) items.push({ 종류: kind, 이름: n, 금액: b - both, 받는사람: "기사", 부담: "회사", 메모: both ? `구글시트 이전 · 기사 지급 ${won(b)} 중 청구 ${won(both)}` : "구글시트 이전 · 회사 부담" });
     if (b < 0 || a < 0) tags.push(`${n} ${won(a < 0 ? a : b)}`);
@@ -809,6 +814,9 @@ function rowToOrder(r, L, ctx) {
   if (상차시간기준) rec.상차시간기준 = 상차시간기준;
   if (경유하차.length) { rec.경유하차목록 = 경유하차; rec.경유지_하차 = 경유하차; }
   if (items.length) Object.assign(rec, { 특수운임: items, 특수기사차감: D, 특수청구추가: C, 외부지급합: 0 });
+  // 🏗 지게차비 — 청구운임엔 이미 들어 있다(지게차청구추가) · 기사운임(매입 합계)에서는 빼고 지게차 기사에게 따로 준다
+  //  수익 = 청구 − 기사 − 지게차(forkliftCore.js) → 시트 수수료와 같다
+  if (fk > 0) Object.assign(rec, { 기사운임: String(B.total - fk), 수수료: String(S.total - (B.total - fk) - fk), 지게차비용: fk, 지게차부담: "청구", 지게차청구추가: fk, 지게차기사차감: 0 });
   if (마감월) { rec.마감월 = 마감월; if (마감월 !== date.slice(0, 7)) rec.마감이월 = true; } // 날짜 칸의 달과 다르면 이월
   if (nameSplit.affiliation) rec.기사소속 = nameSplit.affiliation;
   if (grade) rec.차량구분 = cell(carrierRaw);

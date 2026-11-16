@@ -50253,7 +50253,11 @@ function UnassignedStatus({ dispatchData, setDispatchData = () => {}, drivers = 
   // 🧩 2026-11-16 월 마감에서 오더를 누르면 이 패널로(panelOnly 일 때만 듣는다)
   React.useEffect(() => {
     if (!panelOnly) return undefined;
-    const h = (e) => { const r = e.detail?.row; if (r) openUnEdit(r); };
+    const h = (e) => {
+      const r = e.detail?.row; if (!r) return;
+      if (e.detail?.isNew) { setCopyTarget({ 상차일: r.상차일 || "", 하차일: r.하차일 || r.상차일 || "", 거래처명: r.거래처명 || "", 배차상태: "배차중", 화물수량: "", 화물타입: "", 톤수값: "", 톤수타입: "", __newOrder: true }); setCopyPanelOpen(true); return; }
+      openUnEdit(r);
+    };
     window.addEventListener("kp-open-copy-panel", h);
     return () => window.removeEventListener("kp-open-copy-panel", h);
   });
@@ -50696,10 +50700,10 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
               <div className="sticky top-0 z-20 -mx-5 mb-1 flex justify-between items-center gap-3 px-5 py-2.5 text-white shadow-[0_6px_18px_rgba(11,20,40,0.25)]" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
                 <div className="min-w-0 flex-1">
                   <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>ORDER · COPY / EDIT</div>
-                  <h2 className="text-[18px] font-black leading-tight truncate"><EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" /> <span className="ml-1 text-[13.5px] font-semibold text-white/60">{copyTarget.거래처명} · {copyTarget.상차지명} → {copyTarget.하차지명}</span></h2>
+                  <h2 className="text-[18px] font-black leading-tight truncate">{copyTarget.__newOrder ? "오더 등록" : <EditableText id="copyPanel.title" defaultText="오더 복사 / 수정 패널" />} <span className="ml-1 text-[13.5px] font-semibold text-white/60">{copyTarget.거래처명} · {copyTarget.상차지명} → {copyTarget.하차지명}</span></h2>
                 </div>
                 <div className="flex gap-2 items-center shrink-0 [&_button]:whitespace-nowrap [&_button]:shrink-0">
-                  <button
+                  {!copyTarget.__newOrder && <button
                     onClick={async () => {
                       if (isViewer) { showToast("조회전용 권한으로는 수정할 수 없습니다.", "err"); return; }
                       if (!copyTarget?._id) { showToast("수정할 오더 ID가 없습니다.", "err"); return; }
@@ -50717,23 +50721,24 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     className="px-3.5 h-8 bg-white text-[#0F1A30] rounded-lg text-[13px] font-black hover:bg-[#EEF3FB] transition"
                   >
                     <EditableText id="copyPanel.수정저장" defaultText="수정 저장" />
-                  </button>
+                  </button>}
                   <button
                     onClick={async () => {
                       if (isViewer) { showToast("조회전용 권한으로는 등록할 수 없습니다.", "err"); return; }
                       if (!copyTarget) { showToast("복사할 데이터가 없습니다.", "err"); return; }
                       if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
-                      const ok = await submitCopyOrdersPC(copyTarget, approvedShippers, finalCargo); // ⭐ 2026-11-06 몇 건·날짜 고르기
+                      const { __newOrder: _isNew, ...copySrc } = copyTarget; // 🧩 2026-11-16 월 마감 [+ 오더 추가] — 같은 패널로 새 오더 등록
+                      const ok = await submitCopyOrdersPC(copySrc, approvedShippers, finalCargo); // ⭐ 2026-11-06 몇 건·날짜 고르기
                       if (ok === false) return;
-                      showToast(ok > 1 ? `${ok}건 복사 등록 완료` : "복사 등록 완료");
+                      showToast(_isNew ? (ok > 1 ? `${ok}건 등록 완료` : "오더 등록 완료") : ok > 1 ? `${ok}건 복사 등록 완료` : "복사 등록 완료");
                       setCopyPanelOpen(false);
                       if (copyTarget.상차지명) syncPlaceContactSimple(copyTarget.상차지명, copyTarget.상차지주소 || "", copyTarget.상차지담당자 || "", copyTarget.상차지담당자번호 || "");
                       if (copyTarget.하차지명) syncPlaceContactSimple(copyTarget.하차지명, copyTarget.하차지주소 || "", copyTarget.하차지담당자 || "", copyTarget.하차지담당자번호 || "");
                     }}
                     className="px-3.5 h-8 bg-[#8FB0F0] text-[#0B1428] rounded-lg text-[13px] font-black hover:bg-[#CFE0FF] transition"
                   >
-                    <EditableText id="copyPanel.복사등록" defaultText="복사 등록" />
+                    {copyTarget.__newOrder ? "등록" : <EditableText id="copyPanel.복사등록" defaultText="복사 등록" />}
                   </button>
                   <button onClick={() => setCopyPanelOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-white/25 text-white/70 hover:text-white hover:bg-white/10 transition text-lg">✕</button>
                 </div>
