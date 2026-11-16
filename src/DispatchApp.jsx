@@ -2979,10 +2979,11 @@ import { useRouteGroupFilter, RouteGroupBar, routeGroupOf, RouteGroupField, Shee
 import { settleStartTab } from "./settleStart";
 import { QuickOrderLine, useDriverSuggest, DriverSuggestCell, AssignConfirm } from "./SmartDispatchUI"; // ⭐ 2026-11-13 빠른 등록 · 추천 기사
 const SettleHome = React.lazy(() => import("./SettleHome")); // 🧭 정산 홈(처음 열 때 받는다)
-const CloseFlow = React.lazy(() => import("./CloseFlow"));
 const MonthClose = React.lazy(() => import("./MonthClose")); // ✅ 2026-11-16 월 마감 리디자인(배차자 1차 — 범위 고르기 · 시각화 · 그 자리에서 고치기)
 const InvoiceFormEditor = React.lazy(() => import("./InvoiceFormEditor")); // 🧾 2026-11-16 거래처별 명세서 양식
 import { pickForm, visibleCols, headerLabels } from "./invoiceForm";
+import { closeBoard as closeBoardOf, approvePatch as closeApprovePatch, rejectPatch as closeRejectPatch } from "./closeFlow"; // ✅ 2026-11-16 배차 마감 → 거래처정산
+import { CloseStrip } from "./SettleDesk";
 import { textifyOrder } from "./orderText"; // 🛠 2026-11-16 숫자로 저장된 글자 칸(차량번호 등) → 글자 // ✅ 2026-11-16 2단계 마감 — 배차현황 › 월 마감(배차자 1차) · 정산관리 › 마감 검증(경리 2차)
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "./orderHistoryCache";
 import { effectiveScope, scopeAllows, isOfficeBaseMenu } from "./workScope";
@@ -7869,7 +7870,7 @@ useEffect(() => {
   const [배차현황Tab, set배차현황Tab] = useState("배차현황");
   const [거래처관리Tab, set거래처관리Tab] = useState("하차지거래처");
   const [기사관리Tab, set기사관리Tab] = useState("d:전체"); // ▸ 기사관리 허브 — d:등급 / docs:driver / docs:penalty
-  const [정산관리Tab, set정산관리Tab] = useState(() => settleStartTab()); // 🧭 2026-11-14 정산 홈이 첫 화면(예전처럼 거래처정산부터 보려면 정산 홈 아래 체크)
+  const [정산관리Tab, set정산관리Tab] = useState(() => { const t = settleStartTab(); return t === "마감검증" ? "거래처정산" : t; }); // 🧭 2026-11-14 정산 홈이 첫 화면(예전처럼 거래처정산부터 보려면 정산 홈 아래 체크)
   const [deskAttachId, setDeskAttachId] = useState("");
   const betaPayOn = useBetaOn(getTenant() || userCompany); // 💳 2026-11-11 정산관리 › 입금 확인(시험 기능 — 테스트운송사)
   // ⭐ 내 정보 패널 ON/OFF
@@ -9541,8 +9542,8 @@ return (
 
         {정산관리Visited && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
           <div style={{ display: menu === "정산관리" ? undefined : "none" }}>
-          <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={정산관리Tab} onSelect={set정산관리Tab} actions={[{ key: "manual", label: "정산 매뉴얼", icon: "doc", onClick: () => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu: "정산관리", section: { 홈: "home", 마감검증: "review", 거래처정산: "billing", 지급관리: "payout", 입금확인: "deposit", 지입정산관리: "fleet", 지게차지급: "forklift" }[정산관리Tab] || "" } })) }]}
-            items={[{ key: "홈", label: "정산 홈", en: "OVERVIEW", icon: "dashboard" }, { key: "마감검증", label: "마감 검증", en: "REVIEW", icon: "check" }, { key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOn ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
+          <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={정산관리Tab} onSelect={set정산관리Tab} actions={[{ key: "manual", label: "정산 매뉴얼", icon: "doc", onClick: () => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu: "정산관리", section: { 홈: "home", 거래처정산: "billing", 지급관리: "payout", 입금확인: "deposit", 지입정산관리: "fleet", 지게차지급: "forklift" }[정산관리Tab] || "" } })) }]}
+            items={[{ key: "홈", label: "정산 홈", en: "OVERVIEW", icon: "dashboard" }, { key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOn ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
           <DetailScope data={salesDispatchData} getters={mainDetailGet} title="세부검색 · 정산관리">{(settleRows) => (<>
           {/* 🔎 2026-11-14 세부검색 버튼은 정산관리에서 뺐다(사용자 요청) */}
           {/* 거래명세서 검색/선택 상태 유지를 위해 지급관리 탭으로 전환해도 언마운트하지 않고 숨기기만 한다 */}
@@ -9566,11 +9567,7 @@ return (
           </div>
           {/* 🧭 정산 홈 — 월 마감 진행판 · 미수 경과 · 거래처 원장(기존 화면은 그대로, 여기서 바로 간다) */}
           {정산관리Tab === "홈" && <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><SettleHome orders={settleRows} company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} onGo={(k, d) => { set정산관리Tab(k); if (d) setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: d })), 60); }} depositOn={betaPayOn} /></React.Suspense>}
-          {/* ✅ 2026-11-16 마감 검증(경리 2차) — 배차자가 1차 마감한 거래처를 승인 · 반려 */}
-          {정산관리Tab === "마감검증" && <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><CloseFlow mode="acct" orders={settleRows} isViewer={isViewer} staffName={(o) => mainDetailGet.배차담당자(o)}
-            company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()}
-            me={{ email: user?.email || "", uid: user?.uid || "", name: userNameMap.get(user?.uid) || userNameMap.get(String(user?.email || "").toLowerCase()) || user?.displayName || user?.email || "" }}
-            onOpenInvoice={(client, ym) => { set정산관리Tab("거래처정산"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: { tab: "invoice", client, ym } })), 60); }} /></React.Suspense>}
+          {/* 🛠 2026-11-16 마감 검증 탭은 없앴다 — 배차자가 넘긴 거래처는 거래처정산에 "배차 마감"으로 보인다 */}
           {정산관리Tab === "지게차지급" && <ForkliftPayouts orders={settleRows} patchDispatch={patchDispatchSafe} isViewer={isViewer} />}
           {정산관리Tab === "입금확인" && betaPayOn && <CallDepositDesk orders={settleRows} patchDispatch={patchDispatchSafe} isViewer={isViewer} company={userCompany} onAttach={(r) => setDeskAttachId(r._id || r.id)} />}
           {/* 📎 입금 확인의 첨부 — 배차현황 첨부와 같은 창 · 같은 파일 */}
@@ -53457,7 +53454,25 @@ const handleBatchSettle = async (targetStatus) => {
   const emailOf = (name) => { const c = clientOf(name); return c?.연락처이메일 || c?.이메일 || ""; };
   // 청구할 오더(거래명세서 조회와 같은 조건: 배차완료 · 청구운임 > 0 · 고른 청구 사업자)
   const billRows = useMemo(() => (Array.isArray(dispatchData) ? dispatchData : []).filter(r => (r.배차상태 || "") === "배차완료" && toInt(r.청구운임) > 0 && r.거래처명 && csBizOk(r)), [dispatchData, csBizCur, csBiz.multi]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ✅ 2026-11-16 배차 마감(배차자 1차) — 마감 검증 탭 대신 여기서 거래처마다 보여 준다
+  const closeMaps = useMemo(() => new Map(), [dispatchData, desk.closes]); // eslint-disable-line react-hooks/exhaustive-deps
+  const closeMapOf = (ym) => {
+    if (!closeMaps.has(ym)) closeMaps.set(ym, new Map(closeBoardOf(dispatchData || [], ym, { closeOf: (c, m) => desk.closes?.get(`${c}|${m}`) || null }).map(r => [r.client, r])));
+    return closeMaps.get(ym);
+  };
+  const closeMe = () => ({ email: auth.currentUser?.email || "", name: auth.currentUser?.displayName || auth.currentUser?.email || "" });
+  const closeIdOf = (r) => r.doc?.id || arDeskId(arCompany, "close", r.client, r.ym);
+  // 경리가 명세서를 만들기 시작하면 배차 마감을 "경리 확인"으로(배차자 월 마감 화면에 보인다)
+  const ackClose = (c, ym) => { const r = closeMapOf(ym).get(c); if (!isViewer && r && r.status === "submitted" && !r.changed) desk.save(closeIdOf(r), closeApprovePatch(r, closeMe())).catch(() => {}); };
+  const returnClose = async (c, ym) => {
+    const r = closeMapOf(ym).get(c); if (!r || isViewer) return;
+    const why = await kpPrompt(`${c} ${Number(ym.slice(5))}월 배차 마감을 배차자에게 돌려보낼까요?\n돌려보내는 사유를 적어 주세요.`, "", { title: "배차자에게 돌려보내기", placeholder: "예: 11/12 평택 운임 확인 필요", okText: "돌려보내기" });
+    if (why == null || !String(why).trim()) return;
+    await desk.save(closeIdOf(r), closeRejectPatch(r, closeMe(), String(why).trim()));
+    sflowToast(`${c} 배차 마감을 돌려보냈어요`, "success");
+  };
   const groupsOfMonth = (ym) => {
+    const cm = closeMapOf(ym);
     const m = new Map();
     billRows.forEach(r => { if (String(r.상차일 || "").slice(0, 7) !== ym) return; if (!m.has(r.거래처명)) m.set(r.거래처명, []); m.get(r.거래처명).push(r); });
     return [...m.entries()].map(([c, rows]) => {
@@ -53469,7 +53484,7 @@ const handleBatchSettle = async (targetStatus) => {
       const vat = inc.reduce((a, r) => a + Math.round(toInt(r.청구운임) * 0.1), 0);
       const hist = d?.history || [];
       const lastAt = hist.length ? Math.max(...hist.map(h => (typeof h.at === "number" ? h.at : h.at?.seconds ? h.at.seconds * 1000 : 0))) : 0;
-      return { key: `${c}|${ym}`, client: c, yyyymm: ym, rows: inc, count: inc.length, supply, vat, total: supply + vat, prepaidOut: pp.excluded.length, stage: d?.stage || "미작성", doc: d, lastAt, email: emailOf(c), settled: rows.every(r => r.정산상태?.[ym] === "정산완료") };
+      return { close: cm.get(c) || null, key: `${c}|${ym}`, client: c, yyyymm: ym, rows: inc, count: inc.length, supply, vat, total: supply + vat, prepaidOut: pp.excluded.length, stage: d?.stage || "미작성", doc: d, lastAt, email: emailOf(c), settled: rows.every(r => r.정산상태?.[ym] === "정산완료") };
     });
   };
   const pipeGroups = useMemo(() => groupsOfMonth(pipeMonth), [billRows, pipeMonth, desk.stmts, clients, prepaidDefault]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -53480,6 +53495,7 @@ const handleBatchSettle = async (targetStatus) => {
     const at = date && date !== todayStr8() ? new Date(`${date}T12:00:00+09:00`).getTime() : Date.now();
     const history = [...(cur?.history || []), { stage, at, by: auth.currentUser?.email || "", ...(note ? { note } : {}) }].slice(-40);
     await desk.save(stmtDocId(c, ym), { kind: "stmt", client: c, yyyymm: ym, biz: csBizCur, stage, history, ...(extra || {}) });
+    if (stageIdx(stage) >= 1) ackClose(c, ym);
   };
   // 메일을 보낸 뒤 — 한 달짜리 명세서면 "발송"으로(이미 더 간 단계면 그대로)
   const markStmtSent = (c, s0, e0) => {
@@ -53862,6 +53878,7 @@ const handleBatchSettle = async (targetStatus) => {
               {/* 단계 — 한 달 · 한 거래처로 연 명세서만 */}
               {stmtYm ? (
                 <div className={`${csCard} px-4 py-3`}>
+                  {closeMapOf(stmtYm).get(client) && <div className="pb-2.5 mb-2.5 border-b border-[#EEF2F8]"><CloseStrip close={closeMapOf(stmtYm).get(client)} disabled={isViewer} onReturn={() => returnClose(client, stmtYm)} /></div>}
                   <StageStepper stage={stmtStage} history={stmtCur?.history || []} disabled={isViewer}
                     sentHint={stmtLogs[0]?.sentAt ? `${new Date(stmtLogs[0].sentAt + 9 * 3600e3).getUTCMonth() + 1}/${new Date(stmtLogs[0].sentAt + 9 * 3600e3).getUTCDate()}` : ""}
                     onSet={(k) => {
@@ -63699,12 +63716,8 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
   }, []);
   return (
     <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={tab} onSelect={setTab}
-      items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "마감검증", label: "마감 검증", en: "REVIEW", icon: "check" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOnM ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
-      {tab === "마감검증"
-        ? <React.Suspense fallback={null}><CloseFlow mode="acct" orders={dispatchData} isViewer={isViewer} company={companyName}
-            me={{ email: auth.currentUser?.email || "", uid: auth.currentUser?.uid || "", name: auth.currentUser?.displayName || auth.currentUser?.email || "" }}
-            onOpenInvoice={(client, ym) => { setTab("거래처정산"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: { tab: "invoice", client, ym } })), 60); }} /></React.Suspense>
-        : tab === "거래처정산"
+      items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOnM ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
+      {tab === "거래처정산"
         ? <ClientSettlement dispatchData={dispatchData} setDispatchData={() => {}} userCompany={companyName} clients={clients}
             setClients={(next) => (next || []).forEach(upsertClient)} upsertClient={upsertClient} showAlert={(m) => window.alert(m)}
             patchDispatch={isViewer ? async () => {} : patchDispatch} cardImage={cardImage} setCardImage={setCardImage}

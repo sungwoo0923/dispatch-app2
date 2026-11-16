@@ -76,13 +76,15 @@ export const STMT_STAGES = [
   { k: "미작성", label: "미작성", en: "TODO", hint: "아직 명세서를 만들지 않았어요" },
   { k: "작성", label: "작성", en: "DRAFT", hint: "명세서를 만들어 두었어요" },
   { k: "발송", label: "발송", en: "SENT", hint: "거래처에 보냈어요" },
-  { k: "확인", label: "거래처 확인", en: "CHECKED", hint: "거래처가 내역을 확인했어요" },
-  { k: "계산서요청", label: "계산서 요청", en: "TAX REQ", hint: "거래처가 계산서를 요청했어요" },
+  // 🛠 2026-11-16 opt — 직접 기록할 때만 쓰는 단계(자동으로 바뀌지 않는다). 화면 단계 버튼에서는 숨긴다
+  { k: "확인", label: "거래처 확인", en: "CHECKED", hint: "거래처가 내역을 확인했다고 직접 기록한 단계", opt: true },
+  { k: "계산서요청", label: "계산서 요청", en: "TAX REQ", hint: "거래처가 계산서를 요청했다고 직접 기록한 단계", opt: true },
   { k: "계산서발행", label: "계산서 발행", en: "ISSUED", hint: "세금계산서를 발행했어요" },
   { k: "마감", label: "마감", en: "CLOSED", hint: "이 달 정산을 마쳤어요" },
 ];
 export const stageIdx = (k) => Math.max(0, STMT_STAGES.findIndex((s) => s.k === k));
 export const stageLabel = (k) => STMT_STAGES[stageIdx(k)].label;
+export const nextStage = (k) => STMT_STAGES.find((x, j) => j > stageIdx(k) && !x.opt) || null; // 다음 단계(직접 기록 단계는 건너뜀)
 const safeKey = (x) => String(x || "").replace(/[/\s#?[\]]/g, "_").slice(0, 120);
 export const arDeskId = (co, kind, ...parts) => [co, kind, ...parts].map(safeKey).join("__");
 
@@ -118,6 +120,35 @@ export function useArDesk(company) {
   return { stmts, notes, save, config, saveConfig, company: co, closes, dayCloses, forms };
 }
 
+// ✅ 2026-11-16 배차 마감(배차자 1차) 표시 — 마감 검증 탭 대신 거래처정산에 바로 보인다
+//  close = closeBoard() 한 줄({ status, changed, doc }) · 글씨색으로만
+export function closeTag(close) {
+  if (!close) return { t: "", c: SD.mute, ready: false };
+  if (close.changed && close.status !== "none") return { t: "마감 뒤 바뀜", c: "#C62F25", ready: false };
+  if (close.status === "submitted" || close.status === "approved") return { t: "배차 마감", c: "#0F7A52", ready: true };
+  if (close.status === "rejected") return { t: "돌려보냄", c: "#C62F25", ready: false };
+  if (close.status === "verified") return { t: "배차 검증 완료", c: "#2457D6", ready: false };
+  return { t: "배차 확인 중", c: "#8D97AB", ready: false };
+}
+export function CloseStrip({ close, onReturn, disabled }) {
+  if (!close) return null;
+  const tg = closeTag(close); const d = close.doc || {};
+  const by = d.submittedByName || d.verifiedByName || "";
+  const at = d.submittedAt || d.verifiedAt;
+  return (
+    <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[13.5px]" data-kp="close-strip">
+      <span className="font-black" style={{ color: tg.c }}>{tg.ready ? "✓ " : ""}{tg.t}</span>
+      <span className="text-[#5B6B85] font-bold" style={NUM}>
+        {tg.ready ? `${by ? `${by} · ` : ""}${at ? fmtDay(at) : ""} 배차자가 확인하고 넘긴 내역이에요.`
+          : close.status === "rejected" ? `돌려보낸 사유 · ${d.reason || "-"}`
+          : close.changed ? "배차자가 넘긴 뒤 오더가 바뀌었어요. 배차자가 다시 넘기면 돼요."
+          : "배차자가 아직 월 마감에서 넘기지 않았어요. 명세서는 지금 만들어도 돼요."}
+      </span>
+      {tg.ready && onReturn && !disabled && <button type="button" onClick={onReturn} className="ml-auto text-[13px] font-bold text-[#C62F25] hover:underline underline-offset-4">배차자에게 돌려보내기</button>}
+    </div>
+  );
+}
+
 // ───────────────────────── 단계 표시 ─────────────────────────
 // 작은 진행 점(목록용) — 지나온 단계는 채운 점, 지금 단계는 큰 점
 export function StageDots({ stage }) {
@@ -150,7 +181,8 @@ export function StageStepper({ stage, history = [], onSet, disabled, sentHint })
   return (
     <div className={ph ? "grid grid-cols-4 gap-y-1" : "flex items-stretch gap-0 overflow-x-auto no-scrollbar"} style={{ scrollbarWidth: "none" }} data-kp="stmt-stepper">
       {STMT_STAGES.map((s, i) => {
-        const done = i <= cur; const isCur = i === cur; const isNext = i === cur + 1;
+        if (s.opt && i !== cur) return null; // 🛠 2026-11-16 거래처 확인 · 계산서 요청은 고를 때만(기본은 숨김)
+        const done = i <= cur; const isCur = i === cur; const isNext = i === STMT_STAGES.findIndex((x, j) => j > cur && !x.opt);
         const t = i > 0 ? at(s.k) : 0;
         return (
           <React.Fragment key={s.k}>
@@ -264,7 +296,7 @@ export function StatementClientRail({ month, setMonth, groups = [], sel, onSel, 
                 <span className={`text-[12px] font-black px-1.5 h-5 rounded-md inline-flex items-center whitespace-nowrap ${on ? "bg-white/15 text-white" : stageIdx(g.stage) === 0 ? "border border-dashed border-[#B8C4D8] text-[#5B6B85]" : stageIdx(g.stage) === 6 ? "bg-[#0F1A30] text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>{stageLabel(g.stage)}</span>
               </div>
               <div className={`mt-0.5 flex items-center justify-between gap-2 text-[12.5px] font-bold ${on ? "text-white/70" : "text-[#5B6B85]"}`} style={NUM}>
-                <span className="whitespace-nowrap truncate min-w-0">{(g.count || 0).toLocaleString()}건{g.settled ? <span className={`ml-1 ${on ? "text-white" : "text-[#1E6B4A]"}`} title="미수금관리에서 입금 확인(정산완료)">· 입금</span> : null}{pick && can && !g.email ? <span className="ml-1 text-[#A6400E]">· 메일 없음</span> : null}</span><span className={`whitespace-nowrap ${on ? "text-white font-black" : "text-[#0F1A30] font-black"}`}>{(g.total || 0).toLocaleString()}원</span>
+                <span className="whitespace-nowrap truncate min-w-0">{(g.count || 0).toLocaleString()}건{closeTag(g.close).t ? <span className="ml-1 font-black" style={{ color: on ? "#fff" : closeTag(g.close).c }}>· {closeTag(g.close).t}</span> : null}{g.settled ? <span className={`ml-1 ${on ? "text-white" : "text-[#1E6B4A]"}`} title="미수금관리에서 입금 확인(정산완료)">· 입금</span> : null}{pick && can && !g.email ? <span className="ml-1 text-[#A6400E]">· 메일 없음</span> : null}</span><span className={`whitespace-nowrap ${on ? "text-white font-black" : "text-[#0F1A30] font-black"}`}>{(g.total || 0).toLocaleString()}원</span>
               </div>
             </button>
           );
@@ -278,6 +310,7 @@ export function StatementBoard({ month, setMonth, recentMonths = [], groups, onO
   const [stageF, setStageF] = React.useState("");
   const [q, setQ] = React.useState("");
   const [openOnly, setOpenOnly] = React.useState(false);
+  const [readyOnly, setReadyOnly] = React.useState(false); // ✅ 배차 마감 넘어온 곳만
   const [sel, setSel] = React.useState(() => new Set());
   const [focus, setFocus] = React.useState(0);
   const listRef = React.useRef(null);
@@ -285,9 +318,10 @@ export function StatementBoard({ month, setMonth, recentMonths = [], groups, onO
   const counts = React.useMemo(() => { const c = {}; const amt = {}; STMT_STAGES.forEach((s) => { c[s.k] = 0; amt[s.k] = 0; }); groups.forEach((g) => { c[g.stage] += 1; amt[g.stage] += g.total; }); return { c, amt }; }, [groups]);
   const shown = React.useMemo(() => {
     const nq = q.trim().toLowerCase().replace(/\s+/g, "");
-    return groups.filter((g) => (!stageF || g.stage === stageF) && (!openOnly || g.stage !== "마감") && (!nq || g.client.toLowerCase().replace(/\s+/g, "").includes(nq)))
+    return groups.filter((g) => (!stageF || g.stage === stageF) && (!openOnly || g.stage !== "마감") && (!readyOnly || closeTag(g.close).ready) && (!nq || g.client.toLowerCase().replace(/\s+/g, "").includes(nq)))
       .sort((a, b) => stageIdx(a.stage) - stageIdx(b.stage) || b.total - a.total);
-  }, [groups, stageF, q, openOnly]);
+  }, [groups, stageF, q, openOnly, readyOnly]);
+  const readyN = groups.filter((g) => closeTag(g.close).ready).length;
   const selGroups = shown.filter((g) => sel.has(g.key));
   const total = groups.reduce((s, g) => s + g.total, 0);
   const closed = groups.filter((g) => g.stage === "마감").length;
@@ -334,9 +368,10 @@ export function StatementBoard({ month, setMonth, recentMonths = [], groups, onO
           </div>
         </div>
         {/* 단계 칩 — 누르면 그 단계만 */}
-        <div className="mt-4 grid grid-cols-4 sm:grid-cols-7 gap-1.5">
+        <div className={`mt-4 grid grid-cols-4 ${STMT_STAGES.filter((x) => !x.opt || counts.c[x.k]).length === 5 ? "sm:grid-cols-5" : "sm:grid-cols-7"} gap-1.5`}>
           {STMT_STAGES.map((s, i) => {
             const on = stageF === s.k; const n = counts.c[s.k];
+            if (s.opt && !n && !on) return null; // 직접 기록 단계는 있을 때만
             return (
               <button key={s.k} type="button" onClick={() => setStageF(on ? "" : s.k)} title={s.hint}
                 className={`relative text-left rounded-xl px-3 py-2.5 border transition ${on ? "bg-[#0F1A30] border-[#0F1A30] text-white shadow-[0_8px_18px_rgba(15,26,48,0.2)]" : n ? "bg-white border-[#DCE3EE] hover:border-[#8FB0F0]" : "bg-[#FAFBFD] border-[#EEF2F8] text-[#9AA9C3]"}`}>
@@ -361,6 +396,9 @@ export function StatementBoard({ month, setMonth, recentMonths = [], groups, onO
           </div>
           <label className="inline-flex items-center gap-2 h-10 px-3 rounded-xl border border-[#D5DDEA] text-[14px] font-bold text-[#3A4A66] cursor-pointer select-none">
             <input type="checkbox" className="w-4 h-4 accent-[#0F1A30]" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} />마감 안 된 곳만
+          </label>
+          <label className="inline-flex items-center gap-2 h-10 px-3 rounded-xl border border-[#D5DDEA] text-[14px] font-bold text-[#0F7A52] cursor-pointer select-none" title="배차자가 배차현황 › 월 마감에서 1차 마감해 넘긴 거래처">
+            <input type="checkbox" className="w-4 h-4 accent-[#0F7A52]" checked={readyOnly} onChange={(e) => setReadyOnly(e.target.checked)} />배차 마감 넘어온 곳 {readyN}
           </label>
           {stageF && <button type="button" onClick={() => setStageF("")} className="h-10 px-3 rounded-xl bg-[#EEF3FB] text-[#1B2B4B] text-[14px] font-black inline-flex items-center gap-1.5">{stageLabel(stageF)}<Ico d={IC.x} size={13} w={2.6} /></button>}
           <div className="ml-auto flex items-center gap-2 flex-wrap">
@@ -388,14 +426,15 @@ export function StatementBoard({ month, setMonth, recentMonths = [], groups, onO
               <div className="text-[14px] text-[#9AA9C3] mt-1">{groups.length ? "검색어나 단계 필터를 바꿔 보세요" : "배차완료 · 청구운임이 있는 오더만 모아요"}</div>
             </div>
           ) : (
-            <table className="kp-sd w-full" style={{ tableLayout: "fixed", minWidth: 760 }}>
-              <colgroup><col style={{ width: 44 }} /><col /><col style={{ width: 70 }} /><col style={{ width: 140 }} /><col style={{ width: 150 }} /><col style={{ width: 112 }} /><col style={{ width: 172 }} /></colgroup>
+            <table className="kp-sd w-full" style={{ tableLayout: "fixed", minWidth: 880 }}>
+              <colgroup><col style={{ width: 44 }} /><col /><col style={{ width: 70 }} /><col style={{ width: 140 }} /><col style={{ width: 118 }} /><col style={{ width: 150 }} /><col style={{ width: 112 }} /><col style={{ width: 172 }} /></colgroup>
               <thead>
                 <tr className="text-left text-[13px] text-[#5B6B85] bg-[#F8FAFD]">
                   <th className="px-3 py-2.5 sticky top-0 bg-[#F8FAFD] z-[1]"><input type="checkbox" aria-label="모두 선택" className="w-4 h-4 accent-[#0F1A30]" checked={shown.length > 0 && shown.every((g) => sel.has(g.key))} onChange={(e) => setSel(e.target.checked ? new Set(shown.map((g) => g.key)) : new Set())} /></th>
                   <th className="px-2 py-2.5 font-black sticky top-0 bg-[#F8FAFD] z-[1]">거래처</th>
                   <th className="px-2 py-2.5 font-black text-right sticky top-0 bg-[#F8FAFD] z-[1]">건수</th>
                   <th className="px-2 py-2.5 font-black text-right sticky top-0 bg-[#F8FAFD] z-[1]">청구액(VAT 포함)</th>
+                  <th className="px-2 py-2.5 font-black sticky top-0 bg-[#F8FAFD] z-[1]">배차 마감</th>
                   <th className="px-2 py-2.5 font-black sticky top-0 bg-[#F8FAFD] z-[1]">진행</th>
                   <th className="px-2 py-2.5 font-black sticky top-0 bg-[#F8FAFD] z-[1]">단계</th>
                   <th className="px-3 py-2.5 sticky top-0 bg-[#F8FAFD] z-[1]" />
@@ -403,7 +442,7 @@ export function StatementBoard({ month, setMonth, recentMonths = [], groups, onO
               </thead>
               <tbody>
                 {shown.map((g, i) => {
-                  const nx = STMT_STAGES[stageIdx(g.stage) + 1];
+                  const nx = nextStage(g.stage);
                   return (
                     <tr key={g.key} data-row={i} onClick={() => setFocus(i)} onDoubleClick={() => onOpen(g)}
                       className={`border-t border-[#EEF2F8] transition ${sel.has(g.key) ? "bg-[#EEF3FB]" : i === focus ? "bg-[#F8FAFD]" : "hover:bg-[#F8FAFD]"}`}>
@@ -416,6 +455,7 @@ export function StatementBoard({ month, setMonth, recentMonths = [], groups, onO
                       </td>
                       <td className="px-2 py-3 text-right text-[14px] text-[#3A4A66]" style={NUM}>{g.count}건{g.prepaidOut > 0 && <div className="text-[11.5px] font-bold text-[#9AA9C3] whitespace-nowrap" title="선불·착불은 명세서에서 뺐어요(미수금에는 들어가요)">선불·착불 {g.prepaidOut}건 제외</div>}</td>
                       <td className="px-2 py-3 text-right text-[15px] font-black text-[#0F1A30]" style={NUM}>{won(g.total)}</td>
+                      <td className="px-2 py-3 text-[13px] font-black whitespace-nowrap" style={{ color: closeTag(g.close).c }}>{closeTag(g.close).t || "-"}</td>
                       <td className="px-2 py-3"><StageDots stage={g.stage} /></td>
                       <td className="px-2 py-3"><StageBadge stage={g.stage} /></td>
                       <td className="px-3 py-3 text-right whitespace-nowrap">

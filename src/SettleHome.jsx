@@ -1,5 +1,7 @@
 // ======================= src/SettleHome.jsx =======================
 // 🧭 2026-11-14 정산 홈 — 정산관리 첫 화면. "이번 달에 뭐가 남았지?"를 한눈에 보고, 누르면 그 일을 하는 기존 화면으로 간다
+//  🛠 2026-11-16 리디자인 — ① 이번 달 흐름 5단계(배차 마감 → 명세서 → 계산서 → 입금 → 기사 지급) ② 거래처 진행표(거래처 한 줄에 단계별 ✓)
+//     ③ 먼저 챙길 거래처 · 거래처 원장. 마감 검증 탭은 없앴다 — 배차자가 1차 마감하면 거래처정산에 바로 "배차 마감" 표시
 //  · 기존 화면(거래처정산 · 용차지급관리 · 입금 확인 · 지입정산관리 · 지게차 지급)은 하나도 바꾸지 않았다 — 여기서는 숫자를 모아 보여 주고 길만 안내한다
 //  · ① 월 마감 진행판: 오더 확정 → 명세서 → 계산서 → 입금 → 기사 지급 → 마감 (단계마다 남은 건수 · 금액 · 진행 막대)
 //  · ② 미수 경과: 아직 안 들어온 돈을 30 · 60 · 90일로 나눠 거래처별로
@@ -19,7 +21,6 @@ const NUM = { fontVariantNumeric: "tabular-nums" };
 const CARD = "rounded-2xl border border-[#DCE2EC]";
 const T = { ok: "text-[#0F7A52]", warn: "text-[#B25F00]", bad: "text-[#C62F25]", blue: "text-[#2457D6]", mute: "text-[#8D97AB]", sub: "text-[#5A6781]", fg: "text-[#16233D]" };
 const BTN = "h-10 px-4 rounded-xl border border-[#DCE2EC] bg-transparent text-[13.5px] font-black text-[#16233D] hover:border-[#9FB0CC] whitespace-nowrap";
-const BTN_PRI = "h-10 px-4 rounded-xl border border-[#2457D6] bg-transparent text-[13.5px] font-black text-[#2457D6] whitespace-nowrap";
 
 // 입력하면서 고르는 거래처 찾기(드롭다운 + 검색)
 function ClientCombo({ options, value, onChange }) {
@@ -51,44 +52,70 @@ function ClientCombo({ options, value, onChange }) {
 
 import { START_KEY, settleStartTab } from "./settleStart";
 
+// 거래처 한 곳의 배차 마감 상태(경리 쪽에서 보는 이름)
+export const closeText = (r) => {
+  if (!r) return { t: "-", c: T.mute };
+  if (r.changed && r.status !== "none") return { t: "마감 뒤 바뀜", c: T.bad };
+  if (r.status === "approved" || r.status === "submitted") return { t: "✓ 넘어옴", c: T.ok };
+  if (r.status === "rejected") return { t: "돌려보냄", c: T.bad };
+  if (r.status === "verified") return { t: "검증 완료", c: T.blue };
+  return { t: "배차 확인 중", c: T.mute };
+};
+
 export default function SettleHome({ orders = [], company = "", onGo, depositOn = false }) {
   const desk = useArDesk(company);
   const stageOf = React.useMemo(() => stageFinder(desk?.stmts), [desk?.stmts]);
   const months = React.useMemo(() => { const set = new Set([kstYm(0), kstYm(-1)]); (orders || []).forEach((o) => { const m = monthOf(o); if (/^\d{4}-\d{2}$/.test(m)) set.add(m); }); return [...set].sort().reverse().slice(0, 24); }, [orders]);
   const [ym, setYm] = React.useState(() => kstYm(0));
   const S = React.useMemo(() => summarizeSettle(orders, ym, stageOf), [orders, ym, stageOf]);
-  // ✅ 2026-11-16 2단계 마감 — 배차자 1차 마감 → 경리 2차 검증 숫자
   const closeOf = React.useCallback((c, m) => desk?.closes?.get(`${c}|${m}`) || null, [desk?.closes]);
   const board = React.useMemo(() => closeBoard(orders, ym, { closeOf }), [orders, ym, closeOf]);
+  const boardMap = React.useMemo(() => new Map(board.map((r) => [r.client, r])), [board]);
   const cc = React.useMemo(() => closeCounts(board), [board]);
   const [client, setClient] = React.useState("");
+  const [onlyLeft, setOnlyLeft] = React.useState(false);
+  const [q, setQ] = React.useState("");
   const comboOptions = React.useMemo(() => { const un = new Map(S.aging.map((a) => [a.client, a.total])); const names = new Set(); (orders || []).forEach((o) => { const c = String(o.거래처명 || "").trim(); if (c && n(o.청구운임) > 0) names.add(c); }); return [...names].map((name) => ({ name, unpaid: un.get(name) || 0 })).sort((a, b) => b.unpaid - a.unpaid || a.name.localeCompare(b.name, "ko")); }, [orders, S.aging]);
   const ledger = React.useMemo(() => (client ? clientLedger(orders, client, stageOf) : []), [orders, client, stageOf]);
   const [startOld, setStartOld] = React.useState(() => settleStartTab() === "거래처정산");
   const agingTotal = S.aging.reduce((a, x) => ({ d30: a.d30 + x.d30, d60: a.d60 + x.d60, d90: a.d90 + x.d90, over: a.over + x.over, total: a.total + x.total }), { d30: 0, d60: 0, d90: 0, over: 0, total: 0 });
   const go = (tab, d) => onGo?.(tab === "입금확인" && !depositOn ? "거래처정산" : tab, d);
-  const step = (k) => S.steps.find((s) => s.key === k) || { left: 0, amount: 0 };
-  // 청구할 곳 — 2차 승인했는데 아직 명세서를 안 보낸 곳(마감 흐름을 안 쓰면 발송 전 전체)
-  const stageAt = (c) => stageOf(c, ym);
-  const approvedToSend = board.filter((r) => r.status === "approved" && ["미작성", "작성"].includes(stageAt(r.client))).length;
-  const useClose = cc.submitted + cc.approved + cc.rejected > 0;
-  const toSend = useClose ? approvedToSend : step("send").left;
-  const drv = step("payout");
-  const over60 = S.aging.filter((a) => a.over + a.d90 > 0).length;
-  const cards = [
-    { k: "verify", step: "1 · 검증", title: "경리 확인을 기다려요", big: cc.submitted, unit: "곳", desc: cc.rejected ? `배차자가 1차 마감한 거래처예요. 반려해서 고치는 중 ${cc.rejected}곳.` : "배차자가 1차 마감한 거래처예요. 승인하면 청구로 넘어가요.", btn: "검증하러 가기", on: () => go("마감검증") },
-    { k: "send", step: "2 · 청구", title: "보낼 명세서", big: toSend, unit: "곳", desc: useClose ? "2차 승인이 끝난 곳이에요. 거래처 양식대로 만들어져요." : "아직 명세서를 보내지 않은 거래처예요.", btn: "명세서 보내기", on: () => go("거래처정산", { tab: "invoice", board: true }) },
-    { k: "money", step: "3 · 받기 · 지급", title: "못 받은 돈", big: agingTotal.total, unit: "원", money: true, desc: `60일 넘은 곳 ${over60}곳 · 기사 미지급 ${drv.left.toLocaleString()}건`, btn: "미수금 보기", on: () => go("거래처정산", { tab: "unsettledMonth" }), btn2: drv.left ? "기사 지급" : "", on2: () => go("지급관리") },
+  const step = (k) => S.steps.find((s) => s.key === k) || { left: 0, amount: 0, total: 0 };
+  const total = S.clients.length;
+  const passed = cc.submitted + cc.approved;
+  const ym2 = `${ym.slice(0, 4)}년 ${Number(ym.slice(5))}월`;
+  const openStmt = (c) => go("거래처정산", { tab: "invoice", client: c, ym });
+
+  // ① 이번 달 흐름 — 남은 것이 있는 첫 단계가 "지금 할 일"
+  const flow = [
+    { k: "close", label: "배차 마감", sub: "배차자가 넘긴 곳", done: passed, total, left: Math.max(0, total - passed), unit: "곳",
+      note: cc.rejected ? `돌려보낸 곳 ${cc.rejected}` : cc.none + (cc.verified || 0) ? `배차 확인 중 ${cc.none + (cc.verified || 0)}` : "", btn: "거래처정산", on: () => go("거래처정산", { tab: "invoice", board: true }) },
+    { k: "send", label: "명세서 발송", sub: "보낸 곳", done: total - step("send").left, total, left: step("send").left, unit: "곳", note: step("send").left ? `${short(step("send").amount)}원 남음` : "", btn: "명세서 보내기", on: () => go("거래처정산", { tab: "invoice", board: true }) },
+    { k: "tax", label: "계산서 발행", sub: "발행한 곳", done: total - step("tax").left, total, left: step("tax").left, unit: "곳", note: step("tax").left ? `${short(step("tax").amount)}원 남음` : "", btn: "계산서", on: () => go("거래처정산", { tab: "invoice", board: true }) },
+    { k: "deposit", label: "입금", sub: "다 받은 곳", done: total - step("deposit").left, total, left: step("deposit").left, unit: "곳", note: step("deposit").left ? `${short(step("deposit").amount)}원 못 받음` : "", btn: "미수금", on: () => go("거래처정산", { tab: "unsettledMonth" }) },
+    { k: "payout", label: "기사 지급", sub: "지급한 건", done: step("payout").total - step("payout").left, total: step("payout").total, left: step("payout").left, unit: "건", note: step("payout").left ? `${short(step("payout").amount)}원 미지급` : "", btn: "지급하기", on: () => go("지급관리") },
   ];
-  const hot = cards.findIndex((c) => c.big > 0);
+  const hot = flow.findIndex((f) => f.left > 0);
+
+  // ② 거래처 진행표
+  const rows = React.useMemo(() => S.clients.map((c) => {
+    const idx = ["미작성", "작성", "발송", "확인", "계산서요청", "계산서발행", "마감"].indexOf(c.stage);
+    const b = boardMap.get(c.client);
+    const unpaid = idx >= 6 ? 0 : Math.max(0, c.sale - c.paid);
+    const left = (b && (b.status === "submitted" || b.status === "approved") && !b.changed ? 0 : 1) + (idx < 2 ? 1 : 0) + (idx < 5 ? 1 : 0) + (unpaid > 0 ? 1 : 0);
+    return { ...c, idx, b, unpaid, left };
+  }), [S.clients, boardMap]);
+  const nq = q.replace(/\s/g, "").toLowerCase();
+  const shown = rows.filter((r) => (!onlyLeft || r.left) && (!nq || r.client.replace(/\s/g, "").toLowerCase().includes(nq)));
+  const ck = (ok, t, tone) => <span className={`text-[13px] font-black whitespace-nowrap ${ok ? T.ok : tone || T.mute}`}>{ok ? "✓" : t}</span>;
 
   return (
     <div className="p-1 sm:p-2 space-y-4 text-[#16233D]" data-kp="settle-home">
-      {/* 머리 — 달 고르기 + 이 달 숫자(매뉴얼은 오른쪽 위 [정산 매뉴얼] 하나만) */}
+      {/* 머리 */}
       <div className="flex items-end gap-x-6 gap-y-3 flex-wrap">
         <div className="min-w-0">
           <div className="text-[21px] font-black">정산 홈</div>
-          <div className={`text-[13.5px] ${T.sub}`}>할 일을 검증 → 청구 → 받기 · 지급 순서로 보여 줘요. 지금 할 일은 파란 글씨예요.</div>
+          <div className={`text-[13.5px] ${T.sub}`}>{ym2} 정산이 어디까지 왔는지 보여 줘요. 파란 단계가 지금 할 일이에요.</div>
         </div>
         <CustomSelect value={ym} onChange={(e) => setYm(e.target.value)} className="h-10 w-[150px] rounded-xl border border-[#DCE2EC] bg-transparent px-3 text-[15px] font-black text-[#16233D]" title="정산월">
           {months.map((m) => <option key={m} value={m}>{`${m.slice(0, 4)}년 ${Number(m.slice(5))}월`}</option>)}
@@ -99,42 +126,55 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
         </div>
       </div>
 
-      {/* 마감 흐름 한 줄 — 글씨색으로만 */}
-      <div className="flex gap-x-5 gap-y-1 flex-wrap text-[13.5px] font-black" style={NUM}>
-        <span className={T.ok}>2차 승인 {cc.approved}곳</span>
-        <span className={T.warn}>검증 대기 {cc.submitted}곳</span>
-        <span className={T.bad}>반려 {cc.rejected}곳</span>
-        <span className={T.blue}>배차자 검증 완료 {cc.verified || 0}곳</span>
-        <span className={T.mute}>검증 전 {cc.none}곳</span>
-      </div>
+      {/* ① 이번 달 흐름 */}
+      <section className={`${CARD} overflow-hidden`} data-kp="settle-flow">
+        <div className="grid grid-cols-2 md:grid-cols-5">
+          {flow.map((f, i) => { const on = i === hot; const pct = f.total ? Math.round((f.done / f.total) * 100) : 0; return (
+            <div key={f.k} data-step={f.k} className={`p-4 flex flex-col gap-1.5 border-[#DCE2EC] ${i ? "md:border-l" : ""} ${i % 2 ? "border-l md:border-l" : ""} ${i >= 2 ? "border-t md:border-t-0" : ""}`}>
+              <div className={`flex items-center gap-2 text-[12.5px] font-black ${on ? T.blue : f.left ? T.sub : T.ok}`}>
+                <span className="w-5 h-5 rounded-full border-2 grid place-items-center text-[11px]" style={{ borderColor: "currentColor" }}>{f.left ? i + 1 : "✓"}</span>{f.label}{on && <span className="ml-auto">지금</span>}
+              </div>
+              <div className={`text-[24px] font-black leading-none ${on ? T.blue : f.left ? T.fg : T.ok}`} style={NUM}>{f.done.toLocaleString()}<span className={`text-[14px] font-bold ${T.mute}`}> / {f.total.toLocaleString()}{f.unit}</span></div>
+              <div className="h-1 rounded-full bg-[#EDF1F7] overflow-hidden"><div className="h-full rounded-full" style={{ width: `${pct}%`, background: f.left ? (on ? "#2457D6" : "#9AA6BC") : "#0F7A52" }} /></div>
+              <div className={`text-[12.5px] font-bold min-h-[18px] ${T.sub}`} style={NUM}>{f.left ? f.note || `${f.left}${f.unit} 남음` : "끝났어요"}</div>
+              <button type="button" onClick={f.on} className={`mt-auto self-start text-[13px] font-black hover:underline underline-offset-4 ${on ? T.blue : T.sub}`}>{f.btn} ›</button>
+            </div>); })}
+        </div>
+      </section>
 
-      {/* ① 오늘 할 일 3개 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {cards.map((c, i) => { const on = i === hot; return (
-          <section key={c.k} className={`${CARD} p-4 flex flex-col gap-2`} data-step={c.k}>
-            <div className={`text-[12px] font-black tracking-[0.04em] ${on ? T.blue : T.mute}`}>{c.step}</div>
-            <div className="text-[16.5px] font-black">{c.title}</div>
-            <div className={`text-[28px] font-black leading-none ${on ? T.blue : c.big ? T.fg : T.mute}`} style={NUM}>{c.money ? won(c.big) : c.big.toLocaleString()}<span className={`text-[14px] font-bold ${T.sub} ml-1`}>{c.unit}</span></div>
-            <div className={`text-[13.5px] ${T.sub}`}>{c.desc}</div>
-            <div className="mt-auto pt-1 flex gap-2 flex-wrap">
-              <button type="button" onClick={c.on} className={on ? BTN_PRI : BTN}>{c.btn}</button>
-              {c.btn2 && <button type="button" onClick={c.on2} className={BTN}>{c.btn2}</button>}
-            </div>
-          </section>); })}
-      </div>
-
-      {/* 세부 단계 — 누르면 그 화면으로(숫자가 0이면 끝난 단계) */}
-      <div className={`${CARD} px-4 py-3 flex gap-x-5 gap-y-1.5 flex-wrap items-center text-[13.5px]`} style={NUM}>
-        <span className={`font-black ${T.sub}`}>세부 단계</span>
-        {S.steps.map((s) => (
-          <button key={s.key} type="button" onClick={() => go(s.go)} data-step={s.key} title={`${s.label} 화면으로 이동`} className="font-bold hover:underline underline-offset-4">
-            {s.label} <span className={s.left ? T.warn : T.ok}>{s.left ? `${s.left.toLocaleString()}${s.unit} 남음` : "끝"}</span>
-          </button>))}
-        <button type="button" data-kp="settle-bank" onClick={() => go("거래처정산", { tab: "unsettledMonth", bank: true })} className={`ml-auto font-black ${T.blue} hover:underline underline-offset-4`}>입금내역 자동 대사</button>
-      </div>
+      {/* ② 거래처 진행표 */}
+      <section className={`${CARD}`} data-kp="settle-clients">
+        <div className="px-4 pt-3.5 pb-2 flex items-center gap-3 flex-wrap">
+          <div className="text-[16.5px] font-black mr-auto">거래처 진행표 <span className={`text-[13px] font-bold ${T.mute}`} style={NUM}>{total}곳</span></div>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="거래처 찾기" className="h-9 w-[180px] rounded-lg border border-[#DCE2EC] bg-transparent px-3 text-[13.5px] font-bold outline-none focus:border-[#2457D6]" />
+          <label className={`inline-flex items-center gap-1.5 text-[13px] font-bold cursor-pointer ${T.sub}`}><input type="checkbox" className="w-4 h-4 accent-[#2457D6]" checked={onlyLeft} onChange={(e) => setOnlyLeft(e.target.checked)} />남은 일 있는 곳만</label>
+        </div>
+        {!shown.length ? <div className={`py-10 text-center text-[14px] ${T.mute}`}>{total ? "조건에 맞는 거래처가 없어요" : `${ym2}에 청구할 오더가 없어요`}</div> : (
+          <div className="overflow-x-auto max-h-[460px] overflow-y-auto">
+            <table className="kp-plain w-full min-w-[820px] text-[14px] whitespace-nowrap" style={NUM}>
+              <thead><tr className={`text-[12.5px] ${T.sub}`}>
+                {["순번", "거래처", "오더", "청구", "배차 마감", "명세서", "계산서", "입금", "못 받은 돈", ""].map((h, i) => <th key={i} className={`sticky top-0 bg-white px-3 py-2 font-bold border-b border-[#DCE2EC] ${[2, 3, 8].includes(i) ? "text-right" : i === 0 ? "text-center" : "text-left"}`}>{h}</th>)}
+              </tr></thead>
+              <tbody>{shown.map((r, i) => { const ct = closeText(r.b); return (
+                <tr key={r.client} onClick={() => openStmt(r.client)} className="cursor-pointer border-b border-[#EEF1F6] last:border-b-0 hover:bg-[#F6F8FB]" title="눌러서 명세서 열기">
+                  <td className={`px-3 py-2.5 text-center text-[12.5px] ${T.mute}`}>{i + 1}</td>
+                  <td className="px-3 py-2.5 font-black max-w-[220px] truncate">{r.client}</td>
+                  <td className="px-3 py-2.5 text-right">{r.count.toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-right font-bold">{won(r.sale)}</td>
+                  <td className="px-3 py-2.5"><span className={`text-[13px] font-black ${ct.c}`}>{ct.t}</span></td>
+                  <td className="px-3 py-2.5">{ck(r.idx >= 2, r.idx === 1 ? "작성함" : "보내기 전", r.idx === 1 ? T.blue : null)}</td>
+                  <td className="px-3 py-2.5">{ck(r.idx >= 5, "발행 전")}</td>
+                  <td className="px-3 py-2.5">{ck(r.unpaid <= 0, r.paid > 0 ? "일부 받음" : "받기 전", r.paid > 0 ? T.warn : null)}</td>
+                  <td className={`px-3 py-2.5 text-right font-black ${r.unpaid > 0 ? T.bad : T.mute}`}>{r.unpaid > 0 ? won(r.unpaid) : "-"}</td>
+                  <td className={`px-3 py-2.5 text-right text-[12.5px] font-bold ${T.blue}`}>열기 ›</td>
+                </tr>); })}</tbody>
+            </table>
+          </div>)}
+        <div className={`px-4 py-2 border-t border-[#DCE2EC] text-[12.5px] ${T.mute}`}>배차 마감은 배차현황 › 월 마감에서 배차자가 넘긴 곳이에요. 줄을 누르면 그 거래처 명세서가 열려요.</div>
+      </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        {/* ② 먼저 챙길 거래처(미수 오래된 순) */}
+        {/* ③ 먼저 챙길 거래처(미수 오래된 순) */}
         <section className={`${CARD} p-4`}>
           <div className="flex items-end justify-between gap-3 flex-wrap mb-2">
             <div className="text-[16.5px] font-black">먼저 챙길 거래처</div>
@@ -151,10 +191,13 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
                   <span className="w-[120px] text-right text-[14.5px] font-black whitespace-nowrap" style={NUM}>{won(a.total)}</span>
                 </button>); })}
             </div>)}
-          <div className={`mt-2 text-[12.5px] ${T.mute}`}>입금 확인이나 마감이 끝난 청구는 빠져요. 거래처를 누르면 오른쪽에 원장이 나와요.</div>
+          <div className="mt-2 flex items-center gap-3 flex-wrap">
+            <span className={`text-[12.5px] ${T.mute}`}>거래처를 누르면 오른쪽에 원장이 나와요.</span>
+            <button type="button" data-kp="settle-bank" onClick={() => go("거래처정산", { tab: "unsettledMonth", bank: true })} className={`ml-auto text-[13px] font-black ${T.blue} hover:underline underline-offset-4`}>입금내역 자동 대사 ›</button>
+          </div>
         </section>
 
-        {/* ③ 거래처 원장 */}
+        {/* ④ 거래처 원장 */}
         <section className={`${CARD} p-4`}>
           <div className="flex items-end justify-between gap-3 flex-wrap mb-3">
             <div className="text-[16.5px] font-black">거래처 원장</div>

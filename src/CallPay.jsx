@@ -29,7 +29,8 @@ import { subscribeBankTxns } from "./popbillAuto";
 import CustomDatePicker from "./CustomDatePicker";
 import { CompanyOptionPicker } from "./companyOptionPicker";
 import { kpConfirm, kpPrompt } from "./kpDialog";
-import { EvidenceBox, EvidenceViewer } from "./InvoiceEvidence"; // 🧾 2026-11-11 증빙서류 자동 스캔
+import { EvidenceBox, EvidenceViewer, firestoreEvidenceApi } from "./InvoiceEvidence";
+import { checkAmount } from "./invoiceScan"; // 🧾 2026-11-11 증빙서류 자동 스캔
 
 export const BETA_COMPANY = "테스트운송사";
 export const OUT_KEY = "아웃콜방식"; // 회사별 선택 목록(companyDropdownOptions) — 기본: 24시 · 인성 · 화물맨
@@ -271,6 +272,7 @@ export function queuePayNotice({ row, date, company, patchDispatch }) {
 export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company = "", evidenceApi, others = [] }) {
   const id = row?._id || row?.id;
   const [withOthers, setWithOthers] = React.useState(true);
+  const [scanNote, setScanNote] = React.useState("");
   const init = () => ({ dir: callDir(row), platform: row?.콜플랫폼 || "", inv: row?.계산서일 || "", depDate: row?.입금일 || row?.입금증빙?.date || today(), depName: row?.입금자명 || row?.입금증빙?.payer || row?.계산서스캔?.payer || "", billMemo: row?.청구메모 || "", depMemo: row?.입금메모 || "" });
   const [f, setF] = React.useState(init);
   const [busy, setBusy] = React.useState(false);
@@ -286,6 +288,7 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
   const needMemo = (k, label) => { if (out && !String(f[k] || "").trim()) { window.alert(`${label} 메모를 입력해 주세요.`); return true; } return false; };
   const run = async (fn) => { if (!canEdit || !id || !patchDispatch) return; setBusy(true); try { await fn(); } catch (e) { window.alert(`저장하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); } };
   const save = () => run(async () => {
+    setScanNote("");
     // 새로 청구완료로 바꿀 때(또는 발행일을 바꿀 때)만 메모를 묻는다 — 예전에 메모 없이 청구완료된 오더도 다른 칸은 그대로 고칠 수 있게
     if (out && f.inv && f.inv !== (row?.계산서일 || "") && needMemo("billMemo", "청구완료")) return;
     if (deposited && !out) { await setCallDeposit({ row, done: false, patchDispatch, company }); } // IN으로 바꾸면 입금 기록도 지운다
@@ -318,7 +321,23 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
   const depMany = otherRows.filter((o) => isCaughtCall(o) && o.입금상태 !== "입금완료"); // [입금완료] 같이 — OUT 오더만
   const undoMany = otherRows.filter((o) => o.입금상태 === "입금완료"); // [입금 취소] 같이
   const invMany = withOthers && bulkRows.length > 0;
-  const amt = vatOf(out ? row?.청구운임 : row?.기사운임);
+  const fareOf = (o) => Number(String((out ? o?.청구운임 : o?.기사운임) ?? "").replace(/[^\d.-]/g, "")) || 0;
+  const manyOn = withOthers && otherRows.length > 0;
+  const amt = vatOf(fareOf(row) + (manyOn ? otherRows.reduce((a, o) => a + fareOf(o), 0) : 0)); // 일괄 적용이면 선택 오더 합계(계산서 한 장 = 여러 오더)
+  // 🧾 2026-11-16 일괄 적용이면 올린 증빙 한 장을 선택 오더 모두에 붙인다(스캔 결과도 같이)
+  const baseApi = evidenceApi || firestoreEvidenceApi;
+  const twins = React.useRef(new Map()); // 대표 첨부 id → [{ row, id }]
+  const evApi = React.useMemo(() => (!manyOn ? baseApi : {
+    ...baseApi,
+    async upload(r, payload) {
+      const mainId = await baseApi.upload(r, payload);
+      const list = [];
+      for (const o of otherRows) { try { list.push({ row: o, id: await baseApi.upload(o, { ...payload, sharedFrom: id || "" }) }); } catch (e) { /* 한 건 실패해도 나머지 */ } }
+      twins.current.set(mainId, list);
+      return mainId;
+    },
+    async update(r, attId, patch) { await baseApi.update(r, attId, patch); for (const t of twins.current.get(attId) || []) baseApi.update(t.row, t.id, patch).catch(() => {}); },
+  }), [manyOn, baseApi, otherRows.map((o) => o._id || o.id).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
   // 🧾 증빙서류 스캔 결과 → 정산 창에 바로 반영 + 오더에 저장(계산서 발행일 · 계산서스캔 / 이체확인증이면 입금일 · 입금자명)
   const onScanned = async (scan) => {
     const keep = { kind: scan.kind, date: scan.date || "", supply: scan.supply || 0, vat: scan.vat || 0, total: scan.total || 0, supplier: scan.supplier || "", buyer: scan.buyer || "", payer: scan.payer || "", at: today() };
@@ -331,16 +350,22 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
       ...(out && scan.payer && (!deposited || !p.depName) ? { depName: scan.payer.slice(0, 40) } : {}),
       ...(out && !transfer && scan.date && !p.billMemo ? { billMemo: autoBill } : {}),
     }));
+    // 🛠 2026-11-16 확실할 때만 바로 저장 — 날짜와 금액(운임과 같음)을 둘 다 읽었을 때. 아니면 칸만 채우고 [저장]을 기다린다(지급중 · 청구완료로 멋대로 안 바뀜)
+    const sure = !!scan.date && checkAmount(scan, amt.supply).ok;
+    setScanNote(transfer ? "" : sure ? "" : scan.date ? "계산서를 확실히 읽지 못했어요. 날짜를 확인하고 [저장]을 눌러야 반영돼요." : "계산서 날짜를 읽지 못했어요. 날짜를 직접 넣고 [저장]을 눌러 주세요.");
     if (!canEdit || !id || !patchDispatch) return;
     try {
-      await patchDispatch(id, transfer ? { 입금증빙: keep, __system: true } : { ...(scan.date ? { 계산서일: scan.date } : {}), ...(out && scan.date && !row?.청구메모 && !f.billMemo ? { 청구메모: autoBill } : {}), 계산서스캔: keep, __system: true });
+      await patchDispatch(id, transfer ? { 입금증빙: keep, __system: true } : { ...(sure ? { 계산서일: scan.date } : {}), ...(sure && out && !row?.청구메모 && !f.billMemo ? { 청구메모: autoBill } : {}), 계산서스캔: keep, __system: true });
+      if (manyOn) for (const o of (transfer ? otherRows : bulkRows)) { // 한 장으로 여러 오더 — 선택 오더에도 같은 값
+        await patchDispatch(o._id || o.id, transfer ? { 입금증빙: keep, __system: true } : { ...(sure ? { 계산서일: scan.date } : {}), ...(sure && isCaughtCall(o) && !o.청구메모 ? { 청구메모: autoBill } : {}), 계산서스캔: keep, __system: true });
+      }
     } catch (e) { console.warn("[증빙 스캔] 저장 실패:", e?.message || e); }
   };
   const s = payStage(row);
   const seg = "px-4 h-9 rounded-lg text-[13px] font-black tracking-wide whitespace-nowrap";
   return createPortal(
     <div className="fixed inset-0 z-[99999] bg-black/45 flex items-center justify-center p-4">
-      <div className="w-full max-w-[540px] max-h-[92vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col" data-pay-popup>
+      <div className="w-full max-w-[980px] max-h-[92vh] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col" data-pay-popup>
         <div className="px-5 py-4 text-white flex items-center gap-3 shrink-0" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
           <div className="min-w-0 flex-1">
             <div className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">SETTLE · 정산</div>
@@ -349,7 +374,8 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
           </div>
           <button type="button" onClick={onClose} aria-label="닫기" className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[16px] shrink-0">✕</button>
         </div>
-        <div className="px-5 py-3 overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto md:overflow-hidden md:grid md:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="px-5 py-3 md:overflow-y-auto">
           <Row label="오더 구분">
             <div className="inline-flex rounded-xl bg-[#F1F4F9] p-1">
               {[["IN", "IN"], ["OUT", "OUT"]].map(([v, l]) => (
@@ -373,12 +399,12 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
             {out && (() => { const lb = deposited ? "입금완료" : f.inv ? "청구완료" : "미청구"; const c = OUT_STAGE_COLORS[lb]; return <span data-out-stage={lb} className="ml-auto inline-flex items-center h-7 px-2.5 rounded-full text-[12px] font-black" style={{ background: c.bg, color: c.fg, border: `1px solid ${c.bd}` }}>{lb}</span>; })()}
           </Row>
           {otherRows.length > 0 && (
-            <Row label="같이">
+            <Row label="일괄 적용">
               <label className="inline-flex items-center gap-2 text-[13px] font-bold text-[#0F1A30] cursor-pointer" data-pay-many>
                 <input type="checkbox" checked={withOthers} disabled={!canEdit || busy} onChange={(e) => setWithOthers(e.target.checked)} className="w-4 h-4 accent-[#1B2B4B]" />
-                체크한 {otherRows.length}건 같이
+                선택 오더 {otherRows.length}건 포함
               </label>
-              <span className="text-[11.5px] font-semibold text-[#9AA9C3]">끝난 건은 빠져요</span>
+              <span className="text-[11.5px] font-semibold text-[#9AA9C3]">처리 완료 건 제외</span>
             </Row>
           )}
           {out && f.inv && (
@@ -389,7 +415,7 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
           )}
           <Row label={out ? "받을 금액" : "줄 금액"}>
             <div className="w-full rounded-xl border border-[#E3E8F0] bg-[#F7F9FC] px-3.5 py-2.5 grid grid-cols-3 gap-2 text-center" style={NUM} data-vat>
-              {[[out ? "운임(청구운임)" : "운임(기사운임)", amt.supply, false], ["부가세 10%", amt.vat, false], ["계산서 합계", amt.total, true]].map(([l, v, strong]) => (
+              {[[`${out ? "운임(청구운임)" : "운임(기사운임)"}${manyOn ? ` · ${otherRows.length + 1}건 합계` : ""}`, amt.supply, false], ["부가세 10%", amt.vat, false], ["계산서 합계", amt.total, true]].map(([l, v, strong]) => (
                 <div key={l}><div className="text-[11px] font-bold text-[#7A8AA8]">{l}</div><div className={`${strong ? "text-[15px] font-black text-[#0F1A30]" : "text-[13.5px] font-bold text-[#3A4A66]"}`}>{won(v)}</div></div>
               ))}
             </div>
@@ -414,11 +440,15 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
               <span className="basis-full text-[11.5px] font-semibold text-[#9AA9C3]">지급 처리 · 지급일 수정은 정산관리 › 용차지급관리에서 합니다.</span>
             </Row>
           )}
+        </div>
+        <div className="px-5 py-3 md:overflow-y-auto border-t md:border-t-0 md:border-l border-[#EEF2F8] bg-[#FAFBFD]">
+          {manyOn && <div className="mb-2 text-[12.5px] font-bold text-[#2D4C82]">일괄 적용 중 · 올린 증빙은 선택 오더 {otherRows.length + 1}건에 모두 붙고, 금액은 {otherRows.length + 1}건 합계와 비교해요.</div>}
           {/* 🧾 증빙서류 — 올리면 자동 스캔(오더 스캔과 같은 정밀 인식) */}
-          <EvidenceBox row={row} {...(evidenceApi ? { api: evidenceApi } : {})} canEdit={canEdit} expect={out ? row?.청구운임 : row?.기사운임} onScanned={onScanned} known={[coNow(company), row?.거래처명, row?.이름 || row?.기사명].filter(Boolean)} self={coNow(company)} selfIs={out ? "supplier" : "buyer"} />
+          <EvidenceBox row={row} api={evApi} canEdit={canEdit} expect={amt.supply} onScanned={onScanned} known={[coNow(company), row?.거래처명, row?.이름 || row?.기사명].filter(Boolean)} self={coNow(company)} selfIs={out ? "supplier" : "buyer"} />
+        </div>
         </div>
         <div className="px-5 py-3.5 bg-[#F7F9FC] border-t border-[#EEF2F8] flex items-center gap-2 shrink-0">
-          <span className="flex-1 min-w-0 text-[11.5px] font-semibold text-[#7A8AA8] leading-snug">{dirty ? <b className="text-[#B54708]">저장하지 않은 변경이 있습니다</b> : "아래 증빙서류에 계산서를 올리면 발행일 · 금액 · 입금자명이 자동으로 들어갑니다."}</span>
+          <span className="flex-1 min-w-0 text-[11.5px] font-semibold text-[#7A8AA8] leading-snug">{scanNote ? <b className="text-[#B54708]">{scanNote}</b> : dirty ? <b className="text-[#B54708]">저장하지 않은 변경이 있습니다</b> : "아래 증빙서류에 계산서를 올리면 발행일 · 금액 · 입금자명이 자동으로 들어갑니다."}</span>
           {canEdit && out && deposited && <button type="button" disabled={busy} onClick={undo} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#9A1F15] whitespace-nowrap">{withOthers && undoMany.length ? `${undoMany.length + 1}건 입금 취소` : "입금 취소"}</button>}
           <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#3A4A66]">닫기</button>
           {canEdit && <button type="button" disabled={busy || !dirty} onClick={save} data-pay-save className="h-10 px-5 rounded-xl border border-[#1B2B4B] bg-white text-[13px] font-black text-[#1B2B4B] disabled:opacity-40">{busy ? "저장 중…" : invMany && f.inv !== (row?.계산서일 || "") ? `${bulkRows.length + 1}건 저장` : "저장"}</button>}

@@ -1,7 +1,7 @@
 // ======================= src/MonthClose.jsx =======================
 // ✅ 2026-11-16 월 마감(배차자 1차) — 리디자인 4 "마감표"
 //  · 보기: 내 배차 · 담당자별 · 전체 / 달은 늘 당월부터
-//  · 위: 4단계 체크리스트(오더 확인 → 거래처 검증 → 1차 마감 → 경리 승인) + 진행 막대
+//  · 위: 4단계 체크리스트(오더 확인 → 거래처 검증 → 1차 마감 → 경리 확인) + 진행 막대
 //  · 가운데: 엑셀처럼 한 장의 표(순번 · 거래처 · 담당 · 오더 · 청구 · 기사 · 수수료 · 확인할 것 · 상태). 줄을 누르면 오더가 펼쳐진다(순번 포함)
 //  · 오더 줄을 누르면 PC는 배차관리와 같은 오더 패널, 폰은 아래 창에서 고친다. [+ 오더 추가]도 같은 패널(새 오더)
 //  · 확인할 것이 있어도 [검증]할 수 있다(한 번 묻는다) → [1차 마감] → 경리팀(arDesk kind "close")
@@ -107,14 +107,14 @@ function OrderSheet({ open, row, isNew, ym, phone, isViewer, clients, issues, on
 // ── 화면 ──────────────────────────────────────────
 //  ✅ 2026-11-16 리디자인 4 — "마감표": 엑셀 · 구글시트처럼 한 장의 표
 //   거래처가 한 줄(순번 · 오더 · 청구 · 기사 · 수수료 · 확인할 것 · 상태 · 버튼) → 누르면 그 자리에서 오더가 펼쳐진다(순번 포함)
-//   위: 4단계 체크리스트(오더 확인 → 거래처 검증 → 1차 마감 → 경리 승인) · 체크해서 한 번에 검증 · 1차 마감
+//   위: 4단계 체크리스트(오더 확인 → 거래처 검증 → 1차 마감 → 경리 확인) · 체크해서 한 번에 검증 · 1차 마감
 //   확인할 것(청구운임 빈칸 · 배차 미완료 · 기사운임 빈칸)이 있어도 검증할 수 있다 — 한 번 묻는다
 const ST = { // 상태 → 이름 · 색 · 순서(할 일 먼저)
   rejected: { label: "반려됨", c: C.bad, ord: 0 },
   none: { label: "검증 전", c: C.mute, ord: 1 },
   verified: { label: "검증 완료", c: C.blue, ord: 2 },
   submitted: { label: "1차 마감", c: C.warn, ord: 3 },
-  approved: { label: "경리 승인", c: C.ok, ord: 4 },
+  approved: { label: "경리 확인", c: C.ok, ord: 4 },
 };
 const stOf = (g) => (g.changed && g.status !== "none" ? { label: "바뀜 · 다시 검증", c: C.bad, ord: 0 } : ST[g.status] || ST.none);
 const ck = "w-[18px] h-[18px] accent-[#14213D] cursor-pointer";
@@ -183,7 +183,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
   const submitMany = async (gs) => {
     if (isViewer || busy || !gs.length) return;
     if (gs.length > 1 && !(await kpConfirm(`${gs.length}곳을 1차 마감할까요?\n경리팀 마감 검증으로 넘어가요.`))) return;
-    setBusy("s"); try { for (const g of gs) await save(g, submitPatch(g.row, me)); setToast(`${gs.length === 1 ? gs[0].client : `${gs.length}곳`} 1차 마감 — 경리팀으로 넘어갔어요`); setPick(new Set()); } finally { setBusy(""); }
+    setBusy("s"); try { for (const g of gs) await save(g, submitPatch(g.row, me)); setToast(`${gs.length === 1 ? gs[0].client : `${gs.length}곳`} 1차 마감 — 경리팀 거래처정산으로 넘어갔어요`); setPick(new Set()); } finally { setBusy(""); }
   };
   const unlock = async (g) => { if (isViewer || busy || !g?.row) return; setBusy("u"); try { await save(g, unlockPatch(g.row, me, "월 마감에서")); setToast(g.status === "verified" ? "검증을 취소했어요" : "마감을 풀었어요"); } finally { setBusy(""); } };
   const toggle = (set, setter, k) => setter((p) => { const x = new Set(p); x.has(k) ? x.delete(k) : x.add(k); return x; });
@@ -200,7 +200,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
     { k: "issue", n: "1", label: "오더 확인", v: issueTotal ? `확인할 것 ${issueTotal}건` : "확인할 것 없음", tone: issueTotal ? C.bad : C.ok, on: () => { setOnlyIssue((x) => !x); setTab("all"); }, active: onlyIssue },
     { k: "todo", n: "2", label: "거래처 검증", v: `${cnt.verified + cnt.submitted + cnt.approved} / ${groups.length}곳`, tone: cnt.todo ? C.ink : C.ok, on: () => setTab(tab === "todo" ? "all" : "todo"), active: tab === "todo", sub: cnt.todo ? `남은 곳 ${cnt.todo}` : "모두 검증" },
     { k: "verified", n: "3", label: "1차 마감", v: `${cnt.submitted + cnt.approved} / ${groups.length}곳`, tone: cnt.verified ? C.blue : C.ink, on: () => setTab(tab === "verified" ? "all" : "verified"), active: tab === "verified", sub: cnt.verified ? `마감할 곳 ${cnt.verified}` : "" },
-    { k: "closed", n: "4", label: "경리 승인", v: `${cnt.approved} / ${groups.length}곳`, tone: cnt.approved && cnt.approved === groups.length ? C.ok : C.ink, on: () => setTab(tab === "closed" ? "all" : "closed"), active: tab === "closed", sub: cnt.submitted ? `경리 확인 중 ${cnt.submitted}` : "" },
+    { k: "closed", n: "4", label: "경리 확인", v: `${cnt.approved} / ${groups.length}곳`, tone: cnt.approved && cnt.approved === groups.length ? C.ok : C.ink, on: () => setTab(tab === "closed" ? "all" : "closed"), active: tab === "closed", sub: cnt.submitted ? `경리 확인 중 ${cnt.submitted}` : "" },
   ];
   const pct = groups.length ? Math.round(((cnt.verified * 0.5 + cnt.submitted * 0.85 + cnt.approved) / groups.length) * 100) : 0;
 
