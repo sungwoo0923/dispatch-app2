@@ -1,5 +1,6 @@
 // ======================= src/App.jsx =======================
 
+import BlankScreenGuard from "./BlankScreenGuard"; // 🧯 2026-11-16 빈 화면 지킴이
 import React, { useState, useEffect, useRef } from "react";
 import { setTenant, setTenantRole, setServerFilter, setPreviewMode, isPreviewMode } from "./fsTenant";
 import { purgeOnSignOut, noteSignedInUid } from "./sessionPurge"; // 🔒 2026-11-07 계정 바꿀 때 앞 사람(다른 회사) 데이터 정리
@@ -971,6 +972,8 @@ export default function App() {
       {!IS_MOBILE_PREVIEW && <VersionCheck />}
       {/* ⭐ 2026-11-06 문구 편집 모드 — 최고관리자·부관리자에게만 왼쪽 아래 "✎ 문구" 단추(Ctrl+Shift+E) · 적용은 모든 사용자 */}
       <TextOverrideLayer role={role} user={user} />
+      {/* 🧯 2026-11-16 빈 화면 지킴이 — 로그인 뒤 화면이 6초 넘게 비어 있으면 안내 + 관리센터 오류 신고로 화면 상태 자동 전송 */}
+      {!IS_MOBILE_PREVIEW && <BlankScreenGuard active={!!user && !!role && !needPcMfa && !needUserMfa && !sessionConflict && !driverAppBlocked} info={{ phoneLayout, isTablet, role, uaPhone: isSmartPhone(), uaTablet: isTabletDevice(), entry: kpEntry() }} />}
 
       {/* ⭐ 중복 로그인 선택창 */}
       {/* ⭐ 2026-11-02 화면 점검 — 튜토리얼(z 100060)·로딩 화면(z 2147483000)보다 위에 보이도록 최상위 z-index */}
