@@ -104,7 +104,8 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
         <span className={T.ok}>2차 승인 {cc.approved}곳</span>
         <span className={T.warn}>검증 대기 {cc.submitted}곳</span>
         <span className={T.bad}>반려 {cc.rejected}곳</span>
-        <span className={T.mute}>1차 마감 전 {cc.none}곳</span>
+        <span className={T.blue}>배차자 검증 완료 {cc.verified || 0}곳</span>
+        <span className={T.mute}>검증 전 {cc.none}곳</span>
       </div>
 
       {/* ① 오늘 할 일 3개 */}

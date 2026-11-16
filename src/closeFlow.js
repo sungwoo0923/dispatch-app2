@@ -5,8 +5,10 @@
 //  상태: none(1차 마감 전) → submitted(경리 검증 대기) → approved(2차 승인) / rejected(반려 → 고쳐서 다시 올림)
 import { n, monthOf } from "./settleCore.js";
 
+// ✅ 2026-11-16 검증 단계 — 배차자가 거래처 오더를 다 보고 [검증 완료] → 그 다음 [1차 마감]이 열린다
 export const CLOSE_STATUS = {
-  none: { label: "1차 마감 전", tone: "mute" },
+  none: { label: "검증 전", tone: "mute" },
+  verified: { label: "검증 완료", tone: "blue" },
   submitted: { label: "경리 검증 대기", tone: "warn" },
   rejected: { label: "반려됨", tone: "bad" },
   approved: { label: "2차 승인", tone: "ok" },
@@ -95,14 +97,23 @@ export function closeBoard(orders, ym, { closeOf = () => null, me = null, today 
 }
 
 // 지금 할 수 있는 일
-export const canSubmit = (row) => !!row && row.block === 0 && (row.status === "none" || row.status === "rejected" || (row.status === "submitted" && row.changed));
+// 검증: 고칠 것이 없고(검증 전 · 반려 · 검증 뒤 금액이 바뀜 · 마감 뒤 금액이 바뀜)
+export const canVerify = (row) => !!row && row.block === 0 && (row.status === "none" || row.status === "rejected" || ((row.status === "verified" || row.status === "submitted") && row.changed));
+// 1차 마감: 검증 완료이고 그 뒤로 금액이 그대로일 때만
+export const canSubmit = (row) => !!row && row.block === 0 && row.status === "verified" && !row.changed;
 export const canApprove = (row) => !!row && row.status === "submitted" && !row.changed;
 export const canReject = (row) => !!row && (row.status === "submitted" || row.status === "approved");
-export const canUnlock = (row, mode) => !!row && (mode === "acct" ? row.status === "approved" || row.status === "submitted" : row.status === "submitted");
+export const canUnlock = (row, mode) => !!row && (mode === "acct" ? row.status === "approved" || row.status === "submitted" : row.status === "submitted" || row.status === "verified");
 
 // 저장할 값 만들기(기록은 최근 30개)
 const logOf = (doc, entry) => [entry, ...((doc?.log) || [])].slice(0, 30);
 const who = (me) => ({ email: String(me?.email || "").toLowerCase(), name: me?.name || me?.email || "" });
+export function verifyPatch(row, me, now = Date.now()) {
+  const w = who(me);
+  return { kind: "close", client: row.client, yyyymm: row.ym, status: "verified", reason: "",
+    verifiedBy: w.email, verifiedByName: w.name, verifiedAt: now, snapshot: { count: row.count, sale: row.sale },
+    log: logOf(row.doc, { at: now, by: w.name, act: row.status === "rejected" ? "고쳐서 다시 검증" : "검증 완료", note: "" }) };
+}
 export function submitPatch(row, me, note = "", now = Date.now()) {
   const w = who(me);
   return { kind: "close", client: row.client, yyyymm: row.ym, status: "submitted", reason: "",
@@ -122,7 +133,7 @@ export function rejectPatch(row, me, reason, now = Date.now()) {
 export function unlockPatch(row, me, note = "", now = Date.now()) {
   const w = who(me);
   return { kind: "close", client: row.client, yyyymm: row.ym, status: "none",
-    log: logOf(row.doc, { at: now, by: w.name, act: "마감 풀기", note }) };
+    log: logOf(row.doc, { at: now, by: w.name, act: row.status === "verified" ? "검증 취소" : "마감 풀기", note }) };
 }
 
 // 일 마감 — 배차자 × 날짜. 내 오더만 모아 같은 검사를 한다
@@ -134,7 +145,7 @@ export function dayBoard(orders, date, me, today = kstToday()) {
 
 // 정산 홈 숫자 — 검증 대기 · 반려 · 승인 거래처 수
 export function closeCounts(board) {
-  const c = { none: 0, submitted: 0, rejected: 0, approved: 0 };
+  const c = { none: 0, verified: 0, submitted: 0, rejected: 0, approved: 0 };
   (board || []).forEach((r) => { c[r.status] += 1; });
   return c;
 }

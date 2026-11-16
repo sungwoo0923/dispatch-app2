@@ -1,6 +1,6 @@
 // 2단계 마감 · 거래명세서 양식 테스트 — node scripts/closeFlow.test.mjs
 import assert from "node:assert/strict";
-import { closeBoard, closeChecks, canSubmit, canApprove, canReject, submitPatch, approvePatch, rejectPatch, unlockPatch, dayBoard, closeCounts, isMine, prevYmOf } from "../src/closeFlow.js";
+import { closeBoard, closeChecks, canSubmit, canVerify, verifyPatch, canApprove, canReject, submitPatch, approvePatch, rejectPatch, unlockPatch, dayBoard, closeCounts, isMine, prevYmOf } from "../src/closeFlow.js";
 import { normalizeForm, pickForm, visibleCols, headerLabels, BASE_FORM, formDoc } from "../src/invoiceForm.js";
 
 const me = { email: "Kim@Co.kr", uid: "u1", name: "김배차" };
@@ -29,28 +29,37 @@ assert.deepEqual([row("마바").checks.noDriver.length, row("마바").checks.una
 assert.deepEqual([row("가나상사").block, row("다라물산").block, row("마바").block, row("마바").warn], [0, 2, 1, 1]);
 assert.deepEqual(B.filter((r) => r.mine).map((r) => r.client).sort(), ["가나상사", "마바"], "내 거래처 = 내가 등록한 오더가 있는 곳");
 // 흐름: 1차 마감 → 승인 / 반려 → 다시 마감
-assert.ok(canSubmit(row("가나상사")) && !canSubmit(row("다라물산")), "고칠 것이 있으면 1차 마감 못 함");
+assert.ok(canVerify(row("가나상사")) && !canVerify(row("다라물산")), "고칠 것이 있으면 검증 못 함");
+assert.ok(!canSubmit(row("가나상사")), "검증 전에는 1차 마감 못 함");
 const docs = new Map();
 const closeOf = (c, m) => docs.get(`${c}|${m}`) || null;
+const vp = verifyPatch(row("가나상사"), me, 500);
+assert.deepEqual([vp.status, vp.snapshot.count, vp.log[0].act], ["verified", 2, "검증 완료"]);
+docs.set("가나상사|2026-10", vp);
+B = closeBoard(orders, "2026-10", { me, today, closeOf });
+assert.ok(canSubmit(row("가나상사")) && !canVerify(row("가나상사")), "검증 완료 → 1차 마감 가능");
+B = closeBoard([...orders, o({ _id: "v1", 상차일: "2026-10-21" })], "2026-10", { me, today, closeOf });
+assert.ok(row("가나상사").changed && !canSubmit(row("가나상사")) && canVerify(row("가나상사")), "검증 뒤 오더가 바뀌면 다시 검증");
+B = closeBoard(orders, "2026-10", { me, today, closeOf });
 const sp = submitPatch(row("가나상사"), me, "", 1000);
-assert.deepEqual([sp.status, sp.submittedBy, sp.snapshot.count, sp.snapshot.sale, sp.log[0].act], ["submitted", "kim@co.kr", 2, 200000, "1차 마감"]);
+assert.deepEqual([sp.status, sp.submittedBy, sp.snapshot.count, sp.snapshot.sale, sp.log[0].act, sp.log[1].act], ["submitted", "kim@co.kr", 2, 200000, "1차 마감", "검증 완료"]);
 docs.set("가나상사|2026-10", sp);
 B = closeBoard(orders, "2026-10", { me, today, closeOf });
 assert.ok(canApprove(row("가나상사")) && canReject(row("가나상사")) && !canSubmit(row("가나상사")));
 const rj = rejectPatch(row("가나상사"), { email: "acct@co.kr", name: "최경리" }, " 대기료 빠짐 ", 2000);
-assert.deepEqual([rj.status, rj.reason, rj.log.length, rj.log[0].act], ["rejected", "대기료 빠짐", 2, "반려"]);
+assert.deepEqual([rj.status, rj.reason, rj.log.length, rj.log[0].act], ["rejected", "대기료 빠짐", 3, "반려"], "기록: 검증 완료 → 1차 마감 → 반려");
 docs.set("가나상사|2026-10", { ...sp, ...rj });
 B = closeBoard(orders, "2026-10", { me, today, closeOf });
-assert.ok(canSubmit(row("가나상사")) && !canApprove(row("가나상사")));
-assert.equal(submitPatch(row("가나상사"), me).log[0].act, "고쳐서 다시 1차 마감");
+assert.ok(canVerify(row("가나상사")) && !canSubmit(row("가나상사")) && !canApprove(row("가나상사")), "반려되면 다시 검증부터");
+assert.equal(verifyPatch(row("가나상사"), me).log[0].act, "고쳐서 다시 검증");
 // 마감 뒤 금액이 바뀌면 승인 못 하고 다시 1차 마감
 docs.set("가나상사|2026-10", { ...sp, status: "submitted" });
 const more = [...orders, o({ _id: "11", 상차일: "2026-10-20" })];
 B = closeBoard(more, "2026-10", { me, today, closeOf });
-assert.ok(row("가나상사").changed && !canApprove(row("가나상사")) && canSubmit(row("가나상사")), "금액 바뀜 → 다시 1차 마감");
+assert.ok(row("가나상사").changed && !canApprove(row("가나상사")) && canVerify(row("가나상사")), "금액 바뀜 → 다시 검증");
 const ap = approvePatch(closeBoard(orders, "2026-10", { me, today, closeOf }).find((r) => r.client === "가나상사"), { name: "최경리" });
 assert.equal(ap.status, "approved"); assert.equal(unlockPatch(row("가나상사"), me).status, "none");
-assert.deepEqual(closeCounts(closeBoard(orders, "2026-10", { me, today, closeOf })), { none: 2, submitted: 1, rejected: 0, approved: 0 });
+assert.deepEqual(closeCounts(closeBoard(orders, "2026-10", { me, today, closeOf })), { none: 2, verified: 0, submitted: 1, rejected: 0, approved: 0 });
 // 일 마감 — 그날 내 오더만
 const D = dayBoard(orders, "2026-10-05", me, today);
 assert.deepEqual([D.count, D.sale, D.block, D.warn], [2, 150000, 1, 1], "같은 날 같은 구간 · 같은 차량은 거래처가 달라도 중복 · 기사운임 빈칸은 알림");

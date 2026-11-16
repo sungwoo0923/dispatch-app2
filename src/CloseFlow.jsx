@@ -129,13 +129,13 @@ export default function CloseFlow({ orders = [], company = "", mode = "disp", me
   };
 
   const flow = [
-    { who: "배차자", what: "내 거래처 정리", desc: "자동 검사로 운임 · 배차 · 중복을 맞춰요", n: counts.none + counts.rejected, tone: counts.rejected ? "bad" : "mute" },
+    { who: "배차자", what: "거래처 검증", desc: "오더를 다 보고 [검증 완료]를 눌러요", n: counts.none + counts.rejected + (counts.verified || 0), tone: counts.rejected ? "bad" : "mute" },
     { who: "배차자", what: "1차 마감", desc: "올리면 경리팀 검증 목록에 보여요", n: null },
     { who: "경리팀", what: "2차 검증", desc: "승인하거나 사유를 적어 반려해요", n: counts.submitted, tone: "warn" },
     { who: "경리팀", what: "업체에 발송", desc: "거래처 양식으로 명세서를 보내요", n: counts.approved, tone: "ok" },
   ];
   const filters = mode === "acct"
-    ? [["submitted", "검증 대기", "warn"], ["rejected", "반려", "bad"], ["approved", "승인", "ok"], ["none", "1차 마감 전", "mute"], ["all", "전체", "fg"]]
+    ? [["submitted", "검증 대기", "warn"], ["rejected", "반려", "bad"], ["approved", "승인", "ok"], ["verified", "배차자 검증 완료", "blue"], ["none", "검증 전", "mute"], ["all", "전체", "fg"]]
     : [["all", "내 거래처 전체", "fg"], ["none", "1차 마감 전", "mute"], ["rejected", "반려", "bad"], ["submitted", "검증 대기", "warn"], ["approved", "승인", "ok"]];
 
   const actionCell = (r) => (mode === "disp"

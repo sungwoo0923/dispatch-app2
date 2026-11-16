@@ -334,7 +334,7 @@ export function ScreenChip({ p, now }) {
   if (!p?.screen || !p.now) return null;
   const app = p.screenApp === "mobile" ? "모바일" : p.screenApp === "shipper" ? "화주" : "PC";
   return (
-    <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-[#DCE3EE] bg-white text-[12px] font-black whitespace-nowrap max-w-full" title={`${app} · ${p.screen}`}>
+    <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-md border border-[#DCE3EE] bg-white text-[12px] font-black whitespace-nowrap max-w-full min-w-0 overflow-hidden" title={`${app} · ${p.screen}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${p.screenHidden ? "bg-[#C3CDDD]" : "bg-[#1B2B4B]"}`} />
       <span className={`truncate ${p.screenHidden ? "text-[#94A3B8]" : "text-[#1B2B4B]"}`}>{p.screen}</span>
       <span className="text-[#94A3B8] font-bold">{p.screenHidden ? "자리 비움" : stayText(p.screenAt, now)}</span>
@@ -381,8 +381,10 @@ export function LiveNowPanel({ compact = false, onMore, onCompany }) {
                     <span className="text-[13px] font-bold text-[#7A879C] whitespace-nowrap">{ROLE_LABELS[p.role] || p.role || ""}</span>
                   </div>
                   <button type="button" onClick={() => onCompany?.(p.company)} className="block max-w-full mt-0.5 text-left text-[13.5px] font-semibold text-[#5B6B85] truncate hover:underline leading-tight">{p.isShipper ? "화주 · " : ""}{p.company}</button>
+                  {/* 🛠 2026-11-16 좁은 칸(홈 오른쪽 LIVE)에서는 화면 표시를 이름 아래 줄로 — 옆 칸에 두면 이름 · 회사 위로 겹쳤다 */}
+                  {compact && <div className="mt-1 max-w-full overflow-hidden"><ScreenChip p={p} now={now} /></div>}
                 </div>
-                <div className="hidden sm:block shrink min-w-0"><ScreenChip p={p} now={now} /></div>
+                {!compact && <div className="hidden sm:block shrink min-w-0 max-w-[45%] overflow-hidden"><ScreenChip p={p} now={now} /></div>}
                 <div className="shrink-0 flex items-center gap-2.5 sm:gap-3">
                   <KindChips p={p} now={now} />
                   <span className={`min-w-[64px] text-right text-[14.5px] font-black whitespace-nowrap tabular-nums ${p.now ? "text-[#1B2B4B]" : "text-[#94A3B8]"}`}>{agoText(p.lastSeen, now)}</span>

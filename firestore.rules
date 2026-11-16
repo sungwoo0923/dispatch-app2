@@ -1737,7 +1737,10 @@ service cloud.firestore {
       // ⭐ 2026-11-02 점검 — HOME › 직원 일정(ExecSuite TeamSchedule)은 회사의 연차(cat=="leave") 결재만 조회 → 같은 회사 직원(기사·화주 제외)은 읽기 허용
       //  (조회는 company == 우리 회사 + cat == "leave" 조건으로 보내야 한다) — 2026-11-16 한도에 걸리지 않게 열람 범위 규칙보다 앞으로
       allow read: if resource.data.get('cat', '') == 'leave' && resource.data.get('company', '') == myCo() && isOfficeStaff();
-      allow read: if isApproved() && (isTotalMasterUser() || !locked() || resource.data.companyName == myCo())
+      //  🛠 2026-11-16 "서버 분리 잠금"을 켜도 결재 목록이 막히지 않게 — 예전엔 앞에 companyName 조건이 있어
+      //   참여자 조회(participants) · 회사 조회(company)가 그 칸을 증명하지 못해 잠금을 켜면 거부됐다.
+      //   참여자는 문서에 이름이 있으니 회사와 상관없이, 나머지는 각 함수가 company == 우리 회사를 확인한다
+      allow read: if isApproved()
         && (request.auth.uid in resource.data.get('participants', []) || isAcctApprovalReader(resource.data) || apHrFormReader(resource.data)
           || apTeamReader(resource.data) || apAllReader(resource.data.get('company', '')));
       allow create: if coCreate() && request.resource.data.get('drafterUid', '') == request.auth.uid

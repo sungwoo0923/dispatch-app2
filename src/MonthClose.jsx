@@ -9,7 +9,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { useArDesk, arDeskId } from "./SettleDesk";
 import { won, short, kstYm, monthOf, n } from "./settleCore";
-import { CLOSE_RULES, CLOSE_STATUS, closeBoard, closeChecks, isMine, canSubmit, submitPatch, unlockPatch, prevYmOf } from "./closeFlow";
+import { CLOSE_RULES, CLOSE_STATUS, closeBoard, closeChecks, isMine, canSubmit, canVerify, verifyPatch, submitPatch, unlockPatch, prevYmOf } from "./closeFlow";
 import { useLoadOrderRange, monthEnd } from "./orderHistory";
 import useNarrow from "./useNarrow";
 
@@ -151,266 +151,286 @@ function OrderSheet({ open, row, isNew, ym, phone, isViewer, clients, issues, on
 }
 
 // ── 화면 ──────────────────────────────────────────
+//  ✅ 2026-11-16 리디자인 3 — 거래처 하나씩 "검토 → 검증 완료 → 1차 마감" (원터치)
+//   위: 디지털 진행판(검증 전 → 검증 완료 → 1차 마감 → 경리 승인) · 거래처마다 한 칸씩 상태 띠
+//   왼쪽: 거래처 목록(상태 · 고칠 것) / 오른쪽: 고른 거래처 검토(오더 · 확인할 것 · 큰 버튼 하나)
+const DIG = "'JetBrains Mono','SFMono-Regular',Menlo,Consolas,'Noto Sans KR',monospace";
+const DK = { bg: "linear-gradient(135deg,#0A1224 0%,#13213E 55%,#1B3260 100%)", line: "rgba(143,176,240,.18)", sub: "#9FB2D6", mute: "#6F83A8", hi: "#8FB0F0", ok: "#4ADE80", warn: "#F7B955", bad: "#FF8A80" };
+const ST = { // 상태 → 색 · 이름 · 순서(할 일 먼저)
+  rejected: { label: "반려 · 다시 검증", c: C.bad, dk: DK.bad, ord: 0 },
+  none: { label: "검증 전", c: C.mute, dk: "#7A8DB3", ord: 1 },
+  verified: { label: "검증 완료", c: C.blue, dk: DK.hi, ord: 2 },
+  submitted: { label: "1차 마감", c: C.warn, dk: DK.warn, ord: 3 },
+  approved: { label: "경리 승인", c: C.ok, dk: DK.ok, ord: 4 },
+};
+const stOf = (g) => (g.changed && g.status !== "none" ? { ...ST.none, label: "바뀜 · 다시 검증", c: C.bad, dk: DK.bad, ord: 0 } : ST[g.status] || ST.none);
+const StatusDot = ({ g, size = 10 }) => { const s = stOf(g); const done = g.status === "approved" || g.status === "submitted" || g.status === "verified"; return (
+  <span className="inline-grid place-items-center rounded-full shrink-0" style={{ width: size + 8, height: size + 8, border: `2px solid ${s.c}`, background: done && !g.changed ? s.c : "transparent" }}>
+    {done && !g.changed && <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>}
+  </span>); };
+
 export default function MonthClose({ orders = [], company = "", me = null, staffName, isViewer = false, onPatch, onAdd, onRemove, onOpenOrder }) {
-  // 🧩 2026-11-16 PC는 오더를 누르면 오더 복사/수정 패널(배차현황 · 미배차현황과 같은 창) · 휴대폰은 아래에서 올라오는 고치기 창
-  const openRow = (o) => (onOpenOrder ? onOpenOrder(o) : setSheet({ row: o }));
-  const phone = useNarrow(760);
+  const phone = useNarrow(860);
   const desk = useArDesk(company);
   const [ym, setYm] = React.useState(() => kstYm(new Date(Date.now() + 9 * 3600e3).getUTCDate() > 20 ? 0 : -1));
   useLoadOrderRange(`${prevYmOf(ym)}-01`, monthEnd(ym));
-  const [scope, setScope] = React.useState("mine"); // mine | staff | client | all
+  const [scope, setScope] = React.useState("mine"); // mine | staff | all
   const [staff, setStaff] = React.useState("");
-  const [pickClient, setPickClient] = React.useState("");
-  const [focus, setFocus] = React.useState(""); // 왼쪽 거래처 목록에서 고른 곳("" = 범위 전체)
-  const [only, setOnly] = React.useState("all"); // all | need | 규칙 key
-  const [day, setDay] = React.useState(0);
-  const [q, setQ] = React.useState("");
-  const [sheet, setSheet] = React.useState(null); // { row } | { isNew: true }
-  const [delAsk, setDelAsk] = React.useState(""); // 표에서 바로 지우기 — 확인 중인 오더 id
+  const [listTab, setListTab] = React.useState("todo"); // todo | verified | closed | all
+  const [cq, setCq] = React.useState("");
+  const [sel, setSel] = React.useState("");
+  const [only, setOnly] = React.useState("all");
+  const [sheet, setSheet] = React.useState(null);
+  const [delAsk, setDelAsk] = React.useState("");
   const [ask, setAsk] = React.useState(false);
-  const [busy, setBusy] = React.useState(false);
+  const [busy, setBusy] = React.useState("");
   const [toast, setToast] = React.useState("");
-  React.useEffect(() => { setFocus(""); setDay(0); }, [ym, scope, staff, pickClient]);
-  React.useEffect(() => { if (!toast) return undefined; const t = setTimeout(() => setToast(""), 3500); return () => clearTimeout(t); }, [toast]);
+  const panelRef = React.useRef(null);
+  React.useEffect(() => { if (!toast) return undefined; const t = setTimeout(() => setToast(""), 3200); return () => clearTimeout(t); }, [toast]);
+  React.useEffect(() => { setOnly("all"); }, [sel]);
+  const openRow = (o) => (onOpenOrder && !phone ? onOpenOrder(o) : setSheet({ row: o }));
 
   const staffOf = React.useCallback((o) => (staffName ? staffName(o) : "") || "미지정", [staffName]);
   const month = React.useMemo(() => (orders || []).filter((o) => !isCancel(o) && o?.source !== "transport_transmit" && monthOf(o) === ym), [orders, ym]);
   const staffList = React.useMemo(() => { const m = new Map(); month.forEach((o) => { const s = staffOf(o); m.set(s, (m.get(s) || 0) + 1); }); return [...m.entries()].sort((a, b) => b[1] - a[1]); }, [month, staffOf]);
-  const clientList = React.useMemo(() => { const m = new Map(); month.forEach((o) => { const c = String(o.거래처명 || "").trim() || "(거래처 없음)"; m.set(c, (m.get(c) || 0) + 1); }); return [...m.entries()].sort((a, b) => b[1] - a[1]); }, [month]);
   const mineOf = React.useCallback((o) => isMine(o, me) || (!!me?.name && staffOf(o) === me.name), [me, staffOf]);
-  const scoped = React.useMemo(() => month.filter((o) =>
-    scope === "mine" ? mineOf(o) : scope === "staff" ? (!staff || staffOf(o) === staff) : scope === "client" ? (!pickClient || (String(o.거래처명 || "").trim() || "(거래처 없음)") === pickClient) : true),
-  [month, scope, staff, pickClient, mineOf, staffOf]);
+  const scoped = React.useMemo(() => month.filter((o) => (scope === "mine" ? mineOf(o) : scope === "staff" ? (!staff || staffOf(o) === staff) : true)), [month, scope, staff, mineOf, staffOf]);
 
-  // 검사는 이번 달 전체로(다른 담당자 오더와 겹치는 중복도 잡는다) → 오더마다 걸린 항목
+  // 검사는 이번 달 전체로(다른 담당자 오더와 겹치는 중복도 잡는다)
   const checks = React.useMemo(() => closeChecks(month), [month]);
   const issueMap = React.useMemo(() => { const m = new Map(); CLOSE_RULES.forEach((r) => (checks[r.key] || []).forEach((o) => { const id = idOf(o); const l = m.get(id) || []; l.push({ key: r.key, label: r.label, block: r.block }); m.set(id, l); })); return m; }, [checks]);
-  const noClient = (o) => !String(o.거래처명 || "").trim();
-  const issuesOfRow = React.useCallback((o) => { const l = [...(issueMap.get(idOf(o)) || [])]; if (noClient(o)) l.unshift({ key: "noClient", label: "거래처 빈칸", block: true }); return l; }, [issueMap]);
-  const needIds = React.useMemo(() => new Set(scoped.filter((o) => issuesOfRow(o).length).map(idOf)), [scoped, issuesOfRow]);
-  const blockIds = React.useMemo(() => new Set(scoped.filter((o) => issuesOfRow(o).some((x) => x.block)).map(idOf)), [scoped, issuesOfRow]);
+  const issuesOfRow = React.useCallback((o) => { const l = [...(issueMap.get(idOf(o)) || [])]; if (!String(o.거래처명 || "").trim()) l.unshift({ key: "noClient", label: "거래처 빈칸", block: true }); return l; }, [issueMap]);
 
-  // 거래처 단위 마감 상태(마감은 거래처 전체 기준)
+  // 거래처 단위(검증 · 마감은 거래처 전체 기준)
   const closeOf = React.useCallback((c, m) => desk.closes.get(`${c}|${m}`) || null, [desk.closes]);
   const board = React.useMemo(() => new Map(closeBoard(orders, ym, { closeOf, me }).map((r) => [r.client, r])), [orders, ym, closeOf, me]);
   const groups = React.useMemo(() => {
     const m = new Map();
-    scoped.forEach((o) => { const c = String(o.거래처명 || "").trim() || "(거래처 없음)"; const g = m.get(c) || { client: c, count: 0, sale: 0, need: 0, block: 0 }; g.count += 1; g.sale += n(o.청구운임); if (needIds.has(idOf(o))) g.need += 1; if (blockIds.has(idOf(o))) g.block += 1; m.set(c, g); });
-    return [...m.values()].map((g) => { const b = board.get(g.client); return { ...g, row: b || null, status: b?.status || "none", changed: !!b?.changed }; }).sort((a, b) => b.block - a.block || b.sale - a.sale);
-  }, [scoped, needIds, blockIds, board]);
-  const counts = React.useMemo(() => { const c = { none: 0, submitted: 0, rejected: 0, approved: 0 }; groups.forEach((g) => { c[g.status] += 1; }); return c; }, [groups]);
-  const closable = groups.filter((g) => g.row && g.block === 0 && canSubmit({ ...g.row, block: (g.row.block || 0) }));
-  const blockedGroups = groups.filter((g) => g.block > 0 && (g.status === "none" || g.status === "rejected"));
-
+    scoped.forEach((o) => { const c = String(o.거래처명 || "").trim() || "(거래처 없음)"; const g = m.get(c) || { client: c, rows: [], sale: 0, buy: 0, block: 0, warn: 0 }; g.rows.push(o); g.sale += n(o.청구운임); g.buy += n(o.기사운임); const is = issuesOfRow(o); if (is.some((x) => x.block)) g.block += 1; else if (is.length) g.warn += 1; m.set(c, g); });
+    return [...m.values()].map((g) => { const b = board.get(g.client); return { ...g, count: g.rows.length, row: b || null, status: b?.status || "none", changed: !!b?.changed, owners: [...new Set(g.rows.map(staffOf))].slice(0, 2).join(", ") }; })
+      .sort((a, b) => stOf(a).ord - stOf(b).ord || b.block - a.block || b.sale - a.sale);
+  }, [scoped, board, issuesOfRow, staffOf]);
+  const cnt = React.useMemo(() => { const c = { none: 0, verified: 0, submitted: 0, approved: 0, rejected: 0, changed: 0 }; groups.forEach((g) => { if (g.changed && g.status !== "none") c.changed += 1; else c[g.status] += 1; }); return c; }, [groups]);
+  const todoN = cnt.none + cnt.rejected + cnt.changed;
+  const readyGroups = groups.filter((g) => g.row && canSubmit({ ...g.row, block: g.block }));
+  const blockTotal = groups.reduce((a, g) => a + g.block, 0);
   const sale = scoped.reduce((a, o) => a + n(o.청구운임), 0);
-  const buy = scoped.reduce((a, o) => a + n(o.기사운임), 0);
-  const pct = scoped.length ? Math.round(((scoped.length - needIds.size) / scoped.length) * 100) : 100;
-  const ruleCounts = React.useMemo(() => {
-    const out = [{ key: "noClient", label: "거래처 빈칸", block: true, n: scoped.filter(noClient).length }];
-    CLOSE_RULES.forEach((r) => { const ids = new Set((checks[r.key] || []).map(idOf)); out.push({ key: r.key, label: r.label, block: r.block, n: scoped.filter((o) => ids.has(idOf(o))).length }); });
-    return out.filter((x) => x.n > 0);
-  }, [scoped, checks]);
 
-  const rows = React.useMemo(() => {
-    const nq = q.replace(/\s/g, "").toLowerCase();
-    return scoped.filter((o) => (!focus || (String(o.거래처명 || "").trim() || "(거래처 없음)") === focus)
-      && (!day || dayOf(o) === day)
-      && (only === "all" || (only === "need" ? needIds.has(idOf(o)) : issuesOfRow(o).some((x) => x.key === only)))
-      && (!nq || [o.거래처명, o.상차지명, o.하차지명, o.차량번호, o.이름, o.화물내용].some((v) => String(v || "").replace(/\s/g, "").toLowerCase().includes(nq))))
-      .sort((a, b) => String(a.상차일 || "").localeCompare(String(b.상차일 || "")) || String(a.거래처명 || "").localeCompare(String(b.거래처명 || ""), "ko"));
-  }, [scoped, focus, day, only, q, needIds, issuesOfRow]);
-  const [limit, setLimit] = React.useState(150);
-  React.useEffect(() => { setLimit(150); }, [rows.length, focus, only, day]);
+  const listed = groups.filter((g) => {
+    const s = g.changed && g.status !== "none" ? "todo" : g.status === "verified" ? "verified" : g.status === "submitted" || g.status === "approved" ? "closed" : "todo";
+    return (listTab === "all" || s === listTab) && (!cq || g.client.replace(/\s/g, "").toLowerCase().includes(cq.replace(/\s/g, "").toLowerCase()));
+  });
+  // 고른 거래처 — 없으면 할 일이 있는 첫 곳
+  const cur = groups.find((g) => g.client === sel) || listed[0] || groups[0] || null;
+  React.useEffect(() => { if (cur && cur.client !== sel) setSel(cur.client); }, [cur?.client]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pick = (c) => { setSel(c); if (phone) setTimeout(() => panelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); };
 
-  const focusGroup = focus ? groups.find((g) => g.client === focus) : null;
-  const submit = async () => {
-    if (isViewer || busy || !closable.length) return;
-    setBusy(true);
-    try {
-      for (const g of closable) await desk.save(g.row.doc?.id || arDeskId(desk.company, "close", g.client, ym), submitPatch(g.row, me));
-      setToast(`${closable.length}곳을 1차 마감했어요. 경리팀 마감 검증으로 넘어갔어요.`); setAsk(false);
-    } finally { setBusy(false); }
-  };
-  const unlock = async (g) => { if (isViewer || !g?.row) return; await desk.save(g.row.doc?.id || arDeskId(desk.company, "close", g.client, ym), unlockPatch(g.row, me, "월 마감에서 풀기")); setToast(`${g.client} 마감을 풀었어요.`); };
+  const curRows = React.useMemo(() => {
+    if (!cur) return [];
+    const r = cur.rows.map((o) => ({ o, is: issuesOfRow(o) }));
+    return r.filter(({ is }) => only === "all" || (only === "need" ? is.length : is.some((x) => x.key === only)))
+      .sort((a, b) => (b.is.some((x) => x.block) - a.is.some((x) => x.block)) || (b.is.length - a.is.length) || String(a.o.상차일 || "").localeCompare(String(b.o.상차일 || "")));
+  }, [cur, only, issuesOfRow]);
+  const curRule = React.useMemo(() => {
+    if (!cur) return [];
+    const c = new Map(); cur.rows.forEach((o) => issuesOfRow(o).forEach((x) => { const v = c.get(x.key) || { ...x, n: 0 }; v.n += 1; c.set(x.key, v); }));
+    return [...c.values()].sort((a, b) => b.block - a.block || b.n - a.n);
+  }, [cur, issuesOfRow]);
 
-  const scopes = [["mine", "내 배차"], ["staff", "담당자별"], ["client", "거래처별"], ["all", "전체"]];
-  const statusText = (g) => { const s = CLOSE_STATUS[g.status]; return <span className="text-[12.5px] font-black whitespace-nowrap" style={{ color: TONE[s.tone] }}>{g.changed ? "금액 바뀜 · 다시 마감" : s.label}</span>; };
+  const save = (g, patch) => desk.save(g.row.doc?.id || arDeskId(desk.company, "close", g.client, ym), patch);
+  const verify = async (g) => { if (isViewer || busy || !g?.row) return; setBusy("v"); try { await save(g, verifyPatch({ ...g.row, block: g.block }, me)); setToast(`${g.client} 검증 완료 — 이제 1차 마감할 수 있어요`); const nx = groups.find((x) => x.client !== g.client && (x.status === "none" || x.status === "rejected" || x.changed)); if (nx) setTimeout(() => setSel(nx.client), 400); } finally { setBusy(""); } };
+  const submitOne = async (g) => { if (isViewer || busy || !g?.row) return; setBusy("s"); try { await save(g, submitPatch(g.row, me)); setToast(`${g.client} 1차 마감 — 경리팀으로 넘어갔어요`); } finally { setBusy(""); } };
+  const unlock = async (g) => { if (isViewer || busy || !g?.row) return; setBusy("u"); try { await save(g, unlockPatch(g.row, me, "월 마감에서")); setToast(g.status === "verified" ? "검증을 취소했어요" : "마감을 풀었어요"); } finally { setBusy(""); } };
+  const submitAll = async () => { if (isViewer || busy || !readyGroups.length) return; setBusy("all"); try { for (const g of readyGroups) await save(g, submitPatch(g.row, me)); setToast(`${readyGroups.length}곳 1차 마감 — 경리팀으로 넘어갔어요`); setAsk(false); } finally { setBusy(""); } };
+
+  const scopes = [["mine", "내 배차"], ["staff", "담당자별"], ["all", "전체"]];
+  const pipe = [
+    { k: "todo", label: "검증 전", v: todoN, c: todoN ? "#C9D5EE" : DK.mute, sub: cnt.rejected + cnt.changed ? `반려 · 바뀜 ${cnt.rejected + cnt.changed}` : "거래처를 열어 확인" },
+    { k: "verified", label: "검증 완료", v: cnt.verified, c: DK.hi, sub: cnt.verified ? "1차 마감 대기" : "검토 끝난 곳" },
+    { k: "closed", label: "1차 마감", v: cnt.submitted, c: DK.warn, sub: "경리팀 검증 중" },
+    { k: "done", label: "경리 승인", v: cnt.approved, c: DK.ok, sub: "마감 끝" },
+  ];
+  const nextStep = todoN ? 0 : cnt.verified ? 1 : cnt.submitted ? 2 : 3;
+  const allDone = groups.length > 0 && cnt.approved === groups.length;
+
+  // 큰 버튼 하나 — 상태마다 할 일
+  const primary = !cur || !cur.row ? null
+    : cur.block > 0 && cur.status !== "submitted" && cur.status !== "approved" ? { text: `고칠 것 ${cur.block}건을 먼저 고쳐 주세요`, disabled: true, tone: "bad" }
+    : canVerify({ ...cur.row, block: cur.block }) ? { text: cur.changed ? "바뀐 내용 다시 검증 완료" : "검증 완료", on: () => verify(cur), tone: "blue" }
+    : canSubmit({ ...cur.row, block: cur.block }) ? { text: "1차 마감하기", on: () => submitOne(cur), tone: "ink", sub: { text: "검증 취소", on: () => unlock(cur) } }
+    : cur.status === "submitted" ? { text: "경리팀 검증 중", disabled: true, tone: "warn", sub: { text: "마감 풀기", on: () => unlock(cur) } }
+    : cur.status === "approved" ? { text: "경리 승인 · 마감 끝", disabled: true, tone: "ok" } : null;
+  const pTone = { blue: { bg: C.blue, fg: "#fff" }, ink: { bg: "#0A1224", fg: "#fff" }, bad: { bg: "#FDECEA", fg: C.bad }, warn: { bg: "#FFF4E0", fg: C.warn }, ok: { bg: "#E6F6EE", fg: C.ok } };
 
   return (
-    <div className="space-y-4 pb-24" style={{ color: C.ink }} data-kp="month-close">
-      {/* 머리 */}
-      <div className="flex items-end gap-x-5 gap-y-3 flex-wrap">
-        <div className="min-w-0 mr-auto">
-          <div className="text-[22px] font-black leading-tight">월 마감</div>
-          <div className="text-[13.5px]" style={{ color: C.sub }}>이번 달 배차를 확인하고 1차 마감하면 경리팀 마감 검증으로 넘어가요.</div>
+    <div className="space-y-4" style={{ color: C.ink }} data-kp="month-close">
+      {/* ── 디지털 진행판 ── */}
+      <section className="rounded-[24px] text-white overflow-hidden shadow-[0_18px_40px_rgba(10,18,36,.28)]" style={{ background: DK.bg }}>
+        <div className="px-4 sm:px-6 pt-5 pb-4 flex items-center gap-x-4 gap-y-3 flex-wrap">
+          <div className="mr-auto min-w-0">
+            <div className="text-[11px] font-extrabold tracking-[0.3em]" style={{ color: DK.hi, fontFamily: DIG }}>MONTH CLOSE · {ym.replace("-", ".")}</div>
+            <div className="text-[22px] sm:text-[26px] font-black leading-tight">{Number(ym.slice(5))}월 마감</div>
+          </div>
+          <div className="flex items-center gap-1">
+            <button type="button" aria-label="이전 달" onClick={() => setYm(prevYmOf(ym))} className="w-9 h-9 rounded-xl border text-[16px]" style={{ borderColor: DK.line }}>‹</button>
+            <span className="w-[86px] text-center text-[15px] font-black" style={{ fontFamily: DIG }}>{ym.replace("-", ".")}</span>
+            <button type="button" aria-label="다음 달" onClick={() => setYm(nextYm(ym))} className="w-9 h-9 rounded-xl border text-[16px]" style={{ borderColor: DK.line }}>›</button>
+          </div>
+          <div className="inline-flex rounded-xl p-1" style={{ background: "rgba(255,255,255,.06)", border: `1px solid ${DK.line}` }} role="tablist" aria-label="범위">
+            {scopes.map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={scope === k} onClick={() => setScope(k)} className="h-8 px-3.5 rounded-lg text-[13px] font-black" style={scope === k ? { background: "#fff", color: "#0A1224" } : { color: DK.sub }}>{l}</button>)}
+          </div>
+          {scope === "staff" && (
+            <select id="mc-staff" value={staff} onChange={(e) => setStaff(e.target.value)} className="h-10 rounded-xl px-3 text-[13.5px] font-bold text-[#0A1224]">
+              <option value="">담당자 전체</option>{staffList.map(([s2, c2]) => <option key={s2} value={s2}>{s2} ({c2})</option>)}
+            </select>)}
         </div>
-        <div className="flex items-center gap-1.5">
-          <button type="button" className={`${btn} px-3`} aria-label="이전 달" onClick={() => setYm(prevYmOf(ym))}>‹</button>
-          <div className="w-[118px] text-center text-[16px] font-black" style={NUM}>{ymText(ym)}</div>
-          <button type="button" className={`${btn} px-3`} aria-label="다음 달" onClick={() => setYm(nextYm(ym))}>›</button>
-        </div>
-      </div>
 
-      {/* 보기 고르기 */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="inline-flex rounded-2xl border border-[#D9E0EC] p-1 bg-white" role="tablist" aria-label="마감 범위">
-          {scopes.map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={scope === k} onClick={() => setScope(k)}
-            className={`h-9 px-4 rounded-xl text-[14px] font-black transition ${scope === k ? "bg-[#14213D] text-white" : "text-[#5A6781] hover:text-[#14213D]"}`}>{l}</button>)}
+        {/* 단계 4칸 */}
+        <div className="px-4 sm:px-6 grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+          {pipe.map((p, i) => (
+            <div key={p.k} className="relative rounded-2xl px-4 py-3" style={{ background: i === nextStep && !allDone ? "rgba(143,176,240,.14)" : "rgba(255,255,255,.04)", border: `1px solid ${i === nextStep && !allDone ? "rgba(143,176,240,.55)" : DK.line}` }}>
+              <div className="flex items-center gap-2 text-[11.5px] font-extrabold tracking-[0.12em]" style={{ color: DK.sub }}>
+                <span style={{ fontFamily: DIG, color: p.c }}>0{i + 1}</span>{p.label}
+                {i === nextStep && !allDone && <span className="ml-auto text-[10.5px] font-black px-2 py-0.5 rounded-full" style={{ background: DK.hi, color: "#0A1224" }}>지금</span>}
+              </div>
+              <div className="mt-1 flex items-baseline gap-1"><span className="text-[34px] sm:text-[40px] font-black leading-none" style={{ fontFamily: DIG, color: p.v ? p.c : DK.mute }}>{String(p.v).padStart(2, "0")}</span><span className="text-[13px] font-bold" style={{ color: DK.sub }}>곳</span></div>
+              <div className="mt-1 text-[12px] font-bold truncate" style={{ color: DK.mute }}>{p.sub}</div>
+              {i < 3 && !phone && <span className="absolute -right-[11px] top-1/2 -translate-y-1/2 z-10 text-[14px]" style={{ color: DK.mute }}>›</span>}
+            </div>))}
         </div>
-        {scope === "staff" && (
-          <select id="mc-staff" value={staff} onChange={(e) => setStaff(e.target.value)} className={`${inp} w-auto min-w-[160px]`}>
-            <option value="">담당자 전체</option>{staffList.map(([s, c]) => <option key={s} value={s}>{s} ({c})</option>)}
-          </select>)}
-        {scope === "client" && (
-          <select id="mc-client" value={pickClient} onChange={(e) => setPickClient(e.target.value)} className={`${inp} w-auto min-w-[180px]`}>
-            <option value="">거래처 전체</option>{clientList.map(([c, k]) => <option key={c} value={c}>{c} ({k})</option>)}
-          </select>)}
-        {scope === "mine" && <span className="text-[13px] font-bold" style={{ color: C.sub }}>{me?.name || "나"} 님이 등록 · 담당한 오더</span>}
-      </div>
 
-      {/* 한눈에 보기 */}
-      <section className="rounded-[22px] border border-[#E1E6EF] bg-white p-4 sm:p-5 grid gap-5" style={{ gridTemplateColumns: phone ? "1fr" : "auto minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr)" }}>
-        <div className="flex items-center gap-4">
-          <Donut pct={pct} size={phone ? 96 : 112} />
-          {phone && <div style={NUM}><div className="text-[13px] font-bold" style={{ color: C.sub }}>오더 {scoped.length.toLocaleString()}건</div><div className="text-[13px] font-black" style={{ color: needIds.size ? C.bad : C.ok }}>{needIds.size ? `확인 필요 ${needIds.size}건` : "모두 확인 끝"}</div></div>}
-        </div>
-        <div className="grid grid-cols-3 sm:grid-cols-1 gap-2 content-center" style={NUM}>
-          {[["청구", sale], ["기사", buy], ["수수료", sale - buy]].map(([l, v]) => (
-            <div key={l}><div className="text-[12px] font-bold" style={{ color: C.mute }}>{l}</div><div className="text-[17px] font-black whitespace-nowrap">{short(v)}<span className="text-[12px] font-bold ml-0.5" style={{ color: C.mute }}>원</span></div></div>))}
-        </div>
-        <div className="min-w-0">
-          <div className="flex items-baseline justify-between mb-1"><span className="text-[12.5px] font-black" style={{ color: C.sub }}>날짜별 오더</span>
-            <span className="text-[12px]" style={{ color: C.mute }}>{day ? <button type="button" className="font-bold underline" onClick={() => setDay(0)}>{day}일만 보는 중 · 해제</button> : "막대를 누르면 그날만 · 빨간 점은 확인 필요"}</span></div>
-          <DayBars ym={ym} rows={scoped} issueIds={needIds} onPick={setDay} picked={day} />
-        </div>
-        <div className="min-w-0 flex flex-col justify-center">
-          <div className="text-[12.5px] font-black mb-2" style={{ color: C.sub }}>거래처 마감 상태 · {groups.length}곳</div>
-          <StatusBand counts={counts} total={groups.length} />
+        {/* 거래처마다 한 칸 — 상태 띠 + 합계 + 한꺼번에 1차 마감 */}
+        <div className="px-4 sm:px-6 pt-4 pb-5">
+          <div className="flex gap-[3px] h-3" title="거래처마다 한 칸 — 눌러서 열기">
+            {groups.map((g) => <button key={g.client} type="button" aria-label={`${g.client} · ${stOf(g).label}`} title={`${g.client} · ${stOf(g).label}`} onClick={() => pick(g.client)} className="flex-1 min-w-[3px] rounded-[3px]" style={{ background: stOf(g).dk, opacity: g.status === "none" && !g.changed ? 0.35 : 1, outline: cur?.client === g.client ? "2px solid #fff" : "none", outlineOffset: 1 }} />)}
+            {!groups.length && <div className="flex-1 rounded-[3px]" style={{ background: "rgba(255,255,255,.08)" }} />}
+          </div>
+          <div className="mt-3 flex items-center gap-x-5 gap-y-2 flex-wrap text-[13px] font-bold" style={{ color: DK.sub, fontFamily: DIG }}>
+            <span>거래처 <b className="text-white">{groups.length}</b></span>
+            <span>오더 <b className="text-white">{scoped.length.toLocaleString()}</b></span>
+            <span>청구 <b className="text-white">{won(sale)}</b></span>
+            <span>고칠 것 <b style={{ color: blockTotal ? DK.bad : DK.ok }}>{blockTotal.toLocaleString()}</b></span>
+            {!isViewer && <button type="button" disabled={!readyGroups.length || !!busy} onClick={() => setAsk(true)} className="ml-auto h-11 px-5 rounded-xl text-[14px] font-black disabled:opacity-30" style={{ background: readyGroups.length ? "#fff" : "rgba(255,255,255,.12)", color: "#0A1224", fontFamily: "inherit" }}>
+              {allDone ? "모두 마감했어요" : readyGroups.length ? `검증 완료 ${readyGroups.length}곳 한 번에 1차 마감` : "검증 완료한 곳이 생기면 1차 마감"}
+            </button>}
+          </div>
         </div>
       </section>
 
-      {/* 확인할 것 */}
-      <div className="flex items-center gap-2 flex-wrap" role="group" aria-label="확인 항목으로 보기">
-        {[{ key: "all", label: "전체", n: scoped.length, tone: C.ink }, { key: "need", label: "확인 필요", n: needIds.size, tone: needIds.size ? C.bad : C.ok }, ...ruleCounts.map((r) => ({ ...r, tone: r.block ? C.bad : C.warn }))].map((c) => (
-          <button key={c.key} type="button" aria-pressed={only === c.key} onClick={() => setOnly(c.key)}
-            className={`h-9 px-3.5 rounded-full border text-[13.5px] font-black transition ${only === c.key ? "border-[#14213D] bg-[#14213D] text-white" : "border-[#D9E0EC] bg-white hover:border-[#9FB0CC]"}`}
-            style={only === c.key ? undefined : { color: c.tone }}>{c.label} <span style={NUM}>{c.n.toLocaleString()}</span></button>))}
-        <div className="flex-1" />
-        <input id="mc-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="거래처 · 상하차지 · 차량 · 기사 찾기" className={inp} style={phone ? undefined : { width: 260 }} />
-        {!isViewer && <button type="button" className={btn} onClick={() => setSheet({ isNew: true, row: { 거래처명: focus && focus !== "(거래처 없음)" ? focus : "" } })}>+ 오더 추가</button>}
-      </div>
+      {/* ── 거래처 목록 | 검토 ── */}
+      <div className={phone ? "space-y-3" : "grid gap-4 items-start"} style={phone ? undefined : { gridTemplateColumns: "330px minmax(0,1fr)" }}>
+        <aside className={`rounded-[20px] border border-[#E1E6EF] bg-white overflow-hidden ${phone ? "" : "sticky top-2"}`}>
+          <div className="p-3 border-b border-[#E1E6EF] space-y-2">
+            <div className="grid grid-cols-4 gap-1 p-1 rounded-xl bg-[#F3F6FB]">
+              {[["todo", "검증 전", todoN], ["verified", "검증 완료", cnt.verified], ["closed", "마감", cnt.submitted + cnt.approved], ["all", "전체", groups.length]].map(([k, l, v]) => (
+                <button key={k} type="button" onClick={() => setListTab(k)} className={`h-9 rounded-lg text-[12.5px] font-black ${listTab === k ? "bg-white shadow-sm text-[#0A1224]" : "text-[#7A879C]"}`}>{l} <span style={{ fontFamily: DIG }}>{v}</span></button>))}
+            </div>
+            <input id="mc-cq" value={cq} onChange={(e) => setCq(e.target.value)} placeholder="거래처 찾기" className={inp} />
+          </div>
+          <div className={phone ? "max-h-[320px] overflow-y-auto" : "max-h-[calc(100vh-330px)] min-h-[300px] overflow-y-auto"}>
+            {listed.map((g) => { const s = stOf(g); const on = cur?.client === g.client; return (
+              <button key={g.client} type="button" onClick={() => pick(g.client)} className={`w-full px-3.5 py-3 flex items-center gap-3 text-left border-b border-[#EEF1F6] last:border-b-0 transition ${on ? "bg-[#EEF3FF]" : "hover:bg-[#F8FAFD]"}`} style={on ? { boxShadow: `inset 3px 0 0 ${C.blue}` } : undefined}>
+                <StatusDot g={g} />
+                <span className="flex-1 min-w-0">
+                  <span className="block truncate text-[14.5px] font-black">{g.client}</span>
+                  <span className="block text-[12px] mt-0.5" style={{ ...NUM, color: C.sub }}>{g.count}건 · {short(g.sale)}원{g.block ? <b className="ml-1.5" style={{ color: C.bad }}>고칠 것 {g.block}</b> : g.warn ? <b className="ml-1.5" style={{ color: C.warn }}>확인 {g.warn}</b> : null}</span>
+                </span>
+                <span className="text-[12px] font-black whitespace-nowrap" style={{ color: s.c }}>{s.label}</span>
+              </button>); })}
+            {!listed.length && <div className="px-4 py-10 text-center text-[13.5px]" style={{ color: C.mute }}>{groups.length ? "이 칸에 해당하는 거래처가 없어요" : scope === "mine" ? "이번 달 내 배차가 없어요 — 위에서 ‘전체’로 바꿔 보세요" : "이번 달 오더가 없어요"}</div>}
+          </div>
+        </aside>
 
-      <div className={phone ? "space-y-3" : "grid gap-4"} style={phone ? undefined : { gridTemplateColumns: "280px minmax(0,1fr)" }}>
-        {/* 거래처 목록 */}
-        {phone ? (
-          <select id="mc-focus" value={focus} onChange={(e) => setFocus(e.target.value)} className={inp}>
-            <option value="">거래처 전체 ({groups.length}곳)</option>
-            {groups.map((g) => <option key={g.client} value={g.client}>{g.client} · {g.count}건{g.block ? ` · 고칠 것 ${g.block}` : ""} · {g.changed ? "금액 바뀜" : CLOSE_STATUS[g.status].label}</option>)}
-          </select>
-        ) : (
-          <aside className="rounded-[20px] border border-[#E1E6EF] bg-white overflow-hidden self-start sticky top-2">
-            <button type="button" onClick={() => setFocus("")} className={`w-full px-4 py-3 flex items-center gap-2 text-left border-b border-[#E1E6EF] ${!focus ? "bg-[#F3F6FC]" : ""}`}>
-              <span className="flex-1 font-black text-[14px]">전체 거래처</span><span className="text-[13px] font-bold" style={{ ...NUM, color: C.sub }}>{groups.length}곳</span>
-            </button>
-            <div className="max-h-[560px] overflow-y-auto">
-              {groups.map((g) => (
-                <button key={g.client} type="button" onClick={() => setFocus(g.client === focus ? "" : g.client)} className={`w-full px-4 py-2.5 text-left border-b border-[#EEF1F6] last:border-b-0 ${focus === g.client ? "bg-[#F3F6FC]" : "hover:bg-[#FAFBFD]"}`}>
-                  <div className="flex items-center gap-2"><span className="flex-1 min-w-0 truncate text-[14px] font-black">{g.client}</span>{statusText(g)}</div>
-                  <div className="mt-0.5 flex items-center gap-2 text-[12.5px]" style={NUM}>
-                    <span style={{ color: C.sub }}>{g.count}건 · {short(g.sale)}원</span>
-                    {g.block > 0 ? <span className="font-black" style={{ color: C.bad }}>고칠 것 {g.block}</span> : g.need > 0 ? <span className="font-black" style={{ color: C.warn }}>확인 {g.need}</span> : null}
+        {/* 검토 */}
+        <section ref={panelRef} className="min-w-0 rounded-[20px] border border-[#E1E6EF] bg-white overflow-hidden flex flex-col scroll-mt-3" data-kp="mc-review">
+          {!cur ? <div className="py-20 text-center text-[14px]" style={{ color: C.mute }}>거래처를 고르면 여기서 검토해요</div> : (<>
+            <div className="px-4 sm:px-5 pt-4 pb-3 border-b border-[#E1E6EF]">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <StatusDot g={cur} size={12} />
+                <h3 className="text-[20px] font-black min-w-0 truncate">{cur.client}</h3>
+                <span className="text-[12.5px] font-black px-2.5 py-1 rounded-full" style={{ color: stOf(cur).c, background: `${stOf(cur).c}14` }}>{stOf(cur).label}</span>
+                {cur.owners && <span className="text-[12.5px] font-bold" style={{ color: C.mute }}>담당 {cur.owners}</span>}
+                {!isViewer && <button type="button" className="ml-auto h-9 px-3 rounded-lg border border-[#D9E0EC] text-[13px] font-bold" onClick={() => setSheet({ isNew: true, row: { 거래처명: cur.client === "(거래처 없음)" ? "" : cur.client } })}>+ 오더 추가</button>}
+              </div>
+              {cur.status === "rejected" && cur.row?.doc?.reason && <div className="mt-2 text-[13.5px] font-bold" style={{ color: C.bad }}>반려 사유 · {cur.row.doc.reason}</div>}
+              {cur.changed && cur.status !== "none" && <div className="mt-2 text-[13.5px] font-bold" style={{ color: C.bad }}>{cur.status === "verified" ? "검증" : "마감"} 뒤에 오더가 바뀌었어요({cur.row?.doc?.snapshot?.count}건 → {cur.row?.count}건). 다시 검증해 주세요.</div>}
+              <div className={`mt-3 grid ${phone ? "grid-cols-2" : "grid-cols-4"} gap-2`} style={NUM}>
+                {[["오더", `${cur.count}건`], ["청구", won(cur.sale)], ["기사", won(cur.buy)], ["수수료", won(cur.sale - cur.buy)]].map(([l, v]) => (
+                  <div key={l} className="rounded-xl bg-[#F6F8FB] px-3 py-2 min-w-0"><div className="text-[11.5px] font-bold" style={{ color: C.mute }}>{l}</div><div className="text-[15px] sm:text-[17px] font-black truncate" style={{ fontFamily: DIG }}>{v}</div></div>))}
+              </div>
+              <div className="mt-3 flex gap-1.5 flex-wrap">
+                <button type="button" onClick={() => setOnly("all")} className={`h-8 px-3 rounded-full border text-[12.5px] font-black ${only === "all" ? "bg-[#0A1224] border-[#0A1224] text-white" : "border-[#D9E0EC]"}`}>전체 {cur.count}</button>
+                {curRule.length ? curRule.map((r) => <button key={r.key} type="button" onClick={() => setOnly(only === r.key ? "all" : r.key)} className={`h-8 px-3 rounded-full border text-[12.5px] font-black ${only === r.key ? "text-white" : "bg-white"}`} style={only === r.key ? { background: r.block ? C.bad : C.warn, borderColor: r.block ? C.bad : C.warn } : { color: r.block ? C.bad : C.warn, borderColor: r.block ? "#F3C2BD" : "#F3D9A8" }}>{r.label} {r.n}</button>)
+                  : <span className="h-8 px-3 rounded-full inline-flex items-center text-[12.5px] font-black" style={{ color: C.ok, background: "#E6F6EE" }}>✓ 확인할 것 없음</span>}
+              </div>
+              {/* 원터치 — 상태마다 큰 버튼 하나 */}
+              {!isViewer && primary && (
+                <div className="mt-3 rounded-2xl border border-[#E1E6EF] bg-[#F8FAFD] px-3.5 py-2.5 flex items-center gap-3 flex-wrap" data-kp="mc-action">
+                  <div className="flex-1 min-w-[180px] text-[13px] font-bold" style={{ color: C.sub }}>
+                    {cur.status === "none" && !cur.block ? "오더를 다 봤으면 [검증 완료]를 눌러요. 그다음 1차 마감이 열려요." : cur.status === "verified" && !cur.changed ? `${cur.row?.doc?.verifiedByName || ""} 검증 완료 · 1차 마감하면 경리팀으로 넘어가요.` : cur.block ? "빨간 줄을 눌러 고치면 버튼이 열려요." : ""}
                   </div>
-                </button>))}
-              {!groups.length && <div className="px-4 py-8 text-center text-[13px]" style={{ color: C.mute }}>이 범위에 오더가 없어요</div>}
+                  {primary.sub && <button type="button" disabled={!!busy} onClick={primary.sub.on} className="h-12 px-4 rounded-xl text-[13.5px] font-bold" style={{ color: C.sub }}>{primary.sub.text}</button>}
+                  <button type="button" disabled={primary.disabled || !!busy} onClick={primary.on} className="h-12 min-w-[200px] px-6 ml-auto rounded-xl text-[15px] font-black transition disabled:cursor-not-allowed" style={{ background: pTone[primary.tone].bg, color: pTone[primary.tone].fg, boxShadow: primary.disabled ? "none" : "0 10px 24px rgba(36,87,214,.25)" }}>
+                    {busy ? "처리 중…" : primary.tone === "blue" ? `✓ ${primary.text}` : primary.text}
+                  </button>
+                </div>)}
             </div>
-          </aside>
-        )}
 
-        {/* 오더 */}
-        <section className="min-w-0 rounded-[20px] border border-[#E1E6EF] bg-white overflow-hidden">
-          {focusGroup && (
-            <div className="px-4 py-3 border-b border-[#E1E6EF] flex items-center gap-3 flex-wrap">
-              <span className="text-[15px] font-black">{focusGroup.client}</span>{statusText(focusGroup)}
-              {focusGroup.status === "rejected" && focusGroup.row?.doc?.reason && <span className="text-[13px] font-bold" style={{ color: C.bad }}>반려 사유 · {focusGroup.row.doc.reason}</span>}
-              {focusGroup.status === "submitted" && !isViewer && <button type="button" className="ml-auto text-[13px] font-bold underline underline-offset-4" style={{ color: C.sub }} onClick={() => unlock(focusGroup)}>마감 풀기</button>}
-            </div>)}
-          {rows.length === 0 ? (
-            <div className="py-16 text-center">
-              <div className="text-[15px] font-black">{scoped.length ? "조건에 맞는 오더가 없어요" : `${ymText(ym)}에 ${scope === "mine" ? "내가 한 " : ""}오더가 없어요`}</div>
-              <div className="text-[13px] mt-1" style={{ color: C.mute }}>{scope === "mine" ? "보기를 ‘담당자별’이나 ‘전체’로 바꿔 보세요." : "위에서 범위나 확인 항목을 바꿔 보세요."}</div>
-            </div>
-          ) : phone ? (
-            <div>
-              {rows.slice(0, limit).map((o) => { const is = issuesOfRow(o); return (
-                <button key={idOf(o)} type="button" onClick={() => openRow(o)} className="w-full text-left px-4 py-3 border-b border-[#EEF1F6] last:border-b-0" style={{ boxShadow: is.some((x) => x.block) ? `inset 3px 0 0 ${C.bad}` : is.length ? `inset 3px 0 0 ${C.warn}` : undefined }}>
-                  <div className="flex items-center gap-2 text-[12.5px]" style={{ ...NUM, color: C.mute }}><span>{String(o.상차일 || "").slice(5)}</span><span className="truncate font-bold" style={{ color: C.sub }}>{o.거래처명 || "거래처 없음"}</span><span className="ml-auto font-black text-[14px]" style={{ color: n(o.청구운임) ? C.ink : C.bad }}>{n(o.청구운임) ? won(n(o.청구운임)) : "청구 0"}</span></div>
+            <div className={phone ? "" : "max-h-[calc(100vh-300px)] min-h-[260px] overflow-y-auto"}>
+              {phone ? curRows.map(({ o, is }) => (
+                <button key={idOf(o)} type="button" onClick={() => openRow(o)} className="w-full text-left px-4 py-3 border-b border-[#EEF1F6]" style={{ boxShadow: is.some((x) => x.block) ? `inset 3px 0 0 ${C.bad}` : is.length ? `inset 3px 0 0 ${C.warn}` : undefined }}>
+                  <div className="flex items-center gap-2 text-[12.5px]" style={{ ...NUM, color: C.mute }}><span style={{ fontFamily: DIG }}>{String(o.상차일 || "").slice(5)}</span><span className="truncate" style={{ color: C.sub }}>{o.차량번호 || "차량 없음"} {o.이름 || ""}</span><span className="ml-auto font-black text-[14px]" style={{ color: n(o.청구운임) ? C.ink : C.bad, fontFamily: DIG }}>{won(n(o.청구운임))}</span></div>
                   <div className="mt-0.5 text-[14.5px] font-black truncate">{o.상차지명 || "-"} → {o.하차지명 || "-"}</div>
-                  <div className="mt-0.5 flex items-center gap-2"><span className="text-[12.5px] truncate" style={{ color: C.sub }}>{o.차량번호 || "차량 없음"} {o.이름 || ""}</span><span className="ml-auto"><IssueText list={is} /></span></div>
-                </button>); })}
+                  <div className="mt-0.5"><IssueText list={is} /></div>
+                </button>))
+              : (
+                <table className="kp-plain w-full" style={NUM}>
+                  <thead className="sticky top-0 bg-white z-[1]"><tr className="text-[12px]" style={{ color: C.mute }}>
+                    {["상차일", "구간", "차량 · 기사", "청구", "기사", "확인", ""].map((h, i) => <th key={i} className={`px-3 py-2 font-bold border-b border-[#E1E6EF] ${i === 3 || i === 4 ? "text-right" : "text-left"}`}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {curRows.map(({ o, is }) => (
+                      <tr key={idOf(o)} onClick={() => openRow(o)} className="cursor-pointer border-b border-[#EEF1F6] hover:bg-[#F8FAFD]" style={{ boxShadow: is.some((x) => x.block) ? `inset 3px 0 0 ${C.bad}` : is.length ? `inset 3px 0 0 ${C.warn}` : undefined }} title="눌러서 고치기">
+                        <td className="px-3 py-2.5 text-[13px] whitespace-nowrap" style={{ fontFamily: DIG }}>{String(o.상차일 || "").slice(5)}</td>
+                        <td className="px-3 py-2.5 text-[13.5px] max-w-[320px] truncate font-bold">{o.상차지명 || "-"} <span style={{ color: C.mute }}>→</span> {o.하차지명 || "-"}</td>
+                        <td className="px-3 py-2.5 text-[13px] whitespace-nowrap" style={{ color: C.sub }}>{o.차량번호 || <span style={{ color: C.bad }}>차량 없음</span>} {o.이름 || ""}</td>
+                        <td className="px-3 py-2.5 text-[13.5px] font-black text-right whitespace-nowrap" style={{ color: n(o.청구운임) ? C.ink : C.bad, fontFamily: DIG }}>{won(n(o.청구운임))}</td>
+                        <td className="px-3 py-2.5 text-[13.5px] text-right whitespace-nowrap" style={{ color: n(o.기사운임) ? C.sub : C.warn, fontFamily: DIG }}>{won(n(o.기사운임))}</td>
+                        <td className="px-3 py-2.5"><IssueText list={is} /></td>
+                        <td className="px-2 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                          {!isViewer && (delAsk === idOf(o)
+                            ? <span className="inline-flex gap-1"><button type="button" className="h-8 px-2.5 rounded-lg text-[12.5px] font-black text-white" style={{ background: C.bad }} onClick={async () => { setDelAsk(""); await onRemove?.(o); setToast("오더를 지웠어요"); }}>지우기</button><button type="button" className="h-8 px-2 rounded-lg text-[12.5px] font-bold" style={{ color: C.sub }} onClick={() => setDelAsk("")}>취소</button></span>
+                            : <button type="button" aria-label="오더 삭제" title="삭제" className="w-8 h-8 rounded-lg text-[#9AA6BC] hover:text-[#C62F25]" onClick={() => setDelAsk(idOf(o))}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg></button>)}
+                        </td>
+                      </tr>))}
+                  </tbody>
+                </table>)}
+              {!curRows.length && <div className="py-10 text-center text-[13.5px]" style={{ color: C.mute }}>해당하는 오더가 없어요</div>}
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="kp-plain w-full min-w-[860px]" style={NUM}>
-                <thead><tr className="text-[12.5px]" style={{ color: C.mute }}>
-                  {["상차일", "거래처", "구간", "차량 · 기사", "청구", "기사", "확인", ""].map((h, i) => <th key={h} className={`px-3 py-2.5 font-bold border-b border-[#E1E6EF] ${i >= 4 && i <= 5 ? "text-right" : "text-left"}`}>{h}</th>)}
-                </tr></thead>
-                <tbody>
-                  {rows.slice(0, limit).map((o) => { const is = issuesOfRow(o); return (
-                    <tr key={idOf(o)} onClick={() => openRow(o)} className="cursor-pointer border-b border-[#EEF1F6] last:border-b-0" style={{ boxShadow: is.some((x) => x.block) ? `inset 3px 0 0 ${C.bad}` : is.length ? `inset 3px 0 0 ${C.warn}` : undefined }} title="눌러서 고치기">
-                      <td className="px-3 py-2.5 text-[13.5px] whitespace-nowrap">{String(o.상차일 || "").slice(5)}</td>
-                      <td className="px-3 py-2.5 text-[13.5px] font-bold max-w-[160px] truncate">{o.거래처명 || <span style={{ color: C.bad }}>빈칸</span>}</td>
-                      <td className="px-3 py-2.5 text-[13.5px] max-w-[280px] truncate">{o.상차지명 || "-"} <span style={{ color: C.mute }}>→</span> {o.하차지명 || "-"}</td>
-                      <td className="px-3 py-2.5 text-[13px] whitespace-nowrap" style={{ color: C.sub }}>{o.차량번호 || <span style={{ color: C.bad }}>차량 없음</span>} {o.이름 || ""}</td>
-                      <td className="px-3 py-2.5 text-[13.5px] font-black text-right whitespace-nowrap" style={{ color: n(o.청구운임) ? C.ink : C.bad }}>{won(n(o.청구운임))}</td>
-                      <td className="px-3 py-2.5 text-[13.5px] text-right whitespace-nowrap" style={{ color: n(o.기사운임) ? C.sub : C.warn }}>{won(n(o.기사운임))}</td>
-                      <td className="px-3 py-2.5"><IssueText list={is} /></td>
-                      <td className="px-2 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                        {!isViewer && (delAsk === idOf(o)
-                          ? <span className="inline-flex gap-1"><button type="button" className="h-8 px-2.5 rounded-lg text-[12.5px] font-black text-white" style={{ background: C.bad }} onClick={async () => { setDelAsk(""); await onRemove?.(o); setToast("오더를 지웠어요."); }}>지우기</button><button type="button" className="h-8 px-2 rounded-lg text-[12.5px] font-bold" style={{ color: C.sub }} onClick={() => setDelAsk("")}>취소</button></span>
-                          : <button type="button" aria-label="오더 삭제" title="삭제" className="w-8 h-8 rounded-lg text-[#8D97AB] hover:text-[#C62F25]" onClick={() => setDelAsk(idOf(o))}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg></button>)}
-                      </td>
-                    </tr>); })}
-                </tbody>
-              </table>
-            </div>)}
-          {rows.length > limit && <div className="p-3 text-center border-t border-[#EEF1F6]"><button type="button" className={btn} onClick={() => setLimit((l) => l + 300)}>더 보기 ({(rows.length - limit).toLocaleString()}건 남음)</button></div>}
+
+          </>)}
         </section>
       </div>
 
-      {/* 아래 마감 줄 */}
-      {!isViewer && (
-        <div className="fixed bottom-0 left-0 right-0 z-[60] pointer-events-none" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-          <div className="mx-auto max-w-[1100px] px-3 pb-3 pointer-events-auto">
-            <div className="rounded-2xl bg-white border border-[#D9E0EC] shadow-[0_12px_36px_rgba(14,22,40,.16)] px-4 py-3 flex items-center gap-3 flex-wrap">
-              <div className="flex-1 min-w-0 text-[13.5px]" style={NUM}>
-                <b>{scopes.find(([k]) => k === scope)[1]}</b> · 거래처 {groups.length}곳 · 오더 {scoped.length.toLocaleString()}건
-                {blockIds.size > 0 ? <span className="ml-2 font-black" style={{ color: C.bad }}>고칠 것 {blockIds.size}건</span> : <span className="ml-2 font-black" style={{ color: C.ok }}>고칠 것 없음</span>}
-              </div>
-              <button type="button" className={btnPri} disabled={!closable.length || busy} onClick={() => setAsk(true)}>{closable.length ? `1차 마감 · ${closable.length}곳` : counts.submitted + counts.approved === groups.length && groups.length ? "모두 마감했어요" : "마감할 곳 없음"}</button>
-            </div>
-          </div>
-        </div>)}
-
-      {toast && <div className="fixed left-1/2 -translate-x-1/2 bottom-24 z-[100060] px-4 py-2.5 rounded-xl bg-[#14213D] text-white text-[13.5px] font-bold shadow-lg" role="status">{toast}</div>}
+      {toast && <div className="fixed left-1/2 -translate-x-1/2 bottom-8 z-[100060] px-5 py-3 rounded-2xl bg-[#0A1224] text-white text-[14px] font-bold shadow-[0_16px_40px_rgba(10,18,36,.35)]" role="status">{toast}</div>}
 
       {ask && createPortal(
-        <div className="fixed inset-0 z-[100050] flex items-center justify-center p-4" style={{ background: "rgba(14,22,40,.42)" }} onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) setAsk(false); }}>
+        <div className="fixed inset-0 z-[100050] flex items-center justify-center p-4" style={{ background: "rgba(10,18,36,.5)" }} onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) setAsk(false); }}>
           <div className="w-full max-w-[520px] rounded-[22px] bg-white p-5 max-h-[86vh] flex flex-col" role="dialog" aria-label="1차 마감">
-            <div className="text-[18px] font-black">{ymText(ym)} 1차 마감</div>
-            <div className="text-[13.5px] mt-1" style={{ color: C.sub }}>아래 거래처가 경리팀 마감 검증으로 넘어가요. 마감은 거래처 단위예요.</div>
+            <div className="text-[18px] font-black">검증 완료 {readyGroups.length}곳 1차 마감</div>
+            <div className="text-[13.5px] mt-1" style={{ color: C.sub }}>아래 거래처가 경리팀 마감 검증으로 넘어가요.</div>
             <div className="mt-3 flex-1 overflow-y-auto rounded-xl border border-[#E1E6EF]">
-              {closable.map((g) => <div key={g.client} className="px-3 py-2 flex items-center gap-2 border-b border-[#EEF1F6] last:border-b-0 text-[14px]" style={NUM}><span className="flex-1 truncate font-bold">{g.client}</span><span style={{ color: C.sub }}>{(g.row?.count ?? g.count)}건 · {won(g.row?.sale ?? g.sale)}원</span></div>)}
+              {readyGroups.map((g) => <div key={g.client} className="px-3 py-2 flex items-center gap-2 border-b border-[#EEF1F6] last:border-b-0 text-[14px]" style={NUM}><StatusDot g={g} size={8} /><span className="flex-1 truncate font-bold">{g.client}</span><span style={{ color: C.sub, fontFamily: DIG }}>{g.row.count}건 · {won(g.row.sale)}</span></div>)}
             </div>
-            {blockedGroups.length > 0 && <div className="mt-3 text-[13px] font-bold" style={{ color: C.bad }}>고칠 것이 있어 빠지는 곳 {blockedGroups.length}곳 — {blockedGroups.slice(0, 4).map((g) => g.client).join(", ")}{blockedGroups.length > 4 ? " 외" : ""}</div>}
-            <div className="mt-4 flex justify-end gap-2"><button type="button" className={btn} disabled={busy} onClick={() => setAsk(false)}>취소</button><button type="button" className={btnPri} disabled={busy} onClick={submit}>{busy ? "넘기는 중…" : `${closable.length}곳 1차 마감`}</button></div>
+            <div className="mt-4 flex justify-end gap-2"><button type="button" className={btn} disabled={!!busy} onClick={() => setAsk(false)}>취소</button><button type="button" className={btnPri} disabled={!!busy} onClick={submitAll}>{busy ? "넘기는 중…" : `${readyGroups.length}곳 1차 마감`}</button></div>
           </div>
         </div>, document.body)}
 
       <OrderSheet open={!!sheet} row={sheet?.row} isNew={!!sheet?.isNew} ym={ym} phone={phone} isViewer={isViewer}
-        clients={clientList.map(([c]) => c).filter((c) => c !== "(거래처 없음)")} issues={sheet?.row && !sheet.isNew ? issuesOfRow(sheet.row) : []}
+        clients={groups.map((g) => g.client).filter((c) => c !== "(거래처 없음)")} issues={sheet?.row && !sheet.isNew ? issuesOfRow(sheet.row) : []}
         onClose={() => setSheet(null)}
-        onSave={async (patch) => { if (sheet?.isNew) { const r = await onAdd?.({ ...patch }); if (r !== false) setToast("오더를 추가했어요."); return r; } const r = await onPatch?.(sheet.row, patch); if (r !== false) setToast("저장했어요."); return r; }}
-        onDelete={async () => { await onRemove?.(sheet.row); setToast("오더를 지웠어요."); }} />
+        onSave={async (patch) => { if (sheet?.isNew) { const r = await onAdd?.({ ...patch }); if (r !== false) setToast("오더를 추가했어요"); return r; } const r = await onPatch?.(sheet.row, patch); if (r !== false) setToast("저장했어요"); return r; }}
+        onDelete={async () => { await onRemove?.(sheet.row); setToast("오더를 지웠어요"); }} />
     </div>
   );
 }
