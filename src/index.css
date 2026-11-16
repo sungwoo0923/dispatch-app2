@@ -468,3 +468,6 @@ table[data-kpfit-big] > * > tr > th, table[data-kpfit-big] > * > tr > td { paddi
 /* 🛰 2026-11-10 왼쪽 메뉴(KpSubNav) 새 버전 표시 — 깜빡이는 점 */
 @keyframes kpSubnavNewDot { 0%,100% { opacity: 1 } 50% { opacity: .3 } }
 .kp-subnav-newdot { animation: kpSubnavNewDot 1.2s ease-in-out infinite; box-shadow: 0 0 8px #8FB0F0; }
+/* 🧾 2026-11-16 명세서 단계 — 지금 단계 동그라미가 천천히 깜빡인다 */
+@keyframes kpStepNow { 0%, 100% { box-shadow: 0 0 0 0 rgba(36,87,214,.55); } 50% { box-shadow: 0 0 0 7px rgba(36,87,214,0); } }
+.kp-step-now { animation: kpStepNow 1.4s ease-in-out infinite; }

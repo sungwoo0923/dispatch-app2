@@ -1,5 +1,6 @@
 // src/AdminMenu.jsx
 import { MonthPicker } from "./kpInputs"; // 📅 2026-11-07 월 선택은 프로그램 달력으로
+import { myNameNow } from "./userNames";
 import BillingCenter from "./BillingCenter";
 import { runDelete, commitDeletes } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { billingAccess } from "./billingAccess";
@@ -340,7 +341,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     if (!canDelegateMaster(u)) return;
     const who = u.name || u.email;
     if (!await kpConfirm(`"${who}"님에게 마스터 권한을 위임할까요?\n\n· ${who}님은 마스터(관리자 권한)가 됩니다\n· 본인은 마스터에서 빠지고 지금 권한(${roleLabels[meDoc?.role] || meDoc?.role || "-"})은 그대로입니다\n· 되돌리려면 새 마스터가 다시 위임해야 합니다`)) return;
-    const day = todayStr(); const by = meDoc?.name || me?.email || "";
+    const day = todayStr(); const by = meDoc?.name || myNameNow(me?.email);
     try {
       await setDoc(doc(db, "users", u.id), { isMaster: true, role: "admin", personnelHistory: [...(u.personnelHistory || []), { date: day, type: "마스터 위임 받음", detail: by }] }, { merge: true });
       if (!isTotalMaster && meDoc) await setDoc(doc(db, "users", meDoc.id), { isMaster: false, personnelHistory: [...(meDoc.personnelHistory || []), { date: day, type: "마스터 위임", detail: who }] }, { merge: true });
@@ -781,7 +782,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   // 운송사 관리자 1차 승인
   const approveShipper1st = async (app) => {
     if (isViewer) return _viewerAlert();
-    const myName = users.find(u => u.id === me?.uid)?.name || me?.email || "관리자";
+    const myName = users.find(u => u.id === me?.uid)?.name || myNameNow(me?.email) || "관리자";
     // ⚠️ 1차 승인은 운송사 관리자 확인일 뿐 — 최종 로그인 허용(users.approved)과
     // companyApplications.status="approved"는 최고관리자의 2차 승인(approveShipper2nd)에서만
     // 설정해야 한다. 여기서 같이 켜버리면 1차만 하고도 로그인이 되고, 최고관리자의
@@ -911,7 +912,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     label: g.label,
     items: g.tabs.map((t) => ({ key: t, label: TAB_LABELS[t], icon: TAB_ICONS[t], badge: tabBadgeCounts[t] || 0 })),
   }));
-  const myDisplayName = users.find((u) => u.id === me?.uid)?.name || me?.email || "관리자";
+  const myDisplayName = users.find((u) => u.id === me?.uid)?.name || myNameNow(me?.email) || "관리자";
   // ⭐ 2026-11-02 점검 — 예전 승인 계정·퇴사·삭제 계정을 승인 대기로 세던 문제(사이드바 배지와 같은 기준)
   const pendingUserCount = visibleUsers.filter(isPending).length;
   const todoCount = pendingUserCount + (linkedPendingCount || 0) + (unansweredInquiryCount || 0);

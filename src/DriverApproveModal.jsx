@@ -7,6 +7,7 @@
 //    기존 문서 내용을 drivers/{기사 uid}로 옮기고(기존 값 유지 · 빈 칸만 채움 · 등급 지정) 예전 문서는 지운다
 //  · 후보가 여러 개면 관리자가 고르거나 「새로 등록」, 기존 값과 다른 입력값은 칸마다 「입력값으로 바꾸기」 선택
 import React from "react";
+import { myNameNow } from "./userNames";
 import { createPortal } from "react-dom";
 import { addDoc, collection, doc, getDocs, query, serverTimestamp, setDoc, where, writeBatch, deleteDoc } from "firebase/firestore";
 import { db, auth } from "./firebase";
@@ -90,7 +91,7 @@ export function findDriverCandidates(u, signup, drivers) {
     .sort((a, b) => b.score - a.score);
 }
 
-const adminName = () => { const c = auth?.currentUser; return c?.displayName || c?.email || "관리자"; };
+const adminName = () => { const c = auth?.currentUser; return myNameNow(c?.displayName || c?.email) || "관리자"; };
 const STATUS_DEFAULTS = { mainStatus: "대기", subStatus: "대기", status: "대기", state: "대기", goStatus: "대기", active: false, totalDistance: 0 };
 
 // 승인 — target(연동할 기존 기사 문서 {id, data}) 이 있으면 연동, 없으면 가입 문서를 그대로 기사관리에 등록

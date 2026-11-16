@@ -36,7 +36,7 @@ export function summarizeSettle(orders, ym, stageOf = () => "미작성", today =
   const noFare = mine.filter((o) => n(o.청구운임) <= 0 && !/유류|지원/.test(String(o.화물내용 || "")) && o.지급방식 !== "착불");
   const unassigned = mine.filter((o) => o.배차상태 === "배차중");
   // ② 명세서 발송 전 ③ 계산서 발행 전 ⑥ 마감 전
-  const needSend = clients.filter((c) => idx(c) < 2);
+  const needSend = clients.filter((c) => idx(c) < 1); // 🧾 2026-11-16 발송은 순서에서 뺐다 — 명세서 작성 여부로 본다
   const needTax = clients.filter((c) => idx(c) < 5);
   const needClose = clients.filter((c) => idx(c) < 6);
   // ④ 입금 — 마감한 거래처는 받은 것으로 본다(입금 확인을 안 쓰는 회사)
@@ -47,7 +47,7 @@ export function summarizeSettle(orders, ym, stageOf = () => "미작성", today =
   const unpaidDrv = payable.filter((o) => (o.지급상태 || "지급중") !== "지급완료");
   const steps = [
     { key: "orders", label: "오더 확정", go: "거래처정산", total: mine.length, left: new Set([...noFare, ...unassigned].map((o) => o._id || o.id || o)).size, unit: "건", hint: `운임 미입력 ${noFare.length} · 미배차 ${unassigned.length}`, amount: 0 },
-    { key: "send", label: "명세서 발송", go: "거래처정산", total, left: needSend.length, unit: "곳", hint: "미발송", amount: sumOf(needSend) },
+    { key: "send", label: "명세서 작성", go: "거래처정산", total, left: needSend.length, unit: "곳", hint: "미작성", amount: sumOf(needSend) },
     { key: "tax", label: "계산서 발행", go: "거래처정산", total, left: needTax.length, unit: "곳", hint: "미발행", amount: sumOf(needTax) },
     { key: "deposit", label: "입금 확인", go: "입금확인", total, left: unpaidClients.length, unit: "곳", hint: "미입금", amount: unpaidClients.reduce((a, c) => a + unpaidOf(c), 0) },
     { key: "payout", label: "기사 지급", go: "지급관리", total: payable.length, left: unpaidDrv.length, unit: "건", hint: "미지급", amount: unpaidDrv.reduce((a, o) => a + n(o.기사운임), 0) },

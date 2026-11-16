@@ -34,3 +34,14 @@ export function useUserNames(uids) {
   }, [key]);
   return React.useCallback((uid) => (uid && cache.get(uid)) || "", [key, ver]); // eslint-disable-line react-hooks/exhaustive-deps
 }
+
+// 👤 2026-11-16 "내 이름" 한 곳 — 로그인하면 DispatchApp 이 실제 이름을 넣어 둔다(setMyNameCache).
+//  기록 · 표시에 계정(이메일)이 아니라 이름이 들어가게 어디서든 myNameNow() 를 쓴다
+let myNameCache = "";
+export const setMyNameCache = (n) => { myNameCache = String(n || "").trim(); try { if (myNameCache) localStorage.setItem("kpMyName", myNameCache); } catch { /* 무시 */ } };
+export const myNameNow = (fallback = "") => {
+  if (myNameCache) return myNameCache;
+  try { const v = localStorage.getItem("kpMyName"); if (v) return v; } catch { /* 무시 */ }
+  const f = String(fallback || "").trim();
+  return f.includes("@") ? f.split("@")[0] : f;
+};

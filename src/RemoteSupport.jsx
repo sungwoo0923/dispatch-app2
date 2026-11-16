@@ -19,6 +19,7 @@
 //     직원은 위쪽 배너 [제어 끝내기] 또는 Esc 길게 누르기로 바로 끝낸다. 시작·끝은 세션 문서 controlLog에 남는다.
 //     ⚠ 다른 프로그램·파일 선택·비밀번호 입력은 할 수 없다 → 그런 경우는 원격 프로그램(AnyDesk)으로.
 import React from "react";
+import { myNameNow } from "./userNames";
 import { createPortal } from "react-dom";
 import { addDoc, arrayUnion, collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { db } from "./firebase";
@@ -534,7 +535,7 @@ function RequesterModal({ uid, user, profile, company, mobile, active, latest, h
     try {
       await addDoc(collection(db, "supportRequests"), {
         companyName: profile?.companyName || company || "돌캐", uid, email: user?.email || "",
-        name: profile?.name || user?.displayName || user?.email || "", team: profile?.team || "", position: profile?.position || "",
+        name: profile?.name || myNameNow(user?.displayName || user?.email), team: profile?.team || "", position: profile?.position || "",
         phone, message: msg.trim().slice(0, 2000), method, mode: method, status: "pending",
         device: mobile || isPhoneUA() ? "mobile" : "pc", createdAt: serverTimestamp(), decidedAt: null, decidedBy: "", rejectReason: "",
       });

@@ -75,7 +75,7 @@ export function KpModal({ open = true, onClose, en, title, sub, width = 560, chi
 export const STMT_STAGES = [
   { k: "미작성", label: "미작성", en: "TODO", hint: "아직 명세서를 만들지 않았어요" },
   { k: "작성", label: "작성", en: "DRAFT", hint: "명세서를 만들어 두었어요" },
-  { k: "발송", label: "발송", en: "SENT", hint: "거래처에 보냈어요" },
+  { k: "발송", label: "발송", en: "SENT", hint: "거래처에 보냈어요(순서에서 뺌 — 메일은 언제든 보낼 수 있다)", opt: true },
   // 🛠 2026-11-16 opt — 직접 기록할 때만 쓰는 단계(자동으로 바뀌지 않는다). 화면 단계 버튼에서는 숨긴다
   { k: "확인", label: "거래처 확인", en: "CHECKED", hint: "거래처가 내역을 확인했다고 직접 기록한 단계", opt: true },
   { k: "계산서요청", label: "계산서 요청", en: "TAX REQ", hint: "거래처가 계산서를 요청했다고 직접 기록한 단계", opt: true },
@@ -84,6 +84,9 @@ export const STMT_STAGES = [
 ];
 export const stageIdx = (k) => Math.max(0, STMT_STAGES.findIndex((s) => s.k === k));
 export const stageLabel = (k) => STMT_STAGES[stageIdx(k)].label;
+// 🧾 2026-11-16 화면 단계 — 미작성 → 작성 → 계산서 발행 → 마감. 예전 발송 · 거래처 확인 · 계산서 요청 기록은 "작성"으로 본다
+export const VIEW_STAGES = ["미작성", "작성", "계산서발행", "마감"];
+export const viewStage = (k) => (["발송", "확인", "계산서요청"].includes(k) ? "작성" : VIEW_STAGES.includes(k) ? k : "미작성");
 export const nextStage = (k) => STMT_STAGES.find((x, j) => j > stageIdx(k) && !x.opt) || null; // 다음 단계(직접 기록 단계는 건너뜀)
 const safeKey = (x) => String(x || "").replace(/[/\s#?[\]]/g, "_").slice(0, 120);
 export const arDeskId = (co, kind, ...parts) => [co, kind, ...parts].map(safeKey).join("__");
@@ -124,11 +127,11 @@ export function useArDesk(company) {
 //  close = closeBoard() 한 줄({ status, changed, doc }) · 글씨색으로만
 export function closeTag(close) {
   if (!close) return { t: "", c: SD.mute, ready: false };
-  if (close.changed && close.status !== "none") return { t: "마감 뒤 바뀜", c: "#C62F25", ready: false };
-  if (close.status === "submitted" || close.status === "approved") return { t: "배차 마감", c: "#0F7A52", ready: true };
-  if (close.status === "rejected") return { t: "돌려보냄", c: "#C62F25", ready: false };
-  if (close.status === "verified") return { t: "배차 검증 완료", c: "#2457D6", ready: false };
-  return { t: "배차 확인 중", c: "#8D97AB", ready: false };
+  if (close.changed && close.status !== "none") return { t: "마감 후 변경", c: "#C62F25", ready: false };
+  if (close.status === "submitted" || close.status === "approved") return { t: "배차마감", c: "#0F7A52", ready: true };
+  if (close.status === "rejected") return { t: "반려", c: "#C62F25", ready: false };
+  if (close.status === "verified") return { t: "배차검증", c: "#2457D6", ready: false };
+  return { t: "마감 전", c: "#8D97AB", ready: false };
 }
 export function CloseStrip({ close, onReturn, disabled }) {
   if (!close) return null;
@@ -139,12 +142,12 @@ export function CloseStrip({ close, onReturn, disabled }) {
     <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[13.5px]" data-kp="close-strip">
       <span className="font-black" style={{ color: tg.c }}>{tg.ready ? "✓ " : ""}{tg.t}</span>
       <span className="text-[#5B6B85] font-bold" style={NUM}>
-        {tg.ready ? `${by ? `${by} · ` : ""}${at ? fmtDay(at) : ""} 배차자가 확인하고 넘긴 내역이에요.`
-          : close.status === "rejected" ? `돌려보낸 사유 · ${d.reason || "-"}`
-          : close.changed ? "배차자가 넘긴 뒤 오더가 바뀌었어요. 배차자가 다시 넘기면 돼요."
-          : "배차자가 아직 월 마감에서 넘기지 않았어요. 명세서는 지금 만들어도 돼요."}
+        {tg.ready ? `${by ? `${by} · ` : ""}${at ? fmtDay(at) : ""} 배차 1차 마감`
+          : close.status === "rejected" ? `반려 사유 · ${d.reason || "-"}${d.rejectedByName ? ` (${d.rejectedByName})` : ""}`
+          : close.changed ? "배차마감 후 오더가 변경됨 — 배차 담당자 재마감 필요"
+          : "배차 담당자 1차 마감 전 · 명세서 작성은 가능"}
       </span>
-      {tg.ready && onReturn && !disabled && <button type="button" onClick={onReturn} className="ml-auto text-[13px] font-bold text-[#C62F25] hover:underline underline-offset-4">배차자에게 돌려보내기</button>}
+      {tg.ready && onReturn && !disabled && <button type="button" onClick={onReturn} className="ml-auto text-[13px] font-bold text-[#C62F25] hover:underline underline-offset-4">반려</button>}
     </div>
   );
 }
@@ -181,20 +184,21 @@ export function StageStepper({ stage, history = [], onSet, disabled, sentHint })
   return (
     <div className={ph ? "grid grid-cols-4 gap-y-1" : "flex items-stretch gap-0 overflow-x-auto no-scrollbar"} style={{ scrollbarWidth: "none" }} data-kp="stmt-stepper">
       {STMT_STAGES.map((s, i) => {
-        if (s.opt && i !== cur) return null; // 🛠 2026-11-16 거래처 확인 · 계산서 요청은 고를 때만(기본은 숨김)
+        if (s.opt) return null; // 🛠 2026-11-16 순서는 미작성 → 작성 → 계산서 발행 → 마감(발송 · 거래처 확인 · 계산서 요청은 뺌)
         const done = i <= cur; const isCur = i === cur; const isNext = i === STMT_STAGES.findIndex((x, j) => j > cur && !x.opt);
+        const no = STMT_STAGES.slice(0, i).filter((x) => !x.opt).length; // 화면 번호(0 미작성 · 1 작성 · 2 계산서 발행 · 3 마감)
         const t = i > 0 ? at(s.k) : 0;
         return (
           <React.Fragment key={s.k}>
             {i > 0 && !ph && <div className="self-center h-[2px] min-w-[10px] flex-1" style={{ background: i <= cur ? SD.blue : SD.line }} />}
-            <button type="button" disabled={disabled || i === 0 || i === cur} onClick={() => onSet?.(s.k)}
-              title={i === 0 ? s.hint : isCur ? "지금 단계" : i < cur ? `${s.label}(으)로 되돌리기` : `${s.label}(으)로 기록`}
+            <button type="button" disabled={disabled || i === cur} onClick={() => onSet?.(s.k)}
+              title={isCur ? "지금 단계" : i < cur ? `${s.label}(으)로 되돌리기` : `${s.label}(으)로 기록`}
               className={`shrink-0 flex flex-col items-center gap-1 ${ph ? "min-w-0 px-0.5" : "px-1.5"} py-1 rounded-xl transition ${isNext && !disabled ? "hover:bg-[#EEF3FB]" : ""} disabled:cursor-default`}>
-              <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-black ${isCur ? "bg-[#0F1A30] text-white ring-4 ring-[#CFE0FF]" : done ? "bg-[#2D4C82] text-white" : isNext ? "bg-white text-[#1B2B4B] border-2 border-[#1B2B4B]" : "bg-white text-[#9AA9C3] border-2 border-[#DCE3EE]"}`} style={NUM}>
-                {done && !isCur && i > 0 ? <Ico d={IC.check} size={14} w={3} /> : i}
+              <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-black ${isCur ? "kp-step-now bg-[#0F1A30] text-white ring-4 ring-[#CFE0FF]" : done ? "bg-[#2D4C82] text-white" : isNext ? "bg-white text-[#1B2B4B] border-2 border-[#1B2B4B]" : "bg-white text-[#9AA9C3] border-2 border-[#DCE3EE]"}`} style={NUM}>
+                {done && !isCur && i > 0 ? <Ico d={IC.check} size={14} w={3} /> : no}
               </span>
               <span className={`${ph ? "text-[12px]" : "text-[13px]"} font-black whitespace-nowrap ${isCur ? "text-[#0F1A30]" : done ? "text-[#2D4C82]" : isNext ? "text-[#1B2B4B]" : "text-[#9AA9C3]"}`}>{s.label}</span>
-              <span className="text-[12px] font-bold text-[#9AA9C3] h-4" style={NUM}>{t ? fmtDay(t) : s.k === "발송" && sentHint ? sentHint : ""}</span>
+              <span className="text-[12px] font-bold text-[#9AA9C3] h-4" style={NUM}>{t ? fmtDay(t) : s.k === "작성" && sentHint ? `발송 ${sentHint}` : ""}</span>
             </button>
           </React.Fragment>
         );
@@ -368,15 +372,16 @@ export function StatementBoard({ month, setMonth, recentMonths = [], groups, onO
           </div>
         </div>
         {/* 단계 칩 — 누르면 그 단계만 */}
-        <div className={`mt-4 grid grid-cols-4 ${STMT_STAGES.filter((x) => !x.opt || counts.c[x.k]).length === 5 ? "sm:grid-cols-5" : "sm:grid-cols-7"} gap-1.5`}>
-          {STMT_STAGES.map((s, i) => {
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+          {STMT_STAGES.map((s, i0) => {
             const on = stageF === s.k; const n = counts.c[s.k];
-            if (s.opt && !n && !on) return null; // 직접 기록 단계는 있을 때만
+            if (s.opt) return null; // 순서: 미작성 → 작성 → 계산서 발행 → 마감
+            const i = VIEW_STAGES.indexOf(s.k);
             return (
               <button key={s.k} type="button" onClick={() => setStageF(on ? "" : s.k)} title={s.hint}
                 className={`relative text-left rounded-xl px-3 py-2.5 border transition ${on ? "bg-[#0F1A30] border-[#0F1A30] text-white shadow-[0_8px_18px_rgba(15,26,48,0.2)]" : n ? "bg-white border-[#DCE3EE] hover:border-[#8FB0F0]" : "bg-[#FAFBFD] border-[#EEF2F8] text-[#9AA9C3]"}`}>
                 <div className="flex items-center gap-1.5">
-                  <span className={`w-5 h-5 rounded-full text-[11px] font-black flex items-center justify-center ${on ? "bg-white/15 text-white" : i === 6 ? "bg-[#0F1A30] text-white" : i === 0 ? "border border-dashed border-[#B8C4D8] text-[#5B6B85]" : "bg-[#EEF3FB] text-[#2D4C82]"}`} style={NUM}>{i}</span>
+                  <span className={`w-5 h-5 rounded-full text-[11px] font-black flex items-center justify-center ${on ? "bg-white/15 text-white" : i === 3 ? "bg-[#0F1A30] text-white" : i === 0 ? "border border-dashed border-[#B8C4D8] text-[#5B6B85]" : "bg-[#EEF3FB] text-[#2D4C82]"}`} style={NUM}>{i}</span>
                   <span className={`text-[13px] font-black truncate ${on ? "text-white" : n ? "text-[#1B2B4B]" : ""}`}>{s.label}</span>
                 </div>
                 <div className={`mt-1 text-[22px] font-black leading-none ${on ? "text-white" : n ? "text-[#0F1A30]" : ""}`} style={NUM}>{n}<span className={`text-[13px] ml-0.5 ${on ? "text-white/60" : "text-[#9AA9C3]"}`}>곳</span></div>
@@ -398,7 +403,7 @@ export function StatementBoard({ month, setMonth, recentMonths = [], groups, onO
             <input type="checkbox" className="w-4 h-4 accent-[#0F1A30]" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} />마감 안 된 곳만
           </label>
           <label className="inline-flex items-center gap-2 h-10 px-3 rounded-xl border border-[#D5DDEA] text-[14px] font-bold text-[#0F7A52] cursor-pointer select-none" title="배차자가 배차현황 › 월 마감에서 1차 마감해 넘긴 거래처">
-            <input type="checkbox" className="w-4 h-4 accent-[#0F7A52]" checked={readyOnly} onChange={(e) => setReadyOnly(e.target.checked)} />배차 마감 넘어온 곳 {readyN}
+            <input type="checkbox" className="w-4 h-4 accent-[#0F7A52]" checked={readyOnly} onChange={(e) => setReadyOnly(e.target.checked)} />배차마감 {readyN}
           </label>
           {stageF && <button type="button" onClick={() => setStageF("")} className="h-10 px-3 rounded-xl bg-[#EEF3FB] text-[#1B2B4B] text-[14px] font-black inline-flex items-center gap-1.5">{stageLabel(stageF)}<Ico d={IC.x} size={13} w={2.6} /></button>}
           <div className="ml-auto flex items-center gap-2 flex-wrap">
@@ -434,7 +439,7 @@ export function StatementBoard({ month, setMonth, recentMonths = [], groups, onO
                   <th className="px-2 py-2.5 font-black sticky top-0 bg-[#F8FAFD] z-[1]">거래처</th>
                   <th className="px-2 py-2.5 font-black text-right sticky top-0 bg-[#F8FAFD] z-[1]">건수</th>
                   <th className="px-2 py-2.5 font-black text-right sticky top-0 bg-[#F8FAFD] z-[1]">청구액(VAT 포함)</th>
-                  <th className="px-2 py-2.5 font-black sticky top-0 bg-[#F8FAFD] z-[1]">배차 마감</th>
+                  <th className="px-2 py-2.5 font-black sticky top-0 bg-[#F8FAFD] z-[1]">배차마감</th>
                   <th className="px-2 py-2.5 font-black sticky top-0 bg-[#F8FAFD] z-[1]">진행</th>
                   <th className="px-2 py-2.5 font-black sticky top-0 bg-[#F8FAFD] z-[1]">단계</th>
                   <th className="px-3 py-2.5 sticky top-0 bg-[#F8FAFD] z-[1]" />
@@ -558,7 +563,7 @@ export function StatementLineGrid({ rows, included, onToggle, onToggleAll, onAmo
 // 명세서 이력(단계 기록 + 보낸 메일)
 export function StatementHistory({ history = [], logs = [] }) {
   const items = [
-    ...history.map((h) => ({ at: tsMs(h.at), title: stageLabel(h.stage), body: h.note || "", by: h.by || "", kind: "stage" })),
+    ...history.map((h) => ({ at: tsMs(h.at), title: stageLabel(h.stage), body: h.note || "", by: h.byName || String(h.by || "").split("@")[0], kind: "stage" })),
     ...logs.map((l) => ({ at: tsMs(l.sentAt), title: l.status === "failed" ? "메일 발송 실패" : String(l.type || "").includes("예약") ? "메일 예약" : "메일 발송", body: `${l.to || ""}${l.error ? ` · ${l.error}` : ""}`, by: l.sentBy || "", kind: l.status === "failed" ? "fail" : "mail" })),
   ].sort((a, b) => b.at - a.at);
   if (!items.length) return <div className="py-6 text-center text-[14px] text-[#9AA9C3]">아직 기록이 없어요</div>;

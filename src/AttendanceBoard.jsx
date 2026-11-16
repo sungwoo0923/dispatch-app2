@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { myNameNow } from "./userNames";
 import { isLateAt } from "./lateRule"; // ⏰ 2026-11-07 지각 기준 공용(출근시간 없으면 09:00)
 import { mirrorOfficeToFleet } from "./officeLocSync"; // 📍 2026-11-09 출근지 한 곳 관리
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
@@ -167,7 +168,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
 
   // ─── 권한 ─────────────────────────────────────────────────
   const myEmp = employees.find(e => e.uid === user?.uid);
-  const myName = myEmp?.name || user?.displayName || user?.email || "";
+  const myName = myEmp?.name || myNameNow(user?.displayName || user?.email);
   const meProfile = useMemo(() => ({ ...(myEmp || {}), uid: user?.uid, name: myName, role }), [myEmp, user?.uid, myName, role]);
   // ⭐ 2026-11-01 인사팀(인사관리자·통합인사·인사 부서) — 직원 기록 직접 수정 · 직원 관리/출근지/공휴일 관리
   const isHrStaff = role === "totalMaster" || isHrStaffUser(myEmp || {}, role);

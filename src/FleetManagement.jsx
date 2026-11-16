@@ -1,5 +1,6 @@
 // ======================= FleetManagement.jsx =======================
 import { isFleetGrade } from "./fleetGradesCore"; // 🚛 지입차 구분(지입·직영·임대·분양) 한 곳
+import { myNameNow } from "./userNames";
 import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { pickCompanyLoc } from "./officeLocSync"; // 📍 2026-11-09 출근지 한 곳 관리
 import useNarrow from "./useNarrow"; // ⭐ 2026-11-06 휴대폰 폭 카드 목록
@@ -1007,7 +1008,7 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, comp
               <button type="button" title="이 기사를 퇴근 처리합니다"
                 onClick={async () => {
                   if (!(await kpConfirm(`${data.이름} 기사를 퇴근 처리할까요?\n오늘 이동거리는 누적 키로수에 더해집니다.`))) return;
-                  try { await forceCheckout(data.raw, auth.currentUser?.displayName || auth.currentUser?.email || ""); alert("퇴근 처리했습니다"); }
+                  try { await forceCheckout(data.raw, myNameNow(auth.currentUser?.displayName || auth.currentUser?.email)); alert("퇴근 처리했습니다"); }
                   catch (e) { alert(`퇴근 처리 실패: ${e?.message || e}`); }
                 }}
                 style={{ height: 30, padding: "0 14px", borderRadius: 8, border: "1px solid #1B2B4B", background: "#fff", color: "#1B2B4B", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
@@ -6365,7 +6366,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
     [companyStaffRaw, myCompanyName]
   );
   const myStaffName = companyStaff.find(u => u.id === myUid)?.name
-    || auth.currentUser?.displayName || auth.currentUser?.email || "나";
+    || myNameNow(auth.currentUser?.displayName || auth.currentUser?.email) || "나";
   // ⭐ 사용자 요청 — 노선표 "배차담당자" 칸이 이름을 못 찾으면 계정 이메일을
   // 그대로 보여주고 있었다. 이메일 → 실명 매핑을 만들어 creatorLabel이 최종
   // 폴백으로 이메일 대신 이름을 쓸 수 있게 한다.

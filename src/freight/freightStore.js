@@ -2,6 +2,7 @@
 // 🚢 2026-11-12 컨테이너 · 해상 · 항공 구간 문서(freightJobs) — 회사별 실시간 구독 하나를 모든 화면이 같이 쓴다
 //  회사 분리: src/fsTenant.js STRICT(읽기 거르기 · 쓰기 회사명 자동) + firestore.rules freightJobs
 import React from "react";
+import { myNameNow } from "../userNames";
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { nextJobNo, nextRefNo, buildHandoff, HANDOFF_STATUS, statusList } from "./freightCore";
@@ -35,7 +36,7 @@ const get = () => state;
 // { jobs, loaded } — 회사가 바뀌면(최고관리자) 화면이 다시 열리며 새로 구독된다
 export function useFreightJobs() { return React.useSyncExternalStore(subscribe, get, get); }
 
-const me = (by) => by || auth?.currentUser?.displayName || auth?.currentUser?.email || "";
+const me = (by) => by || myNameNow(auth?.currentUser?.displayName || auth?.currentUser?.email) || "";
 const hist = (text, by) => ({ at: Date.now(), by: me(by), text });
 const clean = (o) => { const out = {}; Object.keys(o || {}).forEach((k) => { if (o[k] !== undefined && !k.startsWith("_") && k !== "id") out[k] = o[k]; }); return out; };
 

@@ -6,6 +6,7 @@
 //    → 그 뒤 각자 다시 바꾸면 그 계정만 그대로 유지 · 다시 [회사 전체 적용]을 누르면 모두 다시 그 배치로
 //  · 모든 표에서 동작(머리글 이름으로 표를 알아본다) — React가 그린 칸을 지우지 않고 자리만 옮긴다
 import React from "react";
+import { myNameNow } from "./userNames";
 import { createPortal } from "react-dom";
 import { doc, onSnapshot, setDoc, updateDoc, deleteField, FieldPath, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "./firebase";
@@ -40,7 +41,7 @@ export function layoutOf(tkey) {
 export const companyLayoutOf = (tkey) => COMP[tkey] || null;
 const anyLayout = () => !!DRAFT || Object.keys(MINE).length > 0 || Object.keys(COMP).length > 0;
 
-const myName = () => { try { return localStorage.getItem("userName") || auth?.currentUser?.displayName || auth?.currentUser?.email || ""; } catch { return ""; } };
+const myName = () => { try { return localStorage.getItem("userName") || myNameNow(auth?.currentUser?.displayName || auth?.currentUser?.email); } catch { return ""; } };
 const err = (e) => { console.warn("[colLayouts] 저장 실패", e?.code || e); try { window.dispatchEvent(new CustomEvent("kp-collayout-error")); } catch { /* 무시 */ } };
 // ⭐ 2026-11-12 F5를 누르면 컬럼 배치 · 화면 맞춤이 원래대로 돌아가던 문제
 //  예전엔 서버 문서가 오면 이 PC에 기억한 값을 통째로 덮어썼다 — 서버 저장이 한 번이라도 안 됐으면(거절 · 끊김 · 저장 전에 새로고침)

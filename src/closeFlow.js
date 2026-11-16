@@ -102,7 +102,7 @@ export const canUnlock = (row, mode) => !!row && (mode === "acct" ? row.status =
 
 // 저장할 값 만들기(기록은 최근 30개)
 const logOf = (doc, entry) => [entry, ...((doc?.log) || [])].slice(0, 30);
-const who = (me) => ({ email: String(me?.email || "").toLowerCase(), name: me?.name || me?.email || "" });
+const who = (me) => ({ email: String(me?.email || "").toLowerCase(), name: me?.name || String(me?.email || "").split("@")[0] }); // 👤 기록엔 이름(없으면 계정 앞부분)
 export function verifyPatch(row, me, now = Date.now()) {
   const w = who(me);
   return { kind: "close", client: row.client, yyyymm: row.ym, status: "verified", reason: "",
