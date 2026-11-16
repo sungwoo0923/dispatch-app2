@@ -471,3 +471,8 @@ table[data-kpfit-big] > * > tr > th, table[data-kpfit-big] > * > tr > td { paddi
 /* 🧾 2026-11-16 명세서 단계 — 지금 단계 동그라미가 천천히 깜빡인다 */
 @keyframes kpStepNow { 0%, 100% { box-shadow: 0 0 0 0 rgba(36,87,214,.55); } 50% { box-shadow: 0 0 0 7px rgba(36,87,214,0); } }
 .kp-step-now { animation: kpStepNow 1.4s ease-in-out infinite; }
+/* 🧾 2026-11-16 정산 · 월 마감 표 — 칸 구분선 + 가운데 정렬 */
+table.kp-grid thead th { border-right: 1px solid #E3E8F0 !important; border-bottom: 1px solid #DCE3EE !important; text-align: center !important; }
+table.kp-sd.kp-grid tbody td, table.kp-grid tbody td { border-right: 1px solid #EEF2F8 !important; text-align: center !important; }
+table.kp-grid thead th:last-child, table.kp-sd.kp-grid tbody td:last-child, table.kp-grid tbody td:last-child { border-right: none !important; }
+table.kp-grid tbody tr { border-bottom: 1px solid #EEF2F8; }

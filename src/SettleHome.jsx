@@ -54,7 +54,8 @@ const G = { ok: "#0F7A52", warn: "#B25F00", bad: "#C62F25", blue: "#2457D6", mut
 export const closeText = (r) => {
   if (!r) return { t: "-", c: G.mute, done: false };
   if (r.changed && r.status !== "none") return { t: "마감 후 변경", c: G.bad, done: false };
-  if (r.status === "approved" || r.status === "submitted") return { t: "마감", c: G.ok, done: true };
+  if (r.status === "approved") return { t: r.doc?.unlocked ? "일시해제" : "최종마감", c: r.doc?.unlocked ? G.warn : G.ok, done: true };
+  if (r.status === "submitted") return { t: "배차마감", c: G.ok, done: true };
   if (r.status === "rejected") return { t: "반려", c: G.bad, done: false };
   if (r.status === "verified") return { t: "검증", c: G.blue, done: false };
   return { t: "마감 전", c: G.mute, done: false };
@@ -86,8 +87,10 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
     const st = viewStage(c.stage); const idx = ["미작성", "작성", "계산서발행", "마감"].indexOf(st);
     const b = boardMap.get(c.client); const ct = closeText(b);
     const unpaid = idx >= 3 ? 0 : Math.max(0, c.sale - c.paid);
-    return { ...c, st, idx, ct, unpaid };
-  }), [S.clients, boardMap]);
+    // 🗂 2026-11-16 진행 순서 — 마감 전(0) → 배차마감(1) → 명세서 작성(2) → 계산서 발행(3) → 입금 완료(4, 맨 아래)
+    const level = unpaid <= 0 && c.sale > 0 ? 4 : idx >= 2 ? 3 : idx >= 1 ? 2 : ct.done ? 1 : 0;
+    return { ...c, st, idx, ct, unpaid, level };
+  }).sort((a, b) => a.level - b.level || b.sale - a.sale), [S.clients, boardMap]);
   const total = rows.length;
   const steps = [
     { k: "close", no: "01", label: "배차마감", done: rows.filter((r) => r.ct.done).length, total, test: (r) => !r.ct.done, go: () => go("거래처정산", { tab: "invoice", board: true }), link: "거래처정산" },
@@ -148,7 +151,7 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
           <div className="py-14 text-center"><div className="text-[15px] font-black">{total ? "조건에 맞는 거래처가 없어요" : `${m}월 청구 대상 오더가 없어요`}</div></div>
         ) : (
           <div className="max-h-[480px] overflow-auto">
-            <table className="kp-sd w-full" style={{ minWidth: 980 }}>
+            <table className="kp-sd kp-grid w-full" style={{ minWidth: 980 }}>
               <thead><tr className="text-left text-[13px] text-[#5B6B85]">
                 <th className={`${th} text-center w-[52px]`}>No</th><th className={th}>거래처</th><th className={`${th} text-right`}>건수</th><th className={`${th} text-right`}>청구액</th>
                 <th className={`${th} text-center`}>정산 진행 (배차마감 → 명세서 → 계산서 → 입금)</th><th className={`${th} text-right`}>미수금</th><th className={th} />
@@ -160,7 +163,7 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
                   <td className="px-3 py-2.5 text-right text-[14px] text-[#3A4A66]" style={NUMS}>{r.count.toLocaleString()}</td>
                   <td className="px-3 py-2.5 text-right text-[14.5px] font-black whitespace-nowrap" style={NUMS}>{won(r.sale)}</td>
                   <td className="px-3 py-2"><div className="max-w-[420px] mx-auto"><FlowTrack compact steps={[
-                    { label: "배차마감", done: r.ct.done, text: r.ct.done ? "마감" : r.ct.t, bad: r.ct.c === G.bad },
+                    { label: "배차마감", done: r.ct.done, text: r.ct.t, bad: r.ct.c === G.bad },
                     { label: "명세서", done: r.idx >= 1, text: r.idx >= 1 ? "작성" : "미작성" },
                     { label: "계산서", done: r.idx >= 2, text: r.idx >= 2 ? "발행" : "미발행" },
                     { label: "입금", done: r.unpaid <= 0, text: r.unpaid <= 0 ? "완료" : r.paid > 0 ? "부분입금" : "미입금" },
@@ -204,7 +207,7 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
           {!client ? <div className="py-12 text-center text-[14px] text-[#9AA9C3]">거래처를 고르면 월별 청구 · 입금 · 잔액이 나와요</div>
             : ledger.length === 0 ? <div className="py-12 text-center text-[14px] text-[#9AA9C3]">청구 내역이 없어요</div> : (
               <div className="max-h-[300px] overflow-auto">
-                <table className="kp-sd w-full" style={NUMS}>
+                <table className="kp-sd kp-grid w-full" style={NUMS}>
                   <thead><tr className="text-[13px] text-[#5B6B85]">{["정산월", "건수", "청구", "입금", "잔액(누계)", "단계"].map((h, i) => <th key={h} className={`${th} ${i === 0 || i === 5 ? "text-left" : "text-right"}`}>{h}</th>)}</tr></thead>
                   <tbody>{[...ledger].reverse().map((x) => (
                     <tr key={x.ym} className="border-t border-[#EEF2F8]">

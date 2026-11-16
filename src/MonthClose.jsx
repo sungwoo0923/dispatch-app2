@@ -10,7 +10,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { useArDesk, arDeskId, MonthPicker, FlowTrack, sdCard, sdInp, Ico, IC } from "./SettleDesk";
 import { won, kstYm, monthOf, n } from "./settleCore";
-import { CLOSE_RULES, closeBoard, closeChecks, isMine, canSubmit, canVerify, verifyPatch, submitPatch, unlockPatch, prevYmOf } from "./closeFlow";
+import { CLOSE_RULES, closeBoard, closeChecks, isMine, canSubmit, canVerify, verifyPatch, submitPatch, unlockPatch, prevYmOf, isFinalLocked } from "./closeFlow";
 import { useLoadOrderRange, monthEnd } from "./orderHistory";
 import useNarrow from "./useNarrow";
 import { kpConfirm } from "./kpDialog";
@@ -113,9 +113,11 @@ const ST = { // 상태 → 이름 · 뱃지 모양 · 순서(할 일 먼저)
   none: { label: "검증 전", cls: "bg-white text-[#5B6B85] border border-dashed border-[#B8C4D8]", ord: 1 },
   verified: { label: "검증 완료", cls: "bg-[#EEF3FB] text-[#1B2B4B] border border-[#CFE0FF]", ord: 2 },
   submitted: { label: "마감 완료", cls: "bg-[#2D4C82] text-white", ord: 3 },
-  approved: { label: "경리 확인", cls: "bg-[#0F1A30] text-white", ord: 4 },
+  approved: { label: "최종마감", cls: "bg-[#0F1A30] text-white", ord: 4 },
 };
-const stOf = (g) => (g.changed && g.status !== "none" ? { label: "마감 후 변경", cls: "bg-white text-[#C62F25] border border-[#F1B5AF]", ord: 0 } : ST[g.status] || ST.none);
+const stOf = (g) => (g.changed && g.status !== "none" ? { label: "마감 후 변경", cls: "bg-white text-[#C62F25] border border-[#F1B5AF]", ord: 0 }
+  : g.status === "approved" && g.row?.doc?.unlocked ? { label: "일시해제", cls: "bg-white text-[#B25F00] border border-[#F2C98A]", ord: 1 } : ST[g.status] || ST.none);
+const lockedOf = (g) => !!g && isFinalLocked(g.row?.doc); // 🔒 최종마감 — 배차 쪽 고치기 · 추가 · 삭제 잠금
 const Badge = ({ g, small }) => { const s2 = stOf(g); return <span className={`inline-flex items-center ${small ? "h-6 px-2 text-[11.5px]" : "h-7 px-2.5 text-[12.5px]"} rounded-lg font-black whitespace-nowrap ${s2.cls}`}>{s2.label}</span>; };
 
 export default function MonthClose({ orders = [], company = "", me = null, staffName, isViewer = false, onPatch, onAdd, onRemove, onOpenOrder }) {
@@ -133,7 +135,8 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
   const [busy, setBusy] = React.useState("");
   const [toast, setToast] = React.useState("");
   React.useEffect(() => { if (!toast) return undefined; const t = setTimeout(() => setToast(""), 3200); return () => clearTimeout(t); }, [toast]);
-  const openRow = (o) => (onOpenOrder && !phone ? onOpenOrder(o) : setSheet({ row: o }));
+  const openRow = (o) => { if (lockedOf(groupsRef.current.find((g) => g.client === (String(o.거래처명 || "").trim() || "(거래처 없음)")))) { setToast("최종마감된 거래처예요 — 경리팀에 일시해제를 요청해 주세요"); return; } return onOpenOrder && !phone ? onOpenOrder(o) : setSheet({ row: o }); };
+  const groupsRef = React.useRef([]);
   const addOrder = (client) => {
     const base = { 거래처명: client === "(거래처 없음)" ? "" : client, 상차일: ym === kstYm(0) ? new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) : `${ym}-01` };
     if (onOpenOrder && !phone) window.dispatchEvent(new CustomEvent("kp-open-copy-panel", { detail: { row: base, isNew: true } })); // 배차관리와 같은 입력 패널
@@ -159,6 +162,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
       rows: g.rows.sort((a, b2) => String(a.상차일 || "").localeCompare(String(b2.상차일 || "")) || String(a.상차시간 || "").localeCompare(String(b2.상차시간 || ""))) }; })
       .sort((a, b) => stOf(a).ord - stOf(b).ord || b.sale - a.sale);
   }, [scoped, board, issuesOfRow, staffOf]);
+  groupsRef.current = groups;
   const bucket = (g) => (g.changed && g.status !== "none") || g.status === "none" || g.status === "rejected" ? "todo" : g.status === "verified" ? "verified" : "closed";
   const cnt = React.useMemo(() => { const c = { todo: 0, verified: 0, submitted: 0, approved: 0 }; groups.forEach((g) => { const b = bucket(g); if (b === "closed") c[g.status] += 1; else c[b] += 1; }); return c; }, [groups]);
   const list = groups.filter((g) => (tab === "all" || bucket(g) === tab) && (!cq || g.client.replace(/\s/g, "").toLowerCase().includes(cq.replace(/\s/g, "").toLowerCase())));
@@ -170,8 +174,10 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
   const save = (g, patch) => desk.save(g.row.doc?.id || arDeskId(desk.company, "close", g.client, ym), patch);
   const verifyMany = async (gs) => {
     if (isViewer || busy || !gs.length) return;
-    const iss = gs.reduce((a, g) => a + g.issue, 0);
-    if (iss && !(await kpConfirm(`${gs.length === 1 ? gs[0].client : `${gs.length}곳`}에 확인할 것이 ${iss}건 있어요.\n(청구운임 빈칸 · 배차 미완료 · 기사운임 빈칸)\n\n맞는 내용이면 그대로 검증 완료할까요?`))) return;
+    // 🛠 2026-11-16 입력 안 된 칸(청구운임 · 기사운임 · 차량번호 · 기사)이 있으면 꼭 한 번 묻는다
+    const rows = gs.flatMap((g) => g.rows);
+    const miss = [["청구운임", rows.filter((o) => !n(o.청구운임)).length], ["기사운임", rows.filter((o) => n(o.청구운임) && !n(o.기사운임)).length], ["차량번호", rows.filter((o) => !String(o.차량번호 || "").trim()).length], ["기사 이름", rows.filter((o) => !String(o.이름 || o.기사명 || "").trim()).length], ["배차 미완료", rows.filter((o) => (o.배차상태 || "") !== "배차완료").length]].filter(([, c]) => c > 0);
+    if (miss.length && !(await kpConfirm(`${gs.length === 1 ? gs[0].client : `${gs.length}곳`}에 입력 안 된 칸이 있어요.\n\n${miss.map(([k, c]) => `· ${k} 빈칸 ${c}건`).join("\n")}\n\n그래도 검증 완료할까요?`, { title: "입력 안 된 칸이 있어요", okText: "그대로 검증 완료" }))) return;
     setBusy("v"); try { for (const g of gs) await save(g, verifyPatch(g.row, me)); setToast(`${gs.length === 1 ? gs[0].client : `${gs.length}곳`} 검증 완료 — [1차 마감]을 누르면 경리팀으로 넘어가요`); } finally { setBusy(""); }
   };
   const submitMany = async (gs) => {
@@ -188,9 +194,9 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
     const day = (t) => { if (!t) return ""; const x = new Date(Number(t) + 9 * 3600e3); return `${x.getUTCMonth() + 1}/${x.getUTCDate()}`; };
     return [
       { label: "오더 확인", done: !g.issue || s !== "none", text: g.issue ? `확인할 것 ${g.issue}` : "이상 없음" },
-      { label: "검증", done: !ch && ["verified", "submitted", "approved"].includes(s), text: ch ? "다시 검증" : s === "rejected" ? "반려 · 다시 검증" : d.verifiedByName ? `${d.verifiedByName} ${day(d.verifiedAt)}` : "검증 전", bad: ch || s === "rejected" },
-      { label: "1차 마감", done: !ch && ["submitted", "approved"].includes(s), text: d.submittedByName && ["submitted", "approved"].includes(s) ? `${d.submittedByName} ${day(d.submittedAt)}` : "마감 전" },
-      { label: "경리 확인", done: !ch && s === "approved", text: s === "approved" ? `${d.approvedByName || "경리"} ${day(d.approvedAt)}` : s === "submitted" ? "확인 대기" : "-" },
+      { label: "검증", done: !ch && ["verified", "submitted", "approved"].includes(s), text: ch ? "다시 검증" : s === "rejected" ? "반려됨" : ["verified", "submitted", "approved"].includes(s) ? day(d.verifiedAt) || "완료" : "검증 전", bad: ch || s === "rejected" },
+      { label: "1차 마감", done: !ch && ["submitted", "approved"].includes(s), text: ["submitted", "approved"].includes(s) ? day(d.submittedAt) || "완료" : "마감 전" },
+      { label: "최종마감", done: !ch && s === "approved", text: s === "approved" ? (d.unlocked ? "일시해제 중" : day(d.approvedAt) || "완료") : s === "submitted" ? "경리 확인 대기" : "-" },
     ];
   };
   const actions = (g) => {
@@ -205,8 +211,9 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
     const s = g.status;
     if (g.changed && s !== "none") return { t: `${s === "verified" ? "검증" : "마감"} 뒤에 오더가 바뀌었어요 — 다시 검증해 주세요.`, c: C.bad };
     if (s === "rejected") return { t: `경리팀 반려 · ${g.row?.doc?.reason || "사유 없음"}${g.row?.doc?.rejectedByName ? ` (${g.row.doc.rejectedByName})` : ""} — 고친 뒤 다시 검증해 주세요.`, c: C.bad };
-    if (s === "approved") return { t: "경리팀이 확인하고 명세서 작성을 시작했어요. 이 거래처 마감은 끝났어요.", c: C.ok };
-    if (s === "submitted") return { t: "마감 완료 — 경리팀 거래처정산에 ‘배차마감’으로 넘어갔어요. 경리팀 확인을 기다리는 중이에요.", c: "#2D4C82" };
+    if (s === "approved" && g.row?.doc?.unlocked) return { t: "경리팀이 일시해제했어요 — 지금은 고치거나 추가 · 삭제할 수 있어요. 끝나면 경리팀이 다시 잠가요.", c: C.warn };
+    if (s === "approved") return { t: "🔒 최종마감 — 경리팀이 확인했어요. 이 거래처 · 이 달 오더는 고치거나 추가 · 삭제할 수 없어요. 꼭 바꿔야 하면 경리팀에 일시해제를 요청해 주세요.", c: C.ink };
+    if (s === "submitted") return { t: "1차 마감 완료 — 경리팀 거래처정산에 ‘배차마감’으로 넘어갔어요. 경리팀이 명세서를 작성하면 최종마감돼요.", c: "#2D4C82" };
     if (s === "verified") return { t: "검증 완료 — [1차 마감 → 경리팀]을 누르면 경리팀으로 넘어가요.", c: "#2D4C82" };
     return { t: "오더를 확인하고 [검증 완료]를 눌러 주세요. 확인할 것이 있어도 맞는 내용이면 그대로 검증할 수 있어요.", c: C.sub };
   };
@@ -279,7 +286,8 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
       <div className={`${sdCard} overflow-hidden`}>
         <div className="px-4 py-2.5 border-b border-[#E3E8F0] flex items-center gap-2">
           <div className="text-[14.5px] font-black mr-auto">오더 <span className="text-[12.5px] font-bold text-[#9AA9C3]">줄을 누르면 고치기</span></div>
-          {!isViewer && <button type="button" onClick={() => addOrder(g.client)} className="h-9 px-3.5 rounded-lg border border-[#D5DDEA] bg-white text-[13px] font-bold text-[#1B2B4B]">+ 오더 추가</button>}
+          {lockedOf(g) ? <span className="h-9 px-3 inline-flex items-center rounded-lg border border-[#0F1A30] text-[12.5px] font-black text-[#0F1A30]">🔒 최종마감 · 수정 잠금</span>
+            : !isViewer && <button type="button" onClick={() => addOrder(g.client)} className="h-9 px-3.5 rounded-lg border border-[#D5DDEA] bg-white text-[13px] font-bold text-[#1B2B4B]">+ 오더 추가</button>}
         </div>
         {phone ? (
           <div className="p-2.5 space-y-1.5">
@@ -292,25 +300,25 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
           </div>
         ) : (
           <div className="overflow-auto max-h-[calc(100vh-430px)] min-h-[200px]">
-            <table className="kp-sd w-full" style={{ ...NUM, minWidth: 900 }}>
+            <table className="kp-sd kp-grid w-full" style={{ ...NUM, minWidth: 900 }}>
               <thead><tr className="text-[12.5px] text-[#5B6B85]">
-                {["순번", "상차일", "상차지 → 하차지", "톤수", "차량번호", "기사", "청구", "기사운임", "수수료", "확인", ""].map((h, i) => <th key={i} className={`px-2.5 py-2 font-black sticky top-0 bg-[#F8FAFD] z-[1] whitespace-nowrap ${i >= 6 && i <= 8 ? "text-right" : i === 0 ? "text-center" : "text-left"}`}>{h}</th>)}
+                {["순번", "상차일", "상차지 → 하차지", "톤수", "차량번호", "기사", "청구", "기사운임", "수수료", "확인", ""].map((h, i) => <th key={i} className="px-2.5 py-2 font-black sticky top-0 bg-[#F8FAFD] z-[1] whitespace-nowrap text-center">{h}</th>)}
               </tr></thead>
               <tbody>
                 {g.rows.map((o, i) => { const is = issuesOfRow(o); return (
                   <tr key={idOf(o)} onClick={() => openRow(o)} className="cursor-pointer border-t border-[#EEF2F8] hover:bg-[#F8FAFD]" title="눌러서 고치기" style={{ boxShadow: is.length ? `inset 3px 0 0 ${is.some((x) => x.block) ? C.bad : C.warn}` : undefined }}>
                     <td className="px-2.5 py-2 text-center text-[12.5px] text-[#9AA9C3]">{i + 1}</td>
-                    <td className="px-2.5 py-2 text-[13px] whitespace-nowrap">{String(o.상차일 || "").slice(5)}</td>
-                    <td className="px-2.5 py-2 text-[13px] font-bold max-w-[280px] truncate">{o.상차지명 || "-"} <span className="text-[#9AA9C3]">→</span> {o.하차지명 || "-"}</td>
-                    <td className="px-2.5 py-2 text-[13px] whitespace-nowrap text-[#5B6B85]">{o.차량톤수 || ""}</td>
-                    <td className="px-2.5 py-2 text-[13px] whitespace-nowrap">{o.차량번호 || <span style={{ color: C.bad }}>없음</span>}</td>
-                    <td className="px-2.5 py-2 text-[13px] whitespace-nowrap text-[#5B6B85]">{o.이름 || ""}</td>
-                    <td className="px-2.5 py-2 text-[13px] font-black text-right whitespace-nowrap" style={{ color: n(o.청구운임) ? C.ink : C.bad }}>{won(n(o.청구운임))}</td>
-                    <td className="px-2.5 py-2 text-[13px] text-right whitespace-nowrap" style={{ color: n(o.기사운임) ? C.sub : C.warn }}>{won(n(o.기사운임))}</td>
-                    <td className="px-2.5 py-2 text-[13px] text-right whitespace-nowrap" style={{ color: n(o.청구운임) - n(o.기사운임) < 0 ? "#2457D6" : C.sub }}>{won(n(o.청구운임) - n(o.기사운임))}</td>
-                    <td className="px-2.5 py-2"><IssueText list={is} /></td>
-                    <td className="px-1.5 py-2 text-right" onClick={(e) => e.stopPropagation()}>
-                      {!isViewer && (delAsk === idOf(o)
+                    <td className="px-2.5 py-2 text-[13px] whitespace-nowrap text-center">{String(o.상차일 || "").slice(5)}</td>
+                    <td className="px-2.5 py-2 text-[13px] font-bold max-w-[280px] truncate text-center">{o.상차지명 || "-"} <span className="text-[#9AA9C3]">→</span> {o.하차지명 || "-"}</td>
+                    <td className="px-2.5 py-2 text-[13px] whitespace-nowrap text-[#5B6B85] text-center">{o.차량톤수 || ""}</td>
+                    <td className="px-2.5 py-2 text-[13px] whitespace-nowrap text-center">{o.차량번호 || <span style={{ color: C.bad }}>없음</span>}</td>
+                    <td className="px-2.5 py-2 text-[13px] whitespace-nowrap text-[#5B6B85] text-center">{o.이름 || ""}</td>
+                    <td className="px-2.5 py-2 text-[13px] font-black text-center whitespace-nowrap" style={{ color: n(o.청구운임) ? C.ink : C.bad }}>{won(n(o.청구운임))}</td>
+                    <td className="px-2.5 py-2 text-[13px] text-center whitespace-nowrap" style={{ color: n(o.기사운임) ? C.sub : C.warn }}>{won(n(o.기사운임))}</td>
+                    <td className="px-2.5 py-2 text-[13px] text-center whitespace-nowrap" style={{ color: n(o.청구운임) - n(o.기사운임) < 0 ? "#2457D6" : C.sub }}>{won(n(o.청구운임) - n(o.기사운임))}</td>
+                    <td className="px-2.5 py-2"><div className="flex justify-center"><IssueText list={is} /></div></td>
+                    <td className="px-1.5 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+                      {!isViewer && !lockedOf(g) && (delAsk === idOf(o)
                         ? <span className="inline-flex gap-1"><button type="button" className="h-7 px-2 rounded-md text-[12px] font-black text-white" style={{ background: C.bad }} onClick={async () => { setDelAsk(""); await onRemove?.(o); setToast("오더를 지웠어요"); }}>지우기</button><button type="button" className="h-7 px-1.5 text-[12px] font-bold" style={{ color: C.sub }} onClick={() => setDelAsk("")}>취소</button></span>
                         : <button type="button" aria-label="오더 삭제" title="삭제" className="w-7 h-7 rounded-md text-[#A3AEC2] hover:text-[#C62F25]" onClick={() => setDelAsk(idOf(o))}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg></button>)}
                     </td>

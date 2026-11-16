@@ -11,7 +11,7 @@ export const CLOSE_STATUS = {
   verified: { label: "검증 완료", tone: "blue" },
   submitted: { label: "경리 검증 대기", tone: "warn" },
   rejected: { label: "반려됨", tone: "bad" },
-  approved: { label: "2차 승인", tone: "ok" },
+  approved: { label: "최종마감", tone: "ok" }, // 🔒 2026-11-16 경리 확인 = 최종마감 — 배차 쪽은 고치기 · 추가 · 삭제 잠금(경리팀 일시해제 가능)
 };
 export const statusOf = (doc) => (doc && CLOSE_STATUS[doc.status] ? doc.status : "none");
 
@@ -82,7 +82,8 @@ export function closeBoard(orders, ym, { closeOf = () => null, me = null, today 
     const ps = prevSale.get(x.client) || 0;
     const diff = ps > 0 ? (x.sale - ps) / ps : 0;
     const snap = doc?.snapshot;
-    const changed = !!snap && status !== "none" && (snap.count !== x.rows.length || Math.round(snap.sale) !== Math.round(x.sale));
+    // 최종마감(잠금)은 경리가 명세서에서 금액을 고쳐도 "바뀜"으로 보지 않는다 — 일시해제 중에만 본다
+    const changed = !!snap && status !== "none" && (status !== "approved" || !!doc?.unlocked) && (snap.count !== x.rows.length || Math.round(snap.sale) !== Math.round(x.sale));
     return {
       client: x.client, ym, count: x.rows.length, sale: x.sale, buy: x.buy, rows: x.rows, checks,
       block: blockCount(checks), warn: warnCount(checks), prevSale: ps, diff, bigDiff: ps > 0 && Math.abs(diff) > DIFF_LIMIT,
@@ -118,7 +119,7 @@ export function submitPatch(row, me, note = "", now = Date.now()) {
 export function approvePatch(row, me, now = Date.now()) {
   const w = who(me);
   return { kind: "close", client: row.client, yyyymm: row.ym, status: "approved", approvedBy: w.email, approvedByName: w.name, approvedAt: now,
-    log: logOf(row.doc, { at: now, by: w.name, act: "2차 승인", note: "" }) };
+    unlocked: false, log: logOf(row.doc, { at: now, by: w.name, act: "최종마감", note: "" }) };
 }
 export function rejectPatch(row, me, reason, now = Date.now()) {
   const w = who(me);
@@ -143,4 +144,18 @@ export function closeCounts(board) {
   const c = { none: 0, verified: 0, submitted: 0, rejected: 0, approved: 0 };
   (board || []).forEach((r) => { c[r.status] += 1; });
   return c;
+}
+
+// 🔒 2026-11-16 최종마감 잠금 — 경리 확인(approved)이면 배차 쪽은 그 거래처 · 그 달 오더를 고치거나 추가 · 삭제할 수 없다
+//  경리팀이 [일시해제]하면 잠깐 풀리고, 고친 뒤 [다시 잠금]하면 그때 금액으로 다시 최종마감
+export const isFinalLocked = (doc) => !!doc && doc.status === "approved" && !doc.unlocked;
+export function tempUnlockPatch(row, me, note = "", now = Date.now()) {
+  const w = who(me);
+  return { kind: "close", client: row.client, yyyymm: row.ym, unlocked: true, unlockedBy: w.email, unlockedByName: w.name, unlockedAt: now,
+    log: logOf(row.doc, { at: now, by: w.name, act: "일시해제", note }) };
+}
+export function relockPatch(row, me, now = Date.now()) {
+  const w = who(me);
+  return { kind: "close", client: row.client, yyyymm: row.ym, status: "approved", unlocked: false, snapshot: { count: row.count, sale: row.sale }, approvedBy: w.email, approvedByName: w.name, approvedAt: now,
+    log: logOf(row.doc, { at: now, by: w.name, act: "다시 잠금(최종마감)", note: "" }) };
 }

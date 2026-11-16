@@ -128,12 +128,13 @@ export function useArDesk(company) {
 export function closeTag(close) {
   if (!close) return { t: "", c: SD.mute, ready: false };
   if (close.changed && close.status !== "none") return { t: "마감 후 변경", c: "#C62F25", ready: false };
-  if (close.status === "submitted" || close.status === "approved") return { t: "배차마감", c: "#0F7A52", ready: true };
+  if (close.status === "approved") return { t: close.doc?.unlocked ? "일시해제" : "최종마감", c: close.doc?.unlocked ? "#B25F00" : "#0F1A30", ready: true, final: true };
+  if (close.status === "submitted") return { t: "배차마감", c: "#0F7A52", ready: true };
   if (close.status === "rejected") return { t: "반려", c: "#C62F25", ready: false };
   if (close.status === "verified") return { t: "배차검증", c: "#2457D6", ready: false };
   return { t: "마감 전", c: "#8D97AB", ready: false };
 }
-export function CloseStrip({ close, onReturn, disabled }) {
+export function CloseStrip({ close, onReturn, onUnlock, onRelock, disabled }) {
   if (!close) return null;
   const tg = closeTag(close); const d = close.doc || {};
   const by = d.submittedByName || d.verifiedByName || "";
@@ -142,12 +143,18 @@ export function CloseStrip({ close, onReturn, disabled }) {
     <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[13.5px]" data-kp="close-strip">
       <span className="font-black" style={{ color: tg.c }}>{tg.ready ? "✓ " : ""}{tg.t}</span>
       <span className="text-[#5B6B85] font-bold" style={NUM}>
-        {tg.ready ? `${by ? `${by} · ` : ""}${at ? fmtDay(at) : ""} 배차 1차 마감`
+        {tg.final ? (d.unlocked ? `${d.unlockedByName || "경리팀"} ${fmtDay(d.unlockedAt)} 일시해제 — 배차 담당자가 고칠 수 있어요. 끝나면 [다시 잠금]` : `${fmtDay(d.approvedAt)} 최종마감 — 배차 쪽 수정 · 추가 · 삭제 잠금`)
+          : tg.ready ? `${by ? `${by} · ` : ""}${at ? fmtDay(at) : ""} 배차 1차 마감`
           : close.status === "rejected" ? `반려 사유 · ${d.reason || "-"}${d.rejectedByName ? ` (${d.rejectedByName})` : ""}`
           : close.changed ? "배차마감 후 오더가 변경됨 — 배차 담당자 재마감 필요"
           : "배차 담당자 1차 마감 전 · 명세서 작성은 가능"}
       </span>
-      {tg.ready && onReturn && !disabled && <button type="button" onClick={onReturn} className="ml-auto text-[13px] font-bold text-[#C62F25] hover:underline underline-offset-4">반려</button>}
+      <span className="ml-auto flex items-center gap-3">
+        {tg.final && !disabled && (d.unlocked
+          ? onRelock && <button type="button" onClick={onRelock} className="text-[13px] font-black text-[#0F1A30] hover:underline underline-offset-4">다시 잠금</button>
+          : onUnlock && <button type="button" onClick={onUnlock} className="text-[13px] font-bold text-[#B25F00] hover:underline underline-offset-4">일시해제</button>)}
+        {tg.ready && !tg.final && onReturn && !disabled && <button type="button" onClick={onReturn} className="text-[13px] font-bold text-[#C62F25] hover:underline underline-offset-4">반려</button>}
+      </span>
     </div>
   );
 }
@@ -431,7 +438,7 @@ export function StatementBoard({ month, setMonth, recentMonths = [], groups, onO
               <div className="text-[14px] text-[#9AA9C3] mt-1">{groups.length ? "검색어나 단계 필터를 바꿔 보세요" : "배차완료 · 청구운임이 있는 오더만 모아요"}</div>
             </div>
           ) : (
-            <table className="kp-sd w-full" style={{ tableLayout: "fixed", minWidth: 880 }}>
+            <table className="kp-sd kp-grid w-full" style={{ tableLayout: "fixed", minWidth: 880 }}>
               <colgroup><col style={{ width: 44 }} /><col /><col style={{ width: 70 }} /><col style={{ width: 140 }} /><col style={{ width: 118 }} /><col style={{ width: 150 }} /><col style={{ width: 112 }} /><col style={{ width: 172 }} /></colgroup>
               <thead>
                 <tr className="text-left text-[13px] text-[#5B6B85] bg-[#F8FAFD]">
@@ -500,7 +507,7 @@ export function StatementLineGrid({ rows, included, onToggle, onToggleAll, onAmo
   return (
     <div className="rounded-2xl border border-[#E3E8F0] overflow-hidden bg-white">
       <div className="max-h-[460px] overflow-auto">
-        <table className="kp-sd w-full" style={{ tableLayout: "fixed", minWidth: ph ? 0 : 470 }}>
+        <table className="kp-sd kp-grid w-full" style={{ tableLayout: "fixed", minWidth: ph ? 0 : 470 }}>
           {ph ? <colgroup><col style={{ width: 32 }} /><col style={{ width: 46 }} /><col /><col style={{ width: 96 }} /></colgroup>
             : <colgroup><col style={{ width: 38 }} /><col style={{ width: 36 }} /><col style={{ width: 58 }} /><col /><col style={{ width: 118 }} /><col style={{ width: 78 }} /></colgroup>}
           <thead>
@@ -714,7 +721,7 @@ export function ArClientList({ rows, sel, onSel, sort, setSort }) {
   const today = kstToday();
   return (
     <div ref={listRef} className="overflow-auto max-h-[calc(100vh-300px)] min-h-[260px]" tabIndex={0} onKeyDown={onKey} aria-label="미수 거래처 목록 · 위아래 화살표로 이동">
-      <table className="kp-sd w-full" style={{ tableLayout: "fixed", minWidth: 620 }}>
+      <table className="kp-sd kp-grid w-full" style={{ tableLayout: "fixed", minWidth: 620 }}>
         <colgroup><col /><col style={{ width: 120 }} /><col style={{ width: 96 }} /><col style={{ width: 74 }} /><col style={{ width: 88 }} /><col style={{ width: 82 }} /></colgroup>
         <thead>
           <tr className="text-[13px] text-[#5B6B85]">
@@ -1013,27 +1020,29 @@ export function MonthPicker({ ym, onChange, months = [], label = "SETTLEMENT" })
   );
 }
 
-// ───────────────────────── 🧭 2026-11-16 진행 선(배차마감 → 명세서 → 계산서 → 입금) ─────────────────────────
-//  steps: [{ label, done, text, bad }] — 끝난 점은 채우고 선으로 잇는다. 지금 단계는 깜빡이고, 모두 끝나면 깜빡임이 멈춘다
+// ───────────────────────── 🧭 2026-11-16 진행 선(배차마감 → 명세서 → 계산서 → 입금 / 오더 확인 → 검증 → 1차 마감 → 최종마감) ─────────────────────────
+//  steps: [{ label, done, text, bad }] — 칸을 똑같이 나누고 점과 점 가운데를 선으로 잇는다(글 · 날짜는 점 바로 아래 가운데)
+//  끝난 구간은 진한 남색, 남은 구간은 옅은 선. 지금 단계는 깜빡이고, 마지막 단계가 끝나면 깜빡임이 멈춘다
 export function FlowTrack({ steps = [], compact = false }) {
-  const cur = steps.length && steps[steps.length - 1].done ? -1 : steps.findIndex((s) => !s.done); // 마지막(입금 · 경리 확인)이 끝나면 깜빡임 멈춤
+  const n = steps.length;
+  const cur = n && steps[n - 1].done ? -1 : steps.findIndex((s) => !s.done);
+  const D = compact ? 18 : 28; // 점 크기
   return (
-    <div className="flex items-start" data-kp="flow-track">
+    <div className="grid" style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }} data-kp="flow-track">
       {steps.map((s, i) => {
         const done = !!s.done; const now = i === cur;
-        const dot = done ? "#0F1A30" : s.bad ? "#C62F25" : now ? "#2457D6" : "#C9D3E3";
+        const col = done ? "#0F1A30" : s.bad && now ? "#C62F25" : now ? "#2457D6" : "#C9D3E3";
+        const segDone = done && steps[i + 1]?.done;
         return (
-          <React.Fragment key={s.label}>
-            {i > 0 && <div className={`flex-1 h-[2px] ${compact ? "mt-[7px] min-w-[18px]" : "mt-[9px] min-w-[26px]"}`} style={{ background: steps[i - 1].done ? "#0F1A30" : "#DCE3EE" }} />}
-            <div className="flex flex-col items-center shrink-0" style={{ minWidth: compact ? 52 : 64 }} title={`${s.label} · ${s.text || ""}`}>
-              <span className={`rounded-full grid place-items-center ${now ? "kp-step-now" : ""}`} style={{ width: compact ? 16 : 20, height: compact ? 16 : 20, background: done ? dot : "#fff", border: `2px solid ${dot}` }}>
-                {done ? <svg width={compact ? 9 : 11} height={compact ? 9 : 11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>
-                  : now ? <span className="rounded-full" style={{ width: compact ? 6 : 8, height: compact ? 6 : 8, background: dot }} /> : null}
-              </span>
-              <span className={`mt-1 text-[11px] font-bold leading-tight whitespace-nowrap ${done ? "text-[#0F1A30]" : now ? (s.bad ? "text-[#C62F25]" : "text-[#2457D6]") : "text-[#9AA9C3]"}`}>{s.label}</span>
-              <span className={`text-[11px] leading-tight whitespace-nowrap ${s.bad ? "text-[#C62F25] font-black" : done ? "text-[#5B6B85]" : "text-[#9AA9C3]"}`}>{s.text || ""}</span>
-            </div>
-          </React.Fragment>
+          <div key={s.label} className="relative flex flex-col items-center min-w-0" title={`${s.label}${s.text ? ` · ${s.text}` : ""}`}>
+            {i < n - 1 && <span aria-hidden="true" className="absolute" style={{ top: D / 2 - (compact ? 1 : 1.5), left: "50%", right: "-50%", height: compact ? 2 : 3, borderRadius: 3, background: segDone ? "#0F1A30" : done ? "linear-gradient(90deg,#0F1A30,#C9D3E3)" : "#E3E8F0" }} />}
+            <span className={`relative z-[1] rounded-full grid place-items-center font-black ${now ? "kp-step-now" : ""}`}
+              style={{ width: D, height: D, fontSize: compact ? 10 : 12.5, background: done ? "#0F1A30" : "#fff", color: done ? "#fff" : col, border: `2px solid ${col}`, boxShadow: now ? `0 0 0 4px ${s.bad ? "rgba(198,47,37,.12)" : "rgba(36,87,214,.12)"}` : "none" }}>
+              {done ? <svg width={compact ? 10 : 14} height={compact ? 10 : 14} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg> : (compact ? (now ? <span className="w-1.5 h-1.5 rounded-full" style={{ background: col }} /> : null) : i + 1)}
+            </span>
+            <span className={`mt-1.5 ${compact ? "text-[11px]" : "text-[13px]"} font-black leading-tight text-center whitespace-nowrap ${done ? "text-[#0F1A30]" : now ? (s.bad ? "text-[#C62F25]" : "text-[#2457D6]") : "text-[#9AA9C3]"}`}>{s.label}</span>
+            {s.text != null && <span className={`mt-0.5 ${compact ? "text-[10.5px]" : "text-[12px]"} font-bold leading-tight text-center whitespace-nowrap ${s.bad ? "text-[#C62F25]" : done ? "text-[#5B6B85]" : "text-[#9AA9C3]"}`} style={{ fontVariantNumeric: "tabular-nums" }}>{s.text || "\u00a0"}</span>}
+          </div>
         );
       })}
     </div>

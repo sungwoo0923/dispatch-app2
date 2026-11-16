@@ -2982,7 +2982,7 @@ const SettleHome = React.lazy(() => import("./SettleHome")); // 🧭 정산 홈(
 const MonthClose = React.lazy(() => import("./MonthClose")); // ✅ 2026-11-16 월 마감 리디자인(배차자 1차 — 범위 고르기 · 시각화 · 그 자리에서 고치기)
 const InvoiceFormEditor = React.lazy(() => import("./InvoiceFormEditor")); // 🧾 2026-11-16 거래처별 명세서 양식
 import { pickForm, visibleCols, headerLabels } from "./invoiceForm";
-import { closeBoard as closeBoardOf, approvePatch as closeApprovePatch, rejectPatch as closeRejectPatch } from "./closeFlow"; // ✅ 2026-11-16 배차 마감 → 거래처정산
+import { closeBoard as closeBoardOf, approvePatch as closeApprovePatch, rejectPatch as closeRejectPatch, isFinalLocked, tempUnlockPatch, relockPatch } from "./closeFlow"; // ✅ 2026-11-16 배차 마감 → 거래처정산
 import { CloseStrip, viewStage } from "./SettleDesk";
 import UserHub from "./UserHub";
 // 🟪 2026-11-16 구글시트(운송사 칸)와 다른 배차방식을 프로그램에서 고른 오더 — 프로그램 값 우선 · 칸을 보라색으로
@@ -4304,11 +4304,23 @@ function useRealtimeCollections(user, userCompany, role) {
   // 패널에서 이름/연락처를 직접 수정할 수 있게 하고, 저장 즉시 반영되도록
   // getDoc 한 번이 아니라 onSnapshot으로 구독한다.
   const [myPhone, setMyPhone] = useState("");
+  const [myTeam, setMyTeam] = useState("");
+  // 🔒 2026-11-16 최종마감 잠금 — 경리 확인(최종마감)된 거래처 · 달의 오더는 배차 쪽에서 고치기 · 추가 · 삭제 불가(경리팀 일시해제 시 가능)
+  const finalDesk = useArDesk((localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim());
+  const finalBypass = role === "totalMaster" || ["hrAcct", "allMgr", "acct", "accounting"].includes(role) || /경리|회계|정산/.test(myTeam);
+  const finalLockOf = (o) => {
+    if (finalBypass || !o) return null;
+    const c = String(o.거래처명 || "").trim(); if (!c) return null;
+    const ym = String(o.마감월 || "").slice(0, 7) || String(o.상차일 || "").slice(0, 7);
+    const d = finalDesk.closes?.get(`${c}|${ym}`);
+    return isFinalLocked(d) ? { client: c, ym } : null;
+  };
+  const finalLockMsg = (l) => `${l.client} ${Number(l.ym.slice(5))}월은 최종마감되어 고치거나 추가 · 삭제할 수 없어요.\n꼭 바꿔야 하면 경리팀에 ‘일시해제’를 요청해 주세요.`;
   useEffect(() => {
     if (!user?.uid) { setMyRealName(""); setMyPhone(""); return; }
     const unsub = onSnapshot(doc(db, "users", user.uid), (snap) => {
       const d = snap.exists() ? snap.data() : {};
-      setMyRealName(d.name || ""); setMyNameCache(d.name || "");
+      setMyRealName(d.name || ""); setMyNameCache(d.name || ""); setMyTeam(String(d.team || d.부서 || ""));
       setMyPhone(d.전화번호 || d.phone || "");
     }, () => {});
     return unsub;
@@ -4852,6 +4864,7 @@ const liveWindowStart = pcLiveWindowStart(); // ★ 13개월 → 최근 7일~(�
 
 const addDispatch = async (recordIn) => {
   let record = recordIn;
+  { const fl = finalLockOf(record); if (fl) { globalShowAlert(finalLockMsg(fl)); return false; } } // 🔒 최종마감
   // 🚫 하차일이 상차일보다 빠른 역순 등록 방지
   if (isReversedDateOrder(record?.상차일, record?.하차일)) {
     globalShowAlert(REVERSED_DATE_ORDER_MSG);
@@ -4985,6 +4998,12 @@ const archiveCompletedOrderPC = (data, orderId, reason) => {
 
 const patchDispatch = async (_id, patch, knownPrev) => {
   if (!_id) return;
+  // 🔒 2026-11-16 최종마감 — 정산 기록(__system: 계산서일 · 입금 · 지급 등)은 그대로, 오더 내용 고치기만 막는다
+  if (patch && !patch.__system && !finalBypass) {
+    const prev0 = knownPrev || ordersCacheRef.current.find((d) => d._id === _id) || dispatchCacheRef.current.find((d) => d._id === _id) || null;
+    const fl = finalLockOf(prev0) || (prev0 ? finalLockOf({ ...prev0, ...patch }) : null);
+    if (fl) { globalShowAlert(finalLockMsg(fl)); return false; }
+  }
 
   // 🚫 블랙 기사 / 메모 기사 차량번호 입력 시 경고
   if (patch.차량번호) {
@@ -5416,8 +5435,13 @@ const rbTombKey = (date, group, name) => [date, group || "", name].map((x) => St
 //   부수 처리(운행기록 스냅샷·기사 취소 알림·삭제 기록 deletedOrders·배차표 지운 줄·화주사 사본 삭제)는 그대로 한다.
 //   한 건(문자열/객체)도 같은 길로 간다(확인창은 원래대로 먼저, 그다음 진행 창).
 const removeDispatch = async (arg, opts = {}) => {
-  const list = (Array.isArray(arg) ? arg : [arg]).filter(Boolean);
+  let list = (Array.isArray(arg) ? arg : [arg]).filter(Boolean);
   if (!list.length) return;
+  { // 🔒 최종마감 오더는 빼고 지운다
+    const of = (a) => { const id = typeof a === "string" ? a : a?._id; return (typeof a === "object" && a?.거래처명 ? a : null) || ordersCacheRef.current.find(d => d._id === id) || dispatchCacheRef.current.find(d => d._id === id) || null; };
+    const locked = list.map((a) => finalLockOf(of(a))).filter(Boolean);
+    if (locked.length) { globalShowAlert(`${locked.length === list.length ? "" : `${locked.length}건은 빼고 지울게요.\n`}${finalLockMsg(locked[0])}`); list = list.filter((a) => !finalLockOf(of(a))); if (!list.length) return; }
+  }
   // 운송완료 오더 확인 — 한 건이면 원래 문구, 여러 건이면 한 번에 묻는다(거절하면 완료 건만 빼고 지운다)
   //   (진행 창이 뜨기 전에 묻는다 — 캐시에 없는 건은 예전처럼 준비 단계에서 건별로 묻는다)
   let skipDone = !!opts.skipCompletedConfirm;
@@ -53473,6 +53497,19 @@ const handleBatchSettle = async (targetStatus) => {
     await desk.save(closeIdOf(r), closeRejectPatch(r, closeMe(), String(why).trim()));
     sflowToast(`${c} 배차마감 반려`, "success");
   };
+  // 🔒 최종마감 일시해제 · 다시 잠금(경리팀)
+  const unlockClose = async (c, ym) => {
+    const r = closeMapOf(ym).get(c); if (!r || isViewer) return;
+    const why = await kpPrompt(`${c} ${Number(ym.slice(5))}월 최종마감을 일시해제할까요?\n배차 담당자가 오더를 고치거나 추가 · 삭제할 수 있게 돼요. 사유를 적어 주세요.`, "", { title: "최종마감 일시해제", placeholder: "예: 11/12 운임 정정", okText: "일시해제" });
+    if (why == null) return;
+    await desk.save(closeIdOf(r), tempUnlockPatch(r, closeMe(), String(why || "").trim()));
+    sflowToast(`${c} 일시해제 — 끝나면 [다시 잠금]을 눌러 주세요`, "success");
+  };
+  const relockClose = async (c, ym) => {
+    const r = closeMapOf(ym).get(c); if (!r || isViewer) return;
+    await desk.save(closeIdOf(r), relockPatch(r, closeMe()));
+    sflowToast(`${c} 다시 최종마감`, "success");
+  };
   const groupsOfMonth = (ym) => {
     const cm = closeMapOf(ym);
     const m = new Map();
@@ -53489,7 +53526,12 @@ const handleBatchSettle = async (targetStatus) => {
       return { close: cm.get(c) || null, key: `${c}|${ym}`, client: c, yyyymm: ym, rows: inc, count: inc.length, supply, vat, total: supply + vat, prepaidOut: pp.excluded.length, stage: viewStage(d?.stage), doc: d, lastAt, email: emailOf(c), settled: rows.every(r => r.정산상태?.[ym] === "정산완료") };
     });
   };
-  const pipeGroups = useMemo(() => groupsOfMonth(pipeMonth), [billRows, pipeMonth, desk.stmts, clients, prepaidDefault]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pipeGroups = useMemo(() => groupsOfMonth(pipeMonth), [billRows, pipeMonth, desk.stmts, desk.closes, clients, prepaidDefault]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 🔒 2026-11-16 명세서를 이미 작성한 뒤에 배차 1차 마감이 들어오면 바로 최종마감(경리 확인)으로
+  useEffect(() => {
+    if (isViewer) return;
+    pipeGroups.forEach((g) => { if (g.close?.status === "submitted" && !g.close.changed && stageIdx(g.stage) >= 1) ackClose(g.client, g.yyyymm); });
+  }, [pipeGroups]); // eslint-disable-line react-hooks/exhaustive-deps
   const pipeRecent = useMemo(() => Array.from({ length: 6 }, (_, i) => kstYm(i - 5)).map(ym => ({ ym, open: groupsOfMonth(ym).filter(g => g.stage !== "마감").length })), [billRows, desk.stmts, prepaidDefault]); // eslint-disable-line react-hooks/exhaustive-deps
   const stmtSnap = (g) => ({ count: g.count, supply: g.supply, vat: g.vat });
   const setStmtStage = async (c, ym, stage, { note = "", date = "", extra = null } = {}) => {
@@ -53895,7 +53937,7 @@ const handleBatchSettle = async (targetStatus) => {
               {/* 단계 — 한 달 · 한 거래처로 연 명세서만 */}
               {stmtYm ? (
                 <div className={`${csCard} px-4 py-3`}>
-                  {closeMapOf(stmtYm).get(client) && <div className="pb-2.5 mb-2.5 border-b border-[#EEF2F8]"><CloseStrip close={closeMapOf(stmtYm).get(client)} disabled={isViewer} onReturn={() => returnClose(client, stmtYm)} /></div>}
+                  {closeMapOf(stmtYm).get(client) && <div className="pb-2.5 mb-2.5 border-b border-[#EEF2F8]"><CloseStrip close={closeMapOf(stmtYm).get(client)} disabled={isViewer} onReturn={() => returnClose(client, stmtYm)} onUnlock={() => unlockClose(client, stmtYm)} onRelock={() => relockClose(client, stmtYm)} /></div>}
                   <StageStepper stage={stmtStage} history={stmtCur?.history || []} disabled={isViewer}
                     sentHint={stmtLogs[0]?.sentAt ? `${new Date(stmtLogs[0].sentAt + 9 * 3600e3).getUTCMonth() + 1}/${new Date(stmtLogs[0].sentAt + 9 * 3600e3).getUTCDate()}` : ""}
                     onSet={(k) => {
