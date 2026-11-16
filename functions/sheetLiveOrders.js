@@ -349,7 +349,46 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     "",
   ].join("\n");
 
-  // 관리센터 요청(최고관리자) — liveGet · liveSet · liveRun
+  // 🔍 2026-11-16 프로그램 비교 — 시트를 읽어 프로그램 오더와 맞춰 보기만 한다(아무것도 쓰지 않음)
+  //  실시간 반영과 같은 규칙(가져오기 규칙 · 반영 범위 · 고른 탭 · 프로그램에서 고친 칸은 그대로 둠)으로 짝을 짓고
+  //  다른 값 · 시트에만 있는 줄 · 프로그램에만 있는 오더를 돌려준다
+  const CMP_KEYS = ["상차일", "하차일", "거래처명", "상차지명", "하차지명", "화물내용", "차량톤수", "차량종류", "차량번호", "이름", "전화번호", "청구운임", "기사운임", "지급방식", "배차방식", "배차상태", "메모"];
+  async function compareOne(co, cfg, { limit = 300 } = {}) {
+    const id = parseSpreadsheetId(cfg.url);
+    if (!id) throw new Error("구글시트 주소가 올바르지 않습니다.");
+    const M = await import("./carrierMigrateCore.mjs");
+    const P = await import("./sheetProfileCore.mjs");
+    const raw = await readTabs(id, null);
+    if (!raw.length) throw new Error("읽을 탭이 없습니다.");
+    const tabs = raw.map((t) => ({ title: t.title, rows: P.applyMerges(t.rows, t.merges) }));
+    const preset = await presetFor(co, M);
+    const places = await placesFor(co);
+    const built = M.buildMigration(tabs, { ...preset, extraPlaces: places });
+    const now = Date.now();
+    const days = Math.max(1, Math.min(400, Number(cfg.days) || 14));
+    const daysFrom = kstYmd(now - days * 86400000);
+    const from = preset.fromDate && /^\d{4}-\d{2}-\d{2}$/.test(preset.fromDate) && preset.fromDate < daysFrom ? preset.fromDate : daysFrom;
+    const wantTabs = Array.isArray(cfg.tabs) && cfg.tabs.length ? new Set(cfg.tabs.map(String)) : null;
+    const tabOf = (x) => String(x?.이전출처 || "").split("!")[0];
+    const incoming = built.orders.filter((o) => String(o.상차일 || "") >= from && (!wantTabs || wantTabs.has(tabOf(o))));
+    const tabSet = new Set(incoming.map(tabOf));
+    const existing = (await existingOrders(co, from)).filter((e) => tabSet.has(tabOf(e.data)));
+    const r = M.reconcileOrders(existing, incoming);
+    const byId = new Map(existing.map((e) => [e.id, e.data]));
+    const brief = (o) => ({ 이전출처: o.이전출처 || "", 상차일: o.상차일 || "", 거래처명: o.거래처명 || "", 상차지명: o.상차지명 || "", 하차지명: o.하차지명 || "", 차량번호: o.차량번호 || "", 이름: o.이름 || "", 청구운임: o.청구운임 ?? "", 기사운임: o.기사운임 ?? "" });
+    const diffs = r.update.map((u) => {
+      const d = byId.get(u.id) || {};
+      const fields = Object.keys(u.patch || {}).filter((k) => CMP_KEYS.includes(k)).map((k) => ({ k, program: d[k] ?? "", sheet: u.patch[k] && typeof u.patch[k] === "object" ? "" : (u.patch[k] ?? "") }));
+      return fields.length ? { id: u.id, ...brief(d), fields } : null;
+    }).filter(Boolean);
+    return {
+      at: now, from, tabs: [...tabSet], sheetRows: incoming.length, programRows: existing.length,
+      same: r.same + (r.update.length - diffs.length), diffCount: diffs.length, sheetOnlyCount: r.create.length, programOnlyCount: r.missing.length,
+      diffs: diffs.slice(0, limit), sheetOnly: r.create.slice(0, limit).map(brief), programOnly: r.missing.slice(0, limit).map((e) => ({ id: e.id, ...brief(e.data) })),
+    };
+  }
+
+  // 관리센터 요청(최고관리자) — liveGet · liveSet · liveRun · liveCompare
   async function handle(action, body, me) {
     const co = String(body.company || "").trim();
     if (!co) throw Object.assign(new Error("운송사를 골라 주세요."), { status: 400 });
@@ -371,6 +410,11 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
       await ref(co).set(patch, { merge: true });
       if (body.enabled != null) await writeStatus(co, { enabled: !!body.enabled, error: "" }, { force: true });
       return { live: pub((await ref(co).get()).data()) };
+    }
+    if (action === "liveCompare") {
+      const cfg = (await ref(co).get()).data();
+      if (!cfg?.url) throw Object.assign(new Error("먼저 실시간 반영할 시트를 저장해 주세요."), { status: 400 });
+      return { compare: await compareOne(co, cfg), live: pub(cfg) };
     }
     if (action === "liveRun") {
       const cfg = (await ref(co).get()).data();

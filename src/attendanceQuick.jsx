@@ -71,7 +71,13 @@ export function CheckoutReminderHost({ uid, role, email }) {
 
 // 출근/퇴근 버튼 — variant: "pc"(상단 칩) | "mobile"(상단 작은 버튼)
 export function AttendanceQuickButton({ company, uid, name, role, email, variant = "pc", dark = false }) {
-  const { rec, today } = useTodayAttendance(uid);
+  const { rec: recLive, today } = useTodayAttendance(uid);
+  // 🛠 2026-11-16 [출근하기]를 누르면 바로 [퇴근하기]로 — 예전엔 저장이 끝날 때까지 그대로라 두 번 누를 수 있었다
+  //  누르는 순간 화면에 먼저 반영(opt)하고, 서버 기록이 같아지면 지운다. 잠금은 ref로(같은 순간 두 번 눌러도 한 번만)
+  const [opt, setOpt] = React.useState(null);
+  React.useEffect(() => { if (!opt || !recLive) return; if (Object.keys(opt).every((k) => (opt[k] === null ? !recLive[k] : !!recLive[k]))) setOpt(null); }, [recLive, opt]);
+  const rec = opt ? { ...(recLive || {}), ...Object.fromEntries(Object.entries(opt).map(([k, v]) => [k, v === null ? undefined : v])) } : recLive;
+  const lockRef = React.useRef(false);
   const { phase } = useCheckoutPhase(uid, rec);
   const blink = phase === "now"; // ⭐ 2026-11-03 퇴근 1분 전부터 퇴근 버튼 깜빡임(누를 때까지)
   const [busy, setBusy] = React.useState(false);
@@ -94,7 +100,7 @@ export function AttendanceQuickButton({ company, uid, name, role, email, variant
   const done = working && !!rec?.checkOutTime;
   const ref = doc(db, "attendance", `${today}_${uid}`);
   const toast = (m) => { try { if (window.__sflowShowToast) window.__sflowShowToast(m, "success"); } catch { /* 무시 */ } };
-  const run = (fn) => async () => { if (busy) return; setBusy(true); try { await fn(); } catch (e) { alert(`처리하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); } };
+  const run = (fn) => async () => { if (lockRef.current) return; lockRef.current = true; setBusy(true); try { await fn(); } catch (e) { setOpt(null); alert(`처리하지 못했습니다: ${e?.message || e}`); } finally { lockRef.current = false; setBusy(false); } };
 
   const checkIn = run(async () => {
     if (!(await inside("출근"))) return;
@@ -102,6 +108,7 @@ export function AttendanceQuickButton({ company, uid, name, role, email, variant
       if (!(await kpConfirm(`오늘은 "${rec.status}"(으)로 기록되어 있습니다.\n출근으로 바꿀까요?`))) return;
     }
     const now = new Date().toISOString();
+    setOpt({ status: HALF_LEAVES.includes(rec?.status) ? rec.status : "출근", checkInTime: rec?.checkInTime || now, checkOutTime: null }); // 화면 먼저
     await setDoc(ref, {
       uid, name: name || auth.currentUser?.displayName || "", date: today, month: today.slice(0, 7),
       status: HALF_LEAVES.includes(rec?.status) ? rec.status : "출근", checkInTime: (rec?.status === "출근" || HALF_LEAVES.includes(rec?.status)) && rec?.checkInTime ? rec.checkInTime : now,
@@ -114,6 +121,7 @@ export function AttendanceQuickButton({ company, uid, name, role, email, variant
     if (!(await inside("퇴근"))) return;
     if (!(await kpConfirm(`지금 퇴근 처리할까요?\n(잘못 눌렀으면 '되돌리기'로 다시 출근 상태로 돌릴 수 있습니다)`))) return;
     const now = new Date().toISOString();
+    setOpt({ checkOutTime: now }); // 화면 먼저
     await setDoc(ref, { checkOutTime: now, checkOutSource: "manual" }, { merge: true });
     toast(`퇴근 처리되었습니다 (${hm(now)})`);
   });
@@ -143,7 +151,7 @@ export function AttendanceQuickButton({ company, uid, name, role, email, variant
         ) : working ? (
           <button type="button" disabled={busy} onClick={checkOut} className={blink ? "kp-blink" : ""} style={{ ...btnBase, background: "#fff", color: "#0F1A30" }}>퇴근하기</button>
         ) : (
-          <button type="button" disabled={busy} onClick={checkIn} style={{ ...btnBase, background: "linear-gradient(135deg,#8FB0F0,#CFE0FF)", color: "#0B1428", boxShadow: "0 8px 22px rgba(143,176,240,0.35)" }}>출근하기</button>
+          <button type="button" disabled={busy} onClick={checkIn} style={{ ...btnBase, background: "linear-gradient(135deg,#8FB0F0,#CFE0FF)", color: "#0B1428", boxShadow: "0 8px 22px rgba(143,176,240,0.35)" }}>{busy ? "확인 중…" : "출근하기"}</button>
         )}
       </div>
     );
@@ -168,7 +176,7 @@ export function AttendanceQuickButton({ company, uid, name, role, email, variant
     return (
       <div className={wrap}>
         {dot("#F79009")}<span className="text-[12.5px] font-bold truncate">{rec?.status && rec.status !== "출근" ? `오늘 ${rec.status}` : "아직 출근 전"}</span>
-        <button type="button" disabled={busy} onClick={checkIn} className={btn(true)}>출근하기</button>
+        <button type="button" disabled={busy} onClick={checkIn} className={btn(true)}>{busy ? "확인 중…" : "출근하기"}</button>
       </div>
     );
   }
@@ -183,7 +191,7 @@ export function AttendanceQuickButton({ company, uid, name, role, email, variant
     <button type="button" disabled={busy} onClick={working ? checkOut : checkIn}
       className={`kp-chip-btn text-[12px] transition disabled:opacity-50 ${working ? (blink ? "kp-blink" : "") : "!bg-[#8FB0F0] !text-[#0B1428]"}`}
       title={working ? `출근 ${hm(rec?.checkInTime)} — 누르면 퇴근 처리` : "누르면 출근 처리"}>
-      {working ? `퇴근하기 · ${hm(rec?.checkInTime)} 출근` : "출근하기"}
+      {working ? `퇴근하기 · ${hm(rec?.checkInTime)} 출근` : busy ? "확인 중…" : "출근하기"}
     </button>
   );
 }

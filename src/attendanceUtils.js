@@ -208,3 +208,23 @@ export function hrLeaveOn(user, ds) {
   if (lv.to && ds > lv.to) return null;
   return st;
 }
+
+
+// 🕘 2026-11-16 출퇴근이 어떻게 기록됐는지 — 출근기록부 팝업(PC · 모바일)에 "자동 출근 · 직접 누름 · 관리자 수정"으로 보여 준다
+//  source: auto · auto_location · auto_mobile_location(출근지 반경 자동) / manual · manual_mobile(직접 누름 · 출근기록부 수정) / leave(휴가)
+export function attendanceSourceText(rec) {
+  if (!rec) return { in: "", out: "" };
+  const src = String(rec.source || "");
+  const edited = !!rec.editedBy || !!rec.editedByName;
+  const inText = !rec.checkInTime && !rec.status ? ""
+    : edited && src.startsWith("manual") ? `관리자 수정${rec.editedByName ? `(${rec.editedByName})` : ""}`
+    : src.startsWith("auto") ? (src.includes("mobile") ? "자동 출근 · 휴대폰 위치" : "자동 출근 · 위치")
+    : src === "manual_mobile" ? "직접 누름 · 휴대폰"
+    : src === "manual" ? "직접 누름"
+    : src === "leave" ? "휴가 기록"
+    : src === "request" || rec.approvedBy ? "출근 요청 승인"
+    : rec.checkInTime ? "기록 방법 모름(예전 기록)" : "";
+  const osrc = String(rec.checkOutSource || "");
+  const outText = !rec.checkOutTime ? "" : osrc.startsWith("auto") ? "자동 퇴근 · 위치" : osrc === "manual" ? (edited ? "직접 누름 · 수정" : "직접 누름") : "기록 방법 모름(예전 기록)";
+  return { in: inText, out: outText };
+}

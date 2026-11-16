@@ -8,7 +8,7 @@ import { geocodeAddress } from "./tmapFareCalc";
 import { db, DEFAULT_COMPANY } from "./firebase";
 import { isTMUser } from "./staffFilter";
 import { RadiusEditor, officeRadii, DEFAULT_IN_RADIUS, DEFAULT_OUT_RADIUS } from "./attendanceQuick";
-import { ATTENDANCE_STATUS_COLOR, isWeekend, findApprovedLeaveForDate, isHoliday, getHolidayLabel, KR_NATIONAL_HOLIDAYS, approvalLeaveOn, hrLeaveOn } from "./attendanceUtils";
+import { ATTENDANCE_STATUS_COLOR, isWeekend, findApprovedLeaveForDate, isHoliday, getHolidayLabel, KR_NATIONAL_HOLIDAYS, approvalLeaveOn, hrLeaveOn, attendanceSourceText } from "./attendanceUtils";
 import { useCustomRoles } from "./customRoles";
 import {
   APPROVER_GROUP_LABEL, isHrStaffUser, isExecUser, canApproveAttendanceReq, canEditAttendanceOf, markNotifSeen,
@@ -1025,6 +1025,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
       {editCell && (
         <Modal title={`${editCell.name} · ${editCell.date}`} eyebrow="EDIT · HR ONLY" onClose={() => setEditCell(null)} narrow>
           <div className="text-[13px] text-[#5B6B85] mb-3">출근 상태 및 시간을 직접 수정합니다. 수정 이력이 남습니다.</div>
+          <AttSourceInfo rec={editCell.current} />
           <EditForm editCell={editCell} onSave={saveEdit} onCancel={() => setEditCell(null)} />
         </Modal>
       )}
@@ -1032,6 +1033,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
       {/* 수정 요청 모달 (본인 기록) */}
       {changeRequestCell && (
         <Modal title="수정 요청" eyebrow="CHANGE · REQUEST" onClose={() => setChangeRequestCell(null)} narrow>
+          <AttSourceInfo rec={changeRequestCell.rec} />
           <div className="space-y-4">
             <div className="text-[13px] text-[#5B6B85]"><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{changeRequestCell.date}</span> · {changeRequestCell.emp.name} — <b className="text-[#1B2B4B]">{myApproverLabel}</b> 승인 후 반영됩니다.</div>
             {(() => {
@@ -1242,6 +1244,18 @@ function ChangeReqRow({ req, onApprove, onReject }) {
   return <ReqRowShell title={req.name} sub={sub} reason={req.reason} group={req.approverGroup} onApprove={() => onApprove(req)} onReject={(r) => onReject(req, r)} />;
 }
 
+function AttSourceInfo({ rec }) {
+  const t = attendanceSourceText(rec);
+  if (!t.in && !t.out) return null;
+  const tone = (x) => (x.startsWith("자동") ? "text-[#0F7A52]" : x.startsWith("관리자") ? "text-[#B25F00]" : "text-[#2457D6]");
+  return (
+    <div className="mb-3 rounded-xl border border-[#E3E8F0] px-3 py-2.5 text-[13px]" data-kp="att-source">
+      <div className="text-[11.5px] font-extrabold tracking-[0.12em] text-[#8A97AD] mb-1">어떻게 기록됐나요</div>
+      {t.in && <div className="flex gap-2"><span className="w-10 text-[#8A97AD] font-bold">출근</span><b className={tone(t.in)}>{t.in}</b>{rec?.checkInTime && <span className="text-[#8A97AD] tabular-nums">{fmtTime(rec.checkInTime)}</span>}</div>}
+      {t.out && <div className="flex gap-2 mt-0.5"><span className="w-10 text-[#8A97AD] font-bold">퇴근</span><b className={tone(t.out)}>{t.out}</b>{rec?.checkOutTime && <span className="text-[#8A97AD] tabular-nums">{fmtTime(rec.checkOutTime)}</span>}</div>}
+    </div>
+  );
+}
 function EditForm({ editCell, onSave, onCancel }) {
   const [status, setStatus] = useState(editCell.current?.status || "출근");
   const [time, setTime] = useState(editCell.current?.checkInTime ? fmtTime(editCell.current.checkInTime) : (editCell.workStartTime || "09:00"));

@@ -10,7 +10,7 @@ const orders = [
   o({ _id: "3", 거래처명: "다라물산", 청구운임: "0", 작성자: "lee@co.kr" }),
   o({ _id: "4", 거래처명: "다라물산", 상차일: "2026-10-07", 작성자: "lee@co.kr" }),
   o({ _id: "5", 거래처명: "다라물산", 상차일: "2026-10-07", 작성자: "lee@co.kr" }), // 4와 중복
-  o({ _id: "6", 거래처명: "마바", 청구운임: "50000", 기사운임: "70000", createdByUid: "u1", 작성자: "" }), // 역마진 · uid로 내 것
+  o({ _id: "6", 거래처명: "마바", 청구운임: "50000", 기사운임: "0", createdByUid: "u1", 작성자: "" }), // 기사운임 빈칸 · uid로 내 것
   o({ _id: "7", 거래처명: "마바", 배차상태: "배차중", 상차일: "2026-10-30", 작성자: "x@co.kr" }), // 지난 날 미배차
   o({ _id: "8", 거래처명: "가나상사", 상차일: "2026-09-10", 청구운임: "100000" }), // 지난달
   o({ _id: "9", 배차상태: "배차취소", 청구운임: "999999" }),
@@ -25,7 +25,7 @@ assert.deepEqual(B.map((r) => r.client).sort(), ["가나상사", "다라물산",
 assert.equal(row("가나상사").sale, 200000, "취소 · 다른 달 제외");
 assert.equal(row("가나상사").prevSale, 100000); assert.equal(row("가나상사").bigDiff, true, "지난달보다 100% → 알림");
 assert.deepEqual([row("다라물산").checks.blank.length, row("다라물산").checks.dup.length], [1, 1], "손실은 빈칸에서 뺀다 · 중복 1건");
-assert.deepEqual([row("마바").checks.neg.length, row("마바").checks.unassigned.length], [1, 1]);
+assert.deepEqual([row("마바").checks.noDriver.length, row("마바").checks.unassigned.length], [1, 1]);
 assert.deepEqual([row("가나상사").block, row("다라물산").block, row("마바").block, row("마바").warn], [0, 2, 1, 1]);
 assert.deepEqual(B.filter((r) => r.mine).map((r) => r.client).sort(), ["가나상사", "마바"], "내 거래처 = 내가 등록한 오더가 있는 곳");
 // 흐름: 1차 마감 → 승인 / 반려 → 다시 마감
@@ -53,7 +53,7 @@ assert.equal(ap.status, "approved"); assert.equal(unlockPatch(row("가나상사"
 assert.deepEqual(closeCounts(closeBoard(orders, "2026-10", { me, today, closeOf })), { none: 2, submitted: 1, rejected: 0, approved: 0 });
 // 일 마감 — 그날 내 오더만
 const D = dayBoard(orders, "2026-10-05", me, today);
-assert.deepEqual([D.count, D.sale, D.block, D.warn], [2, 150000, 1, 1], "같은 날 같은 구간 · 같은 차량은 거래처가 달라도 중복");
+assert.deepEqual([D.count, D.sale, D.block, D.warn], [2, 150000, 1, 1], "같은 날 같은 구간 · 같은 차량은 거래처가 달라도 중복 · 기사운임 빈칸은 알림");
 assert.equal(closeChecks([o({ 상차일: "2026-12-01", 배차상태: "배차중" })], today).unassigned.length, 0, "앞으로 올 날짜는 미배차 아님");
 
 // 거래명세서 양식

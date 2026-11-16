@@ -2980,6 +2980,7 @@ import { settleStartTab } from "./settleStart";
 import { QuickOrderLine, useDriverSuggest, DriverSuggestCell, AssignConfirm } from "./SmartDispatchUI"; // ⭐ 2026-11-13 빠른 등록 · 추천 기사
 const SettleHome = React.lazy(() => import("./SettleHome")); // 🧭 정산 홈(처음 열 때 받는다)
 const CloseFlow = React.lazy(() => import("./CloseFlow"));
+const MonthClose = React.lazy(() => import("./MonthClose")); // ✅ 2026-11-16 월 마감 리디자인(배차자 1차 — 범위 고르기 · 시각화 · 그 자리에서 고치기)
 const InvoiceFormEditor = React.lazy(() => import("./InvoiceFormEditor")); // 🧾 2026-11-16 거래처별 명세서 양식
 import { pickForm, visibleCols, headerLabels } from "./invoiceForm"; // ✅ 2026-11-16 2단계 마감 — 배차현황 › 월 마감(배차자 1차) · 정산관리 › 마감 검증(경리 2차)
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "./orderHistoryCache";
@@ -9275,11 +9276,20 @@ return (
             {/* ✅ 2026-11-16 월 마감(배차자 1차) — 내가 등록한 오더의 거래처를 맞춰서 경리팀에 넘긴다 */}
             {배차현황Tab === "월마감" && (
               <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}>
-                <CloseFlow mode="disp" orders={listDispatchData} isViewer={isViewer}
+                <MonthClose orders={dispatchData} isViewer={isViewer} staffName={(o) => mainDetailGet.배차담당자(o)}
                   company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()}
                   me={{ email: user?.email || "", uid: user?.uid || "", name: userNameMap.get(user?.uid) || userNameMap.get(String(user?.email || "").toLowerCase()) || user?.displayName || user?.email || "" }}
-                  onOpenOrder={(o) => { set배차현황Tab("배차현황"); setFocusOrderId(o._id || o.id); }} />
+                  onPatch={(row, patch) => patchDispatchSafe(row._id || row.id, patch, row)}
+                  onAdd={(rec) => addDispatchSafe(rec)}
+                  onRemove={(row) => removeDispatchSafe(row)}
+                  onOpenOrder={(row) => window.dispatchEvent(new CustomEvent("kp-open-copy-panel", { detail: { row } }))} />
               </React.Suspense>
+            )}
+            {/* 🧩 월 마감에서 오더를 누르면 뜨는 오더 복사/수정 패널(미배차현황과 같은 패널) */}
+            {배차현황Tab === "월마감" && (
+              <UnassignedStatus panelOnly role={role} userCompany={userCompany} userNameMap={userNameMap} dispatchData={dispatchData} setDispatchData={setDispatchData}
+                patchDispatch={patchDispatchSafe} removeDispatch={removeDispatchSafe} drivers={drivers} clients={clients} places={places}
+                upsertDriver={upsertDriver} upsertClient={upsertClientSafe} isViewer={isViewer} setCargoAddPopup={setCargoAddPopup} approvedShippers={approvedShippers} />
             )}
             {배차현황Tab === "배차현황" && (
               <DispatchStatus
@@ -30502,7 +30512,7 @@ const head = isDark
   const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
   setBulkUploadConfirm4({ phones, body: msg });
 }} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.업로드링크" defaultText="업로드링크" />{selected.length>1?` (${selected.length})`:""}</button>
-    <button onClick={()=>setDailyCloseOpen(true)} className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.일마감" defaultText="일마감" /></button>
+    {/* 🧹 2026-11-16 일마감 버튼은 뺐다(사용자 요청) — 마감은 배차현황 › 월 마감에서 */}
 
     <button onClick={()=>{if(!selected.length)return showAlert("삭제할 항목을 선택하세요.");const list=rows.filter(r=>selected.includes(r._id));setDeleteList(list);setDeleteConfirmOpen(true);}} className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.선택삭제" defaultText="선택삭제" /></button>
     <button onClick={()=>setSelected([])} className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.선택초기화" defaultText="선택초기화" /></button>
@@ -40450,7 +40460,7 @@ return (
           <button className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");{const bad=fixedForm&&(dispatchData||[]).find((x)=>selected.has(getId(x))&&!frCanEdit(x));if(bad)return frLockAlert(bad);}setShowDeletePopup(true);}}><EditableText id="status.toolbar.선택삭제" defaultText="선택삭제" /></button>
           <button className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>setSelected(new Set())}><EditableText id="status.toolbar.선택초기화" defaultText="선택초기화" /></button>
           <button className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={downloadExcel}><EditableText id="status.toolbar.엑셀다운" defaultText="엑셀다운" /></button>
-          <button onClick={() => setDailyCloseOpen(true)} className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="status.toolbar.일마감" defaultText="일마감" /></button>
+          {/* 🧹 2026-11-16 일마감 버튼은 뺐다(사용자 요청) — 마감은 배차현황 › 월 마감에서 */}
         </div>
       </div>
 
@@ -50120,7 +50130,7 @@ const tableData = React.useMemo(() => {
 // ===================== DispatchApp.jsx (PART 6/8 — END) =====================
 
 // ===================== DispatchApp.jsx (PART 7/8 — 미배차현황) =====================
-function UnassignedStatus({ dispatchData, setDispatchData = () => {}, drivers = [], userNameMap = null, patchDispatch, removeDispatch, clients = [], places = [], upsertDriver, upsertClient, isViewer = false, setCargoAddPopup = () => {}, approvedShippers = [], role, userCompany = "" }) {
+function UnassignedStatus({ dispatchData, setDispatchData = () => {}, drivers = [], userNameMap = null, patchDispatch, removeDispatch, clients = [], places = [], upsertDriver, upsertClient, isViewer = false, setCargoAddPopup = () => {}, approvedShippers = [], role, userCompany = "", panelOnly = false }) {
   // ⭐ 회사별 커스텀 드롭다운 옵션(Part B) — 오더복사/수정 패널의 상/하차방법·화물타입·톤수타입에 사용.
   const fareRU = useFareRules(getTenant() || userCompany); // ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 운임구분(규칙 사용 회사만)
   const fareOnU = fareRU.on;
@@ -50238,6 +50248,13 @@ function UnassignedStatus({ dispatchData, setDispatchData = () => {}, drivers = 
     });
     setCopyPanelOpen(true);
   };
+  // 🧩 2026-11-16 월 마감에서 오더를 누르면 이 패널로(panelOnly 일 때만 듣는다)
+  React.useEffect(() => {
+    if (!panelOnly) return undefined;
+    const h = (e) => { const r = e.detail?.row; if (r) openUnEdit(r); };
+    window.addEventListener("kp-open-copy-panel", h);
+    return () => window.removeEventListener("kp-open-copy-panel", h);
+  });
   const [copyPanelWorkDatesOpen, setCopyPanelWorkDatesOpen] = React.useState(false); // 오더복사수정패널 근무일(묶음) 수정 팝업
   const [clientDropdown, setClientDropdown] = React.useState([]);
   const [clientDropdownOpen, setClientDropdownOpen] = React.useState(false);
@@ -50654,482 +50671,8 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
   const headBase = "bg-[#1B2B4B] text-white text-center text-[13px] font-semibold px-3 py-3 whitespace-nowrap border-b border-white/10";
   const cellBase = "text-center px-3 py-2.5 whitespace-nowrap align-middle text-[13px] border-b border-gray-100";
 
-  return (
-    <div className="relative">
-      {toast && (
-        <div className={`fixed right-5 top-20 z-50 px-4 py-2 rounded-lg shadow-lg text-[13px] font-semibold ${toast.type === "ok" ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"}`}>
-          {toast.msg}
-        </div>
-      )}
-      <AssignConfirm target={assignAsk} busy={assignBusy} onCancel={() => setAssignAsk(null)} onOk={doAssign} />
-
-      {/* 페이지 헤더 */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-[18px] font-bold text-[#1B2B4B]"><EditableText id="unassigned.title" defaultText="미배차현황" /></h2>
-          <p className="text-[12px] text-gray-500 mt-0.5"><EditableText id="unassigned.subtitle" defaultText="배차 대기 중인 오더 목록 — 더블클릭으로 수정/복사" /></p>
-        </div>
-        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2">
-          <span className="text-[12px] text-gray-500">대기</span>
-          <span className="text-[18px] font-bold text-red-600 ml-2">{filtered.length}</span>
-          <span className="text-[12px] text-gray-500 ml-1">건</span>
-        </div>
-      </div>
-
-      {/* 검색바 */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 mb-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <input autoComplete="off"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="통합검색 (거래처명 / 상차지명 / 차량번호 등)"
-            className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-72 focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/10"
-          />
-          <div className="flex items-center gap-1">
-            <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            <span className="text-gray-500 text-[13px]">~</span>
-            <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          </div>
-          <DetailFilterButton rows={unPending} value={unDetail} onApply={applyUnDetail} getters={unDetailGet} title="세부검색 · 미배차현황" size="md" />
-          <div className="flex items-center gap-1">
-            <CustomSelect value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]">
-              <option value="거래처명">거래처명</option>
-              <option value="차량종류">차량종류</option>
-              {fareOnU && <option value="운임구분">운임구분</option>}{/* ⭐ 2026-11-06 */}
-            </CustomSelect>
-            <input autoComplete="off" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder={`${filterType} 검색`} className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-40 focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/10" />
-          </div>
-          <button onClick={() => { setQ(""); setStartDate(""); setEndDate(""); setFilterValue(""); }} className="px-3 py-1.5 text-[13px] font-semibold rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 transition">
-            초기화
-          </button>
-          <div className="ml-auto flex items-center gap-2">
-            {!deleteMode ? (
-              <button onClick={() => setDeleteMode(true)} className="px-3 py-1.5 text-[13px] font-semibold rounded-lg bg-white border border-red-200 text-red-600 hover:bg-red-50 transition">
-                삭제
-              </button>
-            ) : (
-              <>
-                <span className="text-[12px] px-2 py-1 rounded-lg bg-red-50 text-red-700 border border-red-200 font-semibold">선택 {selectedIds.size}건</span>
-                <button onClick={() => { if (selectedIds.size === 0) { showToast("선택된 항목이 없습니다.", "err"); return; } setDeleteConfirmOpen(true); }} className="px-3 py-1.5 text-[13px] font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 transition"><EditableText id="misc.btn.46612.선택 삭제" defaultText="선택 삭제" /></button>
-                <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-[13px] rounded-lg border border-gray-200 hover:bg-gray-50 transition"><EditableText id="misc.btn.46613.선택 해제" defaultText="선택 해제" /></button>
-                <button onClick={exitDeleteMode} className="px-3 py-1.5 text-[13px] rounded-lg border border-gray-200 hover:bg-gray-50 transition"><EditableText id="misc.btn.46614.취소" defaultText="취소" /></button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* 테이블 */}
-      <div className="kp-grid bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr>
-                {deleteMode && (
-                  <th className={headBase}>
-                    <input autoComplete="off" type="checkbox" onChange={toggleAll} checked={selectedIds.size > 0 && selectedIds.size === filtered.length} />
-                  </th>
-                )}
-                {headers.map((h) => (
-                  <SortTh key={h} k={h === "경유" || h === "추천 기사" ? "" : h} sort={unSort.sort} onSort={unSort.toggle} className={headBase}><EditableText id={`generic.table.header.${h}`} defaultText={h} /></SortTh>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td className="text-center py-16 text-[13px] text-gray-500 font-medium" colSpan={headers.length + (deleteMode ? 1 : 0)}>
-                    배차 대기 중인 오더가 없습니다
-                  </td>
-                </tr>
-              ) : (
-                sortedRows.map((r, i) => {
-                  const isEarly = r.상차시간 && r.상차시간 >= "05:00" && r.상차시간 <= "09:00";
-                  return (
-                    <tr
-                      key={r._id || i}
-                      onDoubleClick={(e) => {
-                        if (deleteMode) return;
-                        if (e.target.closest("input")) return;
-                        openUnEdit(r);
-                      }}
-                      onContextMenu={(e) => {
-                        // 🖱 2026-11-16 오른쪽 클릭 — 수정(오더복사/수정 패널) · 삭제(삭제 확인 창)
-                        if (deleteMode || isViewer) return;
-                        e.preventDefault();
-                        const _z = parseFloat(document.getElementById("root")?.style.zoom) || 1;
-                        setUnCtx({ x: e.clientX / _z, y: e.clientY / _z, row: r });
-                      }}
-                      className={`${isUrgentOrder(r) ? "bg-red-50 hover:bg-red-100" : i % 2 === 0 ? "bg-white" : "bg-gray-50/50"} cursor-pointer hover:bg-blue-50/50 transition`}
-                      style={urgentRowStyle(r, String(r.운행유형 || "").trim() === "왕복" ? { backgroundColor: "#e8f4fd", borderLeft: "4px solid #1B2B4B" } : {})}
-                    >
-                      {deleteMode && (
-                        <td className={cellBase}>
-                          <input autoComplete="off" type="checkbox" checked={selectedIds.has(r._id)} onChange={() => toggleOne(r._id)} />
-                        </td>
-                      )}
-                      <td className={cellBase}>{i + 1}</td>
-                      {!isViewer && <td className={cellBase}><DriverSuggestCell order={r} pick={pickDrivers} drivers={drivers} onAssign={(o, d) => setAssignAsk({ order: o, driver: d })} /></td>}
-                      {unMgrMap && <td className={cellBase}><MgrBadge row={r} name={orderMgrName(unMgrMap, r)} empty={ORDER_MGR_EMPTY} /></td>}
-                      <td className={cellBase}>{displayRegDate(r)}</td>
-                      <td className={cellBase}>
-                        {r.등록일 ? (() => {
-                          const d = Math.floor((Date.now() - new Date(r.등록일).getTime()) / 86400000);
-                          if (d <= 0) return <span className="text-gray-500 text-[12px]">오늘</span>;
-                          if (d >= 3) return <span className="text-red-600 font-bold text-[12px]">{d}일</span>;
-                          return <span className="text-amber-600 text-[12px]">{d}일</span>;
-                        })() : ""}
-                      </td>
-                      <td className={`${cellBase} font-bold`}>{r.상차일 || ""}</td>
-                      <td className={cellBase} style={isEarly ? { color: "red", fontWeight: 600 } : {}}>{r.상차시간 ? fmtDispatchTime(r.상차시간, r.상차시간기준 || r.상차시간구분) : ""}</td>
-                      <td className={cellBase}>{r.하차일 || ""}</td>
-                      <td className={cellBase}>{r.하차시간 ? fmtDispatchTime(r.하차시간, r.하차시간기준 || r.하차시간구분) : ""}</td>
-                      <td className={`${cellBase} font-semibold text-gray-800`}>{/* ⭐ 2026-11-06 긴급 알약 */}{isUrgentOrder(r) ? <span className="inline-flex items-center gap-1 whitespace-nowrap"><UrgentBadge row={r} />{r.거래처명 || ""}</span> : (r.거래처명 || "")}</td>
-                      <td className={`${cellBase} font-medium`}>
-                        <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
-                          <span>{r.상차지명 || ""}</span>
-                          {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}<RotationBadge order={r} />
-                        </div>
-                      </td>
-                      <td className={cellBase}>
-                        {r.상차지주소 && r.상차지주소.length > 10 ? (
-                          openLoadAddrs.has(r._id) ? (
-                            <span>{r.상차지주소}{" "}<button onClick={() => setOpenLoadAddrs((prev) => { const next = new Set(prev); next.delete(r._id); return next; })} className="text-blue-500 underline text-xs"><EditableText id="misc.btn.46699.접기" defaultText="접기" /></button></span>
-                          ) : (
-                            <span>{r.상차지주소.slice(0, 10)}...<button onClick={() => setOpenLoadAddrs((prev) => new Set(prev).add(r._id))} className="text-blue-500 underline text-xs"><EditableText id="misc.btn.46701.더보기" defaultText="더보기" /></button></span>
-                          )
-                        ) : (r.상차지주소 || "")}
-                      </td>
-                      <td className={`${cellBase} font-medium`}>{r.하차지명 || ""}</td>
-                      <td className={cellBase}>
-                        {r.하차지주소 && r.하차지주소.length > 10 ? (
-                          openUnloadAddrs.has(r._id) ? (
-                            <span>{r.하차지주소}{" "}<button onClick={() => setOpenUnloadAddrs((prev) => { const next = new Set(prev); next.delete(r._id); return next; })} className="text-blue-500 underline text-xs"><EditableText id="misc.btn.46709.접기" defaultText="접기" /></button></span>
-                          ) : (
-                            <span>{r.하차지주소.slice(0, 10)}...<button onClick={() => setOpenUnloadAddrs((prev) => new Set(prev).add(r._id))} className="text-blue-500 underline text-xs"><EditableText id="misc.btn.46711.더보기" defaultText="더보기" /></button></span>
-                          )
-                        ) : (r.하차지주소 || "")}
-                      </td>
-                      <td className={cellBase}>{r.차량종류 || ""}</td>
-                      <td className={cellBase}>{r.차량톤수 || ""}</td>
-                      <td className={cellBase}>{r.화물내용 || ""}</td>
-                      <td className={cellBase}>
-                        {(() => {
-                          const _sp = (v) => { if (Array.isArray(v)) return v; if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } } return []; };
-                          const _dedup = (arr) => { const seen = new Set(); return arr.filter(s => { if (!s || (!s.업체명?.trim() && !s.주소?.trim())) return false; const k = s.업체명 || s.주소; if (seen.has(k)) return false; seen.add(k); return true; }); };
-                          const pu = _dedup([..._sp(r.경유상차목록), ..._sp(r.경유지_상차), ..._sp(r.경유지상차)]);
-                          const dr = _dedup([..._sp(r.경유하차목록), ..._sp(r.경유지_하차), ..._sp(r.경유지하차)]);
-                          return (
-                            <div className="flex flex-wrap gap-1">
-                              {pu.length > 0 && <StopBadge count={pu.length} list={pu} type="pickup" orderDate={r.상차일 || ""} />}
-                              {dr.length > 0 && <StopBadge count={dr.length} list={dr} type="drop" orderDate={r.하차일 || ""} />}
-                            </div>
-                          );
-                        })()}
-                      </td>
-                      <td className={cellBase}>
-                        {r.화주사확인대기 ? (
-                          <button
-                            type="button"
-                            title="클릭 시 배차중으로 전환"
-                            className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap bg-sky-500 text-white hover:bg-sky-600 transition"
-                            style={{ animation: "shipperReqBlink 1.4s ease-in-out infinite" }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // patchDispatch 내부의 낙관적 업데이트는 startTransition(저우선순위)이라
-                              // 클릭 즉시 반영되지 않고 지연되어 보였다 — dispatchData를 먼저
-                              // 동기적으로(우선순위 높게) 갱신해 뱃지가 바로 바뀌게 한다.
-                              setDispatchData(prev => prev.map(x => x._id === r._id ? { ...x, 화주사확인대기: false, 배차중전환일시: Date.now() } : x));
-                              patchDispatch(r._id, { 화주사확인대기: false, 배차중전환일시: Date.now(), __col: r.__col });
-                            }}
-                          >
-                            {isRecentShipperEdit(r) ? "수정" : "배차요청"}
-                          </button>
-                        ) : (
-                          <StatusBadge s={r.배차상태} pending={r.수정요청 || r.취소요청} />
-                        )}
-                      </td>
-                      <td className={`${cellBase} max-w-[260px] text-left`}>
-                        {r.메모 && r.메모.length > 40 ? (
-                          openMemos.has(r._id) ? (
-                            <span className="whitespace-pre-wrap">{r.메모}{" "}<button onClick={() => setOpenMemos(prev => { const next = new Set(prev); next.delete(r._id); return next; })} className="text-blue-500 underline text-xs ml-1"><EditableText id="misc.btn.46757.접기" defaultText="접기" /></button></span>
-                          ) : (
-                            <span>{r.메모.slice(0, 40)}...<button onClick={() => setOpenMemos(prev => new Set(prev).add(r._id))} className="text-blue-500 underline text-xs ml-1"><EditableText id="misc.btn.46759.더보기" defaultText="더보기" /></button></span>
-                          )
-                        ) : (r.메모 || "")}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* 삭제 확인 팝업 */}
-      {unCtx && createPortal(
-        <div className="fixed z-[100000] min-w-[150px] rounded-xl border border-[#DCE3EE] bg-white py-1.5 shadow-[0_12px_32px_rgba(15,26,48,0.18)]"
-          style={{ left: Math.min(unCtx.x, window.innerWidth - 170), top: Math.min(unCtx.y, window.innerHeight - 100) }}
-          onMouseDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()} data-kp="unassigned-ctx">
-          <button type="button" className="w-full h-10 px-4 flex items-center gap-2.5 text-left text-[14px] font-bold text-[#0F1A30] hover:bg-[#F4F6FA]"
-            onClick={() => { const r = unCtx.row; setUnCtx(null); openUnEdit(r); }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" /></svg>수정
-          </button>
-          <button type="button" className="w-full h-10 px-4 flex items-center gap-2.5 text-left text-[14px] font-bold text-[#C62F25] hover:bg-[#FDF1F0]"
-            onClick={() => { const r = unCtx.row; setUnCtx(null); setSelectedIds(new Set([r._id])); setDeleteConfirmOpen(true); }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>삭제
-          </button>
-        </div>, document.body)}
-      {deleteConfirmOpen && (
-        <KpDeleteConfirm rows={Array.from(selectedIds).map((id) => filtered.find((d) => d._id === id))} note="삭제된 오더는 복구되지 않습니다" onCancel={() => setDeleteConfirmOpen(false)} onConfirm={() => removeDocs(Array.from(selectedIds))} />
-      )}
-
-      {/* 빠른 배차 팝업 */}
-      {quickAssignOpen && selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl w-[520px] p-6">
-            <h3 className="text-lg font-bold mb-4">빠른 배차 등록</h3>
-            <div className="text-sm mb-3 text-gray-600">
-              <b>{selectedOrder.거래처명}</b> / {selectedOrder.상차지명} → {selectedOrder.하차지명}
-            </div>
-            <input autoComplete="off" placeholder="차량번호" value={vehicleNo} onChange={(e) => { const v = e.target.value; setVehicleNo(v); const found = findDriverByVehicleNo(v); if (found) { setMatchedDriver(found); setDriverName(found.name || found.기사명 || ""); setDriverPhone(found.phone || found.전화번호 || ""); setNewDriverPopup(false); } else { setMatchedDriver(null); setDriverName(""); setDriverPhone(""); setNewDriverPopup(normalizeVehicleNo(v).length >= 6); } }} className="border p-2 rounded w-full mb-2" />
-            <input autoComplete="off" placeholder="기사명" value={driverName} onChange={(e) => setDriverName(e.target.value)} className="border p-2 rounded w-full mb-2" />
-            <input autoComplete="off" placeholder="기사 연락처" value={driverPhone} onChange={(e) => setDriverPhone(formatPhone(e.target.value))} className="border p-2 rounded w-full mb-2" />
-            {matchedDriver && <div className="text-xs text-emerald-600 mb-2">✓ 기존 등록 차량 / 기사 자동 매칭됨</div>}
-            {!matchedDriver && newDriverPopup && <div className="text-xs text-amber-600 mb-2">+ 등록되지 않은 차량입니다. 신규 기사로 등록됩니다.</div>}
-            <input autoComplete="off" placeholder="지불운임" className="border p-2 rounded w-full mb-4" />
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setQuickAssignOpen(false)} className="px-4 py-2 border rounded"><EditableText id="misc.btn.46835.취소" defaultText="취소" /></button>
-              <button onClick={() => setQuickAssignOpen(false)} className="px-4 py-2 bg-[#1B2B4B] text-white rounded"><EditableText id="misc.btn.46836.배차완료" defaultText="배차완료" /></button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 기사 신규등록 팝업 */}
-      {newDriverPopupOpen && (
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-2xl shadow-2xl overflow-hidden w-[400px]">
-            <div className="bg-[#1B2B4B] px-6 py-4">
-              <h3 className="text-white text-[16px] font-bold">신규 기사 등록</h3>
-            </div>
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-[12px] font-semibold text-gray-500 mb-1">차량번호</label>
-                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-gray-100" value={newDriverData.차량번호} readOnly />
-              </div>
-              <div>
-                <label className="block text-[12px] font-semibold text-gray-500 mb-1">기사명 *</label>
-                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]" value={newDriverData.이름} onChange={(e) => setNewDriverData(p => ({...p, 이름: e.target.value}))} placeholder="기사명 입력" />
-              </div>
-              <div>
-                <label className="block text-[12px] font-semibold text-gray-500 mb-1">전화번호 *</label>
-                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]" value={newDriverData.전화번호} onChange={(e) => setNewDriverData(p => ({...p, 전화번호: formatPhone(e.target.value)}))} placeholder="010-0000-0000" />
-              </div>
-            </div>
-            <div className="flex gap-2 px-6 pb-6">
-              <button onClick={() => { setNewDriverPopupOpen(false); setNewDriverData({ 이름: "", 전화번호: "", 차량번호: "" }); }} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-[13px] font-semibold hover:bg-gray-50 transition"><EditableText id="misc.btn.46864.취소" defaultText="취소" /></button>
-              <button onClick={async () => {
-                if (isViewer) { showToast("조회전용 권한으로는 등록할 수 없습니다.", "err"); return; }
-                if (!newDriverData.이름.trim()) { showToast("기사명을 입력하세요.", "err"); return; }
-                if (!newDriverData.전화번호.trim()) { showToast("전화번호를 입력하세요.", "err"); return; }
-                try {
-                  if (typeof upsertDriver === "function") {
-                    await upsertDriver({ 차량번호: newDriverData.차량번호, 이름: newDriverData.이름, 전화번호: newDriverData.전화번호, createdAt: Date.now() });
-                  } else if (typeof db !== "undefined" && db) {
-                    await setDoc(doc(db, "drivers", crypto.randomUUID()), { 차량번호: newDriverData.차량번호, 이름: newDriverData.이름, 전화번호: newDriverData.전화번호, createdAt: Date.now() });
-                  }
-                  setCopyTarget(prev => ({ ...prev, 이름: newDriverData.이름, 전화번호: formatPhone(newDriverData.전화번호), 배차상태: "배차완료" }));
-                  showToast("기사 등록 완료");
-                  setNewDriverPopupOpen(false);
-                  setNewDriverData({ 이름: "", 전화번호: "", 차량번호: "" });
-                } catch (err) { console.error(err); showToast("등록 중 오류 발생", "err"); }
-              }} className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"><EditableText id="misc.btn.46880.저장" defaultText="저장" /></button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ================= 거래처 신규등록 팝업 ================= */}
-      {newClientModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
-          <div className="bg-white rounded-2xl w-[480px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}
-            onKeyDown={e => { if (e.key === "Escape") setNewClientModalOpen(false); }}>
-            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-              <div>
-                <h3 className="text-white font-bold text-[16px]"><EditableText id="popup.title.거래처 신규등록" defaultText="거래처 신규등록" /></h3>
-                <p className="text-white/60 text-[12px] mt-0.5">새 거래처 정보를 입력하세요</p>
-              </div>
-              <button className="text-white/50 hover:text-white text-xl transition" onClick={() => setNewClientModalOpen(false)}>✕</button>
-            </div>
-            <div className="px-6 py-5 space-y-4">
-              <div>
-                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">업체명 <span className="text-red-500">*</span></label>
-                <input autoComplete="off"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
-                  placeholder="업체명 입력"
-                  value={newClientModalData.name}
-                  onChange={e => setNewClientModalData(p => ({ ...p, name: e.target.value }))}
-                  ref={imeFocusRef}
-                />
-              </div>
-              <div>
-                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.주소" defaultText="주소" /></label>
-                <input autoComplete="off"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
-                  placeholder="주소 입력 (선택)"
-                  value={newClientModalData.addr}
-                  onChange={e => setNewClientModalData(p => ({ ...p, addr: e.target.value }))}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.담당자" defaultText="담당자" /></label>
-                  <input autoComplete="off"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
-                    placeholder="담당자명 (선택)"
-                    value={newClientModalData.manager}
-                    onChange={e => setNewClientModalData(p => ({ ...p, manager: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.연락처" defaultText="연락처" /></label>
-                  <input autoComplete="off"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
-                    placeholder="010-0000-0000 (선택)"
-                    value={newClientModalData.phone}
-                    onChange={e => setNewClientModalData(p => ({ ...p, phone: formatPhone(e.target.value) }))}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.이메일" defaultText="이메일" /></label>
-                <input autoComplete="off"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
-                  placeholder="example@email.com (선택)"
-                  value={newClientModalData.email}
-                  onChange={e => setNewClientModalData(p => ({ ...p, email: e.target.value }))}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.등급" defaultText="등급" /></label>
-                  <CustomSelect
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 bg-white"
-                    value={newClientModalData.grade}
-                    onChange={e => setNewClientModalData(p => ({ ...p, grade: e.target.value }))}
-                  >
-                    <option value="일반">일반</option>
-                    <option value="블랙">블랙</option>
-                    <option value="주의">주의</option>
-                    <option value="이탈">이탈</option>
-                  </CustomSelect>
-                </div>
-              </div>
-              <div>
-                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.메모" defaultText="메모" /></label>
-                <textarea
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 resize-none"
-                  placeholder="메모 (선택)"
-                  rows={2}
-                  value={newClientModalData.memo}
-                  onChange={e => setNewClientModalData(p => ({ ...p, memo: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div className="px-6 pb-5 flex gap-3">
-              <button
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"
-                onClick={() => setNewClientModalOpen(false)}>
-                취소
-              </button>
-              <button
-                className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition"
-                onClick={async () => {
-                  if (!newClientModalData.name.trim()) { alert("업체명을 입력하세요."); return; }
-                  await upsertClient({ 거래처명: newClientModalData.name.trim(), 주소: newClientModalData.addr, 담당자: newClientModalData.manager, 연락처: newClientModalData.phone, 이메일: newClientModalData.email, 메모: newClientModalData.memo, 등급: newClientModalData.grade });
-                  alert("신규 거래처 등록이 완료되었습니다.");
-                  setNewClientModalOpen(false);
-                }}>
-                등록 완료
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 블랙 기사 경고 팝업 */}
-      {notificationsEnabled && blackDriverAlert && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]" tabIndex={-1} ref={(el) => el && setTimeout(() => el.focus(), 0)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setBlackDriverAlert(null); } }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
-            <div className="bg-gray-900 px-6 py-4 flex items-center gap-3">
-              <span className="text-2xl">⊘</span>
-              <h3 className="text-white text-lg font-bold">블랙 기사 알림</h3>
-            </div>
-            <div className="px-6 py-5 space-y-3">
-              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm space-y-1">
-                <div><span className="text-gray-500">차량번호</span><b className="ml-2">{blackDriverAlert.차량번호}</b></div>
-                <div><span className="text-gray-500">이름</span><b className="ml-2 text-red-600">{blackDriverAlert.이름 || "-"}</b></div>
-                <div><span className="text-gray-500">전화번호</span><b className="ml-2">{blackDriverAlert.전화번호 || "-"}</b></div>
-                {blackDriverAlert.메모 && <div><span className="text-gray-500">메모</span><span className="ml-2 text-red-600">{blackDriverAlert.메모}</span></div>}
-              </div>
-              <p className="text-sm text-gray-600 text-center font-semibold">해당 기사는 <span className="text-red-600 font-bold">블랙 등급</span>으로 등록된 기사입니다.</p>
-            </div>
-            <div className="px-6 pb-5">
-              <button className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm" onClick={() => setBlackDriverAlert(null)}>확인 (Enter)</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 블랙/주의 업체 경고 팝업 */}
-      {notificationsEnabled && warningPopup && (
-  <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50" tabIndex={-1} ref={warningPopupRef} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setWarningPopup(null); } }}>
-    <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
-      <div className={`px-6 py-4 flex items-center gap-3 ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-500" : "bg-red-600"}`}>
-        <span className="text-2xl">{warningPopup.status === "블랙" ? "⊘" : warningPopup.status === "주의" ? "⚠" : "⊘"}</span>
-        <h3 className="text-white text-lg font-bold">{warningPopup.status || "메모"} 거래처 알림</h3>
-      </div>
-      <div className="px-6 py-5 space-y-3">
-        <div className={`border rounded-lg px-4 py-3 text-sm space-y-1 ${warningPopup.status === "블랙" ? "bg-red-50 border-red-200" : warningPopup.status === "주의" ? "bg-orange-50 border-orange-200" : "bg-red-50 border-red-200"}`}>
-          <div><span className="text-gray-500">거래처명</span><b className="ml-2">{warningPopup.name}</b></div>
-          <div className="flex items-center">
-            <span className="text-gray-500">등급</span>
-            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-500" : "bg-red-600"}`}>{warningPopup.status}</span>
-          </div>
-          {warningPopup.info?.지정일 && (
-            <div><span className="text-gray-500">지정일</span><span className="ml-2">{warningPopup.info.지정일}</span></div>
-          )}
-          {warningPopup.info?.주소 && (
-            <div><span className="text-gray-500">주소</span><span className="ml-2">{warningPopup.info.주소}</span></div>
-          )}
-          {warningPopup.info?.메모 && (
-            <div><span className="text-gray-500">메모</span><span className={`ml-2 ${warningPopup.status === "블랙" ? "text-red-600" : warningPopup.status === "주의" ? "text-orange-500" : "text-red-600"}`}>{warningPopup.info.메모}</span></div>
-          )}
-        </div>
-        <p className="text-sm text-gray-600 text-center font-semibold">해당 거래처는{" "}<span className={`font-bold ${warningPopup.status === "블랙" ? "text-red-600" : warningPopup.status === "주의" ? "text-orange-500" : "text-red-600"}`}>{warningPopup.status} 등급</span>으로 지정된 거래처입니다.</p>
-      </div>
-      <div className="px-6 pb-5">
-        <button className={`w-full py-3 text-white rounded-xl font-bold text-sm ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-500" : "bg-red-600"}`} onClick={() => setWarningPopup(null)}>확인 (Enter)</button>
-      </div>
-    </div>
-  </div>
-)}
-
-      {copyPanelWorkDatesOpen && (
-        <WorkDatesEditModal
-          row={copyTarget}
-          companyName={localStorage.getItem("userCompany") || localStorage.getItem("loginCompany") || ""}
-          onClose={() => setCopyPanelWorkDatesOpen(false)}
-          onSave={async (patch) => {
-            setCopyTarget(p => ({ ...p, ...patch }));
-            setCopyPanelWorkDatesOpen(false);
-          }}
-        />
-      )}
-      {/* 오더 복사/수정 패널 */}
-      {copyPanelOpen && copyTarget && (
+  // 🧩 2026-11-16 오더 복사/수정 패널을 변수로 — 월 마감(panelOnly)에서도 이 패널을 그대로 연다
+      const copyPanelEl = copyPanelOpen && copyTarget ? (
         <div className="fixed inset-0 z-[99999]">
           {copyContactChooser && (
             <ContactChooserModal
@@ -51674,7 +51217,489 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
             </div>
           </div>
         </div>
+      ) : null;
+  if (panelOnly) return (
+    <>
+      {toast && <div className={`fixed right-5 top-20 z-[100001] px-4 py-2 rounded-lg shadow-lg text-[13px] font-semibold ${toast.type === "ok" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}`}>{toast.msg}</div>}
+      {copyPanelEl}
+    </>
+  );
+  return (
+    <div className="relative">
+      {toast && (
+        <div className={`fixed right-5 top-20 z-50 px-4 py-2 rounded-lg shadow-lg text-[13px] font-semibold ${toast.type === "ok" ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"}`}>
+          {toast.msg}
+        </div>
       )}
+      <AssignConfirm target={assignAsk} busy={assignBusy} onCancel={() => setAssignAsk(null)} onOk={doAssign} />
+
+      {/* 페이지 헤더 */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-[18px] font-bold text-[#1B2B4B]"><EditableText id="unassigned.title" defaultText="미배차현황" /></h2>
+          <p className="text-[12px] text-gray-500 mt-0.5"><EditableText id="unassigned.subtitle" defaultText="배차 대기 중인 오더 목록 — 더블클릭으로 수정/복사" /></p>
+        </div>
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2">
+          <span className="text-[12px] text-gray-500">대기</span>
+          <span className="text-[18px] font-bold text-red-600 ml-2">{filtered.length}</span>
+          <span className="text-[12px] text-gray-500 ml-1">건</span>
+        </div>
+      </div>
+
+      {/* 검색바 */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3 mb-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <input autoComplete="off"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="통합검색 (거래처명 / 상차지명 / 차량번호 등)"
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-72 focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/10"
+          />
+          <div className="flex items-center gap-1">
+            <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <span className="text-gray-500 text-[13px]">~</span>
+            <CustomDatePicker className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B] bg-white" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          </div>
+          <DetailFilterButton rows={unPending} value={unDetail} onApply={applyUnDetail} getters={unDetailGet} title="세부검색 · 미배차현황" size="md" />
+          <div className="flex items-center gap-1">
+            <CustomSelect value={filterType} onChange={(e) => setFilterType(e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-[13px] focus:outline-none focus:border-[#1B2B4B]">
+              <option value="거래처명">거래처명</option>
+              <option value="차량종류">차량종류</option>
+              {fareOnU && <option value="운임구분">운임구분</option>}{/* ⭐ 2026-11-06 */}
+            </CustomSelect>
+            <input autoComplete="off" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder={`${filterType} 검색`} className="border border-gray-200 rounded-lg px-3 py-1.5 text-[13px] w-40 focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/10" />
+          </div>
+          <button onClick={() => { setQ(""); setStartDate(""); setEndDate(""); setFilterValue(""); }} className="px-3 py-1.5 text-[13px] font-semibold rounded-lg bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 transition">
+            초기화
+          </button>
+          <div className="ml-auto flex items-center gap-2">
+            {!deleteMode ? (
+              <button onClick={() => setDeleteMode(true)} className="px-3 py-1.5 text-[13px] font-semibold rounded-lg bg-white border border-red-200 text-red-600 hover:bg-red-50 transition">
+                삭제
+              </button>
+            ) : (
+              <>
+                <span className="text-[12px] px-2 py-1 rounded-lg bg-red-50 text-red-700 border border-red-200 font-semibold">선택 {selectedIds.size}건</span>
+                <button onClick={() => { if (selectedIds.size === 0) { showToast("선택된 항목이 없습니다.", "err"); return; } setDeleteConfirmOpen(true); }} className="px-3 py-1.5 text-[13px] font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 transition"><EditableText id="misc.btn.46612.선택 삭제" defaultText="선택 삭제" /></button>
+                <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-[13px] rounded-lg border border-gray-200 hover:bg-gray-50 transition"><EditableText id="misc.btn.46613.선택 해제" defaultText="선택 해제" /></button>
+                <button onClick={exitDeleteMode} className="px-3 py-1.5 text-[13px] rounded-lg border border-gray-200 hover:bg-gray-50 transition"><EditableText id="misc.btn.46614.취소" defaultText="취소" /></button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 테이블 */}
+      <div className="kp-grid bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr>
+                {deleteMode && (
+                  <th className={headBase}>
+                    <input autoComplete="off" type="checkbox" onChange={toggleAll} checked={selectedIds.size > 0 && selectedIds.size === filtered.length} />
+                  </th>
+                )}
+                {headers.map((h) => (
+                  <SortTh key={h} k={h === "경유" || h === "추천 기사" ? "" : h} sort={unSort.sort} onSort={unSort.toggle} className={headBase}><EditableText id={`generic.table.header.${h}`} defaultText={h} /></SortTh>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td className="text-center py-16 text-[13px] text-gray-500 font-medium" colSpan={headers.length + (deleteMode ? 1 : 0)}>
+                    배차 대기 중인 오더가 없습니다
+                  </td>
+                </tr>
+              ) : (
+                sortedRows.map((r, i) => {
+                  const isEarly = r.상차시간 && r.상차시간 >= "05:00" && r.상차시간 <= "09:00";
+                  return (
+                    <tr
+                      key={r._id || i}
+                      onDoubleClick={(e) => {
+                        if (deleteMode) return;
+                        if (e.target.closest("input")) return;
+                        openUnEdit(r);
+                      }}
+                      onContextMenu={(e) => {
+                        // 🖱 2026-11-16 오른쪽 클릭 — 수정(오더복사/수정 패널) · 삭제(삭제 확인 창)
+                        if (deleteMode || isViewer) return;
+                        e.preventDefault();
+                        const _z = parseFloat(document.getElementById("root")?.style.zoom) || 1;
+                        setUnCtx({ x: e.clientX / _z, y: e.clientY / _z, row: r });
+                      }}
+                      className={`${isUrgentOrder(r) ? "bg-red-50 hover:bg-red-100" : i % 2 === 0 ? "bg-white" : "bg-gray-50/50"} cursor-pointer hover:bg-blue-50/50 transition`}
+                      style={urgentRowStyle(r, String(r.운행유형 || "").trim() === "왕복" ? { backgroundColor: "#e8f4fd", borderLeft: "4px solid #1B2B4B" } : {})}
+                    >
+                      {deleteMode && (
+                        <td className={cellBase}>
+                          <input autoComplete="off" type="checkbox" checked={selectedIds.has(r._id)} onChange={() => toggleOne(r._id)} />
+                        </td>
+                      )}
+                      <td className={cellBase}>{i + 1}</td>
+                      {!isViewer && <td className={cellBase}><DriverSuggestCell order={r} pick={pickDrivers} drivers={drivers} onAssign={(o, d) => setAssignAsk({ order: o, driver: d })} /></td>}
+                      {unMgrMap && <td className={cellBase}><MgrBadge row={r} name={orderMgrName(unMgrMap, r)} empty={ORDER_MGR_EMPTY} /></td>}
+                      <td className={cellBase}>{displayRegDate(r)}</td>
+                      <td className={cellBase}>
+                        {r.등록일 ? (() => {
+                          const d = Math.floor((Date.now() - new Date(r.등록일).getTime()) / 86400000);
+                          if (d <= 0) return <span className="text-gray-500 text-[12px]">오늘</span>;
+                          if (d >= 3) return <span className="text-red-600 font-bold text-[12px]">{d}일</span>;
+                          return <span className="text-amber-600 text-[12px]">{d}일</span>;
+                        })() : ""}
+                      </td>
+                      <td className={`${cellBase} font-bold`}>{r.상차일 || ""}</td>
+                      <td className={cellBase} style={isEarly ? { color: "red", fontWeight: 600 } : {}}>{r.상차시간 ? fmtDispatchTime(r.상차시간, r.상차시간기준 || r.상차시간구분) : ""}</td>
+                      <td className={cellBase}>{r.하차일 || ""}</td>
+                      <td className={cellBase}>{r.하차시간 ? fmtDispatchTime(r.하차시간, r.하차시간기준 || r.하차시간구분) : ""}</td>
+                      <td className={`${cellBase} font-semibold text-gray-800`}>{/* ⭐ 2026-11-06 긴급 알약 */}{isUrgentOrder(r) ? <span className="inline-flex items-center gap-1 whitespace-nowrap"><UrgentBadge row={r} />{r.거래처명 || ""}</span> : (r.거래처명 || "")}</td>
+                      <td className={`${cellBase} font-medium`}>
+                        <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
+                          <span>{r.상차지명 || ""}</span>
+                          {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}<RotationBadge order={r} />
+                        </div>
+                      </td>
+                      <td className={cellBase}>
+                        {r.상차지주소 && r.상차지주소.length > 10 ? (
+                          openLoadAddrs.has(r._id) ? (
+                            <span>{r.상차지주소}{" "}<button onClick={() => setOpenLoadAddrs((prev) => { const next = new Set(prev); next.delete(r._id); return next; })} className="text-blue-500 underline text-xs"><EditableText id="misc.btn.46699.접기" defaultText="접기" /></button></span>
+                          ) : (
+                            <span>{r.상차지주소.slice(0, 10)}...<button onClick={() => setOpenLoadAddrs((prev) => new Set(prev).add(r._id))} className="text-blue-500 underline text-xs"><EditableText id="misc.btn.46701.더보기" defaultText="더보기" /></button></span>
+                          )
+                        ) : (r.상차지주소 || "")}
+                      </td>
+                      <td className={`${cellBase} font-medium`}>{r.하차지명 || ""}</td>
+                      <td className={cellBase}>
+                        {r.하차지주소 && r.하차지주소.length > 10 ? (
+                          openUnloadAddrs.has(r._id) ? (
+                            <span>{r.하차지주소}{" "}<button onClick={() => setOpenUnloadAddrs((prev) => { const next = new Set(prev); next.delete(r._id); return next; })} className="text-blue-500 underline text-xs"><EditableText id="misc.btn.46709.접기" defaultText="접기" /></button></span>
+                          ) : (
+                            <span>{r.하차지주소.slice(0, 10)}...<button onClick={() => setOpenUnloadAddrs((prev) => new Set(prev).add(r._id))} className="text-blue-500 underline text-xs"><EditableText id="misc.btn.46711.더보기" defaultText="더보기" /></button></span>
+                          )
+                        ) : (r.하차지주소 || "")}
+                      </td>
+                      <td className={cellBase}>{r.차량종류 || ""}</td>
+                      <td className={cellBase}>{r.차량톤수 || ""}</td>
+                      <td className={cellBase}>{r.화물내용 || ""}</td>
+                      <td className={cellBase}>
+                        {(() => {
+                          const _sp = (v) => { if (Array.isArray(v)) return v; if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } } return []; };
+                          const _dedup = (arr) => { const seen = new Set(); return arr.filter(s => { if (!s || (!s.업체명?.trim() && !s.주소?.trim())) return false; const k = s.업체명 || s.주소; if (seen.has(k)) return false; seen.add(k); return true; }); };
+                          const pu = _dedup([..._sp(r.경유상차목록), ..._sp(r.경유지_상차), ..._sp(r.경유지상차)]);
+                          const dr = _dedup([..._sp(r.경유하차목록), ..._sp(r.경유지_하차), ..._sp(r.경유지하차)]);
+                          return (
+                            <div className="flex flex-wrap gap-1">
+                              {pu.length > 0 && <StopBadge count={pu.length} list={pu} type="pickup" orderDate={r.상차일 || ""} />}
+                              {dr.length > 0 && <StopBadge count={dr.length} list={dr} type="drop" orderDate={r.하차일 || ""} />}
+                            </div>
+                          );
+                        })()}
+                      </td>
+                      <td className={cellBase}>
+                        {r.화주사확인대기 ? (
+                          <button
+                            type="button"
+                            title="클릭 시 배차중으로 전환"
+                            className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap bg-sky-500 text-white hover:bg-sky-600 transition"
+                            style={{ animation: "shipperReqBlink 1.4s ease-in-out infinite" }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // patchDispatch 내부의 낙관적 업데이트는 startTransition(저우선순위)이라
+                              // 클릭 즉시 반영되지 않고 지연되어 보였다 — dispatchData를 먼저
+                              // 동기적으로(우선순위 높게) 갱신해 뱃지가 바로 바뀌게 한다.
+                              setDispatchData(prev => prev.map(x => x._id === r._id ? { ...x, 화주사확인대기: false, 배차중전환일시: Date.now() } : x));
+                              patchDispatch(r._id, { 화주사확인대기: false, 배차중전환일시: Date.now(), __col: r.__col });
+                            }}
+                          >
+                            {isRecentShipperEdit(r) ? "수정" : "배차요청"}
+                          </button>
+                        ) : (
+                          <StatusBadge s={r.배차상태} pending={r.수정요청 || r.취소요청} />
+                        )}
+                      </td>
+                      <td className={`${cellBase} max-w-[260px] text-left`}>
+                        {r.메모 && r.메모.length > 40 ? (
+                          openMemos.has(r._id) ? (
+                            <span className="whitespace-pre-wrap">{r.메모}{" "}<button onClick={() => setOpenMemos(prev => { const next = new Set(prev); next.delete(r._id); return next; })} className="text-blue-500 underline text-xs ml-1"><EditableText id="misc.btn.46757.접기" defaultText="접기" /></button></span>
+                          ) : (
+                            <span>{r.메모.slice(0, 40)}...<button onClick={() => setOpenMemos(prev => new Set(prev).add(r._id))} className="text-blue-500 underline text-xs ml-1"><EditableText id="misc.btn.46759.더보기" defaultText="더보기" /></button></span>
+                          )
+                        ) : (r.메모 || "")}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 삭제 확인 팝업 */}
+      {unCtx && createPortal(
+        <div className="fixed z-[100000] min-w-[150px] rounded-xl border border-[#DCE3EE] bg-white py-1.5 shadow-[0_12px_32px_rgba(15,26,48,0.18)]"
+          style={{ left: Math.min(unCtx.x, window.innerWidth - 170), top: Math.min(unCtx.y, window.innerHeight - 100) }}
+          onMouseDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()} data-kp="unassigned-ctx">
+          <button type="button" className="w-full h-10 px-4 flex items-center gap-2.5 text-left text-[14px] font-bold text-[#0F1A30] hover:bg-[#F4F6FA]"
+            onClick={() => { const r = unCtx.row; setUnCtx(null); openUnEdit(r); }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" /></svg>수정
+          </button>
+          <button type="button" className="w-full h-10 px-4 flex items-center gap-2.5 text-left text-[14px] font-bold text-[#C62F25] hover:bg-[#FDF1F0]"
+            onClick={() => { const r = unCtx.row; setUnCtx(null); setSelectedIds(new Set([r._id])); setDeleteConfirmOpen(true); }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>삭제
+          </button>
+        </div>, document.body)}
+      {deleteConfirmOpen && (
+        <KpDeleteConfirm rows={Array.from(selectedIds).map((id) => filtered.find((d) => d._id === id))} note="삭제된 오더는 복구되지 않습니다" onCancel={() => setDeleteConfirmOpen(false)} onConfirm={() => removeDocs(Array.from(selectedIds))} />
+      )}
+
+      {/* 빠른 배차 팝업 */}
+      {quickAssignOpen && selectedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-[520px] p-6">
+            <h3 className="text-lg font-bold mb-4">빠른 배차 등록</h3>
+            <div className="text-sm mb-3 text-gray-600">
+              <b>{selectedOrder.거래처명}</b> / {selectedOrder.상차지명} → {selectedOrder.하차지명}
+            </div>
+            <input autoComplete="off" placeholder="차량번호" value={vehicleNo} onChange={(e) => { const v = e.target.value; setVehicleNo(v); const found = findDriverByVehicleNo(v); if (found) { setMatchedDriver(found); setDriverName(found.name || found.기사명 || ""); setDriverPhone(found.phone || found.전화번호 || ""); setNewDriverPopup(false); } else { setMatchedDriver(null); setDriverName(""); setDriverPhone(""); setNewDriverPopup(normalizeVehicleNo(v).length >= 6); } }} className="border p-2 rounded w-full mb-2" />
+            <input autoComplete="off" placeholder="기사명" value={driverName} onChange={(e) => setDriverName(e.target.value)} className="border p-2 rounded w-full mb-2" />
+            <input autoComplete="off" placeholder="기사 연락처" value={driverPhone} onChange={(e) => setDriverPhone(formatPhone(e.target.value))} className="border p-2 rounded w-full mb-2" />
+            {matchedDriver && <div className="text-xs text-emerald-600 mb-2">✓ 기존 등록 차량 / 기사 자동 매칭됨</div>}
+            {!matchedDriver && newDriverPopup && <div className="text-xs text-amber-600 mb-2">+ 등록되지 않은 차량입니다. 신규 기사로 등록됩니다.</div>}
+            <input autoComplete="off" placeholder="지불운임" className="border p-2 rounded w-full mb-4" />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setQuickAssignOpen(false)} className="px-4 py-2 border rounded"><EditableText id="misc.btn.46835.취소" defaultText="취소" /></button>
+              <button onClick={() => setQuickAssignOpen(false)} className="px-4 py-2 bg-[#1B2B4B] text-white rounded"><EditableText id="misc.btn.46836.배차완료" defaultText="배차완료" /></button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 기사 신규등록 팝업 */}
+      {newDriverPopupOpen && (
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-2xl shadow-2xl overflow-hidden w-[400px]">
+            <div className="bg-[#1B2B4B] px-6 py-4">
+              <h3 className="text-white text-[16px] font-bold">신규 기사 등록</h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">차량번호</label>
+                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] bg-gray-100" value={newDriverData.차량번호} readOnly />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">기사명 *</label>
+                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]" value={newDriverData.이름} onChange={(e) => setNewDriverData(p => ({...p, 이름: e.target.value}))} placeholder="기사명 입력" />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">전화번호 *</label>
+                <input autoComplete="off" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B]" value={newDriverData.전화번호} onChange={(e) => setNewDriverData(p => ({...p, 전화번호: formatPhone(e.target.value)}))} placeholder="010-0000-0000" />
+              </div>
+            </div>
+            <div className="flex gap-2 px-6 pb-6">
+              <button onClick={() => { setNewDriverPopupOpen(false); setNewDriverData({ 이름: "", 전화번호: "", 차량번호: "" }); }} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-[13px] font-semibold hover:bg-gray-50 transition"><EditableText id="misc.btn.46864.취소" defaultText="취소" /></button>
+              <button onClick={async () => {
+                if (isViewer) { showToast("조회전용 권한으로는 등록할 수 없습니다.", "err"); return; }
+                if (!newDriverData.이름.trim()) { showToast("기사명을 입력하세요.", "err"); return; }
+                if (!newDriverData.전화번호.trim()) { showToast("전화번호를 입력하세요.", "err"); return; }
+                try {
+                  if (typeof upsertDriver === "function") {
+                    await upsertDriver({ 차량번호: newDriverData.차량번호, 이름: newDriverData.이름, 전화번호: newDriverData.전화번호, createdAt: Date.now() });
+                  } else if (typeof db !== "undefined" && db) {
+                    await setDoc(doc(db, "drivers", crypto.randomUUID()), { 차량번호: newDriverData.차량번호, 이름: newDriverData.이름, 전화번호: newDriverData.전화번호, createdAt: Date.now() });
+                  }
+                  setCopyTarget(prev => ({ ...prev, 이름: newDriverData.이름, 전화번호: formatPhone(newDriverData.전화번호), 배차상태: "배차완료" }));
+                  showToast("기사 등록 완료");
+                  setNewDriverPopupOpen(false);
+                  setNewDriverData({ 이름: "", 전화번호: "", 차량번호: "" });
+                } catch (err) { console.error(err); showToast("등록 중 오류 발생", "err"); }
+              }} className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"><EditableText id="misc.btn.46880.저장" defaultText="저장" /></button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= 거래처 신규등록 팝업 ================= */}
+      {newClientModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999999]">
+          <div className="bg-white rounded-2xl w-[480px] shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}
+            onKeyDown={e => { if (e.key === "Escape") setNewClientModalOpen(false); }}>
+            <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-white font-bold text-[16px]"><EditableText id="popup.title.거래처 신규등록" defaultText="거래처 신규등록" /></h3>
+                <p className="text-white/60 text-[12px] mt-0.5">새 거래처 정보를 입력하세요</p>
+              </div>
+              <button className="text-white/50 hover:text-white text-xl transition" onClick={() => setNewClientModalOpen(false)}>✕</button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">업체명 <span className="text-red-500">*</span></label>
+                <input autoComplete="off"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+                  placeholder="업체명 입력"
+                  value={newClientModalData.name}
+                  onChange={e => setNewClientModalData(p => ({ ...p, name: e.target.value }))}
+                  ref={imeFocusRef}
+                />
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.주소" defaultText="주소" /></label>
+                <input autoComplete="off"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+                  placeholder="주소 입력 (선택)"
+                  value={newClientModalData.addr}
+                  onChange={e => setNewClientModalData(p => ({ ...p, addr: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.담당자" defaultText="담당자" /></label>
+                  <input autoComplete="off"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+                    placeholder="담당자명 (선택)"
+                    value={newClientModalData.manager}
+                    onChange={e => setNewClientModalData(p => ({ ...p, manager: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.연락처" defaultText="연락처" /></label>
+                  <input autoComplete="off"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+                    placeholder="010-0000-0000 (선택)"
+                    value={newClientModalData.phone}
+                    onChange={e => setNewClientModalData(p => ({ ...p, phone: formatPhone(e.target.value) }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.이메일" defaultText="이메일" /></label>
+                <input autoComplete="off"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20"
+                  placeholder="example@email.com (선택)"
+                  value={newClientModalData.email}
+                  onChange={e => setNewClientModalData(p => ({ ...p, email: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.등급" defaultText="등급" /></label>
+                  <CustomSelect
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 bg-white"
+                    value={newClientModalData.grade}
+                    onChange={e => setNewClientModalData(p => ({ ...p, grade: e.target.value }))}
+                  >
+                    <option value="일반">일반</option>
+                    <option value="블랙">블랙</option>
+                    <option value="주의">주의</option>
+                    <option value="이탈">이탈</option>
+                  </CustomSelect>
+                </div>
+              </div>
+              <div>
+                <label className="block text-[12px] font-semibold text-gray-600 mb-1.5"><EditableText id="client.newRegForm.label.메모" defaultText="메모" /></label>
+                <textarea
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B] focus:ring-1 focus:ring-[#1B2B4B]/20 resize-none"
+                  placeholder="메모 (선택)"
+                  rows={2}
+                  value={newClientModalData.memo}
+                  onChange={e => setNewClientModalData(p => ({ ...p, memo: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="px-6 pb-5 flex gap-3">
+              <button
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-600 text-[13px] font-semibold hover:bg-gray-50 transition"
+                onClick={() => setNewClientModalOpen(false)}>
+                취소
+              </button>
+              <button
+                className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[13px] font-bold transition"
+                onClick={async () => {
+                  if (!newClientModalData.name.trim()) { alert("업체명을 입력하세요."); return; }
+                  await upsertClient({ 거래처명: newClientModalData.name.trim(), 주소: newClientModalData.addr, 담당자: newClientModalData.manager, 연락처: newClientModalData.phone, 이메일: newClientModalData.email, 메모: newClientModalData.memo, 등급: newClientModalData.grade });
+                  alert("신규 거래처 등록이 완료되었습니다.");
+                  setNewClientModalOpen(false);
+                }}>
+                등록 완료
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 블랙 기사 경고 팝업 */}
+      {notificationsEnabled && blackDriverAlert && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]" tabIndex={-1} ref={(el) => el && setTimeout(() => el.focus(), 0)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setBlackDriverAlert(null); } }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
+            <div className="bg-gray-900 px-6 py-4 flex items-center gap-3">
+              <span className="text-2xl">⊘</span>
+              <h3 className="text-white text-lg font-bold">블랙 기사 알림</h3>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm space-y-1">
+                <div><span className="text-gray-500">차량번호</span><b className="ml-2">{blackDriverAlert.차량번호}</b></div>
+                <div><span className="text-gray-500">이름</span><b className="ml-2 text-red-600">{blackDriverAlert.이름 || "-"}</b></div>
+                <div><span className="text-gray-500">전화번호</span><b className="ml-2">{blackDriverAlert.전화번호 || "-"}</b></div>
+                {blackDriverAlert.메모 && <div><span className="text-gray-500">메모</span><span className="ml-2 text-red-600">{blackDriverAlert.메모}</span></div>}
+              </div>
+              <p className="text-sm text-gray-600 text-center font-semibold">해당 기사는 <span className="text-red-600 font-bold">블랙 등급</span>으로 등록된 기사입니다.</p>
+            </div>
+            <div className="px-6 pb-5">
+              <button className="w-full py-3 bg-gray-900 text-white rounded-xl font-bold text-sm" onClick={() => setBlackDriverAlert(null)}>확인 (Enter)</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 블랙/주의 업체 경고 팝업 */}
+      {notificationsEnabled && warningPopup && (
+  <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50" tabIndex={-1} ref={warningPopupRef} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setWarningPopup(null); } }}>
+    <div className="bg-white rounded-2xl shadow-2xl w-[400px] overflow-hidden">
+      <div className={`px-6 py-4 flex items-center gap-3 ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-500" : "bg-red-600"}`}>
+        <span className="text-2xl">{warningPopup.status === "블랙" ? "⊘" : warningPopup.status === "주의" ? "⚠" : "⊘"}</span>
+        <h3 className="text-white text-lg font-bold">{warningPopup.status || "메모"} 거래처 알림</h3>
+      </div>
+      <div className="px-6 py-5 space-y-3">
+        <div className={`border rounded-lg px-4 py-3 text-sm space-y-1 ${warningPopup.status === "블랙" ? "bg-red-50 border-red-200" : warningPopup.status === "주의" ? "bg-orange-50 border-orange-200" : "bg-red-50 border-red-200"}`}>
+          <div><span className="text-gray-500">거래처명</span><b className="ml-2">{warningPopup.name}</b></div>
+          <div className="flex items-center">
+            <span className="text-gray-500">등급</span>
+            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold text-white ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-500" : "bg-red-600"}`}>{warningPopup.status}</span>
+          </div>
+          {warningPopup.info?.지정일 && (
+            <div><span className="text-gray-500">지정일</span><span className="ml-2">{warningPopup.info.지정일}</span></div>
+          )}
+          {warningPopup.info?.주소 && (
+            <div><span className="text-gray-500">주소</span><span className="ml-2">{warningPopup.info.주소}</span></div>
+          )}
+          {warningPopup.info?.메모 && (
+            <div><span className="text-gray-500">메모</span><span className={`ml-2 ${warningPopup.status === "블랙" ? "text-red-600" : warningPopup.status === "주의" ? "text-orange-500" : "text-red-600"}`}>{warningPopup.info.메모}</span></div>
+          )}
+        </div>
+        <p className="text-sm text-gray-600 text-center font-semibold">해당 거래처는{" "}<span className={`font-bold ${warningPopup.status === "블랙" ? "text-red-600" : warningPopup.status === "주의" ? "text-orange-500" : "text-red-600"}`}>{warningPopup.status} 등급</span>으로 지정된 거래처입니다.</p>
+      </div>
+      <div className="px-6 pb-5">
+        <button className={`w-full py-3 text-white rounded-xl font-bold text-sm ${warningPopup.status === "블랙" ? "bg-gray-900" : warningPopup.status === "주의" ? "bg-orange-500" : "bg-red-600"}`} onClick={() => setWarningPopup(null)}>확인 (Enter)</button>
+      </div>
+    </div>
+  </div>
+)}
+
+      {copyPanelWorkDatesOpen && (
+        <WorkDatesEditModal
+          row={copyTarget}
+          companyName={localStorage.getItem("userCompany") || localStorage.getItem("loginCompany") || ""}
+          onClose={() => setCopyPanelWorkDatesOpen(false)}
+          onSave={async (patch) => {
+            setCopyTarget(p => ({ ...p, ...patch }));
+            setCopyPanelWorkDatesOpen(false);
+          }}
+        />
+      )}
+      {/* 오더 복사/수정 패널 */}
+      {copyPanelEl}
     </div>
   );
 }

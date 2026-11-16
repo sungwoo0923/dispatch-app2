@@ -5,7 +5,20 @@ import { collection, doc, onSnapshot, query, setDoc, where } from "firebase/fire
 import { db, DEFAULT_COMPANY } from "../firebase";
 import { HourMinuteSelect } from "../kpTimePick"; // ⏱ 2026-11-07 시간은 프로그램 시·분 선택으로
 import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
-import { ATTENDANCE_STATUS_COLOR, isWeekend, isHoliday, findApprovedLeaveForDate } from "../attendanceUtils";
+import { ATTENDANCE_STATUS_COLOR, isWeekend, isHoliday, findApprovedLeaveForDate, attendanceSourceText } from "../attendanceUtils";
+// 🕘 2026-11-16 이 날 출퇴근이 어떻게 기록됐는지(자동 · 직접 누름 · 관리자 수정)
+function SourceLine({ rec }) {
+  const t = attendanceSourceText(rec);
+  if (!t.in && !t.out) return null;
+  const tone = (x) => (x.startsWith("자동") ? "#0F7A52" : x.startsWith("관리자") ? "#B25F00" : "#2457D6");
+  return (
+    <div className="rounded-xl border border-gray-200 px-3 py-2 text-[13px]" data-kp="att-source">
+      <div className="text-[11px] font-bold text-gray-400 mb-0.5">어떻게 기록됐나요</div>
+      {t.in && <div>출근 · <b style={{ color: tone(t.in) }}>{t.in}</b></div>}
+      {t.out && <div>퇴근 · <b style={{ color: tone(t.out) }}>{t.out}</b></div>}
+    </div>
+  );
+}
 import { RadiusEditor, officeRadii, DEFAULT_IN_RADIUS, DEFAULT_OUT_RADIUS } from "../attendanceQuick";
 import { checkInsideOffice, workWindow } from "../autoAttendance";
 import { useCustomRoles } from "../customRoles";
@@ -633,6 +646,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
               </div>
               <button onClick={() => setMobileChangeReqCell(null)} className="text-gray-400 text-[20px] font-bold">×</button>
             </div>
+            <SourceLine rec={mobileChangeReqCell.rec} />
             {rejectedChangeMap[mobileChangeReqCell.date] && (
               <div className="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200">
                 <div className="text-[11px] font-bold text-gray-500 mb-0.5">이전 요청 거절 사유</div>
@@ -688,6 +702,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
               </div>
               <button onClick={() => setMobileEditCell(null)} className="text-gray-400 text-[20px] font-bold">×</button>
             </div>
+            <SourceLine rec={mobileEditCell.rec} />
             <div>
               <div className="text-[12px] font-semibold text-gray-600 mb-2">상태</div>
               <div className="grid grid-cols-4 gap-1.5">

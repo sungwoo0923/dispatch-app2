@@ -37,7 +37,7 @@ import { LoginManagerModal } from "../LoginManager";
 import { useCompanyInfo } from "../companyInfo"; // ⭐ 2026-11-02 속도 — RateCard(엑셀 라이브러리 포함) 대신 작은 파일에서
 // ⭐ 2026-11-02 속도 — 안 쓰던 import(지입차 지도·지도운임·팔레트) 제거 → leaflet·지도 데이터가 첫 로딩에서 빠짐. 자주 안 여는 화면은 열 때 받는다
 import { lazyView } from "../lazyLoad";
-const CloseFlowM = lazyView(() => import("../CloseFlow")); // ✅ 2026-11-16 월 마감(배차자 1차) — 휴대폰 화면
+const MonthCloseM = lazyView(() => import("../MonthClose")); // ✅ 2026-11-16 월 마감(배차자 1차) — 휴대폰 화면(PC와 같은 화면 · 카드 · 아래에서 올라오는 고치기 창)
 const MobileAttendanceBoard = lazyView(() => import("./MobileAttendanceBoard"));
 const MobileIntelView = lazyView(() => import("./MobileIntelView"));
 import InternalMessenger from "../InternalMessenger";
@@ -7240,9 +7240,17 @@ setOpenMemo={setOpenMemo}
         {page === "monthclose" && (
           <div className="px-3 py-3">
             <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}>
-              <CloseFlowM mode="disp" orders={allOrders} company={pcViewCompany} isViewer={role === "viewer"}
+              <MonthCloseM orders={allOrders} company={pcViewCompany} isViewer={!aiCanWriteM} staffName={(o) => mDetailGet.배차담당자(o)}
                 me={{ email: currentUser?.email || user?.email || "", uid: currentUser?.uid || user?.uid || "", name: pcViewMe.name }}
-                onOpenOrder={(o) => { setShowMenu(false); setPage("list"); setTimeout(() => focusOrderRow(o._id || o.id), 300); }} />
+                onPatch={(row, patch) => aiOrderApiM.update(row.id || row._id, patch, row)}
+                onRemove={(row) => aiOrderApiM.remove([row.id || row._id])}
+                onAdd={async (rec) => {
+                  // 월 마감에서 바로 추가 — PC 오더 등록과 같은 기본 칸(등록자 · 등록 시각 · 회사)
+                  const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}${Math.random().toString(36).slice(2)}`;
+                  const email = auth.currentUser?.email || "";
+                  await setDoc(doc(db, collName, id), { ...rec, _id: id, companyName: pcViewCompany, 작성자: email, createdByEmail: email, createdByUid: auth.currentUser?.uid || "", createdAt: Date.now(), updatedAt: Date.now(), 알림톡: false });
+                  return true;
+                }} />
             </React.Suspense>
           </div>
         )}

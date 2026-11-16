@@ -207,6 +207,16 @@ function EntryGate({ children }) {
 export default function App() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
+  // 🚦 2026-11-16 처음 쓰는 브라우저(이 PC에 배포 버전 기록 kpPin 이 없음)는 로그인 전 · 가입 중에도 최신 화면이 떴다
+  //  (배포 버전 맞추기가 로그인 후 권한이 정해진 뒤에만 돌았다) → 앱을 열자마자 한 번 확인해서 배포 버전으로 맞춘다.
+  //  관리자 브라우저(쿠키 kp_ch=latest)는 건너뛴다. 처음 쓰는 PC에서 관리자가 로그인하면 아래에서 최신으로 한 번 바꾼다.
+  React.useEffect(() => {
+    let t = setTimeout(function boot() {
+      try { if (sessionStorage.getItem("transportValidating") === "true" || window.__kpGateInline) { t = setTimeout(boot, 1500); return; } } catch { /* 무시 */ }
+      enforcePin().catch(() => {});
+    }, 300);
+    return () => clearTimeout(t);
+  }, []);
   // 🚦 2026-11-13 업데이트 배포 잠금 — 최고관리자 · 부관리자 브라우저는 항상 최신 화면(쿠키 kp_ch) · 그 밖은 배포한 버전(src/releaseGate.js)
   React.useEffect(() => {
     if (!role) return undefined;

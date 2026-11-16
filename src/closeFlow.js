@@ -18,7 +18,7 @@ export const CLOSE_RULES = [
   { key: "blank", label: "청구운임 빈칸", desc: "청구운임이 0원이에요", block: true },
   { key: "unassigned", label: "배차 미완료", desc: "지난 날짜인데 아직 배차완료가 아니에요", block: true },
   { key: "dup", label: "같은 날 같은 구간 중복", desc: "날짜 · 상차지 · 하차지 · 차량이 같은 오더가 또 있어요", block: true },
-  { key: "neg", label: "기사운임이 더 큰 오더", desc: "기사운임이 청구운임보다 커요", block: false },
+  { key: "noDriver", label: "기사운임 빈칸", desc: "청구운임은 있는데 기사운임이 0원이에요", block: false }, // 🧹 2026-11-16 역마진 검사는 뺐다(사용자 요청)
 ];
 export const DIFF_LIMIT = 0.3; // 지난달보다 30% 넘게 차이 나면 알려 준다
 
@@ -41,13 +41,13 @@ export const isMine = (o, me) => {
 
 // 한 묶음(거래처 × 월 또는 배차자 × 날짜) 오더의 자동 검사
 export function closeChecks(rows, today = kstToday()) {
-  const out = { blank: [], unassigned: [], dup: [], neg: [] };
+  const out = { blank: [], unassigned: [], dup: [], noDriver: [] };
   const seen = new Map();
   (rows || []).forEach((o) => {
     const pay = String(o.지급방식 || "");
     if (n(o.청구운임) <= 0 && !/손실|착불/.test(pay)) out.blank.push(o);
     if ((o.배차상태 || "") !== "배차완료" && String(o.상차일 || "") < today) out.unassigned.push(o);
-    if (n(o.청구운임) > 0 && n(o.기사운임) > n(o.청구운임)) out.neg.push(o);
+    if (n(o.청구운임) > 0 && n(o.기사운임) <= 0 && !/손실|착불/.test(pay)) out.noDriver.push(o);
     const car = String(o.차량번호 || "").replace(/\s/g, "");
     if (car) {
       const k = [o.상차일, o.상차지명 || o.상차지, o.하차지명 || o.하차지, car].map((x) => String(x || "").replace(/\s/g, "")).join("|");
@@ -57,6 +57,10 @@ export function closeChecks(rows, today = kstToday()) {
   return out;
 }
 export const blockCount = (checks) => CLOSE_RULES.filter((r) => r.block).reduce((a, r) => a + (checks?.[r.key]?.length || 0), 0);
+// 오더 한 건이 걸린 검사 — 월 마감 표에 빨강(block) · 주황(warn) 글씨로
+export function issuesOf(o, checks) {
+  return CLOSE_RULES.filter((r) => (checks?.[r.key] || []).includes(o)).map((r) => ({ key: r.key, label: r.label, block: r.block }));
+}
 export const warnCount = (checks) => CLOSE_RULES.filter((r) => !r.block).reduce((a, r) => a + (checks?.[r.key]?.length || 0), 0);
 
 // 거래처 × 월 마감판

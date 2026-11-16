@@ -6289,7 +6289,7 @@ exports.sheetImport = functions
       const action = body.action;
 
       // 🔁 2026-11-13 실시간 반영 설정 · 지금 반영
-      if (action === "liveGet" || action === "liveSet" || action === "liveRun" || action === "pingScript") { res.json(await _sheetLive.handle(action, body, me)); return; }
+      if (action === "liveGet" || action === "liveSet" || action === "liveRun" || action === "liveCompare" || action === "pingScript") { res.json(await _sheetLive.handle(action, body, me)); return; }
       // 🔁 2026-11-14 프로그램 → 시트 반영 설정 · 기록 · 보류 처리
       if (action === "pushGet" || action === "pushSet" || action === "pushResolve") { res.json(await _sheetPush.handle(action, body, me)); return; }
 

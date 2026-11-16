@@ -29,6 +29,9 @@ const placeKey = (name) => nm(name);
 const KIND = { orders: "오더", places: "상하차지", drivers: "기사", skip: "건너뜀" };
 
 // 🔗 2026-11-16 관리센터 › 구글시트 연동이 이 회사의 실시간 반영 연결(JY 등)을 같이 보여 주려고 읽는다
+// 🔍 2026-11-16 프로그램 비교(읽기만 · 서버 functions/sheetLiveOrders.js compareOne)
+export async function sheetLiveCompare(co) { const d = await callApi("sheetImport", { action: "liveCompare", company: co }); return d.compare; }
+export async function sheetLiveRunNow(co) { return callApi("sheetImport", { action: "liveRun", company: co }); }
 export async function fetchSheetLive(co) { if (!co) return null; const d = await callApi("sheetImport", { action: "liveGet", company: co }); return d.live || null; }
 async function callApi(fn, body) {
   const token = await auth.currentUser?.getIdToken();

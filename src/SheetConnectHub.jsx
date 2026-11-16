@@ -13,7 +13,8 @@ import OfficeSheetCard from "./OfficeSheetCard"; // 📗 엑셀(xlsx) 파일 안
 import SheetConnectWizard from "./SheetConnectWizard";
 import SheetImportPanel from "./SheetImportPanel";
 import GsheetMinePanel from "./GsheetMinePanel";
-import { SheetLiveCard, SheetPushCard, fetchSheetLive } from "./CarrierMigratePanel"; // 🔗 2026-11-16 실시간 반영 연결(JY 등)도 연결된 시트로 보이게
+import { SheetLiveCard, SheetPushCard, fetchSheetLive } from "./CarrierMigratePanel";
+import { SheetCompareButton } from "./SheetCompare"; // 🔍 2026-11-16 프로그램 비교 // 🔗 2026-11-16 실시간 반영 연결(JY 등)도 연결된 시트로 보이게
 import CustomDatePicker from "./CustomDatePicker";
 import { kpConfirm, kpAlert } from "./kpDialog";
 
@@ -282,6 +283,7 @@ export default function SheetConnectHub({ company, isTotalMaster, withLive = fal
             {live.url && <a href={live.url} target="_blank" rel="noopener noreferrer" className="text-[13px] font-bold text-[#2D4C82] underline underline-offset-2 truncate max-w-[360px]">시트 열기 ↗</a>}
             {Array.isArray(live.tabs) && live.tabs.length > 0 && <span className="text-[13px] text-[#5B6B85]">탭 {live.tabs.length}개</span>}
             <span className="ml-auto text-[13px] text-[#5B6B85]">아래 ‘구글시트 실시간 반영’에서 켜고 끄거나 바로 반영해요</span>
+            <SheetCompareButton co={company} />
           </div>)}
         {list === null || (withLive && live === undefined) ? <div className="py-10 text-center text-[14px] text-[#9AA4B5]">불러오는 중…</div> : !profiles.length && hasLive ? null : !profiles.length ? (
           <div className="py-12 text-center">
