@@ -10,7 +10,7 @@ import { Link } from "react-router-dom";
 import { db, doc, onSnapshot } from "./firebase";
 import KpTruckSide from "./KpTruckSide";
 import { LogisMark, LogisWordmark } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
-import { isDesktopBrowser } from "./driver/driverAppContext"; // 🖥 2026-11-10 PC에서는 차주(기사) 로그인 숨김
+import { isDesktopBrowser, isApkStaffMode, setApkStaffMode } from "./driver/driverAppContext"; // 🖥 2026-11-10 PC에서는 차주(기사) 로그인 숨김
 
 const DEFAULT_FOOTER = "© 2025 LogisWeb. All rights reserved.";
 const FONT_FAMILY_MAP = {
@@ -229,6 +229,8 @@ export default function Login() {
           </div>
         </div>
 
+        {/* 📍 2026-11-16 APK 직원 모드 — 기사 로그인으로 돌아가기 */}
+        {isApkStaffMode() && <button type="button" onClick={() => setApkStaffMode(false)} data-kp="apk-driver-login" className="mx-auto block mb-2 text-[12.5px] font-bold text-white/55 underline underline-offset-4">기사 로그인으로 돌아가기</button>}
         <p className="text-center text-[10.5px] font-bold tracking-[0.12em] text-white/25">{(c.footerText || DEFAULT_FOOTER).replace(/KP-Flow( Logistics)?/gi, "LogisWeb")}</p>
       </div>
     </div>

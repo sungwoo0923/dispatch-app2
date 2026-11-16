@@ -8,7 +8,7 @@ import { readPublicCompanies } from "../publicCompanies"; // ⭐ 2026-11-10 소�
 import BigCheck from "../components/BigCheck";
 import { LogisMark, LogisWordmark, LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { legacyDriverEmail, scopedDriverEmail, signInDriver, isPhoneLoginId, isPartialPhone, phoneDigits, resolveDriverPhone, signInDriverAccount } from "./driverEmail"; // ⭐ 2026-11-11 휴대폰번호 로그인
-import { isDriverAppContext, peekDriverAppOnlyKick, clearDriverAppOnlyKick, DRIVER_APP_ONLY_ERROR } from "./driverAppContext"; // ⭐ 2026-11-08 기사앱은 기사 계정만
+import { isDriverAppContext, peekDriverAppOnlyKick, clearDriverAppOnlyKick, DRIVER_APP_ONLY_ERROR, isNativeApk, setApkStaffMode } from "./driverAppContext"; // ⭐ 2026-11-08 기사앱은 기사 계정만
 import { checkDriverUserDoc, describeDriverLoginError, driverLoginError, keepDriverLoginError, takeDriverLoginError, setDriverBusy } from "./driverLoginErrors"; // ⭐ 2026-11-05 실패 사유 안내
 
 // ⭐ 사용자 요청 — 한 번 로그인한 폰에서는 소속회사명/차량번호/이름을 기억하고(정보 저장),
@@ -397,6 +397,8 @@ export default function DriverLogin() {
               <button onClick={() => navigate("/driver-register")} className="h-11 rounded-xl border border-[#0F1A30] text-[#0F1A30] text-[15.5px] font-black flex items-center justify-center hover:bg-[#0F1A30] hover:text-white transition">기사 등록하기</button>
               {/* 기사앱(APK·홈 화면 기사앱)에서는 기사 전용이라 다른 유형 로그인을 숨긴다 */}
               {!driverApp && <button onClick={() => navigate("/login")} className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[15.5px] font-bold flex items-center justify-center hover:bg-[#F5F7FB] transition">다른 유형 로그인</button>}
+              {/* 📍 2026-11-16 APK에서 직원(사무실) 계정으로 — 백그라운드 자동 출근용 */}
+              {driverApp && isNativeApk() && <button onClick={() => setApkStaffMode(true)} data-kp="apk-staff-login" className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[15px] font-bold flex items-center justify-center hover:bg-[#F4F6FA]">직원(사무실) 계정으로 로그인</button>}
             </div>
           </div>
           <div className="flex justify-center mt-4 text-[13.5px] font-bold tracking-[0.2em] text-[#B4BFD0]"><LogisTag height={7.5} chip spot="loginForm" text="DRIVER" /></div>

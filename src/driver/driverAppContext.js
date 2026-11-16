@@ -41,9 +41,25 @@ export function isStandaloneDisplay() {
 let cached = null;
 
 // 앱이 처음 열릴 때 한 번 판단한다(App.jsx가 모듈을 불러올 때 호출)
+// 📍 2026-11-16 직원도 APK로 — 직원(사무실) 계정이 APK에서 로그인하면 백그라운드 위치로 자동 출근이 된다(브라우저는 앱이 뒤로 가면 위치를 못 받는다)
+//  기사 로그인 화면의 [직원(사무실) 계정으로 로그인]을 누르면 그 폰의 APK가 "직원 모드"가 된다(kpApkStaff=1) → 일반 로그인 · 모바일 화면
+//  직원 로그인 화면의 [기사 로그인으로]를 누르면 다시 기사 전용으로
+export const APK_STAFF_KEY = "kpApkStaff";
+export const isApkStaffMode = () => { try { return isNativeApk() && localStorage.getItem(APK_STAFF_KEY) === "1"; } catch { return false; } };
+export function setApkStaffMode(on) {
+  try { if (on) localStorage.setItem(APK_STAFF_KEY, "1"); else localStorage.removeItem(APK_STAFF_KEY); } catch { /* 무시 */ }
+  try { sessionStorage.removeItem(SESSION_KEY); } catch { /* 무시 */ }
+  try { window.location.replace(on ? "/login" : "/driver-login"); } catch { /* 무시 */ }
+}
+
 export function initDriverAppContext() {
   if (cached !== null) return cached;
-  if (isNativeApk()) { cached = true; return cached; }
+  if (isNativeApk()) {
+    cached = !isApkStaffMode();
+    // 직원 모드인데 기사 화면 주소로 열렸으면(앱 시작 주소 /driver-login) 직원 로그인 · 모바일 화면으로
+    if (!cached) { try { if ((window.location.pathname || "").startsWith("/driver")) window.history.replaceState(null, "", "/app"); } catch { /* 무시 */ } }
+    return cached;
+  }
   if (!isStandaloneDisplay()) { cached = false; return cached; }
   try {
     const fixed = sessionStorage.getItem(SESSION_KEY);
@@ -77,7 +93,7 @@ export const DRIVER_APP_ONLY_ERROR = {
   code: "driver/app-only",
   tone: "stop",
   title: "기사 전용 앱이에요",
-  message: "사무실 계정은 로지스웹 앱이나 PC에서 로그인해 주세요.",
+  message: "사무실(직원) 계정은 로그인 화면 아래 [직원(사무실) 계정으로 로그인]을 눌러 주세요.",
   hint: "",
 };
 
