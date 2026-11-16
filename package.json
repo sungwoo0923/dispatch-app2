@@ -1,6 +1,6 @@
 {
   "name": "dispatch-app",
-  "version": "1.3.649",
+  "version": "1.3.650",
   "private": true,
   "type": "module",
   "scripts": {
