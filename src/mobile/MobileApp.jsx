@@ -127,7 +127,8 @@ import {
   enableNetwork,
 } from "firebase/firestore";
 import { writeOrderDeletedNotice } from "../driverDeleteNotice"; // ⭐ 2026-11-05 기사앱 삭제 오더 팝업
-import { updateDoc, setDoc } from "../orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
+import { updateDoc, setDoc } from "../orderWrite";
+import { useCloseInbox, CloseInboxBanner, useFinalLockGuard, useCloseInboxCount } from "../closeInbox"; // 📥 배차마감 도착 · 🔒 최종마감 // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { db, auth, FUNCTIONS_BASE, DEFAULT_COMPANY, clearFcmToken, IS_MOBILE_PREVIEW } from "../firebase";
 import { signOut } from "firebase/auth";
 import { version as APP_VERSION } from "../../package.json";
@@ -2228,6 +2229,9 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const deptMode = workScopeM ? "office" : role === "test" ? "acct" : role === "hrManager" ? "hr" : role === "salesMgr" ? "sales" : isExecM && !execFull ? "exec" : null; // 💼 2026-11-10 영업관리자(영업사무원 포함) → 영업 화면
   // 📊 2026-11-06 일일 경영 보고 — 기존 임원 판정(isExecM) 그대로(src/dailyReport.js canSeeBriefing)
   const briefCompanyM = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
+  // 📥 2026-11-16 배차마감 도착(숫자 · 배너) · 🔒 최종마감 잠금 — PC와 같은 기준(src/closeInbox.jsx)
+  const closeInboxM = useCloseInbox(briefCompanyM, menuOkM("정산관리"));
+  useFinalLockGuard(briefCompanyM, role === "totalMaster" || realRole === "totalMaster" || ["hrAcct", "allMgr"].includes(realRole) || /경리|회계|정산/.test(String(myProfM?.team || "")));
   const canBriefingM = canSeeBriefing({ isExec: isExecM });
   // 🧭 2026-11-12 업무 영역 — PC와 같은 규칙(회사가 쓰는 업무 ∩ 직원 업무 담당 · 통합은 임원 · 관리자 · 마스터)
   const bizCoM = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim();
@@ -6004,6 +6008,7 @@ const title =
       <PersonalTodayHost uid={user?.uid} mobile />{/* ⭐ 2026-11-03 오늘 개인 일정 — 위쪽 알림줄 */}
       {/* ⭐ 2026-11-02 원격지원 — 요청 상태 막대 · 승인 배너 · 포인터 */}
       <RemoteSupportHost user={user} profile={myProfM} company={userCompany || localStorage.getItem("userCompany") || ""} mobile />
+      <CloseInboxBanner mobile inbox={closeInboxM} onOpen={() => setPage("dept:settle")} />
       <OrderCongratsPopup uid={user?.uid} profile={myProfM} mobile />
       <BirthdayPopup uid={user?.uid} profile={myProfM} company={myProfM?.companyName || ""} mobile />
       {canBriefingM && <DailyReportPopupHost company={briefCompanyM} dispatchData={allOrders} drivers={drivers} me={{ uid: user?.uid }} role={realRole || role} isExec={isExecM} customRole={customRoleM} profile={myProfM} loadRange={loadRange} mobile onOpenReport={() => setPage("dept:briefing")} />}
@@ -8139,6 +8144,7 @@ function MobileSideMenu({
   const planIdM = useCompanyPlanId((role === "totalMaster" ? (localStorage.getItem("loginCompany") || "") : (localStorage.getItem("userCompany") || localStorage.getItem("loginCompany") || "")).trim()); // ⭐ 2026-11-05 PC와 같은 요금제 잠금
   // ⭐ 2026-11-09 요금제에 없는 메뉴(지입차관리·전자결재·인사·회계 등)는 모바일에서도 숨김 — PC MENU_FEATURE와 같은 기준
   const ok = (m) => menuOk(m) && (!MENU_FEATURE[m] || planIncludes(planIdM, MENU_FEATURE[m]));
+  const closeN = useCloseInboxCount(); // 📥 배차마감 도착(경리 확인 대기) 숫자
   const deptOk = (m) => (!MENU_FEATURE[m] || planIncludes(planIdM, MENU_FEATURE[m])) && deptOkRaw(m);
   const canRevenue = ["admin", "totalMaster", "superadmin", "test", "viewer"].includes(role);
   const canAdminMenu = isAdminRole || role === "viewer";
@@ -8266,7 +8272,7 @@ function MobileSideMenu({
           {deptMode === "acct" && (<>
             <MenuSection title="경리 · 회계" en="ACCOUNTING" dark={dark} alwaysOpen>
               <MenuItem label="경리 홈" icon="dashboard" onClick={() => onGo?.("dept")} dark={dark} />
-              {ok("정산관리") && <MenuItem label="정산관리" icon="receipt" onClick={() => onGo?.("dept:settle")} dark={dark} />}
+              {ok("정산관리") && <MenuItem label="정산관리" icon="receipt" badge={closeN || undefined} onClick={() => onGo?.("dept:settle")} dark={dark} />}
               {ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
               {ok("회계관리") && <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />}
               {payM.canView && <MenuItem label="급여 계산" icon="money" onClick={() => onGo?.("dept:payroll")} dark={dark} />}{/* ⭐ 2026-11-06 직원 급여(⭐ 2026-11-07 경리만 · 비밀번호 잠금) */}
@@ -8365,7 +8371,7 @@ function MobileSideMenu({
             <MenuItem label="인사이트" icon="trend" onClick={onGoIntel} dark={dark} />
           </MenuSection>
           ) : <MenuSolo dark={dark}><MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} /></MenuSolo>)}
-          {(canRevenue || /^role_/.test(String(role || ""))) && ok("정산관리") && <MenuSolo dark={dark}><MenuItem label="정산관리" icon="receipt" onClick={() => onGo?.("dept:settle")} dark={dark} /></MenuSolo>}
+          {(canRevenue || /^role_/.test(String(role || ""))) && ok("정산관리") && <MenuSolo dark={dark}><MenuItem label="정산관리" icon="receipt" badge={closeN || undefined} onClick={() => onGo?.("dept:settle")} dark={dark} /></MenuSolo>}
           {ok("지입차관리") && <MenuSolo dark={dark}><MenuItem label="지입차관리" icon="truck" onClick={onGoFleet} badge={alertCounts?.drvSos || null} dark={dark} /></MenuSolo>}
           </>)}
           {!deptMode && (["영업관리", "인사관리부", "회계관리", "자금관리", "비품관리", "증명서발급"].some(deptOk) || payM.canView || payM.leaveViewer) && (

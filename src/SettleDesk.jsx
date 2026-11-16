@@ -131,7 +131,7 @@ export function closeTag(close) {
   if (close.status === "approved") return { t: close.doc?.unlocked ? "일시해제" : "최종마감", c: close.doc?.unlocked ? "#B25F00" : "#0F1A30", ready: true, final: true };
   if (close.status === "submitted") return { t: "배차마감", c: "#0F7A52", ready: true };
   if (close.status === "rejected") return { t: "반려", c: "#C62F25", ready: false };
-  if (close.status === "verified") return { t: "배차검증", c: "#2457D6", ready: false };
+  if (close.status === "verified") return { t: "마감 전", c: "#8D97AB", ready: false }; // 검증만 하고 아직 1차 마감(넘김) 전
   return { t: "마감 전", c: "#8D97AB", ready: false };
 }
 export function CloseStrip({ close, onReturn, onUnlock, onRelock, disabled }) {
@@ -239,13 +239,16 @@ export function PrepaidToggle({ on, onChange, excluded = 0, label = "선불·착
 export const stmtReady = (g) => stageIdx(g?.stage) === 1 && (g?.count || 0) > 0;
 export function StatementClientRail({ month, setMonth, groups = [], sel, onSel, onBoard, onBulkSend, disabled = false }) {
   const [q, setQ] = React.useState("");
+  const [only, setOnly] = React.useState(""); // 📥 2026-11-16 "" 전체 · "ready" 배차마감(경리 확인 대기)만 · "final" 최종마감만
   const [pick, setPick] = React.useState(false);
   const [chosen, setChosen] = React.useState(() => new Set());
   React.useEffect(() => { setChosen(new Set()); }, [month]);
   const shown = React.useMemo(() => {
     const nq = q.trim().toLowerCase().replace(/\s+/g, "");
-    return groups.filter((g) => !nq || String(g.client || "").toLowerCase().replace(/\s+/g, "").includes(nq));
-  }, [groups, q]);
+    return groups.filter((g) => (!only || (only === "ready" ? g.close?.status === "submitted" && !g.close?.changed : g.close?.status === "approved")) && (!nq || String(g.client || "").toLowerCase().replace(/\s+/g, "").includes(nq)));
+  }, [groups, q, only]);
+  const readyN = groups.filter((g) => g.close?.status === "submitted" && !g.close?.changed).length;
+  const finalN = groups.filter((g) => g.close?.status === "approved").length;
   const [y, m] = String(month || "").split("-").map(Number);
   const shift = (n) => { const d = new Date(Date.UTC(y, m - 1 + n, 1)); setMonth(d.toISOString().slice(0, 7)); };
   const total = groups.reduce((s, g) => s + (g.total || 0), 0);
@@ -291,9 +294,16 @@ export function StatementClientRail({ month, setMonth, groups = [], sel, onSel, 
           </div>
         )
       )}
+      <div className="mt-2 grid grid-cols-3 gap-1 p-1 rounded-xl bg-[#F4F6FA]" role="tablist" aria-label="배차마감으로 거르기" data-kp="stmt-rail-only">
+        {[["", "전체", groups.length], ["ready", "배차마감", readyN], ["final", "최종마감", finalN]].map(([k, l, c]) => (
+          <button key={k || "all"} type="button" role="tab" aria-selected={only === k} onClick={() => setOnly(k)} title={k === "ready" ? "배차 담당자가 1차 마감해서 넘어온 곳(경리 확인 대기)" : k === "final" ? "명세서를 작성해 최종마감된 곳" : "이 달 거래처 전체"}
+            className={`h-8 rounded-lg text-[12px] font-black whitespace-nowrap ${only === k ? "bg-white text-[#0F1A30] shadow-sm" : "text-[#5B6B85]"}`} style={NUM}>
+            {l} <span className={k === "ready" && c ? "text-[#C62F25]" : ""}>{c}</span>
+          </button>))}
+      </div>
       {groups.length > 6 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="거래처 찾기" className={`${sdInp} mt-2 h-9`} />}
       <div className="mt-2 flex xl:flex-col gap-1.5 overflow-x-auto xl:overflow-x-visible xl:max-h-[calc(100vh-280px)] xl:overflow-y-auto no-scrollbar" style={{ scrollbarWidth: "thin" }}>
-        {shown.length === 0 && <div className="px-2 py-6 text-center text-[13px] font-bold text-[#9AA9C3] w-full">{groups.length ? "찾는 거래처가 없어요" : "이 달에 청구할 오더가 없어요"}</div>}
+        {shown.length === 0 && <div className="px-2 py-6 text-center text-[13px] font-bold text-[#9AA9C3] w-full">{only === "ready" ? "넘어온 배차마감이 없어요" : only === "final" ? "최종마감된 곳이 없어요" : groups.length ? "찾는 거래처가 없어요" : "이 달에 청구할 오더가 없어요"}</div>}
         {shown.map((g) => {
           const on = !pick && g.client === sel;
           const can = pick && stmtReady(g);

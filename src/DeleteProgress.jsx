@@ -11,6 +11,7 @@
 //   await runDelete({ label: "공지", task: () => deleteDoc(ref) }); // 한 건 삭제(확인창은 원래대로 먼저 묻는다)
 //  · runDelete 안에서 또 runDelete를 부르면 창을 새로 띄우지 않고 바깥 창을 그대로 쓴다.
 //  · task가 오래 걸리면(오프라인 등) 12초 뒤 창은 닫고(서버 반영은 계속) 결과는 그대로 돌려준다.
+import { deleteGuardOf } from "./orderWrite";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { writeBatch, doc, serverTimestamp, deleteDoc } from "firebase/firestore";
@@ -172,9 +173,11 @@ export function deleteDocsAtomic(db, refs, { label = "", count } = {}) {
  * items: [{ col, id }] · 삭제 기록은 예전처럼 실패해도 삭제를 막지 않게 따로 묶음으로 보낸다.
  * opts.modal === false 이면 진행 창 없이(바깥에서 runDelete로 감쌌을 때 등)
  */
-export function deleteOrdersWithLogAtomic(items, { label = "오더", modal = true } = {}) {
+export async function deleteOrdersWithLogAtomic(items, { label = "오더", modal = true } = {}) {
   const list = (items || []).filter((x) => x?.col && x?.id);
-  if (!list.length) return Promise.resolve(0);
+  if (!list.length) return 0;
+  const lockMsg = await deleteGuardOf(list); // 🔒 2026-11-16 최종마감 오더는 지우지 않는다(PC · 모바일 공통)
+  if (lockMsg) { try { window.alert(lockMsg); } catch { /* 무시 */ } return 0; }
   const task = async (progress) => {
     commitDeletes(appDb, list.map(({ col, id }) => (b) => b.set(doc(appDb, "deletedOrders", `${col}_${id}`), { col, id, at: serverTimestamp(), by: auth.currentUser?.email || "" }))).catch(() => {});
     return commitDeletes(appDb, list.map(({ col, id }) => doc(appDb, col, id)), { onProgress: progress });

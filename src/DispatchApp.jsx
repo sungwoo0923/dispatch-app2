@@ -2985,6 +2985,7 @@ import { pickForm, visibleCols, headerLabels } from "./invoiceForm";
 import { closeBoard as closeBoardOf, approvePatch as closeApprovePatch, rejectPatch as closeRejectPatch, isFinalLocked, tempUnlockPatch, relockPatch } from "./closeFlow"; // ✅ 2026-11-16 배차 마감 → 거래처정산
 import { CloseStrip, viewStage } from "./SettleDesk";
 import UserHub from "./UserHub";
+import { useCloseInbox, CloseInboxBanner, useFinalLockGuard, useCloseInboxCount } from "./closeInbox"; // 📥 2026-11-16 배차마감 도착 숫자 · 배너
 // 🟪 2026-11-16 구글시트(운송사 칸)와 다른 배차방식을 프로그램에서 고른 오더 — 프로그램 값 우선 · 칸을 보라색으로
 const sheetWayDiff = (o) => !!o && !!o.이전출처 && Array.isArray(o._programKeys) && o._programKeys.includes("배차방식");
 const SHEET_DIFF_STYLE = { background: "#EDE4FF", borderColor: "#8B5CF6", color: "#5B21B6", fontWeight: 800 };
@@ -8759,6 +8760,12 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   };
   // 🛠 2026-11-13 인사이트는 요금제에 없으면 잠금 표시 대신 메뉴 자체를 안 보이게(상단 · 왼쪽 메뉴)
   const menuShown = (m) => { const st = menuState(m); return m === "인사이트" && st === "locked" ? "hidden" : st; };
+  // 📥 2026-11-16 배차마감 도착 — 정산관리를 볼 수 있는 사람에게 숫자 · 배너
+  const closeInbox = useCloseInbox((localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim(), menuState("정산관리") === "ok");
+  const closeInboxN = closeInbox.count;
+  // 🔒 최종마감 잠금(오더 저장 · 삭제 공통 검사기) — 경리 · 회계 · 정산 팀과 최고관리자는 그대로 고칠 수 있다
+  useFinalLockGuard((localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim(),
+    role === "totalMaster" || realRole === "totalMaster" || ["hrAcct", "allMgr"].includes(realRole) || /경리|회계|정산/.test(String(myProfileDoc?.team || "")));
 return (
     <PlanValueProvider planId={planId} company={planCompany}>
     <OrderHistoryContext.Provider value={orderHistoryApi}>
@@ -8928,7 +8935,8 @@ return (
                 : m === "실시간배차현황" ? drvCounts.orders
                 : m === "배차현황" ? drvCounts.orders + unseenDispatchTotal
                 : m === "지입차관리" ? drvCounts.sos
-                : m === "관리자메뉴" ? pendingStaffSignups : 0;
+                : m === "관리자메뉴" ? pendingStaffSignups
+                : m === "정산관리" ? closeInboxN : 0;
             };
             const subBadgesOf = (m) => {
               const apSep = (deptMode ? DEPT_MENUS[deptMode].includes("전자결재") : true) && menuState("전자결재") !== "hidden";
@@ -8939,6 +8947,7 @@ return (
                 배차현황: { 배차현황: drvCounts.orders, 미배차현황: unseenUnassigned, 고정노선현황: unseenFixed },
                 지입차관리: { tracking: drvCounts.sos },
                 관리자메뉴: { members: pendingStaffSignups },
+                정산관리: { 거래처정산: closeInboxN },
               })[m];
             };
             const navLabelOf = (m) => uiMenuLabel("pc", m, m === BRIEF_MENU ? BRIEF_LABEL : execMenuLabel(m));
@@ -8957,7 +8966,8 @@ return (
                 : m === "실시간배차현황" ? drvCounts.orders
                 : m === "배차현황" ? drvCounts.orders + unseenDispatchTotal /* ⭐ 2026-11-06 안 본 미배차·고정노선 미배차 */
                 : m === "지입차관리" ? drvCounts.sos
-                : m === "관리자메뉴" ? pendingStaffSignups : 0;
+                : m === "관리자메뉴" ? pendingStaffSignups
+                : m === "정산관리" ? closeInboxN : 0;
               const subBadges = {
                 HOME: { 공지사항: alertsNav.notice || 0, "ap:inbox": apSep ? 0 : apCountsNav.todo, "ap:mine": apSep ? 0 : apCountsNav.mineNew, "ap:handover": alertsNav.handover || 0, mail: mailCountsNav.unread || 0, teamsched: 0 }, // 🔢 2026-11-15 상단 HOME 숫자(사내메일 · 인수인계 · 내 기안)가 어느 속메뉴 것인지 보이게
                 전자결재: { inbox: apCountsNav.todo, mine: apCountsNav.mineNew, handover: alertsNav.handover },
@@ -8965,6 +8975,7 @@ return (
                 배차현황: { 배차현황: drvCounts.orders, 미배차현황: unseenUnassigned, 고정노선현황: unseenFixed }, // ⭐ 2026-11-06 안 본 것만
                 지입차관리: { tracking: drvCounts.sos },
                 관리자메뉴: { members: pendingStaffSignups },
+                정산관리: { 거래처정산: closeInboxN },
               }[m];
               return (
                 <NavHover key={m} menu={m} badges={subBadges} disabled={isBlocked || st === "locked"} onOpenMenu={() => handleMenuClick(m)}>
@@ -9074,6 +9085,7 @@ return (
 
         </div>
       </header>
+      <CloseInboxBanner inbox={closeInbox} onOpen={(x) => { handleMenuClick("정산관리"); setTimeout(() => { set정산관리Tab("거래처정산"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: { tab: "invoice", client: x.client, ym: x.ym } })), 120); }, 60); }} />
       {/* ★ 2026-11-12 자주 쓰는 메뉴(접었다 펴기) · 통합 검색 창 · 도움말 센터 — 지금 이 계정에 보이는 메뉴로 자동 구성 */}
       <QuickNav menu={menu}
         menus={uiMenuList("pc", deptMode ? DEPT_MENUS[deptMode] : KP_SIDE_GROUPS.flatMap((g) => g.items)).filter((m) => menuState(m) === "ok")}
@@ -9564,7 +9576,7 @@ return (
         {정산관리Visited && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
           <div style={{ display: menu === "정산관리" ? undefined : "none" }}>
           <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={정산관리Tab} onSelect={set정산관리Tab} actions={[{ key: "manual", label: "정산 매뉴얼", icon: "doc", onClick: () => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu: "정산관리", section: { 홈: "home", 거래처정산: "billing", 지급관리: "payout", 입금확인: "deposit", 지입정산관리: "fleet", 지게차지급: "forklift" }[정산관리Tab] || "" } })) }]}
-            items={[{ key: "홈", label: "정산 홈", en: "OVERVIEW", icon: "dashboard" }, { key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOn ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
+            items={[{ key: "홈", label: "정산 홈", en: "OVERVIEW", icon: "dashboard" }, { key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt", badge: closeInboxN || undefined }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOn ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
           <DetailScope data={salesDispatchData} getters={mainDetailGet} title="세부검색 · 정산관리">{(settleRows) => (<>
           {/* 🔎 2026-11-14 세부검색 버튼은 정산관리에서 뺐다(사용자 요청) */}
           {/* 거래명세서 검색/선택 상태 유지를 위해 지급관리 탭으로 전환해도 언마운트하지 않고 숨기기만 한다 */}
@@ -63766,8 +63778,9 @@ export { Settlement as PcSettlement };
 
 // 📱 2026-10-31 모바일 경리 모드 — PC 정산관리(용차지급·지입정산)·회계관리·인사관리 화면을 휴대폰에서 그대로
 export function PcSettleMobile({ dispatchData = [], companyName = "", role = "", isViewer = false, clients = [] }) {
+  const closeNM = useCloseInboxCount(); // 📥 배차마감 도착(경리 확인 대기) 숫자
   // ⭐ 2026-11-05 PC·모바일 일치 — PC 정산관리와 같은 3개 탭(거래처정산·용차지급관리·지입정산관리) · 첫 화면도 PC처럼 거래처정산
-  const [tab, setTab] = React.useState("거래처정산");
+  const [tab, setTab] = React.useState(() => { const t = settleStartTab(); return t === "홈" ? "홈" : "거래처정산"; }); // 🧭 2026-11-16 PC와 같게 정산 홈부터
   // 지급 상태·지급일 같은 정산 칸만 고치는 간단 저장(배차 검사 없이) — 오더가 있는 컬렉션 그대로
   const patchDispatch = React.useCallback(async (_id, patch, knownPrev) => {
     if (!_id) return;
@@ -63795,8 +63808,10 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
   }, []);
   return (
     <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={tab} onSelect={setTab}
-      items={[{ key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt" }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOnM ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
-      {tab === "거래처정산"
+      items={[{ key: "홈", label: "정산 홈", en: "OVERVIEW", icon: "dashboard" }, { key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt", badge: closeNM || undefined }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOnM ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
+      {tab === "홈"
+        ? <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}><SettleHome orders={dispatchData} company={companyName || DEFAULT_COMPANY} depositOn={betaPayOnM} onGo={(k, d) => { setTab(k === "마감검증" ? "거래처정산" : k); if (d) setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: d })), 80); }} /></React.Suspense>
+        : tab === "거래처정산"
         ? <ClientSettlement dispatchData={dispatchData} setDispatchData={() => {}} userCompany={companyName} clients={clients}
             setClients={(next) => (next || []).forEach(upsertClient)} upsertClient={upsertClient} showAlert={(m) => window.alert(m)}
             patchDispatch={isViewer ? async () => {} : patchDispatch} cardImage={cardImage} setCardImage={setCardImage}

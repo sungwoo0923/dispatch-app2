@@ -137,11 +137,15 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
   useLoadOrderRange(`${prevYmOf(ym)}-01`, monthEnd(ym));
   const [scope, setScope] = React.useState("all"); // all | mine | staff — 🛠 2026-11-16 기본 = 전체(내 배차만 보려면 고른다)
   const [staff, setStaff] = React.useState("");
+  const [route, setRoute] = React.useState(""); // 📍 2026-11-16 노선(담당노선구분 · 시트 탭)으로 거르기 — 목록은 거래처별
   const [tab, setTab] = React.useState("all"); // all | todo | verified | closed
   const [cq, setCq] = React.useState("");
   const [sel, setSel] = React.useState("");
   const [sheet, setSheet] = React.useState(null);
   const [delAsk, setDelAsk] = React.useState("");
+  const [oq, setOq] = React.useState(""); // 오더 검색
+  const [onlyBad, setOnlyBad] = React.useState(false); // 확인 필요만
+  const [osort, setOsort] = React.useState("date"); // date | status
   const [busy, setBusy] = React.useState("");
   const [toast, setToast] = React.useState("");
   React.useEffect(() => { if (!toast) return undefined; const t = setTimeout(() => setToast(""), 3200); return () => clearTimeout(t); }, [toast]);
@@ -157,7 +161,8 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
   const month = React.useMemo(() => (orders || []).filter((o) => !isCancel(o) && o?.source !== "transport_transmit" && monthOf(o) === ym), [orders, ym]);
   const staffList = React.useMemo(() => { const m = new Map(); month.forEach((o) => { const s2 = staffOf(o); m.set(s2, (m.get(s2) || 0) + 1); }); return [...m.entries()].sort((a, b) => b[1] - a[1]); }, [month, staffOf]);
   const mineOf = React.useCallback((o) => isMine(o, me) || (!!me?.name && staffOf(o) === me.name), [me, staffOf]);
-  const scoped = React.useMemo(() => month.filter((o) => (scope === "mine" ? mineOf(o) : scope === "staff" ? (!staff || staffOf(o) === staff) : true)), [month, scope, staff, mineOf, staffOf]);
+  const routeList = React.useMemo(() => { const m = new Map(); month.forEach((o) => { const r = String(o.담당노선구분 || "").trim(); if (r) m.set(r, (m.get(r) || 0) + 1); }); return [...m.entries()].sort((a, b) => b[1] - a[1]); }, [month]);
+  const scoped = React.useMemo(() => month.filter((o) => (scope === "mine" ? mineOf(o) : scope === "staff" ? (!staff || staffOf(o) === staff) : true) && (!route || String(o.담당노선구분 || "").trim() === route)), [month, scope, staff, route, mineOf, staffOf]);
 
   const checks = React.useMemo(() => closeChecks(month), [month]);
   const issueMap = React.useMemo(() => { const m = new Map(); CLOSE_RULES.forEach((r) => (checks[r.key] || []).forEach((o) => { const id = idOf(o); const l = m.get(id) || []; l.push({ key: r.key, label: r.label, block: r.block }); m.set(id, l); })); return m; }, [checks]);
@@ -180,6 +185,13 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
   const cur = groups.find((g) => g.client === sel) || list[0] || null;
   React.useEffect(() => { if (cur && cur.client !== sel) setSel(cur.client); }, [cur?.client]); // eslint-disable-line react-hooks/exhaustive-deps
   const idx = cur ? list.findIndex((g) => g.client === cur.client) : -1;
+  // 오더 목록 거르기 · 정렬 — 확인 필요만 · 검색(차량 · 기사 · 상하차지 · 전화) · 날짜순 / 상태순
+  const shownRows = (g) => {
+    const q = oq.replace(/\s/g, "").toLowerCase();
+    let rows = g.rows.filter((o) => (!onlyBad || issuesOfRow(o).length) && (!q || [o.차량번호, o.이름, o.기사명, o.상차지명, o.하차지명, o.전화번호, o.차량톤수].some((v) => String(v || "").replace(/\s/g, "").toLowerCase().includes(q))));
+    if (osort === "status") rows = [...rows].sort((a, b) => { const A = issuesOfRow(a), B = issuesOfRow(b); const w = (l) => (l.some((x) => x.block) ? 0 : l.length ? 1 : 2); return w(A) - w(B) || String(a.상차일 || "").localeCompare(String(b.상차일 || "")); });
+    return rows;
+  };
 
   const save = (g, patch) => desk.save(g.row.doc?.id || arDeskId(desk.company, "close", g.client, ym), patch);
   const verifyMany = async (gs) => {
@@ -235,6 +247,11 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
         {[["all", "전체"], ["mine", "내 배차"], ["staff", "담당자"]].map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={scope === k} onClick={() => { setScope(k); setSel(""); }} className={`h-8 rounded-lg text-[13px] font-black ${scope === k ? "bg-white text-[#0F1A30] shadow-sm" : "text-[#5B6B85]"}`}>{l}</button>)}
       </div>
       {scope === "staff" && <select id="mc-staff" value={staff} onChange={(e) => { setStaff(e.target.value); setSel(""); }} className={`${sdInp} mt-2 !h-9`}><option value="">담당자 전체</option>{staffList.map(([s2, c2]) => <option key={s2} value={s2}>{s2} ({c2})</option>)}</select>}
+      {routeList.length > 1 && (
+        <select id="mc-route" value={route} onChange={(e) => { setRoute(e.target.value); setSel(""); }} className={`${sdInp} mt-2 !h-9`} title="노선(시트 탭)으로 거르기 — 목록은 거래처별로 나와요">
+          <option value="">노선 전체 ({routeList.length}개)</option>
+          {routeList.map(([r, c]) => <option key={r} value={r}>{r} ({c})</option>)}
+        </select>)}
       <div className="mt-2 relative">
         <Ico d={IC.search} size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9AA9C3] pointer-events-none" />
         <input id="mc-cq" value={cq} onChange={(e) => setCq(e.target.value)} placeholder="거래처 찾기" className={`${sdInp} pl-8 !h-9`} />
@@ -283,28 +300,42 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
           </div>)}
         {actions(g)}
       </div>
-      {/* 진행 선 + 안내 + 합계 */}
+      {/* 진행 선 + 안내 */}
       <div className={`${sdCard} px-5 py-4`}>
         <FlowTrack steps={flow(g)} />
         <div className="mt-3 flex items-center gap-2 flex-wrap">
           <span className="text-[13.5px] font-bold" style={{ color: line.c }}>{line.t}</span>
           {line.tip && <TipButton text={line.tip} />}
         </div>
-        <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-x-4 gap-y-2 pt-3 border-t border-[#EEF2F8]" style={NUM}>
-          {[["오더", `${g.count}건`, C.ink], ["청구", `${won(g.sale)}원`, C.ink], ["기사", `${won(g.buy)}원`, C.sub], ["수수료", `${won(g.sale - g.buy)}원`, g.sale - g.buy < 0 ? "#2457D6" : "#D92D20"], ["확인할 것", g.issue ? `${g.issue}건` : "없음", g.issue ? C.bad : C.ok]].map(([l, v, c]) => (
-            <div key={l}><div className="text-[12px] font-bold text-[#9AA9C3]">{l}</div><div className="text-[16px] font-black whitespace-nowrap" style={{ color: c }}>{v}</div></div>))}
-        </div>
       </div>
       {/* 오더 미리보기 */}
       <div className={`${sdCard} overflow-hidden`}>
-        <div className="px-4 py-2.5 border-b border-[#E3E8F0] flex items-center gap-2">
-          <div className="text-[14.5px] font-black mr-auto">오더 <span className="text-[12.5px] font-bold text-[#9AA9C3]">줄을 누르면 고치기</span></div>
+        {/* 합계 — 오더 목록 바로 위(칸으로 나눈 한 줄) · [확인 필요]를 누르면 확인 필요만 */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 border-b border-[#E3E8F0] bg-[#F8FAFD]" style={NUM} data-kp="mc-totals">
+          {[["오더", `${g.count.toLocaleString()}건`, C.ink], ["청구", `${won(g.sale)}원`, C.ink], ["기사운임", `${won(g.buy)}원`, C.sub], ["수수료", `${won(g.sale - g.buy)}원`, g.sale - g.buy < 0 ? "#2457D6" : "#D92D20"], ["확인 필요", g.issue ? `${g.issue}건` : "없음", g.issue ? C.bad : C.ok]].map(([l, v, c], i) => (
+            <button key={l} type="button" disabled={l !== "확인 필요" || !g.issue} onClick={() => setOnlyBad((x) => !x)} className={`px-4 py-2.5 text-center border-[#E3E8F0] ${i ? "sm:border-l" : ""} ${l === "확인 필요" && g.issue ? "hover:bg-[#FFF5F4] cursor-pointer" : "cursor-default"}`}>
+              <div className="text-[12px] font-bold text-[#9AA9C3]">{l}</div>
+              <div className="text-[16px] font-black whitespace-nowrap" style={{ color: c }}>{v}</div>
+            </button>))}
+        </div>
+        <div className="px-4 py-2.5 border-b border-[#E3E8F0] flex items-center gap-2 flex-wrap">
+          <div className="text-[14.5px] font-black mr-auto">오더 <span className="text-[12.5px] font-bold text-[#9AA9C3]">{shownRows(g).length !== g.rows.length ? `${shownRows(g).length}/${g.rows.length}건 · ` : ""}줄을 누르면 고치기</span></div>
+          <div className="relative">
+            <Ico d={IC.search} size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9AA9C3] pointer-events-none" />
+            <input id="mc-oq" value={oq} onChange={(e) => setOq(e.target.value)} placeholder="차량 · 기사 · 상하차지 검색" className="h-9 w-[210px] rounded-lg border border-[#D5DDEA] bg-white pl-8 pr-2 text-[13px] font-semibold outline-none focus:border-[#1B2B4B]" />
+          </div>
+          <div className="inline-flex p-0.5 rounded-lg bg-[#F4F6FA]" role="tablist" aria-label="보기">
+            {[[false, "전체"], [true, `확인 필요 ${g.issue}`]].map(([k, l]) => <button key={String(k)} type="button" role="tab" aria-selected={onlyBad === k} onClick={() => setOnlyBad(k)} className={`h-8 px-3 rounded-md text-[12.5px] font-black ${onlyBad === k ? "bg-white text-[#0F1A30] shadow-sm" : "text-[#5B6B85]"}`}>{l}</button>)}
+          </div>
+          <select id="mc-sort" value={osort} onChange={(e) => setOsort(e.target.value)} className="h-9 rounded-lg border border-[#D5DDEA] bg-white px-2 text-[13px] font-bold text-[#1B2B4B]" title="정렬">
+            <option value="date">날짜순</option><option value="status">상태순(확인 필요 먼저)</option>
+          </select>
           {lockedOf(g) ? <span className="h-9 px-3 inline-flex items-center rounded-lg border border-[#0F1A30] text-[12.5px] font-black text-[#0F1A30]">최종마감 · 수정 잠금</span>
             : !isViewer && <button type="button" onClick={() => addOrder(g.client)} className="h-9 px-3.5 rounded-lg border border-[#D5DDEA] bg-white text-[13px] font-bold text-[#1B2B4B]">+ 오더 추가</button>}
         </div>
         {phone ? (
           <div className="p-2.5 space-y-1.5">
-            {g.rows.map((o, i) => { const is = issuesOfRow(o); return (
+            {shownRows(g).map((o, i) => { const is = issuesOfRow(o); return (
               <button key={idOf(o)} type="button" onClick={() => openRow(o)} className="w-full text-left rounded-xl bg-white border border-[#E1E6EF] px-3 py-2.5" style={{ boxShadow: is.length ? `inset 3px 0 0 ${is.some((x) => x.block) ? C.bad : C.warn}` : undefined }}>
                 <div className="flex items-center gap-2 text-[12.5px]" style={{ ...NUM, color: C.mute }}><b style={{ color: C.sub }}>{i + 1}</b><span>{String(o.상차일 || "").slice(5)}</span><span className="truncate">{o.차량번호 || "차량 없음"} {o.이름 || ""}</span><span className="ml-auto font-black text-[14px]" style={{ color: n(o.청구운임) ? C.ink : C.bad }}>{won(n(o.청구운임))}</span></div>
                 <div className="mt-0.5 text-[14px] font-black truncate">{o.상차지명 || "-"} → {o.하차지명 || "-"}</div>
@@ -318,7 +349,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
                 {["순번", "상차일", "상차지 → 하차지", "톤수", "차량번호", "기사", "청구", "기사운임", "수수료", "확인", ""].map((h, i) => <th key={i} className="px-2.5 py-2 font-black sticky top-0 bg-[#F8FAFD] z-[1] whitespace-nowrap text-center">{h}</th>)}
               </tr></thead>
               <tbody>
-                {g.rows.map((o, i) => { const is = issuesOfRow(o); return (
+                {shownRows(g).map((o, i) => { const is = issuesOfRow(o); return (
                   <tr key={idOf(o)} onClick={() => openRow(o)} className="cursor-pointer border-t border-[#EEF2F8] hover:bg-[#F8FAFD]" title="눌러서 고치기" style={{ boxShadow: is.length ? `inset 3px 0 0 ${is.some((x) => x.block) ? C.bad : C.warn}` : undefined }}>
                     <td className="px-2.5 py-2 text-center text-[12.5px] text-[#9AA9C3]">{i + 1}</td>
                     <td className="px-2.5 py-2 text-[13px] whitespace-nowrap text-center">{String(o.상차일 || "").slice(5)}</td>

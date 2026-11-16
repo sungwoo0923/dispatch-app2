@@ -13,12 +13,28 @@ const stamp = (ref, data) =>
     ? { ...data, _lastModified: Date.now() }
     : data;
 
-export function updateDoc(ref, data, ...rest) {
+// 🔒 2026-11-16 최종마감 잠금(PC · 모바일 공통) — 화면이 setOrderGuard(fn)로 검사기를 넣어 둔다(src/closeInbox.jsx useFinalLockGuard)
+//  fn(ref, data) → 막을 때 안내 문구 · 아니면 null. 막히면 저장하지 않고 오류(code "final-locked")를 낸다
+let GUARD = null;
+export const setOrderGuard = (fn) => { GUARD = typeof fn === "function" ? fn : null; };
+const guardOf = async (ref, data) => {
+  if (!GUARD || !isOrderDocRef(ref) || !data || typeof data !== "object" || Array.isArray(data)) return;
+  const msg = await GUARD(ref, data);
+  if (msg) { try { window.alert(msg); } catch { /* 무시 */ } throw Object.assign(new Error(msg), { code: "final-locked" }); }
+};
+
+export async function updateDoc(ref, data, ...rest) {
   // updateDoc(ref, "필드", 값, ...) 형태는 그대로 통과
   if (typeof data === "string") return fbUpdateDoc(ref, data, ...rest);
+  await guardOf(ref, data);
   return fbUpdateDoc(ref, stamp(ref, data), ...rest);
 }
 
-export function setDoc(ref, data, options) {
+export async function setDoc(ref, data, options) {
+  await guardOf(ref, data);
   return options === undefined ? fbSetDoc(ref, stamp(ref, data)) : fbSetDoc(ref, stamp(ref, data), options);
 }
+// 지우기 전에 — [{ col, id }] 중 최종마감 오더가 있으면 안내 문구(삭제 진행 창이 부른다)
+let DEL_GUARD = null;
+export const setDeleteGuard = (fn) => { DEL_GUARD = typeof fn === "function" ? fn : null; };
+export const deleteGuardOf = async (items) => (DEL_GUARD ? DEL_GUARD(items) : null);
