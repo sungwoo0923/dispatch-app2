@@ -101,7 +101,9 @@ export function useScreenFit(menu) {
     if (big) { setPref("fitXl", true); return; }
     setPref("fitBig", true);
   };
-  return { on, big: on && (big || xl), xl: on && xl, pct, toggle, toggleBig };
+  // 🖥 2026-11-16 화면 설정 창 — 표 글씨: normal(맞춤만) · big(크게) · xl(더 크게)
+  const setMode = (m) => { setPref("fit", true); setPref("fitBig", m === "big" || m === "xl"); setPref("fitXl", m === "xl"); };
+  return { on, big: on && (big || xl), xl: on && xl, pct, toggle, toggleBig, setMode, setOn: (v) => setPref("fit", !!v) };
 }
 
 export function ScreenFitButton({ fit }) {
@@ -119,6 +121,61 @@ export function ScreenFitButton({ fit }) {
         <span className="font-black text-[13px] leading-none">가</span><span className="font-black text-[10px] leading-none -ml-0.5">{fit.xl ? "++" : "+"}</span>{fit.xl ? "더 크게" : "크게 보기"}
       </button>
     </div>
+  );
+}
+
+// 🖥 2026-11-16 [화면 설정] 하나 — 누르면 창에서 화면 맞춤 · 표 글씨 크기를 고른다(예전 [화면 맞춤] · [가+ 크게 보기] 두 버튼을 합침)
+export function ScreenSettingsButton({ fit }) {
+  const [open, setOpen] = React.useState(false);
+  const mode = fit.xl ? "xl" : fit.big ? "big" : "normal";
+  const Opt = ({ k, title, desc }) => { const on = fit.on && mode === k; return (
+    <button type="button" onClick={() => fit.setMode(k)} data-kp={`screen-mode-${k}`} aria-pressed={on}
+      className={`text-left rounded-xl border px-4 py-3 transition ${on ? "border-[#0F1A30] bg-[#0F1A30] text-white" : "border-[#DCE3EE] bg-white hover:border-[#8FB0F0]"}`}>
+      <span className={`block text-[15px] font-black ${on ? "text-white" : "text-[#0F1A30]"}`}>{title}</span>
+      <span className={`block text-[12.5px] mt-0.5 leading-snug break-keep ${on ? "text-white/70" : "text-[#5B6B85]"}`}>{desc}</span>
+    </button>); };
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} data-kp="screen-settings" title="화면 맞춤 · 표 글씨 크기"
+        className={`kp-chip-btn text-[12px] transition inline-flex items-center gap-1.5 ${fit.on ? "!bg-white !text-[#0F1A30] !border-white" : ""}`}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
+        화면 설정{fit.on && <span className="tabular-nums opacity-70">{fit.pct}%</span>}
+      </button>
+      {open && createPortal(
+        <div className="fixed inset-0 z-[2147482500] bg-[rgba(11,20,40,0.45)] flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+          <div role="dialog" aria-label="화면 설정" className="w-full max-w-[560px] bg-white rounded-2xl shadow-[0_24px_60px_rgba(11,20,40,0.35)] overflow-hidden" onClick={(e) => e.stopPropagation()} style={{ fontFamily: "'Pretendard','Noto Sans KR',sans-serif" }}>
+            <div className="px-6 py-4 flex items-center gap-3" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
+              <div className="mr-auto"><div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">DISPLAY</div><div className="text-[18px] font-black text-white">화면 설정</div></div>
+              <button type="button" aria-label="닫기" onClick={() => setOpen(false)} className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[16px]">✕</button>
+            </div>
+            <div className="p-5 space-y-5 text-[#0F1A30]">
+              <div className="flex items-center gap-4 rounded-xl border border-[#DCE3EE] px-4 py-3.5">
+                <div className="flex-1 min-w-0">
+                  <div className="text-[15px] font-black">화면 맞춤 {fit.on && <span className="text-[13px] font-bold text-[#2457D6] tabular-nums">지금 {fit.pct}%</span>}</div>
+                  <div className="text-[12.5px] text-[#5B6B85] leading-snug">모니터 크기에 맞춰 표 전체(선택 ~ 끝 칸)가 한 화면에 보이게 자동으로 맞춰요.</div>
+                </div>
+                <button type="button" role="switch" aria-checked={fit.on} onClick={() => fit.setOn(!fit.on)} data-kp="screen-fit"
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors shrink-0 ${fit.on ? "bg-[#0F1A30]" : "bg-[#C9D3E3]"}`}>
+                  <span className={`inline-block h-5 w-5 rounded-full bg-white transition-transform ${fit.on ? "translate-x-6" : "translate-x-1"}`} />
+                </button>
+              </div>
+              <div>
+                <div className="text-[13px] font-bold text-[#5B6B85] mb-2">표 글씨 크기 <span className="font-medium text-[#9AA9C3]">· 고르면 화면 맞춤이 켜져요</span></div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <Opt k="normal" title="보통" desc="한 화면에 다 보이게 맞춰요" />
+                  <Opt k="big" title="크게" desc="칸 여백을 줄이고 왼쪽 메뉴를 접어 글씨를 키워요" />
+                  <Opt k="xl" title="더 크게" desc="글씨를 100% 아래로 줄이지 않아요(표는 옆으로 넘겨 봐요)" />
+                </div>
+              </div>
+              <div className="text-[12.5px] text-[#9AA9C3] leading-snug">브라우저 확대(Ctrl + / −)가 100%가 아니면 글씨가 흐려질 수 있어요. <b className="text-[#5B6B85]">Ctrl + 0</b>으로 100%로 돌아가요. 설정은 계정마다 기억돼요.</div>
+            </div>
+            <div className="px-5 py-3 bg-[#F8FAFD] border-t border-[#E3E8F0] flex justify-end gap-2">
+              {fit.on && <button type="button" onClick={() => fit.setOn(false)} className="h-10 px-4 rounded-xl border border-[#D5DDEA] bg-white text-[14px] font-bold text-[#3A4A66]">원래대로(100%)</button>}
+              <button type="button" onClick={() => setOpen(false)} className="h-10 px-6 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black">확인</button>
+            </div>
+          </div>
+        </div>, document.body)}
+    </>
   );
 }
 

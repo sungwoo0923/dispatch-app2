@@ -14,7 +14,8 @@ const I = {
 };
 const Badge = ({ n }) => (n > 0 ? <span className="min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-black text-white grid place-items-center tabular-nums" style={{ background: "#E5332A" }}>{n > 99 ? "99+" : n}</span> : null);
 
-export default function UserHub({ name = "", mailUnread = 0, onMyInfo, onSupport, showSupport = true }) {
+// 🧭 2026-11-16 trigger(children)를 주면 그 모양(회사명 · 이름 칸)이 버튼이 된다 · onTriggerClick 이 있으면 누를 때 그걸 먼저(새 버전 업데이트)
+export default function UserHub({ name = "", mailUnread = 0, onMyInfo, onSupport, showSupport = true, children = null, onTriggerClick = null, align = "right", triggerClass = "" }) {
   const bell = useDriverEventCounts();
   const bellN = (bell.orders || 0) + (bell.docs || 0) + (bell.sos || 0) + (bell.checkout || 0);
   const total = mailUnread + bellN;
@@ -41,14 +42,20 @@ export default function UserHub({ name = "", mailUnread = 0, onMyInfo, onSupport
   const initial = String(name || "").trim().slice(0, 1) || "나";
   return (
     <div ref={box} className="relative" onMouseEnter={enter} onMouseLeave={leave} data-kp="user-hub">
+      {children ? (
+        <button type="button" onClick={() => (onTriggerClick ? onTriggerClick() : setOpen((v) => !v))} aria-haspopup="menu" aria-expanded={open} title="내 메뉴 — 사내메일함 · 알림 내역 · 내 정보 · 원격 지원" className={`relative ${triggerClass}`}>
+          {children}
+          {total > 0 && <span className="absolute -top-1.5 -right-1.5"><Badge n={total} /></span>}
+        </button>
+      ) : (
       <button type="button" onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open} title="내 메뉴 — 사내메일함 · 알림 내역 · 내 정보 · 원격 지원"
         className="kp-icon-btn transition relative !w-auto !px-1.5 gap-1.5 inline-flex items-center">
         <span className="w-6 h-6 rounded-full grid place-items-center text-[12px] font-black text-[#0F1A30] bg-white/90">{initial}</span>
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ opacity: 0.7 }}><path d="M6 9l6 6 6-6" /></svg>
         {total > 0 && <span className="absolute -top-1 -right-1"><Badge n={total} /></span>}
-      </button>
+      </button>)}
       {open && (
-        <div role="menu" className="absolute right-0 top-full pt-2 z-[2147482500]">
+        <div role="menu" className={`absolute ${align === "left" ? "left-0" : "right-0"} top-full pt-2 z-[2147482500]`}>
           <div className="w-[248px] rounded-2xl bg-white shadow-[0_18px_44px_rgba(11,20,40,0.28)] border border-[#E3E8F0] py-1.5 text-[#0F1A30]">
             {name && <div className="px-4 pt-2 pb-2 text-[12.5px] font-bold text-[#7A879C] border-b border-[#EEF2F8] mb-1 truncate">{name}</div>}
             {items.map((it) => (
