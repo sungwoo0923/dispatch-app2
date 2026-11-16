@@ -25,6 +25,7 @@ import { useCustomRoles } from "../customRoles";
 import {
   APPROVER_GROUP_LABEL, isHrStaffUser, isExecUser, canApproveAttendanceReq, canEditAttendanceOf,
   approveChangeReq, rejectChangeReq, approveCheckInReq, rejectCheckInReq, submitChangeReq, submitCheckInReq,
+  approverLabelFor,
 } from "../attendanceApproval";
 
 // ⭐ 2026-11-01 권한·결재는 PC 출근기록부와 같은 규칙(attendanceApproval.js)
@@ -110,7 +111,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
   const isAdmin = ADMIN_ROLES.includes(role) || isHrStaff;
   const mayApprove = isHrStaff || isExecUser(meProfile, customRoles) || role === "admin";
   const canApprove = (req) => canApproveAttendanceReq(req, meProfile, role, customRoles, staff);
-  const myApproverLabel = APPROVER_GROUP_LABEL[isHrStaffUser(myUserDoc || {}, role) ? "exec" : "hr"];
+  const myApproverLabel = approverLabelFor(meProfile, staff, customRoles); // 🛠 2026-11-16 실제로 받는 사람(인사팀 없으면 임원 · 마스터)
 
   useEffect(() => {
     if (!uid) return;

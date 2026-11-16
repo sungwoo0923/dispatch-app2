@@ -43,7 +43,17 @@ export function resolveApprovers(requester, employees, customRoles) {
   }
   const hr = others.filter((e) => isHrStaffUser(e));
   if (hr.length) return { group: "hr", uids: hr.map((e) => e.uid) };
+  // 🛠 2026-11-16 인사팀이 없는 회사 — 대표 · 임원에게(예전엔 바로 회사 마스터 · 관리자에게 갔다). 임원도 없으면 마스터 → 관리자
+  //  "master"가 아니라 "exec"로 정하므로, 나중에 인사팀이 생겨도 이미 올린 요청은 그 임원이 처리한다(새 요청부터 인사팀)
+  const execs = others.filter((e) => isExecUser(e, customRoles));
+  if (execs.length) return { group: "exec", uids: execs.map((e) => e.uid) };
   return fallback;
+}
+// 🏷 내 요청이 실제로 누구에게 가는지 — 화면 문구("인사팀 승인 대기" → 인사팀이 없으면 "임원 승인 대기")
+export function approverLabelFor(requester, employees, customRoles) {
+  if (!requester) return APPROVER_GROUP_LABEL.hr;
+  const { group } = resolveApprovers(requester, employees, customRoles);
+  return group === "master" ? "회사 마스터" : APPROVER_GROUP_LABEL[group] || APPROVER_GROUP_LABEL.hr;
 }
 
 // 이 요청을 내가 승인할 수 있는가(본인 요청은 절대 불가)

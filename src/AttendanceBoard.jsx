@@ -13,6 +13,7 @@ import { useCustomRoles } from "./customRoles";
 import {
   APPROVER_GROUP_LABEL, isHrStaffUser, isExecUser, canApproveAttendanceReq, canEditAttendanceOf, markNotifSeen,
   approveChangeReq, rejectChangeReq, approveCheckInReq, rejectCheckInReq, submitChangeReq, submitCheckInReq,
+  approverLabelFor,
 } from "./attendanceApproval";
 import { CustomSelect } from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜·시간 입력은 프로그램 달력/드롭다운으로
@@ -544,7 +545,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     if (m < 1) { m = 12; y--; } if (m > 12) { m = 1; y++; }
     setYear(y); setMonth(m);
   };
-  const myApproverLabel = APPROVER_GROUP_LABEL[(isHrStaffUser(myEmp || {}, role)) ? "exec" : "hr"];
+  const myApproverLabel = approverLabelFor(meProfile, employees, customRoles); // 🛠 2026-11-16 실제로 받는 사람(인사팀 없으면 임원 · 마스터)
   const pendingApprovalCount = approvableChange.length + approvableCheckIn.length;
   const todayWd = WD[new Date(todayDateStr + "T00:00:00").getDay()];
 
