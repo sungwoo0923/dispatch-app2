@@ -78,7 +78,7 @@ function CheckList({ checks, onOpenOrder, bigDiff, diff, prevSale }) {
 export default function CloseFlow({ orders = [], company = "", mode = "disp", me = null, staffName, isViewer = false, onOpenOrder, onOpenInvoice }) {
   const desk = useArDesk(company);
   const ph = useNarrow(640);
-  const [ym, setYm] = React.useState(() => kstYm(-1 + (new Date(Date.now() + 9 * 3600e3).getUTCDate() > 20 ? 1 : 0)));
+  const [ym, setYm] = React.useState(() => kstYm(0)); // 🛠 2026-11-16 늘 당월부터
   const [unit, setUnit] = React.useState("month"); // 배차자: month | day
   const [day, setDay] = React.useState(kstDay);
   const [filter, setFilter] = React.useState(mode === "acct" ? "submitted" : "all");

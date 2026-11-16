@@ -172,7 +172,7 @@ const StatusDot = ({ g, size = 10 }) => { const s = stOf(g); const done = g.stat
 export default function MonthClose({ orders = [], company = "", me = null, staffName, isViewer = false, onPatch, onAdd, onRemove, onOpenOrder }) {
   const phone = useNarrow(860);
   const desk = useArDesk(company);
-  const [ym, setYm] = React.useState(() => kstYm(new Date(Date.now() + 9 * 3600e3).getUTCDate() > 20 ? 0 : -1));
+  const [ym, setYm] = React.useState(() => kstYm(0)); // 🛠 2026-11-16 늘 당월부터(예전엔 20일 전이면 지난달이 먼저 떴다) — 지난달은 ‹ 로
   useLoadOrderRange(`${prevYmOf(ym)}-01`, monthEnd(ym));
   const [scope, setScope] = React.useState("mine"); // mine | staff | all
   const [staff, setStaff] = React.useState("");
