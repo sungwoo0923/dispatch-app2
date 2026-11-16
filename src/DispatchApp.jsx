@@ -3020,7 +3020,7 @@ function issueUploadUrl(r) {
   if (patch) {
     // 같은 클릭에서 두 번 불려도(문구 + 공유 링크) 같은 토큰이 나오게 화면 데이터에도 바로 반영
     try { Object.assign(r, patch); } catch { /* 고칠 수 없는 객체면 무시 */ }
-    updateDoc(doc(db, "dispatch", r._id), patch).catch(() => {});
+    updateDoc(doc(db, r.__col || "dispatch", r._id), patch).catch(() => {}); // 🛠 2026-11-16 오더가 있는 컬렉션에(예전엔 늘 dispatch)
     if (r._transmittedOrderId) {
       updateDoc(doc(db, "orders", r._transmittedOrderId), patch).catch(() => {});
     } else if (r.originCol && r.originId) {
@@ -4021,6 +4021,7 @@ function useRealtimeCollections(user, userCompany, role) {
   const [dispatchDataLive, setDispatchDataRaw] = useState(() => cleanMgrRows(hideBlind(safeLoad("dispatchData", []))));
   // ⭐ 예전 오더 보관소 — 실시간 범위(최근 7일~) 밖 오더를 화면이 필요할 때만 불러와 담는다.
   const [historyMap, setHistoryMap] = useState(() => new Map());
+  const historyMapRef = React.useRef(historyMap); historyMapRef.current = historyMap;
   // 화면에서 바로 고치는 값(함수형 업데이트)은 실시간 목록·예전 오더 양쪽에 똑같이 적용한다.
   // 배열을 통째로 넣는 건 실시간 리스너뿐이라 실시간 목록만 바꾼다.
   const setDispatchData = React.useCallback((v) => {
@@ -4243,6 +4244,23 @@ function useRealtimeCollections(user, userCompany, role) {
   // onSnapshot이 채워둔 최신 값을 그대로 볼 수 있다.
   const ordersCacheRef = React.useRef([]);
   const dispatchCacheRef = React.useRef([]);
+  // 🛠 2026-11-16 큐런 문의 — 실시간 범위(최근 7일) 밖 오더를 운송관리자 · 직원이 고치거나 지우면 반영이 안 되던 문제
+  //  예전엔 캐시에 없으면 dispatch → orders 순서로 getDoc 했는데, 없는 문서를 읽는 건 서버 규칙이 최고관리자 말고는 거부해서
+  //  (permission-denied) 저장 · 삭제가 조용히 실패했다. 이제 ① 실시간 캐시 ② 불러온 예전 오더(어느 컬렉션인지 앎) ③ 넘겨준 줄의 __col
+  //  ④ orders → dispatch 순서로 읽되 거부돼도 다음 곳을 본다.
+  const findOrderDoc = React.useCallback(async (id, hint) => {
+    const live = ordersCacheRef.current.find(d => d._id === id) || dispatchCacheRef.current.find(d => d._id === id);
+    if (live) return { ref: doc(db, live.__col || "dispatch", id), data: live, cached: true };
+    const hm = historyMapRef.current;
+    const hist = hm.get(`orders/${id}`) || hm.get(`dispatch/${id}`);
+    if (hist) return { ref: doc(db, hist.__col, id), data: hist, cached: true };
+    if (hint && hint.__col && (hint._id === id || hint.id === id)) return { ref: doc(db, hint.__col, id), data: hint, cached: true };
+    for (const col of ["orders", "dispatch"]) {
+      try { const snap = await getDoc(doc(db, col, id)); if (snap.exists()) return { ref: snap.ref, data: snap.data(), cached: false }; }
+      catch (e) { if (e?.code !== "permission-denied") console.warn("오더 찾기 실패:", col, id, e?.message || e); }
+    }
+    return null;
+  }, []);
   // ⚡ localStorage 저장은 오프라인 캐시 용도일 뿐 화면 표시와 무관하므로,
   //    쓰기 한 번마다 전체 목록을 동기적으로 JSON.stringify + localStorage.setItem 하면
   //    (특히 orders 컬렉션이 커질수록) 저장 직후 메인스레드가 블로킹되어 "끊김"의 주 원인이 된다.
@@ -4994,22 +5012,15 @@ const patchDispatch = async (_id, patch, knownPrev) => {
   // 팝업, 오더복사/수정 패널 등) knownPrev로 넘겨주면, 오더가 많은 회사에서 실시간
   // 캐시가 아직 그 문서를 못 담고 있는 드문 순간에도 getDoc 왕복 없이 바로 저장한다 —
   // 실사이트에서 "저장이 지연되고 있습니다" 타임아웃까지 걸리던 지연의 유력한 원인.
-  const cached = knownPrev || ordersCacheRef.current.find(d => d._id === _id) || dispatchCacheRef.current.find(d => d._id === _id);
-
   let ref, prev;
-  if (cached) {
-    ref = doc(db, cached.__col || "dispatch", _id);
-    prev = cached;
+  if (knownPrev && knownPrev.__col) {
+    ref = doc(db, knownPrev.__col, _id);
+    prev = knownPrev;
   } else {
-    // fallback: getDoc (캐시에도 knownPrev에도 없을 때만)
-    ref = doc(db, "dispatch", _id);
-    let snap = await getDoc(ref);
-    if (!snap.exists()) {
-      ref = doc(db, "orders", _id);
-      snap = await getDoc(ref);
-    }
-    if (!snap.exists()) { console.error("✕ 문서 없음", _id); return; }
-    prev = snap.data();
+    // 🛠 2026-11-16 캐시 → 불러온 예전 오더 → 서버(orders · dispatch) 순서 — findOrderDoc 설명 참고
+    const found = await findOrderDoc(_id, knownPrev);
+    if (!found) { console.error("✕ 문서 없음", _id); return; }
+    ref = found.ref; prev = knownPrev ? { ...found.data, ...knownPrev } : found.data;
   }
 
   // ⭐ 사용자 요청 — 지입 기사를 근무가능요일이 아닌 날(휴차)에 배차하면 확인 팝업.
@@ -5439,18 +5450,16 @@ const _prepRemoveDispatch = async (arg, opts = {}) => {
   // ★ 메모리 캐시에서 먼저 찾기 (patchDispatch와 동일한 이유 — getDoc 왕복을 건너뛰어
   //   여러 건 선택삭제 시 순번대로 네트워크 왕복이 쌓여 버벅이던 지연을 줄인다.
   //   배열을 매번 새로 합치지 않고 각 캐시에서 순서대로 찾는다.)
-  const cached = ordersCacheRef.current.find(d => d._id === id) || dispatchCacheRef.current.find(d => d._id === id);
+  // 🛠 2026-11-16 실시간 범위 밖(예전) 오더 삭제가 직원 계정에서 오류 나던 문제 — findOrderDoc(캐시 → 예전 오더 → 서버, 거부돼도 다음 곳)
+  const _found = await findOrderDoc(id, typeof arg === "object" ? arg : null);
+  const cached = _found?.cached ? _found.data : null;
   let ref, data;
   if (cached) {
-    ref = doc(db, cached.__col || "dispatch", id);
+    ref = _found.ref;
     data = cached;
   } else {
-    ref = doc(db, "dispatch", id);
-    let snap = await getDoc(ref);
-    if (!snap.exists()) {
-      ref = doc(db, "orders", id);
-      snap = await getDoc(ref);
-    }
+    ref = _found?.ref || doc(db, "orders", id);
+    const snap = { exists: () => !!_found, data: () => _found?.data };
     if (!snap.exists()) {
       console.error("✕ 삭제 대상 없음", id);
       return null;
@@ -50205,6 +50214,30 @@ function UnassignedStatus({ dispatchData, setDispatchData = () => {}, drivers = 
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
   const [copyContactChooser, setCopyContactChooser] = React.useState(null); // 오더복사/수정 패널 담당자 선택
   const [copyTarget, setCopyTarget] = React.useState(null);
+  // 🖱 2026-11-16 미배차현황 오른쪽 클릭 메뉴(수정 · 삭제)
+  const [unCtx, setUnCtx] = React.useState(null); // { x, y, row }
+  React.useEffect(() => {
+    if (!unCtx) return undefined;
+    const close = () => setUnCtx(null);
+    const key = (e) => { if (e.key === "Escape") close(); };
+    window.addEventListener("mousedown", close); window.addEventListener("scroll", close, true); window.addEventListener("keydown", key);
+    return () => { window.removeEventListener("mousedown", close); window.removeEventListener("scroll", close, true); window.removeEventListener("keydown", key); };
+  }, [unCtx]);
+  const openUnEdit = (r) => {
+    const latest = (dispatchData || []).find(d => d._id === r._id) || r;
+    const rawCargo = String(latest?.화물내용 || "");
+    const cargoMatch = rawCargo.match(/(\d+)(.*)/);
+    const rawTon = String(latest?.차량톤수 || "");
+    const tonMatch = rawTon.match(/([\d.]+)(.*)/);
+    setCopyTarget({
+      ...latest,
+      화물수량: cargoMatch ? cargoMatch[1] : "",
+      화물타입: cargoMatch ? cargoMatch[2].trim() : "",
+      톤수값: tonMatch ? tonMatch[1] : "",
+      톤수타입: tonMatch ? tonMatch[2] : "",
+    });
+    setCopyPanelOpen(true);
+  };
   const [copyPanelWorkDatesOpen, setCopyPanelWorkDatesOpen] = React.useState(false); // 오더복사수정패널 근무일(묶음) 수정 팝업
   const [clientDropdown, setClientDropdown] = React.useState([]);
   const [clientDropdownOpen, setClientDropdownOpen] = React.useState(false);
@@ -50718,19 +50751,14 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       onDoubleClick={(e) => {
                         if (deleteMode) return;
                         if (e.target.closest("input")) return;
-                        const latest = dispatchData.find(d => d._id === r._id);
-                        const rawCargo = String(latest?.화물내용 || "");
-                        const cargoMatch = rawCargo.match(/(\d+)(.*)/);
-                        const rawTon = String(latest?.차량톤수 || "");
-                        const tonMatch = rawTon.match(/([\d.]+)(.*)/);
-                        setCopyTarget({
-                          ...latest,
-                          화물수량: cargoMatch ? cargoMatch[1] : "",
-                          화물타입: cargoMatch ? cargoMatch[2].trim() : "",
-                          톤수값: tonMatch ? tonMatch[1] : "",
-                          톤수타입: tonMatch ? tonMatch[2] : "",
-                        });
-                        setCopyPanelOpen(true);
+                        openUnEdit(r);
+                      }}
+                      onContextMenu={(e) => {
+                        // 🖱 2026-11-16 오른쪽 클릭 — 수정(오더복사/수정 패널) · 삭제(삭제 확인 창)
+                        if (deleteMode || isViewer) return;
+                        e.preventDefault();
+                        const _z = parseFloat(document.getElementById("root")?.style.zoom) || 1;
+                        setUnCtx({ x: e.clientX / _z, y: e.clientY / _z, row: r });
                       }}
                       className={`${isUrgentOrder(r) ? "bg-red-50 hover:bg-red-100" : i % 2 === 0 ? "bg-white" : "bg-gray-50/50"} cursor-pointer hover:bg-blue-50/50 transition`}
                       style={urgentRowStyle(r, String(r.운행유형 || "").trim() === "왕복" ? { backgroundColor: "#e8f4fd", borderLeft: "4px solid #1B2B4B" } : {})}
@@ -50840,6 +50868,19 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
       </div>
 
       {/* 삭제 확인 팝업 */}
+      {unCtx && createPortal(
+        <div className="fixed z-[100000] min-w-[150px] rounded-xl border border-[#DCE3EE] bg-white py-1.5 shadow-[0_12px_32px_rgba(15,26,48,0.18)]"
+          style={{ left: Math.min(unCtx.x, window.innerWidth - 170), top: Math.min(unCtx.y, window.innerHeight - 100) }}
+          onMouseDown={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()} data-kp="unassigned-ctx">
+          <button type="button" className="w-full h-10 px-4 flex items-center gap-2.5 text-left text-[14px] font-bold text-[#0F1A30] hover:bg-[#F4F6FA]"
+            onClick={() => { const r = unCtx.row; setUnCtx(null); openUnEdit(r); }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" /></svg>수정
+          </button>
+          <button type="button" className="w-full h-10 px-4 flex items-center gap-2.5 text-left text-[14px] font-bold text-[#C62F25] hover:bg-[#FDF1F0]"
+            onClick={() => { const r = unCtx.row; setUnCtx(null); setSelectedIds(new Set([r._id])); setDeleteConfirmOpen(true); }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>삭제
+          </button>
+        </div>, document.body)}
       {deleteConfirmOpen && (
         <KpDeleteConfirm rows={Array.from(selectedIds).map((id) => filtered.find((d) => d._id === id))} note="삭제된 오더는 복구되지 않습니다" onCancel={() => setDeleteConfirmOpen(false)} onConfirm={() => removeDocs(Array.from(selectedIds))} />
       )}
@@ -51751,16 +51792,13 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     patch[`정산상태.${yyyymm}`] = status;
     patch[`정산일.${yyyymm}`]   = dateStr || "";
 
-    // ★ patchDispatch와 동일하게 dispatch 먼저, 없으면 orders 확인
-    let ref = doc(db, "dispatch", id);
-    let snap = await getDoc(ref);
-
-    if (!snap.exists()) {
-      ref = doc(db, "orders", id);
-      snap = await getDoc(ref);
+    // 🛠 2026-11-16 orders 먼저, 없으면 dispatch — 없는 문서 읽기가 직원 계정에서 거부(permission-denied)돼도 다음 곳을 본다
+    let ref = null; let snap = null;
+    for (const col of ["orders", "dispatch"]) {
+      try { const sn = await getDoc(doc(db, col, id)); if (sn.exists()) { ref = sn.ref; snap = sn; break; } } catch { /* 다음 컬렉션 */ }
     }
 
-    if (!snap.exists()) {
+    if (!snap) {
       console.error("patchMonthOnDoc: 문서 없음", id);
       return;
     }

@@ -13,7 +13,7 @@
 //  · task가 오래 걸리면(오프라인 등) 12초 뒤 창은 닫고(서버 반영은 계속) 결과는 그대로 돌려준다.
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { writeBatch, doc, serverTimestamp } from "firebase/firestore";
+import { writeBatch, doc, serverTimestamp, deleteDoc } from "firebase/firestore";
 import { db as appDb, auth } from "./firebase";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
@@ -145,7 +145,18 @@ export async function commitDeletes(db, items, { onProgress } = {}) {
   }
   // 모든 묶음을 한꺼번에 커밋 — 사이에 await가 없어 로컬 목록이 거의 동시에 갱신된다
   let done = 0;
-  await Promise.all(batches.map(({ b, size }) => b.commit().then(() => { done += size; onProgress?.(done); })));
+  // 🛠 2026-11-16 묶음 하나가 권한 오류(없는 문서 · 다른 컬렉션을 가리킨 줄 등)로 거부되면 그 묶음 전체가 안 지워졌다
+  //  → 그 묶음만 한 건씩 다시 지운다. 끝내 못 지운 건만 오류로 알린다(나머지는 지워진다)
+  const failed = [];
+  await Promise.all(batches.map(({ b, size }, bi) => b.commit().then(() => { done += size; onProgress?.(done); }).catch(async (e) => {
+    if (e?.code !== "permission-denied") throw e;
+    const part = list.slice(bi * DELETE_BATCH_SIZE, bi * DELETE_BATCH_SIZE + size);
+    for (const it of part) {
+      try { if (typeof it === "function") { const one = writeBatch(db); it(one); await one.commit(); } else await deleteDoc(it); done += 1; onProgress?.(done); }
+      catch (e2) { failed.push(e2); }
+    }
+  })));
+  if (failed.length) { const err = new Error(`${failed.length}건은 권한이 없어 지우지 못했어요(${failed[0]?.message || failed[0]}). 다른 회사로 저장된 오더일 수 있어요 — 관리자에게 알려 주세요.`); err.code = failed[0]?.code; throw err; }
   return list.length;
 }
 
