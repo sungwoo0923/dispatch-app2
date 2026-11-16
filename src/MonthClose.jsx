@@ -25,7 +25,7 @@ const ymText = (ym) => `${ym.slice(0, 4)}년 ${Number(ym.slice(5))}월`;
 const idOf = (o) => o?._id || o?.id;
 const IssueText = ({ list }) => list.length
   ? <span className="flex flex-wrap gap-x-2 gap-y-0.5">{list.map((x) => <span key={x.key} className="text-[12.5px] font-black whitespace-nowrap" style={{ color: x.block ? C.bad : C.warn }}>{x.label}</span>)}</span>
-  : <span className="text-[12.5px] font-bold" style={{ color: C.ok }}>✓ 확인</span>;
+  : <span className="text-[12.5px] font-bold" style={{ color: C.ok }}>정상</span>;
 
 // ── 오더 고치기 · 추가 창 ─────────────────────────────
 const FIELDS = [
@@ -117,7 +117,17 @@ const ST = { // 상태 → 이름 · 뱃지 모양 · 순서(할 일 먼저)
 };
 const stOf = (g) => (g.changed && g.status !== "none" ? { label: "마감 후 변경", cls: "bg-white text-[#C62F25] border border-[#F1B5AF]", ord: 0 }
   : g.status === "approved" && g.row?.doc?.unlocked ? { label: "일시해제", cls: "bg-white text-[#B25F00] border border-[#F2C98A]", ord: 1 } : ST[g.status] || ST.none);
-const lockedOf = (g) => !!g && isFinalLocked(g.row?.doc); // 🔒 최종마감 — 배차 쪽 고치기 · 추가 · 삭제 잠금
+const lockedOf = (g) => !!g && isFinalLocked(g.row?.doc); // 최종마감 — 배차 쪽 고치기 · 추가 · 삭제 잠금
+// ⓘ TIP — 누르면 짧은 안내가 열린다(긴 문장을 화면에 늘어놓지 않게)
+function TipButton({ text }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <span className="relative inline-flex">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="h-6 px-2 rounded-md border border-[#D5DDEA] bg-white text-[11.5px] font-black tracking-wider text-[#2D4C82] hover:bg-[#F4F6FA]">TIP</button>
+      {open && <span role="note" className="absolute left-0 top-full mt-1.5 z-30 w-[300px] rounded-xl border border-[#DCE3EE] bg-white px-3.5 py-2.5 text-[13px] font-bold text-[#1B2B4B] leading-snug shadow-[0_12px_30px_rgba(15,26,48,0.16)]">{text}</span>}
+    </span>
+  );
+}
 const Badge = ({ g, small }) => { const s2 = stOf(g); return <span className={`inline-flex items-center ${small ? "h-6 px-2 text-[11.5px]" : "h-7 px-2.5 text-[12.5px]"} rounded-lg font-black whitespace-nowrap ${s2.cls}`}>{s2.label}</span>; };
 
 export default function MonthClose({ orders = [], company = "", me = null, staffName, isViewer = false, onPatch, onAdd, onRemove, onOpenOrder }) {
@@ -135,7 +145,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
   const [busy, setBusy] = React.useState("");
   const [toast, setToast] = React.useState("");
   React.useEffect(() => { if (!toast) return undefined; const t = setTimeout(() => setToast(""), 3200); return () => clearTimeout(t); }, [toast]);
-  const openRow = (o) => { if (lockedOf(groupsRef.current.find((g) => g.client === (String(o.거래처명 || "").trim() || "(거래처 없음)")))) { setToast("최종마감된 거래처예요 — 경리팀에 일시해제를 요청해 주세요"); return; } return onOpenOrder && !phone ? onOpenOrder(o) : setSheet({ row: o }); };
+  const openRow = (o) => { if (lockedOf(groupsRef.current.find((g) => g.client === (String(o.거래처명 || "").trim() || "(거래처 없음)")))) { setToast("최종마감 이후 수정이 불가합니다. 필요 시 경리팀에 해제요청 해주세요."); return; } return onOpenOrder && !phone ? onOpenOrder(o) : setSheet({ row: o }); };
   const groupsRef = React.useRef([]);
   const addOrder = (client) => {
     const base = { 거래처명: client === "(거래처 없음)" ? "" : client, 상차일: ym === kstYm(0) ? new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10) : `${ym}-01` };
@@ -212,7 +222,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
     if (g.changed && s !== "none") return { t: `${s === "verified" ? "검증" : "마감"} 뒤에 오더가 바뀌었어요 — 다시 검증해 주세요.`, c: C.bad };
     if (s === "rejected") return { t: `경리팀 반려 · ${g.row?.doc?.reason || "사유 없음"}${g.row?.doc?.rejectedByName ? ` (${g.row.doc.rejectedByName})` : ""} — 고친 뒤 다시 검증해 주세요.`, c: C.bad };
     if (s === "approved" && g.row?.doc?.unlocked) return { t: "경리팀이 일시해제했어요 — 지금은 고치거나 추가 · 삭제할 수 있어요. 끝나면 경리팀이 다시 잠가요.", c: C.warn };
-    if (s === "approved") return { t: "🔒 최종마감 — 경리팀이 확인했어요. 이 거래처 · 이 달 오더는 고치거나 추가 · 삭제할 수 없어요. 꼭 바꿔야 하면 경리팀에 일시해제를 요청해 주세요.", c: C.ink };
+    if (s === "approved") return { t: "최종마감 — 경리팀 확인 완료", c: C.ink, tip: "최종마감 이후 수정이 불가합니다. 필요 시 경리팀에 해제요청 해주세요." };
     if (s === "submitted") return { t: "1차 마감 완료 — 경리팀 거래처정산에 ‘배차마감’으로 넘어갔어요. 경리팀이 명세서를 작성하면 최종마감돼요.", c: "#2D4C82" };
     if (s === "verified") return { t: "검증 완료 — [1차 마감 → 경리팀]을 누르면 경리팀으로 넘어가요.", c: "#2D4C82" };
     return { t: "오더를 확인하고 [검증 완료]를 눌러 주세요. 확인할 것이 있어도 맞는 내용이면 그대로 검증할 수 있어요.", c: C.sub };
@@ -276,7 +286,10 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
       {/* 진행 선 + 안내 + 합계 */}
       <div className={`${sdCard} px-5 py-4`}>
         <FlowTrack steps={flow(g)} />
-        <div className="mt-3 text-[13.5px] font-bold" style={{ color: line.c }}>{line.t}</div>
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          <span className="text-[13.5px] font-bold" style={{ color: line.c }}>{line.t}</span>
+          {line.tip && <TipButton text={line.tip} />}
+        </div>
         <div className="mt-3 grid grid-cols-2 sm:grid-cols-5 gap-x-4 gap-y-2 pt-3 border-t border-[#EEF2F8]" style={NUM}>
           {[["오더", `${g.count}건`, C.ink], ["청구", `${won(g.sale)}원`, C.ink], ["기사", `${won(g.buy)}원`, C.sub], ["수수료", `${won(g.sale - g.buy)}원`, g.sale - g.buy < 0 ? "#2457D6" : "#D92D20"], ["확인할 것", g.issue ? `${g.issue}건` : "없음", g.issue ? C.bad : C.ok]].map(([l, v, c]) => (
             <div key={l}><div className="text-[12px] font-bold text-[#9AA9C3]">{l}</div><div className="text-[16px] font-black whitespace-nowrap" style={{ color: c }}>{v}</div></div>))}
@@ -286,7 +299,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
       <div className={`${sdCard} overflow-hidden`}>
         <div className="px-4 py-2.5 border-b border-[#E3E8F0] flex items-center gap-2">
           <div className="text-[14.5px] font-black mr-auto">오더 <span className="text-[12.5px] font-bold text-[#9AA9C3]">줄을 누르면 고치기</span></div>
-          {lockedOf(g) ? <span className="h-9 px-3 inline-flex items-center rounded-lg border border-[#0F1A30] text-[12.5px] font-black text-[#0F1A30]">🔒 최종마감 · 수정 잠금</span>
+          {lockedOf(g) ? <span className="h-9 px-3 inline-flex items-center rounded-lg border border-[#0F1A30] text-[12.5px] font-black text-[#0F1A30]">최종마감 · 수정 잠금</span>
             : !isViewer && <button type="button" onClick={() => addOrder(g.client)} className="h-9 px-3.5 rounded-lg border border-[#D5DDEA] bg-white text-[13px] font-bold text-[#1B2B4B]">+ 오더 추가</button>}
         </div>
         {phone ? (

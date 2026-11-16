@@ -125,7 +125,7 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
             <button key={x.k} type="button" data-step={x.k} onClick={() => (x.test ? setStepF(on ? "" : x.k) : x.go())} title={x.test ? `${x.label} 미완료 거래처만 보기` : `${x.link}로 이동`}
               className={`relative text-left rounded-xl px-3 py-2.5 border transition ${on ? "bg-[#0F1A30] border-[#0F1A30] text-white shadow-[0_8px_18px_rgba(15,26,48,0.2)]" : now ? "bg-white border-[#2457D6]" : "bg-white border-[#DCE3EE] hover:border-[#8FB0F0]"}`}>
               <div className="flex items-center gap-1.5">
-                <span className={`w-6 h-5 rounded-md text-[10.5px] font-black flex items-center justify-center ${on ? "bg-white/15 text-white" : fin ? "bg-[#E8F5EF] text-[#0F7A52]" : now ? "kp-step-now bg-[#0F1A30] text-white" : "bg-[#EEF3FB] text-[#2D4C82]"}`} style={NUMS}>{fin ? "✓" : x.no}</span>
+                <span className={`w-6 h-5 rounded-md text-[10.5px] font-black flex items-center justify-center ${on ? "bg-white/15 text-white" : fin ? "bg-[#E8F5EF] text-[#0F7A52]" : now ? "kp-step-now bg-[#0F1A30] text-white" : "bg-[#EEF3FB] text-[#2D4C82]"}`} style={NUMS}>{x.no}</span>
                 <span className={`text-[13.5px] font-black truncate ${on ? "text-white" : ""}`}>{x.label}</span>
                 {now && !on && <span className="ml-auto text-[11px] font-black text-[#2457D6]">진행</span>}
               </div>

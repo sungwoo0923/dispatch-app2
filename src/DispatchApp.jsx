@@ -4315,7 +4315,7 @@ function useRealtimeCollections(user, userCompany, role) {
     const d = finalDesk.closes?.get(`${c}|${ym}`);
     return isFinalLocked(d) ? { client: c, ym } : null;
   };
-  const finalLockMsg = (l) => `${l.client} ${Number(l.ym.slice(5))}월은 최종마감되어 고치거나 추가 · 삭제할 수 없어요.\n꼭 바꿔야 하면 경리팀에 ‘일시해제’를 요청해 주세요.`;
+  const finalLockMsg = (l) => `${l.client} ${Number(l.ym.slice(5))}월은 최종마감 이후 수정이 불가합니다.\n필요 시 경리팀에 해제요청 해주세요.`;
   useEffect(() => {
     if (!user?.uid) { setMyRealName(""); setMyPhone(""); return; }
     const unsub = onSnapshot(doc(db, "users", user.uid), (snap) => {
@@ -53933,8 +53933,8 @@ const handleBatchSettle = async (targetStatus) => {
                   </div>
                 )}
                 <button type="button" onClick={() => setManualOpen(true)} className={sdBtn}><Ico d={IC.search} size={15} />다른 조회</button>
-                {stmtYm && (stageIdx(stmtStage) === 0 || exNow !== exSaved) && (
-                  <button type="button" disabled={isViewer || !rowsInvoice.length} onClick={saveStmtDraft} className={sdBtn}><Ico d={IC.check} size={15} w={2.6} />{stageIdx(stmtStage) === 0 ? "작성 완료" : "포함 오더 저장"}</button>
+                {stmtYm && stageIdx(stmtStage) >= 1 && exNow !== exSaved && ( /* 🧾 2026-11-16 미작성일 때 [작성]은 아래 빠른 처리 버튼으로 */
+                  <button type="button" disabled={isViewer || !rowsInvoice.length} onClick={saveStmtDraft} className={sdBtn}>포함 오더 저장</button>
                 )}
                 <button type="button" disabled={!searched || !rowsInvoice.length} onClick={openInvoiceEmail} className={sdBtnPri}><Ico d={IC.send} size={15} />발송</button>
               </div>
@@ -53967,9 +53967,11 @@ const handleBatchSettle = async (targetStatus) => {
                       {/* 🧾 2026-11-16 빠른 처리 — 단계에 따라 버튼이 바뀐다: [계산서 발행] → [마감] → 마감 완료(되돌리기) */}
                       {stmtYm && !isViewer && (
                         <div className="flex items-center gap-2" data-kp="stmt-quick">
-                          {stageIdx(stmtStage) < 5 && <button type="button" disabled={!rowsInvoice.length} onClick={() => quickStmt("계산서발행")} className={`${sdBtnPri} !h-full min-h-[44px] px-5`} data-kp="stmt-quick-tax"><Ico d={IC.check} size={15} w={2.6} />계산서 발행</button>}
-                          {stageIdx(stmtStage) === 5 && <button type="button" onClick={() => quickStmt("마감")} className={`${sdBtnPri} !h-full min-h-[44px] px-5`} data-kp="stmt-quick-close"><Ico d={IC.check} size={15} w={2.6} />마감</button>}
-                          {stageIdx(stmtStage) === 6 && <span className="inline-flex items-center px-4 min-h-[44px] rounded-xl border border-[#0F7A52] text-[14px] font-black text-[#0F7A52]">✓ 마감 완료</span>}
+                          {/* 🧾 2026-11-16 미작성 [작성] → 작성 [계산서 발행] → 계산서 발행 [마감] → 마감 완료 */}
+                          {stageIdx(stmtStage) === 0 && <button type="button" disabled={!rowsInvoice.length} onClick={saveStmtDraft} className={`${sdBtnPri} !h-full min-h-[44px] px-6`} data-kp="stmt-quick-write">작성</button>}
+                          {stageIdx(stmtStage) >= 1 && stageIdx(stmtStage) < 5 && <button type="button" disabled={!rowsInvoice.length} onClick={() => quickStmt("계산서발행")} className={`${sdBtnPri} !h-full min-h-[44px] px-6`} data-kp="stmt-quick-tax">계산서 발행</button>}
+                          {stageIdx(stmtStage) === 5 && <button type="button" onClick={() => quickStmt("마감")} className={`${sdBtnPri} !h-full min-h-[44px] px-6`} data-kp="stmt-quick-close">마감</button>}
+                          {stageIdx(stmtStage) === 6 && <span className="inline-flex items-center px-4 min-h-[44px] rounded-xl border border-[#0F1A30] text-[14px] font-black text-[#0F1A30]">마감 완료</span>}
                           {stageIdx(stmtStage) >= 5 && <button type="button" onClick={() => revertStmt("작성")} className={`${sdBtn} !h-full min-h-[44px]`} title="계산서 발행 · 마감을 취소하고 작성 단계로">작성으로 되돌리기</button>}
                         </div>
                       )}

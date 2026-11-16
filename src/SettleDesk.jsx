@@ -141,9 +141,9 @@ export function CloseStrip({ close, onReturn, onUnlock, onRelock, disabled }) {
   const at = d.submittedAt || d.verifiedAt;
   return (
     <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[13.5px]" data-kp="close-strip">
-      <span className="font-black" style={{ color: tg.c }}>{tg.ready ? "✓ " : ""}{tg.t}</span>
+      <span className="font-black" style={{ color: tg.c }}>{tg.t}</span>
       <span className="text-[#5B6B85] font-bold" style={NUM}>
-        {tg.final ? (d.unlocked ? `${d.unlockedByName || "경리팀"} ${fmtDay(d.unlockedAt)} 일시해제 — 배차 담당자가 고칠 수 있어요. 끝나면 [다시 잠금]` : `${fmtDay(d.approvedAt)} 최종마감 — 배차 쪽 수정 · 추가 · 삭제 잠금`)
+        {tg.final ? (d.unlocked ? `${d.unlockedByName || "경리팀"} ${fmtDay(d.unlockedAt)} 일시해제 — 배차 담당자가 고칠 수 있어요. 끝나면 [다시 잠금]` : `${fmtDay(d.approvedAt)} 최종마감 · 배차 쪽 수정 잠금`)
           : tg.ready ? `${by ? `${by} · ` : ""}${at ? fmtDay(at) : ""} 배차 1차 마감`
           : close.status === "rejected" ? `반려 사유 · ${d.reason || "-"}${d.rejectedByName ? ` (${d.rejectedByName})` : ""}`
           : close.changed ? "배차마감 후 오더가 변경됨 — 배차 담당자 재마감 필요"
@@ -202,7 +202,7 @@ export function StageStepper({ stage, history = [], onSet, disabled, sentHint })
               title={isCur ? "지금 단계" : i < cur ? `${s.label}(으)로 되돌리기` : `${s.label}(으)로 기록`}
               className={`shrink-0 flex flex-col items-center gap-1 ${ph ? "min-w-0 px-0.5" : "px-1.5"} py-1 rounded-xl transition ${isNext && !disabled ? "hover:bg-[#EEF3FB]" : ""} disabled:cursor-default`}>
               <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-black ${isCur ? "kp-step-now bg-[#0F1A30] text-white ring-4 ring-[#CFE0FF]" : done ? "bg-[#2D4C82] text-white" : isNext ? "bg-white text-[#1B2B4B] border-2 border-[#1B2B4B]" : "bg-white text-[#9AA9C3] border-2 border-[#DCE3EE]"}`} style={NUM}>
-                {done && !isCur && i > 0 ? <Ico d={IC.check} size={14} w={3} /> : no}
+                {no}
               </span>
               <span className={`${ph ? "text-[12px]" : "text-[13px]"} font-black whitespace-nowrap ${isCur ? "text-[#0F1A30]" : done ? "text-[#2D4C82]" : isNext ? "text-[#1B2B4B]" : "text-[#9AA9C3]"}`}>{s.label}</span>
               <span className="text-[12px] font-bold text-[#9AA9C3] h-4" style={NUM}>{t ? fmtDay(t) : s.k === "작성" && sentHint ? `발송 ${sentHint}` : ""}</span>
@@ -1038,7 +1038,7 @@ export function FlowTrack({ steps = [], compact = false }) {
             {i < n - 1 && <span aria-hidden="true" className="absolute" style={{ top: D / 2 - (compact ? 1 : 1.5), left: "50%", right: "-50%", height: compact ? 2 : 3, borderRadius: 3, background: segDone ? "#0F1A30" : done ? "linear-gradient(90deg,#0F1A30,#C9D3E3)" : "#E3E8F0" }} />}
             <span className={`relative z-[1] rounded-full grid place-items-center font-black ${now ? "kp-step-now" : ""}`}
               style={{ width: D, height: D, fontSize: compact ? 10 : 12.5, background: done ? "#0F1A30" : "#fff", color: done ? "#fff" : col, border: `2px solid ${col}`, boxShadow: now ? `0 0 0 4px ${s.bad ? "rgba(198,47,37,.12)" : "rgba(36,87,214,.12)"}` : "none" }}>
-              {done ? <svg width={compact ? 10 : 14} height={compact ? 10 : 14} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg> : (compact ? (now ? <span className="w-1.5 h-1.5 rounded-full" style={{ background: col }} /> : null) : i + 1)}
+              {compact ? (now ? <span className="w-1.5 h-1.5 rounded-full" style={{ background: col }} /> : null) : i + 1}
             </span>
             <span className={`mt-1.5 ${compact ? "text-[11px]" : "text-[13px]"} font-black leading-tight text-center whitespace-nowrap ${done ? "text-[#0F1A30]" : now ? (s.bad ? "text-[#C62F25]" : "text-[#2457D6]") : "text-[#9AA9C3]"}`}>{s.label}</span>
             {s.text != null && <span className={`mt-0.5 ${compact ? "text-[10.5px]" : "text-[12px]"} font-bold leading-tight text-center whitespace-nowrap ${s.bad ? "text-[#C62F25]" : done ? "text-[#5B6B85]" : "text-[#9AA9C3]"}`} style={{ fontVariantNumeric: "tabular-nums" }}>{s.text || "\u00a0"}</span>}

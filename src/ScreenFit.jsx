@@ -8,7 +8,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { getPref, setPref, usePref } from "./ColumnLayout";
 
-const MIN = 0.67, MAX = 1.25; // 67% 아래는 글씨가 너무 작아진다 — 그래도 넘치면 안내(칸 숨기기)
+const MIN = 0.82, MAX = 1.25; // 🛠 2026-11-16 82% 아래로는 줄이지 않는다(글씨가 안 보임) — 대신 표를 시트처럼 촘촘하게(index.css data-kpfit) 해서 폭을 줄인다
 // 화면 전체가 아니라 "표만" 줄이고 키운다 — 메뉴 · 버튼 · 높이는 그대로, 표 글씨 · 칸만 맞춘다
 const rootEl = () => document.getElementById("root");
 let FIT_T = null; // 지금 맞춘 표
@@ -48,6 +48,7 @@ export function fitNow() {
   const t = mainTable();
   if (!t) return null;
   if (BIG) t.dataset.kpfitBig = "1"; else delete t.dataset.kpfitBig;
+  if (!t.dataset.kpfit) t.dataset.kpfit = "1"; // 촘촘한 칸(index.css)을 먼저 입히고 폭을 잰다
   const sp = scrollParent(t);
   const avail = (sp || t.parentElement).clientWidth - 2;
   const nat = naturalWidth(t);
@@ -162,8 +163,8 @@ export function ScreenSettingsButton({ fit }) {
               <div>
                 <div className="text-[13px] font-bold text-[#5B6B85] mb-2">표 글씨 크기 <span className="font-medium text-[#9AA9C3]">· 고르면 화면 맞춤이 켜져요</span></div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <Opt k="normal" title="보통" desc="한 화면에 다 보이게 맞춰요" />
-                  <Opt k="big" title="크게" desc="칸 여백을 줄이고 왼쪽 메뉴를 접어 글씨를 키워요" />
+                  <Opt k="normal" title="보통" desc="구글시트처럼 촘촘하게 · 한 화면에 맞춰요" />
+                  <Opt k="big" title="크게" desc="더 촘촘하게 · 왼쪽 메뉴를 접어 글씨를 키워요" />
                   <Opt k="xl" title="더 크게" desc="글씨를 100% 아래로 줄이지 않아요(표는 옆으로 넘겨 봐요)" />
                 </div>
               </div>
