@@ -50,7 +50,7 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
   const [viewResign, setViewResign] = React.useState(null);
   const [resigns, setResigns] = React.useState([]);
   const [retire, setRetire] = React.useState({});
-  React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "approvals"), where("company", "==", company), where("cat", "==", "report")), (s) => setResigns(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.form === "resign")), () => setResigns([])); }, [company]);
+  React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "approvals"), where("company", "==", company), where("form", "==", "resign")), (s) => setResigns(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.form === "resign")), () => setResigns([])); }, [company]);
   React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "retireCases"), where("companyName", "==", company)), (s) => { const m = {}; s.docs.forEach((d) => { m[d.id] = d.data(); }); setRetire(m); }, () => setRetire({})); }, [company]);
   React.useEffect(() => subscribeUsersLive((list) => setUsers(list)), []); // ⭐ 2026-11-02 속도 — 앱 공용 users 구독 공유
   const me = (users || []).find((u) => u.id === myUid);

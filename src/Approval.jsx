@@ -2614,7 +2614,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   //  · 회사 전체: 대표 · 임원 · 통합관리자 · 회사 마스터 · 최고관리자만(예전엔 관리자 권한이면 회사 문서가 전부 보였다)
   const myPf = myProfile || (staff || []).find((u) => u.uid === me.uid) || {};
   const canCompanyView = me.role === "totalMaster" || me.role === "allMgr" || myPf.isMaster === true || isExecProfile({ ...me, ...myPf });
-  const canTeamView = canCompanyView || ["admin", "hrManager", "hrAcct"].includes(me.role) || /과장|차장|부장|팀장|파트장|실장|본부장/.test(String(myPf.position || me.position || ""));
+  const canTeamView = canCompanyView || ["admin", "hrManager", "hrAcct"].includes(me.role) || ["과장", "차장", "부장", "팀장", "파트장", "실장", "본부장"].includes(String(myPf.position || me.position || "").trim()); // 서버 규칙(apTeamReader)과 같은 직책
   const myTeam = String(myPf.team || me.team || "").trim();
   const [scope, setScope] = React.useState("line"); // line | team | company
   const [formKey, setFormKey] = React.useState(""); // "" = 모든 문서
@@ -2623,10 +2623,11 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   React.useEffect(() => {
     // ⭐ 2026-11-09 버그수정 — 예전엔 '회사 전체' 탭을 눌렀을 때만 구독해서, 관리자가 지급완료·반려 등 다른 탭을 누르면
     //  (내가 결재선에 없는 문서는) 0건이었다 → 결재함에서는 항상 구독해 모든 상태 탭에 회사 문서를 함께 센다
-    if (!(canCompanyView || canTeamView) || page !== "inbox" || !company) return undefined;
-    return onSnapshot(query(collection(db, "approvals"), where("company", "==", company)),
+    if (!(canCompanyView || (canTeamView && myTeam)) || page !== "inbox" || !company) return undefined;
+    // 🔐 2026-11-16 서버 규칙과 같은 범위로 조회 — 회사 전체(대표 · 임원 · 통합관리자 · 최고관리자) / 같은 부서 문서(팀 관리자)
+    return onSnapshot(canCompanyView ? query(collection(db, "approvals"), where("company", "==", company)) : query(collection(db, "approvals"), where("company", "==", company), where("drafter.team", "==", myTeam)),
       (s) => setCompanyAll(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt))), () => setCompanyAll([]));
-  }, [canCompanyView, canTeamView, page, company]);
+  }, [canCompanyView, canTeamView, myTeam, page, company]);
   // 💸 2026-11-04 지급 대기 — 경리(test)·관리자 역할은 참여하지 않은 지출 문서도 볼 수 있어(규칙상 읽기 허용) 회사 지출 결의를 따로 구독
   const payReader = isFinUser(me); // ⭐ 2026-11-07 지급 권한과 같은 기준
   const payFlagsInbox = usePayFlags(company); // 💸 2026-11-15 경리 없는 회사 — 최종 결재자도 지급 대기 · 지급완료 목록에

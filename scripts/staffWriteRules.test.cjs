@@ -6,6 +6,9 @@
 //   ② 다른 회사 직원은 읽기 · 수정 · 삭제 모두 막힘(없는 문서 확인은 "없음"만)
 const fs = require("fs");
 const path = require("path");
+// 실제 로그인처럼 권한 토큰(functions/authClaims.js — 서버가 넣는 값)을 붙인다. 토큰이 없으면 규칙이 문서를 여러 번 읽어 한도에 걸린다
+const AC = require(path.resolve(__dirname, "..", "functions", "authClaims.js"));
+const claimsOf = (u) => AC.mergeClaims({}, AC.computeUserClaims(u, { plan: null, customRole: null, roleOverride: null }).claims, null, 1);
 const { initializeTestEnvironment, assertFails, assertSucceeds } = require("@firebase/rules-unit-testing");
 const { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, query, where, writeBatch } = require("firebase/firestore");
 
@@ -34,7 +37,8 @@ async function t(name, fn) { try { await fn(); pass += 1; out.push(`PASS ${name}
     await setDoc(doc(db, "dispatch", "d1"), { companyName: CO, 상차일: "2026-11-02", 청구운임: 100000 });
     await setDoc(doc(db, "orders", "oth1"), { companyName: OTHER, 상차일: "2026-11-01" });
   });
-  const as = (uid) => env.authenticatedContext(uid, { email: `${uid}@x.kr` }).firestore();
+  const USERS_REF = typeof U !== "undefined" ? U : USERS;
+  const as = (uid) => env.authenticatedContext(uid, { email: `${uid}@x.kr`, ...claimsOf(USERS_REF[uid] || {}) }).firestore();
 
   for (const uid of ["admin", "user", "acct", "master"]) {
     const db = as(uid);

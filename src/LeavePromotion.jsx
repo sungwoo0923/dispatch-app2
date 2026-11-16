@@ -115,7 +115,7 @@ export default function LeavePromotionBoard({ company, canManage = false }) {
   React.useEffect(() => { setProfiles(userProfiles); }, [userProfiles]);
   React.useEffect(() => {
     if (!company) return undefined;
-    return onSnapshot(query(collection(db, "approvals"), where("company", "==", company)), (s) => setApprs(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => d.cat === "leave" && d.status === "approved")), () => setApprs([]));
+    return onSnapshot(query(collection(db, "approvals"), where("company", "==", company), where("cat", "==", "leave")), (s) => setApprs(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => d.cat === "leave" && d.status === "approved")), () => setApprs([]));
   }, [company]);
   React.useEffect(() => {
     if (!company) return undefined;

@@ -48,7 +48,7 @@ function useLeaveApprovals(company) {
   const [rows, setRows] = React.useState([]);
   React.useEffect(() => {
     if (!company) return undefined;
-    return onSnapshot(query(collection(db, "approvals"), where("company", "==", company)), (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => d.cat === "leave")), () => setRows([]));
+    return onSnapshot(query(collection(db, "approvals"), where("company", "==", company), where("cat", "==", "leave")), (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((d) => d.cat === "leave")), () => setRows([]));
   }, [company]);
   return rows;
 }

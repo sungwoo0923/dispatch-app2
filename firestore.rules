@@ -1631,8 +1631,23 @@ service cloud.firestore {
     }
     // 💼 2026-11-01 경리(test)는 회사 결재 중 지출결의·근태(연차)·보고(사직서)만 읽는다 — 장부 가져오기·퇴직 정산·연차 계산
     function isAcctApprovalReader(d) {
-      return myRole() in ['test', 'acctStaff'] && myCoRaw() == d.get('company', '')
-        && d.get('cat', '') in ['expense', 'leave', 'report'];
+      return d.get('cat', '') in ['expense', 'leave'] && myCoRaw() == d.get('company', '')
+        && myRole() in ['test', 'acctStaff'];
+    }
+    // 🔐 2026-11-16 결재 문서 — 회사 전체를 보는 사람(최고관리자 · 통합관리자/회사 마스터 · 대표 · 임원)
+    function apAllReader(co) {
+      return isTotalMasterUser() || (myCoRaw() == co && (myRole() == 'allMgr' || isExecProfileUser()));
+    }
+    // 같은 부서 직원이 올린 문서 — 팀 관리자(운송관리자 · 인사관리자 · 통합인사 · 팀장급 직책)
+    function apTeamReader(d) {
+      return d.get('drafter', {}).get('team', '') != '' && myCoRaw() == d.get('company', '')
+        && d.get('drafter', {}).get('team', '') == myUser().get('team', '')
+        && (myRole() in ['admin', 'hrManager', 'hrAcct'] || myUser().get('position', '') in ['과장', '차장', '부장', '팀장', '파트장', '실장', '본부장']);
+    }
+    // 인사발령 품의 · 사직서 — 인사 · 경리(퇴직 정산) · 관리자(직원관리)
+    function apHrFormReader(d) {
+      return d.get('form', '') in ['personnel', 'resign'] && myCoRaw() == d.get('company', '')
+        && (myRole() in ['admin', 'hrManager', 'hrAcct', 'test', 'acctStaff'] || myTeamHr() || myTeamFin());
     }
     function isExecUser() {
       return myPosExec();
@@ -1712,11 +1727,19 @@ service cloud.firestore {
       //  ② 임원(직책·임원 부서·임원 역할)은 같은 회사 사업계획서 전부와 사업계획에 연결된 지출 문서(planId)를 읽는다(경영 분석 › 사업계획)
       allow read: if (resource.data.get('form', '') == 'bizplan' || resource.data.get('planId', '') != '')
         && isApproved() && resource.data.get('company', '') == myCo() && isExecProfileUser();
-      allow read: if isApproved() && (isTotalMasterUser() || !locked() || resource.data.companyName == myCo())
-        && (request.auth.uid in resource.data.get('participants', []) || isCompanyAdmin(resource.data.get('company', '')) || isAcctApprovalReader(resource.data));
+      // 🔐 2026-11-16 결재 문서 열람 범위(사용자 요청 — 다른 팀 결재는 결재선 · 참조가 아니면 못 본다)
+      //  · 작성자 · 결재선 · 참조자(participants)
+      //  · 회사 전체: 최고관리자 · 통합관리자(회사 마스터 포함) · 대표 · 임원(apAllReader)
+      //  · 같은 부서 문서: 팀 관리자 — 운송관리자 · 인사관리자 · 통합인사 · 팀장급 직책(apTeamReader, 조회는 drafter.team 조건)
+      //  · 업무상: 경리 — 지출결의 · 근태(isAcctApprovalReader) / 인사발령 · 사직서 — 인사 · 경리 · 관리자(apHrFormReader)
+      //  예전엔 운송관리자 · 인사관리자 권한이면 회사 문서가 전부 읽혔다(isCompanyAdmin)
+      //  ⚠ 규칙 계산 한도(요청당 1000) — 싼 조건(문서 칸)을 앞에, 무거운 임원 판정(apAllReader)은 맨 뒤
       // ⭐ 2026-11-02 점검 — HOME › 직원 일정(ExecSuite TeamSchedule)은 회사의 연차(cat=="leave") 결재만 조회 → 같은 회사 직원(기사·화주 제외)은 읽기 허용
-      //  (조회는 company == 우리 회사 + cat == "leave" 조건으로 보내야 한다)
-      allow read: if isOfficeStaff() && resource.data.get('cat', '') == 'leave' && resource.data.get('company', '') == myCo();
+      //  (조회는 company == 우리 회사 + cat == "leave" 조건으로 보내야 한다) — 2026-11-16 한도에 걸리지 않게 열람 범위 규칙보다 앞으로
+      allow read: if resource.data.get('cat', '') == 'leave' && resource.data.get('company', '') == myCo() && isOfficeStaff();
+      allow read: if isApproved() && (isTotalMasterUser() || !locked() || resource.data.companyName == myCo())
+        && (request.auth.uid in resource.data.get('participants', []) || isAcctApprovalReader(resource.data) || apHrFormReader(resource.data)
+          || apTeamReader(resource.data) || apAllReader(resource.data.get('company', '')));
       allow create: if coCreate() && request.resource.data.get('drafterUid', '') == request.auth.uid
         && apFilesOk()
         && (request.resource.data.get('form', '') != 'bizplan' || apBizLineOk())

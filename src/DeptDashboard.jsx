@@ -621,7 +621,10 @@ function HrDashboard({ company, onGo, me, att }) {
   const resumes = useCompanyRows("hrResumes", company);
   const today = kst(0); const ym = ymAgo(0);
   const attendance = useCol("attendance", company, (a) => a.date === today);
-  const approvals = useCompanyApprovals(company);
+  // 🔐 2026-11-16 결재 열람 범위 — 인사 홈은 회사 근태 결재 + 내가 결재선 · 참조인 문서(보고서 결재 대기)만
+  const leaveAps = useCompanyApprovals(company, ["leave"]);
+  const myAps = useQ(() => (me?.uid ? query(collection(db, "approvals"), where("participants", "array-contains", me.uid)) : null), [me?.uid]) || [];
+  const approvals = React.useMemo(() => [...new Map([...(leaveAps || []), ...myAps].map((x) => [x.id, x])).values()], [leaveAps, myAps]);
   const docsBy = useCompanyDriverDocs(company);
   const staff = (users || []).filter((u) => !["driver", "shipper", "cafeUser", "totalMaster"].includes(u.role) && !isTMUser(u));
   const active = staff.filter((u) => u.approved !== false && u.employmentStatus !== "퇴사");

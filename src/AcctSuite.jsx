@@ -196,7 +196,15 @@ export function RetireDesk({ company, isViewer = false }) {
   const [filter, setFilter] = React.useState("open");
   React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), (s) => setUsers(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setUsers([])); }, [company]);
   React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "retireCases"), where("companyName", "==", company)), (s) => setCases(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setCases([])); }, [company]);
-  React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "approvals"), where("company", "==", company), where("cat", "in", ["leave", "report"])), (s) => setApprovals(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((a) => a.cat === "leave" || (a.form === "resign"))), () => setApprovals([])); }, [company]);
+  // 🔐 2026-11-16 결재 열람 범위를 좁히며 — 경리는 근태 · 사직서만 읽으므로 두 조회로 나눠 합친다(일일 업무일지 등 다른 보고는 안 읽는다)
+  React.useEffect(() => {
+    if (!company) return undefined;
+    const got = { leave: [], resign: [] };
+    const put = (k) => (s) => { got[k] = s.docs.map((d) => ({ id: d.id, ...d.data() })); setApprovals([...new Map([...got.leave, ...got.resign].map((x) => [x.id, x])).values()]); };
+    const a1 = onSnapshot(query(collection(db, "approvals"), where("company", "==", company), where("cat", "==", "leave")), put("leave"), () => {});
+    const a2 = onSnapshot(query(collection(db, "approvals"), where("company", "==", company), where("form", "==", "resign")), put("resign"), () => {});
+    return () => { a1(); a2(); };
+  }, [company]);
   const userProfiles = useUserProfiles(React.useMemo(() => (users || []).map((u) => u.id), [users])); // 🔒 2026-11-07 우리 회사 직원 한 건씩(예전엔 전체 회사)
   React.useEffect(() => { setProfiles(userProfiles); }, [userProfiles]);
   const today = kstDay();
