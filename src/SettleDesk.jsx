@@ -973,3 +973,69 @@ export function ArDetail({ data, note, onSaveNote, onQuickPay, quickPreview, onR
     </div>
   );
 }
+
+// ───────────────────────── 🗓 2026-11-16 달 고르기(큰 글씨를 누르면 목록) ─────────────────────────
+//  ‹ 2026년 11월 › — 가운데 글자를 누르면 최근 24달 목록이 열린다. 늘 당월이 맨 위
+export function MonthPicker({ ym, onChange, months = [], label = "SETTLEMENT" }) {
+  const [open, setOpen] = React.useState(false);
+  const box = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const h = (e) => { if (!box.current?.contains(e.target)) setOpen(false); };
+    window.addEventListener("mousedown", h, true); return () => window.removeEventListener("mousedown", h, true);
+  }, [open]);
+  const [y, m] = String(ym || "").split("-").map(Number);
+  const shift = (d) => onChange(new Date(Date.UTC(y, m - 1 + d, 1)).toISOString().slice(0, 7));
+  const list = React.useMemo(() => {
+    const base = new Date(Date.now() + 9 * 3600e3); base.setUTCDate(1);
+    const out = new Set([...months]);
+    for (let i = 1; i >= -23; i -= 1) { const d = new Date(base); d.setUTCMonth(d.getUTCMonth() + i); out.add(d.toISOString().slice(0, 7)); }
+    return [...out].filter(Boolean).sort().reverse();
+  }, [months]);
+  const nowYm = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
+  return (
+    <div ref={box} className="relative flex items-center gap-1" data-kp="month-picker">
+      <button type="button" onClick={() => shift(-1)} aria-label="이전 달" className="w-9 h-9 rounded-xl border border-[#D5DDEA] text-[#1B2B4B] hover:bg-[#F4F6FA] flex items-center justify-center"><Ico d={IC.back} /></button>
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-haspopup="listbox" aria-expanded={open} title="눌러서 달 고르기" className="px-2 text-center min-w-[136px] rounded-xl hover:bg-[#F4F6FA] py-0.5">
+        <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#9AA9C3]">{label}</div>
+        <div className="text-[20px] font-black leading-tight text-[#0F1A30] inline-flex items-center gap-1.5" style={NUM}>{y}년 {m}월<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5B6B85" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></div>
+      </button>
+      <button type="button" onClick={() => shift(1)} aria-label="다음 달" className="w-9 h-9 rounded-xl border border-[#D5DDEA] text-[#1B2B4B] hover:bg-[#F4F6FA] flex items-center justify-center"><Ico d={IC.next} /></button>
+      {open && (
+        <div role="listbox" className="absolute left-10 top-full mt-1.5 z-40 w-[180px] max-h-[320px] overflow-y-auto rounded-xl border border-[#DCE3EE] bg-white shadow-[0_18px_40px_rgba(15,26,48,0.18)] py-1">
+          {list.map((x) => (
+            <button key={x} type="button" role="option" aria-selected={x === ym} onClick={() => { onChange(x); setOpen(false); }}
+              className={`w-full h-9 px-3.5 flex items-center justify-between text-left text-[14px] ${x === ym ? "font-black text-[#0F1A30] bg-[#EEF3FB]" : "font-bold text-[#3A4A66] hover:bg-[#F4F6FA]"}`} style={NUM}>
+              {`${x.slice(0, 4)}년 ${Number(x.slice(5))}월`}{x === nowYm && <span className="text-[11px] font-black text-[#2457D6]">당월</span>}
+            </button>))}
+        </div>)}
+    </div>
+  );
+}
+
+// ───────────────────────── 🧭 2026-11-16 진행 선(배차마감 → 명세서 → 계산서 → 입금) ─────────────────────────
+//  steps: [{ label, done, text, bad }] — 끝난 점은 채우고 선으로 잇는다. 지금 단계는 깜빡이고, 모두 끝나면 깜빡임이 멈춘다
+export function FlowTrack({ steps = [], compact = false }) {
+  const cur = steps.length && steps[steps.length - 1].done ? -1 : steps.findIndex((s) => !s.done); // 마지막(입금 · 경리 확인)이 끝나면 깜빡임 멈춤
+  return (
+    <div className="flex items-start" data-kp="flow-track">
+      {steps.map((s, i) => {
+        const done = !!s.done; const now = i === cur;
+        const dot = done ? "#0F1A30" : s.bad ? "#C62F25" : now ? "#2457D6" : "#C9D3E3";
+        return (
+          <React.Fragment key={s.label}>
+            {i > 0 && <div className={`flex-1 h-[2px] ${compact ? "mt-[7px] min-w-[18px]" : "mt-[9px] min-w-[26px]"}`} style={{ background: steps[i - 1].done ? "#0F1A30" : "#DCE3EE" }} />}
+            <div className="flex flex-col items-center shrink-0" style={{ minWidth: compact ? 52 : 64 }} title={`${s.label} · ${s.text || ""}`}>
+              <span className={`rounded-full grid place-items-center ${now ? "kp-step-now" : ""}`} style={{ width: compact ? 16 : 20, height: compact ? 16 : 20, background: done ? dot : "#fff", border: `2px solid ${dot}` }}>
+                {done ? <svg width={compact ? 9 : 11} height={compact ? 9 : 11} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7" /></svg>
+                  : now ? <span className="rounded-full" style={{ width: compact ? 6 : 8, height: compact ? 6 : 8, background: dot }} /> : null}
+              </span>
+              <span className={`mt-1 text-[11px] font-bold leading-tight whitespace-nowrap ${done ? "text-[#0F1A30]" : now ? (s.bad ? "text-[#C62F25]" : "text-[#2457D6]") : "text-[#9AA9C3]"}`}>{s.label}</span>
+              <span className={`text-[11px] leading-tight whitespace-nowrap ${s.bad ? "text-[#C62F25] font-black" : done ? "text-[#5B6B85]" : "text-[#9AA9C3]"}`}>{s.text || ""}</span>
+            </div>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}

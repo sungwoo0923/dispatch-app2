@@ -31,7 +31,7 @@ export const CLOSE_CHECKS = [
 ];
 
 export default function MonthCloseCheck({ dispatchData = [], onClose, isViewer = false }) {
-  const [month, setMonth] = useState(() => shiftMonth(kstMonth(), -1));
+  const [month, setMonth] = useState(() => kstMonth()); // 🗓 2026-11-16 늘 당월부터
   useLoadOrderRange(`${month}-01`, monthEnd(month)); // ★ 고른 달만 불러오기
   const [active, setActive] = useState("noSale");
   const [edits, setEdits] = useState({}); // id → { 청구운임, 기사운임, 지급방식 }

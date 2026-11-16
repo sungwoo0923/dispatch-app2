@@ -53435,7 +53435,7 @@ const handleBatchSettle = async (targetStatus) => {
   // (desk = 회사 arDesk 구독 — 위 거래명세서 조회에서 이미 만들었다)
   const csPhone = useIsPhone();
   const kstYm = (n = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + n); return d.toISOString().slice(0, 7); };
-  const [pipeMonth, setPipeMonth] = useState(() => kstYm(-1));
+  const [pipeMonth, setPipeMonth] = useState(() => kstYm(0)); // 🗓 2026-11-16 늘 당월부터
   // ⭐ 2026-11-14 정산 홈 바로가기 — 명세서 일괄 처리(단계 보드) · 입금내역 자동 대사(미수금관리 + 올리기 창)
   useEffect(() => {
     const h = (e) => { const d = e.detail || {}; if (d.tab) setTab(d.tab); if (d.board) setInvView("board"); if (d.bank) setTimeout(() => setBankBulkOpen(true), 200); if (d.client && d.ym) settleOpenRef.current?.(d.client, d.ym); };

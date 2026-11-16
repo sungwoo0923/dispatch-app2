@@ -9,8 +9,7 @@
 //  데이터: 오더(청구운임 · 기사운임 · 지급상태 · 입금상태 · 계산서일 · 마감월) + arDesk(거래처 × 월 명세서 단계)
 //  계산은 아래 summarizeSettle() 한 곳(순수 함수) — scripts/settleHome.test.mjs
 import React from "react";
-import { CustomSelect } from "./CustomSelect";
-import { useArDesk, stageLabel, sdCard, sdBtn, sdBtnPri, sdInp, Ico, IC, viewStage } from "./SettleDesk";
+import { useArDesk, stageLabel, sdCard, sdBtn, sdBtnPri, sdInp, Ico, IC, viewStage, MonthPicker, FlowTrack } from "./SettleDesk";
 import { closeBoard } from "./closeFlow"; // ✅ 2026-11-16 2단계 마감 숫자
 import { n, won, short, kstYm, monthOf, stageFinder, summarizeSettle, clientLedger } from "./settleCore";
 export { summarizeSettle, clientLedger } from "./settleCore";
@@ -60,7 +59,6 @@ export const closeText = (r) => {
   if (r.status === "verified") return { t: "검증", c: G.blue, done: false };
   return { t: "마감 전", c: G.mute, done: false };
 };
-const Cell = ({ done, t, c }) => <span className="text-[13px] font-black whitespace-nowrap" style={{ color: done ? G.ok : c || G.mute }}>{done ? `✓ ${t}` : t}</span>;
 
 export default function SettleHome({ orders = [], company = "", onGo, depositOn = false }) {
   const desk = useArDesk(company);
@@ -81,7 +79,6 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
   const go = (tab, d) => onGo?.(tab === "입금확인" && !depositOn ? "거래처정산" : tab, d);
   const step = (k) => S.steps.find((x) => x.key === k) || { left: 0, amount: 0, total: 0 };
   const [y, m] = ym.split("-").map(Number);
-  const shift = (d) => { const t = new Date(Date.UTC(y, m - 1 + d, 1)).toISOString().slice(0, 7); setYm(t); };
   React.useEffect(() => setStepF(""), [ym]);
 
   // 거래처별 정산 현황
@@ -112,17 +109,7 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
       {/* ① 청구월 · 합계 */}
       <div className={`${sdCard} p-4`}>
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-1">
-            <button type="button" onClick={() => shift(-1)} aria-label="이전 달" className="w-9 h-9 rounded-xl border border-[#D5DDEA] text-[#1B2B4B] hover:bg-[#F4F6FA] flex items-center justify-center"><Ico d={IC.back} /></button>
-            <div className="px-2 text-center min-w-[128px]">
-              <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#9AA9C3]">SETTLEMENT</div>
-              <div className="text-[20px] font-black leading-tight" style={NUMS}>{y}년 {m}월</div>
-            </div>
-            <button type="button" onClick={() => shift(1)} aria-label="다음 달" className="w-9 h-9 rounded-xl border border-[#D5DDEA] text-[#1B2B4B] hover:bg-[#F4F6FA] flex items-center justify-center"><Ico d={IC.next} /></button>
-          </div>
-          <CustomSelect value={ym} onChange={(e) => setYm(e.target.value)} className="h-9 w-[130px] rounded-xl border border-[#D5DDEA] bg-white px-3 text-[13.5px] font-bold text-[#1B2B4B]" title="정산월">
-            {months.map((mm) => <option key={mm} value={mm}>{`${mm.slice(0, 4)}년 ${Number(mm.slice(5))}월`}</option>)}
-          </CustomSelect>
+          <MonthPicker ym={ym} onChange={setYm} months={months} />
           <div className="ml-auto grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2" style={NUMS}>
             {[["매출(청구)", S.sale, G.ink], ["매입(기사)", S.buy, G.sub], ["매출이익", S.profit, S.profit < 0 ? G.bad : G.ink], ["미수 잔액", agingTotal.total, agingTotal.total ? G.bad : G.ink]].map(([l, v, c]) => (
               <div key={l} className="text-right"><div className="text-[12.5px] font-bold text-[#5B6B85]">{l}</div><div className="text-[19px] font-black leading-tight whitespace-nowrap" style={{ color: c }}>{won(v)}<span className="text-[12.5px] text-[#9AA9C3] ml-0.5">원</span></div></div>))}
@@ -161,10 +148,10 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
           <div className="py-14 text-center"><div className="text-[15px] font-black">{total ? "조건에 맞는 거래처가 없어요" : `${m}월 청구 대상 오더가 없어요`}</div></div>
         ) : (
           <div className="max-h-[480px] overflow-auto">
-            <table className="kp-sd w-full" style={{ minWidth: 900 }}>
+            <table className="kp-sd w-full" style={{ minWidth: 980 }}>
               <thead><tr className="text-left text-[13px] text-[#5B6B85]">
                 <th className={`${th} text-center w-[52px]`}>No</th><th className={th}>거래처</th><th className={`${th} text-right`}>건수</th><th className={`${th} text-right`}>청구액</th>
-                <th className={th}>배차마감</th><th className={th}>명세서</th><th className={th}>계산서</th><th className={th}>입금</th><th className={`${th} text-right`}>미수금</th><th className={th} />
+                <th className={`${th} text-center`}>정산 진행 (배차마감 → 명세서 → 계산서 → 입금)</th><th className={`${th} text-right`}>미수금</th><th className={th} />
               </tr></thead>
               <tbody>{shown.map((r, i) => (
                 <tr key={r.client} onDoubleClick={() => openStmt(r.client)} className="border-t border-[#EEF2F8] hover:bg-[#F8FAFD]">
@@ -172,10 +159,12 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
                   <td className="px-3 py-2.5 text-[14.5px] font-black max-w-[240px] truncate">{r.client}</td>
                   <td className="px-3 py-2.5 text-right text-[14px] text-[#3A4A66]" style={NUMS}>{r.count.toLocaleString()}</td>
                   <td className="px-3 py-2.5 text-right text-[14.5px] font-black whitespace-nowrap" style={NUMS}>{won(r.sale)}</td>
-                  <td className="px-3 py-2.5"><Cell done={r.ct.done} t={r.ct.t} c={r.ct.c} /></td>
-                  <td className="px-3 py-2.5"><Cell done={r.idx >= 1} t={r.idx >= 1 ? "작성" : "미작성"} /></td>
-                  <td className="px-3 py-2.5"><Cell done={r.idx >= 2} t={r.idx >= 2 ? "발행" : "미발행"} /></td>
-                  <td className="px-3 py-2.5"><Cell done={r.unpaid <= 0} t={r.unpaid <= 0 ? "완료" : r.paid > 0 ? "부분입금" : "미입금"} c={r.paid > 0 ? G.warn : null} /></td>
+                  <td className="px-3 py-2"><div className="max-w-[420px] mx-auto"><FlowTrack compact steps={[
+                    { label: "배차마감", done: r.ct.done, text: r.ct.done ? "마감" : r.ct.t, bad: r.ct.c === G.bad },
+                    { label: "명세서", done: r.idx >= 1, text: r.idx >= 1 ? "작성" : "미작성" },
+                    { label: "계산서", done: r.idx >= 2, text: r.idx >= 2 ? "발행" : "미발행" },
+                    { label: "입금", done: r.unpaid <= 0, text: r.unpaid <= 0 ? "완료" : r.paid > 0 ? "부분입금" : "미입금" },
+                  ]} /></div></td>
                   <td className="px-3 py-2.5 text-right text-[14px] font-black whitespace-nowrap" style={{ ...NUMS, color: r.unpaid > 0 ? G.bad : G.mute }}>{r.unpaid > 0 ? won(r.unpaid) : "-"}</td>
                   <td className="px-3 py-2 text-right"><button type="button" onClick={() => openStmt(r.client)} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black">명세서</button></td>
                 </tr>))}</tbody>
