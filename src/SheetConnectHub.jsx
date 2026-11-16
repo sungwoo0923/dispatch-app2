@@ -13,6 +13,7 @@ import OfficeSheetCard from "./OfficeSheetCard"; // 📗 엑셀(xlsx) 파일 안
 import SheetConnectWizard from "./SheetConnectWizard";
 import SheetImportPanel from "./SheetImportPanel";
 import GsheetMinePanel from "./GsheetMinePanel";
+import { SheetLiveCard, SheetPushCard, fetchSheetLive } from "./CarrierMigratePanel"; // 🔗 2026-11-16 실시간 반영 연결(JY 등)도 연결된 시트로 보이게
 import CustomDatePicker from "./CustomDatePicker";
 import { kpConfirm, kpAlert } from "./kpDialog";
 
@@ -212,8 +213,19 @@ function ExportRunner({ profile, company, onClose }) {
   );
 }
 
-export default function SheetConnectHub({ company, isTotalMaster }) {
+export default function SheetConnectHub({ company, isTotalMaster, withLive = false }) {
   const list = useSheetProfiles(company);
+  // 🔗 2026-11-16 관리센터에 합치면서 빠졌던 "구글시트 실시간 반영" 연결(배차일지 가져오기 › 운송사 일괄 이전에서 켠 것 — JY 등)
+  //  시트 프로필(sheetProfiles)이 아니라 서버 설정(sheetImport liveGet)에 있어서, 예전엔 프로필만 보고 "연결된 시트가 없어요"라고 나왔다
+  const [live, setLive] = React.useState(undefined); // undefined 읽는 중 · null 없음
+  const [liveUrl, setLiveUrl] = React.useState("");
+  React.useEffect(() => {
+    if (!withLive || !company || sheetDemo()) { setLive(null); return undefined; }
+    let alive = true; setLive(undefined);
+    fetchSheetLive(company).then((l) => { if (alive) { setLive(l); if (l?.url) setLiveUrl(l.url); } }).catch(() => { if (alive) setLive(null); });
+    return () => { alive = false; };
+  }, [withLive, company]);
+  const hasLive = !!(live && (live.url || live.enabled));
   const [wizard, setWizard] = React.useState(null); // { initial } | null
   const [run, setRun] = React.useState(null); // { kind, profile }
   const [legacyOpen, setLegacyOpen] = React.useState("");
@@ -263,7 +275,15 @@ export default function SheetConnectHub({ company, isTotalMaster }) {
           </div>
           <button onClick={() => setWizard({ initial: null })} className={`${btn} h-11 px-5 bg-[#0F1A30] text-white`} data-testid="new-sheet">새 시트 연결</button>
         </div>
-        {list === null ? <div className="py-10 text-center text-[14px] text-[#9AA4B5]">불러오는 중…</div> : !profiles.length ? (
+        {hasLive && (
+          <div className="mb-4 rounded-xl border border-[#E3E8F0] px-4 py-3 flex items-center gap-3 flex-wrap" data-kp="sheet-live-row">
+            <span className={`text-[13px] font-black ${live.enabled ? "text-[#0F7A43]" : "text-[#7A8AA6]"}`}>{live.enabled ? "● 실시간 반영 켜짐" : "○ 실시간 반영 꺼짐"}</span>
+            <span className="text-[14.5px] font-black text-[#0F1A30]">배차일지 시트</span>
+            {live.url && <a href={live.url} target="_blank" rel="noopener noreferrer" className="text-[13px] font-bold text-[#2D4C82] underline underline-offset-2 truncate max-w-[360px]">시트 열기 ↗</a>}
+            {Array.isArray(live.tabs) && live.tabs.length > 0 && <span className="text-[13px] text-[#5B6B85]">탭 {live.tabs.length}개</span>}
+            <span className="ml-auto text-[13px] text-[#5B6B85]">아래 ‘구글시트 실시간 반영’에서 켜고 끄거나 바로 반영해요</span>
+          </div>)}
+        {list === null || (withLive && live === undefined) ? <div className="py-10 text-center text-[14px] text-[#9AA4B5]">불러오는 중…</div> : !profiles.length && hasLive ? null : !profiles.length ? (
           <div className="py-12 text-center">
             <div className="text-[16px] font-black text-[#0F1A30]">아직 연결된 시트가 없어요</div>
             <div className="text-[14px] text-[#7A8AA6] mt-1">시트 주소만 붙여넣으면 탭 · 머리줄 · 칸을 찾아 드려요.</div>
@@ -317,6 +337,20 @@ export default function SheetConnectHub({ company, isTotalMaster }) {
           </div>
         )}
       </section>
+
+      {/* 🔗 2026-11-16 구글시트 실시간 반영(시트 ↔ 프로그램) — 예전 관리센터 › 배차일지 가져오기에 있던 카드 그대로 */}
+      {withLive && live !== undefined && (
+        <section className={`${card} p-5`} data-kp="sheet-live-section">
+          <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]">LIVE SYNC</div>
+          <div className="mt-0.5 text-[17px] font-black text-[#0F1A30]">구글시트 실시간 반영 · {company}</div>
+          {!hasLive && (
+            <label className="mt-3 block"><span className="text-[13px] font-bold text-[#5B6B85]">구글시트 주소</span>
+              <input id="sheet-live-url" value={liveUrl} onChange={(e) => setLiveUrl(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…" className="mt-1 h-11 w-full rounded-xl border border-[#DCE3EE] px-3 text-[14px]" />
+            </label>)}
+          <SheetLiveCard co={company} url={liveUrl} setUrl={setLiveUrl} tabNames={Array.isArray(live?.tabs) ? live.tabs : []} />
+          {hasLive && <SheetPushCard co={company} />}
+        </section>
+      )}
 
       {isTotalMaster && (
         <section className={`${card} p-5`}>

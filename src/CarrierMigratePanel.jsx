@@ -28,6 +28,8 @@ const won = (n) => Number(n || 0).toLocaleString("ko-KR");
 const placeKey = (name) => nm(name);
 const KIND = { orders: "오더", places: "상하차지", drivers: "기사", skip: "건너뜀" };
 
+// 🔗 2026-11-16 관리센터 › 구글시트 연동이 이 회사의 실시간 반영 연결(JY 등)을 같이 보여 주려고 읽는다
+export async function fetchSheetLive(co) { if (!co) return null; const d = await callApi("sheetImport", { action: "liveGet", company: co }); return d.live || null; }
 async function callApi(fn, body) {
   const token = await auth.currentUser?.getIdToken();
   let res;
@@ -72,7 +74,7 @@ async function sheetOrdersOf(co) {
   const out = new Map(); [...a.docs, ...b.docs].forEach((d) => { if (!out.has(d.id)) out.set(d.id, { id: d.id, data: d.data() }); });
   return [...out.values()];
 }
-function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
+export function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
   const [live, setLive] = React.useState(undefined); // undefined 읽는 중 · null 없음
   const [busy, setBusy] = React.useState("");
   const [msg, setMsg] = React.useState("");
@@ -185,7 +187,7 @@ function SheetPingBox({ co, live, pingOk, onDone }) {
 const PUSH_MODES = [["off", "끔"], ["dry", "점검만(시트는 그대로)"], ["on", "켬(시트에 쓰기)"]];
 const PUSH_KIND = { create: "등록", update: "수정", delete: "삭제" };
 const PUSH_STATE = { pending: ["대기", "#5B6B85"], done: ["시트에 씀", "#0F7A43"], dry: ["점검(안 씀)", "#2D4C82"], held: ["보류", "#B26A00"], failed: ["못 씀", "#B4342A"], needTab: ["탭 미정", "#B26A00"], skipped: ["건너뜀", "#7A879C"] };
-function SheetPushCard({ co }) {
+export function SheetPushCard({ co }) {
   const [push, setPush] = React.useState(undefined); // undefined 읽는 중 · null 서버 기능 없음
   const [busy, setBusy] = React.useState("");
   const [msg, setMsg] = React.useState("");

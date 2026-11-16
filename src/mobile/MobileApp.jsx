@@ -37,6 +37,7 @@ import { LoginManagerModal } from "../LoginManager";
 import { useCompanyInfo } from "../companyInfo"; // ⭐ 2026-11-02 속도 — RateCard(엑셀 라이브러리 포함) 대신 작은 파일에서
 // ⭐ 2026-11-02 속도 — 안 쓰던 import(지입차 지도·지도운임·팔레트) 제거 → leaflet·지도 데이터가 첫 로딩에서 빠짐. 자주 안 여는 화면은 열 때 받는다
 import { lazyView } from "../lazyLoad";
+const CloseFlowM = lazyView(() => import("../CloseFlow")); // ✅ 2026-11-16 월 마감(배차자 1차) — 휴대폰 화면
 const MobileAttendanceBoard = lazyView(() => import("./MobileAttendanceBoard"));
 const MobileIntelView = lazyView(() => import("./MobileIntelView"));
 import InternalMessenger from "../InternalMessenger";
@@ -84,7 +85,6 @@ const resyncCheckingStore = createMiniStore(false);
 const bootStageStore = createMiniStore({ server: 0, apply: 0, applyCount: 0, ready: 0 });
 import { createPortal } from "react-dom";
 import "./mobileTheme.css";
-const GsheetMinePanel = lazyView(() => import("../GsheetMinePanel"));
 import { OrderTimeline } from "../OrderTimeline"; // ★ 모바일 A/B 디자인 + 알록달록 금지(남색 계열)
 import KpBootScreen from "../KpBootScreen";
 import { isMeaningfulChange } from "../bootProgress";
@@ -4259,6 +4259,7 @@ const thisMonth = thisMonthKST();
     // ⭐ 2026-11-05 PC·모바일 일치 — PC 실시간 범위는 최근 7일~, 모바일은 어제~. 고정노선현황(입고일 = 상차일 + 하차일수)과
     //   경리·임원 대시보드(최근 7일~을 전제로 집계)는 PC와 같은 7일~을 먼저 받아 둔다(실시간 범위 안쪽은 loadRange가 건너뜀)
     else if (page === "fixedroute") loadRange(pcLiveWindowStart(), todayKST());
+    else if (page === "monthclose") loadRange(`${(() => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 2); return d.toISOString().slice(0, 7); })()}-01`, todayKST()); // ✅ 월 마감 — 지난달 · 전월 비교까지
     else if (page === "dept") loadRange(pcLiveWindowStart(), prevDayStr(mobileLiveStart()));
     else if (page === "fleet" || page === "ratecard" || page === "myinfo" || page === "company-fare") loadFullHistory(); // 누적 매출·운임표·내 전체 실적
     else if (page === "intel") {
@@ -5581,6 +5582,7 @@ const title =
   : page === "drivers" ? "기사관리"
   : page === "clients" ? "거래처관리"
   : page === "fixedroute" ? "고정노선현황"
+  : page === "monthclose" ? "월 마감"
   : page === "perms" ? "권한 관리"
   : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "office" ? "사내업무" : deptMode === "hr" ? "인사관리" : deptMode === "sales" ? "영업" : "경리·회계")
   : String(page).startsWith("dept:") ? ({ "dept:sales": "영업관리", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 제출 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서", "dept:payroll": "급여 계산", "dept:payslip": "급여명세서", "dept:leaveplan": "연차 사용 계획", "dept:leavepromo": "연차 관리", "dept:briefing": "일일 경영 보고" , "dept:analysis": "경영 분석", "dept:apqueue": "결재 대기", "dept:staffinfo": "직원 정보"}[page] || "")
@@ -6032,7 +6034,7 @@ const title =
         }
     : String(page).startsWith("dept:")
       ? () => setPage("dept")
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff" || page === "drvacc" || page === "drivers" || page === "clients" || page === "fixedroute" || page === "perms"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff" || page === "drvacc" || page === "drivers" || page === "clients" || page === "fixedroute" || page === "monthclose" || page === "perms"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -7194,7 +7196,7 @@ setOpenMemo={setOpenMemo}
         )}
         {page === "intel" && <MobileIntelView dispatchData={allOrders} cardVersionB={cardVersionB} />}
         {/* ⭐ 구글시트 전송(최고관리자) — PC 관리자메뉴와 같은 화면 */}
-        {page === "gsheet" && role === "totalMaster" && <div className="px-3 py-3"><GsheetMinePanel /></div>}
+        {/* 🧹 2026-11-16 구글시트 전송은 관리센터 › 데이터 › 구글시트 연동으로(배차 프로그램 메뉴에서 뺐다) */}
 
         {page === "unassigned" && (
   <MobileUnassignedList
@@ -7234,6 +7236,16 @@ setOpenMemo={setOpenMemo}
   />
 )}
 
+        {/* ✅ 2026-11-16 월 마감(배차자 1차) — PC 배차현황 › 월 마감과 같은 기록 · 휴대폰은 카드로 */}
+        {page === "monthclose" && (
+          <div className="px-3 py-3">
+            <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}>
+              <CloseFlowM mode="disp" orders={allOrders} company={pcViewCompany} isViewer={role === "viewer"}
+                me={{ email: currentUser?.email || user?.email || "", uid: currentUser?.uid || user?.uid || "", name: pcViewMe.name }}
+                onOpenOrder={(o) => { setShowMenu(false); setPage("list"); setTimeout(() => focusOrderRow(o._id || o.id), 300); }} />
+            </React.Suspense>
+          </div>
+        )}
         {page === "canceled" && (
           <MobileCanceledList
             orders={allCanceledOrders}
@@ -8322,6 +8334,7 @@ function MobileSideMenu({
             {ok("배차현황") && <MenuItem label="배차현황" icon="list" onClick={onGoList} badge={((alertCounts?.drvOrders || 0) + (listUnseenCount || 0)) || null} dark={dark} />}
             {ok("배차관리") && <MenuItem label="미배차현황" icon="alert" onClick={onGoUnassigned} badge={unassignedCount > 0 ? unassignedCount : null} dark={dark} />}
             {ok("배차현황") && <MenuItem label="고정노선현황" icon="route" onClick={() => onGo?.("fixedroute")} badge={fixedUnassignedCount > 0 ? fixedUnassignedCount : null} dark={dark} />}
+            {ok("배차현황") && role !== "viewer" && <MenuItem label="월 마감" icon="check" onClick={() => onGo?.("monthclose")} dark={dark} />}
           </MenuSection>
           {(ok("단가표") || ok("운임조회")) && (
           <MenuSection title="운임" en="FARE" dark={dark} fold>
@@ -8382,7 +8395,6 @@ function MobileSideMenu({
             <MenuSection title="최고관리자 전용" en="MASTER" dark={dark}>
               {/* PC 상단 "관리센터 ↗"와 같은 역할 — 플랫폼 운영 화면(/platform)으로 전환 */}
               <MenuItem label="관리자 관리센터로 전환 ↗" icon="shield" onClick={() => { try { sessionStorage.setItem("kpEntry", "platform"); } catch { /* 무시 */ } window.location.assign("/platform"); }} dark={dark} />
-              <MenuItem label="구글시트 전송" icon="sheet" onClick={onGoGsheet} dark={dark} />
               <MenuItem label="회사코드조회" icon="key" onClick={openCodeLookup} dark={dark} />
             </MenuSection>
           )}

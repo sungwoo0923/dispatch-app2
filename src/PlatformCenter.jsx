@@ -1179,7 +1179,7 @@ function SheetHubForCompany() {
           {names.map((n) => <option key={n} value={n}>{n}</option>)}
         </CustomSelect>
       </div>
-      {co ? <SheetConnectHub key={co} company={co} isTotalMaster /> : <div className="py-16 text-center text-[#9AA9C3] text-[14px]">운송사를 고르면 그 회사의 시트 연결이 보여요.</div>}
+      {co ? <SheetConnectHub key={co} company={co} isTotalMaster withLive /> : <div className="py-16 text-center text-[#9AA9C3] text-[14px]">운송사를 고르면 그 회사의 시트 연결이 보여요.</div>}
     </div>
   );
 }

@@ -6,6 +6,7 @@
 //  계산 · 저장 값은 src/closeFlow.js(순수 함수) · 기록은 arDesk(kind "close" · "dayclose")
 import React from "react";
 import { useArDesk, arDeskId } from "./SettleDesk";
+import useNarrow from "./useNarrow"; // 📱 2026-11-16 휴대폰 — 표 대신 카드
 import { won, short, kstYm } from "./settleCore";
 import {
   CLOSE_STATUS, CLOSE_RULES, closeBoard, closeCounts, dayBoard, canSubmit, canApprove, canReject, canUnlock,
@@ -76,6 +77,7 @@ function CheckList({ checks, onOpenOrder, bigDiff, diff, prevSale }) {
 
 export default function CloseFlow({ orders = [], company = "", mode = "disp", me = null, staffName, isViewer = false, onOpenOrder, onOpenInvoice }) {
   const desk = useArDesk(company);
+  const ph = useNarrow(640);
   const [ym, setYm] = React.useState(() => kstYm(-1 + (new Date(Date.now() + 9 * 3600e3).getUTCDate() > 20 ? 1 : 0)));
   const [unit, setUnit] = React.useState("month"); // 배차자: month | day
   const [day, setDay] = React.useState(kstDay);
@@ -91,6 +93,9 @@ export default function CloseFlow({ orders = [], company = "", mode = "disp", me
   const list = React.useMemo(() => (filter === "all" ? scope : scope.filter((r) => r.status === filter)), [scope, filter]);
   const cur = list.find((r) => r.client === sel) || list[0] || null;
   React.useEffect(() => { setNote(""); setMsg(""); }, [sel, ym]);
+  // 📱 휴대폰 — 카드를 누르면 아래 자세히 보기로 내려 준다
+  const detailRef = React.useRef(null);
+  React.useEffect(() => { if (ph && sel) detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [ph, sel]);
 
   const ownersOf = (row) => {
     if (!staffName) return "";
@@ -132,6 +137,14 @@ export default function CloseFlow({ orders = [], company = "", mode = "disp", me
   const filters = mode === "acct"
     ? [["submitted", "검증 대기", "warn"], ["rejected", "반려", "bad"], ["approved", "승인", "ok"], ["none", "1차 마감 전", "mute"], ["all", "전체", "fg"]]
     : [["all", "내 거래처 전체", "fg"], ["none", "1차 마감 전", "mute"], ["rejected", "반려", "bad"], ["submitted", "검증 대기", "warn"], ["approved", "승인", "ok"]];
+
+  const actionCell = (r) => (mode === "disp"
+                      ? (canSubmit(r) ? <button type="button" className={btnPri} disabled={isViewer || busy} onClick={() => act("submit", r)}>{r.status === "rejected" ? "다시 1차 마감" : "1차 마감"}</button>
+                        : r.status === "none" || r.status === "rejected" ? <span className={`text-[12.5px] font-bold ${TONE.bad}`}>고칠 것 {r.block}건</span>
+                        : <span className="text-[12.5px] text-[#8D97AB]">{r.status === "approved" ? "경리 확인 끝" : "경리 확인 중"}</span>)
+                      : (canApprove(r) ? <button type="button" className={btnPri} disabled={isViewer || busy} onClick={() => act("approve", r)}>승인</button>
+                        : r.status === "approved" ? <button type="button" className={btn} onClick={() => onOpenInvoice?.(r.client, r.ym)}>명세서</button>
+                        : <span className="text-[12.5px] text-[#8D97AB]">{r.status === "rejected" ? "배차자 수정 중" : r.changed ? "다시 1차 마감 필요" : "배차자 마감 전"}</span>));
 
   return (
     <div className="p-1 sm:p-2 space-y-4 text-[#16233D]" data-kp={mode === "acct" ? "close-review" : "close-mine"}>
@@ -184,10 +197,20 @@ export default function CloseFlow({ orders = [], company = "", mode = "disp", me
               className={`text-[14px] font-black ${filter === k ? `${TONE.blue} underline underline-offset-[6px] decoration-2` : TONE.mute}`}>{l} <span className={filter === k ? TONE.blue : TONE[t]} style={NUM}>{c}</span></button>); })}
         </div>
 
-        <div className={`${box} overflow-x-auto`}>
+        <div className={ph ? "space-y-2" : `${box} overflow-x-auto`}>
           {list.length === 0 ? (
-            <div className="py-10 text-center text-[14px] text-[#8D97AB]">{mode === "disp" && !scope.length ? `${ymText(ym)}에 내가 등록한 오더가 없어요.` : "이 상태의 거래처가 없어요."}</div>
-          ) : (
+            <div className={`py-10 text-center text-[14px] text-[#8D97AB] ${ph ? box : ""}`}>{mode === "disp" && !scope.length ? `${ymText(ym)}에 내가 등록한 오더가 없어요.` : "이 상태의 거래처가 없어요."}</div>
+          ) : ph ? list.map((r) => { const on = cur?.client === r.client; return (
+            <div key={r.client} role="button" tabIndex={0} onClick={() => setSel(r.client)} onKeyDown={(e) => { if (e.key === "Enter") setSel(r.client); }}
+              className={`${box} p-3.5 space-y-1.5 ${on ? "border-[#2457D6]" : ""}`} data-kp="close-card">
+              <div className="flex items-start gap-2">
+                <div className={`flex-1 min-w-0 text-[15.5px] font-black truncate ${on ? TONE.blue : ""}`}>{r.client}</div>
+                <StatusText row={r} />
+              </div>
+              <div className="text-[13.5px] text-[#5A6781]" style={NUM}>{r.count}건 · <b className="text-[#16233D]">{won(r.sale)}원</b>{mode === "acct" ? ` · ${r.doc?.submittedByName || ownersOf(r) || "-"}` : ""}</div>
+              <CheckText row={r} />
+              <div className="pt-1" onClick={(e) => e.stopPropagation()}>{actionCell(r)}</div>
+            </div>); }) : (
             <table className="kp-plain w-full text-[14px] min-w-[760px]" style={NUM}>
               <thead><tr className="text-[12px] text-[#8D97AB]">
                 <th className="text-left font-bold px-3 py-2.5 border-b border-[#DCE2EC]">거래처</th>
@@ -206,21 +229,14 @@ export default function CloseFlow({ orders = [], company = "", mode = "disp", me
                   <td className="px-3 py-2.5 text-right font-bold">{won(r.sale)}</td>
                   <td className="px-3 py-2.5"><CheckText row={r} /></td>
                   <td className="px-3 py-2.5"><StatusText row={r} /></td>
-                  <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                    {mode === "disp"
-                      ? (canSubmit(r) ? <button type="button" className={btnPri} disabled={isViewer || busy} onClick={() => act("submit", r)}>{r.status === "rejected" ? "다시 1차 마감" : "1차 마감"}</button>
-                        : r.status === "none" || r.status === "rejected" ? <span className={`text-[12.5px] font-bold ${TONE.bad}`}>고칠 것 {r.block}건</span>
-                        : <span className="text-[12.5px] text-[#8D97AB]">{r.status === "approved" ? "경리 확인 끝" : "경리 확인 중"}</span>)
-                      : (canApprove(r) ? <button type="button" className={btnPri} disabled={isViewer || busy} onClick={() => act("approve", r)}>승인</button>
-                        : r.status === "approved" ? <button type="button" className={btn} onClick={() => onOpenInvoice?.(r.client, r.ym)}>명세서</button>
-                        : <span className="text-[12.5px] text-[#8D97AB]">{r.status === "rejected" ? "배차자 수정 중" : r.changed ? "다시 1차 마감 필요" : "배차자 마감 전"}</span>)}
+                  <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>{actionCell(r)}
                   </td>
                 </tr>); })}</tbody>
             </table>)}
         </div>
 
         {cur && (
-          <section className={`${box} p-4 grid grid-cols-1 lg:grid-cols-2 gap-5`}>
+          <section ref={detailRef} className={`${box} p-4 grid grid-cols-1 lg:grid-cols-2 gap-5 scroll-mt-16`}>
             <div className="min-w-0">
               <div className="text-[15px] font-black">{cur.client} <span className="font-medium text-[#5A6781]" style={NUM}>· {cur.count}건 · {won(cur.sale)}원</span></div>
               {cur.status === "rejected" && cur.doc?.reason && <div className={`mt-1.5 text-[13.5px] ${TONE.bad}`}><b className="mr-2">반려 사유</b>{cur.doc.reason}</div>}
