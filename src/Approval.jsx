@@ -552,7 +552,8 @@ const captureAt1x = async (el, opts) => {
 // 🧾 2026-11-02 지출결의 지출 내역 표(문서·인쇄) — 종이 양식(NO·발생일·업체명·적요·지출금액(공급가액·세액)·합계·비고(입금 계좌번호))과 같은 배치.
 //    맨 위 「금 액」 줄에 한글 금액(金 ○○ 원整)과 숫자. 휴대폰(compact)에서는 행마다 카드로 쌓는다.
 const n0 = (v) => (Number(v) ? Number(v).toLocaleString("ko-KR") : "");
-const SPEND_COLS = "30px 96px minmax(0,1fr) minmax(0,1.15fr) 78px 64px 84px minmax(0,1.25fr)";
+// 🛠 2026-11-16 금액 칸은 금액 길이만큼 넓어지게(1억이 넘으면 합계가 두 줄로 꺾이던 문제) — 최소 폭은 예전 그대로
+const SPEND_COLS = "30px 96px minmax(0,1fr) minmax(0,1.15fr) minmax(78px,max-content) minmax(64px,max-content) minmax(84px,max-content) minmax(0,1.25fr)";
 function SpendLinesPaper({ label, rows, last, compact: c }) {
   const t = spendTotals(rows);
   const list = rows.length ? rows : [{}];
@@ -587,7 +588,7 @@ function SpendLinesPaper({ label, rows, last, compact: c }) {
                 </div>
               </div>
             ))}
-            <div className="px-2.5 py-2 bg-[#F5F7FB] border-t border-[#0F1A30]/40 flex justify-between text-[13px] font-black"><span>합계{t.vat ? ` (세액 ${n0(t.vat)})` : ""}</span><span className="tabular-nums">{n0(t.total) || 0}</span></div>
+            <div className="px-2.5 py-2 bg-[#F5F7FB] border-t border-[#0F1A30]/40 flex justify-between text-[13px] font-black"><span>합계{t.vat ? ` (세액 ${n0(t.vat)})` : ""}</span><span className="tabular-nums whitespace-nowrap">{n0(t.total) || 0}</span></div>
           </div>
         ) : (
           // 표는 div 그리드로(전역 table td 스타일 — 줄바꿈 금지·15px 강제 — 을 피함)
@@ -604,16 +605,16 @@ function SpendLinesPaper({ label, rows, last, compact: c }) {
                 <div className={`${td} border-b border-r text-center tabular-nums !px-1 text-[12.5px] !whitespace-nowrap ![overflow-wrap:normal]`}>{r.date || ""}</div>
                 <div className={`${td} border-b border-r font-bold`}>{r.vendor || ""}</div>
                 <div className={`${td} border-b border-r whitespace-pre-wrap`}>{r.memo || ""}</div>
-                <div className={`${td} border-b border-r text-right tabular-nums`}>{n0(r.supply)}</div>
-                <div className={`${td} border-b border-r text-right tabular-nums`}>{n0(r.vat)}</div>
-                <div className={`${td} border-b border-r text-right tabular-nums font-black`}>{n0(spendRowTotal(r))}</div>
+                <div className={`${td} border-b border-r text-right tabular-nums !whitespace-nowrap ![overflow-wrap:normal]`}>{n0(r.supply)}</div>
+                <div className={`${td} border-b border-r text-right tabular-nums !whitespace-nowrap ![overflow-wrap:normal]`}>{n0(r.vat)}</div>
+                <div className={`${td} border-b border-r text-right tabular-nums !whitespace-nowrap ![overflow-wrap:normal] font-black`}>{n0(spendRowTotal(r))}</div>
                 <div className={`${td} border-b text-[11.5px] leading-snug`}>{bankText(r.bank) && <div className="tabular-nums font-bold text-[#1B2B4B]">{bankText(r.bank)}</div>}{r.note && <div className="text-[#3A4A66]">{r.note}</div>}</div>
               </React.Fragment>
             ))}
             <div className="bg-[#F5F7FB] font-black border-r border-[#0F1A30]/25 px-2 py-1.5 text-center tracking-[0.3em]" style={{ gridColumn: "1 / span 4" }}>합 계</div>
-            <div className="bg-[#F5F7FB] font-black border-r border-[#0F1A30]/25 px-1.5 py-1.5 text-right tabular-nums">{n0(t.supply)}</div>
-            <div className="bg-[#F5F7FB] font-black border-r border-[#0F1A30]/25 px-1.5 py-1.5 text-right tabular-nums">{n0(t.vat)}</div>
-            <div className="bg-[#F5F7FB] font-black border-r border-[#0F1A30]/25 px-1.5 py-1.5 text-right tabular-nums">{n0(t.total) || 0}</div>
+            <div className="bg-[#F5F7FB] font-black border-r border-[#0F1A30]/25 px-1.5 py-1.5 text-right tabular-nums whitespace-nowrap">{n0(t.supply)}</div>
+            <div className="bg-[#F5F7FB] font-black border-r border-[#0F1A30]/25 px-1.5 py-1.5 text-right tabular-nums whitespace-nowrap">{n0(t.vat)}</div>
+            <div className="bg-[#F5F7FB] font-black border-r border-[#0F1A30]/25 px-1.5 py-1.5 text-right tabular-nums whitespace-nowrap">{n0(t.total) || 0}</div>
             <div className="bg-[#F5F7FB]" />
           </div>
         )}
@@ -666,7 +667,7 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
   const c = React.useContext(PaperCompact);
   const lw = c ? "w-[84px] px-2.5 text-[13px]" : "w-[118px] px-3 text-[14px]";
   const lw2 = c ? "w-[84px] px-2.5 text-[13px]" : "w-[96px] px-3 text-[14px]";
-  const iw = c ? "w-[50px] !px-1.5" : "w-[90px]";
+  const iw = c ? "w-[78px] shrink-0 !px-1.5 whitespace-nowrap" : "w-[120px] shrink-0 whitespace-nowrap"; // 🛠 2026-11-16 큰 금액이 두 줄로 꺾이지 않게
   // 🖨 2026-11-07 --font-scale 1 — 사용자 글씨 크기 설정(전역 text-[12px]·[13px] 확대)이 종이 양식에 섞이면 칸마다 글자 크기가 달라져
   //    인쇄·PDF 표가 어긋났다. 결재 문서는 누가 찍어도 같은 종이 모양으로.
   return (
@@ -732,7 +733,7 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
                 <div className={`grid ${c ? "grid-cols-1" : "grid-cols-2"} gap-x-6 gap-y-1 text-[14.5px]`}>
                   {(v || []).map((r, k) => <div key={k} className="flex justify-between border-b border-dotted border-[#0F1A30]/30 py-0.5"><span>{r.label}</span><span className="font-bold">{Number(r.amount) ? fmtWon(r.amount) : "-"}</span></div>)}
                 </div>
-                <div className="mt-2 text-right text-[14px] font-black">합계 {fmtWon(costsTotal(v))}</div>
+                <div className="mt-2 text-right text-[14px] font-black whitespace-nowrap">합계 {fmtWon(costsTotal(v))}</div>
               </Cell>
             );
           }
@@ -1234,7 +1235,7 @@ function FieldInput({ f, value, onChange, staff, meUid, ctx }) {
         ))}
         <div className="flex items-center justify-between">
           <button type="button" onClick={() => onChange([...rows, { name: "", qty: 1, price: "" }])} className="text-[13.5px] font-bold text-[#4B6CB7]">+ 행 추가</button>
-          <span className="text-[14px] font-black text-[#0F1A30]">합계 {fmtWon(itemsTotal(rows))}</span>
+          <span className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap">합계 {fmtWon(itemsTotal(rows))}</span>
         </div>
       </div>
     );
@@ -1256,7 +1257,7 @@ function FieldInput({ f, value, onChange, staff, meUid, ctx }) {
         ))}
         <div className="flex items-center justify-between">
           <button type="button" onClick={() => onChange([...rows, { label: "기타", amount: "" }])} className="text-[13.5px] font-bold text-[#4B6CB7]">+ 항목 추가</button>
-          <span className="text-[14px] font-black text-[#0F1A30]">합계 {fmtWon(costsTotal(rows))}</span>
+          <span className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap">합계 {fmtWon(costsTotal(rows))}</span>
         </div>
       </div>
     );
@@ -2293,6 +2294,30 @@ function DocList({ docs, onOpen, empty, uid, compact = false, more = false }) {
 // 🔎 목록 검색·기간·기안자 — 결재함·내 기안함 공용(각 탭 안에서 같이 걸러진다)
 const kstNow = () => new Date(Date.now() + 9 * 3600e3);
 const kDay = (off = 0) => { const d = kstNow(); d.setUTCDate(d.getUTCDate() + off); return d.toISOString().slice(0, 10); };
+// 🗂 2026-11-16 결재함 · 내 기안함 위 — 보기 범위(내 결재 문서 · 우리 팀 · 회사 전체) · 문서 종류(지출결의서만 · 일일 업무일지만 …)
+function ViewBar({ scope, setScope, canTeam = false, canCompany = false, myTeam = "", formKey, setFormKey, docs = [] }) {
+  const forms = React.useMemo(() => {
+    const m = new Map(); (docs || []).forEach((d) => { if (!d?.form) return; const x = m.get(d.form) || { key: d.form, label: d.formLabel || formOf(d.form)?.label || d.form, cat: d.cat, n: 0 }; x.n += 1; m.set(d.form, x); });
+    const order = APPROVAL_CATS.map((c) => c.key);
+    return [...m.values()].sort((a, b) => order.indexOf(a.cat) - order.indexOf(b.cat) || b.n - a.n);
+  }, [docs]);
+  const sel = "h-10 px-3 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-bold text-[#0F1A30] outline-none";
+  const scopes = setScope ? [["line", "내 결재 문서"], ...(canTeam ? [["team", `우리 팀 문서${myTeam ? ` · ${myTeam}` : ""}`]] : []), ...(canCompany ? [["company", "회사 전체 문서"]] : [])] : [];
+  return (
+    <div className="px-3.5 md:px-5 pt-3 flex flex-wrap items-center gap-2" data-ap-viewbar>
+      {scopes.length > 1 && (
+        <CustomSelect value={scope} onChange={(e) => setScope(e.target.value)} className={`${sel} min-w-[150px]`} title="어떤 문서까지 볼지">
+          {scopes.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        </CustomSelect>)}
+      <CustomSelect value={formKey} onChange={(e) => setFormKey(e.target.value)} className={`${sel} min-w-[170px]`} title="문서 종류만 골라 보기">
+        <option value="">모든 문서 종류</option>
+        {APPROVAL_CATS.map((c) => { const fs = forms.filter((f) => f.cat === c.key); return fs.length ? (
+          <optgroup key={c.key} label={c.label}>{fs.map((f) => <option key={f.key} value={f.key}>{f.label} ({f.n})</option>)}</optgroup>) : null; })}
+      </CustomSelect>
+      {scopes.length > 1 && <span className="text-[12.5px] font-bold text-[#7A8AA6]">{scope === "line" ? "내가 올렸거나 결재 · 참조로 받은 문서" : scope === "team" ? "같은 부서 직원이 올린 문서도 보여요" : "회사의 모든 결재 문서(대표 · 임원용)"}</span>}
+    </div>
+  );
+}
 function ListTools({ f, setF, drafters }) {
   const quick = [
     ["전체", "", ""], ["오늘", kDay(0), kDay(0)], ["이번 주", kDay(-((kstNow().getUTCDay() + 6) % 7)), kDay(0)],
@@ -2584,15 +2609,24 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   const [companyAll, setCompanyAll] = React.useState(null);
   const [lf, setLf] = React.useState({ q: "", from: "", to: "", who: "" }); // 목록 검색·기간·기안자
   const admin = isAdminRole(me.role);
+  // 🔐 2026-11-16 결재함 보기 범위 — 기본은 "내 결재 문서"(기안 · 결재선 · 참조 · 내가 지급하는 지출)만.
+  //  · 우리 팀 문서: 팀장급(과장 이상 · 팀장 · 파트장) · 운송관리자 · 인사관리자 — 같은 부서 직원이 올린 문서
+  //  · 회사 전체: 대표 · 임원 · 통합관리자 · 회사 마스터 · 최고관리자만(예전엔 관리자 권한이면 회사 문서가 전부 보였다)
+  const myPf = myProfile || (staff || []).find((u) => u.uid === me.uid) || {};
+  const canCompanyView = me.role === "totalMaster" || me.role === "allMgr" || myPf.isMaster === true || isExecProfile({ ...me, ...myPf });
+  const canTeamView = canCompanyView || ["admin", "hrManager", "hrAcct"].includes(me.role) || /과장|차장|부장|팀장|파트장|실장|본부장/.test(String(myPf.position || me.position || ""));
+  const myTeam = String(myPf.team || me.team || "").trim();
+  const [scope, setScope] = React.useState("line"); // line | team | company
+  const [formKey, setFormKey] = React.useState(""); // "" = 모든 문서
   // ⭐ 2026-11-09 결재함은 들어올 때 항상 '지급 대기'부터
   React.useEffect(() => { setTab("all"); }, [page]); // ⭐ 2026-11-10 결재함도 내 기안함처럼 '전체'부터
   React.useEffect(() => {
     // ⭐ 2026-11-09 버그수정 — 예전엔 '회사 전체' 탭을 눌렀을 때만 구독해서, 관리자가 지급완료·반려 등 다른 탭을 누르면
     //  (내가 결재선에 없는 문서는) 0건이었다 → 결재함에서는 항상 구독해 모든 상태 탭에 회사 문서를 함께 센다
-    if (!admin || page !== "inbox" || !company) return undefined;
+    if (!(canCompanyView || canTeamView) || page !== "inbox" || !company) return undefined;
     return onSnapshot(query(collection(db, "approvals"), where("company", "==", company)),
       (s) => setCompanyAll(s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt))), () => setCompanyAll([]));
-  }, [admin, page, company]);
+  }, [canCompanyView, canTeamView, page, company]);
   // 💸 2026-11-04 지급 대기 — 경리(test)·관리자 역할은 참여하지 않은 지출 문서도 볼 수 있어(규칙상 읽기 허용) 회사 지출 결의를 따로 구독
   const payReader = isFinUser(me); // ⭐ 2026-11-07 지급 권한과 같은 기준
   const payFlagsInbox = usePayFlags(company); // 💸 2026-11-15 경리 없는 회사 — 최종 결재자도 지급 대기 · 지급완료 목록에
@@ -2633,7 +2667,8 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   rememberAccounts(list); rememberAccounts(companyAll); rememberAccounts(payPool);
   const lineL0 = L.filter(inLine);
   // 관리자(회사 전체를 보는 사람)는 상태 탭에도 회사 문서 전체를 넣는다 — 결재 대기(내 차례)만 내 문서 기준
-  const lineL = admin && companyAll ? [...new Map([...lineL0, ...companyAll.filter((d) => !isHidden(d))].map((d) => [d.id, d])).values()].sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt)) : lineL0;
+  const scopeExtra = !companyAll || scope === "line" ? [] : scope === "company" && canCompanyView ? companyAll : scope === "team" && canTeamView && myTeam ? companyAll.filter((d) => String(d.drafter?.team || "").trim() === myTeam) : [];
+  const lineL = scopeExtra.length ? [...new Map([...lineL0, ...scopeExtra.filter((d) => !isHidden(d))].map((d) => [d.id, d])).values()].sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt)) : lineL0;
   const payMine = [...new Map([...L, ...payPool.filter((d) => !isHidden(d))].map((d) => [d.id, d])).values()];
   const inboxStatus = apStatusSets(lineL); // ⭐ 2026-11-10 내 기안함과 같은 판정 — 진행 중 = 진행 중인 문서 전부(내 차례는 "내 차례" 표시)
   const sets = {
@@ -2644,7 +2679,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
       .sort((a, b) => toMs(a.updatedAt || a.createdAt) - toMs(b.updatedAt || b.createdAt)),
     paid: [...new Map([...inboxStatus.paid, ...payMine.filter((d) => payState(d) === "paid" && canPay(d, meFull, payFlagsInbox))].map((d) => [d.id, d])).values()],
     cc: L.filter((d) => (d.ccUids || []).includes(uid)),
-    company: companyAll,
+    company: scopeExtra,
     hidden: hiddenL,
   };
   // 🛠 2026-11-14 '전체'가 비어 보이던 문제 — 결재선에는 없지만 내가 지급 처리하는 문서(경리 · 재무의 지급 대기 · 지급완료)도 전체에 넣는다
@@ -2676,19 +2711,20 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
         <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
           {(() => {
             // ⭐ 2026-10-31 탭 숫자는 그 탭의 문서 수(검색·기간 적용), 새 결과는 빨간 점으로 따로
-            const F = (k) => applyListTools(sets[k] || [], lf) || [];
+            const F = (k) => (applyListTools(sets[k] || [], lf) || []).filter((d) => !formKey || d.form === formKey);
             // ⭐ 2026-11-09 결재함 순서: 회사 전체 · 결재 대기 · 지급 대기 · 지급완료 · 반려 · 결재 취소 · 회수 · 참조 문서 · 삭제한 문서
             //   '진행 중·완료'는 뺐다(회사 전체에서 상태로 보임) — 관리자가 아니면 회사 전체 대신 '전체'(내가 결재선에 있는 문서 전부)
             // ⭐ 2026-11-10 결재함 필터 = 내 기안함과 똑같이 — 전체 · 진행 중 · 완료 · (지급 대기 · 지급완료) · 반려 · 결재 취소 · 회수 + 참조 문서 · 삭제한 문서
             //   관리자의 '전체'는 회사 문서 전체(예전 '회사 전체'), 내 차례인 문서는 목록에 "내 차례" 표시로 구분
             const keys = [...apStatusKeys(sets).map(([k]) => k), "cc", "hidden"];
             const label = { ...Object.fromEntries(AP_STATUS_TABS), cc: "참조 문서", hidden: "삭제한 문서" };
-            const pool = [...(list || []), ...(companyAll || [])];
+            const pool = [...(list || []), ...scopeExtra];
             const drafters = [...new Map(pool.filter((d) => d.drafterUid).map((d) => [d.drafterUid, d.drafter?.name || "-"])).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]), "ko"));
             return (<>
+              <ViewBar scope={scope} setScope={setScope} canTeam={canTeamView && !!myTeam} canCompany={canCompanyView} myTeam={myTeam} formKey={formKey} setFormKey={setFormKey} docs={[...(sets.all || []), ...(sets.cc || [])]} />
               <Tabs tab={tab} setTab={setTab} tabs={keys.map((k) => [k, label[k], F(k).length, k === "cc" ? F(k).filter((d) => ccUnread(d, uid)).length : 0])} />
               <ListTools f={lf} setF={setLf} drafters={drafters} />
-              <DocList compact={wide} uid={uid} docs={list === null ? null : F(tab)} more={admin && companyAll === null} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from || lf.who ? "조건에 맞는 문서가 없습니다" : tab === "pending" ? "진행 중인 문서가 없습니다" : tab === "paywait" ? "지급을 기다리는 문서가 없습니다" : "문서가 없습니다"} />
+              <DocList compact={wide} uid={uid} docs={list === null ? null : F(tab)} more={scope !== "line" && companyAll === null} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from || lf.who ? "조건에 맞는 문서가 없습니다" : tab === "pending" ? "진행 중인 문서가 없습니다" : tab === "paywait" ? "지급을 기다리는 문서가 없습니다" : "문서가 없습니다"} />
             </>);
           })()}
         </div>
@@ -2697,9 +2733,10 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
         <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
           {(() => {
             // ⭐ 2026-10-31 숫자는 문서 수(예전엔 "새 결과" 수라 목록 2건인데 1로 보이고, 열어 보면 숫자가 사라졌다) — 새 결과는 빨간 점
-            const M = (k) => applyListTools(mineSets[k] || [], lf) || [];
+            const M = (k) => (applyListTools(mineSets[k] || [], lf) || []).filter((d) => !formKey || d.form === formKey);
             const keys = apStatusKeys(mineSets);
             return (<>
+              <ViewBar formKey={formKey} setFormKey={setFormKey} docs={mineL} />
               <Tabs tab={tab} setTab={setTab} tabs={keys.map(([k, l]) => [k, l, M(k).length, unreadIn(M(k))])} />
               <ListTools f={lf} setF={setLf} />
               <DocList compact={wide} uid={uid} docs={list === null ? null : M(tab)} onOpen={(d) => setOpen(d.id)} empty={lf.q || lf.from ? "조건에 맞는 문서가 없습니다" : "올린 문서가 없습니다. 위 버튼으로 새 문서를 작성하세요."} />
