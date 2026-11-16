@@ -34878,44 +34878,47 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           { type: "fare", label: "운임 포함", desc: "부가세 / 선불 / 착불 형식", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> },
           { type: "full", label: "전체 상세", desc: "상하차 + 화물 + 기사 정보", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> },
           { type: "driver", label: "기사 전달용", desc: "운행 정보 + 전달 문구(⚙ 문구 설정에서 변경)", primary: true, icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><path d="M19 8v6M22 11h-6"/></svg> },
-          { type: "simple", label: "간단 목록", desc: "날짜 · 구간 · 야상/당착 + 차량 · 기사 · 연락처 한 줄 (여러 건은 체크 후 기사복사)", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg> },
+          { type: "simple", label: "간단 목록", desc: "11/16 에이제이-벤더 당착 11톤 7대 + 차량 · 기사 · 연락처 한 줄씩", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg> },
         ];
         return (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-            <div className="bg-white w-full max-w-[540px] rounded-t-2xl pb-8 shadow-2xl" onClick={e => e.stopPropagation()}>
-              <div className="flex justify-center pt-3 pb-2"><div className="w-10 h-1 rounded-full bg-gray-200" /></div>
-              <div className="px-5 pb-3 border-b border-gray-100 flex items-center justify-between">
-                <div className="font-bold text-[15px] text-[#1B2B4B]">복사 형식 선택</div>
-                <button type="button" onClick={openCopyTemplateEditor} className="h-7 px-2.5 rounded-lg border border-[#DCE3EE] text-[11.5px] font-bold text-[#2D4C82] hover:bg-[#F2F6FC]" title="전체 상세 · 기사 전달용 문구와 업로드 링크 포함 여부를 바꿉니다">⚙ 문구 설정</button>
+          <div className="fixed inset-0 bg-[rgba(11,20,40,0.45)] flex items-center justify-center z-[99999] p-4" onClick={() => { setCopyModalOpen(false); setSelected([]); }}>
+            {/* 🎨 2026-11-16 복사 형식 선택 — 가운데 창 · 큰 글씨 · 두 칸 */}
+            <div className="bg-white w-full max-w-[620px] rounded-2xl shadow-[0_24px_60px_rgba(11,20,40,0.35)] overflow-hidden" onClick={e => e.stopPropagation()} data-kp="copy-format">
+              <div className="px-6 py-4 flex items-center gap-3" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
+                <div className="min-w-0 mr-auto">
+                  <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">COPY FORMAT</div>
+                  <div className="text-[18px] font-black text-white leading-tight">복사 형식 선택 <span className="text-[14px] font-bold text-white/60">· 선택 {selected.length}건</span></div>
+                </div>
+                <button type="button" onClick={openCopyTemplateEditor} className="h-9 px-3 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold text-white hover:bg-white/20" title="전체 상세 · 기사 전달용 · 간단 목록 문구를 바꿉니다">⚙ 문구 설정</button>
+                <button type="button" aria-label="닫기" onClick={() => { setCopyModalOpen(false); setSelected([]); }} className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[16px]">✕</button>
               </div>
-              <div className="px-4 py-3 space-y-2">
+              <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {copyOptions.map(({ type, label, desc, icon, primary }) => (
-                  <button key={type} onClick={() => copyMessage(type)}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-left transition-colors ${primary ? "bg-[#1B2B4B] text-white" : "bg-gray-50 border border-gray-200 text-gray-800"}`}>
-                    <span className={primary ? "text-white/80" : "text-gray-500"}>{icon}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className={`text-[13px] font-semibold ${primary ? "text-white" : "text-gray-800"}`}>{label}</div>
-                      <div className={`text-[11px] mt-0.5 ${primary ? "text-white/70" : "text-gray-500"}`}>{desc}</div>
-                    </div>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={primary ? "rgba(255,255,255,0.6)" : "#CBD5E1"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  <button key={type} type="button" onClick={() => copyMessage(type)} data-copy-type={type}
+                    className={`group w-full flex items-start gap-3 px-4 py-3.5 rounded-xl text-left border transition ${primary ? "bg-[#0F1A30] border-[#0F1A30] text-white hover:bg-[#1B2B4B] sm:col-span-2" : type === "simple" && selected.length > 1 ? "bg-white border-[#2457D6] ring-2 ring-[#2457D6]/15 hover:bg-[#F4F7FD]" : "bg-white border-[#DCE3EE] hover:border-[#8FB0F0] hover:bg-[#F8FAFD]"}`}>
+                    <span className={`mt-0.5 w-9 h-9 shrink-0 rounded-lg grid place-items-center ${primary ? "bg-white/10 text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>{icon}</span>
+                    <span className="flex-1 min-w-0">
+                      <span className={`block text-[15px] font-black ${primary ? "text-white" : "text-[#0F1A30]"}`}>{label}{type === "simple" && selected.length > 1 && <span className="ml-1.5 text-[12px] font-black text-[#2457D6]">여러 건 추천</span>}</span>
+                      <span className={`block text-[13px] mt-0.5 leading-snug break-keep ${primary ? "text-white/75" : "text-[#5B6B85]"}`}>{desc}</span>
+                    </span>
                   </button>
                 ))}
-                <div className="pt-1 border-t border-gray-100">
-                  <p className="text-[11px] text-gray-500 text-center mb-2">이미지 복사 (카카오톡 전용)</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button onClick={copyAccountImage4} className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 text-[13px] font-semibold hover:bg-gray-100 transition">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-                      계좌 이미지
-                    </button>
-                    <button onClick={copyBizImage4} className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-700 text-[13px] font-semibold hover:bg-gray-100 transition">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                      사업자등록증
-                    </button>
-                  </div>
+              </div>
+              <div className="px-5 pb-5">
+                <div className="text-[12.5px] font-bold text-[#7A8AA8] mb-2">이미지 복사 <span className="font-medium text-[#9AA9C3]">(카카오톡에 붙여 넣기)</span></div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button type="button" onClick={copyAccountImage4} className="h-12 flex items-center justify-center gap-2 rounded-xl bg-white border border-[#DCE3EE] text-[#0F1A30] text-[14px] font-black hover:bg-[#F4F6FA] transition">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                    계좌 이미지
+                  </button>
+                  <button type="button" onClick={copyBizImage4} className="h-12 flex items-center justify-center gap-2 rounded-xl bg-white border border-[#DCE3EE] text-[#0F1A30] text-[14px] font-black hover:bg-[#F4F6FA] transition">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    사업자등록증
+                  </button>
                 </div>
               </div>
-              <div className="px-4">
-                <button onClick={() => { setCopyModalOpen(false); setSelected([]); }} className="w-full py-3 rounded-xl text-[13px] font-semibold bg-gray-100 text-gray-500"><EditableText id="misc.btn.31044.취소" defaultText="취소" /></button>
+              <div className="px-5 py-3 bg-[#F8FAFD] border-t border-[#E3E8F0] flex justify-end">
+                <button type="button" onClick={() => { setCopyModalOpen(false); setSelected([]); }} className="h-10 px-6 rounded-xl border border-[#D5DDEA] bg-white text-[14px] font-bold text-[#3A4A66]"><EditableText id="misc.btn.31044.취소" defaultText="취소" /></button>
               </div>
             </div>
           </div>
@@ -44255,49 +44258,50 @@ setCopyPlaceOptions(list);
       )}
 
       {/* 기사복사 선택 모달 */}
-      {copyModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]">
-          <div className="bg-white rounded-2xl shadow-2xl w-[min(480px,calc(100vw-32px))] overflow-hidden">
-            <div className="bg-[#1B2B4B] px-5 py-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-white font-bold text-[15px]"><EditableText id="popup.title.복사 방식 선택" defaultText="복사 방식 선택" /></h3>
-                <button type="button" onClick={openCopyTemplateEditor} className="h-7 px-2.5 rounded-lg bg-white/10 border border-white/20 text-[11.5px] font-bold text-white hover:bg-white/20" title="전체 상세 · 기사 전달용 문구와 업로드 링크 포함 여부를 바꿉니다">⚙ 문구 설정</button>
+      {copyModalOpen && (() => {
+        // 🎨 2026-11-16 복사 형식 선택 — 실시간배차현황과 같은 모양(가운데 창 · 큰 글씨 · 두 칸)
+        const close5 = () => { setCopyModalOpen(false); setSelected(new Set()); };
+        const opts = [
+          ["basic", "차량 · 기사 · 연락처", "차량번호 / 기사명 / 전화번호"],
+          ["fare", "운임 포함", "부가세 / 선불 / 착불 형식"],
+          ["full", "전체 상세", "상하차 + 화물 + 기사 정보"],
+          ["simple", "간단 목록", "11/16 에이제이-벤더 당착 11톤 7대 + 차량 · 기사 · 연락처 한 줄씩"],
+          ["driver", "기사 전달용", "운행 정보 + 전달 문구(⚙ 문구 설정에서 변경)", true],
+        ];
+        return (
+        <div className="fixed inset-0 bg-[rgba(11,20,40,0.45)] flex items-center justify-center z-[99999] p-4" onClick={close5}>
+          <div className="bg-white w-full max-w-[620px] rounded-2xl shadow-[0_24px_60px_rgba(11,20,40,0.35)] overflow-hidden" onClick={(e) => e.stopPropagation()} data-kp="copy-format">
+            <div className="px-6 py-4 flex items-center gap-3" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
+              <div className="min-w-0 mr-auto">
+                <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">COPY FORMAT</div>
+                <div className="text-[18px] font-black text-white leading-tight"><EditableText id="popup.title.복사 방식 선택" defaultText="복사 방식 선택" /> <span className="text-[14px] font-bold text-white/60">· 선택 {selected.size}건</span></div>
+              </div>
+              <button type="button" onClick={openCopyTemplateEditor} className="h-9 px-3 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold text-white hover:bg-white/20" title="전체 상세 · 기사 전달용 · 간단 목록 문구를 바꿉니다">⚙ 문구 설정</button>
+              <button type="button" aria-label="닫기" onClick={close5} className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[16px]">✕</button>
+            </div>
+            <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {opts.map(([type, label, desc, primary]) => (
+                <button key={type} type="button" onClick={() => copyMessage(type)} data-copy-type={type}
+                  className={`w-full text-left px-4 py-3.5 rounded-xl border transition ${primary ? "bg-[#0F1A30] border-[#0F1A30] text-white hover:bg-[#1B2B4B] sm:col-span-2" : type === "simple" && selected.size > 1 ? "bg-white border-[#2457D6] ring-2 ring-[#2457D6]/15 hover:bg-[#F4F7FD]" : "bg-white border-[#DCE3EE] hover:border-[#8FB0F0] hover:bg-[#F8FAFD]"}`}>
+                  <span className={`block text-[15px] font-black ${primary ? "text-white" : "text-[#0F1A30]"}`}>{label}{type === "simple" && selected.size > 1 && <span className="ml-1.5 text-[12px] font-black text-[#2457D6]">여러 건 추천</span>}</span>
+                  <span className={`block text-[13px] mt-0.5 leading-snug break-keep ${primary ? "text-white/75" : "text-[#5B6B85]"}`}>{desc}</span>
+                </button>
+              ))}
+            </div>
+            <div className="px-5 pb-5">
+              <div className="text-[12.5px] font-bold text-[#7A8AA8] mb-2">이미지 복사 <span className="font-medium text-[#9AA9C3]">(카카오톡에 붙여 넣기)</span></div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button type="button" onClick={copyAccountImage5} className="h-12 rounded-xl bg-white border border-[#DCE3EE] text-[#0F1A30] text-[14px] font-black hover:bg-[#F4F6FA] transition">계좌 이미지</button>
+                <button type="button" onClick={copyBizImage5} className="h-12 rounded-xl bg-white border border-[#DCE3EE] text-[#0F1A30] text-[14px] font-black hover:bg-[#F4F6FA] transition">사업자등록증</button>
               </div>
             </div>
-            <div className="p-4 space-y-2">
-              <button onClick={() => copyMessage("basic")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
-                차량번호 / 기사명 / 전화번호
-              </button>
-              <button onClick={() => copyMessage("simple")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition" title="여러 건은 체크한 뒤 [기사복사]를 누르면 한 번에 복사됩니다">
-                간단 목록 (날짜 · 구간 · 야상/당착 + 기사 한 줄)
-              </button>
-              <button onClick={() => copyMessage("fare")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
-                운임 포함 (부가세/선불/착불)
-              </button>
-              <button onClick={() => copyMessage("full")} className="w-full py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition">
-                전체 상세 (상하차 + 화물정보 + 차량)
-              </button>
-              <button onClick={() => copyMessage("driver")} className="w-full py-2.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-semibold hover:bg-[#243d6a] transition">
-                기사 전달용 (상세 + 전달메시지)
-              </button>
-              <div className="border-t border-gray-100 pt-2 mt-1 space-y-2">
-                <p className="text-[11px] text-gray-500 text-center">이미지 복사 (카카오톡 전용)</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button onClick={copyAccountImage5} className="py-2.5 rounded-xl border border-[#1B2B4B]/30 bg-[#1B2B4B]/5 text-[#1B2B4B] text-[12px] font-bold hover:bg-[#1B2B4B]/10 transition">
-                    계좌 이미지
-                  </button>
-                  <button onClick={copyBizImage5} className="py-2.5 rounded-xl border border-[#1B2B4B]/30 bg-[#1B2B4B]/5 text-[#1B2B4B] text-[12px] font-bold hover:bg-[#1B2B4B]/10 transition">
-                    사업자등록증
-                  </button>
-                </div>
-              </div>
-              <button onClick={() => { setCopyModalOpen(false); setSelected(new Set()); }} className="w-full py-2 text-[12px] text-gray-500 hover:text-gray-600 transition">
-                취소
-              </button>
+            <div className="px-5 py-3 bg-[#F8FAFD] border-t border-[#E3E8F0] flex justify-end">
+              <button type="button" onClick={close5} className="h-10 px-6 rounded-xl border border-[#D5DDEA] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
       {smsConfirm5 && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100002]">
           <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden">
