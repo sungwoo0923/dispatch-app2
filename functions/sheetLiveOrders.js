@@ -148,11 +148,15 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     const P = await import("./sheetProfileCore.mjs");
     // 주소 찾기에 상하차지 · 기사 탭도 필요해서 전부 쓴다 — 고친 탭만 알면 그 탭만 새로 읽고 나머지는 기억해 둔 값(10분 안)
     const cache = rawOf.get(co);
-    const only = !force && Array.isArray(onlyTabs) && onlyTabs.length && cache && cache.url === cfg.url && now - cache.at < RAW_CACHE_MS && onlyTabs.every((t) => cache.tabs.some((x) => x.title === t)) ? onlyTabs : null;
+    // ⭐ 2026-11-17 기억해 둔 값은 "고친 탭이 오더 탭"일 때만 쓴다(그 탭의 오더만 맞추므로 나머지 탭이 조금 묵어도 괜찮다)
+    //  상하차지 · 기사 같은 참고 탭을 고쳤으면 모든 탭의 오더를 맞추는데, 그때 묵은 탭(다른 서버가 그사이 줄을 끼우거나 지움)으로 맞추면
+    //  줄 위치가 틀어지고 새 줄 오더가 "시트에 없음"으로 지워질 수 있었다 → 그런 때는 전체를 새로 읽는다
+    const wantTabs0 = Array.isArray(cfg.tabs) && cfg.tabs.length ? new Set(cfg.tabs.map(String)) : null;
+    const only = !force && Array.isArray(onlyTabs) && onlyTabs.length && cache && cache.url === cfg.url && now - cache.at < RAW_CACHE_MS
+      && onlyTabs.every((t) => cache.tabs.some((x) => x.title === t) && (cache.orderTabs || new Set()).has(t) && (!wantTabs0 || wantTabs0.has(t))) ? onlyTabs : null;
     let raw;
     if (only) { const fresh = await readTabs(id, only); raw = cache.tabs.map((t) => fresh.find((f) => f.title === t.title) || t); }
     else raw = await readTabs(id, null);
-    rawOf.set(co, { url: cfg.url, at: only ? cache.at : now, tabs: raw });
     if (!raw.length) throw new Error("읽을 탭이 없습니다.");
     const tabs = raw.map((t) => ({ title: t.title, rows: P.applyMerges(t.rows, t.merges) }));
     const preset = await presetFor(co, M);
@@ -166,6 +170,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     const wantTabs = Array.isArray(cfg.tabs) && cfg.tabs.length ? new Set(cfg.tabs.map(String)) : null;
     // 고친 탭이 오더 탭이면 그 탭만 맞춘다. 상하차지 · 기사 같은 참고 탭이면 모든 오더에 영향 → 전부 맞춘다(읽기는 그 탭만)
     const orderTabs = new Set(built.orders.map((o) => String(o.이전출처 || "").split("!")[0]));
+    rawOf.set(co, { url: cfg.url, at: only ? cache.at : now, tabs: raw, orderTabs });
     const scope = only && only.every((t) => orderTabs.has(t) && (!wantTabs || wantTabs.has(t))) ? new Set(only) : null;
     const incoming = built.orders.filter((o) => String(o.상차일 || "") >= from && (!wantTabs || wantTabs.has(String(o.이전출처 || "").split("!")[0])) && (!scope || scope.has(String(o.이전출처 || "").split("!")[0])));
     // 다음 빠른 확인의 기준 — 범위가 그대로면 위에서 잡은 지문을, 바뀌었으면(날이 바뀜 · 줄이 늘어남) 새 범위로 한 번 읽어 둔다
@@ -198,9 +203,17 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     // 시트에서 지운 줄 — 한 번에 너무 많이 없어지면(탭을 잘못 읽었을 수 있다) 지우지 않고 알려만 준다
     let removed = 0; let heldBack = 0;
     if (cfg.removeMissing !== false && r.missing.length) {
+      // ⭐ 2026-11-17 탭을 읽었는데 그 탭에서 오더가 한 줄도 안 나왔으면(읽기가 비어서 온 경우 등) 그 탭의 오더는 지우지 않는다
+      const inTab = new Map(); incoming.forEach((o) => { const t = String(o.이전출처 || "").split("!")[0]; inTab.set(t, (inTab.get(t) || 0) + 1); });
+      const emptyTab = (e) => !inTab.get(String(e.data.이전출처 || "").split("!")[0]);
+      const sure = r.missing.filter((e) => !emptyTab(e));
+      heldBack += r.missing.length - sure.length;
       const limit = Math.max(10, Math.ceil(existing.length * 0.2));
       // 삭제 기록(deletedOrders)을 같이 남긴다 — 열려 있는 PC · 모바일 화면과 PC 보관본에서 그 오더가 바로 빠진다
-      if (r.missing.length <= limit) { r.missing.forEach((e) => { ops.push((b) => b.delete(db.collection("orders").doc(e.id))); ops.push((b) => b.set(db.collection("deletedOrders").doc(`orders_${e.id}`), { col: "orders", id: e.id, at: FieldValue.serverTimestamp(), by: by, companyName: co })); }); removed = r.missing.length; } else heldBack = r.missing.length;
+      //  ⭐ 2026-11-17 기록을 오더 삭제보다 "먼저" 넣는다 — 400건씩 나눠 쓸 때 삭제만 먼저 반영되면, 삭제 트리거가 기록을 못 보고
+      //  시트로 "줄 삭제"를 다시 보낼 수 있었다(functions/sheetPushOrders.js — 시트에서 없어져 지운 오더인지 이 기록으로 안다)
+      //  원인 확인용으로 그 오더의 줄 주소 · 내용도 남긴다
+      if (sure.length <= limit) { sure.forEach((e) => { const x = e.data || {}; ops.push((b) => b.set(db.collection("deletedOrders").doc(`orders_${e.id}`), { col: "orders", id: e.id, at: FieldValue.serverTimestamp(), by: by, companyName: co, 이전출처: x.이전출처 || "", label: [x.상차일, x.상차지명, "→", x.하차지명, x.차량번호].filter(Boolean).join(" ").slice(0, 120) })); ops.push((b) => b.delete(db.collection("orders").doc(e.id))); }); removed = sure.length; } else heldBack += sure.length;
     }
     // ⏸ 쓰기 직전에 다시 확인 — 그사이 관리센터에서 껐으면(수동 가져오기 중) 아무것도 쓰지 않는다(같은 줄을 양쪽이 동시에 만들던 중복 방지)
     if (!force && ops.length) { const cur = (await ref(co).get()).data() || {}; if (cur.enabled !== true) return { skipped: "paused" }; }

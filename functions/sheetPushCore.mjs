@@ -82,9 +82,24 @@ const KEYS = [
   (x) => [tabOf(x.이전출처), x.상차일, ns(x.차량번호), String(Number(x.청구운임) || 0), String(Number(x.기사운임) || 0)].join("|"),
   (x) => (x.이전출처 ? `${x.이전출처}|${x.상차일}` : ""),
 ];
-export function findRow(ctx, data, { taken = new Set(), strict = false } = {}) {
-  const tab = tabOf(data?.이전출처);
+// ⭐ 2026-11-17 프로그램 값을 둔 칸(_programKeys — 시트와 일부러 다른 칸)은 시트에 적힌 값(_sheetBase)으로 줄을 찾는다
+//  예전엔 프로그램 값(예: 프로그램에서 고친 차량번호)으로 찾아 시트 줄과 안 맞음 → "줄 번호 + 날짜"로만 찾게 되어,
+//  줄이 밀렸을 때 엉뚱한 줄에 쓰거나 · 지울 줄을 못 찾아(시트에 이미 없음으로 보고) 지운 오더가 시트에서 다시 살아났다
+const asSheet = (data) => {
+  const pk = Array.isArray(data?._programKeys) ? data._programKeys : []; const sb = data?._sheetBase || {};
+  if (!pk.length) return data;
+  const out = { ...data }; pk.forEach((k) => { if (k in sb) out[k] = sb[k]; }); return out;
+};
+// 이 오더(data)가 시트에서 읽은 그 줄(rec)과 같은 줄인가 — strict: 날짜 · 구간 · 차량까지 같아야 한다(줄 번호 + 날짜만으로는 안 됨)
+export function rowMatches(data, rec, { strict = false } = {}) {
+  if (!data || !rec || tabOf(data.이전출처) !== tabOf(rec.이전출처)) return false;
+  const d = asSheet(data);
+  return (strict ? KEYS.slice(0, 2) : KEYS).some((key) => { const k = key(d); return !!k && key(rec) === k; });
+}
+export function findRow(ctx, data0, { taken = new Set(), strict = false } = {}) {
+  const tab = tabOf(data0?.이전출처);
   if (!tab) return null;
+  const data = asSheet(data0);
   const pool = ctx.built.orders.filter((o) => o.__tab === tab && !taken.has(`${o.__tab}!${o.__row}`));
   // strict(삭제): 날짜 · 구간 · 차량까지 같은 줄만 — "같은 줄 번호 + 같은 날짜"만으로 찾으면 줄이 밀렸을 때 엉뚱한 줄(새로 입력한 줄)을 지웠다
   for (const key of strict ? KEYS.slice(0, 2) : KEYS) {
@@ -96,8 +111,7 @@ export function findRow(ctx, data, { taken = new Set(), strict = false } = {}) {
 }
 // 지운 오더(보류 · 실패한 삭제) ↔ 시트에서 읽은 줄 — 실시간 반영이 그 줄을 오더로 다시 만들지 않게 할 때 쓴다
 export function matchesDeleted(before, rec) {
-  if (!before || !rec || tabOf(before.이전출처) !== tabOf(rec.이전출처)) return false;
-  return KEYS.some((key) => { const k = key(before); return !!k && key(rec) === k; });
+  return rowMatches(before, rec);
 }
 
 // ── 새 오더가 들어갈 탭 고르기 — 같은 거래처 · 상차지 · 하차지로 시트에 이미 있는 탭 ──────────
@@ -313,7 +327,7 @@ export function insertRowFor(ctx, order, title) {
 }
 
 // ── 등록(프로그램에서 만든 오더 → 탭 맨 아래 빈 줄 · atRow: 방금 끼워 넣은 줄) ───────────────────────────
-export function planCreate(ctx, order, title, { rowCount = 0, atRow = 0 } = {}) {
+export function planCreate(ctx, order, title, { rowCount = 0, atRow = 0, taken = new Set() } = {}) {
   const L = layoutOf(ctx, title);
   if (!L) return fail(`"${title}" 탭의 칸 배치를 읽지 못했습니다`);
   const t = tabIn(ctx, title);
@@ -323,7 +337,9 @@ export function planCreate(ctx, order, title, { rowCount = 0, atRow = 0 } = {}) 
   let i = atRow ? atRow - 1 : last + 1;
   // 빈 줄 = 날짜 · 구간 · 차량 · 운임 칸에 사람이 넣은 값이 없는 줄(미리 깔아 둔 수식 · 체크박스만 있는 줄은 빈 줄로 본다)
   const keyCols = [L.cols.date, L.cols.from, L.cols.to, L.cols.consignee, L.cols.plate, L.cols.name, L.sale?.base, L.buy?.base].filter((c) => c !== undefined && c >= 0);
-  const busy = (r) => keyCols.some((c) => cell(r?.[c]) && !isFormula(ctx, title, i + 1, c));
+  // ⭐ 2026-11-17 이번 차례에 이미 쓰기로 한 줄(taken — 특히 곧 지울 줄)은 빈 줄로 보지 않는다
+  //  예전엔 맨 아래 줄 오더를 지우고(값을 비운 셈) 같은 차례에 새 오더를 등록하면, 새 오더를 그 줄에 써 놓고 끝에서 그 줄을 지웠다(새 오더가 시트에서 사라짐)
+  const busy = (r) => taken.has(`${title}!${i + 1}`) || keyCols.some((c) => cell(r?.[c]) && !isFormula(ctx, title, i + 1, c));
   if (atRow && busy(t.rows[i])) return fail("끼워 넣은 줄이 비어 있지 않습니다");
   while (busy(t.rows[i])) i += 1;
   const rowNo = i + 1;

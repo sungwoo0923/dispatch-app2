@@ -169,6 +169,7 @@ import { useUiScreen, uiMenuItem, useUiConfigVersion } from "../uiConfig"; // �
 import MyInfoTabs from "../MyInfoTabs"; // ⭐ 2026-11-07 내정보 안 탭(급여명세서 · 연차 사용 계획)
 import { kpConfirm } from "../kpDialog";
 import { profitCls } from "../marginPct"; // ⭐ 2026-11-17 수수료(이익) 색 — 플러스 빨강 · 마이너스 파랑
+import { stripSheetLink } from "../sheetLinkFields"; // ⭐ 2026-11-17 새 오더에 구글시트 줄 주소를 넘기지 않는다
 import { ensureUploadToken } from "../uploadTokenClient"; // ⭐ 2026-11-08 업로드 링크 토큰(발급 시각·만료)
 
 
@@ -5019,7 +5020,8 @@ const groupedByDate = useMemo(() => {
         return { ...docData, 상차일: dateForOrder, 하차일: dropDateForOrder };
       };
 
-      const saveOne = (rowData) => {
+      const saveOne = (rowData0) => {
+        const rowData = stripSheetLink(rowData0); // ⭐ 2026-11-17 복사 · 불러오기로 만든 새 오더에 원본의 구글시트 줄 주소(이전출처)를 넘기지 않는다
         const newId = crypto.randomUUID();
         const finalData = {
           ...rowData,

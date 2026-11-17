@@ -15,6 +15,12 @@ const KEEP_DONE_MS = 3 * 86400000;
 const SERVICE_ACCOUNT_HINT = "시트를 서버 계정(dispatch-app-9b92f@appspot.gserviceaccount.com)에 '편집자'로 공유해 주세요.";
 const MODES = ["off", "dry", "on"];
 const ts = (v) => (v && typeof v.toMillis === "function" ? v.toMillis() : Number(v) || 0);
+// ⭐ 2026-11-17 시트 줄 연결값 — 복사한 오더에 딸려 가면 원본 줄을 가리킨다(복사본을 고치면 원본 줄을 덮어쓰고, 지우면 원본 줄을 지웠다)
+const LINK_FIELDS = ["이전출처", "시트연동", "_sheetKeys", "_programKeys", "_sheetBase", "이전줄수", "시트탭필요", "시트탭후보"];
+// 남의 줄 주소를 가진 오더 — 시트에서 온 오더(등록기기 "구글시트 이전")도, 프로그램에서 만들어 시트에 줄을 만든 오더(시트연동)도 아닌데 이전출처가 있다 = 복사본
+const borrowedLink = (x) => !!x?.이전출처 && x.등록기기 !== "구글시트 이전" && x.시트연동 !== true;
+const CONFLICTS = "sheetPushConflicts"; // 쓰기 직전에 다시 읽은 줄이 처음 읽은 줄과 달라 쓰지 않은 기록(원인 확인용)
+const MAX_CONFLICTS = 5; // 이만큼 계속 엇갈리면 "실패"로 두고 사람이 본다
 
 function makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quoteTab }) {
   const q = () => db.collection(QUEUE);
@@ -53,9 +59,23 @@ function makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     const C = await core();
     const id = context.params.orderId;
     let kind = "";
-    if (!b && a) { if (a.등록기기 === "구글시트 이전" || a.이전출처) return null; kind = "create"; }
+    let unlink = false; // 복사본이 가져온 원본 줄 주소를 떼고 → 자기 줄을 새로 만든다
+    if (!b && a) {
+      if (a.등록기기 === "구글시트 이전" || /^구글시트/.test(String(a.최종수정자 || ""))) return null; // 시트에서 온 오더(서버 · 가져오기)
+      if (a.이전출처) {
+        // ⭐ 2026-11-17 줄 주소를 가진 채 새로 생긴 오더 = 복사 등록(원본 필드를 그대로 가져옴) 또는 지운 오더 되살리기
+        //  예전엔 그냥 넘겼다 → 복사본이 원본 줄 주소를 그대로 가졌고, 나중에 복사본을 고치면 원본 줄에 덮어쓰고 · 지우면 원본 줄을 지웠다
+        //  되살리기(아직 시트에서 안 지운 삭제가 남아 있음)면 그 삭제만 취소한다. 아니면 주소를 떼고 새 줄로 넣는다
+        const q0 = (await q().doc(id).get().catch(() => null))?.data() || null;
+        if (q0 && q0.kind === "delete" && ["pending", "held", "failed"].includes(q0.state)) { await q().doc(id).delete().catch(() => {}); return null; }
+        unlink = true;
+      }
+      kind = "create";
+    }
     else if (b && !a) {
       kind = b.이전출처 ? "delete" : "drop";
+      // ⭐ 2026-11-17 복사본(남의 줄 주소를 가진 오더)을 지워도 시트 줄은 지우지 않는다 — 그 줄은 원본 오더의 줄이다
+      if (kind === "delete" && borrowedLink(b)) kind = "drop";
       // 🛑 2026-11-17 시트에서 줄이 없어져 서버(실시간 반영)가 지운 오더는 시트로 "삭제"를 보내지 않는다
       //  예전엔 이것도 시트 줄 삭제로 보냈다 → 그 자리(같은 줄 번호 · 같은 날짜)로 올라온 다음 줄을 지움 → 그 줄의 오더가 또 지워짐 → 또 다음 줄…
       //  (시트에서 한 줄을 지우거나 옮기면 같은 날짜 줄들이 줄줄이 사라졌다)
@@ -64,8 +84,14 @@ function makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
         if (log && /^구글시트/.test(String(log.by || ""))) kind = "drop";
       }
     }
+    else if (a.이전출처 && borrowedLink(a)) { kind = "create"; unlink = true; } // ⭐ 2026-11-17 예전에 만든 복사본 — 원본 줄을 고치지 않고 주소를 떼어 자기 줄을 만든다
     else if (a.이전출처) { if (!C.changedKeys(b, a).length) return null; kind = "update"; }
     else { if (a.등록기기 === "구글시트 이전") return null; if (String(a.시트탭 || "") === String(b.시트탭 || "") && String(a.담당노선구분 || "") === String(b.담당노선구분 || "") && !C.changedKeys(b, a).length) return null; kind = "create"; }
+    if (unlink && (await modeFor(co)) === "on") { // 점검(dry)일 때는 오더를 건드리지 않는다
+      const strip = Object.fromEntries(LINK_FIELDS.map((k) => [k, FieldValue.delete()]));
+      await db.collection("orders").doc(id).set({ ...strip, 시트기록일시: FieldValue.serverTimestamp() }, { merge: true }); // 시트기록일시 = 서버가 쓴 표시(이 변경은 다시 대기열에 넣지 않는다)
+      console.log(`[시트 쓰기] ${co} ${id} 복사본의 원본 줄 주소(${a.이전출처})를 떼고 새 줄로 넣습니다`);
+    }
     const before = b ? await trim(b) : null;
     await db.runTransaction(async (tx) => {
       const ref = q().doc(id); const cur = (await tx.get(ref)).data();
@@ -123,6 +149,35 @@ function makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     const dropRows = []; let structural = false;
     const done = (it, state, result, extra = {}) => it.ref.set({ state, doneAt: Date.now(), result: result || null, ...extra }, { merge: true });
     const summary = (p) => ({ tab: p.tab || "", row: p.row || 0, cells: (p.cells || []).slice(0, 40).map((c) => ({ a1: c.a1, was: String(c.was ?? "").slice(0, 80), value: String(c.value ?? "").slice(0, 80) })), pushed: p.pushed || [], unpushed: p.unpushed || [], reason: p.reason || "" });
+    // ⭐ 2026-11-17 쓰기(지우기) 직전 확인 — 시트를 읽은 뒤 실제로 쓰기까지 몇 초~수십 초 걸린다(한 건마다 가져오기 규칙으로 다시 읽어 본다)
+    //  그사이 사람이 줄을 끼우거나 · 지우거나 · 정렬하면 줄 번호가 밀려, 예전엔 엉뚱한 줄(방금 친 줄)에 덮어쓰거나 그 줄을 통째로 지웠다
+    //  → 쓰기 직전에 그 줄만 다시 읽어 처음 읽은 줄과 같을 때만 쓴다(수식 칸은 다른 줄에 따라 바뀔 수 있어 견주지 않는다)
+    //    다르면 쓰지 않고 대기로 남긴다 → 다음 차례(사람이 고친 알림 · 1분 안전장치)에 시트를 새로 읽어 제자리를 다시 찾는다
+    const snapRow = (tab, row) => ({ tab, row,
+      cells: [...((((book.tabs.find((t) => t.title === tab) || {}).rows) || [])[row - 1] || [])].map((v) => String(v ?? "").trim()),
+      formula: ((((book.formulas || {})[tab]) || [])[row - 1] || []).map((v) => String(v ?? "").startsWith("=")) });
+    const sameRow = (sn, now) => { const n = Math.max(sn.cells.length, now.length); for (let c = 0; c < n; c += 1) { if (sn.formula[c]) continue; if ((sn.cells[c] || "") !== String(now[c] ?? "").trim()) return false; } return true; };
+    const readRows = async (list) => {
+      const got = await sheetsApiFor(id, "GET", `/values:batchGet?${list.map((x) => `ranges=${encodeURIComponent(`${quoteTab(x.tab)}!A${x.row}:ZZ${x.row}`)}`).join("&")}&valueRenderOption=FORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING`);
+      return list.map((_, k) => (got.valueRanges?.[k]?.values || [])[0] || []);
+    };
+    const conflict = async (it, plan, sn, now) => {
+      const n = (Number(it.conflicts) || 0) + 1;
+      const reason = "시트를 읽은 뒤 그 줄이 바뀌어(줄 추가 · 삭제 · 정렬 · 입력) 쓰지 않았습니다 — 다음 차례에 시트를 다시 읽어 맞춥니다";
+      await db.collection(CONFLICTS).doc().set({ companyName: co, orderId: it.orderId, kind: it.kind, label: it.label || "", tab: sn.tab, row: sn.row, at: Date.now(),
+        expect: sn.cells.slice(0, 40).map((v) => v.slice(0, 80)), got: now.slice(0, 40).map((v) => String(v ?? "").slice(0, 80)), cells: summary(plan).cells }).catch(() => {});
+      await it.ref.set({ conflicts: n, lastError: reason, ...(n >= MAX_CONFLICTS ? { state: "failed", doneAt: Date.now(), result: { ...summary(plan), reason: `${reason} (${n}번 계속 엇갈려 멈춤 — 확인해 주세요)` } } : {}) }, { merge: true });
+      console.warn(`[시트 쓰기] ${co} ${it.orderId} ${sn.tab}!${sn.row} 읽은 뒤 줄이 바뀌어 쓰지 않음(${n}번째)`);
+    };
+    // ⭐ 2026-11-17 같은 시트 줄을 가리키는 다른 오더(복사본 · 중복) — 그 줄의 날짜 · 구간 · 차량까지 같은 오더만
+    //  하나를 지웠다고 줄을 지우면 남은 오더의 줄(사람이 시트에 적은 줄)이 사라졌다 · 복사본을 고치면 원본 줄을 덮어썼다
+    const othersOn = async (rec, selfId) => {
+      const sn = await db.collection("orders").where("companyName", "==", co).where("이전출처", "==", rec.이전출처).get().catch(() => null);
+      return (sn?.docs || []).filter((d) => d.id !== selfId).map((d) => ({ id: d.id, ...(d.data() || {}) })).filter((x) => C.rowMatches(x, rec, { strict: true }));
+    };
+    // 그 줄의 주인: 시트에서 온 오더 → 프로그램에서 만들어 시트에 줄을 만든 오더 → 먼저 만든 오더
+    const rank = (x) => [x?.등록기기 === "구글시트 이전" ? 0 : x?.시트연동 === true ? 1 : 2, ts(x?.createdAt) || Number.MAX_SAFE_INTEGER];
+    const ahead = (x, y) => { const a = rank(x), b = rank(y); return a[0] !== b[0] ? a[0] < b[0] : a[1] < b[1]; };
     // 삭제가 한꺼번에 많으면(전체 지우기 · 회사 초기화 등) 시트는 건드리지 않고 보류 — 관리센터에서 확인한 것(approved)만 진행
     const dels = all.filter((x) => x.kind === "delete" && !x.approved);
     const hold = mode === "on" && dels.length > HOLD_DELETES;
@@ -137,10 +192,16 @@ function makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
         if (preset.fromDate && day && day < preset.fromDate) { await done(it, "skipped", { reason: `${preset.fromDate} 이전 오더는 시트와 맞추지 않습니다` }); continue; }
         let plan;
         if (it.kind === "delete") {
+          const cur = C.findRow(ctx, it.before || {}, { taken, strict: true });
+          if (cur && (await othersOn(cur, it.orderId)).length) { await done(it, "skipped", { tab: cur.__tab, row: cur.__row, reason: "같은 시트 줄을 쓰는 다른 오더가 있어 줄을 지우지 않았습니다(복사본 · 중복 오더)" }); continue; }
           plan = C.planDelete(ctx, it.before || {}, { taken });
           if (plan.ok && plan.cells.length && hold) { await done(it, "held", { ...summary(plan), reason: `삭제 ${dels.length}건이 한꺼번에 들어와 보류했습니다` }); continue; }
         } else if (it.kind === "update") {
-          plan = C.planUpdate(ctx, { ...(it.before || {}), 이전출처: (it.before || {}).이전출처 || after.이전출처 }, after, { taken });
+          const bf = { ...(it.before || {}), 이전출처: (it.before || {}).이전출처 || after.이전출처 };
+          const cur = C.findRow(ctx, bf, { taken });
+          const others = cur ? await othersOn(cur, it.orderId) : [];
+          if (others.length && (!C.rowMatches(bf, cur, { strict: true }) || others.some((o) => ahead(o, after)))) { await done(it, "skipped", { tab: cur.__tab, row: cur.__row, reason: "같은 시트 줄을 쓰는 다른(먼저 있던) 오더가 있어 시트에 쓰지 않았습니다(복사본 · 중복 오더)" }); continue; }
+          plan = C.planUpdate(ctx, bf, after, { taken });
         } else {
           // 탭: 오더에서 고른 담당노선구분(= 탭 이름)이 먼저, 없으면 같은 구간이 이미 있는 탭
           const okTab = (t) => !!t && ctx.tabs.some((x) => x.title === t) && (!pushTabs.length || pushTabs.includes(t));
@@ -157,20 +218,22 @@ function makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
             wrote = true; structural = true;
             dropRows.forEach((d) => { if (d.tab === tab && d.row >= at) d.row += 1; }); // 이번 차례에 지울 줄이 아래에 있으면 한 줄 밀린다
             book = await readAll(id, null); ctx = ctxOf(book); taken.clear(); // 줄 번호가 바뀌었으니 다시 읽는다
-            plan = C.planCreate(ctx, after, tab, { rowCount: book.grid[tab]?.rowCount || 0, atRow: at });
-          } else plan = C.planCreate(ctx, after, tab, { rowCount: book.grid[tab]?.rowCount || 0 });
+            dropRows.forEach((d) => taken.add(`${d.tab}!${d.row}`)); // ⭐ 2026-11-17 곧 지울 줄은 계속 잡아 둔다(새 오더를 그 줄에 쓰지 않게)
+            plan = C.planCreate(ctx, after, tab, { rowCount: book.grid[tab]?.rowCount || 0, atRow: at, taken });
+          } else plan = C.planCreate(ctx, after, tab, { rowCount: book.grid[tab]?.rowCount || 0, taken });
           if (!plan.ok && plan.needRows && mode === "on") { // 탭에 빈 줄이 없으면 200줄 늘리고 다시
             await sheetsApiFor(id, "POST", ":batchUpdate", { data: { requests: [{ appendDimension: { sheetId: book.grid[tab].sheetId, dimension: "ROWS", length: 200 } }] } });
             book.grid[tab].rowCount += 200; wrote = true;
-            plan = C.planCreate(ctx, after, tab, { rowCount: book.grid[tab].rowCount });
+            plan = C.planCreate(ctx, after, tab, { rowCount: book.grid[tab].rowCount, taken });
           }
         }
         n += 1;
         if (!plan.ok) { await done(it, "failed", summary(plan)); continue; }
         if (plan.tab && plan.row) taken.add(`${plan.tab}!${plan.row}`);
         if (mode === "dry") { await done(it, "dry", summary(plan)); continue; }
-        if (it.kind === "delete" && plan.tab && plan.row && plan.cells?.length && book.grid[plan.tab] && !merged(plan.tab, plan.row)) { dropRows.push({ it, plan, tab: plan.tab, row: plan.row }); continue; }
+        if (it.kind === "delete" && plan.tab && plan.row && plan.cells?.length && book.grid[plan.tab] && !merged(plan.tab, plan.row)) { dropRows.push({ it, plan, tab: plan.tab, row: plan.row, snap: snapRow(plan.tab, plan.row) }); continue; }
         if (plan.cells && plan.cells.length) {
+          if (plan.tab && plan.row) { const sn = snapRow(plan.tab, plan.row); const [now] = await readRows([sn]); if (!sameRow(sn, now)) { await conflict(it, plan, sn, now); continue; } }
           try { await writeCells(id, plan.tab, plan.cells); wrote = true; }
           catch (e) { // 못 썼다 — 이번 차례는 여기서 멈춘다(나머지는 다음에). 권한 문제면 화면에 그대로 알린다
             const msg = writeErr(e);
@@ -187,6 +250,12 @@ function makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
       }
     }
     // 🗑 지울 줄 — 아래 줄부터 한 번에 지운다(위에서부터 지우면 아래 줄 번호가 밀린다). 못 지우면 예전처럼 값만 비운다
+    if (dropRows.length) { // ⭐ 2026-11-17 지우기 직전에 그 줄들을 다시 읽어, 처음 읽은 줄 그대로인 것만 지운다
+      const now = await readRows(dropRows.map((d) => ({ tab: d.tab, row: d.row }))).catch((e) => { console.warn(`[시트 쓰기] ${co} 지울 줄 확인 실패 — 다음 차례에:`, e?.message || e); return null; });
+      const keep = [];
+      for (let k = 0; k < dropRows.length; k += 1) { const d = dropRows[k]; if (now && sameRow(d.snap, now[k])) keep.push(d); else if (now) await conflict(d.it, d.plan, d.snap, now[k]); }
+      dropRows.length = 0; dropRows.push(...keep);
+    }
     if (dropRows.length) {
       const reqs = [...dropRows].sort((x, y) => y.row - x.row).map((d) => ({ deleteDimension: { range: { sheetId: book.grid[d.tab].sheetId, dimension: "ROWS", startIndex: d.row - 1, endIndex: d.row } } }));
       try {
@@ -196,7 +265,9 @@ function makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
       } catch (e) {
         console.warn(`[시트 쓰기] ${co} 줄 삭제 실패 — 값만 비움:`, e?.message || e);
         for (const d of dropRows) {
-          try { await writeCells(id, d.plan.tab, d.plan.cells); wrote = true; await done(d.it, "done", summary(d.plan)); }
+          // ⭐ 2026-11-17 줄 번호는 지금 위치(d.row)로 — 같은 차례에 위에 줄을 끼웠으면 계획 때 번호(plan.cells)는 한 줄 위(새 오더 줄)를 가리킨다
+          const cells = d.plan.cells.map((c) => ({ ...c, a1: String(c.a1).replace(/\d+$/, String(d.row)) }));
+          try { await writeCells(id, d.plan.tab, cells); wrote = true; await done(d.it, "done", summary(d.plan)); }
           catch (e2) { await d.it.ref.set({ tries: (d.it.tries || 0) + 1, lastError: writeErr(e2) }, { merge: true }).catch(() => {}); }
         }
       }
