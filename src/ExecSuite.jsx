@@ -10,7 +10,7 @@ import React from "react";
 import { arrowFocus } from "./useListKeys";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
-import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, AreaChart, Area } from "recharts";
+import { ResponsiveContainer, ComposedChart, BarChart, Bar, Cell, Line, XAxis, YAxis, Tooltip, CartesianGrid, AreaChart, Area } from "recharts";
 import { db, DEFAULT_COMPANY } from "./firebase";
 import { ShellIcon } from "./AdminShell";
 import KpSubNav from "./KpSubNav";
@@ -21,7 +21,7 @@ import { approvalNavItems } from "./menuTree"; // ⭐ 2026-11-10 메뉴 통일
 const ContractStudioX = React.lazy(() => import("./ContractStudio")); // ⭐ 2026-11-10 부서·임원 화면 전자결재 › 계약서
 import { buildPastStats } from "./HomeDeck";
 import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정(끈 업체 오더는 매출에서 뺌)
-import { pcLiveWindowStart, pcPrevDay } from "./orderHistory";
+import { pcLiveWindowStart, pcPrevDay, useOrderHistory } from "./orderHistory";
 import { isUnassignedOrder } from "./unassignedRule"; // ⭐ 2026-11-07 미배차 공용 기준
 import { isTMUser } from "./staffFilter";
 import { personName } from "./userNames";
@@ -32,7 +32,19 @@ import { getNationalHolidayLabel } from "./attendanceUtils";
 import AttendanceApprovalInbox from "./AttendanceApprovalInbox";
 import { PersonalSchedule, PersonalModeSwitch, usePersonalMode, birthdaysOn, BirthChip } from "./PersonalSchedule"; // ⭐ 2026-11-03 개인일정·생일
 import { kpConfirm } from "./kpDialog";
-import { profitStyle, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
+import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
+// 👑 2026-11-17 임원 디자인 시스템(남색 + 골드) · 경영 브리핑 계산
+import { EX, EX_NUM, GOLD_GRAD, GoldRule, ExecPage, ExecPanel, ExecKpis, ExecGrid, ExecTabs, Num, Money, Delta, Eyebrow, Meter, Ring, RankBars, Chip, Empty, ExecClock, Legend, chartTheme, ExecTooltip, useBoxWidth, useExecMode, moneyParts, fmtWon, fmtMoney, fmtEokMan, fmtPct, pctChange } from "./execUi";
+import { monthPipeline, laborByMonth, teamComposition, teamContribution, attendanceToday, briefSentences, TEAM_NONE } from "./execBriefingCore";
+import { liveRows, monthsBack } from "./execAnalyticsCore";
+import { staffRanking, monthSpans } from "./dailyReportCore";
+import { receivablesOf } from "./arAging";
+import { useUserNameMap, orderStaffNameRaw, ORDER_MGR_FIXED } from "./detailGetters";
+import { useCompanyRows } from "./companyColStore";
+import { loadAcctPayments } from "./acctPayments";
+import { computeFunds } from "./fundsCalc";
+import { isDemoOn } from "./devDemoData";
+import { execAnalyticsDemo } from "./execAnalyticsDemo";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const GOLD = "#D7BC82";
@@ -141,381 +153,566 @@ export function eventsOf(a) {
   return out;
 }
 
-// ─────────────────────────── 디자인 조각(다크 · 임원) ───────────────────────────
-const SHELL_BG = "radial-gradient(1200px 500px at 85% -10%, rgba(110,149,232,.22), transparent 60%), radial-gradient(900px 400px at -10% 110%, rgba(215,188,130,.10), transparent 60%), linear-gradient(160deg,#060C1A 0%,#0B1530 45%,#0E1C3C 100%)";
-const GRID = "linear-gradient(rgba(143,176,240,.05) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(90deg, rgba(143,176,240,.05) 1px, transparent 1px) 0 0/26px 26px";
-function Panel({ en, title, right, children, className = "", pad = true }) {
+// ─────────────────────────── 디자인 조각(다크 · 임원 — src/execUi.jsx 디자인 시스템) ───────────────────────────
+// 바탕(남색 + 은은한 격자) — 결재함 · 직원 일정처럼 밝은 화면 안에 들어가는 임원용 띠에 쓴다
+const SHELL_BG = `radial-gradient(1200px 500px at 85% -10%, rgba(215,188,130,.10), transparent 60%), radial-gradient(900px 500px at -10% 10%, rgba(75,108,183,.18), transparent 55%), linear-gradient(180deg, ${EX.bg1}, ${EX.bg0})`;
+const GRID = "linear-gradient(rgba(143,176,240,.045) 1px, transparent 1px) 0 0/28px 28px, linear-gradient(90deg, rgba(143,176,240,.045) 1px, transparent 1px) 0 0/28px 28px";
+const demoOn = () => { try { return !!(import.meta.env.DEV && isDemoOn()); } catch { return false; } };
+const pColor = (v) => profitColor(v, { dark: true, neutral: EX.text });
+const rColor = (v) => profitRateColor(v, { dark: true, neutral: EX.sub });
+// 작은 꼬리 글씨(근거 · 기준)
+const Basis = ({ children, className = "" }) => <div className={`text-[12px] font-semibold leading-relaxed ${className}`} style={{ color: EX.mute }}>{children}</div>;
+// 패널 머리 오른쪽 링크
+const GoLink = ({ children, onClick }) => <button type="button" onClick={onClick} className="h-9 px-3 rounded-xl text-[12.5px] font-extrabold whitespace-nowrap transition hover:brightness-125" style={{ color: EX.sub, background: "rgba(255,255,255,.04)", border: `1px solid ${EX.line}` }}>{children} ›</button>;
+// 축 금액(억 · 만)
+const axisMoney = (v) => { const a = Math.abs(v); if (a >= 1e8) return `${(v / 1e8).toFixed(a >= 1e9 ? 0 : 1).replace(/\.0$/, "")}억`; if (a >= 1e4) return `${Math.round(v / 1e4).toLocaleString("ko-KR")}만`; return `${v}`; };
+
+// 핵심 숫자 타일 — execUi Kpi 와 같은 모양에 "값 색(이익 빨강/파랑)"과 "오른쪽 게이지" 자리를 더했다
+function BTile({ en, label, money, value, unit, color, accent = false, delta, deltaLabel, deltaSuffix = "%", foot, side, onClick, title, testId, muted = false }) {
+  const parts = money != null ? moneyParts(money) : [value, unit];
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className={`relative rounded-[22px] border border-white/[0.08] bg-white/[0.035] backdrop-blur-sm overflow-hidden min-w-0 ${className}`}
-      style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,.05), 0 20px 40px rgba(0,0,0,.25)" }}>
-      {(en || title) && (
-        <div className="px-4 md:px-5 pt-4 pb-2 flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            {en && <div className="text-[11px] font-extrabold tracking-[0.28em] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: ICE }}>{en}</div>}
-            {title && <div className="text-[18px] font-black text-white tracking-tight truncate mt-0.5">{title}</div>}
-          </div>
-          {right}
-        </div>
-      )}
-      <div className={pad ? "px-4 md:px-5 pb-4" : ""}>{children}</div>
-    </div>
-  );
-}
-function Delta({ v, suffix = "%", invert = false }) {
-  if (v == null || !isFinite(v)) return <span className="text-white/35 text-[13px] font-bold" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>—</span>;
-  const up = v >= 0; const good = invert ? !up : up;
-  return (
-    <span className={`inline-flex items-center gap-0.5 text-[13px] font-black tabular-nums whitespace-nowrap ${good ? "text-[#9FE3C4]" : "text-[#FFB4A8]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
-      {up ? "▲" : "▼"}{Math.abs(v).toFixed(1)}{suffix}
-    </span>
-  );
-}
-function Clock() {
-  const [t, setT] = React.useState(kstNow());
-  React.useEffect(() => { const i = setInterval(() => setT(kstNow()), 1000); return () => clearInterval(i); }, []);
-  const p = (n) => String(n).padStart(2, "0");
-  return (
-    <div className="tabular-nums leading-none text-white" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
-      <span className="text-[34px] md:text-[40px] font-black">{p(t.getUTCHours())}<span className="animate-pulse" style={{ color: GOLD }}>:</span>{p(t.getUTCMinutes())}</span>
-      <span className="text-[15.5px] md:text-[17px] font-bold text-white/40 ml-1">{p(t.getUTCSeconds())}</span>
-    </div>
-  );
-}
-const ChartTip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="rounded-xl border border-white/15 bg-[#0B1530]/95 px-3 py-2 text-[13.5px] text-white shadow-xl">
-      <div className="font-black mb-1" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{label}</div>
-      {payload.map((p) => <div key={p.dataKey} className="flex items-center gap-2 tabular-nums"><span className="w-2 h-2 rounded-full" style={{ background: p.color }} />{p.name} <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...(p.dataKey === "profit" ? profitStyle(p.value, { dark: true }) : p.dataKey === "margin" && profitRateColor(p.value, { dark: true }) ? { color: profitRateColor(p.value, { dark: true }) } : {}) }}>{p.dataKey === "margin" ? `${Number(p.value).toFixed(1)}%` : `${Math.round(p.value).toLocaleString()}원`}</b></div>)}
-    </div>
-  );
-};
-function Ring({ value, size = 64, label }) {
-  const r = (size - 8) / 2; const c = 2 * Math.PI * r; const v = Math.max(0, Math.min(1, value || 0));
-  return (
-    <svg width={size} height={size} className="shrink-0">
-      <circle cx={size / 2} cy={size / 2} r={r} stroke="rgba(255,255,255,.08)" strokeWidth="6" fill="none" />
-      <circle cx={size / 2} cy={size / 2} r={r} stroke={GOLD} strokeWidth="6" fill="none" strokeLinecap="round" strokeDasharray={`${c * v} ${c}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
-      <text x="50%" y="50%" dominantBaseline="central" textAnchor="middle" fill="#fff" fontSize="14" fontWeight="900" fontFamily={MONO}>{label}</text>
-    </svg>
+    <Tag type={onClick ? "button" : undefined} onClick={onClick} title={title} data-testid={testId}
+      className={`relative text-left rounded-[20px] p-4 md:p-5 min-w-0 overflow-hidden transition ${onClick ? "hover:-translate-y-0.5 cursor-pointer" : ""}`}
+      style={{ background: accent ? "linear-gradient(160deg, rgba(215,188,130,.16), rgba(215,188,130,.04) 55%, rgba(255,255,255,.02))" : EX.panel, border: `1px solid ${accent ? EX.lineHi : EX.line}`, boxShadow: "inset 0 1px 0 rgba(255,255,255,.05)" }}>
+      {accent && <div className="absolute top-0 left-5 right-5 h-px" style={{ background: GOLD_GRAD }} />}
+      {en && <Eyebrow color={accent ? EX.gold : EX.ice} size={10}>{en}</Eyebrow>}
+      <div className="mt-1 text-[13px] md:text-[13.5px] font-bold truncate" style={{ color: EX.sub }}>{label}</div>
+      <div className="mt-2.5 flex items-center justify-between gap-2 min-w-0">
+        <div className="min-w-0">{muted ? <span className="text-[16px] md:text-[17px] font-black" style={{ color: EX.mute }}>{value}</span> : <Num value={parts[0]} unit={parts[1]} size={accent ? 34 : 30} color={color || (accent ? EX.goldHi : EX.text)} />}</div>
+        {side && <div className="shrink-0 -my-2">{side}</div>}
+      </div>
+      {delta !== undefined && <div className="mt-2.5"><Delta v={delta} label={deltaLabel} suffix={deltaSuffix} size={12.5} /></div>}
+      {foot && <div className={`${delta !== undefined ? "mt-1" : "mt-2.5"} text-[12px] font-semibold truncate`} style={{ color: EX.mute }}>{foot}</div>}
+    </Tag>
   );
 }
 
-// ─────────────────────────── 경영 브리핑 ───────────────────────────
+// 작은 통계 칸(패널 안)
+function Stat({ label, children, sub, tone }) {
+  return (
+    <div className="rounded-2xl px-3.5 py-3 min-w-0" style={{ background: "rgba(255,255,255,.035)", border: `1px solid ${tone === "warn" ? "rgba(245,196,107,.35)" : EX.line}` }}>
+      <div className="text-[12px] font-bold whitespace-nowrap truncate" style={{ color: EX.mute }}>{label}</div>
+      <div className="mt-1.5">{children}</div>
+      {sub && <div className="mt-1 text-[11.5px] font-semibold truncate" style={{ color: EX.faint }}>{sub}</div>}
+    </div>
+  );
+}
+
+// 사업 흐름 — 오더 접수 → 배차완료 → 청구 → 입금 → 기사 지급 → 매출총이익
+//  넓으면 한 줄(단계 사이 ›), 중간이면 2~3칸, 폰처럼 좁으면 한 단계 한 줄(왼쪽 이름 · 오른쪽 숫자)
+function FlowValue({ step, size }) {
+  return step.money != null ? <Money v={step.money} size={size} color={step.color || EX.text} /> : <Num value={step.value} unit={step.unit} size={size} color={step.color || EX.text} />;
+}
+function FlowNode({ i, n, step, mode }) {
+  const box = { background: step.hero ? "linear-gradient(160deg, rgba(215,188,130,.16), rgba(215,188,130,.03))" : "rgba(255,255,255,.035)", border: `1px solid ${step.hero ? EX.lineHi : EX.line}` };
+  const badge = <span className="w-[22px] h-[22px] shrink-0 rounded-full grid place-items-center text-[10.5px] font-black" style={{ ...EX_NUM, background: step.hero ? GOLD_GRAD : "rgba(143,176,240,.14)", color: step.hero ? "#1A1408" : EX.ice }}>{i + 1}</span>;
+  const rate = step.rate != null && <span className="shrink-0 text-[11.5px] font-black whitespace-nowrap" style={{ ...EX_NUM, color: step.rateColor || EX.goldHi }}>{step.rateLabel} {fmtPct(step.rate)}</span>;
+  if (mode === "list") {
+    return (
+      <div className="rounded-2xl px-3.5 py-3" style={box}>
+        <div className="flex items-center gap-3 min-w-0">
+          {badge}
+          <div className="min-w-0 flex-1">
+            <div className="text-[13.5px] font-extrabold truncate" style={{ color: EX.text }}>{step.label}</div>
+            <div className="text-[11.5px] font-semibold truncate" style={{ color: EX.mute }}>{step.sub}</div>
+          </div>
+          <div className="shrink-0 text-right">
+            <FlowValue step={step} size={20} />
+            {rate && <div className="mt-1">{rate}</div>}
+          </div>
+        </div>
+        {step.meter != null && <div className="mt-2 ml-[34px]"><Meter value={step.meter} max={100} height={3} color={step.meterColor || EX.gold} /></div>}
+      </div>
+    );
+  }
+  return (
+    <div className="relative min-w-0 flex">
+      <div className="relative flex-1 min-w-0 rounded-[18px] px-4 py-3.5" style={box}>
+        <div className="flex items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-2 min-w-0">{badge}<span className="text-[13px] font-extrabold truncate" style={{ color: EX.sub }}>{step.label}</span></span>
+          {rate}
+        </div>
+        <div className="mt-2.5"><FlowValue step={step} size={mode === "row" ? 26 : 24} /></div>
+        {step.meter != null && <div className="mt-2.5"><Meter value={step.meter} max={100} height={4} color={step.meterColor || EX.gold} /></div>}
+        <div className="mt-2 text-[11.5px] font-semibold truncate" style={{ color: EX.mute }}>{step.sub}</div>
+      </div>
+      {mode === "row" && i < n - 1 && <span aria-hidden className="absolute top-1/2 -right-[13px] z-10 w-[18px] h-[18px] -translate-y-1/2 grid place-items-center rounded-full text-[11px] font-black" style={{ background: EX.bg1, border: `1px solid ${EX.lineHi}`, color: EX.gold }}>›</span>}
+    </div>
+  );
+}
+function BusinessFlow({ steps }) {
+  const [ref, w] = useBoxWidth(1200);
+  const mode = w >= 1080 ? "row" : w >= 600 ? "grid" : "list";
+  const cols = mode === "row" ? steps.length : mode === "grid" ? (w >= 820 ? 3 : 2) : 1;
+  return (
+    <div ref={ref} className={`grid ${mode === "row" ? "gap-[18px]" : mode === "grid" ? "gap-3" : "gap-2"}`} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))` }}>
+      {steps.map((s, i) => <FlowNode key={s.label} i={i} n={steps.length} step={s} mode={mode} />)}
+    </div>
+  );
+}
+// 매출 = 매입(기사 지급) + 매출총이익 — 한 줄 막대
+function SplitBar({ sale, cost, profit }) {
+  if (!sale) return null;
+  const c = Math.max(0, Math.min(100, (cost / sale) * 100)); const p = Math.max(0, 100 - c);
+  return (
+    <div>
+      <div className="flex h-3 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,.06)" }}>
+        <div style={{ width: `${c}%`, background: `linear-gradient(90deg, ${EX.iceDeep}, ${EX.ice})` }} />
+        <div style={{ width: `${p}%`, background: GOLD_GRAD, boxShadow: "0 0 14px rgba(215,188,130,.35)" }} />
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-3 flex-wrap text-[12px] font-bold" style={{ color: EX.sub }}>
+        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px]" style={{ background: EX.ice }} />매입(기사 지급) <b style={{ ...EX_NUM, color: EX.text }}>{fmtPct(c)}</b></span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px]" style={{ background: EX.gold }} />매출총이익 <b style={{ ...EX_NUM, color: rColor(profit) }}>{fmtPct(sale ? (profit / sale) * 100 : null)}</b></span>
+      </div>
+    </div>
+  );
+}
+// 팀 구성 — 한 줄 쌓은 막대 + 범례
+function TeamStack({ teams, total }) {
+  if (!total) return <Empty text="재직 직원 정보가 없습니다" sub="인사관리부에서 직원 소속 팀을 등록하면 보입니다" />;
+  return (
+    <div>
+      <div className="flex h-3.5 rounded-full overflow-hidden gap-[2px]">
+        {teams.map((t, i) => <div key={t.team} title={`${t.team} ${t.n}명`} style={{ width: `${(t.n / total) * 100}%`, background: EX.series[i % EX.series.length], opacity: t.team === TEAM_NONE ? 0.35 : 0.92 }} />)}
+      </div>
+      <div className="mt-3 grid gap-x-4 gap-y-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(132px,100%), 1fr))" }}>
+        {teams.map((t, i) => (
+          <div key={t.team} className="flex items-center gap-2 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-[3px] shrink-0" style={{ background: EX.series[i % EX.series.length], opacity: t.team === TEAM_NONE ? 0.35 : 1 }} />
+            <span className="text-[13px] font-bold truncate" style={{ color: EX.sub }}>{t.team}</span>
+            <span className="ml-auto text-[13.5px] font-black" style={{ ...EX_NUM, color: EX.text }}>{t.n}<span className="text-[11.5px] font-bold ml-0.5" style={{ color: EX.mute }}>명</span></span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────── 경영 브리핑(회사 종합 현황판) ───────────────────────────
+//  위에서 아래로 "시작 → 과정 → 결과": 인사 · 한 줄 요약 → 핵심 숫자 → 이번 달 사업 흐름 → 조직 · 인건비 / 팀 · 담당자 기여
+//  → 월별 추이 / 결재 대기 → 주의 신호 / 거래처 TOP
 export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liveStart, me = {}, att = null }) {
-  const { days, clients, ready } = useYearDays({ company, dispatchData, pastCache, liveStart });
-  const isCeo = isCeoPosition(me?.position);
+  const demo = React.useMemo(() => (demoOn() ? execAnalyticsDemo(company) : null), [company]);
+  const today = kstToday();
+  const year = today.slice(0, 4);
+  const thisMonth = today.slice(0, 7);
+  const prevMonth = (() => { const d = new Date(`${thisMonth}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7); })();
+  const data = demo ? demo.rows : dispatchData;
+  const demoPast = React.useMemo(() => (demo ? { days: {}, clients: {}, month: "", cs: "" } : null), [demo]);
+  const { days, clients, ready } = useYearDays({ company, dispatchData: data, pastCache: demo ? demoPast : pastCache, liveStart: demo ? `${year}-01-01` : liveStart });
+  const co = demo ? "" : company;
+  const meX = demo ? { ...demo.me, ...Object.fromEntries(Object.entries(me || {}).filter(([, v]) => v)) } : me || {};
+  const isCeo = isCeoPosition(meX?.position);
   const apSet = useApprovalSettings(company);
   const autoDaily = apSet.autoApproveDaily === true;
-  const F = useFundsSummary(company, isCeo);
-  const approvals = useApprovalsOf(company);
-  const { staff, drivers } = useStaff(company);
-  const today = kstToday();
-  const attendance = useCompanyQuery("attendance", company, "companyName", { date: today }) || [];
-  const docsBy = useCompanyDriverDocs(company);
+  const fundsLive = useFundsSummary(company, isCeo && !demo);
+  const F = React.useMemo(() => (demo ? { ready: true, has: true, ...computeFunds(demo.funds, demo.ledger) } : fundsLive), [demo, fundsLive]);
+  const apLive = useApprovalsOf(co);
+  const approvals = demo ? demo.approvals : apLive;
+  const staffLive = useStaff(co);
+  const staff = React.useMemo(() => (demo ? demo.people.filter((p) => p.employmentStatus !== "퇴사").map((p) => ({ ...p, id: p.uid })) : staffLive.staff), [demo, staffLive.staff]);
+  const drivers = staffLive.drivers;
+  const attLive = useCompanyQuery("attendance", co, "companyName", { date: today }) || [];
+  const attendance = demo ? demo.attendance[today] || [] : attLive;
+  const docsBy = useCompanyDriverDocs(co);
+  const ledgerLive = useCompanyRows("acctLedger", co);
+  const ledger = demo ? demo.ledger : ledgerLive || [];
+  const fixedLive = useCompanyRows("fixedClients", co);
   const [range, setRange] = React.useState("year");
+  const [contribTab, setContribTab] = React.useState("team");
 
-  const thisMonth = today.slice(0, 7);
+  // 올해 오더(사업 흐름 · 담당자 기여 · 미수금) — 경영 분석과 같은 방식으로 기간을 불러온다(한 번 받은 기간은 다시 받지 않는다)
+  const { loadRange } = useOrderHistory() || {};
+  const loadFrom = [`${year}-01-01`, `${prevMonth}-01`].sort()[0];
+  const [yearLoaded, setYearLoaded] = React.useState(!!demo);
+  React.useEffect(() => {
+    if (demo || !loadRange) return undefined;
+    let alive = true;
+    Promise.resolve(loadRange(loadFrom, today)).then((r) => { if (alive && r !== null) setYearLoaded(true); }).catch(() => {});
+    return () => { alive = false; };
+  }, [demo, loadRange, loadFrom, today]);
+  const [arPay, setArPay] = React.useState(null);
+  React.useEffect(() => {
+    if (demo) { setArPay(demo.arPayments); return undefined; }
+    if (!company) return undefined;
+    let alive = true;
+    loadAcctPayments(db, Number(year), company).then((d) => { if (alive) setArPay(d.ar || {}); }).catch(() => { if (alive) setArPay(null); });
+    return () => { alive = false; };
+  }, [demo, company, year]);
+  const carrierF = useRouteCarrierFilter(company);
+  const rows = React.useMemo(() => liveRows(data).filter((r) => carrierF.isCountable(r)), [data, carrierF]);
+
+  // ── 매출 · 이익(홈과 같은 집계: 지난 기간 저장값 + 실시간) ──
   const dayNo = Number(today.slice(8, 10));
-  const prevMonth = (() => { const d = new Date(`${thisMonth}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7); })();
   const dim = new Date(Date.UTC(Number(thisMonth.slice(0, 4)), Number(thisMonth.slice(5, 7)), 0)).getUTCDate();
   const sumWhere = (fn) => Object.entries(days).reduce((a, [d, v]) => (fn(d) ? [a[0] + v[0], a[1] + v[1], a[2] + v[2]] : a), [0, 0, 0]);
   const [mSale, mProfit, mCnt] = sumWhere((d) => d.startsWith(thisMonth));
   const [pSale, pProfit] = sumWhere((d) => d.startsWith(prevMonth) && Number(d.slice(8, 10)) <= dayNo);
-  const [ySale, yProfit, yCnt] = sumWhere((d) => d.startsWith(thisMonth.slice(0, 4)));
-  const prevAvail = prevMonth.slice(0, 4) === thisMonth.slice(0, 4);
-  const mMargin = mSale ? (mProfit / mSale) * 100 : 0;
-  const pMargin = pSale ? (pProfit / pSale) * 100 : 0;
+  const [ySale, yProfit, yCnt] = sumWhere((d) => d.startsWith(year));
+  const prevAvail = prevMonth.slice(0, 4) === year;
+  const mMargin = mSale ? (mProfit / mSale) * 100 : null;
+  const pMargin = pSale ? (pProfit / pSale) * 100 : null;
+  const yMargin = ySale ? (yProfit / ySale) * 100 : null;
   const forecast = dayNo ? (mSale / dayNo) * dim : 0;
   const [pFullSale] = sumWhere((d) => d.startsWith(prevMonth));
+  const md = prevAvail ? pctChange(mSale, pSale) : null;
+  const monthSale = (ym) => sumWhere((d) => d.startsWith(ym))[0];
 
-  const monthly = Array.from({ length: Number(thisMonth.slice(5, 7)) }, (_, i) => {
-    const m = `${thisMonth.slice(0, 4)}-${String(i + 1).padStart(2, "0")}`;
+  const monthlyAll = Array.from({ length: Number(thisMonth.slice(5, 7)) }, (_, i) => {
+    const m = `${year}-${String(i + 1).padStart(2, "0")}`;
     const [s, p] = sumWhere((d) => d.startsWith(m));
-    return { k: `${i + 1}월`, sale: s, profit: p, margin: s ? (p / s) * 100 : 0 };
+    return { k: `${i + 1}월`, m, sale: s, profit: p, margin: s ? (p / s) * 100 : null, cur: m === thisMonth };
   });
+  const firstOn = monthlyAll.findIndex((x) => x.sale > 0);
+  const monthly = firstOn > 0 ? monthlyAll.slice(firstOn) : monthlyAll;
   const daily = Array.from({ length: 30 }, (_, i) => { const d = addDay(today, i - 29); const v = days[d] || [0, 0, 0]; return { k: d.slice(5).replace("-", "."), sale: v[0], profit: v[1] }; });
 
-  // 오늘의 현장
-  const todayRows = (dispatchData || []).filter((r) => dateOf(r) === today && !isCancelled(r) && r.source !== "transport_transmit");
-  // ⭐ 2026-11-07 배차 완료 = 배차상태 "배차완료"만(승인대기 등은 빼고) · 미배차 = 배차현황과 같은 공용 기준
+  // ── 이번 달 사업 흐름 ──
+  const pipe = React.useMemo(() => monthPipeline(rows, thisMonth, today), [rows, thisMonth, today]);
+  const todayRows = rows.filter((r) => dateOf(r) === today);
   const doneToday = todayRows.filter((r) => String(r.배차상태 || "").trim() === "배차완료");
   const unassigned = todayRows.filter(isUnassignedOrder);
   const todaySale = (days[today] || [0])[0];
 
-  // 결재
-  const mine = approvals.filter((a) => myTurn(a, me?.uid)).sort((a, b) => tsMs(a.createdAt) - tsMs(b.createdAt));
+  // ── 미수금(회계관리 · 경영 분석과 같은 계산 — 올해 배차완료 + 고정거래처, 부가세 포함 − 수금 기록) ──
+  const ar = React.useMemo(() => {
+    if (!arPay || !yearLoaded) return null;
+    const list = receivablesOf({ orders: rows, fixedRows: demo ? [] : fixedLive || [], paid: arPay, today }).filter((x) => x.outstanding > 0);
+    const total = list.reduce((s, x) => s + x.outstanding, 0);
+    const over30 = list.reduce((s, x) => s + (x.aging?.b60 || 0) + (x.aging?.b90 || 0) + (x.aging?.over || 0), 0);
+    return { total, over30, clients: list.length };
+  }, [arPay, yearLoaded, rows, fixedLive, demo, today]);
+
+  // ── 결재 ──
+  const meUid = meX?.uid;
+  const mine = approvals.filter((a) => myTurn(a, meUid)).sort((a, b) => tsMs(a.createdAt) - tsMs(b.createdAt));
   const pendingAll = approvals.filter((a) => a.status === "pending");
   const late = pendingAll.filter((a) => Date.now() - tsMs(a.createdAt) > 48 * 3600e3);
   const expMonth = approvals.filter((a) => a.cat === "expense" && a.status === "approved" && new Date(tsMs(a.createdAt) + 9 * 3600e3).toISOString().startsWith(thisMonth)).reduce((s, a) => s + (Number(a.amount) || 0), 0);
 
-  // 사람
+  // ── 사람 ──
   const evs = approvals.flatMap(eventsOf);
   const awayToday = evs.filter((e) => e.date === today && !/조퇴|지각/.test(e.label));
   const awayUniq = [...new Map(awayToday.map((e) => [e.uid, e])).values()];
-  const attMap = Object.fromEntries(attendance.map((a) => [a.uid, a]));
-  const inNow = staff.filter((u) => attMap[u.id] && (attMap[u.id].status === "출근" || attMap[u.id].checkInTime)).length;
+  const attToday = attendanceToday(staff, attendance, awayUniq.filter((e) => e.status === "approved").map((e) => e.uid));
+  const teams = teamComposition(staff);
   const week = Array.from({ length: 7 }, (_, i) => addDay(today, i));
   const weekEvs = evs.filter((e) => week.includes(e.date));
 
-  // 거래처
+  // ── 인건비(회계 장부 기준) ──
+  const laborMonths = monthsBack(thisMonth, 6);
+  const labor = React.useMemo(() => laborByMonth(ledger, laborMonths), [ledger, laborMonths.join()]); // eslint-disable-line react-hooks/exhaustive-deps
+  const laborBase = labor[4]?.total ? labor[4] : labor[5]?.total ? labor[5] : null; // 지난달(다 마감된 달) 우선
+  const laborBaseSale = laborBase && laborBase.m.slice(0, 4) === year ? monthSale(laborBase.m) : 0;
+  const laborAccs = laborBase ? Object.entries(laborBase.byAcc).sort((a, b) => b[1] - a[1]) : [];
+
+  // ── 팀 · 담당자 기여(일일 경영 보고와 같은 담당자 기준) ──
+  const nameMap = useUserNameMap();
+  const staffOf = React.useCallback((r) => { const n = orderStaffNameRaw(r, nameMap); return (n && n !== ORDER_MGR_FIXED ? n : "") || String(r?.배차확정자 || "").trim() || n || "미지정"; }, [nameMap]);
+  const teamByName = React.useMemo(() => { const m = {}; staff.forEach((u) => { const n = String(personName(u) || u.name || "").trim(); if (n) m[n] = String(u.team || "").trim(); }); return m; }, [staff]);
+  const rank = React.useMemo(() => { const sp = monthSpans(today); return staffRanking(rows, sp.cur, sp.prev, staffOf, (n) => n === "최고관리자"); }, [rows, today, staffOf]);
+  const teamRows = React.useMemo(() => teamContribution(rank.list, (n) => teamByName[n] || ""), [rank, teamByName]);
+
+  // ── 거래처 ──
   const topClients = Object.entries(clients).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const clientTotal = Object.values(clients).reduce((s, v) => s + v, 0);
   const topShare = clientTotal && topClients[0] ? (topClients[0][1] / clientTotal) * 100 : 0;
   const docIssue = drivers.filter((d) => { const p = docProblems(docsBy?.[d.id]); return p.missing || p.bad; }).length;
 
-  // 주의 신호
+  // ── 주의 신호 ──
   const signals = [
-    unassigned.length > 0 && { tone: "bad", t: `오늘 미배차 ${unassigned.length}건`, s: `오늘 오더 ${todayRows.length}건 중`, go: null },
-    late.length > 0 && { tone: "bad", t: `결재 지연 ${late.length}건`, s: "상신 후 48시간 넘게 진행 중", go: "결재함" },
+    unassigned.length > 0 && { tone: "bad", t: `오늘 미배차 ${unassigned.length}건`, s: `오늘 오더 ${todayRows.length}건 중 · 배차가 아직 잡히지 않았습니다`, go: null },
+    late.length > 0 && { tone: "bad", t: `결재 지연 ${late.length}건`, s: "상신 후 48시간 넘게 진행 중입니다", go: "결재함" },
+    ar && ar.over30 > 0 && { tone: "warn", t: `30일 넘은 미수금 ${fmtEokMan(ar.over30)}`, s: `미수 거래처 ${ar.clients}곳 · 오래된 청구부터 수금된 것으로 계산`, go: "경영분석" },
     topShare >= 30 && { tone: "warn", t: `거래처 쏠림 ${topShare.toFixed(0)}%`, s: `${topClients[0]?.[0]} — 이번 달 매출 비중`, go: "매출관리" },
-    prevAvail && pSale > 0 && mSale > 0 && mMargin < pMargin - 2 && { tone: "warn", t: `이익률 ${(pMargin - mMargin).toFixed(1)}%p 하락`, s: `전월 동기 ${pMargin.toFixed(1)}% → ${mMargin.toFixed(1)}%`, go: "인사이트" },
-    docIssue > 0 && { tone: "warn", t: `기사 서류 미비 ${docIssue}명`, s: "미제출·반려·만료", go: null },
-    expMonth > 0 && { tone: "info", t: `이번 달 승인 지출 ${short(expMonth)}원`, s: "전자결재 비용·지출 결의", go: "결재함" },
+    prevAvail && pSale > 0 && mSale > 0 && mMargin < pMargin - 2 && { tone: "warn", t: `이익률 ${(pMargin - mMargin).toFixed(1)}%p 하락`, s: `전월 같은 기간 ${pMargin.toFixed(1)}% → 이번 달 ${mMargin.toFixed(1)}%`, go: "인사이트" },
+    docIssue > 0 && { tone: "warn", t: `기사 서류 미비 ${docIssue}명`, s: "미제출 · 반려 · 만료 서류가 있습니다", go: null },
+    expMonth > 0 && { tone: "info", t: `이번 달 승인 지출 ${fmtEokMan(expMonth)}`, s: "전자결재 비용 · 지출 결의 승인 합계", go: "결재함" },
   ].filter(Boolean);
 
+  // ── 인사 · 한 줄 요약 ──
   const hour = kstNow().getUTCHours();
-  const greet = hour < 12 ? "좋은 아침입니다" : hour < 18 ? "좋은 오후입니다" : "수고 많으셨습니다";
-  const md = pct(mSale, pSale);
-  const brief = [
-    `이번 달 매출은 ${short(mSale)}원${prevAvail && pSale ? `으로 전월 같은 기간보다 ${md >= 0 ? `${md.toFixed(1)}% 늘었습니다` : `${Math.abs(md).toFixed(1)}% 줄었습니다`}` : "입니다"}.`,
-    forecast > 0 && `지금 속도면 월말 ${short(forecast)}원이 예상됩니다.`,
-    mine.length ? `결재 ${mine.length}건이 대표님 결재를 기다리고 있습니다.` : "기다리는 결재는 없습니다.",
-    awayUniq.length ? `오늘 ${awayUniq.length}명이 휴가·외근 중입니다.` : "",
-  ].filter(Boolean).join(" ").replace("대표님", me?.position ? `${me.position}님` : "임원님");
+  const greet = hour < 12 ? "좋은 아침입니다" : hour < 18 ? "좋은 오후입니다" : "오늘도 수고 많으셨습니다";
+  const honor = meX?.position ? `${meX.position}님` : "임원님";
+  const brief = briefSentences({ mSale, md, prevAvail, mMargin, forecast, pFullSale: prevAvail ? pFullSale : 0, mineCount: mine.length, title: honor, awayCount: awayUniq.length, fmt: fmtEokMan });
+  const stamp = `${today.slice(5).replace("-", ".")} ${String(hour).padStart(2, "0")}:${String(kstNow().getUTCMinutes()).padStart(2, "0")}`;
 
-  const dstr = `${today.replace(/-/g, ".")} ${DOW[new Date(`${today}T00:00:00Z`).getUTCDay()]}요일`;
+  // ── 사업 흐름 단계(믿을 수 있는 자료가 없는 단계는 뺀다) ──
+  const flow = [
+    { label: "오더 접수", value: pipe.orders.toLocaleString("ko-KR"), unit: "건", sub: `하루 평균 ${pipe.perDay.toFixed(1)}건 · ${pipe.days}일간` },
+    { label: "배차완료", value: pipe.done.toLocaleString("ko-KR"), unit: "건", rate: pipe.doneRate, rateLabel: "완료율", meter: pipe.doneRate ?? 0, meterColor: EX.ice, sub: pipe.open ? `배차 진행 중 ${pipe.open.toLocaleString("ko-KR")}건` : "모든 오더 배차완료" },
+    { label: "청구 매출", money: pipe.sale, sub: `건당 평균 ${fmtMoney(pipe.perOrder)} · 부가세 별도` },
+    pipe.useDeposit && { label: "입금 확인", money: pipe.deposited, rate: pipe.depositRate, rateLabel: "입금률", meter: pipe.depositRate ?? 0, sub: `입금 대기 ${fmtMoney(Math.max(0, pipe.sale - pipe.deposited))}` },
+    { label: "기사 지급", money: pipe.cost, rate: pipe.costRate, rateLabel: "매출 대비", rateColor: EX.ice, ...(pipe.usePay ? { meter: pipe.payRate ?? 0, meterColor: EX.ice, sub: `매입 · 기사운임 지급완료 ${fmtPct(pipe.payRate)}` } : { sub: "매입 = 기사운임 + 따로 지급한 비용" }) },
+    { label: "매출총이익", money: pipe.profit, color: pColor(pipe.profit), hero: true, rate: pipe.margin, rateLabel: "이익률", rateColor: rColor(pipe.margin), sub: `건당 ${fmtMoney(pipe.done ? pipe.profit / pipe.done : 0)}` },
+  ].filter(Boolean);
+
+  const chartTip = (props) => <ExecTooltip {...props} unit="" fmt={(v, p) => (p.dataKey === "margin" ? fmtPct(v) : `${fmtWon(v)}원`)} />;
+  const dot = (tone) => (tone === "bad" ? EX.danger : tone === "warn" ? EX.warn : EX.ice);
+
   return (
-    <div className="relative rounded-[26px] overflow-hidden text-white -mx-1 md:mx-0" style={{ background: SHELL_BG }}>
-      <div className="absolute inset-0 pointer-events-none" style={{ background: GRID }} />
-      <div className="relative p-3 md:p-6 space-y-3 md:space-y-4">
-        {/* ── 머리말 · 오늘의 브리핑 ── */}
-        <div className="flex flex-col lg:flex-row lg:items-end gap-4 lg:gap-8">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[12px] font-extrabold tracking-[0.34em]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: GOLD }}>EXECUTIVE · BRIEFING</span>
-              <span className="h-px flex-1 min-w-[40px] max-w-[160px]" style={{ background: `linear-gradient(90deg, ${GOLD}, transparent)` }} />
-            </div>
-            <div className="mt-2 text-[26px] md:text-[34px] font-black tracking-tight leading-tight">
-              {[personName(me) || "임원", me?.position].filter(Boolean).join(" ")}님, <span className="text-white/60">{greet}</span>
-            </div>
-            <p className="mt-2 text-[15px] md:text-[16.5px] leading-relaxed text-white/75 max-w-[880px]">{ready ? brief : "오늘의 경영 지표를 정리하고 있습니다…"}</p>
-          </div>
-          <div className="flex items-center gap-4 lg:gap-6 shrink-0 flex-wrap">
-            {/* ⭐ 2026-11-01 출근·퇴근 — 홈 데크처럼 시계 옆에서 바로 */}
-            {att && <AttendanceQuickButton {...att} variant="deck" />}
-            <div className="text-left lg:text-right">
-              <Clock />
-              <div className="mt-1.5 text-[13px] font-bold text-white/45 tracking-[0.12em]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{dstr} · KST</div>
-            </div>
-          </div>
+    <ExecPage testId="exec-briefing" className="-mx-1 md:mx-0">
+      {/* ── 0. 인사 · 한 줄 요약 · 시계 · 출근 ── (머리 오른쪽 부품이 커서 화면 폭이 아니라 내용 폭에 맞춰 줄바꿈) */}
+      <header className="flex flex-wrap items-end gap-x-8 gap-y-4">
+        <div className="min-w-0 flex-[1_1_460px]">
+          <div className="flex items-center gap-3"><Eyebrow>EXECUTIVE BRIEFING</Eyebrow><div className="flex-1 max-w-[220px]"><GoldRule /></div></div>
+          <h1 className="mt-1.5 text-[24px] md:text-[30px] font-black tracking-[-0.02em] leading-tight" style={{ color: EX.text, wordBreak: "keep-all" }}>
+            {[personName(meX) || "임원", meX?.position].filter(Boolean).join(" ")}님, <span style={{ color: EX.sub, fontWeight: 800 }}>{greet}</span>
+          </h1>
+          <p className="mt-2 text-[14px] md:text-[15px] font-medium leading-[1.7] max-w-[900px]" style={{ color: EX.sub, wordBreak: "keep-all" }} data-testid="exec-brief-text">
+            {ready ? <><span style={{ color: EX.text, fontWeight: 700 }}>{brief[0]}</span> {brief.slice(1).join(" ")}</> : "오늘의 경영 지표를 정리하고 있습니다…"}
+            <span className="ml-2 text-[12px] font-semibold whitespace-nowrap" style={{ ...EX_NUM, color: EX.faint }}>{stamp} 기준</span>
+          </p>
         </div>
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          {/* ⭐ 2026-11-01 출근 · 퇴근 — 시계 옆에서 바로 */}
+          {att && <AttendanceQuickButton {...att} variant="deck" />}
+          <ExecClock />
+        </div>
+      </header>
 
-        {/* ── 핵심 지표 ── */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3">
-          {[
-            { l: "이번 달 매출", v: `${short(mSale)}원`, sub: <><Delta v={prevAvail ? md : null} /><span className="text-white/40"> 전월 동기</span></>, en: "REVENUE · MTD" },
-            { l: "매출총이익", v: `${short(mProfit)}원`, pv: mProfit, sub: <><span className="text-white/70 font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...(profitRateColor(mMargin, { dark: true }) ? { color: profitRateColor(mMargin, { dark: true }) } : {}) }}>{mMargin.toFixed(1)}%</span><span className="text-white/40"> 이익률 </span><Delta v={prevAvail && pSale ? mMargin - pMargin : null} suffix="%p" /></>, en: "GROSS PROFIT" },
-            { l: "월말 예상 매출", v: `${short(forecast)}원`, sub: <><span className="text-white/40">전월 실적 </span><span className="text-white/70 font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{prevAvail ? `${short(pFullSale)}원` : "—"}</span></>, en: "FORECAST", ring: forecast ? Math.min(1, mSale / forecast) : 0, ringLabel: `${dayNo}/${dim}` },
-            { l: "올해 누적 매출", v: `${short(ySale)}원`, sub: <><span className="text-white/40">이익 </span><span className="text-white/70 font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...profitStyle(yProfit, { dark: true }) }}>{short(yProfit)}원</span><span className="text-white/40"> · {yCnt.toLocaleString()}건</span></>, en: "YEAR TO DATE" },
-          ].map((k) => (
-            <div key={k.l} className="relative rounded-[20px] border border-white/[0.09] px-3.5 md:px-5 py-3 md:py-4 overflow-hidden min-w-0" style={{ background: "linear-gradient(150deg, rgba(255,255,255,.07), rgba(255,255,255,.02))" }}>
-              <div className="absolute top-0 left-4 right-4 h-px" style={{ background: `linear-gradient(90deg, transparent, ${GOLD}66, transparent)` }} />
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="text-[10.5px] md:text-[11px] font-extrabold tracking-[0.24em] text-white/40 whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{k.en}</div>
-                  <div className="text-[13.5px] md:text-[14.5px] font-bold text-white/70 mt-0.5 whitespace-nowrap">{k.l}</div>
-                  <div className="text-[24px] md:text-[34px] font-black tabular-nums leading-tight mt-1 whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...(k.pv != null ? profitStyle(k.pv, { dark: true }) : {}) }}>{k.v}</div>
-                </div>
-                {k.ring != null && <span className="hidden md:block"><Ring value={k.ring} label={k.ringLabel} /></span>}
-              </div>
-              <div className="mt-1 text-[12.5px] md:text-[13px] whitespace-nowrap truncate">{k.sub}</div>
-            </div>
-          ))}
-        </div>
+      {/* ── 1. 핵심 숫자 ── */}
+      <div>
+        <ExecKpis min={188}>
+          <BTile accent en="REVENUE · MTD" label="이번 달 매출" money={mSale} delta={md} deltaLabel="전월 동기" foot={`오더 ${mCnt.toLocaleString("ko-KR")}건`} onClick={() => onGo?.("매출관리")} />
+          <BTile en="GROSS PROFIT" label="매출총이익" money={mProfit} color={pColor(mProfit)} delta={prevAvail && pMargin != null && mMargin != null ? mMargin - pMargin : undefined} deltaSuffix="%p" deltaLabel="전월 동기"
+            foot={<>이익률 <b style={{ ...EX_NUM, color: rColor(mMargin) }}>{fmtPct(mMargin)}</b></>} />
+          <BTile en="FORECAST" label="월말 예상 매출" money={forecast} foot={prevAvail ? `전월 실적 ${fmtMoney(pFullSale)}` : undefined} delta={prevAvail && pFullSale ? pctChange(forecast, pFullSale) : undefined} deltaLabel="전월 대비"
+            side={<Ring value={(dayNo / dim) * 100} size={52} stroke={4.5} label={`${dayNo}/${dim}`} sub="일" />} title="이번 달 지난 날짜 비율 · 하루 평균 매출 × 이번 달 날짜 수" />
+          {isCeo && (F.has
+            ? <BTile en="TREASURY" label="보유 자금" money={F.cash} onClick={() => onGo?.("자금현황")} foot={F.runway != null ? `운영 가능 ${F.runway.toFixed(1)}개월` : "자금현황 ›"}
+              delta={undefined} title="통장 · 현금 잔액(경리 입력 기준) — 누르면 자금현황" />
+            : <BTile en="TREASURY" label="보유 자금" muted value={F.ready ? "자금관리 입력 전" : "불러오는 중…"} foot="경리가 통장 잔액을 입력하면 보입니다" onClick={() => onGo?.("자금현황")} />)}
+          {ar ? <BTile en="RECEIVABLES" label="미수금" money={ar.total} foot={ar.over30 > 0 ? <span style={{ color: EX.warn }}>30일 초과 {fmtMoney(ar.over30)}</span> : `${ar.clients}곳 · 부가세 포함`} onClick={() => onGo?.("경영분석")} title="올해 배차완료 + 고정거래처 청구(부가세 포함) − 수금 기록" />
+            : <BTile en="RECEIVABLES" label="미수금" muted value="집계 중…" foot="올해 청구 · 수금 기록을 불러오고 있습니다" />}
+          <BTile en="YEAR TO DATE" label={`${year}년 누적 매출`} money={ySale} foot={<>이익 <b style={{ ...EX_NUM, color: pColor(yProfit) }}>{fmtMoney(yProfit)}</b> · {fmtPct(yMargin)}</>} />
+        </ExecKpis>
         {/* ⭐ 2026-11-07 규칙 점검 — 매출관리(배차완료만)와 숫자가 다른 이유를 화면에 적어 둔다 */}
-        <div className="-mt-1 text-[12.5px] font-bold text-white/40" data-kp="exec-basis">매출 기준: 취소·운송사 전송을 뺀 전체 오더(배차중·승인대기 포함) · 매출관리는 배차완료 오더만 집계해 숫자가 다를 수 있습니다</div>
+        <Basis className="mt-2.5 px-1"><span data-kp="exec-basis">매출 기준: 취소 · 운송사 전송을 뺀 전체 오더(배차중 · 승인대기 포함) · 매출관리는 배차완료 오더만 집계해 숫자가 다를 수 있습니다</span>{isCeo && F.has ? " · 보유 자금은 경리 입력 통장 · 현금 잔액" : ""}</Basis>
+      </div>
 
-        {/* ── 💰 자금(대표만) ── */}
-        {isCeo && (
-          <button type="button" onClick={() => onGo?.("자금현황")} className="w-full text-left rounded-[22px] border border-[#D7BC82]/30 px-4 md:px-6 py-4 flex flex-wrap items-center gap-x-8 gap-y-3" style={{ background: "linear-gradient(120deg, rgba(215,188,130,.12), rgba(255,255,255,.03))" }}>
-            <span className="min-w-[140px]"><span className="block text-[11px] font-extrabold tracking-[0.28em]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: GOLD }}>TREASURY · 자금</span><span className="block text-[13px] text-white/55 mt-0.5">{F.has ? "통장·현금 잔액(경리 입력 기준)" : "경리가 자금 상태를 입력하면 보입니다"}</span></span>
-            {[["보유 자금", F.has ? `${short(F.cash)}원` : "—"], ["이번 달 순현금흐름", F.has ? `${F.thisMonth.in - F.thisMonth.out >= 0 ? "+" : ""}${short(F.thisMonth.in - F.thisMonth.out)}원` : "—"], ["운영 가능 기간", F.runway != null && F.has ? `${F.runway.toFixed(1)}개월` : "—"], ["대출 잔액", F.has ? `${short(F.loan)}원` : "—"]].map(([l, v]) => (
-              <span key={l}><span className="block text-[12.5px] font-bold text-white/55">{l}</span><span className="block text-[24px] md:text-[28px] font-black tabular-nums leading-tight" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</span></span>
-            ))}
-            <span className="ml-auto text-[14px] font-black text-white/60">자세히 ›</span>
-          </button>
-        )}
-
-        {/* ── 매출 추이 · 나의 결재 ── */}
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-3 md:gap-4">
-          <Panel en={`PERFORMANCE · ${thisMonth.slice(0, 4)}`} title={range === "year" ? "월별 매출 · 이익 · 이익률" : "최근 30일 매출 · 이익"}
-            right={<div className="flex rounded-xl bg-white/[0.06] p-0.5 shrink-0">{[["year", "올해"], ["30", "30일"]].map(([k, l]) => <button key={k} type="button" onClick={() => setRange(k)} className={`h-8 px-3 rounded-[10px] text-[13.5px] font-black whitespace-nowrap ${range === k ? "bg-white text-[#0B1530]" : "text-white/60"}`}>{l}</button>)}</div>}>
-            <div className="h-[250px] md:h-[300px] -ml-2">
-              <ResponsiveContainer width="100%" height="100%">
-                {range === "year" ? (
-                  <ComposedChart data={monthly} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="exSale" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#CFE0FF" stopOpacity={0.95} /><stop offset="100%" stopColor="#6E95E8" stopOpacity={0.55} /></linearGradient>
-                    </defs>
-                    <CartesianGrid stroke="rgba(143,176,240,.10)" vertical={false} />
-                    <XAxis dataKey="k" tick={{ fill: "rgba(207,224,255,.55)", fontSize: 12.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="w" tickFormatter={short} tick={{ fill: "rgba(207,224,255,.4)", fontSize: 12, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} width={46} />
-                    <YAxis yAxisId="m" orientation="right" tickFormatter={(v) => `${v}%`} tick={{ fill: "rgba(215,188,130,.6)", fontSize: 12, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} width={36} />
-                    <Tooltip content={<ChartTip />} cursor={{ fill: "rgba(143,176,240,.06)" }} />
-                    <Bar yAxisId="w" dataKey="sale" name="매출" fill="url(#exSale)" radius={[6, 6, 0, 0]} maxBarSize={30} />
-                    <Bar yAxisId="w" dataKey="profit" name="이익" fill="rgba(143,176,240,.35)" radius={[6, 6, 0, 0]} maxBarSize={30} />
-                    <Line yAxisId="m" dataKey="margin" name="이익률" stroke={GOLD} strokeWidth={2.2} dot={{ r: 3, fill: GOLD, strokeWidth: 0 }} />
-                  </ComposedChart>
-                ) : (
-                  <AreaChart data={daily} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="exArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#8FB0F0" stopOpacity={0.55} /><stop offset="100%" stopColor="#8FB0F0" stopOpacity={0} /></linearGradient>
-                    </defs>
-                    <CartesianGrid stroke="rgba(143,176,240,.10)" vertical={false} />
-                    <XAxis dataKey="k" interval={4} tick={{ fill: "rgba(207,224,255,.55)", fontSize: 12, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={short} tick={{ fill: "rgba(207,224,255,.4)", fontSize: 12, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} width={46} />
-                    <Tooltip content={<ChartTip />} />
-                    <Area dataKey="sale" name="매출" stroke="#CFE0FF" strokeWidth={2} fill="url(#exArea)" />
-                    <Area dataKey="profit" name="이익" stroke={GOLD} strokeWidth={1.6} fill="transparent" />
-                  </AreaChart>
-                )}
-              </ResponsiveContainer>
-            </div>
-          </Panel>
-
-          <Panel en="APPROVAL · YOUR TURN" title="나의 결재 대기"
-            right={<button type="button" onClick={() => onGo?.("결재함")} className="h-8 px-3 rounded-[10px] border border-white/15 text-[13.5px] font-black text-white/85 whitespace-nowrap hover:bg-white/10">결재함 ›</button>}>
-            {/* 🤖 일일 업무일지 자동 승인 — 켜면 상신과 동시에 승인, 끄면 임원이 직접 확인 */}
-            <button type="button" onClick={() => setAutoApproveDaily(company, !autoDaily, personName(me) || "")}
-              className={`w-full mb-3 rounded-2xl px-3.5 py-2.5 flex items-center gap-3 border text-left transition ${autoDaily ? "border-[#D7BC82]/50 bg-[#D7BC82]/[0.10]" : "border-white/10 bg-white/[0.04]"}`}>
-              <span className="min-w-0 flex-1"><span className="block text-[14px] font-black">일일 업무일지 자동 승인</span><span className="block text-[12.5px] text-white/50">{autoDaily ? "켜짐 — 올라오는 즉시 승인 처리됩니다" : "꺼짐 — 임원이 직접 확인하고 승인합니다"}</span></span>
-              <span className={`relative w-[52px] h-[30px] rounded-full shrink-0 transition ${autoDaily ? "" : "bg-white/15"}`} style={autoDaily ? { background: "linear-gradient(180deg,#F3E3BC,#D7BC82)" } : undefined}>
-                <span className={`absolute top-[3px] w-6 h-6 rounded-full bg-white shadow transition-all ${autoDaily ? "left-[25px]" : "left-[3px]"}`} />
-              </span>
-            </button>
-            <div className="flex items-end gap-3 mb-2">
-              <span className="text-[44px] font-black leading-none tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: mine.length ? "#fff" : "rgba(255,255,255,.35)" }}>{mine.length}</span>
-              <span className="text-[13.5px] font-bold text-white/50 pb-1">건 · 회사 진행 중 {pendingAll.length}건{late.length ? ` · 지연 ${late.length}` : ""}</span>
-            </div>
-            {!mine.length ? (
-              <div className="rounded-2xl border border-dashed border-white/15 py-8 text-center text-[14.5px] font-bold text-white/45">지금 결재할 문서가 없습니다</div>
-            ) : (
-              <div className="space-y-1.5 max-h-[214px] overflow-y-auto pr-1">
-                {mine.slice(0, 8).map((a) => {
-                  const h = Math.max(0, Math.floor((Date.now() - tsMs(a.createdAt)) / 3600e3));
-                  return (
-                    <button key={a.id} type="button" onClick={() => onGo?.(`결재함:${a.id}`)} className="w-full text-left rounded-2xl bg-white/[0.05] hover:bg-white/[0.09] border border-white/[0.07] px-3 py-2.5 flex items-center gap-3 transition">
-                      <span className="w-9 h-9 rounded-xl grid place-items-center shrink-0" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}><ShellIcon name={a.cat === "expense" ? "wallet" : a.cat === "leave" ? "clock" : "file"} size={16} /></span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-[15px] font-black truncate">{a.title || a.formLabel || "결재 문서"}</span>
-                        <span className="block text-[13px] text-white/50 truncate">{a.drafter?.name || ""}{a.drafter?.team ? ` · ${a.drafter.team}` : ""}{a.amount ? ` · ${Number(a.amount).toLocaleString()}원` : ""}</span>
-                      </span>
-                      <span className={`shrink-0 text-[12.5px] font-black tabular-nums ${h >= 48 ? "text-[#FFB4A8]" : "text-white/45"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{h >= 24 ? `${Math.floor(h / 24)}일` : `${h}시간`}</span>
-                    </button>
-                  );
-                })}
+      {/* ── 2. 이번 달 사업 흐름 ── */}
+      <ExecPanel en={`BUSINESS FLOW · ${thisMonth.replace("-", ".")}`} title="이번 달 사업 흐름" sub={`오더가 들어와 이익이 되기까지 · ${Number(thisMonth.slice(5))}월 1일 ~ ${dayNo}일 · 금액은 배차완료 오더 기준`}
+        right={<GoLink onClick={() => onGo?.("정산관리")}>정산관리</GoLink>}>
+        {!pipe.orders ? <Empty text="이번 달 접수된 오더가 아직 없습니다" sub={yearLoaded ? "배차 화면에 오더가 등록되면 흐름이 채워집니다" : "오더를 불러오고 있습니다"} /> : (
+          <>
+            <BusinessFlow steps={flow} />
+            <div className="mt-4 grid gap-4 md:gap-6 items-center" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(300px,100%), 1fr))" }}>
+              <div>
+                <div className="mb-2 text-[12.5px] font-extrabold" style={{ color: EX.sub }}>청구 매출 100 = 매입 + 매출총이익</div>
+                <SplitBar sale={pipe.sale} cost={pipe.cost} profit={pipe.profit} />
               </div>
-            )}
-          </Panel>
-        </div>
-
-        {/* ── 현장 · 사람 · 주의 신호 ── */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-          <Panel en="LOGISTICS · TODAY" title="물류운송현황" >
-            <div className="grid grid-cols-2 gap-2">
-              {[["오늘 오더", `${todayRows.length}`, "건"], ["배차 완료", `${doneToday.length}`, "건"], ["미배차", `${unassigned.length}`, "건", unassigned.length > 0], ["오늘 매출", short(todaySale), "원"]].map(([l, v, u, bad]) => (
-                <div key={l} className="rounded-2xl bg-white/[0.05] border border-white/[0.06] px-3 py-2.5">
-                  <div className="text-[12.5px] font-bold text-white/50 whitespace-nowrap">{l}</div>
-                  <div className={`text-[26px] font-black tabular-nums leading-tight ${bad ? "text-[#FFB4A8]" : ""}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}<span className="text-[13.5px] text-white/40 ml-0.5">{u}</span></div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-2.5">
-              <div className="flex justify-between text-[12.5px] font-bold text-white/50 mb-1"><span>배차율</span><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{todayRows.length ? Math.round((doneToday.length / todayRows.length) * 100) : 0}%</span></div>
-              <div className="h-1.5 rounded-full bg-white/[0.08] overflow-hidden"><div className="h-full rounded-full" style={{ width: `${todayRows.length ? (doneToday.length / todayRows.length) * 100 : 0}%`, background: `linear-gradient(90deg, ${ICE}, #CFE0FF)` }} /></div>
-            </div>
-          </Panel>
-
-          <Panel en="STAFF · TODAY" title="직원현황" right={<button type="button" onClick={() => onGo?.("직원일정")} className="text-[13.5px] font-black text-white/60 whitespace-nowrap hover:text-white">일정 ›</button>}>
-            <div className="grid grid-cols-3 gap-2">
-              {[["재직", staff.length], ["출근", inNow], ["부재", awayUniq.length]].map(([l, v]) => (
-                <div key={l} className="rounded-2xl bg-white/[0.05] border border-white/[0.06] px-2.5 py-2 text-center">
-                  <div className="text-[12.5px] font-bold text-white/50">{l}</div>
-                  <div className="text-[26px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-2.5 space-y-1 max-h-[96px] overflow-y-auto">
-              {!awayUniq.length ? <div className="text-[14px] font-bold text-white/40 py-2">오늘 부재 인원 없음</div> : awayUniq.map((e) => (
-                <div key={e.uid} className="flex items-center gap-2 text-[14px]">
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: e.status === "approved" ? GOLD : "rgba(255,255,255,.35)" }} />
-                  <span className="font-black whitespace-nowrap">{e.name}</span>
-                  <span className="text-white/45 truncate">{[e.team, e.position].filter(Boolean).join(" · ")}</span>
-                  <span className="ml-auto text-[12.5px] font-black text-white/70 whitespace-nowrap">{e.label}{e.status !== "approved" ? "(결재 중)" : ""}</span>
-                </div>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel en="SIGNALS" title="주의 신호">
-            {!signals.length ? (
-              <div className="rounded-2xl border border-dashed border-white/15 py-8 text-center text-[14.5px] font-bold text-white/45">특이 사항이 없습니다</div>
-            ) : (
-              <div className="space-y-1.5">
-                {signals.slice(0, 5).map((x) => (
-                  <button key={x.t} type="button" disabled={!x.go} onClick={() => x.go && onGo?.(x.go)} className="w-full text-left rounded-2xl bg-white/[0.04] border border-white/[0.06] px-3 py-2 flex items-center gap-2.5 enabled:hover:bg-white/[0.08]">
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: x.tone === "bad" ? "#FF8A7A" : x.tone === "warn" ? GOLD : ICE, boxShadow: `0 0 10px ${x.tone === "bad" ? "#FF8A7A" : x.tone === "warn" ? GOLD : ICE}` }} />
-                    <span className="min-w-0 flex-1"><span className="block text-[14.5px] font-black truncate">{x.t}</span><span className="block text-[12.5px] text-white/45 truncate">{x.s}</span></span>
-                    {x.go && <span className="text-white/35 text-[14.5px]">›</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-          </Panel>
-        </div>
-
-        {/* ── 거래처 · 이번 주 부재 ── */}
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] gap-3 md:gap-4">
-          <Panel en="CLIENTS · THIS MONTH" title="거래처 매출 TOP 5" right={<button type="button" onClick={() => onGo?.("매출관리")} className="text-[13.5px] font-black text-white/60 whitespace-nowrap hover:text-white">매출관리 ›</button>}>
-            {!topClients.length ? <div className="py-8 text-center text-[14.5px] font-bold text-white/40">이번 달 매출이 아직 없습니다</div> : (
-              <div className="space-y-2.5">
-                {topClients.map(([n, v], i) => (
-                  <div key={n}>
-                    <div className="flex items-center gap-2 text-[14.5px]">
-                      <span className="w-5 text-[12.5px] font-black text-white/40" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{String(i + 1).padStart(2, "0")}</span>
-                      <span className="font-black truncate flex-1">{n}</span>
-                      <span className="font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(v)}원</span>
-                      <span className="w-12 text-right text-[12.5px] text-white/45 tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{clientTotal ? ((v / clientTotal) * 100).toFixed(1) : 0}%</span>
+              <div className="rounded-2xl px-4 py-3" style={{ background: "rgba(255,255,255,.03)", border: `1px solid ${EX.line}` }}>
+                <div className="flex items-center justify-between gap-2"><Eyebrow size={10} color={EX.ice}>TODAY · {today.slice(5).replace("-", ".")}</Eyebrow><span className="text-[11.5px] font-bold" style={{ color: EX.mute }}>배차율 <b style={{ ...EX_NUM, color: EX.text }}>{todayRows.length ? Math.round((doneToday.length / todayRows.length) * 100) : 0}%</b></span></div>
+                <div className="mt-2 grid grid-cols-4 gap-2">
+                  {[["오더", todayRows.length, "건"], ["배차완료", doneToday.length, "건"], ["미배차", unassigned.length, "건", unassigned.length > 0], ["매출", null, null]].map(([l, v, u, bad]) => (
+                    <div key={l} className="min-w-0">
+                      <div className="text-[11.5px] font-bold" style={{ color: EX.mute }}>{l}</div>
+                      <div className="mt-0.5">{v == null ? <Money v={todaySale} size={18} /> : <Num value={v} unit={u} size={18} color={bad ? EX.danger : EX.text} />}</div>
                     </div>
-                    <div className="ml-7 mt-1 h-1.5 rounded-full bg-white/[0.06] overflow-hidden"><div className="h-full rounded-full" style={{ width: `${clientTotal ? (v / topClients[0][1]) * 100 : 0}%`, background: i === 0 ? `linear-gradient(90deg, ${GOLD}, #F1DFB4)` : `linear-gradient(90deg, #6E95E8, #CFE0FF)` }} /></div>
+                  ))}
+                </div>
+                <div className="mt-2"><Meter value={doneToday.length} max={Math.max(1, todayRows.length)} height={4} color={EX.ice} /></div>
+              </div>
+            </div>
+            <Basis className="mt-3">접수 = 이번 달 상차일 오더(취소 · 운송사 전송 제외) · 매입 = 기사운임 + 지게차 · 특수운임처럼 회사가 따로 지급한 비용{pipe.useDeposit ? " · 입금 = 정산관리 [입금완료] 처리분" : ""}{pipe.usePay ? " · 지급 = 정산관리 [지급완료] 처리분" : ""}</Basis>
+          </>
+        )}
+      </ExecPanel>
+
+      {/* ── 3. 조직 · 인건비 / 팀 · 담당자 기여 ── */}
+      <ExecGrid cols="minmax(0,1fr) minmax(0,1.1fr)" breakAt={1000}>
+        <ExecPanel en="ORGANIZATION · PEOPLE" title="조직 · 인건비" sub={`재직 ${staff.length}명 · 팀 ${teams.filter((t) => t.team !== TEAM_NONE).length}개`} right={<GoLink onClick={() => onGo?.("직원정보")}>직원 정보</GoLink>}>
+          <div className="grid grid-cols-3 gap-2">
+            <Stat label="오늘 출근" sub={attToday.total ? `재직 ${attToday.total}명 중` : "직원 정보 없음"}><Num value={attToday.in} unit="명" size={24} /></Stat>
+            <Stat label="휴가 · 외근" sub={awayUniq.length ? awayUniq.slice(0, 2).map((e) => e.name).join(" · ") + (awayUniq.length > 2 ? ` 외 ${awayUniq.length - 2}명` : "") : "없음"}><Num value={awayUniq.length} unit="명" size={24} /></Stat>
+            <Stat label="출근 기록 없음" sub={hour < 10 ? "아직 출근 시간 전후" : "근태 확인 필요"} tone={hour >= 10 && attToday.none > 0 ? "warn" : undefined}><Num value={attToday.none} unit="명" size={24} color={hour >= 10 && attToday.none > 0 ? EX.warn : EX.text} /></Stat>
+          </div>
+          <div className="mt-4">
+            <div className="mb-2 flex items-baseline justify-between gap-2"><span className="text-[13px] font-extrabold" style={{ color: EX.sub }}>팀별 인원 구성</span><span className="text-[12px] font-semibold" style={{ color: EX.mute }}>인사 정보(소속 팀) 기준</span></div>
+            <TeamStack teams={teams} total={staff.length} />
+          </div>
+          <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${EX.line}` }}>
+            <div className="mb-2.5 flex items-baseline justify-between gap-2"><span className="text-[13px] font-extrabold" style={{ color: EX.sub }}>인건비</span><Chip tone="mute">회계 장부 기준</Chip></div>
+            {!laborBase ? <Empty text="회계 장부에 인건비 지출이 아직 없습니다" sub="경리가 회계 장부에 급여 · 상여 · 4대보험을 입력하면 보입니다" /> : (
+              <div className="grid gap-4 items-end" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(220px,100%), 1fr))" }}>
+                <div className="min-w-0">
+                  <div className="text-[12px] font-bold" style={{ color: EX.mute }}>{Number(laborBase.m.slice(5))}월 인건비{laborBase.m === thisMonth ? "(진행 중)" : ""}</div>
+                  <div className="mt-1.5"><Money v={laborBase.total} size={28} /></div>
+                  <div className="mt-2 space-y-1 text-[12.5px] font-semibold" style={{ color: EX.sub }}>
+                    {laborBaseSale > 0 && <div className="flex justify-between gap-3"><span style={{ color: EX.mute }}>매출 대비</span><b style={EX_NUM}>{fmtPct((laborBase.total / laborBaseSale) * 100)}</b></div>}
+                    {staff.length > 0 && <div className="flex justify-between gap-3"><span style={{ color: EX.mute }}>재직 1인당 평균</span><b style={EX_NUM}>{fmtMoney(laborBase.total / staff.length)}</b></div>}
+                    {laborAccs.slice(0, 3).map(([k, v]) => <div key={k} className="flex justify-between gap-3"><span className="truncate" style={{ color: EX.mute }}>{k}</span><b style={EX_NUM}>{fmtMoney(v)}</b></div>)}
                   </div>
-                ))}
+                </div>
+                <div className="h-[132px] min-w-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={labor.map((x) => ({ k: `${Number(x.m.slice(5))}월`, v: x.total, cur: x.m === laborBase.m }))} margin={{ top: 18, right: 2, left: 2, bottom: 0 }}>
+                      <defs><linearGradient id="exLabor" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={EX.goldHi} /><stop offset="100%" stopColor={EX.goldDeep} stopOpacity={0.75} /></linearGradient></defs>
+                      <XAxis dataKey="k" {...chartTheme.axis} tick={{ ...chartTheme.axis.tick, fontSize: 11 }} interval={0} />
+                      <Tooltip content={(p) => <ExecTooltip {...p} unit="" fmt={(v) => `${fmtWon(v)}원`} />} cursor={chartTheme.cursor} />
+                      <Bar dataKey="v" name="인건비" radius={[6, 6, 2, 2]} maxBarSize={26} label={{ position: "top", content: ({ x, y, width, index, value }) => (labor[index]?.m === laborBase.m && value ? <text x={x + width / 2} y={y - 6} textAnchor="middle" fill={EX.goldHi} fontSize={11} fontWeight={800} fontFamily={EX_NUM.fontFamily}>{axisMoney(value)}</text> : null) }}>
+                        {labor.map((x) => <Cell key={x.m} fill={x.m === laborBase.m ? "url(#exLabor)" : "rgba(143,176,240,.28)"} />)}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             )}
-          </Panel>
-
-          <Panel en="TEAM · NEXT 7 DAYS" title="이번 주 부재 일정" right={<button type="button" onClick={() => onGo?.("직원일정")} className="text-[13.5px] font-black text-white/60 whitespace-nowrap hover:text-white">달력 ›</button>}>
+            <Basis className="mt-2.5">급여 · 상여 · 퇴직급여 · 4대보험 계정 지출 합 · 급여 상세는 보안상 이 화면에 보이지 않습니다{laborBase && laborBase.m !== thisMonth ? " · 이번 달은 지급 전일 수 있어 지난달 기준" : ""}</Basis>
+          </div>
+          <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${EX.line}` }}>
+            <div className="mb-2 flex items-center justify-between gap-2"><span className="text-[13px] font-extrabold" style={{ color: EX.sub }}>앞으로 7일 부재 일정</span><GoLink onClick={() => onGo?.("직원일정")}>달력</GoLink></div>
             <div className="grid grid-cols-7 gap-1 md:gap-1.5">
               {week.map((d) => {
                 const list = weekEvs.filter((e) => e.date === d);
                 const dow = new Date(`${d}T00:00:00Z`).getUTCDay();
                 return (
-                  <div key={d} className={`rounded-xl md:rounded-2xl border px-1 md:px-2 py-2 min-h-[92px] min-w-0 ${d === today ? "border-[#D7BC82]/60 bg-[#D7BC82]/[0.07]" : "border-white/[0.07] bg-white/[0.03]"}`}>
-                    <div className={`text-center text-[12px] font-black ${dow === 0 ? "text-[#FFB4A8]" : dow === 6 ? "text-[#AFC6F5]" : "text-white/55"}`}>{DOW[dow]}</div>
-                    <div className="text-center text-[16.5px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{Number(d.slice(8))}</div>
+                  <div key={d} className="rounded-xl px-1 py-1.5 min-h-[74px] min-w-0" style={{ background: d === today ? "rgba(215,188,130,.08)" : "rgba(255,255,255,.025)", border: `1px solid ${d === today ? EX.lineHi : EX.line}` }}>
+                    <div className="text-center text-[11px] font-extrabold" style={{ color: dow === 0 || getNationalHolidayLabel(d) ? EX.up : dow === 6 ? EX.down : EX.mute }}>{DOW[dow]}</div>
+                    <div className="text-center text-[14px] font-black" style={{ ...EX_NUM, color: EX.text }}>{Number(d.slice(8))}</div>
                     <div className="mt-1 space-y-0.5">
-                      {list.slice(0, 3).map((e) => <div key={`${e.id}${e.date}`} title={`${e.name} ${e.label}`} className={`rounded-md px-1 py-[1px] text-[11.5px] md:text-[12px] font-bold truncate ${e.status === "approved" ? "bg-white/[0.10] text-white/90" : "border border-dashed border-white/25 text-white/60"}`}>{e.name}</div>)}
-                      {list.length > 3 && <div className="text-[11.5px] text-white/45 text-center">+{list.length - 3}</div>}
+                      {list.slice(0, 2).map((e) => <div key={`${e.id}${e.date}`} title={`${e.name} ${e.label}${e.status !== "approved" ? "(결재 중)" : ""}`} className="rounded-md px-1 py-[1px] text-[10.5px] md:text-[11px] font-bold truncate text-center" style={e.status === "approved" ? { background: "rgba(215,188,130,.16)", color: EX.goldHi } : { border: `1px dashed ${EX.faint}`, color: EX.sub }}>{e.name}</div>)}
+                      {list.length > 2 && <div className="text-[10.5px] text-center font-bold" style={{ color: EX.mute }}>+{list.length - 2}</div>}
                     </div>
                   </div>
                 );
               })}
             </div>
-          </Panel>
-        </div>
-      </div>
-    </div>
+          </div>
+        </ExecPanel>
+
+        <ExecPanel en="CONTRIBUTION · MTD" title="누가 매출과 이익을 만드는가" sub={`${Number(thisMonth.slice(5))}월 1일 ~ ${dayNo}일 · 전월 같은 기간 대비`}
+          right={<ExecTabs size="sm" items={[["team", "팀별"], ["staff", "담당자별"]]} value={contribTab} onChange={setContribTab} />}>
+          {!rank.list.length ? <Empty text="이번 달 담당자별 실적이 아직 없습니다" sub={yearLoaded ? "오더가 등록되면 담당자 · 팀별로 묶여 보입니다" : "오더를 불러오고 있습니다"} /> : contribTab === "team" ? (
+            <div className="space-y-3">
+              {teamRows.map((t, i) => {
+                const mx = teamRows[0]?.sale || 1;
+                return (
+                  <div key={t.team} className="rounded-2xl px-3.5 py-3" style={{ background: i === 0 ? "rgba(215,188,130,.06)" : "rgba(255,255,255,.025)", border: `1px solid ${i === 0 ? EX.lineHi : EX.line}` }}>
+                    <div className="flex items-baseline justify-between gap-3 min-w-0">
+                      <div className="flex items-baseline gap-2 min-w-0">
+                        <span className="text-[14.5px] font-black truncate" style={{ color: EX.text }}>{t.team}</span>
+                        <span className="text-[12px] font-semibold whitespace-nowrap" style={{ color: EX.mute }}>담당 {t.people}명 · {t.cnt.toLocaleString("ko-KR")}건</span>
+                      </div>
+                      <span className="shrink-0 text-[12px] font-black" style={{ ...EX_NUM, color: EX.goldHi }}>{fmtPct(t.share)}</span>
+                    </div>
+                    <div className="mt-2"><Meter value={t.sale} max={mx} height={6} color={i === 0 ? EX.gold : EX.ice} /></div>
+                    <div className="mt-2 grid grid-cols-3 gap-2 text-[12.5px]">
+                      <div className="min-w-0"><div className="font-semibold" style={{ color: EX.mute }}>매출</div><div className="font-black" style={{ ...EX_NUM, color: EX.text }}>{fmtMoney(t.sale)}</div></div>
+                      <div className="min-w-0"><div className="font-semibold" style={{ color: EX.mute }}>매출총이익</div><div className="font-black" style={{ ...EX_NUM, color: pColor(t.profit) }}>{fmtMoney(t.profit)} <span className="font-bold text-[11.5px]" style={{ color: rColor(t.margin) }}>{fmtPct(t.margin)}</span></div></div>
+                      <div className="min-w-0 text-right"><div className="font-semibold" style={{ color: EX.mute }}>전월 동기</div><div><Delta v={t.d} size={12.5} /></div></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <RankBars rows={rank.list.slice(0, 8).map((x) => ({ key: x.n, label: x.n, sub: teamByName[x.n] || "", value: x.sale, profit: x.profit, margin: x.margin, d: x.d }))}
+              valueFmt={fmtMoney}
+              right={(r) => <span className="w-[54px] text-right text-[12px] font-black" style={{ ...EX_NUM, color: rColor(r.margin) }}>{fmtPct(r.margin)}</span>} />
+          )}
+          <Basis className="mt-3">담당 = 오더를 등록한 직원(고정노선은 배차확정자) · 팀 = 직원 정보의 소속 팀{contribTab === "staff" ? " · 오른쪽 숫자는 매출총이익률" : ""}{rank.list.length ? ` · 회사 전체 ${fmtMoney(rank.total)}` : ""}</Basis>
+        </ExecPanel>
+      </ExecGrid>
+
+      {/* ── 4. 월별 추이 · 결재 대기 ── */}
+      <ExecGrid cols="minmax(0,1.6fr) minmax(0,1fr)" breakAt={1100}>
+        <ExecPanel en={`PERFORMANCE · ${year}`} title={range === "year" ? "월별 매출 · 매출총이익 · 이익률" : "최근 30일 매출 · 매출총이익"}
+          right={<ExecTabs size="sm" items={[["year", "올해"], ["30", "30일"]]} value={range} onChange={setRange} />}>
+          <div className="mb-2"><Legend items={range === "year" ? [["매출", EX.ice], ["매출총이익", EX.iceDeep], ["이익률", EX.gold, "line"]] : [["매출", EX.ice], ["매출총이익", EX.gold, "line"]]} /></div>
+          <div className="h-[260px] md:h-[300px] -ml-1">
+            <ResponsiveContainer width="100%" height="100%">
+              {range === "year" ? (
+                <ComposedChart data={monthly} margin={{ top: 22, right: 4, left: 0, bottom: 0 }} barGap={4}>
+                  <defs>
+                    <linearGradient id="exSale" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#CFE0FF" stopOpacity={0.95} /><stop offset="100%" stopColor={EX.iceDeep} stopOpacity={0.5} /></linearGradient>
+                    <linearGradient id="exSaleCur" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={EX.goldHi} /><stop offset="100%" stopColor={EX.goldDeep} stopOpacity={0.7} /></linearGradient>
+                  </defs>
+                  <CartesianGrid {...chartTheme.grid} />
+                  <XAxis dataKey="k" {...chartTheme.axis} />
+                  <YAxis yAxisId="w" tickFormatter={axisMoney} {...chartTheme.axis} width={50} />
+                  <YAxis yAxisId="m" orientation="right" tickFormatter={(v) => `${v}%`} {...chartTheme.axis} tick={{ ...chartTheme.axis.tick, fill: "rgba(215,188,130,.7)" }} width={40} />
+                  <Tooltip content={chartTip} cursor={chartTheme.cursor} />
+                  <Bar yAxisId="w" dataKey="sale" name="매출" radius={[7, 7, 2, 2]} maxBarSize={30}
+                    label={{ position: "top", content: ({ x, y, width, index, value }) => (monthly[index]?.cur ? <text x={x + width / 2} y={y - 7} textAnchor="middle" fill={EX.goldHi} fontSize={11.5} fontWeight={800} fontFamily={EX_NUM.fontFamily}>{axisMoney(value)}</text> : null) }}>
+                    {monthly.map((x) => <Cell key={x.k} fill={x.cur ? "url(#exSaleCur)" : "url(#exSale)"} />)}
+                  </Bar>
+                  <Bar yAxisId="w" dataKey="profit" name="매출총이익" fill="rgba(75,108,183,.55)" radius={[7, 7, 2, 2]} maxBarSize={30} />
+                  <Line yAxisId="m" dataKey="margin" name="이익률" stroke={EX.gold} strokeWidth={2.2} connectNulls dot={{ r: 3, fill: EX.bg1, stroke: EX.gold, strokeWidth: 2 }} activeDot={{ r: 5, fill: EX.gold }} />
+                </ComposedChart>
+              ) : (
+                <AreaChart data={daily} margin={{ top: 10, right: 4, left: 0, bottom: 0 }}>
+                  <defs><linearGradient id="exArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={EX.ice} stopOpacity={0.5} /><stop offset="100%" stopColor={EX.ice} stopOpacity={0} /></linearGradient></defs>
+                  <CartesianGrid {...chartTheme.grid} />
+                  <XAxis dataKey="k" interval={4} {...chartTheme.axis} />
+                  <YAxis tickFormatter={axisMoney} {...chartTheme.axis} width={50} />
+                  <Tooltip content={chartTip} cursor={{ stroke: EX.lineHi }} />
+                  <Area dataKey="sale" name="매출" stroke="#CFE0FF" strokeWidth={2} fill="url(#exArea)" />
+                  <Area dataKey="profit" name="매출총이익" stroke={EX.gold} strokeWidth={1.8} fill="transparent" />
+                </AreaChart>
+              )}
+            </ResponsiveContainer>
+          </div>
+          <Basis className="mt-2">{range === "year" ? `골드 막대 = 이번 달(${dayNo}일까지) · 이익률 = 매출총이익 ÷ 매출` : "하루 단위 · 상차일 기준"}</Basis>
+        </ExecPanel>
+
+        <ExecPanel en="APPROVAL · YOUR TURN" title="나의 결재 대기" right={<GoLink onClick={() => onGo?.("결재함")}>결재함</GoLink>}>
+          {/* 🤖 일일 업무일지 자동 승인 — 켜면 상신과 동시에 승인, 끄면 임원이 직접 확인 */}
+          <button type="button" onClick={() => setAutoApproveDaily(company, !autoDaily, personName(me) || "")} aria-pressed={autoDaily}
+            className="w-full mb-3 rounded-2xl px-3.5 py-2.5 flex items-center gap-3 text-left transition"
+            style={{ background: autoDaily ? "rgba(215,188,130,.10)" : "rgba(255,255,255,.035)", border: `1px solid ${autoDaily ? EX.lineHi : EX.line}` }}>
+            <span className="min-w-0 flex-1"><span className="block text-[14px] font-black" style={{ color: EX.text }}>일일 업무일지 자동 승인</span><span className="block text-[12.5px] font-medium" style={{ color: EX.mute }}>{autoDaily ? "켜짐 — 올라오는 즉시 승인 처리됩니다" : "꺼짐 — 임원이 직접 확인하고 승인합니다"}</span></span>
+            <span className="relative w-[52px] h-[30px] rounded-full shrink-0 transition" style={{ background: autoDaily ? GOLD_GRAD : "rgba(255,255,255,.15)" }}>
+              <span className={`absolute top-[3px] w-6 h-6 rounded-full bg-white shadow transition-all ${autoDaily ? "left-[25px]" : "left-[3px]"}`} />
+            </span>
+          </button>
+          <div className="flex items-end gap-3 mb-3">
+            <Num value={mine.length} unit="건" size={40} color={mine.length ? EX.goldHi : EX.faint} />
+            <span className="pb-1 text-[12.5px] font-semibold" style={{ color: EX.mute }}>회사 진행 중 {pendingAll.length}건{late.length ? <> · <span style={{ color: EX.danger }}>48시간 지연 {late.length}건</span></> : ""}</span>
+          </div>
+          {!mine.length ? <Empty text="지금 결재할 문서가 없습니다" sub="새 문서가 올라오면 여기에 바로 보입니다" /> : (
+            <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
+              {mine.slice(0, 8).map((a) => {
+                const h = Math.max(0, Math.floor((Date.now() - tsMs(a.createdAt)) / 3600e3));
+                return (
+                  <button key={a.id} type="button" onClick={() => onGo?.(`결재함:${a.id}`)} className="w-full text-left rounded-2xl px-3 py-2.5 flex items-center gap-3 transition hover:brightness-125" style={{ background: "rgba(255,255,255,.04)", border: `1px solid ${EX.line}` }}>
+                    <span className="w-9 h-9 rounded-xl grid place-items-center shrink-0" style={{ background: "rgba(143,176,240,.12)", color: EX.ice }}><ShellIcon name={a.cat === "expense" ? "wallet" : a.cat === "leave" ? "clock" : "file"} size={16} /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[14px] font-black truncate" style={{ color: EX.text }}>{a.title || a.formLabel || "결재 문서"}</span>
+                      <span className="block text-[12.5px] font-medium truncate" style={{ color: EX.mute }}>{a.drafter?.name || ""}{a.drafter?.team ? ` · ${a.drafter.team}` : ""}{a.amount ? <> · <span style={EX_NUM}>{fmtWon(a.amount)}원</span></> : ""}</span>
+                    </span>
+                    <span className="shrink-0 text-[12px] font-black" style={{ ...EX_NUM, color: h >= 48 ? EX.danger : EX.mute }}>{h >= 24 ? `${Math.floor(h / 24)}일 전` : `${h}시간 전`}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </ExecPanel>
+      </ExecGrid>
+
+      {/* ── 5. 주의 신호 · 거래처 TOP ── */}
+      <ExecGrid cols="minmax(0,1fr) minmax(0,1fr)" breakAt={900}>
+        <ExecPanel en="SIGNALS" title="주의 신호" sub={signals.length ? `확인이 필요한 항목 ${signals.length}건` : "자동 점검 결과"}>
+          {!signals.length ? <Empty text="특이 사항이 없습니다" sub="미배차 · 결재 지연 · 미수 · 거래처 쏠림 · 이익률 · 기사 서류를 자동으로 살핍니다" /> : (
+            <div className="space-y-1.5">
+              {signals.slice(0, 6).map((x) => (
+                <button key={x.t} type="button" disabled={!x.go} onClick={() => x.go && onGo?.(x.go)} className="w-full min-h-[52px] text-left rounded-2xl px-3.5 py-2.5 flex items-center gap-3 transition enabled:hover:brightness-125" style={{ background: "rgba(255,255,255,.035)", border: `1px solid ${EX.line}` }}>
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: dot(x.tone), boxShadow: `0 0 10px ${dot(x.tone)}` }} />
+                  <span className="min-w-0 flex-1"><span className="block text-[14px] font-black truncate" style={{ color: EX.text }}>{x.t}</span><span className="block text-[12.5px] font-medium truncate" style={{ color: EX.mute }}>{x.s}</span></span>
+                  {x.go && <span className="text-[15px]" style={{ color: EX.faint }}>›</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </ExecPanel>
+        <ExecPanel en="CLIENTS · THIS MONTH" title="거래처 매출 TOP 5" sub={clientTotal ? `이번 달 거래처 ${Object.keys(clients).length}곳 · 상위 5곳 비중 ${fmtPct((topClients.reduce((s, [, v]) => s + v, 0) / clientTotal) * 100)}` : undefined} right={<GoLink onClick={() => onGo?.("매출관리")}>매출관리</GoLink>}>
+          <RankBars rows={topClients.map(([n, v], i) => ({ key: n, label: n, value: v, color: i === 0 ? EX.gold : EX.ice }))} valueFmt={fmtMoney} empty="이번 달 매출이 아직 없습니다"
+            right={(r) => <span className="w-[48px] text-right text-[12px] font-bold" style={{ ...EX_NUM, color: EX.mute }}>{clientTotal ? fmtPct((r.value / clientTotal) * 100) : "—"}</span>} />
+        </ExecPanel>
+      </ExecGrid>
+    </ExecPage>
   );
 }
 
@@ -853,7 +1050,7 @@ function ExecScheduleCompany({ company, me = {}, canWrite = false, modeSwitch })
             </div>
           </div>
           <div className="space-y-4">
-            <Panel en="DAY DETAIL" title={`${pick.replace(/-/g, ".")} (${DOW[new Date(`${pick}T00:00:00Z`).getUTCDay()]})`}>
+            <ExecPanel en="DAY DETAIL" title={`${pick.replace(/-/g, ".")} (${DOW[new Date(`${pick}T00:00:00Z`).getUTCDay()]})`}>
               {birthdaysOn(allStaff, pick).length > 0 && <div className="flex flex-wrap gap-1.5 mb-2">{birthdaysOn(allStaff, pick).map((u) => <BirthChip key={u.id} name={personName(u) || u.name} big dark />)}</div>}
               {!dayList.length ? <div className="py-6 text-center text-[14px] font-bold text-white/40">일정이 없습니다{canWrite ? " · 날짜를 두 번 누르면 등록" : ""}</div> : dayList.map((e) => (
                 <button key={e.id} type="button" disabled={!canWrite} onClick={() => setEdit({ ...blank(), ...e })} className="w-full text-left rounded-2xl bg-white/[0.05] border border-white/[0.08] px-3.5 py-3 mb-2 enabled:hover:bg-white/[0.09]">
@@ -863,15 +1060,15 @@ function ExecScheduleCompany({ company, me = {}, canWrite = false, modeSwitch })
                   {e.memo && <div className="text-[12.5px] text-white/45 mt-1">{e.memo}</div>}
                 </button>
               ))}
-            </Panel>
-            <Panel en="UPCOMING" title="다가오는 일정">
+            </ExecPanel>
+            <ExecPanel en="UPCOMING" title="다가오는 일정">
               {!upcoming.length ? <div className="py-4 text-[14px] font-bold text-white/40">예정된 일정이 없습니다</div> : upcoming.map((e) => (
                 <div key={e.id} className="flex items-center gap-3 py-2 border-b border-white/[0.06] last:border-b-0">
                   <span className="w-12 shrink-0 text-center"><span className="block text-[11px] font-black text-white/45">{DOW[new Date(`${e.date}T00:00:00Z`).getUTCDay()]}</span><span className="block text-[17px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{e.date.slice(5).replace("-", ".")}</span></span>
                   <span className="min-w-0 flex-1"><span className="block text-[14.5px] font-black truncate">{e.title}</span><span className="block text-[12.5px] text-white/50 truncate">{e.name} · {e.kind}{e.start ? ` · ${e.start}` : ""}</span></span>
                 </div>
               ))}
-            </Panel>
+            </ExecPanel>
           </div>
         </div>
       </div>
