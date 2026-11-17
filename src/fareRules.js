@@ -83,8 +83,9 @@ export function useFareRules(company) {
 }
 
 // 계산(순수 함수)은 fareRulesCore.js — 화면들이 쓰던 이름 그대로 여기서 다시 내보낸다
-import { toNum, applyFareRule, findFareRule, farePctOf, effectiveFareRule, fareRuleCalcLabel, fareRuleHint, fareFormChange, farePatchOf, fareIsManual } from "./fareRulesCore.js";
-export { applyFareRule, findFareRule, farePctOf, effectiveFareRule, fareRuleCalcLabel, fareRuleHint, fareFormChange, farePatchOf, fareIsManual };
+import { toNum, applyFareRule, findFareRule, farePctOf, effectiveFareRule, fareRuleCalcLabel, fareRuleHint, fareFormChange, farePatchOf, fareIsManual, fareDeductOf, ruleDriverFare } from "./fareRulesCore.js";
+import { paidOut } from "./forkliftCore.js"; // ⭐ 2026-11-17 운임구분별 합계 수수료도 회사 지급분(지게차·특수운임)을 뺀다
+export { applyFareRule, findFareRule, farePctOf, effectiveFareRule, fareRuleCalcLabel, fareRuleHint, fareFormChange, farePatchOf, fareIsManual, fareDeductOf, ruleDriverFare };
 
 // ⭐ 2026-11-04 운임구분 바로 추가 — 드롭다운에서 새 구분명 + %를 넣으면 회사 운임 규칙(fareRules/{회사}.rules)에 바로 추가
 //  · 회사관리 › 운임 규칙(FareRulesSettings.jsx)의 저장과 같은 모양: rules 항목 { id, name, type:"percent", value, active:true, memo:"" }
@@ -435,7 +436,7 @@ export function sumByFareType(rows = []) {
     const k = String(r?.운임구분 || "").trim() || "(미지정)";
     const cur = m.get(k) || { name: k, count: 0, sale: 0, driver: 0, fee: 0 };
     const s = toNum(r?.청구운임), d = toNum(r?.기사운임);
-    cur.count += 1; cur.sale += s; cur.driver += d; cur.fee += s - d;
+    cur.count += 1; cur.sale += s; cur.driver += d; cur.fee += s - d - paidOut(r); // ⭐ 2026-11-17 = 배차현황 줄 수수료
     m.set(k, cur);
   }
   return [...m.values()].sort((a, b) => (a.name === "(미지정)") - (b.name === "(미지정)") || b.sale - a.sale);

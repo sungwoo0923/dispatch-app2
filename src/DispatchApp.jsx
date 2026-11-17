@@ -2975,7 +2975,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동 계산)
 import FareRulesSettings from "./FareRulesSettings";
 import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
-import { SpecialFareButton, ForkliftChip, ForkliftMark, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount } from "./forklift"; // 🏗 2026-11-09 지게차비용
+import { SpecialFareButton, ForkliftChip, ForkliftMark, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount, orderProfit, profitTotals } from "./forklift"; // 🏗 2026-11-09 지게차비용 · ⭐ 2026-11-17 수수료 한 식(orderProfit · profitTotals)
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합 현황) — 회사가 쓰는 영역에 따라 상단 메뉴가 바뀐다(src/bizModules.js)
@@ -6412,7 +6412,7 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
   const mergedCargo = mergeViaCargoText(row.화물내용, [row.경유상차목록, row.경유지_상차, row.경유하차목록, row.경유지_하차]);
   const mergedTon = mergeViaTonnage(row.차량톤수, [row.경유상차목록, row.경유지_상차, row.경유하차목록, row.경유지_하차]);
   const hasWaypointCargo = pickupStops.length > 0 || dropStops.length > 0;
-  const fee = (Number(row.청구운임) || 0) - (Number(row.기사운임) || 0);
+  const fee = orderProfit(row); // ⭐ 2026-11-17 표와 같은 수수료(청구 − 기사 − 지게차·특수운임 회사 지급분)
   const fmtPhone = (p) => formatPhone(p) || p || "-"; // 공용 formatPhone 사용
   const fmtMoney = (v) => v ? Number(v).toLocaleString() + "원" : "-";
   const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
@@ -28883,11 +28883,8 @@ const driverPanelCallbackRef = React.useRef(null);
 
 
   // KPI
-  const kpi = React.useMemo(() => {
-    const sale = filtered.reduce((a, r) => a + toInt(r.청구운임), 0);
-    const drv = filtered.reduce((a, r) => a + toInt(r.기사운임), 0);
-    return { cnt: filtered.length, sale, drv, fee: sale - drv };
-  }, [filtered]);
+  // ⭐ 2026-11-17 수수료 합계 = 줄 수수료(청구 − 기사 − 회사가 따로 준 지게차·특수운임)의 합 — 예전엔 "청구 합 − 기사 합"이라 줄과 달랐다
+  const kpi = React.useMemo(() => profitTotals(filtered), [filtered]);
 
   // ------------------------
   // 📌 선택 체크
@@ -39251,14 +39248,12 @@ if (mode === "driver") {
           const n = fareFormChange(merged, key, value, fareR.rules, { asString: false });
           Object.assign(cur0, { 운임구분: n.운임구분 || "", 기사운임: n.기사운임, 운임수동: !!n.운임수동, ...(n.운임구분수수료율 !== undefined ? { 운임구분수수료율: n.운임구분수수료율 } : {}) });
         }
-        cur0.수수료 = toInt(cur0.청구운임 ?? row.청구운임) - toInt(cur0.기사운임 ?? row.기사운임);
+        cur0.수수료 = orderProfit({ ...merged, ...cur0 }); // ⭐ 2026-11-17 지게차·특수운임(회사 지급분)까지 뺀 수수료 — 예전엔 청구 − 기사만 저장돼 정산·매출이 틀렸다
         return { ...prev, [getId(row)]: cur0 };
       }
       const cur = { ...(prev[getId(row)] || {}), [key]: value };
       if (key === "청구운임" || key === "기사운임") {
-        const sale = toInt(cur.청구운임 ?? row.청구운임);
-        const drv = toInt(cur.기사운임 ?? row.기사운임);
-        cur.수수료 = sale - drv;
+        cur.수수료 = orderProfit({ ...row, ...cur }); // ⭐ 2026-11-17 청구 − 기사 − 지게차·특수운임(회사 지급분)
       }
       return { ...prev, [getId(row)]: cur };
     });
@@ -39897,10 +39892,10 @@ const filteredBase = React.useMemo(() => {
 
   const summary = React.useMemo(() => {
     const totalCount = filtered.length;
-    const totalSale = filtered.reduce((s, r) => s + toInt(r.청구운임), 0);
-    const totalDriver = filtered.reduce((s, r) => s + toInt(r.기사운임), 0);
-    const totalFee = totalSale - totalDriver;
-    return { totalCount, totalSale, totalDriver, totalFee };
+    // ⭐ 2026-11-17 수수료 = 줄마다 보이는 수수료의 합(청구 − 기사 − 회사가 따로 준 지게차·특수운임) — 예전엔 "청구 합 − 기사 합"이라
+    //  기사 차감 지게차가 있는 오더만큼(예: 180,000 × 15건) 칩 수수료가 줄 합보다 크게 나왔다
+    const t = profitTotals(filtered);
+    return { totalCount, totalSale: t.sale, totalDriver: t.drv, totalFee: t.fee, totalPaid: t.paid };
   }, [filtered]);
 
 
@@ -48764,7 +48759,8 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
             const driver = toInt(r.기사운임);
             return {
               ...r,
-              수수료:
+              // ⭐ 2026-11-17 지게차·특수운임이 있는 오더는 배차현황 표와 같은 식(청구 − 기사 − 회사 지급분)으로 — 저장된 수수료가 예전 식(청구 − 기사)으로 남아 있을 수 있다
+              수수료: hasSpecial(r) ? orderProfit(r) :
                 r.수수료 !== undefined && r.수수료 !== null && String(r.수수료).trim() !== ""
                   ? toInt(r.수수료)
                   : Math.max(sale - driver, 0),
@@ -48844,7 +48840,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const stat = (list) => {
     const sale = sum(list, "청구운임");
     const driver = sum(list, "기사운임");
-    const profit = sale - driver;
+    const profit = sale - driver - list.reduce((a, r) => a + paidOut(r), 0); // ⭐ 2026-11-17 지게차·특수운임(회사 지급분)도 뺀다
     return { sale, driver, profit };
   };
 
@@ -48968,7 +48964,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
     const sale = toInt(r.청구운임);
     const driver = toInt(r.기사운임);
     lastYearFreshByMonth[mIdx].sale += sale;
-    lastYearFreshByMonth[mIdx].profit += sale - driver;
+    lastYearFreshByMonth[mIdx].profit += sale - driver - paidOut(r); // ⭐ 2026-11-17 회사 지급분 빼기
   });
 
   const lastYearPure = stat(lastYearRows.filter((r) => !isFresh(r)));
@@ -57037,12 +57033,13 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const kpi = useMemo(() => {
     const sale = filtered.reduce((s, r) => s + toInt(r.청구운임), 0);
     const driver = filtered.reduce((s, r) => s + toInt(r.기사운임), 0);
+    const paid = profitTotals(filtered).paid; // ⭐ 2026-11-17 회사가 따로 준 지게차·특수운임 — 수수료 합계를 줄 수수료 합과 맞춘다
     const done = filtered.filter(r => (r.지급상태 || "지급중") === "지급완료").length;
     const undone = filtered.length - done;
     const undoneAmt = filtered.filter(r => (r.지급상태 || "지급중") !== "지급완료").reduce((s, r) => s + toInt(r.기사운임), 0);
     const vatTotal = Math.round(driver * vatRate);
     const insuranceTotal = Math.round(driver * (insuranceRate / 100));
-    return { cnt: filtered.length, sale, driver, fee: sale - driver, done, undone, undoneAmt, vatTotal, insuranceTotal };
+    return { cnt: filtered.length, sale, driver, fee: sale - driver - paid, done, undone, undoneAmt, vatTotal, insuranceTotal };
   }, [filtered, vatRate, insuranceRate]);
 
   // ─── 기사별 집계 ───
@@ -57476,7 +57473,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                   <tr><td colSpan={16} className="text-center py-16 text-gray-500 text-[13px]">조회된 데이터가 없습니다.</td></tr>
                 ) : paySorted.map((r, i) => {
                   const isDone = (r.지급상태 || "지급중") === "지급완료";
-                  const fee = toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.외부지급합 ?? r.지게차비용);
+                  const fee = orderProfit(r); // ⭐ 2026-11-17 한 식(청구 − 기사 − 지게차·특수운임 회사 지급분)
                   return (
                     <tr key={r._id || i} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-[#EEF3FC]/40 transition`}>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">

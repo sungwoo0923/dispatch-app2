@@ -157,7 +157,7 @@ import OrderScanModal, { scanDropDate } from "../OrderScanModal";
 import { mainScanAi } from "../orderScanApi"; // 🧠 2026-11-07 오더 스캔 정밀 인식(서버 글자 인식 · AI 칸 정리 · 회사별 학습)
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동)
 import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange } from "../fareRules";
-import { SpecialFareButton, forkliftApply, paidOut } from "../forklift"; import { isViewerNow } from "../blind"; // 🏗 2026-11-09 지게차비용
+import { SpecialFareButton, forkliftApply, paidOut, orderProfit, profitTotals } from "../forklift"; import { isViewerNow } from "../blind"; // 🏗 2026-11-09 지게차비용
 import DetailFilterButton, { applyDetailFilter } from "../DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { useFixedRouteAutoDispatch } from "../FixedRoutes"; // ⭐ 2026-11-05 고정노선 배차 이어서 만들기
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
@@ -7490,7 +7490,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
 
   const calcKPI = (list) => list.reduce((a, r) => {
     const s = toInt(r.청구운임), d = toInt(r.기사운임);
-    return { sale: a.sale+s, driver: a.driver+d, fee: a.fee+(s-d), cnt: a.cnt+1 };
+    return { sale: a.sale+s, driver: a.driver+d, fee: a.fee+(s-d-paidOut(r)), cnt: a.cnt+1 }; // ⭐ 2026-11-17 회사 지급분 빼기
   }, { sale:0, driver:0, fee:0, cnt:0 });
 
   const cur = calcKPI(rows);
@@ -9628,14 +9628,10 @@ const summary = useMemo(() => {
   let totalFee = 0;
 
   groupedByDate.forEach(list => {
-    list.forEach(o => {
-      const claim = Number(o.청구운임 || 0);
-      const driver = Number(o.기사운임 || 0);
-
-      totalClaim += claim;
-      totalDriver += driver;
-      totalFee += (claim - driver);
-    });
+    const t = profitTotals(list); // ⭐ 2026-11-17 수수료 = 청구 − 기사 − 회사가 따로 준 지게차·특수운임(PC 배차현황과 같은 식)
+    totalClaim += t.sale;
+    totalDriver += t.drv;
+    totalFee += t.fee;
   });
 
   return {
@@ -10834,7 +10830,7 @@ function MobileOrderInfoModal({ order: row, onClose }) {
   if (!row) return null;
   const fmtPhone = (p) => { const d = String(p || "").replace(/[^\d]/g, ""); if (d.length === 11) return `${d.slice(0,3)}-${d.slice(3,7)}-${d.slice(7)}`; if (d.length === 10) return `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`; return p || "-"; };
   const fmtMoney = (v) => v ? Number(v).toLocaleString() + "원" : "-";
-  const fee = (Number(row.청구운임) || 0) - (Number(row.기사운임) || 0);
+  const fee = orderProfit(row); // ⭐ 2026-11-17 PC 표와 같은 수수료(청구 − 기사 − 지게차·특수운임 회사 지급분)
   const InfoRow = ({ label, value }) => value ? (
     <div className="flex gap-2 text-[13px] py-1 border-b border-gray-50 last:border-b-0">
       <span className="text-gray-400 w-[68px] shrink-0 text-[12px]">{label}</span>
@@ -11032,8 +11028,9 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
   const fareRK = useFareRules();
   const [fareT, setFareT] = useState({ 운임구분: order.운임구분 || "", 운임수동: !!order.운임수동, 운임구분수수료율: order.운임구분수수료율 ?? "" }); // ⭐ 2026-11-09 이 오더 수수료율
   const fareK = (key, value) => {
-    const num = (x) => (String(x).trim() === "" ? "" : Number(String(x).replace(/[^\d]/g, "")) || 0);
-    const cur = { 청구운임: num(claim), 기사운임: num(fee), ...fareT };
+    const num = (x) => (String(x).trim() === "" ? "" : Number(String(x).replace(/[^\d-]/g, "")) || 0); // ⭐ 2026-11-17 마이너스(기사 차감만 있는 오더) 유지
+    // ⭐ 2026-11-17 오더의 지게차·특수운임 칸도 같이 넘긴다 — 빠지면 규칙이 기사운임을 다시 계산할 때 "기사 차감"(예: 지게차 180,000)이 사라져 기사운임이 그만큼 커졌다
+    const cur = { ...order, 청구운임: num(claim), 기사운임: num(fee), ...fareT };
     const n = fareFormChange(cur, key, key === "청구운임" || key === "기사운임" ? num(value) : value, fareRK.rules, { asString: false, withFee: false, emptyDriver: "" });
     const fmt = (x) => (x === "" || x == null ? "" : Number(x).toLocaleString());
     setClaim(fmt(n.청구운임)); setFee(fmt(n.기사운임)); setFareT({ 운임구분: n.운임구분 || "", 운임수동: !!n.운임수동, 운임구분수수료율: n.운임구분수수료율 ?? "" });
@@ -11170,7 +11167,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
       const id = order._id || order.id;
       const patch = {
         청구운임: Number(String(claim).replace(/[^\d]/g, "")) || 0,
-        기사운임: Number(String(fee).replace(/[^\d]/g, "")) || 0,
+        기사운임: Number(String(fee).replace(/[^\d-]/g, "")) || 0, // ⭐ 2026-11-17 "-180,000"(청구 없이 지게차 기사 차감만 있는 오더)을 저장하면 +180,000이 되던 것 수정
         ...(fareRK.on && (fareT.운임구분 || order.운임구분) ? { 운임구분: fareT.운임구분 || "", 운임수동: !!fareT.운임수동, ...(fareT.운임구분 && String(fareT.운임구분수수료율 ?? "") !== "" ? { 운임구분수수료율: Number(fareT.운임구분수수료율) || 0 } : {}) } : {}), // ⭐ 2026-11-02 운임규칙 · 2026-11-09 오더별 수수료율
         ...(isShipperOrder ? {} : { 지급방식: payType }),
         배차방식: dispType, ...dispWay,
@@ -11180,6 +11177,8 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
         updatedAt: serverTimestamp(),
         _lastModified: Date.now(),
       };
+      // ⭐ 2026-11-17 운임을 바꿨으면 저장된 수수료도 같은 식으로(청구 − 기사 − 회사 지급분) — 예전엔 수수료를 안 고쳐 정산·매출에 옛 값이 남았다
+      if (patch.청구운임 !== (Number(order.청구운임) || 0) || patch.기사운임 !== (Number(order.기사운임) || 0)) patch.수수료 = orderProfit({ ...order, 청구운임: patch.청구운임, 기사운임: patch.기사운임 });
       if (carNo) {
         patch.차량번호 = carNo;
         patch.기사명 = driverName;

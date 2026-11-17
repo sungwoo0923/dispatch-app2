@@ -90,6 +90,19 @@ export function specialLines(o) {
 
 // 수익(수수료) — 매출·정산·보고서가 모두 이 식을 쓴다
 export const orderProfit = (o) => fkNum(o?.청구운임) - fkNum(o?.기사운임) - paidOut(o);
+// ⭐ 2026-11-17 합계(표 위 칩 · 합계 줄 · 마감표) — 줄마다 보이는 수수료(orderProfit)를 그대로 더한다
+//  예전엔 합계만 "청구 합 − 기사 합"이라 지게차·외부 특수운임(회사가 따로 주는 돈)이 있는 오더에서
+//  줄 수수료 합과 칩 수수료가 달랐다(예: 기사 차감 지게차 180,000 × 15건 = 2,700,000원 차이).
+//  rows: 오더 배열 · get(r): 화면에서 고치는 중인 값을 덮어쓴 오더를 돌려주는 함수(없으면 오더 그대로)
+//  반환 { cnt, sale(청구 합), drv(기사 합), paid(회사가 따로 지급한 합), fee(수수료 합 = sale − drv − paid) }
+export function profitTotals(rows = [], get = null) {
+  let sale = 0, drv = 0, paid = 0, cnt = 0;
+  for (const r0 of rows || []) {
+    const r = get ? get(r0) : r0;
+    cnt += 1; sale += fkNum(r?.청구운임); drv += fkNum(r?.기사운임); paid += paidOut(r);
+  }
+  return { cnt, sale, drv, paid, fee: sale - drv - paid };
+}
 
 // 지게차·특수운임 칸·운임 칸이 바뀐 뒤 기사운임·청구운임·수수료를 맞춘다
 //  prev = 바뀌기 전 오더, next = 바뀐 값을 넣은 오더, key = 바뀐 칸
