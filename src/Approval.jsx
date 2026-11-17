@@ -23,6 +23,7 @@ import { useListKeys } from "./useListKeys";
 import { kpConfirm, kpPrompt } from "./kpDialog";
 import BankAccountInput, { ReasonTemplates } from "./BankAccountInput";
 import { createPortal } from "react-dom";
+import { HistoryComment } from "./ApprovalComment"; // 💬 2026-11-17 결재 의견 크게 보기
 import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import { printA4, savePdf } from "./a4Export";
 import { TimeSelect } from "./kpInputs";
@@ -2174,7 +2175,7 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
                   <div key={i} className="relative">
                     <span className={`absolute -left-4 top-1 w-3 h-3 rounded-full ring-2 ring-white ${h.action === "반려" ? "bg-[#0F1A30]" : h.action === "승인" ? "bg-[#1B2B4B]" : "bg-[#9AA9C3]"}`} />
                     <div className="text-[14px]"><b className="text-[#0F1A30]">{h.name}</b> <span className="font-black text-[#1B2B4B]">{h.action}</span> <span className="text-[12.5px] text-[#5B6B85]">{new Date(h.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span></div>
-                    {h.comment && <div className="mt-1 text-[13.5px] text-[#3A4A66] bg-[#F5F8FD] rounded-lg px-2.5 py-1.5 whitespace-pre-wrap">{h.comment}</div>}
+                    {h.comment && <HistoryComment h={h} />}{/* 💬 2026-11-17 결재 의견 — 글씨 크게 · 진하게 + [자세히 보기] 팝업 */}
                   </div>
                 ))}
               </div>
