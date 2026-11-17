@@ -59,9 +59,9 @@ const n0 = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 export const fmtWon = (v) => `${Math.round(n0(v)).toLocaleString("ko-KR")}`; // 1,234,567
 export const fmtMan = (v) => `${Math.round(n0(v) / 1e4).toLocaleString("ko-KR")}`; // 만원 단위 숫자
 // 금액을 사람이 읽기 좋은 [숫자, 단위]로 — 1억 이상: "2.41" 억 / 1만 이상: "1,451" 만 / 그 아래: 원
-export function moneyParts(v, { eokDigits = 2 } = {}) {
+export function moneyParts(v, { eokDigits = 2, fixed = false } = {}) {
   const x = n0(v); const a = Math.abs(x);
-  if (a >= 1e8) return [(x / 1e8).toFixed(a >= 1e10 ? 0 : eokDigits).replace(/\.?0+$/, ""), "억원"];
+  if (a >= 1e8) { const t = (x / 1e8).toFixed(a >= 1e10 ? 0 : eokDigits); return [fixed ? t : t.replace(/\.?0+$/, ""), "억원"]; } // fixed: 5.40억처럼 자릿수 고정(타일끼리 줄 맞춤)
   if (a >= 1e4) return [Math.round(x / 1e4).toLocaleString("ko-KR"), "만원"];
   return [Math.round(x).toLocaleString("ko-KR"), "원"];
 }
@@ -156,9 +156,9 @@ export function ExecPanel({ en, title, sub, right, children, className = "", pad
 }
 
 // 핵심 숫자 타일
-export function Kpi({ en, label, value, unit, money, delta, deltaLabel, invert, foot, accent = false, spark, size, onClick, title }) {
+export function Kpi({ en, label, value, unit, money, delta, deltaLabel, deltaSuffix = "%", invert, foot, accent = false, spark, size, onClick, title }) {
   const big = size || (accent ? 36 : 32);
-  const parts = money != null ? moneyParts(money) : [value, unit];
+  const parts = money != null ? moneyParts(money, { fixed: true }) : [value, unit];
   const Tag = onClick ? "button" : "div";
   return (
     <Tag type={onClick ? "button" : undefined} onClick={onClick} title={title}
@@ -170,7 +170,7 @@ export function Kpi({ en, label, value, unit, money, delta, deltaLabel, invert, 
       <div className="mt-2.5"><Num value={parts[0]} unit={parts[1]} size={big} color={accent ? EX.goldHi : EX.text} /></div>
       {(delta !== undefined || foot) && (
         <div className="mt-2.5 flex items-center justify-between gap-2 min-w-0">
-          {delta !== undefined ? <Delta v={delta} label={deltaLabel} invert={invert} /> : <span />}
+          {delta !== undefined ? <Delta v={delta} label={deltaLabel} invert={invert} suffix={deltaSuffix} /> : <span />}
           {foot && <span className="text-[12px] font-semibold truncate" style={{ color: EX.mute }}>{foot}</span>}
         </div>
       )}

@@ -10,6 +10,10 @@ const n0 = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 // 만원 숫자(음수는 정식 빼기표 −)
 export const mn = (v) => { const x = Math.round(n0(v) / 1e4); return `${x < 0 ? "−" : ""}${Math.abs(x).toLocaleString("ko-KR")}`; };
 export const cm = (v) => { const x = Math.round(n0(v)); return `${x < 0 ? "−" : ""}${Math.abs(x).toLocaleString("ko-KR")}`; };
+// 단가처럼 작은 금액 — 만원 소수 한 자리(35.7)
+export const mn1 = (v) => { const x = n0(v) / 1e4; return `${x < 0 ? "−" : ""}${Math.abs(x).toLocaleString("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`; };
+// 핵심 숫자 타일 금액 — 1억 이상은 억원 소수 두 자리(5.40 · 4.72 처럼 자릿수 고정), 그 아래는 만원
+export const km = (v) => { const x = n0(v); const a = Math.abs(x); const s = x < 0 ? "−" : ""; if (a >= 1e8) return { value: `${s}${(a / 1e8).toFixed(a >= 1e10 ? 0 : 2)}`, unit: "억원" }; if (a >= 1e4) return { value: `${s}${Math.round(a / 1e4).toLocaleString("ko-KR")}`, unit: "만원" }; return { value: `${s}${Math.round(a).toLocaleString("ko-KR")}`, unit: "원" }; };
 export const pct = (v, dp = 1) => (v == null || !Number.isFinite(v) ? "—" : `${v < 0 ? "−" : ""}${Math.abs(v).toFixed(dp)}%`);
 // 이익 · 이익률 색 — 플러스 빨강 · 마이너스 파랑(앱 전체 규칙)
 export const pc = (v) => (v > 0 ? EX.up : v < 0 ? EX.down : EX.sub);
