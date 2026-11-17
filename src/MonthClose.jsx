@@ -13,6 +13,7 @@ import { won, kstYm, monthOf, n } from "./settleCore";
 import { CLOSE_RULES, closeBoard, closeChecks, isMine, canSubmit, canVerify, verifyPatch, submitPatch, unlockPatch, prevYmOf, isFinalLocked } from "./closeFlow";
 import { useLoadOrderRange, monthEnd } from "./orderHistory";
 import useNarrow from "./useNarrow";
+import { MarginPct } from "./marginPct"; // ⭐ 2026-11-17 합계 줄 수수료 옆 수수료율(수수료 ÷ 청구)
 import { kpConfirm } from "./kpDialog";
 const StmtCompareModal = React.lazy(() => import("./StmtCompare")); // ⭐ 2026-11-17 업체 명세서 비교
 
@@ -317,7 +318,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
           {[["오더", `${g.count.toLocaleString()}건`, C.ink], ["청구", `${won(g.sale)}원`, C.ink], ["기사운임", `${won(g.buy)}원`, C.sub], ["수수료", `${won(g.sale - g.buy)}원`, g.sale - g.buy < 0 ? "#2457D6" : "#D92D20"], ["확인 필요", g.issue ? `${g.issue}건` : "없음", g.issue ? C.bad : C.ok]].map(([l, v, c], i) => (
             <button key={l} type="button" disabled={l !== "확인 필요" || !g.issue} onClick={() => setOnlyBad((x) => !x)} className={`px-4 py-2.5 text-center border-[#E3E8F0] ${i ? "sm:border-l" : ""} ${l === "확인 필요" && g.issue ? "hover:bg-[#FFF5F4] cursor-pointer" : "cursor-default"}`}>
               <div className="text-[12px] font-bold text-[#9AA9C3]">{l}</div>
-              <div className="text-[16px] font-black whitespace-nowrap" style={{ color: c }}>{v}</div>
+              <div className="text-[16px] font-black whitespace-nowrap" style={{ color: c }}>{v}{l === "수수료" && <MarginPct profit={g.sale - g.buy} sales={g.sale} hideZero />}</div>{/* ⭐ 2026-11-17 수수료율 */}
             </button>))}
         </div>
         <div className="px-4 py-2.5 border-b border-[#E3E8F0] flex items-center gap-2 flex-wrap">

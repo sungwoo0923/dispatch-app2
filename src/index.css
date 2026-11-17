@@ -130,24 +130,27 @@ button:hover {
 
 .animate-fadeIn {
   animation: fadeIn 0.25s ease-out;
+/* ⭐ 2026-11-17 아래 표 공통 규칙(15px · 줄바꿈 금지 · 줄무늬 · 굵기 · 글자색 !important)은 거래명세서 문서(#invoiceArea) 안 표엔 쓰지 않는다
+   — 명세서는 인쇄 · PDF 와 같은 모양(인라인 11px · 줄바꿈)이어야 하는데, 이 규칙 때문에 칸이 15px 한 줄로 늘어나 미리보기가 반쯤 잘려 보였다.
+   :where() 라서 우선순위(specificity)는 예전과 같다 */
 }
 /* ===== 테이블 글씨 선명도 ===== */
 /* 교체 후 */
-table {
+table:where(:not(#invoiceArea table)) {
   font-size: calc(15px * var(--font-scale, 1)) !important;
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "맑은 고딕", Malgun Gothic, sans-serif !important;
   border-collapse: collapse;
   -webkit-font-smoothing: antialiased;
 }
 
-table thead th {
+table:where(:not(#invoiceArea table)) thead th {
   font-size: calc(14px * var(--font-scale, 1)) !important;
   font-weight: 700 !important;
   letter-spacing: 0;
   height: 46px;
 }
 
-table tbody td {
+table:where(:not(#invoiceArea table)) tbody td {
   font-size: calc(15px * var(--font-scale, 1)) !important;
   font-weight: 600 !important;
   white-space: nowrap !important;
@@ -155,37 +158,37 @@ table tbody td {
 }
 
 /* ===== 행 구분선 (프로그램 스타일) ===== */
-table tbody tr {
+table:where(:not(#invoiceArea table)) tbody tr {
   height: 50px;
   line-height: 1.6;
   border-bottom: 1px solid #e8edf3;
   transition: background 0.1s;
 }
 
-table tbody tr:hover td {
+table:where(:not(#invoiceArea table)) tbody tr:hover td {
   background-color: #f0f5ff !important;
 }
 
 /* ===== 컬럼 구분선 ===== */
-table thead th {
+table:where(:not(#invoiceArea table)) thead th {
   border-right: 1px solid rgba(255,255,255,0.12);
 }
 
-table tbody td {
+table:where(:not(#invoiceArea table)) tbody td {
   border-right: 1px solid #edf0f4;
 }
 
-table tbody td:last-child,
-table thead th:last-child {
+table:where(:not(#invoiceArea table)) tbody td:last-child,
+table:where(:not(#invoiceArea table)) thead th:last-child {
   border-right: none;
 }
 
 /* ===== 짝수행 배경 ===== */
-table tbody tr:nth-child(even) td {
+table:where(:not(#invoiceArea table)) tbody tr:nth-child(even) td {
   background-color: #f8fafc;
 }
 
-table tbody tr:nth-child(odd) td {
+table:where(:not(#invoiceArea table)) tbody tr:nth-child(odd) td {
   background-color: #ffffff;
 }
 

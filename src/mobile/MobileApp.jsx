@@ -1,4 +1,5 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
+import { MarginPct } from "../marginPct"; // ⭐ 2026-11-17 배차 합계 다이얼 — 수수료 아래 수수료율(수수료 ÷ 청구)
 import { MonthPicker } from "../kpInputs"; // 📅 2026-11-07 월 선택은 프로그램 달력으로
 import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { runDelete, deleteOrdersWithLogAtomic } from "../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
@@ -9712,6 +9713,7 @@ const summary = useMemo(() => {
                     >
                       <DialNumber value={value} />
                     </div>
+                    {label === "수수료" && <div className="mt-1 leading-none"><MarginPct profit={summary.totalFee} sales={summary.totalClaim} hideZero dark={cardVersionB} className="!ml-0" style={{ fontSize: 12 }} /></div>}{/* ⭐ 2026-11-17 수수료율 — 플러스 빨강 · 마이너스 파랑 */}
                   </div>
                 ))}
               </div>

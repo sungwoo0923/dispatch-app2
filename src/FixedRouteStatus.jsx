@@ -22,6 +22,7 @@ import { useRouteCarrierSetting, useRouteCarrierFilter, saveRouteCarrierSetting,
 import { isMyOrder } from "./driverEvents"; // ⭐ 2026-11-06 내 오더 판단(기사 수락/거절 알림과 같은 기준)
 import { useMyProfile, personName } from "./userNames";
 import { orderStaffNameRaw, useUserNameMap } from "./detailGetters";
+import { MarginPct } from "./marginPct"; // ⭐ 2026-11-17 합계 줄 수수료 옆 수수료율(수수료 ÷ 청구)
 import MgrBadge from "./MgrBadge"; // ⭐ 2026-11-06 담당자 칸(실시간·배차현황과 같은 모양)
 import { isUrgentOrder, UrgentBadge, urgentRowStyle } from "./urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조
 import { requestRouteSheetPush } from "./routeSheetPush"; // 💰 2026-11-06 고친 값 바로 시트에
@@ -1016,7 +1017,7 @@ function MobileFixedRouteBody({ form, rows, range, setRange, status, setStatus, 
         {[["건수", `${list.length}`], ["청구", won(sum.sale)], ["기사", won(sum.drv)], ["수수료", won(sum.fee)]].map(([l, v], i) => (
           <div key={l} className={`rounded-xl px-2 py-1.5 ${i === 3 ? "bg-[#0B1428] text-white" : "bg-white border border-[#E3E8F0] text-[#0F1A30]"}`}>
             <div className={`text-[11.5px] font-extrabold ${i === 3 ? "text-white" : "text-[#5B6B85]"}`}>{l}</div>{/* ⭐ 2026-11-06 합계 글자 대비 */}
-            <div className="text-[13.5px] font-black tabular-nums truncate" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
+            <div className="text-[13.5px] font-black tabular-nums truncate" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}{i === 3 && <MarginPct dark profit={sum.fee} sales={sum.sale} hideZero />}</div>{/* ⭐ 2026-11-17 수수료율 */}
           </div>
         ))}
       </div>

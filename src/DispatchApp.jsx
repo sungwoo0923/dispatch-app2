@@ -3469,6 +3469,52 @@ const ExecStaffInfo = React.lazy(() => import("./ExecStaffInfo"));
 const INVOICE_PREVIEW_ROWS = 80;
 let _invoiceExpand = null;
 export async function expandInvoicePreview() { if (_invoiceExpand) await _invoiceExpand(); }
+// ⭐ 2026-11-17 명세서 미리보기가 반쯤 잘려 보이던 문제 — 문서가 글자 길이만큼(w-max) 넓어져 좁은 미리보기 칸에서 오른쪽이 잘렸다.
+//  이제 문서는 A4 폭(820px, 내용이 더 넓으면 그만큼)으로 그리고, 칸이 좁으면 칸 폭에 맞춰 통째로 줄여 보여 준다(ResizeObserver + scale).
+//  PDF · 메일 첨부(html2canvas)는 줄인 모양을 찍지 않도록 captureInvoiceFull() 안에서 잠깐 원래 크기로 돌려 찍는다.
+const INVOICE_DOC_W = 820;
+const _invoiceFit = new Set();
+export async function captureInvoiceFull(fn) {
+  const undo = [..._invoiceFit].map((f) => f());
+  try { await new Promise((r) => requestAnimationFrame(() => r())); return await fn(); }
+  finally { undo.forEach((u) => u && u()); }
+}
+function InvoiceDocFit({ children, fit = true, maxScale = 1 }) {
+  const outer = useRef(null), inner = useRef(null);
+  const [box, setBox] = useState({ s: 1, h: null, x: 0 });
+  React.useLayoutEffect(() => {
+    const o = outer.current, n = inner.current;
+    if (!o || !n) return undefined;
+    const run = () => {
+      const cw = o.clientWidth, nw = n.offsetWidth, nh = n.offsetHeight; // offset* 는 scale 과 상관없는 원래 크기
+      if (!cw || !nw) return;
+      const s = fit ? Math.min(maxScale, cw / nw) : 1;
+      const x = s > 1 ? Math.max(0, Math.round((cw - nw * s) / 2)) : 0;
+      setBox((p) => (Math.abs(p.s - s) < 0.002 && p.h === Math.round(nh * s) && p.x === x ? p : { s, h: Math.round(nh * s), x }));
+    };
+    run();
+    let ro = null;
+    if (typeof ResizeObserver !== "undefined") { ro = new ResizeObserver(run); ro.observe(o); ro.observe(n); }
+    else window.addEventListener("resize", run);
+    const full = () => { // 찍는 동안 원래 크기
+      const t = n.style.transform, ov = o.style.overflow, hh = o.style.height;
+      n.style.transform = "none"; o.style.overflow = "visible"; o.style.height = "auto";
+      return () => { n.style.transform = t; o.style.overflow = ov; o.style.height = hh; };
+    };
+    _invoiceFit.add(full);
+    return () => { _invoiceFit.delete(full); if (ro) ro.disconnect(); else window.removeEventListener("resize", run); };
+  }, [fit, maxScale]);
+  const { s, h, x } = box;
+  const shrink = s < 0.999;
+  // 줄일 땐 왼쪽 위 기준으로 줄이고 바깥 높이를 줄인 높이로 맞춘다(아래 빈칸 · 잘림 없음) · 넓으면 가운데
+  return (
+    <div ref={outer} data-kp="inv-fit" style={{ width: "100%", height: h != null ? h : "auto", overflow: fit ? "hidden" : "visible", position: "relative" }}>
+      <div ref={inner} style={{ width: INVOICE_DOC_W, minWidth: "min-content", transform: s !== 1 ? `scale(${s})` : "none", transformOrigin: "top left", position: shrink || s > 1 ? "absolute" : "relative", left: x, top: 0, margin: shrink || s > 1 ? 0 : "0 auto" }}>
+        {children}
+      </div>
+    </div>
+  );
+}
 function InvoicePreviewRows({ mapped, rows, onOpen, docTd, docNum, DOC, won, form }) {
   // 🧾 2026-11-16 거래처 양식(form) — 고른 칸만 · 고른 순서로, 세액 칸은 끌 수 있다
   const cols = visibleCols(form);
@@ -30495,7 +30541,7 @@ const head = isDark
   </div>
   <div className="flex items-center gap-2 bg-white border border-[#1B2B4B]/20 px-4 py-2 rounded-xl shadow-sm">
     <span className="text-[12px] font-medium text-gray-500">수수료</span>
-    <span className="text-[15px] font-extrabold" style={{ color: kpi.fee < 0 ? "#2457D6" : kpi.fee > 0 ? "#D92D20" : "#1B2B4B" }}>{kpi.fee.toLocaleString()}원</span>{/* 🎨 2026-11-16 수수료 — 플러스 빨강 · 마이너스 파랑 */}
+    <span className="text-[15px] font-extrabold" style={{ color: kpi.fee < 0 ? "#2457D6" : kpi.fee > 0 ? "#D92D20" : "#1B2B4B" }}>{kpi.fee.toLocaleString()}원<MarginPct profit={kpi.fee} sales={kpi.sale} hideZero /></span>{/* 🎨 2026-11-16 수수료 — 플러스 빨강 · 마이너스 파랑 · ⭐ 2026-11-17 옆에 수수료율(수수료 ÷ 청구) */}
   </div>
 </div>
 
@@ -40404,7 +40450,7 @@ return (
         </div>
         <div className="flex items-center gap-2 bg-white border border-[#1B2B4B]/20 px-4 py-2 rounded-xl shadow-sm">
           <span className="text-[12px] font-medium text-gray-500">수수료</span>
-          <span className="text-[15px] font-extrabold" style={{ color: summary.totalFee < 0 ? "#2457D6" : summary.totalFee > 0 ? "#D92D20" : "#1B2B4B" }}>{summary.totalFee.toLocaleString()}원</span>
+          <span className="text-[15px] font-extrabold" style={{ color: summary.totalFee < 0 ? "#2457D6" : summary.totalFee > 0 ? "#D92D20" : "#1B2B4B" }}>{summary.totalFee.toLocaleString()}원<MarginPct profit={summary.totalFee} sales={summary.totalSale} hideZero /></span>{/* ⭐ 2026-11-17 수수료율(수수료 ÷ 청구) — 플러스 빨강 · 마이너스 파랑 */}
         </div>
         {/* 구분선 */}
         <div className="w-px h-8 bg-gray-300 mx-1 shrink-0" />
@@ -52126,6 +52172,15 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   // 🧾 2026-11-16 거래처별 명세서 양식(거래처 전용 → 회사 기본 → 기본형)
   const invForm = useMemo(() => pickForm(desk.forms, client), [desk.forms, client]);
   const [invFormOpen, setInvFormOpen] = useState(false);
+  // ⭐ 2026-11-17 명세서 [크게 보기] — 미리보기를 화면 가득 띄운다(폭 맞춤 ↔ 실제 크기) · Esc 로 닫기
+  const [docBig, setDocBig] = useState(false);
+  const [docBigFit, setDocBigFit] = useState(true);
+  useEffect(() => {
+    if (!docBig) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") setDocBig(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [docBig]);
 
   const 합계공급가 = mapped.reduce((a, b) => a + b.공급가액, 0);
   const 합계세액 = mapped.reduce((a, b) => a + b.세액, 0);
@@ -52340,7 +52395,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
 
   const savePDF = async () => {
     await expandInvoicePreview(); const area = document.getElementById("invoiceArea");
-    const canvas = await html2canvas(area, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
+    const canvas = await captureInvoiceFull(() => html2canvas(area, { scale: 2, backgroundColor: "#ffffff", useCORS: true })); // ⭐ 2026-11-17 줄여 보인 미리보기 말고 원래 크기로 찍기
     const pdf = new (await loadJsPDF())("p", "mm", "a4");
     addCanvasAsMultiPagePdf(pdf, canvas, { format: "PNG" });
     pdf.save(`${stmtTitle || "거래명세서"}.pdf`);
@@ -54049,7 +54104,8 @@ const handleBatchSettle = async (targetStatus) => {
                 <div className="rounded-2xl border border-dashed border-[#C9D3E3] bg-white px-4 py-3 text-[14px] text-[#5B6B85]">거래처 한 곳 · 한 달(1일~말일)로 열면 발송 · 확인 · 계산서 · 마감 단계를 기록할 수 있어요</div>
               ) : null}
 
-              <div className="grid grid-cols-1 min-[1800px]:grid-cols-[minmax(0,56fr)_minmax(0,44fr)] gap-3 items-start">{/* ⭐ 2026-11-09 왼쪽 거래처 목록이 늘 있으니 편집·미리보기 나란히는 넓은 화면만, 그보다 좁으면 위(편집)·아래(미리보기) · ⭐ 2026-11-17 명세서 줄 표가 칸을 나눠 넓어져 1800px~ · 편집 56 : 미리보기 44 */}
+              <div className="grid grid-cols-1 min-[2200px]:grid-cols-[minmax(0,52fr)_minmax(0,48fr)] gap-3 items-start">{/* ⭐ 2026-11-09 왼쪽 거래처 목록이 늘 있으니 편집·미리보기 나란히는 넓은 화면만, 그보다 좁으면 위(편집)·아래(미리보기) · ⭐ 2026-11-17 명세서 줄 표가 칸을 나눠 넓어져 1800px~ · 편집 56 : 미리보기 44
+                ⭐ 2026-11-17 (2차) 1800px 에선 미리보기 칸이 500px 남짓이라 A4 명세서가 반쯤 잘려 보였다 → 나란히는 2200px~(편집 52 : 미리보기 48), 그보다 좁으면 위 · 아래로 쌓아 미리보기가 전체 폭을 쓴다 */}
                 <div className="space-y-3 min-w-0">
                   {searched && (
                     <div className="flex items-stretch gap-2 flex-wrap">
@@ -54197,8 +54253,15 @@ const handleBatchSettle = async (targetStatus) => {
               </div>
                 </div>
             {/* ── 오른쪽: 명세서 미리보기(인쇄·PDF·엑셀·메일 첨부와 같은 모양) ── */}
-            <div className="min-w-0 xl:sticky xl:top-3">
-              <div className={`${csCard} overflow-hidden flex flex-col xl:max-h-[calc(100vh-24px)]`}>
+            <div className="min-w-0 min-[2200px]:sticky min-[2200px]:top-3">{/* ⭐ 2026-11-17 따라오기(sticky) · 높이 제한은 나란히 볼 때만 — 쌓여 있을 땐 명세서 전체가 다 보이게 */}
+              {docBig && (
+                <div className={`${csCard} px-4 py-6 text-center`}>
+                  <div className="text-[14px] font-black text-[#0F1A30]">명세서를 크게 보고 있어요</div>
+                  <button type="button" onClick={() => setDocBig(false)} className={`${csBtn} mt-2`}>원래대로</button>
+                </div>
+              )}
+              {(() => { const card = (
+              <div className={docBig ? `${csCard} overflow-hidden flex flex-col w-full max-w-[1400px] mx-auto h-full` : `${csCard} overflow-hidden flex flex-col min-[2200px]:max-h-[calc(100vh-24px)]`} onClick={docBig ? (e) => e.stopPropagation() : undefined}>
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#E3E8F0] bg-white flex-wrap">
                   <div className="min-w-0 mr-auto">
                     <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3] leading-none" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>STATEMENT · PREVIEW</div>
@@ -54215,6 +54278,10 @@ const handleBatchSettle = async (targetStatus) => {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V3h12v6" /><rect x="4" y="9" width="16" height="8" rx="2" /><path d="M7 14h10v7H7z" /></svg>
                     <EditableText id="misc.btn.49334.인쇄" defaultText="인쇄" />
                   </button>
+                  {/* ⭐ 2026-11-17 크게 보기 — 화면 가득 · 폭 맞춤 / 실제 크기 */}
+                  <span className="w-px h-5 bg-[#E3E8F0]" />
+                  {docBig && <button type="button" data-kp="inv-big-fit" onClick={() => setDocBigFit((v) => !v)} className={csBtn} title="화면 폭에 맞추기 ↔ 실제 크기(100%)">{docBigFit ? "실제 크기" : "폭 맞춤"}</button>}
+                  <button type="button" data-kp="inv-big" disabled={!searched && !docBig} onClick={() => setDocBig((v) => !v)} className={docBig ? csBtnPri : csBtn} title={docBig ? "닫기(Esc)" : "명세서를 화면 가득 크게 봐요"}>{docBig ? "닫기" : "크게 보기"}</button>
                 </div>
                 <div className="flex-1 min-h-0 overflow-auto bg-[#E9EDF4] p-4" style={{ backgroundImage: "radial-gradient(rgba(27,43,75,.08) 1px, transparent 1px)", backgroundSize: "14px 14px" }}>
                   {!searched ? (
@@ -54230,7 +54297,8 @@ const handleBatchSettle = async (targetStatus) => {
                       <div className="mt-6 text-center text-[12.5px] font-bold text-[#9AA9C3]">왼쪽에서 거래처를 조회하면 이곳에 명세서가 그려집니다</div>
                     </div>
                   ) : (
-                    <div className="mx-auto w-max min-w-full rounded-md shadow-[0_8px_28px_rgba(15,26,48,0.14)]">{/* ⭐ 2026-11-04 오른쪽이 잘리던 문제 — 문서 폭만큼 늘리고 넓으면 미리보기 안에서 좌우 스크롤 */}
+                    <InvoiceDocFit fit={docBig ? docBigFit : true} maxScale={docBig ? 1.5 : 1}>{/* ⭐ 2026-11-17 칸 폭에 맞춰 문서 통째로 줄이기(잘려 보이지 않게) — 예전: w-max 로 글자 길이만큼 넓어져 반쯤 잘려 보였다 */}
+                    <div className="rounded-md shadow-[0_8px_28px_rgba(15,26,48,0.14)]">
                       <div id="invoiceArea" style={{ background: "#fff", padding: "26px 26px 22px" }}>
                         <div style={{ fontFamily: DOC.font, color: DOC.ink, fontSize: 12 }}>
                           {/* 문서 머리 */}
@@ -54365,7 +54433,7 @@ const handleBatchSettle = async (targetStatus) => {
                               {mapped.length === 0 ? (
                                 <tr><td colSpan={headerLabels(invForm).length} style={{ ...docTd, padding: "28px 6px", color: DOC.mute, fontSize: 12 }}>조회 결과가 없습니다. (청구운임 0원인 오더는 제외됩니다)</td></tr>
                               ) : (
-                                <InvoicePreviewRows mapped={mapped} rows={selectedRowsInvoice} onOpen={openOrderPopup} docTd={docTd} docNum={docNum} DOC={DOC} won={won} form={invForm} />
+                                <InvoicePreviewRows mapped={mapped} rows={selectedRowsInvoice} onOpen={docBig ? (o) => { setDocBig(false); openOrderPopup(o); } : openOrderPopup /* ⭐ 2026-11-17 크게 보기 중엔 닫고 오더 상세(팝업이 크게 보기 뒤로 숨지 않게) */} docTd={docTd} docNum={docNum} DOC={DOC} won={won} form={invForm} />
                               )}
                               {mapped.length > 0 && (
                                 <tr>
@@ -54397,9 +54465,13 @@ const handleBatchSettle = async (targetStatus) => {
                         </div>
                       </div>
                     </div>
+                    </InvoiceDocFit>
                   )}
                 </div>
               </div>
+              ); return docBig ? createPortal(
+                <div className="kp-settle fixed inset-0 z-[99990] bg-[#0F1A30]/50 p-2 sm:p-6 flex" data-kp="inv-big-overlay" onClick={() => setDocBig(false)}>{card}</div>,
+                document.body) : card; })()}
             </div>
               </div>
             </div>
@@ -55166,7 +55238,7 @@ const handleBatchSettle = async (targetStatus) => {
                       try {
                         await expandInvoicePreview(); const area = document.getElementById("invoiceArea");
                         if (area) {
-                          const canvas = await html2canvas(area, { scale: 1.5, backgroundColor: "#ffffff", useCORS: true });
+                          const canvas = await captureInvoiceFull(() => html2canvas(area, { scale: 1.5, backgroundColor: "#ffffff", useCORS: true })); // ⭐ 2026-11-17 원래 크기로 찍기
                           const pdf = new (await loadJsPDF())("p", "mm", "a4");
                           addCanvasAsMultiPagePdf(pdf, canvas, { format: "JPEG", quality: 0.85 });
                           fileAttachments.push({

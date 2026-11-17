@@ -8,7 +8,6 @@ import { createPortal } from "react-dom";
 import { db } from "./firebase";
 import { collection, doc, onSnapshot, query, setDoc, where, serverTimestamp } from "firebase/firestore";
 import CustomDatePicker from "./CustomDatePicker";
-import { fmtPhone } from "./formatInput"; // ⭐ 2026-11-17 명세서 줄 표 — 기사 연락처
 import useNarrow from "./useNarrow"; // 📱 2026-11-10 휴대폰 폭 — 단계 표시 2줄 · 명세서 표 칸 줄이기
 
 export const SD = { ink: "#0F1A30", navy: "#1B2B4B", blue: "#2D4C82", sub: "#5B6B85", mute: "#9AA9C3", line: "#E3E8F0", hair: "#EEF2F8", soft: "#F4F6FA", sky: "#8FB0F0", ice: "#CFE0FF" };
@@ -505,6 +504,8 @@ export function StatementBoard({ month, setMonth, recentMonths = [], groups, onO
 // rows: 조회된 오더(청구운임 > 0) / included: Set(_id) / onAmount(row, 새 공급가) → 오더의 청구운임을 고친다(기존 오더 수정과 같은 저장)
 // ⭐ 2026-11-17 시트처럼 칸을 나눴다 — 날짜 · (구분) · 구간(상차 → 하차) · 기사(이름 · 차량번호 · 연락처) · 화물(품목 · 톤수 · 차종) · 공급가액 · 세액
 //  예전엔 구간 · 기사 · 화물이 한 칸에 섞여(게다가 가운데 정렬) 어수선했다. 칸마다 선 · 머리줄 고정 · 글은 왼쪽, 돈은 오른쪽
+// ⭐ 2026-11-17 (2차) 구간은 한 줄(상차 → 하차, 길면 … + 마우스를 올리면 전체) · 구간 칸을 줄이고
+//  기사 정보는 [차량번호] [기사명] 두 칸으로 나눔 · 연락처는 뺌 · 화물도 한 줄(품목 · 톤수 · 차종)
 //  groupOf(row): 한 거래처 안에 담당노선구분이 여러 개일 때 넘기면 "구분" 칸을 보여 준다(전체로 볼 때)
 export function StatementLineGrid({ rows, included, onToggle, onToggleAll, onAmount, onOpenOrder, readOnly, groupOf = null }) {
   const refs = React.useRef([]);
@@ -525,8 +526,8 @@ export function StatementLineGrid({ rows, included, onToggle, onToggleAll, onAmo
   // 칸 정의 — [머리글, 폭, 정렬]
   const cols = ph
     ? [["", 32, "c"], ["날짜", 46, "c"], ["구간 · 기사 · 화물", null, "l"], ["공급가액", 96, "r"]]
-    : [["", 36, "c"], ["No", 34, "c"], ["날짜", 54, "c"], ...(grp ? [["구분", 86, "l"]] : []), ["구간 (상차 → 하차)", null, "l"], ["기사 정보", 130, "l"], ["화물", 112, "l"], ["공급가액", 106, "r"], ["세액", 72, "r"]];
-  const minW = ph ? 0 : cols.reduce((a, [, w]) => a + (w || 150), 0); // 구간 칸은 남는 폭을 다 쓴다(최소 150)
+    : [["", 36, "c"], ["No", 34, "c"], ["날짜", 54, "c"], ...(grp ? [["구분", 86, "l"]] : []), ["구간 (상차 → 하차)", 220, "l"], ["차량번호", 104, "l"], ["기사명", 78, "l"], ["화물", null, "l"], ["공급가액", 106, "r"], ["세액", 72, "r"]];
+  const minW = ph ? 0 : cols.reduce((a, [, w]) => a + (w || 120), 0); // ⭐ 2026-11-17 남는 폭은 화물 칸이 쓴다(최소 120) — 구간은 220 고정
   const cargoOf = (r) => [r.차량톤수 ? `${String(r.차량톤수).replace(/톤$/, "")}톤` : "", r.차량종류].filter(Boolean).join(" · ");
   const off = (on, c) => (on ? c : "text-[#9AA9C3] line-through"); // 뺀 줄은 흐리게 + 취소선
   return (
@@ -550,12 +551,11 @@ export function StatementLineGrid({ rows, included, onToggle, onToggleAll, onAmo
               const from = r.상차지명 || r.상차지 || "-";
               const to = r.하차지명 || r.하차지 || "-";
               const drv = r.이름 || r.기사명 || "";
-              const phone = r.전화번호 || r.기사전화번호 || r.연락처 || "";
               const cargo = cargoOf(r);
               const route = (
-                <button type="button" onClick={() => onOpenOrder?.(r)} className={`block w-full text-left hover:underline underline-offset-2 ${on ? "text-[#0F1A30]" : "text-[#9AA9C3] line-through"}`} title={`${from} → ${to} · 오더 상세`}>
-                  <span className="block truncate text-[14px] font-bold">{from}</span>
-                  <span className="block truncate text-[13px] font-semibold"><span className="text-[#9AA9C3] mr-0.5">→</span>{to}</span>
+                <button type="button" onClick={() => onOpenOrder?.(r)} className={`block w-full text-left truncate whitespace-nowrap text-[14px] font-bold hover:underline underline-offset-2 ${on ? "text-[#0F1A30]" : "text-[#9AA9C3] line-through"}`} title={`${from} → ${to} · 오더 상세`}>
+                  {/* ⭐ 2026-11-17 한 줄 — 상차 → 하차 (길면 … · 전체는 title) */}
+                  {from}<span className="mx-1 font-semibold text-[#9AA9C3]">→</span>{to}
                 </button>
               );
               const amt = (
@@ -590,13 +590,18 @@ export function StatementLineGrid({ rows, included, onToggle, onToggleAll, onAmo
                   <td className={`px-1 py-2 text-center text-[14px] ${on ? "text-[#3A4A66]" : "text-[#9AA9C3] line-through"}`} style={NUM}>{String(r.상차일 || "").slice(5)}</td>
                   {grp && <td className="px-2 py-2"><span className={`block truncate text-[12.5px] font-bold ${on ? "text-[#2D4C82]" : "text-[#9AA9C3]"}`} title={groupOf(r) || ""}>{groupOf(r) || "-"}</span></td>}
                   <td className="px-2 py-1.5 min-w-0">{route}</td>
-                  <td className="px-2 py-1.5 min-w-0" title={[drv, r.차량번호, phone].filter(Boolean).join(" · ")}>
-                    <div className={`truncate text-[13.5px] font-bold ${on ? "text-[#0F1A30]" : "text-[#9AA9C3] line-through"}`}>{drv || "-"}{r.차량번호 ? <span className="ml-1.5 font-semibold text-[#5B6B85]">{r.차량번호}</span> : null}</div>
-                    <div className={`truncate text-[12.5px] ${off(on, "text-[#5B6B85]")}`} style={NUM}>{phone ? fmtPhone(phone) : "-"}</div>
+                  {/* ⭐ 2026-11-17 기사 정보 → [차량번호] [기사명] 두 칸 · 한 줄 · 연락처는 뺌 */}
+                  <td className="px-2 py-2 min-w-0" title={r.차량번호 || ""}>
+                    <div className={`truncate whitespace-nowrap text-[13.5px] font-semibold ${off(on, "text-[#3A4A66]")}`}>{r.차량번호 || "-"}</div>
                   </td>
-                  <td className="px-2 py-1.5 min-w-0" title={[r.화물내용, cargo].filter(Boolean).join(" · ")}>
-                    <div className={`truncate text-[13.5px] font-semibold ${on ? "text-[#0F1A30]" : "text-[#9AA9C3] line-through"}`}>{r.화물내용 || "-"}</div>
-                    <div className={`truncate text-[12.5px] ${off(on, "text-[#5B6B85]")}`}>{cargo || "-"}</div>
+                  <td className="px-2 py-2 min-w-0" title={drv}>
+                    <div className={`truncate whitespace-nowrap text-[13.5px] font-bold ${off(on, "text-[#0F1A30]")}`}>{drv || "-"}</div>
+                  </td>
+                  <td className="px-2 py-2 min-w-0" title={[r.화물내용, cargo].filter(Boolean).join(" · ")}>
+                    <div className={`truncate whitespace-nowrap text-[13.5px] ${off(on, "text-[#3A4A66]")}`}>
+                      {r.화물내용 ? <span className={`font-semibold ${on ? "text-[#0F1A30]" : ""}`}>{r.화물내용}</span> : (cargo ? null : "-")}
+                      {cargo ? <span className={`${r.화물내용 ? "ml-1.5 " : ""}${on ? "text-[#5B6B85]" : ""}`}>{r.화물내용 ? "· " : ""}{cargo}</span> : null}
+                    </div>
                   </td>
                   <td className="px-1.5 py-1.5 text-right">{amt}</td>
                   <td className="px-2 py-2 text-right text-[14px] text-[#5B6B85]" style={NUM}>{on ? won(Math.round(toInt(edit[r._id] ?? r.청구운임) * 0.1)) : "-"}</td>
