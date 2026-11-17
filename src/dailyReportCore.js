@@ -26,7 +26,7 @@ export const rangeDays = (a, b) => { const out = []; for (let d = a; d <= b && o
 
 // ── 받기 설정 기본값 ──
 export const BRIEF_SECTIONS = [
-  ["kpi", "핵심 지표"], ["headline", "세 줄 요약"], ["chart30", "최근 30일 매출·수익률"], ["mtd", "월 목표 진척 · 누계"],
+  ["kpi", "핵심 지표"], ["headline", "세 줄 요약"], ["chart30", "매출·수익률 추이"], ["mtd", "월 목표 진척 · 누계"],
   ["staff", "담당자별 매출"], ["clients", "거래처 TOP 8 · 증감"], ["ops", "운영 현황 · 가동률 추이"], ["hr", "인력 현황"], ["cash", "자금 현황"],
 ];
 export const SECTION_KEYS = BRIEF_SECTIONS.map(([k]) => k);
