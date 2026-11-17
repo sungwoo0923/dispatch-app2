@@ -12,3 +12,5 @@ export const isExecTeam = (t) => normalizeTeam(t) === EXEC_TEAM;
 // (선택) 예전 부서 이름을 새 이름으로 바꿀 값 — 직원 문서 { team } → 바꿀 게 있으면 { team: 새 이름 }, 없으면 null
 //  자동으로 돌리지는 않는다(원할 때만 쓰는 도우미). 직원 정보를 열어 저장하면 드롭다운이 새 이름으로 저장한다
 export const teamMigrationPatch = (u) => { const t = String(u?.team || "").trim(); return LEGACY_TEAMS[t] ? { team: LEGACY_TEAMS[t] } : null; };
+// ⭐ 2026-11-17 권한 검사용 부서 글자 — 지금 부서 + 예전 부서(legacyTeam: 서버가 이름을 바꿀 때 남김). 예전 부서 이름으로 받던 경리 · 인사 권한이 그대로 유지되게
+export const teamText = (u) => [u?.team, u?.legacyTeam].filter((x) => typeof x === "string" && x).join(" ");

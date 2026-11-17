@@ -4443,6 +4443,20 @@ exports.purgeExpiredResetBackups = functions
     return null;
   });
 
+// ⭐ 2026-11-17 예전 부서 이름 → 새 부서 이름(경리/회계팀 · 인사팀 · 운영팀 → 경영지원팀, 운송팀 → 물류운송팀) — functions/teamMigrate.js (사용자 승인)
+//  배포 뒤 첫 실행에서 직원 · 전자결재 · 공지 · 인사 · 급여 등 문서 전체를 한 번 훑어 바꾸고(나눠서 이어 감), 그다음부터는 예전 이름이 새로 적힌 문서만 고친다
+const _teamMigrate = require("./teamMigrate").makeTeamMigrator({ db });
+exports.migrateLegacyTeams = functions
+  .runWith({ timeoutSeconds: 540, memory: "512MB" })
+  .pubsub.schedule("every 30 minutes")
+  .timeZone("Asia/Seoul")
+  .onRun(async () => {
+    const t0 = Date.now();
+    const r = await _teamMigrate({ deadline: () => Date.now() - t0 > 8 * 60000 });
+    if (r.changed || !r.full) console.log(`🏷 부서 이름 정리 — 확인 ${r.scanned}건, 바꿈 ${r.changed}건${r.full ? "" : " (다음 실행에서 이어서)"}`, JSON.stringify(r.by));
+    return null;
+  });
+
 // 🧹 2026-11-14 매일 새벽 — 7일 지난 접속 이력(로그인·로그아웃 기록 · 끝난 로그인 · 보안 알림)을 지운다(functions/accessLogPurge.js)
 const _accessLogPurge = require("./accessLogPurge");
 exports.purgeOldAccessLogs = functions

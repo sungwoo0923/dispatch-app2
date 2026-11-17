@@ -41,6 +41,9 @@ const full = (re) => new RegExp(`^.*(?:${re}).*$`);
 const RE_FIN = full("경리|회계|재무");
 const RE_PAY = full("재무|경리|회계|총무");
 const RE_HR = full("인사");
+const MGMT_TEAM = "경영지원팀"; // ⭐ 2026-11-17 src/teamNames.js 와 같은 이름
+const MGMT_FIN_ROLES = ["test", "acctStaff", "hrAcct", "allMgr"];
+const MGMT_HR_ROLES = ["hrManager", "hrStaff", "hrAcct", "allMgr"];
 const RE_EXEC_LABEL = full("임원");
 
 // 계약종료를 볼 회사(firestore.rules contractCoOf)
@@ -82,6 +85,7 @@ function roleInfo(role, g, ov) {
 function computeUserClaims(u, ctx = {}) {
   if (!isMap(u)) return { claims: null, reason: "no-user" };
   const role = getOr(u, "role", "");
+  const legacyTeam = (() => { const v = getOr(u, "legacyTeam", ""); return typeof v === "string" && !ODD_LINE.test(v) ? v : ""; })(); // ⭐ 2026-11-17
   const co = getOr(u, "companyName", undefined);
   if (typeof role !== "string") return { claims: null, reason: "role" };
   if (typeof co !== "string") return { claims: null, reason: "companyName" }; // 회사명 없는 옛 문서('돌캐' 기본값)는 문서로
@@ -110,9 +114,11 @@ function computeUserClaims(u, ctx = {}) {
     ms: getOr(u, "isMaster", false) === true,
     pm: getOr(perms, "master", false) === true,
     sh,
-    fin: RE_FIN.test(team),
-    pay: RE_PAY.test(team),
-    hr: RE_HR.test(team),
+    // ⭐ 2026-11-17 경영지원팀(경리 · 인사를 같이 하는 부서 — 예전 경리/회계팀 · 인사팀 · 운영팀)은 부서 이름만으로 경리 · 인사를 가를 수 없어 권한으로 정한다
+    //  예전 부서 이름은 바꿀 때 legacyTeam 에 남겨 둔다(functions/teamMigrate.js) — 예전 부서로 받던 권한은 그대로
+    fin: RE_FIN.test(team) || RE_FIN.test(legacyTeam) || (team === MGMT_TEAM && MGMT_FIN_ROLES.includes(role)),
+    pay: RE_PAY.test(team) || RE_PAY.test(legacyTeam) || (team === MGMT_TEAM && MGMT_FIN_ROLES.includes(role)),
+    hr: RE_HR.test(team) || RE_HR.test(legacyTeam) || (team === MGMT_TEAM && MGMT_HR_ROLES.includes(role)),
     tx: team === "임원",
     xp: EXEC_POSITIONS.includes(pos),
     ceo: CEO_POSITIONS.includes(pos),
@@ -160,7 +166,7 @@ function sameManaged(a, b) {
   return pick(a) === pick(b);
 }
 // users 문서에서 토큰 값에 쓰이는 칸만(바뀌었는지 볼 때)
-const USER_FIELDS = ["role", "companyName", "approved", "employmentStatus", "linkedTransportCompany", "isMaster", "subAdmin", "permissions", "team", "position"];
+const USER_FIELDS = ["role", "companyName", "approved", "employmentStatus", "linkedTransportCompany", "isMaster", "subAdmin", "permissions", "team", "legacyTeam", "position"];
 const HUB_FIELDS = ["companyKey", "source", "companyName", "bizNo", "status", "role"];
 const proj = (d, fields) => JSON.stringify(fields.map((k) => [k, d ? (d[k] === undefined ? null : d[k]) : "∅"]));
 const changedFields = (b, a, fields) => proj(b, fields) !== proj(a, fields);

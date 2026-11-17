@@ -5,10 +5,11 @@
 //  · 회사 마스터(운송관리자)라도 위에 해당하지 않으면 안 보인다(마스터가 대표 직책이면 보기 가능)
 //  · 서버 규칙(firestore.rules › platformInvoices · planRequests)도 같은 기준
 import { isExecProfile } from "./hrConstants";
+import { teamText } from "./teamNames"; // ⭐ 2026-11-17 예전 부서 이름(legacyTeam)까지 같이 본다
 
 export const isFinanceProfile = (u, role = "") => {
   const r = role || u?.role || "";
-  return ["test", "hrAcct", "allMgr", "acctStaff"].includes(r) || /경리|회계|재무/.test(String(u?.team || ""));
+  return ["test", "hrAcct", "allMgr", "acctStaff"].includes(r) || /경리|회계|재무/.test(teamText(u));
 };
 
 export function billingAccess(u, { totalMaster = false, role = "", viewer = false } = {}) {
@@ -16,6 +17,6 @@ export function billingAccess(u, { totalMaster = false, role = "", viewer = fals
   if (totalMaster || r === "totalMaster") return { view: true, edit: !viewer };
   if (!u || r === "shipper" || r === "driver") return { view: false, edit: false };
   const finance = isFinanceProfile(u, r);
-  const exec = isExecProfile(u) || /임원/.test(String(u?.team || ""));
+  const exec = isExecProfile(u) || /임원/.test(teamText(u));
   return { view: finance || exec, edit: finance && !viewer && r !== "viewer" };
 }

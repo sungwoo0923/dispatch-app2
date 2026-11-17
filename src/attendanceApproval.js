@@ -8,13 +8,14 @@ import { addDoc, arrayUnion, collection, doc, getDocs, query, runTransaction, se
 import { db } from "./firebase";
 import { isExecProfile } from "./hrConstants";
 import { findCustomRole, roleScreen } from "./customRoles";
+import { teamText } from "./teamNames"; // ⭐ 2026-11-17 예전 부서 이름(legacyTeam)까지 같이 본다
 
 export const HR_ROLES = ["hrManager", "hrAcct", "allMgr", "hrStaff"];
 
 // 인사 담당자 — 인사관리자·통합인사관리자 권한 또는 부서명에 "인사"
 export function isHrStaffUser(u, roleOverride) {
   const r = roleOverride ?? u?.role;
-  return HR_ROLES.includes(r) || /인사/.test(String(u?.team || ""));
+  return HR_ROLES.includes(r) || /인사/.test(teamText(u));
 }
 // 임원 — 부서 "임원"(또는 임원 직책) 또는 권한 관리에서 "임원 화면"으로 정한 역할
 export function isExecUser(u, customRoles) {

@@ -1,0 +1,21 @@
+// 예전 부서 이름 바꾸기 — node scripts/teamMigrate.test.mjs
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const { patchFor, LEGACY_TEAMS } = require("../functions/teamMigrate.js");
+import { LEGACY_TEAMS as CLIENT } from "../src/teamNames.js";
+let fails = 0;
+const ok = (c, m) => { if (c) console.log("✓", m); else { fails++; console.error("✗", m); } };
+ok(JSON.stringify(LEGACY_TEAMS) === JSON.stringify(CLIENT), "서버 표 = 화면 표(src/teamNames.js)");
+const ap = { title: "지출결의", drafter: { uid: "a", name: "홍길동", team: "경리/회계팀" }, line: [{ uid: "b", team: "운송팀", status: "approved" }, { uid: "c", team: "임원" }], memo: "경리/회계팀 회식" };
+const p = patchFor(ap);
+ok(p.drafter.team === "경영지원팀" && p.drafter.name === "홍길동", "작성자 부서만 바꿈");
+ok(p.line[0].team === "물류운송팀" && p.line[1].team === "임원", "결재선 부서 바꿈 · 다른 부서 그대로");
+ok(!("memo" in p) && !("title" in p), "부서 칸이 아닌 글자는 그대로");
+const u = patchFor({ team: "인사팀", name: "김" }, { isUser: true });
+ok(u.team === "경영지원팀" && u.legacyTeam === "인사팀", "직원 — 예전 이름을 legacyTeam 에 남김");
+ok(patchFor({ team: "경영지원팀" }, { isUser: true }) === null, "이미 새 이름이면 바꿀 것 없음");
+const n = patchFor({ teams: ["경리/회계팀", "인사팀", "영업팀"] });
+ok(JSON.stringify(n.teams) === JSON.stringify(["경영지원팀", "영업팀"]), "공지 받는 팀 목록 — 합치고 겹침 제거");
+const ts = { toDate() { return new Date(); } };
+ok(patchFor({ team: "운영팀", at: ts }).at === undefined, "날짜(Timestamp)는 건드리지 않음");
+if (fails) { console.error(`teamMigrate: ${fails}개 실패`); process.exit(1); } else console.log("teamMigrate: 모두 통과");

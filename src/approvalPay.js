@@ -7,6 +7,7 @@
 import React from "react";
 import { db } from "./firebase";
 import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
+import { teamText } from "./teamNames"; // ⭐ 2026-11-17 예전 부서 이름(legacyTeam)까지 같이 본다
 
 const PAY_SKIP_FORMS = ["card"];
 export const isPayDoc = (d) => d?.cat === "expense" && !PAY_SKIP_FORMS.includes(d?.form) && Number(d?.amount) > 0;
@@ -20,7 +21,7 @@ const acctViewOn = (role) => {
   if (!key) return false;
   try { const v = localStorage.getItem(key); return role === "hrAcct" ? v !== "hr" : v === "acct"; } catch { return false; }
 };
-export const isFinUser = (me) => FIN_ROLES.includes(me?.role) || acctViewOn(me?.role) || FIN_TEAM.test(String(me?.team || ""));
+export const isFinUser = (me) => FIN_ROLES.includes(me?.role) || acctViewOn(me?.role) || FIN_TEAM.test(teamText(me));
 
 export function usePayFlags(company) {
   const [f, setF] = React.useState(null);

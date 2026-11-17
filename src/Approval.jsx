@@ -85,6 +85,7 @@ const goPersonnelOrder = (targetUid) => {
 //  누를 수 있는 사람: 아래 FIN_ROLES·재무 부서(2026-11-07 정리 — 운송 관리자(admin)·최종 결재자는 이제 못 누른다)
 //  (firestore.rules › approvals 의 "⭐ 2026-11-04 전자결재 서명" 규칙과 같은 조건)
 import { isPayDoc, payState, isFinUser, FIN_TEAM, usePayFlags, fallbackPayer, usePayTodo } from "./approvalPay"; // 💸 2026-11-15 지급 규칙은 공용(모바일 숫자도 같이)
+import { teamText } from "./teamNames"; // ⭐ 2026-11-17 예전 부서 이름(legacyTeam)까지 같이 본다
 export { isPayDoc, payState, usePayFlags, fallbackPayer };
 // ⭐ 2026-11-09 계정과목은 경리 권한만 정한다 — 경리관리자·경리사무원·통합관리자·통합인사관리자·최고관리자·경리/회계/재무/총무 부서
 //  (통합관리자·통합인사관리자는 화면 전환과 상관없이 — 계정 분류는 지급 처리와 달리 화면을 바꿀 필요 없음. 보안 규칙의 지급 권한과 같은 역할 목록)
@@ -93,7 +94,7 @@ export { isPayDoc, payState, usePayFlags, fallbackPayer };
 const _usedAccounts = new Set();
 export const rememberAccounts = (docs) => { (docs || []).forEach((d) => { [d?.data?.account, d?.paid?.account].forEach((a) => { const v = String(a || "").trim(); if (v && v.length <= 30) _usedAccounts.add(v); }); }); };
 export const accountOptions = () => [...new Set([...ACCOUNTS, ..._usedAccounts])];
-export const isAcctEditor = (me) => ["test", "acctStaff", "allMgr", "hrAcct", "totalMaster"].includes(me?.role) || FIN_TEAM.test(String(me?.team || ""));
+export const isAcctEditor = (me) => ["test", "acctStaff", "allMgr", "hrAcct", "totalMaster"].includes(me?.role) || FIN_TEAM.test(teamText(me));
 // null(지급 대상 아님) | "wait"(지급 대기) | "paid"(지급완료)
 // ⭐ 2026-11-07 지급완료된 지출결의는 결재 취소 요청을 막는다(경리가 지급완료를 먼저 취소) — firestore.rules apCancelReqOk와 같은 조건
 export const PAID_CANCEL_MSG = "지급완료를 먼저 취소해 주세요";

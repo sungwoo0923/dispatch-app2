@@ -12,6 +12,7 @@ import React from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase";
 import { trialStateOf } from "./contractTerms.js"; // 📑 2026-11-13 무료 이용(계약 전에 먼저 써 보는 기간)
+import { teamText } from "./teamNames"; // ⭐ 2026-11-17 예전 부서 이름(legacyTeam)까지 같이 본다
 
 export const CONTRACT_NOTICE_DAYS = [30, 7, 1];
 export const CONTRACT_TERMS = [[12, "1년"], [24, "2년"], [36, "3년"], [0, "직접 입력"]];
@@ -20,7 +21,7 @@ export const CONTRACT_NOTICE_ROLES = ["test", "acctStaff", "hrAcct", "allMgr", "
 export const EXEC_POSITIONS = ["이사", "상무", "전무", "부사장", "사장", "대표", "대표이사", "본부장", "임원"];
 export const isContractNoticeTarget = (u) => !!u && !["totalMaster", "driver", "shipper", "cafeUser"].includes(u.role) && u.approved !== false && u.employmentStatus !== "퇴사" && (
   CONTRACT_NOTICE_ROLES.includes(u.role) || u.isMaster === true || EXEC_POSITIONS.includes(String(u.position || "").trim())
-  || String(u.team || "").trim() === "임원" || /경리|회계|재무/.test(String(u.team || "")));
+  || teamText(u).trim() === "임원" || /경리|회계|재무/.test(teamText(u)));
 
 const pad = (n) => String(n).padStart(2, "0");
 export const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);

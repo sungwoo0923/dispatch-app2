@@ -45,13 +45,13 @@ service cloud.firestore {
     }
     // 부서·직책 — 규칙의 이름 조건을 서버가 미리 계산해 둔 값
     function myTeamFin() {
-      return ck() ? tk('fin', false) == true : string(myUser().get('team', '')).matches('.*(경리|회계|재무).*');
+      return ck() ? tk('fin', false) == true : (string(myUser().get('team', '')).matches('.*(경리|회계|재무).*') || string(myUser().get('legacyTeam', '')).matches('.*(경리|회계|재무).*'));
     }
     function myTeamPay() {
-      return ck() ? tk('pay', false) == true : myUser().get('team', '').matches('.*(재무|경리|회계|총무).*');
+      return ck() ? tk('pay', false) == true : (string(myUser().get('team', '')).matches('.*(재무|경리|회계|총무).*') || string(myUser().get('legacyTeam', '')).matches('.*(재무|경리|회계|총무).*'));
     }
     function myTeamHr() {
-      return ck() ? tk('hr', false) == true : string(myUser().get('team', '')).matches('.*인사.*');
+      return ck() ? tk('hr', false) == true : (string(myUser().get('team', '')).matches('.*인사.*') || string(myUser().get('legacyTeam', '')).matches('.*인사.*'));
     }
     function myTeamExec() {
       return ck() ? tk('tx', false) == true : myUser().get('team', '') == '임원';
@@ -1438,7 +1438,7 @@ service cloud.firestore {
         : mgrOf(myUser());
     }
     function userSensitiveKeys() {
-      return ['role', 'approved', 'isMaster', 'permissions', 'subAdmin', 'subAdminPrevRole', 'companyName', 'linkedTransportCompany', 'companyCode', 'businessNumber', 'workScope']; // workScope: 업무 범위(2026-11-13)
+      return ['role', 'approved', 'isMaster', 'permissions', 'subAdmin', 'subAdminPrevRole', 'companyName', 'linkedTransportCompany', 'companyCode', 'businessNumber', 'workScope', 'legacyTeam']; // workScope: 업무 범위(2026-11-13) · legacyTeam: 예전 부서 이름(서버만 적는다 · 2026-11-17)
     }
     function otherUserWriteOk() {
       let r = myRole();
@@ -1459,7 +1459,7 @@ service cloud.firestore {
     //  운송사 직원은 부서·직책도(경리·인사·임원 권한이 부서/직책 이름으로 정해진다) — 인사·관리자는 예외
     function selfKeepOk() {
       return resource == null || resource.data.get('approved', true) == false || isTotalMasterUser()
-        || (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['companyName', 'linkedTransportCompany', 'permissions', 'subAdmin', 'subAdminPrevRole', 'employmentStatus', 'companyCode', 'resignedAt', 'workScope', 'mfaOpt', 'mfaKind', 'bioKeys'])
+        || (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['companyName', 'linkedTransportCompany', 'permissions', 'subAdmin', 'subAdminPrevRole', 'employmentStatus', 'companyCode', 'resignedAt', 'workScope', 'mfaOpt', 'mfaKind', 'bioKeys', 'legacyTeam'])
           // ⭐ 2026-11-09 마스터 위임 — 본인 마스터는 "내려놓기(true → false)"만 스스로 할 수 있다(예전엔 막혀 위임 후 마스터가 2명 남았다)
           && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['isMaster']) || request.resource.data.get('isMaster', false) == false)
           && (resource.data.get('role', '') in ['shipper', 'cafeUser'] || isHrStaff() || isCompanyAdmin(myCo())

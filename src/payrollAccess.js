@@ -9,6 +9,7 @@
 //  · 그 밖의 직원: 본인 명세서(발행된 것)만 — 내정보 › 급여명세서
 import React from "react";
 import { useMyProfile } from "./userNames";
+import { teamText } from "./teamNames"; // ⭐ 2026-11-17 예전 부서 이름(legacyTeam)까지 같이 본다
 
 const SUPER_EMAIL = "tjddnqkf@naver.com";
 export const PAYROLL_MENU = "급여관리";
@@ -30,13 +31,13 @@ export function isPayrollStaff(me = {}, email = "", { ignoreView = false } = {})
   if (NON_STAFF.includes(role) || me?.approved === false) return false;
   if (["test", "acctStaff"].includes(role)) return true;
   if (["hrAcct", "allMgr"].includes(role)) return ignoreView || acctViewOn(role);
-  return FIN_TEAM.test(String(me?.team || ""));
+  return FIN_TEAM.test(teamText(me));
 }
 export function isPayrollAdmin(me = {}, email = "") {
   const role = String(me?.role || "");
   if (email === SUPER_EMAIL || role === "totalMaster") return true;
   if (!isPayrollStaff(me, email, { ignoreView: true })) return false;
-  return ["test", "hrAcct", "allMgr"].includes(role) || (FIN_TEAM.test(String(me?.team || "")) && (role === "admin" || me?.isMaster === true));
+  return ["test", "hrAcct", "allMgr"].includes(role) || (FIN_TEAM.test(teamText(me)) && (role === "admin" || me?.isMaster === true));
 }
 export function payrollLevelOf(me = {}, email = "") {
   return isPayrollStaff(me, email) ? "write" : "hidden";
@@ -44,7 +45,7 @@ export function payrollLevelOf(me = {}, email = "") {
 // 연차 촉진 관리(발송·날짜 지정) — 인사팀(보안 규칙 isHrStaff와 같음) + 회사 마스터. 경리관리자는 현황 조회만
 export function leaveManagerOf(me = {}, email = "") {
   const role = String(me?.role || "");
-  return email === SUPER_EMAIL || ["hrManager", "hrAcct", "allMgr", "hrStaff", "totalMaster"].includes(role) || /인사/.test(String(me?.team || "")) || me?.isMaster === true;
+  return email === SUPER_EMAIL || ["hrManager", "hrAcct", "allMgr", "hrStaff", "totalMaster"].includes(role) || /인사/.test(teamText(me)) || me?.isMaster === true;
 }
 export function leaveViewerOf(me = {}, email = "") {
   return leaveManagerOf(me, email) || ["test", "acctStaff"].includes(String(me?.role || ""));
