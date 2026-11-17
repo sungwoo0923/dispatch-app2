@@ -30,7 +30,8 @@ const toInt = (v) => parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
 const amt = (v) => (!v ? "" : `${v < 0 ? "−" : ""}${Math.abs(Math.round(v)).toLocaleString()}`);
 const wonTxt = (v) => (v === 0 ? "–" : (v < 0 ? "−" : "") + Math.abs(Math.round(v)).toLocaleString());
 
-const th = { padding: "9px 10px", fontSize: 12, fontWeight: 800, color: "#3A4A66", whiteSpace: "nowrap", background: "#F3F6FB", borderBottom: `3px double ${INK}`, borderTop: `2px solid ${INK}` };
+// ⭐ 2026-11-17 머리 칸 글자 크게(12 → 14.5px · 굵게) · 머리 칸은 모두 가운데 정렬(본문 금액은 오른쪽 그대로 — 자릿수 맞춰 읽기)
+const th = { padding: "10px 10px", fontSize: 14.5, fontWeight: 900, color: "#1B2B4B", whiteSpace: "nowrap", textAlign: "center", verticalAlign: "middle", background: "#F3F6FB", borderBottom: `3px double ${INK}`, borderTop: `2px solid ${INK}` };
 const td = { padding: "8px 10px", fontSize: 13.5, color: "#1B2B4B", borderBottom: `1px solid ${RULE}`, whiteSpace: "nowrap", height: 40 };
 const tdN = { ...td, ...NUM, textAlign: "right", fontWeight: 700 };
 const vl = { borderLeft: `1px solid ${VRULE}` };
@@ -39,8 +40,8 @@ const totalCell = { borderTop: `1.5px solid ${INK}`, borderBottom: `3px double $
 
 // 장부 머리 칸 — 위 작은 글씨(차변 · 대변 · 잔액) + 아래 이름
 const HeadLbl = ({ tag, children, color }) => (
-  <span className="inline-flex flex-col leading-tight">
-    {tag && <span className="text-[10.5px] font-black tracking-[0.08em]" style={{ color: color || "#7A879C" }}>{tag}</span>}
+  <span className="inline-flex flex-col items-center leading-tight">
+    {tag && <span className="kp-lt text-[13.5px] font-black tracking-[0.04em]" style={{ color: color || "#7A879C" }}>{tag}</span>}
     <span>{children}</span>
   </span>
 );
@@ -51,10 +52,13 @@ const Code = ({ code, name }) => (
     <span className="text-[12.5px] font-bold text-[#5B6B85]">{name}</span>
   </span>
 );
+const LEDGER_HEAD_CSS = "table.kp-ledger>thead>tr>th{font-size:calc(15px * var(--font-scale, 1))!important;font-weight:900!important;text-align:center!important;vertical-align:middle;color:#0F1A30;line-height:1.3!important;height:auto}table.kp-ledger>thead>tr>th .kp-lt{font-size:calc(13.5px * var(--font-scale, 1))}";
 // 장부 표 틀(줄 친 종이)
 const LedgerTable = ({ children, minWidth = 860, caption }) => (
   <div className="rounded-[14px] border border-[#D3DBE8] bg-white overflow-x-auto shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-    <table className="w-full border-collapse" style={{ minWidth }}>
+    {/* ⭐ 2026-11-17 머리 칸 — 앱 공통 표 규칙(index.css · 14px !important)보다 크게 · 가운데 정렬 */}
+    <style>{LEDGER_HEAD_CSS}</style>
+    <table className="kp-ledger w-full border-collapse" style={{ minWidth }}>
       {caption && <caption className="sr-only">{caption}</caption>}
       {children}
     </table>
@@ -237,8 +241,8 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
   const tab = TABS.find((t) => t[0] === subTab) || TABS[0];
   const btnDark = "h-8 px-2.5 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black hover:opacity-85";
   const btnLine = "h-8 px-2.5 rounded-lg border border-[#D3DBE8] bg-white text-[#5B6B85] text-[12.5px] font-black hover:bg-[#F7F9FC]";
-  const SortH = ({ k, label, sortObj, idp, right, tag, color, style }) => (
-    <SortTh k={k} sort={sortObj.sort} onSort={sortObj.toggle} align={right ? "right" : "left"} style={{ ...th, textAlign: right ? "right" : "left", ...style }}>
+  const SortH = ({ k, label, sortObj, idp, tag, color, style }) => ( // right(금액 칸)는 예전 이름 — 머리 칸은 모두 가운데
+    <SortTh k={k} sort={sortObj.sort} onSort={sortObj.toggle} align="center" style={{ ...th, ...style }}>
       <HeadLbl tag={tag} color={color}>{idp ? <EditableText id={`${idp}${k}`} defaultText={label || k} /> : label || k}</HeadLbl>
     </SortTh>
   );
@@ -254,7 +258,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
         <div className="flex items-center gap-2"><span className="w-1.5 h-5 rounded-full bg-[#0F1A30]" /><h3 className="text-[15px] font-black text-[#0F1A30]"><EditableText id={titleId} defaultText={title} /></h3></div>
         <LedgerTable minWidth={760} caption={title}>
           <thead><tr>
-            <th style={{ ...th, width: 48, textAlign: "center" }}>No.</th>
+            <th style={{ ...th, width: 48}}>No.</th>
             <SortH k={first} sortObj={sortObj} idp={idp} />
             <SortH k="건수" sortObj={sortObj} idp={idp} right style={vl} />
             <SortH k="매출" sortObj={sortObj} idp={idp} right tag="401" style={vlDouble} />
@@ -342,14 +346,14 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
           </div>
           <LedgerTable minWidth={1000} caption="미수금 현황(외상매출금 원장)">
             <thead><tr>
-              <th style={{ ...th, width: 48, textAlign: "center" }}>No.</th>
+              <th style={{ ...th, width: 48}}>No.</th>
               <th style={{ ...th, width: 120 }}><HeadLbl tag="계정">코드</HeadLbl></th>
               <SortH k="거래처" sortObj={acArSort} idp="settlement.ar.header." tag="적요" />
               <SortH k="연체 구분" sortObj={acArSort} idp="settlement.ar.header." tag="일자 · 경과" style={vl} />
               <SortH k="청구액" sortObj={acArSort} idp="settlement.ar.header." right tag="차변" color={DR} style={vlDouble} />
               <SortH k="수금액" sortObj={acArSort} idp="settlement.ar.header." right tag="대변" color={CR} style={vl} />
               <SortH k="미수금" sortObj={acArSort} idp="settlement.ar.header." right tag="잔액" style={vl} />
-              <th style={{ ...th, ...vl, textAlign: "right" }}><HeadLbl tag="누계">누계 잔액</HeadLbl></th>
+              <th style={{ ...th, ...vl}}><HeadLbl tag="누계">누계 잔액</HeadLbl></th>
               <th style={{ ...th, ...vlDouble, width: 150 }} />
             </tr></thead>
             <tbody>
@@ -358,9 +362,9 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
                 return (
                   <tr key={r.client} className="hover:bg-[#F5F8FD]" style={{ background: r.outstanding > 0 ? "#fff" : "#FAFBFD" }}>
                     <td style={{ ...td, ...NUM, textAlign: "center", color: "#9AA9C3", fontSize: 12.5 }}>{i + 1}</td>
-                    <td style={td}><Code code="108" name="외상매출금" /></td>
+                    <td style={{ ...td, textAlign: "center" }}><Code code="108" name="외상매출금" /></td>
                     <td style={{ ...td, fontWeight: 800, color: INK }}>{r.client}</td>
-                    <td style={{ ...td, ...vl }}>{r.outstanding > 0 ? <span className="inline-flex items-center gap-1.5"><span className="text-[12.5px] font-bold text-[#7A879C]" style={NUM}>D+{r.ageDays}</span><span className="px-1.5 py-0.5 rounded-md text-[12px] font-black" style={{ color: age.color, background: age.bg }}>{age.label}</span></span> : <span className="px-1.5 py-0.5 rounded-md text-[12px] font-black text-[#1F6F4A] bg-[#E8F5EE]">수금완료</span>}</td>
+                    <td style={{ ...td, ...vl, textAlign: "center" }}>{r.outstanding > 0 ? <span className="inline-flex items-center gap-1.5"><span className="text-[12.5px] font-bold text-[#7A879C]" style={NUM}>D+{r.ageDays}</span><span className="px-1.5 py-0.5 rounded-md text-[12px] font-black" style={{ color: age.color, background: age.bg }}>{age.label}</span></span> : <span className="px-1.5 py-0.5 rounded-md text-[12px] font-black text-[#1F6F4A] bg-[#E8F5EE]">수금완료</span>}</td>
                     <td style={{ ...tdN, ...vlDouble, color: DR }}>{amt(r.invoiced)}</td>
                     <td style={{ ...tdN, ...vl, color: CR }}>{amt(r.paid)}</td>
                     <td style={{ ...tdN, ...vl, color: r.outstanding > 0 ? NEG : "#9AA9C3", fontWeight: r.outstanding > 0 ? 900 : 600 }}>{amt(r.outstanding) || "0"}</td>
@@ -398,14 +402,14 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
           </div>
           <LedgerTable minWidth={1000} caption="지급 현황(미지급금 원장)">
             <thead><tr>
-              <th style={{ ...th, width: 48, textAlign: "center" }}>No.</th>
+              <th style={{ ...th, width: 48}}>No.</th>
               <th style={{ ...th, width: 116 }}><HeadLbl tag="계정">코드</HeadLbl></th>
               <SortH k="기사명" sortObj={acApSort} idp="settlement.ap.header." tag="적요" />
               <SortH k="차량번호" sortObj={acApSort} idp="settlement.ap.header." tag="차량" style={vl} />
               <SortH k="지급액" sortObj={acApSort} idp="settlement.ap.header." right tag="차변" color={DR} style={vlDouble} />
               <SortH k="기사운임 합계" sortObj={acApSort} idp="settlement.ap.header." right tag="대변" color={CR} style={vl} />
               <SortH k="미지급" sortObj={acApSort} idp="settlement.ap.header." right tag="잔액" style={vl} />
-              <th style={{ ...th, ...vl, textAlign: "right" }}><HeadLbl tag="누계">누계 잔액</HeadLbl></th>
+              <th style={{ ...th, ...vl}}><HeadLbl tag="누계">누계 잔액</HeadLbl></th>
               <th style={{ ...th, ...vlDouble, width: 150 }} />
             </tr></thead>
             <tbody>
@@ -414,9 +418,9 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
                 return (
                   <tr key={r.driver} className="hover:bg-[#F5F8FD]" style={{ background: r.outstanding > 0 ? "#fff" : "#FAFBFD" }}>
                     <td style={{ ...td, ...NUM, textAlign: "center", color: "#9AA9C3", fontSize: 12.5 }}>{i + 1}</td>
-                    <td style={td}><Code code="253" name="미지급금" /></td>
+                    <td style={{ ...td, textAlign: "center" }}><Code code="253" name="미지급금" /></td>
                     <td style={{ ...td, fontWeight: 800, color: INK }}>{r.driver}</td>
-                    <td style={{ ...td, ...vl, ...NUM, fontSize: 13, color: "#5B6B85" }}>{r.carNo || "–"}</td>
+                    <td style={{ ...td, ...vl, ...NUM, fontSize: 13, color: "#5B6B85", textAlign: "center" }}>{r.carNo || "–"}</td>
                     <td style={{ ...tdN, ...vlDouble, color: DR }}>{amt(r.paid)}</td>
                     <td style={{ ...tdN, ...vl, color: CR }}>{amt(r.total)}</td>
                     <td style={{ ...tdN, ...vl, color: r.outstanding > 0 ? NEG : "#9AA9C3", fontWeight: r.outstanding > 0 ? 900 : 600 }}>{amt(r.outstanding) || "0"}</td>
@@ -467,19 +471,19 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
           <LedgerTable minWidth={980} caption="부가세 월별 명세">
             <thead><tr>
               <th style={{ ...th, width: 96 }}><HeadLbl tag="일자">월</HeadLbl></th>
-              <th style={{ ...th, ...vl, textAlign: "right" }}><HeadLbl tag="공급가액"><EditableText id="settlement.vatMonthly.header.계산서 매출" defaultText="계산서 매출" /></HeadLbl></th>
-              <th style={{ ...th, ...vlDouble, textAlign: "right" }}><HeadLbl tag="대변 · 255" color={CR}><EditableText id="settlement.vatMonthly.header.매출세액" defaultText="매출세액" /></HeadLbl></th>
-              <th style={{ ...th, ...vl, textAlign: "right" }}><HeadLbl tag="공급가액"><EditableText id="settlement.vatMonthly.header.기사 운임(계산서)" defaultText="기사 운임(계산서)" /></HeadLbl></th>
-              <th style={{ ...th, ...vl, textAlign: "right" }}><HeadLbl tag="차변 · 135" color={DR}><EditableText id="settlement.vatMonthly.header.매입세액" defaultText="매입세액" /></HeadLbl></th>
-              <th style={{ ...th, ...vlDouble, textAlign: "right" }}><HeadLbl tag="잔액"><EditableText id="settlement.vatMonthly.header.납부세액" defaultText="납부세액" /></HeadLbl></th>
-              <th style={{ ...th, ...vl, textAlign: "right" }}><HeadLbl tag="누계">분기 누계</HeadLbl></th>
+              <th style={{ ...th, ...vl}}><HeadLbl tag="공급가액"><EditableText id="settlement.vatMonthly.header.계산서 매출" defaultText="계산서 매출" /></HeadLbl></th>
+              <th style={{ ...th, ...vlDouble}}><HeadLbl tag="대변 · 255" color={CR}><EditableText id="settlement.vatMonthly.header.매출세액" defaultText="매출세액" /></HeadLbl></th>
+              <th style={{ ...th, ...vl}}><HeadLbl tag="공급가액"><EditableText id="settlement.vatMonthly.header.기사 운임(계산서)" defaultText="기사 운임(계산서)" /></HeadLbl></th>
+              <th style={{ ...th, ...vl}}><HeadLbl tag="차변 · 135" color={DR}><EditableText id="settlement.vatMonthly.header.매입세액" defaultText="매입세액" /></HeadLbl></th>
+              <th style={{ ...th, ...vlDouble}}><HeadLbl tag="잔액"><EditableText id="settlement.vatMonthly.header.납부세액" defaultText="납부세액" /></HeadLbl></th>
+              <th style={{ ...th, ...vl}}><HeadLbl tag="누계">분기 누계</HeadLbl></th>
             </tr></thead>
             <tbody>
               {currentQData.months.map(({ mo, sales, costs }) => {
                 const vOut = Math.round(sales * 0.1); const vIn = Math.round(costs * 0.1); const vNet = vOut - vIn; vatCum += vNet;
                 return (
                   <tr key={mo} className="hover:bg-[#F5F8FD]">
-                    <td style={{ ...td, ...NUM, fontWeight: 800 }}>{year}.{mo}</td>
+                    <td style={{ ...td, ...NUM, fontWeight: 800, textAlign: "center" }}>{year}.{mo}</td>
                     <td style={{ ...tdN, ...vl }}>{amt(sales) || "–"}</td>
                     <td style={{ ...tdN, ...vlDouble, color: CR }}>{amt(vOut) || "–"}</td>
                     <td style={{ ...tdN, ...vl }}>{amt(costs) || "–"}</td>
@@ -514,10 +518,10 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
             <LedgerTable minWidth={720} caption="월별 매출 · 이익 추이">
               <thead><tr>
                 <th style={{ ...th, width: 96 }}><HeadLbl tag="일자"><EditableText id="settlement.monthlyTrend.header.월" defaultText="월" /></HeadLbl></th>
-                <th style={{ ...th, ...vlDouble, textAlign: "right" }}><HeadLbl tag="401"><EditableText id="settlement.monthlyTrend.header.매출" defaultText="매출" /></HeadLbl></th>
-                <th style={{ ...th, ...vl, textAlign: "right" }}><HeadLbl tag="451"><EditableText id="settlement.monthlyTrend.header.원가" defaultText="원가" /></HeadLbl></th>
-                <th style={{ ...th, ...vl, textAlign: "right" }}><HeadLbl tag="매출총이익"><EditableText id="settlement.monthlyTrend.header.이익" defaultText="이익" /></HeadLbl></th>
-                <th style={{ ...th, ...vl, textAlign: "right" }}><HeadLbl tag="%"><EditableText id="settlement.monthlyTrend.header.이익률" defaultText="이익률" /></HeadLbl></th>
+                <th style={{ ...th, ...vlDouble}}><HeadLbl tag="401"><EditableText id="settlement.monthlyTrend.header.매출" defaultText="매출" /></HeadLbl></th>
+                <th style={{ ...th, ...vl}}><HeadLbl tag="451"><EditableText id="settlement.monthlyTrend.header.원가" defaultText="원가" /></HeadLbl></th>
+                <th style={{ ...th, ...vl}}><HeadLbl tag="매출총이익"><EditableText id="settlement.monthlyTrend.header.이익" defaultText="이익" /></HeadLbl></th>
+                <th style={{ ...th, ...vl}}><HeadLbl tag="%"><EditableText id="settlement.monthlyTrend.header.이익률" defaultText="이익률" /></HeadLbl></th>
               </tr></thead>
               <tbody>
                 {MONTHS.map((mo) => {
@@ -525,7 +529,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
                   const profit = d.sales - d.costs; const margin = d.sales > 0 ? (profit / d.sales) * 100 : 0; const empty = d.sales === 0;
                   return (
                     <tr key={mo} className="hover:bg-[#F5F8FD]" style={{ background: empty ? "#FAFBFD" : "#fff" }}>
-                      <td style={{ ...td, ...NUM, fontWeight: 800, color: empty ? "#B5C0D3" : INK }}>{year}.{mo}</td>
+                      <td style={{ ...td, ...NUM, fontWeight: 800, textAlign: "center", color: empty ? "#B5C0D3" : INK }}>{year}.{mo}</td>
                       <td style={{ ...tdN, ...vlDouble, color: empty ? "#CBD3E0" : INK }}>{amt(d.sales) || "–"}</td>
                       <td style={{ ...tdN, ...vl, color: d.costs ? INK : "#CBD3E0" }}>{amt(d.costs) || "–"}</td>
                       <td style={{ ...tdN, ...vl, fontWeight: profit ? 900 : 600, color: profitColor(profit, { neutral: "#CBD3E0" }) }}>{amt(profit) || "–"}</td>

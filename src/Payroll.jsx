@@ -16,7 +16,7 @@
 //  직원 급여 설정 2칸(왼쪽 목록·필터 / 오른쪽 상세 + 근로계약서) · 요율 카드 단순화 · 새 급여명세서(payslipDoc.js) · 신고·이체 탭(PayrollReports.jsx) ·
 //  발행하면 앱 알림(hrNotices 팝업) + 사내메일(푸시) · 전월 대비 변동 표시 · 직원은 내정보 › 급여명세서(MyPayslipsSection)
 import React from "react";
-import { arrayUnion, collection, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
+import { arrayUnion, collection, deleteField, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import { BookHero, BookCard } from "./OfficeBooks";
 import { isTMUser } from "./staffFilter";
@@ -31,6 +31,8 @@ import { sendInternalMail } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
 import PayrollGate, { GateTimer, prefetchPayrollStatus, warmPayrollVerify } from "./PayrollGate";
 import { payslipHtml, PAYSLIP_CSS, printPayslips, TAX_NOTE } from "./payslipDoc";
+import { COPY_GROUPS, COPY_DEFAULT, copyPatch, diffEmp, filterTargets, upsertTemplate, removeTemplate } from "./payrollCopy";
+import { isSigned, canSign, stampDate, signTimeText, signError, signPatch, clearSignPatch } from "./payslipSign";
 import { kstDay, kstYm, shiftYm, lastDayOf, safeId, slipId, runId, empId, toNum, ymLabel, blank, uniq, inp, numInp, NUMS, sec, Label, Note, H, Sel, Money, Seg, enterNext, useMedia, useCol, useDocData } from "./payrollUi";
 import { kpPrompt, kpConfirm } from "./kpDialog";
 
@@ -56,6 +58,8 @@ function useWidth(el) {
 const ROW_DOT = { none: "#C5CEDC", calc: "#8FB0F0", confirmed: "#4B6CB7", published: "#1B2B4B", paid: "#0B1428" }; // ⭐ 2026-11-17 직원 목록 상태 점
 const rowStatus = (r) => (!r.result ? "none" : r.slip?.status === "paid" ? "paid" : r.slip?.published ? "published" : r.slip?.status === "confirmed" ? "confirmed" : "calc");
 const RowChip = ({ st, unsaved, compact = false }) => { const s = ROW_ST[st] || ROW_ST.none; return <span className="h-7 px-2.5 rounded-lg text-[14px] font-black inline-flex items-center gap-1 whitespace-nowrap" style={{ color: s[1], background: s[2] }} title={unsaved ? "아직 저장 전(자동 계산 값)" : ""}>{s[0]}{unsaved && st === "calc" ? (compact ? <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" aria-label="저장 전" /> : " · 저장 전") : ""}</span>; };
+// ⭐ 2026-11-17 직원 수령 확인 서명 도장(빨간 동그라미) — 직원 목록 줄
+const SignStamp = ({ slip }) => <span className="h-6 px-2 rounded-full border-2 border-[#D92D20] text-[#D92D20] inline-flex items-center gap-1 text-[12.5px] font-black whitespace-nowrap bg-white" title={`${slip.signName || ""} · ${signTimeText(slip)} 수령 확인 서명`} aria-label="서명완료" data-testid="row-signed">서명 <span style={NUMS}>{stampDate(slip)}</span></span>;
 // 전월 대비 실지급 변동(10% 이상) 표시
 const DiffTag = ({ cur, prev }) => {
   if (!cur || !prev) return null;
@@ -171,7 +175,7 @@ function PayrollShell({ company, gate }) {
     <div className={fit ? "flex flex-col gap-3 min-h-[560px]" : "space-y-3"} style={fit ? { height: "calc(100vh - 196px)" } : undefined} data-testid="payroll-shell">
       <PayBar pm={pm} ym={ym} setYm={setYm} tab={tab} setTab={setTab} gate={gate} />
       <div className={fit ? "flex-1 min-h-0" : ""}>
-        {tab === "run" && <PayrollRun pm={pm} company={company} ym={ym} ro={false} fit={fit} selId={selId} setSelId={setSelId} />}
+        {tab === "run" && <PayrollRun pm={pm} company={company} ym={ym} ro={false} fit={fit} selId={selId} setSelId={setSelId} gate={gate} />}
         {tab === "emp" && <PayEmployees company={company} ro={false} fit={fit} selId={selId} setSelId={setSelId} />}
         {tab === "report" && <div className={scroll}><React.Suspense fallback={fallback}><PayrollReports company={company} ym={ym} /></React.Suspense></div>}
         {tab === "rates" && <div className={scroll}><PayRates company={company} ro={false} /></div>}
@@ -183,25 +187,13 @@ function PayrollShell({ company, gate }) {
 // ── 맨 위 남색 줄 ──
 const STEPS = [["calc", "계산"], ["confirm", "확정"], ["publish", "발행"], ["pay", "지급"]]; // 계산 → 확정 → 명세서 발행 → 지급
 function PayBar({ pm, ym, setYm, tab, setTab, gate }) {
-  const { totals, rows, ready, nConfirmed, nPublished, st, busy, ro } = pm;
-  const [more, setMore] = React.useState(false);
+  const { totals, rows, ready, nConfirmed, nPublished, st } = pm;
   const nAll = rows.length;
   const done = { calc: ready.length > 0 && ready.length === nAll, confirm: ready.length > 0 && nConfirmed === ready.length, publish: ready.length > 0 && nPublished === ready.length, pay: st === "paid" };
   const cnt = { calc: `${ready.length}/${nAll}`, confirm: `${nConfirmed}`, publish: `${nPublished}`, pay: st === "paid" ? (pm.run?.payDate || "완료") : "" };
   const curStep = STEPS.find(([k]) => !done[k])?.[0] || "pay";
-  // 다음에 누를 버튼(단계에 따라 하나만 크게)
-  const next = ro || st === "paid" ? null
-    : ready.some((r) => !r.slip?.published && r.slip?.status !== "paid") ? ["전체 확정 · 발행", () => pm.publishRows(ready), "payroll-publish-all"]
-      : st === "confirmed" ? ["지급 처리", pm.pay, "payroll-pay"] : null;
-  const moreItems = [
-    !ro && st !== "paid" && ["전체 계산 · 저장", () => pm.saveDraft(ready, "전체 계산"), !ready.some((r) => !r.locked), "pay-calc-all"],
-    !ro && st === "confirmed" && next?.[0] !== "지급 처리" && ["지급 처리", pm.pay, false, ""],
-    !ro && st === "confirmed" && ["전체 확정 해제", () => pm.unlockRows(rows), false, "payroll-unlock-all"],
-    !ro && st === "paid" && ["지급 취소", pm.unpay, false, "payroll-unpay"],
-    pm.shownSlips.some((s) => s.status !== "draft") && ["확정분 전체 인쇄", () => printPayslips(pm.shownSlips.filter((s) => s.status !== "draft"), pm.company), false, "payroll-print-all"],
-    gate?.canChange && ["급여 비밀번호 변경", gate.change, false, "pw-change"],
-  ].filter(Boolean);
-  React.useEffect(() => { if (!more) return undefined; const h = () => setMore(false); window.addEventListener("click", h); return () => window.removeEventListener("click", h); }, [more]);
+  // ⭐ 2026-11-17 [확정발행] · [더보기]는 월 급여 계산 오른쪽 칸 머리(명세서 | 인건비 · 누계 옆)로 옮겼다 — 다른 탭(직원 설정 · 신고 · 이체 · 요율)이나 직원이 없을 때만 여기
+  const showActs = tab !== "run" || !nAll;
   const kpi = [["인원", `${totals.n}명`, nAll > totals.n ? `설정 필요 ${nAll - totals.n}` : ""], ["지급 총액", wonFmt(totals.gross), ""], ["공제 총액", wonFmt(totals.deduct), `원천세 ${wonFmt(totals.tax)}`], ["실지급 총액", wonFmt(totals.net), `회사 부담 ${wonFmt(totals.employer)}`]];
   const arrow = "w-10 h-10 rounded-xl bg-white/10 border border-white/20 text-[17px] font-black hover:bg-white/20 shrink-0";
   return (
@@ -242,15 +234,7 @@ function PayBar({ pm, ym, setYm, tab, setTab, gate }) {
             );
           })}
         </ol>
-        <div className="flex items-center gap-1.5 shrink-0 relative">
-          {next && <button type="button" disabled={busy} onClick={next[1]} className="h-10 px-4 rounded-xl bg-[#8FB0F0] text-[#0B1428] text-[14px] font-black hover:bg-[#A9C3F5] disabled:opacity-40 whitespace-nowrap" data-testid={next[2]}>{next[0]}</button>}
-          {moreItems.length > 0 && <button type="button" onClick={(e) => { e.stopPropagation(); setMore((v) => !v); }} className="h-10 px-3 rounded-xl bg-white/10 border border-white/20 text-[14px] font-black hover:bg-white/20 whitespace-nowrap" aria-expanded={more} data-testid="pay-more">더보기 ▾</button>}
-          {more && (
-            <div className="absolute z-40 top-full mt-1.5 left-0 w-[220px] rounded-xl bg-white text-[#0F1A30] shadow-[0_18px_40px_rgba(15,26,48,0.28)] border border-[#DCE3EE] py-1" role="menu">
-              {moreItems.map(([l, fn, dis, tid]) => <button key={l} type="button" role="menuitem" disabled={(busy && tid !== "pw-change") || dis} onClick={() => { setMore(false); fn(); }} className="w-full text-left px-3.5 h-11 text-[14px] font-black hover:bg-[#F5F8FD] disabled:opacity-40" data-testid={tid || undefined}>{l}</button>)}
-            </div>
-          )}
-        </div>
+        {showActs && <RunActions pm={pm} gate={gate} dark />}
         <span className="flex-1" />
         {gate && (
           <div className="flex items-center gap-1.5 shrink-0" data-testid="payroll-unlocked-bar">
@@ -259,6 +243,43 @@ function PayBar({ pm, ym, setYm, tab, setTab, gate }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── 다음 할 일 버튼 + 더보기 ──
+// ⭐ 2026-11-17 [전체 확정 · 발행] → [확정발행] · [지급 처리] → [지급 완료 기록](설명 말풍선)
+//  자리: 월 급여 계산 오른쪽 칸 머리(명세서 | 인건비 · 누계 옆) · 1440px 아래는 가운데 칸 머리(입력 | 명세서 | 인건비 · 누계 옆) · 그 밖의 탭은 맨 위 남색 줄
+//  발행 = 명세서를 직원에게 보여 주고 알림(돈은 안 움직임) · 지급 완료 기록 = 통장에서 실제로 보낸 뒤 지급일을 남김 → 명세서 "지급 완료" + 수입·지출 장부 "급여·상여" 지출 1줄 자동
+const PAY_DONE_TIP = "통장에서 급여를 실제로 보낸 뒤 눌러요. 보낸 날을 적으면 명세서가 '지급 완료'로 바뀌고, 수입·지출 장부에 '급여·상여' 지출 1줄이 자동으로 적혀요(자금관리 · 회계 개요에 반영)";
+const PUBLISH_TIP = "확정(잠금)과 명세서 발행을 한 번에 해요. 직원은 내정보 › 급여명세서에서 보고 서명할 수 있고, 앱 알림 · 사내메일이 가요(돈은 아직 안 나가요)";
+function RunActions({ pm, gate, dark = false }) {
+  const { ready, rows, st, busy, ro } = pm;
+  const [more, setMore] = React.useState(false);
+  const next = ro || st === "paid" ? null
+    : ready.some((r) => !r.slip?.published && r.slip?.status !== "paid") ? ["확정발행", () => pm.publishRows(ready), "payroll-publish-all", PUBLISH_TIP]
+      : st === "confirmed" ? ["지급 완료 기록", pm.pay, "payroll-pay", PAY_DONE_TIP] : null;
+  const moreItems = [
+    !ro && st !== "paid" && ["전체 계산 · 저장", () => pm.saveDraft(ready, "전체 계산"), !ready.some((r) => !r.locked), "pay-calc-all", "아직 확정 안 한 직원을 모두 계산해서 저장해요"],
+    !ro && st === "confirmed" && next?.[0] !== "지급 완료 기록" && ["지급 완료 기록", pm.pay, false, "", PAY_DONE_TIP],
+    !ro && st === "confirmed" && ["전체 확정 해제", () => pm.unlockRows(rows), false, "payroll-unlock-all", "잠금을 풀고 다시 고쳐요. 발행된 명세서와 직원 서명은 내려가요"],
+    !ro && st === "paid" && ["지급 기록 취소", pm.unpay, false, "payroll-unpay", "지급 완료 기록을 되돌려요. 장부의 급여 지출 줄도 지워져요"],
+    pm.shownSlips.some((s) => s.status !== "draft") && ["확정분 전체 인쇄", () => printPayslips(pm.shownSlips.filter((s) => s.status !== "draft"), pm.company), false, "payroll-print-all", ""],
+    gate?.canChange && ["급여 비밀번호 변경", gate.change, false, "pw-change", ""],
+  ].filter(Boolean);
+  React.useEffect(() => { if (!more) return undefined; const h = () => setMore(false); window.addEventListener("click", h); return () => window.removeEventListener("click", h); }, [more]);
+  if (!next && !moreItems.length) return null;
+  const nextCls = dark ? "bg-[#8FB0F0] text-[#0B1428] hover:bg-[#A9C3F5]" : "bg-[#0F1A30] text-white hover:bg-[#1B2B4B]";
+  const moreCls = dark ? "bg-white/10 border border-white/20 hover:bg-white/20" : "bg-white border border-[#DCE3EE] text-[#1B2B4B] hover:border-[#2D4C82]";
+  return (
+    <div className="flex items-center gap-1.5 shrink-0 relative" data-testid="run-actions">
+      {next && <button type="button" disabled={busy} onClick={next[1]} title={next[3]} className={`h-10 px-4 rounded-xl text-[14px] font-black disabled:opacity-40 whitespace-nowrap ${nextCls}`} data-testid={next[2]}>{next[0]}</button>}
+      {moreItems.length > 0 && <button type="button" onClick={(e) => { e.stopPropagation(); setMore((v) => !v); }} className={`h-10 px-3 rounded-xl text-[14px] font-black whitespace-nowrap ${moreCls}`} aria-expanded={more} data-testid="pay-more">더보기 ▾</button>}
+      {more && (
+        <div className={`absolute z-40 top-full mt-1.5 ${dark ? "left-0" : "right-0"} w-[236px] rounded-xl bg-white text-[#0F1A30] shadow-[0_18px_40px_rgba(15,26,48,0.28)] border border-[#DCE3EE] py-1`} role="menu">
+          {moreItems.map(([l, fn, dis, tid, tip]) => <button key={l} type="button" role="menuitem" title={tip || undefined} disabled={(busy && tid !== "pw-change") || dis} onClick={() => { setMore(false); fn(); }} className="w-full text-left px-3.5 h-11 text-[14px] font-black hover:bg-[#F5F8FD] disabled:opacity-40" data-testid={tid || undefined}>{l}</button>)}
+        </div>
+      )}
     </div>
   );
 }
@@ -396,7 +417,7 @@ function usePayrollMonth(company, ym, ro) {
         else b.update(doc(db, "payslips", id), { published: true, publishedAt: now, publishedBy: byName, updatedAt: serverTimestamp() });
         const nm = personName(r.u) || r.u.name || "";
         const pd = r.input?.payDate || r.slip?.payDate || run?.payDate || payDateDefault();
-        b.set(doc(collection(db, "hrNotices")), { companyName: company, uid: r.u.id, kind: "payslip", link: "payslip", refId: id, title: `${ymLabel(ym)} 급여명세서가 발행되었습니다`, body: `${nm}님, ${ymLabel(ym)}분 급여명세서가 발행되었습니다.\n실수령액 ${wonFmt(r.result?.net)}원 · 지급일 ${pd}\n\n내정보 › 급여명세서에서 확인·인쇄할 수 있습니다.`, createdAt: serverTimestamp(), createdBy: byName });
+        b.set(doc(collection(db, "hrNotices")), { companyName: company, uid: r.u.id, kind: "payslip", link: "payslip", refId: id, title: `${ymLabel(ym)} 급여명세서가 발행되었습니다`, body: `${nm}님, ${ymLabel(ym)}분 급여명세서가 발행되었습니다.\n실수령액 ${wonFmt(r.result?.net)}원 · 지급일 ${pd}\n\n내정보 › 급여명세서에서 확인·서명·인쇄할 수 있습니다.`, createdAt: serverTimestamp(), createdBy: byName });
       });
       const after = merged(todo, () => ({ locked: true, slip: { status: "confirmed", published: true } }));
       const status = runStatusAfter(after);
@@ -404,37 +425,40 @@ function usePayrollMonth(company, ym, ro) {
       b.set(doc(db, "payrollRuns", runId(company, ym)), { ...runPatch(after, { status }), published: allPub, ...(allPub ? { publishedAt: now, publishedBy: byName } : {}), log: arrayUnion(logEntry("명세서 발행", `${todo.length}건 · 앱 알림 · 사내메일`)) }, { merge: true });
     }, "발행 실패").then(async (ok) => {
       // ⭐ 2026-11-07 사내메일(받는 사람 휴대폰 푸시는 서버 notifyInternalMail이 보낸다) — 금액은 메일에 넣지 않는다(알림 미리보기 노출 방지)
-      if (ok) await Promise.all(notes.map((x) => sendInternalMail({ company, to: [{ uid: x.uid, name: x.name, team: x.team, position: x.position }], subject: `${ymLabel(ym)} 급여명세서가 발행되었습니다`, body: `${x.name}님, ${ymLabel(ym)}분 급여명세서가 발행되었습니다.\n지급일 ${x.pd}\n\n내정보 › 급여명세서에서 확인·인쇄할 수 있습니다.`, kind: "hr", fromName: "경리팀", important: true }).catch(() => null)));
+      if (ok) await Promise.all(notes.map((x) => sendInternalMail({ company, to: [{ uid: x.uid, name: x.name, team: x.team, position: x.position }], subject: `${ymLabel(ym)} 급여명세서가 발행되었습니다`, body: `${x.name}님, ${ymLabel(ym)}분 급여명세서가 발행되었습니다.\n지급일 ${x.pd}\n\n내정보 › 급여명세서에서 확인·서명·인쇄할 수 있습니다.`, kind: "hr", fromName: "경리팀", important: true }).catch(() => null)));
       return ok;
     });
   };
   const unlockRows = async (list) => {
     const todo = list.filter((r) => r.slip && r.slip.status === "confirmed");
     if (!todo.length) return Promise.resolve(false);
-    const reason = await kpPrompt(`확정을 풀고 다시 수정합니다(${todo.length}명). 사유를 적어 주세요(기록이 남고, 발행된 명세서는 직원 화면에서 내려갑니다).`);
+    const nSigned = todo.filter((r) => isSigned(r.slip)).length;
+    const reason = await kpPrompt(`확정을 풀고 다시 수정합니다(${todo.length}명). 사유를 적어 주세요(기록이 남고, 발행된 명세서는 직원 화면에서 내려갑니다).${nSigned ? `\n· 직원 서명 ${nSigned}건도 지워져요. 다시 발행하면 다시 서명받아요` : ""}`);
     if (!reason || reason.trim().length < 2) return Promise.resolve(false);
     return commit((b) => {
-      todo.forEach((r) => b.update(doc(db, "payslips", r.slip.id), { status: "draft", published: false, updatedAt: serverTimestamp(), updatedBy: byName, unlockReason: reason.trim() }));
+      // ⭐ 2026-11-17 직원 수령 확인 서명도 지운다(내용이 바뀔 수 있으니 다시 발행 → 다시 서명)
+      todo.forEach((r) => b.update(doc(db, "payslips", r.slip.id), { status: "draft", published: false, updatedAt: serverTimestamp(), updatedBy: byName, unlockReason: reason.trim(), ...(isSigned(r.slip) ? clearSignPatch(deleteField()) : {}) }));
       b.set(doc(db, "payrollRuns", runId(company, ym)), { status: "draft", published: false, updatedAt: serverTimestamp(), log: arrayUnion(logEntry("확정 해제", `${todo.length}명 · ${reason.trim()}`)) }, { merge: true });
     }, "실패");
   };
   const pay = async () => {
-    const d = (await kpPrompt("지급일(YYYY-MM-DD)", run?.payDate || payDateDefault()));
+    // ⭐ 2026-11-17 이름 [지급 처리] → [지급 완료 기록] — 돈을 실제로 보낸 날을 남기는 일(발행과 다름)
+    const d = (await kpPrompt("급여를 실제로 보낸 날(YYYY-MM-DD)을 적어 주세요.\n명세서가 '지급 완료'로 바뀌고, 수입·지출 장부에 '급여·상여' 지출 1줄이 자동으로 적혀요.", run?.payDate || payDateDefault()));
     if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d.trim())) return;
     const ok = await commit((b) => {
       (slips || []).forEach((s) => b.update(doc(db, "payslips", s.id), { status: "paid", paidDate: d.trim(), paidAt: Date.now(), updatedAt: serverTimestamp() }));
-      b.set(doc(db, "payrollRuns", runId(company, ym)), { status: "paid", payDate: d.trim(), paidAt: Date.now(), paidBy: byName, totals, log: arrayUnion(logEntry("지급 처리", `${d.trim()} · 실지급 ${wonFmt(totals.net)}원`)) }, { merge: true });
-    }, "지급 처리 실패");
+      b.set(doc(db, "payrollRuns", runId(company, ym)), { status: "paid", payDate: d.trim(), paidAt: Date.now(), paidBy: byName, totals, log: arrayUnion(logEntry("지급 완료 기록", `${d.trim()} · 실지급 ${wonFmt(totals.net)}원`)) }, { merge: true });
+    }, "지급 완료 기록 실패");
     // 🔗 수입·지출 장부 연동(ledgerAuto) — 실지급액 합계 1줄(원천세·4대보험은 신고·납부 때 따로)
     if (ok && settings?.ledgerOn !== false) {
       await upsertAutoEntry(db, `payroll_${ym}`, { company, date: d.trim(), account: "급여·상여", item: `${ymLabel(ym)} 직원 급여 지급 · ${slips.length}명`, amount: totals.net, vendor: "직원 급여", memo: `급여 계산 자동 — 지급 총액 ${wonFmt(totals.gross)}원 · 공제 ${wonFmt(totals.deduct)}원(원천세·4대보험은 따로 납부)`, auto: "payroll" }).catch((e) => console.warn("장부 기록 실패", e));
     }
   };
   const unpay = async () => {
-    if (!(await kpConfirm("지급 처리를 취소할까요? 장부의 급여 지급 줄도 지워집니다."))) return;
+    if (!(await kpConfirm("지급 완료 기록을 취소할까요? 장부의 급여 지급 줄도 지워집니다."))) return;
     const ok = await commit((b) => {
       (slips || []).forEach((s) => b.update(doc(db, "payslips", s.id), { status: "confirmed", paidDate: "", updatedAt: serverTimestamp() }));
-      b.set(doc(db, "payrollRuns", runId(company, ym)), { status: "confirmed", paidAt: null, log: arrayUnion(logEntry("지급 취소")) }, { merge: true });
+      b.set(doc(db, "payrollRuns", runId(company, ym)), { status: "confirmed", paidAt: null, log: arrayUnion(logEntry("지급 기록 취소")) }, { merge: true });
     }, "실패");
     if (ok) await upsertAutoEntry(db, `payroll_${ym}`, { company, amount: 0, auto: "payroll" }).catch(() => {});
   };
@@ -446,7 +470,7 @@ function usePayrollMonth(company, ym, ro) {
 // ── 월 급여 계산 — 직원 목록(왼쪽) | 급여 시트(가운데) | 명세서 미리보기(오른쪽) ──
 // ⭐ 2026-11-17 3칸 폭 고정 · 칸마다 따로 스크롤 · 1440px 아래는 오른쪽 칸을 가운데 [명세서] 탭으로 · 1280px 아래(태블릿 · 휴대폰)는 직원 목록을 서랍(☰)으로
 //  키보드: ↑ ↓ = 다른 직원(입력칸 밖에서) · Alt + ↑ ↓ = 어디서든 · Enter = 첫 입력칸으로
-function PayrollRun({ pm, company, ym, ro, fit, selId, setSelId }) {
+function PayrollRun({ pm, company, ym, ro, fit, selId, setSelId, gate }) {
   const w3 = useMedia("(min-width: 1440px)"); // 3칸
   const ledger2 = useMedia("(min-width: 1760px)"); // 지급 | 공제 나란히
   const { rows, ready, loading, prevMap, nConfirmed, nPublished } = pm;
@@ -554,7 +578,7 @@ function PayrollRun({ pm, company, ym, ro, fit, selId, setSelId }) {
               </span>
               <span className="text-right shrink-0 min-w-[88px]">
                 <span className="block text-[14.5px] font-black text-[#0F1A30]" style={NUMS}>{r.result ? wonFmt(r.result.net) : "-"}</span>
-                <span className="flex items-center justify-end gap-1 text-[12.5px] font-black text-[#5B6B85] whitespace-nowrap"><DiffTag cur={r.result?.net} prev={prevMap[r.u.id]?.result?.net} /><span className="w-1.5 h-1.5 rounded-full" style={{ background: ROW_DOT[rs] }} />{!r.slip && rs === "calc" ? "저장 전" : s[0]}</span>
+                <span className="flex items-center justify-end gap-1 text-[12.5px] font-black text-[#5B6B85] whitespace-nowrap"><DiffTag cur={r.result?.net} prev={prevMap[r.u.id]?.result?.net} />{isSigned(r.slip) ? <SignStamp slip={r.slip} /> : <><span className="w-1.5 h-1.5 rounded-full" style={{ background: ROW_DOT[rs] }} />{!r.slip && rs === "calc" ? "저장 전" : s[0]}</>}</span>
               </span>
             </div>
           );
@@ -568,7 +592,7 @@ function PayrollRun({ pm, company, ym, ro, fit, selId, setSelId }) {
             <button type="button" disabled={pm.busy || !checkedRows.some((r) => r.result && !r.slip?.published)} onClick={() => pm.publishRows(checkedRows)} className={`${bulkBtn} bg-[#1B2B4B] text-white`} data-testid="payroll-publish">선택 발행 {checkedRows.filter((r) => r.result && !r.slip?.published).length}</button>
           </div>
         ) : null}
-        <div className="flex items-center justify-between text-[13.5px] font-bold text-[#5B6B85] px-0.5"><span>확정 <b className="text-[#0F1A30]" style={NUMS}>{nConfirmed}</b> · 발행 <b className="text-[#0F1A30]" style={NUMS}>{nPublished}</b> / {ready.length}명</span><span className="text-[#7A879C]">↑↓ 이동 · Enter 입력</span></div>
+        <div className="flex items-center justify-between text-[13.5px] font-bold text-[#5B6B85] px-0.5"><span>확정 <b className="text-[#0F1A30]" style={NUMS}>{nConfirmed}</b> · 발행 <b className="text-[#0F1A30]" style={NUMS}>{nPublished}</b> · 서명 <b className="text-[#0F1A30]" style={NUMS}>{ready.filter((r) => isSigned(r.slip)).length}</b> / {ready.length}명</span><span className="text-[#7A879C] whitespace-nowrap" title="↑ ↓ = 다른 직원 · Enter = 입력칸으로">↑↓ · Enter</span></div>
       </div>
     </div>
   );
@@ -581,7 +605,7 @@ function PayrollRun({ pm, company, ym, ro, fit, selId, setSelId }) {
     <Workspace key={`${cur.u.id}_${ym}`} company={company} ym={ym} row={cur} ro={ro} busy={pm.busy} fit={fit} w3={w3} ledger2={ledger2} pane={pane} setPane={setPane} kinds={pm.kinds} history={history} rates={cur.rates || pm.curRates} runPayDate={pm.run?.payDate || pm.payDateDefault()}
       slipDoc={pm.slipDoc} onSave={(r) => pm.saveDraft([r])} onConfirm={(r) => pm.confirmRows([r])} onPublish={(r) => pm.publishRows([r])} onUnlock={(r) => pm.unlockRows([r])}
       onPrev={idx > 0 ? () => step(-1) : null} onNext={idx >= 0 && idx < shown.length - 1 ? () => step(1) : null} pos={idx >= 0 ? `${idx + 1}/${shown.length}` : ""} onDirty={(v) => { dirtyRef.current = v; }}
-      onOpenList={fit ? null : () => setDrawer(true)} editRef={editRef} />
+      onOpenList={fit ? null : () => setDrawer(true)} editRef={editRef} actions={<RunActions pm={pm} gate={gate} />} />
   );
   const foot = pm.run?.log?.length > 0 && <div className="text-[13px] font-bold text-[#7A879C] px-1 truncate" title={pm.run.log.map((l) => `${new Date(l.at).toLocaleString("ko-KR")} ${l.action}${l.detail ? `(${l.detail})` : ""}`).join("\n")}>처리 기록 · {pm.run.log.slice(-2).map((l) => `${new Date(l.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} ${l.action}`).join(" · ")}</div>;
   if (fit) {
@@ -676,7 +700,7 @@ const cellInp = "h-9 w-[118px] px-2.5 rounded-lg border border-[#DCE3EE] bg-whit
 // 좁은 칸에서 명세서를 한 줄씩(인쇄 화면은 그대로)
 const NARROW_SLIP_CSS = ".kp-pay-narrow .ps .hero{grid-template-columns:minmax(0,1fr)}.kp-pay-narrow .ps .hd{padding:16px}.kp-pay-narrow .ps .tt{font-size:19px}.kp-pay-narrow .ps .who{text-align:left}.kp-pay-narrow .ps .net .v{font-size:30px}.kp-pay-narrow .ps .cols{grid-template-columns:minmax(0,1fr)}";
 
-function Workspace({ company, ym, row, ro: roIn, busy, fit, w3, ledger2, pane, setPane, kinds, history, rates, runPayDate, slipDoc, onSave, onConfirm, onPublish, onUnlock, onPrev, onNext, pos, onDirty, onOpenList, editRef }) {
+function Workspace({ company, ym, row, ro: roIn, busy, fit, w3, ledger2, pane, setPane, kinds, history, rates, runPayDate, slipDoc, onSave, onConfirm, onPublish, onUnlock, onPrev, onNext, pos, onDirty, onOpenList, editRef, actions: runActs = null }) {
   const u = row.u;
   const init = React.useMemo(() => {
     const emp = { ...EMP_BLANK, ...(row.emp || {}) };
@@ -951,10 +975,10 @@ function Workspace({ company, ym, row, ro: roIn, busy, fit, w3, ledger2, pane, s
       {onOpenList && <button type="button" onClick={onOpenList} className="h-9 px-3 rounded-xl border border-[#1B2B4B] bg-white text-[14px] font-black text-[#1B2B4B]" data-testid="open-emp-drawer">☰ 직원</button>}
       <span className="w-11 h-11 rounded-2xl bg-[#0F1A30] text-white grid place-items-center text-[18px] font-black shrink-0">{String(u.name || "?").slice(0, 1)}</span>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 flex-wrap"><b className="text-[18px] text-[#0F1A30]">{personName(u) || u.name}</b><RowChip st={st} unsaved={!row.slip} />{dirty && <span className="h-7 px-2.5 rounded-lg text-[13.5px] font-black inline-flex items-center border border-[#2D4C82] text-[#2D4C82]">수정 중 · 저장 안 됨</span>}</div>
+        <div className="flex items-center gap-2 flex-wrap"><b className="text-[18px] text-[#0F1A30]">{personName(u) || u.name}</b><RowChip st={st} unsaved={!row.slip} />{isSigned(row.slip) && <span className="h-7 px-2.5 rounded-lg text-[13.5px] font-black inline-flex items-center gap-1 border-2 border-[#D92D20] text-[#D92D20] whitespace-nowrap" title={`${row.slip.signName || ""} · ${signTimeText(row.slip)} 수령 확인 서명`} data-testid="slip-signed">서명완료 {stampDate(row.slip)}</span>}{row.slip?.published && !isSigned(row.slip) && <span className="h-7 px-2.5 rounded-lg text-[13.5px] font-bold inline-flex items-center bg-[#F2F4F7] text-[#5B6B85] whitespace-nowrap" title="직원이 내정보 › 급여명세서에서 확인 서명하면 도장이 찍혀요">서명 대기</span>}{dirty && <span className="h-7 px-2.5 rounded-lg text-[13.5px] font-black inline-flex items-center border border-[#2D4C82] text-[#2D4C82]">수정 중 · 저장 안 됨</span>}</div>
         <div className="text-[13.5px] font-bold text-[#5B6B85] truncate">{[u.team, u.position, u.employmentStatus || "재직", u.hireDate ? `입사 ${u.hireDate}` : "", u.phone || u.mobile || ""].filter(Boolean).join(" · ")}</div>
       </div>
-      {!w3 && <Seg value={pane} onChange={setPane} options={[["edit", "입력"], ["preview", "명세서"], ["cost", "인건비 · 누계"]]} testid="pay-pane" />}
+      {!w3 && <div className="flex items-center gap-1.5 flex-wrap"><Seg value={pane} onChange={setPane} options={[["edit", "입력"], ["preview", "명세서"], ["cost", "인건비 · 누계"]]} testid="pay-pane" />{runActs}</div>}
       <div className="flex items-center gap-1 shrink-0"><button type="button" disabled={!onPrev} onClick={onPrev || undefined} className={navBtn} aria-label="이전 직원">‹</button>{pos && <span className="text-[13px] font-bold text-[#7A879C] min-w-[40px] text-center" style={NUMS}>{pos}</span>}<button type="button" disabled={!onNext} onClick={onNext || undefined} className={navBtn} aria-label="다음 직원">›</button></div>
     </div>
   );
@@ -985,9 +1009,10 @@ function Workspace({ company, ym, row, ro: roIn, busy, fit, w3, ledger2, pane, s
         </div>
         {w3 && (
           <div className={`${sec} overflow-hidden flex flex-col min-h-0 min-w-0`} data-testid="pay-preview">
-            <div className="shrink-0 px-3.5 py-2.5 border-b border-[#EEF1F6] flex items-center gap-2">
-              <Seg value={side} onChange={setSide} options={[["slip", "명세서 미리보기"], ["cost", "인건비 · 누계"]]} testid="pay-side" />
-              <span className="flex-1" />
+            {/* ⭐ 2026-11-17 [확정발행] · [더보기]를 맨 위 남색 줄에서 이리로(명세서 | 인건비 · 누계 바로 오른쪽) */}
+            <div className="shrink-0 px-3 py-2.5 border-b border-[#EEF1F6] flex items-center gap-2 flex-wrap relative z-20">
+              <Seg value={side} onChange={setSide} options={[["slip", "명세서"], ["cost", "인건비 · 누계"]]} testid="pay-side" />
+              {runActs}
             </div>
             <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 bg-[#F4F6FA]">{side === "slip" ? slipNode : costNode}</div>
           </div>
@@ -997,7 +1022,7 @@ function Workspace({ company, ym, row, ro: roIn, busy, fit, w3, ledger2, pane, s
   }
   return (
     <div ref={editRef} className="space-y-3 min-w-0">
-      <div className={`${sec} overflow-hidden`}>{head}</div>
+      <div className={`${sec} relative z-20`}>{head}</div>
       {body}
       {bottom}
     </div>
@@ -1026,6 +1051,8 @@ function PayEmployees({ company, ro, fit = false, selId: selIdIn = null, setSelI
   const [flt, setFlt] = React.useState({ q: "", team: "", position: "", emp: "재직", payType: "", st: "" });
   const [busy, setBusy] = React.useState(false);
   const [paneTab, setPaneTab] = React.useState("pay");
+  const [copyOpen, setCopyOpen] = React.useState(false); // ⭐ 2026-11-17 다른 직원에게 똑같이 적용
+  const templates = settings?.empTemplates || [];
   const all = (staff || []).filter((u) => u.employmentStatus !== "퇴사" || map[u.id]);
   const q = flt.q.trim();
   const list = all.filter((u) => !q || [personName(u), u.name, u.team, u.position, u.phone].some((v) => String(v || "").includes(q)))
@@ -1060,6 +1087,20 @@ function PayEmployees({ company, ro, fit = false, selId: selIdIn = null, setSelI
   const posOpts = uniq([...(hr.exec || []), ...(hr.normal || []), ...all.map((u) => u.position)]);
   const statusOpts = uniq([...EMPLOYMENT_STATUS_OPTIONS, ...all.map((u) => u.employmentStatus)]);
   const nDone = all.filter((u) => empReady(map[u.id])).length;
+  // ⭐ 2026-11-17 템플릿 — payrollSettings/{회사}.empTemplates(요율 · 설정과 같은 문서 · 같은 권한)
+  const saveTemplate = async () => {
+    const nm = await kpPrompt("템플릿 이름을 적어 주세요(예: 사무직 기본). 같은 이름이 있으면 바꿔 끼워요.", `${sel?.position || sel?.team || "기본"} 템플릿`);
+    if (!nm || !nm.trim()) return;
+    const data = copyPatch(cleanEmp(f), COPY_GROUPS.map(([k]) => k));
+    try {
+      await setDoc(doc(db, "payrollSettings", company), { companyName: company, empTemplates: upsertTemplate(templates, nm, data, { at: Date.now(), by: auth.currentUser?.email || "", from: personName(sel) || sel?.name || "" }) }, { merge: true });
+      alert(`"${nm.trim()}" 템플릿으로 저장했어요. 다른 직원 화면에서 [템플릿 불러오기]로 쓰면 돼요.`);
+    } catch (e) { alert(`템플릿 저장 실패: ${e.message}`); }
+  };
+  const loadTemplate = (nm) => {
+    const t = templates.find((x) => x.name === nm); if (!t) return;
+    setF((p) => ({ ...p, ...copyPatch(t.data, COPY_GROUPS.map(([k]) => k)) }));
+  };
 
   const listNode = (
     <div className={`${sec} overflow-hidden min-w-0 flex flex-col ${fit && wide ? "h-full" : wide ? "sticky top-0 self-start" : ""}`} data-testid="payemp-list">
@@ -1116,6 +1157,15 @@ function PayEmployees({ company, ro, fit = false, selId: selIdIn = null, setSelI
           </div>
         )}
       </div>
+      {!ro && paneTab === "pay" && (
+        <div className={`${sec} px-4 py-3 flex items-center gap-2 flex-wrap`} data-testid="payemp-quick">
+          <span className="text-[14px] font-black text-[#3A4A66] mr-1">같은 설정 빠르게</span>
+          <button type="button" disabled={dirty || !empReady(map[sel.id])} onClick={() => setCopyOpen(true)} title={dirty ? "먼저 [저장]해 주세요" : !empReady(map[sel.id]) ? "이 직원 급여를 먼저 저장해 주세요" : "이 직원 설정을 골라서 다른 직원에게 한 번에 넣어요"} className="h-10 px-3.5 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-black disabled:opacity-40 whitespace-nowrap" data-testid="payemp-copy">다른 직원에게 똑같이 적용</button>
+          <button type="button" disabled={!empReady(f)} onClick={saveTemplate} className="h-10 px-3.5 rounded-xl border border-[#1B2B4B] bg-white text-[#1B2B4B] text-[14px] font-black disabled:opacity-40 whitespace-nowrap" data-testid="payemp-tpl-save">템플릿으로 저장</button>
+          {templates.length > 0 && <Sel value="" onChange={(v) => v && loadTemplate(v)} placeholder="템플릿 불러오기" options={templates.map((t) => [t.name, t.name])} ariaLabel="템플릿 불러오기" className="w-[190px]" testid="payemp-tpl-load" />}
+          <span className="text-[13.5px] font-bold text-[#7A879C]">불러오면 칸만 채워져요 · [저장]을 눌러야 저장돼요</span>
+        </div>
+      )}
       {paneTab === "contract" ? (
         <React.Suspense fallback={<div className="py-16 text-center text-[15px] font-bold text-[#7A879C]">불러오는 중…</div>}>
           <PayrollContracts company={company} u={sel} emp={f} settings={settings} canEdit={!ro} docId={empId(company, sel.id)} />
@@ -1194,6 +1244,122 @@ function PayEmployees({ company, ro, fit = false, selId: selIdIn = null, setSelI
   return (
     <div className={fit && wide ? "h-full" : "space-y-3"} data-testid="payroll-emps">
       {wide ? <div className={`grid grid-cols-[280px_minmax(0,1fr)] gap-3 ${fit ? "h-full" : "items-start"}`}>{listNode}{detail}</div> : sel ? detail : listNode}
+      {copyOpen && sel && f && <CopyEmpDialog company={company} src={sel} srcEmp={cleanEmp(f)} staff={all} map={map} teamOpts={teamOpts} posOpts={posOpts} templates={templates} onClose={() => setCopyOpen(false)} />}
+    </div>
+  );
+}
+
+// ── 다른 직원에게 똑같이 적용 ──
+// ⭐ 2026-11-17 한 사람 설정을(또는 템플릿을) 골라 여러 직원에게 한 번에 — ① 무엇을(원본 · 묶음) ② 누구에게(검색 · 부서 · 직책) ③ 바뀌는 칸 확인 → 한 번에 저장(writeBatch)
+//  생년월일 · 지급 계좌 · 메모 · 근로계약서는 복사하지 않는다(payrollCopy.js NEVER_COPY)
+function CopyEmpDialog({ company, src, srcEmp, staff, map, teamOpts, posOpts, templates, onClose }) {
+  const [from, setFrom] = React.useState("__emp"); // __emp | 템플릿 이름
+  const [groups, setGroups] = React.useState(COPY_DEFAULT);
+  const [flt, setFlt] = React.useState({ q: "", team: "", position: "" });
+  const [picked, setPicked] = React.useState(() => new Set());
+  const [openId, setOpenId] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [done, setDone] = React.useState("");
+  const tpl = templates.find((t) => t.name === from);
+  const source = from === "__emp" ? srcEmp : tpl?.data || {};
+  const patch = copyPatch(source, groups);
+  const shown = filterTargets(staff, flt, src.id).sort((a, b) => String(a.team || "").localeCompare(String(b.team || ""), "ko") || String(a.name || "").localeCompare(String(b.name || ""), "ko"));
+  const allOn = shown.length > 0 && shown.every((u) => picked.has(u.id));
+  const togglePick = (id) => { setDone(""); setPicked((s0) => { const n = new Set(s0); if (n.has(id)) n.delete(id); else n.add(id); return n; }); };
+  const plan = staff.filter((u) => picked.has(u.id)).map((u) => {
+    const base = { ...EMP_BLANK, ...(map[u.id] || {}) };
+    if (!base.payAccount) base.payAccount = userAccounts(u)[0] || null;
+    const merged = { ...base, ...patch };
+    return { u, diff: diffEmp(map[u.id] || EMP_BLANK, patch), merged, ok: empReady(merged) };
+  });
+  const todo = plan.filter((x) => x.ok && x.diff.length);
+  const skipNotReady = plan.filter((x) => !x.ok).length;
+  const nSame = plan.filter((x) => x.ok && !x.diff.length).length;
+  React.useEffect(() => { const h = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [onClose]);
+  const apply = async () => {
+    if (!todo.length) return;
+    if (!(await kpConfirm(`${todo.length}명의 급여 설정을 바꿀까요?\n· 고른 묶음만 바뀌고 생년월일 · 지급 계좌 · 근로계약서는 그대로예요\n· 이미 확정한 달 명세서는 바뀌지 않아요(확정 전 달만 다시 계산돼요)`, { title: "한 번에 적용", okText: `${todo.length}명 적용` }))) return;
+    setBusy(true);
+    try {
+      const by = auth.currentUser?.email || "";
+      for (let i = 0; i < todo.length; i += 400) {
+        const b = writeBatch(db);
+        todo.slice(i, i + 400).forEach(({ u, merged }) => b.set(doc(db, "payrollEmployees", empId(company, u.id)), { ...cleanEmp(merged), companyName: company, uid: u.id, name: personName(u) || u.name || "", updatedAt: serverTimestamp(), updatedBy: by }, { merge: true }));
+        await b.commit(); // eslint-disable-line no-await-in-loop
+      }
+      setDone(`${todo.length}명에게 적용했어요`); setPicked(new Set());
+    } catch (e) { alert(`적용 실패: ${e.message}`); } finally { setBusy(false); }
+  };
+  const delTemplate = async () => {
+    if (!tpl || !(await kpConfirm(`"${tpl.name}" 템플릿을 지울까요?`, { title: "템플릿 지우기", okText: "지우기" }))) return;
+    try { await setDoc(doc(db, "payrollSettings", company), { companyName: company, empTemplates: removeTemplate(templates, tpl.name) }, { merge: true }); setFrom("__emp"); } catch (e) { alert(`지우기 실패: ${e.message}`); }
+  };
+  const chk = "w-[18px] h-[18px] accent-[#1B2B4B] shrink-0";
+  return (
+    <div className="fixed inset-0 z-[9000] bg-[#0F1A30]/45 flex items-center justify-center p-3" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-label="다른 직원에게 똑같이 적용" className="w-full max-w-[980px] max-h-[92vh] rounded-[22px] bg-[#F4F6FA] shadow-[0_24px_60px_rgba(15,26,48,0.35)] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()} data-testid="copy-dialog">
+        <div className="shrink-0 px-5 py-4 bg-white border-b border-[#E3E8F0] flex items-center gap-3">
+          <div className="min-w-0 flex-1"><div className="text-[18px] font-black text-[#0F1A30]">다른 직원에게 똑같이 적용</div><div className="text-[14px] font-bold text-[#5B6B85]">무엇을 → 누구에게 고르고, 바뀌는 칸을 확인한 뒤 한 번에 저장해요</div></div>
+          <button type="button" onClick={onClose} className="w-10 h-10 rounded-xl border border-[#DCE3EE] bg-white text-[#1B2B4B] font-black" aria-label="닫기">✕</button>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 grid grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] gap-3 items-start">
+          {/* ① 무엇을 */}
+          <div className={`${sec} p-4 space-y-3`}>
+            <div className="text-[15px] font-black text-[#0F1A30]">① 무엇을 복사할까요</div>
+            <div><Label>원본</Label><Sel value={from} onChange={(v) => { setFrom(v); setDone(""); }} options={[["__emp", `${personName(src) || src.name} 설정(지금 직원)`], ...templates.map((t) => [t.name, `템플릿 · ${t.name}`])]} testid="copy-from" ariaLabel="원본" /></div>
+            {tpl && <div className="flex items-center justify-between text-[13.5px] font-bold text-[#7A879C]"><span>{tpl.from ? `${tpl.from} 설정으로 만든 템플릿` : "템플릿"}</span><button type="button" onClick={delTemplate} className="h-8 px-2.5 rounded-lg text-[13.5px] font-black text-[#5B6B85] hover:bg-[#F2F4F7]">이 템플릿 지우기</button></div>}
+            <div className="space-y-1.5" role="group" aria-label="복사할 묶음">
+              {COPY_GROUPS.map(([k, l, hint]) => (
+                <label key={k} className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 cursor-pointer ${groups.includes(k) ? "border-[#1B2B4B] bg-[#EEF3FC]" : "border-[#DCE3EE] bg-white"}`}>
+                  <input type="checkbox" className={`${chk} mt-0.5`} checked={groups.includes(k)} onChange={() => { setDone(""); setGroups((g) => (g.includes(k) ? g.filter((x) => x !== k) : [...g, k])); }} data-testid={`copy-group-${k}`} />
+                  <span className="min-w-0"><span className="block text-[14.5px] font-black text-[#0F1A30]">{l}</span><span className="block text-[13.5px] font-bold text-[#5B6B85]">{hint}</span></span>
+                </label>
+              ))}
+            </div>
+            <Note>생년월일 · 지급 계좌 · 메모 · 근로계약서는 사람마다 달라서 복사하지 않아요. 소득세(부양가족)도 보통 달라서 처음엔 꺼 뒀어요.</Note>
+          </div>
+          {/* ② 누구에게 */}
+          <div className={`${sec} p-4 space-y-2.5 min-w-0`}>
+            <div className="flex items-center gap-2"><div className="text-[15px] font-black text-[#0F1A30] flex-1">② 누구에게 넣을까요</div><span className="text-[14px] font-black text-[#2D4C82]" style={NUMS}>{picked.size}명 고름</span></div>
+            <input value={flt.q} onChange={(e) => setFlt((x) => ({ ...x, q: e.target.value }))} placeholder="이름 · 부서 · 직책" className={inp} aria-label="직원 검색" data-testid="copy-search" />
+            <div className="grid grid-cols-2 gap-1.5">
+              <Sel value={flt.team} onChange={(v) => setFlt((x) => ({ ...x, team: v }))} placeholder="부서 전체" options={teamOpts} ariaLabel="부서" testid="copy-team" />
+              <Sel value={flt.position} onChange={(v) => setFlt((x) => ({ ...x, position: v }))} placeholder="직책 전체" options={posOpts} ariaLabel="직책" />
+            </div>
+            <label className="h-10 px-3 rounded-xl bg-[#F5F8FD] flex items-center gap-2 text-[14px] font-black text-[#3A4A66] cursor-pointer">
+              <input type="checkbox" className={chk} checked={allOn} onChange={() => { setDone(""); setPicked((s0) => { const n = new Set(s0); shown.forEach((u) => (allOn ? n.delete(u.id) : n.add(u.id))); return n; }); }} data-testid="copy-all" />
+              보이는 직원 모두 고르기 <span className="text-[#7A879C]" style={NUMS}>{shown.length}명</span>
+            </label>
+            <div className="rounded-xl border border-[#E3E8F0] bg-white divide-y divide-[#EEF1F6] max-h-[46vh] overflow-y-auto" data-testid="copy-targets">
+              {!shown.length ? <div className="py-8 text-center text-[14px] font-bold text-[#7A879C]">조건에 맞는 직원이 없어요</div> : shown.map((u) => {
+                const on = picked.has(u.id); const pl = on ? plan.find((x) => x.u.id === u.id) : null; const e = map[u.id];
+                return (
+                  <div key={u.id} className={on ? "bg-[#F8FAFE]" : ""}>
+                    <div className="px-3 py-2 flex items-center gap-2.5">
+                      <input type="checkbox" className={chk} checked={on} onChange={() => togglePick(u.id)} aria-label={`${personName(u) || u.name} 고르기`} />
+                      <button type="button" onClick={() => togglePick(u.id)} className="flex-1 min-w-0 text-left"><span className="block text-[14.5px] font-black text-[#0F1A30] truncate">{personName(u) || u.name}</span><span className="block text-[13px] font-bold text-[#7A879C] truncate">{[u.team, u.position].filter(Boolean).join(" · ") || "-"}</span></button>
+                      <span className="text-right text-[13.5px] font-black whitespace-nowrap" style={NUMS}>{empReady(e) ? <span className="text-[#3A4A66]">{payText(e)}</span> : <span className="text-[#7A879C]">설정 필요</span>}</span>
+                      {pl && (pl.ok ? (pl.diff.length ? <button type="button" onClick={() => setOpenId(openId === u.id ? null : u.id)} className="h-8 px-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-black whitespace-nowrap" aria-expanded={openId === u.id} data-testid="copy-diff-toggle">{pl.diff.length}칸 바뀜 {openId === u.id ? "▴" : "▾"}</button> : <span className="h-8 px-2.5 rounded-lg bg-[#F2F4F7] text-[#5B6B85] text-[13px] font-black inline-flex items-center whitespace-nowrap">같음</span>) : <span className="h-8 px-2.5 rounded-lg bg-[#FEF3F2] text-[#B42318] text-[13px] font-black inline-flex items-center whitespace-nowrap" title="기본 급여 묶음을 켜거나 이 직원 기본급을 먼저 넣어 주세요">기본급 없음</span>)}
+                    </div>
+                    {pl && openId === u.id && pl.diff.length > 0 && (
+                      <ul className="pl-10 pr-3 pb-2.5 space-y-0.5" data-testid="copy-diff">
+                        {pl.diff.map((d) => <li key={d.key} className="text-[13.5px] font-bold text-[#3A4A66] flex gap-2 min-w-0"><span className="text-[#0F1A30] font-black shrink-0">{d.label}</span><span className="truncate" style={NUMS}>{d.from} → <b className="text-[#0F1A30]">{d.to}</b></span></li>)}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        {/* ③ 확인 · 적용 */}
+        <div className="shrink-0 px-5 py-3 bg-white border-t border-[#E3E8F0] flex items-center gap-3 flex-wrap">
+          <span className="text-[14px] font-bold text-[#3A4A66]" style={NUMS}>{done ? <b className="text-[#2D4C82]">{done}</b> : picked.size ? <>바뀜 <b className="text-[#0F1A30]">{todo.length}</b>명{nSame ? ` · 이미 같음 ${nSame}명` : ""}{skipNotReady ? ` · 기본급 없어 건너뜀 ${skipNotReady}명` : ""}</> : "직원을 골라 주세요"}</span>
+          <span className="flex-1" />
+          <button type="button" onClick={onClose} className="h-11 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-black text-[#3A4A66]">닫기</button>
+          <button type="button" disabled={busy || !todo.length || !groups.length} onClick={apply} className="h-11 px-5 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-40 whitespace-nowrap" data-testid="copy-apply">{busy ? "저장 중…" : `${todo.length}명에게 적용`}</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1358,7 +1524,7 @@ export function MyPayslips({ company, uid: uidIn, compact = false }) {
                 {rows.filter((r) => r.ym?.startsWith(y)).map((r) => (
                   <button key={r.id} type="button" role="tab" aria-selected={cur?.id === r.id} onClick={() => setSel(r.id)} className={`shrink-0 lg:w-full text-left px-4 py-2.5 lg:border-t border-[#EEF1F6] ${cur?.id === r.id ? "bg-[#EEF3FC] shadow-[inset_3px_0_0_#1B2B4B]" : "hover:bg-[#F8FAFD]"}`} data-testid="my-slip-row">
                     <div className="text-[15px] font-black text-[#0F1A30] whitespace-nowrap">{Number(r.ym.slice(5, 7))}월<span className="lg:hidden text-[14px] font-bold text-[#7A879C]"> · {r.ym.slice(0, 4)}</span>{!r.readAt && <span className="ml-1.5 text-[14px] font-black px-1.5 rounded bg-[#2D4C82] text-white align-middle">새 명세서</span>}</div>
-                    <div className="text-[14px] font-black text-[#2D4C82] whitespace-nowrap" style={NUMS}>{wonFmt(r.result?.net)}원</div>
+                    <div className="text-[14px] font-black text-[#2D4C82] whitespace-nowrap" style={NUMS}>{wonFmt(r.result?.net)}원{isSigned(r) ? <span className="ml-1.5 text-[12.5px] font-black text-[#D92D20]">서명완료</span> : canSign(r, uid) ? <span className="ml-1.5 text-[12.5px] font-black text-[#5B6B85]">서명 전</span> : null}</div>
                   </button>
                 ))}
               </React.Fragment>
@@ -1366,10 +1532,93 @@ export function MyPayslips({ company, uid: uidIn, compact = false }) {
           </div>
           {cur && (
             <div className="space-y-2 min-w-0">
+              <MySignBar slip={cur} uid={uid} />
               <div className="flex items-center justify-between gap-2 flex-wrap"><span className="text-[14px] font-bold text-[#5B6B85]">{ymLabel(cur.ym)} · {cur.status === "paid" ? `지급 완료 ${cur.paidDate || ""}` : "지급 예정"}</span><button type="button" onClick={() => printPayslips([cur], company || cur.companyName)} className="h-11 px-4 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black" data-testid="my-slip-print">인쇄 · PDF 저장</button></div>
               <div className="rounded-[20px] bg-white border border-[#E3E8F0] p-3 md:p-5"><PayslipView slip={cur} company={company || cur.companyName} /></div>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+// ⭐ 2026-11-17 명세서 수령 확인 서명 — 직원 본인 · 발행된 확정/지급 명세서에 한 번만(firestore.rules 가 서명 칸만 허용)
+//  손글씨 서명(캔버스) → 작은 PNG(360×120)로 명세서 문서에 바로 저장 · 그림을 못 쓰면 [그림 없이 확인] + 이름
+function SignPad({ onChange }) {
+  const ref = React.useRef(null);
+  const drawing = React.useRef(false);
+  const last = React.useRef(null);
+  const [empty, setEmpty] = React.useState(true);
+  React.useEffect(() => {
+    const c = ref.current; const r = c.getBoundingClientRect(); const dpr = window.devicePixelRatio || 1;
+    c.width = Math.max(1, r.width * dpr); c.height = Math.max(1, r.height * dpr);
+    const g = c.getContext("2d"); g.scale(dpr, dpr); g.lineWidth = 3; g.lineCap = "round"; g.lineJoin = "round"; g.strokeStyle = "#0F1A30";
+  }, []);
+  // 저장은 작게(360×120) — 문서 크기 한도(규칙 6만 자) 안으로
+  const small = () => { const c = ref.current; const o = document.createElement("canvas"); o.width = 360; o.height = 120; o.getContext("2d").drawImage(c, 0, 0, 360, 120); return o.toDataURL("image/png"); };
+  const pos = (e) => { const r = ref.current.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  const down = (e) => { e.preventDefault(); ref.current.setPointerCapture?.(e.pointerId); drawing.current = true; last.current = pos(e); };
+  const move = (e) => {
+    if (!drawing.current) return;
+    const g = ref.current.getContext("2d"); const [x, y] = pos(e); const [lx, ly] = last.current;
+    g.beginPath(); g.moveTo(lx, ly); g.lineTo(x, y); g.stroke(); last.current = [x, y];
+    if (empty) setEmpty(false);
+  };
+  const up = () => { if (!drawing.current) return; drawing.current = false; onChange(small()); };
+  const clear = () => { const c = ref.current; c.getContext("2d").clearRect(0, 0, c.width, c.height); setEmpty(true); onChange(""); };
+  return (
+    <div>
+      <div className="relative rounded-2xl border-2 border-dashed border-[#8FB0F0] bg-[#F7F9FC]" style={{ touchAction: "none" }}>
+        <canvas ref={ref} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerLeave={up} className="w-full h-[150px] block cursor-crosshair" aria-label="서명 칸" data-testid="sign-pad" />
+        {empty && <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-[14px] font-bold text-[#7A879C]">여기에 서명해 주세요 (손가락 · 마우스)</div>}
+      </div>
+      <div className="flex justify-end mt-1.5"><button type="button" onClick={clear} className="h-9 px-3 rounded-lg text-[14px] font-bold text-[#5B6B85] hover:bg-[#F2F4F7]">다시 쓰기</button></div>
+    </div>
+  );
+}
+function MySignBar({ slip, uid }) {
+  const [open, setOpen] = React.useState(false);
+  const [mode, setMode] = React.useState("draw"); // draw | check
+  const [img, setImg] = React.useState("");
+  const [name, setName] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState("");
+  React.useEffect(() => { setOpen(false); setImg(""); setErr(""); setMode("draw"); setName(slip?.name || ""); }, [slip?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!slip || slip.uid !== uid) return null;
+  if (isSigned(slip)) {
+    return (
+      <div className="rounded-2xl bg-white border border-[#E3E8F0] px-4 py-3 flex items-center gap-3 flex-wrap" data-testid="my-slip-signed">
+        <span className="w-12 h-12 rounded-full border-[3px] border-[#D92D20] text-[#D92D20] grid place-items-center text-[11px] font-black leading-[1.05] text-center rotate-[-10deg] shrink-0"><span>서명완료<br />{stampDate(slip)}</span></span>
+        <div className="min-w-0 flex-1"><div className="text-[15px] font-black text-[#0F1A30]">확인 서명을 마쳤어요</div><div className="text-[14px] font-bold text-[#5B6B85]">{slip.signName} · {signTimeText(slip)}</div></div>
+      </div>
+    );
+  }
+  if (!canSign(slip, uid)) return null;
+  const submit = async () => {
+    const pic = mode === "draw" ? img : "";
+    if (mode === "draw" && !pic) { setErr("서명을 그려 주세요. 그리기 어려우면 [그림 없이 확인]을 눌러요"); return; }
+    const e = signError(name, pic); if (e) { setErr(e); return; }
+    setBusy(true); setErr("");
+    try { await updateDoc(doc(db, "payslips", slip.id), signPatch(name, pic, serverTimestamp())); setOpen(false); }
+    catch (x) { setErr(`저장하지 못했어요: ${x.message}`); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="rounded-2xl bg-[#EEF3FC] border border-[#C9D7F2] px-4 py-3 space-y-3" data-testid="my-slip-sign">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="min-w-0 flex-1"><div className="text-[15px] font-black text-[#0F1A30]">명세서를 확인했으면 서명해 주세요</div><div className="text-[14px] font-bold text-[#3A4A66]">서명하면 경리팀 화면에 "서명완료" 도장이 찍혀요. 금액이 이상하면 서명하기 전에 경리팀에 물어봐요</div></div>
+        {!open && <button type="button" onClick={() => setOpen(true)} className="h-11 px-4 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black whitespace-nowrap" data-testid="my-slip-sign-open">확인하고 서명하기</button>}
+      </div>
+      {open && (
+        <div className="rounded-2xl bg-white border border-[#DCE3EE] p-3 space-y-3">
+          <Seg value={mode} onChange={(v) => { setMode(v); setErr(""); }} options={[["draw", "손글씨 서명"], ["check", "그림 없이 확인"]]} testid="my-sign-mode" />
+          {mode === "draw" ? <SignPad onChange={setImg} /> : <div className="rounded-xl bg-[#F5F8FD] px-3.5 py-3 text-[14px] font-bold text-[#1B2B4B]">"{ymLabel(slip.ym)} 급여명세서를 확인했어요" — 이름만 적으면 돼요</div>}
+          <div><Label hint="본인 이름">이름</Label><input value={name} onChange={(e) => setName(e.target.value)} maxLength={30} className={inp} data-testid="my-sign-name" /></div>
+          {err && <Note kind="error">{err}</Note>}
+          <div className="flex items-center gap-2 justify-end">
+            <button type="button" onClick={() => { setOpen(false); setErr(""); }} className="h-11 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-black text-[#3A4A66]">닫기</button>
+            <button type="button" disabled={busy} onClick={submit} className="h-11 px-5 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-40" data-testid="my-sign-submit">{busy ? "저장 중…" : mode === "draw" ? "서명 완료" : "확인했어요"}</button>
+          </div>
         </div>
       )}
     </div>
