@@ -1374,6 +1374,12 @@ export function reconcileOrders(existing = [], incoming = [], { keepKeys = ["imp
     // 시트에서 사라진 값 → 비운다
     const before = new Set([...(Array.isArray(e.data._sheetKeys) ? e.data._sheetKeys : SHEET_CORE_KEYS)]);
     before.forEach((k) => { if (!(k in next) && !keepKeys.includes(k) && e.data[k] != null && e.data[k] !== "" && !(Array.isArray(e.data[k]) && !e.data[k].length) && !held(k, "")) patch[k] = Array.isArray(e.data[k]) ? [] : (typeof e.data[k] === "number" ? 0 : typeof e.data[k] === "boolean" ? false : ""); });
+    // ⭐ 2026-11-17 시트에서 차량번호를 지웠는데 기사명 · 전화번호만 프로그램에 남던 문제(롯데베르살리스 탭) — 차량이 없으면 기사도 없다
+    //  차량번호가 이번에 비워지거나(시트에서 지움) 이미 비어 있고 프로그램에서 일부러 둔 값도 아니면, 시트에 없는 기사명 · 전화번호도 비운다
+    //  (프로그램에서 막 배차해 아직 시트에 못 쓴 차량번호 — _programKeys — 는 그대로 둔다)
+    const plateHeld = pk.has("차량번호") && same(sb.차량번호, "");
+    const plateGone = !next.차량번호 && !plateHeld && (patch.차량번호 === "" || !e.data.차량번호);
+    if (plateGone) ["이름", "전화번호"].forEach((k) => { if (!(k in next) && e.data[k]) { patch[k] = ""; if (pk.delete(k)) pkChanged = true; } });
     if (pkChanged) { patch._programKeys = [...pk]; patch._sheetBase = Object.fromEntries(Object.entries(sb).filter(([k]) => pk.has(k))); }
     // 🧹 2026-11-14 시트에는 기사가 없고(미배차) 프로그램 오더도 배차중인데 차량 · 기사만 남아 있는 줄 — 시트에서 기사를 지웠는데 프로그램에 남던 오더를 바로잡는다
     if (!next.차량번호 && (next.배차상태 || e.data.배차상태) === "배차중" && e.data.배차상태 === "배차중") ["차량번호", "이름", "전화번호"].forEach((k) => { if (!(k in next) && e.data[k] && !held(k, "")) patch[k] = ""; });
