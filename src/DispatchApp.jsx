@@ -3506,7 +3506,7 @@ function InvoiceDocFit({ children, fit = true, maxScale = 1, minScale = INVOICE_
       if (!cw || !nw) return;
       let s = fit ? Math.min(maxScale, cw / nw) : 1;
       if (fit && s < minScale) s = Math.min(1, minScale); // 글씨가 깨질 만큼 작게 줄이지 않는다 — 대신 옆으로 넘겨 본다
-      s = Math.round(s * 1000) / 1000;
+      s = Math.floor(s * 1000) / 1000; // ⭐ 2026-11-17 내림 — 반올림하면 칸보다 0.몇 px 넓어져 가로 스크롤이 생겼다
       const x = s > 1 ? Math.max(0, Math.round((cw - nw * s) / 2)) : 0;
       setBox((p) => (Math.abs(p.s - s) < 0.002 && p.h === Math.round(nh * s) && p.x === x ? p : { s, h: Math.round(nh * s), x }));
     };
@@ -3517,7 +3517,9 @@ function InvoiceDocFit({ children, fit = true, maxScale = 1, minScale = INVOICE_
     const full = () => { // 찍는 동안 원래 크기(html2canvas 는 zoom · transform 을 제대로 못 그린다)
       const t = n.style.transform, z = n.style.zoom, ov = o.style.overflow, hh = o.style.height;
       n.style.transform = "none"; n.style.zoom = ""; o.style.overflow = "visible"; o.style.height = "auto";
-      return () => { n.style.transform = t; n.style.zoom = z; o.style.overflow = ov; o.style.height = hh; };
+      // ⭐ 2026-11-17 화면에서만 좁힌 종이 여백(data-kp-pad)을 찍는 동안 원래 A4 여백으로 — PDF · 메일 첨부 모양은 예전 그대로
+      const pads = [...n.querySelectorAll("[data-kp-pad]")].map((el) => { const p0 = el.style.padding; el.style.padding = el.getAttribute("data-kp-pad"); return () => { el.style.padding = p0; }; });
+      return () => { pads.forEach((u) => u()); n.style.transform = t; n.style.zoom = z; o.style.overflow = ov; o.style.height = hh; };
     };
     _invoiceFit.add(full);
     return () => { _invoiceFit.delete(full); if (ro) ro.disconnect(); else window.removeEventListener("resize", run); };
@@ -54396,7 +54398,7 @@ const handleBatchSettle = async (targetStatus) => {
                   {docBig && <button type="button" data-kp="inv-big-fit" onClick={() => setDocBigFit((v) => !v)} className={csBtn} title="화면 폭에 맞추기 ↔ 실제 크기(100%)">{docBigFit ? "실제 크기" : "폭 맞춤"}</button>}
                   <button type="button" data-kp="inv-big" disabled={!searched && !docBig} onClick={() => setDocBig((v) => !v)} className={docBig ? csBtnPri : csBtn} title={docBig ? "닫기(Esc)" : "명세서를 화면 가득 크게 봐요"}>{docBig ? "닫기" : "크게 보기"}</button>
                 </div>
-                <div className="flex-1 min-h-0 overflow-auto bg-[#E9EDF4] p-4" style={{ backgroundImage: "radial-gradient(rgba(27,43,75,.08) 1px, transparent 1px)", backgroundSize: "14px 14px" }}>
+                <div className={`flex-1 min-h-0 overflow-auto bg-[#E9EDF4] ${searched ? "p-1.5" : "p-4"}`} style={{ backgroundImage: "radial-gradient(rgba(27,43,75,.08) 1px, transparent 1px)", backgroundSize: "14px 14px" }}>
                   {!searched ? (
                     <div className="mx-auto max-w-[820px] bg-white rounded-md shadow-[0_8px_28px_rgba(15,26,48,0.12)] px-8 py-10">
                       <div className="text-[9px] font-extrabold tracking-[0.3em] text-[#C9D3E3]" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>TRANSACTION STATEMENT</div>
@@ -54410,9 +54412,11 @@ const handleBatchSettle = async (targetStatus) => {
                       <div className="mt-6 text-center text-[12.5px] font-bold text-[#9AA9C3]">왼쪽에서 거래처를 조회하면 이곳에 명세서가 그려집니다</div>
                     </div>
                   ) : (
-                    <InvoiceDocFit fit={docBig ? docBigFit : true} maxScale={docBig ? 1.5 : 1}>{/* ⭐ 2026-11-17 칸 폭에 맞춰 문서 통째로 줄이기(잘려 보이지 않게) — 예전: w-max 로 글자 길이만큼 넓어져 반쯤 잘려 보였다 */}
-                    <div className="rounded-md shadow-[0_8px_28px_rgba(15,26,48,0.14)]">
-                      <div id="invoiceArea" style={{ background: "#fff", padding: "26px 26px 22px" }}>
+                    <InvoiceDocFit fit={docBig ? docBigFit : true} maxScale={docBig ? 1.8 : 1.6}>{/* ⭐ 2026-11-17 칸 폭에 맞춰 문서 통째로 줄이기(잘려 보이지 않게) — 예전: w-max 로 글자 길이만큼 넓어져 반쯤 잘려 보였다 */}
+                    {/* ⭐ 2026-11-17 (4차) 미리보기 양옆 회색 빈칸 없애기 — 칸이 820px보다 넓으면 폭에 맞춰 키운다(최대 1.6배 · 크게 보기 1.8배, CSS zoom 이라 또렷) ·
+                        미리보기 칸 안쪽 여백(p-4 → p-1.5) · 종이 그림자 · 종이 여백(26px → 12px)을 화면에서만 줄였다. 인쇄(innerHTML) · PDF · 메일 첨부는 예전 A4 그대로 */}
+                    <div className="rounded-sm shadow-[0_1px_3px_rgba(15,26,48,0.12)]">
+                      <div id="invoiceArea" data-kp-pad="26px 26px 22px" style={{ background: "#fff", padding: "12px 14px 12px" }}>
                         <div style={{ fontFamily: DOC.font, color: DOC.ink, fontSize: 12 }}>
                           {/* 문서 머리 */}
                           <table style={{ width: "100%", borderCollapse: "collapse" }}>
