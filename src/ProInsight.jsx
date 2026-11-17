@@ -8,6 +8,7 @@
 import { MonthPicker } from "./kpInputs"; // 📅 2026-11-07 월 선택은 프로그램 달력으로
 import React from "react";
 import { CustomSelect } from "./CustomSelect";
+import { profitStyle, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 마진율 색(플러스 빨강 · 마이너스 파랑)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const n = (v) => Number(String(v ?? "").replace(/[^\d-]/g, "")) || 0;
@@ -133,10 +134,10 @@ export default function ProInsight({ data = [], companyName = "", onOpenOrder })
     w.document.close();
   };
 
-  const kpi = (label, v, d, unit = "원") => (
+  const kpi = (label, v, d, unit = "원", tone) => ( // ⭐ 2026-11-17 tone — 글자색(수익 · 마진율)
     <div className="rounded-2xl bg-white/[0.06] border border-white/10 px-4 py-3">
       <div className="text-[11.5px] font-bold text-white/55">{label}</div>
-      <div className="text-[22px] font-black tabular-nums mt-0.5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}<span className="text-[12px] text-white/50 ml-1">{unit}</span></div>
+      <div className="text-[22px] font-black tabular-nums mt-0.5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...(tone ? { color: tone } : {}) }}>{v}<span className="text-[12px] text-white/50 ml-1">{unit}</span></div>
       {d != null && <div className="text-[11.5px] font-bold text-[#8FB0F0]">{d >= 0 ? "▲" : "▼"} {Math.abs(d).toFixed(1)}% <span className="text-white/40">직전 기간 대비</span></div>}
     </div>
   );
@@ -160,8 +161,8 @@ export default function ProInsight({ data = [], companyName = "", onOpenOrder })
         </div>
         <div className="relative grid grid-cols-2 lg:grid-cols-4 gap-2.5 mt-5">
           {kpi("매출(청구)", won(T.rev), delta(T.rev, P.rev))}
-          {kpi("수익(청구-기사)", won(T.profit), delta(T.profit, P.profit))}
-          {kpi("마진율", T.margin.toFixed(1), null, "%")}
+          {kpi("수익(청구-기사)", won(T.profit), delta(T.profit, P.profit), "원", profitStyle(T.profit, { dark: true }).color)}
+          {kpi("마진율", T.margin.toFixed(1), null, "%", profitRateColor(T.margin, { dark: true }))}
           {kpi("운송 건수", T.cnt.toLocaleString(), delta(T.cnt, P.cnt), "건")}
         </div>
       </div>
@@ -175,9 +176,9 @@ export default function ProInsight({ data = [], companyName = "", onOpenOrder })
                   <td className={`${td} font-black text-[#0F1A30] min-w-[160px]`}><div className="truncate max-w-[220px]">{c.key}</div><Bar v={Math.abs(c.profit)} max={maxProfit} /></td>
                   <td className={`${td} text-center tabular-nums`}>{c.cnt}</td>
                   <td className={`${td} text-right tabular-nums`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(c.rev)}</td>
-                  <td className={`${td} text-right tabular-nums font-black ${c.profit < 0 ? "text-[#2D4C82] underline decoration-[#8FB0F0] decoration-2" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(c.profit)}</td>
-                  <td className={`${td} text-center`}><span className={`px-2 py-0.5 rounded-md text-[12px] font-black ${c.margin < minMargin ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`}>{c.margin.toFixed(1)}%</span></td>
-                  <td className={`${td} text-right tabular-nums`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(c.profit / c.cnt)}</td>
+                  <td className={`${td} text-right tabular-nums font-black ${c.profit < 0 ? "underline decoration-[#8FB0F0] decoration-2" : ""} text-[#0F1A30]`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...profitStyle(c.profit) }}>{won(c.profit)}</td>
+                  <td className={`${td} text-center`}><span className={`px-2 py-0.5 rounded-md text-[12px] font-black ${c.margin < minMargin ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`} style={{ color: profitRateColor(c.margin, { dark: c.margin < minMargin }) }}>{c.margin.toFixed(1)}%</span></td>
+                  <td className={`${td} text-right tabular-nums`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...profitStyle(c.profit / c.cnt) }}>{won(c.profit / c.cnt)}</td>
                   <td className={`${td} text-center text-[12px] font-bold text-[#2D4C82]`}>{d == null ? "신규" : `${d >= 0 ? "▲" : "▼"} ${Math.abs(d).toFixed(0)}%`}</td>
                 </tr>); })}
                 {!clients.length && <tr><td colSpan={7} className="py-14 text-center text-[#9AA9C3]">이 기간 데이터가 없습니다.</td></tr>}
@@ -192,7 +193,7 @@ export default function ProInsight({ data = [], companyName = "", onOpenOrder })
                 <div key={o.key} className="flex items-center gap-3 px-5 py-2.5">
                   <span className="w-7 h-7 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black flex items-center justify-center tabular-nums">{i + 1}</span>
                   <div className="flex-1 min-w-0"><div className="text-[13.5px] font-black text-[#0F1A30] truncate">{o.key}</div><div className="text-[11.5px] font-bold text-[#7A89A3]">{o.cnt}건 · 평균 {won(o.rev / o.cnt)}원 · 마진 {o.margin.toFixed(1)}%</div></div>
-                  <div className="text-[14px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(o.profit)}</div>
+                  <div className="text-[14px] font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...profitStyle(o.profit) }}>{won(o.profit)}</div>
                 </div>
               ))}
               {!routes.length && <div className="py-10 text-center text-[#9AA9C3]">반복 노선이 없습니다.</div>}
@@ -219,9 +220,9 @@ export default function ProInsight({ data = [], companyName = "", onOpenOrder })
           <div className="max-h-[420px] overflow-y-auto divide-y divide-[#EEF1F6]">
             {lowMargin.map(({ r, profit, margin }) => (
               <button key={r._id || r.id} type="button" onClick={() => onOpenOrder?.(r)} className="w-full text-left flex items-center gap-3 px-5 py-2.5 hover:bg-[#F7F9FC]">
-                <span className={`w-16 text-center py-1 rounded-md text-[12px] font-black ${margin < 0 ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`}>{margin.toFixed(1)}%</span>
+                <span className={`w-16 text-center py-1 rounded-md text-[12px] font-black ${margin < 0 ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`} style={{ color: profitRateColor(margin, { dark: margin < 0 }) }}>{margin.toFixed(1)}%</span>
                 <div className="flex-1 min-w-0"><div className="text-[13px] font-black text-[#0F1A30] truncate">{r.거래처명} · {r.상차지명} → {r.하차지명}</div><div className="text-[11.5px] font-bold text-[#7A89A3]">{r.상차일} · 청구 {won(n(r.청구운임))} / 기사 {won(n(r.기사운임))}</div></div>
-                <span className="text-[13px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(profit)}</span>
+                <span className="text-[13px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...profitStyle(profit) }}>{won(profit)}</span>
               </button>
             ))}
             {!lowMargin.length && <div className="py-10 text-center text-[#9AA9C3]">기준 미만 오더가 없습니다.</div>}

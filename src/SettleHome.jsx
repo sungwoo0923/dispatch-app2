@@ -10,7 +10,7 @@
 //  계산은 아래 summarizeSettle() 한 곳(순수 함수) — scripts/settleHome.test.mjs
 import React from "react";
 import { useArDesk, stageLabel, sdCard, sdBtn, sdBtnPri, sdInp, Ico, IC, viewStage, MonthPicker, FlowTrack } from "./SettleDesk";
-import { MarginPct } from "./marginPct"; // ⭐ 2026-11-17 매출이익 옆 매출 대비 %
+import { MarginPct, profitColor } from "./marginPct"; // ⭐ 2026-11-17 매출이익 옆 매출 대비 % · 매출이익 색(플러스 빨강 · 마이너스 파랑)
 import BillingBoard from "./BillingBoard"; // 🧾 2026-11-17 청구 현황판(미청구 · 청구완료 · 입금완료)
 import { closeBoard } from "./closeFlow"; // ✅ 2026-11-16 2단계 마감 숫자
 import { n, won, short, kstYm, monthOf, stageFinder, summarizeSettle, clientLedger } from "./settleCore";
@@ -128,7 +128,7 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
         <div className="flex items-center gap-3 flex-wrap">
           <MonthPicker ym={ym} onChange={setYm} months={months} />
           <div className="ml-auto grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2" style={NUMS}>
-            {[["매출(청구)", S.sale, G.ink], ["매입(기사)", S.buy, G.sub], ["매출이익", S.profit, S.profit < 0 ? G.bad : G.ink], ["미수 잔액", agingTotal.total, agingTotal.total ? G.bad : G.ink]].map(([l, v, c]) => (
+            {[["매출(청구)", S.sale, G.ink], ["매입(기사)", S.buy, G.sub], ["매출이익", S.profit, profitColor(S.profit, { neutral: G.ink })], ["미수 잔액", agingTotal.total, agingTotal.total ? G.bad : G.ink]].map(([l, v, c]) => (
               <div key={l} className="text-right"><div className="text-[12.5px] font-bold text-[#5B6B85]">{l}</div><div className="text-[19px] font-black leading-tight whitespace-nowrap" style={{ color: c }}>{won(v)}<span className="text-[12.5px] text-[#9AA9C3] ml-0.5">원</span>{l === "매출이익" &&<MarginPct profit={S.profit} sales={S.sale} />}</div></div>))}
           </div>
         </div>

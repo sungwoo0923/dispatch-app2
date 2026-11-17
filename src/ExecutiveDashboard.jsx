@@ -7,6 +7,7 @@ import {
 import { EditableText } from "./EditMode";
 import { useLoadFullOrderHistory } from "./orderHistory";
 import { CustomSelect } from "./CustomSelect";
+import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 마진율 색(플러스 빨강 · 마이너스 파랑)
 
 // ─────────────────────────────────────────────────────────
 //  PIN GATE
@@ -226,12 +227,12 @@ function isRealClient(name) {
 // ─────────────────────────────────────────────────────────
 //  SHARED UI COMPONENTS
 // ─────────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, trend, primary }) {
+function KpiCard({ label, value, sub, trend, primary, valueColor }) { // ⭐ 2026-11-17 valueColor — 수익 · 마진율 색
   const up = trend >= 0;
   return (
     <div className="rounded-xl border p-5 flex flex-col justify-between" style={{ background: primary ? "#1B2B4B" : "white", borderColor: primary ? "#1B2B4B" : "#e5e7eb" }}>
       <div className="text-[12px] font-semibold mb-2" style={{ color: primary ? "rgba(255,255,255,0.5)" : "#9ca3af" }}>{label}</div>
-      <div className="text-[24px] font-black leading-none" style={{ color: primary ? "white" : "#1B2B4B" }}>{value}</div>
+      <div className="text-[24px] font-black leading-none" style={{ color: valueColor || (primary ? "white" : "#1B2B4B") }}>{value}</div>
       {sub && <div className="text-[12px] mt-1.5" style={{ color: primary ? "rgba(255,255,255,0.4)" : "#9ca3af" }}>{sub}</div>}
       {trend !== undefined && (
         <div className="text-[12px] font-semibold mt-2" style={{ color: up ? "#10b981" : "#ef4444" }}>
@@ -363,7 +364,7 @@ function OverviewTab({ data }) {
         <KpiCard primary label="연간 누적 매출" value={fmtW(cyRevSoFar)} sub={`${cyStr}년 기준`} trend={yoyTrend} />
         <KpiCard label="이번 달 매출" value={fmtW(tmRev)} sub={`${cyStr}.${cm}`} trend={tmTrend} />
         <KpiCard label="당월 예상 매출" value={fmtW(projectedRev)} sub={`${dayOfMonth}일 기준 추정`} />
-        <KpiCard label="연간 마진율" value={`${marginRate.toFixed(1)}%`} sub={`수익 ${fmtW(cyRevSoFar - tyCost)}`} />
+        <KpiCard label="연간 마진율" value={`${marginRate.toFixed(1)}%`} valueColor={profitRateColor(marginRate)} sub={`수익 ${fmtW(cyRevSoFar - tyCost)}`} />
         <KpiCard label="전체 오더" value={`${thisYear.length}건`} sub={`누적 ${data.length}건`} />
       </div>
 
@@ -405,7 +406,7 @@ function OverviewTab({ data }) {
                     <span className="text-[12px] font-semibold text-gray-500">{label}</span>
                     <span className="text-[12px] font-bold" style={{ color: chgColor(chg) }}>{chgLabel(chg)}</span>
                   </div>
-                  <div className="text-[14px] font-extrabold text-[#1B2B4B]">{fmt(curr)}</div>
+                  <div className="text-[14px] font-extrabold text-[#1B2B4B]" style={label === "수익" ? { color: profitColor(curr) } : undefined}>{fmt(curr)}</div>
                   <div className="text-[11px] text-gray-400">전월 동기 {fmt(prev)}</div>
                 </div>
               ))}
@@ -433,7 +434,7 @@ function OverviewTab({ data }) {
                       {up ? "▲" : "▼"} {Math.abs(pct).toFixed(1)}%
                     </span>
                   </div>
-                  <div className="text-[15px] font-extrabold text-[#1B2B4B]">{typeof curr === "number" && curr > 100 ? fmtW(curr) : `${curr}건`}</div>
+                  <div className="text-[15px] font-extrabold text-[#1B2B4B]" style={label === "수익" ? { color: profitColor(curr) } : undefined}>{typeof curr === "number" && curr > 100 ? fmtW(curr) : `${curr}건`}</div>
                   <div className="text-[11px] text-gray-400">전월 {typeof prev === "number" && prev > 100 ? fmtW(prev) : `${prev}건`}</div>
                 </div>
               );
@@ -464,9 +465,9 @@ function OverviewTab({ data }) {
                       <td className="py-2.5 px-3 font-semibold text-gray-700">{row.건수}건</td>
                       <td className="py-2.5 px-3 font-semibold text-gray-900">{row.매출.toLocaleString()}원</td>
                       <td className="py-2.5 px-3 text-gray-500">{(row.매출 - row.수익).toLocaleString()}원</td>
-                      <td className="py-2.5 px-3 font-semibold text-[#1B2B4B]">{row.수익.toLocaleString()}원</td>
+                      <td className="py-2.5 px-3 font-semibold text-[#1B2B4B]" style={{ color: profitColor(row.수익) }}>{row.수익.toLocaleString()}원</td>
                       <td className="py-2.5 px-3">
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold" style={{ background: "#f0f4f9", color: "#1B2B4B" }}>{margin.toFixed(1)}%</span>
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold" style={{ background: "#f0f4f9", color: profitRateColor(margin, { neutral: "#1B2B4B" }) }}>{margin.toFixed(1)}%</span>
                       </td>
                       <td className="py-2.5 px-3 font-semibold text-[13px]" style={{ color: momChg === null ? "#d1d5db" : momChg >= 0 ? "#059669" : "#ef4444" }}>
                         {momChg === null ? "—" : `${momChg >= 0 ? "▲" : "▼"}${Math.abs(momChg).toFixed(1)}%`}
@@ -526,7 +527,7 @@ function RevenueTab({ data }) {
         <KpiCard primary label="올해 누적 매출" value={fmtW(cyRev)} sub={cyStr} />
         <KpiCard label="전년 누적 매출" value={fmtW(lyRev)} sub={lyStr} />
         <KpiCard label="YoY 성장률" value={`${yoy >= 0 ? "+" : ""}${yoy.toFixed(1)}%`} sub="전년 대비" trend={yoy} />
-        <KpiCard label="올해 마진율" value={`${cyMarginR.toFixed(1)}%`} sub={`전년 ${lyMarginR.toFixed(1)}%`} />
+        <KpiCard label="올해 마진율" value={`${cyMarginR.toFixed(1)}%`} valueColor={profitRateColor(cyMarginR)} sub={`전년 ${lyMarginR.toFixed(1)}%`} />
       </div>
 
       <Card title="연도별 월간 매출 비교" subtitle={`${lyStr} vs ${cyStr}`}>

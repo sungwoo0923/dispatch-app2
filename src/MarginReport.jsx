@@ -7,6 +7,7 @@
 //  - 엑셀: 요약 / 구분별 비교 / 거래처별 비교 / 일자별 상세(당월·전월) / 손실 건 / 수수료 0% 건 / 미배차 페널티 건 / 기타
 import { MonthPicker } from "./kpInputs"; // 📅 2026-11-07 월 선택은 프로그램 달력으로
 import React from "react";
+import { profitStyle, profitRateColor, MARGIN_RED, MARGIN_BLUE } from "./marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
 import * as XLSX from "xlsx";
 import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 
@@ -192,10 +193,13 @@ const prevMonthOf = (k) => { const [y, m] = k.split("-").map(Number); const d = 
 const Diff = ({ v, unit = "won" }) => {
   if (!v) return <span className="text-gray-400">-</span>;
   const text = unit === "won" ? won(Math.abs(v)) : unit === "p" ? `${Math.abs(v)}%p` : `${Math.abs(v).toLocaleString()}건`;
-  return <span className={`font-bold ${v > 0 ? "text-blue-600" : "text-red-600"}`}>{v > 0 ? "▲" : "▼"} {text}</span>;
+  // ⭐ 2026-11-17 늘면 빨강 ▲ · 줄면 파랑 ▼(한국 금융 표기 — 예전엔 반대였다)
+  return <span className="font-bold" style={{ color: v > 0 ? MARGIN_RED : MARGIN_BLUE }}>{v > 0 ? "▲" : "▼"} {text}</span>;
 };
 const Th = ({ children, className = "" }) => <th className={`px-2.5 py-2.5 font-bold whitespace-nowrap ${className}`}>{children}</th>;
-const Td = ({ children, className = "" }) => <td className={`px-2.5 py-2.5 whitespace-nowrap tabular-nums ${className}`}>{children}</td>;
+const Td = ({ children, className = "", style }) => <td className={`px-2.5 py-2.5 whitespace-nowrap tabular-nums ${className}`} style={style}>{children}</td>;
+// ⭐ 2026-11-17 덜 남은 이익(이익이 줄어든 금액)은 파랑
+const GAP_STYLE = { color: MARGIN_BLUE };
 const CUR_TH = "bg-blue-50/70 text-[#1B2B4B]";
 
 export default function MarginReportModal({ rows, initialMonth, isExcluded, hasExcluded, onClose }) {
@@ -250,17 +254,17 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
     }
   };
 
-  const CompareCard = ({ label, a, b, fmt, diff, diffUnit, rateText }) => (
+  const CompareCard = ({ label, a, b, fmt, diff, diffUnit, rateText, profit = false }) => ( // ⭐ 2026-11-17 profit — 이익 · 매익률 값도 빨강/파랑
     <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4 min-w-0">
       <div className="text-[14px] font-bold text-gray-600">{label}</div>
       <div className="mt-2 grid grid-cols-2 gap-3">
         <div>
           <div className="text-[13px] font-semibold text-gray-500">{A}</div>
-          <div className="text-[20px] font-black text-gray-700 whitespace-nowrap tabular-nums">{fmt(a)}</div>
+          <div className="text-[20px] font-black text-gray-700 whitespace-nowrap tabular-nums" style={profit ? profitStyle(a) : undefined}>{fmt(a)}</div>
         </div>
         <div>
           <div className="text-[13px] font-bold text-[#1B2B4B]">{B}</div>
-          <div className="text-[20px] font-black text-[#1B2B4B] whitespace-nowrap tabular-nums">{fmt(b)}</div>
+          <div className="text-[20px] font-black text-[#1B2B4B] whitespace-nowrap tabular-nums" style={profit ? profitStyle(b) : undefined}>{fmt(b)}</div>
         </div>
       </div>
       <div className="mt-2 pt-2 border-t border-gray-100 text-[14px] flex items-center gap-2 whitespace-nowrap">
@@ -271,7 +275,7 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
   );
   const Bar = ({ v, max }) => (
     <div className="h-3 mt-1 bg-gray-100 rounded-full overflow-hidden">
-      <div className="h-full bg-red-500 rounded-full" style={{ width: `${Math.max(2, (v / max) * 100)}%` }} />
+      <div className="h-full bg-[#2D6BE0] rounded-full" style={{ width: `${Math.max(2, (v / max) * 100)}%` }} />
     </div>
   );
 
@@ -317,13 +321,13 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
               </div>
               <div className="px-6 py-5">
                 <div className="text-[14px] font-bold text-gray-600">{B} 실제 이익</div>
-                <div className="mt-1 text-[28px] font-black text-[#1B2B4B] tabular-nums whitespace-nowrap">{won(C.profit)}</div>
+                <div className="mt-1 text-[28px] font-black text-[#1B2B4B] tabular-nums whitespace-nowrap" style={profitStyle(C.profit)}>{won(C.profit)}</div>
                 <div className="text-[13px] text-gray-500 mt-1">매익률 {P.rate}% → {C.rate}% ({T.dRate >= 0 ? "▲" : "▼"}{Math.abs(T.dRate)}%p)</div>
               </div>
-              <div className="px-6 py-5 bg-red-50/60">
-                <div className="text-[14px] font-bold text-red-700">덜 남은 이익</div>
-                <div className="mt-1 text-[32px] font-black text-red-600 tabular-nums whitespace-nowrap">{won(R.shortfall)}</div>
-                {T.dSale > 0 && <div className="text-[13px] text-red-700/90 mt-1">늘어난 매출 {won(T.dSale)}의 이익률은 {pct(T.dProfit, T.dSale)}%</div>}
+              <div className="px-6 py-5 bg-[#EEF3FC]">
+                <div className="text-[14px] font-bold text-[#2D4C82]">덜 남은 이익</div>
+                <div className="mt-1 text-[32px] font-black text-[#2D6BE0] tabular-nums whitespace-nowrap">{won(R.shortfall)}</div>
+                {T.dSale > 0 && <div className="text-[13px] text-[#2D4C82]/90 mt-1">늘어난 매출 {won(T.dSale)}의 이익률은 {pct(T.dProfit, T.dSale)}%</div>}
               </div>
             </div>
           </div>
@@ -331,8 +335,8 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
           {/* 전월 vs 당월 카드 */}
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
             <CompareCard label="매출" a={P.sale} b={C.sale} fmt={won} diff={T.dSale} rateText={P.sale ? `${T.dSale >= 0 ? "+" : ""}${pct(T.dSale, P.sale)}%` : ""} />
-            <CompareCard label="이익(매익)" a={P.profit} b={C.profit} fmt={won} diff={T.dProfit} rateText={P.profit ? `${T.dProfit >= 0 ? "+" : ""}${pct(T.dProfit, P.profit)}%` : ""} />
-            <CompareCard label="매익률" a={P.rate} b={C.rate} fmt={(v) => `${v}%`} diff={T.dRate} diffUnit="p" />
+            <CompareCard profit label="이익(매익)" a={P.profit} b={C.profit} fmt={won} diff={T.dProfit} rateText={P.profit ? `${T.dProfit >= 0 ? "+" : ""}${pct(T.dProfit, P.profit)}%` : ""} />
+            <CompareCard profit label="매익률" a={P.rate} b={C.rate} fmt={(v) => `${v}%`} diff={T.dRate} diffUnit="p" />
             <CompareCard label="건수" a={P.cnt} b={C.cnt} fmt={(v) => `${v.toLocaleString()}건`} diff={C.cnt - P.cnt} diffUnit="cnt" />
           </div>
 
@@ -347,7 +351,7 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
                   <div key={s.seg}>
                     <div className="flex items-baseline justify-between gap-3 text-[15px]">
                       <span className="font-bold">{s.seg}</span>
-                      <span className="font-black text-red-600 tabular-nums whitespace-nowrap">{won(s.gap)}</span>
+                      <span className="font-black text-[#2D6BE0] tabular-nums whitespace-nowrap">{won(s.gap)}</span>
                     </div>
                     <Bar v={s.gap} max={maxSeg} />
                     <div className="text-[13px] text-gray-600 mt-1 tabular-nums">
@@ -366,7 +370,7 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
                   <div key={c.name}>
                     <div className="flex items-baseline justify-between gap-3 text-[15px]">
                       <span className="font-bold truncate">{c.name}</span>
-                      <span className="font-black text-red-600 tabular-nums whitespace-nowrap">{won(c.gap)}</span>
+                      <span className="font-black text-[#2D6BE0] tabular-nums whitespace-nowrap">{won(c.gap)}</span>
                     </div>
                     <Bar v={c.gap} max={maxClient} />
                     <div className="text-[13px] text-gray-600 mt-1 tabular-nums">
@@ -394,18 +398,18 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
                 {R.segments.map((s) => (
                   <tr key={s.seg} className={`border-t ${BAD_SEGMENTS.includes(s.seg) ? "bg-red-50/40" : ""}`}>
                     <Td className="font-bold">{s.seg}</Td>
-                    <Td className="text-right border-l">{s.prev.cnt}건</Td><Td className="text-right">{won(s.prev.sale)}</Td><Td className={`text-right ${s.prev.profit < 0 ? "text-red-600 font-bold" : ""}`}>{won(s.prev.profit)}</Td>
-                    <Td className="text-right border-l font-semibold">{s.cur.cnt}건</Td><Td className="text-right font-semibold">{won(s.cur.sale)}</Td><Td className={`text-right font-semibold ${s.cur.profit < 0 ? "text-red-600" : ""}`}>{won(s.cur.profit)}</Td>
+                    <Td className="text-right border-l">{s.prev.cnt}건</Td><Td className="text-right">{won(s.prev.sale)}</Td><Td className={`text-right ${s.prev.profit < 0 ? "font-bold" : ""}`} style={profitStyle(s.prev.profit)}>{won(s.prev.profit)}</Td>
+                    <Td className="text-right border-l font-semibold">{s.cur.cnt}건</Td><Td className="text-right font-semibold">{won(s.cur.sale)}</Td><Td className="text-right font-semibold" style={profitStyle(s.cur.profit)}>{won(s.cur.profit)}</Td>
                     <Td className="text-right border-l"><Diff v={s.dSale} /></Td><Td className="text-right"><Diff v={s.dProfit} /></Td>
-                    <Td className={`text-right font-black ${s.gap > 0 ? "text-red-600" : "text-gray-400"}`}>{s.gap > 0 ? won(s.gap) : "-"}</Td>
+                    <Td className={`text-right font-black ${s.gap > 0 ? "" : "text-gray-400"}`} style={s.gap > 0 ? GAP_STYLE : undefined}>{s.gap > 0 ? won(s.gap) : "-"}</Td>
                   </tr>
                 ))}
                 <tr className="border-t-2 border-[#DCE3EE] bg-gray-50 font-black">
                   <Td>합계</Td>
-                  <Td className="text-right border-l">{P.cnt}건</Td><Td className="text-right">{won(P.sale)}</Td><Td className="text-right">{won(P.profit)}</Td>
-                  <Td className="text-right border-l">{C.cnt}건</Td><Td className="text-right">{won(C.sale)}</Td><Td className="text-right">{won(C.profit)}</Td>
+                  <Td className="text-right border-l">{P.cnt}건</Td><Td className="text-right">{won(P.sale)}</Td><Td className="text-right" style={profitStyle(P.profit)}>{won(P.profit)}</Td>
+                  <Td className="text-right border-l">{C.cnt}건</Td><Td className="text-right">{won(C.sale)}</Td><Td className="text-right" style={profitStyle(C.profit)}>{won(C.profit)}</Td>
                   <Td className="text-right border-l"><Diff v={T.dSale} /></Td><Td className="text-right"><Diff v={T.dProfit} /></Td>
-                  <Td className="text-right text-red-600">{won(T.gap)}</Td>
+                  <Td className="text-right" style={T.gap > 0 ? GAP_STYLE : profitStyle(-T.gap)}>{won(T.gap)}</Td>
                 </tr>
               </tbody>
             </table>
@@ -456,15 +460,15 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
                     <Td className={`font-bold ${capturing ? "" : "max-w-[200px] truncate"}`}>{c.name}</Td>
                     <Td className="text-right border-l text-gray-600">{c.prev.cnt || "-"}</Td>
                     <Td className="text-right text-gray-600">{c.prev.cnt ? won(c.prev.sale) : "-"}</Td>
-                    <Td className={`text-right ${c.prev.profit < 0 ? "text-red-600" : "text-gray-600"}`}>{c.prev.cnt ? won(c.prev.profit) : "-"}</Td>
-                    <Td className="text-right text-gray-600">{c.prev.cnt ? `${c.prev.rate}%` : "-"}</Td>
+                    <Td className="text-right text-gray-600" style={c.prev.cnt ? profitStyle(c.prev.profit) : undefined}>{c.prev.cnt ? won(c.prev.profit) : "-"}</Td>
+                    <Td className="text-right text-gray-600" style={c.prev.cnt && profitRateColor(c.prev.rate) ? { color: profitRateColor(c.prev.rate) } : undefined}>{c.prev.cnt ? `${c.prev.rate}%` : "-"}</Td>
                     <Td className="text-right border-l font-semibold">{c.cur.cnt || "-"}</Td>
                     <Td className="text-right font-semibold">{c.cur.cnt ? won(c.cur.sale) : "-"}</Td>
-                    <Td className={`text-right font-semibold ${c.cur.profit < 0 ? "text-red-600" : ""}`}>{c.cur.cnt ? won(c.cur.profit) : "-"}</Td>
-                    <Td className={`text-right font-semibold ${c.cur.cnt && c.prev.cnt && c.cur.rate < c.prev.rate ? "text-red-600" : ""}`}>{c.cur.cnt ? `${c.cur.rate}%` : "-"}</Td>
+                    <Td className="text-right font-semibold" style={c.cur.cnt ? profitStyle(c.cur.profit) : undefined}>{c.cur.cnt ? won(c.cur.profit) : "-"}</Td>
+                    <Td className="text-right font-semibold" style={c.cur.cnt && profitRateColor(c.cur.rate) ? { color: profitRateColor(c.cur.rate) } : undefined}>{c.cur.cnt ? `${c.cur.rate}%` : "-"}</Td>
                     <Td className="text-right border-l"><Diff v={c.dSale} /></Td>
                     <Td className="text-right"><Diff v={c.dProfit} /></Td>
-                    <Td className={`text-right font-black ${c.gap > 0 ? "text-red-600" : "text-gray-400"}`}>{c.gap > 0 ? won(c.gap) : "-"}</Td>
+                    <Td className={`text-right font-black ${c.gap > 0 ? "" : "text-gray-400"}`} style={c.gap > 0 ? GAP_STYLE : undefined}>{c.gap > 0 ? won(c.gap) : "-"}</Td>
                     <Td className="text-right">{c.badCur || "-"}</Td>
                   </tr>
                 ))}

@@ -33,7 +33,7 @@ export function plBars(W, months, { compact = false, barH = 200, lowH = 110 } = 
     if (last || i === iMax) s += `<text x="${x + bw / 2}" y="${y - 8}" font-size="${fs + (last ? 2 : 0)}" font-weight="800" fill="${C.t1}" text-anchor="middle">${eokS(v)}</text>`;
     const o = op[i]; const y0 = yo(0), y1 = yo(o);
     if (o) s += `<rect x="${x}" y="${Math.min(y0, y1)}" width="${bw}" height="${Math.max(2, Math.abs(y1 - y0))}" rx="3" fill="${o > 0 ? (last ? C.n3 : "#8EA6D3") : "#C9CFDA"}">${tip}</rect>`;
-    if (last || (!compact && n <= 12)) s += `<text x="${x + bw / 2}" y="${o >= 0 ? y1 - 6 : y1 + 17}" font-size="${compact ? 12 : 13}" font-weight="${last ? 800 : 600}" fill="${last ? C.t1 : C.t2}" text-anchor="middle">${o < 0 ? "−" : ""}${fmt(Math.abs(o))}</text>`;
+    if (last || (!compact && n <= 12)) s += `<text x="${x + bw / 2}" y="${o >= 0 ? y1 - 6 : y1 + 17}" font-size="${compact ? 12 : 13}" font-weight="${last ? 800 : 600}" fill="${o > 0 ? C.pos : o < 0 ? C.neg : last ? C.t1 : C.t2}" text-anchor="middle">${o < 0 ? "−" : ""}${fmt(Math.abs(o))}</text>`; // ⭐ 2026-11-17 영업이익 숫자 — 플러스 빨강 · 마이너스 파랑
     if (!compact || i % 2 === (n - 1) % 2) s += `<text x="${x + bw / 2}" y="${H - 10}" font-size="${fs}" fill="${last ? C.t1 : C.t2}" font-weight="${last ? 700 : 400}" text-anchor="middle">${Number(m.m.slice(5, 7))}월</text>`;
   });
   return `${s}</svg>`;

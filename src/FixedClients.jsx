@@ -13,6 +13,7 @@ import { deleteDocsAtomic } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 �
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
 import { CompanyOptionPicker } from "./companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 import { kpConfirm } from "./kpDialog";
+import { profitCls, profitRateCls } from "./marginPct"; // ⭐ 2026-11-17 수수료 · 수익률 색(플러스 빨강 · 마이너스 파랑)
 
 const fmt = (n) => (n ? Number(n).toLocaleString() : "0");
 
@@ -97,7 +98,7 @@ function FCAttachViewer({ row, onClose }) {
   );
 }
 
-function KpiCard({ title, value, unit = "원", color = "blue" }) {
+function KpiCard({ title, value, unit = "원", color = "blue", valueCls = "text-gray-900" }) { // ⭐ 2026-11-17 valueCls — 글자색
   const colors = {
     blue: "border-l-blue-500 bg-blue-50/50",
     green: "border-l-emerald-500 bg-emerald-50/50",
@@ -107,7 +108,7 @@ function KpiCard({ title, value, unit = "원", color = "blue" }) {
   return (
     <div className={`bg-white rounded-xl border border-gray-200 border-l-4 ${colors[color]} shadow-sm p-4`}>
       <div className="text-[12px] font-semibold text-gray-500 mb-1">{title}</div>
-      <div className="text-[20px] font-bold text-gray-900">
+      <div className={`text-[20px] font-bold ${valueCls}`}>
         {value}<span className="text-[13px] font-semibold text-gray-400 ml-1">{unit}</span>
       </div>
     </div>
@@ -786,8 +787,8 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
       <div className="grid grid-cols-4 gap-4">
         <KpiCard title="총 청구금액" value={fmt(totalSale)} color="blue" />
         <KpiCard title="총 기사운임" value={fmt(totalDrv)} color="green" />
-        <KpiCard title="총 수수료" value={fmt(totalFee)} color="orange" />
-        <KpiCard title="수익률" value={marginRate} unit="%" color="purple" />
+        <KpiCard title="총 수수료" value={fmt(totalFee)} color="orange" valueCls={profitCls(totalFee, "text-gray-900")} />
+        <KpiCard title="수익률" value={marginRate} unit="%" color="purple" valueCls={profitRateCls(Number(marginRate), "text-gray-900")} />
       </div>
 
       {/* 검색 + 필터 */}

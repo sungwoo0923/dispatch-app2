@@ -7,11 +7,13 @@
 //  ⚠ 데이터 계산은 OfficeBooks.jsx CashBook(M.daily)이 한다 — 여기는 그리기만
 import React from "react";
 import { isHoliday } from "./attendanceUtils";
+import { profitColor } from "./marginPct"; // ⭐ 2026-11-17 순이익 · 차액 색(플러스 빨강 · 마이너스 파랑)
 
 const C_IN = "#3F63B5";
 const C_OUT = "#C8772F";
 const C_CUM = "#0F1A30";
-const NUM_FONT = "ui-monospace,'SF Mono','Roboto Mono',Menlo,Consolas,monospace";
+// ⭐ 2026-11-17 숫자 글꼴 — 고정폭(디지털) 글꼴 대신 앱 기본 글꼴 · 자리 맞춤(tabular-nums)만 유지
+const NUM_FONT = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NUM = { fontFamily: NUM_FONT, fontVariantNumeric: "tabular-nums" };
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 const won = (n) => Math.round(Number(n) || 0).toLocaleString("ko-KR");
@@ -91,17 +93,17 @@ export default function CashFlowChart({ daily = [], ym = "", today = "", compact
   const kpis = [
     ["총수입", `${won(S.tin)}원`, C_IN, null],
     ["총지출", `${won(S.tout)}원`, C_OUT, null],
-    ["순이익(수지)", `${S.net >= 0 ? "+" : "−"}${won(Math.abs(S.net))}원`, null, S.net < 0],
+    ["순이익(수지)", `${S.net >= 0 ? "+" : "−"}${won(Math.abs(S.net))}원`, null, S.net < 0, undefined, S.net],
     ["최대 지출일", S.max ? `${Number(ym.slice(5))}.${S.max.d} (${DOW[dowOf(S.max.d - 1)]})` : "–", null, false, S.max ? `−${won(S.max.out)}원` : "지출 없음"],
   ];
   return (
     <div data-testid="cashflow-chart">
       {/* 이 달 요약 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
-        {kpis.map(([l, v, dot, neg, sub]) => (
+        {kpis.map(([l, v, dot, neg, sub, profit]) => (
           <div key={l} className="rounded-2xl bg-[#F7F9FC] border border-[#E9EEF5] px-3 py-2.5 min-w-0">
             <div className="flex items-center gap-1.5 text-[12.5px] font-bold text-[#5B6B85] whitespace-nowrap">{dot && <span className="w-2.5 h-2.5 rounded-[3px] shrink-0" style={{ background: dot }} />}{l}</div>
-            <div className={`mt-0.5 text-[17px] md:text-[19px] font-black whitespace-nowrap truncate ${neg ? "text-[#B42318]" : "text-[#0F1A30]"}`} style={NUM}>{v}</div>
+            <div className={`mt-0.5 text-[17px] md:text-[19px] font-black whitespace-nowrap truncate ${neg ? "text-[#B42318]" : "text-[#0F1A30]"}`} style={{ ...NUM, ...(profit != null && profitColor(profit) ? { color: profitColor(profit) } : {}) }}>{v}</div>
             {sub && <div className="text-[12px] font-bold text-[#7A879C] truncate" style={NUM}>{sub}</div>}
           </div>
         ))}
@@ -177,8 +179,8 @@ export default function CashFlowChart({ daily = [], ym = "", today = "", compact
               {[["수입", h.in, C_IN, "+"], ["지출", h.out, C_OUT, "−"]].map(([l, v, c, sg]) => (
                 <div key={l} className="flex items-center gap-2 text-[12.5px] font-bold text-[#3A4A66] py-0.5"><span className="w-2.5 h-2.5 rounded-[3px]" style={{ background: c }} />{l}<span className="ml-auto font-black text-[#0F1A30]" style={NUM}>{v ? `${sg}${won(v)}` : "–"}</span></div>
               ))}
-              <div className="flex items-center gap-2 text-[12.5px] font-bold text-[#3A4A66] py-0.5 border-t border-[#EEF1F6] mt-1 pt-1.5">이날 차액<span className={`ml-auto font-black ${net < 0 ? "text-[#B42318]" : "text-[#0F1A30]"}`} style={NUM}>{net ? `${net > 0 ? "+" : "−"}${won(Math.abs(net))}` : "0"}</span></div>
-              {hover <= lastIdx && <div className="flex items-center gap-2 text-[12.5px] font-bold text-[#3A4A66] py-0.5"><span className="w-3 h-[2.5px] rounded-full" style={{ background: C_CUM }} />누계 차액<span className="ml-auto font-black text-[#0F1A30]" style={NUM}>{h.cum < 0 ? "−" : "+"}{won(Math.abs(h.cum))}</span></div>}
+              <div className="flex items-center gap-2 text-[12.5px] font-bold text-[#3A4A66] py-0.5 border-t border-[#EEF1F6] mt-1 pt-1.5">이날 차액<span className="ml-auto font-black text-[#0F1A30]" style={{ ...NUM, color: profitColor(net) }}>{net ? `${net > 0 ? "+" : "−"}${won(Math.abs(net))}` : "0"}</span></div>
+              {hover <= lastIdx && <div className="flex items-center gap-2 text-[12.5px] font-bold text-[#3A4A66] py-0.5"><span className="w-3 h-[2.5px] rounded-full" style={{ background: C_CUM }} />누계 차액<span className="ml-auto font-black text-[#0F1A30]" style={{ ...NUM, color: profitColor(h.cum) }}>{h.cum < 0 ? "−" : "+"}{won(Math.abs(h.cum))}</span></div>}
             </div>
           );
         })()}

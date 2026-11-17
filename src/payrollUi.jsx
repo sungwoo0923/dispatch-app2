@@ -33,7 +33,7 @@ export const Note = ({ kind = "info", children }) => (
   <div className={`rounded-xl px-3.5 py-2.5 text-[14px] font-bold leading-relaxed border ${kind === "error" ? "bg-[#FEF3F2] border-[#FECDCA] text-[#B42318]" : "bg-[#F5F8FD] border-[#DCE3EE] text-[#1B2B4B]"}`}>{children}</div>
 );
 // 칸 제목(영문 작은 글씨 + 제목)
-export const H = ({ en, children, right }) => <div className="px-4 pt-3.5 pb-2.5 flex items-center gap-2 flex-wrap"><div className="min-w-0"><div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={NUMS}>{en}</div><div className="text-[16px] font-black text-[#0F1A30]">{children}</div></div>{right && <div className="ml-auto flex items-center gap-1.5 flex-wrap">{right}</div>}</div>;
+export const H = ({ en, children, right }) => <div className="px-4 pt-3.5 pb-2.5 flex items-center gap-2 flex-wrap"><div className="min-w-0"><div className="text-[11px] font-extrabold tracking-[0.08em] text-[#4B6CB7]" style={NUMS}>{en}</div><div className="text-[16px] font-black text-[#0F1A30]">{children}</div></div>{right && <div className="ml-auto flex items-center gap-1.5 flex-wrap">{right}</div>}</div>;
 
 // 기본 드롭다운(브라우저 기본 select — 키보드·모바일 선택창 그대로) · options: [값, 이름] 또는 문자열 · groups: [[머리말, options]]
 export function Sel({ value, onChange, options = [], groups = null, disabled, className = "", placeholder, testid, dark = false, ariaLabel }) {

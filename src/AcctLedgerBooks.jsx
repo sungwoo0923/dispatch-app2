@@ -2,7 +2,7 @@
 // ⭐ 2026-11-17 회계관리 › 회계 장부 — 진짜 장부(총계정원장 · 분개장)처럼 보이게 새로 그림
 //  · 예전 DispatchApp.jsx AccountingDashboard 의 계산 · 저장(수금/지급 기록 · 초기화 · 부가세 엑셀)을 그대로 옮기고 "보이는 모양"만 바꿨다
 //  · 탭 4개(미수금 현황 · 지급 현황 · 부가세 자료 · 원가 분석)는 장부 색인 탭처럼 — 계정 코드(108 외상매출금 · 253 미지급금 · 255/135 부가세 · 451 매출원가)
-//  · 표: No. · 계정 코드 · 적요 · 일자(경과) · 차변 · 대변 · 잔액 · 누계 잔액 / 줄 친 장부 줄 · 고정폭 숫자 · 합계는 두 줄 밑줄(합계선)
+//  · 표: No. · 계정 코드 · 적요 · 일자(경과) · 차변 · 대변 · 잔액 · 누계 잔액 / 줄 친 장부 줄 · 자리 맞춤 숫자 · 합계는 두 줄 밑줄(합계선)
 //  · 계정 코드는 더존 같은 회계 프로그램에서 많이 쓰는 번호(참고용) — 회계용어(acctGlossary.js)에 "계정 코드 · 총계정원장 · 합계선" 추가
 //  ⚠ 숫자 계산은 receivablesOf · invoiceDriverPlates · isTaxInvoiceSale(arAging.js) — 회계 개요 · 거래처정산과 같은 식
 import React from "react";
@@ -13,10 +13,12 @@ import { receivablesOf, invoiceDriverPlates, isTaxInvoiceSale } from "./arAging"
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { EditableText } from "./EditMode";
 import { kpConfirm } from "./kpDialog";
+import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 이익 · 이익률 색(플러스 빨강 · 마이너스 파랑)
 
 // ── 장부 모양 ──
-const NUM_FONT = "ui-monospace,'SF Mono','Roboto Mono',Menlo,Consolas,monospace";
-const NUM = { fontFamily: NUM_FONT, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" };
+// ⭐ 2026-11-17 숫자 글꼴 — 고정폭(디지털) 글꼴이 읽기 불편하다는 요청으로 앱 기본 글꼴로 되돌림 · 자리 맞춤(tabular-nums)만 유지
+const NUM_FONT = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
+const NUM = { fontFamily: NUM_FONT, fontVariantNumeric: "tabular-nums" };
 const INK = "#0F1A30";
 const RULE = "#E4E9F1"; // 장부 가로줄
 const VRULE = "#D3DBE8"; // 칸 세로줄
@@ -38,7 +40,7 @@ const totalCell = { borderTop: `1.5px solid ${INK}`, borderBottom: `3px double $
 // 장부 머리 칸 — 위 작은 글씨(차변 · 대변 · 잔액) + 아래 이름
 const HeadLbl = ({ tag, children, color }) => (
   <span className="inline-flex flex-col leading-tight">
-    {tag && <span className="text-[10.5px] font-black tracking-[0.14em]" style={{ color: color || "#7A879C" }}>{tag}</span>}
+    {tag && <span className="text-[10.5px] font-black tracking-[0.08em]" style={{ color: color || "#7A879C" }}>{tag}</span>}
     <span>{children}</span>
   </span>
 );
@@ -240,7 +242,8 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
       <HeadLbl tag={tag} color={color}>{idp ? <EditableText id={`${idp}${k}`} defaultText={label || k} /> : label || k}</HeadLbl>
     </SortTh>
   );
-  const marginColor = (m, has = true) => (!has ? "#B5C0D3" : m >= 15 ? "#1F6F4A" : m >= 8 ? "#3A4A66" : NEG);
+  // ⭐ 2026-11-17 이익률 색 — 플러스 빨강 · 마이너스 파랑 · 0은 글자색(예전: 15% 이상 초록 · 8% 미만 빨강)
+  const marginColor = (m, has = true) => (!has ? "#B5C0D3" : profitRateColor(m, { neutral: INK }));
 
   // 원가 분석 표(차량 종류 · 배차 방식 같은 모양)
   // 함수로 부른다(컴포넌트로 쓰면 그릴 때마다 표를 새로 만든다)
@@ -267,7 +270,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
                 <td style={{ ...tdN, ...vl }}>{r.count.toLocaleString()}</td>
                 <td style={{ ...tdN, ...vlDouble }}>{amt(r.sales)}</td>
                 <td style={{ ...tdN, ...vl }}>{amt(r.costs)}</td>
-                <td style={{ ...tdN, ...vl, color: r.profit >= 0 ? INK : NEG, fontWeight: 900 }}>{amt(r.profit) || "0"}</td>
+                <td style={{ ...tdN, ...vl, color: profitColor(r.profit, { neutral: INK }), fontWeight: 900 }}>{amt(r.profit) || "0"}</td>
                 <td style={{ ...tdN, ...vl, color: marginColor(r.margin), fontWeight: 900 }}>{r.margin.toFixed(1)}%</td>
               </tr>
             ))}
@@ -278,7 +281,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
             <td style={{ ...tdN, ...vl, ...totalCell }}>{rows.reduce((s, r) => s + r.count, 0).toLocaleString()}</td>
             <td style={{ ...tdN, ...vlDouble, ...totalCell }}>{amt(ts)}</td>
             <td style={{ ...tdN, ...vl, ...totalCell }}>{amt(tc)}</td>
-            <td style={{ ...tdN, ...vl, ...totalCell, color: tp >= 0 ? INK : NEG }}>{amt(tp) || "0"}</td>
+            <td style={{ ...tdN, ...vl, ...totalCell, color: profitColor(tp, { neutral: INK }) }}>{amt(tp) || "0"}</td>
             <td style={{ ...tdN, ...vl, ...totalCell, color: marginColor(ts > 0 ? (tp / ts) * 100 : 0, ts > 0) }}>{ts > 0 ? ((tp / ts) * 100).toFixed(1) : "0.0"}%</td>
           </tr></tfoot>}
         </LedgerTable>
@@ -293,7 +296,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
       <div className="rounded-[18px] border border-[#D3DBE8] bg-white overflow-hidden">
         <div className="px-4 sm:px-5 py-3.5 flex flex-wrap items-center justify-between gap-3" style={{ background: "linear-gradient(180deg,#FFFFFF,#F6F8FC)", borderBottom: `3px double ${INK}` }}>
           <div className="min-w-0">
-            <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={NUM}>GENERAL LEDGER · 총계정원장</div>
+            <div className="text-[11px] font-extrabold tracking-[0.08em] text-[#4B6CB7]" style={NUM}>GENERAL LEDGER · 총계정원장</div>
             <h2 className="text-[19px] font-black text-[#0F1A30] leading-tight"><EditableText id="settlement.accounting.title" defaultText="회계 장부" /></h2>
             <p className="text-[13px] font-bold text-[#5B6B85] mt-0.5">회계연도 <span style={NUM}>{year}.01.01 ~ {year}.12.31</span> · 받을 돈 · 줄 돈 · 부가세 · 원가를 계정별로 봐요</p>
           </div>
@@ -525,7 +528,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
                       <td style={{ ...td, ...NUM, fontWeight: 800, color: empty ? "#B5C0D3" : INK }}>{year}.{mo}</td>
                       <td style={{ ...tdN, ...vlDouble, color: empty ? "#CBD3E0" : INK }}>{amt(d.sales) || "–"}</td>
                       <td style={{ ...tdN, ...vl, color: d.costs ? INK : "#CBD3E0" }}>{amt(d.costs) || "–"}</td>
-                      <td style={{ ...tdN, ...vl, fontWeight: profit ? 900 : 600, color: profit > 0 ? INK : profit < 0 ? NEG : "#CBD3E0" }}>{amt(profit) || "–"}</td>
+                      <td style={{ ...tdN, ...vl, fontWeight: profit ? 900 : 600, color: profitColor(profit, { neutral: "#CBD3E0" }) }}>{amt(profit) || "–"}</td>
                       <td style={{ ...tdN, ...vl, fontWeight: 900, color: marginColor(margin, !empty) }}>{empty ? "–" : `${margin.toFixed(1)}%`}</td>
                     </tr>
                   );
@@ -536,7 +539,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
                   <td style={{ ...td, ...totalCell }}>{year}년 합계</td>
                   <td style={{ ...tdN, ...vlDouble, ...totalCell }}>{amt(s) || "0"}</td>
                   <td style={{ ...tdN, ...vl, ...totalCell }}>{amt(c) || "0"}</td>
-                  <td style={{ ...tdN, ...vl, ...totalCell, color: p >= 0 ? INK : NEG }}>{amt(p) || "0"}</td>
+                  <td style={{ ...tdN, ...vl, ...totalCell, color: profitColor(p, { neutral: INK }) }}>{amt(p) || "0"}</td>
                   <td style={{ ...tdN, ...vl, ...totalCell, color: marginColor(s ? (p / s) * 100 : 0, s > 0) }}>{s ? `${((p / s) * 100).toFixed(1)}%` : "–"}</td>
                 </tr></tfoot>
               ); })()}
@@ -551,7 +554,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
         <div key={type} className="fixed inset-0 bg-[#0F1A30]/45 z-[99999] flex items-center justify-center p-4">
           <div className="bg-white rounded-[20px] shadow-2xl w-full max-w-sm overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-5 pt-4 pb-3" style={{ borderBottom: `3px double ${INK}` }}>
-              <div className="text-[11px] font-black tracking-[0.18em] text-[#7A879C]" style={NUM}>{side}</div>
+              <div className="text-[11px] font-black tracking-[0.08em] text-[#7A879C]" style={NUM}>{side}</div>
               <div className="font-black text-[17px] text-[#0F1A30]">{title}</div>
               <div className="text-[13.5px] font-bold text-[#5B6B85]">{name}</div>
             </div>

@@ -21,6 +21,7 @@ import { useFundsSummary } from "./FundsBoard";
 import { HD_MONO as MONO, HD_C as C, HD_CSS } from "./HomeDeck";
 import { AttendanceQuickButton } from "./attendanceQuick";
 import { LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
+import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 매익률 색(플러스 빨강 · 마이너스 파랑)
 
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const kst = (off = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(d.getUTCDate() + off); return d.toISOString().slice(0, 10); };
@@ -151,7 +152,7 @@ function Spark({ data = [], h = 38 }) {
 }
 
 // KPI 타일 — 값 크게(28~34px), 아래에 스파크라인 또는 진행 막대
-function KTile({ code, label, value, unit, foot, spark, bar, primary, warn }) {
+function KTile({ code, label, value, unit, foot, spark, bar, primary, warn, valueColor }) { // ⭐ 2026-11-17 valueColor — 수익 색
   return (
     <div className={primary ? "hd-tile hd-tile-on" : "hd-tile"} style={{ borderRadius: 16, padding: "16px 18px 12px", position: "relative", overflow: "hidden", minWidth: 0, display: "flex", flexDirection: "column" }}>
       {/* ⭐ 2026-11-02 화면 점검 — 모바일(좁은 폭)에서 영문 코드가 한글 라벨을 잘라먹던 문제: 영문 코드는 sm 이상에서만 표시, 한글 라벨은 말줄임 대신 단어 단위 줄바꿈 */}
@@ -160,7 +161,7 @@ function KTile({ code, label, value, unit, foot, spark, bar, primary, warn }) {
         <span className="hidden sm:inline" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.18em", color: warn ? WARN : C.dim, whiteSpace: "nowrap", flexShrink: 0 }}>{code}</span>
       </div>
       <div style={{ marginTop: 10, display: "flex", alignItems: "baseline", gap: 5, minWidth: 0 }}>
-        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: "clamp(24px, 2.2cqi, 34px)", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textShadow: primary ? `0 0 18px rgba(143,176,240,.45)` : "none" }}>{value}</span>
+        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: "clamp(24px, 2.2cqi, 34px)", fontWeight: 800, color: valueColor || "#fff", letterSpacing: "-0.02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textShadow: primary ? `0 0 18px rgba(143,176,240,.45)` : "none" }}>{value}</span>
         {unit && <span style={{ fontSize: 14, fontWeight: 700, color: C.dim }}>{unit}</span>}
       </div>
       <div style={{ marginTop: 5, minHeight: 20, fontSize: 13.5, fontWeight: 600, color: C.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{foot}</div>
@@ -456,7 +457,7 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
     <Deck>
       <DeckHead code={<LogisTag height={9} text="FINANCE DECK" />} att={att}
         title={myName ? `${myName}님, 오늘의 자금 흐름입니다` : "오늘의 자금 흐름입니다"}
-        sub={/* ⭐ 2026-11-02 화면 점검 — 항목(라벨+금액) 단위로 묶어 "지급 대기 / 0원"처럼 중간에서 줄바뀜 방지 */ <><span className="whitespace-nowrap">이번 달 매출 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(cur[0])}</b>원</span> · <span className="whitespace-nowrap">수익 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(cur[0] - cur[1])}</b>원</span> · <span className="whitespace-nowrap">미수 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(arSum)}</b>원</span> · <span className="whitespace-nowrap">지급 대기 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(apSum)}</b>원</span></>} />
+        sub={/* ⭐ 2026-11-02 화면 점검 — 항목(라벨+금액) 단위로 묶어 "지급 대기 / 0원"처럼 중간에서 줄바뀜 방지 */ <><span className="whitespace-nowrap">이번 달 매출 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(cur[0])}</b>원</span> · <span className="whitespace-nowrap">수익 <b style={{ color: profitColor(cur[0] - cur[1], { dark: true, neutral: "#fff" }), fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(cur[0] - cur[1])}</b>원</span> · <span className="whitespace-nowrap">미수 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(arSum)}</b>원</span> · <span className="whitespace-nowrap">지급 대기 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(apSum)}</b>원</span></>} />
 
       <div className="dd-kpi">
         <KTile primary code="CASH" label="보유 자금" value={F.has ? short(F.cash) : "미입력"} unit={F.has ? "원" : ""}
@@ -464,7 +465,7 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
           spark={(F.monthly || []).map((x) => x.in - x.out)} />
         <KTile code="REVENUE" label="이번 달 매출" value={short(cur[0])} unit="원" foot={`${cur[2].toLocaleString()}건 · 전월 ${short(prev[0])}원`} spark={six.map((x) => x.sale)} />
         <KTile code="PAYOUT" label="매입(기사운임)" value={short(cur[1])} unit="원" foot={`전월 ${short(prev[1])}원`} spark={six.map((x) => x.buy)} />
-        <KTile code="PROFIT" label="이번 달 수익" value={short(cur[0] - cur[1])} unit="원" foot={<>매익률 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.hi }}>{rate.toFixed(1)}%</b></>} spark={six.map((x) => x.profit)} />
+        <KTile code="PROFIT" label="이번 달 수익" value={short(cur[0] - cur[1])} unit="원" valueColor={profitColor(cur[0] - cur[1], { dark: true })} foot={<>매익률 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: profitRateColor(rate, { dark: true, neutral: C.hi }) }}>{rate.toFixed(1)}%</b></>} spark={six.map((x) => x.profit)} />
         <KTile code="RECEIVABLE" label="미수금" value={short(arSum)} unit="원" warn={arSum > 0} foot={`${arByClient.length}곳 · 지난 2개월 매출의 ${pctOf(arSum, six[3].sale + six[4].sale)}%`} bar={pctOf(arSum, six[3].sale + six[4].sale)} />
         <KTile code="PAYABLE" label="미지급(용차)" value={short(apSum)} unit="원" warn={apSum > 0} foot={`${ap.length}건 · 지급률 ${pctOf(paidSum, paidSum + apSum)}%`} bar={pctOf(paidSum, paidSum + apSum)} />
       </div>
@@ -473,7 +474,7 @@ function AcctDashboard({ company, dispatchData = [], onGo, me, att }) {
         <DPanel code="TREND · 6M" title="월별 매출 · 매입 · 수익" right={<button type="button" className="dd-link" disabled={H.loading} onClick={H.reload}>{H.loading ? "불러오는 중…" : "새로 고침"}</button>}>
           <div style={{ display: "flex", gap: 22, flexWrap: "wrap", marginBottom: 10 }}>
             {[["6개월 매출", sixSum[0]], ["6개월 매입", sixSum[1]], ["6개월 수익", sixSum[2]]].map(([l, v]) => (
-              <div key={l}><div style={{ fontSize: 13.5, fontWeight: 700, color: C.dim }}>{l}</div><div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 22, fontWeight: 800, color: "#fff" }}>{short(v)}<span style={{ fontSize: 13, color: C.dim, marginLeft: 3 }}>원</span></div></div>
+              <div key={l}><div style={{ fontSize: 13.5, fontWeight: 700, color: C.dim }}>{l}</div><div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 22, fontWeight: 800, color: (l === "6개월 수익" && profitColor(v, { dark: true })) || "#fff" }}>{short(v)}<span style={{ fontSize: 13, color: C.dim, marginLeft: 3 }}>원</span></div></div>
             ))}
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "flex-end", gap: 14, fontSize: 13.5, fontWeight: 700, color: C.sub }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: "#4B6CB7" }} />매출</span>

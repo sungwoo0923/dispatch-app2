@@ -9,6 +9,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { creatorOf } from "./monthCompare";
 import { AttendanceQuickButton } from "./attendanceQuick";
 import { LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
+import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 매익률 색(플러스 빨강 · 마이너스 파랑)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const C = { ink: "#E8EEF9", sub: "rgba(207,224,255,.8)", dim: "rgba(207,224,255,.72)", line: "rgba(143,176,240,.14)", glow: "#8FB0F0", hi: "#CFE0FF", accent: "#6E95E8" };
@@ -111,7 +112,7 @@ function Spark({ data, id }) {
   );
 }
 
-function Tile({ code, label, value, unit, foot, spark, sparkId, primary }) {
+function Tile({ code, label, value, unit, foot, spark, sparkId, primary, valueColor }) { // ⭐ 2026-11-17 valueColor — 수익 색
   return (
     <div className={primary ? "hd-tile hd-tile-on" : "hd-tile"} style={{ borderRadius: 16, padding: "14px 16px 10px", position: "relative", overflow: "hidden", minWidth: 0 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -119,7 +120,7 @@ function Tile({ code, label, value, unit, foot, spark, sparkId, primary }) {
         <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.18em", color: C.dim, whiteSpace: "nowrap", overflow: "hidden", flexShrink: 1, minWidth: 0, marginLeft: 6 }}>{code}</span>
       </div>
       <div style={{ marginTop: 8, display: "flex", alignItems: "baseline", gap: 5, minWidth: 0 }}>
-        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 27, fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</span>
+        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 27, fontWeight: 800, color: valueColor || "#fff", letterSpacing: "-0.02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</span>
         {unit && <span style={{ fontSize: 13, fontWeight: 700, color: C.dim }}>{unit}</span>}
       </div>
       <div style={{ marginTop: 4, minHeight: 18, fontSize: 13.5, fontWeight: 600, color: C.dim, display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>{foot}</div>
@@ -363,22 +364,22 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
           foot={<><Delta cur={t0[2]} prev={t1[2]} /><span>어제 대비</span></>} />
         <Tile code="REVENUE" label="오늘 매출" value={won(t0[0])} unit="원" spark={sparkS} sparkId="hdS2"
           foot={<><Delta cur={t0[0]} prev={t1[0]} /><span>어제 대비</span></>} />
-        <Tile code="PROFIT" label="오늘 수익" value={won(t0[1])} unit="원" spark={sparkP} sparkId="hdS3"
-          foot={<span>매익률 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.hi }}>{todayRate.toFixed(1)}%</b></span>} />
+        <Tile code="PROFIT" label="오늘 수익" value={won(t0[1])} unit="원" spark={sparkP} sparkId="hdS3" valueColor={profitColor(t0[1], { dark: true })}
+          foot={<span>매익률 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: profitRateColor(todayRate, { dark: true, neutral: C.hi }) }}>{todayRate.toFixed(1)}%</b></span>} />
         <Tile code="MONTH" label="이번 달 매출" value={ready ? short(mNow[0]) : "…"} unit="원"
           foot={ready ? <><Delta cur={mNow[0]} prev={mPrev[0]} /><span>전월 같은 기간 대비</span></> : "계산 중…"} />
         <Tile code="YEAR" label="올해 매출" value={ready ? short(yNow[0]) : "…"} unit="원"
-          foot={ready ? <span>누적 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.hi }}>{yNow[2].toLocaleString()}</b>건 · 수익 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.hi }}>{short(yNow[1])}</b></span> : "계산 중…"} />
+          foot={ready ? <span>누적 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.hi }}>{yNow[2].toLocaleString()}</b>건 · 수익 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: profitColor(yNow[1], { dark: true, neutral: C.hi }) }}>{short(yNow[1])}</b></span> : "계산 중…"} />
       </div>
 
       {/* ── 매출 추이 + 게이지 ── */}
       <div style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(0,2.25fr) minmax(250px,1fr)", gap: 14, marginBottom: 14 }}>
         <Panel code="TREND" title="매출 추이" right={<Seg value={range} onChange={setRange} items={[["7d", "7일"], ["30d", "30일"], ["year", "올해"]]} />}>
           <div style={{ display: "flex", gap: 22, marginBottom: 6, flexWrap: "wrap" }}>
-            {[["기간 매출", won(trendSum[0]) + "원"], ["기간 수익", won(trendSum[1]) + "원"], ["매익률", trendSum[0] ? `${((trendSum[1] / trendSum[0]) * 100).toFixed(1)}%` : "-"], ["최고", `${peak.label} · ${short(peak.s)}`], ["건수", `${trendSum[2].toLocaleString()}건`]].map(([k, v]) => (
+            {[["기간 매출", won(trendSum[0]) + "원"], ["기간 수익", won(trendSum[1]) + "원", profitColor(trendSum[1], { dark: true })], ["매익률", trendSum[0] ? `${((trendSum[1] / trendSum[0]) * 100).toFixed(1)}%` : "-", profitRateColor(trendSum[0] ? (trendSum[1] / trendSum[0]) * 100 : 0, { dark: true })], ["최고", `${peak.label} · ${short(peak.s)}`], ["건수", `${trendSum[2].toLocaleString()}건`]].map(([k, v, vc]) => (
               <div key={k}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.dim }}>{k}</div>
-                <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 16.5, fontWeight: 800, color: "#fff" }}>{v}</div>
+                <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 16.5, fontWeight: 800, color: vc || "#fff" }}>{v}</div>
               </div>
             ))}
             <div style={{ marginLeft: "auto", display: "flex", gap: 14, alignItems: "center", fontSize: 13, fontWeight: 700, color: C.sub }}>
@@ -413,10 +414,10 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
         <Panel code="MARGIN" title="이번 달 매익률">
           <Gauge value={monthRate} label={`${monthRate.toFixed(1)}%`} sub={`${Number(thisMonth.slice(5))}월 수익 ÷ 매출`} />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10 }}>
-            {[["월 수익", short(mNow[1])], ["일평균 매출", short(dayOfMonth ? mNow[0] / dayOfMonth : 0)], ["월 건수", `${mNow[2].toLocaleString()}건`], ["건당 매출", short(mNow[2] ? mNow[0] / mNow[2] : 0)]].map(([k, v]) => (
+            {[["월 수익", short(mNow[1]), profitColor(mNow[1], { dark: true })], ["일평균 매출", short(dayOfMonth ? mNow[0] / dayOfMonth : 0)], ["월 건수", `${mNow[2].toLocaleString()}건`], ["건당 매출", short(mNow[2] ? mNow[0] / mNow[2] : 0)]].map(([k, v, vc]) => (
               <div key={k} style={{ borderRadius: 11, padding: "9px 11px", background: "rgba(255,255,255,.035)", border: `1px solid ${C.line}` }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: C.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{k}</div>
-                <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 16, fontWeight: 800, color: "#fff", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ready ? v : "…"}</div>
+                <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 16, fontWeight: 800, color: (ready && vc) || "#fff", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ready ? v : "…"}</div>
               </div>
             ))}
           </div>
@@ -449,7 +450,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
                     <div style={{ height: 8, borderRadius: 99, background: "rgba(143,176,240,.1)", overflow: "hidden" }}>
                       <div style={{ height: "100%", width: `${Math.max(2, (v / staffMax) * 100)}%`, borderRadius: 99, background: i === 0 ? `linear-gradient(90deg,#4B6CB7,${C.hi})` : "linear-gradient(90deg,#2D4C82,#6E95E8)" }} />
                     </div>
-                    <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14, fontWeight: 800, color: "#fff", textAlign: "right" }}>{rankBy === "cnt" ? `${g.c}건` : short(v)}</span>
+                    <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14, fontWeight: 800, color: (rankBy === "profit" && profitColor(v, { dark: true })) || "#fff", textAlign: "right" }}>{rankBy === "cnt" ? `${g.c}건` : short(v)}</span>
                     <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 700, color: C.sub, textAlign: "right" }}>{g.c}건 · {g.s ? ((g.p / g.s) * 100).toFixed(1) : "0.0"}%</span>
                     <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 700, color: C.dim, textAlign: "right" }}>{share.toFixed(1)}%</span>
                   </div>

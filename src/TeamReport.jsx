@@ -19,6 +19,7 @@ import { printA4, savePdf, pdfBlobOf } from "./a4Export";
 import { uploadApFile } from "./ApprovalFiles";
 import { kpAlert } from "./kpDialog";
 import { periodOf, buildTeamReport, teamMembers, teamKind, reportText, OPINION_SECTIONS, setHolidayFn } from "./teamReportCore";
+import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 이익 · 이익률 색(플러스 빨강 · 마이너스 파랑)
 
 setHolidayFn((d) => !!getNationalHolidayLabel(d));
 const FONT = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',system-ui,sans-serif";
@@ -251,11 +252,11 @@ export default function TeamReport({ company, me }) {
 
           {/* 핵심 숫자 */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))", gap: 12 }}>
-            {[["매출액", `${man(c.sale)}`, "만원", <Delta key="a" v={rep.d.sale} />], ["매출총이익", `${man(c.profit)}`, "만원", <Delta key="b" v={rep.d.profit} />], ["매출총이익률", c.margin.toFixed(1), "%", <Delta key="c" v={rep.d.margin} unit="%p" />],
-              ["운송 건수", c.cnt.toLocaleString("ko-KR"), "건", <Delta key="d" v={rep.d.cnt} />], ["건당 이익", Math.round(c.perOrder).toLocaleString("ko-KR"), "원", <Delta key="e" v={rep.d.perOrder} />]].map(([l, v, u, d]) => (
+            {[["매출액", `${man(c.sale)}`, "만원", <Delta key="a" v={rep.d.sale} />], ["매출총이익", `${man(c.profit)}`, "만원", <Delta key="b" v={rep.d.profit} />, profitColor(c.profit)], ["매출총이익률", c.margin.toFixed(1), "%", <Delta key="c" v={rep.d.margin} unit="%p" />, profitRateColor(c.margin)],
+              ["운송 건수", c.cnt.toLocaleString("ko-KR"), "건", <Delta key="d" v={rep.d.cnt} />], ["건당 이익", Math.round(c.perOrder).toLocaleString("ko-KR"), "원", <Delta key="e" v={rep.d.perOrder} />, profitColor(c.perOrder)]].map(([l, v, u, d, vc]) => (
               <div key={l} className="tr-card" style={{ padding: "18px 20px" }}>
                 <div style={{ fontSize: 14.5, fontWeight: 700, color: C.t2 }}>{l}</div>
-                <div style={{ marginTop: 4 }}><span className="tr-num" style={{ fontSize: 30 }}>{v}</span><span style={{ fontSize: 15, fontWeight: 700, color: C.t2, marginLeft: 3 }}>{u}</span></div>
+                <div style={{ marginTop: 4 }}><span className="tr-num" style={{ fontSize: 30, color: vc }}>{v}</span><span style={{ fontSize: 15, fontWeight: 700, color: C.t2, marginLeft: 3 }}>{u}</span></div>
                 <div style={{ marginTop: 4, fontSize: 13.5, color: C.t3 }}>전기 대비 {d}</div>
               </div>
             ))}
@@ -274,7 +275,7 @@ export default function TeamReport({ company, me }) {
             <Card title="담당자별 실적 현황">
               <div style={{ overflowX: "auto" }}><table>
                 <thead><tr><th>담당자</th><th>매출액</th><th>매출총이익</th><th>이익률</th><th>건수</th><th>전기 대비</th></tr></thead>
-                <tbody>{rep.members.map((m) => <tr key={m.name}><td style={{ fontWeight: 800 }}>{m.name}{m.position ? <span style={{ color: C.t3, fontWeight: 600 }}> {m.position}</span> : null}</td><td className="tr-num" style={{ textAlign: "right" }}>{man(m.sale)}만</td><td className="tr-num" style={{ textAlign: "right" }}>{man(m.profit)}만</td><td className="tr-num" style={{ textAlign: "right" }}>{m.margin.toFixed(1)}%</td><td className="tr-num" style={{ textAlign: "right" }}>{m.cnt}</td><td style={{ textAlign: "right" }}><Delta v={m.d} size={14} /></td></tr>)}</tbody>
+                <tbody>{rep.members.map((m) => <tr key={m.name}><td style={{ fontWeight: 800 }}>{m.name}{m.position ? <span style={{ color: C.t3, fontWeight: 600 }}> {m.position}</span> : null}</td><td className="tr-num" style={{ textAlign: "right" }}>{man(m.sale)}만</td><td className="tr-num" style={{ textAlign: "right", color: profitColor(m.profit) }}>{man(m.profit)}만</td><td className="tr-num" style={{ textAlign: "right", color: profitRateColor(m.margin) }}>{m.margin.toFixed(1)}%</td><td className="tr-num" style={{ textAlign: "right" }}>{m.cnt}</td><td style={{ textAlign: "right" }}><Delta v={m.d} size={14} /></td></tr>)}</tbody>
               </table></div>
             </Card>
           </div>
@@ -283,7 +284,7 @@ export default function TeamReport({ company, me }) {
             <Card title="매출 상위 거래처 (Top 8)">
               <div style={{ overflowX: "auto" }}><table>
                 <thead><tr><th>순위</th><th>거래처</th><th>매출액</th><th>이익률</th><th>전기 대비</th></tr></thead>
-                <tbody>{rep.clients.top.map((x, i) => <tr key={x.n}><td className="tr-num" style={{ textAlign: "center" }}>{i + 1}</td><td style={{ fontWeight: 700 }}>{x.n}</td><td className="tr-num" style={{ textAlign: "right" }}>{man(x.sale)}만</td><td className="tr-num" style={{ textAlign: "right" }}>{x.margin.toFixed(1)}%</td><td style={{ textAlign: "right" }}>{x.prevSale ? <Delta v={x.d} size={14} /> : <b style={{ color: C.n3 }}>신규</b>}</td></tr>)}</tbody>
+                <tbody>{rep.clients.top.map((x, i) => <tr key={x.n}><td className="tr-num" style={{ textAlign: "center" }}>{i + 1}</td><td style={{ fontWeight: 700 }}>{x.n}</td><td className="tr-num" style={{ textAlign: "right" }}>{man(x.sale)}만</td><td className="tr-num" style={{ textAlign: "right", color: profitRateColor(x.margin) }}>{x.margin.toFixed(1)}%</td><td style={{ textAlign: "right" }}>{x.prevSale ? <Delta v={x.d} size={14} /> : <b style={{ color: C.n3 }}>신규</b>}</td></tr>)}</tbody>
               </table></div>
             </Card>
             <Card title="거래처별 매출 증감" sub={`비교 기간(${period.prevLabel}) 대비 매출액 증감`}>

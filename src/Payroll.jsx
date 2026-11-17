@@ -755,13 +755,13 @@ function Workspace({ company, ym, row, ro: roIn, busy, wide, xwide = false, pane
       {result && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className={`${sec} px-4 py-3.5`}>
-            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={NUMS}>NET PAY</div>
+            <div className="text-[11px] font-extrabold tracking-[0.08em] text-[#4B6CB7]" style={NUMS}>NET PAY</div>
             <div className="text-[16px] font-black text-[#0F1A30] mb-2">차인지급액 내역</div>
             {[["지급 총액", result.gross, ""], ["4대보험", insOf(result), "−"], ["소득세 · 지방소득세", taxOf(result), "−"], ["기타 공제", otherDedOf(result), "−"]].map(([l, v, sg]) => <div key={l} className="flex justify-between py-1 text-[14.5px] font-bold text-[#3A4A66]"><span>{sg && <span className="text-[#7A879C] mr-1">{sg}</span>}{l}</span><b className="text-[#0F1A30]" style={NUMS}>{wonFmt(v)}</b></div>)}
             <div className="mt-1.5 pt-2 border-t-2 border-[#1B2B4B] flex justify-between items-baseline"><span className="text-[15px] font-black text-[#0F1A30]">= 차인지급액</span><b className="text-[22px] text-[#0F1A30]" style={NUMS} data-testid="ed-net">{wonFmt(result.net)}원</b></div>
           </div>
           <div className={`${sec} px-4 py-3.5`}>
-            <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={NUMS}>EMPLOYER COST</div>
+            <div className="text-[11px] font-extrabold tracking-[0.08em] text-[#4B6CB7]" style={NUMS}>EMPLOYER COST</div>
             <div className="text-[16px] font-black text-[#0F1A30] mb-2">회사 부담(인건비)</div>
             {[["국민연금", result.employer?.np], ["건강보험", result.employer?.hi], ["장기요양", result.employer?.ltc], ["고용보험(+고용안정)", result.employer?.ei], ["산재보험", result.employer?.ia]].map(([l, v]) => <div key={l} className="flex justify-between py-0.5 text-[14px] font-bold text-[#3A4A66]"><span>{l}</span><b className="text-[#0F1A30]" style={NUMS}>{wonFmt(v)}</b></div>)}
             <div className="mt-1.5 pt-2 border-t border-[#DCE3EE] flex justify-between text-[14.5px] font-black text-[#0F1A30]"><span>회사 부담 합계</span><span style={NUMS}>{wonFmt(result.employer?.total)}</span></div>
@@ -805,7 +805,7 @@ function Workspace({ company, ym, row, ro: roIn, busy, wide, xwide = false, pane
   const preview = (
     <div className={`${sec} overflow-hidden`} data-testid="pay-preview">
       <div className="px-4 py-3 flex items-center gap-2 flex-wrap border-b border-[#EEF1F6]">
-        <div className="min-w-0"><div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={NUMS}>LIVE PREVIEW</div><div className="text-[16px] font-black text-[#0F1A30]">급여명세서 미리보기 <span className="text-[14px] font-bold text-[#5B6B85]">· 입력하면 바로 반영</span></div></div>
+        <div className="min-w-0"><div className="text-[11px] font-extrabold tracking-[0.08em] text-[#4B6CB7]" style={NUMS}>LIVE PREVIEW</div><div className="text-[16px] font-black text-[#0F1A30]">급여명세서 미리보기 <span className="text-[14px] font-bold text-[#5B6B85]">· 입력하면 바로 반영</span></div></div>
         <span className="flex-1" />
         {actions}
       </div>
@@ -1065,7 +1065,7 @@ function PayRates({ company, ro }) {
         right={<Sel dark ariaLabel="연도" value={String(year)} onChange={(v) => setYear(Number(v))} options={yearOpts.map((y) => [String(y), `${y}년 요율`])} className="w-[160px]" />} />
       <div className={`${sec} p-4`}>
         <div className="flex items-center gap-2 flex-wrap mb-3">
-          <div className="min-w-0"><div className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={NUMS}>SOCIAL INSURANCE</div><div className="text-[17px] font-black text-[#0F1A30]">{year}년 4대보험 요율 <span className="text-[14px] font-bold text-[#5B6B85]">· 근로자 부담</span></div></div>
+          <div className="min-w-0"><div className="text-[11px] font-extrabold tracking-[0.08em] text-[#4B6CB7]" style={NUMS}>SOCIAL INSURANCE</div><div className="text-[17px] font-black text-[#0F1A30]">{year}년 4대보험 요율 <span className="text-[14px] font-bold text-[#5B6B85]">· 근로자 부담</span></div></div>
           <span className="flex-1" />
           {changed > 0 && <span className="text-[14px] font-bold text-[#2D4C82]">기준값과 다른 칸 {changed}개</span>}
           {!ro && <button type="button" onClick={() => setF({ ...presetFor(year) })} className="h-10 px-3.5 rounded-xl border border-[#1B2B4B] bg-white text-[14px] font-black text-[#1B2B4B]" data-testid="rates-reset">{year} 기준값으로</button>}

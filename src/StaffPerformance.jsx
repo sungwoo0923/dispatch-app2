@@ -4,6 +4,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import { toWon, creatorOf, useStaffNames } from "./monthCompare";
 import { useLoadOrderRange, monthEnd, monthStartAgo } from "./orderHistory";
 import { CustomSelect } from "./CustomSelect";
+import { profitColor, profitRateColor, MARGIN_BLUE } from "./marginPct"; // ⭐ 2026-11-17 수익 · 수익률 색(플러스 빨강 · 마이너스 파랑)
 
 const NAVY = "#1B2B4B";
 const kstMonth = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
@@ -84,10 +85,10 @@ export default function StaffPerformance({ rows = [], isExcluded = () => false, 
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, flexShrink: 0 }}>
-            {[["담당자 수", `${list.length}명`], ["총 건수", `${tot.cnt.toLocaleString()}건`], ["총 매출", man(tot.sale)], ["총 수익", man(tot.profit)], ["평균 수익률", pct(totRate)], ["저마진·0원 이하", `${(tot.low + tot.neg).toLocaleString()}건`]].map(([l, v]) => (
+            {[["담당자 수", `${list.length}명`], ["총 건수", `${tot.cnt.toLocaleString()}건`], ["총 매출", man(tot.sale)], ["총 수익", man(tot.profit), profitColor(tot.profit)], ["평균 수익률", pct(totRate), profitRateColor(totRate * 100)], ["저마진·0원 이하", `${(tot.low + tot.neg).toLocaleString()}건`]].map(([l, v, vc]) => (
               <div key={l} style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 16, padding: "14px 16px", textAlign: "left", boxShadow: "0 1px 2px rgba(15,26,48,.04)" }}>
                 <div style={{ fontSize: 13.5, fontWeight: 800, color: "#5B6B86" }}>{l}</div>
-                <div style={{ fontSize: 23, fontWeight: 900, color: "#0F1A30", marginTop: 3, fontVariantNumeric: "tabular-nums" }}>{v}</div>
+                <div style={{ fontSize: 23, fontWeight: 900, color: vc || "#0F1A30", marginTop: 3, fontVariantNumeric: "tabular-nums" }}>{v}</div>
               </div>
             ))}
           </div>
@@ -119,12 +120,12 @@ export default function StaffPerformance({ rows = [], isExcluded = () => false, 
                         <td style={td}>{g.cnt.toLocaleString()}건</td>
                         <td style={td}>{man(g.sale)}</td>
                         <td style={td}>{man(g.driver)}</td>
-                        <td style={{ ...td, fontWeight: 900 }}>
+                        <td style={{ ...td, fontWeight: 900, color: profitColor(g.profit) }}>
                           {man(g.profit)}
-                          <div style={{ height: 5, background: "#eef1f6", borderRadius: 3, marginTop: 4 }}><div style={{ width: `${Math.round((Math.abs(g.profit) / maxProfit) * 100)}%`, height: "100%", background: g.profit >= 0 ? NAVY : "#D92D20", borderRadius: 3 }} /></div>
+                          <div style={{ height: 5, background: "#eef1f6", borderRadius: 3, marginTop: 4 }}><div style={{ width: `${Math.round((Math.abs(g.profit) / maxProfit) * 100)}%`, height: "100%", background: g.profit >= 0 ? NAVY : MARGIN_BLUE, borderRadius: 3 }} /></div>
                         </td>
-                        <td style={{ ...td, fontWeight: 900, color: lowRate ? "#D92D20" : "#0F1A30" }}>{pct(g.rate)}</td>
-                        <td style={td}>{Math.round(g.avgProfit).toLocaleString()}원</td>
+                        <td style={{ ...td, fontWeight: 900, color: profitRateColor(g.rate * 100, { neutral: "#0F1A30" }) }}>{pct(g.rate)}</td>
+                        <td style={{ ...td, color: profitColor(g.avgProfit) }}>{Math.round(g.avgProfit).toLocaleString()}원</td>
                         <td style={{ ...td, color: g.low ? "#2D4C82" : "#9AA8C2" }}>{g.low}건</td>
                         <td style={{ ...td, color: g.neg ? "#D92D20" : "#9AA8C2" }}>{g.neg}건</td>
                         <td style={td}>{g.clients.size}</td>

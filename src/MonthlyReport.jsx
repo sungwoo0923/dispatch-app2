@@ -9,6 +9,7 @@ import React, { useMemo, useState } from "react";
 import { statsOf, toWon } from "./monthCompare";
 import { useLoadOrderRange, monthEnd, monthStartAgo } from "./orderHistory";
 import { CustomSelect } from "./CustomSelect";
+import { profitStyle, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 색(플러스 빨강 · 마이너스 파랑)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const kstMonth = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
@@ -78,7 +79,8 @@ export default function MonthlyReport({ rows = [], isExcluded = () => false, has
               {[["운행 건수", sa.cnt, sb.cnt, `${sb.cnt.toLocaleString()}건`], ["매출", sa.sale, sb.sale, `${won(sb.sale)}원`, 1], ["수익", sa.profit, sb.profit, `${won(sb.profit)}원`, 1], ["수익률", sa.rate, sb.rate, pct(sb.rate), 0, 1], ["건당 수익", sa.avgProfit, sb.avgProfit, `${won(sb.avgProfit)}원`, 1], ["거래처 수", clientA.size, clientB.size, `${clientB.size}곳`]].map(([k, a, b, v, money, rate], i) => (
                 <div key={k} style={{ borderRadius: 14, padding: "12px 14px", background: i === 2 ? "#0F1A30" : "#F5F8FD", color: i === 2 ? "#fff" : "#0F1A30", border: i === 2 ? "none" : "1px solid #E3E8F0" }}>
                   <div style={{ fontSize: 12.5, fontWeight: 800, opacity: 0.7 }}>{k}</div>
-                  <div style={{ fontSize: 22, fontWeight: 900, fontFamily: MONO, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{v}</div>
+                  {/* ⭐ 2026-11-17 수익 · 수익률 · 건당 수익 — 플러스 빨강 · 마이너스 파랑 */}
+                  <div style={{ fontSize: 22, fontWeight: 900, fontFamily: MONO, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", ...(i === 2 || i === 4 ? profitStyle(b, { dark: i === 2 }) : i === 3 ? (profitRateColor(b * 100) ? { color: profitRateColor(b * 100) } : {}) : {}) }}>{v}</div>
                   <div style={{ fontSize: 12.5, marginTop: 2 }}>{i === 2 ? <span style={{ color: "#8FB0F0", fontWeight: 900 }}>{sb.profit - sa.profit >= 0 ? "▲" : "▼"} {man(Math.abs(sb.profit - sa.profit))}</span> : <Delta a={a} b={b} money={money} rate={rate} />}</div>
                 </div>
               ))}
@@ -88,7 +90,7 @@ export default function MonthlyReport({ rows = [], isExcluded = () => false, has
             {h("TOP CLIENTS", "매출 상위 거래처 10")}
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead><tr>{["거래처", "건수", "매출", "수익률", "전월 대비"].map((x, i) => <th key={x} style={{ ...th, textAlign: i ? "right" : "left", borderRadius: i === 0 ? "8px 0 0 0" : i === 4 ? "0 8px 0 0" : 0 }}>{x}</th>)}</tr></thead>
-              <tbody>{topClients.map((c) => <tr key={c.k}><td style={{ ...td, textAlign: "left", fontFamily: "inherit", fontWeight: 900, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis" }}>{c.k}</td><td style={td}>{c.s.cnt}</td><td style={td}>{man(c.s.sale)}</td><td style={td}>{pct(c.s.rate)}</td><td style={td}><Delta a={c.p.sale} b={c.s.sale} money /></td></tr>)}
+              <tbody>{topClients.map((c) => <tr key={c.k}><td style={{ ...td, textAlign: "left", fontFamily: "inherit", fontWeight: 900, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis" }}>{c.k}</td><td style={td}>{c.s.cnt}</td><td style={td}>{man(c.s.sale)}</td><td style={{ ...td, ...(profitRateColor(c.s.rate * 100) ? { color: profitRateColor(c.s.rate * 100) } : {}) }}>{pct(c.s.rate)}</td><td style={td}><Delta a={c.p.sale} b={c.s.sale} money /></td></tr>)}
                 {!topClients.length && <tr><td colSpan={5} style={{ ...td, textAlign: "center", color: "#9AA9C3" }}>이 달 운행이 없습니다</td></tr>}</tbody>
             </table>
           </div>
@@ -103,7 +105,7 @@ export default function MonthlyReport({ rows = [], isExcluded = () => false, has
             {h("VEHICLE CLASS", "차량 톤수별 수익성")}
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead><tr>{["톤수", "건수", "매출", "건당 수익", "수익률"].map((x, i) => <th key={x} style={{ ...th, textAlign: i ? "right" : "left" }}>{x}</th>)}</tr></thead>
-              <tbody>{tons.map((t) => <tr key={t.k}><td style={{ ...td, textAlign: "left", fontFamily: "inherit", fontWeight: 900 }}>{t.k}</td><td style={td}>{t.s.cnt}</td><td style={td}>{man(t.s.sale)}</td><td style={td}>{won(t.s.avgProfit)}</td><td style={td}>{pct(t.s.rate)}</td></tr>)}</tbody>
+              <tbody>{tons.map((t) => <tr key={t.k}><td style={{ ...td, textAlign: "left", fontFamily: "inherit", fontWeight: 900 }}>{t.k}</td><td style={td}>{t.s.cnt}</td><td style={td}>{man(t.s.sale)}</td><td style={{ ...td, ...profitStyle(t.s.avgProfit) }}>{won(t.s.avgProfit)}</td><td style={{ ...td, ...(profitRateColor(t.s.rate * 100) ? { color: profitRateColor(t.s.rate * 100) } : {}) }}>{pct(t.s.rate)}</td></tr>)}</tbody>
             </table>
           </div>
           <div style={box}>
@@ -122,7 +124,7 @@ export default function MonthlyReport({ rows = [], isExcluded = () => false, has
                 <div key={k} style={{ borderRadius: 14, padding: "12px 14px", background: "#F5F8FD", border: "1px solid #E3E8F0" }}><div style={{ fontSize: 12.5, fontWeight: 800, color: "#5B6B85" }}>{k}</div><div style={{ fontSize: 22, fontWeight: 900, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div><div style={{ fontSize: 12, color: "#7A89A3" }}>{sub}</div></div>
               ))}
             </div>
-            {risky.slice(0, 12).map((r, i) => <div key={r._id || i} style={{ display: "grid", gridTemplateColumns: "100px 1fr 1fr 120px 120px", gap: 8, padding: "7px 4px", borderBottom: "1px solid #EEF1F6", fontSize: 13.5 }}><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.상차일}</span><b>{r.거래처명}</b><span>{r.상차지명} → {r.하차지명}</span><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right" }}>청구 {won(toWon(r.청구운임))}</span><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right", fontWeight: 900 }}>수익 {won(toWon(r.청구운임) - toWon(r.기사운임) - toWon(r.외부지급합 ?? r.지게차비용))}</span></div>)}
+            {risky.slice(0, 12).map((r, i) => <div key={r._id || i} style={{ display: "grid", gridTemplateColumns: "100px 1fr 1fr 120px 120px", gap: 8, padding: "7px 4px", borderBottom: "1px solid #EEF1F6", fontSize: 13.5 }}><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.상차일}</span><b>{r.거래처명}</b><span>{r.상차지명} → {r.하차지명}</span><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right" }}>청구 {won(toWon(r.청구운임))}</span><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right", fontWeight: 900, ...profitStyle(toWon(r.청구운임) - toWon(r.기사운임) - toWon(r.외부지급합 ?? r.지게차비용)) }}>수익 {won(toWon(r.청구운임) - toWon(r.기사운임) - toWon(r.외부지급합 ?? r.지게차비용))}</span></div>)}
           </div>
         </div>
       </div>

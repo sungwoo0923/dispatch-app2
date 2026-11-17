@@ -5,6 +5,7 @@
 import React, { useMemo, useState } from "react";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Cell, BarChart } from "recharts";
 import { creatorOf, useStaffNames } from "./monthCompare";
+import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 매익률 색(플러스 빨강 · 마이너스 파랑)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NAVY = "#1B2B4B";
@@ -27,7 +28,7 @@ function Delta({ cur, prev, suffix = "", dark = false }) {
   return <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13.5, fontWeight: 800, color: dark ? (r >= 0 ? "#CFE0FF" : "rgba(207,224,255,.7)") : (r >= 0 ? NAVY : "#64748b") }}>{r >= 0 ? "▲" : "▼"} {Math.abs(r).toFixed(1)}%{suffix}</span>;
 }
 
-function Tile({ code, label, value, unit, foot, dark }) {
+function Tile({ code, label, value, unit, foot, dark, valueColor }) { // ⭐ 2026-11-17 valueColor — 수익 · 이익률 색
   return (
     <div style={{
       borderRadius: 16, padding: "15px 17px 13px", minWidth: 0,
@@ -40,7 +41,7 @@ function Tile({ code, label, value, unit, foot, dark }) {
         <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.16em", color: dark ? "rgba(143,176,240,.9)" : "#607089", whiteSpace: "nowrap" }}>{code}</span>
       </div>
       <div style={{ marginTop: 9, display: "flex", alignItems: "baseline", gap: 5 }}>
-        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 27, fontWeight: 800, color: dark ? "#fff" : "#0F1A30", letterSpacing: "-0.02em", whiteSpace: "nowrap" }}>{value}</span>
+        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 27, fontWeight: 800, color: valueColor || (dark ? "#fff" : "#0F1A30"), letterSpacing: "-0.02em", whiteSpace: "nowrap" }}>{value}</span>
         {unit && <span style={{ fontSize: 13, fontWeight: 700, color: dark ? "rgba(207,224,255,.55)" : "#607089" }}>{unit}</span>}
       </div>
       {foot && <div style={{ marginTop: 5, fontSize: 13.5, fontWeight: 600, color: dark ? "rgba(207,224,255,.65)" : "#5B6B85", display: "flex", gap: 6, alignItems: "center", whiteSpace: "nowrap" }}>{foot}</div>}
@@ -225,10 +226,10 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
       {/* KPI */}
       <div className="kp-rv-kpi" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 12 }}>
         <Tile dark code="REVENUE" label={`${M}월 매출`} value={short(m.sale)} unit="원" foot={<><Delta dark cur={m.sale} prev={pm.sale} /><span>전월 같은 기간</span></>} />
-        <Tile code="PROFIT" label={`${M}월 수익`} value={short(m.profit)} unit="원" foot={<><Delta cur={m.profit} prev={pm.profit} /><span>전월 같은 기간</span></>} />
-        <Tile code="MARGIN" label="매익률" value={m.rate.toFixed(1)} unit="%" foot={<span>전월 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: NAVY }}>{pmAll.rate.toFixed(1)}%</b> · {(m.rate - pmAll.rate >= 0 ? "+" : "") + (m.rate - pmAll.rate).toFixed(1)}%p</span>} />
+        <Tile code="PROFIT" label={`${M}월 수익`} value={short(m.profit)} unit="원" valueColor={profitColor(m.profit)} foot={<><Delta cur={m.profit} prev={pm.profit} /><span>전월 같은 기간</span></>} />
+        <Tile code="MARGIN" label="매익률" value={m.rate.toFixed(1)} unit="%" valueColor={profitRateColor(m.rate)} foot={<span>전월 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: NAVY }}>{pmAll.rate.toFixed(1)}%</b> · {(m.rate - pmAll.rate >= 0 ? "+" : "") + (m.rate - pmAll.rate).toFixed(1)}%p</span>} />
         <Tile code="ORDERS" label="오더 건수" value={m.cnt.toLocaleString()} unit="건" foot={<span>건당 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: NAVY }}>{short(m.cnt ? m.sale / m.cnt : 0)}</b>원 · <Delta cur={m.cnt} prev={pm.cnt} /></span>} />
-        <Tile code="FORECAST" label="월말 예상 매출" value={isCurrent && forecast ? short(forecast.sale) : short(m.sale)} unit="원" foot={isCurrent && forecast ? <span>예상 {forecast.count.toLocaleString()}건 · 수익 {short(forecast.profit)}</span> : <span>마감된 달</span>} />
+        <Tile code="FORECAST" label="월말 예상 매출" value={isCurrent && forecast ? short(forecast.sale) : short(m.sale)} unit="원" foot={isCurrent && forecast ? <span>예상 {forecast.count.toLocaleString()}건 · 수익 <b style={{ color: profitColor(forecast.profit) }}>{short(forecast.profit)}</b></span> : <span>마감된 달</span>} />
       </div>
 
       {/* 누적 레이스 + 목표 */}
@@ -387,7 +388,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
                 <div style={{ flex: 1, height: 5, borderRadius: 99, background: "#EEF1F6", overflow: "hidden" }}><div style={{ height: "100%", width: `${(s.sale / staffMax) * 100}%`, background: i === 0 ? NAVY : "#6E8BC4" }} /></div>
-                <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 700, color: "#5B6B85", whiteSpace: "nowrap" }}>{s.cnt}건 · {s.sale ? ((s.profit / s.sale) * 100).toFixed(1) : "0.0"}%</span>
+                <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, fontWeight: 700, color: "#5B6B85", whiteSpace: "nowrap" }}>{s.cnt}건 · <span style={{ color: profitRateColor(s.sale ? (s.profit / s.sale) * 100 : 0) }}>{s.sale ? ((s.profit / s.sale) * 100).toFixed(1) : "0.0"}%</span></span>
               </div>
             </div>
           ))}

@@ -38,6 +38,7 @@ import {
 import { C, spark, revMargin, cumChart, donut, weekBars, netFlowBars, trendLine } from "./dailyReportCharts";
 import { useBriefingPrefs, saveBriefingPrefs, useBriefingCompany, saveBriefingRecipients, useCompanyPeople, canSeeBriefing, isBriefDemo, BRIEF_LABEL, BRIEF_EN } from "./dailyReport";
 import { useRoleOptions } from "./customRoles";
+import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 수익률 색(플러스 빨강 · 마이너스 파랑)
 
 const demoOn = () => { try { return !!(import.meta.env.DEV && isDemoOn()); } catch { return false; } };
 const FONT = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',system-ui,sans-serif";
@@ -369,12 +370,12 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
   const workNow = workOn(lastBiz);
   const tiles = basis.multi ? [
     { k: `${basis.days.length}일 합산 매출`, v: fmt(man(cur.sale)), u: "만원", l1: "지난주 같은 기간", d1: pctChange(cur.sale, p7.sale), sp: sp.sale, hero: true },
-    { k: `${basis.days.length}일 수익`, v: fmt(man(cur.profit)), u: "만원", l1: "지난주 같은 기간", d1: pctChange(cur.profit, p7.profit), sp: sp.profit, note: `수익률 ${marginOf(cur).toFixed(1)}%` },
+    { k: `${basis.days.length}일 수익`, v: fmt(man(cur.profit)), u: "만원", vc: profitColor(cur.profit), l1: "지난주 같은 기간", d1: pctChange(cur.profit, p7.profit), sp: sp.profit, note: `수익률 ${marginOf(cur).toFixed(1)}%` },
     { k: `${basis.days.length}일 오더`, v: fmt(cur.all), u: "건", l1: "지난주 같은 기간", d1: pctChange(cur.all, p7.all), sp: sp.orders, note: `배차완료 ${cur.all ? ((cur.done / cur.all) * 100).toFixed(1) : "0.0"}%` },
   ] : [
     { k: "전일 매출", v: fmt(man(cur.sale)), u: "만원", d1: pctChange(cur.sale, p1.sale), d2: pctChange(cur.sale, p7.sale), sp: sp.sale, hero: true },
-    { k: "수익", v: fmt(man(cur.profit)), u: "만원", d1: pctChange(cur.profit, p1.profit), d2: pctChange(cur.profit, p7.profit), sp: sp.profit },
-    { k: "수익률", v: marginOf(cur).toFixed(1), u: "%", d1: marginOf(cur) - marginOf(p1), d2: marginOf(cur) - marginOf(p7), unit: "%p", sp: sp.margin },
+    { k: "수익", v: fmt(man(cur.profit)), u: "만원", vc: profitColor(cur.profit), d1: pctChange(cur.profit, p1.profit), d2: pctChange(cur.profit, p7.profit), sp: sp.profit },
+    { k: "수익률", v: marginOf(cur).toFixed(1), u: "%", vc: profitRateColor(marginOf(cur)), d1: marginOf(cur) - marginOf(p1), d2: marginOf(cur) - marginOf(p7), unit: "%p", sp: sp.margin },
     { k: "오더", v: fmt(cur.all), u: "건", d1: pctChange(cur.all, p1.all), d2: pctChange(cur.all, p7.all), sp: sp.orders, note: `배차완료 ${cur.all ? ((cur.done / cur.all) * 100).toFixed(1) : "0.0"}%` },
   ];
   if (!basis.multi && (hasAtt || demo)) tiles.push({ k: "근무자", v: fmt(workNow), u: "명", l1: "전 영업일", d1: workNow - workOn(bizSpan[bizSpan.length - 2] || lastBiz), d2: workNow - workOn(addDay(lastBiz, -7)), unit: "명", dp: 0, sp: bizSpan.map(workOn), note: `출근 기록 ${md(lastBiz)}` });
@@ -386,7 +387,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
     return (
       <div key={t.k} className="ebx-card" style={{ padding: compact ? "18px 16px 14px" : "24px 24px 18px", minWidth: 0, ...(dark ? { background: `linear-gradient(150deg,${C.n1},${C.n2})`, border: "1px solid #24365A", color: "#fff" } : null) }}>
         <div style={{ fontSize: compact ? 15 : 17, color: lc, fontWeight: 700 }}>{t.k}</div>
-        <div style={{ marginTop: 8, display: "flex", alignItems: "baseline", gap: 4, flexWrap: "wrap" }}><span className="ebx-num" style={{ fontSize: numFs, fontWeight: 800, lineHeight: 1.1, color: dark ? "#fff" : C.t1 }}>{t.v}</span><span style={{ fontSize: compact ? 15 : 18, color: lc, fontWeight: 600 }}>{t.u}</span></div>
+        <div style={{ marginTop: 8, display: "flex", alignItems: "baseline", gap: 4, flexWrap: "wrap" }}><span className="ebx-num" style={{ fontSize: numFs, fontWeight: 800, lineHeight: 1.1, color: (!dark && t.vc) || (dark ? "#fff" : C.t1) }}>{t.v}</span><span style={{ fontSize: compact ? 15 : 18, color: lc, fontWeight: 600 }}>{t.u}</span></div>
         <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 12px", fontSize: 15, color: lc, alignItems: "baseline" }}>
           <span>{compact && t.l1 === "지난주 같은 기간" ? "지난주" : t.l1 || prevLbl}</span><span style={{ textAlign: "right" }}><Delta v={t.d1} unit={t.unit} dp={t.dp} size={compact ? 16 : 17} light={dark} /></span>
           {t.d2 !== undefined && <><span>{wkLbl}</span><span style={{ textAlign: "right" }}><Delta v={t.d2} unit={t.unit} dp={t.dp} size={compact ? 16 : 17} light={dark} /></span></>}
@@ -421,10 +422,10 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
       <div style={{ display: "grid", gridTemplateColumns: wide ? "minmax(0,1.6fr) minmax(0,1fr)" : "1fr", gap: 32, marginTop: 18, alignItems: "start" }}>
         <Measure>{(w) => <Svg html={weekBars(w, compact ? 240 : 290, weekly.days, weekly.days.map((d, i) => (basis.days.includes(d.d) ? i : -1)).filter((i) => i >= 0), { compact })} />}</Measure>
         <div>
-          {[["주간 매출", `${fmt(man(weekly.cur.sale))}만`, `${fmt(man(weekly.prev.sale))}만`, pctChange(weekly.cur.sale, weekly.prev.sale)], ["주간 수익", `${fmt(man(weekly.cur.profit))}만`, `${fmt(man(weekly.prev.profit))}만`, pctChange(weekly.cur.profit, weekly.prev.profit)], ["평균 수익률", `${marginOf(weekly.cur).toFixed(1)}%`, `${marginOf(weekly.prev).toFixed(1)}%`, marginOf(weekly.cur) - marginOf(weekly.prev), "%p"], ["오더", `${fmt(weekly.cur.all)}건`, `${fmt(weekly.prev.all)}건`, pctChange(weekly.cur.all, weekly.prev.all)], ["신규 거래처", `${weekly.fresh}곳`, "", null]].map((r, i) => (
+          {[["주간 매출", `${fmt(man(weekly.cur.sale))}만`, `${fmt(man(weekly.prev.sale))}만`, pctChange(weekly.cur.sale, weekly.prev.sale)], ["주간 수익", `${fmt(man(weekly.cur.profit))}만`, `${fmt(man(weekly.prev.profit))}만`, pctChange(weekly.cur.profit, weekly.prev.profit), undefined, profitColor(weekly.cur.profit)], ["평균 수익률", `${marginOf(weekly.cur).toFixed(1)}%`, `${marginOf(weekly.prev).toFixed(1)}%`, marginOf(weekly.cur) - marginOf(weekly.prev), "%p", profitRateColor(marginOf(weekly.cur))], ["오더", `${fmt(weekly.cur.all)}건`, `${fmt(weekly.prev.all)}건`, pctChange(weekly.cur.all, weekly.prev.all)], ["신규 거래처", `${weekly.fresh}곳`, "", null]].map((r, i) => (
             <div key={r[0]} className={i ? "ebx-row" : ""} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 16, alignItems: "baseline", padding: "13px 0" }}>
               <span className="ebx-lbl">{r[0]}</span>
-              <span><b className="ebx-num" style={{ fontSize: 20 }}>{r[1]}</b>{r[2] && <span className="ebx-num" style={{ fontSize: 15, color: C.t3, fontWeight: 400, marginLeft: 8 }}>전주 {r[2]}</span>}</span>
+              <span><b className="ebx-num" style={{ fontSize: 20, color: r[5] }}>{r[1]}</b>{r[2] && <span className="ebx-num" style={{ fontSize: 15, color: C.t3, fontWeight: 400, marginLeft: 8 }}>전주 {r[2]}</span>}</span>
               <span style={{ minWidth: 76, textAlign: "right" }}>{r[3] == null ? <span className="ebx-num" style={{ color: weekly.fresh ? C.up : C.flat, fontSize: 17, fontWeight: 800 }}>{weekly.fresh ? `+${weekly.fresh}` : "–"}</span> : <Delta v={r[3]} unit={r[4] || "%"} size={17} />}</span>
             </div>
           ))}
@@ -501,8 +502,8 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
             <span className="ebx-num" style={{ fontSize: 17, color: i < 3 ? C.n3 : C.t3, fontWeight: 800 }}>{i + 1}</span>
             <b style={{ fontSize: 17, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={s.n}>{s.n}</b>
             <span className="ebx-num" style={{ fontSize: 18, whiteSpace: "nowrap", textAlign: "right" }}>{fmt(man(s.sale))}<span style={{ fontSize: 15, fontWeight: 500, color: C.t2 }}>만 · {pctStr(s.sale, sr.total, 0)}</span></span>
-            <span className="ebx-num" style={{ fontSize: 17, textAlign: "right" }}>{fmt(man(s.profit))}</span>
-            <span className="ebx-num" style={{ fontSize: 17, textAlign: "right", color: s.margin < 8 ? C.t2 : C.t1 }}>{s.margin.toFixed(1)}%</span>
+            <span className="ebx-num" style={{ fontSize: 17, textAlign: "right", color: profitColor(s.profit) }}>{fmt(man(s.profit))}</span>
+            <span className="ebx-num" style={{ fontSize: 17, textAlign: "right", color: profitRateColor(s.margin, { neutral: C.t1 }) }}>{s.margin.toFixed(1)}%</span>
             <span className="ebx-num" style={{ fontSize: 17, textAlign: "right" }}>{fmt(s.cnt)}</span>
             <span style={{ textAlign: "right" }}><Chg v={s.d} size={16} /></span>
            </div>
@@ -537,7 +538,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
             <div key={c.n} className={i ? "ebx-row" : ""} style={{ padding: "11px 0" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
                 <span style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}><span className="ebx-num" style={{ fontSize: 16, color: C.t3, width: 16 }}>{i + 1}</span><span style={{ fontSize: 17, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.n}</span>{low && <span className="ebx-tag">저마진</span>}</span>
-                <span style={{ display: "flex", alignItems: "baseline", gap: 12, whiteSpace: "nowrap" }}><b className="ebx-num" style={{ fontSize: 18 }}>{fmt(man(c.sale))}<span style={{ fontWeight: 500, color: C.t2, fontSize: 15 }}>만</span></b>{!compact && <span className="ebx-num" style={{ fontSize: 15, color: low ? C.t1 : C.t2, fontWeight: low ? 800 : 500, minWidth: 92, textAlign: "right" }}>수익률 {c.margin.toFixed(1)}%</span>}<span style={{ minWidth: 72, textAlign: "right" }}><Chg v={c.d} size={16} /></span></span>
+                <span style={{ display: "flex", alignItems: "baseline", gap: 12, whiteSpace: "nowrap" }}><b className="ebx-num" style={{ fontSize: 18 }}>{fmt(man(c.sale))}<span style={{ fontWeight: 500, color: C.t2, fontSize: 15 }}>만</span></b>{!compact && <span className="ebx-num" style={{ fontSize: 15, color: profitRateColor(c.margin, { neutral: C.t2 }), fontWeight: low ? 800 : 500, minWidth: 92, textAlign: "right" }}>수익률 {c.margin.toFixed(1)}%</span>}<span style={{ minWidth: 72, textAlign: "right" }}><Chg v={c.d} size={16} /></span></span>
               </div>
               <div style={{ margin: "7px 0 0 26px", height: 10, width: `calc(${((c.sale / maxC) * 100).toFixed(1)}% - 26px)`, minWidth: 4, borderRadius: "0 5px 5px 0", background: low ? "#9DB2D8" : C.n3 }} />
             </div>
@@ -910,7 +911,7 @@ function PopupBody({ company, dispatchData, prefs, loadRange, mobile, onClose })
   const fpct = month.target ? (month.forecast / month.target) * 100 : null;
   const nums = [
     [basis.multi ? `${basis.days.length}일 합산 매출` : "전일 매출", fmt(man(cur.sale)), "만원", <><Delta v={pctChange(cur.sale, basis.multi ? p7.sale : p1.sale)} size={16} /> <span style={{ color: C.t2 }}>{basis.multi ? "지난주 대비" : "전일 대비"}</span></>],
-    ["수익 · 수익률", fmt(man(cur.profit)), "만원", <><b className="ebx-num" style={{ color: C.t1 }}>{m.toFixed(1)}%</b> <Delta v={m - marginOf(basis.multi ? p7 : p1)} unit="%p" size={16} /></>],
+    ["수익 · 수익률", fmt(man(cur.profit)), "만원", <><b className="ebx-num" style={{ color: profitRateColor(m, { neutral: C.t1 }) }}>{m.toFixed(1)}%</b> <Delta v={m - marginOf(basis.multi ? p7 : p1)} unit="%p" size={16} /></>],
     ["이번 달 누계", fmt(man(month.mtd)), "만원", month.target ? <>목표 <b className="ebx-num" style={{ color: C.t1 }}>{((month.mtd / month.target) * 100).toFixed(1)}%</b> · 예상 {fpct.toFixed(0)}%</> : <>월말 예상 <b className="ebx-num" style={{ color: C.t1 }}>{eok(month.forecast)}</b></>],
   ];
   return (
@@ -923,7 +924,7 @@ function PopupBody({ company, dispatchData, prefs, loadRange, mobile, onClose })
           <div style={{ fontSize: 16, color: "#C9D4EA", marginTop: 6 }}>보고 기준 {basis.multi ? basis.label : mdDow(basis.start).replace("(", " (")} · {company}</div>
         </div>
         <div style={{ padding: mobile ? "20px 16px 6px" : "26px 34px 8px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(3,minmax(0,1fr))", gap: 12 }}>{nums.map((n) => <div key={n[0]} style={{ border: `1px solid ${C.line}`, borderRadius: 16, padding: mobile ? "14px 16px" : "18px 18px 16px", display: mobile ? "flex" : "block", justifyContent: "space-between", alignItems: "center", gap: 10 }}><div><div style={{ fontSize: 16, color: C.t2, fontWeight: 700 }}>{n[0]}</div><div style={{ marginTop: mobile ? 2 : 6 }}><span className="ebx-num" style={{ fontSize: mobile ? 30 : 36, fontWeight: 800 }}>{n[1]}</span><span style={{ fontSize: 16, color: C.t2 }}> {n[2]}</span></div></div><div style={{ fontSize: 15, marginTop: mobile ? 0 : 8, color: C.t2, textAlign: mobile ? "right" : "left" }}>{n[3]}</div></div>)}</div>
+          <div style={{ display: "grid", gridTemplateColumns: mobile ? "1fr" : "repeat(3,minmax(0,1fr))", gap: 12 }}>{nums.map((n) => <div key={n[0]} style={{ border: `1px solid ${C.line}`, borderRadius: 16, padding: mobile ? "14px 16px" : "18px 18px 16px", display: mobile ? "flex" : "block", justifyContent: "space-between", alignItems: "center", gap: 10 }}><div><div style={{ fontSize: 16, color: C.t2, fontWeight: 700 }}>{n[0]}</div><div style={{ marginTop: mobile ? 2 : 6 }}><span className="ebx-num" style={{ fontSize: mobile ? 30 : 36, fontWeight: 800, color: n[0] === "수익 · 수익률" ? profitColor(cur.profit) : undefined }}>{n[1]}</span><span style={{ fontSize: 16, color: C.t2 }}> {n[2]}</span></div></div><div style={{ fontSize: 15, marginTop: mobile ? 0 : 8, color: C.t2, textAlign: mobile ? "right" : "left" }}>{n[3]}</div></div>)}</div>
           <div style={{ marginTop: 18, background: "#F4F7FC", borderRadius: 16, padding: "18px 20px", fontSize: 18, lineHeight: 1.7, color: C.t1, wordBreak: "keep-all" }}>
             매출은 {basis.multi ? "지난주 같은 기간" : "전주 같은 요일"}보다 <b style={{ color: d7 == null || d7 === 0 ? C.flat : d7 > 0 ? C.up : C.down }}>{d7 == null ? "–" : `${d7 > 0 ? "▲" : d7 < 0 ? "▼" : ""} ${Math.abs(d7).toFixed(1)}%`}</b> {d7 == null || d7 >= 0 ? "늘었고" : "줄었고"} {fpct ? (fpct >= 100 ? <>월말 목표 달성(예상 {fpct.toFixed(0)}%)이 유력합니다.</> : <>월말에는 목표의 {fpct.toFixed(0)}% 수준이 예상됩니다.</>) : <>월말 {eok(month.forecast)}원이 예상됩니다.</>}
           </div>
