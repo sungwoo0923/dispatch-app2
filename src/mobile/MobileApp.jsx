@@ -10,6 +10,7 @@ import { useCompanyFeatures } from "../companyFeatures"; // ⭐ 2026-11-04 마�
 import { useBizModules, readBiz, writeBiz, bizInfo } from "../bizModules";
 import { reportScreen, installScreenVisibility, mobileScreenLabel } from "../screenReport";
 import { effectiveScope, isOfficeScope, scopeAllows } from "../workScope";
+import { audienceAllows, activeViewOf, setDispatchAlertsOn } from "../notifyAudience"; // ⭐ 2026-11-17 알림 받는 사람(역할 · 부서 · 지금 화면)
 import { isExecTeam } from "../teamNames"; // ⭐ 2026-11-17 임원 부서 통合관리자 → 경영 브리핑부터
 import { usePayTodo } from "../approvalPay"; // 💸 2026-11-15 지급 대기 지출결의 → 전자결재 숫자(PC와 같게)
 import { useRouteGroupFilter, RouteGroupDropdown, SheetLiveChip, RouteGroupField } from "../routeGroups";
@@ -2235,6 +2236,21 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const execHomeM = isExecM && !execFull;
   // 사내업무 범위는 사내업무 홈 · 경리업무만은 경리 화면 그대로 · ⭐ 2026-11-17 경영 브리핑이 부서 화면보다 먼저(임원 통합관리자)
   const deptMode = isOfficeScope(workScopeM) ? "office" : execHomeM ? "exec" : role === "test" ? "acct" : role === "hrManager" ? "hr" : role === "salesMgr" ? "sales" : null; // 💼 2026-11-10 영업관리자(영업사무원 포함) → 영업 화면
+  // ⭐ 2026-11-17 배차 알림(미배차 임박 · 상차 임박 · 긴급 오더 · 화주 요청 배너 · 기사 수락/거절 · 앱 켜 둔 동안의 배차 푸시)은 지금 운송 일을 하는 사람에게만
+  //  경리 · 인사 · 영업 역할 · 경리업무만 · 사내업무 계정은 끔, 통합관리자 · 최고관리자는 [운송] 화면일 때만(PC와 같은 기준 · src/notifyAudience.js)
+  const notifyCtxM = { realRole, role, view: roleView.view, workScope: workScopeM, execHome: execHomeM, deptMode };
+  const dispatchAlertsOnM = audienceAllows("dispatch", notifyCtxM);
+  const dispatchAlertsOnRef = useRef(dispatchAlertsOnM);
+  dispatchAlertsOnRef.current = dispatchAlertsOnM;
+  const notifyCtxRef = useRef(notifyCtxM);
+  notifyCtxRef.current = notifyCtxM;
+  React.useEffect(() => { setDispatchAlertsOn(dispatchAlertsOnM); }, [dispatchAlertsOnM]);
+  // 휴대폰 푸시는 서버가 받는 사람을 고른다 — 지금 보는 화면을 users/{uid}.activeView 에 적어 둔다(바뀔 때만 · PC와 같은 칸)
+  const notifyActiveViewM = activeViewOf(notifyCtxM);
+  React.useEffect(() => {
+    if (!user?.uid || !myProfM || ["driver", "shipper"].includes(realRole) || myProfM.activeView === notifyActiveViewM) return;
+    updateDoc(doc(db, "users", user.uid), { activeView: notifyActiveViewM, activeViewAt: Date.now() }).catch(() => {});
+  }, [user?.uid, notifyActiveViewM, !!myProfM, myProfM?.activeView]); // eslint-disable-line react-hooks/exhaustive-deps
   // 📊 2026-11-06 일일 경영 보고 — 기존 임원 판정(isExecM) 그대로(src/dailyReport.js canSeeBriefing)
   const briefCompanyM = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
   // 📥 2026-11-16 배차마감 도착(숫자 · 배너) · 🔒 최종마감 잠금 — PC와 같은 기준(src/closeInbox.jsx)
@@ -2712,7 +2728,7 @@ const quickRange = (days) => {
   const drvMeNameM = mobileUsers.find((u) => (u.uid || u.id) === user?.uid)?.name || myProfM?.name || "";
   const drvMeM = React.useMemo(() => ({ uid: ["driver", "shipper"].includes(role) ? "" : (user?.uid || ""), email: user?.email || "", name: drvMeNameM, isAdmin: ["admin", "totalMaster", "superadmin", "allMgr"].includes(realRole || role) }), [user?.uid, user?.email, drvMeNameM, realRole, role]);
   React.useEffect(() => { publishDriverOrderRows(orders, drvMeM); }, [orders, drvMeM]);
-  React.useEffect(() => { setDriverToastsMuted(!alarmEnabled || !!workScopeM); }, [alarmEnabled, workScopeM]); // 🗂 2026-11-17 경리업무만 · 사내업무 계정은 기사 알림 끔
+  React.useEffect(() => { setDriverToastsMuted(!alarmEnabled || !dispatchAlertsOnM); }, [alarmEnabled, dispatchAlertsOnM]); // 🗂 2026-11-17 경리업무만 · 사내업무 계정 · 운송 화면이 아닐 때는 기사 알림 끔
   const [canceledOrdersAll, setCanceledOrdersRaw] = useState([]);
   const canceledOrders = useMemo(() => carrierVisM.filter(canceledOrdersAll) || [], [canceledOrdersAll, carrierVisM]); // ⭐ 2026-11-06
   const setCanceledOrders = React.useCallback((v) => setCanceledOrdersRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v)), []); // ★ 취소내역 화면용
@@ -3067,6 +3083,9 @@ useEffect(() => {
     initForegroundFCM((payload) => {
       if (!alarmEnabledRef.current) return;
       if (toastMutedRef.current) return;
+      // ⭐ 2026-11-17 배차 푸시(신규 · 배차완료 · 재배차 · 취소 · 미배차 · 기사 거절 · 지연 · 담당 기사 출퇴근)는 지금 운송 화면일 때만 띄운다
+      const pd = payload.data || {};
+      if ((pd.cat === "dispatch" || /^fleet_/.test(String(pd.type || "")) || /^driverCheck/.test(String(pd.kind || ""))) && !audienceAllows("dispatch", notifyCtxRef.current)) return;
 
       // ⭐ 서버가 이제 notification이 아니라 data로만 보낸다(안드로이드 중복 알림
       // 버그 수정 — functions/index.js의 sendPushAndCleanup 주석 참고). 그래도
@@ -3179,7 +3198,7 @@ collections.forEach((name) => {
         return;
       }
 
-      if (!alarmEnabledRef.current) return;
+      if (!alarmEnabledRef.current || !dispatchAlertsOnRef.current) return; // ⭐ 2026-11-17 운송 화면이 아니면 배차 배너 없음
 
       // Initialize prevStatusMap if needed
       if (!dispatchPrevStatus.current[name]) dispatchPrevStatus.current[name] = new Map();
@@ -3626,7 +3645,7 @@ useEffect(() => {
 
 // 🔔 상차 임박 2시간 이내 감지 (⏱ 시간 흐름 포함)
 useEffect(() => {
-  if (!orders.length || !alarmEnabled) return;
+  if (!orders.length || !alarmEnabled || !dispatchAlertsOnM) return; // ⭐ 2026-11-17 운송 화면일 때만
 
   const TWO_HOURS = 120; // 분
 
@@ -3663,7 +3682,7 @@ useEffect(() => {
   const timer = setInterval(checkNearPickup, 60 * 1000);
 
   return () => clearInterval(timer);
-}, [orders, alarmEnabled]);
+}, [orders, alarmEnabled, dispatchAlertsOnM]);
 
 // --------------------------------------------------
 // 🔔🚨 미배차 임박 알림 (상차 30분 전, 배차중 + 차량번호 미입력)
@@ -3726,10 +3745,10 @@ useEffect(() => {
   const id = activeUrgentUnassigned ? (activeUrgentUnassigned.id || activeUrgentUnassigned._id) : null;
   if (id && id !== lastVibratedUrgentIdRef.current) {
     lastVibratedUrgentIdRef.current = id;
-    if (alarmEnabled) navigator.vibrate?.([200, 100, 200]);
+    if (alarmEnabled && dispatchAlertsOnM) navigator.vibrate?.([200, 100, 200]);
   }
   if (!id) lastVibratedUrgentIdRef.current = null;
-}, [activeUrgentUnassigned, alarmEnabled]);
+}, [activeUrgentUnassigned, alarmEnabled, dispatchAlertsOnM]);
 
 const dismissUrgentUnassigned = React.useCallback(() => {
   const id = activeUrgentUnassigned ? (activeUrgentUnassigned.id || activeUrgentUnassigned._id) : null;
@@ -3747,7 +3766,7 @@ const dismissUrgentUnassigned = React.useCallback(() => {
 
 // 긴급 오더 등록 즉시 알림 (등록되는 순간 1회)
 useEffect(() => {
-  if (!alarmEnabled || !orders.length) return;
+  if (!alarmEnabled || !dispatchAlertsOnM || !orders.length) return; // ⭐ 2026-11-17 운송 화면일 때만
 
   // 이미 알림 준 긴급 오더 기록 (중복 방지)
   const notified = JSON.parse(
@@ -3778,7 +3797,7 @@ useEffect(() => {
       JSON.stringify(next)
     );
   }
-}, [orders, alarmEnabled]);
+}, [orders, alarmEnabled, dispatchAlertsOnM]);
 
 
   useEffect(() => {
@@ -5742,7 +5761,7 @@ const title =
         {/* 🚨 미배차 임박 알림 (상차 30분 전, 배차중 + 차량번호 미입력) — PC의 미배차 임박
             팝업과 동일 조건. 여러 건이면 한 번에 하나씩, 상차시간이 급한 순서대로 뜨고
             닫기를 누르면 그 건만 사라지고 다음 건이 이어서 뜬다. */}
-        {activeUrgentUnassigned && (
+        {activeUrgentUnassigned && dispatchAlertsOnM && ( /* ⭐ 2026-11-17 운송 화면일 때만 */
           <div
             className="px-4 py-3 text-white shadow-lg"
             style={{ background: "#b91c1c", animation: "bannerDownMT 0.25s ease-out, urgentUnassignedBlink 1.1s ease-in-out infinite" }}
@@ -6059,7 +6078,7 @@ const title =
   onRefresh={page === "list" ? handleRefresh : undefined}
   onValidateOrders={undefined /* ⭐ 2026-11-04 오더검증 버튼 없앰 */}
   onMenu={page === "list" || page === "dept" ? () => setShowMenu(true) : undefined}
-  menuBadge={(alertCounts.approval || 0) + (payTodoM || 0) + (alertCounts.mineNew || 0) + (alertCounts.handover || 0) + (alertCounts.notice || 0) + ((["admin", "totalMaster", "superadmin", "viewer"].includes(role) || deptMode) ? (alertCounts.signupStaff || 0) + (alertCounts.signupDriver || 0) : 0) + drvCounts.orders + drvCounts.docs + drvCounts.sos /* ⭐ 2026-11-05 기사앱 이벤트 */ + unseenDispatchTotal /* ⭐ 2026-11-06 안 본 미배차·고정노선 미배차 */}
+  menuBadge={(alertCounts.approval || 0) + (payTodoM || 0) + (alertCounts.mineNew || 0) + (alertCounts.handover || 0) + (alertCounts.notice || 0) + ((["admin", "totalMaster", "superadmin", "viewer"].includes(role) || deptMode) ? (alertCounts.signupStaff || 0) + (alertCounts.signupDriver || 0) : 0) + (dispatchAlertsOnM ? drvCounts.orders + drvCounts.sos + unseenDispatchTotal : 0) /* ⭐ 2026-11-17 배차 숫자는 운송 화면일 때만 */ + drvCounts.docs /* ⭐ 2026-11-05 기사앱 이벤트 · 2026-11-06 안 본 미배차·고정노선 미배차 */}
   notifCount={unreadCount}
   onNotifClick={() => { setShowNotifPanel(true); markAllRead(); }}
   messengerUnread={messengerUnread}
@@ -6253,10 +6272,10 @@ onGoAttendance={() => {
           canBriefing={canBriefingM}
           execFull={execFull}
           onToggleExec={() => { toggleExecFull(); setShowMenu(false); }}
-          alertCounts={{ ...alertCounts, payTodo: payTodoM, drvOrders: drvCounts.orders, drvDocs: drvCounts.docs, drvSos: drvCounts.sos }}
-          unassignedCount={unseenUnassignedOrders.length /* ⭐ 2026-11-06 안 본 것만 */}
-          listUnseenCount={unseenListOrders.length}
-          fixedUnassignedCount={unseenFixedOrders.length}
+          alertCounts={{ ...alertCounts, payTodo: payTodoM, drvOrders: dispatchAlertsOnM ? drvCounts.orders : 0, drvDocs: drvCounts.docs, drvSos: dispatchAlertsOnM ? drvCounts.sos : 0 }}
+          unassignedCount={dispatchAlertsOnM ? unseenUnassignedOrders.length : 0 /* ⭐ 2026-11-06 안 본 것만 · 2026-11-17 운송 화면일 때만 */}
+          listUnseenCount={dispatchAlertsOnM ? unseenListOrders.length : 0}
+          fixedUnassignedCount={dispatchAlertsOnM ? unseenFixedOrders.length : 0}
           onDeleteAll={deleteAllOrders}
           setUiScale={setUiScale}
           uiScale={uiScale}

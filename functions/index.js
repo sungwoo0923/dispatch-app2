@@ -22,6 +22,8 @@ const { gate: appCheckGate } = makeAppCheckGate({ verifyToken: (t) => require("f
 
 const db = getFirestore();
 const messaging = getMessaging();
+// ⭐ 2026-11-17 알림 받는 사람(역할 · 부서 · 지금 보는 화면) — 배차 알림은 물류운송팀 + [운송] 화면을 보는 통합관리자 · 최고관리자만
+const { userAllows: notifyUserAllows, normalizeTeam: normTeamSrv } = require("./notifyAudience");
 
 // ⭐ 2026-11-02 한 계정 여러 기기 — 예전엔 users.fcmToken 하나만 저장해서, 같은 계정으로 안드로이드·아이폰(·PC)을
 //  같이 쓰면 마지막에 앱을 연 기기만 알림을 받았다(아이폰이 "갑자기" 안 오던 원인). fcmTokens(최근 기기 목록)까지 모두 보낸다.
@@ -69,6 +71,9 @@ async function getTokensForType(type, companyName) {
     if (u.role !== "totalMaster" && String(u.companyName || PUSH_DEFAULT_COMPANY).trim() !== co) return;
     if (u.role === "totalMaster" && co !== PUSH_DEFAULT_COMPANY) return; // 최고관리자는 기본 회사 알림만
     if (!isPushTypeEnabled(u.pushPrefs, type)) return;
+    // ⭐ 2026-11-17 배차 알림은 배차 일을 하는 사람에게만 — 경리 · 인사 · 영업 · 경리업무만 계정은 빼고,
+    //  화면 전환 역할(통합관리자 · 최고관리자)은 마지막으로 연 화면(users.activeView)이 [운송]일 때만(src/notifyAudience.js)
+    if (!notifyUserAllows(u, type)) return;
     tokens.push(...ts);
   });
   return [...new Set(tokens)];
@@ -345,6 +350,7 @@ exports.notifyNewDispatch =
           title: buildNotifTitle(isUrgent ? "긴급 오더 등록" : "신규 오더 등록", fields, data),
           body,
         },
+        data: { cat: "dispatch" }, // ⭐ 2026-11-17 모바일 앱이 켜져 있을 때 지금 운송 화면이 아니면 띄우지 않게(포그라운드)
         android: { priority: "high" },
         apns: { payload: { aps: { sound: "default" } } },
       }, type);
@@ -384,6 +390,7 @@ exports.notifyDispatchDone =
           title: buildNotifTitle("배차완료", doneFields, after),
           body,
         },
+        data: { cat: "dispatch" }, // ⭐ 2026-11-17 모바일 앱이 켜져 있을 때 지금 운송 화면이 아니면 띄우지 않게(포그라운드)
         android: { priority: "high" },
         apns: { payload: { aps: { sound: "default" } } },
       }, "배차완료");
@@ -423,6 +430,7 @@ exports.notifyRedispatch =
           title: "재배차 필요",
           body: `${after["거래처명"] || ""} ${after["상차지명"] || "-"} → ${after["하차지명"] || "-"}\n배정됐던 기사(${prevCar})가 취소되어 다시 배차중입니다.`,
         },
+        data: { cat: "dispatch" }, // ⭐ 2026-11-17 모바일 앱이 켜져 있을 때 지금 운송 화면이 아니면 띄우지 않게(포그라운드)
         android: { priority: "high" },
         apns: { payload: { aps: { sound: "default" } } },
       }, "재배차");
@@ -492,6 +500,7 @@ exports.notifyDispatchCanceled =
             title: "배차취소",
             body: `${after["거래처명"] || ""} ${after["상차지명"] || "-"} → ${after["하차지명"] || "-"} 오더가 취소되었습니다.`,
           },
+          data: { cat: "dispatch" }, // ⭐ 2026-11-17 모바일 앱이 켜져 있을 때 지금 운송 화면이 아니면 띄우지 않게(포그라운드)
           android: { priority: "high" },
           apns: { payload: { aps: { sound: "default" } } },
         }, "배차취소(취소상태 전환)");
@@ -523,6 +532,7 @@ exports.notifyDispatchDeleted =
             title: "배차취소",
             body: `${data["거래처명"] || ""} ${data["상차지명"] || "-"} → ${data["하차지명"] || "-"} 오더가 삭제되었습니다.`,
           },
+          data: { cat: "dispatch" }, // ⭐ 2026-11-17 모바일 앱이 켜져 있을 때 지금 운송 화면이 아니면 띄우지 않게(포그라운드)
           android: { priority: "high" },
           apns: { payload: { aps: { sound: "default" } } },
         }, "배차취소(완전삭제)");
@@ -749,13 +759,13 @@ exports.notifyDispatcherOrderRejected =
       } catch (e) { console.warn("거절 알림 기사 담당자 조회 실패:", e?.message || e); }
       const recipUids = [...new Set(uids.filter((x) => typeof x === "string" && x))];
       let token = [];
+      let eligible = 0; // ⭐ 2026-11-17 배차 일을 하는 담당자(운송 화면) — 아무도 없으면 회사 '재배차' 알림 대상에게
       if (recipUids.length) {
         const uSnaps = await db.getAll(...recipUids.map((uid) => db.collection("users").doc(uid)));
-        uSnaps.forEach((d) => { if (d.exists) token.push(...userTokens(d.data())); });
+        uSnaps.forEach((d) => { if (d.exists && notifyUserAllows(d.data(), "기사거절")) { eligible++; token.push(...userTokens(d.data())); } });
         token = [...new Set(token)];
-      } else {
-        token = await getTokensForType("재배차", co);
       }
+      if (!eligible) token = await getTokensForType("재배차", co);
       if (!token.length) return;
 
       // ⭐ 거절 처리와 동시에 차량번호/이름이 비워지므로(배차중으로 되돌림), after가
@@ -972,6 +982,7 @@ exports.notifyUnassignedUrgent = functions.pubsub
               title: buildNotifTitle("미배차 임박", notifFields, data),
               body: buildNotifBody(notifFields, data),
             },
+            data: { cat: "dispatch" }, // ⭐ 2026-11-17 모바일 앱이 켜져 있을 때 지금 운송 화면이 아니면 띄우지 않게(포그라운드)
             android: { priority: "high" },
             apns: { payload: { aps: { sound: "default" } } },
           }, "미배차 임박");
@@ -1113,10 +1124,12 @@ async function geocodeServerCached(rawAddr) {
   return g;
 }
 
-async function getUserToken(uid) {
-  if (!uid) return null;
+async function getUserToken(uid, cat = "") {
+  if (!uid) return [];
   const u = await db.collection("users").doc(uid).get().catch(() => null);
-  return u?.exists ? userTokens(u.data()) : [];
+  if (!u?.exists) return [];
+  // ⭐ 2026-11-17 배차 알림(cat)이면 지금 운송 일을 하는 사람에게만(src/notifyAudience.js)
+  return cat && !notifyUserAllows(u.data(), cat) ? [] : userTokens(u.data());
 }
 
 exports.notifyFleetLateArrival = functions.pubsub
@@ -1197,7 +1210,7 @@ exports.notifyFleetLateArrival = functions.pubsub
           const mgrUids = [...new Set([drv["담당자"]?.uid, o["createdByUid"]].filter(Boolean))];
           const mgrTokens = [];
           for (const uid of mgrUids) {
-            for (const t of await getUserToken(uid)) if (!mgrTokens.includes(t)) mgrTokens.push(t);
+            for (const t of await getUserToken(uid, "기사지연")) if (!mgrTokens.includes(t)) mgrTokens.push(t);
           }
           if (mgrTokens.length) {
             await sendPushAndCleanup(mgrTokens, {
@@ -5144,6 +5157,7 @@ const NOTICE_ADMIN_ROLES = ["admin", "totalMaster", "superadmin"];
 async function sendNoticePush(n) {
   const company = n.companyName || "돌캐";
   const teams = Array.isArray(n.teams) ? n.teams : [];
+  const teamsN = teams.map(normTeamSrv).filter(Boolean);
   const auds = Array.isArray(n.audiences) && n.audiences.length ? n.audiences : null;
   const toStaff = !auds || auds.includes("internal") || auds.includes("shipper");
   const toDriver = !!auds && auds.includes("driver");
@@ -5160,7 +5174,8 @@ async function sendNoticePush(n) {
     } else {
       if (!toStaff) return;
       // ⭐ 2026-11-03 지정 공지 비공개 — 직원·팀 지정이면 지정된 사람(팀원)에게만. 관리자·다른 직원에게는 보내지 않는다(작성자는 위에서 제외)
-      if (targetUids.size || teams.length) { if (!targetUids.has(d.id) && !teams.includes(String(u.team || "").trim())) return; }
+      // ⭐ 2026-11-17 부서 이름 정리 — 예전 이름(운영팀 → 경영지원팀 등)도 같은 팀으로 본다(src/notifyCore.js 와 같음)
+      if (targetUids.size || teams.length) { if (!targetUids.has(d.id) && !teamsN.includes(normTeamSrv(u.team))) return; }
     }
     if (!isPushTypeEnabled(u.pushPrefs, "공지사항")) return;
     tokens.push(...userTokens(u));
@@ -5282,6 +5297,7 @@ exports.notifyDriverCheckout = functions.firestore.document("driver_logs/{id}").
     if (u.approved === false || u.employmentStatus === "퇴사" || NON_STAFF_ROLES.has(u.role)) return null;
     if (u.role !== "totalMaster" && String(u.companyName || PUSH_DEFAULT_COMPANY).trim() !== company) return null;
     if (!isPushTypeEnabled(u.pushPrefs, "기사출퇴근")) return null;
+    if (!notifyUserAllows(u, "기사출퇴근")) return null; // ⭐ 2026-11-17 담당자가 지금 경리 · 인사 화면이면 보내지 않는다
     const name = String(l.driverName || drv.name || drv.이름 || "기사");
     const car = String(l.carNo || drv.carNo || drv.차량번호 || "");
     const ms = l.timestamp && typeof l.timestamp.toMillis === "function" ? l.timestamp.toMillis() : Date.now();

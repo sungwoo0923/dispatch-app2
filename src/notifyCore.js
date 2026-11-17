@@ -4,6 +4,7 @@
 //  · 안 읽은 공지 = 내가 쓴 글이 아니고 · 게시됐고 · readBy에 내가 없고 · 최근 30일 안의 글
 //  · 1분마다 다시 계산(useMinuteTick) — 예약 시각이 지나면 저절로 나타난다
 import React from "react";
+import { normalizeTeam } from "./teamNames"; // ⭐ 2026-11-17 예전 부서 이름(운영팀 → 경영지원팀 등)도 같은 팀으로
 
 export const toMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : typeof v === "number" ? v : typeof v === "string" && v ? (Date.parse(v) || 0) : 0);
 export const DAY_MS = 86400e3;
@@ -35,8 +36,9 @@ export function canSeeTargetedNotice(n, me) {
   if (n.authorUid && uid && n.authorUid === uid) return true;
   if (me?.role === "totalMaster") return true;
   if (uid && noticeTargetUids(n).includes(uid)) return true;
-  const team = String(me?.team || "").trim();
-  return !!team && noticeTargetTeams(n).includes(team);
+  // ⭐ 2026-11-17 부서 이름 정리 — 공지에 고른 팀 · 내 팀 모두 새 이름으로 읽어 비교(서버 푸시 functions sendNoticePush 와 같음)
+  const team = normalizeTeam(me?.team);
+  return !!team && noticeTargetTeams(n).map(normalizeTeam).includes(team);
 }
 
 // 1분마다 바뀌는 시각 — 예약 공지가 게시 시각을 넘기면 다시 그리게

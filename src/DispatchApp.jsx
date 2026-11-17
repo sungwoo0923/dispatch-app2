@@ -2999,6 +2999,7 @@ import { hardReloadForUpdate } from "./UpdateBanner";
 import { textifyOrder } from "./orderText"; // 🛠 2026-11-16 숫자로 저장된 글자 칸(차량번호 등) → 글자 // ✅ 2026-11-16 2단계 마감 — 배차현황 › 월 마감(배차자 1차) · 정산관리 › 마감 검증(경리 2차)
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "./orderHistoryCache";
 import { effectiveScope, scopeAllows, isOfficeBaseMenu, isOfficeScope } from "./workScope";
+import { audienceAllows, activeViewOf, setDispatchAlertsOn, dispatchAlertsOn, DISPATCH_TOAST_TYPES } from "./notifyAudience"; // ⭐ 2026-11-17 알림 받는 사람(역할 · 부서 · 지금 화면)
 import BizSwitcher from "./freight/BizSwitcher";
 const FreightWorkspace = React.lazy(() => import("./freight/FreightWorkspace"));
 const FreightRevenueStrip = React.lazy(() => import("./freight/FreightSettle").then((m) => ({ default: m.FreightRevenueStrip })));
@@ -6443,6 +6444,8 @@ const ToastContext = React.createContext(null);
 window.__sflowToastQueue = window.__sflowToastQueue || [];
 
 function sflowToast(message, type, meta) {
+  // ⭐ 2026-11-17 배차 토스트(오더 등록 · 배차완료 · 화주 요청 · 수정/취소 요청)는 지금 운송 일을 하는 사람에게만 — 경리 · 인사 · 영업 · 경영 화면이면 띄우지 않는다
+  if (DISPATCH_TOAST_TYPES.includes(type) && !dispatchAlertsOn()) return;
   if (window.__sflowShowToast) {
     window.__sflowShowToast(message, type, meta);
   } else {
@@ -8417,7 +8420,17 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   // 🗂 2026-11-13 업무 범위(사내업무만 / 사내업무 + 경리) — 배차 메뉴 없이 사내업무 화면만(src/workScope.js). 최고관리자는 해당 없음
   // 🛠 2026-11-15 실제 권한 기준(화면을 바꿔도 같다) · 그 권한에서 고를 수 없는 값은 무시(통합관리자 = 전체 고정 등 · src/workScope.js effectiveScope)
   const workScope = role === "totalMaster" || realRole === "totalMaster" ? "" : effectiveScope(realRole, myProfileDoc?.workScope, myProfileDoc?.isMaster === true);
-  const dispatchAlertsOff = !!workScope; // ⭐ 2026-11-17 업무 범위가 있는 계정(사내업무 · 경리업무만)은 배차 알림(재촉 · 수정/취소 요청 · 기사 토스트)을 띄우지 않는다
+  // ⭐ 2026-11-17 배차 알림(재촉 · 수정/취소 요청 · 기사 토스트 · 배차 토스트 · 메뉴 숫자)은 지금 운송 일을 하는 사람에게만(src/notifyAudience.js)
+  //  · 업무 범위가 있는 계정(사내업무 · 경리업무만) · 경리 · 인사 · 영업 역할은 끔 · 통합관리자 · 최고관리자는 [운송] 화면을 보는 동안만
+  const notifyCtx = { realRole, role, view: roleView.view, workScope, execHome, deptMode };
+  const dispatchAlertsOff = !audienceAllows("dispatch", notifyCtx);
+  const notifyActiveView = activeViewOf(notifyCtx);
+  React.useEffect(() => { setDispatchAlertsOn(!dispatchAlertsOff); }, [dispatchAlertsOff]);
+  // 휴대폰 푸시는 서버가 받는 사람을 고른다 — 지금 보는 화면을 users/{uid}.activeView 에 적어 둔다(바뀔 때만 · 모바일도 같은 칸)
+  React.useEffect(() => {
+    if (!user?.uid || !myProfileDoc || myProfileDoc.activeView === notifyActiveView) return;
+    updateDoc(doc(db, "users", user.uid), { activeView: notifyActiveView, activeViewAt: Date.now() }).catch(() => {});
+  }, [user?.uid, notifyActiveView, !!myProfileDoc, myProfileDoc?.activeView]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (workScope && !scopeAllows(workScope, menu) && !isBizMenu(menu)) setMenu("HOME"); else if (workScope && isBizMenu(menu)) setMenu("HOME"); }, [workScope, menu]);
   useUiScreen(menu, deptMode); // ⭐ 2026-11-07 화면 편집 — 지금 메뉴("이 화면만")·부서(역할별 보이기)
   const deptCompany = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
@@ -8478,6 +8491,9 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   // 🔢 2026-11-15 상단 숫자가 확인 뒤에도 다시 뜨던 문제 — 같은 미배차 오더를 "배차현황(list)"과 "미배차현황(unassigned)" 두 기록으로 따로 셌다.
   //  미배차현황에서 확인해도 list 기록이 남아 다른 메뉴로 가면 숫자가 되살아났다 → PC는 미배차현황 하나로만 세고, 어느 탭에서 보든 두 기록을 같이 지운다
   const unseenDispatchTotal = unionCount(unseenUnassignedArr, unseenFixedArr); // 상단 메뉴 합계 — 같은 오더는 한 번
+  // ⭐ 2026-11-17 상단 메뉴 배차 숫자(기사 수락/거절 · 새 미배차 · 고정노선 미배차 · 긴급)도 운송 일을 하는 때만(경리 · 인사 화면이면 0)
+  const navDrvOrders = dispatchAlertsOff ? 0 : drvCounts.orders, navDrvSos = dispatchAlertsOff ? 0 : drvCounts.sos;
+  const navUnseenDispatch = dispatchAlertsOff ? 0 : unseenDispatchTotal, navUnseenUnassigned = dispatchAlertsOff ? 0 : unseenUnassigned, navUnseenFixed = dispatchAlertsOff ? 0 : unseenFixed;
   useMarkSeenOnView(menu === "배차현황" && (배차현황Tab === "배차현황" || 배차현황Tab === "미배차현황"), "list", pcUnassigned, 800);
   useMarkSeenOnView(menu === "배차현황" && 배차현황Tab === "미배차현황", "unassigned", pcUnassigned, 800);
   useMarkSeenOnView(menu === "배차현황" && 배차현황Tab === "고정노선현황", "fixed", pcFixedUnassigned, 800);
@@ -8947,9 +8963,9 @@ return (
               return m === "HOME" ? (mailCountsNav.unread || 0) + (alertsNav.handover || 0) + (apSep ? 0 : apN)
                 : m === "전자결재" ? apN + (alertsNav.handover || 0)
                 : m === "기사관리" ? (canApproveSignup ? alertsNav.signupDriver || 0 : 0) + drvCounts.docs
-                : m === "실시간배차현황" ? drvCounts.orders
-                : m === "배차현황" ? drvCounts.orders + unseenDispatchTotal
-                : m === "지입차관리" ? drvCounts.sos
+                : m === "실시간배차현황" ? navDrvOrders
+                : m === "배차현황" ? navDrvOrders + navUnseenDispatch
+                : m === "지입차관리" ? navDrvSos
                 : m === "관리자메뉴" ? pendingStaffSignups
                 : m === "정산관리" ? closeInboxN : 0;
             };
@@ -8959,8 +8975,8 @@ return (
                 HOME: { 공지사항: alertsNav.notice || 0, "ap:inbox": apSep ? 0 : apCountsNav.todo, "ap:mine": apSep ? 0 : apCountsNav.mineNew, "ap:handover": alertsNav.handover || 0, mail: mailCountsNav.unread || 0, teamsched: 0 }, // 🔢 2026-11-15 상단 HOME 숫자(사내메일 · 인수인계 · 내 기안)가 어느 속메뉴 것인지 보이게
                 전자결재: { inbox: apCountsNav.todo, mine: apCountsNav.mineNew, handover: alertsNav.handover },
                 기사관리: { "acc:pending": canApproveSignup ? alertsNav.signupDriver : 0, "docs:driver": drvCounts.docs },
-                배차현황: { 배차현황: drvCounts.orders, 미배차현황: unseenUnassigned, 고정노선현황: unseenFixed },
-                지입차관리: { tracking: drvCounts.sos },
+                배차현황: { 배차현황: navDrvOrders, 미배차현황: navUnseenUnassigned, 고정노선현황: navUnseenFixed },
+                지입차관리: { tracking: navDrvSos },
                 관리자메뉴: { members: pendingStaffSignups },
                 정산관리: { 거래처정산: closeInboxN },
               })[m];
@@ -8978,17 +8994,17 @@ return (
               const navN = m === "HOME" ? (mailCountsNav.unread || 0) + (alertsNav.handover || 0) + (apSep ? 0 : apN)
                 : m === "전자결재" ? apN + (alertsNav.handover || 0)
                 : m === "기사관리" ? (canApproveSignup ? alertsNav.signupDriver || 0 : 0) + drvCounts.docs
-                : m === "실시간배차현황" ? drvCounts.orders
-                : m === "배차현황" ? drvCounts.orders + unseenDispatchTotal /* ⭐ 2026-11-06 안 본 미배차·고정노선 미배차 */
-                : m === "지입차관리" ? drvCounts.sos
+                : m === "실시간배차현황" ? navDrvOrders
+                : m === "배차현황" ? navDrvOrders + navUnseenDispatch /* ⭐ 2026-11-06 안 본 미배차·고정노선 미배차 */
+                : m === "지입차관리" ? navDrvSos
                 : m === "관리자메뉴" ? pendingStaffSignups
                 : m === "정산관리" ? closeInboxN : 0;
               const subBadges = {
                 HOME: { 공지사항: alertsNav.notice || 0, "ap:inbox": apSep ? 0 : apCountsNav.todo, "ap:mine": apSep ? 0 : apCountsNav.mineNew, "ap:handover": alertsNav.handover || 0, mail: mailCountsNav.unread || 0, teamsched: 0 }, // 🔢 2026-11-15 상단 HOME 숫자(사내메일 · 인수인계 · 내 기안)가 어느 속메뉴 것인지 보이게
                 전자결재: { inbox: apCountsNav.todo, mine: apCountsNav.mineNew, handover: alertsNav.handover },
                 기사관리: { "acc:pending": canApproveSignup ? alertsNav.signupDriver : 0, "docs:driver": drvCounts.docs },
-                배차현황: { 배차현황: drvCounts.orders, 미배차현황: unseenUnassigned, 고정노선현황: unseenFixed }, // ⭐ 2026-11-06 안 본 것만
-                지입차관리: { tracking: drvCounts.sos },
+                배차현황: { 배차현황: navDrvOrders, 미배차현황: navUnseenUnassigned, 고정노선현황: navUnseenFixed }, // ⭐ 2026-11-06 안 본 것만
+                지입차관리: { tracking: navDrvSos },
                 관리자메뉴: { members: pendingStaffSignups },
                 정산관리: { 거래처정산: closeInboxN },
               }[m];
