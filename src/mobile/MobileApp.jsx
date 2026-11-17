@@ -9,7 +9,8 @@ import { useCompanyFeatures } from "../companyFeatures"; // ⭐ 2026-11-04 마�
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합) — 모바일은 기존 화면 위에 업무 화면을 덮어 띄운다(src/freight/FreightMobile.jsx)
 import { useBizModules, readBiz, writeBiz, bizInfo } from "../bizModules";
 import { reportScreen, installScreenVisibility, mobileScreenLabel } from "../screenReport";
-import { effectiveScope } from "../workScope";
+import { effectiveScope, isOfficeScope, scopeAllows } from "../workScope";
+import { isExecTeam } from "../teamNames"; // ⭐ 2026-11-17 임원 부서 통合관리자 → 경영 브리핑부터
 import { usePayTodo } from "../approvalPay"; // 💸 2026-11-15 지급 대기 지출결의 → 전자결재 숫자(PC와 같게)
 import { useRouteGroupFilter, RouteGroupDropdown, SheetLiveChip, RouteGroupField } from "../routeGroups";
 import OrderStaffFields from "../OrderStaffFields"; // 🧭 2026-11-14 PC와 같게 — 수정할 때 [담당자 변경](배차담당자 · 차량배정자)
@@ -22,7 +23,7 @@ import { AttendanceQuickButton, officeRadii, CheckoutReminderHost } from "../att
 import { PersonalTodayHost } from "../PersonalSchedule";
 import { makeClientMatcher } from "../clientMatch"; // ⭐ 2026-11-03 거래처 검색
 import { useCompanyBiz, BizPicker, bizColorOf, bizOf, BizSelect, resolveBiz, rememberBizFor, normBizKey } from "../companyBiz"; // ⭐ 2026-11-03 여러 사업자
-import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus, ROLE_LABELS as ROLE_LABELS_SW, hiddenInSwitchView, builtinHidesMenu } from "../customRoles";
+import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus, ROLE_LABELS as ROLE_LABELS_SW, hiddenInSwitchView, builtinHidesMenu, EXEC_VIEW } from "../customRoles";
 import { ViewPickerDialog } from "../ViewSwitcher"; // 🔀 2026-11-10 화면 전환 창(PC와 같은 것)
 import { usePayrollAccess } from "../payrollAccess"; // ⭐ 2026-11-06 직원 급여·연차 촉진
 import { useReadOnlyGuard } from "../readOnlyGuard";
@@ -2215,18 +2216,25 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const customRolesRawM = useCustomRoles();
   const customRolesM = React.useMemo(() => applyRoleMenus(customRolesRawM, realRole, role), [customRolesRawM, realRole, role]);
   const customRoleM = findCustomRole(customRolesM, role);
-  const isExecM = forceExec || roleScreen(customRoleM) === "exec";
+  // ⭐ 2026-11-17 부서가 임원인 통합관리자도 경영 브리핑(PC와 같음) — 로그인하면 늘 여기서 시작
+  const execAllMgrM = realRole === "allMgr" && isExecTeam(myProfM?.team);
+  const isExecM = forceExec || execAllMgrM || roleScreen(customRoleM) === "exec";
+  // 🗂 2026-11-13 업무 범위(사내업무만 / 사내업무 + 경리 / 경리업무만) — src/workScope.js
+  const workScopeM = role === "totalMaster" || realRole === "totalMaster" ? "" : effectiveScope(realRole, myProfM?.workScope, myProfM?.isMaster === true); // 🛠 2026-11-15 권한 기준(src/workScope.js)
   // 운송사별 권한 설정으로 켠 부서 메뉴(예: A운송사 관리자 → 인사관리부)
   const DEPT_PAGE_MENU = { "dept:hr": "인사관리부", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:assets": "비품관리", "dept:cert": "증명서발급", "dept:schedule": "직원일정", "dept:leave": "인사관리부", "dept:sales": "영업관리" };
   const deptOkM = (m) => !!customRoleM && getMenuAccess(customRolesM, role, m) !== "hidden";
   // 🧾 2026-11-14 통합 · 최고관리자 운송 화면엔 정산관리 없음(경리 화면에서) — PC와 같은 규칙(customRoles.js hiddenInSwitchView)
-  const menuOkM = React.useCallback((m) => !hiddenInSwitchView(realRole, roleView.view, m) && !builtinHidesMenu(role, m, !!customRoleM) && (!customRoleM || getMenuAccess(customRolesM, role, m) !== "hidden"), [customRoleM, customRolesM, role, realRole, roleView.view]);
+  // 🗂 2026-11-17 경리업무만이면 배차 메뉴(배차현황 · 기사관리 · 거래처관리 등)를 숨긴다
+  const menuOkM = React.useCallback((m) => !(workScopeM === "acct" && !scopeAllows(workScopeM, m)) && !hiddenInSwitchView(realRole, roleView.view, m) && !builtinHidesMenu(role, m, !!customRoleM) && (!customRoleM || getMenuAccess(customRolesM, role, m) !== "hidden"), [customRoleM, customRolesM, role, realRole, roleView.view, workScopeM]);
   // 🔒 2026-11-01 조회만 허락된 화면에서 수정·저장·삭제를 누르면 바로 "권한 없음"
   const PAGE_MENU_M = { drivers: "기사관리", clients: "거래처관리", list: "배차현황", detail: "배차현황", canceled: "배차현황", form: "배차관리", unassigned: "배차관리", fleet: "지입차관리", sales: "매출관리", ratecard: "단가표", fare: "운임조회", intel: "인사이트", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:cashbook": "자금관리", "dept:funds": "자금관리", "dept:assets": "비품관리", "dept:hr": "인사관리부", "dept:cert": "증명서발급", "dept:driverdocs": "기사관리", "dept:sales": "영업관리" }; // ⭐ 2026-11-03 가입 승인(staff)은 기사관리 조회권한과 별개 — PC처럼 관리자·경리·인사는 승인·거절 가능
-  const [execFull, setExecFull] = useState(() => { try { return localStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
-  // 🗂 2026-11-13 업무 범위(사내업무만 / 사내업무 + 경리) — 배차 화면 없이 사내업무 홈으로(src/workScope.js)
-  const workScopeM = role === "totalMaster" || realRole === "totalMaster" ? "" : effectiveScope(realRole, myProfM?.workScope, myProfM?.isMaster === true); // 🛠 2026-11-15 권한 기준(src/workScope.js)
-  const deptMode = workScopeM ? "office" : role === "test" ? "acct" : role === "hrManager" ? "hr" : role === "salesMgr" ? "sales" : isExecM && !execFull ? "exec" : null; // 💼 2026-11-10 영업관리자(영업사무원 포함) → 영업 화면
+  // ⭐ 2026-11-17 [전체 메뉴]는 이 로그인 동안만 기억(sessionStorage · 로그아웃하면 지워진다) — 다시 로그인하면 경영 브리핑부터
+  const [execFull, setExecFull] = useState(() => { try { localStorage.removeItem("kpExecFull"); return sessionStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
+  const setExecFullV = (v) => { setExecFull(v); try { sessionStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } };
+  const execHomeM = isExecM && !execFull;
+  // 사내업무 범위는 사내업무 홈 · 경리업무만은 경리 화면 그대로 · ⭐ 2026-11-17 경영 브리핑이 부서 화면보다 먼저(임원 통합관리자)
+  const deptMode = isOfficeScope(workScopeM) ? "office" : execHomeM ? "exec" : role === "test" ? "acct" : role === "hrManager" ? "hr" : role === "salesMgr" ? "sales" : null; // 💼 2026-11-10 영업관리자(영업사무원 포함) → 영업 화면
   // 📊 2026-11-06 일일 경영 보고 — 기존 임원 판정(isExecM) 그대로(src/dailyReport.js canSeeBriefing)
   const briefCompanyM = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
   // 📥 2026-11-16 배차마감 도착(숫자 · 배너) · 🔒 최종마감 잠금 — PC와 같은 기준(src/closeInbox.jsx)
@@ -2272,7 +2280,9 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
     if (deptMode && page === "list" && !((deptMode === "acct" || deptMode === "sales") && deptListOkRef.current)) setPage("dept"); // 💼 영업도 메뉴의 [배차현황]으로 오더 목록 조회
     if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:settle" && page !== "dept:driverdocs" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:board" && page !== "dept:farerules" && page !== "dept:myresume" && !["dept:payslip", "dept:leaveplan", "dept:payroll", "dept:leavepromo"].includes(page) && !(page === "dept:briefing" && canBriefingM) /* ⭐ 2026-11-06 급여·연차 촉진(화면이 권한 확인) */ && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
   }, [deptMode, page]);
-  const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setPage(v ? "list" : "dept"); };
+  const toggleExecFull = () => { const v = !execFull; setExecFullV(v); setPage(v && (!execAllMgrM || roleView.view === "dispatch") ? "list" : "dept"); };
+  // 경영 브리핑을 보는 동안 임원 통합관리자는 운송 화면 역할로(PC와 같음)
+  useEffect(() => { if (execAllMgrM && execHomeM && roleView.views && roleView.view !== roleView.views[0][0]) roleView.setView(roleView.views[0][0]); }, [execAllMgrM, execHomeM, roleView.view]); // eslint-disable-line react-hooks/exhaustive-deps
   const listScrollYRef = useRef(0); // 리스트 스크롤 위치 저장
   const listAnchorRef = useRef(null); // ⭐ 2026-11-04 복귀 기준 카드(화면 맨 위 카드와 그 위치)
   const unassignedScrollYRef = useRef(0); // 미배차/정보미전달 스크롤 위치 저장
@@ -2702,7 +2712,7 @@ const quickRange = (days) => {
   const drvMeNameM = mobileUsers.find((u) => (u.uid || u.id) === user?.uid)?.name || myProfM?.name || "";
   const drvMeM = React.useMemo(() => ({ uid: ["driver", "shipper"].includes(role) ? "" : (user?.uid || ""), email: user?.email || "", name: drvMeNameM, isAdmin: ["admin", "totalMaster", "superadmin", "allMgr"].includes(realRole || role) }), [user?.uid, user?.email, drvMeNameM, realRole, role]);
   React.useEffect(() => { publishDriverOrderRows(orders, drvMeM); }, [orders, drvMeM]);
-  React.useEffect(() => { setDriverToastsMuted(!alarmEnabled); }, [alarmEnabled]);
+  React.useEffect(() => { setDriverToastsMuted(!alarmEnabled || !!workScopeM); }, [alarmEnabled, workScopeM]); // 🗂 2026-11-17 경리업무만 · 사내업무 계정은 기사 알림 끔
   const [canceledOrdersAll, setCanceledOrdersRaw] = useState([]);
   const canceledOrders = useMemo(() => carrierVisM.filter(canceledOrdersAll) || [], [canceledOrdersAll, carrierVisM]); // ⭐ 2026-11-06
   const setCanceledOrders = React.useCallback((v) => setCanceledOrdersRaw(prev => hideBlind(typeof v === "function" ? v(prev) : v)), []); // ★ 취소내역 화면용
@@ -6102,6 +6112,7 @@ const title =
         <MobileSideMenu
   realRole={realRole}
   officeAcct={workScopeM === "officeAcct"}
+  acctOnly={workScopeM === "acct"}
   staffSignupOk={!["acctStaff", "hrStaff"].includes(realRole)}
   onClose={() => setShowMenu(false)}
   currentUser={currentUser}
@@ -6235,8 +6246,8 @@ onGoAttendance={() => {
           menuOk={menuOkM}
           deptOk={deptOkM}
           bizMenu={bizListM.length > 1 || canBizGroupM ? { label: `업무 전환 · 지금 ${bizInfo(bizM).short}`, onSwitch: () => { setShowMenu(false); setBizPickM(true); }, onHandoff: bizListM.includes("inland") ? () => { setShowMenu(false); setBizHandoffM(true); } : null } : null}
-          roleViews={roleView.views}
-          roleViewCur={roleView.view}
+          roleViews={execAllMgrM && roleView.views ? [EXEC_VIEW, ...roleView.views] : roleView.views /* ⭐ 2026-11-17 임원 통합관리자는 [경영] 칸 포함 */}
+          roleViewCur={execAllMgrM && execHomeM ? EXEC_VIEW[0] : roleView.view}
           onRoleView={(v) => { setShowMenu(false); setViewPick(true); void v; }}
           isCeo={forceExec || ["대표", "대표이사", "사장"].includes(String(myProfM?.position || "").trim())}
           canBriefing={canBriefingM}
@@ -7051,10 +7062,14 @@ setOpenMemo={setOpenMemo}
       inlandRows={allOrders} clients={clients} drivers={drivers} places={places} />
   </React.Suspense>
 )}
-{viewPick && roleView.views && (
+{viewPick && roleView.views && (execAllMgrM ? (
+  // ⭐ 2026-11-17 임원 부서 통합관리자 — 첫 칸 [경영](경영 브리핑)
+  <ViewPickerDialog views={[EXEC_VIEW, ...roleView.views]} current={execHomeM ? EXEC_VIEW[0] : roleView.view} roleLabel={ROLE_LABELS_SW[realRole] || ""} onClose={() => setViewPick(false)}
+    onPick={(v) => { setViewPick(false); if (v === EXEC_VIEW[0]) { setExecFullV(false); setPage("dept"); return; } setExecFullV(true); roleView.setView(v); setPage(v === "dispatch" ? "list" : "dept"); }} />
+) : (
   <ViewPickerDialog views={roleView.views} current={roleView.view} roleLabel={ROLE_LABELS_SW[realRole] || ""} onClose={() => setViewPick(false)}
     onPick={(v) => { setViewPick(false); if (v === roleView.view) return; roleView.setView(v); setPage(v === "dispatch" ? "list" : "dept"); }} />
-)}
+))}
 {(page === "dept" || String(page).startsWith("dept:")) && (
   <React.Suspense fallback={null}>
     <MobilePcView key={page} kind={page} deptMode={deptMode} dispatchData={allOrders} drivers={drivers} fixedRows={fixedClientRows} clients={clients} places={places} role={role} userCompany={pcViewCompany} me={pcViewMe} loadRange={loadRange} loadFullHistory={loadFullHistory}
@@ -8097,6 +8112,7 @@ function MobileSideMenu({
   listUnseenCount = 0, // ⭐ 2026-11-06 등록내역 — 안 본 미배차
   deptMode = null,
   officeAcct = false,
+  acctOnly = false, // ⭐ 2026-11-17 경리업무만 — 기사 제출 서류 등 배차 쪽 메뉴를 숨긴다
   isExec = false,
   bizMenu = null, // 🧭 2026-11-12 업무 전환 · 내륙 인계함
   roleViews = null,
@@ -8327,9 +8343,9 @@ function MobileSideMenu({
               <MenuItem label={`화면 전환 · 지금 ${(roleViews.find(([k]) => k === roleViewCur) || roleViews[0])[2]} 화면`} icon="refresh" onClick={() => onRoleView?.(roleViewCur)} dark={dark} />
             </MenuSection>
           )}
-          {isExec && (
+          {isExec && !(roleViews || []).some(([k]) => k === "exec") && (
             <MenuSection title="화면 전환" en="VIEW" dark={dark} alwaysOpen>
-              <MenuItem label={execFull ? "임원 화면으로" : "전체 메뉴 보기(배차·정산)"} icon="refresh" onClick={onToggleExec} dark={dark} />
+              <MenuItem label={execFull ? "경영 브리핑으로" : "전체 메뉴 보기(배차·정산)"} icon="refresh" onClick={onToggleExec} dark={dark} />{/* ⭐ 2026-11-17 "임원 화면" 낱말 정리 */}
             </MenuSection>
           )}
           {(deptMode === "acct" || deptMode === "hr") && (staffSignupOk || ok("기사관리")) && (
@@ -8338,7 +8354,7 @@ function MobileSideMenu({
               {staffSignupOk && <MenuItem label="직원 가입 승인" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />}
               {staffSignupOk && <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />}
               {ok("기사관리") && <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} badge={staffSignupOk ? (alertCounts?.signupDriver || null) : null} dark={dark} />}{/* ⭐ 2026-11-05 PC 경리·인사도 기사관리를 본다 */}
-              {(staffSignupOk || ok("기사관리")) && <MenuItem label="기사 제출 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />}{/* ⭐ 2026-11-10 PC처럼 기사관리를 보면 기사 서류도 본다 */}
+              {((staffSignupOk && !acctOnly) || ok("기사관리")) && <MenuItem label="기사 제출 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />}{/* ⭐ 2026-11-10 PC처럼 기사관리를 보면 기사 서류도 본다 */}
             </MenuSection>
           )}
           {/* ⭐ 2026-11-14 PC와 같은 묶음 · 같은 이름 · 같은 순서 — 배차 / 운임 / 기사 · 거래처 / 매출 · 정산 (PC 왼쪽 ≡ 메뉴)

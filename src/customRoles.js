@@ -3,6 +3,7 @@ import { setHrCustomRoleKeys } from "./hrHandover"; // ⭐ 2026-11-09 인사 담
 import { db } from "./firebase";
 import { collection, onSnapshot, setDoc, deleteDoc, doc, deleteField } from "firebase/firestore";
 import { getTenant } from "./fsTenant";
+import { normalizeTeam } from "./teamNames"; // ⭐ 2026-11-17 예전 부서 이름(운영팀 · 인사팀 · 운송팀 등) → 새 이름
 
 const COLL = "customRoles";
 
@@ -71,7 +72,11 @@ export const VIEW_INFO = {
   sales: ["SALES", "영업 현황 · 영업 기회 · 거래처 담당 · 인센티브", "trend"],
   acct: ["ACCOUNTING", "정산 · 회계 · 자금 · 비품", "money"],
   hr: ["HUMAN RESOURCES", "인사 기록 · 근태 · 연차 · 증명서", "idcard"],
+  // ⭐ 2026-11-17 임원 부서 통합관리자 — 경영 브리핑을 화면 전환 첫 칸으로(로그인하면 늘 여기서 시작)
+  exec: ["EXECUTIVE", "경영 브리핑 · 경영 분석 · 결재 대기 · 직원 정보", "dashboard"],
 };
+// 임원 부서 통합관리자의 화면 전환 목록 — 맨 앞에 [경영] 화면(화면 역할은 운송 화면 역할 그대로 — 메뉴는 경영 브리핑 메뉴)
+export const EXEC_VIEW = ["exec", "admin", "경영"];
 // 🧾 2026-11-14 화면 전환 역할(통합관리자 · 최고관리자 · 회사 마스터)은 운송 화면에서 정산관리를 숨긴다 — 정산은 경리 화면 메뉴(PC · 모바일 같음)
 //  정산관리로 가는 바로가기를 누르면 경리 화면으로 바꿔서 연다(switchViewFor)
 export const VIEW_ONLY_MENUS = { 정산관리: "acct" };
@@ -188,20 +193,26 @@ export function useRoleView(realRole) {
 // 🏢 2026-11-04 부서 → 고를 수 있는 권한(회원 관리·직원 관리·인사관리부·권한 관리 소속 직원 공용)
 //  부서 이름의 낱말로 고른다(인사관리부 › 직책·부서 설정의 부서 목록 그대로). (조회전용은 2026-11-14 권한 목록에서 뺐다)
 //  맞는 규칙이 없는 부서(미배정 포함)는 전체 권한. 직접 만든 역할은 이름에 그 부서 낱말이 들어가면 함께(임원은 "임원 화면" 역할).
+// ⭐ 2026-11-17 부서 정리(사용자 요청)
+//  · 임원 → 임원관리자(권한 관리에서 만든 경영 브리핑 역할) · 통합관리자만. 경영 브리핑 역할이 없는 회사는 통합관리자만
+//  · 경영지원팀(예전 운영팀 · 인사팀 · 경리/회계팀) → 경리사무원 · 경리관리자 · 인사사무원 · 인사관리자 · 통합관리자
+//  · 물류운송팀(예전 운송팀) → 운송관리자 · 운송사무원 · 통합관리자
+//  부서 이름은 normalizeTeam(src/teamNames.js)으로 새 이름으로 바꿔 읽는다(저장값은 그대로)
 export const DEPT_ROLE_RULES = [
-  { re: /임원/, keys: ["allMgr"], exec: true }, // ⭐ 2026-11-05 임원도 통합관리자 고를 수 있게(임원 화면 역할 다음)
-  { re: /경리|회계|재무/, keys: ["test", "acctStaff", "hrAcct", "allMgr"], label: /경리|회계|재무/ },
+  { re: /임원/, keys: ["allMgr"], exec: true }, // ⭐ 2026-11-05 임원도 통합관리자 고를 수 있게(경영 브리핑 역할 다음)
+  { re: /경영지원/, keys: ["acctStaff", "test", "hrStaff", "hrManager", "allMgr"], label: /경리|회계|재무|인사|경영지원/ },
+  { re: /경리|회계|재무/, keys: ["test", "acctStaff", "hrAcct", "allMgr"], label: /경리|회계|재무/ }, // 회사가 직접 만든 부서(예: 재무팀)
   { re: /인사/, keys: ["hrManager", "hrStaff", "hrAcct", "allMgr"], label: /인사/ },
   { re: /영업/, keys: ["salesMgr", "salesStaff", "allMgr"], label: /영업/ }, // 💼 2026-11-10 영업팀
-  { re: /운송|배차/, keys: ["admin", "user", "allMgr"], label: /운송|배차/ },
-  // 운영팀 — 운송사 운영팀은 배차·차량 운영을 같이 하므로 운송 역할을 그대로 쓴다(관리자 화면·보안 규칙이 admin 기준이라 따로 만들면 빠지는 곳이 생김)
+  { re: /운송|배차|물류/, keys: ["admin", "user", "allMgr"], label: /운송|배차|물류/ },
+  // 회사가 직접 만든 "운영" 부서(예: 운영지원팀) — 예전 운영팀은 경영지원팀으로 읽는다. 운송사 운영팀은 배차·차량 운영을 같이 하므로 운송 역할을 그대로 쓴다(관리자 화면·보안 규칙이 admin 기준이라 따로 만들면 빠지는 곳이 생김)
   { re: /운영/, keys: ["admin", "user", "allMgr"], label: /운영|운송|배차/ },
   { re: /법무/, keys: ["legalMgr", "legalStaff"], label: /법무/ },
   { re: /개발/, keys: ["devMgr", "devStaff"], label: /개발/ },
 ];
 // options: [[key, label], …] → 그 부서에 맞는 것만(규칙 순서대로)
 export function rolesForTeam(team, options = [], customRoles = []) {
-  const t = String(team || "").trim();
+  const t = normalizeTeam(team);
   const rule = t ? DEPT_ROLE_RULES.find((r) => r.re.test(t)) : null;
   if (!rule) return options;
   const isOwn = (k) => !isBuiltinKey(k) && !["totalMaster", "driver", "shipper"].includes(k);
@@ -216,7 +227,7 @@ export function rolesForTeam(team, options = [], customRoles = []) {
     return rk(a[0]) - rk(b[0]);
   });
   if (!picked.length) return options;
-  if (rule.exec && !picked.some(([k]) => !rule.keys.includes(k))) return options; // 임원 화면 역할이 없는 회사는 예전처럼 전체 // 그 부서용 역할이 아직 없으면(예: 임원 화면 역할을 안 만든 회사) 전체
+  // ⭐ 2026-11-17 임원은 경영 브리핑 역할(임원관리자)이 없는 회사도 통합관리자만(예전엔 전체 목록) — 지금 권한은 화면에서 맨 앞에 그대로 남는다(forTeam keep)
   return picked;
 }
 
@@ -295,7 +306,8 @@ export function getMenuAccess(customRoles, roleKey, menu) {
 // 👔 2026-10-31 역할의 "기본 화면" — 권한 관리에서 역할마다 고른다(일반 업무 / 임원 화면).
 //  저장값이 없으면 이름에 "임원"이 들어간 직접 만든 역할은 임원 화면으로 본다.
 //  ※ 내장 역할(관리자·실무자 등)은 임원 화면으로 바꿀 수 없다 — 임원 화면은 임원 역할을 받은 직원만.
-export const ROLE_SCREENS = [["", "일반 업무 화면"], ["exec", "임원 화면 (경영 브리핑)"]];
+// ⭐ 2026-11-17 "임원 화면" 낱말은 화면에서 뺐다(사용자 요청) — 값("exec")은 그대로, 이름만 "경영 브리핑"
+export const ROLE_SCREENS = [["", "일반 업무 화면"], ["exec", "경영 브리핑 화면"]];
 export function roleScreen(r) {
   if (!r || isBuiltinKey(r.key)) return "";
   if (typeof r.screen === "string") return r.screen;
@@ -310,7 +322,7 @@ export function roleOptionsFrom(customRoles = []) {
   // 회사에서 같은 이름(예: 경리사무원)의 역할을 이미 만들어 쓰고 있으면 새 기본 역할은 목록에서 뺀다(이름 중복 방지)
   const dupLabel = (k) => NEW_STAFF_KEYS.includes(k) && real.some((r) => !isBuiltinKey(r.key) && String(r.label || "").trim() === ROLE_LABELS[k]);
   const base = BASE_ROLE_OPTIONS.filter(([k]) => !dupLabel(k)).map(([k, l]) => [k, real.find((r) => r.key === k)?.label || l]);
-  const own = real.filter((r) => !BASE_ROLE_OPTIONS.some(([k]) => k === r.key) && !["totalMaster", "driver", "shipper", ...RETIRED_ROLES].includes(r.key)).map((r) => [r.key, `${r.label || r.key}${roleScreen(r) === "exec" ? " · 임원 화면" : ""}`]);
+  const own = real.filter((r) => !BASE_ROLE_OPTIONS.some(([k]) => k === r.key) && !["totalMaster", "driver", "shipper", ...RETIRED_ROLES].includes(r.key)).map((r) => [r.key, `${r.label || r.key}${roleScreen(r) === "exec" && !/임원/.test(String(r.label || "")) ? " · 경영 브리핑" : ""}`]);
   return [...base, ...own];
 }
 export function useRoleOptions() {

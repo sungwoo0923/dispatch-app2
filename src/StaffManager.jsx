@@ -8,6 +8,7 @@ import { db, DEFAULT_COMPANY } from "./firebase";
 import KpSubNav from "./KpSubNav";
 import { Sheet } from "./OfficeBooks";
 import { useRoleOptions } from "./customRoles";
+import { TEAM_OPTIONS, normalizeTeam } from "./hrConstants"; // ⭐ 2026-11-17 부서 이름 정리(경영지원팀 · 물류운송팀)
 import { kpConfirm } from "./kpDialog";
 import { guardSeat } from "./plans"; // 👥 2026-11-09 직원 계정 한도
 
@@ -110,8 +111,8 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
   const empty = { pending: "승인 대기 중인 직원이 없습니다", staff: "직원이 없습니다", left: "퇴사자가 없습니다", dpending: "가입 신청한 기사님이 없습니다", drivers: "승인된 기사님이 없습니다" }[tab];
   // 재직 직원 — 팀별로
   const teamGroups = (() => {
-    const g = {}; L.forEach((u) => { const t = u.team || "미배정"; (g[t] = g[t] || []).push(u); });
-    const order = ["임원", "운영팀", "운송팀", "영업팀", "경리/회계팀", "인사팀", "개발팀", "법무팀"];
+    const g = {}; L.forEach((u) => { const t = normalizeTeam(u.team) || "미배정"; (g[t] = g[t] || []).push(u); }); // ⭐ 2026-11-17 예전 부서 이름은 새 이름으로 묶는다
+    const order = TEAM_OPTIONS;
     return Object.entries(g).sort((x, y) => { const a = order.indexOf(x[0]); const c = order.indexOf(y[0]); return (a < 0 ? 99 : a) - (c < 0 ? 99 : c) || x[0].localeCompare(y[0]); })
       .map(([t, us]) => [t, us.sort((x, y) => String(x.name || "").localeCompare(String(y.name || ""), "ko"))]);
   })();
@@ -161,13 +162,13 @@ export default function StaffManager({ company, role, myUid, initialTab = "pendi
                   <div className="px-2 pb-2 flex items-center gap-2 border-b border-[#EEF2F8] mb-1.5">
                     <div className="min-w-0 flex-1">
                       <div className="text-[15px] font-black text-[#0F1A30] truncate">{u.name || u.email}</div>
-                      <div className="text-[12px] text-[#7A879C] truncate">{[u.team, u.position, ro.label(u.role)].filter(Boolean).join(" · ")}</div>
+                      <div className="text-[12px] text-[#7A879C] truncate">{[normalizeTeam(u.team), u.position, ro.label(u.role)].filter(Boolean).join(" · ")}</div>
                     </div>
                     <button type="button" onClick={() => setMenuOpen(null)} className="w-9 h-9 rounded-lg text-[#7A879C] hover:bg-[#F5F8FD] font-black shrink-0">✕</button>
                   </div>
                   {!isDriverTab && canRole && !u.isMaster && (
                     <>
-                      <div className="px-2 pt-1 pb-1 text-[11.5px] font-black text-[#9AA9C3]">권한 변경{u.team ? ` · ${u.team}에 맞는 권한` : ""}</div>
+                      <div className="px-2 pt-1 pb-1 text-[11.5px] font-black text-[#9AA9C3]">권한 변경{u.team ? ` · ${normalizeTeam(u.team)}에 맞는 권한` : ""}</div>
                       {/* 🏢 2026-11-04 그 직원 부서에 맞는 권한만(customRoles.js rolesForTeam) */}
                       {(() => {
                         // ⭐ 2026-11-05 마스터는 최고관리자를 뺀 모든 권한(부서에 맞는 권한 먼저, 그 아래 「다른 권한」)

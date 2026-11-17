@@ -9,13 +9,14 @@ import { addDoc, arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot, que
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import KpSubNav from "./KpSubNav";
 import { BookHero, BookCard, Chip, Sheet, MONO, HERO_BG } from "./OfficeBooks";
-import { useHrOptions, isExecProfile, suggestRole, ROLE_NAME, EXEC_TEAM, TEAM_OPTIONS, POSITION_OPTIONS, EXEC_POSITION_OPTIONS } from "./hrConstants";
+import { useHrOptions, isExecProfile, suggestRole, ROLE_NAME, EXEC_TEAM, TEAM_OPTIONS, POSITION_OPTIONS, EXEC_POSITION_OPTIONS, normalizeTeam } from "./hrConstants";
 import { isTMUser } from "./staffFilter";
 import { RETIRE_REASONS } from "./AcctSuite";
 // (연차 현황 LeaveLedger는 LeaveArea가 불러온다)
 import ObituaryWriter from "./ObituaryWriter";
 import { WORK_TIME_OPTIONS } from "./autoAttendance";
 import { useRoleOptions } from "./customRoles";
+import { normScope, scopeOptionsFor, effectiveScope, workScopeLabel } from "./workScope"; // ⭐ 2026-11-17 업무 범위(경리업무만 등)도 직원 정보에서
 import { RULE_CATS, RULE_TEMPLATES, fillCompany } from "./companyRuleTemplates";
 import { fmtPhone } from "./formatInput";
 import { CustomSelect } from "./CustomSelect";
@@ -40,11 +41,11 @@ const suggestFor = (x, execKeys = [], ro = null) => {
   return !ro || ro.fits(s0, x?.team) ? s0 : ro.firstFor(x?.team);
 };
 const ROLE_DESC = {
-  admin: "운송 업무 전체 — 배차·운임·정산·매출·기사·거래처 관리 + 관리자메뉴(직원 승인 등). 임원 화면은 「임원 화면」 역할에서",
+  admin: "운송 업무 전체 — 배차·운임·매출·기사·거래처 관리 + 관리자메뉴(직원 승인 등)",
   hrManager: "인사관리부 화면 — 인사 기록·발령·근태·입퇴사·직원 승인",
   test: "경리 화면 — 정산·회계·자금·비품·퇴직 정산",
   hrAcct: "경리 + 인사 — 상단 [화면 전환]으로 경리 화면 ↔ 인사 화면 전환",
-  allMgr: "운송 + 영업 + 경리 + 인사 — 상단 [화면 전환]으로 운송 · 영업 · 경리 · 인사 화면 전환",
+  allMgr: "운송 + 영업 + 경리 + 인사 — 상단 [화면 전환]으로 운송 · 영업 · 경리 · 인사 화면 전환. 부서가 임원이면 로그인할 때 경영 브리핑부터",
   salesMgr: "영업관리자 — 영업 화면(영업관리·거래처·단가표·매출, 인센티브 규정·거래처 담당 지정)",
   salesStaff: "영업사무원 — 영업 화면(본인 실적·인센티브·영업 기회, 권한 관리에서 조정)",
   acctStaff: "경리사무원 — 경리 화면(자금·매출 제외, 권한 관리에서 조정)",
@@ -187,10 +188,10 @@ export function StaffInfoBoard({ company, canManage }) {
   const left = all.filter((u) => u.employmentStatus === "퇴사").sort((a, b) => String(b.resignedAt || "").localeCompare(String(a.resignedAt || "")));
   const kw = q.trim();
   const match = (u) => !kw || [u.name, u.team, u.position, u.phone].some((v) => String(v || "").includes(kw));
-  const groups = (() => { const g = {}; active.filter(match).forEach((u) => { const t = u.team || "미배정"; (g[t] = g[t] || []).push(u); }); return hr.teams.concat(["미배정"]).filter((t) => g[t]).map((t) => [t, g[t].sort((a, b) => hr.positionsFor(t).indexOf(b.position) - hr.positionsFor(t).indexOf(a.position) || String(a.name || "").localeCompare(String(b.name || ""), "ko"))]).concat(Object.keys(g).filter((t) => !hr.teams.includes(t) && t !== "미배정").map((t) => [t, g[t]])); })();
+  const groups = (() => { const g = {}; active.filter(match).forEach((u) => { const t = normalizeTeam(u.team) || "미배정"; /* ⭐ 2026-11-17 예전 부서 이름은 새 이름으로 묶는다 */ (g[t] = g[t] || []).push(u); }); return hr.teams.concat(["미배정"]).filter((t) => g[t]).map((t) => [t, g[t].sort((a, b) => hr.positionsFor(t).indexOf(b.position) - hr.positionsFor(t).indexOf(a.position) || String(a.name || "").localeCompare(String(b.name || ""), "ko"))]).concat(Object.keys(g).filter((t) => !hr.teams.includes(t) && t !== "미배정").map((t) => [t, g[t]])); })();
   const open = (u, m = "info") => {
     setSel(u); setMode(m);
-    setF({ name: u.name || "", phone: u.phone || "", team: u.team || "", position: u.position || "", role: u.role || "user", employType: u.employType || "정규직", employmentStatus: u.employmentStatus || "재직", leaveFrom: u.leave?.from || kstDay(), leaveTo: u.leave?.to || "", leaveMemo: u.leave?.memo || "", hireDate: u.hireDate || "", workStartTime: u.workStartTime || "09:00", workEndTime: u.workEndTime || "18:00" });
+    setF({ name: u.name || "", phone: u.phone || "", team: normalizeTeam(u.team), /* ⭐ 2026-11-17 예전 부서 이름 → 새 이름(저장하면 새 이름으로) */ position: u.position || "", role: u.role || "user", employType: u.employType || "정규직", employmentStatus: u.employmentStatus || "재직", leaveFrom: u.leave?.from || kstDay(), leaveTo: u.leave?.to || "", leaveMemo: u.leave?.memo || "", hireDate: u.hireDate || "", workStartTime: u.workStartTime || "09:00", workEndTime: u.workEndTime || "18:00", workScope: normScope(u.workScope) });
     setR({ type: u.resignPlan?.type || "자진 퇴사", date: u.resignPlan?.date || kstDay(), reason: u.resignPlan?.reason || "", noticeDate: kstDay() });
     // ⭐ 2026-11-01 연차 계산은 userProfiles.hireDate를 쓰므로 그 값을 우선으로 보여준다
     setOrigHire(u.hireDate || "");
@@ -210,10 +211,16 @@ export function StaffInfoBoard({ company, canManage }) {
     setBusy(true);
     try {
       const role = f.role;
+      // ⭐ 2026-11-17 부서를 안 바꿨으면(예전 이름이 새 이름으로 보인 것) 저장값은 예전 그대로
+      const team = f.team === normalizeTeam(sel.team) ? (sel.team || "") : f.team;
       const ch = [];
       if ((sel.employmentStatus || "재직") !== f.employmentStatus) ch.push(`재직상태 ${sel.employmentStatus || "재직"}→${f.employmentStatus}${onLeave ? ` (${f.leaveFrom}~${f.leaveTo || "미정"})` : ""}`);
-      if ((sel.team || "") !== f.team) ch.push(`부서 ${sel.team || "미배정"}→${f.team || "미배정"}`);
+      if ((sel.team || "") !== team) ch.push(`부서 ${sel.team || "미배정"}→${team || "미배정"}`);
       if ((sel.position || "") !== f.position) ch.push(`직책 ${sel.position || "-"}→${f.position || "-"}`);
+      // ⭐ 2026-11-17 업무 범위 — 그 권한에서 고를 수 있는 값만(src/workScope.js effectiveScope). 바뀐 때만 저장
+      const nextScope = effectiveScope(sel.isMaster ? sel.role : role, f.workScope, sel.isMaster === true);
+      const scopeChanged = normScope(sel.workScope) !== nextScope;
+      if (scopeChanged) ch.push(`업무 범위 ${workScopeLabel(sel.workScope)}→${workScopeLabel(nextScope)}`);
       if ((sel.role || "") !== role && !sel.isMaster) ch.push(`권한 ${ro.label(sel.role)}→${ro.label(role)}`);
       const hireChanged = canHire && (origHire || "") !== (f.hireDate || "");
       if (hireChanged) ch.push(`입사일 ${origHire || "미등록"}→${f.hireDate || "미등록"}`);
@@ -221,7 +228,7 @@ export function StaffInfoBoard({ company, canManage }) {
       if (hireChanged) await setDoc(doc(db, "userProfiles", sel.id), { hireDate: f.hireDate || "", hireDateBy: auth.currentUser?.email || "", hireDateAt: serverTimestamp() }, { merge: true });
       // ⭐ 2026-11-02 출근·퇴근 시간(자동 출근 시간대·지각·반차 기준) — 저장 버튼을 눌러야 반영
       if ((sel.workStartTime || "09:00") !== f.workStartTime || (sel.workEndTime || "18:00") !== f.workEndTime) ch.push(`근무시간 ${sel.workStartTime || "09:00"}~${sel.workEndTime || "18:00"}→${f.workStartTime}~${f.workEndTime}`);
-      await updateDoc(doc(db, "users", sel.id), { workStartTime: f.workStartTime, workEndTime: f.workEndTime, name: f.name.trim(), phone: f.phone.trim(), team: f.team, position: f.position, ...(sel.isMaster ? {} : { role }), ...(hireChanged ? { hireDate: f.hireDate || "" } : {}), employType: f.employType, employmentStatus: f.employmentStatus, leave: onLeave ? { type: f.employmentStatus, from: f.leaveFrom, to: f.leaveTo || "", memo: (f.leaveMemo || "").trim() } : null, ...(ch.length ? { personnelHistory: arrayUnion({ date: kstDay(), type: "정보 수정", detail: `${ch.join(" · ")} (공문 없음)` }) } : {}) });
+      await updateDoc(doc(db, "users", sel.id), { workStartTime: f.workStartTime, workEndTime: f.workEndTime, name: f.name.trim(), phone: f.phone.trim(), team, position: f.position, ...(sel.isMaster ? {} : { role }), ...(scopeChanged ? { workScope: nextScope } : {}), ...(hireChanged ? { hireDate: f.hireDate || "" } : {}), employType: f.employType, employmentStatus: f.employmentStatus, leave: onLeave ? { type: f.employmentStatus, from: f.leaveFrom, to: f.leaveTo || "", memo: (f.leaveMemo || "").trim() } : null, ...(ch.length ? { personnelHistory: arrayUnion({ date: kstDay(), type: "정보 수정", detail: `${ch.join(" · ")} (공문 없음)` }) } : {}) });
       setSel(null);
     } catch (e) { alert(`저장 실패: ${e.message}`); } finally { setBusy(false); }
   };
@@ -393,7 +400,7 @@ export function StaffInfoBoard({ company, canManage }) {
                 <button type="button" onClick={() => setSel(null)} className="w-9 h-9 rounded-xl bg-white/10 ring-1 ring-white/15 hover:bg-white/20 shrink-0 grid place-items-center" title="닫기"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
               </div>
               <div className="mt-4 grid grid-cols-2 xl:grid-cols-4 gap-2">
-                <Fact en="Team" k="부서" v={sel.team || "미배정"} />
+                <Fact en="Team" k="부서" v={normalizeTeam(sel.team) || "미배정"} />
                 <Fact en="Title" k="직책" v={sel.position || "미설정"} />
                 <Fact en="Hired" k="입사일" v={origHire || "미등록"} mono />
                 <Fact en="Tenure" k="근속" v={origHire ? tenureOf(origHire) || "1개월 미만" : "—"} mono />
@@ -417,7 +424,11 @@ export function StaffInfoBoard({ company, canManage }) {
                   <div className="grid grid-cols-2 gap-4">
                     <Field label="부서"><CustomSelect value={f.team} onChange={(e) => { const team = e.target.value; const position = hr.positionsFor(team).includes(f.position) ? f.position : ""; setF({ ...f, team, position, role: sel.isMaster ? f.role : suggestFor({ team, position }, ro.execKeys, ro) }); }} className={fi}><option value="">미배정</option>{hr.teams.map((t) => <option key={t}>{t}</option>)}</CustomSelect></Field>
                     <Field label="직책"><CustomSelect value={f.position} onChange={(e) => setF({ ...f, position: e.target.value, role: sel.isMaster ? f.role : suggestFor({ team: f.team, position: e.target.value }, ro.execKeys, ro) })} className={fi}><option value="">미설정</option>{[...new Set([...hr.positionsFor(f.team), f.position].filter(Boolean))].map((p) => <option key={p}>{p}</option>)}</CustomSelect></Field>
-                    <Field label="권한" hint={sel.isMaster ? "마스터 계정은 권한을 바꿀 수 없습니다" : ROLE_DESC[f.role] || (ro.execKeys.includes(f.role) ? "임원 화면(경영 브리핑) — 권한 관리에서 만든 역할" : "권한 관리에서 만든 역할 — 메뉴는 그 설정을 따릅니다")}><CustomSelect value={f.role} disabled={sel.isMaster} onChange={(e) => setF({ ...f, role: e.target.value })} className={fi}>{ro.forTeam(f.team, f.role).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</CustomSelect></Field>
+                    <Field label="권한" hint={sel.isMaster ? "마스터 계정은 권한을 바꿀 수 없습니다" : ROLE_DESC[f.role] || (ro.execKeys.includes(f.role) ? "경영 브리핑 — 권한 관리에서 만든 임원 역할" : "권한 관리에서 만든 역할 — 메뉴는 그 설정을 따릅니다")}><CustomSelect value={f.role} disabled={sel.isMaster} onChange={(e) => setF({ ...f, role: e.target.value })} className={fi}>{ro.forTeam(f.team, f.role).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</CustomSelect></Field>
+                    {/* ⭐ 2026-11-17 업무 범위 — 경리 권한이면 "경리업무만"(배차 메뉴 · 배차 알림 없음)을 고를 수 있어요 */}
+                    {(() => { const opts = scopeOptionsFor(f.role, sel.isMaster === true); const cur = effectiveScope(f.role, f.workScope, sel.isMaster === true); return (
+                      <Field label="업무 범위" hint={`${(opts.find(([k]) => k === cur) || opts[0])[2]}${opts.length < 2 ? " · 권한에 따라 정해져요" : ""}`}><CustomSelect value={cur} disabled={opts.length < 2} onChange={(e) => setF({ ...f, workScope: e.target.value })} className={fi}>{opts.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</CustomSelect></Field>
+                    ); })()}
                     <Field label="고용 형태"><CustomSelect value={f.employType} onChange={(e) => setF({ ...f, employType: e.target.value })} className={fi}>{["정규직", "계약직", "수습", "파트타임", "일용직"].map((k) => <option key={k}>{k}</option>)}</CustomSelect></Field>
                   </div>
                 </Section>
@@ -529,10 +540,10 @@ export function HrSettingsPanel({ company, canManage }) {
       </div>
       <BookCard en="ROLES" title="권한(프로그램 사용 범위)">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {ro.options.map(([r, l]) => <div key={r} className="rounded-xl border border-[#E3E8F0] px-3.5 py-2.5"><div className="text-[14px] font-black text-[#0F1A30]">{l}{!ROLE_DESC[r] && <span className="ml-1.5 text-[10.5px] font-black px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#2D4C82]">직접 만든 역할</span>}</div><div className="text-[12px] text-[#7A879C]">{ROLE_DESC[r] || (ro.execKeys.includes(r) ? "임원 화면(경영 브리핑) — 메뉴 범위는 권한 관리 설정" : "메뉴 범위는 권한 관리 설정을 따릅니다")}</div></div>)}
+          {ro.options.map(([r, l]) => <div key={r} className="rounded-xl border border-[#E3E8F0] px-3.5 py-2.5"><div className="text-[14px] font-black text-[#0F1A30]">{l}{!ROLE_DESC[r] && <span className="ml-1.5 text-[10.5px] font-black px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#2D4C82]">직접 만든 역할</span>}</div><div className="text-[12px] text-[#7A879C]">{ROLE_DESC[r] || (ro.execKeys.includes(r) ? "경영 브리핑 — 메뉴 범위는 권한 관리 설정" : "메뉴 범위는 권한 관리 설정을 따릅니다")}</div></div>)}
         </div>
         <div className="mt-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3.5 py-2.5 text-[12.5px] text-[#5B6B85] leading-relaxed">
-          역할 추가·이름 변경·메뉴 범위 수정은 <b className="text-[#0F1A30]">최고관리자 › 관리자메뉴 › 권한 관리</b>에서 합니다. 여기서 만든 역할은 직원 정보·인사발령·직원관리의 권한 목록에 바로 나타납니다. 부서·직책을 고르면 권한이 자동 추천됩니다(임원 → 임원 화면 역할, 경리/회계팀 → 경리, 인사팀 → 인사관리자, 영업팀 → 영업관리자·영업사무원, 과장 이상 → 관리자, 그 외 → 실무자).
+          역할 추가·이름 변경·메뉴 범위 수정은 <b className="text-[#0F1A30]">최고관리자 › 관리자메뉴 › 권한 관리</b>에서 합니다. 여기서 만든 역할은 직원 정보·인사발령·직원관리의 권한 목록에 바로 나타납니다. 부서·직책을 고르면 권한이 자동 추천됩니다(임원 → 임원관리자 · 통합관리자, 경영지원팀 → 경리 · 인사 역할, 물류운송팀 → 운송관리자 · 운송사무원, 영업팀 → 영업관리자 · 영업사무원).
         </div>
       </BookCard>
     </div>

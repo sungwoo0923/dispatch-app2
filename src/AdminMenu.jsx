@@ -33,7 +33,7 @@ import {
 import { setDoc, updateDoc } from "./orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { ref as storageRef, uploadBytes, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
-import { EMPLOYMENT_STATUS_OPTIONS, suggestRole, ROLE_NAME, isExecProfile, useHrOptions } from "./hrConstants";
+import { EMPLOYMENT_STATUS_OPTIONS, suggestRole, ROLE_NAME, isExecProfile, useHrOptions, normalizeTeam } from "./hrConstants";
 import { CustomSelect } from "./CustomSelect";
 import RolePermissionsPanel from "./RolePermissionsPanel";
 import { AdminSessionsPanel } from "./LoginManager";
@@ -701,7 +701,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     setEditScope(normScope(u.workScope));
     setEditCompany(u.companyName || "");
     setEditPosition(u.position || "");
-    setEditTeam(u.team || "");
+    setEditTeam(normalizeTeam(u.team)); // ⭐ 2026-11-17 예전 부서 이름(운영팀 · 인사팀 · 운송팀 등) → 새 이름. 저장하면 새 이름으로
     setEditWorkStart(u.workStartTime || "09:00");
     setEditWorkEnd(u.workEndTime || "18:00");
     setEditMode(false);
@@ -729,7 +729,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     const prevPosition = manageUser.position || "";
     const lockHr = hrLocked(manageUser);
     const nextPosition = lockHr ? prevPosition : editPosition.trim();
-    const nextTeam = lockHr ? (manageUser.team || "") : editTeam;
+    // ⭐ 2026-11-17 부서를 안 바꿨으면(예전 이름 → 새 이름으로만 보인 것) 저장값은 그대로 — 예전 부서 이름 기준 권한(인사 · 경리 낱말)이 그대로 동작하게
+    const nextTeam = lockHr || editTeam === normalizeTeam(manageUser.team) ? (manageUser.team || "") : editTeam;
     if (prevPosition !== nextPosition && nextPosition) {
       history.push({ date: todayStr(), type: "직책변경", detail: `${prevPosition || "(미지정)"} → ${nextPosition}` });
     }
@@ -990,7 +991,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                   ) : (() => {
                     // ⭐ 부서(팀)별로 묶어서 보여준다 — 팀 이름순, 미배정은 맨 아래
                     const groups = new Map();
-                    filtered.forEach((u) => { const t = String(u.team || "").trim() || "미배정"; if (!groups.has(t)) groups.set(t, []); groups.get(t).push(u); });
+                    filtered.forEach((u) => { const t = normalizeTeam(u.team) || "미배정"; /* ⭐ 2026-11-17 예전 부서 이름은 새 이름으로 묶는다 */ if (!groups.has(t)) groups.set(t, []); groups.get(t).push(u); });
                     const names = [...groups.keys()].sort((a, b) => (a === "미배정") - (b === "미배정") || a.localeCompare(b, "ko"));
                     return names.map((t) => (
                       <div key={t} className="mb-2">
@@ -1060,7 +1061,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                               {u.subAdmin === true && <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#8FB0F0] text-[#0B1428] font-black" data-subadmin-badge>부관리자</span>}
                               {resigned && <span className="text-[11px] px-2 py-0.5 rounded-full border border-white/30 font-bold">퇴사 {u.resignedAt || ""}</span>}
                             </div>
-                            <div className="text-[14px] font-semibold text-white/75 mt-0.5">{[u.position, u.team || "미배정"].filter(Boolean).join(" · ")}</div>
+                            <div className="text-[14px] font-semibold text-white/75 mt-0.5">{[u.position, normalizeTeam(u.team) || "미배정"].filter(Boolean).join(" · ")}</div>
                             <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1.5 text-[13.5px]">
                               <span className="inline-flex items-center gap-2 text-white/90">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></svg>
@@ -1117,7 +1118,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                             {[
                               ["이름", u.name || "-"],
                               ["직책", u.position || "-"],
-                              ["부서", u.team || "미배정"],
+                              ["부서", normalizeTeam(u.team) || "미배정"],
                               ["연락처", u.phone ? formatPhone(u.phone) : "-"],
                               ["권한", roleLabels[u.role] || u.role || "-"],
                               ["회사명", u.companyName || "-"],
