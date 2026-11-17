@@ -157,8 +157,15 @@ const uniq = (a) => [...new Set(a.filter(Boolean))];
 export const PLATE_RE = /^[가-힣]{0,3}\d{2,3}[가-힣]\d{4}$/;
 export const normPlate = (s) => cell(s).replace(/\s+/g, "").replace(/-/g, "");
 const PHONE_RE = /0\d{1,2}[-.\s]?\d{3,4}[-.\s]?\d{4}/;
+// ⭐ 2026-11-17 구글시트가 숫자로 바꿔 앞의 0이 빠진 번호 되살리기 — 1092880431 → 01092880431 · 312345678 → 0312345678
+export function restoreLeadingZero(d) {
+  const x = String(d || "").replace(/\D/g, "");
+  if (/^1[016789]\d{7,8}$/.test(x)) return `0${x}`; // 휴대폰 010 · 011 · 016 …
+  if (/^2\d{7,8}$/.test(x) || /^(3[1-3]|4[1-4]|5[1-5]|6[1-4]|70)\d{7,8}$/.test(x)) return `0${x}`; // 지역번호 02 · 031 … · 070
+  return x;
+}
 export function fmtPhone(s) {
-  const d = cell(s).replace(/\D/g, "");
+  const d = restoreLeadingZero(cell(s).replace(/\D/g, ""));
   if (/^01\d{8,9}$/.test(d)) return d.length === 11 ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}` : `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
   if (/^02\d{7,8}$/.test(d)) return d.length === 10 ? `02-${d.slice(2, 6)}-${d.slice(6)}` : `02-${d.slice(2, 5)}-${d.slice(5)}`;
   if (/^0\d{9,10}$/.test(d)) return d.length === 11 ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}` : `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;

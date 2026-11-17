@@ -9,6 +9,9 @@
 //  · 줄 맞추기: 같은 묶음 안에서 도착지가 같은 줄끼리 순서대로(같은 도착지가 여러 줄이면 1번째↔1번째)
 
 const cell = (v) => String(v ?? "").replace(/ /g, " ").trim();
+// ⭐ 2026-11-17 구글시트가 숫자로 바꿔 앞의 0이 빠진 전화번호(1092880431) → 010-9288-0431 (functions/carrierMigrateCore.mjs fmtPhone 과 같은 규칙)
+const phoneDigits = (v) => { const x = String(v ?? "").replace(/\D/g, ""); return /^1[016789]\d{7,8}$/.test(x) || /^2\d{7,8}$/.test(x) || /^(3[1-3]|4[1-4]|5[1-5]|6[1-4]|70)\d{7,8}$/.test(x) ? `0${x}` : x; };
+const fixPhone = (v) => { const d = phoneDigits(v); if (!d) return String(v ?? "").trim(); if (/^02\d{7,8}$/.test(d)) return d.length === 10 ? `02-${d.slice(2, 6)}-${d.slice(6)}` : `02-${d.slice(2, 5)}-${d.slice(5)}`; if (/^0\d{9,10}$/.test(d)) return d.length === 11 ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}` : `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`; return String(v ?? "").trim(); };
 const nm = (s) => String(s || "").toLowerCase().replace(/[\s()（）[\]]/g, "");
 // ⭐ 2026-11-03 프로그램에서 지운 줄 열쇠(src/DispatchApp.jsx rbTombKey 와 같은 규칙) — 시트에 남아 있어도 다시 만들지 않는다
 const tombKey = (date, group, name) => [date, group || "", name].map((x) => nm(x).replace(/[^0-9a-z가-힣_-]/g, "_")).join("__");
@@ -114,7 +117,7 @@ function fieldsOf(form, v, only = "") {
     if (c.kind === "no" || c.kind === "sum" || c.kind === "calc" || c.kind === "date") return;
     if (only && ownerOf(c) !== only) return;
     const val = cell(v[c.id]);
-    if (c.kind === "field") rec[c.field] = TIME_FIELDS.has(c.field) ? (parseHM(val) ? korTime(parseHM(val)) : val) : MONEY_FIELDS.has(c.field) ? String(toInt(val) || "") : isEnum(c) ? enumVal(c, val) : val;
+    if (c.kind === "field") rec[c.field] = c.field === "전화번호" ? fixPhone(val) : TIME_FIELDS.has(c.field) ? (parseHM(val) ? korTime(parseHM(val)) : val) : MONEY_FIELDS.has(c.field) ? String(toInt(val) || "") : isEnum(c) ? enumVal(c, val) : val;
     else if (c.kind === "qty") { touchedQty = true; if (toInt(val)) qty[c.label] = toInt(val); }
     else if (c.kind === "extra") extra[c.label] = val;
   });
@@ -135,7 +138,7 @@ const same = (c, a, b) => {
   if (c.kind === "qty" || (c.kind === "field" && MONEY_FIELDS.has(c.field))) return toInt(a) === toInt(b);
   if (c.kind === "field" && TIME_FIELDS.has(c.field)) return (parseHM(a) || cell(a)) === (parseHM(b) || cell(b));
   if (c.kind === "field" && c.field === "차량번호") return normPlate(a) === normPlate(b);
-  if (c.kind === "field" && c.field === "전화번호") return String(a || "").replace(/\D/g, "") === String(b || "").replace(/\D/g, "");
+  if (c.kind === "field" && c.field === "전화번호") return phoneDigits(a) === phoneDigits(b); // ⭐ 2026-11-17 1092880431 = 010-9288-0431
   if (isEnum(c)) return enumVal(c, a) === enumVal(c, b); // 🔗 2026-11-08 "24시콜" = "24시" · "배차완료(자동)" = "배차완료"
   return cell(a).replace(/\s+/g, "") === cell(b).replace(/\s+/g, "");
 };
