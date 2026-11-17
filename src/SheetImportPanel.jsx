@@ -17,6 +17,7 @@ import { CustomSelect } from "./CustomSelect";
 import SheetPlaceDriverImport from "./SheetPlaceDriverImport"; // ⭐ 2026-11-02 상하차지·기사 가져오기
 import CarrierMigratePanel from "./CarrierMigratePanel"; // 🚚 2026-11-12 운송사 일괄 이전(시트 전체 · 탭별 모양 자동 인식)
 import { kpConfirm } from "./kpDialog";
+import { buildAliasMap, resolveClientAlias } from "./clientMerge"; // ⭐ 2026-11-17 합친 거래처의 옛 이름 → 남길 이름
 
 const SERVICE_EMAIL = "dispatch-app-9b92f@appspot.gserviceaccount.com";
 const ORDER_COLL = "orders";
@@ -243,6 +244,9 @@ export default function SheetImportPanel() {
       // 기존 오더(중복 확인용)
       const exist = await getDocs(query(collection(db, ORDER_COLL), where("companyName", "==", company)));
       const existKeys = new Set(exist.docs.map((x) => dupKey(x.data())));
+      // ⭐ 2026-11-17 거래처 합치기 — 시트에 옛 이름(예: "큐런네트웍스 주식회사")이 있으면 남길 이름("큐런")으로 가져온다
+      let aliasMap = new Map();
+      try { aliasMap = buildAliasMap((await getDocs(query(collection(db, "clients"), where("companyName", "==", company)))).docs.map((x) => x.data())); } catch { /* 거래처를 못 읽으면 시트 이름 그대로 */ }
       const out = [];
       let skipped = 0;
       tabs.forEach((t) => {
@@ -257,6 +261,7 @@ export default function SheetImportPanel() {
           if (/^(합계|소계|총계|총)/.test(client)) { skipped += 1; return; }
           const r = {};
           FIELDS.forEach((f) => { r[f.key] = get(f.key); });
+          if (r.거래처명) r.거래처명 = resolveClientAlias(r.거래처명, aliasMap); // ⭐ 2026-11-17 옛 이름 → 남길 이름
           r.상차일 = parseDate(r.상차일, hint);
           r.하차일 = parseDate(r.하차일, hint) || r.상차일;
           r.등록일 = parseDate(r.등록일, hint) || r.상차일;

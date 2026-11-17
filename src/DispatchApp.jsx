@@ -52,6 +52,8 @@ import { askCopyDates } from "./CopyCountDialog"; // ⭐ 2026-11-06 복사 등�
 import { dispatchStatusOf, payTypeStatusPatch } from "./dispatchStatus"; // 🚚 2026-11-07 배차상태 공용 규칙
 import { requestRouteSheetPush } from "./routeSheetPush"; // 💰 2026-11-06 고정노선 오더 고치면 바로 시트에
 import { makeClientMatcher } from "./clientMatch"; // ⭐ 2026-11-03 거래처 검색: 정확히 같은 이름이 있으면 그것만
+import ClientMergeModal from "./ClientMergeModal"; // ⭐ 2026-11-17 거래처 합치기(거래처관리 › 기본거래처)
+import { buildAliasMap, resolveOrderClient } from "./clientMerge"; // ⭐ 2026-11-17 합친 거래처의 옛 이름 → 남길 이름
 import DetailFilterButton, { applyDetailFilter, DetailScope } from "./DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { useCompanyBiz, bizOf, BizPicker, BizFilter, bizMatch, printInfoForBiz, BizListEditor, BizScope, BizSelect, bizColorOf, bizStripeProps, BizLegend, resolveBiz, rememberBiz, normBizKey, bankForBiz, bizInfoCardBlob } from "./companyBiz"; // ⭐ 2026-11-03 한 회사 · 여러 사업자 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
 import JSZip from "jszip";
@@ -4996,6 +4998,8 @@ const addDispatch = async (recordIn) => {
   // 💬 2026-11-08 알림톡은 화면에서 뺐다 — 새로 등록되는 오더는 모두 알림톡:false(서버가 보내지 않음) · 예전 발송 결과는 넘기지 않는다
   //  (PC · 모바일 등록 · AI 비서 · 오더 스캔 · 복사 등록이 모두 여기를 지난다)
   if (record) { record = { ...record, 알림톡: false }; delete record.알림톡결과; }
+  // ⭐ 2026-11-17 거래처 합치기 — 합친 거래처의 옛 이름(예: "큐런네트웍스 주식회사")으로 등록하면 남길 이름("큐런")으로 저장
+  if (record) { try { record = resolveOrderClient(record, buildAliasMap(clients)); } catch { /* 무시 */ } }
 
   const _id = crypto.randomUUID(); // ★ 무조건 새로 생성
 
@@ -9614,6 +9618,7 @@ return (
               initialTab={거래처관리Tab === "기본거래처" ? "기본" : "하차지"}
               hideTabs={true}
               userCompany={userCompany}
+              canMerge={!isViewer && (["admin", "totalMaster", "test", "allMgr"].includes(realRole || role) || myProfileDoc?.isMaster === true)} // ⭐ 2026-11-17 거래처 합치기 — 운송관리자 · 경리관리자 · 통합관리자 · 최고관리자 · 회사 마스터
             />
           )}
           {false && 거래처관리Tab === "고정거래처관리" && (
@@ -59222,7 +59227,8 @@ function KpEmptySearch({ en, title, sub }) {
   );
 }
 
-function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace, places: placesProp = [], showAlert = (m) => alert(m), hideTabs = false, initialTab = "하차지", userCompany = "", mobile = false }) {
+function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace, places: placesProp = [], showAlert = (m) => alert(m), hideTabs = false, initialTab = "하차지", userCompany = "", mobile = false, canMerge = false }) {
+  const [mergeOpen, setMergeOpen] = React.useState(false); // ⭐ 2026-11-17 거래처 합치기 창(관리자급만 — canMerge)
   // ⭐ 2026-11-06 mobile — 모바일 앱 거래처관리: 버튼은 신규등록·거래처정리·선택삭제만, 표 대신 카드(누르면 상세 시트)
   const [mSheet, setMSheet] = React.useState(null); // { kind: "place"|"client", r }
   const normalizePlaceRow = (d) => {
@@ -59511,6 +59517,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       return rows.filter((r) =>
         ["거래처명","사업자번호","대표자","주소","담당자","연락처","메모","오더메모"]
           .some((k) => norm(r[k] || "").includes(nq))
+        || (Array.isArray(r.aliases) && r.aliases.some((a) => norm(a).includes(nq))) // ⭐ 2026-11-17 합친 거래처의 옛 이름으로 찾아도 나온다
       );
     }
     if (showAllClients) return rows;
@@ -60677,6 +60684,12 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               <button onClick={downloadClientExcel}
                 className={KP_BTN}><EditableText id="client.baseClient.toolbar.다운로드" defaultText="다운로드" /></button>
               <ClientBizBulkButton clients={rows} className={KP_BTN} />
+              {/* ⭐ 2026-11-17 거래처 합치기 — 같은 회사가 이름 둘로 등록됐을 때(관리자급만) */}
+              {canMerge && <button type="button" data-testid="open-client-merge"
+                onClick={() => { if (!selected.size) return showAlert("합칠 거래처를 체크해 주세요.\n(같은 회사인 거래처 2곳 이상)"); setMergeOpen(true); }}
+                className={KP_BTN}>
+                <EditableText id="client.baseClient.toolbar.거래처합치기" defaultText="거래처 합치기" /> {selected.size > 1 && `(${selected.size})`}
+              </button>}
               <button onClick={removeSelectedFn}
                 className={KP_BTN_DANGER}>
                 <EditableText id="client.baseClient.toolbar.선택삭제" defaultText="선택삭제" /> {selected.size > 0 && `(${selected.size})`}
@@ -60698,6 +60711,13 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               </button>
             </div>}
           </div>
+
+          {/* ⭐ 2026-11-17 거래처 합치기 창 */}
+          {mergeOpen && canMerge && (
+            <ClientMergeModal clients={rows} initialIds={[...selected]} userCompany={userCompany}
+              onClose={() => setMergeOpen(false)}
+              onDone={(r) => { const gone = new Set(r.sources); setRows(prev => prev.filter(x => !gone.has(String(x.거래처명 || "").trim()))); setSelected(new Set()); }} />
+          )}
 
           {/* 신규등록 팝업 */}
           {showNewClientModal && (
