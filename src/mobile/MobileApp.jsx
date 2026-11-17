@@ -23272,14 +23272,16 @@ function ERPPayrollPage({ drivers, orders, cardVersionB, accent }) {
   const [month, setMonth] = useState(now.getMonth() + 1);
 
   const monthStr = `${year}-${String(month).padStart(2, "0")}`;
-  const monthOrders = orders.filter(o => String(o.상차일 || "").startsWith(monthStr) && o.이름 && !isCancelledOrder(o));
+  const monthOrders = orders.filter(o => String(o.상차일 || "").startsWith(monthStr) && (o.차량번호 || o.이름) && !isCancelledOrder(o));
 
+  // 🛠 2026-11-17 기사별 묶음은 차량번호 기준 — 이름이 같은 기사가 둘이어도 금액이 합쳐지지 않게(차량번호가 없으면 이름+연락처)
   const byDriver = {};
   monthOrders.forEach(o => {
-    const name = o.이름 || "-";
-    if (!byDriver[name]) byDriver[name] = { name, carNo: o.차량번호 || "", phone: o.전화번호 || "", cnt: 0, 기사운임: 0 };
-    byDriver[name].cnt += 1;
-    byDriver[name].기사운임 += Number(String(o.기사운임 ?? 0).replace(/[^\d.-]/g, "")) || 0;
+    const car = String(o.차량번호 || "").replace(/\s/g, "");
+    const key = car ? `car:${car}` : `nm:${String(o.이름 || "").trim()}|${String(o.전화번호 || "").replace(/\D/g, "")}`;
+    if (!byDriver[key]) byDriver[key] = { name: o.이름 || "-", carNo: o.차량번호 || "", phone: o.전화번호 || "", cnt: 0, 기사운임: 0 };
+    byDriver[key].cnt += 1;
+    byDriver[key].기사운임 += Number(String(o.기사운임 ?? 0).replace(/[^\d.-]/g, "")) || 0;
   });
   const rows = Object.values(byDriver).sort((a, b) => b.기사운임 - a.기사운임);
   const total = rows.reduce((s, r) => s + r.기사운임, 0);
