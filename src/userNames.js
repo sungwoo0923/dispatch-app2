@@ -9,11 +9,14 @@ import { db } from "./firebase";
 export const personName = (u) => String(u?.name || u?.이름 || u?.담당자명 || u?.displayName || "").trim();
 
 // 내 사용자 문서(실시간)
+// ⭐ 2026-11-17 속도 — 같은 사람 문서를 다른 화면이 이미 받았으면 그 값을 먼저 보여 준다(메모리만 · 구독은 그대로 해서 바로 최신으로)
+//  급여관리처럼 이 값을 기다려 "확인 중…"을 띄우던 화면이 바로 열린다
+const _myProf = new Map();
 export function useMyProfile(uid) {
-  const [p, setP] = React.useState(null);
+  const [p, setP] = React.useState(() => (uid && _myProf.get(uid)) || null);
   React.useEffect(() => {
     if (!uid) return undefined;
-    return onSnapshot(doc(db, "users", uid), (s) => setP(s.exists() ? s.data() : {}), () => setP({}));
+    return onSnapshot(doc(db, "users", uid), (s) => { const v = s.exists() ? s.data() : {}; _myProf.set(uid, v); setP(v); }, () => setP({}));
   }, [uid]);
   return p;
 }

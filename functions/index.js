@@ -6945,7 +6945,9 @@ exports.dailyReportPush = functions.runWith({ secrets: PLATFORM_MAIL_SECRETS, ti
    비밀번호는 payrollSecrets(서버만) · 잠금 해제는 payrollUnlocks/{uid}(30분) — firestore.rules가 급여 문서마다 확인
 ================================================================== */
 const _payrollPw = require("./payrollPw").makePayrollPw({ db, FieldValue, Timestamp, HttpsError: functions.https.HttpsError });
-const payCall = (fn) => functions.runWith({ timeoutSeconds: 30, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
+// ⭐ 2026-11-17 속도 — 1세대 함수는 메모리에 비례해 CPU를 받는다(256MB ≈ 0.4GHz). 이 큰 index.js를 처음 읽어 켜는 시간(콜드 스타트)과
+//  scrypt 비밀번호 계산이 느린 CPU에서 몇 초씩 걸렸다 → 1GB(≈1.4GHz). 드물게 불리는 함수라 비용 차이는 아주 작다
+const payCall = (fn) => functions.runWith({ timeoutSeconds: 30, memory: "1GB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
   try { return await fn(data || {}, context); } catch (e) {
     if (e instanceof functions.https.HttpsError) throw e;
     console.error("[급여 비밀번호] 실패:", e);
