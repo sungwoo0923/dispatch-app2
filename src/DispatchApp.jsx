@@ -10,7 +10,9 @@ import ProInsight from "./ProInsight";
 import NameIdToggle from "./NameIdToggle"; // ⭐ 2026-11-09 계정 이름 ↔ 아이디
 import DailyReport, { DailyReportPopupHost } from "./DailyReport"; // 📊 2026-11-06 일일 경영 보고(임원 화면 · 대표·임원 일일 보고서)
 import { canSeeBriefing, BRIEF_MENU, BRIEF_LABEL } from "./dailyReport";
-import { EXEC_MENUS, execMenuLabel, menuName } from "./execMenus"; // 📈 2026-11-08 임원 화면 · 경영 분석 · 결재 대기 · 직원 정보
+import { EXEC_MENUS, execMenuLabel, menuName } from "./execMenus";
+import { ExecModeContext } from "./execUi"; // 👑 2026-11-17 임원 화면 디자인 시스템
+const EXEC_SKIN_MENUS = ["HOME", "일일경영보고", "경영분석", "결재대기", "직원정보", "자금현황", "스케줄", "영업관리", "결재함", "직원일정"]; // 임원 화면에서 남색 · 골드로 그리는 메뉴 // 📈 2026-11-08 임원 화면 · 경영 분석 · 결재 대기 · 직원 정보
 import BulkUploadChooser, { downloadTemplateXlsx } from "./BulkUploadChooser";
 import { buildCopyText, getCopyTpl, useCopyTemplates } from "./copyTemplates";
 import { CopyTemplateHost, openCopyTemplateEditor } from "./CopyTemplateEditor";
@@ -9359,8 +9361,10 @@ return (
       <BrowserZoomNotice fit={screenFit} />
       {rg.enabled && !workScope && rgOnScreen(menu) && !rgTabOff && <RouteGroupBar rg={rg} rows={dispatchDataPreRG} role={role} userCompany={userCompany} dark={darkMode} />}
       {!rg.enabled && ["배차현황", "실시간배차현황"].includes(menu) && <div className="mb-1 flex justify-end empty:hidden"><SheetLiveChip role={role} userCompany={userCompany} /></div>}
-      <main className={`kp-main ${menu === "HOME" || menu === BRIEF_MENU || EXEC_MENUS.includes(menu) ? "kp-main-bare" : ""} rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
-        {!darkMode && <KpPageHeader menu={menu} />}
+      {/* 👑 2026-11-17 임원 화면 — 대표 · 임원 메뉴는 깊은 남색 + 골드 디자인(src/execUi.jsx)으로 감싸고, 흰 머리말 대신 화면마다 임원용 머리말 */}
+      <ExecModeContext.Provider value={deptMode === "exec" && EXEC_SKIN_MENUS.includes(menu)}>
+      <main className={`kp-main ${menu === "HOME" || menu === BRIEF_MENU || EXEC_MENUS.includes(menu) || (deptMode === "exec" && EXEC_SKIN_MENUS.includes(menu)) ? "kp-main-bare" : ""} rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
+        {!darkMode && !(deptMode === "exec" && EXEC_SKIN_MENUS.includes(menu)) && <KpPageHeader menu={menu} />}
         {/* 🧭 2026-11-12 컨테이너 · 해상 · 항공 · 통합 현황 화면 */}
         {isBizMenu(menu) && (
           <React.Suspense fallback={<div className="py-20 text-center text-[13.5px] font-bold text-[#9AA9C3]">불러오는 중…</div>}>
@@ -9850,6 +9854,7 @@ return (
         {/* ⭐ 2026-10-28 — 관리센터는 "운송사 하나"가 아니라 프로그램 전체(가입 운송사·화주사) 관제 */}
 
       </main>
+      </ExecModeContext.Provider>
       </div>
       {/* ===== 홈 오더 미리보기 모달 ===== */}
       {homeClickedOrder && (

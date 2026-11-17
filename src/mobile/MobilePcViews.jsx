@@ -6,6 +6,7 @@ import React from "react";
 import { approvalNavItems } from "../menuTree"; // ⭐ 2026-11-10 메뉴 통일
 import { doc, setDoc, getDocs, updateDoc, deleteDoc, query, where, collection, serverTimestamp, onSnapshot } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "../firebase";
+import { ExecModeContext } from "../execUi"; // 👑 2026-11-17 임원 화면 디자인 시스템
 import KpSubNav from "../KpSubNav";
 import { kpAlert, kpConfirm } from "../kpDialog"; // 📱 2026-11-17 휴대폰 기본 알림창 대신 앱 디자인 창
 import FreightRateInquiry from "../FreightRateInquiry";
@@ -325,5 +326,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
       <div className="kp-m-pc px-2 pt-2"><DetailScope data={salesData} getters={detGet} title="세부검색 · 매출관리">{(detRows) => <BizScope company={userCompany} data={detRows}>{(bizRows, bizSel) => <PcSettlement key={`ms-${bizSel || "all"}`} dispatchData={bizRows} fixedRows={fixedRows} clients={clients} places={places} role={role} isViewer={role === "viewer"} userCompany={userCompany} />}</BizScope>}</DetailScope></div>
     </React.Suspense>
   );
-  return <OrderHistoryContext.Provider value={history}>{body}</OrderHistoryContext.Provider>;
+  // 👑 2026-11-17 임원 화면 — 임원 메뉴는 PC와 같은 남색 · 골드 디자인(src/execUi.jsx)
+  const execSkin = deptMode === "exec" && String(kind).startsWith("dept:") && ["sales", "briefing", "analysis", "apqueue", "staffinfo", "approvals", "schedule", "funds", "execsched"].includes(String(kind).slice(5));
+  return <OrderHistoryContext.Provider value={history}><ExecModeContext.Provider value={execSkin}>{execSkin ? <div className="kp-m-exec" style={{ background: "#050A16", minHeight: "100%" }}>{body}</div> : body}</ExecModeContext.Provider></OrderHistoryContext.Provider>;
 }
