@@ -551,6 +551,7 @@ const captureAt1x = async (el, opts) => {
   try { return await html2canvas(el, opts); } finally { if (box) box.style.zoom = prev; }
 };
 
+// ⭐ 2026-11-17 줄마다 칸 내용을 세로 가운데로 — 비고(메모)가 길어 줄이 높아져도 다른 칸 글자가 위로 떠 보이지 않게
 // 🧾 2026-11-02 지출결의 지출 내역 표(문서·인쇄) — 종이 양식(NO·발생일·업체명·적요·지출금액(공급가액·세액)·합계·비고(입금 계좌번호))과 같은 배치.
 //    맨 위 「금 액」 줄에 한글 금액(金 ○○ 원整)과 숫자. 휴대폰(compact)에서는 행마다 카드로 쌓는다.
 const n0 = (v) => (Number(v) ? Number(v).toLocaleString("ko-KR") : "");
@@ -603,14 +604,14 @@ function SpendLinesPaper({ label, rows, last, compact: c }) {
             <div className={`${th} border-b border-r`} style={{ gridColumn: "6", gridRow: "2" }}>세액</div>
             {list.map((r, i) => (
               <React.Fragment key={i}>
-                <div className={`${td} border-b border-r text-center font-bold`}>{rows.length ? i + 1 : ""}</div>
-                <div className={`${td} border-b border-r text-center tabular-nums !px-1 text-[12.5px] !whitespace-nowrap ![overflow-wrap:normal]`}>{r.date || ""}</div>
-                <div className={`${td} border-b border-r font-bold`}>{r.vendor || ""}</div>
-                <div className={`${td} border-b border-r whitespace-pre-wrap`}>{r.memo || ""}</div>
-                <div className={`${td} border-b border-r text-right tabular-nums !whitespace-nowrap ![overflow-wrap:normal]`}>{n0(r.supply)}</div>
-                <div className={`${td} border-b border-r text-right tabular-nums !whitespace-nowrap ![overflow-wrap:normal]`}>{n0(r.vat)}</div>
-                <div className={`${td} border-b border-r text-right tabular-nums !whitespace-nowrap ![overflow-wrap:normal] font-black`}>{n0(spendRowTotal(r))}</div>
-                <div className={`${td} border-b text-[11.5px] leading-snug`}>{bankText(r.bank) && <div className="tabular-nums font-bold text-[#1B2B4B]">{bankText(r.bank)}</div>}{r.note && <div className="text-[#3A4A66]">{r.note}</div>}</div>
+                <div className={`${td} border-b border-r flex items-center justify-center text-center font-bold`}>{rows.length ? i + 1 : ""}</div>
+                <div className={`${td} border-b border-r flex items-center justify-center text-center tabular-nums !px-1 text-[12.5px] !whitespace-nowrap ![overflow-wrap:normal]`}>{r.date || ""}</div>
+                <div className={`${td} border-b border-r flex items-center font-bold`}><span className="min-w-0">{r.vendor || ""}</span></div>
+                <div className={`${td} border-b border-r flex items-center`}><span className="min-w-0 whitespace-pre-wrap">{r.memo || ""}</span></div>
+                <div className={`${td} border-b border-r flex items-center justify-end text-right tabular-nums !whitespace-nowrap ![overflow-wrap:normal]`}>{n0(r.supply)}</div>
+                <div className={`${td} border-b border-r flex items-center justify-end text-right tabular-nums !whitespace-nowrap ![overflow-wrap:normal]`}>{n0(r.vat)}</div>
+                <div className={`${td} border-b border-r flex items-center justify-end text-right tabular-nums !whitespace-nowrap ![overflow-wrap:normal] font-black`}>{n0(spendRowTotal(r))}</div>
+                <div className={`${td} border-b flex flex-col justify-center text-[11.5px] leading-snug`}>{bankText(r.bank) && <div className="tabular-nums font-bold text-[#1B2B4B]">{bankText(r.bank)}</div>}{r.note && <div className="text-[#3A4A66]">{r.note}</div>}</div>
               </React.Fragment>
             ))}
             <div className="bg-[#F5F7FB] font-black border-r border-[#0F1A30]/25 px-2 py-1.5 text-center tracking-[0.3em]" style={{ gridColumn: "1 / span 4" }}>합 계</div>
@@ -717,10 +718,10 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
                   <div className="flex bg-[#F5F7FB] font-black border-b border-[#0F1A30]/40">{["품목", "수량", "단가", "금액"].map((h, k) => <div key={h} className={`px-2 py-1.5 whitespace-nowrap ${k === 0 ? "flex-1 min-w-0" : `${iw} text-right`} ${k ? "border-l border-[#0F1A30]/30" : ""}`}>{h}</div>)}</div>
                   {(rows.length ? rows : [{}]).map((r, k) => (
                     <div key={k} className="flex border-b border-[#0F1A30]/20 last:border-b-0">
-                      <div className="flex-1 min-w-0 px-2 py-1.5 break-words">{r.name || " "}</div>
-                      <div className={`${iw} px-2 py-1.5 text-right border-l border-[#0F1A30]/20`}>{r.qty || ""}</div>
-                      <div className={`${iw} px-2 py-1.5 text-right border-l border-[#0F1A30]/20`}>{Number(r.price) ? Number(r.price).toLocaleString("ko-KR") : ""}</div>
-                      <div className={`${iw} px-2 py-1.5 text-right border-l border-[#0F1A30]/20 font-bold`}>{Number(r.price) ? ((Number(r.qty) || 0) * Number(r.price)).toLocaleString("ko-KR") : ""}</div>
+                      <div className="flex-1 min-w-0 px-2 py-1.5 break-words flex items-center">{r.name || " "}</div>
+                      <div className={`${iw} px-2 py-1.5 text-right border-l border-[#0F1A30]/20 flex items-center justify-end`}>{r.qty || ""}</div>
+                      <div className={`${iw} px-2 py-1.5 text-right border-l border-[#0F1A30]/20 flex items-center justify-end`}>{Number(r.price) ? Number(r.price).toLocaleString("ko-KR") : ""}</div>
+                      <div className={`${iw} px-2 py-1.5 text-right border-l border-[#0F1A30]/20 font-bold flex items-center justify-end`}>{Number(r.price) ? ((Number(r.qty) || 0) * Number(r.price)).toLocaleString("ko-KR") : ""}</div>
                     </div>
                   ))}
                   <div className="flex bg-[#F5F7FB] border-t border-[#0F1A30]/40 font-black"><div className="flex-1 px-2 py-1.5 text-right">합계</div><div className={`${iw} px-2 py-1.5 text-right`}>{itemsTotal(v).toLocaleString("ko-KR")}</div></div>
