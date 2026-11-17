@@ -105,7 +105,7 @@ function fakeDb() {
   const snap = (n, id) => { const d = col(n).get(id); return { id, exists: d !== undefined, data: () => (d === undefined ? undefined : structuredClone(d)), ref: ref(n, id) }; };
   const cmp = { "==": (x, v) => x === v, ">": (x, v) => x > v, "<": (x, v) => x < v, ">=": (x, v) => x >= v };
   const qy = (n, fs = [], lim = Infinity) => ({ where: (f, op, v) => qy(n, [...fs, [f, op, v]], lim), limit: (k) => qy(n, fs, k), get: async () => { const docs = [...col(n).keys()].map((id) => snap(n, id)).filter((s) => fs.every(([f, op, v]) => cmp[op](s.data()[f], v))).slice(0, lim); return { docs, empty: !docs.length, size: docs.length }; } });
-  return { collection: (n) => ({ doc: (id) => ref(n, id), ...qy(n) }), batch: () => { const ops = []; return { set: (r, d, o) => ops.push(() => r.set(d, o)), delete: (r) => ops.push(() => r.delete()), commit: async () => { for (const f of ops) await f(); } }; },
+  return { collection: (n) => ({ doc: (id) => ref(n, id ?? `auto${(seq += 1)}`), ...qy(n) }), batch: () => { const ops = []; return { set: (r, d, o) => ops.push(() => r.set(d, o)), delete: (r) => ops.push(() => r.delete()), commit: async () => { for (const f of ops) await f(); } }; },
     runTransaction: async (fn) => fn({ get: (r) => r.get(), set: (r, d, o) => r.set(d, o), delete: (r) => r.delete() }), data: (n, id) => col(n).get(id), ids: (n) => [...col(n).keys()] };
 }
 function fakeSheet(tabs, { denyWrite = false } = {}) {
@@ -421,5 +421,35 @@ async function world(mode, opts = {}) {
   await live.runOne(CO, cfg(), { force: true });
   assert.ok(!w.db.ids("places").some((i) => w.db.data("places", i).업체명 === "CJ ENM 물류센터(인천)"), "지운 곳은 다시 만들지 않는다");
   console.log("live(새 상하차지 이름만 등록) OK");
+}
+{
+  // 🛑 2026-11-17 시트에서 한 줄을 지우면 → 서버가 그 오더를 지움 → (예전) 그 삭제를 다시 시트로 보내 같은 자리 · 같은 날짜의 다음 줄을 지움 → 줄줄이 사라짐
+  //  지금: 시트에서 없어져 서버가 지운 오더는 시트로 삭제를 보내지 않는다 → 나머지 오늘 줄은 그대로
+  const { makeSheetLive } = require("../functions/sheetLiveOrders.js");
+  const w = await world("on");
+  let mt = 1;
+  const live = makeSheetLive({ db: w.db, FieldValue: { serverTimestamp: () => TS, delete: () => DEL, arrayUnion: (...v) => v }, sheetsApiFor: w.sh.api, parseSpreadsheetId: (u) => (u ? "sid" : ""), quoteTab: (t) => `'${t}'`, sheetModifiedTime: async () => String(mt), bumpDataVersion: async () => {}, push: w.push });
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const [y, m, d] = today.split("-").map(Number);
+  const plates = ["충북71가7101", "충북72나7202", "충북73다7303", "충북74라7404"];
+  const dests = ["평택시 포승읍", "천안시 성정동", "아산시 배방읍", "오산시 원동"];
+  plates.forEach((pl, i) => w.tabs["아산 내수"].push([`${y}. ${m}. ${d}`, "신봉길101", dests[i], "", "", "10", "1톤", "80,000", "", "80,000", "70,000", "", "70,000", "10,000", "", "원콜", pl, `기사${i}`, "", "", ""]));
+  await w.db.collection("sheetLive").doc(CO).set({ ...w.cfg, days: 14 });
+  const cfg = () => w.db.data("sheetLive", CO);
+  await live.runOne(CO, cfg(), { force: true });
+  const todays = () => w.db.ids("orders").map((id) => ({ id, ...w.db.data("orders", id) })).filter((o) => o.상차일 === today);
+  assert.equal(todays().length, 4);
+  // 시트에서 첫 줄을 지운다(아래 줄이 한 칸씩 올라온다)
+  const rows = w.tabs["아산 내수"]; const at = rows.findIndex((r) => r[16] === plates[0]); rows.splice(at, 1); mt += 1;
+  const snapBefore = new Map(todays().map((o) => [o.id, o]));
+  const r = await live.runOne(CO, cfg());
+  assert.equal(r.removed, 1, JSON.stringify(r));
+  // 실제 서버에선 orders 삭제 트리거가 돈다 — 흉내
+  for (const [id, o] of snapBefore) if (!w.db.data("orders", id)) { const { id: _x, ...b } = o; await w.push.onOrderWrite({ before: { exists: true, data: () => structuredClone(b) }, after: { exists: false, data: () => undefined } }, { params: { orderId: id } }); }
+  await live.kick(CO, "program");
+  await live.runOne(CO, cfg(), { force: true });
+  assert.deepEqual(rows.filter((x) => plates.includes(x[16])).map((x) => x[16]), plates.slice(1), "남은 오늘 줄이 지워지면 안 된다");
+  assert.equal(todays().length, 3);
+  console.log("live(시트에서 줄 지움 → 다른 줄이 줄줄이 지워지지 않음) OK");
 }
 console.log("sheetPush: 모두 통과");

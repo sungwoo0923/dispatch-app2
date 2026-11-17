@@ -82,11 +82,12 @@ const KEYS = [
   (x) => [tabOf(x.이전출처), x.상차일, ns(x.차량번호), String(Number(x.청구운임) || 0), String(Number(x.기사운임) || 0)].join("|"),
   (x) => (x.이전출처 ? `${x.이전출처}|${x.상차일}` : ""),
 ];
-export function findRow(ctx, data, { taken = new Set() } = {}) {
+export function findRow(ctx, data, { taken = new Set(), strict = false } = {}) {
   const tab = tabOf(data?.이전출처);
   if (!tab) return null;
   const pool = ctx.built.orders.filter((o) => o.__tab === tab && !taken.has(`${o.__tab}!${o.__row}`));
-  for (const key of KEYS) {
+  // strict(삭제): 날짜 · 구간 · 차량까지 같은 줄만 — "같은 줄 번호 + 같은 날짜"만으로 찾으면 줄이 밀렸을 때 엉뚱한 줄(새로 입력한 줄)을 지웠다
+  for (const key of strict ? KEYS.slice(0, 2) : KEYS) {
     const k = key(data); if (!k) continue;
     const hit = pool.find((o) => key(o) === k);
     if (hit) return hit;
@@ -348,7 +349,7 @@ export function planCreate(ctx, order, title, { rowCount = 0, atRow = 0 } = {}) 
 
 // ── 삭제(그 줄의 값만 비운다 · 수식 칸은 그대로) ──────────────────────────
 export function planDelete(ctx, before, opts = {}) {
-  const cur = findRow(ctx, before, opts);
+  const cur = findRow(ctx, before, { ...opts, strict: true });
   if (!cur) return { ok: true, kind: "delete", gone: true, cells: [] }; // 시트에 이미 없다
   if (Number(cur.이전줄수) > 1) return fail("여러 줄을 한 오더로 묶은 줄(회전)은 시트에서 비우지 않습니다");
   const title = cur.__tab, rowNo = cur.__row;
