@@ -3480,16 +3480,27 @@ export async function captureInvoiceFull(fn) {
   try { await new Promise((r) => requestAnimationFrame(() => r())); return await fn(); }
   finally { undo.forEach((u) => u && u()); }
 }
-function InvoiceDocFit({ children, fit = true, maxScale = 1 }) {
+// ⭐ 2026-11-17 (3차) 미리보기 글씨가 뭉개지던 문제 — 원인: transform: scale() 로 820px 문서를 통째로 줄여(나란히 볼 때 0.6배 남짓)
+//  11px 글씨가 6~7px 로 그려졌고, 글자가 픽셀 칸에 맞춰지지 않은 채(힌팅 없이) 축소돼 흐릿하게 깨져 보였다.
+//  이제 CSS zoom 으로 줄인다 — 브라우저가 줄인 크기로 다시 글자를 배치해 또렷하다(크롬 · 엣지 · 사파리 · 파이어폭스 126+).
+//  zoom 이 없는 브라우저만 예전 transform 방식. 그리고 0.85배 아래로는 줄이지 않는다(그보다 좁으면 옆으로 넘겨 본다).
+const INVOICE_ZOOM_OK = typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("zoom", "0.5");
+const INVOICE_MIN_SCALE = 0.85;
+function InvoiceDocFit({ children, fit = true, maxScale = 1, minScale = INVOICE_MIN_SCALE }) {
   const outer = useRef(null), inner = useRef(null);
   const [box, setBox] = useState({ s: 1, h: null, x: 0 });
   React.useLayoutEffect(() => {
     const o = outer.current, n = inner.current;
     if (!o || !n) return undefined;
     const run = () => {
-      const cw = o.clientWidth, nw = n.offsetWidth, nh = n.offsetHeight; // offset* 는 scale 과 상관없는 원래 크기
+      // 원래 크기(줄이기 전)를 잰다 — zoom 은 offset* 값에도 걸리므로 잠깐 풀고 잰다
+      const pz = n.style.zoom; if (pz) n.style.zoom = "";
+      const cw = o.clientWidth, nw = n.offsetWidth, nh = n.offsetHeight;
+      if (pz) n.style.zoom = pz;
       if (!cw || !nw) return;
-      const s = fit ? Math.min(maxScale, cw / nw) : 1;
+      let s = fit ? Math.min(maxScale, cw / nw) : 1;
+      if (fit && s < minScale) s = Math.min(1, minScale); // 글씨가 깨질 만큼 작게 줄이지 않는다 — 대신 옆으로 넘겨 본다
+      s = Math.round(s * 1000) / 1000;
       const x = s > 1 ? Math.max(0, Math.round((cw - nw * s) / 2)) : 0;
       setBox((p) => (Math.abs(p.s - s) < 0.002 && p.h === Math.round(nh * s) && p.x === x ? p : { s, h: Math.round(nh * s), x }));
     };
@@ -3497,23 +3508,59 @@ function InvoiceDocFit({ children, fit = true, maxScale = 1 }) {
     let ro = null;
     if (typeof ResizeObserver !== "undefined") { ro = new ResizeObserver(run); ro.observe(o); ro.observe(n); }
     else window.addEventListener("resize", run);
-    const full = () => { // 찍는 동안 원래 크기
-      const t = n.style.transform, ov = o.style.overflow, hh = o.style.height;
-      n.style.transform = "none"; o.style.overflow = "visible"; o.style.height = "auto";
-      return () => { n.style.transform = t; o.style.overflow = ov; o.style.height = hh; };
+    const full = () => { // 찍는 동안 원래 크기(html2canvas 는 zoom · transform 을 제대로 못 그린다)
+      const t = n.style.transform, z = n.style.zoom, ov = o.style.overflow, hh = o.style.height;
+      n.style.transform = "none"; n.style.zoom = ""; o.style.overflow = "visible"; o.style.height = "auto";
+      return () => { n.style.transform = t; n.style.zoom = z; o.style.overflow = ov; o.style.height = hh; };
     };
     _invoiceFit.add(full);
     return () => { _invoiceFit.delete(full); if (ro) ro.disconnect(); else window.removeEventListener("resize", run); };
-  }, [fit, maxScale]);
+  }, [fit, maxScale, minScale]);
   const { s, h, x } = box;
+  if (INVOICE_ZOOM_OK) {
+    // zoom — 줄인 크기가 그대로 자리(폭 · 높이)가 되므로 높이 맞추기 · absolute 가 필요 없다 · 넓으면 가운데 · 좁으면 옆으로 넘김
+    return (
+      <div ref={outer} data-kp="inv-fit" style={{ width: "100%", overflowX: fit ? "auto" : "visible", position: "relative" }}>
+        <div ref={inner} data-kp="inv-fit-doc" style={{ width: INVOICE_DOC_W, minWidth: "min-content", zoom: s !== 1 ? s : undefined, margin: "0 auto" }}>
+          {children}
+        </div>
+      </div>
+    );
+  }
   const shrink = s < 0.999;
-  // 줄일 땐 왼쪽 위 기준으로 줄이고 바깥 높이를 줄인 높이로 맞춘다(아래 빈칸 · 잘림 없음) · 넓으면 가운데
+  // (예전 방식) 줄일 땐 왼쪽 위 기준으로 줄이고 바깥 높이를 줄인 높이로 맞춘다(아래 빈칸 · 잘림 없음) · 넓으면 가운데
   return (
-    <div ref={outer} data-kp="inv-fit" style={{ width: "100%", height: h != null ? h : "auto", overflow: fit ? "hidden" : "visible", position: "relative" }}>
+    <div ref={outer} data-kp="inv-fit" style={{ width: "100%", height: h != null ? h : "auto", overflowX: fit ? "auto" : "visible", overflowY: fit ? "hidden" : "visible", position: "relative" }}>
       <div ref={inner} style={{ width: INVOICE_DOC_W, minWidth: "min-content", transform: s !== 1 ? `scale(${s})` : "none", transformOrigin: "top left", position: shrink || s > 1 ? "absolute" : "relative", left: x, top: 0, margin: shrink || s > 1 ? 0 : "0 auto" }}>
         {children}
       </div>
     </div>
+  );
+}
+// ⭐ 2026-11-17 (3차) 편집 표 + 미리보기 나란히 보기 — 화면 크기(media query)가 아니라 이 자리의 실제 폭으로 정한다
+//  (왼쪽 메뉴 · 거래처 목록 고정 · 브라우저 확대에 따라 남는 폭이 달라서) · 미리보기 칸이 ~740px(0.9배) 이상일 때만 나란히
+const STMT_SIDE_MIN = 1440;
+function useBoxWidth() {
+  const [w, setW] = useState(0);
+  const roRef = useRef(null);
+  const ref = React.useCallback((el) => {
+    if (roRef.current) { roRef.current.disconnect(); roRef.current = null; }
+    if (!el) return;
+    setW(el.clientWidth);
+    if (typeof ResizeObserver !== "undefined") { const ro = new ResizeObserver(() => setW(el.clientWidth)); ro.observe(el); roRef.current = ro; }
+  }, []);
+  return [ref, w];
+}
+// ⭐ 2026-11-17 (3차) 명세서 내역 표 칸 폭(A4 안에 들어가게) — 날짜 · 차량번호 · 금액은 한 줄, 상차지 · 하차지 · 경유지 · 화물명이 남는 폭을 나눠 쓰고 길면 줄바꿈
+const INVOICE_COL_W = { 상차일: 74, 톤수: 40, 차량종류: 52, 기사명: 52, 차량번호: 86 };
+function InvoiceColGroup({ form }) {
+  const tax = form?.tax !== false;
+  return (
+    <colgroup>
+      <col style={{ width: 30 }} />
+      {visibleCols(form).map((c) => <col key={c.k} style={INVOICE_COL_W[c.k] ? { width: INVOICE_COL_W[c.k] } : undefined} />)}
+      {tax ? [70, 62, 76].map((w, i) => <col key={`m${i}`} style={{ width: w }} />) : <col style={{ width: 84 }} />}
+    </colgroup>
   );
 }
 function InvoicePreviewRows({ mapped, rows, onOpen, docTd, docNum, DOC, won, form }) {
@@ -3535,7 +3582,7 @@ function InvoicePreviewRows({ mapped, rows, onOpen, docTd, docNum, DOC, won, for
       {list.map((m, i) => (
         <tr key={m.idx} className="cursor-pointer hover:bg-[#F4F6FA]" onClick={() => onOpen(rows[i])} title="클릭하여 상세보기">
           <td style={{ ...docTd, color: DOC.mute, fontFamily: DOC.mono }}>{m.idx}</td>
-          {cols.map((c) => <td key={c.k} style={c.mono ? { ...docTd, fontFamily: DOC.mono, whiteSpace: "nowrap" } : c.small ? { ...docTd, fontSize: 10.5 } : docTd}>{m[c.k]}</td>)}
+          {cols.map((c) => <td key={c.k} style={c.mono ? { ...docTd, fontFamily: DOC.mono, whiteSpace: "nowrap" } : c.small ? { ...docTd, fontSize: 10.5, whiteSpace: "nowrap" /* ⭐ 2026-11-17 (3차) 차량번호는 한 줄(경기82자 / 9732 처럼 끊기지 않게) */ } : docTd}>{m[c.k]}</td>)}
           <td style={{ ...docNum, fontWeight: 700 }}>{won(m.공급가액)}</td>
           {tax && <td style={{ ...docNum, color: DOC.sub }}>{won(m.세액)}</td>}
           {tax && <td style={{ ...docNum, fontWeight: 900 }}>{won(m.공급가액 + m.세액)}</td>}
@@ -52190,6 +52237,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const [invFormOpen, setInvFormOpen] = useState(false);
   // ⭐ 2026-11-17 명세서 [크게 보기] — 미리보기를 화면 가득 띄운다(폭 맞춤 ↔ 실제 크기) · Esc 로 닫기
   const [docBig, setDocBig] = useState(false);
+  const [stmtWrapRef, stmtWrapW] = useBoxWidth(); // ⭐ 2026-11-17 (4차) 편집 표 · 미리보기 자리 폭
+  const stmtSide = stmtWrapW >= STMT_SIDE_MIN;
   // ⭐ 2026-11-17 거래처 목록 — 기본은 서랍(버튼으로 열기), [고정]하면 왼쪽 칸(이 브라우저에 기억)
   const [railPin, setRailPin] = useState(() => { try { return localStorage.getItem("kpStmtRailPin") === "1"; } catch { return false; } });
   const [railOpen, setRailOpen] = useState(false);
@@ -54144,7 +54193,7 @@ const handleBatchSettle = async (targetStatus) => {
                 <div className="rounded-2xl border border-dashed border-[#C9D3E3] bg-white px-4 py-3 text-[14px] text-[#5B6B85]">거래처 한 곳 · 한 달(1일~말일)로 열면 발송 · 확인 · 계산서 · 마감 단계를 기록할 수 있어요</div>
               ) : null}
 
-              <div className={railPin ? "grid grid-cols-1 min-[2200px]:grid-cols-[minmax(0,52fr)_minmax(0,48fr)] gap-3 items-start" : "grid grid-cols-1 min-[1900px]:grid-cols-[minmax(0,55fr)_minmax(0,45fr)] gap-3 items-start"}>{/* ⭐ 2026-11-17 (3차) 목록을 서랍으로 접으면 1900px~ 나란히(편집 55 : 미리보기 45), 그보다 좁으면 위 · 아래(미리보기 전체 폭) */}{/* ⭐ 2026-11-09 왼쪽 거래처 목록이 늘 있으니 편집·미리보기 나란히는 넓은 화면만, 그보다 좁으면 위(편집)·아래(미리보기) · ⭐ 2026-11-17 명세서 줄 표가 칸을 나눠 넓어져 1800px~ · 편집 56 : 미리보기 44
+              <div ref={stmtWrapRef} data-kp="stmt-split" data-side={stmtSide ? "1" : "0"} className={stmtSide ? "grid grid-cols-[minmax(0,46fr)_minmax(0,54fr)] gap-3 items-start" : "grid grid-cols-1 gap-3 items-start"}>{/* ⭐ 2026-11-17 (4차) 나란히/위아래는 이 자리 실제 폭으로(1440px~ 나란히 · 편집 46 : 미리보기 54) — 미리보기를 넓혀 글씨가 또렷하게 */}{/* ⭐ 2026-11-17 (3차) 목록을 서랍으로 접으면 1900px~ 나란히(편집 55 : 미리보기 45), 그보다 좁으면 위 · 아래(미리보기 전체 폭) */}{/* ⭐ 2026-11-09 왼쪽 거래처 목록이 늘 있으니 편집·미리보기 나란히는 넓은 화면만, 그보다 좁으면 위(편집)·아래(미리보기) · ⭐ 2026-11-17 명세서 줄 표가 칸을 나눠 넓어져 1800px~ · 편집 56 : 미리보기 44
                 ⭐ 2026-11-17 (2차) 1800px 에선 미리보기 칸이 500px 남짓이라 A4 명세서가 반쯤 잘려 보였다 → 나란히는 2200px~(편집 52 : 미리보기 48), 그보다 좁으면 위 · 아래로 쌓아 미리보기가 전체 폭을 쓴다 */}
                 <div className="space-y-3 min-w-0">
                   {searched && (
@@ -54293,7 +54342,7 @@ const handleBatchSettle = async (targetStatus) => {
               </div>
                 </div>
             {/* ── 오른쪽: 명세서 미리보기(인쇄·PDF·엑셀·메일 첨부와 같은 모양) ── */}
-            <div className={railPin ? "min-w-0 min-[2200px]:sticky min-[2200px]:top-3" : "min-w-0 min-[1900px]:sticky min-[1900px]:top-3"}>{/* ⭐ 2026-11-17 따라오기(sticky) · 높이 제한은 나란히 볼 때만 — 쌓여 있을 땐 명세서 전체가 다 보이게 */}
+            <div className={stmtSide ? "min-w-0 sticky top-3" : "min-w-0"}>{/* ⭐ 2026-11-17 따라오기(sticky) · 높이 제한은 나란히 볼 때만 — 쌓여 있을 땐 명세서 전체가 다 보이게 */}
               {docBig && (
                 <div className={`${csCard} px-4 py-6 text-center`}>
                   <div className="text-[14px] font-black text-[#0F1A30]">명세서를 크게 보고 있어요</div>
@@ -54301,7 +54350,7 @@ const handleBatchSettle = async (targetStatus) => {
                 </div>
               )}
               {(() => { const card = (
-              <div className={docBig ? `${csCard} overflow-hidden flex flex-col w-full max-w-[1400px] mx-auto h-full` : (railPin ? `${csCard} overflow-hidden flex flex-col min-[2200px]:max-h-[calc(100vh-24px)]` : `${csCard} overflow-hidden flex flex-col min-[1900px]:max-h-[calc(100vh-24px)]`)} onClick={docBig ? (e) => e.stopPropagation() : undefined}>
+              <div className={docBig ? `${csCard} overflow-hidden flex flex-col w-full max-w-[1400px] mx-auto h-full` : (stmtSide ? `${csCard} overflow-hidden flex flex-col max-h-[calc(100vh-24px)]` : `${csCard} overflow-hidden flex flex-col`)} onClick={docBig ? (e) => e.stopPropagation() : undefined}>
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#E3E8F0] bg-white flex-wrap">
                   <div className="min-w-0 mr-auto">
                     <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3] leading-none" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>STATEMENT · PREVIEW</div>
@@ -54462,6 +54511,7 @@ const handleBatchSettle = async (targetStatus) => {
 
                           {/* 내역 표 */}
                           <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 12 }}>
+                            <InvoiceColGroup form={invForm} />{/* ⭐ 2026-11-17 (3차) 칸 폭 — A4 안에 들어가게 */}
                             <thead>
                               <tr>
                                 {headerLabels(invForm).map(h => (
