@@ -363,8 +363,8 @@ function XfFlowChart({ six }) {
           <YAxis {...chartTheme.axis} width={58} tickFormatter={(v) => fmtMan(v)} />
           <ReferenceLine y={0} stroke="rgba(255,255,255,.18)" />
           <Tooltip cursor={chartTheme.cursor} content={<ExecTooltip fmt={(v) => fmtMan(v)} unit="만원" />} />
-          <Bar dataKey="in" name="들어온 돈" fill={`url(#xfi${id})`} radius={[6, 6, 0, 0]} maxBarSize={30} />
-          <Bar dataKey="out" name="나간 돈" fill={`url(#xfo${id})`} radius={[6, 6, 0, 0]} maxBarSize={30} />
+          <Bar dataKey="in" name="현금 유입" fill={`url(#xfi${id})`} radius={[6, 6, 0, 0]} maxBarSize={30} />
+          <Bar dataKey="out" name="현금 유출" fill={`url(#xfo${id})`} radius={[6, 6, 0, 0]} maxBarSize={30} />
           <Line dataKey="net" name="순현금흐름" type="monotone" stroke={EX.text} strokeWidth={2} strokeDasharray="4 4" dot={{ r: 3, fill: EX.bg1, stroke: EX.text, strokeWidth: 1.5 }} activeDot={{ r: 4.5 }} />
         </ComposedChart>
       </ResponsiveContainer>
@@ -376,7 +376,7 @@ function XfFlowSum({ six }) {
   const tin = six.reduce((s, x) => s + x.in, 0); const tout = six.reduce((s, x) => s + x.out, 0); const tnet = tin - tout;
   const done = six.slice(0, -1).filter((x) => x.in || x.out);
   const avg = done.length ? done.reduce((s, x) => s + x.out, 0) / done.length : tout;
-  const cells = [["6개월 들어온 돈", fmtMan(tin), EX.text], ["6개월 나간 돈", fmtMan(tout), EX.text], ["6개월 순현금흐름", `${tnet > 0 ? "+" : tnet < 0 ? "−" : ""}${fmtMan(Math.abs(tnet))}`, tnet > 0 ? EX.up : tnet < 0 ? EX.down : EX.text], ["월평균 나간 돈", fmtMan(avg), EX.text]];
+  const cells = [["6개월 현금 유입", fmtMan(tin), EX.text], ["6개월 현금 유출", fmtMan(tout), EX.text], ["6개월 순현금흐름", `${tnet > 0 ? "+" : tnet < 0 ? "−" : ""}${fmtMan(Math.abs(tnet))}`, tnet > 0 ? EX.up : tnet < 0 ? EX.down : EX.text], ["월평균 현금 유출", fmtMan(avg), EX.text]];
   return (
     <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-px rounded-2xl overflow-hidden" style={{ border: `1px solid ${EX.line}`, background: EX.line }}>
       {cells.map(([l, v, c]) => (
@@ -412,7 +412,7 @@ function ExecFundsView({ company }) {
   const today = kstDay();
   if (funds === null) return <ExecFundsSkeleton />;
   const hasFlow = six.some((x) => x.in || x.out);
-  const head = { en: "TREASURY", title: "자금현황", sub: "회사 통장 · 현금 · 예금 잔액과 돈의 흐름입니다 · 보기 전용(입력은 경리 담당자가 자금관리에서 합니다)", right: <XChip tone="mute">{xfDot(today)} 기준</XChip> };
+  const head = { en: "TREASURY", title: "자금현황", sub: "보유 자금(예금 · 현금) 잔액 및 현금흐름 · 조회 전용(입력은 경리 담당자가 자금관리에서 진행합니다)", right: <XChip tone="mute">{xfDot(today)} 기준</XChip> };
 
   // ── 아직 입력 전 ──
   if (!funds.length) {
@@ -425,10 +425,10 @@ function ExecFundsView({ company }) {
             </div>
             <Eyebrow className="mt-6">AWAITING FIRST ENTRY</Eyebrow>
             <h2 className="mt-2 text-[21px] md:text-[24px] font-black tracking-[-0.02em]" style={{ color: EX.text }}>아직 입력된 자금 정보가 없습니다</h2>
-            <p className="mt-2 text-[14px] md:text-[14.5px] font-semibold leading-relaxed" style={{ color: EX.sub }}>경리 담당자가 자금관리에 잔액을 입력하면 여기에 보입니다.</p>
-            <p className="mt-1 text-[12.5px] font-medium leading-relaxed max-w-[520px]" style={{ color: EX.mute, wordBreak: "keep-all" }}>통장 · 현금 · 예금 · 카드 · 대출을 한 번 등록하면, 그 뒤로는 수입 · 지출 장부의 입출금으로 잔액이 자동으로 계산됩니다.</p>
+            <p className="mt-2 text-[14px] md:text-[14.5px] font-semibold leading-relaxed" style={{ color: EX.sub }}>경리 담당자가 자금관리에 잔액을 입력하면 표시됩니다.</p>
+            <p className="mt-1 text-[12.5px] font-medium leading-relaxed max-w-[520px]" style={{ color: EX.mute, wordBreak: "keep-all" }}>예금 · 현금 · 카드 · 차입금 계좌를 최초 1회 등록하면, 이후 잔액은 수입 · 지출 장부의 입출금 내역으로 자동 산출됩니다.</p>
             <div className="mt-8 w-full max-w-[720px] grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(190px, 100%), 1fr))" }}>
-              {[["TOTAL CASH", "보유 자금", "원"], ["RUNWAY", "운영 가능 기간", "개월"], ["NET CASH FLOW", "이번 달 순현금흐름", "원"]].map(([en, l, u]) => (
+              {[["TOTAL CASH", "보유 자금", "원"], ["CASH RUNWAY", "운영 가능 기간", "개월"], ["NET CASH FLOW", "이번 달 순현금흐름", "원"]].map(([en, l, u]) => (
                 <div key={l} className="rounded-2xl px-4 py-3.5 text-left" style={{ border: `1px dashed ${EX.line}`, background: "rgba(255,255,255,.02)" }}>
                   <Eyebrow color={EX.faint} size={9.5}>{en}</Eyebrow>
                   <div className="mt-1 text-[12.5px] font-bold" style={{ color: EX.mute }}>{l}</div>
@@ -436,11 +436,11 @@ function ExecFundsView({ company }) {
                 </div>
               ))}
             </div>
-            <div className="mt-3 text-[11.5px] font-semibold" style={{ color: EX.faint }}>입력되면 이 자리에 보이는 항목입니다</div>
+            <div className="mt-3 text-[11.5px] font-semibold" style={{ color: EX.faint }}>자금 정보가 입력되면 표시되는 항목입니다</div>
           </div>
         </ExecPanel>
         {hasFlow && (
-          <ExecPanel en="CASH FLOW · 6 MONTHS" title="월별 들어온 돈 · 나간 돈" sub="수입 · 지출 장부 기준 · 단위 만원" right={<Legend items={[["들어온 돈", EX.gold], ["나간 돈", EX.ice], ["순현금흐름", EX.text, "line"]]} />}>
+          <ExecPanel en="CASH FLOW · 6 MONTHS" title="월별 현금 유입 · 유출" sub="수입 · 지출 장부 기준 · 단위 만원" right={<Legend items={[["현금 유입", EX.gold], ["현금 유출", EX.ice], ["순현금흐름", EX.text, "line"]]} />}>
             <XfFlowChart six={six} />
           </ExecPanel>
         )}
@@ -456,22 +456,22 @@ function ExecFundsView({ company }) {
   const net = tm.in - tm.out;
   const runway = S.runway;
   const rTone = runway == null ? EX.faint : runway < 3 ? EX.danger : runway < 6 ? EX.warn : EX.gold;
-  const rChip = runway == null ? ["mute", "계산 대기"] : runway < 3 ? ["up", "주의"] : runway < 6 ? ["warn", "보통"] : ["gold", "여유"];
+  const rChip = runway == null ? ["mute", "산출 대기"] : runway < 3 ? ["up", "주의"] : runway < 6 ? ["warn", "보통"] : ["gold", "양호"];
   const comp = XF_KIND.map(([k, l, c]) => ({ k, l, c, v: cashList.filter((f) => xfGroup(f) === k).reduce((s, f) => s + Math.max(0, f.balance), 0), n: cashList.filter((f) => xfGroup(f) === k).length })).filter((x) => x.n);
   const compTotal = comp.reduce((s, x) => s + x.v, 0) || 1;
   const [ca, cu] = moneyParts(S.cash);
   const brief = [
     <>보유 자금은 <b style={{ color: EX.goldHi }}>{fmtEokMan(S.cash)}</b>입니다.</>,
-    runway != null ? <> 최근 3개월 평균 지출로 보면 약 <b style={{ color: EX.text }}>{runway.toFixed(1)}개월</b> 운영할 수 있습니다.</> : null,
-    tm.in || tm.out ? <> 이번 달은 {net >= 0 ? "들어온 돈이" : "나간 돈이"} <b style={{ color: net >= 0 ? EX.up : EX.down }}>{fmtEokMan(Math.abs(net))}</b> 더 많습니다.</> : <> 이번 달 장부 입출금 기록은 아직 없습니다.</>,
-    S.loan > 0 ? <> 대출 잔액은 {fmtEokMan(S.loan)}입니다.</> : null,
+    runway != null ? <> 최근 3개월 월평균 현금 유출 기준 약 <b style={{ color: EX.text }}>{runway.toFixed(1)}개월분</b>의 운영 자금을 보유하고 있습니다.</> : null,
+    tm.in || tm.out ? <> 이번 달 순현금흐름은 <b style={{ color: net >= 0 ? EX.up : EX.down }}>{net > 0 ? "+" : net < 0 ? "−" : ""}{fmtEokMan(Math.abs(net))}</b>{net > 0 ? "(순유입)" : net < 0 ? "(순유출)" : ""}입니다.</> : <> 이번 달 장부 입출금 내역은 아직 없습니다.</>,
+    S.loan > 0 ? <> 차입금(대출 잔액)은 {fmtEokMan(S.loan)}입니다.</> : null,
   ];
   const kpis = [
-    <Kpi key="in" en="INFLOW" label="이번 달 들어온 돈" money={tm.in} delta={pctChange(tm.in, lm.in)} deltaLabel="전월 대비" />,
-    <Kpi key="out" en="OUTFLOW" label="이번 달 나간 돈" money={tm.out} delta={pctChange(tm.out, lm.out)} deltaLabel="전월 대비" invert />,
-    <XfNetTile key="net" net={net} foot="들어온 돈 − 나간 돈 · 장부 기준" />,
-    cards.length ? <Kpi key="card" en="CARD · THIS MONTH" label="이번 달 카드 사용" money={S.cardMonth} foot={`${cards.length}장 · 결제일에 통장 출금`} /> : null,
-    <Kpi key="loan" en="LOAN" label="대출 잔액" money={S.loan} foot={loans.length ? `${loans.length}건 · 마지막 확인 잔액` : "등록된 대출 없음"} />,
+    <Kpi key="in" en="CASH INFLOW" label="이번 달 현금 유입" money={tm.in} delta={pctChange(tm.in, lm.in)} deltaLabel="전월 대비" />,
+    <Kpi key="out" en="CASH OUTFLOW" label="이번 달 현금 유출" money={tm.out} delta={pctChange(tm.out, lm.out)} deltaLabel="전월 대비" invert />,
+    <XfNetTile key="net" net={net} foot="현금 유입 − 현금 유출 · 장부 기준" />,
+    cards.length ? <Kpi key="card" en="CARD · THIS MONTH" label="이번 달 카드 사용액" money={S.cardMonth} foot={`${cards.length}장 · 결제일에 통장에서 출금`} /> : null,
+    <Kpi key="loan" en="BORROWINGS" label="차입금(대출 잔액)" money={S.loan} foot={loans.length ? `${loans.length}건 · 최종 확인 잔액 기준` : "등록된 차입금 없음"} />,
   ].filter(Boolean);
 
   return (
@@ -492,7 +492,7 @@ function ExecFundsView({ company }) {
               <Num value={ca} unit={cu} size={48} color={EX.goldHi} unitColor={EX.gold} />
               <span className="pb-1 text-[12.5px] font-semibold" style={{ ...EX_NUM, color: EX.mute }}>{fmtWon(S.cash)}원</span>
             </div>
-            <div className="mt-1.5 text-[12.5px] font-medium" style={{ color: EX.mute }}>통장 · 현금 · 예금 {cashList.length}곳 합계 · 대출과 신용카드 한도는 넣지 않았습니다</div>
+            <div className="mt-1.5 text-[12.5px] font-medium" style={{ color: EX.mute }}>예금 · 현금 {cashList.length}개 계좌 합계 · 차입금 및 신용카드 한도 제외</div>
             <GoldRule className="mt-5" />
             <div className="mt-4 flex h-3 w-full overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,.06)" }}>
               {comp.map((x) => <span key={x.k} title={`${x.l} ${fmtWon(x.v)}원`} style={{ width: `${(x.v / compTotal) * 100}%`, background: x.c === EX.gold ? GOLD_GRAD : x.c, boxShadow: "inset -1px 0 0 rgba(5,10,22,.6)" }} />)}
@@ -508,52 +508,52 @@ function ExecFundsView({ company }) {
           </div>
         </ExecPanel>
         {/* 운영 가능 기간 */}
-        <ExecPanel en="RUNWAY" title="운영 가능 기간" right={<XChip tone={rChip[0]}>{rChip[1]}</XChip>}>
+        <ExecPanel en="CASH RUNWAY" title="운영 가능 기간" right={<XChip tone={rChip[0]}>{rChip[1]}</XChip>}>
           <div className="mt-2 flex items-center gap-5 md:gap-6">
             <Ring value={runway == null ? 0 : Math.min(100, (runway / 12) * 100)} size={136} stroke={9} color={rTone} label={runway == null ? "—" : runway >= 100 ? "99+" : runway.toFixed(1)} sub="개월" />
             <div className="min-w-0 flex-1">
-              <div className="text-[13.5px] font-semibold leading-relaxed" style={{ color: EX.sub, wordBreak: "keep-all" }}>{runway == null ? "지출 기록이 쌓이면 계산됩니다." : <>새 수입이 없어도 지금 자금으로 약 <b style={{ color: EX.text }}>{runway.toFixed(1)}개월</b>을 버틸 수 있습니다.</>}</div>
+              <div className="text-[13.5px] font-semibold leading-relaxed" style={{ color: EX.sub, wordBreak: "keep-all" }}>{runway == null ? "지출 내역이 누적되면 산출됩니다." : <>추가 현금 유입이 없다고 가정할 때, 현재 보유 자금으로 약 <b style={{ color: EX.text }}>{runway.toFixed(1)}개월</b>간 운영 가능합니다.</>}</div>
               <div className="mt-3 rounded-xl px-3 py-2.5" style={{ background: "rgba(255,255,255,.03)", border: `1px solid ${EX.line}` }}>
-                <div className="flex items-baseline justify-between gap-2 text-[12.5px] font-bold"><span style={{ color: EX.mute }}>월평균 지출</span><span style={{ ...EX_NUM, color: EX.text }}>{fmtMan(S.avgOut)}<span className="ml-0.5 text-[11px]" style={{ color: EX.mute }}>만원</span></span></div>
+                <div className="flex items-baseline justify-between gap-2 text-[12.5px] font-bold"><span style={{ color: EX.mute }}>월평균 현금 유출</span><span style={{ ...EX_NUM, color: EX.text }}>{fmtMan(S.avgOut)}<span className="ml-0.5 text-[11px]" style={{ color: EX.mute }}>만원</span></span></div>
                 <div className="mt-1.5 flex items-baseline justify-between gap-2 text-[12.5px] font-bold"><span style={{ color: EX.mute }}>보유 자금</span><span style={{ ...EX_NUM, color: EX.text }}>{fmtMan(S.cash)}<span className="ml-0.5 text-[11px]" style={{ color: EX.mute }}>만원</span></span></div>
               </div>
             </div>
           </div>
-          <div className="mt-4 text-[11.5px] font-medium leading-relaxed" style={{ color: EX.faint, wordBreak: "keep-all" }}>보유 자금 ÷ 최근 3개월 월평균 지출 · 원이 가득 차면 12개월 이상 · 3개월 미만은 주의</div>
+          <div className="mt-4 text-[11.5px] font-medium leading-relaxed" style={{ color: EX.faint, wordBreak: "keep-all" }}>운영 가능 기간 = 보유 자금 ÷ 최근 3개월 월평균 현금 유출 · 원 그래프 100%는 12개월 이상 · 3개월 미만은 주의</div>
         </ExecPanel>
       </ExecGrid>
 
       <ExecKpis min={190}>{kpis}</ExecKpis>
 
       <ExecGrid cols="minmax(0,1.35fr) minmax(0,1fr)">
-        <ExecPanel en="CASH FLOW · 6 MONTHS" title="월별 들어온 돈 · 나간 돈" sub="수입 · 지출 장부 기준 · 단위 만원" right={<span className="hidden md:block"><Legend items={[["들어온 돈", EX.gold], ["나간 돈", EX.ice], ["순현금흐름", EX.text, "line"]]} /></span>}>
-          {hasFlow ? <><XfFlowChart six={six} /><XfFlowSum six={six} /></> : <Empty text="최근 6개월 장부 입출금 기록이 없습니다" sub="경리 담당자가 수입 · 지출 장부에 적으면 그래프가 그려집니다" />}
-          <div className="md:hidden mt-2"><Legend items={[["들어온 돈", EX.gold], ["나간 돈", EX.ice], ["순현금흐름", EX.text, "line"]]} /></div>
+        <ExecPanel en="CASH FLOW · 6 MONTHS" title="월별 현금 유입 · 유출" sub="수입 · 지출 장부 기준 · 단위 만원" right={<span className="hidden md:block"><Legend items={[["현금 유입", EX.gold], ["현금 유출", EX.ice], ["순현금흐름", EX.text, "line"]]} /></span>}>
+          {hasFlow ? <><XfFlowChart six={six} /><XfFlowSum six={six} /></> : <Empty text="최근 6개월 장부 입출금 내역이 없습니다" sub="경리 담당자가 수입 · 지출 장부에 기록하면 그래프가 표시됩니다." />}
+          <div className="md:hidden mt-2"><Legend items={[["현금 유입", EX.gold], ["현금 유출", EX.ice], ["순현금흐름", EX.text, "line"]]} /></div>
         </ExecPanel>
-        <ExecPanel en="ACCOUNTS" title="계좌 · 카드 · 대출" sub="잔액 큰 순 · 원 단위">
+        <ExecPanel en="ACCOUNTS" title="계좌 · 카드 · 차입금" sub="잔액 순 · 단위 원">
           <XfGroupHead label="보유 자금" total={S.cash} />
           <ul>
-            {cashList.map((f) => <XfRow key={f.id} f={f} share={S.cash > 0 ? Math.max(0, (f.balance / S.cash) * 100) : null} sub={[f.kind === "정기예금·적금" ? "정기예금 · 적금" : f.kind, f.bank, last4(f), f.base?.date ? `기준 ${xfDot(f.base.date)}` : ""].filter(Boolean).join(" · ")}
+            {cashList.map((f) => <XfRow key={f.id} f={f} share={S.cash > 0 ? Math.max(0, (f.balance / S.cash) * 100) : null} sub={[f.kind === "정기예금·적금" ? "정기예금 · 적금" : f.kind, f.bank, last4(f), f.base?.date ? `기준일 ${xfDot(f.base.date)}` : ""].filter(Boolean).join(" · ")}
               right={<><XfAmt v={f.balance} /><div className="mt-0.5 text-[11px] font-bold" style={{ ...EX_NUM, color: EX.faint }}>{S.cash > 0 ? `${Math.max(0, (f.balance / S.cash) * 100).toFixed(1)}%` : ""}</div></>} />)}
           </ul>
           {cards.length > 0 && <>
-            <XfGroupHead label="카드 · 이번 달 사용" total={S.cardMonth} />
+            <XfGroupHead label="카드 · 이번 달 사용액" total={S.cardMonth} />
             <ul>
               {cards.map((f) => { const credit = isCredit(f); const use = credit && f.limit > 0 ? Math.min(100, ((f.usedMonth || 0) / f.limit) * 100) : null; return (
                 <XfRow key={f.id} f={f} share={null} sub={[f.kind, f.bank, last4(f), credit ? (f.limit > 0 ? `한도 ${fmtMan(f.limit)}만원 중 ${use.toFixed(0)}% 사용` : "신용") : f.linkName ? `${f.linkName}에서 출금` : "체크"].filter(Boolean).join(" · ")}
-                  right={<XfAmt v={f.usedMonth || 0} cap="이번 달 사용" />} />
+                  right={<XfAmt v={f.usedMonth || 0} cap="이번 달 사용액" />} />
               ); })}
             </ul>
           </>}
           {loans.length > 0 && <>
-            <XfGroupHead label="대출 잔액" total={S.loan} neg />
-            <ul>{loans.map((f) => <XfRow key={f.id} f={f} share={null} sub={[f.bank, last4(f), f.base?.date ? `확인 ${xfDot(f.base.date)}` : ""].filter(Boolean).join(" · ")} right={<XfAmt v={f.balance} neg color={EX.up} />} />)}</ul>
+            <XfGroupHead label="차입금(대출 잔액)" total={S.loan} neg />
+            <ul>{loans.map((f) => <XfRow key={f.id} f={f} share={null} sub={[f.bank, last4(f), f.base?.date ? `확인일 ${xfDot(f.base.date)}` : ""].filter(Boolean).join(" · ")} right={<XfAmt v={f.balance} neg color={EX.up} />} />)}</ul>
           </>}
         </ExecPanel>
       </ExecGrid>
 
       <div className="px-1 text-[11.5px] font-medium leading-relaxed" style={{ color: EX.faint, wordBreak: "keep-all" }}>
-        잔액 = 기준일(또는 마지막 잔액 맞추기) 잔액 + 그 뒤 장부에서 이 계좌로 지정한 입출금 · 체크카드는 연결 통장에서, 신용카드는 이번 달 한도에서 빠집니다 · 은행 잔액과 다르면 경리 담당자가 자금관리에서 맞춥니다
+        잔액 = 기준일(또는 최종 잔액 조정일) 잔액 + 이후 장부에서 해당 계좌로 지정한 입출금 · 체크카드 사용액은 연결 통장에서, 신용카드 사용액은 이번 달 한도에서 차감됩니다 · 은행 잔액과 차이가 있으면 경리 담당자가 자금관리에서 조정합니다
       </div>
     </ExecPage>
   );

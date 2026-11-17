@@ -42,7 +42,7 @@ function Funnel({ rows }) {
     <div className="space-y-1.5">
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] gap-4 px-1 pb-1 text-[11.5px] font-extrabold" style={{ color: EX.mute }}>
         <span>단계 · 건수</span>
-        <div className="grid grid-cols-[minmax(0,1fr)_44px_minmax(0,1fr)] gap-3"><span className="text-right">예상 월 매출</span><span className="text-right">확률</span><span className="text-right">가중 금액</span></div>
+        <div className="grid grid-cols-[minmax(0,1fr)_44px_minmax(0,1fr)] gap-3"><span className="text-right">예상 월 매출</span><span className="text-right">수주 확률</span><span className="text-right">가중 금액</span></div>
       </div>
       {rows.map((r, i) => {
         const wt = 100 - i * step; const wb = 100 - (i + 1) * step;
@@ -76,7 +76,7 @@ const HEALTH_VIEW = [
   ["new", "신규", EX.goldHi], ["grow", "성장", EX.ice], ["steady", "유지", "rgba(232,238,250,.32)"], ["drop", "급감", EX.warn], ["sleep", "휴면", EX.danger],
 ];
 function HealthBar({ counts, total }) {
-  if (!total) return <Empty text="최근 거래 실적이 있는 거래처가 없습니다" sub="배차완료된 오더가 쌓이면 상태가 나타납니다" />;
+  if (!total) return <Empty text="최근 거래 실적이 있는 거래처가 없습니다" sub="배차완료 오더가 누적되면 거래처 상태가 표시됩니다." />;
   return (
     <div>
       <div className="flex h-3.5 rounded-full overflow-hidden gap-[2px]" style={{ background: "rgba(255,255,255,.05)" }}>
@@ -151,7 +151,7 @@ function ExecOverview({ B, onTab }) {
   const actTypes = ["방문", "전화", "견적 제출", "미팅", "계약"];
 
   // 순위
-  const RANK_KEYS = [["sale", "매출"], ["profit", "매출이익"], ["achieve", "목표 달성률"]];
+  const RANK_KEYS = [["sale", "매출"], ["profit", "매출총이익"], ["achieve", "목표 달성률"]];
   const rankRows = [...team].sort((a, b) => (b[rankBy] || 0) - (a[rankBy] || 0)).map((t) => ({
     key: t.uid, label: t.name, sub: t.position || t.team || "", value: rankBy === "achieve" ? (t.target > 0 ? t.achieve : 0) : t[rankBy] || 0,
     margin: t.sale ? (t.profit / t.sale) * 100 : null, target: t.target,
@@ -161,11 +161,11 @@ function ExecOverview({ B, onTab }) {
   const saleChg = pctChange(T.sale, PT.sale);
   const brief = (
     <>
-      <b style={{ color: EX.goldHi }}>{mOf(ym)}월</b> 영업팀 담당 매출은 <b style={{ color: EX.text }}>{fmtEokMan(T.sale)}</b>{isCur ? "(오늘까지 누계)" : ""}
-      {saleChg != null ? <>으로 전월보다 <b style={{ color: saleChg >= 0 ? EX.up : EX.down }}>{Math.abs(saleChg).toFixed(1)}% {saleChg >= 0 ? "많습니다" : "적습니다"}</b>. </> : "입니다. "}
-      매출이익은 <b style={{ color: EX.text }}>{fmtEokMan(T.profit)}</b>(마진율 {fmtPct(margin)})이며,
+      <b style={{ color: EX.goldHi }}>{mOf(ym)}월</b> 영업팀 담당 매출은 <b style={{ color: EX.text }}>{fmtEokMan(T.sale)}</b>{isCur ? "(금일까지 누계)" : ""}
+      {saleChg != null ? <>으로 전월 대비 <b style={{ color: saleChg >= 0 ? EX.up : EX.down }}>{Math.abs(saleChg).toFixed(1)}% {saleChg >= 0 ? "증가" : "감소"}</b>했습니다. </> : "입니다. "}
+      매출총이익은 <b style={{ color: EX.text }}>{fmtEokMan(T.profit)}</b>(매출총이익률 {fmtPct(margin)})이며,
       진행 중인 영업 기회 <b style={{ color: EX.text }}>{P.open}건</b>의 가중 예상 매출은 월 <b style={{ color: EX.goldHi }}>{fmtEokMan(P.weighted)}</b>입니다.
-      {watch.length ? <> 급감 · 휴면 · 미수로 살펴볼 거래처가 <b style={{ color: EX.warn }}>{health.filter((h) => h.state === "drop" || h.state === "sleep" || h.unpaid).length}곳</b> 있습니다.</> : " 관리가 필요한 거래처는 없습니다."}
+      {watch.length ? <> 매출 급감 · 휴면 · 미수로 점검이 필요한 거래처는 <b style={{ color: EX.warn }}>{health.filter((h) => h.state === "drop" || h.state === "sleep" || h.unpaid).length}곳</b>입니다.</> : " 점검이 필요한 거래처는 없습니다."}
     </>
   );
 
@@ -179,7 +179,7 @@ function ExecOverview({ B, onTab }) {
             <Eyebrow size={10.5}>EXECUTIVE BRIEFING</Eyebrow>
             <p className="mt-2 text-[14.5px] md:text-[16px] font-semibold leading-[1.75]" style={{ color: EX.sub }}>{brief}</p>
             <div className="mt-2 text-[12px] font-semibold" style={{ color: EX.mute }}>
-              담당 거래처의 배차완료 오더 기준 · 매출이익 = 청구운임 − 기사운임 − 회사 지급(지게차 · 외부){B.at ? ` · ${stamp(B.at)} 집계` : ""}
+              담당 거래처 배차완료 오더 기준 · 매출총이익 = 청구운임 − 기사운임 − 회사 부담 지게차 · 외부 특수운임{B.at ? ` · ${stamp(B.at)} 집계` : ""}
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0 flex-wrap">
@@ -191,20 +191,20 @@ function ExecOverview({ B, onTab }) {
 
       {/* 핵심 숫자 */}
       <ExecKpis min={190}>
-        <Kpi accent en="REVENUE" label={`${mOf(ym)}월 영업 매출`} money={T.sale} delta={saleChg} deltaLabel="전월" foot={`${T.n.toLocaleString("ko-KR")}건`} spark={months.map((m) => m.sale)} />
-        <Kpi en="GROSS PROFIT" label="매출이익" money={T.profit} delta={pctChange(T.profit, PT.profit)} deltaLabel="전월" foot={T.target > 0 ? `목표 달성 ${((T.sale / T.target) * 100).toFixed(0)}%` : "목표 미설정"} />
-        <Kpi en="MARGIN" label="마진율" value={margin == null ? "—" : margin.toFixed(1)} unit={margin == null ? "" : "%"}
-          foot={margin != null && pMargin != null ? <span className="inline-flex items-center gap-2"><Delta v={margin - pMargin} suffix="%p" label="전월" size={13} /><span style={{ color: EX.faint }}>전월 {pMargin.toFixed(1)}%</span></span> : "매출이익 ÷ 매출"} />
+        <Kpi accent en="REVENUE" label={`${mOf(ym)}월 영업 매출`} money={T.sale} delta={saleChg} deltaLabel="전월 대비" foot={`${T.n.toLocaleString("ko-KR")}건`} spark={months.map((m) => m.sale)} />
+        <Kpi en="GROSS PROFIT" label="매출총이익" money={T.profit} delta={pctChange(T.profit, PT.profit)} deltaLabel="전월 대비" foot={T.target > 0 ? `목표 달성률 ${((T.sale / T.target) * 100).toFixed(0)}%` : "목표 미설정"} />
+        <Kpi en="GROSS MARGIN" label="매출총이익률" value={margin == null ? "—" : margin.toFixed(1)} unit={margin == null ? "" : "%"}
+          foot={margin != null && pMargin != null ? <span className="inline-flex items-center gap-2"><Delta v={margin - pMargin} suffix="%p" label="전월 대비" size={13} /><span style={{ color: EX.faint }}>전월 {pMargin.toFixed(1)}%</span></span> : "매출총이익 ÷ 매출"} />
         <Kpi en="NEW ACCOUNTS" label="신규 거래처" value={newNames.size} unit="곳" foot={`신규 관리 중 ${hc.new || 0}곳`} onClick={() => onTab("accounts")} title="거래처 담당 보기" />
-        <Kpi en="PIPELINE" label="파이프라인 가중 금액" money={P.weighted} foot={`진행 ${P.open}건 · 수주율 ${P.winRate}%`} onClick={() => onTab("pipeline")} title="영업 기회 보기" />
-        <Kpi en="INCENTIVE" label="예상 인센티브" money={T.total} foot={p.collectOnly ? `확정 ${fmtMan(T.confirmed)} · 보류 ${fmtMan(T.held)}만` : "전액 확정 대상"} onClick={() => onTab("incentive")} title="인센티브 보기" />
+        <Kpi en="PIPELINE" label="영업 기회 가중 금액" money={P.weighted} foot={`진행 ${P.open}건 · 수주율 ${P.winRate}%`} onClick={() => onTab("pipeline")} title="영업 기회 보기" />
+        <Kpi en="INCENTIVE" label="예상 인센티브" money={T.total} foot={p.collectOnly ? `확정 ${fmtMan(T.confirmed)}만원 · 보류 ${fmtMan(T.held)}만원` : "전액 확정 대상"} onClick={() => onTab("incentive")} title="인센티브 보기" />
       </ExecKpis>
 
       {/* 추이 · 순위 */}
       <ExecGrid cols="minmax(0,1.75fr) minmax(0,1fr)">
-        <ExecPanel en="TREND · 12 MONTHS" title="월별 영업 매출 · 매출이익 · 마진율" sub="단위 만원 · 마진율은 오른쪽 축"
-          right={<div className="hidden md:block"><Legend items={[["매출", EX.gold], ["매출이익", EX.ice], ["마진율", EX.goldHi, "line"]]} /></div>}>
-          <div className="md:hidden mb-2"><Legend items={[["매출", EX.gold], ["매출이익", EX.ice], ["마진율", EX.goldHi, "line"]]} /></div>
+        <ExecPanel en="TREND · 12 MONTHS" title="월별 영업 매출 · 매출총이익 · 매출총이익률" sub="단위 만원 · 매출총이익률은 오른쪽 축"
+          right={<div className="hidden md:block"><Legend items={[["매출", EX.gold], ["매출총이익", EX.ice], ["매출총이익률", EX.goldHi, "line"]]} /></div>}>
+          <div className="md:hidden mb-2"><Legend items={[["매출", EX.gold], ["매출총이익", EX.ice], ["매출총이익률", EX.goldHi, "line"]]} /></div>
           <div className="h-[280px] -ml-1">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={months} margin={{ top: 10, right: 4, left: 0, bottom: 0 }} barGap={3}>
@@ -220,10 +220,10 @@ function ExecOverview({ B, onTab }) {
                 <Bar yAxisId="l" dataKey="sale" name="매출" radius={[5, 5, 0, 0]} maxBarSize={20} isAnimationActive={false}>
                   {months.map((m) => <Cell key={m.m} fill="url(#sxSale)" fillOpacity={m.m === ym ? 1 : 0.42} />)}
                 </Bar>
-                <Bar yAxisId="l" dataKey="profit" name="매출이익" radius={[5, 5, 0, 0]} maxBarSize={20} isAnimationActive={false}>
+                <Bar yAxisId="l" dataKey="profit" name="매출총이익" radius={[5, 5, 0, 0]} maxBarSize={20} isAnimationActive={false}>
                   {months.map((m) => <Cell key={m.m} fill="url(#sxProfit)" fillOpacity={m.m === ym ? 1 : 0.42} />)}
                 </Bar>
-                <Line yAxisId="r" dataKey="margin" name="마진율" unit="%" stroke={EX.goldHi} strokeWidth={2} type="monotone" connectNulls isAnimationActive={false}
+                <Line yAxisId="r" dataKey="margin" name="매출총이익률" unit="%" stroke={EX.goldHi} strokeWidth={2} type="monotone" connectNulls isAnimationActive={false}
                   dot={(pr) => (pr.payload.margin == null || pr.cy == null ? <g key={pr.index} /> : <circle key={pr.index} cx={pr.cx} cy={pr.cy} r={pr.payload.m === ym ? 4.5 : 2.5} fill={pr.payload.m === ym ? EX.goldHi : EX.bg1} stroke={EX.goldHi} strokeWidth={1.5} />)} />
               </ComposedChart>
             </ResponsiveContainer>
@@ -233,9 +233,9 @@ function ExecOverview({ B, onTab }) {
           right={<ExecTabs size="sm" items={RANK_KEYS} value={rankBy} onChange={setRankBy} />}>
           <RankBars rows={rankRows} empty="영업 담당자가 없습니다"
             valueFmt={(v) => (rankBy === "achieve" ? `${v.toFixed(0)}%` : manWon(v))}
-            right={(r) => (rankBy === "achieve" ? (r.target > 0 ? null : <span className="text-[11.5px] font-bold" style={{ color: EX.faint }}>목표 없음</span>)
+            right={(r) => (rankBy === "achieve" ? (r.target > 0 ? null : <span className="text-[11.5px] font-bold" style={{ color: EX.faint }}>목표 미설정</span>)
               : <span className="text-[11.5px] font-bold" style={{ ...EX_NUM, color: EX.mute }}>{r.margin == null ? "—" : `${r.margin.toFixed(1)}%`}</span>)} />
-          {rankBy !== "achieve" && rankRows.length > 0 && <div className="mt-2 text-[11.5px] font-semibold text-right" style={{ color: EX.faint }}>오른쪽 작은 숫자는 마진율</div>}
+          {rankBy !== "achieve" && rankRows.length > 0 && <div className="mt-2 text-[11.5px] font-semibold text-right" style={{ color: EX.faint }}>오른쪽 수치는 매출총이익률</div>}
           {team.length > 0 && (
             <div className="mt-4 pt-3" style={{ borderTop: `1px solid ${EX.line}` }}>
               <div className="grid grid-cols-[minmax(0,1fr)_repeat(4,52px)] gap-2 pb-1.5 text-[11.5px] font-extrabold" style={{ color: EX.mute }}>
@@ -253,7 +253,7 @@ function ExecOverview({ B, onTab }) {
               <div className="mt-1 text-[11.5px] font-semibold" style={{ color: EX.faint }}>담당 거래처 · 신규 관리 중 · 진행 중 기회 · {mOf(ym)}월 활동(건)</div>
             </div>
           )}
-          <div className="mt-3 flex justify-end"><ExecButton onClick={() => onTab("ranking")}>팀 순위 자세히 ›</ExecButton></div>
+          <div className="mt-3 flex justify-end"><ExecButton onClick={() => onTab("ranking")}>팀 순위 상세 ›</ExecButton></div>
         </ExecPanel>
       </ExecGrid>
 
@@ -261,32 +261,32 @@ function ExecOverview({ B, onTab }) {
       <ExecGrid cols="minmax(0,1.35fr) minmax(0,1fr)">
         <ExecPanel en="PIPELINE FUNNEL" title="영업 기회 깔때기" sub="진행 중인 기회 · 가중 금액 = 예상 월 매출 × 수주 확률"
           right={<ExecButton onClick={() => onTab("pipeline")}>영업 기회 ›</ExecButton>}>
-          {!P.open ? <Empty text="진행 중인 영업 기회가 없습니다" sub="영업팀이 새 화주를 등록하면 단계별로 나타납니다" /> : <Funnel rows={funnel} />}
+          {!P.open ? <Empty text="진행 중인 영업 기회가 없습니다" sub="영업팀이 신규 화주를 등록하면 단계별로 표시됩니다." /> : <Funnel rows={funnel} />}
           <div className="mt-4 pt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-4 items-center" style={{ borderTop: `1px solid ${EX.line}` }}>
             <Ring value={P.winRate} size={76} label={`${P.winRate}%`} sub="수주율" />
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[["진행 중 합계", <Num key="a" value={fmtMan(P.amount)} unit="만원" size={18} />], ["이번 달 수주", <Num key="b" value={P.wonMonth} unit="건" size={18} color={EX.goldHi} />], ["누적 수주 · 실패", <Num key="c" value={`${wonAll} · ${lostAll}`} unit="건" size={18} />], ["연락 일정 지남", <Num key="d" value={P.overdue} unit="건" size={18} color={P.overdue ? EX.warn : EX.text} />]].map(([l, v]) => (
+              {[["진행 중 예상 월 매출", <Num key="a" value={fmtMan(P.amount)} unit="만원" size={18} />], ["당월 수주", <Num key="b" value={P.wonMonth} unit="건" size={18} color={EX.goldHi} />], ["누적 수주 · 실패", <Num key="c" value={`${wonAll} · ${lostAll}`} unit="건" size={18} />], ["연락 기한 경과", <Num key="d" value={P.overdue} unit="건" size={18} color={P.overdue ? EX.warn : EX.text} />]].map(([l, v]) => (
                 <div key={l} className="min-w-0"><div className="text-[12px] font-bold truncate" style={{ color: EX.mute }}>{l}</div><div className="mt-1.5">{v}</div></div>
               ))}
             </div>
           </div>
         </ExecPanel>
-        <ExecPanel en="ACCOUNT HEALTH" title="거래처 건강도" sub={`최근 30일과 그 전 30일 비교 · 거래 실적 ${active.length}곳`}
+        <ExecPanel en="ACCOUNT HEALTH" title="거래처 건강도" sub={`최근 30일과 직전 30일 비교 · 거래 실적 보유 ${active.length}곳`}
           right={<ExecButton onClick={() => onTab("accounts")}>거래처 담당 ›</ExecButton>}>
           <HealthBar counts={hc} total={active.length} />
           <div className="mt-3 flex flex-wrap gap-1.5">
-            <Chip tone={unpaidN ? "warn" : "mute"}>지난달 미수 {unpaidN}곳</Chip>
-            <Chip tone={noRep ? "up" : "mute"}>담당 없음 {noRep}곳</Chip>
+            <Chip tone={unpaidN ? "warn" : "mute"}>전월 미수 {unpaidN}곳</Chip>
+            <Chip tone={noRep ? "up" : "mute"}>담당자 미지정 {noRep}곳</Chip>
           </div>
           <div className="mt-4 pt-3" style={{ borderTop: `1px solid ${EX.line}` }}>
-            <div className="text-[12.5px] font-extrabold mb-2" style={{ color: EX.sub }}>살펴볼 거래처</div>
+            <div className="text-[12.5px] font-extrabold mb-2" style={{ color: EX.sub }}>점검 대상 거래처</div>
             {!watch.length ? <div className="py-4 text-center text-[13px] font-semibold" style={{ color: EX.mute }}>급감 · 휴면 · 미수 거래처가 없습니다</div> : (
               <ul className="space-y-1">
                 {watch.map((h) => (
                   <li key={h.client} className="flex items-center gap-2.5 min-w-0 py-1.5">
                     <div className="min-w-0 flex-1">
                       <div className="text-[13.5px] font-bold truncate" style={{ color: EX.text }}>{h.client}</div>
-                      <div className="text-[11.5px] font-semibold truncate" style={{ color: EX.mute }}>{h.rep || "담당 없음"}{h.last ? ` · 마지막 오더 ${h.last.slice(5).replace("-", ".")}` : ""}</div>
+                      <div className="text-[11.5px] font-semibold truncate" style={{ color: EX.mute }}>{h.rep || "담당자 미지정"}{h.last ? ` · 최근 오더 ${h.last.slice(5).replace("-", ".")}` : ""}</div>
                     </div>
                     <div className="flex gap-1 shrink-0">
                       {h.state === "drop" && <Chip tone="warn">급감 {Math.abs(h.change).toFixed(0)}%</Chip>}
@@ -304,7 +304,7 @@ function ExecOverview({ B, onTab }) {
       {/* 인센티브 · 영업 활동 */}
       <ExecGrid cols="minmax(0,1.35fr) minmax(0,1fr)">
         <ExecPanel en="INCENTIVE" title={`${mOf(ym)}월 인센티브 현황`}
-          sub={`${baseLabel(p)} 기준${p.useTiers ? " · 구간 누진" : ` · ${p.rate}%`}${p.collectOnly ? " · 수금 완료분만 확정" : ""} · 다음 달 ${p.payDay}일 지급 · 단위 원`}
+          sub={`${baseLabel(p)} 기준${p.useTiers ? " · 구간 누진" : ` · ${p.rate}%`}${p.collectOnly ? " · 수금 완료분만 확정" : ""} · 익월 ${p.payDay}일 지급 · 단위 원`}
           right={<ExecButton onClick={() => onTab("incentive")}>확정 · 지급 ›</ExecButton>}>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[["예상 인센티브", T.total, EX.text], ["지급 확정 대상", p.collectOnly ? T.confirmed : T.total, EX.goldHi], ["보류(미수)", p.collectOnly ? T.held : 0, EX.sub]].map(([l, v, c]) => (
@@ -321,24 +321,24 @@ function ExecOverview({ B, onTab }) {
               </div>
               <div className="mt-1.5 flex justify-between text-[11.5px] font-semibold" style={{ ...EX_NUM, color: EX.mute }}>
                 <span>확정 대상 {fmtPct(((p.collectOnly ? T.confirmed : T.total) / T.total) * 100, 0)}</span>
-                <span>처리: 확정 {fixN}명 · 지급 완료 {paidN}명 / {team.length}명</span>
+                <span>처리 현황: 확정 {fixN}명 · 지급 완료 {paidN}명 / {team.length}명</span>
               </div>
             </div>
           )}
           <div className="mt-4" data-sx-table>
             <style>{"[data-sx-table] table{font-size:13.5px!important}[data-sx-table] tbody td{background-color:transparent!important;border-right:none!important;color:#F4F6FB!important;font-size:13.5px!important;font-weight:600!important}[data-sx-table] thead th{font-size:11.5px!important;height:auto}[data-sx-table] tbody tr:hover td{background-color:rgba(255,255,255,.04)!important}[data-sx-table] tbody tr{height:auto;border-bottom:0}[data-sx-table] thead th{border-right:none!important}"}</style>
-            <ExecTable rows={incRows} rowKey={(r) => r.uid} empty="이 달 인센티브 대상 실적이 없습니다" onRow={() => onTab("incentive")}
+            <ExecTable rows={incRows} rowKey={(r) => r.uid} empty="해당 월 인센티브 대상 실적이 없습니다" onRow={() => onTab("incentive")}
               cols={[
                 { key: "name", label: "담당자", render: (r) => <span className="font-bold">{r.name}{r.position ? <span className="ml-1 text-[12px] font-semibold" style={{ color: EX.mute }}>{r.position}</span> : null}</span> },
                 { key: "sale", label: "매출", align: "right", render: (r) => fmtWon(r.sale) },
-                { key: "profit", label: "매출이익", align: "right", render: (r) => <span style={{ color: r.profit > 0 ? EX.up : r.profit < 0 ? EX.down : EX.text }}>{fmtWon(r.profit)}</span> },
-                { key: "total", label: "예상", align: "right", render: (r) => <b>{fmtWon(r.total)}</b> },
+                { key: "profit", label: "매출총이익", align: "right", render: (r) => <span style={{ color: r.profit > 0 ? EX.up : r.profit < 0 ? EX.down : EX.text }}>{fmtWon(r.profit)}</span> },
+                { key: "total", label: "예상 인센티브", align: "right", render: (r) => <b>{fmtWon(r.total)}</b> },
                 { key: "pay", label: "확정 대상", align: "right", render: (r) => <b style={{ color: EX.goldHi }}>{fmtWon(payable(r))}</b> },
                 { key: "st", label: "상태", align: "center", render: (r) => { const s = saved(r.uid); return !s ? <Chip tone="mute">미확정</Chip> : s.status === "지급완료" ? <Chip tone="ok">지급 완료</Chip> : <Chip tone="gold">확정</Chip>; } },
               ]} />
           </div>
         </ExecPanel>
-        <ExecPanel en="ACTIVITY FLOW" title="영업 활동 최근 흐름" sub={`${mOf(ym)}월 활동 ${monthActs.length}건 · 앞으로 예정 ${planN}건`}
+        <ExecPanel en="ACTIVITY FLOW" title="영업 활동 최근 흐름" sub={`${mOf(ym)}월 활동 ${monthActs.length}건 · 향후 예정 ${planN}건`}
           right={<ExecButton onClick={() => onTab("activity")}>영업 활동 ›</ExecButton>}>
           <div className="grid grid-cols-5 gap-1.5">
             {actTypes.map((t) => { const c = monthActs.filter((a) => a.type === t).length; return (
@@ -349,7 +349,7 @@ function ExecOverview({ B, onTab }) {
             ); })}
           </div>
           <div className="mt-4">
-            {!recent.length ? <Empty text="기록된 영업 활동이 없습니다" sub="영업팀이 방문 · 전화 · 견적을 기록하면 여기에 흐름으로 보입니다" /> : (
+            {!recent.length ? <Empty text="기록된 영업 활동이 없습니다" sub="영업팀이 방문 · 전화 · 견적을 기록하면 시간순으로 표시됩니다." /> : (
               <ol className="relative">
                 <div className="absolute left-[7px] top-2 bottom-2 w-px" style={{ background: `linear-gradient(180deg, ${EX.lineHi}, transparent)` }} />
                 {recent.map((a, i) => (
@@ -381,7 +381,7 @@ function WorkSheet({ label, children }) {
     <div>
       <div className="mb-2.5 flex items-center gap-2 text-[12.5px] font-semibold" style={{ color: EX.mute }}>
         <span className="w-1.5 h-1.5 rounded-full" style={{ background: EX.gold }} />
-        {label} — 영업팀과 같은 업무 화면입니다. 확정 · 배정 · 기록을 여기서 바로 처리할 수 있습니다.
+        {label} — 영업팀과 동일한 업무 화면으로, 확정 · 배정 · 기록을 이 화면에서 바로 처리할 수 있습니다.
       </div>
       <div className="rounded-[22px] p-3 md:p-5 text-[#0F1A30]" style={{ background: "linear-gradient(180deg,#F5F7FB,#EEF2F8)", border: `1px solid ${EX.lineHi}`, boxShadow: "0 24px 48px rgba(0,0,0,.28)" }}>
         {children}
@@ -398,7 +398,7 @@ function ExecSkeleton() {
         {Array.from({ length: 6 }, (_, i) => <div key={i} className="h-[132px] rounded-[20px] animate-pulse" style={{ background: EX.panel, border: `1px solid ${EX.line}` }} />)}
       </div>
       <div className="h-[340px] rounded-[22px] animate-pulse" style={{ background: EX.panel, border: `1px solid ${EX.line}` }} />
-      <div className="text-center text-[13px] font-semibold" style={{ color: EX.mute }}>영업 실적을 모으는 중입니다…</div>
+      <div className="text-center text-[13px] font-semibold" style={{ color: EX.mute }}>영업 실적을 집계하고 있습니다…</div>
     </div>
   );
 }
@@ -409,7 +409,7 @@ export default function SalesExecView({ B, tab, setTab, tabs, renderTab }) {
   const label = (tabs.find((t) => t[0] === tab) || [])[1] || "";
   return (
     <ExecPage en="SALES COCKPIT" title="영업관리"
-      sub="영업팀이 어떤 거래처에서 얼마의 매출과 이익을 만들고 있는지, 다음 달 매출을 이끌 영업 기회는 어디까지 왔는지 보고드립니다."
+      sub="담당자 · 거래처별 영업 매출과 매출총이익, 익월 매출로 이어질 영업 기회의 진행 현황을 보고합니다."
       right={<ExecClock />}>
       <div className="-mt-1">
         <ExecTabs items={tabs} value={tab} onChange={setTab} />

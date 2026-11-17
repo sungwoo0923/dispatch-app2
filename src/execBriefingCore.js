@@ -96,13 +96,16 @@ export function attendanceToday(staff, attendance, awayUids) {
 // ── 한 줄 요약(보고서체) ── 숫자 표기 함수는 화면이 넘긴다(execUi fmtEokMan)
 export function briefSentences({ mSale, md, prevAvail, mMargin, forecast, pFullSale, mineCount, title, awayCount, fmt }) {
   const s = [];
-  if (!mSale) s.push("이번 달 집계된 매출은 아직 없습니다.");
+  if (!mSale) s.push("이번 달 집계된 매출이 아직 없습니다.");
   else {
-    const cmp = prevAvail && md != null && Number.isFinite(md) ? (Math.abs(md) < 0.05 ? "으로 전월 같은 기간과 비슷합니다" : `으로 전월 같은 기간보다 ${Math.abs(md).toFixed(1)}% ${md > 0 ? "늘었습니다" : "줄었습니다"}`) : "입니다";
-    s.push(`이번 달 매출은 ${fmt(mSale)}${cmp}${mMargin != null ? ` · 매출총이익률 ${mMargin.toFixed(1)}%` : ""}.`);
+    const hasM = mMargin != null;
+    const cmp = prevAvail && md != null && Number.isFinite(md)
+      ? (Math.abs(md) < 0.05 ? `으로 전월 동기와 같은 수준${hasM ? "이며" : "입니다"}` : `으로 전월 동기 대비 ${Math.abs(md).toFixed(1)}% ${md > 0 ? "증가" : "감소"}${hasM ? "했으며" : "했습니다"}`)
+      : (hasM ? "이며" : "입니다");
+    s.push(`이번 달 매출은 ${fmt(mSale)}${cmp}${hasM ? `, 매출총이익률은 ${mMargin.toFixed(1)}%입니다` : ""}.`);
   }
-  if (forecast > 0) s.push(`지금 속도라면 월말 ${fmt(forecast)}이 예상됩니다.`);
-  s.push(mineCount ? `결재 ${mineCount}건이 ${title} 결재를 기다리고 있습니다.` : "기다리는 결재는 없습니다.");
+  if (forecast > 0) s.push(`현 추세 기준 월말 매출은 ${fmt(forecast)}으로 예상됩니다.`);
+  s.push(mineCount ? `${title} 결재 대기 건은 ${mineCount}건입니다.` : "결재 대기 건은 없습니다.");
   if (awayCount) s.push(`오늘 ${awayCount}명이 휴가 · 외근 중입니다.`);
   return s;
 }

@@ -224,7 +224,7 @@ export default function ExecStaffInfo({ company }) {
   );
 
   return (
-    <ExecPage testId="exec-staff" en="PEOPLE · ORGANIZATION" title="직원 정보" sub="회사 조직과 근무 현황입니다 · 보기 전용(수정은 인사관리부에서 합니다)" right={<Chip tone="mute">{dot(today)} 기준</Chip>}>
+    <ExecPage testId="exec-staff" en="PEOPLE · ORGANIZATION" title="직원 정보" sub="조직 구성 및 근무 현황 · 조회 전용(정보 수정은 인사관리부에서 가능합니다)" right={<Chip tone="mute">{dot(today)} 기준</Chip>}>
       {loading ? (
         <div className="grid gap-4 grid-cols-2 md:grid-cols-4">{[0, 1, 2, 3].map((i) => <div key={i} className="h-[120px] rounded-[20px] animate-pulse" style={{ background: EX.panel, border: `1px solid ${EX.line}` }} />)}</div>
       ) : (<>
@@ -275,7 +275,7 @@ export default function ExecStaffInfo({ company }) {
 
           {/* 부서별 인원 구성 */}
           <ExecPanel en="ORGANIZATION" title="부서별 인원 구성" sub={`재직 ${working.length}명 · 휴직 ${onLeaveSt.length}명 · 직급 구성`} right={<span className="hidden md:block"><Legend items={usedTiers.map(([l, c]) => [l, c])} /></span>}>
-            {!byTeam.length ? <Empty text="등록된 직원이 없습니다" sub="인사관리부에서 직원을 등록하면 보입니다" /> : (
+            {!byTeam.length ? <Empty text="등록된 직원이 없습니다" sub="인사관리부에서 직원을 등록하면 표시됩니다." /> : (
               <ul className="mt-1">
                 {byTeam.map((x) => (
                   <li key={x.t} className="py-3 grid items-center gap-x-4 gap-y-1.5" style={{ gridTemplateColumns: "minmax(72px,110px) minmax(0,1fr) 52px", borderTop: "1px solid rgba(255,255,255,.05)" }}>
@@ -300,7 +300,7 @@ export default function ExecStaffInfo({ company }) {
         <ExecGrid cols="minmax(0,1.3fr) minmax(0,1fr)">
           {/* 인건비 */}
           <ExecPanel en="LABOR COST · 6 MONTHS" title="인건비 추이" sub="회계 장부 기준 · 개인별 급여는 표시하지 않습니다 · 단위 만원" right={laborHas ? <span className="hidden md:block"><Legend items={laborUsed} /></span> : null}>
-            {!laborHas ? <Empty text="장부에 인건비 기록이 없습니다" sub="경리 담당자가 수입 · 지출 장부에 급여 · 상여 · 4대 보험 계정으로 적으면 보입니다" /> : (<>
+            {!laborHas ? <Empty text="장부에 인건비 기록이 없습니다" sub="경리 담당자가 수입 · 지출 장부에 급여 · 상여 · 4대 보험 계정으로 기록하면 표시됩니다." /> : (<>
               <div className="h-[230px] md:h-[250px] -ml-2 mt-1">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={labor} margin={{ top: 10, right: 6, left: 0, bottom: 0 }} barCategoryGap="34%">
@@ -321,7 +321,7 @@ export default function ExecStaffInfo({ company }) {
                   </div>
                 ))}
               </div>
-              <div className="mt-2.5 text-[11.5px] font-medium leading-relaxed" style={{ color: EX.faint, wordBreak: "keep-all" }}>급여 · 상여 · 퇴직급여 · 4대 보험 계정의 장부 지출 합계입니다. 1인당 금액은 합계를 재직 인원으로 나눈 평균이며, 개인별 급여는 경리 담당자만 볼 수 있습니다.</div>
+              <div className="mt-2.5 text-[11.5px] font-medium leading-relaxed" style={{ color: EX.faint, wordBreak: "keep-all" }}>급여 · 상여 · 퇴직급여 · 4대 보험 계정의 장부 지출 합계입니다. 1인당 금액은 합계를 재직 인원으로 나눈 평균이며, 개인별 급여는 경리 담당자만 열람할 수 있습니다.</div>
             </>)}
           </ExecPanel>
 
@@ -360,13 +360,13 @@ export default function ExecStaffInfo({ company }) {
         <ExecPanel en="LEAVE · ABSENCE" title="휴가 · 부재 일정" sub={`${Number(ym.slice(5))}월 1일 ~ ${dot(winTo).slice(5)} · 전자결재 휴가 · 근태 기록 · 휴직 기준`}>
           {!absences.length ? <Empty text="이 기간에 휴가 · 부재 일정이 없습니다" /> : (
             <div className="grid gap-x-8 gap-y-4 mt-1" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(300px, 100%), 1fr))" }}>
-              {[["지금 부재 중", absNow, "gold"], ["예정", absNext, "ice"], ["이번 달 지난 일정", absPast, "mute"]].map(([l, arr, tone]) => (
+              {[["현재 부재 중", absNow, "gold"], ["예정", absNext, "ice"], ["이번 달 지난 일정", absPast, "mute"]].map(([l, arr, tone]) => (
                 <div key={l} className="min-w-0">
                   <div className="flex items-center justify-between gap-2 pb-2" style={{ borderBottom: `1px solid ${EX.line}` }}>
                     <span className="text-[13px] font-extrabold" style={{ color: EX.sub }}>{l}</span>
                     <Chip tone={tone}>{arr.length}건</Chip>
                   </div>
-                  {!arr.length ? <div className="py-4 text-[12.5px] font-semibold" style={{ color: EX.faint }}>없습니다</div> : (
+                  {!arr.length ? <div className="py-4 text-[12.5px] font-semibold" style={{ color: EX.faint }}>해당 일정이 없습니다.</div> : (
                     <ul className="max-h-[260px] overflow-y-auto">
                       {arr.slice(0, 30).map((x) => (
                         <li key={x.id} className="py-2.5 flex items-center gap-3 min-w-0" style={{ borderBottom: "1px solid rgba(255,255,255,.04)" }}>
@@ -391,7 +391,7 @@ export default function ExecStaffInfo({ company }) {
 
         {/* 직원 목록 · 상세 */}
         <ExecGrid cols="minmax(340px,440px) minmax(0,1fr)">
-          <ExecPanel en="DIRECTORY" title={`직원 목록 ${shown.length}명`} sub="이름을 누르면 인사 정보 · 근태 · 연차 · 발령 이력을 봅니다">
+          <ExecPanel en="DIRECTORY" title={`직원 목록 ${shown.length}명`} sub="이름을 선택하면 인사 정보 · 근태 · 연차 · 발령 이력을 조회할 수 있습니다">
             <div className="mt-2 grid gap-2.5" data-testid="staff-filters">
               <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름 · 부서 · 직책 · 연락처 검색" aria-label="직원 검색" className="w-full outline-none" style={{ ...selSt, height: 44, padding: "0 14px", fontSize: 14 }} />
               <ExecTabs size="sm" value={st} onChange={setSt} items={[["재직", "재직"], ["휴직", "휴직"], ["퇴사", "퇴사"], ["all", "전체"]]} />
@@ -424,14 +424,14 @@ export default function ExecStaffInfo({ company }) {
                   <div className="w-16 h-16 rounded-full grid place-items-center" style={{ border: `1px solid ${EX.lineHi}`, background: "radial-gradient(circle at 50% 35%, rgba(215,188,130,.16), transparent 70%)" }}>
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={EX.gold} strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="8" r="3.6" /><path d="M4.5 20c1.2-3.8 4-5.6 7.5-5.6s6.3 1.8 7.5 5.6" /></svg>
                   </div>
-                  <div className="mt-4 text-[16px] font-black" style={{ color: EX.text }}>직원을 고르세요</div>
-                  <div className="mt-1 text-[13px] font-semibold" style={{ color: EX.mute }}>목록에서 고르면 인사 정보 · 근태 · 연차 · 발령 이력을 봅니다</div>
+                  <div className="mt-4 text-[16px] font-black" style={{ color: EX.text }}>직원을 선택하십시오</div>
+                  <div className="mt-1 text-[13px] font-semibold" style={{ color: EX.mute }}>목록에서 선택하면 인사 정보 · 근태 · 연차 · 발령 이력을 조회할 수 있습니다.</div>
                 </div>
               </ExecPanel>
             )}
           </div>
         </ExecGrid>
-        <div className="px-1 text-[11.5px] font-medium" style={{ color: EX.faint }}>이 화면은 보기 전용입니다 · 직원 정보 수정은 인사관리부 › 직원관리에서 합니다</div>
+        <div className="px-1 text-[11.5px] font-medium" style={{ color: EX.faint }}>이 화면은 조회 전용입니다 · 직원 정보 수정은 인사관리부 › 직원관리에서 가능합니다.</div>
       </>)}
     </ExecPage>
   );
@@ -516,7 +516,7 @@ function StaffDetail({ u, demo, attByDate, leaveAp, today }) {
         </ExecPanel>
         <ExecPanel en="CERTIFICATES · DOCUMENTS" title="자격 · 서류" sub={`입사 서류 ${docOk}/${docs.length} 완료`}>
           <div className="mt-2 text-[12.5px] font-extrabold" style={{ color: EX.sub }}>자격 · 면허</div>
-          {!x ? <div className="py-2.5 text-[13px] font-semibold" style={{ color: EX.mute }}>불러오는 중</div> : !x.certs.length ? <div className="py-2.5 text-[13px] font-semibold" style={{ color: EX.mute }}>등록된 자격이 없습니다.</div> : x.certs.map((c, i) => (
+          {!x ? <div className="py-2.5 text-[13px] font-semibold" style={{ color: EX.mute }}>불러오는 중입니다</div> : !x.certs.length ? <div className="py-2.5 text-[13px] font-semibold" style={{ color: EX.mute }}>등록된 자격이 없습니다.</div> : x.certs.map((c, i) => (
             <div key={i} className="py-2.5 flex justify-between gap-3 text-[13.5px]" style={{ borderTop: i ? "1px solid rgba(255,255,255,.05)" : 0 }}>
               <span className="min-w-0"><b className="font-extrabold" style={{ color: EX.text }}>{c.name}</b> <span className="text-[12px] font-semibold" style={{ color: EX.mute }}>{c.issuer}</span></span>
               <span className="shrink-0 text-[12.5px] font-bold" style={{ ...EX_NUM, color: EX.mute }}>{dot(c.date)}</span>

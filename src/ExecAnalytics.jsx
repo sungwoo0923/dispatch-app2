@@ -178,31 +178,31 @@ function PlTab({ rows, fleet, ledger, recurring, today, compact, W }) {
   const dSale = prev ? pctChange(cur.sale, prev.sale) : null;
   const chart = pl.map((m, i) => ({ k: ymLabel(m.m), i, sale: Math.round(m.sale / 1e4), op: Math.round(m.op / 1e4), gm: m.sale ? Number(m.gm.toFixed(1)) : null, om: m.sale ? Number(m.om.toFixed(1)) : null, raw: m }));
   const hasData = pl.some((m) => m.sale > 0);
-  if (!hasData) return <ExecPanel en="PROFIT & LOSS" title="손익"><Empty text="최근 12개월에 마감된 오더가 없습니다" sub="배차가 쌓이면 월별 매출 · 영업이익이 이곳에 정리됩니다." /></ExecPanel>;
+  if (!hasData) return <ExecPanel en="PROFIT & LOSS" title="손익"><Empty text="최근 12개월간 마감된 오더가 없습니다" sub="배차 실적이 누적되면 월별 매출 · 영업이익이 표시됩니다." /></ExecPanel>;
   return (<>
     <Brief basis={`${ymKo(cur.m)} 마감 · 상차일 기준`}>
       {M}월 매출은 <B>{fmtEokMan(cur.sale)}</B>
-      {dSale != null ? <>으로 전월보다 <B color={dSale >= 0 ? EX.up : EX.down}>{Math.abs(dSale).toFixed(1)}% {dSale >= 0 ? "늘었" : "줄었"}</B>고, </> : "이고, "}
-      영업{cur.op < 0 ? "손실" : "이익"}은 <B color={pc(cur.op)}>{fmtEokMan(Math.abs(cur.op))}</B>(이익률 {pct(cur.om)})입니다.
+      {dSale != null ? <>으로 전월 대비 <B color={dSale >= 0 ? EX.up : EX.down}>{Math.abs(dSale).toFixed(1)}% {dSale >= 0 ? "증가" : "감소"}</B>했으며, </> : "이며, "}
+      영업{cur.op < 0 ? "손실" : "이익"}은 <B color={pc(cur.op)}>{fmtEokMan(Math.abs(cur.op))}</B>(영업이익률 {pct(cur.om)})입니다.
       {" "}최근 12개월 누적 매출은 <B>{fmtEokMan(ltm.sale)}</B>입니다.
     </Brief>
     <ExecKpis min={196}>
       <Kpi accent en="REVENUE" label={`${M}월 매출`} {...km(cur.sale)} delta={dSale ?? undefined} deltaLabel="전월 대비" spark={pl.map((m) => m.sale)} />
-      <Kpi en="COST OF SALES" label="매입(운임)" {...km(cur.cost)} delta={prev ? pctChange(cur.cost, prev.cost) : undefined} deltaLabel="전월 대비" invert foot={`용차 비중 ${cur.cost ? Math.round((cur.hire / cur.cost) * 100) : 0}%`} />
-      <Kpi en="SG&A" label="판관비" {...km(cur.sgaTotal)} delta={prev ? pctChange(cur.sgaTotal, prev.sgaTotal) : undefined} deltaLabel="전월 대비" invert foot={cur.est ? "고정비로 추정" : "장부 기준"} />
-      <Kpi en="OPERATING PROFIT" label="영업이익" {...km(cur.op)} foot={<span className="inline-flex items-center gap-2">이익률 <b style={{ ...EX_NUM, color: pc(cur.om) }}>{pct(cur.om)}</b>{prev && <Delta v={cur.om - prev.om} suffix="%p" size={12} />}</span>} spark={pl.map((m) => m.op)} />
+      <Kpi en="COST OF SALES" label="매입(운송원가)" {...km(cur.cost)} delta={prev ? pctChange(cur.cost, prev.cost) : undefined} deltaLabel="전월 대비" invert foot={`용차비 비중 ${cur.cost ? Math.round((cur.hire / cur.cost) * 100) : 0}%`} />
+      <Kpi en="SG&A" label="판관비" {...km(cur.sgaTotal)} delta={prev ? pctChange(cur.sgaTotal, prev.sgaTotal) : undefined} deltaLabel="전월 대비" invert foot={cur.est ? "고정비 기준 추정" : "회계 장부 기준"} />
+      <Kpi en="OPERATING PROFIT" label="영업이익" {...km(cur.op)} foot={<span className="inline-flex items-center gap-2">영업이익률 <b style={{ ...EX_NUM, color: pc(cur.om) }}>{pct(cur.om)}</b>{prev && <Delta v={cur.om - prev.om} suffix="%p" size={12} />}</span>} spark={pl.map((m) => m.op)} />
       <Kpi en="LAST 12 MONTHS" label="최근 12개월 매출" {...km(ltm.sale)} foot={<span>영업이익 <b style={{ ...EX_NUM, color: pc(ltm.op) }}>{fmtMoney(ltm.op)}</b> · {pct(ltm.sale ? (ltm.op / ltm.sale) * 100 : 0)}</span>} />
     </ExecKpis>
     <ExecGrid cols="minmax(0,1.55fr) minmax(0,1fr)">
-      <ExecPanel en="MONTHLY P&L" title="월별 손익 추이" sub="마감된 최근 12개월 · 단위 만원 · 막대를 누르면 그달 구성을 봅니다"
-        right={W >= 900 && <Legend items={[["매출(선택한 달)", EX.gold], ["영업이익 +", EX.up], ["영업이익 −", EX.down]]} />}>
-        {W < 900 && <div className="mb-2"><Legend items={[["매출(선택한 달)", EX.gold], ["영업이익 +", EX.up], ["영업이익 −", EX.down]]} /></div>}
+      <ExecPanel en="MONTHLY P&L" title="월별 손익 추이" sub="마감 기준 최근 12개월 · 단위 만원 · 막대를 선택하면 해당 월 손익 구조가 표시됩니다"
+        right={W >= 900 && <Legend items={[["매출(선택 월)", EX.gold], ["영업이익 +", EX.up], ["영업이익 −", EX.down]]} />}>
+        {W < 900 && <div className="mb-2"><Legend items={[["매출(선택 월)", EX.gold], ["영업이익 +", EX.up], ["영업이익 −", EX.down]]} /></div>}
         <PlChart data={chart} sel={sel} setSel={setSel} compact={compact} />
-        <Basis>매출 = 청구운임 · 매입 = 기사운임(소속 차량은 기사 운임, 그 외 용차) + 지게차 · 외부 특수운임(회사가 따로 지급) · 판관비 = 장부 지출에서 운송 원가 계정({COGS_ACCOUNTS.slice(0, 3).join(" · ")} 등)을 뺀 금액 · 장부가 없는 달은 고정비로 추정 · 진행 중인 이번 달은 넣지 않았습니다.</Basis>
+        <Basis>매출 = 청구운임 · 매입(운송원가) = 기사운임(소속 차량 기사운임 및 용차비) + 회사 부담 지게차 · 외부 특수운임 · 판관비 = 장부 지출액에서 운송원가 계정({COGS_ACCOUNTS.slice(0, 3).join(" · ")} 등)을 제외한 금액 · 장부 기록이 없는 월은 고정비 기준 추정 · 진행 중인 당월은 제외했습니다.</Basis>
       </ExecPanel>
       <PlStructure cur={cur} M={M} compact={compact} />
     </ExecGrid>
-    <ExecPanel en="MARGIN TREND" title="이익률 추이" sub="매출총이익률(매출 − 매입) · 영업이익률(매출총이익 − 판관비) · 마감된 최근 12개월"
+    <ExecPanel en="MARGIN TREND" title="이익률 추이" sub="매출총이익률(매출 − 매입) · 영업이익률(매출총이익 − 판관비) · 마감 기준 최근 12개월"
       right={W >= 760 && <Legend items={[["매출총이익률", EX.gold, "line"], ["영업이익률", EX.ice, "line"]]} />}>
       {W < 760 && <div className="mb-2"><Legend items={[["매출총이익률", EX.gold, "line"], ["영업이익률", EX.ice, "line"]]} /></div>}
       <MarginChart data={chart} compact={compact} selK={chart[sel]?.k} />
@@ -214,7 +214,7 @@ function PlChart({ data, sel, setSel, compact }) {
   const onClick = (s) => { const i = clickIdx(s); if (i != null) setSel(i); };
   const Tip = ({ active, payload }) => {
     if (!active || !payload?.length) return null; const m = payload[0].payload.raw;
-    return <TipBox title={ymKo(m.m)} rows={[["매출", EX.gold, `${mn(m.sale)}만원`], ["매입", EX.ice, `${mn(m.cost)}만원`], ["판관비", VIOLET, `${mn(m.sgaTotal)}만원${m.est ? " · 추정" : ""}`], ["영업이익", pc(m.op), `${mn(m.op)}만원`, pc(m.op)], ["영업이익률", null, pct(m.om), pc(m.om)]]} foot="누르면 그달 손익 구조를 봅니다" />;
+    return <TipBox title={ymKo(m.m)} rows={[["매출", EX.gold, `${mn(m.sale)}만원`], ["매입", EX.ice, `${mn(m.cost)}만원`], ["판관비", VIOLET, `${mn(m.sgaTotal)}만원${m.est ? " · 추정" : ""}`], ["영업이익", pc(m.op), `${mn(m.op)}만원`, pc(m.op)], ["영업이익률", null, pct(m.om), pc(m.om)]]} foot="선택하면 해당 월 손익 구조가 표시됩니다" />;
   };
   const tick = monthTick(selK);
   return (
@@ -257,7 +257,7 @@ function PlChart({ data, sel, setSel, compact }) {
 function PlStructure({ cur, M, compact }) {
   const sale = cur.sale || 0;
   const share = (v) => (sale ? (v / sale) * 100 : 0);
-  const items = [{ key: "own", label: "기사 운임(소속 차량)", value: cur.own, g: "매입" }, { key: "hire", label: "용차 운임", value: cur.hire, g: "매입" }, { key: "paid", label: "지게차 · 외부 지급", value: cur.paid, g: "매입" },
+  const items = [{ key: "own", label: "기사운임(소속 차량)", value: cur.own, g: "매입" }, { key: "hire", label: "용차비", value: cur.hire, g: "매입" }, { key: "paid", label: "지게차 · 외부 특수운임", value: cur.paid, g: "매입" },
     ...Object.entries(cur.sga).map(([k, v]) => ({ key: `s-${k}`, label: k, value: v, g: "판관비" }))].filter((x) => x.value > 0).sort((a, b) => b.value - a.value);
   const TOP = 8; const rest = items.slice(TOP);
   const list = rest.length ? [...items.slice(0, TOP), { key: "rest", label: `기타 ${rest.length}개 항목`, value: rest.reduce((s, x) => s + x.value, 0), g: "판관비" }] : items;
@@ -265,9 +265,9 @@ function PlStructure({ cur, M, compact }) {
   // 매출 100% 막대 — 매입 · 판관비 · 영업이익
   const segs = [["매입", cur.cost, EX.ice], ["판관비", cur.sgaTotal, VIOLET], ["영업이익", Math.max(0, cur.op), EX.gold]];
   const segSum = segs.reduce((s, x) => s + x[1], 0) || 1;
-  const stmt = [["매출", cur.sale, 100, "", EX.text], ["매입(운임)", -cur.cost, share(cur.cost), "−", EX.sub], ["매출총이익", cur.gross, cur.gm, "=", EX.text], ["판관비", -cur.sgaTotal, share(cur.sgaTotal), "−", EX.sub]];
+  const stmt = [["매출", cur.sale, 100, "", EX.text], ["매입(운송원가)", -cur.cost, share(cur.cost), "−", EX.sub], ["매출총이익", cur.gross, cur.gm, "=", EX.text], ["판관비", -cur.sgaTotal, share(cur.sgaTotal), "−", EX.sub]];
   return (
-    <ExecPanel en="COST STRUCTURE" title={`${M}월 손익 구조`} sub={`매출 대비 비중 · 단위 만원${cur.est ? " · 판관비는 고정비로 추정" : ""}`}>
+    <ExecPanel en="COST STRUCTURE" title={`${M}월 손익 구조`} sub={`매출 대비 비중 · 단위 만원${cur.est ? " · 판관비는 고정비 기준 추정" : ""}`}>
       <div className="flex h-3 w-full overflow-hidden rounded-full gap-[2px] mt-1" role="img" aria-label="매출 구성">
         {segs.filter((s) => s[1] > 0).map(([l, v, c]) => <div key={l} title={`${l} ${pct((v / segSum) * 100)}`} style={{ width: `${(v / segSum) * 100}%`, background: c === EX.gold ? GOLD_GRAD : c }} />)}
       </div>
@@ -335,7 +335,7 @@ function MarginChart({ data, compact, selK }) {
 
 // ═════════════════════════ 거래처 ═════════════════════════
 const RiskChip = ({ v }) => <Chip tone={v === "높음" ? "up" : v === "주의" ? "warn" : "mute"}>{v}</Chip>;
-const AGE_B = [["30일 이내", 0, 30], ["31~60일", 31, 60], ["61~90일", 61, 90], ["90일 넘음", 91, Infinity]];
+const AGE_B = [["30일 이내", 0, 30], ["31~60일", 31, 60], ["61~90일", 61, 90], ["90일 초과", 91, Infinity]];
 const AGE_C = [EX.ice, EX.warn, "#F29A6B", EX.danger];
 const ageBuckets = (open = []) => AGE_B.map(([l, a, b]) => [l, open.filter((o) => o.age >= a && o.age <= b).reduce((s, o) => s + o.amt, 0)]);
 function ClientTab({ rows, arPay, today, W, compact, fixedRows = [] }) {
@@ -359,40 +359,40 @@ function ClientTab({ rows, arPay, today, W, compact, fixedRows = [] }) {
   const cols = [
     { k: "n", l: "거래처", cell: (r) => <span className="font-extrabold">{r.n}</span> },
     { k: "sale", l: "매출(만원)", short: "매출", num: true, cell: (r) => mn(r.sale) },
-    { k: "profit", l: "이익(만원)", short: "이익", num: true, cell: (r) => <span style={{ color: pc(r.profit) }}>{mn(r.profit)}</span> },
-    { k: "margin", l: "이익률", num: true, cell: (r) => <span style={{ color: pc(r.margin) }}>{pct(r.margin)}</span> },
+    { k: "profit", l: "매출총이익(만원)", short: "매출총이익", num: true, cell: (r) => <span style={{ color: pc(r.profit) }}>{mn(r.profit)}</span> },
+    { k: "margin", l: "매출총이익률", num: true, cell: (r) => <span style={{ color: pc(r.margin) }}>{pct(r.margin)}</span> },
     { k: "avg", l: "평균 단가(만원)", short: "평균 단가", num: true, cell: (r) => mn1(r.avg) },
     { k: "cnt", l: "건수", num: true, cell: (r) => `${r.cnt.toLocaleString("ko-KR")}건` },
-    { k: "dSale", l: "매출 증감", short: "증감", num: true, get: (r) => r.dSale ?? -999, cell: (r) => (r.dSale == null ? <Chip tone="gold">신규</Chip> : <Delta v={r.dSale} size={12.5} />) },
-    { k: "avgAge", l: "평균 미수일", short: "미수일", num: true, get: (r) => r.ar.avgAge, cell: (r) => (r.ar.outstanding ? `${Math.round(r.ar.avgAge)}일` : "—") },
-    { k: "over30", l: "30일+ 미수(만원)", short: "30일+ 미수", num: true, get: (r) => r.ar.over30, cell: (r) => (r.ar.over30 ? <span style={{ color: EX.warn }}>{mn(r.ar.over30)}</span> : "—") },
-    { k: "risk", l: "입금 지연 위험", short: "위험", get: (r) => ({ 높음: 2, 주의: 1, 정상: 0 }[r.risk]), cell: (r) => <RiskChip v={r.risk} /> },
+    { k: "dSale", l: "매출 증감률", short: "증감률", num: true, get: (r) => r.dSale ?? -999, cell: (r) => (r.dSale == null ? <Chip tone="gold">신규</Chip> : <Delta v={r.dSale} size={12.5} />) },
+    { k: "avgAge", l: "평균 미수 경과일", short: "미수 경과일", num: true, get: (r) => r.ar.avgAge, cell: (r) => (r.ar.outstanding ? `${Math.round(r.ar.avgAge)}일` : "—") },
+    { k: "over30", l: "30일 초과 미수(만원)", short: "30일 초과", num: true, get: (r) => r.ar.over30, cell: (r) => (r.ar.over30 ? <span style={{ color: EX.warn }}>{mn(r.ar.over30)}</span> : "—") },
+    { k: "risk", l: "회수 지연 위험", short: "회수 위험", get: (r) => ({ 높음: 2, 주의: 1, 정상: 0 }[r.risk]), cell: (r) => <RiskChip v={r.risk} /> },
   ];
   const aging = ageBuckets(arAll.flatMap((r) => r.open || []));
   const agingMax = Math.max(1, ...aging.map((x) => x[1]));
   const overdue = arAll.filter((r) => r.over30 > 0).sort((a, b) => b.over30 - a.over30).slice(0, 5);
   return (<>
-    <Toolbar basis={`${dot(P.from).slice(5)} ~ ${dot(P.to).slice(5)} · 증감은 바로 앞 같은 기간 대비`}><ExecTabs size="sm" items={PERIODS} value={pk} onChange={setPk} /></Toolbar>
-    {!list.length ? <ExecPanel title="거래처 수익성"><Empty text="이 기간에 오더가 없습니다" sub="기간을 늘려 보세요." /></ExecPanel> : <>
-      <Brief basis="취소 · 전송 제외 오더 · 상차일 기준">
-        {PERIOD_L[pk]} 거래처 <B>{list.length}곳</B>에서 매출 <B>{fmtEokMan(tot.sale)}</B>(이익률 {pct(tot.sale ? (tot.profit / tot.sale) * 100 : 0)})을 올렸습니다.
-        {" "}상위 5곳이 매출의 <B>{top5Share.toFixed(0)}%</B>를 차지하며,{" "}
-        {!arPay ? "수금 기록이 없어 미수금은 계산하지 않았습니다." : o30 ? <>30일 넘게 받지 못한 미수가 <B color={EX.warn}>{fmtEokMan(o30)}</B> 있습니다.</> : "30일 넘은 미수는 없습니다."}
+    <Toolbar basis={`${dot(P.from).slice(5)} ~ ${dot(P.to).slice(5)} · 증감률은 직전 동일 기간 대비`}><ExecTabs size="sm" items={PERIODS} value={pk} onChange={setPk} /></Toolbar>
+    {!list.length ? <ExecPanel title="거래처 수익성"><Empty text="해당 기간에 오더가 없습니다" sub="조회 기간을 늘려 확인하시기 바랍니다." /></ExecPanel> : <>
+      <Brief basis="취소 · 운송사 전송 제외 · 상차일 기준">
+        {PERIOD_L[pk]} 거래처 <B>{list.length}곳</B>의 매출은 <B>{fmtEokMan(tot.sale)}</B>(매출총이익률 {pct(tot.sale ? (tot.profit / tot.sale) * 100 : 0)})입니다.
+        {" "}상위 5개 거래처가 매출의 <B>{top5Share.toFixed(0)}%</B>를 차지하며,{" "}
+        {!arPay ? "수금 기록이 없어 미수금은 산출하지 않았습니다." : o30 ? <>30일 초과 미수금은 <B color={EX.warn}>{fmtEokMan(o30)}</B>입니다.</> : "30일 초과 미수금은 없습니다."}
       </Brief>
       <ExecKpis min={196}>
-        <Kpi accent en="REVENUE" label={`${PERIOD_L[pk]} 매출`} {...km(tot.sale)} delta={tot.pSale ? pctChange(tot.sale, tot.pSale) : undefined} deltaLabel="직전 대비" />
-        <Kpi en="GROSS PROFIT" label="이익(매출 − 매입)" {...km(tot.profit)} foot={<span>이익률 <b style={{ ...EX_NUM, color: pc(tot.profit) }}>{pct(tot.sale ? (tot.profit / tot.sale) * 100 : 0)}</b></span>} />
+        <Kpi accent en="REVENUE" label={`${PERIOD_L[pk]} 매출`} {...km(tot.sale)} delta={tot.pSale ? pctChange(tot.sale, tot.pSale) : undefined} deltaLabel="직전 동기간 대비" />
+        <Kpi en="GROSS PROFIT" label="매출총이익" {...km(tot.profit)} foot={<span>매출총이익률 <b style={{ ...EX_NUM, color: pc(tot.profit) }}>{pct(tot.sale ? (tot.profit / tot.sale) * 100 : 0)}</b></span>} />
         <Kpi en="CLIENTS" label="거래처" value={list.length.toLocaleString("ko-KR")} unit="곳" foot={`상위 5곳 비중 ${top5Share.toFixed(0)}%`} />
-        <Kpi en="RECEIVABLES" label="미수금" {...km(out)} foot={arPay ? "올해 청구(부가세 포함) − 수금" : "수금 기록 없음"} />
-        <Kpi en="OVER 30 DAYS" label="30일 넘은 미수" {...km(o30)} foot={`입금 지연 위험 높음 ${hi}곳`} />
+        <Kpi en="RECEIVABLES" label="미수금" {...km(out)} foot={arPay ? "당해 연도 청구액(부가세 포함) − 수금액" : "수금 기록 없음"} />
+        <Kpi en="OVER 30 DAYS" label="30일 초과 미수금" {...km(o30)} foot={`회수 지연 위험 높음 ${hi}곳`} />
       </ExecKpis>
       <ExecGrid cols="minmax(0,1fr) minmax(0,1fr)">
-        <ExecPanel en="CONCENTRATION" title="매출 집중도" sub={`${PERIOD_L[pk]} · 매출 큰 순 누적 · 단위 만원`}>
+        <ExecPanel en="CONCENTRATION" title="매출 집중도" sub={`${PERIOD_L[pk]} · 매출액 순 누적 비중 · 단위 만원`}>
           <div className="flex h-3.5 w-full overflow-hidden rounded-full gap-[2px]">
             {[["A", EX.gold], ["B", EX.ice], ["C", "rgba(232,238,250,.28)"]].filter(([g]) => abc[g].sale > 0).map(([g, c]) => <div key={g} style={{ width: `${(abc[g].sale / (tot.sale || 1)) * 100}%`, background: g === "A" ? GOLD_GRAD : c }} />)}
           </div>
           <div className="mt-3 grid grid-cols-3 gap-2">
-            {[["A", "핵심", "매출 80%까지", EX.gold], ["B", "중요", "다음 15%", EX.ice], ["C", "일반", "나머지 5%", EX.sub]].map(([g, l, s, c]) => (
+            {[["A", "핵심", "누적 매출 0~80%", EX.gold], ["B", "중요", "누적 매출 80~95%", EX.ice], ["C", "일반", "누적 매출 95~100%", EX.sub]].map(([g, l, s, c]) => (
               <div key={g} className="rounded-xl px-3 py-2.5" style={{ background: "rgba(255,255,255,.03)", border: `1px solid ${EX.line}` }}>
                 <div className="text-[11.5px] font-extrabold" style={{ color: c }}>{g} · {l}</div>
                 <div className="mt-0.5 flex items-baseline gap-1" style={EX_NUM}><b className="text-[19px] font-black" style={{ color: EX.text }}>{abc[g].n}</b><span className="text-[12px] font-bold" style={{ color: EX.mute }}>곳</span></div>
@@ -404,8 +404,8 @@ function ClientTab({ rows, arPay, today, W, compact, fixedRows = [] }) {
           <RankBars rows={bySale.slice(0, 7).map((c) => ({ key: c.n, label: c.n, value: c.sale }))} valueFmt={mn}
             right={(r) => <span className="w-[44px] text-right text-[12px] font-bold" style={{ ...EX_NUM, color: EX.mute }}>{pct(tot.sale ? (r.value / tot.sale) * 100 : 0, 0)}</span>} />
         </ExecPanel>
-        <ExecPanel en="RECEIVABLES AGING" title="미수 나이" sub={`지금 남은 미수 ${mn(out)}만원 · 청구일부터 지난 날 · 단위 만원`}>
-          {!arPay ? <Empty text="수금 기록이 없습니다" sub="회계관리 › 수금 기록이 있어야 미수를 계산합니다." /> : !out ? <Empty text="남은 미수가 없습니다" /> : <>
+        <ExecPanel en="RECEIVABLES AGING" title="미수금 연령(채권 연령)" sub={`현재 미수금 ${mn(out)}만원 · 청구일 기준 경과 일수 · 단위 만원`}>
+          {!arPay ? <Empty text="수금 기록이 없습니다" sub="회계관리에 수금 기록이 입력되면 미수금이 산출됩니다." /> : !out ? <Empty text="미수금이 없습니다" /> : <>
             <div className="space-y-3 mt-1">
               {aging.map(([l, v], i) => (
                 <div key={l} className="grid items-center gap-3" style={{ gridTemplateColumns: "76px minmax(0,1fr) 72px 40px" }}>
@@ -416,23 +416,23 @@ function ClientTab({ rows, arPay, today, W, compact, fixedRows = [] }) {
                 </div>
               ))}
             </div>
-            <SubHead right="30일 넘은 미수">늦어지는 거래처</SubHead>
-            {!overdue.length ? <Empty text="30일 넘은 미수가 없습니다" /> : (
+            <SubHead right="30일 초과 미수금">회수 지연 거래처</SubHead>
+            {!overdue.length ? <Empty text="30일 초과 미수금이 없습니다" /> : (
               <div>
                 {overdue.map((r, i) => (
                   <div key={r.n} className="flex items-baseline justify-between gap-3 py-2.5" style={{ borderTop: i ? "1px solid rgba(255,255,255,.06)" : 0 }}>
-                    <span className="min-w-0 truncate text-[13.5px] font-bold" style={{ color: EX.text }}>{r.n} <span className="text-[12px] font-semibold" style={{ color: EX.mute }}>평균 {Math.round(r.avgAge)}일</span></span>
+                    <span className="min-w-0 truncate text-[13.5px] font-bold" style={{ color: EX.text }}>{r.n} <span className="text-[12px] font-semibold" style={{ color: EX.mute }}>평균 {Math.round(r.avgAge)}일 경과</span></span>
                     <b className="shrink-0 text-[14px] font-black" style={{ ...EX_NUM, color: EX.warn }}>{mn(r.over30)}</b>
                   </div>
                 ))}
               </div>
             )}
           </>}
-          <Basis>미수 = 올해 배차완료 · 고정거래처 청구액(부가세 포함) − 수금 기록 · 오래된 청구부터 수금된 것으로 봅니다.</Basis>
+          <Basis>미수금 = 당해 연도 배차완료 · 고정거래처 청구액(부가세 포함) − 수금액 · 수금액은 오래된 청구분부터 순차 상계합니다.</Basis>
         </ExecPanel>
       </ExecGrid>
       <ExecGrid cols={cur ? "minmax(0,1.7fr) minmax(360px,1fr)" : "minmax(0,1fr)"} breakAt={1280}>
-        <ExecPanel en="CLIENT PROFITABILITY" title="거래처 수익성" sub={`${PERIOD_L[pk]} · 제목을 누르면 정렬 · 줄을 누르면 노선별 상세`}>
+        <ExecPanel en="CLIENT PROFITABILITY" title="거래처 수익성" sub={`${PERIOD_L[pk]} · 열 제목을 선택하면 정렬 · 행을 선택하면 노선별 상세`}>
           <SortTable testId="exa-client-table" cols={cols} rows={list} sort={sort} setSort={setSort} compact={compact} selKey={sel}
             onRow={(r) => { setSel(r.n === sel ? null : r.n); if (W < 1280) setTimeout(() => document.getElementById("exa-client-detail")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); }} />
         </ExecPanel>
@@ -446,14 +446,14 @@ function ClientDetail({ c, onClose }) {
   const rMax = Math.max(1, ...c.routes.slice(0, 8).map((r) => r.sale));
   return (
     <div id="exa-client-detail" className="min-w-0">
-      <ExecPanel glow en="CLIENT DETAIL" title={c.n} sub={`${c.cnt.toLocaleString("ko-KR")}건 · 마지막 오더 ${c.last ? md(c.last) : "—"} · 단위 만원`} right={<ExecButton onClick={onClose}>닫기</ExecButton>}>
+      <ExecPanel glow en="CLIENT DETAIL" title={c.n} sub={`${c.cnt.toLocaleString("ko-KR")}건 · 최근 오더 ${c.last ? md(c.last) : "—"} · 단위 만원`} right={<ExecButton onClick={onClose}>닫기</ExecButton>}>
         <div className="grid grid-cols-2 gap-2.5 mt-1">
-          <MiniStat label="매출" value={mn(c.sale)} unit="만원" foot={c.dSale == null ? "새 거래처" : <Delta v={c.dSale} size={12} label="직전 대비" />} />
-          <MiniStat label="이익률" value={pct(c.margin)} color={pc(c.margin)} foot={c.pMargin != null ? <Delta v={c.margin - c.pMargin} suffix="%p" size={12} label="직전 대비" /> : "직전 기록 없음"} />
-          <MiniStat label="평균 단가" value={mn1(c.avg)} unit="만원" foot={c.dAvg != null ? <Delta v={c.dAvg} size={12} label="직전 대비" /> : null} />
-          <MiniStat label="미수금" value={mn(c.ar.outstanding)} unit="만원" foot={c.ar.outstanding ? `평균 ${Math.round(c.ar.avgAge)}일 경과` : "남은 미수 없음"} />
+          <MiniStat label="매출" value={mn(c.sale)} unit="만원" foot={c.dSale == null ? "신규 거래처" : <Delta v={c.dSale} size={12} label="직전 기간 대비" />} />
+          <MiniStat label="매출총이익률" value={pct(c.margin)} color={pc(c.margin)} foot={c.pMargin != null ? <Delta v={c.margin - c.pMargin} suffix="%p" size={12} label="직전 기간 대비" /> : "직전 기록 없음"} />
+          <MiniStat label="평균 단가" value={mn1(c.avg)} unit="만원" foot={c.dAvg != null ? <Delta v={c.dAvg} size={12} label="직전 기간 대비" /> : null} />
+          <MiniStat label="미수금" value={mn(c.ar.outstanding)} unit="만원" foot={c.ar.outstanding ? `평균 ${Math.round(c.ar.avgAge)}일 경과` : "미수금 없음"} />
         </div>
-        <SubHead right="매출 · 이익률">노선별</SubHead>
+        <SubHead right="매출 · 매출총이익률">노선별 실적</SubHead>
         <div className="space-y-2.5">
           {c.routes.slice(0, 8).map((r) => {
             const m = r.sale ? (r.profit / r.sale) * 100 : 0;
@@ -469,7 +469,7 @@ function ClientDetail({ c, onClose }) {
           })}
         </div>
         {c.ar.outstanding > 0 && <>
-          <SubHead>미수 나이</SubHead>
+          <SubHead>미수금 연령</SubHead>
           <div className="space-y-2">
             {ab.map(([l, v], i) => (
               <div key={l} className="grid items-center gap-3" style={{ gridTemplateColumns: "72px minmax(0,1fr) 64px" }}>
@@ -502,20 +502,20 @@ function FleetTab({ rows, fleet, today, compact, W }) {
   const low = list.filter((v) => v.util < 50).length;
   const cols = [
     { k: "plate", l: "차량", get: (r) => r.plate, cell: (r) => <span className="font-extrabold">{r.plate} <span className="font-semibold" style={{ color: EX.mute }}>{r.name}</span></span> },
-    { k: "profit", l: "이익(만원)", short: "이익", num: true, cell: (r) => <span style={{ color: pc(r.profit) }}>{mn(r.profit)}</span> },
+    { k: "profit", l: "매출총이익(만원)", short: "매출총이익", num: true, cell: (r) => <span style={{ color: pc(r.profit) }}>{mn(r.profit)}</span> },
     { k: "type", l: "구분", get: (r) => r.type, cell: (r) => <span className="inline-flex items-center gap-1.5 text-[12.5px] font-bold" style={{ color: EX.sub }}><span className="w-2 h-2 rounded-full" style={{ background: TYPE_C[r.type] }} />{r.type}</span> },
     { k: "sale", l: "매출(만원)", short: "매출", num: true, cell: (r) => mn(r.sale) },
-    { k: "pay", l: "기사 운임(만원)", short: "기사 운임", num: true, cell: (r) => mn(r.pay) },
-    { k: "margin", l: "이익률", num: true, cell: (r) => <span style={{ color: pc(r.margin) }}>{pct(r.margin)}</span> },
+    { k: "pay", l: "기사운임(만원)", short: "기사운임", num: true, cell: (r) => mn(r.pay) },
+    { k: "margin", l: "매출총이익률", num: true, cell: (r) => <span style={{ color: pc(r.margin) }}>{pct(r.margin)}</span> },
     { k: "days", l: "가동일", num: true, cell: (r) => `${r.days}일` },
     { k: "util", l: "가동률", num: true, cell: (r) => <span className="inline-flex items-center gap-2 justify-end"><span className="hidden md:block w-14"><Meter value={r.util} max={100} color={r.util < 50 ? EX.warn : EX.ice} height={4} /></span><span style={{ color: r.util < 50 ? EX.warn : EX.text }}>{pct(r.util, 0)}</span></span> },
-    { k: "last", l: "마지막 운행", short: "최근 운행", get: (r) => r.last || "", cell: (r) => (r.last ? md(r.last) : "없음") },
+    { k: "last", l: "최근 운행일", short: "최근 운행일", get: (r) => r.last || "", cell: (r) => (r.last ? md(r.last) : "기록 없음") },
   ];
-  if (!fleet.size) return <ExecPanel en="FLEET" title="기사 · 차량 수익성"><Empty text="등급이 있는 소속 차량이 없습니다" sub="기사관리에서 지입 · 직영 · 임대 등급을 넣으면 차량별 가동률과 이익이 보입니다." /></ExecPanel>;
+  if (!fleet.size) return <ExecPanel en="FLEET" title="기사 · 차량 수익성"><Empty text="등급이 지정된 소속 차량이 없습니다" sub="기사관리에서 지입 · 직영 · 임대 등급을 입력하면 차량별 가동률과 매출총이익이 표시됩니다." /></ExecPanel>;
   const pts = shown.map((v) => ({ x: Math.round(v.util), y: Math.round(v.profit / 1e4), v }));
   const ScTip = ({ active, payload }) => {
     if (!active || !payload?.length) return null; const v = payload[0].payload.v;
-    return <TipBox title={`${v.plate} · ${v.name || "기사 미등록"}`} rows={[["구분", TYPE_C[v.type], v.type], ["가동률", null, `${pct(v.util, 0)} (${v.days}일)`], ["매출", null, `${mn(v.sale)}만원`], ["이익", null, `${mn(v.profit)}만원`, pc(v.profit)]]} />;
+    return <TipBox title={`${v.plate} · ${v.name || "기사 미등록"}`} rows={[["구분", TYPE_C[v.type], v.type], ["가동률", null, `${pct(v.util, 0)} (${v.days}일)`], ["매출", null, `${mn(v.sale)}만원`], ["매출총이익", null, `${mn(v.profit)}만원`, pc(v.profit)]]} />;
   };
   return (<>
     <Toolbar basis={`${dot(P.from).slice(5)} ~ ${dot(P.to).slice(5)} · 영업일 ${list[0]?.bizDays || 0}일 기준 가동률`}>
@@ -523,18 +523,18 @@ function FleetTab({ rows, fleet, today, compact, W }) {
       <ExecTabs size="sm" items={[["all", "전체"], ...TYPES.map((t) => [t, t])]} value={type} onChange={setType} />
     </Toolbar>
     <Brief basis="소속 차량(지입 · 직영 · 임대) · 배차 기록 기준">
-      소속 차량 <B>{list.length}대</B>의 평균 가동률은 <B>{avgUtil.toFixed(0)}%</B>이며, {PERIOD_L[pk]} 이익은 <B color={pc(totP)}>{fmtEokMan(totP)}</B>입니다.
-      {" "}{idle.length ? <>7일 넘게 운행이 없는 차량이 <B color={EX.warn}>{idle.length}대</B> 있습니다.</> : "모든 차량이 최근 7일 안에 운행했습니다."}
+      소속 차량 <B>{list.length}대</B>의 평균 가동률은 <B>{avgUtil.toFixed(0)}%</B>이며, {PERIOD_L[pk]} 매출총이익은 <B color={pc(totP)}>{fmtEokMan(totP)}</B>입니다.
+      {" "}{idle.length ? <>7일 이상 운행 기록이 없는 미가동 차량은 <B color={EX.warn}>{idle.length}대</B>입니다.</> : "모든 차량이 최근 7일 이내 운행했습니다."}
     </Brief>
     <ExecKpis min={196}>
       <Kpi accent en="UTILIZATION" label="평균 가동률" value={avgUtil.toFixed(0)} unit="%" foot="가동일 ÷ 영업일" />
       <Kpi en="FLEET" label="소속 차량" value={list.length.toLocaleString("ko-KR")} unit="대" foot={byType.map((x) => `${x.t} ${x.n}`).join(" · ")} />
-      <Kpi en="FLEET PROFIT" label="소속 차량 이익" {...km(totP)} foot={<span>매출 {fmtMoney(totS)} · 이익률 <b style={{ ...EX_NUM, color: pc(totP) }}>{pct(totS ? (totP / totS) * 100 : 0)}</b></span>} />
+      <Kpi en="FLEET PROFIT" label="소속 차량 매출총이익" {...km(totP)} foot={<span>매출 {fmtMoney(totS)} · 매출총이익률 <b style={{ ...EX_NUM, color: pc(totP) }}>{pct(totS ? (totP / totS) * 100 : 0)}</b></span>} />
       <Kpi en="LOW UTILIZATION" label="가동률 50% 미만" value={low.toLocaleString("ko-KR")} unit="대" foot="배차 우선 검토 대상" />
-      <Kpi en="IDLE" label="쉬는 차량" value={idle.length.toLocaleString("ko-KR")} unit="대" foot="7일 넘게 운행 없음" />
+      <Kpi en="IDLE" label="미가동 차량" value={idle.length.toLocaleString("ko-KR")} unit="대" foot="7일 이상 운행 기록 없음" />
     </ExecKpis>
     <ExecGrid cols="minmax(0,1.5fr) minmax(0,1fr)">
-      <ExecPanel en="UTILIZATION × PROFIT" title="가동률과 이익" sub="점 하나가 차량 한 대 · 오른쪽 위일수록 많이 달리고 많이 남깁니다 · 이익 단위 만원"
+      <ExecPanel en="UTILIZATION × PROFIT" title="가동률과 매출총이익" sub="점 1개 = 차량 1대 · 오른쪽 위일수록 가동률과 매출총이익이 높음 · 매출총이익 단위 만원"
         right={W >= 900 && <Legend items={TYPES.map((t) => [t, TYPE_C[t]])} />}>
         {W < 900 && <div className="mb-2"><Legend items={TYPES.map((t) => [t, TYPE_C[t]])} /></div>}
         <ResponsiveContainer width="100%" height={compact ? 250 : 420}>
@@ -550,10 +550,10 @@ function FleetTab({ rows, fleet, today, compact, W }) {
             {TYPES.map((t) => <Scatter key={t} name={t} data={pts.filter((p) => p.v.type === t)} fill={TYPE_C[t]} fillOpacity={0.88} stroke={EX.bg1} strokeWidth={1.5} isAnimationActive={false} />)}
           </ScatterChart>
         </ResponsiveContainer>
-        <Basis className="mt-2">옅은 노란 칸 = 가동률 50% 미만. 이익 = 매출 − 기사 운임 − 회사가 따로 지급한 지게차 · 외부 운임.</Basis>
+        <Basis className="mt-2">음영 구간 = 가동률 50% 미만 · 매출총이익 = 매출 − 기사운임 − 회사 부담 지게차 · 외부 특수운임</Basis>
       </ExecPanel>
       <div className="grid gap-4 md:gap-5 content-start min-w-0">
-        <ExecPanel en="BY TYPE" title="구분별 가동률" sub={`${PERIOD_L[pk]} · 이익 단위 만원`}>
+        <ExecPanel en="BY TYPE" title="구분별 가동률" sub={`${PERIOD_L[pk]} · 하단 수치는 매출총이익(만원)`}>
           <div className="grid grid-cols-3 gap-2.5">
             {byType.map((x) => (
               <div key={x.t} className="rounded-2xl px-2 py-3.5 flex flex-col items-center text-center" style={{ background: "rgba(255,255,255,.03)", border: `1px solid ${EX.line}` }}>
@@ -564,20 +564,20 @@ function FleetTab({ rows, fleet, today, compact, W }) {
             ))}
           </div>
         </ExecPanel>
-        <ExecPanel en="IDLE VEHICLES" title="쉬는 차량" sub="7일 넘게 운행 기록 없음 · 오래된 순">
+        <ExecPanel en="IDLE VEHICLES" title="미가동 차량" sub="7일 이상 운행 기록 없음 · 미가동 기간 긴 순">
           <div id="exa-idle">
-            {!idle.length ? <Empty text="모든 차량이 최근 7일 안에 운행했습니다" /> : idle.slice(0, 8).map((v, i) => (
+            {!idle.length ? <Empty text="모든 차량이 최근 7일 이내 운행했습니다" /> : idle.slice(0, 8).map((v, i) => (
               <div key={v.key} className="flex items-baseline justify-between gap-3 py-2.5" style={{ borderTop: i ? "1px solid rgba(255,255,255,.06)" : 0 }}>
                 <span className="min-w-0 truncate text-[13.5px] font-extrabold" style={{ color: EX.text }}>{v.plate} <span className="text-[12.5px] font-semibold" style={{ color: EX.mute }}>{v.name} · {v.type}</span></span>
-                <b className="shrink-0 text-[13.5px] font-black" style={{ ...EX_NUM, color: EX.warn }}>{v.last ? `${dayDiff(v.last, today)}일째` : "기록 없음"}</b>
+                <b className="shrink-0 text-[13.5px] font-black" style={{ ...EX_NUM, color: EX.warn }}>{v.last ? `${dayDiff(v.last, today)}일 미가동` : "운행 기록 없음"}</b>
               </div>
             ))}
-            {idle.length > 8 && <div className="pt-2 text-[12px] font-semibold" style={{ color: EX.mute }}>외 {idle.length - 8}대 — 아래 표에서 ‘마지막 운행’으로 정렬해 보세요.</div>}
+            {idle.length > 8 && <div className="pt-2 text-[12px] font-semibold" style={{ color: EX.mute }}>외 {idle.length - 8}대 — 아래 표에서 ‘최근 운행일’ 기준으로 정렬하여 확인하실 수 있습니다.</div>}
           </div>
         </ExecPanel>
       </div>
     </ExecGrid>
-    <ExecPanel en="VEHICLE P&L" title="차량별 수익성" sub={`${type === "all" ? "소속 차량 전체" : `${type} 차량`} ${shown.length}대 · 제목을 누르면 정렬`}>
+    <ExecPanel en="VEHICLE P&L" title="차량별 수익성" sub={`${type === "all" ? "소속 차량 전체" : `${type} 차량`} ${shown.length}대 · 열 제목을 선택하면 정렬`}>
       <SortTable testId="exa-fleet-table" cols={cols} rows={shown} sort={sort} setSort={setSort} rowKey={(r) => r.key} compact={compact} />
     </ExecPanel>
   </>);
@@ -585,12 +585,12 @@ function FleetTab({ rows, fleet, today, compact, W }) {
 
 // ═════════════════════════ 단가 ═════════════════════════
 function DivergeList({ rows, compact }) {
-  if (!rows.length) return <Empty text="크게 움직인 단가가 없습니다" />;
+  if (!rows.length) return <Empty text="변동 폭이 큰 단가가 없습니다" />;
   const mx = Math.max(5, ...rows.map((r) => Math.abs(r.d)));
   return (
     <div>
       <div className="grid items-center gap-3 mb-1.5 text-[11px] font-extrabold" style={{ gridTemplateColumns: compact ? "minmax(0,1fr) minmax(0,1.2fr) 58px" : "minmax(0,1fr) minmax(0,1.6fr) 64px", color: EX.faint }}>
-        <span /><div className="flex justify-between"><span>◀ 내림</span><span>오름 ▶</span></div><span />
+        <span /><div className="flex justify-between"><span>◀ 인하</span><span>인상 ▶</span></div><span />
       </div>
       {rows.map((r) => {
         const w = (Math.abs(r.d) / mx) * 50; const up = r.d >= 0;
@@ -614,6 +614,7 @@ function PriceTab({ rows, today, compact }) {
   const [view, setView] = React.useState("route");
   const [sort, setSort] = React.useState({ k: "d", dir: "desc" });
   const noun = view === "route" ? "노선" : "거래처";
+  const nounTopic = view === "route" ? "노선은" : "거래처는"; const nounSubj = view === "route" ? "노선이" : "거래처가";
   const base = (view === "route" ? pw.routes : pw.clients).filter((x) => x.cnt >= 5 && x.pCnt >= 5 && x.d != null).map((x) => ({ ...x, absD: Math.abs(x.d) }));
   const warn = pw.routes.filter((x) => x.cnt >= 5 && (x.margin < 8 || (x.pMargin != null && x.margin - x.pMargin <= -3))).sort((a, b) => a.margin - b.margin);
   const up = base.filter((x) => x.d >= 3).length; const dn = base.filter((x) => x.d <= -3).length;
@@ -621,34 +622,34 @@ function PriceTab({ rows, today, compact }) {
   const top = [...base].sort((a, b) => b.absD - a.absD).slice(0, 10).map((x) => ({ k: x.k, d: x.d, label: view === "route" ? x.rt : x.n, sub: view === "route" ? x.ton : "" }));
   const cols = [
     { k: "k", l: view === "route" ? "노선 · 톤수" : "거래처", get: (r) => r.k, cell: (r) => <span className="font-extrabold">{view === "route" ? <>{r.rt} <span className="font-semibold" style={{ color: EX.mute }}>{r.ton}</span></> : r.n}</span> },
-    { k: "d", l: "단가 변동", num: true, get: (r) => r.absD, cell: (r) => <Delta v={r.d} size={13} /> },
-    { k: "avg", l: "최근 4주 단가(만원)", short: "지금 단가", num: true, cell: (r) => mn1(r.avg) },
+    { k: "d", l: "단가 증감률", num: true, get: (r) => r.absD, cell: (r) => <Delta v={r.d} size={13} /> },
+    { k: "avg", l: "최근 4주 단가(만원)", short: "최근 단가", num: true, cell: (r) => mn1(r.avg) },
     { k: "pAvg", l: "직전 8주 단가(만원)", short: "직전 단가", num: true, cell: (r) => mn1(r.pAvg) },
     { k: "cnt", l: "건수", num: true, cell: (r) => `${r.cnt}건` },
-    { k: "margin", l: "이익률", num: true, cell: (r) => <span style={{ color: pc(r.margin) }}>{pct(r.margin)}</span> },
+    { k: "margin", l: "매출총이익률", num: true, cell: (r) => <span style={{ color: pc(r.margin) }}>{pct(r.margin)}</span> },
   ];
   return (<>
-    <Toolbar basis={`최근 4주(${md(cur[0])} ~ ${md(cur[1])}) 평균 단가 대비 직전 8주 · 양쪽 모두 5건 이상만 비교`}>
+    <Toolbar basis={`최근 4주(${md(cur[0])} ~ ${md(cur[1])}) 평균 단가의 직전 8주 대비 증감률 · 두 기간 모두 5건 이상만 비교`}>
       <ExecTabs size="sm" items={[["route", "노선별"], ["client", "거래처별"]]} value={view} onChange={setView} />
     </Toolbar>
     <Brief basis="건당 평균 청구운임 기준" tone={warn.length ? "warn" : "gold"}>
-      최근 4주 단가가 3% 넘게 오른 {noun}은 <B color={EX.up}>{up}곳</B>, 내린 {noun}은 <B color={EX.down}>{dn}곳</B>입니다.
-      {" "}{warn.length ? <>이익률이 8% 아래이거나 3%p 넘게 떨어진 노선 <B color={EX.warn}>{warn.length}곳</B>은 운임 재협의를 검토하시기 바랍니다.</> : "이익률이 급격히 나빠진 노선은 없습니다."}
+      최근 4주 단가가 3% 이상 인상된 {nounTopic} <B color={EX.up}>{up}곳</B>, 인하된 {nounTopic} <B color={EX.down}>{dn}곳</B>입니다.
+      {" "}{warn.length ? <>매출총이익률이 8% 미만이거나 3%p 이상 하락한 노선 <B color={EX.warn}>{warn.length}곳</B>은 운임 재협의 검토가 필요합니다.</> : "매출총이익률이 급격히 하락한 노선은 없습니다."}
     </Brief>
     <ExecKpis min={196}>
-      <Kpi accent en="PRICE INDEX" label="평균 단가 변동" value={avgD == null ? "—" : `${avgD >= 0 ? "+" : "−"}${Math.abs(avgD).toFixed(1)}`} unit={avgD == null ? "" : "%"} foot="건수 가중 · 직전 8주 대비" />
-      <Kpi en="COMPARED" label={`비교한 ${noun}`} value={base.length.toLocaleString("ko-KR")} unit="곳" foot="양쪽 5건 이상" />
-      <Kpi en="PRICE UP" label="단가 오름(3% 이상)" value={up.toLocaleString("ko-KR")} unit="곳" />
-      <Kpi en="PRICE DOWN" label="단가 내림(3% 이상)" value={dn.toLocaleString("ko-KR")} unit="곳" />
-      <Kpi en="LOW MARGIN" label="저마진 경고 노선" value={warn.length.toLocaleString("ko-KR")} unit="곳" foot="이익률 8% 미만 · 3%p 넘게 하락" />
+      <Kpi accent en="PRICE INDEX" label="평균 단가 증감률" value={avgD == null ? "—" : `${avgD >= 0 ? "+" : "−"}${Math.abs(avgD).toFixed(1)}`} unit={avgD == null ? "" : "%"} foot="건수 가중 · 직전 8주 대비" />
+      <Kpi en="COMPARED" label={`비교 대상 ${noun}`} value={base.length.toLocaleString("ko-KR")} unit="곳" foot="두 기간 모두 5건 이상" />
+      <Kpi en="PRICE UP" label="단가 인상(3% 이상)" value={up.toLocaleString("ko-KR")} unit="곳" />
+      <Kpi en="PRICE DOWN" label="단가 인하(3% 이상)" value={dn.toLocaleString("ko-KR")} unit="곳" />
+      <Kpi en="LOW MARGIN" label="저마진 경고 노선" value={warn.length.toLocaleString("ko-KR")} unit="곳" foot="매출총이익률 8% 미만 또는 3%p 이상 하락" />
     </ExecKpis>
     <ExecGrid cols="minmax(0,1.35fr) minmax(0,1fr)">
-      <ExecPanel en="PRICE MOVERS" title={`단가 변동 큰 ${noun}`} sub="오름 · 내림 모두 변동 폭 큰 순 10곳 · 직전 8주 대비">
+      <ExecPanel en="PRICE MOVERS" title={`단가 변동 큰 ${noun}`} sub="인상 · 인하 포함 변동 폭 상위 10곳 · 직전 8주 대비">
         <DivergeList rows={top} compact={compact} />
       </ExecPanel>
-      <ExecPanel en="EARLY WARNING" title="저마진 노선 조기 경고" sub="최근 4주 5건 이상 · 이익률 낮은 순 · 단위 만원">
+      <ExecPanel en="EARLY WARNING" title="저마진 노선 조기 경고" sub="최근 4주 5건 이상 · 매출총이익률 낮은 순 · 단위 만원">
         <div id="exa-lowmargin">
-          {!warn.length ? <Empty text="경고할 노선이 없습니다" sub="모든 노선의 이익률이 8% 이상이고 급락하지 않았습니다." /> : warn.slice(0, 10).map((r, i) => (
+          {!warn.length ? <Empty text="경고 대상 노선이 없습니다" sub="모든 노선의 매출총이익률이 8% 이상이며 급격한 하락이 없습니다." /> : warn.slice(0, 10).map((r, i) => (
             <div key={r.k} className="py-2.5" style={{ borderTop: i ? "1px solid rgba(255,255,255,.06)" : 0 }}>
               <div className="flex items-baseline justify-between gap-3">
                 <span className="min-w-0 truncate text-[13.5px] font-extrabold" style={{ color: EX.text }}>{r.rt} <span className="text-[12.5px] font-semibold" style={{ color: EX.mute }}>{r.ton}</span></span>
@@ -663,8 +664,8 @@ function PriceTab({ rows, today, compact }) {
         </div>
       </ExecPanel>
     </ExecGrid>
-    <ExecPanel en="PRICE WATCH" title="단가 변동 전체" sub={`${noun} ${base.length}곳 · 변동 큰 순(오름 · 내림 모두) · 제목을 누르면 정렬`}>
-      {!base.length ? <Empty text={`비교할 만큼 오더가 쌓인 ${noun}이 없습니다`} /> : <SortTable testId="exa-price-table" cols={cols} rows={base} sort={sort} setSort={setSort} rowKey={(r) => r.k} compact={compact} />}
+    <ExecPanel en="PRICE WATCH" title="단가 변동 전체" sub={`${noun} ${base.length}곳 · 변동 폭 큰 순(인상 · 인하 포함) · 열 제목을 선택하면 정렬`}>
+      {!base.length ? <Empty text={`비교 가능한 오더 실적을 보유한 ${nounSubj} 없습니다`} /> : <SortTable testId="exa-price-table" cols={cols} rows={base} sort={sort} setSort={setSort} rowKey={(r) => r.k} compact={compact} />}
     </ExecPanel>
   </>);
 }
@@ -693,36 +694,36 @@ function CashTab({ rows, ledger, recurring, funds, arPay, today, compact, W, fix
   const inSum = fc.weeks.reduce((s, w) => s + w.in, 0); const outSum = fc.weeks.reduce((s, w) => s + w.out, 0);
   const endBal = fc.weeks[fc.weeks.length - 1]?.end || fc.start;
   const lowWeeks = fc.weeks.filter((w) => w.low < safe);
-  if (!F && !fc.totOut && !fixedMonth) return <ExecPanel en="CASH FLOW" title="현금흐름 예측"><Empty text="예측할 자료가 없습니다" sub="자금관리에 계좌를 넣거나 미수 · 고정비 기록이 쌓이면 앞으로의 잔액을 예측합니다." /></ExecPanel>;
+  if (!F && !fc.totOut && !fixedMonth) return <ExecPanel en="CASH FLOW" title="현금흐름 예측"><Empty text="예측에 필요한 자료가 없습니다" sub="자금관리에 계좌를 등록하거나 미수금 · 고정비 기록이 누적되면 향후 잔액을 예측합니다." /></ExecPanel>;
   const big = (w) => [...w.list].sort((a, b) => b.amt - a.amt).slice(0, 3);
   const pts = [{ lbl: "오늘", low: fc.start, end: fc.start, a: today }, ...fc.weeks.map((w) => ({ lbl: md(w.b), low: w.low, end: w.end, a: w.a, b: w.b, in: w.in, out: w.out }))].map((p) => ({ ...p, lowM: Math.round(p.low / 1e4), endM: Math.round(p.end / 1e4) }));
   const safeM = Math.round(safe / 1e4);
   const lo = Math.min(0, ...pts.map((p) => Math.min(p.lowM, p.endM)));
   const CashTip = ({ active, payload }) => {
     if (!active || !payload?.length) return null; const p = payload[0].payload;
-    return <TipBox title={p.b ? `${md(p.a)} ~ ${md(p.b)} 주` : "오늘"} rows={[["주 최저 잔액", EX.gold, `${cm(p.lowM)}만원`, p.low < safe ? EX.warn : null], ["주 끝 잔액", EX.ice, `${cm(p.endM)}만원`], p.b && ["예상 수금", null, `+${mn(p.in)}만원`], p.b && ["예상 지출", null, `−${mn(p.out)}만원`]]} foot={p.low < safe ? "안전 잔액보다 낮습니다" : null} />;
+    return <TipBox title={p.b ? `${md(p.a)} ~ ${md(p.b)} 주` : "오늘"} rows={[["주간 최저 잔액", EX.gold, `${cm(p.lowM)}만원`, p.low < safe ? EX.warn : null], ["주간 기말 잔액", EX.ice, `${cm(p.endM)}만원`], p.b && ["수금 예정액", null, `+${mn(p.in)}만원`], p.b && ["지급 예정액", null, `−${mn(p.out)}만원`]]} foot={p.low < safe ? "안전 잔액 미달" : null} />;
   };
   const wk = W >= 1300 ? 4 : W >= 760 ? 2 : 1;
   return (<>
-    <Toolbar basis={`안전 잔액 = 한 달 고정비(최소 3,000만원) ${mn(safe)}만원`}>
+    <Toolbar basis={`안전 잔액 = 월 고정비 기준(최소 3,000만원) ${mn(safe)}만원`}>
       <ExecTabs size="sm" items={[["4", "4주"], ["6", "6주"], ["8", "8주"]]} value={String(weeks)} onChange={(k) => setWeeks(Number(k))} />
     </Toolbar>
-    <Brief tone={lowWeeks.length ? "warn" : "gold"} basis={F ? "통장 · 현금 기준(카드 한도 · 대출 제외)" : "자금 계좌 없음 · 0원에서 시작"}>
-      지금 보유 자금은 <B>{fmtEokMan(fc.start)}</B>이며, {weeks}주 뒤에는 <B>{fmtEokMan(endBal)}</B>으로 예상됩니다.
+    <Brief tone={lowWeeks.length ? "warn" : "gold"} basis={F ? "예금 · 현금 기준(카드 한도 · 차입금 제외)" : "등록된 자금 계좌 없음 · 기초 잔액 0원 기준"}>
+      현재 보유 자금은 <B>{fmtEokMan(fc.start)}</B>이며, {weeks}주 후 잔액은 <B>{fmtEokMan(endBal)}</B>으로 예상됩니다.
       {" "}{lowWeeks.length
-        ? <span data-testid="exa-cash-warn"><B color={EX.warn}>{lowWeeks.map((w) => `${md(w.a)}`).join(" · ")} 주</B>에 잔액이 안전 잔액 아래로 내려갈 수 있습니다(가장 낮을 때 <B color={EX.warn}>{fmtEokMan(fc.min.bal)}</B>).</span>
-        : <>예측 기간 내내 안전 잔액({fmtEokMan(safe)}) 이상을 유지합니다.</>}
+        ? <span data-testid="exa-cash-warn"><B color={EX.warn}>{lowWeeks.map((w) => `${md(w.a)}`).join(" · ")} 주</B>에 잔액이 안전 잔액을 하회할 가능성이 있습니다(예상 최저 잔액 <B color={EX.warn}>{fmtEokMan(fc.min.bal)}</B>).</span>
+        : <>예측 기간 동안 안전 잔액({fmtEokMan(safe)}) 이상이 유지될 것으로 예상됩니다.</>}
     </Brief>
     <ExecKpis min={196}>
-      <Kpi accent en="CASH ON HAND" label="지금 보유 자금" {...km(fc.start)} foot={F ? "통장 · 현금" : "자금 계좌 없음"} />
-      <Kpi en="INFLOW" label={`${weeks}주 예상 수금`} {...km(inSum)} foot={`평균 입금 ${Math.round(fc.wDso)}일`} />
-      <Kpi en="OUTFLOW" label={`${weeks}주 예상 지출`} {...km(outSum)} foot="고정비 · 운송료 · 카드 대금" />
-      <Kpi en="ENDING BALANCE" label={`${weeks}주 뒤 잔액`} {...km(endBal)} delta={fc.start ? pctChange(endBal, fc.start) : undefined} deltaLabel="지금 대비" />
-      <Kpi en="LOW POINT" label="가장 낮은 잔액" {...km(fc.min.bal)} foot={fc.min.bal < safe ? `${md(fc.min.d)}부터 한 주 · 안전 잔액 아래` : `${md(fc.min.d)}부터 한 주`} />
+      <Kpi accent en="CASH ON HAND" label="현재 보유 자금" {...km(fc.start)} foot={F ? "예금 · 현금" : "등록된 계좌 없음"} />
+      <Kpi en="CASH INFLOW" label={`${weeks}주 수금 예정액`} {...km(inSum)} foot={`평균 회수 기간 ${Math.round(fc.wDso)}일`} />
+      <Kpi en="CASH OUTFLOW" label={`${weeks}주 지급 예정액`} {...km(outSum)} foot="고정비 · 기사 운송료 · 카드 결제액" />
+      <Kpi en="ENDING BALANCE" label={`${weeks}주 후 예상 잔액`} {...km(endBal)} delta={fc.start ? pctChange(endBal, fc.start) : undefined} deltaLabel="현재 대비" />
+      <Kpi en="LOW POINT" label="예상 최저 잔액" {...km(fc.min.bal)} foot={fc.min.bal < safe ? `${md(fc.min.d)} 시작 주 · 안전 잔액 미달` : `${md(fc.min.d)} 시작 주`} />
     </ExecKpis>
-    <ExecPanel en="CASH FORECAST" title="잔액 예측" sub={`오늘부터 ${weeks}주 · 주별 가장 낮은 잔액과 주 끝 잔액 · 단위 만원`}
-      right={W >= 900 && <Legend items={[["주 최저 잔액", EX.gold, "line"], ["주 끝 잔액", EX.ice, "line"], ["안전 잔액 아래", "rgba(245,196,107,.45)"]]} />}>
-      {W < 900 && <div className="mb-2"><Legend items={[["주 최저 잔액", EX.gold, "line"], ["주 끝 잔액", EX.ice, "line"], ["안전 잔액 아래", "rgba(245,196,107,.45)"]]} /></div>}
+    <ExecPanel en="CASH FORECAST" title="잔액 예측" sub={`오늘부터 ${weeks}주 · 주간 최저 잔액 및 주간 기말 잔액 · 단위 만원`}
+      right={W >= 900 && <Legend items={[["주간 최저 잔액", EX.gold, "line"], ["주간 기말 잔액", EX.ice, "line"], ["안전 잔액 미달 구간", "rgba(245,196,107,.45)"]]} />}>
+      {W < 900 && <div className="mb-2"><Legend items={[["주간 최저 잔액", EX.gold, "line"], ["주간 기말 잔액", EX.ice, "line"], ["안전 잔액 미달 구간", "rgba(245,196,107,.45)"]]} /></div>}
       <ResponsiveContainer width="100%" height={compact ? 250 : 310}>
         <ComposedChart data={pts} margin={{ top: 22, right: compact ? 12 : 26, left: 4, bottom: 0 }}>
           <GradDefs />
@@ -743,7 +744,7 @@ function CashTab({ rows, ledger, recurring, funds, arPay, today, compact, W, fix
         </ComposedChart>
       </ResponsiveContainer>
     </ExecPanel>
-    <ExecPanel en="WEEKLY SCHEDULE" title="주별 입출금 예정" sub="큰 금액 순 3건까지 · 단위 만원">
+    <ExecPanel en="WEEKLY SCHEDULE" title="주별 수금 · 지급 예정" sub="주별 금액 상위 3건 · 단위 만원">
       <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${wk},minmax(0,1fr))` }}>
         {fc.weeks.map((w) => {
           const bad = w.low < safe;
@@ -751,10 +752,10 @@ function CashTab({ rows, ledger, recurring, funds, arPay, today, compact, W, fix
             <div key={w.a} className="rounded-2xl p-4 min-w-0" style={{ background: bad ? "rgba(245,196,107,.06)" : "rgba(255,255,255,.03)", border: `1px solid ${bad ? "rgba(245,196,107,.4)" : EX.line}` }}>
               <div className="flex items-baseline justify-between gap-2">
                 <b className="text-[13.5px] font-extrabold" style={{ ...EX_NUM, color: EX.text }}>{md(w.a)} ~ {md(w.b)}</b>
-                <span className="text-[11.5px] font-bold" style={{ color: EX.mute }}>주 끝 <b className="text-[14px] font-black" style={{ ...EX_NUM, color: bad ? EX.warn : EX.goldHi }}>{cm(w.end / 1e4)}</b></span>
+                <span className="text-[11.5px] font-bold" style={{ color: EX.mute }}>기말 잔액 <b className="text-[14px] font-black" style={{ ...EX_NUM, color: bad ? EX.warn : EX.goldHi }}>{cm(w.end / 1e4)}</b></span>
               </div>
               <div className="mt-2 flex gap-4 text-[12px] font-bold" style={{ color: EX.mute }}>
-                <span>수금 <b style={{ ...EX_NUM, color: EX.text }}>{w.in ? `+${mn(w.in)}` : "0"}</b></span><span>지출 <b style={{ ...EX_NUM, color: EX.text }}>{w.out ? `−${mn(w.out)}` : "0"}</b></span>
+                <span>수금 <b style={{ ...EX_NUM, color: EX.text }}>{w.in ? `+${mn(w.in)}` : "0"}</b></span><span>지급 <b style={{ ...EX_NUM, color: EX.text }}>{w.out ? `−${mn(w.out)}` : "0"}</b></span>
               </div>
               <div className="mt-2.5 pt-2.5 space-y-1" style={{ borderTop: "1px solid rgba(255,255,255,.06)" }}>
                 {big(w).map((e, i) => (
@@ -769,7 +770,7 @@ function CashTab({ rows, ledger, recurring, funds, arPay, today, compact, W, fix
           );
         })}
       </div>
-      <Basis>가정: 미수는 청구일 + 거래처 평균 입금 기간(미수 ÷ 최근 90일 일평균 매출, 15~120일)에 들어오고, 이미 지난 미수는 이번 주 50% · 다음 주 30%만 넣습니다. 앞으로 생길 매출은 평균 입금 기간 뒤부터 들어옵니다. 고정비 · 급여는 자금관리 고정비 등록일, 카드 대금은 이번 달 사용액을 다음 달 15일, 기사 운송료는 최근 3개월 월평균({mn(fc.drvPay)}만원)을 매달 10일에 지급하는 것으로 봅니다(고정비에 운송료가 있으면 그 값을 씁니다).</Basis>
+      <Basis>가정: 미수금은 청구일로부터 거래처별 평균 회수 기간(미수금 ÷ 최근 90일 일평균 매출, 15~120일) 경과 시 회수되는 것으로 보며, 회수 기일이 지난 미수금은 이번 주 50% · 다음 주 30%만 반영합니다. 향후 발생 매출은 평균 회수 기간 경과 후부터 반영합니다. 고정비 · 급여는 자금관리 고정비 등록일에, 카드 결제액은 당월 사용액을 익월 15일에, 기사 운송료는 최근 3개월 월평균({mn(fc.drvPay)}만원)을 매월 10일에 지급하는 것으로 가정합니다(고정비에 운송료가 등록된 경우 해당 금액을 적용합니다).</Basis>
     </ExecPanel>
   </>);
 }
@@ -791,26 +792,26 @@ function SalesTab({ rows, today, compact }) {
   const ramp = fresh.map((c) => ({ ...c, id: c.n }));
   const rampCols = [
     { key: "n", label: "거래처", render: (c) => <span className="font-extrabold">{c.n}</span> },
-    { key: "first", label: "첫 오더", render: (c) => <span style={{ ...EX_NUM, color: EX.sub }}>{dot(c.first).slice(2)}</span> },
-    ...[0, 1, 2].map((i) => ({ key: `r${i}`, label: `${i + 1}개월째(만원)`, align: "right", render: (c) => { const v = c.ramp[i]; const p = c.ramp[i - 1]; return v == null ? <span style={{ color: EX.faint }}>—</span> : <span className="inline-flex items-center gap-2 justify-end">{mn(v)}{i > 0 && p ? <Delta v={((v - p) / p) * 100} dp={0} size={11.5} /> : null}</span>; } })),
+    { key: "first", label: "첫 오더일", render: (c) => <span style={{ ...EX_NUM, color: EX.sub }}>{dot(c.first).slice(2)}</span> },
+    ...[0, 1, 2].map((i) => ({ key: `r${i}`, label: `${i + 1}개월 차(만원)`, align: "right", render: (c) => { const v = c.ramp[i]; const p = c.ramp[i - 1]; return v == null ? <span style={{ color: EX.faint }}>—</span> : <span className="inline-flex items-center gap-2 justify-end">{mn(v)}{i > 0 && p ? <Delta v={((v - p) / p) * 100} dp={0} size={11.5} /> : null}</span>; } })),
     { key: "total", label: "누적 매출(만원)", align: "right", render: (c) => mn(c.total) },
     { key: "cnt", label: "건수", align: "right", render: (c) => `${c.cnt.toLocaleString("ko-KR")}건` },
-    { key: "st", label: "상태", align: "center", render: (c) => <Chip tone={c.active ? "ok" : "warn"}>{c.active ? "거래 중" : "뜸함"}</Chip> },
+    { key: "st", label: "상태", align: "center", render: (c) => <Chip tone={c.active ? "ok" : "warn"}>{c.active ? "거래 중" : "30일 초과 무거래"}</Chip> },
   ];
   return (<>
     <Brief basis="거래처별 첫 오더 · 마지막 오더 기준">
-      최근 3개월 동안 새 거래처 <B>{recent3}곳</B>이 들어왔습니다{prev3 ? <>(직전 3개월 {prev3}곳)</> : ""}.
-      {" "}{st.churn.length ? <>60일 넘게 오더가 끊긴 거래처 <B color={EX.warn}>{st.churn.length}곳</B>(월평균 매출 {fmtEokMan(lostM)})은 다시 연락해 보실 만합니다.</> : "60일 넘게 끊긴 거래처는 없습니다."}
+      최근 3개월 신규 거래처는 <B>{recent3}곳</B>입니다{prev3 ? <>(직전 3개월 {prev3}곳)</> : ""}.
+      {" "}{st.churn.length ? <>60일 초과 무거래 상태인 거래 중단 거래처 <B color={EX.warn}>{st.churn.length}곳</B>(월평균 매출 {fmtEokMan(lostM)})은 재접촉 검토가 필요합니다.</> : "거래 중단 거래처(60일 초과 무거래)는 없습니다."}
     </Brief>
     <ExecKpis min={196}>
       <Kpi accent en="NEW CLIENTS" label="최근 3개월 신규" value={String(recent3)} unit="곳" delta={prev3 ? pctChange(recent3, prev3) : undefined} deltaLabel="직전 3개월 대비" />
-      <Kpi en="12-MONTH NEW" label="12개월 신규" value={String(fresh.length)} unit="곳" foot={`지금도 거래 ${fresh.filter((c) => c.active).length}곳`} />
-      <Kpi en="ACTIVE" label="이번 달 거래처" value={String(aNow)} unit="곳" delta={aPrev ? pctChange(aNow, aPrev) : undefined} deltaLabel="전월 대비" spark={a.map((m) => m.n)} />
-      <Kpi en="NEW REVENUE" label="신규 거래처 최근 달 매출" {...km(freshRev)} foot="12개월 신규 합계" />
-      <Kpi en="CHURNED" label="끊긴 거래처" value={String(st.churn.length)} unit="곳" foot={`월평균 매출 ${fmtMoney(lostM)}`} />
+      <Kpi en="12-MONTH NEW" label="최근 12개월 신규" value={String(fresh.length)} unit="곳" foot={`거래 지속 ${fresh.filter((c) => c.active).length}곳`} />
+      <Kpi en="ACTIVE" label="당월 거래처" value={String(aNow)} unit="곳" delta={aPrev ? pctChange(aNow, aPrev) : undefined} deltaLabel="전월 대비" spark={a.map((m) => m.n)} />
+      <Kpi en="NEW REVENUE" label="신규 거래처 최근 월 매출" {...km(freshRev)} foot="최근 12개월 신규 거래처 합계" />
+      <Kpi en="CHURNED" label="거래 중단 거래처" value={String(st.churn.length)} unit="곳" foot={`월평균 매출 ${fmtMoney(lostM)}`} />
     </ExecKpis>
     <ExecGrid cols="minmax(0,1fr) minmax(0,1fr)">
-      <ExecPanel en="NEW CLIENTS" title="월별 신규 거래처" sub="그달 첫 오더가 들어온 거래처 수 · 막대를 누르면 목록">
+      <ExecPanel en="NEW CLIENTS" title="월별 신규 거래처" sub="해당 월 첫 오더가 발생한 거래처 수 · 막대를 선택하면 목록 표시">
         <ResponsiveContainer width="100%" height={compact ? 200 : 230}>
           <BarChart data={newData} margin={{ top: 22, right: 6, left: 0, bottom: 0 }} onClick={(s) => { const i = clickIdx(s); if (i != null) setSel(sel === newData[i].m ? null : newData[i].m); }} barCategoryGap="26%">
             <GradDefs />
@@ -825,10 +826,10 @@ function SalesTab({ rows, today, compact }) {
           </BarChart>
         </ResponsiveContainer>
         <div className="mt-2 min-h-[24px] text-[13px]" style={{ color: EX.sub }}>
-          {selRow ? <><b style={{ color: EX.goldHi }}>{ymKo(selRow.m)} 신규</b> <span style={{ wordBreak: "keep-all" }}>{selRow.names.join(", ") || "없음"}</span></> : <span style={{ color: EX.mute }}>막대를 누르면 그달 새로 들어온 거래처를 봅니다.</span>}
+          {selRow ? <><b style={{ color: EX.goldHi }}>{ymKo(selRow.m)} 신규</b> <span style={{ wordBreak: "keep-all" }}>{selRow.names.join(", ") || "없음"}</span></> : <span style={{ color: EX.mute }}>막대를 선택하면 해당 월 신규 거래처 목록이 표시됩니다.</span>}
         </div>
       </ExecPanel>
-      <ExecPanel en="ACTIVE CLIENTS" title="거래처 수 추이" sub="그달 오더가 한 건이라도 있었던 거래처 · 최근 12개월">
+      <ExecPanel en="ACTIVE CLIENTS" title="거래처 수 추이" sub="월중 오더가 1건 이상 발생한 거래처 · 최근 12개월">
         <ResponsiveContainer width="100%" height={compact ? 200 : 230}>
           <ComposedChart data={actData} margin={{ top: 22, right: 18, left: 0, bottom: 0 }}>
             <GradDefs />
@@ -843,17 +844,17 @@ function SalesTab({ rows, today, compact }) {
         </ResponsiveContainer>
       </ExecPanel>
     </ExecGrid>
-    <ExecPanel en="RAMP-UP" title="신규 거래처 매출 램프업" sub={`첫 오더 달부터 3개월 매출 · 최근 달 합계 ${mn(freshRev)}만원 · 증감은 전월 대비`}>
-      {!fresh.length ? <Empty text="최근 12개월에 새로 들어온 거래처가 없습니다" /> : <ExecTable cols={rampCols} rows={ramp} rowKey={(r) => r.n} maxHeight={520} />}
+    <ExecPanel en="RAMP-UP" title="신규 거래처 초기 매출 추이" sub={`첫 오더 월부터 3개월간 매출 · 최근 월 합계 ${mn(freshRev)}만원 · 증감률은 전월 대비`}>
+      {!fresh.length ? <Empty text="최근 12개월간 신규 거래처가 없습니다" /> : <ExecTable cols={rampCols} rows={ramp} rowKey={(r) => r.n} maxHeight={520} />}
     </ExecPanel>
-    <ExecPanel en="CHURN WATCH" title="끊긴 거래처" sub="60일 넘게 오더 없음 · 3건 이상 거래했던 곳 · 월평균 매출 큰 순 · 단위 만원">
+    <ExecPanel en="CHURN WATCH" title="거래 중단 거래처" sub="60일 초과 무거래 · 누적 거래 3건 이상 · 월평균 매출 큰 순 · 단위 만원">
       <div id="exa-churn">
-        {!st.churn.length ? <Empty text="끊긴 거래처가 없습니다" /> : st.churn.map((c, i) => (
+        {!st.churn.length ? <Empty text="거래 중단 거래처가 없습니다" /> : st.churn.map((c, i) => (
           <div key={c.n} className="grid items-baseline gap-3 py-2.5" style={{ gridTemplateColumns: compact ? "minmax(0,1fr) auto" : "minmax(0,1fr) 150px 150px 120px", borderTop: i ? "1px solid rgba(255,255,255,.06)" : 0 }}>
             <span className="min-w-0 truncate text-[13.5px] font-extrabold" style={{ color: EX.text }}>{c.n}</span>
-            {!compact && <span className="text-[12.5px] font-semibold" style={{ ...EX_NUM, color: EX.mute }}>마지막 오더 {dot(c.last).slice(2)}</span>}
+            {!compact && <span className="text-[12.5px] font-semibold" style={{ ...EX_NUM, color: EX.mute }}>최근 오더 {dot(c.last).slice(2)}</span>}
             {!compact && <span className="text-right text-[13.5px] font-black" style={{ ...EX_NUM, color: EX.text }}><span className="text-[12px] font-bold mr-1.5" style={{ color: EX.mute }}>월평균</span>{mn(c.monthly)}</span>}
-            <span className="text-right"><Chip tone="warn">{c.gap}일째 없음</Chip></span>
+            <span className="text-right"><Chip tone="warn">{c.gap}일 무거래</Chip></span>
           </div>
         ))}
       </div>
@@ -920,17 +921,17 @@ function PlanTab({ company, demo, today, W, compact }) {
   const cols = W >= 1400 ? 3 : W >= 760 ? 2 : 1;
   return (<>
     {rows.length > 0 && <Brief tone={overN ? "warn" : "gold"} basis="최종 승인된 사업계획서 · 연결된 지출 문서의 승인 금액">
-      승인된 사업계획 <B>{rows.length}건</B>(진행 중 {runN}건)의 예산 <B>{fmtEokMan(tot.budget)}</B> 가운데 <B>{rateStr(tot.budget ? (tot.spent / tot.budget) * 100 : null)}</B>를 집행했습니다.
-      {" "}{overN ? <>예산을 넘긴 계획이 <B color={EX.danger}>{overN}건</B> 있습니다.</> : "예산을 넘긴 계획은 없습니다."}
+      승인된 사업계획 <B>{rows.length}건</B>(진행 중 {runN}건)의 예산 <B>{fmtEokMan(tot.budget)}</B> 중 <B>{rateStr(tot.budget ? (tot.spent / tot.budget) * 100 : null)}</B>를 집행했습니다.
+      {" "}{overN ? <>예산 초과 계획은 <B color={EX.danger}>{overN}건</B>입니다.</> : "예산 초과 계획은 없습니다."}
     </Brief>}
     <ExecKpis min={196}>
       <Kpi accent en="BUDGET" label="총 예산" {...km(tot.budget)} foot={`승인된 계획 ${rows.length}건`} />
-      <Kpi en="SPENT" label="집행액" {...km(tot.spent)} foot={tot.budget ? `예산의 ${rateStr((tot.spent / tot.budget) * 100)}` : "예산 없음"} />
-      <Kpi en="REMAINING" label="남은 예산" {...km(tot.budget - tot.spent)} foot={tot.pend ? `결재 중 지출 ${fmtMoney(tot.pend)}` : "결재 중 지출 없음"} />
+      <Kpi en="SPENT" label="집행액" {...km(tot.spent)} foot={tot.budget ? `예산의 ${rateStr((tot.spent / tot.budget) * 100)}` : "예산 미설정"} />
+      <Kpi en="REMAINING" label="예산 잔액" {...km(tot.budget - tot.spent)} foot={tot.pend ? `결재 중 지출 ${fmtMoney(tot.pend)}` : "결재 중 지출 없음"} />
       <Kpi en="OVER BUDGET" label="예산 초과" value={String(overN)} unit="건" foot={`진행 중 ${runN}건`} />
     </ExecKpis>
-    <ExecPanel en="BUSINESS PLANS" title="사업계획별 예산 집행" sub="최종 승인된 사업계획서 · 집행액은 관련 사업계획으로 연결된 지출 문서의 승인 금액 · 단위 만원 · 누르면 상세">
-      {loading && !rows.length ? <Empty text="불러오는 중입니다" /> : !rows.length ? <Empty text="최종 승인된 사업계획서가 아직 없습니다" sub="전자결재 › 업무 기안 · 품의 › 사업계획서로 올릴 수 있습니다." /> : (
+    <ExecPanel en="BUSINESS PLANS" title="사업계획별 예산 집행" sub="최종 승인된 사업계획서 · 집행액은 관련 사업계획으로 연결된 지출 문서의 승인 금액 · 단위 만원 · 선택하면 상세 표시">
+      {loading && !rows.length ? <Empty text="불러오는 중입니다" /> : !rows.length ? <Empty text="최종 승인된 사업계획서가 아직 없습니다" sub="전자결재 › 업무 기안 · 품의 › 사업계획서로 상신할 수 있습니다." /> : (
         <div data-testid="exa-plan-cards" className="grid gap-3 md:gap-4" style={{ gridTemplateColumns: `repeat(${cols},minmax(0,1fr))` }}>
           {rows.map((r) => (
             <button key={r.id} type="button" onClick={() => setSel(r.id)} data-testid="exa-plan-card" data-over={r.ex.over ? "1" : "0"}
@@ -952,7 +953,7 @@ function PlanTab({ company, demo, today, W, compact }) {
           ))}
         </div>
       )}
-      <Basis>지출결의서 · 구매요청서 · 법인카드 사용보고를 쓸 때 ‘관련 사업계획’을 고르면 여기 집행액에 더해집니다.</Basis>
+      <Basis>지출결의서 · 구매요청서 · 법인카드 사용보고 작성 시 ‘관련 사업계획’을 지정하면 해당 계획의 집행액에 합산됩니다.</Basis>
     </ExecPanel>
     {cur && <PlanDetail r={cur} company={company} demo={demo} compact={compact} onClose={() => setSel(null)} />}
   </>);
@@ -976,7 +977,7 @@ function PlanDetail({ r, company, demo, compact, onClose }) {
       </div>
       <div className="mt-4"><PlanBar ex={r.ex} /></div>
       <SubHead right="단위 원">연결된 지출 {docs.length}건</SubHead>
-      {!docs.length ? <Empty text="아직 연결된 지출이 없습니다" /> : (
+      {!docs.length ? <Empty text="연결된 지출 문서가 없습니다" /> : (
         <div data-testid="exa-plan-expenses">
           {docs.map((d, i) => (
             <div key={d.id} className="flex gap-3 items-baseline py-2.5 text-[13.5px]" style={{ borderTop: i ? "1px solid rgba(255,255,255,.06)" : 0 }}>
@@ -1031,7 +1032,7 @@ export function ExecApprovalQueue({ company, me = {} }) {
   const lateL = (l) => l.filter((d) => Date.now() - tsMs(d.createdAt) > H48);
   const mineLate = lateL(mine).length; const allLate = lateL(pending).length;
   const byCat = Object.entries(pending.reduce((m, d) => { const k = CAT_L[d.cat] || "기타"; const e = m[k] || (m[k] = { n: 0, amt: 0 }); e.n += 1; e.amt += Number(d.amount) || 0; return m; }, {})).sort((a, b) => b[1].n - a[1].n);
-  const ageB = [["24시간 이내", 0, 24, EX.ok], ["1~2일", 24, 48, EX.warn], ["2일 넘음", 48, Infinity, EX.danger]].map(([l, a, b, c]) => [l, pending.filter((d) => { const h = (Date.now() - tsMs(d.createdAt)) / 3600e3; return h >= a && h < b; }).length, c]);
+  const ageB = [["24시간 이내", 0, 24, EX.ok], ["24~48시간", 24, 48, EX.warn], ["48시간 초과", 48, Infinity, EX.danger]].map(([l, a, b, c]) => [l, pending.filter((d) => { const h = (Date.now() - tsMs(d.createdAt)) / 3600e3; return h >= a && h < b; }).length, c]);
   const oldest = mine.length ? Math.min(...mine.map((d) => tsMs(d.createdAt))) : 0;
   const open = (d) => {
     if (d.part && !demo) { window.__kpOpenApproval = { id: d.id, page: "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; }
@@ -1039,32 +1040,32 @@ export function ExecApprovalQueue({ company, me = {} }) {
   };
   const grid = wide ? "6px minmax(0,1fr) 110px 150px 120px 112px 104px" : "6px minmax(0,1fr) auto";
   return (
-    <ExecPage testId="exec-approvals" en="APPROVAL QUEUE" title="결재 대기" sub="결재하실 차례인 문서와 회사 전체에서 기다리는 문서 · 누르면 바로 열립니다">
+    <ExecPage testId="exec-approvals" en="APPROVAL QUEUE" title="결재 대기" sub="결재 순서가 도래한 문서와 회사 전체 결재 대기 문서 · 선택하면 문서가 열립니다">
       <div ref={ref} className="min-w-0 space-y-4 md:space-y-5">
         <Brief tone={mineLate ? "warn" : "gold"} basis={`${mdDow(kstToday())} 현재 · 결재 취소 요청 포함`}>
-          {mine.length ? <>결재하실 문서가 <B>{mine.length}건</B>{sum(mine) ? <>(금액 {fmtEokMan(sum(mine))})</> : ""} 있습니다.{" "}{mineLate ? <>이 중 <B color={EX.warn}>{mineLate}건</B>은 48시간 넘게 기다리고 있습니다.</> : "모두 48시간 안에 올라온 문서입니다."}</> : "지금 결재하실 문서는 없습니다."}
-          {" "}회사 전체로는 <B>{pending.length}건</B>이 결재를 기다리고 있습니다.
+          {mine.length ? <>결재하실 문서는 <B>{mine.length}건</B>{sum(mine) ? <>(금액 {fmtEokMan(sum(mine))})</> : ""}입니다.{" "}{mineLate ? <>이 중 <B color={EX.warn}>{mineLate}건</B>은 대기 시간이 48시간을 초과했습니다.</> : "모두 상신 후 48시간 이내 문서입니다."}</> : "현재 결재하실 문서는 없습니다."}
+          {" "}회사 전체 결재 대기 문서는 <B>{pending.length}건</B>입니다.
         </Brief>
         <ExecKpis min={170}>
-          <Kpi accent en="MY TURN" label="내 차례" value={String(mine.length)} unit="건" foot={sum(mine) ? `금액 ${fmtMoney(sum(mine))}` : "금액 없는 문서"} onClick={() => setScope("mine")} />
-          <Kpi en="MY TURN · 48H+" label="내 차례 중 48시간 초과" value={String(mineLate)} unit="건" foot={mine.length ? `가장 오래 ${ageStr(oldest)}` : "기다리는 문서 없음"} />
+          <Kpi accent en="MY TURN" label="내 차례" value={String(mine.length)} unit="건" foot={sum(mine) ? `금액 ${fmtMoney(sum(mine))}` : "금액 미기재 문서"} onClick={() => setScope("mine")} />
+          <Kpi en="MY TURN · 48H+" label="내 차례 중 48시간 초과" value={String(mineLate)} unit="건" foot={mine.length ? `최장 대기 ${ageStr(oldest)}` : "대기 문서 없음"} />
           <Kpi en="COMPANY-WIDE" label="회사 전체 대기" value={String(pending.length)} unit="건" foot={sum(pending) ? `금액 ${fmtMoney(sum(pending))}` : "—"} onClick={() => setScope("all")} />
           <Kpi en="COMPANY · 48H+" label="전체 중 48시간 초과" value={String(allLate)} unit="건" foot="결재 지연 문서" />
         </ExecKpis>
         <ExecGrid cols="minmax(0,1fr) 340px">
-          <ExecPanel en="QUEUE" title={scope === "mine" ? "내 차례 문서" : "회사 전체 대기 문서"} sub={order === "old" ? "오래 기다린 순" : order === "amt" ? "금액 큰 순" : "최근 올라온 순"}
+          <ExecPanel en="QUEUE" title={scope === "mine" ? "내 차례 문서" : "회사 전체 대기 문서"} sub={order === "old" ? "대기 시간 긴 순" : order === "amt" ? "금액 큰 순" : "최근 상신 순"}
             right={<ExecTabs size="sm" items={[["mine", "내 차례", mine.length], ["all", "회사 전체", pending.length]]} value={scope} onChange={setScope} />}>
             <div className="flex flex-wrap items-center gap-1.5 mb-3">
-              {[["old", "오래 기다린 순"], ["amt", "금액 큰 순"], ["new", "최근 순"]].map(([k, l]) => (
+              {[["old", "대기 시간 긴 순"], ["amt", "금액 큰 순"], ["new", "최근 상신 순"]].map(([k, l]) => (
                 <button key={k} type="button" onClick={() => setOrder(k)} className="h-9 px-3 rounded-xl text-[12.5px] font-extrabold" style={order === k ? { background: "rgba(215,188,130,.14)", color: EX.goldHi, border: `1px solid ${EX.lineHi}` } : { color: EX.sub, border: `1px solid ${EX.line}` }}>{l}</button>
               ))}
-              <span className="ml-auto inline-flex items-center gap-3 text-[11.5px] font-bold" style={{ color: EX.mute }}>{[["24시간 이내", EX.ok], ["1~2일", EX.warn], ["2일 넘음", EX.danger]].map(([l, c]) => <span key={l} className="inline-flex items-center gap-1"><span className="w-1.5 h-3 rounded-full" style={{ background: c }} />{l}</span>)}</span>
+              <span className="ml-auto inline-flex items-center gap-3 text-[11.5px] font-bold" style={{ color: EX.mute }}>{[["24시간 이내", EX.ok], ["24~48시간", EX.warn], ["48시간 초과", EX.danger]].map(([l, c]) => <span key={l} className="inline-flex items-center gap-1"><span className="w-1.5 h-3 rounded-full" style={{ background: c }} />{l}</span>)}</span>
             </div>
-            {!list.length ? <Empty text={scope === "mine" ? "결재하실 문서가 없습니다" : "기다리는 결재가 없습니다"} sub="새 문서가 올라오면 이곳에 바로 나타납니다." /> : (
+            {!list.length ? <Empty text={scope === "mine" ? "결재하실 문서가 없습니다" : "결재 대기 문서가 없습니다"} sub="새 문서가 상신되면 이곳에 즉시 표시됩니다." /> : (
               <div data-testid="exa-ap-table">
                 {wide && (
                   <div className="grid items-center gap-4 px-3 pb-2 text-[11.5px] font-extrabold tracking-[0.03em]" style={{ gridTemplateColumns: grid, color: EX.mute, borderBottom: `1px solid ${EX.line}` }}>
-                    <span /><span>문서</span><span>기안자</span><span>지금 결재자</span><span className="text-right">금액(원)</span><span className="text-right">기다린 시간</span><span />
+                    <span /><span>문서</span><span>기안자</span><span>현재 결재자</span><span className="text-right">금액(원)</span><span className="text-right">대기 시간</span><span />
                   </div>
                 )}
                 {list.map((r) => {
@@ -1099,7 +1100,7 @@ export function ExecApprovalQueue({ company, me = {} }) {
             )}
           </ExecPanel>
           <div className="grid gap-4 md:gap-5 content-start min-w-0">
-            <ExecPanel en="AGING" title="대기 시간" sub="회사 전체 대기 문서 · 올라온 때부터">
+            <ExecPanel en="AGING" title="대기 시간" sub="회사 전체 대기 문서 · 상신 시점 기준">
               <div className="flex h-3 w-full overflow-hidden rounded-full gap-[2px]">
                 {ageB.filter((x) => x[1] > 0).map(([l, n, c]) => <div key={l} style={{ width: `${(n / (pending.length || 1)) * 100}%`, background: c, opacity: 0.85 }} />)}
                 {!pending.length && <div className="w-full" style={{ background: "rgba(255,255,255,.07)" }} />}
@@ -1114,7 +1115,7 @@ export function ExecApprovalQueue({ company, me = {} }) {
               </div>
             </ExecPanel>
             <ExecPanel en="BY CATEGORY" title="종류별 대기" sub="회사 전체 · 건수 큰 순 · 금액 단위 만원">
-              <RankBars rows={byCat.map(([k, v]) => ({ key: k, label: k, value: v.n, sub: v.amt ? `${mn(v.amt)}만원` : "" }))} valueFmt={(v) => `${v}건`} color={EX.ice} empty="기다리는 문서가 없습니다" />
+              <RankBars rows={byCat.map(([k, v]) => ({ key: k, label: k, value: v.n, sub: v.amt ? `${mn(v.amt)}만원` : "" }))} valueFmt={(v) => `${v}건`} color={EX.ice} empty="대기 문서가 없습니다" />
             </ExecPanel>
           </div>
         </ExecGrid>
@@ -1136,7 +1137,7 @@ function ApPreview({ d, company, onClose, compact }) {
       </div>
       {d.summary && <p className="mt-4 text-[14px] font-medium leading-relaxed" style={{ color: EX.sub }}>{d.summary}</p>}
       <div className="mt-4"><Paper><ApprovalDocPreview d={d} company={company} /></Paper></div>
-      {!d.part && <Basis>결재선에 들어 있지 않은 문서라 이곳에서는 보기만 할 수 있습니다. 결재는 지금 결재자가 처리합니다.</Basis>}
+      {!d.part && <Basis>결재선에 포함되지 않은 문서로, 열람만 가능합니다. 결재는 현재 결재자가 처리합니다.</Basis>}
     </Modal>
   );
 }

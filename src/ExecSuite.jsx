@@ -272,7 +272,7 @@ function SplitBar({ sale, cost, profit }) {
         <div style={{ width: `${p}%`, background: GOLD_GRAD, boxShadow: "0 0 14px rgba(215,188,130,.35)" }} />
       </div>
       <div className="mt-2 flex items-center justify-between gap-3 flex-wrap text-[12px] font-bold" style={{ color: EX.sub }}>
-        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px]" style={{ background: EX.ice }} />매입(기사 지급) <b style={{ ...EX_NUM, color: EX.text }}>{fmtPct(c)}</b></span>
+        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px]" style={{ background: EX.ice }} />매입(운송원가) <b style={{ ...EX_NUM, color: EX.text }}>{fmtPct(c)}</b></span>
         <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-[3px]" style={{ background: EX.gold }} />매출총이익 <b style={{ ...EX_NUM, color: rColor(profit) }}>{fmtPct(sale ? (profit / sale) * 100 : null)}</b></span>
       </div>
     </div>
@@ -280,7 +280,7 @@ function SplitBar({ sale, cost, profit }) {
 }
 // 팀 구성 — 한 줄 쌓은 막대 + 범례
 function TeamStack({ teams, total }) {
-  if (!total) return <Empty text="재직 직원 정보가 없습니다" sub="인사관리부에서 직원 소속 팀을 등록하면 보입니다" />;
+  if (!total) return <Empty text="재직 직원 정보가 없습니다" sub="인사관리부에서 직원 소속 팀을 등록하면 표시됩니다." />;
   return (
     <div>
       <div className="flex h-3.5 rounded-full overflow-hidden gap-[2px]">
@@ -432,11 +432,11 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
 
   // ── 주의 신호 ──
   const signals = [
-    unassigned.length > 0 && { tone: "bad", t: `오늘 미배차 ${unassigned.length}건`, s: `오늘 오더 ${todayRows.length}건 중 · 배차가 아직 잡히지 않았습니다`, go: null },
-    late.length > 0 && { tone: "bad", t: `결재 지연 ${late.length}건`, s: "상신 후 48시간 넘게 진행 중입니다", go: "결재함" },
-    ar && ar.over30 > 0 && { tone: "warn", t: `30일 넘은 미수금 ${fmtEokMan(ar.over30)}`, s: `미수 거래처 ${ar.clients}곳 · 오래된 청구부터 수금된 것으로 계산`, go: "경영분석" },
-    topShare >= 30 && { tone: "warn", t: `거래처 쏠림 ${topShare.toFixed(0)}%`, s: `${topClients[0]?.[0]} — 이번 달 매출 비중`, go: "매출관리" },
-    prevAvail && pSale > 0 && mSale > 0 && mMargin < pMargin - 2 && { tone: "warn", t: `이익률 ${(pMargin - mMargin).toFixed(1)}%p 하락`, s: `전월 같은 기간 ${pMargin.toFixed(1)}% → 이번 달 ${mMargin.toFixed(1)}%`, go: "인사이트" },
+    unassigned.length > 0 && { tone: "bad", t: `오늘 미배차 ${unassigned.length}건`, s: `오늘 오더 ${todayRows.length}건 중 · 아직 배차가 확정되지 않았습니다`, go: null },
+    late.length > 0 && { tone: "bad", t: `결재 지연 ${late.length}건`, s: "상신 후 48시간을 초과하여 진행 중입니다", go: "결재함" },
+    ar && ar.over30 > 0 && { tone: "warn", t: `30일 초과 미수금 ${fmtEokMan(ar.over30)}`, s: `미수 거래처 ${ar.clients}곳 · 선입선출(오래된 청구부터 수금 반영) 기준`, go: "경영분석" },
+    topShare >= 30 && { tone: "warn", t: `거래처 매출 집중도 ${topShare.toFixed(0)}%`, s: `${topClients[0]?.[0]} — 이번 달 매출 비중`, go: "매출관리" },
+    prevAvail && pSale > 0 && mSale > 0 && mMargin < pMargin - 2 && { tone: "warn", t: `매출총이익률 ${(pMargin - mMargin).toFixed(1)}%p 하락`, s: `전월 동기 ${pMargin.toFixed(1)}% → 이번 달 ${mMargin.toFixed(1)}%`, go: "인사이트" },
     docIssue > 0 && { tone: "warn", t: `기사 서류 미비 ${docIssue}명`, s: "미제출 · 반려 · 만료 서류가 있습니다", go: null },
     expMonth > 0 && { tone: "info", t: `이번 달 승인 지출 ${fmtEokMan(expMonth)}`, s: "전자결재 비용 · 지출 결의 승인 합계", go: "결재함" },
   ].filter(Boolean);
@@ -450,11 +450,11 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
 
   // ── 사업 흐름 단계(믿을 수 있는 자료가 없는 단계는 뺀다) ──
   const flow = [
-    { label: "오더 접수", value: pipe.orders.toLocaleString("ko-KR"), unit: "건", sub: `하루 평균 ${pipe.perDay.toFixed(1)}건 · ${pipe.days}일간` },
-    { label: "배차완료", value: pipe.done.toLocaleString("ko-KR"), unit: "건", rate: pipe.doneRate, rateLabel: "완료율", meter: pipe.doneRate ?? 0, meterColor: EX.ice, sub: pipe.open ? `배차 진행 중 ${pipe.open.toLocaleString("ko-KR")}건` : "모든 오더 배차완료" },
+    { label: "오더 접수", value: pipe.orders.toLocaleString("ko-KR"), unit: "건", sub: `일평균 ${pipe.perDay.toFixed(1)}건 · ${pipe.days}일 누계` },
+    { label: "배차완료", value: pipe.done.toLocaleString("ko-KR"), unit: "건", rate: pipe.doneRate, rateLabel: "완료율", meter: pipe.doneRate ?? 0, meterColor: EX.ice, sub: pipe.open ? `배차 진행 중 ${pipe.open.toLocaleString("ko-KR")}건` : "전 오더 배차완료" },
     { label: "청구 매출", money: pipe.sale, sub: `건당 평균 ${fmtMoney(pipe.perOrder)} · 부가세 별도` },
-    pipe.useDeposit && { label: "입금 확인", money: pipe.deposited, rate: pipe.depositRate, rateLabel: "입금률", meter: pipe.depositRate ?? 0, sub: `입금 대기 ${fmtMoney(Math.max(0, pipe.sale - pipe.deposited))}` },
-    { label: "기사 지급", money: pipe.cost, rate: pipe.costRate, rateLabel: "매출 대비", rateColor: EX.ice, ...(pipe.usePay ? { meter: pipe.payRate ?? 0, meterColor: EX.ice, sub: `매입 · 기사운임 지급완료 ${fmtPct(pipe.payRate)}` } : { sub: "매입 = 기사운임 + 따로 지급한 비용" }) },
+    pipe.useDeposit && { label: "입금 확인", money: pipe.deposited, rate: pipe.depositRate, rateLabel: "입금률", meter: pipe.depositRate ?? 0, sub: `미입금액 ${fmtMoney(Math.max(0, pipe.sale - pipe.deposited))}` },
+    { label: "운송원가", money: pipe.cost, rate: pipe.costRate, rateLabel: "매출 대비", rateColor: EX.ice, ...(pipe.usePay ? { meter: pipe.payRate ?? 0, meterColor: EX.ice, sub: `기사운임 지급률 ${fmtPct(pipe.payRate)}` } : { sub: "기사운임 + 회사 부담 지게차 · 특수운임" }) },
     { label: "매출총이익", money: pipe.profit, color: pColor(pipe.profit), hero: true, rate: pipe.margin, rateLabel: "이익률", rateColor: rColor(pipe.margin), sub: `건당 ${fmtMoney(pipe.done ? pipe.profit / pipe.done : 0)}` },
   ].filter(Boolean);
 
@@ -471,7 +471,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
             {[personName(meX) || "임원", meX?.position].filter(Boolean).join(" ")}님, <span style={{ color: EX.sub, fontWeight: 800 }}>{greet}</span>
           </h1>
           <p className="mt-2 text-[14px] md:text-[15px] font-medium leading-[1.7] max-w-[900px]" style={{ color: EX.sub, wordBreak: "keep-all" }} data-testid="exec-brief-text">
-            {ready ? <><span style={{ color: EX.text, fontWeight: 700 }}>{brief[0]}</span> {brief.slice(1).join(" ")}</> : "오늘의 경영 지표를 정리하고 있습니다…"}
+            {ready ? <><span style={{ color: EX.text, fontWeight: 700 }}>{brief[0]}</span> {brief.slice(1).join(" ")}</> : "오늘의 경영 지표를 집계하고 있습니다…"}
             <span className="ml-2 text-[12px] font-semibold whitespace-nowrap" style={{ ...EX_NUM, color: EX.faint }}>{stamp} 기준</span>
           </p>
         </div>
@@ -487,30 +487,30 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
         <ExecKpis min={150}>
           <BTile accent en="REVENUE · MTD" label="이번 달 매출" money={mSale} delta={md} deltaLabel="전월 동기" foot={`오더 ${mCnt.toLocaleString("ko-KR")}건`} onClick={() => onGo?.("매출관리")} />
           <BTile en="GROSS PROFIT" label="매출총이익" money={mProfit} color={pColor(mProfit)} delta={prevAvail && pMargin != null && mMargin != null ? mMargin - pMargin : undefined} deltaSuffix="%p" deltaLabel="전월 동기"
-            foot={<>이익률 <b style={{ ...EX_NUM, color: rColor(mMargin) }}>{fmtPct(mMargin)}</b></>} />
+            foot={<>매출총이익률 <b style={{ ...EX_NUM, color: rColor(mMargin) }}>{fmtPct(mMargin)}</b></>} />
           <BTile en="FORECAST" label="월말 예상 매출" money={forecast} foot={prevAvail ? `전월 실적 ${fmtMoney(pFullSale)}` : undefined} delta={prevAvail && pFullSale ? pctChange(forecast, pFullSale) : undefined} deltaLabel="전월 대비"
-            side={<Ring value={(dayNo / dim) * 100} size={52} stroke={4.5} label={`${dayNo}/${dim}`} sub="일" />} title="이번 달 지난 날짜 비율 · 하루 평균 매출 × 이번 달 날짜 수" />
+            side={<Ring value={(dayNo / dim) * 100} size={52} stroke={4.5} label={`${dayNo}/${dim}`} sub="일" />} title="이번 달 경과일 비율 · 현 추세 기준(일평균 매출 × 이번 달 일수)" />
           {isCeo && (F.has
-            ? <BTile en="TREASURY" label="보유 자금" money={F.cash} onClick={() => onGo?.("자금현황")} foot={F.runway != null ? `운영 가능 ${F.runway.toFixed(1)}개월` : "자금현황 ›"}
-              delta={undefined} title="통장 · 현금 잔액(경리 입력 기준) — 누르면 자금현황" />
-            : <BTile en="TREASURY" label="보유 자금" muted value={F.ready ? "자금관리 입력 전" : "불러오는 중…"} foot="경리가 통장 잔액을 입력하면 보입니다" onClick={() => onGo?.("자금현황")} />)}
-          {ar ? <BTile en="RECEIVABLES" label="미수금" money={ar.total} foot={ar.over30 > 0 ? <span style={{ color: EX.warn }}>30일 초과 {fmtMoney(ar.over30)}</span> : `${ar.clients}곳 · 부가세 포함`} onClick={() => onGo?.("경영분석")} title="올해 배차완료 + 고정거래처 청구(부가세 포함) − 수금 기록" />
-            : <BTile en="RECEIVABLES" label="미수금" muted value="집계 중…" foot="올해 청구 · 수금 기록을 불러오고 있습니다" />}
-          <BTile en="YEAR TO DATE" label="올해 누적 매출" money={ySale} foot={<>이익 <b style={{ ...EX_NUM, color: pColor(yProfit) }}>{fmtMoney(yProfit)}</b> · {fmtPct(yMargin)}</>} />
+            ? <BTile en="TREASURY" label="보유 자금" money={F.cash} onClick={() => onGo?.("자금현황")} foot={F.runway != null ? `운영 가능 기간 ${F.runway.toFixed(1)}개월` : "자금현황 ›"}
+              delta={undefined} title="예금 · 현금 잔액(경리 입력 기준) — 선택하면 자금현황으로 이동합니다" />
+            : <BTile en="TREASURY" label="보유 자금" muted value={F.ready ? "자금관리 입력 전" : "불러오는 중…"} foot="경리 담당자가 예금 잔액을 입력하면 표시됩니다" onClick={() => onGo?.("자금현황")} />)}
+          {ar ? <BTile en="RECEIVABLES" label="미수금" money={ar.total} foot={ar.over30 > 0 ? <span style={{ color: EX.warn }}>30일 초과 {fmtMoney(ar.over30)}</span> : `${ar.clients}곳 · 부가세 포함`} onClick={() => onGo?.("경영분석")} title="올해 배차완료 + 고정거래처 청구액(부가세 포함) − 수금액" />
+            : <BTile en="RECEIVABLES" label="미수금" muted value="집계 중…" foot="올해 청구 · 수금 내역을 불러오고 있습니다" />}
+          <BTile en="YEAR TO DATE" label="올해 누적 매출" money={ySale} foot={<>매출총이익 <b style={{ ...EX_NUM, color: pColor(yProfit) }}>{fmtMoney(yProfit)}</b> · {fmtPct(yMargin)}</>} />
         </ExecKpis>
         {/* ⭐ 2026-11-07 규칙 점검 — 매출관리(배차완료만)와 숫자가 다른 이유를 화면에 적어 둔다 */}
-        <Basis className="mt-2.5 px-1"><span data-kp="exec-basis">매출 기준: 취소 · 운송사 전송을 뺀 전체 오더(배차중 · 승인대기 포함) · 매출관리는 배차완료 오더만 집계해 숫자가 다를 수 있습니다</span>{isCeo && F.has ? " · 보유 자금은 경리 입력 통장 · 현금 잔액" : ""}</Basis>
+        <Basis className="mt-2.5 px-1"><span data-kp="exec-basis">매출 기준: 취소 · 운송사 전송을 제외한 전체 오더(배차중 · 승인대기 포함) · 매출관리는 배차완료 오더만 집계하므로 수치가 다를 수 있습니다</span>{isCeo && F.has ? " · 보유 자금은 경리 입력 예금 · 현금 잔액 기준" : ""}</Basis>
       </div>
 
       {/* ── 2. 이번 달 사업 흐름 ── */}
-      <ExecPanel en={`BUSINESS FLOW · ${thisMonth.replace("-", ".")}`} title="이번 달 사업 흐름" sub={`오더가 들어와 이익이 되기까지 · ${Number(thisMonth.slice(5))}월 1일 ~ ${dayNo}일 · 금액은 배차완료 오더 기준`}
+      <ExecPanel en={`BUSINESS FLOW · ${thisMonth.replace("-", ".")}`} title="이번 달 오더 · 정산 현황" sub={`오더 접수부터 매출총이익까지 · ${Number(thisMonth.slice(5))}월 1일 ~ ${dayNo}일 · 금액은 배차완료 오더 기준`}
         right={<GoLink onClick={() => onGo?.("정산관리")}>정산관리</GoLink>}>
-        {!pipe.orders ? <Empty text="이번 달 접수된 오더가 아직 없습니다" sub={yearLoaded ? "배차 화면에 오더가 등록되면 흐름이 채워집니다" : "오더를 불러오고 있습니다"} /> : (
+        {!pipe.orders ? <Empty text="이번 달 접수된 오더가 아직 없습니다" sub={yearLoaded ? "배차 화면에 오더가 등록되면 표시됩니다" : "오더를 불러오고 있습니다"} /> : (
           <>
             <BusinessFlow steps={flow} />
             <div className="mt-4 grid gap-4 md:gap-6 items-center" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(300px,100%), 1fr))" }}>
               <div>
-                <div className="mb-2 text-[12.5px] font-extrabold" style={{ color: EX.sub }}>청구 매출 100 = 매입 + 매출총이익</div>
+                <div className="mb-2 text-[12.5px] font-extrabold" style={{ color: EX.sub }}>청구 매출(100%) = 운송원가 + 매출총이익</div>
                 <SplitBar sale={pipe.sale} cost={pipe.cost} profit={pipe.profit} />
               </div>
               <div className="rounded-2xl px-4 py-3" style={{ background: "rgba(255,255,255,.03)", border: `1px solid ${EX.line}` }}>
@@ -526,7 +526,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
                 <div className="mt-2"><Meter value={doneToday.length} max={Math.max(1, todayRows.length)} height={4} color={EX.ice} /></div>
               </div>
             </div>
-            <Basis className="mt-3">접수 = 이번 달 상차일 오더(취소 · 운송사 전송 제외) · 매입 = 기사운임 + 지게차 · 특수운임처럼 회사가 따로 지급한 비용{pipe.useDeposit ? " · 입금 = 정산관리 [입금완료] 처리분" : ""}{pipe.usePay ? " · 지급 = 정산관리 [지급완료] 처리분" : ""}</Basis>
+            <Basis className="mt-3">접수 = 이번 달 상차일 오더(취소 · 운송사 전송 제외) · 운송원가 = 기사운임 + 회사 부담 지게차 · 특수운임{pipe.useDeposit ? " · 입금 = 정산관리 [입금완료] 처리분" : ""}{pipe.usePay ? " · 지급 = 정산관리 [지급완료] 처리분" : ""}</Basis>
           </>
         )}
       </ExecPanel>
@@ -537,7 +537,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
           <div className="grid grid-cols-3 gap-2">
             <Stat label="오늘 출근" sub={attToday.total ? `재직 ${attToday.total}명` : "직원 정보 없음"}><Num value={attToday.in} unit="명" size={24} /></Stat>
             <Stat label="휴가 · 외근" sub={awayUniq.length ? awayUniq.slice(0, 2).map((e) => e.name).join(" · ") + (awayUniq.length > 2 ? ` 외 ${awayUniq.length - 2}명` : "") : "없음"}><Num value={awayUniq.length} unit="명" size={24} /></Stat>
-            <Stat label="기록 없음" sub={hour < 10 ? "아직 출근 전" : "근태 확인 필요"} tone={hour >= 10 && attToday.none > 0 ? "warn" : undefined}><Num value={attToday.none} unit="명" size={24} color={hour >= 10 && attToday.none > 0 ? EX.warn : EX.text} /></Stat>
+            <Stat label="근태 미기록" sub={hour < 10 ? "출근 시간 전" : "근태 확인 필요"} tone={hour >= 10 && attToday.none > 0 ? "warn" : undefined}><Num value={attToday.none} unit="명" size={24} color={hour >= 10 && attToday.none > 0 ? EX.warn : EX.text} /></Stat>
           </div>
           <div className="mt-4">
             <div className="mb-2 flex items-baseline justify-between gap-2"><span className="text-[13px] font-extrabold" style={{ color: EX.sub }}>팀별 인원 구성</span><span className="text-[12px] font-semibold" style={{ color: EX.mute }}>인사 정보(소속 팀) 기준</span></div>
@@ -545,7 +545,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
           </div>
           <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${EX.line}` }}>
             <div className="mb-2.5 flex items-baseline justify-between gap-2"><span className="text-[13px] font-extrabold" style={{ color: EX.sub }}>인건비</span><Chip tone="mute">회계 장부 기준</Chip></div>
-            {!laborBase ? <Empty text="회계 장부에 인건비 지출이 아직 없습니다" sub="경리가 회계 장부에 급여 · 상여 · 4대보험을 입력하면 보입니다" /> : (
+            {!laborBase ? <Empty text="회계 장부에 인건비 지출 내역이 아직 없습니다" sub="경리 담당자가 회계 장부에 급여 · 상여 · 4대보험을 입력하면 표시됩니다." /> : (
               <div className="grid gap-4 items-end" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(220px,100%), 1fr))" }}>
                 <div className="min-w-0">
                   <div className="text-[12px] font-bold" style={{ color: EX.mute }}>{Number(laborBase.m.slice(5))}월 인건비{laborBase.m === thisMonth ? "(진행 중)" : ""}</div>
@@ -570,10 +570,10 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
                 </div>
               </div>
             )}
-            <Basis className="mt-2.5">급여 · 상여 · 퇴직급여 · 4대보험 계정 지출 합 · 급여 상세는 보안상 이 화면에 보이지 않습니다{laborBase && laborBase.m !== thisMonth ? " · 이번 달은 지급 전일 수 있어 지난달 기준" : ""}</Basis>
+            <Basis className="mt-2.5">급여 · 상여 · 퇴직급여 · 4대보험 계정 지출 합계 · 개인별 급여 상세는 보안상 표시하지 않습니다{laborBase && laborBase.m !== thisMonth ? " · 이번 달은 급여 지급 전일 수 있어 지난달 기준" : ""}</Basis>
           </div>
           <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${EX.line}` }}>
-            <div className="mb-2 flex items-center justify-between gap-2"><span className="text-[13px] font-extrabold" style={{ color: EX.sub }}>앞으로 7일 부재 일정</span><GoLink onClick={() => onGo?.("직원일정")}>달력</GoLink></div>
+            <div className="mb-2 flex items-center justify-between gap-2"><span className="text-[13px] font-extrabold" style={{ color: EX.sub }}>향후 7일 부재 일정</span><GoLink onClick={() => onGo?.("직원일정")}>달력</GoLink></div>
             <div className="grid grid-cols-7 gap-1 md:gap-1.5">
               {week.map((d) => {
                 const list = weekEvs.filter((e) => e.date === d);
@@ -593,9 +593,9 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
           </div>
         </ExecPanel>
 
-        <ExecPanel en="CONTRIBUTION · MTD" title="매출 · 이익 기여" sub={`누가 매출과 이익을 만드는지 · ${Number(thisMonth.slice(5))}월 1~${dayNo}일`}
+        <ExecPanel en="CONTRIBUTION · MTD" title="매출 · 매출총이익 기여도" sub={`팀 · 담당자별 실적 기여 · ${Number(thisMonth.slice(5))}월 1~${dayNo}일`}
           right={<ExecTabs size="sm" items={[["team", "팀별"], ["staff", "담당자별"]]} value={contribTab} onChange={setContribTab} />}>
-          {!rank.list.length ? <Empty text="이번 달 담당자별 실적이 아직 없습니다" sub={yearLoaded ? "오더가 등록되면 담당자 · 팀별로 묶여 보입니다" : "오더를 불러오고 있습니다"} /> : contribTab === "team" ? (
+          {!rank.list.length ? <Empty text="이번 달 담당자별 실적이 아직 없습니다" sub={yearLoaded ? "오더가 등록되면 담당자 · 팀별로 집계됩니다" : "오더를 불러오고 있습니다"} /> : contribTab === "team" ? (
             <div className="space-y-3">
               {teamRows.map((t, i) => {
                 const mx = teamRows[0]?.sale || 1;
@@ -623,13 +623,13 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
               valueFmt={fmtMoney}
               right={(r) => <span className="w-[54px] text-right text-[12px] font-black" style={{ ...EX_NUM, color: rColor(r.margin) }}>{fmtPct(r.margin)}</span>} />
           )}
-          <Basis className="mt-3">담당 = 오더를 등록한 직원(고정노선은 배차확정자) · 팀 = 직원 정보의 소속 팀{contribTab === "staff" ? " · 오른쪽 숫자는 매출총이익률" : ""}{rank.list.length ? ` · 회사 전체 ${fmtMoney(rank.total)}` : ""}</Basis>
+          <Basis className="mt-3">담당 = 오더를 등록한 직원(고정노선은 배차확정자) · 팀 = 직원 정보의 소속 팀{contribTab === "staff" ? " · 우측 수치는 매출총이익률" : ""}{rank.list.length ? ` · 회사 전체 ${fmtMoney(rank.total)}` : ""}</Basis>
         </ExecPanel>
       </ExecGrid>
 
       {/* ── 4. 월별 추이 · 결재 대기 ── */}
       <ExecGrid cols="minmax(0,1.6fr) minmax(0,1fr)" breakAt={1100}>
-        <ExecPanel en={`PERFORMANCE · ${year}`} title={range === "year" ? "월별 매출 · 이익" : "최근 30일 매출 · 이익"} sub={range === "year" ? "막대 = 금액 · 골드 선 = 매출총이익률" : "하루 단위 · 상차일 기준"}
+        <ExecPanel en={`PERFORMANCE · ${year}`} title={range === "year" ? "월별 매출 · 매출총이익" : "최근 30일 매출 · 매출총이익"} sub={range === "year" ? "막대 = 금액 · 골드 선 = 매출총이익률" : "일별 · 상차일 기준"}
           right={<ExecTabs size="sm" items={[["year", "올해"], ["30", "30일"]]} value={range} onChange={setRange} />}>
           <div className="mb-2"><Legend items={range === "year" ? [["매출", EX.ice], ["매출총이익", EX.iceDeep], ["이익률", EX.gold, "line"]] : [["매출", EX.ice], ["매출총이익", EX.gold, "line"]]} /></div>
           <div className="h-[260px] md:h-[300px] -ml-1">
@@ -665,7 +665,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
               )}
             </ResponsiveContainer>
           </div>
-          <Basis className="mt-2">{range === "year" ? `골드 막대 = 이번 달(${dayNo}일까지) · 이익률 = 매출총이익 ÷ 매출` : "매출총이익 = 청구운임 − 기사운임 − 회사가 따로 지급한 비용"}</Basis>
+          <Basis className="mt-2">{range === "year" ? `골드 막대 = 이번 달(${dayNo}일까지) · 이익률 = 매출총이익 ÷ 매출` : "매출총이익 = 청구운임 − 기사운임 − 회사 부담 지게차 · 특수운임"}</Basis>
         </ExecPanel>
 
         <ExecPanel en="APPROVAL · YOUR TURN" title="나의 결재 대기" right={<GoLink onClick={() => onGo?.("결재함")}>결재함</GoLink>}>
@@ -673,16 +673,16 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
           <button type="button" onClick={() => setAutoApproveDaily(company, !autoDaily, personName(me) || "")} aria-pressed={autoDaily}
             className="w-full mb-3 rounded-2xl px-3.5 py-2.5 flex items-center gap-3 text-left transition"
             style={{ background: autoDaily ? "rgba(215,188,130,.10)" : "rgba(255,255,255,.035)", border: `1px solid ${autoDaily ? EX.lineHi : EX.line}` }}>
-            <span className="min-w-0 flex-1"><span className="block text-[14px] font-black" style={{ color: EX.text }}>일일 업무일지 자동 승인</span><span className="block text-[12.5px] font-medium" style={{ color: EX.mute }}>{autoDaily ? "켜짐 — 올라오는 즉시 승인 처리됩니다" : "꺼짐 — 임원이 직접 확인하고 승인합니다"}</span></span>
+            <span className="min-w-0 flex-1"><span className="block text-[14px] font-black" style={{ color: EX.text }}>일일 업무일지 자동 승인</span><span className="block text-[12.5px] font-medium" style={{ color: EX.mute }}>{autoDaily ? "켜짐 — 상신 즉시 자동 승인됩니다" : "꺼짐 — 임원이 직접 검토 후 승인합니다"}</span></span>
             <span className="relative w-[52px] h-[30px] rounded-full shrink-0 transition" style={{ background: autoDaily ? GOLD_GRAD : "rgba(255,255,255,.15)" }}>
               <span className={`absolute top-[3px] w-6 h-6 rounded-full bg-white shadow transition-all ${autoDaily ? "left-[25px]" : "left-[3px]"}`} />
             </span>
           </button>
           <div className="flex items-end gap-3 mb-3">
             <Num value={mine.length} unit="건" size={40} color={mine.length ? EX.goldHi : EX.faint} />
-            <span className="pb-1 text-[12.5px] font-semibold" style={{ color: EX.mute }}>회사 진행 중 {pendingAll.length}건{late.length ? <> · <span style={{ color: EX.danger }}>48시간 지연 {late.length}건</span></> : ""}</span>
+            <span className="pb-1 text-[12.5px] font-semibold" style={{ color: EX.mute }}>전사 진행 중 {pendingAll.length}건{late.length ? <> · <span style={{ color: EX.danger }}>48시간 초과 {late.length}건</span></> : ""}</span>
           </div>
-          {!mine.length ? <Empty text="지금 결재할 문서가 없습니다" sub="새 문서가 올라오면 여기에 바로 보입니다" /> : (
+          {!mine.length ? <Empty text="현재 결재 대기 문서가 없습니다" sub="새 문서가 상신되면 이곳에 즉시 표시됩니다." /> : (
             <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
               {mine.slice(0, 8).map((a) => {
                 const h = Math.max(0, Math.floor((Date.now() - tsMs(a.createdAt)) / 3600e3));
@@ -705,7 +705,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
       {/* ── 5. 주의 신호 · 거래처 TOP ── */}
       <ExecGrid cols="minmax(0,1fr) minmax(0,1fr)" breakAt={900}>
         <ExecPanel en="SIGNALS" title="주의 신호" sub={signals.length ? `확인이 필요한 항목 ${signals.length}건` : "자동 점검 결과"}>
-          {!signals.length ? <Empty text="특이 사항이 없습니다" sub="미배차 · 결재 지연 · 미수 · 거래처 쏠림 · 이익률 · 기사 서류를 자동으로 살핍니다" /> : (
+          {!signals.length ? <Empty text="특이 사항이 없습니다" sub="미배차 · 결재 지연 · 미수금 · 거래처 매출 집중도 · 매출총이익률 · 기사 서류를 자동 점검합니다." /> : (
             <div className="space-y-1.5">
               {signals.slice(0, 6).map((x) => (
                 <button key={x.t} type="button" disabled={!x.go} onClick={() => x.go && onGo?.(x.go)} className="w-full min-h-[52px] text-left rounded-2xl px-3.5 py-2.5 flex items-center gap-3 transition enabled:hover:brightness-125" style={{ background: "rgba(255,255,255,.035)", border: `1px solid ${EX.line}` }}>
@@ -782,11 +782,11 @@ export function ExecApprovals({ company, me }) {
         { key: "lines", label: "결재선 관리", en: "LINES", icon: "route" },
       ] }]}>
       <div className="space-y-3">
-        <ExecBand en="FINAL APPROVER · OVERVIEW" title="결재 현황" sub="최종 결재자 기준 · 상신 후 48시간이 지나면 지연으로 봅니다">
+        <ExecBand en="FINAL APPROVER · OVERVIEW" title="결재 현황" sub="최종 결재자 기준 · 상신 후 48시간 초과 시 지연으로 분류합니다">
           <BandStats items={[
             { label: "나의 결재 대기", node: <Num value={mine} unit="건" size={26} color={mine ? EX.goldHi : EX.text} />, accent: mine > 0 },
-            { label: "회사 진행 중", node: <Num value={pending.length} unit="건" size={26} /> },
-            { label: "48시간 지연", node: <Num value={late} unit="건" size={26} color={late ? EX.danger : EX.text} />, warn: late > 0 },
+            { label: "전사 진행 중", node: <Num value={pending.length} unit="건" size={26} /> },
+            { label: "48시간 초과", node: <Num value={late} unit="건" size={26} color={late ? EX.danger : EX.text} />, warn: late > 0 },
             { label: "이번 달 승인 지출", node: <Money v={expMonth} size={26} /> },
           ]} />
         </ExecBand>
@@ -858,7 +858,7 @@ function TeamScheduleCompany({ company, modeSwitch }) {
   return (
     <div className="space-y-3">
       {X ? (
-        <ExecBand en="TEAM · SCHEDULE" title="직원 일정" sub="전자결재 연차 · 반차 · 외근 · 출장 · 병가 · 경조사 — 결재 완료는 확정, 진행 중은 점선" right={<>{modeSwitch}{monthNav}</>}>
+        <ExecBand en="TEAM · SCHEDULE" title="직원 일정" sub="전자결재 연차 · 반차 · 외근 · 출장 · 병가 · 경조사 기준 — 결재 완료는 확정, 결재 진행 중은 점선으로 표시합니다" right={<>{modeSwitch}{monthNav}</>}>
           <BandStats items={stats.map(([l, v, u]) => ({ label: l, node: <Num value={v} unit={u} size={24} /> }))} />
         </ExecBand>
       ) : (
@@ -923,7 +923,7 @@ function TeamScheduleCompany({ company, modeSwitch }) {
             <div className={`text-[15px] font-black ${T.ink}`}>{pick.replace(/-/g, ".")} ({DOW[new Date(`${pick}T00:00:00Z`).getUTCDay()]}) · {pickList.length}명</div>
           </div>
           {pickBirth.length > 0 && <div className="px-4 pt-3 flex flex-wrap gap-1.5">{pickBirth.map((u) => <BirthChip key={u.id} name={personName(u) || u.name} big dark={X} />)}</div>}
-          {!pickList.length ? <div className={`py-10 text-center text-[13px] font-bold ${T.mute}`}>이 날은 부재 일정이 없습니다</div> : (
+          {!pickList.length ? <div className={`py-10 text-center text-[13px] font-bold ${T.mute}`}>해당 일자에 부재 일정이 없습니다</div> : (
             <div className={`divide-y ${T.divide}`}>
               {pickList.map((e) => (
                 <div key={`${e.id}${e.date}`} className="px-4 py-2.5 flex items-center gap-3">
@@ -1054,7 +1054,7 @@ function ExecScheduleCompany({ company, me = {}, canWrite = false, modeSwitch })
       setEdit(null);
     } finally { setBusy(false); }
   };
-  const remove = async (e) => { if (!(await kpConfirm("이 일정을 지울까요?"))) return; const { doc: fdoc, deleteDoc } = await import("firebase/firestore"); await runDelete({ label: "일정", task: () => deleteDoc(fdoc(db, "execSchedules", e.id)) }); setEdit(null); }; // ⭐ 2026-11-05 삭제 진행 창
+  const remove = async (e) => { if (!(await kpConfirm("이 일정을 삭제하시겠습니까?"))) return; const { doc: fdoc, deleteDoc } = await import("firebase/firestore"); await runDelete({ label: "일정", task: () => deleteDoc(fdoc(db, "execSchedules", e.id)) }); setEdit(null); }; // ⭐ 2026-11-05 삭제 진행 창
   const dayList = by[pick] || [];
   const inpD = "h-12 w-full px-3.5 rounded-xl bg-white/[0.06] border border-white/15 text-white text-[15px] font-bold outline-none focus:border-[#D7BC82] placeholder:text-white/30 [color-scheme:dark]";
   return (
@@ -1065,7 +1065,7 @@ function ExecScheduleCompany({ company, me = {}, canWrite = false, modeSwitch })
           <div>
             <div className="flex items-center gap-3"><Eyebrow>EXECUTIVE · SCHEDULE</Eyebrow><div className="hidden md:block w-[180px]"><GoldRule /></div></div>
             <h1 className="mt-1.5 text-[24px] md:text-[30px] font-black tracking-[-0.02em] leading-tight" style={{ color: EX.text }}>임원 스케줄</h1>
-            <div className="mt-1 text-[13px] md:text-[14px] font-medium" style={{ color: EX.sub }}>{canWrite ? "등록한 일정은 모든 직원이 볼 수 있습니다 · 날짜를 두 번 누르면 바로 등록" : "대표 · 임원의 회의 · 외근 · 출장 일정입니다"}</div>
+            <div className="mt-1 text-[13px] md:text-[14px] font-medium" style={{ color: EX.sub }}>{canWrite ? "등록한 일정은 전 직원에게 공개됩니다 · 날짜를 두 번 누르면 바로 등록할 수 있습니다" : "대표 · 임원의 회의 · 외근 · 출장 일정입니다"}</div>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
             {modeSwitch}
@@ -1112,7 +1112,7 @@ function ExecScheduleCompany({ company, me = {}, canWrite = false, modeSwitch })
           <div className="space-y-4">
             <ExecPanel en="DAY DETAIL" title={`${pick.replace(/-/g, ".")} (${DOW[new Date(`${pick}T00:00:00Z`).getUTCDay()]})`}>
               {birthdaysOn(allStaff, pick).length > 0 && <div className="flex flex-wrap gap-1.5 mb-2">{birthdaysOn(allStaff, pick).map((u) => <BirthChip key={u.id} name={personName(u) || u.name} big dark />)}</div>}
-              {!dayList.length ? <div className="py-6 text-center text-[14px] font-bold text-white/40">일정이 없습니다{canWrite ? " · 날짜를 두 번 누르면 등록" : ""}</div> : dayList.map((e) => (
+              {!dayList.length ? <div className="py-6 text-center text-[14px] font-bold text-white/40">일정이 없습니다{canWrite ? " · 날짜를 두 번 누르면 등록할 수 있습니다" : ""}</div> : dayList.map((e) => (
                 <button key={e.id} type="button" disabled={!canWrite} onClick={() => setEdit({ ...blank(), ...e })} className="w-full text-left rounded-2xl bg-white/[0.05] border border-white/[0.08] px-3.5 py-3 mb-2 enabled:hover:bg-white/[0.09]">
                   <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{ background: KIND_DOT[e.kind] || GOLD }} /><span className="text-[12px] font-black text-white/60">{e.kind}</span><span className="ml-auto text-[13px] font-black tabular-nums text-white/80" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{e.start}{e.end ? `–${e.end}` : ""}</span></div>
                   <div className="text-[16px] font-black mt-1">{e.title}</div>
@@ -1141,7 +1141,7 @@ function ExecScheduleCompany({ company, me = {}, canWrite = false, modeSwitch })
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
               {execPeople.length > 0 && (
-                <div><div className="text-[13px] font-black text-white/70 mb-1.5">누구 일정인가요 <span className="text-white/40 font-bold">(인사팀이 대신 등록 가능)</span></div>
+                <div><div className="text-[13px] font-black text-white/70 mb-1.5">일정 대상자 <span className="text-white/40 font-bold">(인사팀 대리 등록 가능)</span></div>
                   <div className="flex flex-wrap gap-1.5">{execPeople.map((u) => <button key={u.id} type="button" onClick={() => setEdit((p) => ({ ...p, ownerUid: u.id }))} className={`h-10 px-4 rounded-xl text-[14px] font-black ${(edit.ownerUid || (edit.uid && edit.uid === u.id ? u.id : "")) === u.id || (!edit.ownerUid && edit.uid === u.id) ? "text-[#1A1405]" : "bg-white/[0.06] border border-white/10 text-white/80"}`} style={(edit.ownerUid === u.id || (!edit.ownerUid && edit.uid === u.id)) ? { background: `linear-gradient(180deg,#F1DFB4,${GOLD})` } : undefined}>{personName(u) || u.name} <span className="text-[12px] opacity-70">{u.position}</span></button>)}</div>
                 </div>
               )}

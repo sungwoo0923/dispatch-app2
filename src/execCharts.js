@@ -28,7 +28,7 @@ export function plBars(W, months, { compact = false, barH = 200, lowH = 110 } = 
   const iMax = sale.indexOf(Math.max(...sale));
   months.forEach((m, i) => {
     const x = L + i * step + (step - bw) / 2, last = i === n - 1, v = sale[i], y = yb(v);
-    const tip = `<title>${esc(m.m)} 매출 ${fmt(v)}만 · 영업이익 ${fmt(op[i])}만 (${m.om.toFixed(1)}%)${m.est ? " · 판관비 추정" : ""}</title>`;
+    const tip = `<title>${esc(m.m)} 매출 ${fmt(v)}만원 · 영업이익 ${fmt(op[i])}만원(영업이익률 ${m.om.toFixed(1)}%)${m.est ? " · 판관비 추정" : ""}</title>`;
     if (v > 0) s += `<path d="M${x} ${T + barH} V${Math.min(y + 4, T + barH)} q0 -4 4 -4 H${x + bw - 4} q4 0 4 4 V${T + barH} Z" fill="${last ? C.n3 : "#B8C8E6"}">${tip}</path>`;
     if (last || i === iMax) s += `<text x="${x + bw / 2}" y="${y - 8}" font-size="${fs + (last ? 2 : 0)}" font-weight="800" fill="${C.t1}" text-anchor="middle">${eokS(v)}</text>`;
     const o = op[i]; const y0 = yo(0), y1 = yo(o);
@@ -79,7 +79,7 @@ export function cashLine(W, H, weeks, start, safe, { compact = false } = {}) {
   s += `<path d="${path("low")}" fill="none" stroke="${C.n3}" stroke-width="2.5" stroke-linejoin="round"/>`;
   pts.forEach((p, i) => {
     const warn = safe > 0 && p.low < safe; const v = man(p.low);
-    s += `<circle cx="${x(i)}" cy="${y(v)}" r="${warn ? 6 : 4}" fill="${warn ? C.err : "#fff"}" stroke="${warn ? C.err : C.n3}" stroke-width="2"><title>${esc(p.lbl)} 주 최저 ${fmt(v)}만 · 주말 ${fmt(man(p.end))}만</title></circle>`;
+    s += `<circle cx="${x(i)}" cy="${y(v)}" r="${warn ? 6 : 4}" fill="${warn ? C.err : "#fff"}" stroke="${warn ? C.err : C.n3}" stroke-width="2"><title>${esc(p.lbl)} 주간 최저 잔액 ${fmt(v)}만원 · 주간 기말 잔액 ${fmt(man(p.end))}만원</title></circle>`;
     if (warn || i === n - 1) s += `<text x="${x(i)}" y="${y(v) + (warn ? 24 : -10)}" font-size="${fs}" font-weight="800" fill="${warn ? C.err : C.t1}" text-anchor="middle">${eokS(v)}</text>`;
     if (!compact || i % 2 === 0 || i === n - 1) s += `<text x="${x(i)}" y="${H - 10}" font-size="${fs}" fill="${i ? C.t2 : C.t1}" font-weight="${i ? 400 : 700}" text-anchor="middle">${esc(p.lbl)}</text>`;
   });
