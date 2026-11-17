@@ -313,7 +313,7 @@ export function ExecTable({ cols = [], rows = [], rowKey = (r, i) => r.id || i, 
   if (!rows.length) return <Empty text={empty} />;
   return (
     <div className="overflow-x-auto -mx-1" style={maxHeight ? { maxHeight, overflowY: "auto" } : undefined}>
-      <table className="w-full min-w-[520px] text-[13.5px]" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
+      <table className="kp-plain kp-exec-table w-full min-w-[520px] text-[13.5px]" style={{ borderCollapse: "separate", borderSpacing: 0 }}>
         <thead>
           <tr>{cols.map((c) => <th key={c.key} className={`sticky top-0 px-3 py-2.5 text-[11.5px] font-extrabold tracking-[0.04em] whitespace-nowrap ${c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"}`} style={{ color: EX.mute, background: EX.bg1, borderBottom: `1px solid ${EX.line}`, width: c.width }}>{c.label}</th>)}</tr>
         </thead>

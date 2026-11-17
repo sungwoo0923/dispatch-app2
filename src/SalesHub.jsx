@@ -23,6 +23,8 @@ import CustomDatePicker from "./CustomDatePicker";
 import { kpConfirm, kpAlert } from "./kpDialog";
 import { useSalesBoard, useSalesMe, targetOf } from "./salesData";
 const TeamReport = React.lazy(() => import("./TeamReport")); // 📑 2026-11-15 영업팀 실적 보고서(매출관리와 같은 화면)
+import { useExecMode } from "./execUi"; // 👑 2026-11-17 임원 화면(대표 · 임원 메뉴에서 열 때만 남색 · 골드 보고판)
+const SalesExecView = React.lazy(() => import("./SalesExecView"));
 import { ymOf, kstDay, toInt, cName, dayGap, LEAD_STAGES, OPEN_STAGES, stageOf, leadProb, leadWeighted, pipelineSummary, simulateWin, HEALTH, baseLabel, DEFAULT_POLICY, normPolicy, tierAmount } from "./salesCore";
 
 const won = (n) => Math.round(Number(n) || 0).toLocaleString("ko-KR");
@@ -785,6 +787,24 @@ export default function SalesHub({ company, dispatchData = [], clients = null, i
   const [tab, setTab] = React.useState(() => { try { const v = sessionStorage.getItem("kpSalesTab"); sessionStorage.removeItem("kpSalesTab"); return v || "overview"; } catch { return "overview"; } });
   const P = pipelineSummary(who.canManage ? B.leads : B.leads.filter((l) => l.ownerUid === who.uid));
   const due = P.today + P.overdue;
+  const execMode = useExecMode();
+  // 탭 본문(영업팀 화면) — 임원 화면도 같은 본문을 그대로 쓴다
+  const body = (k) => (k === "overview" || k === "overviewStaff" ? <Overview B={B} who={who} onTab={setTab} />
+    : k === "pipeline" ? <Pipeline B={B} who={who} company={company} isViewer={isViewer} />
+      : k === "accounts" ? <Accounts B={B} who={who} company={company} isViewer={isViewer} onGo={onGo} />
+        : k === "activity" ? <Activity B={B} who={who} company={company} isViewer={isViewer} />
+          : k === "incentive" ? <Incentive B={B} who={who} company={company} isViewer={isViewer} />
+            : k === "ranking" ? <Ranking B={B} who={who} />
+              : k === "teamreport" ? <React.Suspense fallback={<BookSkeleton rows={5} />}><TeamReport company={company} me={{ uid: who.uid, name: who.name }} /></React.Suspense>
+                : <Policy B={B} who={who} company={company} isViewer={isViewer} />);
+  if (execMode) {
+    const execTabs = [["overview", "영업 현황"], ["incentive", "인센티브"], ["ranking", "팀 순위"], ["pipeline", "영업 기회", due || undefined], ["accounts", who.canManage ? "거래처 담당" : "내 거래처"], ["activity", "영업 활동"], ["overviewStaff", "담당자별 상세"], ["teamreport", "팀 실적 보고서"], ["policy", "목표 · 규정"]];
+    return (
+      <React.Suspense fallback={<BookSkeleton rows={7} />}>
+        <SalesExecView B={B} tab={tab} setTab={setTab} tabs={execTabs} renderTab={body} />
+      </React.Suspense>
+    );
+  }
   return (
     <KpSubNav code="SALES" title="영업관리" icon="trend" active={tab} onSelect={setTab}
       groups={[
