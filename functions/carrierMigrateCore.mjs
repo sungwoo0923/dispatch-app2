@@ -823,7 +823,8 @@ function rowToOrder(r, L, ctx) {
   if (items.length) Object.assign(rec, { 특수운임: items, 특수기사차감: D, 특수청구추가: C, 외부지급합: 0 });
   // 🏗 지게차비 — 청구운임엔 이미 들어 있다(지게차청구추가) · 기사운임(매입 합계)에서는 빼고 지게차 기사에게 따로 준다
   //  수익 = 청구 − 기사 − 지게차(forkliftCore.js) → 시트 수수료와 같다
-  if (fk > 0) Object.assign(rec, { 기사운임: String(B.total - fk), 수수료: String(S.total - (B.total - fk) - fk), 지게차비용: fk, 지게차부담: "청구", 지게차청구추가: fk, 지게차기사차감: 0 });
+  //  ⭐ 2026-11-17 외부지급합(회사가 따로 주는 돈 = 지게차비용)도 같이 — 프로그램(forkliftApply)이 만드는 값과 같게(시트에 쓴 뒤 다시 읽어도 같은 오더)
+  if (fk > 0) Object.assign(rec, { 기사운임: String(B.total - fk), 수수료: String(S.total - (B.total - fk) - fk), 지게차비용: fk, 지게차부담: "청구", 지게차청구추가: fk, 지게차기사차감: 0, 외부지급합: fk });
   if (마감월) { rec.마감월 = 마감월; if (마감월 !== date.slice(0, 7)) rec.마감이월 = true; } // 날짜 칸의 달과 다르면 이월
   if (nameSplit.affiliation) rec.기사소속 = nameSplit.affiliation;
   if (grade) rec.차량구분 = cell(carrierRaw);
@@ -1336,6 +1337,25 @@ export function forRateSheetDoc(rt, { company, batchId, uid = () => Math.random(
 export const SHEET_CORE_KEYS = ["차량번호", "이름", "전화번호", "청구운임", "기사운임", "수수료", "메모", "특수운임", "특수기사차감", "특수청구추가", "외부지급합", "경유하차목록", "경유지_하차", "상차시간", "하차시간", "차량종류", "차량톤수", "화물내용", "배차방식", "지급방식", "배차상태", "마감월", "마감이월"];
 const tabOf = (src) => String(src || "").split("!")[0];
 const same = (a, b) => JSON.stringify(a ?? "") === JSON.stringify(b ?? "");
+// ⭐ 2026-11-17 특수운임 견주기 — 종류 · 이름 · 금액 · 받는사람 · 부담만(메모 "구글시트 이전" · 자동 표시 auto · 순서는 무시)
+//  프로그램에서 넣은 특수운임(노선 고정 · 팝업)을 시트에 쓴 뒤 다시 읽으면 메모만 달라진다 → 같은 것으로 본다(덮어쓰지 않는다)
+const SP_DEF = { 지게차: ["외부", "기사"], 대기료: ["기사", "청구"], 수작업: ["외부", "청구"], 경유: ["기사", "청구"], 할증: ["기사", "청구"], 통행료: ["기사", "청구"], 기타: ["기사", "청구"] };
+export function normSpecials(list) {
+  const n0 = (v) => { const x = Number(String(v ?? "").replace(/[^\d.-]/g, "")); return Number.isFinite(x) ? Math.round(x) : 0; };
+  return (Array.isArray(list) ? list : []).filter((x) => x && n0(x.금액) > 0).map((x) => {
+    const t = SP_DEF[x.종류] ? x.종류 : "기타";
+    const payee = ["기사", "외부", "없음"].includes(x.받는사람) ? x.받는사람 : SP_DEF[t][0];
+    let mode = ["기사", "회사", "청구"].includes(x.부담) ? x.부담 : SP_DEF[t][1];
+    if (payee === "없음" || (payee === "기사" && mode === "기사")) mode = "청구";
+    return `${t}|${nm(x.이름)}|${n0(x.금액)}|${payee}|${mode}`;
+  }).sort();
+}
+export const sameSpecials = (a, b) => JSON.stringify(normSpecials(a)) === JSON.stringify(normSpecials(b));
+const sameField = (k, a, b) => {
+  if (k === "특수운임") return sameSpecials(a, b);
+  if (k === "지게차비용") return (Number(a) || 0) === (Number(b) || 0);
+  return same(a, b);
+};
 // existing: [{ id, data }] (이 회사의 "구글시트 이전" 오더) · incoming: forOrderDoc 을 거치기 전 오더(rec) 목록
 // → { create: [rec], update: [{ id, rec, patch }], same: n, missing: [{ id, data }] }
 export function reconcileOrders(existing = [], incoming = [], { keepKeys = ["importBatchId", "작성자", "등록기기", "companyName", "_id"] } = {}) {
@@ -1369,8 +1389,8 @@ export function reconcileOrders(existing = [], incoming = [], { keepKeys = ["imp
     // 🔁 2026-11-14 프로그램에서 고친 값(_programKeys · functions/sheetPushCore.mjs) — 시트의 그 칸이 그때 읽은 값(_sheetBase) 그대로면 프로그램 값을 둔다
     //  시트에서 그 칸을 고치면(그때 값과 달라지면) 다시 시트 값을 따르고, 그 칸은 목록에서 뺀다
     const pk = new Set(Array.isArray(e.data._programKeys) ? e.data._programKeys : []); const sb = e.data._sheetBase || {}; let pkChanged = false;
-    const held = (k, v) => { if (!pk.has(k)) return false; if (same(sb[k], v)) return true; pk.delete(k); pkChanged = true; return false; };
-    Object.entries(next).forEach(([k, v]) => { if (!keepKeys.includes(k) && !same(e.data[k], v) && !held(k, v)) patch[k] = v; });
+    const held = (k, v) => { if (!pk.has(k)) return false; if (sameField(k, sb[k], v)) return true; pk.delete(k); pkChanged = true; return false; };
+    Object.entries(next).forEach(([k, v]) => { if (!keepKeys.includes(k) && !sameField(k, e.data[k], v) && !held(k, v)) patch[k] = v; });
     // 시트에서 사라진 값 → 비운다
     const before = new Set([...(Array.isArray(e.data._sheetKeys) ? e.data._sheetKeys : SHEET_CORE_KEYS)]);
     before.forEach((k) => { if (!(k in next) && !keepKeys.includes(k) && e.data[k] != null && e.data[k] !== "" && !(Array.isArray(e.data[k]) && !e.data[k].length) && !held(k, "")) patch[k] = Array.isArray(e.data[k]) ? [] : (typeof e.data[k] === "number" ? 0 : typeof e.data[k] === "boolean" ? false : ""); });

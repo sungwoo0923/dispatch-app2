@@ -452,4 +452,69 @@ async function world(mode, opts = {}) {
   assert.equal(todays().length, 3);
   console.log("live(시트에서 줄 지움 → 다른 줄이 줄줄이 지워지지 않음) OK");
 }
+
+// ⭐ 2026-11-17 노선 고정 특수운임 → JY 시트(에이제이 탭) 추가 칸 · 다시 읽어도 같은 특수운임(두 번 더하지 않음)
+//  에이제이: 매출 H 운송료 · I (이름 없음 → 야상/기타) · J 대행료(지게차) · K 합계 / 매입 L 운송료 · M 대행료 · N (이름 없음) · O 합계
+{
+  const { applyRoutePresets } = await import("../src/routePresetApply.js");
+  const RP = await import("../functions/routePresetCore.mjs");
+  const head = [["AJ-베베숲", "애터미 1PT=760KG"], ["충남 아산시 영인면 아산호로 496번길35", "", "사무실: 041-537-0000"], Array(15).fill(""),
+    ["상차일자", "출발지", "도착지", "", "비고", "입고시간", "차종", "매출", "", "", "", "매입", "", "", "", "이익", "마감월", "운송사", "차량번호", "이름", "연락처"]];
+  const r = (d, from, to, memo, arr, sale, i, j, k, buy, m, n, o) => [d, from, to, "", memo, arr, "11톤", sale, i, j, k, buy, m, n, o, "", "26년11월", "기사직통", "충남80아4135", "장인석", "010-4658-0000"];
+  const rows = [...head, r("2026. 11. 13", "에이제이", "트레이더스 칠곡", "대행료/35,000", "당착", "300,000", "", "35,000", "335,000", "270,000", "35,000", "", "305,000"),
+    r("2026. 11. 14", "에이제이", "트레이더스 칠곡", "", "당착", "300,000", "", "", "300,000", "270,000", "", "", "270,000")];
+  const ctx = makePushContext([{ title: "에이제이", rows }], JY, {});
+  const presets = [
+    RP.parsePresetDoc(RP.presetDocData({ 거래처명: "에이제이", 하차지명: "트레이더스 칠곡", items: [{ 종류: "지게차", 금액: 35000, 부담: "청구" }] })),
+    RP.parsePresetDoc(RP.presetDocData({ 거래처명: "에이제이", 하차지명: "에브리데이 여주", items: [{ 종류: "지게차", 금액: 50000, 부담: "청구" }, { 종류: "할증", 이름: "야상", 금액: 20000, 받는사람: "없음", 부담: "청구", 조건: "야간" }] })),
+  ];
+  const cellsOf = (plan) => Object.fromEntries(plan.cells.map((x) => [x.a1, x.value]));
+  const rowOf = (n) => ctx.built.orders.find((x) => x.__tab === "에이제이" && x.__row === n);
+  // ① 프로그램 등록(밤 · 에브리데이 여주) — 노선 고정 적용 → 시트: 입고시간 야상 · I 20,000(야상) · J/M 50,000(대행료=지게차) · 운송료 300,000
+  const neu = applyRoutePresets({ companyName: "JY로지스틱스", 등록기기: "PC", 거래처명: "에이제이", 상차지명: "에이제이", 하차지명: "에브리데이 여주", 상차일: "2026-11-19", 상차시간: "21:00", 하차일: "2026-11-20", 청구운임: "300000", 기사운임: "270000", 수수료: "30000" }, presets);
+  assert.deepEqual([neu.청구운임, neu.기사운임, neu.지게차비용, neu.특수운임.map((x) => x.이름)], ["370000", "270000", "50000", ["야상"]]);
+  const c = planCreate(ctx, neu, "에이제이", { rowCount: 100 });
+  assert.equal(c.ok, true);
+  const m = cellsOf(c);
+  assert.deepEqual([m.A7, m.F7, m.H7, m.I7, m.J7, m.K7, m.L7, m.M7, m.N7, m.O7], ["2026-11-20", "야상", "300000", "20000", "50000", "370000", "270000", "50000", undefined, "320000"], "시트 칸: 운송료 · 야상 · 대행료 · 합계");
+  for (const k of ["청구운임", "기사운임", "특수운임", "지게차비용", "수수료", "특수청구추가", "지게차청구추가"]) assert.ok(!c.docPatch._programKeys.includes(k), `${k}: 시트와 같게 읽힌다`);
+  assert.ok(c.pushed.includes("특수운임") && c.pushed.includes("지게차비용"));
+  // 다시 읽은 줄 = 같은 특수운임 · 같은 운임(두 번 더하지 않음)
+  const back = rowOf(7);
+  assert.deepEqual([back.청구운임, back.기사운임, back.지게차비용, back.특수운임.map((x) => [x.이름, x.금액, x.받는사람, x.부담])], ["370000", "270000", 50000, [["야상", 20000, "없음", "청구"]]]);
+  // 실시간 반영(시트 → 프로그램): 같은 줄로 보고 운임 · 특수운임을 덮어쓰지 않는다
+  const doc = { ...neu, ...c.docPatch };
+  const rc = reconcileOrders([{ id: "n1", data: doc }], [back]);
+  const pt = rc.update[0]?.patch || {};
+  for (const k of ["청구운임", "기사운임", "특수운임", "지게차비용", "수수료"]) assert.ok(!(k in pt), `다시 가져와도 ${k} 그대로`);
+  // 서버가 시트 줄에 노선 고정을 적용해도(strict) 이미 시트에 있는 지게차 · 특수운임 위에 또 더하지 않는다
+  assert.equal(RP.planRoutePreset(back, presets, { strict: true }), null, "시트에 대행료 · 야상이 있으면 아무것도 안 더함");
+  // ② 낮 오더는 야상 없이 지게차만 · 입고시간 당착
+  const day = applyRoutePresets({ 거래처명: "에이제이", 상차지명: "에이제이", 하차지명: "에브리데이 여주", 상차일: "2026-11-20", 상차시간: "09:00", 하차일: "2026-11-20", 청구운임: "300000", 기사운임: "270000" }, presets);
+  const c2 = planCreate(ctx, day, "에이제이", { rowCount: 100 });
+  const m2 = cellsOf(c2);
+  assert.deepEqual([m2.F8, m2.H8, m2.I8, m2.J8, m2.M8], ["당착", "300000", undefined, "50000", "50000"]);
+  // ③ 시트에서 온 줄(14일 · 칠곡 · 대행료 없음)에 프로그램에서 노선 고정 적용 → 수정: J/M 35,000 · 운송료는 그대로
+  const imp = forOrderDoc(rowOf(6), { company: "JY로지스틱스", batchId: "t" });
+  const upd = applyRoutePresets(imp, presets);
+  assert.deepEqual([upd.청구운임, upd.기사운임, upd.지게차비용], ["335000", "270000", "35000"]);
+  const u = planUpdate(ctx, imp, upd);
+  assert.equal(u.ok, true);
+  assert.deepEqual(cellsOf(u), { J6: "35000", K6: "335000", M6: "35000", O6: "305000" }, "추가 칸 · 합계만");
+  assert.deepEqual(u.unpushed, []);
+  assert.deepEqual([rowOf(6).지게차비용, rowOf(6).기사운임, rowOf(6).청구운임], [35000, "270000", "335000"]);
+  // ④ 지게차가 있는 줄(13일)의 기사운임만 고침 → 매입 운송료만(예전엔 대행료를 빼고 써서 기사운임이 35,000 적게 읽혔다)
+  const d13 = forOrderDoc(rowOf(5), { company: "JY로지스틱스", batchId: "t" });
+  const u2 = planUpdate(ctx, d13, { ...d13, 기사운임: "280000" });
+  assert.deepEqual(cellsOf(u2), { L5: "280000", O5: "315000" }, "매입 운송료 · 합계(지게차 포함)");
+  assert.equal(rowOf(5).기사운임, "280000");
+  // ⑤ 시트 칸으로 나타낼 수 없는 특수운임(외부 지급) — 운임은 예전 방식으로 쓰고 특수운임은 프로그램에만(_programKeys)
+  const ext = { ...day, 하차일: "2026-11-21", 상차일: "2026-11-21", 특수운임수동: true };
+  const ext2 = { ...ext, 특수운임: [{ 종류: "수작업", 금액: 30000, 받는사람: "외부", 부담: "청구" }], 청구운임: "380000", 외부지급합: 80000 };
+  const c3 = planCreate(ctx, ext2, "에이제이", { rowCount: 100 });
+  assert.equal(c3.ok, true); assert.ok(c3.unpushed.includes("특수운임"));
+  const rc3 = reconcileOrders([{ id: "e1", data: { ...ext2, ...c3.docPatch } }], [rowOf(c3.row)]);
+  assert.ok(!("특수운임" in (rc3.update[0]?.patch || {})) && !("청구운임" in (rc3.update[0]?.patch || {})), "프로그램의 특수운임 · 청구운임은 그대로");
+  console.log("노선 고정 특수운임 → JY 시트 추가 칸 · 다시 읽어도 같음(round trip) OK");
+}
 console.log("sheetPush: 모두 통과");
