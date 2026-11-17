@@ -568,14 +568,14 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
       <div style={{ marginTop: 16 }}><Track T={T} pct={goalPct || 0} h={7} marker={month.totalBiz ? (month.elapsed / month.totalBiz) * 100 : null} /></div>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginTop: 10, fontSize: 11.5, fontWeight: 600, color: T.faint }}><span>세로선 = 지난 영업일</span><span style={EX_NUM}>{month.elapsed}/{month.totalBiz}일</span></div>
     </>, "mtd");
-    const kpis = sec.kpi !== false && <div data-pdf-block style={{ display: "grid", gridTemplateColumns: wide && !basis.multi ? "repeat(6,minmax(0,1fr))" : `repeat(auto-fit, minmax(min(${compact ? 150 : 200}px, 100%), 1fr))`, gap: compact ? 10 : 14 }}>{[...tiles.map(tile), mtdTile]}</div>;
+    const kpis = sec.kpi !== false && <div data-pdf-block style={{ display: "grid", gridTemplateColumns: paper ? `repeat(${basis.multi ? 4 : 3},minmax(0,1fr))` : wide && !basis.multi ? "repeat(6,minmax(0,1fr))" : `repeat(auto-fit, minmax(min(${compact ? 150 : 200}px, 100%), 1fr))`, gap: compact ? 10 : 14 }}>{[...tiles.map(tile), mtdTile]}</div>;
 
     // ── 3) 매출 · 수익률 추이 ──
     const trendTabs = !paper && <ExecTabs size="sm" items={[[14, "14일"], [30, "30일"]]} value={trendN} onChange={setTrendN} />;
     const trend = sec.chart30 !== false && (
       <Panel T={T} en="SALES TREND" title="매출 · 수익률 추이" sub={`최근 ${trendN}일 · ${md(tDays[0].d)} ~ ${md(basis.end)} · 매출 단위 만원`} right={trendTabs}>
         <div style={{ marginTop: 4 }}><KeyLegend T={T} items={[[T.iceBar, "평일 매출"], [T.dark ? "rgba(143,176,240,.18)" : "#E4EAF5", "주말·휴일"], [T.gold, "보고 기준"], [T.ice, "수익률", "line"], [T.gold, "평일 평균", "dash"]]} /></div>
-        <Measure style={{ marginTop: 12 }}>{(w) => <Svg html={revMargin(w, tDays, tAvg, compact ? { th, barH: 160, lineH: 64, labelEvery: trendN === 14 ? 3 : 7, compact: true } : { th, barH: wide ? 240 : 210, lineH: 84, valueLabels: trendN === 14, labelEvery: trendN === 14 ? (w < 640 ? 2 : 1) : Math.max(2, Math.ceil((30 * 84) / Math.max(200, w - 140))) })} />}</Measure>
+        <Measure style={{ marginTop: 12 }}>{(w) => <Svg html={revMargin(w, tDays, tAvg, compact ? { th, barH: 160, lineH: 64, labelEvery: trendN === 14 ? 3 : 7, compact: true } : { th, barH: paper ? 180 : wide ? 240 : 210, lineH: paper ? 66 : 84, valueLabels: trendN === 14, labelEvery: trendN === 14 ? (w < 640 ? 2 : 1) : Math.max(2, Math.ceil((30 * 84) / Math.max(200, w - 140))) })} />}</Measure>
         <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr 1fr" : "repeat(4,minmax(0,1fr))", gap: 10, marginTop: 14 }}>
           {statCell(`${trendN}일 매출`, fmt(man(tSum.sale)), "만원", `수익 ${fmt(man(tSum.profit))}만원`)}
           {statCell(`${trendN}일 수익률`, marginOf(tSum).toFixed(1), "%", `보고 기준 ${marginOf(cur).toFixed(1)}%`, profitRateColor(marginOf(tSum), { dark: T.dark, neutral: T.text }))}
@@ -594,7 +594,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
           {statCell("하루 평균", fmt(man(curDaily)), "만원", month.target && remainBiz ? (curDaily >= needDaily ? `필요 ${fmt(man(needDaily))}만 · 달성 속도` : `필요 ${fmt(man(needDaily))}만 · ${fmt(man(needDaily - curDaily))}만 부족`) : `남은 영업일 ${remainBiz}일`)}
         </div>
         <SubHead T={T} title="누계 vs 전월 동기" right={<KeyLegend T={T} items={[[T.gold, `${Number(month.ym.slice(5))}월 누계`, "line"], [T.gold, "월말 예상", "dash"], [th.base, `${Number(month.pym.slice(5))}월`, "line"]]} />} style={{ marginTop: 18 }} />
-        <Measure style={{ marginTop: 6 }}>{(w) => <Svg html={cumChart(w, compact ? 220 : wide ? 340 : 260, { cur: month.cumCur.map(man), prev: month.cumPrev.map(man), target: man(month.target), forecast: man(month.forecast), total: month.totalBiz, curLabel: `${fmt(man(month.mtd))}만`, prevLabel: `${Number(month.pym.slice(5))}월` }, { compact, th })} />}</Measure>
+        <Measure style={{ marginTop: 6 }}>{(w) => <Svg html={cumChart(w, compact ? 220 : paper ? 250 : wide ? 340 : 260, { cur: month.cumCur.map(man), prev: month.cumPrev.map(man), target: man(month.target), forecast: man(month.forecast), total: month.totalBiz, curLabel: `${fmt(man(month.mtd))}만`, prevLabel: `${Number(month.pym.slice(5))}월` }, { compact, th })} />}</Measure>
       </Panel>
     );
 
@@ -604,12 +604,12 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
     const srLabel = staffMode === "month" ? `${md(mSpan.cur[0])}~${md(basis.end)}` : basis.multi ? basis.label : mdDow(basis.start);
     const srTop = sr.list.slice(0, 10);
     const srMax = srTop[0]?.sale || 1;
-    const SR_COLS = "26px minmax(64px,1fr) 128px 64px 64px 44px 78px";
+    const SR_COLS = "22px minmax(56px,1fr) 118px 58px 58px 40px 72px";
     const staffCard = sec.staff !== false && (
       <Panel T={T} en="SALES BY MANAGER" title="담당자 순위" sub={`${srLabel} · 증감은 ${srCmp} 대비 · 단위 만원`} right={!paper && <ExecTabs size="sm" items={[["basis", basis.multi ? `${basis.days.length}일 합산` : "전일"], ["month", "이번 달"]]} value={staffMode} onChange={setStaffMode} />}>
         <div style={{ marginTop: 6 }}>
           {!srTop.length && <Empty2 T={T} text="이 기간에 담당자별 매출이 없습니다." />}
-          {!compact && srTop.length > 0 && <div style={{ display: "grid", gridTemplateColumns: SR_COLS, gap: 12, padding: "0 0 8px", fontSize: 11.5, fontWeight: 800, letterSpacing: "0.04em", color: T.faint, borderBottom: `1px solid ${T.line}` }}><span>순위</span><span>담당자</span><span style={{ textAlign: "right" }}>매출 · 비중</span><span style={{ textAlign: "right" }}>수익</span><span style={{ textAlign: "right" }}>수익률</span><span style={{ textAlign: "right" }}>건수</span><span style={{ textAlign: "right" }}>증감</span></div>}
+          {!compact && srTop.length > 0 && <div style={{ display: "grid", gridTemplateColumns: SR_COLS, gap: 10, padding: "0 0 8px", fontSize: 11.5, fontWeight: 800, letterSpacing: "0.04em", color: T.faint, borderBottom: `1px solid ${T.line}` }}><span>순위</span><span>담당자</span><span style={{ textAlign: "right" }}>매출 · 비중</span><span style={{ textAlign: "right" }}>수익</span><span style={{ textAlign: "right" }}>수익률</span><span style={{ textAlign: "right" }}>건수</span><span style={{ textAlign: "right" }}>증감</span></div>}
           {srTop.map((s, i) => {
             const barC = i < 3 ? GOLD_GRAD : T.iceBar;
             return compact ? (
@@ -623,7 +623,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
               </div>
             ) : (
               <div key={s.n} style={{ padding: "11px 0 10px", borderTop: i ? `1px solid ${T.row}` : "none" }}>
-                <div style={{ display: "grid", gridTemplateColumns: SR_COLS, gap: 12, alignItems: "baseline" }}>
+                <div style={{ display: "grid", gridTemplateColumns: SR_COLS, gap: 10, alignItems: "baseline" }}>
                   <span style={{ ...EX_NUM, fontSize: 13.5, fontWeight: 900, color: i < 3 ? T.gold : T.faint }}>{i + 1}</span>
                   <b style={{ fontSize: 14.5, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={s.n}>{s.n}</b>
                   <span style={{ textAlign: "right", whiteSpace: "nowrap" }}>{amt(s.sale)}<span style={{ ...EX_NUM, fontSize: 12, fontWeight: 600, color: T.mute }}> · {pctStr(s.sale, sr.total, 0)}</span></span>
@@ -632,7 +632,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
                   <span style={{ ...EX_NUM, fontSize: 14, fontWeight: 700, textAlign: "right", color: T.sub }}>{fmt(s.cnt)}</span>
                   <span style={{ textAlign: "right" }}><DlN T={T} v={s.d} size={13} /></span>
                 </div>
-                <div style={{ margin: "7px 0 0 38px", width: "calc(100% - 38px)" }}><Track T={T} pct={(s.sale / srMax) * 100} color={barC} h={4} /></div>
+                <div style={{ margin: "7px 0 0 32px", width: "calc(100% - 32px)" }}><Track T={T} pct={(s.sale / srMax) * 100} color={barC} h={4} /></div>
               </div>
             );
           })}
@@ -691,7 +691,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
     )); };
     const cashCard = showCash && (
       <Panel T={T} en="CASH POSITION" title="자금 현황" sub="단위 만원 · 수입·지출 장부 · 자금 관리 · 미수금 현황 기준">
-        <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr 1fr" : `repeat(${F ? 5 : 4},minmax(0,1fr))`, gap: 10, marginTop: 6 }}>
+        <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr 1fr" : wide ? `repeat(${F ? 5 : 4},minmax(0,1fr))` : "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, marginTop: 6 }}>
           {F && statCell("보유 자금", fmt(man(F.cash)), "만원", F.runway != null ? `월평균 지출 기준 ${F.runway.toFixed(1)}개월` : "통장·현금 합계", T.dark ? T.goldHi : T.text)}
           {statCell(`${basis.multi ? "기간" : "전일"} 입금`, fmt(man(fl.in)), "만원", basis.multi ? `${basis.days.length}일 합산` : mdDow(basis.start))}
           {statCell(`${basis.multi ? "기간" : "전일"} 출금`, fmt(man(fl.out)), "만원", basis.multi ? `${basis.days.length}일 합산` : mdDow(basis.start))}
@@ -815,7 +815,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
         {!paper && <div data-pdf-block className="ebx-noprint"><OrdersWeatherStrip orders={dispatchData} title="오늘 운행 지역 날씨 · 특보" large={!compact} dark /></div>}
         {block("wk", weeklyBlock)}
         {row("trend", "minmax(0,1.55fr) minmax(0,1fr)", trend, monthCard)}
-        {row("staff", "minmax(0,1.25fr) minmax(0,1fr)", staffCard, clientsCard)}
+        {row("staff", paper ? "minmax(0,1fr)" : "minmax(0,1.25fr) minmax(0,1fr)", staffCard, clientsCard)}
         {block("cash", cashCard)}
         {wide && opsCard && (hrCard || movesCard)
           ? row("ops", "minmax(0,1.4fr) minmax(0,1fr)", opsCard, <div style={{ display: "grid", gap: g, alignContent: "start", minWidth: 0, height: "100%" }}>{hrCard}{movesCard}</div>)
@@ -838,8 +838,8 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
   const dateNode = <span style={{ ...EX_NUM, color: EX.goldHi, fontWeight: 900 }}>{dotDate(today)}</span>;
   return (
     <div className="ebx" data-testid="exec-briefing" style={{ background: "transparent", minWidth: 0, fontFamily: EX_FONT }}>
-      <ExecPage en={basis.weekly ? "MONDAY MANAGEMENT REPORT" : "DAILY MANAGEMENT REPORT"} title={<>{BRIEF_LABEL} <span style={{ color: EX.faint, fontWeight: 400 }}>·</span> {dateNode}</>}
-        sub={<span style={{ display: "inline-flex", flexWrap: "wrap", gap: "4px 10px", alignItems: "center" }}><b style={{ color: EX.text, fontWeight: 800 }}>{company}</b><span style={{ color: EX.faint }}>|</span><span>보고 기준 {basisTxt}</span><span style={{ color: EX.faint }}>|</span><span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>{Ico.clock}{scheduleTxt}</span></span>}
+      <ExecPage en={basis.weekly ? "MONDAY MANAGEMENT REPORT" : "DAILY MANAGEMENT REPORT"} title={<span style={{ display: "inline-flex", flexWrap: "wrap", columnGap: 14, alignItems: "baseline" }}><span>{BRIEF_LABEL}</span><span style={{ whiteSpace: "nowrap" }}>{dateNode}</span></span>}
+        sub={<span style={{ display: "inline-flex", flexWrap: "wrap", gap: "4px 16px", alignItems: "center" }}><b style={{ color: EX.text, fontWeight: 800 }}>{company}</b><span>보고 기준 <span style={{ ...EX_NUM, color: EX.text, fontWeight: 700 }}>{basisTxt}</span></span><span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: EX.mute }}>{Ico.clock}{scheduleTxt}</span></span>}
         right={actions}>
         {biz.multi && <div className="ebx-noprint"><ExecTabs size="sm" value={bizSel} onChange={setBizSel} items={[["", "전체 사업자"], ...biz.names.map((n) => [n, n])]} /></div>}
         <div ref={rootRef} style={{ minWidth: 0 }}>{W > 0 && reportBody(TH_DARK, W)}</div>

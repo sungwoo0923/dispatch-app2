@@ -34,7 +34,7 @@ import { PersonalSchedule, PersonalModeSwitch, usePersonalMode, birthdaysOn, Bir
 import { kpConfirm } from "./kpDialog";
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
 // 👑 2026-11-17 임원 디자인 시스템(남색 + 골드) · 경영 브리핑 계산
-import { EX, EX_NUM, GOLD_GRAD, GoldRule, ExecPage, ExecPanel, ExecKpis, ExecGrid, ExecTabs, Num, Money, Delta, Eyebrow, Meter, Ring, RankBars, Chip, Empty, ExecClock, Legend, chartTheme, ExecTooltip, useBoxWidth, useExecMode, moneyParts, fmtWon, fmtMoney, fmtEokMan, fmtPct, pctChange } from "./execUi";
+import { EX, EX_NUM, EX_FONT, GOLD_GRAD, GoldRule, ExecPage, ExecPanel, ExecKpis, ExecGrid, ExecTabs, Num, Money, Delta, Eyebrow, Meter, Ring, RankBars, Chip, Empty, ExecClock, Legend, chartTheme, ExecTooltip, useBoxWidth, useExecMode, moneyParts, fmtWon, fmtMoney, fmtEokMan, fmtPct, pctChange } from "./execUi";
 import { monthPipeline, laborByMonth, teamComposition, teamContribution, attendanceToday, briefSentences, TEAM_NONE } from "./execBriefingCore";
 import { liveRows, monthsBack } from "./execAnalyticsCore";
 import { staffRanking, monthSpans } from "./dailyReportCore";
@@ -157,6 +157,9 @@ export function eventsOf(a) {
 // 바탕(남색 + 은은한 격자) — 결재함 · 직원 일정처럼 밝은 화면 안에 들어가는 임원용 띠에 쓴다
 const SHELL_BG = `radial-gradient(1200px 500px at 85% -10%, rgba(215,188,130,.10), transparent 60%), radial-gradient(900px 500px at -10% 10%, rgba(75,108,183,.18), transparent 55%), linear-gradient(180deg, ${EX.bg1}, ${EX.bg0})`;
 const GRID = "linear-gradient(rgba(143,176,240,.045) 1px, transparent 1px) 0 0/28px 28px, linear-gradient(90deg, rgba(143,176,240,.045) 1px, transparent 1px) 0 0/28px 28px";
+// 직원 일정(다른 부서 화면) 머리 — 예전 모양 그대로
+const SHELL_BG_OLD = "radial-gradient(1200px 500px at 85% -10%, rgba(110,149,232,.22), transparent 60%), radial-gradient(900px 400px at -10% 110%, rgba(215,188,130,.10), transparent 60%), linear-gradient(160deg,#060C1A 0%,#0B1530 45%,#0E1C3C 100%)";
+const GRID_OLD = "linear-gradient(rgba(143,176,240,.05) 1px, transparent 1px) 0 0/26px 26px, linear-gradient(90deg, rgba(143,176,240,.05) 1px, transparent 1px) 0 0/26px 26px";
 const demoOn = () => { try { return !!(import.meta.env.DEV && isDemoOn()); } catch { return false; } };
 const pColor = (v) => profitColor(v, { dark: true, neutral: EX.text });
 const rColor = (v) => profitRateColor(v, { dark: true, neutral: EX.sub });
@@ -167,10 +170,17 @@ const GoLink = ({ children, onClick }) => <button type="button" onClick={onClick
 // 축 금액(억 · 만)
 const axisMoney = (v) => { const a = Math.abs(v); if (a >= 1e8) return `${(v / 1e8).toFixed(a >= 1e9 ? 0 : 1).replace(/\.0$/, "")}억`; if (a >= 1e4) return `${Math.round(v / 1e4).toLocaleString("ko-KR")}만`; return `${v}`; };
 
+// 요소 폭(줄이지 않은 실제 값 — execUi useBoxWidth 는 200 아래를 200으로 본다)
+function useRawWidth() {
+  const ref = React.useRef(null); const [w, setW] = React.useState(0);
+  React.useEffect(() => { const el = ref.current; if (!el || typeof ResizeObserver === "undefined") return undefined; const ro = new ResizeObserver(([e]) => setW(e.contentRect.width)); ro.observe(el); return () => ro.disconnect(); }, []);
+  return [ref, w];
+}
 // 핵심 숫자 타일 — execUi Kpi 와 같은 모양에 "값 색(이익 빨강/파랑)"과 "오른쪽 게이지" 자리를 더했다
 function BTile({ en, label, money, value, unit, color, accent = false, delta, deltaLabel, deltaSuffix = "%", foot, side, onClick, title, testId, muted = false }) {
   const parts = money != null ? moneyParts(money) : [value, unit];
   const Tag = onClick ? "button" : "div";
+  const [rowRef, rowW] = useRawWidth(); // 오른쪽 게이지는 숫자와 겹치지 않을 만큼 넓을 때만
   return (
     <Tag type={onClick ? "button" : undefined} onClick={onClick} title={title} data-testid={testId}
       className={`relative text-left rounded-[20px] p-4 md:p-5 min-w-0 overflow-hidden transition ${onClick ? "hover:-translate-y-0.5 cursor-pointer" : ""}`}
@@ -178,9 +188,9 @@ function BTile({ en, label, money, value, unit, color, accent = false, delta, de
       {accent && <div className="absolute top-0 left-5 right-5 h-px" style={{ background: GOLD_GRAD }} />}
       {en && <Eyebrow color={accent ? EX.gold : EX.ice} size={10}>{en}</Eyebrow>}
       <div className="mt-1 text-[13px] md:text-[13.5px] font-bold truncate" style={{ color: EX.sub }}>{label}</div>
-      <div className="mt-2.5 flex items-center justify-between gap-2 min-w-0">
+      <div ref={rowRef} className="mt-2.5 flex items-center justify-between gap-2 min-w-0">
         <div className="min-w-0">{muted ? <span className="text-[16px] md:text-[17px] font-black" style={{ color: EX.mute }}>{value}</span> : <Num value={parts[0]} unit={parts[1]} size={accent ? 34 : 30} color={color || (accent ? EX.goldHi : EX.text)} />}</div>
-        {side && <div className="shrink-0 -my-2">{side}</div>}
+        {side && rowW >= 168 && <div className="shrink-0 -my-2">{side}</div>}
       </div>
       {delta !== undefined && <div className="mt-2.5"><Delta v={delta} label={deltaLabel} suffix={deltaSuffix} size={12.5} /></div>}
       {foot && <div className={`${delta !== undefined ? "mt-1" : "mt-2.5"} text-[12px] font-semibold truncate`} style={{ color: EX.mute }}>{foot}</div>}
@@ -191,7 +201,7 @@ function BTile({ en, label, money, value, unit, color, accent = false, delta, de
 // 작은 통계 칸(패널 안)
 function Stat({ label, children, sub, tone }) {
   return (
-    <div className="rounded-2xl px-3.5 py-3 min-w-0" style={{ background: "rgba(255,255,255,.035)", border: `1px solid ${tone === "warn" ? "rgba(245,196,107,.35)" : EX.line}` }}>
+    <div className="rounded-2xl px-3 md:px-3.5 py-3 min-w-0" style={{ background: "rgba(255,255,255,.035)", border: `1px solid ${tone === "warn" ? "rgba(245,196,107,.35)" : EX.line}` }}>
       <div className="text-[12px] font-bold whitespace-nowrap truncate" style={{ color: EX.mute }}>{label}</div>
       <div className="mt-1.5">{children}</div>
       {sub && <div className="mt-1 text-[11.5px] font-semibold truncate" style={{ color: EX.faint }}>{sub}</div>}
@@ -370,7 +380,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
 
   // ── 이번 달 사업 흐름 ──
   const pipe = React.useMemo(() => monthPipeline(rows, thisMonth, today), [rows, thisMonth, today]);
-  const todayRows = rows.filter((r) => dateOf(r) === today);
+  const todayRows = (data || []).filter((r) => dateOf(r) === today && !isCancelled(r) && r.source !== "transport_transmit");
   const doneToday = todayRows.filter((r) => String(r.배차상태 || "").trim() === "배차완료");
   const unassigned = todayRows.filter(isUnassignedOrder);
   const todaySale = (days[today] || [0])[0];
@@ -474,7 +484,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
 
       {/* ── 1. 핵심 숫자 ── */}
       <div>
-        <ExecKpis min={188}>
+        <ExecKpis min={150}>
           <BTile accent en="REVENUE · MTD" label="이번 달 매출" money={mSale} delta={md} deltaLabel="전월 동기" foot={`오더 ${mCnt.toLocaleString("ko-KR")}건`} onClick={() => onGo?.("매출관리")} />
           <BTile en="GROSS PROFIT" label="매출총이익" money={mProfit} color={pColor(mProfit)} delta={prevAvail && pMargin != null && mMargin != null ? mMargin - pMargin : undefined} deltaSuffix="%p" deltaLabel="전월 동기"
             foot={<>이익률 <b style={{ ...EX_NUM, color: rColor(mMargin) }}>{fmtPct(mMargin)}</b></>} />
@@ -486,7 +496,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
             : <BTile en="TREASURY" label="보유 자금" muted value={F.ready ? "자금관리 입력 전" : "불러오는 중…"} foot="경리가 통장 잔액을 입력하면 보입니다" onClick={() => onGo?.("자금현황")} />)}
           {ar ? <BTile en="RECEIVABLES" label="미수금" money={ar.total} foot={ar.over30 > 0 ? <span style={{ color: EX.warn }}>30일 초과 {fmtMoney(ar.over30)}</span> : `${ar.clients}곳 · 부가세 포함`} onClick={() => onGo?.("경영분석")} title="올해 배차완료 + 고정거래처 청구(부가세 포함) − 수금 기록" />
             : <BTile en="RECEIVABLES" label="미수금" muted value="집계 중…" foot="올해 청구 · 수금 기록을 불러오고 있습니다" />}
-          <BTile en="YEAR TO DATE" label={`${year}년 누적 매출`} money={ySale} foot={<>이익 <b style={{ ...EX_NUM, color: pColor(yProfit) }}>{fmtMoney(yProfit)}</b> · {fmtPct(yMargin)}</>} />
+          <BTile en="YEAR TO DATE" label="올해 누적 매출" money={ySale} foot={<>이익 <b style={{ ...EX_NUM, color: pColor(yProfit) }}>{fmtMoney(yProfit)}</b> · {fmtPct(yMargin)}</>} />
         </ExecKpis>
         {/* ⭐ 2026-11-07 규칙 점검 — 매출관리(배차완료만)와 숫자가 다른 이유를 화면에 적어 둔다 */}
         <Basis className="mt-2.5 px-1"><span data-kp="exec-basis">매출 기준: 취소 · 운송사 전송을 뺀 전체 오더(배차중 · 승인대기 포함) · 매출관리는 배차완료 오더만 집계해 숫자가 다를 수 있습니다</span>{isCeo && F.has ? " · 보유 자금은 경리 입력 통장 · 현금 잔액" : ""}</Basis>
@@ -525,9 +535,9 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
       <ExecGrid cols="minmax(0,1fr) minmax(0,1.1fr)" breakAt={1000}>
         <ExecPanel en="ORGANIZATION · PEOPLE" title="조직 · 인건비" sub={`재직 ${staff.length}명 · 팀 ${teams.filter((t) => t.team !== TEAM_NONE).length}개`} right={<GoLink onClick={() => onGo?.("직원정보")}>직원 정보</GoLink>}>
           <div className="grid grid-cols-3 gap-2">
-            <Stat label="오늘 출근" sub={attToday.total ? `재직 ${attToday.total}명 중` : "직원 정보 없음"}><Num value={attToday.in} unit="명" size={24} /></Stat>
+            <Stat label="오늘 출근" sub={attToday.total ? `재직 ${attToday.total}명` : "직원 정보 없음"}><Num value={attToday.in} unit="명" size={24} /></Stat>
             <Stat label="휴가 · 외근" sub={awayUniq.length ? awayUniq.slice(0, 2).map((e) => e.name).join(" · ") + (awayUniq.length > 2 ? ` 외 ${awayUniq.length - 2}명` : "") : "없음"}><Num value={awayUniq.length} unit="명" size={24} /></Stat>
-            <Stat label="출근 기록 없음" sub={hour < 10 ? "아직 출근 시간 전후" : "근태 확인 필요"} tone={hour >= 10 && attToday.none > 0 ? "warn" : undefined}><Num value={attToday.none} unit="명" size={24} color={hour >= 10 && attToday.none > 0 ? EX.warn : EX.text} /></Stat>
+            <Stat label="기록 없음" sub={hour < 10 ? "아직 출근 전" : "근태 확인 필요"} tone={hour >= 10 && attToday.none > 0 ? "warn" : undefined}><Num value={attToday.none} unit="명" size={24} color={hour >= 10 && attToday.none > 0 ? EX.warn : EX.text} /></Stat>
           </div>
           <div className="mt-4">
             <div className="mb-2 flex items-baseline justify-between gap-2"><span className="text-[13px] font-extrabold" style={{ color: EX.sub }}>팀별 인원 구성</span><span className="text-[12px] font-semibold" style={{ color: EX.mute }}>인사 정보(소속 팀) 기준</span></div>
@@ -583,7 +593,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
           </div>
         </ExecPanel>
 
-        <ExecPanel en="CONTRIBUTION · MTD" title="누가 매출과 이익을 만드는가" sub={`${Number(thisMonth.slice(5))}월 1일 ~ ${dayNo}일 · 전월 같은 기간 대비`}
+        <ExecPanel en="CONTRIBUTION · MTD" title="매출 · 이익 기여" sub={`누가 매출과 이익을 만드는지 · ${Number(thisMonth.slice(5))}월 1~${dayNo}일`}
           right={<ExecTabs size="sm" items={[["team", "팀별"], ["staff", "담당자별"]]} value={contribTab} onChange={setContribTab} />}>
           {!rank.list.length ? <Empty text="이번 달 담당자별 실적이 아직 없습니다" sub={yearLoaded ? "오더가 등록되면 담당자 · 팀별로 묶여 보입니다" : "오더를 불러오고 있습니다"} /> : contribTab === "team" ? (
             <div className="space-y-3">
@@ -609,7 +619,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
               })}
             </div>
           ) : (
-            <RankBars rows={rank.list.slice(0, 8).map((x) => ({ key: x.n, label: x.n, sub: teamByName[x.n] || "", value: x.sale, profit: x.profit, margin: x.margin, d: x.d }))}
+            <RankBars rows={rank.list.slice(0, 8).map((x, i) => ({ key: x.n, label: x.n, sub: teamByName[x.n] || "", value: x.sale, profit: x.profit, margin: x.margin, d: x.d, color: i === 0 ? EX.gold : EX.ice }))}
               valueFmt={fmtMoney}
               right={(r) => <span className="w-[54px] text-right text-[12px] font-black" style={{ ...EX_NUM, color: rColor(r.margin) }}>{fmtPct(r.margin)}</span>} />
           )}
@@ -619,7 +629,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
 
       {/* ── 4. 월별 추이 · 결재 대기 ── */}
       <ExecGrid cols="minmax(0,1.6fr) minmax(0,1fr)" breakAt={1100}>
-        <ExecPanel en={`PERFORMANCE · ${year}`} title={range === "year" ? "월별 매출 · 매출총이익 · 이익률" : "최근 30일 매출 · 매출총이익"}
+        <ExecPanel en={`PERFORMANCE · ${year}`} title={range === "year" ? "월별 매출 · 이익" : "최근 30일 매출 · 이익"} sub={range === "year" ? "막대 = 금액 · 골드 선 = 매출총이익률" : "하루 단위 · 상차일 기준"}
           right={<ExecTabs size="sm" items={[["year", "올해"], ["30", "30일"]]} value={range} onChange={setRange} />}>
           <div className="mb-2"><Legend items={range === "year" ? [["매출", EX.ice], ["매출총이익", EX.iceDeep], ["이익률", EX.gold, "line"]] : [["매출", EX.ice], ["매출총이익", EX.gold, "line"]]} /></div>
           <div className="h-[260px] md:h-[300px] -ml-1">
@@ -655,7 +665,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
               )}
             </ResponsiveContainer>
           </div>
-          <Basis className="mt-2">{range === "year" ? `골드 막대 = 이번 달(${dayNo}일까지) · 이익률 = 매출총이익 ÷ 매출` : "하루 단위 · 상차일 기준"}</Basis>
+          <Basis className="mt-2">{range === "year" ? `골드 막대 = 이번 달(${dayNo}일까지) · 이익률 = 매출총이익 ÷ 매출` : "매출총이익 = 청구운임 − 기사운임 − 회사가 따로 지급한 비용"}</Basis>
         </ExecPanel>
 
         <ExecPanel en="APPROVAL · YOUR TURN" title="나의 결재 대기" right={<GoLink onClick={() => onGo?.("결재함")}>결재함</GoLink>}>
@@ -716,6 +726,39 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
   );
 }
 
+// 밝은 화면(결재함 · 직원 일정) 위에 얹는 임원용 남색 띠 — 제목 · 요약 숫자
+function ExecBand({ en, title, sub, right, children }) {
+  return (
+    <section className="relative overflow-hidden rounded-[22px] px-4 md:px-6 py-4 md:py-5" style={{ background: SHELL_BG, color: EX.text, fontFamily: EX_FONT, border: `1px solid ${EX.line}`, boxShadow: "0 18px 40px rgba(5,10,22,.18)" }}>
+      <div className="absolute inset-0 pointer-events-none" style={{ background: GRID }} />
+      <div className="relative">
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-3"><Eyebrow size={10.5}>{en}</Eyebrow><div className="hidden sm:block w-[140px]"><GoldRule /></div></div>
+            {title && <div className="mt-1 text-[19px] md:text-[22px] font-black tracking-[-0.01em]">{title}</div>}
+            {sub && <div className="mt-0.5 text-[12.5px] md:text-[13px] font-medium" style={{ color: EX.mute }}>{sub}</div>}
+          </div>
+          {right && <div className="flex flex-wrap items-center gap-1.5">{right}</div>}
+        </div>
+        {children && <div className="mt-3.5">{children}</div>}
+      </div>
+    </section>
+  );
+}
+function BandStats({ items }) {
+  return (
+    <div className="grid gap-2 md:gap-2.5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(150px,100%), 1fr))" }}>
+      {items.map((x) => (
+        <div key={x.label} className="relative rounded-2xl px-3.5 py-3 min-w-0 overflow-hidden" style={{ background: x.accent ? "linear-gradient(160deg, rgba(215,188,130,.16), rgba(215,188,130,.03))" : "rgba(255,255,255,.04)", border: `1px solid ${x.accent ? EX.lineHi : x.warn ? "rgba(255,122,107,.35)" : EX.line}` }}>
+          {x.accent && <div className="absolute top-0 left-4 right-4 h-px" style={{ background: GOLD_GRAD }} />}
+          <div className="text-[12px] font-bold whitespace-nowrap truncate" style={{ color: EX.mute }}>{x.label}</div>
+          <div className="mt-1.5">{x.node}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─────────────────────────── 결재함(최종 결재자) ───────────────────────────
 export function ExecApprovals({ company, me }) {
   const [page, setPage] = React.useState("inbox");
@@ -739,20 +782,14 @@ export function ExecApprovals({ company, me }) {
         { key: "lines", label: "결재선 관리", en: "LINES", icon: "route" },
       ] }]}>
       <div className="space-y-3">
-        <div className="relative overflow-hidden rounded-[22px] px-4 md:px-6 py-4 text-white" style={{ background: SHELL_BG }}>
-          <div className="absolute inset-0 pointer-events-none" style={{ background: GRID }} />
-          <div className="relative">
-            <div className="text-[10.5px] font-extrabold tracking-[0.3em]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: GOLD }}>FINAL APPROVER · OVERVIEW</div>
-            <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2">
-              {[["나의 결재 대기", `${mine}건`], ["회사 진행 중", `${pending.length}건`], ["48시간 지연", `${late}건`], ["이번 달 승인 지출", `${short(expMonth)}원`]].map(([l, v], i) => (
-                <div key={l} className="rounded-2xl bg-white/[0.06] border border-white/10 px-3 py-2.5 min-w-0">
-                  <div className="text-[11.5px] font-bold text-white/55 whitespace-nowrap">{l}</div>
-                  <div className={`text-[20px] md:text-[22px] font-black tabular-nums whitespace-nowrap ${i === 2 && late ? "text-[#FFB4A8]" : ""}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <ExecBand en="FINAL APPROVER · OVERVIEW" title="결재 현황" sub="최종 결재자 기준 · 상신 후 48시간이 지나면 지연으로 봅니다">
+          <BandStats items={[
+            { label: "나의 결재 대기", node: <Num value={mine} unit="건" size={26} color={mine ? EX.goldHi : EX.text} />, accent: mine > 0 },
+            { label: "회사 진행 중", node: <Num value={pending.length} unit="건" size={26} /> },
+            { label: "48시간 지연", node: <Num value={late} unit="건" size={26} color={late ? EX.danger : EX.text} />, warn: late > 0 },
+            { label: "이번 달 승인 지출", node: <Money v={expMonth} size={26} /> },
+          ]} />
+        </ExecBand>
         {/* ⭐ 2026-11-01 인사팀 본인의 출근기록 수정·출근 요청은 임원이 여기서 승인(먼저 승인한 1명으로 종결) */}
         {page === "inbox" && <AttendanceApprovalInbox company={company} me={me} role={me?.role} />}
         {page === "handover"
@@ -768,6 +805,12 @@ const KIND_STYLE = (label, status) => {
   const pend = status !== "approved";
   const base = /연차|휴가|반차|반반차/.test(label) ? ["#1B2B4B", "#fff"] : /출장|외근/.test(label) ? ["#DCE6F8", "#1B2B4B"] : /병가|경조/.test(label) ? ["#F3E7CC", "#6B5320"] : ["#EEF2F8", "#3A4A66"];
   return pend ? { background: "transparent", color: "#5B6B85", border: "1px dashed #9AA9C3" } : { background: base[0], color: base[1], border: `1px solid ${base[0]}` };
+};
+// 임원 화면용(남색 바탕) — 연차 = 골드 · 출장/외근 = 아이스 · 병가/경조 = 분홍 · 결재 중 = 점선
+const KIND_STYLE_X = (label, status) => {
+  if (status !== "approved") return { background: "transparent", color: "rgba(232,238,250,.7)", border: "1px dashed rgba(232,238,250,.35)" };
+  const c = /연차|휴가|반차|반반차/.test(label) ? ["rgba(215,188,130,.18)", "#F1DDAE", "rgba(215,188,130,.45)"] : /출장|외근/.test(label) ? ["rgba(143,176,240,.16)", "#CFE0FF", "rgba(143,176,240,.4)"] : /병가|경조/.test(label) ? ["rgba(229,155,176,.16)", "#F5C6D3", "rgba(229,155,176,.4)"] : ["rgba(255,255,255,.08)", "rgba(232,238,250,.85)", "rgba(255,255,255,.18)"];
+  return { background: c[0], color: c[1], border: `1px solid ${c[2]}` };
 };
 // ⭐ 2026-11-03 [개인일정] 스위치 — 켜면 나만 보는 개인 일정 달력(계정별로 기억 · 다른 메뉴 다녀와도 그대로)
 export function TeamSchedule({ company }) {
@@ -798,10 +841,29 @@ function TeamScheduleCompany({ company, modeSwitch }) {
   const leaveDays = monthEv.filter((e) => e.status === "approved" && /연차|휴가/.test(e.label)).length + monthEv.filter((e) => e.status === "approved" && /반차/.test(e.label)).length * 0.5;
   const pickList = (by[pick] || []).sort((a, b) => a.name.localeCompare(b.name));
   const pickBirth = birthdaysOn(staff, pick); // ⭐ 2026-11-03 생일
+  // 👑 2026-11-17 임원 화면(결재함 · 직원 일정 메뉴)에서는 남색 + 골드 달력, 다른 부서 화면은 지금 모양 그대로
+  const X = useExecMode();
+  const stats = [["오늘 부재", new Set((by[today] || []).map((e) => e.uid)).size, "명"], ["이번 주 부재", new Set(evs.filter((e) => week.includes(e.date)).map((e) => e.uid)).size, "명"], ["이달 연차 사용", leaveDays, "일"], ["결재 진행 중", new Set(monthEv.filter((e) => e.status !== "approved").map((e) => e.id)).size, "건"]];
+  const monthNav = (
+    <span className="inline-flex items-center gap-1.5">
+      <button type="button" onClick={() => move(-1)} aria-label="이전 달" className="w-9 h-9 rounded-xl font-black" style={X ? { background: "rgba(255,255,255,.06)", border: `1px solid ${EX.line}`, color: EX.text } : { background: "rgba(255,255,255,.1)" }}>‹</button>
+      <span className="h-9 px-3.5 rounded-xl font-black grid place-items-center tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...(X ? { background: GOLD_GRAD, color: "#1A1408" } : { background: "#fff", color: "#0B1530" }) }}>{ym.replace("-", ".")}</span>
+      <button type="button" onClick={() => move(1)} aria-label="다음 달" className="w-9 h-9 rounded-xl font-black" style={X ? { background: "rgba(255,255,255,.06)", border: `1px solid ${EX.line}`, color: EX.text } : { background: "rgba(255,255,255,.1)" }}>›</button>
+    </span>
+  );
+  const KS = (label, status) => (X ? KIND_STYLE_X(label, status) : KIND_STYLE(label, status));
+  const T = X
+    ? { card: "border", cardSt: { background: "linear-gradient(180deg, #0C1730, #081124)", borderColor: EX.line, boxShadow: "0 18px 40px rgba(5,10,22,.18)" }, line: "border-white/[0.08]", cell: "border-white/[0.06]", empty: "bg-black/20", pick: "bg-[#D7BC82]/[0.10] ring-1 ring-inset ring-[#D7BC82]/60", hover: "hover:bg-white/[0.04]", sun: "text-[#FF8A7A]", sat: "text-[#7FB0FF]", dow: "text-white/55", ink: "text-white", mute: "text-white/45", today: "text-[#1A1408]", divide: "divide-white/[0.07]", avatar: "bg-white/[0.08] text-[#F1DDAE]" }
+    : { card: "bg-white border border-[#E3E8F0]", cardSt: undefined, line: "border-[#EEF1F6]", cell: "border-[#F1F4F9]", empty: "bg-[#FAFBFD]", pick: "bg-[#F2F6FD] ring-2 ring-inset ring-[#2D4C82]", hover: "hover:bg-[#F8FAFD]", sun: "text-[#D92D20]", sat: "text-[#2D4C82]", dow: "text-[#5B6B85]", ink: "text-[#0F1A30]", mute: "text-[#7A879C]", today: "bg-[#0F1A30] text-white", divide: "divide-[#EEF2F8]", avatar: "bg-[#1B2B4B] text-white" };
   return (
     <div className="space-y-3">
-      <div className="relative overflow-hidden rounded-[22px] px-4 md:px-6 py-4 text-white" style={{ background: SHELL_BG }}>
-        <div className="absolute inset-0 pointer-events-none" style={{ background: GRID }} />
+      {X ? (
+        <ExecBand en="TEAM · SCHEDULE" title="직원 일정" sub="전자결재 연차 · 반차 · 외근 · 출장 · 병가 · 경조사 — 결재 완료는 확정, 진행 중은 점선" right={<>{modeSwitch}{monthNav}</>}>
+          <BandStats items={stats.map(([l, v, u]) => ({ label: l, node: <Num value={v} unit={u} size={24} /> }))} />
+        </ExecBand>
+      ) : (
+      <div className="relative overflow-hidden rounded-[22px] px-4 md:px-6 py-4 text-white" style={{ background: SHELL_BG_OLD }}>
+        <div className="absolute inset-0 pointer-events-none" style={{ background: GRID_OLD }} />
         <div className="relative flex items-start justify-between gap-3 flex-wrap">
           <div>
             <div className="text-[10.5px] font-extrabold tracking-[0.3em]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: GOLD }}>TEAM · SCHEDULE</div>
@@ -810,11 +872,7 @@ function TeamScheduleCompany({ company, modeSwitch }) {
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
             {modeSwitch}
-            <span className="inline-flex items-center gap-1.5">
-            <button type="button" onClick={() => move(-1)} className="w-9 h-9 rounded-xl bg-white/10 font-black">‹</button>
-            <span className="h-9 px-3.5 rounded-xl bg-white text-[#0B1530] font-black grid place-items-center tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{ym.replace("-", ".")}</span>
-            <button type="button" onClick={() => move(1)} className="w-9 h-9 rounded-xl bg-white/10 font-black">›</button>
-            </span>
+            {monthNav}
           </div>
         </div>
         <div className="relative mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -823,13 +881,15 @@ function TeamScheduleCompany({ company, modeSwitch }) {
           ))}
         </div>
       </div>
+      )}
       <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {teams.map((t) => <button key={t} type="button" onClick={() => setTeam(t)} className={`h-9 px-3.5 rounded-full text-[13px] font-black border whitespace-nowrap shrink-0 ${team === t ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}>{t}</button>)}
+        {teams.map((t) => <button key={t} type="button" onClick={() => setTeam(t)} className={`h-9 px-3.5 rounded-full text-[13px] font-black border whitespace-nowrap shrink-0 ${X ? "" : team === t ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#5B6B85] border-[#DCE3EE]"}`}
+          style={X ? (team === t ? { background: GOLD_GRAD, color: "#1A1408", borderColor: "transparent" } : { background: "rgba(255,255,255,.04)", color: EX.sub, borderColor: EX.line }) : undefined}>{t}</button>)}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-3">
-        <div className="rounded-[20px] bg-white border border-[#E3E8F0] overflow-hidden">
-          <div className="grid grid-cols-7 border-b border-[#EEF1F6]">
-            {DOW.map((d, i) => <div key={d} className={`py-2 text-center text-[12px] font-black ${i === 0 ? "text-[#D92D20]" : i === 6 ? "text-[#2D4C82]" : "text-[#5B6B85]"}`}>{d}</div>)}
+        <div className={`rounded-[20px] overflow-hidden ${T.card}`} style={T.cardSt}>
+          <div className={`grid grid-cols-7 border-b ${T.line}`}>
+            {DOW.map((d, i) => <div key={d} className={`py-2 text-center text-[12px] font-black ${i === 0 ? T.sun : i === 6 ? T.sat : T.dow}`}>{d}</div>)}
           </div>
           <div className="grid grid-cols-7">
             {cells.map((d, i) => {
@@ -837,19 +897,19 @@ function TeamScheduleCompany({ company, modeSwitch }) {
               const bd = d ? birthdaysOn(staff, d) : [];
               return (
                 <button key={i} type="button" disabled={!d} onClick={() => d && setPick(d)}
-                  className={`text-left min-h-[64px] md:min-h-[104px] p-1 md:p-1.5 border-b border-r border-[#F1F4F9] align-top ${!d ? "bg-[#FAFBFD]" : pick === d ? "bg-[#F2F6FD] ring-2 ring-inset ring-[#2D4C82]" : "hover:bg-[#F8FAFD]"}`}>
+                  className={`text-left min-h-[64px] md:min-h-[104px] p-1 md:p-1.5 border-b border-r align-top ${T.cell} ${!d ? T.empty : pick === d ? T.pick : T.hover}`}>
                   {d && (
                     <>
                       <div className="flex items-center gap-1 min-w-0">
-                        <div className={`text-[12px] md:text-[13px] font-black tabular-nums shrink-0 ${d === today ? "w-6 h-6 rounded-full bg-[#0F1A30] text-white grid place-items-center" : (i % 7 === 0 || getNationalHolidayLabel(d)) ? "text-[#D92D20]" : i % 7 === 6 ? "text-[#2D4C82]" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{Number(d.slice(8))}</div>
-                        {getNationalHolidayLabel(d) && <span className="hidden md:inline text-[10.5px] font-bold text-[#D92D20] truncate">{getNationalHolidayLabel(d)}</span>}
+                        <div className={`text-[12px] md:text-[13px] font-black tabular-nums shrink-0 ${d === today ? `w-6 h-6 rounded-full grid place-items-center ${T.today}` : (i % 7 === 0 || getNationalHolidayLabel(d)) ? T.sun : i % 7 === 6 ? T.sat : T.ink}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...(d === today && X ? { background: GOLD_GRAD } : {}) }}>{Number(d.slice(8))}</div>
+                        {getNationalHolidayLabel(d) && <span className={`hidden md:inline text-[10.5px] font-bold truncate ${T.sun}`}>{getNationalHolidayLabel(d)}</span>}
                       </div>
                       <div className="hidden md:block mt-1 space-y-0.5">
-                        {bd.map((u) => <BirthChip key={u.id} name={personName(u) || u.name} />)}
-                        {list.slice(0, 3).map((e) => <div key={`${e.id}${e.date}`} className="rounded-md px-1.5 py-[1px] text-[11px] font-bold truncate" style={KIND_STYLE(e.label, e.status)}>{e.name} {e.label}</div>)}
-                        {list.length > 3 && <div className="text-[10.5px] font-bold text-[#7A879C] px-1">+{list.length - 3}명</div>}
+                        {bd.map((u) => <BirthChip key={u.id} name={personName(u) || u.name} dark={X} />)}
+                        {list.slice(0, 3).map((e) => <div key={`${e.id}${e.date}`} className="rounded-md px-1.5 py-[1px] text-[11px] font-bold truncate" style={KS(e.label, e.status)}>{e.name} {e.label}</div>)}
+                        {list.length > 3 && <div className={`text-[10.5px] font-bold px-1 ${T.mute}`}>+{list.length - 3}명</div>}
                       </div>
-                      {(list.length > 0 || bd.length > 0) && <div className="md:hidden mt-1 flex items-center gap-0.5 flex-wrap">{bd.length > 0 && <span className="text-[9px] leading-none">🎂</span>}{list.slice(0, 4).map((e) => <span key={`${e.id}${e.date}`} className="w-1.5 h-1.5 rounded-full" style={{ background: e.status === "approved" ? "#1B2B4B" : "#9AA9C3" }} />)}{list.length > 4 && <span className="text-[9px] font-black text-[#5B6B85]">+{list.length - 4}</span>}</div>}
+                      {(list.length > 0 || bd.length > 0) && <div className="md:hidden mt-1 flex items-center gap-0.5 flex-wrap">{bd.length > 0 && <span className="text-[9px] leading-none">🎂</span>}{list.slice(0, 4).map((e) => <span key={`${e.id}${e.date}`} className="w-1.5 h-1.5 rounded-full" style={{ background: e.status === "approved" ? (X ? EX.gold : "#1B2B4B") : (X ? EX.faint : "#9AA9C3") }} />)}{list.length > 4 && <span className={`text-[9px] font-black ${T.dow}`}>+{list.length - 4}</span>}</div>}
                     </>
                   )}
                 </button>
@@ -857,26 +917,26 @@ function TeamScheduleCompany({ company, modeSwitch }) {
             })}
           </div>
         </div>
-        <div className="rounded-[20px] bg-white border border-[#E3E8F0] overflow-hidden self-start">
-          <div className="px-4 pt-3.5 pb-2.5 border-b border-[#EEF1F6]">
-            <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>DAY DETAIL</div>
-            <div className="text-[15px] font-black text-[#0F1A30]">{pick.replace(/-/g, ".")} ({DOW[new Date(`${pick}T00:00:00Z`).getUTCDay()]}) · {pickList.length}명</div>
+        <div className={`rounded-[20px] overflow-hidden self-start ${T.card}`} style={T.cardSt}>
+          <div className={`px-4 pt-3.5 pb-2.5 border-b ${T.line}`}>
+            <div className={`text-[9.5px] font-extrabold tracking-[0.24em] ${X ? "text-[#8FB0F0]" : "text-[#4B6CB7]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>DAY DETAIL</div>
+            <div className={`text-[15px] font-black ${T.ink}`}>{pick.replace(/-/g, ".")} ({DOW[new Date(`${pick}T00:00:00Z`).getUTCDay()]}) · {pickList.length}명</div>
           </div>
-          {pickBirth.length > 0 && <div className="px-4 pt-3 flex flex-wrap gap-1.5">{pickBirth.map((u) => <BirthChip key={u.id} name={personName(u) || u.name} big />)}</div>}
-          {!pickList.length ? <div className="py-10 text-center text-[13px] font-bold text-[#9AA9C3]">이 날은 부재 일정이 없습니다</div> : (
-            <div className="divide-y divide-[#EEF2F8]">
+          {pickBirth.length > 0 && <div className="px-4 pt-3 flex flex-wrap gap-1.5">{pickBirth.map((u) => <BirthChip key={u.id} name={personName(u) || u.name} big dark={X} />)}</div>}
+          {!pickList.length ? <div className={`py-10 text-center text-[13px] font-bold ${T.mute}`}>이 날은 부재 일정이 없습니다</div> : (
+            <div className={`divide-y ${T.divide}`}>
               {pickList.map((e) => (
                 <div key={`${e.id}${e.date}`} className="px-4 py-2.5 flex items-center gap-3">
-                  <span className="w-9 h-9 rounded-xl bg-[#1B2B4B] text-white grid place-items-center text-[13px] font-black shrink-0">{String(e.name || "?").slice(0, 1)}</span>
-                  <div className="min-w-0 flex-1"><div className="text-[14px] font-black text-[#0F1A30] truncate">{e.name}</div><div className="text-[11.5px] text-[#7A879C] truncate">{[e.team, e.position].filter(Boolean).join(" · ")}</div></div>
-                  <span className="text-[11.5px] font-black px-2 py-0.5 rounded-lg whitespace-nowrap" style={KIND_STYLE(e.label, e.status)}>{e.label}{e.status !== "approved" ? " · 결재 중" : ""}</span>
+                  <span className={`w-9 h-9 rounded-xl grid place-items-center text-[13px] font-black shrink-0 ${T.avatar}`}>{String(e.name || "?").slice(0, 1)}</span>
+                  <div className="min-w-0 flex-1"><div className={`text-[14px] font-black truncate ${T.ink}`}>{e.name}</div><div className={`text-[11.5px] truncate ${T.mute}`}>{[e.team, e.position].filter(Boolean).join(" · ")}</div></div>
+                  <span className="text-[11.5px] font-black px-2 py-0.5 rounded-lg whitespace-nowrap" style={KS(e.label, e.status)}>{e.label}{e.status !== "approved" ? " · 결재 중" : ""}</span>
                 </div>
               ))}
             </div>
           )}
-          <div className="px-4 py-3 border-t border-[#EEF1F6] flex items-center gap-2 flex-wrap text-[11px] font-bold text-[#5B6B85]">
-            {[["연차·반차", "연차"], ["출장·외근", "출장"], ["병가·경조사", "병가"]].map(([l, k]) => <span key={l} className="inline-flex items-center gap-1 whitespace-nowrap"><span className="w-3 h-3 rounded" style={KIND_STYLE(k, "approved")} />{l}</span>)}
-            <span className="inline-flex items-center gap-1 whitespace-nowrap"><span className="w-3 h-3 rounded" style={KIND_STYLE("연차", "pending")} />결재 중</span>
+          <div className={`px-4 py-3 border-t flex items-center gap-2 flex-wrap text-[11px] font-bold ${T.line} ${T.dow}`}>
+            {[["연차·반차", "연차"], ["출장·외근", "출장"], ["병가·경조사", "병가"]].map(([l, k]) => <span key={l} className="inline-flex items-center gap-1 whitespace-nowrap"><span className="w-3 h-3 rounded" style={KS(k, "approved")} />{l}</span>)}
+            <span className="inline-flex items-center gap-1 whitespace-nowrap"><span className="w-3 h-3 rounded" style={KS("연차", "pending")} />결재 중</span>
           </div>
         </div>
       </div>
@@ -1000,20 +1060,20 @@ function ExecScheduleCompany({ company, me = {}, canWrite = false, modeSwitch })
   return (
     <div className="relative rounded-[26px] overflow-hidden text-white" style={{ background: SHELL_BG }}>
       <div className="absolute inset-0 pointer-events-none" style={{ background: GRID }} />
-      <div className="relative p-3 md:p-6 space-y-4">
+      <div className="relative px-4 py-5 md:px-8 md:py-7 space-y-4 md:space-y-5" style={{ fontFamily: EX_FONT }}>
         <div className="flex items-end justify-between gap-3 flex-wrap">
           <div>
-            <div className="text-[11px] font-extrabold tracking-[0.32em]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: GOLD }}>EXECUTIVE · SCHEDULE</div>
-            <div className="text-[24px] md:text-[30px] font-black mt-1">임원 스케줄</div>
-            <div className="text-[13.5px] text-white/55 mt-0.5">{canWrite ? "등록한 일정은 모든 직원이 볼 수 있습니다" : "대표·임원의 회의·외근·출장 일정입니다"}</div>
+            <div className="flex items-center gap-3"><Eyebrow>EXECUTIVE · SCHEDULE</Eyebrow><div className="hidden md:block w-[180px]"><GoldRule /></div></div>
+            <h1 className="mt-1.5 text-[24px] md:text-[30px] font-black tracking-[-0.02em] leading-tight" style={{ color: EX.text }}>임원 스케줄</h1>
+            <div className="mt-1 text-[13px] md:text-[14px] font-medium" style={{ color: EX.sub }}>{canWrite ? "등록한 일정은 모든 직원이 볼 수 있습니다 · 날짜를 두 번 누르면 바로 등록" : "대표 · 임원의 회의 · 외근 · 출장 일정입니다"}</div>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
             {modeSwitch}
             <span className="inline-flex items-center gap-1.5">
             <button type="button" onClick={() => move(-1)} className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 font-black">‹</button>
-            <span className="h-10 px-4 rounded-xl bg-white text-[#0B1530] font-black grid place-items-center tabular-nums text-[15px]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{ym.replace("-", ".")}</span>
+            <span className="h-10 px-4 rounded-xl font-black grid place-items-center tabular-nums text-[15px]" style={{ ...EX_NUM, background: "rgba(255,255,255,.06)", border: `1px solid ${EX.lineHi}`, color: EX.goldHi }}>{ym.replace("-", ".")}</span>
             <button type="button" onClick={() => move(1)} className="w-10 h-10 rounded-xl bg-white/10 border border-white/10 font-black">›</button>
-            {canWrite && <button type="button" onClick={() => setEdit(blank())} className="h-10 px-4 rounded-xl text-[#1A1405] text-[14px] font-black ml-1 whitespace-nowrap" style={{ background: "linear-gradient(180deg,#F3E3BC,#D7BC82)" }}>+ 일정 등록</button>}
+            {canWrite && <button type="button" onClick={() => setEdit(blank())} className="h-10 px-4 rounded-xl text-[#1A1408] text-[14px] font-black ml-1 whitespace-nowrap" style={{ background: GOLD_GRAD, boxShadow: "0 8px 22px rgba(215,188,130,.25)" }}>+ 일정 등록</button>}
             </span>
           </div>
         </div>
