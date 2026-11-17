@@ -240,7 +240,8 @@ export function PrepaidToggle({ on, onChange, excluded = 0, label = "선불·착
 // ⭐ 2026-11-09 월말 일괄 발송 — [일괄 발송]을 누르면 "작성 완료" 거래처를 골라 한 번에 보낸다(발송 목록 창에서 메일 확인 후 발송)
 //  ⭐ 입금 확인으로 자동 마감된 곳은 "입금 확인" 표시
 export const stmtReady = (g) => stageIdx(g?.stage) === 1 && (g?.count || 0) > 0;
-export function StatementClientRail({ month, setMonth, groups = [], sel, onSel, onBoard, onBulkSend, disabled = false }) {
+// ⭐ 2026-11-17 drawer — 거래처정산 명세서 화면에서 왼쪽 칸 대신 옆에서 열리는 서랍으로 쓸 때(늘 세로 목록 · 서랍 높이에 맞춤)
+export function StatementClientRail({ month, setMonth, groups = [], sel, onSel, onBoard, onBulkSend, disabled = false, drawer = false }) {
   const [q, setQ] = React.useState("");
   const [only, setOnly] = React.useState(""); // 📥 2026-11-16 "" 전체 · "ready" 배차마감(경리 확인 대기)만 · "final" 최종마감만
   const [pick, setPick] = React.useState(false);
@@ -267,7 +268,7 @@ export function StatementClientRail({ month, setMonth, groups = [], sel, onSel, 
   const boxRef = React.useRef(null);
   React.useEffect(() => { try { boxRef.current?.querySelector("[data-on='1']")?.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (e) { /* 무시 */ } }, [sel, month, shown.length]);
   return (
-    <div ref={boxRef} className={`${sdCard} p-3 min-w-0 xl:sticky xl:top-3`} data-testid="stmt-client-rail">
+    <div ref={boxRef} className={drawer ? "p-3 min-w-0 h-full flex flex-col bg-white" : `${sdCard} p-3 min-w-0 xl:sticky xl:top-3`} data-testid="stmt-client-rail">
       <div className="flex items-center gap-1.5">
         <button type="button" onClick={() => shift(-1)} className="w-9 h-9 shrink-0 rounded-lg border border-[#D5DDEA] text-[#1B2B4B] flex items-center justify-center hover:bg-[#F4F6FA]" aria-label="이전 달" data-testid="stmt-rail-prev"><Ico d={IC.back} size={15} /></button>
         <div className="flex-1 min-w-0 text-center whitespace-nowrap text-[#0F1A30]" style={NUM}><span className="text-[12px] font-bold text-[#5B6B85] mr-1">{y}</span><span className="text-[16px] font-black">{m}월</span></div>
@@ -305,7 +306,7 @@ export function StatementClientRail({ month, setMonth, groups = [], sel, onSel, 
           </button>))}
       </div>
       {groups.length > 6 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="거래처 찾기" className={`${sdInp} mt-2 h-9`} />}
-      <div className="mt-2 flex xl:flex-col gap-1.5 overflow-x-auto xl:overflow-x-visible xl:max-h-[calc(100vh-280px)] xl:overflow-y-auto no-scrollbar" style={{ scrollbarWidth: "thin" }}>
+      <div className={drawer ? "mt-2 flex flex-col gap-1.5 flex-1 min-h-0 overflow-y-auto" : "mt-2 flex xl:flex-col gap-1.5 overflow-x-auto xl:overflow-x-visible xl:max-h-[calc(100vh-280px)] xl:overflow-y-auto no-scrollbar"} style={{ scrollbarWidth: "thin" }}>
         {shown.length === 0 && <div className="px-2 py-6 text-center text-[13px] font-bold text-[#9AA9C3] w-full">{only === "ready" ? "넘어온 배차마감이 없어요" : only === "final" ? "최종마감된 곳이 없어요" : groups.length ? "찾는 거래처가 없어요" : "이 달에 청구할 오더가 없어요"}</div>}
         {shown.map((g) => {
           const on = !pick && g.client === sel;

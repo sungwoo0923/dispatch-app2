@@ -52190,6 +52190,11 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const [invFormOpen, setInvFormOpen] = useState(false);
   // ⭐ 2026-11-17 명세서 [크게 보기] — 미리보기를 화면 가득 띄운다(폭 맞춤 ↔ 실제 크기) · Esc 로 닫기
   const [docBig, setDocBig] = useState(false);
+  // ⭐ 2026-11-17 거래처 목록 — 기본은 서랍(버튼으로 열기), [고정]하면 왼쪽 칸(이 브라우저에 기억)
+  const [railPin, setRailPin] = useState(() => { try { return localStorage.getItem("kpStmtRailPin") === "1"; } catch { return false; } });
+  const [railOpen, setRailOpen] = useState(false);
+  useEffect(() => { if (!railOpen) return undefined; const k = (e) => { if (e.key === "Escape") setRailOpen(false); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [railOpen]);
+  const setRailPinSave = (v) => { setRailPin(v); try { localStorage.setItem("kpStmtRailPin", v ? "1" : "0"); } catch { /* 무시 */ } };
   const [docBigFit, setDocBigFit] = useState(true);
   useEffect(() => {
     if (!docBig) return undefined;
@@ -54045,16 +54050,35 @@ const handleBatchSettle = async (targetStatus) => {
           )}
 
           {invView === "edit" && (
-            <div className="grid grid-cols-1 xl:grid-cols-[272px_minmax(0,1fr)] min-[1800px]:grid-cols-[320px_minmax(0,1fr)] gap-3 items-start">
+            <div className={railPin ? "grid grid-cols-1 xl:grid-cols-[272px_minmax(0,1fr)] min-[1800px]:grid-cols-[320px_minmax(0,1fr)] gap-3 items-start" : "grid grid-cols-1 gap-3 items-start"}>
               {/* ⭐ 2026-11-09 항상 2분할 — 왼쪽 거래처 목록(이 달) · 오른쪽 명세서 편집 + 미리보기 */}
-              {/* ⭐ 2026-11-17 왼쪽 거래처 목록을 넓혔다(200 → 272px · 아주 넓은 화면 256 → 320px) — 거래처 이름이 잘리지 않게 */}
-              <StatementClientRail month={pipeMonth} setMonth={changeStmtMonth} groups={pipeNav} sel={stmtYm === pipeMonth ? client : ""}
+              {/* ⭐ 2026-11-17 (3차) 거래처 목록이 자리를 많이 차지해 명세서가 작게 보였다 → 기본은 [거래처 목록] 버튼으로 여는 서랍(왼쪽에서 밀려 나옴)
+                   · 서랍 위 [고정]을 누르면 예전처럼 왼쪽 칸에 붙여 둔다(이 브라우저에 기억) */}
+              {railPin ? <StatementClientRail month={pipeMonth} setMonth={changeStmtMonth} groups={pipeNav} sel={stmtYm === pipeMonth ? client : ""}
                 onSel={(g) => openStmt(g.client, g.yyyymm)} disabled={isViewer}
+                onBulkSend={(gs) => onStmtBulk("발송", gs)} /> : railOpen && createPortal(
+                <div className="fixed inset-0 z-[9990] flex" data-kp="stmt-rail-drawer">
+                  <div className="absolute inset-0 bg-[#0B1324]/35 backdrop-blur-[1px]" onClick={() => setRailOpen(false)} />
+                  <aside className="relative h-full w-[360px] max-w-[92vw] bg-white shadow-[12px_0_40px_rgba(11,19,36,.25)] flex flex-col kp-drawer-in">
+                    <div className="flex items-center gap-2 px-4 h-14 border-b border-[#E3E8F0] shrink-0">
+                      <div className="mr-auto"><div className="text-[10.5px] font-bold tracking-[0.18em] text-[#4B6CB7]">CLIENTS</div><div className="text-[16px] font-black text-[#0F1A30] leading-tight">거래처 목록</div></div>
+                      <button type="button" onClick={() => { setRailPinSave(true); setRailOpen(false); }} className="h-8 px-2.5 rounded-lg border border-[#D5DDEA] text-[12.5px] font-bold text-[#5B6B85] hover:bg-[#F4F6FA]" title="왼쪽 칸에 붙여 두기">고정</button>
+                      <button type="button" onClick={() => setRailOpen(false)} className="w-8 h-8 rounded-lg grid place-items-center text-[#5B6B85] hover:bg-[#F4F6FA]" aria-label="닫기"><Ico d={IC.x} size={16} w={2.4} /></button>
+                    </div>
+                    <div className="flex-1 min-h-0">
+                      <StatementClientRail drawer month={pipeMonth} setMonth={changeStmtMonth} groups={pipeNav} sel={stmtYm === pipeMonth ? client : ""}
+                onSel={(g) => { openStmt(g.client, g.yyyymm); setRailOpen(false); }} disabled={isViewer}
                 onBulkSend={(gs) => onStmtBulk("발송", gs)} />
+                    </div>
+                  </aside>
+                </div>, document.body)}
             <div className="space-y-3 min-w-0">
               {/* 편집 머리 — 돌아가기 · 거래처 · 기간 · 이전/다음 · 작성 저장 · 발송 */}
               <div className={`${csCard} px-4 py-3 flex items-center gap-3 flex-wrap`}>
                 <button type="button" onClick={() => { setInvView("board"); if (stmtYm) setPipeMonth(stmtYm); }} className={sdBtn}><Ico d={IC.back} size={15} w={2.4} />단계 보드</button>
+                {railPin ? <button type="button" onClick={() => setRailPinSave(false)} className={sdBtn} title="왼쪽 거래처 목록을 서랍으로 접어 명세서를 넓게 봐요">목록 접기</button>
+                  : <button type="button" onClick={() => setRailOpen(true)} className={sdBtnPri} data-kp="stmt-rail-open" title="이 달 거래처 목록을 열어 다른 거래처로 바꿔요">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" /></svg>거래처 목록<span className="ml-0.5 px-1.5 rounded-md bg-white/15 text-[12px] tabular-nums">{pipeNav.length}</span></button>}
                 <div className="min-w-0 mr-auto">
                   <div className="text-[13px] font-bold text-[#5B6B85] tabular-nums">{stmtYm ? `${stmtYm.slice(0, 4)}년 ${Number(stmtYm.slice(5))}월 청구` : searched ? `${start || "처음"} ~ ${end || "끝"}` : "조회 전"}{searchType === "기사명" ? " · 기사명 조회" : ""}</div>
                   <div className="flex items-center gap-2 min-w-0">
@@ -54120,7 +54144,7 @@ const handleBatchSettle = async (targetStatus) => {
                 <div className="rounded-2xl border border-dashed border-[#C9D3E3] bg-white px-4 py-3 text-[14px] text-[#5B6B85]">거래처 한 곳 · 한 달(1일~말일)로 열면 발송 · 확인 · 계산서 · 마감 단계를 기록할 수 있어요</div>
               ) : null}
 
-              <div className="grid grid-cols-1 min-[2200px]:grid-cols-[minmax(0,52fr)_minmax(0,48fr)] gap-3 items-start">{/* ⭐ 2026-11-09 왼쪽 거래처 목록이 늘 있으니 편집·미리보기 나란히는 넓은 화면만, 그보다 좁으면 위(편집)·아래(미리보기) · ⭐ 2026-11-17 명세서 줄 표가 칸을 나눠 넓어져 1800px~ · 편집 56 : 미리보기 44
+              <div className={railPin ? "grid grid-cols-1 min-[2200px]:grid-cols-[minmax(0,52fr)_minmax(0,48fr)] gap-3 items-start" : "grid grid-cols-1 min-[1900px]:grid-cols-[minmax(0,55fr)_minmax(0,45fr)] gap-3 items-start"}>{/* ⭐ 2026-11-17 (3차) 목록을 서랍으로 접으면 1900px~ 나란히(편집 55 : 미리보기 45), 그보다 좁으면 위 · 아래(미리보기 전체 폭) */}{/* ⭐ 2026-11-09 왼쪽 거래처 목록이 늘 있으니 편집·미리보기 나란히는 넓은 화면만, 그보다 좁으면 위(편집)·아래(미리보기) · ⭐ 2026-11-17 명세서 줄 표가 칸을 나눠 넓어져 1800px~ · 편집 56 : 미리보기 44
                 ⭐ 2026-11-17 (2차) 1800px 에선 미리보기 칸이 500px 남짓이라 A4 명세서가 반쯤 잘려 보였다 → 나란히는 2200px~(편집 52 : 미리보기 48), 그보다 좁으면 위 · 아래로 쌓아 미리보기가 전체 폭을 쓴다 */}
                 <div className="space-y-3 min-w-0">
                   {searched && (
@@ -54269,7 +54293,7 @@ const handleBatchSettle = async (targetStatus) => {
               </div>
                 </div>
             {/* ── 오른쪽: 명세서 미리보기(인쇄·PDF·엑셀·메일 첨부와 같은 모양) ── */}
-            <div className="min-w-0 min-[2200px]:sticky min-[2200px]:top-3">{/* ⭐ 2026-11-17 따라오기(sticky) · 높이 제한은 나란히 볼 때만 — 쌓여 있을 땐 명세서 전체가 다 보이게 */}
+            <div className={railPin ? "min-w-0 min-[2200px]:sticky min-[2200px]:top-3" : "min-w-0 min-[1900px]:sticky min-[1900px]:top-3"}>{/* ⭐ 2026-11-17 따라오기(sticky) · 높이 제한은 나란히 볼 때만 — 쌓여 있을 땐 명세서 전체가 다 보이게 */}
               {docBig && (
                 <div className={`${csCard} px-4 py-6 text-center`}>
                   <div className="text-[14px] font-black text-[#0F1A30]">명세서를 크게 보고 있어요</div>
@@ -54277,7 +54301,7 @@ const handleBatchSettle = async (targetStatus) => {
                 </div>
               )}
               {(() => { const card = (
-              <div className={docBig ? `${csCard} overflow-hidden flex flex-col w-full max-w-[1400px] mx-auto h-full` : `${csCard} overflow-hidden flex flex-col min-[2200px]:max-h-[calc(100vh-24px)]`} onClick={docBig ? (e) => e.stopPropagation() : undefined}>
+              <div className={docBig ? `${csCard} overflow-hidden flex flex-col w-full max-w-[1400px] mx-auto h-full` : (railPin ? `${csCard} overflow-hidden flex flex-col min-[2200px]:max-h-[calc(100vh-24px)]` : `${csCard} overflow-hidden flex flex-col min-[1900px]:max-h-[calc(100vh-24px)]`)} onClick={docBig ? (e) => e.stopPropagation() : undefined}>
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-[#E3E8F0] bg-white flex-wrap">
                   <div className="min-w-0 mr-auto">
                     <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3] leading-none" style={{ fontFamily: KP_MONO, fontVariantNumeric: "tabular-nums" }}>STATEMENT · PREVIEW</div>

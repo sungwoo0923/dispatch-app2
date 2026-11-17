@@ -492,3 +492,7 @@ table[data-kpfit] > tbody > tr > td:not(:has(input, select, textarea, button, [r
 table[data-kpfit] > tbody > tr { height: auto !important; }
 table[data-kpfit][data-kpfit-big] > * > tr > th, table[data-kpfit][data-kpfit-big] > * > tr > td { padding: 2px 4px !important; }
 table[data-kpfit][data-kpfit-big] > tbody > tr > td:not(:has(input, select, textarea, button, [role="button"], [contenteditable])) { max-width: 130px; }
+
+/* ⭐ 2026-11-17 거래처정산 › 거래처 목록 서랍 — 왼쪽에서 밀려 나옴 */
+@keyframes kpDrawerIn { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.kp-drawer-in { animation: kpDrawerIn .18s ease-out; }
