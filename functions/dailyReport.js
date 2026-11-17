@@ -98,8 +98,8 @@ module.exports = function makeDailyReport({ db, FieldValue, sendPushAndCleanup, 
     const lbl = b.multi ? `${md(b.start)}~${md(b.end)} ${b.days.length}일` : `${md(b.start)}(${DOW[dowOf(b.start)]})`;
     const d7 = p7[0] ? ((cur[0] - p7[0]) / Math.abs(p7[0])) * 100 : null;
     const margin = cur[0] ? (cur[1] / cur[0]) * 100 : 0;
-    const title = `오늘의 일일 경영 보고 · ${lbl}`;
-    const body = `매출 ${fmt(man(cur[0]))}만원${d7 == null ? "" : ` (${d7 >= 0 ? "▲" : "▼"}${Math.abs(d7).toFixed(1)}% 전주비)`} · 수익률 ${margin.toFixed(1)}% · 월 누계 ${fmt(man(mtd))}만원${target > 0 ? ` (목표 ${((mtd / target) * 100).toFixed(1)}%)` : ""}`;
+    const title = `일일 경영 보고 · ${lbl} 실적`;
+    const body = `매출 ${fmt(man(cur[0]))}만원${d7 == null ? "" : ` (${d7 >= 0 ? "▲" : "▼"}${Math.abs(d7).toFixed(1)}% 전주 동요일 대비)`} · 매출총이익률 ${margin.toFixed(1)}% · 월 누계 매출 ${fmt(man(mtd))}만원${target > 0 ? ` (목표 달성률 ${((mtd / target) * 100).toFixed(1)}%)` : ""}`;
     return { title, body, lbl };
   }
 

@@ -6,7 +6,9 @@ import React from "react";
 import { approvalNavItems } from "../menuTree"; // ⭐ 2026-11-10 메뉴 통일
 import { doc, setDoc, getDocs, updateDoc, deleteDoc, query, where, collection, serverTimestamp, onSnapshot } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "../firebase";
+import { ExecModeContext } from "../execUi"; // 👑 2026-11-17 임원 화면 디자인 시스템
 import KpSubNav from "../KpSubNav";
+import { kpAlert, kpConfirm } from "../kpDialog"; // 📱 2026-11-17 휴대폰 기본 알림창 대신 앱 디자인 창
 import FreightRateInquiry from "../FreightRateInquiry";
 import RateCard from "../RateCard";
 import FleetManagement from "../FleetManagement";
@@ -37,6 +39,7 @@ import { useMyProfile, personName } from "../userNames";
 import MobileFleetView from "./MobileFleetView";
 import FareRulesSettings from "../FareRulesSettings"; // ⭐ 2026-11-02 운임규칙
 import RouteSpecialPresets from "../RouteSpecialPresets"; // ⭐ 2026-11-17 노선별 고정 특수운임
+import { AcctMenuGate } from "../PayrollGate"; // ⭐ 2026-11-18 회계관리 · 자금관리 메뉴 잠금
 import BoardPage, { BOARDS, canSeeBoard } from "../BoardPosts"; // ⭐ 2026-11-03 모바일 게시판
 import { DetailScope } from "../DetailFilter"; // 🔎 2026-11-03 세부검색
 import { useMobileDetailGetters } from "../detailGetters"; // ⭐ 2026-11-05 PC·모바일 일치 — 세부검색 배차담당자(직원 이름)·청구사업자(빈칸=기본 사업자)
@@ -175,7 +178,7 @@ function ApprovalView({ company, me, initialPage = "inbox" }) {
           ? <React.Suspense fallback={null}><ContractStudioM company={company} me={me} /></React.Suspense>
           : page === "handover"
           ? <HandoverCenter company={company} me={me} isViewer={me?.role === "viewer"} />
-          : <ApprovalCenter company={company} me={me} page={page} setPage={setPage} openId={openId} onOpened={() => setOpenId(null)} />}
+          : <ApprovalCenter company={company} me={me} page={page} setPage={setPage} openId={openId} onOpened={() => setOpenId(null)} inSubNav />}
       </div>
     </KpSubNav>
   );
@@ -227,11 +230,11 @@ function NoticeView({ company, me }) {
       <div className="rounded-2xl bg-white border border-[#E3E8F0] p-3">
         <NoticeBoard notices={notices} me={me} canWrite={canWrite} isViewer={isViewer} openId={openId} setOpenId={setOpenId}
           onEdit={(n) => {
-            if (n.category === "인사발령" && n.hrOrder) { window.alert("인사발령 공문은 인사관리부 › 인사발령에서 [정정 발령] 또는 [발령 취소]로 고쳐 주세요."); return; }
+            if (n.category === "인사발령" && n.hrOrder) { kpAlert("인사발령 공문은 인사관리부 › 인사발령에서 [정정 발령] 또는 [발령 취소]로 처리해 주세요."); return; }
             setOpenId(null);
             setWriter({ initial: n });
           }}
-          confirm={(message, onConfirm) => { if (window.confirm(message)) onConfirm(); }} />
+          confirm={(message, onConfirm) => { kpConfirm(message, /삭제/.test(String(message)) ? { title: "삭제 확인", okText: "삭제", danger: true } : { title: "확인" }).then((ok) => { if (ok) onConfirm(); }); }} />
       </div>
     </div>
   );
@@ -244,7 +247,7 @@ function MobileBoard({ company, me }) {
   return (
     <div className="px-3 py-3 kp-m-pc">
       {list.length > 1 && (
-        <div className="flex gap-1.5 mb-3 overflow-x-auto">
+        <div className="flex gap-1.5 mb-3 overflow-x-auto no-scrollbar">
           {list.map((k) => (
             <button key={k} type="button" onClick={() => setB(k)} className={`h-9 px-3.5 rounded-xl text-[13px] font-black whitespace-nowrap border ${b === k ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>{BOARDS[k].label}</button>
           ))}
@@ -295,7 +298,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
     else if (k === "approvals") body = <div className="kp-m-pc kp-m-approval"><ExecApprovals company={userCompany} me={me} /></div>;
     else if (k === "schedule") body = wrap(<TeamSchedule company={userCompany} />);
     else if (k === "settle") body = lazy(<DetailScope data={salesData} getters={detGet} title="세부검색 · 정산관리">{(detRows) => <><PcSettleMobile dispatchData={detRows} companyName={userCompany} role={role} isViewer={isViewer} clients={clients} /></>}</DetailScope>);
-    else if (k === "acct") body = lazy(<PcAccounting company={userCompany} fixedRows={fixedRows} clients={clients} drivers={drivers || []} isViewer={isViewer} role={role} />);
+    else if (k === "acct") body = <div className="px-3 py-3"><AcctMenuGate company={userCompany} menuLabel="회계관리">{lazy(<PcAccounting company={userCompany} fixedRows={fixedRows} clients={clients} drivers={drivers || []} isViewer={isViewer} role={role} />)}</AcctMenuGate></div>; // ⭐ 2026-11-18 메뉴 입구 비밀번호
     else if (k === "payroll") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><PayrollCenter company={userCompany} role={role} /></div></React.Suspense>;
     else if (k === "payslip") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><MyPayslips company={userCompany} uid={me?.uid} /></div></React.Suspense>;
     else if (k === "leaveplan") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><MyLeavePlan company={userCompany} uid={me?.uid} /></div></React.Suspense>;
@@ -304,7 +307,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
     else if (k === "hr") body = <div className="kp-m-pc"><HrHub company={userCompany} me={{ uid: me?.uid, name: me?.name || me?.displayName || "" }} role={role} canManage={role === "hrManager" || role === "totalMaster" || role === "hrAcct" || (/인사/.test(String(me?.team || "")) && role !== "viewer")}
       renderRecord={(focusUid) => <React.Suspense fallback={<Loading />}><PcHrPage userCompany={userCompany} role={role} userId={me?.uid || ""} focusUid={focusUid} /></React.Suspense>}
       renderAttendance={() => <AttendanceBoard userCompany={userCompany} role={role} user={me} />} /></div>;
-    else if (k === "cashbook") body = <div className="kp-m-pc"><FundsWorkspace company={userCompany} isViewer={isViewer} /></div>;
+    else if (k === "cashbook") body = <div className="kp-m-pc"><AcctMenuGate company={userCompany} menuLabel="자금관리"><FundsWorkspace company={userCompany} isViewer={isViewer} /></AcctMenuGate></div>;
     else if (k === "myresume") body = <div className="kp-m-pc"><React.Suspense fallback={<Loading />}><PcHrPage userCompany={userCompany} role={role} userId={me?.uid || ""} selfOnly /></React.Suspense></div>;
     else if (k === "farerules") body = wrap(<FareRulesSettings company={userCompany} mobile canEdit={role !== "viewer"} myName={me?.name || ""} />); // ⭐ 2026-11-02 운임규칙
     else if (k === "routefare") body = wrap(<RouteSpecialPresets mobile canEdit={role !== "viewer"} canAdmin={["admin", "allMgr", "test", "totalMaster"].includes(role) || me?.isMaster === true} />); // ⭐ 2026-11-17 노선별 고정 특수운임
@@ -323,5 +326,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
       <div className="kp-m-pc px-2 pt-2"><DetailScope data={salesData} getters={detGet} title="세부검색 · 매출관리">{(detRows) => <BizScope company={userCompany} data={detRows}>{(bizRows, bizSel) => <PcSettlement key={`ms-${bizSel || "all"}`} dispatchData={bizRows} fixedRows={fixedRows} clients={clients} places={places} role={role} isViewer={role === "viewer"} userCompany={userCompany} />}</BizScope>}</DetailScope></div>
     </React.Suspense>
   );
-  return <OrderHistoryContext.Provider value={history}>{body}</OrderHistoryContext.Provider>;
+  // 👑 2026-11-17 임원 화면 — 임원 메뉴는 PC와 같은 남색 · 골드 디자인(src/execUi.jsx)
+  const execSkin = deptMode === "exec" && String(kind).startsWith("dept:") && ["sales", "briefing", "analysis", "apqueue", "staffinfo", "approvals", "schedule", "funds", "execsched"].includes(String(kind).slice(5));
+  return <OrderHistoryContext.Provider value={history}><ExecModeContext.Provider value={execSkin}>{execSkin ? <div className="kp-m-exec" style={{ background: "#050A16", minHeight: "100%" }}>{body}</div> : body}</ExecModeContext.Provider></OrderHistoryContext.Provider>;
 }

@@ -1,11 +1,14 @@
 // ======================= src/RouteSpecialPresets.jsx =======================
-// ⭐ 2026-11-17 회사관리 › 노선 특수운임 — 노선(거래처 · 상차지 · 하차지)마다 늘 붙는 특수운임을 한 번 정해 두면 오더에 자동으로 들어가요
+// ⭐ 2026-11-17 노선별 고정 특수운임 — 노선(거래처 · 상차지 · 하차지)마다 늘 붙는 특수운임을 한 번 정해 두면 오더에 자동으로 들어가요
+// ⭐ 2026-11-18 회사관리 탭에서 빼고 배차관리 [특수운임 적용] 팝업 › "고정노선운임" 탭 안으로 옮김(사용자 요청 — 맥락상 오더 입력 쪽이 맞음)
+//  · [노선 불러오기] = 지난 오더에서 찾은 노선을 이 목록 자리에 바로 띄워 고르고 등록 · [+ 노선 추가] · "구글시트 적용" 체크
 //  예) 에이제이 → 트레이더스 칠곡 = 지게차비용 35,000원 · 에이제이 → 에브리데이 여주 = 지게차비용 50,000원 · 야상 +20,000원(야간 상차일 때만)
 //  · 표: 거래처 · 상차지 · 하차지 · 항목 · 금액 · 부담 · 조건 · 사용 — [+ 노선 추가] · 수정 · 삭제 · 검색
 //  · [기존 자료로 자동 설정]: 지난 3~6개월 오더를 보고 노선마다 늘 붙던 특수운임을 찾아 보여 줌 → 골라서 저장
 //  · "구글시트에서 들어오는 오더에도 적용"(관리자): 시트 줄에 그 금액 칸이 비어 있을 때만 서버가 넣는다(companySettings/{회사}.routePresetSheet)
 //  계산 · 저장 규칙: functions/routePresetCore.mjs · src/routePreset.js
 import React from "react";
+import { createPortal } from "react-dom";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { getTenant } from "./fsTenant";
@@ -24,13 +27,13 @@ const MODE_LABEL = { 기사: "기사운임에서 차감", 회사: "회사 부담
 const PAYEE_LABEL = { 기사: "배차 기사에게", 외부: "회사가 따로 지급", 없음: "지급 없음(청구만)" };
 const typeName = (it) => (it.종류 === "지게차" ? "지게차비용" : it.이름 ? `${it.이름}${it.종류 !== "기타" ? ` (${TYPE_LABEL[it.종류] || it.종류})` : ""}` : TYPE_LABEL[it.종류] || it.종류);
 const modeText = (it) => `${MODE_LABEL[it.부담] || it.부담}${it.종류 !== "지게차" && it.받는사람 !== "기사" ? ` · ${PAYEE_LABEL[it.받는사람]}` : ""}`;
-const condText = (it) => (it.조건 === "야간" ? "야간 상차일 때만" : "늘");
+const condText = (it) => (it.조건 === "야간" ? "야간 상차일 때만" : "항상");
 
 export default function RouteSpecialPresets({ canEdit = true, canAdmin = false, mobile = false }) {
   const list = useRoutePresets();
   const [q, setQ] = React.useState("");
   const [edit, setEdit] = React.useState(null); // { id?, 거래처명, 상차지명, 하차지명, items }
-  const [seed, setSeed] = React.useState(false);
+  const [seed, setSeed] = React.useState(false); // true = 목록 자리에 [노선 불러오기] 결과를 띄움
   const [showOld, setShowOld] = React.useState(false);
   const co = getTenant() || "";
   const [sheetOn, setSheetOn] = React.useState(false);
@@ -50,56 +53,40 @@ export default function RouteSpecialPresets({ canEdit = true, canAdmin = false, 
   const del = async (p, it) => {
     if (!canEdit) return;
     const last = p.items.length <= 1;
-    if (!(await kpConfirm(last ? `${routeLabel(p)} 노선 고정을 지울까요?\n이미 저장된 오더는 그대로예요.` : `${routeLabel(p)}에서 '${typeName(it)}'만 뺄까요?`))) return;
+    if (!(await kpConfirm(last ? `${routeLabel(p)} 노선을 삭제할까요?\n이미 저장된 오더는 그대로예요.` : `${routeLabel(p)}에서 '${typeName(it)}'만 뺄까요?`))) return;
     try {
       if (last) await deleteRoutePreset(p.id);
       else await saveRoutePreset({ ...p, items: p.items.filter((x) => slotOf(x) !== slotOf(it)) }, { oldId: p.id });
-    } catch (e) { kpAlert(`지우지 못했어요: ${e?.message || e}`); }
+    } catch (e) { kpAlert(`삭제하지 못했어요: ${e?.message || e}`); }
   };
   const toggleUse = async (p) => { try { await saveRoutePreset({ ...p, 사용: p.사용 === false }, { oldId: p.id }); } catch (e) { kpAlert(`바꾸지 못했어요: ${e?.message || e}`); } };
-  const th = "px-3 py-2.5 text-center font-extrabold whitespace-nowrap";
+  const th = "px-3 py-2.5 text-center text-[13px] font-extrabold text-[#3A4A66] whitespace-nowrap border-b border-[#DCE3EE]";
   const td = "px-3 py-2 whitespace-nowrap";
+  const btnLine = "h-9 px-3.5 rounded-lg border border-[#DCE3EE] bg-white text-[13px] font-extrabold text-[#1B2B4B] hover:border-[#2D4C82] disabled:opacity-40";
+  const btnDark = "h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13px] font-extrabold hover:bg-[#1B2B4B] disabled:opacity-40";
   return (
-    <div className="flex flex-col gap-4 w-full" data-route-presets="1">
-      <div className="rounded-[20px] bg-[#0F1A30] text-white p-5 md:p-6 shadow-[0_10px_28px_rgba(11,20,40,0.25)] relative overflow-hidden">
-        <div className="absolute -right-10 -top-10 w-48 h-48 rounded-full bg-[#2D4C82]/40 blur-2xl pointer-events-none" />
-        <div className="relative flex items-start gap-4 flex-wrap">
-          <div className="flex-1 min-w-[220px]">
-            <div className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>ROUTE SPECIAL FARE</div>
-            <div className="text-[20px] md:text-[22px] font-extrabold mt-1">노선별 고정 특수운임</div>
-            <div className="text-[14px] text-[#B9C7E3] mt-1.5 leading-relaxed break-keep">
-              늘 같은 금액이 붙는 노선을 한 번만 정해 두세요. 그 노선으로 오더를 넣으면 <b className="text-white">지게차비용 · 야상 같은 특수운임이 자동으로</b> 들어가고, 청구운임 · 기사운임 · 수수료도 같이 맞춰져요.
-            </div>
-          </div>
-          {canEdit && (
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => setSeed(true)} data-route-seed="1" className="h-[42px] px-4 rounded-xl bg-white text-[#0F1A30] text-[14px] font-extrabold hover:bg-[#EAF0FB]">기존 자료로 자동 설정</button>
-              <button type="button" onClick={() => setEdit({ 거래처명: "", 상차지명: "", 하차지명: "", items: [cleanItem({ 종류: "지게차", 금액: 0, 부담: "청구" })] })} data-route-add="1" className="h-[42px] px-4 rounded-xl bg-[#2D4C82] text-white text-[14px] font-extrabold hover:bg-[#3A5E9C]">+ 노선 추가</button>
-            </div>
-          )}
-        </div>
-        <div className="relative mt-3 text-[13px] text-[#B9C7E3] leading-relaxed break-keep">
-          찾는 순서: ① 거래처 · 상차지 · 하차지가 모두 같은 노선 → ② 거래처 · 하차지 → ③ 거래처 · 상차지. 오더에서 직접 넣은 특수운임은 건드리지 않아요.
-        </div>
-        <label className={`relative mt-3 flex items-start gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-2.5 ${canAdmin ? "cursor-pointer" : "opacity-60"}`}>
-          <input type="checkbox" className="mt-1" checked={sheetOn} disabled={!canAdmin} onChange={(e) => toggleSheet(e.target.checked)} data-route-sheet="1" />
-          <span className="text-[13.5px] leading-relaxed break-keep"><b>구글시트에서 들어오는 오더에도 적용</b> — 시트 줄에 그 금액 칸(대행료 · 야상 등)이 비어 있을 때만 넣어요. 칸이 채워져 있으면 시트 값을 그대로 써요(두 번 더하지 않아요).{!canAdmin && " · 관리자만 바꿀 수 있어요"}</span>
+    <div className="flex flex-col gap-3 w-full min-w-0" data-route-presets="1">
+      {/* 도구 줄 — 노선 불러오기 · 노선 추가 · 구글시트 적용 · 검색 */}
+      <div className="flex flex-wrap items-center gap-2">
+        {canEdit && <button type="button" onClick={() => setSeed(true)} disabled={seed} data-route-seed="1" className={btnLine}>노선 불러오기</button>}
+        {canEdit && <button type="button" onClick={() => setEdit({ 거래처명: "", 상차지명: "", 하차지명: "", items: [cleanItem({ 종류: "지게차", 금액: 0, 부담: "청구" })] })} data-route-add="1" className={btnDark}>+ 노선 추가</button>}
+        <label className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[13px] font-extrabold text-[#1B2B4B] ${canAdmin ? "cursor-pointer" : "opacity-60"}`}
+          title={`구글시트에서 들어오는 오더에도 적용해요. 시트 줄의 그 금액 칸(대행료 · 야상 등)이 비어 있을 때만 넣고, 채워져 있으면 시트 값을 그대로 써요.${canAdmin ? "" : " · 관리자만 바꿀 수 있어요"}`}>
+          <input type="checkbox" checked={sheetOn} disabled={!canAdmin} onChange={(e) => toggleSheet(e.target.checked)} data-route-sheet="1" />구글시트 적용
         </label>
+        <span className="text-[12.5px] font-bold text-[#7A89A3] tabular-nums">등록 노선 {v2.length}개</span>
+        {!seed && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="거래처 · 상하차지 · 항목 검색" className={`h-9 ${mobile ? "w-full" : "w-60 ml-auto"} px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold outline-none focus:border-[#2D4C82]`} data-route-search="1" />}
+      </div>
+      <div className="text-[12.5px] text-[#6B7A99] leading-relaxed break-keep">
+        등록한 노선으로 오더를 넣으면 지게차비용 · 야상 같은 특수운임이 자동으로 들어가고 청구운임 · 기사운임 · 수수료도 같이 맞춰져요. 찾는 순서는 ① 거래처 · 상차지 · 하차지 → ② 거래처 · 하차지 → ③ 거래처 · 상차지예요.{sheetOn ? " 구글시트로 들어오는 오더에도 적용 중이에요." : ""}
       </div>
 
-      <div className="rounded-[20px] bg-white border border-[#E3E8F0] p-4 md:p-5">
-        <div className="flex flex-wrap items-center gap-2 mb-3">
-          <div className="mr-auto">
-            <div className="text-[10.5px] font-extrabold tracking-[0.24em] text-[#2D4C82]" style={{ fontFamily: MONO }}>ROUTES</div>
-            <div className="text-[16px] font-extrabold text-[#0F1A30] leading-tight">고정 노선 <span className="text-[13px] font-bold text-[#6B7A99] tabular-nums">{v2.length}개</span></div>
-          </div>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="거래처 · 상하차지 · 항목 검색" className={`h-9 ${mobile ? "w-full" : "w-60"} px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold`} data-route-search="1" />
-        </div>
-        <div className="overflow-x-auto rounded-xl border border-[#EEF1F6]">
-          <table className="w-full text-[13.5px]" style={{ minWidth: 920 }}>
-            <thead><tr className="bg-[#1B2B4B] text-white">{["거래처", "상차지", "하차지", "항목", "금액", "부담", "조건", "사용", ""].map((h) => <th key={h} className={th}>{h}</th>)}</tr></thead>
+      {seed ? <SeedPanel existing={v2} mobile={mobile} onClose={() => setSeed(false)} /> : (
+        <div className="overflow-x-auto rounded-xl border border-[#E3E8F0] bg-white">
+          <table className="w-full text-[13.5px]" style={{ minWidth: 900 }}>
+            <thead><tr className="bg-[#F7F9FC]">{["거래처", "상차지", "하차지", "항목", "금액", "부담", "조건", "사용", ""].map((h) => <th key={h} className={th}>{h}</th>)}</tr></thead>
             <tbody>
-              {rows.length === 0 && <tr><td colSpan={9} className="py-12 text-center text-[#9AA9C3] break-keep">{v2.length ? "검색 결과가 없어요" : "아직 고정 노선이 없어요 — [기존 자료로 자동 설정]을 누르면 지난 오더에서 찾아 드려요"}</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={9} className="py-12 text-center text-[#9AA9C3] break-keep">{v2.length ? "검색 결과가 없어요" : "아직 등록한 노선이 없어요. [노선 불러오기]를 누르면 지난 오더에서 찾아 이 목록에 띄워 드려요."}</td></tr>}
               {rows.map(({ p, it, first, span }) => (
                 <tr key={`${p.id}-${slotOf(it)}`} className={`border-t border-[#EEF1F6] ${p.사용 === false ? "opacity-50" : ""}`} data-route-row={p.id}>
                   {first && <td rowSpan={span} className={`${td} font-black text-[#0F1A30] align-top`}>{p.거래처명}</td>}
@@ -108,41 +95,41 @@ export default function RouteSpecialPresets({ canEdit = true, canAdmin = false, 
                   <td className={td}>{typeName(it)}</td>
                   <td className={`${td} text-right tabular-nums font-black`} style={{ fontFamily: MONO }}>{won(it.금액)}</td>
                   <td className={`${td} text-[12.5px]`}>{modeText(it)}</td>
-                  <td className={td}>{it.조건 === "야간" ? <span className="px-2 py-0.5 rounded-md bg-[#1B2B4B] text-[#E9C46A] text-[12px] font-black">야간 상차일 때만</span> : <span className="text-[#5B6B85]">늘</span>}</td>
-                  {first && <td rowSpan={span} className={`${td} text-center align-top`}><button type="button" disabled={!canEdit} onClick={() => toggleUse(p)} className={`h-7 px-2.5 rounded-lg text-[12px] font-black ${p.사용 === false ? "border border-[#DCE3EE] text-[#7A89A3]" : "bg-[#0F1A30] text-white"}`}>{p.사용 === false ? "꺼짐" : "사용"}</button></td>}
+                  <td className={td}>{it.조건 === "야간" ? <span className="text-[12.5px] font-black text-[#B54708]">야간 상차일 때만</span> : <span className="text-[#5B6B85]">항상</span>}</td>
+                  {first && <td rowSpan={span} className={`${td} text-center align-top`}><button type="button" disabled={!canEdit} onClick={() => toggleUse(p)} className={`h-7 px-2.5 rounded-lg border text-[12px] font-black ${p.사용 === false ? "border-[#DCE3EE] text-[#7A89A3]" : "border-[#2D4C82] text-[#2D4C82]"}`}>{p.사용 === false ? "사용 안 함" : "사용"}</button></td>}
                   <td className={`${td} text-center`}>{canEdit && <span className="inline-flex gap-1">
                     {first && <button type="button" onClick={() => setEdit({ ...p })} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] text-[12px] font-black">수정</button>}
-                    <button type="button" onClick={() => del(p, it)} className="h-8 px-2.5 rounded-lg border border-[#F0D3D3] text-[12px] font-black text-[#B4342A]">삭제</button>
+                    <button type="button" onClick={() => del(p, it)} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] text-[12px] font-black text-[#B4342A]">삭제</button>
                   </span>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <div className="mt-3 text-[13px] text-[#6B7A99] leading-relaxed break-keep">
-          · 노선을 바꾸면(거래처 · 상차지 · 하차지 · 상차시간) 자동으로 넣은 항목은 다시 계산해요. [특수운임] 팝업에서 직접 [적용]한 오더는 그대로 둬요.<br />
-          · 야간 상차 = 상차시간 18:00 ~ 05:00, 또는 구글시트 입고시간이 "야상"인 오더예요.<br />
-          · 구글시트 실시간 반영을 쓰는 회사(JY로지스틱스 등)는 프로그램에서 넣은 지게차비용 · 야상이 시트의 대행료 · 야상(추가) 칸에 같이 적혀요.
+      )}
+      {!seed && (
+        <div className="text-[12.5px] text-[#6B7A99] leading-relaxed break-keep">
+          · 노선을 바꾸면(거래처 · 상차지 · 하차지 · 상차시간) 자동으로 넣은 항목은 다시 계산해요. 이 팝업의 [특수운임] 탭에서 직접 [적용]한 오더는 그대로 둬요.<br />
+          · 야간 상차 = 상차시간 18:00 ~ 05:00, 또는 구글시트 입고시간이 "야상"인 오더예요.
         </div>
-        {old.length > 0 && (
-          <div className="mt-3">
-            <button type="button" onClick={() => setShowOld((v) => !v)} className="text-[13px] font-bold text-[#2D4C82]">{showOld ? "▾" : "▸"} 예전 "상차지 기억"(지게차 [불러오기]용) {old.length}개 — 자동으로 넣지는 않아요</button>
-            {showOld && (
-              <ul className="mt-2 divide-y divide-[#EEF2F8] rounded-xl border border-[#EEF1F6]">
-                {old.map((p) => (
-                  <li key={p.id} className="px-3 py-2 flex flex-wrap items-center gap-2 text-[13px]">
-                    <span className="font-bold text-[#0F1A30]">{p.거래처명 || "?"} · {p.상차지명}</span>
-                    <span className="tabular-nums">지게차 {won(p.items[0].금액)} · {MODE_LABEL[p.items[0].부담]}</span>
-                    {canEdit && <button type="button" onClick={() => setEdit({ 거래처명: p.거래처명, 상차지명: p.상차지명, 하차지명: "", items: p.items.map((x) => ({ ...x })) })} className="ml-auto h-7 px-2.5 rounded-lg border border-[#DCE3EE] text-[12px] font-black">자동으로 넣기</button>}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-      </div>
-      {edit && <PresetEditor value={edit} list={v2} onClose={() => setEdit(null)} />}
-      {seed && <SeedModal existing={v2} onClose={() => setSeed(false)} />}
+      )}
+      {!seed && old.length > 0 && (
+        <div>
+          <button type="button" onClick={() => setShowOld((v) => !v)} className="text-[13px] font-bold text-[#2D4C82]">{showOld ? "▾" : "▸"} 예전 "상차지 기억"(지게차 [불러오기]용) {old.length}개 — 자동으로 넣지는 않아요</button>
+          {showOld && (
+            <ul className="mt-2 divide-y divide-[#EEF2F8] rounded-xl border border-[#EEF1F6]">
+              {old.map((p) => (
+                <li key={p.id} className="px-3 py-2 flex flex-wrap items-center gap-2 text-[13px]">
+                  <span className="font-bold text-[#0F1A30]">{p.거래처명 || "?"} · {p.상차지명}</span>
+                  <span className="tabular-nums">지게차 {won(p.items[0].금액)} · {MODE_LABEL[p.items[0].부담]}</span>
+                  {canEdit && <button type="button" onClick={() => setEdit({ 거래처명: p.거래처명, 상차지명: p.상차지명, 하차지명: "", items: p.items.map((x) => ({ ...x })) })} className="ml-auto h-7 px-2.5 rounded-lg border border-[#DCE3EE] text-[12px] font-black">노선으로 등록</button>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {edit && createPortal(<PresetEditor value={edit} list={v2} onClose={() => setEdit(null)} />, document.body)}
     </div>
   );
 }
@@ -167,9 +154,9 @@ function PresetEditor({ value, list, onClose }) {
   const lbl = "text-[12px] font-extrabold text-[#5B6B85] mb-1";
   const sel = "h-10 w-full px-2 rounded-xl border border-[#DCE3EE] bg-white text-[13.5px] font-semibold";
   return (
-    <div className="fixed inset-0 z-[100060] bg-[#0B1428]/60 flex items-center justify-center p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="fixed inset-0 z-[100080] bg-[#0B1428]/60 flex items-center justify-center p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="w-full max-w-[760px] max-h-[90vh] flex flex-col rounded-[22px] bg-white overflow-hidden shadow-2xl" data-route-editor="1">
-        <div className="px-5 py-4 bg-[#0F1A30] text-white"><div className="text-[10.5px] tracking-[0.22em] font-extrabold text-[#8FB0F0]">ROUTE PRESET</div><div className="text-[17px] font-black">{value.id ? "노선 고정 수정" : "노선 고정 추가"}</div></div>
+        <div className="px-5 py-4 bg-[#0F1A30] text-white"><div className="text-[10.5px] tracking-[0.22em] font-extrabold text-[#8FB0F0]">ROUTE PRESET</div><div className="text-[17px] font-black">{value.id ? "노선 수정" : "노선 추가"}</div></div>
         <div className="p-5 overflow-y-auto space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div><div className={lbl}>거래처 *</div><input className={inp} value={f.거래처명} onChange={(e) => setF({ ...f, 거래처명: e.target.value })} placeholder="예: 에이제이" autoFocus data-route-client="1" /></div>
@@ -196,7 +183,7 @@ function PresetEditor({ value, list, onClose }) {
                   </select></div>
                 <div className="flex items-end gap-1"><div className="flex-1"><div className={lbl}>조건</div>
                   <select className={sel} value={it.조건 || "항상"} onChange={(e) => setItem(i, { 조건: e.target.value })} data-route-cond={i}>
-                    <option value="항상">늘</option><option value="야간">야간 상차일 때만</option>
+                    <option value="항상">항상</option><option value="야간">야간 상차일 때만</option>
                   </select></div>
                   <button type="button" onClick={() => setF((p) => ({ ...p, items: p.items.filter((_, k) => k !== i) }))} className="h-10 w-9 rounded-lg text-[#B4342A] hover:bg-[#FDECEC]" title="이 항목 빼기">✕</button>
                 </div>
@@ -216,16 +203,16 @@ function PresetEditor({ value, list, onClose }) {
   );
 }
 
-// ─── 기존 자료로 자동 설정 ───
-function SeedModal({ existing, onClose }) {
+// ─── 노선 불러오기 — 지난 오더에서 찾은 노선을 목록 자리에 바로 띄운다 ───
+function SeedPanel({ existing, mobile, onClose }) {
   const [months, setMonths] = React.useState(6);
   const [state, setState] = React.useState({ step: "idle" }); // idle · loading · done · error
   const [pick, setPick] = React.useState(() => new Set());
   const [busy, setBusy] = React.useState(false);
-  const run = async () => {
+  const run = async (m = months) => {
     setState({ step: "loading" });
     try {
-      const { orders, from } = await loadSeedOrders(months);
+      const { orders, from } = await loadSeedOrders(m);
       const list = seedProposals(orders, { existing });
       setPick(new Set(list.filter((p) => p.status !== "same").map((p) => p.id)));
       setState({ step: "done", list, from, count: orders.length });
@@ -243,60 +230,53 @@ function SeedModal({ existing, onClose }) {
         const old = existing.find((e) => routePresetIdOf(e) === routePresetIdOf(d));
         await saveRoutePreset({ ...d, 출처: old?.출처 || "기존 자료" }, { oldId: old?.id || "" });
       }
-      kpAlert(`노선 ${docs.length}개(항목 ${chosen.length}개)를 저장했어요.\n이제 그 노선으로 오더를 넣으면 자동으로 들어가요.`);
+      kpAlert(`노선 ${docs.length}개(항목 ${chosen.length}개)를 등록했어요.\n이제 그 노선으로 오더를 넣으면 자동으로 들어가요.`);
       onClose();
     } catch (e) { kpAlert(`저장하지 못했어요: ${e?.code || e?.message || e}`); } finally { setBusy(false); }
   };
   const toggle = (id) => setPick((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const STATUS = { new: ["새로", "bg-[#EAF0FB] text-[#2D4C82]"], diff: ["지금과 다름", "bg-[#FFF4E5] text-[#B54708]"], same: ["이미 있음", "bg-[#F1F4F9] text-[#7A89A3]"] };
+  const STATUS = { new: ["새 노선", "text-[#2D4C82]"], diff: ["등록값과 다름", "text-[#B54708]"], same: ["이미 등록됨", "text-[#9AA9C3]"] };
   return (
-    <div className="fixed inset-0 z-[100060] bg-[#0B1428]/60 flex items-center justify-center p-4" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
-      <div className="w-full max-w-[1040px] max-h-[90vh] flex flex-col rounded-[22px] bg-white overflow-hidden shadow-2xl" data-route-seed-modal="1">
-        <div className="px-5 py-4 bg-[#0F1A30] text-white flex flex-wrap items-center gap-3">
-          <div className="mr-auto"><div className="text-[10.5px] tracking-[0.22em] font-extrabold text-[#8FB0F0]">SET UP FROM PAST ORDERS</div><div className="text-[17px] font-black">기존 자료로 자동 설정</div>
-            <div className="text-[12.5px] text-white/60 break-keep">노선마다 오더가 3건 이상이고, 같은 금액 · 같은 부담이 70% 넘게 붙어 있던 특수운임을 찾았어요. 야간 상차 오더에만 붙던 것은 "야간 상차일 때만"으로 넣어요.</div></div>
-          <select value={months} onChange={(e) => setMonths(Number(e.target.value))} className="h-9 px-2 rounded-lg bg-white/10 border border-white/20 text-[13px] font-bold">
-            {[3, 6].map((m) => <option key={m} value={m} className="text-black">최근 {m}개월</option>)}
-          </select>
-          <button type="button" onClick={run} disabled={state.step === "loading"} className="h-9 px-3 rounded-lg bg-white text-[#0F1A30] text-[13px] font-black disabled:opacity-40">다시 찾기</button>
+    <div className="rounded-xl border border-[#E3E8F0] bg-white overflow-hidden" data-route-seed-modal="1">
+      <div className="px-3 py-2.5 flex flex-wrap items-center gap-2 border-b border-[#EEF1F6] bg-[#F7F9FC]">
+        <div className="mr-auto min-w-0">
+          <div className="text-[14px] font-black text-[#0F1A30]">노선 불러오기 결과</div>
+          <div className="text-[12px] text-[#6B7A99] break-keep">{state.step === "done" ? `${state.from}부터 오더 ${state.count.toLocaleString()}건을 보고 노선 ${list.length}개를 찾았어요. 고른 노선을 등록하면 목록에 추가돼요.` : "노선마다 오더가 3건 이상이고 같은 금액이 70% 넘게 붙던 특수운임을 찾아요."}</div>
         </div>
-        <div className="flex-1 overflow-auto">
-          {state.step === "loading" && <div className="py-16 text-center text-[#7A89A3] font-bold">지난 오더를 살펴보는 중이에요…</div>}
-          {state.step === "error" && <div className="py-16 text-center text-[#B4342A] font-bold break-keep">오더를 읽지 못했어요 ({state.msg})</div>}
-          {state.step === "done" && (
-            <>
-              <div className="px-5 py-2.5 text-[12.5px] text-[#5B6B85] bg-[#F7F9FC] border-b border-[#EEF1F6]">{state.from}부터 오더 {state.count.toLocaleString()}건을 봤어요 · 찾은 항목 {list.length}개</div>
-              <table className="w-full text-[13px]" style={{ minWidth: 900 }}>
-                <thead><tr className="bg-[#F1F4F9] text-[#3A4A66]">
-                  <th className="px-3 py-2"><input type="checkbox" checked={list.length > 0 && chosen.length === list.length} onChange={(e) => setPick(new Set(e.target.checked ? list.map((p) => p.id) : []))} /></th>
-                  {["거래처", "상차지", "하차지", "항목", "금액", "부담", "조건", "근거", "상태"].map((h) => <th key={h} className="px-3 py-2 whitespace-nowrap">{h}</th>)}
-                </tr></thead>
-                <tbody>
-                  {list.length === 0 && <tr><td colSpan={10} className="py-14 text-center text-[#9AA9C3] break-keep">늘 같은 특수운임이 붙는 노선을 찾지 못했어요. [+ 노선 추가]로 직접 넣어 주세요.</td></tr>}
-                  {list.map((p) => (
-                    <tr key={p.id} className={`border-t border-[#EEF1F6] ${pick.has(p.id) ? "" : "opacity-60"}`} data-seed-row={p.id}>
-                      <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={pick.has(p.id)} onChange={() => toggle(p.id)} /></td>
-                      <td className="px-3 py-1.5 font-bold whitespace-nowrap">{p.거래처명}</td>
-                      <td className="px-3 py-1.5 whitespace-nowrap">{p.상차지명 || <span className="text-[#9AA9C3]">모든 상차지</span>}</td>
-                      <td className="px-3 py-1.5 whitespace-nowrap font-bold">{p.하차지명 || <span className="text-[#9AA9C3] font-semibold">모든 하차지</span>}</td>
-                      <td className="px-3 py-1.5 whitespace-nowrap">{typeName(p.item)}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums font-black">{won(p.item.금액)}{p.status === "diff" && p.current ? <div className="text-[11px] font-bold text-[#B54708]">지금 {won(p.current.금액)}</div> : null}</td>
-                      <td className="px-3 py-1.5 text-[12px]">{modeText(p.item)}</td>
-                      <td className="px-3 py-1.5 whitespace-nowrap">{condText(p.item)}</td>
-                      <td className="px-3 py-1.5 whitespace-nowrap tabular-nums text-[12px]"><b>{p.count}</b>/{p.total}건 · <b>{Math.round(p.share * 100)}%</b>{p.item.조건 === "야간" ? ` (야간 ${p.nightCount}건 중)` : ""}</td>
-                      <td className="px-3 py-1.5"><span className={`px-2 py-0.5 rounded-md text-[11.5px] font-black ${STATUS[p.status][1]}`}>{STATUS[p.status][0]}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          )}
-        </div>
-        <div className="px-5 py-3 border-t border-[#EEF1F6] flex items-center justify-end gap-2">
-          <span className="mr-auto text-[12.5px] text-[#7A89A3] break-keep">저장해도 이미 등록된 오더는 바뀌지 않아요. 앞으로 넣는 오더부터 자동으로 들어가요.</span>
-          <button type="button" onClick={onClose} disabled={busy} className="h-10 px-4 rounded-xl border border-[#DCE3EE] font-black text-[13.5px]">닫기</button>
-          <button type="button" disabled={busy || !chosen.length} onClick={save} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white font-black text-[13.5px] disabled:opacity-40" data-seed-save="1">{busy ? "저장 중…" : `고른 ${chosen.length}개 저장`}</button>
-        </div>
+        <select value={months} onChange={(e) => { const m = Number(e.target.value); setMonths(m); run(m); }} className="h-9 px-2 rounded-lg border border-[#DCE3EE] bg-white text-[13px] font-bold">
+          {[3, 6].map((m) => <option key={m} value={m}>최근 {m}개월</option>)}
+        </select>
+        <button type="button" onClick={onClose} disabled={busy} className="h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[13px] font-extrabold text-[#3A4A66]">목록으로</button>
+        <button type="button" disabled={busy || !chosen.length} onClick={save} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13px] font-extrabold disabled:opacity-40" data-seed-save="1">{busy ? "등록 중…" : `고른 ${chosen.length}개 등록`}</button>
+      </div>
+      <div className="overflow-x-auto">
+        {state.step === "loading" && <div className="py-14 text-center text-[#7A89A3] font-bold">지난 오더를 살펴보는 중이에요…</div>}
+        {state.step === "error" && <div className="py-14 text-center text-[#B4342A] font-bold break-keep">오더를 읽지 못했어요 ({state.msg})</div>}
+        {state.step === "done" && (
+          <table className="w-full text-[13px]" style={{ minWidth: mobile ? 820 : 900 }}>
+            <thead><tr className="text-[#3A4A66]">
+              <th className="px-3 py-2 border-b border-[#DCE3EE]"><input type="checkbox" checked={list.length > 0 && chosen.length === list.length} onChange={(e) => setPick(new Set(e.target.checked ? list.map((p) => p.id) : []))} /></th>
+              {["거래처", "상차지", "하차지", "항목", "금액", "부담", "조건", "근거", "상태"].map((h) => <th key={h} className="px-3 py-2 whitespace-nowrap font-extrabold border-b border-[#DCE3EE]">{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {list.length === 0 && <tr><td colSpan={10} className="py-12 text-center text-[#9AA9C3] break-keep">늘 같은 특수운임이 붙는 노선을 찾지 못했어요. [+ 노선 추가]로 직접 등록해 주세요.</td></tr>}
+              {list.map((p) => (
+                <tr key={p.id} className={`border-t border-[#EEF1F6] ${pick.has(p.id) ? "" : "opacity-60"}`} data-seed-row={p.id}>
+                  <td className="px-3 py-1.5 text-center"><input type="checkbox" checked={pick.has(p.id)} onChange={() => toggle(p.id)} /></td>
+                  <td className="px-3 py-1.5 font-bold whitespace-nowrap">{p.거래처명}</td>
+                  <td className="px-3 py-1.5 whitespace-nowrap">{p.상차지명 || <span className="text-[#9AA9C3]">모든 상차지</span>}</td>
+                  <td className="px-3 py-1.5 whitespace-nowrap font-bold">{p.하차지명 || <span className="text-[#9AA9C3] font-semibold">모든 하차지</span>}</td>
+                  <td className="px-3 py-1.5 whitespace-nowrap">{typeName(p.item)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums font-black">{won(p.item.금액)}{p.status === "diff" && p.current ? <div className="text-[11px] font-bold text-[#B54708]">등록값 {won(p.current.금액)}</div> : null}</td>
+                  <td className="px-3 py-1.5 text-[12px]">{modeText(p.item)}</td>
+                  <td className="px-3 py-1.5 whitespace-nowrap">{condText(p.item)}</td>
+                  <td className="px-3 py-1.5 whitespace-nowrap tabular-nums text-[12px]"><b>{p.count}</b>/{p.total}건 · <b>{Math.round(p.share * 100)}%</b>{p.item.조건 === "야간" ? ` (야간 ${p.nightCount}건 중)` : ""}</td>
+                  <td className={`px-3 py-1.5 whitespace-nowrap text-[12px] font-black ${STATUS[p.status][1]}`}>{STATUS[p.status][0]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

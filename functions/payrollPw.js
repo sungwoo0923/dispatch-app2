@@ -29,6 +29,12 @@ function isPayrollStaff(u = {}, email = "") {
   if (u.approved === false || NON_STAFF.includes(role) || u.employmentStatus === "퇴사") return false;
   return ["test", "acctStaff", "hrAcct", "allMgr"].includes(role) || FIN_TEAM.test(String(u.team || ""));
 }
+// ⭐ 2026-11-18 회계관리 · 자금관리 메뉴 잠금(scope "acct") — 비밀번호를 아는 사무 직원이면 연다(급여 문서는 규칙이 급여 담당만 그대로)
+function isOfficeUser(u = {}, email = "") {
+  const role = String(u.role || "");
+  if (email === SUPER_EMAIL || role === "totalMaster") return true;
+  return !!role && u.approved !== false && !NON_STAFF.includes(role) && u.employmentStatus !== "퇴사";
+}
 function isPayrollAdmin(u = {}, email = "") {
   const role = String(u.role || "");
   if (email === SUPER_EMAIL || role === "totalMaster") return true;
@@ -78,7 +84,8 @@ function makePayrollPw({ db, FieldValue, Timestamp, HttpsError }) {
     const tm = email === SUPER_EMAIL || u.role === "totalMaster";
     const company = String((tm ? data.company || u.companyName : u.companyName) || "").trim();
     if (!company) throw err("failed-precondition", "회사 정보가 없습니다");
-    return { uid, email, u, company, key: safeId(company), staff: isPayrollStaff(u, email), admin: isPayrollAdmin(u, email) };
+    const staff = isPayrollStaff(u, email);
+    return { uid, email, u, company, key: safeId(company), staff, payStaff: staff, menuOnly: !staff && data?.scope === "acct" && isOfficeUser(u, email), admin: isPayrollAdmin(u, email) };
   }
   // ⭐ 2026-11-17 속도 — 예전엔 ① users 문서를 읽고 ② 그다음에 비밀번호 · 틀린 횟수 문서를 읽었다(왕복 2번).
   //  화면이 보낸 회사 이름으로 ②를 ①과 동시에 미리 읽어 두고, ①로 확인한 진짜 회사 키와 같을 때만 쓴다(다르면 다시 읽는다 — 결과는 예전과 같음)
@@ -108,9 +115,11 @@ function makePayrollPw({ db, FieldValue, Timestamp, HttpsError }) {
   async function status(data, context) {
     if (data?.warm === true) return WARM;
     const [w, [sec, un, at]] = await whoWith(context, data, (key, uid) => [secretRef(key), unlockRef(uid), attemptRef(key, uid)]);
-    if (!w.staff) return { staff: false, admin: false, hasPassword: false };
+    if (!w.staff && !w.menuOnly) return { staff: false, admin: false, hasPassword: false };
     const ex = un.exists ? un.data().expiresAt?.toMillis?.() || 0 : 0;
-    const unlockedUntil = un.exists && un.data().companyName === w.company && ex > Date.now() ? ex : 0;
+    let unlockedUntil = un.exists && un.data().companyName === w.company && ex > Date.now() ? ex : 0;
+    // ⭐ 2026-11-18 쓰는 동안 늘리기(화면이 5분에 한 번 touch) — 이미 열려 있을 때만
+    if (data?.touch === true && unlockedUntil && w.staff) unlockedUntil = await issueUnlock(w);
     const lockUntil = at.exists ? Number(at.data().lockUntil) || 0 : 0;
     return { staff: true, admin: w.admin, company: w.company, hasPassword: true, usingDefault: !(sec.exists && !!sec.data().hash), updatedAt: sec.exists ? sec.data().updatedAtMs || 0 : 0, updatedByName: sec.exists ? sec.data().updatedByName || "" : "", unlockedUntil, lockUntil: lockUntil > Date.now() ? lockUntil : 0 };
   }
@@ -145,7 +154,7 @@ function makePayrollPw({ db, FieldValue, Timestamp, HttpsError }) {
     if (data?.warm === true) return { ok: false, warm: true };
     // ⭐ 2026-11-10 속도 — 비밀번호 문서·틀린 횟수 문서를 한 번에 읽는다 · ⭐ 2026-11-17 users 문서와도 동시에
     const [w, [sec, aSnap]] = await whoWith(context, data, (key, uid) => [secretRef(key), attemptRef(key, uid)]);
-    if (!w.staff) throw err("permission-denied", "급여관리는 경리 담당자만 열 수 있어요");
+    if (!w.staff && !w.menuOnly) throw err("permission-denied", "경영지원팀(경리 담당자)만 열 수 있어요");
     const aRef = attemptRef(w.key, w.uid);
     // ⭐ 2026-11-08 처음 비밀번호(DEFAULT_PW) — 아직 정한 비밀번호가 없으면 000000으로 열고, 경리 관리자는 바로 바꾸게 한다
     const noPw = !sec.exists || !sec.data().hash;
@@ -163,7 +172,8 @@ function makePayrollPw({ db, FieldValue, Timestamp, HttpsError }) {
       await aRef.set({ fails, locks: Number(a.locks) || 0, lockUntil: 0, lastFailAt: now, uid: w.uid, companyName: w.company }, { merge: true });
       return { ok: false, left: MAX_FAILS - fails };
     }
-    const [, expiresAt] = await Promise.all([aSnap.exists ? aRef.delete().catch(() => {}) : null, issueUnlock(w)]);
+    // 급여 담당이 아니면(메뉴만) 급여 문서용 잠금 해제 문서는 만들지 않는다
+    const [, expiresAt] = await Promise.all([aSnap.exists ? aRef.delete().catch(() => {}) : null, w.staff ? issueUnlock(w) : Date.now() + UNLOCK_MS]);
     return { ok: true, expiresAt, mustChange: noPw };
   }
 
@@ -192,4 +202,4 @@ function makePayrollPw({ db, FieldValue, Timestamp, HttpsError }) {
   return { status, setPw, verify, lock, resetPw };
 }
 
-module.exports = { DEFAULT_PW, makePayrollPw, isPayrollStaff, isPayrollAdmin, pwProblem, hashPw, checkPw, hashPwAsync, checkPwAsync, lockMinutesFor, UNLOCK_MS, MAX_FAILS };
+module.exports = { DEFAULT_PW, makePayrollPw, isPayrollStaff, isPayrollAdmin, isOfficeUser, pwProblem, hashPw, checkPw, hashPwAsync, checkPwAsync, lockMinutesFor, UNLOCK_MS, MAX_FAILS };

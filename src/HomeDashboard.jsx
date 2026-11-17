@@ -1,4 +1,5 @@
 import { OrdersWeatherStrip } from "./publicDataMain";
+import { readPendingApproval, clearPendingApproval } from "./pendingOpen";
 import { approvalNavItems } from "./menuTree"; // ⭐ 2026-11-10 메뉴 통일 // 🌦 2026-11-07 오늘 운행 지역 날씨 · 특보
 import NoticeBoard, { canSeeNotice } from "./NoticeBoard";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
@@ -420,7 +421,7 @@ function lockHomeGroups(planId, groups) {
   return out;
 }
 
-export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData: allDispatchData = [], onOrderDoubleClick, dept = null, onDeptGo, onTodoGo }) {
+export default function HomeDashboard({ role, user, userCompany = "", pending, delayed, dispatchData: allDispatchData = [], onOrderDoubleClick, dept = null, onDeptGo, onTodoGo, bizDeck = null }) {
   // ⭐ 년 매출·당월 매출·누적 오더 — 예전엔 새로고침할 때마다 올해 오더 전체(수천~만 건)를 서버에서 다시 받아
   // 새로고침이 느리고 버벅였다. "실시간 범위(최근 7일) 이전" 기간의 합계는 하루 동안 거의 안 바뀌므로
   // 하루 1번만 받아 계산해 PC에 저장해 두고(homePastStats), 최근 7일~은 실시간 데이터로 더한다.
@@ -882,16 +883,19 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   // 🔔 결재 배너를 누르면 홈 › 전자결재로 와서 그 문서를 연다(DispatchApp이 홈으로 옮겨 준 뒤 이 값을 남겨 둔다)
   const [apOpenId, setApOpenId] = useState(null);
   useEffect(() => {
-    const take = () => {
-      const p = window.__kpOpenApproval;
+    const take = (first) => {
+      // 🛠 2026-11-17 새로고침(배포 버전 맞추기 등) 직전에 누른 [전자결재에서 열기]도 이어서 연다(src/pendingOpen.js)
+      const p = window.__kpOpenApproval || (first === true ? readPendingApproval() : null);
       if (!p) return;
       window.__kpOpenApproval = null;
-      setBoardTab(`ap:${p.page || "inbox"}`); setApOpenId(p.id);
+      setBoardTab(`ap:${p.page || "inbox"}`); setApOpenId(p.id || null);
     };
-    take();
+    take(true);
     window.addEventListener("kp-open-approval", take);
-    return () => window.removeEventListener("kp-open-approval", take);
+    return () => { window.removeEventListener("kp-open-approval", take); clearPendingApproval(); };
   }, []);
+  // 결재 화면을 떠나면 남은 요청을 지운다(다시 홈에 와도 결재함이 또 열리지 않게)
+  useEffect(() => { if (!String(boardTab).startsWith("ap:")) clearPendingApproval(); }, [boardTab]);
   // ⭐ 2026-11-03 알림 팝업 [인수인계 열기] → 전자결재 › 인수인계(그 글은 HandoverCenter가 window.__kpOpenHandover로 연다)
   useEffect(() => {
     const take = () => { if (window.__kpOpenHandover) setBoardTab("ap:handover"); };
@@ -980,9 +984,15 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       })()}
 
       {/* 🌦 2026-11-07 오늘 오더가 있는 지역 날씨 · 기상특보(키가 없거나 자료가 없으면 안 보임) */}
-      {boardTab === "대시보드" && !dept && <OrdersWeatherStrip orders={dispatchData} />}
+      {/* 🧭 2026-11-18 컨테이너 · 해상 · 항공 업무 — 같은 홈 틀에 그 업무 자료로 그린 데크(bizDeck)를 넣는다 */}
+      {boardTab === "대시보드" && !dept && bizDeck && bizDeck({
+        users, isMaster: role === "totalMaster",
+        myName: users.find((u) => u.id === user?.uid)?.name || user?.displayName || (user?.email || "").split("@")[0] || "",
+        att: { company: homeCompany, uid: user?.uid, name: users.find((u) => u.id === user?.uid)?.name || user?.displayName || "", role, email: user?.email },
+      })}
+      {boardTab === "대시보드" && !dept && !bizDeck && <OrdersWeatherStrip orders={dispatchData} />}
       {/* ===== 관제 데크 — 오늘 실적 · 매출 추이 · 매익률 · 담당자 순위 · 거래처 Top (2026-10-28 리디자인, 미배차 현황은 뺌) ===== */}
-      {boardTab === "대시보드" && !dept && <HomeDeck
+      {boardTab === "대시보드" && !dept && !bizDeck && <HomeDeck
         todo={onTodoGo ? <TodayTodo rows={allDispatchData} onGo={onTodoGo} /> : null}
         dispatchData={dispatchData}
         pastCache={pastCache}
