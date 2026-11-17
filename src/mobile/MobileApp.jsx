@@ -19057,7 +19057,7 @@ ${kind}방법 : ${e.method || "-"}`;
       const coreBlockMd = isChainMd ? _chainBlockMd : _fanOutBlockMd;
 
       text = `[파렛전표/거래명세서 업로드]
-미 전송시 운임 지연 될 수 있습니다.
+미전송 시 운임 지급이 지연될 수 있습니다.
 ↓↓↓↓↓↓↓↓↓↓↓↓
 ${uploadUrl}
 
