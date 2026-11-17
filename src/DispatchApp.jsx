@@ -146,7 +146,6 @@ const MonthlyReport = lazyView(() => import("./MonthlyReport"));
 import { IdleFleetButton } from "./fleetRecommend";
 import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "./liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
 import { subscribeOrderSync, deleteOrderWithLog, logOrderDeletion, OrderHistoryContext, useOrderHistory, useLoadOrderRange, useLoadFullOrderHistory, pcLiveWindowStart, pcPrevDay, kstToday as histToday, monthStartAgo, monthEnd, monthStart, historyStartDate } from "./orderHistory";
-const MonthCloseCheck = lazyView(() => import("./MonthCloseCheck"));
 const StaffPerformance = lazyView(() => import("./StaffPerformance"));
 import { RotationPicker, RotationBadge, expandRotation, rotationNotice, withRotationMemo } from "./rotation";
 import { generateMonthlyReportPPT, PPT_TEMPLATES } from "./pptReportUtil";
@@ -8149,7 +8148,7 @@ useEffect(() => {
     return prefetchWhenIdle([
       AdminMenu.preload, FleetManagement.preload, FreightRateInquiry.preload, StaffManager.preload, AttendanceBoard.preload,
       RateCard.preload, FixedClients.preload, DriverDocsReview.preload, DriverAccounts.preload, MonthlyReport.preload,
-      MonthCloseCheck.preload, StaffPerformance.preload, MonthCompareAnalysis.preload, ClassicResume.preload,
+      StaffPerformance.preload, MonthCompareAnalysis.preload, ClassicResume.preload,
     ], 12000);
   }, [pcBootDone]);
 
@@ -48516,7 +48515,6 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const [detailClient, setDetailClient] = React.useState(null);
   const [monthCompareOpen, setMonthCompareOpen] = React.useState(false); // ★ 월 비교 분석
   const [marginReportOpen, setMarginReportOpen] = React.useState(false); // ★ 매익률 원인 보고서
-  const [monthCloseOpen, setMonthCloseOpen] = React.useState(false); // ★ 월 마감 점검
   const [staffPerfOpen, setStaffPerfOpen] = React.useState(false); // ★ 배차담당자별 실적(관리자 전용)
   // 🔒 2026-11-10 비공개 청구운임 — 정한 담당자만(처음 켜기는 관리자) · 금액은 별도 보관(src/PrivateFares.jsx · firestore.rules)
   const pfCompany = String(getTenant() || userCompany || "").trim(); // 최고관리자는 지금 보고 있는 회사
@@ -49004,9 +49002,6 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
 
       {rvPage === "query" && <QueryPage rows={rows} clients={clients} />}
 
-              {monthCloseOpen && createPortal(
-                <MonthCloseCheck dispatchData={dispatchData} isViewer={isViewer} onClose={() => setMonthCloseOpen(false)} />, document.body
-              )}
               {staffPerfOpen && canSeeStaffPerf && createPortal(
                 <StaffPerformance
                   rows={rows}
@@ -50274,7 +50269,6 @@ function UnassignedStatus({ dispatchData, setDispatchData = () => {}, drivers = 
   const [openLoadAddrs, setOpenLoadAddrs] = React.useState(new Set());
   const [openUnloadAddrs, setOpenUnloadAddrs] = React.useState(new Set());
   const [openMemos, setOpenMemos] = React.useState(new Set());
-  const [quickAssignOpen, setQuickAssignOpen] = React.useState(false);
   const [vehicleNo, setVehicleNo] = React.useState("");
   const [driverName, setDriverName] = React.useState("");
   const [driverPhone, setDriverPhone] = React.useState("");
@@ -51519,28 +51513,6 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
         </div>, document.body)}
       {deleteConfirmOpen && (
         <KpDeleteConfirm rows={Array.from(selectedIds).map((id) => filtered.find((d) => d._id === id))} note="삭제된 오더는 복구되지 않습니다" onCancel={() => setDeleteConfirmOpen(false)} onConfirm={() => removeDocs(Array.from(selectedIds))} />
-      )}
-
-      {/* 빠른 배차 팝업 */}
-      {quickAssignOpen && selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-xl shadow-xl w-[520px] p-6">
-            <h3 className="text-lg font-bold mb-4">빠른 배차 등록</h3>
-            <div className="text-sm mb-3 text-gray-600">
-              <b>{selectedOrder.거래처명}</b> / {selectedOrder.상차지명} → {selectedOrder.하차지명}
-            </div>
-            <input autoComplete="off" placeholder="차량번호" value={vehicleNo} onChange={(e) => { const v = e.target.value; setVehicleNo(v); const found = findDriverByVehicleNo(v); if (found) { setMatchedDriver(found); setDriverName(found.name || found.기사명 || ""); setDriverPhone(found.phone || found.전화번호 || ""); setNewDriverPopup(false); } else { setMatchedDriver(null); setDriverName(""); setDriverPhone(""); setNewDriverPopup(normalizeVehicleNo(v).length >= 6); } }} className="border p-2 rounded w-full mb-2" />
-            <input autoComplete="off" placeholder="기사명" value={driverName} onChange={(e) => setDriverName(e.target.value)} className="border p-2 rounded w-full mb-2" />
-            <input autoComplete="off" placeholder="기사 연락처" value={driverPhone} onChange={(e) => setDriverPhone(formatPhone(e.target.value))} className="border p-2 rounded w-full mb-2" />
-            {matchedDriver && <div className="text-xs text-emerald-600 mb-2">✓ 기존 등록 차량 / 기사 자동 매칭됨</div>}
-            {!matchedDriver && newDriverPopup && <div className="text-xs text-amber-600 mb-2">+ 등록되지 않은 차량입니다. 신규 기사로 등록됩니다.</div>}
-            <input autoComplete="off" placeholder="지불운임" className="border p-2 rounded w-full mb-4" />
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setQuickAssignOpen(false)} className="px-4 py-2 border rounded"><EditableText id="misc.btn.46835.취소" defaultText="취소" /></button>
-              <button onClick={() => setQuickAssignOpen(false)} className="px-4 py-2 bg-[#1B2B4B] text-white rounded"><EditableText id="misc.btn.46836.배차완료" defaultText="배차완료" /></button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* 기사 신규등록 팝업 */}
