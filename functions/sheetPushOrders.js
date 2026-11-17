@@ -54,7 +54,16 @@ function makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     const id = context.params.orderId;
     let kind = "";
     if (!b && a) { if (a.등록기기 === "구글시트 이전" || a.이전출처) return null; kind = "create"; }
-    else if (b && !a) kind = b.이전출처 ? "delete" : "drop";
+    else if (b && !a) {
+      kind = b.이전출처 ? "delete" : "drop";
+      // 🛑 2026-11-17 시트에서 줄이 없어져 서버(실시간 반영)가 지운 오더는 시트로 "삭제"를 보내지 않는다
+      //  예전엔 이것도 시트 줄 삭제로 보냈다 → 그 자리(같은 줄 번호 · 같은 날짜)로 올라온 다음 줄을 지움 → 그 줄의 오더가 또 지워짐 → 또 다음 줄…
+      //  (시트에서 한 줄을 지우거나 옮기면 같은 날짜 줄들이 줄줄이 사라졌다)
+      if (kind === "delete") {
+        const log = (await db.collection("deletedOrders").doc(`orders_${context.params.orderId}`).get().catch(() => null))?.data() || null;
+        if (log && /^구글시트/.test(String(log.by || ""))) kind = "drop";
+      }
+    }
     else if (a.이전출처) { if (!C.changedKeys(b, a).length) return null; kind = "update"; }
     else { if (a.등록기기 === "구글시트 이전") return null; if (String(a.시트탭 || "") === String(b.시트탭 || "") && String(a.담당노선구분 || "") === String(b.담당노선구분 || "") && !C.changedKeys(b, a).length) return null; kind = "create"; }
     const before = b ? await trim(b) : null;
