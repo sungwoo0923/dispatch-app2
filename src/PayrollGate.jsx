@@ -10,7 +10,7 @@ import { EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import { db, auth, FUNCTIONS_BASE } from "./firebase";
 import { isPreviewMode } from "./fsTenant";
 
-export const IDLE_MS = 10 * 60 * 1000;
+export const IDLE_MS = 30 * 60 * 1000; // ⭐ 2026-11-18 10분 → 30분(회계 · 자금관리 메뉴 잠금과 같음)
 const NUMS = { fontVariantNumeric: "tabular-nums" };
 const demo = () => { try { return isPreviewMode() || window.location.pathname === "/preview"; } catch { return false; } };
 
@@ -32,9 +32,11 @@ const demoApi = {
   reset: ({ newPassword }) => { if (String(newPassword).length < 6) throw new Error("비밀번호는 6자 이상으로 정해 주세요"); sessionStorage.setItem(DK, newPassword); const until = Date.now() + 30 * 60000; sessionStorage.setItem(`${DK}:until`, String(until)); return { ok: true, expiresAt: until }; },
 };
 const api = {
-  status: (company) => (demo() ? Promise.resolve(demoApi.status()) : call("payrollPwStatus", { company })),
+  status: (company) => (demo() ? Promise.resolve(demoApi.status()) : call("payrollPwStatus", { company, scope: "acct" })),
+  // ⭐ 2026-11-18 쓰는 동안 서버 잠금 해제 문서(payrollUnlocks) 늘리기 — 예전 서버면 상태만 돌려준다(무해)
+  touch: (company) => (demo() ? Promise.resolve({}) : call("payrollPwStatus", { company, scope: "acct", touch: true })),
   set: (company, newPassword, currentPassword) => (demo() ? Promise.resolve().then(() => demoApi.set({ newPassword, currentPassword })) : call("payrollPwSet", { company, newPassword, currentPassword })),
-  verify: (company, password) => (demo() ? Promise.resolve(demoApi.verify({ password })) : call("payrollPwVerify", { company, password })),
+  verify: (company, password) => (demo() ? Promise.resolve(demoApi.verify({ password })) : call("payrollPwVerify", { company, password, scope: "acct" })),
   lock: (company) => (demo() ? Promise.resolve(demoApi.lock()) : call("payrollLock", { company })),
   // ⭐ 2026-11-10 잊었을 때 — 로그인 비밀번호로 방금 다시 확인한 새 토큰(force)으로 부른다(서버가 확인 시각 5분 안인지 본다)
   // ⭐ 2026-11-17 속도 — reauthenticateWithCredential 가 이미 새 토큰(확인 시각 포함)을 받아 둔다 → 토큰을 또 새로 받지 않는다(왕복 1번 줄임).
@@ -51,10 +53,6 @@ const stKey = (company) => `kpPayGateSt:${company}:${auth.currentUser?.uid || ""
 const readSt = (company) => { try { const v = JSON.parse(sessionStorage.getItem(stKey(company)) || "null"); return v && typeof v === "object" ? v : null; } catch { return null; } };
 const writeSt = (company, r) => { try { const { unlockedUntil, lockUntil, ...keep } = r || {}; void unlockedUntil; void lockUntil; sessionStorage.setItem(stKey(company), JSON.stringify(keep)); } catch { /* 무시 */ } };
 const stPending = new Map(); // 회사 → { at, p }
-// ⭐ 2026-11-17 잠금 해제 시각(만료 시각만 · 비밀 아님)을 이 탭에 기억 — 이미 열려 있던 사람만 잠깐(서버 문서 확인) 기다리고, 나머지는 비밀번호 칸을 바로 띄운다
-const unKey = (company) => `kpPayGateUntil:${company}:${auth.currentUser?.uid || ""}`;
-const readUntil = (company) => { try { return Number(sessionStorage.getItem(unKey(company))) || 0; } catch { return 0; } };
-const writeUntil = (company, ms) => { try { if (ms > Date.now()) sessionStorage.setItem(unKey(company), String(ms)); else sessionStorage.removeItem(unKey(company)); } catch { /* 무시 */ } };
 // ⭐ 2026-11-10 잠금 해제가 느리던 문제 — 비밀번호 확인 서버(payrollPwVerify)는 자주 안 불려서 매번 처음 켜지느라(콜드 스타트) 몇 초씩 걸렸다.
 //  급여 화면에 들어오면(비밀번호를 치는 동안) 미리 한 번 깨워 둔다 — 아무것도 읽거나 쓰지 않는 호출 · 4분에 한 번만
 // ⭐ 2026-11-17 [비밀번호 정하기 · 바꾸기 · 잊었어요]도 느렸던 이유 — 깨우기는 확인(payrollPwVerify)만 했고, 정하기(payrollPwSet) · 재설정(payrollPwReset)은
@@ -81,12 +79,6 @@ export function prefetchPayrollStatus(company, { force = false } = {}) {
 // ⭐ 2026-11-17 서버 응답 전 임시 상태(비밀번호 칸을 바로 띄우는 용도 — 권한 판단은 서버가 한다)
 const PENDING_ST = { staff: true, hasPassword: true, admin: false, usingDefault: false, pending: true };
 const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
-// ⭐ 2026-11-17 남은 시간 시계(급여 화면 맨 위 줄에 넣는 용도) — 1초마다 이 글자만 다시 그린다(급여 화면 전체는 다시 그리지 않음)
-export function GateTimer({ until }) {
-  const [now, setNow] = React.useState(Date.now());
-  React.useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
-  return <b className="tabular-nums" style={NUMS}>{mmss(until - now)}</b>;
-}
 const inp = "h-12 w-full px-4 rounded-xl border border-[#DCE3EE] bg-white text-[16px] font-bold text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#8FB0F0]/40 tracking-[0.12em]";
 const LockIcon = ({ open = false, size = 26 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -182,46 +174,77 @@ function GateCard({ title, desc, children }) {
   );
 }
 
-export default function PayrollGate({ company, canAdmin = false, children }) {
+// ═════════ ⭐ 2026-11-18 회계관리 · 자금관리 메뉴 잠금(사용자 요청) ═════════
+//  · 예전: 급여 계산 화면에 들어갈 때만 비밀번호. 이제: 회계관리 · 자금관리 메뉴에 들어갈 때 비밀번호(같은 비밀번호 — 예전에 정한 급여 비밀번호 그대로)
+//  · 한 번 열면 다른 메뉴 · 탭에 다녀와도 계속 열려 있다(이 페이지 메모리에만 기억 — 새로고침 · 껐다 켜면 다시 잠김)
+//  · 30분 동안 손대지 않으면 자동 잠금 · [잠그기]
+//  · 급여 계산은 이 잠금 안에서 바로 열린다(비밀번호를 또 묻지 않음). 서버 잠금 해제 문서(payrollUnlocks)는 쓰는 동안 서버가 늘려 준다(payrollPwStatus touch)
+//  · 통합 권한이어도 비밀번호를 모르면 못 연다 — 경영지원(경리 · 회계)팀만 보게 하려는 목적
+export const ACCT_IDLE_MS = 30 * 60 * 1000;
+const SESSION = { company: "", uid: "", lastAct: 0, touchedAt: 0 };
+const sessSubs = new Set();
+const sessNotify = () => sessSubs.forEach((f) => { try { f(); } catch { /* 무시 */ } });
+const myUid = () => auth.currentUser?.uid || (demo() ? "demo" : "");
+export const acctSessionOpen = (company) => !!company && SESSION.company === company && SESSION.uid === myUid() && Date.now() - SESSION.lastAct < ACCT_IDLE_MS;
+export const acctIdleDeadline = () => SESSION.lastAct + ACCT_IDLE_MS;
+function openSession(company) { SESSION.company = company; SESSION.uid = myUid(); SESSION.lastAct = Date.now(); SESSION.touchedAt = Date.now(); sessNotify(); }
+export function lockAcctSession() { if (!SESSION.company) return; SESSION.company = ""; SESSION.lastAct = 0; sessNotify(); }
+// 손댄 시각 — 열려 있을 때만 기록(1초에 한 번만)
+let actBound = false;
+function bindActivity() {
+  if (actBound || typeof window === "undefined") return;
+  actBound = true;
+  const act = () => { if (SESSION.company && Date.now() - SESSION.lastAct > 1000 && Date.now() - SESSION.lastAct < ACCT_IDLE_MS) SESSION.lastAct = Date.now(); };
+  ["mousedown", "keydown", "touchstart", "wheel", "mousemove", "scroll"].forEach((e) => window.addEventListener(e, act, { passive: true, capture: true }));
+}
+function useAcctSession() {
+  const [, force] = React.useReducer((x) => x + 1, 0);
+  React.useEffect(() => { bindActivity(); sessSubs.add(force); return () => { sessSubs.delete(force); }; }, []);
+}
+// 남은 시간 시계 — 마지막으로 손댄 뒤 30분
+export function GateTimer() {
+  const [now, setNow] = React.useState(Date.now());
+  React.useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  return <b className="tabular-nums" style={NUMS}>{mmss(acctIdleDeadline() - now)}</b>;
+}
+
+export default function PayrollGate({ company, canAdmin = false, children, scope = "payroll", menuLabel = "" }) {
+  useAcctSession();
   const uid = auth.currentUser?.uid || "";
-  const [stRaw, setStRaw] = React.useState(() => readSt(company)); // 서버 상태(지난번 값 먼저)
+  const [stRaw, setStRaw] = React.useState(() => readSt(company));
   const setSt = React.useCallback((f) => setStRaw((s) => (typeof f === "function" ? f(s || PENDING_ST) : f)), []);
   const st = stRaw || PENDING_ST;
-  const [until, setUntilRaw] = React.useState(0);
-  const setUntil = React.useCallback((ms) => { setUntilRaw(ms); if (!demo()) writeUntil(company, ms); }, [company]);
-  // ⭐ 2026-11-17 바로 띄우기 — 예전엔 잠금 해제 문서(onSnapshot)를 받을 때까지 늘 "확인 중…"이었다.
-  //  이 탭에서 열려 있던 기록이 있을 때만 잠깐 기다리고(최대 1.5초), 아니면 비밀번호 칸을 바로 보여 준다(문서가 오면 알아서 열린다)
-  const [snapReady, setSnapReady] = React.useState(() => demo() || !uid || !(readUntil(company) > Date.now()));
-  React.useEffect(() => { if (snapReady) return undefined; const t = setTimeout(() => setSnapReady(true), 1500); return () => clearTimeout(t); }, [snapReady]);
   const [pw, setPw] = React.useState("");
   const [msg, setMsg] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [changing, setChanging] = React.useState(false);
-  const [resetting, setResetting] = React.useState(false); // ⭐ 2026-11-10 비밀번호 잊었을 때
+  const [resetting, setResetting] = React.useState(false);
   const [now, setNow] = React.useState(Date.now());
-  const lastAct = React.useRef(Date.now());
-  const load = React.useCallback((force = false) => prefetchPayrollStatus(company, { force }).then((r) => { setSt(r); if (demo() || !uid) setUntil(r.unlockedUntil || 0); }).catch((e) => setSt({ error: e.message })), [company, uid, setSt, setUntil]);
+  const load = React.useCallback((force = false) => prefetchPayrollStatus(company, { force }).then((r) => setSt(r)).catch((e) => setSt({ error: e.message })), [company, setSt]);
   React.useEffect(() => { load(); warmPayrollVerify(); }, [load]);
-  // 서버 잠금 해제 문서(다른 탭에서 잠그거나 비밀번호가 바뀌면 바로 잠김)
+  const open = acctSessionOpen(company);
+  const lockNow = React.useCallback(async (why = "") => { lockAcctSession(); setPw(""); setMsg(why); setChanging(false); stPending.clear(); await api.lock(company).catch(() => {}); }, [company]);
+  // 다른 곳에서 비밀번호를 바꾸면(서버가 잠금 해제 문서를 지운다) 여기도 잠근다 — 문서가 있다가 없어졌을 때만
+  const hadDoc = React.useRef(false);
   React.useEffect(() => {
-    if (demo() || !uid) return undefined;
-    return onSnapshot(doc(db, "payrollUnlocks", uid), (s) => { const d = s.exists() ? s.data() : null; const ex = d && d.companyName === company ? d.expiresAt?.toMillis?.() || 0 : 0; setUntil(ex > Date.now() ? ex : 0); setSnapReady(true); }, () => setSnapReady(true));
-  }, [uid, company, setUntil]);
-  const open = until > now;
-  // 시계 · 손대지 않으면 잠금
+    if (demo() || !uid || !open) return undefined;
+    return onSnapshot(doc(db, "payrollUnlocks", uid), (s) => {
+      const ok = s.exists() && s.data()?.companyName === company;
+      if (ok) hadDoc.current = true;
+      else if (hadDoc.current) { hadDoc.current = false; lockNow("비밀번호가 바뀌어 다시 잠갔어요"); }
+    }, () => {});
+  }, [uid, company, open, lockNow]);
+  // 시계 · 30분 쉬면 잠금 · 쓰는 동안 서버 잠금 해제 늘리기(5분에 한 번)
   React.useEffect(() => {
     if (!open) return undefined;
-    const act = () => { lastAct.current = Date.now(); };
-    const evs = ["mousedown", "keydown", "touchstart", "wheel", "mousemove"];
-    evs.forEach((e) => window.addEventListener(e, act, { passive: true }));
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => { evs.forEach((e) => window.removeEventListener(e, act)); clearInterval(t); };
-  }, [open]);
-  const lockNow = React.useCallback(async (why = "") => { setUntil(0); setPw(""); setMsg(why); setChanging(false); stPending.clear(); await api.lock(company).catch(() => {}); }, [company, setUntil]);
-  React.useEffect(() => { if (open && now - lastAct.current > IDLE_MS) lockNow("10분 동안 쓰지 않아 다시 잠갔어요"); }, [now, open, lockNow]);
-  React.useEffect(() => { if (!open && until && now >= until) setMsg("30분이 지나 다시 잠갔어요"); }, [now, open, until]);
-  React.useEffect(() => { const t = setInterval(() => setNow(Date.now()), 15000); return () => clearInterval(t); }, []);
-  // ⭐ 2026-11-17 처음 비밀번호(000000)를 쓰는 회사의 관리자는 열자마자 [새 비밀번호 정하기]가 뜬다 → 저장 함수를 미리 깨운다
+    const t = setInterval(() => {
+      const n = Date.now(); setNow(n);
+      if (n - SESSION.lastAct >= ACCT_IDLE_MS) { lockNow("30분 동안 사용하지 않아 다시 잠갔어요"); return; }
+      if (!demo() && n - SESSION.touchedAt > 5 * 60000 && n - SESSION.lastAct < 5 * 60000) { SESSION.touchedAt = n; api.touch(company).catch(() => {}); }
+    }, 1000);
+    return () => clearInterval(t);
+  }, [open, company, lockNow]);
+  void now;
   const needSet = !!((st.admin || canAdmin) && st.usingDefault);
   React.useEffect(() => { if (needSet) warmPayrollFn("payrollPwSet"); }, [needSet]);
 
@@ -231,66 +254,61 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
     setBusy(true); setMsg("");
     try {
       const r = await api.verify(company, pw);
-      if (r.ok) { lastAct.current = Date.now(); setNow(Date.now()); setUntil(r.expiresAt); setPw(""); if (r.mustChange) { setSt((s) => ({ ...s, usingDefault: true })); setChanging(true); } }
+      if (r.ok) { openSession(company); setPw(""); if (r.mustChange) { setSt((s) => ({ ...s, usingDefault: true })); setChanging(true); } }
       else if (r.lockUntil) setMsg(`여러 번 틀려서 ${new Date(r.lockUntil).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}까지 잠겼어요`);
       else setMsg(`비밀번호가 맞지 않아요 · ${r.left}번 더 틀리면 잠깐 잠겨요`);
     } catch (er) { setMsg(er.message || "확인하지 못했어요"); } finally { setBusy(false); }
   };
 
-  // 이미 열려 있으면(잠금 해제 문서가 살아 있음) 서버 응답을 기다리지 않고 바로 연다
-  // ⭐ 2026-11-17 처음 여는 탭(기억한 상태 없음)도 서버 응답을 기다리지 않는다 — 우선 "비밀번호 칸"을 띄우고(서버는 늘 hasPassword: true),
-  //  관리자 여부 · 처음 비밀번호 안내만 응답이 오면 채운다. 경리 담당이 아니면 확인 버튼에서 서버가 막는다(보안은 서버 · 규칙 그대로)
+  const what = menuLabel || (scope === "acct" ? "회계 · 자금관리" : "급여관리");
   if (st?.error && !open) return <GateCard title="잠금 상태를 확인하지 못했어요" desc={st.error}><button type="button" onClick={() => load(true)} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">다시 시도</button></GateCard>;
-  if (!open && !snapReady) return <div className="py-24 text-center text-[15px] font-bold text-[#7A879C]">확인 중…</div>;
-  if (!open && st.staff === false) return <GateCard title="경리 담당자만 열 수 있어요" desc="급여는 경리·회계팀이 관리합니다. 본인 급여명세서는 내정보에서 볼 수 있어요." />;
+  if (!open && st.staff === false) return <GateCard title="경영지원(경리 · 회계) 담당자만 열 수 있어요" desc={`${what}는 경영지원팀이 관리합니다. 본인 급여명세서는 내정보에서 볼 수 있어요.`} />;
   if (!open && !st.hasPassword) {
     return (st.admin || canAdmin)
-      ? <GateCard title="급여 비밀번호를 정해 주세요" desc="급여관리를 열 때마다 한 번 더 확인합니다. 경리 담당자에게만 알려 주세요."><PwForm company={company} mode="set" onDone={(r) => { lastAct.current = Date.now(); setSt((s) => ({ ...s, hasPassword: true })); setNow(Date.now()); setUntil(r.expiresAt); }} /></GateCard>
-      : <GateCard title="아직 급여 비밀번호가 없어요" desc="경리 관리자가 먼저 비밀번호를 정하면 열 수 있어요." />;
+      ? <GateCard title="관리 비밀번호를 정해 주세요" desc={`${what}에 들어갈 때마다 확인합니다. 경영지원팀에게만 알려 주세요.`}><PwForm company={company} mode="set" onDone={() => { setSt((s) => ({ ...s, hasPassword: true })); openSession(company); }} /></GateCard>
+      : <GateCard title="아직 관리 비밀번호가 없어요" desc="경리 관리자가 먼저 비밀번호를 정하면 열 수 있어요." />;
   }
   const isPayAdmin = !!(st?.admin || canAdmin);
   if (!open && resetting) {
     return (
-      <GateCard title="급여 비밀번호 재설정" desc="비밀번호를 잊었을 때 — 경리 관리자만 할 수 있어요">
-        <ResetForm company={company} onCancel={() => setResetting(false)} onDone={(r) => { lastAct.current = Date.now(); setResetting(false); setMsg(""); setSt((s) => ({ ...s, hasPassword: true, usingDefault: false })); stPending.clear(); setNow(Date.now()); setUntil(r.expiresAt); }} />
+      <GateCard title="관리 비밀번호 재설정" desc="비밀번호를 잊었을 때 — 경리 관리자만 할 수 있어요">
+        <ResetForm company={company} onCancel={() => setResetting(false)} onDone={() => { setResetting(false); setMsg(""); setSt((s) => ({ ...s, hasPassword: true, usingDefault: false })); stPending.clear(); openSession(company); }} />
       </GateCard>
     );
   }
   if (!open) {
     return (
-      <GateCard title="급여관리 잠금" desc="급여 비밀번호를 넣으면 30분 동안 열려요.">
+      <GateCard title={`${what} 잠금`} desc="관리 비밀번호를 넣으면 열려요. 30분 동안 사용하지 않거나 새로고침하면 다시 잠겨요.">
         <form onSubmit={unlock} className="space-y-3">
-          <input type="password" autoComplete="current-password" autoFocus value={pw} onChange={(e) => setPw(e.target.value)} placeholder="급여 비밀번호" className={inp} data-testid="payroll-pw" aria-label="급여 비밀번호" />
+          <input type="password" autoComplete="current-password" autoFocus value={pw} onChange={(e) => setPw(e.target.value)} placeholder="관리 비밀번호" className={inp} data-testid="payroll-pw" aria-label="관리 비밀번호" />
           {msg && <div className={`rounded-xl px-3.5 py-2.5 text-[14px] font-bold border ${/틀|잠겼어요|맞지/.test(msg) && !/다시 잠갔/.test(msg) ? "bg-[#FEF3F2] border-[#FECDCA] text-[#B42318]" : "bg-[#F5F8FD] border-[#DCE3EE] text-[#1B2B4B]"}`} role="status">{msg}</div>}
           <button type="submit" disabled={busy || !pw} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-40" data-testid="payroll-unlock">{busy ? "확인 중…" : "잠금 해제"}</button>
-          <div className="text-[14px] font-bold text-[#7A879C] leading-relaxed">{st.usingDefault ? "처음 비밀번호는 000000이에요. 들어가면 바로 새 비밀번호로 바꿔 주세요." : isPayAdmin ? "비밀번호를 잊었으면 아래 [비밀번호를 잊었어요]로 다시 정할 수 있어요." : "비밀번호를 잊었으면 경리 관리자에게 바꿔 달라고 하세요."}</div>
+          <div className="text-[14px] font-bold text-[#7A879C] leading-relaxed">{st.usingDefault ? "처음 비밀번호는 000000이에요. 들어가면 바로 새 비밀번호로 바꿔 주세요." : "예전에 정한 급여 비밀번호와 같아요. "}{!st.usingDefault && (isPayAdmin ? "잊었으면 아래 [비밀번호를 잊었어요]로 다시 정할 수 있어요." : "잊었으면 경리 관리자에게 바꿔 달라고 하세요.")}</div>
           {isPayAdmin && !st.usingDefault && <button type="button" onClick={() => { setMsg(""); setResetting(true); }} className="w-full h-11 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-black text-[#1B2B4B]" data-testid="payroll-forgot">비밀번호를 잊었어요</button>}
         </form>
       </GateCard>
     );
   }
-  const left = until - now;
-  // ⭐ 2026-11-17 children 이 함수면 잠금 줄을 따로 그리지 않고 정보(남은 시각 · 잠그기 · 비밀번호 변경)를 넘긴다 — 급여 화면이 맨 위 한 줄에 같이 보여 준다
   const asFn = typeof children === "function";
   return (
     <div className={asFn ? "w-full min-w-0" : "space-y-3 w-full min-w-0"}>
-      {asFn ? <GateBody render={children} until={until} canChange={!!(st?.admin || canAdmin)} lockNow={lockNow} setChanging={setChanging} /> : <>
+      {asFn ? <GateBody render={children} until={0} canChange={isPayAdmin} lockNow={lockNow} setChanging={setChanging} /> : <>
       <div className="rounded-2xl bg-white border border-[#E3E8F0] px-3.5 py-2 flex items-center gap-2.5 flex-wrap" data-testid="payroll-unlocked-bar">
-        <span className="w-8 h-8 rounded-lg bg-[#EEF3FC] text-[#2D4C82] grid place-items-center"><LockIcon open size={17} /></span>
-        <span className="text-[14px] font-black text-[#0F1A30]">잠금 해제됨</span>
-        <span className="text-[14px] font-bold text-[#5B6B85]"><b className="text-[#0F1A30]" style={NUMS}>{mmss(left)}</b> 뒤 잠김 · 10분 쉬면 자동 잠금</span>
+        <span className="w-8 h-8 rounded-lg border border-[#DCE3EE] text-[#2D4C82] grid place-items-center"><LockIcon open size={17} /></span>
+        <span className="text-[14px] font-black text-[#0F1A30]">{what} 잠금 해제됨</span>
+        <span className="text-[14px] font-bold text-[#5B6B85]"><GateTimer /> 동안 사용하지 않으면 자동 잠금</span>
         <span className="flex-1" />
-        {(st?.admin || canAdmin) && <button type="button" onClick={() => setChanging(true)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B]" data-testid="pw-change">비밀번호 변경</button>}
-        <button type="button" onClick={() => lockNow("잠갔어요")} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[14px] font-black" data-testid="payroll-lock">지금 잠그기</button>
+        {isPayAdmin && <button type="button" onClick={() => setChanging(true)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B]" data-testid="pw-change">비밀번호 변경</button>}
+        <button type="button" onClick={() => lockNow("잠갔어요")} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[14px] font-black" data-testid="payroll-lock">잠그기</button>
       </div></>}
       {changing && (
-        <div className="fixed inset-0 z-[100000] bg-[#0F1A30]/45 grid place-items-center px-3" onClick={() => { if (!(st?.usingDefault && (st?.admin || canAdmin))) setChanging(false); }}>
+        <div className="fixed inset-0 z-[100000] bg-[#0F1A30]/45 grid place-items-center px-3" onClick={() => { if (!(st?.usingDefault && isPayAdmin)) setChanging(false); }}>
           <div className="w-full max-w-[440px] rounded-[24px] bg-white shadow-[0_24px_60px_rgba(15,26,48,0.3)] overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 pt-5 pb-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}><div className="text-[12px] font-extrabold tracking-[0.08em] text-[#8FB0F0]">PAYROLL · PASSWORD</div><div className="text-[19px] font-black">급여 비밀번호 변경</div><div className="text-[14px] font-bold text-white/75">바꾸면 다른 담당자는 새 비밀번호로 다시 열어야 해요</div></div>
+            <div className="px-6 pt-5 pb-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}><div className="text-[12px] font-extrabold tracking-[0.08em] text-[#8FB0F0]">ACCOUNTING · PASSWORD</div><div className="text-[19px] font-black">관리 비밀번호 변경</div><div className="text-[14px] font-bold text-white/75">회계관리 · 자금관리 · 급여 계산에 같이 쓰여요. 바꾸면 다른 담당자는 새 비밀번호로 다시 열어야 해요</div></div>
             <div className="px-6 py-5">
               {st?.usingDefault && <div className="mb-3 rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-3.5 py-2.5 text-[14px] font-bold text-[#1B2B4B]">처음 비밀번호(000000)를 쓰고 있어요. 새 비밀번호로 바꿔 주세요.</div>}
-              {(st?.admin || canAdmin)
-                ? <PwForm company={company} mode={st?.usingDefault ? "set" : "change"} onCancel={st?.usingDefault ? undefined : () => setChanging(false)} onDone={(r) => { setChanging(false); setSt((s) => ({ ...s, usingDefault: false })); setUntil(r.expiresAt); }} />
+              {isPayAdmin
+                ? <PwForm company={company} mode={st?.usingDefault ? "set" : "change"} onCancel={st?.usingDefault ? undefined : () => setChanging(false)} onDone={() => { setChanging(false); setSt((s) => ({ ...s, usingDefault: false })); openSession(company); }} />
                 : <div className="space-y-3"><div className="text-[14px] font-bold text-[#3A4A66]">비밀번호는 경리 관리자만 바꿀 수 있어요. 관리자에게 바꿔 달라고 해 주세요.</div><button type="button" onClick={() => setChanging(false)} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">확인</button></div>}
             </div>
           </div>
@@ -300,10 +318,14 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
     </div>
   );
 }
-// 함수 children — 1초 시계로 잠금 화면이 다시 그려져도 급여 화면은 그대로(until · 권한이 바뀔 때만 새로)
-function GateBody({ render, until, canChange, lockNow, setChanging }) {
+// ⭐ 2026-11-18 회계관리 · 자금관리 메뉴 입구 잠금
+export function AcctMenuGate({ company, canAdmin = false, menuLabel, children }) {
+  return <PayrollGate company={company} canAdmin={canAdmin} scope="acct" menuLabel={menuLabel}>{children}</PayrollGate>;
+}
+// 함수 children — 1초 시계로 잠금 화면이 다시 그려져도 급여 화면은 그대로(권한이 바뀔 때만 새로)
+function GateBody({ render, canChange, lockNow, setChanging }) {
   const lock = React.useCallback(() => lockNow("잠갔어요"), [lockNow]);
   const change = React.useCallback(() => setChanging(true), [setChanging]);
-  const info = React.useMemo(() => ({ until, canChange, lock, change }), [until, canChange, lock, change]);
+  const info = React.useMemo(() => ({ until: 0, canChange, lock, change }), [canChange, lock, change]);
   return React.useMemo(() => render(info), [render, info]);
 }

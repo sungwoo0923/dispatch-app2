@@ -103,13 +103,14 @@ export function WorkManualModal({ menu, section = "", onClose }) {
   React.useEffect(() => { if (section) setTimeout(() => go(section), 80); }, [section]); // eslint-disable-line react-hooks/exhaustive-deps
   React.useEffect(() => { const h = (e) => { if (e.key === "Escape") onClose?.(); }; window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [onClose]);
   if (!M) return null;
-  const toc = [["intro", "처음 읽어 주세요"], ...M.sections.map((s) => [s.id, s.tab]), ...(M.changes?.length ? [["changes", "최근 바뀐 점"]] : [])];
+  // ⭐ 2026-11-18 "최근 바뀐 점"은 화면에서 뺐다(사용자 요청) — 바뀐 기능은 각 화면의 움직이는 예시(demo)로 설명한다 · "처음 읽어 주세요" → "읽어주세요"
+  const toc = [["intro", "읽어주세요"], ...M.sections.map((s) => [s.id, s.tab])];
   const side = (
     <nav className="hidden md:flex w-[260px] shrink-0 flex-col gap-1 p-3 border-r border-[#E3E8F0] bg-white overflow-y-auto">
       <div className="px-2 pt-1 pb-2 text-[13px] font-extrabold tracking-[0.2em] text-[#7A879C]">목차</div>
       {toc.map(([id, l], k) => (
         <button key={id} type="button" onClick={() => go(id)} className={`text-left px-3 py-3 rounded-xl text-[16.5px] font-bold transition ${cur === id ? "bg-[#0F1A30] text-white" : "text-[#3A4A66] hover:bg-[#F5F8FD]"}`}>
-          <span className={`inline-block w-7 text-[14px] tabular-nums ${cur === id ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`}>{id === "intro" ? "★" : id === "changes" ? "↻" : k}</span>{l}
+          <span className={`inline-block w-7 text-[14px] tabular-nums ${cur === id ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`}>{id === "intro" ? "★" : k}</span>{l}
         </button>
       ))}
       {menu === "회계관리" && <div className="mt-3 px-1"><GlossaryButton /></div>}
@@ -192,14 +193,6 @@ export function WorkManualModal({ menu, section = "", onClose }) {
           </section>
         ))}
 
-        {M.changes?.length > 0 && (
-          <section id="wm-changes" className="bg-white rounded-3xl border border-[#E3E8F0] p-5 sm:p-8">
-            <h3 className="text-[23px] font-black text-[#0F1A30]">최근 바뀐 점</h3>
-            <ul className="mt-3 space-y-2">
-              {M.changes.map((c, i) => <li key={i} className="flex gap-3 text-[17px] leading-[1.7] text-[#1F2D47]"><span className="shrink-0 text-[14.5px] font-black text-[#4B6CB7] tabular-nums mt-0.5">{c.date}</span>{c.text}</li>)}
-            </ul>
-          </section>
-        )}
         <div className="text-center text-[15px] text-[#7A879C] pb-4">더 궁금한 건 위쪽 [검색] 옆 도움말 센터에서도 찾을 수 있어요.</div>
       </div>
     </Shell>

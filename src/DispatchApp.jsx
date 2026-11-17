@@ -102,6 +102,7 @@ import { AccountingOverview, RetireDesk, useYearOrders } from "./AcctSuite";
 import HrHub from "./HrHub";
 import { usePayrollAccess } from "./payrollAccess"; // ⭐ 2026-11-06 직원 급여·연차 촉진 권한
 const PayrollCenterLazy = React.lazy(() => import("./Payroll"));
+import { AcctMenuGate } from "./PayrollGate"; // ⭐ 2026-11-18 회계관리 · 자금관리 메뉴 잠금
 import AcctLedgerBooks from "./AcctLedgerBooks"; // ⭐ 2026-11-17 회계관리 › 회계 장부 — 총계정원장 모양(계산은 아래 AccountingDashboard 와 같음)
 const CompanyInboxLazy = React.lazy(() => import("./CompanyInbox")); // 📥 2026-11-14 메일함 › 받은메일
 // ⭐ 2026-11-07 급여명세서 · 연차 사용 계획은 내정보 안 탭(MyInfoTabs) · 연차 사용 촉진은 인사관리부 › 연차 관리 안(LeaveArea)
@@ -2978,7 +2979,6 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import FareRulesSettings from "./FareRulesSettings";
 import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
 import { withRoutePresets } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
-import RouteSpecialPresets from "./RouteSpecialPresets"; // ⭐ 2026-11-17 회사관리 › 노선 특수운임
 import { SpecialFareButton, ForkliftChip, ForkliftMark, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount, orderProfit, profitTotals } from "./forklift"; // 🏗 2026-11-09 지게차비용 · ⭐ 2026-11-17 수수료 한 식(orderProfit · profitTotals)
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
@@ -3012,6 +3012,7 @@ import { effectiveScope, scopeAllows, isOfficeBaseMenu, isOfficeScope } from "./
 import { audienceAllows, activeViewOf, setDispatchAlertsOn, dispatchAlertsOn, DISPATCH_TOAST_TYPES } from "./notifyAudience"; // ⭐ 2026-11-17 알림 받는 사람(역할 · 부서 · 지금 화면)
 import BizSwitcher from "./freight/BizSwitcher";
 const FreightWorkspace = React.lazy(() => import("./freight/FreightWorkspace"));
+const FreightHomeDeck = React.lazy(() => import("./freight/FreightHomeDeck")); // 🧭 2026-11-18 컨테이너 · 해상 · 항공 HOME
 const FreightRevenueStrip = React.lazy(() => import("./freight/FreightSettle").then((m) => ({ default: m.FreightRevenueStrip })));
 import { allowedModules } from "./freight/freightCore";
 import { useBetaOn, PayBadge, PayPopup, CallDepositDesk, PayNoticeToggle, queuePayNotice, DateField, OUT_KEY, DispatchWayPicker, isCaughtCall } from "./CallPay"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
@@ -9381,6 +9382,7 @@ return (
             onOrderDoubleClick={(order) => setHomeClickedOrder(order)}
             dept={isOfficeScope(workScope) ? "office" : deptMode}
             onTodoGo={(k) => { const [m, t] = String(k).split(":"); if (m === "배차현황" && t) set배차현황Tab(t); handleMenuClick(m); }}
+            bizDeck={["container", "sea", "air"].includes(biz) ? (p) => <React.Suspense fallback={<div className="py-20 text-center text-[13.5px] font-bold text-[#9AA9C3]">불러오는 중…</div>}><FreightHomeDeck biz={biz} onMenu={handleMenuClick} {...p} /></React.Suspense> : null}
             onDeptGo={(k) => { const [m, t] = String(k).split(":"); if (m === "정산관리" && t) set정산관리Tab(t); if (m === "출근기록부" || (m === "인사관리부" && t)) { try { sessionStorage.setItem("kpHrTab", m === "출근기록부" ? "attendance" : t); } catch { /* 무시 */ } handleMenuClick("인사관리부"); return; } if (m === "기사서류") { set기사관리Tab("docs:driver"); handleMenuClick("기사관리"); return; } if (m === "기사승인") { set기사관리Tab("acc:pending"); handleMenuClick("기사관리"); return; } if (m === "자금관리" && t) { try { sessionStorage.setItem("kpFundsTab", t); } catch { /* 무시 */ } } if (m === "영업관리" && t) { try { sessionStorage.setItem("kpSalesTab", t); } catch { /* 무시 */ } } if (m === "결재함") { window.__kpOpenApproval = t ? { id: t, page: "inbox" } : { page: "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; } handleMenuClick(m); }}
           />
         )}
@@ -9808,9 +9810,9 @@ return (
         {menu === "스케줄" && menuState("스케줄") === "ok" && <ExecScheduleBoard company={deptCompany} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "", position: myProfileDoc?.position || "" }} canWrite />}
         {menu === "전자결재" && menuState("전자결재") === "ok" && <ApprovalWorkspace company={deptCompany} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "", team: myProfileDoc?.team || "", position: myProfileDoc?.position || "", role }} />}
         {/* 🏢 2026-10-31 경리·인사 부서 메뉴 */}
-        {menu === "회계관리" && menuState("회계관리") === "ok" && <AccountingWorkspace company={deptCompany} fixedRows={fixedRows} clients={clients} drivers={drivers} isViewer={isViewer} role={realRole || role} />}
+        {menu === "회계관리" && menuState("회계관리") === "ok" && <AcctMenuGate company={deptCompany} menuLabel="회계관리"><AccountingWorkspace company={deptCompany} fixedRows={fixedRows} clients={clients} drivers={drivers} isViewer={isViewer} role={realRole || role} /></AcctMenuGate>}{/* ⭐ 2026-11-18 메뉴 입구 비밀번호 */}
         {menu === "영업관리" && menuState("영업관리") === "ok" && <React.Suspense fallback={<div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">영업관리를 불러오는 중…</div>}><SalesHub company={deptCompany} dispatchData={salesDispatchData} isViewer={isViewer} exec={deptMode === "exec"} onGo={(m) => handleMenuClick(m)} /></React.Suspense>}
-        {menu === "자금관리" && menuState("자금관리") === "ok" && <FundsWorkspace company={deptCompany} isViewer={isViewer} />}
+        {menu === "자금관리" && menuState("자금관리") === "ok" && <AcctMenuGate company={deptCompany} menuLabel="자금관리"><FundsWorkspace company={deptCompany} isViewer={isViewer} /></AcctMenuGate>}
         {menu === "비품관리" && menuState("비품관리") === "ok" && <AssetManager company={deptCompany} isViewer={isViewer} />}
         {menu === "인사관리부" && menuState("인사관리부") === "ok" && (
           <HrHub company={deptCompany} canManage={role === "hrManager" || role === "totalMaster" || ["hrAcct", "allMgr"].includes(realRole) || (/인사/.test(String(myProfileDoc?.team || "")) && role !== "viewer") || masterHrMain || (!!customRole && getMenuAccess(customRoles, role, "인사관리부") === "write")} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "" }} role={realRole || role}
@@ -58782,9 +58784,8 @@ function CompanyManagementWrapper({ payrollInAcct = false, userCompany, role, us
   // ⭐ 2026-11-02 운임규칙 — 최고관리자가 이 회사에 켜 준 경우에만(관리자센터 › 회사별 맞춤 기능). 회사 직원 누구나 보고 고친다(조회전용은 보기만)
   const fareCM = useFareRules(getTenant() || userCompany);
   const tabs1a = !fareCM.feature || role === "driver" || role === "shipper" ? tabs0 : [...tabs0.slice(0, 2), "운임 규칙", ...tabs0.slice(2)];
-  // ⭐ 2026-11-17 노선별 고정 특수운임 — 사무 직원 누구나(조회전용은 보기만 · 기사 · 화주 제외)
-  const routeCM = !["driver", "shipper", "cafeUser"].includes(role);
-  const tabs1 = routeCM ? [...tabs1a.slice(0, tabs1a.indexOf("조직도") + 1 + (tabs1a.includes("운임 규칙") ? 1 : 0)), "노선 특수운임", ...tabs1a.slice(tabs1a.indexOf("조직도") + 1 + (tabs1a.includes("운임 규칙") ? 1 : 0))] : tabs1a;
+  // ⭐ 2026-11-18 노선 특수운임 탭은 회사관리에서 뺐다 → 배차관리 [특수운임 적용] 팝업 › 고정노선운임 탭(사용자 요청)
+  const tabs1 = tabs1a;
   // ⭐ 2026-11-07 급여관리는 회사관리에서 뺐다(경리 › 회계관리 › 급여 계산에서만) · 급여명세서 · 연차 사용 계획은 내정보 안 탭 ·
   //  연차 사용 촉진은 인사관리부 › 연차 관리 안. (payrollInAcct는 예전 호출 호환용으로만 남김)
   void payrollInAcct;
@@ -58819,7 +58820,6 @@ function CompanyManagementWrapper({ payrollInAcct = false, userCompany, role, us
       {tab === "조직도" && <OrgChart userCompany={userCompany} />}
       {/* ⭐ 2026-11-02 운임규칙 — 회사관리 › 운임 규칙 */}
       {tab === "운임 규칙" && fareCM.feature && <FareRulesSettings company={userCompany} canEdit={role !== "viewer"} myName={myDocCM?.name || myName} />}
-      {tab === "노선 특수운임" && routeCM && <RouteSpecialPresets canEdit={role !== "viewer"} canAdmin={["admin", "allMgr", "test", "totalMaster"].includes(role) || myDocCM?.isMaster === true} />}
       {tab === "내 이력서" && <HRManagementPage userCompany={userCompany} role={role} userId={userId} selfOnly />}
       {tab === "내정보" && (
         <MyProfilePage

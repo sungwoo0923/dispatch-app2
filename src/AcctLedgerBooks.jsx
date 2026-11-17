@@ -9,11 +9,18 @@ import React from "react";
 import { db } from "./firebase";
 import { loadAcctPayments, saveAcctPayments } from "./acctPayments";
 import { addClientCollection, removeClientCollections } from "./ledgerAuto";
-import { receivablesOf, invoiceDriverPlates, isTaxInvoiceSale } from "./arAging";
+import { receivablesOf, invoiceDriverPlates, isTaxInvoiceSale, isArOrder, arClientOf, vatIncluded } from "./arAging";
+import { createPortal } from "react-dom";
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { EditableText } from "./EditMode";
 import { kpConfirm } from "./kpDialog";
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 이익 · 이익률 색(플러스 빨강 · 마이너스 파랑)
+// ⭐ 2026-11-18 회계 장부 정리(사용자 요청)
+//  · 문구를 회계 용어로(받을 돈 · 줄 돈 → 외상매출금 · 미지급금 등)
+//  · 줄을 누르면 상세 내역(거래처 원장 · 기사별 지급 내역 · 월별 매출처/매입처 명세)이 열린다
+//  · 미수금: 정산관리에서 [입금완료] 처리한 오더도 수금액으로 본다(지급 현황이 지급관리 [지급완료]를 보던 것과 같은 방식 — 큰 쪽)
+//  · 입금 · 지급 처리 기록(log)을 남겨 상세 내역에서 언제 얼마 처리했는지 보이게
+//  · 부호 색: 플러스 빨강 · 마이너스 파랑(예전 납부세액 마이너스는 초록이었다)
 
 // ── 장부 모양 ──
 // ⭐ 2026-11-17 숫자 글꼴 — 고정폭(디지털) 글꼴이 읽기 불편하다는 요청으로 앱 기본 글꼴로 되돌림 · 자리 맞춤(tabular-nums)만 유지
@@ -65,8 +72,8 @@ const LedgerTable = ({ children, minWidth = 860, caption }) => (
   </div>
 );
 // 시산 요약 칸(장부 위 숫자 칸)
-function Tally({ label, value, sub, tone, code }) {
-  const color = tone === "danger" ? NEG : tone === "ok" ? "#1F6F4A" : INK;
+function Tally({ label, value, sub, tone, code, color: colorIn }) {
+  const color = colorIn || (tone === "danger" ? NEG : tone === "ok" ? "#1F6F4A" : INK);
   return (
     <div className="min-w-0 rounded-[14px] bg-white border border-[#D3DBE8] px-3.5 py-3">
       <div className="flex items-center gap-1.5 text-[12.5px] font-black text-[#5B6B85] whitespace-nowrap">
@@ -80,10 +87,10 @@ function Tally({ label, value, sub, tone, code }) {
 }
 const Foot = ({ children }) => <p className="text-[12.5px] font-bold text-[#7A879C] leading-relaxed">{children}</p>;
 const ageLabel = (days) => {
-  if (days <= 30) return { label: "30일 이내", color: "#3A4A66", bg: "#EEF2F8" };
-  if (days <= 60) return { label: "31~60일", color: "#8A5A12", bg: "#FBF1DD" };
-  if (days <= 90) return { label: "61~90일", color: "#9A3412", bg: "#FCE9DD" };
-  return { label: "90일 초과", color: NEG, bg: "#FEF3F2" };
+  if (days <= 30) return { label: "30일 이내", color: "#3A4A66", bg: "transparent" };
+  if (days <= 60) return { label: "31~60일", color: "#8A5A12", bg: "transparent" };
+  if (days <= 90) return { label: "61~90일", color: "#9A3412", bg: "transparent" };
+  return { label: "90일 초과", color: NEG, bg: "transparent" };
 };
 const TABS = [
   ["ar", "미수금 현황", "108", "외상매출금"],
@@ -104,6 +111,8 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
   const [apInput, setApInput] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [vatQuarter, setVatQuarter] = React.useState("Q1");
+  const [payLog, setPayLog] = React.useState([]); // ⭐ 2026-11-18 입금 · 지급 처리 기록
+  const [detail, setDetail] = React.useState(null); // { type: "ar" | "ap" | "vat", key }
 
   React.useEffect(() => {
     (async () => {
@@ -111,6 +120,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
         const d = await loadAcctPayments(db, year); // ⭐ 회사별 문서
         setArPayments(d.ar || {});
         setApPayments(d.ap || {});
+        setPayLog(Array.isArray(d.log) ? d.log : []);
       } catch (e) { console.error(e); }
     })();
   }, [year]);
@@ -124,11 +134,19 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
   }, [dispatchData, fixedRows, year]);
 
   // 청구액 = 부가세 포함(거래처정산 미수금과 같은 식) · 연체 구분 = 아직 못 받은 청구 중 가장 오래된 것의 경과일
+  // ⭐ 2026-11-18 정산관리 › 입금 확인 [입금완료] 오더(부가세 포함) — 거래처별 합계
+  const arSettled = React.useMemo(() => {
+    const m = {};
+    yearOrders.forEach((r) => { if (isArOrder(r) && r.입금상태 === "입금완료") { const c = arClientOf(r); m[c] = (m[c] || 0) + vatIncluded(toInt(r.청구운임)); } });
+    return m;
+  }, [yearOrders]);
   const arByClient = React.useMemo(() => {
     const todayK = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-    return receivablesOf({ orders: yearOrders, paid: arPayments, today: todayK, year: String(year) })
-      .map((x) => ({ client: x.client, invoiced: x.billed, paid: x.paid, outstanding: x.outstanding, ageDays: x.oldest }));
-  }, [yearOrders, arPayments, year]);
+    const paidMap = { ...arPayments };
+    Object.entries(arSettled).forEach(([c, v]) => { paidMap[c] = Math.max(Number(arPayments[c]) || 0, v); });
+    return receivablesOf({ orders: yearOrders, paid: paidMap, today: todayK, year: String(year) })
+      .map((x) => ({ client: x.client, invoiced: x.billed, paid: x.paid, manual: Number(arPayments[x.client]) || 0, settled: arSettled[x.client] || 0, outstanding: x.outstanding, ageDays: x.oldest }));
+  }, [yearOrders, arPayments, arSettled, year]);
 
   const apByDriver = React.useMemo(() => {
     const map = {};
@@ -140,7 +158,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
     });
     return Object.entries(map).map(([d, v]) => {
       const paid = Math.max(apPayments[d] || 0, v.settled);
-      return { driver: d, carNo: v.carNo, total: v.total, paid, outstanding: Math.max(0, v.total - paid) };
+      return { driver: d, carNo: v.carNo, total: v.total, paid, manual: apPayments[d] || 0, settled: v.settled, outstanding: Math.max(0, v.total - paid) };
     }).sort((a, b) => b.outstanding - a.outstanding);
   }, [yearOrders, apPayments]);
 
@@ -190,10 +208,11 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
     try {
       const newAr = type === "ar" ? { ...arPayments, [name]: (arPayments[name] || 0) + a } : arPayments;
       const newAp = type === "ap" ? { ...apPayments, [name]: (apPayments[name] || 0) + a } : apPayments;
-      await saveAcctPayments(db, year, "", newAr, newAp);
+      await saveAcctPayments(db, year, "", newAr, newAp, { type, name, amount: a });
       // 거래처 수금 → 수입·지출 장부(수입)·자금 잔액 자동 반영. 기사 지급은 정산관리 › 지급관리 [지급완료]가 장부에 반영(이중 기록 방지)
       if (type === "ar") addClientCollection(db, { name, amount: a, year }).catch(() => {});
       setArPayments(newAr); setApPayments(newAp);
+      setPayLog((l) => [...l, { type, name, amount: a, at: Date.now() }]);
     } catch (e) { console.error(e); alert(`저장 실패: ${e?.message || e}`); } finally { setSaving(false); }
   };
   const resetPayment = async (type, name) => {
@@ -203,7 +222,8 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
     try {
       const newAr = type === "ar" ? { ...arPayments, [name]: 0 } : arPayments;
       const newAp = type === "ap" ? { ...apPayments, [name]: 0 } : apPayments;
-      await saveAcctPayments(db, year, "", newAr, newAp);
+      await saveAcctPayments(db, year, "", newAr, newAp, { type, name, amount: 0, reset: true });
+      setPayLog((l) => [...l, { type, name, amount: 0, reset: true, at: Date.now() }]);
       if (type === "ar") removeClientCollections(db, { name, year }).catch(() => {});
       setArPayments(newAr); setApPayments(newAp);
     } catch (e) { console.error(e); alert(`초기화 실패: ${e?.message || e}`); } finally { setSaving(false); }
@@ -302,7 +322,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
           <div className="min-w-0">
             <div className="text-[11px] font-extrabold tracking-[0.08em] text-[#4B6CB7]" style={NUM}>GENERAL LEDGER · 총계정원장</div>
             <h2 className="text-[19px] font-black text-[#0F1A30] leading-tight"><EditableText id="settlement.accounting.title" defaultText="회계 장부" /></h2>
-            <p className="text-[13px] font-bold text-[#5B6B85] mt-0.5">회계연도 <span style={NUM}>{year}.01.01 ~ {year}.12.31</span> · 받을 돈 · 줄 돈 · 부가세 · 원가를 계정별로 봐요</p>
+            <p className="text-[13px] font-bold text-[#5B6B85] mt-0.5">회계연도 <span style={NUM}>{year}.01.01 ~ {year}.12.31</span> · 외상매출금 · 미지급금 · 부가가치세 · 매출원가 계정별 원장 · 행을 누르면 거래 내역을 볼 수 있어요</p>
           </div>
           <div className="flex items-center gap-2">
             {saving && <span className="text-[13px] font-bold text-[#2D4C82]">저장 중…</span>}
@@ -329,9 +349,9 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
         </div>
         <div className="px-4 sm:px-5 py-2 border-t border-[#D3DBE8] flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] font-bold text-[#5B6B85]">
           <span>계정 <b className="text-[#0F1A30]" style={NUM}>{tab[2]}</b> {tab[3]}</span>
-          <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: DR }} />차변 = 늘어난 쪽(자산) · 갚은 쪽(부채)</span>
-          <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: CR }} />대변 = 줄어든 쪽(자산) · 생긴 쪽(부채)</span>
-          <span className="ml-auto text-[#9AA9C3]">단위 · 원 · 두 줄 밑줄 = 합계</span>
+          <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: DR }} />차변 · 자산 증가 / 부채 감소</span>
+          <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: CR }} />대변 · 자산 감소 / 부채 증가</span>
+          <span className="ml-auto text-[#9AA9C3]">단위 : 원 · 이중선 = 합계</span>
         </div>
       </div>
 
@@ -360,16 +380,16 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
               {!arByClient.length ? <tr><td colSpan={9} style={{ ...td, textAlign: "center", color: "#9AA9C3", height: 64 }}>배차완료 데이터가 없습니다</td></tr> : arSorted.map((r, i) => {
                 const age = ageLabel(r.ageDays); arCum += r.outstanding;
                 return (
-                  <tr key={r.client} className="hover:bg-[#F5F8FD]" style={{ background: r.outstanding > 0 ? "#fff" : "#FAFBFD" }}>
+                  <tr key={r.client} className="hover:bg-[#F5F8FD] cursor-pointer" style={{ background: r.outstanding > 0 ? "#fff" : "#FAFBFD" }} onClick={() => setDetail({ type: "ar", key: r.client })} title="눌러서 거래처 원장 보기" data-ledger-row="ar">
                     <td style={{ ...td, ...NUM, textAlign: "center", color: "#9AA9C3", fontSize: 12.5 }}>{i + 1}</td>
                     <td style={{ ...td, textAlign: "center" }}><Code code="108" name="외상매출금" /></td>
                     <td style={{ ...td, fontWeight: 800, color: INK }}>{r.client}</td>
-                    <td style={{ ...td, ...vl, textAlign: "center" }}>{r.outstanding > 0 ? <span className="inline-flex items-center gap-1.5"><span className="text-[12.5px] font-bold text-[#7A879C]" style={NUM}>D+{r.ageDays}</span><span className="px-1.5 py-0.5 rounded-md text-[12px] font-black" style={{ color: age.color, background: age.bg }}>{age.label}</span></span> : <span className="px-1.5 py-0.5 rounded-md text-[12px] font-black text-[#1F6F4A] bg-[#E8F5EE]">수금완료</span>}</td>
+                    <td style={{ ...td, ...vl, textAlign: "center" }}>{r.outstanding > 0 ? <span className="inline-flex items-center gap-1.5"><span className="text-[12.5px] font-bold text-[#7A879C]" style={NUM}>D+{r.ageDays}</span><span className="px-1.5 py-0.5 rounded-md text-[12px] font-black" style={{ color: age.color, background: age.bg }}>{age.label}</span></span> : <span className="px-1.5 py-0.5 rounded-md text-[12px] font-black text-[#1F6F4A]">수금완료</span>}</td>
                     <td style={{ ...tdN, ...vlDouble, color: DR }}>{amt(r.invoiced)}</td>
                     <td style={{ ...tdN, ...vl, color: CR }}>{amt(r.paid)}</td>
                     <td style={{ ...tdN, ...vl, color: r.outstanding > 0 ? NEG : "#9AA9C3", fontWeight: r.outstanding > 0 ? 900 : 600 }}>{amt(r.outstanding) || "0"}</td>
                     <td style={{ ...tdN, ...vl, color: "#5B6B85", fontWeight: 600 }}>{amt(arCum) || "0"}</td>
-                    <td style={{ ...td, ...vlDouble }}>
+                    <td style={{ ...td, ...vlDouble }} onClick={(e) => e.stopPropagation()}>
                       <div className="flex gap-1.5">
                         <button type="button" onClick={() => { setArModal(r.client); setArInput(""); }} className={btnDark}>입금 처리</button>
                         {r.paid > 0 && <button type="button" onClick={() => resetPayment("ar", r.client)} className={btnLine}>초기화</button>}
@@ -387,7 +407,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
               <td style={{ ...td, ...vl, ...totalCell }} colSpan={2} />
             </tr></tfoot>}
           </LedgerTable>
-          <Foot>* 배차완료 기준 청구운임 합계(부가세 포함)예요. [입금 처리]를 누르면 저장되고, 수입·지출 장부 · 자금 잔액에도 반영돼요. 누계 잔액 = 위에서부터 미수금을 더한 값이에요.</Foot>
+          <Foot>* 청구액은 배차완료 오더의 청구운임(부가세 포함) 합계예요. 수금액은 회계 장부 [입금 처리] 금액과 정산관리 [입금완료] 처리 오더 금액 중 큰 쪽이에요. [입금 처리]는 자금관리 수입·지출 장부와 자금 잔액에도 반영돼요. 누계 잔액은 위에서부터 미수금을 더한 값이에요.</Foot>
         </div>
       )}
 
@@ -416,7 +436,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
               {!apByDriver.length ? <tr><td colSpan={9} style={{ ...td, textAlign: "center", color: "#9AA9C3", height: 64 }}>배차완료 데이터가 없습니다</td></tr> : apSorted.map((r, i) => {
                 apCum += r.outstanding;
                 return (
-                  <tr key={r.driver} className="hover:bg-[#F5F8FD]" style={{ background: r.outstanding > 0 ? "#fff" : "#FAFBFD" }}>
+                  <tr key={r.driver} className="hover:bg-[#F5F8FD] cursor-pointer" style={{ background: r.outstanding > 0 ? "#fff" : "#FAFBFD" }} onClick={() => setDetail({ type: "ap", key: r.driver })} title="눌러서 지급 내역 보기" data-ledger-row="ap">
                     <td style={{ ...td, ...NUM, textAlign: "center", color: "#9AA9C3", fontSize: 12.5 }}>{i + 1}</td>
                     <td style={{ ...td, textAlign: "center" }}><Code code="253" name="미지급금" /></td>
                     <td style={{ ...td, fontWeight: 800, color: INK }}>{r.driver}</td>
@@ -425,7 +445,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
                     <td style={{ ...tdN, ...vl, color: CR }}>{amt(r.total)}</td>
                     <td style={{ ...tdN, ...vl, color: r.outstanding > 0 ? NEG : "#9AA9C3", fontWeight: r.outstanding > 0 ? 900 : 600 }}>{amt(r.outstanding) || "0"}</td>
                     <td style={{ ...tdN, ...vl, color: "#5B6B85", fontWeight: 600 }}>{amt(apCum) || "0"}</td>
-                    <td style={{ ...td, ...vlDouble }}>
+                    <td style={{ ...td, ...vlDouble }} onClick={(e) => e.stopPropagation()}>
                       <div className="flex gap-1.5">
                         <button type="button" onClick={() => { setApModal(r.driver); setApInput(""); }} className={btnDark}>지급 처리</button>
                         {r.paid > 0 && <button type="button" onClick={() => resetPayment("ap", r.driver)} className={btnLine}>초기화</button>}
@@ -443,7 +463,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
               <td style={{ ...td, ...vl, ...totalCell }} colSpan={2} />
             </tr></tfoot>}
           </LedgerTable>
-          <Foot>* 배차완료 기준 기사운임 합계예요. 줄 돈(부채)이라 생긴 돈은 대변, 드린 돈은 차변에 적어요. [지급 처리]를 누르면 저장돼요.</Foot>
+          <Foot>* 기사운임 합계는 배차완료 오더 기준이에요. 미지급금은 부채 계정이라 발생액은 대변, 지급액은 차변에 기록해요. 지급액은 회계 장부 [지급 처리] 금액과 정산관리 › 지급관리 [지급완료] 금액 중 큰 쪽이에요. 자금 장부에는 지급관리 [지급완료]가 반영돼요.</Foot>
         </div>
       )}
 
@@ -465,7 +485,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
             <Tally label="매출세액 (10%)" code="255" value={`${vatOutput.toLocaleString()}원`} />
             <Tally label="계산서 받는 기사 운임" value={`${currentQData.costs.toLocaleString()}원`} sub="기사관리 세금계산서 발행 기사" />
             <Tally label="매입세액 (10%)" code="135" value={`${vatInput.toLocaleString()}원`} />
-            <Tally label="예상 납부세액" value={`${vatNet.toLocaleString()}원`} tone={vatNet > 0 ? "danger" : "ok"} sub="매출세액 − 매입세액(추정)" />
+            <Tally label="예상 납부세액" value={`${vatNet.toLocaleString()}원`} color={profitColor(vatNet, { neutral: INK })} sub={vatNet < 0 ? "환급 예상 · 매출세액 − 매입세액(추정)" : "매출세액 − 매입세액(추정)"} />
             <Tally label="과세 기준" value="일반과세" sub="10% 부가가치세 적용" />
           </div>
           <LedgerTable minWidth={980} caption="부가세 월별 명세">
@@ -482,14 +502,14 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
               {currentQData.months.map(({ mo, sales, costs }) => {
                 const vOut = Math.round(sales * 0.1); const vIn = Math.round(costs * 0.1); const vNet = vOut - vIn; vatCum += vNet;
                 return (
-                  <tr key={mo} className="hover:bg-[#F5F8FD]">
+                  <tr key={mo} className="hover:bg-[#F5F8FD] cursor-pointer" onClick={() => setDetail({ type: "vat", key: mo })} title="눌러서 매출처 · 매입처 명세 보기" data-ledger-row="vat">
                     <td style={{ ...td, ...NUM, fontWeight: 800, textAlign: "center" }}>{year}.{mo}</td>
                     <td style={{ ...tdN, ...vl }}>{amt(sales) || "–"}</td>
                     <td style={{ ...tdN, ...vlDouble, color: CR }}>{amt(vOut) || "–"}</td>
                     <td style={{ ...tdN, ...vl }}>{amt(costs) || "–"}</td>
                     <td style={{ ...tdN, ...vl, color: DR }}>{amt(vIn) || "–"}</td>
-                    <td style={{ ...tdN, ...vlDouble, fontWeight: 900, color: vNet > 0 ? NEG : vNet < 0 ? "#1F6F4A" : "#9AA9C3" }}>{amt(vNet) || "–"}</td>
-                    <td style={{ ...tdN, ...vl, color: "#5B6B85", fontWeight: 600 }}>{amt(vatCum) || "0"}</td>
+                    <td style={{ ...tdN, ...vlDouble, fontWeight: 900, color: profitColor(vNet, { neutral: "#9AA9C3" }) }}>{amt(vNet) || "–"}</td>
+                    <td style={{ ...tdN, ...vl, fontWeight: 600, color: profitColor(vatCum, { neutral: "#5B6B85" }) }}>{amt(vatCum) || "0"}</td>
                   </tr>
                 );
               })}
@@ -500,11 +520,11 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
               <td style={{ ...tdN, ...vlDouble, ...totalCell, color: CR }}>{amt(vatOutput) || "–"}</td>
               <td style={{ ...tdN, ...vl, ...totalCell }}>{amt(currentQData.costs) || "–"}</td>
               <td style={{ ...tdN, ...vl, ...totalCell, color: DR }}>{amt(vatInput) || "–"}</td>
-              <td style={{ ...tdN, ...vlDouble, ...totalCell, color: vatNet > 0 ? NEG : vatNet < 0 ? "#1F6F4A" : INK }}>{amt(vatNet) || "–"}</td>
+              <td style={{ ...tdN, ...vlDouble, ...totalCell, color: profitColor(vatNet, { neutral: INK }) }}>{amt(vatNet) || "–"}</td>
               <td style={{ ...td, ...vl, ...totalCell }} />
             </tr></tfoot>
           </LedgerTable>
-          <Foot>* 매출세액은 지급방식 계산서 오더 청구운임, 매입세액은 기사관리에서 세금계산서 발행 기사로 켠 기사의 운임으로 셉니다. 실제 신고는 세무사 확인을 권장합니다.</Foot>
+          <Foot>* 매출세액은 지급방식이 계산서인 오더의 청구운임, 매입세액은 기사관리에서 세금계산서 발행 기사로 지정한 기사의 운임으로 계산해요. 월을 누르면 매출처 · 매입처별 명세를 볼 수 있어요. 납부세액이 마이너스면 환급 예상이에요. 실제 신고 전에는 세무사 확인을 권장해요.</Foot>
         </div>
       )}
 
@@ -552,6 +572,8 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
         </div>
       )}
 
+      {detail && <LedgerDetail detail={detail} year={year} yearOrders={yearOrders} drivers={drivers} arByClient={arByClient} apByDriver={apByDriver} payLog={payLog} onClose={() => setDetail(null)}
+        onPay={(type, name) => { setDetail(null); if (type === "ar") { setArModal(name); setArInput(""); } else { setApModal(name); setApInput(""); } }} isViewer={isViewer} />}
       {/* 입금 · 지급 처리 창 */}
       {[["ar", arModal, setArModal, arInput, setArInput, "입금 처리", "미수금 잔액", (n) => arByClient.find((r) => r.client === n)?.outstanding || 0, "입금액 입력 (원)", "대변 · 108 외상매출금"],
         ["ap", apModal, setApModal, apInput, setApInput, "지급 처리", "미지급 잔액", (n) => apByDriver.find((r) => r.driver === n)?.outstanding || 0, "지급액 입력 (원)", "차변 · 253 미지급금"]].map(([type, name, setName, val, setVal, title, balLbl, balOf, ph, side]) => name && (
@@ -564,6 +586,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
             </div>
             <div className="px-5 py-4">
               <div className="mb-2 flex items-baseline justify-between text-[13.5px] font-bold text-[#5B6B85]">{balLbl}<b className="text-[16px] text-[#0F1A30]" style={NUM}>{balOf(name).toLocaleString()}원</b></div>
+              {(() => { const st = type === "ar" ? (arByClient.find((r) => r.client === name)?.settled || 0) : (apByDriver.find((r) => r.driver === name)?.settled || 0); return st > 0 ? <div className="mb-2 text-[12.5px] font-bold text-[#5B6B85] leading-relaxed break-keep">정산관리에서 {type === "ar" ? "입금완료" : "지급완료"} 처리한 {st.toLocaleString()}원은 이미 반영돼 있어요. 같은 돈을 여기서 또 처리하지 않도록 확인해 주세요.</div> : null; })()}
               <input autoComplete="off" inputMode="numeric" value={val ? Number(String(val).replace(/[^\d]/g, "") || 0).toLocaleString() : ""} onChange={(e) => setVal(e.target.value.replace(/[^\d]/g, ""))} placeholder={ph}
                 className="w-full h-12 border border-[#D3DBE8] rounded-xl px-3 text-[17px] font-black text-right outline-none focus:border-[#2D4C82]" style={NUM} autoFocus />
               <div className="flex gap-2 justify-end mt-4">
@@ -577,3 +600,244 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
     </div>
   );
 }
+
+// ═════════════ ⭐ 2026-11-18 상세 내역(행을 누르면 열림) ═════════════
+//  · ar  = 거래처 원장: 청구 내역(오더별 공급가액 · 부가세) + 수금 내역(입금 처리 기록 · 정산관리 입금완료 오더)
+//  · ap  = 기사별 지급 내역: 운행 내역(오더별 기사운임 · 지급상태) + 지급 내역(지급 처리 기록 · 지급관리 지급완료)
+//  · vat = 월별 매출처 · 매입처 명세(세금계산서 합계표처럼 거래처 · 기사별 공급가액 · 세액)
+const md = (d) => (d ? String(d).slice(5, 10).replace("-", ".") : "");
+const ymd = (d) => (d ? String(d).slice(0, 10).replace(/-/g, ".") : "");
+const atDay = (ms) => { if (!ms) return ""; const d = new Date(Number(ms) + 9 * 3600e3); return d.toISOString().slice(0, 10); };
+const plateKey = (s) => String(s || "").replace(/\s+/g, "").toUpperCase();
+// 기록(log) 중 마지막 초기화 뒤의 것만
+const logSince = (log, type, name) => {
+  const mine = (log || []).filter((x) => x && x.type === type && x.name === name).sort((a, b) => (a.at || 0) - (b.at || 0));
+  const last = mine.map((x) => !!x.reset).lastIndexOf(true);
+  return mine.slice(last + 1).filter((x) => !x.reset && Number(x.amount) > 0);
+};
+
+function LedgerDetail({ detail, year, yearOrders, drivers, arByClient, apByDriver, payLog, onClose, onPay, isViewer }) {
+  const [tab, setTab] = React.useState("list");
+  const mobile = typeof window !== "undefined" && window.innerWidth < 768;
+  React.useEffect(() => { const k = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
+  const dth = { ...th, fontSize: 13, padding: "8px 8px", borderTop: "none", borderBottom: `1.5px solid ${INK}` };
+  const dtd = { ...td, fontSize: 13, padding: "7px 8px", height: 36 };
+  const dtdN = { ...dtd, ...NUM, textAlign: "right", fontWeight: 700 };
+  const tot = { ...totalCell, fontSize: 13 };
+  let title = ""; let code = ""; let summary = null; let tabs = null; let body = null; let action = null;
+
+  if (detail.type === "ar") {
+    const r = arByClient.find((x) => x.client === detail.key) || { client: detail.key, invoiced: 0, paid: 0, manual: 0, settled: 0, outstanding: 0 };
+    const orders = yearOrders.filter((o) => isArOrder(o) && arClientOf(o) === detail.key).sort((a, b) => String(a.상차일 || "").localeCompare(String(b.상차일 || "")));
+    const logs = logSince(payLog, "ar", detail.key);
+    const logSum = logs.reduce((s, x) => s + Number(x.amount || 0), 0);
+    const legacy = Math.max(0, (r.manual || 0) - logSum);
+    const settledRows = orders.filter((o) => o.입금상태 === "입금완료");
+    title = r.client; code = "108 외상매출금 · 거래처 원장";
+    summary = [["청구액", r.invoiced, INK], ["수금액", r.paid, "#1F6F4A"], ["미수금", r.outstanding, r.outstanding > 0 ? NEG : INK]];
+    tabs = [["list", `청구 내역 ${orders.length}건`], ["pay", "수금 내역"]];
+    action = !isViewer && <button type="button" onClick={() => onPay("ar", r.client)} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black">입금 처리</button>;
+    if (tab === "list") {
+      const sSum = orders.reduce((s, o) => s + toInt(o.청구운임), 0);
+      body = (
+        <LedgerTable minWidth={760} caption="청구 내역">
+          <thead><tr>
+            <th style={{ ...dth, width: 44 }}>No.</th><th style={dth}>상차일</th><th style={{ ...dth, ...vl }}>상차지 → 하차지</th><th style={{ ...dth, ...vl }}>차량번호</th>
+            <th style={{ ...dth, ...vlDouble }}>공급가액</th><th style={{ ...dth, ...vl }}>부가세</th><th style={{ ...dth, ...vl }}>합계</th><th style={{ ...dth, ...vl }}>입금</th>
+          </tr></thead>
+          <tbody>
+            {!orders.length ? <tr><td colSpan={8} style={{ ...dtd, textAlign: "center", color: "#9AA9C3", height: 56 }}>청구 내역이 없어요</td></tr> : orders.map((o, i) => {
+              const s = toInt(o.청구운임); const v = vatIncluded(s) - s;
+              return (
+                <tr key={o._id || i}>
+                  <td style={{ ...dtd, ...NUM, textAlign: "center", color: "#9AA9C3" }}>{i + 1}</td>
+                  <td style={{ ...dtd, ...NUM, textAlign: "center" }}>{ymd(o.상차일)}</td>
+                  <td style={{ ...dtd, ...vl, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }} title={`${o.상차지명 || ""} → ${o.하차지명 || ""}`}>{o.상차지명 || "–"} → {o.하차지명 || "–"}</td>
+                  <td style={{ ...dtd, ...vl, ...NUM, textAlign: "center", color: "#5B6B85" }}>{o.차량번호 || "–"}</td>
+                  <td style={{ ...dtdN, ...vlDouble }}>{amt(s) || "0"}</td>
+                  <td style={{ ...dtdN, ...vl, color: "#5B6B85" }}>{amt(v) || "0"}</td>
+                  <td style={{ ...dtdN, ...vl, color: DR }}>{amt(s + v) || "0"}</td>
+                  <td style={{ ...dtd, ...vl, textAlign: "center", fontWeight: 800, color: o.입금상태 === "입금완료" ? "#1F6F4A" : "#9AA9C3" }}>{o.입금상태 === "입금완료" ? `완료 ${md(o.입금일)}` : "–"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+          {orders.length > 0 && <tfoot><tr>
+            <td style={{ ...dtd, ...tot }} colSpan={4}>합계</td>
+            <td style={{ ...dtdN, ...vlDouble, ...tot }}>{amt(sSum) || "0"}</td>
+            <td style={{ ...dtdN, ...vl, ...tot }}>{amt(vatIncluded(sSum) - sSum) || "0"}</td>
+            <td style={{ ...dtdN, ...vl, ...tot, color: DR }}>{amt(vatIncluded(sSum)) || "0"}</td>
+            <td style={{ ...dtd, ...vl, ...tot }} />
+          </tr></tfoot>}
+        </LedgerTable>
+      );
+    } else {
+      const rows = [
+        ...logs.map((x) => ({ d: atDay(x.at), kind: "회계 장부 입금 처리", amt: Number(x.amount) || 0, src: "manual" })),
+        ...(legacy > 0 ? [{ d: "", kind: "이전 입금 처리 누계(일자 기록 없음)", amt: legacy, src: "manual" }] : []),
+        ...settledRows.map((o) => ({ d: String(o.입금일 || "").slice(0, 10), kind: `정산관리 입금 확인 · ${o.상차지명 || ""} → ${o.하차지명 || ""}`, amt: vatIncluded(toInt(o.청구운임)), src: "settle" })),
+      ].sort((a, b) => String(a.d).localeCompare(String(b.d)));
+      body = (
+        <div className="space-y-2">
+          <LedgerTable minWidth={620} caption="수금 내역">
+            <thead><tr><th style={{ ...dth, width: 110 }}>입금일</th><th style={{ ...dth, ...vl }}>적요</th><th style={{ ...dth, ...vlDouble }}>금액</th></tr></thead>
+            <tbody>
+              {!rows.length ? <tr><td colSpan={3} style={{ ...dtd, textAlign: "center", color: "#9AA9C3", height: 56 }}>수금 기록이 없어요</td></tr> : rows.map((x, i) => (
+                <tr key={i}>
+                  <td style={{ ...dtd, ...NUM, textAlign: "center" }}>{ymd(x.d) || "–"}</td>
+                  <td style={{ ...dtd, ...vl, color: x.src === "settle" ? "#5B6B85" : INK, fontWeight: x.src === "settle" ? 600 : 800 }}>{x.kind}</td>
+                  <td style={{ ...dtdN, ...vlDouble, color: CR }}>{amt(x.amt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </LedgerTable>
+          <Foot>* 수금액 {won(r.paid)}원 = 회계 장부 입금 처리 {won(r.manual)}원과 정산관리 입금완료 {won(r.settled)}원 중 큰 쪽이에요.</Foot>
+        </div>
+      );
+    }
+  } else if (detail.type === "ap") {
+    const r = apByDriver.find((x) => x.driver === detail.key) || { driver: detail.key, total: 0, paid: 0, manual: 0, settled: 0, outstanding: 0 };
+    const orders = yearOrders.filter((o) => (o.이름 || "미지정") === detail.key).sort((a, b) => String(a.상차일 || "").localeCompare(String(b.상차일 || "")));
+    const logs = logSince(payLog, "ap", detail.key);
+    const logSum = logs.reduce((s, x) => s + Number(x.amount || 0), 0);
+    const legacy = Math.max(0, (r.manual || 0) - logSum);
+    title = `${r.driver}${r.carNo ? ` · ${r.carNo}` : ""}`; code = "253 미지급금 · 기사별 지급 내역";
+    summary = [["기사운임 합계", r.total, INK], ["지급액", r.paid, "#1F6F4A"], ["미지급", r.outstanding, r.outstanding > 0 ? NEG : INK]];
+    tabs = [["list", `운행 내역 ${orders.length}건`], ["pay", "지급 내역"]];
+    action = !isViewer && <button type="button" onClick={() => onPay("ap", r.driver)} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black">지급 처리</button>;
+    if (tab === "list") {
+      const sum = orders.reduce((s, o) => s + toInt(o.기사운임), 0);
+      body = (
+        <LedgerTable minWidth={760} caption="운행 내역">
+          <thead><tr>
+            <th style={{ ...dth, width: 44 }}>No.</th><th style={dth}>상차일</th><th style={{ ...dth, ...vl }}>거래처</th><th style={{ ...dth, ...vl }}>상차지 → 하차지</th>
+            <th style={{ ...dth, ...vlDouble }}>기사운임</th><th style={{ ...dth, ...vl }}>지급</th>
+          </tr></thead>
+          <tbody>
+            {!orders.length ? <tr><td colSpan={6} style={{ ...dtd, textAlign: "center", color: "#9AA9C3", height: 56 }}>운행 내역이 없어요</td></tr> : orders.map((o, i) => (
+              <tr key={o._id || i}>
+                <td style={{ ...dtd, ...NUM, textAlign: "center", color: "#9AA9C3" }}>{i + 1}</td>
+                <td style={{ ...dtd, ...NUM, textAlign: "center" }}>{ymd(o.상차일)}</td>
+                <td style={{ ...dtd, ...vl, fontWeight: 800 }}>{o.거래처명 || "–"}</td>
+                <td style={{ ...dtd, ...vl, maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }} title={`${o.상차지명 || ""} → ${o.하차지명 || ""}`}>{o.상차지명 || "–"} → {o.하차지명 || "–"}</td>
+                <td style={{ ...dtdN, ...vlDouble, color: CR }}>{amt(toInt(o.기사운임)) || "0"}</td>
+                <td style={{ ...dtd, ...vl, textAlign: "center", fontWeight: 800, color: o.지급상태 === "지급완료" ? "#1F6F4A" : "#9AA9C3" }}>{o.지급상태 === "지급완료" ? `완료 ${md(o.지급일)}` : "–"}</td>
+              </tr>
+            ))}
+          </tbody>
+          {orders.length > 0 && <tfoot><tr>
+            <td style={{ ...dtd, ...tot }} colSpan={4}>합계</td>
+            <td style={{ ...dtdN, ...vlDouble, ...tot, color: CR }}>{amt(sum) || "0"}</td>
+            <td style={{ ...dtd, ...vl, ...tot }} />
+          </tr></tfoot>}
+        </LedgerTable>
+      );
+    } else {
+      const byDay = {};
+      orders.filter((o) => o.지급상태 === "지급완료").forEach((o) => { const d = String(o.지급일 || "").slice(0, 10); byDay[d] = byDay[d] || { n: 0, a: 0 }; byDay[d].n += 1; byDay[d].a += toInt(o.기사운임); });
+      const rows = [
+        ...logs.map((x) => ({ d: atDay(x.at), kind: "회계 장부 지급 처리", amt: Number(x.amount) || 0, src: "manual" })),
+        ...(legacy > 0 ? [{ d: "", kind: "이전 지급 처리 누계(일자 기록 없음)", amt: legacy, src: "manual" }] : []),
+        ...Object.entries(byDay).map(([d, v]) => ({ d, kind: `지급관리 지급완료 · ${v.n}건`, amt: v.a, src: "settle" })),
+      ].sort((a, b) => String(a.d).localeCompare(String(b.d)));
+      body = (
+        <div className="space-y-2">
+          <LedgerTable minWidth={620} caption="지급 내역">
+            <thead><tr><th style={{ ...dth, width: 110 }}>지급일</th><th style={{ ...dth, ...vl }}>적요</th><th style={{ ...dth, ...vlDouble }}>금액</th></tr></thead>
+            <tbody>
+              {!rows.length ? <tr><td colSpan={3} style={{ ...dtd, textAlign: "center", color: "#9AA9C3", height: 56 }}>지급 기록이 없어요</td></tr> : rows.map((x, i) => (
+                <tr key={i}>
+                  <td style={{ ...dtd, ...NUM, textAlign: "center" }}>{ymd(x.d) || "–"}</td>
+                  <td style={{ ...dtd, ...vl, color: x.src === "settle" ? "#5B6B85" : INK, fontWeight: x.src === "settle" ? 600 : 800 }}>{x.kind}</td>
+                  <td style={{ ...dtdN, ...vlDouble, color: DR }}>{amt(x.amt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </LedgerTable>
+          <Foot>* 지급액 {won(r.paid)}원 = 회계 장부 지급 처리 {won(r.manual)}원과 지급관리 지급완료 {won(r.settled)}원 중 큰 쪽이에요.</Foot>
+        </div>
+      );
+    }
+  } else {
+    const mo = detail.key;
+    const invPlates = invoiceDriverPlates(drivers);
+    const inMonth = yearOrders.filter((o) => String(o.상차일 || "").slice(5, 7) === mo);
+    const salesBy = {}; const buyBy = {};
+    inMonth.forEach((o) => {
+      if (isTaxInvoiceSale(o)) { const k = String(o.거래처명 || "미분류").trim() || "미분류"; salesBy[k] = salesBy[k] || { n: 0, s: 0 }; salesBy[k].n += 1; salesBy[k].s += toInt(o.청구운임); }
+      if (invPlates.has(plateKey(o.차량번호))) { const k = `${o.이름 || "미지정"}${o.차량번호 ? ` · ${o.차량번호}` : ""}`; buyBy[k] = buyBy[k] || { n: 0, s: 0 }; buyBy[k].n += 1; buyBy[k].s += toInt(o.기사운임); }
+    });
+    const sList = Object.entries(salesBy).sort((a, b) => b[1].s - a[1].s);
+    const bList = Object.entries(buyBy).sort((a, b) => b[1].s - a[1].s);
+    const sTot = sList.reduce((s, [, v]) => s + v.s, 0); const bTot = bList.reduce((s, [, v]) => s + v.s, 0);
+    const net = Math.round(sTot * 0.1) - Math.round(bTot * 0.1);
+    title = `${year}년 ${Number(mo)}월`; code = "부가가치세 · 매출처 / 매입처 명세";
+    summary = [["매출세액", Math.round(sTot * 0.1), INK], ["매입세액", Math.round(bTot * 0.1), INK], [net < 0 ? "환급 예상세액" : "납부세액", net, profitColor(net, { neutral: INK })]];
+    tabs = [["list", `매출처 ${sList.length}곳`], ["pay", `매입처 ${bList.length}곳`]];
+    const list = tab === "list" ? sList : bList; const t = tab === "list" ? sTot : bTot;
+    body = (
+      <div className="space-y-2">
+        <LedgerTable minWidth={600} caption={tab === "list" ? "매출처별 명세" : "매입처별 명세"}>
+          <thead><tr>
+            <th style={{ ...dth, width: 44 }}>No.</th><th style={dth}>{tab === "list" ? "매출처(거래처)" : "매입처(기사 · 차량)"}</th><th style={{ ...dth, ...vl }}>건수</th>
+            <th style={{ ...dth, ...vlDouble }}>공급가액</th><th style={{ ...dth, ...vl }}>세액</th><th style={{ ...dth, ...vl }}>합계</th>
+          </tr></thead>
+          <tbody>
+            {!list.length ? <tr><td colSpan={6} style={{ ...dtd, textAlign: "center", color: "#9AA9C3", height: 56 }}>{tab === "list" ? "이 달 계산서 매출이 없어요" : "이 달 계산서 받는 기사 운임이 없어요"}</td></tr> : list.map(([k, v], i) => (
+              <tr key={k}>
+                <td style={{ ...dtd, ...NUM, textAlign: "center", color: "#9AA9C3" }}>{i + 1}</td>
+                <td style={{ ...dtd, fontWeight: 800 }}>{k}</td>
+                <td style={{ ...dtdN, ...vl }}>{v.n.toLocaleString()}</td>
+                <td style={{ ...dtdN, ...vlDouble }}>{amt(v.s) || "0"}</td>
+                <td style={{ ...dtdN, ...vl, color: tab === "list" ? CR : DR }}>{amt(Math.round(v.s * 0.1)) || "0"}</td>
+                <td style={{ ...dtdN, ...vl }}>{amt(v.s + Math.round(v.s * 0.1)) || "0"}</td>
+              </tr>
+            ))}
+          </tbody>
+          {list.length > 0 && <tfoot><tr>
+            <td style={{ ...dtd, ...tot }} colSpan={2}>합계</td>
+            <td style={{ ...dtdN, ...vl, ...tot }}>{list.reduce((s, [, v]) => s + v.n, 0).toLocaleString()}</td>
+            <td style={{ ...dtdN, ...vlDouble, ...tot }}>{amt(t) || "0"}</td>
+            <td style={{ ...dtdN, ...vl, ...tot }}>{amt(Math.round(t * 0.1)) || "0"}</td>
+            <td style={{ ...dtdN, ...vl, ...tot }}>{amt(t + Math.round(t * 0.1)) || "0"}</td>
+          </tr></tfoot>}
+        </LedgerTable>
+        <Foot>* {tab === "list" ? "지급방식이 계산서인 오더를 거래처별로 묶었어요." : "기사관리에서 세금계산서 발행 기사로 지정한 기사의 운임을 기사별로 묶었어요."} 세액은 공급가액의 10%로 계산한 추정치예요.</Foot>
+      </div>
+    );
+  }
+
+  const panel = (
+    <div className="fixed inset-0 z-[99990] bg-[#0F1A30]/40 flex justify-end" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} data-ledger-detail={detail.type}>
+      <div className={`bg-[#F7F9FC] flex flex-col shadow-2xl ${mobile ? "w-full mt-auto h-[92vh] rounded-t-[20px]" : "w-[min(940px,96vw)] h-full"}`} onMouseDown={(e) => e.stopPropagation()}>
+        <div className="bg-white px-4 sm:px-5 pt-4 pb-3" style={{ borderBottom: `3px double ${INK}` }}>
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-[11.5px] font-black tracking-[0.04em] text-[#7A879C]" style={NUM}>{code}</div>
+              <div className="text-[18px] font-black text-[#0F1A30] truncate">{title}</div>
+            </div>
+            {action}
+            <button type="button" onClick={onClose} className="h-9 px-3 rounded-lg border border-[#D3DBE8] bg-white text-[13px] font-black text-[#5B6B85]">닫기</button>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {summary.map(([l, v, c]) => (
+              <div key={l} className="rounded-xl border border-[#D3DBE8] px-3 py-2 min-w-0">
+                <div className="text-[12px] font-black text-[#5B6B85] truncate">{l}</div>
+                <div className="text-[16px] sm:text-[18px] font-black truncate" style={{ ...NUM, color: c }}>{wonTxt(v)}</div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex gap-1" role="tablist">
+            {tabs.map(([k, l]) => (
+              <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)}
+                className={`h-9 px-3.5 rounded-lg text-[13.5px] font-black border ${tab === k ? "border-[#0F1A30] text-[#0F1A30]" : "border-transparent text-[#7A879C] hover:text-[#0F1A30]"}`}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <div className="flex-1 min-h-0 overflow-auto p-3 sm:p-4">{body}</div>
+      </div>
+    </div>
+  );
+  return createPortal(panel, document.body);
+}
+const won = (n) => Math.round(Number(n) || 0).toLocaleString("ko-KR");

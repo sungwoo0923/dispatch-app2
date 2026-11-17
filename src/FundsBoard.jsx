@@ -239,7 +239,7 @@ export function FundsBoard({ company, canEdit = true }) {
                     <span className="text-right shrink-0">
                       {credit && <span className="block text-[10.5px] font-black text-[#9AA9C3]">남은 한도</span>}
                       {isCard(f) && f.linkName && <span className="block text-[10.5px] font-black text-[#9AA9C3]">통장 잔액</span>}
-                      <span className={`block text-[17px] font-black tabular-nums ${f.kind === "대출" || f.balance < 0 ? "text-[#B42318]" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{f.kind === "대출" ? "−" : f.balance < 0 ? "−" : ""}{won(Math.abs(f.balance))}</span>
+                      <span className={`block text-[17px] font-black tabular-nums ${f.balance < 0 ? "text-[#2D6BE0]" : f.kind === "대출" ? "text-[#B42318]" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{f.kind === "대출" ? "−" : f.balance < 0 ? "−" : ""}{won(Math.abs(f.balance))}</span>
                       {share > 0 && <span className="block text-[11px] font-bold text-[#9AA9C3] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{share.toFixed(1)}%</span>}
                     </span>
                   </button>

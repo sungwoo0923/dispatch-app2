@@ -593,7 +593,7 @@ function PlanTab({ company, demo, today, compact, wide, xl }) {
               <div style={{ fontSize: 15, color: C.t2 }}>{r.data?.period?.start ? `${r.data.period.start.replace(/-/g, ".")} ~ ${(r.data.period.end || "").replace(/-/g, ".")}` : "기간 미정"}{r.data?.dept || r.data?.owner ? ` · ${[r.data.dept, r.data.owner].filter(Boolean).join(" ")}` : ""}</div>
               <div className="exa-kv" style={{ gridTemplateColumns: "repeat(3,minmax(0,1fr))", marginTop: 0 }}>
                 {[["예산", r.ex.budget], ["집행액", r.ex.spent], ["잔액", r.ex.remain]].map(([l, v]) => (
-                  <div key={l} style={{ minWidth: 0 }}><span style={{ display: "block", fontSize: 14 }}>{l}</span><b className="ebx-num" style={{ fontSize: 18, fontWeight: 800, color: l === "잔액" && v < 0 ? C.err : C.t1 }}>{won(v)}</b></div>
+                  <div key={l} style={{ minWidth: 0 }}><span style={{ display: "block", fontSize: 14 }}>{l}</span><b className="ebx-num" style={{ fontSize: 18, fontWeight: 800, color: l === "잔액" && v < 0 ? C.down : C.t1 }}>{won(v)}</b></div>
                 ))}
               </div>
               <PlanBar ex={r.ex} />
