@@ -81,6 +81,12 @@ export function prefetchPayrollStatus(company, { force = false } = {}) {
 // ⭐ 2026-11-17 서버 응답 전 임시 상태(비밀번호 칸을 바로 띄우는 용도 — 권한 판단은 서버가 한다)
 const PENDING_ST = { staff: true, hasPassword: true, admin: false, usingDefault: false, pending: true };
 const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+// ⭐ 2026-11-17 남은 시간 시계(급여 화면 맨 위 줄에 넣는 용도) — 1초마다 이 글자만 다시 그린다(급여 화면 전체는 다시 그리지 않음)
+export function GateTimer({ until }) {
+  const [now, setNow] = React.useState(Date.now());
+  React.useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  return <b className="tabular-nums" style={NUMS}>{mmss(until - now)}</b>;
+}
 const inp = "h-12 w-full px-4 rounded-xl border border-[#DCE3EE] bg-white text-[16px] font-bold text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#8FB0F0]/40 tracking-[0.12em]";
 const LockIcon = ({ open = false, size = 26 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -264,8 +270,11 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
     );
   }
   const left = until - now;
+  // ⭐ 2026-11-17 children 이 함수면 잠금 줄을 따로 그리지 않고 정보(남은 시각 · 잠그기 · 비밀번호 변경)를 넘긴다 — 급여 화면이 맨 위 한 줄에 같이 보여 준다
+  const asFn = typeof children === "function";
   return (
-    <div className="space-y-3 w-full min-w-0">
+    <div className={asFn ? "w-full min-w-0" : "space-y-3 w-full min-w-0"}>
+      {asFn ? <GateBody render={children} until={until} canChange={!!(st?.admin || canAdmin)} lockNow={lockNow} setChanging={setChanging} /> : <>
       <div className="rounded-2xl bg-white border border-[#E3E8F0] px-3.5 py-2 flex items-center gap-2.5 flex-wrap" data-testid="payroll-unlocked-bar">
         <span className="w-8 h-8 rounded-lg bg-[#EEF3FC] text-[#2D4C82] grid place-items-center"><LockIcon open size={17} /></span>
         <span className="text-[14px] font-black text-[#0F1A30]">잠금 해제됨</span>
@@ -273,7 +282,7 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
         <span className="flex-1" />
         {(st?.admin || canAdmin) && <button type="button" onClick={() => setChanging(true)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B]" data-testid="pw-change">비밀번호 변경</button>}
         <button type="button" onClick={() => lockNow("잠갔어요")} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[14px] font-black" data-testid="payroll-lock">지금 잠그기</button>
-      </div>
+      </div></>}
       {changing && (
         <div className="fixed inset-0 z-[100000] bg-[#0F1A30]/45 grid place-items-center px-3" onClick={() => { if (!(st?.usingDefault && (st?.admin || canAdmin))) setChanging(false); }}>
           <div className="w-full max-w-[440px] rounded-[24px] bg-white shadow-[0_24px_60px_rgba(15,26,48,0.3)] overflow-hidden" onClick={(e) => e.stopPropagation()}>
@@ -287,7 +296,14 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
           </div>
         </div>
       )}
-      {children}
+      {!asFn && children}
     </div>
   );
+}
+// 함수 children — 1초 시계로 잠금 화면이 다시 그려져도 급여 화면은 그대로(until · 권한이 바뀔 때만 새로)
+function GateBody({ render, until, canChange, lockNow, setChanging }) {
+  const lock = React.useCallback(() => lockNow("잠갔어요"), [lockNow]);
+  const change = React.useCallback(() => setChanging(true), [setChanging]);
+  const info = React.useMemo(() => ({ until, canChange, lock, change }), [until, canChange, lock, change]);
+  return React.useMemo(() => render(info), [render, info]);
 }

@@ -3,7 +3,6 @@
 import React from "react";
 import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "./firebase";
-import { MONO } from "./OfficeBooks";
 import { wonFmt } from "./payrollCalc";
 
 export const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -22,7 +21,8 @@ export const uniq = (a) => a.filter((x, i) => x && a.indexOf(x) === i);
 // 글자 14px 이상 · 숫자는 굵게 + 자리 맞춤(tabular-nums)
 export const inp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[15px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#8FB0F0]/40 disabled:bg-[#F5F7FB] disabled:text-[#7A879C]";
 export const numInp = `${inp} text-right tabular-nums font-black`;
-export const NUMS = { fontFamily: MONO, fontVariantNumeric: "tabular-nums" };
+// ⭐ 2026-11-17 숫자는 보통 글꼴(앱 글꼴) 그대로 · 자리만 맞춤(tabular-nums) — 따로 글꼴을 바꾸지 않는다
+export const NUMS = { fontVariantNumeric: "tabular-nums" };
 export const sec = "rounded-[20px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_24px_rgba(16,24,40,0.05)]";
 export const btn = "h-11 px-4 rounded-xl text-[14px] font-black disabled:opacity-40 whitespace-nowrap";
 export const btnLine = `${btn} border border-[#DCE3EE] bg-white text-[#1B2B4B] hover:border-[#2D4C82]`;
