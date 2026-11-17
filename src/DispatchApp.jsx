@@ -2979,6 +2979,7 @@ import { useRouteGroupFilter, RouteGroupBar, routeGroupOf, RouteGroupField, Shee
 import { settleStartTab } from "./settleStart";
 import { QuickOrderLine, useDriverSuggest, DriverSuggestCell, AssignConfirm } from "./SmartDispatchUI"; // ⭐ 2026-11-13 빠른 등록 · 추천 기사
 const SettleHome = React.lazy(() => import("./SettleHome")); // 🧭 정산 홈(처음 열 때 받는다)
+const StmtCompareModal = React.lazy(() => import("./StmtCompare")); // ⭐ 2026-11-17 업체 명세서 비교(거래처정산)
 const MonthClose = React.lazy(() => import("./MonthClose")); // ✅ 2026-11-16 월 마감 리디자인(배차자 1차 — 범위 고르기 · 시각화 · 그 자리에서 고치기)
 const InvoiceFormEditor = React.lazy(() => import("./InvoiceFormEditor")); // 🧾 2026-11-16 거래처별 명세서 양식
 import { pickForm, visibleCols, headerLabels } from "./invoiceForm";
@@ -9596,8 +9597,15 @@ return (
               setCardImageUploading={setCardImageUploading}
               isViewer={isViewer}
               active={정산관리Tab === "거래처정산"}
+              copyPanel
             />
           </div>
+          {/* ⭐ 2026-11-17 업체 명세서 비교에서 [수정]을 누르면 뜨는 오더 복사/수정 패널(월 마감과 같은 패널) */}
+          {menu === "정산관리" && 정산관리Tab === "거래처정산" && !isViewer && (
+            <UnassignedStatus panelOnly role={role} userCompany={userCompany} userNameMap={userNameMap} dispatchData={dispatchData} setDispatchData={setDispatchData}
+              patchDispatch={patchDispatchSafe} removeDispatch={removeDispatchSafe} drivers={drivers} clients={clients} places={places}
+              upsertDriver={upsertDriver} upsertClient={upsertClientSafe} isViewer={isViewer} setCargoAddPopup={setCargoAddPopup} approvedShippers={approvedShippers} />
+          )}
           {/* 🧭 정산 홈 — 월 마감 진행판 · 미수 경과 · 거래처 원장(기존 화면은 그대로, 여기서 바로 간다) */}
           {정산관리Tab === "홈" && <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><SettleHome orders={settleRows} company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} onGo={(k, d) => { set정산관리Tab(k); if (d) setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: d })), 60); }} depositOn={betaPayOn} /></React.Suspense>}
           {/* 🛠 2026-11-16 마감 검증 탭은 없앴다 — 배차자가 넘긴 거래처는 거래처정산에 "배차 마감"으로 보인다 */}
@@ -51806,7 +51814,7 @@ function ArClientInfo({ client, name, upsertClient, isViewer }) {
   );
 }
 
-function ClientSettlement({ dispatchData, setDispatchData, userCompany = "", clients = [], setClients, upsertClient, showAlert = (m) => alert(m), patchDispatch, cardImage, setCardImage, cardImageUploading, setCardImageUploading, isViewer = false, active = true }) {
+function ClientSettlement({ dispatchData, setDispatchData, userCompany = "", clients = [], setClients, upsertClient, showAlert = (m) => alert(m), patchDispatch, cardImage, setCardImage, cardImageUploading, setCardImageUploading, isViewer = false, active = true, copyPanel = false }) {
   // ⭐ 2026-11-03 여러 사업자 — 거래명세서·미수금은 청구 사업자 하나씩(공급자 정보·직인·계좌가 사업자마다 다름)
   const csBiz = useCompanyBiz(getTenant() || userCompany);
   const [csBizSel, setCsBizSel] = React.useState("");
@@ -51817,6 +51825,7 @@ function ClientSettlement({ dispatchData, setDispatchData, userCompany = "", cli
 
   // ★ 오더 상세 팝업
   const [orderPopup, setOrderPopup] = useState(null);
+  const [stmtCmpOpen, setStmtCmpOpen] = useState(false); // ⭐ 2026-11-17 업체 명세서 비교
   const [orderPopupEdit, setOrderPopupEdit] = useState({});
   const todayStr8 = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   const THIS_YEAR = new Date().getFullYear();
@@ -53945,6 +53954,8 @@ const handleBatchSettle = async (targetStatus) => {
                   </div>
                 )}
                 <button type="button" onClick={() => setManualOpen(true)} className={sdBtn}><Ico d={IC.search} size={15} />다른 조회</button>
+                {/* ⭐ 2026-11-17 업체가 먼저 보낸 명세서와 이 명세서(포함한 오더)를 맞춰 본다 */}
+                {searched && searchType === "거래처명" && client && <button type="button" onClick={() => setStmtCmpOpen(true)} className={sdBtn} data-kp="stmt-compare-open" title="업체가 보낸 거래명세서(엑셀 · 캡처)를 올려 우리 오더와 맞춰 봐요">업체 명세서 비교</button>}
                 {stmtYm && stageIdx(stmtStage) >= 1 && exNow !== exSaved && ( /* 🧾 2026-11-16 미작성일 때 [작성]은 아래 빠른 처리 버튼으로 */
                   <button type="button" disabled={isViewer || !rowsInvoice.length} onClick={saveStmtDraft} className={sdBtn}>포함 오더 저장</button>
                 )}
@@ -54412,6 +54423,14 @@ const handleBatchSettle = async (targetStatus) => {
           </KpModal>
 
           {/* ★ 오더 상세 팝업 */}
+          {/* ⭐ 2026-11-17 업체 명세서 비교 — 이 명세서에 넣은 오더와 맞춘다. [수정]은 PC면 오더 복사/수정 패널, 아니면 오더 팝업 */}
+          {stmtCmpOpen && searched && client && (
+            <React.Suspense fallback={null}>
+              <StmtCompareModal client={client} ym={stmtYm || String(start || "").slice(0, 7)} where="거래처정산" orders={selectedRowsInvoice} canEdit={!isViewer}
+                onClose={() => setStmtCmpOpen(false)}
+                onEdit={(o) => (copyPanel ? window.dispatchEvent(new CustomEvent("kp-open-copy-panel", { detail: { row: o } })) : openOrderPopup(o))} />
+            </React.Suspense>
+          )}
           {orderPopup && (
             <div className="kp-modal fixed inset-0 bg-[#0B1428]/55 backdrop-blur-[2px] flex items-end sm:items-center justify-center sm:p-4 z-[99999]">
               <div className="kp-modal-panel bg-white rounded-t-[22px] sm:rounded-[22px] shadow-[0_24px_64px_rgba(11,20,40,0.35)] w-full max-w-[560px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>

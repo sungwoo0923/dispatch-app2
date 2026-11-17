@@ -14,6 +14,7 @@ import { CLOSE_RULES, closeBoard, closeChecks, isMine, canSubmit, canVerify, ver
 import { useLoadOrderRange, monthEnd } from "./orderHistory";
 import useNarrow from "./useNarrow";
 import { kpConfirm } from "./kpDialog";
+const StmtCompareModal = React.lazy(() => import("./StmtCompare")); // ⭐ 2026-11-17 업체 명세서 비교
 
 const NUM = { fontVariantNumeric: "tabular-nums" };
 const C = { ink: "#14213D", sub: "#5A6781", mute: "#8D97AB", line: "#E1E6EF", soft: "#F6F8FB", blue: "#2457D6", ok: "#0F7A52", warn: "#B25F00", bad: "#C62F25", track: "#EDF1F7" };
@@ -148,6 +149,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
   const [osort, setOsort] = React.useState("date"); // date | status
   const [busy, setBusy] = React.useState("");
   const [toast, setToast] = React.useState("");
+  const [cmpOpen, setCmpOpen] = React.useState(false); // ⭐ 2026-11-17 업체 명세서 비교(고른 거래처)
   React.useEffect(() => { if (!toast) return undefined; const t = setTimeout(() => setToast(""), 3200); return () => clearTimeout(t); }, [toast]);
   const openRow = (o) => { if (lockedOf(groupsRef.current.find((g) => g.client === (String(o.거래처명 || "").trim() || "(거래처 없음)")))) { setToast("최종마감 이후 수정이 불가합니다. 필요 시 경리팀에 해제요청 해주세요."); return; } return onOpenOrder && !phone ? onOpenOrder(o) : setSheet({ row: o }); };
   const groupsRef = React.useRef([]);
@@ -330,6 +332,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
           <select id="mc-sort" value={osort} onChange={(e) => setOsort(e.target.value)} className="h-9 rounded-lg border border-[#D5DDEA] bg-white px-2 text-[13px] font-bold text-[#1B2B4B]" title="정렬">
             <option value="date">날짜순</option><option value="status">상태순(확인 필요 먼저)</option>
           </select>
+          <button type="button" onClick={() => setCmpOpen(true)} className="h-9 px-3.5 rounded-lg border border-[#D5DDEA] bg-white text-[13px] font-bold text-[#1B2B4B]" data-kp="mc-stmt-compare" title="업체가 보낸 거래명세서(엑셀 · 캡처)를 올려 우리 오더와 맞춰 봐요">업체 명세서 비교</button>
           {lockedOf(g) ? <span className="h-9 px-3 inline-flex items-center rounded-lg border border-[#0F1A30] text-[12.5px] font-black text-[#0F1A30]">최종마감 · 수정 잠금</span>
             : !isViewer && <button type="button" onClick={() => addOrder(g.client)} className="h-9 px-3.5 rounded-lg border border-[#D5DDEA] bg-white text-[13px] font-bold text-[#1B2B4B]">+ 오더 추가</button>}
         </div>
@@ -387,6 +390,12 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
 
       {toast && <div className="fixed left-1/2 -translate-x-1/2 bottom-8 z-[100060] px-5 py-3 rounded-2xl bg-[#14213D] text-white text-[14px] font-bold shadow-[0_16px_40px_rgba(10,18,36,.3)]" role="status">{toast}</div>}
 
+      {/* ⭐ 2026-11-17 업체 명세서 비교 — 고른 거래처의 이 달 오더 전체(보기 · 노선 거르기와 상관없이)와 맞춘다 */}
+      {cmpOpen && cur && (
+        <React.Suspense fallback={null}>
+          <StmtCompareModal client={cur.client} ym={ym} where="월 마감" canEdit={!isViewer && !lockedOf(cur)} onClose={() => setCmpOpen(false)} onEdit={openRow}
+            orders={month.filter((o) => (String(o.거래처명 || "").trim() || "(거래처 없음)") === cur.client)} />
+        </React.Suspense>)}
       <OrderSheet open={!!sheet} row={sheet?.row} isNew={!!sheet?.isNew} ym={ym} phone={phone} isViewer={isViewer}
         clients={groups.map((g) => g.client).filter((c) => c !== "(거래처 없음)")} issues={sheet?.row && !sheet.isNew ? issuesOfRow(sheet.row) : []}
         onClose={() => setSheet(null)}
