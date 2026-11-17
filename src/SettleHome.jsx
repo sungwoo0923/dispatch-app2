@@ -11,6 +11,7 @@
 import React from "react";
 import { useArDesk, stageLabel, sdCard, sdBtn, sdBtnPri, sdInp, Ico, IC, viewStage, MonthPicker, FlowTrack } from "./SettleDesk";
 import { MarginPct } from "./marginPct"; // ⭐ 2026-11-17 매출이익 옆 매출 대비 %
+import BillingBoard from "./BillingBoard"; // 🧾 2026-11-17 청구 현황판(미청구 · 청구완료 · 입금완료)
 import { closeBoard } from "./closeFlow"; // ✅ 2026-11-16 2단계 마감 숫자
 import { n, won, short, kstYm, monthOf, stageFinder, summarizeSettle, clientLedger } from "./settleCore";
 export { summarizeSettle, clientLedger } from "./settleCore";
@@ -71,6 +72,8 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
   const closeOf = React.useCallback((c, m) => desk?.closes?.get(`${c}|${m}`) || null, [desk?.closes]);
   const board = React.useMemo(() => closeBoard(orders, ym, { closeOf }), [orders, ym, closeOf]);
   const boardMap = React.useMemo(() => new Map(board.map((r) => [r.client, r])), [board]);
+  const [view, setView] = React.useState(() => { try { return localStorage.getItem("kpSettleHomeView") === "board" ? "board" : "flow"; } catch { return "flow"; } });
+  const setViewSave = (v) => { setView(v); try { localStorage.setItem("kpSettleHomeView", v); } catch { /* 무시 */ } };
   const [client, setClient] = React.useState("");
   const [stepF, setStepF] = React.useState("");
   const [q, setQ] = React.useState("");
@@ -108,8 +111,18 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
   const openStmt = (c) => go("거래처정산", { tab: "invoice", client: c, ym });
   const th = "px-3 py-2.5 font-black sticky top-0 bg-[#F8FAFD] z-[1] whitespace-nowrap";
 
+  // 🧾 2026-11-17 정산 홈 보기 — [정산 진행](예전 화면) · [청구 현황판](미청구 · 청구완료 · 입금완료 한 번에). 고른 보기는 이 브라우저에 기억
+  const viewSw = (
+    <div className="inline-flex p-1 rounded-xl bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(15,26,48,0.04)]" role="tablist" data-kp="settle-home-view">
+      {[["flow", "정산 진행"], ["board", "청구 현황판"]].map(([k, l]) => (
+        <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setViewSave(k)} className={`h-9 px-4 rounded-lg text-[14px] font-black transition ${view === k ? "bg-[#0F1A30] text-white" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>{l}</button>))}
+    </div>);
+  if (view === "board") return (
+    <div className="space-y-3">{viewSw}<BillingBoard orders={orders} stageOf={stageOf} months={months} onGo={go} depositOn={depositOn} /></div>);
+
   return (
     <div className="space-y-3 text-[#0F1A30]" data-kp="settle-home">
+      {viewSw}
       {/* ① 청구월 · 합계 */}
       <div className={`${sdCard} p-4`}>
         <div className="flex items-center gap-3 flex-wrap">
