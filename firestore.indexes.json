@@ -444,6 +444,62 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "companyName",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "`담당노선구분`",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "companyName",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "`이전출처`",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "dispatch",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "companyName",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "`담당노선구분`",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "dispatch",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "companyName",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "`이전출처`",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [

@@ -42,6 +42,8 @@ import { isUrgentOrder, UrgentBadge, urgentRowStyle } from "./urgentOrder"; // �
 import BulkEditCopyModal from "./BulkEditCopy"; // 🗂 2026-11-09 우클릭 [일괄수정·복사]
 const ReceiptCenter = React.lazy(() => import("./ReceiptCenter")); // 🧾 2026-11-09 배차현황 › 인수증관리
 import { applyOwner } from "./orderOwner"; // 👤 2026-11-09 복사본 배차담당자
+import { routeOwnerFill } from "./routeOwnerApply"; // ⭐ 2026-11-17 담당노선 주인 — 빈 배차담당자 채우기
+import { isLockedOrder } from "../functions/routeOwnerCore.mjs";
 import { buildSimpleList } from "./copySimple"; // 📋 2026-11-13 기사복사 간단 목록(여러 오더 한 번에)
 import { getSimpleTpl } from "./copyTemplates";
 import OrderStaffFields from "./OrderStaffFields"; // 👤 2026-11-12 배차담당자 · 차량배정자 바꾸기
@@ -5363,6 +5365,13 @@ const patchDispatch = async (_id, patch, knownPrev) => {
       cleanPatch.배차완료일시 = null;
     }
   }
+  // ⭐ 2026-11-17 담당노선 주인 — 배차담당자가 빈 오더(구글시트에서 온 오더 등)에 노선(담당노선구분)이 있으면 그 노선을 맡은 직원으로 채운다
+  //  (직원이 [내 담당 설정]에서 정함 · companySettings/{회사}.routeGroupOwners · src/routeOwnerApply.js) — 직접 고른 담당자 · 정산 기록 · 최종마감 오더는 그대로
+  if (!_ownerPick && !cleanPatch.__system) {
+    const nextRow = { ...prev, ...cleanPatch };
+    const fill = isLockedOrder(prev, finalDesk.closes) || isLockedOrder(nextRow, finalDesk.closes) ? null : routeOwnerFill(nextRow);
+    if (fill) Object.assign(cleanPatch, fill);
+  }
 
   // 경유지 필드 등은 매번 safeStops()로 새 배열을 만들어 cleanPatch에 채워 넣기 때문에
   // 내용이 같아도 참조가 달라져 아래 !== 비교가 항상 "변경됨"으로 오탐한다.
@@ -8088,7 +8097,7 @@ useEffect(() => {
   const routeCarrierF = useRouteCarrierFilter(getTenant() || userCompany || localStorage.getItem("userCompany") || "");
   // 🗂 2026-11-13 담당노선구분 — 화면 위 버튼 줄에서 고른 묶음만(배차 · 정산 · 매출 화면에서만 거른다. 그 밖의 화면은 전체 · src/routeGroups.jsx RG_SCREENS)
   const rgProfile = useMyProfile(user?.uid);
-  const rg = useRouteGroupFilter({ enabled: useCompanyFeatures(getTenant() || userCompany).routeGroups === true, uid: user?.uid, profile: rgProfile });
+  const rg = useRouteGroupFilter({ enabled: useCompanyFeatures(getTenant() || userCompany).routeGroups === true, uid: user?.uid, profile: rgProfile, company: getTenant() || userCompany }); // ⭐ 2026-11-17 company — 담당노선 주인(배차담당자 자동 지정)
   const dispatchDataPreRG = useMemo(() => routeCarrierF.filter(dispatchDataAll) || [], [dispatchDataAll, routeCarrierF]);
   const dispatchData = useMemo(() => rg.filter(dispatchDataPreRG) || [], [dispatchDataPreRG, rg.filter]);
   const recentDispatchData = useMemo(() => rg.filter(routeCarrierF.filter(recentDispatchDataAll) || []) || [], [recentDispatchDataAll, routeCarrierF, rg.filter]);

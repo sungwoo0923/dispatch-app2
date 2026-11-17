@@ -6,7 +6,11 @@
 //  · 내 담당: 직원마다 맡은 묶음(users/{uid}.routeGroups — 본인이 정함). 정해 두면 로그인했을 때 내 담당만 먼저 보인다. [전체]는 누구나 볼 수 있다
 import React from "react";
 import { doc, setDoc } from "firebase/firestore";
-import { db } from "./firebase";
+import { db, auth } from "./firebase";
+import { routeGroupOf } from "../functions/routeOwnerCore.mjs"; // ⭐ 2026-11-17 서버와 같은 기준(담당노선 주인 — functions/routeOwnerCore.mjs)
+import { planRouteOwners, applyOwnerToOrders, saveRouteOwnerMap, watchRouteOwners } from "./routeOwnerApply";
+import { kpConfirm } from "./kpDialog";
+import { isViewerNow } from "./blind";
 import { useCompanyOptionList, useSheetLiveStatus } from "./companyDropdownOptions";
 import { useCompanyFeatures } from "./companyFeatures";
 import { CompanyOptionPicker } from "./companyOptionPicker";
@@ -19,12 +23,12 @@ const RG_ALL_FIRST = ["매출관리", "정산관리"];
 // 🗂 2026-11-14 탭 줄이 보이고 거르는 화면 — 배차 · 정산 · 매출에서만. 다른 화면(기사관리 · 지입차관리 · 홈 …)은 탭 없이 전체 오더
 export const RG_SCREENS = ["실시간배차현황", "배차현황", "정산관리", "매출관리"]; // 🛠 2026-11-14 오더등록(배차관리)에서는 탭 줄을 보이지 않는다(사용자 요청)
 export const rgOnScreen = (sc) => RG_SCREENS.includes(String(sc || ""));
-export const routeGroupOf = (row) => String(row?.담당노선구분 || String(row?.이전출처 || "").split("!")[0] || "").trim();
+export { routeGroupOf };
 const LS = (uid) => `kpRouteGroup:${uid || "me"}`;
 const readSel = (uid) => { try { const v = JSON.parse(localStorage.getItem(LS(uid)) || "null"); return v === "all" || v === "mine" || Array.isArray(v) ? v : null; } catch { return null; } };
 
 // sel: "all" | "mine" | [묶음…]
-export function useRouteGroupFilter({ enabled, uid, profile }) {
+export function useRouteGroupFilter({ enabled, uid, profile, company = "" }) {
   const mine = React.useMemo(() => (Array.isArray(profile?.routeGroups) ? profile.routeGroups.filter(Boolean) : []), [profile?.routeGroups]); // eslint-disable-line react-hooks/exhaustive-deps
   const [selRaw, setSelRaw] = React.useState(() => readSel(uid));
   React.useEffect(() => { setSelRaw(readSel(uid)); }, [uid]);
@@ -43,7 +47,75 @@ export function useRouteGroupFilter({ enabled, uid, profile }) {
     return rows.filter((r) => set.has(routeGroupOf(r) || RG_NONE));
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   const saveMine = React.useCallback((list) => (uid ? setDoc(doc(db, "users", uid), { routeGroups: list }, { merge: true }) : Promise.resolve()), [uid]);
-  return { enabled: !!enabled, sel, setSel, mine, saveMine, filter, active, setScreen };
+  // ⭐ 2026-11-17 담당노선 주인 — 저장할 때 오더 배차담당자를 바꾸는 데 쓰는 "나"(이름 · 이메일) · 회사 노선 주인표 구독(새 오더 자동 지정)
+  const me = React.useMemo(() => ({ uid: uid || "", name: String(profile?.name || "").trim(), email: String(profile?.email || auth.currentUser?.email || "").trim().toLowerCase() }), [uid, profile?.name, profile?.email]); // eslint-disable-line react-hooks/exhaustive-deps
+  const co = String(company || "").trim();
+  React.useEffect(() => { if (enabled && co) watchRouteOwners(co); }, [enabled, co]);
+  return { enabled: !!enabled, sel, setSel, mine, saveMine, filter, active, setScreen, me, company: co };
+}
+
+// ── ⭐ 2026-11-17 내 담당 저장 + 그 노선 오더의 배차담당자 바꾸기 ─────────────────────────────
+//  ① 저장한 노선의 오더를 찾아(화면이 가진 오더 + 서버) 몇 건 바뀌는지 · 최종마감이라 그대로 두는 건 몇 건인지 묻는다
+//     [바꾸기] → 내 담당 저장 + 회사 노선 주인표(앞으로 새 오더도 나로) + 오더 배차담당자 바꾸기(400건씩)
+//     [담당만 저장] → 내 담당만 저장(오더 · 다른 직원이 맡은 노선은 그대로). 뺀 노선은 어느 쪽이든 노선 주인표에서 나를 지운다(오더는 그대로)
+//  ② 조회전용 계정 · 이름을 모르는 계정은 내 담당만 저장한다
+//  setNote({ text, tone, busy }) — 화면 아래 알림(진행 · 결과)
+const groupsLabel = (gs) => gs.map(rgLabel).join(" · ");
+const eul = (name) => { const v = String(name || ""); const c = v.charCodeAt(v.length - 1); const j = c >= 0xac00 && c <= 0xd7a3 ? (c - 0xac00) % 28 : 0; return j && j !== 8 ? "으로" : "로"; };
+export async function saveMineWithOwners({ rg, list, rows = [], role, setNote = () => {} }) {
+  const me = rg.me || {};
+  const canWrite = role !== "viewer" && !isViewerNow() && !!me.uid && !!me.name && !!rg.company;
+  if (!canWrite) { await rg.saveMine(list); setNote({ text: "내 담당을 저장했어요", tone: "ok" }); return; }
+  setNote({ text: "맡은 노선의 오더를 찾고 있어요…", busy: true });
+  let plan = null;
+  try { plan = await planRouteOwners({ company: rg.company, me, list, rows }); } catch (e) { console.warn("담당노선 오더 찾기 실패", e); }
+  const change = plan?.targets?.change || [];
+  const lockedN = plan?.targets?.locked?.length || 0;
+  const taken = plan?.merge?.taken || [];
+  let doIt = false;
+  if (plan && (change.length || taken.length)) {
+    setNote(null);
+    const nm = me.name;
+    const lines = [];
+    lines.push(change.length
+      ? `${groupsLabel(plan.groups)} 오더 ${change.length.toLocaleString()}건의 배차담당자를 ${nm}${eul(nm)} 바꿀까요?${lockedN ? ` (최종마감된 오더 ${lockedN.toLocaleString()}건은 그대로)` : ""}`
+      : `${groupsLabel(plan.groups)} 노선을 ${nm} 담당으로 정할까요?`);
+    taken.forEach((x) => lines.push(`${rgLabel(x.group)}은(는) 지금 ${x.from.name || "다른 직원"} 담당이에요. 바꾸면 ${nm} 담당으로 넘어가요.`));
+    lines.push(`앞으로 이 노선에 새로 들어오는 오더도 배차담당자가 비어 있으면 ${nm}${eul(nm)} 정해져요.`);
+    if (!plan.closesOk) lines.push("최종마감 기록을 읽지 못해 지금 있는 오더는 바꾸지 않아요.");
+    else if (!plan.serverOk) lines.push("일부 오더는 서버에서 찾지 못해, 화면에 불러온 오더만 셌어요.");
+    lines.push("[담당만 저장]을 누르면 오더는 그대로 두고 내 담당만 저장해요.");
+    doIt = await kpConfirm(lines.join("\n"), { title: "배차담당자 바꾸기", okText: "바꾸기", cancelText: "담당만 저장" });
+  }
+  await rg.saveMine(list);
+  // 노선 주인표 — [바꾸기]를 눌렀거나 물을 것이 없었으면 맡은 노선을 나로, [담당만 저장]이면 뺀 노선만 지운다
+  let mapErr = false;
+  try { await saveRouteOwnerMap(rg.company, me, list, { claim: !!plan && (doIt || (!change.length && !taken.length)) }); } catch (e) { mapErr = true; console.warn("담당노선 주인 저장 실패", e); }
+  if (!doIt || !change.length) {
+    const why = mapErr ? " · 노선 담당자 표는 저장하지 못했어요" : plan && !plan.closesOk ? " · 최종마감 기록을 읽지 못해 오더는 바꾸지 않았어요" : !plan ? " · 오더를 찾지 못해 배차담당자는 그대로예요" : "";
+    setNote({ text: `내 담당을 저장했어요${why}`, tone: why ? "warn" : "ok" }); return;
+  }
+  setNote({ text: `배차담당자 바꾸는 중 0 / ${change.length.toLocaleString()}`, busy: true });
+  const res = await applyOwnerToOrders(change, me, { onProgress: ({ done, total }) => setNote({ text: `배차담당자 바꾸는 중 ${done.toLocaleString()} / ${total.toLocaleString()}`, busy: true }) });
+  setNote({
+    text: `${res.done.toLocaleString()}건의 배차담당자를 ${me.name}${eul(me.name)} 바꿨어요${lockedN ? ` · 최종마감 ${lockedN.toLocaleString()}건은 그대로` : ""}${res.failed ? ` · ${res.failed.toLocaleString()}건은 못 바꿨어요` : ""}`,
+    tone: res.failed ? "warn" : "ok",
+  });
+}
+// 화면 아래 알림(진행 · 결과) — 결과는 6초 뒤 사라진다
+function OwnerNote({ note, onClose }) {
+  React.useEffect(() => { if (!note || note.busy) return undefined; const t = setTimeout(onClose, 6000); return () => clearTimeout(t); }, [note]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!note) return null;
+  const bad = note.tone === "warn";
+  return (
+    <div role="status" data-kp="route-owner-note" className="fixed left-1/2 -translate-x-1/2 bottom-6 z-[2147482500] max-w-[92vw]">
+      <div className={`flex items-center gap-2.5 px-4 h-12 rounded-2xl shadow-[0_16px_40px_rgba(11,20,40,0.3)] text-[14px] font-black text-white ${bad ? "bg-[#7A2A22]" : "bg-[#0F1A30]"}`}>
+        {note.busy ? <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" /> : <span className={`w-2 h-2 rounded-full ${bad ? "bg-[#F3B6AE]" : "bg-[#7FD1A8]"}`} />}
+        <span className="truncate">{note.text}</span>
+        {!note.busy && <button type="button" onClick={onClose} className="ml-1 text-white/60 hover:text-white text-[13px] font-bold">닫기</button>}
+      </div>
+    </div>
+  );
 }
 
 // 화면 위 탭 줄(B안 · 구글시트 탭 모양) — rows: 거르기 전 오더(묶음 이름 · 건수용)
@@ -57,9 +129,16 @@ export function RouteGroupBar({ rg, rows = [], role, userCompany, dark = false }
   const [edit, setEdit] = React.useState(false);
   const [draft, setDraft] = React.useState([]);
   const [busy, setBusy] = React.useState(false);
+  const [note, setNote] = React.useState(null); // ⭐ 2026-11-17 배차담당자 바꾸기 진행 · 결과
   const counts = React.useMemo(() => { const m = new Map(); (rows || []).forEach((r) => { const g = routeGroupOf(r) || RG_NONE; m.set(g, (m.get(g) || 0) + 1); }); return m; }, [rows]);
   const groups = React.useMemo(() => { const out = []; const seen = new Set(); [...(opt.customized ? opt.list : []), ...[...counts.keys()].filter((g) => g !== RG_NONE).sort((a, b) => (counts.get(b) || 0) - (counts.get(a) || 0)), ...rg.mine].forEach((g) => { if (g && g !== RG_NONE && !seen.has(g)) { seen.add(g); out.push(g); } }); if (counts.has(RG_NONE)) out.push(RG_NONE); return out; }, [opt.list, opt.customized, counts, rg.mine]);
   if (!rg.enabled) return null;
+  const save = async () => {
+    setBusy(true);
+    try { await saveMineWithOwners({ rg, list: draft, rows, role, setNote }); rg.setSel(draft.length ? "mine" : "all"); setEdit(false); }
+    catch (e) { console.warn("내 담당 저장 실패", e); setNote({ text: "저장하지 못했어요. 잠시 뒤 다시 해 주세요", tone: "warn" }); }
+    finally { setBusy(false); }
+  };
   const picked = Array.isArray(rg.sel) ? rg.sel : [];
   const onPick = (g, e) => {
     if (edit) return setDraft((d) => (d.includes(g) ? d.filter((x) => x !== g) : [...d, g]));
@@ -91,10 +170,11 @@ export function RouteGroupBar({ rg, rows = [], role, userCompany, dark = false }
       <span className="ml-auto shrink-0 flex items-center gap-1.5 pb-1.5">
         {!edit && <SheetLiveChip role={role} userCompany={userCompany} />}
         {edit ? <>
-          <button type="button" disabled={busy} className="h-8 px-3 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-black" onClick={async () => { setBusy(true); try { await rg.saveMine(draft); rg.setSel(draft.length ? "mine" : "all"); setEdit(false); } catch { /* 권한 등 */ } finally { setBusy(false); } }}>{busy ? "저장 중…" : "저장"}</button>
+          <button type="button" disabled={busy} className="h-8 px-3 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-black" onClick={save}>{busy ? "저장 중…" : "저장"}</button>
           <button type="button" className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[13px] font-bold text-[#5B6B85]" onClick={() => setEdit(false)}>취소</button>
         </> : <button type="button" className="h-8 px-2.5 rounded-lg text-[12.5px] font-bold text-[#7A879C] hover:text-[#1B2B4B] hover:bg-white" onClick={() => { setDraft(rg.mine); setEdit(true); }}>내 담당 설정</button>}
       </span>
+      <OwnerNote note={note} onClose={() => setNote(null)} />
     </div>
   );
 }
@@ -141,6 +221,8 @@ export function RouteGroupDropdown({ rg, rows = [], role, userCompany, right = n
   const opt = useCompanyOptionList("담당노선구분", role, userCompany);
   const [open, setOpen] = React.useState(false);
   const [draft, setDraft] = React.useState([]);
+  const [note, setNote] = React.useState(null); // ⭐ 2026-11-17 배차담당자 바꾸기 진행 · 결과
+  const [busy, setBusy] = React.useState(false);
   const counts = React.useMemo(() => { const m = new Map(); (rows || []).forEach((r) => { const g = routeGroupOf(r) || RG_NONE; m.set(g, (m.get(g) || 0) + 1); }); return m; }, [rows]);
   const groups = React.useMemo(() => { const out = []; const seen = new Set(); [...(opt.customized ? opt.list : []), ...[...counts.keys()].filter((g) => g !== RG_NONE).sort((a, b) => (counts.get(b) || 0) - (counts.get(a) || 0)), ...rg.mine].forEach((g) => { if (g && g !== RG_NONE && !seen.has(g)) { seen.add(g); out.push(g); } }); if (counts.has(RG_NONE)) out.push(RG_NONE); return out; }, [opt.list, opt.customized, counts, rg.mine]);
   if (!rg.enabled) return right ? <div className="px-3 pt-2 flex justify-end">{right}</div> : null;
@@ -177,12 +259,13 @@ export function RouteGroupDropdown({ rg, rows = [], role, userCompany, right = n
                 </button>); })}
             </div>
             <div className="px-4 pt-3 flex gap-2">
-              <button type="button" disabled={!draft.length} onClick={async () => { try { await rg.saveMine(draft); } catch { /* 무시 */ } rg.setSel("mine"); setOpen(false); }} className="h-12 px-4 rounded-xl border border-[#C9D5EA] text-[14px] font-black text-[#1B2B4B] disabled:opacity-40">내 담당으로 저장</button>
+              <button type="button" disabled={!draft.length || busy} onClick={async () => { const list = draft; setBusy(true); setOpen(false); try { await saveMineWithOwners({ rg, list, rows, role, setNote }); } catch { setNote({ text: "저장하지 못했어요. 잠시 뒤 다시 해 주세요", tone: "warn" }); } finally { setBusy(false); } rg.setSel("mine"); }} className="h-12 px-4 rounded-xl border border-[#C9D5EA] text-[14px] font-black text-[#1B2B4B] disabled:opacity-40">내 담당으로 저장</button>
               <button type="button" onClick={apply} className="flex-1 h-12 rounded-xl bg-[#1B2B4B] text-white text-[15.5px] font-black">{draft.length ? `${draft.length}개 보기` : "전체 보기"}</button>
             </div>
           </div>
         </div>
       )}
+      <OwnerNote note={note} onClose={() => setNote(null)} />
     </div>
   );
 }
