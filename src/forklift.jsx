@@ -7,6 +7,7 @@
 //  · ForkliftPayouts        정산관리 › 지게차 지급 (지게차 기사별 합계 · 지급완료 · 엑셀)
 //  저장: forkliftDrivers/{id} · forkliftPresets/{회사__거래처__상차지} — 회사명은 fsTenant가 붙이고 거른다
 import React from "react";
+import { CellNote } from "./cellNote"; // 🏷 2026-11-17 칸 모서리 표시 + 말풍선
 import { useListKeys } from "./useListKeys";
 import { createPortal } from "react-dom";
 import * as XLSX from "xlsx";
@@ -527,6 +528,12 @@ export function ForkliftChip({ row, className = "" }) {
     <span className={`inline-flex items-center px-1.5 h-[18px] rounded-md bg-[#1B2B4B] text-[#E9C46A] text-[10.5px] font-black tabular-nums whitespace-nowrap align-middle ${className}`}
       title={specialLines(row).join("\n") + (hasForklift(row) && row.지게차지급완료 ? "\n지게차 지급완료" : "")}>{only ? "지게차" : `특수 ${specialCount(row)}`}</span>
   );
+}
+// 🏷 2026-11-17 표 칸 모서리 표시(금색 삼각형) + 말풍선 — 금액 옆 알약 대신(숫자 정렬이 어긋나지 않게). 칸(td)에 relative 필요
+export function ForkliftMark({ row }) {
+  if (!hasSpecial(row)) return null;
+  const only = specialCount(row) === 1 && hasForklift(row);
+  return <CellNote tone="gold" title={only ? "지게차" : `특수운임 ${specialCount(row)}건`} lines={[...specialLines(row), ...(hasForklift(row) ? [row.지게차지급완료 ? "지게차 지급완료" : "지게차 미지급"] : [])]} testId="forklift-mark" />;
 }
 // 엑셀 내보내기 공용 열
 export const forkliftExcelCols = (r) => ({ 특수운임: specialLines(r).join(" / "), 지게차비용: fkAmount(r) || "", 지게차기사: r?.지게차기사명 || "", 지게차부담: hasForklift(r) ? fkModeLabel(r) : "", 지게차지급: hasForklift(r) ? (r.지게차지급완료 ? "지급완료" : "미지급") : "" });

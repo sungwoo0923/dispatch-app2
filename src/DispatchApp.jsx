@@ -2971,12 +2971,13 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동 계산)
 import FareRulesSettings from "./FareRulesSettings";
 import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
-import { SpecialFareButton, ForkliftChip, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount } from "./forklift"; // 🏗 2026-11-09 지게차비용
+import { SpecialFareButton, ForkliftChip, ForkliftMark, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount } from "./forklift"; // 🏗 2026-11-09 지게차비용
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합 현황) — 회사가 쓰는 영역에 따라 상단 메뉴가 바뀐다(src/bizModules.js)
 import { useBizModules, isBizMenu, parseBizMenu, bizTopMenus, bizSideGroups, bizFirstMenu, bizMenuKey, readBiz, writeBiz, BIZ_MENU_ICON, bizInfo as bizInfoOf, bizMenuLabel as bizMenuLabelOf } from "./bizModules";
 import { reportScreen, installScreenVisibility } from "./screenReport";
+import { CellNote } from "./cellNote"; // 🏷 2026-11-17 칸 모서리 표시 + 말풍선
 import { useRouteGroupFilter, RouteGroupBar, routeGroupOf, RouteGroupField, SheetLiveChip, rgOnScreen, RG_NONE, rgLabel, RG_TAB_OFF, RouteGroupSelect, filterRouteGroup } from "./routeGroups";
 import { MarginPct, marginPctText, profitCls, profitRateCls } from "./marginPct"; // ⭐ 2026-11-17 정산관리 수익 · 수수료 옆 매출 대비 % · 이익 색(플러스 빨강 · 마이너스 파랑)
 import { settleStartTab } from "./settleStart";
@@ -25196,7 +25197,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   </td>
 
                   {/* 기사운임 */}
-                  <td className={cell}>
+                  <td className={`${cell} relative`}>
                     {canEdit("기사운임", r._id) ? (
                       <input autoComplete="off"
                         type="text"
@@ -25207,16 +25208,16 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                         }
                       />
                     ) : (
-                      <>{formatComma(r.기사운임)}<ForkliftChip row={r} className="ml-1" /></>
+                      <>{formatComma(r.기사운임)}<ForkliftMark row={r} />{/* 🏷 2026-11-17 알약 대신 모서리 표시 — 숫자 정렬 그대로 */}</>
                     )}
                   </td>
 
                   {/* 수수료 */}
-                  <td className={`${cell} text-right pr-2 whitespace-nowrap`}>
+                  <td className={`${cell} relative text-right pr-2 whitespace-nowrap`}>
                     {/* ⭐ 2026-11-06 운임구분 알약을 수수료와 같은 줄에(줄바꿈 금지) */}
                     {fareRules && !canEdit("청구운임", r._id) && r.운임구분 ? (
-                      <span className="inline-block align-middle mr-1 px-1.5 rounded bg-[#EAF0FB] text-[#2D4C82] text-[11.5px] font-extrabold whitespace-nowrap" data-fare-chip="1">{r.운임구분}</span>
-                    ) : null}
+                      <CellNote tone="blue" title="운임구분" lines={[`${r.운임구분}${r.운임수동 ? " · 수동 입력" : ""}`, `청구 ${formatComma(r.청구운임)} · 기사 ${formatComma(r.기사운임)}`]} testId="fare-mark" />
+                    ) : null}{/* 🏷 2026-11-17 운임구분 알약 → 모서리 파란 표시 + 말풍선(숫자 정렬 그대로) */}
                     {/* 📑 2026-11-15 손실이면 눌러서 손실 사유 적기(src/lossReason.js) */}
                     {fee < 0 ? (
                       <button type="button" onClick={() => editLossReason(r, fee, (v) => patchDispatch(r._id, { 손실사유: v, __col: r.__col }))}
@@ -40974,7 +40975,7 @@ return (
 
                   {/* 금액 */}
                   {["청구운임", "기사운임"].map((key) => (
-                    <td key={key} className="border text-right pr-2">
+                    <td key={key} className="border text-right pr-2 relative">
                       {editMode && selected.has(id) ? (
                         <input autoComplete="off"
                           className="border rounded px-1 py-0.5 w-full text-right"
@@ -40982,7 +40983,7 @@ return (
                           onChange={(e) => updateEdited(row, key, e.target.value)}
                         />
                       ) : (
-                        <>{toInt(row[key]).toLocaleString()}{key === "기사운임" && <ForkliftChip row={row} className="ml-1" />}</>
+                        <>{toInt(row[key]).toLocaleString()}{key === "기사운임" && <ForkliftMark row={row} />}</>
                       )}
                     </td>
                   ))}
