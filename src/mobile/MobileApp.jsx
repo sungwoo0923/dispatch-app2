@@ -1044,7 +1044,7 @@ function MobileOrderValidationModal({ issues, scope, onClose, onCancelOrder, onO
               onClick={onExpandScope}
               className="w-full mb-4 py-2 rounded-lg border border-dashed border-gray-300 text-gray-500 text-[12px] font-semibold"
             >
-              지난달 것도 확인하기
+              지난달 오더도 확인하기
             </button>
           )}
           {issues.duplicates.map((g, gi) => (
@@ -1086,13 +1086,13 @@ function MobileOrderValidationModal({ issues, scope, onClose, onCancelOrder, onO
           />
           <Section
             title="운임 확인 필요"
-            desc="기사운임이 청구운임보다 커요 (입력이 바뀌었을 수 있어요)"
+            desc="기사운임이 청구운임보다 커요 (두 금액이 서로 바뀌어 입력됐을 수 있어요)"
             items={issues.feeReversed}
             action={fixButton}
           />
           <Section
             title="전화번호 확인 필요"
-            desc="전화번호 자릿수가 이상해요"
+            desc="전화번호 자릿수가 맞지 않아요"
             items={issues.badPhone}
             action={fixButton}
           />
@@ -2905,7 +2905,7 @@ const quickRange = (days) => {
   }, [orders, canceledOrders, extraSplit, extraMap.size]);
   // 🗂 2026-11-13 담당노선구분(켠 운송사만) — 고른 묶음만(목록 · 미배차 · 매출 등 아래 allOrders 를 쓰는 화면이 모두 따른다 · src/routeGroups.jsx)
   const rgM = useRouteGroupFilter({ enabled: useCompanyFeatures(userCompany).routeGroups === true, uid: user?.uid, profile: myProfM, company: userCompany }); // ⭐ 2026-11-17 company — 담당노선 주인(배차담당자 자동 지정)
-  useEffect(() => { rgM.setScreen(page === "sales" ? "매출관리" : page === "dept" ? "정산관리" : page); }, [page, rgM.setScreen]); // eslint-disable-line react-hooks/exhaustive-deps — 🗂 매출관리 · 정산(경리 · 임원 화면)은 들어갈 때마다 [전체]부터
+  useEffect(() => { rgM.setScreen(page === "sales" ? "매출관리" : page === "dept" ? "정산관리" : page); }, [page, rgM.setScreen]); // eslint-disable-line react-hooks/exhaustive-deps -- 🗂 매출관리 · 정산(경리 · 임원 화면)은 들어갈 때마다 [전체]부터
   const allOrdersPreRG = allOrdersCombined.orders;
   const allOrders = useMemo(() => rgM.filter(allOrdersPreRG) || [], [allOrdersPreRG, rgM.filter]);
   // ⭐ 2026-11-04 고정노선(구글시트 배차표) 오더는 고정노선현황에서만 — 일반 배차현황·미배차·정보미전달에는 넣지 않는다(PC와 같음)
@@ -3041,7 +3041,7 @@ const handleCancelDuplicateOrder = async (o) => {
     }));
     showToast("오더를 취소했습니다");
   } catch (e) {
-    alert("취소 실패: " + (e?.message || ""));
+    alert("오더 취소에 실패했습니다.\n" + (e?.message || ""));
   }
 };
 // 검증 팝업에서 "확인하러 가기"(날짜/운임/전화번호)를 눌렀을 때 — 상세보기로 이동해
@@ -3674,7 +3674,7 @@ useEffect(() => {
     if (nearOrders.length > 0) {
   if (toastMuted) return;   // ▲ 이 줄이 핵심
 
-  setToast(`상차 임박 ${nearOrders.length}건! 확인하세요`);
+  setToast(`상차 2시간 이내 미배차 오더가 ${nearOrders.length}건 있습니다. 확인해 주세요.`);
   navigator.vibrate?.(200);
 }
   };
@@ -4740,7 +4740,7 @@ const groupedByDate = useMemo(() => {
     if (role === "viewer") { alert("조회전용 권한으로는 수정/등록/삭제를 할 수 없습니다."); return; }
     // 필수값 체크
     if (!form.상차지명 || !form.하차지명) {
-      alert("상차지 / 하차지는 필수입니다.");
+      alert("상차지와 하차지를 입력해 주세요.");
       return;
     }
 
@@ -5095,7 +5095,7 @@ const groupedByDate = useMemo(() => {
 
     } catch (e) {
       console.error(e);
-      alert("등록 실패!");
+      alert("오더 등록에 실패했습니다. 잠시 후 다시 시도해 주세요.");
     }
   };
   // 📦 오더복사 → 등록창 이동 (오늘 날짜 기준)
@@ -5619,7 +5619,7 @@ const title =
   : page === "company-fare" ? "운임조회"
   : page === "sales" ? "매출관리"
   : page === "approval" ? "전자결재"
-  : page === "staff" ? "회원 관리"
+  : page === "staff" ? "직원 관리"
   : page === "drvacc" ? "기사 앱 계정"
   : page === "drivers" ? "기사관리"
   : page === "clients" ? "거래처관리"
@@ -5977,13 +5977,13 @@ const title =
 {/* 오더 삭제 확인 팝업 (상세보기) */}
 {deleteConfirmMobile && (
   <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 99999 }}>
-    <div style={{ background: "#fff", borderRadius: 20, width: 320, overflow: "hidden", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
+    <div style={{ background: "#fff", borderRadius: 20, width: "calc(100% - 32px)", maxWidth: 320, overflow: "hidden", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
       <div style={{ padding: "20px 20px 16px", display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#fee2e2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
         </div>
         <div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: "#111" }}>오더 취소</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#111" }}>오더 삭제</div>
           <div style={{ fontSize: 13, color: "#374151", marginTop: 2 }}>
             {deleteConfirmMobile.거래처명 && <span style={{ fontWeight: 600 }}>{deleteConfirmMobile.거래처명} · </span>}
             {deleteConfirmMobile.상차지명} → {deleteConfirmMobile.하차지명}
@@ -6005,7 +6005,7 @@ const title =
           onClick={confirmDeleteMobile}
           style={{ flex: 1, padding: "14px 0", fontSize: 14, fontWeight: 700, color: "#fff", background: "#ef4444", border: "none", cursor: "pointer" }}
         >
-          취소하기
+          삭제하기
         </button>
       </div>
     </div>
@@ -6880,8 +6880,8 @@ onGoAttendance={() => {
       />
       <button
         onClick={async () => {
-          if (!handoverForm.receiver) { alert("받는 사람을 선택하세요"); return; }
-          if (!handoverForm.text.trim()) { alert("내용을 입력하세요"); return; }
+          if (!handoverForm.receiver) { alert("받는 사람을 선택해 주세요."); return; }
+          if (!handoverForm.text.trim()) { alert("인수인계 내용을 입력해 주세요."); return; }
           const me = mobileUsers.find(u => u.id === currentUser?.uid);
           await addDoc(collection(db, "handovers"), {
             ...handoverForm,
@@ -7402,7 +7402,7 @@ function SalesPinGate({ onVerified }) {
   const [n1, setN1] = useState(""); const [n2, setN2] = useState(""); const [busy, setBusy] = useState(false);
   useEffect(() => onSnapshot(doc(db, "companySettings", co), (x) => setPw(x.exists() ? (x.data()?.revenuePassword ?? null) : null), () => setPw(null)), [co]);
   const save = async () => {
-    if (n1.length < 4) { setErr("4자리 이상으로 정해 주세요."); return; }
+    if (n1.length < 4) { setErr("비밀번호는 4자리 이상으로 입력해 주세요."); return; }
     if (n1 !== n2) { setErr("두 번 입력한 비밀번호가 다릅니다."); return; }
     setBusy(true);
     try { await setDoc(doc(db, "companySettings", co), { revenuePassword: n1 }, { merge: true }); setSetup(false); setN1(""); setN2(""); setErr(""); onVerified(); }
@@ -7423,7 +7423,7 @@ function SalesPinGate({ onVerified }) {
           {pw === undefined ? <div className="py-6 text-center text-[13px] text-[#9AA9C3]">불러오는 중…</div>
             : showSetup ? (<>
               <input type="password" className={inp} placeholder="새 비밀번호" value={n1} onChange={(e) => { setN1(e.target.value); setErr(""); }} />
-              <input type="password" className={inp} placeholder="한 번 더" value={n2} onChange={(e) => { setN2(e.target.value); setErr(""); }} />
+              <input type="password" className={inp} placeholder="새 비밀번호 확인" value={n2} onChange={(e) => { setN2(e.target.value); setErr(""); }} />
               <button type="button" disabled={busy} onClick={save} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-60">{busy ? "저장 중…" : "저장"}</button>
               {pw && <button type="button" onClick={() => { setSetup(false); setErr(""); }} className="w-full h-11 rounded-xl border border-[#E3E8F0] text-[#3A4A66] text-[13.5px] font-bold">비밀번호 입력으로</button>}
             </>) : pw === null ? (
@@ -7588,7 +7588,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
     { label:"총 청구운임", value:cur.sale, sub:`${cur.cnt}건 수주`, pct: Math.min(cur.sale/maxSale*100,100), color:"#1B2B4B" },
     { label:"수익 (수수료)", value:cur.fee, profit:true, sub:`수익률 ${profitRate.toFixed(1)}%`, pct: Math.min(profitRate,100), color: profitRate>=15?"#10B981":profitRate>=10?"#F59E0B":"#EF4444" },
     { label:"기사 운임", value:cur.driver, sub:"지급 합계", pct: cur.sale>0?Math.min(cur.driver/cur.sale*100,100):0, color:"#6B7280" },
-    { label:"건당 평균", value:avgFare, sub:"청구운임 기준", pct: prev.cnt>0?Math.min(avgFare/Math.round(prev.sale/prev.cnt)*100,100):50, color:"#4F46E5" },
+    { label:"건당 평균", value:avgFare, sub:"청구운임 기준", pct: prev.cnt>0&&prev.sale>0?Math.min(avgFare/Math.round(prev.sale/prev.cnt)*100,100):50, color:"#4F46E5" },
   ];
 
   return (
@@ -7660,7 +7660,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className={`px-4 py-3 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>
             <div className="text-[13px] font-bold text-white tracking-tight">스마트 인사이트</div>
-            <div className="text-[10px] text-white/40 mt-0.5">AI 기반 월별 분석 요약</div>
+            <div className="text-[10px] text-white/40 mt-0.5">월별 실적 자동 분석 요약</div>
           </div>
           <div className="divide-y divide-gray-50">
             {insights.map((ins,i) => (
@@ -8244,7 +8244,7 @@ function MobileSideMenu({
   };
 
   const logout = async () => {
-    if (!(await kpConfirm("로그아웃 하시겠습니까?"))) return;
+    if (!(await kpConfirm("로그아웃하시겠습니까?"))) return;
     // ⭐ 2026-11-02 로그아웃 지연 방지 — 알림 해제는 최대 1.2초만 기다린다(통신이 느려도 바로 로그아웃)
     await Promise.race([clearFcmToken(auth.currentUser?.uid).catch(() => {}), new Promise((r) => setTimeout(r, 1200))]);
     try {
@@ -8833,7 +8833,7 @@ function UploadLinkModal({ orders = [], onClose, companyName = "" }) {
   const buildMsg = (driver) => {
     const { name, vehicle, orders: dOrders } = driver;
     const lines = [];
-    lines.push(`안녕하세요 ${companyName || "운송사"}입니다.\n`);
+    lines.push(`안녕하세요. ${companyName || "운송사"}입니다.\n`);
 
     // 날짜 목록 (여러 오더면 복수 표시)
     const dates = [...new Set(dOrders.map(o => {
@@ -8844,7 +8844,7 @@ function UploadLinkModal({ orders = [], onClose, companyName = "" }) {
     if (dates.length > 0) lines.push(`▦ ${dates.join(", ")}`);
     if (dOrders.length > 1) lines.push(`총 ${dOrders.length}건`);
 
-    lines.push("파렛전표 및 거래명세서, 타코기록지 등\n관련 서류 업로드를 부탁드립니다.\n미 확인 시 운임 지연이 발생할 수 있습니다.\n");
+    lines.push("파렛전표 및 거래명세서, 타코기록지 등\n관련 서류 업로드를 부탁드립니다.\n미제출 시 운임 지급이 지연될 수 있습니다.\n");
     lines.push("[인수증 업로드 안내]");
     lines.push("아래 링크에서 서류를 업로드해 주세요.\n");
     lines.push("▤ 업로드 방법");
@@ -9321,7 +9321,7 @@ function MobileEstimateModal({ orders = [], userCompany = "", onClose }) {
             disabled={sending || sortedOrders.length === 0}
             className="flex-1 py-3 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-bold disabled:opacity-40 active:scale-[0.97] transition"
           >
-            {sending ? "전송 준비중..." : "업체에 공유하기"}
+            {sending ? "전송 준비 중..." : "업체에 공유하기"}
           </button>
         </div>
       </div>
@@ -9566,8 +9566,8 @@ function MobileOrderList({
     const vehicleType = String(order.차량종류 || order.차종 || "");
     const isCold = vehicleType.includes("냉장") || vehicleType.includes("냉동");
     const cargoLine = isCold
-      ? "파렛전표,거래명세서,타코기록지 등"
-      : "파렛전표,거래명세서 등";
+      ? "파렛전표, 거래명세서, 타코기록지 등"
+      : "파렛전표, 거래명세서 등";
     const params = new URLSearchParams();
     if (date) params.set("date", date);
     const vehicle = (order.차량번호 || "").replace(/\s/g, "");
@@ -9578,13 +9578,13 @@ function MobileOrderList({
     const header = `안녕하세요. ${[dateLabel, timeLabel, from && to ? `${from} → ${to}` : (from || to)].filter(Boolean).join(" ")}`;
     return [
       header,
-      "관련 서류가 업로드 되지 않았습니다.",
-      "미 업로드시 운임 지급이 늦어 질 수 있습니다.",
+      "관련 서류가 아직 업로드되지 않았습니다.",
+      "미업로드 시 운임 지급이 지연될 수 있습니다.",
       "",
-      "아래 링크를 통하여 빠른 업로드 부탁드리겠습니다.",
+      "아래 링크에서 업로드 부탁드립니다.",
       cargoLine,
       "서류는 반드시 한 장씩 찍어서 올려주세요.",
-      "(전표/명세서 없으면 문자로 x 남겨주세요)",
+      "(전표·명세서가 없는 경우 문자로 '없음'이라고 회신해 주세요)",
       "",
       "여기를 눌러 업로드해주세요",
       url,
@@ -10103,7 +10103,7 @@ const summary = useMemo(() => {
               <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
               <path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
             </svg>
-            <span className={`font-bold text-[15px] ${cardVersionB ? "text-[#1B2B4B]" : "text-gray-900"}`}>오더 취소</span>
+            <span className={`font-bold text-[15px] ${cardVersionB ? "text-[#1B2B4B]" : "text-gray-900"}`}>오더 삭제</span>
           </div>
           <div className="text-[13px] text-gray-500 mb-1 ml-6">
             {deleteConfirmOrder.거래처명 && <span className="font-semibold text-gray-700">{deleteConfirmOrder.거래처명} · </span>}
@@ -10681,7 +10681,7 @@ function CardAttachViewer({ order, onClose, showToast, showSuccess }) {
             {isUnlockActive ? (
               <div className="flex items-center gap-1.5 px-3 py-2 bg-[#1B2B4B] text-white text-[12px] font-bold rounded-lg w-fit">
                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                재업로드 대기중 · {fmtRemain(unlockRemainMs)}
+                재업로드 대기 중 · {fmtRemain(unlockRemainMs)}
               </div>
             ) : (
               <button
@@ -10689,7 +10689,7 @@ function CardAttachViewer({ order, onClose, showToast, showSuccess }) {
                 disabled={unlocking}
                 className="px-3 py-2 bg-white border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold rounded-lg disabled:opacity-50"
               >
-                {unlocking ? "처리중..." : "재업로드 허용 (30분)"}
+                {unlocking ? "처리 중..." : "재업로드 허용 (30분)"}
               </button>
             )}
           </div>
@@ -10704,7 +10704,7 @@ function CardAttachViewer({ order, onClose, showToast, showSuccess }) {
           {!loading && items.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 gap-2">
               <div className="text-sm text-gray-400 font-medium">업로드된 파일이 없습니다</div>
-              <div className="text-xs text-gray-300">기사님께 인수증 업로드를 요청하세요</div>
+              <div className="text-xs text-gray-300">기사님께 인수증 업로드를 요청해 주세요.</div>
               <button
                 onClick={() => setSmsUploadConfirm(true)}
                 className="mt-3 px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold"
@@ -12100,7 +12100,7 @@ const SmartTextarea = React.memo(function SmartTextarea({ onSearch, onCommit, te
       ref={textareaRef}
       className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none bg-gray-50 focus:outline-none focus:border-[#1B2B4B]"
       rows={2}
-      placeholder="기사 스마트 검색 "
+      placeholder="기사 스마트 검색"
       autoComplete="off"
       autoCorrect="off"
       autoCapitalize="none"
@@ -12246,7 +12246,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
   const cargo = cargoNow === init.cargo ? (order.화물내용 || "") : cargoNow;
 
   const save = async () => {
-    if (!f.상차지명.trim() || !f.하차지명.trim()) { alert("상차지 / 하차지명은 필수입니다."); return; }
+    if (!f.상차지명.trim() || !f.하차지명.trim()) { alert("상차지명과 하차지명을 입력해 주세요."); return; }
     if (isReversedDateOrder(f.상차일, f.하차일)) { alert("하차일이 상차일보다 빠를 수 없습니다."); return; }
     const patch = {
       거래처명: f.거래처명.trim(),
@@ -13096,14 +13096,14 @@ const pickupTimeText = order.상차시간
 
   const openMap = (type) => {
     const addr = type === "pickup" ? order.상차지주소 || order.상차지명 : order.하차지주소 || order.하차지명;
-    if (!addr) { alert("주소 정보가 없습니다."); return; }
+    if (!addr) { alert("등록된 주소가 없어 지도를 열 수 없습니다."); return; }
     window.open(`https://map.kakao.com/?q=${encodeURIComponent(addr)}`, "_blank");
   };
 
-const handleAssignClick = () => {
+const handleAssignClick = async () => {
     if (!carNo) { alert("차량번호를 입력해주세요."); return; }
     if (!name || !phone) {
-      if (!window.confirm("기사 이름/연락처가 비어 있습니다. 그대로 배차하시겠습니까?")) return;
+      if (!(await kpConfirm("기사 이름 또는 연락처가 비어 있습니다. 그대로 배차하시겠습니까?"))) return;
     }
     onAssignDriver({ 차량번호: carNo, 이름: name, 전화번호: phone });
   };
@@ -13172,7 +13172,7 @@ const handleAssignClick = () => {
       setIsNewDriver(false);
       if (smartTextareaRef.current) smartTextareaRef.current.value = "";
       setSmartMatched([]);
-      showToast("저장 완료!");
+      showToast("저장되었습니다");
     } catch (e) {
       console.error("저장 오류:", e);
       alert("저장 실패: " + e.message);
@@ -13514,9 +13514,9 @@ const handleAssignClick = () => {
                         <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-1.5 focus:outline-none focus:border-[#1B2B4B]" placeholder="기사 이름" value={editingDriverData.이름} onChange={e => setEditingDriverData(p => ({ ...p, 이름: e.target.value }))} onPointerDown={e => e.stopPropagation()} />
                         <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:outline-none focus:border-[#1B2B4B]" placeholder="전화번호" inputMode="tel" value={editingDriverData.전화번호} onChange={e => setEditingDriverData(p => ({ ...p, 전화번호: formatPhoneLive(e.target.value) }))} onPointerDown={e => e.stopPropagation()} />
                         <div className="flex gap-2">
-                          <button type="button" className="flex-1 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
-                            onPointerDown={async (e) => { e.preventDefault(); if (!editingDriverData.이름.trim()) return; await updateDoc(doc(db, "drivers", d.id), { 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 }); setSmartMatched(prev => prev.map(m => m.id === d.id ? { ...m, 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 } : m)); setEditingDriverId(null); }}>저장</button>
-                          <button type="button" className="px-3 py-1.5 rounded-lg bg-gray-200 text-gray-700 text-xs" onPointerDown={e => { e.preventDefault(); setEditingDriverId(null); }}>취소</button>
+                          <button type="button" className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
+                            onPointerDown={async (e) => { e.preventDefault(); if (!String(editingDriverData.이름 || "").trim()) { alert("기사 이름을 입력해 주세요."); return; } try { await updateDoc(doc(db, "drivers", d.id), { 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 }); } catch (err) { alert("기사 정보 저장에 실패했습니다.\n" + (err?.message || err)); return; } setSmartMatched(prev => prev.map(m => m.id === d.id ? { ...m, 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 } : m)); setEditingDriverId(null); }}>저장</button>
+                          <button type="button" className="px-4 py-2.5 rounded-lg bg-gray-200 text-gray-700 text-xs" onPointerDown={e => { e.preventDefault(); setEditingDriverId(null); }}>취소</button>
                         </div>
                       </div>
                     ) : (
@@ -13712,7 +13712,7 @@ const handleAssignClick = () => {
                     </svg>
                   </div>
                   <div className="text-sm text-gray-400 font-medium">업로드된 파일이 없습니다</div>
-                  <div className="text-xs text-gray-300">기사님께 인수증 업로드를 요청하세요</div>
+                  <div className="text-xs text-gray-300">기사님께 인수증 업로드를 요청해 주세요.</div>
                   <button
                     onClick={() => setSmsUploadConfirm(true)}
                     className="mt-1 px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold"
@@ -15970,8 +15970,8 @@ const pickDrop = (c) => {
           },
           {
             key: "reset", Icon: RotateCcw, label: "초기화",
-            onClick: () => {
-              if (!window.confirm("입력한 내용을 모두 초기화하시겠습니까?")) return;
+            onClick: async () => {
+              if (!(await kpConfirm("입력한 내용을 모두 초기화하시겠습니까?"))) return;
               setForm(prev => ({
                 거래처명: "", 상차일: todayKST(), 상차시간: "", 하차일: todayKST(), 하차시간: "",
                 상차지명: "", 상차지주소: "", 상차지담당자: "", 상차지담당자번호: "",
@@ -16717,7 +16717,7 @@ const pickDrop = (c) => {
                 className={`px-3 py-1.5 rounded-lg text-[12.5px] font-bold border transition ${form.혼적여부 === "혼적" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300"}`}>
                 혼적
               </button>
-              <span className="text-[11px] text-gray-400">안 누르면 독차</span>
+              <span className="text-[11px] text-gray-400">선택하지 않으면 독차</span>
             </div>
           }
         />
@@ -16867,7 +16867,7 @@ const pickDrop = (c) => {
 
 {/* 기사 스마트검색 */}
       <div className="border-t border-gray-100 p-3">
-        <div className="text-[11px] text-gray-500 font-semibold mb-1.5">기사 검색 (차량번호/이름/번호 입력)</div>
+        <div className="text-[11px] text-gray-500 font-semibold mb-1.5">기사 검색 (차량번호 · 이름 · 연락처)</div>
         <div className="relative">
           <SmartTextarea textareaRef={formSmartRef} onSearch={handleFormSmartSearch} onCommit={handleFormSmartCommit} />
           {formSmartMatched.length > 0 && (
@@ -17722,7 +17722,7 @@ const pickDrop = (c) => {
       <div className="mb-4 text-xs text-gray-500">
         <span className="font-medium text-gray-700">{selectedClient.거래처명}</span>
         <br />
-        {selectedClient.주소 || "- 주소 없음"}
+        {selectedClient.주소 || "주소 미등록"}
       </div>
 
       {/* 상차지에 적용 */}
@@ -17962,7 +17962,7 @@ const pickDrop = (c) => {
         {!voiceTranscript && !voiceListening && (
           <div className="bg-blue-50 rounded-xl p-3 text-[12px] text-blue-700 space-y-1">
             <div className="font-bold mb-1">음성 예시 (항목별로 끊어 말하면 더 정확해요)</div>
-            <div>"거래처는 테스트업체 상차지는 테스트업체 하차지는 주주물류 화물내용은 박스 5개 내일 오전 10시"</div>
+            <div>"거래처는 ○○유통 상차지는 ○○유통 하차지는 △△물류 화물내용은 박스 5개 내일 오전 10시"</div>
             <div>"거래처는 ○○식품 하차지는 △△물류센터 3톤 냉장 오늘 즉시"</div>
           </div>
         )}
@@ -18061,7 +18061,7 @@ const pickDrop = (c) => {
               <span className="text-[12px] font-bold text-[#1B2B4B]">경유지 {idx + 1}</span>
               {stopList.length > 1 && (
                 <button type="button" onClick={() => setStopList(prev => prev.filter((_, i) => i !== idx))}
-                  className="text-[11px] text-red-500 font-bold px-2 py-0.5 border border-red-200 rounded-full">삭제</button>
+                  className="text-[11px] text-red-500 font-bold px-3 py-1.5 border border-red-200 rounded-full">삭제</button>
               )}
             </div>
             {/* 업체명 + 자동완성 드롭다운 */}
@@ -18343,7 +18343,7 @@ const pickDrop = (c) => {
           ref={imeFocusRef}
           rows={4}
           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[#1B2B4B] resize-none"
-          placeholder="이 거래처를 상/하차지명에 입력할 때마다 안내 팝업으로 뜰 메모"
+          placeholder="상·하차지명에 이 거래처를 입력할 때 안내 팝업으로 표시할 메모"
           value={orderMemoPopup.memo}
           onChange={(e) => setOrderMemoPopup((p) => ({ ...p, memo: e.target.value }))}
         />
@@ -18520,7 +18520,7 @@ const pickDrop = (c) => {
       {/* 목록 */}
       <div className="overflow-y-auto flex-1 px-4 py-2 space-y-2">
         {orderCopyHistLoading && (
-          <div className="text-[12px] text-[#5B6B85] text-center py-1">예전 오더를 받는 중이에요 — 받는 대로 목록에 바로 추가돼요</div>
+          <div className="text-[12px] text-[#5B6B85] text-center py-1">이전 오더를 불러오는 중이에요 — 불러오는 대로 목록에 추가돼요</div>
         )}
         {orderCopyList
           .map(o => (
@@ -18737,7 +18737,7 @@ const buildManagerLine = (name, phone) => {
 // ❄️ 냉장/냉동 차량 안내 (끝에 줄바꿈 ❌)
 const COLD_NOTICE = `★★★필독★★★ 냉장(0~10도 유지), 냉동(-18도 이하)
 
-인수증 및 거래명세서, 타코메타 기록지까지 꼭!! 한 장씩 찍어서 보내주세요. 인수증은 증명서입니다. 
+인수증 및 거래명세서, 타코메타 기록지까지 빠짐없이 한 장씩 찍어서 보내주세요. 인수증은 증명서입니다. 
 반드시 사진 촬영 후 문자 전송 부탁드립니다. 
 미공유 시 운임 지급이 지연될 수 있습니다.
 
@@ -18843,7 +18843,7 @@ const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 �
       if (dayDiff === 1) {
         header = `익일 하차 건 (상차: ${md(order.상차일)} → 하차: ${md(order.하차일)})`;
       } else if (dayDiff >= 2) {
-        header = `지정 하차 건 (상차: ${md(order.상차일)} → 하차: ${md(order.하차일)})`;
+        header = `지정일 하차 건 (상차: ${md(order.상차일)} → 하차: ${md(order.하차일)})`;
       }
 
       const pickupTime = timeOrNow(order.상차시간) + (order.상차시간기준 ? ` ${order.상차시간기준}` : "");
@@ -18916,7 +18916,7 @@ ${kind}방법 : ${e.method || "-"}`;
           const sepMf = diffMf === 1
             ? `익일 하차 건 (상차: ${md(pChainMf[i - 1].date)} → 하차: ${md(dChainMf[i].date)})`
             : diffMf >= 2
-              ? `지정 하차 건 (상차: ${md(pChainMf[i - 1].date)} → 하차: ${md(dChainMf[i].date)})`
+              ? `지정일 하차 건 (상차: ${md(pChainMf[i - 1].date)} → 하차: ${md(dChainMf[i].date)})`
               : "";
           outMf += sepMf ? `\n\n${sepMf}\n\n${legTextsMf[i]}` : `\n\n${legTextsMf[i]}`;
         }
@@ -19061,7 +19061,7 @@ ${kind}방법 : ${e.method || "-"}`;
 ↓↓↓↓↓↓↓↓↓↓↓↓
 ${uploadUrl}
 
-${isColdVeh ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}${order.지급방식 === "착불" ? "*착불건입니다*" : order.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*"}
+${isColdVeh ? "*냉장(0~10도 유지), 냉동(-18도 이하)*\n" : "*관련 서류 업로드 필수*\n"}${order.지급방식 === "착불" ? "*착불건입니다*" : order.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*"}
 ${isChainMd ? "" : dateNotice2}${order.상차일 || ""} ${getYoil(order.상차일)}${order.운행유형 === "왕복" ? "\n[왕복운행]" : ""}${rotationNotice(order)}
 
 ${coreBlockMd}${order.전달사항?.trim() ? `\n\n◆ 전달사항\n${order.전달사항.trim()}` : ""}
@@ -19151,7 +19151,7 @@ ${coreBlockMd}${order.전달사항?.trim() ? `\n\n◆ 전달사항\n${order.전�
         try {
           const blobPromise = new Promise(res => canvas.toBlob(b => res(b), "image/png"));
           await navigator.clipboard.write([new ClipboardItem({ "image/png": blobPromise })]);
-          alert("계좌 정산 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.");
+          alert("계좌 정산 이미지가 복사되었습니다. 카카오톡 대화창에 붙여넣어 주세요.");
           onClose();
           return;
         } catch (writeErr) {
@@ -19180,7 +19180,7 @@ ${coreBlockMd}${order.전달사항?.trim() ? `\n\n◆ 전달사항\n${order.전�
       if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
         try {
           await navigator.clipboard.write([new ClipboardItem({ [mime]: Promise.resolve(toBlob()) })]);
-          alert("사업자등록증 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.");
+          alert("사업자등록증 이미지가 복사되었습니다. 카카오톡 대화창에 붙여넣어 주세요.");
           onClose();
           return;
         } catch (writeErr) {
@@ -19244,15 +19244,15 @@ ${coreBlockMd}${order.전달사항?.trim() ? `\n\n◆ 전달사항\n${order.전�
   if (smsConfirm) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
-        <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden mx-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[360px] overflow-hidden mx-4">
           <div className={cardVersionB ? "bg-[#1B2B4B] px-5 py-4" : "bg-blue-600 px-5 py-4"}>
             <h3 className="text-white font-bold text-[15px]">문자 메시지 전송</h3>
           </div>
           <div className="p-5">
             <div className="bg-gray-50 rounded-xl px-4 py-3 mb-4 border border-gray-100 text-[13px] text-gray-700">
               오더 내용이 복사되었습니다.<br />
-              <span className={`font-semibold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}`}>{smsConfirm.phone}</span> 으로 문자 앱을 여시겠습니까?<br />
-              <span className="text-gray-500">(문자 내용란에 붙여넣기 해주세요 — 길어서 자동입력 시 일부가 잘릴 수 있습니다)</span>
+              <span className={`font-semibold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}`}>{smsConfirm.phone}</span>(으)로 문자 앱을 여시겠습니까?<br />
+              <span className="text-gray-500">(문자 내용이 길면 자동 입력 시 일부가 잘릴 수 있으니, 내용란에 붙여넣어 주세요)</span>
             </div>
             <div className="flex gap-2">
               <button className="flex-1 py-2.5 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-600" onClick={() => { setSmsConfirm(null); }}>취소</button>
@@ -19623,7 +19623,7 @@ function MobileFixedRouteNotice({ order }) {
   return (
     <div className="rounded-xl border border-[#C9D6EE] bg-[#EEF3FC] px-3 py-2.5 text-[12.5px] text-[#1B2B4B] leading-relaxed">
       <b className="font-black">▸ 고정노선 오더{order.고정노선명 ? ` · ${order.고정노선명}` : ""}</b>
-      <div className="text-[12px] text-[#3A4A66]">여기서 고치면 <b>이 날짜({order.상차일 || "-"}) 오더만</b> 바뀝니다. 앞으로 계속 바꾸려면 <b>지입차관리 › 고정노선</b>에서 수정하세요.</div>
+      <div className="text-[12px] text-[#3A4A66]">여기서 수정하면 <b>이 날짜({order.상차일 || "-"}) 오더만</b> 바뀝니다. 앞으로 계속 바꾸려면 <b>지입차관리 › 고정노선</b>에서 수정하세요.</div>
     </div>
   );
 }
@@ -20267,7 +20267,7 @@ function MobileFareInquiry({ cardVersionB = false }) {
             </div>
             <div className="p-3 overflow-y-auto">
               {mapSubLoading?(
-                <div className="text-center py-6 text-[12px] text-gray-400">로딩 중...</div>
+                <div className="text-center py-6 text-[12px] text-gray-400">불러오는 중...</div>
               ):(
                 <div className="grid grid-cols-3 gap-1.5">
                   <button onClick={onMapSelectWholeCity}
@@ -20752,7 +20752,7 @@ function MobileNationalFareSearch() {
             </div>
           </div>
           <div className="px-4 pb-4 space-y-1">
-            <div className="text-[11px] text-gray-400">● 예상단가로 실제 운임은 수작업·상하차 조건 등에 따라 변동될 수 있습니다.</div>
+            <div className="text-[11px] text-gray-400">● 예상 단가이며, 실제 운임은 수작업·상하차 조건 등에 따라 달라질 수 있습니다.</div>
             <div className="text-[11px] text-gray-400">● T-Map 도로거리 기준 산정, 실제 경로에 따라 차이가 있을 수 있습니다.</div>
           </div>
         </div>
@@ -22586,8 +22586,8 @@ const source = rawSource.filter((o) => {
     const vehicleType = String(order.차량종류 || order.차종 || "");
     const isCold = vehicleType.includes("냉장") || vehicleType.includes("냉동");
     const cargoLine = isCold
-      ? "파렛전표,거래명세서,타코기록지 등"
-      : "파렛전표,거래명세서 등";
+      ? "파렛전표, 거래명세서, 타코기록지 등"
+      : "파렛전표, 거래명세서 등";
     const params = new URLSearchParams();
     if (date) params.set("date", date);
     const vehicle = (order.차량번호 || "").replace(/\s/g, "");
@@ -22598,13 +22598,13 @@ const source = rawSource.filter((o) => {
     const header = `안녕하세요. ${[dateLabel, timeLabel, from && to ? `${from} → ${to}` : (from || to)].filter(Boolean).join(" ")}`;
     return [
       header,
-      "관련 서류가 업로드 되지 않았습니다.",
-      "미 업로드시 운임 지급이 늦어 질 수 있습니다.",
+      "관련 서류가 아직 업로드되지 않았습니다.",
+      "미업로드 시 운임 지급이 지연될 수 있습니다.",
       "",
-      "아래 링크를 통하여 빠른 업로드 부탁드리겠습니다.",
+      "아래 링크에서 업로드 부탁드립니다.",
       cargoLine,
       "서류는 반드시 한 장씩 찍어서 올려주세요.",
-      "(전표/명세서 없으면 문자로 x 남겨주세요)",
+      "(전표·명세서가 없는 경우 문자로 '없음'이라고 회신해 주세요)",
       "",
       "여기를 눌러 업로드해주세요",
       url,
@@ -22943,7 +22943,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
       if (!("Notification" in window)) { alert("이 브라우저는 알림을 지원하지 않습니다."); return; }
       let permission = Notification.permission;
       if (permission === "default") permission = await Notification.requestPermission();
-      if (permission !== "granted") { alert("알림 권한이 허용돼 있지 않습니다. 브라우저/기기 설정에서 알림을 허용해주세요."); return; }
+      if (permission !== "granted") { alert("알림 권한이 허용되어 있지 않습니다. 브라우저 또는 기기 설정에서 알림을 허용해 주세요."); return; }
       const reg = await navigator.serviceWorker.ready;
       // ⭐ sw.js의 실제 push 핸들러와 동일한 기준(안드로이드만 네이비 라운드사각
       // KP+트럭 아이콘)으로 맞춘다 — 여기서 다르게 하드코딩돼 있으면 이 버튼으로
@@ -22974,7 +22974,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
       const { diagnoseFcmToken } = await import("../firebase");
       const result = await diagnoseFcmToken(currentUser);
       if (result.ok) {
-        alert(`✓ 토큰 발급/저장 성공\n\n${result.token.slice(0, 28)}...\n\n이 기기는 서버와 정상 연결됐습니다. 그래도 실제 알림이 안 오면 종류별 설정(위 알림 종류별 설정)을 다시 확인해주세요.`);
+        alert(`✓ 토큰 발급/저장 성공\n\n${result.token.slice(0, 28)}...\n\n이 기기는 서버와 정상 연결됐습니다. 그래도 알림이 오지 않으면 [알림 종류별 설정]을 확인해 주세요.`);
       } else {
         alert(`✕ 실패\n\n${result.reason}`);
       }
@@ -23268,7 +23268,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
                 ))}
               </div>
               <div className="text-[12px] text-gray-400 mt-2 leading-relaxed">
-                {pushPrefsTab === "push" ? "앱을 꺼 둬도 휴대폰으로 오는 알림이에요. 꺼 둔 종류는 이 기기로 오지 않아요." : "앱을 쓰는 중에 화면 가운데 뜨는 창이에요. 꺼도 내용은 목록과 메뉴 숫자에 그대로 남아요(PC와 같이 바뀌어요)."}
+                {pushPrefsTab === "push" ? "앱을 꺼 둬도 휴대폰으로 오는 알림이에요. 꺼 둔 종류는 이 기기로 오지 않아요." : "앱을 쓰는 중에 화면 가운데 뜨는 창이에요. 꺼도 내용은 목록과 메뉴 숫자에 그대로 남아요(PC에도 같이 적용돼요)."}
               </div>
             </div>
             <div className="max-h-[62vh] overflow-y-auto">
@@ -23302,7 +23302,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setShowLogoutConfirm(false)}>
           <div className="w-full bg-white rounded-t-3xl p-6" onClick={e => e.stopPropagation()}>
             <div className="text-[16px] font-bold text-gray-900 mb-1">로그아웃</div>
-            <div className="text-[13px] text-gray-500 mb-5">정말 로그아웃 하시겠습니까?</div>
+            <div className="text-[13px] text-gray-500 mb-5">로그아웃하시겠습니까?</div>
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => setShowLogoutConfirm(false)} className="py-3 rounded-xl bg-gray-100 text-gray-700 text-sm font-bold">취소</button>
               <button onClick={onLogout} className="py-3 rounded-xl bg-[#0F1A30] text-white text-sm font-bold">로그아웃</button>
@@ -23615,14 +23615,14 @@ function ERPPayrollPage({ drivers, orders, cardVersionB, accent }) {
   const [month, setMonth] = useState(now.getMonth() + 1);
 
   const monthStr = `${year}-${String(month).padStart(2, "0")}`;
-  const monthOrders = orders.filter(o => (o.상차일 || "").startsWith(monthStr) && o.이름);
+  const monthOrders = orders.filter(o => String(o.상차일 || "").startsWith(monthStr) && o.이름 && !isCancelledOrder(o));
 
   const byDriver = {};
   monthOrders.forEach(o => {
     const name = o.이름 || "-";
     if (!byDriver[name]) byDriver[name] = { name, carNo: o.차량번호 || "", phone: o.전화번호 || "", cnt: 0, 기사운임: 0 };
     byDriver[name].cnt += 1;
-    byDriver[name].기사운임 += Number(o.기사운임 || 0);
+    byDriver[name].기사운임 += Number(String(o.기사운임 ?? 0).replace(/[^\d.-]/g, "")) || 0;
   });
   const rows = Object.values(byDriver).sort((a, b) => b.기사운임 - a.기사운임);
   const total = rows.reduce((s, r) => s + r.기사운임, 0);

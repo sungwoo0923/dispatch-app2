@@ -196,7 +196,7 @@ const fmtMoney = (n) => {
   if (n >= 10000) { const v = n/10000; return v%1===0 ? `${v}만원` : `${v.toFixed(1)}만원`; }
   return `${n.toLocaleString()}원`;
 };
-const fmtTime = (m) => { const h=Math.floor(m/60); const mm=m%60; return h>0 ? `${h}h ${mm}m` : `${mm}m`; };
+const fmtTime = (m) => { const h=Math.floor(m/60); const mm=m%60; return h>0 ? `${h}시간 ${mm}분` : `${mm}분`; };
 
 // "출발/도착" step badge
 function StepBadge({ label, done, active, prov, city, onClear }) {
@@ -217,7 +217,7 @@ function StepBadge({ label, done, active, prov, city, onClear }) {
         }
       </div>
       {done && (
-        <button onClick={onClear} className="text-gray-300 hover:text-red-400 text-[18px] leading-none">×</button>
+        <button type="button" onClick={onClear} aria-label={`${label} 지우기`} className="w-8 h-8 -mr-1.5 flex items-center justify-center text-gray-400 hover:text-red-400 text-[20px] leading-none">×</button>
       )}
     </div>
   );
@@ -225,6 +225,7 @@ function StepBadge({ label, done, active, prov, city, onClear }) {
 
 export default function MobileMapFare() {
   const [step, setStep] = useState("from");
+  const [copied, setCopied] = useState(false); // 📱 2026-11-17 [복사] 누른 뒤 알림
   const [fromP, setFromP] = useState(null);
   const [fromC, setFromC] = useState(null);
   const [toP, setToP] = useState(null);
@@ -287,7 +288,7 @@ export default function MobileMapFare() {
           onClear={() => { setToP(null); setToC(null); setStep(fromC ? "to" : "from"); }}
         />
         {(fromC || toC) && (
-          <button onClick={reset} className="text-[11px] text-gray-400 border border-gray-200 rounded-lg px-2 py-1.5 flex-shrink-0">초기화</button>
+          <button onClick={reset} className="h-9 text-[12px] font-semibold text-gray-500 border border-gray-200 rounded-lg px-3 flex-shrink-0">초기화</button>
         )}
       </div>
 
@@ -302,18 +303,20 @@ export default function MobileMapFare() {
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setZoom(z => Math.min(3, parseFloat((z * 1.5).toFixed(2))))}
-                className="w-7 h-7 rounded-lg bg-white/80 border border-gray-200 text-[#1B2B4B] font-bold text-[14px] flex items-center justify-center shadow-sm"
+                className="w-9 h-9 rounded-lg bg-white/80 border border-gray-200 text-[#1B2B4B] font-bold text-[16px] flex items-center justify-center shadow-sm"
+                aria-label="확대"
               >+</button>
               {zoom > 1 && (
                 <button
                   onClick={() => setZoom(1)}
-                  className="h-7 px-2 rounded-lg bg-white/80 border border-gray-200 text-gray-500 text-[10px] font-bold flex items-center shadow-sm"
-                >원래</button>
+                  className="h-9 px-2.5 rounded-lg bg-white/80 border border-gray-200 text-gray-500 text-[11px] font-bold flex items-center shadow-sm whitespace-nowrap"
+                >원래 크기</button>
               )}
               <button
                 onClick={() => setZoom(z => Math.max(1, parseFloat((z / 1.5).toFixed(2))))}
                 disabled={zoom <= 1}
-                className="w-7 h-7 rounded-lg bg-white/80 border border-gray-200 text-[#1B2B4B] font-bold text-[16px] flex items-center justify-center shadow-sm disabled:opacity-30"
+                className="w-9 h-9 rounded-lg bg-white/80 border border-gray-200 text-[#1B2B4B] font-bold text-[18px] flex items-center justify-center shadow-sm disabled:opacity-30"
+                aria-label="축소"
               >−</button>
             </div>
           </div>
@@ -389,8 +392,8 @@ export default function MobileMapFare() {
             <span className="text-[15px] font-bold text-[#1B2B4B]">{fromP}</span>
             <button
               onClick={() => { setFromP(null); setStep("from"); }}
-              className="ml-auto text-[11px] text-gray-400 border border-gray-200 rounded-lg px-3 py-1 font-semibold"
-            >← 재선택</button>
+              className="ml-auto h-8 text-[12px] text-gray-500 border border-gray-200 rounded-lg px-3 font-semibold"
+            >← 다시 선택</button>
           </div>
           <div className="text-[12px] text-gray-400 mb-3">시·군·구를 선택하세요</div>
           <div className="grid grid-cols-3 gap-1.5 max-h-[260px] overflow-y-auto pr-1">
@@ -398,7 +401,7 @@ export default function MobileMapFare() {
               <button
                 key={city.n}
                 onClick={() => handleCitySelect(city)}
-                className="px-2 py-2.5 text-[12px] font-semibold text-gray-600 border border-gray-100 rounded-xl hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] transition text-center bg-gray-50"
+                className="px-2 py-2.5 text-[12px] font-semibold text-gray-600 border border-gray-100 rounded-xl hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] active:bg-[#1B2B4B] active:text-white transition text-center bg-gray-50"
               >{city.n}</button>
             ))}
           </div>
@@ -409,12 +412,12 @@ export default function MobileMapFare() {
       {showToCityList && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-7 h-7 rounded-full bg-orange-400 flex items-center justify-center text-white text-[11px] font-bold">하</div>
+            <div className="w-7 h-7 rounded-full bg-orange-400 flex items-center justify-center text-white text-[11px] font-bold">도</div>
             <span className="text-[15px] font-bold text-[#1B2B4B]">{toP}</span>
             <button
               onClick={() => { setToP(null); setStep("to"); }}
-              className="ml-auto text-[11px] text-gray-400 border border-gray-200 rounded-lg px-3 py-1 font-semibold"
-            >← 재선택</button>
+              className="ml-auto h-8 text-[12px] text-gray-500 border border-gray-200 rounded-lg px-3 font-semibold"
+            >← 다시 선택</button>
           </div>
           <div className="text-[12px] text-gray-400 mb-3">시·군·구를 선택하세요</div>
           <div className="grid grid-cols-3 gap-1.5 max-h-[260px] overflow-y-auto pr-1">
@@ -422,7 +425,7 @@ export default function MobileMapFare() {
               <button
                 key={city.n}
                 onClick={() => handleCitySelect(city)}
-                className="px-2 py-2.5 text-[12px] font-semibold text-gray-600 border border-gray-100 rounded-xl hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] transition text-center bg-gray-50"
+                className="px-2 py-2.5 text-[12px] font-semibold text-gray-600 border border-gray-100 rounded-xl hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] active:bg-[#1B2B4B] active:text-white transition text-center bg-gray-50"
               >{city.n}</button>
             ))}
           </div>
@@ -475,10 +478,10 @@ export default function MobileMapFare() {
                   <button
                     onClick={() => {
                       const text = `[운임견적]\n경로: ${fromP} ${fromC.n} → ${toP} ${toC.n}\n차종: ${VEHICLE_TYPES.find(v=>v.id===vehicle)?.name}\n거리: 약 ${result.distance}km · ${fmtTime(result.mins)}\n운임: ${fmtMoney(result.min)}~${fmtMoney(result.max)} (평균 ${fmtMoney(result.avg)})\n※ VAT 별도 · 직선거리 기준 환산`;
-                      navigator.clipboard.writeText(text).catch(() => {});
+                      navigator.clipboard?.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }).catch(() => {});
                     }}
                     className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/18 text-white/70 text-[13px] font-bold transition border border-white/10"
-                  >복사</button>
+                  >{copied ? "복사됨" : "복사"}</button>
                   <button
                     onClick={reset}
                     className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/18 text-white/70 text-[13px] font-bold transition border border-white/10"
@@ -491,7 +494,7 @@ export default function MobileMapFare() {
       )}
 
       <div className="text-[11px] text-gray-400 text-center pb-2">
-        직선거리 ×1.35 도로 환산 기준 · 실제 운임과 차이 있을 수 있습니다
+        직선거리 ×1.35 도로 환산 기준 · 실제 운임과 차이가 있을 수 있습니다
       </div>
     </div>
   );

@@ -674,10 +674,9 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
               onClick={() => onSelect(d)}
               onContextMenu={e => { e.preventDefault(); onContextMenu?.(e, d); }}
               style={{
-                background: bg,
                 textAlign: "center",
                 borderBottom: "1px solid #EEF1F6",
-                borderLeft: sel ? `3px solid ${HUD.cyan}` : "3px solid transparent", background: sel ? "#EEF3FC" : undefined, boxShadow: "none",
+                borderLeft: sel ? `3px solid ${HUD.cyan}` : "3px solid transparent", background: sel ? "#EEF3FC" : bg, boxShadow: "none",
                 cursor: "pointer",
                 transition: "background .1s",
               }}

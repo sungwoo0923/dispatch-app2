@@ -2049,13 +2049,12 @@ function BulkDateShiftModal({ rows, patchDispatch, onClose }) {
   const closeTimerRef = React.useRef(null);
   React.useEffect(() => () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current); }, []);
 
-  if (!rows || rows.length === 0) return null;
-
   // 미리보기 — 상차일 기준으로 중복 없이 한 번씩만 보여줘서 목록이 길어지지 않게 한다.
+  // 🛠 2026-11-17 Hook은 빈 목록 return 보다 먼저(순서가 바뀌면 화면 오류)
   const preview = React.useMemo(() => {
     const seen = new Set();
     const list = [];
-    for (const r of rows) {
+    for (const r of rows || []) {
       const oldD = r.상차일 || "";
       if (!oldD || seen.has(oldD)) continue;
       seen.add(oldD);
@@ -2063,6 +2062,7 @@ function BulkDateShiftModal({ rows, patchDispatch, onClose }) {
     }
     return list.sort((a, b) => a.old.localeCompare(b.old));
   }, [rows, shiftDays]);
+  if (!rows || rows.length === 0) return null;
 
   const handleApply = async () => {
     if (!shiftDays) { window.alert("이동할 일수를 입력하세요. (0은 이동이 없습니다)"); return; }
@@ -5839,7 +5839,7 @@ const upsertPlace = async (place) => {
     let key = place._id;
     let existingData = null;
     if (!key) {
-      const myCo = getTenant() || userCompany || DEFAULT_COMPANY;
+      const myCo = getTenant() || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
       const normalizedKey = coDocKey(myCo, makePlaceKey(name)); // ⭐ 회사별 문서 이름
       // 1차: 정규화된 키로 문서 존재 확인(다른 회사 문서면 쓰지 않는다)
       const normalizedSnap = await getDoc(doc(db, "places", normalizedKey)).catch(() => null);
@@ -8830,14 +8830,6 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
     return () => window.removeEventListener("keydown", onKey, true);
   }, [cargoPopupOpen]);
 
-  if (!user) {
-    return (
-      <div className="w-full h-screen flex items-center justify-center text-gray-500">
-        로그인 정보 확인 중...
-      </div>
-    );
-  }
-
   // ---------------- 화주사 푸시 알림 (상차 임박 시 화주사가 보낸 푸시 — 확인 전까지 중앙 팝업 유지) ----------------
   // ⚡ 렌더마다 dispatchData 전체를 filter/sort 하지 않도록 useMemo로 스코프 (pendingShipperRequests와 동일 패턴)
   const pendingNudges = React.useMemo(
@@ -8926,6 +8918,14 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   // 🔒 최종마감 잠금(오더 저장 · 삭제 공통 검사기) — 경리 · 회계 · 정산 팀과 최고관리자는 그대로 고칠 수 있다
   useFinalLockGuard((localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim(),
     role === "totalMaster" || realRole === "totalMaster" || ["hrAcct", "allMgr"].includes(realRole) || /경리|회계|정산/.test(String(myProfileDoc?.team || "")));
+  // 🛠 2026-11-17 로그인 확인 중 화면 — 모든 Hook 다음에 둔다(앞에 두면 로그인 직후 Hook 개수가 바뀌어 화면 오류가 났다)
+  if (!user) {
+    return (
+      <div className="w-full h-screen flex items-center justify-center text-gray-500">
+        로그인 정보를 확인하고 있습니다…
+      </div>
+    );
+  }
 return (
     <PlanValueProvider planId={planId} company={planCompany}>
     <OrderHistoryContext.Provider value={orderHistoryApi}>
@@ -8945,7 +8945,7 @@ return (
         <div className="fixed inset-0 bg-black/40 z-[999999] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
             <div className="text-[16px] font-black text-[#1B2B4B] mb-2">주말 출근 확인</div>
-            <div className="text-[13px] text-gray-500 mb-5">오늘은 주말입니다. 출근 처리 하시겠습니까?</div>
+            <div className="text-[13px] text-gray-500 mb-5">오늘은 주말입니다. 출근 처리하시겠습니까?</div>
             <div className="flex gap-2">
               <button onClick={() => handleWeekendCheckIn(false)}
                 className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-[13px] font-bold hover:bg-gray-50">아니오 (휴무)</button>
@@ -10815,95 +10815,7 @@ const [stopForm, setStopForm] = React.useState({
       setRouteInfo(null);
       return;
     }
-// ============================
-// 🔥 예상운임 계산 (핵심)
-// ============================
-useEffect(() => {
-  if (!form?.상차지주소 || !form?.하차지주소) {
-    setFareStats(null);
-    return;
-  }
-
-  const fullData = Array.isArray(dispatchData) ? dispatchData : [];
-
-  // 🔹 1️⃣ 주소 기반 필터
-  let filtered = fullData.filter(r => {
-    if (!r.상차지주소 || !r.하차지주소) return false;
-
-    return (
-      isAreaMatch(form.상차지주소, r.상차지주소) &&
-      isAreaMatch(form.하차지주소, r.하차지주소)
-    );
-  });
-
-  // 🔹 2️⃣ 차량종류
-  if (form.차량종류) {
-    filtered = filtered.filter(r =>
-      normalizeVehicleGroup(r.차량종류) ===
-      normalizeVehicleGroup(form.차량종류)
-    );
-  }
-
-  // 🔹 3️⃣ 톤수
-  const curTon = getTotalTonFromOrder(form);
-  if (curTon != null) {
-    filtered = filtered.filter(r => {
-      const t = getTotalTonFromOrder(r);
-      return t != null && Math.abs(t - curTon) <= 0.5;
-    });
-  }
-
-  // 🔹 4️⃣ 화물내용 (있으면만)
-  if (form.화물내용) {
-    filtered = filtered.filter(r =>
-      String(r.화물내용 || "").includes(form.화물내용)
-    );
-  }
-
-  // 🔹 5️⃣ 최신순 정렬
-  filtered.sort(
-    (a, b) => new Date(b.상차일) - new Date(a.상차일)
-  );
-
-  if (filtered.length === 0) {
-    setFareStats(null);
-    return;
-  }
-
-  // 🔥 핵심: 최신 운임
-  const latest = filtered[0];
-
-// 🔹 최근 5건
-const recent5 = filtered.slice(0, 5);
-
-// 🔹 평균 계산
-const avg =
-  recent5.reduce((sum, r) => {
-    const v = Number(r.청구운임 || 0);
-    return sum + (isNaN(v) ? 0 : v);
-  }, 0) / (recent5.length || 1);
-
-// 🔹 최신
-const latestFare = Number(filtered[0].청구운임 || 0);
-
-// 🔹 반올림 (만원 단위)
-const round = (n) => Math.round(n / 10000) * 10000;
-
-setFareStats({
-  fare: round(avg),           // ▸ 기본 표시값 (평균 기준)
-  avg: round(avg),
-  latest: round(latestFare),
-  count: filtered.length
-});
-
-}, [
-  form?.상차지주소,
-  form?.하차지주소,
-  form?.차량종류,
-  form?.차량톤수,
-  form?.화물내용,
-  dispatchData
-]);
+// 🛠 2026-11-17 예상운임 계산 useEffect가 이 함수 안(Hook 규칙 위반)에 들어 있어 지웠다 — 실행되지 않던 코드
     const res = await fetch("/api/route", {
       method: "POST",
       headers: {
@@ -10952,27 +10864,6 @@ const filterClients = (keyword) => {
     .slice(0, 5);
 };
 
-// ===== 수수료 자동 계산 =====
-const updateSale = (v) => {
-  const sale = Number(v || 0);
-  const drv = Number(copyTarget?.기사운임 || 0);
-  const commission = Math.max(0, sale - drv); // 음수 방지
-  setCopyTarget(p => ({
-    ...p,
-    청구운임: sale,
-    수수료: commission
-  }));
-};
-
-const updateDriver = (v) => {
-  const drv = Number(v || 0);
-  const sale = Number(copyTarget?.청구운임 || 0);
-  setCopyTarget(p => ({
-    ...p,
-    기사운임: drv,
-    수수료: sale - drv  // ✕ 음수 가능
-  }));
-};
       // ================================
   // 🔑 업체명 Key 정규화 함수(추가!)
   // ================================
@@ -11422,7 +11313,7 @@ React.useEffect(() => {
     const cur = `${hh}:${mm}`;
 
     if (!alertShown && cur === alertTime) {
-      showAlert(`알림: ${alertTime}\n미배차 ${pending}건, 지연 ${delayed}건 확인!`);
+      showAlert(`알림: ${alertTime}\n미배차 ${pending}건, 지연 ${delayed}건이 있습니다. 확인해 주세요.`);
       setAlertShown(true);
     }
   }, 10000);
@@ -15537,7 +15428,7 @@ setCopyOpen(false);
       }
       try {
         await navigator.clipboard.writeText(text);
-       showAlert("공유 문구가 클립보드에 복사되었습니다. (카톡/메신저에 붙여넣기)");
+       showAlert("공유 문구가 클립보드에 복사되었습니다. 카카오톡이나 메신저에 붙여 넣으세요.");
       } catch {
         (await kpPrompt("아래 내용을 복사하세요.", text));
       }
@@ -15588,43 +15479,6 @@ const textareaCls = orderCardStyle === "A"
   : "w-full rounded-[12px] border border-[#E3E8F0] bg-[#F7F9FC] px-3.5 py-2.5 text-[13.5px] font-bold text-[#0F1A30] placeholder:text-[#A7B3C6] placeholder:font-medium resize-none focus:outline-none focus:bg-white focus:border-[#1B2B4B] focus:ring-2 focus:ring-[#1B2B4B]/15 focus:shadow-[0_0_0_6px_rgba(143,176,240,0.16)] transition";
     const reqStar = <span className="text-[#4B6CB7]">*</span>;
     const AutoBadge = ({ show }) => null;
-function FuelPriceWidget({ apiKey }) {
-  const [prices, setPrices] = React.useState([]);
-
-React.useEffect(() => {
-  async function loadFuel() {
-    try {
-      const res = await fetch(`/api/fuel?area=${area || "01"}`)
-      const data = await res.json();
-      setPrices(data?.RESULT?.OIL || []);
-    } catch (e) {
-      console.warn("유가 조회 실패:", e);
-      setPrices([]);
-    }
-  }
-
-  loadFuel();
-}, []);
-
-  return (
-    <div className="mb-4 bg-white rounded-xl shadow-lg border p-4 w-[280px]">
-      <h3 className="font-bold text-gray-800 text-sm mb-2">◆ 오늘 유가 (전국 평균)</h3>
-
-      {prices.length === 0 && (
-        <div className="text-gray-500 text-xs">불러오는 중...</div>
-      )}
-
-      <div className="space-y-1 text-sm">
-        {prices.map(oil => (
-          <div key={oil.PRODCD} className="flex justify-between">
-            <span>{oil.PRODNM}</span>
-            <span className="font-bold">{Number(oil.PRICE).toLocaleString()} 원/L</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 function calcHistoryScore(row, form) {
   let score = 0;
@@ -19650,7 +19504,7 @@ className={`
                       }));
                       setIsCopyMode(true);
                       setCopyOpen(false);
-                      showAlert("오더 내용이 입력창에 복사되었습니다!", () => {
+                      showAlert("오더 내용이 입력창에 복사되었습니다.", () => {
                         pendingCopyChainRef.current?.();
                         pendingCopyChainRef.current = null;
                       });
@@ -19718,7 +19572,7 @@ className={`
     }));
     setIsCopyMode(true);
     setCopyOpen(false);
-    showAlert("오더 내용이 입력창에 복사되었습니다!", () => {
+    showAlert("오더 내용이 입력창에 복사되었습니다.", () => {
       pendingCopyChainRef.current?.();
       pendingCopyChainRef.current = null;
     });
@@ -22492,7 +22346,7 @@ function AttachmentViewer({ row, onClose, db, isViewed, onToggleViewed, onSaved,
         const newId = doc(collection(db, col, row._id, "attachments")).id;
         await setDoc(doc(db, col, row._id, "attachments", newId), payload);
         // 💳 2026-11-11 사무실이 올린 첨부 수(아이콘 파란색) · [계산서로 올리기]면 계산서 날짜가 비어 있을 때 오늘로(정산 창에서 고칠 수 있다)
-        await updateDoc(doc(db, col, row._id), { attachCount: increment(1), ...(payOnAv ? { officeAttach: increment(1) } : {}), ...(payOnAv && asInvoice && !row.계산서일 ? { 계산서일: todayKST() } : {}) });
+        await updateDoc(doc(db, col, row._id), { attachCount: increment(1), ...(payOnAv ? { officeAttach: increment(1) } : {}), ...(payOnAv && asInvoice && !row.계산서일 ? { 계산서일: histToday() } : {}) });
         if (mirror) {
           try {
             await setDoc(doc(db, mirror.col, mirror.id, "attachments", newId), payload);
@@ -24390,7 +24244,6 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
   const [bulkSaving, setBulkSaving] = React.useState(false);
   const [bulkProgress, setBulkProgress] = React.useState("");
 
-  if (!open) return null;
 
   // ⭐ 이 화면(첨부현황)을 여는 부모(실시간배차현황/배차현황)의 dispatchData는
   // 화면마다 스코프가 다르다 — 실시간배차현황은 어제~내일 3일치만, 배차현황도
@@ -24566,7 +24419,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
       "파렛전표 및 거래명세서, 타코기록지 등",
       "관련 서류 업로드를 부탁드립니다.",
       "",
-      "★미 확인 시 운임 지연이 발생할 수 있습니다★",
+      "★서류 미제출 시 운임 지급이 지연될 수 있습니다★",
       "",
       "[인수증 업로드 안내]",
       "아래 링크에서 서류를 업로드해 주세요.",
@@ -24598,6 +24451,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
   // 실제 첨부파일이 있는지(getCnt>0)만 본다.
   const realAttachCount = results.filter(r => getCnt(r) > 0).length;
 
+  if (!open) return null; // 🛠 2026-11-17 Hook을 모두 부른 뒤에 닫힘 처리(Hook 순서 고정)
   return (
     <div className="fixed inset-0 bg-black/50 z-[99998] flex items-center justify-center p-4">
       {/* 컬럼(날짜/거래처/상차지/하차지/첨부 상태/처리) 6개가 900px 안에 다 안 들어가
@@ -26876,7 +26730,7 @@ ${coreBlockF}
     try {
       const latest = await navigator.clipboard.readText();
       if (latest === text) {
-        showAlert("◷ 아직 전달되지 않은 것 같습니다.\n카톡에 붙여넣기 하셨나요?");
+        showAlert("◷ 아직 전달되지 않은 것 같습니다.\n카카오톡 대화창에 붙여넣기(Ctrl+V) 했는지 확인해 주세요.");
       }
     } catch (e) {
       console.error("Clipboard read error", e);
@@ -26925,7 +26779,7 @@ const copyAccountImage4 = async () => {
     const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
     await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
     setCopyModalOpen(false);
-    showAlert("계좌 정산 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.");
+    showAlert("계좌 정산 이미지가 복사되었습니다. 카카오톡에 붙여 넣으세요.");
   } catch { showAlert("이미지 복사에 실패했습니다."); }
 };
 
@@ -26949,7 +26803,7 @@ const copyBizImage4 = async () => {
   const _r4 = selected.length ? rows.find(r => r._id === selected[0]) : null;
   const _bz = rtBiz.multi && _r4 ? rtBiz.find(bizOf(_r4, rtBiz.defaultName)) : null;
   if (_bz) {
-    try { const blob = await bizInfoCardBlob(_bz); await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); setCopyModalOpen(false); showAlert(`'${_bz.name}' 사업자 정보 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.`); }
+    try { const blob = await bizInfoCardBlob(_bz); await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); setCopyModalOpen(false); showAlert(`'${_bz.name}' 사업자 정보 이미지가 복사되었습니다. 카카오톡에 붙여 넣으세요.`); }
     catch { showAlert("사업자 정보 복사에 실패했습니다."); }
     return;
   }
@@ -26960,7 +26814,7 @@ const copyBizImage4 = async () => {
     const imgType = blob.type.startsWith("image/") ? blob.type : "image/png";
     await navigator.clipboard.write([new ClipboardItem({ [imgType]: blob })]);
     setCopyModalOpen(false);
-    showAlert("사업자등록증 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.");
+    showAlert("사업자등록증 이미지가 복사되었습니다. 카카오톡에 붙여 넣으세요.");
   } catch { showAlert("사업자등록증 복사에 실패했습니다. PDF는 이미지 복사를 지원하지 않습니다."); }
 };
 
@@ -28284,7 +28138,7 @@ const handleUrgentSnooze = (minutes) => {
       전화번호,
     }));
 
-    showAlert("신규 기사 등록 완료!");
+    showAlert("신규 기사가 등록되었습니다.");
   };
   // ------------------------
 // driverMap 생성  ← 🔥 여기!
@@ -30234,7 +30088,7 @@ ${url}
 `.trim();
 
     navigator.clipboard.writeText(msg);
-    showAlert("▤ 공유 메시지가 복사되었습니다!");
+    showAlert("▤ 공유 메시지가 복사되었습니다.");
   };
 
 
@@ -31034,7 +30888,7 @@ const head = isDark
   onClick={async () => {
     if (isViewer) return showAlert("조회전용 권한으로 수정할 수 없습니다.");
     if (!copyTarget?._id) {
-      showAlert("수정할 오더 ID가 없습니다.");
+      showAlert("수정할 오더 정보를 찾을 수 없습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.");
       return;
     }
     if (isReversedDateOrder(copyTarget?.상차일, copyTarget?.하차일)) {
@@ -31713,7 +31567,7 @@ checkWarningStatus(c.거래처명, "거래처");
     <div className="relative" style={{overflow: "visible"}}>
       <input autoComplete="off"
         className="w-full border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[14px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-500"
-        placeholder="이름·차량번호·전화번호 또는 문자 복붙 → 엔터로 자동 적용"
+        placeholder="이름·차량번호·전화번호 또는 문자 내용 붙여넣기 → Enter로 자동 적용"
         value={smartQ4}
         onChange={e=>handleSmart4Input(e.target.value)}
         onKeyDown={e=>handleSmart4KeyDown(e, copyTarget, setCopyTarget)}
@@ -33518,7 +33372,7 @@ value={copyTarget?.화물수량 || ""}
               <div className="relative">
                 <input autoComplete="off"
                   className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-2.5 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-500"
-                  placeholder="이름·차량번호·전화번호 또는 문자 복붙 (엔터로 적용)"
+                  placeholder="이름·차량번호·전화번호 또는 문자 내용 붙여넣기 (Enter로 적용)"
                   value={smartQ4}
                   onChange={e => handleSmart4Input(e.target.value)}
                   onKeyDown={e => handleSmart4KeyDown(e, editTarget, setEditTarget)}
@@ -38268,13 +38122,13 @@ ${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
 const COLD_NOTICE = `★★★필독★★★
 
 • 전체보기 또는 모두보기 누르시면
-맨 아래 상/하차 정보 있습니다!
+맨 아래에 상/하차 정보가 있습니다.
 (안내문 꼭 읽어주세요)
 ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
 냉장(0~10도 유지), 냉동(-18도 이하)
 
-1. 인수증 및 거래명세서, 타코메타 기록지까지 꼭!! 한 장씩 찍어서 보내주세요. 
+1. 인수증 및 거래명세서, 타코미터 기록지까지 꼭 한 장씩 찍어서 보내주세요. 
 미공유 시 운임 지급이 지연될 수 있습니다.
 
 2. 상/하차 후 상하차 사진도 꼭 찍어서 공유 주시거나 보관하시면
@@ -38283,14 +38137,14 @@ const COLD_NOTICE = `★★★필독★★★
 (사진 전송 후 전화는 안 주셔도 됩니다)
 
 3. 운임결제는 24시콜 기준 계산서 발행 후 익일 결제입니다.
-금요일 계산서 발행인 경우 익주 월요일 결제 됩니다.
+금요일 계산서 발행인 경우 익주 월요일에 결제됩니다.
 (공휴일도 동일하게 적용됩니다)`;
 
 // 🚚 일반 차량용 (🔥 동일 포맷으로 통일)
 const NORMAL_NOTICE = `★★★필독★★★
 
 • 전체보기 또는 모두보기 누르시면
-맨 아래 상/하차 정보 있습니다!
+맨 아래에 상/하차 정보가 있습니다.
 (안내문 꼭 읽어주세요)
 ↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓↓
 
@@ -38298,11 +38152,11 @@ const NORMAL_NOTICE = `★★★필독★★★
 하차지에 전달하는 경우 사진 먼저 촬영 후 업체에 전달해 주시면 됩니다.
 
 2. 상/하차 사진 찍어서 보관 또는 공유주시면 문제 발생 시 도움 될 수 있습니다. 
-사진 꼭 찍어놔주세요.
+사진은 꼭 찍어 두세요.
 상·하차 이슈 발생 시 반드시 사전 연락 바랍니다.
 
 3. 운임결제는 24시콜 기준 계산서 발행 후 익일 결제입니다. 
-금요일 계산서 발행인 경우 익주 월요일 결제 됩니다. 
+금요일 계산서 발행인 경우 익주 월요일에 결제됩니다. 
 (공휴일도 동일하게 적용됩니다)`;
 
 // 🔥 반찬단지 전용 안내문
@@ -38689,7 +38543,7 @@ if (mode === "driver") {
       const blob = await new Promise(res => canvas.toBlob(res, "image/png"));
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
       setCopyModalOpen(false);
-      showAlert("계좌 정산 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.");
+      showAlert("계좌 정산 이미지가 복사되었습니다. 카카오톡에 붙여 넣으세요.");
     } catch { showAlert("이미지 복사에 실패했습니다."); }
   };
 
@@ -38713,7 +38567,7 @@ if (mode === "driver") {
     const _r5 = selected.size ? dispatchData.find(d => getId(d) === [...selected][0]) : null;
     const _bz = dsBiz.multi && _r5 ? dsBiz.find(bizOf(_r5, dsBiz.defaultName)) : null;
     if (_bz) {
-      try { const blob = await bizInfoCardBlob(_bz); await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); setCopyModalOpen(false); showAlert(`'${_bz.name}' 사업자 정보 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.`); }
+      try { const blob = await bizInfoCardBlob(_bz); await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); setCopyModalOpen(false); showAlert(`'${_bz.name}' 사업자 정보 이미지가 복사되었습니다. 카카오톡에 붙여 넣으세요.`); }
       catch { showAlert("사업자 정보 복사에 실패했습니다."); }
       return;
     }
@@ -38724,7 +38578,7 @@ if (mode === "driver") {
       const imgType = blob.type.startsWith("image/") ? blob.type : "image/png";
       await navigator.clipboard.write([new ClipboardItem({ [imgType]: blob })]);
       setCopyModalOpen(false);
-      showAlert("사업자등록증 이미지가 복사되었습니다. 카카오톡에 붙여넣기 하세요.");
+      showAlert("사업자등록증 이미지가 복사되었습니다. 카카오톡에 붙여 넣으세요.");
     } catch { showAlert("사업자등록증 복사에 실패했습니다. PDF는 이미지 복사를 지원하지 않습니다."); }
   };
 
@@ -39178,7 +39032,7 @@ if (mode === "driver") {
         showAlert(fail ? `✓ ${ok}건 등록 완료 · ⚠ ${fail}건 실패(하차일이 상차일보다 빠른 줄 등)` : `✓ 대용량 업로드 완료 — ${ok}건 등록되었습니다.`);
       } catch (err) {
         console.error(err);
-        showAlert("✕ 업로드 중 오류 발생");
+        showAlert("✕ 업로드 중 오류가 발생했습니다.\n" + (err?.message || ""));
       }
     };
 
@@ -41906,7 +41760,7 @@ return (
               <div className="relative">
                 <input autoComplete="off"
                   className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-2.5 text-[13px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-500"
-                  placeholder="이름·차량번호·전화번호 또는 문자 복붙 (엔터로 적용)"
+                  placeholder="이름·차량번호·전화번호 또는 문자 내용 붙여넣기 (Enter로 적용)"
                   value={smartQ5}
                   onChange={e => handleSmart5Input(e.target.value)}
                   onKeyDown={e => handleSmart5KeyDown(e, editTarget, setEditTarget)}
@@ -42357,7 +42211,7 @@ return (
 
     const targetId = getId(editTarget);
     if (!targetId) {
-      showAlert("✕ 저장 실패: 오더 ID를 찾을 수 없습니다.");
+      showAlert("✕ 오더 정보를 찾을 수 없어 저장하지 못했습니다.");
       return;
     }
 
@@ -42523,7 +42377,7 @@ return (
     if (isViewer) return showAlert("조회전용 권한으로 수정할 수 없습니다.");
     const id = getId(copyTarget);
     if (!id) {
-      showAlert("수정할 오더 ID가 없습니다.");
+      showAlert("수정할 오더 정보를 찾을 수 없습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.");
       return;
     }
     if (isReversedDateOrder(copyTarget?.상차일, copyTarget?.하차일)) {
@@ -43184,7 +43038,7 @@ setCopyPlaceOptions(list);
     <div className="relative">
       <input autoComplete="off"
         className="w-full border-2 border-[#1B2B4B] rounded-lg px-3 py-2 text-[14px] bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 placeholder:text-gray-500"
-        placeholder="이름·차량번호·전화번호 또는 문자 복붙 → 엔터로 자동 적용"
+        placeholder="이름·차량번호·전화번호 또는 문자 내용 붙여넣기 → Enter로 자동 적용"
         value={smartQ5}
         onChange={e=>handleSmart5Input(e.target.value)}
         onKeyDown={e=>handleSmart5KeyDown(e, copyTarget, setCopyTarget)}
@@ -46083,7 +45937,7 @@ function NewOrderPopup({
       });
     } catch (err) {
       console.error(err);
-      showAlert("등록 실패");
+      showAlert("오더 등록에 실패했습니다.\n" + (err?.message || ""));
     }
   };
 
@@ -46992,7 +46846,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
           </tbody>
         </table>
       </div>
-      <p className="mt-3 text-[11px] text-gray-500">* 자동: 배차완료 기준 청구운임(매출) / 기사운임(운반비) 자동 집계 &nbsp;|&nbsp; 빈 셀 클릭 시 수동 입력 (Firestore 저장)</p>
+      <p className="mt-3 text-[11px] text-gray-500">* 자동: 배차완료 기준 청구운임(매출) / 기사운임(운반비) 자동 집계 &nbsp;|&nbsp; 빈 셀을 클릭하면 직접 입력할 수 있고, 입력한 값은 바로 저장됩니다</p>
 
       {/* ── 엑셀 업로드 미리보기 모달 ── */}
       {importPreview && (
@@ -47208,7 +47062,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
 
   const resetPayment = async (type, name) => {
     if (isViewer) { alert("조회전용 권한으로는 초기화할 수 없습니다."); return; }
-    if (!await kpConfirm(`${name} 의 ${type === "ar" ? "수금" : "지급"} 내역을 초기화하시겠습니까?`)) return;
+    if (!await kpConfirm(`${name}의 ${type === "ar" ? "수금" : "지급"} 내역을 초기화하시겠습니까?`)) return;
     setSaving(true);
     try {
       const newAr = type === "ar" ? { ...arPayments, [name]: 0 } : arPayments;
@@ -47348,7 +47202,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
               </tbody>
             </table>
           </div>
-          <p className="text-[11px] text-gray-500">* 배차완료 기준 청구운임 합계. 입금 처리 시 Firestore에 저장됩니다.</p>
+          <p className="text-[11px] text-gray-500">* 배차완료 기준 청구운임 합계입니다. 입금 처리한 내역은 바로 저장됩니다.</p>
         </div>
       )}
 
@@ -47401,7 +47255,7 @@ function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], 
               </tbody>
             </table>
           </div>
-          <p className="text-[11px] text-gray-500">* 배차완료 기준 기사운임 합계. 지급 처리 시 Firestore에 저장됩니다.</p>
+          <p className="text-[11px] text-gray-500">* 배차완료 기준 기사운임 합계입니다. 지급 처리한 내역은 바로 저장됩니다.</p>
         </div>
       )}
 
@@ -48486,7 +48340,7 @@ function MonthlyPPTReportPanel({ rows = [], monthA: monthAProp, setMonthA: setMo
             PPT 리포트 생성
             <span className="text-[10px] font-bold bg-white/10 text-white/80 border border-white/20 px-1.5 py-0.5 rounded">최고관리자 전용</span>
           </h3>
-          <p className="text-[11px] text-white/50 mt-0.5">두 달의 비교분석 결과를 그대로 담은 실적 보고서(.pptx)를 캔바 없이 바로 만들어 다운로드합니다</p>
+          <p className="text-[11px] text-white/50 mt-0.5">두 달의 비교분석 결과를 그대로 담은 실적 보고서(.pptx)를 바로 만들어 다운로드합니다</p>
         </div>
         <div className="flex items-center gap-2">
           <CustomSelect
@@ -48717,7 +48571,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   // ================================
   const exportSettlementCapture = async (type = "png") => {
     const el = document.getElementById("settlement-capture");
-    if (!el) { showAlert("캡쳐 영역을 찾을 수 없습니다."); return; }
+    if (!el) { showAlert("캡처 영역을 찾을 수 없습니다."); return; }
     // 넓은 모니터용 확대(zoom)는 캡쳐할 때만 잠시 끈다 — html2canvas가 확대를 제대로 그리지 못한다
     el.classList.add("kp-rv-nozoom");
     let canvas;
@@ -50581,7 +50435,7 @@ function UnassignedStatus({ dispatchData, setDispatchData = () => {}, drivers = 
       const patch = { 차량번호: d.차량번호, 이름: d.이름, 전화번호: formatPhone(d.전화번호 || ""), 배차상태: "배차완료", updatedAt: Date.now() };
       const ok = await patchDispatch(o._id, { ...patch, __col: o.__col });
       if (ok !== false) showToast(`${d.이름} 기사 배정 완료`);
-    } catch (e) { console.error(e); showToast("배정 중 오류가 났습니다.", "err"); }
+    } catch (e) { console.error(e); showToast("배정 중 오류가 발생했습니다.", "err"); }
     setAssignBusy(false); setAssignAsk(null);
   };
   // ⭐ 2026-11-05 매칭된 기사 이름·전화 [수정] — 미배차현황 오더 복사/수정 패널
@@ -50862,7 +50716,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
     exitDeleteMode();
     Promise.resolve(removeDispatch(ids)).then(() => showToast(`${ids.length}건 삭제 완료`)).catch((e) => {
       console.error(e);
-      showToast("삭제 중 오류 발생", "err");
+      showToast("삭제 중 오류가 발생했습니다.", "err");
     });
   };
 
@@ -50911,7 +50765,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   {!copyTarget.__newOrder && <button
                     onClick={async () => {
                       if (isViewer) { showToast("조회전용 권한으로는 수정할 수 없습니다.", "err"); return; }
-                      if (!copyTarget?._id) { showToast("수정할 오더 ID가 없습니다.", "err"); return; }
+                      if (!copyTarget?._id) { showToast("수정할 오더 정보를 찾을 수 없습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.", "err"); return; }
                       if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
                       if (isReversedDateOrder(copyTarget?.상차일, copyTarget?.하차일)) { showToast(REVERSED_DATE_ORDER_MSG, "err"); return; }
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
@@ -51257,7 +51111,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         ref={smart7Ref}
                         rows={2}
                         className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] resize-none"
-                        placeholder="차량번호 · 기사명 · 연락처 · 문자 복붙"
+                        placeholder="차량번호 · 기사명 · 연락처 · 문자 내용 붙여넣기"
                         value={smartQ7}
                         onChange={(e) => handleSmart7Input(e.target.value)}
                         onKeyDown={handleSmart7KeyDown}
@@ -51726,7 +51580,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                   showToast("기사 등록 완료");
                   setNewDriverPopupOpen(false);
                   setNewDriverData({ 이름: "", 전화번호: "", 차량번호: "" });
-                } catch (err) { console.error(err); showToast("등록 중 오류 발생", "err"); }
+                } catch (err) { console.error(err); showToast("등록 중 오류가 발생했습니다.", "err"); }
               }} className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold hover:bg-[#243a60] transition"><EditableText id="misc.btn.46880.저장" defaultText="저장" /></button>
             </div>
           </div>
@@ -52571,7 +52425,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     if (upsertClient) {
       await upsertClient(merged).catch(e => showAlert("저장 실패: " + e.message));
     }
-    showAlert("거래처 정보 저장 완료!");
+    showAlert("거래처 정보가 저장되었습니다.");
     setShowEdit(false);
   };
 
@@ -52788,7 +52642,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     };
   }));
 
-  showAlert(`${row.yyyymm} → ${next} (${(row._rows||[]).length}건)`);
+  showAlert(`${row.yyyymm} 정산 상태를 ‘${next}’(으)로 변경했습니다. (${(row._rows||[]).length}건)`);
 };
 
   const settleSelected = async () => {
@@ -52822,7 +52676,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     }));
   }
 
-  showAlert(`선택 ${targets.length}개월 정산완료`);
+  showAlert(`선택한 ${targets.length}개월을 정산완료 처리했습니다.`);
   clearSel();
 };
 
@@ -52858,7 +52712,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     }));
   }
 
-  showAlert(`전체 ${monthRows.length}개월 정산완료`);
+  showAlert(`전체 ${monthRows.length}개월을 정산완료 처리했습니다.`);
   clearSel();
 };
 
@@ -53548,7 +53402,7 @@ const handleBatchSettle = async (targetStatus) => {
     }));
 
     setBatchLoading(false);
-    showAlert(`${batchClients.size}개 거래처 / ${months.length}개월 → ${targetStatus} (총 ${totalDocs}건 문서 저장)`);
+    showAlert(`${batchClients.size}개 거래처 · ${months.length}개월을 ‘${targetStatus}’(으)로 변경했습니다. (총 ${totalDocs}건)`);
     setBatchModalOpen(false);
     setBatchClients(new Set());
   };
@@ -54322,7 +54176,7 @@ const handleBatchSettle = async (targetStatus) => {
                       if (!email) return showAlert(`${client}에 등록된 이메일이 없습니다. 거래처 정보에서 이메일을 등록해주세요.`);
                       setBatchSendList(prev => {
                         if (prev.find(x => x.name === client && (x.sub || "") === stmtSub)) return showAlert(`${stmtTitle}은 이미 발송 목록에 있습니다.`) || prev;
-                        showAlert(`${stmtTitle} 발송 목록에 추가됨`);
+                        showAlert(`${stmtTitle}을(를) 발송 목록에 추가했습니다.`);
                         return [...prev, {
                           name: client,
                           ...(stmtSub ? { sub: stmtSub, label: stmtTitle } : {}), // ⭐ 2026-11-17 구분별 명세서
@@ -54755,10 +54609,10 @@ const handleBatchSettle = async (targetStatus) => {
                       if (!orderPopup._id) return showAlert("저장할 수 없는 오더입니다.");
                       if (typeof patchDispatch === "function") {
                         await patchDispatch(orderPopup._id, orderPopupEdit);
-                        showAlert("수정 저장 완료!");
+                        showAlert("수정 내용이 저장되었습니다.");
                         setOrderPopup(null);
                       } else {
-                        showAlert("patchDispatch가 연결되지 않았습니다.");
+                        showAlert("저장 기능이 연결되지 않아 저장할 수 없습니다. 화면을 새로고침한 뒤 다시 시도해 주세요.");
                       }
                     }}
                   >
@@ -55028,7 +54882,7 @@ const handleBatchSettle = async (targetStatus) => {
                           }
                         } catch (e) {
                           logEmail({ type: "일반이메일", client: client || "-", to: generalEmailTo, subject: generalEmailSubject, body: generalEmailBody || "", attachmentNames: generalEmailFiles.map(f => f.name), fromName, replyTo: fromAddr, status: "failed", error: e.message }).catch(() => {});
-                          showAlert(`발송 중 오류: ${e.message}`);
+                          showAlert(`발송 중 오류가 발생했습니다: ${e.message}`);
                         } finally {
                           setGeneralEmailSending(false);
                         }
@@ -55439,7 +55293,7 @@ const handleBatchSettle = async (targetStatus) => {
                           showAlert(`발송 실패: ${r.error}`);
                         }
                       } catch (e) {
-                        showAlert("네트워크 오류로 발송 실패");
+                        showAlert("네트워크 오류로 발송하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.");
                       } finally {
                         setEmailSending(false);
                       }
@@ -56608,7 +56462,7 @@ const handleBatchSettle = async (targetStatus) => {
                         }
                       } catch(e) {
                         logEmail({ type:"미수금", client:selClient, to:emailTo, subject, body: emailBody, status:"failed", error: e.message });
-                        showAlert("네트워크 오류");
+                        showAlert("네트워크 오류로 발송하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.");
                       }
                       finally { setEmailSending(false); }
                     }}>
@@ -57118,7 +56972,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     syncPayLedger(row, "지급완료", d);
   };
   const pay = async (id, status) => {
-    if (!patchDispatch) return alert("patchDispatch 미연결");
+    if (!patchDispatch) return alert("저장 기능이 연결되지 않아 처리할 수 없습니다. 화면을 새로고침한 뒤 다시 시도해 주세요.");
     const row = (dispatchData || []).find((r) => r._id === id);
     const date = status === "지급완료" ? (selectedPayDate || todayStr9()) : "";
     if (row && (row.지급상태 || "지급중") === status && (row.지급일 || "") === date) return; // 바뀐 게 없으면 장부도 그대로
@@ -57127,19 +56981,21 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   };
 
   const bulkPay = async (ids, status) => {
-    if (!ids.length) return alert("선택 항목 없음");
+    if (!ids.length) return alert("처리할 건을 먼저 선택해 주세요.");
     if (!(await kpConfirm(`${ids.length}건을 ${status === "지급완료" ? "지급완료" : status}하시겠습니까?`, { title: status, okText: "네", cancelText: "취소" }))) return;
     await Promise.all(ids.map(id => pay(id, status)));
     setSelectedIds(new Set());
-    alert(`${status} 처리: ${ids.length}건`);
+    alert(`${ids.length}건을 ${status} 처리했습니다.`);
   };
 
   // 기사 전체 미지급 일괄 지급
   const payAllByDriver = async (rows) => {
     const unpaid = rows.filter(r => (r.지급상태 || "지급중") !== "지급완료");
     if (!unpaid.length) return alert("미지급 건이 없습니다.");
+    const unpaidSum = unpaid.reduce((s, r) => s + toInt(r.기사운임), 0);
+    if (!(await kpConfirm(`${rows[0]?.이름 || "이 기사"}의 미지급 ${unpaid.length}건(${unpaidSum.toLocaleString()}원)을 지급완료 처리하시겠습니까?`, { title: "지급완료", okText: "지급완료", cancelText: "취소" }))) return;
     await Promise.all(unpaid.map(r => pay(r._id, "지급완료")));
-    alert(`${unpaid.length}건 지급완료 처리`);
+    alert(`${unpaid.length}건을 지급완료 처리했습니다.`);
   };
 
   // ─── 선택 ───
@@ -57148,7 +57004,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 
   // ─── 엑셀 ───
   const downloadExcel = () => {
-    if (!filtered.length) return alert("데이터 없음");
+    if (!filtered.length) return alert("다운로드할 내역이 없습니다.");
     const rows = filtered.map((r, i) => ({
       순번: i + 1, 상차일: r.상차일 || "", 지급상태: r.지급상태 || "지급중", 지급일: r.지급일 || "",
       거래처명: r.거래처명 || "", 상차지명: r.상차지명 || "", 하차지명: r.하차지명 || "",
@@ -57622,7 +57478,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
             {payExcelDone ? (
               <>
                 <div className="bg-[#1B2B4B] px-6 py-4">
-                  <div className="text-white font-bold text-[16px]">지급완료 처리 완료</div>
+                  <div className="text-white font-bold text-[16px]">엑셀 지급완료 처리 결과</div>
                 </div>
                 <div className="flex-1 flex flex-col items-center justify-center py-12 gap-4">
                   <div className="w-16 h-16 rounded-full bg-[#EEF3FC] flex items-center justify-center">
@@ -57901,7 +57757,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
     for (const d of targets) {
       await upsertDriver({ ...d, 전화번호: normalizePhone(d.전화번호) });
     }
-    showAlert(`${targets.length}건 정규화 완료`);
+    showAlert(`전화번호 ${targets.length}건을 정규화했습니다.`);
   };
 
   const norm = (s="") => String(s).toLowerCase().replace(/\s+/g,"");
@@ -58016,7 +57872,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
 
   const saveEditDriver = async () => {
     if (!editDriverModal) return;
-    if (!editDriverModal.id) return showAlert("문서 ID가 없어 수정할 수 없습니다.");
+    if (!editDriverModal.id) return showAlert("기사 정보를 찾을 수 없어 수정할 수 없습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.");
     // 블랙 등급은 메모가 있으면 무조건 팝업이 뜨도록 별도로 처리되므로(팝업표시 값과 무관),
     // 저장 시점에도 사용자에게 혼란을 주지 않도록 항상 팝업표시:true로 맞춰 저장한다.
     const 팝업표시 = editDriverModal.등급 === "블랙" ? true : editDriverModal.팝업표시 === true;
@@ -58109,9 +57965,9 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
           await upsertDriver(patch);
         } });
         ok = upD.ok;
-        showAlert(`총 ${ok}건 반영`);
+        showAlert(`총 ${ok}건을 반영했습니다.`);
       } catch(err) {
-        console.error(err); showAlert("엑셀 처리 중 오류");
+        console.error(err); showAlert("엑셀 처리 중 오류가 발생했습니다. 파일 형식을 확인해 주세요.");
       } finally { e.target.value = ""; }
     };
     reader.readAsArrayBuffer(file);
@@ -58863,7 +58719,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                       await upsertDriver({ ...d, 전화번호: normalizePhone(d.전화번호) });
                     }
                     setCleanupDone(true);
-                    showAlert(`${phoneNormTargets.length}건 정규화 완료`);
+                    showAlert(`전화번호 ${phoneNormTargets.length}건을 정규화했습니다.`);
                   }}
                   className="ml-auto px-4 py-1.5 bg-[#1B2B4B] text-white text-[13px] font-bold rounded-lg hover:bg-[#243a60] transition">
                   <EditableText id="driver.cleanup.전체정규화" defaultText="전체 정규화" /> ({phoneNormTargets.length}건)
@@ -58910,7 +58766,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                           <td className="px-4 py-3 text-center">
                             <button onClick={async () => {
                               await upsertDriver({ ...d, 전화번호: normalizePhone(d.전화번호) });
-                              showAlert("정규화 완료");
+                              showAlert("전화번호를 정규화했습니다.");
                             }} className="px-3 py-1 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
                               정규화
                             </button>
@@ -58943,9 +58799,9 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                               onClick={async () => {
                                 const toDelete = sorted.slice(1).map(d => d.id).filter(Boolean);
                                 if (!toDelete.length) return;
-                                if (!await kpConfirm(`"${representative.차량번호}" 기사를 1건으로 정리합니다. 나머지 ${toDelete.length}건을 삭제합니까?`)) return;
+                                if (!await kpConfirm(`"${representative.차량번호}" 기사를 1건으로 정리합니다. 나머지 ${toDelete.length}건을 삭제하시겠습니까?`)) return;
                                 await removeDriver(toDelete); // ⭐ 2026-11-05 한 번에 삭제 + 진행 창
-                                showAlert(`정리 완료 — ${toDelete.length}건 삭제`);
+                                showAlert(`정리를 마쳤습니다. 중복 ${toDelete.length}건을 삭제했습니다.`);
                               }}
                               className="px-3 py-1 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition">
                               이 그룹 정리
@@ -59152,7 +59008,7 @@ function BizRegOcrModal({ imageBase64, onClose, onApply }) {
                   <div key={key} className="flex px-3 py-2 gap-2 items-start">
                     <span className="w-16 shrink-0 text-[12px] text-gray-500 font-semibold">{label}</span>
                     <span className={`text-[12px] flex-1 break-words ${fields?.[key] ? "text-gray-800 font-semibold" : "text-gray-300"}`}>
-                      {fields?.[key] || "인식 안됨"}
+                      {fields?.[key] || "인식 안 됨"}
                     </span>
                   </div>
                 ))}
@@ -59499,7 +59355,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     setMismatchRunning(false);
     setMismatchSelected(new Set());
     setShowMismatchPopup(false);
-    showAlert(`${ok}건 복구 완료 (양쪽 담당자 목록을 합쳐서 반영, 이후 자동으로 서로 동기화됩니다)`);
+    showAlert(`${ok}건을 복구했습니다.\n양쪽 담당자 목록을 합쳐 반영했으며, 이후에는 자동으로 서로 동기화됩니다.`);
   };
 
 // ⚠️ 예전엔 "로컬에 이미 있는 행이면 로컬값을 우선 보존"하는 병합 로직이었는데,
@@ -59854,7 +59710,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         } });
         ok = upC.ok;
         showAlert(`총 ${ok}건 반영 완료${failC.length ? `\n반영 실패 ${failC.length}건: ${failC.slice(0, 5).join(", ")}${failC.length > 5 ? " 외" : ""}` : ""}`);
-      } catch (err) { showAlert("엑셀 처리 오류"); } finally { e.target.value = ""; }
+      } catch (err) { console.error(err); showAlert("엑셀 처리 중 오류가 발생했습니다. 파일 형식을 확인해 주세요."); } finally { e.target.value = ""; }
     };
     reader.readAsArrayBuffer(file);
   };
@@ -60100,6 +59956,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
 
   const removeDuplicatePlaces = async () => {
     if (dupSelected.size === 0) return showAlert("삭제할 중복 항목을 선택하세요.");
+    if (!(await kpConfirm(`선택한 중복 상하차지 ${dupSelected.size}건을 삭제하시겠습니까?\n삭제한 항목은 되돌릴 수 없습니다.`))) return;
     await removePlace([...dupSelected]); // ⭐ 2026-11-05 한 번에 삭제 + 진행 창
     setDupSelected(new Set()); showAlert(`${dupSelected.size}건 삭제 완료`);
   };
@@ -60145,8 +60002,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         }
         const up = await runUpload({ items: [...uniq, ...fixes], label: "상하차지", each: (x) => upsertPlace?.(x) });
         ok = Math.min(uniq.length, up.ok);
-        showAlert(`신규 ${uniq.length}건 반영${fixes.length ? ` · 담당자번호 정리 ${fixes.length}곳` : ""}`);
-      } catch (err) { showAlert("엑셀 처리 오류"); } finally { e.target.value = ""; }
+        showAlert(`신규 ${ok}건 반영${fixes.length ? ` · 담당자번호 정리 ${fixes.length}곳` : ""}`);
+      } catch (err) { console.error(err); showAlert("엑셀 처리 중 오류가 발생했습니다. 파일 형식을 확인해 주세요."); } finally { e.target.value = ""; }
     };
     reader.readAsArrayBuffer(file);
   };
@@ -60482,6 +60339,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                     <button onClick={async () => {
                       const primary = group[0];
                       const duplicates = group.slice(1);
+                      if (!(await kpConfirm(`'${primary.업체명}' 중복 ${duplicates.length}건을 이 항목으로 병합하시겠습니까?\n담당자 정보는 합쳐지고, 나머지 ${duplicates.length}건은 삭제됩니다.`))) return;
                       const allContacts = group.map(g => ({ name: g.담당자 || "", phone: g.담당자번호 || "", isPrimary: false })).filter(c => c.name);
                       if (allContacts.length > 0) allContacts[0].isPrimary = true;
                       await upsertPlace?.({ ...primary, _id: primary.id, contacts: allContacts });
@@ -61841,7 +61699,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
   };
   const copyContact = async () => {
     const text = [`${co} ${displayName}${title ? ` (${title})` : ""}`, phone && `휴대폰 ${phone}`, companyTel.tel && `대표번호 ${companyTel.tel}`, companyTel.fax && `팩스 ${companyTel.fax}`, user?.email && `이메일 ${user.email}`, companyAddr && `주소 ${companyAddr}`].filter(Boolean).join("\n");
-    try { await navigator.clipboard.writeText(text); showAlert("연락처를 복사했습니다. 카톡·문자에 붙여넣기 하세요."); } catch { showAlert("복사에 실패했습니다."); }
+    try { await navigator.clipboard.writeText(text); showAlert("연락처를 복사했습니다. 카카오톡이나 문자에 붙여 넣으세요."); } catch { showAlert("복사에 실패했습니다."); }
   };
   const saveVcard = () => {
     const vcf = ["BEGIN:VCARD", "VERSION:3.0", `FN:${displayName}`, `N:${displayName};;;;`, co && `ORG:${co}${myInfo.team ? `;${myInfo.team}` : ""}`,
@@ -63100,6 +62958,14 @@ const ROLE_LABELS_HR = ROLE_LABELS; // customRoles.js 공용 이름
 // ─────────── PC ERP 관리 ───────────
 function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], dispatchData = [], user }) {
   const [subPage, setSubPage] = React.useState(null);
+  // 🛠 2026-11-17 직원 목록 Hook은 화면 분기(if) 밖에서(Hook 순서 고정)
+  const [employees, setEmployees] = React.useState([]);
+  React.useEffect(()=>{
+    if(subPage !== "직원관리" || !userCompany) return;
+    const q = query(collection(db,"users"),where("company","==",userCompany));
+    const unsub = onSnapshot(q,snap=>setEmployees(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    return ()=>unsub();
+  },[userCompany, subPage]);
   const [search, setSearch] = React.useState("");
   const accent = "#1B2B4B";
 
@@ -63139,13 +63005,6 @@ function PCERPPage({ userCompany = "", drivers = [], clients = [], places = [], 
   );
 
   if (subPage === "직원관리") {
-    const [employees, setEmployees] = React.useState([]);
-    React.useEffect(()=>{
-      if(!userCompany) return;
-      const q = query(collection(db,"users"),where("company","==",userCompany));
-      const unsub = onSnapshot(q,snap=>setEmployees(snap.docs.map(d=>({id:d.id,...d.data()}))));
-      return ()=>unsub();
-    },[userCompany]);
     return (
       <div className="p-6">
         <button onClick={()=>setSubPage(null)} className="flex items-center gap-1.5 text-[#1B2B4B] text-[13px] font-semibold mb-5">

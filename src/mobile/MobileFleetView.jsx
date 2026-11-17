@@ -622,9 +622,9 @@ function MobileVehicleCare({ drivers = [], driversRaw = [], by = "" }) {
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6, alignItems: "center", minWidth: 0 }}>
             {!r.cs.setupDone && <span style={{ padding: "1px 7px", borderRadius: 6, border: "1px solid #DCE3EF", fontSize: 14, fontWeight: 800, color: "#5B6B85", whiteSpace: "nowrap" }}>미설정</span>}
-            {r.cs.over > 0 && <span style={{ padding: "1px 7px", borderRadius: 6, background: "#0F1A30", color: "#fff", fontSize: 14, fontWeight: 800, whiteSpace: "nowrap" }}>지남 {r.cs.over}</span>}
-            {r.cs.soon > 0 && <span style={{ padding: "1px 7px", borderRadius: 6, background: "#DCE6F7", color: "#1B2B4B", fontSize: 14, fontWeight: 800, whiteSpace: "nowrap" }}>곧 {r.cs.soon}</span>}
-            <span style={{ fontSize: 14, color: "#5B6B85", minWidth: 0, overflowWrap: "anywhere" }}>{r.cs.alerts.slice(0, 3).map((a) => a.label).join(" · ") || (r.cs.setupDone ? "모두 정상" : "기사앱에서 아직 입력 전")}</span>
+            {r.cs.over > 0 && <span style={{ padding: "1px 7px", borderRadius: 6, background: "#0F1A30", color: "#fff", fontSize: 14, fontWeight: 800, whiteSpace: "nowrap" }}>기한 경과 {r.cs.over}</span>}
+            {r.cs.soon > 0 && <span style={{ padding: "1px 7px", borderRadius: 6, background: "#DCE6F7", color: "#1B2B4B", fontSize: 14, fontWeight: 800, whiteSpace: "nowrap" }}>기한 임박 {r.cs.soon}</span>}
+            <span style={{ fontSize: 14, color: "#5B6B85", minWidth: 0, overflowWrap: "anywhere" }}>{r.cs.alerts.slice(0, 3).map((a) => a.label).join(" · ") || (r.cs.setupDone ? "모두 정상" : "기사 앱 미입력")}</span>
           </div>
         </button>
       ))}
@@ -836,7 +836,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
   const companyStaff = useMemo(
     () => companyStaffRaw
       .filter(u => !userCompany || u.companyName === userCompany)
-      .map(u => ({ id: u.id, name: u.name || u.email || "이름없음" }))
+      .map(u => ({ id: u.id, name: u.name || u.email || "이름 없음" }))
       .sort((a, b) => a.name.localeCompare(b.name, "ko")),
     [companyStaffRaw, userCompany]
   );
@@ -933,9 +933,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
 
   const handleMapSelect = useCallback((d) => {
     setMapSelected(prev => prev?.id === d.id ? null : d);
-    if (prev => prev?.id === d.id) {
-      setGpsTracks([]); setRoadPath([]);
-    }
+    setGpsTracks([]); setRoadPath([]); // 🛠 2026-11-17 고르든 풀든 이전 경로는 지운다(예전 if(함수)는 늘 참이었다)
   }, []);
 
   // 기사 목록에서 "지도 보기" 클릭
@@ -1076,7 +1074,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
       <div className="no-scrollbar" style={{ display: "flex", margin: "16px 16px 0", background: "#EEF2F8", border: "1px solid #E3E8F0", borderRadius: 14, padding: 4, flexWrap: "nowrap", overflowX: "auto", scrollbarWidth: "none" }}>
         {[["drivers", "기사 목록"], ["map", "지도"], ["vehicle", "차량"], ["feed", "상태 로그"], ["attendance", "출근기록"]].map(([key, label]) => (
           <button key={key} onClick={() => setActiveSection(key)} style={{
-            flex: 1, padding: "9px 4px", borderRadius: 10, border: "none",
+            flex: 1, padding: "9px 10px", borderRadius: 10, border: "none", whiteSpace: "nowrap", minHeight: 40,
             background: activeSection === key ? "#0F1A30" : "transparent", boxShadow: activeSection === key ? "0 4px 12px rgba(15,26,48,0.25)" : "none",
             color: activeSection === key ? "#fff" : "#5B6B85",
             fontSize: 14, fontWeight: 700, cursor: "pointer",
@@ -1084,7 +1082,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
           }}>
             {label}
             {key === "feed" && filteredFeed.length > 0 && (
-              <span style={{ background: "#0F1A30", color: "#fff", fontSize: 14, fontWeight: 800, padding: "1px 5px", borderRadius: 99 }}>
+              <span style={{ background: activeSection === "feed" ? "rgba(255,255,255,.25)" : "#1B2B4B", color: "#fff", fontSize: 14, fontWeight: 800, padding: "1px 5px", borderRadius: 99 }}>
                 {filteredFeed.length}
               </span>
             )}
@@ -1104,7 +1102,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
           <div style={{ display: "flex", gap: 4, marginBottom: 10, background: "#EEF2F8", borderRadius: 8, padding: 3 }}>
             {[["mine", "내 담당 차량", drivers.filter(d => d.담당자?.uid === myUid).length], ["all", "전체 지입차", drivers.length]].map(([key, label, count]) => (
               <button key={key} onClick={() => setScope(key)} style={{
-                flex: 1, padding: "7px 4px", borderRadius: 6, border: "none", fontSize: 14, fontWeight: 700, cursor: "pointer",
+                flex: 1, padding: "7px 4px", minHeight: 38, borderRadius: 6, border: "none", fontSize: 14, fontWeight: 700, cursor: "pointer",
                 background: scope === key ? NAVY : "transparent", color: scope === key ? "#fff" : "#5B6B85", transition: "all .12s",
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
               }}>
@@ -1145,7 +1143,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
           {filtered.length === 0 ? (
             <div style={{ padding: "32px 0", textAlign: "center", color: "#5B6B85", fontSize: 14 }}>
               {drivers.length === 0 ? "등록된 기사님이 없습니다"
-                : scopedDrivers.length === 0 ? <>아직 담당 지정된 차량이 없습니다.<br/>"전체 지입차"에서 담당자를 지정해주세요.</>
+                : scopedDrivers.length === 0 ? <>담당으로 지정된 차량이 없습니다.<br/>[전체 지입차]에서 담당자를 지정해 주세요.</>
                 : "검색 결과가 없습니다"}
             </div>
           ) : (
