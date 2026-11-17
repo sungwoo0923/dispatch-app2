@@ -644,7 +644,7 @@ function PriceTab({ rows, today, compact }) {
       <Kpi en="LOW MARGIN" label="저마진 경고 노선" value={warn.length.toLocaleString("ko-KR")} unit="곳" foot="매출총이익률 8% 미만 또는 3%p 이상 하락" />
     </ExecKpis>
     <ExecGrid cols="minmax(0,1.35fr) minmax(0,1fr)">
-      <ExecPanel en="PRICE MOVERS" title={`단가 변동 큰 ${noun}`} sub="인상 · 인하 포함 변동 폭 상위 10곳 · 직전 8주 대비">
+      <ExecPanel en="PRICE MOVERS" title={`단가 변동 폭 상위 ${noun}`} sub="인상 · 인하 포함 변동 폭 상위 10곳 · 직전 8주 대비">
         <DivergeList rows={top} compact={compact} />
       </ExecPanel>
       <ExecPanel en="EARLY WARNING" title="저마진 노선 조기 경고" sub="최근 4주 5건 이상 · 매출총이익률 낮은 순 · 단위 만원">
@@ -712,7 +712,7 @@ function CashTab({ rows, ledger, recurring, funds, arPay, today, compact, W, fix
       현재 보유 자금은 <B>{fmtEokMan(fc.start)}</B>이며, {weeks}주 후 잔액은 <B>{fmtEokMan(endBal)}</B>으로 예상됩니다.
       {" "}{lowWeeks.length
         ? <span data-testid="exa-cash-warn"><B color={EX.warn}>{lowWeeks.map((w) => `${md(w.a)}`).join(" · ")} 주</B>에 잔액이 안전 잔액을 하회할 가능성이 있습니다(예상 최저 잔액 <B color={EX.warn}>{fmtEokMan(fc.min.bal)}</B>).</span>
-        : <>예측 기간 동안 안전 잔액({fmtEokMan(safe)}) 이상이 유지될 것으로 예상됩니다.</>}
+        : <>예측 기간 동안 안전 잔액({fmtEokMan(safe)}) 이상을 유지할 전망입니다.</>}
     </Brief>
     <ExecKpis min={196}>
       <Kpi accent en="CASH ON HAND" label="현재 보유 자금" {...km(fc.start)} foot={F ? "예금 · 현금" : "등록된 계좌 없음"} />
@@ -1047,14 +1047,14 @@ export function ExecApprovalQueue({ company, me = {} }) {
           {" "}회사 전체 결재 대기 문서는 <B>{pending.length}건</B>입니다.
         </Brief>
         <ExecKpis min={170}>
-          <Kpi accent en="MY TURN" label="내 차례" value={String(mine.length)} unit="건" foot={sum(mine) ? `금액 ${fmtMoney(sum(mine))}` : "금액 미기재 문서"} onClick={() => setScope("mine")} />
-          <Kpi en="MY TURN · 48H+" label="내 차례 중 48시간 초과" value={String(mineLate)} unit="건" foot={mine.length ? `최장 대기 ${ageStr(oldest)}` : "대기 문서 없음"} />
+          <Kpi accent en="MY TURN" label="본인 결재 대기" value={String(mine.length)} unit="건" foot={sum(mine) ? `금액 ${fmtMoney(sum(mine))}` : "금액 미기재 문서"} onClick={() => setScope("mine")} />
+          <Kpi en="MY TURN · 48H+" label="본인 결재 중 48시간 초과" value={String(mineLate)} unit="건" foot={mine.length ? `최장 대기 ${ageStr(oldest)}` : "대기 문서 없음"} />
           <Kpi en="COMPANY-WIDE" label="회사 전체 대기" value={String(pending.length)} unit="건" foot={sum(pending) ? `금액 ${fmtMoney(sum(pending))}` : "—"} onClick={() => setScope("all")} />
           <Kpi en="COMPANY · 48H+" label="전체 중 48시간 초과" value={String(allLate)} unit="건" foot="결재 지연 문서" />
         </ExecKpis>
         <ExecGrid cols="minmax(0,1fr) 340px">
-          <ExecPanel en="QUEUE" title={scope === "mine" ? "내 차례 문서" : "회사 전체 대기 문서"} sub={order === "old" ? "대기 시간 긴 순" : order === "amt" ? "금액 큰 순" : "최근 상신 순"}
-            right={<ExecTabs size="sm" items={[["mine", "내 차례", mine.length], ["all", "회사 전체", pending.length]]} value={scope} onChange={setScope} />}>
+          <ExecPanel en="QUEUE" title={scope === "mine" ? "본인 결재 대기 문서" : "회사 전체 대기 문서"} sub={order === "old" ? "대기 시간 긴 순" : order === "amt" ? "금액 큰 순" : "최근 상신 순"}
+            right={<ExecTabs size="sm" items={[["mine", "본인 결재", mine.length], ["all", "회사 전체", pending.length]]} value={scope} onChange={setScope} />}>
             <div className="flex flex-wrap items-center gap-1.5 mb-3">
               {[["old", "대기 시간 긴 순"], ["amt", "금액 큰 순"], ["new", "최근 상신 순"]].map(([k, l]) => (
                 <button key={k} type="button" onClick={() => setOrder(k)} className="h-9 px-3 rounded-xl text-[12.5px] font-extrabold" style={order === k ? { background: "rgba(215,188,130,.14)", color: EX.goldHi, border: `1px solid ${EX.lineHi}` } : { color: EX.sub, border: `1px solid ${EX.line}` }}>{l}</button>
@@ -1086,7 +1086,7 @@ export function ExecApprovalQueue({ company, me = {} }) {
                         </div>
                       </div>
                       {wide && <span className="text-[13.5px] font-bold truncate" style={{ color: EX.sub }}>{r.drafter?.name || "—"}</span>}
-                      {wide && <span className="text-[13.5px] font-bold truncate">{r.mineTurn ? <Chip tone="gold">나</Chip> : <span style={{ color: EX.sub }}>{r.who}{r.whoPos ? <span style={{ color: EX.mute }}> {r.whoPos}</span> : ""}</span>}</span>}
+                      {wide && <span className="text-[13.5px] font-bold truncate">{r.mineTurn ? <Chip tone="gold">본인</Chip> : <span style={{ color: EX.sub }}>{r.who}{r.whoPos ? <span style={{ color: EX.mute }}> {r.whoPos}</span> : ""}</span>}</span>}
                       {wide && <span className="text-right text-[14px] font-black" style={{ ...EX_NUM, color: r.amt ? EX.text : EX.faint }}>{r.amt ? cm(r.amt) : "—"}</span>}
                       {(() => {
                         const age = <span className="text-right text-[13px] font-extrabold whitespace-nowrap" style={{ ...EX_NUM, color: late ? EX.danger : tone === EX.warn ? EX.warn : EX.sub }}>{ageStr(r.created)}</span>;

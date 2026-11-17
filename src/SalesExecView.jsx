@@ -304,7 +304,7 @@ function ExecOverview({ B, onTab }) {
       {/* 인센티브 · 영업 활동 */}
       <ExecGrid cols="minmax(0,1.35fr) minmax(0,1fr)">
         <ExecPanel en="INCENTIVE" title={`${mOf(ym)}월 인센티브 현황`}
-          sub={`${baseLabel(p)} 기준${p.useTiers ? " · 구간 누진" : ` · ${p.rate}%`}${p.collectOnly ? " · 수금 완료분만 확정" : ""} · 익월 ${p.payDay}일 지급 · 단위 원`}
+          sub={`${baseLabel(p).replace("매출이익", "매출총이익")} 기준${p.useTiers ? " · 구간 누진" : ` · ${p.rate}%`}${p.collectOnly ? " · 수금 완료분만 확정" : ""} · 익월 ${p.payDay}일 지급 · 단위 원`}
           right={<ExecButton onClick={() => onTab("incentive")}>확정 · 지급 ›</ExecButton>}>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[["예상 인센티브", T.total, EX.text], ["지급 확정 대상", p.collectOnly ? T.confirmed : T.total, EX.goldHi], ["보류(미수)", p.collectOnly ? T.held : 0, EX.sub]].map(([l, v, c]) => (
