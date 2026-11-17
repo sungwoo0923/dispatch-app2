@@ -8441,7 +8441,7 @@ function MobileSideMenu({
           {/* ⭐ 2026-11-14 관리 = PC 회사관리(운임 규칙 · 내정보 · 내 이력서 · 출근기록부) + 관리자메뉴(회원 관리 · 권한 관리) */}
           <MenuSection title="회사관리" en="COMPANY" dark={dark} fold badge={canAdminMenu && !deptMode ? (alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) : 0}>
             {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}
-            {role !== "driver" && role !== "shipper" && role !== "cafeUser" && <MenuItem label="노선 특수운임" icon="money" onClick={() => onGo?.("dept:routefare")} dark={dark} />}{/* ⭐ 2026-11-17 노선별 고정 특수운임 */}
+            {/* ⭐ 2026-11-18 노선 특수운임 메뉴는 뺐다 → 오더 등록의 [특수운임 적용] › 고정노선운임 탭 */}
             <MenuItem label="내정보" icon="idcard" onClick={onGoMyInfo} dark={dark} />
             <MenuItem label="내 이력서" icon="file" onClick={() => onGo?.("dept:myresume")} dark={dark} />
             <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />

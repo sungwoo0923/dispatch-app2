@@ -179,7 +179,14 @@ function Seg({ value, onChange, items }) {
 }
 
 // ─── 본체 ──────────────────────────────────────────────────────────────────────
-export default function HomeDeck({ dispatchData = [], pastCache, liveStart, users = [], myName = "", isMaster = false, att = null, todo = null }) {
+// 🧭 2026-11-18 컨테이너 · 해상 · 항공 HOME 도 같은 데크를 쓴다 — 글자만 바꿔 넘긴다(내륙은 기본값 그대로)
+export const DECK_LABELS = {
+  tag: "OPERATIONS DECK", orders: "오늘 접수", done: "배차완료", pending: "배차중", progress: "오늘 배차 진행률",
+  board: "오늘 · 내일 배차판", timeline: "상차 시간대 분포", timeTip: "시 상차", immediate: "오늘 \"즉시·시간미정\" 상차",
+  mix: "최근 7일 차종 구성", routes: "최근 7일 주요 노선", weekday: "요일별 평균 오더", empty: "이번 달 오더가 아직 없습니다",
+};
+export default function HomeDeck({ dispatchData = [], pastCache, liveStart, users = [], myName = "", isMaster = false, att = null, todo = null, labels = null }) {
+  const L = labels ? { ...DECK_LABELS, ...labels } : DECK_LABELS;
   const today = kstToday();
   const thisMonth = today.slice(0, 7);
   const [range, setRange] = useState("30d");
@@ -336,14 +343,14 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
       <div style={{ position: "relative", display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20, flexWrap: "wrap", marginBottom: 18 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11.5, fontWeight: 800, letterSpacing: "0.28em", color: C.glow }}><LogisTag height={8.5} text="OPERATIONS DECK" /></span>
+            <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 11.5, fontWeight: 800, letterSpacing: "0.28em", color: C.glow }}><LogisTag height={8.5} text={L.tag} /></span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 9px", borderRadius: 99, border: `1px solid rgba(143,176,240,.35)`, fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.14em", color: C.hi }}>
               <span className="hd-pulse" style={{ width: 6, height: 6, borderRadius: "50%", background: C.hi, boxShadow: `0 0 8px ${C.glow}` }} />LIVE
             </span>
           </div>
           <h1 style={{ margin: "8px 0 0", fontSize: 28, fontWeight: 900, letterSpacing: "-0.02em", color: "#fff" }}>{myName ? `${myName}님 반갑습니다, 좋은 하루 되세요.` : "반갑습니다, 좋은 하루 되세요."}</h1>
           <p style={{ margin: "6px 0 0", fontSize: 15, fontWeight: 600, color: C.sub }}>
-            오늘 접수 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{t0[2].toLocaleString()}</b>건 · 배차완료 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{doneToday.toLocaleString()}</b>건 · 오늘 매출 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(t0[0])}</b>원
+            {L.orders} <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{t0[2].toLocaleString()}</b>건 · {L.done} <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{doneToday.toLocaleString()}</b>건 · 오늘 매출 <b style={{ color: "#fff", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(t0[0])}</b>원
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 22, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -361,7 +368,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
       {/* ── KPI 타일 ── */}
       {/* ⭐ 2026-11-04 폴더블(펼친 화면 884px)·태블릿 — 본문이 좁으면 5칸을 억지로 한 줄에 넣지 않고 줄을 나눈다(글자가 한 자씩 세로로 쪼개졌다) */}
       <div style={{ position: "relative", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 14 }}>
-        <Tile primary code="ORDERS" label="오늘 접수" value={t0[2].toLocaleString()} unit="건" spark={sparkC} sparkId="hdS1"
+        <Tile primary code="ORDERS" label={L.orders} value={t0[2].toLocaleString()} unit="건" spark={sparkC} sparkId="hdS1"
           foot={<><Delta cur={t0[2]} prev={t1[2]} /><span>어제 대비</span></>} />
         <Tile code="REVENUE" label="오늘 매출" value={won(t0[0])} unit="원" spark={sparkS} sparkId="hdS2"
           foot={<><Delta cur={t0[0]} prev={t1[0]} /><span>어제 대비</span></>} />
@@ -424,7 +431,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
           </div>
           <div style={{ marginTop: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, fontWeight: 700, color: C.sub, marginBottom: 6 }}>
-              <span>오늘 배차 진행률</span>
+              <span>{L.progress}</span>
               <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#fff" }}>{doneToday}/{todayRows.length} · {todayRows.length ? Math.round((doneToday / todayRows.length) * 100) : 0}%</span>
             </div>
             <div style={{ height: 8, borderRadius: 99, background: "rgba(143,176,240,.12)", overflow: "hidden" }}>
@@ -488,7 +495,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
 
         <Panel code="CLIENTS" title={`${Number(thisMonth.slice(5))}월 Top 거래처`}>
           {topClients.length === 0 ? (
-            <div style={{ padding: "40px 0", textAlign: "center", fontSize: 14, color: C.dim }}>{ready ? "이번 달 오더가 아직 없습니다" : "계산 중…"}</div>
+            <div style={{ padding: "40px 0", textAlign: "center", fontSize: 14, color: C.dim }}>{ready ? L.empty : "계산 중…"}</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
               {topClients.map((c, i) => (
@@ -512,7 +519,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
 
       {/* ── 운영 현황(2026-10-28 추가) — 오늘·내일 배차판 / 상차 시간대 / 차종 / 주요 노선 / 요일 패턴 ── */}
       <div style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr) minmax(0,1.2fr)", gap: 14, marginTop: 14 }}>
-        <Panel code="BOARD" title="오늘 · 내일 배차판">
+        <Panel code="BOARD" title={L.board}>
           {[["오늘", today, ops.today], ["내일", tomorrow, ops.tomorrow]].map(([k, dd, o]) => (
             <div key={k} style={{ marginBottom: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -523,22 +530,22 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
                 <div style={{ width: `${o.all ? (o.done / o.all) * 100 : 0}%`, background: `linear-gradient(90deg,#4B6CB7,${C.hi})` }} />
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 5, fontSize: 13, fontWeight: 700, color: C.sub }}>
-                <span>배차완료 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.hi }}>{o.done}</b></span>
-                <span>배차중 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#fff" }}>{o.pending}</b></span>
+                <span>{L.done} <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.hi }}>{o.done}</b></span>
+                <span>{L.pending} <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#fff" }}>{o.pending}</b></span>
               </div>
             </div>
           ))}
-          <div style={{ fontSize: 13, color: C.dim, fontWeight: 600 }}>오늘 "즉시·시간미정" 상차 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.sub }}>{ops.today.immediate}</b>건</div>
+          <div style={{ fontSize: 13, color: C.dim, fontWeight: 600 }}>{L.immediate} <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.sub }}>{ops.today.immediate}</b>건</div>
         </Panel>
 
-        <Panel code="TIMELINE" title="상차 시간대 분포" right={<span style={{ display: "flex", gap: 10, fontSize: 13, fontWeight: 700, color: C.sub }}><span><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: C.glow, marginRight: 4 }} />오늘</span><span><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: "rgba(143,176,240,.35)", marginRight: 4 }} />내일</span></span>}>
+        <Panel code="TIMELINE" title={L.timeline} right={<span style={{ display: "flex", gap: 10, fontSize: 13, fontWeight: 700, color: C.sub }}><span><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: C.glow, marginRight: 4 }} />오늘</span><span><span style={{ display: "inline-block", width: 9, height: 9, borderRadius: 2, background: "rgba(143,176,240,.35)", marginRight: 4 }} />내일</span></span>}>
           <div style={{ height: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={ops.hours} margin={{ top: 6, right: 4, left: 0, bottom: 0 }} barGap={1}>
                 <CartesianGrid stroke="rgba(143,176,240,.08)" vertical={false} />
                 <XAxis dataKey="h" axisLine={false} tickLine={false} tick={{ fontSize: 12.5, fill: "rgba(207,224,255,.7)", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} tickFormatter={(h) => `${h}시`} interval={1} />
                 <YAxis allowDecimals={false} axisLine={false} tickLine={false} width={24} tick={{ fontSize: 12, fill: "rgba(207,224,255,.6)", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
-                <Tooltip cursor={{ fill: "rgba(143,176,240,.08)" }} contentStyle={{ background: "rgba(11,20,40,.96)", border: `1px solid ${C.line}`, borderRadius: 10, color: C.ink, fontSize: 13.5, fontWeight: 700 }} labelFormatter={(h) => `${h}시 상차`} formatter={(v, n) => [`${v}건`, n === "t" ? "오늘" : "내일"]} />
+                <Tooltip cursor={{ fill: "rgba(143,176,240,.08)" }} contentStyle={{ background: "rgba(11,20,40,.96)", border: `1px solid ${C.line}`, borderRadius: 10, color: C.ink, fontSize: 13.5, fontWeight: 700 }} labelFormatter={(h) => `${h}${L.timeTip}`} formatter={(v, n) => [`${v}건`, n === "t" ? "오늘" : "내일"]} />
                 <Bar dataKey="t" fill={C.glow} radius={[4, 4, 0, 0]} barSize={9} />
                 <Bar dataKey="n" fill="rgba(143,176,240,.35)" radius={[4, 4, 0, 0]} barSize={9} />
               </BarChart>
@@ -546,7 +553,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
           </div>
         </Panel>
 
-        <Panel code="FLEET MIX" title="최근 7일 차종 구성">
+        <Panel code="FLEET MIX" title={L.mix}>
           {ops.cars.length === 0 ? <div style={{ padding: "40px 0", textAlign: "center", fontSize: 13.5, color: C.dim }}>데이터 없음</div> : (
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ width: 120, height: 120, position: "relative", flexShrink: 0 }}>
@@ -574,7 +581,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
             </div>
           )}
           <div style={{ marginTop: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: C.sub, marginBottom: 4 }}>요일별 평균 오더 <span style={{ color: C.dim, fontWeight: 600 }}>(최근 8주)</span></div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: C.sub, marginBottom: 4 }}>{L.weekday} <span style={{ color: C.dim, fontWeight: 600 }}>(최근 8주)</span></div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, alignItems: "end", height: 54 }}>
               {(() => { const mx = Math.max(1, ...weekdayAvg.map((w) => w.v)); return weekdayAvg.map((w) => (
                 <div key={w.label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }} title={`${w.label}요일 평균 ${w.v}건`}>
@@ -586,7 +593,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
           </div>
         </Panel>
 
-        <Panel code="ROUTES" title="최근 7일 주요 노선">
+        <Panel code="ROUTES" title={L.routes}>
           {ops.routes.length === 0 ? <div style={{ padding: "40px 0", textAlign: "center", fontSize: 13.5, color: C.dim }}>데이터 없음</div> : (
             <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
               {ops.routes.map((x, i) => (

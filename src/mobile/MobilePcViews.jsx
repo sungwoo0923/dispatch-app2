@@ -37,6 +37,7 @@ import { useMyProfile, personName } from "../userNames";
 import MobileFleetView from "./MobileFleetView";
 import FareRulesSettings from "../FareRulesSettings"; // ⭐ 2026-11-02 운임규칙
 import RouteSpecialPresets from "../RouteSpecialPresets"; // ⭐ 2026-11-17 노선별 고정 특수운임
+import { AcctMenuGate } from "../PayrollGate"; // ⭐ 2026-11-18 회계관리 · 자금관리 메뉴 잠금
 import BoardPage, { BOARDS, canSeeBoard } from "../BoardPosts"; // ⭐ 2026-11-03 모바일 게시판
 import { DetailScope } from "../DetailFilter"; // 🔎 2026-11-03 세부검색
 import { useMobileDetailGetters } from "../detailGetters"; // ⭐ 2026-11-05 PC·모바일 일치 — 세부검색 배차담당자(직원 이름)·청구사업자(빈칸=기본 사업자)
@@ -295,7 +296,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
     else if (k === "approvals") body = <div className="kp-m-pc kp-m-approval"><ExecApprovals company={userCompany} me={me} /></div>;
     else if (k === "schedule") body = wrap(<TeamSchedule company={userCompany} />);
     else if (k === "settle") body = lazy(<DetailScope data={salesData} getters={detGet} title="세부검색 · 정산관리">{(detRows) => <><PcSettleMobile dispatchData={detRows} companyName={userCompany} role={role} isViewer={isViewer} clients={clients} /></>}</DetailScope>);
-    else if (k === "acct") body = lazy(<PcAccounting company={userCompany} fixedRows={fixedRows} clients={clients} drivers={drivers || []} isViewer={isViewer} role={role} />);
+    else if (k === "acct") body = <div className="px-3 py-3"><AcctMenuGate company={userCompany} menuLabel="회계관리">{lazy(<PcAccounting company={userCompany} fixedRows={fixedRows} clients={clients} drivers={drivers || []} isViewer={isViewer} role={role} />)}</AcctMenuGate></div>; // ⭐ 2026-11-18 메뉴 입구 비밀번호
     else if (k === "payroll") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><PayrollCenter company={userCompany} role={role} /></div></React.Suspense>;
     else if (k === "payslip") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><MyPayslips company={userCompany} uid={me?.uid} /></div></React.Suspense>;
     else if (k === "leaveplan") body = <React.Suspense fallback={<Loading />}><div className="px-3 py-3 kp-m-pc"><MyLeavePlan company={userCompany} uid={me?.uid} /></div></React.Suspense>;
@@ -304,7 +305,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
     else if (k === "hr") body = <div className="kp-m-pc"><HrHub company={userCompany} me={{ uid: me?.uid, name: me?.name || me?.displayName || "" }} role={role} canManage={role === "hrManager" || role === "totalMaster" || role === "hrAcct" || (/인사/.test(String(me?.team || "")) && role !== "viewer")}
       renderRecord={(focusUid) => <React.Suspense fallback={<Loading />}><PcHrPage userCompany={userCompany} role={role} userId={me?.uid || ""} focusUid={focusUid} /></React.Suspense>}
       renderAttendance={() => <AttendanceBoard userCompany={userCompany} role={role} user={me} />} /></div>;
-    else if (k === "cashbook") body = <div className="kp-m-pc"><FundsWorkspace company={userCompany} isViewer={isViewer} /></div>;
+    else if (k === "cashbook") body = <div className="kp-m-pc"><AcctMenuGate company={userCompany} menuLabel="자금관리"><FundsWorkspace company={userCompany} isViewer={isViewer} /></AcctMenuGate></div>;
     else if (k === "myresume") body = <div className="kp-m-pc"><React.Suspense fallback={<Loading />}><PcHrPage userCompany={userCompany} role={role} userId={me?.uid || ""} selfOnly /></React.Suspense></div>;
     else if (k === "farerules") body = wrap(<FareRulesSettings company={userCompany} mobile canEdit={role !== "viewer"} myName={me?.name || ""} />); // ⭐ 2026-11-02 운임규칙
     else if (k === "routefare") body = wrap(<RouteSpecialPresets mobile canEdit={role !== "viewer"} canAdmin={["admin", "allMgr", "test", "totalMaster"].includes(role) || me?.isMaster === true} />); // ⭐ 2026-11-17 노선별 고정 특수운임

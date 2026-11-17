@@ -68,7 +68,7 @@ export default function FreightWorkspace({ menuKey, modules = [], me = "", canEd
     return (
       <div>
         {head}
-        <div className="flex items-center gap-2 mb-4"><Btn size="sm" onClick={() => setEdit(null)}>← 돌아가기</Btn><span className="text-[14px] font-black text-[#0F1A30]">{edit.refNo} 수정</span></div>
+        <div className="flex items-center gap-2 mb-3"><Btn size="sm" onClick={() => setEdit(null)}>← 돌아가기</Btn><span className="text-[14px] font-black text-[#0F1A30]">{edit.refNo} 수정</span></div>
         <FreightForm {...formProps} mode={edit.mode} initial={edit} onDone={() => setEdit(null)} onCancel={() => setEdit(null)} />
       </div>
     );

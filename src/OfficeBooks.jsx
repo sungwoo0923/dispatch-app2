@@ -168,7 +168,7 @@ function SpendBreakdown({ accTop = [], accN = {}, prevAcc = {}, expense = 0 }) {
                 <div className="mt-1.5 flex items-center gap-2 pl-8">
                   <div className="flex-1 h-2.5 rounded-full bg-[#EEF2F8] overflow-hidden"><span className="block h-full rounded-full" style={{ width: `${Math.max(1.5, pct)}%`, background: i < 3 ? "linear-gradient(90deg,#1B2B4B,#3F63B5)" : "#9FB3D9" }} /></div>
                   <span className="w-[44px] text-right text-[13px] font-black text-[#3A4A66]" style={NUMF}>{pct >= 10 ? Math.round(pct) : pct.toFixed(1)}%</span>
-                  <span className={`w-[58px] text-right text-[12px] font-bold whitespace-nowrap ${d == null ? "text-[#B5C0D3]" : d > 0.1 ? "text-[#B0603A]" : d < -0.1 ? "text-[#2D4C82]" : "text-[#7A879C]"}`} style={NUMF} title={prev ? `지난달 ${won(prev)}원` : "지난달 없음"}>{d == null ? "새로" : `${d > 0 ? "▲" : d < 0 ? "▼" : ""}${Math.abs(Math.round(d * 100))}%`}</span>
+                  <span className={`w-[58px] text-right text-[12px] font-bold whitespace-nowrap ${d == null ? "text-[#B5C0D3]" : d > 0.1 ? "text-[#E5484D]" : d < -0.1 ? "text-[#2D6BE0]" : "text-[#7A879C]"}`} style={NUMF} title={prev ? `지난달 ${won(prev)}원` : "지난달 없음"}>{d == null ? "새로" : `${d > 0 ? "▲" : d < 0 ? "▼" : ""}${Math.abs(Math.round(d * 100))}%`}</span>
                 </div>
               </li>
             );
@@ -416,7 +416,7 @@ export function CashBook({ company, isViewer = false }) {
                           <td className="px-3 py-2 min-w-0">{(r.auto || r.recurId || r.sourceId) && <span title={r.memo || "다른 화면에서 자동 반영"} className="mr-1.5 px-1.5 py-0.5 rounded-md bg-[#F3E7CC] text-[#6B5320] text-[10.5px] font-black">자동</span>}<span className="font-black text-[#0F1A30]">{r.item || "-"}</span>{r.auto === "drvpay" && r.count ? <span className="ml-1 text-[11px] text-[#7A879C]">({r.count}건)</span> : null}{r.vendor && <span className="text-[#7A879C]"> · {r.vendor}</span>}{r.method && <span className="ml-1 text-[11px] text-[#9AA9C3]">{r.method}</span>}{F.byId[r.fundId] && <span className="ml-1.5 px-1.5 py-0.5 rounded-md bg-[#EEF3FC] text-[#2D4C82] text-[11px] font-black whitespace-nowrap">{isCard(F.byId[r.fundId]) ? "▭" : "▣"} {F.byId[r.fundId].name}</span>}</td>
                           <td className="px-3 py-2 text-right font-black tabular-nums text-[#2D4C82]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.type === "수입" ? won(r.amount) : ""}</td>
                           <td className="px-3 py-2 text-right font-black tabular-nums text-[#0F1A30]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.type === "지출" ? won(r.amount) : ""}</td>
-                          <td className={`px-3 py-2 text-right font-black tabular-nums ${r.bal < 0 ? "text-[#B42318]" : "text-[#1B2B4B]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.bal < 0 ? "−" : ""}{won(Math.abs(r.bal))}</td>
+                          <td className={`px-3 py-2 text-right font-black tabular-nums ${r.bal < 0 ? "text-[#2D6BE0]" : "text-[#1B2B4B]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.bal < 0 ? "−" : ""}{won(Math.abs(r.bal))}</td>
                           <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>{r.receipt ? <button type="button" onClick={() => setPhoto(r)} title="증빙 보기·저장" className="w-8 h-8 rounded-lg border border-[#DCE3EE] bg-cover bg-center" style={{ backgroundImage: `url(${r.receipt})` }} /> : r.evidence ? <span className="text-[11px] font-bold text-[#7A879C]">{r.evidence}</span> : r.type === "지출" ? <span className="text-[11px] font-black text-[#B42318]">없음</span> : ""}</td>
                         </tr>
                       );
@@ -473,7 +473,7 @@ export function CashBook({ company, isViewer = false }) {
               <div key={f.id} className="rounded-2xl bg-white/[0.06] border border-white/10 px-3 py-2.5 flex items-center gap-2.5 min-w-0">
                 <span className="w-9 h-9 rounded-xl grid place-items-center text-[10px] font-black shrink-0" style={{ background: isCard(f) ? "linear-gradient(135deg,#B88A2E,#E2C077)" : "rgba(255,255,255,0.12)" }}>{fundBadge(f)}</span>
                 <span className="flex-1 min-w-0"><span className="block text-[13.5px] font-black truncate">{f.name}</span><span className="block text-[11px] text-white/50 truncate">{isCredit(f) ? `남은 한도 · 이번 달 ${won(f.usedMonth || 0)} 사용` : f.linkName ? `${f.linkName} 연결` : [f.bank, last4(f)].filter(Boolean).join(" ") || f.kind}</span></span>
-                <span className={`text-[15px] font-black tabular-nums shrink-0 ${f.balance < 0 ? "text-[#FCA5A5]" : ""}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{f.balance < 0 ? "−" : ""}{won(Math.abs(f.balance))}</span>
+                <span className={`text-[15px] font-black tabular-nums shrink-0 ${f.balance < 0 ? "text-[#8FB0F0]" : ""}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{f.balance < 0 ? "−" : ""}{won(Math.abs(f.balance))}</span>
               </div>
             ))}
           </div>

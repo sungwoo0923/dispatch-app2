@@ -9,8 +9,10 @@ import {
 } from "./freightCore";
 import { createLegs, updateLeg, requestHandoff } from "./freightStore";
 import { rateOf, loadRates, ratesInfo } from "./fxRates"; // 💱 오늘 환율(못 받으면 기본값)
-import { Card, Field, Grid, Sel, Combo, DateIn, TimeIn, DateTimeIn, TextIn, NumIn, Seg, Btn, ContainerArt, RouteArt, ModeChip, MODE_NAME, MONO, NAVY, GRID } from "./ui";
-import { profitCls, profitRateCls, profitColor } from "../marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
+import { Card, Field, Grid, Sel, Combo, DateIn, TimeIn, DateTimeIn, TextIn, NumIn, Seg, Btn, ModeChip, MODE_NAME, MONO, INPUT } from "./ui";
+import { profitCls } from "../marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
+// 🎨 2026-11-18 내륙 배차 등록처럼 — 남색 그림 칸을 빼고 입력칸만 촘촘하게(요약은 카드 머리줄 오른쪽 글씨로)
+const INFO = "text-[12.5px] font-semibold text-[#5B6B85] tabular-nums";
 
 const QTY = Array.from({ length: 20 }, (_, i) => [String(i + 1), `${i + 1}대`]);
 const TEMPS = Array.from({ length: 11 }, (_, i) => { const t = -25 + i * 5; return [String(t), `${t > 0 ? "+" : ""}${t}℃`]; });
@@ -37,12 +39,12 @@ function Lines({ title, mode, lines, onChange, vendor = false }) {
   return (
     <div className="min-w-0">
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-[13px] font-black text-[#0F1A30]">{title}</span>
-        <span className="text-[12.5px] font-black text-[#2D4C82] tabular-nums">{won(sumLines(lines))}원</span>
+        <span className="text-[13px] font-extrabold text-[#0F1A30]">{title}</span>
+        <span className="text-[12.5px] font-black text-[#0F1A30] tabular-nums">{won(sumLines(lines))}원</span>
         <Btn size="sm" kind="soft" onClick={add} className="ml-auto">+ 항목 추가</Btn>
       </div>
-      {!lines.length && <div className="h-10 rounded-xl border border-dashed border-[#DCE3EE] grid place-items-center text-[12.5px] text-[#9AA9C3] font-semibold">항목을 추가하세요</div>}
-      <div className="space-y-2">
+      {!lines.length && <div className="h-9 rounded-lg border border-dashed border-[#DCE3EE] grid place-items-center text-[12.5px] text-[#9AA9C3] font-semibold">항목을 추가해 주세요</div>}
+      <div className="space-y-1.5">
         {lines.map((l, i) => (
           <div key={i} className={`grid gap-1.5 items-center ${vendor ? "grid-cols-[minmax(0,1.3fr)_84px_minmax(0,1fr)_minmax(0,1fr)_32px]" : "grid-cols-[minmax(0,1.4fr)_84px_minmax(0,1fr)_32px]"}`}>
             <Sel value={l.item} onChange={(v) => set(i, "item", v)} options={CHARGE_ITEMS[mode]} placeholder="항목" />
@@ -51,13 +53,13 @@ function Lines({ title, mode, lines, onChange, vendor = false }) {
               <NumIn value={l.amount} onChange={(v) => set(i, "amount", v)} decimals={l.cur !== "KRW"} unit={l.cur === "KRW" ? "원" : l.cur} />
               {l.cur !== "KRW" && (
                 <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-[#7A89A3]">
-                  환율 <input value={l.rate || ""} onChange={(e) => set(i, "rate", e.target.value.replace(/[^0-9.]/g, ""))} className="w-16 h-6 px-1.5 rounded-md border border-[#DCE3EE] text-[11.5px] font-bold text-[#0F1A30] tabular-nums" />
+                  환율 <input value={l.rate || ""} onChange={(e) => set(i, "rate", e.target.value.replace(/[^0-9.]/g, ""))} className="w-16 h-6 px-1.5 rounded-md border border-[#DCE3EE] text-[11.5px] font-bold text-[#0F1A30] tabular-nums focus:outline-none focus:border-[#1B2B4B]" />
                   <span className="tabular-nums">= {won(lineKrw(l))}원</span>
                 </div>
               )}
             </div>
             {vendor && <TextIn value={l.vendor} onChange={(v) => set(i, "vendor", v)} placeholder="지급처" />}
-            <button type="button" onClick={() => onChange(lines.filter((_, j) => j !== i))} aria-label="삭제" className="w-8 h-10 rounded-lg text-[#9AA9C3] hover:text-[#C2362B] hover:bg-[#F5F8FD] grid place-items-center text-[14px] font-black">✕</button>
+            <button type="button" onClick={() => onChange(lines.filter((_, j) => j !== i))} aria-label="삭제" className="w-8 h-9 rounded-lg text-[#9AA9C3] hover:text-[#C2362B] grid place-items-center text-[13px] font-black">✕</button>
           </div>
         ))}
       </div>
@@ -128,18 +130,18 @@ export default function FreightForm({ mode, initial = null, jobs = [], clients =
     const targets = handoffTargets(first, modules);
     return (
       <Card>
-        <div className="py-8 flex flex-col items-center text-center">
-          <div className="w-14 h-14 rounded-2xl grid place-items-center text-white text-[24px] font-black" style={{ background: NAVY }}>✓</div>
-          <div className="text-[19px] font-black text-[#0F1A30] mt-4">{saved.edit ? "저장했습니다" : `${saved.legs.length}건 등록했습니다`}</div>
-          <div className="mt-2 flex items-center gap-2 flex-wrap justify-center">
-            <span className="h-7 px-2.5 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black tabular-nums inline-flex items-center" style={{ fontFamily: MONO }}>{first.jobNo}</span>
-            {saved.legs.slice(0, 6).map((l) => <span key={l.id} className="h-7 px-2.5 rounded-lg bg-[#EEF3FB] text-[#1B2B4B] text-[12.5px] font-extrabold tabular-nums inline-flex items-center">{l.refNo}</span>)}
+        <div className="py-6 flex flex-col items-center text-center">
+          <div className="w-11 h-11 rounded-full grid place-items-center border-2 border-[#1E8E3E] text-[#1E8E3E] text-[20px] font-black">✓</div>
+          <div className="text-[17px] font-black text-[#0F1A30] mt-3">{saved.edit ? "저장했습니다" : `${saved.legs.length}건 등록했습니다`}</div>
+          <div className="mt-1.5 flex items-center gap-x-3 gap-y-1 flex-wrap justify-center">
+            <span className="text-[13px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO }}>{first.jobNo}</span>
+            {saved.legs.slice(0, 6).map((l) => <span key={l.id} className="text-[12.5px] font-bold text-[#2D4C82] tabular-nums">{l.refNo}</span>)}
             {saved.legs.length > 6 && <span className="text-[12.5px] font-bold text-[#7A89A3]">외 {saved.legs.length - 6}건</span>}
           </div>
           {targets.length > 0 && !saved.handed && (
-            <div className="mt-6 w-full max-w-[520px] rounded-2xl border border-[#E3E8F0] bg-[#F5F8FD] p-4 text-left">
-              <div className="text-[13.5px] font-black text-[#0F1A30]">다음 구간을 바로 인계할까요?</div>
-              <div className="text-[12.5px] text-[#5B6B85] mt-0.5">같은 Job 번호로 이어지고, 받는 팀 인계함에 뜹니다. 거래처 · 번호 · 일정은 그대로 넘어갑니다.</div>
+            <div className="mt-5 w-full max-w-[520px] rounded-xl border border-[#E3E8F0] bg-white p-4 text-left">
+              <div className="text-[13.5px] font-extrabold text-[#0F1A30]">다음 구간을 바로 인계할까요?</div>
+              <div className="text-[12.5px] text-[#5B6B85] mt-0.5">같은 Job 번호로 이어지고, 받는 팀 인계함에 보여요. 거래처 · 번호 · 일정은 그대로 넘어가요.</div>
               <div className="mt-3 flex gap-2 flex-wrap">
                 {targets.map((t) => (
                   <Btn key={t} kind="primary" size="sm" disabled={busy} onClick={async () => { setBusy(true); try { await requestHandoff(first, t, {}, me); setSaved((s) => ({ ...s, handed: t })); } catch (e) { setErr(e?.message || "인계 실패"); } setBusy(false); }}>
@@ -149,9 +151,9 @@ export default function FreightForm({ mode, initial = null, jobs = [], clients =
               </div>
             </div>
           )}
-          {saved.handed && <div className="mt-5 text-[13.5px] font-black text-[#2D4C82]">{MODE_NAME[saved.handed]}팀 인계함으로 보냈습니다.</div>}
+          {saved.handed && <div className="mt-4 text-[13.5px] font-bold text-[#1E8E3E]">{MODE_NAME[saved.handed]}팀 인계함으로 보냈습니다.</div>}
           {err && <div className="mt-3 text-[13px] font-bold text-[#C2362B]">{err}</div>}
-          <div className="mt-6 flex gap-2 flex-wrap justify-center">
+          <div className="mt-5 flex gap-2 flex-wrap justify-center">
             {!editing && <Btn onClick={reset}>계속 등록</Btn>}
             <Btn kind="primary" onClick={() => (onDone ? onDone(first) : onGoList?.())}>{editing ? "닫기" : "현황 보기"}</Btn>
           </div>
@@ -161,10 +163,10 @@ export default function FreightForm({ mode, initial = null, jobs = [], clients =
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {accepting && (
-        <div className="rounded-2xl px-4 py-3 border border-[#E3E8F0] bg-[#F5F8FD] text-[13px] font-bold text-[#3A4A66] flex items-center gap-2 flex-wrap">
-          <ModeChip mode={initial.fromMode} /> 팀이 인계한 건입니다({initial.fromRef}). 비어 있는 칸을 채우고 [접수]를 누르면 진행 건으로 바뀝니다.
+        <div className="rounded-xl px-4 py-2.5 border border-[#E3E8F0] bg-white text-[13px] font-semibold text-[#3A4A66] flex items-center gap-2 flex-wrap">
+          <ModeChip mode={initial.fromMode} /> 팀이 인계한 건이에요({initial.fromRef}). 비어 있는 칸을 채우고 [접수]를 누르면 진행 건으로 바뀌어요.
         </div>
       )}
 
@@ -190,15 +192,9 @@ export default function FreightForm({ mode, initial = null, jobs = [], clients =
 
       {/* ── 컨테이너 ── */}
       {mode === "container" && (<>
-        <Card title="컨테이너" en="CONTAINER">
-          <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] gap-5">
-            <div className="rounded-2xl p-4 text-white flex flex-col items-center justify-center min-h-[190px]" style={{ background: `${GRID}, ${NAVY}` }}>
-              <ContainerArt size={f.size} cntrNo={fmtCntrNo(f.cntrNo)} line={f.line} height={104} />
-              <div className="mt-2 flex gap-1.5 flex-wrap justify-center">
-                {ct && [ct.iso, ct.cbm ? `${ct.cbm} CBM` : "", `최대 ${ct.payload}톤`].filter(Boolean).map((x) => <span key={x} className="h-6 px-2 rounded-lg bg-white/10 text-[11.5px] font-extrabold tabular-nums inline-flex items-center">{x}</span>)}
-              </div>
-            </div>
-            <Grid cols={3}>
+        <Card title="컨테이너" en="CONTAINER" right={ct ? <span className={INFO}>{[ct.iso, ct.cbm ? `${ct.cbm} CBM` : "", `최대 ${ct.payload}톤`].filter(Boolean).join(" · ")}</span> : null}>
+          <div>
+            <Grid>
               <Field label="규격" required><Sel value={f.size} onChange={(v) => set("size", v || "40HC")} options={CNTR_OPTIONS} /></Field>
               {!editing && <Field label="수량" hint="같은 내용으로 여러 대"><Sel value={qty} onChange={(v) => setQty(v || "1")} options={QTY} /></Field>}
               <Field label="선사"><Combo value={f.line} onChange={(v) => set("line", v)} options={LINES} placeholder="선사 선택" /></Field>
@@ -216,7 +212,7 @@ export default function FreightForm({ mode, initial = null, jobs = [], clients =
               <Field label="품명" span={ct?.kind === "냉동" ? 1 : 2}><TextIn value={f.cargo} onChange={(v) => set("cargo", v)} placeholder="품명" /></Field>
             </Grid>
           </div>
-          {ct && Number(f.weight) > ct.payload && <div className="mt-3 text-[12.5px] font-bold text-[#C2362B]">중량이 {ct.key} 최대 적재중량({ct.payload}톤)을 넘습니다.</div>}
+          {ct && Number(f.weight) > ct.payload && <div className="mt-2 text-[12.5px] font-bold text-[#C2362B]">중량이 {ct.key} 최대 적재중량({ct.payload}톤)을 넘습니다.</div>}
         </Card>
         <Card title="구간 · 일정" en="ROUTE & SCHEDULE">
           <Grid>
@@ -245,15 +241,9 @@ export default function FreightForm({ mode, initial = null, jobs = [], clients =
 
       {/* ── 해상 ── */}
       {mode === "sea" && (<>
-        <Card title="선적 일정" en="VOYAGE">
-          <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-5">
-            <div className="rounded-2xl p-4 text-white flex flex-col items-center justify-center min-h-[190px]" style={{ background: `${GRID}, ${NAVY}` }}>
-              <RouteArt mode="sea" from={portName(f.pol)} to={portName(f.pod)} fromSub={f.pol} toSub={f.pod} pct={50} />
-              <div className="mt-1 flex gap-1.5 flex-wrap justify-center">
-                {[f.line, f.vessel && `${f.vessel}${f.voyage ? ` ${f.voyage}` : ""}`, transit != null && transit >= 0 ? `운항 ${transit}일` : ""].filter(Boolean).map((x) => <span key={x} className="h-6 px-2 rounded-lg bg-white/10 text-[11.5px] font-extrabold inline-flex items-center">{x}</span>)}
-              </div>
-            </div>
-            <Grid cols={3}>
+        <Card title="선적 일정" en="VOYAGE" right={<span className={INFO}>{[f.pol && f.pod ? `${portName(f.pol)} → ${portName(f.pod)}` : "", f.line, f.vessel && `${f.vessel}${f.voyage ? ` ${f.voyage}` : ""}`, transit != null && transit >= 0 ? `운항 ${transit}일` : ""].filter(Boolean).join(" · ")}</span>}>
+          <div>
+            <Grid>
               <Field label="선적항 (POL)" required><Sel value={f.pol} onChange={(v) => set("pol", v)} options={PORT_OPTIONS} placeholder="항구 선택" /></Field>
               <Field label="도착항 (POD)" required><Sel value={f.pod} onChange={(v) => set("pod", v)} options={PORT_OPTIONS} placeholder="항구 선택" /></Field>
               <Field label="선사"><Combo value={f.line} onChange={(v) => set("line", v)} options={LINES} placeholder="선사 선택" /></Field>
@@ -280,7 +270,7 @@ export default function FreightForm({ mode, initial = null, jobs = [], clients =
                     <div key={i} className="grid grid-cols-[minmax(0,1fr)_96px_32px] gap-1.5">
                       <Sel value={c.size} onChange={(v) => set("cntrs", f.cntrs.map((x, j) => (j === i ? { ...x, size: v } : x)))} options={CNTR_OPTIONS} />
                       <Sel value={c.qty} onChange={(v) => set("cntrs", f.cntrs.map((x, j) => (j === i ? { ...x, qty: v || "1" } : x)))} options={QTY} />
-                      <button type="button" onClick={() => set("cntrs", f.cntrs.filter((_, j) => j !== i))} className="w-8 h-10 rounded-lg text-[#9AA9C3] hover:text-[#C2362B] grid place-items-center font-black" aria-label="삭제">✕</button>
+                      <button type="button" onClick={() => set("cntrs", f.cntrs.filter((_, j) => j !== i))} className="w-8 h-9 rounded-lg text-[#9AA9C3] hover:text-[#C2362B] grid place-items-center font-black" aria-label="삭제">✕</button>
                     </div>
                   ))}
                   <Btn size="sm" kind="soft" onClick={() => set("cntrs", [...(f.cntrs || []), { size: "20GP", qty: "1" }])}>+ 규격 추가</Btn>
@@ -300,15 +290,9 @@ export default function FreightForm({ mode, initial = null, jobs = [], clients =
 
       {/* ── 항공 ── */}
       {mode === "air" && (<>
-        <Card title="항공편" en="FLIGHT">
-          <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-5">
-            <div className="rounded-2xl p-4 text-white flex flex-col items-center justify-center min-h-[190px]" style={{ background: `${GRID}, ${NAVY}` }}>
-              <RouteArt mode="air" from={f.dep} to={f.arr} pct={50} />
-              <div className="mt-1 flex gap-1.5 flex-wrap justify-center">
-                {[airline(f.airline)?.[1], f.flightNo].filter(Boolean).map((x) => <span key={x} className="h-6 px-2 rounded-lg bg-white/10 text-[11.5px] font-extrabold inline-flex items-center">{x}</span>)}
-              </div>
-            </div>
-            <Grid cols={3}>
+        <Card title="항공편" en="FLIGHT" right={<span className={INFO}>{[f.dep && f.arr ? `${f.dep} → ${f.arr}` : "", airline(f.airline)?.[1], f.flightNo].filter(Boolean).join(" · ")}</span>}>
+          <div>
+            <Grid>
               <Field label="항공사"><Sel value={f.airline} onChange={(v) => { const a = airline(v); patch({ airline: v, mawbNo: a && cleanAwb(f.mawbNo).length <= 3 ? a[2] : f.mawbNo, flightNo: a && !f.flightNo ? a[0] : f.flightNo }); }} options={AIRLINE_OPTIONS} placeholder="항공사 선택" /></Field>
               <Field label="편명"><TextIn value={f.flightNo} onChange={(v) => set("flightNo", v)} upper placeholder="KE001" maxLength={8} /></Field>
               <Field label="Master AWB" ok={f.mawbNo && cleanAwb(f.mawbNo).length === 11 && awbChk.ok ? awbChk.msg : ""} err={cleanAwb(f.mawbNo).length === 11 && !awbChk.ok ? awbChk.msg : ""}>
@@ -324,9 +308,10 @@ export default function FreightForm({ mode, initial = null, jobs = [], clients =
             </Grid>
           </div>
         </Card>
-        <Card title="화물 · 운임중량" en="CARGO & CHARGEABLE WEIGHT">
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] gap-5">
-            <Grid cols={3}>
+        <Card title="화물 · 운임중량" en="CARGO & CHARGEABLE WEIGHT"
+          right={<span className={INFO}>운임중량 <b className="text-[#0F1A30] font-black">{cw ? cw.toLocaleString("ko-KR") : "0"} kg</b> · 실중량 {Number(f.grossWeight || 0).toLocaleString("ko-KR")} · 부피중량(÷6000) {volW.toLocaleString("ko-KR")} · {volW > Number(f.grossWeight || 0) ? "부피중량" : "실중량"} 적용</span>}>
+          <div>
+            <Grid>
               <Field label="개수"><NumIn value={f.pieces} onChange={(v) => set("pieces", v)} unit="PCS" /></Field>
               <Field label="실중량"><NumIn value={f.grossWeight} onChange={(v) => set("grossWeight", v)} decimals unit="kg" /></Field>
               <Field label="품명"><TextIn value={f.commodity} onChange={(v) => set("commodity", v)} placeholder="품명" /></Field>
@@ -338,15 +323,6 @@ export default function FreightForm({ mode, initial = null, jobs = [], clients =
               <Field label="해외 파트너"><TextIn value={f.partner} onChange={(v) => set("partner", v)} placeholder="현지 대리점" /></Field>
               <Field label="관세사"><TextIn value={f.broker} onChange={(v) => set("broker", v)} placeholder="관세사" /></Field>
             </Grid>
-            <div className="rounded-2xl p-5 text-white" style={{ background: `${GRID}, ${NAVY}` }}>
-              <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>CHARGEABLE WEIGHT</div>
-              <div className="flex items-baseline gap-1.5 mt-2"><span className="text-[38px] font-black tabular-nums leading-none">{cw ? cw.toLocaleString("ko-KR") : "0"}</span><span className="text-[14px] font-bold text-white/60">kg</span></div>
-              <div className="mt-4 space-y-1.5 text-[12.5px] font-bold">
-                <div className="flex justify-between"><span className="text-white/60">실중량</span><span className="tabular-nums">{Number(f.grossWeight || 0).toLocaleString("ko-KR")} kg</span></div>
-                <div className="flex justify-between"><span className="text-white/60">부피중량 (÷6000)</span><span className="tabular-nums">{volW.toLocaleString("ko-KR")} kg</span></div>
-                <div className="flex justify-between"><span className="text-white/60">적용</span><span>{volW > Number(f.grossWeight || 0) ? "부피중량" : "실중량"}</span></div>
-              </div>
-            </div>
           </div>
         </Card>
       </>)}
@@ -370,18 +346,18 @@ export default function FreightForm({ mode, initial = null, jobs = [], clients =
 
       {/* ── 운임 ── */}
       <Card title="운임" en={fx.live ? `CHARGES · ${fx.day} 환율 자동` : "CHARGES · 기본 환율"} right={<span className={`text-[13px] font-black tabular-nums ${profitCls(profit, "text-[#0F1A30]")}`}>이익 {won(profit)}원{sale > 0 ? ` · ${Math.round((profit / sale) * 1000) / 10}%` : ""}</span>}>
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
           <Lines title="청구 (매출)" mode={mode} lines={f.sales || []} onChange={(v) => set("sales", v)} />
           <Lines title="지급 (매입)" mode={mode} lines={f.costs || []} onChange={(v) => set("costs", v)} vendor />
         </div>
       </Card>
 
       <Card title="메모" en="MEMO">
-        <textarea value={f.memo || ""} onChange={(e) => set("memo", e.target.value)} rows={3} placeholder="전달 사항"
-          className="w-full border border-[#DCE3EE] rounded-xl px-3 py-2.5 text-[14px] font-medium text-[#0F1A30] placeholder:text-[#9AA9C3] focus:outline-none focus:border-[#2D4C82] resize-y" />
+        <textarea value={f.memo || ""} onChange={(e) => set("memo", e.target.value)} rows={2} placeholder="전달 사항"
+          className={`${INPUT} h-auto py-2 resize-y`} />
       </Card>
 
-      <div className="sticky bottom-3 z-10 rounded-2xl bg-white/95 backdrop-blur border border-[#E3E8F0] shadow-[0_12px_30px_rgba(15,26,48,.14)] px-4 py-3 flex items-center gap-3 flex-wrap">
+      <div className="sticky bottom-3 z-10 rounded-xl bg-white/95 backdrop-blur border border-[#E3E8F0] shadow-[0_8px_20px_rgba(15,26,48,.10)] px-4 py-2.5 flex items-center gap-3 flex-wrap">
         {err ? <span className="text-[13px] font-bold text-[#C2362B]">{err}</span> : <span className="text-[12.5px] font-semibold text-[#7A89A3]">청구 {won(sale)}원 · 지급 {won(cost)}원</span>}
         <div className="ml-auto flex gap-2">
           {onCancel && <Btn onClick={onCancel}>취소</Btn>}

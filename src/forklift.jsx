@@ -21,6 +21,7 @@ import { kpAlert, kpConfirm } from "./kpDialog";
 import { MonthPicker } from "./kpInputs";
 import { bumpForkliftPayout } from "./ledgerAuto"; // 지급완료 → 수입·지출 장부 자동
 import { isJyCompany } from "./jyOnly"; // 🏷 JY로지스틱스 전용(특수운임 "지급 없음")
+import RouteSpecialPresets from "./RouteSpecialPresets"; // ⭐ 2026-11-18 [특수운임 적용] 팝업 › 고정노선운임 탭
 import { useRoutePresets, applyRoutePresets, planRoutePreset, itemsFromOrder, mergeItems, saveRoutePreset, routePresetIdOf, AUTO as ROUTE_AUTO, nk as routeNk } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
 import {
   FORKLIFT_MODES, FORKLIFT_UPLOAD_COLS, fkAmount, fkMode, fkModeLabel, fkPresetKey, forkliftApply, forkliftClear,
@@ -410,6 +411,11 @@ function SpecialFareModal({ form, asString, mobile, onClose, onApply }) {
   const [sel, setSel] = React.useState(() => (hasForklift(form) || !sfItems(form).length ? "지게차" : (sfItems(form)[0].종류 || "기타")));
   const [remember, setRemember] = React.useState(true);
   const [preset] = useForkliftPreset(form);
+  // ⭐ 2026-11-18 고정노선운임(노선별 고정 특수운임 설정) — 회사관리에서 이 팝업 안으로 옮김
+  const [view, setView] = React.useState("fare"); // fare = 이 오더 특수운임 · route = 고정노선운임 설정
+  const myRole = (() => { try { return localStorage.getItem("role") || ""; } catch { return ""; } })();
+  const routeCanEdit = !["viewer", "driver", "shipper", "cafeUser"].includes(myRole);
+  const routeCanAdmin = ["admin", "allMgr", "test", "totalMaster"].includes(myRole);
   // ⭐ 2026-11-17 [이 노선 고정으로 저장] — 적용하면서 이 노선(거래처 · 하차지, 고르면 상차지까지)의 고정 특수운임으로도 저장
   const routePresets = useRoutePresets();
   const canRoute = !!String(form.거래처명 || "").trim() && !!String(form.하차지명 || form.상차지명 || "").trim();
@@ -520,18 +526,35 @@ function SpecialFareModal({ form, asString, mobile, onClose, onApply }) {
   const n = (draft.fork ? 1 : 0) + itemList.length;
   const body = (
     <div className={`fixed inset-0 z-[100060] bg-[#0B1428]/55 backdrop-blur-[2px] flex ${isMobile ? "items-end" : "items-center justify-center p-4"}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }} data-special-modal="1">
-      <div className={`bg-[#F4F6FA] shadow-[0_30px_80px_rgba(0,0,0,0.45)] overflow-hidden flex flex-col ${isMobile ? "w-full max-h-[92vh] rounded-t-[24px]" : "w-full max-w-[860px] max-h-[90vh] rounded-[22px]"}`} onMouseDown={(e) => e.stopPropagation()}>
+      <div className={`bg-[#F4F6FA] shadow-[0_30px_80px_rgba(0,0,0,0.45)] overflow-hidden flex flex-col ${isMobile ? `w-full ${view === "route" ? "h-[94vh]" : ""} max-h-[94vh] rounded-t-[24px]` : view === "route" ? "w-full max-w-[1320px] h-[90vh] max-h-[90vh] rounded-[22px]" : "w-full max-w-[860px] max-h-[90vh] rounded-[22px]"}`} onMouseDown={(e) => e.stopPropagation()}>
         <div className="relative px-5 py-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           {isMobile && <div className="absolute left-1/2 -translate-x-1/2 top-1.5 w-10 h-1 rounded-full bg-white/30" />}
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>SPECIAL FARE</div>
-              <div className="text-[18px] font-black mt-0.5">특수운임 적용</div>
-              <div className="text-[12px] text-white/60 mt-0.5 truncate">{[form.거래처명, form.상차지명 && `${form.상차지명} → ${form.하차지명 || ""}`].filter(Boolean).join(" · ") || "이 오더"}</div>
+              <div className="text-[18px] font-black mt-0.5">{view === "route" ? "고정노선운임" : "특수운임 적용"}</div>
+              <div className="text-[12px] text-white/60 mt-0.5 truncate">{view === "route" ? "노선마다 늘 붙는 특수운임을 등록해 두면 오더에 자동으로 들어가요" : null}{view === "route" ? "" : [form.거래처명, form.상차지명 && `${form.상차지명} → ${form.하차지명 || ""}`].filter(Boolean).join(" · ") || "이 오더"}</div>
             </div>
             <button type="button" onClick={onClose} className="shrink-0 h-9 px-3 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold hover:bg-white/20">닫기 ✕</button>
           </div>
+          <div className="mt-3 inline-flex rounded-xl bg-white/10 p-1 gap-1" role="tablist" data-sf-view="1">
+            {[["fare", "특수운임"], ["route", "고정노선운임"]].map(([k, l]) => (
+              <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)} data-sf-view-tab={k}
+                className={`h-8 px-3.5 rounded-lg text-[13px] font-black whitespace-nowrap ${view === k ? "bg-white text-[#0F1A30]" : "text-white/75 hover:text-white"}`}>{l}</button>
+            ))}
+          </div>
         </div>
+        {view === "route" ? (
+          <>
+            <div className="flex-1 min-h-0 overflow-auto p-4 md:p-5 bg-white" onKeyDown={(e) => e.stopPropagation()}>
+              <RouteSpecialPresets mobile={isMobile} canEdit={routeCanEdit} canAdmin={routeCanAdmin} />
+            </div>
+            <div className="border-t border-[#E3E8F0] bg-white px-5 py-3 flex justify-end gap-2" style={isMobile ? { paddingBottom: "max(12px, env(safe-area-inset-bottom))" } : undefined}>
+              <button type="button" onClick={() => setView("fare")} className="h-11 px-4 rounded-xl border border-[#DCE3EE] text-[14px] font-black text-[#3A4A66] hover:bg-[#F4F6FA]">이 오더 특수운임으로</button>
+              <button type="button" onClick={onClose} className="h-11 px-5 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black hover:bg-[#1B2B4B]">닫기</button>
+            </div>
+          </>
+        ) : (<>
         <div className={`flex-1 overflow-y-auto ${isMobile ? "p-4 space-y-4" : "p-5 grid grid-cols-[230px_1fr] gap-5"}`}>
           {listCol}
           <div className="rounded-[18px] bg-white border border-[#E3E8F0] p-4">
@@ -549,10 +572,10 @@ function SpecialFareModal({ form, asString, mobile, onClose, onApply }) {
             {diffRow("수익", orderProfit(base), orderProfit(after))}
           </div>
           {paidOut(after) > 0 && <div className="text-[11.5px] font-bold text-[#7A89A3] mb-2">회사가 따로 지급 {c(paidOut(after))}원{hasForklift(after) ? ` (지게차 ${c(fkAmount(after))}${after.지게차기사명 ? ` · ${after.지게차기사명}` : ""})` : ""}</div>}
-          {autoCount > 0 && <div className="text-[11.5px] font-bold text-[#2D4C82] mb-2" data-sf-auto="1">노선 고정으로 자동으로 들어간 항목 {autoCount}개 — [적용]하면 이 오더는 직접 정한 값으로 바뀌어요(노선을 바꿔도 그대로)</div>}
+          {autoCount > 0 && <div className="text-[11.5px] font-bold text-[#2D4C82] mb-2" data-sf-auto="1">고정노선운임으로 자동으로 들어간 항목 {autoCount}개 — [적용]하면 이 오더는 직접 정한 값으로 바뀌어요(노선을 바꿔도 그대로)</div>}
           {canRoute && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2.5 text-[12.5px] font-bold text-[#1B2B4B]" data-sf-route="1">
-              <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={saveRoute} onChange={(e) => setSaveRoute(e.target.checked)} data-sf-route-save="1" />이 노선 고정으로 저장 <span className="text-[#7A89A3] font-semibold">({form.거래처명} · {routeWithFrom || !form.하차지명 ? `${form.상차지명 || ""} → ` : ""}{form.하차지명 || "모든 하차지"})</span></label>
+              <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={saveRoute} onChange={(e) => setSaveRoute(e.target.checked)} data-sf-route-save="1" />고정노선운임으로 등록 <span className="text-[#7A89A3] font-semibold">({form.거래처명} · {routeWithFrom || !form.하차지명 ? `${form.상차지명 || ""} → ` : ""}{form.하차지명 || "모든 하차지"})</span></label>
               {saveRoute && form.하차지명 && form.상차지명 && <label className="inline-flex items-center gap-1.5 text-[#5B6B85]"><input type="checkbox" checked={routeWithFrom} onChange={(e) => setRouteWithFrom(e.target.checked)} />상차지({form.상차지명})까지 같을 때만</label>}
             </div>
           )}
@@ -561,6 +584,7 @@ function SpecialFareModal({ form, asString, mobile, onClose, onApply }) {
             <button type="button" onClick={apply} data-sf-apply="1" className="flex-[2] h-11 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black hover:bg-[#1B2B4B]">{n ? `적용 · ${n}건` : "적용(특수운임 없음)"}</button>
           </div>
         </div>
+        </>)}
       </div>
     </div>
   );
