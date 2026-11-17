@@ -7,6 +7,7 @@
 //  인쇄/PDF는 브라우저 인쇄로 그대로.
 import React, { useMemo, useState } from "react";
 import { statsOf, toWon } from "./monthCompare";
+import { orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
 import { useLoadOrderRange, monthEnd, monthStartAgo } from "./orderHistory";
 import { CustomSelect } from "./CustomSelect";
 import { profitStyle, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 색(플러스 빨강 · 마이너스 파랑)
@@ -50,7 +51,7 @@ export default function MonthlyReport({ rows = [], isExcluded = () => false, has
   const maxDow = Math.max(1, ...dow.map((x) => x.n));
   const daily = (() => { const m = {}; B.forEach((r) => { const d = String(r.상차일).slice(8, 10); m[d] = (m[d] || 0) + toWon(r.청구운임); }); return Object.entries(m).sort(); })();
   const maxDaily = Math.max(1, ...daily.map(([, v]) => v));
-  const risky = B.filter((r) => { const s = toWon(r.청구운임), d = toWon(r.기사운임); return s > 0 && (s - d <= 0 || (s - d) / s < 0.05); });
+  const risky = B.filter((r) => { const s = toWon(r.청구운임), p = orderProfit(r); return s > 0 && (p <= 0 || p / s < 0.05); }); // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사 지급분
   const unassigned = rows.filter((r) => String(r.상차일 || "").startsWith(month) && DONE(r) && !String(r.차량번호 || "").trim());
   const unsettled = B.filter((r) => { const st = r.정산상태; const v = st && typeof st === "object" ? st[month] : st; return v !== "정산완료"; });
 
@@ -120,11 +121,11 @@ export default function MonthlyReport({ rows = [], isExcluded = () => false, has
           <div style={{ ...box, gridColumn: "1 / -1" }}>
             {h("RISK", "확인이 필요한 오더")}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10, marginBottom: 12 }}>
-              {[["손실·저마진(5% 미만)", `${risky.length}건`, `손실 합계 ${won(risky.reduce((s, r) => s + Math.min(0, toWon(r.청구운임) - toWon(r.기사운임) - toWon(r.외부지급합 ?? r.지게차비용)), 0))}원`], ["미배차(기사 미지정)", `${unassigned.length}건`, "이번 달 상차 오더 중"], ["미정산 매출", `${won(unsettled.reduce((s, r) => s + toWon(r.청구운임), 0))}원`, `${unsettled.length}건 · 거래처정산에서 처리`]].map(([k, v, sub]) => (
+              {[["손실·저마진(5% 미만)", `${risky.length}건`, `손실 합계 ${won(risky.reduce((s, r) => s + Math.min(0, orderProfit(r)), 0))}원`], ["미배차(기사 미지정)", `${unassigned.length}건`, "이번 달 상차 오더 중"], ["미정산 매출", `${won(unsettled.reduce((s, r) => s + toWon(r.청구운임), 0))}원`, `${unsettled.length}건 · 거래처정산에서 처리`]].map(([k, v, sub]) => (
                 <div key={k} style={{ borderRadius: 14, padding: "12px 14px", background: "#F5F8FD", border: "1px solid #E3E8F0" }}><div style={{ fontSize: 12.5, fontWeight: 800, color: "#5B6B85" }}>{k}</div><div style={{ fontSize: 22, fontWeight: 900, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div><div style={{ fontSize: 12, color: "#7A89A3" }}>{sub}</div></div>
               ))}
             </div>
-            {risky.slice(0, 12).map((r, i) => <div key={r._id || i} style={{ display: "grid", gridTemplateColumns: "100px 1fr 1fr 120px 120px", gap: 8, padding: "7px 4px", borderBottom: "1px solid #EEF1F6", fontSize: 13.5 }}><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.상차일}</span><b>{r.거래처명}</b><span>{r.상차지명} → {r.하차지명}</span><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right" }}>청구 {won(toWon(r.청구운임))}</span><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right", fontWeight: 900, ...profitStyle(toWon(r.청구운임) - toWon(r.기사운임) - toWon(r.외부지급합 ?? r.지게차비용)) }}>수익 {won(toWon(r.청구운임) - toWon(r.기사운임) - toWon(r.외부지급합 ?? r.지게차비용))}</span></div>)}
+            {risky.slice(0, 12).map((r, i) => <div key={r._id || i} style={{ display: "grid", gridTemplateColumns: "100px 1fr 1fr 120px 120px", gap: 8, padding: "7px 4px", borderBottom: "1px solid #EEF1F6", fontSize: 13.5 }}><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.상차일}</span><b>{r.거래처명}</b><span>{r.상차지명} → {r.하차지명}</span><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right" }}>청구 {won(toWon(r.청구운임))}</span><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", textAlign: "right", fontWeight: 900, ...profitStyle(orderProfit(r)) }}>수익 {won(orderProfit(r))}</span></div>)}
           </div>
         </div>
       </div>

@@ -16,6 +16,7 @@ import { BookHero, BookCard, Chip, Sheet, MONO } from "./OfficeBooks";
 import { ManualButton, GlossaryButton } from "./WorkManual"; // 📖 2026-11-14 회계용어 · 회계 매뉴얼
 import { isTMUser } from "./staffFilter";
 import { profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 이익률 색(플러스 빨강 · 마이너스 파랑)
+import { paidOut } from "./forkliftCore"; // ⭐ 2026-11-17 회사가 따로 지급(지게차·외부 특수운임)도 매입 — 매출총이익 = 배차표 수수료 합
 import { leaveEntitlement, leaveUseOf } from "./approvalForms";
 import { CustomSelect } from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
@@ -76,7 +77,7 @@ export function AccountingOverview({ company, orders, drivers = [] }) {
   const settled = {}; // ⭐ 2026-11-02 점검 — 지급관리 [지급완료] 오더 기사운임 합계(미지급 탭 apByDriver와 동일 기준)
   orders.forEach((r) => {
     const m = String(r.상차일 || "").slice(5, 7); const s = toInt(r.청구운임); const b = toInt(r.기사운임);
-    if (mon[m]) { mon[m].sale += s; mon[m].buy += b; }
+    if (mon[m]) { mon[m].sale += s; mon[m].buy += b + paidOut(r); } // ⭐ 2026-11-17 매입 = 기사운임 + 지게차·외부 지급(미지급 ap 는 기사운임 그대로)
     const d = r.이름 || "미지정"; ap[d] = (ap[d] || 0) + b;
     if ((r.지급상태 || "") === "지급완료") settled[d] = (settled[d] || 0) + b; // ⭐ 2026-11-02 점검 — [지급완료] 처리분을 지급액으로 반영
   });

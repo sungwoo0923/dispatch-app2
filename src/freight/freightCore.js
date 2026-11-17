@@ -1,6 +1,7 @@
 // ======================= src/freight/freightCore.js =======================
 // 🚢 2026-11-12 컨테이너 · 해상 · 항공 업무 — 기준 목록(드롭다운)과 계산 규칙. 화면 · 저장과 분리(테스트: scripts/freightCore.test.mjs)
 //  · 한 화물 = Job 번호 하나(JB-2611-0001). 해상/항공 → 컨테이너 → 내륙 구간(leg)이 같은 Job 번호로 이어진다
+import { orderProfit } from "../../functions/profitCore.mjs"; // ⭐ 2026-11-17 내륙 배차 오더 수익 = 청구 − 기사 − 회사가 따로 지급(배차표 수수료와 같은 식)
 //  · 구간 문서(freightJobs/{id}) = { companyName, mode, jobNo, refNo, direction, client, status, …영역별 칸, sales[], costs[], history[] }
 
 export const MODES = ["container", "sea", "air", "inland"];
@@ -305,7 +306,7 @@ export function clientMatrix(jobs, inlandRows = [], modules = MODES) {
   const get = (name) => { const k = String(name || "").trim(); if (!k) return null; if (!m.has(k)) m.set(k, { client: k, by: {}, sale: 0, profit: 0, count: 0 }); return m.get(k); };
   const put = (o, mode, sale, profit) => { if (!o) return; const b = o.by[mode] || (o.by[mode] = { count: 0, sale: 0 }); b.count++; b.sale += sale; o.sale += sale; o.profit += profit; o.count++; };
   (jobs || []).forEach((j) => { const p = legPnl(j); put(get(j.client), j.mode, p.sale, p.profit); });
-  (inlandRows || []).forEach((r) => { const s = num(r.청구운임); put(get(r.거래처명), "inland", s, s - num(r.기사운임)); });
+  (inlandRows || []).forEach((r) => { const s = num(r.청구운임); put(get(r.거래처명), "inland", s, orderProfit(r)); });
   return [...m.values()].map((o) => ({ ...o, missing: (modules || []).filter((k) => !o.by[k]) })).sort((a, b) => b.sale - a.sale);
 }
 

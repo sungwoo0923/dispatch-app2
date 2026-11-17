@@ -4,6 +4,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import { toWon, creatorOf, useStaffNames } from "./monthCompare";
 import { useLoadOrderRange, monthEnd, monthStartAgo } from "./orderHistory";
 import { CustomSelect } from "./CustomSelect";
+import { orderCost } from "./forkliftCore"; // ⭐ 2026-11-17 운반비 = 기사운임 + 회사가 따로 지급(지게차·외부 특수운임) → 매출 − 운반비 = 수익(배차표 수수료와 같은 식)
 import { profitColor, profitRateColor, MARGIN_BLUE } from "./marginPct"; // ⭐ 2026-11-17 수익 · 수익률 색(플러스 빨강 · 마이너스 파랑)
 
 const NAVY = "#1B2B4B";
@@ -19,7 +20,7 @@ function aggregate(list) {
     if (k === "최고관리자") continue; // ⭐ 2026-11-03 최고관리자 계정은 담당자 실적에서 뺌
     if (!m.has(k)) m.set(k, { key: k, cnt: 0, sale: 0, driver: 0, low: 0, neg: 0, clients: new Set() });
     const g = m.get(k);
-    const s = toWon(r.청구운임), d = toWon(r.기사운임);
+    const s = toWon(r.청구운임), d = orderCost(r);
     g.cnt++; g.sale += s; g.driver += d;
     if (s > 0 && s - d > 0 && (s - d) / s < 0.05) g.low++;
     if (s - d <= 0) g.neg++;
@@ -104,7 +105,7 @@ export default function StaffPerformance({ rows = [], isExcluded = () => false, 
               <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1150 }}>
                 <thead>
                   <tr style={{ background: "#eef1f6", color: NAVY, fontSize: 14 }}>
-                    {["순위", "담당자", "건수", "매출", "기사운임", "수익", "수익률", "건당 수익", "저마진", "수익 0원 이하", "거래처 수", `${Number(prev.slice(5))}월 대비 수익`].map((h, i) => (
+                    {["순위", "담당자", "건수", "매출", "운반비", "수익", "수익률", "건당 수익", "저마진", "수익 0원 이하", "거래처 수", `${Number(prev.slice(5))}월 대비 수익`].map((h, i) => (
                       <th key={h} style={{ ...th, borderLeft: i ? th.borderLeft : "none", cursor: "default", background: h === "수익" ? NAVY : undefined, color: h === "수익" ? "#fff" : undefined }}>{h}</th>
                     ))}
                   </tr>

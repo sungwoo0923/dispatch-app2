@@ -198,7 +198,7 @@ function PlTab({ rows, fleet, ledger, recurring, today, compact, wide }) {
   const sum = (k) => pl.reduce((s, m) => s + m[k], 0);
   const tot = { sale: sum("sale"), op: sum("op") };
   const accs = Object.entries(cur.sga).sort((a, b) => b[1] - a[1]);
-  const costRows = [["기사 운임(소속 차량)", cur.own], ["용차 운임", cur.hire], ...accs];
+  const costRows = [["기사 운임(소속 차량)", cur.own], ["용차 운임", cur.hire], ...(cur.paid ? [["지게차·외부 지급", cur.paid]] : []), ...accs]; // ⭐ 2026-11-17
   const costMax = Math.max(1, ...costRows.map((x) => x[1]));
   return (<>
     <Stats compact={compact} items={[
@@ -214,14 +214,14 @@ function PlTab({ rows, fleet, ledger, recurring, today, compact, wide }) {
           <Svg html={plBars(w, pl, { compact })} />
           <div style={{ position: "absolute", inset: `0 12px 0 ${compact ? 46 : 62}px`, display: "grid", gridTemplateColumns: `repeat(${pl.length},1fr)` }}>{pl.map((m, i) => <button key={m.m} type="button" aria-label={`${m.m} 보기`} onClick={() => setSel(i)} style={{ background: i === sel ? "rgba(143,176,240,.12)" : "transparent", border: 0, cursor: "pointer", borderRadius: 8 }} />)}</div>
         </div>}</Measure>
-        <Note>매출 = 청구운임 · 매입 = 기사운임(소속 차량은 기사 운임, 그 외 용차) · 판관비 = 장부 지출에서 운송 원가 계정({COGS_ACCOUNTS.slice(0, 3).join("·")} 등) 제외 · 장부가 없는 달은 고정비로 추정 · 이번 달은 진행 중이라 넣지 않음</Note>
+        <Note>매출 = 청구운임 · 매입 = 기사운임(소속 차량은 기사 운임, 그 외 용차) + 지게차·외부 특수운임(회사가 따로 지급) · 판관비 = 장부 지출에서 운송 원가 계정({COGS_ACCOUNTS.slice(0, 3).join("·")} 등) 제외 · 장부가 없는 달은 고정비로 추정 · 이번 달은 진행 중이라 넣지 않음</Note>
       </Card>
       <Card compact={compact} title={`${Number(cur.m.slice(5, 7))}월 비용 구성`} sub={`매출 ${won(cur.sale)} 중 비용 ${won(cur.cost + cur.sgaTotal)}${cur.est ? " · 판관비 추정" : ""}`}>
         <div style={{ marginTop: 14 }}>
           {costRows.map(([k, v], i) => (
             <div key={k} className={i ? "ebx-row" : ""} style={{ padding: "11px 0", display: "grid", gridTemplateColumns: compact ? "minmax(0,1fr) auto" : "minmax(0,170px) minmax(0,1fr) 110px 60px", gap: 12, alignItems: "center" }}>
-              <span style={{ fontSize: 16, color: i < 2 ? C.t1 : C.t2, fontWeight: i < 2 ? 700 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k}</span>
-              {!compact && <div className="exa-bar"><i style={{ width: `${(v / costMax) * 100}%`, background: i < 2 ? C.n3 : "#8EA6D3" }} /></div>}
+              <span style={{ fontSize: 16, color: i < (cur.paid ? 3 : 2) ? C.t1 : C.t2, fontWeight: i < (cur.paid ? 3 : 2) ? 700 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{k}</span>
+              {!compact && <div className="exa-bar"><i style={{ width: `${(v / costMax) * 100}%`, background: i < (cur.paid ? 3 : 2) ? C.n3 : "#8EA6D3" }} /></div>}
               <span className="ebx-num" style={{ textAlign: "right", fontSize: 16 }}>{won(v)}</span>
               {!compact && <span className="ebx-num" style={{ textAlign: "right", fontSize: 15, color: C.t2, fontWeight: 500 }}>{cur.sale ? ((v / cur.sale) * 100).toFixed(1) : "0.0"}%</span>}
             </div>

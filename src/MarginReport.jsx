@@ -9,6 +9,7 @@ import { MonthPicker } from "./kpInputs"; // 📅 2026-11-07 월 선택은 프�
 import React from "react";
 import { profitStyle, profitRateColor, MARGIN_RED, MARGIN_BLUE } from "./marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
 import * as XLSX from "xlsx";
+import { orderProfit, paidOut } from "./forkliftCore"; // ⭐ 2026-11-17 이익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
 import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
@@ -27,7 +28,8 @@ const BAD_SEGMENTS = ["미배차 페널티", "청구운임 0원", "마이너스 
 function classify(r) {
   const sale = toInt(r.청구운임);
   const driver = toInt(r.기사운임);
-  const profit = sale - driver;
+  const paid = paidOut(r); // ⭐ 2026-11-17 회사가 따로 지급(지게차·외부 특수운임)
+  const profit = orderProfit(r);
   const rate = pct(profit, sale);
   let seg;
   if (PENALTY_RE.test(memoOf(r))) seg = "미배차 페널티";
@@ -40,12 +42,12 @@ function classify(r) {
   const tags = [seg];
   if (String(r.배차방식 || "").includes("외부")) tags.push("외부업체 배차");
   if (driver === 0 && sale > 0) tags.push("기사운임 0원");
-  return { sale, driver, profit, rate, seg, tags };
+  return { sale, driver, paid, profit, rate, seg, tags };
 }
 
 function summarize(list) {
-  const s = { cnt: list.length, sale: 0, driver: 0, profit: 0 };
-  list.forEach((r) => { const c = classify(r); s.sale += c.sale; s.driver += c.driver; s.profit += c.profit; });
+  const s = { cnt: list.length, sale: 0, driver: 0, paid: 0, profit: 0 };
+  list.forEach((r) => { const c = classify(r); s.sale += c.sale; s.driver += c.driver; s.paid += c.paid; s.profit += c.profit; });
   s.rate = pct(s.profit, s.sale);
   return s;
 }
@@ -131,7 +133,8 @@ export function exportMarginReportXlsx(R, monthKey, prevKey, pureOnly) {
     ["건수", P.cnt, C.cnt, C.cnt - P.cnt, P.cnt ? pct(C.cnt - P.cnt, P.cnt) : ""],
     ["매출(청구운임)", P.sale, C.sale, T.dSale, P.sale ? pct(T.dSale, P.sale) : ""],
     ["기사운임", P.driver, C.driver, C.driver - P.driver, P.driver ? pct(C.driver - P.driver, P.driver) : ""],
-    ["이익(청구-기사)", P.profit, C.profit, T.dProfit, P.profit ? pct(T.dProfit, P.profit) : ""],
+    ["지게차·외부 지급(회사 부담)", P.paid, C.paid, C.paid - P.paid, P.paid ? pct(C.paid - P.paid, P.paid) : ""],
+    ["이익(청구-기사-지게차·외부 지급)", P.profit, C.profit, T.dProfit, P.profit ? pct(T.dProfit, P.profit) : ""],
     ["매익률(%)", P.rate, C.rate, T.dRate, ""],
     ["건당 매출", P.cnt ? Math.round(P.sale / P.cnt) : 0, C.cnt ? Math.round(C.sale / C.cnt) : 0, "", ""],
     ["건당 이익", P.cnt ? Math.round(P.profit / P.cnt) : 0, C.cnt ? Math.round(C.profit / C.cnt) : 0, "", ""],
@@ -164,17 +167,17 @@ export function exportMarginReportXlsx(R, monthKey, prevKey, pureOnly) {
   ws3["!cols"] = cHead.map((h, i) => ({ wch: i === 0 ? 22 : 14 }));
   XLSX.utils.book_append_sheet(wb, ws3, "거래처별 비교");
   // 4) 오더 목록 시트들
-  const orderHead = ["상차일", "거래처", "상차지", "하차지", "차량번호", "기사", "차종/톤수", "배차방식", "지급방식", "청구운임", "기사운임", "이익", "매익률(%)", "구분", "메모"];
+  const orderHead = ["상차일", "거래처", "상차지", "하차지", "차량번호", "기사", "차종/톤수", "배차방식", "지급방식", "청구운임", "기사운임", "지게차·외부 지급", "이익", "매익률(%)", "구분", "메모"];
   const orderRow = (r) => {
     const c = classify(r);
     return [r.상차일 || "", r.거래처명 || "", r.상차지명 || r.출발지 || "", r.하차지명 || r.도착지 || "", r.차량번호 || "", r.이름 || "",
       [r.차량종류, r.차량톤수].filter(Boolean).join(" "), r.배차방식 || (r.__fixed ? "고정거래처" : ""), r.지급방식 || "",
-      c.sale, c.driver, c.profit, c.rate, c.tags.join(", "), memoOf(r)];
+      c.sale, c.driver, c.paid, c.profit, c.rate, c.tags.join(", "), memoOf(r)];
   };
   const sortRows = (list) => [...list].sort((x, y) => String(x.상차일).localeCompare(String(y.상차일)) || String(x.거래처명 || "").localeCompare(String(y.거래처명 || "")));
   const addOrders = (name, list) => {
     const ws = XLSX.utils.aoa_to_sheet([orderHead, ...sortRows(list).map(orderRow), [], ["합계", `${list.length}건`, "", "", "", "", "", "", "",
-      list.reduce((s, r) => s + toInt(r.청구운임), 0), list.reduce((s, r) => s + toInt(r.기사운임), 0), list.reduce((s, r) => s + classify(r).profit, 0)]]);
+      list.reduce((s, r) => s + toInt(r.청구운임), 0), list.reduce((s, r) => s + toInt(r.기사운임), 0), list.reduce((s, r) => s + paidOut(r), 0), list.reduce((s, r) => s + classify(r).profit, 0)]]);
     ws["!cols"] = orderHead.map((h) => ({ wch: ["메모", "구분"].includes(h) ? 28 : ["상차지", "하차지", "거래처"].includes(h) ? 18 : 12 }));
     XLSX.utils.book_append_sheet(wb, ws, name);
   };

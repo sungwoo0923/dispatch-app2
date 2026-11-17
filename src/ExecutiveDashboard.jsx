@@ -8,6 +8,7 @@ import { EditableText } from "./EditMode";
 import { useLoadFullOrderHistory } from "./orderHistory";
 import { CustomSelect } from "./CustomSelect";
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 마진율 색(플러스 빨강 · 마이너스 파랑)
+import { orderProfit, orderCost } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
 
 // ─────────────────────────────────────────────────────────
 //  PIN GATE
@@ -303,7 +304,7 @@ function OverviewTab({ data }) {
   const tmRev = thisMonth.reduce((s, d) => s + toInt(d.청구운임), 0);
   const lmRev = lastMonth.reduce((s, d) => s + toInt(d.청구운임), 0);
   const cyRevSoFar = thisYear.reduce((s, d) => s + toInt(d.청구운임), 0);
-  const tyCost = thisYear.reduce((s, d) => s + toInt(d.기사운임), 0);
+  const tyCost = thisYear.reduce((s, d) => s + orderCost(d), 0); // ⭐ 2026-11-17 운반비 = 기사운임 + 지게차·외부 지급 → 매출 − 운반비 = 수익
   const lyRev = lastYear.reduce((s, d) => s + toInt(d.청구운임), 0);
   const marginRate = cyRevSoFar > 0 ? ((cyRevSoFar - tyCost) / cyRevSoFar * 100) : 0;
   const tmTrend = lmRev > 0 ? ((tmRev - lmRev) / lmRev * 100) : 0;
@@ -334,8 +335,8 @@ function OverviewTab({ data }) {
   });
   const tmUpRev = thisMonthUpToToday.reduce((s, d) => s + toInt(d.청구운임), 0);
   const lmSameRev = lastMonthSameRange.reduce((s, d) => s + toInt(d.청구운임), 0);
-  const tmUpProfit = thisMonthUpToToday.reduce((s, d) => s + toInt(d.청구운임) - toInt(d.기사운임) - toInt(d.외부지급합 ?? d.지게차비용), 0);
-  const lmSameProfit = lastMonthSameRange.reduce((s, d) => s + toInt(d.청구운임) - toInt(d.기사운임) - toInt(d.외부지급합 ?? d.지게차비용), 0);
+  const tmUpProfit = thisMonthUpToToday.reduce((s, d) => s + orderProfit(d), 0);
+  const lmSameProfit = lastMonthSameRange.reduce((s, d) => s + orderProfit(d), 0);
   const syncRevChg = lmSameRev > 0 ? ((tmUpRev - lmSameRev) / lmSameRev * 100) : null;
   const syncCntChg = lastMonthSameRange.length > 0 ? ((thisMonthUpToToday.length - lastMonthSameRange.length) / lastMonthSameRange.length * 100) : null;
   const syncProfitChg = lmSameProfit > 0 ? ((tmUpProfit - lmSameProfit) / lmSameProfit * 100) : null;
@@ -348,7 +349,7 @@ function OverviewTab({ data }) {
       return {
         month: `${String(d.getMonth() + 1).padStart(2, "0")}월`,
         매출: rows.reduce((s, x) => s + toInt(x.청구운임), 0),
-        수익: rows.reduce((s, x) => s + toInt(x.청구운임) - toInt(x.기사운임) - toInt(x.외부지급합 ?? x.지게차비용), 0),
+        수익: rows.reduce((s, x) => s + orderProfit(x), 0),
         건수: rows.length,
       };
     });
@@ -422,7 +423,7 @@ function OverviewTab({ data }) {
             {[
               { label: "매출", curr: tmRev, prev: lmRev },
               { label: "오더 건수", curr: thisMonth.length, prev: lastMonth.length },
-              { label: "수익", curr: thisMonth.reduce((s,d)=>s+toInt(d.청구운임)-toInt(d.기사운임)-toInt(d.외부지급합 ?? d.지게차비용),0), prev: lastMonth.reduce((s,d)=>s+toInt(d.청구운임)-toInt(d.기사운임)-toInt(d.외부지급합 ?? d.지게차비용),0) },
+              { label: "수익", curr: thisMonth.reduce((s,d)=>s+orderProfit(d),0), prev: lastMonth.reduce((s,d)=>s+orderProfit(d),0) },
             ].map(({ label, curr, prev }) => {
               const pct = prev > 0 ? ((curr - prev) / prev * 100) : 0;
               const up = curr >= prev;
@@ -449,7 +450,7 @@ function OverviewTab({ data }) {
                 <tr style={{ borderBottom: "2px solid #f3f4f6" }}>
                   {["월","오더","총 매출","기사 운임","수익","마진율","전월 대비"].map(h => (
                     <th key={h} className="text-left py-2.5 px-3 font-semibold text-gray-400 whitespace-nowrap">
-                      <EditableText id={`executive.table.header.${h}`} defaultText={h} />
+                      <EditableText id={`executive.table.header.${h}`} defaultText={h === "기사 운임" ? "운반비" : h} />{/* ⭐ 2026-11-17 매출 − 수익 = 기사운임 + 지게차 등 회사 지급분 */}
                     </th>
                   ))}
                 </tr>
@@ -502,7 +503,7 @@ function RevenueTab({ data }) {
       month: `${mo}월`,
       올해: cyRows.reduce((s, d) => s + toInt(d.청구운임), 0),
       전년: lyRows.reduce((s, d) => s + toInt(d.청구운임), 0),
-      올해수익: cyRows.reduce((s, d) => s + toInt(d.청구운임) - toInt(d.기사운임) - toInt(d.외부지급합 ?? d.지게차비용), 0),
+      올해수익: cyRows.reduce((s, d) => s + orderProfit(d), 0),
     };
   }), [data]);
 
@@ -516,8 +517,8 @@ function RevenueTab({ data }) {
 
   const cyRev = cy.reduce((s, d) => s + toInt(d.청구운임), 0);
   const lyRev = ly.reduce((s, d) => s + toInt(d.청구운임), 0);
-  const cyCost = cy.reduce((s, d) => s + toInt(d.기사운임), 0);
-  const lyMarginR = lyRev > 0 ? ((lyRev - ly.reduce((s, d) => s + toInt(d.기사운임), 0)) / lyRev * 100) : 0;
+  const cyCost = cy.reduce((s, d) => s + orderCost(d), 0); // ⭐ 2026-11-17 기사운임 + 지게차·외부 지급
+  const lyMarginR = lyRev > 0 ? ((lyRev - ly.reduce((s, d) => s + orderCost(d), 0)) / lyRev * 100) : 0;
   const cyMarginR = cyRev > 0 ? ((cyRev - cyCost) / cyRev * 100) : 0;
   const yoy = lyRev > 0 ? ((cyRev - lyRev) / lyRev * 100) : 0;
 
@@ -554,7 +555,7 @@ function RevenueTab({ data }) {
           </div>
         </Card>
 
-        <Card title="올해 수익 월별 추이" subtitle="청구운임 - 기사운임">
+        <Card title="올해 수익 월별 추이" subtitle="청구운임 − 기사운임 − 지게차 등 회사 지급분">
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={yoyChart} margin={{ top: 5, right: 16, left: 10, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
@@ -582,7 +583,7 @@ function ClientTab({ data }) {
       m[k] = m[k] || { count: 0, revenue: 0, profit: 0 };
       m[k].count++;
       m[k].revenue += toInt(d.청구운임);
-      m[k].profit += toInt(d.청구운임) - toInt(d.기사운임) - toInt(d.외부지급합 ?? d.지게차비용);
+      m[k].profit += orderProfit(d);
     });
     const all = Object.entries(m)
       .map(([name, v]) => ({ name, ...v, margin: v.revenue > 0 ? (v.profit / v.revenue * 100) : 0 }))

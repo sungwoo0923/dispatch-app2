@@ -13,6 +13,10 @@
 //       기사 부담  → 청구 500,000 · 기사 300,000 · 수익 100,000
 //       회사 부담  → 청구 500,000 · 기사 400,000 · 수익 0
 //       청구 추가  → 청구 600,000 · 기사 400,000 · 수익 100,000
+// ⭐ 2026-11-17 수익 계산(fkNum · paidOut · orderProfit · profitTotals 등)은 functions/profitCore.mjs 로 옮겼다 —
+//  서버(AI 비서 · 일일 보고서)와 같은 파일을 쓰려고. 여기서는 다시 내보내기만 한다(가져오는 곳 그대로).
+import { fkNum, fkAmount, SPECIAL_TYPES, sfType, sfItems, sfPayee, sfMode, sfTotals, paidOut, orderProfit, orderCost, profitRate, profitTotals } from "../functions/profitCore.mjs";
+export { fkNum, fkAmount, SPECIAL_TYPES, sfType, sfItems, sfPayee, sfMode, sfTotals, paidOut, orderProfit, orderCost, profitRate, profitTotals };
 
 export const FORKLIFT_MODES = [
   { key: "기사", label: "기사운임에서 차감", short: "기사 차감" },
@@ -21,14 +25,7 @@ export const FORKLIFT_MODES = [
 ];
 export const FORKLIFT_KEYS = ["지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사"];
 
-export const fkNum = (v) => {
-  if (v == null || v === "") return 0;
-  if (typeof v === "number") return Number.isFinite(v) ? Math.round(v) : 0;
-  const n = Number(String(v).replace(/[^\d.-]/g, ""));
-  return Number.isFinite(n) ? Math.round(n) : 0;
-};
 export const fkMode = (o) => (["기사", "회사", "청구"].includes(o?.지게차부담) ? o.지게차부담 : "기사");
-export const fkAmount = (o) => Math.max(0, fkNum(o?.지게차비용));
 export const hasForklift = (o) => fkAmount(o) > 0;
 export const fkModeLabel = (o) => (FORKLIFT_MODES.find((m) => m.key === fkMode(o)) || FORKLIFT_MODES[0]).short;
 
@@ -39,43 +36,13 @@ export const fkModeLabel = (o) => (FORKLIFT_MODES.find((m) => m.key === fkMode(o
 //   · 받는사람=외부 → 회사가 따로 지급(외부지급합), 기사 부담이면 기사운임 −금액, 청구면 청구운임 +금액
 //  지금 운임에 반영해 둔 양: 특수기사차감(기사운임에서 뺀 양, 음수 = 더한 양) · 특수청구추가 — 바꾸거나 빼면 이 값 기준으로 되돌린다
 //  외부지급합 = 지게차비용 + 외부 항목 합(회사가 따로 주는 돈) — 수익 = 청구 − 기사 − 외부지급합
-export const SPECIAL_TYPES = [
-  { key: "지게차", label: "지게차비용", payee: "외부", mode: "기사", desc: "지게차 기사에게 회사가 지급" },
-  { key: "대기료", label: "대기료", payee: "기사", mode: "청구", desc: "상하차 대기 시간 보상" },
-  { key: "수작업", label: "수작업·인력 상하차비", payee: "외부", mode: "청구", desc: "인력·수작업 상하차 인건비" },
-  { key: "경유", label: "경유(추가 상하차지)", payee: "기사", mode: "청구", desc: "추가 상차·하차지 운임" },
-  { key: "할증", label: "야간·휴일·긴급 할증", payee: "기사", mode: "청구", desc: "야간·주말·긴급 운행" },
-  { key: "통행료", label: "통행료·주차비", payee: "기사", mode: "청구", desc: "기사가 낸 통행료·주차비 보전" },
-  { key: "기타", label: "기타(직접 입력)", payee: "기사", mode: "청구", desc: "이름을 직접 정하는 항목" },
-];
 export const SPECIAL_MODES = [
   { key: "기사", label: "기사운임에서 차감", short: "기사 차감" },
   { key: "회사", label: "회사 몫에서 부담", short: "회사 부담" },
   { key: "청구", label: "거래처에 추가 청구", short: "추가 청구" },
 ];
 export const SPECIAL_KEYS = ["특수운임", "특수기사차감", "특수청구추가", "외부지급합"];
-export const sfType = (k) => SPECIAL_TYPES.find((t) => t.key === k) || SPECIAL_TYPES[SPECIAL_TYPES.length - 1];
-export const sfItems = (o) => (Array.isArray(o?.특수운임) ? o.특수운임 : []).filter((x) => x && fkNum(x.금액) > 0);
-// 🧾 2026-11-12 받는사람 "없음" = 거래처에 추가 청구만 하고 따로 주는 돈은 없음(청구운임 +금액 · 기사운임 그대로 · 수익 +금액)
-export const sfPayee = (it) => (it?.받는사람 === "외부" || it?.받는사람 === "기사" || it?.받는사람 === "없음" ? it.받는사람 : sfType(it?.종류).payee);
-export const sfMode = (it) => {
-  const m = ["기사", "회사", "청구"].includes(it?.부담) ? it.부담 : sfType(it?.종류).mode;
-  if (sfPayee(it) === "없음") return "청구"; // 주는 돈이 없으면 청구만
-  return sfPayee(it) === "기사" && m === "기사" ? "청구" : m; // 기사에게 주는 돈을 기사에게서 뺄 수는 없다
-};
 export const sfName = (it) => (String(it?.이름 || "").trim() || sfType(it?.종류).label);
-export function sfTotals(o) {
-  let D = 0, C = 0, ext = 0;
-  for (const it of sfItems(o)) {
-    const a = Math.max(0, fkNum(it.금액)); const m = sfMode(it);
-    if (sfPayee(it) === "없음") { C += a; continue; } // 청구만(지급 없음)
-    if (sfPayee(it) === "기사") D -= a; else { ext += a; if (m === "기사") D += a; }
-    if (m === "청구") C += a;
-  }
-  return { D, C, ext };
-}
-// 회사가 따로 지급하는 돈 합계(지게차 + 외부 특수운임)
-export const paidOut = (o) => fkAmount(o) + sfTotals(o).ext;
 export const hasSpecial = (o) => hasForklift(o) || sfItems(o).length > 0;
 export const specialCount = (o) => (hasForklift(o) ? 1 : 0) + sfItems(o).length;
 export const specialTotal = (o) => fkAmount(o) + sfItems(o).reduce((s, it) => s + fkNum(it.금액), 0);
@@ -88,21 +55,7 @@ export function specialLines(o) {
   return out;
 }
 
-// 수익(수수료) — 매출·정산·보고서가 모두 이 식을 쓴다
-export const orderProfit = (o) => fkNum(o?.청구운임) - fkNum(o?.기사운임) - paidOut(o);
-// ⭐ 2026-11-17 합계(표 위 칩 · 합계 줄 · 마감표) — 줄마다 보이는 수수료(orderProfit)를 그대로 더한다
-//  예전엔 합계만 "청구 합 − 기사 합"이라 지게차·외부 특수운임(회사가 따로 주는 돈)이 있는 오더에서
-//  줄 수수료 합과 칩 수수료가 달랐다(예: 기사 차감 지게차 180,000 × 15건 = 2,700,000원 차이).
-//  rows: 오더 배열 · get(r): 화면에서 고치는 중인 값을 덮어쓴 오더를 돌려주는 함수(없으면 오더 그대로)
-//  반환 { cnt, sale(청구 합), drv(기사 합), paid(회사가 따로 지급한 합), fee(수수료 합 = sale − drv − paid) }
-export function profitTotals(rows = [], get = null) {
-  let sale = 0, drv = 0, paid = 0, cnt = 0;
-  for (const r0 of rows || []) {
-    const r = get ? get(r0) : r0;
-    cnt += 1; sale += fkNum(r?.청구운임); drv += fkNum(r?.기사운임); paid += paidOut(r);
-  }
-  return { cnt, sale, drv, paid, fee: sale - drv - paid };
-}
+// 수익(수수료) — 매출·정산·보고서가 모두 orderProfit(functions/profitCore.mjs)을 쓴다
 
 // 지게차·특수운임 칸·운임 칸이 바뀐 뒤 기사운임·청구운임·수수료를 맞춘다
 //  prev = 바뀌기 전 오더, next = 바뀐 값을 넣은 오더, key = 바뀐 칸

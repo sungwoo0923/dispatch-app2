@@ -1,13 +1,15 @@
 // ======================= src/teamReportCore.js =======================
 // 📑 2026-11-15 팀 실적 보고서 — 숫자 계산(화면 · PDF · PPT · 전자결재 공용, 테스트: scripts/teamReport.test.mjs)
-//  · 오더 기준은 매출관리 · 일일 경영 보고와 같다: 취소 · 운송사 전송 제외, 청구운임 = 매출, 청구운임 − 기사운임 − 외부지급 = 수익
+//  · 오더 기준은 매출관리 · 일일 경영 보고와 같다: 취소 · 운송사 전송 제외, 청구운임 = 매출, 청구운임 − 기사운임 − 회사가 따로 지급(지게차·외부 특수운임) = 수익
 //  · 팀원 = 그 팀 직원(users.team). 오더 담당 = 등록한 직원(src/detailGetters.js orderStaffNameRaw — 화면이 staffOf 로 넘긴다)
 //  · 비교 = 바로 앞 같은 길이 기간(이번 달이면 지난달 같은 날까지가 아니라 지난달 전체 — 보고서는 "기간 대 기간")
 //  ⚠ 이 파일은 다른 파일을 가져오지 않는다(node 테스트에서 바로 읽는다) — 아래 작은 함수들은 src/dailyReportCore.js 와 같은 식
+//    (⭐ 2026-11-17 예외: 수익 식은 functions/profitCore.mjs(가져오는 것 없음)를 forkliftCore.js 로 가져온다 — 배차표 수수료와 같은 식)
+import { orderProfit } from "./forkliftCore.js";
 const toWon = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 export const dateOf = (r) => String(r?.상차일자 || r?.상차일 || r?.상차 || "").slice(0, 10);
 export const saleOf = (r) => toWon(r?.청구운임);
-export const profitOf = (r) => toWon(r?.청구운임) - toWon(r?.기사운임) - toWon(r?.외부지급합 ?? r?.지게차비용);
+export const profitOf = (r) => orderProfit(r); // ⭐ 2026-11-17 저장된 외부지급합 대신 오더 칸에서 다시 계산 — functions/profitCore.mjs
 export const isCancelledOrder = (r) => r?.배차상태 === "배차취소" || ["취소", "배차취소", "오더취소", "취소됨"].includes(r?.상태);
 const addDay = (ymd, n) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const rangeDays = (a, b) => { const out = []; for (let d = a; d <= b && out.length < 400; d = addDay(d, 1)) out.push(d); return out; };

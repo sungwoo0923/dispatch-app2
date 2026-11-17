@@ -9,6 +9,7 @@ import {
 import { updateDoc } from "./orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { db } from "./firebase";
 import { toWon } from "./monthCompare";
+import { orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
 import { useLoadOrderRange, monthEnd } from "./orderHistory";
 import { CustomSelect } from "./CustomSelect";
 import { CompanyOptionPicker } from "./companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
@@ -22,8 +23,8 @@ const isCanceled = (r) => r?.배차상태 === "배차취소" || r?.상태 === "�
 export const CLOSE_CHECKS = [
   { key: "noSale", label: "청구운임 미입력", tone: "bad", desc: "기사운임만 있고 청구운임이 0원이라 매출이 빠져요", test: (r) => toWon(r.청구운임) === 0 && toWon(r.기사운임) > 0 },
   { key: "noDriverFare", label: "기사운임 미입력", tone: "bad", desc: "청구운임만 있고 기사운임이 0원이라 수익이 부풀려져요", test: (r) => toWon(r.청구운임) > 0 && toWon(r.기사운임) === 0 },
-  { key: "negative", label: "역마진", tone: "bad", desc: "기사운임이 청구운임보다 큼", test: (r) => toWon(r.청구운임) > 0 && toWon(r.청구운임) < toWon(r.기사운임) },
-  { key: "zero", label: "수익 0원", tone: "warn", desc: "청구운임 = 기사운임", test: (r) => toWon(r.청구운임) > 0 && toWon(r.청구운임) === toWon(r.기사운임) },
+  { key: "negative", label: "역마진", tone: "bad", desc: "기사운임(+지게차 등 회사 지급분)이 청구운임보다 큼", test: (r) => toWon(r.청구운임) > 0 && orderProfit(r) < 0 },
+  { key: "zero", label: "수익 0원", tone: "warn", desc: "청구운임 = 기사운임(+지게차 등 회사 지급분)", test: (r) => toWon(r.청구운임) > 0 && orderProfit(r) === 0 },
   { key: "noPay", label: "지급방식 미입력", tone: "warn", desc: "지급방식이 비어 있음", test: (r) => !String(r.지급방식 || "").trim() },
   { key: "noFare", label: "운임 둘 다 미입력", tone: "bad", desc: "청구·기사운임 모두 0원", test: (r) => toWon(r.청구운임) === 0 && toWon(r.기사운임) === 0 },
   { key: "unassigned", label: "배차 미완료", tone: "warn", desc: "지난 날짜인데 아직 배차중(차량 미배정)", test: (r, today) => (r.배차상태 || "") !== "배차완료" && String(r.상차일 || "") < today },
@@ -67,7 +68,7 @@ export default function MonthCloseCheck({ dispatchData = [], onClose, isViewer =
     if (!e) return;
     const s = toWon(e.청구운임 !== undefined ? e.청구운임 : r.청구운임);
     const d = toWon(e.기사운임 !== undefined ? e.기사운임 : r.기사운임);
-    const patch = { 청구운임: s, 기사운임: d, 수수료: s - d, updatedAt: serverTimestamp(), _lastModified: Date.now() };
+    const patch = { 청구운임: s, 기사운임: d, 수수료: orderProfit({ ...r, 청구운임: s, 기사운임: d }), updatedAt: serverTimestamp(), _lastModified: Date.now() };
     if (e.지급방식 !== undefined) patch.지급방식 = e.지급방식;
     setSaving((p) => ({ ...p, [r._id]: true }));
     try {
@@ -138,7 +139,7 @@ export default function MonthCloseCheck({ dispatchData = [], onClose, isViewer =
                   </thead>
                   <tbody>
                     {rows.map((r) => {
-                      const s = toWon(val(r, "청구운임")), d = toWon(val(r, "기사운임"));
+                      const s = toWon(val(r, "청구운임")), d = toWon(val(r, "기사운임")), p = orderProfit({ ...r, 청구운임: s, 기사운임: d }); // ⭐ 2026-11-17
                       const dirty = !!edits[r._id];
                       const fixed = !r._id || r.__fixed;
                       return (
@@ -150,7 +151,7 @@ export default function MonthCloseCheck({ dispatchData = [], onClose, isViewer =
                           <td style={{ padding: "8px", textAlign: "center", whiteSpace: "nowrap", fontWeight: 700 }}>{r.배차상태 || "-"}</td>
                           <td style={{ padding: "8px", textAlign: "center" }}>{editable && !fixed ? <input style={inp} inputMode="numeric" value={fmtMoney(val(r, "청구운임"))} onChange={(e) => setVal(r, "청구운임", e.target.value.replace(/[^\d]/g, ""))} /> : toWon(r.청구운임).toLocaleString()}</td>
                           <td style={{ padding: "8px", textAlign: "center" }}>{editable && !fixed ? <input style={inp} inputMode="numeric" value={fmtMoney(val(r, "기사운임"))} onChange={(e) => setVal(r, "기사운임", e.target.value.replace(/[^\d]/g, ""))} /> : toWon(r.기사운임).toLocaleString()}</td>
-                          <td style={{ padding: "8px", textAlign: "center", fontWeight: 900, color: s - d < 0 ? "#D92D20" : s - d === 0 ? "#6B7588" : "#0F1A30", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{(s - d).toLocaleString()}</td>
+                          <td style={{ padding: "8px", textAlign: "center", fontWeight: 900, color: p < 0 ? "#D92D20" : p === 0 ? "#6B7588" : "#0F1A30", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{p.toLocaleString()}</td>
                           <td style={{ padding: "8px", textAlign: "center" }}>
                             {editable && !fixed ? (
                               <CompanyOptionPicker optKey="지급방식" placeholder="미입력" noneLabel="미입력" value={val(r, "지급방식")} onChange={(v) => setVal(r, "지급방식", v)} style={{ height: 36, minWidth: 96, borderRadius: 10, border: "1px solid #DCE3EE", padding: "0 8px", fontSize: 14, fontWeight: 700, background: "#fff", color: "#0F1A30" }} />

@@ -1,5 +1,6 @@
 // ======================= src/StandardFare.jsx =======================
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수수료 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표와 같은 식
 import { db } from "./firebase";
 import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
 import { KOREAN_HOLIDAYS } from "./CustomDatePicker"; // ⭐ 2026-11-04 특수운임 제거
@@ -892,7 +893,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
         case "fare_asc":  return Number(a.청구운임||0)-Number(b.청구운임||0);
         case "fare_desc": return Number(b.청구운임||0)-Number(a.청구운임||0);
         case "driver_desc": return Number(b.기사운임||0)-Number(a.기사운임||0);
-        case "fee_desc":  return Number(b.수수료||0)-Number(a.수수료||0);
+        case "fee_desc":  return orderProfit(b)-orderProfit(a); // ⭐ 2026-11-17 저장된 수수료 대신 다시 계산
         case "level":     return levelRank[a.fareLevel]-levelRank[b.fareLevel];
         case "level_spike":return levelRank[b.fareLevel]-levelRank[a.fareLevel];
         default: return 0;
@@ -1066,7 +1067,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                               <td className="px-3 py-2.5 text-right text-[13px] font-bold text-gray-800">{Number(r.청구운임||0).toLocaleString()}</td>
                               <td className="px-3 py-2.5 text-center"><FareLevelBadge level={r.fareLevel} /></td>
                               <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{Number(r.기사운임||0).toLocaleString()}</td>
-                              <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{(Number(r.청구운임||0) - Number(r.기사운임||0)).toLocaleString()}</td>
+                              <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{orderProfit(r).toLocaleString()}</td>
                               <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[120px] truncate" title={r.메모}>{r.메모}</td>
                             </tr>
                           );

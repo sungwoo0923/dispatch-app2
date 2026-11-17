@@ -6,6 +6,7 @@
 //  · AI 서버를 못 쓸 때(키 없음 · 오류 · 횟수 초과) 화면에 있는 데이터로 답하는 예전 규칙 답변 + 간단한 수정 알아듣기
 //  · 짧은 마크다운(굵게 · 목록 · 표) 나누기, 대화 기록 저장
 import { normTime, normTon, normVehicle, normAmount, normPay, normPhone, normDate, kstToday, ymdOf } from "./orderScanAi.js";
+import { orderProfit, profitTotals } from "./forkliftCore.js"; // ⭐ 2026-11-17 수수료 = 청구 − 기사 − 회사가 따로 지급(functions/profitCore.mjs)
 
 export const MONEY = ["청구운임", "기사운임", "수수료"];
 export const BOOL = ["혼적", "독차", "긴급"];
@@ -56,7 +57,7 @@ export function buildUpdate(row, changes) {
   });
   // 운임이 바뀌면 수수료도 다시(등록 화면과 같은 계산) — 수수료를 직접 고친 경우는 그대로
   if (("청구운임" in patch || "기사운임" in patch) && !("수수료" in patch)) {
-    const fee = num(patch.청구운임 ?? row?.청구운임) - num(patch.기사운임 ?? row?.기사운임);
+    const fee = orderProfit({ ...(row || {}), 청구운임: num(patch.청구운임 ?? row?.청구운임), 기사운임: num(patch.기사운임 ?? row?.기사운임) }); // ⭐ 2026-11-17 지게차·특수운임(회사 지급분)까지 뺀다 — 배차표와 같은 식
     if (String(fee) !== String(row?.수수료 ?? "")) { patch.수수료 = String(fee); undo.수수료 = row?.수수료 ?? ""; }
   }
   // 기사를 빼면 상태도 되돌릴 수 있게
@@ -300,7 +301,7 @@ export function localAnswer(text, { dispatches = [], clients = [], today = today
   }
   if (/(오늘|금일).*(배차|오더|현황|몇)|^오늘$/.test(t)) {
     if (!day.length) return `오늘(${today}) 등록된 오더가 없어요.`;
-    return `**오늘 배차 현황** ${today}\n· 오더 ${day.length}건 (미배차 ${day.filter(isUnassigned).length}건)\n· 청구운임 ${won(sum(day, "청구운임"))}\n· 기사운임 ${won(sum(day, "기사운임"))}\n· 수익 ${won(sum(day, "청구운임") - sum(day, "기사운임"))}`;
+    return `**오늘 배차 현황** ${today}\n· 오더 ${day.length}건 (미배차 ${day.filter(isUnassigned).length}건)\n· 청구운임 ${won(sum(day, "청구운임"))}\n· 기사운임 ${won(sum(day, "기사운임"))}${profitTotals(day).paid ? `\n· 지게차 등 회사 지급 ${won(profitTotals(day).paid)}` : ""}\n· 수익 ${won(profitTotals(day).fee)}`; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사 지급분
   }
   if (/거래처.*(순위|랭킹|top|많은)/i.test(t)) {
     const m = {}; month.forEach((d) => { const n = d.거래처명 || "미지정"; m[n] = m[n] || { c: 0, s: 0 }; m[n].c += 1; m[n].s += num(d.청구운임); });
@@ -312,8 +313,8 @@ export function localAnswer(text, { dispatches = [], clients = [], today = today
     return `**이번 달 차종별 운행**\n${Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([n, c]) => `· ${n} ${c}건`).join("\n") || "데이터 없음"}`;
   }
   if (/(이번달|이달|월).*(매출|수익|운임)|^매출/.test(t)) {
-    const s = sum(month, "청구운임"); const c = sum(month, "기사운임");
-    return `**${ym} 매출**\n· 운행 ${month.length}건\n· 청구운임 ${won(s)}\n· 기사운임 ${won(c)}\n· 수익 ${won(s - c)}${s ? ` (${(((s - c) / s) * 100).toFixed(1)}%)` : ""}`;
+    const s = sum(month, "청구운임"); const c = sum(month, "기사운임"); const T = profitTotals(month); // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사 지급분(지게차·외부 특수운임)
+    return `**${ym} 매출**\n· 운행 ${month.length}건\n· 청구운임 ${won(s)}\n· 기사운임 ${won(c)}${T.paid ? `\n· 지게차 등 회사 지급 ${won(T.paid)}` : ""}\n· 수익 ${won(s - c - T.paid)}${s ? ` (${(((s - c - T.paid) / s) * 100).toFixed(1)}%)` : ""}`;
   }
   if (/최근/.test(t)) {
     const l = [...live].sort((a, b) => dateOfRow(b).localeCompare(dateOfRow(a))).slice(0, 5);

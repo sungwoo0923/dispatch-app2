@@ -3,6 +3,7 @@ import React, { useMemo, useState, useEffect, useRef } from "react";
 import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import jsPDF from "jspdf";
 import { analyzeMonths, buildReport, COMPARE_DIMS, toWon, MARGIN_BANDS } from "./monthCompare";
+import { orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
 import { CustomSelect } from "./CustomSelect";
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 수익률 색(플러스 빨강 · 마이너스 파랑)
 
@@ -107,6 +108,7 @@ function MonthSideBySide({ res, a, b, compact }) {
     { title: "기본 실적", rows: [
       ["총 매출 (청구운임)", A.sale, B.sale, "money"],
       ["총 기사운임", A.driver, B.driver, "money", false],
+      ["지게차·외부 지급(회사 부담)", A.paid || 0, B.paid || 0, "money", false], // ⭐ 2026-11-17 수익 = 매출 − 기사운임 − 이 금액
       ["총 수익", A.profit, B.profit, "money"],
       ["수익률", A.rate, B.rate, "rate"],
       ["총 건수", A.cnt, B.cnt, "cnt"],
@@ -340,7 +342,7 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
                   </thead>
                   <tbody>
                     {res.anomaliesB.slice(0, 100).map(({ r, an }, i) => {
-                      const s = toWon(r.청구운임), d = toWon(r.기사운임);
+                      const s = toWon(r.청구운임), d = toWon(r.기사운임), p = orderProfit(r); // ⭐ 2026-11-17
                       const t = TONE[an.tone];
                       return (
                         <tr key={r._id || i} style={{ borderBottom: "1px solid #EEF2F7" }}>
@@ -350,7 +352,7 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
                           <td style={{ padding: "8px 10px", whiteSpace: "nowrap", fontWeight: 600, color: SUB }}>{(r.상차지명 || r.출발지 || "-")} → {(r.하차지명 || r.도착지 || "-")}</td>
                           <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 700 }}>{s.toLocaleString()}</td>
                           <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 700 }}>{d.toLocaleString()}</td>
-                          <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 900, color: profitColor(s - d, { neutral: INK }) }}>{(s - d).toLocaleString()}</td>
+                          <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 900, color: profitColor(p, { neutral: INK }) }}>{p.toLocaleString()}</td>
                           <td style={{ padding: "8px 10px", whiteSpace: "nowrap", fontWeight: 600, color: MUTE }}>{an.note}</td>
                         </tr>
                       );

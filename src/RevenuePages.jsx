@@ -9,15 +9,16 @@ import {
 } from "recharts";
 import { RvCard, RvTile, RvDelta, rvShort, RvRing } from "./RevenueDashboard";
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 수익률 색(플러스 빨강 · 마이너스 파랑)
+import { profitTotals, orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NAVY = "#1B2B4B";
 const SHADES = ["#0F1A30", "#1B2B4B", "#2D4C82", "#4B6CB7", "#6E8BC4", "#9FB2D6", "#C9D3E4", "#DCE3EF"];
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
+// ⭐ 2026-11-17 driver = 기사운임 합 · cost = 운반비(기사운임 + 지게차·외부 특수운임) · profit = 매출 − 운반비(= 줄 수수료 합)
 const sOf = (list) => {
-  let sale = 0, driver = 0;
-  list.forEach((r) => { sale += toInt(r.청구운임); driver += toInt(r.기사운임); });
-  return { sale, driver, profit: sale - driver, cnt: list.length, rate: sale ? ((sale - driver) / sale) * 100 : 0 };
+  const t = profitTotals(list);
+  return { sale: t.sale, driver: t.drv, cost: t.buy, profit: t.fee, cnt: t.cnt, rate: t.sale ? (t.fee / t.sale) * 100 : 0 };
 };
 const ymShift = (ym, n) => { const [y, m] = ym.split("-").map(Number); const d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 const tip = { borderRadius: 10, border: "1px solid #E3E8F0", boxShadow: "0 8px 22px rgba(15,26,48,.12)", fontSize: 13, fontWeight: 700 };
@@ -46,7 +47,7 @@ export function TargetPage({ rows = [], targetMonth, yearTarget = 0, isExcluded 
   const lastTotal = last.reduce((s, m) => s + m.sale, 0);
   const achieve = yearTarget > 0 ? ytd / yearTarget : 0;
   const m = cur[curM - 1] || sOf([]);
-  const y = cur.slice(0, curM).reduce((s, x) => ({ sale: s.sale + x.sale, driver: s.driver + x.driver, profit: s.profit + x.profit }), { sale: 0, driver: 0, profit: 0 });
+  const y = cur.slice(0, curM).reduce((s, x) => ({ sale: s.sale + x.sale, driver: s.driver + x.driver, cost: s.cost + x.cost, profit: s.profit + x.profit }), { sale: 0, driver: 0, cost: 0, profit: 0 });
   const runRate = curM ? (ytd / curM) * 12 : 0;
   const scen = [
     { k: "작년 실적", v: lastTotal },
@@ -139,11 +140,11 @@ export function TargetPage({ rows = [], targetMonth, yearTarget = 0, isExcluded 
                 <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 15, fontWeight: 800, color: "#0F1A30" }}>{won(d.sale)}</span>
               </div>
               <div style={{ display: "flex", height: 16, borderRadius: 8, overflow: "hidden", marginTop: 6, background: "#EEF1F6" }}>
-                <div style={{ width: `${d.sale ? (d.driver / d.sale) * 100 : 0}%`, background: "#9FB2D6" }} />
+                <div style={{ width: `${d.sale ? (d.cost / d.sale) * 100 : 0}%`, background: "#9FB2D6" }} />
                 <div style={{ width: `${d.sale ? (d.profit / d.sale) * 100 : 0}%`, background: NAVY }} />
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 5, fontSize: 12.5, fontWeight: 700, color: "#6b7280" }}>
-                <span>운반비 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#374151" }}>{rvShort(d.driver)}</b></span>
+                <span>운반비 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#374151" }}>{rvShort(d.cost)}</b></span>
                 <span>수익 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: profitColor(d.profit) || NAVY }}>{rvShort(d.profit)}</b> · 수익률 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: profitRateColor(d.sale ? (d.profit / d.sale) * 100 : 0) || NAVY }}>{d.sale ? ((d.profit / d.sale) * 100).toFixed(1) : "0.0"}%</b></span>
               </div>
             </div>
@@ -464,7 +465,7 @@ export function QueryPage({ rows = [], clients = [] }) {
     if (!applied) return null;
     const list = rows.filter((r) => { const d = String(r.상차일 || ""); return d >= applied.from && d <= applied.to && (!applied.client || String(r.거래처명 || "").trim() === applied.client); });
     const days = {};
-    list.forEach((r) => { const d = String(r.상차일).slice(0, 10); const e = days[d] || (days[d] = { sale: 0, profit: 0, cnt: 0 }); e.sale += toInt(r.청구운임); e.profit += toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.외부지급합 ?? r.지게차비용); e.cnt += 1; });
+    list.forEach((r) => { const d = String(r.상차일).slice(0, 10); const e = days[d] || (days[d] = { sale: 0, profit: 0, cnt: 0 }); e.sale += toInt(r.청구운임); e.profit += orderProfit(r); e.cnt += 1; });
     const routes = {}, cars = {};
     list.forEach((r) => {
       const k = `${r.상차지명 || r.출발지 || "-"} → ${r.하차지명 || r.도착지 || "-"}`;

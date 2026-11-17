@@ -1,5 +1,6 @@
 // ======================= FleetManagement.jsx =======================
 import { isFleetGrade } from "./fleetGradesCore"; // 🚛 지입차 구분(지입·직영·임대·분양) 한 곳
+import { orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수수료 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표와 같은 식
 import { myNameNow } from "./userNames";
 import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { pickCompanyLoc } from "./officeLocSync"; // 📍 2026-11-09 출근지 한 곳 관리
@@ -3579,7 +3580,7 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose, role = "" }) {
     const rows = driverOrders.map(r => ({
       상차일: r.상차일 || "", 거래처명: r.거래처명 || "", 상차지명: r.상차지명 || "",
       하차지명: r.하차지명 || "", 차량종류: r.차량종류 || "", 배차상태: r.배차상태 || "",
-      청구운임: toWon(r.청구운임), 기사운임: toWon(r.기사운임), 수수료: toWon(r.청구운임) - toWon(r.기사운임) - toWon(r.외부지급합 ?? r.지게차비용),
+      청구운임: toWon(r.청구운임), 기사운임: toWon(r.기사운임), 수수료: orderProfit(r),
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
