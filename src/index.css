@@ -496,3 +496,19 @@ table[data-kpfit][data-kpfit-big] > tbody > tr > td:not(:has(input, select, text
 /* ⭐ 2026-11-17 거래처정산 › 거래처 목록 서랍 — 왼쪽에서 밀려 나옴 */
 @keyframes kpDrawerIn { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
 .kp-drawer-in { animation: kpDrawerIn .18s ease-out; }
+
+/* 📌 2026-11-17 표 머리줄 고정(엑셀처럼) — 어느 표에 붙일지는 src/stickyTableHead.js 가 정한다
+   · [data-kp-st-wrap] 표를 감싼 상자: 높이를 화면 아래 끝까지로 정해 그 안에서 위아래로 스크롤
+   · table[data-kp-st] > thead: 머리줄(여러 줄 머리줄도 통째로)이 상자 맨 위에 붙는다. 바탕이 투명한 머리줄은 바깥 바탕색을 깐다(--kp-st-bg)
+   · 인쇄 · 캡처(.kp-st-off) 땐 꺼서 표 전체가 나오게 */
+[data-kp-st-wrap] { max-height: var(--kp-st-h, calc(100dvh - 160px)); overflow: auto !important; }
+table[data-kp-st] > thead { position: sticky; top: var(--kp-st-top, 0px); z-index: 15; }
+:where(table[data-kp-st]) > thead { background-color: var(--kp-st-bg, transparent); }
+table[data-kp-st] > thead > tr:last-child > th { box-shadow: inset 0 -1px 0 rgba(15, 26, 48, 0.10); }
+[data-kp-st-wrap] ~ [data-kp-hbar] { display: none !important; }
+.kp-st-off [data-kp-st-wrap] { max-height: none !important; overflow: visible !important; }
+.kp-st-off table[data-kp-st] > thead { position: static !important; }
+@media print {
+  [data-kp-st-wrap] { max-height: none !important; overflow: visible !important; }
+  table[data-kp-st] > thead { position: static !important; }
+}

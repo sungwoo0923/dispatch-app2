@@ -3964,9 +3964,16 @@ function KpMoreRows({ shown, total, onMore }) {
   React.useEffect(() => {
     const el = ref.current;
     if (!el || typeof IntersectionObserver === "undefined") return undefined;
-    const io = new IntersectionObserver((ents) => { if (ents.some((e) => e.isIntersecting)) onMore(); }, { rootMargin: "600px 0px" });
+    // 📌 2026-11-17 표 머리줄 고정으로 바로 위 표 상자가 화면 높이로 묶이면(data-kp-st-wrap) 이 버튼이 늘 화면 안이라
+    //   다음 묶음이 끝없이 붙는다 — 그땐 상자 안 스크롤이 끝(600px 안쪽)에 닿았을 때만 더 붙인다
+    const box = () => { const w = el.previousElementSibling; return w && w.hasAttribute("data-kp-st-wrap") ? w : null; };
+    const nearEnd = () => { const w = box(); return !w || w.scrollHeight - w.scrollTop - w.clientHeight < 600; };
+    let fired = false; const more = () => { if (fired) return; fired = true; onMore(); }; // 한 묶음에 한 번만(다음 묶음이 그려지면 다시)
+    const io = new IntersectionObserver((ents) => { if (ents.some((e) => e.isIntersecting) && nearEnd()) more(); }, { rootMargin: "600px 0px" });
     io.observe(el);
-    return () => io.disconnect();
+    const onBoxScroll = (e) => { const w = box(); if (w && e.target === w && nearEnd()) more(); };
+    document.addEventListener("scroll", onBoxScroll, { capture: true, passive: true });
+    return () => { io.disconnect(); document.removeEventListener("scroll", onBoxScroll, { capture: true }); };
   }, [onMore, shown]);
   return (
     <button ref={ref} type="button" onClick={onMore}
@@ -24879,6 +24886,7 @@ function StickyHScrollbar({ targetRef }) {
     <div
       ref={barRef}
       onScroll={onBarScroll}
+      data-kp-hbar="1" /* 📌 2026-11-17 표 상자가 화면 높이로 묶이면(머리줄 고정) 상자 자체 가로 스크롤바가 보여서 이 막대는 숨긴다(index.css) */
       className="sticky bottom-0 z-20 overflow-x-auto overflow-y-hidden"
       style={{ height: 14 }}
     >

@@ -3,12 +3,13 @@
 //  · capture(el): 글꼴이 다 불러와진 뒤 2배 해상도로 그린다(글씨가 흐리거나 잘리지 않게)
 //  · 긴 문서는 A4 높이마다 "빈 줄"을 찾아서 나눈다(글자 한가운데가 잘리는 일 없음)
 //  · 여러 장(.kp-a4page)으로 이미 나뉜 문서는 장마다 그대로 한 쪽씩
+import { withStickyOff } from "./stickyTableHead"; // 📌 2026-11-17 찍는 동안 표 머리줄 고정(높이 제한)을 끈다
 
 export async function capture(el, scale = 2) {
   try { await document.fonts?.ready; } catch { /* 무시 */ }
   const { default: h2c } = await import("html2canvas");
   // 🖨 2026-11-07 화면용 종이 그림자(box-shadow)는 인쇄·PDF 가장자리에 회색 띠로 찍혀서 복제본에서만 뺀다
-  return h2c(el, { scale, backgroundColor: "#ffffff", useCORS: true, logging: false, windowWidth: Math.max(el.scrollWidth, 900), onclone: (_d, c) => { if (c?.style) c.style.boxShadow = "none"; } });
+  return withStickyOff(() => h2c(el, { scale, backgroundColor: "#ffffff", useCORS: true, logging: false, windowWidth: Math.max(el.scrollWidth, 900), onclone: (_d, c) => { if (c?.style) c.style.boxShadow = "none"; } }));
 }
 
 // 캔버스를 A4 비율 조각으로 — 경계 근처(위로 최대 22%)에서 하얀 줄을 찾아 자른다
