@@ -41,7 +41,9 @@ const companyNow = () => localStorage.getItem("loginCompany") || localStorage.ge
 // 오더 내용만 남긴다(이력·시스템 값·날짜 제외) — 날짜는 만들 때마다 새로 정한다
 const SKIP = new Set(["_id", "id", "__col", "history", "createdAt", "updatedAt", "_lastModified", "상차일", "하차일", "등록일", "배차상태", "상태",
   "배차확정일시", "배차확정자", "배차완료일시", "업체전달상태", "업체전달일시", "업체전달방법", "업체전달자", "_gsheetSync", "_gsheetMine", "_gsheetMineSent", "_gsheetMineSentAt",
-  "attachCount", "attachViewed", "기사확인상태", "기사확인일시", "기사완료일시", "위치", "위치갱신일시", "위치공유중", "정기오더", "_recurring", "복구일시", "복구자", "블라인드", "_restAck"]);
+  "attachCount", "attachViewed", "기사확인상태", "기사확인일시", "기사완료일시", "위치", "위치갱신일시", "위치공유중", "정기오더", "_recurring", "복구일시", "복구자", "블라인드", "_restAck",
+  // ⭐ 2026-11-17 구글시트 줄 주소(이전출처 등) — 정기오더로 만든 오더가 원본 줄을 가리키면 그 줄을 덮어쓰거나 지웠다
+  "이전출처", "시트연동", "시트반영일시", "시트기록일시", "시트탭필요", "시트탭후보", "_sheetKeys", "_programKeys", "_sheetBase", "이전줄수", "importBatchId"]);
 const orderSnapshot = (o) => {
   const out = {};
   // 배차관리 저장과 같은 방식으로 화물내용을 완성(예: "3" + 화물타입 "파렛트" → "3파렛트")

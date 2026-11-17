@@ -4,7 +4,8 @@ import { isViewerNow } from "./blind"; // 🧾 특수운임 버튼(조회전용 
 import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon, usePlan } from "./plans";
 import { kpConfirm, kpPrompt } from "./kpDialog";
 import { editLossReason, lossReasonOf } from "./lossReason"; // 📑 2026-11-15 손실 오더 손실 사유
-import { runDelete, commitDeletes, deleteDocsAtomic, runUpload } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제(writeBatch)
+import { runDelete, commitDeletes, deleteDocsAtomic, runUpload } from "./DeleteProgress";
+import { SHEET_LINK_FIELDS, stripSheetLink } from "./sheetLinkFields"; // ⭐ 2026-11-17 복사본에 구글시트 줄 주소를 넘기지 않는다 // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제(writeBatch)
 import ProInsight from "./ProInsight";
 import NameIdToggle from "./NameIdToggle"; // ⭐ 2026-11-09 계정 이름 ↔ 아이디
 import DailyReport, { DailyReportPopupHost } from "./DailyReport"; // 📊 2026-11-06 일일 경영 보고(임원 화면 · 대표·임원 일일 보고서)
@@ -2806,6 +2807,7 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
   delete payload._transmittedAt;
   delete payload._owner;
   delete payload._gsheetSync; // ★ 원본의 구글시트 줄 연결값이 복사본에 딸려가면 원본 줄을 덮어쓰거나 지웠다
+  SHEET_LINK_FIELDS.forEach((k) => { delete payload[k]; }); // ⭐ 2026-11-17 구글시트 실시간 연동(JY)의 줄 주소(이전출처)도 같다 — 복사본은 같은 탭에 자기 줄로 들어간다
   // 🧹 2026-11-09 원본의 운행·지급 진행값(기사 수락/완료, 상차완료, 지급완료, 수정이력)이 복사본에 딸려가면
   //  새 오더가 처음부터 "운송완료·지급완료"로 보였다 — 복사본은 새 운행으로 시작
   ["기사확인상태", "기사확인일시", "기사확인값", "상차완료일시", "하차완료일시", "기사완료일시", "배차확정일시", "배차확정자", "배차완료일시",
@@ -4982,6 +4984,7 @@ const addDispatch = async (recordIn) => {
     }
   }
   if (record && "_restAck" in record) { record = { ...record }; delete record._restAck; }
+  if (record) record = stripSheetLink(record); // ⭐ 2026-11-17 새 오더는 다른 오더의 구글시트 줄 주소를 가지면 안 된다(그 줄을 덮어쓰거나 지웠다)
   // 💬 2026-11-08 알림톡은 화면에서 뺐다 — 새로 등록되는 오더는 모두 알림톡:false(서버가 보내지 않음) · 예전 발송 결과는 넘기지 않는다
   //  (PC · 모바일 등록 · AI 비서 · 오더 스캔 · 복사 등록이 모두 여기를 지난다)
   if (record) { record = { ...record, 알림톡: false }; delete record.알림톡결과; }

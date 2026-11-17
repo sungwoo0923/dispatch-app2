@@ -115,7 +115,7 @@ function fakeSheet(tabs, { denyWrite = false } = {}) {
   const api = async (id, method, path, opts = {}) => {
     calls.push(`${method} ${path}`);
     if (method === "GET" && path.startsWith("?fields=")) return { sheets: titles().map((t, i) => ({ properties: { sheetId: i + 1, title: t, index: i, gridProperties: { rowCount: 100 } }, merges: [] })) };
-    if (method === "GET" && path.startsWith("/values:batchGet")) { const f = /FORMULA/.test(path) ? formulasOf(tabs) : tabs; return { valueRanges: ranges(path).map((t) => { const m = t.match(/^(.+)'!A(\d+):ZZ$/); return { values: m ? (f[m[1]] || []).slice(+m[2] - 1).map((r) => [...r]) : f[t] }; }) }; }
+    if (method === "GET" && path.startsWith("/values:batchGet")) { const f = /FORMULA/.test(path) ? formulasOf(tabs) : tabs; return { valueRanges: ranges(path).map((t) => { const m = t.match(/^(.+)'!A(\d+):ZZ(\d*)$/); return { values: m ? (f[m[1]] || []).slice(+m[2] - 1, m[3] ? +m[3] : undefined).map((r) => [...r]) : f[t] }; }) }; }
     if (method === "GET" && path.startsWith("/values/")) return { values: [[tabs[titles()[0]][0][0]]] };
     if (method === "POST" && path === "/values:batchUpdate") {
       if (denyWrite) throw Object.assign(new Error("The caller does not have permission"), { response: { status: 403 } });
