@@ -7,7 +7,6 @@
 import React from "react";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { db, auth } from "./firebase";
-import { BookHero } from "./OfficeBooks";
 import { wonFmt, withholdingSummary, insuranceSummary, compareMonths, transferRows, yearToDate } from "./payrollCalc";
 import { formatAccount } from "./bankUtil";
 import { PAY_TYPE_LABEL } from "./payslipDoc";
@@ -28,8 +27,10 @@ function Table({ head, children, foot, min = 560 }) {
   );
 }
 
-export default function PayrollReports({ company }) {
-  const [ym, setYm] = React.useState(() => shiftYm(kstYm(), -1));
+// ⭐ 2026-11-17 급여 한 판 — 위 남색 줄의 지급월(ym)을 같이 쓴다(따로 고르지 않음) · 머리 카드 대신 합계 4칸
+export default function PayrollReports({ company, ym: ymIn = "" }) {
+  const [ymLocal, setYm] = React.useState(() => shiftYm(kstYm(), -1));
+  const ym = ymIn || ymLocal;
   const allSlips = useCol("payslips", company);
   const run = useDocData("payrollRuns", company ? runId(company, ym) : "");
   const slips = React.useMemo(() => (allSlips || []).filter((s) => s.ym === ym && s.result).sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ko")), [allSlips, ym]);
@@ -81,9 +82,18 @@ export default function PayrollReports({ company }) {
   const loading = allSlips === null;
   return (
     <div className="space-y-3" data-testid="payroll-reports">
-      <BookHero en={`PAYROLL · REPORTS · ${ym}`} title="신고 · 이체" desc="원천세 신고 · 4대보험 확인 · 급여 이체 파일 · 급여대장을 한 번에"
-        kpis={[["대상", `${slips.length}명`, nDraft ? `작성 중 ${nDraft}명 포함` : "확정분"], ["원천세 합계", `${wonFmt(wh.tax + wh.local)}원`, `소득세 ${wonFmt(wh.tax)} · 지방 ${wonFmt(wh.local)}`], ["4대보험 합계", `${wonFmt(ins.reduce((a, x) => a + x.total, 0))}원`, "근로자 + 회사"], ["이체 합계", `${wonFmt(tr.total)}원`, tr.missing.length ? `계좌 없음 ${tr.missing.length}명` : `${tr.ok.length}명`]]}
-        right={<Sel dark ariaLabel="귀속 월" value={ym} onChange={(v) => v && setYm(v)} options={yms.map((m) => [m, ymLabel(m)])} className="w-[180px]" testid="rep-month" />} />
+      <div className="flex items-stretch gap-2 flex-wrap" data-testid="rep-kpis">
+        {!ymIn && <Sel ariaLabel="귀속 월" value={ym} onChange={(v) => v && setYm(v)} options={yms.map((m) => [m, ymLabel(m)])} className="w-[180px]" testid="rep-month" />}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 flex-1 min-w-0">
+          {[["대상", `${slips.length}명`, nDraft ? `작성 중 ${nDraft}명 포함` : "확정분"], ["원천세 합계", `${wonFmt(wh.tax + wh.local)}원`, `소득세 ${wonFmt(wh.tax)} · 지방 ${wonFmt(wh.local)}`], ["4대보험 합계", `${wonFmt(ins.reduce((a, x) => a + x.total, 0))}원`, "근로자 + 회사"], ["이체 합계", `${wonFmt(tr.total)}원`, tr.missing.length ? `계좌 없음 ${tr.missing.length}명` : `${tr.ok.length}명`]].map(([l, v, sub]) => (
+            <div key={l} className="rounded-2xl bg-white border border-[#E3E8F0] px-4 py-2.5 min-w-0">
+              <div className="text-[13.5px] font-bold text-[#5B6B85] truncate">{l}</div>
+              <div className="text-[19px] font-black text-[#0F1A30] text-right truncate" style={NUMS}>{v}</div>
+              {sub && <div className="text-[13px] font-bold text-[#7A879C] truncate text-right">{sub}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
       {loading ? <div className="py-16 text-center text-[15px] font-bold text-[#7A879C]">불러오는 중…</div> : !slips.length ? (
         <div className={`${sec} py-16 text-center text-[15px] font-bold text-[#5B6B85]`}>{ymLabel(ym)} 급여 기록이 없어요. 월 급여 계산에서 먼저 저장해 주세요.</div>
       ) : (
@@ -137,7 +147,7 @@ export default function PayrollReports({ company }) {
               <div className="px-4 pb-4">
                 {!prev.length ? <div className="py-4 text-[14px] font-bold text-[#7A879C]">{ymLabel(shiftYm(ym, -1))} 기록이 없어 비교할 수 없어요</div> : !cmp.length ? <div className="py-4 text-[14px] font-bold text-[#2D4C82]">크게 바뀐 사람이 없어요</div> : (
                   <Table min={520} head={<><Th>성명</Th><Th>변동</Th><Th right>전월 실지급</Th><Th right>이번 달</Th><Th right>차이</Th></>}>
-                    {cmp.map((x) => <tr key={x.uid}><Td strong>{x.name}</Td><Td><span className={`h-7 px-2.5 rounded-lg text-[13px] font-black inline-flex items-center ${x.kind === "up" ? "bg-[#EEF3FC] text-[#2D4C82]" : x.kind === "down" ? "bg-[#FEF3F2] text-[#B42318]" : "bg-[#F2F4F7] text-[#3A4A66]"}`}>{{ up: "늘었어요", down: "줄었어요", new: "이번 달 새로", gone: "이번 달 없음" }[x.kind]}</span></Td><Td right>{wonFmt(x.prevNet)}</Td><Td right>{wonFmt(x.net)}</Td><Td right strong>{`${x.diff > 0 ? "+" : ""}${wonFmt(x.diff)}`} {pct(x.pct)}</Td></tr>)}
+                    {cmp.map((x) => <tr key={x.uid}><Td strong>{x.name}</Td><Td><span className={`h-7 px-2.5 rounded-lg text-[13px] font-black inline-flex items-center ${x.kind === "up" || x.kind === "down" ? "bg-[#EEF3FC] text-[#1B2B4B]" : "bg-[#F2F4F7] text-[#3A4A66]"}`}>{{ up: "늘었어요", down: "줄었어요", new: "이번 달 새로", gone: "이번 달 없음" }[x.kind]}</span></Td><Td right>{wonFmt(x.prevNet)}</Td><Td right>{wonFmt(x.net)}</Td><Td right strong>{`${x.diff > 0 ? "+" : ""}${wonFmt(x.diff)}`} {pct(x.pct)}</Td></tr>)}
                   </Table>
                 )}
               </div>
