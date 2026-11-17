@@ -33,7 +33,9 @@ const NAME_COLS = [
 const getPath = (o, path) => path.split(".").reduce((a, k) => (a == null ? a : a[k]), o);
 
 export default function ClientMergeModal({ clients = [], initialIds = [], userCompany = "", onClose, onDone }) {
-  const all = React.useMemo(() => (clients || []).filter((c) => nameOf(c)), [clients]);
+  // ⭐ 2026-11-17 거래처로 등록되지 않고 오더에만 적힌 이름(예: "큐런")도 넣을 수 있게 — 거래명세서에는 오더 거래처명으로 보여서 둘로 보였다
+  const [extra, setExtra] = React.useState([]);
+  const all = React.useMemo(() => [...(clients || []).filter((c) => nameOf(c)), ...extra], [clients, extra]);
   const [picked, setPicked] = React.useState(() => {
     const s = new Set(initialIds);
     return all.filter((c) => s.has(keyOf(c))).map(keyOf);
@@ -140,10 +142,14 @@ export default function ClientMergeModal({ clients = [], initialIds = [], userCo
   const toggle = (c) => {
     const k = keyOf(c);
     setPicked((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
+    if (c.__virtual && picked.includes(k)) setExtra((p) => p.filter((x) => keyOf(x) !== k));
     if (k === targetKey) setTargetKey("");
     setErr("");
   };
   const cands = q.trim() ? all.filter((c) => !picked.includes(keyOf(c)) && normName(nameOf(c)).includes(normName(q))).slice(0, 8) : [];
+  const qName = q.trim();
+  const canAddName = !!qName && !all.some((c) => normName(nameOf(c)) === normName(qName));
+  const addVirtual = () => { const v = { 거래처명: qName, companyName: String(pickedRows.find((c) => !c.__virtual)?.companyName || userCompany || "").trim(), __virtual: true }; setExtra((p) => [...p, v]); setPicked((p) => [...p, qName]); setQ(""); setErr(""); };
 
   const summaryLines = () => {
     if (!plan) return [];
@@ -163,7 +169,7 @@ export default function ClientMergeModal({ clients = [], initialIds = [], userCo
     setErr("");
     if (!target) return setErr("남길 거래처를 골라 주세요.");
     if (!sources.length) return setErr("합칠 거래처를 하나 이상 골라 주세요.");
-    if (sources.some((s) => (String(s.companyName || "").trim() || DEFAULT_COMPANY) !== company)) return setErr("같은 운송사 거래처끼리만 합칠 수 있어요.");
+    if (sources.filter((s) => !s.__virtual).some((s) => (String(s.companyName || "").trim() || DEFAULT_COMPANY) !== company)) return setErr("같은 운송사 거래처끼리만 합칠 수 있어요.");
     if (!plan) return setErr("건수를 세는 중이에요. 잠시 뒤 다시 눌러 주세요.");
     if (!sure) return setErr("아래 확인 칸에 체크해 주세요.");
     const tName = nameOf(target);
@@ -177,7 +183,7 @@ export default function ClientMergeModal({ clients = [], initialIds = [], userCo
       // 1) 남길 거래처 — 빈 칸 채우기 · 다른 이름(먼저 저장해야 이 사이 들어오는 오더도 남길 이름으로 바뀐다)
       step(3, "남길 거래처 정보 저장 중");
       const { patch } = buildMergePatch(target, sources, { mode, by: me, at: now });
-      await setDoc(doc(db, "clients", target.id || tName), { ...patch, companyName: company, mergedAt: now }, { merge: true });
+      await setDoc(doc(db, "clients", target.id || tName), { ...patch, ...(target.__virtual ? { 거래처명: tName, createdAt: now } : {}), companyName: company, mergedAt: now }, { merge: true }); // ⭐ 2026-11-17 오더에만 있던 이름을 남기면 그 이름으로 거래처를 새로 만든다
 
       // 2) 오더 — 400건씩
       const groups = chunks(plan.ord.update, BATCH);
@@ -233,7 +239,7 @@ export default function ClientMergeModal({ clients = [], initialIds = [], userCo
       // 5) 합친 거래처 문서 지우기
       step(96, "합친 거래처 정리 중");
       const b = writeBatch(db);
-      sources.forEach((s) => b.delete(doc(db, "clients", s.id || nameOf(s))));
+      sources.filter((s) => !s.__virtual).forEach((s) => b.delete(doc(db, "clients", s.id || nameOf(s)))); // 오더에만 있던 이름은 지울 거래처 문서가 없다
       await b.commit();
       step(100, "끝");
       const out = { target: tName, sources: srcNames, ...res, lockedOrders: plan.ord.locked.length, lockedYms: [...new Set(Object.values(plan.ord.bySource).flatMap((x) => x.lockedYms))].sort(), conflicts: plan.arPlan.conflict.length, salesSkip: plan.named.salesAccounts.skip.length };
@@ -291,7 +297,7 @@ export default function ClientMergeModal({ clients = [], initialIds = [], userCo
                         <button type="button" disabled={!!busy} onClick={() => { setTargetKey(k); setErr(""); }} data-testid="merge-target"
                           className={`flex-1 text-left text-[13.5px] ${isT ? "font-black text-[#0F1A30]" : "text-gray-700"}`}>
                           {isT ? "● " : "○ "}{nameOf(c)}
-                          <span className="ml-1.5 text-[12px] font-semibold text-gray-400">{[c.사업자번호, c.담당자].filter(Boolean).join(" · ")}</span>
+                          <span className="ml-1.5 text-[12px] font-semibold text-gray-400">{c.__virtual ? "오더에만 있는 이름" : [c.사업자번호, c.담당자].filter(Boolean).join(" · ")}</span>
                           {isT && <span className="ml-1.5 px-1.5 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-black">남길 이름</span>}
                         </button>
                         {!isT && target && (
@@ -304,7 +310,12 @@ export default function ClientMergeModal({ clients = [], initialIds = [], userCo
                     );
                   })}
                 </div>
-                <input className={`${inp} mt-2`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="합칠 거래처 더 찾기(이름)" autoComplete="off" disabled={!!busy} />
+                <input className={`${inp} mt-2`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="합칠 거래처 더 찾기(이름) — 등록 안 된 이름도 넣을 수 있어요" autoComplete="off" disabled={!!busy} />
+                {canAddName && (
+                  <button type="button" onClick={addVirtual} disabled={!!busy} data-testid="merge-add-name" className="mt-1 w-full text-left px-3 py-2 rounded-lg border border-dashed border-[#9AA9C3] text-[13px] hover:bg-gray-50">
+                    + "<b>{qName}</b>" 넣기 <span className="text-[12px] text-gray-500">— 거래처로 등록 안 된 이름(오더 · 거래명세서에만 있는 이름)</span>
+                  </button>
+                )}
                 {cands.length > 0 && (
                   <div className="mt-1 rounded-lg border border-gray-200 divide-y divide-gray-100">
                     {cands.map((c) => <button key={keyOf(c)} type="button" onClick={() => { toggle(c); setQ(""); }} className="w-full text-left px-3 py-2 text-[13px] hover:bg-gray-50">+ {nameOf(c)}</button>)}
