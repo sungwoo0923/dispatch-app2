@@ -95,7 +95,7 @@ const qtyOf = (items, key) => (Array.isArray(items) ? items : []).filter((x) => 
 const PRICING_FALLBACK = { base: 99000, includedSeats: 3, seat: 15000, includedOrders: 1000, perOrder: 50 };
 
 // 이 패널의 모든 숫자를 한 번에 계산
-function useCostData() {
+export function useCostData() {
   const live = usePlatformLive();
   const sales = useSalesPricing();
   const saved = useDocLive("platformConfig/costModel");

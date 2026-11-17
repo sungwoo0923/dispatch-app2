@@ -4,7 +4,7 @@
 //   · 상단 메뉴(대시보드 · 고객사 · 영업 · 계약 · 청구 · 운영 · 데이터) + 왼쪽 메뉴(KpSubNav)
 //   · 새로 추가: 오늘 할 일, 도입 문의, 계약(전자서명), 수납 관리, 플랫폼 공지, 접속 이력, 로그인 관리
 //  최고관리자가 로그인하면 /choose 에서 "배차 프로그램 / 관리자 관리센터" 중 고른다.
-//  ⭐ 알록달록 금지 — 네이비 계열만.
+//  🛰 2026-11-18 전면 리디자인 — 어두운 디지털 + 샴페인 골드(대표/임원 화면과 같은 결) · 메뉴 정리(아래 SECTIONS 주석)
 import Pager, { pageCount, pageSlice } from "./Pager";
 import { markUpdatesNoticed } from "./UpdateDigest"; // 📝 2026-11-09 업데이트 보관함(AI 작성함)
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
@@ -41,7 +41,12 @@ const HomepageEditor = React.lazy(() => import("./HomepageEditor")); // ⭐ 2026
 const HubMembersAdmin = React.lazy(() => import("./HubMembersAdmin")); // ⭐ 2026-11-06 허브 회원 승인
 const CostPanel = React.lazy(() => import("./CostPanel"));
 const IntegrationSettings = React.lazy(() => import("./IntegrationSettings")); // 🔌 2026-11-07 연동 설정 // 💰 2026-11-04 비용 · 손익(최고관리자 전용)
-import { AiTeamHub, AiTeamChat, AI_TEAM_TABS } from "./AiTeamPanel"; // 🤖 2026-11-06 AI 팀
+import { AiHq, AI_TEAM_TABS } from "./AiTeamPanel"; // 🤖 2026-11-06 AI 팀 · 2026-11-18 AI 본부
+// 🛰 2026-11-18 관리자센터 리디자인 — 어두운 골드 부품 · 새 화면(관제 · 트래픽 · 운송사 사용량 · 운영 비용)
+import { G, NUM, ADM_CSS, AdmHero, AdmPanel, AdmClock, AdmBtn, AdmEmpty, Seg } from "./adminCenter/admUi";
+import { CommandDeck, TrafficView, CarrierUsageView, WalletView } from "./adminCenter/OpsScreens";
+import { isAdminDemo } from "./adminCenter/useOpsData";
+const DEMO_STATS = () => (isAdminDemo() ? window.__kpAdminDemoStats || null : null); // 개발 /preview-admin 화면 점검용
 import { RemoteSupportAdminPanel } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import { CustomSelect } from "./CustomSelect";
 import { RichTextEditor, htmlToText, textToHtml, sanitizeHtml } from "./richText"; // ⭐ 2026-11-03 공지 글자 꾸미기
@@ -58,101 +63,91 @@ const pad = (n) => String(n).padStart(2, "0");
 const ymd = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 // ─── 메뉴 구성 ───
+// 🛰 2026-11-18 관리자센터 전면 재구성(사용자 요청) — 9묶음 41메뉴 → 8묶음 24메뉴.
+//  같은 일을 하는 메뉴는 한 메뉴 안의 작은 탭(SUBTABS)으로 합쳤다. 예전 메뉴 주소(tab 키)는 모두 그대로 열린다.
+//   · 관제: 관제 대시보드(새로 · 플랫폼 개요를 "고객사 실적" 탭으로) · 오늘 할 일 · 실시간 트래픽(실시간 접속 + 서버 트래픽) · 원격 지원
+//   · AI 본부: AI 팀 개요 + 팀 6개 메뉴 → 메뉴 하나(화면 안 명단에서 팀 고르기)
+//   · 고객사: 가입신청관리 + 허브 회원 승인 → 가입 심사
+//   · 사용량 · 비용(새 묶음): 운송사 사용량(새 시각화 + 사용량·한도 + 문자·알림톡) · 운영 비용(내 주머니 + 비용·손익)
+//   · 영업 · 계약: 영업 + 계약 묶음 합침 · 견적서 작성 + 견적 이력 → 견적 · 계약 현황 + 작성 + 양식 → 계약
+//   · 청구 · 수납: 요금제 · 요금·청구 · 수납 관리
+//   · 운영: 플랫폼 공지 + 알림 문구 → 공지 · 알림 문구 · 브랜드 디자인 + 홈페이지 + 로그인 화면 꾸미기 → 브랜드 · 화면
+//   · 보안 · 데이터: 보안 + 데이터 묶음 합침 · 로그인 관리 + 접속 이력 → 로그인 · 접속 · 보안 알림 + 오류 신고 → 보안 · 오류 알림 · 운송사 분리 + 초기화 → 운송사 분리 · 초기화
+const SUBTABS = {
+  command: [["command", "운영 관제"], ["overview", "고객사 실적"]],
+  applications: [["applications", "운송사 · 화주사"], ["hubMembers", "허브 회원"]],
+  usage: [["usage", "한눈에 보기"], ["usage:limits", "한도 · 초과 요금표"], ["msgUsage", "문자 · 알림톡"]],
+  cost: [["cost", "내 주머니"], ["cost:pnl", "손익 · 원가 상세"]],
+  "sales:quote": [["sales:quote", "견적서 작성"], ["sales:history", "견적 이력"]],
+  "contract:list": [["contract:list", "계약 현황"], ["contract:new", "계약서 작성"], ["contract:templates", "계약서 양식"]],
+  notices: [["notices", "플랫폼 공지"], ["notifTemplate", "알림 문구"]],
+  brand: [["brand", "브랜드 디자인"], ["homepage", "홈페이지"], ["landingEdit", "로그인 화면"]],
+  sessions: [["sessions", "로그인 관리"], ["sessionLogs", "접속 이력"]],
+  securityEvents: [["securityEvents", "보안 알림"], ["errorReports", "오류 신고"]],
+  tenancy: [["tenancy", "운송사 분리"], ["companyReset", "운송사 초기화"]],
+};
+// 휴대폰에서는 쓸 수 없어 숨기는 화면(넓은 화면 편집기 · 휴대폰 미리보기)
+const PHONE_HIDE = new Set(["homepage", "brand", "mobilePreview"]);
+const it = (key, label, en, icon, extra = {}) => ({ key, label, en, icon, also: (SUBTABS[key] || []).map(([k]) => k).filter((k) => k !== key), ...extra });
 const SECTIONS = [
-  { key: "home", label: "대시보드", en: "DASHBOARD", icon: "pulse", items: [
-    { key: "todo", label: "오늘 할 일", en: "TODAY", icon: "check" },
-    { key: "overview", label: "플랫폼 개요", en: "OVERVIEW", icon: "pulse" },
-    { key: "live", label: "실시간 접속", en: "LIVE", icon: "users" }, // ⭐ 2026-11-02 관리자센터
-    { key: "support", label: "원격 지원", en: "SUPPORT", icon: "phone" }, // ⭐ 2026-11-02 원격지원 —
+  { key: "command", label: "관제", en: "COMMAND", icon: "pulse", items: [
+    it("command", "관제 대시보드", "DASHBOARD", "pulse"),
+    it("todo", "오늘 할 일", "TODAY", "check"),
+    it("live", "실시간 트래픽", "LIVE TRAFFIC", "users"),
+    it("support", "원격 지원", "SUPPORT", "phone"),
   ] },
-  { key: "aiteam", label: "AI 팀", en: "AI TEAMS", icon: "spark", items: AI_TEAM_TABS }, // 🤖 2026-11-06 팀별 Claude 에이전트
+  { key: "aiteam", label: "AI 본부", en: "AI HQ", icon: "spark", items: AI_TEAM_TABS }, // 🤖 2026-11-06 팀별 Claude 에이전트
   { key: "clients", label: "고객사", en: "CLIENTS", icon: "building", items: [
-    { key: "companies", label: "운송사 관제", en: "CARRIERS", icon: "building" },
-    { key: "shippers", label: "화주사 관제", en: "SHIPPERS", icon: "link" },
-    { key: "applications", label: "가입신청관리", en: "APPLICATIONS", icon: "inbox" },
-    { key: "hubMembers", label: "허브 회원 승인", en: "HUB MEMBERS", icon: "users" }, // ⭐ 2026-11-06 로지스웹 허브(화물 콜) 차주·화주·운송사 가입 심사
-    { key: "inquiries", label: "도입 문의", en: "LEADS", icon: "mail" },
+    it("companies", "운송사 관제", "CARRIERS", "building"),
+    it("shippers", "화주사 관제", "SHIPPERS", "link"),
+    it("applications", "가입 심사", "APPROVALS", "inbox"),
   ] },
-  { key: "sales", label: "영업", en: "SALES", icon: "trend", items: [
-    { key: "sales:plans", label: "요금제 관리", en: "PRICING", icon: "sheet" },
-    { key: "sales:quote", label: "견적서 작성", en: "QUOTATION", icon: "file" },
-    { key: "sales:history", label: "견적 이력", en: "PIPELINE", icon: "history" },
+  { key: "usagecost", label: "사용량 · 비용", en: "USAGE & COST", icon: "server", items: [
+    it("usage", "운송사 사용량", "USAGE", "chart"),
+    it("cost", "운영 비용", "OUT OF POCKET", "wallet"),
   ] },
-  { key: "contracts", label: "계약", en: "CONTRACTS", icon: "pen", items: [
-    { key: "contract:life", label: "이용 계약·만료", en: "LIFECYCLE", icon: "hourglass" }, // ⭐ 2026-11-06 계약 기간 · 만료 안내 · 계약종료/재개 · 계약종료+초기화
-    { key: "contract:list", label: "계약 현황", en: "STATUS", icon: "list" },
-    { key: "contract:new", label: "계약서 작성", en: "NEW", icon: "pen" },
-    { key: "contract:templates", label: "계약서 양식", en: "TEMPLATES", icon: "file" },
+  { key: "sales", label: "영업 · 계약", en: "SALES & CONTRACTS", icon: "trend", items: [
+    it("inquiries", "도입 문의", "LEADS", "mail"),
+    it("sales:quote", "견적", "QUOTATION", "file"),
+    it("contract:list", "계약", "CONTRACTS", "pen"),
+    it("contract:life", "이용 기간 · 만료", "LIFECYCLE", "hourglass"),
   ] },
-  { key: "billing", label: "청구", en: "BILLING", icon: "money", items: [
-    { key: "billing", label: "요금·청구", en: "BILLING", icon: "money" },
-    { key: "payments", label: "수납 관리", en: "COLLECTION", icon: "wallet" },
-    { key: "usage", label: "사용량·한도", en: "USAGE", icon: "server" },
-    { key: "msgUsage", label: "문자·알림톡 사용량", en: "MESSAGES", icon: "chat" }, // 💬 2026-11-10 운송사별 월 사용량 → 월말 청구 // ⭐ 2026-11-03 요금제 한도 대비 사용량·초과 요금
-    { key: "cost", label: "비용·손익", en: "COST · P&L", icon: "trend" }, // 💰 2026-11-04 매출 vs 서버·운영 지출 · 운송사별 원가 · 손익분기
+  { key: "billing", label: "청구 · 수납", en: "BILLING", icon: "money", items: [
+    it("sales:plans", "요금제", "PRICING", "sheet"),
+    it("billing", "요금 · 청구", "BILLING", "receipt"),
+    it("payments", "수납 관리", "COLLECTION", "money"),
   ] },
-  // 🧹 2026-11-14 메뉴 정리(사용자 요청) — 업데이트 배포를 운영 맨 앞으로(화주사 강제 업데이트는 그 화면 안으로 합침) ·
-  //  보안(로그인 · 접속 · 알림 · 오류 · 부관리자)과 데이터(분리 · 가져오기 · 초기화 · 테스트)를 나눔 · 랜딩페이지 편집 → 로그인 화면 꾸미기
-  //  · phoneHide: 휴대폰에서는 쓸 수 없어 숨기는 메뉴(모바일 화면 미리보기 · 홈페이지 편집기)
-  { key: "ops", label: "운영", en: "OPERATIONS", icon: "server", items: [
-    { key: "release", label: "업데이트 배포", en: "RELEASE", icon: "key" }, // 🚦 2026-11-13 여기서 눌러야 가입자 화면이 바뀐다
-    { key: "notices", label: "플랫폼 공지", en: "BROADCAST", icon: "bell" },
-    { key: "notifTemplate", label: "알림 문구", en: "MESSAGES", icon: "chat" },
-    { key: "integrations", label: "연동 설정", en: "INTEGRATIONS", icon: "link" }, // 🔌 2026-11-07 국세청 · 기상청 · 팝빌
-    { key: "homepage", label: "홈페이지", en: "HOMEPAGE", icon: "globe", phoneHide: true }, // ⭐ 2026-11-03 소개 홈페이지 전체 편집기
-    { key: "landingEdit", label: "로그인 화면 꾸미기", en: "LOGIN SCREEN", icon: "globe" },
-    { key: "brand", label: "브랜드 디자인", en: "BRAND", icon: "spark", phoneHide: true }, // 🎨 2026-11-15 로고 올리기 · 부분 색/굵기 · 자리별 바탕 · 앱 아이콘(src/BrandStudio.jsx)
-    { key: "mobilePreview", label: "모바일 화면", en: "MOBILE", icon: "phone", phoneHide: true }, // 📱 2026-11-14 관리자메뉴에서 옮김 — 크게(기기 · 확대 고르기)
+  { key: "ops", label: "운영", en: "OPERATIONS", icon: "cpu", items: [
+    it("release", "업데이트 배포", "RELEASE", "key"),
+    it("notices", "공지 · 알림 문구", "BROADCAST", "bell"),
+    it("integrations", "연동 설정", "INTEGRATIONS", "link"),
+    it("brand", "브랜드 · 화면", "BRAND", "star"),
+    it("mobilePreview", "모바일 화면", "MOBILE", "phone"),
   ] },
-  { key: "security", label: "보안", en: "SECURITY", icon: "shield", items: [
-    { key: "sessions", label: "로그인 관리", en: "SESSIONS", icon: "key" },
-    { key: "sessionLogs", label: "접속 이력", en: "AUDIT LOG", icon: "history" },
-    { key: "securityEvents", label: "보안 알림", en: "THREATS", icon: "shield" }, // 🛡 2026-11-09 새 기기·해외 IP·새벽 접속·대량 다운로드·퇴사자 차단
-    { key: "errorReports", label: "오류 신고", en: "ERRORS", icon: "shield" }, // 🧯 2026-11-10 오류 화면 [오류 보내기]
-    { key: "subAdmin", label: "부관리자", en: "SUB ADMIN", icon: "key" }, // ⭐ 2026-11-06 부관리자 목록 · 지정/해제
-  ] },
-  { key: "data", label: "데이터", en: "DATA", icon: "sheet", items: [
-    { key: "sheetImport", label: "구글시트 연동", en: "SHEETS", icon: "sheet" }, // 🧹 2026-11-15 배차 프로그램 관리자메뉴의 구글시트 연동을 여기로 합침
-    { key: "tenancy", label: "운송사 분리", en: "ISOLATION", icon: "shield" },
-    { key: "companyReset", label: "운송사 초기화", en: "RESET", icon: "trash" },
-    { key: "testSeed", label: "테스트 데이터", en: "TEST DATA", icon: "sheet" }, // 🧪 2026-11-08 테스트운송사 가짜 데이터
+  { key: "security", label: "보안 · 데이터", en: "SECURITY & DATA", icon: "shield", items: [
+    it("sessions", "로그인 · 접속", "SESSIONS", "key"),
+    it("securityEvents", "보안 · 오류 알림", "THREATS", "alert"),
+    it("subAdmin", "부관리자", "SUB ADMIN", "user"),
+    it("sheetImport", "구글시트 연동", "SHEETS", "sheet"),
+    it("tenancy", "운송사 분리 · 초기화", "ISOLATION", "shield"),
+    it("testSeed", "테스트 데이터", "TEST DATA", "list"),
   ] },
 ];
 // 예전 메뉴 이름(이 기기에 기억된 마지막 화면) → 지금 자리
-const TAB_ALIAS = { forceUpdate: "release" };
-const sectionOf = (tab) => SECTIONS.find((s) => s.items.some((i) => i.key === tab)) || SECTIONS[0];
+const TAB_ALIAS = { forceUpdate: "release", "ai:overview": "ai:hub" };
+const itemOf = (tab) => SECTIONS.flatMap((s) => s.items).find((i) => i.key === tab || (i.also || []).includes(tab));
+const sectionOf = (tab) => SECTIONS.find((s) => s.items.some((i) => i.key === tab || (i.also || []).includes(tab))) || SECTIONS[0];
 const MONITOR_TABS = ["overview", "companies", "shippers", "applications", "billing", "sales:plans", "sales:quote", "sales:history"];
 
 // ─── 공용 부품 ───
+// 🛰 2026-11-18 관리자센터 리디자인 — 카드 · 머리는 어두운 골드 부품(src/adminCenter/admUi.jsx)으로
 function Card({ code, title, right, children, bodyClass = "p-5" }) {
-  return (
-    <div className="bg-white rounded-[18px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_26px_rgba(16,24,40,0.05)] overflow-hidden min-w-0">
-      <div className="flex items-center justify-between gap-3 px-4 sm:px-5 h-[46px] sm:h-[50px] bg-[#F7F9FC] border-b border-[#E8EDF4]">
-        <div className="flex items-center gap-2 min-w-0"><span className="w-1.5 h-1.5 rotate-45 bg-[#1B2B4B]" />
-          <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#94A3B8]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{code}</span>
-          <span className="text-[15px] sm:text-[16px] font-black text-[#0F1A30] truncate whitespace-nowrap">{title}</span></div>
-        {right}
-      </div>
-      <div className={bodyClass}>{children}</div>
-    </div>
-  );
+  return <AdmPanel code={code} title={title} right={right} bodyClass={bodyClass}>{children}</AdmPanel>;
 }
 function Hero({ en, title, desc, right }) {
-  return (
-    <div className="kp-hero relative overflow-hidden rounded-[18px] sm:rounded-[22px] px-4 py-3.5 sm:px-6 sm:py-5 mb-3 sm:mb-4 text-white flex items-center justify-between gap-3 sm:gap-4 flex-wrap"
-      style={{ background: "linear-gradient(rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.06) 1px, transparent 1px) 0 0/22px 22px, radial-gradient(600px 200px at 85% -20%, rgba(75,108,183,.45), transparent 60%), linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
-      <div className="min-w-0"><div className="text-[10px] sm:text-[11px] font-extrabold tracking-[0.28em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
-        <div className="text-[19px] sm:text-[24px] font-black mt-0.5 tracking-tight whitespace-nowrap">{title}</div>
-        {desc && <div className="hidden sm:block text-[13.5px] text-white/65 mt-0.5">{desc}</div>}</div>
-      {right}
-    </div>
-  );
+  return <AdmHero en={en} title={title} desc={desc} right={right} />;
 }
-function Clock() {
-  const [n, setN] = React.useState(() => new Date());
-  React.useEffect(() => { const t = setInterval(() => setN(new Date()), 1000); return () => clearInterval(t); }, []);
-  return <span className="text-[13px] font-black text-white tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{pad(n.getHours())}:{pad(n.getMinutes())}<span className="text-white/40">:{pad(n.getSeconds())}</span></span>;
-}
+function Clock() { return <AdmClock />; }
 function useCol(name, order = "createdAt", n = 300) {
   const [list, setList] = React.useState(null);
   React.useEffect(() => onSnapshot(order ? query(collection(db, name), orderBy(order, "desc"), limit(n)) : query(collection(db, name), limit(n)), (s) => setList(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setList([])), [name, order, n]);
@@ -1228,83 +1223,34 @@ function SessionLogsPanel() {
   );
 }
 
-// ═══════════════════════ 실시간 접속 ═══════════════════════
-// ⭐ 2026-11-02 관리자센터 — 지금 누가(회사·PC/모바일·마지막 활동) 쓰고 있는지 + 회사별 접속 + 최근 가입
-function LiveTab({ openCompany }) {
-  const live = usePlatformLive();
-  const phone = usePhone();
-  if (!live) return null;
-  const t = live.totals;
-  const coRows = Object.values(live.companies).filter((c) => c.online24h > 0).sort((a, b) => (b.onlineNow - a.onlineNow) || (b.online24h - a.online24h)).slice(0, 12)
-    .map((c) => ({ name: c.name, now: c.onlineNow, day: Math.max(0, c.online24h - c.onlineNow) }));
-  const kpi = [
-    ["NOW", "지금 접속 (10분)", t.onlineNow, `운송사 ${t.onlineNow - t.shipperNow} · 화주 ${t.shipperNow}`, true],
-    ["24H", "24시간 접속", t.online24h, `운송사 ${t.online24h - t.shipper24h} · 화주 ${t.shipper24h}`],
-    ["PC", "PC 사용자", t.pcNow, `24시간 ${t.pc24h}명`],
-    ["MOBILE", "모바일 사용자", t.mobileNow, `24시간 ${t.mobile24h}명`],
-  ];
-  return (
-    <div className="space-y-4">
-      <Hero en="DASHBOARD · LIVE" title="실시간 접속" desc="사람(계정) 기준입니다 — 한 사람이 PC와 휴대폰을 같이 써도 1명. 10분 안에 활동하면 '지금 접속'." right={<Clock />} />
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {kpi.map(([code, l, v, foot, dark]) => (
-          <div key={code} className={`rounded-[16px] px-4 py-3.5 border min-w-0 ${dark ? "bg-[linear-gradient(135deg,#0F1A30,#1B2B4B_60%,#2D4C82)] text-white border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}>
-            <div className="flex items-center justify-between gap-2"><span className={`text-[13px] font-bold truncate ${dark ? "text-white/70" : "text-[#5B6B85]"}`}>{l}</span><span className={`text-[10px] font-extrabold tracking-[0.16em] ${dark ? "text-[#8FB0F0]" : "text-[#94A3B8]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{code}</span></div>
-            <div className="text-[28px] font-black mt-1 leading-none" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{live.ready ? v : "-"}<span className={`text-[13px] ml-1 ${dark ? "text-white/50" : "text-[#9AA9C3]"}`}>명</span></div>
-            <div className={`text-[12px] font-semibold mt-1.5 truncate ${dark ? "text-white/60" : "text-[#7A879C]"}`}>{foot}</div>
-          </div>
-        ))}
-      </div>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] items-start">
-        <LiveNowPanel onCompany={openCompany} />
-        <div className="grid gap-4 min-w-0">
-          <LivePanel code="BY COMPANY" title="회사별 접속 (24시간)" right={<span className="text-[12px] font-bold text-[#7A879C] inline-flex items-center gap-3"><span className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm bg-[#1B2B4B] inline-block" />지금</span><span className="inline-flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm bg-[#B9C8E4] inline-block" />24시간</span></span>}>
-            {coRows.length === 0 ? <div className="py-10 text-center text-[#9AA9C3] text-[14px]">최근 24시간 접속이 없습니다</div> : (
-              <div style={{ height: Math.max(140, coRows.length * 34 + 20) }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={coRows} layout="vertical" margin={{ top: 0, right: 12, left: 0, bottom: 0 }} onClick={(e) => e?.activeLabel && openCompany?.(e.activeLabel)}>
-                    <CartesianGrid stroke="#EEF1F6" horizontal={false} />
-                    <XAxis type="number" allowDecimals={false} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#9ca3af", fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
-                    <YAxis type="category" dataKey="name" width={phone ? 84 : 110} axisLine={false} tickLine={false} tick={{ fontSize: 12.5, fill: "#0F1A30", fontWeight: 700 }} />
-                    <Tooltip cursor={{ fill: "rgba(27,43,75,.05)" }} formatter={(v, n) => [`${v}명`, n === "now" ? "지금 접속" : "24시간(지금 제외)"]} contentStyle={{ borderRadius: 10, border: "1px solid #E3E8F0", fontSize: 13, fontWeight: 700 }} />
-                    <Bar dataKey="now" stackId="a" fill="#1B2B4B" radius={[4, 0, 0, 4]} barSize={16} />
-                    <Bar dataKey="day" stackId="a" fill="#B9C8E4" radius={[0, 4, 4, 0]} barSize={16} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </LivePanel>
-          <SignupTimeline max={14} onCompany={openCompany} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ═══════════════════════ 본체 ═══════════════════════
 // ⭐ 2026-11-02 관리자센터 — 실시간 층(PlatformLiveProvider)으로 감싼다. 회사 거르기 해제는 구독보다 먼저(렌더 중)
-export default function PlatformCenter({ user }) {
+// 🛰 2026-11-18 리디자인 — PC: 왼쪽 세로 메뉴(전체 묶음 한눈에) + 위 작은 탭 / 모바일: 위 묶음 · 메뉴 · 작은 탭
+export default function PlatformCenter({ user, demoLive = null }) {
   // 🏢 관리센터는 모든 운송사를 봐야 하므로 회사 거르기를 끈다(자식 화면 구독보다 먼저 — 렌더 중에)
   const [releaseBypass] = React.useState(() => pushTenantBypass());
   React.useEffect(() => releaseBypass, [releaseBypass]);
-  return <PlatformLiveProvider><PlatformCenterInner user={user} /></PlatformLiveProvider>;
+  return <PlatformLiveProvider demo={demoLive}><PlatformCenterInner user={user} /></PlatformLiveProvider>;
 }
 function PlatformCenterInner({ user }) {
   const navigate = useNavigate();
   const live = usePlatformLive();
-  const [tab, setTabState] = React.useState(() => { try { const t = localStorage.getItem("pcTab") || "todo"; return TAB_ALIAS[t] || t; } catch { return "todo"; } });
-  const setTab = React.useCallback((t) => { setTabState(t); try { localStorage.setItem("pcTab", t); } catch { /* 무시 */ } }, []);
+  const [tab, setTabState] = React.useState(() => { try { const t = localStorage.getItem("pcTab") || "command"; return TAB_ALIAS[t] || t; } catch { return "command"; } });
+  const setTab = React.useCallback((t) => { setTabState(TAB_ALIAS[t] || t); try { localStorage.setItem("pcTab", TAB_ALIAS[t] || t); } catch { /* 무시 */ } }, []);
   const [contractCtx, setContractCtx] = React.useState({ initial: null, fromQuote: null, key: 0 });
   const [focusCompany, setFocusCompany] = React.useState(null);
   const section = sectionOf(tab);
   const phone = usePhone();
-  // 🧹 없어진 메뉴 · 휴대폰에서 숨긴 메뉴를 기억하고 있으면 그 묶음의 첫 메뉴로
+  // 🧹 없어진 메뉴 · 휴대폰에서 숨긴 메뉴를 기억하고 있으면 그 메뉴의 첫 화면으로
   React.useEffect(() => {
-    const item = SECTIONS.flatMap((x) => x.items).find((i) => i.key === tab);
-    if (!item) { setTab("todo"); return; }
-    if (phone && item.phoneHide) setTab(sectionOf(tab).items.find((i) => !i.phoneHide)?.key || "todo");
+    const item = itemOf(tab);
+    if (!item) { setTab("command"); return; }
+    if (phone && PHONE_HIDE.has(tab)) {
+      const alt = [item.key, ...(item.also || [])].find((k) => !PHONE_HIDE.has(k));
+      setTab(alt || sectionOf(tab).items.find((i) => !PHONE_HIDE.has(i.key))?.key || "command");
+    }
   }, [tab, phone, setTab]);
-  React.useEffect(() => { document.title = "LogisWeb 관리자 관리센터"; }, []);
+  React.useEffect(() => { document.title = "LogisWeb 관리자센터"; }, []);
   const toApp = () => { try { sessionStorage.setItem("kpEntry", "app"); } catch { /* 무시 */ } navigate("/app"); };
   const logout = async () => { if (!(await kpConfirm("로그아웃할까요?"))) return; try { sessionStorage.removeItem("kpEntry"); } catch { /* 무시 */ } await signOut(auth).catch(() => {}); navigate("/login"); };
   const openContract = (patch) => { setContractCtx((c) => ({ initial: null, fromQuote: null, ...patch, key: c.key + 1 })); setTab("contract:new"); };
@@ -1315,139 +1261,162 @@ function PlatformCenterInner({ user }) {
   // ⭐ 2026-11-06 허브 회원 승인 대기 개수(메뉴 배지)
   const [hubPending, setHubPending] = React.useState(0);
   React.useEffect(() => onSnapshot(query(collection(db, "hubMembers"), where("status", "==", "pending"), limit(200)), (s) => setHubPending(s.size), () => setHubPending(0)), []);
-  // 메뉴 배지(처리 대기 개수)
+  // 메뉴 배지(처리 대기 개수) — 합친 메뉴는 안의 화면 배지를 더한다
   const P = live?.pending;
-  const badges = {
+  const raw = {
     applications: P ? P.transport.length + P.shipper.length : 0,
+    hubMembers: hubPending,
     inquiries: P ? P.inquiries.length : 0,
     payments: P ? P.planReqs.length : 0,
     support: P?.support ? P.support.length : 0, // ⭐ 2026-11-02 원격지원 —
-    hubMembers: hubPending,
   };
+  const badgeOf = (item) => [item.key, ...(item.also || [])].reduce((a, k) => a + (raw[k] || 0), 0);
   const liveBadge = live?.ready ? live.totals.onlineNow : 0;
-  const sectionsView = SECTIONS.map((s) => ({ ...s, items: s.items.filter((it) => !(phone && it.phoneHide)).map((it) => (it.key === "live" ? { ...it, badge: liveBadge, soft: true } : badges[it.key] ? { ...it, badge: badges[it.key] } : it)) }));
+  const sectionsView = SECTIONS.map((s) => ({ ...s, items: s.items.filter((i) => !(phone && [i.key, ...(i.also || [])].every((k) => PHONE_HIDE.has(k)))).map((i) => (i.key === "live" ? { ...i, badge: liveBadge, soft: true } : badgeOf(i) ? { ...i, badge: badgeOf(i) } : i)) }));
   const sectionView = sectionsView.find((s) => s.key === section.key) || sectionsView[0];
-  const secBadge = (s) => s.items.reduce((a, it) => a + (it.key !== "live" && typeof it.badge === "number" ? it.badge : 0), 0);
+  const secBadge = (s) => s.items.reduce((a, i) => a + (!i.soft && typeof i.badge === "number" ? i.badge : 0), 0);
+  const curItem = itemOf(tab);
+  const subs = (SUBTABS[curItem?.key] || []).filter(([k]) => !(phone && PHONE_HIDE.has(k))).map(([k, l]) => [k, l, raw[k] || 0]);
 
   let body = null;
   if (MONITOR_TABS.includes(tab)) {
     body = (
-      <PlatformMonitor bare tab={tab} onTab={setTab} onContract={(q) => openContract({ fromQuote: q })} focusCompany={focusCompany} onFocusDone={clearFocus} />
+      <PlatformMonitor bare tab={tab} onTab={setTab} onContract={(q) => openContract({ fromQuote: q })} focusCompany={focusCompany} onFocusDone={clearFocus} demoStats={DEMO_STATS()} />
     );
-  } else if (tab === "todo") body = <TodayPanel go={setTab} openCompany={openCompany} />;
-  else if (tab === "live") body = <LiveTab openCompany={openCompany} />;
-  else if (tab === "ai:hub") body = <AiTeamHub go={setTab} />; // 🤖 2026-11-06 AI 팀
-  else if (tab.startsWith("ai:")) body = <AiTeamChat teamKey={tab.slice(3)} />;
+  } else if (tab === "command") body = <CommandDeck go={setTab} openCompany={openCompany} />;
+  else if (tab === "todo") body = <TodayPanel go={setTab} openCompany={openCompany} />;
+  else if (tab === "live") body = <TrafficView openCompany={openCompany} />;
+  else if (tab.startsWith("ai:")) body = <AiHq tab={tab} go={setTab} />; // 🤖 2026-11-18 AI 본부(명단 + 개요 · 팀 대화)
   // ⭐ 2026-11-02 원격지원 — 요청 목록 · 승인/거절/완료 · 화면 보기 · 원격 번호
-  // ⭐ 2026-11-05 원격 지원 걸기 — 설명에 "먼저 걸기" 추가
-  else if (tab === "support") body = <><Hero en="DASHBOARD · SUPPORT" title="원격 지원" desc="직원이 보낸 원격 지원 요청을 승인하거나, [원격 지원 걸기]로 직원에게 먼저 요청합니다(직원이 수락해야 시작). 직원 화면을 실시간으로 보고 제어하거나(화면 공유 · 제어는 직원이 허용할 때만) 원격 프로그램 번호를 받습니다." right={<Clock />} /><RemoteSupportAdminPanel me={user} /></>;
+  else if (tab === "support") body = <><Hero en="COMMAND · SUPPORT" title="원격 지원" desc="직원이 보낸 원격 지원 요청을 승인하거나, [원격 지원 걸기]로 직원에게 먼저 요청해요(직원이 수락해야 시작). 직원 화면을 실시간으로 보고 제어하거나(직원이 허용할 때만) 원격 프로그램 번호를 받아요." right={<Clock />} /><RemoteSupportAdminPanel me={user} /></>;
   else if (tab === "inquiries") body = <InquiriesPanel toQuote={(q) => { try { sessionStorage.setItem("kpQuoteSeed", JSON.stringify({ customer: q.companyName || "", contact: q.name || "", phone: q.phone || "" })); } catch { /* 무시 */ } setTab("sales:quote"); }} />;
-  else if (tab === "contract:list") body = <><Hero en="CONTRACTS · STATUS" title="계약 현황" desc="작성 → 서명 요청 → 고객 전자서명 → 체결까지 한 곳에서. 만료 2개월 전부터 갱신 대상으로 표시됩니다." /><ContractList onNew={() => openContract({})} onEdit={(c) => openContract({ initial: c })} /></>;
-  else if (tab === "contract:new") body = <><Hero en="CONTRACTS · NEW" title={contractCtx.initial ? "계약서 수정" : "계약서 작성"} desc="견적을 불러오면 요금·기간이 자동으로 채워집니다. 저장하고 서명 요청을 누르면 고객용 서명 링크가 복사됩니다." /><ContractBuilder key={contractCtx.key} initial={contractCtx.initial} fromQuoteDoc={contractCtx.fromQuote} onDone={() => setTab("contract:list")} /></>;
-  else if (tab === "contract:templates") body = <><Hero en="CONTRACTS · TEMPLATES" title="계약서 양식" desc="기본 이용계약서를 바탕으로 조항을 자유롭게 고치고, 양식을 여러 개 둘 수 있습니다." /><ContractTemplates /></>;
-  else if (tab === "hubMembers") body = <><Hero en="CLIENTS · HUB MEMBERS" title="허브 회원 승인" desc="로지스웹 허브(화물 콜)에 가입 신청한 차주 · 화주 · 운송사의 신청서와 서류를 확인하고 승인 · 거절합니다. 로지스웹 계정으로 들어온 회원은 자동 승인되어 여기서 정지만 할 수 있습니다." /><React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><HubMembersAdmin me={user} /></React.Suspense></>;
+  else if (tab === "contract:list") body = <><Hero en="CONTRACTS · STATUS" title="계약 현황" desc="작성 → 서명 요청 → 고객 전자서명 → 체결까지 한 곳에서 봐요. 만료 2개월 전부터 갱신 대상으로 표시돼요." /><ContractList onNew={() => openContract({})} onEdit={(c) => openContract({ initial: c })} /></>;
+  else if (tab === "contract:new") body = <><Hero en="CONTRACTS · NEW" title={contractCtx.initial ? "계약서 수정" : "계약서 작성"} desc="견적을 불러오면 요금 · 기간이 자동으로 채워져요. 저장하고 서명 요청을 누르면 고객용 서명 링크가 복사돼요." /><ContractBuilder key={contractCtx.key} initial={contractCtx.initial} fromQuoteDoc={contractCtx.fromQuote} onDone={() => setTab("contract:list")} /></>;
+  else if (tab === "contract:templates") body = <><Hero en="CONTRACTS · TEMPLATES" title="계약서 양식" desc="기본 이용계약서를 바탕으로 조항을 자유롭게 고치고, 양식을 여러 개 둘 수 있어요." /><ContractTemplates /></>;
+  else if (tab === "hubMembers") body = <><Hero en="CLIENTS · HUB MEMBERS" title="허브 회원 승인" desc="로지스웹 허브(화물 콜)에 가입 신청한 차주 · 화주 · 운송사의 신청서와 서류를 보고 승인 · 거절해요. 로지스웹 계정으로 들어온 회원은 자동 승인되어 여기서 정지만 할 수 있어요." /><React.Suspense fallback={<AdmEmpty />}><HubMembersAdmin me={user} /></React.Suspense></>;
   else if (tab === "payments") body = <PaymentsPanel />;
-  else if (tab === "usage") body = <UsagePanel />;
+  else if (tab === "usage") body = <CarrierUsageView openCompany={openCompany} />;
+  else if (tab === "usage:limits") body = <UsagePanel />;
   else if (tab === "msgUsage") body = <MessageUsagePanel />;
-  else if (tab === "cost") body = <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><CostPanel openUsage={() => setTab("usage")} /></React.Suspense>;
+  else if (tab === "cost") body = <WalletView openSettings={() => setTab("cost:pnl")} />;
+  else if (tab === "cost:pnl") body = <React.Suspense fallback={<AdmEmpty />}><CostPanel openUsage={() => setTab("usage:limits")} /></React.Suspense>;
   else if (tab === "notices") body = <NoticesPanel />;
-  else if (tab === "notifTemplate") body = <><Hero en="OPERATIONS · MESSAGES" title="알림 문구" desc="배차 알림 등 자동 발송 문구를 관리합니다." /><NotifTemplatePanel /></>;
-    else if (tab === "homepage") body = phone
-    ? <><Hero en="OPERATIONS · HOMEPAGE" title="홈페이지" desc="" /><div className="rounded-2xl bg-white border border-[#E3E8F0] p-5 text-[14px] text-[#3A4A66] leading-relaxed">홈페이지 편집은 PC 화면에서 해 주세요. 사진·글자 위치를 끌어서 옮기는 편집이라 넓은 화면이 필요합니다.<br /><a className="font-black text-[#2D5BD8]" href="https://www.logisweb.co.kr/" target="_blank" rel="noopener noreferrer">지금 홈페이지 보기 ↗</a></div></>
-    : <React.Suspense fallback={<div className="p-6 text-[13px] text-[#7A879C]">편집기를 여는 중…</div>}><HomepageEditor /></React.Suspense>;
-  else if (tab === "integrations") body = <><Hero en="OPERATIONS · INTEGRATIONS" title="연동 설정" desc="국세청 · 기상청 · 팝빌 연동 상태를 보고 시험해요. 키는 Firebase 비밀값에만 두고 화면에는 보이지 않아요." /><React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중</div>}><IntegrationSettings /></React.Suspense></>;
+  else if (tab === "notifTemplate") body = <><Hero en="OPERATIONS · MESSAGES" title="알림 문구" desc="배차 알림 등 자동으로 보내는 문구를 관리해요." /><NotifTemplatePanel /></>;
+  else if (tab === "homepage") body = phone
+    ? <><Hero en="OPERATIONS · HOMEPAGE" title="홈페이지" desc="" /><AdmPanel><div className="text-[14px] leading-relaxed" style={{ color: G.sub }}>홈페이지 편집은 PC 화면에서 해 주세요. 사진 · 글자 위치를 끌어서 옮기는 편집이라 넓은 화면이 필요해요.<br /><a className="font-black" style={{ color: G.goldHi }} href="https://www.logisweb.co.kr/" target="_blank" rel="noopener noreferrer">지금 홈페이지 보기 ↗</a></div></AdmPanel></>
+    : <React.Suspense fallback={<AdmEmpty>편집기를 여는 중이에요…</AdmEmpty>}><HomepageEditor /></React.Suspense>;
+  else if (tab === "integrations") body = <><Hero en="OPERATIONS · INTEGRATIONS" title="연동 설정" desc="국세청 · 기상청 · 팝빌 연동 상태를 보고 시험해요. 키는 Firebase 비밀값에만 두고 화면에는 보이지 않아요." /><React.Suspense fallback={<AdmEmpty />}><IntegrationSettings /></React.Suspense></>;
   else if (tab === "landingEdit") body = <><Hero en="OPERATIONS · LOGIN SCREEN" title="로그인 화면 꾸미기" desc="계정을 고르는 첫 화면(트럭이 지나가는 화면)의 배경 사진 · 영상 · 글꼴 · 아래 문구를 바꿔요." /><LandingPageEditPanel /></>;
   else if (tab === "brand") body = <><Hero en="OPERATIONS · BRAND" title="브랜드 디자인" desc="로고를 올리고 부분마다 색 · 굵기를 고쳐요. 로고가 들어가는 자리마다 바탕도 바꿔 보며 미리 볼 수 있어요." /><React.Suspense fallback={null}><BrandStudioLazy /></React.Suspense></>;
   else if (tab === "mobilePreview") body = <><Hero en="OPERATIONS · MOBILE" title="모바일 화면" desc="지금 로그인한 계정의 모바일 화면을 휴대폰 크기 그대로, 크게 확인해요." /><React.Suspense fallback={null}><MobilePreviewPanelLazy /></React.Suspense></>;
-  else if (tab === "sessions") body = <><Hero en="SECURITY · SESSIONS" title="로그인 관리" desc="지금 로그인 중인 모든 기기를 보고, 필요하면 강제로 내보냅니다." /><AdminSessionsPanel isTotalMaster company="" /></>;
+  else if (tab === "sessions") body = <><Hero en="SECURITY · SESSIONS" title="로그인 관리" desc="지금 로그인 중인 모든 기기를 보고, 필요하면 강제로 내보내요." /><AdminSessionsPanel isTotalMaster company="" /></>;
   else if (tab === "sessionLogs") body = <SessionLogsPanel />;
-  else if (tab === "errorReports") body = <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}><ErrorReportsPanel /></React.Suspense>;
-  else if (tab === "securityEvents") body = <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}><SecurityEventsPanel /></React.Suspense>;
+  else if (tab === "errorReports") body = <React.Suspense fallback={<AdmEmpty />}><ErrorReportsPanel /></React.Suspense>;
+  else if (tab === "securityEvents") body = <React.Suspense fallback={<AdmEmpty />}><SecurityEventsPanel /></React.Suspense>;
   else if (tab === "tenancy") body = <TenancyPanel />;
   else if (tab === "sheetImport") body = <><Hero en="DATA · SHEETS" title="구글시트 연동" desc="운송사를 고르면 연결된 시트를 보고 가져오기 · 보내기 · 칸 맞추기를 해요. 처음 세팅할 때 쓰던 배차일지를 옮기는 것도 여기서 해요." /><SheetHubForCompany /></>;
-  // ⭐ 2026-11-06 운송사 초기화는 이제 관리센터에서만(배차 프로그램 관리자메뉴에서 뺐다) — 계약종료 + 초기화는 계약 › 이용 계약·만료
-  else if (tab === "companyReset") body = <><Hero en="DATA · RESET" title="운송사 초기화" desc="운송사 데이터를 모두 지웁니다 — 7일 동안 보관함에서 복원할 수 있습니다. 계약을 끝내며 지우려면 계약 › 이용 계약·만료를 쓰세요." right={<button type="button" onClick={() => setTab("contract:life")} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/20 text-[14px] font-black whitespace-nowrap">이용 계약·만료 ›</button>} /><CompanyResetPanel /></>;
-  else if (tab === "testSeed") body = <><Hero en="DATA · TEST DATA" title="테스트 데이터" desc="테스트운송사에 가짜 데이터를 채우거나 다시 채워요. 다른 운송사에는 넣을 수 없어요." /><React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중</div>}><TestSeedPanel /></React.Suspense></>;
-  else if (tab === "contract:life") body = <><Hero en="CONTRACTS · LIFECYCLE" title="이용 계약·만료" desc="운송사별 계약 기간을 정하고, 만료 30·7·1일 전 안내를 보냅니다. 계약종료하면 데이터는 남기고 그 회사 사람은 접속할 수 없습니다." right={<Clock />} /><ContractLifecyclePanel openCompany={openCompany} /></>;
-  else if (tab === "release") body = <><Hero en="OPERATIONS · RELEASE" title="업데이트 배포" desc="새 화면을 올려도 여기서 배포해야 가입자 화면이 바뀝니다. 최고관리자 · 부관리자는 항상 최신 화면을 먼저 봅니다." /><ReleasePanel>
+  // ⭐ 2026-11-06 운송사 초기화는 이제 관리센터에서만(배차 프로그램 관리자메뉴에서 뺐다) — 계약종료 + 초기화는 영업 · 계약 › 이용 기간 · 만료
+  else if (tab === "companyReset") body = <><Hero en="DATA · RESET" title="운송사 초기화" desc="운송사 데이터를 모두 지워요 — 7일 동안 보관함에서 되살릴 수 있어요. 계약을 끝내며 지우려면 영업 · 계약 › 이용 기간 · 만료를 쓰세요." right={<AdmBtn onClick={() => setTab("contract:life")}>이용 기간 · 만료 ›</AdmBtn>} /><CompanyResetPanel /></>;
+  else if (tab === "testSeed") body = <><Hero en="DATA · TEST DATA" title="테스트 데이터" desc="테스트운송사에 가짜 데이터를 채우거나 다시 채워요. 다른 운송사에는 넣을 수 없어요." /><React.Suspense fallback={<AdmEmpty />}><TestSeedPanel /></React.Suspense></>;
+  else if (tab === "contract:life") body = <><Hero en="CONTRACTS · LIFECYCLE" title="이용 기간 · 만료" desc="운송사별 계약 기간을 정하고, 만료 30 · 7 · 1일 전 안내를 보내요. 계약종료하면 데이터는 남기고 그 회사 사람은 접속할 수 없어요." right={<Clock />} /><ContractLifecyclePanel openCompany={openCompany} /></>;
+  else if (tab === "release") body = <><Hero en="OPERATIONS · RELEASE" title="업데이트 배포" desc="새 화면을 올려도 여기서 배포해야 가입자 화면이 바뀌어요. 최고관리자 · 부관리자는 항상 최신 화면을 먼저 봐요." /><ReleasePanel>
     {/* 🧹 2026-11-14 '화주사 강제 업데이트' — 2026-11-15 고급 설정 안으로 */}
-    <div><div className="text-[14px] font-black text-[#0F1A30] mb-2">화주사 화면 강제 업데이트</div><ShipperForceUpdatePanel currentVersion={typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : ""} /></div></ReleasePanel></>;
-  else if (tab === "subAdmin") body = <><Hero en="SECURITY · SUB ADMIN" title="부관리자" desc="최고관리자와 같은 권한을 가진 부관리자(1명)를 보고 지정·해제합니다." /><SubAdminPanel /></>;
+    <div><div className="text-[14px] font-black mb-2" style={{ color: G.ink }}>화주사 화면 강제 업데이트</div><ShipperForceUpdatePanel currentVersion={typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : ""} /></div></ReleasePanel></>;
+  else if (tab === "subAdmin") body = <><Hero en="SECURITY · SUB ADMIN" title="부관리자" desc="최고관리자와 같은 권한을 가진 부관리자(1명)를 보고 지정 · 해제해요." /><SubAdminPanel /></>;
 
-  if (phone) return <PlatformMobileShell user={user} sections={sectionsView} section={sectionView} tab={tab} setTab={setTab} toApp={toApp} logout={logout} secBadge={secBadge}>{body}</PlatformMobileShell>;
+  const subBar = subs.length > 1 ? <div className="mb-3 sm:mb-4 flex"><Seg value={tab} onChange={setTab} items={subs} /></div> : null;
+  const content = <>{subBar}<div key={tab} className="adm-in">{body}</div></>;
+
+  if (phone) return <PlatformMobileShell user={user} sections={sectionsView} section={sectionView} tab={tab} curItem={curItem} setTab={setTab} toApp={toApp} logout={logout} secBadge={secBadge}>{content}</PlatformMobileShell>;
 
   return (
-    <div className="kp-pc kp-pcenter min-h-screen bg-[#EEF1F6]">
-      <style>{PC_HEADER_CSS}</style>
-      {/* ── 상단 바 ── ⭐ 2026-11-02 관리자센터: 메뉴 버튼 h-10 · 14px · 아이콘 · 처리 대기 배지 · 좁으면 가로 스크롤 */}
-      <header className="kp-pc-head sticky top-0 z-40 h-16 flex items-center gap-3 px-4 2xl:px-6 text-white">
-        <div className="flex items-center gap-2.5 shrink-0">
+    <div className="kp-adm kp-pcenter min-h-screen">
+      <style>{ADM_CSS}{PC_SHELL_CSS}</style>
+      <div className="adm-grid" aria-hidden />
+      {/* ── 왼쪽 세로 메뉴 ── */}
+      <aside className="adm-side fixed left-0 top-0 bottom-0 z-40 w-[244px] flex flex-col">
+        <div className="px-4 pt-4 pb-3 flex items-center gap-2.5">
           <LogisMark size={36} spot="admin" />
-          <div className="leading-none">
+          <div className="leading-none min-w-0">
             <LogisWordmark height={12} spot="admin" />
-            <div className="text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mt-1.5 whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>PLATFORM ADMIN</div>
+            <div className="text-[9.5px] font-extrabold tracking-[0.32em] mt-1.5 whitespace-nowrap" style={{ ...NUM, color: G.gold }}>ADMIN CENTER</div>
           </div>
         </div>
-        <span className="hidden 2xl:block w-px h-7 bg-white/15 shrink-0" />
-        <nav className="kp-pc-nav flex-1 min-w-0 flex items-center gap-1 overflow-x-auto">
+        <div className="px-3 pb-2"><HeaderLivePill onClick={() => setTab("live")} /></div>
+        <nav className="adm-scroll flex-1 overflow-y-auto px-2.5 pb-3">
           {sectionsView.map((s) => {
-            const on = s.key === section.key;
             const b = secBadge(s);
+            const secOn = s.key === section.key;
             return (
-              <button key={s.key} type="button" onClick={() => setTab(s.items[0].key)} aria-current={on ? "page" : undefined}
-                className={`kp-pc-navbtn relative shrink-0 h-10 px-3.5 2xl:px-4 rounded-xl text-[14px] whitespace-nowrap inline-flex items-center gap-2 transition ${on ? "kp-on font-black" : "font-bold text-white/70 hover:text-white hover:bg-white/[0.09]"}`}>
-                <ShellIcon name={s.icon} size={16} className={`hidden 2xl:block ${on ? "text-[#2D4C82]" : "text-[#8FB0F0]"}`} />
-                {s.label}
-                {b > 0 && <span className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-black inline-flex items-center justify-center ${on ? "bg-[#1B2B4B] text-white" : "bg-white text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{b > 99 ? "99+" : b}</span>}
-              </button>
+              <div key={s.key} className="mt-3 first:mt-1">
+                <div className="px-2 mb-1 flex items-center gap-2">
+                  <span className="text-[10px] font-extrabold tracking-[0.24em] whitespace-nowrap" style={{ ...NUM, color: secOn ? G.gold : "rgba(215,188,130,.5)" }}>{s.en}</span>
+                  <span className="h-px flex-1" style={{ background: secOn ? "rgba(215,188,130,.35)" : "rgba(215,188,130,.1)" }} />
+                  {b > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black inline-flex items-center justify-center" style={{ ...NUM, background: G.gold, color: G.goldInk }}>{b > 99 ? "99+" : b}</span>}
+                </div>
+                {s.items.map((i) => {
+                  const on = curItem?.key === i.key;
+                  return (
+                    <button key={i.key} type="button" onClick={() => setTab(i.key)} data-on={on ? "1" : "0"} aria-current={on ? "page" : undefined}
+                      className="adm-nav w-full h-[38px] px-2.5 rounded-[11px] flex items-center gap-2.5 text-[13.5px] whitespace-nowrap transition">
+                      <ShellIcon name={i.icon} size={16} className="shrink-0" />
+                      <span className="truncate">{i.label}</span>
+                      {typeof i.badge === "number" && i.badge > 0 && <span className={`ml-auto min-w-[20px] h-5 px-1.5 rounded-full text-[10.5px] font-black inline-flex items-center justify-center ${i.soft ? "adm-badge-soft" : "adm-badge"}`} style={NUM}>{i.badge > 99 ? "99+" : i.badge}</span>}
+                    </button>
+                  );
+                })}
+              </div>
             );
           })}
         </nav>
-        <div className="flex items-center gap-2 shrink-0">
-          <HeaderLivePill onClick={() => setTab("live")} />
-          <span className="hidden 2xl:inline-flex items-center gap-1.5 px-3 h-10 rounded-xl bg-white/[0.06] ring-1 ring-white/10"><Clock /></span>
-          <button type="button" onClick={toApp} className="h-10 px-3.5 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black whitespace-nowrap hover:bg-[#E9F0FC]" title="배차 프로그램으로 전환">배차 프로그램 ↗</button>
-          <span className="hidden min-[1700px]:inline text-[12.5px] text-white/55 max-w-[180px] truncate">{user?.email}</span>
-          <button type="button" onClick={logout} className="h-10 px-3.5 rounded-xl bg-white/10 ring-1 ring-white/15 text-[14px] font-black whitespace-nowrap hover:bg-white/20" title={user?.email || ""}>로그아웃</button>
+        <div className="px-3 py-3 space-y-2" style={{ borderTop: `1px solid ${G.line}` }}>
+          <button type="button" onClick={toApp} className="adm-btn-gold w-full h-10 rounded-xl text-[13.5px] font-black" title="배차 프로그램으로 전환">배차 프로그램 ↗</button>
+          <div className="flex items-center gap-2">
+            <span className="flex-1 min-w-0 text-[11.5px] truncate" style={{ color: G.dim }} title={user?.email || ""}>{user?.email}</span>
+            <button type="button" onClick={logout} className="adm-btn h-8 px-2.5 rounded-lg text-[12px] font-black whitespace-nowrap">로그아웃</button>
+          </div>
         </div>
-      </header>
-
-      {/* ── 왼쪽 메뉴 + 본문 ── */}
-      <div className="px-4 py-4">
-        <KpSubNav code={sectionView.en} title={sectionView.label} icon={sectionView.icon} active={tab} onSelect={setTab} items={sectionView.items}>
-          {body}
-        </KpSubNav>
+      </aside>
+      {/* ── 본문 ── */}
+      <div className="pl-[244px] relative">
+        <header className="adm-top sticky top-0 z-30 h-[60px] px-5 2xl:px-7 flex items-center gap-3">
+          <div className="min-w-0 flex items-center gap-2.5">
+            <span className="text-[10.5px] font-extrabold tracking-[0.26em] whitespace-nowrap" style={{ ...NUM, color: G.goldDim }}>{sectionView.en}</span>
+            <span style={{ color: "rgba(215,188,130,.35)" }}>/</span>
+            <span className="text-[16px] font-black whitespace-nowrap" style={{ color: G.ink }}>{curItem?.label || ""}</span>
+          </div>
+          <div className="ml-auto flex items-center gap-2.5 shrink-0">
+            <span className="hidden xl:inline-flex items-center gap-2 h-9 px-3 rounded-xl" style={{ background: "rgba(255,255,255,.04)", border: `1px solid ${G.line}` }}><span className="text-[10px] font-extrabold tracking-[0.2em]" style={{ ...NUM, color: G.goldDim }}>KST</span><Clock /></span>
+          </div>
+        </header>
+        <main className="adm-main px-5 2xl:px-7 pt-4 pb-10 min-w-0 relative">{content}</main>
       </div>
     </div>
   );
 }
-const PC_HEADER_CSS = `
-.kp-pcenter .kp-pc-head { background: radial-gradient(700px 120px at 30% -60px, rgba(75,108,183,.35), transparent 70%), linear-gradient(90deg,#0B1428 0%,#0F1A30 45%,#1B2B4B 100%); box-shadow: 0 1px 0 rgba(255,255,255,.06) inset, 0 8px 24px rgba(11,20,40,.28); }
-.kp-pcenter .kp-pc-head::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(143,176,240,.5), transparent); pointer-events: none; }
-.kp-pcenter .kp-pc-nav { scrollbar-width: none; mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); }
-.kp-pcenter .kp-pc-nav::-webkit-scrollbar { display: none; }
-/* ⭐ 2026-11-02 관리자센터2 — 관리센터 전체 글자 키움. index.css가 text-[11px]→13 · [12px]→14 · [13px]→15 로 올리므로
-   나머지(소수점·14px·KPI 숫자)만 여기서 한 단계씩 올린다 — 본문/표 ≥14.5px, 라벨 ≥13.5px, 작은 영문 코드 ≥11.5px */
-.kp-pcenter .text-\\[10px\\] { font-size: 11.5px !important; }
-.kp-pcenter .text-\\[10\\.5px\\] { font-size: 12px !important; }
-.kp-pcenter .text-\\[11\\.5px\\] { font-size: 13px !important; }
-.kp-pcenter .text-\\[12\\.5px\\] { font-size: 13.5px !important; }
-.kp-pcenter .text-\\[13\\.5px\\] { font-size: 14.5px !important; }
-.kp-pcenter main .text-\\[14px\\] { font-size: 15px !important; }
-.kp-pcenter .text-\\[14\\.5px\\] { font-size: 15px !important; }
-.kp-pcenter .text-xs { font-size: 13px !important; }
-.kp-pcenter .text-sm { font-size: 14.5px !important; }
-.kp-pcenter .text-\\[20px\\] { font-size: 22px !important; }
-.kp-pcenter .text-\\[22px\\] { font-size: 25px !important; }
-.kp-pcenter .text-\\[26px\\] { font-size: 30px !important; }
-.kp-pcenter .text-\\[28px\\] { font-size: 32px !important; }
-.kp-pcenter .kp-pc-navbtn.kp-on { background: linear-gradient(180deg,#FFFFFF 0%,#E9F0FC 100%); color: #0F1A30; box-shadow: 0 6px 16px rgba(0,0,0,.28), 0 0 0 1px rgba(255,255,255,.6) inset, 0 0 18px rgba(143,176,240,.3); }
+const PC_SHELL_CSS = `
+.kp-adm .adm-side { background: radial-gradient(420px 280px at 0% 0%, rgba(215,188,130,.13), transparent 70%), linear-gradient(180deg, #04070F 0%, #0A1328 55%, #070D1C 100%); box-shadow: inset -1px 0 0 rgba(215,188,130,.2), 10px 0 30px rgba(0,0,0,.25); }
+.kp-adm .adm-top { background: linear-gradient(180deg, rgba(6,10,20,.92), rgba(8,13,26,.78)); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(215,188,130,.14); }
+.kp-adm .adm-nav[data-on="0"] { color: rgba(226,232,245,.72); font-weight: 700; }
+.kp-adm .adm-nav[data-on="0"] svg { color: rgba(215,188,130,.7); }
+.kp-adm .adm-nav[data-on="0"]:hover { background: rgba(215,188,130,.07); color: #fff; }
+.kp-adm .adm-nav[data-on="1"] { background: linear-gradient(180deg, #F3E3BC 0%, #D7BC82 100%); color: #1A1405; font-weight: 900; box-shadow: 0 8px 20px rgba(0,0,0,.35), 0 0 0 1px rgba(255,240,210,.5) inset, 0 0 18px rgba(215,188,130,.25); }
+.kp-adm .adm-nav[data-on="1"] svg { color: #5A4517; }
+.kp-adm .adm-badge { background: ${G.gold}; color: ${G.goldInk}; }
+.kp-adm .adm-nav[data-on="1"] .adm-badge, .kp-adm .adm-nav[data-on="1"] .adm-badge-soft { background: ${G.goldInk}; color: ${G.goldHi}; }
+.kp-adm .adm-badge-soft { background: rgba(215,188,130,.16); color: ${G.goldHi}; }
+.kp-adm button[title*="지금 접속"] { width: 100%; justify-content: center; background: rgba(215,188,130,.08) !important; --tw-ring-color: rgba(215,188,130,.3) !important; }
+/* ⭐ 2026-11-02 관리자센터2 — 관리센터 전체 글자 키움(소수점 크기만 한 단계씩) */
+.kp-pcenter .adm-main .text-\\[10px\\] { font-size: 11.5px !important; }
+.kp-pcenter .adm-main .text-\\[10\\.5px\\] { font-size: 12px !important; }
+.kp-pcenter .adm-main .text-\\[11\\.5px\\] { font-size: 13px !important; }
+.kp-pcenter .adm-main .text-\\[12\\.5px\\] { font-size: 13.5px !important; }
+.kp-pcenter .adm-main .text-\\[13\\.5px\\] { font-size: 14.5px !important; }
+.kp-pcenter .adm-main .text-\\[14\\.5px\\] { font-size: 15px !important; }
 `;
 
 // ═══════════════════════ 📱 모바일 관리센터 ═══════════════════════
-//  PC와 같은 메뉴·화면을 폰 폭에 맞춰 보여준다.
-//   · 상단: 로고 · 배차앱 전환 · 로그아웃 / 큰 메뉴(대시보드~보안) 가로 스크롤 / 속메뉴 가로 스크롤
-//   · 본문: 글자 줄바꿈 없이(표는 가로 스크롤), 간격·글자 크기를 폰에 맞게 줄인다
+//  🛰 2026-11-18 리디자인 — 어두운 골드. 위: 로고 · 지금 접속 · 배차앱 · 로그아웃 / 묶음(가로) / 메뉴(가로) · 본문 위 작은 탭
 const PM_MOBILE_CSS = `
 .kp-pm { -webkit-text-size-adjust: 100%; }
 .kp-pm .kp-pm-scroll { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
@@ -1460,23 +1429,25 @@ const PM_MOBILE_CSS = `
 .kp-pm main .pm-tile, .kp-pm main .pm-tile-dark { padding: 12px 13px 11px !important; border-radius: 14px !important; }
 .kp-pm main .pm-tile > div:first-child > span:last-child, .kp-pm main .pm-tile-dark > div:first-child > span:last-child { display: none; }
 .kp-pm main .pm-tile span[style*="font-size: 32px"], .kp-pm main .pm-tile-dark span[style*="font-size: 32px"] { font-size: 23px !important; }
-/* ⭐ 2026-11-02 관리자센터2 — 폰 글자 한 단계 키움(index.css가 11/12/13px은 이미 13/14/15px로 올림 → 나머지 소수점 크기만) */
 .kp-pm .text-\\[10px\\] { font-size: 11px !important; }
 .kp-pm .text-\\[10\\.5px\\] { font-size: 11.5px !important; }
 .kp-pm .text-\\[11\\.5px\\] { font-size: 12.5px !important; }
-.kp-pm .text-\\[12\\.5px\\] { font-size: 13.5px !important; }
-.kp-pm .text-\\[13\\.5px\\] { font-size: 14px !important; }
 .kp-pm main .text-xs { font-size: 13px !important; }
 .kp-pm main .pm-tile > div:last-child, .kp-pm main .pm-tile-dark > div:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kp-pm main .pm-spark { display: none; } /* ⭐ 2026-11-02 관리자센터 — 폰 타일에선 스파크라인 숨김 */
+.kp-pm main .pm-spark { display: none; }
 .kp-pm main [class*="max-w-[1180px]"] { padding: 20px 16px !important; }
 .kp-pm main .kp-contract h1 { white-space: normal; font-size: 20px !important; letter-spacing: .08em; }
 .kp-pm main .kp-contract { font-size: 14px; }
 .kp-pm main { word-break: keep-all; }
 .kp-pm main [style*="min-width: 1220px"], .kp-pm main [style*="min-width: 960px"], .kp-pm main [style*="min-width: 820px"] { font-size: 13px; }
+.kp-pm .pm-head { background: radial-gradient(500px 120px at 20% -40px, rgba(215,188,130,.16), transparent 70%), linear-gradient(120deg, #04070F 0%, #0A1328 60%, #101C38 100%); box-shadow: 0 1px 0 rgba(215,188,130,.25), 0 8px 22px rgba(0,0,0,.4); }
+.kp-pm .pm-sec[data-on="1"] { background: linear-gradient(180deg, #F3E3BC 0%, #D7BC82 100%); color: #1A1405; font-weight: 900; box-shadow: 0 6px 16px rgba(215,188,130,.25); }
+.kp-pm .pm-sec[data-on="0"] { color: rgba(226,232,245,.7); font-weight: 700; }
+.kp-pm .pm-item[data-on="1"] { background: rgba(215,188,130,.16); color: #F3E3BC; border-color: rgba(215,188,130,.55); }
+.kp-pm .pm-item[data-on="0"] { background: rgba(255,255,255,.03); color: rgba(226,232,245,.75); border-color: rgba(215,188,130,.14); }
 `;
-// ⭐ 2026-11-02 관리자센터 — 버튼을 손가락 크기로(큰 메뉴 h-10·14px, 속메뉴 h-9·13.5px), 처리 대기 배지, 지금 접속 알약
-function PlatformMobileShell({ user, sections = SECTIONS, section, tab, setTab, toApp, logout, secBadge = () => 0, children }) {
+// ⭐ 2026-11-02 관리자센터 — 버튼을 손가락 크기로, 처리 대기 배지, 지금 접속 알약
+function PlatformMobileShell({ user, sections = SECTIONS, section, tab, curItem, setTab, toApp, logout, secBadge = () => 0, children }) {
   const secRef = React.useRef(null);
   const subRef = React.useRef(null);
   // 고른 메뉴가 화면 밖이면 가운데로 끌어온다
@@ -1485,18 +1456,19 @@ function PlatformMobileShell({ user, sections = SECTIONS, section, tab, setTab, 
     window.scrollTo(0, 0);
   }, [tab]);
   return (
-    <div className="kp-pm min-h-screen bg-[#EEF1F6]">
-      <style>{PM_MOBILE_CSS}</style>
-      <header data-kp-spot="admin" className="sticky top-0 z-40 text-white shadow-[0_6px_18px_rgba(11,20,40,0.28)]" style={{ background: "linear-gradient(90deg,#0B1428 0%,#13213F 55%,#1B2B4B 100%)", paddingTop: "env(safe-area-inset-top, 0px)" }}>
+    <div className="kp-pm kp-adm min-h-screen">
+      <style>{ADM_CSS}{PM_MOBILE_CSS}</style>
+      <div className="adm-grid" aria-hidden />
+      <header data-kp-spot="admin" className="pm-head sticky top-0 z-40 text-white" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
         <div className="h-[56px] flex items-center gap-2 px-3">
           <LogisMark size={30} spot="admin" />
           <div className="min-w-0 flex-1 leading-none">
-            <div className="text-[14px] font-black whitespace-nowrap">관리자 관리센터</div>
-            <div className="text-[9px] font-extrabold tracking-[0.26em] text-[#8FB0F0] mt-1 truncate whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{user?.email || "PLATFORM"}</div>
+            <div className="text-[15px] font-black whitespace-nowrap">관리자센터</div>
+            <div className="text-[9px] font-extrabold tracking-[0.3em] mt-1 truncate whitespace-nowrap" style={{ ...NUM, color: G.gold }}>ADMIN CENTER</div>
           </div>
           <HeaderLivePill phone onClick={() => setTab("live")} />
-          <button type="button" onClick={toApp} className="shrink-0 h-9 px-2.5 rounded-[10px] bg-white text-[#0F1A30] text-[13px] font-black whitespace-nowrap">배차앱 ↗</button>
-          <button type="button" onClick={logout} aria-label="로그아웃" className="shrink-0 h-9 w-9 rounded-[10px] bg-white/10 ring-1 ring-white/15 flex items-center justify-center" title="로그아웃">
+          <button type="button" onClick={toApp} className="adm-btn-gold shrink-0 h-9 px-2.5 rounded-[10px] text-[13px] font-black whitespace-nowrap">배차앱 ↗</button>
+          <button type="button" onClick={logout} aria-label="로그아웃" className="adm-btn shrink-0 h-9 w-9 rounded-[10px] flex items-center justify-center" title={user?.email || "로그아웃"}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
           </button>
         </div>
@@ -1506,32 +1478,33 @@ function PlatformMobileShell({ user, sections = SECTIONS, section, tab, setTab, 
             const b = secBadge(s);
             return (
               <button key={s.key} type="button" data-on={on ? "1" : "0"} onClick={() => setTab(s.items[0].key)}
-                className={`shrink-0 h-10 px-3.5 rounded-[11px] text-[14px] whitespace-nowrap transition inline-flex items-center gap-1.5 ${on ? "bg-white text-[#0F1A30] font-black" : "text-white/70 font-bold active:bg-white/10"}`}>
-                {s.label}
-                {b > 0 && <span className={`min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-black inline-flex items-center justify-center ${on ? "bg-[#1B2B4B] text-white" : "bg-white text-[#0F1A30]"}`}>{b > 99 ? "99+" : b}</span>}
+                className="pm-sec shrink-0 h-9 px-3.5 rounded-[11px] text-[13.5px] whitespace-nowrap transition inline-flex items-center gap-1.5">
+                <ShellIcon name={s.icon} size={14} />{s.label}
+                {b > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-black inline-flex items-center justify-center" style={on ? { background: G.goldInk, color: G.goldHi } : { background: G.gold, color: G.goldInk }}>{b > 99 ? "99+" : b}</span>}
               </button>
             );
           })}
         </nav>
       </header>
-      <div ref={subRef} className="kp-pm-scroll sticky z-30 flex gap-1.5 overflow-x-auto px-3 py-2 bg-[#F7F9FC] border-b border-[#E3E8F0]" style={{ top: "calc(104px + env(safe-area-inset-top, 0px))" }}>
-        {section.items.map((it) => {
-          const on = it.key === tab;
-          const hb = typeof it.badge === "number" && it.badge > 0;
-          return (
-            <button key={it.key} type="button" data-on={on ? "1" : "0"} onClick={() => setTab(it.key)}
-              className={`shrink-0 h-9 px-3.5 rounded-full text-[13.5px] font-black whitespace-nowrap border transition inline-flex items-center gap-1.5 ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#3A4A66] border-[#DCE3EE]"}`}>
-              {it.label}
-              {hb && <span className={`min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-black inline-flex items-center justify-center ${on ? "bg-white text-[#0F1A30]" : it.soft ? "bg-[#EEF2F8] text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>{it.badge}</span>}
-            </button>
-          );
-        })}
-      </div>
-      <main className="px-3 pt-3 pb-10 min-w-0 overflow-x-hidden" style={{ paddingBottom: "calc(40px + env(safe-area-inset-bottom, 0px))" }}>{children}</main>
+      {section.items.length > 1 && (
+        <div ref={subRef} className="kp-pm-scroll sticky z-30 flex gap-1.5 overflow-x-auto px-3 py-2" style={{ top: "calc(100px + env(safe-area-inset-top, 0px))", background: "rgba(6,10,20,.88)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${G.line}` }}>
+          {section.items.map((i) => {
+            const on = i.key === curItem?.key;
+            const hb = typeof i.badge === "number" && i.badge > 0;
+            return (
+              <button key={i.key} type="button" data-on={on ? "1" : "0"} onClick={() => setTab(i.key)}
+                className="pm-item shrink-0 h-8 px-3 rounded-full text-[13px] font-black whitespace-nowrap border transition inline-flex items-center gap-1.5">
+                {i.label}
+                {hb && <span className="min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-black inline-flex items-center justify-center" style={{ background: i.soft ? "rgba(215,188,130,.2)" : G.gold, color: i.soft ? G.goldHi : G.goldInk }}>{i.badge}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <main className="adm-main relative px-3 pt-3 pb-10 min-w-0 overflow-x-hidden" style={{ paddingBottom: "calc(40px + env(safe-area-inset-bottom, 0px))" }}>{children}</main>
     </div>
   );
 }
-
 
 // ═══════════════════════ 진입 선택(/choose) ═══════════════════════
 export function EntryChooser({ user }) {
