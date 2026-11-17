@@ -3674,7 +3674,7 @@ useEffect(() => {
     if (nearOrders.length > 0) {
   if (toastMuted) return;   // ▲ 이 줄이 핵심
 
-  setToast(`상차 2시간 이내 미배차 오더가 ${nearOrders.length}건 있습니다. 확인해 주세요.`);
+  setToast(`상차 2시간 이내 미배차 ${nearOrders.length}건 · 확인해 주세요`);
   navigator.vibrate?.(200);
 }
   };
