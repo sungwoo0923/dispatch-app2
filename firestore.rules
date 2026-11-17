@@ -360,6 +360,14 @@ service cloud.firestore {
       allow update: if isApproved() && myCo() == co && !(myRole() in ['driver', 'shipper', 'viewer', 'cafeUser'])
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['routeGroupOwners'])
         && request.resource.data.routeGroupOwners is map;
+      // ⭐ 2026-11-17 노선별 고정 특수운임을 구글시트에서 들어오는 오더에도 적용할지(routePresetSheet: true/false) — 관리자(운송 · 통합)만 · 이 칸만
+      //  서버(functions/sheetLiveOrders.js)가 읽는다. 프리셋 자체는 forkliftPresets(사무 직원이 쓰는 기존 규칙 그대로)
+      allow create: if isApproved() && myCo() == co && myRole() in ['admin', 'allMgr', 'test']
+        && request.resource.data.keys().hasOnly(['companyName', 'routePresetSheet'])
+        && request.resource.data.get('companyName', '') == co && request.resource.data.routePresetSheet is bool;
+      allow update: if isApproved() && myCo() == co && myRole() in ['admin', 'allMgr', 'test']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['routePresetSheet'])
+        && request.resource.data.routePresetSheet is bool;
     }
     // 🎨 2026-11-03 표 컬럼 색(회사 공용) — 그 회사 직원은 읽고, 둘러보기(viewer) 말고는 바꿀 수 있다
     match /colStyles/{co} {

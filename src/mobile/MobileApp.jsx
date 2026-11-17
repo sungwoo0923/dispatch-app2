@@ -157,6 +157,7 @@ import OrderScanModal, { scanDropDate } from "../OrderScanModal";
 import { mainScanAi } from "../orderScanApi"; // 🧠 2026-11-07 오더 스캔 정밀 인식(서버 글자 인식 · AI 칸 정리 · 회사별 학습)
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동)
 import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange } from "../fareRules";
+import { applyRoutePresets, routePresetsNow } from "../routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
 import { SpecialFareButton, forkliftApply, paidOut, orderProfit, profitTotals } from "../forklift"; import { isViewerNow } from "../blind"; // 🏗 2026-11-09 지게차비용
 import DetailFilterButton, { applyDetailFilter } from "../DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { useFixedRouteAutoDispatch } from "../FixedRoutes"; // ⭐ 2026-11-05 고정노선 배차 이어서 만들기
@@ -2297,7 +2298,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   useEffect(() => {
     if (!["list", "detail", "form"].includes(page)) deptListOkRef.current = false;
     if (deptMode && page === "list" && !((deptMode === "acct" || deptMode === "sales") && deptListOkRef.current)) setPage("dept"); // 💼 영업도 메뉴의 [배차현황]으로 오더 목록 조회
-    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:settle" && page !== "dept:driverdocs" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:board" && page !== "dept:farerules" && page !== "dept:myresume" && !["dept:payslip", "dept:leaveplan", "dept:payroll", "dept:leavepromo"].includes(page) && !(page === "dept:briefing" && canBriefingM) /* ⭐ 2026-11-06 급여·연차 촉진(화면이 권한 확인) */ && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
+    if (!deptMode && (page === "dept" || (String(page).startsWith("dept:") && page !== "dept:execsched" && page !== "dept:settle" && page !== "dept:driverdocs" && page !== "dept:schedule" && page !== "dept:rules" && page !== "dept:board" && page !== "dept:farerules" && page !== "dept:routefare" && page !== "dept:myresume" && !["dept:payslip", "dept:leaveplan", "dept:payroll", "dept:leavepromo"].includes(page) && !(page === "dept:briefing" && canBriefingM) /* ⭐ 2026-11-06 급여·연차 촉진(화면이 권한 확인) */ && !(DEPT_PAGE_MENU[page] && deptOkM(DEPT_PAGE_MENU[page]))))) setPage("list");
   }, [deptMode, page]);
   const toggleExecFull = () => { const v = !execFull; setExecFullV(v); setPage(v && (!execAllMgrM || roleView.view === "dispatch") ? "list" : "dept"); };
   // 경영 브리핑을 보는 동안 임원 통합관리자는 운송 화면 역할로(PC와 같음)
@@ -4777,7 +4778,7 @@ const groupedByDate = useMemo(() => {
     const 기사운임 = toNumber(form.기사운임);
     // 🏗 2026-11-12 [특수운임 적용](지게차 등)이 모바일 등록에서 저장되지 않던 문제 — 폼에 적용한 칸(수정이면 원래 오더 값)을 함께 저장,
     //  수수료 = 청구 − 기사 − 회사가 따로 주는 돈(지게차 · 외부 특수운임)
-    const SPECIAL_SAVE_KEYS = ["지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", "특수운임", "특수기사차감", "특수청구추가", "외부지급합"];
+    const SPECIAL_SAVE_KEYS = ["지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", "특수운임", "특수기사차감", "특수청구추가", "외부지급합", "지게차자동", "특수운임수동"]; // ⭐ 2026-11-17 노선 고정 표시(지게차자동 · 특수운임수동)
     const pickSp = (o) => Object.fromEntries(SPECIAL_SAVE_KEYS.filter((k) => o && o[k] !== undefined).map((k) => [k, o[k]]));
     const special = { ...(form._editId ? pickSp(selectedOrder) : {}), ...pickSp(form) };
     const 수수료 = 청구운임 - 기사운임 - paidOut(special);
@@ -5021,7 +5022,10 @@ const groupedByDate = useMemo(() => {
       };
 
       const saveOne = (rowData0) => {
-        const rowData = stripSheetLink(rowData0); // ⭐ 2026-11-17 복사 · 불러오기로 만든 새 오더에 원본의 구글시트 줄 주소(이전출처)를 넘기지 않는다
+        // ⭐ 2026-11-17 노선별 고정 특수운임 — 폼에서 노선을 바꾼 직후(0.6초 안)에 저장해도 빠지지 않게 한 번 더(이미 들어가 있으면 그대로)
+        let rowData1 = rowData0;
+        try { rowData1 = applyRoutePresets(rowData0, routePresetsNow(), { asString: false }); } catch { /* 무시 */ }
+        const rowData = stripSheetLink(rowData1); // ⭐ 2026-11-17 복사 · 불러오기로 만든 새 오더에 원본의 구글시트 줄 주소(이전출처)를 넘기지 않는다
         const newId = crypto.randomUUID();
         const finalData = {
           ...rowData,
@@ -5623,7 +5627,7 @@ const title =
   : page === "monthclose" ? "월 마감"
   : page === "perms" ? "권한 관리"
   : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "office" ? "사내업무" : deptMode === "hr" ? "인사관리" : deptMode === "sales" ? "영업" : "경리·회계")
-  : String(page).startsWith("dept:") ? ({ "dept:sales": "영업관리", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 제출 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서", "dept:payroll": "급여 계산", "dept:payslip": "급여명세서", "dept:leaveplan": "연차 사용 계획", "dept:leavepromo": "연차 관리", "dept:briefing": "일일 경영 보고" , "dept:analysis": "경영 분석", "dept:apqueue": "결재 대기", "dept:staffinfo": "직원 정보"}[page] || "")
+  : String(page).startsWith("dept:") ? ({ "dept:sales": "영업관리", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 제출 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:routefare": "노선 특수운임", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서", "dept:payroll": "급여 계산", "dept:payslip": "급여명세서", "dept:leaveplan": "연차 사용 계획", "dept:leavepromo": "연차 관리", "dept:briefing": "일일 경영 보고" , "dept:analysis": "경영 분석", "dept:apqueue": "결재 대기", "dept:staffinfo": "직원 정보"}[page] || "")
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
   : page === "canceled" ? "취소내역"
@@ -8437,6 +8441,7 @@ function MobileSideMenu({
           {/* ⭐ 2026-11-14 관리 = PC 회사관리(운임 규칙 · 내정보 · 내 이력서 · 출근기록부) + 관리자메뉴(회원 관리 · 권한 관리) */}
           <MenuSection title="회사관리" en="COMPANY" dark={dark} fold badge={canAdminMenu && !deptMode ? (alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) : 0}>
             {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}
+            {role !== "driver" && role !== "shipper" && role !== "cafeUser" && <MenuItem label="노선 특수운임" icon="money" onClick={() => onGo?.("dept:routefare")} dark={dark} />}{/* ⭐ 2026-11-17 노선별 고정 특수운임 */}
             <MenuItem label="내정보" icon="idcard" onClick={onGoMyInfo} dark={dark} />
             <MenuItem label="내 이력서" icon="file" onClick={() => onGo?.("dept:myresume")} dark={dark} />
             <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />

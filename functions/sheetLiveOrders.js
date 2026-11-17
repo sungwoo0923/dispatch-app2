@@ -121,6 +121,17 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     return fresh.length;
   }
   const pushOn = (cfg) => !!push && cfg.enabled === true && cfg.pushMode === "on";
+  // ⭐ 2026-11-17 노선별 고정 특수운임 — 켠 회사만 { core, list, sig } · 꺼져 있으면 null
+  async function routePresetsFor(co) {
+    try {
+      const on = ((await db.collection("companySettings").doc(co).get()).data() || {}).routePresetSheet === true;
+      if (!on) return null;
+      const core = await import("./routePresetCore.mjs");
+      const snap = await db.collection("forkliftPresets").where("companyName", "==", co).get();
+      const list = snap.docs.map((d) => core.parsePresetDoc(d.data() || {}, d.id)).filter((p) => !p.legacy && p.사용 !== false);
+      return { core, list, sig: crypto.createHash("sha1").update(JSON.stringify(list.map((p) => [p.id, p.items]))).digest("hex") };
+    } catch (e) { console.warn(`[시트 실시간] ${co} 노선 고정 특수운임 읽기 실패:`, e?.message || e); return null; }
+  }
 
   // 한 회사 반영 — force: 수정 시각 · 내용이 같아도 비교한다
   //  sheetWritten: 방금 프로그램 변경을 시트에 썼다 → 시트 수정 시각이 같아 보여도 다시 읽는다
@@ -178,12 +189,25 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     const sameRanges = pkOk && JSON.stringify(pk.ranges) === JSON.stringify(ranges);
     const baseFp = !usePeek ? undefined : sameRanges && fp !== undefined ? fp : await peek(id, ranges).catch(() => undefined);
     if (baseFp === undefined) peekOf.delete(co); else peekOf.set(co, { url: cfg.url, ranges, fp: baseFp });
-    const hash = crypto.createHash("sha1").update(JSON.stringify(incoming)).digest("hex");
+    // ⭐ 2026-11-17 노선별 고정 특수운임(forkliftPresets v2) — 회사가 켠 경우에만(companySettings/{회사}.routePresetSheet · 회사관리 › 노선 특수운임)
+    //  시트 줄에 특수운임 · 지게차(대행료 · 야상 칸)가 이미 있으면 그 종류는 넣지 않는다(strict — 두 번 더하지 않게)
+    const rp = await routePresetsFor(co);
+    const hash = crypto.createHash("sha1").update(JSON.stringify(incoming) + (rp ? rp.sig : "")).digest("hex");
     const stamp = { lastMt: mt || "", lastRunAt: now, ...(only ? {} : { lastFullAt: now }), lastError: "" };
     if (!force && !scope && hash === cfg.lastHash) { await ref(co).set({ ...stamp, lastCheckedAt: now }, { merge: true }); await writeStatus(co, { enabled: true, error: "" }); return { skipped: "same" }; }
 
     const tabSet = scope || new Set(incoming.map((o) => String(o.이전출처 || "").split("!")[0])); // 탭만 맞출 때는 그 탭(줄을 다 지워도 지운 오더를 찾는다)
     const existing = (await existingOrders(co, from)).filter((e) => tabSet.has(String(e.data.이전출처 || "").split("!")[0]));
+    if (rp && rp.list.length) {
+      // 프로그램에서 등록해 시트에 줄을 만든 오더(시트연동)의 줄은 건드리지 않는다 — 그 오더의 특수운임은 프로그램 값이 기준
+      const linked = new Set(existing.filter((e) => e.data.시트연동 === true || (e.data.등록기기 && e.data.등록기기 !== "구글시트 이전")).map((e) => String(e.data.이전출처 || "")).filter(Boolean));
+      for (let i = 0; i < incoming.length; i += 1) {
+        const o = incoming[i];
+        if (linked.has(String(o.이전출처 || ""))) continue;
+        const plan = rp.core.planRoutePreset(o, rp.list, { strict: true });
+        if (plan) incoming[i] = rp.core.applyPlanToRec(o, plan);
+      }
+    }
     const r = M.reconcileOrders(existing, incoming);
     let again = false; // 이번에 미룬 것이 있으면 다음 차례에 다시 비교한다(내용이 같아도)
     if (pushOn(cfg)) {
@@ -395,6 +419,11 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     const incoming = built.orders.filter((o) => String(o.상차일 || "") >= from && (!wantTabs || wantTabs.has(tabOf(o))));
     const tabSet = new Set(incoming.map(tabOf));
     const existing = (await existingOrders(co, from)).filter((e) => tabSet.has(tabOf(e.data)));
+    const rp = await routePresetsFor(co); // ⭐ 2026-11-17 실시간 반영과 같게(노선 고정 특수운임을 켠 회사)
+    if (rp && rp.list.length) {
+      const linked = new Set(existing.filter((e) => e.data.시트연동 === true || (e.data.등록기기 && e.data.등록기기 !== "구글시트 이전")).map((e) => String(e.data.이전출처 || "")).filter(Boolean));
+      incoming.forEach((o, i) => { if (linked.has(String(o.이전출처 || ""))) return; const plan = rp.core.planRoutePreset(o, rp.list, { strict: true }); if (plan) incoming[i] = rp.core.applyPlanToRec(o, plan); });
+    }
     const r = M.reconcileOrders(existing, incoming);
     const byId = new Map(existing.map((e) => [e.id, e.data]));
     const brief = (o) => ({ 이전출처: o.이전출처 || "", 상차일: o.상차일 || "", 거래처명: o.거래처명 || "", 상차지명: o.상차지명 || "", 하차지명: o.하차지명 || "", 차량번호: o.차량번호 || "", 이름: o.이름 || "", 청구운임: o.청구운임 ?? "", 기사운임: o.기사운임 ?? "" });

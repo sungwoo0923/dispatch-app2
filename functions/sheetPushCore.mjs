@@ -5,7 +5,7 @@
 //         ② 수식이 든 칸(합계 · 이익 등)은 쓰지 않는다
 //         ③ 시트에 쓸 수 없는 값(칸이 없거나 똑같이 읽히지 않는 값)은 오더의 _programKeys 에 적어 둔다 — 실시간 반영이 그 값을 시트 값으로 되돌리지 않는다
 //  · 삭제 = 그 줄의 값만 비운다(줄은 남긴다 · 수식 칸은 그대로)
-import { buildMigration, tabLayout, parseDate, parseMoney, parseTime, splitVehicle, nm, colLetter, SHEET_CORE_KEYS, DEFAULT_PRESET } from "./carrierMigrateCore.mjs";
+import { buildMigration, tabLayout, parseDate, parseMoney, parseTime, splitVehicle, nm, colLetter, SHEET_CORE_KEYS, DEFAULT_PRESET, pairExtras, sameSpecials } from "./carrierMigrateCore.mjs";
 
 const cell = (v) => String(v ?? "").trim();
 const tabOf = (src) => String(src || "").split("!")[0];
@@ -15,7 +15,9 @@ const uniq = (a) => [...new Set(a)];
 const empty = (v) => v == null || v === "" || (Array.isArray(v) && !v.length);
 
 // 시트에 쓸 수 있는 칸(탭 양식에 그 칸이 있을 때)
-export const PUSH_FIELDS = ["상차일", "하차일", "상차시간", "하차시간", "상차지명", "상차지주소", "하차지명", "하차지주소", "화물내용", "차량톤수", "차량종류", "차량번호", "이름", "전화번호", "청구운임", "기사운임", "배차방식", "배차상태", "메모", "마감월"];
+//  ⭐ 2026-11-17 특수운임 · 지게차비용 — 매출 · 매입 추가 칸(야상 · 대행료 …)에 가져오기 규칙의 거꾸로 쓴다(moneyPlan · JY처럼 extrasAsSpecial 회사)
+export const PUSH_FIELDS = ["상차일", "하차일", "상차시간", "하차시간", "상차지명", "상차지주소", "하차지명", "하차지주소", "화물내용", "차량톤수", "차량종류", "차량번호", "이름", "전화번호", "청구운임", "기사운임", "특수운임", "지게차비용", "배차방식", "배차상태", "메모", "마감월"];
+const MONEY_FIELDS = ["청구운임", "기사운임", "특수운임", "지게차비용"];
 
 // 🗓 2026-11-16 입고시간 칸 — 시간이 있으면 시간, 없으면 날짜로 당착 · 야상 · 월착 · 익착(시트에서 읽는 규칙과 같은 말)
 const dayN = (a, b) => { const A = Date.parse(`${a}T00:00:00Z`), B = Date.parse(`${b}T00:00:00Z`); return Number.isFinite(A) && Number.isFinite(B) ? Math.round((B - A) / 86400000) : null; };
@@ -40,7 +42,8 @@ const NOT_WATCHED = new Set(["이전출처", "담당노선구분", "등록일", 
 const MONEY = new Set(["청구운임", "기사운임", "수수료", "특수기사차감", "특수청구추가", "외부지급합"]);
 
 export function sameValue(k, a, b) {
-  if (MONEY.has(k)) return (Number(a) || 0) === (Number(b) || 0);
+  if (MONEY.has(k) || k === "지게차비용") return (Number(a) || 0) === (Number(b) || 0);
+  if (k === "특수운임") return sameSpecials(a, b); // 메모 · 자동 표시 · 순서는 견주지 않는다
   if (k === "전화번호") return digits(a) === digits(b);
   if (k === "차량번호") return ns(a) === ns(b);
   if (empty(a) && empty(b)) return true;
@@ -154,6 +157,90 @@ function fareEdits(grp, row, total) {
   if (grp.total >= 0) out.push({ c: grp.total, v: n ? String(n) : "", optional: true });
   return out;
 }
+// ⭐ 2026-11-17 운임 + 특수운임 + 지게차비용을 한꺼번에 — 가져오기(carrierMigrateCore rowToOrder, extrasAsSpecial)의 거꾸로
+//  · 매출 · 매입 추가 칸 짝(pairExtras)마다 금액을 정한다
+//     지게차비용(부담 "청구"만) → 지게차 이름 칸(preset.forkliftExtraNames — JY "대행료") 매출 · 매입에 같은 금액
+//     특수운임: 받는사람 기사 · 부담 청구 → 매출 · 매입 둘 다 / 받는사람 없음(청구만) → 매출만 / 받는사람 기사 · 부담 회사 → 매입만
+//       칸 찾기 = 같은 이름 칸(머리줄 "야상" 등) → 없으면 이름 없는 칸(추가비용 — 가져올 때 입고시간 · 비고로 "야상" · "기타" 이름이 붙는다)
+//  · 운송료 칸 = 청구운임 − 매출 추가 합 · 매입 운송료 = 기사운임 + 지게차비용 − 매입 추가 합(가져올 때 기사운임 = 매입 합계 − 지게차비용)
+//  · 사람이 적은 글이 섞인 칸("180,000 착불" 등)은 금액이 같을 때만 그대로 두고, 다르면 쓰지 않는다(null → 운임만 예전 방식)
+//  → [{ c, v, optional, side }] · null = 이 오더는 이 방식으로 못 쓴다
+const n0 = (v) => { const x = Number(String(v ?? "").replace(/[^\d.-]/g, "")); return Number.isFinite(x) ? Math.round(x) : 0; };
+const SP_DEF = { 대기료: ["기사", "청구"], 수작업: ["외부", "청구"], 경유: ["기사", "청구"], 할증: ["기사", "청구"], 통행료: ["기사", "청구"], 기타: ["기사", "청구"] };
+function moneyPlan(env, o) {
+  const { L, preset, row } = env;
+  if (!preset.extrasAsSpecial || !L.sale || !L.buy) return null;
+  const pairs = pairExtras(L);
+  const forkNames = (preset.forkliftExtraNames || []).map(nm);
+  const generic = (n) => /^추가비용\d*$/.test(n);
+  const amt = pairs.map(() => ({ sale: 0, buy: 0 }));
+  const F = Math.max(0, n0(o.지게차비용));
+  if (F > 0) {
+    const i = pairs.findIndex((p) => forkNames.includes(nm(p.name)) && p.sale.length && p.buy.length);
+    if (i < 0 || o.지게차부담 !== "청구") return null;
+    amt[i].sale += F; amt[i].buy += F;
+  }
+  const genericName = new Map();
+  for (const x of Array.isArray(o.특수운임) ? o.특수운임 : []) {
+    const a = n0(x?.금액); if (!(a > 0)) continue;
+    const t = SP_DEF[x.종류] ? x.종류 : "기타";
+    const payee = ["기사", "외부", "없음"].includes(x.받는사람) ? x.받는사람 : SP_DEF[t][0];
+    const mode = payee === "없음" ? "청구" : ["기사", "회사", "청구"].includes(x.부담) ? x.부담 : SP_DEF[t][1];
+    const name = nm(x.이름);
+    let i = name ? pairs.findIndex((p) => !generic(p.name) && !forkNames.includes(nm(p.name)) && nm(p.name) === name) : -1;
+    if (i < 0) {
+      i = pairs.findIndex((p, k) => generic(p.name) && (!genericName.has(k) || genericName.get(k) === name));
+      if (i < 0) return null;
+      genericName.set(i, name);
+    }
+    if (payee === "기사" && mode === "청구") { amt[i].sale += a; amt[i].buy += a; }
+    else if (payee === "없음") amt[i].sale += a;
+    else if (payee === "기사" && mode === "회사") amt[i].buy += a;
+    else return null; // 외부(회사가 따로 지급) · 기사 차감은 시트 칸으로 나타낼 수 없다
+    if ((amt[i].sale && !pairs[i].sale.length) || (amt[i].buy && !pairs[i].buy.length)) return null;
+  }
+  const out = []; let saleX = 0, buyX = 0;
+  for (let i = 0; i < pairs.length; i += 1) {
+    for (const [side, cols, want] of [["sale", pairs[i].sale, amt[i].sale], ["buy", pairs[i].buy, amt[i].buy]]) {
+      for (let k = 0; k < cols.length; k += 1) {
+        const c = cols[k]; const v = k === 0 ? want : 0;
+        const raw = cell(row[c]); const p = parseMoney(raw);
+        const cur = /착불/.test(p.note) ? 0 : p.n;
+        if (cur === v) continue; // 그대로(사람이 적은 글 포함)
+        if ((p.note && !/^[-–—]$/.test(raw)) || p.n < 0) return null;
+        out.push({ c, v: v ? String(v) : "", side });
+      }
+      if (side === "sale") saleX += want; else buyX += want;
+    }
+  }
+  const sale = n0(o.청구운임), buyTotal = n0(o.기사운임) + F;
+  const sb = sale - saleX, bb = buyTotal - buyX;
+  if (sb < 0 || bb < 0) return null;
+  // 이미 같은 금액이 적혀 있으면("270,000") 그대로 둔다 — 쓸데없이 칸 모양을 바꾸지 않게
+  const put = (c, n, v, extra) => { const p = parseMoney(row[c]); if (cell(row[c]) && !p.note && p.n === n) return; out.push({ c, v, ...extra }); };
+  put(L.sale.base, sb, sb ? String(sb) : (sale === 0 && !cell(row[L.sale.base]) ? "" : "0"), { side: "sale" });
+  if (L.sale.total >= 0) put(L.sale.total, sale, sale ? String(sale) : "", { optional: true, side: "sale" });
+  put(L.buy.base, bb, bb ? String(bb) : (buyTotal === 0 && !cell(row[L.buy.base]) ? "" : "0"), { side: "buy" });
+  if (L.buy.total >= 0) put(L.buy.total, buyTotal, buyTotal ? String(buyTotal) : "", { optional: true, side: "buy" });
+  return out;
+}
+function moneyEdits(k, o, env) {
+  const { L, row } = env;
+  if (env.money !== "legacy") {
+    const m = moneyPlan(env, o);
+    if (m) {
+      // 이번에 바꾸는 칸 쪽만 쓴다 — 청구운임만 고쳤으면 매출 쪽만(매입 칸은 그대로), 특수운임 · 지게차비용이면 둘 다
+      const f = new Set(env.fields || MONEY_FIELDS);
+      const both = f.has("특수운임") || f.has("지게차비용");
+      const want = k === "청구운임" ? ["sale"] : k === "기사운임" ? ["buy"] : ["sale", "buy"];
+      const sides = new Set(want.filter((sd) => both || (sd === "sale" ? f.has("청구운임") : f.has("기사운임"))));
+      return m.filter((x) => sides.has(x.side)).map(({ side, ...x }) => x);
+    }
+  }
+  if (k === "청구운임") return fareEdits(L.sale, row, o.청구운임);
+  if (k === "기사운임") return fareEdits(L.buy, row, o.기사운임);
+  return null; // 특수운임 · 지게차비용은 추가 칸으로만
+}
 function fieldEdits(k, o, env) {
   const { L, rule, preset, tab, row } = env;
   const arrival = (preset.arrivalDateTabs || []).includes(tab);
@@ -178,8 +265,10 @@ function fieldEdits(k, o, env) {
       return cell(row[c]) ? null : [{ c, v: cell(o.배차방식) }];
     }
     case "배차상태": return one(L.cols.status, o.배차상태);
-    case "청구운임": return fareEdits(L.sale, row, o.청구운임);
-    case "기사운임": return fareEdits(L.buy, row, o.기사운임);
+    case "청구운임":
+    case "기사운임":
+    case "특수운임":
+    case "지게차비용": return moneyEdits(k, o, env);
     case "상차지명": {
       if (rule?.fromFixed) return null;
       const via = rule?.splitVia && Array.isArray(o.경유상차목록) ? o.경유상차목록.map((v) => cell(v?.업체명)).filter(Boolean) : [];
@@ -260,13 +349,15 @@ const padRow = (row, width) => { const r = [...(row || [])].map((v) => (v == nul
 // 여러 칸의 쓰기를 넣어 보고, 프로그램 값과 똑같이 읽히지 않는 칸은 빼고 다시 — 끝까지 남은 것만 쓴다
 function fitEdits(ctx, title, rowNo, baseRow, target, fields, env) {
   const byField = new Map();
-  fields.forEach((k) => {
+  env.fields = fields; env.money = "";
+  const add = (k) => {
     const e = fieldEdits(k, target, env); if (!e) return;
     const usable = [];
     // 수식 칸: 꼭 써야 하는 칸이면 이 값은 못 옮긴다. 합계처럼 시트가 계산해 주는 칸(optional)은 쓰지는 않고, 계산될 값으로 미리 읽어만 본다(virtual)
     for (const x of e) { if (isFormula(ctx, title, rowNo, x.c)) { if (x.optional) { usable.push({ ...x, virtual: true }); continue; } return; } usable.push(x); }
     byField.set(k, usable);
-  });
+  };
+  fields.forEach(add);
   for (;;) {
     const row = [...baseRow];
     byField.forEach((list) => list.forEach((x) => { row[x.c] = x.v; }));
@@ -278,6 +369,13 @@ function fitEdits(ctx, title, rowNo, baseRow, target, fields, env) {
     const bad = [...byField.keys()].filter((k) => !sameValue(k, d.o[k], target[k]) || (k === "하차시간" && (!sameValue("하차일", d.o.하차일, target.하차일) || !sameValue("상차일", d.o.상차일, target.상차일))));
     if (!bad.length) return { row, writeRow, d, fields: [...byField.keys()] };
     d.undo();
+    // ⭐ 2026-11-17 운임 · 특수운임을 추가 칸까지 같이 써 봤는데 똑같이 읽히지 않으면 → 예전 방식(운송료 칸만)으로 한 번 더
+    if (env.money !== "legacy" && bad.some((k) => MONEY_FIELDS.includes(k))) {
+      env.money = "legacy";
+      MONEY_FIELDS.forEach((k) => byField.delete(k));
+      fields.filter((k) => MONEY_FIELDS.includes(k)).forEach(add);
+      continue;
+    }
     bad.forEach((k) => byField.delete(k));
   }
 }

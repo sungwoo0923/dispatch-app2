@@ -36,6 +36,7 @@ import AttendanceBoard from "../AttendanceBoard";
 import { useMyProfile, personName } from "../userNames";
 import MobileFleetView from "./MobileFleetView";
 import FareRulesSettings from "../FareRulesSettings"; // ⭐ 2026-11-02 운임규칙
+import RouteSpecialPresets from "../RouteSpecialPresets"; // ⭐ 2026-11-17 노선별 고정 특수운임
 import BoardPage, { BOARDS, canSeeBoard } from "../BoardPosts"; // ⭐ 2026-11-03 모바일 게시판
 import { DetailScope } from "../DetailFilter"; // 🔎 2026-11-03 세부검색
 import { useMobileDetailGetters } from "../detailGetters"; // ⭐ 2026-11-05 PC·모바일 일치 — 세부검색 배차담당자(직원 이름)·청구사업자(빈칸=기본 사업자)
@@ -306,6 +307,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
     else if (k === "cashbook") body = <div className="kp-m-pc"><FundsWorkspace company={userCompany} isViewer={isViewer} /></div>;
     else if (k === "myresume") body = <div className="kp-m-pc"><React.Suspense fallback={<Loading />}><PcHrPage userCompany={userCompany} role={role} userId={me?.uid || ""} selfOnly /></React.Suspense></div>;
     else if (k === "farerules") body = wrap(<FareRulesSettings company={userCompany} mobile canEdit={role !== "viewer"} myName={me?.name || ""} />); // ⭐ 2026-11-02 운임규칙
+    else if (k === "routefare") body = wrap(<RouteSpecialPresets mobile canEdit={role !== "viewer"} canAdmin={["admin", "allMgr", "test", "totalMaster"].includes(role) || me?.isMaster === true} />); // ⭐ 2026-11-17 노선별 고정 특수운임
     else if (k === "board") body = <MobileBoard company={userCompany} me={{ ...(me || {}), role }} />;
     else if (k === "rules") body = wrap(<CompanyRules company={userCompany} canEdit={role === "hrManager" || role === "totalMaster"} />);
     else if (k === "funds") body = wrap(<FundsBoard company={userCompany} canEdit={false} />);

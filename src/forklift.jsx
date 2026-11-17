@@ -21,6 +21,7 @@ import { kpAlert, kpConfirm } from "./kpDialog";
 import { MonthPicker } from "./kpInputs";
 import { bumpForkliftPayout } from "./ledgerAuto"; // 지급완료 → 수입·지출 장부 자동
 import { isJyCompany } from "./jyOnly"; // 🏷 JY로지스틱스 전용(특수운임 "지급 없음")
+import { useRoutePresets, applyRoutePresets, planRoutePreset, itemsFromOrder, mergeItems, saveRoutePreset, routePresetIdOf, AUTO as ROUTE_AUTO, nk as routeNk } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
 import {
   FORKLIFT_MODES, FORKLIFT_UPLOAD_COLS, fkAmount, fkMode, fkModeLabel, fkPresetKey, forkliftApply, forkliftClear,
   forkliftPayoutGroups, forkliftRowFromSheet, forkliftSummary, hasForklift,
@@ -359,8 +360,32 @@ export function specialBadgeText(o) {
   if (n === 1) return `${sfName(sfItems(o)[0])} ${won(fkNum(sfItems(o)[0].금액))}`;
   return `${n}건 · ${won(specialTotal(o))}`;
 }
-export function SpecialFareButton({ form, setForm, asString = true, disabled = false, btnClass, mobile = false, className = "" }) {
+// ⭐ 2026-11-17 노선별 고정 특수운임 자동 적용 — 거래처 · 상차지 · 하차지 · 상차시간이 바뀌면(0.6초 뒤) 맞는 노선 항목을 넣고 운임을 맞춘다
+//  처음 열 때(수정 · 복사 화면)는 건드리지 않고, 사람이 노선을 바꿨을 때만. 팝업에서 직접 [적용]한 오더(특수운임수동)는 건드리지 않는다
+const routeSigOf = (f) => [f?.거래처명, f?.상차지명, f?.하차지명, f?.상차시간].map(routeNk).join("|");
+function useRouteAuto(form, setForm, asString, enabled) {
+  const presets = useRoutePresets();
+  const sig = routeSigOf(form);
+  const last = React.useRef(sig);
+  const [flash, setFlash] = React.useState("");
+  React.useEffect(() => {
+    if (!enabled || !form || sig === last.current) return undefined;
+    const t = setTimeout(() => {
+      last.current = sig;
+      const plan = presets.length ? planRoutePreset(form, presets) : null;
+      if (!plan) return;
+      setForm((p) => applyRoutePresets(p, presets, { asString }));
+      const add = plan.added.map((x) => `${x.종류 === "지게차" ? "지게차" : x.이름 || x.종류} ${won(x.금액)}`);
+      const msg = add.length ? `노선 고정 · ${add.join(" · ")}` : plan.removed.length ? "노선이 바뀌어 자동 특수운임을 뺐어요" : "";
+      if (msg) { setFlash(msg); setTimeout(() => setFlash(""), 4500); }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [sig, enabled, presets]); // eslint-disable-line react-hooks/exhaustive-deps
+  return flash;
+}
+export function SpecialFareButton({ form, setForm, asString = true, disabled = false, btnClass, mobile = false, className = "", autoRoute = true }) {
   const [open, setOpen] = React.useState(false);
+  const flash = useRouteAuto(form, setForm, asString, autoRoute && !disabled);
   if (!form) return null;
   const on = hasSpecial(form);
   const cls = (typeof btnClass === "function" ? btnClass(on) : btnClass) || `inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border text-[13px] font-extrabold whitespace-nowrap transition ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B] shadow-[0_4px_12px_rgba(27,43,75,0.22)]" : "bg-white text-[#5B6B85] border-[#DCE3EE] hover:border-[#2D4C82] hover:text-[#0F1A30]"}`;
@@ -371,6 +396,7 @@ export function SpecialFareButton({ form, setForm, asString = true, disabled = f
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 3v18M5 8h11a3 3 0 0 1 0 6H8a3 3 0 0 0 0 6h11" /></svg>
         특수운임{on ? <span className="ml-0.5 px-1.5 h-[18px] inline-flex items-center rounded-md bg-[#E9C46A] text-[#0F1A30] text-[11px] font-black tabular-nums">{specialBadgeText(form)}</span> : " 적용"}
       </button>
+      {flash && <span role="status" data-route-flash="1" className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-[#0F1A30] text-white text-[12px] font-bold whitespace-nowrap"><span className="w-1.5 h-1.5 rounded-full bg-[#E9C46A]" />{flash}</span>}
       {open && <SpecialFareModal form={form} asString={asString} mobile={mobile} onClose={() => setOpen(false)} onApply={(fn) => { setForm(fn); setOpen(false); }} />}
     </>
   );
@@ -384,6 +410,12 @@ function SpecialFareModal({ form, asString, mobile, onClose, onApply }) {
   const [sel, setSel] = React.useState(() => (hasForklift(form) || !sfItems(form).length ? "지게차" : (sfItems(form)[0].종류 || "기타")));
   const [remember, setRemember] = React.useState(true);
   const [preset] = useForkliftPreset(form);
+  // ⭐ 2026-11-17 [이 노선 고정으로 저장] — 적용하면서 이 노선(거래처 · 하차지, 고르면 상차지까지)의 고정 특수운임으로도 저장
+  const routePresets = useRoutePresets();
+  const canRoute = !!String(form.거래처명 || "").trim() && !!String(form.하차지명 || form.상차지명 || "").trim();
+  const [saveRoute, setSaveRoute] = React.useState(false);
+  const [routeWithFrom, setRouteWithFrom] = React.useState(false);
+  const autoCount = (Array.isArray(form.특수운임) ? form.특수운임 : []).filter((x) => x?.auto === ROUTE_AUTO).length + (form.지게차자동 === ROUTE_AUTO && hasForklift(form) ? 1 : 0);
   React.useEffect(() => { const k = (e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", k, true); return () => window.removeEventListener("keydown", k, true); }, [onClose]);
   const itemList = Object.values(items).filter((x) => fkNum(x.금액) > 0);
   const draft = { fork: fkNum(fork.지게차비용) > 0 ? fork : null, items: itemList };
@@ -399,8 +431,16 @@ function SpecialFareModal({ form, asString, mobile, onClose, onApply }) {
     else setItems((p) => { const n = { ...p }; delete n[sel]; return n; });
   };
   const apply = () => {
-    const res = specialApplyAll(form, draft, { asString });
+    // 팝업에서 직접 적용 = 사람이 정한 특수운임 → 노선 고정 자동 적용이 더는 바꾸지 않는다(특수운임수동)
+    const res = { ...specialApplyAll(form, draft, { asString }), 특수운임수동: true, 지게차자동: "" };
     if (remember && hasForklift(res)) rememberForkliftPreset(res);
+    if (saveRoute && canRoute) {
+      const route = { 거래처명: form.거래처명 || "", 상차지명: routeWithFrom || !String(form.하차지명 || "").trim() ? form.상차지명 || "" : "", 하차지명: form.하차지명 || "" };
+      const items = itemsFromOrder(res);
+      const id = routePresetIdOf(route);
+      const old = routePresets.find((p) => p.id === id);
+      if (items.length) saveRoutePreset({ ...route, 사용: true, items: mergeItems(old?.items || [], items), 출처: old?.출처 || "오더" }).catch((e) => kpAlert(`노선 고정을 저장하지 못했어요: ${e?.message || e}`));
+    }
     onApply(() => res);
   };
   const moneyInput = (val, onCh) => (
@@ -509,6 +549,13 @@ function SpecialFareModal({ form, asString, mobile, onClose, onApply }) {
             {diffRow("수익", orderProfit(base), orderProfit(after))}
           </div>
           {paidOut(after) > 0 && <div className="text-[11.5px] font-bold text-[#7A89A3] mb-2">회사가 따로 지급 {c(paidOut(after))}원{hasForklift(after) ? ` (지게차 ${c(fkAmount(after))}${after.지게차기사명 ? ` · ${after.지게차기사명}` : ""})` : ""}</div>}
+          {autoCount > 0 && <div className="text-[11.5px] font-bold text-[#2D4C82] mb-2" data-sf-auto="1">노선 고정으로 자동으로 들어간 항목 {autoCount}개 — [적용]하면 이 오더는 직접 정한 값으로 바뀌어요(노선을 바꿔도 그대로)</div>}
+          {canRoute && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2.5 text-[12.5px] font-bold text-[#1B2B4B]" data-sf-route="1">
+              <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={saveRoute} onChange={(e) => setSaveRoute(e.target.checked)} data-sf-route-save="1" />이 노선 고정으로 저장 <span className="text-[#7A89A3] font-semibold">({form.거래처명} · {routeWithFrom || !form.하차지명 ? `${form.상차지명 || ""} → ` : ""}{form.하차지명 || "모든 하차지"})</span></label>
+              {saveRoute && form.하차지명 && form.상차지명 && <label className="inline-flex items-center gap-1.5 text-[#5B6B85]"><input type="checkbox" checked={routeWithFrom} onChange={(e) => setRouteWithFrom(e.target.checked)} />상차지({form.상차지명})까지 같을 때만</label>}
+            </div>
+          )}
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="flex-1 h-11 rounded-xl border border-[#DCE3EE] text-[14px] font-black text-[#3A4A66] hover:bg-[#F4F6FA]">취소</button>
             <button type="button" onClick={apply} data-sf-apply="1" className="flex-[2] h-11 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black hover:bg-[#1B2B4B]">{n ? `적용 · ${n}건` : "적용(특수운임 없음)"}</button>

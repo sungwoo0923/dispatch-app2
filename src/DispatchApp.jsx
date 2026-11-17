@@ -2977,6 +2977,8 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동 계산)
 import FareRulesSettings from "./FareRulesSettings";
 import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
+import { withRoutePresets } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
+import RouteSpecialPresets from "./RouteSpecialPresets"; // ⭐ 2026-11-17 회사관리 › 노선 특수운임
 import { SpecialFareButton, ForkliftChip, ForkliftMark, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount, orderProfit, profitTotals } from "./forklift"; // 🏗 2026-11-09 지게차비용 · ⭐ 2026-11-17 수수료 한 식(orderProfit · profitTotals)
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
@@ -5002,6 +5004,9 @@ const addDispatch = async (recordIn) => {
   if (record) { record = { ...record, 알림톡: false }; delete record.알림톡결과; }
   // ⭐ 2026-11-17 거래처 합치기 — 합친 거래처의 옛 이름(예: "큐런네트웍스 주식회사")으로 등록하면 남길 이름("큐런")으로 저장
   if (record) { try { record = resolveOrderClient(record, buildAliasMap(clients)); } catch { /* 무시 */ } }
+  // ⭐ 2026-11-17 노선별 고정 특수운임(회사관리 › 노선 특수운임) — 거래처 · 상차지 · 하차지가 맞으면 지게차비용 · 야상 등을 넣고 운임을 맞춘다
+  //  (PC · AI 비서 · 오더 스캔 · 복사 등록이 모두 여기를 지난다 · 사람이 [특수운임]에서 직접 정한 오더는 그대로)
+  if (record) record = await withRoutePresets(record, { asString: typeof record.청구운임 !== "number" });
 
   const _id = crypto.randomUUID(); // ★ 무조건 새로 생성
 
@@ -62170,7 +62175,10 @@ function CompanyManagementWrapper({ payrollInAcct = false, userCompany, role, us
   const tabs0 = role === "hrManager" ? ["회사정보", "조직도", "내정보", "내 이력서"] : canViewHR ? ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부", "인사관리부"] : ["회사정보", "조직도", "내정보", "내 이력서", "출근기록부"];
   // ⭐ 2026-11-02 운임규칙 — 최고관리자가 이 회사에 켜 준 경우에만(관리자센터 › 회사별 맞춤 기능). 회사 직원 누구나 보고 고친다(조회전용은 보기만)
   const fareCM = useFareRules(getTenant() || userCompany);
-  const tabs1 = !fareCM.feature || role === "driver" || role === "shipper" ? tabs0 : [...tabs0.slice(0, 2), "운임 규칙", ...tabs0.slice(2)];
+  const tabs1a = !fareCM.feature || role === "driver" || role === "shipper" ? tabs0 : [...tabs0.slice(0, 2), "운임 규칙", ...tabs0.slice(2)];
+  // ⭐ 2026-11-17 노선별 고정 특수운임 — 사무 직원 누구나(조회전용은 보기만 · 기사 · 화주 제외)
+  const routeCM = !["driver", "shipper", "cafeUser"].includes(role);
+  const tabs1 = routeCM ? [...tabs1a.slice(0, tabs1a.indexOf("조직도") + 1 + (tabs1a.includes("운임 규칙") ? 1 : 0)), "노선 특수운임", ...tabs1a.slice(tabs1a.indexOf("조직도") + 1 + (tabs1a.includes("운임 규칙") ? 1 : 0))] : tabs1a;
   // ⭐ 2026-11-07 급여관리는 회사관리에서 뺐다(경리 › 회계관리 › 급여 계산에서만) · 급여명세서 · 연차 사용 계획은 내정보 안 탭 ·
   //  연차 사용 촉진은 인사관리부 › 연차 관리 안. (payrollInAcct는 예전 호출 호환용으로만 남김)
   void payrollInAcct;
@@ -62180,7 +62188,7 @@ function CompanyManagementWrapper({ payrollInAcct = false, userCompany, role, us
   const tabs = planIncludes(planCM, "hr") ? tabs1 : tabs1.filter((t) => t !== "출근기록부" && t !== "인사관리부");
 
   // ⭐ 디자인 개편 — 관리자메뉴와 같은 왼쪽 메뉴바 + 상단 인사 카드(AdminShell 공용 레이아웃)
-  const TAB_ICONS = { 회사정보: "building", 조직도: "users", "운임 규칙": "money", 내정보: "user", "내 이력서": "idcard", 출근기록부: "clock", 인사관리부: "idcard" };
+  const TAB_ICONS = { 회사정보: "building", 조직도: "users", "운임 규칙": "money", "노선 특수운임": "truck", 내정보: "user", "내 이력서": "idcard", 출근기록부: "clock", 인사관리부: "idcard" };
   const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
   const myName = user?.displayName || (user?.email || "").split("@")[0] || "";
   return (
@@ -62205,6 +62213,7 @@ function CompanyManagementWrapper({ payrollInAcct = false, userCompany, role, us
       {tab === "조직도" && <OrgChart userCompany={userCompany} />}
       {/* ⭐ 2026-11-02 운임규칙 — 회사관리 › 운임 규칙 */}
       {tab === "운임 규칙" && fareCM.feature && <FareRulesSettings company={userCompany} canEdit={role !== "viewer"} myName={myDocCM?.name || myName} />}
+      {tab === "노선 특수운임" && routeCM && <RouteSpecialPresets canEdit={role !== "viewer"} canAdmin={["admin", "allMgr", "test", "totalMaster"].includes(role) || myDocCM?.isMaster === true} />}
       {tab === "내 이력서" && <HRManagementPage userCompany={userCompany} role={role} userId={userId} selfOnly />}
       {tab === "내정보" && (
         <MyProfilePage
