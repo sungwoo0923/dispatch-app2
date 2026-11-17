@@ -7,6 +7,7 @@
 //  ③ loadJsPDF: PDF 라이브러리 — PDF 저장 버튼을 누를 때 내려받는다.
 //  ④ prefetchWhenIdle: 첫 화면이 다 뜬 뒤 한가할 때 미리 받아 둬서, 메뉴를 처음 열 때도 기다림이 거의 없다.
 import React, { Suspense } from "react";
+import { withStickyOff } from "./stickyTableHead";
 
 // 한 번 실패(배포 직후 옛 파일 등)하면 한 번 더 시도 — 그래도 실패하면 ErrorBoundary가 새로고침 처리
 const retryOnce = (load) => () => load().catch(() => load());
@@ -36,7 +37,8 @@ export function lazyView(load, fallback = <LazyFallback />) {
 let h2cP = null;
 export function html2canvas(...args) {
   if (!h2cP) h2cP = import("html2canvas").then((m) => m.default || m).catch((e) => { h2cP = null; throw e; });
-  return h2cP.then((fn) => fn(...args));
+  // 📌 2026-11-17 찍는 동안 표 머리줄 고정(높이 제한 상자)을 꺼서 표 전체가 찍히게
+  return h2cP.then((fn) => withStickyOff(() => fn(...args)));
 }
 
 let pdfP = null;

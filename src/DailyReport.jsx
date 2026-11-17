@@ -13,6 +13,7 @@
 //  · 받기 설정(DailyReportSettings) · 아침 요약 팝업(DailyReportPopupHost)도 이 파일에.
 import { isFleetGrade } from "./fleetGradesCore"; // 🚛 지입차 구분(지입·직영·임대·분양) 한 곳
 import React from "react";
+import { withStickyOff } from "./stickyTableHead";
 import { planIncludes, useCompanyPlanId } from "./plans"; // 💳 2026-11-09 요금제 잠금
 import { doc, onSnapshot, collection, query, where } from "firebase/firestore";
 import { db } from "./firebase";
@@ -314,7 +315,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
     setBusy(true);
     try {
       const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
-      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: C.page, ignoreElements: (n) => n?.classList?.contains?.("ebx-noprint") });
+      const canvas = await withStickyOff(() => html2canvas(el, { scale: 2, useCORS: true, backgroundColor: C.page, ignoreElements: (n) => n?.classList?.contains?.("ebx-noprint") })); // 📌 2026-11-17 찍는 동안 표 머리줄 고정 끔
       const pdf = new jsPDF("p", "mm", "a4");
       const pw = 210, ph = 297, ih = (canvas.height * pw) / canvas.width; const img = canvas.toDataURL("image/jpeg", 0.92);
       let left = ih, pos = 0; pdf.addImage(img, "JPEG", 0, pos, pw, ih); left -= ph;
