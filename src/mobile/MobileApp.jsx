@@ -1070,7 +1070,7 @@ function MobileOrderValidationModal({ issues, scope, onClose, onCancelOrder, onO
                         onClick={() => onCancelOrder?.(o)}
                         className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-red-200 text-red-500"
                       >
-                        이 오더 취소하기
+                        이 오더 삭제
                       </button>
                     </div>
                   </div>
@@ -2870,13 +2870,6 @@ const quickRange = (days) => {
     }, 25000);
     return () => { clearTimeout(t); if (idleId && window.cancelIdleCallback) window.cancelIdleCallback(idleId); };
   }, [secondaryReady, loadFullHistory]);
-  const canceledLoadedRef = useRef(false);
-  const loadCanceledHistory = React.useCallback(async () => {
-    if (canceledLoadedRef.current) return;
-    canceledLoadedRef.current = true;
-    const rows = await fetchRows((c) => query(c, where("상태", "in", CANCELED_STATUS_LIST.slice(0, 30))));
-    if (rows === null) canceledLoadedRef.current = false; // 실패 시 다시 시도 가능
-  }, [fetchRows]);
   // 화면에서 쓰는 전체 목록 = 실시간 오더 + 불러온 예전 오더(같은 오더면 실시간 쪽 우선)
   // 예전 오더 목록 정리(블라인드 제외·취소 분리)는 보관소가 바뀔 때만 한 번
   const extraSplit = useMemo(() => {
@@ -2910,7 +2903,6 @@ const quickRange = (days) => {
   const allOrders = useMemo(() => rgM.filter(allOrdersPreRG) || [], [allOrdersPreRG, rgM.filter]);
   // ⭐ 2026-11-04 고정노선(구글시트 배차표) 오더는 고정노선현황에서만 — 일반 배차현황·미배차·정보미전달에는 넣지 않는다(PC와 같음)
   const listOrders = useMemo(() => allOrders.filter((o) => !o?.배차표Id), [allOrders]);
-  const allCanceledOrders = allOrdersCombined.canceled;
   // 화면에서 바로 고친 값을 실시간 목록·예전 오더 보관소 양쪽에 반영
   const patchLocalOrder = React.useCallback((id, patchIn) => {
     const fix = (o) => ({ ...o, ...localizeSentinels(patchIn, o) });
@@ -3039,9 +3031,9 @@ const handleCancelDuplicateOrder = async (o) => {
         .map(g => g.filter(x => (x.id || x._id) !== id))
         .filter(g => g.length > 1),
     }));
-    showToast("오더를 취소했습니다");
+    showToast("오더를 삭제했습니다");
   } catch (e) {
-    alert("오더 취소에 실패했습니다.\n" + (e?.message || ""));
+    alert("오더 삭제에 실패했습니다.\n" + (e?.message || ""));
   }
 };
 // 검증 팝업에서 "확인하러 가기"(날짜/운임/전화번호)를 눌렀을 때 — 상세보기로 이동해
@@ -4293,10 +4285,9 @@ const thisMonth = thisMonthKST();
     loadRange(appliedStartDate || "2000-01-01", appliedEndDate || todayKST());
   }, [page, appliedStartDate, appliedEndDate, onlyToday, thisMonth, loadRange]);
   useEffect(() => {
-    if (page === "canceled") loadCanceledHistory();
     // ⭐ 2026-11-05 PC·모바일 일치 — PC 실시간 범위는 최근 7일~, 모바일은 어제~. 고정노선현황(입고일 = 상차일 + 하차일수)과
     //   경리·임원 대시보드(최근 7일~을 전제로 집계)는 PC와 같은 7일~을 먼저 받아 둔다(실시간 범위 안쪽은 loadRange가 건너뜀)
-    else if (page === "fixedroute") loadRange(pcLiveWindowStart(), todayKST());
+    if (page === "fixedroute") loadRange(pcLiveWindowStart(), todayKST());
     else if (page === "monthclose") loadRange(`${(() => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 2); return d.toISOString().slice(0, 7); })()}-01`, todayKST()); // ✅ 월 마감 — 지난달 · 전월 비교까지
     else if (page === "dept") loadRange(pcLiveWindowStart(), prevDayStr(mobileLiveStart()));
     else if (page === "fleet" || page === "ratecard" || page === "myinfo" || page === "company-fare") loadFullHistory(); // 누적 매출·운임표·내 전체 실적
@@ -4306,7 +4297,7 @@ const thisMonth = thisMonthKST();
       const sixAgo = d.toISOString().slice(0, 7) + "-01";
       loadRange(`${y}-01-01` < sixAgo ? `${y}-01-01` : sixAgo, todayKST()); // 올해·최근 6개월 통계
     }
-  }, [page, loadRange, loadFullHistory, loadCanceledHistory]);
+  }, [page, loadRange, loadFullHistory]);
 
   // 🔎 세부검색(배차현황) — ⭐ 2026-11-05 PC·모바일 일치: 목록 화면에서 메인으로 올림(세부검색만 걸어도 PC처럼 고정노선 오더까지 찾기)
   const [mDetail, setMDetail] = useState(null);
@@ -5630,7 +5621,6 @@ const title =
   : String(page).startsWith("dept:") ? ({ "dept:sales": "영업관리", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 제출 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:routefare": "노선 특수운임", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서", "dept:payroll": "급여 계산", "dept:payslip": "급여명세서", "dept:leaveplan": "연차 사용 계획", "dept:leavepromo": "연차 관리", "dept:briefing": "일일 경영 보고" , "dept:analysis": "경영 분석", "dept:apqueue": "결재 대기", "dept:staffinfo": "직원 정보"}[page] || "")
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
-  : page === "canceled" ? "취소내역"
   : page === "handover" ? "인수인계"
   : page === "attendance" ? "출근기록부"
   : page === "myinfo" ? "내정보"
@@ -6077,7 +6067,7 @@ const title =
         }
     : String(page).startsWith("dept:")
       ? () => setPage("dept")
-    : page === "notice" || page === "schedule" || page === "unassigned" || page === "canceled" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff" || page === "drvacc" || page === "drivers" || page === "clients" || page === "fixedroute" || page === "monthclose" || page === "perms"
+    : page === "notice" || page === "schedule" || page === "unassigned" || page === "handover" || page === "attendance" || page === "ratecard" || page === "myinfo" || page === "settings" || page === "fleet" || page === "intel" || page === "national-fare" || page === "gsheet" || page === "company-fare" || page === "sales" || page === "approval" || page === "staff" || page === "drvacc" || page === "drivers" || page === "clients" || page === "fixedroute" || page === "monthclose" || page === "perms"
       ? () => setPage("list")
       : page === "fare"
       ? () => setPage(prevPage || "list")
@@ -6245,11 +6235,6 @@ onGoAttendance={() => {
           onGoUnassigned={() => {
             setUnassignedTypeFilter("전체");
             setPage("unassigned");
-            setShowMenu(false);
-          }}
-
-          onGoCanceled={() => {
-            setPage("canceled");
             setShowMenu(false);
           }}
 
@@ -7302,14 +7287,6 @@ setOpenMemo={setOpenMemo}
             </React.Suspense>
           </div>
         )}
-        {page === "canceled" && (
-          <MobileCanceledList
-            orders={allCanceledOrders}
-            onBack={() => setPage("list")}
-            cardVersionB={cardVersionB}
-            mobileUsers={mobileUsers}
-          />
-        )}
 
       </div>
 
@@ -8109,7 +8086,6 @@ function MobileSideMenu({
   onGoRateCard,
   onGoSales,
   onGoUnassigned,
-  onGoCanceled,
   onGoNotice,
   onGoSchedule,
   hasNewNotice,
@@ -10974,8 +10950,8 @@ function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriv
       svg: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>,
     },
     {
-      label: "취소",
-      desc: "이 오더를 삭제합니다 (모든 화면에서 사라짐)",
+      label: "삭제",
+      desc: "이 오더를 삭제합니다 (모든 화면에서 사라지며 되돌릴 수 없습니다)",
       action: onDelete,
       danger: true,
       svg: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>,
@@ -13311,10 +13287,10 @@ const handleAssignClick = async () => {
       </div>
     )}
 
-    {/* 버튼 — 수정 · 취소 (🧹 2026-11-14 빠른수정은 사용자 요청으로 뺐다 — 수정은 [수정] 한 곳에서) */}
+    {/* 버튼 — 수정 · 삭제 (🧹 2026-11-14 빠른수정은 사용자 요청으로 뺐다 — 수정은 [수정] 한 곳에서) */}
     <div className="mt-3.5 grid grid-cols-2 gap-1.5">
       <button onClick={handleGoToEdit} className={`h-10 rounded-xl text-[13px] font-extrabold ${cardVersionB ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white"}`}>수정</button>
-      <button onClick={onCancelOrder} className={`h-10 rounded-xl text-[13px] font-extrabold ${cardVersionB ? "text-white/80 border border-white/20" : "text-[#5B6B85] border border-[#E3E8F0] bg-white"}`}>오더취소</button>
+      <button onClick={onCancelOrder} className={`h-10 rounded-xl text-[13px] font-extrabold ${cardVersionB ? "text-white/80 border border-white/20" : "text-[#5B6B85] border border-[#E3E8F0] bg-white"}`}>오더 삭제</button>
     </div>
       {showQuickEdit && (
         <QuickEditSheet
@@ -22083,325 +22059,6 @@ function MobileStatusTable({ title, orders, onBack }) {
     </div>
   );
 }
-// ======================================================================
-// 📌 취소내역 — 오더를 취소(소프트 삭제)하면 여기로 모인다. "재등록"으로 되살리거나
-// "완전삭제"로 영구 삭제할 수 있다. PC에서 취소한 오더도 상태 필드가 같으므로
-// 이 화면에 똑같이 나타난다(단, PC 쪽 취소 액션 자체를 소프트 취소로 바꾸는 작업은
-// 이번엔 하지 않아 PC에서 취소한 건은 취소자/취소일시가 비어 보일 수 있다).
-// ======================================================================
-function MobileCanceledList({ orders = [], onBack, cardVersionB = false, mobileUsers = [] }) {
-  const [confirmInfo, setConfirmInfo] = useState(null);
-  const [detailInfo, setDetailInfo] = useState(null);
-  const [restoreTarget, setRestoreTarget] = useState(null);
-  const [purgeTarget, setPurgeTarget] = useState(null);
-  const [purgeAll, setPurgeAll] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [toastMsg, setToastMsg] = useState("");
-
-  const flash = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(""), 2000); };
-
-  const sorted = React.useMemo(
-    () => [...orders].sort((a, b) => (toMillis(b.취소일시) || toMillis(b.updatedAt)) - (toMillis(a.취소일시) || toMillis(a.updatedAt))),
-    [orders]
-  );
-
-  const handleRestore = async () => {
-    if (!restoreTarget || busy) return;
-    setBusy(true);
-    try {
-      const hasCarNo = !!String(restoreTarget.차량번호 || "").trim();
-      await updateDoc(doc(db, restoreTarget.__col, restoreTarget.id), {
-        상태: hasCarNo ? "배차완료" : "배차중",
-        배차상태: hasCarNo ? "배차완료" : "배차중",
-        취소자: deleteField(),
-        취소일시: deleteField(),
-        취소처리: deleteField(),
-        updatedAt: serverTimestamp(),
-        _lastModified: Date.now(),
-      });
-      setRestoreTarget(null);
-      flash("재등록 완료");
-    } catch (e) {
-      alert("재등록 중 오류가 발생했습니다: " + e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handlePurge = async () => {
-    if (!purgeTarget || busy) return;
-    setBusy(true);
-    try {
-      await deleteOrdersAtomicMobile([{ col: purgeTarget.__col, id: purgeTarget.id }]); // ⭐ 2026-11-05 삭제 진행 창
-      setPurgeTarget(null);
-      flash("완전 삭제 완료");
-    } catch (e) {
-      alert("삭제 중 오류가 발생했습니다: " + e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handlePurgeAll = async () => {
-    if (!sorted.length || busy) return;
-    setBusy(true);
-    try {
-      setPurgeAll(false);
-      // ⭐ 2026-11-05 건별 병렬 삭제 → 한 번에(writeBatch) + 삭제 진행 창(한 줄씩 사라지지 않게)
-      await deleteOrdersAtomicMobile(sorted.map((o) => ({ col: o.__col, id: o.id })));
-      flash("전체 삭제 완료");
-    } catch (e) {
-      alert("전체 삭제 중 오류가 발생했습니다: " + e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="px-4 pt-3 pb-24">
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <p className="text-[12px] text-gray-400">
-          취소된 오더 {sorted.length}건 — 재등록하면 취소 전 상태로 돌아가고, 완전삭제하면 복구할 수 없습니다.
-        </p>
-        {!!sorted.length && (
-          <button
-            type="button"
-            onClick={() => setPurgeAll(true)}
-            className="shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-red-200 text-red-500 bg-red-50"
-          >
-            전체삭제
-          </button>
-        )}
-      </div>
-
-      {!sorted.length && (
-        <div className="flex flex-col items-center justify-center py-24 text-gray-300">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3" className="mb-3">
-            <path d="M9 3h6l2 4H7l2-4z" /><rect x="4" y="7" width="16" height="14" rx="2" /><path d="M9 12h6" />
-          </svg>
-          <div className="text-[13px] font-semibold text-gray-400">취소된 오더가 없습니다</div>
-        </div>
-      )}
-
-      <div className="space-y-3">
-        {sorted.map((o) => (
-          <div
-            key={o.id || o._id}
-            onClick={() => setDetailInfo(o)}
-            className="bg-white rounded-xl border border-gray-200 p-4 active:bg-gray-50 transition cursor-pointer"
-          >
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <div className="text-[13px] font-bold text-gray-800 truncate">{o.거래처명 || "-"}</div>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setConfirmInfo(o); }}
-                className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-500 border border-red-200"
-              >
-                배차취소
-              </button>
-            </div>
-            <div className="text-[12px] text-gray-500 mb-0.5 truncate">{o.상차지명 || "-"} → {o.하차지명 || "-"}</div>
-            <div className="text-[11px] text-gray-400 mb-2">
-              {o.상차일 || ""}{o.상차시간 ? ` · ${o.상차시간}` : ""}
-              {o.차량번호 ? ` · ${o.차량번호}` : ""}{o.기사명 ? ` · ${o.기사명}` : ""}
-            </div>
-            {(!!o.청구운임 || !!o.기사운임) && (
-              <div className="flex gap-4 text-[12px] text-gray-600 mb-3">
-                <span>청구 {Number(o.청구운임 || 0).toLocaleString()}원</span>
-                <span>기사 {Number(o.기사운임 || 0).toLocaleString()}원</span>
-              </div>
-            )}
-            <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-              <button
-                onClick={() => setRestoreTarget(o)}
-                className={`flex-1 py-2 rounded-lg text-[12px] font-bold text-white ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
-              >
-                재등록
-              </button>
-              <button
-                onClick={() => setPurgeTarget(o)}
-                className="flex-1 py-2 rounded-lg text-[12px] font-bold border border-red-200 text-red-500"
-              >
-                완전삭제
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {confirmInfo && (
-        <DispatchConfirmModal order={confirmInfo} cardVersionB={cardVersionB} mobileUsers={mobileUsers} mode="cancel" onClose={() => setConfirmInfo(null)} />
-      )}
-
-      {restoreTarget && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center px-6" onClick={() => !busy && setRestoreTarget(null)}>
-          <div className="absolute inset-0 bg-black/50" />
-          <div className="relative bg-white rounded-2xl w-full max-w-xs p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="text-[15px] font-bold text-gray-800 mb-2">재등록하시겠습니까?</div>
-            <div className="text-[13px] text-gray-500 mb-5">
-              {restoreTarget.거래처명 || "-"} · {restoreTarget.상차지명 || "-"} → {restoreTarget.하차지명 || "-"}<br />
-              취소 전 상태({restoreTarget.차량번호 ? "배차완료" : "배차중"})로 목록에 다시 나타납니다.
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => setRestoreTarget(null)} disabled={busy} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-[13px] font-semibold">닫기</button>
-              <button onClick={handleRestore} disabled={busy} className={`flex-1 py-2.5 rounded-xl text-white text-[13px] font-bold ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}>
-                {busy ? "처리 중..." : "재등록"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {purgeTarget && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center px-6" onClick={() => !busy && setPurgeTarget(null)}>
-          <div className="absolute inset-0 bg-black/50" />
-          <div className="relative bg-white rounded-2xl w-full max-w-xs p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="text-[15px] font-bold text-gray-800 mb-2">완전삭제하시겠습니까?</div>
-            <div className="text-[13px] text-gray-500 mb-5">
-              {purgeTarget.거래처명 || "-"} · {purgeTarget.상차지명 || "-"} → {purgeTarget.하차지명 || "-"}<br />
-              완전삭제하면 다시 복구할 수 없습니다.
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => setPurgeTarget(null)} disabled={busy} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-[13px] font-semibold">닫기</button>
-              <button onClick={handlePurge} disabled={busy} className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-[13px] font-bold">
-                {busy ? "처리 중..." : "완전삭제"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {purgeAll && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center px-6" onClick={() => !busy && setPurgeAll(false)}>
-          <div className="absolute inset-0 bg-black/50" />
-          <div className="relative bg-white rounded-2xl w-full max-w-xs p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="text-[15px] font-bold text-gray-800 mb-2">전체삭제하시겠습니까?</div>
-            <div className="text-[13px] text-gray-500 mb-5">
-              취소내역 {sorted.length}건을 모두 완전삭제합니다.<br />
-              완전삭제하면 다시 복구할 수 없습니다.
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => setPurgeAll(false)} disabled={busy} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-[13px] font-semibold">닫기</button>
-              <button onClick={handlePurgeAll} disabled={busy} className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-[13px] font-bold">
-                {busy ? "처리 중..." : "전체삭제"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {detailInfo && (
-        <CanceledOrderDetailModal
-          order={detailInfo}
-          cardVersionB={cardVersionB}
-          mobileUsers={mobileUsers}
-          onClose={() => setDetailInfo(null)}
-        />
-      )}
-
-      {toastMsg && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-black/80 text-white text-[12px] font-semibold z-[10000]">
-          {toastMsg}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ⭐ 취소내역 카드를 클릭했을 때 뜨는 "오더 전체 정보" 읽기 전용 팝업.
-// DispatchConfirmModal(mode="cancel")은 등록/취소 메타데이터 5줄만 보여주는
-// 반면, 이 팝업은 상/하차지·화물정보·배차정보 등 오더 전체 내용을 보여준다.
-function CanceledOrderDetailModal({ order: o, cardVersionB = false, mobileUsers = [], onClose }) {
-  const accent = cardVersionB ? "#1B2B4B" : "#1d4ed8";
-  const regMs = toMillis(o.createdAt) || toMillis(o.등록일시) || (o.등록일 ? new Date(`${o.등록일}T00:00:00`).getTime() : 0);
-  const regDateStr = regMs
-    ? new Date(regMs).toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
-    : "-";
-  const cancelMs = toMillis(o.취소일시);
-  const cancelDateStr = cancelMs
-    ? new Date(cancelMs).toLocaleString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
-    : "-";
-
-  const Section = ({ title, children }) => (
-    <div className="mb-4">
-      <div className="text-[11px] font-bold mb-1.5" style={{ color: accent }}>{title}</div>
-      <div className="space-y-1.5">{children}</div>
-    </div>
-  );
-  const Row = ({ label, value }) => (
-    !value ? null : (
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-[11px] text-gray-400 shrink-0">{label}</span>
-        <span className="text-[12.5px] text-gray-800 font-semibold text-right break-all">{value}</span>
-      </div>
-    )
-  );
-
-  return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center px-5" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/50" />
-      <div className="relative bg-white rounded-2xl w-full max-w-sm max-h-[85vh] overflow-y-auto p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-[15px] font-bold text-gray-800">오더 전체 정보</div>
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-500 border border-red-200">배차취소</span>
-        </div>
-
-        <Section title="기본정보">
-          <Row label="거래처명" value={o.거래처명} />
-          <Row label="상차지" value={[o.상차지명, o.상차지주소].filter(Boolean).join(" · ")} />
-          <Row label="상차 담당자" value={[o.상차지담당자, o.상차지담당자번호].filter(Boolean).join(" · ")} />
-          <Row label="상차일시" value={[o.상차일, o.상차시간].filter(Boolean).join(" ")} />
-          <Row label="하차지" value={[o.하차지명, o.하차지주소].filter(Boolean).join(" · ")} />
-          <Row label="하차 담당자" value={[o.하차지담당자, o.하차지담당자번호].filter(Boolean).join(" · ")} />
-          <Row label="하차일시" value={[o.하차일, o.하차시간].filter(Boolean).join(" ")} />
-        </Section>
-
-        <Section title="화물정보">
-          <Row label="톤수/차종" value={[o.톤수 || o.차량톤수, o.차종 || o.차량종류].filter(Boolean).join(" / ")} />
-          <Row label="화물내용" value={o.화물내용} />
-          <Row label="상/하차방법" value={[o.상차방법, o.하차방법].filter(Boolean).join(" / ")} />
-          <Row label="혼적여부" value={mixLabelOf(o)} />
-        </Section>
-
-        <Section title="배차정보">
-          <Row label="배차방식" value={o.배차방식} />
-          <Row label="지급방식" value={o.지급방식} />
-          {o.운임구분 && <Row label="운임구분" value={o.운임구분} />}{/* ⭐ 2026-11-02 운임규칙 */}
-          <Row label="차량번호" value={o.차량번호} />
-          <Row label="기사명" value={o.기사명} />
-          <Row label="기사 연락처" value={o.전화번호} />
-          <Row label="청구운임" value={o.청구운임 ? `${Number(o.청구운임).toLocaleString()}원` : ""} />
-          <Row label="기사운임" value={o.기사운임 ? `${Number(o.기사운임).toLocaleString()}원` : ""} />
-          <Row label="수수료" value={o.청구운임 || o.기사운임 ? `${orderProfit(o).toLocaleString()}원` : ""} />{/* ⭐ 2026-11-17 저장된 수수료 대신 다시 계산 */}
-        </Section>
-
-        {(o.메모 || o.전달사항 || o.특이사항) && (
-          <Section title="메모/전달사항">
-            <Row label="메모" value={o.메모} />
-            <Row label="전달사항" value={o.전달사항} />
-            <Row label="특이사항" value={o.특이사항} />
-          </Section>
-        )}
-
-        <Section title="등록/취소 정보">
-          <Row label="등록일" value={regDateStr} />
-          <Row label="작성자" value={resolveCreatorName(o, mobileUsers) || "-"} />
-          <Row label="등록기기" value={o.등록기기} />
-          <Row label="취소한 사람" value={o.취소자} />
-          <Row label="취소일시" value={cancelDateStr} />
-        </Section>
-
-        <button onClick={onClose} className="w-full py-2.5 rounded-xl text-white text-[14px] font-semibold mt-1" style={{ background: accent }}>
-          닫기
-        </button>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-// ======================================================================
-// 📌 미배차현황 (카드형)
 // ======================================================================
 function MobileUnassignedList({
   detailBtn = null,
