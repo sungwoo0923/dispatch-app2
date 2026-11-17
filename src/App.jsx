@@ -93,6 +93,7 @@ const ShortLinkRedirect = React.lazy(() => import("./ShortLinkRedirect"));
 const StandardFare = React.lazy(() => import("./StandardFare"));
 const ChangePassword = React.lazy(() => import("./ChangePassword"));
 const PlatformCenter = React.lazy(() => import("./PlatformCenter"));
+const AdminPreview = React.lazy(() => import("./adminCenter/AdminPreview")); // 🛰 2026-11-18 관리자센터 화면 점검(개발 서버 전용)
 const EntryChooser = React.lazy(() => import("./PlatformCenter").then((m) => ({ default: m.EntryChooser })));
 const ContractSign = React.lazy(() => import("./ContractSign"));
 const DriverGuidePage = React.lazy(() => import("./DriverAppGuide")); // ⭐ 2026-11-06 기사앱 안내 공개 페이지(/driver-guide)
@@ -1179,6 +1180,7 @@ export default function App() {
           <Route path="/no-access" element={<NoAccess />} />
           {/* ⭐ 2026-11-04 승인 전 둘러보기 없앰 — 배포 화면에서는 로그인으로 보낸다(개발 서버 점검용으로만 남김) */}
           <Route path="/preview" element={import.meta.env.DEV ? <PreviewApp /> : <Navigate to="/login" replace />} />
+          <Route path="/preview-admin" element={import.meta.env.DEV ? <AdminPreview /> : <Navigate to="/login" replace />} />
 
           <Route
             path="*"
