@@ -1,4 +1,5 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
+import { readPendingApproval, clearPendingApproval } from "../pendingOpen"; // 🛠 2026-11-17 결재 화면 이동 요청을 새로고침 뒤에도 이어서
 import { MarginPct } from "../marginPct"; // ⭐ 2026-11-17 배차 합계 다이얼 — 수수료 아래 수수료율(수수료 ÷ 청구)
 import { MonthPicker } from "../kpInputs"; // 📅 2026-11-07 월 선택은 프로그램 달력으로
 import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
@@ -2665,8 +2666,9 @@ const quickRange = (days) => {
   }, [topOrderBanner?.noticeId, user?.uid]);
   // ⭐ 2026-11-02 점검 — BannerCenter 결재 배너 탭(kp-open-approval) → 모바일 결재 화면으로 이동
   useEffect(() => {
-    const h = () => {
-      const p = window.__kpOpenApproval;
+    const h = (first) => {
+      // 🛠 2026-11-17 새로고침(배포 버전 맞추기 등) 직전에 누른 [전자결재에서 열기]도 이어서 연다(src/pendingOpen.js)
+      const p = window.__kpOpenApproval || (first === true ? readPendingApproval() : null);
       if (!p) return;
       window.__kpOpenApproval = null;
       if (p.id) { try { sessionStorage.setItem("kpExecApOpen", p.id); } catch { /* 무시 */ } }
@@ -2674,9 +2676,12 @@ const quickRange = (days) => {
       setPage("approval");
       setTimeout(() => window.dispatchEvent(new Event("kp-m-approval-open")), 0); // 이미 전자결재 화면이면 그 자리에서 연다
     };
+    h(true);
     window.addEventListener("kp-open-approval", h);
     return () => window.removeEventListener("kp-open-approval", h);
   }, []);
+  // 전자결재 화면을 떠나면 남은 요청을 지운다(다시 들어와도 같은 문서가 또 열리지 않게)
+  useEffect(() => { if (page !== "approval") clearPendingApproval(); }, [page]);
 
   const showToast = (msg) => {
   if (toastMuted) return;   // ▲ 추가

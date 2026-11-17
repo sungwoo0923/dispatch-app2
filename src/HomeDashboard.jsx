@@ -1,4 +1,5 @@
 import { OrdersWeatherStrip } from "./publicDataMain";
+import { readPendingApproval, clearPendingApproval } from "./pendingOpen";
 import { approvalNavItems } from "./menuTree"; // ⭐ 2026-11-10 메뉴 통일 // 🌦 2026-11-07 오늘 운행 지역 날씨 · 특보
 import NoticeBoard, { canSeeNotice } from "./NoticeBoard";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
@@ -882,16 +883,19 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   // 🔔 결재 배너를 누르면 홈 › 전자결재로 와서 그 문서를 연다(DispatchApp이 홈으로 옮겨 준 뒤 이 값을 남겨 둔다)
   const [apOpenId, setApOpenId] = useState(null);
   useEffect(() => {
-    const take = () => {
-      const p = window.__kpOpenApproval;
+    const take = (first) => {
+      // 🛠 2026-11-17 새로고침(배포 버전 맞추기 등) 직전에 누른 [전자결재에서 열기]도 이어서 연다(src/pendingOpen.js)
+      const p = window.__kpOpenApproval || (first === true ? readPendingApproval() : null);
       if (!p) return;
       window.__kpOpenApproval = null;
-      setBoardTab(`ap:${p.page || "inbox"}`); setApOpenId(p.id);
+      setBoardTab(`ap:${p.page || "inbox"}`); setApOpenId(p.id || null);
     };
-    take();
+    take(true);
     window.addEventListener("kp-open-approval", take);
-    return () => window.removeEventListener("kp-open-approval", take);
+    return () => { window.removeEventListener("kp-open-approval", take); clearPendingApproval(); };
   }, []);
+  // 결재 화면을 떠나면 남은 요청을 지운다(다시 홈에 와도 결재함이 또 열리지 않게)
+  useEffect(() => { if (!String(boardTab).startsWith("ap:")) clearPendingApproval(); }, [boardTab]);
   // ⭐ 2026-11-03 알림 팝업 [인수인계 열기] → 전자결재 › 인수인계(그 글은 HandoverCenter가 window.__kpOpenHandover로 연다)
   useEffect(() => {
     const take = () => { if (window.__kpOpenHandover) setBoardTab("ap:handover"); };
