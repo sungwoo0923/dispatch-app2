@@ -6,6 +6,7 @@ import React from "react";
 import { db } from "./firebase";
 import { collection, doc, getDoc, onSnapshot, query, where } from "firebase/firestore";
 import { isTMUser } from "./staffFilter";
+import { normalizeTeam } from "./teamNames"; // ⭐ 2026-11-17 예전 부서 이름(운영팀 · 인사팀 · 운송팀) → 새 이름으로 묶는다
 
 const RANK = ["대표", "대표이사", "사장", "부사장", "전무", "상무", "이사", "실장", "본부장", "부장", "차장", "팀장", "과장", "대리", "주임", "계장", "사원", "인턴"];
 const rankOf = (p) => { const s = String(p || ""); const i = RANK.findIndex((r) => s.includes(r)); return i === -1 ? 50 : i; };
@@ -61,7 +62,7 @@ export default function OrgChart({ userCompany }) {
     const k = q.trim();
     const g = new Map();
     (members || []).filter((m) => !k || [m.name, m.team, m.position, m.phone, m.전화번호].some((v) => String(v || "").includes(k)))
-      .forEach((m) => { const t = String(m.team || "").trim() || "미배정"; if (!g.has(t)) g.set(t, []); g.get(t).push(m); });
+      .forEach((m) => { const t = normalizeTeam(m.team) || "미배정"; if (!g.has(t)) g.set(t, []); g.get(t).push(m); });
     return [...g.entries()].map(([name, list]) => ({
       name, list: list.sort((a, b) => rankOf(a.position) - rankOf(b.position) || String(a.name).localeCompare(String(b.name), "ko")),
     })).sort((a, b) => (a.name === "미배정") - (b.name === "미배정") || Math.min(...a.list.map((m) => rankOf(m.position))) - Math.min(...b.list.map((m) => rankOf(m.position))) || a.name.localeCompare(b.name, "ko"));

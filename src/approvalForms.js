@@ -439,7 +439,7 @@ export const APPROVAL_FORMS = [
       { k: "fromTeam", label: "현 부서", type: "text", half: true, pick: "teams", ph: "자동 입력", legacyOf: "fromText" },
       { k: "fromPosition", label: "현 직책", type: "text", half: true, pick: "positions", pickTeam: "fromTeam", ph: "자동 입력", legacyOf: "fromText" },
       { k: "fromText", label: "현 소속·직책", type: "text", legacy: true },
-      { k: "toTeam", label: "발령 부서", type: "text", required: true, half: true, ph: "예) 운송팀", pick: "teams" },
+      { k: "toTeam", label: "발령 부서", type: "text", required: true, half: true, ph: "예) 물류운송팀", pick: "teams" },
       { k: "toPosition", label: "발령 직책", type: "text", required: true, half: true, ph: "예) 과장", pick: "positions", pickTeam: "toTeam" },
       { k: "date", label: "발령일", type: "date", required: true },
       { k: "reason", label: "발령 사유", templates: ["정기 승진(근무 평가 우수)", "조직 개편에 따른 전보", "결원 충원", "본인 희망 전보", "직무 역량 강화"], type: "textarea", required: true },
@@ -550,7 +550,8 @@ export const formsOfCat = (cat) => APPROVAL_FORMS.filter((f) => f.cat === cat);
 // 📝 2026-11-15 기본 양식 — 글 칸(tpl · 팀마다 다르면 tplByTeam)은 처음부터 틀이 들어가 있고, 날짜 칸은 오늘(작성일 · 바꿀 수 있다)
 //  ctx: { team } 쓰는 사람의 부서(일일 업무일지 "오늘 업무 내용"이 팀마다 다르다)
 export const todayYmd = () => { const t = new Date(); return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`; };
-const teamKey = (team) => { const t = String(team || ""); return /임원/.test(t) ? "임원" : /경리|회계|재무|총무/.test(t) ? "경리" : /인사/.test(t) ? "인사" : /영업/.test(t) ? "영업" : /개발/.test(t) ? "개발" : /법무/.test(t) ? "법무" : /운영|운송|배차/.test(t) ? "운송" : ""; };
+// ⭐ 2026-11-17 경영지원팀(경리 · 인사) → 경리 틀 · 물류운송팀 → 운송 틀
+const teamKey = (team) => { const t = String(team || ""); return /임원/.test(t) ? "임원" : /경리|회계|재무|총무|경영지원/.test(t) ? "경리" : /인사/.test(t) ? "인사" : /영업/.test(t) ? "영업" : /개발/.test(t) ? "개발" : /법무/.test(t) ? "법무" : /운영|운송|배차|물류/.test(t) ? "운송" : ""; };
 export function templateOf(f, ctx = {}) {
   if (f.tplByTeam) return f.tplByTeam[teamKey(ctx.team)] ?? f.tplByTeam[""] ?? "";
   return f.tpl || "";

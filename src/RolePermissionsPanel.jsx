@@ -62,10 +62,10 @@ const MENU_DESC = {
   영업관리: "영업 현황 · 영업 기회 · 거래처 담당 · 인센티브", // 💼 2026-11-10
 };
 const ROLE_DESC = {
-  admin: "운송 업무 전체(배차·정산·관리자메뉴) — 임원 화면 아님", hrManager: "인사 화면 — 인사관리부·증명서·직원 승인", user: "배차 실무 담당",
+  admin: "운송 업무 전체(배차·운임·기사·거래처·관리자메뉴)", hrManager: "인사 화면 — 인사관리부·증명서·직원 승인", user: "배차 실무 담당",
   test: "경리 화면 — 정산·회계·자금·비품", viewer: "보기만 가능",
   // ⭐ 2026-11-04 통합 역할·부서 사무원·법무·개발
-  allMgr: "운송 ↔ 영업 ↔ 경리 ↔ 인사 화면 전환 — 각 화면 메뉴 중 여기서 켠 것만", hrAcct: "경리 ↔ 인사 화면 전환 — 각 화면 메뉴 중 여기서 켠 것만",
+  allMgr: "운송 ↔ 영업 ↔ 경리 ↔ 인사 화면 전환 — 각 화면 메뉴 중 여기서 켠 것만. 부서가 임원이면 로그인할 때 경영 브리핑부터", hrAcct: "경리 ↔ 인사 화면 전환 — 각 화면 메뉴 중 여기서 켠 것만",
   acctStaff: "경리 화면 — 경리관리자 메뉴 중 여기서 켠 것만", hrStaff: "인사 화면 — 인사관리자 메뉴 중 여기서 켠 것만",
   salesMgr: "영업 화면 — 영업관리(인센티브 규정·거래처 담당 지정)·거래처·단가표·매출", salesStaff: "영업 화면 — 영업관리자 메뉴 중 여기서 켠 것만(본인 실적·인센티브)",
   legalMgr: "법무팀 — 일반 화면, 여기서 켠 메뉴만", legalStaff: "법무팀 — 일반 화면, 여기서 켠 메뉴만",
@@ -413,7 +413,7 @@ export default function RolePermissionsPanel({ users: allUsers = [], roleLabels 
                     <div className="rounded-xl border border-gray-200 px-4 py-3 flex flex-wrap items-center gap-3">
                       <div className="min-w-0">
                         <div className="text-[13.5px] font-black text-[#1B2B4B]">로그인하면 보이는 화면</div>
-                        <div className="text-[11.5px] text-gray-500">임원 화면 = 경영 브리핑·일일 경영 보고·결재함·임원 스케줄·직원 일정 (상단 [전체 메뉴]로 아래 메뉴 권한 화면 전환)</div>
+                        <div className="text-[11.5px] text-gray-500">경영 브리핑 화면 = 경영 브리핑·일일 경영 보고·결재 대기·임원 스케줄·직원 정보 (상단 [전체 메뉴]를 누르면 아래 메뉴 권한 화면으로 바뀌어요)</div>{/* ⭐ 2026-11-17 "임원 화면" 낱말 정리 */}
                       </div>
                       <div className="ml-auto inline-flex rounded-xl bg-gray-100 p-1">
                         {ROLE_SCREENS.map(([k, l]) => <button key={k || "normal"} onClick={() => setDraft((d) => ({ ...d, screen: k }))} className={`px-3.5 py-1.5 rounded-lg text-[12.5px] font-bold ${(draft.screen || "") === k ? "bg-white text-[#1B2B4B] shadow-sm" : "text-gray-500"}`}>{l}</button>)}

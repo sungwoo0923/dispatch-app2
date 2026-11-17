@@ -130,7 +130,8 @@ import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnable
 import { PopupPrefsSection } from "./popupPrefs"; // ⭐ 2026-11-07 팝업 알림 켜고 끄기(계정별)
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare, geocodeAddress, haversineKm, specialSurcharge } from "./tmapFareCalc";
-import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus, ROLE_LABELS, hiddenInSwitchView, switchViewFor, builtinHidesMenu } from "./customRoles";
+import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus, ROLE_LABELS, hiddenInSwitchView, switchViewFor, builtinHidesMenu, EXEC_VIEW } from "./customRoles";
+import { isExecTeam } from "./teamNames"; // ⭐ 2026-11-17 임원 부서 통합관리자 → 로그인하면 경영 브리핑
 import { useReadOnlyGuard } from "./readOnlyGuard";
 import { confirmLeave } from "./leaveGuard";
 import RouteMapModal from "./RouteMapModal";
@@ -2995,7 +2996,7 @@ import { useNewVersion } from "./VersionCheck";
 import { hardReloadForUpdate } from "./UpdateBanner";
 import { textifyOrder } from "./orderText"; // 🛠 2026-11-16 숫자로 저장된 글자 칸(차량번호 등) → 글자 // ✅ 2026-11-16 2단계 마감 — 배차현황 › 월 마감(배차자 1차) · 정산관리 › 마감 검증(경리 2차)
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "./orderHistoryCache";
-import { effectiveScope, scopeAllows, isOfficeBaseMenu } from "./workScope";
+import { effectiveScope, scopeAllows, isOfficeBaseMenu, isOfficeScope } from "./workScope";
 import BizSwitcher from "./freight/BizSwitcher";
 const FreightWorkspace = React.lazy(() => import("./freight/FreightWorkspace"));
 const FreightRevenueStrip = React.lazy(() => import("./freight/FreightSettle").then((m) => ({ default: m.FreightRevenueStrip })));
@@ -8251,7 +8252,7 @@ useEffect(() => {
     await Promise.race([clearFcmToken(auth.currentUser?.uid).catch(() => {}), new Promise((r) => setTimeout(r, 1200))]);
     await signOut(auth).catch(() => {});
     localStorage.removeItem("role");
-    try { sessionStorage.removeItem("skipLoginPopup"); sessionStorage.removeItem("transportValidating"); } catch { /* 무시 */ }
+    try { sessionStorage.removeItem("skipLoginPopup"); sessionStorage.removeItem("transportValidating"); sessionStorage.removeItem("kpExecFull"); } catch { /* 무시 */ } // ⭐ 2026-11-17 다시 로그인하면 경영 브리핑부터
     // ⭐ 2026-11-01 로그아웃 뒤 운송사를 누르면 선택 화면이 한 번 더 뜨던 문제 — 기록을 덮어써서(/login 중복 방지) 이동
     navigate("/login", { replace: true });
   };
@@ -8400,13 +8401,21 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   const coStaffMain = useCompanyStaff(myProfileDoc?.isMaster === true ? (userCompany || localStorage.getItem("userCompany") || "") : "");
   const masterHrMain = !!coStaffMain && masterHasHr(myProfileDoc, coStaffMain, user?.uid);
   // ⭐ 2026-10-31 임원 화면은 권한 관리에서 "임원 화면"으로 정한 역할(예: 임원관리자)만 — 관리자 권한은 직책과 무관하게 일반 화면
-  const isExec = forceExec || roleScreen(customRole) === "exec";
-  const [execFull, setExecFull] = React.useState(() => { try { return localStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
-  const toggleExecFull = () => { const v = !execFull; setExecFull(v); try { localStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } setMenu("HOME"); };
-  const deptMode = deptModeOf(role, customRole) || (isExec && !execFull ? "exec" : null);
+  // ⭐ 2026-11-17 부서가 임원인 통합관리자도 경영 브리핑 화면(사용자 요청) — 로그인하면 늘 여기서 시작하고, [화면 전환]으로 운송 · 영업 · 경리 · 인사를 본다
+  const execAllMgr = realRole === "allMgr" && isExecTeam(myProfileDoc?.team);
+  const isExec = forceExec || execAllMgr || roleScreen(customRole) === "exec";
+  // ⭐ 2026-11-17 [전체 메뉴]로 바꾼 것은 이 로그인 동안만 기억(sessionStorage) — 다시 로그인하면 경영 브리핑부터. 예전 localStorage 값은 지운다
+  const [execFull, setExecFull] = React.useState(() => { try { localStorage.removeItem("kpExecFull"); return sessionStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
+  const setExecFullV = (v) => { setExecFull(v); try { sessionStorage.setItem("kpExecFull", v ? "1" : "0"); } catch { /* 무시 */ } };
+  const toggleExecFull = () => { setExecFullV(!execFull); setMenu("HOME"); };
+  const execHome = isExec && !execFull;
+  // 경영 브리핑을 보는 동안 임원 통합관리자는 운송 화면 역할(관리자)로 — 마지막에 경리 · 인사 화면을 보고 나갔어도 경영 브리핑이 먼저
+  useEffect(() => { if (execAllMgr && execHome && roleView.views && roleView.view !== roleView.views[0][0]) roleView.setView(roleView.views[0][0]); }, [execAllMgr, execHome, roleView.view]); // eslint-disable-line react-hooks/exhaustive-deps
+  const deptMode = execHome ? "exec" : deptModeOf(role, customRole); // ⭐ 2026-11-17 경영 브리핑이 먼저(예전: 부서 화면 → 임원 순 — 임원 역할은 부서 화면이 없어 결과는 같다)
   // 🗂 2026-11-13 업무 범위(사내업무만 / 사내업무 + 경리) — 배차 메뉴 없이 사내업무 화면만(src/workScope.js). 최고관리자는 해당 없음
   // 🛠 2026-11-15 실제 권한 기준(화면을 바꿔도 같다) · 그 권한에서 고를 수 없는 값은 무시(통합관리자 = 전체 고정 등 · src/workScope.js effectiveScope)
   const workScope = role === "totalMaster" || realRole === "totalMaster" ? "" : effectiveScope(realRole, myProfileDoc?.workScope, myProfileDoc?.isMaster === true);
+  const dispatchAlertsOff = !!workScope; // ⭐ 2026-11-17 업무 범위가 있는 계정(사내업무 · 경리업무만)은 배차 알림(재촉 · 수정/취소 요청 · 기사 토스트)을 띄우지 않는다
   useEffect(() => { if (workScope && !scopeAllows(workScope, menu) && !isBizMenu(menu)) setMenu("HOME"); else if (workScope && isBizMenu(menu)) setMenu("HOME"); }, [workScope, menu]);
   useUiScreen(menu, deptMode); // ⭐ 2026-11-07 화면 편집 — 지금 메뉴("이 화면만")·부서(역할별 보이기)
   const deptCompany = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
@@ -8470,7 +8479,7 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   useMarkSeenOnView(menu === "배차현황" && (배차현황Tab === "배차현황" || 배차현황Tab === "미배차현황"), "list", pcUnassigned, 800);
   useMarkSeenOnView(menu === "배차현황" && 배차현황Tab === "미배차현황", "unassigned", pcUnassigned, 800);
   useMarkSeenOnView(menu === "배차현황" && 배차현황Tab === "고정노선현황", "fixed", pcFixedUnassigned, 800);
-  React.useEffect(() => { setDriverToastsMuted(!notificationsEnabled); }, [notificationsEnabled]);
+  React.useEffect(() => { setDriverToastsMuted(!notificationsEnabled || dispatchAlertsOff); }, [notificationsEnabled, dispatchAlertsOff]); // 🗂 2026-11-17 경리업무만 · 사내업무 계정은 기사 알림 끔
   // 그 화면을 보고 있으면 "봤음"으로(토스트·줄 칩 맥박은 그대로 보이고 4초 뒤 숫자만 사라짐)
   React.useEffect(() => {
     if (!["실시간배차현황", "배차현황", "배차관리"].includes(menu) || !drvCounts.orders) return undefined;
@@ -8828,7 +8837,7 @@ return (
           }
           window.__kpOpenNotice = it.openId || it.id; setMenu("HOME"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp:openNotice")), 0);
         }} />
-      <DriverEventToasts onView={onDriverEventView} />{/* ⭐ 2026-11-05 기사 수락/거절·서류·긴급 — 오른쪽 아래 토스트(포커스 안 뺏음 · 8초) */}
+      {!dispatchAlertsOff && <DriverEventToasts onView={onDriverEventView} />}{/* 🗂 2026-11-17 경리업무만이면 기사 알림 토스트도 숨김 · */}{/* ⭐ 2026-11-05 기사 수락/거절·서류·긴급 — 오른쪽 아래 토스트(포커스 안 뺏음 · 8초) */}
       <CheckoutReminderHost uid={user?.uid} role={role} email={user?.email} />{/* ⭐ 2026-11-03 퇴근 10분 전 알림 */}
       <PersonalTodayHost uid={user?.uid} />{/* ⭐ 2026-11-03 오늘 개인 일정 — 오른쪽 아래 배너 */}
       {/* ⭐ 2026-11-02 원격지원 — 요청 상태 막대 · 승인 배너 · 화면 공유 · 포인터(앱 전체에 한 번) */}
@@ -9061,11 +9070,14 @@ return (
 
             {/* 🔀 2026-11-10 화면 전환(통합인사관리자: 경리·인사 / 통합관리자: 운송·영업·경리·인사) — 버튼 하나, 누르면 어느 팀 화면으로 볼지 고르는 창 */}
             <BizSwitcher modules={workScope ? ["inland"] : bizMods.list} current={biz} canGroup={canBizGroup} onPick={pickBiz} />
-            {roleView.views && <ViewSwitcher views={roleView.views} current={roleView.view} roleLabel={ROLE_LABELS[realRole] || ""} onPick={(k) => { roleView.setView(k); setMenu("HOME"); }} />}
-            {/* 👔 임원 — 임원 화면 ↔ 전체 메뉴(관리자 권한일 때만) */}
-            {isExec && (
-              <button type="button" onClick={toggleExecFull} className="kp-chip-btn text-[12px] transition" title={execFull ? "임원 화면으로 돌아갑니다" : "배차·정산 등 전체 메뉴를 봅니다"}>
-                {execFull ? "임원 화면" : "전체 메뉴"}
+            {/* ⭐ 2026-11-17 임원 부서 통합관리자 — 화면 전환 첫 칸이 [경영](경영 브리핑). 고르면 그 화면, 경영을 고르면 경영 브리핑으로 */}
+            {roleView.views && (execAllMgr
+              ? <ViewSwitcher views={[EXEC_VIEW, ...roleView.views]} current={execHome ? EXEC_VIEW[0] : roleView.view} roleLabel={ROLE_LABELS[realRole] || ""} onPick={(k) => { if (k === EXEC_VIEW[0]) setExecFullV(false); else { setExecFullV(true); roleView.setView(k); } setMenu("HOME"); }} />
+              : <ViewSwitcher views={roleView.views} current={roleView.view} roleLabel={ROLE_LABELS[realRole] || ""} onPick={(k) => { roleView.setView(k); setMenu("HOME"); }} />)}
+            {/* 👔 임원 — 경영 브리핑 ↔ 전체 메뉴(화면 전환이 없는 임원 역할만 · 2026-11-17 "임원 화면" 낱말은 뺐다) */}
+            {isExec && !(execAllMgr && roleView.views) && (
+              <button type="button" onClick={toggleExecFull} className="kp-chip-btn text-[12px] transition" title={execFull ? "경영 브리핑으로 돌아가요" : "배차·정산 등 전체 메뉴를 봐요"}>
+                {execFull ? "경영 브리핑" : "전체 메뉴"}
               </button>
             )}
 
@@ -9097,7 +9109,7 @@ return (
 
 
       {/* 화주사 푸시 알림 — 상차 예정시각이 임박했는데 미처리인 오더를 화주사가 푸시하면 중앙에 확인 전까지 표시 */}
-      {activeNudge && (
+      {activeNudge && !dispatchAlertsOff && ( /* ⭐ 2026-11-17 경리업무만(배차 알림 없음) */
         <div className="fixed inset-0 z-[9999999] bg-black/55 flex items-center justify-center p-4">
           <style>{`
             @keyframes nudgePopIn { from { opacity:0; transform:scale(0.92); } to { opacity:1; transform:scale(1); } }
@@ -9143,7 +9155,7 @@ return (
       )}
 
       {/* 화주사 수정요청/기사취소요청 중앙 팝업 — 확인은 알림만 닫고, 실제 승인/거절은 목록의 뱃지 클릭으로 처리 */}
-      {activeReqAlert && (
+      {activeReqAlert && !dispatchAlertsOff && ( /* ⭐ 2026-11-17 경리업무만(배차 알림 없음) */
         <div className="fixed inset-0 z-[9999999] bg-black/55 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[440px] overflow-hidden" style={{ animation: "nudgePopIn 0.25s ease-out" }}>
             <div
@@ -9218,9 +9230,9 @@ return (
             myStats={myStats}
             pending={pendingToday}
             delayed={0}
-            dispatchData={workScope ? [] : dispatchDataFiltered}
+            dispatchData={isOfficeScope(workScope) ? [] : dispatchDataFiltered}
             onOrderDoubleClick={(order) => setHomeClickedOrder(order)}
-            dept={workScope ? "office" : deptMode}
+            dept={isOfficeScope(workScope) ? "office" : deptMode}
             onTodoGo={(k) => { const [m, t] = String(k).split(":"); if (m === "배차현황" && t) set배차현황Tab(t); handleMenuClick(m); }}
             onDeptGo={(k) => { const [m, t] = String(k).split(":"); if (m === "정산관리" && t) set정산관리Tab(t); if (m === "출근기록부" || (m === "인사관리부" && t)) { try { sessionStorage.setItem("kpHrTab", m === "출근기록부" ? "attendance" : t); } catch { /* 무시 */ } handleMenuClick("인사관리부"); return; } if (m === "기사서류") { set기사관리Tab("docs:driver"); handleMenuClick("기사관리"); return; } if (m === "기사승인") { set기사관리Tab("acc:pending"); handleMenuClick("기사관리"); return; } if (m === "자금관리" && t) { try { sessionStorage.setItem("kpFundsTab", t); } catch { /* 무시 */ } } if (m === "영업관리" && t) { try { sessionStorage.setItem("kpSalesTab", t); } catch { /* 무시 */ } } if (m === "결재함") { window.__kpOpenApproval = t ? { id: t, page: "inbox" } : { page: "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; } handleMenuClick(m); }}
           />
