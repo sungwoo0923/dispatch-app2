@@ -29,6 +29,7 @@ function mainTable() {
   document.querySelectorAll("#root table").forEach((t) => {
     if (!t.offsetParent || !t.tHead || t.rows.length < 2) return;
     if (t.closest("[data-kp-dialog],[role=dialog]")) return; // 팝업 안 표는 빼고
+    if (t.closest("#invoiceArea, [data-kp=inv-fit]")) return; // ⭐ 2026-11-17 거래명세서 문서(A4 미리보기)는 따로 맞춘다 — 여기서 줄이거나 칸을 … 로 자르면 글씨가 깨진다
     const hr = t.tHead.rows[t.tHead.rows.length - 1]; if (!hr || hr.cells.length < 3) return;
     const w = t.getBoundingClientRect().width / zoomOf(t); if (w > bw) { bw = w; best = t; }
   });
