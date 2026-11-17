@@ -307,6 +307,19 @@ function filterOrders(rows, a = {}) {
 const sortOrders = (rows) => rows.sort((x, y) => `${x.상차일}${x.상차시간 || ""}`.localeCompare(`${y.상차일}${y.상차시간 || ""}`));
 const sumOf = (rows) => rows.reduce((s, r) => { const sale = won(r.청구운임); const cost = won(r.기사운임); s.count += 1; s.sale += sale; s.cost += cost; s.profit += sale - cost; return s; }, { count: 0, sale: 0, cost: 0, profit: 0 });
 
+// ⭐ 2026-11-17 도움말 센터 사본 — 질문 낱말로 묶음 · 항목 찾기(메뉴 이름이 맞으면 그 메뉴 전체)
+let _help = null;
+const helpData = () => (_help || (_help = (() => { try { return require("./helpData.json"); } catch { return { common: [], menus: {} }; } })()));
+function searchHelp(query) {
+  const H = helpData();
+  const toks = String(query).split(/[\s,·?!.]+/).map((w) => w.replace(/(에서는|에서|으로|은|는|이|가|을|를|의)$/, "")).filter((w) => w.length >= 2);
+  const menuHit = Object.keys(H.menus).find((m) => toks.some((w) => m.includes(w) || w.includes(m)));
+  if (menuHit && toks.length <= 2) return H.menus[menuHit].map((s) => ({ 메뉴: menuHit, 묶음: s.title, 설명: s.intro, 항목: s.items.slice(0, 14) }));
+  const hits = [];
+  const scan = (menu, list) => list.forEach((s) => s.items.forEach((it) => { const name = String(it).split(" — ")[0]; let sc = 0; toks.forEach((w) => { if (name.includes(w)) sc += 4; else if (String(it).includes(w)) sc += 2; if (menu.includes(w) || s.title.includes(w)) sc += 1; }); if (sc) hits.push({ sc, 메뉴: menu, 묶음: s.title, 항목: it }); }));
+  scan("공통", H.common); Object.entries(H.menus).forEach(([m, l]) => scan(m, l));
+  return hits.sort((a, b) => b.sc - a.sc).slice(0, 10).map(({ sc, ...r }) => r); // eslint-disable-line no-unused-vars
+}
 const MENUS = {
   HOME: "홈 대시보드(오늘 요약·공지·일정)", 배차관리: "오더 등록·수정·복사, 오더 스캔(캡처·카톡 글 붙여넣기 자동 입력), 다중등록",
   실시간배차현황: "어제·오늘·내일 오더 실시간 보드(배차·기사 배정·상태)", 배차현황: "기간별 배차 내역 조회·수정·엑셀",
@@ -481,9 +494,13 @@ const TOOLS = {
     },
   },
   app_help: {
-    description: "LogisWeb 메뉴·기능 안내. 어디서 무엇을 하는지 물으면 이 목록에서 찾아 답하고 navigate로 열어 줄 수 있다.",
-    input_schema: { type: "object", properties: {} },
-    async run() { return { 메뉴: MENUS, 팁: ["배차관리 화면에서 Ctrl+V로 카톡 캡처·글을 붙여넣으면 오더 스캔이 열립니다", "AI 비서 창에 캡처나 카톡 글을 붙여넣으면 바로 오더 카드로 만들어 등록할 수 있습니다"] }; },
+    description: "LogisWeb 메뉴·기능·사용법 안내(도움말 센터 전체). 프로그램 기능 · 버튼 · 화면 위치 · 사용법을 물으면 반드시 query(질문의 핵심 낱말, 예: \"전자결재\", \"거래명세서 발송\")로 찾아 그 결과만 근거로 답하고, navigate로 화면을 열어 줄 수 있다. query 없이 부르면 메뉴 목록.",
+    input_schema: { type: "object", properties: { query: { type: "string", description: "찾을 낱말(메뉴 이름 · 버튼 이름 · 기능)" } } },
+    async run(ctx, x) {
+      // ⭐ 2026-11-17 도움말 센터 전체에서 찾기(functions/helpData.json = src/helpContent.js 사본 · scripts/genHelpData.mjs)
+      const q = String(x?.query || "").trim();
+      if (q) { const found = searchHelp(q); if (found.length) return { 찾은도움말: found }; }
+      return { 메뉴: MENUS, 팁: ["배차관리 화면에서 Ctrl+V로 카톡 캡처·글을 붙여넣으면 오더 스캔이 열립니다", "AI 비서 창에 캡처나 카톡 글을 붙여넣으면 바로 오더 카드로 만들어 등록할 수 있습니다"] }; },
   },
   calc: {
     description: "운임 계산기: vat_add(공급가→부가세 포함), vat_split(합계→공급가·부가세), per_km(금액÷km), margin(청구 a, 기사 b → 수익·수익률), sum(여러 금액 합).",
@@ -666,7 +683,7 @@ const COMMON = `
 - 시간은 "오후 2시", "오전 9시 30분"처럼, 날짜는 YYYY-MM-DD로 넣는다. '이전/이후'는 상차시간기준·하차시간기준 칸.
 - 권한 오류가 오면 권한이 없다고 알리고 우회하지 않는다.
 - 문자·카톡 안내문 초안(기사 배차 안내, 거래처 운임 안내·견적)을 부탁하면 바로 복사해 보낼 수 있게 완성된 문장으로 쓴다(오더 정보는 도구로 확인).
-- 화면 위치를 물으면 app_help로 확인하고 navigate로 여는 버튼을 띄운다.
+- 프로그램 기능 · 사용법 · 버튼 · 화면 위치를 물으면(예: "전자결재에서 뭘 할 수 있어?") 반드시 app_help에 query를 넣어 찾고, 찾은 도움말만 근거로 정리해 답한 뒤 navigate로 여는 버튼을 띄운다. 도움말에 없으면 없다고 말한다.
 - 표가 도움이 되면 간단한 마크다운 표·목록을 쓴다. 굵게는 **글자**.
 
 [보안]

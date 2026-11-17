@@ -22,6 +22,7 @@ import { CustomSelect } from "./CustomSelect";
 import { VehicleTypePicker } from "./vehicleTypes";
 import { dropdownList } from "./companyDropdownOptions";
 import { remindAtOf } from "./PersonalSchedule";
+import { helpAnswer } from "./helpSearch"; // ⭐ 2026-11-17 서버 없이도 도움말에서 답하기
 import {
   buildUpdate, buildCreateRecord, scanValsToFields, splitPasted, looksLikeOrderText, intentOf, menuWhere, pickerRows, localEditProposal, localAnswer,
   mdBlocks, mdInline, serializeChat, deserializeChat, labelOf, fmtVal, CREATE_FIELDS, missingOf, todayYmd, isUnassigned, won,
@@ -561,6 +562,9 @@ export default function AiAssistant({ dispatches = [], clients = [], places = []
     if (ch) { push({ kind: "update", data: { id: rid(row), col: row.__col, summary: row, changes: ch.map((c) => ({ ...c, before: row[c.field] ?? "" })) } }); return; }
     const ans = localAnswer(text, { dispatches, clients, today });
     if (ans) { push({ content: ans }); return; }
+    // ⭐ 2026-11-17 AI 서버를 못 써도 프로그램 도움말(도움말 센터)에서 찾아 답한다 — "전자결재에서 뭘 할 수 있어?" 등
+    const help = helpAnswer(text);
+    if (help) { push({ content: help.answer, copy: true }); if (help.menu && help.menu !== "HOME") push({ kind: "navigate", data: { menu: help.menu, label: `${help.menu === "배차관리" ? "오더등록" : help.menu} 열기` } }); return; }
     push({ content: `${why || "지금은 AI 서버를 쓸 수 없어요."}\n아래 버튼으로 바로 볼 수 있어요. 오더를 고른 뒤 "3파레트를 2파레트로"처럼 말씀하시면 기본 모드에서도 바꿀 수 있어요.`, chips: ["오더 수정", "오늘 배차 현황", "오늘 미배차", "이번 달 매출", "최근 오더", "거래처 순위"] });
   };
 

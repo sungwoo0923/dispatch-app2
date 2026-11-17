@@ -352,6 +352,7 @@ async function runTeamChat({ db, team, history, text }) {
 }
 
 function apiErrorMessage(e) {
+  if (e instanceof Anthropic.AuthenticationError) { const k = cleanKey(); if (/^sk-ant-/.test(k) && !/^sk-ant-api/.test(k)) return { status: 502, msg: `등록된 값(${keyHint()})은 Claude API 키가 아니에요. 로그인 토큰(sk-ant-usr · sk-ant-oat …)은 서버에서 쓸 수 없어요. Claude Console(console.anthropic.com) › API Keys에서 sk-ant-api 로 시작하는 키를 새로 만들어 등록 · 배포해 주세요: firebase functions:secrets:set ANTHROPIC_API_KEY → firebase deploy --only functions` }; } // ⭐ 2026-11-17
   if (e instanceof Anthropic.AuthenticationError) return { status: 502, msg: `Claude API 키가 올바르지 않습니다(등록된 키: ${keyHint()}). Claude Console(console.anthropic.com) › API Keys에서 키가 살아 있는지 확인하고, 새 키로 다시 등록·배포해 주세요: firebase functions:secrets:set ANTHROPIC_API_KEY → firebase deploy --only functions` };
   if (e instanceof Anthropic.PermissionDeniedError) return { status: 502, msg: "이 API 키로는 사용할 수 없는 기능입니다. Claude Console에서 키 권한을 확인해 주세요." };
   if (e instanceof Anthropic.RateLimitError) return { status: 429, msg: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." };
