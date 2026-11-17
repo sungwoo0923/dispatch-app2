@@ -2975,7 +2975,7 @@ import { useCompanyFeatures } from "./companyFeatures";
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합 현황) — 회사가 쓰는 영역에 따라 상단 메뉴가 바뀐다(src/bizModules.js)
 import { useBizModules, isBizMenu, parseBizMenu, bizTopMenus, bizSideGroups, bizFirstMenu, bizMenuKey, readBiz, writeBiz, BIZ_MENU_ICON, bizInfo as bizInfoOf, bizMenuLabel as bizMenuLabelOf } from "./bizModules";
 import { reportScreen, installScreenVisibility } from "./screenReport";
-import { useRouteGroupFilter, RouteGroupBar, routeGroupOf, RouteGroupField, SheetLiveChip, rgOnScreen } from "./routeGroups";
+import { useRouteGroupFilter, RouteGroupBar, routeGroupOf, RouteGroupField, SheetLiveChip, rgOnScreen, RG_TAB_OFF, RouteGroupSelect, filterRouteGroup } from "./routeGroups";
 import { settleStartTab } from "./settleStart";
 import { QuickOrderLine, useDriverSuggest, DriverSuggestCell, AssignConfirm } from "./SmartDispatchUI"; // ⭐ 2026-11-13 빠른 등록 · 추천 기사
 const SettleHome = React.lazy(() => import("./SettleHome")); // 🧭 정산 홈(처음 열 때 받는다)
@@ -8272,7 +8272,10 @@ useEffect(() => {
  const [navFlat, setNavFlat] = useState(() => navFlatPref()); // ⭐ 2026-11-14 상단 메뉴 묶음(기본) / 예전처럼 한 줄(펼침)
  const [menu, setMenu] = useState(() => { try { const j = JSON.parse(sessionStorage.getItem("kpReloadMenu") || "null"); sessionStorage.removeItem("kpReloadMenu"); if (j && j.menu && Date.now() - j.at < 60000) return j.menu; } catch { /* 무시 */ } return "HOME"; });
   // 🗂 2026-11-14 담당노선구분 탭 — 매출관리는 들어갈 때마다 [전체]부터(다른 화면에서 고른 탭 때문에 매출이 일부만 보이던 문제 · src/routeGroups.jsx)
-  React.useEffect(() => { rg.setScreen(menu); }, [menu, rg.setScreen]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 🗂 2026-11-17 배차현황의 월 마감 · 인수증관리 · 고정노선현황에서는 탭 줄을 숨기고 거르지 않는다(화면 안 [노선구분]으로 고른다)
+  const rgTabOff = menu === "배차현황" && RG_TAB_OFF.includes(배차현황Tab);
+  React.useEffect(() => { rg.setScreen(rgTabOff ? `배차현황:${배차현황Tab}` : menu); }, [menu, rgTabOff, 배차현황Tab, rg.setScreen]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [subRg, setSubRg] = useState("all"); // 인수증관리 안에서 고른 노선구분(월 마감은 화면 안 [노선 전체] 칸이 이미 있다)
  useEffect(() => { try { window.__kpMenu = menu; } catch { /* 무시 */ } }, [menu]);
  // 📍 2026-11-13 지금 보는 화면을 로그인 기록에 적는다(관리센터 실시간 표시 — src/screenReport.js)
  useEffect(() => { installScreenVisibility(); reportScreen(isBizMenu(menu) ? `${bizInfoOf(parseBizMenu(menu).biz).short} · ${bizMenuLabelOf(menu)}` : (menu === "HOME" ? "홈" : menu), "pc"); }, [menu]);
@@ -9193,7 +9196,7 @@ return (
       {/* ---------------- 화면 렌더링 ---------------- */}
       <ColumnStyleHost company={userCompany || localStorage.getItem("userCompany") || ""} />
       <BrowserZoomNotice fit={screenFit} />
-      {rg.enabled && !workScope && rgOnScreen(menu) && <RouteGroupBar rg={rg} rows={dispatchDataPreRG} role={role} userCompany={userCompany} dark={darkMode} />}
+      {rg.enabled && !workScope && rgOnScreen(menu) && !rgTabOff && <RouteGroupBar rg={rg} rows={dispatchDataPreRG} role={role} userCompany={userCompany} dark={darkMode} />}
       {!rg.enabled && ["배차현황", "실시간배차현황"].includes(menu) && <div className="mb-1 flex justify-end empty:hidden"><SheetLiveChip role={role} userCompany={userCompany} /></div>}
       <main className={`kp-main ${menu === "HOME" || menu === BRIEF_MENU || EXEC_MENUS.includes(menu) ? "kp-main-bare" : ""} rounded shadow p-4 w-full min-w-0 ${darkMode ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"}`}>
         {!darkMode && <KpPageHeader menu={menu} />}
@@ -9377,7 +9380,8 @@ return (
             {/* 🧾 2026-11-09 인수증관리 — 기사앱 첨부 + 운송사 직접 업로드(인수증·전표) · 운송팀·경리팀 같이 */}
             {배차현황Tab === "인수증관리" && (
               <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}>
-                <ReceiptCenter dispatchData={dispatchDataFiltered} isViewer={isViewer} toast={sflowToast} />
+                <div className="mb-2 flex justify-end"><RouteGroupSelect enabled={rg.enabled} rows={dispatchDataFiltered} value={subRg} onChange={setSubRg} /></div>
+                <ReceiptCenter dispatchData={filterRouteGroup(dispatchDataFiltered, subRg)} isViewer={isViewer} toast={sflowToast} />
               </React.Suspense>
             )}
             {/* ⭐ 2026-11-03 고정노선현황 — 배차표 양식(화주사 구글시트) 오더를 배차현황과 같은 화면으로, 열은 시트 순서 · 시트 실시간 연동 */}

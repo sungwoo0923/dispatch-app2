@@ -186,3 +186,22 @@ export function RouteGroupDropdown({ rg, rows = [], role, userCompany, right = n
     </div>
   );
 }
+
+// ── 🗂 2026-11-17 탭 줄 없이 "화면 안에서" 고르는 노선구분(월 마감 · 인수증관리) ─────────────────
+//  배차현황의 월 마감 · 인수증관리 · 고정노선현황에서는 위 탭 줄을 숨기고(사용자 요청), 필요한 화면은 이 드롭다운으로 거른다
+export const RG_TAB_OFF = ["월마감", "인수증관리", "고정노선현황"];
+export const filterRouteGroup = (rows, g) => (!g || g === "all" || !Array.isArray(rows) ? rows : rows.filter((r) => (routeGroupOf(r) || RG_NONE) === g));
+export function RouteGroupSelect({ rows = [], value = "all", onChange, enabled = true }) {
+  const counts = React.useMemo(() => { const m = new Map(); (rows || []).forEach((r) => { const g = routeGroupOf(r) || RG_NONE; m.set(g, (m.get(g) || 0) + 1); }); return m; }, [rows]);
+  const groups = React.useMemo(() => [...counts.keys()].sort((a, b) => (a === RG_NONE) - (b === RG_NONE) || (counts.get(b) || 0) - (counts.get(a) || 0)), [counts]);
+  if (!enabled || groups.length < 2) return null;
+  return (
+    <label data-kp="route-group-select" className="inline-flex items-center gap-2 h-10 px-3 rounded-xl border border-[#D5DDEA] bg-white text-[14px] font-bold text-[#1B2B4B]">
+      <span className="text-[12px] font-black tracking-wide text-[#7A879C]">노선구분</span>
+      <select value={groups.includes(value) ? value : "all"} onChange={(e) => onChange?.(e.target.value)} className="bg-transparent outline-none text-[14px] font-black text-[#0F1A30] cursor-pointer">
+        <option value="all">전체 ({(rows || []).length.toLocaleString()})</option>
+        {groups.map((g) => <option key={g} value={g}>{rgLabel(g)} ({(counts.get(g) || 0).toLocaleString()})</option>)}
+      </select>
+    </label>
+  );
+}

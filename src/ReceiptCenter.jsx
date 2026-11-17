@@ -52,6 +52,7 @@ export default function ReceiptCenter({ dispatchData = [], isViewer = false, toa
   const [from, setFrom] = React.useState(`${today.slice(0, 8)}01`);
   const [to, setTo] = React.useState(today);
   const [client, setClient] = React.useState("");
+  const [qInput, setQInput] = React.useState(""); // 🔎 2026-11-17 검색창에 입력 → [조회](또는 Enter)를 눌러야 결과가 바뀐다
   const [q, setQ] = React.useState("");
   const [st, setSt] = React.useState("all"); // all · has · missing
   const [sel, setSel] = React.useState(null);
@@ -107,7 +108,11 @@ export default function ReceiptCenter({ dispatchData = [], isViewer = false, toa
         <CustomSelect value={client} onChange={(e) => setClient(e.target.value)} className="h-9 px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[13px] font-semibold text-left min-w-[150px]">
           <option value="">전체 거래처</option>{clients.map((c) => <option key={c} value={c}>{c}</option>)}
         </CustomSelect>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="거래처·상하차지·차량번호·기사 검색" className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] w-[240px]" />
+        <form role="search" onSubmit={(e) => { e.preventDefault(); setQ(qInput); }} className="h-9 w-[300px] flex items-center rounded-lg border border-[#DCE3EE] bg-white focus-within:border-[#1B2B4B] overflow-hidden">
+          <input value={qInput} onChange={(e) => { setQInput(e.target.value); if (!e.target.value) setQ(""); }} placeholder="거래처·상하차지·차량번호·기사 검색" className="flex-1 min-w-0 h-full px-3 text-[13px] outline-none bg-transparent" />
+          {qInput && <button type="button" aria-label="검색어 지우기" onClick={() => { setQInput(""); setQ(""); }} className="px-1.5 text-[#9AA9C3] hover:text-[#1B2B4B] text-[15px]">×</button>}
+          <button type="submit" data-testid="receipt-search-go" className="h-7 mr-1 px-3 rounded-md bg-[#1B2B4B] text-white text-[12.5px] font-black whitespace-nowrap">조회</button>
+        </form>
         <div className="flex gap-1.5 ml-1">{chip("all", "전체", cnt.all)}{chip("has", "제출", cnt.has)}{chip("missing", "미제출", cnt.missing)}</div>
         <div className="flex-1" />
         <button type="button" disabled={!!zipBusy || !checked.size} onClick={() => zipOrders(rows.filter((r) => checked.has(idOf(r))))} className="h-9 px-3.5 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-black disabled:opacity-40">{zipBusy ? `내려받는 중 ${zipBusy}` : `선택 ${checked.size}건 ZIP`}</button>
