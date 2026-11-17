@@ -216,6 +216,28 @@ export async function removeCompanyDropdownOption(key, name, company) {
   return v;
 }
 
+// ✏ 2026-11-17 항목 이름 바꾸기(회사 공용) — 같은 자리에서 이름만 바꾼다. 이미 저장된 오더 값은 그대로(예전 이름은 "직접 입력값"으로 보인다)
+export async function renameCompanyDropdownOption(key, from, to, company) {
+  const co = String(company || "").trim() || resolveCompanyKey();
+  const a = clean(from), b = clean(to);
+  if (!co) throw new Error("회사 정보를 찾지 못했습니다");
+  if (!b) throw new Error("이름을 입력해 주세요");
+  if (a === b) return b;
+  const ref = doc(db, "companySettings", co);
+  let stored = companyOptionsSnapshot(co).opts?.[key];
+  if (!companyOptionsSnapshot(co).loaded) {
+    try { const snap = await getDoc(ref); stored = snap.exists() ? snap.data()?.dropdownOptions?.[key] : null; } catch { /* 아래에서 기본 목록으로 */ }
+  }
+  const cur = listFromStored(stored, key);
+  if (cur.includes(b)) throw new Error(`'${b}'은(는) 이미 목록에 있어요`);
+  const next = cur.includes(a) ? cur.map((x) => (x === a ? b : x)) : [...cur, b];
+  await setDoc(ref, { dropdownOptions: { [key]: next } }, { merge: true });
+  const st = getStore(co);
+  st.state = { loaded: true, opts: { ...(st.state.opts || {}), [key]: next } };
+  emit(st);
+  return b;
+}
+
 // ⭐ 편집모드일 때만 드롭다운 옆에 붙는 "옵션 관리" 버튼 + 모달 — EditableText와
 // 같은 상호작용(클릭해서 바로 고치기) 느낌을 유지하되, 목록 추가/삭제/순서변경이
 // 필요해 모달로 뺐다. isTotalMaster가 아니거나 편집모드가 꺼져있으면 아무것도

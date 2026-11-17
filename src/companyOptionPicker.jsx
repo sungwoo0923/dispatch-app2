@@ -8,9 +8,9 @@
 //  · onChange(값) — 값은 글자. 빈 글자(또는 noneValue) = 선택 안 함 / 필터는 noneValue="전체"
 import React from "react";
 import { createPortal } from "react-dom";
-import { addCompanyDropdownOption, removeCompanyDropdownOption, useCompanyOptionList, filterByScope } from "./companyDropdownOptions";
+import { addCompanyDropdownOption, removeCompanyDropdownOption, renameCompanyDropdownOption, useCompanyOptionList, filterByScope } from "./companyDropdownOptions";
 import { uiOptionLabel, useUiConfigVersion } from "./uiConfig"; // ⭐ 2026-11-07 화면 편집 — 보이는 이름만 바꾸기(저장값 그대로)
-import { kpConfirm } from "./kpDialog";
+import { kpConfirm, kpPrompt } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const FONT = "'Pretendard','Noto Sans KR',sans-serif";
@@ -182,6 +182,22 @@ function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allo
     catch (e) { setErr(String(e?.message || "").includes("permission") ? "삭제 권한이 없습니다" : (e?.message || "삭제하지 못했습니다")); setAdding(true); }
     finally { setBusy(false); }
   };
+  // ✏ 2026-11-17 이름 바꾸기 — 목록 이름만 바꾼다(지금 이 오더 값이 그 이름이면 새 이름으로 같이 바꾼다)
+  const doRename = async (v) => {
+    const nv = clean(await kpPrompt(`'${v}' 새 이름을 입력해 주세요\n${ttl} 목록(PC · 모바일 모두)에서 이름이 바뀌어요. 예전에 저장된 오더는 예전 이름 그대로예요.`, v));
+    if (!nv || nv === v) return;
+    setBusy(true); setErr("");
+    try { await renameCompanyDropdownOption(optKey, v, nv, co.company); if (cur === v) onPick(nv); }
+    catch (e) { setErr(String(e?.message || "").includes("permission") ? "바꿀 권한이 없습니다" : (e?.message || "바꾸지 못했습니다")); }
+    finally { setBusy(false); }
+  };
+  // 🧾 2026-11-17 직접 입력값(목록에 없는 이 오더의 값) → 목록에 넣으면 그다음부터 이름 바꾸기 · 삭제가 된다
+  const doAdopt = async (v) => {
+    setBusy(true); setErr("");
+    try { await addCompanyDropdownOption(optKey, v, co.company); }
+    catch (e) { setErr(String(e?.message || "").includes("permission") ? "추가 권한이 없습니다" : (e?.message || "추가하지 못했습니다")); }
+    finally { setBusy(false); }
+  };
   const onKey = (e) => {
     e.stopPropagation();
     if (e.key === "Escape") { e.preventDefault(); onClose(); return; }
@@ -208,7 +224,15 @@ function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allo
         <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: sheet ? 15.5 : 14.5, fontWeight: o.none ? 700 : 800, color: o.none ? "#8E9BB2" : "#0F1A30" }}>
           {o.none ? noneLabel : (labelOf ? labelOf(o.v) : o.v)}
         </span>
-        {o.legacy ? <span style={{ fontSize: 12, fontWeight: 800, color: "#B54708", whiteSpace: "nowrap" }}>직접 입력값</span> : null}
+        {o.legacy ? <span title="목록에 없는 값이에요(예전에 저장됐거나 목록에서 지워진 이름). 이 오더에만 남아 있어요" style={{ fontSize: 12, fontWeight: 800, color: "#B54708", whiteSpace: "nowrap" }}>직접 입력값</span> : null}
+        {allowAdd && o.legacy ? <button type="button" disabled={busy} data-opt-adopt="1" title="이 값을 목록에 넣어요 — 그다음부터 이름 바꾸기 · 삭제가 돼요"
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); doAdopt(o.v); }}
+          style={{ height: 24, padding: "0 8px", borderRadius: 7, border: "1px solid #F3C99B", background: "#FFF7ED", color: "#B54708", fontSize: 11.5, fontWeight: 900, whiteSpace: "nowrap", cursor: "pointer" }}>목록에 추가</button> : null}
+        {allowAdd && !o.none && !o.legacy ? <button type="button" disabled={busy} data-opt-rename="1" title={`${o.v} 이름 바꾸기`} aria-label={`${o.v} 이름 바꾸기`}
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); doRename(o.v); }}
+          style={{ width: 28, height: 28, flexShrink: 0, display: "grid", placeItems: "center", borderRadius: 8, border: 0, background: "transparent", color: "#9AA9C3", cursor: "pointer" }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+        </button> : null}
         {allowAdd && !o.none && !o.legacy ? <OptTrash title={`${o.v} 삭제`} onClick={() => doRemove(o.v)} disabled={busy} /> : null}
       </div>
     );
