@@ -697,7 +697,9 @@ function AssetPaper({ edit }) {
     </div>
   );
 }
-export function AssetDocForm({ edit, setEdit, busy, onSave, onDelete, fileRef, rows = [], onPick, onNew }) {
+export function AssetDocForm({ edit, setEdit, busy, onSave, onDelete, fileRef, rows = [], onPick, onNew, onMove, inline = false, readOnly = false }) {
+  const [okAt, setOkAt] = React.useState(0);
+  const doSave = async () => { const r = await onSave?.(); if (r !== false) { snap.current = ""; setOkAt(Date.now()); setTimeout(() => setOkAt(0), 1800); } };
   const set = (k) => (e) => setEdit((p) => ({ ...p, [k]: e.target.value }));
   const num = (k) => (e) => setEdit((p) => ({ ...p, [k]: e.target.value.replace(/[^\d]/g, "") }));
   const cost = costOf(edit);
@@ -708,19 +710,26 @@ export function AssetDocForm({ edit, setEdit, busy, onSave, onDelete, fileRef, r
   React.useEffect(() => { snap.current = JSON.stringify(edit); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   const dirty = () => snap.current && snap.current !== JSON.stringify(edit);
   const guard = async (fn) => { if (dirty() && !(await kpConfirm("저장하지 않은 내용이 있어요. 그래도 넘어갈까요?"))) return; fn(); };
-  React.useEffect(() => { const k = (e) => { if (e.key === "Escape") guard(() => setEdit(null)); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => { if (inline) return undefined; const k = (e) => { if (e.key === "Escape") guard(() => setEdit(null)); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => { if (okAt === 0) snap.current = JSON.stringify(edit); }, [okAt]); // eslint-disable-line react-hooks/exhaustive-deps
   const kw = q.trim();
-  const list = (rows || []).filter((a) => (cat === "전체" ? a.status !== "폐기" : cat === "폐기" ? a.status === "폐기" : a.category === cat && a.status !== "폐기"))
+  const isLow = (a) => toInt(a.minQty) > 0 && toInt(a.qty) <= toInt(a.minQty);
+  const lowN = (rows || []).filter((a) => a.status !== "폐기" && isLow(a)).length;
+  const list = (rows || []).filter((a) => (cat === "전체" ? a.status !== "폐기" : cat === "재고 부족" ? a.status !== "폐기" && isLow(a) : cat === "폐기" ? a.status === "폐기" : a.category === cat && a.status !== "폐기"))
     .filter((a) => !kw || [a.name, a.location, a.holder, a.code].some((v) => String(v || "").includes(kw)))
     .sort((a, b) => String(a.category).localeCompare(String(b.category), "ko") || String(a.name).localeCompare(String(b.name), "ko"));
   return (
-    <div className="fixed inset-0 z-[100000] bg-[#EEF1F6] flex flex-col" data-kp="asset-doc-form">
+    <div className={inline ? "relative rounded-2xl overflow-hidden border border-[#E3E8F0] bg-[#EEF1F6] flex flex-col shadow-[0_1px_2px_rgba(15,26,48,.04)]" : "fixed inset-0 z-[100000] bg-[#EEF1F6] flex flex-col"} style={inline ? { height: "max(640px, calc(100vh - 300px))" } : undefined} data-kp="asset-doc-form">
       {/* 위 막대 */}
-      <div className="shrink-0 flex items-center gap-2 px-4 md:px-6 h-16 text-white" style={{ background: HERO_BG }}>
-        <div className="min-w-0 mr-auto"><div className="text-[11px] font-bold tracking-[0.14em] text-[#8FB0F0]">OFFICE ASSET · {edit.id ? "EDIT" : "NEW"}</div><div className="text-[18px] font-black truncate">{edit.id ? `비품 수정 · ${edit.name || ""}` : "비품 등록"}</div></div>
-        {onDelete && <button type="button" onClick={onDelete} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13.5px] font-bold text-[#FFB4B4] hover:bg-white/15">삭제</button>}
-        <button type="button" onClick={() => guard(() => setEdit(null))} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13.5px] font-bold text-white hover:bg-white/15">닫기</button>
-        <button type="button" disabled={busy} onClick={onSave} className="h-10 px-6 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black disabled:opacity-50 shadow-[0_6px_16px_rgba(0,0,0,.2)]">{busy ? "저장 중…" : edit.id ? "수정 저장" : "등록"}</button>
+      <div className={`shrink-0 flex items-center gap-2 px-4 md:px-6 ${inline ? "h-14" : "h-16"} text-white`} style={{ background: HERO_BG }}>
+        <div className="min-w-0 mr-auto"><div className="text-[11px] font-bold tracking-[0.14em] text-[#8FB0F0]">OFFICE ASSET · {edit.id ? "EDIT" : "NEW"}</div><div className="text-[17px] font-black truncate">{edit.id ? `${edit.name || "비품"} · 수정` : "새 비품 등록"}</div></div>
+        {!readOnly && edit.id && onMove && edit.status !== "폐기" && <>
+          <button type="button" onClick={() => onMove("in")} className="h-10 px-3.5 rounded-xl bg-white/10 border border-white/20 text-[13.5px] font-bold text-white hover:bg-white/15">입고</button>
+          <button type="button" onClick={() => onMove("out")} className="h-10 px-3.5 rounded-xl bg-white/10 border border-white/20 text-[13.5px] font-bold text-white hover:bg-white/15">출고</button>
+        </>}
+        {!readOnly && onDelete && <button type="button" onClick={onDelete} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13.5px] font-bold text-[#FFB4B4] hover:bg-white/15">삭제</button>}
+        {!inline && <button type="button" onClick={() => guard(() => setEdit(null))} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13.5px] font-bold text-white hover:bg-white/15">닫기</button>}
+        {!readOnly && <button type="button" disabled={busy} onClick={doSave} className="h-10 px-6 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black disabled:opacity-50 shadow-[0_6px_16px_rgba(0,0,0,.2)]">{busy ? "저장 중…" : okAt ? "저장했어요 ✓" : edit.id ? "수정 저장" : "등록"}</button>}
       </div>
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_minmax(0,1fr)]">
         {/* ① 왼쪽 — 비품 대장 목록 */}
@@ -728,7 +737,7 @@ export function AssetDocForm({ edit, setEdit, busy, onSave, onDelete, fileRef, r
           <div className="p-3 border-b border-[#EEF1F6] space-y-2">
             <button type="button" onClick={() => guard(() => onNew?.())} className={`w-full h-10 rounded-xl text-[13.5px] font-black ${!edit.id ? "bg-[#0F1A30] text-white" : "border border-dashed border-[#9AA9C3] text-[#1B2B4B] hover:bg-[#F4F6FA]"}`}>+ 새 비품</button>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="품목 · 위치 · 담당자 검색" className="h-9 w-full px-3 rounded-lg border border-[#DCE3EE] bg-[#F8FAFD] text-[13px] outline-none focus:border-[#2D4C82] focus:bg-white" />
-            <div className="flex flex-wrap gap-1">{["전체", ...ASSET_CATS, "폐기"].map((c) => <button key={c} type="button" onClick={() => setCat(c)} className={`h-7 px-2 rounded-md text-[11.5px] font-black ${cat === c ? "bg-[#0F1A30] text-white" : "bg-[#F1F4F9] text-[#5B6B85]"}`}>{c}</button>)}</div>
+            <div className="flex flex-wrap gap-1">{["전체", "재고 부족", ...ASSET_CATS, "폐기"].map((c) => <button key={c} type="button" onClick={() => setCat(c)} className={`h-7 px-2 rounded-md text-[11.5px] font-black ${cat === c ? "bg-[#0F1A30] text-white" : c === "재고 부족" && lowN ? "bg-[#FEECEC] text-[#B42318]" : "bg-[#F1F4F9] text-[#5B6B85]"}`}>{c}{c === "재고 부족" && lowN ? ` ${lowN}` : ""}</button>)}</div>
           </div>
           <div className="px-3 pt-2 pb-1 text-[11px] font-bold tracking-[0.12em] text-[#9AA9C3]">ASSET LEDGER · {list.length}건</div>
           <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-3">
@@ -744,10 +753,17 @@ export function AssetDocForm({ edit, setEdit, busy, onSave, onDelete, fileRef, r
         {/* ② 가운데 — 입력칸 */}
         <div className="min-h-0 overflow-y-auto">
           <div className="max-w-[720px] mx-auto p-4 md:p-6 space-y-3">
+            {/* 좁은 화면 — 왼쪽 목록 대신 고르기 칸 */}
+            <div className="lg:hidden flex gap-2">
+              <select value={edit.id || ""} onChange={(e) => { const a = (rows || []).find((x) => x.id === e.target.value); guard(() => (a ? onPick?.(a) : onNew?.())); }} className={`${adInp} flex-1`}>
+                <option value="">+ 새 비품 등록</option>
+                {(rows || []).filter((a) => a.status !== "폐기").map((a) => <option key={a.id} value={a.id}>{a.name} · {won(a.qty)}{a.unit || "개"}</option>)}
+              </select>
+            </div>
             <AdSection no="1" title="기본 정보">
               <AdField label="분류"><div className="flex flex-wrap gap-1.5">{ASSET_CATS.map((c) => <button key={c} type="button" className={adChip(edit.category === c)} onClick={() => setEdit((p) => ({ ...p, category: c }))}>{c}</button>)}</div></AdField>
               <div className="mt-3 grid grid-cols-1 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-2.5">
-                <AdField label="품목 이름"><input value={edit.name} onChange={set("name")} className={`${adInp} font-black`} placeholder="예: 노트북, A4용지, 복합기" autoFocus={!edit.id} /></AdField>
+                <AdField label="품목 이름"><input value={edit.name} onChange={set("name")} className={`${adInp} font-black`} placeholder="예: 노트북, A4용지, 복합기" autoFocus={!edit.id && !inline} /></AdField>
                 <AdField label="관리번호 (선택)"><input value={edit.code} onChange={set("code")} className={adInp} placeholder="예: IT-001" /></AdField>
               </div>
             </AdSection>
@@ -799,9 +815,7 @@ export function AssetDocForm({ edit, setEdit, busy, onSave, onDelete, fileRef, r
 }
 export function AssetManager({ company, isViewer = false }) {
   const rows = useCompanyCol("officeAssets", company);
-  const [cat, setCat] = React.useState("전체");
-  const [q, setQ] = React.useState("");
-  const [edit, setEdit] = React.useState(null);
+  const [edit, setEdit] = React.useState(() => blankAsset()); // ⭐ 2026-11-17 비품관리 화면 = 바로 3칸 작업 화면(새 비품 입력부터)
   const [move, setMove] = React.useState(null); // { a, kind: "in"|"out", n, memo }
   const [busy, setBusy] = React.useState(false);
   const fileRef = React.useRef(null);
@@ -810,10 +824,6 @@ export function AssetManager({ company, isViewer = false }) {
   const low = active.filter((a) => toInt(a.minQty) > 0 && toInt(a.qty) <= toInt(a.minQty));
   const value = active.reduce((s, a) => s + toInt(a.price) * (a.category === "소모품" ? 1 : Math.max(1, toInt(a.qty))), 0);
   const repair = active.filter((a) => a.status === "수리중");
-  const kw = q.trim();
-  const shown = L.filter((a) => (cat === "전체" ? a.status !== "폐기" : cat === "재고 부족" ? low.includes(a) : cat === "폐기" ? a.status === "폐기" : a.category === cat && a.status !== "폐기"))
-    .filter((a) => !kw || [a.name, a.location, a.holder, a.code, a.vendor].some((v) => String(v || "").includes(kw)))
-    .sort((a, b) => String(a.category).localeCompare(String(b.category), "ko") || String(a.name).localeCompare(String(b.name), "ko"));
   const save = async () => {
     const e = edit;
     if (!e.name.trim()) return alert("품목 이름을 입력해 주세요.");
@@ -827,8 +837,9 @@ export function AssetManager({ company, isViewer = false }) {
       // 🔗 2026-11-01 구입가 → 수입·지출 장부 "비품 구입" 지출(자금 잔액 반영). 끄면 장부에서 빠진다
       const cost = data.category === "소모품" ? data.price : data.price * Math.max(1, data.qty);
       await upsertAutoEntry(db, id, { company, date: data.purchaseDate, account: data.category === "소모품" ? "소모품비" : "비품구입", item: `비품 구입 · ${data.name}`, amount: toLedger ? cost : 0, vendor: data.vendor, memo: "비품·자산 등록 — 자동 반영", auto: "asset" }).catch(() => {});
-      setEdit(null);
-    } catch (err) { alert(`저장 실패: ${err.message}`); } finally { setBusy(false); }
+      setEdit((p) => ({ ...p, id, history: p.history || [{ at: Date.now(), kind: "등록", n: data.qty }] })); // ⭐ 2026-11-17 저장 뒤에도 그 비품을 계속 보여 준다
+      return true;
+    } catch (err) { alert(`저장 실패: ${err.message}`); return false; } finally { setBusy(false); }
   };
   const doMove = async () => {
     const n = toInt(move.n); if (!n) return;
@@ -841,48 +852,12 @@ export function AssetManager({ company, isViewer = false }) {
       <BookHero en="ACCOUNTING · OFFICE ASSETS" title="비품·자산 관리" desc="사무가구·IT기기·소모품의 수량·위치·담당자·구입가를 관리하고 소모품 재고 부족을 알려줍니다"
         right={<button type="button" data-manual-btn="비품관리" onClick={() => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu: "비품관리", section: "assets" } }))} className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl text-[13.5px] font-black whitespace-nowrap bg-white/12 text-white border border-white/25 hover:bg-white/20">📘 비품 매뉴얼</button>}
         kpis={[["관리 품목", `${active.length}종`, `폐기 ${L.length - active.length}`], ["자산 금액", `${won(value)}원`, "구입가 기준"], ["재고 부족", `${low.length}종`, "최소 수량 이하 소모품"], ["수리중", `${repair.length}건`, ""]]} />
-      <BookCard flush>
-        <div className="px-3.5 md:px-4 py-3 border-b border-[#EEF1F6] flex items-center gap-2 overflow-x-auto no-scrollbar">
-          {["전체", "재고 부족", ...ASSET_CATS, "폐기"].map((c) => <Chip key={c} on={cat === c} onClick={() => setCat(c)}>{c}{c === "재고 부족" && low.length ? ` ${low.length}` : ""}</Chip>)}
-        </div>
-        <div className="px-3.5 md:px-4 py-2.5 border-b border-[#EEF1F6] flex gap-2">
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="품목·위치·담당자·관리번호 검색" className="flex-1 min-w-0 h-10 px-3 rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] text-[13.5px] outline-none focus:border-[#2D4C82]" />
-          {!isViewer && <button type="button" onClick={() => setEdit(blankAsset())} className="h-10 px-4 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap">+ 비품 등록</button>}
-        </div>
-        {rows === null ? <div className="py-16 text-center text-[13px] font-bold text-[#9AA9C3]">불러오는 중…</div>
-          : !shown.length ? <div className="py-16 text-center text-[13.5px] font-bold text-[#9AA9C3]">등록된 비품이 없습니다</div> : (
-          <div className="p-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
-            {shown.map((a) => {
-              const isLow = low.includes(a);
-              return (
-                <div key={a.id} className={`rounded-2xl border p-3 flex gap-3 ${isLow ? "border-[#F5C2C2] bg-[#FFF8F8]" : "border-[#E3E8F0] bg-white"}`}>
-                  <button type="button" onClick={() => !isViewer && setEdit({ ...blankAsset(), ...a, toLedger: a.toLedger === true, qty: String(a.qty ?? ""), minQty: String(a.minQty || ""), price: String(a.price || "") })}
-                    className="w-14 h-14 rounded-xl shrink-0 grid place-items-center text-white text-[11px] font-black bg-cover bg-center" style={a.photo ? { backgroundImage: `url(${a.photo})` } : { background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>{a.photo ? "" : String(a.category || "").slice(0, 2)}</button>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5"><span className="text-[14px] font-black text-[#0F1A30] truncate">{a.name}</span>{a.code && <span className="text-[10.5px] font-bold text-[#9AA9C3] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{a.code}</span>}</div>
-                    <div className="text-[11.5px] text-[#7A879C] truncate">{[a.category, a.location, a.holder && `담당 ${a.holder}`].filter(Boolean).join(" · ")}</div>
-                    <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
-                      <span className={`h-6 px-2 rounded-md text-[11.5px] font-black grid place-items-center tabular-nums whitespace-nowrap ${isLow ? "bg-[#B42318] text-white" : "bg-[#0F1A30] text-white"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(a.qty)}{a.unit || "개"}</span>
-                      {a.status !== "사용중" && <span className="h-6 px-2 rounded-md bg-[#EEF3FC] text-[#2D4C82] text-[11px] font-black grid place-items-center whitespace-nowrap">{a.status}</span>}
-                      {isLow && <span className="text-[11px] font-black text-[#B42318] whitespace-nowrap">재고 부족(최소 {a.minQty})</span>}
-                      {!isViewer && a.status !== "폐기" && <>
-                        <button type="button" onClick={() => setMove({ a, kind: "in", n: "1", memo: "" })} className="ml-auto h-7 px-2.5 rounded-lg border border-[#DCE3EE] text-[11.5px] font-black text-[#1B2B4B] whitespace-nowrap">입고</button>
-                        <button type="button" onClick={() => setMove({ a, kind: "out", n: "1", memo: "" })} className="h-7 px-2.5 rounded-lg border border-[#DCE3EE] text-[11.5px] font-black text-[#1B2B4B] whitespace-nowrap">출고</button>
-                      </>}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </BookCard>
-
-      {edit && (
-        // 🧾 2026-11-17 비품 등록 · 수정 — 오른쪽 사이드 패널 대신 전자결재처럼 "종이 양식"(가운데 문서 · 칸마다 제목 칸 + 입력 칸)으로(사용자 요청)
-        <AssetDocForm edit={edit} setEdit={setEdit} busy={busy} onSave={save} fileRef={fileRef} rows={L} onNew={() => setEdit(blankAsset())} onPick={(a) => setEdit({ ...blankAsset(), ...a, toLedger: a.toLedger === true, qty: String(a.qty ?? ""), minQty: String(a.minQty || ""), price: String(a.price || "") })}
-          onDelete={edit.id ? async () => { if ((await kpConfirm("삭제할까요? (폐기 처리는 상태를 '폐기'로)"))) { const _id = edit.id; /* ⭐ 2026-11-05 삭제 진행 창 */ await runDelete({ label: "비품", task: async () => { await deleteDoc(doc(db, "officeAssets", _id)); /* ⭐ 2026-11-02 점검 — 비품 삭제 시 '비품 구입' 자동 지출 줄도 함께 삭제(amount 0 → 줄 제거) */ await upsertAutoEntry(db, _id, { company, amount: 0, auto: "asset" }).catch(() => {}); } }); setEdit(null); } } : null} />
-      )}
+      {/* ⭐ 2026-11-17 [+ 비품 등록] 버튼 없이 처음부터 3칸(비품 대장 목록 · 입력칸 · 등록 대장 미리보기) */}
+      <AssetDocForm inline readOnly={isViewer} edit={edit} setEdit={setEdit} busy={busy} onSave={save} fileRef={fileRef} rows={L}
+        onNew={() => setEdit(blankAsset())}
+        onPick={(a) => setEdit({ ...blankAsset(), ...a, toLedger: a.toLedger === true, qty: String(a.qty ?? ""), minQty: String(a.minQty || ""), price: String(a.price || "") })}
+        onMove={(kind) => { const a = L.find((x) => x.id === edit.id); if (a) setMove({ a, kind, n: "1", memo: "" }); }}
+        onDelete={edit.id ? async () => { if ((await kpConfirm("삭제할까요? (폐기 처리는 상태를 '폐기'로)"))) { const _id = edit.id; /* ⭐ 2026-11-05 삭제 진행 창 */ await runDelete({ label: "비품", task: async () => { await deleteDoc(doc(db, "officeAssets", _id)); /* ⭐ 2026-11-02 점검 — 비품 삭제 시 '비품 구입' 자동 지출 줄도 함께 삭제(amount 0 → 줄 제거) */ await upsertAutoEntry(db, _id, { company, amount: 0, auto: "asset" }).catch(() => {}); } }); setEdit(blankAsset()); } } : null} />
       {move && (
         <Sheet en={`ASSET · ${move.kind === "in" ? "STOCK IN" : "STOCK OUT"}`} title={`${move.a.name} ${move.kind === "in" ? "입고" : "출고"}`} onClose={() => setMove(null)}
           footer={<><button type="button" onClick={() => setMove(null)} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">취소</button><button type="button" onClick={doMove} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">{move.kind === "in" ? "입고" : "출고"} 처리</button></>}>
