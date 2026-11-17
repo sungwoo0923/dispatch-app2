@@ -629,94 +629,171 @@ export const ASSET_CATS = ["사무가구", "IT기기", "사무기기", "소모�
 const ASSET_STATUS = ["사용중", "보관", "수리중", "폐기"];
 const blankAsset = () => ({ name: "", category: "IT기기", qty: "1", unit: "개", minQty: "", location: "", holder: "", purchaseDate: kstDay(), price: "", vendor: "", status: "사용중", code: "", memo: "", photo: "", toLedger: true });
 
-// 🧾 2026-11-17 비품 등록 양식 — 전자결재 문서와 같은 모양(가운데 종이 · 굵은 바깥선 · 회색 제목 칸 · 입력 칸). 저장 · 계산은 예전과 같다
-const AD_LINE = "border-[#0F1A30]/60";
-function AdCell({ label, children, wide = false, last = false, hint = "" }) {
+// 🧾 2026-11-17 비품 등록 · 수정 — 3분할 작업 화면(사용자 요청)
+//  왼쪽: 등록된 비품 대장 목록(검색 · 분류 · 누르면 그 비품을 바로 불러와 고침) · 가운데: 입력칸 · 오른쪽: 종이 미리보기(비품 등록 대장, 입력하는 대로 바로 바뀜)
+//  좁은 화면: 목록은 숨기고(1024px 아래) 미리보기는 입력칸 아래로(1280px 아래). 저장 · 계산은 예전과 같다
+const AD_LINE = "border-[#0F1A30]/55";
+const adInp = "h-11 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#2D4C82]/10 placeholder:text-[#A9B6CC]";
+const adChip = (on) => `h-9 px-3 rounded-lg text-[13px] font-black border transition ${on ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "bg-white border-[#DCE3EE] text-[#3A4A66] hover:border-[#9AA9C3]"}`;
+function AdField({ label, hint, children, className = "" }) {
+  return <div className={className}><div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">{label}</div>{children}{hint && <div className="mt-1 text-[11.5px] font-semibold text-[#8A97AD]">{hint}</div>}</div>;
+}
+function AdSection({ no, title, children }) {
   return (
-    <div className={`flex ${wide ? "md:col-span-2" : ""} ${last ? "" : `border-b ${AD_LINE}`} min-w-0`}>
-      <div className={`w-[104px] md:w-[116px] shrink-0 bg-[#EEF1F6] border-r ${AD_LINE} px-3 py-3 text-[13.5px] font-black text-[#0F1A30] flex items-center break-keep`}>{label}</div>
-      <div className="flex-1 min-w-0 px-2.5 py-2 flex flex-col justify-center">{children}{hint && <div className="mt-1 text-[11.5px] font-semibold text-[#7A879C]">{hint}</div>}</div>
+    <section className="bg-white rounded-2xl border border-[#E3E8F0] p-4 md:p-5">
+      <div className="flex items-center gap-2 mb-3.5"><span className="w-6 h-6 rounded-md bg-[#EEF3FB] text-[#2D4C82] text-[11.5px] font-black grid place-items-center tabular-nums">{no}</span><span className="text-[15px] font-black text-[#0F1A30]">{title}</span></div>
+      {children}
+    </section>);
+}
+const costOf = (e) => (e.category === "소모품" ? toInt(e.price) : toInt(e.price) * Math.max(1, toInt(e.qty)));
+// 종이 미리보기(읽기 전용)
+function AssetPaper({ edit }) {
+  const row = (l, v, wide) => (
+    <div className={`flex ${wide ? "col-span-2" : ""} border-b ${AD_LINE} min-w-0`}>
+      <div className={`w-[100px] shrink-0 bg-[#EEF1F6] border-r ${AD_LINE} px-2.5 py-2 text-[12.5px] font-black text-[#0F1A30] flex items-center whitespace-nowrap`}>{l}</div>
+      <div className="flex-1 min-w-0 px-2.5 py-2 text-[13px] font-semibold text-[#0F1A30] break-keep [overflow-wrap:anywhere]">{v || <span className="text-[#B8C2D3]">-</span>}</div>
+    </div>);
+  const cost = costOf(edit);
+  return (
+    <div className="bg-white shadow-[0_10px_30px_rgba(15,26,48,0.12)] px-6 py-7 w-full" style={{ fontFamily: "'Pretendard','Noto Sans KR',sans-serif" }} data-kp="asset-paper">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 mr-auto">
+          <div className="text-[11px] font-extrabold tracking-[0.16em] text-[#4B6CB7]">OFFICE ASSET · {edit.code || "AS"}</div>
+          <div className="text-[23px] font-black tracking-[0.12em] text-[#0F1A30] mt-1 whitespace-nowrap">비 품 등 록 대 장</div>
+          <div className="text-[12px] text-[#5A6A85] mt-1">{edit.id ? `수정일 ${kstDay()}` : `등록일 ${kstDay()}`}</div>
+        </div>
+        <div className="w-[96px] h-[92px] border border-[#0F1A30] flex flex-col shrink-0">
+          <div className="h-6 bg-[#EEF1F6] border-b border-[#0F1A30] text-[11.5px] font-black text-[#0F1A30] grid place-items-center">사 진</div>
+          <div className="flex-1 min-h-0 bg-cover bg-center grid place-items-center text-[11px] text-[#B8C2D3]" style={edit.photo ? { backgroundImage: `url(${edit.photo})` } : null}>{edit.photo ? "" : "없음"}</div>
+        </div>
+      </div>
+      <div className="mt-5 border-t-2 border-x border-[#0F1A30] grid grid-cols-2">
+        {row("분류", edit.category)}{row("상태", edit.status)}
+        {row("품목 이름", <b>{edit.name}</b>, true)}
+        {row("관리번호", edit.code)}{row("수량", edit.qty ? `${won(edit.qty)}${edit.unit || "개"}` : "")}
+        {row("위치", edit.location)}{row("담당 · 사용자", edit.holder)}
+        {row("구입일", edit.purchaseDate)}{row("구입가", edit.price ? `${won(edit.price)}원` : "")}
+        {row("구입처", edit.vendor, true)}
+        {row("최소 수량", edit.minQty ? `${won(edit.minQty)}${edit.unit || "개"} 이하면 재고 부족` : "")}{row("장부 반영", edit.toLedger !== false ? "수입·지출 장부 지출" : "기록 안 함")}
+        {row("메모", edit.memo, true)}
+      </div>
+      <div className="mt-3 flex items-center justify-end gap-3">
+        <span className="text-[13px] font-bold text-[#5B6B85]">자산 금액</span>
+        <span className="text-[18px] font-black text-[#0F1A30] tabular-nums border-b-[3px] border-double border-[#0F1A30] pb-0.5">{won(cost)}원</span>
+      </div>
+      {edit.id && (edit.history || []).length > 0 && (
+        <div className="mt-5">
+          <div className="text-[12.5px] font-black text-[#0F1A30] mb-1.5">입출고 이력</div>
+          <div className="border border-[#0F1A30]/40 text-[12.5px]">
+            {[...(edit.history || [])].reverse().slice(0, 10).map((h, i) => (
+              <div key={i} className="grid grid-cols-[96px_56px_minmax(0,1fr)_60px] border-b border-[#0F1A30]/15 last:border-b-0">
+                <div className="px-2 py-1.5 tabular-nums">{new Date(h.at).toLocaleDateString("ko-KR")}</div>
+                <div className="px-2 py-1.5 border-l border-[#0F1A30]/15 font-bold">{h.kind}</div>
+                <div className="px-2 py-1.5 border-l border-[#0F1A30]/15 truncate text-[#5B6B85]">{h.memo || "-"}</div>
+                <div className="px-2 py-1.5 border-l border-[#0F1A30]/15 text-right font-black tabular-nums">{h.kind === "출고" ? "−" : "+"}{h.n}</div>
+              </div>))}
+          </div>
+        </div>)}
     </div>
   );
 }
-const adInp = "h-10 w-full px-2.5 rounded-lg border border-transparent bg-[#F8FAFD] hover:border-[#DCE3EE] focus:bg-white focus:border-[#2D4C82] text-[14.5px] font-semibold text-[#0F1A30] outline-none transition";
-export function AssetDocForm({ edit, setEdit, busy, onSave, onDelete, fileRef }) {
+export function AssetDocForm({ edit, setEdit, busy, onSave, onDelete, fileRef, rows = [], onPick, onNew }) {
   const set = (k) => (e) => setEdit((p) => ({ ...p, [k]: e.target.value }));
   const num = (k) => (e) => setEdit((p) => ({ ...p, [k]: e.target.value.replace(/[^\d]/g, "") }));
-  const cost = edit.category === "소모품" ? toInt(edit.price) : toInt(edit.price) * Math.max(1, toInt(edit.qty));
-  React.useEffect(() => { const k = (e) => { if (e.key === "Escape") setEdit(null); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [setEdit]);
-  const chipCls = (on) => `h-8 px-3 rounded-lg text-[13px] font-black border transition ${on ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "bg-white border-[#DCE3EE] text-[#3A4A66] hover:border-[#9AA9C3]"}`;
+  const cost = costOf(edit);
+  const [q, setQ] = React.useState("");
+  const [cat, setCat] = React.useState("전체");
+  const snap = React.useRef("");
+  const key = edit.id || "__new";
+  React.useEffect(() => { snap.current = JSON.stringify(edit); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dirty = () => snap.current && snap.current !== JSON.stringify(edit);
+  const guard = async (fn) => { if (dirty() && !(await kpConfirm("저장하지 않은 내용이 있어요. 그래도 넘어갈까요?"))) return; fn(); };
+  React.useEffect(() => { const k = (e) => { if (e.key === "Escape") guard(() => setEdit(null)); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }); // eslint-disable-line react-hooks/exhaustive-deps
+  const kw = q.trim();
+  const list = (rows || []).filter((a) => (cat === "전체" ? a.status !== "폐기" : cat === "폐기" ? a.status === "폐기" : a.category === cat && a.status !== "폐기"))
+    .filter((a) => !kw || [a.name, a.location, a.holder, a.code].some((v) => String(v || "").includes(kw)))
+    .sort((a, b) => String(a.category).localeCompare(String(b.category), "ko") || String(a.name).localeCompare(String(b.name), "ko"));
   return (
-    <div className="fixed inset-0 z-[100000] bg-[#0F1A30]/55 overflow-y-auto" onClick={() => setEdit(null)} data-kp="asset-doc-form">
-      <div className="min-h-full flex flex-col items-center px-3 md:px-6 py-4 md:py-8" onClick={(e) => e.stopPropagation()}>
-        {/* 위 도구줄 — 전자결재 작성 화면처럼 */}
-        <div className="w-full max-w-[860px] flex items-center gap-2 mb-3">
-          <div className="text-white min-w-0 mr-auto"><div className="text-[11px] font-bold tracking-[0.14em] text-[#8FB0F0]">OFFICE ASSET · {edit.id ? "EDIT" : "NEW"}</div><div className="text-[17px] font-black truncate">{edit.id ? "비품 수정" : "비품 등록"}</div></div>
-          {onDelete && <button type="button" onClick={onDelete} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13.5px] font-bold text-[#FFB4B4] hover:bg-white/15">삭제</button>}
-          <button type="button" onClick={() => setEdit(null)} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13.5px] font-bold text-white hover:bg-white/15">취소</button>
-          <button type="button" disabled={busy} onClick={onSave} className="h-10 px-6 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black disabled:opacity-50 shadow-[0_6px_16px_rgba(0,0,0,.2)]">{busy ? "저장 중…" : "저장"}</button>
-        </div>
-
-        {/* 종이 */}
-        <div className="w-full max-w-[860px] bg-white shadow-[0_18px_44px_rgba(11,19,36,.35)] px-4 md:px-10 py-6 md:py-10" style={{ fontFamily: "'Pretendard','Noto Sans KR',sans-serif" }}>
-          <div className="flex items-end gap-4 flex-wrap">
-            <div className="min-w-0 mr-auto">
-              <div className="text-[12px] font-extrabold tracking-[0.16em] text-[#4B6CB7]">OFFICE ASSET · AS</div>
-              <div className="text-[24px] md:text-[30px] font-black tracking-[0.12em] text-[#0F1A30] mt-1 whitespace-nowrap">비 품 등 록 대 장</div>
-              <div className="text-[13px] text-[#5A6A85] mt-1">{edit.code ? `관리번호 ${edit.code}` : "관리번호는 비워 두어도 돼요"}</div>
-            </div>
-            {/* 사진 칸 — 결재란 자리 */}
-            <div className={`w-[132px] h-[112px] border border-[#0F1A30] flex flex-col shrink-0`}>
-              <div className="h-7 bg-[#EEF1F6] border-b border-[#0F1A30] text-[12.5px] font-black text-[#0F1A30] grid place-items-center">사 진</div>
-              {edit.photo
-                ? <div className="relative flex-1 min-h-0 bg-cover bg-center" style={{ backgroundImage: `url(${edit.photo})` }}><button type="button" onClick={() => setEdit((p) => ({ ...p, photo: "" }))} className="absolute bottom-1 right-1 h-6 px-2 rounded bg-[#0F1A30]/80 text-white text-[11px] font-bold">빼기</button></div>
-                : <button type="button" onClick={() => fileRef.current?.click()} className="flex-1 text-[12px] font-bold text-[#7A879C] hover:bg-[#F8FAFD]">＋ 사진 올리기</button>}
-            </div>
+    <div className="fixed inset-0 z-[100000] bg-[#EEF1F6] flex flex-col" data-kp="asset-doc-form">
+      {/* 위 막대 */}
+      <div className="shrink-0 flex items-center gap-2 px-4 md:px-6 h-16 text-white" style={{ background: HERO_BG }}>
+        <div className="min-w-0 mr-auto"><div className="text-[11px] font-bold tracking-[0.14em] text-[#8FB0F0]">OFFICE ASSET · {edit.id ? "EDIT" : "NEW"}</div><div className="text-[18px] font-black truncate">{edit.id ? `비품 수정 · ${edit.name || ""}` : "비품 등록"}</div></div>
+        {onDelete && <button type="button" onClick={onDelete} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13.5px] font-bold text-[#FFB4B4] hover:bg-white/15">삭제</button>}
+        <button type="button" onClick={() => guard(() => setEdit(null))} className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-[13.5px] font-bold text-white hover:bg-white/15">닫기</button>
+        <button type="button" disabled={busy} onClick={onSave} className="h-10 px-6 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black disabled:opacity-50 shadow-[0_6px_16px_rgba(0,0,0,.2)]">{busy ? "저장 중…" : edit.id ? "수정 저장" : "등록"}</button>
+      </div>
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_minmax(0,1fr)]">
+        {/* ① 왼쪽 — 비품 대장 목록 */}
+        <aside className="hidden lg:flex flex-col min-h-0 bg-white border-r border-[#E3E8F0]">
+          <div className="p-3 border-b border-[#EEF1F6] space-y-2">
+            <button type="button" onClick={() => guard(() => onNew?.())} className={`w-full h-10 rounded-xl text-[13.5px] font-black ${!edit.id ? "bg-[#0F1A30] text-white" : "border border-dashed border-[#9AA9C3] text-[#1B2B4B] hover:bg-[#F4F6FA]"}`}>+ 새 비품</button>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="품목 · 위치 · 담당자 검색" className="h-9 w-full px-3 rounded-lg border border-[#DCE3EE] bg-[#F8FAFD] text-[13px] outline-none focus:border-[#2D4C82] focus:bg-white" />
+            <div className="flex flex-wrap gap-1">{["전체", ...ASSET_CATS, "폐기"].map((c) => <button key={c} type="button" onClick={() => setCat(c)} className={`h-7 px-2 rounded-md text-[11.5px] font-black ${cat === c ? "bg-[#0F1A30] text-white" : "bg-[#F1F4F9] text-[#5B6B85]"}`}>{c}</button>)}</div>
           </div>
-
-          <div className="mt-6 border-t-2 border-x border-b border-[#0F1A30] grid grid-cols-1 md:grid-cols-2">
-            <AdCell label="분류" wide><div className="flex flex-wrap gap-1.5 py-0.5">{ASSET_CATS.map((c) => <button key={c} type="button" className={chipCls(edit.category === c)} onClick={() => setEdit((p) => ({ ...p, category: c }))}>{c}</button>)}</div></AdCell>
-            <AdCell label="품목 이름"><input value={edit.name} onChange={set("name")} className={`${adInp} font-black`} placeholder="예: 노트북, A4용지, 복합기" autoFocus={!edit.id} /></AdCell>
-            <div className={`md:border-l ${AD_LINE}`}><AdCell label="관리번호"><input value={edit.code} onChange={set("code")} className={adInp} placeholder="예: IT-001 (선택)" /></AdCell></div>
-            <AdCell label="수량 · 단위"><div className="flex gap-1.5"><input inputMode="numeric" value={edit.qty} onChange={num("qty")} className={`${adInp} flex-1 min-w-0 text-right tabular-nums`} /><input value={edit.unit} onChange={set("unit")} className={`${adInp} !w-[84px] shrink-0`} placeholder="개" /></div></AdCell>
-            <div className={`md:border-l ${AD_LINE}`}><AdCell label="최소 수량" hint="이 수량 이하면 ‘재고 부족’으로 알려요"><input inputMode="numeric" value={edit.minQty} onChange={num("minQty")} className={`${adInp} text-right tabular-nums`} placeholder="소모품만" /></AdCell></div>
-            <AdCell label="위치"><input value={edit.location} onChange={set("location")} className={adInp} placeholder="예: 2층 사무실" /></AdCell>
-            <div className={`md:border-l ${AD_LINE}`}><AdCell label="담당 · 사용자"><input value={edit.holder} onChange={set("holder")} className={adInp} placeholder="예: 홍길동" /></AdCell></div>
-            <AdCell label="구입일"><CustomDatePicker value={edit.purchaseDate} onChange={set("purchaseDate")} className={adInp} showIcon /></AdCell>
-            <div className={`md:border-l ${AD_LINE}`}><AdCell label="구입가(원)"><input inputMode="numeric" value={edit.price ? won(edit.price) : ""} onChange={num("price")} className={`${adInp} text-right tabular-nums`} placeholder="0" /></AdCell></div>
-            <AdCell label="구입처" wide><input value={edit.vendor} onChange={set("vendor")} className={adInp} placeholder="예: ○○문구, 쿠팡" /></AdCell>
-            <AdCell label="상태" wide><div className="flex flex-wrap gap-1.5 py-0.5">{ASSET_STATUS.map((c) => <button key={c} type="button" className={chipCls(edit.status === c)} onClick={() => setEdit((p) => ({ ...p, status: c }))}>{c}</button>)}</div></AdCell>
-            <AdCell label="장부 반영" wide>
-              <label className="flex items-center gap-2 text-[14px] font-bold text-[#1B2B4B] py-1 cursor-pointer"><input type="checkbox" className="w-4 h-4 accent-[#0F1A30]" checked={edit.toLedger !== false} onChange={(e) => setEdit((p) => ({ ...p, toLedger: e.target.checked }))} />
-                수입·지출 장부에 지출로 기록 <span className="text-[#5B6B85] font-semibold tabular-nums">{cost ? `— ${won(cost)}원${edit.category !== "소모품" && toInt(edit.qty) > 1 ? ` (구입가 × ${toInt(edit.qty)}개)` : ""}` : ""}</span></label>
-            </AdCell>
-            <AdCell label="메모" wide last><textarea value={edit.memo} onChange={set("memo")} rows={3} className={`${adInp} h-auto py-2 resize-y`} placeholder="보증기간 · 시리얼 번호 등" /></AdCell>
+          <div className="px-3 pt-2 pb-1 text-[11px] font-bold tracking-[0.12em] text-[#9AA9C3]">ASSET LEDGER · {list.length}건</div>
+          <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-3">
+            {!list.length && <div className="py-10 text-center text-[12.5px] font-bold text-[#9AA9C3]">등록된 비품이 없어요</div>}
+            {list.map((a) => { const on = a.id === edit.id; const low = toInt(a.minQty) > 0 && toInt(a.qty) <= toInt(a.minQty); return (
+              <button key={a.id} type="button" onClick={() => on || guard(() => onPick?.(a))} className={`w-full text-left flex items-center gap-2.5 px-2 py-2 rounded-xl mb-1 transition ${on ? "bg-[#0F1A30] text-white" : "hover:bg-[#F4F6FA]"}`}>
+                <span className="w-9 h-9 rounded-lg shrink-0 grid place-items-center text-[10px] font-black bg-cover bg-center" style={a.photo ? { backgroundImage: `url(${a.photo})` } : { background: on ? "rgba(255,255,255,.12)" : "#EEF3FB", color: on ? "#fff" : "#2D4C82" }}>{a.photo ? "" : String(a.category || "").slice(0, 2)}</span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-[13.5px] font-black">{a.name}</span><span className={`block truncate text-[11.5px] ${on ? "text-white/60" : "text-[#7A879C]"}`}>{[a.code, a.location, a.holder].filter(Boolean).join(" · ") || a.category}</span></span>
+                <span className={`shrink-0 text-[12px] font-black tabular-nums ${low ? (on ? "text-[#FFB4B4]" : "text-[#B42318]") : ""}`}>{won(a.qty)}{a.unit || "개"}</span>
+              </button>); })}
           </div>
-
-          {/* 합계 줄 — 결재 문서의 금액 줄처럼 */}
-          <div className="mt-4 flex items-center justify-end gap-3 text-[14px]">
-            <span className="font-bold text-[#5B6B85]">자산 금액</span>
-            <span className="text-[20px] font-black text-[#0F1A30] tabular-nums border-b-[3px] border-double border-[#0F1A30] pb-0.5">{won(cost)}원</span>
-          </div>
-
-          {edit.id && (edit.history || []).length > 0 && (
-            <div className="mt-6">
-              <div className="text-[13.5px] font-black text-[#0F1A30] mb-1.5">입출고 이력</div>
-              <div className="border border-[#0F1A30]/40">
-                <div className="grid grid-cols-[110px_80px_minmax(0,1fr)_80px] bg-[#F5F7FB] border-b border-[#0F1A30]/40 text-[12.5px] font-black text-[#3A4A66]">{["날짜", "구분", "메모", "수량"].map((h, i) => <div key={h} className={`px-2.5 py-1.5 ${i ? "border-l border-[#0F1A30]/20" : ""} ${i === 3 ? "text-right" : ""}`}>{h}</div>)}</div>
-                {[...(edit.history || [])].reverse().slice(0, 15).map((h, i) => (
-                  <div key={i} className="grid grid-cols-[110px_80px_minmax(0,1fr)_80px] border-b border-[#0F1A30]/15 last:border-b-0 text-[13px]">
-                    <div className="px-2.5 py-1.5 tabular-nums">{new Date(h.at).toLocaleDateString("ko-KR")}</div>
-                    <div className="px-2.5 py-1.5 border-l border-[#0F1A30]/15 font-bold">{h.kind}</div>
-                    <div className="px-2.5 py-1.5 border-l border-[#0F1A30]/15 truncate text-[#5B6B85]">{h.memo || "-"}</div>
-                    <div className="px-2.5 py-1.5 border-l border-[#0F1A30]/15 text-right font-black tabular-nums">{h.kind === "출고" ? "−" : "+"}{h.n}</div>
-                  </div>))}
+        </aside>
+        {/* ② 가운데 — 입력칸 */}
+        <div className="min-h-0 overflow-y-auto">
+          <div className="max-w-[720px] mx-auto p-4 md:p-6 space-y-3">
+            <AdSection no="1" title="기본 정보">
+              <AdField label="분류"><div className="flex flex-wrap gap-1.5">{ASSET_CATS.map((c) => <button key={c} type="button" className={adChip(edit.category === c)} onClick={() => setEdit((p) => ({ ...p, category: c }))}>{c}</button>)}</div></AdField>
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-2.5">
+                <AdField label="품목 이름"><input value={edit.name} onChange={set("name")} className={`${adInp} font-black`} placeholder="예: 노트북, A4용지, 복합기" autoFocus={!edit.id} /></AdField>
+                <AdField label="관리번호 (선택)"><input value={edit.code} onChange={set("code")} className={adInp} placeholder="예: IT-001" /></AdField>
               </div>
-            </div>
-          )}
-          <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) { const r = await compressImage(f, 1000, 0.75).catch(() => ""); setEdit((p) => ({ ...p, photo: r })); } }} />
+            </AdSection>
+            <AdSection no="2" title="수량 · 위치">
+              <div className="grid grid-cols-3 gap-2.5">
+                <AdField label="수량"><input inputMode="numeric" value={edit.qty} onChange={num("qty")} className={`${adInp} text-right tabular-nums`} /></AdField>
+                <AdField label="단위"><input value={edit.unit} onChange={set("unit")} className={adInp} placeholder="개 · 대 · 박스" /></AdField>
+                <AdField label="최소 수량" hint="이하면 재고 부족 알림"><input inputMode="numeric" value={edit.minQty} onChange={num("minQty")} className={`${adInp} text-right tabular-nums`} placeholder="소모품" /></AdField>
+              </div>
+              <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+                <AdField label="위치"><input value={edit.location} onChange={set("location")} className={adInp} placeholder="예: 2층 사무실" /></AdField>
+                <AdField label="담당 · 사용자"><input value={edit.holder} onChange={set("holder")} className={adInp} placeholder="예: 홍길동" /></AdField>
+              </div>
+            </AdSection>
+            <AdSection no="3" title="구입 · 장부">
+              <div className="grid grid-cols-2 gap-2.5">
+                <AdField label="구입일"><CustomDatePicker value={edit.purchaseDate} onChange={set("purchaseDate")} className={adInp} showIcon /></AdField>
+                <AdField label="구입가(원)"><input inputMode="numeric" value={edit.price ? won(edit.price) : ""} onChange={num("price")} className={`${adInp} text-right tabular-nums`} placeholder="0" /></AdField>
+              </div>
+              <AdField label="구입처" className="mt-2.5"><input value={edit.vendor} onChange={set("vendor")} className={adInp} placeholder="예: ○○문구, 쿠팡" /></AdField>
+              <label className="mt-3 flex items-center gap-2 rounded-xl bg-[#F6F8FC] border border-[#E3E8F0] px-3 py-2.5 text-[13.5px] font-bold text-[#1B2B4B] cursor-pointer">
+                <input type="checkbox" className="w-4 h-4 accent-[#0F1A30]" checked={edit.toLedger !== false} onChange={(e) => setEdit((p) => ({ ...p, toLedger: e.target.checked }))} />
+                수입·지출 장부에 지출로 기록 <span className="ml-auto text-[#5B6B85] tabular-nums">{cost ? `${won(cost)}원${edit.category !== "소모품" && toInt(edit.qty) > 1 ? ` (× ${toInt(edit.qty)})` : ""}` : ""}</span>
+              </label>
+            </AdSection>
+            <AdSection no="4" title="상태 · 사진 · 메모">
+              <AdField label="상태"><div className="flex flex-wrap gap-1.5">{ASSET_STATUS.map((c) => <button key={c} type="button" className={adChip(edit.status === c)} onClick={() => setEdit((p) => ({ ...p, status: c }))}>{c}</button>)}</div></AdField>
+              <AdField label="사진" className="mt-3">
+                {edit.photo ? <div className="relative rounded-xl overflow-hidden border border-[#E3E8F0] bg-[#F8FAFD]"><img src={edit.photo} alt="" className="w-full max-h-44 object-contain" /><button type="button" onClick={() => setEdit((p) => ({ ...p, photo: "" }))} className="absolute top-2 right-2 h-8 px-3 rounded-lg bg-[#0F1A30]/80 text-white text-[12px] font-bold">빼기</button></div>
+                  : <button type="button" onClick={() => fileRef.current?.click()} className="w-full h-14 rounded-xl border-2 border-dashed border-[#C9D2E0] bg-[#FBFCFE] text-[13px] font-bold text-[#5B6B85] hover:bg-white">◎ 사진 올리기 (선택)</button>}
+              </AdField>
+              <AdField label="메모" className="mt-3"><textarea value={edit.memo} onChange={set("memo")} rows={3} className={`${adInp} h-auto py-2.5 resize-y`} placeholder="보증기간 · 시리얼 번호 등" /></AdField>
+            </AdSection>
+            {/* 좁은 화면 — 미리보기를 아래에 */}
+            <div className="xl:hidden pt-2"><div className="text-[12px] font-bold tracking-[0.12em] text-[#9AA9C3] mb-2">PREVIEW</div><AssetPaper edit={edit} /></div>
+          </div>
+        </div>
+        {/* ③ 오른쪽 — 미리보기 */}
+        <div className="hidden xl:block min-h-0 overflow-y-auto bg-[#E4E9F1] border-l border-[#DCE3EE]">
+          <div className="p-5">
+            <div className="flex items-center gap-2 mb-3"><span className="text-[11px] font-bold tracking-[0.14em] text-[#7A879C]">PREVIEW</span><span className="text-[13px] font-black text-[#1B2B4B]">비품 등록 대장 미리보기</span><span className="ml-auto text-[11.5px] font-semibold text-[#7A879C]">입력하는 대로 바로 바뀌어요</span></div>
+            <AssetPaper edit={edit} />
+          </div>
         </div>
       </div>
+      <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={async (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) { const r = await compressImage(f, 1000, 0.75).catch(() => ""); setEdit((p) => ({ ...p, photo: r })); } }} />
     </div>
   );
 }
@@ -803,7 +880,7 @@ export function AssetManager({ company, isViewer = false }) {
 
       {edit && (
         // 🧾 2026-11-17 비품 등록 · 수정 — 오른쪽 사이드 패널 대신 전자결재처럼 "종이 양식"(가운데 문서 · 칸마다 제목 칸 + 입력 칸)으로(사용자 요청)
-        <AssetDocForm edit={edit} setEdit={setEdit} busy={busy} onSave={save} fileRef={fileRef}
+        <AssetDocForm edit={edit} setEdit={setEdit} busy={busy} onSave={save} fileRef={fileRef} rows={L} onNew={() => setEdit(blankAsset())} onPick={(a) => setEdit({ ...blankAsset(), ...a, toLedger: a.toLedger === true, qty: String(a.qty ?? ""), minQty: String(a.minQty || ""), price: String(a.price || "") })}
           onDelete={edit.id ? async () => { if ((await kpConfirm("삭제할까요? (폐기 처리는 상태를 '폐기'로)"))) { const _id = edit.id; /* ⭐ 2026-11-05 삭제 진행 창 */ await runDelete({ label: "비품", task: async () => { await deleteDoc(doc(db, "officeAssets", _id)); /* ⭐ 2026-11-02 점검 — 비품 삭제 시 '비품 구입' 자동 지출 줄도 함께 삭제(amount 0 → 줄 제거) */ await upsertAutoEntry(db, _id, { company, amount: 0, auto: "asset" }).catch(() => {}); } }); setEdit(null); } } : null} />
       )}
       {move && (
