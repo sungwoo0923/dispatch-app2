@@ -19,7 +19,7 @@ async function call(name, data, force = false) {
   const res = await fetch(`${FUNCTIONS_BASE}/${name}`, { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ data }) });
   let j = {};
   try { j = await res.json(); } catch { /* 무시 */ }
-  if (!res.ok || j.error) throw new Error(j.error?.message || `요청 실패(${res.status})`);
+  if (!res.ok || j.error) { const e = new Error(j.error?.message || `요청 실패(${res.status})`); e.status = j.error?.status || ""; throw e; }
   return j.result;
 }
 // 둘러보기용 가짜 서버(이 탭 안에서만)
@@ -37,7 +37,10 @@ const api = {
   verify: (company, password) => (demo() ? Promise.resolve(demoApi.verify({ password })) : call("payrollPwVerify", { company, password })),
   lock: (company) => (demo() ? Promise.resolve(demoApi.lock()) : call("payrollLock", { company })),
   // ⭐ 2026-11-10 잊었을 때 — 로그인 비밀번호로 방금 다시 확인한 새 토큰(force)으로 부른다(서버가 확인 시각 5분 안인지 본다)
-  reset: (company, newPassword) => (demo() ? Promise.resolve().then(() => demoApi.reset({ newPassword })) : call("payrollPwReset", { company, newPassword }, true)),
+  // ⭐ 2026-11-17 속도 — reauthenticateWithCredential 가 이미 새 토큰(확인 시각 포함)을 받아 둔다 → 토큰을 또 새로 받지 않는다(왕복 1번 줄임).
+  //  서버가 "본인 확인 시간이 지났어요"(UNAUTHENTICATED)라고 하면 그때만 새 토큰으로 한 번 더
+  reset: (company, newPassword) => (demo() ? Promise.resolve().then(() => demoApi.reset({ newPassword }))
+    : call("payrollPwReset", { company, newPassword }).catch((e) => { if (e.status === "UNAUTHENTICATED") return call("payrollPwReset", { company, newPassword }, true); throw e; })),
 };
 
 // ⭐ 2026-11-09 급여관리 바로 열기 — 잠금 상태(서버 함수) 응답을 기다리지 않게
@@ -48,15 +51,22 @@ const stKey = (company) => `kpPayGateSt:${company}:${auth.currentUser?.uid || ""
 const readSt = (company) => { try { const v = JSON.parse(sessionStorage.getItem(stKey(company)) || "null"); return v && typeof v === "object" ? v : null; } catch { return null; } };
 const writeSt = (company, r) => { try { const { unlockedUntil, lockUntil, ...keep } = r || {}; void unlockedUntil; void lockUntil; sessionStorage.setItem(stKey(company), JSON.stringify(keep)); } catch { /* 무시 */ } };
 const stPending = new Map(); // 회사 → { at, p }
+// ⭐ 2026-11-17 잠금 해제 시각(만료 시각만 · 비밀 아님)을 이 탭에 기억 — 이미 열려 있던 사람만 잠깐(서버 문서 확인) 기다리고, 나머지는 비밀번호 칸을 바로 띄운다
+const unKey = (company) => `kpPayGateUntil:${company}:${auth.currentUser?.uid || ""}`;
+const readUntil = (company) => { try { return Number(sessionStorage.getItem(unKey(company))) || 0; } catch { return 0; } };
+const writeUntil = (company, ms) => { try { if (ms > Date.now()) sessionStorage.setItem(unKey(company), String(ms)); else sessionStorage.removeItem(unKey(company)); } catch { /* 무시 */ } };
 // ⭐ 2026-11-10 잠금 해제가 느리던 문제 — 비밀번호 확인 서버(payrollPwVerify)는 자주 안 불려서 매번 처음 켜지느라(콜드 스타트) 몇 초씩 걸렸다.
 //  급여 화면에 들어오면(비밀번호를 치는 동안) 미리 한 번 깨워 둔다 — 아무것도 읽거나 쓰지 않는 호출 · 4분에 한 번만
-let warmAt = 0;
-export function warmPayrollVerify() {
-  if (demo() || Date.now() - warmAt < 4 * 60000) return;
-  warmAt = Date.now();
-  // 로그인 토큰 없이 부른다 — 예전 서버(warm 처리 전)에 닿아도 "로그인 필요"로 끝나서 틀린 횟수로 세지 않는다
-  fetch(`${FUNCTIONS_BASE}/payrollPwVerify`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: { warm: true } }) }).catch(() => { warmAt = 0; });
+// ⭐ 2026-11-17 [비밀번호 정하기 · 바꾸기 · 잊었어요]도 느렸던 이유 — 깨우기는 확인(payrollPwVerify)만 했고, 정하기(payrollPwSet) · 재설정(payrollPwReset)은
+//  서버 함수가 따로라 누를 때마다 처음 켜지느라(콜드 스타트) 몇 초씩 걸렸다 → 그 칸이 뜨는 순간 해당 함수도 미리 깨운다
+const warmAt = new Map();
+export function warmPayrollFn(name) {
+  if (demo() || Date.now() - (warmAt.get(name) || 0) < 4 * 60000) return;
+  warmAt.set(name, Date.now());
+  // 로그인 토큰 없이 부른다 — 서버는 warm이면 아무것도 읽거나 쓰지 않고 끝낸다(예전 서버여도 "로그인 필요"로 끝나서 틀린 횟수로 세지 않는다)
+  fetch(`${FUNCTIONS_BASE}/${name}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: { warm: true } }) }).catch(() => { warmAt.delete(name); });
 }
+export function warmPayrollVerify() { warmPayrollFn("payrollPwVerify"); }
 export function prefetchPayrollStatus(company, { force = false } = {}) {
   if (!company) return Promise.resolve(null);
   const key = `${company}:${auth.currentUser?.uid || ""}`;
@@ -68,6 +78,8 @@ export function prefetchPayrollStatus(company, { force = false } = {}) {
   return p;
 }
 
+// ⭐ 2026-11-17 서버 응답 전 임시 상태(비밀번호 칸을 바로 띄우는 용도 — 권한 판단은 서버가 한다)
+const PENDING_ST = { staff: true, hasPassword: true, admin: false, usingDefault: false, pending: true };
 const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 const inp = "h-12 w-full px-4 rounded-xl border border-[#DCE3EE] bg-white text-[16px] font-bold text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#8FB0F0]/40 tracking-[0.12em]";
 const LockIcon = ({ open = false, size = 26 }) => (
@@ -84,6 +96,7 @@ function PwForm({ company, mode, onDone, onCancel }) {
   const [msg, setMsg] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const change = mode === "change";
+  React.useEffect(() => { warmPayrollFn("payrollPwSet"); }, []); // ⭐ 2026-11-17 입력하는 동안 저장 함수를 깨워 둔다
   const submit = async (e) => {
     e?.preventDefault?.();
     setMsg("");
@@ -113,6 +126,7 @@ function ResetForm({ company, onDone, onCancel }) {
   const [b, setB] = React.useState("");
   const [msg, setMsg] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => { warmPayrollFn("payrollPwReset"); }, []); // ⭐ 2026-11-17 입력하는 동안 재설정 함수를 깨워 둔다
   const submit = async (e) => {
     e?.preventDefault?.();
     setMsg("");
@@ -164,9 +178,15 @@ function GateCard({ title, desc, children }) {
 
 export default function PayrollGate({ company, canAdmin = false, children }) {
   const uid = auth.currentUser?.uid || "";
-  const [st, setSt] = React.useState(() => readSt(company)); // 서버 상태(지난번 값 먼저)
-  const [until, setUntil] = React.useState(0);
-  const [snapReady, setSnapReady] = React.useState(() => demo() || !uid); // 잠금 해제 문서를 한 번 받았는지
+  const [stRaw, setStRaw] = React.useState(() => readSt(company)); // 서버 상태(지난번 값 먼저)
+  const setSt = React.useCallback((f) => setStRaw((s) => (typeof f === "function" ? f(s || PENDING_ST) : f)), []);
+  const st = stRaw || PENDING_ST;
+  const [until, setUntilRaw] = React.useState(0);
+  const setUntil = React.useCallback((ms) => { setUntilRaw(ms); if (!demo()) writeUntil(company, ms); }, [company]);
+  // ⭐ 2026-11-17 바로 띄우기 — 예전엔 잠금 해제 문서(onSnapshot)를 받을 때까지 늘 "확인 중…"이었다.
+  //  이 탭에서 열려 있던 기록이 있을 때만 잠깐 기다리고(최대 1.5초), 아니면 비밀번호 칸을 바로 보여 준다(문서가 오면 알아서 열린다)
+  const [snapReady, setSnapReady] = React.useState(() => demo() || !uid || !(readUntil(company) > Date.now()));
+  React.useEffect(() => { if (snapReady) return undefined; const t = setTimeout(() => setSnapReady(true), 1500); return () => clearTimeout(t); }, [snapReady]);
   const [pw, setPw] = React.useState("");
   const [msg, setMsg] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -174,13 +194,13 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
   const [resetting, setResetting] = React.useState(false); // ⭐ 2026-11-10 비밀번호 잊었을 때
   const [now, setNow] = React.useState(Date.now());
   const lastAct = React.useRef(Date.now());
-  const load = React.useCallback((force = false) => prefetchPayrollStatus(company, { force }).then((r) => { setSt(r); if (demo() || !uid) setUntil(r.unlockedUntil || 0); }).catch((e) => setSt({ error: e.message })), [company, uid]);
+  const load = React.useCallback((force = false) => prefetchPayrollStatus(company, { force }).then((r) => { setSt(r); if (demo() || !uid) setUntil(r.unlockedUntil || 0); }).catch((e) => setSt({ error: e.message })), [company, uid, setSt, setUntil]);
   React.useEffect(() => { load(); warmPayrollVerify(); }, [load]);
   // 서버 잠금 해제 문서(다른 탭에서 잠그거나 비밀번호가 바뀌면 바로 잠김)
   React.useEffect(() => {
     if (demo() || !uid) return undefined;
     return onSnapshot(doc(db, "payrollUnlocks", uid), (s) => { const d = s.exists() ? s.data() : null; const ex = d && d.companyName === company ? d.expiresAt?.toMillis?.() || 0 : 0; setUntil(ex > Date.now() ? ex : 0); setSnapReady(true); }, () => setSnapReady(true));
-  }, [uid, company]);
+  }, [uid, company, setUntil]);
   const open = until > now;
   // 시계 · 손대지 않으면 잠금
   React.useEffect(() => {
@@ -191,10 +211,13 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => { evs.forEach((e) => window.removeEventListener(e, act)); clearInterval(t); };
   }, [open]);
-  const lockNow = React.useCallback(async (why = "") => { setUntil(0); setPw(""); setMsg(why); setChanging(false); stPending.clear(); await api.lock(company).catch(() => {}); }, [company]);
+  const lockNow = React.useCallback(async (why = "") => { setUntil(0); setPw(""); setMsg(why); setChanging(false); stPending.clear(); await api.lock(company).catch(() => {}); }, [company, setUntil]);
   React.useEffect(() => { if (open && now - lastAct.current > IDLE_MS) lockNow("10분 동안 쓰지 않아 다시 잠갔어요"); }, [now, open, lockNow]);
   React.useEffect(() => { if (!open && until && now >= until) setMsg("30분이 지나 다시 잠갔어요"); }, [now, open, until]);
   React.useEffect(() => { const t = setInterval(() => setNow(Date.now()), 15000); return () => clearInterval(t); }, []);
+  // ⭐ 2026-11-17 처음 비밀번호(000000)를 쓰는 회사의 관리자는 열자마자 [새 비밀번호 정하기]가 뜬다 → 저장 함수를 미리 깨운다
+  const needSet = !!((st.admin || canAdmin) && st.usingDefault);
+  React.useEffect(() => { if (needSet) warmPayrollFn("payrollPwSet"); }, [needSet]);
 
   const unlock = async (e) => {
     e?.preventDefault?.();
@@ -209,7 +232,8 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
   };
 
   // 이미 열려 있으면(잠금 해제 문서가 살아 있음) 서버 응답을 기다리지 않고 바로 연다
-  if (!st && !open) return <div className="py-24 text-center text-[15px] font-bold text-[#7A879C]">확인 중…</div>;
+  // ⭐ 2026-11-17 처음 여는 탭(기억한 상태 없음)도 서버 응답을 기다리지 않는다 — 우선 "비밀번호 칸"을 띄우고(서버는 늘 hasPassword: true),
+  //  관리자 여부 · 처음 비밀번호 안내만 응답이 오면 채운다. 경리 담당이 아니면 확인 버튼에서 서버가 막는다(보안은 서버 · 규칙 그대로)
   if (st?.error && !open) return <GateCard title="잠금 상태를 확인하지 못했어요" desc={st.error}><button type="button" onClick={() => load(true)} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">다시 시도</button></GateCard>;
   if (!open && !snapReady) return <div className="py-24 text-center text-[15px] font-bold text-[#7A879C]">확인 중…</div>;
   if (!open && st.staff === false) return <GateCard title="경리 담당자만 열 수 있어요" desc="급여는 경리·회계팀이 관리합니다. 본인 급여명세서는 내정보에서 볼 수 있어요." />;

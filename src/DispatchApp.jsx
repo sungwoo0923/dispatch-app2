@@ -97,6 +97,7 @@ import { AccountingOverview, RetireDesk, useYearOrders } from "./AcctSuite";
 import HrHub from "./HrHub";
 import { usePayrollAccess } from "./payrollAccess"; // ⭐ 2026-11-06 직원 급여·연차 촉진 권한
 const PayrollCenterLazy = React.lazy(() => import("./Payroll"));
+import AcctLedgerBooks from "./AcctLedgerBooks"; // ⭐ 2026-11-17 회계관리 › 회계 장부 — 총계정원장 모양(계산은 아래 AccountingDashboard 와 같음)
 const CompanyInboxLazy = React.lazy(() => import("./CompanyInbox")); // 📥 2026-11-14 메일함 › 받은메일
 // ⭐ 2026-11-07 급여명세서 · 연차 사용 계획은 내정보 안 탭(MyInfoTabs) · 연차 사용 촉진은 인사관리부 › 연차 관리 안(LeaveArea)
 import { myInfoExtraTabs, initialMyInfoTab, useMyInfoTabLink } from "./MyInfoTabs";
@@ -46890,6 +46891,8 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
 }
 
 // ===================== 회계자료 컴포넌트 =====================
+// ⭐ 2026-11-17 화면은 src/AcctLedgerBooks.jsx(장부 모양)로 옮겼다 — 이 함수는 예전 모양 참고용으로 남겨 둠(계산을 바꾸면 두 곳 다)
+// eslint-disable-next-line no-unused-vars
 function AccountingDashboard({ dispatchData = [], fixedRows = [], clients = [], drivers = [], isViewer = false }) {
   const currentYear = new Date().getFullYear();
   const [subTab, setSubTab] = React.useState("ar");
@@ -63889,7 +63892,7 @@ function AccountingWorkspace({ company, fixedRows = [], clients = [], drivers = 
       items={[{ key: "overview", label: "회계 개요", en: "OVERVIEW", icon: "chart" }, { key: "book", label: "회계 장부", en: "LEDGER", icon: "sheet" }, ...(payAcc.canView ? [{ key: "payroll", label: "급여 계산", en: "PAYROLL", icon: "money" }] : []), { key: "retire", label: "퇴직 정산", en: "RETIREMENT", icon: "user" }]}>
       {tab === "payroll" && payAcc.canView && <React.Suspense fallback={<div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">급여 화면 불러오는 중…</div>}><PayrollCenterLazy company={company} role={role} /></React.Suspense>}
       {tab === "overview" && <AccountingOverview company={company} orders={yearRows} drivers={drivers} />}
-      {tab === "book" && (yearRows ? <AccountingDashboard dispatchData={yearRows} fixedRows={[]} clients={clients} drivers={drivers} isViewer={isViewer} /> : <div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">올해 운행 내역을 불러오는 중…</div>)}
+      {tab === "book" && (yearRows ? <AcctLedgerBooks dispatchData={yearRows} fixedRows={[]} clients={clients} drivers={drivers} isViewer={isViewer} /> : <div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">올해 운행 내역을 불러오는 중…</div>)}
       {tab === "retire" && <RetireDesk company={company} isViewer={isViewer} />}
     </KpSubNav>
   );

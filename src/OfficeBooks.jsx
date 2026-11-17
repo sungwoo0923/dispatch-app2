@@ -14,7 +14,7 @@ import CustomDatePicker from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect";
 import { computeFunds, isCard, isCredit, last4, fundBadge } from "./fundsCalc";
 import { upsertAutoEntry } from "./ledgerAuto";
-import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
+import CashFlowChart from "./CashFlowChart"; // ⭐ 2026-11-17 일별 수입 · 지출 · 누계 그래프(SVG) — 예전 recharts 막대를 바꿈
 import { kpConfirm } from "./kpDialog";
 import { suggestAccount, evidenceOf, vatSplit } from "./acctSuggest"; // 🧾 2026-11-15 전표 자동화 — 계정과목 추천 · 증빙 · 부가세
 
@@ -136,6 +136,78 @@ export const LEDGER_ACCOUNTS = {
 const METHODS = ["법인카드", "계좌이체", "현금", "개인카드(정산)", "자동이체"];
 const blankEntry = (type = "지출") => ({ date: kstDay(), type, account: type === "지출" ? "소모품비" : "운송수입", item: "", amount: "", method: type === "지출" ? "법인카드" : "계좌이체", vendor: "", memo: "", evidence: "", receipt: "" });
 
+// ⭐ 2026-11-17 오른쪽 분석 칸 — 계정과목별 지출(순위 · 금액 · 비중 % · 건수 · 지난달 대비)
+const NUMF = { fontFamily: MONO, fontVariantNumeric: "tabular-nums" };
+function SpendBreakdown({ accTop = [], accN = {}, prevAcc = {}, expense = 0 }) {
+  const [all, setAll] = React.useState(false);
+  const shown = all ? accTop : accTop.slice(0, 8);
+  const top3 = accTop.slice(0, 3).reduce((a, [, v]) => a + v, 0);
+  return (
+    <BookCard en="BREAKDOWN" title="계정과목별 지출">
+      {!accTop.length ? <div className="py-8 text-center text-[14px] text-[#9AA9C3] font-bold">이 달 지출 내역이 없어요</div> : (<>
+        <div className="rounded-2xl bg-[#F7F9FC] border border-[#E9EEF5] px-3.5 py-3 flex items-end justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <div className="text-[12.5px] font-bold text-[#5B6B85]">이 달 지출 합계</div>
+            <div className="text-[22px] font-black text-[#0F1A30] whitespace-nowrap" style={NUMF}>{won(expense)}<span className="text-[14px] text-[#7A879C] ml-0.5">원</span></div>
+          </div>
+          <div className="text-right text-[12.5px] font-bold text-[#5B6B85] leading-snug">계정 {accTop.length}개<br />상위 3개가 <b className="text-[#0F1A30]" style={NUMF}>{expense ? Math.round((top3 / expense) * 100) : 0}%</b></div>
+        </div>
+        <ol className="mt-2">
+          {shown.map(([k, v], i) => {
+            const pct = expense ? (v / expense) * 100 : 0;
+            const prev = prevAcc[k] || 0; const d = prev ? (v - prev) / prev : null;
+            return (
+              <li key={k} className="py-2.5 border-b border-[#F1F4F9] last:border-b-0">
+                <div className="flex items-center gap-2">
+                  <span className={`w-6 h-6 shrink-0 rounded-lg grid place-items-center text-[12px] font-black ${i < 3 ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#5B6B85]"}`} style={NUMF}>{i + 1}</span>
+                  <span className="min-w-0 flex-1 truncate text-[14.5px] font-black text-[#1B2B4B]">{k}<span className="ml-1.5 text-[12px] font-bold text-[#9AA9C3]">{accN[k] || 0}건</span></span>
+                  <span className="text-[15px] font-black text-[#0F1A30] whitespace-nowrap" style={NUMF}>{won(v)}</span>
+                </div>
+                <div className="mt-1.5 flex items-center gap-2 pl-8">
+                  <div className="flex-1 h-2.5 rounded-full bg-[#EEF2F8] overflow-hidden"><span className="block h-full rounded-full" style={{ width: `${Math.max(1.5, pct)}%`, background: i < 3 ? "linear-gradient(90deg,#1B2B4B,#3F63B5)" : "#9FB3D9" }} /></div>
+                  <span className="w-[44px] text-right text-[13px] font-black text-[#3A4A66]" style={NUMF}>{pct >= 10 ? Math.round(pct) : pct.toFixed(1)}%</span>
+                  <span className={`w-[58px] text-right text-[12px] font-bold whitespace-nowrap ${d == null ? "text-[#B5C0D3]" : d > 0.1 ? "text-[#B0603A]" : d < -0.1 ? "text-[#2D4C82]" : "text-[#7A879C]"}`} style={NUMF} title={prev ? `지난달 ${won(prev)}원` : "지난달 없음"}>{d == null ? "새로" : `${d > 0 ? "▲" : d < 0 ? "▼" : ""}${Math.abs(Math.round(d * 100))}%`}</span>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+        {accTop.length > 8 && <button type="button" onClick={() => setAll((x) => !x)} className="mt-1 w-full h-9 rounded-xl bg-[#F7F9FC] text-[13px] font-black text-[#2D4C82]">{all ? "접기" : `나머지 ${accTop.length - 8}개 더 보기`}</button>}
+        <div className="mt-2 text-[12px] font-bold text-[#9AA9C3]">% = 이 달 지출 중 비중 · ▲▼ = 지난달보다 늘었는지 줄었는지</div>
+      </>)}
+    </BookCard>
+  );
+}
+// ⭐ 2026-11-17 오른쪽 분석 칸 — 고정비(매달 나가는 돈) · 이번 달 반영 여부 · 합계와 지출 중 비중
+function RecurringPanel({ recurring = [], recurDone, expense = 0, isViewer, onManage }) {
+  const act = recurring.filter((r) => r.active !== false);
+  const total = act.filter((r) => (r.type || "지출") === "지출").reduce((a, r) => a + toInt(r.amount), 0);
+  const done = act.filter((r) => recurDone.has(r.id)).length;
+  const sorted = [...recurring].sort((a, b) => (Number(a.day) || 1) - (Number(b.day) || 1));
+  return (
+    <BookCard en="RECURRING" title="고정비" right={!isViewer && <button type="button" onClick={onManage} className="h-9 px-3.5 rounded-xl border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B] whitespace-nowrap">관리</button>}>
+      {!recurring.length ? <div className="py-3 text-[14px] text-[#7A879C] font-bold leading-relaxed">임대료 · 통신비 · 보험료처럼 매달 나가는 돈을 등록해 두면 한 번에 장부에 넣을 수 있어요</div> : (<>
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <div className="rounded-2xl bg-[#F7F9FC] border border-[#E9EEF5] px-3 py-2.5"><div className="text-[12.5px] font-bold text-[#5B6B85]">매달 고정비</div><div className="text-[18px] font-black text-[#0F1A30] whitespace-nowrap" style={NUMF}>{won(total)}원</div><div className="text-[12px] font-bold text-[#9AA9C3]">이 달 지출의 <span style={NUMF}>{expense ? Math.round((total / expense) * 100) : 0}%</span></div></div>
+          <div className="rounded-2xl bg-[#F7F9FC] border border-[#E9EEF5] px-3 py-2.5"><div className="text-[12.5px] font-bold text-[#5B6B85]">이번 달 반영</div><div className="text-[18px] font-black text-[#0F1A30]" style={NUMF}>{done} / {act.length}건</div><div className="mt-1.5 h-2 rounded-full bg-[#EEF2F8] overflow-hidden"><span className="block h-full rounded-full bg-[#2D4C82]" style={{ width: `${act.length ? (done / act.length) * 100 : 0}%` }} /></div></div>
+        </div>
+        <ul>
+          {sorted.map((r) => {
+            const ok = recurDone.has(r.id); const off = r.active === false;
+            return (
+              <li key={r.id} className={`flex items-center gap-2.5 py-2.5 border-b border-[#F1F4F9] last:border-b-0 ${off ? "opacity-50" : ""}`}>
+                <span className="w-11 shrink-0 text-center rounded-lg bg-[#EEF2F8] py-1"><span className="block text-[10.5px] font-bold text-[#7A879C] leading-none">매달</span><span className="block text-[14px] font-black text-[#1B2B4B] leading-tight" style={NUMF}>{Number(r.day) || 1}일</span></span>
+                <span className="min-w-0 flex-1"><span className="block text-[14.5px] font-black text-[#0F1A30] truncate">{r.name}</span><span className="block text-[12px] font-bold text-[#9AA9C3] truncate">{r.account || "기타"}{r.method ? ` · ${r.method}` : ""}</span></span>
+                <span className="text-right shrink-0"><span className="block text-[15px] font-black text-[#0F1A30] whitespace-nowrap" style={NUMF}>{won(r.amount)}</span><span className={`block text-[12px] font-black ${off ? "text-[#9AA9C3]" : ok ? "text-[#2D4C82]" : "text-[#B0603A]"}`}>{off ? "쉬는 중" : ok ? "✓ 반영됨" : "반영 전"}</span></span>
+              </li>
+            );
+          })}
+        </ul>
+      </>)}
+    </BookCard>
+  );
+}
+
 export function CashBook({ company, isViewer = false }) {
   const narrow = useNarrow(); // ⭐ 2026-11-06 PC 표·휴대폰 카드 중 하나만 그린다(예전엔 둘 다 그리고 CSS로 숨김 — 영수증 사진도 두 번 그렸다)
   const rowsRaw = useCompanyCol("acctLedger", company);
@@ -194,19 +266,24 @@ export function CashBook({ company, isViewer = false }) {
   const M = React.useMemo(() => {
     const month = (rows || []).filter((r) => String(r.date || "").startsWith(ym));
     let income = 0, expense = 0, noEvidence = 0, nIn = 0, nOut = 0;
-    const byAcc = {}; const byDay = {};
+    const byAcc = {}; const byDay = {}; const accN = {};
     for (const r of month) {
       const v = toInt(r.amount);
       const dd = byDay[r.date] || (byDay[r.date] = { in: 0, out: 0 });
       if (r.type === "수입") { income += v; nIn++; dd.in += v; }
-      else if (r.type === "지출") { expense += v; nOut++; dd.out += v; byAcc[r.account || "기타"] = (byAcc[r.account || "기타"] || 0) + v; if (!r.receipt && !r.evidence) noEvidence++; }
+      else if (r.type === "지출") { expense += v; nOut++; dd.out += v; byAcc[r.account || "기타"] = (byAcc[r.account || "기타"] || 0) + v; accN[r.account || "기타"] = (accN[r.account || "기타"] || 0) + 1; if (!r.receipt && !r.evidence) noEvidence++; }
     }
+    // ⭐ 2026-11-17 계정과목별 지출 — 지난달 같은 계정 금액(늘었는지 줄었는지 보여 주기)
+    const pd = new Date(`${ym}-01T00:00:00`); pd.setMonth(pd.getMonth() - 1);
+    const prevYm = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, "0")}`;
+    const prevAcc = {};
+    for (const r of rows || []) if (r.type === "지출" && String(r.date || "").startsWith(prevYm)) prevAcc[r.account || "기타"] = (prevAcc[r.account || "기타"] || 0) + toInt(r.amount);
     const dim = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0).getDate();
     let cum = 0;
     const daily = Array.from({ length: dim }, (_, i) => { const x = byDay[`${ym}-${String(i + 1).padStart(2, "0")}`] || { in: 0, out: 0 }; cum += x.in - x.out; return { d: i + 1, in: x.in, out: x.out, cum }; });
-    return { month, income, expense, noEvidence, nIn, nOut, accTop: Object.entries(byAcc).sort((a, b) => b[1] - a[1]), daily };
+    return { month, income, expense, noEvidence, nIn, nOut, accTop: Object.entries(byAcc).sort((a, b) => b[1] - a[1]), accN, prevAcc, daily };
   }, [rows, ym]);
-  const { month, income, expense, noEvidence, accTop, daily } = M;
+  const { month, income, expense, noEvidence, accTop, accN, prevAcc, daily } = M;
   const kw = q.trim();
   const list = React.useMemo(() => month.filter((r) => (type === "전체" || r.type === type) && (!kw || [r.item, r.vendor, r.account, r.memo].some((v) => String(v || "").includes(kw))))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)) || tsMs(b.createdAt) - tsMs(a.createdAt)), [month, type, kw]);
@@ -299,24 +376,14 @@ export function CashBook({ company, isViewer = false }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-4">
+      {/* ⭐ 2026-11-17 일별 현금 흐름 — 위로 수입 · 아래로 지출 · 누계 차액 선 + 이 달 요약(총수입 · 총지출 · 순이익 · 최대 지출일) · 넓게 한 줄 */}
+      <BookCard en="DAILY CASH FLOW" title={`${ym.replace("-", "년 ")}월 일별 수입 · 지출 · 누계`}>
+        <CashFlowChart daily={daily} ym={ym} today={kstDay()} compact={narrow} />
+      </BookCard>
+
+      {/* ⭐ 2026-11-17 2칸 — 왼쪽 장부(LEDGER · 약 60%) | 오른쪽 분석(계정과목별 지출 · 고정비 · 약 40%) · 좁은 화면은 위아래로 */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] gap-4 items-start">
         <div className="space-y-4 min-w-0">
-        {/* ⭐ 2026-10-31 장부형 — 일별 현금 흐름 그래프 + 줄 친 장부(일자·구분·계정·적요·수입·지출·누계 잔액) */}
-        <BookCard en="DAILY CASH FLOW" title={`${ym.replace("-", "년 ")}월 일별 수입 · 지출 · 누계`}>
-          <div className="h-[200px] -ml-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={daily} margin={{ top: 6, right: 6, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke="#EEF2F8" vertical={false} />
-                <XAxis dataKey="d" tick={{ fill: "#9AA9C3", fontSize: 10.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} interval={2} />
-                <YAxis tickFormatter={(v) => (Math.abs(v) >= 1e4 ? `${Math.round(v / 1e4)}만` : v)} tick={{ fill: "#9AA9C3", fontSize: 10.5, fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} axisLine={false} tickLine={false} width={44} />
-                <Tooltip formatter={(v, n) => [`${won(v)}원`, n]} labelFormatter={(l) => `${ym.slice(5)}월 ${l}일`} contentStyle={{ borderRadius: 12, border: "1px solid #E3E8F0", fontSize: 12 }} />
-                <Bar dataKey="in" name="수입" fill="#4B6CB7" radius={[4, 4, 0, 0]} maxBarSize={14} />
-                <Bar dataKey="out" name="지출" fill="#0F1A30" radius={[4, 4, 0, 0]} maxBarSize={14} />
-                <Line dataKey="cum" name="누계 차액" stroke="#B88A2E" strokeWidth={2} dot={false} type="monotone" />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        </BookCard>
         <BookCard flush>
           <div className="px-3.5 md:px-4 py-3 border-b border-[#EEF1F6] flex items-center gap-2 flex-wrap">
             <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7] mr-1" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>LEDGER</span>
@@ -330,10 +397,10 @@ export function CashBook({ company, isViewer = false }) {
             <>
               {/* PC — 줄 친 장부 */}
               {!narrow && <div className="overflow-x-auto">
-                <table className="w-full text-[13px] border-collapse" style={{ minWidth: 820 }}>
+                <table className="w-full text-[13px] border-collapse" style={{ minWidth: 740 }}>{/* ⭐ 2026-11-17 2칸 배치에 맞게 조금 좁게(820 → 740) */}
                   <thead>
                     <tr className="bg-[#0F1A30] text-white">
-                      {[["일자", 70], ["구분", 54], ["계정과목", 120], ["적요 · 거래처", null], ["수입", 116], ["지출", 116], ["누계 잔액", 124], ["증빙", 64]].map(([h, w]) => <th key={h} className="px-3 py-2.5 text-[12px] font-black text-left whitespace-nowrap" style={w ? { width: w } : undefined}>{h}</th>)}
+                      {[["일자", 62], ["구분", 52], ["계정과목", 104], ["적요 · 거래처", null], ["수입", 104], ["지출", 104], ["누계 잔액", 112], ["증빙", 60]].map(([h, w]) => <th key={h} className="px-3 py-2.5 text-[12px] font-black text-left whitespace-nowrap" style={w ? { width: w } : undefined}>{h}</th>)}
                     </tr>
                   </thead>
                   <tbody>
@@ -378,25 +445,10 @@ export function CashBook({ company, isViewer = false }) {
           )}
         </BookCard>
         </div>
-        <div className="space-y-4">
-          <BookCard en="BREAKDOWN" title="계정과목별 지출">
-            {!accTop.length ? <div className="py-4 text-[12.5px] text-[#9AA9C3] font-bold">지출 내역이 없습니다</div> : accTop.map(([k, v]) => (
-              <div key={k} className="py-1.5">
-                <div className="flex justify-between text-[12.5px]"><span className="font-bold text-[#3A4A66] truncate">{k}</span><span className="font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(v)}</span></div>
-                <div className="mt-1 h-2 rounded-full bg-[#EEF2F8] overflow-hidden"><span className="block h-full bg-gradient-to-r from-[#1B2B4B] to-[#4B6CB7]" style={{ width: `${(v / Math.max(1, accTop[0][1])) * 100}%` }} /></div>
-              </div>
-            ))}
-          </BookCard>
-          <BookCard en="RECURRING" title="고정비" right={!isViewer && <button type="button" onClick={() => setRecurOpen(true)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12px] font-black text-[#1B2B4B] whitespace-nowrap">관리</button>}>
-            {!(recurring || []).length ? <div className="py-2 text-[12.5px] text-[#9AA9C3] font-bold">임대료·통신비·보험료처럼 매달 나가는 돈을 등록해 두면 한 번에 장부에 넣을 수 있습니다</div>
-              : (recurring || []).map((r) => (
-                <div key={r.id} className="flex items-center justify-between py-1.5 text-[12.5px] border-b border-[#F1F4F9] last:border-b-0">
-                  <span className="min-w-0 truncate"><b className="text-[#0F1A30]">{r.name}</b> <span className="text-[#9AA9C3]">매달 {r.day}일</span></span>
-                  <span className="font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(r.amount)}{recurDone.has(r.id) ? " ✓" : ""}</span>
-                </div>
-              ))}
-          </BookCard>
-          <button type="button" onClick={csv} className="w-full h-11 rounded-2xl border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#1B2B4B]">이 달 장부 엑셀(CSV) 내려받기</button>
+        <div className="space-y-4 min-w-0 xl:sticky xl:top-3">
+          <SpendBreakdown accTop={accTop} accN={accN} prevAcc={prevAcc} expense={expense} />
+          <RecurringPanel recurring={recurring || []} recurDone={recurDone} expense={expense} isViewer={isViewer} onManage={() => setRecurOpen(true)} />
+          <button type="button" onClick={csv} className="w-full h-12 rounded-2xl border border-[#DCE3EE] bg-white text-[14px] font-black text-[#1B2B4B] hover:border-[#2D4C82]">이 달 장부 엑셀(CSV) 내려받기</button>
         </div>
       </div>
 
