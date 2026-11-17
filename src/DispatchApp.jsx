@@ -2982,7 +2982,7 @@ import { useCompanyFeatures } from "./companyFeatures";
 import { useBizModules, isBizMenu, parseBizMenu, bizTopMenus, bizSideGroups, bizFirstMenu, bizMenuKey, readBiz, writeBiz, BIZ_MENU_ICON, bizInfo as bizInfoOf, bizMenuLabel as bizMenuLabelOf } from "./bizModules";
 import { reportScreen, installScreenVisibility } from "./screenReport";
 import { CellNote } from "./cellNote";
-import { usePageSize, PageSizeSelect } from "./pageSizePref"; // 📄 2026-11-17 한 페이지 개수(계정마다) // 🏷 2026-11-17 칸 모서리 표시 + 말풍선
+import { usePageSize, PageSizeChip } from "./pageSizePref"; // 📄 2026-11-17 한 페이지 개수(계정마다) // 🏷 2026-11-17 칸 모서리 표시 + 말풍선
 import { useRouteGroupFilter, RouteGroupBar, routeGroupOf, RouteGroupField, SheetLiveChip, rgOnScreen, RG_NONE, rgLabel, RG_TAB_OFF, RouteGroupSelect, filterRouteGroup } from "./routeGroups";
 import { MarginPct, marginPctText, profitCls, profitRateCls } from "./marginPct"; // ⭐ 2026-11-17 정산관리 수익 · 수수료 옆 매출 대비 % · 이익 색(플러스 빨강 · 마이너스 파랑)
 import { settleStartTab } from "./settleStart";
@@ -40521,10 +40521,7 @@ return (
 
       {/* ===== KPI + 상태 칩 한 줄 ===== */}
       <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <div className="flex items-center gap-2 bg-[#1B2B4B] text-white px-4 py-2 rounded-xl shadow-sm">
-          <span className="text-[12px] font-medium text-white/70">총</span>
-          <span className="text-[15px] font-extrabold">{summary.totalCount}건</span>
-        </div>
+        <PageSizeChip count={summary.totalCount} value={pageSize} onChange={(n) => { setPageSizePref(n); setPage(0); }} />{/* 📄 2026-11-17 "총 N건"을 누르면 몇 개씩 볼지 고르기 */}
         <div className="flex items-center gap-2 bg-white border border-[#1B2B4B]/20 px-4 py-2 rounded-xl shadow-sm">
           <span className="text-[12px] font-medium text-gray-500">청구</span>
           <span className="text-[15px] font-extrabold text-[#1B2B4B]">{summary.totalSale.toLocaleString()}원</span>
@@ -40564,7 +40561,6 @@ return (
           ◀ 이전
         </button>
         <span className="text-[11px] font-semibold text-gray-600 px-1 whitespace-nowrap flex-shrink-0">{page+1}<span className="text-gray-500"> / {Math.ceil(filtered.length/pageSize)}</span></span>
-        <PageSizeSelect value={pageSize} onChange={(n) => { setPageSizePref(n); setPage(0); }} />
         <button disabled={(page+1)*pageSize>=filtered.length} onClick={()=>setPage(p=>p+1)}
           className={`px-2 py-1 rounded-lg text-[11px] font-semibold border whitespace-nowrap flex-shrink-0 ${(page+1)*pageSize>=filtered.length?"bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed":"bg-white text-gray-700 border-gray-300 hover:bg-gray-100 shadow-sm"}`}>
           다음 ▶
@@ -41203,7 +41199,6 @@ return (
           ◀ 이전
         </button>
         <span className="text-[12px] font-semibold text-gray-600 px-1 whitespace-nowrap">{page+1}<span className="text-gray-500"> / {Math.max(1, Math.ceil(filtered.length/pageSize))}</span></span>
-        <PageSizeSelect value={pageSize} onChange={(n) => { setPageSizePref(n); setPage(0); window.scrollTo?.({ top: 0 }); }} />
         <button disabled={(page+1)*pageSize>=filtered.length} onClick={()=>setPage(p=>p+1)}
           className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold border whitespace-nowrap ${(page+1)*pageSize>=filtered.length?"bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed":"bg-white text-gray-700 border-gray-300 hover:bg-gray-100 shadow-sm"}`}>
           다음 ▶

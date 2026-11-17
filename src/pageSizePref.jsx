@@ -41,3 +41,37 @@ export function PageSizeSelect({ value, onChange, className = "", dark = false }
     </label>
   );
 }
+
+// 📄 2026-11-17 (2차) "총 N건" 칩을 누르면 몇 개씩 볼지 고르는 작은 창 — 페이지 넘김 버튼 사이 선택칸 대신(사용자 요청)
+export function PageSizeChip({ count = 0, value, onChange }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const off = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", off); window.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", off); window.removeEventListener("keydown", esc); };
+  }, [open]);
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-haspopup="listbox" aria-expanded={open} data-kp="total-chip"
+        title="눌러서 한 페이지에 볼 개수를 골라요" className="flex items-center gap-2 bg-[#1B2B4B] text-white px-4 py-2 rounded-xl shadow-sm hover:bg-[#24375E] transition">
+        <span className="text-[12px] font-medium text-white/70">총</span>
+        <span className="text-[15px] font-extrabold">{Number(count).toLocaleString()}건</span>
+        <span className="ml-0.5 text-[11px] font-bold text-white/60 tabular-nums">· {value}개씩</span>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={`text-white/70 transition ${open ? "rotate-180" : ""}`}><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+      {open && (
+        <div role="listbox" className="absolute left-0 top-[calc(100%+6px)] z-[60] w-[200px] rounded-xl bg-white border border-[#E3E8F0] shadow-[0_14px_34px_rgba(15,26,48,.18)] p-1.5">
+          <div className="px-2.5 pt-1.5 pb-2 text-[11.5px] font-bold text-[#7A879C]">한 페이지에 볼 개수 · 내 계정에만</div>
+          {PAGE_SIZE_OPTIONS.map((n) => (
+            <button key={n} type="button" role="option" aria-selected={n === value} onClick={() => { onChange?.(n); setOpen(false); }}
+              className={`w-full flex items-center justify-between h-9 px-2.5 rounded-lg text-[13.5px] font-bold ${n === value ? "bg-[#EEF3FB] text-[#0F1A30]" : "text-[#3A4A66] hover:bg-[#F4F6FA]"}`}>
+              <span className="tabular-nums">{n}개씩</span>{n === value && <span className="text-[#2D4C82]">✓</span>}
+            </button>))}
+        </div>
+      )}
+    </div>
+  );
+}
