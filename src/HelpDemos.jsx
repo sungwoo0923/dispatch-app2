@@ -446,12 +446,13 @@ const DEMOS = {
   },
   payroll: {
     // ⭐ 2026-11-17 급여 한 화면 — 위 남색 줄(지급월 · 진행 단계 · 합계) + 직원 목록 | 급여 시트(지급 | 공제) | 명세서
+    // ⭐ 2026-11-17 [확정발행] · [더보기]는 오른쪽 칸 머리(명세서 | 인건비 · 누계 옆) · 직원 서명하면 빨간 "서명완료" 도장
     steps: [
       { c: [30, 26], cap: "위 남색 줄에서 지급월을 골라요. 옆에 계산 → 확정 → 발행 → 지급 단계와 이 달 합계가 보여요." },
       { c: [25, 55], cap: "왼쪽에서 직원을 눌러요. ↑ ↓ 키로 옮기고 Enter 를 누르면 바로 입력칸으로 가요." },
       { c: [52, 60], cap: "가운데 급여 시트에 지급 · 공제가 장부처럼 나와요. 출근기록부 시간은 자동이고, 금액은 칸에서 바로 고쳐요." },
-      { c: [83, 60], cap: "오른쪽 명세서와 아래 실지급액이 입력하는 대로 바로 바뀌어요." },
-      { c: [70, 26], cap: "다 됐으면 [전체 확정 · 발행] → [지급 처리]. 발행하면 직원에게 알림이 가고, 지급하면 장부에 자동 기록돼요." },
+      { c: [83, 62], cap: "오른쪽 명세서와 아래 실지급액이 입력하는 대로 바로 바뀌어요. 직원이 확인 서명하면 빨간 ‘서명완료’ 도장이 찍혀요." },
+      { c: [86, 41.5], cap: "다 됐으면 오른쪽 칸 머리(명세서 | 인건비 · 누계 옆) [확정발행]을 눌러요. 직원에게 알림이 가요. 통장에서 급여를 보낸 뒤엔 같은 자리 [지급 완료 기록]을 눌러요. 장부에 자동으로 적혀요." },
     ],
     scene: (i) => (<>
       <TopBar items={["HOME", "배차", "매출", "정산", "회계관리", "자금관리"]} on="회계관리" />
@@ -461,8 +462,7 @@ const DEMOS = {
       {[["인원", "11명"], ["지급", "3,957만"], ["실지급", "3,442만"]].map(([l, v], k) => <span key={l} style={pos(66 + k * 10.3, 16, 9.8, 7.5)} className="rounded-md bg-white/10 px-1.5 flex flex-col justify-center text-white"><span className="text-[10px] text-white/60 leading-none">{l}</span><b className="text-[11.5px] leading-tight text-right">{v}</b></span>)}
       <Bx r={[20, 25.5, 15, 8]} value="2026년 11월" dark hi={i === 0} />
       {["1 계산", "2 확정", "3 발행", "4 지급"].map((t, k) => <span key={t} style={pos(36 + k * 7.2, 26, 6.8, 7)} className={`rounded-md flex items-center justify-center text-[11px] font-black ${k === 0 ? "bg-white text-[#0F1A30]" : "text-white/60"} ${i === 0 ? "ring-1 ring-[#8FB0F0]" : ""}`}>{t}</span>)}
-      <Btn r={[66, 25.5, 14, 8]} hi={i === 4}>전체 확정 · 발행</Btn>
-      {["김경리", "박대리", "이주임", "최팀장"].map((n, k) => <Bx key={n} r={[19, 38 + k * 13, 16, 11.5]} label={["발행", "확정", "계산됨", "저장 전"][k]} value={`${n} · ${["271만", "287만", "372만", "393만"][k]}`} dark={k === (i >= 1 ? 1 : 0)} hi={i === 1 && k === 1} />)}
+      {["김경리", "박대리", "이주임", "최팀장"].map((n, k) => <Bx key={n} r={[19, 38 + k * 13, 16, 11.5]} label={["서명 11.17", "확정", "계산됨", "저장 전"][k]} value={`${n} · ${["271만", "287만", "372만", "393만"][k]}`} dark={k === (i >= 1 ? 1 : 0)} hi={i === 1 && k === 1} />)}
       <div style={pos(36.5, 38, 31, 57)} className={`rounded-lg bg-white ring-1 ${i === 2 ? "ring-2 ring-[#2D4C82] z-[2]" : "ring-[#DCE3EE]"} px-2 py-1.5 text-[11.5px] font-bold text-[#3A4A66] flex flex-col gap-1`}>
         <span className="text-[10.5px] font-black text-[#4B6CB7]">지급 항목</span>
         {[["기본급 · 자동", "2,800,000"], ["연장 6h · 자동", "120,500"], ["식대 · 비과세", "200,000"]].map(([l, v]) => <span key={l} className="flex justify-between"><span>{l}</span><b className="text-[#0F1A30]">{v}</b></span>)}
@@ -470,7 +470,10 @@ const DEMOS = {
         {[["4대보험", "−278,210"], ["소득세 · 지방세", "−34,630"]].map(([l, v]) => <span key={l} className="flex justify-between"><span>{l}</span><b className="text-[#0F1A30]">{v}</b></span>)}
         <span className={`mt-auto rounded-md bg-[#0F1A30] text-white px-1.5 py-1 flex justify-between ${i === 3 ? "ring-2 ring-[#8FB0F0]" : ""}`}><span>실지급</span><b>2,807,660</b></span>
       </div>
-      <div style={pos(68.5, 38, 28.5, 57)} className={`rounded-lg bg-white ring-1 ${i === 3 ? "ring-2 ring-[#2D4C82] z-[2]" : "ring-[#DCE3EE]"} px-2 py-1.5 text-[11.5px] font-bold text-[#3A4A66] leading-relaxed`}><span className="block rounded-md px-1.5 py-1 text-white text-[11px] font-black mb-1" style={{ background: NAVY }}>11월 급여명세서</span>실수령액<br /><b className="text-[15px] text-[#0F1A30]">2,807,660원</b><br />지급 3,120,500<br />공제 312,840</div>
+      <span style={pos(68.5, 38, 13.5, 7)} className="rounded-md bg-[#EEF1F6] flex items-center gap-0.5 p-0.5 text-[10.5px] font-black"><span className="flex-1 h-full rounded bg-white text-[#0F1A30] flex items-center justify-center">명세서</span><span className="flex-1 text-[#5B6B85] text-center truncate">인건비·누계</span></span>
+      <Btn r={[82.5, 38, 8, 7]} hi={i === 4}>확정발행</Btn>
+      <Btn r={[91, 38, 6, 7]} primary={false}>더보기</Btn>
+      <div style={pos(68.5, 46.5, 28.5, 48.5)} className={`rounded-lg bg-white ring-1 ${i === 3 ? "ring-2 ring-[#2D4C82] z-[2]" : "ring-[#DCE3EE]"} px-2 py-1.5 text-[11.5px] font-bold text-[#3A4A66] leading-relaxed relative`}><span className="block rounded-md px-1.5 py-1 text-white text-[11px] font-black mb-1" style={{ background: NAVY }}>11월 급여명세서</span>실수령액<br /><b className="text-[15px] text-[#0F1A30]">2,807,660원</b><br />지급 3,120,500<br />공제 312,840<span className="absolute right-[6%] top-[36%] w-[46px] h-[46px] rounded-full border-2 border-[#D92D20] text-[#D92D20] bg-white grid place-items-center whitespace-nowrap text-[10px] font-black leading-[1.05] text-center rotate-[-12deg]">서명완료<br />11.17</span></div>
     </>),
   },
   funds: {

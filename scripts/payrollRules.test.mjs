@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { initializeApp, deleteApp } from "firebase/app";
-import { setLogLevel, getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, setDoc, updateDoc, collection, query, where } from "firebase/firestore";
+import { setLogLevel, getFirestore, connectFirestoreEmulator, doc, getDoc, getDocs, setDoc, updateDoc, collection, query, where, serverTimestamp, deleteField } from "firebase/firestore";
 
 setLogLevel("silent");
 const HOST = process.env.FS_EMU || "127.0.0.1:8181";
@@ -47,6 +47,10 @@ await seed(`payrollSecrets/${CO}`, { companyName: CO, salt: "x", hash: "y" });
 await seed(`payslips/s_emp`, { companyName: CO, uid: "emp", ym: "2026-10", status: "paid", published: true, result: { net: 100 } });
 await seed(`payslips/s_emp_draft`, { companyName: CO, uid: "emp", ym: "2026-11", status: "draft", published: false, result: { net: 100 } });
 await seed(`payslips/s_emp2`, { companyName: CO, uid: "emp2", ym: "2026-10", status: "confirmed", published: true, result: { net: 200 } });
+// ⭐ 2026-11-17 수령 확인 서명용
+await seed(`payslips/s_sign`, { companyName: CO, uid: "emp", ym: "2026-09", status: "confirmed", published: true, result: { net: 100 } });
+await seed(`payslips/s_sign2`, { companyName: CO, uid: "emp", ym: "2026-08", status: "paid", published: true, result: { net: 100 } });
+await seed(`payslips/s_sign_draft`, { companyName: CO, uid: "emp", ym: "2026-07", status: "draft", published: true, result: { net: 100 } });
 await seed(`payrollEmployees/e_emp`, { companyName: CO, uid: "emp", baseMonthly: 3000000 });
 await seed(`payrollRuns/r_1`, { companyName: CO, ym: "2026-10", status: "paid" });
 await seed(`leavePromotions/lp_emp`, { companyName: CO, uid: "emp", periodFrom: "2026-03-15", log: [{ type: "n1", at: 1 }] });
@@ -73,6 +77,18 @@ await no("직원: 본인 미발행(작성 중) 명세서", getDoc(doc(emp, "pays
 await no("직원: 회사 전체 명세서 목록", getDocs(query(collection(emp, "payslips"), where("companyName", "==", CO), where("ym", "==", "2026-10"))));
 await ok("직원: 본인 명세서 읽음 표시", updateDoc(doc(emp, "payslips/s_emp"), { readAt: 1 }));
 await no("직원: 본인 명세서 금액 고치기", updateDoc(doc(emp, "payslips/s_emp"), { result: { net: 999999 } }));
+// ⭐ 2026-11-17 수령 확인 서명 — 본인 · 발행 · 확정/지급 · 한 번만 · 서명 칸만
+const PNG = "data:image/png;base64,iVBORw0KGgo=";
+await no("직원: 서명 시각을 내 시계로", updateDoc(doc(emp, "payslips/s_sign"), { signedAt: Date.now(), signName: "직원", signImg: PNG }));
+await no("직원: 서명하면서 금액 고치기", updateDoc(doc(emp, "payslips/s_sign"), { signedAt: serverTimestamp(), signName: "직원", signImg: PNG, result: { net: 1 } }));
+await no("직원: 서명 그림 대신 다른 주소", updateDoc(doc(emp, "payslips/s_sign"), { signedAt: serverTimestamp(), signName: "직원", signImg: "https://x.kr/a.png" }));
+await no("직원: 서명 그림 너무 큼", updateDoc(doc(emp, "payslips/s_sign"), { signedAt: serverTimestamp(), signName: "직원", signImg: PNG + "A".repeat(60000) }));
+await no("직원: 이름 없이 서명", updateDoc(doc(emp, "payslips/s_sign"), { signedAt: serverTimestamp(), signName: "", signImg: PNG }));
+await ok("직원: 본인 명세서 서명(그림)", updateDoc(doc(emp, "payslips/s_sign"), { signedAt: serverTimestamp(), signName: "직원", signImg: PNG, readAt: 3 }));
+await no("직원: 서명 덮어쓰기", updateDoc(doc(emp, "payslips/s_sign"), { signedAt: serverTimestamp(), signName: "다른 이름", signImg: "" }));
+await ok("직원: 지급 완료 명세서 확인만(그림 없이)", updateDoc(doc(emp, "payslips/s_sign2"), { signedAt: serverTimestamp(), signName: "직원", signImg: "" }));
+await no("직원: 작성 중 명세서 서명", updateDoc(doc(emp, "payslips/s_sign_draft"), { signedAt: serverTimestamp(), signName: "직원" }));
+await no("다른 직원: 남의 명세서 서명", updateDoc(doc(as("emp2"), "payslips/s_emp"), { signedAt: serverTimestamp(), signName: "직원2" }));
 await no("직원: 급여 설정 읽기", getDoc(doc(emp, "payrollEmployees/e_emp")));
 await no("직원: 요율 설정 쓰기", setDoc(doc(emp, `payrollSettings/${CO}`), { companyName: CO, years: {} }));
 // 비밀번호 문서 · 잠금 해제 문서 — 서버만 쓴다
@@ -91,6 +107,10 @@ await ok("경리(해제): 급여 설정 쓰기", setDoc(doc(acct, "payrollEmploy
 await ok("경리(해제): 작성 중 명세서 수정", updateDoc(doc(acct, "payslips/s_emp_draft"), { result: { net: 150 } }));
 await no("경리(해제): 확정된 명세서 금액 수정(잠금)", updateDoc(doc(acct, "payslips/s_emp2"), { result: { net: 1 } }));
 await ok("경리(해제): 확정 해제(상태만)", updateDoc(doc(acct, "payslips/s_emp2"), { status: "draft", published: false, unlockReason: "정정" }));
+await no("경리(해제): 직원 서명 만들기", updateDoc(doc(acct, "payslips/s_emp_draft"), { signedAt: serverTimestamp(), signName: "직원" }));
+await no("경리(해제): 서명 이름 바꾸기", updateDoc(doc(acct, "payslips/s_sign2"), { signName: "가짜" }));
+await no("경리(해제): 서명 든 명세서 새로 만들기", setDoc(doc(acct, "payslips/s_new_forged"), { companyName: CO, uid: "emp", ym: "2026-06", status: "draft", signedAt: 1, signName: "직원" }));
+await ok("경리(해제): 확정 해제하며 서명 지우기", updateDoc(doc(acct, "payslips/s_sign"), { status: "draft", published: false, unlockReason: "정정", signedAt: deleteField(), signName: deleteField(), signImg: deleteField() }));
 await ok("경리(해제): 요율 설정 저장", setDoc(doc(acct, `payrollSettings/${CO}`), { companyName: CO, years: { 2026: { npEmp: 4.75 } } }));
 await no("경리(해제): 다른 회사 이름으로 급여 설정 만들기", setDoc(doc(acct, "payrollEmployees/e_x_other"), { companyName: "다른운송", uid: "x" }));
 // 경리지만 잠김 · 만료 · 다른 회사 잠금 해제

@@ -6,6 +6,7 @@
 //    연장/야간/휴일 근로시간·공제 항목별 금액과 총액)은 모두 들어 있다
 import { wonFmt } from "./payrollCalc";
 import { formatAccount } from "./bankUtil";
+import { isSigned, stampDate, signTimeText } from "./payslipSign";
 
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const ymLabel = (ym) => (ym ? `${ym.slice(0, 4)}년 ${Number(ym.slice(5, 7))}월` : "");
@@ -35,10 +36,15 @@ export function payslipHtml(slip, company, { notesOpen = false } = {}) {
     r.annual ? `<li><b>연봉제</b> 연봉 ${wonFmt(r.annual.annual)}원 ÷ ${r.annual.divisor} = 월 ${wonFmt(r.annual.monthlyTotal)}원${r.annual.severance ? " (퇴직금 포함 연봉 · 13분의 1은 퇴직금 몫)" : ""}${r.annual.fixedIn ? ` · 식대 등 ${wonFmt(r.annual.fixedIn)}원 포함` : ""}</li>` : "",
     r.taxMode === "auto" ? `<li><b>소득세</b> ${TAX_NOTE}</li>` : "",
   ].filter(Boolean).join("");
-  return `<article class="ps">
+  // ⭐ 2026-11-17 직원 수령 확인 서명 — 빨간 동그라미 도장(오른쪽 위) + 맨 아래 "수령 확인" 줄(이름 · 시각 · 서명 그림)
+  const signed = isSigned(s);
+  const img = signed && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(String(s.signImg || "")) ? s.signImg : "";
+  const stamp = signed ? `<div class="ps-stamp" aria-label="서명완료"><span>서명완료</span><b>${esc(stampDate(s))}</b></div>` : "";
+  const signRow = signed ? `<section class="sg"><span class="k">수령 확인</span><span class="n">${esc(s.signName || s.name || "")}</span><span class="t">${esc(signTimeText(s))}</span>${img ? `<img src="${img}" alt="서명" />` : `<em>확인했어요(서명 그림 없음)</em>`}</section>` : "";
+  return `<article class="ps${signed ? " ps-signed" : ""}">
 <header class="hd">
   <div class="hl"><div class="en">PAYSLIP · ${esc(s.ym || "")}</div><div class="tt">${esc(ymLabel(s.ym))} 급여명세서</div><div class="sub">${esc(company || s.companyName || "")}${s.paidDate || s.payDate ? ` · 지급일 ${esc(s.paidDate || s.payDate)}` : ""}</div></div>
-  <div class="who"><b>${esc(s.name || "")}</b><span>${esc([s.team, s.position].filter(Boolean).join(" · ") || "")}</span></div>
+  ${stamp}<div class="who"><b>${esc(s.name || "")}</b><span>${esc([s.team, s.position].filter(Boolean).join(" · ") || "")}</span></div>
 </header>
 <section class="hero">
   <div class="net"><div class="k">실수령액</div><div class="v">${wonFmt(r.net)}<small>원</small></div></div>
@@ -52,6 +58,7 @@ export function payslipHtml(slip, company, { notesOpen = false } = {}) {
 <dl class="info">${info.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>
 ${s.input?.memo ? `<div class="memo"><b>비고</b> ${esc(s.input.memo)}</div>` : ""}
 <details class="notes"${notesOpen ? " open" : ""}><summary>계산 방법</summary><ul>${notes}</ul></details>
+${signRow}
 <footer class="fo">이 명세서는 근로기준법 제48조 제2항에 따라 교부합니다.</footer>
 </article>`;
 }
@@ -77,6 +84,8 @@ export const PAYSLIP_CSS = `.ps{font-family:'Pretendard','Noto Sans KR','Apple S
 .ps .memo{margin-top:10px;font-size:14px;color:#3A4A66}.ps .memo b{margin-right:6px}
 .ps .notes{margin-top:10px;border:1px solid #E3E8F0;border-radius:14px;padding:0 14px}.ps .notes summary{cursor:pointer;padding:10px 0;font-size:14px;font-weight:900;color:#1B2B4B}.ps .notes ul{padding:0 0 10px}.ps .notes li{padding:3px 0;font-size:14px;color:#3A4A66;overflow-wrap:anywhere}.ps .notes li b{color:#0F1A30;margin-right:6px}
 .ps .fo{margin-top:10px;font-size:13px;color:#7A879C}
+.ps .ps-stamp{margin-left:auto;flex:none;align-self:center;width:68px;height:68px;border-radius:50%;border:3px solid #D92D20;color:#D92D20;background:rgba(255,255,255,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;transform:rotate(-12deg);font-weight:900;line-height:1.1;box-shadow:inset 0 0 0 2px #fff,inset 0 0 0 3.5px #D92D20;-webkit-print-color-adjust:exact;print-color-adjust:exact}.ps .ps-stamp span{font-size:12.5px;letter-spacing:-.02em}.ps .ps-stamp b{font-size:13.5px;margin-top:2px}.ps.ps-signed .who{margin-left:0}
+.ps .sg{margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid #E3E8F0;border-radius:14px;padding:8px 14px;font-size:14px}.ps .sg .k{font-weight:900;color:#3A4A66}.ps .sg .n{font-weight:900}.ps .sg .t{font-weight:700;color:#5B6B85}.ps .sg img{height:44px;max-width:160px;margin-left:auto;object-fit:contain}.ps .sg em{margin-left:auto;font-style:normal;font-weight:700;color:#7A879C}
 @media (max-width:640px){.ps .hero{grid-template-columns:minmax(0,1fr)}.ps .net .v{font-size:30px}.ps .hd{padding:16px}.ps .tt{font-size:19px}.ps .who{text-align:left}}
 @media print{.ps{max-width:none}.ps .notes summary{list-style:none}}`;
 

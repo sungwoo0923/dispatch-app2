@@ -2065,18 +2065,40 @@ service cloud.firestore {
       allow delete: if isTotalMasterUser();
     }
     // 급여명세서 — 확정(confirmed)·지급(paid)된 명세서는 금액을 못 바꾸고 상태(확정 해제·발행·지급)만
+    // ⭐ 2026-11-17 수령 확인 서명(signedAt · signName · signImg) — 직원 본인이 발행된 확정·지급 명세서에 한 번만 쓴다(src/payslipSign.js)
+    //  · signedAt = 서버 시각(request.time) · 이름 1~30자 · 그림은 PNG dataURL 6만 자까지(없으면 "")
+    //  · 경리는 서명을 만들거나 고칠 수 없고, 확정 해제 때 지우기만(다시 발행 → 다시 서명)
+    function paySignKeys() {
+      return ['signedAt', 'signName', 'signImg'];
+    }
+    function paySignNotForged() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(paySignKeys())
+        || !request.resource.data.keys().hasAny(paySignKeys());
+    }
+    function paySignOk() {
+      let d = request.resource.data;
+      return resource.data.get('signedAt', null) == null
+        && resource.data.get('status', '') in ['confirmed', 'paid']
+        && d.diff(resource.data).affectedKeys().hasOnly(['readAt', 'signedAt', 'signName', 'signImg'])
+        && d.diff(resource.data).affectedKeys().hasAll(['signedAt', 'signName'])
+        && d.signedAt == request.time
+        && d.signName is string && d.signName.size() > 0 && d.signName.size() <= 30
+        && (!('signImg' in d) || (d.signImg is string && d.signImg.size() <= 60000
+          && (d.signImg == '' || d.signImg.matches('data:image/png;base64,[A-Za-z0-9+/=]+'))));
+    }
     match /payslips/{id} {
       allow read: if (resource != null && isSignedIn() && resource.data.get('uid', '') == request.auth.uid && resource.data.get('published', false) == true)
         || (resource == null && payrollEditor())
         || (resource != null && payOk(resource.data));
-      allow create: if payOk(request.resource.data);
+      allow create: if payOk(request.resource.data) && !request.resource.data.keys().hasAny(paySignKeys());
       allow update: if (payOk(resource.data)
           && request.resource.data.get('companyName', '') == resource.data.get('companyName', '')
           && request.resource.data.get('uid', '') == resource.data.get('uid', '')
+          && paySignNotForged()
           && (resource.data.get('status', 'draft') == 'draft'
-            || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'published', 'publishedAt', 'publishedBy', 'paidAt', 'paidDate', 'updatedAt', 'updatedBy', 'unlockReason'])))
+            || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'published', 'publishedAt', 'publishedBy', 'paidAt', 'paidDate', 'updatedAt', 'updatedBy', 'unlockReason', 'signedAt', 'signName', 'signImg'])))
         || (isSignedIn() && resource.data.get('uid', '') == request.auth.uid && resource.data.get('published', false) == true
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']));
+          && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']) || paySignOk()));
       allow delete: if payOk(resource.data) && resource.data.get('status', 'draft') == 'draft';
     }
     // 인사·급여 알림(명세서 발행 · 연차 촉진) — 받는 사람만 읽고 읽음 표시
