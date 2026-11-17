@@ -183,14 +183,14 @@ function BTile({ en, label, money, value, unit, color, accent = false, delta, de
   const [rowRef, rowW] = useRawWidth(); // 오른쪽 게이지는 숫자와 겹치지 않을 만큼 넓을 때만
   return (
     <Tag type={onClick ? "button" : undefined} onClick={onClick} title={title} data-testid={testId}
-      className={`relative text-left rounded-[20px] p-4 md:p-5 min-w-0 overflow-hidden transition ${onClick ? "hover:-translate-y-0.5 cursor-pointer" : ""}`}
+      className={`relative flex flex-col justify-start text-left rounded-[20px] p-4 md:p-5 min-w-0 overflow-hidden transition ${onClick ? "hover:-translate-y-0.5 cursor-pointer" : ""}`}
       style={{ background: accent ? "linear-gradient(160deg, rgba(215,188,130,.16), rgba(215,188,130,.04) 55%, rgba(255,255,255,.02))" : EX.panel, border: `1px solid ${accent ? EX.lineHi : EX.line}`, boxShadow: "inset 0 1px 0 rgba(255,255,255,.05)" }}>
       {accent && <div className="absolute top-0 left-5 right-5 h-px" style={{ background: GOLD_GRAD }} />}
       {en && <Eyebrow color={accent ? EX.gold : EX.ice} size={10}>{en}</Eyebrow>}
       <div className="mt-1 text-[13px] md:text-[13.5px] font-bold truncate" style={{ color: EX.sub }}>{label}</div>
       <div ref={rowRef} className="mt-2.5 flex items-center justify-between gap-2 min-w-0">
         <div className="min-w-0">{muted ? <span className="text-[16px] md:text-[17px] font-black" style={{ color: EX.mute }}>{value}</span> : <Num value={parts[0]} unit={parts[1]} size={accent ? 34 : 30} color={color || (accent ? EX.goldHi : EX.text)} />}</div>
-        {side && rowW >= 168 && <div className="shrink-0 -my-2">{side}</div>}
+        {side && rowW >= 150 && <div className="shrink-0 -my-2">{side}</div>}
       </div>
       {delta !== undefined && <div className="mt-2.5"><Delta v={delta} label={deltaLabel} suffix={deltaSuffix} size={12.5} /></div>}
       {foot && <div className={`${delta !== undefined ? "mt-1" : "mt-2.5"} text-[12px] font-semibold truncate`} style={{ color: EX.mute }}>{foot}</div>}
