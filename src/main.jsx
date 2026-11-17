@@ -11,6 +11,8 @@ import { trimLocalStorage } from "./safeStorage";
 import { installModalScrollLock } from "./modalScrollLock"; // 🪟 2026-11-10 팝업이 떠 있으면 스크롤은 팝업 안에서만
 import { installDownloadWatch } from "./securityWatch"; // 🛡 2026-11-09 짧은 시간 대량 다운로드 감지(서버 securityPing)
 import { installStickyTableHeads } from "./stickyTableHead"; // 📌 2026-11-17 긴 표는 머리줄(칸 이름)이 맨 위에 고정돼 따라온다(엑셀처럼 · 모든 화면)
+import { installPendingApprovalWatch } from "./pendingOpen"; // 🛠 2026-11-17 결재 화면 이동 요청을 새로고침 뒤에도 이어서
+installPendingApprovalWatch();
 
 // ⭐ 2026-11-03 최고관리자 — 탭마다 다른 운송사를 열 수 있게 "지금 회사"(loginCompany·userCompany)를 탭별로 기억한다.
 //  예전엔 브라우저 전체에 하나라, 오른쪽 탭에서 돌캐로 들어가면 왼쪽 태진 탭도 몰래 돌캐로 바뀌어

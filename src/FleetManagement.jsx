@@ -674,10 +674,9 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
               onClick={() => onSelect(d)}
               onContextMenu={e => { e.preventDefault(); onContextMenu?.(e, d); }}
               style={{
-                background: bg,
                 textAlign: "center",
                 borderBottom: "1px solid #EEF1F6",
-                borderLeft: sel ? `3px solid ${HUD.cyan}` : "3px solid transparent", background: sel ? "#EEF3FC" : undefined, boxShadow: "none",
+                borderLeft: sel ? `3px solid ${HUD.cyan}` : "3px solid transparent", background: sel ? "#EEF3FC" : bg, boxShadow: "none",
                 cursor: "pointer",
                 transition: "background .1s",
               }}
@@ -2131,10 +2130,10 @@ ${fanOutD}
 화물 : ${totTon}${totCargo ? ` / ${totCargo}` : ""} ${r.차량종류 || "-"}
 결제방법 : ${r.지급방식 === "계산서" ? `계산서(${r.배차방식 === "24시" ? "24시발행" : companyName})` : (r.지급방식 || "-")}${driverNoteText}
 
-※ 인수증(파렛전표) 서명 받은 후 업로드필수
-KPP/아주파렛트 상차시 각각 전표업로드 필수
+※ 인수증(파렛전표) 서명을 받은 후 업로드 필수
+KPP/아주파렛트 상차 시 각각 전표 업로드 필수
 ${isCold ? "※ 거래명세서/타코메타 기록지 함께 촬영업로드" : "※ 거래명세서 서류 업로드"}
-※ 서류/전표 없는 건이면 업로드 하지마세요
+※ 서류/전표 없는 건은 업로드하지 마세요
 ※ 미업로드 시 운임 지급 지연될 수 있습니다`.replace(/\n{3,}/g, "\n\n").trim();
   }
 

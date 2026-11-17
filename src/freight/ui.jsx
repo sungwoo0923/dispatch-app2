@@ -1,5 +1,7 @@
 // ======================= src/freight/ui.jsx =======================
 // 🚢 2026-11-12 컨테이너 · 해상 · 항공 화면 공용 부품 — 직접 입력 대신 드롭다운 · 달력 · 시간 고르기 위주
+// 🎨 2026-11-18 내륙 화면과 같은 크기 · 모양으로 — 입력칸 h-9 · 13px, 표 머리줄 남색(#1B2B4B), 카드는 흰 바탕 + 회색 테두리,
+//  상태 · 마감은 바탕색 없이 글씨 색으로만(빨강 · 초록 · 파랑 · 주황)
 import React from "react";
 import { createPortal } from "react-dom";
 import { Container, Ship, Plane, Truck, Layers } from "lucide-react";
@@ -11,7 +13,12 @@ import { CNTR_TYPES, cntrType, statusList, HANDOFF_STATUS, progressPct, portName
 export const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 export const NAVY = "linear-gradient(135deg,#0B1428 0%,#14203A 45%,#1B2B4B 75%,#2D4C82 100%)";
 export const GRID = "linear-gradient(rgba(143,176,240,.08) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.08) 1px, transparent 1px) 0 0/22px 22px";
-const INPUT = "w-full h-10 border border-[#DCE3EE] rounded-xl px-3 text-[14px] font-semibold text-[#0F1A30] bg-white placeholder:text-[#9AA9C3] placeholder:font-medium focus:outline-none focus:border-[#2D4C82]";
+export const INPUT = "w-full h-9 border border-[#DCE3EE] rounded-lg px-2.5 text-[13px] font-semibold text-[#0F1A30] bg-white placeholder:text-[#9AA9C3] placeholder:font-medium focus:outline-none focus:border-[#1B2B4B] focus:ring-2 focus:ring-[#1B2B4B]/10";
+// 표 — 내륙 배차표처럼 남색 머리줄
+export const TH = "px-3 h-9 text-left text-[12.5px] font-bold text-white whitespace-nowrap";
+export const TD = "px-3 h-11 text-[13px] text-[#3A4A66] whitespace-nowrap";
+export const THEAD_BG = "#1B2B4B";
+export const NOTE = "text-[12.5px] font-medium text-[#7A89A3]";
 
 export const MODE_ICON = { inland: Truck, container: Container, sea: Ship, air: Plane, group: Layers };
 export const MODE_NAME = { inland: "내륙", container: "컨테이너", sea: "해상", air: "항공", group: "통합" };
@@ -19,9 +26,10 @@ export function ModeIcon({ mode, size = 16, className = "", strokeWidth = 2 }) {
   const I = MODE_ICON[mode] || Truck;
   return <I size={size} className={className} strokeWidth={strokeWidth} />;
 }
+// 업무 표시 — 바탕 없이 아이콘 + 글씨
 export function ModeChip({ mode, dark = false }) {
   return (
-    <span className={`inline-flex items-center gap-1 h-6 px-2 rounded-lg text-[11.5px] font-extrabold whitespace-nowrap ${dark ? "bg-white/10 text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>
+    <span className={`inline-flex items-center gap-1 text-[12px] font-bold whitespace-nowrap ${dark ? "text-white" : "text-[#1B2B4B]"}`}>
       <ModeIcon mode={mode} size={12} />{MODE_NAME[mode] || mode}
     </span>
   );
@@ -30,8 +38,8 @@ export function ModeChip({ mode, dark = false }) {
 // ── 화면 틀 ───────────────────────────────────────────────────────────
 export function PageHead({ mode, en, title, desc, right }) {
   return (
-    <div className="flex items-center gap-4 pb-4 mb-5 border-b border-[#EEF1F6] flex-wrap">
-      <div className="relative w-12 h-12 rounded-[15px] flex items-center justify-center shrink-0 overflow-hidden shadow-[0_8px_20px_rgba(15,26,48,0.28)] ring-1 ring-white/10 text-white" style={{ background: NAVY }}>
+    <div className="flex items-center gap-4 pb-4 mb-4 border-b border-[#EEF1F6] flex-wrap">
+      <div className="relative w-12 h-12 rounded-[15px] flex items-center justify-center shrink-0 overflow-hidden shadow-[0_8px_20px_rgba(15,26,48,0.28)] ring-1 ring-white/10 text-white" style={{ background: "linear-gradient(135deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>
         <span className="absolute inset-0 opacity-[0.12]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "8px 8px" }} />
         <ModeIcon mode={mode} size={21} className="relative" />
       </div>
@@ -48,68 +56,78 @@ export function PageHead({ mode, en, title, desc, right }) {
 }
 export function Card({ title, en, right, children, className = "", pad = true }) {
   return (
-    <section className={`bg-white rounded-[18px] border border-[#E3E8F0] shadow-[0_6px_20px_rgba(15,26,48,0.05)] min-w-0 ${className}`}>
+    <section className={`bg-white rounded-xl border border-[#E3E8F0] min-w-0 ${className}`}>
       {(title || right) && (
-        <div className="flex items-center gap-2.5 px-5 h-[52px] border-b border-[#EEF1F6]">
+        <div className="flex items-center gap-2 px-4 min-h-[44px] py-1.5 border-b border-[#EEF1F6] flex-wrap">
           <span className="w-1.5 h-1.5 rotate-45 bg-[#2D4C82] shrink-0" />
-          <span className="text-[15px] font-black text-[#0F1A30] whitespace-nowrap">{title}</span>
-          {en && <span className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#9AA9C3] hidden sm:inline" style={{ fontFamily: MONO }}>{en}</span>}
-          <div className="ml-auto flex items-center gap-2">{right}</div>
+          <span className="text-[14px] font-extrabold text-[#0F1A30] whitespace-nowrap">{title}</span>
+          {en && <span className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3] hidden sm:inline" style={{ fontFamily: MONO }}>{en}</span>}
+          <div className="ml-auto flex items-center gap-2 flex-wrap">{right}</div>
         </div>
       )}
-      <div className={pad ? "p-5" : ""}>{children}</div>
+      <div className={pad ? "p-4" : ""}>{children}</div>
     </section>
   );
 }
-export function Kpi({ label, value, unit, sub, tone = "", dark = false, onClick }) {
+export function Kpi({ label, value, unit, sub, tone = "", dark = false, onClick, color }) {
   const Tag = onClick ? "button" : "div";
-  const col = tone === "bad" ? "#C2362B" : tone === "warn" ? "#B26A00" : dark ? "#fff" : "#0F1A30";
+  const col = color || (tone === "bad" ? "#C2362B" : tone === "warn" ? "#B26A00" : dark ? "#fff" : "#0F1A30");
   return (
     <Tag type={onClick ? "button" : undefined} onClick={onClick}
-      className={`text-left rounded-2xl px-4 py-3.5 border min-w-0 ${dark ? "border-white/10 bg-white/[0.06]" : "border-[#E3E8F0] bg-white"} ${onClick ? "hover:border-[#2D4C82] transition" : ""}`}>
-      <div className={`text-[12px] font-bold whitespace-nowrap ${dark ? "text-white/60" : "text-[#7A89A3]"}`}>{label}</div>
+      className={`text-left rounded-xl px-4 py-3 border min-w-0 ${dark ? "border-white/10 bg-white/[0.06]" : "border-[#E3E8F0] bg-white"} ${onClick ? "hover:border-[#1B2B4B] transition" : ""}`}>
+      <div className={`text-[12.5px] font-bold whitespace-nowrap truncate ${dark ? "text-white/60" : "text-[#5B6B85]"}`}>{label}</div>
       <div className="flex items-baseline gap-1 mt-1">
-        <span className="text-[24px] font-black tabular-nums leading-none" style={{ color: col }}>{value}</span>
-        {unit && <span className={`text-[12.5px] font-bold ${dark ? "text-white/60" : "text-[#7A89A3]"}`}>{unit}</span>}
+        <span className="text-[21px] font-black tabular-nums leading-none tracking-tight" style={{ color: col }}>{value}</span>
+        {unit && <span className={`text-[12px] font-bold ${dark ? "text-white/60" : "text-[#7A89A3]"}`}>{unit}</span>}
       </div>
-      {sub && <div className={`text-[11.5px] font-semibold mt-1.5 truncate ${dark ? "text-white/50" : "text-[#9AA9C3]"}`}>{sub}</div>}
+      {sub && <div className={`text-[12px] font-medium mt-1 truncate ${dark ? "text-white/50" : "text-[#9AA9C3]"}`}>{sub}</div>}
     </Tag>
   );
 }
 export function Btn({ children, onClick, kind = "ghost", size = "md", disabled = false, type = "button", title, className = "" }) {
-  const h = size === "sm" ? "h-8 px-3 text-[12.5px]" : size === "lg" ? "h-12 px-6 text-[15px]" : "h-10 px-4 text-[13.5px]";
-  const k = kind === "primary" ? "bg-[#0F1A30] text-white hover:bg-[#1B2B4B] shadow-[0_6px_16px_rgba(15,26,48,.22)]"
-    : kind === "danger" ? "bg-white text-[#C2362B] border border-[#DCE3EE] hover:bg-[#F5F8FD]"
-    : kind === "soft" ? "bg-[#EEF3FB] text-[#1B2B4B] hover:bg-[#E2EAF7]"
-    : "bg-white text-[#1B2B4B] border border-[#DCE3EE] hover:border-[#2D4C82]";
-  return <button type={type} title={title} onClick={onClick} disabled={disabled} className={`inline-flex items-center justify-center gap-1.5 rounded-xl font-extrabold whitespace-nowrap transition disabled:opacity-40 disabled:cursor-not-allowed ${h} ${k} ${className}`}>{children}</button>;
+  const h = size === "sm" ? "h-8 px-2.5 text-[12.5px]" : size === "lg" ? "h-10 px-5 text-[14px]" : "h-9 px-3.5 text-[13px]";
+  const k = kind === "primary" ? "bg-[#1B2B4B] text-white border border-[#1B2B4B] hover:bg-[#24396A]"
+    : kind === "danger" ? "bg-white text-[#C2362B] border border-[#DCE3EE] hover:border-[#C2362B]"
+    : kind === "soft" ? "bg-white text-[#2D4C82] border border-[#DCE3EE] hover:border-[#2D4C82]"
+    : "bg-white text-[#1B2B4B] border border-[#DCE3EE] hover:border-[#1B2B4B]";
+  return <button type={type} title={title} onClick={onClick} disabled={disabled} className={`inline-flex items-center justify-center gap-1.5 rounded-lg font-bold whitespace-nowrap transition disabled:opacity-40 disabled:cursor-not-allowed ${h} ${k} ${className}`}>{children}</button>;
 }
 export function Empty({ mode, title, desc, action }) {
   return (
-    <div className="py-14 flex flex-col items-center text-center">
-      <div className="w-14 h-14 rounded-2xl grid place-items-center bg-[#F5F8FD] border border-[#E3E8F0] text-[#4B6CB7]"><ModeIcon mode={mode} size={24} /></div>
-      <div className="text-[15px] font-black text-[#0F1A30] mt-3">{title}</div>
-      {desc && <div className="text-[13px] text-[#7A89A3] mt-1">{desc}</div>}
+    <div className="py-10 flex flex-col items-center text-center">
+      <ModeIcon mode={mode} size={26} strokeWidth={1.6} className="text-[#9AA9C3]" />
+      <div className="text-[14px] font-bold text-[#0F1A30] mt-2.5">{title}</div>
+      {desc && <div className="text-[12.5px] text-[#7A89A3] mt-1">{desc}</div>}
       {action && <div className="mt-4">{action}</div>}
+    </div>
+  );
+}
+// 검색칸(돋보기)
+export function SearchIn({ value, onChange, placeholder = "검색", className = "" }) {
+  return (
+    <div className={`relative ${className}`}>
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={`${INPUT} pl-8`} />
+      <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9AA9C3] pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
     </div>
   );
 }
 
 // ── 입력 ─────────────────────────────────────────────────────────────
 export function Field({ label, required, hint, span = 1, children, ok, err }) {
-  const sp = span === 2 ? "sm:col-span-2" : span === 3 ? "sm:col-span-2 xl:col-span-3" : span === 4 ? "sm:col-span-2 xl:col-span-4" : "";
+  const sp = span === 2 ? "sm:col-span-2" : span === 3 ? "sm:col-span-2 lg:col-span-3" : span === 4 ? "sm:col-span-2 lg:col-span-3 xl:col-span-4" : "";
   return (
     <div className={`min-w-0 ${sp}`}>
-      <label className="flex items-center gap-1 text-[12.5px] font-extrabold text-[#3A4A66] mb-1.5">
+      <label className="flex items-center gap-1 text-[12px] font-bold text-[#3A4A66] mb-1 whitespace-nowrap overflow-hidden">
         {label}{required && <span className="text-[#C2362B]">*</span>}
-        {hint && <span className="font-semibold text-[#9AA9C3]">· {hint}</span>}
+        {hint && <span className="font-medium text-[#9AA9C3] truncate">· {hint}</span>}
       </label>
       {children}
-      {(ok || err) && <div className={`text-[11.5px] font-bold mt-1 ${err ? "text-[#C2362B]" : "text-[#2D4C82]"}`}>{err || ok}</div>}
+      {(ok || err) && <div className={`text-[11.5px] font-semibold mt-1 ${err ? "text-[#C2362B]" : "text-[#2D4C82]"}`}>{err || ok}</div>}
     </div>
   );
 }
-export const Grid = ({ children, cols = 4 }) => <div className={`grid grid-cols-1 sm:grid-cols-2 ${cols === 3 ? "xl:grid-cols-3" : "xl:grid-cols-4"} gap-x-4 gap-y-3.5`}>{children}</div>;
+// 넓은 화면에서 칸이 길게 늘어나지 않게 — 화면 폭에 따라 최대 6칸
+export const Grid = ({ children, cols = 4 }) => <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${cols === 3 ? "2xl:grid-cols-4" : "xl:grid-cols-4 2xl:grid-cols-6"} gap-x-3 gap-y-2.5`}>{children}</div>;
 export function Sel({ value, onChange, options = [], placeholder = "선택", disabled = false, className = "" }) {
   // options: ["a", "b"] | [[value, label]] | [{ group, items }]
   const opt = (o) => (Array.isArray(o) ? <option key={o[0]} value={o[0]}>{o[1]}</option> : <option key={o} value={o}>{o}</option>);
@@ -131,7 +149,7 @@ export function TextIn({ value, onChange, placeholder = "", upper = false, right
       <input value={value || ""} disabled={disabled} inputMode={inputMode} maxLength={maxLength} placeholder={placeholder}
         onChange={(e) => onChange(upper ? e.target.value.toUpperCase() : e.target.value)}
         className={`${INPUT} ${right ? "pr-12" : ""} ${upper ? "tracking-wide" : ""} disabled:bg-[#F5F8FD] disabled:text-[#7A89A3]`} />
-      {right && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] font-bold text-[#9AA9C3] pointer-events-none">{right}</span>}
+      {right && <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[12px] font-semibold text-[#9AA9C3] pointer-events-none">{right}</span>}
     </div>
   );
 }
@@ -162,7 +180,7 @@ export function Combo({ value, onChange, options = [], placeholder = "선택 또
   const pick = (v) => { onChange(v); setOpen(false); setHi(-1); };
   return (
     <div ref={ref} className="relative">
-      <input value={value || ""} placeholder={placeholder} className={`${INPUT} pr-9`}
+      <input value={value || ""} placeholder={placeholder} className={`${INPUT} pr-8`}
         onFocus={() => setOpen(true)} onClick={() => setOpen(true)}
         onChange={(e) => { onChange(upper ? e.target.value.toUpperCase() : e.target.value); setOpen(true); setHi(-1); }}
         onKeyDown={(e) => {
@@ -171,15 +189,15 @@ export function Combo({ value, onChange, options = [], placeholder = "선택 또
           else if (e.key === "Enter" && open && hi >= 0 && list[hi]) { e.preventDefault(); pick(list[hi].v); }
           else if (e.key === "Escape" || e.key === "Tab") setOpen(false);
         }} />
-      <svg className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#9AA9C3]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+      <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#9AA9C3]" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
       {open && rect && list.length > 0 && createPortal(
-        <div ref={popRef} className="kp-pc-pop fixed z-[2147482500] rounded-xl bg-white border border-[#DCE3EE] shadow-[0_18px_44px_rgba(15,26,48,.22)] overflow-y-auto py-1"
+        <div ref={popRef} className="kp-pc-pop fixed z-[2147482500] rounded-lg bg-white border border-[#DCE3EE] shadow-[0_14px_36px_rgba(15,26,48,.18)] overflow-y-auto py-1"
           style={{ left: rect.left, width: rect.width, maxHeight: 248, ...(rect.up != null ? { bottom: window.innerHeight - rect.up } : { top: rect.top }) }}>
           {list.map((x, i) => (
             <React.Fragment key={`${x.g}:${x.v}`}>
               {x.g && (i === 0 || list[i - 1].g !== x.g) && <div className="px-3 pt-2 pb-1 text-[10.5px] font-extrabold tracking-[0.14em] text-[#9AA9C3]">{x.g}</div>}
               <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => pick(x.v)} onMouseEnter={() => setHi(i)}
-                className={`w-full text-left px-3 h-9 text-[13.5px] font-semibold truncate ${i === hi ? "bg-[#EEF3FB] text-[#0F1A30]" : "text-[#3A4A66]"} ${String(value || "") === x.v ? "font-black text-[#0F1A30]" : ""}`}>{x.v}</button>
+                className={`w-full text-left px-3 h-8 text-[13px] font-semibold truncate ${i === hi ? "bg-[#F5F8FD] text-[#0F1A30]" : "text-[#3A4A66]"} ${String(value || "") === x.v ? "font-black text-[#0F1A30]" : ""}`}>{x.v}</button>
             </React.Fragment>
           ))}
         </div>, document.body)}
@@ -189,41 +207,42 @@ export function Combo({ value, onChange, options = [], placeholder = "선택 또
 // 몇 개 중 하나 고르기(수출/수입 · FCL/LCL)
 export function Seg({ value, onChange, options, size = "md" }) {
   return (
-    <div className={`inline-flex p-1 rounded-xl bg-[#F0F3F8] border border-[#E3E8F0] max-w-full overflow-x-auto ${size === "sm" ? "h-9" : "h-10"}`}>
-      {options.map((o) => { const [v, l] = Array.isArray(o) ? o : [o, o]; const on = value === v; return (
-        <button key={v} type="button" onClick={() => onChange(v)}
-          className={`px-3.5 rounded-lg text-[13px] font-extrabold whitespace-nowrap transition ${on ? "bg-[#0F1A30] text-white shadow-[0_3px_8px_rgba(15,26,48,.25)]" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>{l}</button>
+    <div className={`inline-flex rounded-lg bg-white border border-[#DCE3EE] max-w-full overflow-x-auto overflow-y-hidden ${size === "sm" ? "h-8" : "h-9"}`}>
+      {options.map((o, i) => { const [v, l] = Array.isArray(o) ? o : [o, o]; const on = value === v; return (
+        <button key={v} type="button" onClick={() => onChange(v)} aria-pressed={on}
+          className={`px-3 text-[12.5px] whitespace-nowrap transition ${i ? "border-l border-[#E3E8F0]" : ""} ${on ? "bg-[#1B2B4B] text-white font-bold" : "text-[#5B6B85] font-semibold hover:text-[#0F1A30]"}`}>{l}</button>
       ); })}
     </div>
   );
 }
 
-// ── 상태 · 마감 표시 ───────────────────────────────────────────────────
+// ── 상태 · 마감 표시(글씨 색으로만) ─────────────────────────────────────
+// 인계 요청 = 주황 · 끝남 = 초록 · 진행 중 = 파랑
 export function StatusChip({ job }) {
   const req = job.status === HANDOFF_STATUS;
   const pct = progressPct(job);
   const done = pct >= 100;
+  const c = req ? "#B26A00" : done ? "#1E8E3E" : "#2D6BE0";
   return (
-    <span className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-lg text-[11.5px] font-extrabold whitespace-nowrap ${req ? "bg-[#F5F8FD] border border-[#E3E8F0] text-[#B26A00]" : done ? "bg-[#0F1A30] text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${req ? "bg-[#B26A00] animate-pulse" : done ? "bg-[#8FB0F0]" : "bg-[#4B6CB7]"}`} />{job.status || "-"}
+    <span className="inline-flex items-center gap-1.5 text-[12px] font-bold whitespace-nowrap" style={{ color: c }}>
+      <span className={`w-1.5 h-1.5 rounded-full ${req ? "animate-pulse" : ""}`} style={{ background: c }} />{job.status || "-"}
     </span>
   );
 }
-// 🎨 2026-11-12 알록달록 금지 — 바탕은 모두 같은 옅은 남색, 급한 정도는 글씨 색으로만
-const DUE_BG = "#F5F8FD";
+// 🎨 2026-11-12 알록달록 금지 — 급한 정도는 글씨 색으로만
 const DUE_STYLE = {
-  over: { bg: DUE_BG, fg: "#C2362B", dot: "#C2362B" },
-  urgent: { bg: DUE_BG, fg: "#C2362B", dot: "#C2362B" },
-  soon: { bg: DUE_BG, fg: "#B26A00", dot: "#B26A00" },
-  ok: { bg: DUE_BG, fg: "#2D4C82", dot: "#4B6CB7" },
+  over: { fg: "#C2362B" },
+  urgent: { fg: "#C2362B" },
+  soon: { fg: "#B26A00" },
+  ok: { fg: "#2D4C82" },
 };
 export function DueChip({ due, showLabel = true }) {
   if (!due) return <span className="text-[12px] text-[#C3CCDB]">-</span>;
   const s = DUE_STYLE[due.level] || DUE_STYLE.ok;
   return (
-    <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-lg text-[11.5px] font-extrabold whitespace-nowrap tabular-nums" style={{ background: s.bg, color: s.fg, boxShadow: "inset 0 0 0 1px #E3E8F0" }}>
-      <span className={`w-1.5 h-1.5 rounded-full ${due.level === "over" || due.level === "urgent" ? "animate-pulse" : ""}`} style={{ background: s.dot }} />
-      {showLabel && <span className="opacity-80">{due.label}</span>}{due.text}
+    <span className="inline-flex items-center gap-1.5 text-[12px] font-bold whitespace-nowrap tabular-nums" style={{ color: s.fg }}>
+      <span className={`w-1.5 h-1.5 rounded-full ${due.level === "over" || due.level === "urgent" ? "animate-pulse" : ""}`} style={{ background: s.fg }} />
+      {showLabel && <span className="font-semibold opacity-80">{due.label}</span>}{due.text}
     </span>
   );
 }
@@ -261,7 +280,7 @@ export function ContainerArt({ size = "40HC", cntrNo = "", line = "", height = 9
   const ribs = []; for (let x = 14; x < W - (reefer ? 30 : 12); x += 9) ribs.push(x);
   return (
     <svg viewBox={`0 0 ${W + 8} 100`} height={height} style={{ maxWidth: "100%" }} role="img" aria-label={`${t.label} 컨테이너`}>
-      <ellipse cx={(W + 8) / 2} cy="95" rx={W / 2} ry="3.5" fill="rgba(0,0,0,.22)" />
+      <ellipse cx={(W + 8) / 2} cy="95" rx={W / 2} ry="3.5" fill={dark ? "rgba(0,0,0,.22)" : "rgba(15,26,48,.08)"} />
       {flat ? (<>
         <rect x="4" y="74" width={W} height="12" rx="2" fill={body} />
         <rect x="4" y={y0 + 6} width="9" height={H - 6} rx="1.5" fill={body} /><rect x={W - 5} y={y0 + 6} width="9" height={H - 6} rx="1.5" fill={body} />
@@ -310,7 +329,7 @@ export function RouteArt({ mode = "sea", from = "", to = "", fromSub = "", toSub
 }
 export const routeEnds = (j) => (j.mode === "sea" ? { from: portName(j.pol), to: portName(j.pod), fromSub: j.pol || "", toSub: j.pod || "" } : { from: j.dep || "", to: j.arr || "", fromSub: "", toSub: "" });
 
-// 옆에서 나오는 상세 창
+// 옆에서 나오는 상세 창 — 흰 머리줄
 export function Drawer({ open, onClose, title, sub, children, footer, width = 640 }) {
   React.useEffect(() => {
     if (!open) return undefined;
@@ -321,17 +340,17 @@ export function Drawer({ open, onClose, title, sub, children, footer, width = 64
   if (!open) return null;
   return createPortal(
     <div className="kp-pc-pop fixed inset-0 z-[2147481000] flex justify-end">
-      <div className="absolute inset-0 bg-[#0B1428]/45" onClick={onClose} />
-      <aside className="relative h-full bg-[#F5F8FD] shadow-[-24px_0_60px_rgba(5,10,25,.35)] flex flex-col" style={{ width: `min(100vw, ${width}px)` }}>
-        <header className="px-5 py-4 text-white flex items-start gap-3 shrink-0" style={{ background: `${GRID}, ${NAVY}` }}>
+      <div className="absolute inset-0 bg-[#0B1428]/40" onClick={onClose} />
+      <aside className="relative h-full bg-[#F7F9FC] shadow-[-24px_0_60px_rgba(5,10,25,.25)] flex flex-col" style={{ width: `min(100vw, ${width}px)` }}>
+        <header className="px-5 pb-3.5 bg-white border-b border-[#E3E8F0] flex items-start gap-3 shrink-0" style={{ paddingTop: "max(env(safe-area-inset-top, 0px), 14px)" }}>
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{sub}</div>
-            <div className="text-[18px] font-black mt-0.5 truncate">{title}</div>
+            <div className="text-[10px] font-extrabold tracking-[0.24em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>{sub}</div>
+            <div className="text-[17px] font-black text-[#0F1A30] mt-0.5 truncate">{title}</div>
           </div>
-          <button type="button" onClick={onClose} aria-label="닫기" className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 grid place-items-center text-[16px] font-black">✕</button>
+          <button type="button" onClick={onClose} aria-label="닫기" className="w-9 h-9 rounded-lg border border-[#DCE3EE] hover:border-[#1B2B4B] text-[#5B6B85] grid place-items-center text-[15px] font-black">✕</button>
         </header>
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">{children}</div>
-        {footer && <footer className="shrink-0 px-4 py-3 bg-white border-t border-[#E3E8F0] flex items-center gap-2 flex-wrap">{footer}</footer>}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">{children}</div>
+        {footer && <footer className="shrink-0 px-4 py-3 bg-white border-t border-[#E3E8F0] flex items-center gap-2 flex-wrap" style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 12px)" }}>{footer}</footer>}
       </aside>
     </div>, document.body);
 }

@@ -6,19 +6,19 @@ import { db } from "../firebase";
 import { BIZ } from "../bizModules";
 import { settleSummary, receivables, payables, sumLines, sumPnl, won, wonShort, ymOf, legTitle } from "./freightCore";
 import { updateLeg, useFreightJobs } from "./freightStore";
-import { Card, Kpi, Btn, Sel, Seg, Empty, ModeChip, ModeIcon, MODE_NAME, MONO } from "./ui";
-import { profitCls, profitRateCls, profitColor } from "../marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
+import { Card, Kpi, Btn, Sel, Seg, Empty, ModeChip, ModeIcon, MODE_NAME, MONO, NOTE, SearchIn } from "./ui";
+import { profitCls } from "../marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
 
 const kstYmd = (ms) => (ms ? new Date(ms + 9 * 3600e3).toISOString().slice(0, 10) : "");
 const md = (ms) => (ms ? kstYmd(ms).slice(5).replace("-", ".") : "");
 const months = () => { const out = []; const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(1); for (let i = 0; i < 12; i++) { const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`; out.push([ym, `${d.getUTCFullYear()}년 ${d.getUTCMonth() + 1}월`]); d.setUTCMonth(d.getUTCMonth() - 1); } return out; };
 const num = (v) => Number(String(v ?? "").replace(/,/g, "")) || 0;
 
-// 켜고 끄는 작은 확인 버튼(바탕색 없이 글씨 · 테두리로만)
+// 켜고 끄는 작은 확인 버튼(바탕색 없이 글씨 · 테두리로만 — 확인됨은 초록 글씨)
 function Tick({ on, label, date, onClick, disabled }) {
   return (
     <button type="button" disabled={disabled} onClick={onClick}
-      className={`h-7 px-2 rounded-lg border text-[11.5px] font-extrabold whitespace-nowrap inline-flex items-center gap-1 transition disabled:opacity-40 ${on ? "border-[#0F1A30] bg-[#0F1A30] text-white" : "border-[#DCE3EE] bg-white text-[#7A89A3] hover:border-[#2D4C82] hover:text-[#0F1A30]"}`}>
+      className={`h-7 px-2 rounded-md border text-[12px] font-bold whitespace-nowrap inline-flex items-center gap-1 transition disabled:opacity-40 bg-white ${on ? "border-[#1E8E3E] text-[#1E8E3E]" : "border-[#DCE3EE] text-[#7A89A3] hover:border-[#1B2B4B] hover:text-[#0F1A30]"}`}>
       {on ? "✓" : "○"} {label}{on && date ? <span className="opacity-70 tabular-nums">{date}</span> : null}
     </button>
   );
@@ -38,25 +38,25 @@ export function SettlePage({ jobs, mode, me, canEdit, onOpen }) {
   const rec = receivables(scoped).map((g) => ({ ...g, legs: only === "미완료" ? g.legs.filter((j) => !j.collectedAt) : g.legs })).filter((g) => g.legs.length);
   const pay = payables(scoped).map((g) => ({ ...g, lines: only === "미완료" ? g.lines.filter((x) => !x.line.paidAt) : g.lines })).filter((g) => g.lines.length);
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center gap-2.5 flex-wrap">
-        <div className="w-[160px]"><Sel value={ym} onChange={(v) => setYm(v || ms[0][0])} options={ms} /></div>
+        <div className="w-[150px]"><Sel value={ym} onChange={(v) => setYm(v || ms[0][0])} options={ms} /></div>
         <Seg size="sm" value={tab} onChange={setTab} options={["청구", "지급"]} />
         <Seg size="sm" value={only} onChange={setOnly} options={["미완료", "전체"]} />
-        <span className="text-[12.5px] font-semibold text-[#7A89A3]">등록일 기준 · 확인을 누르면 날짜와 처리한 사람이 이력에 남습니다</span>
+        <span className={NOTE}>등록일 기준이에요 · 확인을 누르면 날짜와 처리한 사람이 이력에 남아요</span>
       </div>
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5">
         <Kpi label="미청구" value={wonShort(sum.unbilled)} unit="원" tone={sum.unbilled ? "warn" : ""} sub="계산서 발행 전" />
         <Kpi label="미수금" value={wonShort(sum.receivable)} unit="원" tone={sum.receivable ? "bad" : ""} sub="발행했고 입금 전" />
         <Kpi label="미지급" value={wonShort(sum.unpaid)} unit="원" tone={sum.unpaid ? "warn" : ""} sub={`지급 완료 ${wonShort(sum.paid)}원`} />
         <Kpi label="매출 · 입금 완료" value={wonShort(sum.sale)} unit="원" sub={`입금 ${wonShort(sum.collected)}원`} />
       </div>
       {tab === "청구" ? (
-        rec.length === 0 ? <Card><Empty mode={mode} title={only === "미완료" ? "청구 · 입금이 남은 건이 없습니다" : "이 달에 청구할 건이 없습니다"} /></Card> : rec.map((g) => (
+        rec.length === 0 ? <Card><Empty mode={mode} title={only === "미완료" ? "청구 · 입금이 남은 건이 없어요" : "이 달에 청구할 건이 없어요"} /></Card> : rec.map((g) => (
           <Card key={g.client} pad={false} title={g.client} right={<span className="text-[12.5px] font-bold text-[#7A89A3] tabular-nums">매출 <b className="text-[#0F1A30]">{won(g.sale)}</b>{g.unbilled > 0 && <> · 미청구 <b className="text-[#B26A00]">{won(g.unbilled)}</b></>}{g.receivable > 0 && <> · 미수 <b className="text-[#C2362B]">{won(g.receivable)}</b></>}</span>}>
             <div className="divide-y divide-[#EEF1F6]">
               {g.legs.map((j) => (
-                <div key={j.id} className="px-4 sm:px-5 py-2.5 flex items-center gap-2.5 flex-wrap">
+                <div key={j.id} className="px-4 py-2 flex items-center gap-2.5 flex-wrap">
                   <button type="button" onClick={() => onOpen(j)} className="text-[12.5px] font-black text-[#0F1A30] tabular-nums hover:underline" style={{ fontFamily: MONO }}>{j.refNo}</button>
                   <span className="text-[12.5px] font-semibold text-[#5B6B85] truncate flex-1 min-w-[120px]">{legTitle(j)}</span>
                   <span className="text-[13.5px] font-black text-[#0F1A30] tabular-nums">{won(sumLines(j.sales) + num(j.saleAmt))}원</span>
@@ -68,11 +68,11 @@ export function SettlePage({ jobs, mode, me, canEdit, onOpen }) {
           </Card>
         ))
       ) : (
-        pay.length === 0 ? <Card><Empty mode={mode} title={only === "미완료" ? "지급이 남은 건이 없습니다" : "이 달에 지급할 건이 없습니다"} desc="등록 화면의 지급(매입) 항목과 지급처가 여기에 모입니다." /></Card> : pay.map((g) => (
+        pay.length === 0 ? <Card><Empty mode={mode} title={only === "미완료" ? "지급이 남은 건이 없어요" : "이 달에 지급할 건이 없어요"} desc="등록 화면의 지급(매입) 항목과 지급처가 여기에 모여요." /></Card> : pay.map((g) => (
           <Card key={g.vendor} pad={false} title={g.vendor} right={<span className="text-[12.5px] font-bold text-[#7A89A3] tabular-nums">합계 <b className="text-[#0F1A30]">{won(g.total)}</b>{g.unpaid > 0 && <> · 미지급 <b className="text-[#B26A00]">{won(g.unpaid)}</b></>}</span>}>
             <div className="divide-y divide-[#EEF1F6]">
               {g.lines.map(({ job, idx, line, krw }) => (
-                <div key={`${job.id}:${idx}`} className="px-4 sm:px-5 py-2.5 flex items-center gap-2.5 flex-wrap">
+                <div key={`${job.id}:${idx}`} className="px-4 py-2 flex items-center gap-2.5 flex-wrap">
                   <button type="button" onClick={() => onOpen(job)} className="text-[12.5px] font-black text-[#0F1A30] tabular-nums hover:underline" style={{ fontFamily: MONO }}>{job.refNo}</button>
                   <span className="text-[12.5px] font-bold text-[#3A4A66]">{line.item}</span>
                   <span className="text-[12.5px] font-semibold text-[#5B6B85] truncate flex-1 min-w-[100px]">{job.client}</span>
@@ -107,22 +107,22 @@ export function StaffBizPage({ modules, canEdit }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2.5 flex-wrap">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름 · 부서 검색" className="h-10 w-full max-w-[280px] border border-[#DCE3EE] rounded-xl px-3 text-[13.5px] font-semibold text-[#0F1A30] placeholder:text-[#9AA9C3] focus:outline-none focus:border-[#2D4C82]" />
-        <span className="text-[12.5px] font-semibold text-[#7A89A3]">아무것도 고르지 않은 직원은 회사가 쓰는 업무를 모두 봅니다 · 관리자 · 마스터 · 임원은 항상 전체</span>
+        <SearchIn value={q} onChange={setQ} placeholder="이름 · 부서 검색" className="w-full max-w-[260px]" />
+        <span className={NOTE}>아무것도 고르지 않은 직원은 회사가 쓰는 업무를 모두 봐요 · 관리자 · 마스터 · 임원은 항상 전체예요</span>
       </div>
       <Card pad={false}>
-        {staff === null ? <div className="py-16 text-center text-[13.5px] font-bold text-[#9AA9C3]">불러오는 중…</div> : list.length === 0 ? <Empty mode="group" title="직원이 없습니다" /> : (
+        {staff === null ? <div className="py-16 text-center text-[13.5px] font-bold text-[#9AA9C3]">불러오는 중…</div> : list.length === 0 ? <Empty mode="group" title="직원이 없어요" /> : (
           <div className="divide-y divide-[#EEF1F6]">
             {list.map((u) => { const acc = Array.isArray(u.bizAccess) ? u.bizAccess : []; return (
-              <div key={u.id} className="px-4 sm:px-5 py-3 flex items-center gap-3 flex-wrap">
+              <div key={u.id} className="px-4 py-2.5 flex items-center gap-3 flex-wrap">
                 <div className="min-w-[150px] flex-1">
-                  <div className="text-[14px] font-black text-[#0F1A30]">{u.name || u.email}</div>
+                  <div className="text-[13.5px] font-bold text-[#0F1A30]">{u.name || u.email}</div>
                   <div className="text-[12px] font-semibold text-[#7A89A3]">{[u.team, u.position].filter(Boolean).join(" · ") || "-"}</div>
                 </div>
                 <div className="flex gap-1.5 flex-wrap">
                   {modules.map((k) => { const on = acc.includes(k); return (
                     <button key={k} type="button" disabled={!canEdit || busy === u.id} onClick={() => toggle(u, k)} aria-pressed={on}
-                      className={`h-9 px-3 rounded-xl border text-[12.5px] font-extrabold inline-flex items-center gap-1.5 transition disabled:opacity-40 ${on ? "border-[#0F1A30] bg-[#0F1A30] text-white" : "border-[#DCE3EE] bg-white text-[#7A89A3] hover:border-[#2D4C82]"}`}>
+                      className={`h-8 px-2.5 rounded-lg border bg-white text-[12.5px] inline-flex items-center gap-1.5 transition disabled:opacity-40 ${on ? "border-[#1B2B4B] text-[#1B2B4B] font-black" : "border-[#DCE3EE] text-[#9AA9C3] font-semibold hover:border-[#1B2B4B]"}`}>
                       <ModeIcon mode={k} size={13} />{MODE_NAME[k]}
                     </button>
                   ); })}
@@ -147,13 +147,13 @@ export function FreightRevenueStrip({ modules = [], onOpenGroup }) {
   const month = jobs.filter((j) => !j.dispatchId && ymOf(kstYmd(j.createdAtMs)) === ym);
   const tot = sumPnl(month.filter((j) => others.includes(j.mode)));
   return (
-    <div className="mb-4 rounded-2xl border border-[#E3E8F0] bg-[#F5F8FD] px-4 py-3 flex items-center gap-x-5 gap-y-2 flex-wrap" data-testid="freight-revenue-strip">
-      <span className="text-[12.5px] font-black text-[#0F1A30]">다른 사업부 이번 달</span>
+    <div className="mb-3 rounded-xl border border-[#E3E8F0] bg-white px-4 py-2.5 flex items-center gap-x-5 gap-y-2 flex-wrap" data-testid="freight-revenue-strip">
+      <span className="text-[12.5px] font-extrabold text-[#0F1A30]">다른 사업부 이번 달</span>
       {others.map((m) => { const p = sumPnl(month.filter((j) => j.mode === m)); return (
         <span key={m} className="inline-flex items-center gap-1.5 text-[12.5px] font-bold text-[#5B6B85]"><ModeChip mode={m} />매출 <b className="text-[#0F1A30] tabular-nums">{wonShort(p.sale)}</b> · 이익 <b className={`tabular-nums ${profitCls(p.profit, "text-[#0F1A30]")}`}>{wonShort(p.profit)}</b></span>
       ); })}
       <span className="text-[12.5px] font-bold text-[#5B6B85]">합계 <b className="text-[#0F1A30] tabular-nums">{wonShort(tot.sale)}원</b></span>
-      <span className="text-[12px] font-semibold text-[#9AA9C3]">이 화면의 숫자는 내륙 배차만입니다</span>
+      <span className="text-[12px] font-medium text-[#9AA9C3]">이 화면의 숫자는 내륙 배차만이에요</span>
       {onOpenGroup && <Btn size="sm" className="ml-auto" onClick={onOpenGroup}>전사 손익 보기</Btn>}
     </div>
   );

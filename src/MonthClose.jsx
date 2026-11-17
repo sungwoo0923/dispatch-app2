@@ -305,8 +305,8 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
         {actions(g)}
       </div>
       {/* 진행 선 + 안내 */}
-      <div className={`${sdCard} px-5 py-4`}>
-        <FlowTrack steps={flow(g)} />
+      <div className={`${sdCard} ${phone ? "px-3 py-3" : "px-5 py-4"}`}>
+        <FlowTrack steps={flow(g)} compact={phone} />
         <div className="mt-3 flex items-center gap-2 flex-wrap">
           <span className="text-[13.5px] font-bold" style={{ color: line.c }}>{line.t}</span>
           {line.tip && <TipButton text={line.tip} />}
@@ -323,20 +323,25 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
             </button>))}
         </div>
         <div className="px-4 py-2.5 border-b border-[#E3E8F0] flex items-center gap-2 flex-wrap">
-          <div className="text-[14.5px] font-black mr-auto">오더 <span className="text-[12.5px] font-bold text-[#9AA9C3]">{shownRows(g).length !== g.rows.length ? `${shownRows(g).length}/${g.rows.length}건 · ` : ""}줄을 누르면 고치기</span></div>
-          <div className="relative">
+          <div className="text-[14.5px] font-black mr-auto">오더 <span className="text-[12.5px] font-bold text-[#9AA9C3]">{shownRows(g).length !== g.rows.length ? `${shownRows(g).length}/${g.rows.length}건 · ` : ""}오더를 누르면 수정할 수 있습니다</span></div>
+          <div className="relative w-full sm:w-auto">
             <Ico d={IC.search} size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9AA9C3] pointer-events-none" />
-            <input id="mc-oq" value={oq} onChange={(e) => setOq(e.target.value)} placeholder="차량 · 기사 · 상하차지 검색" className="h-9 w-[210px] rounded-lg border border-[#D5DDEA] bg-white pl-8 pr-2 text-[13px] font-semibold outline-none focus:border-[#1B2B4B]" />
+            <input id="mc-oq" value={oq} onChange={(e) => setOq(e.target.value)} placeholder="차량 · 기사 · 상하차지 검색" className="h-10 sm:h-9 w-full sm:w-[210px] rounded-lg border border-[#D5DDEA] bg-white pl-8 pr-2 text-[14px] sm:text-[13px] font-semibold outline-none focus:border-[#1B2B4B]" />
           </div>
           <div className="inline-flex p-0.5 rounded-lg bg-[#F4F6FA]" role="tablist" aria-label="보기">
             {[[false, "전체"], [true, `확인 필요 ${g.issue}`]].map(([k, l]) => <button key={String(k)} type="button" role="tab" aria-selected={onlyBad === k} onClick={() => setOnlyBad(k)} className={`h-8 px-3 rounded-md text-[12.5px] font-black ${onlyBad === k ? "bg-white text-[#0F1A30] shadow-sm" : "text-[#5B6B85]"}`}>{l}</button>)}
           </div>
+          {phone ? (
+            <div className="inline-flex p-0.5 rounded-lg bg-[#F4F6FA]" role="tablist" aria-label="정렬">
+              {[["date", "날짜순"], ["status", "확인 필요 먼저"]].map(([k, l]) => <button key={k} type="button" role="tab" aria-selected={osort === k} onClick={() => setOsort(k)} className={`h-8 px-3 rounded-md text-[12.5px] font-black ${osort === k ? "bg-white text-[#0F1A30] shadow-sm" : "text-[#5B6B85]"}`}>{l}</button>)}
+            </div>
+          ) : (
           <select id="mc-sort" value={osort} onChange={(e) => setOsort(e.target.value)} className="h-9 rounded-lg border border-[#D5DDEA] bg-white px-2 text-[13px] font-bold text-[#1B2B4B]" title="정렬">
             <option value="date">날짜순</option><option value="status">상태순(확인 필요 먼저)</option>
-          </select>
-          <button type="button" onClick={() => setCmpOpen(true)} className="h-9 px-3.5 rounded-lg border border-[#D5DDEA] bg-white text-[13px] font-bold text-[#1B2B4B]" data-kp="mc-stmt-compare" title="업체가 보낸 거래명세서(엑셀 · 캡처)를 올려 우리 오더와 맞춰 봐요">업체 명세서 비교</button>
+          </select>)}
+          <button type="button" onClick={() => setCmpOpen(true)} className={`${phone ? "flex-1 h-11 rounded-xl" : "h-9 rounded-lg"} px-3.5 border border-[#D5DDEA] bg-white text-[13px] font-bold text-[#1B2B4B]`} data-kp="mc-stmt-compare" title="업체가 보낸 거래명세서(엑셀 · 캡처)를 올려 우리 오더와 맞춰 봐요">업체 명세서 비교</button>
           {lockedOf(g) ? <span className="h-9 px-3 inline-flex items-center rounded-lg border border-[#0F1A30] text-[12.5px] font-black text-[#0F1A30]">최종마감 · 수정 잠금</span>
-            : !isViewer && <button type="button" onClick={() => addOrder(g.client)} className="h-9 px-3.5 rounded-lg border border-[#D5DDEA] bg-white text-[13px] font-bold text-[#1B2B4B]">+ 오더 추가</button>}
+            : !isViewer && <button type="button" onClick={() => addOrder(g.client)} className={`${phone ? "flex-1 h-11 rounded-xl bg-[#0F1A30] text-white border-[#0F1A30] font-black" : "h-9 rounded-lg bg-white text-[#1B2B4B] border-[#D5DDEA] font-bold"} px-3.5 border text-[13px]`}>+ 오더 추가</button>}
         </div>
         {phone ? (
           <div className="p-2.5 space-y-1.5">
@@ -355,7 +360,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
               </tr></thead>
               <tbody>
                 {shownRows(g).map((o, i) => { const is = issuesOfRow(o); return (
-                  <tr key={idOf(o)} onClick={() => openRow(o)} className="cursor-pointer border-t border-[#EEF2F8] hover:bg-[#F8FAFD]" title="눌러서 고치기" style={{ boxShadow: is.length ? `inset 3px 0 0 ${is.some((x) => x.block) ? C.bad : C.warn}` : undefined }}>
+                  <tr key={idOf(o)} onClick={() => openRow(o)} className="cursor-pointer border-t border-[#EEF2F8] hover:bg-[#F8FAFD]" title="눌러서 수정" style={{ boxShadow: is.length ? `inset 3px 0 0 ${is.some((x) => x.block) ? C.bad : C.warn}` : undefined }}>
                     <td className="px-2.5 py-2 text-center text-[12.5px] text-[#9AA9C3]">{i + 1}</td>
                     <td className="px-2.5 py-2 text-[13px] whitespace-nowrap text-center">{String(o.상차일 || "").slice(5)}</td>
                     <td className="px-2.5 py-2 text-[13px] font-bold max-w-[280px] truncate text-center">{o.상차지명 || "-"} <span className="text-[#9AA9C3]">→</span> {o.하차지명 || "-"}</td>
@@ -368,7 +373,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
                     <td className="px-2.5 py-2"><div className="flex justify-center"><IssueText list={is} /></div></td>
                     <td className="px-1.5 py-2 text-center" onClick={(e) => e.stopPropagation()}>
                       {!isViewer && !lockedOf(g) && (delAsk === idOf(o)
-                        ? <span className="inline-flex gap-1"><button type="button" className="h-7 px-2 rounded-md text-[12px] font-black text-white" style={{ background: C.bad }} onClick={async () => { setDelAsk(""); await onRemove?.(o); setToast("오더를 지웠어요"); }}>지우기</button><button type="button" className="h-7 px-1.5 text-[12px] font-bold" style={{ color: C.sub }} onClick={() => setDelAsk("")}>취소</button></span>
+                        ? <span className="inline-flex gap-1"><button type="button" className="h-7 px-2 rounded-md text-[12px] font-black text-white" style={{ background: C.bad }} onClick={async () => { setDelAsk(""); await onRemove?.(o); setToast("오더를 삭제했습니다"); }}>삭제</button><button type="button" className="h-7 px-1.5 text-[12px] font-bold" style={{ color: C.sub }} onClick={() => setDelAsk("")}>취소</button></span>
                         : <button type="button" aria-label="오더 삭제" title="삭제" className="w-7 h-7 rounded-md text-[#A3AEC2] hover:text-[#C62F25]" onClick={() => setDelAsk(idOf(o))}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg></button>)}
                     </td>
                   </tr>); })}
@@ -401,8 +406,8 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
       <OrderSheet open={!!sheet} row={sheet?.row} isNew={!!sheet?.isNew} ym={ym} phone={phone} isViewer={isViewer}
         clients={groups.map((g) => g.client).filter((c) => c !== "(거래처 없음)")} issues={sheet?.row && !sheet.isNew ? issuesOfRow(sheet.row) : []}
         onClose={() => setSheet(null)}
-        onSave={async (patch) => { if (sheet?.isNew) { const r = await onAdd?.({ ...patch }); if (r !== false) setToast("오더를 추가했어요"); return r; } const r = await onPatch?.(sheet.row, patch); if (r !== false) setToast("저장했어요"); return r; }}
-        onDelete={async () => { await onRemove?.(sheet.row); setToast("오더를 지웠어요"); }} />
+        onSave={async (patch) => { if (sheet?.isNew) { const r = await onAdd?.({ ...patch }); if (r !== false) setToast("오더를 추가했습니다"); return r; } const r = await onPatch?.(sheet.row, patch); if (r !== false) setToast("저장했습니다"); return r; }}
+        onDelete={async () => { await onRemove?.(sheet.row); setToast("오더를 삭제했습니다"); }} />
     </div>
   );
 }

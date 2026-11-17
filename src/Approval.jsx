@@ -2571,7 +2571,7 @@ function AutoApproveCard({ company, me, todo = [] }) {
   );
 }
 
-export default function ApprovalCenter({ company, me, page, setPage, openId, onOpened }) {
+export default function ApprovalCenter({ company, me, page, setPage, openId, onOpened, inSubNav = false }) { // 📱 2026-11-17 inSubNav: 모바일 위쪽 탭(KpSubNav)이 제목·문서 종류 탭을 이미 보여 주면 머리의 제목 줄·바로가기 버튼을 숨긴다
   const staff = useCompanyStaff(company);
   const rawList = useApprovals(me.uid);
   // ⭐ 2026-10-31 기안자·결재자가 계정 아이디로 보이던 문제 — 본인 문서·각 사람 문서에서 실제 이름을 찾아 쓴다
@@ -2753,9 +2753,9 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
       <div className="relative overflow-hidden rounded-[22px] px-4 py-4 md:px-7 md:py-5 text-white flex items-center justify-between gap-4 flex-wrap shadow-[0_14px_32px_rgba(15,26,48,0.25)]"
         style={{ background: "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
         <div>
-          <div className="text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>E-APPROVAL · {heroEn}</div>
-          <div className="text-[20px] md:text-[24px] font-black mt-0.5">{heroTitle}</div>
-          <div className="text-[12.5px] md:text-[14px] text-white/60 mt-0.5">{heroDesc}</div>
+          {!inSubNav && <div className="text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>E-APPROVAL · {heroEn}</div>}
+          {!inSubNav && <div className="text-[20px] md:text-[24px] font-black mt-0.5">{heroTitle}</div>}
+          <div className={`text-[12.5px] md:text-[14px] text-white/60 ${inSubNav ? "" : "mt-0.5"}`}>{heroDesc}</div>
         </div>
         <div className="flex items-center gap-2.5 flex-wrap md:flex-nowrap w-full md:w-auto">
           {kpis.map(([l, v]) => (
@@ -2770,7 +2770,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
             <span className="w-9 h-7 md:h-9 rounded-lg bg-white grid place-items-center overflow-hidden">{meFull.markMode === "sign" && meFull.sign ? <img src={meFull.sign} alt="" className="max-w-[32px] max-h-[24px] object-contain" /> : <span className="w-6 h-6 rounded-full border-2 border-[#1B2B4B] text-[#1B2B4B] text-[8px] font-black grid place-items-center">승인</span>}</span>
             <span className="leading-tight"><span className="block text-[13px] font-black">내 서명</span><span className="block text-[11px] font-bold text-white/55">{meFull.markMode === "sign" && meFull.sign ? (meFull.rawMode === "image" ? "도장 이미지로 결재" : "서명으로 결재") : "도장으로 결재"}</span></span>
           </button>
-          {!isCat && page !== "lines" && (
+          {!isCat && page !== "lines" && !inSubNav && (
             <div className="grid grid-cols-2 md:flex md:flex-col gap-1.5 w-full md:w-auto">
               {APPROVAL_CATS.map((c) => <button key={c.key} type="button" onClick={() => { confirmLeave().then((ok) => { if (ok) { setPreset(null); setPage(c.key); } }); }} className="h-8 px-3 rounded-lg bg-white text-[#0F1A30] text-[13px] font-black inline-flex items-center gap-1.5"><ShellIcon name={c.icon} size={13} />{c.label}</button>)}
             </div>
