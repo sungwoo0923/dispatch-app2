@@ -15,6 +15,12 @@ export function applyFareRule(rule, 청구운임) {
   return { 기사운임: sale - fee, 수수료: fee };
 }
 
+// ⭐ 2026-11-17 특수운임 기사 차감 — 지게차(기사 부담)·외부 특수운임(기사 부담)으로 기사운임에서 빼 둔 금액(음수 = 대기료 등 더해 준 금액)
+//  규칙이 계산한 기사운임에서 이만큼 빠져 있는 게 "규칙대로"다(빼 둔 걸 직접 고친 걸로 보면 안 된다)
+export const fareDeductOf = (form) => toNum(form?.지게차기사차감) + toNum(form?.특수기사차감);
+// 규칙대로라면 지금 보여야 할 기사운임 = 규칙 기사운임 − 특수운임 기사 차감
+export const ruleDriverFare = (rule, form) => applyFareRule(rule, form?.청구운임).기사운임 - fareDeductOf(form);
+
 export const findFareRule = (rules, name) => {
   const n = String(name || "").trim();
   if (!n) return null;
@@ -69,8 +75,8 @@ export function fareFormChange(form, key, value, rules, { asString = true, withF
   } else if (key === "기사운임") {
     // 사람이 기사운임을 고침 → 규칙 계산값과 다르면 수동으로 표시
     if (rule && String(next.청구운임 ?? "") !== "") {
-      const calc = applyFareRule(rule, next.청구운임);
-      next.운임수동 = toNum(value) !== calc.기사운임;
+      // ⭐ 2026-11-17 지게차·특수운임 기사 차감이 있으면 그만큼 뺀 값이 규칙대로(예전엔 차감 오더를 늘 "직접 고침"으로 봤다)
+      next.운임수동 = toNum(value) !== ruleDriverFare(rule, form);
     }
   } else if (key === "__reapply" || key === "운임구분수수료율" || ((key === "운임구분" || key === "청구운임") && !next.운임수동)) {
     // 수수료율을 직접 바꾸면 그 값으로 다시 계산(사람이 고친 기사운임도 새 %로)
@@ -84,7 +90,7 @@ export function fareFormChange(form, key, value, rules, { asString = true, withF
   if (withFee && (key === "청구운임" || key === "기사운임" || key === "운임구분" || key === "운임구분수수료율" || key === "__reapply")) {
     const sale = toNum(next.청구운임);
     const drv = toNum(next.기사운임);
-    next.수수료 = out(sale - drv);
+    next.수수료 = out(sale - drv); // 지게차·특수운임이 있으면 아래 forkliftApply가 청구 − 기사 − 회사 지급분으로 다시 맞춘다
   }
   // 🏗 2026-11-09 지게차비용이 있는 오더 — 운임구분 계산 뒤 지게차를 다시 적용(기사 부담이면 기사운임에서 빼고 수익 = 청구 − 기사 − 지게차)
   if (form && (toNum(form.지게차비용) > 0 || toNum(form.지게차기사차감) > 0 || toNum(form.지게차청구추가) > 0 || toNum(next.지게차비용) > 0 || (Array.isArray(form.특수운임) && form.특수운임.length) || toNum(form.특수기사차감) !== 0 || toNum(form.특수청구추가) > 0)) return forkliftApply(form, next, key, { asString });
@@ -104,6 +110,6 @@ export const fareIsManual = (form, rules) => {
   const rule = effectiveFareRule(form, rules);
   if (!rule || String(form?.청구운임 ?? "") === "") return false;
   if (form?.운임수동) return true;
-  return toNum(form?.기사운임) !== applyFareRule(rule, form.청구운임).기사운임;
+  return toNum(form?.기사운임) !== ruleDriverFare(rule, form); // ⭐ 2026-11-17 특수운임 기사 차감분은 규칙대로로 본다
 };
 

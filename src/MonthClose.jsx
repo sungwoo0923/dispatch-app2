@@ -14,6 +14,7 @@ import { CLOSE_RULES, closeBoard, closeChecks, isMine, canSubmit, canVerify, ver
 import { useLoadOrderRange, monthEnd } from "./orderHistory";
 import useNarrow from "./useNarrow";
 import { MarginPct } from "./marginPct"; // ⭐ 2026-11-17 합계 줄 수수료 옆 수수료율(수수료 ÷ 청구)
+import { orderProfit, paidOut } from "./forkliftCore"; // ⭐ 2026-11-17 수수료 한 식 — 청구 − 기사 − 회사가 따로 준 지게차·특수운임(배차현황 표와 같음)
 import { kpConfirm } from "./kpDialog";
 const StmtCompareModal = React.lazy(() => import("./StmtCompare")); // ⭐ 2026-11-17 업체 명세서 비교
 
@@ -55,7 +56,7 @@ function OrderSheet({ open, row, isNew, ym, phone, isViewer, clients, issues, on
     if (f.하차일 && f.하차일 < f.상차일) { setErr("하차일이 상차일보다 빨라요."); return; }
     const patch = {};
     FIELDS.forEach(([k, , t]) => { const nv = t === "money" ? n(f[k]) : String(f[k] || "").trim(); const ov = t === "money" ? n(row?.[k]) : String(row?.[k] ?? "").trim(); if (isNew ? (nv !== "" && nv !== 0) : nv !== ov) patch[k] = nv; });
-    if ("청구운임" in patch || "기사운임" in patch) patch.수수료 = n(f.청구운임) - n(f.기사운임);
+    if ("청구운임" in patch || "기사운임" in patch) patch.수수료 = orderProfit({ ...(row || {}), 청구운임: n(f.청구운임), 기사운임: n(f.기사운임) }); // ⭐ 2026-11-17 회사 지급분(지게차·특수운임) 빼기
     if ("이름" in patch) patch.기사명 = patch.이름;
     if (isNew) { patch.배차상태 = String(f.차량번호 || "").trim() ? "배차완료" : "배차중"; patch.등록기기 = "월 마감"; }
     else if ("차량번호" in patch && String(f.차량번호 || "").trim() && (row?.배차상태 || "") !== "배차완료") patch.배차상태 = "배차완료";
@@ -65,7 +66,7 @@ function OrderSheet({ open, row, isNew, ym, phone, isViewer, clients, issues, on
     catch (e) { setErr(`저장하지 못했어요 — ${e?.message || e}`); setBusy(""); }
   };
   const del = async () => { setBusy("del"); try { await onDelete(); onClose(); } catch (e) { setErr(`지우지 못했어요 — ${e?.message || e}`); setBusy(""); } };
-  const profit = n(f.청구운임) - n(f.기사운임);
+  const profit = orderProfit({ ...(row || {}), 청구운임: n(f.청구운임), 기사운임: n(f.기사운임) }); // ⭐ 2026-11-17
   const node = (
     <div className="fixed inset-0 z-[100050] flex" style={{ background: "rgba(14,22,40,.42)" }} onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
       <div className={phone ? "mt-auto w-full max-h-[92vh] rounded-t-[22px] bg-white flex flex-col" : "ml-auto h-full w-[460px] max-w-full bg-white flex flex-col shadow-[-12px_0_40px_rgba(14,22,40,.18)]"} data-kp="mc-sheet" onMouseDown={(e) => e.stopPropagation()}>
@@ -175,7 +176,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
   const board = React.useMemo(() => new Map(closeBoard(orders, ym, { closeOf, me }).map((r) => [r.client, r])), [orders, ym, closeOf, me]);
   const groups = React.useMemo(() => {
     const m = new Map();
-    scoped.forEach((o) => { const c = String(o.거래처명 || "").trim() || "(거래처 없음)"; const g = m.get(c) || { client: c, rows: [], sale: 0, buy: 0, issue: 0 }; g.rows.push(o); g.sale += n(o.청구운임); g.buy += n(o.기사운임); if (issuesOfRow(o).length) g.issue += 1; m.set(c, g); });
+    scoped.forEach((o) => { const c = String(o.거래처명 || "").trim() || "(거래처 없음)"; const g = m.get(c) || { client: c, rows: [], sale: 0, buy: 0, paid: 0, issue: 0 }; g.rows.push(o); g.sale += n(o.청구운임); g.buy += n(o.기사운임); g.paid += paidOut(o); /* ⭐ 2026-11-17 회사 지급분 */ if (issuesOfRow(o).length) g.issue += 1; m.set(c, g); });
     return [...m.values()].map((g) => { const b = board.get(g.client); return { ...g, count: g.rows.length, row: b || null, status: b?.status || "none", changed: !!b?.changed, owners: [...new Set(g.rows.map(staffOf))].slice(0, 2).join(", "),
       rows: g.rows.sort((a, b2) => String(a.상차일 || "").localeCompare(String(b2.상차일 || "")) || String(a.상차시간 || "").localeCompare(String(b2.상차시간 || ""))) }; })
       .sort((a, b) => stOf(a).ord - stOf(b).ord || b.sale - a.sale);
@@ -315,10 +316,10 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
       <div className={`${sdCard} overflow-hidden`}>
         {/* 합계 — 오더 목록 바로 위(칸으로 나눈 한 줄) · [확인 필요]를 누르면 확인 필요만 */}
         <div className="grid grid-cols-2 sm:grid-cols-5 border-b border-[#E3E8F0] bg-[#F8FAFD]" style={NUM} data-kp="mc-totals">
-          {[["오더", `${g.count.toLocaleString()}건`, C.ink], ["청구", `${won(g.sale)}원`, C.ink], ["기사운임", `${won(g.buy)}원`, C.sub], ["수수료", `${won(g.sale - g.buy)}원`, g.sale - g.buy < 0 ? "#2457D6" : "#D92D20"], ["확인 필요", g.issue ? `${g.issue}건` : "없음", g.issue ? C.bad : C.ok]].map(([l, v, c], i) => (
+          {[["오더", `${g.count.toLocaleString()}건`, C.ink], ["청구", `${won(g.sale)}원`, C.ink], ["기사운임", `${won(g.buy)}원`, C.sub], ["수수료", `${won(g.sale - g.buy - g.paid)}원`, g.sale - g.buy - g.paid < 0 ? "#2457D6" : "#D92D20"], ["확인 필요", g.issue ? `${g.issue}건` : "없음", g.issue ? C.bad : C.ok]].map(([l, v, c], i) => (
             <button key={l} type="button" disabled={l !== "확인 필요" || !g.issue} onClick={() => setOnlyBad((x) => !x)} className={`px-4 py-2.5 text-center border-[#E3E8F0] ${i ? "sm:border-l" : ""} ${l === "확인 필요" && g.issue ? "hover:bg-[#FFF5F4] cursor-pointer" : "cursor-default"}`}>
               <div className="text-[12px] font-bold text-[#9AA9C3]">{l}</div>
-              <div className="text-[16px] font-black whitespace-nowrap" style={{ color: c }}>{v}{l === "수수료" && <MarginPct profit={g.sale - g.buy} sales={g.sale} hideZero />}</div>{/* ⭐ 2026-11-17 수수료율 */}
+              <div className="text-[16px] font-black whitespace-nowrap" style={{ color: c }}>{v}{l === "수수료" && <MarginPct profit={g.sale - g.buy - g.paid} sales={g.sale} hideZero />}</div>{/* ⭐ 2026-11-17 수수료율 */}
             </button>))}
         </div>
         <div className="px-4 py-2.5 border-b border-[#E3E8F0] flex items-center gap-2 flex-wrap">
@@ -363,7 +364,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
                     <td className="px-2.5 py-2 text-[13px] whitespace-nowrap text-[#5B6B85] text-center">{o.이름 || ""}</td>
                     <td className="px-2.5 py-2 text-[13px] font-black text-center whitespace-nowrap" style={{ color: n(o.청구운임) ? C.ink : C.bad }}>{won(n(o.청구운임))}</td>
                     <td className="px-2.5 py-2 text-[13px] text-center whitespace-nowrap" style={{ color: n(o.기사운임) ? C.sub : C.warn }}>{won(n(o.기사운임))}</td>
-                    <td className="px-2.5 py-2 text-[13px] text-center whitespace-nowrap" style={{ color: n(o.청구운임) - n(o.기사운임) < 0 ? "#2457D6" : C.sub }}>{won(n(o.청구운임) - n(o.기사운임))}</td>
+                    <td className="px-2.5 py-2 text-[13px] text-center whitespace-nowrap" style={{ color: orderProfit(o) < 0 ? "#2457D6" : C.sub }}>{won(orderProfit(o))}</td>{/* ⭐ 2026-11-17 수수료 = 청구 − 기사 − 회사 지급분 */}
                     <td className="px-2.5 py-2"><div className="flex justify-center"><IssueText list={is} /></div></td>
                     <td className="px-1.5 py-2 text-center" onClick={(e) => e.stopPropagation()}>
                       {!isViewer && !lockedOf(g) && (delAsk === idOf(o)

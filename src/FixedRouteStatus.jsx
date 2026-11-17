@@ -23,6 +23,7 @@ import { isMyOrder } from "./driverEvents"; // ⭐ 2026-11-06 내 오더 판단(
 import { useMyProfile, personName } from "./userNames";
 import { orderStaffNameRaw, useUserNameMap } from "./detailGetters";
 import { MarginPct } from "./marginPct"; // ⭐ 2026-11-17 합계 줄 수수료 옆 수수료율(수수료 ÷ 청구)
+import { orderProfit, paidOut, profitTotals } from "./forkliftCore"; // ⭐ 2026-11-17 수수료 한 식 — 청구 − 기사 − 회사가 따로 준 지게차·특수운임
 import MgrBadge from "./MgrBadge"; // ⭐ 2026-11-06 담당자 칸(실시간·배차현황과 같은 모양)
 import { isUrgentOrder, UrgentBadge, urgentRowStyle } from "./urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조
 import { requestRouteSheetPush } from "./routeSheetPush"; // 💰 2026-11-06 고친 값 바로 시트에
@@ -100,7 +101,7 @@ const valueOf = (c, row) => {
   if (c.kind === "qty") return row.품목수량?.[c.label] ? String(row.품목수량[c.label]) : "";
   if (c.id === CARRIER_VCOL) return carrierOf(row); // ⭐ 2026-11-06 양식에 운송업체 열이 없을 때 붙인 칸
   if (c.kind === "extra") return String(row.추가정보?.[c.label] ?? "");
-  if (c.kind === "calc") { const a = toInt(row.청구운임); const b = toInt(row.기사운임); return c.field === "매익율" ? marginRate(a, b) : a || b ? (a - b).toLocaleString() : ""; } // 🔗 2026-11-08 프로그램 계산(#DIV/0! 없음)
+  if (c.kind === "calc") { const a = toInt(row.청구운임); const b = toInt(row.기사운임) + paidOut(row); /* ⭐ 2026-11-17 회사 지급분(지게차·특수운임)까지 뺀 수수료 */ return c.field === "매익율" ? marginRate(a, b) : a || b ? (a - b).toLocaleString() : ""; } // 🔗 2026-11-08 프로그램 계산(#DIV/0! 없음)
   if (c.kind === "sum") { const t = Object.values(row.품목수량 || {}).reduce((a, n) => a + toInt(n), 0); return t ? String(t) : ""; }
   // ⭐ 2026-11-03 시군구 칸은 시트에 적힌 그대로(여주시) — 오더에는 기사 길안내용 풀주소를 그대로 둔다
   if (c.field === "하차지주소") { const sv = row.시트기준값?.[c.id] ?? row.시트추가값?.[c.id]; if (sv != null && String(sv).trim()) return String(sv); const short = siGunGu(row.하차지주소); return short || String(row.하차지주소 ?? ""); }
@@ -271,8 +272,8 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
     if (!form?.rateTable?.length || row.운임수동) return {};
     const n = Object.values(q || {}).reduce((a, x) => a + toInt(x), 0);
     const r = rateFor(form.rateTable, addr ?? row.하차지주소 ?? "", n);
-    if (r) return { 청구운임: String(r.total), 수수료: String(r.total - toInt(row.기사운임)), 단가표지역: r.region, 파렛단가: r.per };
-    return row.단가표지역 ? { 청구운임: "", 수수료: String(-toInt(row.기사운임)), 단가표지역: "", 파렛단가: 0 } : {}; // 12·18P가 아니면 자동 운임 지움 → 직접 입력
+    if (r) return { 청구운임: String(r.total), 수수료: String(orderProfit({ ...row, 청구운임: r.total })), 단가표지역: r.region, 파렛단가: r.per }; // ⭐ 2026-11-17 회사 지급분 빼기
+    return row.단가표지역 ? { 청구운임: "", 수수료: String(orderProfit({ ...row, 청구운임: 0 })), 단가표지역: "", 파렛단가: 0 } : {}; // 12·18P가 아니면 자동 운임 지움 → 직접 입력
   };
   const commit = (c, raw) => {
     const val = String(raw ?? "").trim();
@@ -295,7 +296,7 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
     if (c.kind === "calc") return undefined; // 자동 계산 칸
     if (c.field === "배차상태" || c.field === "지급방식" || c.field === "배차방식") return onPatch({ [c.field]: enumValue(c.field, val) });
     if (TIME_FIELDS.has(c.field)) return onPatch({ [c.field]: parseHM(val) ? korTime(parseHM(val)) : val });
-    if (MONEY_FIELDS.has(c.field)) { const n = toInt(val); const p = { [c.field]: n ? String(n) : "" }; const sale = c.field === "청구운임" ? n : toInt(row.청구운임); const drv = c.field === "기사운임" ? n : toInt(row.기사운임); return onPatch({ ...p, 수수료: String(sale - drv), ...(c.field === "청구운임" ? { 운임수동: !!n } : {}), ...(c.field === "기사운임" ? { 기사운임자동: false } : {}) }); } // 💸 직접 넣은 기사운임 = 자동 계산 멈춤(비우면 다시 자동) // 청구운임을 직접 고치면 단가표 자동 계산 멈춤(비우면 다시 자동)
+    if (MONEY_FIELDS.has(c.field)) { const n = toInt(val); const p = { [c.field]: n ? String(n) : "" }; const sale = c.field === "청구운임" ? n : toInt(row.청구운임); const drv = c.field === "기사운임" ? n : toInt(row.기사운임); return onPatch({ ...p, 수수료: String(sale - drv - paidOut(row)), ...(c.field === "청구운임" ? { 운임수동: !!n } : {}), ...(c.field === "기사운임" ? { 기사운임자동: false } : {}) }); } // 💸 직접 넣은 기사운임 = 자동 계산 멈춤(비우면 다시 자동) // 청구운임을 직접 고치면 단가표 자동 계산 멈춤(비우면 다시 자동)
     return onPatch({ [c.field]: val });
   };
   const has = (f) => hasField(cols, f);
@@ -326,7 +327,7 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
         const look = frsLook(c);
         const bg = look ? "" : own === "운송사" ? "bg-[#F3F7FF]" : "";
         if (c.kind === "sum") return <td key={c.id} data-frs="sum" className={`${td} tabular-nums`}>{v}</td>;
-        if (c.kind === "calc") return <td key={c.id} className={`${td} text-[13.5px] font-black tabular-nums ${c.field === "수수료" && toInt(row.청구운임) - toInt(row.기사운임) - toInt(row.외부지급합 ?? row.지게차비용) < 0 ? "text-red-600" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} title="자동 계산(청구운임 − 기사운임)">{v}</td>;
+        if (c.kind === "calc") return <td key={c.id} className={`${td} text-[13.5px] font-black tabular-nums ${c.field === "수수료" && orderProfit(row) < 0 ? "text-red-600" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} title="자동 계산(청구운임 − 기사운임 − 회사가 따로 준 지게차·특수운임)">{v}</td>;
         if (c.kind === "field" && c.field === "배차상태") return <td key={c.id} className={td}>{statusChip}</td>;
         if (c.kind === "field" && DRV_KEY[c.field]) {
           const pick = (d) => onPatch({ 차량번호: d.차량번호 || "", 이름: d.이름 || "", 전화번호: d.전화번호 || "", ...(row.배차상태 === "배차중" || !row.배차상태 ? { 배차상태: "배차완료" } : {}) });
@@ -347,7 +348,7 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
       {!has("배차상태") && <td className={td}>{statusChip}</td>}
       {!has("청구운임") && money("청구운임")}
       {!has("기사운임") && money("기사운임")}
-      {!has("수수료") && <td className={`${td} text-[13.5px] font-black tabular-nums ${toInt(row.청구운임) - toInt(row.기사운임) - toInt(row.외부지급합 ?? row.지게차비용) < 0 ? "text-red-600" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{(toInt(row.청구운임) - toInt(row.기사운임) - toInt(row.외부지급합 ?? row.지게차비용)).toLocaleString()}</td>}
+      {!has("수수료") && <td className={`${td} text-[13.5px] font-black tabular-nums ${orderProfit(row) < 0 ? "text-red-600" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{orderProfit(row).toLocaleString()}</td>}
     </>
   );
 }
@@ -965,7 +966,7 @@ function MobileFixedRouteBody({ form, rows, range, setRange, status, setStatus, 
   }, [inRange, q, qType, nameMap]);
   const list = React.useMemo(() => inRange.filter((r) => frStatusOk(r, status) && frSearchOk(r, q, qType, nameMap))
     .sort((a, b) => frIn(a).localeCompare(frIn(b)) || gi(a) - gi(b) || (a.시트줄 ?? 1e9) - (b.시트줄 ?? 1e9) || (a.배차표순번 || 0) - (b.배차표순번 || 0)), [inRange, status, q, qType, nameMap]); // eslint-disable-line react-hooks/exhaustive-deps
-  const sum = React.useMemo(() => { const sale = list.reduce((s, r) => s + toInt(r.청구운임), 0); const drv = list.reduce((s, r) => s + toInt(r.기사운임), 0); return { sale, drv, fee: sale - drv }; }, [list]);
+  const sum = React.useMemo(() => profitTotals(list), [list]); // ⭐ 2026-11-17 합계 수수료 = 줄 수수료 합(청구 − 기사 − 지게차·특수운임 회사 지급분)
   const head = fixedHeaderOf(form).filter((h) => h !== "선택");
   // 📱 2026-11-10 휴대폰 폭 — 넓은 표(가로 스크롤) 대신 줄마다 카드. 칸 이름은 머리글에서 가져와 각 칸 위에 작게 표시
   const narrow = useNarrow(640);
