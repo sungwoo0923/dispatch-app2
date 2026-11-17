@@ -74,3 +74,47 @@ export function clientLedger(orders, client, stageOf = () => "미작성") {
   return [...m.values()].sort((a, b) => a.ym.localeCompare(b.ym)).map((x) => { const stage = stageOf(client, x.ym); const paid = stageIdx(stage) >= 6 ? x.sale : x.paid; bal += x.sale - paid; return { ...x, paid, stage, balance: bal }; });
 }
 
+
+// ── 🧾 2026-11-17 청구 현황판 — 미청구 · 청구완료 · 입금완료(지급완료)를 화주사(명세서 단위) + 개별오더(OUT 콜) 한 번에 ──────────
+//  받을 돈(mode "ar"):
+//   · 화주사 = 거래처 × 정산월 한 줄(OUT 콜이 아닌 오더). 명세서 단계(viewStage) 마감 또는 다 입금 → 입금완료 / 계산서발행 → 청구완료 / 그 외 → 미청구
+//   · 개별오더 = OUT 콜(외부 콜을 잡은 오더) 한 건씩. 입금상태 입금완료 → 입금완료 / 계산서일 있음 → 청구완료 / 그 외 → 미청구
+//  줄 돈(mode "ap"): 기사운임이 있는 오더 한 건씩. 지급완료 → 지급완료 / 계산서일(기사 계산서 받음) → 청구받음 / 그 외 → 미청구
+//  stageOf(client, ym) → "미작성" | "작성" | "계산서발행" | "마감" (화면 단계)
+export const BILL_STATUS = { unbilled: "미청구", billed: "청구완료", paid: "입금완료" };
+export const PAY_STATUS = { unbilled: "계산서 전", billed: "계산서 받음", paid: "지급완료" };
+const outCall = (o) => o?.콜구분 === "OUT" || o?.콜구분 === "잡은콜";
+const inRange = (ym, from, to) => !!ym && (!from || ym >= from) && (!to || ym <= to);
+export function billingBoard(orders, { from = "", to = "", mode = "ar", stageOf = () => "미작성" } = {}) {
+  const rows = (orders || []).filter((o) => !isCancel(o) && o?.source !== "transport_transmit" && inRange(monthOf(o), from, to));
+  const items = [];
+  if (mode === "ap") {
+    rows.forEach((o) => {
+      const amt = n(o.기사운임); if (amt <= 0) return;
+      const status = o.지급상태 === "지급완료" ? "paid" : o.계산서일 ? "billed" : "unbilled";
+      items.push({ kind: "order", key: `ap:${o._id || o.id}`, order: o, client: String(o.기사명 || o.차량번호 || "기사 미정").trim(), sub: String(o.거래처명 || "").trim(), ym: monthOf(o), date: String(o.상차일 || ""), count: 1, amount: amt, vat: Math.round(amt * 1.1), paid: status === "paid" ? amt : 0, status, note: status === "paid" ? String(o.지급일 || "") : o.계산서일 ? `계산서 ${o.계산서일}` : "" });
+    });
+  } else {
+    const groups = new Map();
+    rows.forEach((o) => {
+      const c = String(o.거래처명 || "").trim(); const amt = n(o.청구운임); if (!c || amt <= 0) return;
+      if (outCall(o)) {
+        const status = o.입금상태 === "입금완료" ? "paid" : o.계산서일 ? "billed" : "unbilled";
+        items.push({ kind: "order", key: `o:${o._id || o.id}`, order: o, client: c, ym: monthOf(o), date: String(o.상차일 || ""), count: 1, amount: amt, vat: Math.round(amt * 1.1), paid: status === "paid" ? amt : 0, status, note: status === "paid" ? String(o.입금일 || "") : o.계산서일 ? `계산서 ${o.계산서일}` : "" });
+        return;
+      }
+      const ym = monthOf(o); const k = `${c}|${ym}`;
+      const g = groups.get(k) || { kind: "client", key: `c:${k}`, client: c, ym, date: "", count: 0, amount: 0, paid: 0, orders: [] };
+      g.count += 1; g.amount += amt; if (o.입금상태 === "입금완료") g.paid += amt; g.orders.push(o); groups.set(k, g);
+    });
+    groups.forEach((g) => {
+      const st = stageOf(g.client, g.ym);
+      const status = st === "마감" || (g.amount > 0 && g.paid >= g.amount) ? "paid" : st === "계산서발행" ? "billed" : "unbilled";
+      items.push({ ...g, vat: Math.round(g.amount * 1.1), stage: st, status, note: status === "billed" && g.paid > 0 ? `부분입금 ${won(g.paid)}` : st === "작성" ? "명세서 작성" : "" });
+    });
+  }
+  const order = { unbilled: 0, billed: 1, paid: 2 };
+  items.sort((a, b) => order[a.status] - order[b.status] || a.ym.localeCompare(b.ym) || b.amount - a.amount);
+  const sum = (st) => { const l = items.filter((x) => x.status === st); return { count: l.length, orders: l.reduce((a, x) => a + x.count, 0), amount: l.reduce((a, x) => a + x.amount, 0), vat: l.reduce((a, x) => a + x.vat, 0) }; };
+  return { items, totals: { unbilled: sum("unbilled"), billed: sum("billed"), paid: sum("paid") } };
+}
