@@ -120,13 +120,13 @@ export function ExecPage({ en, title, sub, right, children, className = "", test
       <div className="absolute inset-0 pointer-events-none" style={{ background: GRID_BG, maskImage: "linear-gradient(180deg, #000 0%, rgba(0,0,0,.35) 60%, transparent 100%)", WebkitMaskImage: "linear-gradient(180deg, #000 0%, rgba(0,0,0,.35) 60%, transparent 100%)" }} />
       <div className={`relative ${compact ? "px-4 py-4" : "px-4 py-5 md:px-8 md:py-7"}`}>
         {(en || title) && (
-          <header className="flex flex-col md:flex-row md:items-end gap-3 md:gap-6 mb-5 md:mb-7">
-            <div className="min-w-0 flex-1">
+          <header className="flex flex-wrap items-end gap-x-6 gap-y-3 mb-5 md:mb-7">{/* 내용 폭으로 줄바꿈 — 옆 메뉴가 있는 좁은 PC에서도 제목이 세로로 깨지지 않게 */}
+            <div className="min-w-[min(100%,280px)] flex-[1_1_320px]">
               {en && <div className="flex items-center gap-3"><Eyebrow>{en}</Eyebrow><div className="hidden md:block flex-1 max-w-[220px]"><GoldRule /></div></div>}
               {title && <h1 className="mt-1.5 text-[24px] md:text-[30px] font-black tracking-[-0.02em] leading-tight" style={{ color: EX.text }}>{title}</h1>}
               {sub && <div className="mt-1.5 text-[13px] md:text-[14.5px] font-medium leading-relaxed" style={{ color: EX.sub }}>{sub}</div>}
             </div>
-            {right && <div className="flex flex-wrap items-center gap-2 md:justify-end">{right}</div>}
+            {right && <div className="flex flex-wrap items-center gap-2 ml-auto">{right}</div>}
           </header>
         )}
         <div className="space-y-4 md:space-y-5">{children}</div>
@@ -189,9 +189,9 @@ export function ExecGrid({ cols = "1fr 1fr", children, className = "", breakAt =
   return <div ref={ref} className={`grid gap-4 md:gap-5 ${className}`} style={{ gridTemplateColumns: w >= breakAt ? cols : "minmax(0,1fr)" }}>{children}</div>;
 }
 // 내용 폭(그래프 크기 계산용)
-export function useBoxWidth(initial = 600) {
+export function useBoxWidth(initial = 600, minW = 0) {
   const ref = React.useRef(null); const [w, setW] = React.useState(initial);
-  React.useEffect(() => { const el = ref.current; if (!el || typeof ResizeObserver === "undefined") return undefined; const ro = new ResizeObserver(([e]) => setW(Math.max(200, e.contentRect.width))); ro.observe(el); return () => ro.disconnect(); }, []);
+  React.useEffect(() => { const el = ref.current; if (!el || typeof ResizeObserver === "undefined") return undefined; const ro = new ResizeObserver(([e]) => setW(Math.max(minW, e.contentRect.width))); ro.observe(el); return () => ro.disconnect(); }, [minW]);
   return [ref, w];
 }
 
