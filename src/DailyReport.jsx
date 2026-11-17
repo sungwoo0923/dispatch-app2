@@ -182,36 +182,36 @@ function Narr({ parts }) {
   return <>{parts.map((p, i) => (typeof p === "string" ? <React.Fragment key={i}>{p}</React.Fragment> : p.up != null ? <b key={i} className="hup">{p.up}</b> : p.dn != null ? <b key={i} className="hdn">{p.dn}</b> : <b key={i}>{p.b}</b>))}</>;
 }
 const pctTok = (v) => (v == null ? { b: "–" } : v > 0 ? { up: `${Math.abs(v).toFixed(1)}%` } : v < 0 ? { dn: `${Math.abs(v).toFixed(1)}%` } : { b: "0.0%" });
-const upDown = (v, up = "늘었고", dn = "줄었고") => (v == null || v >= 0 ? up : dn);
+const upDown = (v, up = "증가했고", dn = "감소했고") => (v == null || v >= 0 ? up : dn);
 export function narrative({ report, weekly, ar = [], topStaff = null }) {
   const { basis, cur, p1, p7, month } = report;
   const out = [];
   const lbl = basis.multi ? `${Number(basis.start.slice(5, 7))}월 ${Number(basis.start.slice(8, 10))}일(${DOW[dowOf(basis.start)]})~${Number(basis.end.slice(8, 10))}일(${DOW[dowOf(basis.end)]}) ${basis.days.length}일간` : `${Number(basis.start.slice(5, 7))}월 ${Number(basis.start.slice(8, 10))}일(${DOW[dowOf(basis.start)]})`;
   const m = marginOf(cur); const dm = m - marginOf(p1);
   if (!cur.sale) out.push([`${lbl}에는 집계된 매출이 없습니다.`]);
-  else if (basis.multi) out.push([`${lbl} 매출은 `, { b: `${fmt(man(cur.sale))}만원` }, ", 수익은 ", { b: `${fmt(man(cur.profit))}만원` }, "(수익률 ", { b: `${m.toFixed(1)}%` }, ")으로 지난주 같은 기간보다 ", pctTok(pctChange(cur.sale, p7.sale)), ` ${upDown(pctChange(cur.sale, p7.sale), "늘었습니다.", "줄었습니다.")}`]);
+  else if (basis.multi) out.push([`${lbl} 매출은 `, { b: `${fmt(man(cur.sale))}만원` }, ", 매출총이익은 ", { b: `${fmt(man(cur.profit))}만원` }, "(매출총이익률 ", { b: `${m.toFixed(1)}%` }, ")이며, 매출은 전주 동기간 대비 ", pctTok(pctChange(cur.sale, p7.sale)), ` ${upDown(pctChange(cur.sale, p7.sale), "증가했습니다.", "감소했습니다.")}`]);
   else {
     const a1 = pctChange(cur.sale, p1.sale); const a7 = pctChange(cur.sale, p7.sale);
     const same = a1 != null && a7 != null && (a1 >= 0) === (a7 >= 0);
-    const cmp = same ? ["으로 전일보다 ", pctTok(a1), ", 전주 같은 요일보다 ", pctTok(a7), ` ${upDown(a7)}`]
-      : ["으로 전일보다 ", pctTok(a1), ` ${a1 == null ? "변동이 없고" : upDown(a1, "늘었으나", "줄었으나")} 전주 같은 요일보다는 `, pctTok(a7), ` ${upDown(a7)}`];
-    out.push([`${lbl} 매출은 `, { b: `${fmt(man(cur.sale))}만원` }, ...cmp, ", 수익은 ", { b: `${fmt(man(cur.profit))}만원` }, "(수익률 ", { b: `${m.toFixed(1)}%` }, ", 전일 대비 ", dm > 0 ? { up: `+${dm.toFixed(1)}%p` } : dm < 0 ? { dn: `${dm.toFixed(1)}%p` } : { b: "0.0%p" }, ")입니다."]);
+    const cmp = same ? ["으로 전일 대비 ", pctTok(a1), ", 전주 동요일 대비 ", pctTok(a7), ` ${upDown(a7)}`]
+      : ["으로 전일 대비 ", pctTok(a1), ` ${a1 == null ? "증감 산출이 불가하며" : upDown(a1, "증가했으나", "감소했으나")} 전주 동요일 대비로는 `, pctTok(a7), ` ${upDown(a7)}`];
+    out.push([`${lbl} 매출은 `, { b: `${fmt(man(cur.sale))}만원` }, ...cmp, ", 매출총이익은 ", { b: `${fmt(man(cur.profit))}만원` }, "(매출총이익률 ", { b: `${m.toFixed(1)}%` }, ", 전일 대비 ", dm > 0 ? { up: `+${dm.toFixed(1)}%p` } : dm < 0 ? { dn: `${dm.toFixed(1)}%p` } : { b: "0.0%p" }, ")입니다."]);
   }
   if (weekly && weekly.prev.sale) {
     const d = pctChange(weekly.cur.sale, weekly.prev.sale);
-    out.push([`지난주(${md(weekly.range[0])}~${md(weekly.range[1])}) 주간 매출은 `, { b: `${fmt(man(weekly.cur.sale))}만원` }, "으로 전주보다 ", pctTok(d), ` ${d >= 0 ? "증가했고" : "감소했고"}, 평일 5일 중 ${weekly.over}일이 전주를 넘었습니다.`]);
+    out.push([`지난주(${md(weekly.range[0])}~${md(weekly.range[1])}) 주간 매출은 `, { b: `${fmt(man(weekly.cur.sale))}만원` }, "으로 전주 대비 ", pctTok(d), ` ${d >= 0 ? "증가했으며" : "감소했으며"}, 평일 5일 중 ${weekly.over}일이 전주 동요일 실적을 상회했습니다.`]);
   } else if (month.mtd) {
     const tp = month.target ? (month.forecast / month.target) * 100 : null;
-    out.push(["이번 달 누계는 ", { b: `${fmt(man(month.mtd))}만원` }, ...(month.prevSame ? ["으로 전월 동기보다 ", pctTok(month.d), ` ${month.d >= 0 ? "앞서 있으며" : "뒤처져 있으며"}`] : ["이며"]), ", 이 속도라면 월말 ", { b: `${eok(month.forecast)}원` }, tp ? `(목표의 ${tp.toFixed(0)}%)` : "", "이 예상됩니다."]);
+    out.push(["이번 달 누계 매출은 ", { b: `${fmt(man(month.mtd))}만원` }, ...(month.prevSame ? ["으로 전월 동기 대비 ", pctTok(month.d), ` ${month.d >= 0 ? "증가했으며" : "감소했으며"}`] : ["이며"]), ", 현 추세 기준 월말 매출은 ", { b: `${eok(month.forecast)}원` }, tp ? `(목표 대비 ${tp.toFixed(0)}%)` : "", "으로 예상됩니다."]);
   }
   const lowSet = new Set((report.clients.top || []).filter((c) => c.margin < 8 && c.sale > 0).map((c) => c.n));
   const arHit = ar.find((a) => lowSet.has(a.client) && a.outstanding > 0);
   if (arHit) {
     const lowN = (report.lowOrders || []).filter((r) => String(r.거래처명 || "") === arHit.client).length;
-    out.push(["다만 ", { b: arHit.client }, `은 미수금 ${fmt(man(arHit.outstanding))}만원${lowN ? `과 저마진 오더 ${lowN}건이 겹쳐` : "이 있고 수익률도 낮아"} 거래 조건 점검이 필요합니다.`]);
-  } else if (lowSet.size) { const c = report.clients.top.find((x) => lowSet.has(x.n)); out.push(["저마진 거래처 ", { b: c.n }, `(수익률 ${c.margin.toFixed(1)}%)의 단가 점검이 필요합니다.`]); }
-  else if (topStaff) out.push(["담당자 중에서는 ", { b: topStaff.n }, "님이 매출 ", { b: `${fmt(man(topStaff.sale))}만원` }, "으로 가장 많았습니다."]);
-  else out.push(["특이 사항은 없습니다."]);
+    out.push(["다만 ", { b: arHit.client }, `의 경우 미수금 ${fmt(man(arHit.outstanding))}만원${lowN ? `과 저마진 오더 ${lowN}건이 함께 발생하고 있어` : "이 남아 있고 매출총이익률도 낮아"} 거래 조건 점검이 필요합니다.`]);
+  } else if (lowSet.size) { const c = report.clients.top.find((x) => lowSet.has(x.n)); out.push(["저마진 거래처 ", { b: c.n }, `(매출총이익률 ${c.margin.toFixed(1)}%)의 단가 점검이 필요합니다.`]); }
+  else if (topStaff) out.push(["담당자별로는 ", { b: topStaff.n }, "님이 매출 ", { b: `${fmt(man(topStaff.sale))}만원` }, "으로 가장 높은 실적을 기록했습니다."]);
+  else out.push(["그 밖의 특이 사항은 없습니다."]);
   return out.slice(0, 3);
 }
 
@@ -392,7 +392,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
   const { cur, p1, p7, month } = report;
   const sp = report.spark;
   const workNow = workOn(lastBiz);
-  const prevLbl = basis.multi ? "지난주 같은 기간" : "전일";
+  const prevLbl = basis.multi ? "전주 동기간" : "전일";
   const wkLbl = `전주 ${DOW[dowOf(basis.start)]}요일`;
   const goalPct = month.target ? (month.mtd / month.target) * 100 : null;
   const doneRate = cur.all ? (cur.done / cur.all) * 100 : 0;
@@ -444,17 +444,17 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
 
   // ── 타일 ──
   const tiles = basis.multi ? [
-    { en: "SALES", k: `${basis.days.length}일 합산 매출`, v: fmt(man(cur.sale)), u: "만원", cmp: [["지난주 같은 기간", pctChange(cur.sale, p7.sale)]], sp: sp.sale, hero: true },
-    { en: "PROFIT", k: `${basis.days.length}일 수익`, v: fmt(man(cur.profit)), u: "만원", prof: cur.profit, cmp: [["지난주 같은 기간", pctChange(cur.profit, p7.profit)]], sp: sp.profit, note: `수익률 ${marginOf(cur).toFixed(1)}%` },
-    { en: "ORDERS", k: `${basis.days.length}일 오더`, v: fmt(cur.all), u: "건", cmp: [["지난주 같은 기간", pctChange(cur.all, p7.all)]], sp: sp.orders, note: `배차완료 ${doneRate.toFixed(1)}%` },
+    { en: "SALES", k: `${basis.days.length}일 합산 매출`, v: fmt(man(cur.sale)), u: "만원", cmp: [["전주 동기간", pctChange(cur.sale, p7.sale)]], sp: sp.sale, hero: true },
+    { en: "GROSS PROFIT", k: `${basis.days.length}일 매출총이익`, v: fmt(man(cur.profit)), u: "만원", prof: cur.profit, cmp: [["전주 동기간", pctChange(cur.profit, p7.profit)]], sp: sp.profit, note: `매출총이익률 ${marginOf(cur).toFixed(1)}%` },
+    { en: "ORDERS", k: `${basis.days.length}일 오더`, v: fmt(cur.all), u: "건", cmp: [["전주 동기간", pctChange(cur.all, p7.all)]], sp: sp.orders, note: `배차완료율 ${doneRate.toFixed(1)}%` },
   ] : [
     { en: "SALES", k: "전일 매출", v: fmt(man(cur.sale)), u: "만원", cmp: [["전일", pctChange(cur.sale, p1.sale)], [wkLbl, pctChange(cur.sale, p7.sale)]], sp: sp.sale, hero: true },
-    { en: "PROFIT", k: "수익", v: fmt(man(cur.profit)), u: "만원", prof: cur.profit, cmp: [["전일", pctChange(cur.profit, p1.profit)], [wkLbl, pctChange(cur.profit, p7.profit)]], sp: sp.profit },
-    { en: "MARGIN", k: "수익률", v: marginOf(cur).toFixed(1), u: "%", prof: marginOf(cur), cmp: [["전일", marginOf(cur) - marginOf(p1)], [wkLbl, marginOf(cur) - marginOf(p7)]], unit: "%p", sp: sp.margin },
-    { en: "ORDERS", k: "오더", v: fmt(cur.all), u: "건", cmp: [["전일", pctChange(cur.all, p1.all)], [wkLbl, pctChange(cur.all, p7.all)]], sp: sp.orders, note: `배차완료 ${doneRate.toFixed(1)}%` },
+    { en: "GROSS PROFIT", k: "매출총이익", v: fmt(man(cur.profit)), u: "만원", prof: cur.profit, cmp: [["전일", pctChange(cur.profit, p1.profit)], [wkLbl, pctChange(cur.profit, p7.profit)]], sp: sp.profit },
+    { en: "GROSS MARGIN", k: "매출총이익률", v: marginOf(cur).toFixed(1), u: "%", prof: marginOf(cur), cmp: [["전일", marginOf(cur) - marginOf(p1)], [wkLbl, marginOf(cur) - marginOf(p7)]], unit: "%p", sp: sp.margin },
+    { en: "ORDERS", k: "오더", v: fmt(cur.all), u: "건", cmp: [["전일", pctChange(cur.all, p1.all)], [wkLbl, pctChange(cur.all, p7.all)]], sp: sp.orders, note: `배차완료율 ${doneRate.toFixed(1)}%` },
   ];
-  if (!basis.multi && (hasAtt || demo)) tiles.push({ en: "STAFF", k: "근무자", v: fmt(workNow), u: "명", cmp: [["전 영업일", workNow - workOn(bizSpan[bizSpan.length - 2] || lastBiz)], [wkLbl, workNow - workOn(addDay(lastBiz, -7))]], unit: "명", dp: 0, sp: bizSpan.map(workOn), note: `출근 기록 ${md(lastBiz)}`, range: `최근 ${bizSpan.length}영업일` });
-  else if (!basis.multi) tiles.push({ en: "OPEN ORDERS", k: "미배차 · 취소", v: `${unassigned.filter((r) => dateOf(r) <= today).length} · ${cur.cancel}`, u: "건", cmp: [["취소 · 전일", cur.cancel - p1.cancel], ["취소 · " + wkLbl, cur.cancel - p7.cancel]], unit: "건", dp: 0, sp: report.spanDays.map((d) => report.byDay[d]?.cancel || 0), note: "취소 14일 추이" });
+  if (!basis.multi && (hasAtt || demo)) tiles.push({ en: "STAFF", k: "근무자", v: fmt(workNow), u: "명", cmp: [["전 영업일", workNow - workOn(bizSpan[bizSpan.length - 2] || lastBiz)], [wkLbl, workNow - workOn(addDay(lastBiz, -7))]], unit: "명", dp: 0, sp: bizSpan.map(workOn), note: `출근 기록 기준 ${md(lastBiz)}`, range: `최근 ${bizSpan.length}영업일` });
+  else if (!basis.multi) tiles.push({ en: "OPEN ORDERS", k: "미배차 · 취소", v: `${unassigned.filter((r) => dateOf(r) <= today).length} · ${cur.cancel}`, u: "건", cmp: [["취소 · 전일", cur.cancel - p1.cancel], ["취소 · " + wkLbl, cur.cancel - p7.cancel]], unit: "건", dp: 0, sp: report.spanDays.map((d) => report.byDay[d]?.cancel || 0), note: "취소 건수 14일 추이" });
 
   // ── PDF · 메일 ──
   const [busy, setBusy] = React.useState(false);
@@ -496,9 +496,9 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
   const sendMail = () => {
     const subj = `[${company}] 일일 경영 보고 ${dotDate(today)}`;
     const dTxt = (v, u = "%") => (v == null || !Number.isFinite(v) ? "—" : `${v > 0 ? "▲" : v < 0 ? "▼" : ""}${Math.abs(v).toFixed(u === "%p" || u === "%" ? 1 : 0)}${u}`);
-    const kpiLines = tiles.map((t) => `· ${t.k} ${t.v}${t.u}  (${t.cmp.map(([l, v]) => `${l} ${dTxt(v, t.unit || "%")}`).join(" · ")})`);
-    kpiLines.push(`· 이번 달 누계 ${fmt(man(month.mtd))}만원  (전월 동기 ${dTxt(month.d)}${goalPct != null ? ` · 목표 달성 ${goalPct.toFixed(1)}%` : ""})`);
-    const body = `${subj}\n보고 기준: ${basis.label}\n\n■ 요약\n${narr.map(textOf).join("\n")}\n\n■ 핵심 지표\n${kpiLines.join("\n")}\n\n※ 그래프가 포함된 전체 보고서는 [PDF 저장]으로 받아 첨부해 주세요.\nLogisWeb 자동 생성 보고서`;
+    const kpiLines = tiles.map((t) => `· ${t.k} ${t.v}${t.u}  (${t.cmp.map(([l, v]) => `${l} 대비 ${dTxt(v, t.unit || "%")}`).join(" · ")})`);
+    kpiLines.push(`· 이번 달 누계 매출 ${fmt(man(month.mtd))}만원  (전월 동기 대비 ${dTxt(month.d)}${goalPct != null ? ` · 목표 달성률 ${goalPct.toFixed(1)}%` : ""})`);
+    const body = `${subj}\n보고 기준: ${basis.label}\n\n■ 요약\n${narr.map(textOf).join("\n")}\n\n■ 핵심 지표\n${kpiLines.join("\n")}\n\n※ 차트를 포함한 전체 보고서는 [PDF 저장]으로 내려받아 첨부하시기 바랍니다.\nLogisWeb 자동 생성 보고서`;
     window.location.href = `mailto:?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;
   };
 
@@ -528,7 +528,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
 
     // ── 1) 결론 ──
     const summary = sec.headline !== false && (
-      <Panel T={T} glow en="EXECUTIVE SUMMARY" title="오늘의 결론" sub={bizSel ? `청구 사업자 ${bizSel} 기준` : undefined}>
+      <Panel T={T} glow en="EXECUTIVE SUMMARY" title="경영 요약" sub={bizSel ? `청구 사업자 ${bizSel} 기준` : undefined}>
         <ol style={{ listStyle: "none", margin: "6px 0 0", padding: 0, display: "grid", gap: compact ? 12 : 14 }}>
           {narr.map((s, i) => (
             <li key={i} style={{ display: "grid", gridTemplateColumns: compact ? "26px minmax(0,1fr)" : "34px minmax(0,1fr)", gap: compact ? 8 : 12, alignItems: "baseline", paddingTop: i ? (compact ? 12 : 14) : 0, borderTop: i ? `1px solid ${T.row}` : "none" }}>
@@ -563,23 +563,23 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
       <div style={{ marginTop: 10 }}><Num value={fmt(man(month.mtd))} unit="만원" size={bigS} color={T.text} unitColor={T.mute} /></div>
       <div style={{ marginTop: 10, display: "grid", gap: 3 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, fontSize: 12.5, color: T.mute, fontWeight: 600 }}><span>전월 동기 대비</span><Dl T={T} v={month.d} size={13} /></div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, fontSize: 12.5, color: T.mute, fontWeight: 600 }}><span>월 목표 달성</span><b style={{ ...EX_NUM, fontSize: 13, fontWeight: 900, color: goalPct != null ? T.gold : T.faint }}>{goalPct != null ? `${goalPct.toFixed(1)}%` : "미설정"}</b></div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, fontSize: 12.5, color: T.mute, fontWeight: 600 }}><span>월 목표 달성률</span><b style={{ ...EX_NUM, fontSize: 13, fontWeight: 900, color: goalPct != null ? T.gold : T.faint }}>{goalPct != null ? `${goalPct.toFixed(1)}%` : "미설정"}</b></div>
       </div>
       <div style={{ marginTop: 16 }}><Track T={T} pct={goalPct || 0} h={7} marker={month.totalBiz ? (month.elapsed / month.totalBiz) * 100 : null} /></div>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginTop: 10, fontSize: 11.5, fontWeight: 600, color: T.faint }}><span>세로선 = 지난 영업일</span><span style={EX_NUM}>{month.elapsed}/{month.totalBiz}일</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginTop: 10, fontSize: 11.5, fontWeight: 600, color: T.faint }}><span>세로선 = 경과 영업일</span><span style={EX_NUM}>{month.elapsed}/{month.totalBiz}일</span></div>
     </>, "mtd");
     const kpis = sec.kpi !== false && <div data-pdf-block style={{ display: "grid", gridTemplateColumns: paper ? `repeat(${basis.multi ? 4 : 3},minmax(0,1fr))` : wide && !basis.multi ? "repeat(6,minmax(0,1fr))" : `repeat(auto-fit, minmax(min(${compact ? 150 : 200}px, 100%), 1fr))`, gap: compact ? 10 : 14 }}>{[...tiles.map(tile), mtdTile]}</div>;
 
     // ── 3) 매출 · 수익률 추이 ──
     const trendTabs = !paper && <ExecTabs size="sm" items={[[14, "14일"], [30, "30일"]]} value={trendN} onChange={setTrendN} />;
     const trend = sec.chart30 !== false && (
-      <Panel T={T} en="SALES TREND" title="매출 · 수익률 추이" sub={`최근 ${trendN}일 · ${md(tDays[0].d)} ~ ${md(basis.end)} · 매출 단위 만원`} right={trendTabs}>
-        <div style={{ marginTop: 4 }}><KeyLegend T={T} items={[[T.iceBar, "평일 매출"], [T.dark ? "rgba(143,176,240,.18)" : "#E4EAF5", "주말·휴일"], [T.gold, "보고 기준"], [T.ice, "수익률", "line"], [T.gold, "평일 평균", "dash"]]} /></div>
+      <Panel T={T} en="SALES TREND" title="매출 · 매출총이익률 추이" sub={`최근 ${trendN}일 · ${md(tDays[0].d)} ~ ${md(basis.end)} · 매출 단위 만원`} right={trendTabs}>
+        <div style={{ marginTop: 4 }}><KeyLegend T={T} items={[[T.iceBar, "평일 매출"], [T.dark ? "rgba(143,176,240,.18)" : "#E4EAF5", "주말·휴일"], [T.gold, "보고 기준"], [T.ice, "매출총이익률", "line"], [T.gold, "평일 평균", "dash"]]} /></div>
         <Measure style={{ marginTop: 12 }}>{(w) => <Svg html={revMargin(w, tDays, tAvg, compact ? { th, barH: 160, lineH: 64, labelEvery: trendN === 14 ? 3 : 7, compact: true } : { th, barH: paper ? 180 : wide ? 240 : 210, lineH: paper ? 66 : 84, valueLabels: trendN === 14, labelEvery: trendN === 14 ? (w < 640 ? 2 : 1) : Math.max(2, Math.ceil((30 * 84) / Math.max(200, w - 140))) })} />}</Measure>
         <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr 1fr" : "repeat(4,minmax(0,1fr))", gap: 10, marginTop: 14 }}>
-          {statCell(`${trendN}일 매출`, fmt(man(tSum.sale)), "만원", `수익 ${fmt(man(tSum.profit))}만원`)}
-          {statCell(`${trendN}일 수익률`, marginOf(tSum).toFixed(1), "%", `보고 기준 ${marginOf(cur).toFixed(1)}%`, profitRateColor(marginOf(tSum), { dark: T.dark, neutral: T.text }))}
-          {statCell("평일 하루 평균", fmt(man(tAvg)), "만원", "주말·휴일 제외")}
+          {statCell(`${trendN}일 매출`, fmt(man(tSum.sale)), "만원", `매출총이익 ${fmt(man(tSum.profit))}만원`)}
+          {statCell(`${trendN}일 매출총이익률`, marginOf(tSum).toFixed(1), "%", `보고 기준 ${marginOf(cur).toFixed(1)}%`, profitRateColor(marginOf(tSum), { dark: T.dark, neutral: T.text }))}
+          {statCell("평일 일평균 매출", fmt(man(tAvg)), "만원", "주말·휴일 제외")}
           {statCell("최고 매출일", tBest ? fmt(man(tBest.sale)) : "—", tBest ? "만원" : "", tBest ? mdDow(tBest.d) : "")}
         </div>
       </Panel>
@@ -587,29 +587,29 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
 
     // ── 4) 월 목표 ──
     const monthCard = sec.mtd !== false && (
-      <Panel T={T} en="MONTHLY TARGET" title={`${Number(month.ym.slice(5))}월 목표 진척`} sub="영업일 기준 · 주말 매출은 다음 영업일에 합산 · 단위 만원">
+      <Panel T={T} en="MONTHLY TARGET" title={`${Number(month.ym.slice(5))}월 목표 달성 현황`} sub="영업일 기준 · 주말 매출은 다음 영업일에 합산 · 단위 만원">
         <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "repeat(3,minmax(0,1fr))", gap: 10, marginTop: 6 }}>
-          {statCell("월 목표", month.target ? fmt(man(month.target)) : "미설정", month.target ? "만원" : "", month.target ? `남은 금액 ${fmt(man(Math.max(0, month.target - month.mtd)))}만원` : "회사 설정에서 입력")}
-          {statCell("월말 예상", fmt(man(month.forecast)), "만원", fpct != null ? `목표의 ${fpct.toFixed(0)}%` : `전월 ${fmt(man(month.cumPrev[month.cumPrev.length - 1] || 0))}만원`, fpct != null && fpct >= 100 ? T.gold : T.text)}
-          {statCell("하루 평균", fmt(man(curDaily)), "만원", month.target && remainBiz ? (curDaily >= needDaily ? `필요 ${fmt(man(needDaily))}만 · 달성 속도` : `필요 ${fmt(man(needDaily))}만 · ${fmt(man(needDaily - curDaily))}만 부족`) : `남은 영업일 ${remainBiz}일`)}
+          {statCell("월 목표", month.target ? fmt(man(month.target)) : "미설정", month.target ? "만원" : "", month.target ? `목표 잔여액 ${fmt(man(Math.max(0, month.target - month.mtd)))}만원` : "회사 설정에서 입력하면 표시됩니다")}
+          {statCell("월말 예상 매출", fmt(man(month.forecast)), "만원", fpct != null ? `목표 대비 ${fpct.toFixed(0)}%` : `전월 실적 ${fmt(man(month.cumPrev[month.cumPrev.length - 1] || 0))}만원`, fpct != null && fpct >= 100 ? T.gold : T.text)}
+          {statCell("일평균 매출", fmt(man(curDaily)), "만원", month.target && remainBiz ? (curDaily >= needDaily ? `필요 일평균 ${fmt(man(needDaily))}만 · 목표 달성 가능` : `필요 일평균 ${fmt(man(needDaily))}만 · ${fmt(man(needDaily - curDaily))}만 미달`) : `잔여 영업일 ${remainBiz}일`)}
         </div>
-        <SubHead T={T} title="누계 vs 전월 동기" right={<KeyLegend T={T} items={[[T.gold, `${Number(month.ym.slice(5))}월 누계`, "line"], [T.gold, "월말 예상", "dash"], [th.base, `${Number(month.pym.slice(5))}월`, "line"]]} />} style={{ marginTop: 18 }} />
+        <SubHead T={T} title="누계 매출 · 전월 동기 비교" right={<KeyLegend T={T} items={[[T.gold, `${Number(month.ym.slice(5))}월 누계`, "line"], [T.gold, "월말 예상", "dash"], [th.base, `${Number(month.pym.slice(5))}월`, "line"]]} />} style={{ marginTop: 18 }} />
         <Measure style={{ marginTop: 6 }}>{(w) => <Svg html={cumChart(w, compact ? 220 : paper ? 250 : wide ? 340 : 260, { cur: month.cumCur.map(man), prev: month.cumPrev.map(man), target: man(month.target), forecast: man(month.forecast), total: month.totalBiz, curLabel: `${fmt(man(month.mtd))}만`, prevLabel: `${Number(month.pym.slice(5))}월` }, { compact, th })} />}</Measure>
       </Panel>
     );
 
     // ── 5) 담당자 순위 ──
     const sr = staffMode === "month" ? staffRank.month : staffRank.basis;
-    const srCmp = staffMode === "month" ? "전월 같은 기간" : basis.multi ? "지난주 같은 기간" : "전 영업일";
+    const srCmp = staffMode === "month" ? "전월 동기간" : basis.multi ? "전주 동기간" : "전 영업일";
     const srLabel = staffMode === "month" ? `${md(mSpan.cur[0])}~${md(basis.end)}` : basis.multi ? basis.label : mdDow(basis.start);
     const srTop = sr.list.slice(0, 10);
     const srMax = srTop[0]?.sale || 1;
-    const SR_COLS = "22px minmax(56px,1fr) 118px 58px 58px 40px 72px";
+    const SR_COLS = "22px minmax(56px,1fr) 118px 72px 58px 40px 72px";
     const staffCard = sec.staff !== false && (
-      <Panel T={T} en="SALES BY MANAGER" title="담당자 순위" sub={`${srLabel} · 증감은 ${srCmp} 대비 · 단위 만원`} right={!paper && <ExecTabs size="sm" items={[["basis", basis.multi ? `${basis.days.length}일 합산` : "전일"], ["month", "이번 달"]]} value={staffMode} onChange={setStaffMode} />}>
+      <Panel T={T} en="SALES BY MANAGER" title="담당자별 매출 순위" sub={`${srLabel} · 증감은 ${srCmp} 대비 · 단위 만원`} right={!paper && <ExecTabs size="sm" items={[["basis", basis.multi ? `${basis.days.length}일 합산` : "전일"], ["month", "이번 달"]]} value={staffMode} onChange={setStaffMode} />}>
         <div style={{ marginTop: 6 }}>
-          {!srTop.length && <Empty2 T={T} text="이 기간에 담당자별 매출이 없습니다." />}
-          {!compact && srTop.length > 0 && <div style={{ display: "grid", gridTemplateColumns: SR_COLS, gap: 10, padding: "0 0 8px", fontSize: 11.5, fontWeight: 800, letterSpacing: "0.04em", color: T.faint, borderBottom: `1px solid ${T.line}` }}><span>순위</span><span>담당자</span><span style={{ textAlign: "right" }}>매출 · 비중</span><span style={{ textAlign: "right" }}>수익</span><span style={{ textAlign: "right" }}>수익률</span><span style={{ textAlign: "right" }}>건수</span><span style={{ textAlign: "right" }}>증감</span></div>}
+          {!srTop.length && <Empty2 T={T} text="해당 기간에 집계된 담당자별 매출이 없습니다." />}
+          {!compact && srTop.length > 0 && <div style={{ display: "grid", gridTemplateColumns: SR_COLS, gap: 10, padding: "0 0 8px", fontSize: 11.5, fontWeight: 800, letterSpacing: "0.04em", color: T.faint, borderBottom: `1px solid ${T.line}` }}><span>순위</span><span>담당자</span><span style={{ textAlign: "right" }}>매출 · 비중</span><span style={{ textAlign: "right" }}>매출총이익</span><span style={{ textAlign: "right" }}>이익률</span><span style={{ textAlign: "right" }}>건수</span><span style={{ textAlign: "right" }}>증감</span></div>}
           {srTop.map((s, i) => {
             const barC = i < 3 ? GOLD_GRAD : T.iceBar;
             return compact ? (
@@ -619,7 +619,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
                   <span style={{ display: "flex", gap: 10, alignItems: "baseline" }}>{amt(s.sale, { size: 15.5 })}<DlN T={T} v={s.d} size={12.5} /></span>
                 </div>
                 <div style={{ margin: "7px 0 0 26px" }}><Track T={T} pct={(s.sale / srMax) * 100} color={barC} h={5} /></div>
-                <div style={{ margin: "7px 0 0 26px", fontSize: 12.5, color: T.mute }}>수익 <b style={{ ...EX_NUM, color: profitColor(s.profit, { dark: T.dark, neutral: T.text }) }}>{fmt(man(s.profit))}만</b> · 수익률 <b style={{ ...EX_NUM, color: T.text }}>{s.margin.toFixed(1)}%</b> · <b style={{ ...EX_NUM, color: T.text }}>{fmt(s.cnt)}</b>건</div>
+                <div style={{ margin: "7px 0 0 26px", fontSize: 12.5, color: T.mute }}>매출총이익 <b style={{ ...EX_NUM, color: profitColor(s.profit, { dark: T.dark, neutral: T.text }) }}>{fmt(man(s.profit))}만</b> · 이익률 <b style={{ ...EX_NUM, color: T.text }}>{s.margin.toFixed(1)}%</b> · <b style={{ ...EX_NUM, color: T.text }}>{fmt(s.cnt)}</b>건</div>
               </div>
             ) : (
               <div key={s.n} style={{ padding: "11px 0 10px", borderTop: i ? `1px solid ${T.row}` : "none" }}>
@@ -648,40 +648,40 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
     const cl = report.clients;
     const maxC = cl.top[0]?.sale || 1;
     const clientsCard = sec.clients !== false && (
-      <Panel T={T} en="TOP CLIENTS" title={`거래처 TOP ${Math.min(8, cl.top.length) || 8}`} sub={`${md(basis.end)}${basis.multi ? ` 외 ${basis.days.length - 1}일` : ""} · 단위 만원 · 증감은 최근 4주 같은 요일 평균 대비`}>
+      <Panel T={T} en="TOP CLIENTS" title={`거래처 TOP ${Math.min(8, cl.top.length) || 8}`} sub={`${md(basis.end)}${basis.multi ? ` 외 ${basis.days.length - 1}일` : ""} · 단위 만원 · 증감은 최근 4주 동요일 평균 대비`}>
         <div style={{ marginTop: 6 }}>
-          {!cl.top.length && <Empty2 T={T} text="보고 기준 기간에 매출이 없습니다." />}
+          {!cl.top.length && <Empty2 T={T} text="보고 기준 기간에 집계된 매출이 없습니다." />}
           {cl.top.map((c, i) => {
             const low = c.margin < 8;
             return (
               <div key={c.n} style={{ padding: "10px 0", borderTop: i ? `1px solid ${T.row}` : "none" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
                   <span style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}><span style={{ ...EX_NUM, fontSize: 13, fontWeight: 900, color: i < 3 ? T.gold : T.faint, width: 16, textAlign: "right" }}>{i + 1}</span><span style={{ fontSize: 14.5, fontWeight: 700, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.n}</span>{low && <span style={{ fontSize: 11, fontWeight: 800, color: T.warn, border: `1px solid ${T.warn}`, borderRadius: 99, padding: "0 7px", lineHeight: "18px", whiteSpace: "nowrap" }}>저마진</span>}</span>
-                  <span style={{ display: "flex", alignItems: "baseline", gap: 12, whiteSpace: "nowrap" }}>{amt(c.sale)}{!compact && <span style={{ ...EX_NUM, fontSize: 12.5, color: low ? T.warn : T.mute, fontWeight: low ? 800 : 600, minWidth: 82, textAlign: "right" }}>수익률 {c.margin.toFixed(1)}%</span>}<span style={{ minWidth: 64, textAlign: "right" }}><DlN T={T} v={c.d} size={13} /></span></span>
+                  <span style={{ display: "flex", alignItems: "baseline", gap: 12, whiteSpace: "nowrap" }}>{amt(c.sale)}{!compact && <span style={{ ...EX_NUM, fontSize: 12.5, color: low ? T.warn : T.mute, fontWeight: low ? 800 : 600, minWidth: 82, textAlign: "right" }}>이익률 {c.margin.toFixed(1)}%</span>}<span style={{ minWidth: 64, textAlign: "right" }}><DlN T={T} v={c.d} size={13} /></span></span>
                 </div>
                 <div style={{ margin: "7px 0 0 26px" }}><Track T={T} pct={(c.sale / maxC) * 100} color={low ? T.iceBar : GOLD_GRAD} h={4} /></div>
               </div>
             );
           })}
         </div>
-        {cl.top.length > 0 && <div style={{ paddingTop: 12, marginTop: 4, borderTop: `1px solid ${T.line}`, fontSize: 12.5, color: T.mute, lineHeight: 1.6 }}>TOP {cl.top.length} 합계 <b style={{ ...EX_NUM, color: T.text }}>{fmt(man(cl.topSum))}만원</b> ({cl.total ? ((cl.topSum / cl.total) * 100).toFixed(1) : 0}%){cl.others ? ` · 기타 ${cl.others}곳 ${fmt(man(cl.total - cl.topSum))}만원` : ""} · 저마진 = 수익률 8% 미만</div>}
+        {cl.top.length > 0 && <div style={{ paddingTop: 12, marginTop: 4, borderTop: `1px solid ${T.line}`, fontSize: 12.5, color: T.mute, lineHeight: 1.6 }}>TOP {cl.top.length} 합계 <b style={{ ...EX_NUM, color: T.text }}>{fmt(man(cl.topSum))}만원</b> ({cl.total ? ((cl.topSum / cl.total) * 100).toFixed(1) : 0}%){cl.others ? ` · 기타 ${cl.others}개사 ${fmt(man(cl.total - cl.topSum))}만원` : ""} · 저마진 = 매출총이익률 8% 미만</div>}
       </Panel>
     );
     const moveList = (list, up) => (
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 800, color: up ? T.up : T.down, paddingBottom: 6 }}>{up ? "▲ 늘어난 곳" : "▼ 줄어든 곳"}</div>
-        {!list.length && <div style={{ fontSize: 13, color: T.faint, marginTop: 6 }}>없음</div>}
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: up ? T.up : T.down, paddingBottom: 6 }}>{up ? "▲ 매출 증가 거래처" : "▼ 매출 감소 거래처"}</div>
+        {!list.length && <div style={{ fontSize: 13, color: T.faint, marginTop: 6 }}>해당 없음</div>}
         {list.map((c, i) => <div key={c.n} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, padding: "9px 0", borderTop: `1px solid ${i ? T.row : T.line}` }}><span style={{ fontSize: 14, fontWeight: 600, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.n}</span><span style={{ display: "flex", gap: 8, alignItems: "baseline" }}><ManDl T={T} won={c.diff} size={13.5} /><span style={{ ...EX_NUM, fontSize: 12, color: T.mute, fontWeight: 600, minWidth: 34, textAlign: "right" }}>{c.d == null ? "신규" : `${Math.abs(c.d).toFixed(0)}%`}</span></span></div>)}
       </div>
     );
     const movesCard = sec.clients !== false && (moves.up.length > 0 || moves.down.length > 0) && (
-      <Panel T={T} en="CLIENT MOVES" title="거래처 증감" sub={`이번 달 ${md(mSpan.cur[0])}~${md(basis.end)} vs 전월 같은 기간 · 금액 차이 순`}>
+      <Panel T={T} en="CLIENT MOVES" title="거래처별 매출 증감" sub={`당월 ${md(mSpan.cur[0])}~${md(basis.end)} vs 전월 동기간 · 증감액 순`}>
         <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "1fr 1fr", gap: compact ? 16 : 22, marginTop: 6 }}>{moveList(moves.up, true)}{moveList(moves.down, false)}</div>
       </Panel>
     );
 
     // ── 7) 자금 ──
-    const agingParts = [["30일 이내", aging.b30, T.iceBar], ["31~60일", aging.b60, T.ice], ["61~90일", aging.b90, T.warn], ["90일 넘음", aging.over, T.up]];
+    const agingParts = [["30일 이내", aging.b30, T.iceBar], ["31~60일", aging.b60, T.ice], ["61~90일", aging.b90, T.warn], ["90일 초과", aging.over, T.up]];
     const accBars = (list, col) => { const top = list[0]?.[1] || 0; return list.slice(0, 5).map(([k2, v]) => (
       <div key={k2} style={{ display: "grid", gridTemplateColumns: "minmax(64px,96px) minmax(0,1fr) auto", gap: 10, alignItems: "center", marginTop: 8, fontSize: 13 }}>
         <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: T.sub, fontWeight: 600 }}>{k2}</span>
@@ -690,55 +690,55 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
       </div>
     )); };
     const cashCard = showCash && (
-      <Panel T={T} en="CASH POSITION" title="자금 현황" sub="단위 만원 · 수입·지출 장부 · 자금 관리 · 미수금 현황 기준">
+      <Panel T={T} en="CASH POSITION" title="자금 현황" sub="단위 만원 · 회계 장부(수입·지출) · 자금관리 · 미수금 현황 기준">
         <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr 1fr" : wide ? `repeat(${F ? 5 : 4},minmax(0,1fr))` : "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, marginTop: 6 }}>
-          {F && statCell("보유 자금", fmt(man(F.cash)), "만원", F.runway != null ? `월평균 지출 기준 ${F.runway.toFixed(1)}개월` : "통장·현금 합계", T.dark ? T.goldHi : T.text)}
-          {statCell(`${basis.multi ? "기간" : "전일"} 입금`, fmt(man(fl.in)), "만원", basis.multi ? `${basis.days.length}일 합산` : mdDow(basis.start))}
-          {statCell(`${basis.multi ? "기간" : "전일"} 출금`, fmt(man(fl.out)), "만원", basis.multi ? `${basis.days.length}일 합산` : mdDow(basis.start))}
-          {statCell("순유입", `${net > 0 ? "+" : net < 0 ? "−" : ""}${fmt(Math.abs(man(net)))}`, "만원", "입금 − 출금", sgnC(T, net))}
-          {statCell("미수금", fmt(man(arTotal)), "만원", ar30 > 0 ? `30일 넘은 미수 ${fmt(man(ar30))}만원` : "올해 청구 · 부가세 포함")}
+          {F && statCell("보유 자금", fmt(man(F.cash)), "만원", F.runway != null ? `운영 가능 기간 약 ${F.runway.toFixed(1)}개월` : "통장·현금 잔액 합계", T.dark ? T.goldHi : T.text)}
+          {statCell(`${basis.multi ? "기간" : "전일"} 현금 유입`, fmt(man(fl.in)), "만원", basis.multi ? `${basis.days.length}일 합산` : mdDow(basis.start))}
+          {statCell(`${basis.multi ? "기간" : "전일"} 현금 유출`, fmt(man(fl.out)), "만원", basis.multi ? `${basis.days.length}일 합산` : mdDow(basis.start))}
+          {statCell("순현금흐름", `${net > 0 ? "+" : net < 0 ? "−" : ""}${fmt(Math.abs(man(net)))}`, "만원", "현금 유입 − 현금 유출", sgnC(T, net))}
+          {statCell("미수금", fmt(man(arTotal)), "만원", ar30 > 0 ? `30일 초과 미수금 ${fmt(man(ar30))}만원` : "당해 연도 청구분 · 부가세 포함")}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : wide ? "minmax(0,1fr) minmax(0,1.3fr) minmax(0,1fr)" : "1fr 1fr", gap: compact ? 24 : 30, marginTop: 22, alignItems: "start" }}>
           <div style={{ minWidth: 0 }}>
             <SubHead T={T} title="통장 · 계좌별 잔액" />
-            {!fundsList.length && <div style={{ fontSize: 13, color: T.mute, marginTop: 8, lineHeight: 1.6 }}>등록된 계좌가 없습니다. 자금 관리에서 통장을 등록하면 잔액이 보입니다.</div>}
-            <div style={{ marginTop: 4 }}>{fundsList.map((f, i) => lineRow(f.id, f.name || f.bank || f.kind, <b style={{ ...EX_NUM, fontSize: 15, fontWeight: 800, color: f.kind === "대출" ? T.mute : T.text }}>{f.kind === "대출" ? "−" : ""}{fmt(man(f.balance))}</b>, [f.bank, last4(f), isCredit(f) ? "남은 한도" : f.kind === "대출" ? "대출 잔액" : isCard(f) ? "체크카드" : f.kind].filter(Boolean).join(" · "), i))}</div>
+            {!fundsList.length && <div style={{ fontSize: 13, color: T.mute, marginTop: 8, lineHeight: 1.6 }}>등록된 계좌가 없습니다. 자금관리에서 계좌를 등록하면 잔액이 표시됩니다.</div>}
+            <div style={{ marginTop: 4 }}>{fundsList.map((f, i) => lineRow(f.id, f.name || f.bank || f.kind, <b style={{ ...EX_NUM, fontSize: 15, fontWeight: 800, color: f.kind === "대출" ? T.mute : T.text }}>{f.kind === "대출" ? "−" : ""}{fmt(man(f.balance))}</b>, [f.bank, last4(f), isCredit(f) ? "잔여 한도" : f.kind === "대출" ? "대출 잔액" : isCard(f) ? "체크카드" : f.kind].filter(Boolean).join(" · "), i))}</div>
             {F && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
               {statCell("대출 잔액", fmt(man(F.loan)), "만원", null, null, "loan")}
-              {statCell("카드 이번 달", fmt(man(F.cardMonth)), "만원", null, null, "card")}
+              {statCell("당월 카드 사용액", fmt(man(F.cardMonth)), "만원", null, null, "card")}
             </div>}
             {hasLedger && <>
-              <SubHead T={T} title="월별 입출금" style={{ marginTop: 22 }} />
+              <SubHead T={T} title="월별 현금흐름" style={{ marginTop: 22 }} />
               <div style={{ display: "grid", gridTemplateColumns: "44px 1fr 1fr 1fr", gap: 0, marginTop: 6, fontSize: 13.5 }}>
-                {["", "입금", "출금", "순액"].map((h) => <span key={h || "m"} style={{ color: T.faint, fontWeight: 800, fontSize: 11.5, textAlign: h ? "right" : "left", padding: "4px 0", borderBottom: `1px solid ${T.line}` }}>{h}</span>)}
+                {["", "현금 유입", "현금 유출", "순현금흐름"].map((h) => <span key={h || "m"} style={{ color: T.faint, fontWeight: 800, fontSize: 11.5, textAlign: h ? "right" : "left", padding: "4px 0", borderBottom: `1px solid ${T.line}` }}>{h}</span>)}
                 {monthFlow.map((x) => { const nv = x.in - x.out; const cs = { padding: "8px 0", borderBottom: `1px solid ${T.row}` }; return [<span key={`${x.m}a`} style={{ ...cs, color: T.mute, fontWeight: 700 }}>{Number(x.m.slice(5))}월</span>, <span key={`${x.m}b`} style={{ ...cs, ...EX_NUM, textAlign: "right", color: T.text, fontWeight: 700 }}>{fmt(man(x.in))}</span>, <span key={`${x.m}c`} style={{ ...cs, ...EX_NUM, textAlign: "right", color: T.text, fontWeight: 700 }}>{fmt(man(x.out))}</span>, <span key={`${x.m}d`} style={{ ...cs, ...EX_NUM, textAlign: "right", fontWeight: 800, color: sgnC(T, nv) }}>{nv > 0 ? "+" : nv < 0 ? "−" : ""}{fmt(Math.abs(man(nv)))}</span>]; })}
               </div>
             </>}
           </div>
           {hasLedger || arTotal > 0 ? <div style={{ minWidth: 0 }}>
             {hasLedger && <>
-              <SubHead T={T} title="순현금흐름 추이" right={`최근 ${netData.length}주 · 주간 입금 − 출금`} />
+              <SubHead T={T} title="순현금흐름 추이" right={`최근 ${netData.length}주 · 주간 현금 유입 − 현금 유출`} />
               <Measure style={{ marginTop: 6 }}>{(w) => <Svg html={netFlowBars(w, compact ? 190 : 210, netData, { compact, th, labelEvery: compact ? 3 : w < 520 ? 2 : 1 })} />}</Measure>
-              <SubHead T={T} title="이번 달 입출금 내역" style={{ marginTop: 18 }} />
+              <SubHead T={T} title="당월 계정별 입출금" style={{ marginTop: 18 }} />
               <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "1fr 1fr", gap: compact ? 14 : 20, marginTop: 2 }}>
-                <div><div style={{ fontSize: 12.5, fontWeight: 700, color: T.mute, marginTop: 8 }}>입금 <b style={{ ...EX_NUM, color: T.text }}>{fmt(man(accIn.reduce((s, x) => s + x[1], 0)))}</b></div>{accBars(accIn, GOLD_GRAD)}{!accIn.length && <div style={{ fontSize: 13, color: T.faint, marginTop: 8 }}>없음</div>}</div>
-                <div><div style={{ fontSize: 12.5, fontWeight: 700, color: T.mute, marginTop: 8 }}>출금 <b style={{ ...EX_NUM, color: T.text }}>{fmt(man(accOut.reduce((s, x) => s + x[1], 0)))}</b></div>{accBars(accOut, T.iceBar)}{!accOut.length && <div style={{ fontSize: 13, color: T.faint, marginTop: 8 }}>없음</div>}</div>
+                <div><div style={{ fontSize: 12.5, fontWeight: 700, color: T.mute, marginTop: 8 }}>입금액 <b style={{ ...EX_NUM, color: T.text }}>{fmt(man(accIn.reduce((s, x) => s + x[1], 0)))}</b></div>{accBars(accIn, GOLD_GRAD)}{!accIn.length && <div style={{ fontSize: 13, color: T.faint, marginTop: 8 }}>내역 없음</div>}</div>
+                <div><div style={{ fontSize: 12.5, fontWeight: 700, color: T.mute, marginTop: 8 }}>출금액 <b style={{ ...EX_NUM, color: T.text }}>{fmt(man(accOut.reduce((s, x) => s + x[1], 0)))}</b></div>{accBars(accOut, T.iceBar)}{!accOut.length && <div style={{ fontSize: 13, color: T.faint, marginTop: 8 }}>내역 없음</div>}</div>
               </div>
             </>}
             {arTotal > 0 && <>
               <SubHead T={T} title="미수금 연령" right={<b style={{ ...EX_NUM, fontSize: 15, color: T.text }}>{fmt(man(arTotal))}</b>} style={{ marginTop: hasLedger ? 24 : 0 }} />
               <div style={{ display: "flex", height: 10, borderRadius: 99, overflow: "hidden", gap: 2, marginTop: 10, background: T.track }}>{agingParts.filter((a) => a[1] > 0).map((a) => <div key={a[0]} style={{ flex: a[1], background: a[2] }} />)}</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px", marginTop: 10, fontSize: 12.5 }}>{agingParts.map(([l, v, c]) => <span key={l} style={{ display: "flex", alignItems: "center", gap: 7, color: T.mute, fontWeight: 600 }}><Swatch c={c} size={8} />{l} <b style={{ ...EX_NUM, color: T.text, marginLeft: "auto", fontWeight: 800 }}>{fmt(man(v))}</b></span>)}</div>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: T.mute, marginTop: 14 }}>미수금 많은 거래처</div>
-              {ar.slice(0, 5).map((o, i) => lineRow(o.client, o.client, <span style={{ display: "inline-flex", gap: 10, alignItems: "baseline" }}>{amt(o.outstanding, { size: 14.5 })}<span style={{ ...EX_NUM, fontSize: 12.5, color: o.aging.oldest > 30 ? T.warn : T.mute, fontWeight: o.aging.oldest > 30 ? 800 : 600, minWidth: 44, textAlign: "right" }}>{o.aging.oldest}일</span></span>, null, i))}
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: T.mute, marginTop: 14 }}>미수금 상위 거래처</div>
+              {ar.slice(0, 5).map((o, i) => lineRow(o.client, o.client, <span style={{ display: "inline-flex", gap: 10, alignItems: "baseline" }}>{amt(o.outstanding, { size: 14.5 })}<span style={{ ...EX_NUM, fontSize: 12.5, color: o.aging.oldest > 30 ? T.warn : T.mute, fontWeight: o.aging.oldest > 30 ? 800 : 600, minWidth: 44, textAlign: "right" }}>경과 {o.aging.oldest}일</span></span>, null, i))}
             </>}
           </div> : null}
           <div style={{ minWidth: 0 }}>
-            <SubHead T={T} title="이번 주 지급 예정" right={<b style={{ ...EX_NUM, fontSize: 15, color: T.text }}>{fmt(man(dues.reduce((s, x) => s + x.amt, 0)))}</b>} />
-            {!dues.length && <div style={{ fontSize: 13, color: T.mute, marginTop: 8 }}>이번 주 고정비 지급이 없습니다.</div>}
+            <SubHead T={T} title="이번 주 지급 예정액" right={<b style={{ ...EX_NUM, fontSize: 15, color: T.text }}>{fmt(man(dues.reduce((s, x) => s + x.amt, 0)))}</b>} />
+            {!dues.length && <div style={{ fontSize: 13, color: T.mute, marginTop: 8 }}>이번 주 지급 예정인 고정비가 없습니다.</div>}
             <div style={{ marginTop: 4 }}>{dues.slice(0, 5).map((p, i) => lineRow(`w${i}`, p.name, amt(p.amt, { size: 14.5 }), `${mdDow(p.d)}${p.d === today ? " · 오늘" : ""}`, i))}</div>
             {duesMonth.length > 0 && <>
-              <SubHead T={T} title="다음 주 ~ 월말 지급" right={<b style={{ ...EX_NUM, fontSize: 15, color: T.text }}>{fmt(man(duesMonth.reduce((s, x) => s + x.amt, 0)))}</b>} style={{ marginTop: 22 }} />
+              <SubHead T={T} title="다음 주 ~ 월말 지급 예정액" right={<b style={{ ...EX_NUM, fontSize: 15, color: T.text }}>{fmt(man(duesMonth.reduce((s, x) => s + x.amt, 0)))}</b>} style={{ marginTop: 22 }} />
               <div style={{ marginTop: 4 }}>{duesMonth.slice(0, 6).map((p, i) => lineRow(`m${i}`, p.name, amt(p.amt, { size: 14.5 }), mdDow(p.d), i))}</div>
             </>}
           </div>
@@ -750,7 +750,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
     const parts = [["지입", T.gold], ["직영", T.ice], ["임대", T.violet]].map(([n, c]) => ({ n, c, v: fleet.filter((d) => d.등급 === n).length, run: fleet.filter((d) => d.등급 === n && report.plates.has(normPlate(d.차량번호))).length }));
     const runN = parts.reduce((s, p) => s + p.run, 0);
     const opsCard = sec.ops !== false && (fleetN > 0 || report.routes.length > 0) && (
-      <Panel T={T} en="OPERATIONS" title="운영 현황" sub={`${md(basis.end)}${basis.multi ? ` 외 ${basis.days.length - 1}일` : ""} 기준 · 운행 = 그날 오더에 배정된 소속 차량`}>
+      <Panel T={T} en="OPERATIONS" title="운영 현황" sub={`${md(basis.end)}${basis.multi ? ` 외 ${basis.days.length - 1}일` : ""} 기준 · 운행 = 해당일 오더에 배정된 소속 차량`}>
         {fleetN > 0 && <div style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "auto minmax(0,1fr)", gap: compact ? 16 : 30, marginTop: 8, alignItems: "center" }}>
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
             <Svg html={donut(128, parts, { thick: 12, track: T.track, center: `<text x="64" y="66" text-anchor="middle" font-size="28" font-weight="900" fill="${T.text}">${fleetN}</text><text x="64" y="86" text-anchor="middle" font-size="12" font-weight="600" fill="${T.mute}">전체 차량</text>` })} style={{ flex: "none" }} />
@@ -759,7 +759,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}><span style={{ fontSize: 13, fontWeight: 700, color: T.mute }}>가동률 (운행 / 전체)</span><Num value={fleetN ? ((runN / fleetN) * 100).toFixed(1) : "0.0"} unit="%" size={numS} color={T.dark ? T.goldHi : T.text} unitColor={T.mute} /></div>
             {parts.filter((p) => p.v > 0).map((u) => <div key={u.n} style={{ display: "grid", gridTemplateColumns: "34px 1fr 52px", gap: 10, alignItems: "center", marginTop: 9, fontSize: 13 }}><span style={{ color: T.mute, fontWeight: 600 }}>{u.n}</span><Track T={T} pct={(u.run / u.v) * 100} color={u.c} h={6} /><span style={{ ...EX_NUM, textAlign: "right", color: T.text, fontWeight: 700 }}>{u.run}/{u.v}</span></div>)}
-            <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 12.5, flexWrap: "wrap", color: T.mute, fontWeight: 600 }}>{[["운행", runN], ["미운행", fleetN - runN], ["용차", extRun]].map((a) => <span key={a[0]}>{a[0]} <b style={{ ...EX_NUM, color: T.text, fontSize: 14 }}>{a[1]}대</b></span>)}</div>
+            <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 12.5, flexWrap: "wrap", color: T.mute, fontWeight: 600 }}>{[["운행", runN], ["미가동", fleetN - runN], ["용차(외부 차량)", extRun]].map((a) => <span key={a[0]}>{a[0]} <b style={{ ...EX_NUM, color: T.text, fontSize: 14 }}>{a[1]}대</b></span>)}</div>
           </div>
         </div>}
         {utilTrend.length > 1 && <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${T.line}` }}>
@@ -768,7 +768,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
         </div>}
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${T.line}` }}>
           <SubHead T={T} title="노선 TOP 5" right="상차 → 하차" />
-          {!report.routes.length && <div style={{ fontSize: 13, color: T.mute, marginTop: 8 }}>오더가 없습니다.</div>}
+          {!report.routes.length && <div style={{ fontSize: 13, color: T.mute, marginTop: 8 }}>집계된 오더가 없습니다.</div>}
           {report.routes.map(([k2, n2], i) => { const [a, b] = k2.split("→"); return <div key={k2} style={{ display: "grid", gridTemplateColumns: compact ? "minmax(0,1fr) 64px 44px" : "minmax(0,1fr) 150px 48px", gap: 12, alignItems: "center", marginTop: i ? 8 : 10, fontSize: 13.5 }}><span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: T.text, fontWeight: 600 }}>{a} <span style={{ color: T.gold }}>→</span> {b}</span><Track T={T} pct={(n2 / maxR) * 100} color={T.iceBar} h={5} /><b style={{ ...EX_NUM, textAlign: "right", color: T.text }}>{n2}건</b></div>; })}
         </div>
       </Panel>
@@ -781,10 +781,10 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 8, marginTop: 14 }}>{[["출근", hr.present - hr.outside, T.gold], ["지각", hr.late, T.warn], ["휴가", hr.leave, T.iceBar], ["외근", hr.outside, T.ice]].map((s) => <div key={s[0]} style={{ background: T.stat, border: `1px solid ${T.line}`, borderRadius: 14, padding: "10px 11px" }}><div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: T.mute }}><Swatch c={s[2]} size={7} />{s[0]}</div><div style={{ ...EX_NUM, fontSize: 22, fontWeight: 900, color: T.text, marginTop: 4 }}>{s[1]}</div></div>)}</div>
         <div style={{ marginTop: 12, fontSize: 13.5 }}>
           {[
-            ["신규 입사 (최근 7일)", <><b style={EX_NUM}>{hr.hires.length}</b>명{hr.hires.length ? ` · ${hr.hires.slice(0, 2).map((u) => `${u.name || ""}${u.team ? ` (${u.team})` : ""}`).join(", ")}` : ""}</>],
-            ["퇴사 (최근 7일)", <><b style={EX_NUM}>{hr.quits.length}</b>명</>],
+            ["입사자 (최근 7일)", <><b style={EX_NUM}>{hr.hires.length}</b>명{hr.hires.length ? ` · ${hr.hires.slice(0, 2).map((u) => `${u.name || ""}${u.team ? ` (${u.team})` : ""}`).join(", ")}` : ""}</>],
+            ["퇴사자 (최근 7일)", <><b style={EX_NUM}>{hr.quits.length}</b>명</>],
             ["지각", hr.lateList.length ? hr.lateList.slice(0, 2).join(", ") + (hr.lateList.length > 2 ? ` 외 ${hr.lateList.length - 2}명` : "") : "없음"],
-            ["미출근 기록", <><b style={EX_NUM}>{Math.max(0, staff.length - hr.present - hr.leave)}</b>명{hrDay === today ? " (출근 체크 전 포함)" : ""}</>],
+            ["출근 미기록", <><b style={EX_NUM}>{Math.max(0, staff.length - hr.present - hr.leave)}</b>명{hrDay === today ? " (출근 처리 전 인원 포함)" : ""}</>],
           ].map(([l, v], i) => <div key={l} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "9px 0", borderTop: i ? `1px solid ${T.row}` : "none" }}><span style={{ color: T.mute, fontWeight: 600, flex: "none" }}>{l}</span><span style={{ textAlign: "right", wordBreak: "keep-all", color: T.text, fontWeight: 600 }}>{v}</span></div>)}
         </div>
       </Panel>
@@ -796,7 +796,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
         <div style={{ display: "grid", gridTemplateColumns: wide ? "minmax(0,1.6fr) minmax(0,1fr)" : "1fr", gap: 26, marginTop: 6, alignItems: "start" }}>
           <Measure>{(w) => <Svg html={weekBars(w, compact ? 230 : 270, weekly.days, weekly.days.map((d, i) => (basis.days.includes(d.d) ? i : -1)).filter((i) => i >= 0), { compact, th })} />}</Measure>
           <div>
-            {[["주간 매출", `${fmt(man(weekly.cur.sale))}만원`, `${fmt(man(weekly.prev.sale))}만`, pctChange(weekly.cur.sale, weekly.prev.sale)], ["주간 수익", `${fmt(man(weekly.cur.profit))}만원`, `${fmt(man(weekly.prev.profit))}만`, pctChange(weekly.cur.profit, weekly.prev.profit), undefined, profitColor(weekly.cur.profit, { dark: T.dark, neutral: T.text })], ["평균 수익률", `${marginOf(weekly.cur).toFixed(1)}%`, `${marginOf(weekly.prev).toFixed(1)}%`, marginOf(weekly.cur) - marginOf(weekly.prev), "%p"], ["오더", `${fmt(weekly.cur.all)}건`, `${fmt(weekly.prev.all)}건`, pctChange(weekly.cur.all, weekly.prev.all)], ["신규 거래처", `${weekly.fresh}곳`, "", null]].map((r, i) => (
+            {[["주간 매출", `${fmt(man(weekly.cur.sale))}만원`, `${fmt(man(weekly.prev.sale))}만`, pctChange(weekly.cur.sale, weekly.prev.sale)], ["주간 매출총이익", `${fmt(man(weekly.cur.profit))}만원`, `${fmt(man(weekly.prev.profit))}만`, pctChange(weekly.cur.profit, weekly.prev.profit), undefined, profitColor(weekly.cur.profit, { dark: T.dark, neutral: T.text })], ["매출총이익률", `${marginOf(weekly.cur).toFixed(1)}%`, `${marginOf(weekly.prev).toFixed(1)}%`, marginOf(weekly.cur) - marginOf(weekly.prev), "%p"], ["오더", `${fmt(weekly.cur.all)}건`, `${fmt(weekly.prev.all)}건`, pctChange(weekly.cur.all, weekly.prev.all)], ["신규 거래처", `${weekly.fresh}곳`, "", null]].map((r, i) => (
               <div key={r[0]} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 14, alignItems: "baseline", padding: "11px 0", borderTop: i ? `1px solid ${T.row}` : "none" }}>
                 <span style={{ fontSize: 13.5, fontWeight: 700, color: T.mute }}>{r[0]}</span>
                 <span><b style={{ ...EX_NUM, fontSize: 17, fontWeight: 900, color: r[5] || T.text }}>{r[1]}</b>{r[2] && <span style={{ ...EX_NUM, fontSize: 12, color: T.faint, fontWeight: 600, marginLeft: 8 }}>전주 {r[2]}</span>}</span>
@@ -821,7 +821,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
           ? row("ops", "minmax(0,1.4fr) minmax(0,1fr)", opsCard, <div style={{ display: "grid", gap: g, alignContent: "start", minWidth: 0, height: "100%" }}>{hrCard}{movesCard}</div>)
           : <>{block("ops1", opsCard)}{block("hr1", hrCard)}{block("mv1", movesCard)}</>}
         <div data-pdf-block style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, paddingTop: 6, fontSize: 12, fontWeight: 500, color: T.faint, lineHeight: 1.6 }}>
-          <span>데이터 기준 {dotDate(today)} {kstHm()} · 배차·정산·인사 데이터 자동 집계 · 매출 = 취소 제외 전체 오더(배차중 포함 · 매출관리는 배차완료만){bizSel ? ` · 청구 사업자 ${bizSel}` : ""}</span><span style={{ letterSpacing: "0.04em" }}>LogisWeb 자동 생성 보고서</span>
+          <span>{dotDate(today)} {kstHm()} 집계 · 배차·정산·인사 데이터 자동 집계 · 매출 = 취소 · 운송사 전송 제외 전체 오더 기준(배차중 포함, 매출관리 화면은 배차완료 기준){bizSel ? ` · 청구 사업자 ${bizSel}` : ""}</span><span style={{ letterSpacing: "0.04em" }}>LogisWeb 자동 생성 보고서</span>
         </div>
       </div>
     );
@@ -830,7 +830,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
   const compactScr = W > 0 && W < 640;
   const actions = (
     <div className="ebx-noprint" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-      <XBtn onClick={savePdf} disabled={busy} icon={Ico.pdf} testId="brief-pdf">{busy ? "만드는 중…" : compactScr ? "PDF" : "PDF 저장"}</XBtn>
+      <XBtn onClick={savePdf} disabled={busy} icon={Ico.pdf} testId="brief-pdf">{busy ? "생성 중…" : compactScr ? "PDF" : "PDF 저장"}</XBtn>
       <XBtn onClick={sendMail} icon={Ico.mail} testId="brief-mail">{compactScr ? "메일" : "메일로 보내기"}</XBtn>
       <XBtn onClick={() => setSettingsOpen(true)} icon={Ico.gear} testId={compactScr ? "brief-settings-m" : "brief-settings"}>설정</XBtn>
     </div>
@@ -907,8 +907,8 @@ export function DailyReportSettings({ onClose, uid, company, prefs, role, profil
   const set = (patch) => setP((x) => ({ ...x, ...patch }));
   const anySection = SECTION_KEYS.some((k) => p.sections[k]);
   const save = async () => {
-    if (!anySection) { setMsg("포함할 항목을 1개 이상 골라 주세요."); return; }
-    if (!p.days.length) { setMsg("받는 요일을 1개 이상 골라 주세요."); return; }
+    if (!anySection) { setMsg("포함 항목을 1개 이상 선택해 주십시오."); return; }
+    if (!p.days.length) { setMsg("수신 요일을 1개 이상 선택해 주십시오."); return; }
     setSaving(true); setMsg("");
     try {
       await saveBriefingPrefs(uid, company, { time: p.time, days: p.days, weekend: p.weekend, monday: p.monday, channels: p.channels, sections: p.sections });
@@ -928,39 +928,39 @@ export function DailyReportSettings({ onClose, uid, company, prefs, role, profil
   const optBox = { display: "flex", gap: 12, alignItems: "flex-start", border: `1px solid ${SD.line}`, borderRadius: 14, padding: "14px 16px", background: "rgba(255,255,255,.03)", textAlign: "left", cursor: "pointer", color: SD.text };
   return (
     <div className="ebx" data-kp-dialog style={{ position: "fixed", inset: 0, zIndex: 2147483500, background: "rgba(3,7,16,.66)", backdropFilter: "blur(3px)", display: "flex", alignItems: narrow ? "stretch" : "flex-start", justifyContent: "center", overflowY: "auto", padding: narrow ? 0 : "40px 16px", fontFamily: EX_FONT }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div role="dialog" aria-modal="true" aria-label="일일 경영 보고 받기 설정" data-testid="brief-settings-dialog" style={{ width: narrow ? "100%" : 920, maxWidth: "100%", borderRadius: narrow ? 0 : 26, height: "fit-content", minHeight: narrow ? "100%" : undefined, background: modalBg, border: narrow ? "none" : `1px solid ${EX.lineHi}`, boxShadow: "0 40px 100px rgba(0,0,0,.55)", color: SD.text, overflow: "hidden" }}>
+      <div role="dialog" aria-modal="true" aria-label="일일 경영 보고 수신 설정" data-testid="brief-settings-dialog" style={{ width: narrow ? "100%" : 920, maxWidth: "100%", borderRadius: narrow ? 0 : 26, height: "fit-content", minHeight: narrow ? "100%" : undefined, background: modalBg, border: narrow ? "none" : `1px solid ${EX.lineHi}`, boxShadow: "0 40px 100px rgba(0,0,0,.55)", color: SD.text, overflow: "hidden" }}>
         <div style={{ padding: narrow ? "22px 18px 14px" : "28px 34px 16px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-          <div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><Eyebrow>{BRIEF_EN}</Eyebrow><span style={{ fontSize: 12.5, fontWeight: 700, color: SD.mute }}>{BRIEF_LABEL}</span></div><div style={{ fontSize: narrow ? 24 : 28, fontWeight: 900, marginTop: 6, letterSpacing: "-0.02em" }}>받기 설정</div><div style={{ fontSize: 14, color: SD.sub, marginTop: 4 }}>보고서를 언제, 어떻게{canManage ? ", 누구에게" : ""} 보낼지 정합니다.</div></div>
+          <div><div style={{ display: "flex", alignItems: "center", gap: 10 }}><Eyebrow>{BRIEF_EN}</Eyebrow><span style={{ fontSize: 12.5, fontWeight: 700, color: SD.mute }}>{BRIEF_LABEL}</span></div><div style={{ fontSize: narrow ? 24 : 28, fontWeight: 900, marginTop: 6, letterSpacing: "-0.02em" }}>수신 설정</div><div style={{ fontSize: 14, color: SD.sub, marginTop: 4 }}>보고서의 발송 시각{canManage ? ", 수신 방법, 수신 대상" : "과 수신 방법"}을 설정합니다.</div></div>
           <button type="button" onClick={onClose} aria-label="닫기" style={{ fontSize: 28, color: SD.mute, background: "rgba(255,255,255,.05)", border: `1px solid ${SD.line}`, borderRadius: 12, cursor: "pointer", lineHeight: 1, width: 42, height: 42 }}>×</button>
         </div>
         <div style={{ padding: narrow ? "0 18px" : "0 34px" }}>
-          {row("받는 시간", "영업일 아침, 고른 시각에 보냅니다", (
+          {row("수신 시각", "영업일 아침, 지정한 시각에 발송됩니다.", (
             <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
               <div style={{ width: 220, position: "relative" }}>
                 <button type="button" data-testid="brief-time" onClick={() => setTimeOpen((v) => !v)} style={{ width: "100%", height: 48, border: `1px solid ${EX.lineHi}`, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", fontSize: 18, fontWeight: 900, background: "rgba(215,188,130,.08)", color: SD.goldHi, cursor: "pointer" }}><span style={EX_NUM}>{p.time}</span><span style={{ color: SD.mute, fontSize: 13 }}>{timeOpen ? "▲" : "▼"}</span></button>
                 {timeOpen && <div style={{ marginTop: 6, padding: 6, borderRadius: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, background: EX.bg2, border: `1px solid ${SD.line}`, boxShadow: "0 20px 40px rgba(0,0,0,.4)" }}>{BRIEF_TIMES.map((t) => <button type="button" key={t} onClick={() => { set({ time: t }); setTimeOpen(false); }} style={{ height: 40, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 15, border: 0, cursor: "pointer", background: t === p.time ? "rgba(215,188,130,.16)" : "transparent", color: t === p.time ? SD.goldHi : SD.sub, fontWeight: t === p.time ? 900 : 600 }}><span style={{ ...EX_NUM, fontWeight: "inherit" }}>{t}</span>{t === p.time ? "✓" : ""}</button>)}</div>}
               </div>
-              <div style={{ fontSize: 13, color: SD.sub, lineHeight: 1.65, background: "rgba(255,255,255,.04)", border: `1px solid ${SD.line}`, borderRadius: 14, padding: "12px 14px", maxWidth: 300 }}>전날 마감 데이터로 보고합니다. <b style={{ color: SD.text }}>06:00</b> 전 시각은 고를 수 없습니다.</div>
+              <div style={{ fontSize: 13, color: SD.sub, lineHeight: 1.65, background: "rgba(255,255,255,.04)", border: `1px solid ${SD.line}`, borderRadius: 14, padding: "12px 14px", maxWidth: 300 }}>전일 마감 데이터 기준으로 보고됩니다. <b style={{ color: SD.text }}>06:00</b> 이전 시각은 선택할 수 없습니다.</div>
             </div>
           ))}
-          {row("받는 요일", "공휴일은 자동으로 건너뜁니다", (
+          {row("수신 요일", "공휴일은 자동으로 제외됩니다.", (
             <>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{[1, 2, 3, 4, 5, 6, 0].map((d) => { const wkd = d === 0 || d === 6; const on = p.days.includes(d) && (!wkd || p.weekend); return <button type="button" key={d} disabled={wkd && !p.weekend} onClick={() => toggleDay(d)} style={{ width: 46, height: 46, borderRadius: 13, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 15.5, fontWeight: 900, cursor: wkd && !p.weekend ? "not-allowed" : "pointer", ...(on ? { background: GOLD_GRAD, color: "#1A1408", border: 0, boxShadow: "0 6px 16px rgba(215,188,130,.22)" } : { background: "rgba(255,255,255,.04)", border: `1px solid ${SD.line}`, color: wkd && !p.weekend ? SD.faint : SD.sub }) }}>{DOW[d]}</button>; })}</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, fontSize: 14.5, flexWrap: "wrap" }}><Toggle on={p.weekend} onClick={() => set({ weekend: !p.weekend, days: !p.weekend ? [...new Set([...p.days, 6, 0])] : p.days.filter((d) => d !== 0 && d !== 6) })} /><span style={{ fontWeight: 700 }}>주말 포함</span><span style={{ color: SD.mute, fontSize: 13 }}>{p.weekend ? "토·일에도 보냄" : "토·일에는 보내지 않음"}</span></div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, fontSize: 14.5, flexWrap: "wrap" }}><Toggle on={p.weekend} onClick={() => set({ weekend: !p.weekend, days: !p.weekend ? [...new Set([...p.days, 6, 0])] : p.days.filter((d) => d !== 0 && d !== 6) })} /><span style={{ fontWeight: 700 }}>주말 포함</span><span style={{ color: SD.mute, fontSize: 13 }}>{p.weekend ? "토·일에도 발송" : "토·일 발송 안 함"}</span></div>
             </>
           ))}
-          {row("월요일 보고 범위", "주말 실적을 한 번에 봅니다", (
-            <div style={{ display: "grid", gap: 10 }}>{[["merge3", "금·토·일 3일 합산", `${mdDow(addDay(nextMon, -3))} ~ ${mdDow(addDay(nextMon, -1))} 실적을 합쳐 보고`], ["weekly", "지난주 주간 요약", "요일별 매출 비교, 주간 합계와 전주 대비"]].map(([k, t, d]) => <button type="button" key={k} onClick={() => set({ monday: { ...p.monday, [k]: !p.monday[k] } })} style={{ ...optBox, ...(p.monday[k] ? { borderColor: EX.lineHi, background: "rgba(215,188,130,.06)" } : null) }}><Check on={p.monday[k]} /><span><b style={{ fontSize: 14.5, color: SD.text }}>{t}</b><div style={{ fontSize: 12.5, color: SD.mute, marginTop: 3 }}>{d}</div></span></button>)}</div>
+          {row("월요일 보고 범위", "주말 실적을 합산하여 보고합니다.", (
+            <div style={{ display: "grid", gap: 10 }}>{[["merge3", "금·토·일 3일 합산", `${mdDow(addDay(nextMon, -3))} ~ ${mdDow(addDay(nextMon, -1))} 실적을 합산하여 보고`], ["weekly", "지난주 주간 요약", "요일별 매출 비교 · 주간 합계 · 전주 대비 증감"]].map(([k, t, d]) => <button type="button" key={k} onClick={() => set({ monday: { ...p.monday, [k]: !p.monday[k] } })} style={{ ...optBox, ...(p.monday[k] ? { borderColor: EX.lineHi, background: "rgba(215,188,130,.06)" } : null) }}><Check on={p.monday[k]} /><span><b style={{ fontSize: 14.5, color: SD.text }}>{t}</b><div style={{ fontSize: 12.5, color: SD.mute, marginTop: 3 }}>{d}</div></span></button>)}</div>
           ))}
-          {row("받는 방법", "", (
-            <div style={{ display: "grid", gap: 2 }}>{[["popup", "앱 팝업", "LogisWeb에 처음 들어올 때 요약 팝업"], ["push", "모바일 푸시", "LogisWeb 앱 잠금화면 알림"], ["email", "이메일", "요약 메일 · 내 계정 이메일로"]].map(([k, t, d], i) => <div key={k} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 0", gap: 14, borderTop: i ? `1px solid ${SD.row}` : "none" }}><div><div style={{ fontSize: 14.5, fontWeight: 800 }}>{t}</div><div style={{ fontSize: 12.5, color: SD.mute }}>{d}</div></div><Toggle on={p.channels[k]} onClick={() => set({ channels: { ...p.channels, [k]: !p.channels[k] } })} /></div>)}</div>
+          {row("수신 방법", "", (
+            <div style={{ display: "grid", gap: 2 }}>{[["popup", "앱 팝업", "LogisWeb 최초 접속 시 요약 팝업 표시"], ["push", "모바일 푸시", "LogisWeb 앱 잠금화면 알림"], ["email", "이메일", "요약 메일 · 계정 이메일 주소로 발송"]].map(([k, t, d], i) => <div key={k} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 0", gap: 14, borderTop: i ? `1px solid ${SD.row}` : "none" }}><div><div style={{ fontSize: 14.5, fontWeight: 800 }}>{t}</div><div style={{ fontSize: 12.5, color: SD.mute }}>{d}</div></div><Toggle on={p.channels[k]} onClick={() => set({ channels: { ...p.channels, [k]: !p.channels[k] } })} /></div>)}</div>
           ))}
-          {row("포함할 항목", "1개 이상 고릅니다", (
+          {row("포함 항목", "1개 이상 선택합니다.", (
             <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr" : "1fr 1fr", gap: "12px 22px" }}>{BRIEF_SECTIONS.map(([k, l]) => <button type="button" key={k} onClick={() => set({ sections: { ...p.sections, [k]: !p.sections[k] } })} style={{ display: "flex", alignItems: "center", gap: 11, fontSize: 14.5, fontWeight: 700, color: p.sections[k] ? SD.text : SD.mute, background: "none", border: 0, padding: 0, cursor: "pointer", textAlign: "left", minHeight: 36 }}><Check on={p.sections[k]} />{l}</button>)}</div>
           ))}
-          {canManage && row("받는 사람", "임원 화면 역할 직원은 기본으로 받습니다. 끄면 그 사람에게 팝업·푸시·메일이 가지 않습니다(메뉴는 그대로).", (
+          {canManage && row("수신 대상", "임원 화면 역할 직원은 기본 수신 대상입니다. 해제하면 해당 직원에게 팝업·푸시·메일이 발송되지 않습니다(메뉴 열람은 유지).", (
             <div style={{ border: `1px solid ${SD.line}`, borderRadius: 16, overflow: "hidden", background: "rgba(255,255,255,.02)" }}>
-              {!listed.length && <div style={{ padding: 16, fontSize: 13.5, color: SD.mute }}>임원 화면 역할인 직원이 없습니다(권한 관리 › 역할의 기본 화면 "임원 화면").</div>}
+              {!listed.length && <div style={{ padding: 16, fontSize: 13.5, color: SD.mute }}>임원 화면 역할로 지정된 직원이 없습니다(권한 관리 › 역할의 기본 화면 "임원 화면").</div>}
               {listed.map((u, i) => {
                 const tags = [u.isMaster ? "마스터" : null, String(u.position || "").trim() || null, u.team && u.team !== u.position ? u.team : null].filter(Boolean).slice(0, 2);
                 return (
@@ -976,7 +976,7 @@ export function DailyReportSettings({ onClose, uid, company, prefs, role, profil
           ))}
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, flexWrap: "wrap", padding: narrow ? "16px 18px calc(16px + env(safe-area-inset-bottom,0px))" : "18px 34px", borderTop: `1px solid ${SD.line}`, background: "rgba(0,0,0,.18)" }}>
-          <span style={{ fontSize: 13.5, color: SD.mute }}>{msg ? <b style={{ color: SD.up }}>{msg}</b> : nx ? <>다음 발송 <b style={{ ...EX_NUM, color: SD.goldHi }}>{mdDow(nx.d).replace("(", " (")} {nx.t}</b>{dowOf(nx.d) === 1 && (p.monday.merge3 || p.monday.weekly) ? ` · ${[p.monday.merge3 && "금~일 합산", p.monday.weekly && "주간 요약"].filter(Boolean).join(" + ")}` : ""}</> : "받는 요일이 없습니다"}</span>
+          <span style={{ fontSize: 13.5, color: SD.mute }}>{msg ? <b style={{ color: SD.up }}>{msg}</b> : nx ? <>다음 발송 <b style={{ ...EX_NUM, color: SD.goldHi }}>{mdDow(nx.d).replace("(", " (")} {nx.t}</b>{dowOf(nx.d) === 1 && (p.monday.merge3 || p.monday.weekly) ? ` · ${[p.monday.merge3 && "금~일 합산", p.monday.weekly && "주간 요약"].filter(Boolean).join(" + ")}` : ""}</> : "선택된 수신 요일이 없습니다"}</span>
           <div style={{ display: "flex", gap: 10, ...(narrow ? { width: "100%" } : {}) }}>
             <button type="button" onClick={onClose} style={{ flex: narrow ? 1 : "none", height: 48, padding: "0 22px", borderRadius: 13, border: `1px solid ${SD.line}`, fontSize: 15, fontWeight: 800, color: SD.sub, background: "rgba(255,255,255,.05)", cursor: "pointer" }}>취소</button>
             <button type="button" data-testid="brief-save" disabled={saving} onClick={save} style={{ flex: narrow ? 2 : "none", height: 48, padding: "0 32px", borderRadius: 13, background: GOLD_GRAD, color: "#1A1408", fontSize: 15, fontWeight: 900, border: 0, cursor: "pointer", boxShadow: "0 8px 22px rgba(215,188,130,.25)" }}>{saving ? "저장 중" : "저장"}</button>
@@ -1033,9 +1033,9 @@ function PopupBody({ company, dispatchData, prefs, loadRange, mobile, onClose })
   const fpct = month.target ? (month.forecast / month.target) * 100 : null;
   const gp = month.target ? (month.mtd / month.target) * 100 : null;
   const nums = [
-    { en: "SALES", k: basis.multi ? `${basis.days.length}일 합산 매출` : "전일 매출", v: fmt(man(cur.sale)), c: T.goldHi, foot: <><Dl T={T} v={pctChange(cur.sale, basis.multi ? p7.sale : p1.sale)} size={13} /> <span style={{ color: T.mute }}>{basis.multi ? "지난주 대비" : "전일 대비"}</span></>, hero: true },
-    { en: "PROFIT", k: "수익 · 수익률", v: fmt(man(cur.profit)), c: profitColor(cur.profit, { dark: true, neutral: T.text }), foot: <><b style={{ ...EX_NUM, color: T.text }}>{m.toFixed(1)}%</b> <Dl T={T} v={m - marginOf(basis.multi ? p7 : p1)} unit="%p" size={13} /></> },
-    { en: "MONTH TO DATE", k: "이번 달 누계", v: fmt(man(month.mtd)), c: T.text, foot: gp != null ? <>목표 <b style={{ ...EX_NUM, color: T.gold }}>{gp.toFixed(1)}%</b> · 예상 {fpct.toFixed(0)}%</> : <>월말 예상 <b style={{ ...EX_NUM, color: T.text }}>{eok(month.forecast)}원</b></>, meter: gp },
+    { en: "SALES", k: basis.multi ? `${basis.days.length}일 합산 매출` : "전일 매출", v: fmt(man(cur.sale)), c: T.goldHi, foot: <><Dl T={T} v={pctChange(cur.sale, basis.multi ? p7.sale : p1.sale)} size={13} /> <span style={{ color: T.mute }}>{basis.multi ? "전주 동기간 대비" : "전일 대비"}</span></>, hero: true },
+    { en: "GROSS PROFIT", k: "매출총이익 · 이익률", v: fmt(man(cur.profit)), c: profitColor(cur.profit, { dark: true, neutral: T.text }), foot: <><b style={{ ...EX_NUM, color: T.text }}>{m.toFixed(1)}%</b> <Dl T={T} v={m - marginOf(basis.multi ? p7 : p1)} unit="%p" size={13} /></> },
+    { en: "MONTH TO DATE", k: "이번 달 누계", v: fmt(man(month.mtd)), c: T.text, foot: gp != null ? <>목표 달성률 <b style={{ ...EX_NUM, color: T.gold }}>{gp.toFixed(1)}%</b> · 월말 예상 {fpct.toFixed(0)}%</> : <>월말 예상 <b style={{ ...EX_NUM, color: T.text }}>{eok(month.forecast)}원</b></>, meter: gp },
   ];
   const pad = mobile ? 18 : 30;
   return (
@@ -1069,13 +1069,13 @@ function PopupBody({ company, dispatchData, prefs, loadRange, mobile, onClose })
           <div style={{ marginTop: 14, borderRadius: 18, padding: mobile ? "14px 16px" : "16px 20px", background: "rgba(215,188,130,.06)", border: `1px solid ${EX.lineHi}`, display: "grid", gridTemplateColumns: "auto minmax(0,1fr)", gap: 12, alignItems: "baseline" }}>
             <span style={{ ...EX_NUM, fontSize: 11, fontWeight: 900, letterSpacing: ".16em", color: T.gold }}>요약</span>
             <p style={{ margin: 0, fontSize: mobile ? 15 : 16.5, fontWeight: 600, lineHeight: 1.7, color: T.text, wordBreak: "keep-all" }}>
-              매출은 {basis.multi ? "지난주 같은 기간" : "전주 같은 요일"}보다 <b style={{ ...EX_NUM, color: d7 == null || Math.abs(d7) < 0.05 ? T.mute : d7 > 0 ? T.up : T.down }}>{d7 == null ? "—" : `${d7 > 0 ? "▲ " : d7 < 0 ? "▼ " : ""}${Math.abs(d7).toFixed(1)}%`}</b> {d7 == null || d7 >= 0 ? "늘었고" : "줄었고"}, {fpct ? (fpct >= 100 ? <>월말 목표 달성(예상 <b style={{ ...EX_NUM, color: T.goldHi }}>{fpct.toFixed(0)}%</b>)이 유력합니다.</> : <>월말에는 목표의 <b style={{ ...EX_NUM, color: T.goldHi }}>{fpct.toFixed(0)}%</b> 수준이 예상됩니다.</>) : <>월말 <b style={{ ...EX_NUM, color: T.goldHi }}>{eok(month.forecast)}원</b>이 예상됩니다.</>}
+              {d7 == null ? <>매출은 {basis.multi ? "전주 동기간" : "전주 동요일"} 비교 데이터가 없으며, </> : <>매출은 {basis.multi ? "전주 동기간" : "전주 동요일"} 대비 <b style={{ ...EX_NUM, color: Math.abs(d7) < 0.05 ? T.mute : d7 > 0 ? T.up : T.down }}>{`${d7 > 0 ? "▲ " : d7 < 0 ? "▼ " : ""}${Math.abs(d7).toFixed(1)}%`}</b> {d7 >= 0 ? "증가했으며" : "감소했으며"}, </>}{fpct ? (fpct >= 100 ? <>현 추세 기준 월말 목표 달성(예상 달성률 <b style={{ ...EX_NUM, color: T.goldHi }}>{fpct.toFixed(0)}%</b>)이 유력합니다.</> : <>현 추세 기준 월말 매출은 목표 대비 <b style={{ ...EX_NUM, color: T.goldHi }}>{fpct.toFixed(0)}%</b> 수준으로 예상됩니다.</>) : <>현 추세 기준 월말 매출은 <b style={{ ...EX_NUM, color: T.goldHi }}>{eok(month.forecast)}원</b>으로 예상됩니다.</>}
             </p>
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, padding: mobile ? `14px ${pad}px calc(18px + env(safe-area-inset-bottom,0px))` : `20px ${pad}px 26px`, alignItems: "center", flexWrap: "wrap" }}>
           <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, fontWeight: 600, color: T.sub, marginRight: "auto", cursor: "pointer", minHeight: 40, ...(mobile ? { width: "100%" } : {}) }}><input type="checkbox" checked={noToday} onChange={(e) => setNoToday(e.target.checked)} style={{ width: 20, height: 20, accentColor: EX.gold }} data-testid="brief-notoday" />오늘 하루 보지 않기</label>
-          <button type="button" onClick={() => onClose("later", noToday)} style={{ flex: mobile ? "1 1 0" : "none", height: 50, padding: "0 22px", borderRadius: 14, border: `1px solid ${T.line}`, fontSize: 15, fontWeight: 800, color: T.sub, background: "rgba(255,255,255,.05)", cursor: "pointer" }}>나중에</button>
+          <button type="button" onClick={() => onClose("later", noToday)} style={{ flex: mobile ? "1 1 0" : "none", height: 50, padding: "0 22px", borderRadius: 14, border: `1px solid ${T.line}`, fontSize: 15, fontWeight: 800, color: T.sub, background: "rgba(255,255,255,.05)", cursor: "pointer" }}>나중에 보기</button>
           <button type="button" data-testid="brief-open" onClick={() => onClose("open", true)} style={{ flex: mobile ? "2 1 0" : "none", height: 50, padding: "0 26px", borderRadius: 14, background: GOLD_GRAD, color: "#1A1408", fontSize: 15, fontWeight: 900, border: 0, cursor: "pointer", boxShadow: "0 8px 22px rgba(215,188,130,.25)" }}>전체 보고서 보기 →</button>
         </div>
       </div>

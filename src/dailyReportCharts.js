@@ -99,7 +99,7 @@ export function revMargin(W, days, avg, { barH = 190, lineH = 74, labelEvery = 3
   const yl = (v) => T2 + lineH - ((v - mn) / (mx - mn)) * lineH;
   const ticks = [mn + 1, Math.round((mn + mx) / 2), mx - 0.5].map((v) => Math.round(v));
   [...new Set(ticks)].forEach((v) => { s += `<line x1="${L}" x2="${W - R}" y1="${yl(v)}" y2="${yl(v)}" stroke="${th.grid}" stroke-dasharray="3 6"/><text x="${L - 10}" y="${yl(v) + 4}" font-size="${fs}" fill="${th.mute}" text-anchor="end">${v}%</text>`; });
-  s += `<text x="${L}" y="${T2 - 16}" font-size="${fs}" font-weight="800" fill="${th.ice}" letter-spacing="0.5">수익률</text>`;
+  s += `<text x="${L}" y="${T2 - 16}" font-size="${fs}" font-weight="800" fill="${th.ice}" letter-spacing="0.5">매출총이익률</text>`;
   const pts = days.map((d, i) => (d.sale > 0 ? [L + i * step + step / 2, yl(d.margin)] : null));
   let path = ""; let pen = false; let first = null; let lastPt = null;
   pts.forEach((p) => { if (!p) { pen = false; return; } path += `${pen ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)} `; pen = true; if (!first) first = p; lastPt = p; });
@@ -196,7 +196,7 @@ export function weekBars(W, H, days, hi = [], { compact = false, th = CT_PAPER }
   const gG = gid(th, "wkG");
   let s = `${svgOpen(W, H)}<defs>${goldGrad(gG, th)}</defs>`;
   for (let v = 0; v <= max + 1e-6; v += st) s += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${v ? th.grid : th.zero}" ${v ? `stroke-dasharray="3 6"` : ""}/><text x="${L - 8}" y="${y(v) + 4}" font-size="${fs}" fill="${th.mute}" text-anchor="end">${fmt(v)}</text>`;
-  if (hi.length) { const a = Math.min(...hi), b = Math.max(...hi); s += `<rect x="${L + gw * a + 2}" y="${T - 28}" width="${gw * (b - a + 1) - 4}" height="${ih + 28}" rx="8" fill="${th.band}"/><text x="${L + gw * ((a + b + 1) / 2)}" y="${T - 12}" font-size="${fs}" font-weight="800" fill="${th.gold}" text-anchor="middle">이번 보고 ${hi.length}일 합산 구간</text>`; }
+  if (hi.length) { const a = Math.min(...hi), b = Math.max(...hi); s += `<rect x="${L + gw * a + 2}" y="${T - 28}" width="${gw * (b - a + 1) - 4}" height="${ih + 28}" rx="8" fill="${th.band}"/><text x="${L + gw * ((a + b + 1) / 2)}" y="${T - 12}" font-size="${fs}" font-weight="800" fill="${th.gold}" text-anchor="middle">보고 기준 ${hi.length}일 합산 구간</text>`; }
   const bar = (x, v, c) => (v > 0 ? `<path d="${barPath(x, y(v), bw, y(0) - y(v), 4)}" fill="${c}"/>` : "");
   days.forEach((d, i) => {
     const cx = L + gw * i + gw / 2; const c = d.cur / 1e4, p = d.prev / 1e4;
