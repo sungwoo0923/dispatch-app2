@@ -32,6 +32,7 @@ import { getNationalHolidayLabel } from "./attendanceUtils";
 import AttendanceApprovalInbox from "./AttendanceApprovalInbox";
 import { PersonalSchedule, PersonalModeSwitch, usePersonalMode, birthdaysOn, BirthChip } from "./PersonalSchedule"; // ⭐ 2026-11-03 개인일정·생일
 import { kpConfirm } from "./kpDialog";
+import { profitStyle, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const GOLD = "#D7BC82";
@@ -185,7 +186,7 @@ const ChartTip = ({ active, payload, label }) => {
   return (
     <div className="rounded-xl border border-white/15 bg-[#0B1530]/95 px-3 py-2 text-[13.5px] text-white shadow-xl">
       <div className="font-black mb-1" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{label}</div>
-      {payload.map((p) => <div key={p.dataKey} className="flex items-center gap-2 tabular-nums"><span className="w-2 h-2 rounded-full" style={{ background: p.color }} />{p.name} <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{p.dataKey === "margin" ? `${Number(p.value).toFixed(1)}%` : `${Math.round(p.value).toLocaleString()}원`}</b></div>)}
+      {payload.map((p) => <div key={p.dataKey} className="flex items-center gap-2 tabular-nums"><span className="w-2 h-2 rounded-full" style={{ background: p.color }} />{p.name} <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...(p.dataKey === "profit" ? profitStyle(p.value, { dark: true }) : p.dataKey === "margin" && profitRateColor(p.value, { dark: true }) ? { color: profitRateColor(p.value, { dark: true }) } : {}) }}>{p.dataKey === "margin" ? `${Number(p.value).toFixed(1)}%` : `${Math.round(p.value).toLocaleString()}원`}</b></div>)}
     </div>
   );
 };
@@ -314,9 +315,9 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3">
           {[
             { l: "이번 달 매출", v: `${short(mSale)}원`, sub: <><Delta v={prevAvail ? md : null} /><span className="text-white/40"> 전월 동기</span></>, en: "REVENUE · MTD" },
-            { l: "매출총이익", v: `${short(mProfit)}원`, sub: <><span className="text-white/70 font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{mMargin.toFixed(1)}%</span><span className="text-white/40"> 이익률 </span><Delta v={prevAvail && pSale ? mMargin - pMargin : null} suffix="%p" /></>, en: "GROSS PROFIT" },
+            { l: "매출총이익", v: `${short(mProfit)}원`, pv: mProfit, sub: <><span className="text-white/70 font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...(profitRateColor(mMargin, { dark: true }) ? { color: profitRateColor(mMargin, { dark: true }) } : {}) }}>{mMargin.toFixed(1)}%</span><span className="text-white/40"> 이익률 </span><Delta v={prevAvail && pSale ? mMargin - pMargin : null} suffix="%p" /></>, en: "GROSS PROFIT" },
             { l: "월말 예상 매출", v: `${short(forecast)}원`, sub: <><span className="text-white/40">전월 실적 </span><span className="text-white/70 font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{prevAvail ? `${short(pFullSale)}원` : "—"}</span></>, en: "FORECAST", ring: forecast ? Math.min(1, mSale / forecast) : 0, ringLabel: `${dayNo}/${dim}` },
-            { l: "올해 누적 매출", v: `${short(ySale)}원`, sub: <><span className="text-white/40">이익 </span><span className="text-white/70 font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(yProfit)}원</span><span className="text-white/40"> · {yCnt.toLocaleString()}건</span></>, en: "YEAR TO DATE" },
+            { l: "올해 누적 매출", v: `${short(ySale)}원`, sub: <><span className="text-white/40">이익 </span><span className="text-white/70 font-black" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...profitStyle(yProfit, { dark: true }) }}>{short(yProfit)}원</span><span className="text-white/40"> · {yCnt.toLocaleString()}건</span></>, en: "YEAR TO DATE" },
           ].map((k) => (
             <div key={k.l} className="relative rounded-[20px] border border-white/[0.09] px-3.5 md:px-5 py-3 md:py-4 overflow-hidden min-w-0" style={{ background: "linear-gradient(150deg, rgba(255,255,255,.07), rgba(255,255,255,.02))" }}>
               <div className="absolute top-0 left-4 right-4 h-px" style={{ background: `linear-gradient(90deg, transparent, ${GOLD}66, transparent)` }} />
@@ -324,7 +325,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
                 <div className="min-w-0">
                   <div className="text-[10.5px] md:text-[11px] font-extrabold tracking-[0.24em] text-white/40 whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{k.en}</div>
                   <div className="text-[13.5px] md:text-[14.5px] font-bold text-white/70 mt-0.5 whitespace-nowrap">{k.l}</div>
-                  <div className="text-[24px] md:text-[34px] font-black tabular-nums leading-tight mt-1 whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{k.v}</div>
+                  <div className="text-[24px] md:text-[34px] font-black tabular-nums leading-tight mt-1 whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...(k.pv != null ? profitStyle(k.pv, { dark: true }) : {}) }}>{k.v}</div>
                 </div>
                 {k.ring != null && <span className="hidden md:block"><Ring value={k.ring} label={k.ringLabel} /></span>}
               </div>

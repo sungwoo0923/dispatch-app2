@@ -4,6 +4,7 @@ import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 �
 import jsPDF from "jspdf";
 import { analyzeMonths, buildReport, COMPARE_DIMS, toWon, MARGIN_BANDS } from "./monthCompare";
 import { CustomSelect } from "./CustomSelect";
+import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 수익률 색(플러스 빨강 · 마이너스 파랑)
 
 const NAVY = "#1B2B4B";
 // ⭐ 2026-11-07 디자인 통일 — 다른 경영 화면(일일 경영 보고 · 경영 분석)과 같은 남색 팔레트 · 증감은 상승 빨강 ▲ / 하락 파랑 ▼
@@ -139,9 +140,9 @@ function MonthSideBySide({ res, a, b, compact }) {
   // ⭐ 칸 사이 세로 구분선 + 가운데 정렬
   const LINE = `1px solid ${LINE_C}`;
   const cellBox = (first) => ({ padding: compact ? "8px 8px" : "10px 12px", borderLeft: first ? "none" : LINE, textAlign: "center", minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center" });
-  const valCell = (main, sub, strong) => (
+  const valCell = (main, sub, strong, tone) => ( // ⭐ 2026-11-17 tone — 수익 · 수익률 글자색
     <div style={{ textAlign: "center", minWidth: 0 }}>
-      <div style={{ fontSize: compact ? 14 : 15, fontWeight: strong ? 900 : 700, color: INK, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontVariantNumeric: "tabular-nums" }}>{main}</div>
+      <div style={{ fontSize: compact ? 14 : 15, fontWeight: strong ? 900 : 700, color: tone || INK, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontVariantNumeric: "tabular-nums" }}>{main}</div>
       {sub && <div style={{ fontSize: 13, fontWeight: 700, color: MUTE, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{sub}</div>}
     </div>
   );
@@ -181,18 +182,21 @@ function MonthSideBySide({ res, a, b, compact }) {
             const payNoSale = isPay && !va.sale && !vb.sale;
             const diff = isPay ? (payNoSale ? diffEl(va.sale - va.driver, vb.sale - vb.driver, "money") : diffEl(va.sale, vb.sale, "money", goodUp)) : diffEl(va, vb, kind, goodUp);
             const strong = ["총 매출 (청구운임)", "총 수익", "총 손실금액 (역마진)"].includes(label);
+            // ⭐ 2026-11-17 수익 · 수익률 줄은 플러스 빨강 · 마이너스 파랑
+            const isProfitRow = label === "총 수익" || label === "건당 평균 수익";
+            const toneOf = (v) => (isProfitRow ? profitColor(v) : label === "수익률" ? profitRateColor(v * 100) : undefined);
             return (
               <div key={label} style={{ display: "grid", gridTemplateColumns: cols, alignItems: "stretch", borderTop: "1px solid #EEF2F7" }}>
                 <span style={{ ...cellBox(true), fontSize: 14, fontWeight: 800, color: INK, gridColumn: compact ? "1 / -1" : undefined, background: compact ? "#FAFBFD" : "transparent", borderBottom: compact ? "1px solid #EEF2F7" : "none", padding: compact ? "6px 8px" : undefined }}>{label}</span>
-                <div style={cellBox(compact)}>{valCell(mainA, sA, strong)}</div>
+                <div style={cellBox(compact)}>{valCell(mainA, sA, strong, toneOf(va))}</div>
                 {compact ? (
                   <div style={cellBox(false)}>
-                    {valCell(mainB, sB, strong)}
+                    {valCell(mainB, sB, strong, toneOf(vb))}
                     <div style={{ fontSize: 12 }}>{diff}</div>
                   </div>
                 ) : (
                   <>
-                    <div style={cellBox(false)}>{valCell(mainB, sB, strong)}</div>
+                    <div style={cellBox(false)}>{valCell(mainB, sB, strong, toneOf(vb))}</div>
                     <div style={{ ...cellBox(false), fontSize: 14 }}>
                       {diff}
                       {isPay && (va.cnt || vb.cnt) ? <div style={{ fontSize: 13, fontWeight: 700, color: MUTE }}>건수 {vb.cnt - va.cnt >= 0 ? "+" : "−"}{Math.abs(vb.cnt - va.cnt)}건</div> : null}
@@ -346,7 +350,7 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
                           <td style={{ padding: "8px 10px", whiteSpace: "nowrap", fontWeight: 600, color: SUB }}>{(r.상차지명 || r.출발지 || "-")} → {(r.하차지명 || r.도착지 || "-")}</td>
                           <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 700 }}>{s.toLocaleString()}</td>
                           <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 700 }}>{d.toLocaleString()}</td>
-                          <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 900, color: s - d < 0 ? UP : INK }}>{(s - d).toLocaleString()}</td>
+                          <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 900, color: profitColor(s - d, { neutral: INK }) }}>{(s - d).toLocaleString()}</td>
                           <td style={{ padding: "8px 10px", whiteSpace: "nowrap", fontWeight: 600, color: MUTE }}>{an.note}</td>
                         </tr>
                       );
@@ -477,9 +481,9 @@ export default function MonthCompareAnalysis({ rows = [], isExcluded = () => fal
                         {g.isGone && <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 800, color: MUTE, background: "#F1F4F8", borderRadius: 99, padding: "1px 7px" }}>{b} 없음</span>}
                       </td>
                       <td style={{ padding: "9px 10px", textAlign: "right", color: SUB, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{g.a.sale ? won(g.a.sale) : "-"}</td>
-                      <td style={{ padding: "9px 10px", textAlign: "right", color: SUB, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{g.a.sale ? pct(g.a.rate) : "-"}</td>
+                      <td style={{ padding: "9px 10px", textAlign: "right", color: (g.a.sale && profitRateColor(g.a.rate * 100)) || SUB, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{g.a.sale ? pct(g.a.rate) : "-"}</td>
                       <td style={{ padding: "9px 10px", textAlign: "right", color: INK, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{g.b.sale ? won(g.b.sale) : "-"}</td>
-                      <td style={{ padding: "9px 10px", textAlign: "right", fontWeight: 800, color: g.b.sale && g.b.rate < A.rate ? UP : INK, fontVariantNumeric: "tabular-nums" }}>{g.b.sale ? pct(g.b.rate) : "-"}</td>
+                      <td style={{ padding: "9px 10px", textAlign: "right", fontWeight: 800, color: (g.b.sale && profitRateColor(g.b.rate * 100)) || INK, fontVariantNumeric: "tabular-nums" }}>{g.b.sale ? pct(g.b.rate) : "-"}</td>
                       <td style={{ padding: "9px 10px", textAlign: "right" }}><Delta v={g.dSale} /></td>
                       <td style={{ padding: "9px 10px", textAlign: "right" }}><Delta v={g.dProfit} /></td>
                       <td style={{ padding: "9px 10px", textAlign: "right" }}><Delta v={Math.round(g.marginImpact)} /></td>

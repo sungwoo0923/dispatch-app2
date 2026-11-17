@@ -10,12 +10,15 @@ const NAVY = "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
 const pos = (x, y, w, h) => ({ position: "absolute", left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%` });
 
 // 입력칸 모양 — label(작은 글씨) + value. hi = 지금 설명하는 곳(테두리 강조)
-function Bx({ r, label, value = "", hi = false, dark = false, center = false, muted = false, bold = true }) {
+// ⭐ 2026-11-17 tone — 이익 · 수수료 글자색(플러스 빨강 · 마이너스 파랑, 실제 화면과 같게)
+const toneOf = (v) => { const t = String(v || "").trim(); if (!t || /^0원?$/.test(t)) return undefined; return /^[−-]/.test(t) ? "blue" : "red"; };
+const TONE_COLOR = { red: "#E5484D", blue: "#2D6BE0", redL: "#FF8A8E", blueL: "#8FB0F0" };
+function Bx({ r, label, value = "", hi = false, dark = false, center = false, muted = false, bold = true, tone }) {
   return (
     <div style={{ ...pos(...r), transition: "all .35s" }}
       className={`rounded-lg px-2 flex flex-col justify-center overflow-hidden ${dark ? "bg-[#0F1A30] text-white" : "bg-white text-[#0F1A30]"} ${hi ? "ring-2 ring-[#2D4C82] shadow-[0_0_0_5px_rgba(45,76,130,.18)] z-[2]" : "ring-1 ring-[#DCE3EE]"} ${center ? "items-center text-center" : ""}`}>
       {label && <div className={`text-[11px] font-bold leading-none mb-1 ${dark ? "text-white/60" : "text-[#8FA0BD]"}`}>{label}</div>}
-      <div className={`text-[13.5px] leading-tight truncate ${bold ? "font-black" : "font-semibold"} ${muted ? "text-[#B5C0D3]" : ""}`}>{value || " "}</div>
+      <div className={`text-[13.5px] leading-tight truncate ${bold ? "font-black" : "font-semibold"} ${muted ? "text-[#B5C0D3]" : ""}`} style={tone ? { color: TONE_COLOR[dark ? `${tone}L` : tone] } : undefined}>{value || " "}</div>
     </div>
   );
 }
@@ -138,7 +141,7 @@ const DEMOS = {
       <Bx r={[38, 47, 11, 18]} label="톤수 *" value={i >= 2 ? "5톤" : ""} hi={i === 2} />
       <Bx r={[51, 47, 15, 18]} label="청구운임" value={i >= 3 ? "350,000" : ""} hi={i === 3} />
       <Bx r={[68, 47, 15, 18]} label="기사운임" value={i >= 3 ? "300,000" : ""} hi={i === 3} />
-      <Bx r={[85, 47, 12, 18]} label="수수료" value={i >= 3 ? "50,000" : ""} dark={i === 3} />
+      <Bx r={[85, 47, 12, 18]} label="수수료" value={i >= 3 ? "50,000" : ""} dark={i === 3} tone={i >= 3 ? "red" : undefined} />
       <Bx r={[3, 69, 20, 18]} label="차량번호" value={i >= 4 ? "경기81바1037" : ""} hi={i === 4} />
       <Bx r={[25, 69, 14, 18]} label="기사명" value={i >= 4 ? "이영희" : ""} muted={false} />
       <Bx r={[41, 69, 16, 18]} label="지급방식 *" value={i >= 4 ? "계산서" : "선택"} hi={i === 4} muted={i < 4} />
@@ -165,7 +168,7 @@ const DEMOS = {
         <Btn r={[68, 53, 28, 16]} primary={i === 3} hi={i === 3}>추가 청구</Btn>
         <Bx r={[4, 75, 28, 20]} label="청구운임" value={v[0]} hi={i === 3} center />
         <Bx r={[36, 75, 28, 20]} label="기사운임" value={v[1]} hi={i === 1} center />
-        <Bx r={[68, 75, 28, 20]} label="수수료(수익)" value={v[2]} hi={i === 2} dark center />
+        <Bx r={[68, 75, 28, 20]} label="수수료(수익)" value={v[2]} hi={i === 2} dark center tone={toneOf(v[2])} />
       </>);
     },
   },
@@ -414,7 +417,7 @@ const DEMOS = {
       <TopBar items={["HOME", "배차", "매출", "정산", "회계관리", "자금관리"]} on="회계관리" />
       <Side items={["회계 개요", "회계 장부", "급여 계산", "퇴직 정산"]} on={0} />
       <Btn r={[80, 15, 17, 11]} hi={i === 1} primary={false}>📖 회계용어</Btn>
-      {[["올해 매출(공급가)", "3.2억"], ["매출총이익", "4,820만"], ["미수금 / 미지급", "1,240만"], ["예상 부가세", "690만"]].map(([l, v], k) => <Bx key={l} r={[19 + k * 19.7, 29, 18.7, 18]} label={l} value={v} hi={i === 0} />)}
+      {[["올해 매출(공급가)", "3.2억"], ["매출총이익", "4,820만"], ["미수금 / 미지급", "1,240만"], ["예상 부가세", "690만"]].map(([l, v], k) => <Bx key={l} r={[19 + k * 19.7, 29, 18.7, 18]} label={l} value={v} hi={i === 0} tone={l === "매출총이익" ? "red" : undefined} />)}
       <div style={pos(19, 52, 46, 44)} className={`rounded-lg bg-white ring-1 ${i === 2 ? "ring-2 ring-[#2D4C82]" : "ring-[#DCE3EE]"} flex items-end gap-[3%] px-[3%] pb-[4%]`}>{[40, 55, 48, 70, 62, 80].map((h, k) => <span key={k} style={{ height: `${h}%` }} className="flex-1 rounded-t bg-[#2D4C82]" />)}</div>
       <Tbl r={[67, 52, 30, 44]} cols={[["경과", 50], ["금액", 50]]} rows={[["30일 이내", "820만"], ["31~60일", "290만"], ["90일 초과", "130만"]]} hiRow={i === 3 ? 2 : -1} />
     </>),

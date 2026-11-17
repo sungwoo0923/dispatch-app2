@@ -168,6 +168,7 @@ import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "../liveFle
 import { useUiScreen, uiMenuItem, useUiConfigVersion } from "../uiConfig"; // ⭐ 2026-11-07 화면 편집 모드 — 메뉴 이름·순서·숨기기(권한은 그대로)
 import MyInfoTabs from "../MyInfoTabs"; // ⭐ 2026-11-07 내정보 안 탭(급여명세서 · 연차 사용 계획)
 import { kpConfirm } from "../kpDialog";
+import { profitCls } from "../marginPct"; // ⭐ 2026-11-17 수수료(이익) 색 — 플러스 빨강 · 마이너스 파랑
 import { ensureUploadToken } from "../uploadTokenClient"; // ⭐ 2026-11-08 업로드 링크 토큰(발급 시각·만료)
 
 
@@ -7579,7 +7580,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
   const maxSale = Math.max(cur.sale, prev.sale, 1);
   const kpiCards = [
     { label:"총 청구운임", value:cur.sale, sub:`${cur.cnt}건 수주`, pct: Math.min(cur.sale/maxSale*100,100), color:"#1B2B4B" },
-    { label:"수익 (수수료)", value:cur.fee, sub:`수익률 ${profitRate.toFixed(1)}%`, pct: Math.min(profitRate,100), color: profitRate>=15?"#10B981":profitRate>=10?"#F59E0B":"#EF4444" },
+    { label:"수익 (수수료)", value:cur.fee, profit:true, sub:`수익률 ${profitRate.toFixed(1)}%`, pct: Math.min(profitRate,100), color: profitRate>=15?"#10B981":profitRate>=10?"#F59E0B":"#EF4444" },
     { label:"기사 운임", value:cur.driver, sub:"지급 합계", pct: cur.sale>0?Math.min(cur.driver/cur.sale*100,100):0, color:"#6B7280" },
     { label:"건당 평균", value:avgFare, sub:"청구운임 기준", pct: prev.cnt>0?Math.min(avgFare/Math.round(prev.sale/prev.cnt)*100,100):50, color:"#4F46E5" },
   ];
@@ -7642,7 +7643,7 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
               <Dial pct={k.pct} color={k.color} size={52} />
               <div className="w-full min-w-0">
                 <div className="text-[11px] text-gray-500 font-semibold leading-tight">{k.label}</div>
-                <div className="text-[12px] font-extrabold leading-tight text-gray-900">{fmtWon(k.value)}<span className="text-[10px] font-normal text-gray-400 ml-0.5">원</span></div>
+                <div className={`text-[12px] font-extrabold leading-tight ${k.profit ? profitCls(k.value, "text-gray-900") : "text-gray-900"}`}>{fmtWon(k.value)}<span className="text-[10px] font-normal text-gray-400 ml-0.5">원</span></div>
                 <div className="text-[10.5px] text-gray-400 mt-0.5">{k.sub}</div>
               </div>
             </div>
@@ -12362,7 +12363,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
           </div>
           <div className="mt-3 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
             <span className="text-[12px] font-bold text-gray-500">수수료</span>
-            <span className={`text-[15px] font-black ${fee < 0 ? "text-red-500" : "text-[#1B2B4B]"}`}>{fee.toLocaleString()}원</span>
+            <span className={`text-[15px] font-black ${profitCls(fee, "text-[#1B2B4B]")}`}>{fee.toLocaleString()}원</span>
           </div>
         </div>
         <div className="px-5 pb-6 pt-3 border-t border-gray-100 flex gap-2">

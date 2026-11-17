@@ -8,6 +8,7 @@ import {
 import { setLegStatus, removeLeg, requestHandoff, updateLeg } from "./freightStore";
 import FreightForm from "./FreightForm";
 import { Card, Btn, Sel, Seg, Empty, StatusChip, DueChip, Stepper, Drawer, ContainerArt, RouteArt, routeEnds, ModeChip, MODE_NAME, MONO } from "./ui";
+import { profitCls, profitRateCls, profitColor } from "../marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
 
 const TH = "px-3 h-10 text-left text-[11.5px] font-extrabold text-white/80 whitespace-nowrap";
 const TD = "px-3 h-[52px] text-[13px] text-[#3A4A66] whitespace-nowrap";
@@ -150,10 +151,10 @@ export function LegDrawer({ job, jobs, modules, me, canEdit, onClose, onEdit, on
         {job.memo && <div className="mt-3 pt-3 border-t border-[#EEF1F6] text-[13px] text-[#3A4A66] whitespace-pre-wrap">{job.memo}</div>}
       </Card>
 
-      <Card title="손익" en="P&L" right={<span className="text-[12px] font-bold text-[#7A89A3]">Job 전체 이익 <b className={jobPnl.profit < 0 ? "text-[#C2362B]" : "text-[#0F1A30]"}>{won(jobPnl.profit)}원</b></span>}>
+      <Card title="손익" en="P&L" right={<span className="text-[12px] font-bold text-[#7A89A3]">Job 전체 이익 <b className={profitCls(jobPnl.profit, "text-[#0F1A30]")}>{won(jobPnl.profit)}원</b></span>}>
         <div className="grid grid-cols-3 gap-2">
           {[["청구", pnl.sale], ["지급", pnl.cost], ["이익", pnl.profit]].map(([l, v]) => (
-            <div key={l} className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2.5"><div className="text-[11.5px] font-bold text-[#7A89A3]">{l}</div><div className={`text-[16px] font-black tabular-nums ${l === "이익" && v < 0 ? "text-[#C2362B]" : "text-[#0F1A30]"}`}>{won(v)}</div></div>
+            <div key={l} className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2.5"><div className="text-[11.5px] font-bold text-[#7A89A3]">{l}</div><div className={`text-[16px] font-black tabular-nums ${l === "이익" ? profitCls(v, "text-[#0F1A30]") : "text-[#0F1A30]"}`}>{won(v)}</div></div>
           ))}
         </div>
         {[["청구", job.sales], ["지급", job.costs]].map(([l, lines]) => (Array.isArray(lines) && lines.length > 0 ? (
@@ -258,7 +259,7 @@ export default function FreightBoard({ mode, jobs, allJobs, handoffOnly = false,
                 <div className="flex items-center gap-2"><span className="text-[12.5px] font-black text-[#0F1A30]" style={mono}>{j.refNo}</span><span className="text-[11px] font-bold text-[#9AA9C3]" style={mono}>{j.jobNo}</span><span className="ml-auto"><StatusChip job={j} /></span></div>
                 <div className="mt-1 text-[14px] font-black text-[#0F1A30] truncate">{j.client || "-"}</div>
                 <div className="text-[12.5px] font-semibold text-[#5B6B85] truncate">{legTitle(j) || "-"}</div>
-                <div className="mt-1.5 flex items-center gap-2"><Stepper job={j} compact /><span className="ml-auto flex items-center gap-2">{due && <DueChip due={due} />}{(p.sale || p.cost) ? <span className={`text-[12px] font-black tabular-nums ${p.profit < 0 ? "text-[#C2362B]" : "text-[#0F1A30]"}`}>{won(p.profit)}</span> : null}</span></div>
+                <div className="mt-1.5 flex items-center gap-2"><Stepper job={j} compact /><span className="ml-auto flex items-center gap-2">{due && <DueChip due={due} />}{(p.sale || p.cost) ? <span className={`text-[12px] font-black tabular-nums ${profitCls(p.profit, "text-[#0F1A30]")}`}>{won(p.profit)}</span> : null}</span></div>
               </button>
             ); })}
           </div>
@@ -281,7 +282,7 @@ export default function FreightBoard({ mode, jobs, allJobs, handoffOnly = false,
                       {cols.map(([l, fn]) => <td key={l} className={`${TD} max-w-[190px] truncate`}>{fn(j)}</td>)}
                       <td className={TD}><div className="flex flex-col gap-1"><StatusChip job={j} /><Stepper job={j} compact /></div></td>
                       <td className={TD}><DueChip due={due} /></td>
-                      <td className={`${TD} text-right font-black tabular-nums ${p.profit < 0 ? "text-[#C2362B]" : "text-[#0F1A30]"}`}>{p.sale || p.cost ? won(p.profit) : "-"}</td>
+                      <td className={`${TD} text-right font-black tabular-nums ${profitCls(p.profit, "text-[#0F1A30]")}`}>{p.sale || p.cost ? won(p.profit) : "-"}</td>
                     </tr>
                   );
                 })}

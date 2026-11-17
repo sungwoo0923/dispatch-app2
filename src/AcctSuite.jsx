@@ -15,6 +15,7 @@ import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05
 import { BookHero, BookCard, Chip, Sheet, MONO } from "./OfficeBooks";
 import { ManualButton, GlossaryButton } from "./WorkManual"; // 📖 2026-11-14 회계용어 · 회계 매뉴얼
 import { isTMUser } from "./staffFilter";
+import { profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 이익률 색(플러스 빨강 · 마이너스 파랑)
 import { leaveEntitlement, leaveUseOf } from "./approvalForms";
 import { CustomSelect } from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
@@ -56,7 +57,7 @@ export function useYearOrders(company, fixedRows = []) {
 const Tip = ({ active, payload, label }) => (active && payload?.length ? (
   <div className="rounded-xl border border-[#E3E8F0] bg-white px-3 py-2 text-[12px] shadow-xl">
     <div className="font-black mb-1" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{label}</div>
-    {payload.map((p) => <div key={p.dataKey} className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{ background: p.color }} />{p.name} <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{p.dataKey === "margin" ? `${Number(p.value).toFixed(1)}%` : `${won(p.value)}원`}</b></div>)}
+    {payload.map((p) => <div key={p.dataKey} className="flex items-center gap-2"><span className="w-2 h-2 rounded-full" style={{ background: p.color }} />{p.name} <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...(p.dataKey === "margin" && profitRateColor(p.value) ? { color: profitRateColor(p.value) } : {}) }}>{p.dataKey === "margin" ? `${Number(p.value).toFixed(1)}%` : `${won(p.value)}원`}</b></div>)}
   </div>
 ) : null);
 
@@ -101,7 +102,7 @@ export function AccountingOverview({ company, orders, drivers = [] }) {
     <div className="space-y-4">
       <BookHero en={`ACCOUNTING · ${y}`} title="회계 개요" desc="배차완료 기준 매출·매입과 미수·미지급·부가세를 한 화면에서"
         right={<div className="flex items-center gap-2 flex-wrap"><GlossaryButton dark /><ManualButton menu="회계관리" section="overview" dark /></div>}
-        kpis={[["올해 매출(공급가)", `${short(sale)}원`, `${orders.length.toLocaleString()}건`], ["매출총이익", `${short(sale - buy)}원`, `이익률 ${sale ? (((sale - buy) / sale) * 100).toFixed(1) : 0}%`], ["미수금 / 미지급", `${short(arSum)} / ${short(apSum)}`, "미수금은 부가세 포함"], ["예상 부가세(추정)", `${short(vat)}원`, `매출세액 ${short(vatE.saleVat)} − 매입세액 ${short(vatE.buyVat)}`]]} />
+        kpis={[["올해 매출(공급가)", `${short(sale)}원`, `${orders.length.toLocaleString()}건`], ["매출총이익", `${short(sale - buy)}원`, `이익률 ${sale ? (((sale - buy) / sale) * 100).toFixed(1) : 0}%`, sale - buy], ["미수금 / 미지급", `${short(arSum)} / ${short(apSum)}`, "미수금은 부가세 포함"], ["예상 부가세(추정)", `${short(vat)}원`, `매출세액 ${short(vatE.saleVat)} − 매입세액 ${short(vatE.buyVat)}`]]} />
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-4">
         <BookCard en="MONTHLY" title="월별 매출 · 매입 · 이익률">
           <div className="h-[280px] -ml-2"><ResponsiveContainer width="100%" height="100%">
@@ -276,7 +277,7 @@ function RetireCaseSheet({ company, u, c, profile, resign, approvals, isViewer, 
     <Sheet side en="RETIREMENT · SETTLEMENT" title={`${u.name || u.email} 퇴직 정산`} onClose={onClose}
       footer={<><button type="button" onClick={onClose} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">닫기</button>{!isViewer && <button type="button" onClick={async () => { await save(); onClose(); }} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">저장</button>}</>}>
       <div className="rounded-2xl p-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
-        <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ESTIMATE · 계산</div>
+        <div className="text-[11px] font-extrabold tracking-[0.08em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ESTIMATE · 계산</div>
         <div className="grid grid-cols-2 gap-3 mt-2">
           <div><div className="text-[12px] text-white/60">퇴직금 {sev.eligible ? "" : "(1년 미만 — 대상 아님)"}</div><div className="text-[24px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(sev.amount)}원</div><div className="text-[11.5px] text-white/50">재직 {sev.days.toLocaleString()}일</div></div>
           <div><div className="text-[12px] text-white/60">미사용 연차수당</div><div className="text-[24px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(leavePay)}원</div><div className="text-[11.5px] text-white/50">{f.unusedLeave || 0}일</div></div>

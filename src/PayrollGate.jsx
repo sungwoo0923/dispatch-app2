@@ -166,7 +166,7 @@ function GateCard({ title, desc, children }) {
       <div className="w-full max-w-[440px] rounded-[24px] bg-white border border-[#E3E8F0] shadow-[0_24px_60px_rgba(15,26,48,0.14)] overflow-hidden">
         <div className="px-6 pt-6 pb-5 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
           <div className="w-12 h-12 rounded-2xl bg-white/10 ring-1 ring-white/20 grid place-items-center text-[#8FB0F0]"><LockIcon /></div>
-          <div className="mt-3 text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]">PAYROLL · LOCKED</div>
+          <div className="mt-3 text-[12px] font-extrabold tracking-[0.08em] text-[#8FB0F0]">PAYROLL · LOCKED</div>
           <div className="mt-0.5 text-[21px] font-black">{title}</div>
           {desc && <div className="mt-1 text-[14px] font-bold text-white/75 leading-relaxed">{desc}</div>}
         </div>
@@ -277,7 +277,7 @@ export default function PayrollGate({ company, canAdmin = false, children }) {
       {changing && (
         <div className="fixed inset-0 z-[100000] bg-[#0F1A30]/45 grid place-items-center px-3" onClick={() => { if (!(st?.usingDefault && (st?.admin || canAdmin))) setChanging(false); }}>
           <div className="w-full max-w-[440px] rounded-[24px] bg-white shadow-[0_24px_60px_rgba(15,26,48,0.3)] overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 pt-5 pb-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}><div className="text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]">PAYROLL · PASSWORD</div><div className="text-[19px] font-black">급여 비밀번호 변경</div><div className="text-[14px] font-bold text-white/75">바꾸면 다른 담당자는 새 비밀번호로 다시 열어야 해요</div></div>
+            <div className="px-6 pt-5 pb-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}><div className="text-[12px] font-extrabold tracking-[0.08em] text-[#8FB0F0]">PAYROLL · PASSWORD</div><div className="text-[19px] font-black">급여 비밀번호 변경</div><div className="text-[14px] font-bold text-white/75">바꾸면 다른 담당자는 새 비밀번호로 다시 열어야 해요</div></div>
             <div className="px-6 py-5">
               {st?.usingDefault && <div className="mb-3 rounded-xl bg-[#EEF3FC] border border-[#C9D6EE] px-3.5 py-2.5 text-[14px] font-bold text-[#1B2B4B]">처음 비밀번호(000000)를 쓰고 있어요. 새 비밀번호로 바꿔 주세요.</div>}
               {(st?.admin || canAdmin)

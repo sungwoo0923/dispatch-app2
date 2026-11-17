@@ -17,6 +17,10 @@ import { isDemoOn } from "./devDemoData";
 import { execAnalyticsDemo } from "./execAnalyticsDemo";
 import { myTurn, useApprovals, ApprovalDocPreview } from "./Approval";
 import { C } from "./dailyReportCharts";
+import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 이익 · 이익률 색(플러스 빨강 · 마이너스 파랑)
+// ⭐ 2026-11-17 이익 금액 · 이익률 글자(색만 입힘)
+const PAmt = ({ v, children }) => <span style={{ color: profitColor(v) }}>{children}</span>;
+const PRate = ({ v, children }) => <span style={{ color: profitRateColor(v) }}>{children}</span>;
 import { addDay, kstToday, fmt, man, eok, md, dateOf, toWon, isBizDay, rangeDays, dayDiff, mdDow } from "./dailyReportCore";
 import { Delta, Card, Measure, Svg, Seg, Legend, useWidth, EBX_CSS } from "./DailyReport";
 import { plMonthly, receivables, dsoOf, clientTable, vehicleTable, priceWatch, cashForecast, salesTrend, liveRows, fleetIndex, monthsBack, ymOf, COGS_ACCOUNTS } from "./execAnalyticsCore";
@@ -201,7 +205,7 @@ function PlTab({ rows, fleet, ledger, recurring, today, compact, wide }) {
       { l: `${Number(cur.m.slice(5, 7))}월 매출`, v: fmt(man(cur.sale)), u: "만원", d: prev ? (prev.sale ? ((cur.sale - prev.sale) / prev.sale) * 100 : null) : undefined, sub: "전월 대비" },
       { l: "매입(운임)", v: fmt(man(cur.cost)), u: "만원", sub: `용차 ${cur.cost ? ((cur.hire / cur.cost) * 100).toFixed(0) : 0}%`, d: prev && prev.cost ? ((cur.cost - prev.cost) / prev.cost) * 100 : undefined },
       { l: "판관비", v: fmt(man(cur.sgaTotal)), u: "만원", sub: cur.est ? "고정비로 추정" : "장부 기준", d: prev && prev.sgaTotal ? ((cur.sgaTotal - prev.sgaTotal) / prev.sgaTotal) * 100 : undefined },
-      { l: "영업이익", v: fmt(man(cur.op)), u: "만원", sub: `이익률 ${cur.om.toFixed(1)}%`, d: prev ? cur.om - prev.om : undefined, dUnit: "%p" },
+      { l: "영업이익", v: fmt(man(cur.op)), u: "만원", tone: profitColor(cur.op), sub: `이익률 ${cur.om.toFixed(1)}%`, d: prev ? cur.om - prev.om : undefined, dUnit: "%p" },
       { l: "최근 12개월 매출", v: (tot.sale / 1e8).toFixed(1), u: "억원", sub: `영업이익 ${eok(tot.op)}원 · ${tot.sale ? ((tot.op / tot.sale) * 100).toFixed(1) : "0.0"}%` },
     ]} cols={5} />
     <div style={{ display: "grid", gridTemplateColumns: wide ? "minmax(0,1.55fr) minmax(0,1fr)" : "1fr", gap: compact ? 14 : 20, alignItems: "start" }}>
@@ -223,7 +227,7 @@ function PlTab({ rows, fleet, ledger, recurring, today, compact, wide }) {
             </div>
           ))}
         </div>
-        <div className="ebx-row" style={{ marginTop: 6, paddingTop: 14, display: "flex", justifyContent: "space-between", fontSize: 17 }}><b>영업이익</b><b className="ebx-num" style={{ fontSize: 20 }}>{won(cur.op)} <span style={{ fontSize: 15, color: C.t2, fontWeight: 600 }}>({cur.om.toFixed(1)}%)</span></b></div>
+        <div className="ebx-row" style={{ marginTop: 6, paddingTop: 14, display: "flex", justifyContent: "space-between", fontSize: 17 }}><b>영업이익</b><b className="ebx-num" style={{ fontSize: 20, color: profitColor(cur.op) }}>{won(cur.op)} <span style={{ fontSize: 15, color: C.t2, fontWeight: 600 }}>({cur.om.toFixed(1)}%)</span></b></div>
       </Card>
     </div>
     <Card compact={compact} title="이익률 추이" sub="매출총이익률(매출 − 매입) · 영업이익률(− 판관비) · 최근 12개월" right={<Legend items={[[C.s1, "매출총이익률"], [C.n1, "영업이익률"]]} />}>
@@ -250,8 +254,8 @@ function ClientTab({ rows, arPay, today, compact, W, fixedRows = [] }) {
   const cols = [
     { k: "n", l: "거래처", cell: (r) => <span style={{ fontWeight: 700 }}>{r.n}</span> },
     { k: "sale", l: "매출", num: true, cell: (r) => won(r.sale) },
-    { k: "profit", l: "이익", num: true, cell: (r) => won(r.profit) },
-    { k: "margin", l: "이익률", num: true, cell: (r) => pct(r.margin) },
+    { k: "profit", l: "이익", num: true, cell: (r) => <PAmt v={r.profit}>{won(r.profit)}</PAmt> },
+    { k: "margin", l: "이익률", num: true, cell: (r) => <PRate v={r.margin}>{pct(r.margin)}</PRate> },
     { k: "avg", l: "평균 단가", short: "단가", num: true, cell: (r) => won(r.avg) },
     { k: "cnt", l: "건수", num: true, cell: (r) => `${fmt(r.cnt)}건` },
     { k: "dSale", l: "매출 증감", short: "증감", num: true, get: (r) => r.dSale ?? -999, cell: (r) => (r.dSale == null ? <span style={{ color: C.flat }}>신규</span> : <Delta v={r.dSale} size={16} />) },
@@ -280,7 +284,7 @@ function ClientDetail({ c, compact, onClose }) {
     <Card compact={compact} title={c.n} sub={`매출 ${won(c.sale)} · 이익률 ${pct(c.margin)} · ${fmt(c.cnt)}건 · 마지막 오더 ${c.last ? md(c.last) : "-"}`} right={<button type="button" className="ebx-link" onClick={onClose}>닫기</button>} id="exa-client-detail">
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 10, marginTop: 16 }}>
         {[["평균 단가", won(c.avg), c.dAvg], ["이익률", pct(c.margin), c.pMargin != null ? c.margin - c.pMargin : null, "%p"], ["미수금", won(c.ar.outstanding)], ["평균 미수일", c.ar.outstanding ? `${Math.round(c.ar.avgAge)}일` : "–"]].map(([l, v, d, u]) => (
-          <div key={l} className="ebx-stat"><div className="ebx-lbl">{l}</div><div className="ebx-num" style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{v}</div>{d !== undefined && <div style={{ marginTop: 2 }}><Delta v={d} unit={u || "%"} size={15} /></div>}</div>
+          <div key={l} className="ebx-stat"><div className="ebx-lbl">{l}</div><div className="ebx-num" style={{ fontSize: 24, fontWeight: 800, marginTop: 4, color: l === "이익률" ? profitRateColor(c.margin) : undefined }}>{v}</div>{d !== undefined && <div style={{ marginTop: 2 }}><Delta v={d} unit={u || "%"} size={15} /></div>}</div>
         ))}
       </div>
       <h3 className="ebx-h3" style={{ marginTop: 22 }}>노선별</h3>
@@ -289,7 +293,7 @@ function ClientDetail({ c, compact, onClose }) {
           <div key={r.rt} className={i ? "ebx-row" : ""} style={{ padding: "11px 0", display: "grid", gridTemplateColumns: "minmax(0,1fr) auto auto", gap: 14, alignItems: "baseline", fontSize: 16 }}>
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.rt} <span style={{ color: C.t3, fontSize: 15 }}>{r.cnt}건</span></span>
             <span className="ebx-num">{won(r.sale)}</span>
-            <span className="ebx-num" style={{ color: r.sale && r.profit / r.sale < 0.08 ? C.err : C.t2, fontWeight: 600, minWidth: 56, textAlign: "right" }}>{pct(r.sale ? (r.profit / r.sale) * 100 : 0)}</span>
+            <span className="ebx-num" style={{ color: profitRateColor(r.sale ? (r.profit / r.sale) * 100 : 0, { neutral: C.t2 }), fontWeight: 600, minWidth: 56, textAlign: "right" }}>{pct(r.sale ? (r.profit / r.sale) * 100 : 0)}</span>
           </div>
         ))}
       </div>
@@ -315,11 +319,11 @@ function FleetTab({ rows, fleet, today, compact, W }) {
   const avgUtil = list.length ? list.reduce((s, v) => s + v.util, 0) / list.length : 0;
   const cols = [
     { k: "plate", l: "차량", get: (r) => r.plate, cell: (r) => <span style={{ fontWeight: 700 }}>{r.plate} <span style={{ color: C.t2, fontWeight: 500 }}>{r.name}</span></span> },
-    { k: "profit", l: "이익", num: true, cell: (r) => won(r.profit) },
+    { k: "profit", l: "이익", num: true, cell: (r) => <PAmt v={r.profit}>{won(r.profit)}</PAmt> },
     { k: "type", l: "구분", cell: (r) => <span className="exa-tag">{r.type}</span> },
     { k: "sale", l: "매출", num: true, cell: (r) => won(r.sale) },
     { k: "pay", l: "기사 운임", short: "운임", num: true, cell: (r) => won(r.pay) },
-    { k: "margin", l: "이익률", num: true, cell: (r) => pct(r.margin) },
+    { k: "margin", l: "이익률", num: true, cell: (r) => <PRate v={r.margin}>{pct(r.margin)}</PRate> },
     { k: "days", l: "가동일수", short: "가동일", num: true, cell: (r) => `${r.days}일` },
     { k: "util", l: "가동률", num: true, cell: (r) => <span style={{ color: r.util < 50 ? C.err : C.t1 }}>{pct(r.util, 0)}</span> },
     { k: "last", l: "마지막 운행", short: "최근 운행", cell: (r) => (r.last ? md(r.last) : "없음") },
@@ -330,7 +334,7 @@ function FleetTab({ rows, fleet, today, compact, W }) {
     <Stats compact={compact} items={[
       { l: "소속 차량", v: fmt(list.length), u: "대", sub: byType.map((x) => `${x.t} ${x.n}`).join(" · ") },
       { l: "평균 가동률", v: avgUtil.toFixed(0), u: "%", sub: `가동일 ÷ 영업일` },
-      { l: "소속 차량 이익", v: fmt(man(list.reduce((s, v) => s + v.profit, 0))), u: "만원", sub: `매출 ${won(list.reduce((s, v) => s + v.sale, 0))}` },
+      { l: "소속 차량 이익", v: fmt(man(list.reduce((s, v) => s + v.profit, 0))), u: "만원", tone: profitColor(list.reduce((s, v) => s + v.profit, 0)), sub: `매출 ${won(list.reduce((s, v) => s + v.sale, 0))}` },
       { l: "쉬는 차량", v: fmt(idle.length), u: "대", tone: idle.length ? C.err : undefined, sub: "7일 넘게 운행 없음" },
     ]} />
     <div style={{ display: "grid", gridTemplateColumns: wide ? "minmax(0,1.7fr) minmax(340px,1fr)" : "1fr", gap: compact ? 14 : 20, alignItems: "start" }}>
@@ -341,7 +345,7 @@ function FleetTab({ rows, fleet, today, compact, W }) {
         <Card compact={compact} title="구분별" sub="평균 가동률 · 이익">
           {byType.map((x, i) => (
             <div key={x.t} className={i ? "ebx-row" : ""} style={{ padding: "13px 0", marginTop: i ? 0 : 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}><b>{x.t} <span style={{ color: C.t2, fontWeight: 500 }}>{x.n}대</span></b><span className="ebx-num">{won(x.profit)}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16 }}><b>{x.t} <span style={{ color: C.t2, fontWeight: 500 }}>{x.n}대</span></b><span className="ebx-num" style={{ color: profitColor(x.profit) }}>{won(x.profit)}</span></div>
               <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 56px", gap: 10, alignItems: "center", marginTop: 8 }}><div className="exa-bar"><i style={{ width: `${Math.min(100, x.util)}%` }} /></div><span className="ebx-num" style={{ textAlign: "right", fontSize: 15 }}>{x.util.toFixed(0)}%</span></div>
             </div>
           ))}
@@ -375,7 +379,7 @@ function PriceTab({ rows, today, compact, W }) {
     { k: "avg", l: "최근 4주 단가", short: "지금 단가", num: true, cell: (r) => won(r.avg) },
     { k: "pAvg", l: "직전 8주 단가", short: "전 단가", num: true, cell: (r) => won(r.pAvg) },
     { k: "cnt", l: "건수", num: true, cell: (r) => `${r.cnt}건` },
-    { k: "margin", l: "이익률", num: true, cell: (r) => <span style={{ color: r.margin < 8 ? C.err : C.t1 }}>{pct(r.margin)}</span> },
+    { k: "margin", l: "이익률", num: true, cell: (r) => <span style={{ color: profitRateColor(r.margin, { neutral: C.t1 }) }}>{pct(r.margin)}</span> },
   ];
   return (<>
     <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}><Seg value={view} onChange={setView} items={[["route", "노선별"], ["client", "거래처별"]]} /><span className="ebx-sub">최근 4주({md(cur[0])}~{md(cur[1])}) 평균 단가 vs 직전 8주 · 양쪽 5건 이상만</span></div>

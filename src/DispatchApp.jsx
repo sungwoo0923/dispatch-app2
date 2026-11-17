@@ -2978,7 +2978,7 @@ import { useCompanyFeatures } from "./companyFeatures";
 import { useBizModules, isBizMenu, parseBizMenu, bizTopMenus, bizSideGroups, bizFirstMenu, bizMenuKey, readBiz, writeBiz, BIZ_MENU_ICON, bizInfo as bizInfoOf, bizMenuLabel as bizMenuLabelOf } from "./bizModules";
 import { reportScreen, installScreenVisibility } from "./screenReport";
 import { useRouteGroupFilter, RouteGroupBar, routeGroupOf, RouteGroupField, SheetLiveChip, rgOnScreen, RG_NONE, rgLabel, RG_TAB_OFF, RouteGroupSelect, filterRouteGroup } from "./routeGroups";
-import { MarginPct, marginPctText } from "./marginPct"; // ⭐ 2026-11-17 정산관리 수익 · 수수료 옆 매출 대비 %
+import { MarginPct, marginPctText, profitCls, profitRateCls } from "./marginPct"; // ⭐ 2026-11-17 정산관리 수익 · 수수료 옆 매출 대비 % · 이익 색(플러스 빨강 · 마이너스 파랑)
 import { settleStartTab } from "./settleStart";
 import { QuickOrderLine, useDriverSuggest, DriverSuggestCell, AssignConfirm } from "./SmartDispatchUI"; // ⭐ 2026-11-13 빠른 등록 · 추천 기사
 const SettleHome = React.lazy(() => import("./SettleHome")); // 🧭 정산 홈(처음 열 때 받는다)
@@ -20723,7 +20723,7 @@ setConfirmChange(null);
           {fareOn && form.운임구분 && (
             <div className="rounded-xl bg-[#EAF0FB] border border-[#C9D5EA] px-3 py-2 col-span-2">
               <div className="text-[12px] font-bold text-gray-500">운임구분</div>
-              <div className="text-[15px] font-black text-[#1B2B4B]">{form.운임구분} <span className="text-[12.5px] font-bold text-[#2D4C82]">수수료 {(Number(form.청구운임 || 0) - Number(form.기사운임 || 0)).toLocaleString()}원</span></div>
+              <div className="text-[15px] font-black text-[#1B2B4B]">{form.운임구분} <span className={`text-[12.5px] font-bold ${profitCls(Number(form.청구운임 || 0) - Number(form.기사운임 || 0), "text-[#2D4C82]")}`}>수수료 {(Number(form.청구운임 || 0) - Number(form.기사운임 || 0)).toLocaleString()}원</span></div>
             </div>
           )}
         </div>
@@ -21366,7 +21366,7 @@ setConfirmChange(null);
                 </div>
                 <div className="flex items-center gap-4 text-[11px]">
                   <span className="text-gray-500">기사 {driver.toLocaleString()}원</span>
-                  <span className={margin >= 0 ? "text-emerald-600 font-bold" : "text-red-500 font-bold"}>
+                  <span className={`font-bold ${profitCls(margin, "text-gray-500")}`}>{/* ⭐ 2026-11-17 마진 — 플러스 빨강 · 마이너스 파랑 */}
                     마진 {margin.toLocaleString()}원 ({marginPct}%)
                   </span>
                 </div>
@@ -25220,11 +25220,11 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                     {/* 📑 2026-11-15 손실이면 눌러서 손실 사유 적기(src/lossReason.js) */}
                     {fee < 0 ? (
                       <button type="button" onClick={() => editLossReason(r, fee, (v) => patchDispatch(r._id, { 손실사유: v, __col: r.__col }))}
-                        title={lossReasonOf(r) ? `손실 사유: ${lossReasonOf(r)}` : "눌러서 손실 사유 적기"} className="font-bold whitespace-nowrap text-red-600 underline decoration-dotted underline-offset-2 hover:text-red-700">
+                        title={lossReasonOf(r) ? `손실 사유: ${lossReasonOf(r)}` : "눌러서 손실 사유 적기"} className="font-bold whitespace-nowrap text-[#2D6BE0] underline decoration-dotted underline-offset-2 hover:text-[#1E4FB0]">{/* ⭐ 2026-11-17 손실(마이너스)은 파랑 */}
                         {formatComma(fee)}{r.손실사유 ? <span className="ml-1 text-[10.5px] px-1 rounded bg-red-50 border border-red-200">사유</span> : null}
                       </button>
                     ) : (
-                      <span className={`font-bold whitespace-nowrap ${fee < 0 ? "text-red-600" : "text-blue-600"}`}>
+                      <span className={`font-bold whitespace-nowrap ${profitCls(fee, "text-gray-500")}`}>{/* ⭐ 2026-11-17 수수료 — 플러스 빨강 · 마이너스 파랑(예전엔 반대) */}
                         {formatComma(fee)}
                       </span>
                     )}
@@ -29078,7 +29078,7 @@ const handleDailyReport = async () => {
     const pay    = Number(String(r.기사운임  || "0").replace(/[^\d-]/g, "")) || 0;
     const fee    = charge - pay;
     const rate   = charge > 0 ? Math.round(fee / charge * 100) : null;
-    const rateClass = rate === null ? "" : rate >= 20 ? "rate-good" : rate < 10 ? "rate-bad" : "";
+    const rateClass = rate === null ? "" : rate > 0 ? "rate-good" : rate < 0 ? "rate-bad" : ""; // ⭐ 2026-11-17 수수료율 — 플러스 빨강 · 마이너스 파랑
     return `<tr>
       <td class="center">${i + 1}</td>
       <td class="center">${r.상차일 || ""}</td>
@@ -29089,7 +29089,7 @@ const handleDailyReport = async () => {
       <td class="center">${r.전화번호 || ""}</td>
       <td class="num">${charge ? charge.toLocaleString() : "-"}</td>
       <td class="num">${pay ? pay.toLocaleString() : "-"}</td>
-      <td class="num">${fee ? fee.toLocaleString() : "-"}</td>
+      <td class="num ${fee > 0 ? "rate-good" : fee < 0 ? "rate-bad" : ""}">${fee ? fee.toLocaleString() : "-"}</td>
       <td class="num ${rateClass}">${rate !== null ? rate + "%" : "-"}</td>
       <td class="center">${r.지급방식 || ""}</td>
       <td class="center">${r.배차방식 || ""}</td>
@@ -29161,8 +29161,8 @@ const handleDailyReport = async () => {
   .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:#1B2B4B; border-radius:10px 10px 0 0; }
   .kpi-label { font-size:9px; font-weight:700; color:#9ca3af; letter-spacing:0.4px; text-transform:uppercase; margin-bottom:5px; }
   .kpi-value { font-size:18px; font-weight:900; color:#111827; letter-spacing:-0.5px; line-height:1.1; }
-  .kpi-value.pos { color:#059669; }
-  .kpi-value.neg { color:#dc2626; }
+  .kpi-value.pos { color:#E5484D; } /* ⭐ 2026-11-17 수수료(이익) 플러스 빨강 */
+  .kpi-value.neg { color:#2D6BE0; } /* 마이너스 파랑 */
   .kpi-diff { font-size:9px; font-weight:500; margin-top:6px; padding-top:5px; border-top:1px dashed #f3f4f6; color:#6b7280; }
   .kpi-diff .up   { color:#059669; font-weight:700; }
   .kpi-diff .down { color:#dc2626; font-weight:700; }
@@ -29189,8 +29189,8 @@ const handleDailyReport = async () => {
   tbody tr:nth-child(even) td { background:#fafafa; }
   td.center { text-align:center; }
   td.num { text-align:right; padding-right:8px; font-variant-numeric:tabular-nums; }
-  td.rate-good { color:#059669; font-weight:700; }
-  td.rate-bad  { color:#dc2626; font-weight:700; }
+  td.rate-good { color:#E5484D; font-weight:700; }
+  td.rate-bad  { color:#2D6BE0; font-weight:700; }
   tr.total-row td { background:#eef2f7 !important; font-weight:900; color:#1B2B4B; font-size:11px; border-top:2px solid #1B2B4B; }
 
   /* ── 하단 ── */
@@ -33661,7 +33661,7 @@ value={copyTarget?.화물수량 || ""}
               <div>
                 <label>수수료</label>
                 <input autoComplete="off"
-                  className={`border p-2 rounded w-full bg-gray-100 font-bold ${(editTarget.수수료 || 0) < 0 ? "text-red-600" : "text-blue-700"}`}
+                  className={`border p-2 rounded w-full bg-gray-100 font-bold ${profitCls(editTarget.수수료 || 0, "text-[#1B2B4B]")}`} // ⭐ 2026-11-17 수수료 — 플러스 빨강 · 마이너스 파랑(예전엔 반대)
                   value={(editTarget.수수료 || 0).toLocaleString()}
                   readOnly
                 />
@@ -36765,7 +36765,7 @@ const handleDailyReport = async () => {
     const pay    = Number(String(r.기사운임  || "0").replace(/[^\d-]/g, "")) || 0;
     const fee    = charge - pay;
     const rate   = charge > 0 ? Math.round(fee / charge * 100) : null;
-    const rateClass = rate === null ? "" : rate >= 20 ? "rate-good" : rate < 10 ? "rate-bad" : "";
+    const rateClass = rate === null ? "" : rate > 0 ? "rate-good" : rate < 0 ? "rate-bad" : ""; // ⭐ 2026-11-17 수수료율 — 플러스 빨강 · 마이너스 파랑
     return `<tr>
       <td class="center">${i + 1}</td>
       <td class="center">${r.상차일 || ""}</td>
@@ -36776,7 +36776,7 @@ const handleDailyReport = async () => {
       <td class="center">${r.전화번호 || ""}</td>
       <td class="num">${charge ? charge.toLocaleString() : "-"}</td>
       <td class="num">${pay ? pay.toLocaleString() : "-"}</td>
-      <td class="num">${fee ? fee.toLocaleString() : "-"}</td>
+      <td class="num ${fee > 0 ? "rate-good" : fee < 0 ? "rate-bad" : ""}">${fee ? fee.toLocaleString() : "-"}</td>
       <td class="num ${rateClass}">${rate !== null ? rate + "%" : "-"}</td>
       <td class="center">${r.지급방식 || ""}</td>
       <td class="center">${r.배차방식 || ""}</td>
@@ -36821,8 +36821,8 @@ const handleDailyReport = async () => {
   .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:#1B2B4B; border-radius:10px 10px 0 0; }
   .kpi-label { font-size:9px; font-weight:700; color:#9ca3af; letter-spacing:0.4px; text-transform:uppercase; margin-bottom:5px; }
   .kpi-value { font-size:18px; font-weight:900; color:#111827; letter-spacing:-0.5px; line-height:1.1; }
-  .kpi-value.pos { color:#059669; }
-  .kpi-value.neg { color:#dc2626; }
+  .kpi-value.pos { color:#E5484D; } /* ⭐ 2026-11-17 수수료(이익) 플러스 빨강 */
+  .kpi-value.neg { color:#2D6BE0; } /* 마이너스 파랑 */
   .kpi-diff { font-size:9px; font-weight:500; margin-top:6px; padding-top:5px; border-top:1px dashed #f3f4f6; color:#6b7280; }
   .kpi-diff .up   { color:#059669; font-weight:700; }
   .kpi-diff .down { color:#dc2626; font-weight:700; }
@@ -36843,8 +36843,8 @@ const handleDailyReport = async () => {
   tbody tr:nth-child(even) td { background:#fafafa; }
   td.center { text-align:center; }
   td.num { text-align:right; padding-right:8px; font-variant-numeric:tabular-nums; }
-  td.rate-good { color:#059669; font-weight:700; }
-  td.rate-bad  { color:#dc2626; font-weight:700; }
+  td.rate-good { color:#E5484D; font-weight:700; }
+  td.rate-bad  { color:#2D6BE0; font-weight:700; }
   tr.total-row td { background:#eef2f7 !important; font-weight:900; color:#1B2B4B; font-size:11px; border-top:2px solid #1B2B4B; }
   .report-footer { margin-top:12px; display:flex; justify-content:space-between; }
   .footer-note { font-size:9px; color:#d1d5db; }
@@ -40991,10 +40991,10 @@ return (
                     {/* 📑 2026-11-15 손실(음수)이면 눌러서 손실 사유 적기 — 팀 실적 보고서 리스크 점검에 들어간다(src/lossReason.js) */}
                     {fee < 0 && !isViewer ? (
                       <button type="button" onClick={() => editLossReason(row, fee, (v) => patchDispatch(r._id || id, { 손실사유: v, ...(r.__col ? { __col: r.__col } : {}) }))}
-                        title={lossReasonOf(row) ? `손실 사유: ${lossReasonOf(row)}` : "눌러서 손실 사유 적기"} className="font-bold text-red-500 underline decoration-dotted underline-offset-2 hover:text-red-700">
+                        title={lossReasonOf(row) ? `손실 사유: ${lossReasonOf(row)}` : "눌러서 손실 사유 적기"} className="font-bold text-[#2D6BE0] underline decoration-dotted underline-offset-2 hover:text-[#1E4FB0]">{/* ⭐ 2026-11-17 손실(마이너스)은 파랑 */}
                         {fee.toLocaleString()}{row.손실사유 ? <span className="ml-1 text-[10.5px] no-underline px-1 rounded bg-red-50 border border-red-200">사유</span> : null}
                       </button>
-                    ) : <span className={`font-bold ${fee < 0 ? "text-red-500" : "text-blue-600"}`}>{fee.toLocaleString()}</span>}
+                    ) : <span className={`font-bold ${profitCls(fee, "text-gray-500")}`}>{fee.toLocaleString()}</span>}{/* ⭐ 2026-11-17 플러스 빨강 · 마이너스 파랑 */}
                   </td>
                   {/* ⭐ 2026-11-02 운임규칙 — 운임구분 열(규칙 사용 회사만) */}
                   {fareOn && (
@@ -42052,7 +42052,7 @@ return (
               <div>
                 <label>수수료</label>
                 <input autoComplete="off"
-                  className={`border p-2 rounded w-full bg-gray-100 font-bold ${(editTarget.수수료 || 0) < 0 ? "text-red-600" : "text-blue-700"}`}
+                  className={`border p-2 rounded w-full bg-gray-100 font-bold ${profitCls(editTarget.수수료 || 0, "text-[#1B2B4B]")}`} // ⭐ 2026-11-17 수수료 — 플러스 빨강 · 마이너스 파랑(예전엔 반대)
                   value={(editTarget.수수료 || 0).toLocaleString()}
                   readOnly
                 />
@@ -46556,7 +46556,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
 
   const CalcCell = ({ value, highlight = false }) => (
     <td className={`px-1 py-0.5 text-center border-r border-gray-100 text-[12px] font-semibold ${
-      highlight ? (value >= 0 ? "text-emerald-700" : "text-rose-600") : cellClass(value)
+      highlight ? profitCls(value, "text-gray-400") : cellClass(value) /* ⭐ 2026-11-17 이익 줄 — 플러스 빨강 · 마이너스 파랑 */
     }`}>
       {value !== 0 ? value.toLocaleString() : "–"}
     </td>
@@ -46564,7 +46564,7 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
 
   const RateCell = ({ profit, revenue }) => (
     <td className={`px-1 py-0.5 text-center border-r border-gray-100 text-[11px] font-medium ${
-      revenue ? (profit / revenue >= 0 ? "text-emerald-600" : "text-rose-500") : "text-gray-400"
+      revenue ? profitRateCls((profit / revenue) * 100, "text-gray-400") : "text-gray-400" /* ⭐ 2026-11-17 이익률 — 플러스 빨강 · 마이너스 파랑 */
     }`}>
       {pct(profit, revenue)}
     </td>
@@ -46653,15 +46653,15 @@ function ProfitLossReport({ dispatchData = [], fixedRows = [], clients = [], pla
         if (isPct) return <RateCell key={m} profit={calcFn(m)} revenue={totalRevenue(m)} />;
         return (
           <td key={m} className={`px-1 py-1 text-center border-r border-gray-100 text-[12px] ${bold ? "font-bold" : "font-semibold"} ${
-            isHighlight ? (val >= 0 ? "text-emerald-700" : "text-rose-600") : cellClass(val)
+            isHighlight ? profitCls(val, "text-gray-400") : cellClass(val) /* ⭐ 2026-11-17 이익 합계 줄 — 플러스 빨강 · 마이너스 파랑 */
           }`}>
             {val !== 0 ? val.toLocaleString() : "–"}
           </td>
         );
       })}
       <td className={`px-1 py-1 text-center text-[12px] ${bold ? "font-bold" : "font-semibold"} ${
-        isPct ? "" : isHighlight
-          ? (yearTotal(calcFn) >= 0 ? "text-emerald-700" : "text-rose-600")
+        isPct ? profitRateCls(yearTotal(totalRevenue) ? (yearTotal(calcFn) / yearTotal(totalRevenue)) * 100 : 0) : isHighlight
+          ? profitCls(yearTotal(calcFn), "text-gray-400")
           : cellClass(yearTotal(calcFn))
       }`}>
         {isPct ? pct(yearTotal(calcFn), yearTotal(totalRevenue)) : (yearTotal(calcFn) !== 0 ? yearTotal(calcFn).toLocaleString() : "–")}
@@ -49262,8 +49262,8 @@ function ClientPeriodQuery({ rows = [], clients = [] }) {
               <Metric label="오더건수" value={`${totals.count}건`} />
               <Metric label="청구운임" value={`${totals.sale.toLocaleString()}원`} valueClass="text-[#1B2B4B]" />
               <Metric label="기사운임" value={`${totals.driver.toLocaleString()}원`} />
-              <Metric label="수수료" value={`${totals.fee.toLocaleString()}원`} valueClass="text-emerald-600" />
-              <Metric label="수익률" value={`${totalRate.toFixed(1)}%`} valueClass="text-[#1B2B4B]" />
+              <Metric label="수수료" value={`${totals.fee.toLocaleString()}원`} valueClass={profitCls(totals.fee, "text-gray-900")} />{/* ⭐ 2026-11-17 플러스 빨강 · 마이너스 파랑 */}
+              <Metric label="수익률" value={`${totalRate.toFixed(1)}%`} valueClass={profitRateCls(totalRate, "text-[#1B2B4B]")} />
             </div>
 
             <div className="h-[260px]">
@@ -49307,8 +49307,8 @@ function ClientPeriodQuery({ rows = [], clients = [] }) {
                         <td className="border p-2">{r.count}건</td>
                         <td className="border p-2 text-[#1B2B4B] font-semibold">{r.sale.toLocaleString()}원</td>
                         <td className="border p-2 text-gray-600">{r.driver.toLocaleString()}원</td>
-                        <td className="border p-2 text-emerald-600 font-semibold">{r.fee.toLocaleString()}원</td>
-                        <td className="border p-2">{rate.toFixed(1)}%</td>
+                        <td className={`border p-2 font-semibold ${profitCls(r.fee)}`}>{r.fee.toLocaleString()}원</td>
+                        <td className={`border p-2 ${profitRateCls(rate)}`}>{rate.toFixed(1)}%</td>
                       </tr>
                     );
                   })}
@@ -49317,8 +49317,8 @@ function ClientPeriodQuery({ rows = [], clients = [] }) {
                     <td className="border p-2">{totals.count}건</td>
                     <td className="border p-2 text-[#1B2B4B]">{totals.sale.toLocaleString()}원</td>
                     <td className="border p-2 text-gray-700">{totals.driver.toLocaleString()}원</td>
-                    <td className="border p-2 text-emerald-700">{totals.fee.toLocaleString()}원</td>
-                    <td className="border p-2">{totalRate.toFixed(1)}%</td>
+                    <td className={`border p-2 ${profitCls(totals.fee)}`}>{totals.fee.toLocaleString()}원</td>
+                    <td className={`border p-2 ${profitRateCls(totalRate)}`}>{totalRate.toFixed(1)}%</td>
                   </tr>
                 </tbody>
               </table>
@@ -49504,7 +49504,7 @@ function SettlementTop10({ rows = [], allRows = [], targetMonth }) {
 
   const won = (n) => `${n.toLocaleString()}원`;
   const arrow = (n) => (n >= 0 ? "▲" : "▼");
-  const rateCls = (n) => (n >= 0 ? "text-emerald-600" : "text-rose-600");
+  const rateCls = (n) => (n > 0 ? "text-[#E5484D]" : n < 0 ? "text-[#2D6BE0]" : "text-gray-400"); // ⭐ 2026-11-17 늘면 빨강 · 줄면 파랑
 
   return (
     <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-5">
@@ -49529,9 +49529,9 @@ function SettlementTop10({ rows = [], allRows = [], targetMonth }) {
                   <span className={`text-[11px] ${rateCls(r.saleRate)}`}>{arrow(r.saleRate)}{Math.abs(r.saleRate).toFixed(1)}%</span>
                 </span>
               </td>
-              <td className="border p-2 text-emerald-600">
+              <td className="border p-2">
                 <span className="inline-flex items-center gap-1">
-                  <span>{won(r.profit)}</span>
+                  <span className={profitCls(r.profit)}>{won(r.profit)}</span>
                   <span className={`text-[11px] ${rateCls(r.profitRate)}`}>{arrow(r.profitRate)}{Math.abs(r.profitRate).toFixed(1)}%</span>
                 </span>
               </td>
@@ -49660,7 +49660,7 @@ function SettlementNewClients({ rows = [] }) {
               <td className="border p-2">{r.firstDate}</td>
               <td className="border p-2">{r.cnt}</td>
               <td className="border p-2">{r.sale.toLocaleString()}원</td>
-              <td className="border p-2 text-emerald-600">{r.profit.toLocaleString()}원</td>
+              <td className={`border p-2 ${profitCls(r.profit)}`}>{r.profit.toLocaleString()}원</td>
             </tr>
           ))}
         </tbody>
@@ -49803,16 +49803,16 @@ function YearlySummaryChart({ rows = [], year, clients = [], places = [] }) {
               <tr key={r.month} className="hover:bg-gray-50">
                 <td className="border p-2 font-semibold">{r.month}</td>
                 <td className="border p-2 text-indigo-600">{r.sale.toLocaleString()}원</td>
-                <td className="border p-2 text-emerald-600">{r.profit.toLocaleString()}원</td>
-                <td className="border p-2">{r.rate.toFixed(1)}%</td>
+                <td className={`border p-2 ${profitCls(r.profit)}`}>{r.profit.toLocaleString()}원</td>{/* ⭐ 2026-11-17 수익 — 플러스 빨강 · 마이너스 파랑 */}
+                <td className={`border p-2 ${profitRateCls(r.rate)}`}>{r.rate.toFixed(1)}%</td>
                 {hasExcludedClients && (
                   <>
                     <td className="border p-2 text-indigo-600">{r.pureSale.toLocaleString()}원</td>
-                    <td className="border p-2 text-emerald-600">{r.pureProfit.toLocaleString()}원</td>
-                    <td className="border p-2">{r.pureRate.toFixed(1)}%</td>
+                    <td className={`border p-2 ${profitCls(r.pureProfit)}`}>{r.pureProfit.toLocaleString()}원</td>
+                    <td className={`border p-2 ${profitRateCls(r.pureRate)}`}>{r.pureRate.toFixed(1)}%</td>
                     <td className="border p-2 text-rose-600">{r.freshSale.toLocaleString()}원</td>
-                    <td className="border p-2 text-rose-600">{r.freshProfit.toLocaleString()}원</td>
-                    <td className="border p-2">{r.freshRate.toFixed(1)}%</td>
+                    <td className={`border p-2 ${profitCls(r.freshProfit)}`}>{r.freshProfit.toLocaleString()}원</td>
+                    <td className={`border p-2 ${profitRateCls(r.freshRate)}`}>{r.freshRate.toFixed(1)}%</td>
                   </>
                 )}
               </tr>
@@ -49820,16 +49820,16 @@ function YearlySummaryChart({ rows = [], year, clients = [], places = [] }) {
             <tr className="font-bold bg-gray-50">
               <td className="border p-2">합계</td>
               <td className="border p-2 text-indigo-700">{total.sale.toLocaleString()}원</td>
-              <td className="border p-2 text-emerald-700">{total.profit.toLocaleString()}원</td>
-              <td className="border p-2">{total.sale ? ((total.profit / total.sale) * 100).toFixed(1) : "0.0"}%</td>
+              <td className={`border p-2 ${profitCls(total.profit)}`}>{total.profit.toLocaleString()}원</td>
+              <td className={`border p-2 ${profitRateCls(total.sale ? (total.profit / total.sale) * 100 : 0)}`}>{total.sale ? ((total.profit / total.sale) * 100).toFixed(1) : "0.0"}%</td>
               {hasExcludedClients && (
                 <>
                   <td className="border p-2 text-indigo-700">{total.pureSale.toLocaleString()}원</td>
-                  <td className="border p-2 text-emerald-700">{total.pureProfit.toLocaleString()}원</td>
-                  <td className="border p-2">{total.pureSale ? ((total.pureProfit / total.pureSale) * 100).toFixed(1) : "0.0"}%</td>
+                  <td className={`border p-2 ${profitCls(total.pureProfit)}`}>{total.pureProfit.toLocaleString()}원</td>
+                  <td className={`border p-2 ${profitRateCls(total.pureSale ? (total.pureProfit / total.pureSale) * 100 : 0)}`}>{total.pureSale ? ((total.pureProfit / total.pureSale) * 100).toFixed(1) : "0.0"}%</td>
                   <td className="border p-2 text-rose-600">{total.freshSale.toLocaleString()}원</td>
-                  <td className="border p-2 text-rose-600">{total.freshProfit.toLocaleString()}원</td>
-                  <td className="border p-2">{total.freshSale ? ((total.freshProfit / total.freshSale) * 100).toFixed(1) : "0.0"}%</td>
+                  <td className={`border p-2 ${profitCls(total.freshProfit)}`}>{total.freshProfit.toLocaleString()}원</td>
+                  <td className={`border p-2 ${profitRateCls(total.freshSale ? (total.freshProfit / total.freshSale) * 100 : 0)}`}>{total.freshSale ? ((total.freshProfit / total.freshSale) * 100).toFixed(1) : "0.0"}%</td>
                 </>
               )}
             </tr>
@@ -49850,8 +49850,8 @@ function ClientInsight({ rows = [] }) {
     <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-2">
       <div className="flex justify-between text-[13px]"><span className="text-gray-600">매출</span><span className="font-semibold">{sale.toLocaleString()}원</span></div>
       <div className="flex justify-between text-[13px]"><span className="text-gray-600">운반비</span><span>{driver.toLocaleString()}원</span></div>
-      <div className="flex justify-between text-[13px] font-semibold"><span className="text-gray-700">수익</span><span className="text-emerald-600">{profit.toLocaleString()}원</span></div>
-      <div className="text-[11px] text-gray-500 text-right">수익률 {rate.toFixed(1)}%</div>
+      <div className="flex justify-between text-[13px] font-semibold"><span className="text-gray-700">수익</span><span className={profitCls(profit, "text-gray-700")}>{profit.toLocaleString()}원</span></div>{/* ⭐ 2026-11-17 플러스 빨강 · 마이너스 파랑 */}
+      <div className="text-[11px] text-gray-500 text-right">수익률 <span className={profitRateCls(rate)}>{rate.toFixed(1)}%</span></div>
     </div>
   );
 }
@@ -49876,7 +49876,7 @@ function SettlementDetailPopup({ client, rows = [], onClose }) {
           <div className="space-y-2 text-[13px] mb-4">
             <div className="flex justify-between"><span><EditableText id="settlement.detailPopup.총매출" defaultText="총 매출" /></span><span className="font-semibold">{sale.toLocaleString()}원</span></div>
             <div className="flex justify-between"><span><EditableText id="settlement.detailPopup.총운반비" defaultText="총 운반비" /></span><span>{driver.toLocaleString()}원</span></div>
-            <div className="flex justify-between font-semibold"><span><EditableText id="settlement.detailPopup.총수익" defaultText="총 수익" /></span><span className="text-emerald-600">{profit.toLocaleString()}원</span></div>
+            <div className="flex justify-between font-semibold"><span><EditableText id="settlement.detailPopup.총수익" defaultText="총 수익" /></span><span className={profitCls(profit)}>{profit.toLocaleString()}원</span></div>
           </div>
           <table className="w-full text-[12px] border-collapse text-center">
             <thead className="bg-gray-50">
@@ -49891,7 +49891,7 @@ function SettlementDetailPopup({ client, rows = [], onClose }) {
                 <tr key={i} className="hover:bg-gray-50">
                   <td className="border p-1.5">{r.상차일}</td>
                   <td className="border p-1.5">{toInt(r.청구운임).toLocaleString()}</td>
-                  <td className="border p-1.5 text-emerald-600">{(toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.외부지급합 ?? r.지게차비용)).toLocaleString()}</td>
+                  <td className={`border p-1.5 ${profitCls(toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.외부지급합 ?? r.지게차비용))}`}>{(toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.외부지급합 ?? r.지게차비용)).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -50141,7 +50141,7 @@ const tableData = React.useMemo(() => {
                       </div>
                     </td>
                     <td className="px-3 py-3 text-center font-bold text-[#1B2B4B]">{won(r.curSale)}</td>
-                    <td className="px-3 py-3 text-center text-emerald-600 font-semibold">{won(r.curProfit)}</td>
+                    <td className={`px-3 py-3 text-center font-semibold ${profitCls(r.curProfit, "text-gray-500")}`}>{won(r.curProfit)}</td>{/* ⭐ 2026-11-17 플러스 빨강 · 마이너스 파랑 */}
                     <td className="px-3 py-3 text-center text-gray-600">{r.curCnt || "—"}</td>
                     <td className="px-3 py-3 text-center text-gray-500 border-l border-gray-100">{won(r.prevSale)}</td>
                     <td className="px-3 py-3 text-center text-gray-500">{won(r.prevProfit)}</td>
@@ -50170,7 +50170,7 @@ const tableData = React.useMemo(() => {
                   <tr className="bg-[#1B2B4B]/5 font-bold text-[13px] text-center border-t-2 border-[#1B2B4B]/20">
                     <td className="px-3 py-3 text-left text-[#1B2B4B] sticky left-0 bg-[#1B2B4B]/5">합계</td>
                     <td className="px-3 py-3 text-[#1B2B4B]">{s.cur.toLocaleString()}</td>
-                    <td className="px-3 py-3 text-emerald-700">{s.curP.toLocaleString()}</td>
+                    <td className={`px-3 py-3 ${profitCls(s.curP)}`}>{s.curP.toLocaleString()}</td>
                     <td className="px-3 py-3">{s.curC}</td>
                     <td className="px-3 py-3 border-l border-gray-200">{s.prev.toLocaleString()}</td>
                     <td className="px-3 py-3">{s.prevP.toLocaleString()}</td>
@@ -57397,7 +57397,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                       <td className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b border-gray-100">{won(r.기사운임)}</td>
                       <td className="px-3 py-2.5 text-right text-[#2D4C82] font-semibold border-b border-gray-100">{won(Math.round(toInt(r.기사운임) * vatRate))}</td>
                       <td className="px-3 py-2.5 text-right text-[#1B2B4B] font-semibold border-b border-gray-100">{won(Math.round(toInt(r.기사운임) * insuranceRate / 100))}</td>
-                      <td className={`px-3 py-2.5 text-right font-bold border-b border-gray-100 ${fee >= 0 ? "text-yellow-600" : "text-[#0B1428]"}`}>{won(fee)}<MarginPct profit={fee} sales={toInt(r.청구운임)} /></td>{/* ⭐ 2026-11-17 수수료 옆 매출(청구운임) 대비 % */}
+                      <td className={`px-3 py-2.5 text-right font-bold border-b border-gray-100 ${profitCls(fee, "text-[#0B1428]")}`}>{won(fee)}<MarginPct profit={fee} sales={toInt(r.청구운임)} /></td>{/* ⭐ 2026-11-17 수수료 옆 매출(청구운임) 대비 % */}
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.지급방식 || ""}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.배차방식 || ""}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">
@@ -57432,7 +57432,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                     <td className="px-3 py-3 text-right text-yellow-300 font-bold">{won(kpi.driver)}</td>
                     <td className="px-3 py-3 text-right text-[#8FB0F0] font-bold">{won(kpi.vatTotal)}</td>
                     <td className="px-3 py-3 text-right text-[#8FB0F0] font-bold">{won(kpi.insuranceTotal)}</td>
-                    <td className="px-3 py-3 text-right text-yellow-300 font-bold">{won(kpi.fee)}<MarginPct dark profit={kpi.fee} sales={kpi.sale} /></td>
+                    <td className={`px-3 py-3 text-right font-bold ${kpi.fee > 0 ? "text-[#FF8A8E]" : kpi.fee < 0 ? "text-[#8FB0F0]" : "text-white"}`}>{won(kpi.fee)}<MarginPct dark profit={kpi.fee} sales={kpi.sale} /></td>{/* ⭐ 2026-11-17 수수료 합계 — 플러스 빨강 · 마이너스 파랑 */}
                     <td colSpan={4} className="px-3 py-3 text-center text-white/60 text-[11px]">
                       지급완료 {kpi.done}건 / 미지급 {kpi.undone}건 (미지급액 {won(kpi.undoneAmt)}원)
                     </td>
@@ -61857,7 +61857,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
                     <thead><tr className="bg-[#F5F8FD] text-[#7A879C]"><th className="text-left font-bold px-3 py-2">구분</th><th className="text-right font-bold px-3 py-2">오더</th><th className="text-right font-bold px-3 py-2">매출</th><th className="text-right font-bold px-3 py-2">수익</th></tr></thead>
                     <tbody className="tabular-nums">
                       {[["오늘", todayStats?.count, todayStats?.revenue, todayStats?.profit], ["누적", myStats?.totalOrders, myStats?.totalRevenue, myStats?.totalProfit]].map(([k, c, r, pf]) => (
-                        <tr key={k} className="border-t border-[#EEF1F6]"><td className="px-3 py-2.5 font-black text-[#0F1A30]">{k}</td><td className="px-3 py-2.5 text-right font-bold">{Number(c ?? 0).toLocaleString()}건</td><td className="px-3 py-2.5 text-right font-bold whitespace-nowrap">{won(r)}</td><td className="px-3 py-2.5 text-right font-black text-[#2D4C82] whitespace-nowrap">{won(pf)}</td></tr>
+                        <tr key={k} className="border-t border-[#EEF1F6]"><td className="px-3 py-2.5 font-black text-[#0F1A30]">{k}</td><td className="px-3 py-2.5 text-right font-bold">{Number(c ?? 0).toLocaleString()}건</td><td className="px-3 py-2.5 text-right font-bold whitespace-nowrap">{won(r)}</td><td className={`px-3 py-2.5 text-right font-black whitespace-nowrap ${profitCls(pf, "text-[#2D4C82]")}`}>{won(pf)}</td></tr>
                       ))}
                     </tbody>
                   </table>

@@ -7,6 +7,7 @@ import React from "react";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Cell } from "recharts";
 import { HD_MONO as MONO, HD_C as C } from "./HomeDeck";
 import { LogisTag } from "./brand";
+import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 매출이익 · 마진율 색(플러스 빨강 · 마이너스 파랑)
 import { Deck, DeckHead, KTile, DPanel, Muted, SubHead, Line2, TodoPanel, Donut, Legend, HBar, DarkTip, DBadge, WARN } from "./DeptDashboard";
 import { useSalesBoard, useSalesMe } from "./salesData";
 import { ymOf, kstDay, LEAD_STAGES, OPEN_STAGES, leadWeighted, toInt, baseLabel, HEALTH } from "./salesCore";
@@ -74,7 +75,7 @@ export default function SalesDashboard({ company, dispatchData = [], onGo, me, a
     <Deck>
       <DeckHead code={<LogisTag height={9} text="SALES DECK" />} att={att}
         title={name ? `${name}님, 이번 달 영업 현황입니다` : "이번 달 영업 현황입니다"}
-        sub={<><span className="whitespace-nowrap">{teamView ? "영업팀 매출" : "내 담당 매출"} <b style={{ color: "#fff", ...num }}>{won(cur?.sale)}</b>원</span> · <span className="whitespace-nowrap">매출이익 <b style={{ color: "#fff", ...num }}>{won(cur?.profit)}</b>원</span> · <span className="whitespace-nowrap">예상 인센티브 <b style={{ color: "#fff", ...num }}>{won(cur?.total)}</b>원</span>{cur?.target > 0 && <> · <span className="whitespace-nowrap">목표 <b style={{ color: "#fff", ...num }}>{achieve.toFixed(0)}%</b></span></>}</>} />
+        sub={<><span className="whitespace-nowrap">{teamView ? "영업팀 매출" : "내 담당 매출"} <b style={{ color: "#fff", ...num }}>{won(cur?.sale)}</b>원</span> · <span className="whitespace-nowrap">매출이익 <b style={{ color: profitColor(cur?.profit, { dark: true, neutral: "#fff" }), ...num }}>{won(cur?.profit)}</b>원</span> · <span className="whitespace-nowrap">예상 인센티브 <b style={{ color: "#fff", ...num }}>{won(cur?.total)}</b>원</span>{cur?.target > 0 && <> · <span className="whitespace-nowrap">목표 <b style={{ color: "#fff", ...num }}>{achieve.toFixed(0)}%</b></span></>}</>} />
 
       {who.canManage && B.reps.some((r) => r.uid === who.uid) && (
         <div style={{ position: "relative", display: "flex", gap: 8, marginBottom: 12 }}>
@@ -86,7 +87,7 @@ export default function SalesDashboard({ company, dispatchData = [], onGo, me, a
         <KTile primary code="INCENTIVE" label="예상 인센티브" value={short(cur?.total)} unit="원"
           foot={<>확정 <b style={{ color: C.hi, ...num }}>{short(cur?.confirmed)}</b> · 보류 <b style={{ color: C.hi, ...num }}>{short(cur?.held)}</b></>} spark={six.map((x) => x.profit)} />
         <KTile code="REVENUE" label={teamView ? "영업팀 매출" : "내 담당 매출"} value={short(cur?.sale)} unit="원" foot={`${(cur?.n || 0).toLocaleString()}건 · 전월 ${short(prev.sale)}원`} spark={six.map((x) => x.sale)} />
-        <KTile code="PROFIT" label="매출이익" value={short(cur?.profit)} unit="원" foot={<>마진율 <b style={{ color: C.hi, ...num }}>{rate.toFixed(1)}%</b></>} spark={six.map((x) => x.profit)} />
+        <KTile code="PROFIT" label="매출이익" value={short(cur?.profit)} unit="원" valueColor={profitColor(cur?.profit, { dark: true })} foot={<>마진율 <b style={{ color: profitRateColor(rate, { dark: true, neutral: C.hi }), ...num }}>{rate.toFixed(1)}%</b></>} spark={six.map((x) => x.profit)} />
         <KTile code="TARGET" label="목표 달성률" value={cur?.target > 0 ? achieve.toFixed(0) : "미설정"} unit={cur?.target > 0 ? "%" : ""} warn={cur?.target > 0 && achieve < 50}
           foot={cur?.target > 0 ? `목표 ${short(cur.target)}원 · 남은 ${short(Math.max(0, cur.target - cur.sale))}원` : "영업관리 › 목표에서 설정"} bar={achieve} />
         <KTile code="PIPELINE" label="예상 수주(가중)" value={short(weighted)} unit="원" foot={`진행 ${open.length}곳 · 월 매출 × 수주 확률`} bar={open.length ? Math.min(100, (weighted / Math.max(1, open.reduce((s, l) => s + toInt(l.monthlyRevenue), 0))) * 100) : 0} />

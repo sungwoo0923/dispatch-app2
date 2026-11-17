@@ -10,6 +10,7 @@ import {
 import { createLegs, updateLeg, requestHandoff } from "./freightStore";
 import { rateOf, loadRates, ratesInfo } from "./fxRates"; // 💱 오늘 환율(못 받으면 기본값)
 import { Card, Field, Grid, Sel, Combo, DateIn, TimeIn, DateTimeIn, TextIn, NumIn, Seg, Btn, ContainerArt, RouteArt, ModeChip, MODE_NAME, MONO, NAVY, GRID } from "./ui";
+import { profitCls, profitRateCls, profitColor } from "../marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
 
 const QTY = Array.from({ length: 20 }, (_, i) => [String(i + 1), `${i + 1}대`]);
 const TEMPS = Array.from({ length: 11 }, (_, i) => { const t = -25 + i * 5; return [String(t), `${t > 0 ? "+" : ""}${t}℃`]; });
@@ -368,7 +369,7 @@ export default function FreightForm({ mode, initial = null, jobs = [], clients =
       )}
 
       {/* ── 운임 ── */}
-      <Card title="운임" en={fx.live ? `CHARGES · ${fx.day} 환율 자동` : "CHARGES · 기본 환율"} right={<span className={`text-[13px] font-black tabular-nums ${profit < 0 ? "text-[#C2362B]" : "text-[#0F1A30]"}`}>이익 {won(profit)}원{sale > 0 ? ` · ${Math.round((profit / sale) * 1000) / 10}%` : ""}</span>}>
+      <Card title="운임" en={fx.live ? `CHARGES · ${fx.day} 환율 자동` : "CHARGES · 기본 환율"} right={<span className={`text-[13px] font-black tabular-nums ${profitCls(profit, "text-[#0F1A30]")}`}>이익 {won(profit)}원{sale > 0 ? ` · ${Math.round((profit / sale) * 1000) / 10}%` : ""}</span>}>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <Lines title="청구 (매출)" mode={mode} lines={f.sales || []} onChange={(v) => set("sales", v)} />
           <Lines title="지급 (매입)" mode={mode} lines={f.costs || []} onChange={(v) => set("costs", v)} vendor />

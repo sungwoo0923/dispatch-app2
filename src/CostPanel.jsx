@@ -17,6 +17,7 @@ import { useSalesPricing, applyPlanBill, itemsTotal, monthlyOf } from "./SalesQu
 import { PLAN_IDS, planIncludes } from "./plans";
 import { COST_DEFAULT, CLAUDE_TIERS, VERCEL_PLANS, mergeCost, fixedCosts, variableCosts, estimateDaily, estimateMonth, breakEvenCurve, daysInMonth } from "./costModel";
 import { kpConfirm } from "./kpDialog";
+import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 이익 · 이익률 색(플러스 빨강 · 마이너스 파랑)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NAVY = "#1B2B4B", INK = "#0F1A30", MID = "#4B6CB7", SOFT = "#8FB0F0", RED = "#B42318";
@@ -54,11 +55,11 @@ function Hero({ en, title, desc, right }) {
     </div>
   );
 }
-function Kpi({ k, v, sub, dark = false, loss = false }) {
+function Kpi({ k, v, sub, dark = false, loss = false, profit, rate }) { // ⭐ 2026-11-17 profit(금액) · rate(%) 를 주면 플러스 빨강 · 마이너스 파랑
   return (
     <div className={`rounded-[16px] px-4 py-3.5 border min-w-0 ${dark ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}>
       <div className={`text-[12.5px] font-bold ${dark ? "text-white/60" : "text-[#7A879C]"}`}>{k}</div>
-      <div className="text-[21px] sm:text-[23px] font-black mt-0.5 tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: loss ? (dark ? "#FDA29B" : RED) : undefined }}>{v}</div>
+      <div className="text-[21px] sm:text-[23px] font-black mt-0.5 tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: profit != null ? profitColor(profit, { dark }) : rate != null ? profitRateColor(rate, { dark }) : loss ? (dark ? "#FDA29B" : RED) : undefined }}>{v}</div>
       {sub && <div className={`text-[11.5px] font-semibold mt-0.5 truncate ${dark ? "text-white/50" : "text-[#9AA9C3]"}`}>{sub}</div>}
     </div>
   );
@@ -279,8 +280,8 @@ function SummaryView({ d, openUsage }) {
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Kpi k={`${Number(d.ym.slice(5))}월 매출 (VAT 별도)`} v={won(d.revenue)} sub={`청구 대상 ${d.paying}곳 · 월말 예상`} />
         <Kpi k="이달 지출" v={won(d.cost)} sub={`서버 ${won(d.variable.total)} + 고정 ${won(d.fixed.total)}`} />
-        <Kpi dark k="순이익" v={wonS(d.profit)} loss={loss} sub={loss ? "적자 — 운송사별 원가에서 원인 확인" : "매출 − 지출(월말 예상)"} />
-        <Kpi k="이익률" v={d.margin == null ? "-" : `${(d.margin * 100).toFixed(1)}%`} loss={d.margin != null && d.margin < 0} sub="순이익 ÷ 매출" />
+        <Kpi dark k="순이익" v={wonS(d.profit)} loss={loss} profit={d.profit} sub={loss ? "적자 — 운송사별 원가에서 원인 확인" : "매출 − 지출(월말 예상)"} />
+        <Kpi k="이익률" v={d.margin == null ? "-" : `${(d.margin * 100).toFixed(1)}%`} loss={d.margin != null && d.margin < 0} rate={d.margin == null ? undefined : d.margin * 100} sub="순이익 ÷ 매출" />
         <Kpi k="1곳당 평균" v={won(d.avgRevenue)} sub={`원가 ${won(d.paying ? d.cost / d.paying : 0)} / 곳`} />
       </div>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
@@ -400,7 +401,7 @@ function CompaniesView({ d }) {
                   <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(r.server)}<div className="text-[10.5px] text-[#9AA9C3]" title="무료 제공량이 없다고 볼 때(규모가 커졌을 때) 단가 기준">단가 기준 {won(r.gross)}</div></td>
                   <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(r.direct)}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap text-[#5B6B85]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(r.fixedShare)}</td>
-                  <td className="px-3 py-2.5 text-right font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: neg ? RED : INK }}>{wonS(r.margin)}<div className="text-[10.5px] font-bold" style={{ color: neg ? RED : "#9AA9C3" }}>{r.marginRate == null ? "-" : `${(r.marginRate * 100).toFixed(0)}%`}</div></td>
+                  <td className="px-3 py-2.5 text-right font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: profitColor(r.margin, { neutral: INK }) }}>{wonS(r.margin)}<div className="text-[10.5px] font-bold" style={{ color: r.marginRate == null ? "#9AA9C3" : profitRateColor(r.marginRate * 100, { neutral: "#9AA9C3" }) }}>{r.marginRate == null ? "-" : `${(r.marginRate * 100).toFixed(0)}%`}</div></td>
                   <td className="px-3 py-2.5 text-[12px] font-bold text-[#3A4A66] min-w-[220px]">{r.recs.length ? r.recs.map((x) => <div key={x} className={x.startsWith("적자") ? "text-[#B42318]" : ""}>· {x}</div>) : <span className="text-[#9AA9C3]">-</span>}</td>
                 </tr>
               );
@@ -452,7 +453,7 @@ function BreakEvenView({ d }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Kpi dark k="손익분기점" v={curve.be == null ? "100곳 넘음" : `${curve.be}곳`} sub={`이 조건(${plan?.name || "-"} · 일 ${sim.daily}건)으로 이만큼부터 흑자`} />
         <Kpi k="지금 위치" v={`${d.cos.length}곳`} sub={`이 조건이면 월 ${wonS(cur.profit)}`} loss={cur.profit < 0} />
-        <Kpi k={`${sim.n}곳일 때 월 이익`} v={wonS(at.profit)} loss={at.profit < 0} sub={`매출 ${won(at.rev)} · 비용 ${won(at.cost)}`} />
+        <Kpi k={`${sim.n}곳일 때 월 이익`} v={wonS(at.profit)} loss={at.profit < 0} profit={at.profit} sub={`매출 ${won(at.rev)} · 비용 ${won(at.cost)}`} />
         <Kpi k="고정비 (월)" v={won(d.fixed.total)} sub="회사 수와 상관없이 나가는 돈" />
       </div>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)]">
@@ -491,7 +492,7 @@ function BreakEvenView({ d }) {
             {numBox({ k: "extra", l: "1곳당 추가 청구(문자·세금계산서 등)", unit: "원", min: 0, max: 200000, step: 5000, })}
             <div className="rounded-xl bg-[#F7F9FC] border border-[#EEF1F6] p-3 space-y-1.5 text-[13px]">
               {[["1곳 월 청구(요금제+초과+추가)", won(rev1)], [`${sim.n}곳 매출`, won(at.rev)], ["고정비", won(d.fixed.total)], ["서버 변동비", won(at.variable)]].map(([k, v]) => <div key={k} className="flex justify-between gap-2"><span className="font-bold text-[#5B6B85]">{k}</span><span className="font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</span></div>)}
-              <div className="flex justify-between gap-2 pt-1.5 border-t border-dashed border-[#DCE3EE]"><span className="font-black">월 이익</span><span className="font-black tabular-nums text-[15px]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: at.profit < 0 ? RED : INK }}>{wonS(at.profit)}</span></div>
+              <div className="flex justify-between gap-2 pt-1.5 border-t border-dashed border-[#DCE3EE]"><span className="font-black">월 이익</span><span className="font-black tabular-nums text-[15px]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: profitColor(at.profit, { neutral: INK }) }}>{wonS(at.profit)}</span></div>
             </div>
           </div>
         </Card>
@@ -506,8 +507,8 @@ function BreakEvenView({ d }) {
               <td className="px-3 py-2.5 text-center tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{num(p.seats)}명 · {cnt(p.orders)}건 · {num(p.fleet)}대</td>
               <td className="px-3 py-2.5 text-center tabular-nums text-[#5B6B85]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{short(e.reads)} / {short(e.writes)}</td>
               <td className="px-3 py-2.5 text-right tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(gross)}</td>
-              <td className="px-3 py-2.5 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: margin < 0 ? RED : INK }}>{wonS(margin)}</td>
-              <td className="px-3 py-2.5 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: rate < 0 ? RED : INK }}>{(rate * 100).toFixed(1)}%</td>
+              <td className="px-3 py-2.5 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: profitColor(margin, { neutral: INK }) }}>{wonS(margin)}</td>
+              <td className="px-3 py-2.5 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: profitRateColor(rate * 100, { neutral: INK }) }}>{(rate * 100).toFixed(1)}%</td>
             </tr>); })}</tbody>
         </table></div>
         <div className="px-5 py-3 border-t border-[#EEF1F6] text-[11.5px] text-[#7A879C]">고정비는 빼지 않은 값(공헌이익)입니다. 원가는 [비용 기준 설정] › 활동량 환산 계수로 추정 — 실측이 쌓이면 '서버 사용량'에서 [실측으로 계수 맞추기]를 누르세요.</div>

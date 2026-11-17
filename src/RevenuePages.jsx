@@ -8,6 +8,7 @@ import {
   ResponsiveContainer, ComposedChart, BarChart, Bar, Line, Area, AreaChart, XAxis, YAxis, Tooltip, CartesianGrid, Cell, PieChart, Pie, ReferenceLine,
 } from "recharts";
 import { RvCard, RvTile, RvDelta, rvShort, RvRing } from "./RevenueDashboard";
+import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 수익률 색(플러스 빨강 · 마이너스 파랑)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NAVY = "#1B2B4B";
@@ -105,10 +106,10 @@ export function TargetPage({ rows = [], targetMonth, yearTarget = 0, isExcluded 
           )}
           {forecast && (
             <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 6 }}>
-              {[["월말 예상 매출", rvShort(forecast.sale)], ["예상 건수", `${forecast.count}건`], ["예상 수익", rvShort(forecast.profit)]].map(([k, v]) => (
+              {[["월말 예상 매출", rvShort(forecast.sale)], ["예상 건수", `${forecast.count}건`], ["예상 수익", rvShort(forecast.profit), forecast.profit]].map(([k, v, pv]) => (
                 <div key={k} style={{ borderRadius: 10, padding: "8px 8px", background: "#fff", border: "1px solid #E3E8F0", textAlign: "center" }}>
                   <div style={{ fontSize: 11.5, fontWeight: 700, color: "#6b7280" }}>{k}</div>
-                  <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14, fontWeight: 800, color: NAVY }}>{v}</div>
+                  <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 14, fontWeight: 800, color: (pv != null && profitColor(pv)) || NAVY }}>{v}</div>
                 </div>
               ))}
             </div>
@@ -143,7 +144,7 @@ export function TargetPage({ rows = [], targetMonth, yearTarget = 0, isExcluded 
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 5, fontSize: 12.5, fontWeight: 700, color: "#6b7280" }}>
                 <span>운반비 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#374151" }}>{rvShort(d.driver)}</b></span>
-                <span>수익 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: NAVY }}>{rvShort(d.profit)}</b> · 수익률 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: NAVY }}>{d.sale ? ((d.profit / d.sale) * 100).toFixed(1) : "0.0"}%</b></span>
+                <span>수익 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: profitColor(d.profit) || NAVY }}>{rvShort(d.profit)}</b> · 수익률 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: profitRateColor(d.sale ? (d.profit / d.sale) * 100 : 0) || NAVY }}>{d.sale ? ((d.profit / d.sale) * 100).toFixed(1) : "0.0"}%</b></span>
               </div>
             </div>
           ))}
@@ -397,7 +398,7 @@ export function YearlyPage({ rows = [], year }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div className="kp-rv-kpi" style={grid4}>
         <RvTile dark code="REVENUE" label={`${year}년 매출`} value={rvShort(tot.sale)} unit="원" foot={<><RvDelta dark cur={tot.sale} prev={tot.last} /><span>작년 대비</span></>} />
-        <RvTile code="PROFIT" label="수익" value={rvShort(tot.profit)} unit="원" foot={<span>수익률 {tot.sale ? ((tot.profit / tot.sale) * 100).toFixed(1) : "0.0"}%</span>} />
+        <RvTile code="PROFIT" label="수익" value={rvShort(tot.profit)} unit="원" valueColor={profitColor(tot.profit)} foot={<span>수익률 {tot.sale ? ((tot.profit / tot.sale) * 100).toFixed(1) : "0.0"}%</span>} />
         <RvTile code="ORDERS" label="오더 건수" value={tot.cnt.toLocaleString()} unit="건" foot={<span>월평균 {active.length ? Math.round(tot.cnt / active.length).toLocaleString() : 0}건</span>} />
         <RvTile code="BEST" label="최고 매출 월" value={best.label} foot={<span>{rvShort(best.sale)}원</span>} />
       </div>
@@ -506,7 +507,7 @@ export function QueryPage({ rows = [], clients = [] }) {
         <>
           <div className="kp-rv-kpi" style={grid4}>
             <RvTile dark code="REVENUE" label={applied.client || "전체 거래처"} value={rvShort(res.s.sale)} unit="원" foot={<span>{applied.from} ~ {applied.to}</span>} />
-            <RvTile code="PROFIT" label="수익" value={rvShort(res.s.profit)} unit="원" foot={<span>수익률 {res.s.rate.toFixed(1)}%</span>} />
+            <RvTile code="PROFIT" label="수익" value={rvShort(res.s.profit)} unit="원" valueColor={profitColor(res.s.profit)} foot={<span>수익률 {res.s.rate.toFixed(1)}%</span>} />
             <RvTile code="ORDERS" label="건수" value={res.s.cnt.toLocaleString()} unit="건" foot={<span>건당 {rvShort(res.s.cnt ? res.s.sale / res.s.cnt : 0)}원</span>} />
             <RvTile code="DRIVER" label="기사운임" value={rvShort(res.s.driver)} unit="원" foot={<span>운행일 {res.daily.length}일</span>} />
           </div>

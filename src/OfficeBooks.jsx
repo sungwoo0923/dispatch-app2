@@ -17,6 +17,7 @@ import { upsertAutoEntry } from "./ledgerAuto";
 import CashFlowChart from "./CashFlowChart"; // ⭐ 2026-11-17 일별 수입 · 지출 · 누계 그래프(SVG) — 예전 recharts 막대를 바꿈
 import { kpConfirm } from "./kpDialog";
 import { suggestAccount, evidenceOf, vatSplit } from "./acctSuggest"; // 🧾 2026-11-15 전표 자동화 — 계정과목 추천 · 증빙 · 부가세
+import { profitStyle } from "./marginPct"; // ⭐ 2026-11-17 이익 금액 색(플러스 빨강 · 마이너스 파랑)
 
 export const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 export const HERO_BG = "linear-gradient(rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(143,176,240,.07) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)";
@@ -38,7 +39,7 @@ export function BookHero({ en, title, desc, kpis = [], right }) {
     <div className="relative overflow-hidden rounded-[22px] px-4 py-4 md:px-7 md:py-5 text-white shadow-[0_14px_32px_rgba(15,26,48,0.25)]" style={{ background: HERO_BG }}>
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          <div className="text-[11px] md:text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
+          <div className="text-[11px] md:text-[12px] font-extrabold tracking-[0.08em] text-[#8FB0F0] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
           <div className="text-[20px] md:text-[24px] font-black mt-0.5">{title}</div>
           <div className="text-[12.5px] md:text-[14px] text-white/60 mt-0.5">{desc}</div>
         </div>
@@ -46,10 +47,11 @@ export function BookHero({ en, title, desc, kpis = [], right }) {
       </div>
       {kpis.length > 0 && (
         <div className={`mt-3 grid grid-cols-2 ${kpis.length >= 4 ? "md:grid-cols-4" : "md:grid-cols-3"} gap-2`}>
-          {kpis.map(([l, v, sub]) => (
+          {kpis.map(([l, v, sub, profit]) => (
             <div key={l} className="rounded-2xl bg-white/[0.07] border border-white/10 px-3 md:px-4 py-2.5 min-w-0">
               <div className="text-[11.5px] md:text-[12.5px] font-bold text-white/55 whitespace-nowrap truncate">{l}</div>
-              <div className="text-[18px] md:text-[21px] font-black tabular-nums whitespace-nowrap truncate" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</div>
+              {/* ⭐ 2026-11-17 4번째 값(이익 · 수지 차액)을 주면 플러스 빨강 · 마이너스 파랑 */}
+              <div className="text-[18px] md:text-[21px] font-black tabular-nums whitespace-nowrap truncate" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...(profit != null ? profitStyle(profit, { dark: true }) : {}) }}>{v}</div>
               {sub && <div className="text-[11px] text-white/45 truncate">{sub}</div>}
             </div>
           ))}
@@ -64,7 +66,7 @@ export function BookCard({ en, title, right, children, flush = false }) {
       {(en || title) && (
         <div className="px-4 pt-3.5 pb-2.5 flex items-center justify-between gap-2 flex-wrap">
           <div className="min-w-0">
-            {en && <div className="text-[9.5px] font-extrabold tracking-[0.24em] text-[#4B6CB7] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>}
+            {en && <div className="text-[9.5px] font-extrabold tracking-[0.08em] text-[#4B6CB7] whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>}
             <div className="text-[15px] font-black text-[#0F1A30] tracking-tight truncate">{title}</div>
           </div>
           {right}
@@ -85,7 +87,7 @@ export function Sheet({ title, en, onClose, children, footer, side = false }) {
       <div className="kp-side-panel h-full w-full md:w-[600px] xl:w-[680px] bg-[#F4F6FA] flex flex-col shadow-[-24px_0_60px_rgba(15,26,48,0.35)]" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 md:px-7 py-5 text-white flex items-center gap-3 shrink-0" style={{ background: HERO_BG, paddingTop: "max(env(safe-area-inset-top, 0px), 20px)" }}>
           <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
+            <div className="text-[11px] font-extrabold tracking-[0.08em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
             <div className="text-[21px] md:text-[23px] font-black truncate">{title}</div>
           </div>
           <button type="button" onClick={onClose} className="w-10 h-10 rounded-xl bg-white/10 border border-white/15 shrink-0 text-[15px]">✕</button>
@@ -100,7 +102,7 @@ export function Sheet({ title, en, onClose, children, footer, side = false }) {
       <div className="w-full md:max-w-[640px] max-h-[92vh] bg-[#F4F6FA] rounded-t-[24px] md:rounded-[22px] overflow-hidden flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 py-4 text-white flex items-center gap-3 shrink-0" style={{ background: HERO_BG }}>
           <div className="min-w-0 flex-1">
-            <div className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
+            <div className="text-[10.5px] font-extrabold tracking-[0.08em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{en}</div>
             <div className="text-[17px] font-black truncate">{title}</div>
           </div>
           <button type="button" onClick={onClose} className="w-9 h-9 rounded-xl bg-white/10 shrink-0">✕</button>
@@ -367,7 +369,7 @@ export function CashBook({ company, isViewer = false }) {
           <span className="h-9 px-3 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black grid place-items-center tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{ym.replace("-", ".")}</span>
           <button type="button" onClick={() => shiftYm(1)} className="w-9 h-9 rounded-xl bg-white/10 border border-white/15">›</button>
         </div>}
-        kpis={[["수입", `${won(income)}원`, `${M.nIn}건`], ["지출", `${won(expense)}원`, `${M.nOut}건`], ["수지 차액", `${income - expense >= 0 ? "+" : ""}${won(income - expense)}원`, "수입 − 지출"], ["증빙 없는 지출", `${noEvidence}건`, "영수증·전자결재 미첨부"]]} />
+        kpis={[["수입", `${won(income)}원`, `${M.nIn}건`], ["지출", `${won(expense)}원`, `${M.nOut}건`], ["수지 차액", `${income - expense >= 0 ? "+" : ""}${won(income - expense)}원`, "수입 − 지출", income - expense], ["증빙 없는 지출", `${noEvidence}건`, "영수증·전자결재 미첨부"]]} />
 
       {!isViewer && (toImport.length > 0 || recurTodo.length > 0) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -386,7 +388,7 @@ export function CashBook({ company, isViewer = false }) {
         <div className="space-y-4 min-w-0">
         <BookCard flush>
           <div className="px-3.5 md:px-4 py-3 border-b border-[#EEF1F6] flex items-center gap-2 flex-wrap">
-            <span className="text-[11px] font-extrabold tracking-[0.22em] text-[#4B6CB7] mr-1" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>LEDGER</span>
+            <span className="text-[11px] font-extrabold tracking-[0.08em] text-[#4B6CB7] mr-1" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>LEDGER</span>
             {["전체", "지출", "수입"].map((t) => <Chip key={t} on={type === t} onClick={() => setType(t)}>{t}</Chip>)}
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="적요·거래처·계정 검색" className="order-last md:order-none w-full md:w-auto md:ml-auto md:min-w-[150px] h-9 px-3 rounded-xl border border-[#DCE3EE] bg-[#F8FAFD] text-[13.5px] outline-none focus:border-[#2D4C82]" />
             {!isViewer && <button type="button" onClick={() => setEdit(blankEntry("지출"))} className="ml-auto md:ml-0 h-9 px-3.5 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black whitespace-nowrap shrink-0">+ 지출</button>}
@@ -457,7 +459,7 @@ export function CashBook({ company, isViewer = false }) {
         <div className="rounded-[22px] overflow-hidden text-white shadow-[0_14px_32px_rgba(15,26,48,0.22)]" style={{ background: HERO_BG }}>
           <div className="px-4 md:px-6 py-4 flex items-end justify-between gap-3 flex-wrap border-b border-white/10">
             <div>
-              <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>COMPANY FUNDS · 회사 총 자금</div>
+              <div className="text-[11px] font-extrabold tracking-[0.08em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>COMPANY FUNDS · 회사 총 자금</div>
               <div className="text-[28px] md:text-[34px] font-black tabular-nums leading-tight" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(F.cash)}<span className="text-[16px] text-white/60 ml-1">원</span></div>
               <div className="text-[12.5px] text-white/55">통장·현금 잔액 합계 · 장부에서 고른 통장·카드 입출금이 바로 반영됩니다</div>
             </div>

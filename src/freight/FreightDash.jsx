@@ -6,6 +6,7 @@ import {
   CNTR_TYPES, fmtCntrNo, progressPct,
 } from "./freightCore";
 import { Card, Kpi, Btn, Sel, Seg, Empty, StatusChip, DueChip, Stepper, ModeChip, ModeIcon, ContainerArt, RouteArt, routeEnds, MODE_NAME, MONO, NAVY, GRID } from "./ui";
+import { profitCls, profitRateCls, profitColor } from "../marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
 
 const kstYmd = (ms) => (ms ? new Date(ms + 9 * 3600e3).toISOString().slice(0, 10) : "");
 const monthOptions = () => { const out = []; const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(1); for (let i = 0; i < 12; i++) { const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`; out.push([ym, `${d.getUTCFullYear()}년 ${d.getUTCMonth() + 1}월`]); d.setUTCMonth(d.getUTCMonth() - 1); } return out; };
@@ -198,7 +199,7 @@ export function PnlPage({ jobs, mode = "", inlandRows = null, onOpen }) {
           {[["inland", inl], ...["container", "sea", "air"].map((m) => [m, sumPnl(inMonth.filter((j) => j.mode === m))])].map(([m, p]) => (
             <div key={m} className="rounded-2xl border border-[#E3E8F0] bg-white px-4 py-3.5">
               <div className="flex items-center gap-2"><ModeChip mode={m} /><span className="ml-auto text-[11.5px] font-bold text-[#9AA9C3]">매출 {wonShort(p.sale)}</span></div>
-              <div className={`mt-2 text-[20px] font-black tabular-nums ${p.profit < 0 ? "text-[#C2362B]" : "text-[#0F1A30]"}`}>{wonShort(p.profit)}<span className="text-[12px] font-bold text-[#7A89A3] ml-1">원 이익</span></div>
+              <div className={`mt-2 text-[20px] font-black tabular-nums ${profitCls(p.profit, "text-[#0F1A30]")}`}>{wonShort(p.profit)}<span className="text-[12px] font-bold text-[#7A89A3] ml-1">원 이익</span></div>
               <div className="mt-2 h-1.5 rounded-full bg-[#EEF1F6] overflow-hidden"><div className="h-full rounded-full bg-[#1B2B4B]" style={{ width: `${all.sale > 0 ? Math.min(100, (p.sale / all.sale) * 100) : 0}%` }} /></div>
             </div>
           ))}
@@ -221,8 +222,8 @@ export function PnlPage({ jobs, mode = "", inlandRows = null, onOpen }) {
                       view === "Job" ? <button key={l.id} type="button" onClick={() => onOpen(l)} title={`${l.refNo} · ${l.status}`}><ModeChip mode={l.mode} /></button> : <ModeChip key={l.id} mode={l.mode} />
                     ))}</div></td>
                     <td className={`${TD} text-right tabular-nums font-bold`}>{won(g.pnl.sale)}</td><td className={`${TD} text-right tabular-nums font-bold`}>{won(g.pnl.cost)}</td>
-                    <td className={`${TD} text-right tabular-nums font-black ${g.pnl.profit < 0 ? "text-[#C2362B]" : "text-[#0F1A30]"}`}>{won(g.pnl.profit)}</td>
-                    <td className={`${TD} text-right tabular-nums font-bold`}>{g.pnl.sale > 0 ? `${g.pnl.margin}%` : "-"}</td>
+                    <td className={`${TD} text-right tabular-nums font-black ${profitCls(g.pnl.profit, "text-[#0F1A30]")}`}>{won(g.pnl.profit)}</td>
+                    <td className={`${TD} text-right tabular-nums font-bold ${g.pnl.sale > 0 ? profitRateCls(g.pnl.margin) : ""}`}>{g.pnl.sale > 0 ? `${g.pnl.margin}%` : "-"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -266,7 +267,7 @@ export function GroupOverview({ jobs, modules, inlandRows, onOpen, goBiz }) {
               <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                 {[["오늘 상차", inl.today], ["미배차", inl.noDriver], ["이번 달", inl.monthCount]].map(([l, v]) => <div key={l}><div className="text-[20px] font-black tabular-nums" style={{ color: l === "미배차" && v ? "#FFC46B" : "#fff" }}>{v}</div><div className="text-[11px] font-bold text-white/50">{l}</div></div>)}
               </div>
-              <div className="mt-3 pt-3 border-t border-white/10 flex justify-between text-[12px] font-bold"><span className="text-white/55">이익</span><span className="tabular-nums">{wonShort(inl.pnl.profit)}원 · {inl.pnl.margin}%</span></div>
+              <div className="mt-3 pt-3 border-t border-white/10 flex justify-between text-[12px] font-bold"><span className="text-white/55">이익</span><span className="tabular-nums" style={{ color: profitColor(inl.pnl.profit, { dark: true }) }}>{wonShort(inl.pnl.profit)}원 · {inl.pnl.margin}%</span></div>
             </button>
           )}
           {stats.map(([m, s]) => (
@@ -275,7 +276,7 @@ export function GroupOverview({ jobs, modules, inlandRows, onOpen, goBiz }) {
               <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                 {[["진행 중", s.active, ""], ["24시간 안", s.urgent, "#FFC46B"], ["마감 지남", s.over, "#FF8A80"]].map(([l, v, c]) => <div key={l}><div className="text-[20px] font-black tabular-nums" style={{ color: v && c ? c : "#fff" }}>{v}</div><div className="text-[11px] font-bold text-white/50">{l}</div></div>)}
               </div>
-              <div className="mt-3 pt-3 border-t border-white/10 flex justify-between text-[12px] font-bold"><span className="text-white/55">이익</span><span className="tabular-nums">{wonShort(s.pnl.profit)}원 · {s.pnl.margin}%</span></div>
+              <div className="mt-3 pt-3 border-t border-white/10 flex justify-between text-[12px] font-bold"><span className="text-white/55">이익</span><span className="tabular-nums" style={{ color: profitColor(s.pnl.profit, { dark: true }) }}>{wonShort(s.pnl.profit)}원 · {s.pnl.margin}%</span></div>
             </button>
           ))}
         </div>
@@ -321,7 +322,7 @@ export function JobTimeline({ jobs, onOpen }) {
             <span className="h-7 px-2.5 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black inline-flex items-center tabular-nums" style={{ fontFamily: MONO }}>{g.jobNo}</span>
             <span className="text-[14.5px] font-black text-[#0F1A30] truncate">{g.client || "거래처 없음"}</span>
             {g.direction && <span className="text-[12px] font-bold text-[#7A89A3]">{g.direction}</span>}
-            <span className="ml-auto text-[12.5px] font-bold text-[#7A89A3]">매출 <b className="text-[#0F1A30] tabular-nums">{won(g.pnl.sale)}</b> · 이익 <b className={`tabular-nums ${g.pnl.profit < 0 ? "text-[#C2362B]" : "text-[#0F1A30]"}`}>{won(g.pnl.profit)}</b></span>
+            <span className="ml-auto text-[12.5px] font-bold text-[#7A89A3]">매출 <b className="text-[#0F1A30] tabular-nums">{won(g.pnl.sale)}</b> · 이익 <b className={`tabular-nums ${profitCls(g.pnl.profit, "text-[#0F1A30]")}`}>{won(g.pnl.profit)}</b></span>
           </div>
           <div className="p-4 flex items-stretch gap-0 overflow-x-auto">
             {g.legs.map((l, i) => { const due = topDeadline(l); const p = legPnl(l); return (
@@ -332,7 +333,7 @@ export function JobTimeline({ jobs, onOpen }) {
                   <div className="mt-2 text-[13px] font-bold text-[#3A4A66] truncate">{legTitle(l) || "-"}</div>
                   <div className="mt-2 flex items-center gap-1.5 flex-wrap"><StatusChip job={l} />{due && <DueChip due={due} />}</div>
                   <div className="mt-2.5"><Stepper job={l} compact /></div>
-                  <div className="mt-2 text-[11.5px] font-bold text-[#9AA9C3] tabular-nums">이익 {p.sale || p.cost ? `${won(p.profit)}원` : "-"}</div>
+                  <div className="mt-2 text-[11.5px] font-bold text-[#9AA9C3] tabular-nums">이익 <span className={p.sale || p.cost ? profitCls(p.profit) : ""}>{p.sale || p.cost ? `${won(p.profit)}원` : "-"}</span></div>
                 </button>
               </React.Fragment>
             ); })}
@@ -371,7 +372,7 @@ export function Clients360({ jobs, inlandRows, modules }) {
                     <td className={`${TD} font-black text-[#0F1A30] max-w-[240px] truncate`}>{r.client}</td>
                     {modules.map((m) => <td key={m} className={`${TD} text-center`}>{r.by[m] ? <span className="inline-flex items-center justify-center min-w-[44px] h-7 px-2 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black tabular-nums">{r.by[m].count}건</span> : <span className="inline-block w-7 h-7 rounded-lg border border-dashed border-[#C3CCDB]" />}</td>)}
                     <td className={`${TD} text-right tabular-nums font-bold`}>{r.count}</td><td className={`${TD} text-right tabular-nums font-bold`}>{won(r.sale)}</td>
-                    <td className={`${TD} text-right tabular-nums font-black ${r.profit < 0 ? "text-[#C2362B]" : "text-[#0F1A30]"}`}>{won(r.profit)}</td>
+                    <td className={`${TD} text-right tabular-nums font-black ${profitCls(r.profit, "text-[#0F1A30]")}`}>{won(r.profit)}</td>
                     <td className={TD}><div className="flex gap-1">{r.missing.map((m) => <span key={m} className="h-6 px-2 rounded-lg bg-[#F5F8FD] border border-[#E3E8F0] text-[#B26A00] text-[11.5px] font-extrabold inline-flex items-center">{MODE_NAME[m]} 제안</span>)}</div></td>
                   </tr>
                 ))}

@@ -7,6 +7,7 @@ import { BIZ } from "../bizModules";
 import { settleSummary, receivables, payables, sumLines, sumPnl, won, wonShort, ymOf, legTitle } from "./freightCore";
 import { updateLeg, useFreightJobs } from "./freightStore";
 import { Card, Kpi, Btn, Sel, Seg, Empty, ModeChip, ModeIcon, MODE_NAME, MONO } from "./ui";
+import { profitCls, profitRateCls, profitColor } from "../marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
 
 const kstYmd = (ms) => (ms ? new Date(ms + 9 * 3600e3).toISOString().slice(0, 10) : "");
 const md = (ms) => (ms ? kstYmd(ms).slice(5).replace("-", ".") : "");
@@ -149,7 +150,7 @@ export function FreightRevenueStrip({ modules = [], onOpenGroup }) {
     <div className="mb-4 rounded-2xl border border-[#E3E8F0] bg-[#F5F8FD] px-4 py-3 flex items-center gap-x-5 gap-y-2 flex-wrap" data-testid="freight-revenue-strip">
       <span className="text-[12.5px] font-black text-[#0F1A30]">다른 사업부 이번 달</span>
       {others.map((m) => { const p = sumPnl(month.filter((j) => j.mode === m)); return (
-        <span key={m} className="inline-flex items-center gap-1.5 text-[12.5px] font-bold text-[#5B6B85]"><ModeChip mode={m} />매출 <b className="text-[#0F1A30] tabular-nums">{wonShort(p.sale)}</b> · 이익 <b className={`tabular-nums ${p.profit < 0 ? "text-[#C2362B]" : "text-[#0F1A30]"}`}>{wonShort(p.profit)}</b></span>
+        <span key={m} className="inline-flex items-center gap-1.5 text-[12.5px] font-bold text-[#5B6B85]"><ModeChip mode={m} />매출 <b className="text-[#0F1A30] tabular-nums">{wonShort(p.sale)}</b> · 이익 <b className={`tabular-nums ${profitCls(p.profit, "text-[#0F1A30]")}`}>{wonShort(p.profit)}</b></span>
       ); })}
       <span className="text-[12.5px] font-bold text-[#5B6B85]">합계 <b className="text-[#0F1A30] tabular-nums">{wonShort(tot.sale)}원</b></span>
       <span className="text-[12px] font-semibold text-[#9AA9C3]">이 화면의 숫자는 내륙 배차만입니다</span>

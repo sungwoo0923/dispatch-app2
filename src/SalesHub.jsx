@@ -15,6 +15,10 @@ import KpSubNav from "./KpSubNav";
 import useNarrow from "./useNarrow";
 import { BookHero, BookCard, Chip, Sheet, BookSkeleton, MONO } from "./OfficeBooks";
 import { CustomSelect } from "./CustomSelect";
+import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 매출이익 · 마진율 색(플러스 빨강 · 마이너스 파랑)
+// ⭐ 2026-11-17 매출이익(금액 · %) 글자 — 색만 입힘
+const PAmt = ({ v, children }) => <span style={{ color: profitColor(v) }}>{children}</span>;
+const PRate = ({ v, children }) => <span style={{ color: profitRateColor(v) }}>{children}</span>;
 import CustomDatePicker from "./CustomDatePicker";
 import { kpConfirm, kpAlert } from "./kpDialog";
 import { useSalesBoard, useSalesMe, targetOf } from "./salesData";
@@ -85,7 +89,7 @@ function Overview({ B, who, onTab }) {
     <div className="space-y-4">
       <BookHero en="SALES · OVERVIEW" title="영업 현황" desc="내가 수주한 거래처의 매출 · 매출이익과 이번 달 예상 인센티브를 한눈에 봅니다"
         right={<div className="flex items-center gap-2 flex-wrap justify-end">{who.canManage && <RepPick B={B} value={rep} onChange={setRep} />}<MonthNav ym={ym} setYm={setYm} /></div>}
-        kpis={[["담당 매출", `${won(cur.sale)}원`, `${cur.n.toLocaleString()}건 · 배차완료 기준`], ["매출이익", `${won(cur.profit)}원`, `마진율 ${rate.toFixed(1)}%`], ["목표 달성률", cur.target > 0 ? `${cur.achieve.toFixed(0)}%` : "미설정", cur.target > 0 ? `목표 ${short(cur.target)}원` : "목표·규정에서 설정"], ["예상 인센티브", `${won(cur.total)}원`, `확정 ${short(cur.confirmed)} · 보류 ${short(cur.held)}`]]} />
+        kpis={[["담당 매출", `${won(cur.sale)}원`, `${cur.n.toLocaleString()}건 · 배차완료 기준`], ["매출이익", `${won(cur.profit)}원`, `마진율 ${rate.toFixed(1)}%`, cur.profit], ["목표 달성률", cur.target > 0 ? `${cur.achieve.toFixed(0)}%` : "미설정", cur.target > 0 ? `목표 ${short(cur.target)}원` : "목표·규정에서 설정"], ["예상 인센티브", `${won(cur.total)}원`, `확정 ${short(cur.confirmed)} · 보류 ${short(cur.held)}`]]} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4">
         <div className="space-y-4 min-w-0">
@@ -113,7 +117,7 @@ function Overview({ B, who, onTab }) {
                     {[...cur.rows].sort((a, b) => b.sale - a.sale).map((x, i) => (
                       <tr key={`${x.client}${x.rep || ""}`} className={`border-t border-[#EEF2F8] ${i % 2 ? "bg-[#FBFCFE]" : "bg-white"}`}>
                         <Td bold>{x.client} {x.isNew && <Tag>신규</Tag>}</Td>{!uid && <Td>{x.rep}</Td>}
-                        <Td right>{x.n}</Td><Td right bold>{won(x.sale)}</Td><Td right>{won(x.sale - x.buy)}</Td><Td right>{x.sale ? (((x.sale - x.buy) / x.sale) * 100).toFixed(1) : "0.0"}%</Td>
+                        <Td right>{x.n}</Td><Td right bold>{won(x.sale)}</Td><Td right><PAmt v={x.sale - x.buy}>{won(x.sale - x.buy)}</PAmt></Td><Td right><PRate v={x.sale ? ((x.sale - x.buy) / x.sale) * 100 : 0}>{x.sale ? (((x.sale - x.buy) / x.sale) * 100).toFixed(1) : "0.0"}%</PRate></Td>
                         <Td right bold className="!text-[#2D4C82]">{won(x.amount)}</Td><Td>{x.collected ? <Tag tone="dark">수금 완료</Tag> : <Tag tone="warn">미수</Tag>}</Td>
                       </tr>
                     ))}
@@ -394,8 +398,8 @@ function Accounts({ B, who, company, isViewer, onGo }) {
         <Sheet en="SALES · ACCOUNT" title={edit.client} onClose={() => setEdit(null)}
           footer={canAssign ? <>{edit.accountId && <button type="button" className={btnLine} onClick={clear}>담당 해제</button>}<button type="button" disabled={busy} className={`${btnDark} flex-1`} onClick={save}>{busy ? "저장 중…" : "저장"}</button></> : <button type="button" data-ro-allow className={`${btnLine} flex-1`} onClick={() => setEdit(null)}>닫기</button>}>
           <div className="grid grid-cols-2 gap-2">
-            {[["이번 달 매출", `${won(edit.cur)}원`], ["이번 달 매출이익", `${won(edit.curProfit)}원`], ["지난달 매출", `${won(edit.prev)}원`], ["최근 12개월", `${short(edit.total)}원 · ${edit.n}건`]].map(([l, v]) => (
-              <div key={l} className="rounded-2xl bg-white border border-[#E3E8F0] px-3.5 py-2.5"><div className="text-[11.5px] font-bold text-[#7A879C]">{l}</div><div className="text-[15.5px] font-black text-[#0F1A30] tabular-nums" style={num}>{v}</div></div>
+            {[["이번 달 매출", `${won(edit.cur)}원`], ["이번 달 매출이익", `${won(edit.curProfit)}원`, edit.curProfit], ["지난달 매출", `${won(edit.prev)}원`], ["최근 12개월", `${short(edit.total)}원 · ${edit.n}건`]].map(([l, v, pv]) => (
+              <div key={l} className="rounded-2xl bg-white border border-[#E3E8F0] px-3.5 py-2.5"><div className="text-[11.5px] font-bold text-[#7A879C]">{l}</div><div className="text-[15.5px] font-black text-[#0F1A30] tabular-nums" style={pv != null && profitColor(pv) ? { ...num, color: profitColor(pv) } : num}>{v}</div></div>
             ))}
           </div>
           <div className="flex items-center gap-1.5 flex-wrap"><St h={edit} />{edit.last && <span className="text-[12.5px] font-bold text-[#5B6B85]">마지막 오더 {edit.last}{edit.idle > 0 ? ` · ${edit.idle}일 전` : ""}</span>}</div>
@@ -588,12 +592,12 @@ function Incentive({ B, who, company, isViewer }) {
                   {cur.rows.map((x, i) => (
                     <tr key={x.client} className={`border-t border-[#EEF2F8] ${i % 2 ? "bg-[#FBFCFE]" : "bg-white"}`}>
                       <Td bold>{x.client} {x.isNew && <Tag>신규 +{p.newBonus}%p</Tag>} {x.isMature && <Tag tone="dim">장기 {p.matureFactor}%</Tag>} {x.exN > 0 && <Tag tone="warn">저마진 {x.exN}건 제외</Tag>}</Td>
-                      <Td right>{x.n}</Td><Td right>{won(x.sale)}</Td><Td right>{won(x.sale - x.buy)}</Td><Td right bold>{won(x.base)}</Td><Td right>{x.rate.toFixed(2)}%</Td><Td right bold className="!text-[#2D4C82]">{won(x.amount)}</Td>
+                      <Td right>{x.n}</Td><Td right>{won(x.sale)}</Td><Td right><PAmt v={x.sale - x.buy}>{won(x.sale - x.buy)}</PAmt></Td><Td right bold>{won(x.base)}</Td><Td right>{x.rate.toFixed(2)}%</Td><Td right bold className="!text-[#2D4C82]">{won(x.amount)}</Td>
                       <Td>{x.collected ? <Tag tone="dark">수금 완료</Tag> : <Tag tone="warn">미수 · 보류</Tag>}</Td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot><tr className="border-t-[3px] border-double border-[#0F1A30] bg-[#F5F8FD]"><Td bold>합계</Td><Td right bold>{cur.n}</Td><Td right bold>{won(cur.sale)}</Td><Td right bold>{won(cur.profit)}</Td><Td right bold>{won(cur.base)}</Td><Td right bold>{cur.effRate.toFixed(2)}%</Td><Td right bold className="!text-[#2D4C82]">{won(cur.total)}</Td><Td /></tr></tfoot>
+                <tfoot><tr className="border-t-[3px] border-double border-[#0F1A30] bg-[#F5F8FD]"><Td bold>합계</Td><Td right bold>{cur.n}</Td><Td right bold>{won(cur.sale)}</Td><Td right bold><PAmt v={cur.profit}>{won(cur.profit)}</PAmt></Td><Td right bold>{won(cur.base)}</Td><Td right bold>{cur.effRate.toFixed(2)}%</Td><Td right bold className="!text-[#2D4C82]">{won(cur.total)}</Td><Td /></tr></tfoot>
               </table>
             </div>
           )}
@@ -621,7 +625,7 @@ function Incentive({ B, who, company, isViewer }) {
                 <tbody>
                   {team.map((t, i) => { const s = saved(t.uid); return (
                     <tr key={t.uid} data-ro-allow onClick={() => setRep(t.uid)} className={`cursor-pointer hover:bg-[#F2F6FD] border-t border-[#EEF2F8] ${t.uid === uid ? "bg-[#EEF3FC]" : i % 2 ? "bg-[#FBFCFE]" : "bg-white"}`}>
-                      <Td bold>{t.name}{t.position ? <span className="text-[#7A879C] font-bold"> {t.position}</span> : null}</Td><Td right>{won(t.sale)}</Td><Td right>{won(t.profit)}</Td><Td right bold>{won(t.total)}</Td><Td right bold className="!text-[#2D4C82]">{won(p.collectOnly ? t.confirmed : t.total)}</Td><Td right>{won(p.collectOnly ? t.held : 0)}</Td>
+                      <Td bold>{t.name}{t.position ? <span className="text-[#7A879C] font-bold"> {t.position}</span> : null}</Td><Td right>{won(t.sale)}</Td><Td right><PAmt v={t.profit}>{won(t.profit)}</PAmt></Td><Td right bold>{won(t.total)}</Td><Td right bold className="!text-[#2D4C82]">{won(p.collectOnly ? t.confirmed : t.total)}</Td><Td right>{won(p.collectOnly ? t.held : 0)}</Td>
                       <Td><StBadge s={s} />{s && s.status === "확정" && s.amount !== (p.collectOnly ? t.confirmed : t.total) && <> <Tag tone="warn">금액 변동</Tag></>}</Td>
                       <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>{canAct && s?.status === "확정" && <button type="button" disabled={busy} className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-black text-[#1B2B4B]" onClick={() => markPaid(t.uid, t.name)}>지급 완료</button>}</td>
                     </tr>

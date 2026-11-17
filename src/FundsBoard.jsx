@@ -146,7 +146,7 @@ function AccountPanel({ company, acc, funds = [], onClose }) {
       footer={<>{acc && <button type="button" onClick={async () => { if ((await kpConfirm("이 계좌를 목록에서 뺄까요? (기록은 남습니다)"))) { await updateDoc(doc(db, "acctFunds", acc.id), { active: false }); onClose(); } }} className="h-12 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#B42318]">목록에서 빼기</button>}<button type="button" onClick={onClose} className="h-12 px-5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-bold text-[#3A4A66]">닫기</button><button type="button" onClick={save} className="flex-1 h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">저장</button></>}>
       {acc && !isCredit(acc) && !(isCard(acc) && acc.linkFundId) && (
         <div className="rounded-2xl p-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
-          <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>RECONCILE · 잔액 맞추기</div>
+          <div className="text-[11px] font-extrabold tracking-[0.08em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>RECONCILE · 잔액 맞추기</div>
           <div className="text-[13px] text-white/70 mt-1">은행 앱의 실제 잔액과 다르면 오늘 실제 잔액을 적어 주세요. 이후 계산은 이 값부터 시작합니다.</div>
           <div className="grid grid-cols-[1fr_1fr_auto] gap-2 mt-3">
             <CustomDatePicker value={check.date} onChange={(e) => setCheck((p) => ({ ...p, date: e.target.value }))} className="h-11 w-full px-3 rounded-xl text-[#0F1A30] text-[14px] font-bold" showIcon />
@@ -205,13 +205,13 @@ export function FundsBoard({ company, canEdit = true }) {
         right={<div className="flex items-center gap-2 flex-wrap"><ManualButton menu="자금관리" section="funds" dark />{canEdit && funds.length > 0 && <button type="button" onClick={() => setAcc({})} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black whitespace-nowrap">+ 통장·카드 등록</button>}</div>}
         kpis={[
           ["보유 자금", `${won(S.cash)}원`, `${assetList.length}개 계좌·현금`],
-          ["이번 달 순현금흐름", `${net >= 0 ? "+" : ""}${short(net)}원`, `수입 ${short(S.thisMonth.in)} · 지출 ${short(S.thisMonth.out)}`],
+          ["이번 달 순현금흐름", `${net >= 0 ? "+" : ""}${short(net)}원`, `수입 ${short(S.thisMonth.in)} · 지출 ${short(S.thisMonth.out)}`, net], // ⭐ 2026-11-17 플러스 빨강 · 마이너스 파랑
           ["운영 가능 기간", S.runway == null ? "—" : `${S.runway.toFixed(1)}개월`, `월평균 지출 ${short(S.avgOut)}원 기준`],
           cards.length ? ["이번 달 카드 사용", `${won(S.cardMonth)}원`, `${cards.length}장 · 대출 ${short(S.loan)}원`] : ["대출 잔액", `${won(S.loan)}원`, S.loan ? "기준일·맞추기 잔액" : "등록된 대출 없음"],
         ]} />
       {!funds.length ? (
         <div className="rounded-[22px] border-2 border-dashed border-[#C9D2E0] bg-white px-6 py-12 text-center">
-          <div className="text-[11px] font-extrabold tracking-[0.26em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>GET STARTED</div>
+          <div className="text-[11px] font-extrabold tracking-[0.08em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>GET STARTED</div>
           <div className="text-[20px] font-black text-[#0F1A30] mt-1">자금 상태를 입력해 주세요</div>
           <div className="text-[13.5px] text-[#7A879C] mt-1">통장·카드·현금·예금·대출을 등록하고 지금 잔액만 적으면, 이후엔 장부 입출금으로 자동 계산됩니다</div>
           {canEdit ? <button type="button" onClick={() => setSetup(true)} className="mt-5 h-12 px-6 rounded-2xl bg-[#0F1A30] text-white text-[15px] font-black">자금 상태 입력</button> : <div className="mt-4 text-[13px] font-bold text-[#9AA9C3]">경리 담당자가 입력하면 여기에 보입니다</div>}
