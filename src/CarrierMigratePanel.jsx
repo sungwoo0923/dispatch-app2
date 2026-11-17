@@ -12,6 +12,7 @@ import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { collection, doc, getDoc, getDocs, query, where, writeBatch, setDoc, serverTimestamp } from "firebase/firestore";
 import { applyMerges } from "../functions/sheetProfileCore.mjs";
 import { buildMigration, DEFAULT_PRESET, PRESET_SUGGESTIONS, presetSuggestionFor, forOrderDoc, forRouteDoc, forRateSheetDoc, nm, reconcileOrders } from "../functions/carrierMigrateCore.mjs";
+import { autoOwnerPatch } from "../functions/routeOwnerCore.mjs"; // ⭐ 2026-11-17 담당노선 주인
 import { arrayUnion } from "firebase/firestore";
 import { VT_DEFAULTS, hasTon } from "./vehicleTypes";
 import { coDocKey } from "./coKey";
@@ -609,9 +610,12 @@ export default function CarrierMigratePanel({ companies = [] }) {
         }
       }
       let done = 0;
+      // ⭐ 2026-11-17 담당노선 주인 — 직원이 [내 담당 설정]으로 맡은 노선의 새 오더는 배차담당자를 그 직원으로(functions/routeOwnerCore.mjs · 서버 실시간 반영과 같음)
+      let owners = null;
+      try { owners = (await getDoc(doc(db, "companySettings", co))).data()?.routeGroupOwners || null; } catch { owners = null; }
       for (let i = 0; i < list.length; i += 400) {
         const b = writeBatch(db);
-        list.slice(i, i + 400).forEach((o) => { const _id = newId(); b.set(doc(db, "orders", _id), { ...forOrderDoc(o, { company: co, batchId, me }), _id, _lastModified: Date.now(), createdAt: serverTimestamp() }); }); // 🕒 2026-11-14 등록 · 수정 시각 — 없으면 열려 있는 PC · 모바일과 이 PC 보관본이 "새로 생긴 오더"로 받지 못해 매출 · 정산 등 지난 기간 화면에 안 나왔다
+        list.slice(i, i + 400).forEach((o) => { const _id = newId(); b.set(doc(db, "orders", _id), { ...forOrderDoc(o, { company: co, batchId, me }), ...(autoOwnerPatch(o, owners) || {}), _id, _lastModified: Date.now(), createdAt: serverTimestamp() }); }); // 🕒 2026-11-14 등록 · 수정 시각 — 없으면 열려 있는 PC · 모바일과 이 PC 보관본이 "새로 생긴 오더"로 받지 못해 매출 · 정산 등 지난 기간 화면에 안 나왔다
         await b.commit();
         done = Math.min(list.length, i + 400);
         setProgress({ pct: 20 + Math.round((done / Math.max(1, list.length)) * 78), step: `오더 저장 중 ${won(done)} / ${won(list.length)}` });

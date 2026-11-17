@@ -352,6 +352,14 @@ service cloud.firestore {
       // ⭐ 2026-11-03 청구 사업자 기억(bizMemory: 거래처+상차지+하차지 → 사업자 이름) — 실무자(user)도 오더를 저장할 때 함께 기록한다(이 칸만)
       allow update: if isApproved() && myCo() == co && myRole() in ['admin', 'allMgr', 'hrAcct', 'hrManager', 'test', 'acctStaff', 'hrStaff', 'user']
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bizMemory']);
+      // ⭐ 2026-11-17 담당노선 주인(routeGroupOwners: 노선 → { uid, name, email, at }) — 직원이 [내 담당 설정]을 저장할 때 함께 적는다(이 칸만 · 우리 회사만 · 조회전용 제외)
+      //  앞으로 그 노선에 들어오는 새 오더의 배차담당자를 정하는 데 쓴다(functions/routeOwnerCore.mjs)
+      allow create: if isApproved() && myCo() == co && !(myRole() in ['driver', 'shipper', 'viewer', 'cafeUser'])
+        && request.resource.data.keys().hasOnly(['companyName', 'routeGroupOwners'])
+        && request.resource.data.get('companyName', '') == co && request.resource.data.routeGroupOwners is map;
+      allow update: if isApproved() && myCo() == co && !(myRole() in ['driver', 'shipper', 'viewer', 'cafeUser'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['routeGroupOwners'])
+        && request.resource.data.routeGroupOwners is map;
     }
     // 🎨 2026-11-03 표 컬럼 색(회사 공용) — 그 회사 직원은 읽고, 둘러보기(viewer) 말고는 바꿀 수 있다
     match /colStyles/{co} {

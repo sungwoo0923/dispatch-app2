@@ -192,9 +192,18 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
       if (r.update.length !== n1) again = true;
     }
     const batchId = `live_${kstYmd(now).replace(/-/g, "")}`;
+    // ⭐ 2026-11-17 담당노선 주인 — 직원이 [내 담당 설정]에서 맡은 노선(companySettings/{회사}.routeGroupOwners)의 새 오더는 배차담당자를 그 직원으로(시트 줄에 담당자가 없을 때 · functions/routeOwnerCore.mjs)
+    //  새로 만드는 오더에만 — 이미 있는 오더(최종마감일 수 있다)는 건드리지 않는다
+    let ownerOf = () => null;
+    if (r.create.length) {
+      try {
+        const map = ((await db.collection("companySettings").doc(co).get()).data() || {}).routeGroupOwners;
+        if (map && typeof map === "object" && Object.keys(map).length) { const RO = await import("./routeOwnerCore.mjs"); ownerOf = (o) => RO.autoOwnerPatch(o, map); }
+      } catch (e) { console.warn(`[시트 실시간] ${co} 담당노선 주인 읽기 실패:`, e?.message || e); }
+    }
     const ops = [];
     r.update.forEach((u) => ops.push((b) => b.set(db.collection("orders").doc(u.id), { ...u.patch, _lastModified: now, 최종수정자: by, 시트반영일시: FieldValue.serverTimestamp() }, { merge: true })));
-    r.create.forEach((o) => { const d = db.collection("orders").doc(); ops.push((b) => b.set(d, { ...M.forOrderDoc(o, { company: co, batchId, me: by }), _id: d.id, _lastModified: now, 최종수정자: by, createdAt: FieldValue.serverTimestamp(), 시트반영일시: FieldValue.serverTimestamp() })); }); // 최종수정자 = 서버 — 방금 시트에서 만든 오더를 "프로그램에서 방금 고친 오더"로 잘못 보고 미루지 않게
+    r.create.forEach((o) => { const d = db.collection("orders").doc(); ops.push((b) => b.set(d, { ...M.forOrderDoc(o, { company: co, batchId, me: by }), ...(ownerOf(o) || {}), _id: d.id, _lastModified: now, 최종수정자: by, createdAt: FieldValue.serverTimestamp(), 시트반영일시: FieldValue.serverTimestamp() })); }); // 최종수정자 = 서버 — 방금 시트에서 만든 오더를 "프로그램에서 방금 고친 오더"로 잘못 보고 미루지 않게
     // 시트에서 지운 줄 — 한 번에 너무 많이 없어지면(탭을 잘못 읽었을 수 있다) 지우지 않고 알려만 준다
     let removed = 0; let heldBack = 0;
     if (cfg.removeMissing !== false && r.missing.length) {
