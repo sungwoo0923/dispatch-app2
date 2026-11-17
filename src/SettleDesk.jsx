@@ -2,12 +2,13 @@
 // 🧾 2026-11-07 정산관리 › 거래처정산 리디자인 — 거래명세서 단계 보드 · 명세서 편집 그리드 · 미수금 데스크 · 공용 팝업 틀
 //  · 화면 조각만 모았다. 금액 계산(청구운임 · 세액 · 미정산 · 입금 배분)은 DispatchApp.jsx의 ClientSettlement가 지금처럼 하고
 //    이 파일은 받은 숫자를 그리기만 한다(회계관리 · AI 비서가 쓰는 미수금 숫자는 건드리지 않음).
-//  · 단계 기록: arDesk 컬렉션(회사별) — kind "stmt"(거래처·청구월 명세서 단계 · includePrepaid) / kind "client"(미수금 메모 · 다음 할 일 · 상태) / kind "config"(stmtIncludePrepaid)
+//  · 단계 기록: arDesk 컬렉션(회사별) — kind "stmt"(거래처·청구월 명세서 단계 · includePrepaid) / ⭐ 2026-11-17 kind "stmtSub"(같은 거래처의 담당노선구분별 명세서 · sub) / kind "client"(미수금 메모 · 다음 할 일 · 상태) / kind "config"(stmtIncludePrepaid)
 import React from "react";
 import { createPortal } from "react-dom";
 import { db } from "./firebase";
 import { collection, doc, onSnapshot, query, setDoc, where, serverTimestamp } from "firebase/firestore";
 import CustomDatePicker from "./CustomDatePicker";
+import { fmtPhone } from "./formatInput"; // ⭐ 2026-11-17 명세서 줄 표 — 기사 연락처
 import useNarrow from "./useNarrow"; // 📱 2026-11-10 휴대폰 폭 — 단계 표시 2줄 · 명세서 표 칸 줄이기
 
 export const SD = { ink: "#0F1A30", navy: "#1B2B4B", blue: "#2D4C82", sub: "#5B6B85", mute: "#9AA9C3", line: "#E3E8F0", hair: "#EEF2F8", soft: "#F4F6FA", sky: "#8FB0F0", ice: "#CFE0FF" };
@@ -107,6 +108,9 @@ export function useArDesk(company) {
     return [...m.values()];
   }, [docs, local]);
   const stmts = React.useMemo(() => { const m = new Map(); all.filter((d) => d.kind === "stmt").forEach((d) => m.set(`${d.biz || ""}|${d.client}|${d.yyyymm}`, d)); return m; }, [all]);
+  // ⭐ 2026-11-17 구분별 명세서(kind "stmtSub" · 거래처 × 청구월 × 담당노선구분) — 거래처 전체 명세서(kind "stmt")와 따로 둔다
+  //  (정산 홈 · 미수금 · 자동 마감은 지금처럼 거래처 전체 명세서만 본다)
+  const subStmts = React.useMemo(() => { const m = new Map(); all.filter((d) => d.kind === "stmtSub" && d.sub).forEach((d) => m.set(`${d.biz || ""}|${d.client}|${d.yyyymm}|${d.sub}`, d)); return m; }, [all]);
   const notes = React.useMemo(() => { const m = new Map(); all.filter((d) => d.kind === "client").forEach((d) => m.set(`${d.biz || ""}|${d.client}`, d)); return m; }, [all]);
   const save = React.useCallback(async (id, patch) => {
     setLocal((l) => ({ ...l, [id]: { ...(l[id] || {}), ...patch } }));
@@ -120,7 +124,7 @@ export function useArDesk(company) {
   const closes = React.useMemo(() => { const m = new Map(); all.filter((d) => d.kind === "close").forEach((d) => m.set(`${d.client}|${d.yyyymm}`, d)); return m; }, [all]);
   const dayCloses = React.useMemo(() => { const m = new Map(); all.filter((d) => d.kind === "dayclose").forEach((d) => m.set(`${d.by}|${d.date}`, d)); return m; }, [all]);
   const forms = React.useMemo(() => { const m = new Map(); all.filter((d) => d.kind === "form").forEach((d) => m.set(String(d.client ?? ""), d)); return m; }, [all]);
-  return { stmts, notes, save, config, saveConfig, company: co, closes, dayCloses, forms };
+  return { stmts, subStmts, notes, save, config, saveConfig, company: co, closes, dayCloses, forms };
 }
 
 // ✅ 2026-11-16 배차 마감(배차자 1차) 표시 — 마감 검증 탭 대신 거래처정산에 바로 보인다
@@ -310,14 +314,14 @@ export function StatementClientRail({ month, setMonth, groups = [], sel, onSel, 
           const checked = can && chosen.has(g.key);
           return (
             <button key={g.key} type="button" onClick={() => (pick ? can && toggle(g.key) : onSel(g))} data-testid="stmt-rail-item" data-on={on ? "1" : "0"}
-              className={`shrink-0 xl:shrink text-left rounded-xl px-3 py-2 border transition min-w-[180px] xl:min-w-0 ${on ? "bg-[#0F1A30] border-[#0F1A30] text-white" : checked ? "bg-[#EEF3FB] border-[#1B2B4B]" : pick && !can ? "bg-white border-[#E3E8F0] opacity-45 cursor-default" : "bg-white border-[#E3E8F0] hover:border-[#B8C4D8] hover:bg-[#F8FAFD]"}`}>
+              className={`shrink-0 xl:shrink text-left rounded-xl px-3 py-2 border transition min-w-[230px] xl:min-w-0 ${on ? "bg-[#0F1A30] border-[#0F1A30] text-white" : checked ? "bg-[#EEF3FB] border-[#1B2B4B]" : pick && !can ? "bg-white border-[#E3E8F0] opacity-45 cursor-default" : "bg-white border-[#E3E8F0] hover:border-[#B8C4D8] hover:bg-[#F8FAFD]"}`}>
               <div className="flex items-center gap-2 min-w-0">
                 {pick && <span className={`w-4 h-4 shrink-0 rounded border inline-flex items-center justify-center ${checked ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "border-[#B8C4D8] bg-white"}`}>{checked && <Ico d={IC.check} size={11} w={3} />}</span>}
-                <span className={`text-[14px] font-black truncate flex-1 ${on ? "text-white" : "text-[#0F1A30]"}`}>{g.client}</span>
+                <span className={`text-[14px] font-black flex-1 min-w-0 leading-snug break-keep line-clamp-2 ${on ? "text-white" : "text-[#0F1A30]"}`} title={g.client}>{g.client}</span>{/* ⭐ 2026-11-17 이름이 길면 두 줄까지(예전엔 좁은 칸에서 … 로 잘렸다) */}
                 <span className={`text-[12px] font-black px-1.5 h-5 rounded-md inline-flex items-center whitespace-nowrap ${on ? "bg-white/15 text-white" : stageIdx(g.stage) === 0 ? "border border-dashed border-[#B8C4D8] text-[#5B6B85]" : stageIdx(g.stage) === 6 ? "bg-[#0F1A30] text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>{stageLabel(g.stage)}</span>
               </div>
               <div className={`mt-0.5 flex items-center justify-between gap-2 text-[12.5px] font-bold ${on ? "text-white/70" : "text-[#5B6B85]"}`} style={NUM}>
-                <span className="whitespace-nowrap truncate min-w-0">{(g.count || 0).toLocaleString()}건{closeTag(g.close).t ? <span className="ml-1 font-black" style={{ color: on ? "#fff" : closeTag(g.close).c }}>· {closeTag(g.close).t}</span> : null}{g.settled ? <span className={`ml-1 ${on ? "text-white" : "text-[#1E6B4A]"}`} title="미수금관리에서 입금 확인(정산완료)">· 입금</span> : null}{pick && can && !g.email ? <span className="ml-1 text-[#A6400E]">· 메일 없음</span> : null}</span><span className={`whitespace-nowrap ${on ? "text-white font-black" : "text-[#0F1A30] font-black"}`}>{(g.total || 0).toLocaleString()}원</span>
+                <span className="whitespace-nowrap truncate min-w-0">{(g.count || 0).toLocaleString()}건{closeTag(g.close).t ? <span className="ml-1 font-black" style={{ color: on ? "#fff" : closeTag(g.close).c }}>· {closeTag(g.close).t}</span> : null}{g.settled ? <span className={`ml-1 ${on ? "text-white" : "text-[#1E6B4A]"}`} title="미수금관리에서 입금 확인(정산완료)">· 입금</span> : null}{pick && can && !g.email ? <span className="ml-1 text-[#A6400E]">· 메일 없음</span> : null}{g.subN > 1 ? <span className={`ml-1 ${on ? "text-white" : "text-[#2D4C82]"}`} title={`담당노선구분 ${g.subN}개 — 구분별 명세서 ${g.subDone || 0}개 작성`}>· 구분 {g.subDone || 0}/{g.subN}</span> : null}</span><span className={`whitespace-nowrap ${on ? "text-white font-black" : "text-[#0F1A30] font-black"}`}>{(g.total || 0).toLocaleString()}원</span>
               </div>
             </button>
           );
@@ -499,7 +503,10 @@ export function StatementBoard({ month, setMonth, recentMonths = [], groups, onO
 
 // ───────────────────────── 명세서 줄 편집 그리드 ─────────────────────────
 // rows: 조회된 오더(청구운임 > 0) / included: Set(_id) / onAmount(row, 새 공급가) → 오더의 청구운임을 고친다(기존 오더 수정과 같은 저장)
-export function StatementLineGrid({ rows, included, onToggle, onToggleAll, onAmount, onOpenOrder, readOnly }) {
+// ⭐ 2026-11-17 시트처럼 칸을 나눴다 — 날짜 · (구분) · 구간(상차 → 하차) · 기사(이름 · 차량번호 · 연락처) · 화물(품목 · 톤수 · 차종) · 공급가액 · 세액
+//  예전엔 구간 · 기사 · 화물이 한 칸에 섞여(게다가 가운데 정렬) 어수선했다. 칸마다 선 · 머리줄 고정 · 글은 왼쪽, 돈은 오른쪽
+//  groupOf(row): 한 거래처 안에 담당노선구분이 여러 개일 때 넘기면 "구분" 칸을 보여 준다(전체로 볼 때)
+export function StatementLineGrid({ rows, included, onToggle, onToggleAll, onAmount, onOpenOrder, readOnly, groupOf = null }) {
   const refs = React.useRef([]);
   const [edit, setEdit] = React.useState({});
   const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
@@ -514,16 +521,23 @@ export function StatementLineGrid({ rows, included, onToggle, onToggleAll, onAmo
   const vat = incRows.reduce((s, r) => s + Math.round(toInt(edit[r._id] ?? r.청구운임) * 0.1), 0);
   const allOn = rows.length > 0 && incRows.length === rows.length;
   const ph = useNarrow(640); // 📱 2026-11-10 휴대폰 — No·세액 칸을 빼고 화면 폭에 맞춤(세액은 아래 합계에)
+  const grp = typeof groupOf === "function" && !ph;
+  // 칸 정의 — [머리글, 폭, 정렬]
+  const cols = ph
+    ? [["", 32, "c"], ["날짜", 46, "c"], ["구간 · 기사 · 화물", null, "l"], ["공급가액", 96, "r"]]
+    : [["", 36, "c"], ["No", 34, "c"], ["날짜", 54, "c"], ...(grp ? [["구분", 86, "l"]] : []), ["구간 (상차 → 하차)", null, "l"], ["기사 정보", 130, "l"], ["화물", 112, "l"], ["공급가액", 106, "r"], ["세액", 72, "r"]];
+  const minW = ph ? 0 : cols.reduce((a, [, w]) => a + (w || 150), 0); // 구간 칸은 남는 폭을 다 쓴다(최소 150)
+  const cargoOf = (r) => [r.차량톤수 ? `${String(r.차량톤수).replace(/톤$/, "")}톤` : "", r.차량종류].filter(Boolean).join(" · ");
+  const off = (on, c) => (on ? c : "text-[#9AA9C3] line-through"); // 뺀 줄은 흐리게 + 취소선
   return (
-    <div className="rounded-2xl border border-[#E3E8F0] overflow-hidden bg-white">
+    <div className="rounded-2xl border border-[#E3E8F0] overflow-hidden bg-white" data-kp="stmt-lines">
       <div className="max-h-[460px] overflow-auto">
-        <table className="kp-sd kp-grid w-full" style={{ tableLayout: "fixed", minWidth: ph ? 0 : 470 }}>
-          {ph ? <colgroup><col style={{ width: 32 }} /><col style={{ width: 46 }} /><col /><col style={{ width: 96 }} /></colgroup>
-            : <colgroup><col style={{ width: 38 }} /><col style={{ width: 36 }} /><col style={{ width: 58 }} /><col /><col style={{ width: 118 }} /><col style={{ width: 78 }} /></colgroup>}
+        <table className="kp-sd kp-stmt-lines w-full" style={{ tableLayout: "fixed", minWidth: minW }}>
+          <colgroup>{cols.map(([, w], i) => <col key={i} style={w ? { width: w } : undefined} />)}</colgroup>
           <thead>
             <tr className="text-[13px] text-[#5B6B85]">
-              {[["", "c"], ["No", "c"], ["날짜", "l"], [ph ? "구간 · 기사" : "구간 · 기사 · 화물", "l"], ["공급가액", "r"], ["세액", "r"]].map(([h, a], i) => (ph && (i === 1 || i === 5)) ? null : (
-                <th key={i} className={`sticky top-0 z-[1] bg-[#F4F6FA] px-2 py-2.5 font-black ${a === "r" ? "text-right" : a === "c" ? "text-center" : "text-left"}`}>
+              {cols.map(([h, , a], i) => (
+                <th key={i} className={`sticky top-0 z-[1] bg-[#F4F6FA] px-2 py-2 font-black whitespace-nowrap ${a === "r" ? "text-right" : a === "c" ? "text-center" : "text-left"}`}>
                   {i === 0 ? <input type="checkbox" aria-label="모두 포함" className="w-4 h-4 accent-[#0F1A30]" checked={allOn} onChange={() => onToggleAll?.(!allOn)} /> : h}
                 </th>
               ))}
@@ -533,31 +547,59 @@ export function StatementLineGrid({ rows, included, onToggle, onToggleAll, onAmo
             {rows.map((r, i) => {
               const on = included.has(r._id);
               const v = edit[r._id] ?? toInt(r.청구운임).toLocaleString();
+              const from = r.상차지명 || r.상차지 || "-";
+              const to = r.하차지명 || r.하차지 || "-";
+              const drv = r.이름 || r.기사명 || "";
+              const phone = r.전화번호 || r.기사전화번호 || r.연락처 || "";
+              const cargo = cargoOf(r);
+              const route = (
+                <button type="button" onClick={() => onOpenOrder?.(r)} className={`block w-full text-left hover:underline underline-offset-2 ${on ? "text-[#0F1A30]" : "text-[#9AA9C3] line-through"}`} title={`${from} → ${to} · 오더 상세`}>
+                  <span className="block truncate text-[14px] font-bold">{from}</span>
+                  <span className="block truncate text-[13px] font-semibold"><span className="text-[#9AA9C3] mr-0.5">→</span>{to}</span>
+                </button>
+              );
+              const amt = (
+                <input ref={(el) => { refs.current[i] = el; }} inputMode="numeric" autoComplete="off" disabled={readOnly || !on} aria-label="공급가액"
+                  value={v}
+                  onFocus={(e) => { setEdit((x) => ({ ...x, [r._id]: String(toInt(r.청구운임)) })); setTimeout(() => e.target.select(), 0); }}
+                  onChange={(e) => setEdit((x) => ({ ...x, [r._id]: e.target.value.replace(/[^\d]/g, "") }))}
+                  onBlur={() => commit(r, i, 0)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === "ArrowDown") { e.preventDefault(); commit(r, i, 1); }
+                    else if (e.key === "ArrowUp") { e.preventDefault(); commit(r, i, -1); }
+                    else if (e.key === "Escape") { setEdit((x) => { const n = { ...x }; delete n[r._id]; return n; }); e.currentTarget.blur(); }
+                  }}
+                  className="h-9 w-full rounded-lg border border-transparent hover:border-[#D5DDEA] focus:border-[#1B2B4B] focus:ring-2 focus:ring-[#1B2B4B]/10 bg-transparent focus:bg-white px-2 text-right text-[15px] font-black text-[#0F1A30] outline-none disabled:text-[#9AA9C3]" style={NUM} />
+              );
+              if (ph) return (
+                <tr key={r._id} className={on ? "" : "bg-[#FAFBFD]"}>
+                  <td className="px-1 py-2 text-center"><input type="checkbox" aria-label="명세서에 넣기" className="w-4 h-4 accent-[#0F1A30]" checked={on} onChange={() => onToggle?.(r._id, !on)} /></td>
+                  <td className={`px-1 py-2 text-center text-[13px] ${on ? "text-[#3A4A66]" : "text-[#9AA9C3] line-through"}`} style={NUM}>{String(r.상차일 || "").slice(5)}</td>
+                  <td className="px-2 py-1.5 min-w-0">
+                    {route}
+                    <div className={`truncate text-[12.5px] ${off(on, "text-[#5B6B85]")}`}>{[drv, r.차량번호].filter(Boolean).join(" · ") || "-"}</div>
+                    {(r.화물내용 || cargo) && <div className={`truncate text-[12.5px] ${off(on, "text-[#9AA9C3]")}`}>{[r.화물내용, cargo].filter(Boolean).join(" · ")}</div>}
+                  </td>
+                  <td className="px-1 py-1.5 text-right">{amt}</td>
+                </tr>
+              );
               return (
-                <tr key={r._id} className={`border-t border-[#EEF2F8] ${on ? "" : "bg-[#FAFBFD]"}`}>
+                <tr key={r._id} className={on ? "" : "bg-[#FAFBFD]"}>
                   <td className="px-2 py-2 text-center"><input type="checkbox" aria-label="명세서에 넣기" className="w-4 h-4 accent-[#0F1A30]" checked={on} onChange={() => onToggle?.(r._id, !on)} /></td>
-                  {!ph && <td className="px-2 py-2 text-center text-[13px] text-[#9AA9C3]" style={NUM}>{i + 1}</td>}
-                  <td className={`${ph ? "px-1 text-[13px]" : "px-2 text-[14px]"} py-2 whitespace-nowrap ${on ? "text-[#3A4A66]" : "text-[#9AA9C3] line-through"}`} style={NUM}>{String(r.상차일 || "").slice(5)}</td>
-                  <td className="px-2 py-2 min-w-0">
-                    <button type="button" onClick={() => onOpenOrder?.(r)} className={`block max-w-full text-left truncate text-[14px] font-bold ${on ? "text-[#0F1A30]" : "text-[#9AA9C3] line-through"} hover:underline underline-offset-2`} title="오더 상세">
-                      {r.상차지명 || r.상차지 || "-"} <span className="text-[#9AA9C3]">→</span> {r.하차지명 || r.하차지 || "-"}
-                    </button>
-                    <div className="truncate text-[13px] text-[#9AA9C3]">{[r.이름 || r.기사명, r.차량번호, r.화물내용].filter(Boolean).join(" · ")}</div>
+                  <td className="px-1 py-2 text-center text-[13px] text-[#9AA9C3]" style={NUM}>{i + 1}</td>
+                  <td className={`px-1 py-2 text-center text-[14px] ${on ? "text-[#3A4A66]" : "text-[#9AA9C3] line-through"}`} style={NUM}>{String(r.상차일 || "").slice(5)}</td>
+                  {grp && <td className="px-2 py-2"><span className={`block truncate text-[12.5px] font-bold ${on ? "text-[#2D4C82]" : "text-[#9AA9C3]"}`} title={groupOf(r) || ""}>{groupOf(r) || "-"}</span></td>}
+                  <td className="px-2 py-1.5 min-w-0">{route}</td>
+                  <td className="px-2 py-1.5 min-w-0" title={[drv, r.차량번호, phone].filter(Boolean).join(" · ")}>
+                    <div className={`truncate text-[13.5px] font-bold ${on ? "text-[#0F1A30]" : "text-[#9AA9C3] line-through"}`}>{drv || "-"}{r.차량번호 ? <span className="ml-1.5 font-semibold text-[#5B6B85]">{r.차량번호}</span> : null}</div>
+                    <div className={`truncate text-[12.5px] ${off(on, "text-[#5B6B85]")}`} style={NUM}>{phone ? fmtPhone(phone) : "-"}</div>
                   </td>
-                  <td className="px-1.5 py-1.5 text-right">
-                    <input ref={(el) => { refs.current[i] = el; }} inputMode="numeric" autoComplete="off" disabled={readOnly || !on} aria-label="공급가액"
-                      value={v}
-                      onFocus={(e) => { setEdit((x) => ({ ...x, [r._id]: String(toInt(r.청구운임)) })); setTimeout(() => e.target.select(), 0); }}
-                      onChange={(e) => setEdit((x) => ({ ...x, [r._id]: e.target.value.replace(/[^\d]/g, "") }))}
-                      onBlur={() => commit(r, i, 0)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === "ArrowDown") { e.preventDefault(); commit(r, i, 1); }
-                        else if (e.key === "ArrowUp") { e.preventDefault(); commit(r, i, -1); }
-                        else if (e.key === "Escape") { setEdit((x) => { const n = { ...x }; delete n[r._id]; return n; }); e.currentTarget.blur(); }
-                      }}
-                      className="h-9 w-full rounded-lg border border-transparent hover:border-[#D5DDEA] focus:border-[#1B2B4B] focus:ring-2 focus:ring-[#1B2B4B]/10 bg-transparent focus:bg-white px-2 text-right text-[15px] font-black text-[#0F1A30] outline-none disabled:text-[#9AA9C3]" style={NUM} />
+                  <td className="px-2 py-1.5 min-w-0" title={[r.화물내용, cargo].filter(Boolean).join(" · ")}>
+                    <div className={`truncate text-[13.5px] font-semibold ${on ? "text-[#0F1A30]" : "text-[#9AA9C3] line-through"}`}>{r.화물내용 || "-"}</div>
+                    <div className={`truncate text-[12.5px] ${off(on, "text-[#5B6B85]")}`}>{cargo || "-"}</div>
                   </td>
-                  {!ph && <td className="px-2 py-2 text-right text-[14px] text-[#5B6B85]" style={NUM}>{on ? won(Math.round(toInt(edit[r._id] ?? r.청구운임) * 0.1)) : "-"}</td>}
+                  <td className="px-1.5 py-1.5 text-right">{amt}</td>
+                  <td className="px-2 py-2 text-right text-[14px] text-[#5B6B85]" style={NUM}>{on ? won(Math.round(toInt(edit[r._id] ?? r.청구운임) * 0.1)) : "-"}</td>
                 </tr>
               );
             })}
@@ -572,7 +614,7 @@ export function StatementLineGrid({ rows, included, onToggle, onToggleAll, onAmo
           </div>
         ))}
       </div>
-      <div className="px-3 py-2 text-[13px] text-[#9AA9C3] border-t border-[#E3E8F0]">금액 칸에서 Enter · ↑↓ 로 다음 줄 · Esc 취소 · 바꾼 금액은 그 오더의 청구운임으로 저장돼요</div>
+      <div className="px-3 py-2 text-[13px] text-[#9AA9C3] border-t border-[#E3E8F0]">금액 칸에서 Enter · ↑↓ 로 다음 줄 · Esc 취소 · 바꾼 금액은 그 오더의 청구운임으로 저장돼요 · 구간을 누르면 오더 상세가 열려요</div>
     </div>
   );
 }

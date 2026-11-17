@@ -476,6 +476,11 @@ table.kp-grid thead th { border-right: 1px solid #E3E8F0 !important; border-bott
 table.kp-sd.kp-grid tbody td, table.kp-grid tbody td { border-right: 1px solid #EEF2F8 !important; text-align: center !important; }
 table.kp-grid thead th:last-child, table.kp-sd.kp-grid tbody td:last-child, table.kp-grid tbody td:last-child { border-right: none !important; }
 table.kp-grid tbody tr { border-bottom: 1px solid #EEF2F8; }
+/* ⭐ 2026-11-17 거래명세서 줄 표(StatementLineGrid) — 시트처럼 칸마다 선 · 머리줄은 밝은 회색으로 고정(PC 테마의 남색 머리줄 · 가운데 정렬을 쓰지 않는다) */
+table.kp-sd.kp-stmt-lines thead th { background: #F4F6FA !important; color: #5B6B85 !important; height: auto; border-right: 1px solid #E3E8F0 !important; border-bottom: 1px solid #DCE3EE !important; }
+table.kp-sd.kp-stmt-lines tbody td { border-right: 1px solid #EEF2F8 !important; border-bottom: 1px solid #EEF2F8 !important; vertical-align: middle; }
+table.kp-sd.kp-stmt-lines thead th:last-child, table.kp-sd.kp-stmt-lines tbody td:last-child { border-right: none !important; }
+table.kp-sd.kp-stmt-lines tbody tr:hover td:not([class*="bg-"]) { background-color: #F7F9FD !important; }
 /* 🖥 2026-11-16 화면 맞춤 = 구글시트처럼 촘촘하게 — 줄이기 전에 칸 여백을 줄이고, 머리글은 두 줄까지, 긴 글(주소 · 메모)은 … 로 잘라 폭을 줄인다
    (글씨는 82% 아래로 줄이지 않는다 · 마우스를 올리면 전체 글이 보이는 칸은 그대로 title) */
 table[data-kpfit] > * > tr > th, table[data-kpfit] > * > tr > td { padding: 3px 6px !important; }

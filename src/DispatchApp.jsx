@@ -2975,7 +2975,8 @@ import { useCompanyFeatures } from "./companyFeatures";
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합 현황) — 회사가 쓰는 영역에 따라 상단 메뉴가 바뀐다(src/bizModules.js)
 import { useBizModules, isBizMenu, parseBizMenu, bizTopMenus, bizSideGroups, bizFirstMenu, bizMenuKey, readBiz, writeBiz, BIZ_MENU_ICON, bizInfo as bizInfoOf, bizMenuLabel as bizMenuLabelOf } from "./bizModules";
 import { reportScreen, installScreenVisibility } from "./screenReport";
-import { useRouteGroupFilter, RouteGroupBar, routeGroupOf, RouteGroupField, SheetLiveChip, rgOnScreen } from "./routeGroups";
+import { useRouteGroupFilter, RouteGroupBar, routeGroupOf, RouteGroupField, SheetLiveChip, rgOnScreen, RG_NONE, rgLabel } from "./routeGroups";
+import { MarginPct, marginPctText } from "./marginPct"; // ⭐ 2026-11-17 정산관리 수익 · 수수료 옆 매출 대비 %
 import { settleStartTab } from "./settleStart";
 import { QuickOrderLine, useDriverSuggest, DriverSuggestCell, AssignConfirm } from "./SmartDispatchUI"; // ⭐ 2026-11-13 빠른 등록 · 추천 기사
 const SettleHome = React.lazy(() => import("./SettleHome")); // 🧭 정산 홈(처음 열 때 받는다)
@@ -51884,6 +51885,9 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const [searchType, setSearchType] = useState("거래처명");
   const [searchInput, setSearchInput] = useState("");
   const [client, setClient] = useState("");
+  // ⭐ 2026-11-17 구분별 명세서 — 한 거래처(예: 녹수)를 담당노선구분(녹수내수 · 보령내수 · 녹수셔틀 …)별로 따로 발행한다. "" = 거래처 전체(기본)
+  //  고른 거래처가 바뀌면 저절로 전체로 돌아간다(c가 다르면 "")
+  const [stmtSubSel, setStmtSubSel] = useState({ c: "", g: "" });
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [editInfo, setEditInfo] = useState({});
@@ -52024,13 +52028,14 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const desk = useArDesk((localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim());
   const prepaidDefault = desk.config?.stmtIncludePrepaid === true;
   const invYmEarly = searchType === "거래처명" && client && start && end && start.slice(0, 7) === end.slice(0, 7) && start === monthStart(start.slice(0, 7)) && end === monthEnd(start.slice(0, 7)) ? start.slice(0, 7) : "";
-  const invStmtDocEarly = invYmEarly ? desk.stmts.get(`${csBizCur}|${client}|${invYmEarly}`) || null : null;
+  const stmtSub = searchType === "거래처명" && client && stmtSubSel.c === client ? stmtSubSel.g : ""; // ⭐ 2026-11-17 지금 보는 구분("" = 전체)
+  const invStmtDocEarly = invYmEarly ? (stmtSub ? desk.subStmts?.get(`${csBizCur}|${client}|${invYmEarly}|${stmtSub}`) : desk.stmts.get(`${csBizCur}|${client}|${invYmEarly}`)) || null : null;
   const [invPrepaidLocal, setInvPrepaidLocal] = useState(null);
-  useEffect(() => { setInvPrepaidLocal(null); }, [client, start, end, searchType]);
+  useEffect(() => { setInvPrepaidLocal(null); }, [client, start, end, searchType, stmtSub]);
   const invIncPrepaid = invPrepaidLocal ?? stmtIncludePrepaidOf(invStmtDocEarly, prepaidDefault);
 
   // ★ 청구운임 0 제외 필터 추가
-  const rowsInvoiceAll = useMemo(() => {
+  const rowsInvoiceBase = useMemo(() => {
     if (!searched) return [];
     let list = Array.isArray(dispatchData) ? dispatchData : [];
     list = list.filter(r => (r.배차상태 || "") === "배차완료");
@@ -52043,6 +52048,16 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     list = list.filter(csBizOk); // ⭐ 청구 사업자
     return list.sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
   }, [dispatchData, client, start, end, searched, searchType, csBizCur, csBiz.multi]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ⭐ 2026-11-17 구분별 명세서 — 이 거래처 오더의 담당노선구분 목록(2개 이상일 때만 [전체 · 구분…] 줄이 보인다) · 고른 구분이면 그 오더만
+  const stmtSubOf = (r) => routeGroupOf(r) || RG_NONE;
+  const stmtSubList = useMemo(() => {
+    if (searchType !== "거래처명" || !client) return [];
+    const m = new Map();
+    rowsInvoiceBase.forEach((r) => { const g = stmtSubOf(r); const x = m.get(g) || { g, count: 0, supply: 0 }; x.count += 1; x.supply += toInt(r.청구운임); m.set(g, x); });
+    return m.size > 1 ? [...m.values()].sort((a, b) => (a.g === RG_NONE) - (b.g === RG_NONE) || b.count - a.count || a.g.localeCompare(b.g)) : [];
+  }, [rowsInvoiceBase, searchType, client]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rowsInvoiceAll = useMemo(() => (stmtSub ? rowsInvoiceBase.filter((r) => stmtSubOf(r) === stmtSub) : rowsInvoiceBase), [rowsInvoiceBase, stmtSub]); // eslint-disable-line react-hooks/exhaustive-deps
+  const stmtTitle = stmtSub ? `${client}(${rgLabel(stmtSub)})` : client; // 파일 이름 · 메일 제목 · 인쇄 제목
   const rowsInvoice = useMemo(() => statementRowsOf(rowsInvoiceAll, invIncPrepaid).rows, [rowsInvoiceAll, invIncPrepaid]);
   const invPrepaidOut = rowsInvoiceAll.length - rowsInvoice.length; // 선불·착불이라 뺀 건수
 
@@ -52237,7 +52252,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
         </td>
         <td style="padding:0;vertical-align:bottom;text-align:right">
           <div style="font-size:10px;font-weight:700;color:${SUB}">거래기간</div>
-          <div style="font-family:${MONO};font-size:13px;font-weight:800;margin-top:2px">${item.start||""} ~ ${item.end||""}</div>
+          <div style="font-family:${MONO};font-size:13px;font-weight:800;margin-top:2px">${item.start||""} ~ ${item.end||""}</div>${item.sub ? `<div style="font-size:11px;font-weight:800;color:${SUB};margin-top:3px">구분 · ${String(rgLabel(item.sub)).replace(/[<>&]/g, "")}</div>` : ""}
         </td>
       </tr></tbody></table>
       <div style="height:2px;background:${INK};margin:12px 0 14px"></div>
@@ -52300,7 +52315,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     const canvas = await html2canvas(area, { scale: 2, backgroundColor: "#ffffff", useCORS: true });
     const pdf = new (await loadJsPDF())("p", "mm", "a4");
     addCanvasAsMultiPagePdf(pdf, canvas, { format: "PNG" });
-    pdf.save(`${client || "거래명세서"}.pdf`);
+    pdf.save(`${stmtTitle || "거래명세서"}.pdf`);
   };
 
   const downloadInvoiceExcel = async () => {
@@ -52354,7 +52369,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     if (!area) return showAlert("인쇄할 내용이 없습니다.");
     const win = window.open("", "_blank");
     win.document.write(`
-      <html><head><title>거래명세서 - ${client || ""}</title>
+      <html><head><title>거래명세서 - ${stmtTitle || ""}</title>
       <style>*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
       body{margin:0;padding:20px;font-family:'Pretendard','Malgun Gothic','Apple SD Gothic Neo',sans-serif;color:#0F1A30;background:#fff;}
       table{border-collapse:collapse;}[data-html2canvas-ignore]{display:none!important;}
@@ -53487,9 +53502,11 @@ const handleBatchSettle = async (targetStatus) => {
   const [stageAsk, setStageAsk] = useState(null); // { stage, groups }
   const [pendingSend, setPendingSend] = useState(false);
   useLoadOrderRange(monthStart(kstYm(-5) < pipeMonth ? kstYm(-5) : pipeMonth), monthEnd(pipeMonth > kstYm(0) ? pipeMonth : kstYm(0)));
-  const stmtKey = (c, ym) => `${csBizCur}|${c}|${ym}`;
-  const stmtDocOf = (c, ym) => desk.stmts.get(stmtKey(c, ym)) || null;
-  const stmtDocId = (c, ym) => stmtDocOf(c, ym)?.id || arDeskId(arCompany, "stmt", csBizCur, c, ym);
+  // ⭐ 2026-11-17 sub(담당노선구분)가 있으면 구분별 명세서 — kind "stmtSub" · 문서 이름도 따로(거래처 전체 명세서와 섞이지 않게)
+  const stmtKey = (c, ym, sub = "") => (sub ? `${csBizCur}|${c}|${ym}|${sub}` : `${csBizCur}|${c}|${ym}`);
+  const stmtDocOf = (c, ym, sub = "") => (sub ? desk.subStmts?.get(stmtKey(c, ym, sub)) : desk.stmts.get(stmtKey(c, ym))) || null;
+  const stmtDocId = (c, ym, sub = "") => stmtDocOf(c, ym, sub)?.id || (sub ? arDeskId(arCompany, "stmtSub", csBizCur, c, ym, sub) : arDeskId(arCompany, "stmt", csBizCur, c, ym));
+  const stmtBase = (c, ym, sub = "") => ({ kind: sub ? "stmtSub" : "stmt", client: c, yyyymm: ym, biz: csBizCur, ...(sub ? { sub } : {}) });
   const clientOf = (name) => (clients || []).find((c) => c.거래처명 === name) || null;
   const emailOf = (name) => { const c = clientOf(name); return c?.연락처이메일 || c?.이메일 || ""; };
   // 청구할 오더(거래명세서 조회와 같은 조건: 배차완료 · 청구운임 > 0 · 고른 청구 사업자)
@@ -53540,10 +53557,14 @@ const handleBatchSettle = async (targetStatus) => {
       const vat = inc.reduce((a, r) => a + Math.round(toInt(r.청구운임) * 0.1), 0);
       const hist = d?.history || [];
       const lastAt = hist.length ? Math.max(...hist.map(h => (typeof h.at === "number" ? h.at : h.at?.seconds ? h.at.seconds * 1000 : 0))) : 0;
-      return { close: cm.get(c) || null, key: `${c}|${ym}`, client: c, yyyymm: ym, rows: inc, count: inc.length, supply, vat, total: supply + vat, prepaidOut: pp.excluded.length, stage: viewStage(d?.stage), doc: d, lastAt, email: emailOf(c), settled: rows.every(r => r.정산상태?.[ym] === "정산완료") };
+      // ⭐ 2026-11-17 구분별 명세서 — 이 거래처에 담당노선구분이 몇 개고, 그중 몇 개를 작성했는지(왼쪽 목록에 "구분 1/3")
+      const subs = [...new Set(rows.map((r) => routeGroupOf(r) || RG_NONE))];
+      const subN = subs.length > 1 ? subs.length : 0;
+      const subDone = subN ? subs.filter((g) => stageIdx(stmtDocOf(c, ym, g)?.stage) >= 1).length : 0;
+      return { subN, subDone, close: cm.get(c) || null, key: `${c}|${ym}`, client: c, yyyymm: ym, rows: inc, count: inc.length, supply, vat, total: supply + vat, prepaidOut: pp.excluded.length, stage: viewStage(d?.stage), doc: d, lastAt, email: emailOf(c), settled: rows.every(r => r.정산상태?.[ym] === "정산완료") };
     });
   };
-  const pipeGroups = useMemo(() => groupsOfMonth(pipeMonth), [billRows, pipeMonth, desk.stmts, desk.closes, clients, prepaidDefault]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pipeGroups = useMemo(() => groupsOfMonth(pipeMonth), [billRows, pipeMonth, desk.stmts, desk.subStmts, desk.closes, clients, prepaidDefault]); // eslint-disable-line react-hooks/exhaustive-deps
   // 🔒 2026-11-16 명세서를 이미 작성한 뒤에 배차 1차 마감이 들어오면 바로 최종마감(경리 확인)으로
   useEffect(() => {
     if (isViewer) return;
@@ -53551,27 +53572,28 @@ const handleBatchSettle = async (targetStatus) => {
   }, [pipeGroups]); // eslint-disable-line react-hooks/exhaustive-deps
   const pipeRecent = useMemo(() => Array.from({ length: 6 }, (_, i) => kstYm(i - 5)).map(ym => ({ ym, open: groupsOfMonth(ym).filter(g => g.stage !== "마감").length })), [billRows, desk.stmts, prepaidDefault]); // eslint-disable-line react-hooks/exhaustive-deps
   const stmtSnap = (g) => ({ count: g.count, supply: g.supply, vat: g.vat });
-  const setStmtStage = async (c, ym, stage, { note = "", date = "", extra = null } = {}) => {
-    const cur = stmtDocOf(c, ym);
+  const setStmtStage = async (c, ym, stage, { note = "", date = "", extra = null, sub = "" } = {}) => {
+    const cur = stmtDocOf(c, ym, sub);
     const at = date && date !== todayStr8() ? new Date(`${date}T12:00:00+09:00`).getTime() : Date.now();
     const history = [...(cur?.history || []), { stage, at, by: auth.currentUser?.email || "", byName: csMyName(), ...(note ? { note } : {}) }].slice(-40);
-    await desk.save(stmtDocId(c, ym), { kind: "stmt", client: c, yyyymm: ym, biz: csBizCur, stage, history, ...(extra || {}) });
+    await desk.save(stmtDocId(c, ym, sub), { ...stmtBase(c, ym, sub), stage, history, ...(extra || {}) });
     if (stageIdx(stage) >= 1) ackClose(c, ym);
   };
   // 메일을 보낸 뒤 — 한 달짜리 명세서면 "발송"으로(이미 더 간 단계면 그대로)
-  const markStmtSent = (c, s0, e0) => {
+  const markStmtSent = (c, s0, e0, sub = "") => {
     const ym = String(s0 || "").slice(0, 7);
     if (!c || !ym || ym !== String(e0 || "").slice(0, 7)) return;
     // 🧾 2026-11-16 발송은 순서에서 뺐다 — 단계는 그대로 두고 보낸 날만 기록(미작성이면 작성으로)
-    const cur = stmtDocOf(c, ym);
+    const cur = stmtDocOf(c, ym, sub);
     const hist = [...(cur?.history || []), { stage: "발송", at: Date.now(), by: auth.currentUser?.email || "", byName: csMyName() }].slice(-40);
-    desk.save(stmtDocId(c, ym), { kind: "stmt", client: c, yyyymm: ym, biz: csBizCur, sentAt: Date.now(), history: hist, ...(stageIdx(cur?.stage) === 0 ? { stage: "작성" } : {}) }).catch(() => {});
+    desk.save(stmtDocId(c, ym, sub), { ...stmtBase(c, ym, sub), sentAt: Date.now(), history: hist, ...(stageIdx(cur?.stage) === 0 ? { stage: "작성" } : {}) }).catch(() => {});
   };
   const settleOpenRef = useRef(null); // 정산 홈 → 그 거래처 · 그 달 명세서 바로 열기
   useEffect(() => { settleOpenRef.current = (c, ym) => openStmt(c, ym); });
-  const openStmt = (c, ym, { send = false } = {}) => {
-    const d = stmtDocOf(c, ym);
+  const openStmt = (c, ym, { send = false, sub = "" } = {}) => {
+    const d = stmtDocOf(c, ym, sub);
     stmtExRef.current = d?.excludedIds || [];
+    setStmtSubSel({ c: sub ? c : "", g: sub }); // ⭐ 2026-11-17 다른 거래처 · 다른 달을 열면 구분은 전체로
     setSearchType("거래처명"); setSearchInput(c); setClient(c);
     setStart(monthStart(ym)); setEnd(monthEnd(ym)); setSearched(true); setDropdownOpen(false);
     setInvView("edit");
@@ -53580,35 +53602,38 @@ const handleBatchSettle = async (targetStatus) => {
   };
   // 편집 중인 명세서가 한 달 · 한 거래처면 단계 기록 대상
   const stmtYm = searchType === "거래처명" && client && start && end && start.slice(0, 7) === end.slice(0, 7) && start === monthStart(start.slice(0, 7)) && end === monthEnd(start.slice(0, 7)) ? start.slice(0, 7) : "";
-  const stmtCur = stmtYm ? stmtDocOf(client, stmtYm) : null;
+  const stmtCur = stmtYm ? stmtDocOf(client, stmtYm, stmtSub) : null;
   const stmtStage = viewStage(stmtCur?.stage);
-  const stmtLogs = useMemo(() => (emailLogs || []).filter(l => l.client === client && String(l.type || "").startsWith("거래명세서") && (!stmtYm || String(l.subject || "").includes(stmtYm))), [emailLogs, client, stmtYm]);
+  const stmtLogs = useMemo(() => (emailLogs || []).filter(l => l.client === client && String(l.type || "").startsWith("거래명세서") && (!stmtYm || String(l.subject || "").includes(stmtYm))
+    && (stmtSub ? String(l.subject || "").includes(`${client}(${rgLabel(stmtSub)})`) : !String(l.subject || "").includes(`${client}(`))), [emailLogs, client, stmtYm, stmtSub]); // ⭐ 2026-11-17 구분별 명세서 메일은 그 구분에서만
+  // ⭐ 2026-11-17 구분 고르기 — 그 구분 명세서에서 뺀 오더를 다시 뺀다(전체로 돌아가면 전체 명세서 기준)
+  const pickStmtSub = (g) => { stmtExRef.current = (stmtYm ? stmtDocOf(client, stmtYm, g)?.excludedIds : null) || []; setStmtSubSel({ c: g ? client : "", g }); };
   const exNow = excludedRowsInvoice.map(r => r._id).sort().join(",");
   const exSaved = [...(stmtCur?.excludedIds || [])].sort().join(",");
   const saveStmtDraft = async () => {
     if (!stmtYm) return;
     const extra = { count: mapped.length, supply: 합계공급가, vat: 합계세액, excludedIds: excludedRowsInvoice.map(r => r._id), includePrepaid: invIncPrepaid };
-    if (stageIdx(stmtStage) >= 1) { await desk.save(stmtDocId(client, stmtYm), { kind: "stmt", client, yyyymm: stmtYm, biz: csBizCur, ...extra }); sflowToast("포함 오더를 저장했어요", "success"); return; }
-    await setStmtStage(client, stmtYm, "작성", { extra });
-    sflowToast(`${client} ${Number(stmtYm.slice(5))}월 명세서 작성 완료`, "success");
+    if (stageIdx(stmtStage) >= 1) { await desk.save(stmtDocId(client, stmtYm, stmtSub), { ...stmtBase(client, stmtYm, stmtSub), ...extra }); sflowToast("포함 오더를 저장했어요", "success"); return; }
+    await setStmtStage(client, stmtYm, "작성", { extra, sub: stmtSub });
+    sflowToast(`${stmtTitle} ${Number(stmtYm.slice(5))}월 명세서 작성 완료`, "success");
   };
   // 🧾 2026-11-16 빠른 처리 — 미작성 · 작성 → 계산서 발행 → 마감(한 번씩 누르면 다음 단계) · 되돌리기
   const quickStmt = async (stage) => {
     if (!stmtYm || isViewer) return;
     const extra = stageIdx(stmtStage) === 0 ? { count: mapped.length, supply: 합계공급가, vat: 합계세액, excludedIds: excludedRowsInvoice.map(r => r._id), includePrepaid: invIncPrepaid } : null;
-    await setStmtStage(client, stmtYm, stage, { extra });
-    sflowToast(`${client} ${Number(stmtYm.slice(5))}월 ${stageLabel(stage)}`, "success");
+    await setStmtStage(client, stmtYm, stage, { extra, sub: stmtSub });
+    sflowToast(`${stmtTitle} ${Number(stmtYm.slice(5))}월 ${stageLabel(stage)}`, "success");
   };
   const revertStmt = async (stage) => {
     if (!stmtYm || isViewer) return;
-    if (!(await kpConfirm(`${client} ${Number(stmtYm.slice(5))}월 명세서를 ‘${stageLabel(stage)}’ 단계로 되돌릴까요?`))) return;
-    await setStmtStage(client, stmtYm, stage, { note: `${stageLabel(stmtStage)} 취소`, extra: { autoClosed: true } });
+    if (!(await kpConfirm(`${stmtTitle} ${Number(stmtYm.slice(5))}월 명세서를 ‘${stageLabel(stage)}’ 단계로 되돌릴까요?`))) return;
+    await setStmtStage(client, stmtYm, stage, { note: `${stageLabel(stmtStage)} 취소`, extra: { autoClosed: true }, sub: stmtSub });
     sflowToast(`${stageLabel(stage)} 단계로 되돌렸어요`, "success");
   };
   // ⭐ 2026-11-07 선불·착불 포함 — 이 명세서만(한 달 · 한 거래처면 단계 기록에 저장) / 회사 기본
   const toggleInvPrepaid = (on) => {
     setInvPrepaidLocal(on);
-    if (stmtYm && !isViewer) desk.save(stmtDocId(client, stmtYm), { kind: "stmt", client, yyyymm: stmtYm, biz: csBizCur, includePrepaid: on, ...(stmtCur ? {} : { stage: "미작성" }) }).catch(() => {});
+    if (stmtYm && !isViewer) desk.save(stmtDocId(client, stmtYm, stmtSub), { ...stmtBase(client, stmtYm, stmtSub), includePrepaid: on, ...(stmtCur ? {} : { stage: "미작성" }) }).catch(() => {});
   };
   const savePrepaidDefault = (on) => { if (!isViewer) desk.saveConfig({ stmtIncludePrepaid: on }).catch(() => {}); };
   // 거래명세서 메일 창 열기(예전 "명세서 발송" 버튼과 같은 내용)
@@ -53671,7 +53696,7 @@ const handleBatchSettle = async (targetStatus) => {
   const saveStageAsk = async ({ date, note }) => {
     const t = stageAsk; if (!t) return;
     setStageAsk(null);
-    for (const g of t.groups) await setStmtStage(g.client, g.yyyymm, t.stage, { date, note, extra: stageIdx(g.stage) === 0 ? { ...stmtSnap(g), excludedIds: [] } : null });
+    for (const g of t.groups) await setStmtStage(g.client, g.yyyymm, t.stage, { date, note, sub: g.sub || "", extra: stageIdx(g.stage) === 0 ? { ...stmtSnap(g), excludedIds: [] } : null });
     sflowToast(`${t.groups.length > 1 ? `${t.groups.length}곳 ` : ""}${stageLabel(t.stage)} 기록`, "success");
   };
   const pipeNav = useMemo(() => [...pipeGroups].sort((a, b) => stageIdx(a.stage) - stageIdx(b.stage) || b.total - a.total), [pipeGroups]);
@@ -53921,8 +53946,9 @@ const handleBatchSettle = async (targetStatus) => {
           )}
 
           {invView === "edit" && (
-            <div className="grid grid-cols-1 xl:grid-cols-[200px_minmax(0,1fr)] min-[1800px]:grid-cols-[256px_minmax(0,1fr)] gap-3 items-start">
+            <div className="grid grid-cols-1 xl:grid-cols-[272px_minmax(0,1fr)] min-[1800px]:grid-cols-[320px_minmax(0,1fr)] gap-3 items-start">
               {/* ⭐ 2026-11-09 항상 2분할 — 왼쪽 거래처 목록(이 달) · 오른쪽 명세서 편집 + 미리보기 */}
+              {/* ⭐ 2026-11-17 왼쪽 거래처 목록을 넓혔다(200 → 272px · 아주 넓은 화면 256 → 320px) — 거래처 이름이 잘리지 않게 */}
               <StatementClientRail month={pipeMonth} setMonth={changeStmtMonth} groups={pipeNav} sel={stmtYm === pipeMonth ? client : ""}
                 onSel={(g) => openStmt(g.client, g.yyyymm)} disabled={isViewer}
                 onBulkSend={(gs) => onStmtBulk("발송", gs)} />
@@ -53934,6 +53960,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <div className="text-[13px] font-bold text-[#5B6B85] tabular-nums">{stmtYm ? `${stmtYm.slice(0, 4)}년 ${Number(stmtYm.slice(5))}월 청구` : searched ? `${start || "처음"} ~ ${end || "끝"}` : "조회 전"}{searchType === "기사명" ? " · 기사명 조회" : ""}</div>
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-[19px] font-black text-[#0F1A30] truncate">{client || "거래처를 고르세요"}</span>
+                    {stmtSub && <span className="shrink-0 h-7 px-2.5 rounded-lg bg-[#EEF3FB] text-[#2D4C82] text-[13.5px] font-black inline-flex items-center whitespace-nowrap" data-kp="stmt-sub-badge">{rgLabel(stmtSub)}</span>}
                     {stmtYm && <StageBadge stage={stmtStage} />}
                   </div>
                 </div>
@@ -53951,6 +53978,30 @@ const handleBatchSettle = async (targetStatus) => {
                 <button type="button" disabled={!searched || !rowsInvoice.length} onClick={openInvoiceEmail} className={sdBtnPri}><Ico d={IC.send} size={15} />발송</button>
               </div>
 
+              {/* ⭐ 2026-11-17 구분별 명세서 — 이 거래처 오더에 담당노선구분이 2개 이상이면 [전체 · 구분…]을 고른다(기본 = 전체 한 장)
+                   구분을 고르면 줄 · 합계 · 미리보기 · 인쇄 · PDF · 엑셀 · 메일 · 단계 기록이 모두 그 구분만 따로 */}
+              {stmtSubList.length > 0 && (
+                <div className={`${csCard} px-4 py-3`} data-kp="stmt-sub">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[13px] font-black text-[#5B6B85] mr-1 whitespace-nowrap">구분별 명세서</span>
+                    {[{ g: "", count: rowsInvoiceBase.length }, ...stmtSubList].map((x) => {
+                      const on = stmtSub === x.g;
+                      const st = stmtYm ? viewStage(stmtDocOf(client, stmtYm, x.g)?.stage) : "";
+                      return (
+                        <button key={x.g || "_all"} type="button" onClick={() => pickStmtSub(x.g)} aria-pressed={on} data-kp="stmt-sub-chip"
+                          title={x.g ? `${rgLabel(x.g)} 오더만 따로 명세서를 만들어요` : "이 거래처 오더 전체를 한 장으로"}
+                          className={`h-9 px-3 rounded-lg border text-[13px] font-black inline-flex items-center gap-1.5 whitespace-nowrap transition ${on ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "bg-white border-[#D5DDEA] text-[#1B2B4B] hover:bg-[#F4F6FA]"}`}>
+                          {x.g ? rgLabel(x.g) : "전체"}
+                          <span className={`tabular-nums font-bold ${on ? "text-white/70" : "text-[#9AA9C3]"}`}>{x.count.toLocaleString()}건</span>
+                          {stmtYm && stageIdx(st) >= 1 && <span className={`text-[11.5px] px-1.5 h-5 rounded-md inline-flex items-center ${on ? "bg-white/15 text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>{stageLabel(st)}</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-1.5 text-[12.5px] text-[#9AA9C3]">{stmtSub ? `‘${rgLabel(stmtSub)}’ 오더만 따로 명세서를 만들어요. 단계 · 메일 · 인쇄도 이 구분만 따로 기록돼요` : "전체는 이 거래처 오더를 한 장으로 청구해요. 구분을 누르면 그 구분만 따로 발행할 수 있어요"}</div>
+                </div>
+              )}
+
               {/* 단계 — 한 달 · 한 거래처로 연 명세서만 */}
               {stmtYm ? (
                 <div className={`${csCard} px-4 py-3`}>
@@ -53958,7 +54009,7 @@ const handleBatchSettle = async (targetStatus) => {
                   <StageStepper stage={stmtStage} history={stmtCur?.history || []} disabled={isViewer}
                     sentHint={stmtLogs[0]?.sentAt ? `${new Date(stmtLogs[0].sentAt + 9 * 3600e3).getUTCMonth() + 1}/${new Date(stmtLogs[0].sentAt + 9 * 3600e3).getUTCDate()}` : ""}
                     onSet={(k) => {
-                      const g = { client, yyyymm: stmtYm, stage: stmtStage, count: mapped.length, supply: 합계공급가, vat: 합계세액, doc: stmtCur };
+                      const g = { client, yyyymm: stmtYm, sub: stmtSub, stage: stmtStage, count: mapped.length, supply: 합계공급가, vat: 합계세액, doc: stmtCur };
                       if (k === "작성" && stageIdx(stmtStage) === 0) { saveStmtDraft(); return; }
                       if (stageIdx(k) < stageIdx(stmtStage)) { revertStmt(k); return; } // 계산서 발행 · 마감 → 되돌리기
                       setStageAsk({ stage: k, groups: [g] });
@@ -53968,7 +54019,7 @@ const handleBatchSettle = async (targetStatus) => {
                 <div className="rounded-2xl border border-dashed border-[#C9D3E3] bg-white px-4 py-3 text-[14px] text-[#5B6B85]">거래처 한 곳 · 한 달(1일~말일)로 열면 발송 · 확인 · 계산서 · 마감 단계를 기록할 수 있어요</div>
               ) : null}
 
-              <div className="grid grid-cols-1 2xl:grid-cols-[minmax(0,44fr)_minmax(0,56fr)] gap-3 items-start">{/* ⭐ 2026-11-09 왼쪽 거래처 목록이 늘 있으니 편집·미리보기 나란히는 넓은 화면(1536px~)만, 그보다 좁으면 위(편집)·아래(미리보기) */}
+              <div className="grid grid-cols-1 min-[1800px]:grid-cols-[minmax(0,56fr)_minmax(0,44fr)] gap-3 items-start">{/* ⭐ 2026-11-09 왼쪽 거래처 목록이 늘 있으니 편집·미리보기 나란히는 넓은 화면만, 그보다 좁으면 위(편집)·아래(미리보기) · ⭐ 2026-11-17 명세서 줄 표가 칸을 나눠 넓어져 1800px~ · 편집 56 : 미리보기 44 */}
                 <div className="space-y-3 min-w-0">
                   {searched && (
                     <div className="flex items-stretch gap-2 flex-wrap">
@@ -54001,7 +54052,7 @@ const handleBatchSettle = async (targetStatus) => {
                       <div className="text-[14px] mt-1 text-[#9AA9C3]">배차완료 · 청구운임이 있는 오더만 명세서에 들어가요</div>
                     </div>
                   ) : (
-                    <StatementLineGrid rows={rowsInvoice} included={selectedInvoiceIds} readOnly={isViewer}
+                    <StatementLineGrid rows={rowsInvoice} included={selectedInvoiceIds} readOnly={isViewer} groupOf={stmtSubList.length && !stmtSub ? (r) => rgLabel(stmtSubOf(r)) : null}
                       onToggle={(id, on) => (on ? restoreInvoiceRow(id) : excludeInvoiceRow(id))}
                       onToggleAll={(on) => setSelectedInvoiceIds(on ? new Set(rowsInvoice.map(r => r._id)) : new Set())}
                       onOpenOrder={openOrderPopup}
@@ -54065,10 +54116,11 @@ const handleBatchSettle = async (targetStatus) => {
                       const email = found?.연락처이메일 || found?.이메일 || "";
                       if (!email) return showAlert(`${client}에 등록된 이메일이 없습니다. 거래처 정보에서 이메일을 등록해주세요.`);
                       setBatchSendList(prev => {
-                        if (prev.find(x => x.name === client)) return showAlert(`${client}은 이미 발송 목록에 있습니다.`) || prev;
-                        showAlert(`${client} 발송 목록에 추가됨`);
+                        if (prev.find(x => x.name === client && (x.sub || "") === stmtSub)) return showAlert(`${stmtTitle}은 이미 발송 목록에 있습니다.`) || prev;
+                        showAlert(`${stmtTitle} 발송 목록에 추가됨`);
                         return [...prev, {
                           name: client,
+                          ...(stmtSub ? { sub: stmtSub, label: stmtTitle } : {}), // ⭐ 2026-11-17 구분별 명세서
                           email,
                           start: start || "",
                           end: end || "",
@@ -54162,6 +54214,7 @@ const handleBatchSettle = async (targetStatus) => {
                                 <td style={{ padding: 0, verticalAlign: "bottom", textAlign: "right", border: "none" }}>
                                   <div style={{ fontSize: 10, fontWeight: 700, color: DOC.sub }}>거래기간</div>
                                   <div style={{ fontFamily: DOC.mono, fontSize: 12.5, fontWeight: 800, color: DOC.ink, marginTop: 2, whiteSpace: "nowrap" }}>{(start || end) ? `${start || "시작일"} ~ ${end || "종료일"}` : "전체 기간"}</div>
+                                  {stmtSub && <div style={{ fontSize: 11, fontWeight: 800, color: DOC.sub, marginTop: 3, whiteSpace: "nowrap" }} data-kp="stmt-sub-doc">구분 · {rgLabel(stmtSub)}</div>}{/* ⭐ 2026-11-17 구분별 명세서 */}
                                 </td>
                               </tr>
                             </tbody>
@@ -54774,7 +54827,7 @@ const handleBatchSettle = async (targetStatus) => {
           <div key={i} className="bg-[#F8FAFD] rounded-xl border border-[#E3E8F0] px-4 py-3">
             <div className="flex items-center justify-between mb-2">
               <div>
-                <span className="text-[13px] font-bold text-[#1B2B4B]">{item.name}</span>
+                <span className="text-[13px] font-bold text-[#1B2B4B]">{item.label || item.name}</span>
                 <span className="ml-2 text-[11px] text-[#7A89A3]">{item.start}~{item.end} · {item.mapped?.length||0}건</span>
               </div>
               {!batchSending && (
@@ -54841,7 +54894,7 @@ const handleBatchSettle = async (targetStatus) => {
                 XLSX.utils.book_append_sheet(wb2, XLSX.utils.json_to_sheet(wsData), "거래명세서");
                 const excelBase64 = XLSX.write(wb2, { bookType: "xlsx", type: "base64" });
                 const attachments = [{
-                  filename: `거래명세서_${item.name}_${item.start}~${item.end}.xlsx`,
+                  filename: `거래명세서_${item.label || item.name}_${item.start}~${item.end}.xlsx`,
                   content: excelBase64,
                   contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 }];
@@ -54859,13 +54912,13 @@ const handleBatchSettle = async (targetStatus) => {
                   const pdf = new (await loadJsPDF())("p", "mm", "a4");
                   addCanvasAsMultiPagePdf(pdf, canvas, { format: "JPEG", quality: 0.85 });
                   attachments.push({
-                    filename: `거래명세서_${item.name}_${item.start}~${item.end}.pdf`,
+                    filename: `거래명세서_${item.label || item.name}_${item.start}~${item.end}.pdf`,
                     content: pdf.output("datauristring").split(",")[1],
                     contentType: "application/pdf",
                   });
                 } catch(pdfErr) { console.error("PDF 생성 실패:", pdfErr); }
 
-                const subject = `[거래명세서] ${item.name} ${item.start}~${item.end}`;
+                const subject = `[거래명세서] ${item.label || item.name} ${item.start}~${item.end}`; // ⭐ 2026-11-17 구분별 명세서는 label "녹수(녹수셔틀)"
                 const totalAmt = (item.totals?.공급가||0)+(item.totals?.세액||0);
                 const bodyText = `안녕하세요, ${item.name} 담당자님.\n\n${COMPANY_PRINT.name}입니다.\n\n${item.start}~${item.end} 기간 거래명세서를 발송드립니다.\n\n총 ${item.mapped?.length||0}건\n공급가액: ${(item.totals?.공급가||0).toLocaleString()}원\n부가세: ${(item.totals?.세액||0).toLocaleString()}원\n합계: ${totalAmt.toLocaleString()}원\n\n입금계좌: ${COMPANY_PRINT.bank}\n마감문의: ${COMPANY_PRINT.phone || "-"}\n\n확인 부탁드립니다.\n감사합니다.\n\n${COMPANY_PRINT.name}\n${COMPANY_PRINT.contact}`;
                 const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyText.split("\n").map(l=>`<p style="margin:0 0 4px 0">${l||"&nbsp;"}</p>`).join("")}</div>`;
@@ -54873,7 +54926,7 @@ const handleBatchSettle = async (targetStatus) => {
                 const r = await sendCompanyMail({ to: item.email, subject, html: bodyHtml, attachments, log: { type: "거래명세서", client: item.name, body: bodyText } });
                 if (r.ok) {
                   if (!r.logged) logEmail({ type:"거래명세서", client: item.name, to: item.email, subject, body: bodyText, attachmentNames: attachments.map(a=>a.filename), status:"success" });
-                  markStmtSent(item.name, item.start, item.end); // ⭐ 2026-11-07 단계 보드 — 발송
+                  markStmtSent(item.name, item.start, item.end, item.sub || ""); // ⭐ 2026-11-07 단계 보드 — 발송
                 } else {
                   const reason = r.error || "보내지 못했어요";
                   failed.push({ name: item.name, reason });
@@ -55079,7 +55132,7 @@ const handleBatchSettle = async (targetStatus) => {
                           const pdf = new (await loadJsPDF())("p", "mm", "a4");
                           addCanvasAsMultiPagePdf(pdf, canvas, { format: "JPEG", quality: 0.85 });
                           fileAttachments.push({
-                            filename: `거래명세서_${client}_${start||""}~${end||""}.pdf`,
+                            filename: `거래명세서_${stmtTitle}_${start||""}~${end||""}.pdf`,
                             content: pdf.output("datauristring").split(",")[1],
                             contentType: "application/pdf",
                           });
@@ -55105,13 +55158,13 @@ const handleBatchSettle = async (targetStatus) => {
                         const ws2 = XLSX.utils.json_to_sheet(wsData);
                         XLSX.utils.book_append_sheet(wb2, ws2, "거래명세서");
                         fileAttachments.push({
-                          filename: `거래명세서_${client}_${start||""}~${end||""}.xlsx`,
+                          filename: `거래명세서_${stmtTitle}_${start||""}~${end||""}.xlsx`,
                           content: XLSX.write(wb2, { bookType: "xlsx", type: "base64" }),
                           contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         });
                       } catch (e) { console.error("엑셀 생성 실패:", e); }
 
-                      const subject = `[거래명세서] ${client} ${start||""}~${end||""}`;
+                      const subject = `[거래명세서] ${stmtTitle} ${start||""}~${end||""}`; // ⭐ 2026-11-17 구분별 명세서면 "녹수(녹수셔틀)"
                       const bodyLines = emailBody.split("\n").map(l => `<p style="margin:0 0 4px 0">${l || "&nbsp;"}</p>`).join("");
                       const cardSectionInvoice = (includeCardInvoice && cardImage) ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0"/><img src="${cardImage}" alt="명함" style="width:100%;max-width:500px;border-radius:8px;display:block" onerror="this.style.display='none'"/>` : "";
                       const bodyHtml = `<div style="font-family:sans-serif;font-size:14px;color:#333;line-height:1.8;max-width:600px">${bodyLines}${cardSectionInvoice}</div>`;
@@ -55129,7 +55182,7 @@ const handleBatchSettle = async (targetStatus) => {
                             type: "거래명세서", meta: { client, body: emailBody },
                           });
                           logEmail({ type:"거래명세서(예약)", client, to: emailTo, subject, body: emailBody, attachmentNames: fileAttachments.map(f=>f.filename), status:"success" });
-                          markStmtSent(client, start, end); // ⭐ 2026-11-07 단계 보드 — 예약도 발송으로
+                          markStmtSent(client, start, end, stmtSub); // ⭐ 2026-11-07 단계 보드 — 예약도 발송으로
                           showAlert(`${new Date(emailScheduleAt).toLocaleString("ko-KR")}에 발송 예약되었습니다.`);
                           setEmailModalOpen(false);
                           setEmailSending(false);
@@ -55146,7 +55199,7 @@ const handleBatchSettle = async (targetStatus) => {
                         });
                         if (r.ok) {
                           if (!r.logged) logEmail({ type:"거래명세서", client, to: emailTo, subject, body: emailBody, attachmentNames: fileAttachments.map(f=>f.filename), status:"success" });
-                          markStmtSent(client, start, end); // ⭐ 2026-11-07 단계 보드 — 발송
+                          markStmtSent(client, start, end, stmtSub); // ⭐ 2026-11-07 단계 보드 — 발송
                           showAlert(`${emailTo} 로 발송 완료`);
                           setEmailModalOpen(false);
                         } else if (!isMailSetupNeeded(r)) {
@@ -56869,6 +56922,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
       차량번호: r.차량번호 || "", 기사명: r.이름 || "", 전화번호: r.전화번호 || "",
       청구운임: toInt(r.청구운임), 기사운임: toInt(r.기사운임),
       수수료: toInt(r.청구운임) - toInt(r.기사운임) - paidOut(r), // 🏗 지게차
+      수수료율: marginPctText(toInt(r.청구운임) - toInt(r.기사운임) - paidOut(r), toInt(r.청구운임)), // ⭐ 2026-11-17 매출 대비 %
       ...(fareRP.on ? { 운임구분: r.운임구분 || "" } : {}),
       지급방식: r.지급방식 || "", 배차방식: r.배차방식 || "", 메모: r.메모 || "",
     }));
@@ -57217,7 +57271,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                       <td className="px-3 py-2.5 text-right font-semibold text-gray-700 border-b border-gray-100">{won(r.기사운임)}</td>
                       <td className="px-3 py-2.5 text-right text-[#2D4C82] font-semibold border-b border-gray-100">{won(Math.round(toInt(r.기사운임) * vatRate))}</td>
                       <td className="px-3 py-2.5 text-right text-[#1B2B4B] font-semibold border-b border-gray-100">{won(Math.round(toInt(r.기사운임) * insuranceRate / 100))}</td>
-                      <td className={`px-3 py-2.5 text-right font-bold border-b border-gray-100 ${fee >= 0 ? "text-yellow-600" : "text-[#0B1428]"}`}>{won(fee)}</td>
+                      <td className={`px-3 py-2.5 text-right font-bold border-b border-gray-100 ${fee >= 0 ? "text-yellow-600" : "text-[#0B1428]"}`}>{won(fee)}<MarginPct profit={fee} sales={toInt(r.청구운임)} /></td>{/* ⭐ 2026-11-17 수수료 옆 매출(청구운임) 대비 % */}
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.지급방식 || ""}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">{r.배차방식 || ""}</td>
                       <td className="px-3 py-2.5 text-center border-b border-gray-100">
@@ -57252,7 +57306,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                     <td className="px-3 py-3 text-right text-yellow-300 font-bold">{won(kpi.driver)}</td>
                     <td className="px-3 py-3 text-right text-[#8FB0F0] font-bold">{won(kpi.vatTotal)}</td>
                     <td className="px-3 py-3 text-right text-[#8FB0F0] font-bold">{won(kpi.insuranceTotal)}</td>
-                    <td className="px-3 py-3 text-right text-yellow-300 font-bold">{won(kpi.fee)}</td>
+                    <td className="px-3 py-3 text-right text-yellow-300 font-bold">{won(kpi.fee)}<MarginPct dark profit={kpi.fee} sales={kpi.sale} /></td>
                     <td colSpan={4} className="px-3 py-3 text-center text-white/60 text-[11px]">
                       지급완료 {kpi.done}건 / 미지급 {kpi.undone}건 (미지급액 {won(kpi.undoneAmt)}원)
                     </td>
