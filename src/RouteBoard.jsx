@@ -11,6 +11,7 @@
 //   · 오더에 남기는 것: 배차표Id·배차표명·배차표묶음·배차표순번, 품목수량{칸이름:수량}, 추가정보{칸이름:값}
 //   · 배차관리에서 고친 차량·기사·시간도 이 화면에 그대로 보인다(같은 오더를 읽으므로).
 import React from "react";
+import { orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수수료 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표와 같은 식
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { createPortal } from "react-dom";
 import { carrierFarePatch, mergedOrder, rateMapOf } from "../functions/carrierFareCore.mjs"; // 💸 2026-11-09 운송업체별 수수료율 → 기사운임 자동
@@ -138,7 +139,7 @@ function orderFromRow(form, g, r, i, date, co, isNew, prevStatus) {
     const n = toInt(r.fareOverride);
     if (n) Object.assign(rec, { 청구운임: String(n), 운임수동: true }); else rec.운임수동 = false;
   }
-  if (rec.청구운임 || rec.기사운임) rec.수수료 = String(toInt(rec.청구운임) - toInt(rec.기사운임) - toInt(rec.외부지급합 ?? rec.지게차비용));
+  if (rec.청구운임 || rec.기사운임) rec.수수료 = String(orderProfit(rec));
   rec.차량번호 = normPlate(rec.차량번호 || "") ? String(rec.차량번호).trim() : "";
   const keepStatus = prevStatus && !["배차중", "배차완료", ""].includes(prevStatus);
   return {

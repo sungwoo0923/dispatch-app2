@@ -217,6 +217,9 @@ async function takeTurn(db, uid, now = Date.now()) {
 // 💰 2026-11-07 미수금 공용 계산(화면과 같은 파일) — ESM이라 처음 쓸 때 import()
 let _arCore = null;
 const arCore = async () => _arCore || (_arCore = await import("./arCore.mjs"));
+// ⭐ 2026-11-17 수익(수수료) 공용 계산(화면 src/forkliftCore.js 와 같은 파일) — 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
+let _profitCore = null;
+const profitCore = async () => _profitCore || (_profitCore = await import("./profitCore.mjs"));
 
 // ─────────────────────────── 회사 데이터 읽기(우리 회사만) ───────────────────────────
 const coOf = (r) => String(r?.companyName || DEFAULT_CO).trim();
@@ -305,7 +308,8 @@ function filterOrders(rows, a = {}) {
   });
 }
 const sortOrders = (rows) => rows.sort((x, y) => `${x.상차일}${x.상차시간 || ""}`.localeCompare(`${y.상차일}${y.상차시간 || ""}`));
-const sumOf = (rows) => rows.reduce((s, r) => { const sale = won(r.청구운임); const cost = won(r.기사운임); s.count += 1; s.sale += sale; s.cost += cost; s.profit += sale - cost; return s; }, { count: 0, sale: 0, cost: 0, profit: 0 });
+// ⭐ 2026-11-17 P = profitCore() — cost = 기사운임 합 · paid = 지게차·외부 특수운임(회사가 따로 지급) · profit = 청구 − 기사 − paid(배차표 수수료 합과 같다)
+const sumOf = (rows, P) => rows.reduce((s, r) => { const sale = won(r.청구운임); const cost = won(r.기사운임); const paid = P.paidOut(r); s.count += 1; s.sale += sale; s.cost += cost; s.paid += paid; s.profit += sale - cost - paid; return s; }, { count: 0, sale: 0, cost: 0, paid: 0, profit: 0 });
 
 // ⭐ 2026-11-17 도움말 센터 사본 — 질문 낱말로 묶음 · 항목 찾기(메뉴 이름이 맞으면 그 메뉴 전체)
 let _help = null;
@@ -345,7 +349,7 @@ const TOOLS = {
       const { from, to } = dateRange(ctx, a, 0, 92);
       const rows = sortOrders(filterOrders(await loadOrders(ctx, from, to), a).filter((r) => a.status === "배차취소" || !isCancelled(r)));
       const n = Math.min(100, Math.max(1, Number(a.limit) || 40));
-      return { 기간: `${from}~${to}`, total: rows.length, 합계: sumOf(rows), rows: rows.slice(0, n).map(brief), ...(rows.length > n ? { 안내: `${rows.length - n}건 더 있음. 조건을 좁혀 주세요.` } : {}) };
+      return { 기간: `${from}~${to}`, total: rows.length, 합계: sumOf(rows, await profitCore()), rows: rows.slice(0, n).map(brief), ...(rows.length > n ? { 안내: `${rows.length - n}건 더 있음. 조건을 좁혀 주세요.` } : {}) };
     },
   },
   get_order: {
@@ -359,7 +363,7 @@ const TOOLS = {
     },
   },
   today_summary: {
-    description: "하루 현황 요약: 오더 수, 미배차(기사 없는 오더) 목록, 상태별 건수, 매출·기사운임·수익, 승인대기.",
+    description: "하루 현황 요약: 오더 수, 미배차(기사 없는 오더) 목록, 상태별 건수, 매출·기사운임·수익(청구 − 기사 − 지게차 등 회사 지급분), 승인대기.",
     input_schema: { type: "object", properties: { date: { type: "string", description: "YYYY-MM-DD(비우면 오늘)" } } },
     async run(ctx, a) {
       need(ctx, "orderRead", "오더 조회");
@@ -367,12 +371,12 @@ const TOOLS = {
       const rows = (await loadOrders(ctx, d, d)).filter((r) => !isCancelled(r));
       const by = {}; rows.forEach((r) => { const s = statusOf(r); by[s] = (by[s] || 0) + 1; });
       const un = sortOrders(rows.filter((r) => statusOf(r) === "미배차"));
-      const money = sumOf(rows);
-      return { 날짜: d, 오더수: rows.length, 상태별: by, ...(ctx.perms.sales ? { 매출: money.sale, 기사운임: money.cost, 수익: money.profit } : {}), 미배차: un.slice(0, 40).map(brief) };
+      const money = sumOf(rows, await profitCore());
+      return { 날짜: d, 오더수: rows.length, 상태별: by, ...(ctx.perms.sales ? { 매출: money.sale, 기사운임: money.cost, ...(money.paid ? { 지게차등회사지급: money.paid } : {}), 수익: money.profit } : {}), 미배차: un.slice(0, 40).map(brief) };
     },
   },
   sales_summary: {
-    description: "매출(청구운임)·매입(기사운임)·수익 합계와 묶음별 순위. group_by: client(거래처)·day(일자)·month(월)·vehicle(차종)·driver(기사)·route(구간).",
+    description: "매출(청구운임)·매입(cost=기사운임, paid=지게차·외부 특수운임 회사 지급분)·수익(청구 − 기사 − paid) 합계와 묶음별 순위. group_by: client(거래처)·day(일자)·month(월)·vehicle(차종)·driver(기사)·route(구간).",
     input_schema: { type: "object", properties: { ...DATE_PROPS, group_by: { type: "string", enum: ["client", "day", "month", "vehicle", "driver", "route"] }, client: { type: "string" } } },
     async run(ctx, a) {
       need(ctx, "sales", "매출 조회");
@@ -380,8 +384,9 @@ const TOOLS = {
       const rows = filterOrders(await loadOrders(ctx, from, to), { client: a.client }).filter((r) => !isCancelled(r));
       const keyOf = { client: (r) => r.거래처명 || "미지정", day: (r) => r.상차일, month: (r) => String(r.상차일).slice(0, 7), vehicle: (r) => `${r.차량톤수 || ""} ${r.차량종류 || ""}`.trim() || "미지정", driver: (r) => r.이름 || r.차량번호 || "미배차", route: (r) => `${r.상차지명 || "-"} → ${r.하차지명 || "-"}` }[a.group_by || "client"] || ((r) => r.거래처명 || "미지정");
       const g = {}; rows.forEach((r) => { const k = keyOf(r); (g[k] = g[k] || []).push(r); });
-      const groups = Object.entries(g).map(([k, l]) => ({ 이름: k, ...sumOf(l) })).sort((x, y) => (a.group_by === "day" || a.group_by === "month" ? x.이름.localeCompare(y.이름) : y.sale - x.sale));
-      const t = sumOf(rows);
+      const P = await profitCore();
+      const groups = Object.entries(g).map(([k, l]) => ({ 이름: k, ...sumOf(l, P) })).sort((x, y) => (a.group_by === "day" || a.group_by === "month" ? x.이름.localeCompare(y.이름) : y.sale - x.sale));
+      const t = sumOf(rows, P);
       return { 기간: `${from}~${to}`, 합계: { ...t, 수익률: t.sale ? `${((t.profit / t.sale) * 100).toFixed(1)}%` : "-" }, 묶음: groups.slice(0, 60) };
     },
   },

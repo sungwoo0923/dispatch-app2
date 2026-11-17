@@ -12228,7 +12228,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
       [`${type}지담당자번호`]: primary?.phone || c.담당자번호 || "",
     }));
   };
-  const fee = toNum(f.청구운임) - toNum(f.기사운임) - toNum(f.외부지급합 ?? f.지게차비용);
+  const fee = orderProfit(f); // ⭐ 2026-11-17 저장된 외부지급합 대신 지게차·특수운임 칸에서 다시 계산
   const joinU = (v, u) => (u ? `${v}${u}` : v);
   // 손대지 않은 칸은 원래 글자 그대로 둔다("12 파레트" → "12파레트"처럼 바뀐 걸로 잡히지 않게)
   const [init] = useState(() => {
@@ -13427,7 +13427,7 @@ const handleAssignClick = () => {
         {[
           { k: "청구", v: Number(claim || 0), strong: true },
           { k: "기사", v: Number(order.기사운임 || 0) },
-          { k: "수수료", v: Number(claim || 0) - Number(order.기사운임 || 0) },
+          { k: "수수료", v: orderProfit({ ...order, 청구운임: Number(claim || 0) }) }, /* ⭐ 2026-11-17 수수료 = 청구 − 기사 − 회사 지급분(orderProfit) */
         ].map(({ k, v, strong }, i) => (
           <div key={k} className={`py-2.5 text-center ${i > 0 ? "border-l border-[#E3E8F0]" : ""} ${strong ? "bg-[#0F1A30]" : "bg-white"}`}>
             <div className={`text-[10.5px] font-bold ${strong ? "text-white/60" : "text-[#7A879C]"}`}>{k}</div>
@@ -14295,7 +14295,7 @@ const handleAssignClick = () => {
                   </div>
                   <div>
                     <div className="text-white/50 text-[10px] mb-1">수수료</div>
-                    <div className="text-white font-extrabold text-[16px]">{(Number(detailFareDetailItem.청구운임||0)-Number(detailFareDetailItem.기사운임||0)).toLocaleString()}</div>
+                    <div className="text-white font-extrabold text-[16px]">{orderProfit(detailFareDetailItem).toLocaleString()}</div>
                   </div>
                 </div>
               </div>
@@ -15524,7 +15524,7 @@ const orderCopyList = useMemo(() => {
       if (key === "청구운임" || key === "기사운임") {
         const 청구 = toNumber(next.청구운임);
         const 기사 = toNumber(next.기사운임);
-        next.수수료 = 청구 - 기사;
+        next.수수료 = orderProfit({ ...next, 청구운임: 청구, 기사운임: 기사 }); // ⭐ 2026-11-17
       }
       return forkliftApply(p, next, key, { asString: false }); // 🏗 지게차비용(수익 = 청구 − 기사 − 지게차)
     });
@@ -16005,7 +16005,7 @@ const pickDrop = (c) => {
         {[
           { k: "청구운임", v: Number(form.청구운임 || 0) },
           { k: "기사운임", v: Number(form.기사운임 || 0) },
-          { k: "수수료", v: Number(form.청구운임 || 0) - Number(form.기사운임 || 0) },
+          { k: "수수료", v: orderProfit(form) }, /* ⭐ 2026-11-17 수수료 = 청구 − 기사 − 회사 지급분(orderProfit) */
         ].map(({ k, v }, i) => (
           <div key={k} className={`px-2 py-3 text-center ${i > 0 ? (cardVersionB ? "border-l border-white/10" : "border-l border-dashed border-[#DCE3EE]") : ""}`}>
             <div className={`text-[10px] font-extrabold tracking-[0.12em] ${cardVersionB ? "text-white/55" : "text-[#9AA9C3]"}`}>{k}</div>
@@ -17586,7 +17586,7 @@ const pickDrop = (c) => {
                   </div>
                   <div>
                     <div className="text-white/50 text-[10px] mb-1">수수료</div>
-                    <div className="text-white font-extrabold text-[16px]">{(Number(fareDetailItem.청구운임||0)-Number(fareDetailItem.기사운임||0)).toLocaleString()}</div>
+                    <div className="text-white font-extrabold text-[16px]">{orderProfit(fareDetailItem).toLocaleString()}</div>
                   </div>
                 </div>
               </div>
@@ -21183,7 +21183,7 @@ const calcFareMobile = async () => {
       case "fare_asc":  return Number(a.청구운임||0)-Number(b.청구운임||0);
       case "fare_desc": return Number(b.청구운임||0)-Number(a.청구운임||0);
       case "driver_desc": return Number(b.기사운임||0)-Number(a.기사운임||0);
-      case "fee_desc":  return (Number(b.청구운임||0)-Number(b.기사운임||0)) - (Number(a.청구운임||0)-Number(a.기사운임||0));
+      case "fee_desc":  return orderProfit(b) - orderProfit(a); // ⭐ 2026-11-17
       case "level":     return levelRank[a.fareLevel]-levelRank[b.fareLevel];
       case "level_spike":return levelRank[b.fareLevel]-levelRank[a.fareLevel];
       default: return 0;
@@ -21594,7 +21594,7 @@ const runNationalFareInPopup = async () => {
                   </div>
                   <div>
                     <div className="text-white/50 text-[10px] mb-1">수수료</div>
-                    <div className="text-white font-extrabold text-[16px]">{(Number(fareDetailItemStd.청구운임||0)-Number(fareDetailItemStd.기사운임||0)).toLocaleString()}</div>
+                    <div className="text-white font-extrabold text-[16px]">{orderProfit(fareDetailItemStd).toLocaleString()}</div>
                   </div>
                 </div>
               </div>
@@ -22367,7 +22367,7 @@ function CanceledOrderDetailModal({ order: o, cardVersionB = false, mobileUsers 
           <Row label="기사 연락처" value={o.전화번호} />
           <Row label="청구운임" value={o.청구운임 ? `${Number(o.청구운임).toLocaleString()}원` : ""} />
           <Row label="기사운임" value={o.기사운임 ? `${Number(o.기사운임).toLocaleString()}원` : ""} />
-          <Row label="수수료" value={o.수수료 ? `${Number(o.수수료).toLocaleString()}원` : ""} />
+          <Row label="수수료" value={o.청구운임 || o.기사운임 ? `${orderProfit(o).toLocaleString()}원` : ""} />{/* ⭐ 2026-11-17 저장된 수수료 대신 다시 계산 */}
         </Section>
 
         {(o.메모 || o.전달사항 || o.특이사항) && (

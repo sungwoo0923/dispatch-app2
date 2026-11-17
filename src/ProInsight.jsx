@@ -8,6 +8,7 @@
 import { MonthPicker } from "./kpInputs"; // 📅 2026-11-07 월 선택은 프로그램 달력으로
 import React from "react";
 import { CustomSelect } from "./CustomSelect";
+import { orderProfit, orderCost, paidOut } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
 import { profitStyle, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 마진율 색(플러스 빨강 · 마이너스 파랑)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
@@ -67,11 +68,11 @@ export default function ProInsight({ data = [], companyName = "", onOpenOrder })
     rows.forEach((r) => {
       const k = keyFn(r); if (!k) return;
       const o = m.get(k) || { key: k, cnt: 0, rev: 0, cost: 0 };
-      o.cnt++; o.rev += n(r.청구운임); o.cost += n(r.기사운임); m.set(k, o);
+      o.cnt++; o.rev += n(r.청구운임); o.cost += orderCost(r); m.set(k, o); // ⭐ 2026-11-17 cost = 기사운임 + 지게차·외부 지급
     });
     return [...m.values()].map((o) => ({ ...o, profit: o.rev - o.cost, margin: pct(o.rev - o.cost, o.rev) }));
   };
-  const tot = (rows) => { const rev = rows.reduce((a, r) => a + n(r.청구운임), 0); const cost = rows.reduce((a, r) => a + n(r.기사운임), 0); return { cnt: rows.length, rev, profit: rev - cost, margin: pct(rev - cost, rev) }; };
+  const tot = (rows) => { const rev = rows.reduce((a, r) => a + n(r.청구운임), 0); const cost = rows.reduce((a, r) => a + orderCost(r), 0); return { cnt: rows.length, rev, profit: rev - cost, margin: pct(rev - cost, rev) }; };
   const T = tot(cur), P = tot(prev);
   const delta = (a, b) => (b ? ((a - b) / b) * 100 : null);
 
@@ -82,7 +83,7 @@ export default function ProInsight({ data = [], companyName = "", onOpenOrder })
   const routeKey = (r) => `${String(r.상차지명 || "").trim()} → ${String(r.하차지명 || "").trim()}`;
   const routes = agg(cur, (r) => (r.상차지명 && r.하차지명 ? routeKey(r) : "")).filter((o) => o.cnt >= 2).sort((a, b) => b.profit - a.profit).slice(0, 10);
 
-  const lowMargin = cur.map((r) => ({ r, profit: n(r.청구운임) - n(r.기사운임), margin: pct(n(r.청구운임) - n(r.기사운임), n(r.청구운임)) }))
+  const lowMargin = cur.map((r) => ({ r, profit: orderProfit(r), margin: pct(orderProfit(r), n(r.청구운임)) }))
     .filter((x) => x.margin < minMargin).sort((a, b) => a.margin - b.margin).slice(0, 40);
 
   // 이상 운임: 최근 13개월 같은 노선+차종 평균 대비 ±35% 이상(표본 4건 이상)
@@ -161,7 +162,7 @@ export default function ProInsight({ data = [], companyName = "", onOpenOrder })
         </div>
         <div className="relative grid grid-cols-2 lg:grid-cols-4 gap-2.5 mt-5">
           {kpi("매출(청구)", won(T.rev), delta(T.rev, P.rev))}
-          {kpi("수익(청구-기사)", won(T.profit), delta(T.profit, P.profit), "원", profitStyle(T.profit, { dark: true }).color)}
+          {kpi("수익(청구-기사-지게차 등)", won(T.profit), delta(T.profit, P.profit), "원", profitStyle(T.profit, { dark: true }).color)}
           {kpi("마진율", T.margin.toFixed(1), null, "%", profitRateColor(T.margin, { dark: true }))}
           {kpi("운송 건수", T.cnt.toLocaleString(), delta(T.cnt, P.cnt), "건")}
         </div>
@@ -221,7 +222,7 @@ export default function ProInsight({ data = [], companyName = "", onOpenOrder })
             {lowMargin.map(({ r, profit, margin }) => (
               <button key={r._id || r.id} type="button" onClick={() => onOpenOrder?.(r)} className="w-full text-left flex items-center gap-3 px-5 py-2.5 hover:bg-[#F7F9FC]">
                 <span className={`w-16 text-center py-1 rounded-md text-[12px] font-black ${margin < 0 ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`} style={{ color: profitRateColor(margin, { dark: margin < 0 }) }}>{margin.toFixed(1)}%</span>
-                <div className="flex-1 min-w-0"><div className="text-[13px] font-black text-[#0F1A30] truncate">{r.거래처명} · {r.상차지명} → {r.하차지명}</div><div className="text-[11.5px] font-bold text-[#7A89A3]">{r.상차일} · 청구 {won(n(r.청구운임))} / 기사 {won(n(r.기사운임))}</div></div>
+                <div className="flex-1 min-w-0"><div className="text-[13px] font-black text-[#0F1A30] truncate">{r.거래처명} · {r.상차지명} → {r.하차지명}</div><div className="text-[11.5px] font-bold text-[#7A89A3]">{r.상차일} · 청구 {won(n(r.청구운임))} / 기사 {won(n(r.기사운임))}{paidOut(r) ? ` / 지게차 등 ${won(paidOut(r))}` : ""}</div></div>
                 <span className="text-[13px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", ...profitStyle(profit) }}>{won(profit)}</span>
               </button>
             ))}

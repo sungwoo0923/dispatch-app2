@@ -5,6 +5,7 @@ import React from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "./firebase";
 import { computeFunds } from "./fundsCalc";
+import { orderCost } from "./forkliftCore"; // ⭐ 2026-11-17 매입 = 기사운임 + 회사가 따로 지급(지게차·외부 특수운임)
 
 const won = (n) => `${Math.round(Number(n) || 0).toLocaleString("ko-KR")}원`;
 const kst = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -55,7 +56,7 @@ export function teamAnswer(mode, key, T, dispatches = []) {
   const today = kst(); const ym = today.slice(0, 7);
   const monthOrders = dispatches.filter((d) => String(d.상차일 || d.상차일자 || "").startsWith(ym) && d.배차상태 !== "배차취소");
   const sale = monthOrders.reduce((s, d) => s + (Number(d.청구운임) || 0), 0);
-  const cost = monthOrders.reduce((s, d) => s + (Number(d.기사운임) || 0), 0);
+  const cost = monthOrders.reduce((s, d) => s + orderCost(d), 0); // ⭐ 2026-11-17 매출 − 매입 = 배차표 수수료 합
   const staff = (T.users || []).filter(STAFF);
   const active = staff.filter((u) => u.employmentStatus !== "퇴사");
   switch (key) {
@@ -81,7 +82,7 @@ export function teamAnswer(mode, key, T, dispatches = []) {
       return n.length ? `[증빙 없는 지출] ${n.length}건\n\n${n.slice(0, 8).map((r) => `· ${r.date} ${r.item || r.account} ${won(r.amount)}`).join("\n")}\n\n장부에서 영수증 사진이나 증빙 종류를 넣어 주세요.` : "이번 달 증빙 없는 지출이 없습니다.";
     }
     case "sales":
-      return `[${ym} 매출·매입]\n매출(청구운임) ${won(sale)}\n매입(기사운임) ${won(cost)}\n이익 ${won(sale - cost)}${sale ? ` (${((sale - cost) / sale * 100).toFixed(1)}%)` : ""}\n운행 ${monthOrders.length}건`;
+      return `[${ym} 매출·매입]\n매출(청구운임) ${won(sale)}\n매입(기사운임+지게차 등) ${won(cost)}\n이익 ${won(sale - cost)}${sale ? ` (${((sale - cost) / sale * 100).toFixed(1)}%)` : ""}\n운행 ${monthOrders.length}건`;
     case "tax": {
       const d = Number(today.slice(8, 10)); const m = Number(today.slice(5, 7));
       const items = [["원천세 신고·납부", 10], ["4대보험료 납부", 10]];

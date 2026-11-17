@@ -4,6 +4,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import CustomDatePicker from "./CustomDatePicker"; // 프로그램 공용 달력
 import MgrBadge from "./MgrBadge";
+import { orderProfit, paidOut } from "./forkliftCore"; // ⭐ 2026-11-17 수수료 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표와 같은 식
 
 const kst = (d = new Date()) => new Date(d.getTime() + 9 * 3600e3).toISOString().slice(0, 10);
 const addDays = (s, n) => { const d = new Date(s + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
@@ -67,9 +68,9 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
   const mgrStats = React.useMemo(() => {
     const m = new Map();
     for (const { r, mgr: n } of inRange) {
-      const o = m.get(n) || { name: n, cnt: 0, done: 0, sale: 0, drv: 0 };
+      const o = m.get(n) || { name: n, cnt: 0, done: 0, sale: 0, drv: 0, fee: 0 };
       o.cnt++; if (String(r.차량번호 || "").trim()) o.done++;
-      o.sale += toInt(r.청구운임); o.drv += toInt(r.기사운임);
+      o.sale += toInt(r.청구운임); o.drv += toInt(r.기사운임); o.fee += orderProfit(r);
       m.set(n, o);
     }
     return [...m.values()].sort((a, b) => (a.name === EMPTY) - (b.name === EMPTY) || b.cnt - a.cnt || a.name.localeCompare(b.name, "ko"));
@@ -102,9 +103,9 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
   React.useEffect(() => { setShowN(300); }, [start, end, mgr, car]);
 
   const kpi = React.useMemo(() => {
-    let done = 0, sale = 0, drv = 0;
-    for (const { r } of result) { if (String(r.차량번호 || "").trim()) done++; sale += toInt(r.청구운임); drv += toInt(r.기사운임); }
-    return { cnt: result.length, done, wait: result.length - done, sale, drv, fee: sale - drv };
+    let done = 0, sale = 0, drv = 0, paid = 0;
+    for (const { r } of result) { if (String(r.차량번호 || "").trim()) done++; sale += toInt(r.청구운임); drv += toInt(r.기사운임); paid += paidOut(r); }
+    return { cnt: result.length, done, wait: result.length - done, sale, drv, fee: sale - drv - paid }; // ⭐ 2026-11-17 줄 수수료 합
   }, [result]);
 
   const downloadExcel = async () => {
@@ -112,7 +113,7 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
     const data = result.map(({ r, mgr: n }, i) => ({
       순번: i + 1, 상차일: r.상차일 || "", 상차시간: r.상차시간 || "", 배차담당자: n, 거래처명: r.거래처명 || "",
       상차지명: r.상차지명 || "", 하차지명: r.하차지명 || "", 차량번호: r.차량번호 || "", 기사명: r.이름 || "", 전화번호: r.전화번호 || "",
-      배차상태: r.배차상태 || "", 청구운임: toInt(r.청구운임), 기사운임: toInt(r.기사운임), 수수료: toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.외부지급합 ?? r.지게차비용),
+      배차상태: r.배차상태 || "", 청구운임: toInt(r.청구운임), 기사운임: toInt(r.기사운임), 수수료: orderProfit(r),
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -244,7 +245,7 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
                     </div>
                     <div className="mt-2 h-1 rounded-full bg-[#EEF1F6] overflow-hidden"><div className="h-full rounded-full bg-[#2D4C82]" style={{ width: `${m.cnt ? (m.done / m.cnt) * 100 : 0}%` }} /></div>
                     <div className="mt-1.5 flex items-center gap-2 text-[11px] font-bold text-[#7A8AA6] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
-                      <span>₩{m.sale.toLocaleString()}</span><span className="text-[#C9D3E3]">|</span><span className="text-[#4B6CB7]">+{(m.sale - m.drv).toLocaleString()}</span>
+                      <span>₩{m.sale.toLocaleString()}</span><span className="text-[#C9D3E3]">|</span><span className="text-[#4B6CB7]">+{m.fee.toLocaleString()}</span>
                       {m.cnt - m.done > 0 && <span className="ml-auto text-[#C2410C]">미배차 {m.cnt - m.done}</span>}
                     </div>
                   </button>
@@ -268,7 +269,7 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
                 </thead>
                 <tbody>
                   {result.slice(0, showN).map(({ r, mgr: n }, i) => {
-                    const sale = toInt(r.청구운임), drv = toInt(r.기사운임);
+                    const sale = toInt(r.청구운임), drv = toInt(r.기사운임), fee = orderProfit(r); // ⭐ 2026-11-17
                     const hasCar = !!String(r.차량번호 || "").trim();
                     const td = "px-2 py-2 border-b border-[#E9EDF4] border-r border-r-[#F1F4F9] last:border-r-0 whitespace-nowrap overflow-hidden text-ellipsis text-center";
                     return (
@@ -284,7 +285,7 @@ export default function OrderLookupModal({ open, onClose, rows = [], nameOf = ()
                         <td className={`${td} text-center`}><span className={`inline-block px-2 py-0.5 rounded-md text-[11.5px] font-black ${hasCar ? "bg-[#E7F5EC] text-[#1B7F4B]" : "bg-[#FFF1E6] text-[#C2410C]"}`}>{r.배차상태 || (hasCar ? "배차완료" : "배차중")}</span></td>
                         <td className={`${td} tabular-nums`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{sale ? sale.toLocaleString() : "-"}</td>
                         <td className={`${td} tabular-nums`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{drv ? drv.toLocaleString() : "-"}</td>
-                        <td style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} className={`${td} tabular-nums font-bold ${sale - drv < 0 ? "text-[#C2410C]" : "text-[#4B6CB7]"}`}>{sale || drv ? (sale - drv).toLocaleString() : "-"}</td>
+                        <td style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} className={`${td} tabular-nums font-bold ${fee < 0 ? "text-[#C2410C]" : "text-[#4B6CB7]"}`}>{sale || drv ? fee.toLocaleString() : "-"}</td>
                       </tr>
                     );
                   })}

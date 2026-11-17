@@ -6,6 +6,7 @@
 //    장부가 없는 달은 고정비(acctRecurring 지출)로 대신 채우고 "추정"으로 표시
 //  · 미수: 올해 배차완료 + 고정거래처 청구액(부가세 포함) − 수금 기록(acctPayments) · 오래된 청구부터 수금된 것으로 본다(src/arAging.js 공용)
 import { receivablesOf } from "./arAging"; // ⭐ 2026-11-07 미수금 공용 계산
+import { orderProfit, paidOut } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
 import { addDay, dayDiff, rangeDays, isBizDay, toWon, dateOf, isCancelledOrder, isDone, normPlate, prevYm } from "./dailyReportCore";
 
 export const FLEET_TYPES = ["지입", "직영", "임대"];
@@ -58,12 +59,13 @@ export function fleetIndex(drivers) {
 // ── 1. 손익(월별) ──
 export function plMonthly({ rows, fleet, ledger, recurring, months }) {
   const set = new Set(months);
-  const out = Object.fromEntries(months.map((m) => [m, { m, sale: 0, own: 0, hire: 0, cnt: 0, sga: {}, sgaTotal: 0, est: false }]));
+  const out = Object.fromEntries(months.map((m) => [m, { m, sale: 0, own: 0, hire: 0, paid: 0, cnt: 0, sga: {}, sgaTotal: 0, est: false }]));
   rows.forEach((r) => {
     const m = ymOf(dateOf(r)); if (!set.has(m)) return;
     const e = out[m]; const pay = toWon(r.기사운임);
     e.sale += toWon(r.청구운임); e.cnt += 1;
     if (fleet.has(normPlate(r.차량번호))) e.own += pay; else e.hire += pay;
+    e.paid += paidOut(r); // ⭐ 2026-11-17 지게차·외부 특수운임(회사가 따로 지급)도 매입
   });
   const hasLedger = {};
   (ledger || []).forEach((x) => {
@@ -78,7 +80,7 @@ export function plMonthly({ rows, fleet, ledger, recurring, months }) {
     const e = out[m];
     if (!hasLedger[m] && fixed.length) { e.est = true; fixed.forEach((x) => { const k = String(x.account || x.name || "고정비"); e.sga[k] = (e.sga[k] || 0) + toWon(x.amount); }); }
     e.sgaTotal = Object.values(e.sga).reduce((s, v) => s + v, 0);
-    e.cost = e.own + e.hire;
+    e.cost = e.own + e.hire + e.paid; // ⭐ 2026-11-17 매출 − 매입 = 줄 수수료(orderProfit) 합
     e.gross = e.sale - e.cost;
     e.op = e.gross - e.sgaTotal;
     e.gm = e.sale ? (e.gross / e.sale) * 100 : 0;
@@ -111,7 +113,7 @@ export function dsoOf(rows, rec, today) {
 // ── 2. 거래처 수익성 ──
 export function clientTable(rows, from, to, prevFrom, prevTo, rec = {}) {
   const m = {};
-  const add = (key, r) => { const c = clientOf(r); const e = m[c] || (m[c] = { n: c, sale: 0, profit: 0, cnt: 0, pSale: 0, pProfit: 0, pCnt: 0, routes: {}, last: "" }); const s = toWon(r.청구운임), p = s - toWon(r.기사운임); if (key === "c") { e.sale += s; e.profit += p; e.cnt += 1; const rt = routeOf(r); const x = e.routes[rt] || (e.routes[rt] = { rt, sale: 0, profit: 0, cnt: 0 }); x.sale += s; x.profit += p; x.cnt += 1; } else { e.pSale += s; e.pProfit += p; e.pCnt += 1; } if (dateOf(r) > e.last) e.last = dateOf(r); };
+  const add = (key, r) => { const c = clientOf(r); const e = m[c] || (m[c] = { n: c, sale: 0, profit: 0, cnt: 0, pSale: 0, pProfit: 0, pCnt: 0, routes: {}, last: "" }); const s = toWon(r.청구운임), p = orderProfit(r); if (key === "c") { e.sale += s; e.profit += p; e.cnt += 1; const rt = routeOf(r); const x = e.routes[rt] || (e.routes[rt] = { rt, sale: 0, profit: 0, cnt: 0 }); x.sale += s; x.profit += p; x.cnt += 1; } else { e.pSale += s; e.pProfit += p; e.pCnt += 1; } if (dateOf(r) > e.last) e.last = dateOf(r); };
   rows.forEach((r) => { const d = dateOf(r); if (d >= from && d <= to) add("c", r); else if (d >= prevFrom && d <= prevTo) add("p", r); });
   return Object.values(m).filter((e) => e.cnt > 0).map((e) => {
     const ar = rec[e.n] || { outstanding: 0, avgAge: 0, over30: 0 };
@@ -127,22 +129,22 @@ export function clientTable(rows, from, to, prevFrom, prevTo, rec = {}) {
 export function vehicleTable(rows, fleet, from, to) {
   const days = rangeDays(from, to); const biz = days.filter(isBizDay).length || 1;
   const m = new Map();
-  fleet.forEach((v, p) => m.set(p, { ...v, key: p, sale: 0, pay: 0, cnt: 0, days: new Set(), last: "" }));
+  fleet.forEach((v, p) => m.set(p, { ...v, key: p, sale: 0, pay: 0, paid: 0, cnt: 0, days: new Set(), last: "" }));
   const lastRun = {};
   rows.forEach((r) => {
     const p = normPlate(r.차량번호); if (!p || !m.has(p)) return;
     const d = dateOf(r); if (!lastRun[p] || d > lastRun[p]) lastRun[p] = d;
     if (d < from || d > to) return;
-    const e = m.get(p); e.sale += toWon(r.청구운임); e.pay += toWon(r.기사운임); e.cnt += 1; e.days.add(d);
+    const e = m.get(p); e.sale += toWon(r.청구운임); e.pay += toWon(r.기사운임); e.paid += paidOut(r); e.cnt += 1; e.days.add(d);
   });
-  return [...m.values()].map((e) => ({ ...e, days: e.days.size, profit: e.sale - e.pay, margin: e.sale ? ((e.sale - e.pay) / e.sale) * 100 : 0, util: Math.min(100, ([...e.days].filter(isBizDay).length / biz) * 100), last: lastRun[e.key] || "", bizDays: biz }));
+  return [...m.values()].map((e) => ({ ...e, days: e.days.size, profit: e.sale - e.pay - e.paid, margin: e.sale ? ((e.sale - e.pay - e.paid) / e.sale) * 100 : 0, util: Math.min(100, ([...e.days].filter(isBizDay).length / biz) * 100), last: lastRun[e.key] || "", bizDays: biz }));
 }
 
 // ── 4. 단가 변동 ──
 //  노선(상차 지역→하차 지역 · 톤수)별 평균 단가 · 수익률 — 이번 기간 vs 전 기간
 export function priceWatch(rows, cur, prev) {
   const r0 = {}; const c0 = {};
-  const put = (m, k, key, r, extra) => { const e = m[k] || (m[k] = { k, ...extra, c: [0, 0, 0], p: [0, 0, 0] }); const s = toWon(r.청구운임); const a = e[key]; a[0] += s; a[1] += s - toWon(r.기사운임); a[2] += 1; };
+  const put = (m, k, key, r, extra) => { const e = m[k] || (m[k] = { k, ...extra, c: [0, 0, 0], p: [0, 0, 0] }); const s = toWon(r.청구운임); const a = e[key]; a[0] += s; a[1] += orderProfit(r); a[2] += 1; };
   rows.forEach((r) => {
     const d = dateOf(r); const key = d >= cur[0] && d <= cur[1] ? "c" : d >= prev[0] && d <= prev[1] ? "p" : null; if (!key) return;
     const rt = routeOf(r); const ton = tonOf(r);

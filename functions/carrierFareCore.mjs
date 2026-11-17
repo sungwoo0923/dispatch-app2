@@ -51,6 +51,8 @@ export const rateFor = (setting, name, map = null) => {
   return m.has(k) ? m.get(k) : null;
 };
 
+import { orderProfit } from "./profitCore.mjs"; // ⭐ 2026-11-17 수수료 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
+
 export const autoDriverFare = (sale, rate) => Math.round(toInt(sale) * (1 - Number(rate) / 100));
 
 // 오더(바뀐 값을 합친 모습)에 수수료율 자동 계산을 적용한 변경분 — 바꿀 것이 없으면 null
@@ -64,11 +66,11 @@ export function carrierFarePatch(o, setting, map = null) {
   const sale = toInt(o.청구운임);
   if (rate == null || !sale) {
     // 수수료율을 지웠거나 청구운임이 없어졌으면 자동으로 넣었던 기사운임만 비운다
-    if (auto && drv) return { 기사운임: "", 수수료: sale ? String(sale) : "", 기사운임자동: false };
+    if (auto && drv) return { 기사운임: "", 수수료: sale ? String(orderProfit({ ...o, 기사운임: 0 })) : "", 기사운임자동: false };
     return null;
   }
   const next = autoDriverFare(sale, rate);
-  const fee = String(sale - next);
+  const fee = String(orderProfit({ ...o, 기사운임: next })); // ⭐ 2026-11-17 지게차·특수운임 없으면 청구 − 기사 그대로
   if (auto && drv === next && String(o.수수료 ?? "") === fee) return null;
   return { 기사운임: String(next), 수수료: fee, 기사운임자동: true };
 }

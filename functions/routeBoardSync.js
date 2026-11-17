@@ -222,6 +222,7 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
   const co = form.companyName;
   // 💸 2026-11-09 운송업체별 수수료율(routeCarrierSettings/{회사}.carriers[].rate) → 비어 있는 기사운임 자동 계산(functions/carrierFareCore.mjs)
   const CF = await import("./carrierFareCore.mjs");
+  const PC = await import("./profitCore.mjs"); // ⭐ 2026-11-17 수수료 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 화면과 같은 식
   let carrierSet = null;
   try { const cs = await db.collection("routeCarrierSettings").doc(co).get(); carrierSet = cs.exists ? cs.data() || null : null; } catch { carrierSet = null; }
   const rateMap = CF.rateMapOf(carrierSet);
@@ -328,7 +329,9 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
           { const fp = farePatchOf(o, patch); if (fp) Object.assign(patch, fp); } // 💸 2026-11-09 운송업체 수수료율 → 기사운임·수수료 자동
           if (("청구운임" in patch || "기사운임" in patch) && !("수수료" in patch)) { // 🔗 2026-11-08 수수료 = 청구 − 기사(프로그램 계산)
             const sale = toInt("청구운임" in patch ? patch.청구운임 : o.청구운임); const drv = toInt("기사운임" in patch ? patch.기사운임 : o.기사운임);
-            patch.수수료 = sale || drv ? String(sale - drv) : "";
+            patch.수수료 = sale || drv ? String(PC.orderProfit({ ...o, 청구운임: sale, 기사운임: drv })) : "";
+          } else if (("청구운임" in patch || "기사운임" in patch) && PC.paidOut(o) > 0) { // ⭐ 2026-11-17 단가표 · 수수료율이 넣은 수수료도 지게차·특수운임 오더는 회사 지급분까지 뺀다
+            patch.수수료 = String(PC.orderProfit({ ...o, ...patch }));
           }
           if (patch.거래처명) newClients.add(patch.거래처명);
           if (JSON.stringify(base0 || {}) !== JSON.stringify(nextBase)) patch.시트기준값 = nextBase;

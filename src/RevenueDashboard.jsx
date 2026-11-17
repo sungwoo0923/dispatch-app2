@@ -6,6 +6,7 @@ import React, { useMemo, useState } from "react";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Cell, BarChart } from "recharts";
 import { creatorOf, useStaffNames } from "./monthCompare";
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 매익률 색(플러스 빨강 · 마이너스 파랑)
+import { profitTotals, orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NAVY = "#1B2B4B";
@@ -17,9 +18,8 @@ const short = (n) => {
   return Math.round(n || 0).toLocaleString();
 };
 const statOf = (list) => {
-  let sale = 0, driver = 0;
-  list.forEach((r) => { sale += toInt(r.청구운임); driver += toInt(r.기사운임); });
-  return { sale, profit: sale - driver, cnt: list.length, rate: sale ? ((sale - driver) / sale) * 100 : 0 };
+  const t = profitTotals(list); // ⭐ 2026-11-17 줄 수수료(orderProfit) 합 — 예전엔 청구 − 기사만 빼 지게차·외부 지급분이 수익에 남았다
+  return { sale: t.sale, profit: t.fee, cnt: t.cnt, rate: t.sale ? (t.fee / t.sale) * 100 : 0 };
 };
 
 function Delta({ cur, prev, suffix = "", dark = false }) {
@@ -161,7 +161,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
   // 일별 + 누적 레이스
   const daily = useMemo(() => {
     const cur = Array(daysInMonth + 1).fill(0), curP = Array(daysInMonth + 1).fill(0), prev = Array(32).fill(0);
-    monthRows.forEach((r) => { const d = Number(String(r.상차일).slice(8, 10)); cur[d] += toInt(r.청구운임); curP[d] += toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.외부지급합 ?? r.지게차비용); });
+    monthRows.forEach((r) => { const d = Number(String(r.상차일).slice(8, 10)); cur[d] += toInt(r.청구운임); curP[d] += orderProfit(r); });
     prevRows.forEach((r) => { const d = Number(String(r.상차일).slice(8, 10)); if (d <= 31) prev[d] += toInt(r.청구운임); });
     let a = 0, b = 0;
     return Array.from({ length: daysInMonth }, (_, i) => {
@@ -203,7 +203,7 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
       const k = creatorOf(r) || "미지정";
       if (k === "최고관리자") return;
       const e = g[k] || (g[k] = { name: k, sale: 0, profit: 0, cnt: 0 });
-      e.sale += toInt(r.청구운임); e.profit += toInt(r.청구운임) - toInt(r.기사운임) - toInt(r.외부지급합 ?? r.지게차비용); e.cnt += 1;
+      e.sale += toInt(r.청구운임); e.profit += orderProfit(r); e.cnt += 1;
     });
     return Object.values(g).sort((a, b) => b.sale - a.sale).slice(0, 8);
   }, [monthRows, namesVer]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -10,6 +10,7 @@ import { creatorOf } from "./monthCompare";
 import { AttendanceQuickButton } from "./attendanceQuick";
 import { LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 매익률 색(플러스 빨강 · 마이너스 파랑)
+import { orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const C = { ink: "#E8EEF9", sub: "rgba(207,224,255,.8)", dim: "rgba(207,224,255,.72)", line: "rgba(143,176,240,.14)", glow: "#8FB0F0", hi: "#CFE0FF", accent: "#6E95E8" };
@@ -43,7 +44,7 @@ export function buildPastStats(rows, thisMonth) {
   for (const r of rows) {
     const d = dateOf(r);
     if (!d) continue;
-    const s = toWon(r.청구운임), p = s - toWon(r.기사운임);
+    const s = toWon(r.청구운임), p = orderProfit(r); // ⭐ 2026-11-17
     const e = days[d] || (days[d] = [0, 0, 0]);
     e[0] += s; e[1] += p; e[2] += 1;
     if (d.startsWith(thisMonth)) {

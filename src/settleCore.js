@@ -1,6 +1,7 @@
 // ======================= src/settleCore.js =======================
 // 🧭 2026-11-14 정산 홈 계산(순수 함수) — 화면은 src/SettleHome.jsx · 테스트 scripts/settleHome.test.mjs
 //  명세서 단계 순서는 src/SettleDesk.jsx STMT_STAGES 와 같다(미작성 → 작성 → 발송 → 확인 → 계산서요청 → 계산서발행 → 마감)
+import { paidOut } from "./forkliftCore.js"; // ⭐ 2026-11-17 회사가 따로 지급(지게차·외부 특수운임) — functions/profitCore.mjs
 const STAGE_ORDER = ["미작성", "작성", "발송", "확인", "계산서요청", "계산서발행", "마감"];
 export const stageIdx = (k) => Math.max(0, STAGE_ORDER.indexOf(k));
 export const n = (v) => Number(String(v ?? "").replace(/[^\d.-]/g, "")) || 0;
@@ -53,7 +54,9 @@ export function summarizeSettle(orders, ym, stageOf = () => "미작성", today =
     { key: "payout", label: "기사 지급", go: "지급관리", total: payable.length, left: unpaidDrv.length, unit: "건", hint: "미지급", amount: unpaidDrv.reduce((a, o) => a + n(o.기사운임), 0) },
     { key: "close", label: "마감", go: "거래처정산", total, left: needClose.length, unit: "곳", hint: "미마감", amount: sumOf(needClose) },
   ];
-  const sale = sumOf(clients), buy = payable.reduce((a, o) => a + n(o.기사운임), 0);
+  // ⭐ 2026-11-17 매입 = 기사운임 + 회사가 따로 지급(지게차·외부 특수운임) → 매출이익 = 청구 − 기사 − 지게차 등(배차표 수수료와 같은 식)
+  const drv = payable.reduce((a, o) => a + n(o.기사운임), 0), paid = mine.reduce((a, o) => a + paidOut(o), 0);
+  const sale = sumOf(clients), buy = drv + paid;
   // 미수 경과(전체 기간) — 입금 안 됐고 그 달을 마감하지 않은 청구
   const aging = new Map();
   rows.forEach((o) => {
@@ -64,7 +67,7 @@ export function summarizeSettle(orders, ym, stageOf = () => "미작성", today =
     if (age <= 30) x.d30 += s; else if (age <= 60) x.d60 += s; else if (age <= 90) x.d90 += s; else x.over += s;
     x.total += s; aging.set(c, x);
   });
-  return { ym, steps, clients, sale, buy, profit: sale - buy, aging: [...aging.values()].sort((a, b) => (b.over + b.d90) - (a.over + a.d90) || b.total - a.total) };
+  return { ym, steps, clients, sale, buy, drv, paid, profit: sale - buy, aging: [...aging.values()].sort((a, b) => (b.over + b.d90) - (a.over + a.d90) || b.total - a.total) };
 }
 // 거래처 원장 — 달마다 청구 · 입금 · 잔액(오래된 달부터 잔액을 쌓는다)
 export function clientLedger(orders, client, stageOf = () => "미작성") {

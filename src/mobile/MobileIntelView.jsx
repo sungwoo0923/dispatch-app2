@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useRouteCarrierFilter } from "../routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정
 import { isInsightRow, insightRange } from "../ProInsight"; // ⭐ 2026-11-05 PC·모바일 일치 — 인사이트 매출 기준 공용
+import { orderProfit } from "../forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
@@ -302,7 +303,7 @@ function IntelDashboard({ dispatchData, accent = NAVY }) {
   const thisYear  = useMemo(() => dispatchData.filter(d => getY(d.상차일) === cyStr), [dispatchData, cyStr]);
 
   const tmRev  = useMemo(() => thisMonth.reduce((s, d) => s + toInt(d.청구운임), 0), [thisMonth]);
-  const tmProfit = useMemo(() => thisMonth.reduce((s, d) => s + toInt(d.청구운임) - toInt(d.기사운임) - toInt(d.외부지급합 ?? d.지게차비용), 0), [thisMonth]);
+  const tmProfit = useMemo(() => thisMonth.reduce((s, d) => s + orderProfit(d), 0) /* ⭐ 2026-11-17 줄 수수료와 같은 식 */, [thisMonth]);
   const lmRev  = useMemo(() => lastMonth.reduce((s, d) => s + toInt(d.청구운임), 0), [lastMonth]);
   const cyRev  = useMemo(() => thisYear.reduce((s, d) => s + toInt(d.청구운임), 0), [thisYear]);
   const tmTrend = lmRev > 0 ? ((tmRev - lmRev) / lmRev * 100) : 0;

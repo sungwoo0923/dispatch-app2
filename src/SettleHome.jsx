@@ -128,7 +128,7 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
         <div className="flex items-center gap-3 flex-wrap">
           <MonthPicker ym={ym} onChange={setYm} months={months} />
           <div className="ml-auto grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2" style={NUMS}>
-            {[["매출(청구)", S.sale, G.ink], ["매입(기사)", S.buy, G.sub], ["매출이익", S.profit, profitColor(S.profit, { neutral: G.ink })], ["미수 잔액", agingTotal.total, agingTotal.total ? G.bad : G.ink]].map(([l, v, c]) => (
+            {[["매출(청구)", S.sale, G.ink], ["매입(기사·지게차 등)", S.buy, G.sub], ["매출이익", S.profit, profitColor(S.profit, { neutral: G.ink })], ["미수 잔액", agingTotal.total, agingTotal.total ? G.bad : G.ink]].map(([l, v, c]) => (
               <div key={l} className="text-right"><div className="text-[12.5px] font-bold text-[#5B6B85]">{l}</div><div className="text-[19px] font-black leading-tight whitespace-nowrap" style={{ color: c }}>{won(v)}<span className="text-[12.5px] text-[#9AA9C3] ml-0.5">원</span>{l === "매출이익" &&<MarginPct profit={S.profit} sales={S.sale} />}</div></div>))}
           </div>
         </div>

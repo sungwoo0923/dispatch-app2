@@ -14,16 +14,18 @@ import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — �
 import { useEffect, useState } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db, auth } from "./firebase";
+import { orderProfit, orderCost, paidOut } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
 
 export const toWon = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 
 export function statsOf(list) {
-  let sale = 0, driver = 0;
-  for (const r of list) { sale += toWon(r.청구운임); driver += toWon(r.기사운임); }
+  // ⭐ 2026-11-17 driver = 기사운임 합 · paid = 회사가 따로 지급(지게차·외부 특수운임) · profit = 줄 수수료(orderProfit) 합
+  let sale = 0, driver = 0, paid = 0;
+  for (const r of list) { sale += toWon(r.청구운임); driver += toWon(r.기사운임); paid += paidOut(r); }
   const cnt = list.length;
-  const profit = sale - driver;
+  const profit = sale - driver - paid;
   return {
-    cnt, sale, driver, profit,
+    cnt, sale, driver, paid, profit,
     rate: sale ? profit / sale : 0,
     avgSale: cnt ? sale / cnt : 0,
     avgProfit: cnt ? profit / cnt : 0,
@@ -90,11 +92,11 @@ export const COMPARE_DIMS = [
 ];
 
 function anomalyOf(r) {
-  const s = toWon(r.청구운임), d = toWon(r.기사운임), p = s - d;
+  const s = toWon(r.청구운임), d = toWon(r.기사운임), p = orderProfit(r); // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사 지급분
   if (s > 0 && d === 0 && !r.__fixed) return { type: "기사운임 미입력", tone: "warn", note: "수익이 실제보다 크게 잡혔을 수 있음" };
   if (s === 0 && d > 0) return { type: "청구운임 미입력", tone: "bad", note: "매출 없이 운반비만 나감" };
   if (s > 0 && p < 0) return { type: "역마진", tone: "bad", note: `${(-p).toLocaleString()}원 손해` };
-  if (s > 0 && p === 0) return { type: "수익 0원", tone: "warn", note: "청구=기사운임" };
+  if (s > 0 && p === 0) return { type: "수익 0원", tone: "warn", note: "청구=기사운임(+지게차 등)" };
   if (s > 0 && p / s < 0.05) return { type: "저마진", tone: "warn", note: `수익률 ${((p / s) * 100).toFixed(1)}%` };
   return null;
 }
@@ -126,7 +128,7 @@ export function analyzeMonths({ rows = [], monthA, monthB, scope = "pure", isExc
   }
 
   const anomaliesB = listB.map((r) => ({ r, an: anomalyOf(r) })).filter((x) => x.an)
-    .sort((x, y) => (toWon(x.r.청구운임) - toWon(x.r.기사운임) - toWon(x.r.지게차비용)) - (toWon(y.r.청구운임) - toWon(y.r.기사운임) - toWon(y.r.지게차비용)));
+    .sort((x, y) => orderProfit(x.r) - orderProfit(y.r));
   const anomaliesA = listA.map((r) => anomalyOf(r)).filter(Boolean);
   const countBy = (arr) => arr.reduce((m, a) => { const t = a.type || a.an.type; m[t] = (m[t] || 0) + 1; return m; }, {});
 
@@ -180,7 +182,7 @@ export function monthDetail(list) {
   const days = new Set(), clients = new Set();
   const bands = Object.fromEntries(MARGIN_BANDS.map((b) => [b.key, { cnt: 0, sale: 0, driver: 0 }]));
   for (const r of list) {
-    const s = toWon(r.청구운임), d = toWon(r.기사운임);
+    const s = toWon(r.청구운임), d = orderCost(r); // ⭐ 2026-11-17 d = 운반비(기사운임 + 지게차·외부 지급) → s − d = 수익(orderProfit)
     const band = bandOf(s, d);
     bands[band].cnt++; bands[band].sale += s; bands[band].driver += d;
     const k = r.__fixed ? "계산서" : (String(r.지급방식 || "").trim() || "미지정");
@@ -204,10 +206,10 @@ export function monthDetail(list) {
 
 export const ANOMALY_TYPES = [
   { type: "청구운임 미입력", tone: "bad", amountLabel: "나간 운반비", amount: (r) => toWon(r.기사운임), desc: "매출 0원인데 기사운임만 나간 오더 — 수익이 그만큼 줄어듦" },
-  { type: "역마진", tone: "bad", amountLabel: "손해 금액", amount: (r) => toWon(r.기사운임) - toWon(r.청구운임), desc: "기사운임이 청구운임보다 큰 오더" },
+  { type: "역마진", tone: "bad", amountLabel: "손해 금액", amount: (r) => -orderProfit(r), desc: "기사운임(+지게차 등 회사 지급분)이 청구운임보다 큰 오더" },
   { type: "기사운임 미입력", tone: "warn", amountLabel: "청구운임", amount: (r) => toWon(r.청구운임), desc: "기사운임이 비어 수익이 실제보다 크게 잡힌 오더" },
-  { type: "수익 0원", tone: "warn", amountLabel: "청구운임", amount: (r) => toWon(r.청구운임), desc: "청구운임 = 기사운임" },
-  { type: "저마진", tone: "warn", amountLabel: "수익", amount: (r) => toWon(r.청구운임) - toWon(r.기사운임) - toWon(r.외부지급합 ?? r.지게차비용), desc: "수익률 5% 미만" },
+  { type: "수익 0원", tone: "warn", amountLabel: "청구운임", amount: (r) => toWon(r.청구운임), desc: "청구운임 = 기사운임(+지게차 등 회사 지급분)" },
+  { type: "저마진", tone: "warn", amountLabel: "수익", amount: (r) => orderProfit(r), desc: "수익률 5% 미만" },
 ];
 
 // ── 쉬운 설명: "매출은 늘었는데 왜 수익은 그대로인가" ─────────────────────
@@ -221,7 +223,7 @@ export function explainGap(res) {
   const gap = B.profit - expected; // 음수면 덜 번 것
   const reasons = [];
   const used = new Set();
-  const impactOf = (list) => list.reduce((acc, r) => acc + (toWon(r.청구운임) - toWon(r.기사운임) - toWon(r.외부지급합 ?? r.지게차비용)) - toWon(r.청구운임) * A.rate, 0);
+  const impactOf = (list) => list.reduce((acc, r) => acc + orderProfit(r) - toWon(r.청구운임) * A.rate, 0);
 
   const noSale = listB.filter((r) => anomalyOf(r)?.type === "청구운임 미입력");
   if (noSale.length) {
@@ -388,8 +390,8 @@ export function buildReport(res) {
   const lowShareA = A.sale ? lowSale(detailA) / A.sale : 0, lowShareB = B.sale ? lowSale(detailB) / B.sale : 0;
   const top = (dt) => dt.bands["15"];
   const topProfitD = (top(detailB).sale - top(detailB).driver) - (top(detailA).sale - top(detailA).driver);
-  const zeroA = listA.filter((r) => toWon(r.청구운임) > 0 && toWon(r.청구운임) === toWon(r.기사운임));
-  const zeroB = listB.filter((r) => toWon(r.청구운임) > 0 && toWon(r.청구운임) === toWon(r.기사운임));
+  const zeroA = listA.filter((r) => toWon(r.청구운임) > 0 && orderProfit(r) === 0);
+  const zeroB = listB.filter((r) => toWon(r.청구운임) > 0 && orderProfit(r) === 0);
   const zeroTop = Object.entries(zeroB.reduce((m, r) => { const k = String(r.거래처명 || "").trim() || "(미입력)"; m[k] = (m[k] || 0) + 1; return m; }, {})).sort((x, y) => y[1] - x[1]).slice(0, 4);
   const marginBullets = [
     `수익률 10% 미만 오더가 전체 매출에서 차지하는 비중: ${pctU(lowShareA)} → ${pctU(lowShareB)}`,
@@ -417,7 +419,7 @@ export function buildReport(res) {
   methodRows.forEach((r) => { const loss = r.g.b.sale * (r.g.b.rate - r.g.a.rate); if (r.g.a.sale > 0 && isMajor(loss)) { r.major = true; r.majorText = `마진 하락 ${sManU(loss)}`; } });
   const worstMethod = methodRows.map((r) => r.g).filter((g) => g.a.sale > 0 && g.b.sale > 0 && g.b.rate < g.a.rate - 0.01).sort((x, y) => (x.b.sale * (x.b.rate - x.a.rate)) - (y.b.sale * (y.b.rate - y.a.rate)))[0];
   if (worstMethod && worstMethod.b.sale * (worstMethod.a.rate - worstMethod.b.rate) > Math.max(300000, Math.abs(B.sale * (A.rate - B.rate)) * 0.2)) {
-    const low = (list) => list.filter((r) => COMPARE_DIMS[1].get(r) === worstMethod.key && rateOf(toWon(r.청구운임), toWon(r.기사운임)) < 0.10).length;
+    const low = (list) => list.filter((r) => COMPARE_DIMS[1].get(r) === worstMethod.key && rateOf(toWon(r.청구운임), orderCost(r)) < 0.10).length;
     causes.push({
       key: "method", title: `"${worstMethod.key}" 오더의 마진이 떨어졌습니다`, head: ["배차방식", a, b, "증감"], rows: methodRows,
       bullets: [

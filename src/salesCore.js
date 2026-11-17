@@ -5,6 +5,10 @@
 //    최저 마진율(저가 수주 제외) · 수금 완료분만 확정 · 목표 초과 가속 · 월 상한
 //  · 거래처 상태(신규·성장·급감·휴면·미수) · 영업 파이프라인 단계(확률 가중 예상 매출)
 
+// ⭐ 2026-11-17 예외: 수익 식은 functions/profitCore.mjs(가져오는 것 없음)를 forkliftCore.js 로 가져온다 — 배차표 수수료와 같은 식
+//  매입(buy) = 기사운임 + 회사가 따로 지급(지게차·외부 특수운임) → 매출이익 = 매출 − 매입 = orderProfit
+import { orderProfit, orderCost } from "./forkliftCore.js";
+
 export const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 export const kstDay = (off = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(d.getUTCDate() + off); return d.toISOString().slice(0, 10); };
 export const ymOf = (off = 0, base = kstDay()) => { const d = new Date(`${String(base).slice(0, 7)}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + off); return d.toISOString().slice(0, 7); };
@@ -15,7 +19,7 @@ export const orderDate = (r) => String(r?.상차일 || r?.날짜 || "").slice(0,
 
 // ─── 인센티브 규정 기본값 ───
 export const DEFAULT_POLICY = {
-  base: "profit",          // "profit" 매출이익(청구운임 − 기사운임) | "revenue" 매출(청구운임)
+  base: "profit",          // "profit" 매출이익(청구운임 − 기사운임 − 지게차·외부 지급) | "revenue" 매출(청구운임)
   useTiers: true,          // 구간 누진(월 기준금액이 커질수록 높은 요율)
   rate: 10,                // 구간을 안 쓸 때 기본 요율(%)
   tiers: [{ from: 0, rate: 8 }, { from: 5000000, rate: 11 }, { from: 10000000, rate: 14 }],
@@ -85,7 +89,7 @@ export function calcIncentive({ orders = [], accounts = [], policy: pIn, uid, ym
     const a = acc.get(c);
     if (!a || a.uid !== uid) return;
     if (a.since && d < a.since) return; // 수주일 전 오더는 내 실적이 아니다
-    const sale = toInt(r.청구운임), buy = toInt(r.기사운임);
+    const sale = toInt(r.청구운임), buy = orderCost(r); // ⭐ 2026-11-17 기사운임 + 지게차·외부 지급
     const g = by.get(c) || { client: c, since: a.since || "", n: 0, sale: 0, buy: 0, base: 0, exN: 0, exSale: 0, open: 0 };
     g.n += 1; g.sale += sale; g.buy += buy;
     if (!orderSettled(r)) g.open += 1;
@@ -146,7 +150,7 @@ export function clientHealth({ orders = [], accounts = [], clients = [], today =
     g.n += 1; g.total += sale;
     if (!g.last || d > g.last) g.last = d;
     if (!g.first || d < g.first) g.first = d;
-    if (d.startsWith(ym)) { g.cur += sale; g.curProfit += sale - toInt(r.기사운임); }
+    if (d.startsWith(ym)) { g.cur += sale; g.curProfit += orderProfit(r); }
     if (d.startsWith(prevYm)) { g.prev += sale; if (!orderSettled(r)) g.prevOpen += 1; }
     if (d > d30 && d <= today) g.r30 += sale; else if (d > d60 && d <= d30) g.p30 += sale;
   });

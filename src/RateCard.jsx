@@ -1,5 +1,6 @@
 // ===================== src/RateCard.jsx =====================
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수수료 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표와 같은 식
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { kpConfirm } from "./kpDialog";
 import * as XLSX from "xlsx";
@@ -183,14 +184,14 @@ function OrderDetailModal({ rows: rowsIn, bucket, fareField, onClose }) {
   const rows = useMemo(() => sortRows(rowsIn || [], odSort.sort, (r, k) => {
     if (k === "청구운임") return _rcInt(r.청구운임);
     if (k === "기사운임") return _rcInt(r.기사운임);
-    if (k === "수수료") return _rcInt(r.청구운임) - _rcInt(r.기사운임) - _rcInt(r.외부지급합 ?? r.지게차비용);
+    if (k === "수수료") return orderProfit(r);
     if (k === "혼적") return r.혼적 ? "혼적" : "독차";
     return r[RC_DETAIL_KEY[k] || k];
   }), [rowsIn, odSort.sort]);
   if (!rows||!rows.length) return null;
   const avgFare = roundDown10k(rows.reduce((s,r)=>s+Number(String(r.청구운임||0).replace(/[^\d]/g,"")),0)/rows.length);
   const avgDriver = roundDown10k(rows.reduce((s,r)=>s+Number(String(r.기사운임||0).replace(/[^\d]/g,"")),0)/rows.length);
-  const avgMargin = roundDown10k(rows.reduce((s,r)=>{const f=Number(String(r.청구운임||0).replace(/[^\d]/g,"")); const d=Number(String(r.기사운임||0).replace(/[^\d]/g,"")); return s+(f-d);},0)/rows.length);
+  const avgMargin = roundDown10k(rows.reduce((s,r)=>s+orderProfit(r),0)/rows.length); // ⭐ 2026-11-17 수수료 = orderProfit
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[999999]" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-[820px] max-h-[82vh] overflow-hidden flex flex-col" onClick={e=>e.stopPropagation()}>
@@ -212,7 +213,7 @@ function OrderDetailModal({ rows: rowsIn, bucket, fareField, onClose }) {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {rows.map((r,i)=>{
-                const fare=Number(String(r.청구운임||0).replace(/[^\d]/g,"")); const driver=Number(String(r.기사운임||0).replace(/[^\d]/g,"")); const margin=fare-driver;
+                const fare=Number(String(r.청구운임||0).replace(/[^\d]/g,"")); const driver=Number(String(r.기사운임||0).replace(/[^\d]/g,"")); const margin=orderProfit(r); // ⭐ 2026-11-17
                 return (
                   <tr key={i} className={`hover:bg-[#F5F8FD] transition ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
                     <td className="px-3 py-2.5 text-center text-[12px] text-gray-500 whitespace-nowrap">{r.상차일||"-"}</td>
