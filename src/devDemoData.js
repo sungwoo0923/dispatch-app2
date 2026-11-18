@@ -15,7 +15,7 @@ const ymd = (off) => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
 
-const CLIENTS = ["(주)한빛물류센터", "대한통운 평택허브", "삼성전자 기흥캠퍼스 자재팀", "LG디스플레이 파주", "CJ대한통운", "쿠팡 이천2센터", "롯데글로벌로지스 김해", "현대모비스 아산공장 출하장"];
+const CLIENTS = ["(주)한빛물류센터", "한결물류 평택허브", "세진전자 기흥공장 자재팀", "엘림디스플레이 파주", "대성로지텍", "바로마켓 이천2센터", "동남글로벌로지스 김해", "현성모터스 아산공장 출하장"];
 const PLACES = [
   ["평택항 컨테이너터미널", "경기도 평택시 포승읍 평택항만길 73"],
   ["이천 물류센터 B동", "경기도 이천시 마장면 서이천로 578번길 120"],
@@ -242,13 +242,13 @@ function arDeskDocs() {
   ];
 }
 function arPaymentDocs() {
-  return [fakeDoc("arPayments", "demo-ap-1", { company: demoCo, client: CLIENTS[1], yyyymm: ymShift(-3), amount: 500000, full: false, depositName: "대한통운평택", depositDate: ymd(-20), at: { seconds: Math.floor(arTs(20) / 1000), nanoseconds: 0 } })];
+  return [fakeDoc("arPayments", "demo-ap-1", { company: demoCo, client: CLIENTS[1], yyyymm: ymShift(-3), amount: 500000, full: false, depositName: "한결물류평택", depositDate: ymd(-20), at: { seconds: Math.floor(arTs(20) / 1000), nanoseconds: 0 } })];
 }
 function arEmailLogs() {
   return [
     fakeDoc("emailLogs", "demo-el-1", { type: "거래명세서", client: CLIENTS[0], to: "billing@hanbit.example", subject: `[거래명세서] ${CLIENTS[0]} ${ymShift(-1)}`, status: "success", sentAt: arTs(5), sentBy: "preview@kp-flow.app" }),
-    fakeDoc("emailLogs", "demo-el-2", { type: "미수금", client: CLIENTS[2], to: "ap@samsung.example", subject: `[미수금현황] ${CLIENTS[2]}`, status: "success", sentAt: arTs(15), sentBy: "preview@kp-flow.app" }),
-    fakeDoc("emailLogs", "demo-el-3", { type: "미수금", client: CLIENTS[1], to: "ap@cj.example", subject: `[미수금현황] ${CLIENTS[1]}`, status: "success", sentAt: arTs(8), sentBy: "preview@kp-flow.app" }),
+    fakeDoc("emailLogs", "demo-el-2", { type: "미수금", client: CLIENTS[2], to: "ap@sejin.example", subject: `[미수금현황] ${CLIENTS[2]}`, status: "success", sentAt: arTs(15), sentBy: "preview@kp-flow.app" }),
+    fakeDoc("emailLogs", "demo-el-3", { type: "미수금", client: CLIENTS[1], to: "ap@daesung.example", subject: `[미수금현황] ${CLIENTS[1]}`, status: "success", sentAt: arTs(8), sentBy: "preview@kp-flow.app" }),
   ];
 }
 // 여러 사업자 점검(URL에 demoBiz=1) — companySettings/{회사}.bizList
