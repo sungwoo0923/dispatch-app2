@@ -2928,7 +2928,8 @@ export default function DriverHome() {
       {uid && driver && needFirstOdo(driver) && (
         <OdoFirstSheet uid={uid} by={`${driver.name || driver.이름 || "기사"}(기사)`} onDone={() => showToast("현재 키로수를 저장했습니다")} />
       )}
-      {vehicleSetup && uid && !(driver && needFirstOdo(driver)) && (
+      {/* 🛠 2026-11-18 점검 — 새 오더 · 수정된 오더 · 삭제 안내 창이 떠 있으면 차량 설정은 기다린다(예전엔 설정 창이 오더 승인 창을 덮어 [승인]이 안 보였다) */}
+      {vehicleSetup && uid && !(driver && needFirstOdo(driver)) && !(deletedNotices.length > 0 || popupOrder || modOrder) && (
         <VehicleSetupWizard driverMode driverId={uid} drv={driver} by={`${driver.name || driver.이름 || "기사"}(기사)`} onClose={(done) => { setVehicleSetup(false); if (done) { showToast("차량 설정이 저장되었습니다"); setActiveTab("vehicle"); } }} />
       )}
 
