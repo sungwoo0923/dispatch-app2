@@ -13,6 +13,17 @@ on:
       - "firestore.indexes.json"
       - "storage.rules"
       - "firebase.json"
+  # 🔐 2026-11-18 다른 자동 작업(Firebase 비밀값 등록)이 키를 넣은 뒤 이어서 부른다 — 입력은 아래 workflow_dispatch 와 같다
+  workflow_call:
+    inputs:
+      target:
+        type: string
+        required: false
+        default: "서버 기능 전체(functions)"
+      custom:
+        type: string
+        required: false
+        default: ""
   workflow_dispatch:
     inputs:
       target:
