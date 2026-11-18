@@ -1,11 +1,12 @@
 // ======================= pnk-site/src/pages/Sales.jsx =======================
 // 영업 관리 — 영업 대상 회사를 단계(발굴 → 첫 연락 → 시연 → 견적 → 계약 → 도입)별로 관리하고, 다음 연락일을 일정에 띄운다.
+//  🏡 2026-11-18 맨 위 [홈페이지 문의] — 공식 홈페이지(/contact)에서 들어온 pnkInquiries(새 문의 · 처리 완료 · 영업 대상으로 옮기기)
 //  pnkSales: { company, contact, phone, email, product, stage, value(월 예상 금액), nextDate, nextAction, ownerUid, ownerName, memo, notes:[{at,by,text}] }
 import React from "react";
 import { arrayUnion } from "firebase/firestore";
 import { Bar, BarChart, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useMeCtx } from "../App";
-import { PRODUCTS, SALES_STAGES, kstDateTime, addRow, by, patchRow, productLabel, removeRow, stageLabel, useCol, where, won, ymd, num } from "../pnkApi";
+import { PRODUCTS, SALES_STAGES, kstDateTime, addRow, by, fmtTime, limit, orderBy, patchRow, productLabel, removeRow, stageLabel, useCol, where, won, ymd, num } from "../pnkApi";
 import { Btn, Card, Chip, Field, Hero, HeroBtn, Input, Loading, Modal, Select, Stat, Tabs, Textarea, cx, fail, DateInput } from "../ui";
 
 const NEXT_ACTIONS = ["첫 연락(전화)", "요금제 안내", "자료 · 소개서 보내기", "현장 시연", "무료 체험 안내", "견적서 보내기", "계약서 보내기", "계약서 서명", "도입 교육", "결과 확인 전화"];
@@ -38,6 +39,7 @@ export default function Sales() {
       <Hero title="영업 관리">
         <HeroBtn icon="plus" onClick={() => setEdit({})}>영업 대상 추가</HeroBtn>
       </Hero>
+      <Inquiries onMove={(q) => setEdit({ company: q.company || q.name, contact: q.name, phone: q.phone, email: q.email, memo: `[홈페이지 문의 ${fmtTime(q.createdAt)}] ${(q.topics || []).join(", ")}\n${q.message}`, fromInquiry: q.id })} />
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 mb-5">
         <Stat icon="handshake" label="진행 중" value={`${open.length}곳`} sub={`월 예상 ${won(pipeVal)}`} />
         <Stat icon="pie" label="가중 예상 매출" value={`${Math.round(weighted / 10000).toLocaleString()}만`} sub="단계별 확률 반영(월)" />
@@ -152,6 +154,7 @@ function SalesEditor({ deal, me, members, onClose }) {
     const data = { ...f, company: f.company.trim(), value: num(f.value), ownerName: o?.name || "", ...(f.stage === "won" && deal.stage !== "won" ? { wonAt: ymd() } : {}) };
     try {
       if (isNew) { const b = by(me); await addRow("pnkSales", { ...data, notes: [], createdBy: b.uid }); }
+      if (isNew && deal.fromInquiry) await patchRow("pnkInquiries", deal.fromInquiry, { status: "moved" }).catch(() => {});
       else await patchRow("pnkSales", deal.id, data);
       onClose();
     } catch (e) { fail(e); }
@@ -202,5 +205,47 @@ function SalesEditor({ deal, me, members, onClose }) {
         </div>
       </div>
     </Modal>
+  );
+}
+
+// ───────── 홈페이지 문의(pnkInquiries) — 새 문의가 있으면 맨 위에 보인다 ─────────
+function Inquiries({ onMove }) {
+  const [rows] = useCol("pnkInquiries", [orderBy("createdAt", "desc"), limit(50)], []);
+  const [all, setAll] = React.useState(false);
+  const [open, setOpen] = React.useState(null);
+  const fresh = (rows || []).filter((q) => q.status === "new");
+  const list = all ? rows || [] : fresh;
+  if (!rows || (!rows.length)) return null;
+  const done = (q, status) => patchRow("pnkInquiries", q.id, { status }).catch(fail);
+  return (
+    <Card title={`홈페이지 문의${fresh.length ? ` · 새 문의 ${fresh.length}건` : ""}`} className="mb-5" pad={false}
+      right={<button type="button" onClick={() => setAll((v) => !v)} className="text-[12.5px] font-bold text-[#5A6A86] hover:text-navy">{all ? "새 문의만" : `지난 문의까지(${rows.length})`}</button>}>
+      {list.length === 0 ? <div className="py-6 text-center text-[13px] text-[#7A8AA8]">새 문의가 없습니다.</div> : (
+        <ul className="divide-y divide-[#EEF1F6]">
+          {list.map((q) => (
+            <li key={q.id} className="px-5 py-3">
+              <button type="button" onClick={() => setOpen(open === q.id ? null : q.id)} className="w-full text-left flex items-center gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13.5px] font-black truncate">{q.company ? `${q.company} · ` : ""}{q.name} <span className="font-semibold text-[#5A6A86] tnum">{q.phone}</span></div>
+                  <div className="text-[12px] text-[#7A8AA8] truncate">{(q.topics || []).join(" · ") || "분야 선택 안 함"} · {q.message}</div>
+                </div>
+                <span className="text-[12px] text-[#7A8AA8] tnum shrink-0">{fmtTime(q.createdAt)}</span>
+                <Chip tone={q.status === "new" ? "red" : q.status === "moved" ? "green" : "gray"}>{q.status === "new" ? "새 문의" : q.status === "moved" ? "영업 등록" : "처리 완료"}</Chip>
+              </button>
+              {open === q.id && (
+                <div className="mt-3 rounded-xl bg-navy-50 p-4">
+                  <div className="text-[13.5px] whitespace-pre-wrap leading-relaxed">{q.message}</div>
+                  {q.email && <div className="mt-2 text-[12.5px] text-[#5A6A86]">이메일 {q.email}</div>}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Btn icon="plus" onClick={() => onMove(q)}>영업 대상으로 추가</Btn>
+                    {q.status === "new" ? <Btn kind="ghost" onClick={() => done(q, "done")}>처리 완료</Btn> : <Btn kind="ghost" onClick={() => done(q, "new")}>새 문의로 되돌리기</Btn>}
+                  </div>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }

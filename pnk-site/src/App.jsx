@@ -1,5 +1,5 @@
 // ======================= pnk-site/src/App.jsx =======================
-// PnK PROJECT 사내 인트라넷 — 로그인 · 가입 요청 · 왼쪽 메뉴(로지스웹 관리 화면과 같은 네이비 사이드바) · 화면 이동
+// PnK PROJECT 사내 인트라넷 — 주소 /login · /intranet/…(공식 홈페이지 site/Site.jsx 와 따로 불러온다) · 로그인 · 가입 요청 · 왼쪽 메뉴(로지스웹 관리 화면과 같은 네이비 사이드바) · 화면 이동
 //  PnK PROJECT(법인)가 만드는 로지스웹 · 로지스웹 허브 · 공식 홈페이지 · 기사앱을 한곳에서 관리하는 사내 시스템.
 import React from "react";
 import { BrowserRouter, NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
@@ -76,9 +76,11 @@ export default function App() {
   if (!me.user) { UI.setRoute("login"); return <Login />; }
   if (me.needMfa) return <MfaGate me={me} />;
   if (!me.active) return <JoinGate me={me} />;
+  // 로그인 화면(/login)에서 들어왔으면 주소를 인트라넷(/intranet)으로 바꾼다 — 화면 이동은 아래 basename 기준
+  if (!window.location.pathname.startsWith("/intranet")) window.history.replaceState(null, "", "/intranet");
   return (
     <MeCtx.Provider value={me}>
-      <BrowserRouter>
+      <BrowserRouter basename="/intranet">
         <Shell>
           <React.Suspense fallback={<div className="py-16 text-center text-[13px] font-semibold text-[#7A8AA8]">불러오는 중…</div>}>
           <Routes>
