@@ -2980,6 +2980,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동 계산)
 import FareRulesSettings from "./FareRulesSettings";
 import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
+import { SpecialFareTag, SpecialFareLine } from "./specialFareTag"; // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import { withRoutePresets } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
 import { SpecialFareButton, ForkliftChip, ForkliftMark, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount, orderProfit, profitTotals } from "./forklift"; // 🏗 2026-11-09 지게차비용 · ⭐ 2026-11-17 수수료 한 식(orderProfit · profitTotals)
 import { useTableSort, sortRows, SortTh } from "./tableSort";
@@ -21027,6 +21028,7 @@ setConfirmChange(null);
                     {r.__sameCargo && (
                       <span className="px-2 py-0.5 text-[10px] rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">화물동일</span>
                     )}
+                    <SpecialFareTag row={r} size="sm" />
                   </div>
                 </div>
                 <div className="px-4 py-3">
@@ -21041,6 +21043,7 @@ setConfirmChange(null);
                     <span>{r.차량종류}{r.차량톤수 ? ` / ${r.차량톤수}` : ""}</span>
                     {r.화물내용 && <span className="text-gray-500">· {r.화물내용}</span>}
                   </div>
+                  <SpecialFareLine row={r} className="mt-2" />
                   <div className="mt-2 flex items-center justify-between">
                     <span className="text-[13px] text-gray-600">기사 {r.이름 || "-"}</span>
                     <span className="text-[15px] font-bold text-[#1B2B4B]">{Number(r.청구운임 || 0).toLocaleString()}원</span>
@@ -21105,6 +21108,7 @@ setConfirmChange(null);
                   )}
                   {r.차량종류 && <span className="text-[11px] text-gray-500">{r.차량종류}</span>}
                   {r.차량톤수 && <span className="text-[11px] text-gray-500">{r.차량톤수}</span>}
+                  <SpecialFareTag row={r} size="sm" />
                   {(() => {
                     const _xv2 = (arr) => Array.isArray(arr) ? arr.map(v => typeof v==="string"?v:(v?.업체명||v?.주소||"")).filter(Boolean) : [];
                     const names = [...new Set([..._xv2(r.경유지_상차),..._xv2(r.경유상차목록),..._xv2(r.경유지상차),..._xv2(r.경유지_하차),..._xv2(r.경유하차목록),..._xv2(r.경유지하차)])];
@@ -21120,6 +21124,7 @@ setConfirmChange(null);
                     마진 {margin.toLocaleString()}원 ({marginPct}%)
                   </span>
                 </div>
+                <SpecialFareLine row={r} />
                 {r.메모 && (
                   <div className="text-[11px] text-amber-800 bg-amber-50 rounded px-2 py-1 border border-amber-100 truncate">
                     메모: {r.메모}
@@ -21590,6 +21595,7 @@ setConfirmChange(null);
                         {isOutlierRow(r) && (
                           <span className="px-2 py-0.5 text-[10px] font-bold rounded border border-orange-300 text-orange-700">이례적 청구(반복없음)</span>
                         )}
+                        <SpecialFareTag row={r} size="sm" />
                         <span className={`px-2 py-0.5 text-[11px] font-bold rounded border ${fareCls}`}>{fareLabel}</span>
                           </div>
                         </div>
@@ -21619,6 +21625,7 @@ setConfirmChange(null);
                           {r.차량종류 || "-"} / {r.차량톤수 || "-"}
                           {r.화물내용 && <span> · {r.화물내용}</span>}
                         </div>
+                        <SpecialFareLine row={r} className="mb-2" />
 
                         {/* 운임 위치 바 */}
                         <div className="relative h-1.5 bg-gray-100 rounded-full mb-3">
