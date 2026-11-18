@@ -11,7 +11,7 @@ import { Btn, Card, Chip, Field, Hero, HeroBtn, Input, Loading, Modal, Select, S
 
 const NEXT_ACTIONS = ["첫 연락(전화)", "요금제 안내", "자료 · 소개서 보내기", "현장 시연", "무료 체험 안내", "견적서 보내기", "계약서 보내기", "계약서 서명", "도입 교육", "결과 확인 전화"];
 const OPEN = SALES_STAGES.filter((s) => !["won", "lost"].includes(s.key));
-const NAVY = ["#C9D3E4", "#A9B9DC", "#8FA6D6", "#4B6CB7", "#2D4C82", "#1B2B4B"];
+const NAVY = ["#DDD8D1", "#C9C4BC", "#C5B5A0", "#9F8563", "#6C5A42", "#3A342D"];
 
 export default function Sales() {
   const me = useMeCtx();
@@ -36,7 +36,7 @@ export default function Sales() {
 
   return (
     <div>
-      <Hero title="영업 관리">
+      <Hero en="Sales pipeline" title="영업 관리">
         <HeroBtn icon="plus" onClick={() => setEdit({})}>영업 대상 추가</HeroBtn>
       </Hero>
       <Inquiries onMove={(q) => setEdit({ company: q.company || q.name, contact: q.name, phone: q.phone, email: q.email, memo: `[홈페이지 문의 ${fmtTime(q.createdAt)}] ${[q.topic, ...(q.topics || [])].filter(Boolean).join(", ")}\n${q.message}`, fromInquiry: q.id })} />
@@ -53,22 +53,22 @@ export default function Sales() {
             <ResponsiveContainer>
               <BarChart data={funnel} layout="vertical" margin={{ left: 10, right: 30 }}>
                 <XAxis type="number" hide allowDecimals={false} />
-                <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 12.5, fill: "#3A4A66", fontWeight: 700 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #E3E8F0", fontSize: 12 }} cursor={{ fill: "#F4F6FA" }} formatter={(v) => [`${v}곳`, "회사"]} />
+                <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 12.5, fill: "#57514A", fontWeight: 700 }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #EDEAE7", fontSize: 12 }} cursor={{ fill: "#F8F7F6" }} formatter={(v) => [`${v}곳`, "회사"]} />
                 <Bar dataKey="n" radius={[0, 8, 8, 0]} barSize={20}>
                   {funnel.map((f) => <Cell key={f.name} fill={NAVY[f.i % NAVY.length]} />)}
-                  <LabelList dataKey="n" position="right" style={{ fontSize: 12, fontWeight: 800, fill: "#1B2B4B" }} />
+                  <LabelList dataKey="n" position="right" style={{ fontSize: 12, fontWeight: 800, fill: "#3A342D" }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
         </Card>
         <Card title="연락할 곳" pad={false}>
-          {due.length === 0 ? <div className="py-8 text-center text-[13px] text-[#7A8AA8]">오늘까지 연락할 곳이 없습니다.</div> : (
-            <ul className="divide-y divide-[#EEF1F6]">
+          {due.length === 0 ? <div className="py-8 text-center text-[13px] text-[#98928B]">오늘까지 연락할 곳이 없습니다.</div> : (
+            <ul className="divide-y divide-[#F4F2F0]">
               {due.slice(0, 6).map((s) => (
                 <li key={s.id}><button type="button" onClick={() => setEdit(s)} className="w-full text-left px-5 py-3 hover:bg-navy-50 flex items-center gap-3">
-                  <div className="min-w-0 flex-1"><div className="text-[13.5px] font-black truncate">{s.company}</div><div className="text-[12px] text-[#7A8AA8] truncate">{s.nextAction || "연락"} · {s.ownerName}</div></div>
+                  <div className="min-w-0 flex-1"><div className="text-[13.5px] font-black truncate">{s.company}</div><div className="text-[12px] text-[#98928B] truncate">{s.nextAction || "연락"} · {s.ownerName}</div></div>
                   <Chip tone={s.nextDate < today ? "red" : "navy"}>{s.nextDate < today ? "지남" : "오늘"}</Chip>
                 </button></li>
               ))}
@@ -88,10 +88,10 @@ export default function Sales() {
             const items = list.filter((s) => s.stage === st.key);
             const sum = items.reduce((a, s) => a + (Number(s.value) || 0), 0);
             return (
-              <div key={st.key} className="w-[260px] shrink-0 snap-start rounded-2xl bg-[#E9EDF4] p-2.5">
+              <div key={st.key} className="w-[260px] shrink-0 snap-start rounded-2xl bg-[#F1EFEC] p-2.5">
                 <div className="px-2 pt-1 pb-2.5">
-                  <div className="flex items-center gap-2"><span className="text-[14px] font-black">{st.label}</span><span className="ml-auto text-[12px] font-black text-[#5A6A86] bg-white rounded-lg px-2 h-6 flex items-center">{items.length}</span></div>
-                  <div className="text-[11.5px] font-bold text-[#7A8AA8] tnum">월 {won(sum)}</div>
+                  <div className="flex items-center gap-2"><span className="text-[14px] font-black">{st.label}</span><span className="ml-auto text-[12px] font-black text-[#77716A] bg-white rounded-lg px-2 h-6 flex items-center">{items.length}</span></div>
+                  <div className="text-[11.5px] font-bold text-[#98928B] tnum">월 {won(sum)}</div>
                 </div>
                 <div className="space-y-2">
                   {items.map((s) => {
@@ -100,7 +100,7 @@ export default function Sales() {
                     return (
                       <div key={s.id} onClick={() => setEdit(s)} className="bg-white rounded-2xl border border-line p-3 cursor-pointer hover:border-navy-500 transition">
                         <div className="text-[14px] font-black truncate">{s.company}</div>
-                        <div className="text-[12px] text-[#7A8AA8] truncate">{s.contact} · {productLabel(s.product)}</div>
+                        <div className="text-[12px] text-[#98928B] truncate">{s.contact} · {productLabel(s.product)}</div>
                         <div className="mt-2 flex items-center gap-1.5">
                           <span className="text-[13px] font-black tnum">{won(s.value)}</span>
                           {s.nextDate && st.key !== "won" && st.key !== "lost" && <Chip tone={s.nextDate < today ? "red" : "gray"} className="ml-auto">{s.nextDate.slice(5).replace("-", "/")}</Chip>}
@@ -118,14 +118,14 @@ export default function Sales() {
         <Card pad={false}>
           <div className="overflow-x-auto">
             <table className="w-full text-[13.5px] min-w-[760px]">
-              <thead><tr className="text-left text-[12px] text-[#7A8AA8] bg-[#F8FAFD]">{["회사", "담당자(고객)", "단계", "월 예상", "다음 연락", "영업 담당"].map((h) => <th key={h} className="px-4 py-2.5 font-bold">{h}</th>)}</tr></thead>
+              <thead><tr className="text-left text-[12px] text-[#98928B] bg-[#F9F8F6]">{["회사", "담당자(고객)", "단계", "월 예상", "다음 연락", "영업 담당"].map((h) => <th key={h} className="px-4 py-2.5 font-bold">{h}</th>)}</tr></thead>
               <tbody>
                 {list.sort((a, b) => String(a.nextDate || "9").localeCompare(String(b.nextDate || "9"))).map((s) => (
-                  <tr key={s.id} onClick={() => setEdit(s)} className="border-t border-[#EEF1F6] hover:bg-[#F8FAFD] cursor-pointer">
-                    <td className="px-4 py-3 font-black">{s.company}</td><td className="px-4 py-3">{s.contact} <span className="text-[#7A8AA8]">{s.phone}</span></td>
+                  <tr key={s.id} onClick={() => setEdit(s)} className="border-t border-[#F4F2F0] hover:bg-[#F9F8F6] cursor-pointer">
+                    <td className="px-4 py-3 font-black">{s.company}</td><td className="px-4 py-3">{s.contact} <span className="text-[#98928B]">{s.phone}</span></td>
                     <td className="px-4 py-3"><Chip tone={s.stage === "won" ? "green" : s.stage === "lost" ? "gray" : "navy"}>{stageLabel(s.stage)}</Chip></td>
                     <td className="px-4 py-3 tnum font-bold">{won(s.value)}</td>
-                    <td className={cx("px-4 py-3 tnum", s.nextDate && s.nextDate < today && "text-rose-600 font-bold")}>{s.nextDate || "-"} <span className="text-[#7A8AA8] font-normal">{s.nextAction}</span></td>
+                    <td className={cx("px-4 py-3 tnum", s.nextDate && s.nextDate < today && "text-rose-600 font-bold")}>{s.nextDate || "-"} <span className="text-[#98928B] font-normal">{s.nextAction}</span></td>
                     <td className="px-4 py-3">{s.ownerName}</td>
                   </tr>
                 ))}
@@ -180,7 +180,7 @@ function SalesEditor({ deal, me, members, onClose }) {
             <Field label="월 예상 금액(원)"><Input inputMode="numeric" value={f.value} onChange={set("value")} placeholder="199000" /></Field>
           </div>
           <Field label="단계">
-            <div className="grid grid-cols-4 gap-1.5">{SALES_STAGES.map((s) => <button key={s.key} type="button" onClick={() => setF({ ...f, stage: s.key })} className={cx("h-9 rounded-xl text-[12px] font-black border", f.stage === s.key ? "bg-navy text-white border-navy" : "border-[#DCE3EE] text-[#3A4A66]")}>{s.label}</button>)}</div>
+            <div className="grid grid-cols-4 gap-1.5">{SALES_STAGES.map((s) => <button key={s.key} type="button" onClick={() => setF({ ...f, stage: s.key })} className={cx("h-9 rounded-xl text-[12px] font-black border", f.stage === s.key ? "bg-navy text-white border-navy" : "border-[#E9E6E1] text-[#57514A]")}>{s.label}</button>)}</div>
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="다음 연락일"><DateInput value={f.nextDate} onChange={set("nextDate")} /></Field>
@@ -190,16 +190,16 @@ function SalesEditor({ deal, me, members, onClose }) {
           <Field label="메모"><Textarea rows={3} value={f.memo} onChange={set("memo")} /></Field>
         </div>
         <div>
-          <div className="text-[12.5px] font-bold text-[#3A4A66] mb-1">연락 기록</div>
-          {isNew ? <div className="text-[12.5px] text-[#7A8AA8] rounded-2xl bg-navy-50 p-4">저장한 뒤 통화 · 미팅 기록을 남길 수 있습니다.</div> : (<>
+          <div className="text-[12.5px] font-bold text-[#57514A] mb-1">연락 기록</div>
+          {isNew ? <div className="text-[12.5px] text-[#98928B] rounded-2xl bg-navy-50 p-4">저장한 뒤 통화 · 미팅 기록을 남길 수 있습니다.</div> : (<>
             <div className="flex gap-2 mb-3"><Input value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) addNote(); }} placeholder="예: 대표와 통화 — 다음 주 시연 희망" /><Btn onClick={addNote}>기록</Btn></div>
             <ol className="relative border-l-2 border-navy-100 ml-2 space-y-3">
               {(deal.notes || []).slice().sort((a, b) => b.at - a.at).map((n) => (
                 <li key={n.at} className="pl-4 relative"><span className="absolute -left-[7px] top-1.5 w-3 h-3 rounded-full bg-navy ring-4 ring-white" />
-                  <div className="text-[11.5px] text-[#7A8AA8] tnum">{kstDateTime(n.at)} · {n.by}</div>
+                  <div className="text-[11.5px] text-[#98928B] tnum">{kstDateTime(n.at)} · {n.by}</div>
                   <div className="text-[13.5px] whitespace-pre-wrap">{n.text}</div></li>
               ))}
-              {!(deal.notes || []).length && <li className="pl-4 text-[12.5px] text-[#7A8AA8]">아직 기록이 없습니다.</li>}
+              {!(deal.notes || []).length && <li className="pl-4 text-[12.5px] text-[#98928B]">아직 기록이 없습니다.</li>}
             </ol>
           </>)}
         </div>
@@ -219,24 +219,24 @@ function Inquiries({ onMove }) {
   const done = (q, status) => patchRow("pnkInquiries", q.id, { status }).catch(fail);
   return (
     <Card title={`홈페이지 문의${fresh.length ? ` · 새 문의 ${fresh.length}건` : ""}`} className="mb-5" pad={false}
-      right={<button type="button" onClick={() => setAll((v) => !v)} className="text-[12.5px] font-bold text-[#5A6A86] hover:text-navy">{all ? "새 문의만" : `지난 문의까지(${rows.length})`}</button>}>
-      {list.length === 0 ? <div className="py-6 text-center text-[13px] text-[#7A8AA8]">새 문의가 없습니다.</div> : (
-        <ul className="divide-y divide-[#EEF1F6]">
+      right={<button type="button" onClick={() => setAll((v) => !v)} className="text-[12.5px] font-bold text-[#77716A] hover:text-navy">{all ? "새 문의만" : `지난 문의까지(${rows.length})`}</button>}>
+      {list.length === 0 ? <div className="py-6 text-center text-[13px] text-[#98928B]">새 문의가 없습니다.</div> : (
+        <ul className="divide-y divide-[#F4F2F0]">
           {list.map((q) => (
             <li key={q.id} className="px-5 py-3">
               <button type="button" onClick={() => setOpen(open === q.id ? null : q.id)} className="w-full text-left flex items-center gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="text-[13.5px] font-black truncate">{q.company ? `${q.company} · ` : ""}{q.name} <span className="font-semibold text-[#5A6A86] tnum">{q.phone}</span></div>
-                  <div className="text-[12px] text-[#7A8AA8] truncate">{[q.topic, ...(q.topics || [])].filter(Boolean).join(" · ") || "분야 선택 안 함"} · {q.message}</div>
+                  <div className="text-[13.5px] font-black truncate">{q.company ? `${q.company} · ` : ""}{q.name} <span className="font-semibold text-[#77716A] tnum">{q.phone}</span></div>
+                  <div className="text-[12px] text-[#98928B] truncate">{[q.topic, ...(q.topics || [])].filter(Boolean).join(" · ") || "분야 선택 안 함"} · {q.message}</div>
                 </div>
-                <span className="text-[12px] text-[#7A8AA8] tnum shrink-0">{fmtTime(q.createdAt)}</span>
+                <span className="text-[12px] text-[#98928B] tnum shrink-0">{fmtTime(q.createdAt)}</span>
                 <Chip tone={q.status === "new" ? "red" : q.status === "moved" ? "green" : "gray"}>{q.status === "new" ? "새 문의" : q.status === "moved" ? "영업 등록" : "처리 완료"}</Chip>
               </button>
               {open === q.id && (
                 <div className="mt-3 rounded-xl bg-navy-50 p-4">
                   <div className="text-[13.5px] whitespace-pre-wrap leading-relaxed">{q.message}</div>
-                  {q.email && <div className="mt-2 text-[12.5px] text-[#5A6A86]">이메일 {q.email}</div>}
-                  {Object.entries(q.extra || {}).map(([k, v]) => <div key={k} className="mt-1 text-[12.5px] text-[#5A6A86]">{k}: {String(v)}</div>)}
+                  {q.email && <div className="mt-2 text-[12.5px] text-[#77716A]">이메일 {q.email}</div>}
+                  {Object.entries(q.extra || {}).map(([k, v]) => <div key={k} className="mt-1 text-[12.5px] text-[#77716A]">{k}: {String(v)}</div>)}
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Btn icon="plus" onClick={() => onMove(q)}>영업 대상으로 추가</Btn>
                     {q.status === "new" ? <Btn kind="ghost" onClick={() => done(q, "done")}>처리 완료</Btn> : <Btn kind="ghost" onClick={() => done(q, "new")}>새 문의로 되돌리기</Btn>}

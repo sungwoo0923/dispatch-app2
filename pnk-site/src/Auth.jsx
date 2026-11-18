@@ -45,7 +45,7 @@ function Frame({ children, wide }) {
             {["사내메일", "전자결재", "근태 · 휴가", "업무 · 일정"].map((t) => <span key={t} className="h-8 px-3 rounded-lg bg-white/10 text-[13px] font-bold flex items-center">{t}</span>)}
           </div>
         </div>
-        <div className="flex items-center justify-between text-[12.5px] font-semibold text-blue-100/70">
+        <div className="flex items-center justify-between text-[12.5px] font-semibold text-stone-100/70">
           <span>© PnK PROJECT</span>
           <a href="/" className="hover:text-white">← 공식 홈페이지</a>
         </div>
@@ -55,7 +55,7 @@ function Frame({ children, wide }) {
           <div className="lg:hidden flex items-center gap-2.5 mb-7">
             <img src="/brand/pnk-mark-192.png" alt="" className="w-9 h-9 rounded-xl border border-line" />
             <div className="text-[16px] font-black text-navy-950 flex-1">PnK PROJECT 인트라넷</div>
-            <a href="/" className="text-[13px] font-bold text-[#5A6A86] hover:text-navy">홈페이지</a>
+            <a href="/" className="text-[13px] font-bold text-[#77716A] hover:text-navy">홈페이지</a>
           </div>
           {children}
         </div>
@@ -65,8 +65,8 @@ function Frame({ children, wide }) {
 }
 function Check({ checked, onChange, children, className = "" }) {
   return (
-    <label className={cx("flex items-center gap-2 text-[13px] font-semibold text-[#3A4A66] cursor-pointer select-none", className)}>
-      <span className={cx("w-[18px] h-[18px] rounded-md border-2 flex items-center justify-center transition shrink-0", checked ? "bg-navy border-navy" : "border-[#C9D3E4] bg-white")}>
+    <label className={cx("flex items-center gap-2 text-[13px] font-semibold text-[#57514A] cursor-pointer select-none", className)}>
+      <span className={cx("w-[18px] h-[18px] rounded-md border-2 flex items-center justify-center transition shrink-0", checked ? "bg-navy border-navy" : "border-[#DDD8D1] bg-white")}>
         {checked && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4"><path d="m5 12 5 5 9-10" /></svg>}
       </span>
       <input type="checkbox" className="hidden" checked={checked} onChange={(e) => onChange(e.target.checked)} />{children}
@@ -86,11 +86,11 @@ export function Login() {
     <Frame wide={mode === "signup"}>
       <div className="flex gap-6 mb-6 border-b border-line">
         {[["login", "로그인"], ["signup", "회원가입"]].map(([k, l]) => (
-          <button key={k} type="button" onClick={() => setMode(k)} className={cx("pb-3 -mb-px text-[20px] font-black border-b-[3px] transition", (mode === k || (mode === "status" && k === "login")) ? "text-navy-950 border-navy" : "text-[#A0ABBE] border-transparent hover:text-navy")}>{l}</button>
+          <button key={k} type="button" onClick={() => setMode(k)} className={cx("pb-3 -mb-px text-[20px] font-black border-b-[3px] transition", (mode === k || (mode === "status" && k === "login")) ? "text-navy-950 border-navy" : "text-[#B6B0A9] border-transparent hover:text-navy")}>{l}</button>
         ))}
       </div>
       {mode === "login" ? <LoginForm onStatus={() => setMode("status")} /> : mode === "status" ? <StatusForm onBack={() => setMode("login")} /> : <SignupForm onDone={() => setMode("login")} showTerm={setTerms} />}
-      {terms && <Modal open title={terms.title} onClose={() => setTerms(null)} footer={<Btn onClick={() => setTerms(null)}>확인</Btn>}><div className="text-[13.5px] leading-[1.8] whitespace-pre-wrap text-[#22304D]">{terms.body}</div></Modal>}
+      {terms && <Modal open title={terms.title} onClose={() => setTerms(null)} footer={<Btn onClick={() => setTerms(null)}>확인</Btn>}><div className="text-[13.5px] leading-[1.8] whitespace-pre-wrap text-[#3E3931]">{terms.body}</div></Modal>}
     </Frame>
   );
 }
@@ -135,7 +135,7 @@ function LoginForm({ onStatus }) {
       <Field label="비밀번호">
         <div className="relative">
           <Input type={show ? "text" : "password"} autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} autoFocus={!!emp && !!id} className="h-12 text-[15px] pr-11" />
-          <button type="button" onClick={() => setShow((v) => !v)} className="absolute right-3 top-3.5 text-[#7A8AA8]" aria-label="비밀번호 보기"><Icon name="eye" size={18} /></button>
+          <button type="button" onClick={() => setShow((v) => !v)} className="absolute right-3 top-3.5 text-[#98928B]" aria-label="비밀번호 보기"><Icon name="eye" size={18} /></button>
         </div>
       </Field>
       <div className="flex items-center gap-4 pt-1">
@@ -146,7 +146,7 @@ function LoginForm({ onStatus }) {
       <Btn type="submit" disabled={busy} className="w-full h-12 text-[15px]">{busy ? "로그인 중…" : "로그인"}</Btn>
       <div className="flex items-center justify-center gap-3 pt-2 text-[13px] font-bold text-navy">
         <button type="button" onClick={reset} className="hover:underline">비밀번호 찾기</button>
-        <span className="w-px h-3 bg-[#DCE3EE]" />
+        <span className="w-px h-3 bg-[#E9E6E1]" />
         <button type="button" onClick={onStatus} className="hover:underline">가입 신청 상태 확인</button>
       </div>
     </form>
@@ -233,10 +233,10 @@ function SignupForm({ onDone, showTerm }) {
     <div className="space-y-3">
       <div className="rounded-2xl border border-line p-3.5">
         <Check checked={all} onChange={(v) => setAgree({ service: v, privacy: v, notify: v })} className="font-black text-navy-950">약관 전체 동의</Check>
-        <div className="mt-2.5 pt-2.5 border-t border-[#EEF1F6] space-y-2">
+        <div className="mt-2.5 pt-2.5 border-t border-[#F4F2F0] space-y-2">
           {TERMS.map((t) => (
             <div key={t.key} className="flex items-center gap-2">
-              <Check checked={agree[t.key]} onChange={(v) => setAgree({ ...agree, [t.key]: v })}><span className={t.required ? "text-navy font-black" : "text-[#5A6A86]"}>{t.required ? "[필수]" : "[선택]"}</span> {t.title.replace("(선택) ", "")}</Check>
+              <Check checked={agree[t.key]} onChange={(v) => setAgree({ ...agree, [t.key]: v })}><span className={t.required ? "text-navy font-black" : "text-[#77716A]"}>{t.required ? "[필수]" : "[선택]"}</span> {t.title.replace("(선택) ", "")}</Check>
               <button type="button" onClick={() => showTerm(t)} className="ml-auto text-[12.5px] font-bold text-navy hover:underline shrink-0">보기</button>
             </div>
           ))}
@@ -277,7 +277,7 @@ export function JoinGate({ me }) {
     <div className="text-center py-2">
       <div className="w-14 h-14 mx-auto rounded-2xl bg-navy-100 text-navy flex items-center justify-center mb-3"><Icon name={icon} size={26} /></div>
       <div className="text-[17px] font-black text-navy-950">{title}</div>
-      <p className="mt-2 text-[13.5px] font-semibold text-[#3A4A66] leading-relaxed">{children}</p>
+      <p className="mt-2 text-[13.5px] font-semibold text-[#57514A] leading-relaxed">{children}</p>
     </div>
   );
   return (
@@ -363,13 +363,13 @@ function SmsStep({ me, phone }) {
       <div className="text-center">
         <div className="w-14 h-14 mx-auto rounded-2xl bg-navy text-white flex items-center justify-center mb-3"><Icon name="shield" size={26} /></div>
         <div className="text-[17px] font-black text-navy-950">처음 로그인하는 기기입니다</div>
-        <p className="mt-1.5 text-[13.5px] font-semibold text-[#3A4A66]">{phone ? <>{maskPhone(phone)} 으로 인증번호를 보냅니다</> : <>본인 휴대폰 번호를 넣어 주세요</>}</p>
+        <p className="mt-1.5 text-[13.5px] font-semibold text-[#57514A]">{phone ? <>{maskPhone(phone)} 으로 인증번호를 보냅니다</> : <>본인 휴대폰 번호를 넣어 주세요</>}</p>
       </div>
-      {!phone && !sent && <input value={num} onChange={(e) => setNum(e.target.value.replace(/[^\d]/g, "").slice(0, 11).replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3"))} inputMode="tel" autoFocus placeholder="010-0000-0000" className="w-full h-14 rounded-2xl border-2 border-[#DCE3EE] focus:border-navy text-center text-[20px] font-black outline-none tabular-nums" />}
+      {!phone && !sent && <input value={num} onChange={(e) => setNum(e.target.value.replace(/[^\d]/g, "").slice(0, 11).replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3"))} inputMode="tel" autoFocus placeholder="010-0000-0000" className="w-full h-14 rounded-2xl border-2 border-[#E9E6E1] focus:border-navy text-center text-[20px] font-black outline-none tabular-nums" />}
       {!sent ? <Btn type="button" onClick={send} disabled={busy === "send" || !okPhone} className="w-full h-12 text-[15px]">{busy === "send" ? "문자 보내는 중…" : "인증번호 받기"}</Btn> : (
         <>
-          <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" autoFocus placeholder="● ● ● ● ● ●" className="w-full h-14 rounded-2xl border-2 border-[#DCE3EE] focus:border-navy text-center text-[24px] font-black tracking-[0.45em] outline-none tabular-nums" />
-          <div className="flex items-center justify-end text-[13px]"><button type="button" onClick={send} disabled={left > 0 || busy === "send"} className="font-bold text-navy disabled:text-[#A9B4C8]">{left > 0 ? `다시 받기 ${left}초` : "다시 받기"}</button></div>
+          <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" autoFocus placeholder="● ● ● ● ● ●" className="w-full h-14 rounded-2xl border-2 border-[#E9E6E1] focus:border-navy text-center text-[24px] font-black tracking-[0.45em] outline-none tabular-nums" />
+          <div className="flex items-center justify-end text-[13px]"><button type="button" onClick={send} disabled={left > 0 || busy === "send"} className="font-bold text-navy disabled:text-[#BFBAB2]">{left > 0 ? `다시 받기 ${left}초` : "다시 받기"}</button></div>
           <Btn type="submit" disabled={busy === "verify" || code.length !== 6} className="w-full h-12 text-[15px]">{busy === "verify" ? "확인 중…" : "인증 확인"}</Btn>
         </>
       )}
@@ -406,7 +406,7 @@ export function MfaGate({ me }) {
         <div className="text-center">
           <div className="w-14 h-14 mx-auto rounded-2xl bg-navy text-white flex items-center justify-center mb-3"><Icon name="shield" size={26} /></div>
           <div className="text-[17px] font-black text-navy-950">{setup ? (first ? "한 번 더 넣어 주세요" : "2차 비밀번호 만들기") : "2차 인증"}</div>
-          <p className="mt-1.5 text-[13.5px] font-semibold text-[#3A4A66]">{setup ? (first ? "같은 값을 한 번 더" : "영문 · 숫자 8자 이상") : me.user.email}</p>
+          <p className="mt-1.5 text-[13.5px] font-semibold text-[#57514A]">{setup ? (first ? "같은 값을 한 번 더" : "영문 · 숫자 8자 이상") : me.user.email}</p>
         </div>
         <SecureKeypad value={code} onChange={setCode} onSubmit={go} disabled={busy || !!info.error} submitLabel={busy ? "확인 중…" : setup ? (first ? "정하고 들어가기" : "다음") : "확인"} />
         {msg && <div className="text-[12.5px] font-semibold text-rose-600 bg-rose-50 rounded-xl px-3 py-2 text-center">{msg}</div>}

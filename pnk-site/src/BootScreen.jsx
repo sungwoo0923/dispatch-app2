@@ -26,19 +26,19 @@ export default function BootScreen({ stage = 0, name = "", onDone }) {
 
   return (
     <div className="fixed inset-0 z-[100001] flex flex-col items-center justify-center px-6 select-none overflow-hidden"
-      style={{ background: "radial-gradient(90% 60% at 50% 0%, #22396A 0%, #0F1A30 55%, #060D1C 100%)", opacity: leaving ? 0 : 1, transition: "opacity .26s ease" }}>
+      style={{ background: "radial-gradient(90% 60% at 50% 0%, #65543E 0%, #262119 55%, #16120C 100%)", opacity: leaving ? 0 : 1, transition: "opacity .26s ease" }}>
       <style>{`
         @keyframes pnkBlink { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
         @keyframes pnkRise { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
-        @keyframes pnkGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(143,176,240,.45) } 50% { box-shadow: 0 0 0 14px rgba(143,176,240,0) } }
+        @keyframes pnkGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(207,194,176,.45) } 50% { box-shadow: 0 0 0 14px rgba(207,194,176,0) } }
       `}</style>
       {/* 본사 건물 실루엣(창문 불빛이 진행만큼 켜진다) */}
       <div className="absolute inset-x-0 bottom-0 h-[38%] pointer-events-none flex items-end justify-center gap-2 opacity-[0.22]" aria-hidden="true">
         {[46, 70, 120, 92, 160, 108, 64, 84, 52].map((h, i) => (
-          <div key={i} className="w-10 md:w-16 rounded-t-md bg-[#8FB0F0]/30 relative overflow-hidden" style={{ height: `${h * 1.4}px` }}>
+          <div key={i} className="w-10 md:w-16 rounded-t-md bg-[#CFC2B0]/30 relative overflow-hidden" style={{ height: `${h * 1.4}px` }}>
             <div className="absolute inset-2 grid grid-cols-2 gap-1.5 content-start">
               {Array.from({ length: Math.floor(h / 14) * 2 }).map((_, k) => (
-                <div key={k} className="h-1.5 rounded-sm transition-colors duration-500" style={{ background: (k * 7 + i * 13) % 100 < shown ? "#CFE0FF" : "rgba(255,255,255,.12)" }} />
+                <div key={k} className="h-1.5 rounded-sm transition-colors duration-500" style={{ background: (k * 7 + i * 13) % 100 < shown ? "#EEE8E1" : "rgba(255,255,255,.12)" }} />
               ))}
             </div>
           </div>
@@ -58,8 +58,8 @@ export default function BootScreen({ stage = 0, name = "", onDone }) {
 
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-[11px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#8FB0F0]" style={{ animation: "pnkBlink 1.2s ease-in-out infinite" }} />
+            <div className="flex items-center gap-1.5 text-[11px] font-extrabold tracking-[0.24em] text-[#CFC2B0]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#CFC2B0]" style={{ animation: "pnkBlink 1.2s ease-in-out infinite" }} />
               {shown >= 100 ? "WELCOME" : "CONNECTING"} · KST {clock}
             </div>
             <div className="mt-1 text-[14px] font-bold text-white/75 truncate">{shown >= 100 ? `${name ? `${name}님, ` : ""}본사에 오신 것을 환영합니다` : `${STEPS[active]} 중…`}</div>
@@ -70,7 +70,7 @@ export default function BootScreen({ stage = 0, name = "", onDone }) {
         </div>
 
         <div className="relative h-[3px] mt-4 mb-7 rounded-full bg-white/[0.08] overflow-hidden">
-          <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${shown}%`, background: "linear-gradient(90deg, #4B6CB7, #CFE0FF)", boxShadow: "0 0 12px rgba(143,176,240,.8)", transition: "width .12s linear" }} />
+          <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${shown}%`, background: "linear-gradient(90deg, #9F8563, #EEE8E1)", boxShadow: "0 0 12px rgba(207,194,176,.8)", transition: "width .12s linear" }} />
         </div>
 
         <ol className="space-y-2.5">
@@ -78,8 +78,8 @@ export default function BootScreen({ stage = 0, name = "", onDone }) {
             const done = shown >= (i + 1) * 25;
             const on = i === active && !done;
             return (
-              <li key={s} className={`flex items-center gap-3 rounded-2xl px-4 py-3 border transition ${on ? "border-[#8FB0F0]/40 bg-white/[0.06]" : "border-white/[0.06] bg-white/[0.02]"}`}>
-                <span className={`w-6 h-6 rounded-full text-[11px] font-black flex items-center justify-center ${done ? "bg-[#CFE0FF] text-[#0F1A30]" : on ? "bg-[#4B6CB7] text-white" : "bg-white/10 text-white/40"}`}>{done ? "✓" : i + 1}</span>
+              <li key={s} className={`flex items-center gap-3 rounded-2xl px-4 py-3 border transition ${on ? "border-[#CFC2B0]/40 bg-white/[0.06]" : "border-white/[0.06] bg-white/[0.02]"}`}>
+                <span className={`w-6 h-6 rounded-full text-[11px] font-black flex items-center justify-center ${done ? "bg-[#EEE8E1] text-[#262119]" : on ? "bg-[#9F8563] text-white" : "bg-white/10 text-white/40"}`}>{done ? "✓" : i + 1}</span>
                 <span className={`flex-1 text-[13.5px] font-bold ${done || on ? "text-white" : "text-white/40"}`}>{s}</span>
                 <span className="text-[11.5px] font-bold text-white/40 tabular-nums">{done ? "완료" : on ? "진행 중" : "대기"}</span>
               </li>

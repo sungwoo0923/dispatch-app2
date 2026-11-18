@@ -1247,6 +1247,7 @@ export default function DriverHome() {
         .then((r) => {
           if (r.status !== 400) return;
           arm();
+          window.__kpDriverLeaving = true; // 🛠 2026-11-18 로그인 화면을 먼저 그리지 않게(App.jsx)
           signOut(auth).catch(() => {}).finally(() => { arm(); window.location.href = "/driver-login"; });
         })
         .catch(() => {});
@@ -2107,8 +2108,11 @@ export default function DriverHome() {
         await updateDoc(doc(db, "drivers", uid), { active: false, updatedAt: serverTimestamp() });
       } catch (_) {}
     }
-    await signOut(auth);
-    window.location.href = "/driver-login";
+    // 🛠 2026-11-18 로그아웃 중엔 화면 안에서 로그인 화면을 먼저 그리지 않는다(App.jsx) — 새 버전 배포 뒤 예전 로그인 화면 파일을
+    //  찾다가 "화면을 불러오는 중 오류"가 떴다. 로딩 점을 보인 채 새 페이지(/driver-login)로 바로 연다
+    window.__kpDriverLeaving = true;
+    await signOut(auth).catch(() => {});
+    window.location.replace("/driver-login");
   };
 
   // ─────────── ⭐ 2026-11-05 기사앱 팝업·알림 ───────────
@@ -2924,7 +2928,8 @@ export default function DriverHome() {
       {uid && driver && needFirstOdo(driver) && (
         <OdoFirstSheet uid={uid} by={`${driver.name || driver.이름 || "기사"}(기사)`} onDone={() => showToast("현재 키로수를 저장했습니다")} />
       )}
-      {vehicleSetup && uid && !(driver && needFirstOdo(driver)) && (
+      {/* 🛠 2026-11-18 점검 — 새 오더 · 수정된 오더 · 삭제 안내 창이 떠 있으면 차량 설정은 기다린다(예전엔 설정 창이 오더 승인 창을 덮어 [승인]이 안 보였다) */}
+      {vehicleSetup && uid && !(driver && needFirstOdo(driver)) && !(deletedNotices.length > 0 || popupOrder || modOrder) && (
         <VehicleSetupWizard driverMode driverId={uid} drv={driver} by={`${driver.name || driver.이름 || "기사"}(기사)`} onClose={(done) => { setVehicleSetup(false); if (done) { showToast("차량 설정이 저장되었습니다"); setActiveTab("vehicle"); } }} />
       )}
 

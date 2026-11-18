@@ -9253,7 +9253,7 @@ return (
       </header>
       <CloseInboxBanner inbox={closeInbox} onOpen={(x) => { handleMenuClick("정산관리"); setTimeout(() => { set정산관리Tab("거래처정산"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: { tab: "invoice", client: x.client, ym: x.ym } })), 120); }, 60); }} />
       {/* ★ 2026-11-12 자주 쓰는 메뉴(접었다 펴기) · 통합 검색 창 · 도움말 센터 — 지금 이 계정에 보이는 메뉴로 자동 구성 */}
-      <QuickNav menu={menu}
+      <QuickNav menu={menu} isMaster={realRole === "totalMaster"} /* 🔒 2026-11-18 도움말 '새 기능 · 바뀐 점'은 최고관리자만 */
         menus={uiMenuList("pc", deptMode ? DEPT_MENUS[deptMode] : KP_SIDE_GROUPS.flatMap((g) => g.items)).filter((m) => menuState(m) === "ok")}
         onGo={(m, code, key) => { handleMenuClick(m); if (code && key) setTimeout(() => emitSubnav(code, key), 0); }} />
 

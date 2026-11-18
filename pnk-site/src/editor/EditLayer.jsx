@@ -10,7 +10,7 @@ import { createPortal } from "react-dom";
 import * as U from "./uiStore";
 
 const UI = { "data-pnk-edit-ui": "" };
-const C = { navy: "#1B2B4B", line: "#DCE3EE", mute: "#7A8AA8", amber: "#F5B83D" };
+const C = { navy: "#3A342D", line: "#E9E6E1", mute: "#98928B", amber: "#F5B83D" };
 const FONTS = [
   ["", "기본(Noto Sans KR)"], ["'Pretendard', 'Noto Sans KR', sans-serif", "Pretendard"], ["'Nanum Gothic', sans-serif", "나눔고딕"],
   ["'Nanum Myeongjo', serif", "나눔명조(바탕)"], ["'Gowun Dodum', sans-serif", "고운돋움"], ["'Malgun Gothic', sans-serif", "맑은 고딕"],
@@ -61,7 +61,7 @@ export default function EditLayer({ me, menu }) {
     if (!el || !el.isConnected) return null;
     const r = el.getBoundingClientRect();
     return <div {...UI} style={{ position: "fixed", left: r.left - 2, top: r.top - 2, width: r.width + 4, height: r.height + 4, border: `2px ${color === C.amber ? "solid" : "dashed"} ${color}`, borderRadius: 6, pointerEvents: "none", zIndex: 99990 }}>
-      {label && <span style={{ position: "absolute", left: -2, top: -22, background: color, color: color === C.amber ? "#0F1A30" : "#fff", fontSize: 11, fontWeight: 800, padding: "2px 6px", borderRadius: 4, whiteSpace: "nowrap" }}>{label}</span>}
+      {label && <span style={{ position: "absolute", left: -2, top: -22, background: color, color: color === C.amber ? "#262119" : "#fff", fontSize: 11, fontWeight: 800, padding: "2px 6px", borderRadius: 4, whiteSpace: "nowrap" }}>{label}</span>}
     </div>;
   };
   const tagLabel = (el) => `${el.tagName.toLowerCase()}${(el.innerText || "").trim() ? ` · ${(el.innerText || "").trim().slice(0, 14)}` : ""}`;
@@ -69,9 +69,9 @@ export default function EditLayer({ me, menu }) {
     <>
       {/* 켜기 단추 */}
       <button {...UI} type="button" onClick={toggle} title="화면 편집 (Ctrl+Shift+E)"
-        style={{ position: "fixed", left: 16, bottom: 16, zIndex: 99999, background: on ? C.amber : C.navy, color: on ? "#0F1A30" : "#fff" }}
+        style={{ position: "fixed", left: 16, bottom: 16, zIndex: 99999, background: on ? C.amber : C.navy, color: on ? "#262119" : "#fff" }}
         className="h-10 px-4 rounded-full text-[13px] font-black shadow-xl ring-1 ring-white/20">{on ? "✎ 편집 중 — 끄기" : "✎ 화면 편집"}</button>
-      {on && hover && hover !== sel?.el && box(hover, "#4B6CB7", tagLabel(hover))}
+      {on && hover && hover !== sel?.el && box(hover, "#9F8563", tagLabel(hover))}
       {on && sel && <Selected sel={sel} box={box} />}
       {on && <Panel me={me} sel={sel} setSel={setSel} tab={tab} setTab={setTab} menu={menu} />}
     </>,
@@ -105,7 +105,7 @@ function Selected({ sel, box }) {
   return (
     <>
       {box(el, C.amber, "선택됨 · 끌어서 옮기기")}
-      <div {...UI} onMouseDown={drag("move")} title="끌어서 옮기기" style={{ position: "fixed", left: r.left + r.width / 2 - 14, top: r.top + r.height / 2 - 14, width: 28, height: 28, zIndex: 99995, cursor: "move", background: C.amber, borderRadius: 999, boxShadow: "0 2px 10px rgba(0,0,0,.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 900, color: "#0F1A30" }}>✥</div>
+      <div {...UI} onMouseDown={drag("move")} title="끌어서 옮기기" style={{ position: "fixed", left: r.left + r.width / 2 - 14, top: r.top + r.height / 2 - 14, width: 28, height: 28, zIndex: 99995, cursor: "move", background: C.amber, borderRadius: 999, boxShadow: "0 2px 10px rgba(0,0,0,.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 900, color: "#262119" }}>✥</div>
       <div {...UI} onMouseDown={drag("size")} title="끌어서 크기 바꾸기" style={{ position: "fixed", left: r.right - 7, top: r.bottom - 7, width: 14, height: 14, zIndex: 99995, cursor: "nwse-resize", background: "#fff", border: `3px solid ${C.amber}`, borderRadius: 3 }} />
     </>
   );
@@ -117,21 +117,21 @@ function Panel({ me, sel, setSel, tab, setTab, menu }) {
   const [min, setMin] = React.useState(false);
   const save = async () => { setBusy(true); try { await U.publish(me.member?.name || me.user.email); window.alert("저장했습니다. 모든 구성원 화면에 적용됩니다."); } catch (e) { window.alert(e.code === "permission-denied" ? "저장 권한이 없습니다(최고관리자 · 부관리자만)." : e.message); } finally { setBusy(false); } };
   return (
-    <div {...UI} className="fixed top-3 right-3 bottom-3 z-[99998] w-[340px] max-w-[calc(100vw-24px)] bg-white rounded-[20px] shadow-[0_20px_60px_rgba(0,0,0,.3)] border border-line flex flex-col overflow-hidden text-[#0F1A30]" style={min ? { bottom: "auto" } : undefined}>
-      <div className="px-4 py-3 flex items-center gap-2 text-white" style={{ background: "linear-gradient(120deg,#1B2B4B,#2D4C82)" }}>
-        <div className="flex-1"><div className="text-[10.5px] font-extrabold tracking-[0.18em] text-blue-200/80">EDIT MODE</div><div className="text-[14px] font-black">화면 편집 {U.dirty() && <span className="ml-1 text-[11px] font-black px-1.5 py-0.5 rounded bg-amber-400 text-[#0F1A30]">저장 안 함</span>}</div></div>
+    <div {...UI} className="fixed top-3 right-3 bottom-3 z-[99998] w-[340px] max-w-[calc(100vw-24px)] bg-white rounded-[20px] shadow-[0_20px_60px_rgba(0,0,0,.3)] border border-line flex flex-col overflow-hidden text-[#262119]" style={min ? { bottom: "auto" } : undefined}>
+      <div className="px-4 py-3 flex items-center gap-2 text-white" style={{ background: "linear-gradient(120deg,#3A342D,#6C5A42)" }}>
+        <div className="flex-1"><div className="text-[10.5px] font-extrabold tracking-[0.18em] text-stone-200/80">EDIT MODE</div><div className="text-[14px] font-black">화면 편집 {U.dirty() && <span className="ml-1 text-[11px] font-black px-1.5 py-0.5 rounded bg-amber-400 text-[#262119]">저장 안 함</span>}</div></div>
         <button type="button" disabled={!U.canUndo()} onClick={U.undo} className="w-8 h-8 rounded-lg hover:bg-white/10 disabled:opacity-30" title="되돌리기 Ctrl+Z">↶</button>
         <button type="button" disabled={!U.canRedo()} onClick={U.redo} className="w-8 h-8 rounded-lg hover:bg-white/10 disabled:opacity-30" title="다시 Ctrl+Y">↷</button>
         <button type="button" onClick={() => setMin((v) => !v)} className="w-8 h-8 rounded-lg hover:bg-white/10" title="접기">{min ? "▢" : "–"}</button>
       </div>
       {!min && (<>
-        <div className="grid grid-cols-4 gap-1 p-1.5 bg-[#F4F6FA] border-b border-line">
+        <div className="grid grid-cols-4 gap-1 p-1.5 bg-[#F8F7F6] border-b border-line">
           {[["el", "요소"], ["menu", "메뉴"], ["theme", "테마"], ["hist", "기록"]].map(([k, l]) => (
-            <button key={k} type="button" onClick={() => setTab(k)} className={`h-8 rounded-lg text-[12.5px] font-black ${tab === k ? "bg-white shadow text-[#1B2B4B]" : "text-[#7A8AA8]"}`}>{l}</button>
+            <button key={k} type="button" onClick={() => setTab(k)} className={`h-8 rounded-lg text-[12.5px] font-black ${tab === k ? "bg-white shadow text-[#3A342D]" : "text-[#98928B]"}`}>{l}</button>
           ))}
         </div>
         <div className="flex-1 overflow-y-auto p-4 text-[13px]">
-          {tab === "el" && (sel ? <ElementTab sel={sel} setSel={setSel} /> : <div className="text-[#7A8AA8] leading-relaxed">화면에서 바꾸고 싶은 곳(제목 · 글 · 카드 · 버튼 · 메뉴 등)을 눌러 고르세요.<br /><br />· 노란 ✥ 를 끌면 옮겨집니다<br />· 오른쪽 아래 모서리를 끌면 크기가 바뀝니다<br />· Esc: 고르기 취소 · Ctrl+Z: 되돌리기</div>)}
+          {tab === "el" && (sel ? <ElementTab sel={sel} setSel={setSel} /> : <div className="text-[#98928B] leading-relaxed">화면에서 바꾸고 싶은 곳(제목 · 글 · 카드 · 버튼 · 메뉴 등)을 눌러 고르세요.<br /><br />· 노란 ✥ 를 끌면 옮겨집니다<br />· 오른쪽 아래 모서리를 끌면 크기가 바뀝니다<br />· Esc: 고르기 취소 · Ctrl+Z: 되돌리기</div>)}
           {tab === "menu" && <MenuTab menu={menu} />}
           {tab === "theme" && <ThemeTab />}
           {tab === "hist" && <HistTab />}
@@ -146,18 +146,18 @@ function Panel({ me, sel, setSel, tab, setTab, menu }) {
 }
 
 const Num = ({ label, value, onChange, step = 1, unit = "px" }) => (
-  <label className="block"><span className="block text-[11.5px] font-bold text-[#5A6A86] mb-0.5">{label}</span>
-    <div className="flex items-center h-9 rounded-lg border border-line px-2 focus-within:border-[#4B6CB7]">
+  <label className="block"><span className="block text-[11.5px] font-bold text-[#77716A] mb-0.5">{label}</span>
+    <div className="flex items-center h-9 rounded-lg border border-line px-2 focus-within:border-[#9F8563]">
       <input type="number" step={step} value={value ?? ""} onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))} className="w-full outline-none text-[13px] tabular-nums" />
-      <span className="text-[11px] text-[#A0ABBE]">{unit}</span>
+      <span className="text-[11px] text-[#B6B0A9]">{unit}</span>
     </div></label>
 );
 const Color = ({ label, value, onChange }) => (
-  <label className="block"><span className="block text-[11.5px] font-bold text-[#5A6A86] mb-0.5">{label}</span>
+  <label className="block"><span className="block text-[11.5px] font-bold text-[#77716A] mb-0.5">{label}</span>
     <div className="flex items-center gap-1.5 h-9 rounded-lg border border-line px-1.5">
-      <input type="color" value={value || "#1B2B4B"} onChange={(e) => onChange(e.target.value)} className="w-7 h-7 rounded border-0 bg-transparent cursor-pointer" />
+      <input type="color" value={value || "#3A342D"} onChange={(e) => onChange(e.target.value)} className="w-7 h-7 rounded border-0 bg-transparent cursor-pointer" />
       <input value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder="없음" className="flex-1 min-w-0 outline-none text-[12px] tabular-nums" />
-      {value && <button type="button" onClick={() => onChange("")} className="text-[#A0ABBE] text-[12px]">✕</button>}
+      {value && <button type="button" onClick={() => onChange("")} className="text-[#B6B0A9] text-[12px]">✕</button>}
     </div></label>
 );
 
@@ -188,7 +188,7 @@ function ElementTab({ sel, setSel }) {
   const textVal = (i, o) => cur.etexts?.[route]?.[sel.selector]?.[i]?.t ?? cur.texts?.[route]?.[o] ?? cur.texts?.["*"]?.[o] ?? o;
   return (
     <div className="space-y-4">
-      <div className="rounded-xl bg-[#F4F6FA] px-3 py-2 text-[11.5px] text-[#5A6A86] break-all"><b className="text-[#0F1A30]">{el?.tagName.toLowerCase()}</b> · 화면 {route}
+      <div className="rounded-xl bg-[#F8F7F6] px-3 py-2 text-[11.5px] text-[#77716A] break-all"><b className="text-[#262119]">{el?.tagName.toLowerCase()}</b> · 화면 {route}
         <div className="mt-1 flex gap-1.5">
           <button type="button" onClick={() => el?.parentElement && el.parentElement.closest("#root") && setSel({ el: el.parentElement, selector: U.selectorOf(el.parentElement) })} className="h-7 px-2 rounded-md bg-white border border-line font-bold">↑ 바깥 상자 고르기</button>
           <button type="button" onClick={() => setSel(null)} className="h-7 px-2 rounded-md bg-white border border-line font-bold">고르기 취소</button>
@@ -201,23 +201,23 @@ function ElementTab({ sel, setSel }) {
             <option value="el">이 요소만</option><option value="route">이 화면의 같은 글자 모두</option><option value="all">모든 화면의 같은 글자 모두</option>
           </select></div>
         {mode !== "el" && <div className="mb-1.5 text-[11px] text-amber-700 bg-amber-50 rounded-md px-2 py-1">이름 · 숫자처럼 바뀌는 글자에는 쓰지 마세요(같은 글자가 모두 바뀝니다).</div>}
-        {nodes.length === 0 && !ph ? <div className="text-[12px] text-[#A0ABBE]">이 요소에는 바꿀 글자가 없습니다.</div> : (
+        {nodes.length === 0 && !ph ? <div className="text-[12px] text-[#B6B0A9]">이 요소에는 바꿀 글자가 없습니다.</div> : (
           <div className="space-y-1.5">
             {nodes.map((n, i) => { const o = U.originalText(n).trim(); return (
-              <div key={i}><div className="text-[10.5px] text-[#A0ABBE] truncate">원래: {o}</div>
-                <textarea rows={o.length > 30 ? 3 : 1} value={textVal(String(i), o)} onChange={(e) => setText(String(i), o, e.target.value)} className="w-full rounded-lg border border-line px-2 py-1.5 text-[13px] outline-none focus:border-[#4B6CB7] resize-y" /></div>
+              <div key={i}><div className="text-[10.5px] text-[#B6B0A9] truncate">원래: {o}</div>
+                <textarea rows={o.length > 30 ? 3 : 1} value={textVal(String(i), o)} onChange={(e) => setText(String(i), o, e.target.value)} className="w-full rounded-lg border border-line px-2 py-1.5 text-[13px] outline-none focus:border-[#9F8563] resize-y" /></div>
             ); })}
-            {ph && <div><div className="text-[10.5px] text-[#A0ABBE]">입력칸 안내문구 · 원래: {ph} (같은 글자 모두)</div><input value={cur.texts?.[route]?.[ph] ?? cur.texts?.["*"]?.[ph] ?? ph} onChange={(e) => U.edit((d) => { const m = (d.texts[route] = d.texts[route] || {}); if (!e.target.value || e.target.value === ph) delete m[ph]; else m[ph] = e.target.value; })} className="w-full h-9 rounded-lg border border-line px-2 text-[13px] outline-none" /></div>}
+            {ph && <div><div className="text-[10.5px] text-[#B6B0A9]">입력칸 안내문구 · 원래: {ph} (같은 글자 모두)</div><input value={cur.texts?.[route]?.[ph] ?? cur.texts?.["*"]?.[ph] ?? ph} onChange={(e) => U.edit((d) => { const m = (d.texts[route] = d.texts[route] || {}); if (!e.target.value || e.target.value === ph) delete m[ph]; else m[ph] = e.target.value; })} className="w-full h-9 rounded-lg border border-line px-2 text-[13px] outline-none" /></div>}
           </div>
         )}
       </section>
 
       <section>
         <div className="flex items-center mb-1.5"><b className="flex-1">모양</b>
-          <label className="flex items-center gap-1 text-[11.5px] text-[#5A6A86]"><input type="checkbox" checked={allScope} onChange={(e) => moveScope(e.target.checked)} />모든 화면</label></div>
+          <label className="flex items-center gap-1 text-[11.5px] text-[#77716A]"><input type="checkbox" checked={allScope} onChange={(e) => moveScope(e.target.checked)} />모든 화면</label></div>
         <div className="grid grid-cols-2 gap-2">
           <Num label="글씨 크기" value={st.fs} onChange={(v) => setSt({ fs: v })} />
-          <label className="block"><span className="block text-[11.5px] font-bold text-[#5A6A86] mb-0.5">굵기</span>
+          <label className="block"><span className="block text-[11.5px] font-bold text-[#77716A] mb-0.5">굵기</span>
             <select value={st.fw || ""} onChange={(e) => setSt({ fw: e.target.value })} className="w-full h-9 rounded-lg border border-line px-2 text-[13px]">
               {[["", "그대로"], ["400", "보통"], ["600", "약간 굵게"], ["800", "굵게"], ["900", "아주 굵게"]].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select></label>
@@ -226,8 +226,8 @@ function ElementTab({ sel, setSel }) {
           <Num label="안쪽 여백" value={st.pad} onChange={(v) => setSt({ pad: v })} />
           <Num label="모서리 둥글게" value={st.radius} onChange={(v) => setSt({ radius: v })} />
           <Num label="글자 간격" value={st.ls} step={0.1} onChange={(v) => setSt({ ls: v })} />
-          <label className="block"><span className="block text-[11.5px] font-bold text-[#5A6A86] mb-0.5">정렬</span>
-            <div className="grid grid-cols-3 gap-1">{[["left", "왼"], ["center", "가운데"], ["right", "오른"]].map(([k, l]) => <button key={k} type="button" onClick={() => setSt({ align: st.align === k ? "" : k })} className={`h-9 rounded-lg border text-[11.5px] font-bold ${st.align === k ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-line"}`}>{l}</button>)}</div></label>
+          <label className="block"><span className="block text-[11.5px] font-bold text-[#77716A] mb-0.5">정렬</span>
+            <div className="grid grid-cols-3 gap-1">{[["left", "왼"], ["center", "가운데"], ["right", "오른"]].map(([k, l]) => <button key={k} type="button" onClick={() => setSt({ align: st.align === k ? "" : k })} className={`h-9 rounded-lg border text-[11.5px] font-bold ${st.align === k ? "bg-[#3A342D] text-white border-[#3A342D]" : "border-line"}`}>{l}</button>)}</div></label>
         </div>
       </section>
 
@@ -264,13 +264,13 @@ function MenuTab({ menu }) {
   });
   return (
     <div className="space-y-4">
-      <div className="text-[12px] text-[#7A8AA8]">왼쪽 메뉴의 이름 · 순서 · 보이기를 바꿉니다(권한은 그대로 — 숨겨도 주소로는 들어갈 수 있습니다).</div>
+      <div className="text-[12px] text-[#98928B]">왼쪽 메뉴의 이름 · 순서 · 보이기를 바꿉니다(권한은 그대로 — 숨겨도 주소로는 들어갈 수 있습니다).</div>
       {U.menuOf(cur, menu).map((g) => (
         <div key={g.origLabel || "top"} className="rounded-xl border border-line p-2.5">
-          {g.origLabel && <input value={g.label || ""} onChange={(e) => setGroup(g.origLabel, e.target.value)} className="w-full h-8 mb-2 rounded-md bg-[#F4F6FA] px-2 text-[12px] font-black outline-none" title={`묶음 이름 (원래: ${g.origLabel})`} />}
+          {g.origLabel && <input value={g.label || ""} onChange={(e) => setGroup(g.origLabel, e.target.value)} className="w-full h-8 mb-2 rounded-md bg-[#F8F7F6] px-2 text-[12px] font-black outline-none" title={`묶음 이름 (원래: ${g.origLabel})`} />}
           {g.items.map((it, i) => (
             <div key={it.to} className="flex items-center gap-1 mb-1">
-              <input value={it.label} onChange={(e) => setItem(it.to, { label: e.target.value })} className={`flex-1 min-w-0 h-8 rounded-md border border-line px-2 text-[12.5px] outline-none ${it.hidden ? "line-through text-[#A0ABBE]" : ""}`} />
+              <input value={it.label} onChange={(e) => setItem(it.to, { label: e.target.value })} className={`flex-1 min-w-0 h-8 rounded-md border border-line px-2 text-[12.5px] outline-none ${it.hidden ? "line-through text-[#B6B0A9]" : ""}`} />
               <button type="button" onClick={() => move(g, i, -1)} className="w-7 h-8 rounded-md border border-line text-[11px]">▲</button>
               <button type="button" onClick={() => move(g, i, 1)} className="w-7 h-8 rounded-md border border-line text-[11px]">▼</button>
               <button type="button" onClick={() => setItem(it.to, { hidden: !it.hidden })} className={`w-12 h-8 rounded-md border text-[11px] font-bold ${it.hidden ? "bg-rose-50 border-rose-200 text-rose-700" : "border-line"}`}>{it.hidden ? "숨김" : "보임"}</button>
@@ -294,12 +294,12 @@ function ThemeTab() {
         <Color label="화면 바탕" value={t.bg} onChange={(v) => set({ bg: v })} />
         <Num label="전체 크기" unit="%" value={t.scale} onChange={(v) => set({ scale: v })} />
       </div>
-      <label className="block"><span className="block text-[11.5px] font-bold text-[#5A6A86] mb-0.5">글꼴</span>
+      <label className="block"><span className="block text-[11.5px] font-bold text-[#77716A] mb-0.5">글꼴</span>
         <select value={t.font || ""} onChange={(e) => set({ font: e.target.value })} className="w-full h-9 rounded-lg border border-line px-2 text-[13px]">{FONTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
-      <label className="block"><span className="block text-[11.5px] font-bold text-[#5A6A86] mb-0.5">메뉴 위 회사 이름</span><input value={t.brandTitle || ""} onChange={(e) => set({ brandTitle: e.target.value })} placeholder="PnK PROJECT" className="w-full h-9 rounded-lg border border-line px-2" /></label>
-      <label className="block"><span className="block text-[11.5px] font-bold text-[#5A6A86] mb-0.5">작은 영문 글자</span><input value={t.brandSub || ""} onChange={(e) => set({ brandSub: e.target.value })} placeholder="INTRANET" className="w-full h-9 rounded-lg border border-line px-2" /></label>
-      <label className="block"><span className="block text-[11.5px] font-bold text-[#5A6A86] mb-0.5">고급 — 직접 CSS</span><textarea rows={5} value={t.css || ""} onChange={(e) => set({ css: e.target.value })} placeholder=".bg-white { border-radius: 8px }" className="w-full rounded-lg border border-line px-2 py-1.5 text-[12px] font-mono" /></label>
-      <div className="text-[11.5px] text-[#A0ABBE]">글꼴을 바꾸면 그 글꼴이 설치되지 않은 컴퓨터에서는 기본 글꼴로 보입니다.</div>
+      <label className="block"><span className="block text-[11.5px] font-bold text-[#77716A] mb-0.5">메뉴 위 회사 이름</span><input value={t.brandTitle || ""} onChange={(e) => set({ brandTitle: e.target.value })} placeholder="PnK PROJECT" className="w-full h-9 rounded-lg border border-line px-2" /></label>
+      <label className="block"><span className="block text-[11.5px] font-bold text-[#77716A] mb-0.5">작은 영문 글자</span><input value={t.brandSub || ""} onChange={(e) => set({ brandSub: e.target.value })} placeholder="INTRANET" className="w-full h-9 rounded-lg border border-line px-2" /></label>
+      <label className="block"><span className="block text-[11.5px] font-bold text-[#77716A] mb-0.5">고급 — 직접 CSS</span><textarea rows={5} value={t.css || ""} onChange={(e) => set({ css: e.target.value })} placeholder=".bg-white { border-radius: 8px }" className="w-full rounded-lg border border-line px-2 py-1.5 text-[12px] font-mono" /></label>
+      <div className="text-[11.5px] text-[#B6B0A9]">글꼴을 바꾸면 그 글꼴이 설치되지 않은 컴퓨터에서는 기본 글꼴로 보입니다.</div>
     </div>
   );
 }
@@ -310,12 +310,12 @@ function HistTab() {
   const n = (c) => Object.values(c.styles || {}).reduce((a, m) => a + Object.keys(m || {}).length, 0) + Object.values(c.texts || {}).reduce((a, m) => a + Object.keys(m || {}).length, 0) + Object.values(c.etexts || {}).reduce((a, m) => a + Object.values(m || {}).reduce((b, x) => b + Object.keys(x || {}).length, 0), 0);
   return (
     <div className="space-y-3">
-      <div className="rounded-xl bg-[#F4F6FA] p-3 text-[12px] text-[#5A6A86]">지금 바뀐 곳 <b className="text-[#0F1A30]">{n(U.current())}</b>개 (글자 + 모양)</div>
+      <div className="rounded-xl bg-[#F8F7F6] p-3 text-[12px] text-[#77716A]">지금 바뀐 곳 <b className="text-[#262119]">{n(U.current())}</b>개 (글자 + 모양)</div>
       <div className="text-[12px] font-black">저장 기록(최근 20개) — 누르면 그 상태로 불러옵니다(저장해야 적용)</div>
-      {!list ? <div className="text-[#A0ABBE]">불러오는 중…</div> : list.length === 0 ? <div className="text-[#A0ABBE]">아직 기록이 없습니다.</div> : list.map((h) => (
-        <button key={h.id} type="button" onClick={() => window.confirm("이 기록으로 되돌릴까요?") && U.loadToDraft(h.cfg)} className="w-full text-left rounded-lg border border-line px-3 py-2 hover:border-[#4B6CB7]">
+      {!list ? <div className="text-[#B6B0A9]">불러오는 중…</div> : list.length === 0 ? <div className="text-[#B6B0A9]">아직 기록이 없습니다.</div> : list.map((h) => (
+        <button key={h.id} type="button" onClick={() => window.confirm("이 기록으로 되돌릴까요?") && U.loadToDraft(h.cfg)} className="w-full text-left rounded-lg border border-line px-3 py-2 hover:border-[#9F8563]">
           <div className="font-bold tabular-nums">{h.at?.toDate ? new Date(h.at.toDate().getTime() + 9 * 3600e3).toISOString().slice(0, 16).replace("T", " ") : "-"}</div>
-          <div className="text-[11.5px] text-[#7A8AA8]">{h.by}</div>
+          <div className="text-[11.5px] text-[#98928B]">{h.by}</div>
         </button>
       ))}
       <button type="button" onClick={() => window.confirm("모든 화면 편집을 지우고 처음 모습으로 돌릴까요? (저장해야 적용)") && U.resetAll()} className="w-full h-9 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 text-[12.5px] font-black">모두 처음 모습으로</button>

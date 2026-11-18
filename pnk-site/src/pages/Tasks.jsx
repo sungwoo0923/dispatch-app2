@@ -28,21 +28,21 @@ export default function Tasks() {
 
   return (
     <div>
-      <Hero title="업무 보드">
+      <Hero en="Task board" title="업무 보드">
         <HeroBtn icon="plus" onClick={() => setEdit({})}>업무 추가</HeroBtn>
       </Hero>
 
       <div className="flex flex-col lg:flex-row lg:items-center gap-3 mb-4">
         <div className="flex gap-1 p-1 bg-white border border-line rounded-2xl overflow-x-auto no-scrollbar max-w-full">
           {[{ key: "", label: "전체" }, ...PRODUCTS].map((p) => (
-            <button key={p.key} type="button" onClick={() => setProd(p.key)} className={cx("h-9 px-3.5 rounded-xl text-[13px] font-black whitespace-nowrap", prod === p.key ? "bg-navy text-white" : "text-[#5A6A86] hover:bg-navy-50")}>
+            <button key={p.key} type="button" onClick={() => setProd(p.key)} className={cx("h-9 px-3.5 rounded-xl text-[13px] font-black whitespace-nowrap", prod === p.key ? "bg-navy text-white" : "text-[#77716A] hover:bg-navy-50")}>
               {p.label}<span className="ml-1 opacity-70 text-[11px]">{(rows || []).filter((t) => (!p.key || t.product === p.key) && t.status !== "done").length}</span>
             </button>
           ))}
         </div>
         <Select value={who} onChange={(e) => setWho(e.target.value)} className="lg:w-[180px]" options={[{ key: "", label: "담당자 전체" }, { key: "me", label: "내 업무" }, ...(members || []).map((m) => ({ key: m.uid, label: m.name }))]} />
         <div className="lg:ml-auto flex items-center gap-3 bg-white border border-line rounded-2xl px-4 h-11">
-          <span className="text-[12.5px] font-bold text-[#5A6A86]">완료율</span>
+          <span className="text-[12.5px] font-bold text-[#77716A]">완료율</span>
           <div className="w-32 h-2 rounded-full bg-navy-100 overflow-hidden"><div className="h-full bg-navy rounded-full transition-all" style={{ width: `${pct}%` }} /></div>
           <span className="text-[13px] font-black tnum">{pct}%</span>
         </div>
@@ -55,10 +55,10 @@ export default function Tasks() {
               .sort((a, b) => (c.key === "done" ? (b.doneAt || 0) - (a.doneAt || 0) : String(a.due || "9999").localeCompare(String(b.due || "9999"))));
             return (
               <div key={c.key} onDragOver={(e) => e.preventDefault()} onDrop={() => { if (drag && drag.status !== c.key) move(drag, c.key); setDrag(null); }}
-                className={cx("rounded-2xl p-3 min-h-[300px] transition", drag ? "bg-navy-100/70 ring-2 ring-dashed ring-navy-500/30" : "bg-[#E9EDF4]")}>
+                className={cx("rounded-2xl p-3 min-h-[300px] transition", drag ? "bg-navy-100/70 ring-2 ring-dashed ring-navy-500/30" : "bg-[#F1EFEC]")}>
                 <div className="flex items-center gap-2 px-2 pt-1 pb-3">
                   <span className="text-[14.5px] font-black">{c.label}</span>
-                  <span className="ml-auto text-[12px] font-black text-[#5A6A86] bg-white rounded-lg px-2 h-6 flex items-center tnum">{items.length}</span>
+                  <span className="ml-auto text-[12px] font-black text-[#77716A] bg-white rounded-lg px-2 h-6 flex items-center tnum">{items.length}</span>
                 </div>
                 <div className="space-y-2.5">
                   {items.slice(0, c.key === "done" ? 20 : 999).map((t) => {
@@ -70,7 +70,7 @@ export default function Tasks() {
                           {t.priority === "high" && <span className="mt-1.5 w-2 h-2 rounded-full bg-rose-500 shrink-0" title="긴급" />}
                           <div className={cx("flex-1 text-[14px] font-bold leading-snug", c.key === "done" && "line-through")}>{t.title}</div>
                         </div>
-                        {t.desc && <div className="mt-1 text-[12.5px] text-[#7A8AA8] line-clamp-2">{t.desc}</div>}
+                        {t.desc && <div className="mt-1 text-[12.5px] text-[#98928B] line-clamp-2">{t.desc}</div>}
                         <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
                           <Chip tone="gray">{productLabel(t.product)}</Chip>
                           {t.due && <Chip tone={late ? "red" : "navy"}>{late ? "기한 지남 " : ""}{t.due.slice(5).replace("-", "/")}</Chip>}
@@ -85,9 +85,9 @@ export default function Tasks() {
                       </div>
                     );
                   })}
-                  {items.length === 0 && <div className="py-8 text-center text-[12.5px] text-[#7A8AA8]">{drag ? "여기에 놓기" : "비어 있음"}</div>}
+                  {items.length === 0 && <div className="py-8 text-center text-[12.5px] text-[#98928B]">{drag ? "여기에 놓기" : "비어 있음"}</div>}
                 </div>
-                {c.key === "todo" && <button type="button" onClick={() => setEdit({ product: prod || "common" })} className="mt-2.5 w-full h-10 rounded-xl border-2 border-dashed border-[#C9D3E4] text-[13px] font-bold text-[#7A8AA8] hover:border-navy-500 hover:text-navy">+ 업무 추가</button>}
+                {c.key === "todo" && <button type="button" onClick={() => setEdit({ product: prod || "common" })} className="mt-2.5 w-full h-10 rounded-xl border-2 border-dashed border-[#DDD8D1] text-[13px] font-bold text-[#98928B] hover:border-navy-500 hover:text-navy">+ 업무 추가</button>}
               </div>
             );
           })}
@@ -129,10 +129,10 @@ function TaskEditor({ task, me, members, onClose }) {
           <Field label="기한"><DateInput value={f.due} onChange={set("due")} /></Field>
           <Field label="중요도"><Select value={f.priority} onChange={set("priority")} options={PRI} /></Field>
           <Field label="상태" className="col-span-2">
-            <div className="grid grid-cols-3 gap-1.5">{COLS.map((c) => <button key={c.key} type="button" onClick={() => setF({ ...f, status: c.key })} className={cx("h-10 rounded-xl text-[13px] font-black border", f.status === c.key ? "bg-navy text-white border-navy" : "border-[#DCE3EE] text-[#3A4A66]")}>{c.label}</button>)}</div>
+            <div className="grid grid-cols-3 gap-1.5">{COLS.map((c) => <button key={c.key} type="button" onClick={() => setF({ ...f, status: c.key })} className={cx("h-10 rounded-xl text-[13px] font-black border", f.status === c.key ? "bg-navy text-white border-navy" : "border-[#E9E6E1] text-[#57514A]")}>{c.label}</button>)}</div>
           </Field>
         </div>
-        {!isNew && <div className="text-[12px] text-[#7A8AA8]">만든 사람 {task.createdByName || "-"}</div>}
+        {!isNew && <div className="text-[12px] text-[#98928B]">만든 사람 {task.createdByName || "-"}</div>}
       </div>
     </Modal>
   );

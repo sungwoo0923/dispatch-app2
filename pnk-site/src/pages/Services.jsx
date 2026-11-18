@@ -26,7 +26,7 @@ export default function Services() {
 
   return (
     <div>
-      <Hero title="서비스 현황" desc={issues.length ? `확인이 필요한 서비스 ${issues.length}개 — ${issues.map((s) => s.label).join(", ")}` : "모든 서비스가 정상입니다."}>
+      <Hero en="Service status" title="서비스 현황" desc={issues.length ? `확인이 필요한 서비스 ${issues.length}개 — ${issues.map((s) => s.label).join(", ")}` : "모든 서비스가 정상입니다."}>
         <HeroBtn icon="plus" onClick={() => setRelEdit({})}>업데이트 기록</HeroBtn>
       </Hero>
 
@@ -42,14 +42,14 @@ export default function Services() {
                 <div className="w-12 h-12 rounded-2xl bg-navy text-white flex items-center justify-center shrink-0"><Icon name={s.icon} size={22} /></div>
                 <div className="min-w-0 flex-1">
                   <div className="text-[16px] font-black">{s.label}</div>
-                  <div className="text-[12.5px] text-[#7A8AA8]">{s.sub}</div>
+                  <div className="text-[12.5px] text-[#98928B]">{s.sub}</div>
                 </div>
                 <Chip tone={st.tone}>{st.label}</Chip>
               </div>
               <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-xl bg-navy-50 py-2"><div className="text-[11px] font-bold text-[#7A8AA8]">현재 버전</div><div className="text-[14px] font-black tnum">{d.version ? `v${d.version}` : "-"}</div></div>
-                <div className="rounded-xl bg-navy-50 py-2"><div className="text-[11px] font-bold text-[#7A8AA8]">진행 업무</div><div className="text-[14px] font-black tnum">{open.length}</div></div>
-                <div className="rounded-xl bg-navy-50 py-2"><div className="text-[11px] font-bold text-[#7A8AA8]">{s.key === "logisweb" && errs != null ? "오류 신고" : "최근 배포"}</div><div className="text-[14px] font-black tnum">{s.key === "logisweb" && errs != null ? errs : last ? last.date.slice(5).replace("-", "/") : "-"}</div></div>
+                <div className="rounded-xl bg-navy-50 py-2"><div className="text-[11px] font-bold text-[#98928B]">현재 버전</div><div className="text-[14px] font-black tnum">{d.version ? `v${d.version}` : "-"}</div></div>
+                <div className="rounded-xl bg-navy-50 py-2"><div className="text-[11px] font-bold text-[#98928B]">진행 업무</div><div className="text-[14px] font-black tnum">{open.length}</div></div>
+                <div className="rounded-xl bg-navy-50 py-2"><div className="text-[11px] font-bold text-[#98928B]">{s.key === "logisweb" && errs != null ? "오류 신고" : "최근 배포"}</div><div className="text-[14px] font-black tnum">{s.key === "logisweb" && errs != null ? errs : last ? last.date.slice(5).replace("-", "/") : "-"}</div></div>
               </div>
               {d.note && <div className="mt-3 text-[12.5px] rounded-xl bg-amber-50 text-amber-800 px-3 py-2 font-semibold">{d.note}</div>}
               <div className="mt-auto pt-4 flex gap-2">
@@ -63,21 +63,21 @@ export default function Services() {
       </div>
 
       <Card title="업데이트 기록" right={
-        <div className="flex gap-1 overflow-x-auto no-scrollbar">{[{ key: "", label: "전체" }, ...SERVICES].map((s) => <button key={s.key} type="button" onClick={() => setFilter(s.key)} className={cx("h-8 px-3 rounded-lg text-[12px] font-black whitespace-nowrap", filter === s.key ? "bg-navy text-white" : "bg-navy-50 text-[#5A6A86]")}>{s.label}</button>)}</div>}>
-        {(rel || []).filter((r) => !filter || r.product === filter).length === 0 ? <div className="py-8 text-center text-[13px] text-[#7A8AA8]">아직 기록이 없습니다. 배포할 때마다 [업데이트 기록]으로 남겨 두면 고객 안내 · 인수인계에 씁니다.</div> : (
+        <div className="flex gap-1 overflow-x-auto no-scrollbar">{[{ key: "", label: "전체" }, ...SERVICES].map((s) => <button key={s.key} type="button" onClick={() => setFilter(s.key)} className={cx("h-8 px-3 rounded-lg text-[12px] font-black whitespace-nowrap", filter === s.key ? "bg-navy text-white" : "bg-navy-50 text-[#77716A]")}>{s.label}</button>)}</div>}>
+        {(rel || []).filter((r) => !filter || r.product === filter).length === 0 ? <div className="py-8 text-center text-[13px] text-[#98928B]">아직 기록이 없습니다. 배포할 때마다 [업데이트 기록]으로 남겨 두면 고객 안내 · 인수인계에 씁니다.</div> : (
           <ol className="relative border-l-2 border-navy-100 ml-3 space-y-5">
             {(rel || []).filter((r) => !filter || r.product === filter).map((r) => (
               <li key={r.id} className="pl-6 relative">
                 <span className="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-navy ring-4 ring-white" />
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[12.5px] font-black tnum text-[#5A6A86]">{r.date}</span>
+                  <span className="text-[12.5px] font-black tnum text-[#77716A]">{r.date}</span>
                   <Chip>{SERVICES.find((s) => s.key === r.product)?.label || r.product}</Chip>
                   {r.version && <Chip tone="dark">v{r.version}</Chip>}
-                  {(r.createdBy === me.user.uid || me.isAdmin) && <button type="button" onClick={() => window.confirm("이 기록을 지울까요?") && removeRow("pnkReleases", r.id).catch(fail)} className="ml-auto text-[11.5px] text-[#A0ABBE] hover:text-rose-600">지우기</button>}
+                  {(r.createdBy === me.user.uid || me.isAdmin) && <button type="button" onClick={() => window.confirm("이 기록을 지울까요?") && removeRow("pnkReleases", r.id).catch(fail)} className="ml-auto text-[11.5px] text-[#B6B0A9] hover:text-rose-600">지우기</button>}
                 </div>
                 <div className="mt-1 text-[15px] font-black">{r.title}</div>
-                {r.body && <div className="mt-1 text-[13.5px] text-[#3A4A66] whitespace-pre-wrap leading-relaxed">{r.body}</div>}
-                <div className="mt-1 text-[11.5px] text-[#A0ABBE]">{r.createdByName}</div>
+                {r.body && <div className="mt-1 text-[13.5px] text-[#57514A] whitespace-pre-wrap leading-relaxed">{r.body}</div>}
+                <div className="mt-1 text-[11.5px] text-[#B6B0A9]">{r.createdByName}</div>
               </li>
             ))}
           </ol>
@@ -96,7 +96,7 @@ function StatusEditor({ s, onClose }) {
   return (
     <Modal open title={`${s.label} 상태`} onClose={onClose} footer={<><Btn kind="ghost" onClick={onClose}>취소</Btn><Btn onClick={save}>저장</Btn></>}>
       <div className="space-y-3">
-        <div className="grid grid-cols-3 gap-1.5">{SERVICE_STATUS.map((x) => <button key={x.key} type="button" onClick={() => setF({ ...f, status: x.key })} className={cx("h-10 rounded-xl text-[13px] font-black border", f.status === x.key ? "bg-navy text-white border-navy" : "border-[#DCE3EE]")}>{x.label}</button>)}</div>
+        <div className="grid grid-cols-3 gap-1.5">{SERVICE_STATUS.map((x) => <button key={x.key} type="button" onClick={() => setF({ ...f, status: x.key })} className={cx("h-10 rounded-xl text-[13px] font-black border", f.status === x.key ? "bg-navy text-white border-navy" : "border-[#E9E6E1]")}>{x.label}</button>)}</div>
         <Field label="현재 버전"><Input value={f.version} onChange={(e) => setF({ ...f, version: e.target.value })} placeholder="1.3.506" /></Field>
         <Field label="안내 문구" hint="점검 · 장애 내용(대시보드에 보임)"><Input value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></Field>
       </div>

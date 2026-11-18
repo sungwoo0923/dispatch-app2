@@ -25,7 +25,7 @@ export default function Company() {
 
   return (
     <div>
-      <Hero title={info?.name || "PnK PROJECT"}>
+      <Hero en="Company" title={info?.name || "PnK PROJECT"}>
         {me.isAdmin && <HeroBtn icon="pen" onClick={() => setEdit("info")}>정보 고치기</HeroBtn>}
       </Hero>
 
@@ -33,10 +33,10 @@ export default function Company() {
         <Card title="법인 기본 정보" className="xl:col-span-2" right={<Btn kind="ghost" onClick={() => copy(INFO_FIELDS.map(([k, l]) => `${l}: ${info?.[k] || ""}`).join("\n"))}>전체 복사</Btn>}>
           <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
             {INFO_FIELDS.map(([k, l]) => (
-              <div key={k} className="flex items-center gap-3 py-3 border-b border-[#EEF1F6]">
-                <dt className="w-28 shrink-0 text-[12.5px] font-bold text-[#7A8AA8]">{l}</dt>
-                <dd className="flex-1 min-w-0 text-[14px] font-bold truncate tnum">{info?.[k] || <span className="text-[#C0C8D6] font-medium">미입력</span>}</dd>
-                {info?.[k] && <button type="button" onClick={() => copy(info[k])} className="text-[#C0C8D6] hover:text-navy" title="복사"><Icon name="file" size={15} /></button>}
+              <div key={k} className="flex items-center gap-3 py-3 border-b border-[#F4F2F0]">
+                <dt className="w-28 shrink-0 text-[12.5px] font-bold text-[#98928B]">{l}</dt>
+                <dd className="flex-1 min-w-0 text-[14px] font-bold truncate tnum">{info?.[k] || <span className="text-[#D0CCC6] font-medium">미입력</span>}</dd>
+                {info?.[k] && <button type="button" onClick={() => copy(info[k])} className="text-[#D0CCC6] hover:text-navy" title="복사"><Icon name="file" size={15} /></button>}
               </div>
             ))}
           </dl>
@@ -48,8 +48,8 @@ export default function Company() {
             <a href="/brand/pnk-logo-600.png" download="PnK-PROJECT-logo.png"><Btn kind="ghost" icon="download" className="w-full">전체 로고</Btn></a>
             <a href="/brand/pnk-mark-512.png" download="PnK-PROJECT-mark.png"><Btn kind="ghost" icon="download" className="w-full">심볼</Btn></a>
           </div>
-          <div className="mt-4 flex gap-2">{[["#1B2B4B", "메인 네이비"], ["#2D4C82", "포인트"], ["#F4F6FA", "바탕"]].map(([c, l]) => (
-            <button key={c} type="button" onClick={() => copy(c)} className="flex-1 text-left"><div className="h-10 rounded-xl border border-line" style={{ background: c }} /><div className="mt-1 text-[11.5px] font-bold">{l}</div><div className="text-[11px] text-[#7A8AA8] tnum">{c}</div></button>
+          <div className="mt-4 flex gap-2">{[["#3A342D", "메인 네이비"], ["#6C5A42", "포인트"], ["#F8F7F6", "바탕"]].map(([c, l]) => (
+            <button key={c} type="button" onClick={() => copy(c)} className="flex-1 text-left"><div className="h-10 rounded-xl border border-line" style={{ background: c }} /><div className="mt-1 text-[11.5px] font-bold">{l}</div><div className="text-[11px] text-[#98928B] tnum">{c}</div></button>
           ))}</div>
         </Card>
 
@@ -58,7 +58,7 @@ export default function Company() {
             {links.map((l) => (
               <a key={l.url} href={l.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-2xl border border-line px-4 py-3.5 hover:border-navy-500 transition">
                 <div className="w-10 h-10 rounded-xl bg-navy-100 text-navy flex items-center justify-center"><Icon name="link" size={18} /></div>
-                <div className="min-w-0 flex-1"><div className="text-[14px] font-black">{l.label}</div><div className="text-[12px] text-[#7A8AA8] truncate">{l.sub || l.url}</div></div>
+                <div className="min-w-0 flex-1"><div className="text-[14px] font-black">{l.label}</div><div className="text-[12px] text-[#98928B] truncate">{l.sub || l.url}</div></div>
               </a>
             ))}
           </div>
@@ -67,17 +67,17 @@ export default function Company() {
         {me.isAdmin && <MailServer me={me} info={info} />}
         {me.isAdmin && (
           <Card title="관리자 전용" right={<Btn kind="ghost" icon="pen" onClick={() => setEdit("secure")}>고치기</Btn>}>
-            <div className="text-[12.5px] font-bold text-[#7A8AA8] mb-1">법인 계좌</div>
-            <div className="text-[14px] font-black tnum mb-4">{secure?.bank || <span className="text-[#C0C8D6] font-medium">미입력</span>}</div>
-            <div className="text-[12.5px] font-bold text-[#7A8AA8] mb-1.5">운영 계정 · 서비스 목록</div>
+            <div className="text-[12.5px] font-bold text-[#98928B] mb-1">법인 계좌</div>
+            <div className="text-[14px] font-black tnum mb-4">{secure?.bank || <span className="text-[#D0CCC6] font-medium">미입력</span>}</div>
+            <div className="text-[12.5px] font-bold text-[#98928B] mb-1.5">운영 계정 · 서비스 목록</div>
             <ul className="space-y-1.5">
               {(secure?.accounts || []).map((a, i) => (
                 <li key={i} className="rounded-xl bg-navy-50 px-3 py-2">
                   <div className="flex items-center gap-2"><b className="text-[13px] flex-1">{a.name}</b>{a.url && <a href={a.url} target="_blank" rel="noreferrer" className="text-navy-500"><Icon name="link" size={14} /></a>}</div>
-                  <div className="text-[12px] text-[#5A6A86]">{a.owner}{a.note ? ` · ${a.note}` : ""}</div>
+                  <div className="text-[12px] text-[#77716A]">{a.owner}{a.note ? ` · ${a.note}` : ""}</div>
                 </li>
               ))}
-              {!(secure?.accounts || []).length && <li className="text-[12.5px] text-[#7A8AA8]">Vercel · Firebase · 도메인 · 팝빌 등 어디서 관리하는지 적어 두세요.</li>}
+              {!(secure?.accounts || []).length && <li className="text-[12.5px] text-[#98928B]">Vercel · Firebase · 도메인 · 팝빌 등 어디서 관리하는지 적어 두세요.</li>}
             </ul>
             <div className="mt-3 text-[11.5px] text-rose-600 font-semibold">⚠ 비밀번호는 여기에 적지 마세요.</div>
           </Card>

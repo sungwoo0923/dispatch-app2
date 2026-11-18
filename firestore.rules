@@ -496,6 +496,20 @@ service cloud.firestore {
     // 코드 목록이 노출되지 않게 하고, 발급(create/update)은 로그인한
     // 운송사 앱에서만 가능하게 한다.
     // ⭐ 2026-11-07 보안 — 이미 있는 짧은 링크는 같은 오더(id)로만 다시 쓸 수 있다(다른 회사가 남의 링크를 다른 곳으로 돌리지 못하게) · 삭제는 최고관리자
+    // 📱 2026-11-18 QR로 내 폰에서 문자 보내기 — PC가 받는 번호 · 내용을 잠깐 올리고 /t/{code}(로그인 없음)가 code로 읽는다
+    //  list 막음(코드 모르면 못 읽음) · 고치기 막음 · 만든 사람만 지움 · 화면은 하루 지난 것은 열지 않는다
+    match /smsRelay/{code} {
+      allow get: if true;
+      allow list, update: if false;
+      allow create: if isApproved() && code.size() >= 12
+        && request.resource.data.keys().hasOnly(['to', 'body', 'by', 'createdAt'])
+        && request.resource.data.by == request.auth.uid
+        && request.resource.data.to is list && request.resource.data.to.size() >= 1 && request.resource.data.to.size() <= 50
+        && request.resource.data.body is string && request.resource.data.body.size() <= 2000
+        && request.resource.data.createdAt == request.time;
+      allow delete: if isSignedIn() && resource.data.get('by', '') == request.auth.uid;
+    }
+
     match /shortLinks/{code} {
       allow get: if true;
       allow list: if false;
@@ -2724,6 +2738,7 @@ service cloud.firestore {
         'pnkEmpIndex', 'pnkApprovals', 'pnkAttendance', 'pnkMailSecrets', 'pnkMailUsage', 'pnkMfaSecrets', 'pnkMfaSessions', 'pnkUi', 'pnkUiHistory', 'pnkInquiries', 'pnkSite',
         'logisPasskeys', 'logisPasskeyChal', 'passwordResetSms', // 👆 얼굴 · 지문 로그인 공개키 · 한 번 쓰는 확인값(서버만 — functions/logisPasskey.js)
         'publicRelease',
+        'smsRelay', // 📱 QR로 내 폰에서 문자 보내기 — 위에서 따로 정함
         'sheetLive', // 🔁 구글시트 실시간 반영 설정(서버만)
         'sheetPushQueue', // 🔁 프로그램 → 구글시트 반영 대기열 · 기록(서버만)
         'adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'resetLocks', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'driverContracts', 'fixedRoutes', 'routeBoards', 'freightJobs', 'personalSchedules', 'publicCompanies', 'companyContracts',
