@@ -37,8 +37,8 @@ const TEAM_BY_KEY = Object.fromEntries(AI_TEAMS.map((t) => [t.key, t]));
 // 🧹 2026-11-18 메뉴는 "AI 본부" 하나 — 팀은 화면 안 명단에서 고른다(예전 ai:<team> 주소는 그대로 동작)
 export const AI_TEAM_TABS = [{ key: "ai:hub", label: "AI 본부", en: "AI HQ", icon: "spark", also: AI_TEAMS.map((t) => `ai:${t.key}`) }];
 
-// Claude Opus 5.5 단가(USD / 100만 토큰) — 화면 표시용 어림값
-const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
+// Claude Sonnet 5.5 단가(USD / 100만 토큰) — 화면 표시용 어림값
+const PRICE = { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 };
 const costOf = (u) => (u ? ((u.input || 0) * PRICE.input + (u.output || 0) * PRICE.output + (u.cacheRead || 0) * PRICE.cacheRead + (u.cacheWrite || 0) * PRICE.cacheWrite) / 1e6 : 0);
 const tokOf = (u) => (u ? (u.input || 0) + (u.output || 0) + (u.cacheRead || 0) + (u.cacheWrite || 0) : 0);
 const usd = (n) => `$${n < 0.01 && n > 0 ? n.toFixed(4) : n.toFixed(2)}`;
@@ -519,7 +519,7 @@ export function AiTeamHub({ go, logs: logsProp, stats: statsProp }) {
               </div>
             )}
       </AdmPanel>
-      <div className="text-[12px] px-1" style={{ color: G.dim }}>비용은 Claude Opus 5.5 표준 단가로 낸 어림값이에요. 정확한 청구 금액은 Claude Console › 지출에서 확인해 주세요.</div>
+      <div className="text-[12px] px-1" style={{ color: G.dim }}>비용은 Claude Sonnet 5.5 표준 단가로 낸 어림값이에요. 정확한 청구 금액은 Claude Console › 지출에서 확인해 주세요.</div>
       <style>{AI_CSS}</style>
     </div>
   );
