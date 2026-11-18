@@ -62,6 +62,7 @@ import RouteMapModal from "../RouteMapModal";
 import southKorea from "@svg-maps/south-korea";
 import { canSeeNotice } from "../NoticeBoard";
 import React, { useState, useMemo, useEffect, useRef, startTransition, useSyncExternalStore } from "react";
+import OfficeSmsLinkCard from "../officeSms/OfficeSmsLinkCard"; // 💬 2026-11-18 사내문자(업무폰 문자 연결)
 import { withCo, getTenant } from "../fsTenant";
 // 📱 PC와 같은 화면(매출관리·운임조회·단가표·지입차관리·전자결재·직원관리) — 메뉴를 열 때만 불러온다
 import { runMobileBack } from "../mobileBack"; // 🔙 2026-11-10 덮어 뜬 창 뒤로가기로 닫기
@@ -21202,6 +21203,9 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
           {/* 🧹 2026-11-14 정리 — 예전엔 '알림 종류별 설정(휴대폰 푸시)'과 '팝업 알림' 카드가 따로 있어 같은 종류(결재 · 공지 · 인사 …)가 두 번 보였다 → 한 줄로, 안에서 [휴대폰 푸시 | 화면 팝업] 탭 */}
           <KpmRow label="알림 종류별 설정" sub={`휴대폰 푸시 ${pushOnCount}/${PUSH_PREF_TYPES.length}종 켜짐 · 화면 가운데 팝업`} onClick={() => { setPushPrefsTab("push"); setPushPrefsOpen(true); }} right={go("설정")} />
         </KpmCard>
+
+        {/* 💬 2026-11-18 사내문자 — 이 휴대폰을 내 업무폰으로 연결(PC 배차 프로그램과 문자 주고받기 · 본인만 보임) */}
+        <OfficeSmsLinkCard currentUser={currentUser} Card={KpmCard} Row={KpmRow} go={go} showSuccess={showSuccess} />
 
         <KpmCard en="DATA" title="데이터" flush>
           <KpmRow label="앱 새로고침" sub="서버에서 가장 최신 상태를 다시 불러옵니다"
