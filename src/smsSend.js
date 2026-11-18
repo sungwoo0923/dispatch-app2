@@ -4,7 +4,7 @@
 //   · popbill(회사 번호 문자) 서버(smsSend)가 팝빌로 회사 번호에서 보낸다(사용한 만큼 월말 로지스웹 청구)
 //   · auto(자동)            팝빌이 연결돼 있으면 회사 번호로, 아니면 휴대폰과 연결로
 //   · qr(QR로 내 폰에서)     📱 2026-11-18 PC에 QR → 업무폰 카메라로 찍으면 문자 앱이 내용까지 채워 열린다(설치 없음 · 무료)
-//  '휴대폰과 연결' · 'QR로 내 폰에서'는 PC마다 다르게 고를 수 있다(이 PC에 기억 — 휴대폰과 연결이 안 되는 PC가 있어서)
+//  '휴대폰과 연결' · 'QR로 내 폰에서'는 보낼 때마다 고른다(지난번 고른 것을 이 PC에 기억해 먼저 골라 둔다 — Enter면 그대로)
 //  모바일 앱은 휴대폰에서 바로 보내므로 지금처럼 sms: 를 쓴다(이 파일은 PC 화면만).
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase";
@@ -15,7 +15,7 @@ const digits = (v) => String(v ?? "").replace(/[^\d]/g, "");
 export const SMS_MODES = [
   ["phone", "휴대폰과 연결", "PC에 연결된 휴대폰으로 · 무료"],
   ["popbill", "회사 번호 문자", "팝빌로 회사 번호에서 · 사용한 만큼 월말 청구"],
-  ["qr", "QR로 내 폰에서", "PC에 뜬 QR을 업무폰 카메라로 찍어 내 번호로 · 무료"],
+  ["qr", "QR로 내 폰에서", "PC에 뜬 QR을 업무폰 카메라로 찍어 내 번호로 · 무료(보낼 때 처음에 QR이 골라져 있음)"],
   ["auto", "자동", "팝빌이 연결돼 있으면 회사 번호, 아니면 휴대폰과 연결"],
 ];
 // 이 PC에서 '휴대폰으로' 보낼 때 쓰는 길 — "phone"(휴대폰과 연결) · "qr"(QR로 내 폰에서) · ""(아직 안 고름)
@@ -41,16 +41,13 @@ export function watchSmsSettings(co) {
 export const smsSettingsNow = () => _set;
 
 const openSms = (phones, body) => { window.location.href = `sms:${phones.join(",")}?body=${encodeURIComponent(body || "")}`; };
-// 휴대폰으로 보내기 — 이 PC가 고른 길(없으면 회사 설정 · '휴대폰과 연결' 회사면 처음 한 번 물어본다)
+// 휴대폰으로 보내기 — 보낼 때마다 '휴대폰과 연결 / QR로 내 폰에서'를 고른다(이 PC가 지난번 고른 것이 먼저 · 처음엔 회사 설정)
 async function openPhone(list, body, companyMode) {
-  let way = getPcSmsWay();
-  if (!way && companyMode === "qr") way = "qr";
-  if (!way) {
-    const qr = await kpConfirm("이 PC에서 문자를 어떻게 보낼까요?\n· 휴대폰과 연결: PC에 연결된 휴대폰이 바로 보내요\n· QR로 내 폰에서: PC에 뜬 QR을 업무폰 카메라로 찍으면 문자 앱이 내용까지 채워서 열려요(설치 없음)\n\n이 PC에 기억해요. 회사정보 › 문자 보내기에서 바꿀 수 있어요.", { title: "문자 보내는 방법", okText: "QR로 내 폰에서", cancelText: "휴대폰과 연결" });
-    way = qr ? "qr" : "phone"; setPcSmsWay(way);
-  }
+  const { chooseSmsWay, openSmsQr } = await import("./SmsQrModal");
+  const way = await chooseSmsWay(list, getPcSmsWay() || (companyMode === "qr" ? "qr" : "phone"));
+  if (!way) return "cancel";
+  setPcSmsWay(way);
   if (way === "qr") {
-    const { openSmsQr } = await import("./SmsQrModal");
     const r = await openSmsQr(list, body);
     if (r === "phone") { setPcSmsWay("phone"); openSms(list.map((x) => x.phone), body); }
     return "phone";
