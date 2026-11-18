@@ -2044,6 +2044,50 @@ service cloud.firestore {
           && request.auth.uid in get(/databases/$(database)/documents/privateFareSettings/$(co)).data.get('viewers', []);
       }
     }
+    // ════════════════════════════════════════════════════════════
+    // 🔐 2026-11-18 비공개 운임(사람별 금고) — 최고관리자가 관리자센터에서 운송사 · 사람을 고른다(사용자 요청)
+    //  privateFareGrants/{uid}   = { uid, companyName, name, on, grantedBy, grantedAt } — 최고관리자만 쓰고, 본인 · 최고관리자만 읽는다
+    //  privateFarePins/{uid}     = 비밀번호(서버만 · functions/privateFarePin.js) · privateFarePinAttempts/{uid} = 틀린 횟수(서버만)
+    //  privateFareUnlocks/{uid}  = { companyName, expiresAt(30분) } — 서버가 비밀번호가 맞을 때 만든다 · 본인만 읽음
+    //  privateFareVaults/{uid}(/fares/{오더 id}) = 그 사람이 정한 금액 · 규칙 — 본인만, 지정이 켜져 있고(같은 회사) 잠금을 푼 동안만
+    //   회사 마스터 · 관리자 · 최고관리자도 금액은 못 본다(최고관리자는 지정 · 비밀번호 초기화 · 지정 해제만)
+    // ════════════════════════════════════════════════════════════
+    function pfGrantOk(uid) {
+      let g = /databases/$(database)/documents/privateFareGrants/$(uid);
+      return exists(g) && get(g).data.get('on', false) == true && get(g).data.get('companyName', '') == myCo();
+    }
+    function pfUnlocked(uid) {
+      let u = /databases/$(database)/documents/privateFareUnlocks/$(uid);
+      return exists(u) && get(u).data.expiresAt > request.time && get(u).data.get('companyName', '') == myCo();
+    }
+    function pfVaultOk(uid) {
+      return isSignedIn() && request.auth.uid == uid && isApproved() && pfGrantOk(uid) && pfUnlocked(uid);
+    }
+    match /privateFareGrants/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isTotalMasterUser());
+      allow create, update: if isTotalMasterUser() && request.resource.data.get('uid', '') == uid && request.resource.data.get('companyName', '') != '';
+      allow delete: if isTotalMasterUser();
+    }
+    match /privateFarePins/{uid} {
+      allow read, create, update: if false;
+      allow delete: if isTotalMasterUser(); // 비밀번호 초기화(다음에 들어갈 때 새로 정함)
+    }
+    match /privateFarePinAttempts/{uid} {
+      allow read, create, update: if false;
+      allow delete: if isTotalMasterUser();
+    }
+    match /privateFareUnlocks/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow create, update: if false;
+      allow delete: if isSignedIn() && (request.auth.uid == uid || isTotalMasterUser());
+    }
+    match /privateFareVaults/{uid} {
+      allow read, delete: if pfVaultOk(uid);
+      allow create, update: if pfVaultOk(uid) && request.resource.data.get('companyName', '') == myCo();
+      match /fares/{oid} {
+        allow read, write: if pfVaultOk(uid);
+      }
+    }
     match /payrollUnlocks/{uid} {
       allow read: if isSignedIn() && request.auth.uid == uid;
       allow write: if false;
@@ -2684,6 +2728,8 @@ service cloud.firestore {
         'payrollSecrets', 'payrollUnlocks', 'payrollPwAttempts',
         // 🔒 2026-11-10 비공개 청구운임 — 위에서 따로 정함(빠지면 같은 회사 직원 누구나 실제 청구 금액을 읽는다)
         'privateFareSettings',
+        // 🔐 2026-11-18 비공개 운임(사람별 금고 · 지정 · 비밀번호 · 잠금 해제) — 위에서 따로 정함
+        'privateFareGrants', 'privateFarePins', 'privateFarePinAttempts', 'privateFareUnlocks', 'privateFareVaults',
         // 🤖 2026-11-06 AI 팀 사용 기록 — 위에서 따로 정함
         'aiTeamLogs',
         // 📊 2026-11-06 일일 경영 보고 — 위에서 따로 정함

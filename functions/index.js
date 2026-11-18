@@ -6988,6 +6988,16 @@ exports.payrollPwStatus = payCall(_payrollPw.status);
 exports.payrollPwSet = payCall(_payrollPw.setPw);
 exports.payrollPwVerify = payCall(_payrollPw.verify);
 exports.payrollLock = payCall(_payrollPw.lock);
+
+/* ==================================================================
+   🔐 2026-11-18 비공개 운임 비밀번호(사람별) — 설명은 functions/privateFarePin.js 맨 위
+   호출형 4개: pfPinStatus · pfPinSet · pfPinVerify · pfLock — 잠금 해제는 privateFareUnlocks/{uid}(30분)
+================================================================== */
+const _pfPin = require("./privateFarePin").makePrivateFarePin({ db, FieldValue, Timestamp, HttpsError: functions.https.HttpsError });
+exports.pfPinStatus = payCall(_pfPin.status);
+exports.pfPinSet = payCall(_pfPin.setPin);
+exports.pfPinVerify = payCall(_pfPin.verify);
+exports.pfLock = payCall(_pfPin.lock);
 exports.payrollPwReset = payCall(_payrollPw.resetPw); // ⭐ 2026-11-10 급여 비밀번호 잊었을 때(로그인 비밀번호로 본인 확인 후)
 
 /* ==================================================================

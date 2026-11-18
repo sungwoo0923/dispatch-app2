@@ -14,7 +14,8 @@ import { useBizModules, readBiz, writeBiz, bizInfo } from "../bizModules";
 import { reportScreen, installScreenVisibility, mobileScreenLabel } from "../screenReport";
 import { effectiveScope, isOfficeScope, scopeAllows } from "../workScope";
 import { audienceAllows, activeViewOf, setDispatchAlertsOn } from "../notifyAudience"; // ⭐ 2026-11-17 알림 받는 사람(역할 · 부서 · 지금 화면)
-import { isExecTeam } from "../teamNames"; // ⭐ 2026-11-17 임원 부서 통合관리자 → 경영 브리핑부터
+import { isExecTeam } from "../teamNames";
+import { usePrivateFareGrant } from "../privateFareGrant"; // 🔐 2026-11-18 비공개 운임 // ⭐ 2026-11-17 임원 부서 통合관리자 → 경영 브리핑부터
 import { usePayTodo } from "../approvalPay"; // 💸 2026-11-15 지급 대기 지출결의 → 전자결재 숫자(PC와 같게)
 import { useRouteGroupFilter, RouteGroupDropdown, SheetLiveChip, RouteGroupField } from "../routeGroups";
 import OrderStaffFields from "../OrderStaffFields"; // 🧭 2026-11-14 PC와 같게 — 수정할 때 [담당자 변경](배차담당자 · 차량배정자)
@@ -2200,6 +2201,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   // ⭐ 2026-11-17 부서가 임원인 통합관리자도 경영 브리핑(PC와 같음) — 로그인하면 늘 여기서 시작
   const execAllMgrM = realRole === "allMgr" && isExecTeam(myProfM?.team);
   const isExecM = forceExec || execAllMgrM || roleScreen(customRoleM) === "exec";
+  const pfGrantM = usePrivateFareGrant(user?.uid || ""); // 🔐 2026-11-18 비공개 운임 — 관리자센터에서 지정한 사람만 메뉴
   // 🗂 2026-11-13 업무 범위(사내업무만 / 사내업무 + 경리 / 경리업무만) — src/workScope.js
   const workScopeM = role === "totalMaster" || realRole === "totalMaster" ? "" : effectiveScope(realRole, myProfM?.workScope, myProfM?.isMaster === true); // 🛠 2026-11-15 권한 기준(src/workScope.js)
   // 운송사별 권한 설정으로 켠 부서 메뉴(예: A운송사 관리자 → 인사관리부)
@@ -5598,7 +5600,7 @@ const title =
   : page === "monthclose" ? "월 마감"
   : page === "perms" ? "권한 관리"
   : page === "dept" ? (deptMode === "exec" ? "경영 브리핑" : deptMode === "office" ? "사내업무" : deptMode === "hr" ? "인사관리" : deptMode === "sales" ? "영업" : "경리·회계")
-  : String(page).startsWith("dept:") ? ({ "dept:sales": "영업관리", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 제출 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:routefare": "노선 특수운임", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서", "dept:payroll": "급여 계산", "dept:payslip": "급여명세서", "dept:leaveplan": "연차 사용 계획", "dept:leavepromo": "연차 관리", "dept:briefing": "일일 경영 보고" , "dept:analysis": "경영 분석", "dept:apqueue": "결재 대기", "dept:staffinfo": "직원 정보"}[page] || "")
+  : String(page).startsWith("dept:") ? ({ "dept:sales": "영업관리", "dept:settle": "정산관리", "dept:acct": "회계관리", "dept:assets": "비품·자산", "dept:hr": "인사관리부", "dept:leave": "연차 관리", "dept:onboarding": "입·퇴사 관리", "dept:cert": "증명서 발급", "dept:driverdocs": "기사 제출 서류", "dept:approvals": "결재함", "dept:schedule": "직원 일정", "dept:funds": "자금 현황", "dept:pfvault": "비공개 운임", "dept:execsched": "임원 일정", "dept:rules": "사내 규정", "dept:board": "사내 게시판", "dept:farerules": "운임 규칙", "dept:routefare": "노선 특수운임", "dept:cashbook": "자금 관리", "dept:myresume": "내 이력서", "dept:payroll": "급여 계산", "dept:payslip": "급여명세서", "dept:leaveplan": "연차 사용 계획", "dept:leavepromo": "연차 관리", "dept:briefing": "일일 경영 보고" , "dept:analysis": "경영 분석", "dept:apqueue": "결재 대기", "dept:staffinfo": "직원 정보"}[page] || "")
   : page === "status" ? "배차현황"
   : page === "unassigned" ? "미배차현황"
   : page === "handover" ? "인수인계"
@@ -6243,6 +6245,7 @@ onGoAttendance={() => {
           onRoleView={(v) => { setShowMenu(false); setViewPick(true); void v; }}
           isCeo={forceExec || ["대표", "대표이사", "사장"].includes(String(myProfM?.position || "").trim())}
           canBriefing={canBriefingM}
+          pfOn={pfGrantM.on && !workScopeM}
           execFull={execFull}
           onToggleExec={() => { toggleExecFull(); setShowMenu(false); }}
           alertCounts={{ ...alertCounts, payTodo: payTodoM, drvOrders: dispatchAlertsOnM ? drvCounts.orders : 0, drvDocs: drvCounts.docs, drvSos: dispatchAlertsOnM ? drvCounts.sos : 0 }}
@@ -8103,6 +8106,7 @@ function MobileSideMenu({
   onRoleView,
   isCeo = false,
   canBriefing = false,
+  pfOn = false,
   execFull = false,
   onToggleExec,
   menuOk = () => true,
@@ -8300,6 +8304,7 @@ function MobileSideMenu({
               <MenuItem label="결재 대기" icon="stamp" onClick={() => onGo?.("dept:apqueue")} dark={dark} />
               <MenuItem label="직원 정보" icon="users" onClick={() => onGo?.("dept:staffinfo")} dark={dark} />
               {isCeo && <MenuItem label="자금 현황" icon="wallet" onClick={() => onGo?.("dept:funds")} dark={dark} />}
+              {pfOn && <MenuItem label="비공개 운임" icon="key" onClick={() => onGo?.("dept:pfvault")} dark={dark} />}{/* 🔐 2026-11-18 관리자센터에서 지정한 사람만 · 비밀번호로 열기 */}
               <MenuItem label="임원 스케줄" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />
               {(canRevenue || isExec) && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
               {(isAdminRole || isExec) && ok("인사이트") && <MenuItem label="경영인텔리전스" icon="trend" onClick={onGoIntel} dark={dark} />}
