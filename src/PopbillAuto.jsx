@@ -192,7 +192,7 @@ export function SmsSettingsCard({ company, canEdit }) {
             ))}
           </div>
         </div>
-        {v.mode !== "phone" && (
+        {v.mode !== "phone" && v.mode !== "qr" && (
           <label className="block"><div className="text-[12.5px] font-black text-[#3A4A66] mb-1">발신번호</div>
             <input className={inp} inputMode="tel" value={fmtPhone(v.senderNumber)} placeholder="팝빌에 등록한 회사 번호" disabled={dis} onChange={(e) => { setDraft({ ...v, senderNumber: e.target.value.replace(/[^\d]/g, "") }); setMsg(""); }} />
             <div className="mt-1 text-[12px] text-[#7A879C]">법에 따라 미리 등록한 번호로만 보낼 수 있어요(팝빌 › 발신번호 등록)</div>
@@ -212,7 +212,7 @@ export function SmsSettingsCard({ company, canEdit }) {
           {info?.error && <div className="mt-1 text-[11.5px] text-white/50">서버에서 사용량을 아직 못 읽었어요</div>}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[12.5px] font-semibold text-[#7A879C]">{v.mode === "phone" ? "휴대폰과 연결은 요금이 청구되지 않아요" : "90자(한글 45자) 넘으면 장문으로 보내요"}</span>
+          <span className="text-[12.5px] font-semibold text-[#7A879C]">{v.mode === "phone" || v.mode === "qr" ? "휴대폰과 연결 · QR로 내 폰에서는 요금이 청구되지 않아요" : "90자(한글 45자) 넘으면 장문으로 보내요"}</span>
           {canEdit && <span className="ml-auto flex gap-1.5">
             {draft && <button type="button" className={btn} onClick={() => { setDraft(null); setMsg(""); }} disabled={busy}>되돌리기</button>}
             <button type="button" className={btnPri} onClick={save} disabled={busy || !draft} data-testid="sms-save">{busy ? "저장 중" : "저장"}</button>
