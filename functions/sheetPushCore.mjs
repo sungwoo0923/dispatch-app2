@@ -5,7 +5,7 @@
 //         ② 수식이 든 칸(합계 · 이익 등)은 쓰지 않는다
 //         ③ 시트에 쓸 수 없는 값(칸이 없거나 똑같이 읽히지 않는 값)은 오더의 _programKeys 에 적어 둔다 — 실시간 반영이 그 값을 시트 값으로 되돌리지 않는다
 //  · 삭제 = 그 줄의 값만 비운다(줄은 남긴다 · 수식 칸은 그대로)
-import { buildMigration, tabLayout, parseDate, parseMoney, parseTime, splitVehicle, nm, colLetter, SHEET_CORE_KEYS, DEFAULT_PRESET, pairExtras, sameSpecials } from "./carrierMigrateCore.mjs";
+import { buildMigration, tabLayout, parseDate, parseMoney, parseTime, splitVehicle, nm, colLetter, SHEET_CORE_KEYS, DEFAULT_PRESET, pairExtras, sameSpecials, normSpecials } from "./carrierMigrateCore.mjs";
 
 const cell = (v) => String(v ?? "").trim();
 const tabOf = (src) => String(src || "").split("!")[0];
@@ -50,6 +50,16 @@ export function sameValue(k, a, b) {
   if (typeof a === "object" || typeof b === "object") return JSON.stringify(a ?? "") === JSON.stringify(b ?? "");
   if (typeof a === "boolean" || typeof b === "boolean") return !!a === !!b;
   return cell(a) === cell(b);
+}
+
+// ⭐ 2026-11-18 시트에 썼는지 확인할 때의 특수운임 비교 — 금액 · 받는사람 · 부담만 본다(종류 · 이름은 보지 않음)
+//  시트의 이름 없는 추가 칸(에이제이 I · N)은 다시 읽으면 입고시간 · 비고로 "야상" · "기타" 이름이 붙는다.
+//  예전엔 프로그램 이름("대기료" · 이름 없음)과 달라 "똑같이 읽히지 않는다"고 보고 추가 칸을 포기 → 운송료 칸에 합친 금액만 썼다(사용자 신고).
+//  이름은 프로그램 값을 그대로 둔다(_programKeys — 시트에서 다시 가져와도 덮어쓰지 않음)
+const looseSpecials = (list) => normSpecials(list).map((x) => x.split("|").slice(2).join("|")).sort();
+export function pushSame(k, a, b) {
+  if (k === "특수운임") return JSON.stringify(looseSpecials(a)) === JSON.stringify(looseSpecials(b));
+  return sameValue(k, a, b);
 }
 
 // 이 오더가 바뀌었을 때 시트와 맞춰 봐야 하는 칸
@@ -366,7 +376,7 @@ function fitEdits(ctx, title, rowNo, baseRow, target, fields, env) {
     const writeRow = [...baseRow];
     byField.forEach((list) => list.forEach((x) => { if (!x.virtual) writeRow[x.c] = x.v; }));
     if (!d.o) return { row, writeRow, d, fields: [...byField.keys()] }; // 줄 자체가 오더로 읽히지 않는다 — 부른 쪽이 되돌린다
-    const bad = [...byField.keys()].filter((k) => !sameValue(k, d.o[k], target[k]) || (k === "하차시간" && (!sameValue("하차일", d.o.하차일, target.하차일) || !sameValue("상차일", d.o.상차일, target.상차일))));
+    const bad = [...byField.keys()].filter((k) => !pushSame(k, d.o[k], target[k]) || (k === "하차시간" && (!sameValue("하차일", d.o.하차일, target.하차일) || !sameValue("상차일", d.o.상차일, target.상차일))));
     if (!bad.length) return { row, writeRow, d, fields: [...byField.keys()] };
     d.undo();
     // ⭐ 2026-11-17 운임 · 특수운임을 추가 칸까지 같이 써 봤는데 똑같이 읽히지 않으면 → 예전 방식(운송료 칸만)으로 한 번 더
@@ -403,7 +413,7 @@ export function planUpdate(ctx, before, after, opts = {}) {
   const sb = { ...(before._sheetBase || {}) };
   changed.forEach((k) => { if (sameValue(k, o[k], after[k])) { pk.delete(k); delete sb[k]; } else { pk.add(k); sb[k] = o[k] ?? ""; } });
   const cells = cellsOf(title, rowNo, base, fit.writeRow);
-  return { ok: true, kind: "update", tab: title, row: rowNo, cells, pushed: fit.fields.filter((k) => sameValue(k, o[k], after[k])), unpushed: changed.filter((k) => !sameValue(k, o[k], after[k])),
+  return { ok: true, kind: "update", tab: title, row: rowNo, cells, pushed: fit.fields.filter((k) => pushSame(k, o[k], after[k])), unpushed: changed.filter((k) => !pushSame(k, o[k], after[k])),
     // _sheetKeys: 지금 시트에서 읽히는 칸 — 프로그램에서 배차해 시트에 쓴 차량 · 기사를 나중에 시트에서 지우면 프로그램에서도 비워지게(없으면 "시트에 원래 없던 값"으로 보고 남겨 뒀다)
     docPatch: { 이전출처: `${title}!${rowNo}`, _programKeys: [...pk], _sheetBase: sb, _sheetKeys: uniq([...(Array.isArray(before._sheetKeys) ? before._sheetKeys : []), ...Object.keys(o).filter((k) => !k.startsWith("__") && !empty(o[k]))]) } };
 }
@@ -457,7 +467,7 @@ export function planCreate(ctx, order, title, { rowCount = 0, atRow = 0, taken =
   const pk = []; const sb = {};
   // 시트에서 읽히는 값이 프로그램 값과 다른 칸은 프로그램 값을 둔다(등록일 · 하차일 · 거래처명 등) — 탭에서 오는 값(이전출처 · 담당노선구분)만 시트를 따른다
   keys.forEach((k) => { if (k === "이전출처" || k === "담당노선구분") return; if (!sameValue(k, order[k], o[k])) { pk.push(k); sb[k] = o[k]; } });
-  return { ok: true, kind: "create", tab: title, row: rowNo, cells: cellsOf(title, rowNo, base, fit.writeRow), pushed: fit.fields.filter((k) => sameValue(k, o[k], order[k])), unpushed: fields.filter((k) => !sameValue(k, o[k], order[k])),
+  return { ok: true, kind: "create", tab: title, row: rowNo, cells: cellsOf(title, rowNo, base, fit.writeRow), pushed: fit.fields.filter((k) => pushSame(k, o[k], order[k])), unpushed: fields.filter((k) => !pushSame(k, o[k], order[k])),
     docPatch: { 이전출처: `${title}!${rowNo}`, 담당노선구분: title, 시트연동: true, _sheetKeys: keys, _programKeys: pk, _sheetBase: sb, ...(!cell(order0.마감월) && cell(o.마감월) === cell(order.마감월) ? { 마감월: order.마감월 } : {}) } };
 }
 
