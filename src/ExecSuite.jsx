@@ -6,6 +6,7 @@
 //  · 결재함(ExecApprovals): 최종 결재자 화면 — 결재 현황 요약 + 전자결재(결재함·기안함·결재선·인수인계)
 //  · 직원 일정(TeamSchedule): 연차·반차·외근·출장·병가·경조사를 달력으로(결재 완료 = 확정, 진행 중 = 점선)
 //  매출 통계는 홈과 같은 방식 — 올해 지난 기간 합계(하루 1번 계산·저장, homePastStats v4) + 최근 실시간 오더.
+import { OrdersWeatherDeck } from "./publicDataMain"; // 🌦 2026-11-18 운행 지역 날씨(골드)
 import React from "react";
 import { arrowFocus } from "./useListKeys";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
@@ -502,6 +503,8 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
         <Basis className="mt-2.5 px-1"><span data-kp="exec-basis">매출 기준: 취소 · 운송사 전송을 제외한 전체 오더(배차중 · 승인대기 포함) · 매출관리는 배차완료 오더만 집계하므로 수치가 다를 수 있습니다</span>{isCeo && F.has ? " · 보유 자금은 경리 입력 예금 · 현금 잔액 기준" : ""}</Basis>
       </div>
 
+      {/* 🌦 2026-11-18 운행 지역 날씨 — 임원 화면(골드) · 오늘 · 내일 오더 지역 · 기상특보 */}
+      <OrdersWeatherDeck orders={dispatchData} theme="gold" />
       {/* ── 2. 이번 달 사업 흐름 ── */}
       <ExecPanel en={`BUSINESS FLOW · ${thisMonth.replace("-", ".")}`} title="이번 달 오더 · 정산 현황" sub={`오더 접수부터 매출총이익까지 · ${Number(thisMonth.slice(5))}월 1일 ~ ${dayNo}일 · 금액은 배차완료 오더 기준`}
         right={<GoLink onClick={() => onGo?.("정산관리")}>정산관리</GoLink>}>
