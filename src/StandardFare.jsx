@@ -5,6 +5,7 @@ import { db } from "./firebase";
 import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
 import { KOREAN_HOLIDAYS } from "./CustomDatePicker"; // ⭐ 2026-11-04 특수운임 제거
 import { CustomSelect } from "./CustomSelect";
+import { SpecialFareTag } from "./specialFareTag"; // 🏷 2026-11-18 자사운임표 이력 — 특수운임 붙은 오더 표시
 import { kpConfirm } from "./kpDialog";
 
 const VEHICLE_TYPES = [
@@ -1065,7 +1066,7 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
                               <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r._mergedTon || r.차량톤수}</td>
                               <td className="px-3 py-2.5 text-[13px] text-gray-700 text-center">{r.혼적 ? "Y" : ""}</td>
                               <td className="px-3 py-2.5 text-right text-[13px] font-bold text-gray-800">{Number(r.청구운임||0).toLocaleString()}</td>
-                              <td className="px-3 py-2.5 text-center"><FareLevelBadge level={r.fareLevel} /></td>
+                              <td className="px-3 py-2.5 text-center whitespace-nowrap"><FareLevelBadge level={r.fareLevel} /><SpecialFareTag row={r} size="sm" className="ml-1" /></td>
                               <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{Number(r.기사운임||0).toLocaleString()}</td>
                               <td className="px-3 py-2.5 text-right text-[13px] text-gray-700 font-medium">{orderProfit(r).toLocaleString()}</td>
                               <td className="px-3 py-2.5 text-[13px] text-gray-600 max-w-[120px] truncate" title={r.메모}>{r.메모}</td>

@@ -222,7 +222,7 @@ function MobilePinGate({ onVerified, accent = NAVY }) {
             <button
               onClick={hasBiometric ? () => { localStorage.removeItem(BIOMETRIC_KEY); localStorage.removeItem(BIOMETRIC_AUTO_KEY); setHasBiometric(false); setBioAuto(false); setError("생체인증이 해제되었습니다"); } : registerBiometric}
               disabled={bioLoading}
-              style={{ textAlign: "center", fontSize: 12, color: hasBiometric ? "#d1d5db" : "#6b7280", background: "none", border: "none", cursor: "pointer", fontFamily: "'Noto Sans KR', sans-serif" }}
+              style={{ textAlign: "center", fontSize: 12, padding: "8px 0", color: hasBiometric ? "#d1d5db" : "#6b7280", background: "none", border: "none", cursor: "pointer", fontFamily: "'Noto Sans KR', sans-serif" }}
             >
               {bioLoading ? "처리 중..." : hasBiometric ? "생체인증 해제" : "지문 / Face ID 등록"}
             </button>
@@ -235,9 +235,9 @@ function MobilePinGate({ onVerified, accent = NAVY }) {
                 localStorage.setItem(BIOMETRIC_AUTO_KEY, next ? "1" : "0");
                 setError(next ? "다음부터 자동으로 생체인증이 실행됩니다" : "자동 생체인증이 해제되었습니다");
               }}
-              style={{ textAlign: "center", fontSize: 12, color: bioAuto ? accent : "#9ca3af", background: "none", border: "none", cursor: "pointer", fontFamily: "'Noto Sans KR', sans-serif", fontWeight: bioAuto ? 700 : 400 }}
+              style={{ textAlign: "center", fontSize: 12, padding: "8px 0", color: bioAuto ? accent : "#9ca3af", background: "none", border: "none", cursor: "pointer", fontFamily: "'Noto Sans KR', sans-serif", fontWeight: bioAuto ? 700 : 400 }}
             >
-              {bioAuto ? "✓ 자동 생체인증 켜짐 (탭하여 해제)" : "자동 생체인증 설정 (카카오톡처럼)"}
+              {bioAuto ? "✓ 자동 생체인증 사용 중 (누르면 해제)" : "자동 생체인증 사용"}
             </button>
           )}
         </div>
@@ -252,9 +252,8 @@ function MobilePinGate({ onVerified, accent = NAVY }) {
 function toInt(v) { return parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0; }
 
 function fmtW(v) {
-  if (v >= 1e8) return `${(v / 1e8).toFixed(1)}억`;
-  if (v >= 1e6) return `${(v / 1e6).toFixed(1)}백만`;
-  if (v >= 1e4) return `${Math.round(v / 1e4)}만원`;
+  if (v >= 1e8) return `${(v / 1e8).toFixed(1)}억원`;
+  if (v >= 1e4) return `${Math.round(v / 1e4).toLocaleString()}만원`; // 📱 2026-11-17 "12.3백만" 대신 "1,230만원"
   return `${v.toLocaleString()}원`;
 }
 
@@ -355,9 +354,9 @@ function IntelDashboard({ dispatchData, accent = NAVY }) {
       {/* KPI 카드 */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, padding: "16px 16px 0" }}>
         {[
-          { label: "이번달 매출", val: fmtW(tmRev), sub: `${cyStr}.${cm}`, trend: tmTrend, primary: true },
-          { label: "이번달 수익", val: fmtW(tmProfit), sub: `${thisMonth.length}건 기준` },
-          { label: "이번달 건수", val: `${thisMonth.length}건`, sub: `전월 ${lastMonth.length}건` },
+          { label: "이번 달 매출", val: fmtW(tmRev), sub: `${cyStr}.${cm}`, trend: tmTrend, primary: true },
+          { label: "이번 달 수익", val: fmtW(tmProfit), sub: `${thisMonth.length}건 기준` },
+          { label: "이번 달 건수", val: `${thisMonth.length}건`, sub: `전월 ${lastMonth.length}건` },
           { label: "연간 누적 매출", val: fmtW(cyRev), sub: `${cyStr}년 기준` },
         ].map(({ label, val, sub, trend, primary }) => (
           <div key={label} style={{
@@ -404,7 +403,7 @@ function IntelDashboard({ dispatchData, accent = NAVY }) {
       {/* 상위 거래처 */}
       <div style={{ margin: "16px 16px 0", background: "white", borderRadius: 14, border: "1px solid #e5e7eb", overflow: "hidden" }}>
         <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid #f3f4f6", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: accent }}>이번달 상위 거래처</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: accent }}>이번 달 상위 거래처</span>
           <span style={{ fontSize: 11, color: "#9ca3af" }}>{cyStr}.{cm}</span>
         </div>
         <div style={{ padding: "4px 16px 12px" }}>
@@ -434,7 +433,7 @@ function IntelDashboard({ dispatchData, accent = NAVY }) {
       {/* 상위 기사 */}
       <div style={{ margin: "16px 16px 0", background: "white", borderRadius: 14, border: "1px solid #e5e7eb", overflow: "hidden" }}>
         <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid #f3f4f6", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <span style={{ fontSize: 13, fontWeight: 800, color: accent }}>이번달 상위 기사</span>
+          <span style={{ fontSize: 13, fontWeight: 800, color: accent }}>이번 달 상위 기사</span>
           <span style={{ fontSize: 11, color: "#9ca3af" }}>{cyStr}.{cm} 배차건수</span>
         </div>
         <div style={{ padding: "4px 16px 12px" }}>

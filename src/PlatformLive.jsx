@@ -52,7 +52,7 @@ const Ctx = React.createContext(null);
 export const usePlatformLive = () => React.useContext(Ctx);
 
 // 최고관리자 화면(PlatformCenter) 맨 바깥에 한 번만 — 자식 화면들이 같은 구독을 나눠 쓴다
-export function PlatformLiveProvider({ children }) {
+export function PlatformLiveProvider({ children, demo = null }) { // 🛰 2026-11-18 demo — 개발 /preview-admin 화면 점검용(실제 화면에선 안 씀)
   const users = useLiveCol(() => collection(db, "users"), []);
   const sessions = useLiveCol(() => query(collection(db, "loginSessions"), where("active", "==", true)), []);
   const tApps = useLiveCol(() => collection(db, "transportApplications"), []);
@@ -202,7 +202,7 @@ export function PlatformLiveProvider({ children }) {
       planMap, invoiceMap, planReqMap, month,
     };
   }, [users, sessions, tApps, cApps, planReqs, inquiries, plans, invoices, supportReqs, now]);
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={demo || value}>{children}</Ctx.Provider>;
 }
 
 // ─── 캐시(집계 문서) + 실시간 합치기 ───

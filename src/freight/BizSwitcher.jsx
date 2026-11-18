@@ -29,7 +29,7 @@ export default function BizSwitcher({ modules = [], current = "inland", canGroup
   return (
     <>
       {!hideButton && <button ref={btnRef} type="button" onKeyDown={(e) => { if (!open && e.key === "ArrowDown") { e.preventDefault(); setOpen(true); } }} onClick={() => setOpen(true)} data-testid="biz-switch" title="업무 전환"
-        className="h-[34px] pl-2.5 pr-2 rounded-xl inline-flex items-center gap-1.5 bg-white text-[#0F1A30] text-[12.5px] font-black whitespace-nowrap shadow-[0_4px_12px_rgba(0,0,0,.25)] hover:bg-[#EEF3FB] transition">
+        className="h-[34px] pl-2.5 pr-2 rounded-xl inline-flex items-center gap-1.5 bg-white text-[#0F1A30] text-[12.5px] font-black whitespace-nowrap border border-[#DCE3EE] shadow-[0_2px_6px_rgba(15,26,48,.12)] hover:border-[#1B2B4B] transition">
         <ModeIcon mode={cur.key} size={14} />{cur.short}
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
       </button>}

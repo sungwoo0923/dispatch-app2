@@ -7,11 +7,8 @@ import {
 } from "./freightCore";
 import { setLegStatus, removeLeg, requestHandoff, updateLeg } from "./freightStore";
 import FreightForm from "./FreightForm";
-import { Card, Btn, Sel, Seg, Empty, StatusChip, DueChip, Stepper, Drawer, ContainerArt, RouteArt, routeEnds, ModeChip, MODE_NAME, MONO } from "./ui";
-import { profitCls, profitRateCls, profitColor } from "../marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
-
-const TH = "px-3 h-10 text-left text-[11.5px] font-extrabold text-white/80 whitespace-nowrap";
-const TD = "px-3 h-[52px] text-[13px] text-[#3A4A66] whitespace-nowrap";
+import { Card, Btn, Sel, Seg, Empty, StatusChip, DueChip, Stepper, Drawer, ContainerArt, RouteArt, routeEnds, ModeChip, MODE_NAME, MONO, TH, TD, THEAD_BG, SearchIn } from "./ui";
+import { profitCls } from "../marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
 const mono = { fontFamily: MONO, fontVariantNumeric: "tabular-nums" };
 
 // 영역별 표 칸
@@ -101,11 +98,11 @@ export function LegDrawer({ job, jobs, modules, me, canEdit, onClose, onEdit, on
           {!linked && !canMakeOrder && next && job.status !== HANDOFF_STATUS && <Btn kind="primary" disabled={busy} onClick={() => run(() => setLegStatus(job, next, me))}>다음 단계 · {next}</Btn>}
         </div>
       </>) : null}>
-      <div className="rounded-2xl p-4 text-white flex flex-col items-center" style={{ background: "linear-gradient(135deg,#0B1428 0%,#14203A 45%,#1B2B4B 75%,#2D4C82 100%)" }}>
-        {job.mode === "container" ? <ContainerArt size={job.size} cntrNo={fmtCntrNo(job.cntrNo)} line={job.line} height={92} />
-          : job.mode === "inland" ? <div className="py-4 text-[15px] font-black">{job.pickupPlace || "상차지"} → {job.dropPlace || "하차지"}</div>
-          : <RouteArt mode={job.mode} {...ends} pct={progressPct(job)} />}
-        <div className="mt-2 flex items-center gap-2 flex-wrap justify-center">
+      <div className="rounded-xl border border-[#E3E8F0] bg-white p-3 flex flex-col items-center">
+        {job.mode === "container" ? <ContainerArt size={job.size} cntrNo={fmtCntrNo(job.cntrNo)} line={job.line} height={72} dark={false} />
+          : job.mode === "inland" ? <div className="py-3 text-[14px] font-extrabold text-[#0F1A30]">{job.pickupPlace || "상차지"} → {job.dropPlace || "하차지"}</div>
+          : <RouteArt mode={job.mode} {...ends} pct={progressPct(job)} dark={false} height={72} />}
+        <div className="mt-1.5 flex items-center gap-3 flex-wrap justify-center">
           <StatusChip job={job} />
           {dls.slice(0, 3).map((d) => <DueChip key={d.key} due={{ ...d, ...dueInfo(d.at, now) }} />)}
         </div>
@@ -118,12 +115,12 @@ export function LegDrawer({ job, jobs, modules, me, canEdit, onClose, onEdit, on
       </Card>
 
       {linked && (
-        <div className="rounded-2xl px-4 py-3 border border-[#E3E8F0] bg-white text-[13px] font-bold text-[#3A4A66]">
-          {job._orderMissing ? "연결된 배차 오더를 찾지 못했습니다(삭제됐거나 조회 기간 밖)." : "배차 오더와 연결된 건입니다. 기사 · 금액 · 진행 상태는 배차현황에서 바꾸면 여기에 자동으로 반영됩니다."}
+        <div className="rounded-xl px-4 py-2.5 border border-[#E3E8F0] bg-white text-[13px] font-semibold text-[#3A4A66]">
+          {job._orderMissing ? "연결된 배차 오더를 찾지 못했어요(삭제됐거나 조회 기간 밖이에요)." : "배차 오더와 연결된 건이에요. 기사 · 금액 · 진행 상태는 배차현황에서 바꾸면 여기에 자동으로 반영돼요."}
         </div>
       )}
       {over.days > 0 && (
-        <div className="rounded-2xl px-4 py-3 border border-[#E3E8F0] bg-[#F5F8FD] text-[13px] font-bold text-[#C2362B]">
+        <div className="rounded-xl px-4 py-2.5 border border-[#E3E8F0] bg-white text-[13px] font-bold text-[#C2362B]">
           {job.mode === "container" ? "반납 기한" : "프리타임"}을 {over.days}일 넘겼습니다{over.cost > 0 ? ` · 예상 초과 비용 ${won(over.cost)}원` : " · 하루 비용을 넣으면 예상 금액이 나옵니다"}.
         </div>
       )}
@@ -154,7 +151,7 @@ export function LegDrawer({ job, jobs, modules, me, canEdit, onClose, onEdit, on
       <Card title="손익" en="P&L" right={<span className="text-[12px] font-bold text-[#7A89A3]">Job 전체 이익 <b className={profitCls(jobPnl.profit, "text-[#0F1A30]")}>{won(jobPnl.profit)}원</b></span>}>
         <div className="grid grid-cols-3 gap-2">
           {[["청구", pnl.sale], ["지급", pnl.cost], ["이익", pnl.profit]].map(([l, v]) => (
-            <div key={l} className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2.5"><div className="text-[11.5px] font-bold text-[#7A89A3]">{l}</div><div className={`text-[16px] font-black tabular-nums ${l === "이익" ? profitCls(v, "text-[#0F1A30]") : "text-[#0F1A30]"}`}>{won(v)}</div></div>
+            <div key={l} className="rounded-lg bg-white border border-[#E3E8F0] px-3 py-2"><div className="text-[11.5px] font-bold text-[#7A89A3]">{l}</div><div className={`text-[15px] font-black tabular-nums ${l === "이익" ? profitCls(v, "text-[#0F1A30]") : "text-[#0F1A30]"}`}>{won(v)}</div></div>
           ))}
         </div>
         {[["청구", job.sales], ["지급", job.costs]].map(([l, lines]) => (Array.isArray(lines) && lines.length > 0 ? (
@@ -166,10 +163,10 @@ export function LegDrawer({ job, jobs, modules, me, canEdit, onClose, onEdit, on
       </Card>
 
       <Card title="Job 연결 구간" en="LINKED LEGS">
-        {siblings.length === 0 && <div className="text-[13px] text-[#9AA9C3] font-semibold">아직 이어진 구간이 없습니다.</div>}
-        <div className="space-y-1.5">
+        {siblings.length === 0 && <div className="text-[13px] text-[#9AA9C3] font-semibold">아직 이어진 구간이 없어요.</div>}
+        <div>
           {siblings.map((s) => (
-            <button key={s.id} type="button" onClick={() => onOpenLeg?.(s)} className="w-full flex items-center gap-2 px-3 h-11 rounded-xl border border-[#E3E8F0] bg-white hover:border-[#2D4C82] text-left">
+            <button key={s.id} type="button" onClick={() => onOpenLeg?.(s)} className="w-full flex items-center gap-2.5 px-1 h-10 border-b border-[#EEF1F6] last:border-b-0 hover:bg-[#F7F9FC] text-left">
               <ModeChip mode={s.mode} /><span className="text-[12.5px] font-extrabold text-[#0F1A30] tabular-nums">{s.refNo}</span><span className="text-[12.5px] text-[#5B6B85] truncate flex-1">{legTitle(s)}</span><StatusChip job={s} />
             </button>
           ))}
@@ -227,7 +224,7 @@ export default function FreightBoard({ mode, jobs, allJobs, handoffOnly = false,
   if (edit) {
     return (
       <div>
-        <div className="flex items-center gap-2 mb-4"><Btn size="sm" onClick={() => setEdit(null)}>← 목록으로</Btn><span className="text-[14px] font-black text-[#0F1A30]">{edit.refNo} {edit.status === HANDOFF_STATUS ? "인계 접수" : "수정"}</span></div>
+        <div className="flex items-center gap-2 mb-3"><Btn size="sm" onClick={() => setEdit(null)}>← 목록으로</Btn><span className="text-[14px] font-black text-[#0F1A30]">{edit.refNo} {edit.status === HANDOFF_STATUS ? "인계 접수" : "수정"}</span></div>
         <FreightForm {...formProps} mode={edit.mode} initial={edit} onDone={() => setEdit(null)} onCancel={() => setEdit(null)} />
       </div>
     );
@@ -236,36 +233,32 @@ export default function FreightBoard({ mode, jobs, allJobs, handoffOnly = false,
   return (
     <>
       <Card pad={false}>
-        <div className="p-4 flex items-center gap-2.5 flex-wrap border-b border-[#EEF1F6]">
+        <div className="px-3 py-2.5 flex items-center gap-2 flex-wrap border-b border-[#EEF1F6]">
           {!handoffOnly && <Seg size="sm" value={scope} onChange={setScope} options={["진행", "완료", "전체"]} />}
           {!handoffOnly && mode !== "inland" && <Seg size="sm" value={dir} onChange={setDir} options={[["", "전체"], ["수출", "수출"], ["수입", "수입"]]} />}
-          {!handoffOnly && <div className="w-[150px]"><Sel value={st} onChange={setSt} options={statusList(mode)} placeholder="상태 전체" /></div>}
-          <div className="relative flex-1 min-w-[200px] max-w-[360px]">
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="번호 · 거래처 · 기사 검색"
-              className="w-full h-10 border border-[#DCE3EE] rounded-xl pl-9 pr-3 text-[13.5px] font-semibold text-[#0F1A30] placeholder:text-[#9AA9C3] focus:outline-none focus:border-[#2D4C82]" />
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9AA9C3]" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
-          </div>
+          {!handoffOnly && <div className="w-[140px]"><Sel value={st} onChange={setSt} options={statusList(mode)} placeholder="상태 전체" /></div>}
+          <SearchIn value={q} onChange={setQ} placeholder="번호 · 거래처 · 기사 검색" className="flex-1 min-w-[180px] max-w-[320px]" />
           <span className="ml-auto text-[12.5px] font-bold text-[#7A89A3] tabular-nums">{rows.length}건</span>
           {onNew && canEdit && !handoffOnly && <Btn kind="primary" size="sm" onClick={onNew}>+ 등록</Btn>}
         </div>
         {rows.length === 0 ? (
-          <Empty mode={mode} title={handoffOnly ? "받은 인계 요청이 없습니다" : "조건에 맞는 건이 없습니다"} desc={handoffOnly ? "다른 팀이 인계를 요청하면 여기에 뜹니다." : "검색 · 상태 조건을 바꿔 보세요."} action={onNew && canEdit && !handoffOnly ? <Btn kind="primary" onClick={onNew}>+ 새로 등록</Btn> : null} />
+          <Empty mode={mode} title={handoffOnly ? "받은 인계 요청이 없어요" : "조건에 맞는 건이 없어요"} desc={handoffOnly ? "다른 팀이 인계를 요청하면 여기에 보여요." : "검색 · 상태 조건을 바꿔 보세요."} action={onNew && canEdit && !handoffOnly ? <Btn kind="primary" onClick={onNew}>+ 새로 등록</Btn> : null} />
         ) : (
           <>
           {/* 휴대폰 — 표 대신 카드 */}
           <div className="md:hidden divide-y divide-[#EEF1F6]">
             {rows.map((j) => { const due = topDeadline(j, now); const p = legPnl(j); return (
-              <button key={j.id} type="button" onClick={() => setOpenId(j.id)} className="w-full text-left px-4 py-3 active:bg-[#F5F8FD]">
+              <button key={j.id} type="button" onClick={() => setOpenId(j.id)} className="w-full text-left px-3.5 py-2.5 active:bg-[#F7F9FC]">
                 <div className="flex items-center gap-2"><span className="text-[12.5px] font-black text-[#0F1A30]" style={mono}>{j.refNo}</span><span className="text-[11px] font-bold text-[#9AA9C3]" style={mono}>{j.jobNo}</span><span className="ml-auto"><StatusChip job={j} /></span></div>
-                <div className="mt-1 text-[14px] font-black text-[#0F1A30] truncate">{j.client || "-"}</div>
-                <div className="text-[12.5px] font-semibold text-[#5B6B85] truncate">{legTitle(j) || "-"}</div>
+                <div className="mt-0.5 text-[13.5px] font-bold text-[#0F1A30] truncate">{j.client || "-"}</div>
+                <div className="text-[12.5px] font-medium text-[#5B6B85] truncate">{legTitle(j) || "-"}</div>
                 <div className="mt-1.5 flex items-center gap-2"><Stepper job={j} compact /><span className="ml-auto flex items-center gap-2">{due && <DueChip due={due} />}{(p.sale || p.cost) ? <span className={`text-[12px] font-black tabular-nums ${profitCls(p.profit, "text-[#0F1A30]")}`}>{won(p.profit)}</span> : null}</span></div>
               </button>
             ); })}
           </div>
           <div className="overflow-x-auto hidden md:block">
             <table className="w-full border-collapse min-w-[980px]">
-              <thead style={{ background: "#0F1A30" }}>
+              <thead style={{ background: THEAD_BG }}>
                 <tr>
                   <th className={TH}>번호</th><th className={TH}>거래처</th>
                   {cols.map(([l]) => <th key={l} className={TH}>{l}</th>)}
@@ -276,11 +269,11 @@ export default function FreightBoard({ mode, jobs, allJobs, handoffOnly = false,
                 {rows.map((j) => {
                   const due = topDeadline(j, now); const p = legPnl(j);
                   return (
-                    <tr key={j.id} onClick={() => setOpenId(j.id)} className="border-b border-[#EEF1F6] hover:bg-[#F5F8FD] cursor-pointer">
+                    <tr key={j.id} onClick={() => setOpenId(j.id)} className="border-b border-[#EEF1F6] hover:bg-[#F7F9FC] cursor-pointer">
                       <td className={TD}><div className="font-black text-[#0F1A30] text-[12.5px]" style={mono}>{j.refNo}</div><div className="text-[11px] font-bold text-[#9AA9C3]" style={mono}>{j.jobNo}</div></td>
                       <td className={`${TD} font-bold text-[#0F1A30] max-w-[180px] truncate`}>{j.client || "-"}</td>
                       {cols.map(([l, fn]) => <td key={l} className={`${TD} max-w-[190px] truncate`}>{fn(j)}</td>)}
-                      <td className={TD}><div className="flex flex-col gap-1"><StatusChip job={j} /><Stepper job={j} compact /></div></td>
+                      <td className={TD}><div className="flex flex-col gap-1 py-1"><StatusChip job={j} /><Stepper job={j} compact /></div></td>
                       <td className={TD}><DueChip due={due} /></td>
                       <td className={`${TD} text-right font-black tabular-nums ${profitCls(p.profit, "text-[#0F1A30]")}`}>{p.sale || p.cost ? won(p.profit) : "-"}</td>
                     </tr>

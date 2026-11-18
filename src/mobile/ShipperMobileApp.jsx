@@ -336,7 +336,7 @@ async function shipperRequestDriverSwap(order, user) {
     alert("이미 기사변경을 요청했습니다.\n운송사의 승인을 기다리고 있습니다.");
     return false;
   }
-  if (!(await kpConfirm(`배정된 기사(${order.이름 || order.차량번호 || "-"})를 취소하고 다시 배차해달라고 요청하시겠습니까?`))) return false;
+  if (!(await kpConfirm(`배정된 기사(${order.이름 || order.차량번호 || "-"})의 배차를 취소하고 재배차를 요청하시겠습니까?`))) return false;
   await updateDoc(doc(db, "orders", order.id), {
     기사취소요청: true, 기사취소요청일시: serverTimestamp(), 기사취소요청자: user?.email || "",
   });
@@ -358,7 +358,7 @@ function HistoryViewerModal({ history = [], onClose }) {
           <button onClick={onClose} className="text-gray-400 text-lg">×</button>
         </div>
         <div className="px-4 pb-6 overflow-y-auto space-y-2">
-          {items.length === 0 && <div className="text-center text-gray-400 text-sm py-8">수정이력이 없습니다.</div>}
+          {items.length === 0 && <div className="text-center text-gray-400 text-sm py-8">수정 이력이 없습니다.</div>}
           {items.map((h, i) => (
             <div key={i} className="border-b border-gray-100 pb-2 last:border-b-0">
               <div className="flex items-center gap-2 text-[11px] text-gray-400 mb-0.5">
@@ -605,7 +605,7 @@ export default function ShipperMobileApp() {
       const cur = o.배차거절 === true;
       const prev = prevRejectRef.current[o.id];
       if (prev === false && cur === true) {
-        pushNotif({ type: "cancel", title: "배차요청 거절", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"} · 재요청하거나 삭제해주세요` });
+        pushNotif({ type: "cancel", title: "배차요청 거절", desc: `${o.거래처명 || ""} | ${o.상차지명 || "-"} → ${o.하차지명 || "-"} · 다시 요청하거나 삭제해 주세요` });
       }
       prevRejectRef.current[o.id] = cur;
     });
@@ -863,7 +863,7 @@ export default function ShipperMobileApp() {
         {page === "order" && (
           <ShipperOrderM user={user} userData={userData} orders={orders} showToast={showToast}
             editData={editOrderData}
-            onDone={(msg) => { setEditOrderData(null); setPage("history"); showToast(msg || (editOrderData ? "수정 완료!" : "배차요청 완료!")); }}
+            onDone={(msg) => { setEditOrderData(null); setPage("history"); showToast(msg || (editOrderData ? "수정이 완료되었습니다." : "배차요청이 등록되었습니다.")); }}
             onBack={() => { setEditOrderData(null); setPage(editOrderData ? "history" : "home"); }} />
         )}
         {page === "history" && (
@@ -1172,7 +1172,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
     }));
     setCargoRows([EMPTY_CARGO_ROW()]);
     setCopyOpen(false);
-    showToast("오더 복사 완료");
+    showToast("오더를 복사했습니다.");
   };
 
   const upsertPlace = async (name, address, 담당자명, 담당자번호, type) => {
@@ -1187,8 +1187,8 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
 
   const submit = async () => {
     if (!form.상차지명 || !form.하차지명) { alert("상차지 / 하차지는 필수입니다."); return; }
-    if (!cargoRows.some((r) => r.qty)) { alert("화물내용을 입력해주세요."); return; }
-    if (cargoRows.some((r) => r.unit === "파레트" && r.qty && !r.palletCo)) { alert("파렛트사를 선택해주세요."); return; }
+    if (!cargoRows.some((r) => r.qty)) { alert("화물내용을 입력해 주세요."); return; }
+    if (cargoRows.some((r) => r.unit === "파레트" && r.qty && !r.palletCo)) { alert("파렛트사를 선택해 주세요."); return; }
     setSubmitting(true);
     try {
       await upsertPlace(form.상차지명, form.상차지주소, form.상차지담당자, form.상차지담당자번호, "상차");
@@ -1251,7 +1251,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
       onDone();
     } catch (e) {
       console.error(e);
-      alert(isEdit ? "수정 실패" : "등록 실패");
+      alert(isEdit ? "수정하지 못했습니다. 잠시 후 다시 시도해 주세요." : "등록하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setSubmitting(false);
     }
@@ -1301,7 +1301,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
             <input type="checkbox" checked={!!fixedTransport}
               onChange={(e) => {
                 if (e.target.checked) {
-                  if (!form.운송사명) { alert("운송사를 먼저 선택하세요"); return; }
+                  if (!form.운송사명) { alert("운송사를 먼저 선택해 주세요."); return; }
                   const d = { name: form.운송사명, code: form.운송사코드 };
                   setFixedTransport(d); localStorage.setItem("fixedTransport", JSON.stringify(d));
                 } else {
@@ -1514,7 +1514,7 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
       <button onClick={submit} disabled={submitting}
         className="w-full py-4 text-white rounded-2xl font-bold text-base shadow mb-8 disabled:opacity-50"
         style={{ background: NAVY }}>
-        {submitting ? (isEdit ? "저장중..." : "등록중...") : (isEdit ? "수정 저장" : "배차요청 등록")}
+        {submitting ? (isEdit ? "저장 중..." : "등록 중...") : (isEdit ? "수정 저장" : "배차요청 등록")}
       </button>
 
       {/* 오더 복사 모달 */}
@@ -1898,7 +1898,7 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
 
       {order.수정요청 && order.수정요청데이터 && (
         <div className="bg-white rounded-xl border border-sky-200 overflow-hidden">
-          <div className="px-3 py-2 bg-sky-50 text-[12px] font-bold text-sky-700 border-b border-sky-200">수정요청 내용 (승인 대기중)</div>
+          <div className="px-3 py-2 bg-sky-50 text-[12px] font-bold text-sky-700 border-b border-sky-200">수정요청 내용 (승인 대기 중)</div>
           <div className="px-3 py-2 space-y-1.5 max-h-52 overflow-y-auto">
             {Object.entries(order.수정요청데이터)
               .filter(([k, v]) => k !== "화물목록" && String(order[k] ?? "") !== String(v ?? ""))
@@ -1978,7 +1978,7 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
 
         <DetailGroup label={`첨부사진 ${attachments.length > 0 ? `(${attachments.length}장)` : ""}`} last>
           {loadingAttach ? (
-            <div className="py-4 text-center text-sm text-gray-400">로딩 중...</div>
+            <div className="py-4 text-center text-sm text-gray-400">불러오는 중...</div>
           ) : attachments.length === 0 ? (
             <div className="py-4 text-center text-sm text-gray-400">첨부된 파일이 없습니다</div>
           ) : (
@@ -2048,7 +2048,7 @@ function ShipperMyPageM({ user, userData, onBack, showToast, orders }) {
       showToast("비밀번호가 변경되었습니다.");
       setPwForm({ current: "", next: "", confirm: "" });
     } catch (e) {
-      alert("비밀번호 변경 실패: " + (e.code === "auth/wrong-password" ? "현재 비밀번호가 틀립니다." : e.message));
+      alert("비밀번호 변경 실패: " + (e.code === "auth/wrong-password" ? "현재 비밀번호가 올바르지 않습니다." : e.message));
     } finally {
       setPwSaving(false);
     }
@@ -2235,7 +2235,7 @@ function ShipperInquiryM({ user, userData, onBack, showToast }) {
   }, [user]);
 
   const submit = async () => {
-    if (!form.title.trim() || !form.content.trim()) { alert("제목과 내용을 모두 입력해주세요."); return; }
+    if (!form.title.trim() || !form.content.trim()) { alert("제목과 내용을 모두 입력해 주세요."); return; }
     setSubmitting(true);
     try {
       const docRef = await addDoc(collection(db, "inquiries"), {
@@ -2345,7 +2345,7 @@ function ShipperInquiryM({ user, userData, onBack, showToast }) {
             <div>
               <div className="text-xs text-gray-500 mb-1">내용</div>
               <textarea className="input-m" rows={6} style={{ resize: "none" }} value={form.content}
-                onChange={(e) => setForm(p => ({ ...p, content: e.target.value }))} placeholder="문의 내용을 상세히 작성해주세요" />
+                onChange={(e) => setForm(p => ({ ...p, content: e.target.value }))} placeholder="문의 내용을 상세히 작성해 주세요" />
             </div>
             <div className="text-xs text-gray-400">회사: {userData?.companyName || ""} · 담당자: {userData?.name || user.email}</div>
             <button onClick={submit} disabled={submitting}
@@ -2674,8 +2674,8 @@ function ShipperSettingsM({ onBack, showToast, uiScale, setUiScale }) {
     });
   };
 
-  const clearCache = () => {
-    if (!window.confirm("저장된 운송사 목록, 임시 설정을 초기화하시겠습니까?\n(등록된 오더 데이터에는 영향이 없습니다)")) return;
+  const clearCache = async () => {
+    if (!(await kpConfirm("저장된 운송사 목록과 임시 설정을 초기화하시겠습니까?\n(등록된 오더 데이터에는 영향이 없습니다)", { title: "설정 초기화", okText: "초기화", danger: true }))) return;
     ["transportList", "fixedTransport", "shipperUiScale"].forEach(k => localStorage.removeItem(k));
     showToast?.("초기화되었습니다.");
   };

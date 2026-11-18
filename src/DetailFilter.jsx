@@ -4,6 +4,7 @@
 //  · 검색어가 그 칸의 어떤 값과 "정확히 같으면"(띄어쓰기·대소문자 무시) 그 값만, 같은 값이 없으면 "포함"으로
 //    (원로 → 원로만 · 원로지스·원로지는 빠짐)
 //  · 실시간배차현황은 기간 없이(withDate=false)
+//  · ⭐ 2026-11-18 같은 칸을 여러 차에 고를 수 있다(1차 거래처명 A · 2차 거래처명 B = A 또는 B) — detailGroupOrder 로 값별 · 날짜별 정렬
 import React from "react";
 import { createPortal } from "react-dom";
 import CustomDatePicker from "./CustomDatePicker";
@@ -55,13 +56,43 @@ export function applyDetailFilter(rows, value, { getters, dateOf = defDateOf, wi
     const s = value.from <= value.to ? value.from : value.to, e = value.from <= value.to ? value.to : value.from;
     out = out.filter((r) => { const d = dateOf(r); return d && d >= s && d <= e; });
   }
-  for (const c of value.conds || []) {
-    if (!c?.f || !normClient(c.q)) continue;
-    const vals = new Set(); out.forEach((r) => vals.add(valOf(fm, c.f, r)));
-    const ok = makeClientMatcher(c.q, [...vals]);
-    out = out.filter((r) => ok(valOf(fm, c.f, r)));
+  // ⭐ 2026-11-18 같은 칸을 여러 차에 고르면(1차 거래처명 A · 2차 거래처명 B) "A 또는 B" — 다른 칸끼리는 차례로 좁힌다
+  for (const [f, qs] of condGroups(value.conds)) {
+    const vals = new Set(); out.forEach((r) => vals.add(valOf(fm, f, r)));
+    const oks = qs.map((q) => makeClientMatcher(q, [...vals]));
+    out = out.filter((r) => { const v = valOf(fm, f, r); return oks.some((ok) => ok(v)); });
   }
   return out;
+}
+// 칸별로 묶은 조건 — [[칸, [검색어…]], …] (처음 나온 차례대로)
+function condGroups(conds) {
+  const m = new Map();
+  for (const c of conds || []) {
+    if (!c?.f || !normClient(c.q)) continue;
+    if (!m.has(c.f)) m.set(c.f, []);
+    m.get(c.f).push(String(c.q).trim());
+  }
+  return [...m.entries()];
+}
+// ⭐ 2026-11-18 같은 칸에 값을 2개 이상 골랐으면 그 칸 값별로 묶어 보여 주기 위한 순번(고른 차례) — 없으면 null
+//  예) 1차 거래처명 A · 2차 거래처명 B → A 오더 0, B 오더 1 (쓰는 쪽에서 순번 → 날짜 순으로 정렬)
+export function detailGroupOrder(value, { getters, hide } = {}) {
+  const g = condGroups(value?.conds).find(([, qs]) => qs.length > 1);
+  if (!g) return null;
+  const fm = fieldMap(getters, hide);
+  const [f, qs] = g;
+  const cache = new Map();
+  return (r) => {
+    const v = valOf(fm, f, r);
+    if (cache.has(v)) return cache.get(v);
+    const nv = normClient(v);
+    // 정확히 같은 이름 먼저, 없으면 포함
+    let i = qs.findIndex((q) => normClient(q) === nv);
+    if (i < 0) i = qs.findIndex((q) => nv.includes(normClient(q)));
+    const out = i < 0 ? qs.length : i;
+    cache.set(v, out);
+    return out;
+  };
 }
 export const detailActive = (v) => !!v && ((v.conds || []).some((c) => c?.f && normClient(c.q)) || !!(v.from && v.to));
 export const detailSummary = (v, withDate = true) => {
@@ -175,17 +206,18 @@ function DetailFilterModal({ open, onClose, rows, value, onApply, withDate, gett
     let base = rows || [];
     if (withDate && from && to) base = applyDetailFilter(base, { from, to, conds: [] }, { getters, dateOf, withDate, hide });
     const out = [base];
-    for (const c of conds) {
-      const cur = out[out.length - 1];
-      out.push(c.f && normClient(c.q) ? applyDetailFilter(cur, { conds: [c] }, { getters, withDate: false, hide }) : cur);
-    }
+    conds.forEach((_, i) => { out.push(applyDetailFilter(base, { conds: conds.slice(0, i + 1) }, { getters, withDate: false, hide })); });
     return out;
   }, [open, rows, from, to, conds, withDate, getters, dateOf, hide]);
 
+  // ⭐ 2026-11-18 값 목록 — 앞 차례 조건으로 거른 오더에서 뽑되, 같은 칸(1차 거래처명 → 2차 거래처명)은 빼고 거른다
+  //  (예전엔 1차에서 거래처 A를 고르면 2차 거래처명 목록에 A만 남아 다른 거래처를 고를 수 없었다)
   const optionsFor = (i, f) => {
     if (!f) return [];
+    const src = applyDetailFilter(stages[0] || [], { conds: conds.slice(0, i).filter((c) => c.f !== f) }, { getters, withDate: false, hide });
+    const already = new Set(conds.filter((c, j) => j !== i && c.f === f && normClient(c.q)).map((c) => normClient(c.q)));
     const cnt = new Map();
-    for (const r of stages[i] || []) { const v = valOf(fm, f, r); if (v) cnt.set(v, (cnt.get(v) || 0) + 1); }
+    for (const r of src) { const v = valOf(fm, f, r); if (v && !already.has(normClient(v))) cnt.set(v, (cnt.get(v) || 0) + 1); }
     return [...cnt.entries()].map(([v, n]) => ({ v, n })).sort((a, b) => b.n - a.n || a.v.localeCompare(b.v, "ko"));
   };
 
@@ -259,11 +291,11 @@ function DetailFilterModal({ open, onClose, rows, value, onApply, withDate, gett
             <div className="flex items-center gap-2 mb-3">
               <span className="text-[10px] font-extrabold tracking-[0.22em] text-[#2D4C82]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>CONDITIONS</span>
               <span className="text-[13px] font-black text-[#0F1A30] whitespace-nowrap">조건</span>
-              <span className="hidden sm:inline text-[11.5px] font-bold text-[#9AA9C3]">위에서부터 차례로 좁혀집니다 · 같은 이름이 있으면 그 이름만</span>
+              <span className="hidden sm:inline text-[11.5px] font-bold text-[#9AA9C3]">위에서부터 차례로 좁혀집니다 · 같은 칸을 또 고르면 "또는"(거래처별 · 날짜별로 보여요)</span>
             </div>
             <div className="space-y-2">
               {conds.map((c, i) => {
-                const used = conds.filter((_, j) => j !== i).map((x) => x.f);
+                const orSame = i > 0 && c.f && conds.slice(0, i).some((x) => x.f === c.f); // 앞 차례와 같은 칸 = "또는"
                 return (
                   <div key={i} className="flex items-center gap-2">
                     <span className="w-9 sm:w-11 h-10 shrink-0 rounded-xl bg-[#0F1A30] text-white flex flex-col items-center justify-center leading-none">
@@ -273,8 +305,9 @@ function DetailFilterModal({ open, onClose, rows, value, onApply, withDate, gett
                     <select value={c.f} onChange={(e) => { setC(i, { f: e.target.value, q: "" }); }}
                       className={`${inp} w-[96px] sm:w-[150px] px-1.5 sm:px-3 text-[13px] sm:text-[14px] shrink-0 cursor-pointer ${c.f ? "" : "text-[#9AA9C3]"}`}>
                       <option value="">칸 선택</option>
-                      {fields.map((f) => <option key={f} value={f} disabled={used.includes(f)}>{f}</option>)}
+                      {fields.map((f) => <option key={f} value={f}>{f}</option>)}
                     </select>
+                    {orSame && <span className="shrink-0 h-6 px-1.5 rounded-md bg-[#EEF2F8] text-[#1B2B4B] text-[11px] font-black inline-flex items-center" title={`앞에서 고른 ${c.f}와 함께(또는) 찾아요`}>또는</span>}
                     <ValueInput field={c.f} q={c.q} onChange={(q) => setC(i, { q })} options={optionsFor(i, c.f)} onEnter={apply} inputRef={i === 0 ? firstInput : undefined} />
                     <span className="hidden sm:inline w-16 shrink-0 text-right text-[12px] font-black tabular-nums text-[#5B6B85]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
                       {c.f && normClient(c.q) ? `${(stages[i + 1] || []).length.toLocaleString()}건` : "—"}

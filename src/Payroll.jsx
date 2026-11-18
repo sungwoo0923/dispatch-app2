@@ -238,7 +238,7 @@ function PayBar({ pm, ym, setYm, tab, setTab, gate }) {
         <span className="flex-1" />
         {gate && (
           <div className="flex items-center gap-1.5 shrink-0" data-testid="payroll-unlocked-bar">
-            <span className="h-10 px-3 rounded-xl bg-white/[0.07] text-[14px] font-bold text-white/70 inline-flex items-center gap-1.5 whitespace-nowrap" title="급여 비밀번호로 연 남은 시간이에요. 10분 동안 손대지 않으면 자동으로 잠겨요" aria-label="잠금까지 남은 시간"><GateTimer until={gate.until} /></span>
+            <span className="h-10 px-3 rounded-xl bg-white/[0.07] text-[14px] font-bold text-white/70 inline-flex items-center gap-1.5 whitespace-nowrap" title="이 시간 동안 사용하지 않으면 회계 · 자금관리가 자동으로 잠겨요(30분)" aria-label="잠금까지 남은 시간"><GateTimer until={gate.until} /></span>
             <button type="button" onClick={gate.lock} className="h-10 px-3 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black whitespace-nowrap" data-testid="payroll-lock">잠그기</button>
           </div>
         )}
@@ -265,7 +265,7 @@ function RunActions({ pm, gate, dark = false }) {
     !ro && st === "confirmed" && ["전체 확정 해제", () => pm.unlockRows(rows), false, "payroll-unlock-all", "잠금을 풀고 다시 고쳐요. 발행된 명세서와 직원 서명은 내려가요"],
     !ro && st === "paid" && ["지급 기록 취소", pm.unpay, false, "payroll-unpay", "지급 완료 기록을 되돌려요. 장부의 급여 지출 줄도 지워져요"],
     pm.shownSlips.some((s) => s.status !== "draft") && ["확정분 전체 인쇄", () => printPayslips(pm.shownSlips.filter((s) => s.status !== "draft"), pm.company), false, "payroll-print-all", ""],
-    gate?.canChange && ["급여 비밀번호 변경", gate.change, false, "pw-change", ""],
+    gate?.canChange && ["관리 비밀번호 변경", gate.change, false, "pw-change", ""],
   ].filter(Boolean);
   React.useEffect(() => { if (!more) return undefined; const h = () => setMore(false); window.addEventListener("click", h); return () => window.removeEventListener("click", h); }, [more]);
   if (!next && !moreItems.length) return null;

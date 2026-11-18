@@ -119,11 +119,11 @@ const MobileSelect = React.forwardRef(function MobileSelect(
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 18px 10px" , borderBottom: "1px solid #EEF1F6" }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: "#0F1A30", letterSpacing: "-0.01em" }}>{sheetTitle}</div>
-              <button type="button" onClick={() => setOpen(false)} style={{ fontSize: 13, fontWeight: 700, color: "#5B6B85", padding: "6px 4px", border: 0, background: "transparent", fontFamily: "inherit" }}>닫기</button>
+              <button type="button" onClick={() => setOpen(false)} style={{ fontSize: 14, fontWeight: 700, color: "#5B6B85", padding: "8px 10px", marginRight: -10, minHeight: 40, border: 0, background: "transparent", fontFamily: "inherit" }}>닫기</button>
             </div>
             <div ref={listRef} style={{ overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "6px 10px 12px" }}>
               {selectable.length === 0 && (
-                <div style={{ padding: "18px 8px", fontSize: 14, color: "#94A3B8", textAlign: "center" }}>항목 없음</div>
+                <div style={{ padding: "18px 8px", fontSize: 14, color: "#94A3B8", textAlign: "center" }}>선택할 항목이 없습니다</div>
               )}
               {options.map((o, i) => {
                 if (o.header) {
@@ -146,7 +146,7 @@ const MobileSelect = React.forwardRef(function MobileSelect(
                       background: on ? "#EEF3FB" : "transparent",
                     }}
                   >
-                    <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.label}</span>
+                    <span style={{ minWidth: 0, padding: "10px 0", lineHeight: 1.35, overflowWrap: "anywhere" }}>{o.label}</span>{/* 📱 2026-11-17 긴 항목(거래처명 등)이 … 로 잘리지 않게 줄바꿈 */}
                     {on && (
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1B2B4B" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden="true">
                         <path d="M5 12.5l4.5 4.5L19 7.5" />

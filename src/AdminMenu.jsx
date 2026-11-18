@@ -319,6 +319,12 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     const next = !u.isMaster;
     // ⭐ 2026-11-09 마스터는 운송사마다 1명 — 회사 마스터가 다른 직원을 마스터로 지정하면 "위임"으로 처리(본인은 마스터에서 빠짐)
     if (next && !isTotalMaster) { await delegateMaster(u); return; }
+    // 👑 2026-11-18 최고관리자도 이미 마스터가 있는 운송사에는 또 지정할 수 없다(사용자 요청 — 예전엔 기존 마스터를 말없이 해제하고 바꿨다)
+    if (next) {
+      const co = u.companyName || DEFAULT_COMPANY;
+      const other = users.find((x) => x.id !== u.id && x.isMaster === true && x.role !== "shipper" && x.employmentStatus !== "퇴사" && (x.companyName || DEFAULT_COMPANY) === co);
+      if (other) return alert(`「${co}」에는 이미 마스터가 있어요.\n지금 마스터: ${other.name || other.email}\n\n마스터는 운송사마다 1명이에요. 바꾸려면 [마스터 위임]을 쓰거나 지금 마스터를 먼저 해제해 주세요.`);
+    }
     if (!await kpConfirm(next ? `"${u.name || u.email}"님을 마스터로 지정할까요?\n마스터는 직원 승인·권한을 정하고, 인사 담당자가 없을 때는 부서·직책·퇴사도 처리합니다.` : `"${u.name || u.email}"님의 마스터를 해제할까요?`)) return;
     const history = [...(u.personnelHistory || []), { date: todayStr(), type: next ? "마스터 지정" : "마스터 해제", detail: meDoc?.name || me?.email || "" }];
     await setDoc(doc(db, "users", u.id), { isMaster: next, ...(next ? { role: "admin" } : {}), personnelHistory: history }, { merge: true });
