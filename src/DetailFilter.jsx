@@ -136,8 +136,25 @@ function ValueInput({ field, q, onChange, options, onEnter, inputRef }) {
   }, [options, nq]);
   const exact = nq && options.some((o) => normClient(o.v) === nq);
   React.useEffect(() => { setHi(0); }, [nq, field]);
+  // 목록 위치(입력칸 바로 아래 · 자리가 없으면 위) — 스크롤 · 창 크기가 바뀌면 다시 잰다
+  const wrapRef = React.useRef(null);
+  const [rect, setRect] = React.useState(null);
+  React.useLayoutEffect(() => {
+    if (!open) { setRect(null); return undefined; }
+    const measure = () => {
+      const r = wrapRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const below = window.innerHeight - r.bottom - 12, above = r.top - 12;
+      const up = below < 200 && above > below;
+      setRect({ left: r.left, width: r.width, top: r.top, bottom: r.bottom, up, maxH: Math.max(120, Math.min(280, up ? above : below)) });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    return () => { window.removeEventListener("resize", measure); window.removeEventListener("scroll", measure, true); };
+  }, [open, list.length]);
   return (
-    <div className="relative flex-1 min-w-0">
+    <div ref={wrapRef} className="relative flex-1 min-w-0">
       <input ref={inputRef} autoComplete="off" disabled={!field} value={q}
         placeholder={field ? `${field} 입력 · 목록에서 고르기` : "← 먼저 칸을 고르세요"}
         onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
@@ -160,8 +177,11 @@ function ValueInput({ field, q, onChange, options, onEnter, inputRef }) {
           {exact ? "EXACT" : "LIKE"}
         </span>
       )}
-      {open && field && list.length > 0 && !exact && (
-        <div className="absolute z-20 left-0 right-0 top-[calc(100%+4px)] max-h-[240px] overflow-y-auto rounded-xl bg-white border border-[#DCE3EE] shadow-[0_16px_36px_rgba(15,26,48,.18)] py-1">
+      {/* ⭐ 2026-11-18 목록이 조건 칸(스크롤 영역) 안에 갇혀 잘리던 문제 — 화면 맨 위(body)에 그리고, 아래 자리가 없으면 위로 연다 */}
+      {open && field && list.length > 0 && !exact && rect && createPortal(
+        <div onMouseDown={(e) => e.preventDefault()}
+          style={{ position: "fixed", left: rect.left, width: rect.width, zIndex: 10000, ...(rect.up ? { bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4 }), maxHeight: rect.maxH }}
+          className="overflow-y-auto rounded-xl bg-white border border-[#DCE3EE] shadow-[0_16px_36px_rgba(15,26,48,.22)] py-1">
           {list.map((o, i) => (
             <button key={o.v} type="button" onMouseDown={(e) => { e.preventDefault(); onChange(o.v); setOpen(false); }} onMouseEnter={() => setHi(i)}
               className={`w-full flex items-center gap-2 px-3 h-8 text-left text-[13px] font-bold ${i === hi ? "bg-[#EEF2F8] text-[#0F1A30]" : "text-[#33415C]"}`}>
@@ -169,7 +189,8 @@ function ValueInput({ field, q, onChange, options, onEnter, inputRef }) {
               <span className="text-[11px] font-bold text-[#9AA9C3] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{o.n.toLocaleString()}</span>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
