@@ -9,7 +9,7 @@ import BizSwitcher from "./BizSwitcher";
 import { MONO } from "./ui";
 
 export default function FreightMobile({ biz, modules, canGroup, onBiz, onClose, ...rest }) {
-  const first = biz === "inland" ? bizMenuKey("inland", "handoff") : bizFirstMenu(biz);
+  const first = biz === "inland" ? bizMenuKey("inland", "handoff") : biz === "group" ? bizFirstMenu(biz) : bizMenuKey(biz, "list"); // 휴대폰은 운송현황부터
   const [menuKey, setMenuKey] = React.useState(first);
   React.useEffect(() => { if (parseBizMenu(menuKey).biz !== biz) setMenuKey(first); }, [biz]); // eslint-disable-line react-hooks/exhaustive-deps
   const bodyRef = React.useRef(null);
