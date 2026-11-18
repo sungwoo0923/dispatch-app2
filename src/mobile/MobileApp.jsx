@@ -1,4 +1,5 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
+import { SpecialFareTag, SpecialFareLine } from "../specialFareTag"; // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import { readPendingApproval, clearPendingApproval } from "../pendingOpen"; // 🛠 2026-11-17 결재 화면 이동 요청을 새로고침 뒤에도 이어서
 import { MarginPct } from "../marginPct"; // ⭐ 2026-11-17 배차 합계 다이얼 — 수수료 아래 수수료율(수수료 ÷ 청구)
 import { MonthPicker } from "../kpInputs"; // 📅 2026-11-07 월 선택은 프로그램 달력으로
@@ -20054,7 +20055,7 @@ const runNationalFareInPopup = async () => {
                 <div className="px-4 pt-3 pb-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 mb-1">
+                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${fareLevelCls}`}>{fareLevel}</span>
                         {r.긴급 === true && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-600 text-white">긴급</span>
@@ -20062,6 +20063,7 @@ const runNationalFareInPopup = async () => {
                         {r._viaNames?.length > 0 && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">경유</span>
                         )}
+                        <SpecialFareTag row={r} size="sm" />
                         <span className="text-[11px] text-gray-400">{(r.상차일||"").slice(0,10)}</span>
                       </div>
                       <div className="text-[13px] font-bold text-gray-900 truncate">
@@ -20138,6 +20140,7 @@ const runNationalFareInPopup = async () => {
               <div className="text-white/60 text-[11px] mt-1">{fareDetailItemStd.상차일 || ""}</div>
             </div>
             <div className="px-5 py-4 space-y-3">
+              <SpecialFareLine row={fareDetailItemStd} />
               {fareDetailItemStd.거래처명 && (
                 <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
                   <span className="text-[11px] text-gray-400 w-16 shrink-0">거래처</span>

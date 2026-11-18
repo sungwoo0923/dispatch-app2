@@ -13,6 +13,7 @@ import { imeFocusRef } from "./imeFocus";
 import { saveDriverChoice } from "./DriverEditChoice";
 import { bizOf, bankForBiz, bizInfoCardBlob } from "./companyBiz";
 import { orderProfit, profitTotals } from "./forklift";
+import { SpecialFareTag, SpecialFareLine } from "./specialFareTag"; // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 
 // ===================== 1. 거래처 주소 충돌 팝업 =====================
 // queue 의 맨 앞 항목을 보여 준다. addrMismatch(같은 이름 · 다른 주소) / addrDuplicate(같은 주소 · 다른 이름).
@@ -927,16 +928,18 @@ export function AddrFareSearchModal({ open, onClose, pickup, setPickup, drop, se
                         <div className="px-4 py-3 bg-white">
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-[12px] font-bold text-gray-500">{rec.상차일}</span>
-                            <div className="flex gap-1">
+                            <div className="flex gap-1 flex-wrap justify-end items-center">
                               {rec.긴급 === true && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-[#0F1A30] text-white">긴급</span>}
                               {rec._match?.label === "완전일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>}
                               {rec._match?.label === "부분일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-[#2D4C82] text-white">부분일치</span>}
                               {rec._match?.label === "톤수일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-[#1B2B4B] text-white">톤수일치</span>}
                               {rec._match?.label === "경로일치" && <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-[#8FB0F0] text-[#0F1A30]">경로일치</span>}
+                              <SpecialFareTag row={rec} size="sm" />
                             </div>
                           </div>
                           <div className="text-[13px] font-bold text-gray-900 mb-1">{rec.상차지명 || "-"} → {rec.하차지명 || "-"}</div>
                           <div className="text-[12px] text-gray-500 mb-2">{rec.차량종류 || "-"} / {rec.차량톤수 || "-"}{rec.화물내용 ? ` · ${rec.화물내용}` : ""}</div>
+                          <SpecialFareLine row={rec} className="mb-2" />
                           <div className="flex items-center justify-between">
                             <span className="text-[12px] text-gray-500">기사 <span className="text-gray-700 font-bold">{rec.이름 || "-"}</span></span>
                             <span className="text-[18px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
@@ -1058,7 +1061,7 @@ function FareRecordCard({ rec, idx, records, getBarPct, getFareTag, onApply }) {
       <div className="px-4 py-3 bg-white">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
-          <div className="flex gap-1">
+          <div className="flex gap-1 flex-wrap justify-end items-center">
             {rec._reverseRoute && (
               <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#EEF2F8] text-[#1B2B4B] border border-[#DCE3EE]">반대노선</span>
             )}
@@ -1077,6 +1080,7 @@ function FareRecordCard({ rec, idx, records, getBarPct, getFareTag, onApply }) {
             {rec._match?.label === "경로일치" && (
               <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#8FB0F0] text-[#0F1A30]">경로일치</span>
             )}
+            <SpecialFareTag row={rec} />
             <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
           </div>
         </div>
@@ -1104,6 +1108,7 @@ function FareRecordCard({ rec, idx, records, getBarPct, getFareTag, onApply }) {
           {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
           {rec.화물내용 && <span> · {rec.화물내용}</span>}
         </div>
+        <SpecialFareLine row={rec} className="mb-2" />
         <div className="relative h-1.5 bg-gray-100 rounded-full mb-3">
           <div className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#1B2B4B] border-2 border-white shadow"
             style={{ left: `calc(${barPct}% - 5px)` }} />

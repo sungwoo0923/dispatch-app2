@@ -9,6 +9,7 @@ import { Scale, Package } from "lucide-react";
 import { withCo } from "../fsTenant";
 import { saveDriverChoice } from "../DriverEditChoice";
 import { orderProfit } from "../forklift";
+import { SpecialFareTag, SpecialFareLine } from "../specialFareTag"; // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import MobileSelect from "./MobileSelect";
 
 // ────────────────────────────────────────────────────────────────
@@ -547,6 +548,7 @@ export function FareHistorySheet({
                                 {o.긴급 === true && (
                                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-orange-300 text-orange-700">긴급</span>
                                 )}
+                                <SpecialFareTag row={o} size="sm" />
                                 <span className="text-[11px] text-gray-400">{o.상차일 || ""}</span>
                               </div>
                               <div className="text-[13px] font-bold text-gray-900 truncate">
@@ -558,6 +560,7 @@ export function FareHistorySheet({
                                 </div>
                               )}
                               {o.거래처명 && <div className="text-[11px] text-gray-500 mt-0.5">{o.거래처명}</div>}
+                              <SpecialFareLine row={o} className="mt-1" />
                               <div className="flex items-center gap-3 mt-1.5 overflow-x-auto whitespace-nowrap">
                                 {o.화물내용 && (
                                   <span className="text-[13px] font-bold text-gray-900 inline-flex items-center gap-1 shrink-0">
@@ -652,6 +655,7 @@ export function FareHistoryDetailSheet({ item, cardVersionB, onClose, onApply })
           <div className="text-white/60 text-[11px] mt-1">{item.상차일 || ""}</div>
         </div>
         <div className="px-5 py-4 space-y-3">
+          <SpecialFareLine row={item} />
           {item.거래처명 && (
             <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
               <span className="text-[11px] text-gray-400 w-16 shrink-0">거래처</span>
