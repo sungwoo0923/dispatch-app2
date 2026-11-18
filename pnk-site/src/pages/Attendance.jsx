@@ -83,18 +83,18 @@ export default function Attendance() {
 
   return (
     <div>
-      <Hero title="출퇴근 · 근태" desc={`근무 시간 ${work.start} ~ ${work.end} · 한국 시간 기준`} />
+      <Hero en="Attendance" title="출퇴근 · 근태" desc={`근무 시간 ${work.start} ~ ${work.end} · 한국 시간 기준`} />
 
       <div className="grid grid-cols-1 xl:grid-cols-[420px_1fr] gap-4 md:gap-5 mb-5">
         {/* 출퇴근 카드 */}
         <section className="relative overflow-hidden rounded-2xl p-6 text-white bg-navy">
           <div className="absolute -right-10 -top-14 w-56 h-56 rounded-full bg-white/[0.06]" />
           <div className="relative">
-            <div className="text-[13px] font-bold text-blue-100/85">{Number(today.slice(5, 7))}월 {Number(today.slice(8))}일 {WEEK[dow(today)]}요일 · {me.member?.name} ({me.member?.empNo})</div>
+            <div className="text-[13px] font-bold text-stone-100/85">{Number(today.slice(5, 7))}월 {Number(today.slice(8))}일 {WEEK[dow(today)]}요일 · {me.member?.name} ({me.member?.empNo})</div>
             <div className="mt-2 text-[52px] font-black tabular-nums tracking-tight leading-none">{clock}</div>
             <div className="mt-4 grid grid-cols-3 gap-2 text-center">
               {[["출근", rec?.inAt ? hm(new Date(rec.inAt)) : "--:--"], ["퇴근", rec?.outAt ? hm(new Date(rec.outAt)) : "--:--"], ["근무", rec?.outAt ? dur(rec.workMin) : working ? dur(working) : "-"]].map(([l, v]) => (
-                <div key={l} className="rounded-2xl bg-white/10 py-2.5"><div className="text-[11.5px] text-blue-100/80 font-bold">{l}</div><div className="text-[15px] font-black tabular-nums">{v}</div></div>
+                <div key={l} className="rounded-2xl bg-white/10 py-2.5"><div className="text-[11.5px] text-stone-100/80 font-bold">{l}</div><div className="text-[15px] font-black tabular-nums">{v}</div></div>
               ))}
             </div>
             {rec?.late && <div className="mt-2 text-[12.5px] font-bold text-rose-200">지각 ({work.start} 이후 출근)</div>}
@@ -104,7 +104,7 @@ export default function Attendance() {
             <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={rec ? "퇴근 메모(선택)" : "출근 메모(선택) — 예: 고객사 방문 후 출근"} className="mt-2 w-full h-10 px-3 rounded-xl bg-white/10 text-white placeholder-white/50 text-[13.5px] outline-none focus:bg-white/15" />
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button type="button" disabled={busy || !!rec} onClick={checkIn} className="h-14 rounded-2xl bg-white text-navy text-[17px] font-black disabled:opacity-40 shadow-lg">출근</button>
-              <button type="button" disabled={busy || !rec} onClick={checkOut} className="h-14 rounded-2xl bg-[#4B6CB7] text-white text-[17px] font-black disabled:opacity-40 shadow-lg ring-1 ring-white/20">{rec?.outAt ? "퇴근 다시" : "퇴근"}</button>
+              <button type="button" disabled={busy || !rec} onClick={checkOut} className="h-14 rounded-2xl bg-[#9F8563] text-white text-[17px] font-black disabled:opacity-40 shadow-lg ring-1 ring-white/20">{rec?.outAt ? "퇴근 다시" : "퇴근"}</button>
             </div>
           </div>
         </section>
@@ -119,9 +119,9 @@ export default function Attendance() {
               return (
                 <div key={mm.uid} className="flex items-center gap-3 rounded-2xl border border-line px-3.5 py-2.5">
                   <div className="relative"><div className="w-9 h-9 rounded-full bg-navy text-white text-[13px] font-black flex items-center justify-center">{mm.name.slice(0, 1)}</div>
-                    <span className={cx("absolute -right-0.5 -bottom-0.5 w-3 h-3 rounded-full ring-2 ring-white", r && !r.outAt ? "bg-emerald-500" : r ? "bg-navy-500" : "bg-[#C9D3E4]")} /></div>
-                  <div className="min-w-0 flex-1"><div className="text-[13.5px] font-black truncate">{mm.name} <span className="text-[11.5px] text-[#7A8AA8] font-bold">{mm.dept}</span></div>
-                    <div className="text-[12px] text-[#7A8AA8] tabular-nums">{r?.inAt ? `${hm(new Date(r.inAt))} 출근` : "-"}{r?.outAt ? ` · ${hm(new Date(r.outAt))} 퇴근` : ""}{r?.late ? " · 지각" : ""}</div></div>
+                    <span className={cx("absolute -right-0.5 -bottom-0.5 w-3 h-3 rounded-full ring-2 ring-white", r && !r.outAt ? "bg-emerald-500" : r ? "bg-navy-500" : "bg-[#DDD8D1]")} /></div>
+                  <div className="min-w-0 flex-1"><div className="text-[13.5px] font-black truncate">{mm.name} <span className="text-[11.5px] text-[#98928B] font-bold">{mm.dept}</span></div>
+                    <div className="text-[12px] text-[#98928B] tabular-nums">{r?.inAt ? `${hm(new Date(r.inAt))} 출근` : "-"}{r?.outAt ? ` · ${hm(new Date(r.outAt))} 퇴근` : ""}{r?.late ? " · 지각" : ""}</div></div>
                   <Chip tone={st[1]}>{st[0]}</Chip>
                 </div>
               );
@@ -145,17 +145,17 @@ export default function Attendance() {
         <Card pad={false}>
           <div className="overflow-x-auto">
             <table className="w-full text-[13.5px] min-w-[620px]">
-              <thead><tr className="text-left text-[12px] text-[#7A8AA8] bg-[#F8FAFD]">{["날짜", "출근", "퇴근", "근무", "장소", "메모"].map((h) => <th key={h} className="px-4 py-2.5 font-bold">{h}</th>)}</tr></thead>
+              <thead><tr className="text-left text-[12px] text-[#98928B] bg-[#F9F8F6]">{["날짜", "출근", "퇴근", "근무", "장소", "메모"].map((h) => <th key={h} className="px-4 py-2.5 font-bold">{h}</th>)}</tr></thead>
               <tbody>{days.filter((d) => d <= today).reverse().map((d) => {
                 const r = byDate[d]; const w = dow(d); const off = leaveDaysOf(uid, d);
                 return (
-                  <tr key={d} className={cx("border-t border-[#EEF1F6]", (w === 0 || w === 6) && "bg-[#FAFBFD] text-[#A0ABBE]")}>
-                    <td className="px-4 py-2.5 tabular-nums font-bold">{d.slice(5).replace("-", "/")} <span className={w === 0 ? "text-rose-500" : w === 6 ? "text-navy-500" : "text-[#7A8AA8]"}>{WEEK[w]}</span></td>
+                  <tr key={d} className={cx("border-t border-[#F4F2F0]", (w === 0 || w === 6) && "bg-[#FAFBFD] text-[#B6B0A9]")}>
+                    <td className="px-4 py-2.5 tabular-nums font-bold">{d.slice(5).replace("-", "/")} <span className={w === 0 ? "text-rose-500" : w === 6 ? "text-navy-500" : "text-[#98928B]"}>{WEEK[w]}</span></td>
                     <td className="px-4 py-2.5 tabular-nums">{r?.inAt ? <>{hm(new Date(r.inAt))}{r.late && <Chip tone="red" className="ml-1.5">지각</Chip>}</> : off ? <Chip tone="gray">휴가</Chip> : "-"}</td>
                     <td className="px-4 py-2.5 tabular-nums">{r?.outAt ? hm(new Date(r.outAt)) : r?.inAt && d < today ? <span className="text-rose-600 font-bold text-[12px]">퇴근 안 찍음</span> : "-"}</td>
                     <td className="px-4 py-2.5 tabular-nums">{dur(r?.workMin)}</td>
                     <td className="px-4 py-2.5">{r ? PLACES.find((p) => p.key === r.place)?.label : ""}</td>
-                    <td className="px-4 py-2.5 text-[#7A8AA8] truncate max-w-[260px]">{[r?.note, r?.outNote].filter(Boolean).join(" / ")}</td>
+                    <td className="px-4 py-2.5 text-[#98928B] truncate max-w-[260px]">{[r?.note, r?.outNote].filter(Boolean).join(" / ")}</td>
                   </tr>
                 );
               })}</tbody>
@@ -179,19 +179,19 @@ function AllTable({ members, rows, days, today, isLeave }) {
     <Card pad={false}>
       <div className="overflow-x-auto">
         <table className="text-[12px] border-collapse">
-          <thead><tr className="bg-[#F8FAFD] text-[#7A8AA8]">
-            <th className="sticky left-0 bg-[#F8FAFD] px-3 py-2 text-left font-bold min-w-[130px]">구성원</th>
+          <thead><tr className="bg-[#F9F8F6] text-[#98928B]">
+            <th className="sticky left-0 bg-[#F9F8F6] px-3 py-2 text-left font-bold min-w-[130px]">구성원</th>
             {days.map((d) => { const w = dow(d); return <th key={d} className={cx("px-1 py-2 font-bold w-8 text-center", w === 0 && "text-rose-500", w === 6 && "text-navy-500")}>{Number(d.slice(8))}</th>; })}
             <th className="px-3 py-2 font-bold">출근</th><th className="px-3 py-2 font-bold">지각</th>
           </tr></thead>
           <tbody>{members.map((m) => {
             const mine = rows.filter((r) => r.uid === m.uid);
             return (
-              <tr key={m.uid} className="border-t border-[#EEF1F6]">
-                <td className="sticky left-0 bg-white px-3 py-1.5 font-bold whitespace-nowrap">{m.name} <span className="text-[#A0ABBE] font-medium">{m.empNo}</span></td>
+              <tr key={m.uid} className="border-t border-[#F4F2F0]">
+                <td className="sticky left-0 bg-white px-3 py-1.5 font-bold whitespace-nowrap">{m.name} <span className="text-[#B6B0A9] font-medium">{m.empNo}</span></td>
                 {days.map((d) => {
                   const r = map[`${m.uid}_${d}`]; const w = dow(d); const off = isLeave(m.uid, d);
-                  const c = r ? (r.late ? "bg-rose-400" : r.place !== "office" ? "bg-[#8FA6D6]" : "bg-navy") : off ? "bg-amber-300" : d > today || w === 0 || w === 6 ? "bg-transparent" : "bg-[#E9EDF4]";
+                  const c = r ? (r.late ? "bg-rose-400" : r.place !== "office" ? "bg-[#C5B5A0]" : "bg-navy") : off ? "bg-amber-300" : d > today || w === 0 || w === 6 ? "bg-transparent" : "bg-[#F1EFEC]";
                   return <td key={d} className="px-0.5 py-1.5 text-center"><button type="button" title={r ? `${d} ${hm(new Date(r.inAt))}~${r.outAt ? hm(new Date(r.outAt)) : ""}` : d} onClick={() => r && setEdit(r)} className={cx("w-6 h-6 rounded-md", c, r && "hover:ring-2 hover:ring-navy-500")} /></td>;
                 })}
                 <td className="px-3 text-center font-black tabular-nums">{mine.length}</td>
@@ -201,8 +201,8 @@ function AllTable({ members, rows, days, today, isLeave }) {
           })}</tbody>
         </table>
       </div>
-      <div className="px-4 py-3 border-t border-[#EEF1F6] flex flex-wrap gap-3 text-[12px] text-[#5A6A86]">
-        {[["bg-navy", "정상 출근"], ["bg-rose-400", "지각"], ["bg-[#8FA6D6]", "재택 · 외근"], ["bg-amber-300", "휴가"], ["bg-[#E9EDF4]", "기록 없음"]].map(([c, l]) => <span key={l} className="flex items-center gap-1.5"><span className={cx("w-3.5 h-3.5 rounded", c)} />{l}</span>)}
+      <div className="px-4 py-3 border-t border-[#F4F2F0] flex flex-wrap gap-3 text-[12px] text-[#77716A]">
+        {[["bg-navy", "정상 출근"], ["bg-rose-400", "지각"], ["bg-[#C5B5A0]", "재택 · 외근"], ["bg-amber-300", "휴가"], ["bg-[#F1EFEC]", "기록 없음"]].map(([c, l]) => <span key={l} className="flex items-center gap-1.5"><span className={cx("w-3.5 h-3.5 rounded", c)} />{l}</span>)}
         <span className="ml-auto">칸을 누르면 기록을 고칠 수 있습니다</span>
       </div>
       {edit && <FixModal r={edit} onClose={() => setEdit(null)} />}

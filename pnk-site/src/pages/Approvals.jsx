@@ -40,7 +40,7 @@ export default function Approvals() {
 
   return (
     <div>
-      <Hero title="전자결재" desc={`내 결재 차례 ${todo.length}건 · 내가 올린 진행 중 문서 ${myPending}건`}>
+      <Hero en="E-approval" title="전자결재" desc={`내 결재 차례 ${todo.length}건 · 내가 올린 진행 중 문서 ${myPending}건`}>
         <HeroBtn icon="pen" onClick={() => setWrite("pick")}>새 문서 쓰기</HeroBtn>
       </Hero>
 
@@ -49,7 +49,7 @@ export default function Approvals() {
           <button key={f.key} type="button" onClick={() => setWrite(f.key)} className="bg-white rounded-2xl border border-line px-3 py-3 text-left hover:border-navy-500 hover:shadow-md transition">
             <div className="w-9 h-9 rounded-xl bg-navy-100 text-navy flex items-center justify-center mb-2"><Icon name={f.icon} size={18} /></div>
             <div className="text-[13.5px] font-black">{f.label}</div>
-            <div className="text-[11.5px] text-[#7A8AA8] truncate">{f.hint}</div>
+            <div className="text-[11.5px] text-[#98928B] truncate">{f.hint}</div>
           </button>
         ))}
       </div>
@@ -65,13 +65,13 @@ export default function Approvals() {
       <div className={cx("grid gap-4 md:gap-5", cur ? "xl:grid-cols-[minmax(0,420px)_1fr]" : "")}>
         <Card pad={false} className={cur ? "hidden xl:block" : ""}>
           {!mine ? <Loading /> : list.length === 0 ? <Empty icon="stamp">{tab === "todo" ? "결재할 문서가 없습니다." : "문서가 없습니다."}</Empty> : (
-            <ul className="divide-y divide-[#EEF1F6]">
+            <ul className="divide-y divide-[#F4F2F0]">
               {list.map((a) => (
                 <li key={a.id}>
                   <button type="button" onClick={() => setSp({ id: a.id })} className={cx("w-full text-left px-5 py-3.5 hover:bg-navy-50 flex items-center gap-3", a.id === openId && "bg-navy-50")}>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5"><Chip tone="gray">{formLabel(a.form)}</Chip><span className="text-[14px] font-black truncate">{a.title}</span></div>
-                      <div className="mt-1 text-[12px] text-[#7A8AA8] truncate">{a.docNo} · {a.authorName} · {kstDateTime(a.createdAt).slice(2, 16)}</div>
+                      <div className="mt-1 text-[12px] text-[#98928B] truncate">{a.docNo} · {a.authorName} · {kstDateTime(a.createdAt).slice(2, 16)}</div>
                       <LineDots a={a} />
                     </div>
                     <Chip tone={stTone[a.status]}>{a.status === "pending" ? `${a.step + 1}/${a.line.length} 진행` : APPROVAL_STATUS[a.status]}</Chip>
@@ -90,7 +90,7 @@ export default function Approvals() {
             {APPROVAL_FORMS.map((f) => (
               <button key={f.key} type="button" onClick={() => setWrite(f.key)} className="rounded-2xl border border-line px-4 py-3 text-left hover:border-navy-500">
                 <div className="flex items-center gap-2"><Icon name={f.icon} size={17} className="text-navy" /><b className="text-[14px]">{f.label}</b></div>
-                <div className="text-[12px] text-[#7A8AA8] mt-0.5">{f.hint}</div>
+                <div className="text-[12px] text-[#98928B] mt-0.5">{f.hint}</div>
               </button>
             ))}
           </div>
@@ -106,9 +106,9 @@ function LineDots({ a }) {
     <div className="mt-1.5 flex items-center gap-1 flex-wrap">
       {a.line?.map((l, i) => (
         <React.Fragment key={i}>
-          {i > 0 && <span className="w-2 h-px bg-[#C9D3E4]" />}
+          {i > 0 && <span className="w-2 h-px bg-[#DDD8D1]" />}
           <span className={cx("h-5 px-1.5 rounded-md text-[10.5px] font-black flex items-center",
-            l.status === "approved" ? "bg-navy text-white" : l.status === "rejected" ? "bg-rose-500 text-white" : i === a.step && a.status === "pending" ? "bg-navy-100 text-navy ring-1 ring-navy-500" : "bg-[#F0F2F6] text-[#7A8AA8]")}>{l.name}</span>
+            l.status === "approved" ? "bg-navy text-white" : l.status === "rejected" ? "bg-rose-500 text-white" : i === a.step && a.status === "pending" ? "bg-navy-100 text-navy ring-1 ring-navy-500" : "bg-[#F4F3F2] text-[#98928B]")}>{l.name}</span>
         </React.Fragment>
       ))}
     </div>
@@ -156,10 +156,10 @@ function DocView({ a, me, onClose }) {
   }[a.form] || [];
   return (
     <Card pad={false}>
-      <div className="px-5 md:px-7 pt-5 pb-3 flex items-center gap-2 border-b border-[#EEF1F6] print:hidden">
+      <div className="px-5 md:px-7 pt-5 pb-3 flex items-center gap-2 border-b border-[#F4F2F0] print:hidden">
         <button type="button" onClick={onClose} className="xl:hidden text-[13px] font-bold text-navy-500 mr-2">← 목록</button>
         <Chip tone={stTone[a.status]}>{APPROVAL_STATUS[a.status]}</Chip>
-        <span className="text-[12.5px] text-[#7A8AA8] tnum">{a.docNo}</span>
+        <span className="text-[12.5px] text-[#98928B] tnum">{a.docNo}</span>
         <div className="ml-auto flex gap-1.5">
           <Btn kind="ghost" icon="file" onClick={() => window.print()}>인쇄</Btn>
           {a.authorUid === uid && a.status === "pending" && <Btn kind="danger" onClick={cancel}>회수</Btn>}
@@ -168,7 +168,7 @@ function DocView({ a, me, onClose }) {
       <div className="px-5 md:px-8 py-6" id="pnk-print">
         <div className="flex flex-col md:flex-row md:items-start gap-5">
           <div className="flex-1 min-w-0">
-            <div className="text-[11px] font-extrabold tracking-[0.18em] text-[#7A8AA8]">PnK PROJECT · {formLabel(a.form)}</div>
+            <div className="text-[11px] font-extrabold tracking-[0.18em] text-[#98928B]">PnK PROJECT · {formLabel(a.form)}</div>
             <h2 className="mt-1 text-[22px] font-black leading-snug">{a.title}</h2>
           </div>
           {/* 결재란 */}
@@ -182,10 +182,10 @@ function DocView({ a, me, onClose }) {
                     <span className="w-11 h-11 rounded-full border-[2.5px] border-rose-600 text-rose-600 text-[11px] font-black flex items-center justify-center rotate-[-12deg] leading-none">{i === 0 ? "기안" : "승인"}</span>
                   ) : l.status === "rejected" ? (
                     <span className="w-11 h-11 rounded-full border-[2.5px] border-rose-600 bg-rose-50 text-rose-600 text-[11px] font-black flex items-center justify-center rotate-[-12deg]">반려</span>
-                  ) : i - 1 === a.step && a.status === "pending" ? <span className="text-[11px] font-bold text-navy-500 animate-pulse">결재 중</span> : <span className="text-[11px] text-[#C0C8D6]">대기</span>}
+                  ) : i - 1 === a.step && a.status === "pending" ? <span className="text-[11px] font-bold text-navy-500 animate-pulse">결재 중</span> : <span className="text-[11px] text-[#D0CCC6]">대기</span>}
                 </div>
                 <div className="h-6 border-t border-navy/30 text-[11.5px] font-bold flex items-center justify-center truncate px-1">{l.name}</div>
-                <div className="h-5 text-[10px] text-[#7A8AA8] tnum">{l.at ? kstDateTime(l.at).slice(5, 10).replace("-", "/") : ""}</div>
+                <div className="h-5 text-[10px] text-[#98928B] tnum">{l.at ? kstDateTime(l.at).slice(5, 10).replace("-", "/") : ""}</div>
               </div>
             ))}
           </div>
@@ -194,7 +194,7 @@ function DocView({ a, me, onClose }) {
         <table className="w-full mt-5 text-[13.5px] border border-line rounded-xl overflow-hidden">
           <tbody>
             {[["기안자", `${a.authorName} (${a.authorEmpNo || ""} · ${a.dept || ""})`], ["기안일", kstDateTime(a.createdAt)], ...rowsOf, ...(a.cc?.length ? [["참조", a.cc.map((c) => c.name).join(", ")]] : [])].map(([k, v]) => (
-              <tr key={k} className="border-b border-[#EEF1F6] last:border-0"><th className="w-28 bg-[#F8FAFD] text-left px-4 py-2.5 text-[12.5px] text-[#5A6A86] font-bold align-top">{k}</th><td className="px-4 py-2.5 font-semibold">{v || "-"}</td></tr>
+              <tr key={k} className="border-b border-[#F4F2F0] last:border-0"><th className="w-28 bg-[#F9F8F6] text-left px-4 py-2.5 text-[12.5px] text-[#77716A] font-bold align-top">{k}</th><td className="px-4 py-2.5 font-semibold">{v || "-"}</td></tr>
             ))}
           </tbody>
         </table>
@@ -204,13 +204,13 @@ function DocView({ a, me, onClose }) {
           <div className="mt-6 rounded-2xl bg-navy-50 p-4 space-y-2">
             <div className="text-[12.5px] font-black text-navy">결재 의견</div>
             {a.line.filter((l) => l.comment).map((l, i) => (
-              <div key={i} className="text-[13.5px]"><b>{l.name}</b> <Chip tone={l.status === "rejected" ? "red" : "navy"}>{l.status === "rejected" ? "반려" : "승인"}</Chip> <span className="text-[#3A4A66]">{l.comment}</span></div>
+              <div key={i} className="text-[13.5px]"><b>{l.name}</b> <Chip tone={l.status === "rejected" ? "red" : "navy"}>{l.status === "rejected" ? "반려" : "승인"}</Chip> <span className="text-[#57514A]">{l.comment}</span></div>
             ))}
           </div>
         )}
       </div>
       {myTurn && (
-        <div className="px-5 md:px-8 py-4 border-t border-[#EEF1F6] bg-[#F8FAFD] rounded-b-[20px] print:hidden">
+        <div className="px-5 md:px-8 py-4 border-t border-[#F4F2F0] bg-[#F9F8F6] rounded-b-[20px] print:hidden">
           <div className="text-[13px] font-black mb-2">내 결재 차례입니다 ({a.step + 1}/{a.line.length})</div>
           <Textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="의견(반려할 때는 꼭)" />
           <div className="mt-2 flex gap-2 justify-end">
@@ -325,26 +325,26 @@ function Compose({ form, me, members, onClose, onDone }) {
 
         <div className="space-y-4">
           <div>
-            <div className="text-[12.5px] font-bold text-[#3A4A66] mb-1.5">결재선 (위에서부터 차례대로)</div>
+            <div className="text-[12.5px] font-bold text-[#57514A] mb-1.5">결재선 (위에서부터 차례대로)</div>
             <ol className="space-y-1.5">
-              <li className="flex items-center gap-2 rounded-xl bg-navy-50 px-3 py-2 text-[13px]"><span className="w-5 h-5 rounded-full bg-navy text-white text-[10px] font-black flex items-center justify-center">기</span><b>{me.member?.name}</b><span className="text-[#7A8AA8] text-[12px]">기안</span></li>
+              <li className="flex items-center gap-2 rounded-xl bg-navy-50 px-3 py-2 text-[13px]"><span className="w-5 h-5 rounded-full bg-navy text-white text-[10px] font-black flex items-center justify-center">기</span><b>{me.member?.name}</b><span className="text-[#98928B] text-[12px]">기안</span></li>
               {line.map((u, i) => { const m = members.find((x) => x.uid === u); return (
                 <li key={u} className="flex items-center gap-2 rounded-xl border border-line px-3 py-2 text-[13px]">
                   <span className="w-5 h-5 rounded-full bg-navy-100 text-navy text-[10px] font-black flex items-center justify-center">{i + 1}</span>
-                  <b className="flex-1 truncate">{m?.name}</b><span className="text-[#7A8AA8] text-[12px] truncate">{m?.title}</span>
-                  <button type="button" disabled={i === 0} onClick={() => setLine((l) => { const n = [...l]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; return n; })} className="text-[#7A8AA8] disabled:opacity-20" title="위로">▲</button>
-                  <button type="button" onClick={() => setLine((l) => l.filter((x) => x !== u))} className="text-[#7A8AA8] hover:text-rose-600" title="빼기"><Icon name="x" size={14} /></button>
+                  <b className="flex-1 truncate">{m?.name}</b><span className="text-[#98928B] text-[12px] truncate">{m?.title}</span>
+                  <button type="button" disabled={i === 0} onClick={() => setLine((l) => { const n = [...l]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; return n; })} className="text-[#98928B] disabled:opacity-20" title="위로">▲</button>
+                  <button type="button" onClick={() => setLine((l) => l.filter((x) => x !== u))} className="text-[#98928B] hover:text-rose-600" title="빼기"><Icon name="x" size={14} /></button>
                 </li>
               ); })}
             </ol>
             <div className="mt-2"><Select value="" onChange={(e) => e.target.value && setLine((l) => (l.includes(e.target.value) || l.length >= 8 ? l : [...l, e.target.value]))} options={pickOpts.filter((o) => !line.includes(o.key))} placeholder="+ 결재자 추가" /></div>
           </div>
           <div>
-            <div className="text-[12.5px] font-bold text-[#3A4A66] mb-1.5">참조 (결재 없이 받아 보기)</div>
+            <div className="text-[12.5px] font-bold text-[#57514A] mb-1.5">참조 (결재 없이 받아 보기)</div>
             <div className="flex flex-wrap gap-1.5 mb-2">{cc.map((u) => <span key={u} className="inline-flex items-center gap-1 h-7 pl-2.5 pr-1 rounded-lg bg-navy-100 text-navy text-[12.5px] font-bold">{members.find((x) => x.uid === u)?.name}<button type="button" onClick={() => setCc((l) => l.filter((x) => x !== u))} className="w-5 h-5 flex items-center justify-center"><Icon name="x" size={12} /></button></span>)}</div>
             <Select value="" onChange={(e) => e.target.value && setCc((l) => (l.includes(e.target.value) ? l : [...l, e.target.value]))} options={pickOpts.filter((o) => !cc.includes(o.key) && !line.includes(o.key))} placeholder="+ 참조자 추가" />
           </div>
-          <div className="rounded-2xl bg-navy-50 p-3 text-[12px] text-[#5A6A86] leading-relaxed">결재자가 차례대로 승인하면 완료됩니다. 한 명이라도 반려하면 멈춥니다. 진행 중에는 [회수]할 수 있습니다.{form === "leave" ? " 승인된 휴가는 휴가 · 일정 화면에 자동으로 나옵니다." : ""}</div>
+          <div className="rounded-2xl bg-navy-50 p-3 text-[12px] text-[#77716A] leading-relaxed">결재자가 차례대로 승인하면 완료됩니다. 한 명이라도 반려하면 멈춥니다. 진행 중에는 [회수]할 수 있습니다.{form === "leave" ? " 승인된 휴가는 휴가 · 일정 화면에 자동으로 나옵니다." : ""}</div>
         </div>
       </div>
     </Modal>

@@ -63,7 +63,7 @@ export default function Mail() {
 
   return (
     <div>
-      <Hero title="사내메일" desc={<span className="tnum">{myAddr || "메일 주소 없음 — 관리자에게 요청"}</span>}>
+      <Hero en="Mail" title="사내메일" desc={<span className="tnum">{myAddr || "메일 주소 없음 — 관리자에게 요청"}</span>}>
         <Chip tone={external ? "green" : "gray"}>{external ? "외부 메일 연결됨" : "사내 전용"}</Chip>
         <HeroBtn icon="pen" onClick={() => setWrite({})}>메일 쓰기</HeroBtn>
       </Hero>
@@ -71,10 +71,10 @@ export default function Mail() {
       {/* 메일함 · 목록 · 읽기를 한 판에 */}
       <div className="bg-white rounded-2xl border border-line overflow-hidden lg:grid lg:grid-cols-[190px_minmax(0,380px)_1fr] lg:h-[calc(100vh-170px)] lg:min-h-[480px]">
         {/* 메일함 */}
-        <div className="flex lg:flex-col gap-1 p-2 overflow-x-auto no-scrollbar border-b lg:border-b-0 lg:border-r border-[#EEF1F6]">
+        <div className="flex lg:flex-col gap-1 p-2 overflow-x-auto no-scrollbar border-b lg:border-b-0 lg:border-r border-[#F4F2F0]">
           {BOXES.map((b) => (
             <button key={b.key} type="button" onClick={() => { setBox(b.key); setSp({}); }}
-              className={cx("flex items-center gap-2.5 h-10 px-3 rounded-lg text-[13.5px] whitespace-nowrap transition", box === b.key ? "bg-navy text-white font-black" : "font-bold text-[#3A4A66] hover:bg-navy-50")}>
+              className={cx("flex items-center gap-2.5 h-10 px-3 rounded-lg text-[13.5px] whitespace-nowrap transition", box === b.key ? "bg-navy text-white font-black" : "font-bold text-[#57514A] hover:bg-navy-50")}>
               <Icon name={b.icon} size={17} /><span className="flex-1 text-left">{b.label}</span>
               {b.key === "inbox" && unread > 0 && <span className="min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-black flex items-center justify-center" style={{ background: "#FF3B30", color: "#fff" }}>{unread}</span>}
             </button>
@@ -82,10 +82,10 @@ export default function Mail() {
         </div>
 
         {/* 목록 */}
-        <div className={cx("min-h-0 flex flex-col lg:border-r border-[#EEF1F6]", cur && "hidden lg:flex")}>
-          <div className="p-3 border-b border-[#EEF1F6] relative"><Icon name="search" size={16} className="absolute left-6 top-6 text-[#7A8AA8]" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="메일 검색" className="pl-9" /></div>
+        <div className={cx("min-h-0 flex flex-col lg:border-r border-[#F4F2F0]", cur && "hidden lg:flex")}>
+          <div className="p-3 border-b border-[#F4F2F0] relative"><Icon name="search" size={16} className="absolute left-6 top-6 text-[#98928B]" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="메일 검색" className="pl-9" /></div>
           {!inbox || !sent ? <Loading /> : list.length === 0 ? <Empty icon="inbox">메일이 없습니다.</Empty> : (
-            <ul className="divide-y divide-[#EEF1F6] flex-1 min-h-0 overflow-y-auto">
+            <ul className="divide-y divide-[#F4F2F0] flex-1 min-h-0 overflow-y-auto">
               {list.map((m) => {
                 const isUnread = m.toUids?.includes(uid) && !m.readBy?.[uid];
                 const who = box === "sent" ? `받는 사람: ${(m.to || []).map((x) => x.name || x.addr).join(", ")}` : m.fromName || m.fromAddr;
@@ -94,9 +94,9 @@ export default function Mail() {
                     <button type="button" onClick={() => setSp({ id: m.id })} className={cx("w-full text-left px-4 py-3 flex gap-3 hover:bg-navy-50", m.id === openId && "bg-navy-50")}>
                       <div className={cx("w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-black shrink-0", isUnread ? "bg-navy text-white" : "bg-navy-100 text-navy")}>{(m.fromName || "?").slice(0, 1)}</div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2"><span className={cx("truncate text-[13.5px] flex-1", isUnread ? "font-black" : "font-bold text-[#3A4A66]")}>{who}</span><span className="text-[11.5px] text-[#7A8AA8] shrink-0">{fmtTime(m.createdAt)}</span></div>
-                        <div className={cx("truncate text-[13.5px]", isUnread ? "font-bold text-navy-950" : "text-[#3A4A66]")}>{m.starBy?.[uid] && "★ "}{m.external && <span className="text-[10.5px] font-black text-amber-700 mr-1">외부</span>}{m.extStatus === "failed" && <span className="text-[10.5px] font-black text-rose-600 mr-1">발송 실패</span>}{m.attachments?.length ? "📎 " : ""}{m.subject || "(제목 없음)"}</div>
-                        <div className="truncate text-[12px] text-[#7A8AA8]">{String(m.body || "").slice(0, 70)}</div>
+                        <div className="flex items-center gap-2"><span className={cx("truncate text-[13.5px] flex-1", isUnread ? "font-black" : "font-bold text-[#57514A]")}>{who}</span><span className="text-[11.5px] text-[#98928B] shrink-0">{fmtTime(m.createdAt)}</span></div>
+                        <div className={cx("truncate text-[13.5px]", isUnread ? "font-bold text-navy-950" : "text-[#57514A]")}>{m.starBy?.[uid] && "★ "}{m.external && <span className="text-[10.5px] font-black text-amber-700 mr-1">외부</span>}{m.extStatus === "failed" && <span className="text-[10.5px] font-black text-rose-600 mr-1">발송 실패</span>}{m.attachments?.length ? "📎 " : ""}{m.subject || "(제목 없음)"}</div>
+                        <div className="truncate text-[12px] text-[#98928B]">{String(m.body || "").slice(0, 70)}</div>
                       </div>
                     </button>
                   </li>
@@ -109,17 +109,17 @@ export default function Mail() {
         {/* 읽기 */}
         {cur ? (
           <div className="min-h-0 overflow-y-auto">
-            <div className="px-5 md:px-7 pt-5 pb-4 border-b border-[#EEF1F6]">
+            <div className="px-5 md:px-7 pt-5 pb-4 border-b border-[#F4F2F0]">
               <button type="button" onClick={() => setSp({})} className="lg:hidden mb-3 text-[13px] font-bold text-navy-500">← 목록</button>
               <div className="flex items-start gap-2">
                 <h2 className="flex-1 text-[19px] font-black leading-snug">{cur.subject || "(제목 없음)"}</h2>
-                <button type="button" title="중요" onClick={() => toggle(cur, "starBy")} className={cx("w-9 h-9 rounded-lg flex items-center justify-center", cur.starBy?.[uid] ? "text-amber-500" : "text-[#C0C8D6] hover:text-navy")}><Icon name="star" size={18} /></button>
+                <button type="button" title="중요" onClick={() => toggle(cur, "starBy")} className={cx("w-9 h-9 rounded-lg flex items-center justify-center", cur.starBy?.[uid] ? "text-amber-500" : "text-[#D0CCC6] hover:text-navy")}><Icon name="star" size={18} /></button>
               </div>
               <div className="mt-3 text-[13px] space-y-0.5">
-                <div><span className="text-[#7A8AA8] w-14 inline-block">보낸 사람</span><b>{cur.fromName}</b> <span className="text-[#7A8AA8] tnum">&lt;{cur.fromAddr}&gt;</span></div>
-                <div><span className="text-[#7A8AA8] w-14 inline-block">받는 사람</span>{(cur.to || []).map((x) => `${x.name} <${x.addr}>`).join(", ")}</div>
-                {cur.cc?.length > 0 && <div><span className="text-[#7A8AA8] w-14 inline-block">참조</span>{cur.cc.map((x) => x.name).join(", ")}</div>}
-                <div><span className="text-[#7A8AA8] w-14 inline-block">날짜</span>{kstDateTime(cur.createdAt)}</div>
+                <div><span className="text-[#98928B] w-14 inline-block">보낸 사람</span><b>{cur.fromName}</b> <span className="text-[#98928B] tnum">&lt;{cur.fromAddr}&gt;</span></div>
+                <div><span className="text-[#98928B] w-14 inline-block">받는 사람</span>{(cur.to || []).map((x) => `${x.name} <${x.addr}>`).join(", ")}</div>
+                {cur.cc?.length > 0 && <div><span className="text-[#98928B] w-14 inline-block">참조</span>{cur.cc.map((x) => x.name).join(", ")}</div>}
+                <div><span className="text-[#98928B] w-14 inline-block">날짜</span>{kstDateTime(cur.createdAt)}</div>
               </div>
             </div>
             {cur.fromUid === uid && cur.extStatus && (
@@ -134,7 +134,7 @@ export default function Mail() {
               <div className="px-5 md:px-7 py-6 text-[15px] leading-[1.8] whitespace-pre-wrap break-words min-h-[200px]">{cur.body}</div>
             )}
             <Attachments list={cur.attachments} />
-            <div className="px-5 md:px-7 py-3 border-t border-[#EEF1F6] flex flex-wrap gap-2">
+            <div className="px-5 md:px-7 py-3 border-t border-[#F4F2F0] flex flex-wrap gap-2">
               <Btn icon="reply" onClick={() => setWrite({ reply: cur })}>답장</Btn>
               <Btn kind="ghost" icon="send" onClick={() => setWrite({ forward: cur })}>전달</Btn>
               {cur.html && <Btn kind="ghost" icon="eye" onClick={() => setHtml((v) => !v)}>{html ? "글자로 보기" : "원문(HTML) 보기"}</Btn>}
@@ -225,11 +225,11 @@ function Compose({ me, members, init, onClose, onSent, external }) {
   ));
   return (
     <Modal open wide title={r ? "답장" : fw ? "전달" : "메일 쓰기"} onClose={onClose}
-      footer={<><span className="mr-auto text-[12px] text-[#7A8AA8] self-center">보내는 주소 <b className="tnum">{mailAddr(me.member) || "없음"}</b>{external ? " · 외부 메일 연결됨" : " · 구성원끼리만"}</span><Btn kind="ghost" onClick={onClose}>취소</Btn><Btn icon="send" onClick={send} disabled={!!busy}>{busy || "보내기"}</Btn></>}>
+      footer={<><span className="mr-auto text-[12px] text-[#98928B] self-center">보내는 주소 <b className="tnum">{mailAddr(me.member) || "없음"}</b>{external ? " · 외부 메일 연결됨" : " · 구성원끼리만"}</span><Btn kind="ghost" onClick={onClose}>취소</Btn><Btn icon="send" onClick={send} disabled={!!busy}>{busy || "보내기"}</Btn></>}>
       <div className="space-y-3">
         {[["to", "받는 사람", to, setTo], ["cc", "참조", cc, setCc]].map(([k, label, list, set]) => (
           <Field key={k} label={label}>
-            <div className="flex flex-wrap items-center gap-1.5 min-h-10 px-2 py-1.5 rounded-xl border border-[#DCE3EE] focus-within:border-navy-500 relative">
+            <div className="flex flex-wrap items-center gap-1.5 min-h-10 px-2 py-1.5 rounded-xl border border-[#E9E6E1] focus-within:border-navy-500 relative">
               <Chips list={list} set={set} />
               <input value={field === k ? text : ""} onFocus={() => setField(k)} onChange={(e) => { setField(k); setText(e.target.value); }}
                 onBlur={() => { if (field === k && text.includes("@")) add(text); }}
@@ -239,7 +239,7 @@ function Compose({ me, members, init, onClose, onSent, external }) {
                 <div className="absolute left-0 right-0 top-full mt-1 z-10 bg-white rounded-xl border border-line shadow-lg py-1">
                   {sugg.map((m) => (
                     <button key={m.uid} type="button" onMouseDown={(e) => { e.preventDefault(); set((l) => (l.some((x) => x.uid === m.uid) ? l : [...l, asR(m)])); setText(""); }}
-                      className="w-full text-left px-3 py-2 hover:bg-navy-50 text-[13px]"><b>{m.name}</b> <span className="text-[#7A8AA8]">{m.dept} · {mailAddr(m)}</span></button>
+                      className="w-full text-left px-3 py-2 hover:bg-navy-50 text-[13px]"><b>{m.name}</b> <span className="text-[#98928B]">{m.dept} · {mailAddr(m)}</span></button>
                   ))}
                 </div>
               )}
@@ -249,11 +249,11 @@ function Compose({ me, members, init, onClose, onSent, external }) {
         <Field label="제목"><Input value={subject} onChange={(e) => setSubject(e.target.value)} /></Field>
         <Field label="내용"><Textarea rows={11} value={body} onChange={(e) => setBody(e.target.value)} autoFocus={!!r} /></Field>
         <div>
-          <label className="inline-flex items-center gap-2 h-9 px-3.5 rounded-xl border border-dashed border-[#C9D3E4] text-[13px] font-bold text-[#5A6A86] cursor-pointer hover:border-navy-500">
+          <label className="inline-flex items-center gap-2 h-9 px-3.5 rounded-xl border border-dashed border-[#DDD8D1] text-[13px] font-bold text-[#77716A] cursor-pointer hover:border-navy-500">
             <Icon name="upload" size={16} />파일 첨부<input type="file" multiple className="hidden" onChange={(e) => setFiles((l) => [...l, ...e.target.files])} />
           </label>
           <div className="mt-2 flex flex-wrap gap-1.5">{files.map((f, i) => (
-            <span key={i} className="inline-flex items-center gap-1 h-7 pl-2.5 pr-1 rounded-lg bg-navy-50 text-[12.5px] font-bold">{f.name} <span className="text-[#7A8AA8] font-medium">{fsize(f.size)}</span>
+            <span key={i} className="inline-flex items-center gap-1 h-7 pl-2.5 pr-1 rounded-lg bg-navy-50 text-[12.5px] font-bold">{f.name} <span className="text-[#98928B] font-medium">{fsize(f.size)}</span>
               <button type="button" onClick={() => setFiles((l) => l.filter((_, k) => k !== i))} className="w-5 h-5 flex items-center justify-center"><Icon name="x" size={12} /></button></span>
           ))}</div>
         </div>
@@ -270,7 +270,7 @@ function Attachments({ list }) {
     <div className="px-5 md:px-7 pb-5 flex flex-wrap gap-2">
       {list.map((a) => (
         <button key={a.path} type="button" onClick={() => open(a)} className="flex items-center gap-2 h-10 px-3 rounded-xl border border-line hover:border-navy-500 text-[13px]">
-          <Icon name="file" size={16} className="text-navy" /><b className="max-w-[220px] truncate">{a.name}</b><span className="text-[#7A8AA8]">{fsize(a.size || 0)}</span><Icon name="download" size={14} className="text-[#7A8AA8]" />
+          <Icon name="file" size={16} className="text-navy" /><b className="max-w-[220px] truncate">{a.name}</b><span className="text-[#98928B]">{fsize(a.size || 0)}</span><Icon name="download" size={14} className="text-[#98928B]" />
         </button>
       ))}
     </div>

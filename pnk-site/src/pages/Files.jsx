@@ -29,7 +29,7 @@ export default function Files() {
 
   return (
     <div>
-      <Hero title="자료실" desc={`회사 문서를 한곳에 — ${list.length}개 · 전체 ${size(used)}`}>
+      <Hero en="Library" title="자료실" desc={`회사 문서를 한곳에 — ${list.length}개 · 전체 ${size(used)}`}>
         <HeroBtn icon="upload" onClick={() => setUp(true)}>올리기</HeroBtn>
       </Hero>
       <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-4 md:gap-5">
@@ -37,22 +37,22 @@ export default function Files() {
           {["", ...FILE_CATS].map((c) => {
             const n = (rows || []).filter((f) => f.storagePath && (!c || f.category === c)).length;
             return (
-              <button key={c || "all"} type="button" onClick={() => setCat(c)} className={cx("flex items-center gap-2.5 h-11 px-3.5 rounded-xl text-[13.5px] font-bold whitespace-nowrap", cat === c ? "bg-navy text-white" : "bg-white border border-line text-[#3A4A66] hover:border-navy-500")}>
+              <button key={c || "all"} type="button" onClick={() => setCat(c)} className={cx("flex items-center gap-2.5 h-11 px-3.5 rounded-xl text-[13.5px] font-bold whitespace-nowrap", cat === c ? "bg-navy text-white" : "bg-white border border-line text-[#57514A] hover:border-navy-500")}>
                 <Icon name="folder" size={17} /><span className="flex-1 text-left">{c || "전체"}</span><span className="text-[12px] opacity-70 tnum">{n}</span>
               </button>
             );
           })}
         </div>
         <Card pad={false}>
-          <div className="p-3 border-b border-[#EEF1F6] relative"><Icon name="search" size={16} className="absolute left-6 top-6 text-[#7A8AA8]" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="파일 이름 · 메모 검색" className="pl-9" /></div>
+          <div className="p-3 border-b border-[#F4F2F0] relative"><Icon name="search" size={16} className="absolute left-6 top-6 text-[#98928B]" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="파일 이름 · 메모 검색" className="pl-9" /></div>
           {!rows ? <Loading /> : list.length === 0 ? <Empty icon="folder">자료가 없습니다.</Empty> : (
-            <ul className="divide-y divide-[#EEF1F6]">
+            <ul className="divide-y divide-[#F4F2F0]">
               {list.map((f) => (
-                <li key={f.id} className="flex items-center gap-3 px-4 py-3 hover:bg-[#F8FAFD]">
+                <li key={f.id} className="flex items-center gap-3 px-4 py-3 hover:bg-[#F9F8F6]">
                   <div className="w-11 h-11 rounded-xl bg-navy-100 text-navy text-[11px] font-black flex items-center justify-center shrink-0">{ext(f.name)}</div>
                   <button type="button" onClick={() => open(f)} className="min-w-0 flex-1 text-left">
                     <div className="flex items-center gap-1.5"><span className="text-[14px] font-bold truncate">{f.name}</span>{f.adminOnly && <Chip tone="dark">관리자</Chip>}</div>
-                    <div className="text-[12px] text-[#7A8AA8] truncate">{f.category} · {size(f.size || 0)} · {f.uploaderName} · {fmtTime(f.createdAt)}{f.note ? ` · ${f.note}` : ""}</div>
+                    <div className="text-[12px] text-[#98928B] truncate">{f.category} · {size(f.size || 0)} · {f.uploaderName} · {fmtTime(f.createdAt)}{f.note ? ` · ${f.note}` : ""}</div>
                   </button>
                   <Btn kind="ghost" icon="download" onClick={() => open(f)} aria-label="받기" />
                   {(f.uploaderUid === me.user.uid || me.isAdmin) && <Btn kind="danger" icon="trash" onClick={() => del(f)} aria-label="지우기" />}
@@ -98,10 +98,10 @@ function Upload({ me, defCat, onClose }) {
     <Modal open title="자료 올리기" onClose={onClose} footer={<><Btn kind="ghost" onClick={onClose}>취소</Btn><Btn icon="upload" onClick={go} disabled={!files.length || pct != null}>{pct != null ? `올리는 중 ${pct}%` : `${files.length}개 올리기`}</Btn></>}>
       <div className="space-y-3">
         <label onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={(e) => { e.preventDefault(); setDrag(false); setFiles([...e.dataTransfer.files]); }}
-          className={cx("flex flex-col items-center justify-center gap-2 h-36 rounded-2xl border-2 border-dashed cursor-pointer transition", drag ? "border-navy-500 bg-navy-50" : "border-[#C9D3E4] hover:border-navy-500")}>
+          className={cx("flex flex-col items-center justify-center gap-2 h-36 rounded-2xl border-2 border-dashed cursor-pointer transition", drag ? "border-navy-500 bg-navy-50" : "border-[#DDD8D1] hover:border-navy-500")}>
           <Icon name="upload" size={26} className="text-navy-500" />
           <span className="text-[13.5px] font-bold">{files.length ? files.map((f) => f.name).join(", ") : "파일을 끌어다 놓거나 눌러서 고르기"}</span>
-          <span className="text-[12px] text-[#7A8AA8]">파일 하나에 50MB 미만</span>
+          <span className="text-[12px] text-[#98928B]">파일 하나에 50MB 미만</span>
           <input type="file" multiple className="hidden" onChange={(e) => setFiles([...e.target.files])} />
         </label>
         <div className="grid grid-cols-2 gap-3">

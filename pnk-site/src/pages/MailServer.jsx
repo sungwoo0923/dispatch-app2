@@ -33,7 +33,7 @@ export default function MailServer({ me, info }) {
   const step = (n, done, title, body) => (
     <li className="flex gap-3">
       <span className={cx("w-7 h-7 rounded-full text-[12px] font-black flex items-center justify-center shrink-0", done ? "bg-emerald-500 text-white" : "bg-navy-100 text-navy")}>{done ? "✓" : n}</span>
-      <div className="min-w-0 flex-1 pb-4"><div className="text-[14px] font-black">{title}</div><div className="text-[13px] text-[#3A4A66] leading-relaxed mt-0.5">{body}</div></div>
+      <div className="min-w-0 flex-1 pb-4"><div className="text-[14px] font-black">{title}</div><div className="text-[13px] text-[#57514A] leading-relaxed mt-0.5">{body}</div></div>
     </li>
   );
   return (
@@ -60,19 +60,19 @@ export default function MailServer({ me, info }) {
           </div>
           <Field label="비밀번호 · API 키" hint={st?.server?.hasPassword ? "저장되어 있습니다 — 바꿀 때만 넣으세요" : "서버에서 암호화해 보관합니다"}><Input type="password" autoComplete="new-password" value={f.pass} onChange={(e) => setF({ ...f, pass: e.target.value })} placeholder={st?.server?.hasPassword ? "••••••••(저장됨)" : ""} /></Field>
           <Btn disabled={!!busy} onClick={() => run("저장 중…", async () => { await call({ action: "save", host: f.host, port: Number(f.port), security: f.security, user: f.user, pass: f.pass }); setF((x) => ({ ...x, pass: "" })); await load(); })}>{busy === "저장 중…" ? busy : "서버 저장"}</Btn>
-          <div className="pt-3 border-t border-[#EEF1F6]">
-            <div className="text-[12.5px] font-bold text-[#3A4A66] mb-1">테스트 메일 — 보내는 주소 <b className="tnum">{mailAddr(me.member) || "(내 메일 아이디 없음)"}</b></div>
+          <div className="pt-3 border-t border-[#F4F2F0]">
+            <div className="text-[12.5px] font-bold text-[#57514A] mb-1">테스트 메일 — 보내는 주소 <b className="tnum">{mailAddr(me.member) || "(내 메일 아이디 없음)"}</b></div>
             <div className="flex gap-2"><Input value={to} onChange={(e) => setTo(e.target.value)} placeholder="받을 주소(내 네이버 · 구글)" /><Btn kind="soft" disabled={!!busy} onClick={() => run("보내는 중…", async () => { const r = await call({ action: "test", to }); window.alert(r.ok ? "테스트 메일을 보냈습니다. 받은 편지함(스팸함도)을 확인해 주세요." : `실패: ${r.error}`); await load(); })}>보내기</Btn></div>
             {lastTest && <div className={cx("mt-1.5 text-[12px] font-bold", lastTest.ok ? "text-emerald-700" : "text-rose-600")}>마지막 테스트: {lastTest.ok ? "성공" : `실패 — ${lastTest.err}`} ({lastTest.to})</div>}
           </div>
-          <div className="pt-3 border-t border-[#EEF1F6]">
-            <div className="text-[12.5px] font-bold text-[#3A4A66] mb-1">받기 주소 (Mailgun Route › Forward 에 넣기)</div>
+          <div className="pt-3 border-t border-[#F4F2F0]">
+            <div className="text-[12.5px] font-bold text-[#57514A] mb-1">받기 주소 (Mailgun Route › Forward 에 넣기)</div>
             <div className="flex gap-2">
               <Input readOnly value={st?.inboundUrl || ""} placeholder="[만들기]를 누르세요" className="tnum text-[12px]" />
               <Btn kind="ghost" onClick={() => st?.inboundUrl && navigator.clipboard?.writeText(st.inboundUrl).then(() => window.alert("복사했습니다."))}>복사</Btn>
               <Btn kind="soft" disabled={!!busy} onClick={() => run("만드는 중…", async () => { if (st?.inboundUrl && !window.confirm("새로 만들면 예전 주소는 바로 막힙니다. 계속할까요?")) return; await call({ action: "token" }); await load(); })}>{st?.inboundUrl ? "새로 만들기" : "만들기"}</Btn>
             </div>
-            <div className="mt-1 text-[11.5px] text-[#7A8AA8]">이 주소는 비밀번호와 같습니다. 다른 곳에 올리지 마세요.</div>
+            <div className="mt-1 text-[11.5px] text-[#98928B]">이 주소는 비밀번호와 같습니다. 다른 곳에 올리지 마세요.</div>
           </div>
           {external && <Btn kind="danger" onClick={() => run("끄는 중…", async () => { if (window.confirm("외부 메일 보내기를 끌까요?")) await call({ action: "off" }); })}>외부 보내기 끄기</Btn>}
         </div>
