@@ -539,9 +539,10 @@ export function DriverEventBell({ enabled, onToggleEnabled, onView, isAdmin = fa
         <KakaoBadge n={total} size="sm" style={{ position: "absolute", top: -4, right: -4, boxShadow: "0 0 0 2px #14203A" }} />
       </button>
       {open && createPortal(
-        <div ref={panel} style={mobile ? { position: "fixed", left: 10, right: 10, top: pos.top, zIndex: 2147482600 } : { position: "fixed", top: pos.top, right: pos.right, width: 380, zIndex: 2147482600 }}>
-          <div style={{ borderRadius: 18, overflow: "hidden", background: "#fff", boxShadow: "0 24px 60px rgba(5,10,25,.35)", border: "1px solid #E3E8F0" }}>
-            <div style={{ padding: "14px 16px 12px", background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 70%,#2D4C82 100%)", color: "#fff" }}>
+        <div ref={panel} style={mobile ? { position: "fixed", left: 10, right: 10, top: pos.top, zIndex: 2147482600 } : { position: "fixed", top: pos.top, right: Math.max(8, pos.right), width: "min(400px, calc(100vw - 16px))", zIndex: 2147482600 }}>
+          {/* ⭐ 2026-11-18 알림함이 화면 아래로 넘쳐 잘리던 문제 — 창 높이 안에서만 늘고, 목록만 스크롤 · 아래 설정은 늘 보이게 */}
+          <div style={{ borderRadius: 18, overflow: "hidden", background: "#fff", boxShadow: "0 24px 60px rgba(5,10,25,.35)", border: "1px solid #E3E8F0", display: "flex", flexDirection: "column", maxHeight: `calc(100vh - ${Math.round(pos.top || 60)}px - 12px)` }}>
+            <div style={{ padding: "14px 16px 12px", background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 70%,#2D4C82 100%)", color: "#fff", flexShrink: 0 }}>
               <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".26em", color: "#8FB0F0" }}>DRIVER EVENTS</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
                 <span style={{ fontSize: 16, fontWeight: 900 }}>기사 알림</span>
@@ -549,7 +550,7 @@ export function DriverEventBell({ enabled, onToggleEnabled, onView, isAdmin = fa
                 <button type="button" onClick={() => markDriverSeen(["orders", "docs", "sos", "checkout"])} style={{ marginLeft: "auto", fontSize: 12, fontWeight: 800, color: "#CFE0FF", background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.14)", borderRadius: 8, height: 26, padding: "0 9px" }}>모두 읽음</button>
               </div>
             </div>
-            <div style={{ maxHeight: mobile ? "55vh" : 380, overflowY: "auto", overscrollBehavior: "contain" }}>
+            <div style={{ maxHeight: mobile ? "55vh" : 420, flex: "1 1 auto", minHeight: 0, overflowY: "auto", overscrollBehavior: "contain" }}>
               {!items.length && <div style={{ padding: "28px 16px", textAlign: "center", fontSize: 13.5, fontWeight: 700, color: "#7A879C" }}>새 기사 알림이 없습니다</div>}
               {items.map((e) => {
                 const ui = KIND_UI[e.kind] || KIND_UI.doc; const tx = driverEventText(e);
@@ -562,15 +563,15 @@ export function DriverEventBell({ enabled, onToggleEnabled, onView, isAdmin = fa
                         <span style={{ fontSize: 11.5, fontWeight: 800, color: e.kind === "accept" ? "#067647" : e.kind === "doc" || e.kind === "checkout" ? "#2D4C82" : "#B42318" }}>{ui.label}</span>
                         <span style={{ marginLeft: "auto", fontSize: 11.5, fontWeight: 700, color: "#9AA9C3", fontVariantNumeric: "tabular-nums" }}>{hm(e.at)}</span>
                       </span>
-                      <span style={{ display: "block", fontSize: 13.5, fontWeight: 800, color: "#0F1A30", marginTop: 1 }}>{tx.head}</span>
-                      {tx.sub && <span style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#5B6B85", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tx.sub}</span>}
+                      <span style={{ display: "block", fontSize: 13.5, fontWeight: 800, color: "#0F1A30", marginTop: 1, wordBreak: "keep-all", overflowWrap: "anywhere" }}>{tx.head}</span>
+                      {tx.sub && <span title={tx.sub} style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", fontSize: 12, fontWeight: 600, color: "#5B6B85", overflow: "hidden", wordBreak: "keep-all", overflowWrap: "anywhere", lineHeight: 1.45 }}>{tx.sub}</span>}
                       {tx.reason && <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#B42318", marginTop: 2 }}>사유 · {tx.reason}</span>}
                     </span>
                   </button>
                 );
               })}
             </div>
-            <div style={{ padding: "10px 16px 12px", borderTop: "1px solid #E3E8F0", background: "#F8FAFD", display: "grid", gap: 7 }}>
+            <div style={{ padding: "10px 16px 12px", borderTop: "1px solid #E3E8F0", background: "#F8FAFD", display: "grid", gap: 7, flexShrink: 0 }}>
               {[
                 ["알림 켜기(토스트·소리)", enabled, () => onToggleEnabled?.(!enabled)],
                 ["알림음", prefs.sound, () => setDriverEventPrefs({ sound: !prefs.sound })],

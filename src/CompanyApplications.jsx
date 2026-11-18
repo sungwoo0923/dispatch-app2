@@ -6,6 +6,7 @@ import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 �
 import { publishCompany } from "./publicCompanies";
 import React, { useState, useEffect, useMemo } from "react";
 import { kpConfirm } from "./kpDialog";
+import { findOtherMaster, masterLabel } from "./companyMaster"; // 👑 2026-11-18 운송사 마스터 1명
 import { imeFocusRef } from "./imeFocus";
 import { db, auth } from "./firebase";
 import {
@@ -227,6 +228,10 @@ export default function CompanyApplications() {
   }, [managingApp?.userId, activeTab]);
   const saveTransportRole = async () => {
     if (!managingApp?.userId) return;
+    if (tMaster && tUser?.isMaster !== true) {
+      const other = await findOtherMaster(managingApp.companyName || tUser?.companyName, managingApp.userId);
+      if (other) { alert(`「${managingApp.companyName || tUser?.companyName}」에는 이미 마스터가 있어요.\n지금 마스터: ${masterLabel(other)}\n\n마스터는 운송사마다 1명이라 저장하지 않았어요.`); setTMaster(false); return; }
+    }
     setTSaving(true);
     try {
       const history = [...(tUser?.personnelHistory || []), { date: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), type: "권한변경(최고관리자)", detail: `${tUser?.role || "-"} → ${tRole}${tMaster ? " · 마스터" : ""}` }];
@@ -387,6 +392,15 @@ export default function CompanyApplications() {
   const approveTransport = async (app) => {
     // 👥 2026-11-09 기존 회사 직원 가입 — 요금제 직원 계정 한도가 다 찼으면 확인
     if (app.type === "기존" && app.companyName && !(await guardSeat(app.companyName, { isSuper: true }))) return;
+    // 👑 2026-11-18 신규 승인 = 그 사람이 마스터 — 그 운송사에 이미 마스터가 있으면 마스터 없이(관리자로) 승인할지 묻는다
+    let asMaster = app.type !== "기존";
+    if (asMaster && app.companyName) {
+      const other = await findOtherMaster(app.companyName, app.userId);
+      if (other) {
+        if (!(await kpConfirm(`「${app.companyName}」에는 이미 마스터가 있어요.\n지금 마스터: ${masterLabel(other)}\n\n마스터는 운송사마다 1명이에요. 이 신청은 마스터 없이 관리자로 승인할까요?`))) return;
+        asMaster = false;
+      }
+    }
     setProcessing(true);
     try {
       publishCompany(app.companyName, app.type === "신규" ? app.address : "").catch(() => {});
@@ -429,7 +443,7 @@ export default function CompanyApplications() {
             companyCode,
             companyName: app.companyName,
             // 👑 신규 운송사를 처음 가입한 사람 = 그 회사의 마스터(이후 직원 권한·부서·직책을 정한다)
-            ...(app.type !== "기존" ? { isMaster: true, role: "admin" } : {}),
+            ...(app.type !== "기존" ? (asMaster ? { isMaster: true, role: "admin" } : { role: "admin" }) : {}),
           });
         } catch (_) {}
       }
@@ -1152,7 +1166,15 @@ export default function CompanyApplications() {
                       ))}
                     </div>
                     <label className="flex items-center gap-2 text-[13px] font-semibold text-[#1B2B4B]">
-                      <input type="checkbox" checked={tMaster} onChange={(e) => { setTMaster(e.target.checked); if (e.target.checked) setTRole("admin"); }} />
+                      <input type="checkbox" checked={tMaster} onChange={async (e) => {
+                        const on = e.target.checked;
+                        if (on && tUser?.isMaster !== true) {
+                          // 👑 2026-11-18 이미 그 운송사에 마스터가 있으면 체크 안 됨
+                          const other = await findOtherMaster(managingApp.companyName || tUser?.companyName, managingApp.userId);
+                          if (other) { alert(`「${managingApp.companyName || tUser?.companyName}」에는 이미 마스터가 있어요.\n지금 마스터: ${masterLabel(other)}\n\n마스터는 운송사마다 1명이에요. 바꾸려면 그 회사 회원관리에서 마스터를 위임하거나 먼저 해제해 주세요.`); return; }
+                        }
+                        setTMaster(on); if (on) setTRole("admin");
+                      }} />
                       마스터 계정 (그 회사 직원의 승인·권한·부서·직책을 정함)
                     </label>
                     <button type="button" disabled={tSaving} onClick={saveTransportRole}
