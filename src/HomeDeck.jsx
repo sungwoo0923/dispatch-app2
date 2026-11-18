@@ -185,7 +185,7 @@ export const DECK_LABELS = {
   board: "오늘 · 내일 배차판", timeline: "상차 시간대 분포", timeTip: "시 상차", immediate: "오늘 \"즉시·시간미정\" 상차",
   mix: "최근 7일 차종 구성", routes: "최근 7일 주요 노선", weekday: "요일별 평균 오더", empty: "이번 달 오더가 아직 없습니다",
 };
-export default function HomeDeck({ dispatchData = [], pastCache, liveStart, users = [], myName = "", isMaster = false, att = null, todo = null, labels = null }) {
+export default function HomeDeck({ dispatchData = [], pastCache, liveStart, users = [], myName = "", isMaster = false, att = null, todo = null, labels = null, weather = null }) {
   const L = labels ? { ...DECK_LABELS, ...labels } : DECK_LABELS;
   const today = kstToday();
   const thisMonth = today.slice(0, 7);
@@ -380,6 +380,8 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
           foot={ready ? <span>누적 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: C.hi }}>{yNow[2].toLocaleString()}</b>건 · 수익 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: profitColor(yNow[1], { dark: true, neutral: C.hi }) }}>{short(yNow[1])}</b></span> : "계산 중…"} />
       </div>
 
+      {/* 🌦 2026-11-18 운행 지역 날씨(오늘 · 내일 오더 지역 · 기상특보) — 날씨는 대시보드에만(배차 목록에서는 뺐다) */}
+      {weather}
       {/* ── 매출 추이 + 게이지 ── */}
       <div style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(0,2.25fr) minmax(250px,1fr)", gap: 14, marginBottom: 14 }}>
         <Panel code="TREND" title="매출 추이" right={<Seg value={range} onChange={setRange} items={[["7d", "7일"], ["30d", "30일"], ["year", "올해"]]} />}>

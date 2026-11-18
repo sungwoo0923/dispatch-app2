@@ -6,8 +6,9 @@ import React from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { kpConfirm } from "./kpDialog";
+import { regionOfAddress } from "../functions/publicDataCore.mjs";
 import { createBizChecker, BizStatusCheck, BizBulkCheck, bizGuard } from "./BizStatusBadge";
-import { createWeatherStore, WeatherBadge, WeatherStrip } from "./WeatherBadge";
+import { createWeatherStore, WeatherBadge, WeatherStrip, DeckWeather } from "./WeatherBadge";
 
 const isDemo = () => { try { return new URLSearchParams(window.location.search).get("demo") === "1"; } catch { return false; } };
 let demoMod = null;
@@ -83,6 +84,24 @@ export function OrdersWeatherStrip({ orders, ymd = kstYmd(0), title, dark, large
     return out;
   }, [orders, ymd]);
   return <WeatherStrip store={mainWeather} addresses={addrs} ymd={ymd} title={title} dark={dark} large={large} />;
+}
+
+// 🌦 2026-11-18 대시보드(관제 데크) 날씨 — 오늘 · 내일 오더가 있는 상하차 지역(많은 순)
+export function OrdersWeatherDeck({ orders }) {
+  const days = React.useMemo(() => {
+    const pick = (ymd) => {
+      const m = new Map();
+      (orders || []).forEach((o) => {
+        if (!o || o.배차상태 === "배차취소") return;
+        const add = (a) => { const r = regionOfAddress(a); if (!r) return; const x = m.get(r.key) || { r, n: 0 }; x.n += 1; m.set(r.key, x); };
+        if (String(o.상차일 || "").slice(0, 10) === ymd && o.상차지주소) add(o.상차지주소);
+        if (String(o.하차일 || o.상차일 || "").slice(0, 10) === ymd && o.하차지주소) add(o.하차지주소);
+      });
+      return [...m.values()].sort((a, b) => b.n - a.n);
+    };
+    return { today: pick(kstYmd(0)), tomorrow: pick(kstYmd(1)) };
+  }, [orders]);
+  return <DeckWeather store={mainWeather} days={days} ymdOf={(d) => kstYmd(d === "tomorrow" ? 1 : 0)} />;
 }
 
 // ─────────────── 팝빌 연동회원(회사정보) ───────────────
