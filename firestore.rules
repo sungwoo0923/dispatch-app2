@@ -1194,6 +1194,13 @@ service cloud.firestore {
     // 최고관리자로 제한한다 — landing과 같은 이유의 예외.
     // 🎨 2026-11-15 브랜드 디자인(관리자센터 › 운영 › 브랜드 디자인 · src/brandConfig.js) — 로고 · 자리별 바탕.
     //  로그인 전 화면에도 로고가 나오므로 읽기는 누구나, 쓰기는 최고관리자만(크기는 문서 한도 안에서 앱이 막는다)
+    // 🎬 2026-11-18 교육 영상 고치기(관리자 › AI 본부 › 영상 작업실 · src/VideoFixer.jsx) — 강조 상자 · 카메라 · 타이밍 수정.
+    //  도움말 센터 영상에 바로 반영돼야 하니 로그인한 사용자는 읽기, 고치기는 최고관리자만.
+    match /siteConfig/videoEdits {
+      allow get: if request.auth != null;
+      allow list: if false;
+      allow write: if isTotalMasterUser();
+    }
     match /siteConfig/brand {
       allow get: if true;
       allow list: if false;

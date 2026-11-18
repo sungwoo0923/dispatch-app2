@@ -72,6 +72,7 @@ function orders(col) {
       등록자명: NAMES[(i + 2) % NAMES.length], 혼적여부: i % 5 === 0 ? "혼적" : "독차",
       ...(i % 6 === 1 ? { 긴급: true } : {}), // ⭐ 2026-11-06 긴급 오더 강조 점검
       ...(i % 3 === 0 ? { 운임구분: i % 2 ? "월대" : "일대" } : {}), // ⭐ 2026-11-06 운임구분 알약·검색 점검
+      ...(done && i % 4 === 1 ? { attachCount: 1 + (i % 3) } : {}), // 📎 2026-11-18 기사님이 올린 첨부 표시 점검(교육 영상)
       ...(col === "dispatch" ? demoAck(i) : {}),
     }));
   }
@@ -81,10 +82,10 @@ function orders(col) {
 // ⭐ 2026-11-05 고정노선현황(구글시트 배차표) 점검 — URL에 demoRoute=1 이 있을 때만 배차표 양식 1개 + 그 오더 12건(운송업체 칸 포함)
 const demoRouteOn = () => { try { return new URLSearchParams(window.location.search).get("demoRoute") === "1"; } catch { return false; } };
 const demoXlsxOn = () => { try { return new URLSearchParams(window.location.search).get("demoXlsx") === "1"; } catch { return false; } };
-const ROUTE_CARRIERS = ["태진물류", "대성운수", "한길로지스", ""];
+const ROUTE_CARRIERS = ["샘터물류", "대성운수", "한길로지스", ""];
 function routeBoard() {
   return fakeDoc("routeBoards", "demo-rb-1", {
-    name: "삼다수 배차표", client: "(주)태진", dropOffset: 1, sheetUrl: demoXlsxOn() ? "https://docs.google.com/spreadsheets/d/demo-xlsx-file/edit" : "", // 📗 demoXlsx=1: 드라이브에 올린 엑셀 파일 흉내
+    name: "생수 정기 배차표", client: "(주)맑은샘음료", dropOffset: 1, sheetUrl: demoXlsxOn() ? "https://docs.google.com/spreadsheets/d/demo-xlsx-file/edit" : "", // 📗 demoXlsx=1: 드라이브에 올린 엑셀 파일 흉내
     groups: [{ name: "1센터", 상차지명: "1센터", 상차지주소: "" }, { name: "2센터", 상차지명: "2센터", 상차지주소: "" }],
     columns: [
       { id: "c1", label: "도착지", kind: "field", field: "하차지명" }, { id: "c2", label: "시군구", kind: "field", field: "하차지주소" },
@@ -98,8 +99,8 @@ function routeOrders() {
   for (let i = 0; i < 12; i++) {
     const day = ymd(i % 3 === 0 ? 1 : 0);
     out.push(fakeDoc("dispatch", `demo-rb-o-${i}`, {
-      상차일: ymd(-1), 하차일: day, 입고일: day, 발주일: ymd(-1), 배차표Id: "demo-rb-1", 배차표명: "삼다수 배차표", 배차표묶음: i % 2 ? "2센터" : "1센터", 배차표순번: i + 1, 시트줄: i + 5,
-      거래처명: "(주)태진", 상차지명: i % 2 ? "2센터" : "1센터", 하차지명: `도착지 ${i + 1}`, 하차지주소: ["경기 오산시", "경기 평택시", "충남 천안시"][i % 3],
+      상차일: ymd(-1), 하차일: day, 입고일: day, 발주일: ymd(-1), 배차표Id: "demo-rb-1", 배차표명: "생수 정기 배차표", 배차표묶음: i % 2 ? "2센터" : "1센터", 배차표순번: i + 1, 시트줄: i + 5,
+      거래처명: "(주)맑은샘음료", 상차지명: i % 2 ? "2센터" : "1센터", 하차지명: `도착지 ${i + 1}`, 하차지주소: ["경기 오산시", "경기 평택시", "충남 천안시"][i % 3],
       품목수량: { "0.5L": 6 + i, "2L": 4 }, 추가정보: { 운송업체: ROUTE_CARRIERS[i % 4] }, 차량번호: i % 4 === 3 ? "" : i === 1 ? "경기81바1037" : `경기9${i}바${2000 + i}`,
       배차상태: i % 4 === 3 ? "배차중" : "배차완료", 청구운임: 200000 + i * 10000, 기사운임: 170000 + i * 9000, 지급방식: "계산서", 배차방식: "고정",
       // ⭐ 2026-11-06 담당자 잠금·검색 점검 — 배차된 줄은 기사 이름 · 배차한 사람(김대리=다른 직원 / 둘러보기=나), 나머지는 시트 자동(담당 없음)

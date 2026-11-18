@@ -15,6 +15,8 @@ import { manualFor, manualName } from "./WorkManual"; // 📘 2026-11-15 모든 
 import { HELP_DETAIL, HELP_COMMON, helpTextOf } from "./helpContent"; // 📖 메뉴별 자세한 사용법
 import { HELP_VIDEOS, videoSrc, videoPoster, videosForMenu } from "./helpVideos"; // 🎬 2026-11-17 영상으로 배우기
 import { HelpDemo, hasHelpDemo } from "./HelpDemos"; // 🎬 2026-11-13 움직이는 예시 화면
+// 🎬 2026-11-18 영상 작업실에서 고친 편은 실제 영상과 똑같은 실시간 재생기로(실패하면 원래 mp4)
+const HelpVideoSmart = React.lazy(() => import("./EditedVideoPlayer").then((m) => ({ default: m.HelpVideoSmart })));
 
 const FONT = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const MASTER_MENUS = new Set(["관리센터"]);
@@ -216,7 +218,9 @@ function VideoPlayer({ v, onClose, onPick }) {
           {next && <button type="button" onClick={() => onPick(next)} className="ml-auto h-9 px-3.5 rounded-xl bg-white/10 ring-1 ring-white/25 text-[13px] font-black whitespace-nowrap hover:bg-white/20">다음 영상 · {next.title} →</button>}
           <button type="button" onClick={onClose} className={`${next ? "" : "ml-auto "}h-9 px-3.5 rounded-xl bg-white text-[#0F1A30] text-[13px] font-black`}>닫기</button>
         </div>
-        <video key={v.id} src={videoSrc(v)} poster={videoPoster(v)} controls autoPlay playsInline className="w-full max-h-[78vh] rounded-xl bg-black" />
+        <React.Suspense fallback={<div className="w-full aspect-video max-h-[78vh] rounded-xl bg-black" />}>
+          <HelpVideoSmart key={v.id} v={v} fallback={<video key={v.id} src={videoSrc(v)} poster={videoPoster(v)} controls autoPlay playsInline className="w-full max-h-[78vh] rounded-xl bg-black" />} />
+        </React.Suspense>
       </div>
     </div>);
 }
