@@ -57,7 +57,7 @@ import { requestRouteSheetPush } from "./routeSheetPush"; // 💰 2026-11-06 고
 import { makeClientMatcher } from "./clientMatch"; // ⭐ 2026-11-03 거래처 검색: 정확히 같은 이름이 있으면 그것만
 import ClientMergeModal from "./ClientMergeModal"; // ⭐ 2026-11-17 거래처 합치기(거래처관리 › 기본거래처)
 import { buildAliasMap, resolveOrderClient } from "./clientMerge"; // ⭐ 2026-11-17 합친 거래처의 옛 이름 → 남길 이름
-import DetailFilterButton, { applyDetailFilter, DetailScope } from "./DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
+import DetailFilterButton, { applyDetailFilter, DetailScope, detailGroupOrder } from "./DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { useCompanyBiz, bizOf, BizPicker, BizFilter, bizMatch, printInfoForBiz, BizListEditor, BizScope, BizSelect, bizColorOf, bizStripeProps, BizLegend, resolveBiz, rememberBiz, normBizKey, bankForBiz, bizInfoCardBlob } from "./companyBiz"; // ⭐ 2026-11-03 한 회사 · 여러 사업자 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
 import JSZip from "jszip";
 import { OrderWeather, BizCheck, bizGuardMain, ClientBizBulkButton, PopbillMemberCard } from "./publicDataMain"; // 🏛 2026-11-07 국세청 사업자 상태 · 기상청 날씨 · 팝빌 연동회원
@@ -36804,7 +36804,15 @@ const filteredBase = React.useMemo(() => {
       || (a.시트줄 ?? 1e9) - (b.시트줄 ?? 1e9) || (a.배차표순번 || 0) - (b.배차표순번 || 0));
     return data;
   }
+  // ⭐ 2026-11-18 세부검색에서 같은 칸(거래처명 등)을 여러 개 고르면 고른 값별 → 날짜별로 묶어 보여 준다
+  const dsGroup = dsDetail ? detailGroupOrder(dsDetail, { getters: dsDetailGet }) : null;
   data.sort((a, b) => {
+    if (dsGroup) {
+      const ga = dsGroup(a), gb = dsGroup(b);
+      if (ga !== gb) return ga - gb;
+      const da0 = String(a.상차일 || ""), db0 = String(b.상차일 || "");
+      if (da0 !== db0) return db0.localeCompare(da0);
+    }
     const ra = getStatusRank(a.배차상태);
     const rb = getStatusRank(b.배차상태);
     if (ra !== rb) return ra - rb;

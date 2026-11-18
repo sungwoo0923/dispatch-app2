@@ -162,7 +162,7 @@ import { mainScanAi } from "../orderScanApi"; // 🧠 2026-11-07 오더 스캔 �
 import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange } from "../fareRules";
 import { applyRoutePresets, routePresetsNow } from "../routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
 import { SpecialFareButton, forkliftApply, paidOut, orderProfit, profitTotals } from "../forklift"; import { isViewerNow } from "../blind"; // 🏗 2026-11-09 지게차비용
-import DetailFilterButton, { applyDetailFilter } from "../DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
+import DetailFilterButton, { applyDetailFilter, detailGroupOrder } from "../DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { useFixedRouteAutoDispatch } from "../FixedRoutes"; // ⭐ 2026-11-05 고정노선 배차 이어서 만들기
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { LogisMark, LogisWordmark, LogisTag, LogisLockup } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
@@ -9428,6 +9428,7 @@ function MobileOrderList({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   groupedByDate = useMemo(() => {
     const next = new Map();
+    const mGroup = mDetail ? detailGroupOrder(mDetail, { getters: detailGetters }) : null;
     groupedByDateRaw.forEach((list, key) => {
       let filtered = list;
       if (orderTypeFilter.size > 0) filtered = filtered.filter(o => orderTypeFilter.has(classifyOrderType(o)));
@@ -9436,7 +9437,12 @@ function MobileOrderList({
       if (chargeMissingOnly) filtered = filtered.filter(o => !(Number(o.청구운임) > 0));
       if (driverFeeMissingOnly) filtered = filtered.filter(o => !(Number(o.기사운임) > 0));
       if (mDetail) filtered = applyDetailFilter(filtered, mDetail, { withDate: false, getters: detailGetters });
-      if (filtered.length) next.set(key, sortOrdersByMode(filtered));
+      if (filtered.length) {
+        let sorted = sortOrdersByMode(filtered);
+        // ⭐ 2026-11-18 세부검색에서 같은 칸(거래처명 등)을 여러 개 고르면 날짜 안에서 고른 값별로 묶는다
+        if (mGroup) sorted = sorted.map((o, i) => [o, i]).sort((x, y) => mGroup(x[0]) - mGroup(y[0]) || x[1] - y[1]).map((x) => x[0]);
+        next.set(key, sorted);
+      }
     });
     return next;
   }, [groupedByDateRaw, orderTypeFilter, assignMethodFilter, payTypeFilter, chargeMissingOnly, driverFeeMissingOnly, mDetail, orderSortMode, detailGetters]);
