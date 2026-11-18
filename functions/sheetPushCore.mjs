@@ -23,11 +23,17 @@ const MONEY_FIELDS = ["청구운임", "기사운임", "특수운임", "지게차
 const dayN = (a, b) => { const A = Date.parse(`${a}T00:00:00Z`), B = Date.parse(`${b}T00:00:00Z`); return Number.isFinite(A) && Number.isFinite(B) ? Math.round((B - A) / 86400000) : null; };
 const dowOf = (d) => new Date(`${d}T00:00:00Z`).getUTCDay();
 const hourOf = (t) => { const m = /^(\d{1,2}):/.exec(cell(t)); return m ? Number(m[1]) : null; };
-export function arriveTag(o, arrival = false) {
+//  ⭐ 2026-11-18 사용자 규칙 — 같은 날 상차 · 하차 = 당착, 저녁 6시 이후 상차 = 야상(입고시간 칸이 있는 탭만 · 그 탭이 다시 읽어도 같은 날짜가 되는 경우만)
+//   · 날짜 칸 = 상차일인 탭: 같은 날 하차 + 18시 이후 상차 → 야상(다시 읽으면 같은 날 · 야상 꼬리표)
+//   · 야상 = 다음 날 하차로 읽는 탭(yasangNext · 대원전선): 다음 날 하차 + 18시 이후 상차 → 야상
+//   · 날짜 칸 = 하차일인 탭(arrival · 에이제이): 전날 18시 이후 상차 → 야상(예전 그대로)
+export function arriveTag(o, arrival = false, yasangNext = false) {
   const up = cell(o?.상차일), down = cell(o?.하차일 || o?.상차일);
   const d = up && down ? dayN(up, down) : null;
-  if (d === 0) return "당착";
   const h = hourOf(o?.상차시간);
+  const evening = h != null && h >= 18;
+  if (d === 0) return !arrival && !yasangNext && evening ? "야상" : "당착";
+  if (d === 1 && yasangNext && !arrival && evening) return "야상";
   if (d === 1 && arrival && h != null && (h >= 18 || h < 5)) return "야상";
   if (d === 3 && dowOf(up) === 5 && dowOf(down) === 1) return "월착";
   if (d === 1) return arrival ? "야상" : "익착";
@@ -262,7 +268,7 @@ function fieldEdits(k, o, env) {
     case "상차시간": return one(L.cols.time, o.상차시간);
     case "하차시간": { // 🗓 2026-11-16 시간이면 시간, 아니면 날짜로 당착 · 야상 · 월착(프로그램 날짜가 기준)
       const c = col(L.cols.arriveTime); if (c == null) return null; // 입고시간 칸이 있는 탭만
-      const v = cell(o.하차시간) || arriveTag(o, arrival);
+      const v = cell(o.하차시간) || arriveTag(o, arrival, !!rule?.yasangNextDay);
       if (!v) { const cur = cell(row[c]); return cur && !parseTime(cur) ? null : [{ c, v: "" }]; }
       return [{ c, v }];
     }

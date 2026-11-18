@@ -249,5 +249,38 @@ eq("Vision → 줄 + 위치", S.visionToLines(visionResp).lines, [{ text: "상�
   eq("AI: 연결 실패 → unavailable", broken, "unavailable");
 }
 
+// ⭐ 2026-11-18 여러 형식 · 등록 업체 · 신규 · 여러 건 한 번에
+{
+  const M = await import("../src/orderScanAi.js");
+  const ok = (name, cond) => { if (cond) pass++; else { fail++; console.log("✗", name); } };
+  const board = "(오전 상차)\n1. 한가득 - 521\n2. 송림 - 166\n(오후 상차)\n1. 오뚜기 - 1000\n2. 동탄점, CJ동탄, 의왕 - 730";
+  ok("목록형(화이트보드) = 여러 건", M.looksMulti(board));
+  ok("라벨형 한 건 = 한 건", !M.looksMulti("상차지 : 에이제이\n충남 아산시 영인면\n하차지 : 비엠솔루션\n중량 : 1톤 윙바디"));
+  ok("한 줄형 한 건 = 한 건", !M.looksMulti("에이제이\n비엠솔루션 5톤 제품 1대"));
+  ok("배차요청형 한 건 = 한 건", !M.looksMulti("11/19(목) 배차요청의 건 당착\n상차: 에이제이\n하차: 애터미 이천\n요청차량: 11톤 1대\n상차품목: 제품"));
+  const k = M.knownFor(board, { places: [{ 업체명: "한가득물류", 주소: "경기 화성시 동탄대로 1" }, { 업체명: "전혀다른곳" }], clients: [{ 거래처명: "에이제이" }], aliases: [{ k: "하차지명", from: "송림", to: "송림푸드" }] });
+  ok("등록 업체 중 원문과 겹치는 것만", k.places.length === 1 && k.places[0].n === "한가득물류" && k.places[0].a === "경기 화성시 동탄대로");
+  ok("배운 이름 같이", k.aliases[0][0] === "송림" && k.aliases[0][1] === "송림푸드");
+  ok("신규 판단", M.isNewPlace("비엠솔루션", [{ 업체명: "에이제이" }]) && !M.isNewPlace("한가득", [{ 업체명: "한가득물류" }]) && !M.isNewPlace("에이제이", [{ 업체명: "에이제이" }]));
+  ok("나눈 오더 → 글", /하차지: 동탄점/.test(M.orderBlockText({ 하차지명: { v: "동탄점" }, 경유하차: { v: "CJ동탄, 의왕" } })) && !/상차지/.test(M.orderBlockText({ 하차지명: { v: "동탄점" } })));
+  // 서버: 등록 업체 · 배운 이름 · 여러 건 안내가 AI에 같이 간다
+  const msg = S.buildUserMessage({ text: board, today: "2026-11-18", examples: [], known: k, multi: true });
+  ok("서버: 등록 업체 목록", /\[등록된 업체\][\s\S]*한가득물류/.test(msg));
+  ok("서버: 이렇게 부른다", /송림 → 송림푸드/.test(msg));
+  ok("서버: 여러 건 안내(521 = 박스 · 쉼표 = 경유)", /단위가 없으면 박스/.test(msg) && /경유하차/.test(msg));
+  ok("서버: 한 건이면 여러 건 안내 없음", !/여러 오더 정리 방법/.test(S.buildUserMessage({ text: "a", today: "2026-11-18", examples: [] })));
+  ok("서버: 여러 건 스키마 = orders 배열(경유하차 포함)", S.SCHEMA_MULTI.properties.orders.type === "array" && "경유하차" in S.SCHEMA_MULTI.properties.orders.items.properties);
+  {
+    let req = null;
+    const F = (o) => Object.fromEntries([...S.FIELD_KEYS, "경유하차"].map((k) => [k, { v: String(o[k] ?? ""), c: 0.9 }]));
+    const fake = { messages: { create: async (r) => { req = r; return { model: S.MODEL, stop_reason: "end_turn", usage: {}, content: [{ type: "text", text: JSON.stringify({ orders: [F({ 하차지명: "한가득물류", 화물내용: "521박스" }), F({ 하차지명: "동탄점", 경유하차: "CJ동탄, 의왕", 화물내용: "730박스" })] }) }] }; } } };
+    const out = await S.runExtract({ db, auth: authOf("staff"), data: { text: board, multi: true, known: k }, makeAnthropic: () => fake });
+    ok("서버 여러 건: orders 2건 · 경유하차", out.orders.length === 2 && out.orders[1].경유하차.v === "CJ동탄, 의왕" && out.fields.하차지명.v === "한가득물류");
+    ok("서버 여러 건: 여러 건 스키마 · 넉넉한 길이", req.output_config.format.schema === S.SCHEMA_MULTI && req.max_tokens >= 8000);
+    ok("서버 여러 건: 등록 업체가 메시지에", /한가득물류/.test(req.messages[0].content));
+  }
+  ok("서버: 이상한 등록 목록은 걸러짐", S.cleanKnown({ places: [{ n: "" }, { n: "가".repeat(100) }], aliases: [["a", "a"]] }).places[0].n.length === 60 && !S.cleanKnown({ aliases: [["a", "a"]] }).aliases.length);
+}
+
 console.log(`\n오더 스캔 정밀 인식 ${pass + fail}개 — 통과 ${pass} · 실패 ${fail}`);
 process.exit(fail ? 1 : 0);

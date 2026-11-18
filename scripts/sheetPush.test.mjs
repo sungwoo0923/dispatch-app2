@@ -38,6 +38,12 @@ const ctxOf = (tabs = sheet()) => makePushContext(Object.entries(tabs).map(([tit
   assert.equal(Object.fromEntries(c2.cells.map((x) => [x.a1, x.value])).D7, "월착", "금요일 상차 · 월요일 하차 = 월착");
   const c3 = planCreate(ctx, { 상차일: "2026-11-15", 하차일: "2026-11-15", 하차시간: "14:00", 상차지명: "평택", 하차지명: "이천", 청구운임: "90000", 기사운임: "70000" }, "평택 내수", { rowCount: 100 });
   assert.equal(Object.fromEntries(c3.cells.map((x) => [x.a1, x.value])).D8, "14:00", "시간이 있으면 시간");
+  // ⭐ 2026-11-18 같은 날 상차 · 하차라도 저녁 6시 이후 상차면 야상(다시 읽어도 같은 날 · 같은 오더)
+  const c4 = planCreate(ctx, { 상차일: "2026-11-19", 하차일: "2026-11-19", 상차시간: "18:30", 상차지명: "평택", 하차지명: "이천", 청구운임: "90000", 기사운임: "70000" }, "평택 내수", { rowCount: 100 });
+  assert.equal(c4.ok, true); assert.equal(Object.fromEntries(c4.cells.map((x) => [x.a1, x.value])).D9, "야상", "저녁 6시 이후 상차 = 야상");
+  assert.ok(c4.pushed.includes("하차시간"), "야상도 다시 읽으면 같은 날");
+  const c5 = planCreate(ctx, { 상차일: "2026-11-20", 하차일: "2026-11-20", 상차시간: "17:00", 상차지명: "평택", 하차지명: "이천", 청구운임: "90000", 기사운임: "70000" }, "평택 내수", { rowCount: 100 });
+  assert.equal(Object.fromEntries(c5.cells.map((x) => [x.a1, x.value])).D10, "당착", "6시 전이면 당착");
   console.log("입고시간 · 마감월 · 운송사 OK");
 }
 

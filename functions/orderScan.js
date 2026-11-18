@@ -170,6 +170,15 @@ const SCHEMA = {
   required: FIELD_KEYS,
   additionalProperties: false,
 };
+// 여러 건: 오더마다 같은 칸 + 경유하차(쉼표로)
+const ORDER_PROPS = { ...SCHEMA.properties, 경유하차: { type: "object", properties: { v: { type: "string" }, c: { type: "number" } }, required: ["v", "c"], additionalProperties: false } };
+const SCHEMA_MULTI = {
+  type: "object",
+  properties: { orders: { type: "array", items: { type: "object", properties: ORDER_PROPS, required: [...FIELD_KEYS, "경유하차"], additionalProperties: false } } },
+  required: ["orders"],
+  additionalProperties: false,
+};
+const MULTI_MAX = 40;
 // 바뀌지 않는 지시문(프롬프트 캐시) — 오늘 날짜·예시·원문은 사용자 메시지로만 보낸다
 const SYSTEM = [
   "너는 한국 화물 운송 배차 프로그램의 오더 정리 담당이다.",
@@ -185,19 +194,49 @@ const SYSTEM = [
   "- 금액은 원 단위 숫자만(쉼표·원 없이). 10만 미만 숫자가 '만' 없이 오면 운임인지 확인하고 아니면 비운다.",
   "- 여러 오더가 섞여 있으면 첫 번째 오더만 정리한다.",
   "- [예시]가 있으면 같은 회사가 예전에 직접 고친 결과다. 같은 양식이면 예시의 칸 나누기 방식을 그대로 따른다.",
+  // ⭐ 2026-11-18 등록된 업체 · 학습한 이름 — 화주마다 같은 곳을 다르게 부른다(에이제이 · AJ · 에이제이 후문)
+  "- [등록된 업체]가 있으면, 원문의 거래처 · 상차지 · 하차지가 그 목록의 업체와 같은 곳(줄임말 · 띄어쓰기 · 영문/한글 · 지점명 · 오타 차이)이면 목록의 이름을 글자 그대로 쓰고 주소 칸은 비워 둔다(프로그램이 등록 주소를 채운다).",
+  "- [이렇게 부른다]는 이 회사가 예전에 고친 이름이다(원문 이름 → 등록 이름). 같은 이름이 나오면 오른쪽 이름을 쓴다.",
+  "- 목록에 없는 곳이면 원문 이름 그대로 쓴다(새 업체). 억지로 비슷한 다른 업체에 맞추지 않는다.",
   "",
   "칸 설명",
   ...FIELD_DOC.map(([k, d]) => `- ${k}: ${d}`),
 ].join("\n");
 
-function buildUserMessage({ text, today, examples }) {
+// ⭐ 2026-11-18 여러 오더 한 번에(목록 · 표 · 화이트보드 사진 등) — orders 배열로
+const MULTI_GUIDE = [
+  "[여러 오더 정리 방법]",
+  "- 이 글에는 오더가 여러 건 있을 수 있다. 모든 오더를 orders 배열에 차례대로 넣는다(최대 40건). 1건이면 1개만.",
+  "- 공통 머리말(날짜 · 거래처 · '오전 상차' · '오후 상차' 같은 묶음 · 공통 상차지 · 공통 차량)은 그 아래 모든 오더에 똑같이 채운다.",
+  "- '오전 상차' · '오후 상차' 같은 묶음 이름은 상차시간을 비우고 메모에 '오전 상차' · '오후 상차'로 남긴다.",
+  "- 목록형 '이름 - 숫자'(예: '1. 한가득 - 521')는 이름 = 하차지명, 숫자 = 화물 수량이다. 단위가 없으면 박스(화물내용 '521박스', 화물수량 521, 화물단위 박스). 번호(1. 2.)는 버린다.",
+  "- 한 줄에 하차지가 쉼표로 여럿이면(예: '동탄점, CJ동탄, 의왕 - 730') 차 한 대가 차례로 내리는 오더 1건이다: 첫 곳 = 하차지명, 나머지 = 경유하차(쉼표로, 순서대로), 수량은 그 줄의 숫자.",
+  "- 아래쪽에 따로 떨어진 '이름 숫자'(예: '금촌 100')도 같은 방식의 오더로 본다.",
+  "- 상차지가 글에 없으면 비우고 c(확신도)를 0으로 둔다(사람이 채운다).",
+].join("\n");
+
+function buildUserMessage({ text, today, examples, known, multi = false }) {
   const d = new Date(`${today}T00:00:00Z`);
   const parts = [`[오늘] ${today} (${WEEK[d.getUTCDay()]}요일, 한국 시간)`];
+  const k = cleanKnown(known);
+  if (k.places.length || k.clients.length) {
+    parts.push(`[등록된 업체]\n${[...k.clients.map((n) => `거래처: ${n}`), ...k.places.map((p) => `상하차지: ${p.n}${p.a ? ` (${p.a})` : ""}`)].join("\n")}`);
+  }
+  if (k.aliases.length) parts.push(`[이렇게 부른다]\n${k.aliases.map(([a, b]) => `${a} → ${b}`).join("\n")}`);
+  if (multi) parts.push(MULTI_GUIDE);
   (examples || []).slice(0, 3).forEach((ex, i) => {
     parts.push(`[예시 ${i + 1} 원문]\n${String(ex.text || "").slice(0, 1500)}\n[예시 ${i + 1} 정답]\n${JSON.stringify(ex.fields || {})}`);
   });
   parts.push(`[정리할 오더 원문]\n${text}`);
   return parts.join("\n\n");
+}
+// 화면이 보낸 등록 업체 · 학습한 이름(원문과 비슷한 것만 — 화면이 고른다)
+function cleanKnown(known) {
+  const str = (v, n) => String(v ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, n);
+  const places = (Array.isArray(known?.places) ? known.places : []).slice(0, 80).map((p) => ({ n: str(p?.n, 60), a: str(p?.a, 40) })).filter((p) => p.n);
+  const clients = (Array.isArray(known?.clients) ? known.clients : []).slice(0, 40).map((n) => str(n, 60)).filter(Boolean);
+  const aliases = (Array.isArray(known?.aliases) ? known.aliases : []).slice(0, 60).map((x) => [str(x?.[0], 60), str(x?.[1], 60)]).filter(([a, b]) => a && b && a !== b);
+  return { places, clients, aliases };
 }
 function cleanExamples(list) {
   if (!Array.isArray(list)) return [];
@@ -218,14 +257,15 @@ async function runExtract({ db, makeAnthropic, bumpUsage, auth, data, now = Date
   const left = await takeQuota(db, auth.uid, "extract", now);
   const today = kstYmd(now);
   const examples = cleanExamples(data?.examples);
+  const multi = data?.multi === true;
   let res;
   try {
     res = await client.messages.create({
       model: MODEL,
-      max_tokens: 4000, // 생각 + JSON(28칸)이 들어갈 만큼
+      max_tokens: multi ? 16000 : 4000, // 생각 + JSON(28칸 · 여러 건이면 건수만큼)이 들어갈 만큼
       system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
-      messages: [{ role: "user", content: buildUserMessage({ text, today, examples }) }],
-      output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA } },
+      messages: [{ role: "user", content: buildUserMessage({ text, today, examples, known: data?.known, multi }) }],
+      output_config: { effort: "low", format: { type: "json_schema", schema: multi ? SCHEMA_MULTI : SCHEMA } },
     });
   } catch (e) {
     const code = e instanceof Anthropic.RateLimitError ? "resource-exhausted"
@@ -242,12 +282,20 @@ async function runExtract({ db, makeAnthropic, bumpUsage, auth, data, now = Date
   const raw = (res?.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
   let fields;
   try { fields = JSON.parse(raw); } catch { throw new ScanError("unavailable", "AI 답을 읽지 못했어요"); }
-  const out = {};
-  FIELD_KEYS.forEach((k) => {
-    const f = fields?.[k];
-    if (f && typeof f === "object") out[k] = { v: String(f.v ?? "").slice(0, 300), c: Math.max(0, Math.min(1, Number(f.c) || 0)) };
-  });
-  return { fields: out, engine: "claude", model: res?.model || MODEL, today, left, companyKey: who.key, usedExamples: examples.length };
+  const pick = (src, keys) => {
+    const out = {};
+    keys.forEach((k) => {
+      const f = src?.[k];
+      if (f && typeof f === "object") out[k] = { v: String(f.v ?? "").slice(0, 300), c: Math.max(0, Math.min(1, Number(f.c) || 0)) };
+    });
+    return out;
+  };
+  const base = { engine: "claude", model: res?.model || MODEL, today, left, companyKey: who.key, usedExamples: examples.length };
+  if (multi) {
+    const orders = (Array.isArray(fields?.orders) ? fields.orders : []).slice(0, MULTI_MAX).map((o) => pick(o, [...FIELD_KEYS, "경유하차"]));
+    return { ...base, orders, fields: orders[0] || {} };
+  }
+  return { ...base, fields: pick(fields, FIELD_KEYS) };
 }
 
-module.exports = { Anthropic, runOcr, runExtract, visionToLines, scanUserOf, takeQuota, companyKeyOf, ScanError, SCHEMA, SYSTEM, FIELD_KEYS, MODEL, LIMITS, buildUserMessage, cleanExamples };
+module.exports = { Anthropic, runOcr, runExtract, visionToLines, scanUserOf, takeQuota, companyKeyOf, ScanError, SCHEMA, SCHEMA_MULTI, SYSTEM, FIELD_KEYS, MODEL, LIMITS, buildUserMessage, cleanExamples, cleanKnown, MULTI_GUIDE };

@@ -37,7 +37,8 @@ export function createScanAi({ base, getToken, getKey, getUid, db, fs, call = nu
 
   const api = {
     async ocr(image) { return invoke("orderScanOcr", { image }, 25000); },
-    async extract(text, examples = []) { return invoke("orderScanExtract", { text, examples }, 30000); },
+    // ⭐ 2026-11-18 opts: { known(등록 업체 · 배운 이름), multi(여러 건 한 번에 → orders 배열) }
+    async extract(text, examples = [], opts = {}) { return invoke("orderScanExtract", { text, examples, ...(opts.known ? { known: opts.known } : {}), ...(opts.multi ? { multi: true } : {}) }, opts.multi ? 115000 : 30000); },
     async loadLearn() {
       const key = await getKey();
       if (!key || !db) return [];
