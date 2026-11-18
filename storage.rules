@@ -43,6 +43,31 @@ service firebase.storage {
       allow delete: if pnkStaffS() && (pnkFileDoc().uploaderUid == request.auth.uid || pnkAdminS());
     }
 
+    // 🌐 2026-11-18 PnK 공식 홈페이지 사진(인트라넷 › 홈페이지 편집에서 올림) — 홈페이지 방문자가 봐야 하니 읽기는 누구나
+    //  올리기 · 지우기는 대표 · 관리자만(사진 · 영상, 20MB 미만)
+    match /pnk/site/{file} {
+      function pnkMem() { return firestore.get(/databases/(default)/documents/pnkMembers/$(request.auth.uid)).data; }
+      // 최고관리자 · 부관리자는 2차 인증(Firestore pnkMfaSessions)을 마친 로그인만 — users 문서가 없어도 오류 없이
+      function pnkTmS() {
+        return request.auth.token.get('email', '') == 'tjddnqkf@naver.com'
+          || (firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.get('role', '') == 'totalMaster');
+      }
+      function pnkMfaS() {
+        return firestore.exists(/databases/(default)/documents/pnkMfaSessions/$(request.auth.uid))
+          && firestore.get(/databases/(default)/documents/pnkMfaSessions/$(request.auth.uid)).data.authTime == request.auth.token.auth_time
+          && firestore.get(/databases/(default)/documents/pnkMfaSessions/$(request.auth.uid)).data.until > request.time;
+      }
+      function pnkStaffS() {
+        return request.auth != null && (pnkTmS() ? pnkMfaS()
+          : (!firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) && firestore.exists(/databases/(default)/documents/pnkMembers/$(request.auth.uid)) && pnkMem().get('status', '') == 'active' && pnkMem().get('empNo', '') != ''));
+      }
+      function pnkAdminS() { return pnkStaffS() && (pnkTmS() || pnkMem().get('role', '') in ['owner', 'admin']); }
+      allow read: if true;
+      allow create, update: if pnkAdminS() && request.resource.size < 20 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*|video/.*');
+      allow delete: if pnkAdminS();
+    }
+
     // 🏢 2026-11-10 PnK 인트라넷 사내메일 첨부 — pnk/mail/{메일 id}/{파일}
     //  보기: 그 메일을 보낸 사람 · 받은 사람. 올리기: 구성원(메일 문서보다 먼저 올리므로 문서 확인 없이, 20MB 미만). 받은 메일 첨부는 서버가 저장
     match /pnk/mail/{mailId}/{file} {
