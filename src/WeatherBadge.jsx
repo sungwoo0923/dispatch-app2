@@ -146,10 +146,18 @@ export function WeatherStrip({ store, addresses, ymd, title = "오늘 운행 지
 
 // ─────────────── 🌦 2026-11-18 대시보드(관제 데크) 날씨 패널 — 네이비 데크와 같은 모양(사용자 요청: 날씨는 대시보드에만) ───────────────
 //  regionsByDay: { today: [{ r, n }], tomorrow: [...] } (오더가 있는 지역 · 많은 순) · 키가 없으면 "연결 전" 안내만
-const DK = { ink: "#E8EEF9", sub: "rgba(207,224,255,.8)", dim: "rgba(207,224,255,.6)", line: "rgba(143,176,240,.14)", glow: "#8FB0F0", hi: "#CFE0FF", warn: "#F5C46B", bad: "#FF8A7A" };
+const DK_NAVY = { ink: "#E8EEF9", sub: "rgba(207,224,255,.8)", dim: "rgba(207,224,255,.6)", line: "rgba(143,176,240,.14)", glow: "#8FB0F0", hi: "#CFE0FF", warn: "#F5C46B", bad: "#FF8A7A" };
 const DK_NUM = { fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" };
 const DK_KIND = { rain: "#7FB0FF", snow: "#CFE0FF", wind: "#A9B8D6", heat: "#FFB37A", cold: "#9EC1FF", sun: "#F5C46B", cloud: "#A9B8D6" };
-export function DeckWeather({ store, days, ymdOf }) {
+// ⭐ 2026-11-18 화면에 맞는 색 — navy: 일반 직원 대시보드(관제 데크) · gold: 임원(경영 브리핑) · 최고관리자
+const DK_GOLD = { ink: "#F4F6FB", sub: "rgba(232,238,250,.72)", dim: "rgba(232,238,250,.48)", line: "rgba(255,255,255,.08)", glow: "#D7BC82", hi: "#F1DDAE", warn: "#F5C46B", bad: "#FF7A6B" };
+const PANEL_BG = {
+  navy: { background: "linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025))", border: "1px solid rgba(143,176,240,.14)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.04)" },
+  gold: { background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,.08)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.05), 0 24px 48px rgba(0,0,0,.28)", borderRadius: 22 },
+};
+export function DeckWeather({ store, days, ymdOf, theme = "navy" }) {
+  const gold = theme === "gold";
+  const DK = gold ? DK_GOLD : DK_NAVY;
   const [day, setDay] = React.useState("today");
   const list = (days?.[day] || []).slice(0, 24);
   useWeather(store, list.map((x) => x.r.key));
@@ -163,14 +171,14 @@ export function DeckWeather({ store, days, ymdOf }) {
   const warnTypes = [...new Set(rows.flatMap((x) => x.warns.map((w) => w.type)))];
   const rough = rows.filter((x) => x.warns.length || x.sum?.kinds.length).length;
   const seg = (k, l) => (
-    <button key={k} type="button" onClick={() => setDay(k)} style={{ height: 28, padding: "0 12px", borderRadius: 8, fontSize: 12.5, fontWeight: 800, border: "none", cursor: "pointer", ...(day === k ? { background: "linear-gradient(140deg, rgba(110,149,232,.55), rgba(45,76,130,.4))", color: "#fff", boxShadow: "0 0 0 1px rgba(143,176,240,.45) inset" } : { background: "transparent", color: DK.sub }) }}>{l}</button>
+    <button key={k} type="button" onClick={() => setDay(k)} style={{ height: 28, padding: "0 12px", borderRadius: 8, fontSize: 12.5, fontWeight: 800, border: "none", cursor: "pointer", ...(day === k ? (gold ? { background: "linear-gradient(135deg,#F1DDAE 0%,#D7BC82 45%,#A8874A 100%)", color: "#1A1408" } : { background: "linear-gradient(140deg, rgba(110,149,232,.55), rgba(45,76,130,.4))", color: "#fff", boxShadow: "0 0 0 1px rgba(143,176,240,.45) inset" }) : { background: "transparent", color: DK.sub }) }}>{l}</button>
   );
   const empty = (msg, sub) => <div style={{ padding: "18px 4px", textAlign: "center", color: DK.sub, fontSize: 13.5, fontWeight: 700 }}>{msg}{sub && <div style={{ marginTop: 4, fontSize: 12, color: DK.dim, fontWeight: 600 }}>{sub}</div>}</div>;
   return (
-    <div className="hd-panel" data-testid="deck-weather" style={{ borderRadius: 18, padding: "16px 18px", marginBottom: 14, position: "relative", minWidth: 0 }}>
+    <div data-testid="deck-weather" data-theme={theme} style={{ borderRadius: 18, padding: gold ? "18px 22px" : "16px 18px", marginBottom: gold ? 0 : 14, position: "relative", minWidth: 0, backdropFilter: "blur(6px)", ...PANEL_BG[gold ? "gold" : "navy"] }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, rowGap: 8, flexWrap: "wrap", marginBottom: 12 }}>
         <span style={{ width: 7, height: 7, borderRadius: 2, background: DK.glow, transform: "rotate(45deg)", boxShadow: `0 0 8px ${DK.glow}` }} />
-        <span style={{ ...DK_NUM, fontSize: 11, fontWeight: 800, letterSpacing: "0.2em", color: DK.dim }}>WEATHER</span>
+        <span style={{ ...DK_NUM, fontSize: gold ? 10.5 : 11, fontWeight: 800, letterSpacing: gold ? "0.28em" : "0.2em", color: gold ? "#8FB0F0" : DK.dim }}>WEATHER</span>
         <span style={{ fontSize: 16.5, fontWeight: 800, color: DK.ink, whiteSpace: "nowrap" }}>운행 지역 날씨</span>
         {warnTypes.length > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, height: 24, padding: "0 9px", borderRadius: 7, fontSize: 12, fontWeight: 800, color: DK.warn, background: "rgba(245,196,107,.1)", boxShadow: "inset 0 0 0 1px rgba(245,196,107,.35)" }}><WxIcon kind="warn" size={12} color={DK.warn} />{warnTypes.join(" · ")} 발효 중</span>}
         {!disabled && rows.length > 0 && <span style={{ fontSize: 12.5, fontWeight: 700, color: rough ? DK.warn : DK.sub }}>{rough ? `날씨 주의 ${rough}곳` : "모든 지역 운행 무난"}</span>}
@@ -188,7 +196,7 @@ export function DeckWeather({ store, days, ymdOf }) {
                 const risky = x.warns.length > 0 || (x.sum?.kinds.length || 0) > 0;
                 const pop = x.sum?.pop || 0;
                 return (
-                  <div key={x.r.key} title={x.warns.length ? warnShort(x.warns) : ""} style={{ borderRadius: 14, padding: "11px 12px", minWidth: 0, background: risky ? "linear-gradient(140deg, rgba(245,196,107,.10), rgba(255,255,255,.02))" : "rgba(255,255,255,.035)", border: `1px solid ${x.warns.length ? "rgba(245,196,107,.45)" : risky ? "rgba(245,196,107,.25)" : DK.line}` }}>
+                  <div key={x.r.key} title={x.warns.length ? warnShort(x.warns) : ""} style={{ borderRadius: 14, padding: "11px 12px", minWidth: 0, background: risky ? "linear-gradient(140deg, rgba(245,196,107,.10), rgba(255,255,255,.02))" : gold ? "rgba(255,255,255,.03)" : "rgba(255,255,255,.035)", border: `1px solid ${x.warns.length ? "rgba(245,196,107,.45)" : risky ? "rgba(245,196,107,.25)" : DK.line}` }}>
                     <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 6 }}>
                       <span style={{ fontSize: 14, fontWeight: 800, color: DK.ink, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.r.short}</span>
                       <span style={{ ...DK_NUM, fontSize: 11.5, fontWeight: 700, color: DK.dim, flexShrink: 0 }}>오더 {x.n}</span>
@@ -199,7 +207,7 @@ export function DeckWeather({ store, days, ymdOf }) {
                         <span style={{ ...DK_NUM, fontSize: 18, fontWeight: 800, color: "#fff", letterSpacing: "-0.01em" }}>{x.sum.tmax !== null ? `${x.sum.tmax}°` : ""}<span style={{ fontSize: 13, color: DK.dim, fontWeight: 700 }}>{x.sum.tmin !== null ? ` / ${x.sum.tmin}°` : ""}</span></span>
                       </> : <span style={{ fontSize: 12.5, color: DK.dim }}>예보 없음</span>}
                     </div>
-                    {x.sum && <div style={{ marginTop: 7, height: 4, borderRadius: 4, background: "rgba(255,255,255,.07)", overflow: "hidden" }} title={`강수 확률 ${pop}%`}><div style={{ width: `${Math.min(100, pop)}%`, height: "100%", borderRadius: 4, background: pop >= 60 ? "#7FB0FF" : "rgba(143,176,240,.55)" }} /></div>}
+                    {x.sum && <div style={{ marginTop: 7, height: 4, borderRadius: 4, background: "rgba(255,255,255,.07)", overflow: "hidden" }} title={`강수 확률 ${pop}%`}><div style={{ width: `${Math.min(100, pop)}%`, height: "100%", borderRadius: 4, background: pop >= 60 ? "#7FB0FF" : gold ? "linear-gradient(90deg,#A8874A,#D7BC82)" : "rgba(143,176,240,.55)" }} /></div>}
                     <div style={{ marginTop: 6, fontSize: 12, fontWeight: 700, color: x.warns.length ? DK.warn : risky ? DK.hi : DK.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {x.warns.length ? warnShort(x.warns) : x.sum?.kinds.length ? `${x.sum.kinds.map((k) => WEATHER_KIND_LABEL[k]).join(" · ")} · 강수 ${pop}%` : x.sum ? `운행 무난 · 강수 ${pop}%` : ""}
                     </div>

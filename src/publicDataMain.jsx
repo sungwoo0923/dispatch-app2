@@ -87,7 +87,7 @@ export function OrdersWeatherStrip({ orders, ymd = kstYmd(0), title, dark, large
 }
 
 // 🌦 2026-11-18 대시보드(관제 데크) 날씨 — 오늘 · 내일 오더가 있는 상하차 지역(많은 순)
-export function OrdersWeatherDeck({ orders }) {
+export function OrdersWeatherDeck({ orders, theme = "navy" }) {
   const days = React.useMemo(() => {
     const pick = (ymd) => {
       const m = new Map();
@@ -101,7 +101,7 @@ export function OrdersWeatherDeck({ orders }) {
     };
     return { today: pick(kstYmd(0)), tomorrow: pick(kstYmd(1)) };
   }, [orders]);
-  return <DeckWeather store={mainWeather} days={days} ymdOf={(d) => kstYmd(d === "tomorrow" ? 1 : 0)} />;
+  return <DeckWeather store={mainWeather} days={days} theme={theme} ymdOf={(d) => kstYmd(d === "tomorrow" ? 1 : 0)} />;
 }
 
 // ─────────────── 팝빌 연동회원(회사정보) ───────────────

@@ -992,7 +992,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       })}
       {/* ===== 관제 데크 — 오늘 실적 · 매출 추이 · 매익률 · 담당자 순위 · 거래처 Top (2026-10-28 리디자인, 미배차 현황은 뺌) ===== */}
       {boardTab === "대시보드" && !dept && !bizDeck && <HomeDeck
-        weather={<OrdersWeatherDeck orders={dispatchData} />}
+        weather={<OrdersWeatherDeck orders={dispatchData} theme={role === "totalMaster" ? "gold" : "navy"} /* ⭐ 2026-11-18 최고관리자는 골드 · 다른 직원은 데크 네이비 */ />}
         todo={onTodoGo ? <TodayTodo rows={allDispatchData} onGo={onTodoGo} /> : null}
         dispatchData={dispatchData}
         pastCache={pastCache}
