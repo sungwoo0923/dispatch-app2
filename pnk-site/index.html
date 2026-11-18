@@ -57,9 +57,9 @@
 </header>
 
 <section data-k="e18" class="hero" id="top">
-  <video data-k="e19" class="clip hero-video" autoplay muted loop playsinline preload="metadata" poster="/pk/video/dev.jpg" aria-label="화면 설계부터 개발, AI, 배포까지 이어지는 작업 과정">
-    <source data-k="e20" src="/pk/video/dev.webm" type="video/webm" />
-    <source data-k="e21" src="/pk/video/dev.mp4" type="video/mp4" />
+  <video data-k="e19" class="clip hero-video" autoplay muted playsinline preload="auto" poster="/pk/video/work.jpg" data-playlist="work,dev" aria-label="회의 · 설계 · 디자인 · 개발 · 출시로 이어지는 업무 장면과 화면 개발 과정">
+    <source data-k="e20" src="/pk/video/work.webm" type="video/webm" />
+    <source data-k="e21" src="/pk/video/work.mp4" type="video/mp4" />
   </video>
   <div data-k="e22" class="hero-shade"></div>
   <div data-k="e23" class="wrap hero-in">
@@ -264,7 +264,21 @@
       if (tg) { var v = $(".hero-video"); if (!v) return; if (v.paused) { v.play().catch(function () {}); tg.innerHTML = '<svg class="i"><use href="#i-pause"/></svg>'; tg.setAttribute("aria-label", "영상 멈추기"); } else { v.pause(); tg.innerHTML = '<svg class="i"><use href="#i-play"/></svg>'; tg.setAttribute("aria-label", "영상 재생"); } }
     });
     var io = null, vio = null;
+    // 첫 화면 영상 재생 목록(data-playlist="work,dev") — 하나가 끝나면 다음 영상, 마지막 다음엔 처음으로
+    function playlist(v) {
+      if (!v || v.__pk) return; v.__pk = true;
+      var list = String(v.getAttribute("data-playlist") || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean);
+      if (list.length < 2) { v.loop = true; return; }
+      var i = 0;
+      v.addEventListener("ended", function () {
+        i = (i + 1) % list.length; var n = list[i];
+        v.poster = "/pk/video/" + n + ".jpg";
+        v.innerHTML = '<source src="/pk/video/' + n + '.webm" type="video/webm" /><source src="/pk/video/' + n + '.mp4" type="video/mp4" />';
+        v.load(); v.play().catch(function () {});
+      });
+    }
     window.kpPageInit = function () {
+      if (!editing()) playlist($(".hero-video"));
       solid();
       var y = $("#year"); if (y) y.textContent = new Date().getFullYear();
       if (vio) vio.disconnect();
