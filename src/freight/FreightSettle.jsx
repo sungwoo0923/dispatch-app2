@@ -24,10 +24,10 @@ function Tick({ on, label, date, onClick, disabled }) {
   );
 }
 
-export function SettlePage({ jobs, mode, me, canEdit, onOpen }) {
+export function SettlePage({ jobs, mode, me, canEdit, onOpen, initialTab = "청구", hideTab = false }) {
   const ms = React.useMemo(months, []);
   const [ym, setYm] = React.useState(ms[0][0]);
-  const [tab, setTab] = React.useState("청구");
+  const [tab, setTab] = React.useState(initialTab);
   const [only, setOnly] = React.useState("미완료");
   const [busy, setBusy] = React.useState("");
   const scoped = jobs.filter((j) => j.mode === mode && !j._linked && ymOf(kstYmd(j.createdAtMs)) === ym);
@@ -41,7 +41,7 @@ export function SettlePage({ jobs, mode, me, canEdit, onOpen }) {
     <div className="space-y-3">
       <div className="flex items-center gap-2.5 flex-wrap">
         <div className="w-[150px]"><Sel value={ym} onChange={(v) => setYm(v || ms[0][0])} options={ms} /></div>
-        <Seg size="sm" value={tab} onChange={setTab} options={["청구", "지급"]} />
+        {!hideTab && <Seg size="sm" value={tab} onChange={setTab} options={["청구", "지급"]} />}
         <Seg size="sm" value={only} onChange={setOnly} options={["미완료", "전체"]} />
         <span className={NOTE}>등록일 기준이에요 · 확인을 누르면 날짜와 처리한 사람이 이력에 남아요</span>
       </div>

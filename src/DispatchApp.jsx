@@ -8572,6 +8572,7 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   const bizWant = bizRaw || myProfileDoc?.bizHome || "";
   const biz = bizWant === "group" ? (canBizGroup ? "group" : bizMods.list[0]) : (bizMods.list.includes(bizWant) ? bizWant : bizMods.list[0]);
   const bizMenus = bizTopMenus(biz); // 내륙은 null(기존 메뉴)
+  try { window.__kpBizNow = biz; } catch { /* 무시 */ } // F1~F3 단축키가 지금 업무를 알게
   const pickBiz = (k) => { setBizRaw(k); writeBiz(user?.uid, k); setMenu(bizFirstMenu(k)); };
   const bizLandedRef = React.useRef(false);
   React.useEffect(() => {
@@ -8728,6 +8729,9 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   useEffect(() => {
     const handler = (e) => {
       const map = { F1: "배차관리", F2: "실시간배차현황", F3: "배차현황" };
+      // 🎨 2026-11-18 컨테이너 · 해상 · 항공 화면에서는 그 업무의 오더등록 · 실시간현황 · 운송현황으로
+      const fb = window.__kpBizNow; const bmap = { F1: "new", F2: "live", F3: "list" };
+      if (["container", "sea", "air"].includes(fb) && bmap[e.key]) { e.preventDefault(); setMenu(bizMenuKey(fb, bmap[e.key])); return; }
       const target = map[e.key];
       if (!target) return;
       e.preventDefault();
@@ -9160,7 +9164,7 @@ return (
               );
             };
             // ⭐ 2026-11-14 상단 메뉴 묶음 — 홈/배차/운임/기사관리/거래처/매출/정산/지입차관리/회사관리(권한으로 보이는 메뉴만 · 1개면 그대로)
-            if (navFlat || bizMenus) return navList.map(renderOne);
+            if (navFlat || biz === "group") return navList.map(renderOne); // 🎨 2026-11-18 컨테이너 · 해상 · 항공도 내륙처럼 묶어서
             return groupNavMenus(navList.filter((m) => menuShown(m) !== "hidden")).map((g) => {
               if (g.menus.length === 1) return renderOne(g.menus[0]);
               const members = g.menus.map((m) => { const st = menuShown(m); return { menu: m, label: navLabelOf(m), disabled: st === "blocked" || st === "locked", badge: st === "locked" ? 0 : navNOf(m), subBadges: subBadgesOf(m) }; });

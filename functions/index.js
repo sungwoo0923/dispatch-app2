@@ -6890,6 +6890,35 @@ exports.aiTeamChat = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeout
   }
 });
 
+// 🎬 2026-11-18 AI 본부 › 홍보팀 영상 작업실 — 숏츠 · 교육영상 기획 + 배경음악 큐시트 + 자막(설명은 functions/aiVideo.js 맨 위)
+const aiVideo = require("./aiVideo");
+exports.aiVideoPlan = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 180, memory: "256MB" }).https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "aiVideoPlan"))) return;
+  if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
+  const authz = String(req.get("Authorization") || "");
+  const decoded = authz.startsWith("Bearer ") ? await getAuth().verifyIdToken(authz.slice(7)).catch(() => null) : null;
+  if (!(await isTotalMasterReq(req))) { res.status(403).json({ error: "최고관리자·부관리자만 사용할 수 있습니다." }); return; }
+  let body = req.body; if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+  try {
+    const out = await aiVideo.runVideoPlan({ input: body?.input || {} });
+    db.collection("aiTeamLogs").add({
+      team: "marketing", uid: decoded?.uid || "", email: decoded?.email || "",
+      question: `[영상 작업실] ${out.input.kind} ${out.input.seconds}초 · ${out.input.topic}`.slice(0, 500), answer: String(out.plan?.title || "").slice(0, 500),
+      tools: ["video"], usage: out.usage, model: out.model, at: FieldValue.serverTimestamp(),
+    }).catch((e) => console.error("[영상 작업실] 기록 실패:", e));
+    res.json(out);
+  } catch (e) {
+    if (e?.user) { res.status(e.status || 500).json({ error: e.message }); return; } // 우리가 만든 안내(키 없음 · 거절 · 끊김)
+    const { status, msg } = aiTeams.apiErrorMessage(e);
+    console.error("[영상 작업실] 실패:", e);
+    res.status(status).json({ error: msg });
+  }
+});
+
 // 🧠 2026-11-07 오더 스캔 정밀 인식 — 설명은 functions/orderScan.js 맨 위
 //  orderScanOcr: Google Cloud Vision 글자 인식(줄 위치 포함) · orderScanExtract: Claude(Haiku)로 배차 등록 칸 정리
 //  둘 다 호출형(callable) · 로그인 + 승인된 사람만 · 사람마다 하루 횟수 제한(scanUsage) · 실패하면 화면이 예전 방식으로 넘어간다

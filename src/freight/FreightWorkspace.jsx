@@ -5,19 +5,25 @@ import { parseBizMenu, bizMenuKey, bizInfo, bizMenuLabel } from "../bizModules";
 import { useFreightJobs } from "./freightStore";
 import FreightForm from "./FreightForm";
 import FreightBoard, { LegDrawer } from "./FreightBoard";
-import { ModeDashboard, DeadlineBoard, PnlPage, GroupOverview, JobTimeline, Clients360 } from "./FreightDash";
+import { DeadlineBoard, PnlPage, GroupOverview, JobTimeline, Clients360 } from "./FreightDash";
 import { SettlePage, StaffBizPage } from "./FreightSettle";
 import { enrichInland, orderIdOf } from "./freightCore";
-import { PageHead, Btn } from "./ui";
+import { PageHead } from "./ui";
+import FreightStatus, { FreightLive, StatusTable } from "./FreightStatus"; // 🎨 2026-11-18 내륙 배차현황 · 실시간배차현황과 같은 모양
+import FreightFarePage from "./FreightFarePage"; // 💰 운임조회
+import KpSubNav from "../KpSubNav";
+import { PageClock } from "./inlandLook";
 
 const DESC = {
   dash: "진행 · 마감 · 인계 · 이익을 한 화면에서",
-  new: "드롭다운 · 달력으로 빠르게 등록",
-  list: "진행 단계와 마감을 줄마다 확인",
+  new: "오더 등록과 배차 처리를 한 화면에서",
+  live: "어제 · 오늘 · 내일 건을 실시간으로",
+  list: "기간별 내역 조회 · 수정",
+  fare: "같은 구간 지난 운임 · 구간별 평균",
   deadline: "넘기면 비용이 나가는 마감을 시간순으로",
-  pnl: "Job · 거래처별 매출 · 매입 · 이익",
+  pnl: "매출 · 매입 · 수익 분석",
   handoff: "다른 팀이 넘긴 건을 받아 이어서 진행",
-  settle: "계산서 · 입금 · 지급을 건별로 확인",
+  settle: "청구 · 수금 · 지급을 건별로 확인",
   staff: "직원마다 볼 수 있는 업무와 처음 화면",
   overview: "전 사업부 건수 · 마감 · 손익",
   jobs: "화물 하나가 팀을 거쳐 가는 흐름",
@@ -36,7 +42,8 @@ export default function FreightWorkspace({ menuKey, modules = [], me = "", canEd
   }, [rawJobs, inlandRows]);
   const [openId, setOpenId] = React.useState("");
   const [edit, setEdit] = React.useState(null);
-  React.useEffect(() => { setEdit(null); setOpenId(""); }, [menuKey]);
+  const [sub, setSub] = React.useState("");
+  React.useEffect(() => { setEdit(null); setOpenId(""); setSub(""); }, [menuKey]);
 
   const clientNames = React.useMemo(() => {
     const s = new Set();
@@ -57,9 +64,10 @@ export default function FreightWorkspace({ menuKey, modules = [], me = "", canEd
   const onOpen = (j) => setOpenId(j.id);
   const drawer = <LegDrawer job={open} jobs={jobs} modules={modules} me={me} canEdit={canEdit} onCreateInlandOrder={onCreateInlandOrder} onClose={() => setOpenId("")} onEdit={(j) => { setOpenId(""); setEdit(j); }} onOpenLeg={onOpen} />;
 
+  // 🎨 2026-11-18 머리말 — 내륙 화면 머리말처럼 오른쪽에 날짜 · 시각(예전 "+ 오더등록" 단추는 뺐다: 상단 배차 › 오더등록)
   const head = bare ? null : (
     <PageHead mode={biz} en={`${info.en} · ${String(page || "").toUpperCase()}`} title={biz === "group" ? bizMenuLabel(menuKey) : biz === "inland" ? "내륙 인계함" : `${info.short} ${bizMenuLabel(menuKey)}`} desc={DESC[page]}
-      right={biz !== "group" && biz !== "inland" && page !== "new" && canEdit ? <Btn kind="primary" onClick={() => go("new")}>+ {bizMenuLabel(bizMenuKey(biz, "new"))}</Btn> : null} />
+      right={biz === "group" || biz === "inland" ? null : <PageClock />} />
   );
   if (!loaded) return <div>{head}<div className="py-20 text-center text-[13.5px] font-bold text-[#9AA9C3]">불러오는 중…</div></div>;
 
@@ -68,7 +76,7 @@ export default function FreightWorkspace({ menuKey, modules = [], me = "", canEd
     return (
       <div>
         {head}
-        <div className="flex items-center gap-2 mb-3"><Btn size="sm" onClick={() => setEdit(null)}>← 돌아가기</Btn><span className="text-[14px] font-black text-[#0F1A30]">{edit.refNo} 수정</span></div>
+        <h2 className="text-lg font-bold mb-3">{edit.refNo} {edit.status === "인계요청" ? "인계 접수" : "수정"}</h2>
         <FreightForm {...formProps} mode={edit.mode} initial={edit} onDone={() => setEdit(null)} onCancel={() => setEdit(null)} />
       </div>
     );
@@ -82,14 +90,37 @@ export default function FreightWorkspace({ menuKey, modules = [], me = "", canEd
     else if (page === "pnl") body = <PnlPage jobs={jobs} inlandRows={modules.includes("inland") ? inlandRows : null} onOpen={onOpen} />;
     else if (page === "staff") body = <StaffBizPage modules={modules} canEdit={canManage} />;
     else body = <Clients360 jobs={jobs} inlandRows={inlandRows} modules={modules} />;
-  } else if (page === "dash") body = <ModeDashboard mode={biz} jobs={jobs} onOpen={onOpen} go={go} canEdit={canEdit} />;
-  else if (page === "new") body = canEdit ? <FreightForm key={biz} {...formProps} mode={biz} onGoList={() => go("list")} /> : <div className="py-16 text-center text-[13.5px] font-bold text-[#9AA9C3]">조회 전용 계정은 등록할 수 없습니다.</div>;
-  else if (page === "list") body = <FreightBoard mode={biz} jobs={jobs} allJobs={jobs} modules={modules} me={me} canEdit={canEdit} formProps={formProps} onNew={biz === "inland" ? null : () => go("new")} />;
-  else if (page === "handoff" && biz === "inland") body = <FreightBoard mode="inland" jobs={jobs} allJobs={jobs} modules={modules} me={me} canEdit={canEdit} formProps={formProps} onCreateInlandOrder={onCreateInlandOrder} />;
-  else if (page === "handoff") body = <FreightBoard mode={biz} jobs={jobs} allJobs={jobs} handoffOnly modules={modules} me={me} canEdit={canEdit} formProps={formProps} />;
-  else if (page === "deadline") body = <DeadlineBoard jobs={jobs} mode={biz} onOpen={onOpen} />;
-  else if (page === "pnl") body = <PnlPage jobs={jobs} mode={biz} onOpen={onOpen} />;
-  else if (page === "settle") body = <SettlePage jobs={jobs} mode={biz} me={me} canEdit={canEdit} onOpen={onOpen} />;
+  } else if (biz === "inland") {
+    body = <FreightBoard mode="inland" jobs={jobs} allJobs={jobs} modules={modules} me={me} canEdit={canEdit} formProps={formProps} onCreateInlandOrder={onCreateInlandOrder} />;
+  } else if (page === "new") {
+    // 내륙 오더등록처럼 — 입력 카드 아래에 오늘 건 목록
+    body = canEdit ? (<>
+      <FreightForm key={biz} {...formProps} mode={biz} onGoList={() => go("list")} />
+      {!bare && <div className="mt-6"><StatusTable mode={biz} jobs={jobs} variant="embed" canEdit={canEdit} onOpen={onOpen} onEdit={setEdit} /></div>}
+    </>) : <div className="py-16 text-center text-[13.5px] font-bold text-[#9AA9C3]">조회 전용 계정은 등록할 수 없습니다.</div>;
+  } else if (bare && ["live", "list", "pending", "handoff", "dash", "deadline"].includes(page)) {
+    // 휴대폰 — 넓은 표 대신 예전 카드 목록(내륙 모바일처럼 카드)
+    body = <FreightBoard mode={biz} jobs={jobs} allJobs={jobs} handoffOnly={page === "handoff"} modules={modules} me={me} canEdit={canEdit} formProps={formProps} onNew={() => go("new")} />;
+  } else if (page === "live") body = <FreightLive mode={biz} jobs={jobs} canEdit={canEdit} onOpen={onOpen} onEdit={setEdit} onNew={() => go("new")} />;
+  else if (["list", "pending", "deadline", "handoff", "dash"].includes(page)) {
+    // 예전 메뉴(대시보드 · 마감보드 · 인계함)는 운송현황 안의 탭으로
+    const tab = page === "dash" ? "list" : page;
+    body = bare
+      ? <StatusTable mode={biz} jobs={jobs} tab={tab === "deadline" ? "list" : tab} canEdit={canEdit} onOpen={onOpen} onEdit={setEdit} onNew={() => go("new")} />
+      : <FreightStatus mode={biz} jobs={jobs} tab={tab} canEdit={canEdit} onOpen={onOpen} onEdit={setEdit} onNew={() => go("new")} />;
+  } else if (page === "fare") body = <FreightFarePage mode={biz} jobs={jobs} places={placeNames} onOpen={onOpen} />;
+  else if (page === "pnl") body = bare ? <PnlPage jobs={jobs} mode={biz} onOpen={onOpen} /> : (
+    <KpSubNav code={`${info.en} REVENUE`} title="매출관리" icon="chart" items={[{ key: "job", label: "Job별 손익", en: "BY JOB", icon: "chart" }, { key: "client", label: "거래처별 손익", en: "BY CLIENT", icon: "building" }]} active={sub || "job"} onSelect={setSub}>
+      <h2 className="text-lg font-bold mb-3">{sub === "client" ? "거래처별 손익" : "Job별 손익"}</h2>
+      <PnlPage key={sub} jobs={jobs} mode={biz} onOpen={onOpen} initialView={sub === "client" ? "거래처" : "Job"} hideView />
+    </KpSubNav>
+  );
+  else if (page === "settle") body = bare ? <SettlePage jobs={jobs} mode={biz} me={me} canEdit={canEdit} onOpen={onOpen} /> : (
+    <KpSubNav code={`${info.en} SETTLEMENT`} title="정산관리" icon="inbox" items={[{ key: "청구", label: "청구 · 수금", en: "RECEIVABLES", icon: "receipt" }, { key: "지급", label: "지급", en: "PAYABLES", icon: "wallet" }]} active={sub === "지급" ? "지급" : "청구"} onSelect={setSub}>
+      <h2 className="text-lg font-bold mb-3">{sub === "지급" ? "지급" : "청구 · 수금"}</h2>
+      <SettlePage key={sub} jobs={jobs} mode={biz} me={me} canEdit={canEdit} onOpen={onOpen} initialTab={sub === "지급" ? "지급" : "청구"} hideTab />
+    </KpSubNav>
+  );
 
   return <div data-testid={`freight-${biz}-${page}`}>{head}{body}{drawer}</div>;
 }

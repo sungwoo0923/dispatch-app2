@@ -149,10 +149,10 @@ export function DeadlineBoard({ jobs, mode = "", onOpen }) {
 }
 
 // ── 손익 ─────────────────────────────────────────────────────────────
-export function PnlPage({ jobs, mode = "", inlandRows = null, onOpen }) {
+export function PnlPage({ jobs, mode = "", inlandRows = null, onOpen, initialView = "Job", hideView = false }) {
   const months = React.useMemo(monthOptions, []);
   const [ym, setYm] = React.useState(months[0][0]);
-  const [view, setView] = React.useState("Job");
+  const [view, setView] = React.useState(initialView);
   const inMonth = jobs.filter((j) => ymOf(kstYmd(j.createdAtMs)) === ym);
   const scoped = inMonth.filter((j) => !mode || j.mode === mode);
   const tot = sumPnl(inlandRows ? scoped.filter((j) => !j._linked) : scoped); // 배차 오더와 연결된 내륙 구간은 내륙 매출에 이미 들어 있다
@@ -166,7 +166,7 @@ export function PnlPage({ jobs, mode = "", inlandRows = null, onOpen }) {
     <div className="space-y-3">
       <div className="flex items-center gap-2.5 flex-wrap">
         <div className="w-[150px]"><Sel value={ym} onChange={(v) => setYm(v || months[0][0])} options={months} /></div>
-        <Seg size="sm" value={view} onChange={setView} options={["Job", "거래처"]} />
+        {!hideView && <Seg size="sm" value={view} onChange={setView} options={["Job", "거래처"]} />}
         <span className={NOTE}>등록일 기준이에요 · 외화는 입력한 환율로 원화 환산해요</span>
       </div>
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5">

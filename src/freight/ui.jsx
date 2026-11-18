@@ -18,6 +18,10 @@ export const INPUT = "w-full h-9 border border-[#DCE3EE] rounded-lg px-2.5 text-
 export const TH = "px-3 h-9 text-left text-[12.5px] font-bold text-white whitespace-nowrap";
 export const TD = "px-3 h-11 text-[13px] text-[#3A4A66] whitespace-nowrap";
 export const THEAD_BG = "#1B2B4B";
+// 🎨 2026-11-18 내륙 오더등록과 같은 "밑줄형" 입력(오더등록 화면에서만 켠다) — FieldLook.Provider value="line"
+export const LINE = "w-full h-[38px] border-0 border-b-2 border-gray-300 rounded-none px-1 text-[13px] font-bold text-gray-900 bg-transparent placeholder:text-[#A7B3C6] placeholder:font-medium focus:outline-none focus:border-[#1B2B4B] transition";
+export const FieldLook = React.createContext("box");
+const useIn = () => (React.useContext(FieldLook) === "line" ? LINE : INPUT);
 export const NOTE = "text-[12.5px] font-medium text-[#7A89A3]";
 
 export const MODE_ICON = { inland: Truck, container: Container, sea: Ship, air: Plane, group: Layers };
@@ -114,11 +118,12 @@ export function SearchIn({ value, onChange, placeholder = "검색", className = 
 
 // ── 입력 ─────────────────────────────────────────────────────────────
 export function Field({ label, required, hint, span = 1, children, ok, err }) {
+  const line = React.useContext(FieldLook) === "line";
   const sp = span === 2 ? "sm:col-span-2" : span === 3 ? "sm:col-span-2 lg:col-span-3" : span === 4 ? "sm:col-span-2 lg:col-span-3 xl:col-span-4" : "";
   return (
     <div className={`min-w-0 ${sp}`}>
-      <label className="flex items-center gap-1 text-[12px] font-bold text-[#3A4A66] mb-1 whitespace-nowrap overflow-hidden">
-        {label}{required && <span className="text-[#C2362B]">*</span>}
+      <label className={line ? "flex items-center gap-1 h-[22px] text-[15px] font-semibold text-black mb-1 whitespace-nowrap overflow-hidden" : "flex items-center gap-1 text-[12px] font-bold text-[#3A4A66] mb-1 whitespace-nowrap overflow-hidden"}>
+        {label}{required && <span className={line ? "text-[#4B6CB7]" : "text-[#C2362B]"}>*</span>}
         {hint && <span className="font-medium text-[#9AA9C3] truncate">· {hint}</span>}
       </label>
       {children}
@@ -127,28 +132,35 @@ export function Field({ label, required, hint, span = 1, children, ok, err }) {
   );
 }
 // 넓은 화면에서 칸이 길게 늘어나지 않게 — 화면 폭에 따라 최대 6칸
-export const Grid = ({ children, cols = 4 }) => <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${cols === 3 ? "2xl:grid-cols-4" : "xl:grid-cols-4 2xl:grid-cols-6"} gap-x-3 gap-y-2.5`}>{children}</div>;
+export const Grid = ({ children, cols = 4 }) => {
+  // 밑줄형(오더등록)은 내륙 오더등록처럼 4 → 6 → 8칸
+  if (React.useContext(FieldLook) === "line") return <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 min-[1500px]:grid-cols-8 gap-x-3.5 gap-y-4">{children}</div>;
+  return <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 ${cols === 3 ? "2xl:grid-cols-4" : "xl:grid-cols-4 2xl:grid-cols-6"} gap-x-3 gap-y-2.5`}>{children}</div>;
+};
 export function Sel({ value, onChange, options = [], placeholder = "선택", disabled = false, className = "" }) {
+  const IN = useIn();
   // options: ["a", "b"] | [[value, label]] | [{ group, items }]
   const opt = (o) => (Array.isArray(o) ? <option key={o[0]} value={o[0]}>{o[1]}</option> : <option key={o} value={o}>{o}</option>);
   return (
-    <CustomSelect value={value || ""} onChange={(e) => onChange(e.target.value)} disabled={disabled} placeholder={placeholder} className={`${INPUT} ${className}`}>
+    <CustomSelect value={value || ""} onChange={(e) => onChange(e.target.value)} disabled={disabled} placeholder={placeholder} className={`${IN} ${className}`}>
       <option value="">{placeholder}</option>
       {options.map((o) => (o && o.group ? <optgroup key={o.group} label={o.group}>{o.items.map(opt)}</optgroup> : opt(o)))}
     </CustomSelect>
   );
 }
-export const DateIn = ({ value, onChange, placeholder = "날짜 선택", min, max }) => (
-  <CustomDatePicker value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} showIcon min={min} max={max} className={INPUT} />
-);
-export const TimeIn = ({ value, onChange, placeholder = "시간 선택" }) => <TimeSelect value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={INPUT} />;
-export const DateTimeIn = ({ value, onChange }) => <DateTimeSelect value={value || ""} onChange={(e) => onChange(e.target.value)} dateClassName={INPUT} timeClassName={INPUT} />;
+export const DateIn = ({ value, onChange, placeholder = "날짜 선택", min, max }) => {
+  const IN = useIn();
+  return <CustomDatePicker value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} showIcon min={min} max={max} className={IN} />;
+};
+export const TimeIn = ({ value, onChange, placeholder = "시간 선택" }) => { const IN = useIn(); return <TimeSelect value={value || ""} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={IN} />; };
+export const DateTimeIn = ({ value, onChange }) => { const IN = useIn(); return <DateTimeSelect value={value || ""} onChange={(e) => onChange(e.target.value)} dateClassName={IN} timeClassName={IN} />; };
 export function TextIn({ value, onChange, placeholder = "", upper = false, right, inputMode, maxLength, disabled = false }) {
+  const IN = useIn();
   return (
     <div className="relative">
       <input value={value || ""} disabled={disabled} inputMode={inputMode} maxLength={maxLength} placeholder={placeholder}
         onChange={(e) => onChange(upper ? e.target.value.toUpperCase() : e.target.value)}
-        className={`${INPUT} ${right ? "pr-12" : ""} ${upper ? "tracking-wide" : ""} disabled:bg-[#F5F8FD] disabled:text-[#7A89A3]`} />
+        className={`${IN} ${right ? "pr-12" : ""} ${upper ? "tracking-wide" : ""} disabled:bg-[#F5F8FD] disabled:text-[#7A89A3]`} />
       {right && <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[12px] font-semibold text-[#9AA9C3] pointer-events-none">{right}</span>}
     </div>
   );
@@ -160,6 +172,7 @@ export function NumIn({ value, onChange, placeholder = "0", unit, decimals = fal
 }
 // 고르거나(목록) 바로 쓰는 칸 — 목록에서 찾기 + 없는 값은 그대로 입력
 export function Combo({ value, onChange, options = [], placeholder = "선택 또는 입력", upper = false }) {
+  const IN = useIn();
   const flat = React.useMemo(() => options.flatMap((o) => (o && o.group ? o.items.map((x) => ({ g: o.group, v: x })) : [{ g: "", v: o }])), [options]);
   const [open, setOpen] = React.useState(false);
   const [rect, setRect] = React.useState(null);
@@ -180,7 +193,7 @@ export function Combo({ value, onChange, options = [], placeholder = "선택 또
   const pick = (v) => { onChange(v); setOpen(false); setHi(-1); };
   return (
     <div ref={ref} className="relative">
-      <input value={value || ""} placeholder={placeholder} className={`${INPUT} pr-8`}
+      <input value={value || ""} placeholder={placeholder} className={`${IN} pr-8`}
         onFocus={() => setOpen(true)} onClick={() => setOpen(true)}
         onChange={(e) => { onChange(upper ? e.target.value.toUpperCase() : e.target.value); setOpen(true); setHi(-1); }}
         onKeyDown={(e) => {
