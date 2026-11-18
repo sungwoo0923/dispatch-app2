@@ -5998,7 +5998,7 @@ const title =
       )}
       {/* ⭐ 2026-11-03 알림 통합 — 새 공지·인사발령·결재 요청/결과·인수인계는 가운데 팝업(아래쪽 배너 없앰) */}
       {!["driver", "shipper"].includes(role) && (
-        <NotifyCenter mobile uid={user?.uid} role={realRole || role} team={myProfM?.team || (() => { try { return window.__kpMeTeam || ""; } catch { return ""; } })()}
+        <NotifyCenter mobile exec={!!(isExecM || /대표/.test(String(myProfM?.position || "")))} name={myProfM?.name || ""} uid={user?.uid} role={realRole || role} team={myProfM?.team || (() => { try { return window.__kpMeTeam || ""; } catch { return ""; } })()}
           company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY).trim()}
           onGo={(it) => {
             if (it.src === "approval") { window.__kpOpenApproval = { id: it.id, page: it.page || "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; }

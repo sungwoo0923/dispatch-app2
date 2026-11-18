@@ -7,6 +7,7 @@ import React from "react";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { isPopupOn, usePopupPrefs } from "./popupPrefs";
+import { usePopupTurn } from "./popupTurn";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const GOLD = "#E9C46A";
@@ -79,7 +80,8 @@ export default function OrderCongratsPopup({ uid, profile, mobile = false }) {
   const [closed, setClosed] = React.useState(false);
   const popupOn = isPopupOn(usePopupPrefs(uid), "hr"); // ⭐ 2026-11-07 팝업 알림 설정 · 인사 공지(꺼도 seen은 안 바꿔 다시 켜면 뜬다)
   const seenHere = (() => { try { return lsKey && localStorage.getItem(lsKey) === "1"; } catch { return false; } })();
-  const show = !!(popupOn && uid && n && !n.seen && !seenHere && !closed);
+  const want = !!(popupOn && uid && n && !n.seen && !seenHere && !closed);
+  const show = usePopupTurn("orderCongrats", want); // 🪟 2026-11-18 알림 브리핑이 닫힌 다음에
 
   const close = React.useCallback(() => {
     setClosed(true);
