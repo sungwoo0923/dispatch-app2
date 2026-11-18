@@ -8974,7 +8974,7 @@ return (
       {/* ✉️ 2026-11-08 발신 메일 — 보내다가 "설정 없음"이면 안내 창 · 예전 공용 계정을 쓰던 회사 관리자에게 등록 안내 */}
       <MailSetupHost company={userCompany || localStorage.getItem("userCompany") || ""} role={realRole || role} isMaster={myProfileDoc?.isMaster === true} />
       {/* ⭐ 2026-11-03 알림 통합 — 새 공지·인사발령·결재 요청/결과·인수인계는 가운데 팝업(하나씩 · 최신 것부터) · [바로 가기]는 그 메뉴로 */}
-      <NotifyCenter uid={user?.uid} role={realRole || role} team={myProfileDoc?.team || ""} company={deptCompany}
+      <NotifyCenter uid={user?.uid} role={realRole || role} team={myProfileDoc?.team || ""} company={deptCompany} exec={!!(isExec || deptMode === "exec" || isCeoPosition(myProfileDoc?.position))} name={myRealName || myProfileDoc?.name || ""}
         onGo={(it) => {
           if (it.src === "approval") { window.__kpOpenApproval = { id: it.id, page: it.page || "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; }
           if (it.src === "handover") { window.__kpOpenHandover = it.id; setMenu("HOME"); setTimeout(() => window.dispatchEvent(new Event("kp-open-handover")), 0); return; }
