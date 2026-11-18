@@ -72,11 +72,12 @@ export default class ErrorBoundary extends React.Component {
           textAlign: "center", background: "#F5F7FA", fontFamily: "sans-serif",
         }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>⚠</div>
+          {/* 🛠 2026-11-18 새 버전 배포 뒤 화면 파일을 못 받은 경우는 오류가 아니라 "새 버전" 안내로 */}
           <div style={{ fontSize: 16, fontWeight: 700, color: "#1B2B4B", marginBottom: 8 }}>
-            화면을 불러오는 중 오류가 발생했습니다
+            {isChunkLoadError(this.state.error) ? "새 버전이 나왔어요" : "화면을 불러오는 중 오류가 발생했습니다"}
           </div>
           <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 20 }}>
-            새로고침하면 대부분 해결됩니다. 계속되면 [오류 보내기]를 눌러 주세요.
+            {isChunkLoadError(this.state.error) ? "[새로고침]을 누르면 새 버전으로 바로 열려요." : "새로고침하면 대부분 해결됩니다. 계속되면 [오류 보내기]를 눌러 주세요."}
           </div>
           <button
             onClick={() => window.location.reload()}
