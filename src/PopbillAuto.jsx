@@ -15,7 +15,7 @@ import {
   ALIMTALK_TEMPLATES, ALIMTALK_COST_NOTE, alimtalkChipOf, isAssignedDone,
 } from "./popbillAuto";
 import { POPBILL_BANKS, bankNameOf, maskAccount } from "./arMatch";
-import { SMS_MODES, smsInfo } from "./smsSend";
+import { SMS_MODES, smsInfo, getPcSmsWay, setPcSmsWay } from "./smsSend";
 
 const TONE = { ok: ["#E9F5EE", "#1F7A4D"], warn: ["#FFF4E0", "#9A5B00"], error: ["#FDECEC", "#B4342A"], muted: ["#F3F5F9", "#6B7A93"], info: ["#EEF3FA", "#2D4C82"] };
 export function Chip({ tone = "muted", children, title, testId }) {
@@ -165,6 +165,9 @@ export function SmsSettingsCard({ company, canEdit }) {
   const [info, setInfo] = React.useState(null);
   const v = draft || cur;
   const dis = !canEdit || busy || raw === null;
+  const [pcWay, setPcWay] = React.useState(getPcSmsWay); // 📱 2026-11-18 이 PC만 — 휴대폰과 연결 / QR로 내 폰에서
+  const pickPc = (k) => { setPcSmsWay(k); setPcWay(k); };
+  const freeMode = cur.mode === "phone" || cur.mode === "qr" || cur.mode === "auto";
   React.useEffect(() => { let alive = true; smsInfo().then((r) => { if (alive) setInfo(r); }).catch(() => { if (alive) setInfo({ error: true }); }); return () => { alive = false; }; }, [company]);
   const save = async () => {
     setBusy(true); setMsg("");
@@ -192,7 +195,24 @@ export function SmsSettingsCard({ company, canEdit }) {
             ))}
           </div>
         </div>
-        {v.mode !== "phone" && (
+        {freeMode && (
+          <div data-testid="sms-pc-way">
+            <div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">이 PC에서 휴대폰으로 보낼 때 <span className="font-semibold text-[#7A879C]">· 직원마다 이 PC에 기억해요</span></div>
+            <div className="grid grid-cols-2 gap-2">
+              {[["phone", "휴대폰과 연결", "PC에 연결된 휴대폰이 보내요"], ["qr", "QR로 내 폰에서", "QR을 폰 카메라로 찍어 보내요"]].map(([k, l, d]) => {
+                const on = (pcWay || (cur.mode === "qr" ? "qr" : "")) === k;
+                return (
+                  <button key={k} type="button" onClick={() => pickPc(k)} data-testid={`sms-pc-${k}`}
+                    className={`text-left rounded-xl border px-3 py-2.5 transition ${on ? "border-[#0F1A30] bg-[#F5F8FD]" : "border-[#E3E8F0] bg-white hover:border-[#C9D3E3]"}`}>
+                    <span className="block text-[13.5px] font-black text-[#0F1A30]">{l}</span><span className="block text-[12px] text-[#5B6B85]">{d}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {!pcWay && cur.mode !== "qr" && <div className="mt-1 text-[12px] text-[#7A879C]">아직 안 골랐어요. 처음 문자를 보낼 때 한 번 물어봐요.</div>}
+          </div>
+        )}
+        {v.mode !== "phone" && v.mode !== "qr" && (
           <label className="block"><div className="text-[12.5px] font-black text-[#3A4A66] mb-1">발신번호</div>
             <input className={inp} inputMode="tel" value={fmtPhone(v.senderNumber)} placeholder="팝빌에 등록한 회사 번호" disabled={dis} onChange={(e) => { setDraft({ ...v, senderNumber: e.target.value.replace(/[^\d]/g, "") }); setMsg(""); }} />
             <div className="mt-1 text-[12px] text-[#7A879C]">법에 따라 미리 등록한 번호로만 보낼 수 있어요(팝빌 › 발신번호 등록)</div>
@@ -212,7 +232,7 @@ export function SmsSettingsCard({ company, canEdit }) {
           {info?.error && <div className="mt-1 text-[11.5px] text-white/50">서버에서 사용량을 아직 못 읽었어요</div>}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[12.5px] font-semibold text-[#7A879C]">{v.mode === "phone" ? "휴대폰과 연결은 요금이 청구되지 않아요" : "90자(한글 45자) 넘으면 장문으로 보내요"}</span>
+          <span className="text-[12.5px] font-semibold text-[#7A879C]">{v.mode === "phone" || v.mode === "qr" ? "휴대폰과 연결 · QR로 내 폰에서는 요금이 청구되지 않아요" : "90자(한글 45자) 넘으면 장문으로 보내요"}</span>
           {canEdit && <span className="ml-auto flex gap-1.5">
             {draft && <button type="button" className={btn} onClick={() => { setDraft(null); setMsg(""); }} disabled={busy}>되돌리기</button>}
             <button type="button" className={btnPri} onClick={save} disabled={busy || !draft} data-testid="sms-save">{busy ? "저장 중" : "저장"}</button>

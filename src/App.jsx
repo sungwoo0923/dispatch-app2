@@ -91,6 +91,7 @@ import { securityLoginPing } from "./securityWatch"; // 🛡 2026-11-09 이상 �
 const UploadPage = lazyRetry(() => import("./UploadPage"));
 const DriverSearchPage = lazyRetry(() => import("./DriverSearchPage"));
 const ShortLinkRedirect = lazyRetry(() => import("./ShortLinkRedirect"));
+const SmsRelayPage = lazyRetry(() => import("./SmsRelayPage")); // 📱 2026-11-18 QR로 내 폰에서 문자 보내기(/t/{코드})
 const StandardFare = lazyRetry(() => import("./StandardFare"));
 const ChangePassword = lazyRetry(() => import("./ChangePassword"));
 const PlatformCenter = lazyRetry(() => import("./PlatformCenter"));
@@ -903,6 +904,12 @@ export default function App() {
   const shortLinkMatch = window.location.pathname.match(/^\/u\/([A-Za-z0-9]+)$/);
   if (shortLinkMatch) {
     return <Router><Routes><Route path="*" element={<React.Suspense fallback={null}><ShortLinkRedirect code={shortLinkMatch[1]} /></React.Suspense>} /></Routes></Router>;
+  }
+
+  // 📱 2026-11-18 PC 'QR로 내 폰에서 문자 보내기'의 링크 QR(/t/{코드}) — 로그인 없이 휴대폰에서 문자 앱 열기
+  const smsRelayMatch = window.location.pathname.match(/^\/t\/([A-Za-z0-9]{12,})$/);
+  if (smsRelayMatch) {
+    return <Router><Routes><Route path="*" element={<React.Suspense fallback={null}><SmsRelayPage code={smsRelayMatch[1]} /></React.Suspense>} /></Routes></Router>;
   }
 
   // ✍ 전자계약 서명 링크 (/sign/{계약ID}) — 로그인 없이 고객이 열어 서명
