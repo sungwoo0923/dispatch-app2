@@ -117,7 +117,7 @@ function WayDialog({ list, def, onDone }) {
               <span><span style={{ display: "block", fontSize: 15, fontWeight: 900, color: "#0F1A30" }}>{l}</span><span style={{ display: "block", fontSize: 12.5, color: "#5B6B85", marginTop: 1 }}>{d}</span></span>
             </button>
           ))}
-          <div style={{ fontSize: 12, color: "#7A879C", fontWeight: 600 }}>Enter = 선택한 방법 · 숫자 1 · 2로 바로 골라요 · 지난번 방법이 먼저 골라져 있어요</div>
+          <div style={{ fontSize: 12, color: "#7A879C", fontWeight: 600 }}>Enter를 누르면 바로 보내져요</div>
         </div>
         <div style={{ display: "flex", gap: 8, padding: "14px 22px 20px" }}>
           <button type="button" onClick={() => onDone(null)} style={{ flex: 1, height: 46, borderRadius: 13, border: "1px solid #DCE3EE", background: "#fff", color: "#3A4A66", fontSize: 14.5, fontWeight: 800, cursor: "pointer" }}>취소</button>
