@@ -140,3 +140,13 @@ export function suggestRecipients(input, book = {}, threads = [], n = 6) {
   Object.entries(book).forEach(([p, nm]) => { if (nm.toLowerCase().includes(last) || (d.length >= 3 && p.includes(d))) push(p, nm); });
   return out;
 }
+
+/** 이름표 + 구분 — 기사관리(drivers) "기사", 오더에 적힌 기사(contacts) "오더". 기사관리가 먼저 */
+export function buildBookKinds(drivers = [], contacts = []) {
+  const d = (drivers || []).map((x) => ({ name: x?.이름 || x?.name || x?.기사명 || "", phone: x?.전화번호 || x?.phone || x?.휴대폰 || "" }));
+  const book = buildNameBook([...d, ...(contacts || [])]);
+  const kinds = {};
+  d.forEach((x) => { const p = normPeer(x.phone); if (p && !kinds[p]) kinds[p] = "기사"; });
+  (contacts || []).forEach((x) => { const p = normPeer(x?.phone); if (p && !kinds[p]) kinds[p] = "오더"; });
+  return { book, kinds };
+}
