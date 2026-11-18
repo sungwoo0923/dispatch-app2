@@ -6,9 +6,9 @@
 //  🔒 smsBox/{내 uid} 만 읽는다 — 다른 사람(관리자 포함)의 문자는 규칙에서 막힌다
 import React from "react";
 import { FabButton, WinHeader, ResizeGrip, useWinSize } from "../FloatDock";
-import { kpConfirm, kpPrompt } from "../kpDialog";
+import { kpConfirm } from "../kpDialog";
 import { watchBox, watchMsgs, queueSms, resendSms, markRead, deleteThread, getSmsRoute, setSmsRoute, OFFICE_SMS_OPEN_EVENT, OFFICE_SMS_ROUTE_EVENT } from "./officeSmsStore";
-import { normPeer, fmtPhone, smsBytesOf, phoneState, buildNameBook, groupThreads, threadMessages, statusText, filterThreads, timeLabel, toMs } from "./officeSmsCore";
+import { normPeer, fmtPhone, smsBytesOf, phoneState, buildNameBook, groupThreads, threadMessages, statusText, filterThreads, timeLabel, toMs, parseRecipients, suggestRecipients } from "./officeSmsCore";
 const APK_URL = "https://github.com/sungwoo0923/dispatch-app2/releases/download/driver-apk-latest/LogisWeb-Driver.apk"; // DriverAppGuide.jsx 와 같은 주소
 
 const NAVY = "#1B2B4B";
@@ -71,6 +71,10 @@ export default function OfficeSmsWindow({ user, drivers = [], contacts = [], con
   const [showSet, setShowSet] = React.useState(false);
   const [now, setNow] = React.useState(Date.now());
   const [toast, setToast] = React.useState(null);
+  // ✍ 새 문자 — 받는사람 칸에 휴대폰 번호만 적으면 누구에게나(지입기사 · 일반 용차 · 거래처). 여러 명은 쉼표로
+  const [composing, setComposing] = React.useState(false);
+  const [toText, setToText] = React.useState("");
+  const [composeMsg, setComposeMsg] = React.useState("");
   const win = useWinSize("officeSms", PRESETS, { w: 480, h: 400 });
   const listEndRef = React.useRef(null);
   const seenInRef = React.useRef(null);
@@ -89,7 +93,7 @@ export default function OfficeSmsWindow({ user, drivers = [], contacts = [], con
   React.useEffect(() => {
     const h = (e) => {
       const d = e.detail || {};
-      if (d.peer) { setPeer(normPeer(d.peer)); setDraftName(d.name || ""); }
+      if (d.peer) { setPeer(normPeer(d.peer)); setDraftName(d.name || ""); setComposing(false); }
       setShowSet(false);
       setOpen(true);
     };
@@ -143,18 +147,33 @@ export default function OfficeSmsWindow({ user, drivers = [], contacts = [], con
     } finally { setBusy(false); }
   };
 
-  const newChat = async () => {
-    const v = await kpPrompt("받는 사람 휴대폰 번호 또는 기사 이름", "", { title: "새 대화" });
-    if (v == null) return;
-    const s = String(v).trim();
-    let p = normPeer(s);
-    if (!/^\d{8,12}$/.test(p)) {
-      const hit = Object.entries(book).filter(([, n]) => n.includes(s));
-      if (hit.length === 1) p = hit[0][0];
-      else if (hit.length > 1) { setQ(s); return; }
-      else { await kpConfirm("번호를 찾지 못했어요. 휴대폰 번호를 숫자로 넣어 주세요.", { title: "새 대화", okText: "확인" }); return; }
+  const newChat = () => { setComposing(true); setPeer(""); setToText(""); setComposeMsg(""); setShowSet(false); };
+  const recips = React.useMemo(() => parseRecipients(toText, book), [toText, book]);
+  const suggests = React.useMemo(() => suggestRecipients(toText, book, threads), [toText, book, threads]);
+  const pickSuggest = (x) => {
+    const parts = toText.split(/[,;\n]+/);
+    parts[parts.length - 1] = ` ${x.name ? `${x.name} ` : ""}${fmtPhone(x.phone)}`;
+    setToText(`${parts.join(",").replace(/^[\s,]+/, "")}, `);
+  };
+  const sendNew = async () => {
+    const body = text.trim();
+    if (busy) return;
+    if (!recips.ok.length) { setComposeMsg("받는사람에 휴대폰 번호를 적어 주세요"); return; }
+    if (recips.bad.length) { setComposeMsg(`번호를 알 수 없어요: ${recips.bad.join(", ")} — 숫자로 적어 주세요`); return; }
+    if (!body) { setComposeMsg("문자 내용을 적어 주세요"); return; }
+    if (recips.ok.length > 1) {
+      const many = recips.ok.length > 30 ? "\n\n※ 30명이 넘으면 업무폰에 확인 창이 떠요. 업무폰에서 [항상 허용]을 눌러 주세요." : "";
+      const ok = await kpConfirm(`${recips.ok.length}명에게 같은 문자를 보낼까요?\n(받는 사람마다 따로 보내져요)${many}`, { title: "새 문자", okText: "보내기" });
+      if (!ok) return;
     }
-    setPeer(p); setDraftName(book[p] || "");
+    setBusy(true);
+    try {
+      await queueSms(uid, recips.ok, body, { source: "사내문자 창" });
+      setText(""); setComposing(false); setToText(""); setComposeMsg("");
+      if (recips.ok.length === 1) { setPeer(recips.ok[0].phone); setDraftName(recips.ok[0].name || ""); }
+    } catch (e) {
+      setComposeMsg(`보내지 못했어요(${e?.code || e})`);
+    } finally { setBusy(false); }
   };
 
   const removeThread = async () => {
@@ -217,12 +236,12 @@ export default function OfficeSmsWindow({ user, drivers = [], contacts = [], con
               <div style={{ width: Math.min(250, Math.round(win.w * 0.36)), borderRight: "1px solid #EEF1F6", display: "flex", flexDirection: "column", minHeight: 0, background: "#FAFBFD" }}>
                 <div style={{ padding: 10, display: "flex", gap: 6 }}>
                   <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름 · 번호 검색" style={{ flex: 1, minWidth: 0, height: 34, borderRadius: 10, border: "1px solid #E3E8F0", padding: "0 10px", fontSize: 13, outline: "none" }} />
-                  <button type="button" onClick={newChat} title="새 대화" style={{ width: 34, height: 34, borderRadius: 10, border: "none", background: NAVY, color: "#fff", fontSize: 18, fontWeight: 900, cursor: "pointer" }}>+</button>
+                  <button type="button" onClick={newChat} title="새 문자(받는사람에 번호 적기)" data-kp="office-sms-new" style={{ width: 34, height: 34, borderRadius: 10, border: "none", background: NAVY, color: "#fff", fontSize: 18, fontWeight: 900, cursor: "pointer" }}>+</button>
                 </div>
                 <div style={{ flex: 1, overflowY: "auto" }}>
                   {shown.length === 0 && <div style={{ padding: 16, fontSize: 12.5, color: "#9AA9C3", textAlign: "center" }}>{q ? "찾는 대화가 없어요" : "아직 주고받은 문자가 없어요"}</div>}
                   {shown.map((t) => (
-                    <button key={t.peer} type="button" onClick={() => { setPeer(t.peer); setDraftName(""); }}
+                    <button key={t.peer} type="button" onClick={() => { setPeer(t.peer); setDraftName(""); setComposing(false); }}
                       style={{ display: "block", width: "100%", textAlign: "left", padding: "10px 12px", border: "none", borderBottom: "1px solid #EEF1F6", cursor: "pointer", background: t.peer === peer ? "#EAF0FA" : "transparent" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 900, color: "#0F1A30", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name || fmtPhone(t.peer)}</span>
@@ -239,9 +258,53 @@ export default function OfficeSmsWindow({ user, drivers = [], contacts = [], con
 
               {/* 대화 */}
               <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", minHeight: 0 }}>
-                {!peer ? (
+                {composing ? (
+                  <>
+                    <div style={{ padding: "12px 14px", borderBottom: "1px solid #EEF1F6", position: "relative" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 900, color: "#0F1A30", flexShrink: 0 }}>받는사람</span>
+                        <input autoFocus value={toText} onChange={(e) => { setToText(e.target.value); setComposeMsg(""); }} data-kp="office-sms-to"
+                          placeholder="휴대폰 번호 (여러 명은 쉼표로) · 이름으로도 찾아요"
+                          style={{ flex: 1, minWidth: 0, height: 36, borderRadius: 10, border: "1px solid #C9D6EE", padding: "0 10px", fontSize: 13.5, outline: "none" }} />
+                        <button type="button" onClick={() => setComposing(false)} style={{ height: 30, padding: "0 10px", borderRadius: 8, border: "1px solid #E3E8F0", background: "#fff", color: "#7A879C", fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>취소</button>
+                      </div>
+                      {suggests.length > 0 && (
+                        <div style={{ position: "absolute", left: 82, right: 60, top: 50, zIndex: 5, background: "#fff", border: "1px solid #C9D6EE", borderRadius: 12, boxShadow: "0 14px 30px rgba(15,26,48,.18)", overflow: "hidden" }}>
+                          {suggests.map((x) => (
+                            <button key={x.phone} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => pickSuggest(x)}
+                              style={{ display: "flex", width: "100%", gap: 8, padding: "8px 12px", border: "none", borderBottom: "1px solid #EEF1F6", background: "#fff", cursor: "pointer", textAlign: "left", fontSize: 13 }}>
+                              <b style={{ color: "#0F1A30" }}>{x.name || "이름 없음"}</b><span style={{ color: "#7A879C" }}>{fmtPhone(x.phone)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {recips.ok.length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
+                          {recips.ok.map((x) => (
+                            <span key={x.phone} style={{ fontSize: 11.5, fontWeight: 800, padding: "3px 8px", borderRadius: 99, background: "#EAF0FA", color: NAVY }}>{x.name ? `${x.name} · ` : ""}{fmtPhone(x.phone)}</span>
+                          ))}
+                        </div>
+                      )}
+                      {recips.bad.length > 0 && suggests.length === 0 && <div style={{ marginTop: 6, fontSize: 11.5, color: "#B4342A", fontWeight: 700 }}>번호를 알 수 없어요: {recips.bad.join(", ")}</div>}
+                    </div>
+                    <div style={{ flex: 1, background: "#F4F6FA", display: "grid", placeItems: "center", color: "#9AA9C3", fontSize: 12.5, textAlign: "center", padding: 16, lineHeight: 1.7 }}>
+                      등록된 기사님이 아니어도 돼요.<br />휴대폰 번호만 적으면 일반 용차 · 거래처 누구에게나 보내요.<br />답장은 그 번호 대화방으로 와요.
+                    </div>
+                    <div style={{ borderTop: "1px solid #EEF1F6", padding: 10, background: "#fff" }}>
+                      {composeMsg && <div style={{ fontSize: 11.5, color: "#B4342A", fontWeight: 700, marginBottom: 6 }}>{composeMsg}</div>}
+                      <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="문자 내용 (Enter 보내기 · Shift+Enter 줄바꿈)"
+                          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); sendNew(); } }}
+                          style={{ flex: 1, minWidth: 0, resize: "none", borderRadius: 12, border: "1px solid #E3E8F0", padding: "8px 10px", fontSize: 13.5, outline: "none", fontFamily: "inherit", lineHeight: 1.5 }} />
+                        <button type="button" onClick={sendNew} disabled={busy} data-kp="office-sms-send-new"
+                          style={{ height: 44, padding: "0 16px", borderRadius: 12, border: "none", background: NAVY, color: "#fff", fontSize: 14, fontWeight: 900, cursor: "pointer" }}>{recips.ok.length > 1 ? `${recips.ok.length}명 보내기` : "보내기"}</button>
+                      </div>
+                      <div style={{ marginTop: 4, fontSize: 10.5, color: "#9AA9C3", textAlign: "right" }}>{smsBytesOf(text)}바이트 · {smsBytesOf(text) > 90 ? "장문" : "단문"}</div>
+                    </div>
+                  </>
+                ) : !peer ? (
                   <div style={{ flex: 1, display: "grid", placeItems: "center", color: "#9AA9C3", fontSize: 13, textAlign: "center", padding: 20, lineHeight: 1.7 }}>
-                    왼쪽에서 대화를 고르거나 <b style={{ color: NAVY }}>+</b> 를 눌러 새 대화를 시작해요.<br />배차 화면의 [문자 보내기]도 여기로 와요.
+                    왼쪽에서 대화를 고르거나 <b style={{ color: NAVY }}>+</b> 를 눌러 받는사람에 번호를 적어 보내요.<br />배차 화면의 [문자 보내기]도 여기로 와요.
                     {loadErr && <div style={{ color: "#B4342A", marginTop: 8 }}>불러오지 못했어요({loadErr})</div>}
                   </div>
                 ) : (

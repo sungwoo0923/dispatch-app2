@@ -106,3 +106,37 @@ export function timeLabel(ms, now = Date.now()) {
   if (d.toDateString() === y.toDateString()) return `어제 ${hm}`;
   return `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
 }
+
+// ── 받는사람 칸(2026-11-18) — 지입기사뿐 아니라 일반 용차 · 거래처 누구에게나: 휴대폰 번호만 적으면 보낸다 ──
+export const isSendablePeer = (p) => /^01\d{8,9}$/.test(p) || /^0[2-9]\d{7,9}$/.test(p) || /^1\d{7}$/.test(p);
+
+/** "010-1111-2222, 홍길동 01033334444" → { ok: [{ phone, name }], bad: ["…"] } — 이름은 이름표(book)에 딱 하나 있으면 번호로 바꾼다 */
+export function parseRecipients(input, book = {}) {
+  const ok = []; const bad = []; const seen = new Set();
+  const byName = {};
+  Object.entries(book).forEach(([p, n]) => { (byName[n] = byName[n] || []).push(p); });
+  const tokens = String(input || "").split(/[,;\n]+/).map((s) => s.trim()).filter(Boolean);
+  for (const tok of tokens) {
+    const digits = normPeer(tok);
+    let phone = "";
+    if (digits.length >= 8) phone = digits; // "홍길동 010-1111-2222"처럼 이름이 같이 있어도 번호를 쓴다
+    else if (byName[tok]?.length === 1) phone = byName[tok][0];
+    if (!phone || !isSendablePeer(phone)) { bad.push(tok); continue; }
+    if (seen.has(phone)) continue;
+    seen.add(phone);
+    ok.push({ phone, name: book[phone] || tok.replace(/[\d\s\-+()]/g, "").trim() });
+  }
+  return { ok, bad };
+}
+
+/** 받는사람 칸 추천 — 마지막으로 치고 있는 글자로 이름표 · 최근 대화에서 찾기(최대 n개) */
+export function suggestRecipients(input, book = {}, threads = [], n = 6) {
+  const last = String(input || "").split(/[,;\n]+/).pop().trim().toLowerCase();
+  if (!last) return [];
+  const d = last.replace(/[^\d]/g, "");
+  const out = []; const seen = new Set();
+  const push = (phone, name) => { if (!seen.has(phone) && out.length < n) { seen.add(phone); out.push({ phone, name }); } };
+  threads.forEach((t) => { if ((t.name && t.name.toLowerCase().includes(last)) || (d.length >= 3 && t.peer.includes(d))) push(t.peer, t.name); });
+  Object.entries(book).forEach(([p, nm]) => { if (nm.toLowerCase().includes(last) || (d.length >= 3 && p.includes(d))) push(p, nm); });
+  return out;
+}

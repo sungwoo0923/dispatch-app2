@@ -2,7 +2,7 @@
 //  실행: node scripts/officeSms.test.mjs
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { normPeer, fmtPhone, phoneState, buildNameBook, groupThreads, threadMessages, statusText, filterThreads, smsBytesOf, OFFICE_SMS_STALE_MS, OFFICE_SMS_QUEUE_LIMIT_MS } from "../src/officeSms/officeSmsCore.js";
+import { normPeer, fmtPhone, phoneState, buildNameBook, groupThreads, threadMessages, statusText, filterThreads, smsBytesOf, parseRecipients, suggestRecipients, isSendablePeer, OFFICE_SMS_STALE_MS, OFFICE_SMS_QUEUE_LIMIT_MS } from "../src/officeSms/officeSmsCore.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`PASS ${name}`); };
@@ -88,6 +88,24 @@ t("보안 규칙 — smsBox는 본인만 · 공용 규칙에서 빠짐", () => {
   assert.match(rules, /match \/smsBox\/\{uid\} \{\s*allow read, write: if isSignedIn\(\) && request\.auth\.uid == uid;\s*match \/msgs\/\{mid\} \{\s*allow read, write: if isSignedIn\(\) && request\.auth\.uid == uid;/);
   const ex = rules.slice(rules.indexOf("function catchAllExcluded"));
   assert.match(ex, /'smsBox'/);
+});
+
+t("받는사람 — 등록 안 된 번호(일반 용차)도 번호만 적으면 보냄", () => {
+  const book = { "01011112222": "홍길동", "01044445555": "김철수", "01066667777": "김철수" };
+  const r = parseRecipients("010-9999-8888, 홍길동; 이영희 010 1234 5678\n김철수, 12345, 010-9999-8888", book);
+  assert.deepEqual(r.ok.map((x) => x.phone), ["01099998888", "01011112222", "01012345678"]);
+  assert.equal(r.ok[1].name, "홍길동");
+  assert.equal(r.ok[2].name, "이영희");
+  assert.deepEqual(r.bad, ["김철수", "12345"]); // 같은 이름 둘 · 잘못된 번호
+  assert.ok(isSendablePeer("0212345678") && isSendablePeer("15881234") && !isSendablePeer("0101234"));
+});
+
+t("받는사람 추천 — 이름 · 번호 일부", () => {
+  const book = { "01011112222": "홍길동" };
+  const th = [{ peer: "01099998888", name: "" }];
+  assert.deepEqual(suggestRecipients("010-1, 홍", book, th).map((x) => x.phone), ["01011112222"]);
+  assert.deepEqual(suggestRecipients("9998", book, th).map((x) => x.phone), ["01099998888"]);
+  assert.deepEqual(suggestRecipients("", book, th), []);
 });
 
 console.log(`\n${n}개 통과`);
