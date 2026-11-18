@@ -27,6 +27,7 @@ const Services = React.lazy(() => import("./pages/Services"));
 const Approvals = React.lazy(() => import("./pages/Approvals"));
 const Attendance = React.lazy(() => import("./pages/Attendance"));
 const Leave = React.lazy(() => import("./pages/Leave"));
+const Insights = React.lazy(() => import("./pages/Insights")); // 📊 2026-11-18 경영 분석(대표 · 관리자)
 const HomepageEditor = React.lazy(() => import("./pages/HomepageEditor")); // 🌐 2026-11-18 공식 홈페이지 편집(로지스웹 홈페이지 편집기와 같은 것)
 
 export const MeCtx = React.createContext(null);
@@ -34,7 +35,7 @@ export const useMeCtx = () => React.useContext(MeCtx);
 
 // 메뉴 — admin: true 는 대표 · 관리자만 보인다
 const MENU = [
-  { label: null, items: [{ to: "/", label: "본사 대시보드", icon: "home" }] },
+  { label: null, items: [{ to: "/", label: "대시보드", icon: "home" }, { to: "/insights", label: "경영 분석", icon: "trend", admin: true }] },
   { label: "사업 관제", items: [
     { to: "/customers", label: "고객사 · 가입자", icon: "building", owner: true },
     { to: "/services", label: "서비스 현황", icon: "server" },
@@ -85,7 +86,7 @@ export default function App() {
     <MeCtx.Provider value={me}>
       <BrowserRouter basename="/intranet">
         <Shell>
-          <React.Suspense fallback={<div className="py-16 text-center text-[13px] font-semibold text-[#7A8AA8]">불러오는 중…</div>}>
+          <React.Suspense fallback={<div className="py-16 text-center text-[13px] font-semibold text-[#98928B]">불러오는 중…</div>}>
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/notice" element={<Board mode="notice" />} />
@@ -94,6 +95,7 @@ export default function App() {
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/sales" element={<Sales />} />
+            <Route path="/insights" element={me.isAdmin ? <Insights /> : <Navigate to="/" />} />
             <Route path="/finance" element={me.isAdmin ? <Finance /> : <Navigate to="/" />} />
             <Route path="/homepage" element={me.isAdmin ? <HomepageEditor /> : <Navigate to="/" />} />
             <Route path="/company" element={<Company />} />
@@ -117,7 +119,7 @@ export default function App() {
 const todayLabel = () => { const d = new Date(Date.now() + 9 * 3600e3); return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일 (${"일월화수목금토"[d.getUTCDay()]})`; };
 
 // ───────────────────────── 왼쪽 메뉴 + 위쪽 줄 + 본문 ─────────────────────────
-function Shell({ children }) {
+export function Shell({ children }) {
   const me = useMeCtx();
   const loc = useLocation();
   const [open, setOpen] = React.useState(false);
@@ -140,27 +142,33 @@ function Shell({ children }) {
 
   const here = groups.flatMap((g) => g.items.map((it) => ({ g, it }))).find((x) => (x.it.to === "/" ? loc.pathname === "/" : loc.pathname.startsWith(x.it.to)));
 
+  const GROUP_EN = { "사업 관제": "Business", "소통": "Communication", "결재 · 근태": "Workflow", "업무": "Work", "경영": "Management" };
   const side = (
-    <aside id="pnk-side" className="w-[224px] shrink-0 h-full flex flex-col text-white bg-navy-900">
-      <div className="px-5 h-14 shrink-0 flex items-center gap-2.5">
-        <img src="/brand/pnk-mark-192.png" alt="" className="w-8 h-8 rounded-lg bg-white shrink-0" />
-        <div className="text-[15px] font-black truncate">{cfg.theme?.brandTitle || "PnK PROJECT"}</div>
-      </div>
-      <nav className="flex-1 overflow-y-auto px-3 pt-2 pb-4 space-y-4 no-scrollbar">
+    <aside id="pnk-side" className="w-[248px] shrink-0 h-full flex flex-col text-white bg-navy-900 relative">
+      <span className="absolute top-0 right-0 bottom-0 w-px bg-white/[0.06]" />
+      <a href="/" title="공식 홈페이지" className="px-6 h-[76px] shrink-0 flex items-center gap-3 border-b border-white/[0.06]">
+        <img src="/brand/pnk-mark-w.png" alt="" className="w-9 h-9 object-contain shrink-0" />
+        <div className="min-w-0">
+          <div className="text-[15px] font-semibold tracking-[0.02em] truncate">{cfg.theme?.brandTitle || "PnK PROJECT"}</div>
+          <div className="eng text-[10px] text-[#CDBB9C] mt-0.5">Intranet</div>
+        </div>
+      </a>
+      <nav className="flex-1 overflow-y-auto px-3 pt-4 pb-4 space-y-5 no-scrollbar">
         {groups.map((g) => (
           <div key={g.label || "top"}>
-            {g.label && <div className="px-3 mb-1 text-[11px] font-bold text-blue-200/60">{g.label}</div>}
+            {g.label && <div className="px-3 mb-1.5 flex items-baseline gap-2"><span className="eng text-[10.5px] text-[#CDBB9C]/80">{GROUP_EN[g.label] || ""}</span><span className="text-[11px] text-white/35">{g.label}</span></div>}
             <div className="space-y-0.5">
               {g.items.map((it) => {
                 const b = it.badge ? badges[it.badge] : 0;
                 return (
                   <NavLink key={it.to} to={it.to} end={it.to === "/"}
-                    className={({ isActive }) => cx("w-full flex items-center gap-3 px-3 h-10 rounded-lg text-[13.5px] transition",
-                      isActive ? "bg-white text-navy font-black" : "font-semibold text-blue-50/80 hover:bg-white/[0.08] hover:text-white")}>
+                    className={({ isActive }) => cx("relative w-full flex items-center gap-3 px-3 h-10 rounded-[10px] text-[13.5px] transition",
+                      isActive ? "bg-white/[0.08] text-white font-semibold" : "font-medium text-white/60 hover:bg-white/[0.04] hover:text-white")}>
                     {({ isActive }) => (<>
-                      <Icon name={it.icon} size={18} className={isActive ? "text-navy" : "text-blue-200/80"} />
+                      {isActive && <span className="absolute -left-3 top-2 bottom-2 w-[3px] rounded-r gold-grad" />}
+                      <Icon name={it.icon} size={17} className={isActive ? "text-[#D8C3A0]" : "text-white/45"} />
                       <span className={cx("flex-1 text-left truncate", it.hidden && "line-through opacity-50")}>{it.label}</span>
-                      {b > 0 && <span className="min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-extrabold flex items-center justify-center" style={{ background: "#FF3B30", color: "#fff" }}>{b}</span>}
+                      {b > 0 && <span className="min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold flex items-center justify-center gold-grad text-navy-950">{b}</span>}
                     </>)}
                   </NavLink>
                 );
@@ -169,14 +177,14 @@ function Shell({ children }) {
           </div>
         ))}
       </nav>
-      <div className="px-3 py-3 border-t border-white/10">
-        <div className="px-3 py-2 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center text-[13px] font-black">{(me.member?.name || "?").slice(0, 1)}</div>
+      <div className="px-3 py-3 border-t border-white/[0.06]">
+        <div className="px-3 py-2 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full p-[1.5px] gold-grad shrink-0"><div className="w-full h-full rounded-full bg-navy-900 flex items-center justify-center text-[13px] font-semibold">{(me.member?.name || "?").slice(0, 1)}</div></div>
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-bold truncate">{me.member?.name || me.user.email}</div>
-            <div className="text-[11px] text-blue-200/75 truncate">{me.member?.empNo} · {me.member?.title || ROLE_LABEL[me.member?.role] || "직원"}{me.member?.dept ? ` · ${me.member.dept}` : ""}</div>
+            <div className="text-[13px] font-semibold truncate">{me.member?.name || me.user.email}</div>
+            <div className="text-[11px] text-white/45 truncate tnum">{me.member?.empNo} · {me.member?.title || ROLE_LABEL[me.member?.role] || "직원"}{me.member?.dept ? ` · ${me.member.dept}` : ""}</div>
           </div>
-          <button type="button" onClick={() => signOut(auth)} title="로그아웃" className="w-8 h-8 rounded-lg flex items-center justify-center text-blue-200/80 hover:bg-white/10 hover:text-white"><Icon name="logout" size={17} /></button>
+          <button type="button" onClick={() => signOut(auth)} title="로그아웃" className="w-8 h-8 rounded-lg flex items-center justify-center text-white/45 hover:bg-white/10 hover:text-white"><Icon name="logout" size={17} /></button>
         </div>
       </div>
     </aside>
@@ -188,8 +196,8 @@ function Shell({ children }) {
       {/* 휴대폰: 위쪽 줄 + 햄버거 메뉴 */}
       <header className="md:hidden sticky top-0 z-30 h-14 px-4 flex items-center gap-3 text-white bg-navy-900">
         <button type="button" onClick={() => setOpen(true)} className="w-9 h-9 -ml-1 rounded-lg flex items-center justify-center hover:bg-white/10" aria-label="메뉴"><Icon name="menu" size={20} /></button>
-        <img src="/brand/pnk-mark-64.png" alt="" className="w-7 h-7 rounded-lg bg-white" />
-        <div className="text-[15px] font-black flex-1">PnK PROJECT</div>
+        <img src="/brand/pnk-mark-w.png" alt="" className="w-7 h-7 object-contain" />
+        <div className="flex-1 min-w-0"><div className="text-[14.5px] font-semibold leading-tight">PnK PROJECT</div><div className="eng text-[9.5px] text-[#CDBB9C]">Intranet</div></div>
         {badges.mail > 0 && <NavLink to="/mail" className="relative w-9 h-9 flex items-center justify-center"><Icon name="mail" size={20} /><span className="absolute top-1 right-0.5 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-black flex items-center justify-center" style={{ background: "#FF3B30" }}>{badges.mail}</span></NavLink>}
       </header>
       {open && (
@@ -200,20 +208,21 @@ function Shell({ children }) {
       )}
       <div className="flex-1 min-w-0 md:h-full flex flex-col">
         {/* PC: 위쪽 줄 — 지금 화면 위치 · 날짜 · 메일/결재 바로가기 */}
-        <div id="pnk-top" className="hidden md:flex shrink-0 h-14 px-7 items-center gap-2 bg-white border-b border-line">
-          <div className="flex-1 min-w-0 flex items-center gap-2 text-[13.5px]">
-            {here?.g.label && <><span className="font-semibold text-[#5A6A86]">{here.g.label}</span><span className="text-[#C0C8D6]">/</span></>}
-            <span className="font-black text-navy-950 truncate">{here?.it.label || ""}</span>
+        <div id="pnk-top" className="hidden md:flex shrink-0 h-[76px] px-8 items-center gap-3 bg-white/80 backdrop-blur border-b border-line">
+          <div className="flex-1 min-w-0">
+            <div className="eng text-[10.5px] text-gold-deep">{here?.g.label ? `${GROUP_EN[here.g.label] || ""} · ${here.g.label}` : "PnK PROJECT"}</div>
+            <div className="text-[17px] font-semibold text-navy-950 truncate tracking-[-0.02em]">{here?.it.label || ""}</div>
           </div>
-          <span className="text-[13px] font-bold text-[#3A4A66] tnum mr-2">{todayLabel()}</span>
+          <span className="text-[12.5px] font-medium text-navy-600 tnum mr-3">{todayLabel()}</span>
           {[["/mail", "mail", "사내메일", badges.mail], ["/approvals", "stamp", "전자결재", badges.approval], ["/notice", "megaphone", "사내 공지", badges.notice]].map(([to, icon, label, n]) => (
-            <NavLink key={to} to={to} title={label} className={({ isActive }) => cx("relative w-9 h-9 rounded-lg flex items-center justify-center transition", isActive ? "bg-navy-100 text-navy" : "text-[#5A6A86] hover:bg-navy-50 hover:text-navy")}>
-              <Icon name={icon} size={19} />
-              {n > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-[17px] px-1 rounded-full text-[10px] font-black flex items-center justify-center" style={{ background: "#FF3B30", color: "#fff" }}>{n}</span>}
+            <NavLink key={to} to={to} title={label} className={({ isActive }) => cx("relative w-10 h-10 rounded-full flex items-center justify-center transition border", isActive ? "bg-navy-900 text-white border-navy-900" : "text-navy-700 border-line hover:border-[#CFC7BB]")}>
+              <Icon name={icon} size={18} />
+              {n > 0 && <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center gold-grad text-navy-950">{n}</span>}
             </NavLink>
           ))}
+          <a href="/" target="_blank" rel="noopener noreferrer" title="공식 홈페이지" className="ml-1 h-10 px-4 rounded-full border border-line text-[12.5px] font-semibold text-navy-700 hover:border-[#CFC7BB] flex items-center gap-1.5"><Icon name="globe" size={15} />홈페이지</a>
         </div>
-        <main id="pnk-main" className="flex-1 min-w-0 min-h-0 md:overflow-y-auto px-4 md:px-7 py-5 md:py-6">
+        <main id="pnk-main" className="flex-1 min-w-0 min-h-0 md:overflow-y-auto px-4 md:px-8 py-5 md:py-7">
           <div className="w-full max-w-[1600px] mx-auto">{children}</div>
         </main>
       </div>

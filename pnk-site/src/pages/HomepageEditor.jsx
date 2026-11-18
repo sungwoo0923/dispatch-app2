@@ -24,7 +24,7 @@ const FONTS = [["", "기본(Pretendard)"], ["system-ui", "기기 기본 글꼴"]
 const WEIGHTS = [["", "기본"], ["400", "보통"], ["600", "조금 굵게"], ["700", "굵게"], ["800", "더 굵게"], ["900", "가장 굵게"]];
 const ADDS = [["heading", "제목"], ["text", "문장"], ["image", "사진"], ["button", "버튼"], ["card", "카드"], ["spacer", "빈 여백"]];
 const SECTION_ADDS = [["section", "밝은 섹션"], ["section-dark", "어두운 섹션"], ["section-split", "사진 + 설명 섹션"]];
-const COLORS = [["--accent", "강조 색(파랑)", "#3B6EF5"], ["--accent2", "강조 색 2", "#6E8DFF"], ["--navy", "남색", "#1D2A55"], ["--ink", "제목 · 버튼 색", "#0E1424"], ["--t2", "설명 글자색", "#3A4459"], ["--soft", "연한 섹션 배경", "#F6F8FB"], ["--dark", "어두운 섹션 배경", "#0B1020"], ["--bg", "바탕색", "#FFFFFF"]];
+const COLORS = [["--accent", "강조 색(파랑)", "#B19B7F"], ["--accent2", "강조 색 2", "#C8B9A5"], ["--navy", "남색", "#403A33"], ["--ink", "제목 · 버튼 색", "#1E1A14"], ["--t2", "설명 글자색", "#504B43"], ["--soft", "연한 섹션 배경", "#F6F8FB"], ["--dark", "어두운 섹션 배경", "#1B1611"], ["--bg", "바탕색", "#FFFFFF"]];
 
 const absUrl = (base, src) => { try { return new URL(src || "", base).href; } catch { return src || ""; } };
 const cls = (...a) => a.filter(Boolean).join(" ");
@@ -56,8 +56,8 @@ async function shrinkImage(file) {
 // ── 작은 부품 ──
 function Sec({ title, right, children }) {
   return (
-    <div className="border-b border-[#E8EDF4] px-4 py-3.5">
-      <div className="flex items-center justify-between mb-2.5"><div className="text-[12.5px] font-black text-[#0F1A30]">{title}</div>{right}</div>
+    <div className="border-b border-[#F1EEEB] px-4 py-3.5">
+      <div className="flex items-center justify-between mb-2.5"><div className="text-[12.5px] font-black text-[#262119]">{title}</div>{right}</div>
       <div className="space-y-2">{children}</div>
     </div>
   );
@@ -65,15 +65,15 @@ function Sec({ title, right, children }) {
 function Row({ label, children, hint }) {
   return (
     <label className="flex items-center gap-2 text-[12.5px]">
-      <span className="w-[74px] shrink-0 text-[#5B6B85] font-bold">{label}</span>
+      <span className="w-[74px] shrink-0 text-[#77716A] font-bold">{label}</span>
       <div className="flex-1 min-w-0 flex items-center gap-1.5">{children}</div>
-      {hint && <span className="text-[11px] text-[#9AA9C3]">{hint}</span>}
+      {hint && <span className="text-[11px] text-[#B5B0A8]">{hint}</span>}
     </label>
   );
 }
-const inp = "w-full h-8 px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] text-[#0F1A30] outline-none focus:border-[#4B6CB7] min-w-0";
-const btn = "h-8 px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-bold text-[#1B2B4B] hover:bg-[#F3F6FB] disabled:opacity-40 whitespace-nowrap";
-const btnDark = "h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black hover:bg-[#1B2B4B] disabled:opacity-40 whitespace-nowrap";
+const inp = "w-full h-8 px-2.5 rounded-lg border border-[#E9E6E1] bg-white text-[12.5px] text-[#262119] outline-none focus:border-[#9F8563] min-w-0";
+const btn = "h-8 px-2.5 rounded-lg border border-[#E9E6E1] bg-white text-[12px] font-bold text-[#3A342D] hover:bg-[#F9F7F5] disabled:opacity-40 whitespace-nowrap";
+const btnDark = "h-8 px-3 rounded-lg bg-[#262119] text-white text-[12px] font-black hover:bg-[#3A342D] disabled:opacity-40 whitespace-nowrap";
 
 // 값 입력 — 엔터·포커스 아웃 때만 반영(입력 중 매번 다시 그리지 않게)
 function LazyInput({ value, onCommit, className = inp, placeholder, type = "text", textarea, rows = 3 }) {
@@ -87,8 +87,8 @@ function NumInput({ value, placeholder, onCommit, unit = "px", step = 1 }) {
   return (
     <div className="flex items-center gap-1 w-full">
       <LazyInput type="number" value={value === "" || value == null ? "" : num(value)} placeholder={placeholder} onCommit={(v) => onCommit(v === "" ? "" : `${v}${unit}`)} className={inp} />
-      <span className="text-[11px] text-[#9AA9C3] w-6">{unit}</span>
-      {value !== "" && value != null && <button type="button" title="원래대로" className="text-[#9AA9C3] hover:text-[#B42318] text-[13px]" onClick={() => onCommit("")}>×</button>}
+      <span className="text-[11px] text-[#B5B0A8] w-6">{unit}</span>
+      {value !== "" && value != null && <button type="button" title="원래대로" className="text-[#B5B0A8] hover:text-[#B42318] text-[13px]" onClick={() => onCommit("")}>×</button>}
       <input type="hidden" step={step} />
     </div>
   );
@@ -97,9 +97,9 @@ function ColorInput({ value, fallback, onCommit }) {
   const has = !!value;
   return (
     <div className="flex items-center gap-1.5 w-full">
-      <input type="color" value={toHex(value || fallback)} onChange={(e) => onCommit(e.target.value)} className="w-9 h-8 rounded-lg border border-[#DCE3EE] bg-white p-0.5 cursor-pointer" />
+      <input type="color" value={toHex(value || fallback)} onChange={(e) => onCommit(e.target.value)} className="w-9 h-8 rounded-lg border border-[#E9E6E1] bg-white p-0.5 cursor-pointer" />
       <LazyInput value={value || ""} placeholder={toHex(fallback)} onCommit={onCommit} />
-      {has && <button type="button" title="원래대로" className="text-[#9AA9C3] hover:text-[#B42318] text-[13px]" onClick={() => onCommit("")}>×</button>}
+      {has && <button type="button" title="원래대로" className="text-[#B5B0A8] hover:text-[#B42318] text-[13px]" onClick={() => onCommit("")}>×</button>}
     </div>
   );
 }
@@ -308,11 +308,11 @@ export default function HomepageEditor() {
   const tabs = [["select", "속성"], ["page", "페이지"], ["sections", "섹션"], ["nav", "메뉴"], ["form", "문의 양식"], ["images", "사진"], ["add", "추가"], ["history", "이력"]];
 
   const panel = (() => {
-    if (!state) return <div className="p-6 text-[13px] text-[#7A879C]">불러오는 중…</div>;
+    if (!state) return <div className="p-6 text-[13px] text-[#928C85]">불러오는 중…</div>;
     if (tab === "select") {
       if (!sel) return (
-        <div className="p-5 text-[13px] leading-relaxed text-[#5B6B85] space-y-3">
-          <div className="text-[14px] font-black text-[#0F1A30]">홈페이지에서 고칠 곳을 누르세요</div>
+        <div className="p-5 text-[13px] leading-relaxed text-[#77716A] space-y-3">
+          <div className="text-[14px] font-black text-[#262119]">홈페이지에서 고칠 곳을 누르세요</div>
           <ul className="space-y-1.5 list-disc pl-4">
             <li><b>한 번 누르기</b> — 고르기 (속성이 여기에 나옵니다)</li>
             <li><b>두 번 누르기</b> — 글자 바로 고치기</li>
@@ -322,7 +322,7 @@ export default function HomepageEditor() {
             <li><b>Delete</b> 숨기기 · <b>Ctrl+D</b> 복제 · <b>방향키</b> 1px 이동 · <b>Esc</b> 상위 요소</li>
             <li><b>Ctrl+Z / Ctrl+Y</b> 실행취소 · 다시실행</li>
           </ul>
-          <div className="rounded-xl bg-[#F3F6FB] p-3 text-[12px]">안내 창(PC 설치 안내 등)도 버튼을 눌러 열고 고칩니다.</div>
+          <div className="rounded-xl bg-[#F9F7F5] p-3 text-[12px]">안내 창(PC 설치 안내 등)도 버튼을 눌러 열고 고칩니다.</div>
         </div>
       );
       const isImg = sel.kind === "image", isIcon = sel.kind === "icon", isInput = sel.kind === "input" || sel.kind === "select";
@@ -330,16 +330,16 @@ export default function HomepageEditor() {
       const c = sel.computed || {};
       return (
         <div>
-          <div className="px-4 pt-3 pb-2 border-b border-[#E8EDF4] bg-[#F7F9FC]">
+          <div className="px-4 pt-3 pb-2 border-b border-[#F1EEEB] bg-[#F7F9FC]">
             <div className="flex flex-wrap gap-1 text-[11px] mb-1.5">
               {sel.path.slice(-4).map((p, i, a) => (
                 <React.Fragment key={p.key}>
-                  <button type="button" onClick={() => send({ cmd: "select", key: p.key })} className={cls("px-1.5 py-0.5 rounded-md truncate max-w-[120px]", i === a.length - 1 ? "bg-[#0F1A30] text-white font-black" : "bg-white border border-[#E3E8F0] text-[#5B6B85] hover:border-[#4B6CB7]")} title={p.label}>{p.label.split(" · ")[0]}</button>
-                  {i < a.length - 1 && <span className="text-[#C3CEE0]">›</span>}
+                  <button type="button" onClick={() => send({ cmd: "select", key: p.key })} className={cls("px-1.5 py-0.5 rounded-md truncate max-w-[120px]", i === a.length - 1 ? "bg-[#262119] text-white font-black" : "bg-white border border-[#EDEAE7] text-[#77716A] hover:border-[#9F8563]")} title={p.label}>{p.label.split(" · ")[0]}</button>
+                  {i < a.length - 1 && <span className="text-[#D8D3CB]">›</span>}
                 </React.Fragment>
               ))}
             </div>
-            <div className="text-[13.5px] font-black text-[#0F1A30] truncate">{sel.label}</div>
+            <div className="text-[13.5px] font-black text-[#262119] truncate">{sel.label}</div>
             <div className="flex flex-wrap gap-1 mt-2">
               <button className={btn} onClick={() => send({ cmd: "move", key: sel.key, dir: "up" })} disabled={!sel.canUp}>▲ 앞으로</button>
               <button className={btn} onClick={() => send({ cmd: "move", key: sel.key, dir: "down" })} disabled={!sel.canDown}>▼ 뒤로</button>
@@ -351,12 +351,12 @@ export default function HomepageEditor() {
           </div>
 
           {hasText && (
-            <Sec title="글자 내용" right={<span className="text-[11px] text-[#9AA9C3]">홈페이지에서 두 번 눌러도 됩니다</span>}>
+            <Sec title="글자 내용" right={<span className="text-[11px] text-[#B5B0A8]">홈페이지에서 두 번 눌러도 됩니다</span>}>
               <LazyInput textarea rows={Math.min(8, Math.max(2, Math.ceil((sel.text || "").length / 34)))} value={sel.text} onCommit={(v) => send({ cmd: "setText", key: sel.key, text: v })} />
               {sel.html && /<(b|strong|br|span|small|svg|em|i)\b/i.test(sel.html) && (
-                <details className="text-[12px]"><summary className="cursor-pointer text-[#4B6CB7] font-bold">굵게·줄바꿈까지 고치기(HTML)</summary>
+                <details className="text-[12px]"><summary className="cursor-pointer text-[#9F8563] font-bold">굵게·줄바꿈까지 고치기(HTML)</summary>
                   <LazyInput textarea rows={4} value={sel.html} onCommit={(v) => send({ cmd: "setHtml", key: sel.key, html: v })} className={cls(inp, "tabular-nums text-[11.5px]")} />
-                  <div className="text-[11px] text-[#9AA9C3] mt-1">&lt;b&gt;굵게&lt;/b&gt; · &lt;br&gt; 줄바꿈 · &lt;span style="color:#2D5BD8"&gt;색&lt;/span&gt;</div>
+                  <div className="text-[11px] text-[#B5B0A8] mt-1">&lt;b&gt;굵게&lt;/b&gt; · &lt;br&gt; 줄바꿈 · &lt;span style="color:#A08665"&gt;색&lt;/span&gt;</div>
                 </details>
               )}
             </Sec>
@@ -371,23 +371,23 @@ export default function HomepageEditor() {
                   {ANCHORS.map(([h, l]) => <option key={h} value={h}>{l} ({h})</option>)}
                 </select>
               </Row>
-              <label className="flex items-center gap-2 text-[12.5px] font-bold text-[#3A4A66]"><input type="checkbox" checked={sel.attrs.target === "_blank"} onChange={(e) => send({ cmd: "setAttr", key: sel.key, name: "target", value: e.target.checked ? "_blank" : "", label: "새 창" })} />새 창으로 열기</label>
+              <label className="flex items-center gap-2 text-[12.5px] font-bold text-[#57514A]"><input type="checkbox" checked={sel.attrs.target === "_blank"} onChange={(e) => send({ cmd: "setAttr", key: sel.key, name: "target", value: e.target.checked ? "_blank" : "", label: "새 창" })} />새 창으로 열기</label>
             </Sec>
           )}
 
           {isImg && (
             <Sec title="사진">
-              <div className="rounded-xl overflow-hidden border border-[#E3E8F0] bg-[#F3F6FB]"><img src={/^https?:|^data:/.test(sel.attrs.src || "") ? sel.attrs.src : absUrl(siteUrl, sel.attrs.src || "")} alt="" className="w-full max-h-[160px] object-contain" /></div>
+              <div className="rounded-xl overflow-hidden border border-[#EDEAE7] bg-[#F9F7F5]"><img src={/^https?:|^data:/.test(sel.attrs.src || "") ? sel.attrs.src : absUrl(siteUrl, sel.attrs.src || "")} alt="" className="w-full max-h-[160px] object-contain" /></div>
               <div className="flex gap-1.5">
                 <label className={cls(btnDark, "inline-flex items-center cursor-pointer")}>{busy ? "올리는 중…" : "새 사진 올리기"}<input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) uploadTo(sel.key, f); }} /></label>
               </div>
               <Row label="사진 주소"><LazyInput value={sel.attrs.src || ""} onCommit={(v) => send({ cmd: "setAttr", key: sel.key, name: "src", value: v, label: "사진 교체" })} /></Row>
               <Row label="설명(alt)"><LazyInput value={sel.attrs.alt || ""} placeholder="검색·시각장애인용 사진 설명" onCommit={(v) => send({ cmd: "setAttr", key: sel.key, name: "alt", value: v, label: "사진 설명" })} /></Row>
               {meta?.images?.length > 0 && (
-                <details><summary className="cursor-pointer text-[12px] font-bold text-[#4B6CB7]">홈페이지에 있는 다른 사진으로 바꾸기</summary>
+                <details><summary className="cursor-pointer text-[12px] font-bold text-[#9F8563]">홈페이지에 있는 다른 사진으로 바꾸기</summary>
                   <div className="grid grid-cols-3 gap-1.5 mt-2 max-h-[220px] overflow-auto">
                     {[...new Set(meta.images.map((x) => x.src))].map((src) => (
-                      <button key={src} type="button" onClick={() => send({ cmd: "setAttr", key: sel.key, name: "src", value: src, label: "사진 교체" })} className={cls("rounded-lg overflow-hidden border", src === sel.attrs.src ? "border-[#2D5BD8] ring-2 ring-[#2D5BD8]/30" : "border-[#E3E8F0] hover:border-[#4B6CB7]")}>
+                      <button key={src} type="button" onClick={() => send({ cmd: "setAttr", key: sel.key, name: "src", value: src, label: "사진 교체" })} className={cls("rounded-lg overflow-hidden border", src === sel.attrs.src ? "border-[#A08665] ring-2 ring-[#A08665]/30" : "border-[#EDEAE7] hover:border-[#9F8563]")}>
                         <img src={/^https?:/.test(src) ? src : absUrl(siteUrl, src)} alt="" className="w-full h-14 object-cover" />
                       </button>
                     ))}
@@ -406,7 +406,7 @@ export default function HomepageEditor() {
             <Sec title="아이콘 바꾸기">
               <div className="grid grid-cols-6 gap-1">
                 {meta.icons.map((id) => (
-                  <button key={id} type="button" title={id} onClick={() => send({ cmd: "setIcon", key: sel.key, icon: id })} className={cls("h-9 rounded-lg border text-[10px] font-bold", sel.icon === id ? "border-[#2D5BD8] bg-[#EEF3FF] text-[#2D5BD8]" : "border-[#E3E8F0] text-[#5B6B85] hover:border-[#4B6CB7]")}>{id.replace("i-", "")}</button>
+                  <button key={id} type="button" title={id} onClick={() => send({ cmd: "setIcon", key: sel.key, icon: id })} className={cls("h-9 rounded-lg border text-[10px] font-bold", sel.icon === id ? "border-[#A08665] bg-[#FBF7F3] text-[#A08665]" : "border-[#EDEAE7] text-[#77716A] hover:border-[#9F8563]")}>{id.replace("i-", "")}</button>
                 ))}
               </div>
             </Sec>
@@ -415,22 +415,22 @@ export default function HomepageEditor() {
           {isInput && (
             <Sec title="입력칸">
               {sel.kind !== "select" && <Row label="안내 글자"><LazyInput value={sel.attrs.placeholder || ""} onCommit={(v) => send({ cmd: "setAttr", key: sel.key, name: "placeholder", value: v, label: "안내 글자" })} /></Row>}
-              {sel.kind === "select" && <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">선택 항목 (한 줄에 하나 · 첫 줄은 "선택해 주세요")</div><LazyInput textarea rows={5} value={(sel.options || []).join("\n")} onCommit={(v) => send({ cmd: "setOptions", key: sel.key, options: v.split("\n") })} /></div>}
-              <label className="flex items-center gap-2 text-[12.5px] font-bold text-[#3A4A66]"><input type="checkbox" checked={!!sel.attrs.required} onChange={(e) => send({ cmd: "setAttr", key: sel.key, name: "required", value: e.target.checked, label: "필수" })} />필수 입력</label>
+              {sel.kind === "select" && <div><div className="text-[12px] font-bold text-[#77716A] mb-1">선택 항목 (한 줄에 하나 · 첫 줄은 "선택해 주세요")</div><LazyInput textarea rows={5} value={(sel.options || []).join("\n")} onCommit={(v) => send({ cmd: "setOptions", key: sel.key, options: v.split("\n") })} /></div>}
+              <label className="flex items-center gap-2 text-[12.5px] font-bold text-[#57514A]"><input type="checkbox" checked={!!sel.attrs.required} onChange={(e) => send({ cmd: "setAttr", key: sel.key, name: "required", value: e.target.checked, label: "필수" })} />필수 입력</label>
             </Sec>
           )}
 
           <Sec title={mobileEdit ? "모양 · 모바일 화면에만 적용" : "모양 · 모든 화면"} right={
-            <div className="flex rounded-lg bg-[#EEF1F6] p-0.5 text-[11px] font-black">
-              <button type="button" onClick={() => setMobileEdit(false)} className={cls("px-2 py-1 rounded-md", !mobileEdit ? "bg-white text-[#0F1A30] shadow" : "text-[#7A879C]")}>모든 화면</button>
-              <button type="button" onClick={() => setMobileEdit(true)} className={cls("px-2 py-1 rounded-md", mobileEdit ? "bg-white text-[#0F1A30] shadow" : "text-[#7A879C]")}>모바일만</button>
+            <div className="flex rounded-lg bg-[#F4F2F0] p-0.5 text-[11px] font-black">
+              <button type="button" onClick={() => setMobileEdit(false)} className={cls("px-2 py-1 rounded-md", !mobileEdit ? "bg-white text-[#262119] shadow" : "text-[#928C85]")}>모든 화면</button>
+              <button type="button" onClick={() => setMobileEdit(true)} className={cls("px-2 py-1 rounded-md", mobileEdit ? "bg-white text-[#262119] shadow" : "text-[#928C85]")}>모바일만</button>
             </div>}>
             {hasText && <>
               <Row label="글자 크기"><NumInput value={sv("fontSize")} placeholder={num(c.fontSize)} onCommit={(v) => setS("fontSize", v)} /></Row>
               <Row label="굵기"><select className={inp} value={sv("fontWeight")} onChange={(e) => setS("fontWeight", e.target.value)}>{WEIGHTS.map(([v, l]) => <option key={v} value={v}>{l}{v === "" ? ` (${c.fontWeight})` : ""}</option>)}</select></Row>
               <Row label="글자색"><ColorInput value={sv("color")} fallback={c.color} onCommit={(v) => setS("color", v)} /></Row>
               <Row label="정렬">
-                {[["left", "왼쪽"], ["center", "가운데"], ["right", "오른쪽"]].map(([v, l]) => <button key={v} type="button" onClick={() => setS("textAlign", sv("textAlign") === v ? "" : v)} className={cls(btn, "flex-1", sv("textAlign") === v && "bg-[#0F1A30] text-white border-[#0F1A30] hover:bg-[#0F1A30]")}>{l}</button>)}
+                {[["left", "왼쪽"], ["center", "가운데"], ["right", "오른쪽"]].map(([v, l]) => <button key={v} type="button" onClick={() => setS("textAlign", sv("textAlign") === v ? "" : v)} className={cls(btn, "flex-1", sv("textAlign") === v && "bg-[#262119] text-white border-[#262119] hover:bg-[#262119]")}>{l}</button>)}
               </Row>
               <Row label="줄 간격"><NumInput unit="" value={sv("lineHeight")} placeholder={c.lineHeight === "normal" ? "1.5" : (num(c.lineHeight) / (num(c.fontSize) || 16)).toFixed(2)} onCommit={(v) => setS("lineHeight", v)} /></Row>
               <Row label="자간"><NumInput value={sv("letterSpacing")} placeholder={c.letterSpacing === "normal" ? "0" : num(c.letterSpacing)} onCommit={(v) => setS("letterSpacing", v)} /></Row>
@@ -438,9 +438,9 @@ export default function HomepageEditor() {
             <Row label="너비"><NumInput value={sv("width")} placeholder={num(c.width)} onCommit={(v) => { setS("width", v); if (v) setS("maxWidth", "none"); }} /></Row>
             <Row label="높이"><NumInput value={sv("height")} placeholder={num(c.height)} onCommit={(v) => setS("height", v)} /></Row>
             <Row label="위치 이동">
-              <span className="text-[11px] text-[#9AA9C3]">가로</span><LazyInput type="number" value={num(tr[0]) || ""} placeholder="0" onCommit={(v) => setTr(v, num(tr[1]) || 0)} />
-              <span className="text-[11px] text-[#9AA9C3]">세로</span><LazyInput type="number" value={num(tr[1]) || ""} placeholder="0" onCommit={(v) => setTr(num(tr[0]) || 0, v)} />
-              {sv("translate") && <button type="button" title="원래 자리로" className="text-[#9AA9C3] hover:text-[#B42318] text-[13px]" onClick={() => setS("translate", "")}>×</button>}
+              <span className="text-[11px] text-[#B5B0A8]">가로</span><LazyInput type="number" value={num(tr[0]) || ""} placeholder="0" onCommit={(v) => setTr(v, num(tr[1]) || 0)} />
+              <span className="text-[11px] text-[#B5B0A8]">세로</span><LazyInput type="number" value={num(tr[1]) || ""} placeholder="0" onCommit={(v) => setTr(num(tr[0]) || 0, v)} />
+              {sv("translate") && <button type="button" title="원래 자리로" className="text-[#B5B0A8] hover:text-[#B42318] text-[13px]" onClick={() => setS("translate", "")}>×</button>}
             </Row>
             <Row label="위 여백"><NumInput value={sv("marginTop")} placeholder={num(c.marginTop)} onCommit={(v) => setS("marginTop", v)} /></Row>
             <Row label="아래 여백"><NumInput value={sv("marginBottom")} placeholder={num(c.marginBottom)} onCommit={(v) => setS("marginBottom", v)} /></Row>
@@ -449,7 +449,7 @@ export default function HomepageEditor() {
             <Row label="둥글기"><NumInput value={sv("borderRadius")} placeholder={num(c.borderRadius)} onCommit={(v) => setS("borderRadius", v)} /></Row>
             <Row label="투명도"><input type="range" min="0.1" max="1" step="0.05" value={sv("opacity") || c.opacity || 1} onChange={(e) => setS("opacity", e.target.value === "1" ? "" : e.target.value)} className="flex-1" /><span className="text-[11px] w-8 text-right">{Math.round((sv("opacity") || c.opacity || 1) * 100)}%</span></Row>
             <Row label="그림자">
-              {[["", "기본"], ["none", "없음"], ["0 10px 30px rgba(15,26,48,.18)", "약하게"], ["0 30px 80px -20px rgba(15,26,48,.4)", "진하게"]].map(([v, l]) => <button key={l} type="button" onClick={() => setS("boxShadow", v)} className={cls(btn, "flex-1 px-1", sv("boxShadow") === v && "bg-[#0F1A30] text-white border-[#0F1A30] hover:bg-[#0F1A30]")}>{l}</button>)}
+              {[["", "기본"], ["none", "없음"], ["0 10px 30px rgba(38,33,25,.18)", "약하게"], ["0 30px 80px -20px rgba(38,33,25,.4)", "진하게"]].map(([v, l]) => <button key={l} type="button" onClick={() => setS("boxShadow", v)} className={cls(btn, "flex-1 px-1", sv("boxShadow") === v && "bg-[#262119] text-white border-[#262119] hover:bg-[#262119]")}>{l}</button>)}
             </Row>
             {(Object.keys(sel.style || {}).length > 0 || Object.keys(sel.styleM || {}).length > 0) && <button className={cls(btn, "w-full")} onClick={() => send({ cmd: "clearStyle", key: sel.key })}>모양 바꾼 것 모두 지우기</button>}
           </Sec>
@@ -468,7 +468,7 @@ export default function HomepageEditor() {
           <Sec title="검색 · 브라우저 탭">
             <Row label="페이지 제목"><LazyInput value={p.title || ""} placeholder={meta?.title} onCommit={(v) => setPage({ title: String(v || "").slice(0, 40) })} /></Row>
             {/* 🔎 2026-11-14 네이버 서치어드바이저 — 제목 40자 · 설명 80자 이내(넘으면 사이트 간단 체크에서 경고) */}
-            <div><div className="text-[12px] font-bold text-[#5B6B85] mb-1">검색 설명</div><LazyInput textarea rows={3} value={p.description || ""} placeholder={meta?.description} onCommit={(v) => setPage({ description: String(v || "").slice(0, 80) })} /><div className="text-[11px] text-[#9AA9C3] mt-1">네이버 기준: 제목 40자 · 설명 80자 이내(넘는 글자는 잘려요)</div></div>
+            <div><div className="text-[12px] font-bold text-[#77716A] mb-1">검색 설명</div><LazyInput textarea rows={3} value={p.description || ""} placeholder={meta?.description} onCommit={(v) => setPage({ description: String(v || "").slice(0, 80) })} /><div className="text-[11px] text-[#B5B0A8] mt-1">네이버 기준: 제목 40자 · 설명 80자 이내(넘는 글자는 잘려요)</div></div>
           </Sec>
           <Sec title="색상" right={Object.keys(vars).length > 0 && <button className="text-[11.5px] font-bold text-[#B42318]" onClick={() => setPage({ vars: {} })}>색 원래대로</button>}>
             {COLORS.map(([v, l, d]) => <Row key={v} label={l}><ColorInput value={vars[v] || ""} fallback={d} onCommit={(val) => setPage({ vars: { ...vars, [v]: val } })} /></Row>)}
@@ -485,10 +485,10 @@ export default function HomepageEditor() {
     }
     if (tab === "sections") return (
       <div>
-        <Sec title="섹션 순서 · 보이기" right={<span className="text-[11px] text-[#9AA9C3]">누르면 그 위치로 이동</span>}>
+        <Sec title="섹션 순서 · 보이기" right={<span className="text-[11px] text-[#B5B0A8]">누르면 그 위치로 이동</span>}>
           {(meta?.sections || []).map((s, i, a) => (
-            <div key={s.key} className={cls("flex items-center gap-1.5 rounded-xl border px-2.5 py-2", s.hidden ? "border-dashed border-[#DCE3EE] bg-[#F7F9FC] opacity-70" : "border-[#E3E8F0] bg-white")}>
-              <button type="button" onClick={() => send({ cmd: "select", key: s.key, scroll: true })} className="flex-1 min-w-0 text-left text-[12.5px] font-bold text-[#0F1A30] truncate">{s.label || "영역"}</button>
+            <div key={s.key} className={cls("flex items-center gap-1.5 rounded-xl border px-2.5 py-2", s.hidden ? "border-dashed border-[#E9E6E1] bg-[#F7F9FC] opacity-70" : "border-[#EDEAE7] bg-white")}>
+              <button type="button" onClick={() => send({ cmd: "select", key: s.key, scroll: true })} className="flex-1 min-w-0 text-left text-[12.5px] font-bold text-[#262119] truncate">{s.label || "영역"}</button>
               <button className={cls(btn, "px-1.5")} disabled={i === 0} onClick={() => send({ cmd: "move", key: s.key, dir: "up" })}>▲</button>
               <button className={cls(btn, "px-1.5")} disabled={i === a.length - 1} onClick={() => send({ cmd: "move", key: s.key, dir: "down" })}>▼</button>
               <button className={cls(btn, "px-1.5")} onClick={() => send({ cmd: "hide", key: s.key, hidden: !s.hidden })}>{s.hidden ? "보이기" : "숨김"}</button>
@@ -496,23 +496,23 @@ export default function HomepageEditor() {
             </div>
           ))}
         </Sec>
-        <Sec title="새 섹션 넣기" right={<span className="text-[11px] text-[#9AA9C3]">고른 섹션 다음에 들어갑니다</span>}>
+        <Sec title="새 섹션 넣기" right={<span className="text-[11px] text-[#B5B0A8]">고른 섹션 다음에 들어갑니다</span>}>
           <div className="grid grid-cols-1 gap-1.5">{SECTION_ADDS.map(([k, l]) => <button key={k} className={btn} onClick={() => send({ cmd: "add", kind: k, ref: info?.key })}>+ {l}</button>)}</div>
         </Sec>
       </div>
     );
     if (tab === "nav") {
       const navRow = (n, i, a) => (
-        <div key={n.key} className="rounded-xl border border-[#E3E8F0] bg-white p-2 space-y-1.5">
+        <div key={n.key} className="rounded-xl border border-[#EDEAE7] bg-white p-2 space-y-1.5">
           <div className="flex items-center gap-1.5">
-            <span className="text-[10.5px] font-black text-[#9AA9C3] w-14 shrink-0">{n.group || "링크"}</span>
+            <span className="text-[10.5px] font-black text-[#B5B0A8] w-14 shrink-0">{n.group || "링크"}</span>
             <LazyInput value={n.text} onCommit={(v) => send({ cmd: "setText", key: n.key, text: v })} />
             <button className={cls(btn, "px-1.5")} disabled={i === 0} onClick={() => send({ cmd: "move", key: n.key, dir: "up" })}>▲</button>
             <button className={cls(btn, "px-1.5")} disabled={i === a.length - 1} onClick={() => send({ cmd: "move", key: n.key, dir: "down" })}>▼</button>
             <button className={cls(btn, "px-1.5 text-[#B42318]")} onClick={() => send({ cmd: "remove", key: n.key })}>×</button>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-[10.5px] font-black text-[#9AA9C3] w-14 shrink-0">이동</span>
+            <span className="text-[10.5px] font-black text-[#B5B0A8] w-14 shrink-0">이동</span>
             <select className={inp} value={ANCHORS.some(([h]) => h === n.href) ? n.href : ""} onChange={(e) => e.target.value && send({ cmd: "setAttr", key: n.key, name: "href", value: e.target.value, label: "메뉴 링크" })}>
               <option value="">{n.href}</option>{ANCHORS.map(([h, l]) => <option key={h} value={h}>{l}</option>)}
             </select>
@@ -532,24 +532,24 @@ export default function HomepageEditor() {
       const f = meta?.form || [];
       return (
         <div>
-          <Sec title="문의하기 질문" right={<span className="text-[11px] text-[#9AA9C3]">{f.length}개</span>}>
+          <Sec title="문의하기 질문" right={<span className="text-[11px] text-[#B5B0A8]">{f.length}개</span>}>
             {f.map((q, i) => (
-              <div key={q.key} className="rounded-xl border border-[#E3E8F0] bg-white p-2.5 space-y-1.5">
+              <div key={q.key} className="rounded-xl border border-[#EDEAE7] bg-white p-2.5 space-y-1.5">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10.5px] font-black text-[#9AA9C3] w-10 shrink-0">질문</span>
+                  <span className="text-[10.5px] font-black text-[#B5B0A8] w-10 shrink-0">질문</span>
                   {q.labelKey ? <LazyInput value={q.label} onCommit={(v) => send({ cmd: "setText", key: q.labelKey, text: v })} /> : <span className="text-[12px]">{q.label}</span>}
                   <button className={cls(btn, "px-1.5")} disabled={i === 0} onClick={() => send({ cmd: "move", key: q.key, dir: "up" })}>▲</button>
                   <button className={cls(btn, "px-1.5")} disabled={i === f.length - 1} onClick={() => send({ cmd: "move", key: q.key, dir: "down" })}>▼</button>
                   <button className={cls(btn, "px-1.5 text-[#B42318]")} title={q.extra ? "삭제" : "숨기기(기본 질문은 저장 구조 때문에 숨기기만 됩니다)"} onClick={() => send({ cmd: "remove", key: q.key })}>×</button>
                 </div>
                 {q.type !== "select" ? (
-                  <div className="flex items-center gap-1.5"><span className="text-[10.5px] font-black text-[#9AA9C3] w-10 shrink-0">안내</span><LazyInput value={q.placeholder} onCommit={(v) => send({ cmd: "setAttr", key: q.inputKey, name: "placeholder", value: v, label: "안내 글자" })} /></div>
+                  <div className="flex items-center gap-1.5"><span className="text-[10.5px] font-black text-[#B5B0A8] w-10 shrink-0">안내</span><LazyInput value={q.placeholder} onCommit={(v) => send({ cmd: "setAttr", key: q.inputKey, name: "placeholder", value: v, label: "안내 글자" })} /></div>
                 ) : (
-                  <div><span className="text-[10.5px] font-black text-[#9AA9C3]">선택 항목(한 줄에 하나)</span><LazyInput textarea rows={4} value={(q.options || []).join("\n")} onCommit={(v) => send({ cmd: "setOptions", key: q.inputKey, options: v.split("\n") })} /></div>
+                  <div><span className="text-[10.5px] font-black text-[#B5B0A8]">선택 항목(한 줄에 하나)</span><LazyInput textarea rows={4} value={(q.options || []).join("\n")} onCommit={(v) => send({ cmd: "setOptions", key: q.inputKey, options: v.split("\n") })} /></div>
                 )}
                 <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-1.5 text-[12px] font-bold text-[#3A4A66]"><input type="checkbox" checked={q.required} onChange={(e) => send({ cmd: "setAttr", key: q.inputKey, name: "required", value: e.target.checked, label: "필수" })} />필수</label>
-                  <button type="button" className="text-[11.5px] font-bold text-[#4B6CB7]" onClick={() => send({ cmd: "select", key: q.key, scroll: true })}>위치 보기</button>
+                  <label className="flex items-center gap-1.5 text-[12px] font-bold text-[#57514A]"><input type="checkbox" checked={q.required} onChange={(e) => send({ cmd: "setAttr", key: q.inputKey, name: "required", value: e.target.checked, label: "필수" })} />필수</label>
+                  <button type="button" className="text-[11.5px] font-bold text-[#9F8563]" onClick={() => send({ cmd: "select", key: q.key, scroll: true })}>위치 보기</button>
                   {q.extra && <span className="text-[10.5px] font-black text-[#12A150]">추가한 질문 · 신청 내역에 함께 저장</span>}
                 </div>
               </div>
@@ -567,11 +567,11 @@ export default function HomepageEditor() {
       );
     }
     if (tab === "images") return (
-      <Sec title="홈페이지 사진" right={<span className="text-[11px] text-[#9AA9C3]">{meta?.images?.length || 0}장</span>}>
+      <Sec title="홈페이지 사진" right={<span className="text-[11px] text-[#B5B0A8]">{meta?.images?.length || 0}장</span>}>
         <div className="grid grid-cols-2 gap-2">
           {(meta?.images || []).map((im) => (
-            <div key={im.key} className={cls("rounded-xl border overflow-hidden bg-white", im.hidden ? "opacity-50 border-dashed" : "border-[#E3E8F0]")}>
-              <button type="button" onClick={() => send({ cmd: "select", key: im.key, scroll: true })} className="block w-full"><img src={/^https?:/.test(im.src) ? im.src : absUrl(siteUrl, im.src)} alt="" className="w-full h-20 object-cover bg-[#F3F6FB]" /></button>
+            <div key={im.key} className={cls("rounded-xl border overflow-hidden bg-white", im.hidden ? "opacity-50 border-dashed" : "border-[#EDEAE7]")}>
+              <button type="button" onClick={() => send({ cmd: "select", key: im.key, scroll: true })} className="block w-full"><img src={/^https?:/.test(im.src) ? im.src : absUrl(siteUrl, im.src)} alt="" className="w-full h-20 object-cover bg-[#F9F7F5]" /></button>
               <div className="p-1.5 flex gap-1">
                 <label className={cls(btn, "flex-1 inline-flex items-center justify-center cursor-pointer px-1 text-[11px]")}>교체<input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) uploadTo(im.key, f); }} /></label>
                 <button className={cls(btn, "px-1.5 text-[11px]")} onClick={() => send({ cmd: "hide", key: im.key, hidden: !im.hidden })}>{im.hidden ? "보이기" : "숨김"}</button>
@@ -587,8 +587,8 @@ export default function HomepageEditor() {
           <div className="grid grid-cols-3 gap-1.5">{ADDS.map(([k, l]) => <button key={k} className={btn} disabled={!info} onClick={() => send({ cmd: "add", kind: k, ref: info?.key })}>+ {l}</button>)}</div>
         </Sec>
         <Sec title="섹션 넣기"><div className="grid grid-cols-1 gap-1.5">{SECTION_ADDS.map(([k, l]) => <button key={k} className={btn} onClick={() => send({ cmd: "add", kind: k, ref: info?.key })}>+ {l}</button>)}</div></Sec>
-        <Sec title="숨긴 요소" right={<span className="text-[11px] text-[#9AA9C3]">{meta?.hidden?.length || 0}개</span>}>
-          {(meta?.hidden || []).length === 0 && <div className="text-[12px] text-[#9AA9C3]">숨긴 요소가 없습니다</div>}
+        <Sec title="숨긴 요소" right={<span className="text-[11px] text-[#B5B0A8]">{meta?.hidden?.length || 0}개</span>}>
+          {(meta?.hidden || []).length === 0 && <div className="text-[12px] text-[#B5B0A8]">숨긴 요소가 없습니다</div>}
           {(meta?.hidden || []).map((h) => (
             <div key={h.key} className="flex items-center gap-1.5 text-[12.5px]"><span className="flex-1 truncate">{h.label}</span><button className={btn} onClick={() => send({ cmd: "hide", key: h.key, hidden: false })}>다시 보이기</button></div>
           ))}
@@ -597,11 +597,11 @@ export default function HomepageEditor() {
     );
     if (tab === "history") return (
       <div>
-        <Sec title="게시 이력" right={<span className="text-[11px] text-[#9AA9C3]">최근 15개</span>}>
-          {history.length === 0 && <div className="text-[12px] text-[#9AA9C3]">아직 게시한 적이 없습니다</div>}
+        <Sec title="게시 이력" right={<span className="text-[11px] text-[#B5B0A8]">최근 15개</span>}>
+          {history.length === 0 && <div className="text-[12px] text-[#B5B0A8]">아직 게시한 적이 없습니다</div>}
           {history.map((h, i) => (
-            <div key={h.at + "-" + i} className="flex items-center gap-2 rounded-xl border border-[#E3E8F0] bg-white px-2.5 py-2">
-              <div className="flex-1 min-w-0"><div className="text-[12.5px] font-black text-[#0F1A30]">{fmtTime(h.at)}{i === 0 && <span className="ml-1.5 text-[10.5px] text-[#12A150]">지금 게시본</span>}</div><div className="text-[11px] text-[#7A879C] truncate">{h.note} · {h.by}</div></div>
+            <div key={h.at + "-" + i} className="flex items-center gap-2 rounded-xl border border-[#EDEAE7] bg-white px-2.5 py-2">
+              <div className="flex-1 min-w-0"><div className="text-[12.5px] font-black text-[#262119]">{fmtTime(h.at)}{i === 0 && <span className="ml-1.5 text-[10.5px] text-[#12A150]">지금 게시본</span>}</div><div className="text-[11px] text-[#928C85] truncate">{h.note} · {h.by}</div></div>
               <button className={btn} onClick={() => restore(h)}>되돌리기</button>
             </div>
           ))}
@@ -615,7 +615,7 @@ export default function HomepageEditor() {
         </Sec>
         <Sec title="홈페이지 주소">
           <LazyInput value={siteUrl} onCommit={(v) => { setSiteUrl(v || DEFAULT_URL); setReady(false); setFrameKey((x) => x + 1); }} />
-          <div className="text-[11px] text-[#9AA9C3]">도메인을 새로 연결하면 여기 주소만 바꾸세요.</div>
+          <div className="text-[11px] text-[#B5B0A8]">도메인을 새로 연결하면 여기 주소만 바꾸세요.</div>
         </Sec>
       </div>
     );
@@ -624,46 +624,46 @@ export default function HomepageEditor() {
 
   const statusText = { saved: "임시 저장됨", saving: "저장 중…", unsaved: "저장 대기", error: "저장 실패" }[saveState];
   return (
-    <div className={cls("flex flex-col bg-[#EEF1F6]", full ? "fixed inset-0 z-[80] p-3" : "rounded-[18px] border border-[#E3E8F0] overflow-hidden")} style={full ? undefined : { height: "calc(100vh - 120px)", minHeight: 620 }}>
+    <div className={cls("flex flex-col bg-[#F4F2F0]", full ? "fixed inset-0 z-[80] p-3" : "rounded-[18px] border border-[#EDEAE7] overflow-hidden")} style={full ? undefined : { height: "calc(100vh - 120px)", minHeight: 620 }}>
       {/* 상단 도구줄 */}
-      <div className="flex items-center gap-2 flex-wrap px-3 py-2 bg-[#0F1A30] text-white rounded-t-[14px]">
+      <div className="flex items-center gap-2 flex-wrap px-3 py-2 bg-[#262119] text-white rounded-t-[14px]">
         <div className="flex items-center gap-2 mr-1">
-          <span className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>HOMEPAGE</span>
+          <span className="text-[10px] font-extrabold tracking-[0.24em] text-[#CFC2B0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>HOMEPAGE</span>
           <span className="text-[14px] font-black">홈페이지 편집</span>
         </div>
         <div className="flex rounded-lg bg-white/10 p-0.5">
-          <button type="button" onClick={() => setPreview(false)} className={cls("h-7 px-2.5 rounded-md text-[12px] font-black", !preview ? "bg-white text-[#0F1A30]" : "text-white/70")}>편집</button>
-          <button type="button" onClick={() => setPreview(true)} className={cls("h-7 px-2.5 rounded-md text-[12px] font-black", preview ? "bg-white text-[#0F1A30]" : "text-white/70")}>미리보기</button>
+          <button type="button" onClick={() => setPreview(false)} className={cls("h-7 px-2.5 rounded-md text-[12px] font-black", !preview ? "bg-white text-[#262119]" : "text-white/70")}>편집</button>
+          <button type="button" onClick={() => setPreview(true)} className={cls("h-7 px-2.5 rounded-md text-[12px] font-black", preview ? "bg-white text-[#262119]" : "text-white/70")}>미리보기</button>
         </div>
         <div className="flex rounded-lg bg-white/10 p-0.5">
-          {DEVICES.map(([k, l]) => <button key={k} type="button" onClick={() => setDevice(k)} className={cls("h-7 px-2.5 rounded-md text-[12px] font-black", device === k ? "bg-white text-[#0F1A30]" : "text-white/70")}>{l}</button>)}
+          {DEVICES.map(([k, l]) => <button key={k} type="button" onClick={() => setDevice(k)} className={cls("h-7 px-2.5 rounded-md text-[12px] font-black", device === k ? "bg-white text-[#262119]" : "text-white/70")}>{l}</button>)}
         </div>
         <button type="button" onClick={undo} disabled={!undoRef.current.length} className="h-8 px-2.5 rounded-lg bg-white/10 text-[12px] font-black disabled:opacity-35" title="실행취소 (Ctrl+Z)">↶ 실행취소</button>
         <button type="button" onClick={redo} disabled={!redoRef.current.length} className="h-8 px-2.5 rounded-lg bg-white/10 text-[12px] font-black disabled:opacity-35" title="다시실행 (Ctrl+Y)">↷ 다시실행</button>
         <span className={cls("text-[11.5px] font-bold", saveState === "error" ? "text-[#FFB3B5]" : "text-white/55")}>{statusText}</span>
         <div className="flex-1" />
-        {msg && <span className="text-[12px] font-bold text-[#CFE0FF] truncate max-w-[300px]">{msg}</span>}
+        {msg && <span className="text-[12px] font-bold text-[#EEE8E1] truncate max-w-[300px]">{msg}</span>}
         <span className={cls("text-[11.5px] font-black px-2 py-1 rounded-md", dirtyVsLive ? "bg-[#F5A524]/20 text-[#FFD48A]" : "bg-[#2BD17E]/15 text-[#7EF0B5]")}>{dirtyVsLive ? "게시 안 한 변경 있음" : "홈페이지와 같음"}</span>
         <a href={siteUrl} target="_blank" rel="noopener noreferrer" className="h-8 px-2.5 rounded-lg bg-white/10 text-[12px] font-black inline-flex items-center">홈페이지 열기 ↗</a>
         <button type="button" onClick={() => setFull((x) => !x)} className="h-8 px-2.5 rounded-lg bg-white/10 text-[12px] font-black">{full ? "창 작게" : "전체 화면"}</button>
-        <button type="button" onClick={publish} disabled={busy || !state} className="h-8 px-3.5 rounded-lg bg-[#2D5BD8] text-white text-[12.5px] font-black disabled:opacity-40 hover:bg-[#3A66E0]">게시하기</button>
+        <button type="button" onClick={publish} disabled={busy || !state} className="h-8 px-3.5 rounded-lg bg-[#A08665] text-white text-[12.5px] font-black disabled:opacity-40 hover:bg-[#A89172]">게시하기</button>
       </div>
 
       <div className="flex-1 min-h-0 flex">
         {/* 왼쪽 패널 */}
-        <aside className="w-[340px] shrink-0 bg-white border-r border-[#E3E8F0] flex flex-col min-h-0">
-          <div className="grid grid-cols-4 gap-1 p-2 border-b border-[#E8EDF4] bg-[#F7F9FC]">
-            {tabs.map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={cls("h-8 rounded-lg text-[12px] font-black", tab === k ? "bg-[#0F1A30] text-white" : "text-[#5B6B85] hover:bg-white")}>{l}</button>)}
+        <aside className="w-[340px] shrink-0 bg-white border-r border-[#EDEAE7] flex flex-col min-h-0">
+          <div className="grid grid-cols-4 gap-1 p-2 border-b border-[#F1EEEB] bg-[#F7F9FC]">
+            {tabs.map(([k, l]) => <button key={k} type="button" onClick={() => setTab(k)} className={cls("h-8 rounded-lg text-[12px] font-black", tab === k ? "bg-[#262119] text-white" : "text-[#77716A] hover:bg-white")}>{l}</button>)}
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto">{panel}</div>
         </aside>
 
         {/* 가운데: 홈페이지 */}
-        <div ref={wrapRef} className="flex-1 min-w-0 overflow-hidden relative flex justify-center pt-3" style={{ background: "linear-gradient(rgba(27,43,75,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(27,43,75,.05) 1px, transparent 1px) 0 0/22px 22px, #E6EBF3" }}>
-          {!ready && <div className="absolute inset-0 grid place-items-center text-[13px] text-[#5B6B85] font-bold pointer-events-none z-10">
-            <div className="text-center bg-white/90 rounded-2xl px-6 py-5 shadow">홈페이지를 불러오는 중…<div className="text-[11.5px] text-[#9AA9C3] mt-1 font-semibold">계속 안 뜨면 [이력] 탭에서 홈페이지 주소를 확인하세요<br />{siteUrl}</div></div>
+        <div ref={wrapRef} className="flex-1 min-w-0 overflow-hidden relative flex justify-center pt-3" style={{ background: "linear-gradient(rgba(58,52,45,.05) 1px, transparent 1px) 0 0/22px 22px, linear-gradient(90deg, rgba(58,52,45,.05) 1px, transparent 1px) 0 0/22px 22px, #F0EDEA" }}>
+          {!ready && <div className="absolute inset-0 grid place-items-center text-[13px] text-[#77716A] font-bold pointer-events-none z-10">
+            <div className="text-center bg-white/90 rounded-2xl px-6 py-5 shadow">홈페이지를 불러오는 중…<div className="text-[11.5px] text-[#B5B0A8] mt-1 font-semibold">계속 안 뜨면 [이력] 탭에서 홈페이지 주소를 확인하세요<br />{siteUrl}</div></div>
           </div>}
-          <div style={{ width: devW, height: `calc((100% - 12px) / ${scale})`, transform: `scale(${scale})`, transformOrigin: "top center" }} className={cls("bg-white shadow-[0_20px_60px_rgba(15,26,48,.18)] shrink-0", device !== "pc" && "rounded-[18px] overflow-hidden ring-8 ring-[#0B1428]")}>
+          <div style={{ width: devW, height: `calc((100% - 12px) / ${scale})`, transform: `scale(${scale})`, transformOrigin: "top center" }} className={cls("bg-white shadow-[0_20px_60px_rgba(38,33,25,.18)] shrink-0", device !== "pc" && "rounded-[18px] overflow-hidden ring-8 ring-[#201B13]")}>
             <iframe key={frameKey} ref={iframeRef} title="홈페이지 편집" src={frameSrc} className="w-full h-full border-0 block" onLoad={() => setTimeout(() => setReady((r) => r), 0)} />
           </div>
         </div>

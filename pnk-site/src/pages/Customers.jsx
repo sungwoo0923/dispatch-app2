@@ -10,11 +10,11 @@ import { Btn, Card, Chip, Empty, Hero, HeroBtn, Input, Loading, Stat, Tabs, cx }
 import Icon from "../icons";
 
 const PLATFORM = "https://app.logisweb.co.kr/platform";
-const NAVY = ["#0F1A30", "#1B2B4B", "#2D4C82", "#4B6CB7", "#8FA6D6", "#C9D3E4"];
+const NAVY = ["#262119", "#3A342D", "#6C5A42", "#9F8563", "#C5B5A0", "#DDD8D1"];
 const planName = (id) => PLAN_DEFAULTS.find((p) => p.id === id)?.name || (id ? id : "미지정");
 const planPrice = (id) => PLAN_DEFAULTS.find((p) => p.id === id)?.price || 0;
 const months = (n) => { const out = []; const d = new Date(); d.setDate(1); for (let i = n - 1; i >= 0; i -= 1) out.push(ymd(new Date(d.getFullYear(), d.getMonth() - i, 1)).slice(0, 7)); return out; };
-const tip = { borderRadius: 12, border: "1px solid #E3E8F0", fontSize: 12 };
+const tip = { borderRadius: 12, border: "1px solid #EDEAE7", fontSize: 12 };
 
 export default function Customers() {
   const me = useMeCtx();
@@ -26,7 +26,7 @@ export default function Customers() {
   const load = (force) => { setBusy(true); loadPlatform(force).then(setData).finally(() => setBusy(false)); };
   React.useEffect(() => { load(false); }, []);
 
-  if (!me.owner) return <><Hero title="고객사 · 가입자" /><Card><Empty icon="shield">대표(최고관리자) 계정에서만 볼 수 있습니다.</Empty></Card></>;
+  if (!me.owner) return <><Hero en="Customers" title="고객사 · 가입자" /><Card><Empty icon="shield">대표(최고관리자) 계정에서만 볼 수 있습니다.</Empty></Card></>;
   if (data === undefined) return <Loading />;
   if (!data) return <Card><Empty icon="alert">고객사 데이터를 읽지 못했습니다.</Empty></Card>;
 
@@ -50,7 +50,7 @@ export default function Customers() {
 
   return (
     <div>
-      <Hero title="고객사 · 가입자" desc={`로지스웹을 쓰는 운송사 · 직원 · 기사 · 화주 현황 (불러온 시각 ${fmtTime(data.at)})`}>
+      <Hero en="Customers" title="고객사 · 가입자" desc={`로지스웹을 쓰는 운송사 · 직원 · 기사 · 화주 현황 (불러온 시각 ${fmtTime(data.at)})`}>
         <HeroBtn sub icon="refresh" onClick={() => load(true)}>{busy ? "불러오는 중…" : "새로고침"}</HeroBtn>
         <a href={PLATFORM} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl text-[13.5px] font-black bg-navy text-white hover:bg-navy-700">관리자 관리센터에서 처리 <Icon name="link" size={14} /></a>
       </Hero>
@@ -69,14 +69,14 @@ export default function Customers() {
           <div className="h-[260px] -ml-3">
             <ResponsiveContainer>
               <BarChart data={trend} barGap={2}>
-                <CartesianGrid stroke="#EEF1F6" vertical={false} />
-                <XAxis dataKey="m" tick={{ fontSize: 11.5, fill: "#7A8AA8" }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11.5, fill: "#7A8AA8" }} axisLine={false} tickLine={false} width={34} />
-                <Tooltip contentStyle={tip} cursor={{ fill: "#F4F6FA" }} />
+                <CartesianGrid stroke="#F4F2F0" vertical={false} />
+                <XAxis dataKey="m" tick={{ fontSize: 11.5, fill: "#98928B" }} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11.5, fill: "#98928B" }} axisLine={false} tickLine={false} width={34} />
+                <Tooltip contentStyle={tip} cursor={{ fill: "#F8F7F6" }} />
                 <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="운송사" fill="#0F1A30" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="직원" fill="#2D4C82" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="기사" fill="#8FA6D6" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="운송사" fill="#262119" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="직원" fill="#6C5A42" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="기사" fill="#C5B5A0" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -94,7 +94,7 @@ export default function Customers() {
           </div>
           <div className="grid grid-cols-2 gap-1.5 mt-1">
             {pie.map((p, i) => (
-              <div key={p.name} className="flex items-center gap-2 text-[12.5px] font-bold"><span className="w-2.5 h-2.5 rounded-full" style={{ background: NAVY[i % NAVY.length] }} />{p.name}<span className="ml-auto tnum text-[#5A6A86]">{p.value}곳</span></div>
+              <div key={p.name} className="flex items-center gap-2 text-[12.5px] font-bold"><span className="w-2.5 h-2.5 rounded-full" style={{ background: NAVY[i % NAVY.length] }} />{p.name}<span className="ml-auto tnum text-[#77716A]">{p.value}곳</span></div>
             ))}
           </div>
         </Card>
@@ -104,13 +104,13 @@ export default function Customers() {
         <div className="h-[200px] -ml-3">
           <ResponsiveContainer>
             <BarChart data={invTrend}>
-              <CartesianGrid stroke="#EEF1F6" vertical={false} />
-              <XAxis dataKey="m" tick={{ fontSize: 12, fill: "#7A8AA8" }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={(v) => `${Math.round(v / 10000)}만`} tick={{ fontSize: 11.5, fill: "#7A8AA8" }} axisLine={false} tickLine={false} width={48} />
-              <Tooltip contentStyle={tip} formatter={(v) => won(v)} cursor={{ fill: "#F4F6FA" }} />
+              <CartesianGrid stroke="#F4F2F0" vertical={false} />
+              <XAxis dataKey="m" tick={{ fontSize: 12, fill: "#98928B" }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={(v) => `${Math.round(v / 10000)}만`} tick={{ fontSize: 11.5, fill: "#98928B" }} axisLine={false} tickLine={false} width={48} />
+              <Tooltip contentStyle={tip} formatter={(v) => won(v)} cursor={{ fill: "#F8F7F6" }} />
               <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="청구" fill="#C9D3E4" radius={[6, 6, 0, 0]} />
-              <Bar dataKey="입금" fill="#1B2B4B" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="청구" fill="#DDD8D1" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="입금" fill="#3A342D" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -120,41 +120,41 @@ export default function Customers() {
 
       {tab === "list" ? (
         <Card pad={false}>
-          <div className="p-4 flex flex-col sm:flex-row gap-2 border-b border-[#EEF1F6]">
-            <div className="relative sm:w-[280px]"><Icon name="search" size={16} className="absolute left-3 top-3 text-[#7A8AA8]" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="회사 이름 검색" className="pl-9" /></div>
+          <div className="p-4 flex flex-col sm:flex-row gap-2 border-b border-[#F4F2F0]">
+            <div className="relative sm:w-[280px]"><Icon name="search" size={16} className="absolute left-3 top-3 text-[#98928B]" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="회사 이름 검색" className="pl-9" /></div>
             <div className="flex gap-1 flex-wrap sm:ml-auto">
               {[["staff", "직원 많은 순"], ["drivers", "기사 많은 순"], ["new", "최근 가입"], ["name", "이름"]].map(([k, l]) => (
-                <button key={k} type="button" onClick={() => setSort(k)} className={cx("h-9 px-3 rounded-xl text-[12.5px] font-black", sort === k ? "bg-navy text-white" : "bg-navy-50 text-[#5A6A86]")}>{l}</button>
+                <button key={k} type="button" onClick={() => setSort(k)} className={cx("h-9 px-3 rounded-xl text-[12.5px] font-black", sort === k ? "bg-navy text-white" : "bg-navy-50 text-[#77716A]")}>{l}</button>
               ))}
             </div>
           </div>
           {/* PC 표 */}
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-[13.5px]">
-              <thead><tr className="text-left text-[12px] text-[#7A8AA8] bg-[#F8FAFD]">
+              <thead><tr className="text-left text-[12px] text-[#98928B] bg-[#F9F8F6]">
                 {["회사", "요금제", "직원", "기사", "승인 대기", "처음 가입", "이달 청구"].map((h) => <th key={h} className="px-4 py-2.5 font-bold whitespace-nowrap">{h}</th>)}
               </tr></thead>
               <tbody>
                 {list.map((c) => { const v = invOf(c); return (
-                  <tr key={c.name} className="border-t border-[#EEF1F6] hover:bg-[#F8FAFD]">
-                    <td className="px-4 py-3"><div className="font-black">{c.name}</div>{(c.rep || c.phone) && <div className="text-[12px] text-[#7A8AA8]">{c.rep} {c.phone}</div>}</td>
+                  <tr key={c.name} className="border-t border-[#F4F2F0] hover:bg-[#F9F8F6]">
+                    <td className="px-4 py-3"><div className="font-black">{c.name}</div>{(c.rep || c.phone) && <div className="text-[12px] text-[#98928B]">{c.rep} {c.phone}</div>}</td>
                     <td className="px-4 py-3"><Chip tone={c.plan ? "navy" : "gray"}>{planName(c.plan?.planId)}</Chip></td>
-                    <td className="px-4 py-3 tnum font-bold">{c.staff}<span className="text-[#7A8AA8] font-medium">{c.admins ? ` (관리 ${c.admins})` : ""}</span></td>
+                    <td className="px-4 py-3 tnum font-bold">{c.staff}<span className="text-[#98928B] font-medium">{c.admins ? ` (관리 ${c.admins})` : ""}</span></td>
                     <td className="px-4 py-3 tnum font-bold">{c.drivers}</td>
-                    <td className="px-4 py-3">{c.pending ? <Chip tone="red">{c.pending}명</Chip> : <span className="text-[#C0C8D6]">-</span>}</td>
-                    <td className="px-4 py-3 tnum text-[#5A6A86]">{c.firstAt ? ymd(new Date(c.firstAt)) : "-"}</td>
-                    <td className="px-4 py-3">{v ? <span className="flex items-center gap-2"><span className="tnum font-bold">{won(v.amount)}</span><Chip tone={v.status === "입금완료" ? "green" : v.status === "연체" ? "red" : "gray"}>{v.status || "미청구"}</Chip></span> : <span className="text-[#C0C8D6]">-</span>}</td>
+                    <td className="px-4 py-3">{c.pending ? <Chip tone="red">{c.pending}명</Chip> : <span className="text-[#D0CCC6]">-</span>}</td>
+                    <td className="px-4 py-3 tnum text-[#77716A]">{c.firstAt ? ymd(new Date(c.firstAt)) : "-"}</td>
+                    <td className="px-4 py-3">{v ? <span className="flex items-center gap-2"><span className="tnum font-bold">{won(v.amount)}</span><Chip tone={v.status === "입금완료" ? "green" : v.status === "연체" ? "red" : "gray"}>{v.status || "미청구"}</Chip></span> : <span className="text-[#D0CCC6]">-</span>}</td>
                   </tr>
                 ); })}
               </tbody>
             </table>
           </div>
           {/* 휴대폰 카드 */}
-          <ul className="md:hidden divide-y divide-[#EEF1F6]">
+          <ul className="md:hidden divide-y divide-[#F4F2F0]">
             {list.map((c) => { const v = invOf(c); return (
               <li key={c.name} className="px-4 py-3">
                 <div className="flex items-center gap-2"><span className="font-black flex-1 truncate">{c.name}</span><Chip tone={c.plan ? "navy" : "gray"}>{planName(c.plan?.planId)}</Chip></div>
-                <div className="mt-1 text-[12.5px] text-[#5A6A86]">직원 {c.staff} · 기사 {c.drivers}{c.pending ? ` · 승인 대기 ${c.pending}` : ""}{v ? ` · ${v.status || "미청구"} ${won(v.amount)}` : ""}</div>
+                <div className="mt-1 text-[12.5px] text-[#77716A]">직원 {c.staff} · 기사 {c.drivers}{c.pending ? ` · 승인 대기 ${c.pending}` : ""}{v ? ` · ${v.status || "미청구"} ${won(v.amount)}` : ""}</div>
               </li>
             ); })}
           </ul>
@@ -176,17 +176,17 @@ export default function Customers() {
 function QueueCard({ title, en, rows, line }) {
   return (
     <Card title={title} right={<Chip tone={rows.length ? "red" : "gray"}>{rows.length}건</Chip>} pad={false}>
-      {rows.length === 0 ? <div className="py-6 text-center text-[13px] text-[#7A8AA8]">처리할 것이 없습니다.</div> : (
-        <ul className="divide-y divide-[#EEF1F6]">
+      {rows.length === 0 ? <div className="py-6 text-center text-[13px] text-[#98928B]">처리할 것이 없습니다.</div> : (
+        <ul className="divide-y divide-[#F4F2F0]">
           {rows.slice().sort((a, b) => tsMs(b.createdAt) - tsMs(a.createdAt)).slice(0, 8).map((r, i) => { const [a, b, at] = line(r); return (
             <li key={r.id || i} className="px-5 py-3 flex items-center gap-3">
-              <div className="min-w-0 flex-1"><div className="text-[13.5px] font-black truncate">{a}</div><div className="text-[12px] text-[#7A8AA8] truncate">{b}</div></div>
-              <span className="text-[11.5px] text-[#7A8AA8] shrink-0">{fmtTime(at)}</span>
+              <div className="min-w-0 flex-1"><div className="text-[13.5px] font-black truncate">{a}</div><div className="text-[12px] text-[#98928B] truncate">{b}</div></div>
+              <span className="text-[11.5px] text-[#98928B] shrink-0">{fmtTime(at)}</span>
             </li>
           ); })}
         </ul>
       )}
-      {rows.length > 0 && <div className="px-5 py-3 border-t border-[#EEF1F6]"><a href={PLATFORM} target="_blank" rel="noreferrer"><Btn kind="soft" className="w-full">관리자 관리센터에서 처리</Btn></a></div>}
+      {rows.length > 0 && <div className="px-5 py-3 border-t border-[#F4F2F0]"><a href={PLATFORM} target="_blank" rel="noreferrer"><Btn kind="soft" className="w-full">관리자 관리센터에서 처리</Btn></a></div>}
     </Card>
   );
 }

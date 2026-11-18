@@ -9,8 +9,8 @@ import { Btn, Card, Chip, Empty, Field, Hero, HeroBtn, Input, Loading, Modal, Se
 
 const INCOME_CATS = ["구독료", "도입비", "허브 수수료", "추가 기능", "기타 매출"];
 const EXPENSE_CATS = ["인건비", "서버 · 클라우드", "문자 · 알림톡", "광고 · 마케팅", "사무실 임대료", "외주 · 개발", "세금 · 공과", "기타 비용"];
-const NAVY = ["#0F1A30", "#1B2B4B", "#2D4C82", "#4B6CB7", "#8FA6D6", "#A9B9DC", "#C9D3E4", "#E2E8F2"];
-const tip = { borderRadius: 12, border: "1px solid #E3E8F0", fontSize: 12 };
+const NAVY = ["#262119", "#3A342D", "#6C5A42", "#9F8563", "#C5B5A0", "#C9C4BC", "#DDD8D1", "#EEEBE6"];
+const tip = { borderRadius: 12, border: "1px solid #EDEAE7", fontSize: 12 };
 const man = (v) => `${Math.round((Number(v) || 0) / 10000).toLocaleString()}만`;
 
 export default function Finance() {
@@ -51,7 +51,7 @@ export default function Finance() {
 
   return (
     <div>
-      <Hero title="매출 · 손익">
+      <Hero en="Profit & loss" title="매출 · 손익">
         <MonthPicker value={month} onChange={(v) => v && setMonth(v)} />
         <HeroBtn sub icon="plus" onClick={() => setEdit({ kind: "expense", date: ymd() })}>비용 입력</HeroBtn>
         <HeroBtn icon="plus" onClick={() => setEdit({ kind: "income", date: ymd() })}>매출 입력</HeroBtn>
@@ -70,14 +70,14 @@ export default function Finance() {
             <div className="h-[280px] -ml-3">
               <ResponsiveContainer>
                 <ComposedChart data={trend}>
-                  <CartesianGrid stroke="#EEF1F6" vertical={false} />
-                  <XAxis dataKey="m" tick={{ fontSize: 12, fill: "#7A8AA8" }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={man} tick={{ fontSize: 11.5, fill: "#7A8AA8" }} axisLine={false} tickLine={false} width={54} />
-                  <Tooltip contentStyle={tip} formatter={(v) => won(v)} cursor={{ fill: "#F4F6FA" }} />
+                  <CartesianGrid stroke="#F4F2F0" vertical={false} />
+                  <XAxis dataKey="m" tick={{ fontSize: 12, fill: "#98928B" }} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={man} tick={{ fontSize: 11.5, fill: "#98928B" }} axisLine={false} tickLine={false} width={54} />
+                  <Tooltip contentStyle={tip} formatter={(v) => won(v)} cursor={{ fill: "#F8F7F6" }} />
                   <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="매출" fill="#1B2B4B" radius={[6, 6, 0, 0]} barSize={16} />
-                  <Bar dataKey="비용" fill="#C9D3E4" radius={[6, 6, 0, 0]} barSize={16} />
-                  <Line type="monotone" dataKey="이익" stroke="#4B6CB7" strokeWidth={3} dot={{ r: 3.5, fill: "#fff", strokeWidth: 2 }} />
+                  <Bar dataKey="매출" fill="#3A342D" radius={[6, 6, 0, 0]} barSize={16} />
+                  <Bar dataKey="비용" fill="#DDD8D1" radius={[6, 6, 0, 0]} barSize={16} />
+                  <Line type="monotone" dataKey="이익" stroke="#9F8563" strokeWidth={3} dot={{ r: 3.5, fill: "#fff", strokeWidth: 2 }} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -89,7 +89,7 @@ export default function Finance() {
                 <Tooltip contentStyle={tip} formatter={(v) => won(v)} />
               </PieChart></ResponsiveContainer></div>
               <ul className="space-y-1.5 mt-2">{expPie.sort((a, b) => b.value - a.value).map((p, i) => (
-                <li key={p.name} className="flex items-center gap-2 text-[12.5px]"><span className="w-2.5 h-2.5 rounded-full" style={{ background: NAVY[i % NAVY.length] }} /><span className="font-bold">{p.name}</span><span className="ml-auto tnum font-bold">{won(p.value)}</span><span className="w-9 text-right text-[#7A8AA8] tnum">{Math.round((p.value / exp) * 100)}%</span></li>
+                <li key={p.name} className="flex items-center gap-2 text-[12.5px]"><span className="w-2.5 h-2.5 rounded-full" style={{ background: NAVY[i % NAVY.length] }} /><span className="font-bold">{p.name}</span><span className="ml-auto tnum font-bold">{won(p.value)}</span><span className="w-9 text-right text-[#98928B] tnum">{Math.round((p.value / exp) * 100)}%</span></li>
               ))}</ul>
             </>)}
           </Card>
@@ -100,20 +100,20 @@ export default function Finance() {
             {byProd.length === 0 ? <Empty>이달 기록이 없습니다.</Empty> : (
               <ul className="space-y-4">{byProd.map((p) => (
                 <li key={p.key}>
-                  <div className="flex items-center text-[13px] mb-1.5"><b className="flex-1">{p.label}</b><span className="tnum font-bold">{won(p.inc - p.exp)}</span><span className="ml-1 text-[#7A8AA8] text-[12px]">손익</span></div>
+                  <div className="flex items-center text-[13px] mb-1.5"><b className="flex-1">{p.label}</b><span className="tnum font-bold">{won(p.inc - p.exp)}</span><span className="ml-1 text-[#98928B] text-[12px]">손익</span></div>
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2"><span className="w-8 text-[11px] font-bold text-[#7A8AA8]">매출</span><div className="flex-1 h-3 rounded-full bg-navy-50 overflow-hidden"><div className="h-full rounded-full bg-navy" style={{ width: `${(p.inc / maxProd) * 100}%` }} /></div><span className="w-24 text-right text-[12px] tnum">{won(p.inc)}</span></div>
-                    <div className="flex items-center gap-2"><span className="w-8 text-[11px] font-bold text-[#7A8AA8]">비용</span><div className="flex-1 h-3 rounded-full bg-navy-50 overflow-hidden"><div className="h-full rounded-full bg-[#A9B9DC]" style={{ width: `${(p.exp / maxProd) * 100}%` }} /></div><span className="w-24 text-right text-[12px] tnum">{won(p.exp)}</span></div>
+                    <div className="flex items-center gap-2"><span className="w-8 text-[11px] font-bold text-[#98928B]">매출</span><div className="flex-1 h-3 rounded-full bg-navy-50 overflow-hidden"><div className="h-full rounded-full bg-navy" style={{ width: `${(p.inc / maxProd) * 100}%` }} /></div><span className="w-24 text-right text-[12px] tnum">{won(p.inc)}</span></div>
+                    <div className="flex items-center gap-2"><span className="w-8 text-[11px] font-bold text-[#98928B]">비용</span><div className="flex-1 h-3 rounded-full bg-navy-50 overflow-hidden"><div className="h-full rounded-full bg-[#C9C4BC]" style={{ width: `${(p.exp / maxProd) * 100}%` }} /></div><span className="w-24 text-right text-[12px] tnum">{won(p.exp)}</span></div>
                   </div>
                 </li>
               ))}</ul>
             )}
           </Card>
           <Card title="로지스웹 수납 연동">
-            {!me.owner ? <div className="text-[13px] text-[#7A8AA8]">대표 계정에서 로지스웹 수납 관리 금액을 불러옵니다.</div> : !inv ? <div className="text-[13px] text-[#7A8AA8] py-4">{plat ? `${month} 청구 기록이 없습니다.` : "불러오는 중…"}</div> : (
+            {!me.owner ? <div className="text-[13px] text-[#98928B]">대표 계정에서 로지스웹 수납 관리 금액을 불러옵니다.</div> : !inv ? <div className="text-[13px] text-[#98928B] py-4">{plat ? `${month} 청구 기록이 없습니다.` : "불러오는 중…"}</div> : (
               <div className="space-y-2">
                 {[["청구", inv.billed], ["입금 완료", inv.paid], ["연체", inv.overdue]].map(([k, v]) => (
-                  <div key={k} className="flex items-center rounded-2xl bg-navy-50 px-4 py-2.5"><span className="text-[13px] font-bold text-[#5A6A86] flex-1">{k}</span><span className={cx("text-[15px] font-black tnum", k === "연체" && v > 0 && "text-rose-600")}>{won(v)}</span></div>
+                  <div key={k} className="flex items-center rounded-2xl bg-navy-50 px-4 py-2.5"><span className="text-[13px] font-bold text-[#77716A] flex-1">{k}</span><span className={cx("text-[15px] font-black tnum", k === "연체" && v > 0 && "text-rose-600")}>{won(v)}</span></div>
                 ))}
                 <Btn kind={imported ? "ghost" : "primary"} disabled={imported || !inv.paid} onClick={importInv} className="w-full mt-1">{imported ? "이미 장부에 넣었습니다" : "입금 완료 금액을 장부에 넣기"}</Btn>
               </div>
@@ -121,21 +121,21 @@ export default function Finance() {
           </Card>
         </div>
 
-        <Card title={`${month} 장부`} right={<span className="text-[12.5px] text-[#7A8AA8]">{cur.length}건</span>} pad={false}>
+        <Card title={`${month} 장부`} right={<span className="text-[12.5px] text-[#98928B]">{cur.length}건</span>} pad={false}>
           {cur.length === 0 ? <Empty icon="receipt">이달 기록이 없습니다. 위 [매출 입력] · [비용 입력]으로 적어 주세요.</Empty> : (
             <div className="overflow-x-auto">
               <table className="w-full text-[13.5px] min-w-[640px]">
-                <thead><tr className="text-left text-[12px] text-[#7A8AA8] bg-[#F8FAFD]">{["날짜", "구분", "항목", "서비스", "금액", "메모"].map((h) => <th key={h} className={cx("px-4 py-2.5 font-bold", h === "금액" && "text-right")}>{h}</th>)}</tr></thead>
+                <thead><tr className="text-left text-[12px] text-[#98928B] bg-[#F9F8F6]">{["날짜", "구분", "항목", "서비스", "금액", "메모"].map((h) => <th key={h} className={cx("px-4 py-2.5 font-bold", h === "금액" && "text-right")}>{h}</th>)}</tr></thead>
                 <tbody>{cur.sort((a, b) => String(b.date).localeCompare(String(a.date))).map((r) => (
-                  <tr key={r.id} onClick={() => setEdit(r)} className="border-t border-[#EEF1F6] hover:bg-[#F8FAFD] cursor-pointer">
+                  <tr key={r.id} onClick={() => setEdit(r)} className="border-t border-[#F4F2F0] hover:bg-[#F9F8F6] cursor-pointer">
                     <td className="px-4 py-2.5 tnum">{String(r.date).slice(5).replace("-", "/")}</td>
                     <td className="px-4 py-2.5"><Chip tone={r.kind === "income" ? "dark" : "gray"}>{r.kind === "income" ? "매출" : "비용"}</Chip></td>
-                    <td className="px-4 py-2.5 font-bold">{r.category}</td><td className="px-4 py-2.5 text-[#5A6A86]">{productLabel(r.product)}</td>
-                    <td className={cx("px-4 py-2.5 text-right tnum font-black", r.kind === "expense" && "text-[#5A6A86]")}>{r.kind === "expense" ? "-" : ""}{won(r.amount)}</td>
-                    <td className="px-4 py-2.5 text-[#7A8AA8] max-w-[280px] truncate">{r.memo}</td>
+                    <td className="px-4 py-2.5 font-bold">{r.category}</td><td className="px-4 py-2.5 text-[#77716A]">{productLabel(r.product)}</td>
+                    <td className={cx("px-4 py-2.5 text-right tnum font-black", r.kind === "expense" && "text-[#77716A]")}>{r.kind === "expense" ? "-" : ""}{won(r.amount)}</td>
+                    <td className="px-4 py-2.5 text-[#98928B] max-w-[280px] truncate">{r.memo}</td>
                   </tr>
                 ))}</tbody>
-                <tfoot><tr className="border-t-2 border-line bg-[#F8FAFD] font-black"><td colSpan={4} className="px-4 py-3">합계 (매출 − 비용)</td><td className="px-4 py-3 text-right tnum">{won(profit)}</td><td /></tr></tfoot>
+                <tfoot><tr className="border-t-2 border-line bg-[#F9F8F6] font-black"><td colSpan={4} className="px-4 py-3">합계 (매출 − 비용)</td><td className="px-4 py-3 text-right tnum">{won(profit)}</td><td /></tr></tfoot>
               </table>
             </div>
           )}
@@ -165,7 +165,7 @@ function EntryEditor({ entry, me, onClose }) {
     <Modal open title={isNew ? (f.kind === "income" ? "매출 입력" : "비용 입력") : "장부 고치기"} onClose={onClose}
       footer={<>{!isNew && <Btn kind="danger" icon="trash" onClick={del} className="mr-auto">지우기</Btn>}<Btn kind="ghost" onClick={onClose}>취소</Btn><Btn onClick={save}>저장</Btn></>}>
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-1.5">{[["income", "매출"], ["expense", "비용"]].map(([k, l]) => <button key={k} type="button" onClick={() => setF({ ...f, kind: k, category: "" })} className={cx("h-10 rounded-xl text-[13.5px] font-black border", f.kind === k ? "bg-navy text-white border-navy" : "border-[#DCE3EE] text-[#3A4A66]")}>{l}</button>)}</div>
+        <div className="grid grid-cols-2 gap-1.5">{[["income", "매출"], ["expense", "비용"]].map(([k, l]) => <button key={k} type="button" onClick={() => setF({ ...f, kind: k, category: "" })} className={cx("h-10 rounded-xl text-[13.5px] font-black border", f.kind === k ? "bg-navy text-white border-navy" : "border-[#E9E6E1] text-[#57514A]")}>{l}</button>)}</div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="날짜"><DateInput value={f.date} onChange={set("date")} /></Field>
           <Field label="금액(원)"><Input inputMode="numeric" value={f.amount ? Number(num(f.amount)).toLocaleString() : ""} onChange={set("amount")} autoFocus /></Field>

@@ -34,14 +34,14 @@ export default function Board({ mode }) {
 
   return (
     <div>
-      <Hero title={mode === "notice" ? "사내 공지" : "게시판 · 회의록"}>
+      <Hero en={mode === "notice" ? "Notice" : "Board"} title={mode === "notice" ? "사내 공지" : "게시판 · 회의록"}>
         {canWrite && <HeroBtn icon="pen" onClick={() => setEdit({})}>{mode === "notice" ? "공지 쓰기" : "글쓰기"}</HeroBtn>}
       </Hero>
 
       <div className="flex flex-col md:flex-row md:items-center gap-3 mb-1">
         {mode === "board" ? <Tabs items={[{ key: "free", label: "자유게시판" }, { key: "minutes", label: "회의록" }]} value={tab} onChange={(k) => { setTab(k); setSp({}); }} /> : <div className="flex-1" />}
         <div className="md:ml-auto relative md:w-[300px] mb-4">
-          <Icon name="search" size={16} className="absolute left-3 top-3 text-[#7A8AA8]" />
+          <Icon name="search" size={16} className="absolute left-3 top-3 text-[#98928B]" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="제목 · 내용 · 작성자 검색" className="pl-9" />
         </div>
       </div>
@@ -49,7 +49,7 @@ export default function Board({ mode }) {
       <div className={cx("grid gap-4 md:gap-5", cur ? "lg:grid-cols-[minmax(0,420px)_1fr]" : "")}>
         <Card pad={false} className={cur ? "hidden lg:block" : ""}>
           {!rows ? <Loading /> : list.length === 0 ? <Empty icon="megaphone">{q ? "검색 결과가 없습니다." : "아직 글이 없습니다."}</Empty> : (
-            <ul className="divide-y divide-[#EEF1F6]">
+            <ul className="divide-y divide-[#F4F2F0]">
               {list.map((p) => {
                 const isNew = !p.readBy?.[uid] && p.authorUid !== uid;
                 const readCnt = Object.keys(p.readBy || {}).length;
@@ -60,10 +60,10 @@ export default function Board({ mode }) {
                         <div className="flex items-center gap-1.5">
                           {p.pinned && <Chip tone="dark">고정</Chip>}
                           {isNew && <span className="w-1.5 h-1.5 rounded-full bg-[#FF3B30] shrink-0" />}
-                          <span className={cx("truncate text-[14.5px]", isNew ? "font-black" : "font-bold text-[#22304D]")}>{p.title}</span>
+                          <span className={cx("truncate text-[14.5px]", isNew ? "font-black" : "font-bold text-[#3E3931]")}>{p.title}</span>
                         </div>
-                        <div className="mt-0.5 text-[12.5px] text-[#7A8AA8] truncate">{String(p.body || "").slice(0, 80)}</div>
-                        <div className="mt-1 text-[11.5px] text-[#7A8AA8]">{p.authorName} · {fmtTime(p.createdAt)}{board === "notice" ? ` · 읽음 ${readCnt}` : ""}</div>
+                        <div className="mt-0.5 text-[12.5px] text-[#98928B] truncate">{String(p.body || "").slice(0, 80)}</div>
+                        <div className="mt-1 text-[11.5px] text-[#98928B]">{p.authorName} · {fmtTime(p.createdAt)}{board === "notice" ? ` · 읽음 ${readCnt}` : ""}</div>
                       </div>
                     </button>
                   </li>
@@ -96,7 +96,7 @@ function PostView({ post, me, members, onClose, onEdit }) {
   const notYet = members.filter((m) => !post.readBy?.[m.uid] && m.uid !== post.authorUid);
   return (
     <Card pad={false}>
-      <div className="px-5 md:px-7 pt-5 pb-4 border-b border-[#EEF1F6]">
+      <div className="px-5 md:px-7 pt-5 pb-4 border-b border-[#F4F2F0]">
         <button type="button" onClick={onClose} className="lg:hidden mb-3 text-[13px] font-bold text-navy-500">← 목록</button>
         <div className="flex items-start gap-3">
           <h2 className="flex-1 text-[20px] font-black text-navy-950 leading-snug">{post.title}</h2>
@@ -106,9 +106,9 @@ function PostView({ post, me, members, onClose, onEdit }) {
             <Btn kind="danger" icon="trash" onClick={del} />
           </div>}
         </div>
-        <div className="mt-1.5 text-[12.5px] text-[#7A8AA8]">{post.authorName} · {fmtTime(post.createdAt)}{post.updatedAt && post.updatedAt?.seconds !== post.createdAt?.seconds ? " · 수정됨" : ""}</div>
+        <div className="mt-1.5 text-[12.5px] text-[#98928B]">{post.authorName} · {fmtTime(post.createdAt)}{post.updatedAt && post.updatedAt?.seconds !== post.createdAt?.seconds ? " · 수정됨" : ""}</div>
       </div>
-      <div className="px-5 md:px-7 py-5 text-[15px] leading-[1.8] whitespace-pre-wrap break-words text-[#1A2740]">{post.body}</div>
+      <div className="px-5 md:px-7 py-5 text-[15px] leading-[1.8] whitespace-pre-wrap break-words text-[#342E27]">{post.body}</div>
       {post.board === "notice" && (
         <div className="mx-5 md:mx-7 mb-5 rounded-2xl bg-navy-50 px-4 py-3">
           <div className="text-[12.5px] font-black text-navy mb-1.5">읽음 확인 {readers.length} / {readers.length + notYet.length}</div>
@@ -118,15 +118,15 @@ function PostView({ post, me, members, onClose, onEdit }) {
           </div>
         </div>
       )}
-      <div className="border-t border-[#EEF1F6] px-5 md:px-7 py-4">
+      <div className="border-t border-[#F4F2F0] px-5 md:px-7 py-4">
         <div className="text-[13px] font-black mb-3">댓글 {(comments || []).length}</div>
         <ul className="space-y-3 mb-3">
           {(comments || []).map((c) => (
             <li key={c.id} className="flex gap-2.5">
               <div className="w-8 h-8 rounded-full bg-navy-100 text-navy text-[12px] font-black flex items-center justify-center shrink-0">{(c.authorName || "?").slice(0, 1)}</div>
               <div className="min-w-0 flex-1">
-                <div className="text-[12.5px]"><b>{c.authorName}</b> <span className="text-[#7A8AA8]">{fmtTime(c.createdAt)}</span>
-                  {(c.authorUid === uid || me.isAdmin) && <button type="button" onClick={() => removeRow(`pnkPosts/${post.id}/comments`, c.id).catch(fail)} className="ml-2 text-[11.5px] text-[#7A8AA8] hover:text-rose-600">지우기</button>}</div>
+                <div className="text-[12.5px]"><b>{c.authorName}</b> <span className="text-[#98928B]">{fmtTime(c.createdAt)}</span>
+                  {(c.authorUid === uid || me.isAdmin) && <button type="button" onClick={() => removeRow(`pnkPosts/${post.id}/comments`, c.id).catch(fail)} className="ml-2 text-[11.5px] text-[#98928B] hover:text-rose-600">지우기</button>}</div>
                 <div className="text-[14px] whitespace-pre-wrap break-words">{c.body}</div>
               </div>
             </li>

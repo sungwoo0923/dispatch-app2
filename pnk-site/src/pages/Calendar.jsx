@@ -31,7 +31,7 @@ export default function CalendarPage() {
     const push = (d, x) => { (out[d] || (out[d] = [])).push(x); };
     if (show.ev) (events || []).forEach((e) => push(e.date, { kind: "ev", id: e.id, title: e.title, time: e.time, dot: typeOf(e.type).dot, raw: e }));
     if (show.sales) (sales || []).filter((s) => s.nextDate && !["won", "lost"].includes(s.stage)).forEach((s) => push(s.nextDate, { kind: "sales", id: s.id, title: `${s.company} · ${s.nextAction || "연락"}`, dot: "bg-sky-600" }));
-    if (show.task) (tasks || []).filter((t) => t.due && t.status !== "done").forEach((t) => push(t.due, { kind: "task", id: t.id, title: t.title, dot: "bg-[#8FA6D6]" }));
+    if (show.task) (tasks || []).filter((t) => t.due && t.status !== "done").forEach((t) => push(t.due, { kind: "task", id: t.id, title: t.title, dot: "bg-[#C5B5A0]" }));
     Object.values(out).forEach((l) => l.sort((a, b) => String(a.time || "99").localeCompare(String(b.time || "99"))));
     return out;
   }, [events, sales, tasks, show]);
@@ -41,25 +41,25 @@ export default function CalendarPage() {
 
   return (
     <div>
-      <Hero title="일정">
+      <Hero en="Calendar" title="일정">
         <HeroBtn icon="plus" onClick={() => setEdit({ date: sel })}>일정 추가</HeroBtn>
       </Hero>
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-4 md:gap-5">
         <Card pad={false}>
-          <div className="flex items-center gap-2 px-4 md:px-5 py-3.5 border-b border-[#EEF1F6] flex-wrap">
+          <div className="flex items-center gap-2 px-4 md:px-5 py-3.5 border-b border-[#F4F2F0] flex-wrap">
             <button type="button" onClick={() => go(-1)} className="w-9 h-9 rounded-xl border border-line flex items-center justify-center hover:border-navy-500" aria-label="이전 달">‹</button>
             <div className="text-[18px] font-black tnum w-[120px] text-center">{y}년 {m + 1}월</div>
             <button type="button" onClick={() => go(1)} className="w-9 h-9 rounded-xl border border-line flex items-center justify-center hover:border-navy-500" aria-label="다음 달">›</button>
             <Btn kind="ghost" onClick={() => { const d = new Date(); setCur(new Date(d.getFullYear(), d.getMonth(), 1)); setSel(today); }}>오늘</Btn>
             <div className="ml-auto flex gap-1.5 flex-wrap">
-              {[["ev", "회사 일정", "bg-navy-700"], ["sales", "영업 연락", "bg-sky-600"], ["task", "업무 기한", "bg-[#8FA6D6]"]].map(([k, l, dot]) => (
-                <button key={k} type="button" onClick={() => setShow({ ...show, [k]: !show[k] })} className={cx("h-8 px-2.5 rounded-lg text-[12px] font-bold flex items-center gap-1.5 border", show[k] ? "border-navy-500/40 bg-navy-50" : "border-line text-[#A0ABBE]")}>
+              {[["ev", "회사 일정", "bg-navy-700"], ["sales", "영업 연락", "bg-sky-600"], ["task", "업무 기한", "bg-[#C5B5A0]"]].map(([k, l, dot]) => (
+                <button key={k} type="button" onClick={() => setShow({ ...show, [k]: !show[k] })} className={cx("h-8 px-2.5 rounded-lg text-[12px] font-bold flex items-center gap-1.5 border", show[k] ? "border-navy-500/40 bg-navy-50" : "border-line text-[#B6B0A9]")}>
                   <span className={cx("w-2 h-2 rounded-full", dot, !show[k] && "opacity-30")} />{l}
                 </button>
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-7 text-center text-[12px] font-bold text-[#7A8AA8] border-b border-[#EEF1F6]">
+          <div className="grid grid-cols-7 text-center text-[12px] font-bold text-[#98928B] border-b border-[#F4F2F0]">
             {WEEK.map((w, i) => <div key={w} className={cx("py-2", i === 0 && "text-rose-500", i === 6 && "text-navy-500")}>{w}</div>)}
           </div>
           <div className="grid grid-cols-7">
@@ -67,15 +67,15 @@ export default function CalendarPage() {
               const k = ymd(d); const inM = d.getMonth() === m; const items = byDay[k] || [];
               return (
                 <button key={k} type="button" onClick={() => setSel(k)} onDoubleClick={() => setEdit({ date: k })}
-                  className={cx("text-left min-h-[64px] md:min-h-[108px] p-1.5 md:p-2 border-b border-r border-[#EEF1F6] align-top transition", i % 7 === 6 && "border-r-0",
+                  className={cx("text-left min-h-[64px] md:min-h-[108px] p-1.5 md:p-2 border-b border-r border-[#F4F2F0] align-top transition", i % 7 === 6 && "border-r-0",
                     !inM && "bg-[#FAFBFD]", sel === k && "bg-navy-50 ring-2 ring-inset ring-navy-500/50")}>
                   <div className={cx("text-[12.5px] font-black tnum w-6 h-6 rounded-full flex items-center justify-center",
-                    k === today ? "bg-navy text-white" : !inM ? "text-[#C0C8D6]" : d.getDay() === 0 ? "text-rose-500" : "text-[#22304D]")}>{d.getDate()}</div>
+                    k === today ? "bg-navy text-white" : !inM ? "text-[#D0CCC6]" : d.getDay() === 0 ? "text-rose-500" : "text-[#3E3931]")}>{d.getDate()}</div>
                   <div className="hidden md:block mt-1 space-y-0.5">
                     {items.slice(0, 3).map((x) => (
                       <div key={x.kind + x.id} className="flex items-center gap-1 text-[11.5px] font-semibold truncate"><span className={cx("w-1.5 h-1.5 rounded-full shrink-0", x.dot)} /><span className="truncate">{x.time ? `${x.time} ` : ""}{x.title}</span></div>
                     ))}
-                    {items.length > 3 && <div className="text-[11px] font-bold text-[#7A8AA8]">+{items.length - 3}</div>}
+                    {items.length > 3 && <div className="text-[11px] font-bold text-[#98928B]">+{items.length - 3}</div>}
                   </div>
                   <div className="md:hidden mt-1 flex gap-0.5 flex-wrap">{items.slice(0, 4).map((x) => <span key={x.kind + x.id} className={cx("w-1.5 h-1.5 rounded-full", x.dot)} />)}</div>
                 </button>
@@ -85,7 +85,7 @@ export default function CalendarPage() {
         </Card>
 
         <Card title={`${Number(sel.slice(5, 7))}월 ${Number(sel.slice(8))}일 (${WEEK[new Date(sel).getDay()]})`} right={<Btn kind="soft" icon="plus" onClick={() => setEdit({ date: sel })}>추가</Btn>}>
-          {selItems.length === 0 ? <div className="py-8 text-center text-[13px] text-[#7A8AA8]">일정이 없습니다.<br /><span className="text-[12px]">달력 날짜를 두 번 누르면 바로 추가</span></div> : (
+          {selItems.length === 0 ? <div className="py-8 text-center text-[13px] text-[#98928B]">일정이 없습니다.<br /><span className="text-[12px]">달력 날짜를 두 번 누르면 바로 추가</span></div> : (
             <ul className="space-y-2">
               {selItems.map((x) => (
                 <li key={x.kind + x.id}>
@@ -93,9 +93,9 @@ export default function CalendarPage() {
                     <span className={cx("mt-1.5 w-2.5 h-2.5 rounded-full shrink-0", x.dot)} />
                     <div className="min-w-0 flex-1">
                       <div className="text-[14px] font-bold">{x.title}</div>
-                      <div className="text-[12px] text-[#7A8AA8]">{x.kind === "ev" ? `${typeOf(x.raw.type).label} · ${x.time || "종일"}${x.raw.memo ? ` · ${x.raw.memo}` : ""}` : x.kind === "sales" ? "영업 다음 연락" : "업무 기한"}</div>
+                      <div className="text-[12px] text-[#98928B]">{x.kind === "ev" ? `${typeOf(x.raw.type).label} · ${x.time || "종일"}${x.raw.memo ? ` · ${x.raw.memo}` : ""}` : x.kind === "sales" ? "영업 다음 연락" : "업무 기한"}</div>
                     </div>
-                    <Icon name="link" size={14} className="text-[#C0C8D6] mt-1" />
+                    <Icon name="link" size={14} className="text-[#D0CCC6] mt-1" />
                   </button>
                 </li>
               ))}

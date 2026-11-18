@@ -22,7 +22,7 @@ export default function Members() {
 
   return (
     <div>
-      <Hero title="구성원 · 조직도" desc={`PnK PROJECT 구성원 ${active.length}명${pending.length && me.isAdmin ? ` · 가입 승인 대기 ${pending.length}명` : ""}`}>
+      <Hero en="People" title="구성원 · 조직도" desc={`PnK PROJECT 구성원 ${active.length}명${pending.length && me.isAdmin ? ` · 가입 승인 대기 ${pending.length}명` : ""}`}>
         <HeroBtn sub icon="user" onClick={() => setMine(true)}>내 정보 고치기</HeroBtn>
       </Hero>
       <Tabs items={[{ key: "org", label: "조직도" }, { key: "list", label: "연락처" }, ...(me.isAdmin ? [{ key: "admin", label: "구성원 관리", badge: pending.length }] : [])]} value={tab} onChange={setTab} />
@@ -30,26 +30,26 @@ export default function Members() {
       {!rows ? <Loading /> : tab === "org" ? (
         <div className="bg-white rounded-2xl border border-line p-5 md:p-8 overflow-x-auto">
           <div className="min-w-[600px] flex flex-col items-center">
-            <div className="rounded-2xl px-6 py-4 text-white text-center shadow-lg" style={{ background: "linear-gradient(120deg,#1B2B4B,#2D4C82)" }}>
+            <div className="rounded-2xl px-6 py-4 text-white text-center shadow-lg" style={{ background: "linear-gradient(120deg,#3A342D,#6C5A42)" }}>
               <img src="/brand/pnk-mark-64.png" alt="" className="w-9 h-9 rounded-lg bg-white mx-auto mb-1.5" />
               <div className="text-[15px] font-black">PnK PROJECT</div>
-              <div className="text-[12px] text-blue-100/85">{ceo.map((c) => `${c.title || "대표"} ${c.name}`).join(" · ") || "대표"}</div>
+              <div className="text-[12px] text-stone-100/85">{ceo.map((c) => `${c.title || "대표"} ${c.name}`).join(" · ") || "대표"}</div>
             </div>
-            <div className="w-0.5 h-6 bg-[#C9D3E4]" />
+            <div className="w-0.5 h-6 bg-[#DDD8D1]" />
             <div className="relative flex gap-4 pt-6 flex-wrap justify-center">
-              <div className="absolute top-0 left-[8%] right-[8%] h-0.5 bg-[#C9D3E4]" />
+              <div className="absolute top-0 left-[8%] right-[8%] h-0.5 bg-[#DDD8D1]" />
               {depts.map((d) => {
                 const ppl = active.filter((m) => (m.dept || "기타") === d && m.role !== "owner");
                 if (!ppl.length) return null;
                 return (
                   <div key={d} className="relative w-[190px]">
-                    <div className="absolute -top-6 left-1/2 w-0.5 h-6 bg-[#C9D3E4]" />
-                    <div className="rounded-2xl border-2 border-navy bg-navy-50 px-3 py-2 text-center text-[13.5px] font-black text-navy">{d} <span className="text-[12px] text-[#7A8AA8]">{ppl.length}</span></div>
+                    <div className="absolute -top-6 left-1/2 w-0.5 h-6 bg-[#DDD8D1]" />
+                    <div className="rounded-2xl border-2 border-navy bg-navy-50 px-3 py-2 text-center text-[13.5px] font-black text-navy">{d} <span className="text-[12px] text-[#98928B]">{ppl.length}</span></div>
                     <div className="mt-2 space-y-1.5">
                       {ppl.map((m) => (
                         <div key={m.uid} className="flex items-center gap-2 rounded-xl border border-line bg-white px-2.5 py-2">
                           <div className="w-8 h-8 rounded-full bg-navy text-white text-[12px] font-black flex items-center justify-center shrink-0">{m.name.slice(0, 1)}</div>
-                          <div className="min-w-0"><div className="text-[13px] font-black truncate">{m.name} <span className="text-[11.5px] text-[#7A8AA8] font-bold">{m.title}</span></div><div className="text-[11px] text-[#7A8AA8] truncate tnum">{mailAddr(m) || m.email}</div></div>
+                          <div className="min-w-0"><div className="text-[13px] font-black truncate">{m.name} <span className="text-[11.5px] text-[#98928B] font-bold">{m.title}</span></div><div className="text-[11px] text-[#98928B] truncate tnum">{mailAddr(m) || m.email}</div></div>
                         </div>
                       ))}
                     </div>
@@ -65,11 +65,11 @@ export default function Members() {
             <div key={m.uid} className="bg-white rounded-2xl border border-line p-4 flex gap-3">
               <div className="w-12 h-12 rounded-2xl bg-navy text-white text-[16px] font-black flex items-center justify-center shrink-0">{m.name.slice(0, 1)}</div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5"><span className="text-[15px] font-black">{m.name}</span><span className="text-[12px] text-[#7A8AA8] font-bold">{m.dept} {m.title} · {m.empNo}</span>{m.role !== "staff" && <Chip tone="dark" className="ml-auto">{ROLE_LABEL[m.role]}</Chip>}</div>
-                <div className="mt-1 text-[12.5px] space-y-0.5 text-[#3A4A66]">
-                  {mailAddr(m) && <div className="flex items-center gap-1.5 tnum"><Icon name="mail" size={13} className="text-[#7A8AA8]" />{mailAddr(m)}</div>}
-                  {m.phone && <a href={`tel:${m.phone}`} className="flex items-center gap-1.5 tnum"><Icon name="phone" size={13} className="text-[#7A8AA8]" />{m.phone}</a>}
-                  {m.bio && <div className="text-[12px] text-[#7A8AA8] truncate">{m.bio}</div>}
+                <div className="flex items-center gap-1.5"><span className="text-[15px] font-black">{m.name}</span><span className="text-[12px] text-[#98928B] font-bold">{m.dept} {m.title} · {m.empNo}</span>{m.role !== "staff" && <Chip tone="dark" className="ml-auto">{ROLE_LABEL[m.role]}</Chip>}</div>
+                <div className="mt-1 text-[12.5px] space-y-0.5 text-[#57514A]">
+                  {mailAddr(m) && <div className="flex items-center gap-1.5 tnum"><Icon name="mail" size={13} className="text-[#98928B]" />{mailAddr(m)}</div>}
+                  {m.phone && <a href={`tel:${m.phone}`} className="flex items-center gap-1.5 tnum"><Icon name="phone" size={13} className="text-[#98928B]" />{m.phone}</a>}
+                  {m.bio && <div className="text-[12px] text-[#98928B] truncate">{m.bio}</div>}
                 </div>
               </div>
             </div>
@@ -79,9 +79,9 @@ export default function Members() {
         <div className="space-y-4">
           {pending.length > 0 && (
             <Card title="가입 승인 대기" pad={false}>
-              <ul className="divide-y divide-[#EEF1F6]">{pending.map((m) => (
+              <ul className="divide-y divide-[#F4F2F0]">{pending.map((m) => (
                 <li key={m.uid} className="flex flex-col sm:flex-row sm:items-center gap-2 px-5 py-3">
-                  <div className="flex-1 min-w-0"><b>{m.name}</b> <span className="text-[12.5px] text-[#7A8AA8]">{m.dept} {m.title} · {m.email} · {m.phone}</span></div>
+                  <div className="flex-1 min-w-0"><b>{m.name}</b> <span className="text-[12.5px] text-[#98928B]">{m.dept} {m.title} · {m.email} · {m.phone}</span></div>
                   <div className="flex gap-2"><Btn onClick={() => setEdit({ ...m, status: "active" })}>승인하기</Btn><Btn kind="danger" onClick={() => window.confirm(`${m.name} 가입 요청을 거절할까요?`) && removeRow("pnkMembers", m.uid).catch(fail)}>거절</Btn></div>
                 </li>
               ))}</ul>
@@ -90,12 +90,12 @@ export default function Members() {
           <Card title="전체 구성원" pad={false}>
             <div className="overflow-x-auto">
               <table className="w-full text-[13.5px] min-w-[700px]">
-                <thead><tr className="text-left text-[12px] text-[#7A8AA8] bg-[#F8FAFD]">{["사번", "이름", "부서 · 직책", "로그인 계정", "사내메일", "역할", "상태", ""].map((h) => <th key={h} className="px-4 py-2.5 font-bold">{h}</th>)}</tr></thead>
+                <thead><tr className="text-left text-[12px] text-[#98928B] bg-[#F9F8F6]">{["사번", "이름", "부서 · 직책", "로그인 계정", "사내메일", "역할", "상태", ""].map((h) => <th key={h} className="px-4 py-2.5 font-bold">{h}</th>)}</tr></thead>
                 <tbody>{(rows || []).filter((m) => m.status !== "pending").map((m) => (
-                  <tr key={m.uid} className="border-t border-[#EEF1F6]">
+                  <tr key={m.uid} className="border-t border-[#F4F2F0]">
                     <td className="px-4 py-3 tnum font-bold text-navy">{m.empNo || <span className="text-rose-600 text-[12px]">미발급</span>}</td>
                     <td className="px-4 py-3 font-black">{m.name}</td><td className="px-4 py-3">{m.dept} {m.title}</td>
-                    <td className="px-4 py-3 text-[#5A6A86]">{m.email}</td>
+                    <td className="px-4 py-3 text-[#77716A]">{m.email}</td>
                     <td className="px-4 py-3 tnum">{mailAddr(m) || <span className="text-rose-600 text-[12px] font-bold">없음</span>}</td>
                     <td className="px-4 py-3"><Chip tone={m.role === "staff" ? "gray" : "dark"}>{ROLE_LABEL[m.role]}</Chip></td>
                     <td className="px-4 py-3"><Chip tone={m.status === "active" ? "green" : "red"}>{STATUS_LABEL[m.status]}</Chip></td>
@@ -151,7 +151,7 @@ function MemberEditor({ m, me, all, onClose }) {
           <Field label="직책"><Select custom value={f.title} onChange={set("title")} options={TITLES} placeholder="고르거나 직접 입력" /></Field>
         </div>
         <Field label="사내메일 주소" hint="영문 소문자 · 숫자 — 한 번 정하면 바꾸지 않는 것이 좋습니다.">
-          <div className="flex items-center gap-2"><Input value={f.mailId} onChange={set("mailId")} className="tnum" /><span className="text-[14px] font-bold text-[#5A6A86] shrink-0">@{MAIL_DOMAIN}</span></div>
+          <div className="flex items-center gap-2"><Input value={f.mailId} onChange={set("mailId")} className="tnum" /><span className="text-[14px] font-bold text-[#77716A] shrink-0">@{MAIL_DOMAIN}</span></div>
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="역할"><Select value={f.role} onChange={set("role")} options={roles} disabled={m.role === "owner" && !me.owner} /></Field>
@@ -190,7 +190,7 @@ function MyEditor({ m, onClose }) {
             <Btn kind="soft" onClick={change}>바꾸기</Btn>
           </div>
         )}
-        <div className="text-[12px] text-[#7A8AA8]">사번 · 부서 · 직책 · 메일 주소 · 역할은 관리자가 바꿉니다. ({m.empNo} · {m.dept} {m.title} · {mailAddr(m) || "메일 주소 없음"})</div>
+        <div className="text-[12px] text-[#98928B]">사번 · 부서 · 직책 · 메일 주소 · 역할은 관리자가 바꿉니다. ({m.empNo} · {m.dept} {m.title} · {mailAddr(m) || "메일 주소 없음"})</div>
       </div>
     </Modal>
   );

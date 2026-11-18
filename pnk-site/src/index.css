@@ -1,15 +1,14 @@
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* PnK PROJECT 인트라넷 — 로지스웹과 같은 글꼴 · 바탕색 */
+/* PnK PROJECT 인트라넷 — 공식 홈페이지와 같은 글꼴(Pretendard · 영문 라벨 Cormorant Garamond) · 스톤 바탕 */
 html, body {
-  font-family: "Noto Sans KR", "Apple SD Gothic Neo", "맑은 고딕", "Malgun Gothic", system-ui, sans-serif;
-  background: #F4F6FA;
-  color: #0F1A30;
-  letter-spacing: -0.3px;
+  font-family: "Pretendard Variable", "Pretendard", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  background: #F7F5F1;
+  color: #1F1D1A;
+  letter-spacing: -0.2px;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
@@ -18,3 +17,13 @@ body { overflow-x: hidden; }
 .no-scrollbar { scrollbar-width: none; }
 .tnum { font-variant-numeric: tabular-nums; }
 input, select, textarea, button { font: inherit; letter-spacing: inherit; }
+
+/* 굵기 — 홈페이지처럼 덜 두껍게(font-black 900 → 700) */
+.font-black { font-weight: 700; }
+.font-extrabold { font-weight: 650; }
+.eng { font-family: "Cormorant Garamond", "Times New Roman", serif; text-transform: uppercase; letter-spacing: .22em; }
+.gold-grad { background: linear-gradient(135deg, #D8C3A0 0%, #B59B74 55%, #8B7A64 100%); }
+.gold-text { background: linear-gradient(135deg, #E7D6B8 0%, #C9B08A 60%, #A38862 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+@keyframes pnkRise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.rise { animation: pnkRise .5s cubic-bezier(.2,.7,.2,1) both; }
+@media (prefers-reduced-motion: reduce) { .rise { animation: none; } }
