@@ -37,6 +37,7 @@ import SheetConnectHub from "./SheetConnectHub"; // 🧹 2026-11-15 관리자메
 import NoticeBoard from "./NoticeBoard";
 import { toBoardNotice } from "./PlatformNoticeBanner";
 import { compressImage } from "./InternalMail";
+const PrivateFareAdminLazy = React.lazy(() => import("./adminCenter/PrivateFareAdmin")); // 🔐 2026-11-18 비공개 운임 지정
 const HomepageEditor = React.lazy(() => import("./HomepageEditor")); // ⭐ 2026-11-03 소개 홈페이지 편집기
 const HubMembersAdmin = React.lazy(() => import("./HubMembersAdmin")); // ⭐ 2026-11-06 허브 회원 승인
 const CostPanel = React.lazy(() => import("./CostPanel"));
@@ -128,6 +129,7 @@ const SECTIONS = [
     it("sessions", "로그인 · 접속", "SESSIONS", "key"),
     it("securityEvents", "보안 · 오류 알림", "THREATS", "alert"),
     it("subAdmin", "부관리자", "SUB ADMIN", "user"),
+    it("privateFare", "비공개 운임", "PRIVATE FARE", "eye"), // 🔐 2026-11-18 운송사 · 사람별 비공개 운임 지정
     it("sheetImport", "구글시트 연동", "SHEETS", "sheet"),
     it("tenancy", "운송사 분리 · 초기화", "ISOLATION", "shield"),
     it("testSeed", "테스트 데이터", "TEST DATA", "list"),
@@ -1322,6 +1324,7 @@ function PlatformCenterInner({ user }) {
   else if (tab === "release") body = <><Hero en="OPERATIONS · RELEASE" title="업데이트 배포" desc="새 화면을 올려도 여기서 배포해야 가입자 화면이 바뀌어요. 최고관리자 · 부관리자는 항상 최신 화면을 먼저 봐요." /><ReleasePanel>
     {/* 🧹 2026-11-14 '화주사 강제 업데이트' — 2026-11-15 고급 설정 안으로 */}
     <div><div className="text-[14px] font-black mb-2" style={{ color: G.ink }}>화주사 화면 강제 업데이트</div><ShipperForceUpdatePanel currentVersion={typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : ""} /></div></ReleasePanel></>;
+  else if (tab === "privateFare") body = <><Hero en="SECURITY · PRIVATE FARE" title="비공개 운임" desc="운송사와 사람을 골라 비공개 운임을 켜요. 켜진 사람의 임원 화면에 메뉴가 생기고, 비밀번호로 들어가요. 그 사람이 정한 금액은 최고관리자도 볼 수 없어요." /><React.Suspense fallback={<AdmEmpty />}><PrivateFareAdminLazy /></React.Suspense></>;
   else if (tab === "subAdmin") body = <><Hero en="SECURITY · SUB ADMIN" title="부관리자" desc="최고관리자와 같은 권한을 가진 부관리자(1명)를 보고 지정 · 해제해요." /><SubAdminPanel /></>;
 
   const subBar = subs.length > 1 ? <div className="mb-3 sm:mb-4 flex"><Seg value={tab} onChange={setTab} items={subs} /></div> : null;

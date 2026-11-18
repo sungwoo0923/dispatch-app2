@@ -21,6 +21,7 @@ import DailyReport from "../DailyReport"; // 📊 2026-11-06 일일 경영 보�
 const ExecAnalysis = React.lazy(() => import("../ExecAnalytics")); // 📈 2026-11-08 임원 화면 · 경영 분석 · 결재 대기 · 직원 정보
 const ExecApprovalQueue = React.lazy(() => import("../ExecAnalytics").then((m) => ({ default: m.ExecApprovalQueue })));
 const ExecStaffInfo = React.lazy(() => import("../ExecStaffInfo"));
+const PrivateFareVault = React.lazy(() => import("../PrivateFareVault")); // 🔐 2026-11-18 비공개 운임(지정된 사람 · 비밀번호)
 const ContractStudioM = React.lazy(() => import("../ContractStudio")); // ⭐ 2026-11-10 모바일 전자결재 › 계약서
 import { OrderHistoryContext } from "../orderHistory";
 import StaffManager from "../StaffManager";
@@ -314,6 +315,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
     else if (k === "board") body = <MobileBoard company={userCompany} me={{ ...(me || {}), role }} />;
     else if (k === "rules") body = wrap(<CompanyRules company={userCompany} canEdit={role === "hrManager" || role === "totalMaster"} />);
     else if (k === "funds") body = wrap(<FundsBoard company={userCompany} canEdit={false} />);
+    else if (k === "pfvault") body = <React.Suspense fallback={<Loading />}><div className="px-2 py-2"><PrivateFareVault company={userCompany} dispatchData={salesData} /></div></React.Suspense>;
     else if (k === "execsched") body = <div className="px-2 py-2"><ExecScheduleBoard company={userCompany} me={me} canWrite={canWriteExecSchedule({ dept: deptMode, role, team: me?.team })} /></div>;
     else if (k === "assets") body = wrap(<AssetManager company={userCompany} isViewer={isViewer} />);
     else if (k === "leave") body = wrap(<LeaveArea company={userCompany} isViewer={isViewer} canManage={role === "hrManager" || role === "totalMaster"} promoManage={role === "hrManager" || role === "totalMaster" || role === "hrAcct" || role === "allMgr" || role === "hrStaff" || /인사/.test(String(me?.team || "")) || me?.isMaster === true} />);
@@ -327,6 +329,6 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
     </React.Suspense>
   );
   // 👑 2026-11-17 임원 화면 — 임원 메뉴는 PC와 같은 남색 · 골드 디자인(src/execUi.jsx)
-  const execSkin = deptMode === "exec" && String(kind).startsWith("dept:") && ["sales", "briefing", "analysis", "apqueue", "staffinfo", "approvals", "schedule", "funds", "execsched"].includes(String(kind).slice(5));
+  const execSkin = deptMode === "exec" && String(kind).startsWith("dept:") && ["sales", "briefing", "analysis", "apqueue", "staffinfo", "approvals", "schedule", "funds", "pfvault", "execsched"].includes(String(kind).slice(5));
   return <OrderHistoryContext.Provider value={history}><ExecModeContext.Provider value={execSkin}>{execSkin ? <div className="kp-m-exec" style={{ background: "#050A16", minHeight: "100%" }}>{body}</div> : body}</ExecModeContext.Provider></OrderHistoryContext.Provider>;
 }
