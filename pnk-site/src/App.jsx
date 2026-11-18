@@ -27,6 +27,7 @@ const Services = React.lazy(() => import("./pages/Services"));
 const Approvals = React.lazy(() => import("./pages/Approvals"));
 const Attendance = React.lazy(() => import("./pages/Attendance"));
 const Leave = React.lazy(() => import("./pages/Leave"));
+const HomepageEditor = React.lazy(() => import("./pages/HomepageEditor")); // 🌐 2026-11-18 공식 홈페이지 편집(로지스웹 홈페이지 편집기와 같은 것)
 
 export const MeCtx = React.createContext(null);
 export const useMeCtx = () => React.useContext(MeCtx);
@@ -56,6 +57,7 @@ const MENU = [
   ] },
   { label: "경영", items: [
     { to: "/finance", label: "매출 · 손익", icon: "trend", admin: true },
+    { to: "/homepage", label: "홈페이지 편집", icon: "globe", admin: true },
     { to: "/company", label: "회사 정보", icon: "idcard" },
     { to: "/members", label: "구성원 · 조직도", icon: "users", badge: "pending" },
   ] },
@@ -77,7 +79,8 @@ export default function App() {
   if (me.needMfa) return <MfaGate me={me} />;
   if (!me.active) return <JoinGate me={me} />;
   // 로그인 화면(/login)에서 들어왔으면 주소를 인트라넷(/intranet)으로 바꾼다 — 화면 이동은 아래 basename 기준
-  if (!window.location.pathname.startsWith("/intranet")) window.history.replaceState(null, "", "/intranet");
+  //  예전 인트라넷 주소(/mail 등)로 들어왔으면 /intranet/mail 처럼 그 화면으로
+  { const p = window.location.pathname; if (!p.startsWith("/intranet")) window.history.replaceState(null, "", p === "/login" || p === "/" ? "/intranet" : `/intranet${p}`); }
   return (
     <MeCtx.Provider value={me}>
       <BrowserRouter basename="/intranet">
@@ -92,6 +95,7 @@ export default function App() {
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/sales" element={<Sales />} />
             <Route path="/finance" element={me.isAdmin ? <Finance /> : <Navigate to="/" />} />
+            <Route path="/homepage" element={me.isAdmin ? <HomepageEditor /> : <Navigate to="/" />} />
             <Route path="/company" element={<Company />} />
             <Route path="/files" element={<Files />} />
             <Route path="/members" element={<Members />} />
