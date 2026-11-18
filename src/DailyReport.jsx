@@ -12,6 +12,7 @@
 //           목표 = companySettings.매출목표.순수매출목표(연간) ÷ 12
 //  · 받기 설정(DailyReportSettings) · 아침 요약 팝업(DailyReportPopupHost)도 이 파일에.
 import { isFleetGrade } from "./fleetGradesCore"; // 🚛 지입차 구분(지입·직영·임대·분양) 한 곳
+import { usePopupTurn } from "./popupTurn";
 import React from "react";
 import { withStickyOff } from "./stickyTableHead";
 import { planIncludes, useCompanyPlanId } from "./plans"; // 💳 2026-11-09 요금제 잠금
@@ -1012,7 +1013,7 @@ export function DailyReportPopupHost({ company, dispatchData = [], drivers = [],
   const [closed, setClosed] = React.useState(false);
   const popupOn = isPopupOn(usePopupPrefs(uid), "briefing"); // ⭐ 2026-11-07 팝업 알림 설정(계정별) · 꺼도 메뉴의 보고서는 그대로
   const eligible = popupOn && !!uid && pf.ready && profile !== null && allowed && p.channels.popup !== false && (forced || (isReceiveDay(today, p) && now >= p.time && lsGet(dismissKey) !== "1" && pf.raw?.popupDismissed !== today && ssGet(laterKey) !== "1"));
-  const show = eligible && !closed;
+  const show = usePopupTurn("briefing", eligible && !closed); // 🪟 2026-11-18 알림 브리핑 등 다른 접속 팝업이 닫힌 다음에
   void drivers; void role; void customRole;
   if (!show) return null;
   return <PopupBody {...{ company, dispatchData, prefs: p, uid, loadRange, mobile, onOpenReport }} onClose={(mode, noToday) => {

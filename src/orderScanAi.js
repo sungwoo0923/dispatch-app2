@@ -309,3 +309,59 @@ export function reconcileRoles(result, blockText) {
   return { ...result, roles, unknown };
 }
 export { ymdOf };
+
+// ════════════════════════════════════════════════════════════
+// ⭐ 2026-11-18 오더 스캔 개선(사용자 요청) — 화주마다 다른 양식을 더 잘 읽게
+//  ① 등록된 업체 · 배운 이름을 AI에 같이 보낸다(knownFor) — "에이제이" · "애터미 이천" 같은 줄임말을 등록 이름으로
+//  ② 여러 건(목록 · 화이트보드 · "이름 - 숫자")이면 한 번에 나눠 달라고 한다(looksMulti → 서버 multi)
+//  ③ 등록 안 된 곳은 "신규"로 알려 준다(isNewPlace)
+// ════════════════════════════════════════════════════════════
+const bigrams = (s) => { const t = loose(s); const out = new Set(); for (let i = 0; i < t.length - 1; i += 1) out.add(t.slice(i, i + 2)); return out; };
+// 원문과 겹치는 글자가 많은 등록 업체부터(최대 places 70 · clients 30)
+export function knownFor(text, { places = [], clients = [], aliases = [] } = {}) {
+  const tg = bigrams(text);
+  const score = (name) => { const b = bigrams(name); if (!b.size) return 0; let n = 0; b.forEach((x) => { if (tg.has(x)) n += 1; }); return n / b.size; };
+  const nameOf = (p) => String(p?.업체명 || p?.거래처명 || p?.name || "").trim();
+  const shortAddr = (a) => String(a || "").trim().split(/\s+/).slice(0, 3).join(" ");
+  const ranked = (list, n) => {
+    const seen = new Set();
+    return (list || []).map((p) => ({ p, n: nameOf(p), s: score(nameOf(p)) })).filter((x) => x.n && x.s > 0 && !seen.has(loose(x.n)) && seen.add(loose(x.n)))
+      .sort((a, b) => b.s - a.s).slice(0, n);
+  };
+  return {
+    places: ranked(places, 70).map((x) => ({ n: x.n, a: shortAddr(x.p?.주소 || x.p?.address) })),
+    clients: ranked(clients, 30).map((x) => x.n),
+    aliases: (aliases || []).filter((x) => x?.from && x?.to).slice(0, 60).map((x) => [x.from, x.to]),
+  };
+}
+// 여러 건으로 보이는 글 — "1. 이름 - 521" 같은 줄이 둘 이상 · "(오전 상차)" 묶음 · 이름 숫자 줄이 여럿
+export function looksMulti(text) {
+  const lines = String(text || "").split("\n").map((l) => l.trim()).filter(Boolean);
+  const listLine = (l) => /^\d+\s*[.)]\s*\S/.test(l) && /[-–~]\s*\d{2,}/.test(l);
+  const dashNum = (l) => /[가-힣A-Za-z)]\s*[-–]\s*\d{2,}\s*$/.test(l);
+  const groupHead = (l) => /^[(（[]?\s*(오전|오후|야간|주간|\d+차)\s*상\s*차\s*[)）\]]?$/.test(l.replace(/\s+/g, " "));
+  const n = lines.filter((l) => listLine(l) || dashNum(l)).length;
+  return n >= 2 || (lines.some(groupHead) && n >= 1);
+}
+// AI가 나눈 오더 하나 → 규칙 인식기가 다시 읽을 수 있는 글(화면 줄 상자 · 학습 원문용)
+export function orderBlockText(f = {}) {
+  const v = (k) => String(f?.[k]?.v ?? f?.[k] ?? "").trim();
+  return [
+    v("상차일") && `상차일: ${v("상차일")}`,
+    v("거래처명") && `거래처: ${v("거래처명")}`,
+    v("상차지명") && `상차지: ${v("상차지명")}${v("상차지주소") ? `\n${v("상차지주소")}` : ""}`,
+    v("하차지명") && `하차지: ${v("하차지명")}${v("하차지주소") ? `\n${v("하차지주소")}` : ""}`,
+    v("경유하차") && `경유 하차: ${v("경유하차")}`,
+    v("화물내용") && `화물: ${v("화물내용")}`,
+    (v("차량톤수") || v("차량종류")) && `차량: ${[v("차량톤수"), v("차량종류")].filter(Boolean).join(" ")}`,
+    v("메모") && `메모: ${v("메모")}`,
+  ].filter(Boolean).join("\n");
+}
+// 등록된 곳인지(이름이 같거나 핵심 이름이 겹치면 등록된 곳으로 본다)
+export function isNewPlace(name, list = []) {
+  const n = loose(name);
+  if (n.length < 2) return false;
+  const core = (s) => loose(s).replace(/\(주\)|㈜|주식회사/g, "").replace(/(물류센터|센터|물류|창고|공장|지점|본점)$/, "");
+  const c = core(name);
+  return !(list || []).some((p) => { const m = loose(p?.업체명 || p?.거래처명 || p?.name || ""); const mc = core(m); return m === n || (c.length >= 2 && mc.length >= 2 && (mc === c || mc.includes(c) || c.includes(mc))); });
+}

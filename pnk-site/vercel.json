@@ -1,10 +1,17 @@
 {
   "git": { "deploymentEnabled": { "claude/*": false } },
   "ignoreCommand": "git diff --quiet ${VERCEL_GIT_PREVIOUS_SHA:-HEAD^} HEAD -- . 2>/dev/null || exit 1",
+  "cleanUrls": false,
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/login", "destination": "/intranet.html" },
+    { "source": "/intranet", "destination": "/intranet.html" },
+    { "source": "/intranet/(.*)", "destination": "/intranet.html" },
+    { "source": "/(notice|board|mail|tasks|calendar|sales|finance|company|files|members|customers|services|approvals|attendance|leave)(/.*)?", "destination": "/intranet.html" }
   ],
   "headers": [
-    { "source": "/(.*)", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] }
+    { "source": "/login", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
+    { "source": "/intranet(.*)", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
+    { "source": "/intranet.html", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }] },
+    { "source": "/pk/pk-site.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] }
   ]
 }

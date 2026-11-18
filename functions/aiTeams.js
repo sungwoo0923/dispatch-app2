@@ -9,7 +9,7 @@
 const AnthropicMod = require("@anthropic-ai/sdk");
 const Anthropic = AnthropicMod.default || AnthropicMod;
 
-const MODEL = "claude-opus-5-5";
+const MODEL = "claude-sonnet-5-5"; // 2026-11-18 비용 절감: Opus → Sonnet(단가 절반)
 const MAX_ROUNDS = 8; // 한 질문에 도구를 부르며 왕복하는 최대 횟수
 const MAX_HISTORY_BYTES = 600 * 1024;
 

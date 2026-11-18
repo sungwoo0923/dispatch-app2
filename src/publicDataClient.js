@@ -64,6 +64,7 @@ export function createWeatherStore({ call, readDoc, now = () => Date.now() }) {
   let disabled = false;
   let ver = 0;
   const asked = new Set();
+  const done = new Set(); // ⭐ 2026-11-18 다 물어본 지역(불러오는 중 / 예보 없음 구분)
   const subs = new Set();
   let queue = new Set();
   let timer = null;
@@ -85,8 +86,10 @@ export function createWeatherStore({ call, readDoc, now = () => Date.now() }) {
       if (w) warn = w;
       if (!w || Number(w.fetchedAt || 0) < now() - FRESH_MS) { if (!stale.length && keys.length) stale.push(keys[0]); }
     }
+    keys.forEach((k) => { if (regions[k] || !stale.includes(k)) done.add(k); });
     emit();
-    if (!stale.length || disabled || !call) return;
+    const finish = () => { keys.forEach((k) => done.add(k)); emit(); };
+    if (!stale.length || disabled || !call) { finish(); return; }
     for (let i = 0; i < stale.length; i += 40) {
       try {
         const r = await call("weatherFor", { regions: stale.slice(i, i + 40) });
@@ -97,6 +100,7 @@ export function createWeatherStore({ call, readDoc, now = () => Date.now() }) {
         if (disabled) break;
       } catch { break; /* 서버가 안 되면 조용히(저장된 값만) */ }
     }
+    finish();
   }
   return {
     request(keys) {
@@ -105,6 +109,7 @@ export function createWeatherStore({ call, readDoc, now = () => Date.now() }) {
       if (added && !timer) timer = setTimeout(flush, 60);
     },
     region: (k) => regions[k] || null,
+    loading: (k) => asked.has(k) && !done.has(k) && !regions[k],
     warn: () => warn,
     isDisabled: () => disabled,
     subscribe: (f) => { subs.add(f); return () => subs.delete(f); },

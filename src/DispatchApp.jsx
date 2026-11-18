@@ -12,7 +12,7 @@ import DailyReport, { DailyReportPopupHost } from "./DailyReport"; // 📊 2026-
 import { canSeeBriefing, BRIEF_MENU, BRIEF_LABEL } from "./dailyReport";
 import { EXEC_MENUS, execMenuLabel, menuName } from "./execMenus";
 import { ExecModeContext } from "./execUi"; // 👑 2026-11-17 임원 화면 디자인 시스템
-const EXEC_SKIN_MENUS = ["HOME", "일일경영보고", "경영분석", "결재대기", "직원정보", "자금현황", "스케줄", "영업관리", "결재함", "직원일정"]; // 임원 화면에서 남색 · 골드로 그리는 메뉴 // 📈 2026-11-08 임원 화면 · 경영 분석 · 결재 대기 · 직원 정보
+const EXEC_SKIN_MENUS = ["HOME", "일일경영보고", "경영분석", "결재대기", "직원정보", "자금현황", "비공개운임", "스케줄", "영업관리", "결재함", "직원일정"]; // 임원 화면에서 남색 · 골드로 그리는 메뉴 // 📈 2026-11-08 임원 화면 · 경영 분석 · 결재 대기 · 직원 정보
 import BulkUploadChooser, { downloadTemplateXlsx } from "./BulkUploadChooser";
 import { buildCopyText, getCopyTpl, useCopyTemplates } from "./copyTemplates";
 import { buildDriverCopyText, copyVarsOf } from "./driverCopyText"; // 📋 2026-11-18 기사복사 문구 — PC · 모바일 같은 글
@@ -60,7 +60,7 @@ import { buildAliasMap, resolveOrderClient } from "./clientMerge"; // ⭐ 2026-1
 import DetailFilterButton, { applyDetailFilter, DetailScope, detailGroupOrder } from "./DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { useCompanyBiz, bizOf, BizPicker, BizFilter, bizMatch, printInfoForBiz, BizListEditor, BizScope, BizSelect, bizColorOf, bizStripeProps, BizLegend, resolveBiz, rememberBiz, normBizKey, bankForBiz, bizInfoCardBlob } from "./companyBiz"; // ⭐ 2026-11-03 한 회사 · 여러 사업자 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
 import JSZip from "jszip";
-import { OrderWeather, BizCheck, bizGuardMain, ClientBizBulkButton, PopbillMemberCard } from "./publicDataMain"; // 🏛 2026-11-07 국세청 사업자 상태 · 기상청 날씨 · 팝빌 연동회원
+import { BizCheck, bizGuardMain, ClientBizBulkButton, PopbillMemberCard } from "./publicDataMain"; // 🏛 2026-11-07 국세청 사업자 상태 · 팝빌 연동회원(🌦 날씨는 2026-11-18부터 대시보드에만 — 배차 목록에서 뺐다)
 import { BankAccountsCard, BankReviewQueue, SmsSettingsCard, AlimtalkSettingsCard } from "./PopbillAuto"; // 🏦 2026-11-08 은행 입금 자동 매칭
 // 💬 2026-11-08 사장님 요청 — 카카오 알림톡은 PC·모바일 화면에서 모두 뺐다(새 오더는 알림톡:false → 서버 트리거가 보내지 않는다)
 import { buildArMonths as buildArMonthsCore, allocArDeposit as allocArDepositCore, allocKindOf, matchDeposits } from "./arMatch"; // 💰 2026-11-08 입금 매칭 공용 식(서버 계좌조회와 같은 파일)
@@ -142,7 +142,9 @@ import { PopupPrefsSection } from "./popupPrefs"; // ⭐ 2026-11-07 팝업 알�
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare, geocodeAddress, haversineKm, specialSurcharge } from "./tmapFareCalc";
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus, ROLE_LABELS, hiddenInSwitchView, switchViewFor, builtinHidesMenu, EXEC_VIEW } from "./customRoles";
-import { isExecTeam } from "./teamNames"; // ⭐ 2026-11-17 임원 부서 통합관리자 → 로그인하면 경영 브리핑
+import { isExecTeam } from "./teamNames";
+import { usePrivateFareGrant, PF_MENU } from "./privateFareGrant"; // 🔐 2026-11-18 비공개 운임(임원 화면 · 관리자센터에서 지정)
+const PrivateFareVaultLazy = React.lazy(() => import("./PrivateFareVault")); // ⭐ 2026-11-17 임원 부서 통합관리자 → 로그인하면 경영 브리핑
 import { useReadOnlyGuard } from "./readOnlyGuard";
 import { confirmLeave } from "./leaveGuard";
 import RouteMapModal from "./RouteMapModal";
@@ -3393,6 +3395,7 @@ const KP_PAGE_META = {
   인사관리부: { en: "HUMAN RESOURCES", desc: "이력서·인사발령·근태/근속 — 직원 인사 기록", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6" },
   출근기록부: { en: "ATTENDANCE", desc: "출퇴근·지각·휴가·외근 현황", icon: "M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z" },
   자금현황: { en: "TREASURY", desc: "통장·현금·예금·대출 잔액과 현금 흐름(조회)", icon: "M3 6h18v12H3zM3 10h18M16 15h2" },
+  비공개운임: { en: "PRIVATE FARE", desc: "나만 보는 실제 청구 금액 · 차액(비밀번호로 열기)", icon: "M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4" }, // 🔐 2026-11-18
   스케줄: { en: "EXECUTIVE SCHEDULE", desc: "임원 일정 — 등록하면 모든 직원이 볼 수 있습니다", icon: "M4 5h16v15H4zM4 9h16M8 3v4M16 3v4" },
   영업관리: { en: "SALES", desc: "영업 현황 · 영업 기회 · 거래처 담당 · 인센티브", icon: "M3 17l6-6 4 4 8-8M15 7h6v6" },
   자금관리: { en: "FINANCE", desc: "자금 현황(통장·현금·대출) · 수입·지출 장부 · 고정비", icon: "M3 6h18v12H3zM3 10h18M16 15h2" },
@@ -3616,7 +3619,7 @@ const DEPT_MENUS = {
   sales: ["HOME", "전자결재", "영업관리", "회사관리"],
   // 👔 임원(대표·전무·이사) — 보고·결재·매출 중심
   // 결재는 홈 › 전자결재에 다 있어 상단에서 뺐다(2026-10-31)
-  exec: ["HOME", "일일경영보고", "경영분석", "결재대기", "직원정보", "자금현황", "스케줄", "매출관리", "영업관리", "인사이트", "관리자메뉴", "회사관리"], // 📊 2026-11-06 일일 경영 보고 — 임원 홈(경영 브리핑) 바로 다음 // 직원일정은 HOME › 사내 게시판으로(2026-11-01)
+  exec: ["HOME", "일일경영보고", "경영분석", "결재대기", "직원정보", "자금현황", "비공개운임", "스케줄", "매출관리", "영업관리", "인사이트", "관리자메뉴", "회사관리"], // 📊 2026-11-06 일일 경영 보고 — 임원 홈(경영 브리핑) 바로 다음 // 직원일정은 HOME › 사내 게시판으로(2026-11-01)
 };
 // 부서 모드 왼쪽 메뉴 묶음
 const DEPT_SIDE_GROUPS = {
@@ -3635,7 +3638,7 @@ const DEPT_SIDE_GROUPS = {
     { label: "관리", items: ["회사관리"] },
   ],
   exec: [
-    { label: "경영", items: ["HOME", "일일경영보고", "경영분석", "결재대기", "직원정보", "자금현황", "매출관리", "영업관리", "인사이트"] },
+    { label: "경영", items: ["HOME", "일일경영보고", "경영분석", "결재대기", "직원정보", "자금현황", "비공개운임", "매출관리", "영업관리", "인사이트"] },
     { label: "일정", items: ["스케줄"] },
     { label: "관리", items: ["관리자메뉴", "회사관리"] },
   ],
@@ -3646,7 +3649,7 @@ const KP_SIDE_ICONS = {
   회사관리: "idcard", 관리자메뉴: "key", 관리센터: "shield", 인사이트: "chart",
   영업관리: "trend", 회계관리: "money", 인사관리부: "idcard", 출근기록부: "clock", 직원관리: "users", 기사서류: "file",
   자금관리: "wallet", 비품관리: "list", 연차관리: "flag", 입퇴사관리: "check", 증명서발급: "stamp",
-  결재함: "stamp", 직원일정: "clock", 자금현황: "wallet", 스케줄: "pin", 전자결재: "stamp", 일일경영보고: "chart", 경영분석: "chart", 결재대기: "stamp", 직원정보: "users",
+  결재함: "stamp", 직원일정: "clock", 자금현황: "wallet", 비공개운임: "key", 스케줄: "pin", 전자결재: "stamp", 일일경영보고: "chart", 경영분석: "chart", 결재대기: "stamp", 직원정보: "users",
 };
 const kpNavIcon = (m) => KP_SIDE_ICONS[m] || (isBizMenu(m) ? BIZ_MENU_ICON[parseBizMenu(m).page] : undefined);
 function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, company, email, myName = "", groups = KP_SIDE_GROUPS }) {
@@ -8530,6 +8533,7 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   // ⭐ 2026-10-31 임원 화면은 권한 관리에서 "임원 화면"으로 정한 역할(예: 임원관리자)만 — 관리자 권한은 직책과 무관하게 일반 화면
   // ⭐ 2026-11-17 부서가 임원인 통합관리자도 경영 브리핑 화면(사용자 요청) — 로그인하면 늘 여기서 시작하고, [화면 전환]으로 운송 · 영업 · 경리 · 인사를 본다
   const execAllMgr = realRole === "allMgr" && isExecTeam(myProfileDoc?.team);
+  const pfGrant = usePrivateFareGrant(user?.uid || ""); // 🔐 2026-11-18 비공개 운임 지정 여부(메뉴만 · 금액은 화면을 열 때)
   const isExec = forceExec || execAllMgr || roleScreen(customRole) === "exec";
   // ⭐ 2026-11-17 [전체 메뉴]로 바꾼 것은 이 로그인 동안만 기억(sessionStorage) — 다시 로그인하면 경영 브리핑부터. 예전 localStorage 값은 지운다
   const [execFull, setExecFull] = React.useState(() => { try { localStorage.removeItem("kpExecFull"); return sessionStorage.getItem("kpExecFull") === "1"; } catch { return false; } });
@@ -8568,6 +8572,7 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   const bizWant = bizRaw || myProfileDoc?.bizHome || "";
   const biz = bizWant === "group" ? (canBizGroup ? "group" : bizMods.list[0]) : (bizMods.list.includes(bizWant) ? bizWant : bizMods.list[0]);
   const bizMenus = bizTopMenus(biz); // 내륙은 null(기존 메뉴)
+  try { window.__kpBizNow = biz; } catch { /* 무시 */ } // F1~F3 단축키가 지금 업무를 알게
   const pickBiz = (k) => { setBizRaw(k); writeBiz(user?.uid, k); setMenu(bizFirstMenu(k)); };
   const bizLandedRef = React.useRef(false);
   React.useEffect(() => {
@@ -8724,6 +8729,9 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   useEffect(() => {
     const handler = (e) => {
       const map = { F1: "배차관리", F2: "실시간배차현황", F3: "배차현황" };
+      // 🎨 2026-11-18 컨테이너 · 해상 · 항공 화면에서는 그 업무의 오더등록 · 실시간현황 · 운송현황으로
+      const fb = window.__kpBizNow; const bmap = { F1: "new", F2: "live", F3: "list" };
+      if (["container", "sea", "air"].includes(fb) && bmap[e.key]) { e.preventDefault(); setMenu(bizMenuKey(fb, bmap[e.key])); return; }
       const target = map[e.key];
       if (!target) return;
       e.preventDefault();
@@ -8872,6 +8880,7 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
     if (isBizMenu(m)) return parseBizMenu(m).biz === biz ? "ok" : "hidden"; // 🧭 2026-11-12 업무 영역 메뉴(컨테이너 · 해상 · 항공 · 통합)
     // 📊 2026-11-06 일일 경영 보고 — 임원 화면 역할만(기존 임원 판정 isExec 그대로)
     if (m === BRIEF_MENU) return canBriefing ? "ok" : "hidden";
+    if (m === PF_MENU) return pfGrant.on && !workScope ? "ok" : "hidden"; // 🔐 2026-11-18 비공개 운임 — 관리자센터에서 지정한 사람만(PrivateFareVault 가 비밀번호로 한 번 더)
     if (EXEC_MENUS.includes(m)) return deptMode === "exec" ? "ok" : "hidden"; // 📈 2026-11-08 임원 화면만
     // 🏢 2026-10-31 부서 모드 — 경리·인사 권한은 배차 메뉴 없이 부서 업무 메뉴만
     // ⚙ 권한 관리에서 경리·인사관리자 메뉴를 숨겼으면 부서 화면에서도 숨긴다
@@ -8965,7 +8974,7 @@ return (
       {/* ✉️ 2026-11-08 발신 메일 — 보내다가 "설정 없음"이면 안내 창 · 예전 공용 계정을 쓰던 회사 관리자에게 등록 안내 */}
       <MailSetupHost company={userCompany || localStorage.getItem("userCompany") || ""} role={realRole || role} isMaster={myProfileDoc?.isMaster === true} />
       {/* ⭐ 2026-11-03 알림 통합 — 새 공지·인사발령·결재 요청/결과·인수인계는 가운데 팝업(하나씩 · 최신 것부터) · [바로 가기]는 그 메뉴로 */}
-      <NotifyCenter uid={user?.uid} role={realRole || role} team={myProfileDoc?.team || ""} company={deptCompany}
+      <NotifyCenter uid={user?.uid} role={realRole || role} team={myProfileDoc?.team || ""} company={deptCompany} exec={!!(isExec || deptMode === "exec" || isCeoPosition(myProfileDoc?.position))} name={myRealName || myProfileDoc?.name || ""}
         onGo={(it) => {
           if (it.src === "approval") { window.__kpOpenApproval = { id: it.id, page: it.page || "inbox" }; window.dispatchEvent(new Event("kp-open-approval")); return; }
           if (it.src === "handover") { window.__kpOpenHandover = it.id; setMenu("HOME"); setTimeout(() => window.dispatchEvent(new Event("kp-open-handover")), 0); return; }
@@ -9067,6 +9076,7 @@ return (
               "매출관리",
               "정산관리",
               "인사이트",
+              "비공개운임", // 🔐 2026-11-18 최고관리자가 지정한 사람만(menuState)
               // 직접 만든 권한에서 켠 부서 메뉴만 보인다(그 외에는 menuState가 숨김)
               "전자결재",
               "영업관리",
@@ -9154,7 +9164,7 @@ return (
               );
             };
             // ⭐ 2026-11-14 상단 메뉴 묶음 — 홈/배차/운임/기사관리/거래처/매출/정산/지입차관리/회사관리(권한으로 보이는 메뉴만 · 1개면 그대로)
-            if (navFlat || bizMenus) return navList.map(renderOne);
+            if (navFlat || biz === "group") return navList.map(renderOne); // 🎨 2026-11-18 컨테이너 · 해상 · 항공도 내륙처럼 묶어서
             return groupNavMenus(navList.filter((m) => menuShown(m) !== "hidden")).map((g) => {
               if (g.menus.length === 1) return renderOne(g.menus[0]);
               const members = g.menus.map((m) => { const st = menuShown(m); return { menu: m, label: navLabelOf(m), disabled: st === "blocked" || st === "locked", badge: st === "locked" ? 0 : navNOf(m), subBadges: subBadgesOf(m) }; });
@@ -9801,6 +9811,7 @@ return (
         {menu === "결재함" && menuState("결재함") === "ok" && <ExecApprovals company={deptCompany} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "", team: myProfileDoc?.team || "", position: myProfileDoc?.position || "", role }} />}
         {menu === "직원일정" && menuState("직원일정") === "ok" && <TeamSchedule company={deptCompany} />}
         {menu === "자금현황" && menuState("자금현황") === "ok" && <FundsBoard company={deptCompany} canEdit={false} />}
+        {menu === PF_MENU && menuState(PF_MENU) === "ok" && <div className="px-0 lg:px-5 pb-7"><React.Suspense fallback={<div className="py-20 text-center text-[16px] text-[#667085]">불러오는 중</div>}><PrivateFareVaultLazy company={deptCompany} dispatchData={salesDispatchData} /></React.Suspense></div>}
         {menu === "스케줄" && menuState("스케줄") === "ok" && <ExecScheduleBoard company={deptCompany} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "", position: myProfileDoc?.position || "" }} canWrite />}
         {menu === "전자결재" && menuState("전자결재") === "ok" && <ApprovalWorkspace company={deptCompany} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "", team: myProfileDoc?.team || "", position: myProfileDoc?.position || "", role }} />}
         {/* 🏢 2026-10-31 경리·인사 부서 메뉴 */}
@@ -24749,7 +24760,6 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.상차지명} max={8} popupTitle="상차지명 전체보기" />
     {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}<RotationBadge order={r} />
-    <OrderWeather order={r} side="pickup" />
 
 {r.__pickupStops?.length > 0 && (
   <StopInlineBadge count={r.__pickupStops.length} list={r.__pickupStops} type="pickup"
@@ -24768,7 +24778,6 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                                   <td className={cell}>
   <div className="inline-flex items-center gap-1 flex-nowrap whitespace-nowrap">
     <AddressCell text={r.하차지명} max={8} popupTitle="하차지명 전체보기" />
-    <OrderWeather order={r} side="drop" />
 
 {r.__dropStops?.length > 0 && (
   <StopInlineBadge count={r.__dropStops.length} list={r.__dropStops} type="drop"
@@ -37783,7 +37792,6 @@ return (
   <div className="inline-flex items-center gap-1">
     <AddressCell text={row.상차지명} max={8} popupTitle="상차지명 전체보기" />
     {String(row.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}<RotationBadge order={row} />
-    <OrderWeather order={row} side="pickup" />
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
       const list=[..._s(row.경유상차목록),..._s(row.경유지_상차)]
@@ -37796,7 +37804,6 @@ return (
 ) : key === "하차지명" ? (
   <div className="inline-flex items-center gap-1">
     <AddressCell text={row.하차지명} max={8} popupTitle="하차지명 전체보기" />
-    <OrderWeather order={row} side="drop" />
     {(() => {
       const _s=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
       const list=[..._s(row.경유하차목록),..._s(row.경유지_하차)]
@@ -44629,9 +44636,10 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const [staffPerfOpen, setStaffPerfOpen] = React.useState(false); // ★ 배차담당자별 실적(관리자 전용)
   // 🔒 2026-11-10 비공개 청구운임 — 정한 담당자만(처음 켜기는 관리자) · 금액은 별도 보관(src/PrivateFares.jsx · firestore.rules)
   const pfCompany = String(getTenant() || userCompany || "").trim(); // 최고관리자는 지금 보고 있는 회사
+  const pfShowOld = false;
   const [pfVer, setPfVer] = React.useState(0);
   React.useEffect(() => { const h = () => setPfVer((n) => n + 1); window.addEventListener("kp-private-fare-changed", h); return () => window.removeEventListener("kp-private-fare-changed", h); }, []);
-  const pfAccess = usePrivateFareAccessLazy(pfCompany, pfVer);
+  const pfAccess = usePrivateFareAccessLazy(pfShowOld ? pfCompany : "", pfVer); // 🔐 2026-11-18 예전 창은 쓰지 않음(빈 회사 → 읽지 않음)
   const [pfOpen, setPfOpen] = React.useState(false);
   const pfShow = !pfAccess.loading && (pfAccess.viewer || (!pfAccess.exists && (role === "admin" || role === "totalMaster") && !isViewer)); // 처음 켜기: 그 회사 관리자 · 최고관리자(대신 켜 주기)
   // ⭐ 매출관리 — 선택한 연도 전체 + 고른 달 기준 3개월 전(전월 비교·마감 점검·담당자 실적)까지만 불러온다.
@@ -45034,7 +45042,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
         // ⭐ 2026-11-10 월 비교 분석 · 월 마감 점검은 메뉴에서 뺐다(요청)
         { key: "a2", label: "월간 경영 보고서", icon: "file", onClick: () => setMarginReportOpen(true) },
         ...(canSeeStaffPerf ? [{ key: "a4", label: "담당자별 실적", icon: "users", onClick: () => setStaffPerfOpen(true) }] : []),
-        ...(pfShow ? [{ key: "a5", label: pfAccess.exists ? "비공개 청구" : "비공개 청구 켜기", icon: "key", onClick: () => setPfOpen(true) }] : []),
+        // 🔐 2026-11-18 [비공개 청구]는 임원 화면 › 비공개 운임으로 옮겼다(최고관리자가 관리자센터에서 지정한 사람만 · 예전 내용은 그 화면에서 불러오기)
       ]}>
     {pfOpen && pfShow && <React.Suspense fallback={null}><PrivateFaresModal company={pfCompany} dispatchData={dispatchData} clients={clients} access={pfAccess} onClose={() => setPfOpen(false)} /></React.Suspense>}
     {rvPage === "teamreport" ? (

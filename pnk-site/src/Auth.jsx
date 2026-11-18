@@ -45,13 +45,17 @@ function Frame({ children, wide }) {
             {["사내메일", "전자결재", "근태 · 휴가", "업무 · 일정"].map((t) => <span key={t} className="h-8 px-3 rounded-lg bg-white/10 text-[13px] font-bold flex items-center">{t}</span>)}
           </div>
         </div>
-        <div className="text-[12.5px] font-semibold text-blue-100/70">© PnK PROJECT</div>
+        <div className="flex items-center justify-between text-[12.5px] font-semibold text-blue-100/70">
+          <span>© PnK PROJECT</span>
+          <a href="/" className="hover:text-white">← 공식 홈페이지</a>
+        </div>
       </div>
       <div className="flex-1 min-w-0 flex items-center justify-center px-5 py-10">
         <div className={cx("w-full", wide ? "max-w-[480px]" : "max-w-[380px]")}>
           <div className="lg:hidden flex items-center gap-2.5 mb-7">
             <img src="/brand/pnk-mark-192.png" alt="" className="w-9 h-9 rounded-xl border border-line" />
-            <div className="text-[16px] font-black text-navy-950">PnK PROJECT 인트라넷</div>
+            <div className="text-[16px] font-black text-navy-950 flex-1">PnK PROJECT 인트라넷</div>
+            <a href="/" className="text-[13px] font-bold text-[#5A6A86] hover:text-navy">홈페이지</a>
           </div>
           {children}
         </div>

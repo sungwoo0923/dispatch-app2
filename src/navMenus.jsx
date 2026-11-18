@@ -200,12 +200,12 @@ export function NavHover({ menu, label, disabled = false, onOpenMenu, badges = n
 //  · PC 왼쪽 ≡ 메뉴 · 모바일 메뉴도 같은 묶음을 쓴다.
 export const NAV_GROUPS = [
   { key: "home", label: "홈", items: ["HOME"] },
-  { key: "dispatch", label: "배차", items: ["배차관리", "실시간배차현황", "배차현황"], prefix: ["biz:inland:"] },
-  { key: "fare", label: "운임", items: ["단가표", "운임조회"] },
+  { key: "dispatch", label: "배차", items: ["배차관리", "실시간배차현황", "배차현황"], prefix: ["biz:inland:"], biz: ["new", "live", "list", "pending", "deadline", "handoff", "dash"] },
+  { key: "fare", label: "운임", items: ["단가표", "운임조회"], biz: ["fare"] },
   { key: "drivers", label: "기사관리", items: ["기사관리"] },
   { key: "clients", label: "거래처", items: ["거래처관리"] },
-  { key: "revenue", label: "매출", items: ["매출관리", "인사이트"] },
-  { key: "settle", label: "정산", items: ["정산관리"] },
+  { key: "revenue", label: "매출", items: ["매출관리", "인사이트"], biz: ["pnl"] },
+  { key: "settle", label: "정산", items: ["정산관리"], biz: ["settle"] },
   { key: "fleet", label: "지입차관리", items: ["지입차관리"] },
   // 🧭 2026-11-14 관리자메뉴는 회사관리 안에서 빼서 바로 옆에 따로(최고관리자의 관리센터는 관리자메뉴 묶음 안)
   { key: "company", label: "회사관리", items: ["회사관리"] },
@@ -214,7 +214,9 @@ export const NAV_GROUPS = [
 // 보이는 메뉴 목록 → [{ group, label, menus:[...] }] (묶음에 없는 메뉴는 제자리에 하나짜리로)
 export function groupNavMenus(menus) {
   const used = new Set(); const out = []; const at = new Map();
-  const gOf = (m) => NAV_GROUPS.find((g) => g.items.includes(m) || (g.prefix || []).some((p) => String(m).startsWith(p)));
+  // 🎨 2026-11-18 컨테이너 · 해상 · 항공 메뉴("biz:container:new")도 내륙과 같은 묶음으로(통합 현황 group 은 제외)
+  const bizPage = (m) => { const [a, b, c] = String(m).split(":"); return a === "biz" && b !== "group" && b !== "inland" ? c : ""; };
+  const gOf = (m) => NAV_GROUPS.find((g) => g.items.includes(m) || (g.prefix || []).some((p) => String(m).startsWith(p)) || (bizPage(m) && (g.biz || []).includes(bizPage(m))));
   // 묶음 순서를 먼저 잡고(홈 … 지입차관리), 묶음에 없는 메뉴(부서 메뉴)는 회사관리 앞에 둔다
   const slots = [];
   NAV_GROUPS.forEach((g) => { const ms = menus.filter((m) => gOf(m) === g); if (ms.length) { slots.push({ group: g.key, label: g.label, menus: ms }); ms.forEach((m) => used.add(m)); } });

@@ -9,6 +9,22 @@ PnK PROJECT(법인)가 만드는 **로지스웹 · 로지스웹 허브 · 공식
 - 상위 폴더에서 가져오는 것: `../src/appCheckClient.js`, `../src/CustomDatePicker.jsx`, `../src/kpTimePick.jsx`, `../src/kpInputs.jsx`, `../src/CustomSelect.jsx`, `../src/planCore.js`
   (모두 Firebase를 쓰지 않는 순수 화면/계산 조각 — 로지스웹과 같은 달력 · 시간 · 월 고르기 · 요금제 표)
 
+## 주소 나눔 · 공식 홈페이지 (2026-11-18)
+
+| 주소 | 화면 | 파일 |
+|---|---|---|
+| `/` | **공식 홈페이지**(누구나 · 검색엔진에도 뜬다) — 한 페이지: 첫 화면 영상 · 회사소개 · 사업분야 · 철학 · 일하는 방식 · 스튜디오 · 약속 (문의 양식 없음 — 소개용) | `index.html` + `public/pk/home.css` · `public/pk/pk-site.js`(편집 엔진) |
+| `/login` · `/intranet/…` | 사내 인트라넷(React) — 예전 주소(`/mail` 등)는 `/intranet/mail` 로 | `intranet.html` → `src/main.jsx` |
+
+- 빌드: Vite 두 페이지(`vite.config.js` input). 배포 주소 나눔은 `vercel.json` rewrites, 개발 서버는 vite 플러그인이 같은 일을 한다.
+- 디자인: 고급 가구 브랜드 같은 톤 — 화이트 · 스톤 · 그레이지 · 차콜, 넓은 여백, 큰 사진(`public/pk/img/`). 한글 Pretendard · 영문 Cormorant Garamond. 로고는 바탕을 뺀 `public/brand/pnk-mark-t.png`.
+- 맨 위 영상: `public/pk/video/dev.mp4 · dev.webm`(30초 반복, 디자인 → 개발 → AI → 배포). 포스터 `dev.jpg`.
+- **홈페이지 편집**: 인트라넷 › 경영 › **홈페이지 편집**(대표 · 관리자) — 로지스웹 관리자센터 › 운영 › 홈페이지 편집기와 같은 것(`src/pages/HomepageEditor.jsx`).
+  누르면 고르기 · 두 번 누르면 글 고치기 · 끌어서 옮기기 · 사진 교체 · 섹션 순서/숨기기/추가 · 메뉴 · 문의 양식 · 색 · 이력.
+  저장: 임시 `pnkSite/draft` → [게시하기] `pnkSite/live.homepage`(홈페이지가 읽는다) · 이력 `pnkSite/history` · 사진 Storage `pnk/site/`.
+- `index.html` 을 고치면 `python3 pnk-site/tools/add-keys.py` 로 새 요소에 번호(data-k)를 붙인다(이미 붙은 번호는 그대로 — 게시한 편집이 어긋나지 않게).
+- ⚠ 규칙 배포 필요: `firestore.rules`(pnkSite) · `storage.rules`(pnk/site).
+
 ## 메뉴
 
 | 메뉴 | 내용 | 볼 수 있는 사람 |
@@ -80,7 +96,7 @@ npm run build
    - `@` A → `76.76.21.21` (Vercel 화면 값)
    - 메일(Mailgun) MX · TXT 는 그대로 두고 함께 쓴다
 4. **Firebase 콘솔 › Authentication › 설정 › 승인된 도메인**에 `www.pnkproject.com`, `pnkproject.com` 추가(로그인 · 비밀번호 찾기 메일)
-5. `main` 에 합치면 자동 배포(`claude/*` 브랜치는 배포 안 됨). 검색엔진에는 안 뜨게 `noindex`.
+5. `main` 에 합치면 자동 배포(`claude/*` 브랜치는 배포 안 됨). 인트라넷(`/login` · `/intranet`)만 `noindex`.
 
 ## 외부 메일(@pnkproject.com) 연결 — 회사 정보 › 외부 메일 연결(관리자) 화면에 순서 · 링크가 나온다
 

@@ -29,16 +29,19 @@ export const AI_TEAMS = [
   { key: "security", code: "SEC", name: "보안팀", en: "SECURITY", icon: "shield", desc: "로그인 기록 · 접속 세션 · 이상 징후 점검",
     access: ["보안 이벤트", "접속 이력", "접속 세션", "고객사 현황"],
     quick: ["최근 24시간 로그인 이상 징후 점검해줘", "기기를 너무 많이 쓰는 계정 있어?", "최근 7일 새벽 시간대 접속 기록 확인해줘"] },
-  { key: "marketing", code: "MKT", name: "홍보팀", en: "MARKETING", icon: "send", desc: "홍보 아이디어 · 홈페이지 문구 · 공지·SNS 초안",
+  { key: "marketing", code: "MKT", name: "홍보팀", en: "MARKETING", icon: "send", desc: "홍보 아이디어 · 홈페이지 문구 · 공지·SNS 초안 · 영상 작업실(숏츠 · 교육영상)",
     access: ["도입 문의", "플랫폼 공지", "고객사 현황"],
     quick: ["이번 달 홍보 아이디어 5개 제안해줘", "홈페이지 메인 문구 3가지 버전 써줘", "신규 기능 안내 공지 초안 써줘", "블로그 글 초안: 배차 관리 프로그램을 바꿔야 하는 신호"] },
 ];
 const TEAM_BY_KEY = Object.fromEntries(AI_TEAMS.map((t) => [t.key, t]));
 // 🧹 2026-11-18 메뉴는 "AI 본부" 하나 — 팀은 화면 안 명단에서 고른다(예전 ai:<team> 주소는 그대로 동작)
-export const AI_TEAM_TABS = [{ key: "ai:hub", label: "AI 본부", en: "AI HQ", icon: "spark", also: AI_TEAMS.map((t) => `ai:${t.key}`) }];
+export const AI_TEAM_TABS = [{ key: "ai:hub", label: "AI 본부", en: "AI HQ", icon: "spark", also: [...AI_TEAMS.map((t) => `ai:${t.key}`), "ai:video"] }];
+// 🎬 2026-11-18 홍보팀 영상 작업실(숏츠 · 교육영상 기획 + 배경음악 큐시트 + 자막 SRT) — 명단에서 홍보팀 바로 아래
+const VideoStudio = React.lazy(() => import("./VideoStudio"));
+const VIDEO_ITEM = { key: "video", name: "영상 작업실", en: "VIDEO STUDIO", icon: "star", code: "VID", sub: "홍보팀 · 숏츠 · 교육영상" };
 
-// Claude Opus 5.5 단가(USD / 100만 토큰) — 화면 표시용 어림값
-const PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
+// Claude Sonnet 5.5 단가(USD / 100만 토큰) — 화면 표시용 어림값
+const PRICE = { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 };
 const costOf = (u) => (u ? ((u.input || 0) * PRICE.input + (u.output || 0) * PRICE.output + (u.cacheRead || 0) * PRICE.cacheRead + (u.cacheWrite || 0) * PRICE.cacheWrite) / 1e6 : 0);
 const tokOf = (u) => (u ? (u.input || 0) + (u.output || 0) + (u.cacheRead || 0) + (u.cacheWrite || 0) : 0);
 const usd = (n) => `$${n < 0.01 && n > 0 ? n.toFixed(4) : n.toFixed(2)}`;
@@ -169,7 +172,7 @@ export function AiHq({ tab, go }) {
   const logs = useAiLogs(400);
   const stats = useTeamStats(logs);
   const cur = tab === "ai:hub" ? "hub" : tab.slice(3);
-  const items = [{ key: "hub", name: "본부 개요", en: "HQ", icon: "spark", code: "HQ" }, ...AI_TEAMS];
+  const items = [{ key: "hub", name: "본부 개요", en: "HQ", icon: "spark", code: "HQ" }, ...AI_TEAMS.flatMap((t) => (t.key === "marketing" ? [t, VIDEO_ITEM] : [t]))];
   return (
     <div className="grid gap-3 sm:gap-4 lg:grid-cols-[248px_minmax(0,1fr)] items-start">
       {/* 명단 — PC는 왼쪽 세로, 모바일은 위 가로 */}
@@ -187,16 +190,16 @@ export function AiHq({ tab, go }) {
                 <TeamMark team={t} size={34} on={on} />
                 <span className="min-w-0 flex-1">
                   <span className="block text-[13.5px] font-black whitespace-nowrap" style={{ color: on ? G.goldHi : G.ink }}>{t.name}</span>
-                  <span className="hidden lg:block text-[11px] font-bold whitespace-nowrap truncate" style={{ ...NUM, color: G.dim }}>{t.key === "hub" ? `이번 달 ${fmtN(stats.total.qs)}회 · ${usd(stats.total.cost)}` : b?.count ? `${b.count}회 · ${usd(b.cost)} · ${ago(b.last)}` : "아직 지시 없음"}</span>
+                  <span className="hidden lg:block text-[11px] font-bold whitespace-nowrap truncate" style={{ ...NUM, color: G.dim }}>{t.key === "hub" ? `이번 달 ${fmtN(stats.total.qs)}회 · ${usd(stats.total.cost)}` : t.sub ? t.sub : b?.count ? `${b.count}회 · ${usd(b.cost)} · ${ago(b.last)}` : "아직 지시 없음"}</span>
                 </span>
-                {t.key !== "hub" && <span className="hidden lg:block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: G.gold, boxShadow: `0 0 8px ${G.gold}` }} />}
+                {t.key !== "hub" && !t.sub && <span className="hidden lg:block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: G.gold, boxShadow: `0 0 8px ${G.gold}` }} />}
               </button>
             );
           })}
         </div>
       </aside>
       <div className="min-w-0">
-        {cur === "hub" ? <AiTeamHub go={go} logs={logs} stats={stats} /> : <AiTeamChat teamKey={cur} logs={logs} />}
+        {cur === "hub" ? <AiTeamHub go={go} logs={logs} stats={stats} /> : cur === "video" ? <React.Suspense fallback={<div className="py-20 text-center text-[13px]" style={{ color: G.dim }}>불러오는 중…</div>}><VideoStudio /></React.Suspense> : <AiTeamChat teamKey={cur} logs={logs} />}
       </div>
     </div>
   );
@@ -519,7 +522,7 @@ export function AiTeamHub({ go, logs: logsProp, stats: statsProp }) {
               </div>
             )}
       </AdmPanel>
-      <div className="text-[12px] px-1" style={{ color: G.dim }}>비용은 Claude Opus 5.5 표준 단가로 낸 어림값이에요. 정확한 청구 금액은 Claude Console › 지출에서 확인해 주세요.</div>
+      <div className="text-[12px] px-1" style={{ color: G.dim }}>비용은 Claude Sonnet 5.5 표준 단가로 낸 어림값이에요. 정확한 청구 금액은 Claude Console › 지출에서 확인해 주세요.</div>
       <style>{AI_CSS}</style>
     </div>
   );

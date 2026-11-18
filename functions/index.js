@@ -6890,6 +6890,35 @@ exports.aiTeamChat = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeout
   }
 });
 
+// 🎬 2026-11-18 AI 본부 › 홍보팀 영상 작업실 — 숏츠 · 교육영상 기획 + 배경음악 큐시트 + 자막(설명은 functions/aiVideo.js 맨 위)
+const aiVideo = require("./aiVideo");
+exports.aiVideoPlan = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 180, memory: "256MB" }).https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "aiVideoPlan"))) return;
+  if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
+  const authz = String(req.get("Authorization") || "");
+  const decoded = authz.startsWith("Bearer ") ? await getAuth().verifyIdToken(authz.slice(7)).catch(() => null) : null;
+  if (!(await isTotalMasterReq(req))) { res.status(403).json({ error: "최고관리자·부관리자만 사용할 수 있습니다." }); return; }
+  let body = req.body; if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+  try {
+    const out = await aiVideo.runVideoPlan({ input: body?.input || {} });
+    db.collection("aiTeamLogs").add({
+      team: "marketing", uid: decoded?.uid || "", email: decoded?.email || "",
+      question: `[영상 작업실] ${out.input.kind} ${out.input.seconds}초 · ${out.input.topic}`.slice(0, 500), answer: String(out.plan?.title || "").slice(0, 500),
+      tools: ["video"], usage: out.usage, model: out.model, at: FieldValue.serverTimestamp(),
+    }).catch((e) => console.error("[영상 작업실] 기록 실패:", e));
+    res.json(out);
+  } catch (e) {
+    if (e?.user) { res.status(e.status || 500).json({ error: e.message }); return; } // 우리가 만든 안내(키 없음 · 거절 · 끊김)
+    const { status, msg } = aiTeams.apiErrorMessage(e);
+    console.error("[영상 작업실] 실패:", e);
+    res.status(status).json({ error: msg });
+  }
+});
+
 // 🧠 2026-11-07 오더 스캔 정밀 인식 — 설명은 functions/orderScan.js 맨 위
 //  orderScanOcr: Google Cloud Vision 글자 인식(줄 위치 포함) · orderScanExtract: Claude(Haiku)로 배차 등록 칸 정리
 //  둘 다 호출형(callable) · 로그인 + 승인된 사람만 · 사람마다 하루 횟수 제한(scanUsage) · 실패하면 화면이 예전 방식으로 넘어간다
@@ -6918,11 +6947,12 @@ exports.orderScanOcr = functions.runWith({ timeoutSeconds: 60, memory: "512MB", 
     });
   } catch (e) { throw scanHttpsError(e); }
 });
-exports.orderScanExtract = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 60, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
+// ⭐ 2026-11-18 여러 오더 한 번에(data.multi) — 건수만큼 답이 길어 시간을 넉넉히(한 건은 예전처럼 30초 안)
+exports.orderScanExtract = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 120, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
   try {
     return await _orderScan.runExtract({
       db, auth: context.auth, data,
-      makeAnthropic: () => (process.env.ANTHROPIC_API_KEY ? new (_orderScan.Anthropic)({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 30000, maxRetries: 1 }) : null),
+      makeAnthropic: () => (process.env.ANTHROPIC_API_KEY ? new (_orderScan.Anthropic)({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: data?.multi === true ? 100000 : 30000, maxRetries: 1 }) : null),
       // 💰 비용·손익 — 호출 수와 토큰(입력·출력·캐시 읽기·캐시 쓰기)
       bumpUsage: (u) => bumpScanUsage({ scanAiCalls: 1, scanAiInTok: u.input, scanAiOutTok: u.output, scanAiCacheReadTok: u.cacheRead, scanAiCacheWriteTok: u.cacheWrite }),
     });
@@ -6988,6 +7018,16 @@ exports.payrollPwStatus = payCall(_payrollPw.status);
 exports.payrollPwSet = payCall(_payrollPw.setPw);
 exports.payrollPwVerify = payCall(_payrollPw.verify);
 exports.payrollLock = payCall(_payrollPw.lock);
+
+/* ==================================================================
+   🔐 2026-11-18 비공개 운임 비밀번호(사람별) — 설명은 functions/privateFarePin.js 맨 위
+   호출형 4개: pfPinStatus · pfPinSet · pfPinVerify · pfLock — 잠금 해제는 privateFareUnlocks/{uid}(30분)
+================================================================== */
+const _pfPin = require("./privateFarePin").makePrivateFarePin({ db, FieldValue, Timestamp, HttpsError: functions.https.HttpsError });
+exports.pfPinStatus = payCall(_pfPin.status);
+exports.pfPinSet = payCall(_pfPin.setPin);
+exports.pfPinVerify = payCall(_pfPin.verify);
+exports.pfLock = payCall(_pfPin.lock);
 exports.payrollPwReset = payCall(_payrollPw.resetPw); // ⭐ 2026-11-10 급여 비밀번호 잊었을 때(로그인 비밀번호로 본인 확인 후)
 
 /* ==================================================================

@@ -32,6 +32,9 @@ import {
 
 export * from "./forkliftCore";
 
+// 🏗 2026-11-18 지게차비 기본 부담 — JY로지스틱스는 늘 거래처에 청구(시트 대행료 칸 · 사용자 요청), 다른 회사는 기사운임에서 차감(예전 그대로)
+//  이미 저장된 오더는 저장된 값 그대로(새로 지게차비를 넣을 때만)
+export const defaultFkMode = () => (isJyCompany() ? "청구" : "기사");
 const COL = "forkliftDrivers";
 const PRESET_COL = "forkliftPresets";
 const won = (n) => Math.round(Number(n) || 0).toLocaleString("ko-KR");
@@ -309,7 +312,7 @@ export function ForkliftFeeRow({ form, setForm, asString = true, disabled = fals
   if (!on) {
     return (
       <div className={`flex flex-wrap items-center gap-1.5 ${className}`} data-forklift="off">
-        <button type="button" disabled={disabled} onClick={() => setForm((p) => ({ ...p, 지게차부담: p.지게차부담 || "기사" }))}
+        <button type="button" disabled={disabled} onClick={() => setForm((p) => ({ ...p, 지게차부담: p.지게차부담 || defaultFkMode() }))}
           className="h-7 px-2.5 rounded-full border border-dashed border-[#9AA9C3] text-[12px] font-black text-[#1B2B4B] hover:border-[#4B6CB7] hover:bg-[#F2F6FC] disabled:opacity-40">+ 지게차</button>
         {preset && fkAmount(preset) > 0 && !disabled && (
           <button type="button" onClick={() => apply({ 지게차비용: String(fkAmount(preset)), 지게차부담: fkMode(preset), 지게차기사ID: preset.지게차기사ID || "", 지게차기사명: preset.지게차기사명 || "", 지게차기사전화: preset.지게차기사전화 || "", 지게차회사: preset.지게차회사 || "" })}
@@ -404,7 +407,7 @@ export function SpecialFareButton({ form, setForm, asString = true, disabled = f
 }
 function SpecialFareModal({ form, asString, mobile, onClose, onApply }) {
   const isMobile = mobile || (typeof window !== "undefined" && window.innerWidth < 768);
-  const [fork, setFork] = React.useState(() => ({ 지게차비용: fkAmount(form) || "", 지게차부담: hasForklift(form) ? fkMode(form) : "기사", 지게차기사ID: form.지게차기사ID || "", 지게차기사명: form.지게차기사명 || "", 지게차기사전화: form.지게차기사전화 || "", 지게차회사: form.지게차회사 || "" }));
+  const [fork, setFork] = React.useState(() => ({ 지게차비용: fkAmount(form) || "", 지게차부담: hasForklift(form) ? fkMode(form) : defaultFkMode(), 지게차기사ID: form.지게차기사ID || "", 지게차기사명: form.지게차기사명 || "", 지게차기사전화: form.지게차기사전화 || "", 지게차회사: form.지게차회사 || "" }));
   const [items, setItems] = React.useState(() => {
     const m = {}; sfItems(form).forEach((it) => { m[it.종류 || "기타"] = { ...it, 금액: fkNum(it.금액) }; }); return m;
   });

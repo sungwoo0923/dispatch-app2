@@ -1,4 +1,4 @@
-import { OrdersWeatherStrip } from "./publicDataMain";
+import { OrdersWeatherDeck } from "./publicDataMain"; // 🌦 2026-11-18 날씨는 대시보드(관제 데크) 안 패널로
 import { readPendingApproval, clearPendingApproval } from "./pendingOpen";
 import { approvalNavItems } from "./menuTree"; // ⭐ 2026-11-10 메뉴 통일 // 🌦 2026-11-07 오늘 운행 지역 날씨 · 특보
 import NoticeBoard, { canSeeNotice } from "./NoticeBoard";
@@ -990,9 +990,9 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         myName: users.find((u) => u.id === user?.uid)?.name || user?.displayName || (user?.email || "").split("@")[0] || "",
         att: { company: homeCompany, uid: user?.uid, name: users.find((u) => u.id === user?.uid)?.name || user?.displayName || "", role, email: user?.email },
       })}
-      {boardTab === "대시보드" && !dept && !bizDeck && <OrdersWeatherStrip orders={dispatchData} />}
       {/* ===== 관제 데크 — 오늘 실적 · 매출 추이 · 매익률 · 담당자 순위 · 거래처 Top (2026-10-28 리디자인, 미배차 현황은 뺌) ===== */}
       {boardTab === "대시보드" && !dept && !bizDeck && <HomeDeck
+        weather={<OrdersWeatherDeck orders={dispatchData} theme={role === "totalMaster" ? "gold" : "navy"} /* ⭐ 2026-11-18 최고관리자는 골드 · 다른 직원은 데크 네이비 */ />}
         todo={onTodoGo ? <TodayTodo rows={allDispatchData} onGo={onTodoGo} /> : null}
         dispatchData={dispatchData}
         pastCache={pastCache}

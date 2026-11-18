@@ -1,5 +1,5 @@
 // ======================= pnk-site/src/App.jsx =======================
-// PnK PROJECT 사내 인트라넷 — 로그인 · 가입 요청 · 왼쪽 메뉴(로지스웹 관리 화면과 같은 네이비 사이드바) · 화면 이동
+// PnK PROJECT 사내 인트라넷 — 주소 /login · /intranet/…(공식 홈페이지 site/Site.jsx 와 따로 불러온다) · 로그인 · 가입 요청 · 왼쪽 메뉴(로지스웹 관리 화면과 같은 네이비 사이드바) · 화면 이동
 //  PnK PROJECT(법인)가 만드는 로지스웹 · 로지스웹 허브 · 공식 홈페이지 · 기사앱을 한곳에서 관리하는 사내 시스템.
 import React from "react";
 import { BrowserRouter, NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
@@ -27,6 +27,7 @@ const Services = React.lazy(() => import("./pages/Services"));
 const Approvals = React.lazy(() => import("./pages/Approvals"));
 const Attendance = React.lazy(() => import("./pages/Attendance"));
 const Leave = React.lazy(() => import("./pages/Leave"));
+const HomepageEditor = React.lazy(() => import("./pages/HomepageEditor")); // 🌐 2026-11-18 공식 홈페이지 편집(로지스웹 홈페이지 편집기와 같은 것)
 
 export const MeCtx = React.createContext(null);
 export const useMeCtx = () => React.useContext(MeCtx);
@@ -56,6 +57,7 @@ const MENU = [
   ] },
   { label: "경영", items: [
     { to: "/finance", label: "매출 · 손익", icon: "trend", admin: true },
+    { to: "/homepage", label: "홈페이지 편집", icon: "globe", admin: true },
     { to: "/company", label: "회사 정보", icon: "idcard" },
     { to: "/members", label: "구성원 · 조직도", icon: "users", badge: "pending" },
   ] },
@@ -76,9 +78,12 @@ export default function App() {
   if (!me.user) { UI.setRoute("login"); return <Login />; }
   if (me.needMfa) return <MfaGate me={me} />;
   if (!me.active) return <JoinGate me={me} />;
+  // 로그인 화면(/login)에서 들어왔으면 주소를 인트라넷(/intranet)으로 바꾼다 — 화면 이동은 아래 basename 기준
+  //  예전 인트라넷 주소(/mail 등)로 들어왔으면 /intranet/mail 처럼 그 화면으로
+  { const p = window.location.pathname; if (!p.startsWith("/intranet")) window.history.replaceState(null, "", p === "/login" || p === "/" ? "/intranet" : `/intranet${p}`); }
   return (
     <MeCtx.Provider value={me}>
-      <BrowserRouter>
+      <BrowserRouter basename="/intranet">
         <Shell>
           <React.Suspense fallback={<div className="py-16 text-center text-[13px] font-semibold text-[#7A8AA8]">불러오는 중…</div>}>
           <Routes>
@@ -90,6 +95,7 @@ export default function App() {
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/sales" element={<Sales />} />
             <Route path="/finance" element={me.isAdmin ? <Finance /> : <Navigate to="/" />} />
+            <Route path="/homepage" element={me.isAdmin ? <HomepageEditor /> : <Navigate to="/" />} />
             <Route path="/company" element={<Company />} />
             <Route path="/files" element={<Files />} />
             <Route path="/members" element={<Members />} />
