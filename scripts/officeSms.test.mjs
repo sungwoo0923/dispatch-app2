@@ -115,7 +115,9 @@ t("플레이스토어 앱(main · play)에는 문자 권한이 없다 — 업무
   const office = fs.readFileSync(new URL("../android/app/src/office/AndroidManifest.xml", import.meta.url), "utf8");
   for (const need of ["SEND_SMS", "RECEIVE_SMS", "READ_SMS", "KpSmsService", "KpSmsReceiver"]) assert.ok(office.includes(need), `office 매니페스트에 ${need} 없음`);
   const gradle = fs.readFileSync(new URL("../android/app/build.gradle", import.meta.url), "utf8");
-  assert.match(gradle, /productFlavors\s*\{[\s\S]*play\s*\{[\s\S]*office\s*\{/);
+  assert.match(gradle, /productFlavors\s*\{[\s\S]*play\s*\{[\s\S]*office\s*\{[\s\S]*applicationId "com\.kpflow\.logisweb"/);
+  const names = fs.readFileSync(new URL("../android/app/src/office/res/values/strings.xml", import.meta.url), "utf8");
+  assert.match(names, /<string name="app_name">LogisWeb<\/string>/);
 });
 
 console.log(`\n${n}개 통과`);

@@ -47,7 +47,7 @@ function Picker({ current, onDone }) {
           })}
           {sel === "office" && (
             <div style={{ fontSize: 12.5, color: "#3A4A66", background: "#F7F9FC", borderRadius: 12, padding: "10px 12px", lineHeight: 1.6, wordBreak: "keep-all" }}>
-              업무폰에 <b>업무폰용 LogisWeb 앱</b>(플레이스토어 앱 말고)을 깔고 <b>직원(사무실) 계정으로 로그인 → 설정 → 업무폰 문자 연결</b>을 켜면 돼요.<br />
+              업무폰에 <b>LogisWeb 앱</b>(기사앱 말고)을 깔고 <b>내 아이디로 로그인 → 설정 → 업무폰 문자 연결</b>을 켜면 돼요.<br />
               🔒 주고받은 문자는 <b>나만</b> 볼 수 있어요. 관리자도 못 봐요.
             </div>
           )}
