@@ -1,0 +1,96 @@
+/* ======================= pnk-site/src/site/site.css =======================
+   PnK PROJECT 공식 홈페이지(로그인 전 화면) — 아이보리 · 베이지 · 오크 톤의 따뜻한 디자인
+   인트라넷(index.css · 네이비)과 섞이지 않게 모두 .pk 안에서만 쓴다. */
+@import url("https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&display=swap");
+
+html.pk-public, html.pk-public body { background: #FBF8F2; }
+
+.pk {
+  --ivory: #FBF8F2;
+  --cream: #F5EFE4;
+  --sand: #EBE1D0;
+  --oak: #A8804F;
+  --oak-d: #8A6639;
+  --ink: #2A2520;
+  --ink-2: #4A4239;
+  --mute: #7A6F62;
+  --line: #E5DACA;
+  --navy: #1D2A55;
+  --sage: #8C9A7E;
+  background: var(--ivory);
+  color: var(--ink);
+  letter-spacing: -0.2px;
+  min-height: 100vh;
+  overflow-x: clip;
+  word-break: keep-all; /* 한글 낱말이 중간에 끊기지 않게 */
+  overflow-wrap: anywhere;
+}
+.pk ::selection { background: #E9D9BE; }
+.pk a { color: inherit; text-decoration: none; }
+.pk .serif { font-family: "Noto Serif KR", "Nanum Myeongjo", serif; letter-spacing: -0.6px; }
+.pk .eng { font-family: "Cormorant Garamond", "Noto Serif KR", serif; letter-spacing: 0.18em; text-transform: uppercase; }
+.pk .wrap { width: 100%; max-width: 1280px; margin: 0 auto; padding: 0 20px; }
+@media (min-width: 768px) { .pk .wrap { padding: 0 40px; } }
+
+/* 글자 크기 — 화면 폭에 따라 자연스럽게 */
+.pk .t-display { font-size: clamp(34px, 6.2vw, 76px); line-height: 1.18; font-weight: 600; }
+.pk .t-1 { font-size: clamp(28px, 4.2vw, 50px); line-height: 1.28; font-weight: 600; }
+.pk .t-2 { font-size: clamp(22px, 2.8vw, 34px); line-height: 1.35; font-weight: 600; }
+.pk .lead { font-size: clamp(15px, 1.35vw, 18px); line-height: 1.85; color: var(--ink-2); }
+.pk .body { font-size: 15px; line-height: 1.85; color: var(--ink-2); }
+.pk .label { font-size: 12px; color: var(--oak); font-weight: 600; }
+
+/* 버튼 */
+.pk .btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 52px; padding: 0 26px; border-radius: 999px; font-size: 15px; font-weight: 700; transition: background .25s, color .25s, border-color .25s, transform .25s; white-space: nowrap; }
+.pk .btn:active { transform: scale(.98); }
+.pk .btn-dark { background: var(--ink); color: var(--ivory); }
+.pk .btn-dark:hover { background: var(--oak-d); }
+.pk .btn-line { border: 1px solid currentColor; }
+.pk .btn-line:hover { background: var(--ink); color: var(--ivory); border-color: var(--ink); }
+.pk .btn-light { background: var(--ivory); color: var(--ink); }
+.pk .btn-light:hover { background: #fff; }
+.pk .btn-sm { height: 40px; padding: 0 18px; font-size: 14px; }
+.pk .link-arrow { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14.5px; border-bottom: 1px solid currentColor; padding-bottom: 3px; transition: gap .25s, color .25s; }
+.pk .link-arrow:hover { gap: 14px; color: var(--oak-d); }
+
+/* 위쪽 메뉴 */
+.pk-head { position: fixed; inset: 0 0 auto 0; z-index: 50; transition: background .35s, box-shadow .35s, color .35s; }
+.pk-head.solid { background: rgba(251, 248, 242, .94); backdrop-filter: saturate(1.4) blur(12px); -webkit-backdrop-filter: saturate(1.4) blur(12px); box-shadow: 0 1px 0 var(--line); }
+.pk-head.over { color: #fff; }
+.pk-nav a.on { color: var(--oak); }
+.pk-head.over .pk-nav a.on { color: #F3DDB8; }
+.pk-nav a { position: relative; font-size: 15px; font-weight: 600; padding: 6px 2px; transition: color .2s; }
+.pk-nav a::after { content: ""; position: absolute; left: 0; right: 0; bottom: -2px; height: 1px; background: currentColor; transform: scaleX(0); transform-origin: left; transition: transform .3s; }
+.pk-nav a:hover::after, .pk-nav a.on::after { transform: scaleX(1); }
+
+/* 사진 */
+.pk .photo { position: relative; overflow: hidden; background: var(--sand); }
+.pk .photo img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 1.2s cubic-bezier(.2,.7,.2,1); }
+.pk .zoom:hover .photo img, .pk .photo.zoom:hover img { transform: scale(1.045); }
+
+/* 나타나기 */
+.pk .rv { opacity: 0; transform: translateY(26px); transition: opacity .9s ease, transform .9s cubic-bezier(.2,.7,.2,1); }
+.pk .rv.in { opacity: 1; transform: none; }
+.pk .rv.d1 { transition-delay: .1s; } .pk .rv.d2 { transition-delay: .2s; } .pk .rv.d3 { transition-delay: .3s; }
+@media (prefers-reduced-motion: reduce) {
+  .pk .rv { opacity: 1; transform: none; transition: none; }
+  .pk .photo img { transition: none; }
+  .pk .hero-img { animation: none !important; }
+}
+.pk .hero-img { animation: pkHero 14s ease-out both; }
+@keyframes pkHero { from { transform: scale(1.08); } to { transform: scale(1); } }
+
+/* 흐르는 글자 줄 */
+.pk .marquee { display: flex; width: max-content; animation: pkMarq 38s linear infinite; }
+@keyframes pkMarq { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .pk .marquee { animation: none; } }
+
+/* 입력 */
+.pk .in-f { width: 100%; height: 52px; padding: 0 18px; border-radius: 14px; border: 1px solid var(--line); background: #fff; font-size: 15px; color: var(--ink); outline: none; transition: border-color .2s, box-shadow .2s; }
+.pk textarea.in-f { height: auto; padding: 14px 18px; line-height: 1.7; resize: vertical; }
+.pk .in-f:focus { border-color: var(--oak); box-shadow: 0 0 0 4px rgba(168, 128, 79, .14); }
+.pk .chip { height: 42px; padding: 0 18px; border-radius: 999px; border: 1px solid var(--line); background: #fff; font-size: 14px; font-weight: 600; color: var(--ink-2); transition: all .2s; }
+.pk .chip.on { background: var(--ink); color: var(--ivory); border-color: var(--ink); }
+
+.pk .rule { height: 1px; background: var(--line); }
+.pk .grain { background-image: radial-gradient(rgba(120, 95, 60, .05) 1px, transparent 1px); background-size: 4px 4px; }

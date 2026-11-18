@@ -9,6 +9,21 @@ PnK PROJECT(법인)가 만드는 **로지스웹 · 로지스웹 허브 · 공식
 - 상위 폴더에서 가져오는 것: `../src/appCheckClient.js`, `../src/CustomDatePicker.jsx`, `../src/kpTimePick.jsx`, `../src/kpInputs.jsx`, `../src/CustomSelect.jsx`, `../src/planCore.js`
   (모두 Firebase를 쓰지 않는 순수 화면/계산 조각 — 로지스웹과 같은 달력 · 시간 · 월 고르기 · 요금제 표)
 
+## 주소 나눔 (2026-11-18)
+
+| 주소 | 화면 | 누가 |
+|---|---|---|
+| `/` `/about` `/business` `/services` `/contact` | **공식 홈페이지**(`src/site/`) — 회사 소개 · 사업분야(물류 · 배차 / 요양 · 돌봄 / 맞춤 개발) · 서비스 · 문의 | 누구나(검색엔진에도 뜬다) |
+| `/login` | 직원 로그인(오른쪽 위 [로그인]) | 직원 |
+| `/intranet/…` | 사내 인트라넷(기존 화면 그대로 — 주소 앞에 `/intranet`) | 구성원 |
+
+- `src/main.jsx` 가 주소를 보고 둘 중 하나만 불러온다. 홈페이지는 Firebase 를 처음부터 불러오지 않는다(문의 보낼 때만).
+- 예전 인트라넷 주소(`/mail` · `/tasks` …)로 들어오면 `/intranet/…` 로 넘어간다.
+- 디자인: 아이보리 · 베이지 · 오크 톤(`src/site/site.css`, 제목은 Noto Serif KR). 사진은 `public/home/*.webp`.
+- 문의하기 → Firestore `pnkInquiries`(로그인 없이 보내기만 · 읽기는 구성원) → 인트라넷 **영업 관리** 맨 위 [홈페이지 문의]에서 확인 · 영업 대상으로 옮기기.
+  ⚠ 규칙(`firestore.rules` 의 pnkInquiries)을 배포해야 문의가 저장된다.
+- 검색엔진 막기(`noindex`)는 이제 `/login` · `/intranet` 에만 걸린다(`vercel.json`).
+
 ## 메뉴
 
 | 메뉴 | 내용 | 볼 수 있는 사람 |
@@ -80,7 +95,7 @@ npm run build
    - `@` A → `76.76.21.21` (Vercel 화면 값)
    - 메일(Mailgun) MX · TXT 는 그대로 두고 함께 쓴다
 4. **Firebase 콘솔 › Authentication › 설정 › 승인된 도메인**에 `www.pnkproject.com`, `pnkproject.com` 추가(로그인 · 비밀번호 찾기 메일)
-5. `main` 에 합치면 자동 배포(`claude/*` 브랜치는 배포 안 됨). 검색엔진에는 안 뜨게 `noindex`.
+5. `main` 에 합치면 자동 배포(`claude/*` 브랜치는 배포 안 됨). 인트라넷(`/login` · `/intranet`)만 `noindex`.
 
 ## 외부 메일(@pnkproject.com) 연결 — 회사 정보 › 외부 메일 연결(관리자) 화면에 순서 · 링크가 나온다
 
