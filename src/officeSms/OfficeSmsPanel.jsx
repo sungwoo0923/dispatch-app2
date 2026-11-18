@@ -9,7 +9,7 @@ import { kpConfirm } from "../kpDialog";
 import { queueSms, resendSms, markRead, deleteThread, deleteMsg } from "./officeSmsStore";
 import { normPeer, fmtPhone, smsBytesOf, phoneState, groupThreads, threadMessages, statusText, filterThreads, timeLabel, toMs, parseRecipients, suggestRecipients } from "./officeSmsCore";
 
-const APK_URL = "https://github.com/sungwoo0923/dispatch-app2/releases/download/logisweb-apk-latest/LogisWeb.apk"; // 📦 업무폰용 앱(문자 권한 포함 · 플레이스토어 앱과 다름)
+const APK_URL = "https://github.com/sungwoo0923/dispatch-app2/releases/download/logisweb-apk-latest/LogisWeb-SMS.apk"; // 📦 "LogisWeb 업무폰" 앱(문자 권한은 이 앱에만)
 const FONT = "'Pretendard','Noto Sans KR','Apple SD Gothic Neo','맑은 고딕',sans-serif";
 const C = {
   ink: "#0F1A30", ink2: "#3A4A66", sub: "#7A879C", faint: "#A9B4C6", line: "#E8ECF3", line2: "#F0F3F8",
@@ -139,7 +139,7 @@ function Composer({ text, setText, onSend, busy, sendLabel = "보내기", disabl
 
 function SetupGuide({ st }) {
   const steps = [
-    ["업무폰에 LogisWeb 앱 설치", <>운송사 직원 · 화주사용 앱이에요(기사앱 말고). 안드로이드만 돼요. <a href={APK_URL} style={{ color: C.navy2, fontWeight: 800 }}>LogisWeb 앱 받기</a></>],
+    ["업무폰에 'LogisWeb 업무폰' 앱 설치", <>안드로이드만 돼요. <a href={APK_URL} style={{ color: C.navy2, fontWeight: 800 }}>업무폰 앱 받기</a> · "앱 차단됨"이 뜨면 Play 스토어 → 프로필 → Play 프로텍트 → ⚙ → 앱 검사를 잠깐 끄고 설치한 뒤 다시 켜요</>],
     ["내 아이디로 로그인", "PC에서 쓰는 운송사 계정 그대로 로그인해요"],
     ["설정 → 업무폰 문자 연결 → [연결하기]", "문자 권한을 [허용]하면 끝이에요"],
   ];
@@ -157,7 +157,7 @@ function SetupGuide({ st }) {
             </div>
           ))}
         </div>
-        {st.state !== "none" && <div style={{ marginTop: 12, fontSize: 12.5, color: C.red, fontWeight: 700 }}>{st.label}{st.device ? ` · ${st.device}` : ""} — 업무폰에서 LogisWeb 앱을 한 번 열어 주세요.</div>}
+        {st.state !== "none" && <div style={{ marginTop: 12, fontSize: 12.5, color: C.red, fontWeight: 700 }}>{st.label}{st.device ? ` · ${st.device}` : ""} — 업무폰에서 LogisWeb 업무폰 앱을 한 번 열어 주세요.</div>}
         <div style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center", fontSize: 12.5, color: C.ink2, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 12, padding: "10px 12px" }}>
           <span style={{ color: C.navy2 }}><Icon d={I.lock} size={15} /></span>주고받은 문자는 나만 볼 수 있어요. 최고관리자도 못 봐요.
         </div>

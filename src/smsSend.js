@@ -51,7 +51,7 @@ async function sendPersonal(list, body, title) {
   if (route !== "office") { openPhone(list.map((x) => x.phone), body); return "phone"; }
   const st = phoneState(await getBox(uid));
   if (st.state === "none") {
-    const go = await kpConfirm("업무폰이 아직 연결되지 않았어요.\n\n업무폰 LogisWeb 앱(기사앱 말고) → 내 아이디로 로그인 → 설정 → [업무폰 문자 연결]을 켜 주세요.\n\n이번 문자는 '휴대폰과 연결'로 보낼까요?", { title, okText: "휴대폰과 연결로 보내기" });
+    const go = await kpConfirm("업무폰이 아직 연결되지 않았어요.\n\n업무폰에 LogisWeb 업무폰 앱 → 내 아이디로 로그인 → 설정 → [업무폰 문자 연결]을 켜 주세요.\n\n이번 문자는 '휴대폰과 연결'로 보낼까요?", { title, okText: "휴대폰과 연결로 보내기" });
     if (go) { openPhone(list.map((x) => x.phone), body); return "phone"; }
     return "cancel";
   }

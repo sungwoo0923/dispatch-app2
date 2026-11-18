@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 💬 2026-11-18 사내문자 — 업무폰용 앱(office)에만 들어가는 문자 권한 · 서비스(빌드할 때 main 매니페스트와 합쳐진다)
-     ⚠ 플레이스토어용(play)에는 절대 넣지 말 것 — 구글 플레이는 기본 문자 앱이 아닌 앱의 문자 권한을 막는다 -->
+<!-- 💬 2026-11-18 사내문자 — "LogisWeb 업무폰" 앱(smslink)에만 들어가는 문자 권한 · 서비스(빌드할 때 main 매니페스트와 합쳐진다)
+     ⚠ 기사앱(play) · LogisWeb(office)에는 절대 넣지 말 것 — 플레이스토어 심사 거절 · 휴대폰 Play 프로텍트가 설치를 막는다("기기 보호를 위해 앱 차단됨") -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application>

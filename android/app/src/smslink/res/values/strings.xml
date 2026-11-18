@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- 💬 2026-11-18 사내문자를 쓰는 업무폰 전용 앱 이름(LogisWeb + 문자 연결) -->
+<resources>
+    <string name="app_name">LogisWeb 업무폰</string>
+    <string name="title_activity_main">LogisWeb 업무폰</string>
+    <string name="package_name">com.kpflow.logisweb.sms</string>
+    <string name="custom_url_scheme">com.kpflow.logisweb.sms</string>
+</resources>
