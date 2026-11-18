@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<style>
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800;900&family=JetBrains+Mono:wght@600;800&display=swap");
+:root{--navy:#0B1428;--navy2:#13213D;--blue:#3D7BFF;--blue2:#6EA0FF;--ink:#EAF1FF;--amber:#FFB547}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#070D1C}
+body{word-break:keep-all;font-family:"Noto Sans KR",sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+#stage{position:absolute;inset:0;background:radial-gradient(1200px 700px at 15% -10%,#1E3566 0%,transparent 60%),radial-gradient(900px 600px at 110% 110%,#17305E 0%,transparent 55%),linear-gradient(160deg,#0A1326,#070D1C)}
+#win{position:absolute;left:96px;top:22px;width:1728px;height:972px;border-radius:18px;overflow:hidden;background:#F3F6FB;
+  box-shadow:0 0 0 1px rgba(140,170,230,.18),0 30px 80px rgba(0,0,0,.55)}
+#cam{position:absolute;left:0;top:0;width:1600px;height:900px;transform-origin:0 0}
+#cam img{position:absolute;left:0;width:1600px;height:900px;image-rendering:auto}
+#ov{position:absolute;inset:0;pointer-events:none}
+.hl{position:absolute;border-radius:12px;border:3px solid var(--blue);box-shadow:0 0 0 4px rgba(61,123,255,.22),0 0 26px rgba(61,123,255,.55)}
+.hl.dim{box-shadow:0 0 0 4px rgba(61,123,255,.22),0 0 26px rgba(61,123,255,.55),0 0 0 4000px rgba(7,13,28,.42)}
+#cursor{position:absolute;width:34px;height:34px;left:0;top:0;filter:drop-shadow(0 3px 5px rgba(0,0,0,.45))}
+.ripple{position:absolute;border-radius:50%;border:3px solid rgba(61,123,255,.95);background:rgba(61,123,255,.18)}
+#band{z-index:5;position:absolute;left:96px;right:96px;top:1000px;height:64px;display:flex;align-items:center;justify-content:center}
+#chip{position:absolute;left:0;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:10px;font-size:19px;font-weight:700;color:#BFD3FF;white-space:nowrap}
+#chip b{font-family:"JetBrains Mono";font-size:15px;letter-spacing:.12em;color:#fff;background:var(--blue);padding:4px 10px;border-radius:8px}
+#caption{font-size:31px;font-weight:700;letter-spacing:-.02em;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.5);display:flex;align-items:center;gap:14px;max-width:1360px;text-align:center}
+#caption .tip{font-family:"JetBrains Mono";font-size:17px;font-weight:800;letter-spacing:.1em;color:#1B1300;background:var(--amber);padding:5px 11px;border-radius:8px}
+#prog{position:absolute;left:0;bottom:0;height:5px;background:linear-gradient(90deg,var(--blue),var(--blue2))}
+#keys{position:absolute;left:0;right:0;bottom:56px;display:flex;justify-content:center;gap:34px}
+.key{display:flex;align-items:center;gap:16px;background:rgba(9,17,36,.92);padding:16px 26px 16px 18px;border-radius:20px;box-shadow:0 18px 40px rgba(0,0,0,.4);border:1px solid rgba(120,160,255,.35)}
+.cap{font-family:"JetBrains Mono";font-weight:800;font-size:34px;color:#0B1428;background:linear-gradient(#fff,#DCE6F7);border-radius:12px;padding:8px 18px;box-shadow:0 5px 0 #8FA3C6,0 8px 14px rgba(0,0,0,.35)}
+.key span{font-size:28px;font-weight:800;color:#fff}.key i{font-style:normal;color:var(--blue2);font-size:26px;font-weight:800}
+.card{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;padding:0 170px;background:radial-gradient(1000px 640px at 80% 20%,#1F3A72 0%,transparent 62%),linear-gradient(150deg,#0C1730,#060B18)}
+.card .grid{position:absolute;inset:0;background-image:linear-gradient(rgba(110,160,255,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(110,160,255,.07) 1px,transparent 1px);background-size:64px 64px;mask-image:radial-gradient(900px 600px at 70% 40%,#000,transparent)}
+.logo{display:flex;align-items:center;gap:16px;margin-bottom:46px}
+.logo .mk{display:flex;gap:6px;align-items:flex-end;height:46px}.logo .mk i{display:block;width:9px;border-radius:3px;background:linear-gradient(#8DB4FF,#3D7BFF)}
+.logo b{font-size:34px;font-weight:900;letter-spacing:.18em}.logo small{display:block;font-size:12px;letter-spacing:.5em;color:#8FA9D9;font-weight:700}
+.eyebrow{font-family:"JetBrains Mono";font-size:20px;letter-spacing:.32em;color:var(--blue2);font-weight:800;margin-bottom:22px}
+.ttl{font-size:84px;font-weight:900;letter-spacing:-.04em;line-height:1.12}
+.sub{font-size:31px;color:#AFC4EC;font-weight:500;margin-top:24px}
+.chlist{display:flex;gap:18px;margin-top:70px}
+.chlist div{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(140,175,240,.2);border-radius:18px;padding:22px 24px}
+.chlist em{font-style:normal;font-family:"JetBrains Mono";font-weight:800;color:var(--blue2);font-size:19px}
+.chlist p{font-size:25px;font-weight:800;margin-top:8px}
+.bignum{font-family:"JetBrains Mono";font-size:200px;font-weight:800;line-height:.9;background:linear-gradient(#9CC0FF,#3D7BFF);-webkit-background-clip:text;color:transparent;margin-bottom:18px}
+.dots{display:flex;gap:12px;margin-top:56px}.dots i{width:64px;height:8px;border-radius:5px;background:rgba(255,255,255,.14)}.dots i.on{background:var(--blue)}.dots i.done{background:#5C7FC4}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;margin-top:56px}
+.steps div{background:rgba(255,255,255,.06);border:1px solid rgba(140,175,240,.24);border-radius:22px;padding:30px 28px;min-height:230px}
+.steps em{font-style:normal;font-family:"JetBrains Mono";font-weight:800;color:#fff;background:var(--blue);border-radius:10px;padding:4px 11px;font-size:20px}
+.steps h4{font-size:32px;font-weight:900;margin:20px 0 10px;letter-spacing:-.03em}.steps p{font-size:23px;color:#B5C8EE;line-height:1.45;font-weight:500}
+.helpbar{margin-top:40px;display:inline-flex;align-items:center;gap:14px;font-size:27px;font-weight:700;color:#D6E3FF}
+.helpbar b{background:#fff;color:#0B1428;border-radius:12px;padding:6px 16px;font-weight:900}
+.pnl{position:absolute;top:50%;width:700px;padding:40px 44px;border-radius:26px;background:linear-gradient(160deg,rgba(14,26,52,.96),rgba(9,17,36,.97));border:1px solid rgba(120,160,255,.35);box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.pnl .eb{display:flex;align-items:center;gap:12px;font-family:"JetBrains Mono";font-weight:800;letter-spacing:.2em;font-size:17px;color:var(--amber)}
+.pnl h3{font-size:40px;font-weight:900;letter-spacing:-.03em;margin:16px 0 22px;line-height:1.25;color:#fff}
+.pnl li{list-style:none;display:flex;gap:14px;font-size:27px;font-weight:600;line-height:1.45;color:#D9E5FF;margin:14px 0}
+.pnl li b{flex:none;width:34px;height:34px;border-radius:10px;background:rgba(255,181,71,.16);color:var(--amber);font-size:19px;display:flex;align-items:center;justify-content:center;margin-top:3px;font-family:"JetBrains Mono"}
+.lk{position:absolute;inset:0;display:flex;align-items:center;padding:0 90px;gap:70px;background:radial-gradient(900px 600px at 30% 50%,rgba(31,58,114,.97),rgba(8,15,32,.97))}
+.lk .me{flex:none;width:360px;padding:40px 34px;border-radius:28px;background:linear-gradient(150deg,#2D5BD6,#1A3A8F);box-shadow:0 20px 60px rgba(30,80,200,.45);text-align:center}
+.lk .me small{font-family:"JetBrains Mono";letter-spacing:.25em;font-size:16px;color:#BFD3FF;font-weight:800}.lk .me div{font-size:46px;font-weight:900;margin-top:10px;color:#fff}
+.lk .to{flex:1;display:flex;flex-direction:column;gap:20px}
+.lk .row{display:flex;align-items:center;gap:22px}
+.lk .ar{flex:none;width:120px;height:4px;background:linear-gradient(90deg,#5C8DFF,#9CC0FF);position:relative;border-radius:2px}.lk .ar:after{content:"";position:absolute;right:-4px;top:-8px;border:10px solid transparent;border-left:14px solid #9CC0FF}
+.lk .nd{flex:none;min-width:230px;padding:16px 22px;border-radius:16px;background:rgba(255,255,255,.08);border:1px solid rgba(140,175,240,.35);font-size:28px;font-weight:900;color:#fff}
+.lk .tx{font-size:25px;color:#C9D8F7;font-weight:600;line-height:1.4}
+.br{position:absolute;inset:0;background:radial-gradient(900px 520px at 50% 50%,#16295A 0%,#0A1328 55%,#050A16 100%);overflow:hidden}
+.br .lock{position:absolute;left:50%;top:50%;display:flex;align-items:center;gap:56px;transform:translate(-50%,-56%)}
+.br .mk{position:relative;width:280px;height:280px}.br .mk img{width:100%;height:100%}
+.br .ring{position:absolute;left:50%;top:50%;border-radius:50%;border:3px solid rgba(140,180,255,.9);transform:translate(-50%,-50%)}
+.br .wm{position:relative;width:880px;height:99px;overflow:hidden}.br .wm img{width:100%;height:100%;display:block}
+.br .sweep{position:absolute;top:-20%;height:140%;width:180px;background:linear-gradient(100deg,transparent,rgba(255,255,255,.75),transparent);mix-blend-mode:overlay}
+.br .gl{position:absolute;height:3px;background:linear-gradient(90deg,transparent,#F6C76A,#FFE2A6,#F6C76A,transparent);box-shadow:0 0 18px rgba(246,199,106,.8)}
+.br .tag{position:absolute;left:0;right:0;text-align:center;font-family:"JetBrains Mono";font-weight:800;letter-spacing:.6em;font-size:22px;color:#9DB6E8}
+.br .flare{position:absolute;inset:0;background:radial-gradient(600px 300px at 50% 46%,rgba(120,170,255,.35),transparent 70%)}
+</style></head><body>
+<div id="stage">
+  <div id="win"><div id="cam"><img id="imA"><img id="imB"></div><div id="ov"></div><div id="keys"></div></div>
+  <div id="band"><div id="chip"></div><div id="caption"></div></div>
+  <div id="prog"></div>
+  <div id="cards" style="position:absolute;inset:0;z-index:3"></div>
+</div>
+<svg width="0" height="0" style="position:absolute"><defs><symbol id="arrow" viewBox="0 0 24 24"><path d="M4 2.5 L4 19.5 L8.6 15.3 L11.6 22 L14.6 20.7 L11.7 14.2 L17.9 14.2 Z" fill="#fff" stroke="#0B1428" stroke-width="1.5" stroke-linejoin="round"/></symbol></defs></svg>
+<script>
+let T = null; const $ = (s) => document.querySelector(s);
+const ease = (x) => x <= 0 ? 0 : x >= 1 ? 1 : x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const easeOut = (x) => x <= 0 ? 0 : x >= 1 ? 1 : 1 - Math.pow(1 - x, 3);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const fadeIO = (t, t0, t1, f = .3) => clamp(Math.min((t - t0) / f, (t1 - t) / f), 0, 1);
+const W = 1728;
+function camAt(t) {
+  let c = T.cams[0].c, prev = c;
+  for (const k of T.cams) { if (t < k.t) break; prev = c; const p = ease((t - k.t) / k.d); c = k.c.map((v, i) => prev[i] + (v - prev[i]) * p); if (p < 1) { /* 진행 중 */ } }
+  return c;
+}
+// 이전 카메라 보간을 정확히: 각 키의 시작 시점 값을 누적 계산
+function camAt2(t) {
+  let cur = T.cams[0].c.slice();
+  for (const k of T.cams) {
+    if (t < k.t) break;
+    const p = ease((t - k.t) / k.d); const from = cur.slice();
+    cur = k.c.map((v, i) => from[i] + (v - from[i]) * p);
+    if (p < 1) return cur;
+  }
+  return cur;
+}
+const toScreen = (cam, x, y) => { const s = W / cam[2]; return [(x - cam[0]) * s, (y - cam[1]) * s]; };
+const imgCache = {};
+async function setImg(el, file) {
+  if (el.dataset.f === file) return;
+  el.dataset.f = file; el.src = T.kfDir + '/' + file; try { await el.decode(); } catch (e) {}
+}
+function cardHTML(c, t) {
+  const L = (t - c.t0);
+  const ap = (d) => `style="opacity:${easeOut((L - d) / .6)};transform:translateY(${(1 - easeOut((L - d) / .6)) * 24}px)"`;
+  if (c.kind === 'brand') {
+    const L = t - c.t0, eo = (a, d) => easeOut((L - a) / d);
+    const back = (x) => { x = clamp(x, 0, 1); const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+    const mS = .55 + .45 * back((L - .05) / .7), mO = eo(.05, .35);
+    const ringP = clamp((L - .45) / .9, 0, 1), ringR = 160 + ringP * 420;
+    const rev = eo(.6, .75), sw = clamp((L - .9) / .9, 0, 1);
+    const gl = eo(1.15, .6), tg = eo(1.5, .6), fl = Math.max(0, 1 - Math.abs(L - .55) / .5);
+    const zoom = 1 + L * .012;
+    return `<div class="br"><div class="flare" style="opacity:${fl}"></div>
+      <div class="lock" style="transform:translate(-50%,-56%) scale(${zoom})">
+        <div class="mk" style="opacity:${mO};transform:scale(${mS})"><img src="logisweb-mark.png"><div class="ring" style="width:${ringR}px;height:${ringR}px;opacity:${(1 - ringP) * .8 * (L > .45 ? 1 : 0)}"></div></div>
+        <div><div class="wm" style="clip-path:inset(0 ${(1 - rev) * 100}% 0 0);transform:translateX(${(1 - rev) * -40}px)"><img src="logisweb-wordmark.png"><div class="sweep" style="left:${-200 + sw * 1300}px;opacity:${sw > 0 && sw < 1 ? 1 : 0}"></div></div></div>
+      </div>
+      <div class="gl" style="left:${960 - 560 * gl}px;width:${1120 * gl}px;top:${640}px"></div>
+      <div class="tag" style="top:672px;opacity:${tg};letter-spacing:${(c.end ? .35 : .9) - .3 * tg}em;${c.end ? 'font-family:Noto Sans KR;font-size:26px;' : ''}">${c.end ? 'THANK YOU · 도움말 센터에서 언제든 다시 보세요' : 'SMART DISPATCH PLATFORM'}</div></div>`;
+  }
+  if (c.kind === 'intro') { const M = T.meta; return `<div class="card"><div class="grid"></div>
+    <div class="logo" ${ap(.1)}><div class="mk"><i style="height:22px"></i><i style="height:34px"></i><i style="height:46px"></i></div><div><b>LOGISWEB</b><small>DISPATCH</small></div></div>
+    <div class="eyebrow" ${ap(.35)}>${M.eyebrow || 'TRAINING'}</div>
+    <div class="ttl" ${ap(.5)}>${M.title}</div>
+    <div class="sub" ${ap(.75)}>${M.sub || ''}</div>
+    <div class="chlist">${(M.chapters || []).map((x, i) => `<div ${ap(1.1 + i * .16)}><em>STEP ${i + 1}</em><p>${x}</p></div>`).join('')}</div></div>`; }
+  if (c.kind === 'chapter') return `<div class="card"><div class="grid"></div>
+    <div class="bignum" ${ap(0)}>0${c.n}</div><div class="eyebrow" ${ap(.12)}>STEP ${c.n} OF ${(T.meta.chapters || []).length}</div>
+    <div class="ttl" ${ap(.2)}>${c.title}</div><div class="sub" ${ap(.35)}>${c.sub}</div>
+    <div class="dots" ${ap(.45)}>${(T.meta.chapters || []).map((_, j) => j + 1).map(i => `<i class="${i === c.n ? 'on' : i < c.n ? 'done' : ''}"></i>`).join('')}</div></div>`;
+  if (c.kind === 'outro') {
+    const o = T.outro; const at = (f) => o.t + o.d * f; const SM = T.meta.summary || [];
+    const st = (f) => { const p = easeOut((t - at(f)) / .6); return `style="opacity:${.15 + .85 * p};transform:translateY(${(1 - p) * 18}px);border-color:${p > .5 ? 'rgba(110,160,255,.6)' : 'rgba(140,175,240,.24)'}"`; };
+    return `<div class="card"><div class="grid"></div>
+    <div class="eyebrow" ${ap(0)}>SUMMARY · 한눈에 정리</div><div class="ttl" style="font-size:70px" ${ap(.15)}>${T.meta.summaryTitle || '이것만 기억하면 돼요'}</div>
+    <div class="steps" style="grid-template-columns:repeat(${SM.length},1fr)">${SM.map((x, i) => `<div ${st(.06 + i * (.6 / Math.max(1, SM.length)))}><em>${x.tag || i + 1}</em><h4>${x.title}</h4><p>${x.text}</p></div>`).join('')}</div>
+    <div class="helpbar" style="opacity:${easeOut((t - at(.72)) / .6)}">${T.meta.help || '궁금할 땐 오른쪽 위 <b>도움말 센터</b> 에서 언제든 다시 봐요'}</div></div>`;
+  }
+  return '';
+}
+window.render = async function (t) {
+  // 카드(인트로 · 장 제목 · 정리)
+  let cardsHTML = ''; let cardFull = false;
+  for (const c of T.cards) {
+    const f = .45;
+    if (t >= c.t0 - .01 && t <= c.t1 + f) {
+      const op = (c.kind === 'intro' || (c.kind === 'brand' && !c.end)) ? clamp((c.t1 + f - t) / f, 0, 1) : clamp(Math.min((t - c.t0) / f, (c.t1 + f - t) / f), 0, 1);
+      if (op >= 1) cardFull = true;
+      cardsHTML += `<div style="position:absolute;inset:0;opacity:${op}">${cardHTML(c, t)}</div>`;
+    }
+  }
+  $('#cards').innerHTML = cardsHTML;
+  $('#prog').style.width = (t / T.total * 100) + '%';
+  if (cardFull) { $('#caption').innerHTML = capHTML(t); $('#chip').innerHTML = ''; $('#ov').innerHTML = ''; return; }
+  // 화면 이미지
+  let ev = T.events[0], pv = null;
+  for (const e of T.events) { if (e.t <= t) { pv = ev; ev = e; } else break; }
+  if (ev === T.events[0]) pv = null;
+  const a = $('#imA'), b = $('#imB');
+  await setImg(a, ev.file); a.style.top = ev.sy + 'px';
+  const fp = ev.fade ? (t - ev.t) / ev.fade : 1;
+  if (pv && fp < 1) { await setImg(b, pv.file); b.style.top = pv.sy + 'px'; b.style.opacity = 1 - easeOut(fp); b.style.display = ''; } else b.style.display = 'none';
+  const cam = camAt2(t); const s = W / cam[2];
+  $('#cam').style.transform = `scale(${s}) translate(${-cam[0]}px,${-cam[1]}px)`;
+  // 강조 상자
+  let ov = ''; let dimUsed = false;
+  for (const h of T.hls) {
+    if (t < h.t0 || t > h.t1 + .3) continue;
+    const p = easeOut((t - h.t0) / .45), out = clamp((h.t1 + .3 - t) / .3, 0, 1);
+    const pad = 7; const [x0, y0] = toScreen(cam, h.b[0] - pad, h.b[1] - pad); const [x1, y1] = toScreen(cam, h.b[0] + h.b[2] + pad, h.b[1] + h.b[3] + pad);
+    const sc = 1 + (1 - p) * .06, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, w = (x1 - x0) * sc, hh = (y1 - y0) * sc;
+    const pulse = .5 + .5 * Math.sin((t - h.t0) * 4);
+    ov += `<div class="hl ${dimUsed ? '' : 'dim'}" style="left:${cx - w / 2}px;top:${cy - hh / 2}px;width:${w}px;height:${hh}px;opacity:${p * out};border-color:rgba(61,123,255,${.8 + .2 * pulse})"></div>`;
+    dimUsed = true;
+  }
+  // 클릭 물결
+  for (const c of T.clicks) { const d = t - c.t; if (d < 0 || d > .55) continue; const [x, y] = toScreen(cam, c.at[0], c.at[1]); const r = 10 + easeOut(d / .55) * 34;
+    ov += `<div class="ripple" style="left:${x - r}px;top:${y - r}px;width:${2 * r}px;height:${2 * r}px;opacity:${1 - d / .55}"></div>`; }
+  // 커서
+  let cp = T.cursor.length ? T.cursor[0].from : [800, 450];
+  for (const m of T.cursor) { if (t < m.t0) break; const p = ease((t - m.t0) / (m.t1 - m.t0)); cp = [m.from[0] + (m.to[0] - m.from[0]) * p, m.from[1] + (m.to[1] - m.from[1]) * p]; }
+  const pressed = T.clicks.some(c => t - c.t >= 0 && t - c.t < .14);
+  const [cx, cy] = toScreen(cam, cp[0], cp[1]); const cs = (pressed ? .86 : 1) * 1.15;
+  ov += `<svg id="cursor" style="transform:translate(${cx - 6}px,${cy - 4}px) scale(${cs});transform-origin:6px 4px"><use href="#arrow"/></svg>`;
+  for (const P of (T.panels || [])) {
+    if (t < P.t0 || t > P.t1 + .35) continue;
+    const p = easeOut((t - P.t0) / .5), o = clamp((P.t1 + .35 - t) / .35, 0, 1), op = p * o;
+    const n = (P.lines || P.items || []).length; const shown = (i) => easeOut((t - (P.vt + P.d * (i / Math.max(1, n)) * .9)) / .45);
+    if (P.kind === 'links') {
+      ov += `<div class="lk" style="opacity:${op}"><div class="me" style="transform:scale(${.9 + .1 * p})"><small>${P.eyebrow || 'CONNECTED'}</small><div>${P.title}</div></div><div class="to">${P.items.map((x, i) => `<div class="row" style="opacity:${shown(i)};transform:translateX(${(1 - shown(i)) * 30}px)"><div class="ar"></div><div class="nd">${x.to}</div><div class="tx">${x.text}</div></div>`).join('')}</div></div>`;
+    } else {
+      const left = P.pos === 'left';
+      ov += `<div style="position:absolute;inset:0;background:rgba(7,13,28,${.45 * op})"></div><div class="pnl" style="${left ? 'left:60px' : 'right:60px'};opacity:${op};transform:translateY(-50%) translateX(${(1 - p) * (left ? -40 : 40)}px)">
+        <div class="eb"><svg width="26" height="26" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z" fill="none" stroke="#FFB547" stroke-width="2" stroke-linecap="round"/></svg>${P.eyebrow || '알아두면 좋은 팁'}</div>
+        <h3>${P.title}</h3><ul>${(P.lines || []).map((x, i) => `<li style="opacity:${.25 + .75 * shown(i)}"><b>${i + 1}</b><span>${x}</span></li>`).join('')}</ul></div>`;
+    }
+  }
+  $('#ov').innerHTML = ov;
+  // 단축키
+  $('#keys').innerHTML = T.keys.filter(k => t >= k.t0 && t <= k.t1 + .3).map(k => { const p = easeOut((t - k.t0) / .4), o = clamp((k.t1 + .3 - t) / .3, 0, 1);
+    return `<div class="key" style="opacity:${p * o};transform:translateY(${(1 - p) * 20}px) scale(${.92 + .08 * p})"><div class="cap">${k.k}</div><i>→</i><span>${k.label}</span></div>`; }).join('');
+  // 장 표시
+  const ch = T.chips.find(c => t >= c.t0 && t < c.t1);
+  $('#chip').innerHTML = ch ? `<b>STEP ${ch.n}</b>${ch.title}` : '';
+  $('#caption').innerHTML = capHTML(t);
+};
+function capHTML(t) {
+  const c = T.caps.find(c => t >= c.t0 && t < c.t1); if (!c) return '';
+  const o = fadeIO(t, c.t0, c.t1, .18);
+  return `<div style="opacity:${o};display:flex;align-items:center;gap:14px">${c.tip ? '<span class="tip">TIP</span>' : ''}<span>${c.text}</span></div>`;
+}
+window.init = async (tl) => { T = tl; await document.fonts.ready; await document.fonts.load('800 30px "Noto Sans KR"'); await document.fonts.load('800 30px "JetBrains Mono"'); return true; };
+</script></body></html>
