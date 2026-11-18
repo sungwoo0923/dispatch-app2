@@ -101,14 +101,10 @@ installNoDblSelect(); // ⭐ 2026-11-10 엣지 미니 도구창(더블클릭 글
 // ⭐ ErrorBoundary로 전체를 감싼다 — 화면 어딘가에서 예상 못한 JS 오류가 나도
 // 백지 화면 대신 "새로고침" 안내가 뜨게 하기 위함(특히 모바일에서 발생 시
 // 사용자가 복구할 방법이 전혀 없었음).
-// 💬 2026-11-18 사내문자 별도 창(/sms-window) — 프로그램 전체 대신 사내문자 화면만 띄운다(가볍게 · 로그인 확인은 화면 안에서)
-const OfficeSmsPopupPage = React.lazy(() => import("./officeSms/OfficeSmsPopupPage.jsx"));
-const IS_SMS_POPUP = window.location.pathname === "/sms-window";
-
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ErrorBoundary>
-      {IS_SMS_POPUP ? <React.Suspense fallback={null}><OfficeSmsPopupPage /></React.Suspense> : <App />}
+      <App />
     </ErrorBoundary>
   </React.StrictMode>
 );

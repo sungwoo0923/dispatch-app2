@@ -1,8 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<!-- 🏢 2026-11-18 운송사 직원 · 화주사용 앱 이름(기사앱 "LogisWeb 기사"와 따로 설치) -->
-<resources>
-    <string name="app_name">LogisWeb</string>
-    <string name="title_activity_main">LogisWeb</string>
-    <string name="package_name">com.kpflow.logisweb</string>
-    <string name="custom_url_scheme">com.kpflow.logisweb</string>
-</resources>

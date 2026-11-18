@@ -33,29 +33,6 @@ android {
             keyPassword 'android'
         }
     }
-    // 🏢 2026-11-18 앱을 세 가지로 만든다(각각 따로 설치 · 한 폰에 같이 깔 수 있다)
-    //  · play   : "LogisWeb 기사" (com.kpflow.driver) — 기사님용 · 플레이스토어. 문자 권한 없음
-    //  · office : "LogisWeb" (com.kpflow.logisweb) — 운송사 직원 · 화주사용. 기사 로그인 없음. 문자 권한 없음
-    //             (문자 권한이 있으면 휴대폰 Play 프로텍트가 "기기 보호를 위해 앱 차단됨"으로 설치를 막는다)
-    //  · smslink: "LogisWeb 업무폰" (com.kpflow.logisweb.sms) — office 와 같고 + 사내문자(업무폰 문자 연결) 문자 권한
-    //             사내문자를 쓰는 업무폰에만. 설치할 때 Play 프로텍트를 잠깐 꺼야 한다. 문자 권한 · 서비스는 src/smslink/ 에만
-    //  office · smslink 시작 주소 /login · 화면 식별(LogisWebOffice)은 CI가 capacitor.config.json 을 만들어 넣는다
-    flavorDimensions = ["dist"]
-    productFlavors {
-        play {
-            dimension "dist"
-        }
-        office {
-            dimension "dist"
-            applicationId "com.kpflow.logisweb"
-            versionNameSuffix "-office"
-        }
-        smslink {
-            dimension "dist"
-            applicationId "com.kpflow.logisweb.sms"
-            versionNameSuffix "-sms"
-        }
-    }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
@@ -94,9 +71,4 @@ try {
     }
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
-}
-
-// 🏢 2026-11-18 LogisWeb(office) · LogisWeb 업무폰(smslink) 앱은 네이티브 푸시를 쓰지 않는다 — google-services.json 에 이 패키지가 없어도 빌드되게 처리를 끈다
-tasks.configureEach { t ->
-    if (t.name ==~ /process[A-Za-z]*(Office|Smslink)[A-Za-z]*GoogleServices/) t.enabled = false
 }
