@@ -38,6 +38,12 @@ const ctxOf = (tabs = sheet()) => makePushContext(Object.entries(tabs).map(([tit
   assert.equal(Object.fromEntries(c2.cells.map((x) => [x.a1, x.value])).D7, "월착", "금요일 상차 · 월요일 하차 = 월착");
   const c3 = planCreate(ctx, { 상차일: "2026-11-15", 하차일: "2026-11-15", 하차시간: "14:00", 상차지명: "평택", 하차지명: "이천", 청구운임: "90000", 기사운임: "70000" }, "평택 내수", { rowCount: 100 });
   assert.equal(Object.fromEntries(c3.cells.map((x) => [x.a1, x.value])).D8, "14:00", "시간이 있으면 시간");
+  // ⭐ 2026-11-18 같은 날 상차 · 하차라도 저녁 6시 이후 상차면 야상(다시 읽어도 같은 날 · 같은 오더)
+  const c4 = planCreate(ctx, { 상차일: "2026-11-19", 하차일: "2026-11-19", 상차시간: "18:30", 상차지명: "평택", 하차지명: "이천", 청구운임: "90000", 기사운임: "70000" }, "평택 내수", { rowCount: 100 });
+  assert.equal(c4.ok, true); assert.equal(Object.fromEntries(c4.cells.map((x) => [x.a1, x.value])).D9, "야상", "저녁 6시 이후 상차 = 야상");
+  assert.ok(c4.pushed.includes("하차시간"), "야상도 다시 읽으면 같은 날");
+  const c5 = planCreate(ctx, { 상차일: "2026-11-20", 하차일: "2026-11-20", 상차시간: "17:00", 상차지명: "평택", 하차지명: "이천", 청구운임: "90000", 기사운임: "70000" }, "평택 내수", { rowCount: 100 });
+  assert.equal(Object.fromEntries(c5.cells.map((x) => [x.a1, x.value])).D10, "당착", "6시 전이면 당착");
   console.log("입고시간 · 마감월 · 운송사 OK");
 }
 
@@ -516,5 +522,34 @@ async function world(mode, opts = {}) {
   const rc3 = reconcileOrders([{ id: "e1", data: { ...ext2, ...c3.docPatch } }], [rowOf(c3.row)]);
   assert.ok(!("특수운임" in (rc3.update[0]?.patch || {})) && !("청구운임" in (rc3.update[0]?.patch || {})), "프로그램의 특수운임 · 청구운임은 그대로");
   console.log("노선 고정 특수운임 → JY 시트 추가 칸 · 다시 읽어도 같음(round trip) OK");
+}
+// ⭐ 2026-11-18 [특수운임 적용]으로 넣은 특수운임(이름 없음 · 대기료 등)도 추가 칸에 — 예전엔 다시 읽은 이름(야상 · 기타)이 달라 운송료 칸에 합친 금액만 썼다
+{
+  const { specialApplyAll } = await import("../src/forkliftCore.js");
+  const head = [["AJ-베베숲"], [""], Array(15).fill(""), ["상차일자", "출발지", "도착지", "", "비고", "입고시간", "차종", "매출", "", "", "", "매입", "", "", "", "이익", "마감월", "운송사", "차량번호", "이름", "연락처"]];
+  const r = (d) => [d, "에이제이", "트레이더스 칠곡", "", "", "당착", "11톤", "300,000", "", "", "300,000", "270,000", "", "", "270,000", "", "26년11월", "기사직통", "충남80아4135", "장인석", "010-4658-0000"];
+  const base = { companyName: "JY로지스틱스", 등록기기: "PC", 거래처명: "에이제이", 상차지명: "에이제이", 하차지명: "트레이더스 칠곡", 상차일: "2026-11-19", 하차일: "2026-11-19", 청구운임: "300000", 기사운임: "270000", 수수료: "30000" };
+  const cases = [
+    ["기사에게 더 줌(회사 부담)", { 종류: "기타", 금액: 20000, 받는사람: "기사", 부담: "회사" }, { H6: "300000", K6: "300000", L6: "270000", N6: "20000", O6: "290000" }],
+    ["기사에게 주고 거래처에 청구", { 종류: "대기료", 금액: 20000, 받는사람: "기사", 부담: "청구" }, { H6: "300000", I6: "20000", K6: "320000", L6: "270000", N6: "20000", O6: "290000" }],
+    ["거래처에 청구만", { 종류: "기타", 금액: 20000, 받는사람: "없음", 부담: "청구" }, { H6: "300000", I6: "20000", K6: "320000", L6: "270000", O6: "270000" }],
+  ];
+  for (const [label, it, want] of cases) {
+    const ctx = makePushContext([{ title: "에이제이", rows: [...head, r("2026. 11. 13")] }], JY, {});
+    const o = { ...base, ...specialApplyAll({ ...base }, { items: [it] }) };
+    const c = planCreate(ctx, o, "에이제이", { rowCount: 100 });
+    assert.equal(c.ok, true, label);
+    const got = Object.fromEntries(c.cells.filter((x) => /^[H-O]\d/.test(x.a1)).map((x) => [x.a1, x.value]));
+    assert.deepEqual(got, want, `${label}: 운송료 칸은 원금액, 추가 금액은 옆 칸`);
+    assert.ok(c.pushed.includes("특수운임"), `${label}: 특수운임을 시트에 썼다`);
+    // 다시 가져와도(시트 → 프로그램) 운임 · 특수운임을 덮어쓰지 않는다(이름은 프로그램 값 그대로)
+    const back = ctx.built.orders.find((x) => x.__tab === "에이제이" && x.__row === 6);
+    assert.equal(Number(back.청구운임), Number(o.청구운임), `${label}: 다시 읽은 청구운임`);
+    assert.equal(Number(back.기사운임), Number(o.기사운임), `${label}: 다시 읽은 기사운임`);
+    const rc = reconcileOrders([{ id: "x", data: { ...o, ...c.docPatch } }], [back]);
+    const pt = rc.update[0]?.patch || {};
+    for (const k of ["청구운임", "기사운임", "특수운임", "수수료"]) assert.ok(!(k in pt), `${label}: 다시 가져와도 ${k} 그대로`);
+  }
+  console.log("특수운임 적용 → JY 시트 추가 칸(매출 · 매입 옆 칸) OK");
 }
 console.log("sheetPush: 모두 통과");

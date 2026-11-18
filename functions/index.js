@@ -6918,11 +6918,12 @@ exports.orderScanOcr = functions.runWith({ timeoutSeconds: 60, memory: "512MB", 
     });
   } catch (e) { throw scanHttpsError(e); }
 });
-exports.orderScanExtract = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 60, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
+// ⭐ 2026-11-18 여러 오더 한 번에(data.multi) — 건수만큼 답이 길어 시간을 넉넉히(한 건은 예전처럼 30초 안)
+exports.orderScanExtract = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 120, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
   try {
     return await _orderScan.runExtract({
       db, auth: context.auth, data,
-      makeAnthropic: () => (process.env.ANTHROPIC_API_KEY ? new (_orderScan.Anthropic)({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 30000, maxRetries: 1 }) : null),
+      makeAnthropic: () => (process.env.ANTHROPIC_API_KEY ? new (_orderScan.Anthropic)({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: data?.multi === true ? 100000 : 30000, maxRetries: 1 }) : null),
       // 💰 비용·손익 — 호출 수와 토큰(입력·출력·캐시 읽기·캐시 쓰기)
       bumpUsage: (u) => bumpScanUsage({ scanAiCalls: 1, scanAiInTok: u.input, scanAiOutTok: u.output, scanAiCacheReadTok: u.cacheRead, scanAiCacheWriteTok: u.cacheWrite }),
     });

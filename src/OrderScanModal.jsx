@@ -13,8 +13,8 @@
 //  · AI 키가 없거나 실패하면 아무 말 없이 규칙 인식 결과 그대로
 import React from "react";
 import { createPortal } from "react-dom";
-import { parseOrderScan, splitOrders } from "./orderScanParser";
-import { normalizeAiFields, mergeAiInto, applyAliases, applyLabelRemaps, needsCheck, kstToday, reconcileRoles } from "./orderScanAi";
+import { parseOrderScan, splitOrders, namesSimilar } from "./orderScanParser";
+import { normalizeAiFields, mergeAiInto, applyAliases, applyLabelRemaps, needsCheck, kstToday, reconcileRoles, knownFor, looksMulti, orderBlockText, isNewPlace } from "./orderScanAi";
 import { verifyAddress } from "./tmapFareCalc";
 import { fmtPhone } from "./formatInput";
 
@@ -160,6 +160,11 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
   const scannedRef = React.useRef({}); // 스캔 직후 값(학습 기록에서 "무엇을 고쳤나" 비교용)
   const scanSeq = React.useRef(0); // 새로 스캔하면 늦게 온 예전 응답은 버린다
   const biRef = React.useRef(0); // 지금 보고 있는 오더 블록(늦게 온 AI 결과를 그 블록에만 합친다)
+  // ⭐ 2026-11-18 여러 건을 AI가 한 번에 나눴을 때 — 블록 = AI가 나눈 오더(원문 줄과 1:1이 아님) · 경유하차(쉼표)
+  const [multiMode, setMultiMode] = React.useState(false);
+  const viaByBlock = React.useRef({});
+  const fullRef = React.useRef(""); // 스캔한 글 전체
+  const multiTried = React.useRef(false);
 
   // ── 결과 계산(오더 블록 단위) ── 배운 라벨 바꾸기 → 규칙 인식 → (AI 결과 합치기 · 배운 이름 바꾸기) → 등록 업체 맞추기
   const parseBlock = React.useCallback((bl, i) => {
@@ -182,6 +187,7 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
     });
   }, []);
   const runParse = React.useCallback((text, idx = 0) => {
+    fullRef.current = text;
     const bl = splitOrders(text);
     setBlocks(bl);
     const i = Math.min(idx, bl.length - 1);
@@ -203,9 +209,31 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
         if (seq !== scanSeq.current) return;
         if (hintsRef.current?.remaps && (Object.keys(hintsRef.current.remaps.labelMap || {}).length || hintsRef.current.remaps.aliases?.length)) showParsed(parseBlock(bl, i), true);
       }
+      // ⭐ 2026-11-18 여러 건으로 보이는 글(목록 · 화이트보드 · "이름 - 숫자")이면 AI에게 한 번에 나눠 달라고 한다
+      const full = fullRef.current || bl.join("\n");
+      if (!multiTried.current && looksMulti(full)) {
+        multiTried.current = true;
+        try {
+          const known = knownFor(full, { places, clients, aliases: hintsRef.current?.remaps?.aliases });
+          const r = await ai.extract(applyLabelRemaps(full, hintsRef.current?.remaps?.labelMap), hintsRef.current?.examples || [], { known, multi: true });
+          if (seq !== scanSeq.current) return;
+          const orders = Array.isArray(r?.orders) ? r.orders.filter((o) => o && (o.하차지명?.v || o.상차지명?.v)) : [];
+          if (orders.length) {
+            const nb = orders.map(orderBlockText);
+            aiByBlock.current = {}; viaByBlock.current = {};
+            orders.forEach((o, k) => { aiByBlock.current[k] = normalizeAiFields(o, { today: kstToday() }); viaByBlock.current[k] = String(o.경유하차?.v || "").trim(); });
+            setMultiMode(true); setBlocks(nb); setBi(0); biRef.current = 0;
+            touched.current = new Set();
+            showParsed(parseBlock(nb, 0), false);
+            setEngine((e) => ({ ...e, used: true }));
+            return;
+          }
+        } catch (e) { console.warn("[오더 스캔] 여러 건 정리를 못 해 한 건씩 정리해요:", e?.message || e); }
+      }
       if (!aiByBlock.current[i]) {
         const txt = applyLabelRemaps(bl[i], hintsRef.current?.remaps?.labelMap);
-        const r = await ai.extract(txt, hintsRef.current?.examples || []);
+        const known = knownFor(bl[i], { places, clients, aliases: hintsRef.current?.remaps?.aliases }); // ⭐ 2026-11-18 등록 업체 · 배운 이름도 같이
+        const r = await ai.extract(txt, hintsRef.current?.examples || [], { known });
         if (seq !== scanSeq.current) return;
         aiByBlock.current[i] = normalizeAiFields(r?.fields, { today: kstToday() });
       }
@@ -216,8 +244,8 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
     } finally {
       if (seq === scanSeq.current) setEngine((e) => ({ ...e, busy: false }));
     }
-  }, [ai, parseBlock, showParsed]);
-  const newScan = () => { scanSeq.current += 1; aiByBlock.current = {}; hintsRef.current = null; touched.current = new Set(); setEngine({ ocr: "", busy: false, used: false }); return scanSeq.current; };
+  }, [ai, parseBlock, showParsed, places, clients]);
+  const newScan = () => { scanSeq.current += 1; aiByBlock.current = {}; viaByBlock.current = {}; multiTried.current = false; setMultiMode(false); hintsRef.current = null; touched.current = new Set(); setEngine({ ocr: "", busy: false, used: false }); return scanSeq.current; };
 
   // ── 텍스트 스캔(빛줄 애니메이션 → 결과) ──
   const startText = React.useCallback((text) => {
@@ -361,7 +389,10 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
     return () => { off = true; };
   }, [stage, vals.상차지주소, vals.하차지주소]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const switchBlock = (i) => { const full = src?.type === "text" ? src.text : typed; const { bl } = runParse(full, i); refine(bl, i, scanSeq.current); };
+  const switchBlock = (i) => {
+    if (multiMode) { setBi(i); biRef.current = i; touched.current = new Set(); showParsed(parseBlock(blocks, i), false); return; } // AI가 나눈 오더 — 다시 나누지 않는다
+    const full = src?.type === "text" ? src.text : typed; const { bl } = runParse(full, i); refine(bl, i, scanSeq.current);
+  };
 
   const apply = () => {
     const v = vals;
@@ -384,6 +415,9 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
       patch.화물타입 = ["파레트", "박스", "통"].includes(unit) ? unit : "";
     }
     if (v.혼적 === true) patch.혼적 = true;
+    // ⭐ 2026-11-18 한 줄에 하차지가 여럿(차 한 대가 차례로) — 첫 곳 = 하차지, 나머지 = 경유 하차(등록된 곳이면 주소까지)
+    const vias = String(viaByBlock.current[bi] || "").split(/[,，、/]/).map((x) => x.trim()).filter(Boolean);
+    if (vias.length) patch.경유하차목록 = vias.map((n) => { const hit = places.find((p) => p.업체명 === n) || places.find((p) => namesSimilar(p.업체명, n)); return { 업체명: hit?.업체명 || n, 주소: hit?.주소 || "", 담당자: "", 담당자번호: "" }; });
     if (v.긴급 === true) patch.긴급 = true;
     if (v.전달사항) patch.전달사항 = v.전달사항;
     const memo = [v.메모추가, v.중량 && v.중량 !== v.차량톤수 ? `중량 ${v.중량}` : "", unknownToMemo && result?.unknown?.length ? result.unknown.join(" / ") : ""].filter(Boolean).join(" / ");
@@ -410,6 +444,16 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
     if (c?.st === "approx") issues.unshift({ field: `${P}주소`, level: "warn", msg: `${P} 주소는 ${c.area || "동네"}까지만 확인됩니다. 번지·건물번호를 확인하세요` });
     if (c?.st === "error") issues.push({ field: `${P}주소확인`, level: "info", msg: `${P} 주소를 지도로 확인하지 못했습니다(통신). 저장 시 다시 확인됩니다` });
   });
+  // ⭐ 2026-11-18 등록되지 않은 곳(신규) · 경유 하차 알림
+  if (result && stage !== "scanning") {
+    [["거래처명", clients, "거래처"], ["상차지명", places, "상차지"], ["하차지명", places, "하차지"]].forEach(([k, list, label]) => {
+      const n = String(vals[k] || "").trim();
+      if (issues.some((x) => String(x.msg || "").includes("등록되지 않은") && String(x.field || "").startsWith(label))) return; // 이미 같은 안내가 있다
+      if (n && (list || []).length && isNewPlace(n, list)) issues.push({ field: `_new_${k}`, level: "warn", msg: `「${n}」은(는) 등록되지 않은 ${label}예요(신규) — 이름 · 주소를 확인해 주세요` });
+    });
+    const vias = String(viaByBlock.current[bi] || "").split(/[,，、/]/).map((x) => x.trim()).filter(Boolean);
+    if (vias.length) issues.push({ field: "_via", level: "info", msg: `경유 하차 ${vias.length}곳: ${vias.join(" → ")} — 적용하면 경유 하차로 들어가요` });
+  }
   const issueOf = (k) => issues.find((x) => x.field === k && x.level !== "info");
   // 노란 칸 — AI · 규칙 인식이 서로 다르거나 자신 없는 칸(사용자가 고치면 사라진다)
   const checkOf = (k) => !!result && needsCheck(result.fields[k]) && !touched.current.has(k) && vals[k] !== undefined && vals[k] !== "";
@@ -521,7 +565,7 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
                       {srcLines.map((ln, i) => {
                         const passed = !scanning || scanPos >= (i + 0.5) / Math.max(1, srcLines.length);
                         const role = roleOfText(i);
-                        const otherBlock = blocks.length > 1 && ln.trim() && !blockSet.has(ln.trim());
+                        const otherBlock = blocks.length > 1 && !multiMode && ln.trim() && !blockSet.has(ln.trim());
                         return (
                           <div key={i} className={`flex items-start gap-2.5 min-h-[24px] rounded-[8px] px-2 py-1 transition-colors ${otherBlock ? "opacity-35" : ""} ${passed && role && role !== "미인식" && !otherBlock ? "bg-[#F2F6FC]" : ""}`}>
                             <span className="w-[54px] shrink-0 pt-0.5">
