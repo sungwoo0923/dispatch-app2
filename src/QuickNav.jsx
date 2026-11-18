@@ -14,6 +14,9 @@ import { MENU_TOURS } from "./onboardingTour";
 import { manualFor, manualName } from "./WorkManual"; // 📘 2026-11-15 모든 메뉴 매뉴얼
 import { HELP_DETAIL, HELP_COMMON, helpTextOf } from "./helpContent"; // 📖 메뉴별 자세한 사용법
 import { HelpDemo, hasHelpDemo } from "./HelpDemos"; // 🎬 2026-11-13 움직이는 예시 화면
+import { doc, onSnapshot, setDoc, arrayUnion, serverTimestamp } from "firebase/firestore"; // 🔒 2026-11-18 바뀐 점 지우기(최고관리자)
+import { db } from "./firebase";
+import { kpConfirm } from "./kpDialog";
 
 const FONT = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const MASTER_MENUS = new Set(["관리센터"]);
@@ -76,6 +79,20 @@ export function pushRecent(id) {
 const useFavs = () => { const v = usePref("favMenus"); return Array.isArray(v) ? v : []; };
 const toggleFav = (favs, id) => setPref("favMenus", favs.includes(id) ? favs.filter((x) => x !== id) : [...favs, id].slice(0, 20));
 
+// 🔒 2026-11-18 "새 기능 · 바뀐 점"은 최고관리자만 본다(사용자 요청) · 개별 / 전체 삭제
+//  지운 목록: siteConfig/helpUpdates { hidden: [해시], clearedBefore: 커밋 시각 ISO } — siteConfig 는 최고관리자만 읽고 쓴다(보안 규칙)
+//  전체 삭제 = 지금까지 쌓인 것 전부 숨김(clearedBefore). 그 뒤 새로 바뀐 내용은 다시 쌓인다. 원본(public/updates.json)은 그대로
+const HIDE_REF = () => doc(db, "siteConfig", "helpUpdates");
+function useHiddenUpdates(enabled) {
+  const [v, setV] = React.useState({ hidden: [], clearedBefore: "" });
+  React.useEffect(() => {
+    if (!enabled) return undefined;
+    return onSnapshot(HIDE_REF(), (snap) => { const d = snap.exists() ? snap.data() : {}; setV({ hidden: Array.isArray(d.hidden) ? d.hidden : [], clearedBefore: String(d.clearedBefore || "") }); }, () => {});
+  }, [enabled]);
+  return v;
+}
+const visibleUpdates = (list, hid) => (list || []).filter((x) => !hid.hidden.includes(x.h) && !(hid.clearedBefore && String(x.at) <= hid.clearedBefore));
+
 // 업데이트 내역(자동 누적) — 최고관리자 내용 제외
 function useUpdates(enabled) {
   const [items, setItems] = React.useState(null);
@@ -113,10 +130,12 @@ const Star = ({ on, size = 14 }) => (
 const SearchIco = ({ size = 14 }) => (<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>);
 
 // ───────────────────────── 통합 검색 창 ─────────────────────────
-function Palette({ index, favs, onGo, onHelp, onClose }) {
+function Palette({ index, favs, onGo, onHelp, onClose, isMaster = false }) {
   const [q, setQ] = React.useState("");
   const [cur, setCur] = React.useState(0);
-  const updates = useUpdates(true);
+  const hid = useHiddenUpdates(isMaster);
+  const rawUpdates = useUpdates(isMaster); // 🔒 최고관리자만
+  const updates = React.useMemo(() => (isMaster && rawUpdates ? visibleUpdates(rawUpdates, hid) : []), [isMaster, rawUpdates, hid]);
   const listRef = React.useRef(null);
   const nq = norm(q);
   const rows = React.useMemo(() => {
@@ -186,11 +205,32 @@ function Palette({ index, favs, onGo, onHelp, onClose }) {
 }
 
 // ───────────────────────── 도움말 센터 ─────────────────────────
-function HelpCenter({ index, initial, onGo, onClose }) {
+function HelpCenter({ index, initial, onGo, onClose, isMaster = false }) {
   const menus = React.useMemo(() => index.filter((e) => !e.sub && !MASTER_MENUS.has(e.menu)), [index]);
-  const [sel, setSel] = React.useState(initial?.menu || "__common");
+  const [sel, setSel] = React.useState(() => { const m = initial?.menu || "__common"; return m === "__new" && !isMaster ? "__common" : m; });
   const [q, setQ] = React.useState(initial?.q || "");
-  const updates = useUpdates(true);
+  const hid = useHiddenUpdates(isMaster);
+  const rawUpdates = useUpdates(isMaster); // 🔒 최고관리자만
+  const updates = React.useMemo(() => (isMaster && rawUpdates ? visibleUpdates(rawUpdates, hid) : (isMaster ? null : [])), [isMaster, rawUpdates, hid]);
+  const hideOne = async (x) => {
+    const ok = await kpConfirm(`이 내용을 '새 기능 · 바뀐 점'에서 지울까요?\n\n${String(x.s).slice(0, 120)}`, { title: "바뀐 점 지우기", okText: "지우기", danger: true });
+    if (!ok) return;
+    try { await setDoc(HIDE_REF(), { hidden: arrayUnion(x.h), updatedAt: serverTimestamp() }, { merge: true }); } catch (e) { await kpConfirm(`지우지 못했어요\n${e?.code || e}`, { title: "바뀐 점 지우기", okText: "확인" }); }
+  };
+  const hideAll = async () => {
+    const list = updates || [];
+    if (!list.length) return;
+    const ok = await kpConfirm(`지금 보이는 '새 기능 · 바뀐 점' ${list.length}건을 모두 지울까요?\n앞으로 새로 바뀌는 내용은 다시 쌓여요.`, { title: "전체 지우기", okText: "전체 지우기", danger: true });
+    if (!ok) return;
+    const latest = (rawUpdates || []).reduce((a, x) => (String(x.at) > a ? String(x.at) : a), "");
+    try { await setDoc(HIDE_REF(), { clearedBefore: latest, hidden: [], updatedAt: serverTimestamp() }, { merge: true }); } catch (e) { await kpConfirm(`지우지 못했어요\n${e?.code || e}`, { title: "전체 지우기", okText: "확인" }); }
+  };
+  const restoreAll = async () => {
+    const ok = await kpConfirm("지운 '바뀐 점'을 모두 되살릴까요?", { title: "되살리기", okText: "되살리기" });
+    if (!ok) return;
+    try { await setDoc(HIDE_REF(), { clearedBefore: "", hidden: [], updatedAt: serverTimestamp() }, { merge: true }); } catch { /* 무시 */ }
+  };
+  const hiddenCount = isMaster && rawUpdates ? rawUpdates.length - (updates || []).length : 0;
   const nq = norm(q);
   const subsOf = (m) => index.filter((e) => e.menu === m && e.sub);
   // 그 메뉴와 관련된 업데이트 — 메뉴 이름 · 세부 메뉴 이름이 들어간 내역
@@ -203,7 +243,9 @@ function HelpCenter({ index, initial, onGo, onClose }) {
       <div key={d} className="mb-4">
         <div className="text-[11px] font-black tracking-[0.12em] text-[#8FA0BD] mb-1.5">{d}</div>
         {byDay[d].map((x) => { const { topic, lines } = parseUpdate(x.s); return (
-          <div key={x.h} className="mb-2 rounded-xl border border-[#E6EBF3] bg-white px-3.5 py-2.5">
+          <div key={x.h} className="group relative mb-2 rounded-xl border border-[#E6EBF3] bg-white px-3.5 py-2.5 pr-12">
+            {isMaster && <button type="button" onClick={() => hideOne(x)} title="이 내용 지우기" aria-label="이 내용 지우기" data-kp="help-update-del"
+              className="absolute top-2 right-2 h-7 px-2 rounded-lg text-[11.5px] font-black text-[#9AA9C3] hover:text-[#B4342A] hover:bg-[#FDF0EF]">삭제</button>}
             {topic && <div className="text-[13px] font-black text-[#0F1A30] mb-1">{topic}</div>}
             <ul className="space-y-0.5">{lines.map((l, i) => <li key={i} className="text-[13px] leading-relaxed text-[#2A3852] pl-3 relative"><span className="absolute left-0 top-[9px] w-1 h-1 rounded-full bg-[#9AA9C3]" />{l}</li>)}</ul>
           </div>); })}
@@ -258,7 +300,7 @@ function HelpCenter({ index, initial, onGo, onClose }) {
         </div>
         <div className="flex-1 min-h-0 flex">
           <div className="w-[268px] shrink-0 overflow-y-auto border-r border-[#E1E7F0] bg-white p-3 hidden sm:block">
-            <button type="button" onClick={() => { setSel("__new"); setQ(""); }} className={`w-full text-left px-3.5 h-11 rounded-xl text-[14.5px] font-black mb-1 whitespace-nowrap ${!searching && sel === "__new" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>새 기능 · 바뀐 점</button>
+            {isMaster && <button type="button" onClick={() => { setSel("__new"); setQ(""); }} className={`w-full text-left px-3.5 h-11 rounded-xl text-[14.5px] font-black mb-1 whitespace-nowrap ${!searching && sel === "__new" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>새 기능 · 바뀐 점 <span className="ml-1 text-[10.5px] font-black opacity-60">최고관리자</span></button>}
             <button type="button" onClick={() => { setSel("__common"); setQ(""); }} className={`w-full text-left px-3.5 h-11 rounded-xl text-[14.5px] font-black mb-1 whitespace-nowrap ${!searching && sel === "__common" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>처음 사용 안내 · 공통 사용법</button>
             <div className="px-3.5 pt-4 pb-2 mt-2 border-t border-[#EEF1F6] text-[12px] font-black tracking-[0.14em] text-[#8FA0BD]">메뉴별 사용법</div>
             {menus.map((e) => (
@@ -282,8 +324,10 @@ function HelpCenter({ index, initial, onGo, onClose }) {
                     <div className="text-[11px] font-black tracking-[0.12em] text-[#8FA0BD] mb-1.5">사용법 · {label}</div>
                     <Sections list={list} only={nq} />
                   </div>))}
-                <div className="text-[11px] font-black tracking-[0.12em] text-[#8FA0BD] mb-1.5">새 기능 · 바뀐 점</div>
-                <UpdateList list={foundUpd} />
+                {isMaster && <>
+                  <div className="text-[11px] font-black tracking-[0.12em] text-[#8FA0BD] mb-1.5">새 기능 · 바뀐 점</div>
+                  <UpdateList list={foundUpd} />
+                </>}
               </>
             ) : sel === "__common" ? (
               <>
@@ -291,10 +335,17 @@ function HelpCenter({ index, initial, onGo, onClose }) {
                 <div className="text-[15px] text-[#4A5A75] mt-1 mb-6">어느 화면에서나 똑같이 쓰는 기능입니다. 메뉴별 사용법은 왼쪽에서 메뉴를 고르세요.</div>
                 <Sections list={HELP_COMMON} />
               </>
-            ) : sel === "__new" ? (
+            ) : sel === "__new" && isMaster ? (
               <>
-                <div className="text-[24px] font-black text-[#0F1A30] tracking-tight">새 기능 · 바뀐 점</div>
-                <div className="text-[15px] text-[#4A5A75] mt-1 mb-6">프로그램이 바뀔 때마다 자동으로 쌓입니다. 왼쪽에서 메뉴를 고르면 그 메뉴의 사용법과 관련 내용만 볼 수 있어요.</div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="text-[24px] font-black text-[#0F1A30] tracking-tight">새 기능 · 바뀐 점</div>
+                  <span className="text-[11px] font-black px-2 py-1 rounded-lg bg-[#0F1A30] text-white">🔒 최고관리자만 보여요</span>
+                  <div className="ml-auto flex items-center gap-2">
+                    {hiddenCount > 0 && <button type="button" onClick={restoreAll} className="h-9 px-3 rounded-xl border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#4A5A75] hover:bg-[#F7F9FC]">지운 {hiddenCount}건 되살리기</button>}
+                    <button type="button" onClick={hideAll} disabled={!(updates || []).length} data-kp="help-update-del-all" className="h-9 px-3 rounded-xl border border-[#F3C9C5] bg-white text-[12.5px] font-black text-[#B4342A] hover:bg-[#FDF0EF] disabled:opacity-40">전체 삭제</button>
+                  </div>
+                </div>
+                <div className="text-[15px] text-[#4A5A75] mt-1 mb-6">프로그램이 바뀔 때마다 자동으로 쌓여요. 다른 사용자에게는 이 메뉴가 안 보여요. 지운 내용은 [되살리기]로 다시 볼 수 있어요.</div>
                 <UpdateList list={updates || []} limit={120} />
               </>
             ) : (() => {
@@ -343,7 +394,7 @@ export function QuickSearchButton() {
 }
 
 // menus: 지금 이 계정에 보이는 상단 메뉴 · onGo(menu, code, key): 그 화면으로 이동
-export default function QuickNav({ menus = [], menu = "", onGo }) {
+export default function QuickNav({ menus = [], menu = "", onGo, isMaster = false }) {
   const index = React.useMemo(() => buildNavIndex(menus), [menus.join("|"), menu]); // eslint-disable-line react-hooks/exhaustive-deps
   const favs = useFavs();
   const open = usePref("favOpen") !== false; // 처음엔 펴 둔다
@@ -389,8 +440,8 @@ export default function QuickNav({ menus = [], menu = "", onGo }) {
             {manualName(menu)} 매뉴얼
           </button>)}
       </div>
-      {pal && <Palette index={index} favs={favs} onGo={go} onHelp={(init) => { setPal(false); setHelp(init || {}); }} onClose={() => setPal(false)} />}
-      {help && <HelpCenter index={index} initial={help} onGo={go} onClose={() => setHelp(null)} />}
+      {pal && <Palette index={index} favs={favs} isMaster={isMaster} onGo={go} onHelp={(init) => { setPal(false); setHelp(init || {}); }} onClose={() => setPal(false)} />}
+      {help && <HelpCenter index={index} initial={help} isMaster={isMaster} onGo={go} onClose={() => setHelp(null)} />}
     </>
   );
 }

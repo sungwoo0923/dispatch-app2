@@ -10,7 +10,7 @@ import { Link } from "react-router-dom";
 import { db, doc, onSnapshot } from "./firebase";
 import KpTruckSide from "./KpTruckSide";
 import { LogisMark, LogisWordmark } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
-import { isDesktopBrowser, isApkStaffMode, setApkStaffMode } from "./driver/driverAppContext"; // 🖥 2026-11-10 PC에서는 차주(기사) 로그인 숨김
+import { isDesktopBrowser, isApkStaffMode, setApkStaffMode, isOfficeApk } from "./driver/driverAppContext"; // 🖥 2026-11-10 PC에서는 차주(기사) 로그인 숨김
 
 const DEFAULT_FOOTER = "© 2025 LogisWeb. All rights reserved.";
 const FONT_FAMILY_MAP = {
@@ -85,8 +85,9 @@ export default function Login() {
   // 마지막에 고른 계정 종류(이 기기 기준)
   // 🖥 2026-11-10 차주(기사)는 휴대폰 기사앱에서만 — PC 웹에서는 운송사 · 화주사만 보인다
   const pc = isDesktopBrowser();
-  const roles = pc ? ROLES.filter((r) => r.key !== "driver") : ROLES;
-  const [lastRole] = useState(() => { try { const v = localStorage.getItem(LAST_ROLE_KEY) || "transport"; return pc && v === "driver" ? "transport" : v; } catch { return "transport"; } });
+  const officeApp = isOfficeApk(); // 🏢 2026-11-18 직원 · 화주 전용 앱 — 기사 로그인 없음(기사는 LogisWeb 기사앱)
+  const roles = pc || officeApp ? ROLES.filter((r) => r.key !== "driver") : ROLES;
+  const [lastRole] = useState(() => { try { const v = localStorage.getItem(LAST_ROLE_KEY) || "transport"; return (pc || officeApp) && v === "driver" ? "transport" : v; } catch { return "transport"; } });
   const remember = (key) => { try { localStorage.setItem(LAST_ROLE_KEY, key); } catch { /* 무시 */ } };
   const hasHistory = (() => { try { return !!localStorage.getItem(LAST_ROLE_KEY); } catch { return false; } })();
 
@@ -230,7 +231,7 @@ export default function Login() {
         </div>
 
         {/* 📍 2026-11-16 APK 직원 모드 — 기사 로그인으로 돌아가기 */}
-        {isApkStaffMode() && <button type="button" onClick={() => setApkStaffMode(false)} data-kp="apk-driver-login" className="mx-auto block mb-2 text-[12.5px] font-bold text-white/55 underline underline-offset-4">기사 로그인으로 돌아가기</button>}
+        {isApkStaffMode() && !officeApp && <button type="button" onClick={() => setApkStaffMode(false)} data-kp="apk-driver-login" className="mx-auto block mb-2 text-[12.5px] font-bold text-white/55 underline underline-offset-4">기사 로그인으로 돌아가기</button>}
         <p className="text-center text-[10.5px] font-bold tracking-[0.12em] text-white/25">{(c.footerText || DEFAULT_FOOTER).replace(/KP-Flow( Logistics)?/gi, "LogisWeb")}</p>
       </div>
     </div>

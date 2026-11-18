@@ -2,6 +2,7 @@
 // 📂 기사앱 "서류함" — 회사가 보낸 지급명세서 · 과태료/사고 서류를 본다.
 //  열면 읽음 표시, 명세서는 [확인했습니다]로 회사에 확인을 알린다. 첨부 사진은 눌러서 전체화면(확대·이동·저장).
 // 💳 "정산 정보" 카드 — 가입 때 넣은 계좌·사업자번호를 보고 고친다(사업자등록증 사진도 교체 가능).
+import { lazyRetry } from "../lazyRetry"; // 🛠 2026-11-18 새 버전 뒤 화면 파일 못 받으면 새로 열기
 import React from "react";
 import { collection, doc, onSnapshot, query, updateDoc, where, setDoc, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
@@ -14,7 +15,7 @@ import DriverSubmitDocs from "./DriverSubmitDocs";
 import { useDriverDocs, docProblems } from "../driverRequiredDocs";
 import DocZoomViewer from "./DocZoomViewer"; // ⭐ 2026-11-10 서류 확대 보기
 import { saveElementPdf } from "./docSave"; // ⭐ 2026-11-10 서류 PDF 저장(기사앱·아이폰·PC)
-const DriverContractSign = React.lazy(() => import("./DriverContractSign")); // ⭐ 2026-11-10 계약서 서명(열 때만 불러온다)
+const DriverContractSign = lazyRetry(() => import("./DriverContractSign")); // ⭐ 2026-11-10 계약서 서명(열 때만 불러온다)
 
 const toMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : 0);
 const card = { background: "#fff", borderRadius: 20, border: "1px solid #E6EBF3", boxShadow: "0 1px 6px rgba(0,0,0,0.05)" };

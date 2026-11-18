@@ -1,6 +1,7 @@
 // ======================= src/App.jsx =======================
 
 import React, { useState, useEffect, useRef } from "react";
+import { lazyRetry } from "./lazyRetry"; // 🛠 2026-11-18 새 버전 배포 뒤 화면 파일을 못 받으면 오류 화면 대신 새로 열기
 import { setTenant, setTenantRole, setServerFilter, setPreviewMode, isPreviewMode } from "./fsTenant";
 import { purgeOnSignOut, noteSignedInUid } from "./sessionPurge"; // 🔒 2026-11-07 계정 바꿀 때 앞 사람(다른 회사) 데이터 정리
 import { setUsageMeter } from "./usageMeter"; // 💰 2026-11-04 회사별 서버 사용량 표본
@@ -35,7 +36,7 @@ import {
 import { LoginManagerModal } from "./LoginManager";
 import { AdminLoginGate, isAdminGatePassed, adminAuthTime, ADMIN_GATE_EVENT } from "./AdminGate";
 import { UserLoginGate, MfaAskModal, mfaAskState, mfaCall } from "./UserSecurity";
-const ManualHost = React.lazy(() => import("./WorkManual").then((m) => ({ default: m.ManualHost }))); // 📘 2026-11-14 업무 매뉴얼 · 회계용어 창(PC · 모바일 어디서든 이벤트로)
+const ManualHost = lazyRetry(() => import("./WorkManual").then((m) => ({ default: m.ManualHost }))); // 📘 2026-11-14 업무 매뉴얼 · 회계용어 창(PC · 모바일 어디서든 이벤트로)
 import { DRIVER_BUSY_EVENT, isDriverBusy } from "./driver/driverLoginErrors"; // ⭐ 2026-11-05 기사 로그인 확인 중 표시
 import { initDriverAppContext, markDriverAppOnlyKick } from "./driver/driverAppContext"; // ⭐ 2026-11-08 기사앱(APK·홈 화면 기사앱)은 기사 계정만
 // ⭐ 2026-11-08 기사앱 안인지 — 안드로이드 APK 또는 기사 화면에서 "홈 화면에 추가"한 기사앱(실행 중 standalone). 열릴 때 한 번 정한다
@@ -46,10 +47,10 @@ import { accessLogCutoffMs } from "./accessLogRetention";
 // 역할별 대형 화면은 지연 로딩(code-splitting)한다 — 이전에는 전부 하나의 번들로
 // 즉시 로드되어, 로그인 화면 하나만 보려 해도 운송사/화주사/모바일 프로그램 전체
 // 코드를 다운로드/파싱해야 했다(초기 접속 로딩이 느린 주된 원인).
-const ShipperApp = React.lazy(() => import("./shipper/ShipperApp"));
-const DispatchApp = React.lazy(() => import("./DispatchApp"));
-const MobileApp = React.lazy(() => import("./mobile/MobileApp"));
-const ShipperMobileApp = React.lazy(() => import("./mobile/ShipperMobileApp"));
+const ShipperApp = lazyRetry(() => import("./shipper/ShipperApp"));
+const DispatchApp = lazyRetry(() => import("./DispatchApp"));
+const MobileApp = lazyRetry(() => import("./mobile/MobileApp"));
+const ShipperMobileApp = lazyRetry(() => import("./mobile/ShipperMobileApp"));
 
 // ⭐ 로딩 속도 개선 — 운송사 프로그램 본체(PC: DispatchApp, 폰: MobileApp)는 로그인
 // 확인(Firebase 인증 + 사용자 문서 조회)이 다 끝난 "뒤에야" 다운로드를 시작해서,
@@ -71,32 +72,32 @@ const ShipperMobileApp = React.lazy(() => import("./mobile/ShipperMobileApp"));
 // ⭐ 로딩 속도 개선 — 기사앱/회원가입/업로드 페이지 등은 운송사 PC 사용자가 거의
 // 열지 않는 화면인데, 첫 번들에 같이 들어 있어서(약 600KB, html2canvas 포함) 프로그램을
 // 열 때마다 다운로드/해석 시간이 늘었다. 필요할 때만 불러오도록 지연 로딩으로 바꾼다.
-const DriverHome = React.lazy(() => import("./driver/DriverHome"));
-const DriverLogin = React.lazy(() => import("./driver/DriverLogin"));
+const DriverHome = lazyRetry(() => import("./driver/DriverHome"));
+const DriverLogin = lazyRetry(() => import("./driver/DriverLogin"));
 import DriverPcGate from "./driver/DriverPcGate"; // 🖥 2026-11-10 기사 로그인 · 가입은 휴대폰에서만
-const DriverRegister = React.lazy(() => import("./driver/DriverRegister"));
+const DriverRegister = lazyRetry(() => import("./driver/DriverRegister"));
 
 import Login from "./Login";
 import KpLogoMark, { KP_MARK_CSS } from "./KpLogoMark";
 import { LogisWordmark } from "./brand";
 import TransportLogin from "./TransportLogin";
-const Signup = React.lazy(() => import("./Signup"));
+const Signup = lazyRetry(() => import("./Signup"));
 import ShipperLogin from "./shipper/ShipperLogin";
-const ShipperSignup = React.lazy(() => import("./shipper/ShipperSignup"));
-const ShipperPending = React.lazy(() => import("./shipper/ShipperPending"));
+const ShipperSignup = lazyRetry(() => import("./shipper/ShipperSignup"));
+const ShipperPending = lazyRetry(() => import("./shipper/ShipperPending"));
 
 import NoAccess from "./NoAccess";
 import { securityLoginPing } from "./securityWatch"; // 🛡 2026-11-09 이상 접속 알림
-const UploadPage = React.lazy(() => import("./UploadPage"));
-const DriverSearchPage = React.lazy(() => import("./DriverSearchPage"));
-const ShortLinkRedirect = React.lazy(() => import("./ShortLinkRedirect"));
-const StandardFare = React.lazy(() => import("./StandardFare"));
-const ChangePassword = React.lazy(() => import("./ChangePassword"));
-const PlatformCenter = React.lazy(() => import("./PlatformCenter"));
-const AdminPreview = React.lazy(() => import("./adminCenter/AdminPreview")); // 🛰 2026-11-18 관리자센터 화면 점검(개발 서버 전용)
-const EntryChooser = React.lazy(() => import("./PlatformCenter").then((m) => ({ default: m.EntryChooser })));
-const ContractSign = React.lazy(() => import("./ContractSign"));
-const DriverGuidePage = React.lazy(() => import("./DriverAppGuide")); // ⭐ 2026-11-06 기사앱 안내 공개 페이지(/driver-guide)
+const UploadPage = lazyRetry(() => import("./UploadPage"));
+const DriverSearchPage = lazyRetry(() => import("./DriverSearchPage"));
+const ShortLinkRedirect = lazyRetry(() => import("./ShortLinkRedirect"));
+const StandardFare = lazyRetry(() => import("./StandardFare"));
+const ChangePassword = lazyRetry(() => import("./ChangePassword"));
+const PlatformCenter = lazyRetry(() => import("./PlatformCenter"));
+const AdminPreview = lazyRetry(() => import("./adminCenter/AdminPreview")); // 🛰 2026-11-18 관리자센터 화면 점검(개발 서버 전용)
+const EntryChooser = lazyRetry(() => import("./PlatformCenter").then((m) => ({ default: m.EntryChooser })));
+const ContractSign = lazyRetry(() => import("./ContractSign"));
+const DriverGuidePage = lazyRetry(() => import("./DriverAppGuide")); // ⭐ 2026-11-06 기사앱 안내 공개 페이지(/driver-guide)
 
 // ⭐ 관리자 겸 개발자 계정 — 배차/화주/모바일 등 프로그램 어디서든, users 문서
 // 상태(role 필드 오타, 퇴사 처리, 문서 자체가 없는 경우 등)와 무관하게 무조건
@@ -1065,7 +1066,7 @@ export default function App() {
             />
             <Route
               path="/driver-home"
-              element={user && role === "driver" && approved ? <DriverHome /> : (user && roleFor !== user.uid ? routeFallback : <Navigate to="/driver-login" replace />)}
+              element={user && role === "driver" && approved ? <DriverHome /> : ((user && roleFor !== user.uid) || window.__kpDriverLeaving ? routeFallback : <Navigate to="/driver-login" replace />)}
             />
             <Route path="*" element={<Navigate to={user && role === "driver" && approved ? "/driver-home" : "/driver-login"} replace />} />
           </Routes>
@@ -1149,7 +1150,7 @@ export default function App() {
           />
           <Route
             path="/driver-home"
-            element={user && role === "driver" && approved ? <DriverHome /> : (user && roleFor !== user.uid ? routeFallback : <Navigate to="/driver-login" replace />)}
+            element={user && role === "driver" && approved ? <DriverHome /> : ((user && roleFor !== user.uid) || window.__kpDriverLeaving ? routeFallback : <Navigate to="/driver-login" replace />)}
           />
 
           <Route

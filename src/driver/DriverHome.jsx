@@ -1247,6 +1247,7 @@ export default function DriverHome() {
         .then((r) => {
           if (r.status !== 400) return;
           arm();
+          window.__kpDriverLeaving = true; // 🛠 2026-11-18 로그인 화면을 먼저 그리지 않게(App.jsx)
           signOut(auth).catch(() => {}).finally(() => { arm(); window.location.href = "/driver-login"; });
         })
         .catch(() => {});
@@ -2107,8 +2108,11 @@ export default function DriverHome() {
         await updateDoc(doc(db, "drivers", uid), { active: false, updatedAt: serverTimestamp() });
       } catch (_) {}
     }
-    await signOut(auth);
-    window.location.href = "/driver-login";
+    // 🛠 2026-11-18 로그아웃 중엔 화면 안에서 로그인 화면을 먼저 그리지 않는다(App.jsx) — 새 버전 배포 뒤 예전 로그인 화면 파일을
+    //  찾다가 "화면을 불러오는 중 오류"가 떴다. 로딩 점을 보인 채 새 페이지(/driver-login)로 바로 연다
+    window.__kpDriverLeaving = true;
+    await signOut(auth).catch(() => {});
+    window.location.replace("/driver-login");
   };
 
   // ─────────── ⭐ 2026-11-05 기사앱 팝업·알림 ───────────

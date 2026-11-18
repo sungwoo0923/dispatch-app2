@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 💬 2026-11-18 사내문자 — 업무폰용 앱(office)에만 들어가는 문자 권한 · 서비스(빌드할 때 main 매니페스트와 합쳐진다)
+     ⚠ 플레이스토어용(play)에는 절대 넣지 말 것 — 구글 플레이는 기본 문자 앱이 아닌 앱의 문자 권한을 막는다 -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- 💬 2026-11-18 사내문자 — 직원 업무폰 ↔ PC 배차 프로그램 문자 연결(설정 › 업무폰 문자 연결을 켠 폰만 동작) -->
+        <service
+            android:name=".KpSmsService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="remoteMessaging" />
+        <receiver
+            android:name=".KpSmsReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name=".KpSmsBootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+    <!-- 직원이 설정 › 업무폰 문자 연결을 직접 켤 때만 권한을 묻는다 -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+</manifest>

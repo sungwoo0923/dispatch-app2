@@ -18,6 +18,7 @@ TESTS=(
   scripts/payrollPw.test.cjs
   scripts/hubTests/hub3_unit.test.mjs
   scripts/hubTests/scan_map.test.mjs
+  scripts/officeSms.test.mjs
 )
 fail=0
 : > "$OUT/summary.txt"

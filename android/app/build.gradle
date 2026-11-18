@@ -33,6 +33,24 @@ android {
             keyPassword 'android'
         }
     }
+    // 🏢 2026-11-18 앱을 두 가지로 만든다(따로 설치 · 한 폰에 둘 다 깔 수 있다)
+    //  · play  : "LogisWeb 기사" (com.kpflow.driver) — 기사님용 · 플레이스토어. 문자 권한이 "없다"
+    //            (구글 플레이는 기본 문자 앱이 아닌 앱의 문자 권한을 막는다)
+    //  · office: "LogisWeb" (com.kpflow.logisweb) — 운송사 직원 · 화주사용. 기사 로그인 없음 + 사내문자(업무폰 문자 연결)
+    //            회사가 APK(LogisWeb.apk)로 직접 설치. 이름 · 문자 권한 · 서비스는 src/office/ 에만 있다
+    //            (main 에 문자 권한을 넣으면 플레이 심사에서 기사앱 전체가 거절된다)
+    //            시작 주소 /login · 화면 식별(LogisWebOffice)은 CI가 office 용 capacitor.config.json 을 만들어 넣는다
+    flavorDimensions = ["dist"]
+    productFlavors {
+        play {
+            dimension "dist"
+        }
+        office {
+            dimension "dist"
+            applicationId "com.kpflow.logisweb"
+            versionNameSuffix "-office"
+        }
+    }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
@@ -71,4 +89,9 @@ try {
     }
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
+
+// 🏢 2026-11-18 LogisWeb(office) 앱은 네이티브 푸시를 쓰지 않는다 — google-services.json 에 이 패키지가 없어도 빌드되게 처리를 끈다
+tasks.configureEach { t ->
+    if (t.name ==~ /process[A-Za-z]*Office[A-Za-z]*GoogleServices/) t.enabled = false
 }

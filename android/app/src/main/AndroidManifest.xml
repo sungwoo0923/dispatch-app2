@@ -59,6 +59,8 @@
     <!-- 배터리 최적화 제외 요청(절전으로 추적이 끊기지 않게) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- 💬 2026-11-18 사내문자 문자 권한은 업무폰용(office)에만 — src/office/AndroidManifest.xml -->
+
     <!-- 백그라운드 GPS 서비스는 @capacitor-community/background-geolocation 플러그인
     모듈 자체의 AndroidManifest.xml(gradle manifest merge)에서 올바른 클래스명으로
     선언되므로 여기서 중복 선언하지 않는다. (이전에 클래스명이 잘못 적혀 있던
