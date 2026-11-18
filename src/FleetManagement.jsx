@@ -1,4 +1,6 @@
 // ======================= FleetManagement.jsx =======================
+import { buildDriverCopyText } from "./driverCopyText"; // 📋 2026-11-18 기사복사 문구 — PC · 모바일 같은 글
+import { useCopyTemplates } from "./copyTemplates";
 import { isFleetGrade } from "./fleetGradesCore"; // 🚛 지입차 구분(지입·직영·임대·분양) 한 곳
 import { orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수수료 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표와 같은 식
 import { myNameNow } from "./userNames";
@@ -1984,48 +1986,7 @@ function handleSendToDriver(driver, orders, selectedDate, rangeEndDate) {
 }
 
 // ─── 오더 우클릭 메뉴 — "기사복사" 텍스트 생성 ────────────────────────────────
-// ⭐ 사용자 요청 — DispatchApp.jsx "기사복사 선택 모달"(복사 방식 선택)과 완전동일한
-// 포맷으로 노선표 오더 한 건을 복사할 수 있어야 한다. 이 화면엔 경유지(상차/하차
-// 경유목록)·거래처(mergedClients) 데이터가 없어 그 부분만 제외하고, 경유지가 없는
-// (가장 흔한) 건에 대해선 원본과 동일한 텍스트가 나오도록 포팅했다.
-function parseWon(v) {
-  return Number(String(v || "0").replace(/[^\d]/g, "")) || 0;
-}
-
-function getYoil(dateStr) {
-  if (!dateStr) return "";
-  const date = new Date(dateStr);
-  return ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"][date.getDay()];
-}
-
-// kg/g으로 입력해도 항상 톤 단위 문자열로 통일 (DispatchApp.jsx toTonUnit과 동일)
-function toTonUnit(v = "") {
-  const str = String(v ?? "").trim();
-  if (!str) return "";
-  const m = str.match(/^([\d.]+)\s*(kg|g|톤|ton|t)?$/i);
-  if (!m) return str;
-  const num = parseFloat(m[1]);
-  if (isNaN(num)) return str;
-  const unit = (m[2] || "톤").toLowerCase();
-  let tons;
-  if (unit === "kg") tons = num / 1000;
-  else if (unit === "g") tons = num / 1000000;
-  else tons = num;
-  let formatted = tons.toFixed(3).replace(/\.?0+$/, "");
-  if (formatted === "" || formatted === "-") formatted = "0";
-  return `${formatted}톤`;
-}
-
-function buildContactLine(name, phone) {
-  if (!name && !phone) return "";
-  const cleanName = String(name || "").trim();
-  const cleanPhone = String(phone || "").trim();
-  if (cleanPhone) return `담당자 : ${cleanName} (${formatPhone(cleanPhone)})`;
-  return `담당자 : ${cleanName}`;
-}
-
-// 기사전달용 업로드 링크 — DispatchApp.jsx buildShortUploadUrl과 동일하게 /u/{code}로
-// 줄여 shortLinks에 저장한다. 토큰이 없거나 잠겨있으면 새로 발급.
+// 📋 2026-11-18 문구는 src/driverCopyText.js(배차현황 · 실시간배차현황 · 모바일과 같은 글). 여기선 업로드 링크만 만든다
 function buildFleetUploadUrl(order) {
   // ⭐ 2026-11-08 보안 — 토큰 발급 시각도 남긴다(서버가 30일 뒤 만료 · 만료 2일 전부터 새로 발급)
   const { token, patch } = ensureUploadToken(order);
@@ -2039,133 +2000,11 @@ function buildFleetUploadUrl(order) {
 }
 
 function buildOrderCopyText(order, driver, mode) {
-  const r = order;
-  const plate = driver?.차량번호 || r.차량번호 || "";
-  const name = driver?.이름 || r.이름 || "";
-  const phone = formatPhone(driver?.전화번호 || r.전화번호 || "");
-  const fare = parseWon(r.청구운임);
-  const pay = r.지급방식 || "";
-  const payLabel = pay === "계산서" ? "부가세별도" : (pay === "선불" || pay === "착불") ? pay : "";
-  const yoil = getYoil(r.상차일 || "");
-
-  if (mode === "basic") return `${plate} ${name} ${phone}`;
-  if (mode === "fare") {
-    return `${plate} ${name} ${phone}
-${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
-  }
-
-  // 익일/지정일 하차 판별 (전체 상세 · 기사 전달용 공통)
-  const pickupTime = (r.상차시간 || "").trim() || "즉시";
-  const dropTimeRaw = (r.하차시간 || "").trim() || "즉시";
-  let dateNotice = "";
-  let dropTimeText = dropTimeRaw;
-  if (r.상차일 && r.하차일) {
-    const s = new Date(r.상차일), e = new Date(r.하차일);
-    const s0 = new Date(s.getFullYear(), s.getMonth(), s.getDate());
-    const e0 = new Date(e.getFullYear(), e.getMonth(), e.getDate());
-    const diffDays = Math.round((e0 - s0) / (1000 * 60 * 60 * 24));
-    const sm = s.getMonth() + 1, sd = s.getDate(), em = e.getMonth() + 1, ed = e.getDate();
-    if (diffDays === 1) {
-      dateNotice = `익일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
-      dropTimeText = `${em}/${ed} ${dropTimeRaw}`;
-    } else if (diffDays >= 2) {
-      dateNotice = `지정일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`;
-      dropTimeText = `${em}/${ed} ${dropTimeRaw}`;
-    }
-  }
-
-  const pCon = buildContactLine(r.상차지담당자, r.상차지담당자번호);
-  const dCon = buildContactLine(r.하차지담당자, r.하차지담당자번호);
-  const totTon = r.차량톤수 ? toTonUnit(r.차량톤수) : "-";
-  const totCargo = (r.화물내용 && r.화물내용 !== "없음") ? r.화물내용 : "";
-
-  if (mode === "full") {
-    const fanOut = `상차지 : ${r.상차지명 || "-"}
-${r.상차지주소 || "-"}${pCon ? `\n${pCon}` : ""}
-상차시간 : ${pickupTime}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
-상차방법 : ${r.상차방법 || "-"}
-
-하차지 : ${r.하차지명 || "-"}
-${r.하차지주소 || "-"}${dCon ? `\n${dCon}` : ""}
-하차시간 : ${dropTimeText}${r.하차시간기준 ? ` (${r.하차시간기준})` : ""}
-하차방법 : ${r.하차방법 || "-"}`;
-
-    return `${dateNotice}${r.상차일 || ""} ${yoil}${r.운행유형 === "왕복" ? "\n[왕복운행]" : ""}
-
-${fanOut}
-
-중량 : ${totTon}${totCargo ? ` / ${totCargo}` : ""} ${r.차량종류 || ""}
-결제방법 : ${r.지급방식 || "-"}
-
-${plate} ${name} ${phone}
-${fare.toLocaleString()}원 ${payLabel} 배차되었습니다.`;
-  }
-
-  if (mode === "driver") {
-    const isCold = /냉장|냉동/.test(r.차량종류 || "");
-    const dateText = `${r.상차일 || ""} ${yoil}`;
-    const driverNote = (r.전달사항 || "").trim();
-    const driverNoteText = driverNote ? `\n\n◆ 전달사항\n${driverNote}` : "";
-    const uploadUrl = buildFleetUploadUrl(r);
-    const companyName = (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim() || "-";
-
-    const fanOutD = `상차 : ${r.상차지명 || "-"} / ${r.상차시간 || "즉시"}${r.상차시간기준 ? ` (${r.상차시간기준})` : ""}
-${r.상차지주소 || ""}${pCon ? `\n${pCon}` : ""}
-상차방법 : ${r.상차방법 || "-"}
-
-하차 : ${r.하차지명 || "-"} / ${dropTimeText}${r.하차시간기준 ? ` (${r.하차시간기준})` : ""}
-${r.하차지주소 || ""}${dCon ? `\n${dCon}` : ""}
-하차방법 : ${r.하차방법 || "-"}`;
-
-    return `[파렛전표/거래명세서 업로드]
-(파렛전표/명세서없으면 미업로드)
-↓↓↓↓↓↓↓↓↓↓↓↓
-${uploadUrl}
-
-${isCold ? "*냉장(0~10도유지),냉동(-18도이하)*\n" : "*관련 서류 업로드 필수*\n"}${r.지급방식 === "착불" ? "*착불건입니다*" : r.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*"}
-${dateNotice}${dateText}${r.운행유형 === "왕복" ? "\n[왕복운행]" : ""}
-
-${fanOutD}
-
-화물 : ${totTon}${totCargo ? ` / ${totCargo}` : ""} ${r.차량종류 || "-"}
-결제방법 : ${r.지급방식 === "계산서" ? `계산서(${r.배차방식 === "24시" ? "24시발행" : companyName})` : (r.지급방식 || "-")}${driverNoteText}
-
-※ 인수증(파렛전표) 서명을 받은 후 업로드 필수
-KPP/아주파렛트 상차 시 각각 전표 업로드 필수
-${isCold ? "※ 거래명세서/타코메타 기록지 함께 촬영업로드" : "※ 거래명세서 서류 업로드"}
-※ 서류/전표 없는 건은 업로드하지 마세요
-※ 미업로드 시 운임 지급 지연될 수 있습니다`.replace(/\n{3,}/g, "\n\n").trim();
-  }
-
-  return "";
+  // 📋 2026-11-18 배차현황 · 실시간배차현황 · 모바일 기사복사와 같은 글(src/driverCopyText.js) — 경유지 · 회사 ⚙ 문구 설정도 그대로
+  const r = { ...order, 차량번호: driver?.차량번호 || order.차량번호 || "", 이름: driver?.이름 || order.이름 || "", 전화번호: driver?.전화번호 || order.전화번호 || "" };
+  return buildDriverCopyText(r, mode, { driverNote: order.전달사항, uploadUrlOf: () => buildFleetUploadUrl(order) });
 }
 
-// ─── 오더 재발송 — 기사확인상태:"대기"를 null→"대기"로 두 번 빠르게 써서
-// Cloud Function(notifyFleetDriverNewOrder)의 "새로 대기로 바뀐 경우만" 가드를
-// 다시 통과시킨다(functions/index.js 561행). 차량번호는 그대로 두므로 다른
-// 안전망 로직과는 충돌하지 않는다 — 순수 클라이언트 처리로 충분하다.
-async function resendOrderToDriver(order, driver) {
-  const col = order.__col || "orders";
-  try {
-    await updateDoc(doc(db, col, order._id), { 기사확인상태: null });
-    await new Promise((res) => setTimeout(res, 400));
-    await updateDoc(doc(db, col, order._id), { 기사확인상태: "대기" });
-    addDoc(collection(db, "driver_notifications"), {
-      driverId: driver.id,
-      type: "new_order",
-      orderId: order._id,
-      title: "배차오더가 도착했습니다",
-      body: `${order.거래처명 || ""} ${order.상차지명 || "-"} → ${order.하차지명 || "-"}`,
-      createdAt: serverTimestamp(),
-      read: false,
-    }).catch(() => {});
-    window.alert("기사에게 오더를 다시 전송했습니다.");
-  } catch {
-    window.alert("재발송에 실패했습니다. 잠시 후 다시 시도해주세요.");
-  }
-}
-
-// ─── 주소 복사 — 상/하차지 주소를 내비게이션 앱 등에 바로 붙여넣을 수 있게 ──────
 function copyOrderAddress(order) {
   const text = [
     `${order.상차지명 || ""} ${order.상차지주소 || ""}`.trim(),
@@ -2300,6 +2139,7 @@ function OrderContextMenu({ x, y, items, onClose }) {
 // 건에 대해 그대로 제공. "기사 전달용"은 원본처럼 전송 전 문자 확인 팝업을 띄운다.
 function OrderCopyModal({ order, driver, onClose }) {
   const [smsConfirm, setSmsConfirm] = useState(null);
+  useCopyTemplates(); // 📋 회사 기사복사 문구 설정 실시간 반영
 
   const doCopy = (mode) => {
     const text = buildOrderCopyText(order, driver, mode);

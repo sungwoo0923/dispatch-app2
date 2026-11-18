@@ -175,6 +175,9 @@ import { kpConfirm } from "../kpDialog";
 import { profitCls } from "../marginPct"; // ⭐ 2026-11-17 수수료(이익) 색 — 플러스 빨강 · 마이너스 파랑
 import { stripSheetLink } from "../sheetLinkFields"; // ⭐ 2026-11-17 새 오더에 구글시트 줄 주소를 넘기지 않는다
 import { ensureUploadToken } from "../uploadTokenClient"; // ⭐ 2026-11-08 업로드 링크 토큰(발급 시각·만료)
+import { buildDriverCopyText } from "../driverCopyText"; // 📋 2026-11-18 기사복사 문구 — PC와 같은 글
+import { useCopyTemplates, getSimpleTpl } from "../copyTemplates";
+import { buildSimpleList } from "../copySimple";
 
 
 
@@ -17273,6 +17276,7 @@ const pickDrop = (c) => {
 
 function CopySelectModal({ order, onClose, onAfterFullCopy, onAfterDriverCopy, onCopySuccess, cardVersionB = false }) {
   const [smsConfirm, setSmsConfirm] = useState(null); // { phone, body }
+  useCopyTemplates(); // 📋 2026-11-18 회사 기사복사 문구 설정(PC ⚙ 문구 설정) 실시간 반영
   const [companyBankData, setCompanyBankData] = useState(null);
 
   useEffect(() => {
@@ -17412,264 +17416,52 @@ const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 �
     }
   };
 
+  // 📋 2026-11-18 업로드 링크(오더별 토큰) — 기사님이 업로드를 완료하면 토큰이 잠기고, 다시 복사하면 새 토큰
+  const uploadUrlOf = (o) => {
+    const oid = o._id || o.id;
+    const col = o.__col || o._col || "dispatch";
+    // ⭐ 2026-11-08 보안 — 토큰 발급 시각도 남긴다(서버가 30일 뒤 만료 · 만료 2일 전부터 새로 발급)
+    const { token, patch } = ensureUploadToken(o);
+    if (patch) {
+      try { Object.assign(o, patch); } catch { /* 고칠 수 없는 객체면 무시 */ }
+      // ⭐ oid가 없으면 doc()이 예외를 던져 복사 자체가 실패했다 — oid가 있을 때만 문서 갱신
+      if (oid) {
+        updateDoc(doc(db, col, oid), patch).catch(() => {});
+        if (o._transmittedOrderId) updateDoc(doc(db, "orders", o._transmittedOrderId), patch).catch(() => {});
+        else if (o.originCol && o.originId) updateDoc(doc(db, o.originCol, o.originId), patch).catch(() => {});
+      }
+    }
+    return buildShortUploadUrlMobile(oid, token);
+  };
+
+  // 📋 2026-11-18 PC 기사복사와 같은 글 — 문구는 src/driverCopyText.js(PC 배차현황 기사복사와 한 곳) · 회사 ⚙ 문구 설정도 그대로 적용
   const copyImpl = async (type) => {
     let text = "";
+    // 모바일에서 예전 이름으로 저장된 칸(기사명 · 차종 · 톤수)도 PC 칸 이름으로 맞춰 넘긴다
+    const r = { ...order, 이름: order.이름 || order.기사명 || order.기사 || "", 차량종류: order.차량종류 || order.차종 || "", 차량톤수: order.차량톤수 || order.톤수 || "" };
+    const company = localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "";
 
-    /* =========================
-       1⃣ 차량번호 / 기사명 / 전화번호
-    ========================= */
-    if (type === "simple") {
-      text = `${order.차량번호 || "-"} ${driverName} ${driverPhone}`;
-    }
-
-    /* =========================
-       2⃣ 운임 포함 (기존 함수 유지)
-    ========================= */
-    else if (type === "fare") {
-      text = buildOrderCopyText(order);
-    }
-
-    /* =========================
-       3⃣ 전체 상세 (요청 포맷)
-    ========================= */
-    else if (type === "full") {
-      const dayDiff = diffDays(order.상차일, order.하차일);
-
-      let header = "";
-      if (dayDiff === 1) {
-        header = `익일 하차 건 (상차: ${md(order.상차일)} → 하차: ${md(order.하차일)})`;
-      } else if (dayDiff >= 2) {
-        header = `지정일 하차 건 (상차: ${md(order.상차일)} → 하차: ${md(order.하차일)})`;
+    if (type === "list") {
+      // 간단 목록(PC와 같은 틀) — "11/16 거래처 구간 톤수 N대" + 차량 · 기사 · 연락처
+      text = buildSimpleList([r], getSimpleTpl());
+    } else {
+      let noticeBlock = "";
+      if (type === "driver") {
+        const [_pNoticeM, _dNoticeM] = await Promise.race([
+          noticePrefetchRef.current || Promise.resolve(["", ""]),
+          new Promise((res) => setTimeout(() => res(["", ""]), 800)),
+        ]);
+        noticeBlock = [...new Set([_pNoticeM, _dNoticeM].filter(Boolean))].join("\n\n");
       }
-
-      const pickupTime = timeOrNow(order.상차시간) + (order.상차시간기준 ? ` ${order.상차시간기준}` : "");
-      const dropTimeRaw = timeOrNow(order.하차시간) + (order.하차시간기준 ? ` ${order.하차시간기준}` : "");
-      const dropTime = dayDiff >= 1 ? `${md(order.하차일)} ${dropTimeRaw}` : dropTimeRaw;
-
-      // 경유지 파싱
-      const _ssM=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p))return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
-      const _ctM=(s)=>{const raw=String(s.화물내용||"").replace(/^\s*없음\s*/,"");if(/파레트|파렛트|박스|통/.test(raw))return raw;const qty=raw||s.화물수량||"";const tp=s.화물타입||"";if(!qty)return"";return tp&&tp!=="없음"?`${qty}${tp}`:qty;};
-      const _ttM=(s)=>{const raw=String(s.차량톤수||"").replace(/^\s*없음\s*/,"");if(/톤|kg/.test(raw))return toTonUnit(raw);const val=s.톤수값||raw||"";const tp=s.톤수타입||"";if(!val)return"";return toTonUnit(tp&&tp!=="없음"?`${val}${tp}`:val);};
-      const _pkgM=(str)=>{const s=String(str||"").trim().replace(/,/g,"");if(!s)return 0;const kg=s.match(/([\d.]+)\s*kg/i);if(kg)return parseFloat(kg[1]);const ton=s.match(/([\d.]+)\s*톤/);return ton?parseFloat(ton[1])*1000:0;};
-      const _fkgM=(kg)=>{if(!kg)return"";if(kg>=1000){const t=kg/1000;return t.toFixed(3).replace(/\.?0+$/,"")+"톤";}return`${kg}kg`;};
-      const _scM=(main,stops)=>{const mainParts=main?main.split("+").map(s=>s.trim()).filter(Boolean):[];const all=[...mainParts,...stops.map(_ctM)].filter(Boolean);const byU={};const unk=[];for(const c of all){let hit=false;for(const u of["파레트","파렛트","박스","통","바구니"]){if(c.endsWith(u)){const n=parseFloat(c.slice(0,-u.length));if(!isNaN(n)){const k=u==="파렛트"?"파레트":u;byU[k]=(byU[k]||0)+n;hit=true;break;}}}if(!hit&&c)unk.push(c);}return[...Object.entries(byU).map(([u,n])=>`${n}${u}`),...unk].join("+");};
-
-      const _pStopsMf=_ssM(order.경유상차목록||order.경유지_상차).filter(s=>s?.업체명?.trim());
-      const _dStopsMf=_ssM(order.경유하차목록||order.경유지_하차).filter(s=>s?.업체명?.trim());
-      const _totKgMf=_pkgM(order.차량톤수)+_dStopsMf.reduce((a,s)=>a+_pkgM(_ttM(s)),0)+_pStopsMf.reduce((a,s)=>a+_pkgM(_ttM(s)),0);
-      const _totTonMf=_fkgM(_totKgMf)||normalizeTon(order.차량톤수)||"-";
-      const _totCargoMf=_scM(order.화물내용,[..._pStopsMf,..._dStopsMf])||order.화물내용||"";
-      const _pHasMf=_pStopsMf.length>0;
-      const _dHasMf=_dStopsMf.length>0;
-      const _pNumMf=_pHasMf?`${_pStopsMf.length+1}.`:"";
-      const _dNumMf=_dHasMf?`${_dStopsMf.length+1}.`:"";
-      const _pConMf=buildManagerLine(order.상차지담당자,order.상차지담당자번호);
-      const _dConMf=buildManagerLine(order.하차지담당자,order.하차지담당자번호);
-      const _pStopsTextMf=_pHasMf?_pStopsMf.map((s,i)=>{const cargo=_ctM(s);const ton=_ttM(s);return`${i+1}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${(s.담당자||s.담당자명)?`\n담당자 : ${s.담당자||s.담당자명}${(s.담당자번호||s.연락처||s.전화번호)?` (${formatPhone(s.담당자번호||s.연락처||s.전화번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-      const _dStopsTextMf=_dHasMf?_dStopsMf.map((s,i)=>{const cargo=_ctM(s);const ton=_ttM(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${(s.담당자||s.담당자명)?`\n담당자 : ${s.담당자||s.담당자명}${(s.담당자번호||s.연락처||s.전화번호)?` (${formatPhone(s.담당자번호||s.연락처||s.전화번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-      const _mainDCargoMf=(_dHasMf||_pHasMf)&&order.화물내용?`\n화물내용 : ${order.화물내용}`:"";
-      const _mainDTonMf=(_dHasMf||_pHasMf)&&order.차량톤수?`\n화물톤수 : ${normalizeTon(order.차량톤수)}`:"";
-
-      // 🔗 상차/하차 경유지 수가 같으면 연속 경유(체인) 건 — N번째 상차/하차를 한 쌍으로
-      // 묶어서 보여준다. (상세 설명은 DispatchApp.jsx의 isChainD 주석 참고)
-      const isChainMf = _pHasMf && _dHasMf && _pStopsMf.length === _dStopsMf.length;
-      const _fanOutBlockMf = `${_pStopsTextMf ? _pStopsTextMf+"\n\n" : ""}${_pNumMf}상차지 : ${order.상차지명||"-"}
-${order.상차지주소||""}${_pConMf?`\n${_pConMf}`:""}
-상차시간 : ${pickupTime}
-상차방법 : ${order.상차방법||"-"}
-
-${_dStopsTextMf ? _dStopsTextMf+"\n\n" : ""}${_dNumMf}하차지 : ${order.하차지명||"-"}
-${order.하차지주소||""}${_dConMf?`\n${_dConMf}`:""}${_mainDCargoMf}${_mainDTonMf}
-하차시간 : ${dropTime}
-하차방법 : ${order.하차방법||"-"}`;
-
-      const _chainBlockMf = isChainMf ? (() => {
-        const pChainMf = [
-          { name: order.상차지명, addr: order.상차지주소, contact: _pConMf, cargo: order.화물내용, ton: order.차량톤수 ? normalizeTon(order.차량톤수) : "", method: order.상차방법, date: order.상차일, time: pickupTime },
-          ..._pStopsMf.map(s => ({ name: s.업체명, addr: s.주소, contact: buildManagerLine(s.담당자||s.담당자명, s.담당자번호||s.연락처||s.전화번호), cargo: _ctM(s), ton: _ttM(s), method: s.방법, date: s.상차일, time: s.상차시간 || "즉시" })),
-        ];
-        const dChainMf = [
-          { name: order.하차지명, addr: order.하차지주소, contact: _dConMf, cargo: order.화물내용, ton: order.차량톤수 ? normalizeTon(order.차량톤수) : "", method: order.하차방법, date: order.하차일, time: dropTimeRaw },
-          ..._dStopsMf.map(s => ({ name: s.업체명, addr: s.주소, contact: buildManagerLine(s.담당자||s.담당자명, s.담당자번호||s.연락처||s.전화번호), cargo: _ctM(s), ton: _ttM(s), method: s.방법, date: s.하차일, time: s.하차시간 || "즉시" })),
-        ];
-        const nMf = pChainMf.length;
-        const renderLegMf = (e, num, kind, timeOverride) => {
-          const t = timeOverride ?? e.time;
-          return `${num}${kind}지 : ${e.name || "-"}
-${e.addr || ""}${e.contact ? `\n${e.contact}` : ""}${e.cargo ? `\n화물내용 : ${e.cargo}` : ""}${e.ton ? `\n화물톤수 : ${e.ton}` : ""}
-${kind}시간 : ${t}
-${kind}방법 : ${e.method || "-"}`;
-        };
-        const legTextsMf = [];
-        for (let i = 1; i <= nMf; i++) {
-          const p = pChainMf[i - 1], d = dChainMf[i - 1];
-          const dTime = i === 1 ? dropTime : (diffDays(p.date, d.date) >= 1 ? `${md(d.date)} ${d.time}` : d.time);
-          legTextsMf.push(`${renderLegMf(p, `${i}.`, "상차")}\n\n${renderLegMf(d, `${i}.`, "하차", dTime)}`);
-        }
-        let outMf = legTextsMf[0];
-        for (let i = 1; i < nMf; i++) {
-          const diffMf = diffDays(pChainMf[i - 1].date, dChainMf[i].date);
-          const sepMf = diffMf === 1
-            ? `익일 하차 건 (상차: ${md(pChainMf[i - 1].date)} → 하차: ${md(dChainMf[i].date)})`
-            : diffMf >= 2
-              ? `지정일 하차 건 (상차: ${md(pChainMf[i - 1].date)} → 하차: ${md(dChainMf[i].date)})`
-              : "";
-          outMf += sepMf ? `\n\n${sepMf}\n\n${legTextsMf[i]}` : `\n\n${legTextsMf[i]}`;
-        }
-        return outMf;
-      })() : "";
-
-      const coreBlockMf = isChainMf ? _chainBlockMf : _fanOutBlockMf;
-
-      text = `
-${isChainMf ? "" : (header ? header + "\n\n" : "")}${order.상차일} ${getYoil(order.상차일)}${order.운행유형 === "왕복" ? "\n[왕복운행]" : ""}${rotationNotice(order)}
-
-${coreBlockMf}
-
-중량 : ${_totTonMf}${_totCargoMf?` / ${_totCargoMf}`:""} ${order.차량종류||order.차종||""}
-결제방법 : ${order.지급방식 || "-"}
-
-${order.차량번호} ${driverName} ${driverPhone}
-${Number(order.청구운임||0).toLocaleString()}원 ${(()=>{const pt=order.지급방식||"";return pt==="계산서"?"부가세별도":pt==="착불"?"착불":pt==="선불"?"선불":"부가세별도";})()  } 배차되었습니다.
-`.trim();
-}
-    else if (type === "driver") {
-      const carTypeText = String(order.차량종류 || order.차종 || "");
-      const isColdVeh = carTypeText.includes("냉장") || carTypeText.includes("냉동");
-      const [_pNoticeM, _dNoticeM] = await Promise.race([
-        noticePrefetchRef.current || Promise.resolve(["", ""]),
-        new Promise((r) => setTimeout(() => r(["", ""]), 800)),
-      ]);
-      const noticeBlock = [...new Set([_pNoticeM, _dNoticeM].filter(Boolean))].join("\n\n");
-
-      // 업로드 링크는 오더별 토큰을 함께 담는다 — 기사님이 업로드를 완료(등록)하면
-      // 이 토큰은 잠기고, 이후 "기사전달용" 복사를 다시 하면 새 토큰이 발급되어
-      // 예전 링크(구 토큰)로는 더 이상 접속할 수 없게 된다.
-      const uploadUrl = (() => {
-        const oid = order._id || order.id;
-        const col = order.__col || order._col || "dispatch";
-        // ⭐ 2026-11-08 보안 — 토큰 발급 시각도 남긴다(서버가 30일 뒤 만료 · 만료 2일 전부터 새로 발급)
-        const { token, patch } = ensureUploadToken(order);
-        if (patch) {
-          // ⭐ oid가 없으면(드물게 order 객체가 id를 못 들고 있는 경우) doc()이 그
-          // 자리에서 예외를 던져 전체 복사 자체가 조용히 실패했다 — oid가 있을 때만
-          // 문서 갱신을 시도하고, 없어도 링크 자체는(토큰만으로) 계속 만들어준다.
-          if (oid) {
-            updateDoc(doc(db, col, oid), patch).catch(() => {});
-            if (order._transmittedOrderId) {
-              updateDoc(doc(db, "orders", order._transmittedOrderId), patch).catch(() => {});
-            } else if (order.originCol && order.originId) {
-              updateDoc(doc(db, order.originCol, order.originId), patch).catch(() => {});
-            }
-          }
-        }
-        return buildShortUploadUrlMobile(oid, token);
-      })();
-
-      const pm = (n, p) => (!n && !p) ? "" : p ? `담당자 : ${n || ""} (${formatPhone(p)})` : `담당자 : ${n}`;
-
-      let dateNotice2 = "";
-      let dropTimeText2 = timeOrNow(order.하차시간) + (order.하차시간기준 ? ` ${order.하차시간기준}` : "");
-      if (order.상차일 && order.하차일) {
-        const s0 = new Date(order.상차일);
-        const e0 = new Date(order.하차일);
-        const diff2 = Math.round((e0 - s0) / (1000 * 60 * 60 * 24));
-        const sm = s0.getMonth()+1, sd = s0.getDate();
-        const em = e0.getMonth()+1, ed = e0.getDate();
-        if (diff2 === 1) { dateNotice2 = `익일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`; dropTimeText2 = `${em}/${ed} ${timeOrNow(order.하차시간)}${order.하차시간기준 ? ` ${order.하차시간기준}` : ""}`; }
-        else if (diff2 >= 2) { dateNotice2 = `지정일 하차 건 (상차: ${sm}/${sd} → 하차: ${em}/${ed})\n\n`; dropTimeText2 = `${em}/${ed} ${timeOrNow(order.하차시간)}${order.하차시간기준 ? ` ${order.하차시간기준}` : ""}`; }
-      }
-
-      // 경유지 파싱
-      const _ssMd=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p))return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
-      const _ctMd=(s)=>{const raw=String(s.화물내용||"").replace(/^\s*없음\s*/,"");if(/파레트|파렛트|박스|통/.test(raw))return raw;const qty=raw||s.화물수량||"";const tp=s.화물타입||"";if(!qty)return"";return tp&&tp!=="없음"?`${qty}${tp}`:qty;};
-      const _ttMd=(s)=>{const raw=String(s.차량톤수||"").replace(/^\s*없음\s*/,"");if(/톤|kg/.test(raw))return toTonUnit(raw);const val=s.톤수값||raw||"";const tp=s.톤수타입||"";if(!val)return"";return toTonUnit(tp&&tp!=="없음"?`${val}${tp}`:val);};
-      const _pkgMd=(str)=>{const s=String(str||"").trim().replace(/,/g,"");if(!s)return 0;const kg=s.match(/([\d.]+)\s*kg/i);if(kg)return parseFloat(kg[1]);const ton=s.match(/([\d.]+)\s*톤/);return ton?parseFloat(ton[1])*1000:0;};
-      const _fkgMd=(kg)=>{if(!kg)return"";if(kg>=1000){const t=kg/1000;return t.toFixed(3).replace(/\.?0+$/,"")+"톤";}return`${kg}kg`;};
-      const _scMd=(main,stops)=>{const mainParts=main?main.split("+").map(s=>s.trim()).filter(Boolean):[];const all=[...mainParts,...stops.map(_ctMd)].filter(Boolean);const byU={};const unk=[];for(const c of all){let hit=false;for(const u of["파레트","파렛트","박스","통","바구니"]){if(c.endsWith(u)){const n=parseFloat(c.slice(0,-u.length));if(!isNaN(n)){const k=u==="파렛트"?"파레트":u;byU[k]=(byU[k]||0)+n;hit=true;break;}}}if(!hit&&c)unk.push(c);}return[...Object.entries(byU).map(([u,n])=>`${n}${u}`),...unk].join("+");};
-
-      const _pStopsMd=_ssMd(order.경유상차목록||order.경유지_상차).filter(s=>s?.업체명?.trim());
-      const _dStopsMd=_ssMd(order.경유하차목록||order.경유지_하차).filter(s=>s?.업체명?.trim());
-      const _totKgMd=_pkgMd(order.차량톤수)+_dStopsMd.reduce((a,s)=>a+_pkgMd(_ttMd(s)),0)+_pStopsMd.reduce((a,s)=>a+_pkgMd(_ttMd(s)),0);
-      const _totTonMd=_fkgMd(_totKgMd)||normalizeTon(order.차량톤수)||"-";
-      const _totCargoMd=_scMd(order.화물내용,[..._pStopsMd,..._dStopsMd])||order.화물내용||"";
-      const _pHasMd=_pStopsMd.length>0;
-      const _dHasMd=_dStopsMd.length>0;
-      const _pNumMd=_pHasMd?`${_pStopsMd.length+1}.`:"";
-      const _dNumMd=_dHasMd?`${_dStopsMd.length+1}.`:"";
-      const pickupMgr = pm(order.상차지담당자, order.상차지담당자번호);
-      const dropMgr = pm(order.하차지담당자, order.하차지담당자번호);
-      const _pStopsTextMd=_pHasMd?_pStopsMd.map((s,i)=>{const cargo=_ctMd(s);const ton=_ttMd(s);return`${i+1}.상차경유지 : ${s.업체명||"-"}\n${s.주소||""}${(s.담당자||s.담당자명)?`\n담당자 : ${s.담당자||s.담당자명}${(s.담당자번호||s.연락처||s.전화번호)?` (${formatPhone(s.담당자번호||s.연락처||s.전화번호)})`:""}`:``}${s.상차시간?`\n상차시간 : ${s.상차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n상차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-      const _dStopsTextMd=_dHasMd?_dStopsMd.map((s,i)=>{const cargo=_ctMd(s);const ton=_ttMd(s);return`${i+1}.하차경유지 : ${s.업체명||"-"}\n${s.주소||""}${(s.담당자||s.담당자명)?`\n담당자 : ${s.담당자||s.담당자명}${(s.담당자번호||s.연락처||s.전화번호)?` (${formatPhone(s.담당자번호||s.연락처||s.전화번호)})`:""}`:``}${s.하차시간?`\n하차시간 : ${s.하차시간}`:""}${cargo?`\n화물내용 : ${cargo}`:""}${ton?`\n화물톤수 : ${ton}`:""}${s.방법?`\n하차방법 : ${s.방법}`:``}`;}).join("\n"):"";
-      const _mainDCargoMd=(_dHasMd||_pHasMd)&&order.화물내용?`\n화물내용 : ${order.화물내용}`:"";
-      const _mainDTonMd=(_dHasMd||_pHasMd)&&order.차량톤수?`\n화물톤수 : ${normalizeTon(order.차량톤수)}`:"";
-
-      // 🔗 상차/하차 경유지 수가 같으면 연속 경유(체인) 건 — N번째 상차/하차를 한 쌍으로
-      // 묶어서 보여준다. (상세 설명은 DispatchApp.jsx의 isChainD 주석 참고)
-      const isChainMd = _pHasMd && _dHasMd && _pStopsMd.length === _dStopsMd.length;
-      const _fanOutBlockMd = `${_pStopsTextMd ? _pStopsTextMd+"\n\n" : ""}${_pNumMd}상차 : ${order.상차지명||"-"} / ${timeOrNow(order.상차시간)}${order.상차시간기준 ? ` ${order.상차시간기준}` : ""}
-${order.상차지주소||""}${pickupMgr?`\n${pickupMgr}`:""}
-상차방법 : ${order.상차방법||"-"}
-
-${_dStopsTextMd ? _dStopsTextMd+"\n\n" : ""}${_dNumMd}하차 : ${order.하차지명||"-"} / ${dropTimeText2}
-${order.하차지주소||""}${dropMgr?`\n${dropMgr}`:""}${_mainDCargoMd}${_mainDTonMd}
-하차방법 : ${order.하차방법||"-"}`;
-
-      const _chainBlockMd = isChainMd ? (() => {
-        const pChainMd = [
-          { name: order.상차지명, addr: order.상차지주소, contact: pickupMgr, cargo: order.화물내용, ton: order.차량톤수 ? normalizeTon(order.차량톤수) : "", method: order.상차방법, date: order.상차일, time: timeOrNow(order.상차시간) + (order.상차시간기준 ? ` ${order.상차시간기준}` : "") },
-          ..._pStopsMd.map(s => ({ name: s.업체명, addr: s.주소, contact: pm(s.담당자||s.담당자명, s.담당자번호||s.연락처||s.전화번호), cargo: _ctMd(s), ton: _ttMd(s), method: s.방법, date: s.상차일, time: s.상차시간 || "즉시" })),
-        ];
-        const dChainMd = [
-          { name: order.하차지명, addr: order.하차지주소, contact: dropMgr, cargo: order.화물내용, ton: order.차량톤수 ? normalizeTon(order.차량톤수) : "", method: order.하차방법, date: order.하차일, time: timeOrNow(order.하차시간) },
-          ..._dStopsMd.map(s => ({ name: s.업체명, addr: s.주소, contact: pm(s.담당자||s.담당자명, s.담당자번호||s.연락처||s.전화번호), cargo: _ctMd(s), ton: _ttMd(s), method: s.방법, date: s.하차일, time: s.하차시간 || "즉시" })),
-        ];
-        const nMd = pChainMd.length;
-        const renderLegMd = (e, num, kind, timeOverride) => {
-          const t = timeOverride ?? e.time;
-          return `${num}${kind} : ${e.name || "-"} / ${t}
-${e.addr || ""}${e.contact ? `\n${e.contact}` : ""}${e.cargo ? `\n화물내용 : ${e.cargo}` : ""}${e.ton ? `\n화물톤수 : ${e.ton}` : ""}
-${kind}방법 : ${e.method || "-"}`;
-        };
-        const legTextsMd = [];
-        for (let i = 1; i <= nMd; i++) {
-          const p = pChainMd[i - 1], d = dChainMd[i - 1];
-          const dTime = i === 1 ? dropTimeText2 : (diffDays(p.date, d.date) >= 1 ? `${md(d.date)} ${d.time}` : d.time);
-          legTextsMd.push(`${renderLegMd(p, `${i}.`, "상차")}\n\n${renderLegMd(d, `${i}.`, "하차", dTime)}`);
-        }
-        let outMd = legTextsMd[0];
-        for (let i = 1; i < nMd; i++) {
-          const diffMd = diffDays(pChainMd[i - 1].date, dChainMd[i].date);
-          const sepMd = diffMd === 1
-            ? `익일 하차 건 (상차: ${md(pChainMd[i - 1].date)} → 하차: ${md(dChainMd[i].date)})`
-            : diffMd >= 2
-              ? `지정일 하차 건 (상차: ${md(pChainMd[i - 1].date)} → 하차: ${md(dChainMd[i].date)})`
-              : "";
-          outMd += sepMd ? `\n\n${sepMd}\n\n${legTextsMd[i]}` : `\n\n${legTextsMd[i]}`;
-        }
-        return outMd;
-      })() : "";
-
-      const coreBlockMd = isChainMd ? _chainBlockMd : _fanOutBlockMd;
-
-      text = `[파렛전표/거래명세서 업로드]
-미전송 시 운임 지급이 지연될 수 있습니다.
-↓↓↓↓↓↓↓↓↓↓↓↓
-${uploadUrl}
-
-${isColdVeh ? "*냉장(0~10도 유지), 냉동(-18도 이하)*\n" : "*관련 서류 업로드 필수*\n"}${order.지급방식 === "착불" ? "*착불건입니다*" : order.지급방식 === "선불" ? "*선불건입니다*" : "*결제일 링크 참고하세요*"}
-${isChainMd ? "" : dateNotice2}${order.상차일 || ""} ${getYoil(order.상차일)}${order.운행유형 === "왕복" ? "\n[왕복운행]" : ""}${rotationNotice(order)}
-
-${coreBlockMd}${order.전달사항?.trim() ? `\n\n◆ 전달사항\n${order.전달사항.trim()}` : ""}
-
-화물 : ${_totTonMd}${_totCargoMd?` / ${_totCargoMd}`:""} ${order.차량종류||order.차종||""}
-결제방법 : ${order.지급방식 === "계산서" ? `계산서(${order.배차방식 === "24시" ? "24시발행" : (localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim() || "-"})` : (order.지급방식 || "-")}${noticeBlock?`\n\n${noticeBlock}`:""}
-
-※ 인수증(파렛전표) 서명 받은 후 업로드
-※ 거래명세서${isColdVeh ? "/타코메타 기록지" : ""} 함께 촬영
-※ 서류/전표 없는 건이면 업로드 하지마세요.
-※ 미업로드 시 운임 지급 지연될 수 있습니다`.replace(/\n{3,}/g, "\n\n").trim();
-}
+      const mode = type === "simple" ? "basic" : type; // 모바일 "simple" = PC "basic"(차량 · 기사 · 연락처)
+      text = buildDriverCopyText(r, mode, {
+        driverNote: order.전달사항,
+        noticeBlock,
+        // 토큰은 원래 오더 객체에 남겨 같은 창에서 다시 눌러도 같은 링크
+        uploadUrlOf: () => uploadUrlOf(order),
+        company,
+      });
+    }
 
     // ── 클립보드 복사 + 완료 처리
     if (!text) return;
@@ -17701,7 +17493,8 @@ ${coreBlockMd}${order.전달사항?.trim() ? `\n\n◆ 전달사항\n${order.전�
       return;
     }
 
-    if (type === "full") {
+    // 📋 2026-11-18 PC와 같게 — 차량·기사·연락처 / 운임 포함 / 전체 상세 복사 뒤 "전달완료로 바꿀까요?"(간단 목록 · 기사 전달용은 안 물음)
+    if (type === "full" || type === "simple" || type === "fare") {
       onCopySuccess?.("기사 문자 복사 완료");
       onAfterFullCopy?.();
       return;
@@ -17825,9 +17618,19 @@ ${coreBlockMd}${order.전달사항?.trim() ? `\n\n◆ 전달사항\n${order.전�
       ),
     },
     {
+      type: "list",
+      label: "간단 목록",
+      desc: "날짜 거래처 구간 톤수 + 차량 · 기사 · 연락처 한 줄",
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>
+        </svg>
+      ),
+    },
+    {
       type: "driver",
       label: "기사 전달용",
-      desc: "운행 정보 + 업로드 링크 포함",
+      desc: "운행 정보 + 전달 문구(PC ⚙ 문구 설정과 같음)",
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><path d="M19 8v6M22 11h-6"/>
