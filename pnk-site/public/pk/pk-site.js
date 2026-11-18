@@ -65,15 +65,15 @@
     switch (kind) {
       case "heading": return "<h3" + K() + ' class="kp-add-h">새 제목을 입력하세요</h3>';
       case "text": return "<p" + K() + ' class="kp-add-p">새 문장을 입력하세요. 두 번 눌러 고칠 수 있습니다.</p>';
-      case "image": return "<img" + K() + ' class="kp-add-img" src="/pk/img/office.webp" alt="새 사진" />';
+      case "image": return "<img" + K() + ' class="kp-add-img" src="/pk/img/team.webp" alt="새 사진" />';
       case "button": return "<a" + K() + ' class="btn btn-primary" href="#inquiry-form">새 버튼</a>';
       case "spacer": return "<div" + K() + ' class="kp-add-spacer" aria-hidden="true"></div>';
       case "card": return "<div" + K() + ' class="mod"><div' + K("i") + ' class="mi"><svg' + K("s") + ' class="i"><use href="#i-check"/></svg></div><h4' + K("t") + ">새 카드 제목</h4><p" + K("d") + ">카드 설명을 입력하세요.</p></div>";
       case "section":
       case "section-dark":
-        return "<section" + K() + ' class="block' + (kind === "section-dark" ? " dark-sec dark" : "") + '"><div' + K("w") + ' class="wrap"><div' + K("h") + ' class="head"><span' + K("e") + ' class="eyebrow">NEW SECTION</span><h2' + K("t") + ">새 섹션 제목</h2><p" + K("d") + '>섹션 설명 문장을 입력하세요.</p></div><div' + K("s") + ' class="shot"><img' + K("i") + ' src="/pk/img/office.webp" alt="" /></div></div></section>';
+        return "<section" + K() + ' class="block' + (kind === "section-dark" ? " dark-sec dark" : "") + '"><div' + K("w") + ' class="wrap"><div' + K("h") + ' class="head"><span' + K("e") + ' class="eyebrow">NEW SECTION</span><h2' + K("t") + ">새 섹션 제목</h2><p" + K("d") + '>섹션 설명 문장을 입력하세요.</p></div><div' + K("s") + ' class="shot"><img' + K("i") + ' src="/pk/img/team.webp" alt="" /></div></div></section>';
       case "section-split":
-        return "<section" + K() + ' class="block"><div' + K("w") + ' class="wrap"><div' + K("g") + ' class="panel on"><div' + K("s") + ' class="shot"><img' + K("i") + ' src="/pk/img/devices.webp" alt="" /></div><div' + K("c") + '><span' + K("e") + ' class="tag">NEW</span><h3' + K("t") + ">새 기능 제목</h3><p" + K("d") + ">기능 설명 문장을 입력하세요.</p></div></div></div></section>";
+        return "<section" + K() + ' class="block"><div' + K("w") + ' class="wrap"><div' + K("g") + ' class="panel on"><div' + K("s") + ' class="shot"><img' + K("i") + ' src="/pk/img/detail.webp" alt="" /></div><div' + K("c") + '><span' + K("e") + ' class="tag">NEW</span><h3' + K("t") + ">새 기능 제목</h3><p" + K("d") + ">기능 설명 문장을 입력하세요.</p></div></div></div></section>";
       case "field-text": return "<div" + K() + "><label" + K("l") + ">새 질문</label><input" + K("i") + ' data-extra="새 질문" placeholder="입력해 주세요" /></div>';
       case "field-textarea": return "<div" + K() + ' class="full"><label' + K("l") + ">새 질문</label><textarea" + K("i") + ' data-extra="새 질문" rows="3" placeholder="입력해 주세요"></textarea></div>';
       case "field-select": return "<div" + K() + "><label" + K("l") + ">새 선택 항목</label><select" + K("i") + ' data-extra="새 선택 항목"><option value="">선택해 주세요</option><option>항목 1</option><option>항목 2</option></select></div>';
