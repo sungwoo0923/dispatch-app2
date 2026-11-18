@@ -108,4 +108,14 @@ t("받는사람 추천 — 이름 · 번호 일부", () => {
   assert.deepEqual(suggestRecipients("", book, th), []);
 });
 
+t("플레이스토어 앱(main · play)에는 문자 권한이 없다 — 업무폰용(office)에만", () => {
+  const main = fs.readFileSync(new URL("../android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8").replace(/<!--[\s\S]*?-->/g, "");
+  for (const bad of ["SEND_SMS", "RECEIVE_SMS", "READ_SMS", "RECEIVE_MMS", "READ_CALL_LOG", "KpSmsService", "KpSmsReceiver", "SMS_RECEIVED"]) assert.ok(!main.includes(bad), `main 매니페스트에 ${bad}`);
+  assert.ok(!fs.existsSync(new URL("../android/app/src/play/AndroidManifest.xml", import.meta.url)) || !/SMS/.test(fs.readFileSync(new URL("../android/app/src/play/AndroidManifest.xml", import.meta.url), "utf8")));
+  const office = fs.readFileSync(new URL("../android/app/src/office/AndroidManifest.xml", import.meta.url), "utf8");
+  for (const need of ["SEND_SMS", "RECEIVE_SMS", "READ_SMS", "KpSmsService", "KpSmsReceiver"]) assert.ok(office.includes(need), `office 매니페스트에 ${need} 없음`);
+  const gradle = fs.readFileSync(new URL("../android/app/build.gradle", import.meta.url), "utf8");
+  assert.match(gradle, /productFlavors\s*\{[\s\S]*play\s*\{[\s\S]*office\s*\{/);
+});
+
 console.log(`\n${n}개 통과`);

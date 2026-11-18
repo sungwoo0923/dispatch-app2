@@ -13,7 +13,8 @@ import { watchBox } from "./officeSmsStore";
 import { phoneState, timeLabel } from "./officeSmsCore";
 
 const KpSms = registerPlugin("KpSms");
-const APK_URL = "https://github.com/sungwoo0923/dispatch-app2/releases/download/driver-apk-latest/LogisWeb-Driver.apk";
+// 📦 업무폰용 앱(office) — 플레이스토어 앱에는 문자 권한이 없어 사내문자를 못 쓴다(구글 정책). 회사가 이 APK로 직접 설치
+const APK_URL = "https://github.com/sungwoo0923/dispatch-app2/releases/download/driver-apk-latest/LogisWeb-Office.apk";
 
 const isNative = () => { try { return !!window.Capacitor?.isNativePlatform?.(); } catch { return false; } };
 const hasPlugin = () => { try { return !!window.Capacitor?.isPluginAvailable?.("KpSms"); } catch { return false; } };
@@ -25,6 +26,7 @@ export default function OfficeSmsLinkCard({ currentUser, Card, Row, go, showSucc
   const [busy, setBusy] = React.useState(false);
   const native = isNative();
   const plugin = native && hasPlugin();
+  const unsupported = plugin && st && st.supported === false; // 플레이스토어 앱 · 예전 APK
 
   const refresh = React.useCallback(() => {
     if (!plugin) return;
@@ -85,8 +87,8 @@ export default function OfficeSmsLinkCard({ currentUser, Card, Row, go, showSucc
   };
 
   const perm = st ? [st.send ? null : "보내기", st.read ? null : "읽기", st.receive ? null : "받기"].filter(Boolean) : [];
-  const sub = !native ? "LogisWeb 앱(안드로이드)에서만 켤 수 있어요"
-    : !plugin ? "앱을 새로 설치해야 쓸 수 있어요"
+  const sub = !native ? "LogisWeb 업무폰용 앱(안드로이드)에서만 켤 수 있어요"
+    : (!plugin || unsupported) ? "업무폰용 앱이 필요해요 — 플레이스토어 앱을 지우고 업무폰용 앱을 설치해 주세요"
       : mine ? (st.authError ? `⚠ ${st.authError}` : `${server.label}${server.lastMs ? ` · ${timeLabel(server.lastMs)}` : ""}`)
         : other ? "다른 계정에 연결돼 있어요"
           : "PC 배차 프로그램에서 이 휴대폰으로 문자를 보내고 받아요";
@@ -94,8 +96,8 @@ export default function OfficeSmsLinkCard({ currentUser, Card, Row, go, showSucc
   return (
     <Card en="OFFICE SMS" title="업무폰 문자 연결" flush>
       <Row label={mine ? "● 이 휴대폰 연결됨" : "업무폰 문자 연결"} sub={sub}
-        onClick={!native || busy ? undefined : !plugin ? () => { window.location.href = APK_URL; } : mine ? undefined : link}
-        right={!native ? null : !plugin ? go("앱 받기") : mine ? null : go(busy ? "…" : other ? "이 계정으로" : "연결하기")} />
+        onClick={!native || busy ? undefined : (!plugin || unsupported) ? () => { window.location.href = APK_URL; } : mine ? undefined : link}
+        right={!native ? null : (!plugin || unsupported) ? go("업무폰용 앱 받기") : mine ? null : go(busy ? "…" : other ? "이 계정으로" : "연결하기")} />
       {mine && perm.length > 0 && (
         <Row label="문자 권한" sub={`꺼진 권한: ${perm.join(" · ")} — 앱 설정 › 권한 › SMS에서 허용`} onClick={() => { try { KpSms.openAppSettings(); } catch { /* 무시 */ } }} right={go("열기")} />
       )}

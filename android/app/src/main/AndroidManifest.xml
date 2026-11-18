@@ -31,31 +31,6 @@
             android:exported="false"
             android:foregroundServiceType="location" />
 
-        <!-- 💬 2026-11-18 사내문자 — 직원 업무폰 ↔ PC 배차 프로그램 문자 연결(설정 › 업무폰 문자 연결을 켠 폰만 동작) -->
-        <service
-            android:name=".KpSmsService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="remoteMessaging" />
-        <receiver
-            android:name=".KpSmsReceiver"
-            android:enabled="true"
-            android:exported="true"
-            android:permission="android.permission.BROADCAST_SMS">
-            <intent-filter>
-                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
-            </intent-filter>
-        </receiver>
-        <receiver
-            android:name=".KpSmsBootReceiver"
-            android:enabled="true"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-            </intent-filter>
-        </receiver>
-
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -84,12 +59,7 @@
     <!-- 배터리 최적화 제외 요청(절전으로 추적이 끊기지 않게) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
-    <!-- 💬 2026-11-18 사내문자(업무폰 문자 연결) — 직원이 설정에서 직접 켤 때만 권한을 묻는다 -->
-    <uses-permission android:name="android.permission.SEND_SMS" />
-    <uses-permission android:name="android.permission.RECEIVE_SMS" />
-    <uses-permission android:name="android.permission.READ_SMS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
-    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    <!-- 💬 2026-11-18 사내문자 문자 권한은 업무폰용(office)에만 — src/office/AndroidManifest.xml -->
 
     <!-- 백그라운드 GPS 서비스는 @capacitor-community/background-geolocation 플러그인
     모듈 자체의 AndroidManifest.xml(gradle manifest merge)에서 올바른 클래스명으로

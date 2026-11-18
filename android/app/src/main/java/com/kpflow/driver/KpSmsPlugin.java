@@ -27,7 +27,9 @@ import com.getcapacitor.annotation.PermissionCallback;
  * 💬 2026-11-18 사내문자 — 웹 화면(src/officeSms/OfficeSmsLinkCard.jsx) ↔ 사내문자 서비스(KpSmsService).
  *  - link({ uid, refreshToken, apiKey, projectId, backfillDays }) : 문자 권한을 받고 연결 시작
  *  - unlink()  : 연결 끊기(서비스 멈춤 · 이 휴대폰에 저장한 로그인 정보 지움)
- *  - status()  : { linked, uid, running, send, read, receive, ignoringBattery, authError }
+ *  - status()  : { supported, linked, uid, running, send, read, receive, ignoringBattery, authError }
+ *  ⚠ 플레이스토어용(play) 앱에는 문자 권한이 없다 → supported:false, link()는 NOT_SUPPORTED.
+ *    업무폰용(office) 앱(src/office/AndroidManifest.xml)에서만 동작한다.
  *  - requestIgnoreBattery() / openAppSettings()
  */
 @CapacitorPlugin(
@@ -38,8 +40,20 @@ import com.getcapacitor.annotation.PermissionCallback;
 )
 public class KpSmsPlugin extends Plugin {
 
+    /** 이 앱(빌드)에 문자 권한이 들어 있나 — 업무폰용(office)만 true */
+    private boolean supported() {
+        try {
+            String[] req = getContext().getPackageManager()
+                    .getPackageInfo(getContext().getPackageName(), PackageManager.GET_PERMISSIONS).requestedPermissions;
+            if (req == null) return false;
+            for (String p : req) if (Manifest.permission.SEND_SMS.equals(p)) return true;
+        } catch (Exception ignored) {}
+        return false;
+    }
+
     @PluginMethod
     public void link(PluginCall call) {
+        if (!supported()) { call.reject("NOT_SUPPORTED"); return; }
         String uid = call.getString("uid");
         String refreshToken = call.getString("refreshToken");
         String apiKey = call.getString("apiKey");
@@ -116,7 +130,7 @@ public class KpSmsPlugin extends Plugin {
     @PluginMethod
     public void status(PluginCall call) {
         // 연결돼 있는데 서비스가 꺼져 있으면(앱 업데이트 · 강제 종료 뒤) 다시 켠다
-        if (KpSmsService.linked(getContext()) && !KpSmsService.running) {
+        if (supported() && KpSmsService.linked(getContext()) && !KpSmsService.running) {
             try { KpSmsService.start(getContext()); } catch (Exception ignored) {}
         }
         call.resolve(statusObj());
@@ -129,6 +143,7 @@ public class KpSmsPlugin extends Plugin {
     private JSObject statusObj() {
         SharedPreferences sp = getContext().getSharedPreferences(KpSmsService.PREFS, Context.MODE_PRIVATE);
         JSObject o = new JSObject();
+        o.put("supported", supported());
         o.put("linked", sp.getString("uid", null) != null);
         o.put("uid", sp.getString("uid", ""));
         o.put("running", KpSmsService.running);

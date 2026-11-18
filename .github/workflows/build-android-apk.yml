@@ -113,7 +113,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: KPFlow-기사앱-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: android/app/build/outputs/apk/*/debug/*.apk
           retention-days: 30
 
       - name: Release APK 업로드
@@ -121,7 +121,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: KPFlow-기사앱-release
-          path: android/app/build/outputs/apk/release/app-release-unsigned.apk
+          path: android/app/build/outputs/apk/*/release/*.apk
           retention-days: 30
 
       # ⭐ 사용자 요청 — GitHub Actions의 "Artifacts" 다운로드가 모바일 웹에서
@@ -132,11 +132,18 @@ jobs:
       # ⭐ 2026-11-05 앱 안 "앱 업데이트가 있어요" 안내용 — 이번 APK의 versionCode(build.gradle과 같은 규칙: 실행번호+1)
       # ⭐ 2026-11-10 기사님이 다운로드 폴더에서 알아보기 쉽게 — LogisWeb-Driver.apk(영문: 릴리즈 파일 이름에 한글을 쓰면 깨질 수 있다)
       #  예전 이름(app-debug.apk)도 같이 올린다 — 이미 설치된 앱의 "앱 업데이트가 있어요" 주소가 예전 이름이라서
-      - name: APK 이름 바꾸기(LogisWeb-Driver.apk)
+      # 💬 2026-11-18 앱이 두 가지 — play(기사 · 플레이스토어와 같은 것, 문자 권한 없음) / office(사무실 업무폰 · 사내문자 포함)
+      #  LogisWeb-Driver.apk(+ 예전 이름 app-debug.apk) = play · LogisWeb-Office.apk = office
+      - name: APK 이름 바꾸기(LogisWeb-Driver.apk · LogisWeb-Office.apk)
         run: |
-          SRC=$(ls android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/release/app-release-unsigned.apk 2>/dev/null | head -1)
+          O=android/app/build/outputs/apk
+          PLAY=$(ls $O/play/debug/app-play-debug.apk $O/play/release/app-play-release*.apk 2>/dev/null | head -1)
+          OFFICE=$(ls $O/office/debug/app-office-debug.apk $O/office/release/app-office-release*.apk 2>/dev/null | head -1)
+          [ -n "$PLAY" ] && [ -n "$OFFICE" ] || { echo "::error::APK를 찾지 못했습니다"; ls -R $O; exit 1; }
           mkdir -p android/app/build/outputs/named
-          cp "$SRC" android/app/build/outputs/named/LogisWeb-Driver.apk
+          cp "$PLAY" android/app/build/outputs/named/LogisWeb-Driver.apk
+          cp "$PLAY" android/app/build/outputs/named/app-debug.apk
+          cp "$OFFICE" android/app/build/outputs/named/LogisWeb-Office.apk
           ls -la android/app/build/outputs/named
 
       - name: APK 버전 정보(version.json)
@@ -154,10 +161,14 @@ jobs:
           name: "KP-Flow 기사앱 (최신 빌드)"
           # ⭐ versionCode 줄은 기사앱이 GitHub API로 읽어 새 APK가 있는지 비교한다(지우지 말 것)
           body: |
-            커밋 ${{ github.sha }} 기준 자동 빌드. 안드로이드 폰에서 LogisWeb-Driver.apk 를 눌러 다운로드한 뒤 설치하세요.
+            커밋 ${{ github.sha }} 기준 자동 빌드.
+            · 기사님: LogisWeb-Driver.apk
+            · 사무실 업무폰(사내문자): LogisWeb-Office.apk — 플레이스토어 앱과 같이 깔 수 없어요(하나만)
             versionCode: ${{ env.APK_VERSION_CODE }}
           files: |
             android/app/build/outputs/named/LogisWeb-Driver.apk
+            android/app/build/outputs/named/LogisWeb-Office.apk
+            android/app/build/outputs/named/app-debug.apk
             android/app/build/outputs/apk/**/*.apk
             android/app/build/outputs/version.json
           prerelease: true

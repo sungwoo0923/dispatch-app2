@@ -9,7 +9,7 @@ import { kpConfirm } from "../kpDialog";
 import { queueSms, resendSms, markRead, deleteThread, deleteMsg } from "./officeSmsStore";
 import { normPeer, fmtPhone, smsBytesOf, phoneState, groupThreads, threadMessages, statusText, filterThreads, timeLabel, toMs, parseRecipients, suggestRecipients } from "./officeSmsCore";
 
-const APK_URL = "https://github.com/sungwoo0923/dispatch-app2/releases/download/driver-apk-latest/LogisWeb-Driver.apk"; // DriverAppGuide.jsx 와 같은 주소
+const APK_URL = "https://github.com/sungwoo0923/dispatch-app2/releases/download/driver-apk-latest/LogisWeb-Office.apk"; // 📦 업무폰용 앱(문자 권한 포함 · 플레이스토어 앱과 다름)
 const FONT = "'Pretendard','Noto Sans KR','Apple SD Gothic Neo','맑은 고딕',sans-serif";
 const C = {
   ink: "#0F1A30", ink2: "#3A4A66", sub: "#7A879C", faint: "#A9B4C6", line: "#E8ECF3", line2: "#F0F3F8",
@@ -139,7 +139,7 @@ function Composer({ text, setText, onSend, busy, sendLabel = "보내기", disabl
 
 function SetupGuide({ st }) {
   const steps = [
-    ["업무폰에 LogisWeb 앱 설치", <>안드로이드만 돼요. <a href={APK_URL} style={{ color: C.navy2, fontWeight: 800 }}>앱 받기</a></>],
+    ["업무폰에 업무폰용 LogisWeb 앱 설치", <>안드로이드만 돼요. 플레이스토어 앱이 아니라 이 파일로 설치해요. <a href={APK_URL} style={{ color: C.navy2, fontWeight: 800 }}>업무폰용 앱 받기</a></>],
     ["직원(사무실) 계정으로 로그인", "앱 첫 화면 아래 버튼을 누르고 내 아이디로 로그인해요"],
     ["설정 → 업무폰 문자 연결 → [연결하기]", "문자 권한을 [허용]하면 끝이에요"],
   ];
