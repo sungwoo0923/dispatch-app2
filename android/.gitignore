@@ -102,3 +102,4 @@ app/src/main/res/xml/config.xml
 
 # 🏢 LogisWeb(office) 앱 설정 — CI가 capacitor.config.json 에서 만든다
 app/src/office/assets/capacitor.config.json
+app/src/smslink/assets/capacitor.config.json

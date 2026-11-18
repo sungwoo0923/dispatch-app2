@@ -95,7 +95,8 @@ export default function OfficeSmsWindow({ user, drivers = [], contacts = [], con
 
   if (!uid) return null;
   const unread = msgs.filter((m) => m.dir === "in" && m.read !== true).length;
-  const showFab = route === "office" || (box && box.linked !== false) || msgs.length > 0;
+  // 🛠 2026-11-18 버튼은 항상 보인다 — 예전엔 [문자 보내기]에서 사내문자를 고르거나 업무폰을 연결해야만 떠서 찾을 수 없었다(누르면 연결 방법이 나온다)
+  const showFab = true;
 
   return (
     <>
