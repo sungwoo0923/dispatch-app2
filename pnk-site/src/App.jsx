@@ -119,6 +119,7 @@ export default function App() {
 const todayLabel = () => { const d = new Date(Date.now() + 9 * 3600e3); return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일 (${"일월화수목금토"[d.getUTCDay()]})`; };
 
 // ───────────────────────── 왼쪽 메뉴 + 위쪽 줄 + 본문 ─────────────────────────
+//  PC: 왼쪽 메뉴는 화면 높이에 붙어 있고(sticky · 위아래 끝까지), 본문은 창 전체로 스크롤된다
 export function Shell({ children }) {
   const me = useMeCtx();
   const loc = useLocation();
@@ -191,8 +192,8 @@ export function Shell({ children }) {
   );
 
   return (
-    <div className="md:flex md:h-screen md:overflow-hidden">
-      <div className="hidden md:block h-full">{side}</div>
+    <div className="md:flex min-h-screen">
+      <div className="hidden md:block sticky top-0 h-screen shrink-0 z-20">{side}</div>
       {/* 휴대폰: 위쪽 줄 + 햄버거 메뉴 */}
       <header className="md:hidden sticky top-0 z-30 h-14 px-4 flex items-center gap-3 text-white bg-navy-900">
         <button type="button" onClick={() => setOpen(true)} className="w-9 h-9 -ml-1 rounded-lg flex items-center justify-center hover:bg-white/10" aria-label="메뉴"><Icon name="menu" size={20} /></button>
@@ -206,9 +207,9 @@ export function Shell({ children }) {
           <div className="flex-1 bg-black/40" />
         </div>
       )}
-      <div className="flex-1 min-w-0 md:h-full flex flex-col">
+      <div className="flex-1 min-w-0 flex flex-col min-h-screen">
         {/* PC: 위쪽 줄 — 지금 화면 위치 · 날짜 · 메일/결재 바로가기 */}
-        <div id="pnk-top" className="hidden md:flex shrink-0 h-[76px] px-8 items-center gap-3 bg-white/80 backdrop-blur border-b border-line">
+        <div id="pnk-top" className="hidden md:flex sticky top-0 z-10 shrink-0 h-[76px] px-8 items-center gap-3 bg-white/85 backdrop-blur border-b border-line">
           <div className="flex-1 min-w-0">
             <div className="eng text-[10.5px] text-gold-deep">{here?.g.label ? `${GROUP_EN[here.g.label] || ""} · ${here.g.label}` : "PnK PROJECT"}</div>
             <div className="text-[17px] font-semibold text-navy-950 truncate tracking-[-0.02em]">{here?.it.label || ""}</div>
@@ -222,7 +223,7 @@ export function Shell({ children }) {
           ))}
           <a href="/" target="_blank" rel="noopener noreferrer" title="공식 홈페이지" className="ml-1 h-10 px-4 rounded-full border border-line text-[12.5px] font-semibold text-navy-700 hover:border-[#CFC7BB] flex items-center gap-1.5"><Icon name="globe" size={15} />홈페이지</a>
         </div>
-        <main id="pnk-main" className="flex-1 min-w-0 min-h-0 md:overflow-y-auto px-4 md:px-8 py-5 md:py-7">
+        <main id="pnk-main" className="flex-1 min-w-0 px-4 md:px-8 py-5 md:py-7">
           <div className="w-full max-w-[1600px] mx-auto">{children}</div>
         </main>
       </div>
