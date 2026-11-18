@@ -147,7 +147,19 @@ function makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
     //  날짜 칸 등이 여러 줄에 걸쳐 병합된 줄은 줄을 지우면 병합 값이 사라질 수 있어 예전처럼 값만 비운다
     const merged = (tab, row) => ((book.tabs.find((t) => t.title === tab) || {}).merges || []).some((m) => m.endRowIndex - m.startRowIndex > 1 && m.startRowIndex <= row - 1 && row - 1 < m.endRowIndex);
     const dropRows = []; let structural = false;
-    const done = (it, state, result, extra = {}) => it.ref.set({ state, doneAt: Date.now(), result: result || null, ...extra }, { merge: true });
+    // ⭐ 2026-11-18 끝 표시 — 처리하는 사이(시트를 읽고 쓰는 몇 초~수십 초) 사람이 그 오더를 또 고쳤으면(대기열 at이 바뀜) "끝"으로 덮지 않는다
+    //  예전엔 기사를 빼고(1차) 곧바로 다른 기사를 넣으면(2차) 2차 변경이 같은 대기 건에 합쳐진 뒤 1차 처리의 "끝" 표시에 덮여 시트에 안 갔다(사용자 신고)
+    //  written: 방금 시트에 쓴 오더 값 — 다음 차례의 비교 기준(before)으로 삼는다(시트 줄이 이미 이 값이다 · 새로 만든 줄이면 이제 "수정")
+    const done = (it, state, result, extra = {}, written = null) => db.runTransaction(async (tx) => {
+      const cur = (await tx.get(it.ref)).data();
+      if (!cur) return;
+      if (cur.state === "pending" && Number(cur.at || 0) !== Number(it.at || 0)) {
+        if (written) tx.set(it.ref, { before: written, kind: cur.kind === "delete" ? "delete" : "update", tries: 0, conflicts: 0 }, { merge: true });
+        console.log(`[시트 쓰기] ${co} ${it.orderId} 처리하는 사이 또 고쳐져 다음 차례에 이어서 반영합니다`);
+        return;
+      }
+      tx.set(it.ref, { state, doneAt: Date.now(), result: result || null, ...extra }, { merge: true });
+    });
     const summary = (p) => ({ tab: p.tab || "", row: p.row || 0, cells: (p.cells || []).slice(0, 40).map((c) => ({ a1: c.a1, was: String(c.was ?? "").slice(0, 80), value: String(c.value ?? "").slice(0, 80) })), pushed: p.pushed || [], unpushed: p.unpushed || [], reason: p.reason || "" });
     // ⭐ 2026-11-17 쓰기(지우기) 직전 확인 — 시트를 읽은 뒤 실제로 쓰기까지 몇 초~수십 초 걸린다(한 건마다 가져오기 규칙으로 다시 읽어 본다)
     //  그사이 사람이 줄을 끼우거나 · 지우거나 · 정렬하면 줄 번호가 밀려, 예전엔 엉뚱한 줄(방금 친 줄)에 덮어쓰거나 그 줄을 통째로 지웠다
@@ -243,7 +255,7 @@ function makeSheetPush({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
           }
         }
         if (doc && plan.docPatch) await doc.ref.set({ ...plan.docPatch, 시트탭필요: FieldValue.delete(), 시트탭후보: FieldValue.delete(), 시트기록일시: FieldValue.serverTimestamp() }, { merge: true });
-        await done(it, "done", summary(plan));
+        await done(it, "done", summary(plan), {}, after ? await trim({ ...after, ...(plan.docPatch || {}) }) : null);
       } catch (e) {
         console.error(`[시트 쓰기 실패] ${co} ${it.orderId}:`, e?.message || e);
         await it.ref.set({ tries: (it.tries || 0) + 1, lastError: String(e?.message || e).slice(0, 200), ...(it.tries >= 4 ? { state: "failed", doneAt: Date.now(), result: { reason: String(e?.message || e).slice(0, 200) } } : {}) }, { merge: true }).catch(() => {});

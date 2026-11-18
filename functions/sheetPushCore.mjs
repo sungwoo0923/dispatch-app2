@@ -278,7 +278,9 @@ function fieldEdits(k, o, env) {
     case "전화번호": return one(L.cols.phone, o.전화번호);
     case "배차방식": { // 🟪 2026-11-16 시트 운송사 칸에 이미 업체가 적혀 있으면 덮지 않는다 — 프로그램 값이 우선(오더에 _programKeys로 남고 화면에 보라색)
       const c = col(L.cols.carrier); if (c == null) return null;
-      return cell(row[c]) ? null : [{ c, v: cell(o.배차방식) }];
+      // ⭐ 2026-11-18 기사(차량번호)를 바꾸거나 뺐으면 운송사 칸도 같이 바꾼다(비운다) — 예전 기사의 운송사가 시트에 그대로 남았다(사용자 신고)
+      const driverSwap = (env.fields || []).includes("차량번호");
+      return cell(row[c]) && !driverSwap ? null : [{ c, v: cell(o.배차방식) }];
     }
     case "배차상태": return one(L.cols.status, o.배차상태);
     case "청구운임":

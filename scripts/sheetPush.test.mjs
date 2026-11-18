@@ -115,7 +115,7 @@ function fakeDb() {
     runTransaction: async (fn) => fn({ get: (r) => r.get(), set: (r, d, o) => r.set(d, o), delete: (r) => r.delete() }), data: (n, id) => col(n).get(id), ids: (n) => [...col(n).keys()] };
 }
 function fakeSheet(tabs, { denyWrite = false } = {}) {
-  const writes = []; const calls = [];
+  const writes = []; const calls = []; const onWrite = []; // onWrite: 다음 칸 쓰기 직전에 한 번 부른다(쓰는 사이 사람이 고친 것 흉내)
   const titles = () => Object.keys(tabs);
   const ranges = (path) => [...path.matchAll(/ranges=([^&]+)/g)].map((m) => decodeURIComponent(m[1]).replace(/^'|'$/g, ""));
   const api = async (id, method, path, opts = {}) => {
@@ -125,6 +125,7 @@ function fakeSheet(tabs, { denyWrite = false } = {}) {
     if (method === "GET" && path.startsWith("/values/")) return { values: [[tabs[titles()[0]][0][0]]] };
     if (method === "POST" && path === "/values:batchUpdate") {
       if (denyWrite) throw Object.assign(new Error("The caller does not have permission"), { response: { status: 403 } });
+      while (onWrite.length) await onWrite.shift()();
       opts.data.data.forEach((u) => { const [, t, colL, row] = u.range.match(/^'(.+)'!([A-Z]+)(\d+)$/); const c = colL.split("").reduce((a, ch) => a * 26 + ch.charCodeAt(0) - 64, 0) - 1; const rows = tabs[t]; while (rows.length < +row) rows.push([]); const r = rows[+row - 1]; while (r.length <= c) r.push(""); r[c] = u.values[0][0]; writes.push(`${t}!${colL}${row}=${u.values[0][0]}`); });
       return {};
     }
@@ -139,7 +140,7 @@ function fakeSheet(tabs, { denyWrite = false } = {}) {
     }
     throw new Error(`fake sheet: ${method} ${path}`);
   };
-  return { api, writes, calls };
+  return { api, writes, calls, onWrite };
 }
 const CO = "JY로지스틱스";
 async function world(mode, opts = {}) {
@@ -551,5 +552,32 @@ async function world(mode, opts = {}) {
     for (const k of ["청구운임", "기사운임", "특수운임", "수수료"]) assert.ok(!(k in pt), `${label}: 다시 가져와도 ${k} 그대로`);
   }
   console.log("특수운임 적용 → JY 시트 추가 칸(매출 · 매입 옆 칸) OK");
+}
+// ⭐ 2026-11-18 기사 교체 — 기사를 빼고(1차) 시트에 쓰는 사이 다른 기사를 넣으면(2차) 2차도 시트에 가야 한다
+//  예전: 2차 변경이 같은 대기 건에 합쳐진 뒤 1차 처리의 "끝" 표시에 덮여 시트에 안 갔다 · 운송사 칸(원콜)도 예전 기사 것이 남았다
+{
+  const w = await world("on");
+  const d0 = w.db.data("orders", "o아6");
+  assert.equal(w.tabs["아산 내수"][5][15], "원콜");
+  await w.write("o아6", { ...d0, 차량번호: "", 이름: "", 전화번호: "", 배차방식: "", 배차상태: "배차중" });
+  w.sh.onWrite.push(async () => { // 1차를 시트에 쓰는 바로 그때 2차 입력
+    await w.write("o아6", { ...w.db.data("orders", "o아6"), 차량번호: "서울55마5555", 이름: "오오", 전화번호: "010-5555-6666", 배차방식: "24시", 배차상태: "배차완료" });
+  });
+  await w.run();
+  assert.equal(w.tabs["아산 내수"][5][16], "", "1차: 차량번호 비움");
+  assert.equal(w.tabs["아산 내수"][5][15], "", "1차: 기사를 빼면 운송사 칸도 비움");
+  assert.equal(w.db.data("sheetPushQueue", "o아6").state, "pending", "2차는 끝으로 덮이지 않고 대기로 남는다");
+  await w.run();
+  const row = w.tabs["아산 내수"][5];
+  assert.deepEqual([row[15], row[16], row[17]], ["24시", "서울55마5555", "오오"], row.join("|"));
+  assert.equal(w.db.data("sheetPushQueue", "o아6").state, "done");
+  // 기사를 바로 다른 기사로 바꿔도(빼지 않고) 운송사 칸까지 바뀐다 · 기사 그대로 배차방식만 바꾸면 예전처럼 시트 업체 이름은 그대로
+  await w.write("o아6", { ...w.db.data("orders", "o아6"), 차량번호: "경기66바6666", 이름: "육육", 배차방식: "원콜" });
+  await w.run();
+  assert.deepEqual(w.tabs["아산 내수"][5].slice(15, 18), ["원콜", "경기66바6666", "육육"]);
+  await w.write("o아6", { ...w.db.data("orders", "o아6"), 배차방식: "기사직통" });
+  await w.run();
+  assert.equal(w.tabs["아산 내수"][5][15], "원콜", "기사는 그대로 · 배차방식만 → 시트 업체 이름 유지(2026-11-16 규칙)");
+  console.log("기사 교체(쓰는 사이 또 고침 · 운송사 칸) OK");
 }
 console.log("sheetPush: 모두 통과");
