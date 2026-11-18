@@ -128,8 +128,6 @@ function createDb() {
   if (USE_EMU) { const d = getFirestore(app); try { FS.connectFirestoreEmulator(d, "127.0.0.1", Number(import.meta.env.VITE_EMU_FS_PORT || 8080)); } catch { /* 무시 */ } return d; }
   // ⭐ 2026-11-06 모바일 미리보기 iframe은 메모리 캐시만(부모 탭이 저장소 사용권을 쥐고 있어 기다리지 않게)
   if (IS_MOBILE_PREVIEW) { try { return initializeFirestore(app, { localCache: FS.memoryLocalCache() }); } catch { return getFirestore(app); } }
-  // 💬 2026-11-18 사내문자 별도 창 — 프로그램 창이 저장소 사용권을 쥐고 있으니 메모리 캐시만(기다리지 않게)
-  if (typeof window !== "undefined" && window.location.pathname === "/sms-window") { try { return initializeFirestore(app, { localCache: FS.memoryLocalCache() }); } catch { return getFirestore(app); } }
   try {
     return initializeFirestore(app, {
       localCache: persistentLocalCache({

@@ -130,7 +130,6 @@ import { CompanyOptionPicker } from "./companyOptionPicker"; // 🧾 2026-11-02 
 const RateCard = lazyView(() => import("./RateCard"));
 import AiAssistant from "./AiAssistant";
 import InternalMessenger from "./InternalMessenger";
-import OfficeSmsWindow from "./officeSms/OfficeSmsWindow"; // 💬 2026-11-18 사내문자(업무폰 문자 연결)
 import { calcLeaveBalance } from "./leaveUtils";
 import { useMyLeaveExtras, useLeaveBasis } from "./leaveBasis"; // ⭐ 2026-11-07 내정보 연차 = 전자결재 연차 현황
 import { receivablesOf, invoiceDriverPlates, isTaxInvoiceSale, statementRowsOf, stmtIncludePrepaidOf, isPrepaidPay } from "./arAging"; // ⭐ 2026-11-07 미수금(부가세 포함) · 예상 부가세 공용 계산
@@ -8217,8 +8216,6 @@ useEffect(() => {
   //   ⭐ 2026-11-06 화면 데이터(dispatchData)에서 이미 빠져 있다 — 아래 거름은 그대로 둬도 결과가 같다(이중 안전)
   const salesDispatchData = useMemo(() => routeCarrierF.filter(dispatchDataFiltered), [dispatchDataFiltered, routeCarrierF]);
   const salesRawDispatchData = useMemo(() => routeCarrierF.filter(dispatchData) || [], [dispatchData, routeCarrierF]);
-  // 💬 2026-11-18 사내문자 이름표 — 오더에 적힌 기사(일반 용차 포함) 이름 · 번호(최근 3,000건). 등록 안 된 번호는 번호로 보인다
-  const officeSmsContacts = useMemo(() => (Array.isArray(dispatchData) ? dispatchData.slice(-3000) : []).map((r) => ({ name: r?.이름 || r?.기사명 || "", phone: r?.전화번호 || "" })).filter((x) => x.phone && x.name), [dispatchData]);
   const listRecentDispatchData = useMemo(() => recentDispatchDataFiltered.filter((r) => !r?.배차표Id), [recentDispatchDataFiltered]);
   // ⭐ 2026-11-06 운송업체 설정 창 전용 — 숨긴 업체 오더까지 센다(다시 켤 수 있게 · 화면 목록에는 안 씀)
   const routeCarrierPoolRows = useMemo(() => filterByCompanyAndRole((dispatchDataAll || []).filter((r) => r?.배차표Id)), [dispatchDataAll, filterByCompanyAndRole]);
@@ -8432,7 +8429,7 @@ useEffect(() => {
   const [정산관리Visited, set정산관리Visited] = useState(false);
   useEffect(() => { if (menu === "정산관리") set정산관리Visited(true); }, [menu]);
   const mainDetailGet = useDetailGetters(userNameMap, userCompany); // 🔎 세부검색(정산관리·매출관리)
-  const [activeTool, setActiveTool] = useState("none"); // "none" | "calculator" | "ai" | "messenger" | "officeSms"
+  const [activeTool, setActiveTool] = useState("none"); // "none" | "calculator" | "ai" | "messenger"
   const notificationsEnabled = useNotificationsEnabled();
   const calcOpen = activeTool === "calculator";
   const setCalcOpen = (v) => setActiveTool(v ? "calculator" : "none");
@@ -10122,15 +10119,6 @@ return (
         role={role}
         controlledOpen={activeTool === "messenger"}
         onOpenChange={v => setActiveTool(v ? "messenger" : "none")}
-      />
-
-      {/* 💬 2026-11-18 사내문자 — 내 업무폰으로 기사님과 문자 주고받기(본인만 보임) · 메신저 버튼 위 */}
-      <OfficeSmsWindow
-        user={user}
-        drivers={drivers}
-        contacts={officeSmsContacts}
-        controlledOpen={activeTool === "officeSms"}
-        onOpenChange={v => setActiveTool(v ? "officeSms" : "none")}
       />
 
       {/* 계산기 플로팅 버튼 — 모든 탭에 표시 */}

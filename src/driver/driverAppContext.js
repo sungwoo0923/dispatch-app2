@@ -16,14 +16,6 @@ export function isNativeApk() {
   try { return typeof window !== "undefined" && !!window.Capacitor?.isNativePlatform?.(); } catch { return false; }
 }
 
-// 🏢 2026-11-18 직원 · 화주 전용 앱 "LogisWeb"(안드로이드 office 앱 · 패키지 com.kpflow.logisweb)
-//  기사앱(LogisWeb 기사)과 따로 설치된다. 기사 로그인이 없고 운송사 · 화주사 로그인으로 열린다(+ 사내문자 업무폰 연결)
-//  앱이 화면 주소창 정보(User-Agent) 끝에 "LogisWebOffice"를 붙인다(CI가 office 앱 capacitor.config.json 에 appendUserAgent)
-export const OFFICE_APP_UA = "LogisWebOffice";
-export function isOfficeApk() {
-  try { return isNativeApk() && String(navigator.userAgent || "").includes(OFFICE_APP_UA); } catch { return false; }
-}
-
 // 🖥 2026-11-10 PC(데스크톱) 브라우저인가 — 기사 로그인은 휴대폰(기사앱 · 모바일 브라우저)에서만
 export function isDesktopBrowser() {
   try {
@@ -53,7 +45,7 @@ let cached = null;
 //  기사 로그인 화면의 [직원(사무실) 계정으로 로그인]을 누르면 그 폰의 APK가 "직원 모드"가 된다(kpApkStaff=1) → 일반 로그인 · 모바일 화면
 //  직원 로그인 화면의 [기사 로그인으로]를 누르면 다시 기사 전용으로
 export const APK_STAFF_KEY = "kpApkStaff";
-export const isApkStaffMode = () => { try { return isNativeApk() && (isOfficeApk() || localStorage.getItem(APK_STAFF_KEY) === "1"); } catch { return false; } };
+export const isApkStaffMode = () => { try { return isNativeApk() && localStorage.getItem(APK_STAFF_KEY) === "1"; } catch { return false; } };
 export function setApkStaffMode(on) {
   try { if (on) localStorage.setItem(APK_STAFF_KEY, "1"); else localStorage.removeItem(APK_STAFF_KEY); } catch { /* 무시 */ }
   try { sessionStorage.removeItem(SESSION_KEY); } catch { /* 무시 */ }
@@ -62,12 +54,6 @@ export function setApkStaffMode(on) {
 
 export function initDriverAppContext() {
   if (cached !== null) return cached;
-  // 🏢 직원 · 화주 전용 앱은 기사 화면이 없다 — 기사 주소로 열려도 로그인 화면으로
-  if (isOfficeApk()) {
-    cached = false;
-    try { if ((window.location.pathname || "").startsWith("/driver")) window.history.replaceState(null, "", "/login"); } catch { /* 무시 */ }
-    return cached;
-  }
   if (isNativeApk()) {
     cached = !isApkStaffMode();
     // 직원 모드인데 기사 화면 주소로 열렸으면(앱 시작 주소 /driver-login) 직원 로그인 · 모바일 화면으로
