@@ -129,8 +129,9 @@ export default function BankStatementBook({ company, isViewer = false }) {
     if (!d) return false;
     const what = m.lineIdx == null ? `「${d.title}」 ${won(d.amount)}` : `「${d.title}」의 ${m.lineIdx + 1}번째 줄(${d.data?.lines?.[m.lineIdx]?.vendor || ""}) ${won(t.out)}`;
     if (ask && !(await kpConfirm(`${what}을\n${t.date} 통장 출금(${t.name || t.memo || "-"})으로 지급 처리할까요?`))) return false;
-    const now = Date.now(); const by = { at: now, by: uid, byName: me?.name || "" };
+    const now = Date.now();
     const memo = `통장 내역 대조 · ${t.name || t.memo || ""}`.trim();
+    const by = { at: now, by: uid, byName: me?.name || "", date: t.date, memo }; // 💳 줄별 지급에도 지급일 · 메모(부분지급 도장에 날짜)
     const lines = Array.isArray(d.data?.lines) ? d.data.lines : [];
     const patch = { updatedAt: serverTimestamp() };
     let whole = m.lineIdx == null;
@@ -140,8 +141,13 @@ export default function BankStatementBook({ company, isViewer = false }) {
       if (lines.length && left === 0) whole = true; // 마지막 줄 — 문서도 지급완료
     }
     if (whole) {
+      lines.forEach((_, i) => { if (!d.paidLines?.[i] && lines.length >= 2) patch[`paidLines.${i}`] = by; }); // 남은 줄도 지급으로
       patch.paid = { ...by, date: t.date, memo };
       patch.history = arrayUnion({ at: now, uid, name: me?.name || "", action: "지급 완료", comment: `지급일 ${t.date} · ${memo}` });
+      if (d.drafterUid && d.drafterUid !== uid) patch.drafterUnread = true;
+    } else {
+      // 💳 부분 지급 기록(결재 이력 · 기안자 알림)
+      patch.history = arrayUnion({ at: now, uid, name: me?.name || "", action: "부분 지급", comment: `${m.lineIdx + 1}번 ${d.data?.lines?.[m.lineIdx]?.vendor || ""} · ${won(t.out)} · 지급일 ${t.date} · ${memo}` });
       if (d.drafterUid && d.drafterUid !== uid) patch.drafterUnread = true;
     }
     await updateDoc(doc(db, "approvals", d.id), patch);

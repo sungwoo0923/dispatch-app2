@@ -38,9 +38,15 @@ export const onlyDigits = (v) => String(v || "").replace(/\D/g, "");
 // 그 은행 계좌의 보통 자리수(작은 순) — 형식이 정해지지 않은 은행은 빈 배열
 export const accountLengths = (bank) => Object.keys(byName(bank)?.fmt || {}).map(Number).sort((x, y) => x - y);
 
+// 🔢 2026-11-19 사용자 요청 — 은행마다 계좌 자리수가 정해져 있으면 그보다 더 입력되지 않게(예: 신한 110-335-484151 = 12자리)
+//  형식이 정해지지 않은 은행(저축은행 · 기타)은 16자리까지
+export const accountMaxLen = (bank) => { const l = accountLengths(bank); return l.length ? l[l.length - 1] : 16; };
+// 그 은행 계좌 모양 예시(입력칸 안내) — 가장 긴 형식을 0으로
+export const accountPattern = (bank) => { const b = byName(bank); const l = accountLengths(bank); if (!l.length) return ""; return b.fmt[l[l.length - 1]].map((g) => "0".repeat(g)).join("-"); };
+
 // 은행에 맞춰 하이픈 — 입력 중에도 자리수만큼 끊어 보여준다
 export function formatAccount(bank, raw) {
-  const d = onlyDigits(raw).slice(0, 16);
+  const d = onlyDigits(raw).slice(0, accountMaxLen(bank));
   const b = byName(bank);
   const lens = Object.keys(b?.fmt || {}).map(Number).sort((x, y) => x - y);
   // 지금 길이 이상인 형식 중 가장 짧은 것(입력 중) → 없으면 가장 긴 것

@@ -17,6 +17,7 @@ TESTS=(
   scripts/sheetGuard.test.cjs
   scripts/payrollPw.test.cjs
   scripts/bankStmt.test.mjs
+  scripts/approvalPartial.test.mjs
   scripts/hubTests/hub3_unit.test.mjs
   scripts/hubTests/scan_map.test.mjs
 )

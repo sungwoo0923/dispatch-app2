@@ -76,13 +76,14 @@ export function apBoxDemo(company = "테스트운송") {
     const line = o.mine ? [{ ...tl, kind: "결재", status: o.status === "pending" ? "wait" : "approved" }] : [{ ...me, kind: "결재", status: o.step === 0 && o.status === "pending" ? "wait" : "approved" }, { ...tl, kind: "결재", status: "wait" }];
     return { id, company, docNo: `DB-${id}`, cat: o.cat || "draft", form: o.cat === "expense" ? "spend" : "general", formLabel: o.cat === "expense" ? "지출결의서" : "기안서",
       title: o.title, summary: o.title, amount: o.amount || 0, status: o.status, step: o.step ?? 0, drafterUid: drafter.uid, drafter, line,
-      participants: [...new Set([drafter.uid, ...line.map((x) => x.uid)])], ...(o.paid ? { paid: { at: Date.now() - 864e5, date: ymd(-1), by: "dap-fin", byName: "이재무" } } : {}),
+      participants: [...new Set([drafter.uid, ...line.map((x) => x.uid)])], ...(o.data ? { data: o.data } : {}), ...(o.paidLines ? { paidLines: o.paidLines } : {}), ...(o.paid ? { paid: { at: Date.now() - 864e5, date: ymd(-1), by: "dap-fin", byName: "이재무" } } : {}),
       createdAt: ts(o.ago || 1), updatedAt: ts(o.ago || 1) };
   };
   return [
     mk("m-pend", { mine: true, title: "[내 기안] 진행 중 기안", status: "pending", ago: 1 }),
     mk("m-appr", { mine: true, title: "[내 기안] 완료 기안", status: "approved", ago: 2 }),
-    mk("m-wait", { mine: true, cat: "expense", amount: 120000, title: "[내 기안] 지급 대기 지출", status: "approved", ago: 3 }),
+    mk("m-wait", { mine: true, cat: "expense", amount: 120000, title: "[내 기안] 지급 대기 지출", status: "approved", ago: 3,
+      data: { account: "유류비", pay: "계좌이체", reason: "11월 주유비", lines: [{ date: ymd(-3), vendor: "SK주유소", memo: "주유", supply: "109091", vat: "10909", total: "120000", bank: { bank: "신한", acct: "110335484151", holder: "SK주유소" }, note: "법인차량" }] } }),
     mk("m-paid", { mine: true, cat: "expense", amount: 80000, paid: true, title: "[내 기안] 지급완료 지출", status: "approved", ago: 4 }),
     mk("m-rej", { mine: true, title: "[내 기안] 반려 기안", status: "rejected", ago: 5 }),
     mk("m-can", { mine: true, title: "[내 기안] 결재 취소 기안", status: "cancelled", ago: 6 }),
@@ -91,6 +92,11 @@ export function apBoxDemo(company = "테스트운송") {
     mk("i-prog", { title: "[결재] 다음 결재자 진행 중", status: "pending", step: 1, ago: 2 }),
     mk("i-appr", { title: "[결재] 완료 기안", status: "approved", step: 2, ago: 3 }),
     mk("i-wait", { cat: "expense", amount: 300000, title: "[결재] 지급 대기 지출", status: "approved", step: 2, ago: 4 }),
+    // 💳 2026-11-19 부분 지급 점검 — 3줄 중 2번째 줄만 지급된 지출결의
+    mk("i-part", { cat: "expense", amount: 726000, title: "[결재] 부분 지급 지출(3줄 중 1줄 지급)", status: "approved", step: 2, ago: 2, data: { account: "유류비", pay: "계좌이체", reason: "유류비 정산", lines: [
+    { date: ymd(-3), vendor: "○○사무소", memo: "11월 임차료", supply: "500000", vat: "50000", total: "550000", bank: { bank: "신한", acct: "110335484151", holder: "○○사무소" }, note: "" },
+    { date: ymd(-3), vendor: "○○물류", memo: "상하차 인건비", supply: "60000", vat: "6000", total: "66000", bank: { bank: "KB국민", acct: "12345678901234", holder: "○○물류" }, note: "" },
+    { date: ymd(-2), vendor: "SK주유소", memo: "주유", supply: "100000", vat: "10000", total: "110000", bank: "", note: "" }] }, paidLines: { 1: { at: Date.now() - 36e5, by: "dap-fin", byName: "이재무", date: ymd(0), memo: "" } } }),
     mk("i-paid", { cat: "expense", amount: 50000, paid: true, title: "[결재] 지급완료 지출", status: "approved", step: 2, ago: 5 }),
     mk("i-rej", { title: "[결재] 반려 기안", status: "rejected", step: 1, ago: 6 }),
     mk("i-can", { title: "[결재] 결재 취소 기안", status: "cancelled", step: 2, ago: 7 }),
