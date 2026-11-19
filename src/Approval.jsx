@@ -2150,7 +2150,8 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
                 ? <span className="inline-flex flex-col"><button type="button" disabled aria-disabled="true" data-testid="ap-cancel-req-blocked" title={PAID_CANCEL_MSG} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#9AA9C3] cursor-not-allowed">결재 취소 요청</button><span className="mt-1 text-[12px] font-bold text-[#B42318]">{PAID_CANCEL_MSG}</span></span>
                 : <button type="button" onClick={() => { setCancelAsk(true); setComment(""); }} className="h-9 px-3.5 rounded-lg border border-[#0F1A30] text-[13.5px] font-black text-[#0F1A30]">결재 취소 요청</button>)}
               {mine && ["rejected", "withdrawn"].includes(d.status) && <button type="button" onClick={() => onRedraft(d)} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13.5px] font-black">재기안</button>}
-              {mine && ["approved", "cancelled"].includes(d.status) && <button type="button" onClick={() => onRedraft({ ...d, id: null })} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#3A4A66]">복사해서 새로 쓰기</button>}
+              {/* 📋 2026-11-19 태진 요청 — 주유비처럼 반복되는 지출결의는 결재가 끝나기 전(진행 중)에도 복사해서 날짜만 바꿔 새로 올릴 수 있게(예전엔 결재 완료 · 취소 문서만) */}
+              {mine && ["pending", "approved", "cancelled"].includes(d.status) && <button type="button" data-testid="ap-copy-new" onClick={() => onRedraft({ ...d, id: null })} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#3A4A66]">복사해서 새로 쓰기</button>}
               {(() => {
                 const hidden = (d.hiddenBy || []).includes(me.uid);
                 const finished = d.status !== "pending" && !(d.status === "approved" && d.cancel?.status === "pending");
