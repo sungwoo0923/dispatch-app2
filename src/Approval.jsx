@@ -1077,23 +1077,35 @@ function pickOptions(f, { staff, hr, refs, data } = {}) {
     default: return [];
   }
 }
-// 🧾 2026-11-02 지출결의 지출 내역 입력 — 행마다 카드(발생일·지출처·적요·공급가액·세액·합계·입금계좌·비고), [+ 행 추가]/[복사]/[삭제]
+// 🧾 2026-11-02 지출결의 지출 내역 입력 — 행마다 카드(발생일·지출처·적요·공급가액·세액·합계·입금계좌·비고)
 //    합계는 공급가액+세액으로 자동(합계만 알면 합계 칸에 바로 입력 가능). [부가세 10%]·[합계에서 나누기] 빠른 계산.
+// 📄 2026-11-19 사용자 요청 — 행을 10개 넣으면 아래로 너무 길어져서, 입력 칸은 하나만 두고 페이지처럼 넘긴다
+//    · 위쪽 번호 칩(1 · 2 · 3 …)에 지출처 · 금액이 보이고, 누르면 그 행으로 · ◀ ▶ 로 앞뒤 이동
+//    · [복사] 옆 [+ 행 추가] — 누르면 새 행이 생기고 바로 그 행으로 넘어간다(복사도 같음)
+//    · 아래 [다음 행 →](마지막 행이면 [+ 새 행]) · 지출처나 합계가 빈 행은 칩에 주황 점
+//    · [목록으로 보기]를 켜면 예전처럼 모든 행을 아래로 펼쳐 볼 수 있다
 const moneyIn = (v) => String(v || "").replace(/[^\d]/g, "");
 function SpendLinesInput({ value, onChange }) {
   const rows = Array.isArray(value) && value.length ? value : [blankSpendRow()];
+  const [cur, setCur] = React.useState(0);
+  const [listView, setListView] = React.useState(false);
+  const chipsRef = React.useRef(null);
+  const at = Math.min(cur, rows.length - 1);
+  React.useEffect(() => { if (cur > rows.length - 1) setCur(rows.length - 1); }, [rows.length, cur]);
+  React.useEffect(() => { chipsRef.current?.querySelector(`[data-spend-chip="${at}"]`)?.scrollIntoView?.({ block: "nearest", inline: "nearest" }); }, [at]);
   const set = (i, patch) => onChange(rows.map((r, j) => {
     if (j !== i) return r;
     const n = { ...r, ...patch };
     if ("supply" in patch || "vat" in patch) { const s = (Number(n.supply) || 0) + (Number(n.vat) || 0); n.total = s ? String(s) : ""; }
     return n;
   }));
-  const add = () => onChange([...rows, blankSpendRow(rows[rows.length - 1]?.date)]);
-  const dup = (i) => onChange([...rows.slice(0, i + 1), { ...rows[i], memo: "", supply: "", vat: "", total: "", note: "" }, ...rows.slice(i + 1)]);
+  const add = () => { onChange([...rows, blankSpendRow(rows[rows.length - 1]?.date)]); setCur(rows.length); };
+  const dup = (i) => { onChange([...rows.slice(0, i + 1), { ...rows[i], memo: "", supply: "", vat: "", total: "", note: "" }, ...rows.slice(i + 1)]); setCur(i + 1); };
   const del = async (i) => {
     const r = rows[i];
     if ((r.vendor || r.memo || spendRowTotal(r)) && !await kpConfirm(`${i + 1}번 행${r.vendor ? `(${r.vendor})` : ""}을 삭제할까요?`)) return;
     onChange(rows.length > 1 ? rows.filter((_, j) => j !== i) : [blankSpendRow(r.date)]);
+    setCur(Math.max(0, Math.min(i, rows.length - 2)));
   };
   const t = spendTotals(rows);
   const lab = "block text-[11.5px] font-extrabold text-[#5B6B85] mb-1";
@@ -1103,40 +1115,76 @@ function SpendLinesInput({ value, onChange }) {
       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12.5px] font-bold text-[#5B6B85]">원</span>
     </div>
   );
-  return (
-    <div className="space-y-2.5" data-spend-lines>
-      {rows.map((r, i) => {
-        const sum = (Number(r.supply) || 0) + (Number(r.vat) || 0);
-        const off = sum > 0 && Number(r.total) > 0 && Number(r.total) !== sum;
-        return (
-          <div key={i} data-spend-row={i} className="rounded-2xl border border-[#DCE3EE] bg-[#FAFBFD] overflow-hidden">
-            <div className="flex items-center gap-2 px-3 py-2 bg-white border-b border-[#E3E8F0]">
-              <span className="w-6 h-6 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black flex items-center justify-center tabular-nums">{i + 1}</span>
-              <span className="flex-1 min-w-0 truncate text-[13.5px] font-black text-[#0F1A30]">{r.vendor || <span className="text-[#9AA9C3] font-bold">지출처 미입력</span>}</span>
-              <span className="text-[13.5px] font-black text-[#0F1A30] tabular-nums whitespace-nowrap">{spendRowTotal(r) ? fmtWon(spendRowTotal(r)) : ""}</span>
-              <button type="button" onClick={() => dup(i)} title="같은 지출처·계좌로 아래에 행 추가" className="h-7 px-2 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-black text-[#3A4A66] hover:border-[#4B6CB7] whitespace-nowrap">복사</button>
-              <button type="button" onClick={() => del(i)} title="행 삭제" aria-label={`${i + 1}번 행 삭제`} className="w-7 h-7 rounded-lg text-[#5B6B85] hover:bg-[#EEF3FC] hover:text-[#0F1A30]">✕</button>
-            </div>
-            <div className="p-3 grid grid-cols-2 gap-x-2 gap-y-2.5">
-              <div className="col-span-2 sm:col-span-1"><span className={lab}>발생일(납입일)</span><CustomDatePicker value={r.date || ""} onChange={(e) => set(i, { date: e.target.value })} className={inp} showIcon placeholder="날짜 선택" /></div>
-              <div className="col-span-2 sm:col-span-1"><span className={lab}>지출처(업체명) *</span><input value={r.vendor || ""} onChange={(e) => set(i, { vendor: e.target.value })} placeholder="예) ○○특장 김제공장" className={inp} /></div>
-              <div className="col-span-2"><span className={lab}>적요</span><input value={r.memo || ""} onChange={(e) => set(i, { memo: e.target.value })} placeholder="예) 1234 홍길동 박스 고리 작업" className={inp} /></div>
-              <div><span className={lab}>공급가액</span>{won("supply", r, i)}</div>
-              <div><span className={lab}>세액(부가세)</span>{won("vat", r, i, "없으면 비움")}</div>
-              <div className="col-span-2"><span className={lab}>합계 *</span>{won("total", r, i)}
-                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  <button type="button" disabled={!(Number(r.supply) > 0)} onClick={() => set(i, { vat: String(Math.round(Number(r.supply) * 0.1)) })} className="h-7 px-2.5 rounded-lg border border-[#C9D6EE] bg-[#F3F6FA] text-[12px] font-black text-[#1B2B4B] hover:bg-[#EEF3FC] disabled:opacity-40">부가세 10%</button>
-                  <button type="button" disabled={!(Number(r.total) > 0)} onClick={() => { const tt = Number(r.total); const sp = Math.round(tt / 1.1); set(i, { supply: String(sp), vat: String(tt - sp) }); }} className="h-7 px-2.5 rounded-lg border border-[#C9D6EE] bg-[#F3F6FA] text-[12px] font-black text-[#1B2B4B] hover:bg-[#EEF3FC] disabled:opacity-40">합계에서 공급가·세액 나누기</button>
-                  {off && <span className="text-[12px] font-bold text-[#2D4C82]">! 공급가액+세액({n0(sum)})과 다릅니다</span>}
-                </div>
-              </div>
-              <div className="col-span-2"><span className={lab}>입금 계좌</span><BankAccountInput value={r.bank} onChange={(b) => set(i, { bank: b })} stacked /></div>
-              <div className="col-span-2"><span className={lab}>비고</span><input value={r.note || ""} onChange={(e) => set(i, { note: e.target.value })} placeholder="선택" className={inp} /></div>
+  const empty = (r) => !String(r.vendor || "").trim() || !spendRowTotal(r);
+  const card = (r, i) => {
+    const sum = (Number(r.supply) || 0) + (Number(r.vat) || 0);
+    const off = sum > 0 && Number(r.total) > 0 && Number(r.total) !== sum;
+    return (
+      <div key={i} data-spend-row={i} className="rounded-2xl border border-[#DCE3EE] bg-[#FAFBFD] overflow-hidden">
+        <div className="flex items-center gap-2 px-3 py-2 bg-white border-b border-[#E3E8F0]">
+          <span className="h-6 px-1.5 min-w-6 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black flex items-center justify-center tabular-nums whitespace-nowrap">{i + 1}{!listView && rows.length > 1 ? <span className="text-white/55 font-bold">/{rows.length}</span> : null}</span>
+          <span className="flex-1 min-w-0 truncate text-[13.5px] font-black text-[#0F1A30]">{r.vendor || <span className="text-[#9AA9C3] font-bold">지출처 미입력</span>}</span>
+          <span className="text-[13.5px] font-black text-[#0F1A30] tabular-nums whitespace-nowrap">{spendRowTotal(r) ? fmtWon(spendRowTotal(r)) : ""}</span>
+          <button type="button" onClick={() => dup(i)} title="같은 지출처·계좌로 바로 다음에 행 추가" className="h-7 px-2 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-black text-[#3A4A66] hover:border-[#4B6CB7] whitespace-nowrap shrink-0">복사</button>
+          <button type="button" onClick={add} data-spend-add title="빈 행을 맨 끝에 추가하고 그 행으로 넘어가요" className="h-7 px-2 rounded-lg border border-[#1B2B4B] bg-[#1B2B4B] text-white text-[12px] font-black hover:bg-[#0F1A30] whitespace-nowrap shrink-0">+ 행 추가</button>
+          <button type="button" onClick={() => del(i)} title="행 삭제" aria-label={`${i + 1}번 행 삭제`} className="w-7 h-7 rounded-lg text-[#5B6B85] hover:bg-[#EEF3FC] hover:text-[#0F1A30] shrink-0">✕</button>
+        </div>
+        <div className="p-3 grid grid-cols-2 gap-x-2 gap-y-2.5">
+          <div className="col-span-2 sm:col-span-1"><span className={lab}>발생일(납입일)</span><CustomDatePicker value={r.date || ""} onChange={(e) => set(i, { date: e.target.value })} className={inp} showIcon placeholder="날짜 선택" /></div>
+          <div className="col-span-2 sm:col-span-1"><span className={lab}>지출처(업체명) *</span><input value={r.vendor || ""} onChange={(e) => set(i, { vendor: e.target.value })} placeholder="예) ○○특장 김제공장" className={inp} /></div>
+          <div className="col-span-2"><span className={lab}>적요</span><input value={r.memo || ""} onChange={(e) => set(i, { memo: e.target.value })} placeholder="예) 1234 홍길동 박스 고리 작업" className={inp} /></div>
+          <div><span className={lab}>공급가액</span>{won("supply", r, i)}</div>
+          <div><span className={lab}>세액(부가세)</span>{won("vat", r, i, "없으면 비움")}</div>
+          <div className="col-span-2"><span className={lab}>합계 *</span>{won("total", r, i)}
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <button type="button" disabled={!(Number(r.supply) > 0)} onClick={() => set(i, { vat: String(Math.round(Number(r.supply) * 0.1)) })} className="h-7 px-2.5 rounded-lg border border-[#C9D6EE] bg-[#F3F6FA] text-[12px] font-black text-[#1B2B4B] hover:bg-[#EEF3FC] disabled:opacity-40">부가세 10%</button>
+              <button type="button" disabled={!(Number(r.total) > 0)} onClick={() => { const tt = Number(r.total); const sp = Math.round(tt / 1.1); set(i, { supply: String(sp), vat: String(tt - sp) }); }} className="h-7 px-2.5 rounded-lg border border-[#C9D6EE] bg-[#F3F6FA] text-[12px] font-black text-[#1B2B4B] hover:bg-[#EEF3FC] disabled:opacity-40">합계에서 공급가·세액 나누기</button>
+              {off && <span className="text-[12px] font-bold text-[#2D4C82]">! 공급가액+세액({n0(sum)})과 다릅니다</span>}
             </div>
           </div>
-        );
-      })}
-      <button type="button" onClick={add} className="w-full h-11 rounded-2xl border-2 border-dashed border-[#9AB0D6] bg-white text-[14px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD] hover:border-[#2D4C82]">+ 행 추가</button>
+          <div className="col-span-2"><span className={lab}>입금 계좌</span><BankAccountInput value={r.bank} onChange={(b) => set(i, { bank: b })} stacked /></div>
+          <div className="col-span-2"><span className={lab}>비고</span><input value={r.note || ""} onChange={(e) => set(i, { note: e.target.value })} placeholder="선택" className={inp} /></div>
+        </div>
+        {!listView && (
+          <div className="flex items-center gap-2 px-3 pb-3">
+            <button type="button" disabled={i === 0} onClick={() => setCur(i - 1)} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#3A4A66] disabled:opacity-35 whitespace-nowrap">← 이전 행</button>
+            <div className="flex-1" />
+            {i < rows.length - 1
+              ? <button type="button" onClick={() => setCur(i + 1)} className="h-10 px-4 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black whitespace-nowrap">다음 행 →</button>
+              : <button type="button" onClick={add} className="h-10 px-4 rounded-xl border-2 border-dashed border-[#9AB0D6] bg-white text-[13px] font-black text-[#1B2B4B] hover:border-[#2D4C82] whitespace-nowrap">+ 새 행</button>}
+          </div>
+        )}
+      </div>
+    );
+  };
+  return (
+    <div className="space-y-2.5" data-spend-lines>
+      {/* 행 번호 칩 — 누르면 그 행으로(지출처 · 금액이 보여 한눈에) */}
+      {(rows.length > 1 || listView) && (
+        <div className="flex items-center gap-1.5">
+          {!listView && <button type="button" aria-label="이전 행" disabled={at === 0} onClick={() => setCur(at - 1)} className="w-8 h-8 rounded-lg border border-[#DCE3EE] bg-white text-[#1B2B4B] font-black disabled:opacity-35 shrink-0">‹</button>}
+          <div ref={chipsRef} className="flex-1 min-w-0 flex gap-1.5 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "thin" }}>
+            {rows.map((r, i) => {
+              const on = !listView && i === at;
+              return (
+                <button key={i} type="button" data-spend-chip={i}
+                  onClick={() => { if (listView) document.querySelector(`[data-spend-row="${i}"]`)?.scrollIntoView({ block: "start", behavior: "smooth" }); else setCur(i); }}
+                  title={`${i + 1}번 · ${r.vendor || "지출처 미입력"} · ${spendRowTotal(r) ? fmtWon(spendRowTotal(r)) : "금액 없음"}`}
+                  className={`relative shrink-0 h-8 max-w-[170px] pl-2 pr-2.5 rounded-lg border text-[12px] font-black flex items-center gap-1.5 whitespace-nowrap transition ${on ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "bg-white border-[#DCE3EE] text-[#1B2B4B] hover:border-[#4B6CB7]"}`}>
+                  <span className={`tabular-nums ${on ? "text-white/70" : "text-[#7A89A3]"}`}>{i + 1}</span>
+                  <span className="truncate">{r.vendor || "미입력"}</span>
+                  {spendRowTotal(r) > 0 && <span className={`tabular-nums font-bold ${on ? "text-white/75" : "text-[#5B6B85]"}`}>{n0(spendRowTotal(r))}</span>}
+                  {empty(r) && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#F79009] border-2 border-white" title="지출처 또는 합계가 비었어요" />}
+                </button>
+              );
+            })}
+          </div>
+          {!listView && <button type="button" aria-label="다음 행" disabled={at >= rows.length - 1} onClick={() => setCur(at + 1)} className="w-8 h-8 rounded-lg border border-[#DCE3EE] bg-white text-[#1B2B4B] font-black disabled:opacity-35 shrink-0">›</button>}
+          <button type="button" onClick={() => setListView((v) => !v)} title={listView ? "한 행씩 넘겨 보기" : "모든 행을 아래로 펼쳐 보기"} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-black text-[#3A4A66] hover:border-[#4B6CB7] whitespace-nowrap shrink-0">{listView ? "한 행씩" : "목록으로 보기"}</button>
+        </div>
+      )}
+      {listView ? rows.map((r, i) => card(r, i)) : card(rows[at], at)}
+      {listView && <button type="button" onClick={add} className="w-full h-11 rounded-2xl border-2 border-dashed border-[#9AB0D6] bg-white text-[14px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD] hover:border-[#2D4C82]">+ 행 추가</button>}
       <div className="rounded-2xl text-white px-4 py-3" style={{ background: "linear-gradient(120deg,#0F1A30,#1B2B4B)" }}>
         <div className="flex items-center justify-between gap-3">
           <span className="text-[11.5px] font-extrabold tracking-[0.2em] text-[#9AB0D6]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>TOTAL · {rows.filter((r) => spendRowTotal(r) > 0).length}건</span>
