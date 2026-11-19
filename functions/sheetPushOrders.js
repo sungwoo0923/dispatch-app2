@@ -16,7 +16,7 @@ const SERVICE_ACCOUNT_HINT = "시트를 서버 계정(dispatch-app-9b92f@appspot
 const MODES = ["off", "dry", "on"];
 const ts = (v) => (v && typeof v.toMillis === "function" ? v.toMillis() : Number(v) || 0);
 // ⭐ 2026-11-17 시트 줄 연결값 — 복사한 오더에 딸려 가면 원본 줄을 가리킨다(복사본을 고치면 원본 줄을 덮어쓰고, 지우면 원본 줄을 지웠다)
-const LINK_FIELDS = ["이전출처", "시트연동", "_sheetKeys", "_programKeys", "_sheetBase", "이전줄수", "시트탭필요", "시트탭후보"];
+const LINK_FIELDS = ["이전출처", "시트연동", "_sheetKeys", "_programKeys", "_sheetBase", "_sheetWayRaw", "이전줄수", "시트탭필요", "시트탭후보"];
 // 남의 줄 주소를 가진 오더 — 시트에서 온 오더(등록기기 "구글시트 이전")도, 프로그램에서 만들어 시트에 줄을 만든 오더(시트연동)도 아닌데 이전출처가 있다 = 복사본
 const borrowedLink = (x) => !!x?.이전출처 && x.등록기기 !== "구글시트 이전" && x.시트연동 !== true;
 const CONFLICTS = "sheetPushConflicts"; // 쓰기 직전에 다시 읽은 줄이 처음 읽은 줄과 달라 쓰지 않은 기록(원인 확인용)
