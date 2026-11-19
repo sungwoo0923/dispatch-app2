@@ -12,6 +12,14 @@ import { teamText } from "./teamNames"; // ⭐ 2026-11-17 예전 부서 이름(l
 const PAY_SKIP_FORMS = ["card"];
 export const isPayDoc = (d) => d?.cat === "expense" && !PAY_SKIP_FORMS.includes(d?.form) && Number(d?.amount) > 0;
 // null(지급 대상 아님) | "wait"(지급 대기) | "paid"(지급완료)
+// 📋 2026-11-19 태진 요청 — 지출 내역이 여러 줄인 지출결의는 경리가 줄마다 "지급함" 체크(d.paidLines = { "줄번호": { at, by, byName } })
+//  n: 지출 내역 줄 수 · done: 체크된 줄 수(문서 전체 지급완료면 모두 지급으로 본다)
+export function payLinesInfo(d) {
+  const n = Array.isArray(d?.data?.lines) ? d.data.lines.length : 0;
+  const pl = d?.paidLines && typeof d.paidLines === "object" ? d.paidLines : {};
+  const done = d?.paid?.at ? n : Object.keys(pl).filter((k) => pl[k] && Number(k) < n).length;
+  return { n, done, map: pl };
+}
 export const payState = (d) => (!isPayDoc(d) || d.status !== "approved" ? null : d.paid?.at ? "paid" : "wait");
 const FIN_ROLES = ["test", "acctStaff", "totalMaster"];
 export const FIN_TEAM = /재무|경리|회계|총무/;
