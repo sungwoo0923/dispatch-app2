@@ -21,7 +21,7 @@ const sheet = () => ({
 const formulasOf = (tabs) => Object.fromEntries(Object.entries(tabs).map(([t, rows]) => [t, rows.map((r, i) => r.map((v, c) => (t === "아산 내수" && i >= 4 && [9, 12, 13].includes(c) ? `=X${i + 1}` : v)))]));
 const ctxOf = (tabs = sheet()) => makePushContext(Object.entries(tabs).map(([title, rows]) => ({ title, rows })), JY, formulasOf(tabs));
 
-// 🗓 2026-11-16 입고시간(당착 · 월착 · 시간) · 마감월(26년11월) · 운송사 칸(이미 적힌 업체는 덮지 않음 → 프로그램 값 우선)
+// 🗓 2026-11-16 입고시간(당착 · 월착 · 시간) · 마감월(26년11월) · 운송사 칸(2026-11-19 — 프로그램에서 바꾸면 시트 칸도 바뀐다)
 {
   const tabs = { "평택 내수": [["▣ 평택"], [""], ["", "", "", "", "매출", "", "매입"], ["상차일자", "출발지", "도착지", "입고시간", "운송료", "합계", "운송료", "합계", "마감월", "운송사", "차량번호", "이름", "연락처"],
     ["2026. 11. 5", "평택", "이천", "", "88,000", "88,000", "60,000", "60,000", "26년11월", "전국특송", "경기33다3333", "박삼", "010-3333-4444"]] };
@@ -29,8 +29,8 @@ const ctxOf = (tabs = sheet()) => makePushContext(Object.entries(tabs).map(([tit
   const doc = forOrderDoc(ctx.built.orders[0], { company: "JY로지스틱스", batchId: "t" });
   assert.equal(doc.배차방식 ? true : true, true);
   const u = planUpdate(ctx, doc, { ...doc, 배차방식: "기사직통" });
-  assert.equal(u.ok, true); assert.ok(!u.cells.some((c) => c.a1.startsWith("J")), "운송사 칸(전국특송)은 그대로");
-  assert.ok(u.docPatch._programKeys.includes("배차방식"), "배차방식은 프로그램 값 우선(_programKeys)");
+  assert.equal(u.ok, true); assert.deepEqual(u.cells.map((c) => [c.a1, c.value]), [["J5", "기사직통"]], "배차방식만 바꾸면 운송사 칸만 바뀐다");
+  assert.ok(!u.docPatch._programKeys.includes("배차방식"), "시트에 썼으니 보라색(프로그램 값 우선) 아님");
   const c = planCreate(ctx, { 상차일: "2026-11-14", 하차일: "2026-11-14", 상차지명: "평택", 하차지명: "이천", 청구운임: "90000", 기사운임: "70000", 배차방식: "기사직통" }, "평택 내수", { rowCount: 100 });
   const m = Object.fromEntries(c.cells.map((x) => [x.a1, x.value]));
   assert.equal(c.ok, true); assert.equal(m.D6, "당착"); assert.equal(m.I6, "26년11월"); assert.equal(m.J6, "기사직통");
@@ -575,9 +575,10 @@ async function world(mode, opts = {}) {
   await w.write("o아6", { ...w.db.data("orders", "o아6"), 차량번호: "경기66바6666", 이름: "육육", 배차방식: "원콜" });
   await w.run();
   assert.deepEqual(w.tabs["아산 내수"][5].slice(15, 18), ["원콜", "경기66바6666", "육육"]);
+  w.sh.writes.length = 0;
   await w.write("o아6", { ...w.db.data("orders", "o아6"), 배차방식: "기사직통" });
   await w.run();
-  assert.equal(w.tabs["아산 내수"][5][15], "원콜", "기사는 그대로 · 배차방식만 → 시트 업체 이름 유지(2026-11-16 규칙)");
+  assert.deepEqual(w.sh.writes, ["아산 내수!P6=기사직통"], "배차방식만 바꾸면 운송사 칸만 바뀐다");
   console.log("기사 교체(쓰는 사이 또 고침 · 운송사 칸) OK");
 }
 console.log("sheetPush: 모두 통과");
