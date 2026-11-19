@@ -1,6 +1,6 @@
 // 🏦 2026-11-19 통장 거래내역 읽기 · 출금 ↔ 지출결의 맞추기 테스트 — node scripts/bankStmt.test.mjs
 import assert from "node:assert/strict";
-import { parseStatement, normDate, summarize, depositsOf, matchWithdrawals, ledgerKeys, txnLedgerKey } from "../src/bankStmtCore.js";
+import { parseStatement, normDate, summarize, depositsOf, matchWithdrawals, ledgerKeys, txnLedgerKey, presetByBankName, savedOf, BANK_PRESETS } from "../src/bankStmtCore.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n++; console.log(`  ✓ ${name}`); };
@@ -75,6 +75,37 @@ t("장부에 이미 있는지", () => {
   const keys = ledgerKeys([{ date: "2026-11-18", type: "지출", amount: 85000 }]);
   assert.equal(keys.has(txnLedgerKey({ date: "2026-11-18", in: 0, out: 85000 })), true);
   assert.equal(keys.has(txnLedgerKey({ date: "2026-11-18", in: 85000, out: 0 })), false);
+});
+
+t("은행 고르기 — 카카오뱅크 · 토스뱅크(거래금액 한 칸, 출금은 −)", () => {
+  const k = parseStatement([["카카오뱅크 거래내역"], ["거래일시", "구분", "거래금액", "거래 후 잔액", "거래구분", "내용", "메모"], ["2026.11.18 10:00:00", "입금", "50,000", "1", "일반입금", "김철수", ""], ["2026.11.18 11:00:00", "출금", "-12,000", "1", "체크카드", "편의점", ""]], { bank: "kakao" });
+  assert.deepEqual(k.txns.map((x) => [x.in, x.out, x.name]), [[50000, 0, "김철수"], [0, 12000, "편의점"]]);
+  const tb = parseStatement([["거래 일시", "적요", "거래 유형", "거래 금액", "거래 후 잔액"], ["2026-11-18 09:00", "급여", "이체", "-3,000,000", "1"], ["2026-11-18 10:00", "한빛물류", "입금", "1,100,000", "1"]], { bank: "toss" });
+  assert.deepEqual(tb.txns.map((x) => [x.in, x.out]), [[0, 3000000], [1100000, 0]]);
+});
+
+t("은행 고르기 — 국민(출금액(원) · 보낸분/받는분) · 우리(지급)", () => {
+  const kb = parseStatement([["거래일시", "적요", "보낸분/받는분", "송금메모", "출금액(원)", "입금액(원)", "잔액(원)", "거래점"], ["2026.11.18 10:00:00", "인터넷", "홍길동", "11월", "0", "300,000", "1", "x"]], { bank: "kb" });
+  assert.deepEqual([kb.txns[0].in, kb.txns[0].name, kb.txns[0].memo], [300000, "홍길동", "11월"]);
+  const wr = parseStatement([["거래일시", "적요", "기재내용", "지급(원)", "입금(원)", "거래후 잔액(원)"], ["2026.11.18 10:00", "타행", "정비소", "120,000", "0", "1"]], { bank: "woori" });
+  assert.deepEqual([wr.txns[0].out, wr.txns[0].name], [120000, "정비소"]);
+});
+
+t("칸을 직접 고르면 다음에도 그 이름으로 찾는다", () => {
+  const aoa = [["일", "들어온돈", "나간돈", "누구"], ["2026-11-18", "1000", "", "갑"]];
+  const first = parseStatement(aoa);
+  assert.equal(first.txns.length, 0); // 자동으로는 못 찾음
+  const map = { date: 0, in: 1, out: 2, name: 3 };
+  const fixed = parseStatement(aoa, { map, headerRow: 0 });
+  assert.equal(fixed.txns[0].in, 1000);
+  const saved = savedOf(map, aoa[0]);
+  assert.deepEqual(saved, { date: "일", in: "들어온돈", out: "나간돈", name: "누구" });
+  assert.equal(parseStatement(aoa, { saved }).txns[0].name, "갑");
+});
+
+t("통장 이름으로 은행 맞추기", () => {
+  assert.equal(presetByBankName("IBK기업은행"), "ibk"); assert.equal(presetByBankName("국민"), "kb"); assert.equal(presetByBankName("카카오뱅크"), "kakao"); assert.equal(presetByBankName(""), "");
+  assert.ok(BANK_PRESETS.length >= 15);
 });
 
 console.log(`\n통장 내역 테스트 ${n}개 통과`);
