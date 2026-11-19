@@ -276,9 +276,10 @@ function fieldEdits(k, o, env) {
     case "차량번호": return one(L.cols.plate, o.차량번호);
     case "이름": return one(L.cols.name, o.이름);
     case "전화번호": return one(L.cols.phone, o.전화번호);
-    case "배차방식": { // 🟪 2026-11-16 시트 운송사 칸에 이미 업체가 적혀 있으면 덮지 않는다 — 프로그램 값이 우선(오더에 _programKeys로 남고 화면에 보라색)
+    case "배차방식": { // ⭐ 2026-11-19 프로그램에서 배차방식을 바꾸면 시트 운송사 칸도 그대로 바꾼다(사용자 요청 — 프로그램에서 고치면 시트에, 시트에서 고치면 프로그램에)
+      //  예전(11-16)엔 칸에 업체가 적혀 있으면 덮지 않고 프로그램에만 두었다(보라색). 이제 보라색은 시트 양식상 그 값으로 못 적을 때만
       const c = col(L.cols.carrier); if (c == null) return null;
-      return cell(row[c]) ? null : [{ c, v: cell(o.배차방식) }];
+      return [{ c, v: cell(o.배차방식) }];
     }
     case "배차상태": return one(L.cols.status, o.배차상태);
     case "청구운임":
