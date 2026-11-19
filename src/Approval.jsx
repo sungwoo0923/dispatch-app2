@@ -510,7 +510,8 @@ function Cell({ label, children, wide, last }) {
 
 // ⭐ 2026-10-29 미리보기 문서가 작다는 의견 — 문서(기본 폭 780px)를 보이는 칸 폭에 맞춰 키운다(최대 1.5배).
 //    인쇄·이미지 저장(html2canvas) 때는 잠깐 원래 크기(1배)로 되돌려 찍는다.
-function FitPaper({ children, base = 820, max = 1.5 }) {
+// 🖥 2026-11-19 shrink — 결재함 오른쪽 미리보기처럼 칸이 좁아도 A4 표 모양 그대로 칸 폭에 맞춰 줄인다(좌우가 잘리지 않게 · 아주 좁을 때만 카드)
+function FitPaper({ children, base = 820, max = 1.5, shrink = false }) {
   const ref = React.useRef(null);
   const [z, setZ] = React.useState(1);
   const [compact, setCompact] = React.useState(() => typeof window !== "undefined" && window.innerWidth < 640);
@@ -528,13 +529,13 @@ function FitPaper({ children, base = 820, max = 1.5 }) {
     const ro = new ResizeObserver(([e]) => {
       const w = e.contentRect.width;
       // 휴대폰처럼 좁으면 축소하지 않고 좁은 화면용 배치로(글씨는 그대로 읽히게)
-      if (w < 640) { setCompact(true); setZ(1); return; }
+      if (w < (shrink ? 300 : 640)) { setCompact(true); setZ(1); return; }
       setCompact(false);
-      setZ(Math.max(1, Math.min(max, Math.floor((w / base) * 100) / 100)));
+      setZ(Math.max(shrink ? 0.35 : 1, Math.min(max, Math.floor((w / base) * 100) / 100)));
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [base, max]);
+  }, [base, max, shrink]);
   return <div ref={ref} data-fithost><PaperCompact.Provider value={full ? false : compact}><div data-fitpaper style={full ? { zoom: 1, width: 780 } : { zoom: z }}>{children}</div></PaperCompact.Provider></div>;
 }
 // 인쇄·PDF 직전 종이 모양(표·1배)으로 바꾸고 화면이 다시 그려질 때까지 기다린다 → 끝나면 되돌린다
@@ -2083,7 +2084,7 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
   return wrap(
       <div className={inline ? "w-full h-[calc(100vh-190px)] min-h-[640px] bg-[#F4F6FA] rounded-[20px] border border-[#E3E8F0] overflow-hidden flex flex-row" : "w-full max-w-[1280px] h-full md:h-[92vh] bg-[#F4F6FA] md:rounded-[24px] overflow-y-auto md:overflow-hidden flex flex-col md:flex-row shadow-[0_24px_60px_rgba(15,26,48,0.4)]"} onClick={(e) => e.stopPropagation()}>
         <div className="md:flex-1 md:overflow-auto p-3 md:p-6 bg-[#E9EDF3] order-2 md:order-1">
-          <FitPaper><ApprovalPaper paperRef={paperRef} form={form} data={d.data} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff} status={d.status} paid={pstate === "paid" ? d.paid : null} files={d.files} images={d.images}
+          <FitPaper shrink={inline}><ApprovalPaper paperRef={paperRef} form={form} data={d.data} title={d.title} line={d.line} cc={d.cc} drafter={d.drafter} docNo={d.docNo} createdMs={toMs(d.createdAt)} staff={staff} status={d.status} paid={pstate === "paid" ? d.paid : null} files={d.files} images={d.images}
             paidLines={phase === "partial" ? paidOnly : null} partial={phase === "partial" ? { done: lineDone, n: plines.n, date: lastPaidDate } : null} /></FitPaper>
           {/* 📎 2026-11-08 첨부 — Storage 파일(목록·미리보기·저장) + 예전 사진 첨부(base64) · [첨부 모두 저장]은 ZIP 하나로 */}
           {/* ⭐ 2026-11-09 새로 올린 사진 파일도 예전 사진처럼 누르면 크게 보기 · 이미지 저장(onGallery) */}
@@ -2852,7 +2853,8 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
 
   // ⭐ 2026-10-31 넓은 화면(1280px+)은 왼쪽 목록 · 오른쪽 문서 미리보기
   const [wide, setWide] = React.useState(() => typeof window !== "undefined" && window.innerWidth >= 1280);
-  React.useEffect(() => { const f = () => setWide(window.innerWidth >= 1280); window.addEventListener("resize", f); return () => window.removeEventListener("resize", f); }, []);
+  const [vwApprox, setVw] = React.useState(() => (typeof window !== "undefined" ? window.innerWidth : 1920));
+  React.useEffect(() => { const f = () => { setWide(window.innerWidth >= 1280); setVw(window.innerWidth); }; window.addEventListener("resize", f); return () => window.removeEventListener("resize", f); }, []);
   const inboxList = (
         <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden">
           {(() => {
@@ -2932,8 +2934,9 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
       )}
 
       {(page === "inbox" || page === "mine") && wide ? (
-        <div className="grid gap-4 items-start" style={{ gridTemplateColumns: "minmax(400px, 0.85fr) minmax(0, 1.5fr)" }}>
-          <div className="min-w-0">{page === "inbox" ? inboxList : mineList}</div>
+        // 🖥 2026-11-19 문서를 열면 목록 칸을 줄이고, 1600px보다 좁은 화면은 목록을 잠깐 접어 미리보기 · 오른쪽 칸이 한눈에(✕ 누르면 목록)
+        <div className="grid gap-4 items-start" style={{ gridTemplateColumns: cur ? (vwApprox < 1600 ? "minmax(0, 1fr)" : "minmax(340px, 0.7fr) minmax(0, 1.6fr)") : "minmax(400px, 0.85fr) minmax(0, 1.5fr)" }}>
+          <div className="min-w-0" style={cur && vwApprox < 1600 ? { display: "none" } : undefined}>{page === "inbox" ? inboxList : mineList}</div>
           <div className="min-w-0 sticky top-[76px]">
             {cur ? <Viewer key={cur.id} inline canHr={canHr} d={cur} me={meFull} staff={staff} company={company} onClose={() => setOpen(null)} onRedraft={redraft} onEdit={edit} />
               : <div className="h-[calc(100vh-190px)] min-h-[640px] rounded-[20px] border-2 border-dashed border-[#DCE3EE] bg-white grid place-items-center text-center"><div><div className="text-[12px] font-extrabold tracking-[0.24em] text-[#9AA9C3]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>PREVIEW</div><div className="text-[15px] font-black text-[#5B6B85] mt-1">왼쪽 목록에서 문서를 누르면<br />여기에 결재 문서가 바로 보입니다</div></div></div>}
