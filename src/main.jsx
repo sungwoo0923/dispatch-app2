@@ -13,6 +13,8 @@ import { installDownloadWatch } from "./securityWatch"; // 🛡 2026-11-09 짧�
 import { installStickyTableHeads } from "./stickyTableHead"; // 📌 2026-11-17 긴 표는 머리줄(칸 이름)이 맨 위에 고정돼 따라온다(엑셀처럼 · 모든 화면)
 import { installPendingApprovalWatch } from "./pendingOpen"; // 🛠 2026-11-17 결재 화면 이동 요청을 새로고침 뒤에도 이어서
 installPendingApprovalWatch();
+import { installLookupFeedback } from "./lookupFeedback"; // 🔎 2026-11-19 [조회]를 누르면 "조회했어요" 표시(모든 화면)
+installLookupFeedback();
 
 // ⭐ 2026-11-03 최고관리자 — 탭마다 다른 운송사를 열 수 있게 "지금 회사"(loginCompany·userCompany)를 탭별로 기억한다.
 //  예전엔 브라우저 전체에 하나라, 오른쪽 탭에서 돌캐로 들어가면 왼쪽 태진 탭도 몰래 돌캐로 바뀌어
