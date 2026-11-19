@@ -20,6 +20,14 @@ export function payLinesInfo(d) {
   const done = d?.paid?.at ? n : Object.keys(pl).filter((k) => pl[k] && Number(k) < n).length;
   return { n, done, map: pl };
 }
+// 💳 2026-11-19 부분 지급 — 여러 줄 지출결의에서 고른 줄만 지급하면 "partial"(남색 부분지급 도장), 남은 줄까지 다 지급하면 "paid"
+//  null(지급 대상 아님) | "wait" | "partial" | "paid" — 결재함 탭(지급 대기 · 지급완료)은 예전처럼 payState(부분 지급은 지급 대기 쪽)
+export function payPhase(d) {
+  const st = payState(d);
+  if (st !== "wait") return st;
+  const p = payLinesInfo(d);
+  return p.n >= 2 && p.done > 0 ? "partial" : "wait";
+}
 export const payState = (d) => (!isPayDoc(d) || d.status !== "approved" ? null : d.paid?.at ? "paid" : "wait");
 const FIN_ROLES = ["test", "acctStaff", "totalMaster"];
 export const FIN_TEAM = /재무|경리|회계|총무/;

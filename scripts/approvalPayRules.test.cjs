@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { initializeTestEnvironment, assertFails, assertSucceeds } = require("@firebase/rules-unit-testing");
 const fbFs = require(require.resolve("firebase/firestore", { paths: [path.dirname(require.resolve("@firebase/rules-unit-testing"))] }));
-const { doc, setDoc, updateDoc } = fbFs;
+const { doc, setDoc, updateDoc, deleteField, arrayUnion } = fbFs;
 const ROOT = process.env.REPO || path.resolve(__dirname, "..");
 let pass = 0, fail = 0;
 async function t(name, fn) { try { await fn(); pass++; console.log(`PASS ${name}`); } catch (e) { fail++; console.log(`FAIL ${name} :: ${String(e?.message || e).slice(0, 160)}`); } }
@@ -42,6 +42,11 @@ async function t(name, fn) { try { await fn(); pass++; console.log(`PASS ${name}
   await t("결재자도 아닌 일반 직원이 진행 중 문서에 지급 표시 막힘", () => assertFails(updateDoc(doc(as("user"), "approvals/pending"), pay)));
   // 📋 2026-11-19 줄별 지급 체크(paidLines) — 승인된 지출결의에서 경리만
   await t("경리 — 줄별 지급 체크", () => assertSucceeds(updateDoc(doc(as("acct"), "approvals/notInLine"), { "paidLines.0": { at: 1, by: "acct", byName: "경리" }, updatedAt: 3 })));
+  // 💳 2026-11-19 부분 지급 — 고른 줄 지급(+이력) · 줄 지급 취소 · 지급 모두 취소(paidLines 지우기)
+  await t("경리 — 부분 지급(줄 2개 + 이력 + 기안자 알림)", () => assertSucceeds(updateDoc(doc(as("acct"), "approvals/notInLine"), { "paidLines.0": { at: 1, by: "acct", date: "2026-11-19" }, "paidLines.1": { at: 1, by: "acct" }, history: arrayUnion({ at: 1, action: "부분 지급" }), drafterUnread: true, updatedAt: 4 })));
+  await t("경리 — 줄 지급 취소(필드 지우기)", () => assertSucceeds(updateDoc(doc(as("acct"), "approvals/notInLine"), { "paidLines.1": deleteField(), history: arrayUnion({ at: 2, action: "지급 취소" }), updatedAt: 5 })));
+  await t("경리 — 지급 모두 취소(paid null + paidLines 지우기)", () => assertSucceeds(updateDoc(doc(as("acct"), "approvals/notInLine"), { paid: null, paidLines: deleteField(), updatedAt: 6 })));
+  await t("일반 직원 — 부분 지급 막힘", () => assertFails(updateDoc(doc(as("user"), "approvals/notInLine"), { "paidLines.2": { at: 1 }, history: arrayUnion({ at: 3 }), updatedAt: 7 })));
   await t("일반 직원 — 줄별 지급 체크 막힘", () => assertFails(updateDoc(doc(as("user"), "approvals/notInLine"), { "paidLines.1": { at: 1, by: "user" }, updatedAt: 3 })));
   await t("경리 없는 회사 — 최종 결재자 지급 완료", () => assertSucceeds(updateDoc(doc(as("ceoC"), "approvals/fallbackC"), { ...pay, paid: { ...pay.paid, by: "ceoC" } })));
   await t("경리 없는 회사 — 중간 결재자는 막힘", () => assertFails(updateDoc(doc(as("midC"), "approvals/fallbackC"), pay)));
