@@ -1813,6 +1813,19 @@ function Progress({ d }) {
   );
 }
 
+// 📋 2026-11-19 태진 요청 — [복사해서 새로 쓰기]는 날짜 · 금액 · 첨부파일(사진 · 파일)을 뺀 나머지만 복사
+//  지출 내역 표는 지출처 · 적요 · 입금계좌 · 비고는 그대로, 발생일 · 공급가액 · 세액 · 합계만 비운다(주유비처럼 매번 같은 건은 날짜 · 금액만 넣으면 끝)
+//  지급 · 결재 기록(paid · paidLines · 결재선 진행)은 새 문서로 넘어가지 않는다(상신할 때 결재선은 새로 시작)
+export function copyForNew(d) {
+  const f = formOf(d?.form);
+  const data = { ...(d?.data || {}) };
+  for (const x of f?.fields || []) if (["date", "daterange", "time", "money"].includes(x.type)) delete data[x.k];
+  if (Array.isArray(data.lines)) data.lines = data.lines.map((r) => ({ ...r, date: "", supply: "", vat: "", total: "" }));
+  if (Array.isArray(data.items)) data.items = data.items.map((r) => ({ ...r, price: "" })); // 예전 지출결의(품목 · 단가)
+  ["date", "amount", "vexIds"].forEach((k) => { delete data[k]; });
+  const { paid, paidLines, ...rest } = d || {}; void paid; void paidLines;
+  return { ...rest, id: null, data, images: [], files: [] };
+}
 function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline = false, canHr = false }) {
   // ⭐ 2026-11-09 지급완료 확정 직후 화면 반영 — 저장은 됐는데 목록 구독이 늦게 도착하면 도장이 안 찍히고 [지급 완료 확정]이 그대로 보여
   //  한 번 더 누르게 됐다(실제 테스트운송사 문서에 '지급 완료'가 두 번 기록됨). 저장이 끝나면 화면에 바로 반영하고, 서버 값이 오면 그 값을 쓴다.
@@ -2087,23 +2100,23 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
                   <div className="rounded-xl border border-[#DCE3EE] bg-white overflow-hidden" data-ap-paylines>
                     <div className="px-3 py-2 bg-[#F5F8FD] border-b border-[#E3E8F0] flex items-center gap-2">
                       <span className="text-[13px] font-black text-[#0F1A30]">줄별 지급 체크</span>
-                      <span className={`ml-auto text-[12.5px] font-black tabular-nums ${lineDone >= plines.n ? "text-[#067647]" : "text-[#2D4C82]"}`}>{lineDone}/{plines.n}건 지급</span>
+                      <span className={`ml-auto text-[12.5px] font-black tabular-nums ${lineDone >= plines.n ? "text-[#2D4C82]" : "text-[#2D4C82]"}`}>{lineDone}/{plines.n}건 지급</span>
                     </div>
                     {spendLinesOf(d.data).map((r, i) => {
                       const c = d.paid?.at ? (lineMap[i] || d.paid) : lineMap[i];
                       const can = payable && pstate === "wait";
                       return (
                         <label key={i} className={`flex items-start gap-2.5 px-3 py-2 border-b border-[#EEF1F6] last:border-b-0 ${can ? "cursor-pointer hover:bg-[#F8FAFD]" : ""}`}>
-                          <input type="checkbox" checked={!!c} disabled={!can || busy} onChange={() => toggleLine(i)} className="mt-0.5 w-4 h-4 accent-[#067647] shrink-0" data-testid={`ap-payline-${i}`} />
+                          <input type="checkbox" checked={!!c} disabled={!can || busy} onChange={() => toggleLine(i)} className="mt-0.5 w-4 h-4 accent-[#1B2B4B] shrink-0" data-testid={`ap-payline-${i}`} />
                           <span className="flex-1 min-w-0 text-[13px] leading-snug">
                             <span className="flex items-baseline gap-2"><b className={`truncate ${c ? "text-[#5B6B85] line-through decoration-[#9AA9C3]" : "text-[#0F1A30]"}`}>{i + 1}. {r.vendor || "-"}</b><b className="ml-auto tabular-nums whitespace-nowrap text-[#0F1A30]">{n0(spendRowTotal(r)) || "-"}</b></span>
                             <span className="block text-[12px] text-[#5B6B85] truncate">{[r.date, r.memo, bankText(r.bank)].filter(Boolean).join(" · ")}</span>
-                            {c && <span className="block text-[12px] font-bold text-[#067647]">✓ 지급함 · {c.byName || ""}{c.at ? ` · ${new Date(c.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}</span>}
+                            {c && <span className="block text-[12px] font-bold text-[#2D4C82]">✓ 지급함 · {c.byName || ""}{c.at ? ` · ${new Date(c.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}</span>}
                           </span>
                         </label>
                       );
                     })}
-                    {pstate === "wait" && payable && lineDone >= plines.n && <div className="px-3 py-2 bg-[#ECFDF3] text-[12.5px] font-bold text-[#067647]">모두 체크했어요. 아래 [₩ 지급 완료 처리]를 누르면 문서가 지급완료로 바뀌어요.</div>}
+                    {pstate === "wait" && payable && lineDone >= plines.n && <div className="px-3 py-2 bg-[#EEF3FC] text-[12.5px] font-bold text-[#2D4C82]">모두 체크했어요. 아래 [₩ 지급 완료 처리]를 누르면 문서가 지급완료로 바뀌어요.</div>}
                     {pstate === "wait" && payable && lineDone < plines.n && <div className="px-3 py-2 text-[12px] font-bold text-[#7A879C]">보낸 줄을 체크해 두면 다른 담당자도 어디까지 보냈는지 바로 알아요.</div>}
                   </div>
                 )}
@@ -2172,7 +2185,8 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
               </div>
             )}
             {/* ⭐ 2026-11-02 점검 — 의견 등록은 참여자만(참여자가 아닌 관리자는 규칙상 저장이 막혀 권한 오류가 났음) */}
-            {!turn && !cancelAsk && d.status === "pending" && (d.participants || []).includes(me.uid) && (
+            {/* 💬 2026-11-19 태진 요청 — 결재 완료 · 지급완료 문서에도 의견 등록(참여자 + 지급 처리하는 경리) */}
+            {!turn && !cancelAsk && ["pending", "approved"].includes(d.status) && ((d.participants || []).includes(me.uid) || (d.status === "approved" && payable)) && (
               <div className="space-y-2">
                 <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={2} placeholder="의견 남기기" className={`${inp} h-auto py-2`} />
                 <button type="button" disabled={busy || !comment.trim()} onClick={() => act("comment")} className="w-full h-10 rounded-xl border border-[#DCE3EE] text-[14px] font-bold text-[#3A4A66] disabled:opacity-40">의견 등록</button>
@@ -2187,7 +2201,7 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
                 : <button type="button" onClick={() => { setCancelAsk(true); setComment(""); }} className="h-9 px-3.5 rounded-lg border border-[#0F1A30] text-[13.5px] font-black text-[#0F1A30]">결재 취소 요청</button>)}
               {mine && ["rejected", "withdrawn"].includes(d.status) && <button type="button" onClick={() => onRedraft(d)} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13.5px] font-black">재기안</button>}
               {/* 📋 2026-11-19 태진 요청 — 주유비처럼 반복되는 지출결의는 결재가 끝나기 전(진행 중)에도 복사해서 날짜만 바꿔 새로 올릴 수 있게(예전엔 결재 완료 · 취소 문서만) */}
-              {mine && ["pending", "approved", "cancelled"].includes(d.status) && <button type="button" data-testid="ap-copy-new" onClick={() => onRedraft({ ...d, id: null })} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#3A4A66]">복사해서 새로 쓰기</button>}
+              {mine && ["pending", "approved", "cancelled"].includes(d.status) && <button type="button" data-testid="ap-copy-new" onClick={() => onRedraft(copyForNew(d))} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#3A4A66]">복사해서 새로 쓰기</button>}
               {(() => {
                 const hidden = (d.hiddenBy || []).includes(me.uid);
                 const finished = d.status !== "pending" && !(d.status === "approved" && d.cancel?.status === "pending");

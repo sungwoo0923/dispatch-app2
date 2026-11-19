@@ -10,6 +10,8 @@ import { CustomSelect } from "./CustomSelect";
 import { useVehicleTypes } from "./vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { CARE_DATES, CLASS_LABEL, FUELS, GEARS, TONS, VEHICLE_KINDS, careSummary, dateStatus, itemStatus, itemsFor, specFor, tonClass, today, vehicleDefaults, searchTruckModels, TRUCK_MODELS } from "./vehicleCare";
 import { kpConfirm } from "./kpDialog";
+import { getTenant } from "./fsTenant";
+import { saveEvidence, loadEvidence, deleteEvidence, dataUrlToBlobUrl } from "./vehicleLedgerData"; // 📎 2026-11-19 기록 증서 · 사진(차량 관리대장 증빙과 같은 저장소)
 import { normCare, normCareLogs } from "../functions/fleetCareCore.mjs"; // ⭐ 2026-11-09 실제 데이터 모양 방어(날짜 Timestamp·숫자 글자·배열 아님)
 
 const NAVY = "#1B2B4B";
@@ -127,7 +129,7 @@ export default function VehicleCarePanel({ driverId, drv = {}, by = "", staff = 
       {tab === "items" && <Items {...{ driverId, by, items, care, odo, busy, run, staff, large }} />}
       {tab === "dates" && <Dates {...{ driverId, by, care, busy, run, large }} />}
       {tab === "spec" && <Spec {...{ driverId, by, vehicle, busy, run, large }} />}
-      {tab === "logs" && <Logs {...{ driverId, by, logs, odo, busy, run, items }} />}
+      {tab === "logs" && <Logs {...{ driverId, by, logs, odo, busy, run, items, staff, rawLogs: drv.careLogs, co: drv.companyName || getTenant() || "" }} />}
 
       {drv.careUpdatedBy && <div style={{ marginTop: 12, fontSize: 12.5, color: "#7A879C", textAlign: "right", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>마지막 수정 · {drv.careUpdatedBy}{drv.careUpdatedAt?.toDate ? ` · ${drv.careUpdatedAt.toDate().toLocaleString("ko-KR", { hour12: false })}` : ""}</div>}
     </div>
@@ -199,6 +201,28 @@ function Summary({ driverId, by, vehicle, care, sum, odo, logs, busy, run, setTa
           </div>
         </>
       )}
+
+      {/* 📝 2026-11-19 운송사 요청 — 기록 탭에 적은 내용(주유 · 수리 · 사고 · 세차 등)을 요약에서도 최근 5건만 간단히 */}
+      {(() => {
+        const recent = logs.filter((l) => !["주행거리", "제원", "기본설정", "만기"].includes(l.kind)).slice(0, 5);
+        return (
+          <>
+            <Head code="RECENT" title="최근 기록" right={<button type="button" onClick={() => setTab("logs")} style={{ border: "none", background: "none", color: "#4B6CB7", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>기록 전체 ›</button>} />
+            <div style={{ ...box, padding: 6 }} data-kp="care-recent">
+              {recent.length === 0
+                ? <div style={{ padding: "14px 8px", textAlign: "center", fontSize: 13.5, color: "#9AA9C3" }}>아직 기록이 없어요 — 기록 탭에서 주유 · 수리 · 사고를 남겨 주세요</div>
+                : recent.map((l, i) => (
+                  <div key={`${l.at}_${i}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", borderTop: i ? "1px solid #EEF1F6" : "none" }}>
+                    <span style={{ width: 44, flexShrink: 0, textAlign: "center", padding: "2px 0", borderRadius: 6, background: l.kind === "정비" ? INK : "#EEF2F8", color: l.kind === "정비" ? "#fff" : NAVY, fontSize: 12, fontWeight: 800 }}>{l.kind}</span>
+                    <span style={{ minWidth: 0, flex: 1, fontSize: 13.5, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.itemLabel || l.memo || l.kind}{l.files?.length ? <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 800, color: "#7A879C" }}>첨부 {l.files.length}</span> : null}</span>
+                    <span style={{ fontSize: 12.5, color: "#7A879C", whiteSpace: "nowrap" }}>{String(l.date || "").slice(5).replace("-", "/")}</span>
+                    {l.cost ? <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap", minWidth: 76, textAlign: "right" }}>{won(l.cost)}</span> : <span style={{ minWidth: 76 }} />}
+                  </div>
+                ))}
+            </div>
+          </>
+        );
+      })()}
     </>
   );
 }
@@ -363,42 +387,130 @@ function Spec({ driverId, by, vehicle, busy, run, large }) {
 
 // ─── 기록(주유·수리·사고·기타 + 정비 이력) ───
 const LOG_KINDS = ["주유", "요소수", "수리", "세차", "사고", "기타"];
-function Logs({ driverId, by, logs, odo, busy, run }) {
+// 📎 2026-11-19 운송사 요청 — 잘못 적은 기록 고치기 · 수리 · 사고(파손) 증서 · 사진 첨부(사무실 직원만 · 기사앱은 예전처럼 추가만)
+//  기록은 drivers/{id}.careLogs 배열 — 고치거나 지우면 배열을 통째로 다시 쓴다(원본 순서 _ri 로 찾아서)
+//  첨부는 차량 관리대장 증빙과 같은 곳(vehicleLedgerFiles, 사진은 줄여서 · PDF 4.5MB) — 기록에는 { id, name, type, n } 만 남긴다
+function LogFiles({ files = [], onRemove }) {
+  const open = async (m) => {
+    try { const data = await loadEvidence(m); if (data) window.open(dataUrlToBlobUrl(data), "_blank"); } catch { /* 무시 */ }
+  };
+  if (!files.length) return null;
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
+      {files.map((m) => (
+        <span key={m.id} style={{ display: "inline-flex", alignItems: "center", borderRadius: 7, border: "1px solid #DCE3EF", background: "#F5F8FD", overflow: "hidden" }}>
+          <button type="button" onClick={() => open(m)} title={m.name} style={{ border: "none", background: "transparent", padding: "2px 8px", fontSize: 12.5, fontWeight: 800, color: "#2D4C82", cursor: "pointer", maxWidth: 160, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: "#7A879C", marginRight: 4 }}>{m.type === "pdf" ? "PDF" : "IMG"}</span>{m.name}</button>
+          {onRemove && <button type="button" onClick={() => onRemove(m)} title="첨부 빼기" style={{ border: "none", borderLeft: "1px solid #DCE3EF", background: "#fff", padding: "2px 6px", fontSize: 12.5, color: "#9AA9C3", cursor: "pointer" }}>✕</button>}
+        </span>
+      ))}
+    </div>
+  );
+}
+function FilePick({ onPick, busy, label = "+ 증서 · 사진" }) {
+  const ref = React.useRef(null);
+  return (<>
+    <button type="button" disabled={busy} onClick={() => ref.current?.click()} style={{ height: 32, padding: "0 12px", borderRadius: 9, border: "1px solid #DCE3EF", background: "#fff", color: NAVY, fontSize: 13, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>{label}</button>
+    <input ref={ref} type="file" accept="image/*,application/pdf" multiple hidden onChange={(e) => { const fs = Array.from(e.target.files || []); e.target.value = ""; if (fs.length) onPick(fs); }} />
+  </>);
+}
+function Logs({ driverId, by, logs, odo, busy, run, staff = false, rawLogs, co = "" }) {
   const [f, setF] = React.useState({ kind: "주유", date: today(), km: "", liters: "", cost: "", memo: "" });
+  const [newFiles, setNewFiles] = React.useState([]); // 새 기록에 붙일 파일(저장할 때 올림)
+  const [ed, setEd] = React.useState(null); // 고치는 기록 { _ri, ... }
+  const [up, setUp] = React.useState(false);
+  const uploadAll = async (fs) => { const out = []; for (const x of fs) out.push(await saveEvidence(co, `drv_${driverId}`, x)); return out; };
   const add = () => run(async () => {
     const km = num(f.km);
-    await save(driverId, by, km > odo ? { care: { odometer: km, odometerAt: f.date } } : {}, { kind: f.kind, date: f.date, km: km || null, liters: num(f.liters) || null, cost: num(f.cost), memo: f.memo });
-    setF({ ...f, km: "", liters: "", cost: "", memo: "" });
+    const files = newFiles.length ? await uploadAll(newFiles) : [];
+    await save(driverId, by, km > odo ? { care: { odometer: km, odometerAt: f.date } } : {}, { kind: f.kind, date: f.date, km: km || null, liters: num(f.liters) || null, cost: num(f.cost), memo: f.memo, ...(files.length ? { files } : {}) });
+    setF({ ...f, km: "", liters: "", cost: "", memo: "" }); setNewFiles([]);
   });
-  const shown = logs.filter((l) => l.kind !== "주행거리").slice(0, 60);
+  // 원본 배열 위치(_ri)를 단 정렬된 목록
+  const raw = Array.isArray(rawLogs) ? rawLogs : [];
+  const withIdx = normCareLogs(raw.map((x, i) => ({ ...x, _ri: i })));
+  const shown = (withIdx.length ? withIdx : logs).filter((l) => l.kind !== "주행거리").slice(0, 60);
+  const rewrite = (fn) => setDoc(doc(db, "drivers", driverId), { careLogs: fn(raw.map((x) => ({ ...x }))), careUpdatedAt: serverTimestamp(), careUpdatedBy: by || "" }, { merge: true });
+  const saveEdit = () => run(async () => {
+    const i = ed._ri;
+    await rewrite((arr) => { arr[i] = { ...arr[i], kind: ed.kind, date: ed.date, km: num(ed.km) || null, liters: num(ed.liters) || null, cost: num(ed.cost), memo: ed.memo || "", files: ed.files || [], editedAt: Date.now(), editedBy: by || "" }; return arr; });
+    if (ed._removed?.length) deleteEvidence(ed._removed).catch(() => {});
+    setEd(null);
+  }, "기록을 고쳤어요");
+  const delLog = async (l) => {
+    if (!(await kpConfirm("이 기록을 삭제할까요?", { title: "기록 삭제", okText: "삭제", danger: true }))) return;
+    await run(async () => {
+      await rewrite((arr) => arr.filter((_, i) => i !== l._ri));
+      if (l.files?.length) deleteEvidence(l.files).catch(() => {});
+      setEd(null);
+    }, "기록을 삭제했어요");
+  };
+  const addToEdit = async (fs) => { setUp(true); try { const m = await uploadAll(fs); setEd((p) => ({ ...p, files: [...(p.files || []), ...m] })); } catch (e) { window.alert(e.message || "올리지 못했어요"); } finally { setUp(false); } };
+  const row2 = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 };
   return (
     <>
       <Head code="LOG" title="기록 추가" />
       <div style={{ ...box, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
         <div style={{ gridColumn: "1 / -1", display: "flex", gap: 4, overflowX: "auto" }}>
-          {LOG_KINDS.map((k) => <button key={k} type="button" onClick={() => setF({ ...f, kind: k })} style={{ flexShrink: 0, height: 32, padding: "0 12px", borderRadius: 99, border: `1px solid ${f.kind === k ? NAVY : "#DCE3EF"}`, background: f.kind === k ? NAVY : "#fff", color: f.kind === k ? "#fff" : "#3A4A66", fontSize: 13, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>{k}</button>)}
+          {LOG_KINDS.map((k) => <button key={k} type="button" onClick={() => setF({ ...f, kind: k })} style={{ flexShrink: 0, height: 32, padding: "0 12px", borderRadius: 99, border: `1px solid ${f.kind === k ? NAVY : "#DCE3EF"}`, background: f.kind === k ? NAVY : "#fff", color: f.kind === k ? "#fff" : NAVY, fontSize: 13, fontWeight: 800, cursor: "pointer" }}>{k}</button>)}
         </div>
         <label><div style={lbl}>날짜</div><DateIn value={f.date} onChange={(x) => setF({ ...f, date: x })} /></label>
         <label><div style={lbl}>주행거리(km)</div><input inputMode="numeric" value={comma(f.km)} placeholder={odo ? odo.toLocaleString() : ""} onChange={(e) => setF({ ...f, km: e.target.value.replace(/[^\d]/g, "") })} style={inp} /></label>
         {(f.kind === "주유" || f.kind === "요소수") && <label><div style={lbl}>{f.kind === "주유" ? "주유량(L)" : "보충량(L)"}</div><input inputMode="decimal" value={f.liters} onChange={(e) => setF({ ...f, liters: e.target.value.replace(/[^\d.]/g, "") })} style={inp} /></label>}
         <label><div style={lbl}>금액(원)</div><input inputMode="numeric" value={comma(f.cost)} onChange={(e) => setF({ ...f, cost: e.target.value.replace(/[^\d]/g, "") })} style={inp} /></label>
         <input value={f.memo} onChange={(e) => setF({ ...f, memo: e.target.value })} placeholder={f.kind === "사고" ? "사고 내용·보험 접수번호" : "메모"} style={{ ...inp, gridColumn: "1 / -1" }} />
+        {staff && (
+          <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }} data-kp="care-log-files">
+            <FilePick busy={busy} onPick={(fs) => setNewFiles((p) => [...p, ...fs])} />
+            {newFiles.map((x, i) => <span key={i} style={{ fontSize: 12.5, fontWeight: 700, color: "#3A4A66", padding: "2px 8px", borderRadius: 7, background: "#F5F8FD", border: "1px solid #DCE3EF" }}>{x.name} <button type="button" onClick={() => setNewFiles((p) => p.filter((_, j) => j !== i))} style={{ border: "none", background: "none", color: "#9AA9C3", cursor: "pointer" }}>✕</button></span>)}
+            {!newFiles.length && <span style={{ fontSize: 12.5, color: "#9AA9C3" }}>수리 · 사고 견적서, 보험 증서, 파손 사진을 붙일 수 있어요</span>}
+          </div>
+        )}
         <button type="button" disabled={busy} onClick={add} style={{ ...btn(), gridColumn: "1 / -1" }}>{busy ? "저장 중…" : `${f.kind} 기록 저장`}</button>
       </div>
       {f.kind === "주유" && <div style={{ fontSize: 12.5, color: "#7A879C", marginTop: 4 }}>가득 주유할 때마다 주행거리와 주유량을 넣으면 연비가 자동 계산됩니다.</div>}
 
       <Head code="HISTORY" title={`이력 ${shown.length}건`} />
       <div style={{ ...box, padding: 4 }}>
-        {shown.length === 0 ? <div style={{ padding: "16px 8px", textAlign: "center", fontSize: 13.5, color: "#9AA9C3" }}>아직 기록이 없습니다</div> : shown.map((l, i) => (
-          <div key={`${l.at}_${i}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 8px", borderTop: i ? "1px solid #EEF1F6" : "none" }}>
-            <span style={{ width: 44, flexShrink: 0, textAlign: "center", padding: "3px 0", borderRadius: 6, background: l.kind === "정비" ? INK : "#EEF2F8", color: l.kind === "정비" ? "#fff" : NAVY, fontSize: 12.5, fontWeight: 800 }}>{l.kind}</span>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.itemLabel || l.memo || l.kind}{l.liters ? ` · ${l.liters}L` : ""}</div>
-              <div style={{ fontSize: 12.5, color: "#7A879C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[l.date, l.km ? `${Number(l.km).toLocaleString()}km` : "", l.shop, l.by].filter(Boolean).join(" · ")}</div>
+        {shown.length === 0 ? <div style={{ padding: "16px 8px", textAlign: "center", fontSize: 13.5, color: "#9AA9C3" }}>아직 기록이 없습니다</div> : shown.map((l, i) => {
+          const editing = ed && ed._ri === l._ri && l._ri != null;
+          return (
+            <div key={`${l.at}_${i}`} style={{ padding: "8px 8px", borderTop: i ? "1px solid #EEF1F6" : "none" }} data-kp="care-log-row">
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ width: 44, flexShrink: 0, textAlign: "center", padding: "3px 0", borderRadius: 6, background: l.kind === "정비" ? INK : "#EEF2F8", color: l.kind === "정비" ? "#fff" : NAVY, fontSize: 12.5, fontWeight: 800 }}>{l.kind}</span>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.itemLabel || l.memo || l.kind}{l.liters ? ` · ${l.liters}L` : ""}</div>
+                  <div style={{ fontSize: 12.5, color: "#7A879C", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[l.date, l.km ? `${Number(l.km).toLocaleString()}km` : "", l.shop, l.by, l.editedAt ? `수정 ${l.editedBy || ""}` : ""].filter(Boolean).join(" · ")}</div>
+                </div>
+                {l.cost ? <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, whiteSpace: "nowrap" }}>{won(l.cost)}</span> : null}
+                {staff && l._ri != null && !editing && <button type="button" onClick={() => setEd({ ...l, km: l.km || "", liters: l.liters || "", cost: l.cost || "", memo: l.memo || "", files: l.files || [], _removed: [] })} style={{ height: 28, padding: "0 10px", borderRadius: 8, border: "1px solid #DCE3EF", background: "#fff", color: NAVY, fontSize: 12.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }} data-kp="care-log-edit">수정 · 첨부</button>}
+              </div>
+              {!editing && <LogFiles files={l.files || []} />}
+              {editing && (
+                <div style={{ marginTop: 8, padding: 10, borderRadius: 12, background: "#F7F9FC", border: "1px solid #E3E8F0", display: "grid", gap: 6 }} data-kp="care-log-editor">
+                  <div style={{ display: "flex", gap: 4, overflowX: "auto" }}>
+                    {[...new Set([...LOG_KINDS, ed.kind])].map((k) => <button key={k} type="button" onClick={() => setEd({ ...ed, kind: k })} style={{ flexShrink: 0, height: 30, padding: "0 11px", borderRadius: 99, border: `1px solid ${ed.kind === k ? NAVY : "#DCE3EF"}`, background: ed.kind === k ? NAVY : "#fff", color: ed.kind === k ? "#fff" : NAVY, fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>{k}</button>)}
+                  </div>
+                  <div style={row2}>
+                    <label><div style={lbl}>날짜</div><DateIn value={ed.date} onChange={(x) => setEd({ ...ed, date: x })} /></label>
+                    <label><div style={lbl}>주행거리(km)</div><input inputMode="numeric" value={comma(ed.km)} onChange={(e) => setEd({ ...ed, km: e.target.value.replace(/[^\d]/g, "") })} style={inp} /></label>
+                    {(ed.kind === "주유" || ed.kind === "요소수") && <label><div style={lbl}>양(L)</div><input inputMode="decimal" value={ed.liters} onChange={(e) => setEd({ ...ed, liters: e.target.value.replace(/[^\d.]/g, "") })} style={inp} /></label>}
+                    <label><div style={lbl}>금액(원)</div><input inputMode="numeric" value={comma(ed.cost)} onChange={(e) => setEd({ ...ed, cost: e.target.value.replace(/[^\d]/g, "") })} style={inp} /></label>
+                  </div>
+                  <input value={ed.memo} onChange={(e) => setEd({ ...ed, memo: e.target.value })} placeholder="메모" style={inp} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <FilePick busy={up} label={up ? "올리는 중…" : "+ 증서 · 사진"} onPick={addToEdit} />
+                    <LogFiles files={ed.files || []} onRemove={(m) => setEd((p) => ({ ...p, files: p.files.filter((x) => x.id !== m.id), _removed: [...(p._removed || []), m] }))} />
+                  </div>
+                  <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                    <button type="button" onClick={() => delLog(l)} style={{ ...btn(false), height: 38, color: "#B42318", marginRight: "auto" }}>삭제</button>
+                    <button type="button" onClick={() => setEd(null)} style={{ ...btn(false), height: 38 }}>취소</button>
+                    <button type="button" disabled={busy || up} onClick={saveEdit} style={{ ...btn(), height: 38 }} data-kp="care-log-save">{busy ? "저장 중…" : "고친 내용 저장"}</button>
+                  </div>
+                </div>
+              )}
             </div>
-            {l.cost ? <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 800, whiteSpace: "nowrap" }}>{won(l.cost)}</span> : null}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </>
   );

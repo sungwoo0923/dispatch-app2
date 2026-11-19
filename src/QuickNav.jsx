@@ -342,6 +342,8 @@ function HelpCenter({ index, initial, onGo, onClose, isMaster = false }) {
         <div className="flex-1 min-h-0 flex">
           <div className="w-[268px] shrink-0 overflow-y-auto border-r border-[#E1E7F0] bg-white p-3 hidden sm:block">
             <button type="button" data-help-videos onClick={() => { setSel("__video"); setQ(""); }} className={`w-full text-left px-3.5 h-11 rounded-xl text-[14.5px] font-black mb-1 whitespace-nowrap ${!searching && sel === "__video" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>🎬 영상으로 배우기</button>
+            {/* 📘 2026-11-19 매뉴얼을 도움말 센터 안으로(사용자 요청 — 상단 버튼은 [도움말 센터] 하나) */}
+            <button type="button" data-help-manuals onClick={() => { setSel("__manual"); setQ(""); }} className={`w-full text-left px-3.5 h-11 rounded-xl text-[14.5px] font-black mb-1 whitespace-nowrap ${!searching && sel === "__manual" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>업무 매뉴얼</button>
             {isMaster && <button type="button" onClick={() => { setSel("__new"); setQ(""); }} className={`w-full text-left px-3.5 h-11 rounded-xl text-[14.5px] font-black mb-1 whitespace-nowrap ${!searching && sel === "__new" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>새 기능 · 바뀐 점 <span className="ml-1 text-[10.5px] font-black opacity-60">최고관리자</span></button>}
             <button type="button" onClick={() => { setSel("__common"); setQ(""); }} className={`w-full text-left px-3.5 h-11 rounded-xl text-[14.5px] font-black mb-1 whitespace-nowrap ${!searching && sel === "__common" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>처음 사용 안내 · 공통 사용법</button>
             <div className="px-3.5 pt-4 pb-2 mt-2 border-t border-[#EEF1F6] text-[12px] font-black tracking-[0.14em] text-[#8FA0BD]">메뉴별 사용법</div>
@@ -370,6 +372,27 @@ function HelpCenter({ index, initial, onGo, onClose, isMaster = false }) {
                   <div className="text-[11px] font-black tracking-[0.12em] text-[#8FA0BD] mb-1.5">새 기능 · 바뀐 점</div>
                   <UpdateList list={foundUpd} />
                 </>}
+              </>
+            ) : sel === "__manual" ? (
+              <>
+                <div className="text-[24px] font-black text-[#0F1A30] tracking-tight">업무 매뉴얼</div>
+                <div className="text-[15px] text-[#4A5A75] leading-relaxed mb-5">메뉴마다 화면 · 버튼 · 순서를 처음부터 끝까지 정리한 설명서예요. 누르면 매뉴얼이 열려요.</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3" data-help-manual-list>
+                  {[...new Map(menus.filter((e) => manualFor(e.menu)).sort((a, b) => (b.menu === initial?.menu) - (a.menu === initial?.menu)).map((e) => [e.menu, e])).values()].map((e) => {
+                    const M = manualFor(e.menu);
+                    return (
+                      <button key={e.menu} type="button" onClick={() => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu: e.menu } }))}
+                        className="text-left rounded-2xl bg-white border border-[#E1E7F0] hover:border-[#2D4C82] hover:shadow-[0_10px_24px_rgba(15,26,48,0.08)] p-4 transition">
+                        <div className="flex items-center gap-2">
+                          <span className="w-8 h-8 rounded-lg grid place-items-center text-white shrink-0" style={{ background: "linear-gradient(135deg,#0F1A30,#2D4C82)" }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z" /><path d="M4 19V5M8 7h7M8 11h5" /></svg></span>
+                          <span className="text-[15.5px] font-black text-[#0F1A30]">{manualName(e.menu)} 매뉴얼</span>
+                          {e.menu === initial?.menu && <span className="ml-auto text-[11.5px] font-black text-[#2D4C82]">지금 메뉴</span>}
+                        </div>
+                        {M?.intro && <div className="mt-2 text-[13px] text-[#5B6B85] leading-relaxed line-clamp-2">{M.intro}</div>}
+                      </button>
+                    );
+                  })}
+                </div>
               </>
             ) : sel === "__common" ? (
               <>
@@ -415,7 +438,7 @@ function HelpCenter({ index, initial, onGo, onClose, isMaster = false }) {
                   <div className="flex items-center gap-3 mb-1">
                     <div className="text-[24px] font-black text-[#0F1A30] tracking-tight">{e.label}</div>
                     <button type="button" onClick={() => go(e)} className="h-9 px-4 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black hover:bg-[#1B2B4B]">이 메뉴 열기</button>
-                    {["정산관리", "회계관리", "자금관리", "비품관리"].includes(sel) && <button type="button" data-help-manual onClick={() => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu: sel } }))} className="h-9 px-4 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-[13.5px] font-black hover:bg-[#F5F8FD]">📘 업무 매뉴얼 열기</button>}
+                    {manualFor(sel) && <button type="button" data-help-manual onClick={() => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu: sel } }))} className="h-9 px-4 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-[13.5px] font-black hover:bg-[#F5F8FD]">📘 업무 매뉴얼 열기</button>}
                   </div>
                   {descOf(sel) && <div className="text-[15px] text-[#4A5A75] leading-relaxed mb-6">{String(descOf(sel)).replace(/\s+—\s+/g, ": ")}</div>}
                   {!!videosForMenu(sel).length && <div className="mb-6" data-help-menu-videos>
@@ -491,17 +514,13 @@ export default function QuickNav({ menus = [], menu = "", onGo, isMaster = false
         {open && !favRows.length && <span className="text-[12px] font-semibold text-[#8FA0BD]">자주 쓰는 화면을 여기에 모아 두세요 →</span>}
         {open && curId && !favs.includes(curId) && (
           <button type="button" data-kp="fav-add" onClick={() => toggleFav(favs, curId)} className="h-7 px-2.5 rounded-full border border-dashed border-[#B9C4D8] text-[12px] font-bold text-[#5B6B85] hover:border-[#2D4C82] hover:text-[#0F1A30]">+ 지금 메뉴({menuName(curId)}) 넣기</button>)}
-        {open && <>
-          <button type="button" onClick={() => setPal(true)} className="h-7 px-2.5 rounded-full text-[12px] font-bold text-[#5B6B85] hover:text-[#0F1A30] hover:bg-white inline-flex items-center gap-1"><SearchIco size={11} />찾아서 넣기</button>
-          <button type="button" data-kp="help-open" onClick={() => setHelp({ menu: curId && !MASTER_MENUS.has(curId) ? curId : undefined })} className="ml-auto h-7 px-3 rounded-full bg-white border border-[#DCE3EE] text-[12px] font-black text-[#1B2B4B] hover:border-[#2D4C82]">도움말 센터</button>
-        </>}
-        {/* 📘 2026-11-15 지금 메뉴의 매뉴얼 — 정산관리의 [정산 매뉴얼]처럼 모든 메뉴에서 연다(접혀 있어도 보인다) */}
-        {manualFor(menu) && (
-          <button type="button" data-kp="menu-manual" onClick={() => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu } }))}
-            className={`${open ? "" : "ml-auto "}inline-flex items-center gap-1 rounded-full bg-[#0F1A30] text-white font-black hover:bg-[#1B2B4B] ${open ? "h-7 px-3 text-[12px]" : "h-[20px] px-2 text-[10.5px]"}`}>
-            <svg width={open ? 12 : 10} height={open ? 12 : 10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z" /><path d="M4 19V5M8 7h7M8 11h5" /></svg>
-            {manualName(menu)} 매뉴얼
-          </button>)}
+        {open && <button type="button" onClick={() => setPal(true)} className="h-7 px-2.5 rounded-full text-[12px] font-bold text-[#5B6B85] hover:text-[#0F1A30] hover:bg-white inline-flex items-center gap-1"><SearchIco size={11} />찾아서 넣기</button>}
+        {/* 📘 2026-11-19 사용자 요청 — [도움말 센터] · [○○ 매뉴얼] 두 버튼을 [도움말 센터] 하나로. 매뉴얼은 도움말 센터 안 ‘업무 매뉴얼’에서(지금 메뉴 매뉴얼이 있으면 그 탭으로 바로) */}
+        <button type="button" data-kp="help-open" onClick={() => setHelp({ menu: curId && !MASTER_MENUS.has(curId) ? curId : undefined })}
+          className={`ml-auto inline-flex items-center gap-1 rounded-full bg-[#0F1A30] text-white font-black hover:bg-[#1B2B4B] ${open ? "h-7 px-3 text-[12px]" : "h-[20px] px-2 text-[10.5px]"}`}>
+          <svg width={open ? 12 : 10} height={open ? 12 : 10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden><circle cx="12" cy="12" r="9" /><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01" /></svg>
+          도움말 센터
+        </button>
       </div>
       {pal && <Palette index={index} favs={favs} isMaster={isMaster} onGo={go} onHelp={(init) => { setPal(false); setHelp(init || {}); }} onClose={() => setPal(false)} />}
       {help && <HelpCenter index={index} initial={help} isMaster={isMaster} onGo={go} onClose={() => setHelp(null)} />}
