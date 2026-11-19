@@ -56,6 +56,10 @@ const t = async (name, fn) => { await fn(); n += 1; console.log(`  ✓ ${name}`)
     // 처음 비밀번호 000000 — 맞으면 열리고 바꾸라고 알린다, 다른 값은 틀림
     const v0 = await api.verify({ password: "000000" }, ctx("clerk")); assert.equal(v0.ok, true); assert.equal(v0.mustChange, true);
     const v1 = await api.verify({ password: "123123" }, ctx("clerk")); assert.equal(v1.ok, false);
+    // 2026-11-19 휴대폰 키보드 — 앞뒤 공백 · 전각 숫자도 000000으로 본다
+    assert.equal((await api.verify({ password: " 000000 " }, ctx("clerk"))).ok, true);
+    assert.equal((await api.verify({ password: "００００００" }, ctx("clerk"))).ok, true);
+    assert.equal((await api.verify({ password: "00000" }, ctx("clerk"))).ok, false);
     await assert.rejects(api.setPw({ newPassword: "pay2026!" }, ctx("clerk")), /경리 관리자/);
     assert.equal((await api.status({}, ctx("hr"))).staff, false);
     await assert.rejects(api.verify({ password: "x" }, ctx("ceo")), /경리 담당자/);
