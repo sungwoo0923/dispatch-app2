@@ -45,6 +45,8 @@ const t = async (name, fn) => { await fn(); n += 1; console.log(`  ✓ ${name}`)
     assert.equal(isPayrollAdmin({ role: "admin", team: "회계팀" }), true);
     assert.equal(isPayrollAdmin({ role: "user", team: "총무팀" }), false);
     assert.equal(isPayrollAdmin({ role: "totalMaster" }), true);
+    assert.equal(isPayrollAdmin({ role: "allMgr" }), true); // 통합관리자도 [비밀번호를 잊었어요]로 새로 정할 수 있다
+    assert.equal(isPayrollAdmin({ role: "hrAcct" }), true);
   });
   await t("해시 — scrypt · 소금마다 다르고 맞는 비밀번호만 통과", () => {
     const a = hashPw("pay2026!"); const b = hashPw("pay2026!");
