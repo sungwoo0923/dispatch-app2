@@ -44,6 +44,7 @@ import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차�
 import MgrBadge, { setMgrNameMap } from "./MgrBadge";
 import { isUrgentOrder, UrgentBadge, urgentRowStyle } from "./urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조(모든 현황 공용)
 import BulkEditCopyModal from "./BulkEditCopy"; // 🗂 2026-11-09 우클릭 [일괄수정·복사]
+import { placeSearch } from "./placeSearch"; // 🔎 상/하차지 · 거래처 검색 공용(등록폼 · 일괄수정 같은 규칙)
 const ReceiptCenter = React.lazy(() => import("./ReceiptCenter")); // 🧾 2026-11-09 배차현황 › 인수증관리
 import { applyOwner } from "./orderOwner"; // 👤 2026-11-09 복사본 배차담당자
 import { routeOwnerFill } from "./routeOwnerApply"; // ⭐ 2026-11-17 담당노선 주인 — 빈 배차담당자 채우기
@@ -3916,32 +3917,7 @@ const _sortInt = (v) => { const n = Number(String(v ?? "").replace(/[^\d.-]/g, "
 // 🔎 2026-11-03 상/하차지 검색 공용 — 업체명이 같고 주소·담당자만 다른 곳이 많을 때(예: (도외)위탁 55곳)
 //  "도외 목포"처럼 띄어 쓰면 첫 낱말은 업체명, 나머지 낱말은 주소·담당자·전화번호에서 찾아 바로 좁힌다.
 //  점수: 업체명 완전일치 > 앞글자 일치 > 포함, 같은 점수는 업체명 → 주소 순.
-const _pqN = (s) => String(s || "").toLowerCase().replace(/[\s()（）\-]/g, "");
-function placeSearch(list, q) {
-  const toks = String(q || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
-  if (!toks.length) return [];
-  const first = _pqN(toks[0]); const rest = toks.slice(1).map(_pqN).filter(Boolean);
-  const out = [];
-  (list || []).forEach((p) => {
-    if (!p) return;
-    const name = _pqN(p.업체명 || p.name || p.거래처명);
-    if (!name) return;
-    let sc = name === first ? 100 : name.startsWith(first) ? 80 : name.includes(first) ? 50 : 0;
-    // 낱말이 하나뿐이면 예전처럼 업체명만, 여러 개면 전체(업체명+주소+담당자)에서도 첫 낱말을 찾는다
-    if (rest.length) {
-      const hay = name + _pqN([p.주소, p.담당자, p.담당자번호, p.연락처, ...(Array.isArray(p.contacts) ? p.contacts.flatMap((c) => [c?.name, c?.phone]) : [])].join(" "));
-      if (!sc && hay.includes(first)) sc = 30;
-      if (!sc || !rest.every((t) => hay.includes(t))) {
-        // ⭐ 2026-11-03 이름 자체에 띄어쓰기가 있는 경우("삼진 1") — 붙여서 이름에서 찾기
-        const whole = first + rest.join("");
-        if (name.includes(whole)) out.push({ ...p, __score: name === whole ? 100 : name.startsWith(whole) ? 80 : 50 });
-        return;
-      }
-    }
-    if (sc) out.push({ ...p, __score: sc });
-  });
-  return out.sort((a, b) => b.__score - a.__score || String(a.업체명 || "").localeCompare(String(b.업체명 || ""), "ko") || String(a.주소 || "").localeCompare(String(b.주소 || ""), "ko"));
-}
+// → src/placeSearch.js 로 옮김(일괄수정 · 복사 창도 같은 검색을 쓴다)
 // ⭐ 2026-11-05 PC·모바일 일치 — 등록 직원 이름·세부검색 값 꺼내기는 src/detailGetters.js(모바일도 같은 파일)
 // 수정할 때 덮어쓰면 안 되는 등록자 칸(patchDispatch)
 const ORDER_CREATOR_FIELDS = ["작성자", "createdByEmail", "createdByUid", "createdBy", "createdByName", "등록자", "등록자명", "등록자이메일", "authorEmail", "author", "등록기기"];
@@ -29654,8 +29630,8 @@ const head = isDark
 {bulkEditRows && !bulkLegacy && (
   <BulkEditCopyModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} onDateShift={() => setDateShiftRows(bulkEditRows)}
     onLegacyEdit={() => setBulkLegacy(true)} onCopyOne={(o) => submitCopyOrderPC(o, approvedShippers)}
-    drivers={drivers} clients={clients} places={placeRows} timeOptions={timeOptions} tonOptions={tonOptions}
-    vehicleTypes={withCustomVehicleTypes(VEHICLE_TYPES)} payTypes={PAY_TYPES} dispatchTypes={dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사", "로지스허브"])}
+    drivers={drivers} clients={clients} places={placeRows} tonOptions={tonOptions} upsertDriver={upsertDriver}
+    vehicleTypes={withCustomVehicleTypes(VEHICLE_TYPES)}
     isViewer={isViewer} toast={sflowToast} />
 )}
 {bulkEditRows && bulkLegacy && (
@@ -39374,8 +39350,8 @@ return (
       {bulkEditRows && !bulkLegacy && (
         <BulkEditCopyModal rows={bulkEditRows} patchDispatch={patchDispatch} onClose={() => setBulkEditRows(null)} onDateShift={() => setDateShiftRows(bulkEditRows)}
           onLegacyEdit={() => setBulkLegacy(true)} onCopyOne={(o) => submitCopyOrderPC(o, approvedShippers)}
-          drivers={drivers} clients={clients} places={placeRows?.length ? placeRows : places} timeOptions={timeOptions} tonOptions={tonOptions}
-          vehicleTypes={withCustomVehicleTypes(VEHICLE_TYPES)} payTypes={PAY_TYPES} dispatchTypes={dropdownList("배차방식", ["24시", "직접배차", "인성", "고정기사", "로지스허브"])}
+          drivers={drivers} clients={clients} places={placeRows?.length ? placeRows : places} tonOptions={tonOptions} upsertDriver={upsertDriver}
+          vehicleTypes={withCustomVehicleTypes(VEHICLE_TYPES)}
           isViewer={isViewer} toast={sflowToast} />
       )}
       {bulkEditRows && bulkLegacy && (
