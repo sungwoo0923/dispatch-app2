@@ -13,7 +13,10 @@ import { menuName } from "./execMenus";
 import { MENU_TOURS } from "./onboardingTour";
 import { manualFor, manualName } from "./WorkManual"; // 📘 2026-11-15 모든 메뉴 매뉴얼
 import { HELP_DETAIL, HELP_COMMON, helpTextOf } from "./helpContent"; // 📖 메뉴별 자세한 사용법
+import { HELP_VIDEOS, videoSrc, videoPoster, videosForMenu } from "./helpVideos"; // 🎬 2026-11-17 영상으로 배우기
 import { HelpDemo, hasHelpDemo } from "./HelpDemos"; // 🎬 2026-11-13 움직이는 예시 화면
+// 🎬 2026-11-18 영상 작업실에서 고친 편은 실제 영상과 똑같은 실시간 재생기로(실패하면 원래 mp4)
+const HelpVideoSmart = React.lazy(() => import("./EditedVideoPlayer").then((m) => ({ default: m.HelpVideoSmart })));
 import { doc, onSnapshot, setDoc, arrayUnion, serverTimestamp } from "firebase/firestore"; // 🔒 2026-11-18 바뀐 점 지우기(최고관리자)
 import { db } from "./firebase";
 import { kpConfirm } from "./kpDialog";
@@ -205,9 +208,46 @@ function Palette({ index, favs, onGo, onHelp, onClose, isMaster = false }) {
 }
 
 // ───────────────────────── 도움말 센터 ─────────────────────────
+// 🎬 2026-11-17 영상으로 배우기 — 카드(표지 · 편 번호 · 제목 · 내용) · 누르면 크게 재생
+function VideoCard({ v, onPlay, small }) {
+  return (
+    <button type="button" data-help-video={v.id} onClick={() => onPlay(v)} className="group text-left rounded-2xl border border-[#DCE3EE] bg-white overflow-hidden hover:border-[#2D4C82] hover:shadow-[0_10px_26px_rgba(15,26,48,.12)] transition">
+      <div className="relative aspect-video bg-[#0B1428]">
+        <img src={videoPoster(v)} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+        <span className="absolute inset-0 grid place-items-center"><span className="w-14 h-14 rounded-full bg-white/90 grid place-items-center shadow-lg group-hover:scale-105 transition"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="#0F1A30" /></svg></span></span>
+        <span className="absolute left-2.5 top-2.5 h-6 px-2 rounded-md bg-[#3D7BFF] text-white text-[11.5px] font-black grid place-items-center tabular-nums">EP{String(v.no).padStart(2, "0")}</span>
+        {v.len && <span className="absolute right-2.5 bottom-2.5 h-6 px-2 rounded-md bg-black/70 text-white text-[11.5px] font-black grid place-items-center tabular-nums">{v.len}</span>}
+      </div>
+      <div className={small ? "px-3.5 py-2.5" : "px-4 py-3"}>
+        <div className="text-[15px] font-black text-[#0F1A30] leading-snug">{v.title}</div>
+        {!small && <div className="text-[13px] text-[#4A5A75] leading-relaxed mt-1">{v.desc}</div>}
+        <div className="text-[12px] font-bold text-[#8FA0BD] mt-1">{v.who}</div>
+      </div>
+    </button>);
+}
+function VideoPlayer({ v, onClose, onPick }) {
+  React.useEffect(() => { const k = (e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", k, true); return () => window.removeEventListener("keydown", k, true); }, [onClose]);
+  const i = HELP_VIDEOS.findIndex((x) => x.id === v.id); const next = HELP_VIDEOS[i + 1];
+  return (
+    <div data-help-player className="absolute inset-0 z-20 bg-[#060C1A]/90 flex flex-col items-center justify-center p-4 sm:p-8" onClick={onClose}>
+      <div className="w-full max-w-[1180px]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-3 mb-3 text-white">
+          <span className="h-7 px-2.5 rounded-md bg-[#3D7BFF] text-[12.5px] font-black grid place-items-center tabular-nums">EP{String(v.no).padStart(2, "0")}</span>
+          <div className="text-[18px] font-black truncate">{v.title}</div>
+          {next && <button type="button" onClick={() => onPick(next)} className="ml-auto h-9 px-3.5 rounded-xl bg-white/10 ring-1 ring-white/25 text-[13px] font-black whitespace-nowrap hover:bg-white/20">다음 영상 · {next.title} →</button>}
+          <button type="button" onClick={onClose} className={`${next ? "" : "ml-auto "}h-9 px-3.5 rounded-xl bg-white text-[#0F1A30] text-[13px] font-black`}>닫기</button>
+        </div>
+        <React.Suspense fallback={<div className="w-full aspect-video max-h-[78vh] rounded-xl bg-black" />}>
+          <HelpVideoSmart key={v.id} v={v} fallback={<video key={v.id} src={videoSrc(v)} poster={videoPoster(v)} controls autoPlay playsInline className="w-full max-h-[78vh] rounded-xl bg-black" />} />
+        </React.Suspense>
+      </div>
+    </div>);
+}
+
 function HelpCenter({ index, initial, onGo, onClose, isMaster = false }) {
   const menus = React.useMemo(() => index.filter((e) => !e.sub && !MASTER_MENUS.has(e.menu)), [index]);
   const [sel, setSel] = React.useState(() => { const m = initial?.menu || "__common"; return m === "__new" && !isMaster ? "__common" : m; });
+  const [play, setPlay] = React.useState(null); // 🎬 재생 중인 영상
   const [q, setQ] = React.useState(initial?.q || "");
   const hid = useHiddenUpdates(isMaster);
   const rawUpdates = useUpdates(isMaster); // 🔒 최고관리자만
@@ -298,8 +338,10 @@ function HelpCenter({ index, initial, onGo, onClose, isMaster = false }) {
           </div>
           <button type="button" onClick={onClose} className="ml-auto h-10 px-4 rounded-xl bg-white/10 hover:bg-white/20 ring-1 ring-white/25 text-[14px] font-black whitespace-nowrap">닫기</button>
         </div>
+        {play && <VideoPlayer v={play} onClose={() => setPlay(null)} onPick={setPlay} />}
         <div className="flex-1 min-h-0 flex">
           <div className="w-[268px] shrink-0 overflow-y-auto border-r border-[#E1E7F0] bg-white p-3 hidden sm:block">
+            <button type="button" data-help-videos onClick={() => { setSel("__video"); setQ(""); }} className={`w-full text-left px-3.5 h-11 rounded-xl text-[14.5px] font-black mb-1 whitespace-nowrap ${!searching && sel === "__video" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>🎬 영상으로 배우기</button>
             {isMaster && <button type="button" onClick={() => { setSel("__new"); setQ(""); }} className={`w-full text-left px-3.5 h-11 rounded-xl text-[14.5px] font-black mb-1 whitespace-nowrap ${!searching && sel === "__new" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>새 기능 · 바뀐 점 <span className="ml-1 text-[10.5px] font-black opacity-60">최고관리자</span></button>}
             <button type="button" onClick={() => { setSel("__common"); setQ(""); }} className={`w-full text-left px-3.5 h-11 rounded-xl text-[14.5px] font-black mb-1 whitespace-nowrap ${!searching && sel === "__common" ? "bg-[#0F1A30] text-white" : "text-[#1B2B4B] hover:bg-[#EEF3FB]"}`}>처음 사용 안내 · 공통 사용법</button>
             <div className="px-3.5 pt-4 pb-2 mt-2 border-t border-[#EEF1F6] text-[12px] font-black tracking-[0.14em] text-[#8FA0BD]">메뉴별 사용법</div>
@@ -333,7 +375,24 @@ function HelpCenter({ index, initial, onGo, onClose, isMaster = false }) {
               <>
                 <div className="text-[24px] font-black text-[#0F1A30] tracking-tight">처음 사용 안내 · 공통 사용법</div>
                 <div className="text-[15px] text-[#4A5A75] mt-1 mb-6">어느 화면에서나 똑같이 쓰는 기능입니다. 메뉴별 사용법은 왼쪽에서 메뉴를 고르세요.</div>
+                <div className="mb-6 rounded-2xl p-4 sm:p-5 text-white flex flex-col sm:flex-row sm:items-center gap-4" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] font-extrabold tracking-[0.22em] text-[#8FB0F0]">VIDEO · 영상으로 배우기</div>
+                    <div className="text-[18px] font-black mt-0.5">글 대신 영상으로 보세요 · 메뉴별 {HELP_VIDEOS.length}편</div>
+                    <div className="text-[13.5px] text-white/70 mt-1">실제 화면을 누르면서 안내 음성과 자막으로 알려 드려요. 처음이면 1편부터 보면 돼요.</div>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button type="button" onClick={() => setPlay(HELP_VIDEOS[0])} className="h-11 px-4 rounded-xl bg-white text-[#0F1A30] text-[14px] font-black">▶ 1편부터 보기</button>
+                    <button type="button" onClick={() => setSel("__video")} className="h-11 px-4 rounded-xl bg-white/10 ring-1 ring-white/25 text-[14px] font-black">전체 영상</button>
+                  </div>
+                </div>
                 <Sections list={HELP_COMMON} />
+              </>
+            ) : sel === "__video" ? (
+              <>
+                <div className="text-[24px] font-black text-[#0F1A30] tracking-tight">🎬 영상으로 배우기</div>
+                <div className="text-[15px] text-[#4A5A75] mt-1 mb-6">실제 화면을 누르면서 안내 음성 · 자막으로 알려 드려요. 처음이면 1편부터, 필요한 메뉴만 골라 봐도 돼요.</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">{HELP_VIDEOS.map((v) => <VideoCard key={v.id} v={v} onPlay={setPlay} />)}</div>
               </>
             ) : sel === "__new" && isMaster ? (
               <>
@@ -359,6 +418,10 @@ function HelpCenter({ index, initial, onGo, onClose, isMaster = false }) {
                     {["정산관리", "회계관리", "자금관리", "비품관리"].includes(sel) && <button type="button" data-help-manual onClick={() => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu: sel } }))} className="h-9 px-4 rounded-xl border border-[#1B2B4B] text-[#1B2B4B] text-[13.5px] font-black hover:bg-[#F5F8FD]">📘 업무 매뉴얼 열기</button>}
                   </div>
                   {descOf(sel) && <div className="text-[15px] text-[#4A5A75] leading-relaxed mb-6">{String(descOf(sel)).replace(/\s+—\s+/g, ": ")}</div>}
+                  {!!videosForMenu(sel).length && <div className="mb-6" data-help-menu-videos>
+                    <div className="text-[12.5px] font-black tracking-[0.12em] text-[#8FA0BD] mb-2.5">🎬 이 메뉴 영상</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">{videosForMenu(sel).map((v) => <VideoCard key={v.id} v={v} onPlay={setPlay} small />)}</div>
+                  </div>}
                   {!!(HELP_DETAIL[sel] || []).length && <div className="mb-3">
                     <div className="text-[12.5px] font-black tracking-[0.12em] text-[#8FA0BD] mb-2.5">자세한 사용법</div>
                     <Sections list={HELP_DETAIL[sel]} />

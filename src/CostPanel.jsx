@@ -15,7 +15,8 @@ import { usePlatformLive, mergeCompanies } from "./PlatformLive";
 import { estimateBill } from "./PlatformMonitor";
 import { useSalesPricing, applyPlanBill, itemsTotal, monthlyOf } from "./SalesQuote";
 import { PLAN_IDS, planIncludes } from "./plans";
-import { COST_DEFAULT, CLAUDE_TIERS, VERCEL_PLANS, mergeCost, fixedCosts, variableCosts, estimateDaily, estimateMonth, breakEvenCurve, daysInMonth } from "./costModel";
+import { COST_DEFAULT, CLAUDE_TIERS, VERCEL_PLANS, mergeCost, fixedCosts, variableCosts, estimateDaily, estimateMonth, breakEvenCurve, daysInMonth, ledgerMonth, applyLedger } from "./costModel";
+import PaymentsLedger from "./CostLedger";
 import { kpConfirm } from "./kpDialog";
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 이익 · 이익률 색(플러스 빨강 · 마이너스 파랑)
 
@@ -161,13 +162,18 @@ export function useCostData() {
       variable.rows = variable.rows.map((r) => (r.key === "gcs" ? { ...r, usage: gcsGb } : r));
       varMtd = null; source = "estimate";
     }
-    const fixed = fixedCosts(model);
+    // 💳 실제 결제 내역 — 그 달에 실제 결제가 있는 예상 줄은 0원(대체), 결제 금액은 ledger 로 따로 더한다
+    const ledger = ledgerMonth(model, ym, { day: dayNo });
+    const fixedModel = fixedCosts(model);
+    const fixed = applyLedger(fixedModel, ledger);
+    const variableShown = applyLedger(variable, ledger);
+    const varMtdShown = varMtd ? applyLedger(varMtd, ledger) : null;
     const revenue = cos.reduce((a, r) => a + r.revenue, 0);
     const baseRev = cos.reduce((a, r) => a + (r.inv && r.inv.amount != null ? 0 : num(r.bill.base)), 0);
     const overRev = cos.reduce((a, r) => a + (r.inv && r.inv.amount != null ? 0 : num(r.bill.total) - num(r.bill.base)), 0);
     const extraRev = cos.reduce((a, r) => a + (r.inv && r.inv.amount != null ? 0 : r.extra), 0);
     const fixedRev = cos.reduce((a, r) => a + (r.inv && r.inv.amount != null ? r.revenue : 0), 0);
-    const cost = variable.total + fixed.total;
+    const cost = variableShown.total + fixed.total + ledger.total;
 
     // ③ 운송사별 배분 — 앱 표본(usageCounters)이 있으면 그 비율, 없으면 활동량 추정
     const est = cos.map((r) => estimateDaily(model, r.act));
@@ -189,7 +195,7 @@ export function useCostData() {
         + qtyOf(r.items, "alimtalk") * num(model.msg?.alimtalk) + qtyOf(r.items, "sms") * num(model.msg?.sms) + qtyOf(r.items, "lms") * num(model.msg?.lms);
       const d = est[i];
       const gross = ((d.reads * 30) / 1e5 * num(model.fs.read) + (d.writes * 30) / 1e5 * num(model.fs.write) + wS[i] * num(model.fs.gib)) * fx + direct;
-      const fixedShare = r.revenue > 0 || !paying ? fixed.total / fixedShareBase : 0;
+      const fixedShare = r.revenue > 0 || !paying ? (fixed.total + ledger.fixedLike) / fixedShareBase : 0;
       const variableCost = server + direct;
       const margin = r.revenue - variableCost - fixedShare;
       // 추천 — 요금제 전환 · 추가 청구
@@ -213,7 +219,7 @@ export function useCostData() {
     const avgAct = { ordersMonth: sumActs.orders / n, staff: cos.reduce((a, r) => a + r.act.staff, 0) / n, fleet: cos.reduce((a, r) => a + r.act.fleet, 0) / n, storageGB: sumActs.storageGB / n, taxInvoices: 0 };
     return {
       ym, today, dim, dayNo, model, cos: perCo, revenue, baseRev, overRev, extraRev, fixedRev, cost, profit: revenue - cost, margin: revenue > 0 ? (revenue - cost) / revenue : null,
-      variable, varMtd, fixed, source, measuredDays, avgDay, status, monthDoc, counters, paying, avgAct, avgRevenue: paying ? revenue / paying : 0, sales, fsGib, gcsGb,
+      variable: variableShown, variableModel: variable, varMtd, varMtdShown, fixed, fixedModel, ledger, source, measuredDays, avgDay, status, monthDoc, counters, paying, avgAct, avgRevenue: paying ? revenue / paying : 0, sales, fsGib, gcsGb,
     };
   }, [ready, ym, today, live, sales, stats, pricingDoc, invoices, counters, daily, plans, model, monthDoc, status]);
   return { data, model, saved };
@@ -270,7 +276,7 @@ function SourceNote({ d }) {
     : <Tag>활동량 추정 — 실측 연결 전</Tag>;
 }
 function SummaryView({ d, openUsage }) {
-  const rows = [...d.variable.rows, ...d.fixed.rows];
+  const rows = [...d.variable.rows, ...d.fixed.rows, ...d.ledger.rows];
   const groups = {};
   rows.forEach((r) => { groups[r.group] = (groups[r.group] || 0) + r.krw; });
   const bars = Object.entries(groups).map(([g, v]) => ({ g, v: Math.round(v) })).sort((a, b) => b.v - a.v);
@@ -279,7 +285,7 @@ function SummaryView({ d, openUsage }) {
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Kpi k={`${Number(d.ym.slice(5))}월 매출 (VAT 별도)`} v={won(d.revenue)} sub={`청구 대상 ${d.paying}곳 · 월말 예상`} />
-        <Kpi k="이달 지출" v={won(d.cost)} sub={`서버 ${won(d.variable.total)} + 고정 ${won(d.fixed.total)}`} />
+        <Kpi k="이달 지출" v={won(d.cost)} sub={`서버 ${won(d.variable.total)} + 고정 ${won(d.fixed.total)}${d.ledger.total ? ` + 실제 결제 ${won(d.ledger.total)}` : ""}`} />
         <Kpi dark k="순이익" v={wonS(d.profit)} loss={loss} profit={d.profit} sub={loss ? "적자 — 운송사별 원가에서 원인 확인" : "매출 − 지출(월말 예상)"} />
         <Kpi k="이익률" v={d.margin == null ? "-" : `${(d.margin * 100).toFixed(1)}%`} loss={d.margin != null && d.margin < 0} rate={d.margin == null ? undefined : d.margin * 100} sub="순이익 ÷ 매출" />
         <Kpi k="1곳당 평균" v={won(d.avgRevenue)} sub={`원가 ${won(d.paying ? d.cost / d.paying : 0)} / 곳`} />
@@ -311,9 +317,14 @@ function SummaryView({ d, openUsage }) {
         </Card>
       </div>
       <CostTable d={d} />
+      <PaymentsLedger model={d.model} ym={d.ym} />
     </div>
   );
 }
+// 예상 · 실제 결제 표시 — 실제 결제로 바뀐 예상 줄은 원래 금액에 줄을 긋는다
+const RowTag = ({ r }) => (r.actual ? <span className="inline-block px-1.5 py-0.5 rounded-md bg-[#1B2B4B] text-white text-[10px] font-black align-middle whitespace-nowrap">실제 결제</span>
+  : r.replaced ? <span className="inline-block px-1.5 py-0.5 rounded-md bg-[#EEF2F8] text-[#5B6B85] text-[10px] font-black align-middle whitespace-nowrap">실제 결제로 대체</span> : <Tag>예상</Tag>);
+const RowWon = ({ r }) => (r.replaced ? <span className="text-[#9AA9C3] line-through font-bold">{won(r.modelKrw)}</span> : won(r.krw));
 function CostTable({ d }) {
   const m = d.model;
   return (
@@ -324,25 +335,35 @@ function CostTable({ d }) {
           {d.variable.rows.map((r) => (
             <tr key={r.key} className="border-t border-[#EEF1F6]">
               <td className="px-3 py-2 font-bold text-[#5B6B85] whitespace-nowrap">{r.group}</td>
-              <td className="px-3 py-2 font-black text-[#0F1A30] whitespace-nowrap">{r.label}</td>
+              <td className="px-3 py-2 font-black text-[#0F1A30] whitespace-nowrap">{r.label} <RowTag r={r} /></td>
               <td className="px-3 py-2 text-center tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.unit}</td>
               <td className="px-3 py-2 text-center text-[#7A879C] whitespace-nowrap">{r.free}</td>
               <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.usage < 100 && r.usage % 1 ? r.usage.toFixed(2) : cnt(r.usage)} <span className="text-[#9AA9C3]">{r.usageUnit}</span></td>
               <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap text-[#5B6B85]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.billable < 100 && r.billable % 1 ? r.billable.toFixed(2) : cnt(r.billable)}</td>
-              <td className="px-3 py-2 text-right font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(r.krw)}</td>
+              <td className="px-3 py-2 text-right font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}><RowWon r={r} /></td>
             </tr>
           ))}
           <tr className="border-t-2 border-[#DCE3EE] bg-[#F7F9FC]"><td colSpan={6} className="px-3 py-2 font-black text-right">서버 · 사용량 변동비 소계</td><td className="px-3 py-2 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(d.variable.total)}</td></tr>
           {d.fixed.rows.map((r) => (
             <tr key={r.key} className={`border-t border-[#EEF1F6] ${r.off ? "opacity-45" : ""}`}>
               <td className="px-3 py-2 font-bold text-[#5B6B85] whitespace-nowrap">{r.group}</td>
-              <td className="px-3 py-2 font-black text-[#0F1A30] whitespace-nowrap">{r.label}{r.off ? " (꺼짐)" : ""}</td>
+              <td className="px-3 py-2 font-black text-[#0F1A30] whitespace-nowrap">{r.label}{r.off ? " (꺼짐)" : ""} {!r.off && <RowTag r={r} />}</td>
               <td className="px-3 py-2 text-center tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.unit}</td>
               <td className="px-3 py-2 text-center text-[#9AA9C3]">-</td><td className="px-3 py-2 text-right text-[#9AA9C3]">고정</td><td />
-              <td className="px-3 py-2 text-right font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(r.krw)}</td>
+              <td className="px-3 py-2 text-right font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}><RowWon r={r} /></td>
             </tr>
           ))}
           <tr className="border-t-2 border-[#DCE3EE] bg-[#F7F9FC]"><td colSpan={6} className="px-3 py-2 font-black text-right">고정비 소계</td><td className="px-3 py-2 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(d.fixed.total)}</td></tr>
+          {d.ledger.rows.map((r) => (
+            <tr key={r.key} className="border-t border-[#EEF1F6] bg-[#F3F7FF]">
+              <td className="px-3 py-2 font-bold text-[#5B6B85] whitespace-nowrap">{r.group}</td>
+              <td className="px-3 py-2 font-black text-[#0F1A30] whitespace-nowrap">{r.label} <RowTag r={r} /></td>
+              <td className="px-3 py-2 text-center tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{r.unit}</td>
+              <td className="px-3 py-2 text-center text-[#9AA9C3]">-</td><td className="px-3 py-2 text-right text-[#9AA9C3] whitespace-nowrap">{r.date}</td><td />
+              <td className="px-3 py-2 text-right font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(r.krw)}</td>
+            </tr>
+          ))}
+          {d.ledger.rows.length > 0 && <tr className="border-t-2 border-[#DCE3EE] bg-[#F7F9FC]"><td colSpan={6} className="px-3 py-2 font-black text-right">실제 결제 소계</td><td className="px-3 py-2 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(d.ledger.total)}</td></tr>}
           <tr className="bg-[#0F1A30] text-white"><td colSpan={6} className="px-3 py-2.5 font-black text-right">이달 지출 합계 (월말 예상)</td><td className="px-3 py-2.5 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(d.cost)}</td></tr>
         </tbody>
       </table></div>
@@ -366,7 +387,7 @@ function CompaniesView({ d }) {
         <Kpi k="운송사" v={`${list.length}곳`} sub={`청구 대상 ${d.paying}곳`} />
         <Kpi k="적자 운송사" v={`${lossN}곳`} loss={lossN > 0} sub={lossN ? list.filter((r) => r.margin < 0).slice(0, 3).map((r) => r.name).join(" · ") : "없음"} />
         <Kpi k="서버비가 가장 큰 곳" v={(() => { const t = [...list].sort((a, b) => b.server - a.server)[0]; return t ? t.name : "-"; })()} sub="활동량·앱 표본 기준" />
-        <Kpi dark k="1곳당 고정비 몫" v={won(d.fixed.total / Math.max(1, d.paying || list.length))} sub="고정비 ÷ 청구 대상 회사 수" />
+        <Kpi dark k="1곳당 고정비 몫" v={won((d.fixed.total + d.ledger.fixedLike) / Math.max(1, d.paying || list.length))} sub="고정비(실제 결제 포함) ÷ 청구 대상 회사 수" />
       </div>
       {chart.length > 0 && (
         <Card code="MARGIN" title="운송사별 월 이익 (매출 − 변동 원가 − 고정비 몫)">
@@ -431,7 +452,7 @@ function BreakEvenView({ d }) {
   const plan = planList.find((p) => p.id === sim.planId) || recPlan;
   const act = { ordersMonth: sim.daily * 30, staff: sim.staff, fleet: sim.fleet, storageGB: (sim.daily * 30 * num(d.model.coef.mbPerOrder)) / 1024 * 6, taxInvoices: 0 };
   const rev1 = plan ? monthlyOf(plan, sales, { staff: sim.staff, orders: sim.daily * 30, fleet: sim.fleet, storageGB: act.storageGB }).total + num(sim.extra) : 0;
-  const curve = React.useMemo(() => breakEvenCurve(d.model, { avgRevenue: rev1, avgAct: act, maxN: 100, fixed: d.fixed.total }), [d.model, rev1, sim.daily, sim.staff, sim.fleet, d.fixed.total]); // eslint-disable-line react-hooks/exhaustive-deps
+  const curve = React.useMemo(() => breakEvenCurve(d.model, { avgRevenue: rev1, avgAct: act, maxN: 100, fixed: d.fixed.total + d.ledger.recurringFixed }), [d.model, rev1, sim.daily, sim.staff, sim.fleet, d.fixed.total, d.ledger.recurringFixed]); // eslint-disable-line react-hooks/exhaustive-deps
   const at = curve.pts[Math.min(100, sim.n)] || curve.pts[0];
   const cur = curve.pts[Math.min(100, d.cos.length)] || curve.pts[0];
   // 요금제별 — 한도까지 쓸 때 원가와 마진(미팅 설명용)
@@ -454,7 +475,7 @@ function BreakEvenView({ d }) {
         <Kpi dark k="손익분기점" v={curve.be == null ? "100곳 넘음" : `${curve.be}곳`} sub={`이 조건(${plan?.name || "-"} · 일 ${sim.daily}건)으로 이만큼부터 흑자`} />
         <Kpi k="지금 위치" v={`${d.cos.length}곳`} sub={`이 조건이면 월 ${wonS(cur.profit)}`} loss={cur.profit < 0} />
         <Kpi k={`${sim.n}곳일 때 월 이익`} v={wonS(at.profit)} loss={at.profit < 0} profit={at.profit} sub={`매출 ${won(at.rev)} · 비용 ${won(at.cost)}`} />
-        <Kpi k="고정비 (월)" v={won(d.fixed.total)} sub="회사 수와 상관없이 나가는 돈" />
+        <Kpi k="고정비 (월)" v={won(d.fixed.total + d.ledger.recurringFixed)} sub="회사 수와 상관없이 나가는 돈(매달 실제 결제 포함)" />
       </div>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(300px,1fr)]">
         <Card code="BREAK-EVEN" title="운송사 수에 따른 월 매출 · 비용" right={<div className="hidden sm:flex items-center gap-3 text-[11px] font-bold text-[#5B6B85]">
@@ -491,7 +512,7 @@ function BreakEvenView({ d }) {
             {numBox({ k: "fleet", l: "평균 지입차(GPS)", unit: "대", min: 0, max: 60, })}
             {numBox({ k: "extra", l: "1곳당 추가 청구(문자·세금계산서 등)", unit: "원", min: 0, max: 200000, step: 5000, })}
             <div className="rounded-xl bg-[#F7F9FC] border border-[#EEF1F6] p-3 space-y-1.5 text-[13px]">
-              {[["1곳 월 청구(요금제+초과+추가)", won(rev1)], [`${sim.n}곳 매출`, won(at.rev)], ["고정비", won(d.fixed.total)], ["서버 변동비", won(at.variable)]].map(([k, v]) => <div key={k} className="flex justify-between gap-2"><span className="font-bold text-[#5B6B85]">{k}</span><span className="font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</span></div>)}
+              {[["1곳 월 청구(요금제+초과+추가)", won(rev1)], [`${sim.n}곳 매출`, won(at.rev)], ["고정비", won(d.fixed.total + d.ledger.recurringFixed)], ["서버 변동비", won(at.variable)]].map(([k, v]) => <div key={k} className="flex justify-between gap-2"><span className="font-bold text-[#5B6B85]">{k}</span><span className="font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{v}</span></div>)}
               <div className="flex justify-between gap-2 pt-1.5 border-t border-dashed border-[#DCE3EE]"><span className="font-black">월 이익</span><span className="font-black tabular-nums text-[15px]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: profitColor(at.profit, { neutral: INK }) }}>{wonS(at.profit)}</span></div>
             </div>
           </div>
@@ -529,7 +550,7 @@ function ServerView({ d, model, saved, onRefresh, busy }) {
   });
   const mtd = d.varMtd;
   const fsRowsM = mtd ? mtd.rows.filter((r) => ["fsRead", "fsWrite", "fsDel", "fsGib", "fn", "gcs", "egress"].includes(r.key)) : [];
-  const fsRowsP = d.variable.rows.filter((r) => ["fsRead", "fsWrite", "fsDel", "fsGib", "fn", "gcs", "egress"].includes(r.key));
+  const fsRowsP = d.variableModel.rows.filter((r) => ["fsRead", "fsWrite", "fsDel", "fsGib", "fn", "gcs", "egress"].includes(r.key));
   const mtdBill = fsRowsM.reduce((a, r) => a + r.krw, 0), projBill = fsRowsP.reduce((a, r) => a + r.krw, 0);
   const [cmsg, setCmsg] = React.useState("");
   // 실측으로 계수 맞추기 — 최근 7일 실측 평균 ÷ 활동량 추정
@@ -648,7 +669,8 @@ function SettingsModal({ model, onClose }) {
   const up = (p, v) => setM((x) => setP(x, p, v));
   const save = async () => {
     setSaving(true);
-    try { await setDoc(doc(db, "platformConfig", "costModel"), { ...m, updatedAt: serverTimestamp() }); onClose(); }
+    // 결제 내역(payments)은 [결제 내역] 카드에서 따로 저장한다 — 이 창을 연 뒤 추가한 결제가 지워지지 않게 지금 저장된 값을 그대로 둔다
+    try { await setDoc(doc(db, "platformConfig", "costModel"), { ...m, payments: model.payments || [], updatedAt: serverTimestamp() }); onClose(); }
     catch (e) { window.alert(`저장 실패: ${e.message}`); setSaving(false); }
   };
   const inp = "h-9 w-28 px-2.5 rounded-lg border border-[#DCE3EE] text-right text-[14px] font-black text-[#1B2B4B] outline-none focus:border-[#4B6CB7]";

@@ -4,14 +4,15 @@
 //   · 접속: loginSessions(5분 하트비트 → usePlatformLive) · sessionLogs(로그인 이벤트, 7일 보관)
 //   · 서버 사용량: platformUsage/{날짜}(구글 클라우드 실측, 1시간마다) · platformUsage/m_{월}(AI · OCR 토큰 카운터)
 //   · 회사별: siteConfig/platformStats(오더 · 직원 · 지입차 · 저장 용량) · usageCounters(앱 표본 읽기/쓰기) · messageUsage(문자 · 알림톡)
-//   · 비용: platformConfig/costModel(단가 · 고정비) — 계산은 CostPanel 의 useCostData 와 같다
+//   · 비용: platformConfig/costModel(단가 · 고정비 · 💳 실제 결제 내역 payments) — 계산은 CostPanel 의 useCostData 와 같다
+//     실제 결제가 있는 달은 그 예상 줄(Claude 구독 · Vercel · 서버비 · AI 사용량 등)을 0원으로 바꾸고 결제 금액을 더한다(이중 계산 없음)
 //  ⚠ 분 단위 읽기/쓰기, Vercel · 지도 API 호출 수, 각 업체 실제 청구서는 어디에도 기록되지 않는다 → 화면에 "추정"으로 표시.
 import React from "react";
 import { collection, doc, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 import { useCostData } from "../CostPanel";
 import { usePlatformLive } from "../PlatformLive";
-import { variableCosts } from "../costModel";
+import { variableCosts, ledgerMonth, applyLedger, mergeCost } from "../costModel";
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const tsMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : typeof v === "number" ? v : 0);
@@ -93,21 +94,24 @@ export function useOpsData() {
     ai.usd = ai.scanUsd + ai.chatUsd + ai.teamUsd;
     ai.krw = ai.usd * fx;
 
-    // ── 운영 비용(월말 예상 · 지금까지) ──
+    // ── 운영 비용(월말 예상 · 지금까지) — 예상(단가 × 사용량) + 💳 실제 결제 ──
+    const ledger = cost.ledger || ledgerMonth(model, ym, { day: cost.dayNo });
     const varRows = (cost.variable?.rows || []).map((r) => ({ ...r, est: cost.source !== "measured" || ["tmap", "etax", "msg"].includes(r.key) }));
-    const fixRows = (cost.fixed?.rows || []).filter((r) => !r.off && r.krw > 0);
-    const aiRow = { key: "aiApi", group: "AI (Claude API)", label: "AI 비서 · 오더 인식 · AI 팀", krw: ai.krw * (cost.dim / Math.max(1, cost.dayNo)), est: true };
+    const fixRows = (cost.fixed?.rows || []).filter((r) => !r.off && (r.krw > 0 || (r.replaced && r.modelKrw > 0)));
+    const aiReplaced = ledger.replaced.has("aiApi");
+    const aiModel = ai.krw * (cost.dim / Math.max(1, cost.dayNo));
+    const aiRow = { key: "aiApi", group: "AI (Claude API)", label: "AI 비서 · 오더 인식 · AI 팀", krw: aiReplaced ? 0 : aiModel, est: true, ...(aiReplaced ? { replaced: true, modelKrw: aiModel } : {}) };
+    const payRows = ledger.rows.map((r) => ({ ...r, est: false }));
     const groups = {};
-    [...varRows, aiRow].forEach((r) => { groups[r.group] = (groups[r.group] || 0) + num(r.krw); });
-    fixRows.forEach((r) => { const g = r.group === "개발 도구" || r.group === "앱 마켓" ? r.group : r.group; groups[g] = (groups[g] || 0) + num(r.krw); });
+    [...varRows, aiRow, ...fixRows, ...payRows].forEach((r) => { groups[r.group] = (groups[r.group] || 0) + num(r.krw); });
     const byGroup = Object.entries(groups).map(([group, krw]) => ({ group, krw })).filter((x) => x.krw > 0.5).sort((a, b) => b.krw - a.krw);
     const totalMonth = byGroup.reduce((a, x) => a + x.krw, 0);
-    const mtdVar = cost.varMtd ? cost.varMtd.total : num(cost.variable?.total) * (cost.dayNo / cost.dim);
-    const mtd = mtdVar + num(cost.fixed?.total) * (cost.dayNo / cost.dim) + ai.krw;
+    const mtdVar = cost.varMtdShown ? cost.varMtdShown.total : num(cost.variable?.total) * (cost.dayNo / cost.dim);
+    const mtd = mtdVar + num(cost.fixed?.total) * (cost.dayNo / cost.dim) + (aiReplaced ? 0 : ai.krw) + ledger.mtd;
     const opsCost = {
-      totalMonth, mtd, perDay: totalMonth / Math.max(1, cost.dim), byGroup, varRows, fixRows, aiRow,
-      server: num(cost.variable?.total), fixed: num(cost.fixed?.total), revenue: num(cost.revenue), free: cost.revenue <= 0,
-      source: cost.source, dim: cost.dim, dayNo: cost.dayNo, fx, ym,
+      totalMonth, mtd, perDay: totalMonth / Math.max(1, cost.dim), byGroup, varRows, fixRows, aiRow, payRows,
+      server: num(cost.variable?.total), fixed: num(cost.fixed?.total), paid: ledger.total, paidMtd: ledger.mtd, revenue: num(cost.revenue), free: cost.revenue <= 0,
+      source: cost.source, dim: cost.dim, dayNo: cost.dayNo, fx, ym, model,
     };
 
     // ── 운송사별 사용량 · 초과 ──
@@ -131,6 +135,10 @@ export function useOpsData() {
 }
 
 // ═══════════════════════ 화면 점검용 가짜 데이터(개발 /preview-admin 전용) ═══════════════════════
+export const DEMO_PAYMENTS = (ym) => [
+  { id: "demo1", date: `${ym}-03`, endDate: "", vendor: "Anthropic", item: "Claude Max 업그레이드", amount: 100, currency: "USD", kind: "monthly", group: "개발 도구", replaces: "claude", memo: "" },
+  { id: "demo2", date: `${ym}-01`, endDate: "", vendor: "Google AI Studio", item: "Gemini API 크레딧 충전", amount: 8000, currency: "KRW", kind: "prepaid", group: "AI (Gemini API)", replaces: "", memo: "교육 영상 목소리" },
+];
 function buildDemo() {
   const today = kstToday(); const dim = 30; const dayNo = Number(today.slice(8));
   const rnd = (s) => { const x = Math.sin(s * 9301 + 49297) * 233280; return x - Math.floor(x); };
@@ -161,8 +169,15 @@ function buildDemo() {
     readsPerMin: 425, writesPerMin: 19, days, free: { read: 50000, write: 20000 }, measured: true, status: { ok: true }, storageGb: 7.8,
   };
   const ai = { scanUsd: 6.4, chatUsd: 11.2, teamUsd: 4.1, scanCalls: 312, chatTurns: 845, teamQs: 57 }; ai.usd = ai.scanUsd + ai.chatUsd + ai.teamUsd; ai.krw = ai.usd * 1540;
-  const byGroup = [["Firestore", 214000], ["AI (Claude API)", Math.round(ai.krw * dim / dayNo)], ["호스팅", 30800], ["개발 도구", 30800], ["Cloud Functions", 18200], ["문자 · 알림톡", carriers.reduce((a, c) => a + c.msgCost, 0)], ["Cloud Storage", 9400], ["앱 마켓", 14300], ["글자 인식", 3100]].map(([group, krw]) => ({ group, krw })).sort((a, b) => b.krw - a.krw);
+  // 💳 예시 결제 내역 — 이달 Claude 구독 업그레이드(예상 Claude 줄 대신) · Gemini API 충전
+  const ym = today.slice(0, 7);
+  const model = mergeCost({ fx: 1400, usdTaxPct: 10, payments: DEMO_PAYMENTS(ym) });
+  const ledger = ledgerMonth(model, ym, { day: dayNo });
+  const payRows = ledger.rows.map((r) => ({ ...r, est: false }));
+  const byGroup0 = [["Firestore", 214000], ["AI (Claude API)", Math.round(ai.krw * dim / dayNo)], ["호스팅", 30800], ["Cloud Functions", 18200], ["문자 · 알림톡", carriers.reduce((a, c) => a + c.msgCost, 0)], ["Cloud Storage", 9400], ["앱 마켓", 14300], ["글자 인식", 3100]];
+  const groups = {}; byGroup0.forEach(([g, k]) => { groups[g] = k; }); payRows.forEach((r) => { groups[r.group] = (groups[r.group] || 0) + r.krw; });
+  const byGroup = Object.entries(groups).map(([group, krw]) => ({ group, krw })).sort((a, b) => b.krw - a.krw);
   const totalMonth = byGroup.reduce((a, x) => a + x.krw, 0);
-  const opsCost = { totalMonth, mtd: totalMonth * dayNo / dim, perDay: totalMonth / dim, byGroup, varRows: [], fixRows: [], aiRow: null, server: 241600, fixed: 75900, revenue: 0, free: true, source: "measured", dim, dayNo, fx: 1540, ym: today.slice(0, 7) };
+  const opsCost = { totalMonth, mtd: (totalMonth - ledger.total) * dayNo / dim + ledger.mtd, perDay: totalMonth / dim, byGroup, varRows: [], fixRows: [], aiRow: null, payRows, server: 241600, fixed: 44100, paid: ledger.total, paidMtd: ledger.mtd, revenue: 0, free: true, source: "measured", dim, dayNo, fx: 1540, ym, model };
   return { demo: true, ready: true, traffic, ai, opsCost, carriers, live: null, tick: 0 };
 }

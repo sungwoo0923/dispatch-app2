@@ -39,6 +39,8 @@ export const COST_DEFAULT = {
   vision: { per1k: 1.5, free: 1000 },        // 구글 글자 인식(배차일지 사진 OCR) 1,000건당 $
   emailKrw: 0,          // 메일 발송(Daum SMTP — 무료 · 하루 발송 한도 있음)
   custom: [{ label: "세무 기장료", krw: 0 }, { label: "운영자 인건비(목표)", krw: 0 }],
+  // 💳 2026-11-18 실제 결제 내역 — 카드 명세 · 영수증에 찍힌 금액(아래 ledgerMonth 참고). 그 달에는 예상 단가보다 이 값이 우선이다.
+  payments: [],
   // 활동량 → 서버 사용량 환산 계수(실측이 없을 때 · 시뮬레이터) — 실측(Cloud Monitoring)이 쌓이면 [실측으로 계수 맞추기]
   coef: {
     readsPerOrder: 200,     // 오더 1건이 한 달 동안 일으키는 읽기(직원 화면 실시간 반영 + 관리센터 집계)
@@ -63,6 +65,7 @@ export function mergeCost(saved) {
     out[k] = isObj(d) ? { ...d, ...(isObj(v) ? v : {}) } : v === undefined || v === null || v === "" ? d : v;
   });
   if (!Array.isArray(out.custom)) out.custom = COST_DEFAULT.custom;
+  if (!Array.isArray(out.payments)) out.payments = [];
   return out;
 }
 
@@ -148,4 +151,129 @@ export function breakEvenCurve(m, { avgRevenue, avgAct, maxN = 100, fixed }) {
     if (be == null && k > 0 && rev >= cost) be = k;
   }
   return { pts, be };
+}
+
+// ═══════════════════════ 💳 실제 결제 내역(2026-11-18) ═══════════════════════
+//  payments: [{ id, date:'YYYY-MM-DD', endDate?, vendor, item, amount, currency:'KRW'|'USD', kind, group, replaces?, memo }]
+//   · monthly : date 가 속한 달부터 매달 전액(endDate 가 있으면 그 달까지)
+//   · yearly  : date 가 속한 달부터 매달 amount ÷ 12(endDate 까지)
+//   · once    : 결제한 달에만 전액
+//   · prepaid : 충전(API 크레딧 · 문자 충전 등) — 결제한 달에만 전액
+//  · USD 는 비용 기준의 환율 × (1 + 해외 결제 가산%)로 원화 환산(예상 줄과 같은 계산).
+//  · replaces: 이 결제가 대신하는 "예상" 줄 — 그 달에 이 결제가 잡히면 예상 줄은 0원(실제 결제로 대체) → 이중 계산 없음.
+export const PAY_KINDS = [
+  { id: "monthly", label: "매달" },
+  { id: "yearly", label: "매년(÷12)" },
+  { id: "once", label: "한 번" },
+  { id: "prepaid", label: "충전(선불)" },
+];
+export const PAY_TARGETS = [
+  { id: "", label: "따로 더하기(겹치는 예상 없음)", keys: [] },
+  { id: "claude", label: "Claude 구독(요금제) 예상 대신", keys: ["claude"] },
+  { id: "aiApi", label: "Claude API 사용량 예상 대신", keys: ["aiApi"] },
+  { id: "vercel", label: "Vercel 예상 대신", keys: ["vercel"] },
+  { id: "domain", label: "도메인 예상 대신", keys: ["domain"] },
+  { id: "hosting", label: "Firebase Hosting 예상 대신", keys: ["hosting"] },
+  { id: "apple", label: "Apple 개발자 예상 대신", keys: ["apple"] },
+  { id: "play", label: "Google Play 등록비 예상 대신", keys: ["play"], sticky: true }, // 1회 등록비 — 결제를 적은 달부터는 나눠 반영하지 않음
+  { id: "email", label: "메일 발송 예상 대신", keys: ["email"] },
+  { id: "server", label: "서버비(Firestore · 함수 · 저장) 예상 대신", keys: ["fsRead", "fsWrite", "fsDel", "fsGib", "fn", "gcs", "egress", "vision"] },
+  { id: "msg", label: "문자 · 알림톡 원가 예상 대신", keys: ["msg"] },
+];
+// 빠른 추가 — 금액은 비워 두고 사장님이 채운다
+export const PAY_PRESETS = [
+  { label: "Claude 구독(업그레이드)", vendor: "Anthropic", item: "Claude 구독", currency: "USD", kind: "monthly", group: "개발 도구", replaces: "claude" },
+  { label: "Claude API 충전", vendor: "Anthropic", item: "Claude API 크레딧 충전", currency: "USD", kind: "prepaid", group: "AI (Claude API)", replaces: "aiApi" },
+  { label: "Gemini API 충전(Google AI Studio)", vendor: "Google AI Studio", item: "Gemini API 크레딧 충전", currency: "KRW", kind: "prepaid", group: "AI (Gemini API)", replaces: "" },
+  { label: "Google Cloud", vendor: "Google Cloud", item: "구글 클라우드 청구", currency: "KRW", kind: "once", group: "Google Cloud", replaces: "server" },
+  { label: "Firebase(Blaze)", vendor: "Firebase", item: "Firebase Blaze 청구", currency: "KRW", kind: "once", group: "Google Cloud", replaces: "server" },
+  { label: "Vercel", vendor: "Vercel", item: "Vercel Pro", currency: "USD", kind: "monthly", group: "호스팅", replaces: "vercel" },
+  { label: "도메인", vendor: "도메인", item: "도메인 1년", currency: "KRW", kind: "yearly", group: "호스팅", replaces: "domain" },
+  { label: "Canva", vendor: "Canva", item: "Canva 구독", currency: "KRW", kind: "monthly", group: "디자인 도구", replaces: "" },
+  { label: "문자 · 알림톡 충전", vendor: "문자 발송 업체", item: "문자 · 알림톡 충전", currency: "KRW", kind: "prepaid", group: "문자 · 알림톡", replaces: "msg" },
+  { label: "기타", vendor: "", item: "", currency: "KRW", kind: "once", group: "기타", replaces: "" },
+];
+
+const ymOf = (d) => (typeof d === "string" && /^\d{4}-\d{2}/.test(d) ? d.slice(0, 7) : "");
+// 결제 1건의 원화 금액(1회분)
+export function paymentKrw(m, p) {
+  const a = n(p?.amount);
+  return p?.currency === "USD" ? usdK(m, a) : a;
+}
+// 이 결제가 ym 달에 잡히는 금액(원) — 0 이면 그 달과 상관없음
+export function paymentMonthKrw(m, p, ym) {
+  const start = ymOf(p?.date); if (!start || !ym || ym < start) return 0;
+  const end = ymOf(p?.endDate);
+  const krw = paymentKrw(m, p);
+  if (p.kind === "monthly") return !end || ym <= end ? krw : 0;
+  if (p.kind === "yearly") return !end || ym <= end ? krw / 12 : 0;
+  return ym === start ? krw : 0; // once · prepaid
+}
+// ym 달 day 일까지 이미 나갔나(지금까지 금액용) — 매달 · 매년은 그 달 결제일(일)이 지났으면
+export function paymentPaidBy(p, day) {
+  const d = Number(String(p?.date || "").slice(8, 10)) || 1;
+  return d <= day;
+}
+// 대신하는 예상 줄 — 직접 고른 값(replaces)이 우선, 없으면 업체 · 항목 이름으로 짐작
+export function paymentTarget(p) {
+  if (p && typeof p.replaces === "string") return p.replaces;
+  const t = `${p?.vendor || ""} ${p?.item || ""}`.toLowerCase();
+  if (/claude|anthropic/.test(t)) return /api|크레딧|credit|충전/.test(t) || p?.kind === "prepaid" ? "aiApi" : "claude";
+  if (/vercel/.test(t)) return "vercel";
+  if (/도메인|domain|가비아|gabia|whois|godaddy|namecheap/.test(t)) return "domain";
+  if (/apple|애플/.test(t)) return "apple";
+  if (/google play|play console|플레이 ?스토어|구글 ?플레이/.test(t)) return "play";
+  if (/google cloud|구글 ?클라우드|firebase|파이어베이스|blaze/.test(t)) return "server";
+  if (/문자|알림톡|sms|lms/.test(t)) return "msg";
+  return "";
+}
+const VAR_KEYS = new Set(["fsRead", "fsWrite", "fsDel", "fsGib", "fn", "gcs", "egress", "vision", "msg", "aiApi"]);
+// ym 달의 실제 결제 — rows(표시용) · total(월 전체) · mtd(day 일까지 나간 돈) · replaced(0원이 될 예상 줄 key)
+export function ledgerMonth(m, ym, { day = 31 } = {}) {
+  const pays = Array.isArray(m?.payments) ? m.payments : [];
+  const replaced = new Set();
+  const rows = [];
+  pays.forEach((p, i) => {
+    if (!p) return;
+    const target = paymentTarget(p);
+    const tdef = PAY_TARGETS.find((x) => x.id === target);
+    const krw = paymentMonthKrw(m, p, ym);
+    if (tdef?.sticky && ymOf(p.date) && ymOf(p.date) <= ym) tdef.keys.forEach((k) => replaced.add(k));
+    if (krw <= 0) return;
+    if (tdef) tdef.keys.forEach((k) => replaced.add(k));
+    const kind = PAY_KINDS.find((k) => k.id === p.kind) || PAY_KINDS[2];
+    const amt = p.currency === "USD" ? `$${n(p.amount).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : `${Math.round(n(p.amount)).toLocaleString()}원`;
+    rows.push({
+      key: `pay_${p.id || i}`, id: p.id || String(i), group: p.group || "기타", label: [p.vendor, p.item].filter(Boolean).join(" · ") || "결제",
+      unit: `${kind.label} ${amt}${p.kind === "yearly" ? " ÷ 12" : ""}`, krw, mtdKrw: p.kind === "yearly" || paymentPaidBy(p, day) ? krw : 0, // 매년 ÷12 는 이미 낸 돈을 나눈 몫이라 늘 포함
+      actual: true, kind: p.kind || "once", replaces: target, recurring: p.kind === "monthly" || p.kind === "yearly", date: p.date || "", memo: p.memo || "",
+    });
+  });
+  const sum = (arr, k = "krw") => arr.reduce((a, r) => a + n(r[k]), 0);
+  const fixedLike = rows.filter((r) => !(PAY_TARGETS.find((x) => x.id === r.replaces)?.keys || []).some((k) => VAR_KEYS.has(k)));
+  return {
+    rows, replaced, total: sum(rows), mtd: sum(rows, "mtdKrw"),
+    fixedLike: sum(fixedLike), // 서버 · 문자 · AI 사용량을 대신하지 않는 결제(회사별 고정비 몫용)
+    recurringFixed: sum(fixedLike.filter((r) => r.recurring)), // 그중 매달 반복되는 몫(손익분기용)
+  };
+}
+// 예상 줄 목록(fixedCosts · variableCosts 결과)에 실제 결제 반영 — 대체된 줄은 krw 0 · replaced:true · modelKrw(원래 예상)
+export function applyLedger(block, ledger) {
+  if (!block) return block;
+  const rows = (block.rows || []).map((r) => (ledger?.replaced?.has(r.key) ? { ...r, krw: 0, modelKrw: r.krw, replaced: true } : r));
+  return { ...block, rows, total: rows.reduce((a, r) => a + n(r.krw), 0) };
+}
+// 저장 전 정리 — 빈 값 · 숫자 · 허용 값
+export function cleanPayment(p) {
+  const ok = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || "");
+  return {
+    id: p.id || `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    date: ok(p.date) ? p.date : "", endDate: ok(p.endDate) ? p.endDate : "",
+    vendor: String(p.vendor || "").trim(), item: String(p.item || "").trim(),
+    amount: n(p.amount), currency: p.currency === "USD" ? "USD" : "KRW",
+    kind: PAY_KINDS.some((k) => k.id === p.kind) ? p.kind : "once",
+    group: String(p.group || "").trim() || "기타",
+    replaces: PAY_TARGETS.some((t) => t.id === p.replaces) ? p.replaces : paymentTarget({ ...p, replaces: undefined }),
+    memo: String(p.memo || "").trim(),
+  };
 }
