@@ -5,11 +5,13 @@
 //  ③ 자막: 장면 시간에 맞춘 SRT 파일 내려받기(캡컷 · 프리미어 · 유튜브에 그대로)
 //  서버: functions/aiVideo.js(aiVideoPlan) · 파일 계산: src/videoStudio.js
 //  만든 기획안은 이 브라우저에 최근 10개까지 기억한다(다시 열기)
+//  🎬 2026-11-18 [교육 영상 고치기] 탭 — 도움말 센터 교육 영상(1~14편)의 강조 상자 · 카메라 · 화면 바뀌는 시각 · 자막 · 효과를 직접 고친다(src/VideoFixer.jsx)
 import React from "react";
 import { auth, FUNCTIONS_BASE } from "./firebase";
 import { ShellIcon } from "./AdminShell";
 import { G, NUM, GOLD_BTN, AdmPanel, LivePulse } from "./adminCenter/admUi";
 import { toSrt, cueSheetCsv, planText, downloadText, safeName, clock, subtitleCues } from "./videoStudio";
+const VideoFixer = React.lazy(() => import("./VideoFixer"));
 
 const KINDS = [["숏츠", "세로 · 15~60초"], ["교육영상", "가로 · 1~5분"], ["홍보영상", "가로 · 30초~2분"]];
 const LENGTHS = { 숏츠: [15, 30, 45, 60], 교육영상: [60, 120, 180, 300], 홍보영상: [30, 60, 90, 120] };
@@ -36,7 +38,7 @@ function Chip({ on, onClick, children, sub }) {
 }
 const lbl = "block text-[12px] font-extrabold tracking-[0.04em] mb-1.5";
 
-export default function VideoStudio() {
+function PlanStudio() {
   const [f, setF] = React.useState({ kind: "숏츠", topic: "", seconds: 30, audience: AUDIENCE[0], mood: MOODS[0], platform: "유튜브 쇼츠", narration: "내레이션", notes: "" });
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
@@ -241,6 +243,23 @@ export default function VideoStudio() {
           )}
         </>)}
       </div>
+    </div>
+  );
+}
+
+// 영상 작업실 맨 위 — [새 영상 기획] · [교육 영상 고치기]
+const MODES = [["plan", "새 영상 기획", "대본 · 음악 큐시트 · 자막"], ["fix", "교육 영상 고치기", "도움말 센터 1~14편"]];
+export default function VideoStudio() {
+  const [mode, setMode] = React.useState(() => { try { return localStorage.getItem("kpVideoStudioMode") === "fix" ? "fix" : "plan"; } catch { return "plan"; } });
+  const pick = (m) => { setMode(m); try { localStorage.setItem("kpVideoStudioMode", m); } catch { /* 무시 */ } };
+  return (
+    <div className="space-y-3 min-w-0">
+      <div className="grid grid-cols-2 sm:flex gap-1.5">
+        {MODES.map(([k, l, sub]) => <Chip key={k} on={mode === k} onClick={() => pick(k)} sub={sub}>{l}</Chip>)}
+      </div>
+      {mode === "fix"
+        ? <React.Suspense fallback={<div className="py-20 text-center text-[13px]" style={{ color: G.dim }}>불러오는 중…</div>}><VideoFixer /></React.Suspense>
+        : <PlanStudio />}
     </div>
   );
 }

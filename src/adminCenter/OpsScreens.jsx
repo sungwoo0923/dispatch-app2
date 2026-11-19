@@ -7,7 +7,8 @@
 import React from "react";
 import { G, NUM, AdmHero, AdmPanel, AdmKpi, AdmClock, AdmBtn, AdmEmpty, LivePulse, EstTag, RealTag, Ring, Seg, compact, short, won, kstToday } from "./admUi";
 import { TrafficChart, HourBars, CostDonut, CostLegend, WalletStrip, CarrierUsageRows, OverageList, CarrierCostBars, DailyCostBars, FlowGauge, SERIES } from "./OpsWidgets";
-import { useOpsData } from "./useOpsData";
+import { useOpsData, DEMO_PAYMENTS } from "./useOpsData";
+import PaymentsLedger from "../CostLedger";
 import { usePlatformLive, LiveNowPanel, SignupTimeline } from "../PlatformLive";
 
 
@@ -240,7 +241,8 @@ export function WalletView({ openSettings }) {
   const head = <AdmHero en="COST · OUT OF POCKET" title="운영 비용" desc="지금은 모든 운송사가 무료 기간이라 서버 · 외부 서비스 비용이 운영자 주머니에서 나가요. 실측이 없는 항목은 '추정'으로 표시해요." right={openSettings ? <AdmBtn gold onClick={openSettings}>비용 기준 · 손익 상세 ›</AdmBtn> : null} />;
   if (!d) return <>{head}<Loading /></>;
   const { opsCost: c, ai, traffic: t } = d;
-  const rows = [...(c.varRows || []).filter((r) => r.krw > 0.5 || r.usage > 0), ...(c.aiRow ? [c.aiRow] : []), ...(c.fixRows || []).map((r) => ({ ...r, fixed: true }))].sort((a, b) => b.krw - a.krw);
+  const rows = [...(c.payRows || []), ...(c.varRows || []).filter((r) => r.krw > 0.5 || r.usage > 0 || r.replaced), ...(c.aiRow ? [c.aiRow] : []), ...(c.fixRows || []).map((r) => ({ ...r, fixed: true }))]
+    .sort((a, b) => (b.actual ? 1 : 0) - (a.actual ? 1 : 0) || (b.krw || b.modelKrw || 0) - (a.krw || a.modelKrw || 0));
   const top = c.byGroup[0];
   return (
     <div className="space-y-3 sm:space-y-4">
@@ -248,10 +250,11 @@ export function WalletView({ openSettings }) {
       <div className="grid gap-3 sm:gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <AdmPanel code="WALLET" title="이번 달 운영자 부담">
           <WalletStrip c={c} ai={ai} />
-          <div className="mt-3 grid grid-cols-3 gap-2">
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
             <MiniStat label="서버(변동)" value={`${short(c.server)}원`} sub="Firestore · 함수 · 저장 등" />
-            <MiniStat label="고정비" value={`${short(c.fixed)}원`} sub="호스팅 · 도구 · 앱 마켓" />
-            <MiniStat label="AI(Claude API)" value={`${short(ai.krw)}원`} sub={`${usd(ai.usd)} · 지금까지`} />
+            <MiniStat label="고정비(예상)" value={`${short(c.fixed)}원`} sub="호스팅 · 도구 · 앱 마켓" />
+            <MiniStat label="AI(Claude API)" value={`${short(c.aiRow?.replaced ? 0 : ai.krw)}원`} sub={c.aiRow?.replaced ? "이달은 충전 금액으로 셈" : `${usd(ai.usd)} · 지금까지`} />
+            <MiniStat label="실제 결제" value={`${short(c.paid || 0)}원`} sub={c.payRows?.length ? `${c.payRows.length}건 · 아래 결제 내역` : "아래에서 넣어요"} />
           </div>
           {top && <div className="mt-3 rounded-[12px] px-3.5 py-2.5 text-[13px] font-bold leading-relaxed" style={{ background: "rgba(215,188,130,.07)", border: `1px solid ${G.line}`, color: G.sub }}>가장 많이 나가는 곳은 <b style={{ color: G.goldHi }}>{top.group}</b>이에요 — 월 {won(top.krw)}({c.totalMonth ? Math.round((top.krw / c.totalMonth) * 100) : 0}%).</div>}
         </AdmPanel>
@@ -290,16 +293,20 @@ export function WalletView({ openSettings }) {
               <tbody>{rows.map((r) => (
                 <tr key={r.key} className="adm-row" style={{ borderBottom: "1px solid rgba(215,188,130,.07)" }}>
                   <td className="px-4 py-2.5 whitespace-nowrap font-bold" style={{ color: G.sub }}>{r.group}</td>
-                  <td className="px-4 py-2.5 whitespace-nowrap font-black" style={{ color: G.ink }}>{r.label} {r.est ? <EstTag /> : r.fixed ? <span className="text-[11px] font-bold" style={{ color: G.dim }}>고정</span> : null}</td>
-                  <td className="px-4 py-2.5 text-right whitespace-nowrap" style={{ ...NUM, color: G.sub }}>{r.usage != null ? `${Number(r.usage).toLocaleString(undefined, { maximumFractionDigits: 1 })}${r.usageUnit || ""}` : "-"}</td>
+                  <td className="px-4 py-2.5 whitespace-nowrap font-black" style={{ color: G.ink }}>{r.label} {r.actual ? <RealTag>실제 결제</RealTag> : r.replaced ? <span className="text-[11px] font-bold" style={{ color: G.dim }}>실제 결제로 대체</span> : <EstTag>{r.fixed ? "예상 · 고정" : "예상"}</EstTag>}</td>
+                  <td className="px-4 py-2.5 text-right whitespace-nowrap" style={{ ...NUM, color: G.sub }}>{r.actual ? (r.date || "-") : r.usage != null ? `${Number(r.usage).toLocaleString(undefined, { maximumFractionDigits: 1 })}${r.usageUnit || ""}` : "-"}</td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap text-[12.5px]" style={{ ...NUM, color: G.dim }}>{r.unit || "-"}</td>
-                  <td className="px-4 py-2.5 text-right whitespace-nowrap font-black" style={{ ...NUM, color: G.goldHi }}>{won(r.krw)}</td>
+                  <td className="px-4 py-2.5 text-right whitespace-nowrap font-black" style={{ ...NUM, color: r.replaced ? G.dim : G.goldHi }}>{r.replaced ? <s>{won(r.modelKrw)}</s> : won(r.krw)}</td>
                 </tr>))}</tbody>
             </table>
           </div>
         </AdmPanel>
       )}
+      <AdmPanel code="PAYMENTS" title="결제 내역" right={<span className="text-[12px] font-bold" style={{ color: G.dim }}>실제로 낸 돈 · 바로 반영돼요</span>}>
+        <PaymentsLedger tone="dark" model={c.model} ym={c.ym} demo={d.demo} demoPayments={d.demo ? DEMO_PAYMENTS(c.ym) : null} />
+      </AdmPanel>
       <div className="px-1 text-[12px] font-bold leading-relaxed" style={{ color: G.dim }}>
+        · 구독 업그레이드 · API 충전처럼 실제로 낸 돈은 위 [결제 내역]에 넣으면 '실제 결제'로 잡혀요. 같은 항목의 예상 금액은 그 달만 빠져서 두 번 세지 않아요.<br />
         · Vercel 사용량, 카카오 · 네이버 · Tmap 지도 호출 수, 각 업체 실제 청구서는 프로그램에 기록되지 않아요 — 단가 × 사용량(또는 활동량)으로 낸 값이에요.<br />
         · 단가 · 환율 · 고정비는 [비용 기준 · 손익 상세] › 비용 기준 설정에서 고쳐요.
       </div>
