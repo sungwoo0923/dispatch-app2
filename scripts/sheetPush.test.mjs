@@ -595,6 +595,16 @@ async function world(mode, opts = {}) {
   assert.equal(row[18], "010-2410-8291", w.sh.writes.join(" "));
   const doc = w.db.data("orders", "o아6");
   assert.equal(doc._sheetWayRaw, "전국특송", "시트 칸 글 기억(화면 보라색 아님)");
+  // 🛠 2026-11-19 다시 읽어도 전국특송 그대로(24시로 바뀌어 프로그램에만 남는 값이 아님) · 오더에 24시가 생기지 않는다
+  assert.equal(doc.배차방식, "전국특송");
+  assert.ok(!(doc._programKeys || []).includes("배차방식"), "배차방식은 시트와 같다(프로그램에만 둔 값 아님)");
+  // 기사직통 → 전국특송으로 바꿔도 시트 운송사 칸이 바뀐다
+  await w.write("o아6", { ...w.db.data("orders", "o아6"), 배차방식: "기사직통" });
+  await w.run();
+  assert.equal(w.tabs["아산 내수"][5][15], "기사직통");
+  await w.write("o아6", { ...w.db.data("orders", "o아6"), 배차방식: "전국특송" });
+  await w.run();
+  assert.equal(w.tabs["아산 내수"][5][15], "전국특송", "기사직통 → 전국특송 시트 반영");
   // 다른 칸만 고쳐도 숫자로 남은 연락처 칸은 고친다
   w.tabs["아산 내수"][5][18] = "1024108291";
   await w.write("o아6", { ...w.db.data("orders", "o아6"), 청구운임: "125000" });

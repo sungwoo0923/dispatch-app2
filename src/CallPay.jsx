@@ -120,7 +120,7 @@ export function PayBadge({ row, onOpen }) {
 
 const Row = ({ label, children }) => (
   <div className="flex items-center gap-3 py-2.5 border-b border-[#EEF2F8] last:border-b-0">
-    <div className="w-[92px] shrink-0 text-[12.5px] font-bold text-[#5B6B85]">{label}</div>
+    <div className="w-[92px] shrink-0 text-[12.5px] font-bold text-[#5B6B85] whitespace-nowrap">{label}</div>
     <div className="flex-1 min-w-0 flex flex-wrap items-center gap-2 text-[13.5px] font-bold text-[#0F1A30]">{children}</div>
   </div>
 );
@@ -374,8 +374,8 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
           </div>
           <button type="button" onClick={onClose} aria-label="닫기" className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[16px] shrink-0">✕</button>
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto md:overflow-hidden md:grid md:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="px-5 py-3 md:overflow-y-auto">
+        <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden lg:grid lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="px-5 py-3 lg:overflow-y-auto">
           <Row label="오더 구분">
             <div className="inline-flex rounded-xl bg-[#F1F4F9] p-1">
               {[["IN", "IN"], ["OUT", "OUT"]].map(([v, l]) => (
@@ -441,17 +441,17 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
             </Row>
           )}
         </div>
-        <div className="px-5 py-3 md:overflow-y-auto border-t md:border-t-0 md:border-l border-[#EEF2F8] bg-[#FAFBFD]">
+        <div className="px-5 py-3 lg:overflow-y-auto border-t lg:border-t-0 lg:border-l border-[#EEF2F8] bg-[#FAFBFD] min-w-0">
           {manyOn && <div className="mb-2 text-[12.5px] font-bold text-[#2D4C82]">일괄 적용 중 · 올린 증빙은 선택 오더 {otherRows.length + 1}건에 모두 붙고, 금액은 {otherRows.length + 1}건 합계와 비교해요.</div>}
           {/* 🧾 증빙서류 — 올리면 자동 스캔(오더 스캔과 같은 정밀 인식) */}
           <EvidenceBox row={row} api={evApi} canEdit={canEdit} expect={amt.supply} onScanned={onScanned} known={[coNow(company), row?.거래처명, row?.이름 || row?.기사명].filter(Boolean)} self={coNow(company)} selfIs={out ? "supplier" : "buyer"} />
         </div>
         </div>
         <div className="px-5 py-3.5 bg-[#F7F9FC] border-t border-[#EEF2F8] flex items-center gap-2 shrink-0">
-          <span className="flex-1 min-w-0 text-[11.5px] font-semibold text-[#7A8AA8] leading-snug">{scanNote ? <b className="text-[#B54708]">{scanNote}</b> : dirty ? <b className="text-[#B54708]">저장하지 않은 변경이 있습니다</b> : "아래 증빙서류에 계산서를 올리면 발행일 · 금액 · 입금자명이 자동으로 들어갑니다."}</span>
+          <span className="flex-1 min-w-0 text-[11.5px] font-semibold text-[#7A8AA8] leading-snug break-keep">{scanNote ? <b className="text-[#B54708]">{scanNote}</b> : dirty ? <b className="text-[#B54708]">저장하지 않은 변경이 있습니다</b> : "아래 증빙서류에 계산서를 올리면 발행일 · 금액 · 입금자명이 자동으로 들어갑니다."}</span>
           {canEdit && out && deposited && <button type="button" disabled={busy} onClick={undo} className="h-10 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#9A1F15] whitespace-nowrap">{withOthers && undoMany.length ? `${undoMany.length + 1}건 입금 취소` : "입금 취소"}</button>}
-          <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#3A4A66]">닫기</button>
-          {canEdit && <button type="button" disabled={busy || !dirty} onClick={save} data-pay-save className="h-10 px-5 rounded-xl border border-[#1B2B4B] bg-white text-[13px] font-black text-[#1B2B4B] disabled:opacity-40">{busy ? "저장 중…" : invMany && f.inv !== (row?.계산서일 || "") ? `${bulkRows.length + 1}건 저장` : "저장"}</button>}
+          <button type="button" onClick={onClose} className="h-10 px-4 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-black text-[#3A4A66] whitespace-nowrap shrink-0">닫기</button>
+          {canEdit && <button type="button" disabled={busy || !dirty} onClick={save} data-pay-save className="h-10 px-5 whitespace-nowrap shrink-0 rounded-xl border border-[#1B2B4B] bg-white text-[13px] font-black text-[#1B2B4B] disabled:opacity-40">{busy ? "저장 중…" : invMany && f.inv !== (row?.계산서일 || "") ? `${bulkRows.length + 1}건 저장` : "저장"}</button>}
           {canEdit && out && !deposited && <button type="button" disabled={busy} onClick={deposit} data-pay-deposit className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-40 whitespace-nowrap">{withOthers && depMany.length ? `${depMany.length + 1}건 입금완료` : "입금완료"}</button>}
         </div>
       </div>
