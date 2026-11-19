@@ -45,6 +45,8 @@ const t = async (name, fn) => { await fn(); n += 1; console.log(`  ✓ ${name}`)
     assert.equal(isPayrollAdmin({ role: "admin", team: "회계팀" }), true);
     assert.equal(isPayrollAdmin({ role: "user", team: "총무팀" }), false);
     assert.equal(isPayrollAdmin({ role: "totalMaster" }), true);
+    assert.equal(isPayrollAdmin({ role: "allMgr" }), true); // 통합관리자도 [비밀번호를 잊었어요]로 새로 정할 수 있다
+    assert.equal(isPayrollAdmin({ role: "hrAcct" }), true);
   });
   await t("해시 — scrypt · 소금마다 다르고 맞는 비밀번호만 통과", () => {
     const a = hashPw("pay2026!"); const b = hashPw("pay2026!");
@@ -56,6 +58,10 @@ const t = async (name, fn) => { await fn(); n += 1; console.log(`  ✓ ${name}`)
     // 처음 비밀번호 000000 — 맞으면 열리고 바꾸라고 알린다, 다른 값은 틀림
     const v0 = await api.verify({ password: "000000" }, ctx("clerk")); assert.equal(v0.ok, true); assert.equal(v0.mustChange, true);
     const v1 = await api.verify({ password: "123123" }, ctx("clerk")); assert.equal(v1.ok, false);
+    // 2026-11-19 휴대폰 키보드 — 앞뒤 공백 · 전각 숫자도 000000으로 본다
+    assert.equal((await api.verify({ password: " 000000 " }, ctx("clerk"))).ok, true);
+    assert.equal((await api.verify({ password: "００００００" }, ctx("clerk"))).ok, true);
+    assert.equal((await api.verify({ password: "00000" }, ctx("clerk"))).ok, false);
     await assert.rejects(api.setPw({ newPassword: "pay2026!" }, ctx("clerk")), /경리 관리자/);
     assert.equal((await api.status({}, ctx("hr"))).staff, false);
     await assert.rejects(api.verify({ password: "x" }, ctx("ceo")), /경리 담당자/);

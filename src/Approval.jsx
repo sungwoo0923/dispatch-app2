@@ -29,7 +29,7 @@ import { printA4, savePdf } from "./a4Export";
 import { TimeSelect } from "./kpInputs";
 import { useMyProfile, useUserNames, personName } from "./userNames";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
-import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp, setDoc } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, arrayUnion, arrayRemove, serverTimestamp, setDoc, deleteField } from "firebase/firestore";
 import { ShellIcon } from "./AdminShell";
 import { useCompanyStaff, compressImage, sendInternalMail } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
@@ -85,7 +85,7 @@ const goPersonnelOrder = (targetUid) => {
 //  대상: cat=="expense" && 금액>0 (법인카드 사용보고는 이미 카드로 결제된 건이라 제외)
 //  누를 수 있는 사람: 아래 FIN_ROLES·재무 부서(2026-11-07 정리 — 운송 관리자(admin)·최종 결재자는 이제 못 누른다)
 //  (firestore.rules › approvals 의 "⭐ 2026-11-04 전자결재 서명" 규칙과 같은 조건)
-import { isPayDoc, payState, isFinUser, FIN_TEAM, usePayFlags, fallbackPayer, usePayTodo } from "./approvalPay"; // 💸 2026-11-15 지급 규칙은 공용(모바일 숫자도 같이)
+import { isPayDoc, payState, payLinesInfo, isFinUser, FIN_TEAM, usePayFlags, fallbackPayer, usePayTodo } from "./approvalPay"; // 💸 2026-11-15 지급 규칙은 공용(모바일 숫자도 같이)
 import { teamText } from "./teamNames"; // ⭐ 2026-11-17 예전 부서 이름(legacyTeam)까지 같이 본다
 export { isPayDoc, payState, usePayFlags, fallbackPayer };
 // ⭐ 2026-11-09 계정과목은 경리 권한만 정한다 — 경리관리자·경리사무원·통합관리자·통합인사관리자·최고관리자·경리/회계/재무/총무 부서
@@ -1954,6 +1954,18 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
       setPayAsk(null);
     } catch (e) { window.alert(`지급 완료 처리 실패: ${e.message}`); } finally { setBusy(false); }
   };
+  // 📋 2026-11-19 태진 요청 — 여러 줄 지출결의는 줄마다 지급 체크(경리가 직접). 문서 전체 [지급 완료 처리]와 따로 남는다
+  const [linesLocal, setLinesLocal] = React.useState({});
+  const plines = payLinesInfo(d);
+  const lineMap = { ...plines.map, ...linesLocal };
+  const lineDone = d.paid?.at ? plines.n : Object.keys(lineMap).filter((k) => lineMap[k] && Number(k) < plines.n).length;
+  const toggleLine = async (i) => {
+    const on = !lineMap[i];
+    const v = on ? { at: Date.now(), by: me.uid, byName: me.name || "" } : null;
+    setLinesLocal((m) => ({ ...m, [i]: v }));
+    try { await updateDoc(doc(db, "approvals", d.id), { [`paidLines.${i}`]: on ? v : deleteField(), updatedAt: serverTimestamp() }); }
+    catch (e) { setLinesLocal((m) => { const n = { ...m }; delete n[i]; return n; }); window.alert(`체크 저장 실패: ${e.message}`); }
+  };
   const undoPay = async () => {
     if (!await kpConfirm(`「${d.title}」의 지급 완료를 취소할까요?\n문서가 다시 「지급 대기」로 바뀝니다.`)) return;
     setBusy(true);
@@ -2071,6 +2083,30 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
                   <span className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap">{pstate === "paid" ? "지급 완료" : "지급 대기"}</span>
                   <span className="ml-auto text-[14px] font-black text-[#0F1A30] tabular-nums whitespace-nowrap">{fmtWon(d.amount)}</span>
                 </div>
+                {plines.n >= 2 && (
+                  <div className="rounded-xl border border-[#DCE3EE] bg-white overflow-hidden" data-ap-paylines>
+                    <div className="px-3 py-2 bg-[#F5F8FD] border-b border-[#E3E8F0] flex items-center gap-2">
+                      <span className="text-[13px] font-black text-[#0F1A30]">줄별 지급 체크</span>
+                      <span className={`ml-auto text-[12.5px] font-black tabular-nums ${lineDone >= plines.n ? "text-[#067647]" : "text-[#2D4C82]"}`}>{lineDone}/{plines.n}건 지급</span>
+                    </div>
+                    {spendLinesOf(d.data).map((r, i) => {
+                      const c = d.paid?.at ? (lineMap[i] || d.paid) : lineMap[i];
+                      const can = payable && pstate === "wait";
+                      return (
+                        <label key={i} className={`flex items-start gap-2.5 px-3 py-2 border-b border-[#EEF1F6] last:border-b-0 ${can ? "cursor-pointer hover:bg-[#F8FAFD]" : ""}`}>
+                          <input type="checkbox" checked={!!c} disabled={!can || busy} onChange={() => toggleLine(i)} className="mt-0.5 w-4 h-4 accent-[#067647] shrink-0" data-testid={`ap-payline-${i}`} />
+                          <span className="flex-1 min-w-0 text-[13px] leading-snug">
+                            <span className="flex items-baseline gap-2"><b className={`truncate ${c ? "text-[#5B6B85] line-through decoration-[#9AA9C3]" : "text-[#0F1A30]"}`}>{i + 1}. {r.vendor || "-"}</b><b className="ml-auto tabular-nums whitespace-nowrap text-[#0F1A30]">{n0(spendRowTotal(r)) || "-"}</b></span>
+                            <span className="block text-[12px] text-[#5B6B85] truncate">{[r.date, r.memo, bankText(r.bank)].filter(Boolean).join(" · ")}</span>
+                            {c && <span className="block text-[12px] font-bold text-[#067647]">✓ 지급함 · {c.byName || ""}{c.at ? ` · ${new Date(c.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""}</span>}
+                          </span>
+                        </label>
+                      );
+                    })}
+                    {pstate === "wait" && payable && lineDone >= plines.n && <div className="px-3 py-2 bg-[#ECFDF3] text-[12.5px] font-bold text-[#067647]">모두 체크했어요. 아래 [₩ 지급 완료 처리]를 누르면 문서가 지급완료로 바뀌어요.</div>}
+                    {pstate === "wait" && payable && lineDone < plines.n && <div className="px-3 py-2 text-[12px] font-bold text-[#7A879C]">보낸 줄을 체크해 두면 다른 담당자도 어디까지 보냈는지 바로 알아요.</div>}
+                  </div>
+                )}
                 {pstate === "paid" ? (
                   <>
                     <div className="text-[13px] text-[#3A4A66] leading-relaxed break-words">지급일 <b className="text-[#0F1A30] tabular-nums">{d.paid.date || ymd(d.paid.at)}</b> · 처리 {d.paid.byName || "-"}{d.paid.account ? <> · 계정과목 <b className="text-[#0F1A30]">{d.paid.account}</b></> : null}{d.paid.memo ? <><br />메모 {d.paid.memo}</> : null}</div>
@@ -2150,7 +2186,8 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
                 ? <span className="inline-flex flex-col"><button type="button" disabled aria-disabled="true" data-testid="ap-cancel-req-blocked" title={PAID_CANCEL_MSG} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#9AA9C3] cursor-not-allowed">결재 취소 요청</button><span className="mt-1 text-[12px] font-bold text-[#B42318]">{PAID_CANCEL_MSG}</span></span>
                 : <button type="button" onClick={() => { setCancelAsk(true); setComment(""); }} className="h-9 px-3.5 rounded-lg border border-[#0F1A30] text-[13.5px] font-black text-[#0F1A30]">결재 취소 요청</button>)}
               {mine && ["rejected", "withdrawn"].includes(d.status) && <button type="button" onClick={() => onRedraft(d)} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13.5px] font-black">재기안</button>}
-              {mine && ["approved", "cancelled"].includes(d.status) && <button type="button" onClick={() => onRedraft({ ...d, id: null })} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#3A4A66]">복사해서 새로 쓰기</button>}
+              {/* 📋 2026-11-19 태진 요청 — 주유비처럼 반복되는 지출결의는 결재가 끝나기 전(진행 중)에도 복사해서 날짜만 바꿔 새로 올릴 수 있게(예전엔 결재 완료 · 취소 문서만) */}
+              {mine && ["pending", "approved", "cancelled"].includes(d.status) && <button type="button" data-testid="ap-copy-new" onClick={() => onRedraft({ ...d, id: null })} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13.5px] font-black text-[#3A4A66]">복사해서 새로 쓰기</button>}
               {(() => {
                 const hidden = (d.hiddenBy || []).includes(me.uid);
                 const finished = d.status !== "pending" && !(d.status === "approved" && d.cancel?.status === "pending");
@@ -2257,7 +2294,7 @@ function DocList({ docs, onOpen, empty, uid, compact = false, more = false }) {
               <span className="text-[12px] font-black px-1.5 py-0.5 rounded border border-[#0F1A30] text-[#0F1A30] shrink-0">{d.formLabel}</span>
               {myTurn(d, uid) && !cancelTurn(d, uid) && <span className="text-[12px] font-black px-1.5 py-0.5 rounded bg-[#0F1A30] text-white shrink-0">내 차례</span>}
               {payState(d) === "paid" && <span className="text-[12px] font-black px-1.5 py-0.5 rounded border border-[#E8C4C0] bg-[#FDF3F2] text-[#9A1F15] shrink-0" title={`지급일 ${d.paid?.date || ""}`}>지급완료</span>}
-              {payState(d) === "wait" && <span className="text-[12px] font-black px-1.5 py-0.5 rounded border border-dashed border-[#9AB0D6] bg-[#F5F8FD] text-[#2D4C82] shrink-0">지급 대기</span>}
+              {payState(d) === "wait" && <span className="text-[12px] font-black px-1.5 py-0.5 rounded border border-dashed border-[#9AB0D6] bg-[#F5F8FD] text-[#2D4C82] shrink-0">지급 대기{(() => { const p = payLinesInfo(d); return p.n >= 2 && p.done > 0 ? ` ${p.done}/${p.n}` : ""; })()}</span>}
               {(mineUnread(d, uid) || ccUnread(d, uid)) && <span className="w-[18px] h-[18px] rounded-full bg-rose-500 text-white text-[11px] font-black flex items-center justify-center shrink-0">N</span>}
               <span className="text-[14.5px] font-black text-[#0F1A30] truncate min-w-0 max-w-full">{d.title}</span>
             </div>

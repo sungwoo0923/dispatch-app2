@@ -161,7 +161,13 @@ function makePayrollPw({ db, FieldValue, Timestamp, HttpsError }) {
     const a = aSnap.data() || {};
     const now = Date.now();
     if ((Number(a.lockUntil) || 0) > now) return { ok: false, lockUntil: Number(a.lockUntil), left: 0 };
-    if (noPw ? String(data?.password ?? "") !== DEFAULT_PW : !(await checkPwAsync(data?.password, sec.data()))) {
+    // ⭐ 2026-11-19 태진 문의(정한 적 없는데 000000이 계속 실패) — 휴대폰 키보드가 붙이는 앞뒤 공백 · 전각 숫자(０)를 정리해서 비교
+    //  정해 둔 비밀번호는 입력 그대로 먼저 보고, 틀리면 앞뒤 공백만 뺀 값으로 한 번 더 본다(예전에 공백까지 넣어 정했어도 그대로 통함)
+    const raw = String(data?.password ?? "");
+    const typed = raw.normalize("NFKC").trim();
+    const pwOk = noPw ? typed === DEFAULT_PW
+      : (await checkPwAsync(raw, sec.data())) || (raw.trim() !== raw && (await checkPwAsync(raw.trim(), sec.data())));
+    if (!pwOk) {
       const fails = (Number(a.fails) || 0) + 1;
       if (fails >= MAX_FAILS) {
         const locks = Number(a.locks) || 0;

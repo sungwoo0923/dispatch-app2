@@ -40,6 +40,9 @@ async function t(name, fn) { try { await fn(); pass++; console.log(`PASS ${name}
   await t("다른 회사 경리 — 막힘", () => assertFails(updateDoc(doc(as("acctB"), "approvals/inLine"), pay)));
   await t("경리 — 지급 칸 말고 금액 고치기 막힘", () => assertFails(updateDoc(doc(as("acct"), "approvals/inLine"), { ...pay, amount: 1 })));
   await t("결재자도 아닌 일반 직원이 진행 중 문서에 지급 표시 막힘", () => assertFails(updateDoc(doc(as("user"), "approvals/pending"), pay)));
+  // 📋 2026-11-19 줄별 지급 체크(paidLines) — 승인된 지출결의에서 경리만
+  await t("경리 — 줄별 지급 체크", () => assertSucceeds(updateDoc(doc(as("acct"), "approvals/notInLine"), { "paidLines.0": { at: 1, by: "acct", byName: "경리" }, updatedAt: 3 })));
+  await t("일반 직원 — 줄별 지급 체크 막힘", () => assertFails(updateDoc(doc(as("user"), "approvals/notInLine"), { "paidLines.1": { at: 1, by: "user" }, updatedAt: 3 })));
   await t("경리 없는 회사 — 최종 결재자 지급 완료", () => assertSucceeds(updateDoc(doc(as("ceoC"), "approvals/fallbackC"), { ...pay, paid: { ...pay.paid, by: "ceoC" } })));
   await t("경리 없는 회사 — 중간 결재자는 막힘", () => assertFails(updateDoc(doc(as("midC"), "approvals/fallbackC"), pay)));
   await t("경리 있는 회사 — 최종 결재자 막힘", () => assertFails(updateDoc(doc(as("ceoD"), "approvals/hasFinD"), pay)));

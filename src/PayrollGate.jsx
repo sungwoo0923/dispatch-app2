@@ -256,7 +256,8 @@ export default function PayrollGate({ company, canAdmin = false, children, scope
       const r = await api.verify(company, pw);
       if (r.ok) { openSession(company); setPw(""); if (r.mustChange) { setSt((s) => ({ ...s, usingDefault: true })); setChanging(true); } }
       else if (r.lockUntil) setMsg(`여러 번 틀려서 ${new Date(r.lockUntil).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}까지 잠겼어요`);
-      else setMsg(`비밀번호가 맞지 않아요 · ${r.left}번 더 틀리면 잠깐 잠겨요`);
+      else setMsg(`비밀번호가 맞지 않아요 · ${r.left}번 더 틀리면 잠깐 잠겨요${st.usingDefault ? " (처음 비밀번호는 숫자 0 여섯 개 000000)" : ""}`);
+      if (r.lockUntil) setSt((s) => ({ ...s, lockUntil: r.lockUntil }));
     } catch (er) { setMsg(er.message || "확인하지 못했어요"); } finally { setBusy(false); }
   };
 
@@ -283,7 +284,13 @@ export default function PayrollGate({ company, canAdmin = false, children, scope
           <input type="password" autoComplete="current-password" autoFocus value={pw} onChange={(e) => setPw(e.target.value)} placeholder="관리 비밀번호" className={inp} data-testid="payroll-pw" aria-label="관리 비밀번호" />
           {msg && <div className={`rounded-xl px-3.5 py-2.5 text-[14px] font-bold border ${/틀|잠겼어요|맞지/.test(msg) && !/다시 잠갔/.test(msg) ? "bg-[#FEF3F2] border-[#FECDCA] text-[#B42318]" : "bg-[#F5F8FD] border-[#DCE3EE] text-[#1B2B4B]"}`} role="status">{msg}</div>}
           <button type="submit" disabled={busy || !pw} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-40" data-testid="payroll-unlock">{busy ? "확인 중…" : "잠금 해제"}</button>
-          <div className="text-[14px] font-bold text-[#7A879C] leading-relaxed">{st.usingDefault ? "처음 비밀번호는 000000이에요. 들어가면 바로 새 비밀번호로 바꿔 주세요." : "예전에 정한 급여 비밀번호와 같아요. "}{!st.usingDefault && (isPayAdmin ? "잊었으면 아래 [비밀번호를 잊었어요]로 다시 정할 수 있어요." : "잊었으면 경리 관리자에게 바꿔 달라고 하세요.")}</div>
+          {/* ⭐ 2026-11-19 태진 문의 — 정한 비밀번호가 있는지(있으면 찾는 방법) · 지금 잠겨 있는지 먼저 보여 준다 */}
+          {!st.pending && <div className="rounded-xl bg-[#F5F8FD] border border-[#DCE3EE] px-3.5 py-2.5 text-[13.5px] font-bold text-[#1B2B4B] leading-relaxed" data-testid="payroll-pw-who">
+            {st.usingDefault ? "아직 아무도 비밀번호를 정하지 않았어요 → 처음 비밀번호 000000(숫자 0 여섯 개)을 넣으면 돼요."
+              : `회사에서 정한 비밀번호가 있어서 000000은 안 돼요. 잊었으면 경리 관리자 · 통합관리자가 아래 [비밀번호를 잊었어요]를 누르고, 본인 로그인 비밀번호로 확인한 뒤 새로 정하면 돼요.`}
+          </div>}
+          {(st.lockUntil || 0) > Date.now() && !msg && <div className="rounded-xl px-3.5 py-2.5 text-[14px] font-bold border bg-[#FEF3F2] border-[#FECDCA] text-[#B42318]" role="status">여러 번 틀려서 {new Date(st.lockUntil).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}까지 잠겨 있어요. 그때까지는 맞는 비밀번호를 넣어도 안 열려요.</div>}
+          <div className="text-[14px] font-bold text-[#7A879C] leading-relaxed">{st.usingDefault ? "처음 비밀번호는 000000이에요. 들어가면 바로 새 비밀번호로 바꿔 주세요." : "예전에 정한 급여 비밀번호와 같아요. "}{!st.usingDefault && (isPayAdmin ? "잊었으면 아래 [비밀번호를 잊었어요]로 다시 정할 수 있어요." : "잊었으면 경리 관리자 · 통합관리자에게 새로 정해 달라고 하세요.")}</div>
           {isPayAdmin && !st.usingDefault && <button type="button" onClick={() => { setMsg(""); setResetting(true); }} className="w-full h-11 rounded-xl border border-[#DCE3EE] bg-white text-[14.5px] font-black text-[#1B2B4B]" data-testid="payroll-forgot">비밀번호를 잊었어요</button>}
         </form>
       </GateCard>
