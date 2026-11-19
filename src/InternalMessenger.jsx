@@ -2344,6 +2344,14 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
 // ════════════════ 채팅 뷰 ════════════════
 function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, sendingImgs = [], friends, mobileMode, themeHdr, themeMyBubble, themeChatBg, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf, groupPeople = [], onShowMembers, onInvite, onRename, onLeave, onShareOrder, onPin, onUnpin, onForward, quickReplies = [], onSaveQuickReplies, mentionPeople = [], myName = "" }) {
   const [showSearch, setShowSearch] = useState(false);
+  // 💬 2026-11-19 운송사 요청 — 카카오톡처럼 글이 다음 줄로 넘어가면 입력칸이 같이 늘어난다(최대 6줄, 그 뒤로는 칸 안에서 스크롤 · 보내면 다시 한 줄)
+  React.useLayoutEffect(() => {
+    const el = inputRef?.current; if (!el) return;
+    el.style.height = "auto";
+    const max = 6 * 20.25 + 12; // 13.5px × 1.5줄 높이 × 6줄 + 위아래 여백
+    el.style.height = `${Math.min(el.scrollHeight, max)}px`;
+    el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
+  }, [input, inputRef]);
   // ⭐ 2026-11-06 오더 열기 · 공지 접기 · 자주 쓰는 문구 · @멘션 고르기 · 모아보기
   const [orderView, setOrderView] = useState(null);
   const [pinFold, setPinFold] = useState(false);
@@ -3050,7 +3058,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="sentences"
-            style={{ flex: 1, background: "none", border: "none", outline: "none", resize: "none", fontSize: 13.5, color: "#111827", maxHeight: 90, overflowY: "auto", lineHeight: 1.5 }}
+            style={{ flex: 1, background: "none", border: "none", outline: "none", resize: "none", fontSize: 13.5, color: "#111827", maxHeight: 134, overflowY: "hidden", lineHeight: 1.5, padding: "6px 2px", alignSelf: "center", boxSizing: "border-box" }}
           />
           <button type="button"
             onMouseDown={e => e.preventDefault()}
