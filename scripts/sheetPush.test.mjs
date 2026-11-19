@@ -602,4 +602,23 @@ async function world(mode, opts = {}) {
   assert.equal(w.tabs["아산 내수"][5][18], "010-2410-8291");
   console.log("배차방식 별칭(전국특송) · 연락처 하이픈 OK");
 }
+// ⭐ 2026-11-19 하차 경유지 — "창동식자재,고양유통"처럼 하차지 칸에 쉼표로 이어 쓴다 · 다시 읽으면 첫 곳 = 하차지, 나머지 = 경유지
+{
+  const ctx = ctxOf();
+  const order = { 상차일: "2026-11-20", 하차일: "2026-11-20", 거래처명: "녹수", 상차지명: "신봉길101", 하차지명: "창동식자재", 청구운임: "90000", 기사운임: "80000", 메모: "오전 도착",
+    경유하차목록: [{ 업체명: "고양유통", 주소: "경기 고양시 덕양구 1" }] };
+  const c = planCreate(ctx, order, "아산 내수", { rowCount: 100 });
+  assert.equal(c.ok, true, c.reason);
+  const m = Object.fromEntries(c.cells.map((x) => [x.a1, x.value]));
+  assert.equal(m.C7, "창동식자재,고양유통", JSON.stringify(m));
+  assert.equal(m.U7, "오전 도착", "메모도 그대로(경유 꼬리표 때문에 빠지지 않음)");
+  const back = ctx.built.orders.find((o) => o.__tab === "아산 내수" && o.__row === 7);
+  assert.equal(back.하차지명, "창동식자재"); assert.deepEqual(back.경유하차목록.map((x) => x.업체명), ["고양유통"]);
+  // 경유지만 바꿔도 하차지 칸을 다시 쓴다
+  const doc = { ...order, ...c.docPatch };
+  const u = planUpdate(ctx, doc, { ...doc, 경유하차목록: [{ 업체명: "고양유통" }, { 업체명: "의왕물류" }] });
+  assert.equal(u.ok, true, u.reason);
+  assert.deepEqual(u.cells.map((x) => [x.a1, x.value]), [["C7", "창동식자재,고양유통,의왕물류"]]);
+  console.log("하차 경유지(쉼표로 이어 쓰기) OK");
+}
 console.log("sheetPush: 모두 통과");

@@ -63,7 +63,13 @@ export function sameValue(k, a, b) {
 //  예전엔 프로그램 이름("대기료" · 이름 없음)과 달라 "똑같이 읽히지 않는다"고 보고 추가 칸을 포기 → 운송료 칸에 합친 금액만 썼다(사용자 신고).
 //  이름은 프로그램 값을 그대로 둔다(_programKeys — 시트에서 다시 가져와도 덮어쓰지 않음)
 const looseSpecials = (list) => normSpecials(list).map((x) => x.split("|").slice(2).join("|")).sort();
+// 하차 경유지 이름들(프로그램 경유하차목록 · 예전 이름 경유지_하차)
+const dropStops = (o) => { const list = Array.isArray(o?.경유하차목록) && o.경유하차목록.length ? o.경유하차목록 : Array.isArray(o?.경유지_하차) ? o.경유지_하차 : [];
+  return list.map((v) => cell(typeof v === "string" ? v : v?.업체명).replace(/[,，+]/g, " ").trim()).filter(Boolean); };
+// 메모 비교 — 가져오기가 덧붙이는 "경유 창동식자재,고양유통" 꼬리표는 빼고 본다(경유지를 시트에 쓰면 다시 읽을 때 붙는다)
+const memoCore = (v) => cell(v).split(" · ").map((x) => x.trim()).filter((x) => x && !/^경유 /.test(x)).join(" · ");
 export function pushSame(k, a, b, preset = null) {
+  if (k === "메모" && preset?.multiDropStops) return memoCore(a) === memoCore(b);
   // ⭐ 2026-11-19 배차방식 — 시트 운송사 글이 가져오기 규칙으로 바뀌어 읽혀도(JY: 시트 "전국특송" → 프로그램 "24시") 같은 회사면 쓴 것으로 본다
   //  예전엔 프로그램 "전국특송"을 써 보고 다시 읽은 "24시"와 달라 쓰기를 포기했다(사용자 신고: 배차방식이 시트에 안 들어감)
   if (k === "배차방식" && preset) return nm(normCarrier(a, preset)) === nm(normCarrier(b, preset));
@@ -296,10 +302,14 @@ function fieldEdits(k, o, env) {
     }
     case "상차지주소": return rule?.fromFixed ? one(L.cols.from, o.상차지주소) : null;
     case "하차지명": {
-      if (rule?.toNameCol) return one(headerCol(L, rule.toNameCol), o.하차지명);
-      if (col(L.cols.consignee) != null) return one(L.cols.consignee, o.하차지명);
+      // ⭐ 2026-11-19 하차 경유지가 있으면 "창동식자재,고양유통"처럼 한 칸에 쉼표로 이어 쓴다(가져오기 규칙 multiDropStops의 거꾸로 — 첫 곳 = 하차지, 나머지 = 경유지)
+      //  예전엔 첫 하차지만 써서 시트에 1곳만 나왔다(사용자 신고)
+      const drops = preset.multiDropStops ? dropStops(o) : [];
+      const join = (first) => [first, ...drops].filter(Boolean).join(",");
+      if (rule?.toNameCol) return one(headerCol(L, rule.toNameCol), join(cell(o.하차지명)));
+      if (col(L.cols.consignee) != null) return one(L.cols.consignee, join(cell(o.하차지명)));
       if (rule?.shortAddrName && cell(o.하차지주소)) return null; // 이름은 주소에서 만들어진다
-      return one(L.cols.to, sheetPlaceName(env, cell(o.하차지명)));
+      return one(L.cols.to, [cell(o.하차지명), ...drops].map((n) => sheetPlaceName(env, n)).filter(Boolean).join(","));
     }
     case "하차지주소": {
       if (rule?.toAddrCol) return one(headerCol(L, rule.toAddrCol), o.하차지주소);
@@ -416,6 +426,8 @@ export function planUpdate(ctx, before, after, opts = {}) {
   if (!env) return fail("이 탭의 칸 배치를 읽지 못했습니다");
   const pushKeys = changed.filter((k) => PUSH_FIELDS.includes(k));
   if ((changed.includes("상차일") || changed.includes("하차일") || changed.includes("상차시간")) && !pushKeys.includes("하차시간")) pushKeys.push("하차시간");
+  // ⭐ 2026-11-19 하차 경유지만 바꿔도 하차지 칸(쉼표로 이은 이름)을 다시 쓴다
+  if ((changed.includes("경유하차목록") || changed.includes("경유지_하차")) && !pushKeys.includes("하차지명") && cell(after.하차지명)) pushKeys.push("하차지명");
   // ⭐ 2026-11-19 예전에 숫자로 들어가 앞의 0 · 하이픈이 빠진 연락처 칸(1024108291)은 이 오더를 다시 쓸 때 같이 고친다
   const pc = env.L.cols.phone; if (pc !== undefined && pc >= 0 && cell(after.전화번호) && /^\d+$/.test(cell(base[pc])) && !pushKeys.includes("전화번호")) pushKeys.push("전화번호"); // 날짜가 바뀌면 입고시간(당착 · 야상 · 월착)도
   const fit = fitEdits(ctx, title, rowNo, base, after, pushKeys, env);
