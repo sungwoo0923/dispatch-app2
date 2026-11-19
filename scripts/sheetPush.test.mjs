@@ -70,7 +70,7 @@ const ctxOf = (tabs = sheet()) => makePushContext(Object.entries(tabs).map(([tit
   assert.deepEqual(pickTab(ctx, neu, []), { tab: "아산 내수" }); // 같은 거래처 · 상차지가 이 탭에만
   const c = planCreate(ctx, neu, "아산 내수", { rowCount: 100 });
   assert.equal(c.ok, true); assert.equal(c.row, 7);
-  assert.deepEqual(Object.fromEntries(c.cells.map((x) => [x.a1, x.value])), { A7: "2026-11-14", B7: "신봉길101", C7: "충남 천안시 성정동 12", H7: "90000", K7: "80000", O7: "26년11월", P7: "원콜", Q7: "충남77사7777", R7: "최사", S7: "01055556666", U7: "신규" });
+  assert.deepEqual(Object.fromEntries(c.cells.map((x) => [x.a1, x.value])), { A7: "2026-11-14", B7: "신봉길101", C7: "충남 천안시 성정동 12", H7: "90000", K7: "80000", O7: "26년11월", P7: "원콜", Q7: "충남77사7777", R7: "최사", S7: "010-5555-6666", U7: "신규" });
   assert.equal(c.docPatch.이전출처, "아산 내수!7"); assert.equal(c.docPatch.시트연동, true);
   assert.ok(!c.docPatch._programKeys.includes("청구운임") && !c.docPatch._programKeys.includes("차량번호"));
   assert.equal(planCreate(ctx, neu, "아산 내수", { rowCount: 7 }).needRows, 1); // 다음 빈 줄(8행)이 없으면 줄을 늘려야 한다
@@ -580,5 +580,26 @@ async function world(mode, opts = {}) {
   await w.run();
   assert.deepEqual(w.sh.writes, ["아산 내수!P6=기사직통"], "배차방식만 바꾸면 운송사 칸만 바뀐다");
   console.log("기사 교체(쓰는 사이 또 고침 · 운송사 칸) OK");
+}
+// ⭐ 2026-11-19 배차방식 "전국특송"(JY 규칙상 "24시"로 읽힘)도 시트에 쓴다 · 연락처는 하이픈 넣어(앞 0이 빠지지 않게) · 예전에 빠진 칸은 다시 쓸 때 고친다
+{
+  const w = await world("on");
+  const d0 = w.db.data("orders", "o아6");
+  w.tabs["아산 내수"][5][18] = "1024108291"; // 예전에 숫자로 들어간 칸
+  w.tabs["아산 내수"][5][15] = "";
+  w.sh.writes.length = 0;
+  await w.write("o아6", { ...d0, 배차방식: "전국특송", 전화번호: "01024108291" });
+  await w.run();
+  const row = w.tabs["아산 내수"][5];
+  assert.equal(row[15], "전국특송", w.sh.writes.join(" "));
+  assert.equal(row[18], "010-2410-8291", w.sh.writes.join(" "));
+  const doc = w.db.data("orders", "o아6");
+  assert.equal(doc._sheetWayRaw, "전국특송", "시트 칸 글 기억(화면 보라색 아님)");
+  // 다른 칸만 고쳐도 숫자로 남은 연락처 칸은 고친다
+  w.tabs["아산 내수"][5][18] = "1024108291";
+  await w.write("o아6", { ...w.db.data("orders", "o아6"), 청구운임: "125000" });
+  await w.run();
+  assert.equal(w.tabs["아산 내수"][5][18], "010-2410-8291");
+  console.log("배차방식 별칭(전국특송) · 연락처 하이픈 OK");
 }
 console.log("sheetPush: 모두 통과");

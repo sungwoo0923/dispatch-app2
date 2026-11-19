@@ -3007,7 +3007,8 @@ import { CloseStrip, viewStage } from "./SettleDesk";
 import UserHub from "./UserHub";
 import { useCloseInbox, CloseInboxBanner, useFinalLockGuard, useCloseInboxCount } from "./closeInbox"; // 📥 2026-11-16 배차마감 도착 숫자 · 배너
 // 🟪 2026-11-16 구글시트(운송사 칸)와 다른 배차방식을 프로그램에서 고른 오더 — 프로그램 값 우선 · 칸을 보라색으로
-const sheetWayDiff = (o) => !!o && !!o.이전출처 && Array.isArray(o._programKeys) && o._programKeys.includes("배차방식");
+const sheetWayDiff = (o) => !!o && !!o.이전출처 && Array.isArray(o._programKeys) && o._programKeys.includes("배차방식")
+  && !(typeof o._sheetWayRaw === "string" && o._sheetWayRaw.replace(/\s+/g, "") === String(o.배차방식 || "").replace(/\s+/g, "")); // ⭐ 2026-11-19 시트 칸에 같은 글(전국특송)이 적혀 있으면 보라색 아님(규칙상 "24시"로 읽혀도)
 const SHEET_DIFF_STYLE = { background: "#EDE4FF", borderColor: "#8B5CF6", color: "#5B21B6", fontWeight: 800 };
 const sheetWayTitle = (o) => `구글시트 운송사: ${o?._sheetBase?.배차방식 || "-"} · 프로그램 값(${o?.배차방식 || "-"})을 씁니다`; // 🧭 2026-11-16 상단바 [내 메뉴] 하나로(메일 · 알림 · 내 정보 · 원격 지원)
 import { useNewVersion } from "./VersionCheck";
