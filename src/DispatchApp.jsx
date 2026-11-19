@@ -6684,14 +6684,15 @@ function ToastProvider({ children }) {
       {(() => {
         // 🎨 2026-11-19 디자인 변경(사용자 요청) — 예전 흰 카드 → 프로그램 알림과 같은 남색 카드
         //  (driverEvents.jsx 기사 수락 · 긴급 알림과 같은 모양: 왼쪽 색 띠 · 아이콘 칸 · 한글/영문 라벨 · 시각 · [닫기]/[보기] · 아래 진행 막대)
+        //  색은 프로그램 남색 · 하늘색 계열만(취소 · 오류만 붉은색) — 알록달록하지 않게
         const UI = {
-          dispatch: { label: "배차 완료", en: "DISPATCHED", c: "#34D399", bg: "rgba(52,211,153,.14)" },
-          orderRegistered: { label: "오더 등록", en: "NEW ORDER", c: "#8FB0F0", bg: "rgba(143,176,240,.16)" },
-          order: { label: "신규 오더(화주사)", en: "SHIPPER ORDER", c: "#FBBF24", bg: "rgba(251,191,36,.16)" },
-          shipperEdit: { label: "화주사 수정", en: "EDITED", c: "#FBBF24", bg: "rgba(251,191,36,.16)" },
-          cancel: { label: "오더 취소", en: "CANCELLED", c: "#FF6B61", bg: "rgba(255,59,48,.18)" },
-          error: { label: "확인 필요", en: "ERROR", c: "#FF6B61", bg: "rgba(255,59,48,.18)" },
-          other: { label: "알림", en: "NOTICE", c: "#CFE0FF", bg: "rgba(143,176,240,.18)" },
+          dispatch: { label: "배차 완료", en: "DISPATCHED", c: "#8FB0F0", bg: "rgba(143,176,240,.16)" },
+          orderRegistered: { label: "오더 등록", en: "NEW ORDER", c: "#CFE0FF", bg: "rgba(207,224,255,.12)" },
+          order: { label: "신규 오더(화주사)", en: "SHIPPER ORDER", c: "#8FB0F0", bg: "rgba(143,176,240,.16)" },
+          shipperEdit: { label: "화주사 수정", en: "EDITED", c: "#CFE0FF", bg: "rgba(207,224,255,.12)" },
+          cancel: { label: "오더 취소", en: "CANCELLED", c: "#FF8A80", bg: "rgba(255,107,97,.14)" },
+          error: { label: "확인 필요", en: "ERROR", c: "#FF8A80", bg: "rgba(255,107,97,.14)" },
+          other: { label: "알림", en: "NOTICE", c: "#CFE0FF", bg: "rgba(207,224,255,.12)" },
         };
         const ICON = {
           dispatch: <><rect x="1" y="7" width="14" height="11" rx="1.5"/><path d="M15 11h4l3 3.5V18h-7z"/><circle cx="6.5" cy="19.5" r="1.8"/><circle cx="17" cy="19.5" r="1.8"/></>,
@@ -6749,7 +6750,7 @@ function ToastProvider({ children }) {
                       </div>
                     </div>
                   </div>
-                  <div className="kp-sf-bar absolute left-0 bottom-0 h-[3px] w-full origin-left opacity-70" style={{ background: ui.c, animation: "kpSfBar 4000ms linear forwards" }} key={latest.id} />
+                  <div className="kp-sf-bar absolute left-0 bottom-0 h-[3px] w-full origin-left opacity-70" style={{ background: "#8FB0F0", animation: "kpSfBar 4000ms linear forwards" }} key={latest.id} />
                 </div>
               );
             })}

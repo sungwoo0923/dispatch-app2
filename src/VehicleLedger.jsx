@@ -691,9 +691,9 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {/* 머리 — 차량 사진 + 번호판 */}
-      <div style={{ borderRadius: 18, padding: narrow ? 14 : "18px 22px", color: "#fff", background: HERO_BG, display: "flex", alignItems: "center", gap: narrow ? 12 : 18, flexWrap: "wrap" }}>
-        {drawer ? (
+      {/* 📌 2026-11-19 운송사 요청 — 아래로 내려도 [기본 정보 수정 · 인쇄 · 엑셀 저장 · 닫기] 줄이 위에 붙어 있게(다시 올라가지 않고 닫기) */}
+      {drawer && (
+        <div data-kp="vl-topbar" style={{ position: "sticky", top: 0, zIndex: 7, padding: narrow ? "8px 10px" : "10px 16px", borderRadius: 14, background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 70%,#2D4C82 100%)", color: "#fff", boxShadow: "0 10px 24px rgba(11,20,40,.22)" }}>
           <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.12em", color: C.sky, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{narrow ? "VEHICLE" : "VEHICLE · 차량 정보"}</span>
             {narrow ? (
@@ -727,7 +727,11 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
               </>
             )}
           </div>
-        ) : <div style={{ width: narrow ? "100%" : "auto" }}><Btn kind="light" onClick={onBack}>← 차량 목록</Btn></div>}
+        </div>
+      )}
+      {/* 머리 — 차량 사진 + 번호판 */}
+      <div style={{ borderRadius: 18, padding: narrow ? 14 : "18px 22px", color: "#fff", background: HERO_BG, display: "flex", alignItems: "center", gap: narrow ? 12 : 18, flexWrap: "wrap" }}>
+        {!drawer && <div style={{ width: narrow ? "100%" : "auto" }}><Btn kind="light" onClick={onBack}>← 차량 목록</Btn></div>}
         <button type="button" onClick={() => canEdit && photoRef.current?.click()} title={canEdit ? "차량 사진 바꾸기" : ""} style={{ position: "relative", width: narrow ? 92 : 132, height: narrow ? 70 : 96, borderRadius: 14, border: "1px solid rgba(143,176,240,.35)", background: photo ? `center/cover no-repeat url(${photo})` : "rgba(255,255,255,.06)", display: "flex", alignItems: "center", justifyContent: "center", cursor: canEdit ? "pointer" : "default", flexShrink: 0, overflow: "hidden", padding: 0 }}>
           {!photo && <TruckIcon s={narrow ? 34 : 44} />}
           {canEdit && <span style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "3px 0", background: "rgba(11,20,40,.62)", fontSize: 14, fontWeight: 800, color: "#fff" }}>{photo ? "사진 변경" : "+ 차량 사진"}</span>}
@@ -763,7 +767,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
         </div>
       )}
       {/* 바로가기 */}
-      <div style={{ position: "sticky", top: 0, zIndex: 5, display: "flex", gap: 6, overflowX: "auto", padding: 6, background: "rgba(244,246,250,.94)", backdropFilter: "blur(6px)", borderRadius: 12, border: `1px solid ${C.line}` }}>
+      <div style={{ position: "sticky", top: drawer ? (narrow ? 56 : 60) : 0, zIndex: 5, display: "flex", gap: 6, overflowX: "auto", padding: 6, background: "rgba(244,246,250,.94)", backdropFilter: "blur(6px)", borderRadius: 12, border: `1px solid ${C.line}` }}>
         {nav.map(([id, l]) => <button key={id} type="button" onClick={() => go(id)} style={{ flexShrink: 0, height: 36, padding: "0 14px", borderRadius: 9, border: "none", background: "#fff", color: C.mid, fontSize: 14.5, fontWeight: 800, cursor: "pointer", boxShadow: "0 1px 2px rgba(16,24,40,.06)" }}>{l}</button>)}
       </div>
 

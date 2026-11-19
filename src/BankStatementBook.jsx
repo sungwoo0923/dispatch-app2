@@ -180,15 +180,15 @@ export default function BankStatementBook({ company, isViewer = false }) {
 
   const badge = (t) => {
     const s = stateOf(t);
-    if (s === "paid") return <span className="text-[12px] font-black text-[#B42318]">지급 완료 처리함</span>;
-    if (s === "paidLine") return <span className="text-[12px] font-black text-[#067647]">줄 지급 체크함</span>;
-    if (s === "ledger") return <span className="text-[12px] font-black text-[#067647]">장부에 넣음</span>;
+    if (s === "paid") return <span className="text-[12px] font-black text-[#0F1A30]">지급 완료 처리함</span>;
+    if (s === "paidLine") return <span className="text-[12px] font-black text-[#2D4C82]">줄 지급 체크함</span>;
+    if (s === "ledger") return <span className="text-[12px] font-black text-[#2D4C82]">장부에 넣음</span>;
     if (s === "inLedger") return <span className="text-[12px] font-bold text-[#7A879C]">장부에 있음</span>;
     if (s === "match") {
       const m = match.get(t.id); const d = docOf(m.docId);
       return (
         <span className="flex items-center gap-2 flex-wrap justify-end">
-          <span className="text-[12px] font-bold text-[#2D4C82] text-right">지출결의 · {d?.title || ""}{m.lineIdx != null ? ` · ${m.lineIdx + 1}번째 줄` : ""}{d?.drafter?.name ? ` · ${d.drafter.name}` : ""}{!m.sure && <span className="ml-1 text-[#B54708]">(확인 필요)</span>}</span>
+          <span className="text-[12px] font-bold text-[#2D4C82] text-right">지출결의 · {d?.title || ""}{m.lineIdx != null ? ` · ${m.lineIdx + 1}번째 줄` : ""}{d?.drafter?.name ? ` · ${d.drafter.name}` : ""}{!m.sure && <span className="ml-1 text-[#7A879C]">· 확인 필요</span>}</span>
           {fin ? <button type="button" disabled={busy} onClick={run(() => payOne(t))} className={`${btn} bg-[#0F1A30] text-white`} data-testid="bank-pay">지급 완료</button> : <span className="text-[12px] text-[#7A879C]">경리가 처리</span>}
         </span>
       );
@@ -213,7 +213,7 @@ export default function BankStatementBook({ company, isViewer = false }) {
       {!isViewer && bank && presetOf(bank) && (
         <div className="rounded-xl bg-white border border-[#E3E8F0] px-4 py-2.5 text-[13.5px] text-[#3A4A66] flex flex-wrap items-center gap-x-2 gap-y-1" data-testid="bank-guide">
           <b className="text-[#0F1A30]">{presetOf(bank).name}</b><span>엑셀 받는 곳:</span><span className="font-bold text-[#2D4C82]">{presetOf(bank).path}</span>
-          {lsGet(MKEY(company, bank)) && <span className="text-[12.5px] text-[#067647] font-bold">· 이 회사에서 고친 칸으로 읽어요</span>}
+          {lsGet(MKEY(company, bank)) && <span className="text-[12.5px] text-[#2D4C82] font-bold">· 이 회사에서 고친 칸으로 읽어요</span>}
         </div>
       )}
       {msg && <div className="rounded-xl bg-[#F5F8FD] border border-[#DCE3EE] px-4 py-2.5 text-[14px] font-bold text-[#1B2B4B]" role="status">{msg}</div>}
