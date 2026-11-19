@@ -232,9 +232,9 @@ export function EvidenceBox({ row, canEdit = true, expect, onScanned, api = fire
     <div className="pt-3" data-evidence-box>
       <style>{`@keyframes kpScanLine { 0% { top: 0% } 50% { top: calc(100% - 3px) } 100% { top: 0% } } @keyframes kpPop { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }`}</style>
       <div className="flex items-center gap-2 mb-2">
-        <div className="text-[12.5px] font-black text-[#0F1A30]">증빙서류</div>
-        <span className="text-[10px] font-extrabold tracking-[0.16em] text-white bg-gradient-to-r from-[#1B2B4B] to-[#2D4C82] rounded px-1.5 py-0.5">AUTO SCAN</span>
-        <span className="text-[11.5px] font-semibold text-[#9AA9C3] truncate">세금계산서 · 계산서 · 거래명세서 · 이체확인증</span>
+        <div className="text-[12.5px] font-black text-[#0F1A30] whitespace-nowrap shrink-0">증빙서류</div>
+        <span className="text-[10px] font-extrabold tracking-[0.16em] text-white bg-gradient-to-r from-[#1B2B4B] to-[#2D4C82] rounded px-1.5 py-0.5 whitespace-nowrap shrink-0">AUTO SCAN</span>
+        <span className="min-w-0 text-[11.5px] font-semibold text-[#9AA9C3] truncate" title="세금계산서 · 계산서 · 거래명세서 · 이체확인증">세금계산서 · 계산서 · 거래명세서 · 이체확인증</span>
         {items.length > 0 && <span className="ml-auto text-[11.5px] font-black text-[#2D4C82] shrink-0" style={NUM}>{items.length}장</span>}
       </div>
 
@@ -289,7 +289,7 @@ export function EvidenceBox({ row, canEdit = true, expect, onScanned, api = fire
           </span>
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-black text-[#0F1A30]">{drag ? "여기에 놓으면 바로 스캔해요" : "계산서를 올리면 자동으로 읽어요"}</div>
-            <div className="text-[11.5px] font-semibold text-[#7A8AA8] mt-0.5">눌러서 선택 · 끌어다 놓기 · <b className="text-[#1B2B4B]">Ctrl+V</b> 붙여넣기 → 발행일 · 금액 · 입금자명 자동 입력</div>
+            <div className="text-[11.5px] font-semibold text-[#7A8AA8] mt-0.5 break-keep">눌러서 선택 · 끌어다 놓기 · <b className="text-[#1B2B4B]">Ctrl+V</b> 붙여넣기 → 발행일 · 금액 · 입금자명 자동 입력</div>
           </div>
           <input ref={inputRef} type="file" accept="image/*,.pdf" multiple className="hidden" onChange={(e) => { handleFiles([...(e.target.files || [])]); e.target.value = ""; }} />
         </div>
