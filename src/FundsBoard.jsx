@@ -560,12 +560,14 @@ function ExecFundsView({ company }) {
 }
 
 // ── 경리 상단 메뉴 › 자금관리: 자금 현황 · 수입·지출 장부 ──
+const BankStatementBook = React.lazy(() => import("./BankStatementBook")); // 🏦 2026-11-19 통장 내역(처음 열 때만 받는다)
 export function FundsWorkspace({ company, isViewer = false }) {
   const [tab, setTab] = React.useState(() => { try { const v = sessionStorage.getItem("kpFundsTab"); sessionStorage.removeItem("kpFundsTab"); return v || "funds"; } catch { return "funds"; } });
   return (
     <KpSubNav code="FINANCE" title="자금관리" icon="wallet" active={tab} onSelect={setTab} actions={[{ key: "manual", label: "자금 매뉴얼", icon: "doc", onClick: () => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu: "자금관리", section: tab } })) }]}
-      items={[{ key: "funds", label: "자금 현황", en: "TREASURY", icon: "wallet" }, { key: "book", label: "수입·지출 장부", en: "CASH BOOK", icon: "sheet" }]}>
-      {tab === "funds" ? <FundsBoard company={company} canEdit={!isViewer} /> : <CashBook company={company} isViewer={isViewer} />}
+      items={[{ key: "funds", label: "자금 현황", en: "TREASURY", icon: "wallet" }, { key: "book", label: "수입·지출 장부", en: "CASH BOOK", icon: "sheet" }, { key: "bank", label: "통장 내역", en: "BANK STATEMENT", icon: "doc" }]}>
+      {/* 🏦 2026-11-19 통장 내역 — 은행 거래내역 엑셀 한 번에(입금 → 미수금, 출금 → 지출결의 · 장부) */}
+      {tab === "funds" ? <FundsBoard company={company} canEdit={!isViewer} /> : tab === "bank" ? <React.Suspense fallback={<div className="py-16 text-center text-[14px] text-[#9AA9C3]">불러오는 중…</div>}><BankStatementBook company={company} isViewer={isViewer} /></React.Suspense> : <CashBook company={company} isViewer={isViewer} />}
     </KpSubNav>
   );
 }

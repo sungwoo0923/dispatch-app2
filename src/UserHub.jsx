@@ -10,12 +10,13 @@ const I = {
   mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
   support: <><circle cx="12" cy="12" r="9" /><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01" /></>,
   me: <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></>,
+  swap: <><path d="M7 7h11l-3-3M17 17H6l3 3" /></>,
   bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></>,
 };
 const Badge = ({ n }) => (n > 0 ? <span className="min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-black text-white grid place-items-center tabular-nums" style={{ background: "#E5332A" }}>{n > 99 ? "99+" : n}</span> : null);
 
 // 🧭 2026-11-16 trigger(children)를 주면 그 모양(회사명 · 이름 칸)이 버튼이 된다 · onTriggerClick 이 있으면 누를 때 그걸 먼저(새 버전 업데이트)
-export default function UserHub({ name = "", mailUnread = 0, onMyInfo, onSupport, showSupport = true, children = null, onTriggerClick = null, align = "right", triggerClass = "" }) {
+export default function UserHub({ name = "", mailUnread = 0, onMyInfo, onSupport, showSupport = true, children = null, onTriggerClick = null, align = "right", triggerClass = "", onSwitchCompany = null }) {
   const bell = useDriverEventCounts();
   const bellN = (bell.orders || 0) + (bell.docs || 0) + (bell.sos || 0) + (bell.checkout || 0);
   const total = mailUnread + bellN;
@@ -37,6 +38,8 @@ export default function UserHub({ name = "", mailUnread = 0, onMyInfo, onSupport
     { k: "mail", label: "사내메일함", ico: I.mail, n: mailUnread, on: () => window.dispatchEvent(new CustomEvent("kp-open-mail", { detail: {} })) },
     { k: "bell", label: "알림 내역", sub: "기사 수락 · 서류 · 긴급", ico: I.bell, n: bellN, on: openBell },
     { k: "me", label: "내 정보", ico: I.me, on: onMyInfo },
+    // 🔀 2026-11-19 최고관리자 · 부관리자만 — 다른 운송사 화면으로 바로(CompanySwitcher)
+    ...(onSwitchCompany ? [{ k: "company", label: "운송사 전환", sub: "로그아웃 없이 다른 운송사 화면으로", ico: I.swap, on: onSwitchCompany }] : []),
     ...(showSupport ? [{ k: "support", label: "원격 지원 요청", sub: "사용이 어려우면 화면을 같이 봐요", ico: I.support, on: onSupport }] : []),
   ];
   const initial = String(name || "").trim().slice(0, 1) || "나";

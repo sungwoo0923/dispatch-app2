@@ -29,7 +29,7 @@ import { drawTmapTrafficRoute, TRAFFIC_LEGEND } from "./mapStyle";
 import { html2canvas, loadJsPDF, lazyView, prefetchWhenIdle } from "./lazyLoad";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { VehicleTypePicker, VehicleTypeAddButton, useVehicleTypes, withCustomVehicleTypes, VT_DEFAULTS } from "./vehicleTypes"; // ⭐ 2026-11-02 회사 공용 차량종류
-import { withCo, getTenant } from "./fsTenant";
+import { withCo, getTenant, isPreviewMode } from "./fsTenant";
 // 🧪 개발 전용 — /preview?demo=1 둘러보기 점검에서는 매출관리 비밀번호 화면을 건너뛴다(배포 빌드에서는 항상 false)
 const DEV_DEMO_REVENUE = import.meta.env.DEV && (() => { try { return window.location.pathname === "/preview" && new URLSearchParams(window.location.search).get("demo") === "1"; } catch { return false; } })();
 import { coDocKey } from "./coKey";
@@ -3005,6 +3005,7 @@ import { pickForm, visibleCols, headerLabels } from "./invoiceForm";
 import { closeBoard as closeBoardOf, approvePatch as closeApprovePatch, rejectPatch as closeRejectPatch, isFinalLocked, tempUnlockPatch, relockPatch } from "./closeFlow"; // ✅ 2026-11-16 배차 마감 → 거래처정산
 import { CloseStrip, viewStage } from "./SettleDesk";
 import UserHub from "./UserHub";
+const CompanySwitcherLazy = React.lazy(() => import("./CompanySwitcher")); // 🔀 2026-11-19 운송사 전환(최고관리자 · 부관리자)
 import { useCloseInbox, CloseInboxBanner, useFinalLockGuard, useCloseInboxCount } from "./closeInbox"; // 📥 2026-11-16 배차마감 도착 숫자 · 배너
 // 🟪 2026-11-16 구글시트(운송사 칸)와 다른 배차방식을 프로그램에서 고른 오더 — 프로그램 값 우선 · 칸을 보라색으로
 const sheetWayDiff = (o) => !!o && !!o.이전출처 && Array.isArray(o._programKeys) && o._programKeys.includes("배차방식")
@@ -6681,7 +6682,17 @@ function ToastProvider({ children }) {
       {/* ⭐ 2026-10-27 — 알림을 화면 가운데 위에 큰 카드로 여러 장 쌓던 것을 오른쪽 위 작은 카드로.
             같은 종류(예: 오더 등록 6건)는 한 장으로 묶어 "6건"과 짧은 목록만 보여준다(표를 가리지 않게) */}
       {(() => {
-        const LABEL = { dispatch: "배차 완료", orderRegistered: "오더 등록", order: "신규 오더(화주사)", shipperEdit: "화주사 수정", cancel: "오더 취소" };
+        // 🎨 2026-11-19 디자인 변경(사용자 요청) — 예전 흰 카드 → 프로그램 알림과 같은 남색 카드
+        //  (driverEvents.jsx 기사 수락 · 긴급 알림과 같은 모양: 왼쪽 색 띠 · 아이콘 칸 · 한글/영문 라벨 · 시각 · [닫기]/[보기] · 아래 진행 막대)
+        const UI = {
+          dispatch: { label: "배차 완료", en: "DISPATCHED", c: "#34D399", bg: "rgba(52,211,153,.14)" },
+          orderRegistered: { label: "오더 등록", en: "NEW ORDER", c: "#8FB0F0", bg: "rgba(143,176,240,.16)" },
+          order: { label: "신규 오더(화주사)", en: "SHIPPER ORDER", c: "#FBBF24", bg: "rgba(251,191,36,.16)" },
+          shipperEdit: { label: "화주사 수정", en: "EDITED", c: "#FBBF24", bg: "rgba(251,191,36,.16)" },
+          cancel: { label: "오더 취소", en: "CANCELLED", c: "#FF6B61", bg: "rgba(255,59,48,.18)" },
+          error: { label: "확인 필요", en: "ERROR", c: "#FF6B61", bg: "rgba(255,59,48,.18)" },
+          other: { label: "알림", en: "NOTICE", c: "#CFE0FF", bg: "rgba(143,176,240,.18)" },
+        };
         const ICON = {
           dispatch: <><rect x="1" y="7" width="14" height="11" rx="1.5"/><path d="M15 11h4l3 3.5V18h-7z"/><circle cx="6.5" cy="19.5" r="1.8"/><circle cx="17" cy="19.5" r="1.8"/></>,
           order: <><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M3 7l9 5 9-5"/><path d="M12 12v9"/></>,
@@ -6689,43 +6700,56 @@ function ToastProvider({ children }) {
           cancel: <><circle cx="12" cy="12" r="9"/><line x1="7" y1="7" x2="17" y2="17"/></>,
           other: <><path d="M12 3a5 5 0 0 0-5 5v3.5L5 15h14l-2-3.5V8a5 5 0 0 0-5-5z"/><path d="M10 18a2 2 0 0 0 4 0"/></>,
         };
+        const hm = (ms) => new Date(ms || Date.now()).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+        const keep = (e) => e.preventDefault(); // 눌러도 입력칸 포커스를 빼앗지 않는다
         const list = toasts.filter(t => t.type !== "editRequest" && t.type !== "cancelRequest");
         const groups = [];
         list.forEach((t) => { const g = groups.find((x) => x.type === t.type); if (g) g.items.push(t); else groups.push({ type: t.type, items: [t] }); });
         return (
-          <div className="fixed top-[72px] right-5 z-[99999] space-y-2 pointer-events-none" style={{ width: "min(360px, 92vw)" }}>
+          <div className="fixed top-[72px] right-5 z-[99999] space-y-2 pointer-events-none" style={{ width: "min(340px, 92vw)" }} data-kp="sflow-toasts">
+            <style>{`@keyframes kpSfBar{from{transform:scaleX(1)}to{transform:scaleX(0)}}`}</style>
             {groups.map((g) => {
               const latest = g.items[g.items.length - 1];
               const many = g.items.length > 1;
-              const strong = g.type === "order" || g.type === "cancel";
+              const ui = UI[g.type] || UI.other;
+              const icoKey = g.type === "orderRegistered" ? "order" : g.type === "error" ? "cancel" : g.type;
+              const shipperBtn = latest.meta?.orderId && (latest.meta?.source === "shipper" || latest.meta?.source === "shipper_mobile") && !many;
+              const close = (e) => { e.stopPropagation(); g.items.forEach((t) => removeToast(t.id)); };
               return (
-                <div key={g.type} className="toast-enter pointer-events-auto rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_12px_32px_rgba(15,26,48,0.18)] overflow-hidden">
-                  <div className={`flex items-center gap-3 pl-3 pr-2 py-2.5 border-l-4 ${strong ? "border-l-[#0F1A30]" : "border-l-[#4B6CB7]"}`}>
-                    <div className={`w-8 h-8 rounded-[10px] flex items-center justify-center shrink-0 ${strong ? "bg-[#0F1A30] text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{ICON[g.type === "orderRegistered" ? "order" : g.type] || ICON.other}</svg>
+                <div key={g.type} role="status" aria-live="polite" onMouseDown={keep} data-kp-sftoast={g.type}
+                  className="kp-sf-toast toast-enter pointer-events-auto relative overflow-hidden rounded-2xl text-white border border-[rgba(143,176,240,0.28)] shadow-[0_18px_44px_rgba(5,10,25,0.42)]"
+                  style={{ background: "linear-gradient(150deg,#0F1A30 0%,#1B2B4B 100%)" }}>
+                  <div className="absolute inset-y-0 left-0 w-1" style={{ background: ui.c }} />
+                  <div className="flex items-start gap-3 pl-[18px] pr-3.5 pt-3 pb-3.5">
+                    <div className="w-9 h-9 rounded-[11px] grid place-items-center shrink-0" style={{ background: ui.bg }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ui.c} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">{ICON[icoKey] || ICON.other}</svg>
                     </div>
-                    <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleToastClick(latest)}>
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[13px] font-extrabold text-[#0F1A30]">{LABEL[g.type] || "알림"}</span>
-                        {many && <span className="h-5 px-1.5 rounded-full bg-[#0F1A30] text-white text-[11px] font-extrabold inline-flex items-center tabular-nums">{g.items.length}건</span>}
+                        <span className="text-[11px] font-extrabold" style={{ color: ui.c }}>{ui.label}</span>
+                        <span className="text-[10px] font-bold tracking-[0.16em] text-[rgba(143,176,240,0.6)]">{ui.en}</span>
+                        {many && <span className="h-[18px] px-1.5 rounded-full bg-white/15 text-white text-[10.5px] font-extrabold inline-flex items-center tabular-nums">{g.items.length}건</span>}
+                        <span className="ml-auto text-[11px] font-bold text-white/50 tabular-nums">{hm(latest.createdAt)}</span>
                       </div>
-                      {!many && <div className="text-[12px] text-[#5B6B85] truncate">{latest.message}</div>}
+                      {!many && <div className="mt-[3px] text-[14px] font-extrabold leading-snug break-keep cursor-pointer" onClick={() => handleToastClick(latest)} title={latest.message}>
+                        <span className="block truncate">{latest.message}</span>
+                      </div>}
+                      {many && (
+                        <div className="mt-1.5 space-y-0.5">
+                          {g.items.slice(-4).reverse().map((t) => (
+                            <button key={t.id} type="button" tabIndex={-1} onMouseDown={keep} onClick={() => handleToastClick(t)}
+                              className="w-full text-left text-[12.5px] font-semibold text-[rgba(226,234,248,0.78)] truncate px-2 py-1 rounded-lg hover:bg-white/[0.07]">{t.message}</button>
+                          ))}
+                          {g.items.length > 4 && <div className="px-2 text-[11px] font-bold text-white/45">외 {g.items.length - 4}건</div>}
+                        </div>
+                      )}
+                      <div className="mt-2.5 flex gap-1.5 justify-end">
+                        <button type="button" tabIndex={-1} onMouseDown={keep} onClick={close} className="h-[30px] px-3 rounded-[9px] text-[12.5px] font-extrabold bg-white/[0.07] text-white/75 border border-white/[0.12]">닫기</button>
+                        {latest.meta?.orderId && <button type="button" tabIndex={-1} onMouseDown={keep} onClick={(e) => { e.stopPropagation(); handleToastClick(latest); }} className="h-[30px] px-3 rounded-[9px] text-[12.5px] font-extrabold bg-white text-[#0F1A30]">{shipperBtn ? "배차확인" : "보기"}</button>}
+                      </div>
                     </div>
-                    {latest.meta?.orderId && (latest.meta?.source === "shipper" || latest.meta?.source === "shipper_mobile") && !many && (
-                      <button onClick={(e) => { e.stopPropagation(); handleToastClick(latest); }} className="h-7 px-2.5 rounded-lg bg-[#0F1A30] text-white text-[11.5px] font-bold shrink-0">배차확인</button>
-                    )}
-                    <button className="w-7 h-7 rounded-lg text-[#9AA9C3] hover:text-[#0F1A30] hover:bg-[#F5F8FD] shrink-0" title="닫기"
-                      onClick={(e) => { e.stopPropagation(); g.items.forEach((t) => removeToast(t.id)); }}>✕</button>
                   </div>
-                  {many && (
-                    <div className="px-3 pb-2.5 -mt-0.5">
-                      {g.items.slice(-4).reverse().map((t) => (
-                        <button key={t.id} onClick={() => handleToastClick(t)}
-                          className="w-full text-left text-[12px] text-[#3A4A66] truncate px-2 py-1 rounded-lg hover:bg-[#F5F8FD]">{t.message}</button>
-                      ))}
-                      {g.items.length > 4 && <div className="px-2 text-[11px] font-bold text-[#9AA9C3]">외 {g.items.length - 4}건</div>}
-                    </div>
-                  )}
+                  <div className="kp-sf-bar absolute left-0 bottom-0 h-[3px] w-full origin-left opacity-70" style={{ background: ui.c, animation: "kpSfBar 4000ms linear forwards" }} key={latest.id} />
                 </div>
               );
             })}
@@ -8036,6 +8060,7 @@ useEffect(() => {
   const [거래처관리Tab, set거래처관리Tab] = useState("하차지거래처");
   const [기사관리Tab, set기사관리Tab] = useState("d:전체"); // ▸ 기사관리 허브 — d:등급 / docs:driver / docs:penalty
   const hdrNewVer = useNewVersion(); // 🧭 2026-11-16 새 버전 → 상단바 회사명 칸이 [업데이트]로
+  const [coSwitchOpen, setCoSwitchOpen] = React.useState(false); // 🔀 2026-11-19 운송사 전환 창
   const [정산관리Tab, set정산관리Tab] = useState(() => { const t = settleStartTab(); return t === "마감검증" ? "거래처정산" : t; }); // 🧭 2026-11-14 정산 홈이 첫 화면(예전처럼 거래처정산부터 보려면 정산 홈 아래 체크)
   const [deskAttachId, setDeskAttachId] = useState("");
   const betaPayOn = useBetaOn(getTenant() || userCompany); // 💳 2026-11-11 정산관리 › 입금 확인(시험 기능 — 테스트운송사)
@@ -8794,6 +8819,18 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
     window.addEventListener("kp-go-menu", h);
     return () => window.removeEventListener("kp-go-menu", h);
   }, []);
+  // 🏦 2026-11-19 자금관리 › 통장 내역 [미수금과 맞추기] — 정산관리 › 거래처정산 › 미수금관리로 가서 올린 입금으로 자동 매칭 창을 연다
+  React.useEffect(() => {
+    const h = (e) => {
+      const deps = e?.detail?.deposits;
+      if (!Array.isArray(deps) || !deps.length) return;
+      e.detail.handled = true;
+      menuClickRef.current("정산관리");
+      setTimeout(() => { set정산관리Tab("거래처정산"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: { tab: "unsettledMonth", deposits: deps } })), 160); }, 80);
+    };
+    window.addEventListener("kp-bank-ar-match", h);
+    return () => window.removeEventListener("kp-bank-ar-match", h);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [sideMenuOpen, setSideMenuOpen] = React.useState(false);
   const closeSideMenu = React.useCallback(() => setSideMenuOpen(false), []);
 
@@ -9028,6 +9065,7 @@ return (
                 {(co || myRealName || hdrNewVer) && (
                   <UserHub align="left" name={[myRealName || user?.displayName || "", myProfileDoc?.position || ""].filter(Boolean).join(" ")} mailUnread={mailCountsNav.unread || 0}
                     showSupport={role !== "totalMaster"} onSupport={openRemoteSupport}
+                    onSwitchCompany={realRole === "totalMaster" && !isPreviewMode() ? () => setCoSwitchOpen(true) : null}
                     onMyInfo={() => { setMyInfoNameDraft(myRealName); setMyInfoPhoneDraft(myPhone); setShowMyInfo(true); }}
                     onTriggerClick={hdrNewVer ? () => hardReloadForUpdate() : null}
                     triggerClass={`ml-1 px-3 h-8 inline-flex items-center gap-2 rounded-lg whitespace-nowrap shrink-0 transition ${hdrNewVer ? "border border-[#8FB0F0]/70 bg-white/[0.08] hover:bg-white/[0.16] text-[12.5px] font-black text-white" : `bg-white/[0.07] border border-white/10 hover:bg-white/[0.14] font-bold text-white/90 ${co.length > 8 ? "text-[12px]" : "text-[13px]"}`}`}>
@@ -9037,6 +9075,7 @@ return (
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ opacity: 0.6 }}><path d="M6 9l6 6 6-6" /></svg></span>}
                   </UserHub>
                 )}
+                {coSwitchOpen && <React.Suspense fallback={null}><CompanySwitcherLazy current={co} onClose={() => setCoSwitchOpen(false)} /></React.Suspense>}
                 {/* 🛰 2026-11-10 버전 표시·새 버전 안내는 왼쪽 메뉴(KpSubNav) 머리·맨 아래로 옮김 */}
                 <EditModeToggleButton className="ml-1" />
               </div>
@@ -49439,13 +49478,19 @@ const handleBatchSettle = async (targetStatus) => {
       //  ③ 딱 맞는 달이 없으면 오래된 달부터 채움 — 다 채운 달은 정산완료, 모자란 달은 일부입금, 남으면 초과입금
       //  ④ 입금자명이 어느 거래처와도 안 맞으면 금액이 딱 맞는 달이 하나뿐일 때만 "이름 확인" 제안
       //  ⑤ 2026-11-08 "입금 확인"에서 확정할 때 배운 입금자명 별칭(bankAliases)도 먼저 본다 · 식은 functions/arMatchCore.mjs(matchDeposits)
-      const months = buildArMonths(); // client -> sorted list
-      const { matches, unmatched } = matchDeposits({ deposits, months, aliases: bankAliasMap });
-      setBankMatchResult({ matches, unmatched, deposits });
+      runBankMatch(deposits);
     };
 
     reader.readAsArrayBuffer(file);
   };
+  // 🏦 2026-11-19 자금관리 › 통장 내역에서 넘어온 입금도 같은 매칭 창으로(엑셀 올리기와 같은 식)
+  const runBankMatch = (deposits) => {
+    const months = buildArMonths(); // client -> sorted list
+    const { matches, unmatched } = matchDeposits({ deposits, months, aliases: bankAliasMap });
+    setBankMatchResult({ matches, unmatched, deposits });
+  };
+  const runBankMatchRef = useRef(runBankMatch);
+  runBankMatchRef.current = runBankMatch;
 
   // ★ 매칭용 정규화
 
@@ -49518,7 +49563,7 @@ const handleBatchSettle = async (targetStatus) => {
   const [pipeMonth, setPipeMonth] = useState(() => kstYm(0)); // 🗓 2026-11-16 늘 당월부터
   // ⭐ 2026-11-14 정산 홈 바로가기 — 명세서 일괄 처리(단계 보드) · 입금내역 자동 대사(미수금관리 + 올리기 창)
   useEffect(() => {
-    const h = (e) => { const d = e.detail || {}; if (d.tab) setTab(d.tab); if (d.board) setInvView("board"); if (d.bank) setTimeout(() => setBankBulkOpen(true), 200); if (d.client && d.ym) settleOpenRef.current?.(d.client, d.ym); };
+    const h = (e) => { const d = e.detail || {}; if (d.tab) setTab(d.tab); if (d.board) setInvView("board"); if (Array.isArray(d.deposits) && d.deposits.length) setTimeout(() => runBankMatchRef.current?.(d.deposits), 250); if (d.bank) setTimeout(() => setBankBulkOpen(true), 200); if (d.client && d.ym) settleOpenRef.current?.(d.client, d.ym); };
     window.addEventListener("kp-settle-open", h); return () => window.removeEventListener("kp-settle-open", h);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [invView, setInvView] = useState("edit"); // ⭐ 2026-11-09 기본 = 2분할 명세서 편집(왼쪽 거래처 목록) · board(단계 보드)는 버튼으로
