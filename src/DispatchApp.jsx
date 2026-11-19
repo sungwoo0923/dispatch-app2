@@ -8794,6 +8794,18 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
     window.addEventListener("kp-go-menu", h);
     return () => window.removeEventListener("kp-go-menu", h);
   }, []);
+  // 🏦 2026-11-19 자금관리 › 통장 내역 [미수금과 맞추기] — 정산관리 › 거래처정산 › 미수금관리로 가서 올린 입금으로 자동 매칭 창을 연다
+  React.useEffect(() => {
+    const h = (e) => {
+      const deps = e?.detail?.deposits;
+      if (!Array.isArray(deps) || !deps.length) return;
+      e.detail.handled = true;
+      menuClickRef.current("정산관리");
+      setTimeout(() => { set정산관리Tab("거래처정산"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: { tab: "unsettledMonth", deposits: deps } })), 160); }, 80);
+    };
+    window.addEventListener("kp-bank-ar-match", h);
+    return () => window.removeEventListener("kp-bank-ar-match", h);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [sideMenuOpen, setSideMenuOpen] = React.useState(false);
   const closeSideMenu = React.useCallback(() => setSideMenuOpen(false), []);
 
@@ -49439,13 +49451,19 @@ const handleBatchSettle = async (targetStatus) => {
       //  ③ 딱 맞는 달이 없으면 오래된 달부터 채움 — 다 채운 달은 정산완료, 모자란 달은 일부입금, 남으면 초과입금
       //  ④ 입금자명이 어느 거래처와도 안 맞으면 금액이 딱 맞는 달이 하나뿐일 때만 "이름 확인" 제안
       //  ⑤ 2026-11-08 "입금 확인"에서 확정할 때 배운 입금자명 별칭(bankAliases)도 먼저 본다 · 식은 functions/arMatchCore.mjs(matchDeposits)
-      const months = buildArMonths(); // client -> sorted list
-      const { matches, unmatched } = matchDeposits({ deposits, months, aliases: bankAliasMap });
-      setBankMatchResult({ matches, unmatched, deposits });
+      runBankMatch(deposits);
     };
 
     reader.readAsArrayBuffer(file);
   };
+  // 🏦 2026-11-19 자금관리 › 통장 내역에서 넘어온 입금도 같은 매칭 창으로(엑셀 올리기와 같은 식)
+  const runBankMatch = (deposits) => {
+    const months = buildArMonths(); // client -> sorted list
+    const { matches, unmatched } = matchDeposits({ deposits, months, aliases: bankAliasMap });
+    setBankMatchResult({ matches, unmatched, deposits });
+  };
+  const runBankMatchRef = useRef(runBankMatch);
+  runBankMatchRef.current = runBankMatch;
 
   // ★ 매칭용 정규화
 
@@ -49518,7 +49536,7 @@ const handleBatchSettle = async (targetStatus) => {
   const [pipeMonth, setPipeMonth] = useState(() => kstYm(0)); // 🗓 2026-11-16 늘 당월부터
   // ⭐ 2026-11-14 정산 홈 바로가기 — 명세서 일괄 처리(단계 보드) · 입금내역 자동 대사(미수금관리 + 올리기 창)
   useEffect(() => {
-    const h = (e) => { const d = e.detail || {}; if (d.tab) setTab(d.tab); if (d.board) setInvView("board"); if (d.bank) setTimeout(() => setBankBulkOpen(true), 200); if (d.client && d.ym) settleOpenRef.current?.(d.client, d.ym); };
+    const h = (e) => { const d = e.detail || {}; if (d.tab) setTab(d.tab); if (d.board) setInvView("board"); if (Array.isArray(d.deposits) && d.deposits.length) setTimeout(() => runBankMatchRef.current?.(d.deposits), 250); if (d.bank) setTimeout(() => setBankBulkOpen(true), 200); if (d.client && d.ym) settleOpenRef.current?.(d.client, d.ym); };
     window.addEventListener("kp-settle-open", h); return () => window.removeEventListener("kp-settle-open", h);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [invView, setInvView] = useState("edit"); // ⭐ 2026-11-09 기본 = 2분할 명세서 편집(왼쪽 거래처 목록) · board(단계 보드)는 버튼으로
