@@ -51130,7 +51130,7 @@ const handleBatchSettle = async (targetStatus) => {
                             </div>
                             {s.status === "pending" && (
                               <button
-                                onClick={() => deleteDoc(doc(db, "scheduledEmails", s.id)).catch(() => {})}
+                                onClick={async () => { if (!(await kpConfirm(`${s.meta?.client || s.to} 예약 메일을 취소할까요?\n예약한 시간에 보내지 않아요.`, { title: "예약 취소", okText: "예약 취소", danger: true }))) return; deleteDoc(doc(db, "scheduledEmails", s.id)).catch(() => {}); }} // 🗑 2026-11-20 삭제 확인창
                                 className="px-3 py-1.5 rounded-lg border border-[#E3E8F0] text-[11px] font-semibold text-[#7A89A3] hover:bg-[#F3F6FA] hover:text-[#0B1428] hover:border-[#C9D6EE] transition shrink-0"
                               >
                                 예약취소
