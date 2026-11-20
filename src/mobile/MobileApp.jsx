@@ -17504,8 +17504,9 @@ const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 �
       return;
     }
 
-    // 📋 2026-11-18 PC와 같게 — 차량·기사·연락처 / 운임 포함 / 전체 상세 복사 뒤 "전달완료로 바꿀까요?"(간단 목록 · 기사 전달용은 안 물음)
-    if (type === "full" || type === "simple" || type === "fare") {
+    // 📋 2026-11-18 PC와 같게 — 차량·기사·연락처 / 운임 포함 / 전체 상세 복사 뒤 "전달완료로 바꿀까요?"(기사 전달용은 안 물음)
+    //  2026-11-20 간단 목록(list)도 다른 복사처럼 묻는다(사용자 요청)
+    if (type === "full" || type === "simple" || type === "fare" || type === "list") {
       onCopySuccess?.("기사 문자 복사 완료");
       onAfterFullCopy?.();
       return;

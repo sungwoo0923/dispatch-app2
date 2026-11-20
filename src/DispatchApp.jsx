@@ -26100,12 +26100,17 @@ const buildContactLine = (name0, phone) => {
 };
 
 // 📋 2026-11-13 간단 목록 — 고른 오더(여러 건)를 "머리말 + 기사 한 줄씩"으로 복사(⚙ 문구 설정 › 간단 목록에서 틀 변경)
+// 📋 2026-11-20 사용자 요청 — 다른 복사처럼 복사 뒤 [전달상태 → 전달완료] 팝업(고른 오더 중 미전달인 것 전부 한 번에)
 const copySimpleList = () => {
   const list = selected.map((id) => rows.find((x) => x._id === id)).filter(Boolean);
   if (!list.length) { showAlert("복사할 오더를 선택하세요."); return; }
-  navigator.clipboard.writeText(buildSimpleList(list, getSimpleTpl()));
+  const text = buildSimpleList(list, getSimpleTpl());
+  navigator.clipboard.writeText(text);
   setCopyModalOpen(false); setSelected([]);
-  showAlert(`오더 ${list.length}건을 간단 목록으로 복사했습니다.`);
+  const ids = list.filter((r) => r.업체전달상태 !== "전달완료").map((r) => r._id);
+  if (ids.length) setDeliveryConfirm({ rowId: ids[0], ids, total: list.length, before: "미전달", after: "전달완료", reason: "copy" });
+  else showAlert(`오더 ${list.length}건을 간단 목록으로 복사했습니다.`);
+  setTimeout(async () => { try { if (await navigator.clipboard.readText() === text) showAlert("◷ 아직 전달되지 않은 것 같습니다.\n카카오톡 대화창에 붙여넣기(Ctrl+V) 했는지 확인해 주세요."); } catch { /* 읽기 권한 없음 */ } }, 3000);
 };
 const copyMessage = (mode) => {
   if (mode === "simple") return copySimpleList();
@@ -33082,10 +33087,11 @@ setConfirmChange(null);
                 __system: true,
               };
               setDeliveryConfirm(null);
+              const dcIds = new Set(deliveryConfirm.ids || [deliveryConfirm.rowId]); // 📋 간단 목록 = 여러 건
               React.startTransition(() => {
-                setRows(prev => prev.map(r => r._id === deliveryConfirm.rowId ? { ...r, ...patch } : r));
+                setRows(prev => prev.map(r => dcIds.has(r._id) ? { ...r, ...patch } : r));
               });
-              patchDispatch(deliveryConfirm.rowId, patch).catch(console.error);
+              dcIds.forEach((id) => patchDispatch(id, patch).catch(console.error));
             }
           }}
         >
@@ -33098,7 +33104,7 @@ setConfirmChange(null);
             <div className="p-5">
               <div className="bg-gray-50 rounded-xl px-4 py-3 mb-5 border border-gray-100">
                 {deliveryConfirm.reason === "copy" ? (
-                  <div className="text-[13px] text-gray-700">전달상태를 <span className="font-bold text-[#1B2B4B]">전달완료</span>로 변경할까요?</div>
+                  <div className="text-[13px] text-gray-700">{deliveryConfirm.ids?.length > 1 || deliveryConfirm.total > 1 ? <>간단 목록 {deliveryConfirm.total}건 복사 · 미전달 <b className="text-[#1B2B4B]">{deliveryConfirm.ids.length}건</b>의 </> : null}전달상태를 <span className="font-bold text-[#1B2B4B]">전달완료</span>로 변경할까요?</div>
                 ) : (
                   <>
                     <div className="text-[12px] font-semibold text-gray-500 mb-1">업체전달상태</div>
@@ -33123,10 +33129,11 @@ setConfirmChange(null);
                       __system: true,
                     };
                     setDeliveryConfirm(null);
+                    const dcIds = new Set(deliveryConfirm.ids || [deliveryConfirm.rowId]); // 📋 간단 목록 = 여러 건
                     React.startTransition(() => {
-                      setRows(prev => prev.map(r => r._id === deliveryConfirm.rowId ? { ...r, ...patch } : r));
+                      setRows(prev => prev.map(r => dcIds.has(r._id) ? { ...r, ...patch } : r));
                     });
-                    patchDispatch(deliveryConfirm.rowId, patch).catch(console.error);
+                    dcIds.forEach((id) => patchDispatch(id, patch).catch(console.error));
                   }}
                 ><EditableText id="misc.btn.31350.변경" defaultText="변경" /></button>
               </div>
@@ -35685,12 +35692,17 @@ const getPalletCount = (text = "") => {
   // 📋 기사복사 (PART 5 최종)
   // ===============================
   // 📋 2026-11-13 간단 목록 — 고른 오더(여러 건)를 "머리말 + 기사 한 줄씩"으로 복사
+  // 📋 2026-11-20 사용자 요청 — 다른 복사처럼 복사 뒤 [전달상태 → 전달완료] 팝업(고른 오더 중 미전달인 것 전부 한 번에)
   const copySimpleList = () => {
     const list = [...selected].map((id) => dispatchData.find((d) => getId(d) === id)).filter(Boolean);
     if (!list.length) { showAlert("복사할 항목을 선택하세요."); return; }
-    navigator.clipboard.writeText(buildSimpleList(list, getSimpleTpl()));
+    const text = buildSimpleList(list, getSimpleTpl());
+    navigator.clipboard.writeText(text);
     setCopyModalOpen(false); setSelected(new Set());
-    showAlert(`오더 ${list.length}건을 간단 목록으로 복사했습니다.`);
+    const ids = list.filter((r) => r.업체전달상태 !== "전달완료").map((r) => getId(r));
+    if (ids.length) setConfirmChange({ id: ids[0], ids, total: list.length, field: "업체전달상태", before: "미전달", after: "전달완료", reason: "copy" });
+    else showAlert(`오더 ${list.length}건을 간단 목록으로 복사했습니다.`);
+  setTimeout(async () => { try { if (await navigator.clipboard.readText() === text) showAlert("◷ 아직 전달되지 않은 것 같습니다.\n카카오톡 대화창에 붙여넣기(Ctrl+V) 했는지 확인해 주세요."); } catch { /* 읽기 권한 없음 */ } }, 3000);
   };
   const copyMessage = async (mode) => {
     if (mode === "simple") return copySimpleList();
@@ -41023,7 +41035,7 @@ setCopyPlaceOptions(list);
               if (confirmChange.field === "지급방식") {
                 Object.assign(patch, payTypeStatusPatch((dispatchData || []).find(r => r._id === confirmChange.id) || {}, confirmChange.after));
               }
-              await patchDispatch(confirmChange.id, patch);
+              for (const id of (confirmChange.ids || [confirmChange.id])) await patchDispatch(id, patch); // 📋 간단 목록 = 여러 건
               setConfirmChange(null);
             }
           }}
@@ -41035,7 +41047,7 @@ setCopyPlaceOptions(list);
             <div className="p-5">
               <div className="bg-gray-50 rounded-xl px-4 py-3 mb-5 border border-gray-100">
                 {confirmChange.reason === "copy" ? (
-                  <div className="text-[13px] text-gray-700">전달상태를 <span className="font-bold text-[#1B2B4B]">전달완료</span>로 변경할까요?</div>
+                  <div className="text-[13px] text-gray-700">{confirmChange.ids?.length > 1 || confirmChange.total > 1 ? <>간단 목록 {confirmChange.total}건 복사 · 미전달 <b className="text-[#1B2B4B]">{confirmChange.ids.length}건</b>의 </> : null}전달상태를 <span className="font-bold text-[#1B2B4B]">전달완료</span>로 변경할까요?</div>
                 ) : (
                   <>
                     <div className="text-[12px] font-semibold text-gray-500 mb-1">{confirmChange.field}</div>
@@ -41060,7 +41072,7 @@ setCopyPlaceOptions(list);
                     Object.assign(patch, payTypeStatusPatch((dispatchData || []).find(r => r._id === confirmChange.id) || {}, confirmChange.after));
                   }
                   // 저장을 기다리지 않고 즉시 팝업을 닫아 끊김 없이 반응하게 한다.
-                  patchDispatch(confirmChange.id, patch).catch(console.error);
+                  (confirmChange.ids || [confirmChange.id]).forEach((id) => patchDispatch(id, patch).catch(console.error)); // 📋 간단 목록 = 여러 건
                   setConfirmChange(null);
                 }}><EditableText id="misc.btn.40212.변경" defaultText="변경" /></button>
               </div>
