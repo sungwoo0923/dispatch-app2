@@ -344,7 +344,7 @@ function Composer({ company, myName, staff, uid, init, onClose, onDone }) {
     const next = [{ name: name.slice(0, 30), subject, body }, ...myTpls.filter((t) => t.name !== name)];
     setMyTpls(next); writeTpls(uid, next); setMsg(`'${name}' 양식을 저장했습니다.`);
   };
-  const removeTpl = (name) => { const next = myTpls.filter((t) => t.name !== name); setMyTpls(next); writeTpls(uid, next); };
+  const removeTpl = async (name) => { if (!(await kpConfirm(`양식 「${name}」을 지울까요?`, { title: "양식 삭제", okText: "삭제", danger: true }))) return; const next = myTpls.filter((t) => t.name !== name); setMyTpls(next); writeTpls(uid, next); };
   const meUser = { uid, name: myName || auth.currentUser?.email || "나" };
 
   const quick = (kind) => {
