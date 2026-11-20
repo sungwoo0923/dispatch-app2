@@ -13078,7 +13078,7 @@ const handleAssignClick = async () => {
             <div className="text-[14.5px] font-black text-[#0F1A30] truncate">{order.상차지명 || "-"}</div>
             <div className="text-[11.5px] font-bold text-[#1B2B4B] shrink-0">{상차일시 || "-"}</div>
           </div>
-          {order.상차지주소 && <div className="flex items-start gap-2 mt-0.5"><div className="flex-1 min-w-0 text-[12px] text-[#7A879C]">{order.상차지주소}</div><RoadviewButton addr={order.상차지주소} variant="inline" /></div>}
+          {order.상차지주소 && <div className="flex items-start gap-2 mt-0.5"><div className="flex-1 min-w-0 text-[12px] text-[#7A879C]">{order.상차지주소}</div><RoadviewButton addr={order.상차지주소} name={order.상차지명} variant="inline" /></div>}
         </div>
         {validStops(order.경유상차목록 || order.경유지_상차).map((s, i) => <StopBlock key={`p${i}`} s={s} i={i} kind="상" />)}
         {validStops(order.경유하차목록 || order.경유지_하차).map((s, i) => <StopBlock key={`d${i}`} s={s} i={i} kind="하" />)}
@@ -13088,7 +13088,7 @@ const handleAssignClick = async () => {
             <div className="text-[14.5px] font-black text-[#0F1A30] truncate">{order.하차지명 || "-"}</div>
             <div className="text-[11.5px] font-bold text-[#1B2B4B] shrink-0">{하차일시 || "-"}</div>
           </div>
-          {order.하차지주소 && <div className="flex items-start gap-2 mt-0.5"><div className="flex-1 min-w-0 text-[12px] text-[#7A879C]">{order.하차지주소}</div><RoadviewButton addr={order.하차지주소} variant="inline" /></div>}
+          {order.하차지주소 && <div className="flex items-start gap-2 mt-0.5"><div className="flex-1 min-w-0 text-[12px] text-[#7A879C]">{order.하차지주소}</div><RoadviewButton addr={order.하차지주소} name={order.하차지명} variant="inline" /></div>}
         </div>
       </div>
     </div>
@@ -15393,7 +15393,7 @@ const pickDrop = (c) => {
             update("상차지주소", e.target.value)
           }
         />
-        <RoadviewButton addr={form.상차지주소} variant="inline" className="mb-1" />
+        <RoadviewButton addr={form.상차지주소} name={form.상차지명} variant="inline" className="mb-1" />
         </div>
 
         <input autoComplete="off"
@@ -15567,7 +15567,7 @@ const pickDrop = (c) => {
             update("하차지주소", e.target.value)
           }
         />
-        <RoadviewButton addr={form.하차지주소} variant="inline" className="mb-1" />
+        <RoadviewButton addr={form.하차지주소} name={form.하차지명} variant="inline" className="mb-1" />
         </div>
 
         <input autoComplete="off"

@@ -6438,7 +6438,7 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
       </div>
       <div className="flex items-start gap-2 mt-0.5">
         <div className="flex-1 min-w-0 text-[13px] font-semibold text-[#3A4A66] break-words">{s.addr || "-"}</div>
-        {s.addr && <RoadviewButton addr={s.addr} variant="inline" className="mt-px" />}
+        {s.addr && <RoadviewButton addr={s.addr} name={`${s.kind} · ${s.name || ""}`} variant="inline" className="mt-px" />}
       </div>
       {(s.extra || []).filter(Boolean).length > 0 && <div className="text-[12px] font-semibold text-[#7A89A3] mt-0.5">{s.extra.filter(Boolean).join(" · ")}</div>}
     </div>
@@ -17222,7 +17222,7 @@ const similar = placeList.filter(p => {
 
     {/* ⭐ 여기로 이동 (핵심) */}
     <div className="flex items-center gap-1 shrink-0">
-    <RoadviewButton addr={form.상차지주소} />
+    <RoadviewButton addr={form.상차지주소} name={form.상차지명} />
 <button
   type="button"
   tabIndex={-1}   // ★ 탭 제외 유지
@@ -17401,7 +17401,7 @@ className={`
 
     {/* ⭐ 여기로 이동 */}
     <div className="flex items-center gap-1 shrink-0">
-    <RoadviewButton addr={form.하차지주소} />
+    <RoadviewButton addr={form.하차지주소} name={form.하차지명} />
 <button
   type="button"
   tabIndex={-1}
