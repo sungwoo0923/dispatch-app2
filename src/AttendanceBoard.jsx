@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { kpConfirm } from "./kpDialog"; // 🗑 2026-11-20 삭제 확인창
 import { myNameNow } from "./userNames";
 import { isLateAt } from "./lateRule"; // ⏰ 2026-11-07 지각 기준 공용(출근시간 없으면 09:00)
 import { mirrorOfficeToFleet } from "./officeLocSync"; // 📍 2026-11-09 출근지 한 곳 관리
@@ -499,7 +500,8 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     setNewHolidayDate("");
     setNewHolidayLabel("");
   };
-  const removeHoliday = async (id) => { await runDelete({ label: "휴일", task: () => deleteDoc(doc(db, "holidays", id)) }); }; // ⭐ 2026-11-05 삭제 진행 창
+  // 🗑 2026-11-20 삭제 전에 한 번 묻는다(프로그램 공통 — 삭제는 모두 확인창)
+  const removeHoliday = async (id) => { if (!(await kpConfirm("이 휴일을 삭제할까요?", { title: "휴일 삭제", okText: "삭제", danger: true }))) return; await runDelete({ label: "휴일", task: () => deleteDoc(doc(db, "holidays", id)) }); }; // ⭐ 2026-11-05 삭제 진행 창
 
   // ─── 월간 집계(직원별) ─────────────────────────────────────────
   const monthAgg = useMemo(() => {

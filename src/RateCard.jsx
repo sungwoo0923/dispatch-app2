@@ -423,10 +423,12 @@ const [detailModal, setDetailModal] = useState(null);
     if (!selectedSheet) return;
     patchSheet(selectedSheet.id, { columns: [...(selectedSheet.columns || []), { id: uid(), label: "새 구간" }] });
   };
-  const removeMultiColumn = (colId) => {
+  const removeMultiColumn = async (colId) => {
     if (!selectedSheet) return;
     const target = (selectedSheet.columns || []).find(c => c.id === colId);
     if (target?.isDefault) return; // 기본 톤수 컬럼은 삭제 불가
+    // 🗑 2026-11-20 삭제 확인창 — 이 열의 단가도 같이 지워진다
+    if (!(await kpConfirm(`「${target?.label || "이 열"}」 열을 삭제할까요?\n이 열에 적힌 단가도 함께 지워져요.`, { title: "열 삭제", okText: "삭제", danger: true }))) return;
     const nextCols = (selectedSheet.columns || []).filter(c => c.id !== colId);
     const nextRows = (selectedSheet.rows || []).map(r => {
       const prices = { ...(r.prices || {}) };
@@ -456,8 +458,10 @@ const [detailModal, setDetailModal] = useState(null);
     if (!selectedSheet) return;
     patchSheet(selectedSheet.id, { rows: [...(selectedSheet.rows || []), { id: uid(), name: "", address: "", prices: {} }] });
   };
-  const removeMultiRow = (rowId) => {
+  const removeMultiRow = async (rowId) => {
     if (!selectedSheet) return;
+    const row = (selectedSheet.rows || []).find((r) => r.id === rowId);
+    if (!(await kpConfirm(`「${row?.name || row?.하차지 || "이 줄"}」 줄을 삭제할까요?\n이 줄의 단가도 함께 지워져요.`, { title: "하차지 삭제", okText: "삭제", danger: true }))) return; // 🗑 2026-11-20
     patchSheet(selectedSheet.id, { rows: (selectedSheet.rows || []).filter(r => r.id !== rowId) });
   };
   const updateMultiRowField = (rowId, field, value) => {
