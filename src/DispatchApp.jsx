@@ -3029,7 +3029,7 @@ const FreightRevenueStrip = React.lazy(() => import("./freight/FreightSettle").t
 import { allowedModules } from "./freight/freightCore";
 import { useBetaOn, PayBadge, PayPopup, CallDepositDesk, PayNoticeToggle, queuePayNotice, DateField, OUT_KEY, DispatchWayPicker, isCaughtCall } from "./CallPay";
 import PrepayImportModal from "./PrepayImport"; // 💳 2026-11-20 선정산 파일(국세청승인번호 양식) → 용차지급 자동 반영 + 기사 정산정보
-import { isPrepaySheet, parsePrepayRows } from "./prepayCore"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
+import { isPrepaySheet, parsePrepayRows, yongchaTransferRows, normPlate as prepayPlate } from "./prepayCore"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
 import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
 import { DriverGuideSendModal, GUIDE_BTN, guideSentLabel, isFleetGrade } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
 // ⭐ 2026-11-06 로지스웹 허브(운송사 간 오더 거래소) — [저장 + 허브 등록]
@@ -53211,6 +53211,28 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     reader.readAsArrayBuffer(file);
   };
 
+  // 🏦 2026-11-20 용차 정산계좌(기사관리) — 기사별 집계 · 대량이체 엑셀
+  const payDriverByPlate = useMemo(() => {
+    const m = new Map();
+    (payDrivers || []).forEach((d) => { const k = prepayPlate(d.차량번호 || d.carNo || ""); if (k && !m.has(k)) m.set(k, d); });
+    return m;
+  }, [payDrivers]);
+  const acctOf = (plate) => { const a = payDriverByPlate.get(prepayPlate(plate))?.정산계좌; return a && typeof a === "object" && a.acct ? a : null; };
+  const exportTransfer = async () => {
+    if (!searched) return alert("기간을 정하고 조회한 뒤에 받아 주세요.");
+    const period = loadStart && loadEnd ? `${loadStart.slice(5).replace("-", "/")}~${loadEnd.slice(5).replace("-", "/")}` : "";
+    const { rows, missing, total } = yongchaTransferRows(driverSummary, payDriverByPlate, { period, payer: getTenant() || companyName, vatRate });
+    if (!rows.length) {
+      return alert(missing.length ? `미지급 기사님 모두 기사관리에 정산계좌가 없어요.\n\n${missing.join(", ")}\n\n기사관리에서 계좌를 등록하거나, 선정산 파일을 올리면 저절로 채워져요.` : "이 기간에 지급할(미지급) 용차 운임이 없어요.");
+    }
+    if (!await kpConfirm(`${rows.length}명 · ${total.toLocaleString()}원을 대량이체 엑셀로 받을까요?\n사업자번호가 있는 기사님은 기사운임 + 부가세 10%예요.${missing.length ? `\n\n계좌가 없는 ${missing.length}명은 빠져요: ${missing.join(", ")}` : ""}`, { title: "대량이체 엑셀", okText: "받기" })) return;
+    const ws = XLSX.utils.json_to_sheet(rows, { header: ["은행", "계좌번호", "예금주", "금액", "받는분 통장표시", "내 통장표시", "메모"] });
+    ws["!cols"] = [{ wch: 12 }, { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 40 }];
+    rows.forEach((_, i) => { const c = ws[XLSX.utils.encode_cell({ r: i + 1, c: 1 })]; if (c) { c.t = "s"; c.v = String(c.v); } }); // 계좌번호 앞자리 0 보존
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "대량이체");
+    XLSX.writeFile(wb, `용차지급_이체_${loadStart || ""}_${loadEnd || ""}.xlsx`);
+  };
+
   const confirmPayExcel = async () => {
     if (!payExcelPreview?.matched?.length) return;
     setPayExcelConfirming(true);
@@ -53260,6 +53282,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
             지급 매칭 업로드
             <input autoComplete="off" type="file" accept=".xlsx,.xls" className="hidden" onChange={handlePayExcelUpload} />
           </label>} {/* ⭐ 2026-11-03 모바일에서는 지급 매칭 업로드 없음 */}
+          {!mobile && <button type="button" onClick={exportTransfer} title="기사별 미지급 합계를 은행 대량이체 양식(은행 · 계좌번호 · 예금주 · 금액 · 통장표시)으로 받아요. 계좌는 기사관리 정산계좌를 써요." className="h-10 px-4 rounded-xl bg-white/10 border border-white/20 text-white text-[13px] font-black hover:bg-white/15 transition">대량이체 엑셀</button>}
           <button onClick={downloadExcel} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[13px] font-black hover:brightness-95 transition"><EditableText id="misc.btn.52296.엑셀 다운로드" defaultText="엑셀 다운로드" /></button>
         </div>
       </div>
@@ -53460,21 +53483,25 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="bg-[#0B1428]">
-                  {["차량번호", "기사명", "전화번호", "총 건수", "기사운임 합계", "지급완료", "미지급 건수", "미지급 금액", "일괄 지급"].map(h => (
+                  {["차량번호", "기사명", "전화번호", "정산계좌", "총 건수", "기사운임 합계", "지급완료", "미지급 건수", "미지급 금액", "일괄 지급"].map(h => (
                     <SortTh key={h} k={h === "일괄 지급" ? "" : h} sort={payDrvSort.sort} onSort={payDrvSort.toggle} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap border-b border-white/10"><EditableText id={`settlement.byDriver.header.${h}`} defaultText={h} /></SortTh>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {!searched ? (
-                  <tr><td colSpan={9} className="text-center py-20 text-gray-500 text-[13px]">이번달 / 지난달 버튼 또는 날짜를 설정하고 <b className="text-[#1B2B4B]">조회</b> 버튼을 눌러주세요.</td></tr>
+                  <tr><td colSpan={10} className="text-center py-20 text-gray-500 text-[13px]">이번달 / 지난달 버튼 또는 날짜를 설정하고 <b className="text-[#1B2B4B]">조회</b> 버튼을 눌러주세요.</td></tr>
                 ) : driverSummary.length === 0 ? (
-                  <tr><td colSpan={9} className="text-center py-16 text-gray-500 text-[13px]">데이터가 없습니다.</td></tr>
+                  <tr><td colSpan={10} className="text-center py-16 text-gray-500 text-[13px]">데이터가 없습니다.</td></tr>
                 ) : payDrvSorted.map((d, i) => (
                   <tr key={d.차량번호} className={`${i % 2 === 0 ? "bg-white" : "bg-gray-50/60"} hover:bg-[#EEF3FC]/40 transition`}>
                     <td className="px-3 py-3 text-center border-b border-gray-100">{d.차량번호}</td>
                     <td className="px-3 py-3 text-center font-semibold border-b border-gray-100">{d.이름 || "-"}</td>
                     <td className="px-3 py-3 text-center border-b border-gray-100">{d.전화번호 || "-"}</td>
+                    {/* 🏦 2026-11-20 기사관리 정산계좌 — 없으면 '미등록'(대량이체 엑셀에서 빠짐) */}
+                    <td className="px-3 py-3 text-center border-b border-gray-100 whitespace-nowrap" style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {acctOf(d.차량번호) ? <span title={acctOf(d.차량번호).holder ? `예금주 ${acctOf(d.차량번호).holder}` : undefined}><b className="text-[#1B2B4B]">{acctOf(d.차량번호).bank}</b> {fmtAcctByBank(acctOf(d.차량번호).bank, acctOf(d.차량번호).acct)}</span> : <span className="text-gray-400">미등록</span>}
+                    </td>
                     <td className="px-3 py-3 text-center border-b border-gray-100">{d.cnt}건</td>
                     <td className="px-3 py-3 text-right font-bold text-[#1B2B4B] border-b border-gray-100">{won(d.기사운임합)}원</td>
                     <td className="px-3 py-3 text-center border-b border-gray-100">
@@ -53816,8 +53843,11 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
   const filtered = React.useMemo(() => {
     if (q.trim() && searched) {
       const nq = norm(q);
-      const fields = qField === "전체" ? ["차량번호","이름","전화번호","메모"] : [qField === "기사명" ? "이름" : qField === "연락처" ? "전화번호" : qField];
-      let list = drivers.filter(r => fields.some(k => norm(r[k]||"").includes(nq)));
+      const fields = qField === "전체" ? ["차량번호","이름","전화번호","메모","사업자상호","사업자대표"] : [qField === "기사명" ? "이름" : qField === "연락처" ? "전화번호" : qField];
+      // 💳 2026-11-20 전체 검색 — 사업자번호 · 계좌번호(하이픈 무시) · 상호 · 대표자 · 예금주로도 찾는다
+      const nqDigits = String(q).replace(/\D/g, "");
+      const payHit = (r) => qField === "전체" && ((nqDigits.length >= 6 && [r.사업자번호, r.정산계좌?.acct].some((v) => String(v || "").replace(/\D/g, "").includes(nqDigits))) || norm(r.정산계좌?.holder || "").includes(nq));
+      let list = drivers.filter(r => fields.some(k => norm(r[k]||"").includes(nq)) || payHit(r));
       if (gradeFilter !== "전체") list = list.filter(r => (r.등급||"일반") === gradeFilter);
       return list;
     }
