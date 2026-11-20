@@ -66,16 +66,16 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
   const [q, setQ] = React.useState("");
   const [page, setPage] = React.useState(1);
   const visible = React.useMemo(() => notices.filter((n) => canSeeNotice(n, me)).sort((a, b) => whenOf(b) - whenOf(a)), [notices, me]);
-  // 플랫폼 공지 고정글은 회사 고정 5개와 따로 — 맨 위
-  const pinned = React.useMemo(() => [
-    ...visible.filter((n) => n._platform && n.pinned).sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt)),
-    ...visible.filter((n) => !n._platform && n.pinned).sort((a, b) => toMs(b.pinnedAt || b.createdAt) - toMs(a.pinnedAt || a.createdAt)).slice(0, MAX_PINNED),
-  ], [visible]);
+  const kwHit = React.useCallback((n) => { const kw = q.trim(); return !kw || [n.title, n.content, n.author].some((v) => String(v || "").includes(kw)); }, [q]);
+  // 📢 2026-11-20 사용자 요청 — 플랫폼 공지는 고정 여부와 상관없이 전부 맨 위에 플랫폼 공지끼리 모은다(운송사 공지와 섞지 않는다).
+  //  순서: 플랫폼 고정 → 플랫폼 최신순 · 그 아래 회사 고정(5개) → 회사 공지 최신순. 검색하면 플랫폼 공지도 검색어에 맞는 것만.
+  const platformTop = React.useMemo(() => visible.filter((n) => n._platform).filter(kwHit)
+    .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || whenOf(b) - whenOf(a)), [visible, kwHit]);
+  const pinned = React.useMemo(() =>
+    visible.filter((n) => !n._platform && n.pinned).sort((a, b) => toMs(b.pinnedAt || b.createdAt) - toMs(a.pinnedAt || a.createdAt)).slice(0, MAX_PINNED),
+  [visible]);
   const [, bumpRead] = React.useState(0);
-  const rest = React.useMemo(() => {
-    const kw = q.trim();
-    return visible.filter((n) => !pinned.includes(n)).filter((n) => !kw || [n.title, n.content, n.author].some((v) => String(v || "").includes(kw)));
-  }, [visible, pinned, q]);
+  const rest = React.useMemo(() => visible.filter((n) => !n._platform && !pinned.includes(n)).filter(kwHit), [visible, pinned, kwHit]);
   const pages = Math.max(1, Math.ceil(rest.length / PAGE));
   const shown = rest.slice((page - 1) * PAGE, page * PAGE);
   const cur = openId ? notices.find((n) => n.id === openId && canSeeNotice(n, me)) || null : null; // 🔒 지정 공지는 링크·알림으로 열어도 대상자만
@@ -167,7 +167,8 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
       <button type="button" onClick={() => setOpenId(n.id)}
         className={`w-full grid grid-cols-[52px_minmax(0,1fr)_auto] md:grid-cols-[64px_minmax(0,1fr)_120px_110px_64px] items-center gap-2.5 md:gap-3 px-3 md:px-5 h-[60px] md:h-[56px] border-b border-[#F1F4F9] text-left transition hover:bg-[#F5F8FD] ${n._platform ? "bg-[linear-gradient(90deg,#FBF7EC,#F6F8FC_40%)]" : pin ? "bg-[#F3F6FB]" : ""}`}>
         <span className="text-center">
-          {pin ? <span className="inline-flex items-center justify-center whitespace-nowrap h-6 px-1.5 rounded-md bg-[#0F1A30] text-[#8FB0F0] text-[10.5px] font-black">• 고정</span>
+          {n._platform && !n.pinned ? <span className="inline-flex items-center justify-center whitespace-nowrap h-6 px-1.5 rounded-md bg-[#0F1A30] text-[#E9C46A] text-[10.5px] font-black">공지</span>
+            : pin ? <span className="inline-flex items-center justify-center whitespace-nowrap h-6 px-1.5 rounded-md bg-[#0F1A30] text-[#8FB0F0] text-[10.5px] font-black">• 고정</span>
             : <span className="text-[14px] font-bold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{no}</span>}
         </span>
         <span className="min-w-0 flex flex-col md:flex-row md:items-center gap-0.5 md:gap-1.5">
@@ -177,7 +178,8 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
           {isNoticeScheduled(n) && <SchedBadge n={n} />}
           {!n._platform && <AudBadges n={n} />}
           {/* 🔒 2026-11-03 지정 공지 — 목록에는 대상(팀·지정 N명)을 드러내지 않는다(본문 안에서만 표시) */}
-          <span className={`truncate ${pin ? "text-[15.5px] font-black text-[#0B1428]" : unread ? "text-[15px] font-black text-[#0F1A30]" : "text-[15px] font-semibold text-[#3A4A66]"}`}>{n.title || "공지사항"}</span>
+          {/* 📢 2026-11-20 플랫폼 공지 제목은 읽었어도 항상 굵게 */}
+          <span className={`truncate ${n._platform ? "text-[15.5px] font-black text-[#0B1428]" : pin ? "text-[15.5px] font-black text-[#0B1428]" : unread ? "text-[15px] font-black text-[#0F1A30]" : "text-[15px] font-semibold text-[#3A4A66]"}`}>{n.title || "공지사항"}</span>
           {n.revisedAt && <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10.5px] font-black ${n.hrOrder?.status === "cancelled" ? "bg-[#FEF3F2] text-[#B42318]" : "bg-[#FFF4E5] text-[#B54708]"}`}>{n.hrOrder?.status === "cancelled" ? "취소" : "수정됨"}</span>}
           {n.image && <span className="shrink-0 text-[11px] text-[#9AA9C3]">▣</span>}
           {!n._platform && <PostCounts p={n} />}
@@ -208,8 +210,9 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
       <div className="grid grid-cols-[52px_minmax(0,1fr)_auto] md:grid-cols-[64px_minmax(0,1fr)_120px_110px_64px] gap-2.5 md:gap-3 px-3 md:px-5 h-11 items-center bg-[#F3F6FA] border-b border-[#E3E8F0] text-[13.5px] md:text-[14px] font-black text-[#1B2B4B] whitespace-nowrap">
         <span className="text-center">번호</span><span>제목</span><span className="hidden md:block">작성자</span><span className="text-right">날짜</span><span className="hidden md:block text-center">조회</span>
       </div>
+      {platformTop.map((n) => <Row key={n.id} n={n} pin />)}
       {pinned.map((n) => <Row key={n.id} n={n} pin />)}
-      {!shown.length && !pinned.length ? <div className="py-16 text-center text-[13.5px] font-bold text-[#9AA9C3]">{q ? "검색 결과가 없습니다" : "등록된 공지가 없습니다"}</div>
+      {!shown.length && !pinned.length && !platformTop.length ? <div className="py-16 text-center text-[13.5px] font-bold text-[#9AA9C3]">{q ? "검색 결과가 없습니다" : "등록된 공지가 없습니다"}</div>
         : shown.map((n, i) => <Row key={n.id} n={n} no={rest.length - ((page - 1) * PAGE + i)} />)}
       {pages > 1 && (
         <div className="flex justify-center gap-1 py-3">

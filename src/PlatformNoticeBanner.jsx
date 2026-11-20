@@ -107,12 +107,13 @@ export const toBoardNotice = (n) => ({
   ...(n.publishAt ? { createdAt: n.publishAt } : {}), // 예약 게시는 게시 시각을 작성일로
   teams: [], targetUids: [], readBy: [], viewedBy: Array.isArray(n.viewedBy) ? n.viewedBy : [], audience: "platform", // ⭐ 2026-11-03 조회수(viewedBy) // ⭐ 2026-11-03 직원 지정 없음(우리 회사 직원 전체)
 });
-// 회사 공지 + 플랫폼 공지를 합친 목록(최신순)
+// 회사 공지 + 플랫폼 공지를 합친 목록 — 📢 2026-11-20 플랫폼 공지 묶음이 맨 위(최신순), 그 아래 회사 공지(최신순)
 export function useBoardNoticesWithPlatform(notices, company, dateOf) {
   const plat = usePlatformNotices({ audience: "carrier", company });
   return React.useMemo(() => {
     const extra = plat.filter((n) => n.board !== false).map((n) => { const b = toBoardNotice(n); return dateOf ? { ...b, date: dateOf(b.createdAt) } : b; });
-    return [...extra, ...(notices || [])].sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
+    const newest = (a, b) => toMs(b.createdAt) - toMs(a.createdAt);
+    return [...extra.sort(newest), ...[...(notices || [])].sort(newest)];
   }, [plat, notices, dateOf]);
 }
 
