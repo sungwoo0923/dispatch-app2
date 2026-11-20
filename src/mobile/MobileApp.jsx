@@ -1,4 +1,5 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
+import { isFleetGrade } from "../fleetGradesCore"; // 🚛 2026-11-20 사용자 요청 — 지입 · 직영 · 임대 · 분양(isFleetGrade) 모두 기사앱 오더 수락/거절 · 같은 기사앱 화면(예전엔 지입만)
 import { SpecialFareTag, SpecialFareLine } from "../specialFareTag"; // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import { readPendingApproval, clearPendingApproval } from "../pendingOpen"; // 🛠 2026-11-17 결재 화면 이동 요청을 새로고침 뒤에도 이어서
 import { MarginPct } from "../marginPct"; // ⭐ 2026-11-17 배차 합계 다이얼 — 수수료 아래 수수료율(수수료 ÷ 청구)
@@ -4890,7 +4891,7 @@ const groupedByDate = useMemo(() => {
       const nextPlateM3 = normPlateM3(docData.차량번호 || "");
       if (nextPlateM3 && nextPlateM3 !== prevPlateM3 && docData.배차상태 !== "배차취소") {
         const assignedDriverM3 = (drivers || []).find(d => normPlateM3(d.차량번호) === nextPlateM3);
-        if (assignedDriverM3?.등급 === "지입" && !!assignedDriverM3.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
+        if (isFleetGrade(assignedDriverM3?.등급) && !!assignedDriverM3.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
           docData.기사확인상태 = "대기";
           docData.기사거절사유 = null;
           docData.기사확인일시 = null;
@@ -5300,7 +5301,7 @@ const notifyFleetCancelMobile = (order, orderId) => {
   if (!order?.기사확인상태 || order.기사확인상태 === "거절" || !order.차량번호) return;
   const norm = (v = "") => String(v).replace(/\s+/g, "").toLowerCase().replace(/-/g, "");
   const drv = (drivers || []).find(d => norm(d.차량번호) === norm(order.차량번호));
-  if (drv?.등급 !== "지입") return;
+  if (!isFleetGrade(drv?.등급)) return;
   // ⭐ 2026-11-05 기사앱 "삭제된 오더" 팝업용 안내 문서(오더 요약 포함) — 따로 저장, 삭제는 기다리지 않는다
   writeOrderDeletedNotice(db, { driverId: drv.id, orderId, data: order });
 };
@@ -5677,7 +5678,7 @@ const title =
           const dv = (drivers || []).find((d) => nd(d.차량번호) === nd(car));
           if (dv && !patch.이름) { patch.이름 = dv.이름 || ""; patch.전화번호 = dv.전화번호 || ""; }
           if (patch.이름) patch.기사명 = patch.이름;
-          if (dv?.등급 === "지입" && !!dv.uid) {
+          if (isFleetGrade(dv?.등급) && !!dv.uid) {
             Object.assign(patch, { 기사확인상태: "대기", 기사거절사유: null, 기사확인일시: null, 기사완료일시: null, 배차상태: "승인대기" });
             addDoc(collection(db, "driver_notifications"), { driverId: dv.id, type: "new_order", orderId: id, title: "배차오더가 도착했습니다", body: `${order.거래처명 || ""} ${order.상차지명 || "-"} → ${order.하차지명 || "-"}`, createdAt: serverTimestamp(), read: false }).catch(() => {});
           } else if (!patch.배차상태) patch.배차상태 = "배차완료";
@@ -11028,7 +11029,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
         // 별도 경로라 직접 반영).
         if (nd(carNo) !== nd(order.차량번호 || "") && !(!isShipperOrder && isPayCancel(payType))) {
           const assignedDriverM2 = (drivers || []).find(d => nd(d.차량번호) === nd(carNo));
-          if (assignedDriverM2?.등급 === "지입" && !!assignedDriverM2.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
+          if (isFleetGrade(assignedDriverM2?.등급) && !!assignedDriverM2.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
             patch.기사확인상태 = "대기";
             patch.기사거절사유 = null;
             patch.기사확인일시 = null;
@@ -12909,7 +12910,7 @@ const handleAssignClick = async () => {
       const nextPlateM = normPlateM(carNo);
       if (nextPlateM && nextPlateM !== prevPlateM) {
         const assignedDriverM = driversRef.current.find(d => normPlateM(d.차량번호) === nextPlateM);
-        if (assignedDriverM?.등급 === "지입" && !!assignedDriverM.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
+        if (isFleetGrade(assignedDriverM?.등급) && !!assignedDriverM.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
           driverPatch.기사확인상태 = "대기";
           driverPatch.기사거절사유 = null;
           driverPatch.기사확인일시 = null;

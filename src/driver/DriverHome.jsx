@@ -1,4 +1,5 @@
 // DriverHome.jsx — 지입기사 전용 앱 (리뉴얼)
+import { isFleetGrade } from "../fleetGradesCore"; // 🚛 2026-11-20 사용자 요청 — 지입 · 직영 · 임대 · 분양(isFleetGrade) 모두 기사앱 오더 수락/거절 · 같은 기사앱 화면(예전엔 지입만)
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { platePeriods, periodFor, normPlate as histPlate } from "../driverVehicleHistory"; // ⭐ 2026-11-11 차량이력
 import { pickCompanyLoc } from "../officeLocSync"; // 📍 2026-11-09 출근지 한 곳 관리
@@ -1266,7 +1267,7 @@ export default function DriverHome() {
   //  (예전엔 지금 차량번호만 봐서, 차량을 옮기면 내 지난 운행이 운행일지에서 사라지고 그 차량을 전에 타던 기사 건이 보였다)
   const plateHistKey = JSON.stringify(driver?.차량이력 || null);
   useEffect(() => {
-    if (driver?.등급 !== "지입") { setMyOrdersByCol({ orders: [], dispatch: [] }); return; }
+    if (!isFleetGrade(driver?.등급)) { setMyOrdersByCol({ orders: [], dispatch: [] }); return; }
     const plate = driver?.차량번호 || driver?.carNo || "";
     const hist = Array.isArray(driver?.차량이력) && driver.차량이력.length > 0;
     const plates = [...new Set([plate, ...(hist ? platePeriods(driver).slice(-8).map((x) => x.plate) : [])].filter(Boolean))].slice(0, 10);
@@ -1585,7 +1586,7 @@ export default function DriverHome() {
   // On app restart: if driver's last status update was >5 min ago, assume they've been away
   useEffect(() => {
     if (!pos || !uid || statusLoading) return;
-    if (driver?.등급 === "지입") return; // 지입차는 반경 기반 자동출근 없이 수동 버튼으로만 출근한다
+    if (isFleetGrade(driver?.등급)) return; // 지입차는 반경 기반 자동출근 없이 수동 버튼으로만 출근한다
     if (odoOnRef.current && needOilConfirm(driver)) return; // ⭐ 2026-11-08 오일 알림 확인 전에는 자동 출근하지 않는다
     const status = driver?.status;
     if (status && status !== "퇴근" && status !== "대기") return;
@@ -1638,7 +1639,7 @@ export default function DriverHome() {
   // 그 즉시 위치가 관리자 화면에 노출되어 어느 지역에 있는지 보고 배차할 수 있다.
   const handleActionButton = useCallback((action, opts = {}) => {
     if (action.disabled) return;
-    if (action.status === "출근" && driver?.등급 !== "지입") {
+    if (action.status === "출근" && !isFleetGrade(driver?.등급)) {
       const checkInLoc = driver?.checkInLocation || companyDefaultLoc;
       if (checkInLoc?.lat && checkInLoc?.lng && pos && (pos.accuracy == null || pos.accuracy <= 100)) {
         const dist = calcDist(pos.lat, pos.lng, checkInLoc.lat, checkInLoc.lng);
@@ -2037,7 +2038,7 @@ export default function DriverHome() {
   const handleUndoLastStatus = useCallback(async () => {
     if (!uid || statusLoading || todayLogs.length === 0) return;
     // 안전장치 — 수락/확인대기 오더가 있으면(운송 중) 되돌리기 불가
-    if (driver?.등급 === "지입" && myOrders.some(o => (o.기사확인상태 === "수락" || o.기사확인상태 === "대기") && o.배차상태 !== "배차취소" && o.상태 !== "취소")) {
+    if (isFleetGrade(driver?.등급) && myOrders.some(o => (o.기사확인상태 === "수락" || o.기사확인상태 === "대기") && o.배차상태 !== "배차취소" && o.상태 !== "취소")) {
       showToast("운송 중에는 이전 상태로 되돌릴 수 없습니다");
       return;
     }
@@ -2080,7 +2081,7 @@ export default function DriverHome() {
       showToast("새로고침 완료");
       return;
     }
-    if (driver?.등급 === "지입") { showToast("새로고침 완료"); return; } // 지입차는 반경 기반 자동출근 없음
+    if (isFleetGrade(driver?.등급)) { showToast("새로고침 완료"); return; } // 지입차는 반경 기반 자동출근 없음
     if (odoOnRef.current && needOilConfirm(driver)) { showToast("새로고침 완료"); return; } // 오일 알림 확인 전 자동 출근 안 함
     const checkInLoc = driver?.checkInLocation || companyDefaultLoc;
     if (!checkInLoc?.lat || !checkInLoc?.lng || !pos || (pos.accuracy != null && pos.accuracy > 100)) {
@@ -2142,7 +2143,7 @@ export default function DriverHome() {
   // (2) 새 오더 팝업 — 수락 대기 오더를 가운데 큰 팝업으로(나중에 보기를 누른 오더는 이번 실행 동안 다시 안 띄움)
   const laterOrderIdsRef = useRef(new Set());
   const [, setLaterTick] = useState(0);
-  const popupOrders = driver?.등급 === "지입"
+  const popupOrders = isFleetGrade(driver?.등급)
     ? myOrders.filter(o => o.기사확인상태 === "대기" && o.배차상태 !== "배차취소" && o.상태 !== "취소" && !laterOrderIdsRef.current.has(o._id))
     : [];
   const popupOrder = popupOrders[0] || null;
@@ -2213,7 +2214,7 @@ export default function DriverHome() {
 
   const currentStatus = driver.status || "대기";
   const statusCfg = STATUS_CONFIG[currentStatus] || STATUS_CONFIG["대기"];
-  const isFleetDriver = driver.등급 === "지입";
+  const isFleetDriver = isFleetGrade(driver.등급);
   // ⭐ 사용자 요청 — 지입 기사는 상단 상태를 "출근" 대신 관리자 화면과 같은 통합 상태로
   // (오더 없음=배차대기, 수락 전=오더확인중, 수락 후=운송중/상차지진입/도착/하차지진입/도착, 휴차)
   const fleetPhase = isFleetDriver
@@ -3224,7 +3225,7 @@ export default function DriverHome() {
           <div style={{ background: "white", borderRadius: 20, boxShadow: "0 1px 2px rgba(15,26,48,.04), 0 10px 28px rgba(15,26,48,.06)", border: "1px solid #E6EBF3", overflow: "hidden", marginBottom: 20 }}>
             {/* ⭐ 사용자 요청 — 출발지/하차지 반경 개념은 고정노선으로 다니는 직영차 전용.
                 지입차는 그날그날 배차를 받는 구조라 이 설정 자체가 필요 없어 숨긴다. */}
-            {driver.등급 !== "지입" && (<>
+            {!isFleetGrade(driver.등급) && (<>
             {/* 출발지 */}
             <div style={{ padding: "14px 16px", borderBottom: "1px solid #EEF2F8" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
