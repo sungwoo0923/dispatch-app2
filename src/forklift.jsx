@@ -7,6 +7,7 @@
 //  · ForkliftPayouts        정산관리 › 지게차 지급 (지게차 기사별 합계 · 지급완료 · 엑셀)
 //  저장: forkliftDrivers/{id} · forkliftPresets/{회사__거래처__상차지} — 회사명은 fsTenant가 붙이고 거른다
 import React from "react";
+import { runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 일괄 처리 진행 창
 import { CellNote } from "./cellNote"; // 🏷 2026-11-17 칸 모서리 표시 + 말풍선
 import { useListKeys } from "./useListKeys";
 import { createPortal } from "react-dom";
@@ -631,12 +632,14 @@ export function ForkliftPayouts({ orders = [], patchDispatch, isViewer = false }
     if (!(await kpConfirm(`${target.length}건을 ${paid ? "지급완료" : "미지급"}로 바꿀까요?`))) return;
     setBusy(true);
     try {
-      for (const r of target) {
+      await runBulkTask({ count: (target).length, label: "지게차비", verb: "지급 상태 변경", unitWord: "건", task: async (progress) => { let _k = 0;
+      for (const r of target) { progress(_k++);
         const date = paid ? kstDay() : "";
         await patchDispatch(r._id || r.id, { 지게차지급완료: paid, 지게차지급일: date, __system: true });
         // 수입·지출 장부(지급일별 "지게차비 지급")에 자동 반영 — 되돌리면 빠진다
         bumpForkliftPayout(db, { date: paid ? date : (r.지게차지급일 || kstDay()), amount: paid ? fkAmount(r) : -fkAmount(r), count: paid ? 1 : -1, company: r.companyName || getTenant() }).catch(() => {});
       }
+      } });
     } finally { setBusy(false); }
   };
   const exportXlsx = () => {

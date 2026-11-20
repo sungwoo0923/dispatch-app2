@@ -12,6 +12,12 @@
    측정용 그림만 원래대로 inline으로 되돌린다(화면 다른 그림에는 영향 없음). */
 body > div > img[src^="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP"] { display: inline !important; }
 
+/* 📷 2026-11-20 로드뷰 · 카카오맵 — Tailwind 기본값(img{max-width:100%;display:block})이 카카오가 그리는
+   그림(로드뷰 이동 화살표 · 지도 조각 · 표시)을 칸에 맞춰 줄여 버려 화살표가 작게 찌그러지고 누르는 자리가 어긋났다.
+   카카오 화면 안의 그림만 원래 크기로 둔다. 손가락 동작(끌기 · 확대)은 카카오가 직접 처리하게 한다. */
+[data-kp-roadview] img { max-width: none !important; max-height: none !important; display: inline; }
+[data-kp-roadview] .kp-rv-surface { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+
 @keyframes successBannerIn {
   0%   { opacity: 0; transform: scale(0.85) translateY(8px); }
   100% { opacity: 1; transform: scale(1) translateY(0); }

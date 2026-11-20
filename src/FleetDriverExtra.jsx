@@ -71,6 +71,8 @@ export default function FleetExtraFields({ value: v, onChange, company }) {
           <div className="col-span-2"><BankAccountInput value={v.정산계좌 || { bank: "", acct: "", holder: "" }} onChange={(b) => set({ 정산계좌: b })} noFav /></div>
           <div><label className={lab}>사업자등록번호</label><input inputMode="numeric" className={inp} value={fmtBiz(v.사업자번호 || "")} onChange={(e) => set({ 사업자번호: onlyDigits(e.target.value).slice(0, 10) })} placeholder="000-00-00000" /></div>
           <div><label className={lab}>상호</label><input className={inp} value={v.사업자상호 || ""} onChange={(e) => set({ 사업자상호: e.target.value })} placeholder="사업자등록증 상호" /></div>
+          <div><label className={lab}>대표자</label><input className={inp} value={v.사업자대표 || ""} onChange={(e) => set({ 사업자대표: e.target.value })} placeholder="사업자등록증 대표자" /></div>
+          <div />
           <div><label className={lab}>지입 계약 시작일</label><CustomDatePicker className={inp} value={v.지입계약일 || ""} onChange={(e) => set({ 지입계약일: e.target.value })} showIcon /></div>
           <div><label className={lab}>월 지입료 <span className="font-normal text-[#5B6B85]">(명세서 자동 공제)</span></label><input inputMode="numeric" className={`${inp} text-right`} value={fee ? Number(fee).toLocaleString() : ""} onChange={(e) => setFee(e.target.value)} placeholder="0" /></div>
           <div className="col-span-2 flex items-center justify-between gap-3 rounded-xl bg-white border border-[#E3E8F0] px-3.5 py-2.5">
@@ -165,6 +167,28 @@ export function DriverCombo({ drivers = [], value = "", onChange, placeholder = 
         </div>,
         document.body,
       )}
+    </div>
+  );
+}
+
+// 💳 2026-11-20 용차(일반 · 블랙 등) 기사 정산정보 — 사업자번호 · 상호 · 대표자 · 은행 · 계좌번호 · 예금주
+//  지입 기사와 같은 칸(정산계좌 · 사업자번호 · 사업자상호 · 사업자대표)에 저장 → 기사관리 표 · 선정산 파일 반영이 같이 쓴다
+//  사업자번호는 000-00-00000, 계좌번호는 은행 형식대로 하이픈이 저절로 들어간다(BankAccountInput)
+export function DriverPayFields({ value: v = {}, onChange }) {
+  const set = (patch) => onChange((p) => ({ ...p, ...patch }));
+  return (
+    <div className="col-span-2 rounded-2xl border border-[#DCE3EE] overflow-hidden">
+      <div className="px-4 py-2.5 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
+        <div className="text-[11px] font-extrabold tracking-[0.2em] text-[#8FB0F0]">PAYMENT · 정산 정보</div>
+        <div className="text-[13.5px] font-black">사업자 · 지급 계좌 <span className="text-white/55 text-[12px] font-bold">(선정산 파일을 올리면 저절로 채워져요)</span></div>
+      </div>
+      <div className="p-3.5 grid grid-cols-2 gap-3 bg-[#F7F9FC]">
+        <div><label className={lab}>사업자등록번호</label><input inputMode="numeric" className={inp} value={fmtBiz(v.사업자번호 || "")} onChange={(e) => set({ 사업자번호: onlyDigits(e.target.value).slice(0, 10) })} placeholder="000-00-00000" /></div>
+        <div><label className={lab}>상호</label><input className={inp} value={v.사업자상호 || ""} onChange={(e) => set({ 사업자상호: e.target.value })} placeholder="사업자등록증 상호" /></div>
+        <div><label className={lab}>대표자</label><input className={inp} value={v.사업자대표 || ""} onChange={(e) => set({ 사업자대표: e.target.value })} placeholder="사업자등록증 대표자" /></div>
+        <div />
+        <div className="col-span-2"><BankAccountInput value={v.정산계좌 || { bank: "", acct: "", holder: "" }} onChange={(b) => set({ 정산계좌: b })} noFav /></div>
+      </div>
     </div>
   );
 }

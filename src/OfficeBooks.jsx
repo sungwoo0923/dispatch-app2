@@ -4,7 +4,7 @@
 //    전자결재 "비용·지출 결의" 승인분을 한 번에 장부로 가져오기, 매달 나가는 고정비(임대료·통신비 등) 한 번에 반영
 //  · 비품·자산: 사무가구·IT기기·소모품 등 — 수량·위치·담당자·구입가·상태, 소모품은 최소 수량 아래면 "재고 부족", 입출고 이력
 import React from "react";
-import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
+import { runDelete, runBulkTask } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, arrayUnion } from "firebase/firestore";
 import { useCompanyRows } from "./companyColStore"; // ⭐ 2026-11-06 공용 구독
 import useNarrow from "./useNarrow";
@@ -323,18 +323,22 @@ export function CashBook({ company, isViewer = false }) {
         const c = /법인카드/.test(p) ? fundOpts.filter((f) => f.kind === "법인카드" || f.kind === "법인카드 한도") : /현금/.test(p) ? fundOpts.filter((f) => f.kind === "현금") : /계좌|이체/.test(p) ? fundOpts.filter((f) => f.kind === "보통예금") : [];
         return c.length === 1 ? c[0].id : "";
       };
-      for (const a of toImport) {
+      await runBulkTask({ count: (toImport).length, label: "지출결의", verb: "장부 반영", unitWord: "건", task: async (progress) => { let _k = 0;
+      for (const a of toImport) { progress(_k++);
         const d = a.data || {};
         await setDoc(doc(db, "acctLedger", `appr_${a.id}`), { fundId: pickFund(d.pay || d.method || "법인카드"), date: d.date || d.spendDate || new Date(tsMs(a.createdAt) + 9 * 3600e3).toISOString().slice(0, 10), type: "지출", account: d.account || "기타", item: a.title || a.formLabel || "지출결의", amount: Number(a.amount) || 0, method: d.pay || d.method || "법인카드", vendor: d.vendor || "", memo: `전자결재 ${a.docNo || ""} · ${a.drafter?.name || ""}`, evidence: "전자결재", receipt: (a.images || [])[0] || "", sourceId: a.id, companyName: company, createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" }, { merge: true });
       }
+      } });
     } finally { setBusy(false); }
   };
   // 고정비 한 달 치를 장부에 — 같은 고정비·같은 달은 한 줄만(문서 이름 고정: 여러 명이 눌러도 두 번 안 들어감)
-  const writeRecur = async (list, month) => {
-    for (const r of list) {
+  const writeRecur = async (list, month, quiet = false) => { // quiet: 장부를 열 때 자동 반영은 진행 창 없이
+    await runBulkTask({ count: (list).length, label: "고정비", verb: "장부 반영", unitWord: "건", minCount: quiet ? Infinity : 2, task: async (progress) => { let _k = 0;
+    for (const r of list) { progress(_k++);
       const day = String(Math.min(28, Math.max(1, Number(r.day) || 1))).padStart(2, "0");
       await setDoc(doc(db, "acctLedger", `recur_${r.id}_${month}`), { date: `${month}-${day}`, type: r.type || "지출", account: r.account || "기타", item: r.name, amount: toInt(r.amount), method: r.method || "자동이체", fundId: r.fundId || "", vendor: r.vendor || "", memo: "고정비 자동 반영", evidence: "", receipt: "", recurId: r.id, companyName: company, createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" }, { merge: true });
     }
+    } });
   };
   // ⭐ 2026-11-01 이번 달 고정비는 납부일이 지나면 장부를 열 때 자동 반영(경리·관리자 화면)
   const autoRecurRef = React.useRef("");
@@ -344,7 +348,7 @@ export function CashBook({ company, isViewer = false }) {
     if (ym !== month || autoRecurRef.current === month) return;
     const due = recurTodo.filter((r) => Math.min(28, Math.max(1, Number(r.day) || 1)) <= Number(today.slice(8, 10)));
     autoRecurRef.current = month;
-    if (due.length) writeRecur(due, month).catch(() => {});
+    if (due.length) writeRecur(due, month, true).catch(() => {});
   }, [rows, recurring, ym, isViewer]); // eslint-disable-line react-hooks/exhaustive-deps
   const applyRecurring = async () => {
     if (!recurTodo.length) return;

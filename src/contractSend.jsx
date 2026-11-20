@@ -5,6 +5,7 @@
 //  · 기사는 기사앱 › 서류함 › 계약서에서 열어 도장 사진을 올리거나 손으로 서명한다(src/driver/DriverContractSign.jsx)
 //  · 서버(functions › driverContractPush)가 새 계약서를 기사 휴대폰으로 푸시 알림
 import React from "react";
+import { runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 일괄 처리 진행 창
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, where } from "firebase/firestore";
 import { db } from "./firebase";
 import { kpAlert, kpConfirm } from "./kpDialog";
@@ -40,7 +41,8 @@ export function DriverContractSendBar({ company, me = {}, targets = [], valsFor,
     let sent = 0; const fail = [];
     // ⭐ 2026-11-10 저장할 수 없는 값(undefined 등)을 미리 걸러 낸다 — 예전엔 빈 칸 하나 때문에 전송 전체가 실패할 수 있었다
     const clean = (o) => JSON.parse(JSON.stringify(o ?? null));
-    for (const d of ok) {
+    await runBulkTask({ count: (ok).length, label: "계약서", verb: "발송", unitWord: "명", task: async (progress) => { let _k = 0;
+    for (const d of ok) { progress(_k++);
       try {
         await addDoc(collection(db, "driverContracts"), {
           companyName: String(company || "").trim(), driverId: d.appUid, driverDocId: d.id, driverName: d.이름 || "", 차량번호: d.차량번호 !== "-" ? d.차량번호 : "",
@@ -49,6 +51,7 @@ export function DriverContractSendBar({ company, me = {}, targets = [], valsFor,
         sent += 1;
       } catch (e) { fail.push(`${d.이름} — ${sendErrText(e)}`); }
     }
+    } });
     setBusy(false);
     kpAlert(`${sent}명에게 보냈습니다.${fail.length ? `\n\n보내지 못한 기사님:\n${fail.map((f) => `· ${f}`).join("\n")}` : ""}\n진행 상황은 아래 '기사앱 발송 현황'에서 볼 수 있어요.`);
   };

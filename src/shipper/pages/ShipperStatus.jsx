@@ -20,7 +20,7 @@ import { updateDoc, setDoc } from "../../orderWrite"; // ★ 오더 수정시각
 import { useNavigate } from "react-router-dom";
 import { DeckStrip, SegTabs } from "../ShipUi";
 import { deleteOrderWithLog } from "../../orderHistory";
-import { deleteOrdersWithLogAtomic, runDelete } from "../../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
+import { deleteOrdersWithLogAtomic, runDelete, runBulkTask } from "../../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 
 // 운송사 프로그램(DispatchApp.jsx StatusBadge)과 동일한 배지 디자인 — 단색 배경 + 흰 글씨 + rounded-lg
 const STATUS = {
@@ -682,13 +682,15 @@ export default function ShipperStatus() {
     const cancelable = targets.filter(o => o.상태 !== "취소" && !(o.차량번호 && o.차량번호.trim()));
 
     const cancelImmediately = async () => {
-      for (const o of cancelable) {
+      await runBulkTask({ count: (cancelable).length, label: "오더", verb: "취소", unitWord: "건", task: async (progress) => { let _k = 0;
+      for (const o of cancelable) { progress(_k++);
         const patch = { 상태: "취소", 배차상태: "배차취소", 취소알림대기: true };
         await updateDoc(doc(db, "orders", o.id), patch);
         // 배차취소된 오더는 화주사의 "배차취소" 목록에만 남아야 한다 — 운송사 배차현황에는
         // 배차상태가 "배차취소"인 오더가 존재하면 안 되므로 운송사 쪽 원본은 삭제한다.
         await propagateCancelDeleteToOrigin(o);
       }
+      } });
     };
 
     if (locked.length > 0 && cancelable.length === 0) {
