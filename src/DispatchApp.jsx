@@ -5469,6 +5469,8 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     SHIPPER_MIRROR_FIELDS.forEach((key) => {
       if (key in cleanPatch) mirrorPatch[key] = cleanPatch[key];
     });
+    // 🛠 2026-11-20 오더 칸(상차지담당자 · 상차지담당자번호) → 화주사 사본 칸(상차담당자명 · 상차담당자번호) — 예전엔 이름이 달라 담당자를 고쳐도 사본에 안 갔다
+    Object.entries({ 상차지담당자: "상차담당자명", 상차지담당자번호: "상차담당자번호", 하차지담당자: "하차담당자명", 하차지담당자번호: "하차담당자번호" }).forEach(([from, to]) => { if (from in cleanPatch) mirrorPatch[to] = cleanPatch[from]; });
     if ("차량번호" in cleanPatch || "배차완료일시" in cleanPatch) {
       const mirrorPlate = String(cleanPatch.차량번호 ?? prev.차량번호 ?? "").trim();
       mirrorPatch.배차상태 = mirrorPlate ? "배차완료" : "배차중";

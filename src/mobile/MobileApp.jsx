@@ -588,12 +588,15 @@ function payTypeHistoryMobile(order, patch, userEmail) {
   });
   return out;
 }
+// 🛠 2026-11-20 오더의 상/하차지 담당자 칸(상차지담당자 · 상차지담당자번호)을 화주사 사본 칸 이름(상차담당자명 · 상차담당자번호)으로 — 예전엔 이름이 달라 담당자를 고쳐도 사본에 안 갔다
+const MIRROR_RENAME = { 상차지담당자: "상차담당자명", 상차지담당자번호: "상차담당자번호", 하차지담당자: "하차담당자명", 하차지담당자번호: "하차담당자번호" };
 const syncShipperMirrorMobile = async (order, patch) => {
   if (order?.source) return; // 화주사가 등록한 오더는 사본 동기화 대상이 아님
   const mirrorPatch = {};
   SHIPPER_MIRROR_FIELDS_MOBILE.forEach((key) => {
     if (key in patch) mirrorPatch[key] = patch[key];
   });
+  Object.entries(MIRROR_RENAME).forEach(([from, to]) => { if (from in patch) mirrorPatch[to] = patch[from]; });
   if ("차량번호" in patch || "배차완료일시" in patch) {
     const mirrorPlate = String(patch.차량번호 ?? order.차량번호 ?? "").trim();
     mirrorPatch.배차상태 = mirrorPlate ? "배차완료" : "배차중";
@@ -3635,9 +3638,9 @@ useEffect(() => {
       if (o.차량번호) return false; // 배차중만
 
       const [y, m, d] = o.상차일.split("-").map(Number);
-      const [hh, mm] = normalizeKoreanTime(o.상차시간)
-        .split(":")
-        .map(Number);
+      // 🛠 2026-11-20 "오전 9시 30분" 형식도 읽게(예전 normalizeKoreanTime은 "9시"를 숫자로 못 바꿔 늘 계산 실패)
+      const hm = normalizeTimeHM(o.상차시간); if (!hm) return false;
+      const [hh, mm] = hm.split(":").map(Number);
 
       const dt = new Date(y, m - 1, d, hh, mm);
       const diffMin = (dt - now) / 60000;
@@ -4825,8 +4828,15 @@ const groupedByDate = useMemo(() => {
       ...(form.운임구분 !== undefined ? { 운임구분: form.운임구분 || "", 운임수동: !!form.운임수동, ...(form.운임구분 && String(form.운임구분수수료율 ?? "") !== "" ? { 운임구분수수료율: Number(form.운임구분수수료율) || 0 } : {}) } : {}),
 
       // 상태 PC/모바일 동일 — 🚚 2026-11-07 지급방식 "취소"면 배차취소(PC와 같음 · 상태 칸은 PC처럼 그대로)
-      배차상태: dispatchStatusOf({ 지급방식: form.지급방식, 차량번호: form.차량번호 }),
-      상태: (form.차량번호 || "").trim() ? "배차완료" : "배차중",
+      // 🛠 2026-11-20 모바일 점검 — 수정할 때는 차량번호나 지급방식이 바뀐 경우에만 배차상태 · 상태를 다시 정한다(PC patchDispatch와 같게)
+      //  예전엔 아무 칸만 고쳐도 덮어써서, 지입 기사 승인대기 오더가 배차완료로 · 취소된 오더(상태 "취소")가 되살아났다
+      ...(() => {
+        const prevO = form._editId ? (selectedOrder || {}) : null;
+        const plateSame = !!prevO && String(prevO.차량번호 || "").replace(/\s+/g, "") === String(form.차량번호 || "").replace(/\s+/g, "");
+        if (prevO && plateSame && (prevO.지급방식 || "") === (form.지급방식 || "")) return {};
+        if (prevO && plateSame) return payTypeStatusPatch(prevO, form.지급방식 || "", { 차량번호: form.차량번호 }); // 지급방식만 바뀜 — 등록폼 · PC와 같은 규칙
+        return { 배차상태: dispatchStatusOf({ 지급방식: form.지급방식, 차량번호: form.차량번호 }), 상태: (form.차량번호 || "").trim() ? "배차완료" : "배차중" };
+      })(),
 
       경유상차목록: validStops(form.경유상차목록),
       경유지_상차: validStops(form.경유상차목록),
@@ -4919,6 +4929,7 @@ const groupedByDate = useMemo(() => {
       // 백그라운드로 넘기고, 화면은 먼저 갱신한다 — 실패하면 뒤늦게 알림.
       const updatePromise = updateDoc(doc(db, editCol, editId), {
         ...docData,
+        최종수정자: auth.currentUser?.email || "", // 🛠 2026-11-20 PC와 같게 — 마지막으로 고친 사람(담당자 표시)
         _id: editId,
         id: editId,
       });
@@ -11560,9 +11571,11 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
       {isUrgentOrder(order) && <UrgentBadge className="h-[19px] !text-[10.5px]" />}{/* ⭐ 2026-11-06 긴급 빨간 알약(미전달만 보기에서도) */}
       {(() => {
         if (!order.상차일 || !order.상차시간) return null;
-        const now = new Date(Date.now() + 9 * 60 * 60 * 1000);
+        // 🛠 2026-11-20 임박 표시가 뜨지 않던 문제 — "오전 9시 30분" 형식 읽기 + 휴대폰 시계(한국 시간) 그대로(예전엔 9시간을 한 번 더 더함)
+        const now = new Date();
         const [y, m, d] = order.상차일.split("-").map(Number);
-        const [hh, mm] = normalizeKoreanTime(order.상차시간).split(":").map(Number);
+        const hm = normalizeTimeHM(order.상차시간); if (!hm) return null;
+        const [hh, mm] = hm.split(":").map(Number);
         const diffMin = (new Date(y, m - 1, d, hh, mm) - now) / 60000;
         return diffMin > 0 && diffMin <= 120
           ? <span className="h-[19px] px-1.5 inline-flex items-center rounded-md bg-[#0F1A30] text-white text-[10px] font-black leading-none">임박</span>
@@ -12431,12 +12444,17 @@ function MobileOrderDetail({
       운행유형: order.운행유형 || "",
       회전수: Number(order.회전수) > 1 ? Number(order.회전수) : 1,
       적요: order.메모 || "",
-      기사명: order.기사명 || "",
-      전화번호: order.전화번호 || "",
-      경유상차목록: order.경유상차목록 || [],
-      경유하차목록: order.경유하차목록 || [],
+      // 🛠 2026-11-20 모바일 점검 — 오더의 기사 이름 칸은 "이름"(예전엔 기사명만 읽어 저장할 때 기사 이름이 지워졌다) · 전달사항도 불러온다(저장 때 비워지던 문제)
+      기사명: order.기사명 || order.이름 || "",
+      전화번호: order.전화번호 || order.전화 || "",
+      전달사항: order.전달사항 || "",
+      전달사항고정: order.전달사항고정 === true,
+      경유상차목록: validStops(order.경유상차목록 || order.경유지_상차),
+      경유하차목록: validStops(order.경유하차목록 || order.경유지_하차),
       source: order.source || "",
       ...(order.고정노선Id ? { 고정노선Id: order.고정노선Id, 고정노선명: order.고정노선명 || "" } : {}),
+      청구사업자: order.청구사업자 || "", 블라인드: order.블라인드 === true,
+      ...(order.콜구분 !== undefined ? { 콜구분: order.콜구분 || "", 콜플랫폼: order.콜플랫폼 || "" } : {}),
       _editId: order.id,
       _returnToDetail: true,
     });
@@ -12901,6 +12919,9 @@ const handleAssignClick = async () => {
       경유하차목록: validStops(order.경유하차목록 || order.경유지_하차),
       source: order.source || "",
       ...(order.고정노선Id ? { 고정노선Id: order.고정노선Id, 고정노선명: order.고정노선명 || "" } : {}),
+      // 🛠 2026-11-20 모바일 점검 — 수정 저장 때 이 칸들을 비우거나 바꾸지 않게 원래 값을 불러온다(예전엔 청구사업자가 지워지고 블라인드 오더가 풀렸다)
+      청구사업자: order.청구사업자 || "", 블라인드: order.블라인드 === true,
+      ...(order.콜구분 !== undefined ? { 콜구분: order.콜구분 || "", 콜플랫폼: order.콜플랫폼 || "" } : {}),
       _editId: order.id, _returnToDetail: true,
     });
   };
