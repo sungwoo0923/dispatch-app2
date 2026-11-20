@@ -711,8 +711,9 @@ export function ApprovalPaper({ form, data, title, line, cc, drafter, docNo, cre
           <div className="text-[12.5px] font-extrabold tracking-[0.3em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{catOf(form.cat).en} · {form.code}</div>
           {/* ⭐ 2026-11-02 점검 — 휴대폰(compact)에서는 제목을 줄이고 줄바꿈 허용(긴 양식 제목이 용지 밖으로 넘치던 문제) */}
           <div className={`${c ? "text-[19px] tracking-[0.04em] break-keep" : "text-[30px] tracking-[0.12em] whitespace-nowrap"} font-black text-[#0F1A30] mt-1`}>{form.title}</div>
-          <div className="text-[13.5px] text-[#5A6A85] mt-1 flex items-center gap-2" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{docNo || "문서번호는 상신할 때 자동 부여"}
-            {status && status !== "pending" && <span className="px-2 py-0.5 rounded border-2 border-[#0F1A30] text-[13px] font-black text-[#0F1A30] tracking-widest" style={{ fontFamily: "inherit" }}>{STATUS[status]}</span>}
+          {/* 🛠 2026-11-20 결재자가 많아 결재란이 넓어지면 '결재 완료' 상자가 '결재 / 완료' 두 줄로 꺾였다 → 상자 안은 한 줄 고정, 자리가 모자라면 상자째 아래 줄로 */}
+          <div className="text-[13.5px] text-[#5A6A85] mt-1 flex flex-wrap items-center gap-x-2 gap-y-1" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}><span className="whitespace-nowrap">{docNo || "문서번호는 상신할 때 자동 부여"}</span>
+            {status && status !== "pending" && <span className="shrink-0 whitespace-nowrap px-2 py-0.5 rounded border-2 border-[#0F1A30] text-[13px] font-black text-[#0F1A30] tracking-widest" style={{ fontFamily: "inherit" }}>{STATUS[status]}</span>}
           </div>
         </div>
         {/* 결재란 */}
