@@ -7,7 +7,7 @@
 //    · 복사가 필요한 영역은 data-allow-select 를 붙이면 예외
 const ALLOW = [
   "input", "textarea", "select", "[contenteditable='']", "[contenteditable='true']",
-  "[data-allow-select]", "article", "pre", "code", ".kp-doc", ".ProseMirror", "[data-doc-body]",
+  "[data-allow-select]", "[data-kp-roadview]", "article", "pre", "code", ".kp-doc", ".ProseMirror", "[data-doc-body]",
 ].join(",");
 
 export function installNoDblSelect() {

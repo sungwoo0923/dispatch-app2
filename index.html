@@ -9,20 +9,27 @@
         document.addEventListener('gesturechange', function(e) { e.preventDefault(); }, { passive: false });
         document.addEventListener('gestureend', function(e) { e.preventDefault(); }, { passive: false });
 
+        // 📷 2026-11-20 로드뷰 · 지도(카카오맵) 안에서는 아래 확대 방지 · 두 번 탭 막기를 하지 않는다
+        //  (화살표를 연달아 누르거나 사진을 끈 직후 누르면 300ms 막기에 걸려 이동이 씹혔다 · 두 손가락 확대도 써야 함)
+        function inMapArea(e) { var t = e.target; return !!(t && t.closest && t.closest('[data-kp-roadview]')); }
+
         // Android Chrome: pinch-zoom via touchmove (Chrome 65+ ignores user-scalable=no)
         document.addEventListener('touchmove', function(e) {
+          if (inMapArea(e)) return;
           if (e.touches.length > 1) { e.preventDefault(); }
         }, { passive: false });
 
         // Android Chrome: track pinch scale via touchstart
         var lastScale = 1;
         document.addEventListener('touchstart', function(e) {
+          if (inMapArea(e)) return;
           if (e.touches.length > 1) { e.preventDefault(); }
         }, { passive: false });
 
         // Double-tap zoom prevention
         var lastTouch = 0;
         document.addEventListener('touchend', function(e) {
+          if (inMapArea(e)) { lastTouch = 0; return; }
           var now = Date.now();
           if (now - lastTouch < 300) { e.preventDefault(); }
           lastTouch = now;

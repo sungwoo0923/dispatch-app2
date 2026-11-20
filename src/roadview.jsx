@@ -165,7 +165,7 @@ function RoadviewModal({ addr, name, onClose }) {
   }[state];
 
   return createPortal(
-    <div className="fixed inset-0 z-[1000001] bg-[#0B1428]/70 backdrop-blur-[2px] flex items-center justify-center p-0 sm:p-4"
+    <div data-kp-roadview className="fixed inset-0 z-[1000001] bg-[#0B1428]/70 sm:backdrop-blur-[2px] flex items-center justify-center p-0 sm:p-4"
       onMouseDown={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) close(); }}
       onClick={(e) => e.stopPropagation()}>
       <div className="bg-white w-full h-full sm:w-[1180px] sm:max-w-[96vw] sm:h-[78vh] sm:max-h-[820px] sm:rounded-2xl overflow-hidden flex flex-col shadow-[0_30px_80px_rgba(0,0,0,0.4)]"
@@ -189,7 +189,7 @@ function RoadviewModal({ addr, name, onClose }) {
         {/* 본문: 로드뷰 + 지도 */}
         <div className="flex-1 min-h-0 flex flex-col sm:grid sm:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)]">
           <div className="relative flex-[3] sm:flex-none min-h-0 bg-[#E9EDF3]">
-            <div ref={rvRef} className="absolute inset-0" />
+            <div ref={rvRef} className="kp-rv-surface absolute inset-0" />
             {msg && (
               <div className="absolute inset-0 flex items-center justify-center p-6 bg-[#F4F6FA]">
                 <div className="max-w-[380px] text-center text-[13.5px] font-bold text-[#3A4A66] leading-relaxed">
@@ -202,7 +202,7 @@ function RoadviewModal({ addr, name, onClose }) {
             )}
           </div>
           <div className="relative flex-[2] sm:flex-none min-h-0 border-t sm:border-t-0 sm:border-l border-[#E3E8F0]">
-            <div ref={mapRef} className="absolute inset-0" />
+            <div ref={mapRef} className="kp-rv-surface absolute inset-0" />
           </div>
         </div>
         {/* 안내 */}
