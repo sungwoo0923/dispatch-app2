@@ -1,5 +1,6 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import { RoadviewButton } from "../roadview"; // 📷 2026-11-20 상·하차지 로드뷰
+import { isFleetGrade } from "../fleetGradesCore"; // 🚛 2026-11-20 사용자 요청 — 지입 · 직영 · 임대 · 분양(isFleetGrade) 모두 기사앱 오더 수락/거절 · 같은 기사앱 화면(예전엔 지입만)
 import { SpecialFareTag, SpecialFareLine } from "../specialFareTag"; // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import { readPendingApproval, clearPendingApproval } from "../pendingOpen"; // 🛠 2026-11-17 결재 화면 이동 요청을 새로고침 뒤에도 이어서
 import { MarginPct } from "../marginPct"; // ⭐ 2026-11-17 배차 합계 다이얼 — 수수료 아래 수수료율(수수료 ÷ 청구)
@@ -163,7 +164,8 @@ import { mainScanAi } from "../orderScanApi"; // 🧠 2026-11-07 오더 스캔 �
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동)
 import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange } from "../fareRules";
 import { applyRoutePresets, routePresetsNow } from "../routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
-import { SpecialFareButton, forkliftApply, paidOut, orderProfit, profitTotals } from "../forklift"; import { isViewerNow } from "../blind"; // 🏗 2026-11-09 지게차비용
+import { placeSearch } from "../placeSearch"; // 🔎 2026-11-20 상하차지 검색 — PC와 같은 규칙
+import { SpecialFareButton, forkliftApply, paidOut, orderProfit, profitTotals, nextFee } from "../forklift"; import { isViewerNow } from "../blind"; // 🏗 2026-11-09 지게차비용
 import DetailFilterButton, { applyDetailFilter, detailGroupOrder } from "../DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { useFixedRouteAutoDispatch } from "../FixedRoutes"; // ⭐ 2026-11-05 고정노선 배차 이어서 만들기
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
@@ -589,12 +591,15 @@ function payTypeHistoryMobile(order, patch, userEmail) {
   });
   return out;
 }
+// 🛠 2026-11-20 오더의 상/하차지 담당자 칸(상차지담당자 · 상차지담당자번호)을 화주사 사본 칸 이름(상차담당자명 · 상차담당자번호)으로 — 예전엔 이름이 달라 담당자를 고쳐도 사본에 안 갔다
+const MIRROR_RENAME = { 상차지담당자: "상차담당자명", 상차지담당자번호: "상차담당자번호", 하차지담당자: "하차담당자명", 하차지담당자번호: "하차담당자번호" };
 const syncShipperMirrorMobile = async (order, patch) => {
   if (order?.source) return; // 화주사가 등록한 오더는 사본 동기화 대상이 아님
   const mirrorPatch = {};
   SHIPPER_MIRROR_FIELDS_MOBILE.forEach((key) => {
     if (key in patch) mirrorPatch[key] = patch[key];
   });
+  Object.entries(MIRROR_RENAME).forEach(([from, to]) => { if (from in patch) mirrorPatch[to] = patch[from]; });
   if ("차량번호" in patch || "배차완료일시" in patch) {
     const mirrorPlate = String(patch.차량번호 ?? order.차량번호 ?? "").trim();
     mirrorPatch.배차상태 = mirrorPlate ? "배차완료" : "배차중";
@@ -2956,13 +2961,20 @@ const mergedCompanies = useMemo(() => {
 // 통째로 리렌더시키므로, 그때마다 이 무거운 배열 재계산이 같이 돌면서 타이핑이 밀리는
 // 원인이 됐다(안드로이드 저사양 기기에서 특히 체감이 컸다). clients/places가 실제로
 // 바뀔 때만 재계산되도록 메모이즈해서 타이핑 중 재계산을 없앤다.
-const formClientsList = useMemo(() => [
-  ...clients,
-  ...places.filter(p =>
-    p.거래처명 &&
-    !clients.some(c => normalizeCompany(c.거래처명) === normalizeCompany(p.거래처명))
-  )
-], [clients, places]);
+// 🛠 2026-11-20 PC(mergedClients)와 같게 — 기본거래처에 같은 이름이 있어도, 상하차지에 같은 이름 · 다른 주소가 여러 곳이면(지점 · 창고, 예: (도외)위탁 55곳) 모두 보여 준다
+//  예전엔 이름이 같으면 전부 빠져 한 곳만 떴다
+const formClientsList = useMemo(() => {
+  const nameSet = new Set(clients.map((c) => normalizeCompany(c.거래처명)).filter(Boolean));
+  const cnt = {}; places.forEach((p) => { const k = normalizeCompany(p.거래처명); if (k) cnt[k] = (cnt[k] || 0) + 1; });
+  const seen = new Set(clients.map((c) => `${normalizeCompany(c.거래처명)}|${normalizeCompany(c.주소 || "")}`));
+  const extra = places.filter((p) => {
+    const k = normalizeCompany(p.거래처명);
+    if (!k || (nameSet.has(k) && cnt[k] < 2)) return false;
+    const key = `${k}|${normalizeCompany(p.주소 || "")}`;
+    if (seen.has(key)) return false; seen.add(key); return true;
+  });
+  return [...clients, ...extra];
+}, [clients, places]);
 const handleRefresh = async () => {
   if (isRefreshing) return;
 
@@ -3636,9 +3648,9 @@ useEffect(() => {
       if (o.차량번호) return false; // 배차중만
 
       const [y, m, d] = o.상차일.split("-").map(Number);
-      const [hh, mm] = normalizeKoreanTime(o.상차시간)
-        .split(":")
-        .map(Number);
+      // 🛠 2026-11-20 "오전 9시 30분" 형식도 읽게(예전 normalizeKoreanTime은 "9시"를 숫자로 못 바꿔 늘 계산 실패)
+      const hm = normalizeTimeHM(o.상차시간); if (!hm) return false;
+      const [hh, mm] = hm.split(":").map(Number);
 
       const dt = new Date(y, m - 1, d, hh, mm);
       const diffMin = (dt - now) / 60000;
@@ -4755,7 +4767,8 @@ const groupedByDate = useMemo(() => {
     const SPECIAL_SAVE_KEYS = ["지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", "특수운임", "특수기사차감", "특수청구추가", "외부지급합", "지게차자동", "특수운임수동"]; // ⭐ 2026-11-17 노선 고정 표시(지게차자동 · 특수운임수동)
     const pickSp = (o) => Object.fromEntries(SPECIAL_SAVE_KEYS.filter((k) => o && o[k] !== undefined).map((k) => [k, o[k]]));
     const special = { ...(form._editId ? pickSp(selectedOrder) : {}), ...pickSp(form) };
-    const 수수료 = 청구운임 - 기사운임 - paidOut(special);
+    // 🛠 2026-11-20 수정할 때 사람이 직접 넣은 수수료는 그대로(PC patchDispatch와 같은 규칙 · nextFee) — 예전엔 고칠 때마다 다시 계산해 덮어썼다
+    const 수수료 = form._editId && selectedOrder ? nextFee(selectedOrder, { ...selectedOrder, ...special, 청구운임, 기사운임 }) : 청구운임 - 기사운임 - paidOut(special);
     const today = todayStr();
 
     // 공통 데이터 (PC 호환 필드 포함)
@@ -4826,8 +4839,28 @@ const groupedByDate = useMemo(() => {
       ...(form.운임구분 !== undefined ? { 운임구분: form.운임구분 || "", 운임수동: !!form.운임수동, ...(form.운임구분 && String(form.운임구분수수료율 ?? "") !== "" ? { 운임구분수수료율: Number(form.운임구분수수료율) || 0 } : {}) } : {}),
 
       // 상태 PC/모바일 동일 — 🚚 2026-11-07 지급방식 "취소"면 배차취소(PC와 같음 · 상태 칸은 PC처럼 그대로)
-      배차상태: dispatchStatusOf({ 지급방식: form.지급방식, 차량번호: form.차량번호 }),
-      상태: (form.차량번호 || "").trim() ? "배차완료" : "배차중",
+      // 🛠 2026-11-20 모바일 점검 — 수정할 때는 차량번호나 지급방식이 바뀐 경우에만 배차상태 · 상태를 다시 정한다(PC patchDispatch와 같게)
+      //  예전엔 아무 칸만 고쳐도 덮어써서, 지입 기사 승인대기 오더가 배차완료로 · 취소된 오더(상태 "취소")가 되살아났다
+      ...(() => {
+        const prevO = form._editId ? (selectedOrder || {}) : null;
+        const plateSame = !!prevO && String(prevO.차량번호 || "").replace(/\s+/g, "") === String(form.차량번호 || "").replace(/\s+/g, "");
+        if (prevO && plateSame && (prevO.지급방식 || "") === (form.지급방식 || "")) return {};
+        if (prevO && plateSame) return payTypeStatusPatch(prevO, form.지급방식 || "", { 차량번호: form.차량번호 }); // 지급방식만 바뀜 — 등록폼 · PC와 같은 규칙
+        const hasPlate = !!String(form.차량번호 || "").trim();
+        const st = dispatchStatusOf({ 지급방식: form.지급방식, 차량번호: form.차량번호 });
+        const out = { 배차상태: st, 상태: hasPlate ? "배차완료" : "배차중" };
+        if (prevO) {
+          // 🛠 2026-11-20 PC patchDispatch와 같게 — 차량이 바뀌면 이전 기사의 수락 · 완료 기록을 지운다(기사앱 쓰는 지입 기사면 아래 · 서버가 승인대기를 다시 건다)
+          Object.assign(out, { 기사확인상태: null, 기사거절사유: null, 기사확인일시: null, 기사완료일시: null });
+          if (!hasPlate) Object.assign(out, { 업체전달상태: "미전달", 배차확정일시: null, 배차확정자: null, 배차완료일시: null }); // 배차 취소 — 다시 전달 확인을 받게
+          else {
+            out.화주사확인대기 = false;
+            // 처음 배차될 때만 "배차한 시간" · 배차한 사람(PC 배차한시간 툴팁 · 모바일 배차완료 순 정렬)
+            if (st === "배차완료" && !String(prevO.차량번호 || "").trim()) Object.assign(out, { 배차완료일시: serverTimestamp(), 배차확정일시: serverTimestamp(), 배차확정자: dispatcherName });
+          }
+        }
+        return out;
+      })(),
 
       경유상차목록: validStops(form.경유상차목록),
       경유지_상차: validStops(form.경유상차목록),
@@ -4859,7 +4892,7 @@ const groupedByDate = useMemo(() => {
       const nextPlateM3 = normPlateM3(docData.차량번호 || "");
       if (nextPlateM3 && nextPlateM3 !== prevPlateM3 && docData.배차상태 !== "배차취소") {
         const assignedDriverM3 = (drivers || []).find(d => normPlateM3(d.차량번호) === nextPlateM3);
-        if (assignedDriverM3?.등급 === "지입" && !!assignedDriverM3.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
+        if (isFleetGrade(assignedDriverM3?.등급) && !!assignedDriverM3.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
           docData.기사확인상태 = "대기";
           docData.기사거절사유 = null;
           docData.기사확인일시 = null;
@@ -4920,6 +4953,7 @@ const groupedByDate = useMemo(() => {
       // 백그라운드로 넘기고, 화면은 먼저 갱신한다 — 실패하면 뒤늦게 알림.
       const updatePromise = updateDoc(doc(db, editCol, editId), {
         ...docData,
+        최종수정자: auth.currentUser?.email || "", // 🛠 2026-11-20 PC와 같게 — 마지막으로 고친 사람(담당자 표시)
         _id: editId,
         id: editId,
       });
@@ -5268,7 +5302,7 @@ const notifyFleetCancelMobile = (order, orderId) => {
   if (!order?.기사확인상태 || order.기사확인상태 === "거절" || !order.차량번호) return;
   const norm = (v = "") => String(v).replace(/\s+/g, "").toLowerCase().replace(/-/g, "");
   const drv = (drivers || []).find(d => norm(d.차량번호) === norm(order.차량번호));
-  if (drv?.등급 !== "지입") return;
+  if (!isFleetGrade(drv?.등급)) return;
   // ⭐ 2026-11-05 기사앱 "삭제된 오더" 팝업용 안내 문서(오더 요약 포함) — 따로 저장, 삭제는 기다리지 않는다
   writeOrderDeletedNotice(db, { driverId: drv.id, orderId, data: order });
 };
@@ -5426,22 +5460,30 @@ const deleteSingleOrder = async (order) => {
     }
 
     // 사용자가 선택한 값(이름, 차량번호, 전화번호)을 그대로 저장
+    // 🛠 2026-11-20 모바일 점검 — PC와 같게
+    //  · 다른 기사로 바뀌면 이전 기사의 수락 · 완료 기록을 지운다(새 기사가 "수락"/"완료"를 물려받던 문제) — 기사앱 쓰는 지입 기사면 서버가 승인대기 · 알림을 건다
+    //  · 지급방식이 "취소"면 배차취소 그대로 · 배차한 시간(배차확정일시)은 처음 배차될 때만(기사를 바꿀 때마다 덮어쓰던 문제)
+    const plateChanged = norm(selectedOrder.차량번호) !== norm(차량번호);
+    const firstAssign = !String(selectedOrder.차량번호 || "").trim() || !["배차완료", "승인대기"].includes(selectedOrder.배차상태);
+    const nextStatus = dispatchStatusOf({ 지급방식: selectedOrder.지급방식, 차량번호, 기사확인상태: plateChanged ? null : selectedOrder.기사확인상태 });
     const assignPatch = {
       기사명: 이름,
       이름: 이름,
       차량번호: 차량번호,
       전화번호: 전화번호,
       전화: 전화번호,
-      배차상태: "배차완료",
-      상태: "배차완료",
+      배차상태: nextStatus,
+      ...(nextStatus !== "배차취소" ? { 상태: nextStatus } : {}),
       화주사확인대기: false,
-      배차완료일시: serverTimestamp(),
-      // ⭐ PC(DispatchApp) 등록일 hover 툴팁의 "배차한시간"이 읽는 필드는 배차완료일시가
-      // 아니라 배차확정일시다 — 모바일에서 배차를 확정해도 이 필드가 없어 PC에서
-      // "배차한시간"이 항상 "-"로 보이던 버그.
-      배차확정일시: serverTimestamp(),
-      // ⭐ "배차완료" 뱃지 팝업에서 배차한 사람 이름을 보여주기 위한 필드.
-      배차확정자: dispatcherName,
+      ...(plateChanged ? { 기사확인상태: null, 기사거절사유: null, 기사확인일시: null, 기사완료일시: null } : {}),
+      ...(firstAssign && nextStatus === "배차완료" ? {
+        배차완료일시: serverTimestamp(),
+        // ⭐ PC(DispatchApp) 등록일 hover 툴팁의 "배차한시간"이 읽는 필드는 배차확정일시
+        배차확정일시: serverTimestamp(),
+        // ⭐ "배차완료" 뱃지 팝업에서 배차한 사람 이름을 보여주기 위한 필드.
+        배차확정자: dispatcherName,
+      } : {}),
+      최종수정자: auth.currentUser?.email || "",
       updatedAt: serverTimestamp(),
       _lastModified: Date.now(),
     };
@@ -5480,8 +5522,12 @@ const deleteSingleOrder = async (order) => {
   배차확정일시: null,
   배차확정자: null,
   // 차량정보가 빠지면 그 배차 자체가 무효화되는 것이므로, 배차방식(직접배차/24시
-  // 등)도 다시 "선택없음"으로 되돌린다 — PC와 동일.
-  배차방식: "선택없음",
+  // 등)도 다시 미선택으로 되돌린다 — PC와 동일(🛠 2026-11-20 "선택없음" 글자 대신 빈 값 · PC와 같게)
+  배차방식: "",
+  콜구분: "", 콜플랫폼: "",
+  // 🛠 2026-11-20 이전 기사의 수락 · 완료 기록도 지운다(다음 기사가 물려받지 않게 · PC와 같게)
+  기사확인상태: null, 기사거절사유: null, 기사확인일시: null, 기사완료일시: null,
+  최종수정자: auth.currentUser?.email || "",
   // 배차완료 → 배차중으로 되돌아가는 건 보통 재배차 상황이라, 이전에 전달된
   // 전달상태(화주사/기사 전달)도 함께 초기화해야 다시 전달 확인을 받을 수 있다.
   업체전달상태: "미전달",
@@ -5633,7 +5679,7 @@ const title =
           const dv = (drivers || []).find((d) => nd(d.차량번호) === nd(car));
           if (dv && !patch.이름) { patch.이름 = dv.이름 || ""; patch.전화번호 = dv.전화번호 || ""; }
           if (patch.이름) patch.기사명 = patch.이름;
-          if (dv?.등급 === "지입" && !!dv.uid) {
+          if (isFleetGrade(dv?.등급) && !!dv.uid) {
             Object.assign(patch, { 기사확인상태: "대기", 기사거절사유: null, 기사확인일시: null, 기사완료일시: null, 배차상태: "승인대기" });
             addDoc(collection(db, "driver_notifications"), { driverId: dv.id, type: "new_order", orderId: id, title: "배차오더가 도착했습니다", body: `${order.거래처명 || ""} ${order.상차지명 || "-"} → ${order.하차지명 || "-"}`, createdAt: serverTimestamp(), read: false }).catch(() => {});
           } else if (!patch.배차상태) patch.배차상태 = "배차완료";
@@ -9493,6 +9539,18 @@ function MobileOrderList({
     () => allVisibleOrders.filter(o => selectedIds.has(o.id || o._id)),
     [allVisibleOrders, selectedIds]
   );
+  // 📋 2026-11-20 모바일 점검 — 여러 건 골라 간단 목록 복사(PC와 같은 틀) → 미전달 건 전달완료 확인
+  useCopyTemplates();
+  const copySimpleSelected = async () => {
+    const list = selectedOrders.map((o) => ({ ...o, 이름: o.이름 || o.기사명 || o.기사 || "", 차량종류: o.차량종류 || o.차종 || "", 차량톤수: o.차량톤수 || o.톤수 || "" }));
+    if (!list.length) return;
+    const text = buildSimpleList(list, getSimpleTpl());
+    try { await navigator.clipboard.writeText(text); }
+    catch { const el = document.createElement("textarea"); el.value = text; document.body.appendChild(el); el.select(); document.execCommand("copy"); document.body.removeChild(el); }
+    const todo = selectedOrders.filter((o) => o.업체전달상태 !== "전달완료");
+    if (todo.length) setConfirmDeliverOrder({ __many: todo, total: list.length });
+    else showToast?.(`간단 목록 ${list.length}건 복사 완료`);
+  };
 
   const toggleSelect = (order) => {
     const id = order.id || order._id;
@@ -10197,7 +10255,7 @@ const summary = useMemo(() => {
       <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-6">
         <div className="bg-white rounded-2xl p-5 w-full max-w-xs">
           <div className="text-sm font-bold text-gray-900 mb-1">복사 완료</div>
-          <div className="text-sm text-gray-500 mb-4">전달상태를 <b className="text-gray-900">전달완료</b>로 변경할까요?</div>
+          <div className="text-sm text-gray-500 mb-4">{confirmDeliverOrder.__many ? <>간단 목록 {confirmDeliverOrder.total}건 복사 · 미전달 <b className="text-gray-900">{confirmDeliverOrder.__many.length}건</b>의 </> : null}전달상태를 <b className="text-gray-900">전달완료</b>로 변경할까요?</div>
           <div className="flex gap-2">
             <button onClick={() => setConfirmDeliverOrder(null)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold">아니오</button>
             <button
@@ -10205,10 +10263,10 @@ const summary = useMemo(() => {
                 const o = confirmDeliverOrder;
                 setConfirmDeliverOrder(null);
                 showToast?.("전달완료 처리되었습니다");
-                if (typeof onOrderUpdate === "function") {
-                  onOrderUpdate(o.id, { 업체전달상태: "전달완료", 정보전달완료: true, 정보전달상태: "전달완료" });
-                }
-                updateDoc(doc(db, o.__col || collName, o.id), { 업체전달상태: "전달완료", 전달완료일시: serverTimestamp(), 정보전달완료: true, 정보전달상태: "전달완료" }).catch(console.error);
+                (o.__many || [o]).forEach((x) => { // 📋 간단 목록 = 여러 건
+                  if (typeof onOrderUpdate === "function") onOrderUpdate(x.id, { 업체전달상태: "전달완료", 정보전달완료: true, 정보전달상태: "전달완료" });
+                  updateDoc(doc(db, x.__col || collName, x.id), { 업체전달상태: "전달완료", 전달완료일시: serverTimestamp(), 정보전달완료: true, 정보전달상태: "전달완료" }).catch(console.error);
+                });
               }}
               className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold"
             >확인</button>
@@ -10298,6 +10356,13 @@ const summary = useMemo(() => {
             className="flex-1 py-3 rounded-xl bg-[#1B2B4B] text-white text-[12px] font-bold disabled:opacity-40 active:scale-[0.97] transition whitespace-nowrap"
           >
             이미지공유
+          </button>
+          <button
+            onClick={copySimpleSelected}
+            disabled={selectedIds.size === 0}
+            className="flex-1 py-3 rounded-xl bg-white border-2 border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-bold disabled:opacity-40 active:scale-[0.97] transition whitespace-nowrap"
+          >
+            간단목록
           </button>
           <button
             onClick={handleDeleteSelected}
@@ -10946,7 +11011,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
         _lastModified: Date.now(),
       };
       // ⭐ 2026-11-17 운임을 바꿨으면 저장된 수수료도 같은 식으로(청구 − 기사 − 회사 지급분) — 예전엔 수수료를 안 고쳐 정산·매출에 옛 값이 남았다
-      if (patch.청구운임 !== (Number(order.청구운임) || 0) || patch.기사운임 !== (Number(order.기사운임) || 0)) patch.수수료 = orderProfit({ ...order, 청구운임: patch.청구운임, 기사운임: patch.기사운임 });
+      if (patch.청구운임 !== (Number(order.청구운임) || 0) || patch.기사운임 !== (Number(order.기사운임) || 0)) patch.수수료 = nextFee(order, { ...order, 청구운임: patch.청구운임, 기사운임: patch.기사운임 }); // 🛠 2026-11-20 직접 넣은 수수료는 그대로(PC와 같게)
       if (carNo) {
         patch.차량번호 = carNo;
         patch.기사명 = driverName;
@@ -10965,7 +11030,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
         // 별도 경로라 직접 반영).
         if (nd(carNo) !== nd(order.차량번호 || "") && !(!isShipperOrder && isPayCancel(payType))) {
           const assignedDriverM2 = (drivers || []).find(d => nd(d.차량번호) === nd(carNo));
-          if (assignedDriverM2?.등급 === "지입" && !!assignedDriverM2.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
+          if (isFleetGrade(assignedDriverM2?.등급) && !!assignedDriverM2.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
             patch.기사확인상태 = "대기";
             patch.기사거절사유 = null;
             patch.기사확인일시 = null;
@@ -11025,7 +11090,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
         <div className={`w-10 h-1 rounded-full mx-auto mb-3 ${bStyle ? "bg-[#1B2B4B]/15" : "bg-gray-200"}`} />
         <div className="flex items-center justify-between mb-1.5">
           <span className={`text-[15px] font-bold ${bStyle ? "text-[#1B2B4B]" : "text-gray-900"}`}>일부 수정</span>
-          <button onClick={onClose} className="p-1 text-gray-400">
+          <button onClick={onClose} aria-label="닫기" className="p-2.5 -m-1.5 text-gray-400">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
         </div>
@@ -11271,7 +11336,8 @@ const MobileOrderCard = React.memo(function MobileOrderCard({
     try {
       bgWrite(updateDoc(doc(db, order.__col || "orders", order.id), {
         차량번호: "", 이름: "", 기사명: "", 전화번호: "", 전화: "",
-        배차상태: "배차중", 상태: "배차중", 배차방식: "선택없음", _lastModified: Date.now(), // ★ 기사님이 빠지면 배차중으로(예전엔 배차완료로 남았다)
+        배차상태: "배차중", 상태: "배차중", 배차방식: "", _lastModified: Date.now(), // ★ 기사님이 빠지면 배차중으로(예전엔 배차완료로 남았다)
+        기사확인상태: null, 기사거절사유: null, 기사확인일시: null, 기사완료일시: null, 배차완료일시: null, 배차확정일시: null, 배차확정자: null, // 🛠 2026-11-20 이전 기사 흔적 지움(PC와 같게)
         기사취소요청: false, 기사취소요청일시: deleteField(),
         // 재배차 상황이므로 이전에 전달된 전달상태도 함께 초기화한다.
         업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달", 전달완료일시: null,
@@ -11554,16 +11620,18 @@ const dropTime = order.하차시간 ? fmtDispatchTimeM(order.하차시간, order
       {order.거래처명 && <span className="text-[12px] font-bold text-[#3A4A66] truncate">{order.거래처명}</span>}
       {(order.메모 || order.적요) && (
         <button onClick={(e) => { e.stopPropagation(); onOpenMemo(order); }}
-          className="memo-blink shrink-0 px-1.5 py-[3px] rounded-md bg-[#0F1A30] text-white text-[9.5px] font-extrabold leading-none">메모</button>
+          className="memo-blink shrink-0 px-2 py-[7px] -my-1 rounded-md bg-[#0F1A30] text-white text-[11px] font-extrabold leading-none">메모</button>
       )}
     </div>
     <div className="flex flex-wrap items-center justify-end gap-1">
       {isUrgentOrder(order) && <UrgentBadge className="h-[19px] !text-[10.5px]" />}{/* ⭐ 2026-11-06 긴급 빨간 알약(미전달만 보기에서도) */}
       {(() => {
         if (!order.상차일 || !order.상차시간) return null;
-        const now = new Date(Date.now() + 9 * 60 * 60 * 1000);
+        // 🛠 2026-11-20 임박 표시가 뜨지 않던 문제 — "오전 9시 30분" 형식 읽기 + 휴대폰 시계(한국 시간) 그대로(예전엔 9시간을 한 번 더 더함)
+        const now = new Date();
         const [y, m, d] = order.상차일.split("-").map(Number);
-        const [hh, mm] = normalizeKoreanTime(order.상차시간).split(":").map(Number);
+        const hm = normalizeTimeHM(order.상차시간); if (!hm) return null;
+        const [hh, mm] = hm.split(":").map(Number);
         const diffMin = (new Date(y, m - 1, d, hh, mm) - now) / 60000;
         return diffMin > 0 && diffMin <= 120
           ? <span className="h-[19px] px-1.5 inline-flex items-center rounded-md bg-[#0F1A30] text-white text-[10px] font-black leading-none">임박</span>
@@ -12371,13 +12439,18 @@ function MobileOrderDetail({
     const col = order.__col || order._col || "dispatch";
     const id = order.id || order._id;
     if (!id) return;
+    // 🛠 2026-11-20 수수료는 PC와 같은 규칙(지게차 · 특수운임 회사 지급분을 빼고, 직접 넣은 수수료는 그대로) · 마지막 수정자 · 화주사 사본(청구운임)
+    const nextDrv = drv != null ? drv : (order.기사운임 || 0);
     const patch = {
       청구운임: claim,
-      기사운임: drv != null ? drv : (order.기사운임 || 0),
-      수수료: claim - (drv != null ? drv : (Number(order.기사운임) || 0)),
+      기사운임: nextDrv,
+      수수료: nextFee(order, { ...order, 청구운임: claim, 기사운임: nextDrv }),
+      최종수정자: auth.currentUser?.email || "",
+      _lastModified: Date.now(),
     };
     try {
       updateDoc(doc(db, col, id), patch).catch(() => showToast("적용 중 오류가 발생했습니다.")); // ★ 속도개선 — 기다리지 않음
+      syncShipperMirrorMobile(order, patch).catch(() => {});
       if (typeof onOrderUpdate === "function") onOrderUpdate(id, patch);
       // 상세보기 즉시 반영
       if (typeof setSelectedOrder === "function") {
@@ -12432,12 +12505,17 @@ function MobileOrderDetail({
       운행유형: order.운행유형 || "",
       회전수: Number(order.회전수) > 1 ? Number(order.회전수) : 1,
       적요: order.메모 || "",
-      기사명: order.기사명 || "",
-      전화번호: order.전화번호 || "",
-      경유상차목록: order.경유상차목록 || [],
-      경유하차목록: order.경유하차목록 || [],
+      // 🛠 2026-11-20 모바일 점검 — 오더의 기사 이름 칸은 "이름"(예전엔 기사명만 읽어 저장할 때 기사 이름이 지워졌다) · 전달사항도 불러온다(저장 때 비워지던 문제)
+      기사명: order.기사명 || order.이름 || "",
+      전화번호: order.전화번호 || order.전화 || "",
+      전달사항: order.전달사항 || "",
+      전달사항고정: order.전달사항고정 === true,
+      경유상차목록: validStops(order.경유상차목록 || order.경유지_상차),
+      경유하차목록: validStops(order.경유하차목록 || order.경유지_하차),
       source: order.source || "",
       ...(order.고정노선Id ? { 고정노선Id: order.고정노선Id, 고정노선명: order.고정노선명 || "" } : {}),
+      청구사업자: order.청구사업자 || "", 블라인드: order.블라인드 === true,
+      ...(order.콜구분 !== undefined ? { 콜구분: order.콜구분 || "", 콜플랫폼: order.콜플랫폼 || "" } : {}),
       _editId: order.id,
       _returnToDetail: true,
     });
@@ -12504,7 +12582,7 @@ function MobileOrderDetail({
   const approveDriverSwap = async () => {
     try {
       // 재배차 상황이므로 이전에 전달된 전달상태도 함께 초기화한다.
-      const patch = { 차량번호: "", 이름: "", 기사명: "", 전화번호: "", 전화: "", 배차상태: "배차중", 상태: "배차중", 배차방식: "선택없음", _lastModified: Date.now(), 기사취소요청: false, 기사취소요청일시: deleteField(), 업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달", 전달완료일시: null };
+      const patch = { 차량번호: "", 이름: "", 기사명: "", 전화번호: "", 전화: "", 배차상태: "배차중", 상태: "배차중", 배차방식: "", 기사확인상태: null, 기사거절사유: null, 기사확인일시: null, 기사완료일시: null, 배차완료일시: null, 배차확정일시: null, 배차확정자: null, _lastModified: Date.now(), 기사취소요청: false, 기사취소요청일시: deleteField(), 업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달", 전달완료일시: null };
       setSelectedOrder((prev) => (prev ? { ...prev, 차량번호: "", 이름: "", 기사명: "", 전화번호: "", 배차상태: "배차중", 상태: "배차중", 기사취소요청: false, 업체전달상태: "미전달", 정보전달완료: false, 정보전달상태: "미전달" } : prev));
       bgWrite(updateDoc(doc(db, order.__col || "orders", order.id), patch), "기사 변경 승인");
     } catch {}
@@ -12833,7 +12911,7 @@ const handleAssignClick = async () => {
       const nextPlateM = normPlateM(carNo);
       if (nextPlateM && nextPlateM !== prevPlateM) {
         const assignedDriverM = driversRef.current.find(d => normPlateM(d.차량번호) === nextPlateM);
-        if (assignedDriverM?.등급 === "지입" && !!assignedDriverM.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
+        if (isFleetGrade(assignedDriverM?.등급) && !!assignedDriverM.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
           driverPatch.기사확인상태 = "대기";
           driverPatch.기사거절사유 = null;
           driverPatch.기사확인일시 = null;
@@ -12902,6 +12980,9 @@ const handleAssignClick = async () => {
       경유하차목록: validStops(order.경유하차목록 || order.경유지_하차),
       source: order.source || "",
       ...(order.고정노선Id ? { 고정노선Id: order.고정노선Id, 고정노선명: order.고정노선명 || "" } : {}),
+      // 🛠 2026-11-20 모바일 점검 — 수정 저장 때 이 칸들을 비우거나 바꾸지 않게 원래 값을 불러온다(예전엔 청구사업자가 지워지고 블라인드 오더가 풀렸다)
+      청구사업자: order.청구사업자 || "", 블라인드: order.블라인드 === true,
+      ...(order.콜구분 !== undefined ? { 콜구분: order.콜구분 || "", 콜플랫폼: order.콜플랫폼 || "" } : {}),
       _editId: order.id, _returnToDetail: true,
     });
   };
@@ -14626,64 +14707,20 @@ const orderCopyList = useMemo(() => {
 const pickupOptions = useMemo(() => {
   const base = queryPickup || form.상차지명;
   if (!base) return [];
-
+  // 🛠 2026-11-20 PC와 같은 검색(placeSearch) — "도외 목포"처럼 띄어 쓰면 첫 낱말은 업체명, 나머지는 주소 · 담당자에서 · 주소로만 맞는 곳은 뒤에
+  const hits = placeSearch(clients, base);
   const nq = normalizeCompany(base);
-
-  const exact = [];
-  const starts = [];
-  const includes = [];
-  const addrMatch = [];
-
-  clients.forEach((c) => {
-    const nameRaw = c.거래처명 || "";
-    const name = normalizeCompany(nameRaw);
-    const addr = normalizeCompany(c.주소 || "");
-
-    if (nameRaw.trim() === base.trim()) {
-      exact.push(c);
-    } else if (name === nq) {
-      exact.push(c);
-    } else if (name.startsWith(nq)) {
-      starts.push(c);
-    } else if (name.includes(nq)) {
-      includes.push(c);
-    } else if (addr.includes(nq)) {
-      addrMatch.push(c);
-    }
-  });
-
-  return [...exact, ...starts, ...includes, ...addrMatch].slice(0, 10);
+  const addrOnly = /\s/.test(String(base).trim()) ? [] : clients.filter((c) => !hits.includes(c) && normalizeCompany(c.주소 || "").includes(nq) && !hits.some((h) => h.거래처명 === c.거래처명 && h.주소 === c.주소));
+  return [...hits, ...addrOnly].slice(0, 15);
 
 }, [clients, queryPickup, form.상차지명]);
 const dropOptions = useMemo(() => {
   if (!queryDrop) return [];
-
+  // 🛠 2026-11-20 PC와 같은 검색(placeSearch) — "도외 목포"처럼 띄어 쓰면 첫 낱말은 업체명, 나머지는 주소 · 담당자에서 · 주소로만 맞는 곳은 뒤에
+  const hits = placeSearch(clients, queryDrop);
   const nq = normalizeCompany(queryDrop);
-
-  const exact = [];
-  const starts = [];
-  const includes = [];
-  const addrMatch = [];
-
-  clients.forEach((c) => {
-    const nameRaw = c.거래처명 || "";
-    const name = normalizeCompany(nameRaw);
-    const addr = normalizeCompany(c.주소 || "");
-
-    if (nameRaw.trim() === queryDrop.trim()) {
-      exact.push(c);
-    } else if (name === nq) {
-      exact.push(c);
-    } else if (name.startsWith(nq)) {
-      starts.push(c);
-    } else if (name.includes(nq)) {
-      includes.push(c);
-    } else if (addr.includes(nq)) {
-      addrMatch.push(c);
-    }
-  });
-
-  return [...exact, ...starts, ...includes, ...addrMatch].slice(0, 10);
+  const addrOnly = /\s/.test(String(queryDrop).trim()) ? [] : clients.filter((c) => !hits.includes(c) && normalizeCompany(c.주소 || "").includes(nq) && !hits.some((h) => h.거래처명 === c.거래처명 && h.주소 === c.주소));
+  return [...hits, ...addrOnly].slice(0, 15);
 
 }, [clients, queryDrop]);
 
@@ -15151,7 +15188,7 @@ const pickDrop = (c) => {
               key={v}
               type="button"
               onClick={() => update("상차시간기준", form.상차시간기준 === v ? null : v)}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition ${
+              className={`flex-1 py-2 min-h-[36px] rounded-lg text-xs font-bold border transition ${
                 form.상차시간기준 === v
                   ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
                   : "bg-white text-[#1B2B4B] border-[#1B2B4B]/40"
@@ -15193,7 +15230,7 @@ const pickDrop = (c) => {
               key={v}
               type="button"
               onClick={() => update("하차시간기준", form.하차시간기준 === v ? null : v)}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition ${
+              className={`flex-1 py-2 min-h-[36px] rounded-lg text-xs font-bold border transition ${
                 form.하차시간기준 === v
                   ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
                   : "bg-white text-[#1B2B4B] border-[#1B2B4B]/40"
@@ -20928,7 +20965,7 @@ return (
       <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center px-6">
         <div className="bg-white rounded-2xl p-5 w-full max-w-xs">
           <div className="text-sm font-bold text-gray-900 mb-1">복사 완료</div>
-          <div className="text-sm text-gray-500 mb-4">전달상태를 <b className="text-gray-900">전달완료</b>로 변경할까요?</div>
+          <div className="text-sm text-gray-500 mb-4">{confirmDeliverOrder.__many ? <>간단 목록 {confirmDeliverOrder.total}건 복사 · 미전달 <b className="text-gray-900">{confirmDeliverOrder.__many.length}건</b>의 </> : null}전달상태를 <b className="text-gray-900">전달완료</b>로 변경할까요?</div>
           <div className="flex gap-2">
             <button onClick={() => setConfirmDeliverOrder(null)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 text-sm font-semibold">아니오</button>
             <button
@@ -20936,10 +20973,10 @@ return (
                 const o = confirmDeliverOrder;
                 setConfirmDeliverOrder(null);
                 showToast?.("전달완료 처리되었습니다");
-                if (typeof onOrderUpdate === "function") {
-                  onOrderUpdate(o.id, { 업체전달상태: "전달완료", 정보전달완료: true, 정보전달상태: "전달완료" });
-                }
-                updateDoc(doc(db, o.__col || collName, o.id), { 업체전달상태: "전달완료", 전달완료일시: serverTimestamp(), 정보전달완료: true, 정보전달상태: "전달완료" }).catch(console.error);
+                (o.__many || [o]).forEach((x) => { // 📋 간단 목록 = 여러 건
+                  if (typeof onOrderUpdate === "function") onOrderUpdate(x.id, { 업체전달상태: "전달완료", 정보전달완료: true, 정보전달상태: "전달완료" });
+                  updateDoc(doc(db, x.__col || collName, x.id), { 업체전달상태: "전달완료", 전달완료일시: serverTimestamp(), 정보전달완료: true, 정보전달상태: "전달완료" }).catch(console.error);
+                });
               }}
               className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold"
             >확인</button>

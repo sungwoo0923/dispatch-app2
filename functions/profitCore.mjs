@@ -51,6 +51,16 @@ export function sfTotals(o) {
 export const paidOut = (o) => fkAmount(o) + sfTotals(o).ext;
 // 수익(수수료) — 배차표 · 정산 · 매출 · 보고서 · AI 가 모두 이 식을 쓴다
 export const orderProfit = (o) => fkNum(o?.청구운임) - fkNum(o?.기사운임) - paidOut(o);
+// 🛠 2026-11-20 운임을 고칠 때 저장할 수수료 — PC patchDispatch(wasAuto)와 같은 규칙을 한 곳에(모바일도 같이 쓴다)
+//  예전 수수료가 비었거나 자동 계산 값(청구 − 기사 − 회사 지급분 · 또는 청구 − 기사)이었으면 새 값으로 다시 계산하고,
+//  사람이 직접 넣은 수수료면 그대로 둔다. prev 가 없으면(새 오더) 계산 값.
+export function nextFee(prev, next) {
+  if (!prev) return orderProfit(next);
+  const f = prev.수수료;
+  const auto = f == null || String(f).trim() === "" || fkNum(f) === orderProfit(prev) || fkNum(f) === fkNum(prev.청구운임) - fkNum(prev.기사운임)
+    || fkNum(f) === fkNum(prev.청구운임) - fkNum(prev.기사운임) - Math.max(0, fkNum(prev.외부지급합 != null ? prev.외부지급합 : prev.지게차비용));
+  return auto ? orderProfit(next) : fkNum(f);
+}
 // 매입(회사가 이 오더로 내보내는 돈) = 기사운임 + 회사가 따로 지급한 돈 → 매출 − 매입 = 수익
 export const orderCost = (o) => fkNum(o?.기사운임) + paidOut(o);
 // 수익률(%) — 매출 0이면 0
