@@ -3,7 +3,7 @@
 //  인사 기록(이력서·근태·인사발령) · 직원 등록(계정 없이 인사 기록) · 정보 수정(공문 없이 바로) · 출근기록부 ·
 //  퇴사·권고사직 · 직책·부서 설정(회사별 추가·숨김) · 사내 규정(취업규칙 등)
 import React from "react";
-import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
+import { runDelete, runBulkTask } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { AddressField, BirthSelect } from "./ResumeInputs";
 import { addDoc, arrayUnion, collection, deleteDoc, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
@@ -565,7 +565,7 @@ export function CompanyRules({ company, canEdit = false }) {
   const registerAll = async () => {
     if (!tpls.length || !(await kpConfirm(`표준안 ${tpls.length}건을 우리 회사 규정으로 한 번에 등록할까요?\n(등록 후에도 각각 고칠 수 있습니다)`))) return;
     setBusyAll(true);
-    try { for (const t of tpls) await addDoc(collection(db, "companyRules"), { companyName: company, title: t.title, category: t.category, body: t.body, effectiveDate: kstDay(), version: 1, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "" }); } finally { setBusyAll(false); }
+    try { await runBulkTask({ count: (tpls).length, label: "규정", verb: "등록", unitWord: "건", task: async (progress) => { let _k = 0; for (const t of tpls) { await addDoc(collection(db, "companyRules"), { companyName: company, title: t.title, category: t.category, body: t.body, effectiveDate: kstDay(), version: 1, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "" }); progress(++_k); } } }); } finally { setBusyAll(false); }
   };
   const save = async () => {
     const e = edit; if (!e.title.trim() || !e.body.trim()) return alert("제목과 내용을 입력해 주세요.");

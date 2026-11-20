@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { db, auth } from "../../firebase";
-import { runDelete } from "../../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창
+import { runDelete, runBulkTask } from "../../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창
 import { getDoc, collection, query, where, getDocs, doc, deleteDoc, addDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { kpConfirm } from "../../kpDialog";
 
@@ -168,7 +168,8 @@ export default function SettingsAddress() {
       const rows = XLSX.utils.sheet_to_json(ws);
 
       let count = 0;
-      for (const row of rows) {
+      await runBulkTask({ count: (rows).length, label: "주소", verb: "등록", unitWord: "건", task: async (progress) => { let _k = 0;
+      for (const row of rows) { progress(_k++);
         const name = String(row["회사명"] || row["name"] || "").trim();
         if (!name) continue;
         await addDoc(collection(db, "places"), {
@@ -184,6 +185,7 @@ export default function SettingsAddress() {
         });
         count++;
       }
+      } });
       alert(`${count}건 등록 완료`);
       loadAddress();
     } catch (err) {

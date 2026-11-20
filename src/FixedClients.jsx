@@ -9,7 +9,7 @@ import { Dialog } from "@headlessui/react";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { fmtMoney, fmtPhone, moneyDigits } from "./formatInput";
 import { CustomSelect } from "./CustomSelect";
-import { deleteDocsAtomic } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
+import { deleteDocsAtomic, runBulkTask } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
 import { CompanyOptionPicker } from "./companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 import { kpConfirm } from "./kpDialog";
@@ -604,7 +604,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
     if (!selected.length) return alert("정산처리할 항목을 선택하세요.");
     const targets = rows.filter(r => selected.includes(r.id));
     if (!(await kpConfirm(`${targets.length}건의 정산상태를 변경하시겠습니까?`))) return;
-    for (const r of targets) await saveRow({ ...r, 정산완료: !r.정산완료 });
+    await runBulkTask({ count: (targets).length, label: "항목", verb: "정산상태 변경", unitWord: "건", task: async (progress) => { let _k = 0; for (const r of targets) { await saveRow({ ...r, 정산완료: !r.정산완료 }); progress(++_k); } } });
     setSelected([]);
   };
 
@@ -683,12 +683,14 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
 
   const submitFastRows = async () => {
     const vc = getViewCompany();
-    for (const row of fastRows) {
+    await runBulkTask({ count: (fastRows).length, label: "항목", verb: "등록", unitWord: "건", task: async (progress) => { let _k = 0;
+    for (const row of fastRows) { progress(_k++);
       const id = crypto.randomUUID();
       const finalRow = calcRow(row);
       await setDoc(doc(coll, id), { id, ...finalRow, 정산완료: false, companyName: vc });
       if (row.거래처명) saveClientConfig(row.거래처명, { 기사단가: Number(row.기사단가 || 0), 수수료단가: Number(row.수수료단가 || 0), 수수료기준: row.수수료기준 || "수량", 지급방식: row.지급방식 || "" });
     }
+    } });
     alert(`${fastRows.length}건 등록 완료!`);
     setFastRows([emptyFastRow()]);
     setFastOpen(false);

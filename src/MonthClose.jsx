@@ -7,6 +7,7 @@
 //  · 확인할 것이 있어도 [검증]할 수 있다(한 번 묻는다) → [1차 마감] → 경리팀(arDesk kind "close")
 //  계산은 src/closeFlow.js(순수 함수 · scripts/closeFlow.test.mjs) · 경리 2차 화면은 src/CloseFlow.jsx(mode "acct")
 import React from "react";
+import { runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 일괄 처리 진행 창
 import { createPortal } from "react-dom";
 import { useArDesk, arDeskId, MonthPicker, FlowTrack, sdCard, sdInp, Ico, IC } from "./SettleDesk";
 import { won, kstYm, monthOf, n } from "./settleCore";
@@ -204,12 +205,12 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
     const rows = gs.flatMap((g) => g.rows);
     const miss = [["청구운임", rows.filter((o) => !n(o.청구운임)).length], ["기사운임", rows.filter((o) => n(o.청구운임) && !n(o.기사운임)).length], ["차량번호", rows.filter((o) => !String(o.차량번호 || "").trim()).length], ["기사 이름", rows.filter((o) => !String(o.이름 || o.기사명 || "").trim()).length], ["배차 미완료", rows.filter((o) => (o.배차상태 || "") !== "배차완료").length]].filter(([, c]) => c > 0);
     if (miss.length && !(await kpConfirm(`${gs.length === 1 ? gs[0].client : `${gs.length}곳`}에 입력 안 된 칸이 있어요.\n\n${miss.map(([k, c]) => `· ${k} 빈칸 ${c}건`).join("\n")}\n\n그래도 검증 완료할까요?`, { title: "입력 안 된 칸이 있어요", okText: "그대로 검증 완료" }))) return;
-    setBusy("v"); try { for (const g of gs) await save(g, verifyPatch(g.row, me)); setToast(`${gs.length === 1 ? gs[0].client : `${gs.length}곳`} 검증 완료 — [1차 마감]을 누르면 경리팀으로 넘어가요`); } finally { setBusy(""); }
+    setBusy("v"); try { await runBulkTask({ count: (gs).length, label: "거래처", verb: "검증", unitWord: "곳", task: async (progress) => { let _k = 0; for (const g of gs) { await save(g, verifyPatch(g.row, me)); progress(++_k); } } }); setToast(`${gs.length === 1 ? gs[0].client : `${gs.length}곳`} 검증 완료 — [1차 마감]을 누르면 경리팀으로 넘어가요`); } finally { setBusy(""); }
   };
   const submitMany = async (gs) => {
     if (isViewer || busy || !gs.length) return;
     if (gs.length > 1 && !(await kpConfirm(`${gs.length}곳을 1차 마감할까요?\n경리팀 거래처정산에 ‘배차마감’으로 넘어가요.`))) return;
-    setBusy("s"); try { for (const g of gs) await save(g, submitPatch(g.row, me)); setToast(`${gs.length === 1 ? gs[0].client : `${gs.length}곳`} 마감 완료 — 경리팀 확인을 기다려요`); } finally { setBusy(""); }
+    setBusy("s"); try { await runBulkTask({ count: (gs).length, label: "거래처", verb: "1차 마감", unitWord: "곳", task: async (progress) => { let _k = 0; for (const g of gs) { await save(g, submitPatch(g.row, me)); progress(++_k); } } }); setToast(`${gs.length === 1 ? gs[0].client : `${gs.length}곳`} 마감 완료 — 경리팀 확인을 기다려요`); } finally { setBusy(""); }
   };
   const unlock = async (g) => { if (isViewer || busy || !g?.row) return; setBusy("u"); try { await save(g, unlockPatch(g.row, me, "월 마감에서")); setToast(g.status === "verified" ? "검증을 취소했어요" : "마감을 풀었어요"); } finally { setBusy(""); } };
 

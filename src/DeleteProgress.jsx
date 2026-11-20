@@ -30,10 +30,14 @@ const getState = () => state;
 function DeleteProgressModal() {
   const s = React.useSyncExternalStore(subscribe, getState, getState);
   if (!s) return null;
-  const { phase, count = 0, done = 0, label = "", message = "", mode = "delete" } = s;
+  const { phase, count = 0, done = 0, label = "", message = "", mode = "delete", verb = "", unitWord = "건" } = s;
   // 📥 2026-11-12 대용량 업로드도 같은 창을 쓴다(mode: "upload") — 가운데 로딩 창 · 다 올린 뒤 한 번에 목록에 반영
-  const W = mode === "upload"
-    ? { tag: "UPLOAD", ok: "등록 완료", fail: "등록 실패", run: "등록 중…", tOk: "등록 완료", tErr: "오류", tRun: "등록 중", done: "등록했습니다", ing: "등록하는 중", err: "등록하지 못했습니다. 잠시 후 다시 시도해 주세요.", hint: "창을 닫지 말고 잠시만 기다려 주세요 · 모두 올린 뒤 목록에 반영됩니다" }
+  // ⏳ 2026-11-20 일괄 저장 · 수정 · 반영도 같은 창(mode: "bulk", verb: "저장" · "지급 처리" · "반영" …)
+  const V = verb || "저장";
+  const W = mode === "bulk"
+    ? { tag: "PROGRESS", ok: `${V} 완료`, fail: `${V} 실패`, run: `${V} 중…`, tOk: "완료", tErr: "오류", tRun: "진행 중", done: `${V}했어요`, ing: `${V}하는 중`, err: `${V}하지 못했어요. 잠시 후 다시 시도해 주세요.`, hint: "창을 닫지 말고 잠시만 기다려 주세요" }
+    : mode === "upload"
+    ? { tag: "UPLOAD", ok: "등록 완료", fail: "등록 실패", run: "등록 중…", tOk: "등록 완료", tErr: "오류", tRun: "등록 중", done: "등록했습니다", ing: "등록하는 중", err: "등록하지 못했습니다. 잠시 후 다시 시도해 주세요.", hint: "창을 닫지 말고 잠시만 기다려 주세요" }
     : { tag: "DELETE", ok: "삭제 완료", fail: "삭제 실패", run: "삭제 중…", tOk: "삭제 완료", tErr: "오류", tRun: "삭제 중", done: "삭제했습니다", ing: "삭제하는 중", err: "삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.", hint: "모두 지운 뒤 한 번에 목록에 반영됩니다" };
   const total = Math.max(1, count);
   const pct = phase === "done" ? 100 : Math.min(98, Math.round((done / total) * 100));
@@ -41,10 +45,10 @@ function DeleteProgressModal() {
   const title = phase === "done" ? W.ok : phase === "error" ? W.fail : W.run;
   return (
     <div data-kp-delete-progress="1" role="alertdialog" aria-live="assertive" aria-busy={phase === "run"}
-      style={{ position: "fixed", inset: 0, zIndex: 2147483645, background: "rgba(11,20,40,.62)", backdropFilter: "blur(3px)", WebkitBackdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Noto Sans KR',sans-serif" }}
+      style={{ position: "fixed", inset: 0, zIndex: 2147483645, background: "rgba(11,20,40,.6)", backdropFilter: "blur(10px) saturate(.8)", WebkitBackdropFilter: "blur(10px) saturate(.8)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, fontFamily: "'Noto Sans KR',sans-serif" }}
       onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
       <style>{"@keyframes kpdelin{from{transform:translateY(8px) scale(.98);opacity:0}to{transform:none;opacity:1}}@keyframes kpdelspin{to{transform:rotate(360deg)}}@keyframes kpdelbar{0%{background-position:0 0}100%{background-position:40px 0}}"}</style>
-      <div style={{ width: "min(360px,100%)", borderRadius: 18, overflow: "hidden", background: "#fff", boxShadow: "0 30px 80px rgba(11,20,40,.45)", animation: "kpdelin .16s ease-out" }}>
+      <div style={{ width: "min(380px,100%)", borderRadius: 18, overflow: "hidden", background: "#fff", boxShadow: "0 30px 80px rgba(11,20,40,.45)", animation: "kpdelin .16s ease-out" }}>
         <div style={{ padding: "16px 20px 14px", color: "#fff", background: "linear-gradient(120deg,#0F1A30 0%,#1B2B4B 62%,#2D4C82 100%)" }}>
           <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10, fontWeight: 800, letterSpacing: "0.26em", color: "#8FB0F0" }}>
             {`${W.tag} · ${phase === "done" ? W.tOk : phase === "error" ? W.tErr : W.tRun}`}
@@ -64,14 +68,20 @@ function DeleteProgressModal() {
           <div style={{ fontSize: 15, fontWeight: 800, color: "#0F1A30", textAlign: "center", wordBreak: "keep-all" }}>
             {phase === "error"
               ? (message || W.err)
-              : <>{unit}<span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{count.toLocaleString()}</span>건 {phase === "done" ? W.done : W.ing}{mode === "upload" && phase === "run" && done > 0 ? ` (${done.toLocaleString()} / ${count.toLocaleString()})` : ""}</>}
+              : <>{unit}<span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{count.toLocaleString()}</span>{unitWord} {phase === "done" ? W.done : W.ing}</>}
           </div>
+          {/* ⏳ 2026-11-20 진행 숫자 — 몇 건 중 몇 건 · 몇 % */}
+          {phase === "run" && count > 1 && (
+            <div style={{ width: "100%", display: "flex", justifyContent: "space-between", fontSize: 12.5, fontWeight: 800, color: "#1B2B4B", fontFamily: MONO, fontVariantNumeric: "tabular-nums", marginBottom: -6 }}>
+              <span>{Math.min(done, count).toLocaleString()} / {count.toLocaleString()}{unitWord}</span><span>{Math.round((Math.min(done, count) / Math.max(1, count)) * 100)}%</span>
+            </div>
+          )}
           {phase !== "error" && (
             <div style={{ width: "100%", height: 8, borderRadius: 999, background: "#E4EBF7", overflow: "hidden" }}>
               <div style={{ width: `${phase === "run" && pct < 8 ? 8 : pct}%`, height: "100%", borderRadius: 999, transition: "width .25s ease", background: phase === "done" ? "#2D4C82" : "repeating-linear-gradient(45deg,#2D4C82 0 10px,#4B6CB7 10px 20px)", backgroundSize: "40px 100%", animation: phase === "run" ? "kpdelbar .7s linear infinite" : "none" }} />
             </div>
           )}
-          {phase === "run" && <div style={{ fontSize: 12, fontWeight: 700, color: "#7A879C" }}>{W.hint}</div>}
+          {phase === "run" && <div style={{ fontSize: 12, fontWeight: 700, color: "#7A879C", whiteSpace: "nowrap" }}>{W.hint}</div>}
         </div>
       </div>
     </div>
@@ -100,7 +110,7 @@ let closeTimer = null;
  * @param {{count?:number, label?:string, task:(progress:(done:number)=>void)=>Promise<any>, minMs?:number}} opts
  * @returns task의 결과(실패하면 오류를 그대로 던진다)
  */
-export async function runDelete({ count = 1, label = "", task, minMs = 450, mode = "delete", slowMs = 12000 } = {}) {
+export async function runDelete({ count = 1, label = "", task, minMs = 450, mode = "delete", slowMs = 12000, verb = "", unitWord = "건" } = {}) {
   if (typeof task !== "function") return undefined;
   // 이미 창이 떠 있으면(안쪽 호출) 창은 그대로 두고 일만 한다
   if (depth > 0) return task(() => {});
@@ -108,7 +118,7 @@ export async function runDelete({ count = 1, label = "", task, minMs = 450, mode
   ensureHost();
   if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
   const n = Math.max(1, Number(count) || 1);
-  setState({ phase: "run", count: n, done: 0, label, mode });
+  setState({ phase: "run", count: n, done: 0, label, mode, verb, unitWord });
   const progress = (done) => { if (state?.phase === "run") setState({ ...state, done: Math.min(n, Number(done) || 0) }); };
   const started = Date.now();
   const work = Promise.resolve().then(() => task(progress));
@@ -118,13 +128,13 @@ export async function runDelete({ count = 1, label = "", task, minMs = 450, mode
     const r = await Promise.race([work, wait(slowMs).then(() => SLOW)]);
     const left = minMs - (Date.now() - started);
     if (left > 0) await wait(left);
-    setState({ phase: "done", count: n, done: n, label, mode });
+    setState({ phase: "done", count: n, done: n, label, mode, verb, unitWord });
     closeTimer = setTimeout(() => { setState(null); closeTimer = null; }, 650);
     depth -= 1;
     if (r === SLOW) return work; // 결과는 끝날 때 돌려준다
     return r;
   } catch (e) {
-    setState({ phase: "error", count: n, done: 0, label, mode, message: e?.message ? `${mode === "upload" ? "등록" : "삭제"}하지 못했습니다 — ${e.message}` : "" });
+    setState({ phase: "error", count: n, done: 0, label, mode, verb, unitWord, message: e?.message ? `${mode === "bulk" ? (verb || "저장") : mode === "upload" ? "등록" : "삭제"}하지 못했어요 — ${e.message}` : "" });
     closeTimer = setTimeout(() => { setState(null); closeTimer = null; }, 1800);
     depth -= 1;
     throw e;
@@ -199,6 +209,37 @@ export async function runUpload({ items = [], label = "", each, chunk = 40 } = {
   if (!list.length || typeof each !== "function") return out;
   await runDelete({
     count: list.length, label, mode: "upload", slowMs: 15 * 60 * 1000, minMs: 600,
+    task: async (progress) => {
+      for (let i = 0; i < list.length; i += chunk) {
+        const part = list.slice(i, i + chunk);
+        const rs = await Promise.allSettled(part.map((x, k) => each(x, i + k)));
+        rs.forEach((r) => { if (r.status === "fulfilled") { if (r.value !== false) out.ok += 1; } else { out.fail += 1; out.errors.push(r.reason); } });
+        progress(Math.min(list.length, i + chunk));
+      }
+    },
+  });
+  return out;
+}
+
+/**
+ * ⏳ 2026-11-20 일괄 저장 · 수정 · 반영 진행 창(프로그램 공통) — 여러 건을 고칠 때 가운데 진행 창(몇 건 중 몇 건 · %)을 띄우고
+ *  뒤 화면은 흐리게 가린다(한 줄씩 바뀌는 목록이 보이지 않게).
+ *   await runBulkTask({ count: rows.length, label: "오더", verb: "지급 처리", task: async (progress) => { …; progress(i + 1); } });
+ *   const r = await runBulk({ items: rows, label: "기사", verb: "저장", each: (x) => save(x) });  // { ok, fail, errors }
+ *  · 1건이면 창 없이 바로 한다(minCount로 바꿀 수 있음) · 안에서 또 부르면 바깥 창을 그대로 쓴다
+ *  · runBulk 는 기본 한 건씩 차례로(chunk: 1) — 순서가 상관없으면 chunk 를 키워 동시에
+ */
+export async function runBulkTask({ count = 1, label = "", verb = "저장", unitWord = "건", task, minCount = 2, slowMs = 15 * 60 * 1000 } = {}) {
+  if (typeof task !== "function") return undefined;
+  if ((Number(count) || 0) < minCount) return task(() => {});
+  return runDelete({ count, label, task, mode: "bulk", verb, unitWord, slowMs, minMs: 500 });
+}
+export async function runBulk({ items = [], label = "", verb = "저장", unitWord = "건", each, chunk = 1, minCount = 2 } = {}) {
+  const list = Array.isArray(items) ? items : [];
+  const out = { ok: 0, fail: 0, errors: [] };
+  if (!list.length || typeof each !== "function") return out;
+  await runBulkTask({
+    count: list.length, label, verb, unitWord, minCount,
     task: async (progress) => {
       for (let i = 0; i < list.length; i += chunk) {
         const part = list.slice(i, i + chunk);

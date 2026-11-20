@@ -8,9 +8,10 @@ import { createPortal } from "react-dom";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { DateField } from "./CallPay";
-import { formatAccount } from "./bankUtil";
+import { formatAccountView as formatAccount } from "./bankUtil"; // 👀 화면용(긴 계좌도 자르지 않음)
 import { fmtBizNo } from "./formatInput";
 import { matchPrepay, normPlate, driverPayDiff, driverPatchFrom } from "./prepayCore";
+import { runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 가운데 진행 창(몇 건 중 몇 건 · 뒤 화면 흐림)
 
 const won = (n) => Math.round(Number(n) || 0).toLocaleString();
 const NUM = { fontVariantNumeric: "tabular-nums" };
@@ -96,26 +97,29 @@ export default function PrepayImportModal({ fileName = "", items, pool, allOrder
     setBusy(true);
     let orderN = 0, amt = 0, drvN = 0;
     const seen = new Set();
+    const drvJobs = fillDrivers ? driverPlan.map((p) => {
+      const entries = { ...p.fill };
+      if (overwrite) p.conflicts.forEach((c) => { entries[c.path] = c.next; });
+      return Object.keys(entries).length ? { p, entries } : null;
+    }).filter(Boolean) : [];
     try {
-      for (const r of picked) {
-        const date = (useHint && r.payDateHint) || payDate;
-        for (const o of r.orders) {
-          if (seen.has(o._id)) continue; seen.add(o._id);
-          await patchDispatch(o._id, { 지급상태: "지급완료", 지급일: date, 국세청승인번호: r.approvalNo, 계산서일자: r.invoiceDate, __system: true });
-          onPaid?.(o, date);
-          orderN++;
+      await runBulkTask({ count: pickedOrders.length + drvJobs.length, label: "선정산", verb: "반영", task: async (progress) => {
+        let step = 0;
+        for (const r of picked) {
+          const date = (useHint && r.payDateHint) || payDate;
+          for (const o of r.orders) {
+            if (seen.has(o._id)) continue; seen.add(o._id);
+            await patchDispatch(o._id, { 지급상태: "지급완료", 지급일: date, 국세청승인번호: r.approvalNo, 계산서일자: r.invoiceDate, __system: true });
+            onPaid?.(o, date);
+            orderN++; progress(++step);
+          }
+          amt += r.amount;
         }
-        amt += r.amount;
-      }
-      if (fillDrivers) {
-        for (const p of driverPlan) {
-          const entries = { ...p.fill };
-          if (overwrite) p.conflicts.forEach((c) => { entries[c.path] = c.next; });
-          if (!Object.keys(entries).length) continue;
+        for (const { p, entries } of drvJobs) {
           await updateDoc(doc(db, "drivers", p.d.id), { ...driverPatchFrom(p.d, entries), 정산정보출처: `선정산 파일 ${p.r.invoiceDate || ""}`.trim() });
-          drvN++;
+          drvN++; progress(++step);
         }
-      }
+      } });
       setDone({ rows: picked.length, orderN, amt, drvN });
     } catch (e) {
       window.alert(`처리 중 오류가 났어요: ${e.message}\n여기까지 처리한 오더 ${orderN}건은 지급완료로 바뀌었어요.`);
@@ -124,7 +128,7 @@ export default function PrepayImportModal({ fileName = "", items, pool, allOrder
 
   const chk = "w-4 h-4 accent-[#1B2B4B]";
   const body = (
-    <div className="fixed inset-0 z-[99999] bg-[#0B1428]/60 flex items-center justify-center p-3" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
+    <div className="fixed inset-0 z-[99999] bg-[#0B1428]/60 backdrop-blur-[6px] flex items-center justify-center p-3" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
       <div className="bg-white rounded-[22px] shadow-[0_40px_100px_rgba(0,0,0,0.45)] w-[1320px] max-w-[98vw] h-[88vh] max-h-[920px] flex flex-col overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
         <div className="shrink-0 px-6 py-4 flex items-center gap-3 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div className="min-w-0 flex-1">
@@ -292,13 +296,17 @@ export function DriverPayImportModal({ fileNames = [], items = [], drivers = [],
     setBusy(true);
     let n = 0;
     try {
-      for (const r of picked) {
-        const entries = { ...r.fill };
-        if (overwrite) r.conflicts.forEach((c) => { entries[c.path] = c.next; });
-        if (!Object.keys(entries).length) continue;
-        await updateDoc(doc(db, "drivers", r.d.id), { ...driverPatchFrom(r.d, entries), 정산정보출처: `선정산 파일 ${r.it.invoiceDate || ""}`.trim() });
-        n++;
-      }
+      await runBulkTask({ count: picked.length, label: "기사 정산정보", verb: "저장", unitWord: "명", task: async (progress) => {
+        for (const r of picked) {
+          const entries = { ...r.fill };
+          if (overwrite) r.conflicts.forEach((c) => { entries[c.path] = c.next; });
+          if (Object.keys(entries).length) {
+            await updateDoc(doc(db, "drivers", r.d.id), { ...driverPatchFrom(r.d, entries), 정산정보출처: `선정산 파일 ${r.it.invoiceDate || ""}`.trim() });
+            n++;
+          }
+          progress(n);
+        }
+      } });
       setDone({ n });
     } catch (e) {
       window.alert(`저장 중 오류가 났어요: ${e.message}\n여기까지 ${n}명은 저장됐어요.`);
@@ -316,7 +324,7 @@ export function DriverPayImportModal({ fileNames = [], items = [], drivers = [],
   const curAcct = (d) => (d?.정산계좌?.acct ? `${d.정산계좌.bank || ""} ${formatAccount(d.정산계좌.bank, d.정산계좌.acct)}` : "");
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] bg-[#0B1428]/60 flex items-center justify-center p-3" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
+    <div className="fixed inset-0 z-[99999] bg-[#0B1428]/60 backdrop-blur-[6px] flex items-center justify-center p-3" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
       <div className="bg-white rounded-[22px] shadow-[0_40px_100px_rgba(0,0,0,0.45)] w-[1320px] max-w-[98vw] h-[88vh] max-h-[920px] flex flex-col overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
         <div className="shrink-0 px-6 py-4 flex items-center gap-3 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div className="min-w-0 flex-1">
@@ -418,3 +426,118 @@ export function DriverPayImportModal({ fileNames = [], items = [], drivers = [],
   );
 }
 const DRIVER_FIELD_LABEL = { 사업자번호: "사업자번호", 사업자상호: "상호", 사업자대표: "대표자", "정산계좌.bank": "은행", "정산계좌.acct": "계좌", "정산계좌.holder": "예금주" };
+
+// ══════════════════════════════════════════════════════════════════════
+// 🏦 2026-11-20 용차 대량이체 미리보기 — 확인 문구 대신 게시판(표)으로: 이체할 기사 · 계좌 미등록 기사
+//  [엑셀 받기]를 눌러야 파일이 만들어진다(onDownload). 금액 계산은 prepayCore.yongchaTransferRows
+// ══════════════════════════════════════════════════════════════════════
+export function TransferPreviewModal({ period = "", plan, onDownload, onClose }) {
+  const { rows = [], details = [], missingDetail = [], total = 0 } = plan || {};
+  const [tab, setTab] = React.useState(rows.length ? "ok" : "missing");
+  React.useEffect(() => {
+    const k = (e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    window.addEventListener("keydown", k, true);
+    return () => window.removeEventListener("keydown", k, true);
+  }, [onClose]);
+  const td = "px-3 py-2.5 text-center border-b border-[#EEF1F6]";
+  const th = "px-3 py-3 text-center text-white font-bold border-b border-white/10";
+  const supplySum = details.reduce((s, d) => s + d.기사운임, 0);
+  const vatSum = details.reduce((s, d) => s + d.부가세, 0);
+  const missSum = missingDetail.reduce((s, d) => s + d.기사운임, 0);
+  return createPortal(
+    <div className="fixed inset-0 z-[99999] bg-[#0B1428]/60 backdrop-blur-[6px] flex items-center justify-center p-3" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-white rounded-[22px] shadow-[0_40px_100px_rgba(0,0,0,0.45)] w-[1100px] max-w-[98vw] h-[84vh] max-h-[880px] flex flex-col overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="shrink-0 px-6 py-4 flex items-center gap-3 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+          <div className="min-w-0 flex-1">
+            <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]">BANK · BULK TRANSFER</div>
+            <div className="text-[17px] font-black truncate">대량이체 엑셀 <span className="text-white/50 text-[13px] font-bold ml-1">{period}</span></div>
+          </div>
+          <button type="button" onClick={onClose} className="h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 hover:bg-white/20 text-[13px] font-bold">닫기 ✕</button>
+        </div>
+        <div className="shrink-0 px-6 pt-5 pb-4 border-b border-[#EEF1F6] space-y-4 bg-[#F7F9FC]">
+          <div className="grid grid-cols-4 gap-3" style={NUM}>
+            {[["TRANSFER", "이체할 기사", `${rows.length}명`, "엑셀에 들어가요", true],
+              ["AMOUNT", "이체 합계", `${won(total)}원`, `기사운임 ${won(supplySum)} + 부가세 ${won(vatSum)}`],
+              ["NO ACCOUNT", "계좌 미등록", `${missingDetail.length}명`, missingDetail.length ? `${won(missSum)}원 빠짐` : "모두 등록됨"],
+              ["RULE", "부가세", "사업자만 10%", "사업자번호 있는 기사님"]].map(([en, l, v, sub, hot]) => (
+              <div key={en} className={`rounded-2xl px-4 py-3 border text-center ${hot ? "bg-[#0F1A30] border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}>
+                <div className={`text-[9.5px] font-extrabold tracking-[0.22em] ${hot ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`}>{en}</div>
+                <div className={`text-[12px] font-bold whitespace-nowrap ${hot ? "text-white/70" : "text-[#5B6B85]"}`}>{l}</div>
+                <div className={`text-[19px] font-black leading-tight whitespace-nowrap ${hot ? "text-white" : "text-[#0F1A30]"}`}>{v}</div>
+                <div className={`text-[11px] font-semibold whitespace-nowrap ${hot ? "text-white/50" : "text-[#9AA9C3]"}`}>{sub}</div>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between gap-4 whitespace-nowrap">
+            <div className="inline-flex rounded-xl border border-[#DCE3EE] bg-white p-0.5">
+              {[["ok", "이체할 기사", rows.length], ["missing", "계좌 미등록", missingDetail.length]].map(([k, l, n]) => (
+                <button key={k} type="button" onClick={() => setTab(k)} className={`h-8 px-3.5 rounded-[9px] text-[12.5px] font-black whitespace-nowrap transition ${tab === k ? "bg-[#0F1A30] text-white" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>
+                  {l} <span className={tab === k ? "text-white/60" : "text-[#9AA9C3]"} style={NUM}>{n}</span>
+                </button>
+              ))}
+            </div>
+            <span className="text-[12px] font-semibold text-[#9AA9C3]">{tab === "ok" ? "은행 다건이체 양식(은행 · 계좌번호 · 예금주 · 금액 · 통장표시 · 메모)으로 받아요" : "기사관리에서 계좌를 넣거나 선정산 파일로 정산정보를 가져오면 다음부터 들어가요"}</span>
+          </div>
+        </div>
+        <div className="flex-1 min-h-0 overflow-auto">
+          <table className="min-w-full text-[13px] whitespace-nowrap" style={NUM}>
+            <thead className="sticky top-0 z-[1]">
+              {tab === "ok"
+                ? <tr className="bg-[#0B1428]">{["번호", "차량번호", "기사명", "은행", "계좌번호", "예금주", "건수", "기사운임", "부가세", "이체금액"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>
+                : <tr className="bg-[#0B1428]">{["번호", "차량번호", "기사명", "건수", "기사운임", "사유"].map((h) => <th key={h} className={th}>{h}</th>)}</tr>}
+            </thead>
+            <tbody>
+              {tab === "ok" && rows.map((r, i) => {
+                const d = details[i] || {};
+                return (
+                  <tr key={i} className={i % 2 ? "bg-[#FAFBFD]" : "bg-white"}>
+                    <td className={`${td} text-[#9AA9C3]`}>{i + 1}</td>
+                    <td className={`${td} font-bold text-[#0F1A30]`}>{d.차량번호}</td>
+                    <td className={`${td} text-[#0F1A30]`}>{d.이름 || "-"}</td>
+                    <td className={`${td} font-bold text-[#1B2B4B]`}>{r.은행}</td>
+                    <td className={`${td} text-[#0F1A30]`}>{formatAccount(r.은행, r.계좌번호)}</td>
+                    <td className={`${td} text-[#3A4A66]`}>{r.예금주 || "-"}</td>
+                    <td className={`${td} text-[#3A4A66]`}>{d.건수}건</td>
+                    <td className={`${td} text-[#3A4A66]`}>{won(d.기사운임)}</td>
+                    <td className={`${td} ${d.부가세 ? "text-[#3A4A66]" : "text-[#9AA9C3]"}`}>{d.부가세 ? won(d.부가세) : "-"}</td>
+                    <td className={`${td} font-black text-[#0F1A30]`}>{won(r.금액)}</td>
+                  </tr>
+                );
+              })}
+              {tab === "missing" && missingDetail.map((d, i) => (
+                <tr key={i} className={i % 2 ? "bg-[#FAFBFD]" : "bg-white"}>
+                  <td className={`${td} text-[#9AA9C3]`}>{i + 1}</td>
+                  <td className={`${td} font-bold text-[#0F1A30]`}>{d.차량번호}</td>
+                  <td className={`${td} text-[#0F1A30]`}>{d.이름 || "-"}</td>
+                  <td className={`${td} text-[#3A4A66]`}>{d.건수}건</td>
+                  <td className={`${td} text-[#3A4A66]`}>{won(d.기사운임)}</td>
+                  <td className={`${td} text-[#7A89A3]`}>{d.등록됨 ? "기사관리에 계좌 없음" : "기사관리에 없는 차량"}</td>
+                </tr>
+              ))}
+              {(tab === "ok" ? rows.length : missingDetail.length) === 0 && <tr><td colSpan={10} className="py-16 text-center text-[13px] text-[#9AA9C3]">{tab === "ok" ? "이체할 기사가 없어요" : "계좌가 없는 기사가 없어요"}</td></tr>}
+            </tbody>
+            {tab === "ok" && rows.length > 0 && (
+              <tfoot className="sticky bottom-0">
+                <tr className="bg-[#0B1428] text-white font-black">
+                  <td colSpan={6} className="px-3 py-3 text-center">합 계 ({rows.length}명)</td>
+                  <td className="px-3 py-3 text-center">{details.reduce((s, d) => s + d.건수, 0)}건</td>
+                  <td className="px-3 py-3 text-center">{won(supplySum)}</td>
+                  <td className="px-3 py-3 text-center">{won(vatSum)}</td>
+                  <td className="px-3 py-3 text-center text-[#E9C46A]">{won(total)}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+        <div className="shrink-0 px-6 py-3.5 border-t border-[#EEF1F6] flex items-center gap-3 whitespace-nowrap bg-white">
+          <div className="text-[13.5px] text-[#3A4A66] flex-1 min-w-0 truncate" style={NUM}>
+            <b className="text-[#0F1A30]">{rows.length}명 · {won(total)}원</b>을 엑셀로 받아요{missingDetail.length ? ` · 계좌 미등록 ${missingDetail.length}명은 빠져요` : ""}
+          </div>
+          <button type="button" onClick={onClose} className="h-11 px-5 rounded-xl border border-[#DCE3EE] text-[14px] font-bold text-[#3A4A66]">취소</button>
+          <button type="button" disabled={!rows.length} onClick={() => { onDownload(); onClose(); }} className="h-11 px-6 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-40">엑셀 받기</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}

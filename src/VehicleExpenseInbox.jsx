@@ -5,6 +5,7 @@
 //    → 상신하면 "결재 중", 최종 승인되면 "승인"(수입·지출 장부 자동 기록은 전자결재 기존 기능) · 기사앱에도 같은 상태
 //  [정기 차량 사진] 주기(매일 · 매주 · 2주 · 매월) · 마감 요일/날짜 · 찍을 부위 · 대상 설정 + 기사별 제출 현황 · 사진 보기
 import React from "react";
+import { runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 일괄 처리 진행 창
 import { createPortal } from "react-dom";
 import { kpConfirm, kpPrompt } from "./kpDialog";
 import useNarrow from "./useNarrow";
@@ -200,7 +201,9 @@ export function VehicleExpenseInbox({ company, drivers = [], canEdit = true, me 
       const locked = items.length - ok.length;
       if (!ok.length) { await kpConfirm("전자결재에 올라간 영수증(결재 중 · 승인 · 지급완료)은 삭제할 수 없어요.\n전자결재 문서를 먼저 회수하거나 반려해 주세요.", { okText: "확인" }); return; }
       if (!(await kpConfirm(`영수증 ${ok.length}건을 삭제할까요?${locked ? `\n(전자결재에 올라간 ${locked}건은 빼고)` : ""}\n기사앱에서도 사라지고 되돌릴 수 없습니다.`, { okText: "삭제", danger: true }))) return;
-      for (const e of ok) { await deleteExpense(e.id); notifyDriver(e.driverId, company, "사무실에서 영수증을 삭제했어요", `${(e.kinds || []).map(vexKindLabel).join("·")} ${won(e.amount)}원 · ${String(e.date || "").slice(5).replace("-", ".")}`); }
+      await runBulkTask({ count: (ok).length, label: "영수증", verb: "삭제", unitWord: "건", task: async (progress) => { let _k = 0;
+      for (const e of ok) { progress(_k++); await deleteExpense(e.id); notifyDriver(e.driverId, company, "사무실에서 영수증을 삭제했어요", `${(e.kinds || []).map(vexKindLabel).join("·")} ${won(e.amount)}원 · ${String(e.date || "").slice(5).replace("-", ".")}`); }
+      } });
       setSel(new Set()); setCur(null); return;
     }
     if (kind === "reject") {

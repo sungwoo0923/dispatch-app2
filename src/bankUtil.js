@@ -7,7 +7,7 @@
 export const BANKS = [
   ["KB국민", { 14: [6, 2, 6], 12: [3, 2, 4, 3] }],
   ["신한", { 12: [3, 3, 6], 11: [3, 2, 6] }],
-  ["우리", { 13: [4, 3, 6] }],
+  ["우리", { 13: [4, 3, 6], 14: [3, 6, 2, 3] }], // 14자리 = 예전 한빛은행 계좌(710-214223-02-101)
   ["하나", { 14: [3, 6, 5], 12: [3, 6, 3] }],
   ["NH농협", { 13: [3, 4, 4, 2], 14: [6, 2, 6], 11: [3, 2, 6] }],
   ["IBK기업", { 14: [3, 6, 2, 3], 12: [3, 6, 3] }],
@@ -57,6 +57,14 @@ export function formatAccount(bank, raw) {
   for (const g of groups) { if (i >= d.length) break; out.push(d.slice(i, i + g)); i += g; }
   if (i < d.length) out.push(d.slice(i));
   return out.join("-");
+}
+
+// 👀 2026-11-20 화면에 보여 주기용 — 입력칸(formatAccount)은 은행 자리수만큼 잘라 더 못 치게 하지만,
+//  파일 · 저장된 계좌가 그보다 길면 잘라 보이면 안 된다(한 자리 빠진 계좌로 보임) → 그때는 4자리씩
+export function formatAccountView(bank, raw) {
+  const d = onlyDigits(raw);
+  if (!d) return "";
+  return d.length > accountMaxLen(bank) ? d.replace(/(\d{4})(?=\d)/g, "$1-") : formatAccount(bank, d);
 }
 
 // 형식 검사 — { ok, level: "ok"|"warn"|"error", msg }
