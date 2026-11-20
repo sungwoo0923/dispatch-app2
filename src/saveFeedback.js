@@ -1,6 +1,7 @@
 // ======================= src/saveFeedback.js =======================
 // ✅ 2026-11-20 "저장했어요" 알림(사용자 요청 — 저장하고 나서 저장된 건지 알 수 있게 · 떴다가 사라지게)
-//  · 모양 · 자리: "✓ 조회했어요"(src/lookupFeedback.js)와 같은 남색 알림, 화면 위쪽 가운데 · 1.8초 뒤 저절로 사라진다
+//  · 모양: "✓ 조회했어요"(src/lookupFeedback.js)와 같은 남색 알림 · 자리: 화면 한가운데(2026-11-20 사용자 요청 — 위쪽보다 잘 보이게)
+//    1.8초 뒤 저절로 사라진다 · 클릭은 통과(뒤 화면 작업을 막지 않음)
 //  · 프로그램 모든 화면(PC · 모바일 · 화주사 · 기사앱)에 한 번에 — 화면마다 고치지 않는다
 //    ① 짧은 완료 알림("저장되었습니다" · "수정 완료" …)은 [확인]을 눌러야 닫히는 창 대신 이 알림으로(kpDialog.jsx installAlertShim · kpAlert)
 //    ② 알림이 없던 [저장] 버튼 — 누른 뒤 저장이 진행된 흔적(버튼이 잠겼다 풀림 · 창이 닫힘)이 있고
@@ -35,17 +36,15 @@ export function showSaved(message = "저장했어요") {
       box.setAttribute("role", "status");
       box.setAttribute("aria-live", "polite");
       box.setAttribute("data-save-done", "");
-      box.style.cssText = "position:fixed;left:50%;top:76px;z-index:2147483000;pointer-events:none;display:flex;align-items:center;gap:9px;padding:9px 16px 9px 11px;border-radius:14px;background:#0F1A30;color:#fff;font:800 14.5px/1.2 'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕',sans-serif;box-shadow:0 14px 34px rgba(15,26,48,.32);white-space:nowrap;max-width:calc(100vw - 32px);opacity:0;transform:translate(-50%,-8px);transition:opacity .18s ease,transform .18s ease";
+      box.style.cssText = "position:fixed;left:50%;top:50%;z-index:2147483000;pointer-events:none;display:flex;align-items:center;gap:12px;padding:16px 26px 16px 18px;border-radius:18px;background:rgba(15,26,48,.94);color:#fff;font:800 17px/1.2 'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕',sans-serif;box-shadow:0 24px 60px rgba(15,26,48,.38);white-space:nowrap;max-width:calc(100vw - 32px);opacity:0;transform:translate(-50%,-50%) scale(.94);transition:opacity .18s ease,transform .18s ease";
       document.body.appendChild(box);
     }
     const d = new Date();
     const text = String(message || "저장했어요").replace(/[<>&]/g, "").trim();
-    box.innerHTML = `<span style="width:22px;height:22px;border-radius:50%;background:#7EE2A8;color:#0F1A30;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;flex-shrink:0">✓</span><span style="overflow:hidden;text-overflow:ellipsis">${text}</span><span style="opacity:.55;font-weight:700;font-size:12.5px;font-variant-numeric:tabular-nums">${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}</span>`;
-    // 휴대폰은 위쪽 메뉴가 낮아 조금 더 아래(모바일 머리줄 아래)
-    box.style.top = (window.innerWidth || 1024) < 640 ? "64px" : "76px";
-    requestAnimationFrame(() => { if (box) { box.style.opacity = "1"; box.style.transform = "translate(-50%,0)"; } });
+    box.innerHTML = `<span style="width:30px;height:30px;border-radius:50%;background:#7EE2A8;color:#0F1A30;display:inline-flex;align-items:center;justify-content:center;font-size:17px;font-weight:900;flex-shrink:0">✓</span><span style="overflow:hidden;text-overflow:ellipsis">${text}</span><span style="opacity:.55;font-weight:700;font-size:13px;font-variant-numeric:tabular-nums">${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}</span>`;
+    requestAnimationFrame(() => { if (box) { box.style.opacity = "1"; box.style.transform = "translate(-50%,-50%) scale(1)"; } });
     clearTimeout(timer);
-    timer = setTimeout(() => { if (box) { box.style.opacity = "0"; box.style.transform = "translate(-50%,-8px)"; } }, 1800);
+    timer = setTimeout(() => { if (box) { box.style.opacity = "0"; box.style.transform = "translate(-50%,-50%) scale(.96)"; } }, 1800);
   } catch { /* 표시만 — 실패해도 저장에는 영향 없음 */ }
 }
 
