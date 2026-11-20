@@ -182,9 +182,9 @@ export function matchPrepay(items, pool, opts = {}) {
   // 0) 이미 반영 · 차량번호 없음 · 지입 차량
   res.forEach((r) => {
     const done = doneByApproval.get(normApproval(r.approvalNo));
-    if (r.approvalNo && done?.length) { r.status = "done"; r.orders = done; r.sum = sumOf(done); r.reason = "이미 반영된 계산서예요"; return; }
-    if (!r.plateKey) { r.status = "none"; r.reason = "차량번호가 없어요"; return; }
-    if (fleet.has(r.plateKey)) { r.status = "fleet"; r.reason = "소속 차량(지입 · 직영 · 임대)이라 지입정산관리에서 지급해요"; }
+    if (r.approvalNo && done?.length) { r.status = "done"; r.orders = done; r.sum = sumOf(done); r.reason = "이미 반영된 계산서"; return; }
+    if (!r.plateKey) { r.status = "none"; r.reason = "차량번호 없음"; return; }
+    if (fleet.has(r.plateKey)) { r.status = "fleet"; r.reason = "소속 차량 — 지입정산관리에서 지급"; }
   });
   const open = () => res.filter((r) => r.status === "none" && r.plateKey && byPlate.has(r.plateKey));
   // 1) 같은 날 오더(계산서 날짜 = 상차일)
@@ -213,13 +213,13 @@ export function matchPrepay(items, pool, opts = {}) {
   // 5) 금액이 안 맞는 줄 — 가장 그럴듯한 오더 묶음을 "확인 필요"로 보여 준다(체크하면 반영)
   open().forEach((r) => {
     const cands = free(byPlate.get(r.plateKey)).filter((o) => inWindow(r, o));
-    if (!cands.length) { r.reason = r.invoiceDate ? `계산서 날짜(${r.invoiceDate}) 전 ${windowDays}일 안에 미지급 오더가 없어요` : "미지급 오더가 없어요"; return; }
+    if (!cands.length) { r.reason = r.invoiceDate ? `계산서일 전 ${windowDays}일 안 미지급 오더 없음` : "미지급 오더 없음"; return; }
     const same = r.invoiceDate ? cands.filter((o) => String(o.상차일 || "").slice(0, 10) === r.invoiceDate) : [];
     const pick = same.length ? same : cands;
     take(r, pick, same.length ? "같은 날 오더(금액 다름)" : `기간 안 ${pick.length}건(금액 다름)`, "check");
     r.reason = `금액이 달라요 — 파일 ${r.amount.toLocaleString()}원 · 오더 기사운임 ${r.sum.toLocaleString()}원(부가세 포함 ${Math.round(r.sum * 1.1).toLocaleString()}원)`;
   });
-  res.forEach((r) => { if (r.status === "none" && !r.reason) r.reason = fleet.has(r.plateKey) ? "소속 차량(지입 · 직영 · 임대)이에요" : "이 차량번호로 된 미지급 용차 오더가 없어요"; });
+  res.forEach((r) => { if (r.status === "none" && !r.reason) r.reason = fleet.has(r.plateKey) ? "소속 차량 — 지입정산관리에서 지급" : "이 차량의 미지급 용차 오더 없음"; });
   return res;
 }
 
