@@ -1044,7 +1044,7 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, comp
       </div>
 
       {/* 출근지 / 도착지 — 지입차는 고정 노선이 없어 반경 설정 자체가 필요 없다 */}
-      {data.등급 !== "지입" && (
+      {!isFleetGrade(data.등급) && (
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
         {[
           {
@@ -2057,7 +2057,7 @@ async function cancelDriverAssignment(order, driver) {
       기사확인상태: null, 기사거절사유: null, 기사확인일시: null, 기사완료일시: null,
       updatedAt: serverTimestamp(), _lastModified: Date.now(),
     });
-    if (driver.등급 === "지입") {
+    if (isFleetGrade(driver.등급)) {
       addDoc(collection(db, "driver_notifications"), {
         driverId: driver.id,
         type: "canceled",

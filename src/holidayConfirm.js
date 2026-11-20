@@ -2,6 +2,7 @@
 // 근무가능요일이 아닌 날(휴차)에 지입 기사를 배차하려 하면 띄운다.
 // 전산상 휴차여도 불가피하게 운행할 수 있으므로 "그래도 배차" / "취소" 중 선택하게 한다.
 // React 화면 어디서 호출하든 쓸 수 있게 DOM으로 직접 그리고 Promise<boolean>을 돌려준다.
+import { isFleetGrade } from "./fleetGradesCore";
 const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
 
 export function weekdayKo(dateStr) {
@@ -30,7 +31,7 @@ export function findRestConflict(drivers, plate, dateStr) {
   const p = normPlate(plate);
   if (!p) return null;
   const drv = (drivers || []).find(d => normPlate(d.차량번호) === p);
-  if (!drv || drv.등급 !== "지입") return null;
+  if (!drv || !isFleetGrade(drv.등급)) return null; // 🚛 2026-11-20 지입 · 직영 · 임대 · 분양
   const date = String(dateStr || kstToday()).slice(0, 10);
   const days = Array.isArray(drv.근무요일) ? drv.근무요일 : [];
   const wd = weekdayKo(date);

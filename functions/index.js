@@ -8,6 +8,7 @@
 // "Functions codebase could not be analyzed successfully" 오류의 원인이었음).
 // 이 파일 전체가 v1 스타일로 작성돼 있으므로 v1 서브패스에서 명시적으로 가져온다.
 const functions = require("firebase-functions/v1");
+const SRV_FLEET_GRADES = ["지입", "직영", "임대", "분양"]; // 🚛 2026-11-20 기사앱 오더 수락/거절 대상 등급(src/fleetGradesCore.js FLEET_GRADES와 같게)
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
@@ -471,7 +472,7 @@ exports.notifyDispatchCanceled =
       if (checkState !== "거절" && before["차량번호"]) try {
         const plate = normalizePlateServer(before["차량번호"]);
         // ⭐ 2026-11-02 점검 — 회사 구분 없이 차량번호로만 찾던 것을 이 오더 회사의 기사로 한정
-        const driverDoc = await findDriverByPlate(before["차량번호"], before.companyName || after.companyName, (d) => normalizePlateServer(d.data()["차량번호"]) === plate && (checkState || d.data()["등급"] === "지입"));
+        const driverDoc = await findDriverByPlate(before["차량번호"], before.companyName || after.companyName, (d) => normalizePlateServer(d.data()["차량번호"]) === plate && (checkState || SRV_FLEET_GRADES.includes(String(d.data()["등급"] || "").trim())));
         if (driverDoc) {
           const userSnap = await db.collection("users").doc(driverDoc.id).get();
           const userData = userSnap.exists ? userSnap.data() : null;
@@ -640,7 +641,7 @@ exports.notifyFleetDriverNewOrder =
         // ⭐ 2026-11-02 점검 — 다른 회사 같은 번호 기사의 등급으로 승인대기를 잘못 거는 것 방지
         const wDriverDoc = await findDriverByPlate(after["차량번호"], after.companyName);
         // ⭐ 2026-11-02 기사앱에 가입한(uid가 있는) 지입 기사만 — 아직 가입 안 한 차량은 수락할 화면이 없어 승인대기로 멈춘다
-        if (wDriverDoc?.data()?.["등급"] === "지입" && !!wDriverDoc.data().uid) {
+        if (SRV_FLEET_GRADES.includes(String(wDriverDoc?.data()?.["등급"] || "").trim()) && !!wDriverDoc.data().uid) { // 🚛 2026-11-20 지입 · 직영 · 임대 · 분양
           await change.after.ref.update({
             기사확인상태: "대기",
             기사거절사유: null,
