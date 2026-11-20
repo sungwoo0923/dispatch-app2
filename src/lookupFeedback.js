@@ -1,7 +1,8 @@
 // ======================= src/lookupFeedback.js =======================
 // 🔎 2026-11-19 [조회]를 누르면 "조회했어요" 표시(사용자 요청 — 조회가 된 건지 안 된 건지 알 수 없다)
 //  · 프로그램 모든 화면(PC · 모바일)에 한 번에 — 화면마다 고치지 않고, 글자가 "조회"인 버튼을 누르거나
-//    그 버튼 옆 검색칸에서 Enter를 치면 버튼 바로 아래에 작은 표시가 1.6초 떴다 사라진다(누른 시각까지 보여서 다시 눌러도 알 수 있다)
+//    그 버튼 옆 검색칸에서 Enter를 치면 화면 위쪽 가운데에 표시가 1.6초 떴다 사라진다(누른 시각까지 보여서 다시 눌러도 알 수 있다)
+//    2026-11-19 사용자 요청 — 검색창 옆이 아니라 상단 중앙에
 //  · 대상 버튼 글자: 조회 · 조회하기 · 다시 조회 · 새로 조회 · 기간 조회 · …(끝이 "조회"이고 6글자 이하) 또는 data-lookup 이 붙은 버튼
 //  · 빼고 싶은 버튼은 data-no-lookup-toast
 const pad = (n) => String(n).padStart(2, "0");
@@ -19,25 +20,23 @@ let box = null; let timer = null;
 export function showLookupDone(anchor) {
   try {
     const r = anchor?.getBoundingClientRect?.();
-    if (!r || (!r.width && !r.height)) return;
+    if (!r || (!r.width && !r.height)) return; // 화면에 보이는 버튼일 때만
     if (!box) {
       box = document.createElement("div");
       box.setAttribute("role", "status");
       box.setAttribute("aria-live", "polite");
       box.setAttribute("data-lookup-done", "");
-      box.style.cssText = "position:fixed;z-index:2147483000;pointer-events:none;padding:6px 11px;border-radius:10px;background:#0F1A30;color:#fff;font:800 12.5px/1.2 'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕',sans-serif;box-shadow:0 10px 26px rgba(15,26,48,.28);white-space:nowrap;transition:opacity .18s ease,transform .18s ease;opacity:0;transform:translateY(-4px)";
+      box.style.cssText = "position:fixed;z-index:2147483000;pointer-events:none;padding:9px 16px;border-radius:12px;background:#0F1A30;color:#fff;font:800 14px/1.2 'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕',sans-serif;box-shadow:0 10px 26px rgba(15,26,48,.28);white-space:nowrap;transition:opacity .18s ease,transform .18s ease;opacity:0;transform:translate(-50%,-6px)";
       document.body.appendChild(box);
     }
     const d = new Date();
     box.innerHTML = `<span style="color:#7EE2A8">✓</span> 조회했어요 <span style="opacity:.6;font-weight:700;margin-left:4px;font-variant-numeric:tabular-nums">${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}</span>`;
-    const w = box.offsetWidth || 150;
-    const left = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8);
-    const below = r.bottom + 40 < window.innerHeight;
-    box.style.left = `${left}px`;
-    box.style.top = `${below ? r.bottom + 6 : Math.max(8, r.top - 36)}px`;
-    requestAnimationFrame(() => { if (box) { box.style.opacity = "1"; box.style.transform = "translateY(0)"; } });
+    // 상단 중앙 — 위쪽 메뉴 바로 아래쯤
+    box.style.left = "50%";
+    box.style.top = "76px";
+    requestAnimationFrame(() => { if (box) { box.style.opacity = "1"; box.style.transform = "translate(-50%,0)"; } });
     clearTimeout(timer);
-    timer = setTimeout(() => { if (box) { box.style.opacity = "0"; box.style.transform = "translateY(-4px)"; } }, 1600);
+    timer = setTimeout(() => { if (box) { box.style.opacity = "0"; box.style.transform = "translate(-50%,-6px)"; } }, 1600);
   } catch { /* 표시만 — 실패해도 조회에는 영향 없음 */ }
 }
 
