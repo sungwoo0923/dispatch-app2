@@ -2567,8 +2567,10 @@ const applyListTools = (docs, f) => {
 };
 
 // ⭐ 2026-11-09 결재함·내 기안함 상태 필터 공용 — 같은 순서·같은 이름·같은 판정(지급 대기·지급완료는 해당 문서가 있을 때만 보인다)
-export const AP_STATUS_TABS = [["all", "전체"], ["pending", "진행 중"], ["approved", "완료"], ["paywait", "지급 대기"], ["paid", "지급완료"], ["rejected", "반려"], ["cancelled", "결재 취소"], ["withdrawn", "회수"]];
-const PAY_TAB_KEYS = ["paywait", "paid"];
+// 💳 2026-11-20 '부분 지급' 버튼 — 여러 줄 지출결의에서 일부 줄만 지급된 문서(남은 줄 지급 필요)를 따로 모아 본다.
+//  지급 대기 = 아직 한 줄도 지급 안 됨 · 부분 지급 = 일부 지급(남은 줄 있음) · 지급완료 = 전부 지급 — 한 문서는 한 버튼에만
+export const AP_STATUS_TABS = [["all", "전체"], ["pending", "진행 중"], ["approved", "완료"], ["paywait", "지급 대기"], ["paypartial", "부분 지급"], ["paid", "지급완료"], ["rejected", "반려"], ["cancelled", "결재 취소"], ["withdrawn", "회수"]];
+const PAY_TAB_KEYS = ["paywait", "paypartial", "paid"];
 // 상태별 묶음 — pendingFilter로 "진행 중"의 범위를 정한다(결재함은 내 차례인 문서를 '결재 대기'로 따로 빼서 진행 중에서 제외)
 function apStatusSets(docs, { pendingFilter = () => true } = {}) {
   return {
@@ -2576,14 +2578,15 @@ function apStatusSets(docs, { pendingFilter = () => true } = {}) {
     pending: docs.filter((d) => d.status === "pending" && pendingFilter(d)),
     // ⭐ 2026-11-09 지급 문서(지출 결의)는 '지급 대기·지급완료'에만 — '완료'에 같은 문서가 두 번 보이던 중복 제거
     approved: docs.filter((d) => d.status === "approved" && !payState(d)),
-    paywait: docs.filter((d) => payState(d) === "wait"),
+    paywait: docs.filter((d) => payPhase(d) === "wait"),
+    paypartial: docs.filter((d) => payPhase(d) === "partial"),
     paid: docs.filter((d) => payState(d) === "paid"),
     rejected: docs.filter((d) => d.status === "rejected"),
     cancelled: docs.filter((d) => d.status === "cancelled"),
     withdrawn: docs.filter((d) => d.status === "withdrawn"),
   };
 }
-const apStatusKeys = (sets, showPay = false) => AP_STATUS_TABS.filter(([k]) => !PAY_TAB_KEYS.includes(k) || showPay || sets.paywait.length || sets.paid.length);
+const apStatusKeys = (sets, showPay = false) => AP_STATUS_TABS.filter(([k]) => !PAY_TAB_KEYS.includes(k) || showPay || sets.paywait.length || sets.paypartial?.length || sets.paid.length);
 
 function Tabs({ tabs, tab, setTab }) {
   return (
@@ -2871,7 +2874,10 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
     todo: L.filter((d) => myTurn(d, uid)),
     ...inboxStatus,
     // 💸 지급 대기·지급완료 — 내가 결재선에 있는 문서 + 내가 지급 처리할 수 있는 회사 지출 결의(경리·재무, 오래된 것부터)
-    paywait: [...new Map([...inboxStatus.paywait, ...payMine.filter((d) => payState(d) === "wait" && canPay(d, meFull, payFlagsInbox))].map((d) => [d.id, d])).values()]
+    paywait: [...new Map([...inboxStatus.paywait, ...payMine.filter((d) => payPhase(d) === "wait" && canPay(d, meFull, payFlagsInbox))].map((d) => [d.id, d])).values()]
+      .sort((a, b) => toMs(a.updatedAt || a.createdAt) - toMs(b.updatedAt || b.createdAt)),
+    // 💳 2026-11-20 부분 지급 — 지급 대기처럼 오래된 것부터(남은 줄을 먼저 처리하도록)
+    paypartial: [...new Map([...inboxStatus.paypartial, ...payMine.filter((d) => payPhase(d) === "partial" && canPay(d, meFull, payFlagsInbox))].map((d) => [d.id, d])).values()]
       .sort((a, b) => toMs(a.updatedAt || a.createdAt) - toMs(b.updatedAt || b.createdAt)),
     paid: [...new Map([...inboxStatus.paid, ...payMine.filter((d) => payState(d) === "paid" && canPay(d, meFull, payFlagsInbox))].map((d) => [d.id, d])).values()],
     cc: L.filter((d) => (d.ccUids || []).includes(uid)),
@@ -2880,7 +2886,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
   };
   // 🛠 2026-11-14 '전체'가 비어 보이던 문제 — 결재선에는 없지만 내가 지급 처리하는 문서(경리 · 재무의 지급 대기 · 지급완료)도 전체에 넣는다
   //  (예전엔 지급 대기 3 · 지급완료 31인데 전체는 0건이었다 — 전체 = 다른 상태 탭에 보이는 문서를 모두 합친 것)
-  sets.all = [...new Map([...inboxStatus.all, ...sets.paywait, ...sets.paid].map((d) => [d.id, d])).values()].sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
+  sets.all = [...new Map([...inboxStatus.all, ...sets.paywait, ...sets.paypartial, ...sets.paid].map((d) => [d.id, d])).values()].sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
   const mineL = L.filter((d) => d.drafterUid === uid);
   const mineSets = apStatusSets(mineL);
   const redraft = (d) => { setOpen(null); setPreset({ ...d, editId: null }); setPage(d.cat); };
