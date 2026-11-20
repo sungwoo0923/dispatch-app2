@@ -184,7 +184,7 @@ export function matchPrepay(items, pool, opts = {}) {
     const done = doneByApproval.get(normApproval(r.approvalNo));
     if (r.approvalNo && done?.length) { r.status = "done"; r.orders = done; r.sum = sumOf(done); r.reason = "이미 반영된 계산서예요"; return; }
     if (!r.plateKey) { r.status = "none"; r.reason = "차량번호가 없어요"; return; }
-    if (!byPlate.has(r.plateKey) && fleet.has(r.plateKey)) { r.status = "fleet"; r.reason = "지입 · 직영 차량이라 지입정산관리에서 처리해요"; }
+    if (fleet.has(r.plateKey)) { r.status = "fleet"; r.reason = "소속 차량(지입 · 직영 · 임대)이라 지입정산관리에서 지급해요"; }
   });
   const open = () => res.filter((r) => r.status === "none" && r.plateKey && byPlate.has(r.plateKey));
   // 1) 같은 날 오더(계산서 날짜 = 상차일)
@@ -219,7 +219,7 @@ export function matchPrepay(items, pool, opts = {}) {
     take(r, pick, same.length ? "같은 날 오더(금액 다름)" : `기간 안 ${pick.length}건(금액 다름)`, "check");
     r.reason = `금액이 달라요 — 파일 ${r.amount.toLocaleString()}원 · 오더 기사운임 ${r.sum.toLocaleString()}원(부가세 포함 ${Math.round(r.sum * 1.1).toLocaleString()}원)`;
   });
-  res.forEach((r) => { if (r.status === "none" && !r.reason) r.reason = fleet.has(r.plateKey) ? "지입 · 직영 차량이에요" : "이 차량번호로 된 미지급 용차 오더가 없어요"; });
+  res.forEach((r) => { if (r.status === "none" && !r.reason) r.reason = fleet.has(r.plateKey) ? "소속 차량(지입 · 직영 · 임대)이에요" : "이 차량번호로 된 미지급 용차 오더가 없어요"; });
   return res;
 }
 
@@ -254,4 +254,28 @@ export function driverPatchFrom(driver, entries) {
   });
   if (acct) patch.정산계좌 = acct;
   return patch;
+}
+
+// 🏦 2026-11-20 용차 대량이체 — 기사별 미지급 합계를 인터넷뱅킹 다건이체 양식으로(지게차 지급과 같은 열)
+//  금액: 사업자번호가 있는 기사(세금계산서 받는 용차) = 기사운임 + 부가세 10% · 없으면 기사운임 그대로
+//  계좌(기사관리 정산계좌)가 없는 기사는 빼고 missing 으로 알려 준다
+export function yongchaTransferRows(summary = [], driverByPlate = new Map(), { period = "", payer = "", vatRate = 0.1 } = {}) {
+  const cut = (v, n = 7) => String(v || "").replace(/\s+/g, "").slice(0, n);
+  const rows = []; const missing = [];
+  for (const g of summary || []) {
+    const supply = Math.round(Number(g.미지급액) || 0);
+    if (!(supply > 0)) continue;
+    const d = driverByPlate.get(normPlate(g.차량번호)) || {};
+    const a = d.정산계좌 && typeof d.정산계좌 === "object" ? d.정산계좌 : {};
+    const bank = String(a.bank || "").trim(); const acct = onlyDigits(a.acct);
+    if (!bank || !acct) { missing.push(`${g.이름 || d.이름 || "-"}(${g.차량번호})`); continue; }
+    const withVat = !!onlyDigits(d.사업자번호);
+    const vat = withVat ? Math.round(supply * vatRate) : 0;
+    rows.push({
+      은행: bank, 계좌번호: acct, 예금주: String(a.holder || d.이름 || g.이름 || "").trim(), 금액: supply + vat,
+      "받는분 통장표시": cut(payer || "운송료"), "내 통장표시": cut(`용차${g.이름 || ""}`),
+      메모: `${period ? `${period} ` : ""}${g.차량번호} 운임 ${g.미지급}건 · 기사운임 ${supply.toLocaleString()}${withVat ? ` + 부가세 ${vat.toLocaleString()}` : ""}`,
+    });
+  }
+  return { rows, missing, total: rows.reduce((s, r) => s + r.금액, 0) };
 }

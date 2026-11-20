@@ -16,12 +16,12 @@ const won = (n) => Math.round(Number(n) || 0).toLocaleString();
 const NUM = { fontVariantNumeric: "tabular-nums" };
 const ST = {
   match: { label: "바로 반영", cls: "bg-[#0F1A30] text-white" },
-  check: { label: "확인 필요", cls: "bg-[#FFF4E5] text-[#B54708] border border-[#F7C98B]" },
+  check: { label: "확인 필요", cls: "bg-white text-[#0F1A30] border border-[#0F1A30]" },
   done: { label: "이미 반영", cls: "bg-[#EEF3FC] text-[#1B2B4B] border border-[#C9D6EE]" },
-  fleet: { label: "지입 차량", cls: "bg-[#F4F6FA] text-[#5B6B85] border border-[#DCE3EE]" },
+  fleet: { label: "소속 차량", cls: "bg-[#F4F6FA] text-[#5B6B85] border border-[#DCE3EE]" },
   none: { label: "오더 없음", cls: "bg-[#F4F6FA] text-[#5B6B85] border border-[#DCE3EE]" },
 };
-const FILTERS = [["all", "전체"], ["match", "바로 반영"], ["check", "확인 필요"], ["done", "이미 반영"], ["none", "오더 없음"]];
+const FILTERS = [["all", "전체"], ["match", "바로 반영"], ["check", "확인 필요"], ["done", "이미 반영"], ["fleet", "소속 차량"], ["none", "오더 없음"]];
 const dateRange = (os) => {
   const ds = os.map((o) => String(o.상차일 || "").slice(5, 10)).filter(Boolean).sort();
   if (!ds.length) return "";
@@ -50,8 +50,8 @@ export default function PrepayImportModal({ fileName = "", items, pool, allOrder
     return () => window.removeEventListener("keydown", k, true);
   }, [busy, onClose]);
 
-  const cnt = (s) => results.filter((r) => (s === "none" ? r.status === "none" || r.status === "fleet" : r.status === s)).length;
-  const shown = results.filter((r) => filter === "all" || r.status === filter || (filter === "none" && r.status === "fleet"));
+  const cnt = (s) => results.filter((r) => r.status === s).length;
+  const shown = results.filter((r) => filter === "all" || r.status === filter);
   const picked = results.filter((r) => checked.has(r.key) && (r.status === "match" || r.status === "check"));
   const pickedOrders = [...new Map(picked.flatMap((r) => r.orders).map((o) => [o._id, o])).values()];
   const pickedAmt = picked.reduce((s, r) => s + r.amount, 0);
@@ -72,7 +72,7 @@ export default function PrepayImportModal({ fileName = "", items, pool, allOrder
     if (!driverByPlate.get(r.plateKey)) return { t: "미등록", c: "text-[#9AA9C3]" };
     if (!p) return { t: "-", c: "text-[#9AA9C3]" };
     const f = Object.keys(p.fill).length;
-    if (p.conflicts.length) return { t: `다른 값 ${p.conflicts.length}칸${f ? ` · 채움 ${f}칸` : ""}`, c: "text-[#B54708]", title: p.conflicts.map((c) => `${c.label}: 지금 ${c.cur} → 파일 ${c.next}`).join("\n") };
+    if (p.conflicts.length) return { t: `다른 값 ${p.conflicts.length}칸${f ? ` · 채움 ${f}칸` : ""}`, c: "text-[#0F1A30] font-black underline decoration-dotted underline-offset-2", title: p.conflicts.map((c) => `${c.label}: 지금 ${c.cur} → 파일 ${c.next}`).join("\n") };
     if (f) return { t: `채움 ${f}칸`, c: "text-[#1B2B4B] font-black" };
     return { t: "같음", c: "text-[#5B6B85]" };
   };
@@ -140,7 +140,7 @@ export default function PrepayImportModal({ fileName = "", items, pool, allOrder
                   ["바로 반영", `${cnt("match")}장`, "금액 · 차량이 맞아요"],
                   ["확인 필요", `${cnt("check")}장`, "금액이 달라요 — 보고 체크"],
                   ["이미 반영", `${cnt("done")}장`, "같은 승인번호가 있어요"],
-                  ["오더 없음", `${cnt("none")}장`, "미지급 용차 오더가 없어요"]].map(([l, v, s]) => (
+                  ["소속 · 오더 없음", `${cnt("fleet") + cnt("none")}장`, cnt("fleet") ? `소속 차량 ${cnt("fleet")}장은 지입정산관리` : "미지급 용차 오더가 없어요"]].map(([l, v, s]) => (
                   <div key={l} className="rounded-xl border border-[#E3E8F0] bg-[#F8FAFD] px-3.5 py-2.5">
                     <div className="text-[11.5px] font-bold text-[#7A89A3]">{l}</div>
                     <div className="text-[18px] font-black text-[#0F1A30]">{v}</div>
@@ -154,7 +154,7 @@ export default function PrepayImportModal({ fileName = "", items, pool, allOrder
               </div>
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px]">
                 <label className="inline-flex items-center gap-1.5 font-semibold text-[#3A4A66] cursor-pointer"><input type="checkbox" className={chk} checked={fillDrivers} onChange={(e) => setFillDrivers(e.target.checked)} />기사관리 정산정보 채우기(사업자번호 · 상호 · 대표자 · 은행 · 계좌 · 예금주) — 기사관리에 있는 차량 {driverPlan.length}대</label>
-                {fillDrivers && drvConflictN > 0 && <label className="inline-flex items-center gap-1.5 font-semibold text-[#B54708] cursor-pointer"><input type="checkbox" className={chk} checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} />이미 적힌 값이 다르면 파일 값으로 바꾸기({drvConflictN}명)</label>}
+                {fillDrivers && drvConflictN > 0 && <label className="inline-flex items-center gap-1.5 font-semibold text-[#0F1A30] cursor-pointer"><input type="checkbox" className={chk} checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} />이미 적힌 값이 다르면 파일 값으로 바꾸기({drvConflictN}명)</label>}
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
                 {FILTERS.map(([k, l]) => (
@@ -189,7 +189,7 @@ export default function PrepayImportModal({ fileName = "", items, pool, allOrder
                           {r.orders.length ? <><b className="text-[#0F1A30]">{r.orders.length}건</b> <span className="text-[#5B6B85]">{dateRange(r.orders)}</span>{r.how && <div className="text-[11px] text-[#9AA9C3]">{r.how}</div>}</> : <span className="text-[11.5px] text-[#9AA9C3] whitespace-normal">{r.reason}</span>}
                         </td>
                         <td className="px-2.5 py-2 text-right whitespace-nowrap text-[#3A4A66]">{r.orders.length ? won(r.sum * 1.1) : "-"}</td>
-                        <td className={`px-2.5 py-2 text-right whitespace-nowrap font-bold ${r.status === "check" ? "text-[#B54708]" : "text-[#9AA9C3]"}`}>{r.orders.length ? won(r.diff) : "-"}</td>
+                        <td className={`px-2.5 py-2 text-right whitespace-nowrap font-bold ${r.status === "check" ? "text-[#0F1A30] font-black" : "text-[#9AA9C3]"}`}>{r.orders.length ? won(r.diff) : "-"}</td>
                         <td className={`px-2.5 py-2 text-center whitespace-nowrap text-[12px] ${di.c}`} title={di.title}>{di.t}</td>
                         <td className="px-2.5 py-2 text-center whitespace-nowrap text-[11.5px] text-[#5B6B85]">{r.approvalNo || "-"}</td>
                       </tr>

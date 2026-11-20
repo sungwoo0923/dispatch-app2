@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import {
   parsePrepayRows, isPrepaySheet, invoiceDateOf, payDateHintOf, normalizeBankName,
-  amountClose, matchPrepay, driverPayDiff, driverPatchFrom,
+  amountClose, matchPrepay, driverPayDiff, driverPatchFrom, yongchaTransferRows,
 } from "../src/prepayCore.js";
 
 let n = 0;
@@ -105,6 +105,24 @@ t("기사관리 정산정보 — 빈 칸만 채우고 다른 값은 따로", () 
   const patch = driverPatchFrom({ 정산계좌: { bank: "NH농협" } }, fill);
   assert.deepEqual(patch.정산계좌, { bank: "NH농협", acct: "3521000000001", holder: "홍길동" });
   assert.equal(patch.사업자상호, "가나용달");
+});
+
+t("용차 대량이체 — 사업자는 부가세 포함 · 계좌 없는 기사는 빼고 알려 주기", () => {
+  const drivers = new Map([
+    ["경기93자0001", { 이름: "홍길동", 사업자번호: "1210400001", 정산계좌: { bank: "NH농협", acct: "352-1000-0000-01", holder: "홍길동" } }],
+    ["부산92아0003", { 이름: "이영희", 정산계좌: { bank: "카카오뱅크", acct: "3333010000003", holder: "" } }],
+  ]);
+  const { rows, missing, total } = yongchaTransferRows([
+    { 차량번호: "경기93자0001", 이름: "홍길동", 미지급: 2, 미지급액: 100000 },
+    { 차량번호: "부산 92아 0003", 이름: "이영희", 미지급: 1, 미지급액: 50000 },
+    { 차량번호: "대전88아0004", 이름: "박민수", 미지급: 1, 미지급액: 70000 },
+    { 차량번호: "서울82바0005", 이름: "최지훈", 미지급: 0, 미지급액: 0 },
+  ], drivers, { period: "11월" });
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].금액, 110000); assert.equal(rows[0].계좌번호, "3521000000001");
+  assert.equal(rows[1].금액, 50000); assert.equal(rows[1].예금주, "이영희");
+  assert.deepEqual(missing, ["박민수(대전88아0004)"]);
+  assert.equal(total, 160000);
 });
 
 console.log(`\n선정산 매칭 테스트 ${n}개 통과`);
