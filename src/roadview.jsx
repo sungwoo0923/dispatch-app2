@@ -73,6 +73,19 @@ function nearestPano(kakao, latlng) {
   });
 }
 
+// 👆 2026-11-20 두 번 톡 → 그 방향으로 이동(모바일에서 화살표가 작아 잘 안 눌린다는 요청)
+//  누른 자리(가로 위치)를 지금 보는 방향(pan, 정북 0 · 시계방향)에 더해 갈 방향을 정한다. 화면 가로 시야는 대략 90°(확대하면 좁아짐)
+export function headingFromTap(pan, x, width, zoom = 0) {
+  const fov = 90 / Math.pow(1.35, Number(zoom) || 0);
+  const off = ((x / Math.max(1, width)) - 0.5) * fov;
+  return ((Number(pan) || 0) + off + 360) % 360;
+}
+// 위경도에서 heading(도) 쪽으로 m 미터 간 자리
+export function offsetLatLng(lat, lon, heading, m) {
+  const r = (heading * Math.PI) / 180;
+  return { lat: lat + (m * Math.cos(r)) / 111320, lon: lon + (m * Math.sin(r)) / (111320 * Math.cos((lat * Math.PI) / 180)) };
+}
+
 // 예전 방식 — 새 창으로 열기(SDK를 못 쓸 때)
 export async function openRoadviewWindow(addr) {
   const a = cleanAddr(addr);
@@ -91,6 +104,7 @@ function RoadviewModal({ addr, name, onClose }) {
   const mapRef = useRef(null);
   const [state, setState] = useState("loading"); // loading | ok | nopano | nocoord | error
   const [coord, setCoord] = useState(null);
+  const [tip, setTip] = useState(""); // 두 번 톡 이동 결과 짧은 안내
   // 부모 화면이 다시 그려져도(입력 중 등) 로드뷰를 처음부터 다시 만들지 않게 onClose는 ref로 들고 있는다
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
@@ -150,9 +164,67 @@ function RoadviewModal({ addr, name, onClose }) {
       if (!alive) return;
       setState(ok ? "ok" : "nopano");
 
+      // 👆 두 번 톡(모바일) · 두 번 클릭(PC) → 누른 쪽으로 한 칸 이동
+      const client = new kakao.maps.RoadviewClient();
+      let pendingPan = null; let moving = false; let tipTimer = null;
+      const flash = (t) => { setTip(t); clearTimeout(tipTimer); tipTimer = setTimeout(() => setTip(""), 1400); };
+      kakao.maps.event.addListener(rv, "panoid_changed", () => {
+        if (pendingPan == null) return;
+        try { const vp = rv.getViewpoint(); rv.setViewpoint({ pan: pendingPan, tilt: vp.tilt || 0, zoom: vp.zoom || 0 }); } catch { /* 무시 */ }
+        pendingPan = null;
+      });
+      const nearestId = (lat, lon, radius) => new Promise((res) => { try { client.getNearestPanoId(new kakao.maps.LatLng(lat, lon), radius, (id) => res(id || null)); } catch { res(null); } });
+      const moveToward = async (clientX) => {
+        if (moving || !alive) return;
+        const el = rvRef.current; if (!el) return;
+        const rect = el.getBoundingClientRect();
+        let vp; let pos; let cur;
+        try { vp = rv.getViewpoint(); pos = rv.getPosition(); cur = rv.getPanoId(); } catch { return; }
+        if (!pos) return;
+        const heading = headingFromTap(vp.pan, clientX - rect.left, rect.width, vp.zoom);
+        moving = true; flash("이동 중…");
+        try {
+          for (const d of [12, 22, 35, 55, 80]) {
+            const t = offsetLatLng(pos.getLat(), pos.getLng(), heading, d);
+            const id = await nearestId(t.lat, t.lon, Math.max(15, d * 0.6));
+            if (!alive) return;
+            if (id && String(id) !== String(cur)) {
+              pendingPan = heading;
+              rv.setPanoId(id, new kakao.maps.LatLng(t.lat, t.lon));
+              setTip(""); return;
+            }
+          }
+          flash("그쪽으로는 더 갈 수 있는 사진이 없어요");
+        } finally { moving = false; }
+      };
+      const el = rvRef.current;
+      let down = null; let lastTap = null;
+      const onStart = (e) => { const p = e.touches?.[0]; if (p) down = { x: p.clientX, y: p.clientY, t: Date.now(), moved: false }; };
+      const onMove = (e) => { const p = e.touches?.[0]; if (down && p && Math.hypot(p.clientX - down.x, p.clientY - down.y) > 10) down.moved = true; };
+      const onEnd = (e) => {
+        if (!down || down.moved || (e.touches && e.touches.length)) { down = null; return; }
+        const now = Date.now(); const tap = { x: down.x, y: down.y, t: now }; down = null;
+        if (lastTap && now - lastTap.t < 320 && Math.hypot(tap.x - lastTap.x, tap.y - lastTap.y) < 40) {
+          lastTap = null;
+          if (e.cancelable) e.preventDefault();
+          e.stopPropagation(); // 카카오 로드뷰가 두 번 톡을 확대로 받지 않게
+          moveToward(tap.x);
+        } else lastTap = tap;
+      };
+      const onDbl = (e) => { e.preventDefault(); e.stopPropagation(); moveToward(e.clientX); };
+      el?.addEventListener("touchstart", onStart, { passive: true, capture: true });
+      el?.addEventListener("touchmove", onMove, { passive: true, capture: true });
+      el?.addEventListener("touchend", onEnd, { passive: false, capture: true });
+      el?.addEventListener("dblclick", onDbl, true);
+
       const onResize = () => { try { rv.relayout(); map.relayout(); } catch { /* 무시 */ } };
       window.addEventListener("resize", onResize);
-      cleanup = () => window.removeEventListener("resize", onResize);
+      cleanup = () => {
+        window.removeEventListener("resize", onResize);
+        el?.removeEventListener("touchstart", onStart, true); el?.removeEventListener("touchmove", onMove, true);
+        el?.removeEventListener("touchend", onEnd, true); el?.removeEventListener("dblclick", onDbl, true);
+        clearTimeout(tipTimer);
+      };
     })();
     return () => { alive = false; cleanup(); };
   }, [addr]);
@@ -190,6 +262,7 @@ function RoadviewModal({ addr, name, onClose }) {
         <div className="flex-1 min-h-0 flex flex-col sm:grid sm:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)]">
           <div className="relative flex-[3] sm:flex-none min-h-0 bg-[#E9EDF3]">
             <div ref={rvRef} className="kp-rv-surface absolute inset-0" />
+            {tip && state === "ok" && <div className="absolute left-1/2 top-4 -translate-x-1/2 z-[5] pointer-events-none px-3.5 h-8 rounded-full bg-[#0F1A30]/85 text-white text-[12.5px] font-bold inline-flex items-center whitespace-nowrap">{tip}</div>}
             {msg && (
               <div className="absolute inset-0 flex items-center justify-center p-6 bg-[#F4F6FA]">
                 <div className="max-w-[380px] text-center text-[13.5px] font-bold text-[#3A4A66] leading-relaxed">
@@ -206,8 +279,8 @@ function RoadviewModal({ addr, name, onClose }) {
           </div>
         </div>
         {/* 안내 */}
-        <div className="shrink-0 px-4 sm:px-5 py-2 border-t border-[#EEF1F6] text-[11.5px] font-semibold text-[#7A89A3]">
-          지도의 파란 길을 누르면 그 자리 사진으로 옮겨가요 · 사진은 찍은 지 오래됐을 수 있으니 참고용으로 보세요
+        <div className="shrink-0 px-4 sm:px-5 py-2 border-t border-[#EEF1F6] text-[11.5px] font-semibold text-[#7A89A3] whitespace-nowrap overflow-hidden text-ellipsis" title="사진을 두 번 톡(PC는 더블클릭) 하면 그쪽으로 이동해요 · 지도의 파란 길을 눌러도 돼요">
+          사진을 두 번 톡(PC는 더블클릭) 하면 그쪽으로 이동해요 · 지도의 파란 길을 눌러도 돼요 · 사진은 찍은 지 오래됐을 수 있어요
         </div>
       </div>
     </div>,
