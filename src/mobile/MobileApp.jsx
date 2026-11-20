@@ -13150,7 +13150,23 @@ const handleAssignClick = async () => {
 
     {/* ── ② 상·하차 타임라인 ── */}
     <div className="px-4 pt-4 pb-1">
-      <div className={`${dSec} mb-2`}>ROUTE</div>
+      {/* 📤 2026-11-20 사용자 요청 — 업체전달 스위치를 아래 운임 칸에서 상·하차 표 오른쪽 위로(작게) 옮김 */}
+      <div className="flex items-center justify-between mb-2">
+        <div className={dSec}>ROUTE</div>
+        <button
+          type="button"
+          onClick={() => isDelivered ? setConfirmUndoDeliver(true) : setConfirmDeliver(true)}
+          style={{ touchAction: "manipulation" }}
+          aria-pressed={isDelivered}
+          title={isDelivered ? "전달 완료 — 누르면 미전달로 되돌려요" : "아직 전달하지 않음 — 누르면 전달완료로 바꿔요"}
+          className="flex items-center gap-1.5 -my-1 py-1 pl-2"
+        >
+          <span className={`text-[12px] font-bold ${isDelivered ? "text-[#0F1A30]" : "text-[#7A879C]"}`}>업체전달</span>
+          <span className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${isDelivered ? "bg-[#0F1A30]" : "bg-[#D5DCE7]"}`}>
+            <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${isDelivered ? "translate-x-4" : "translate-x-0"}`} />
+          </span>
+        </button>
+      </div>
       <div className="relative">
         <div className="absolute left-[11px] top-3 bottom-6 w-px bg-[#DCE3EE]" />
         <div className="relative pl-7 pb-3">
@@ -13201,7 +13217,7 @@ const handleAssignClick = async () => {
       )}
     </div>
 
-    {/* ── ④ 운임 + 업체전달 ── */}
+    {/* ── ④ 운임 (업체전달은 위 ROUTE 오른쪽 위로 옮김) ── */}
     <div className="px-4 pt-3 pb-4 border-t border-[#EEF1F6]">
       <div className={`${dSec} mb-2`}>FARE</div>
       <div className="grid grid-cols-3 rounded-2xl border border-[#E3E8F0] overflow-hidden">
@@ -13215,19 +13231,6 @@ const handleAssignClick = async () => {
             <div className={`text-[14.5px] font-black tabular-nums ${strong ? "text-white" : "text-[#0F1A30]"}`}>{v.toLocaleString()}<span className={`text-[10px] font-semibold ml-0.5 ${strong ? "text-white/60" : "text-[#9AA9C3]"}`}>원</span></div>
           </div>
         ))}
-      </div>
-      <div className="mt-2.5 flex items-center justify-between px-1">
-        <div>
-          <div className="text-[13px] font-bold text-[#1F2A44]">업체전달</div>
-          <div className="text-[11px] text-[#7A879C]">{isDelivered ? "전달 완료" : "아직 전달하지 않음"}</div>
-        </div>
-        <button
-          type="button"
-          onClick={() => isDelivered ? setConfirmUndoDeliver(true) : setConfirmDeliver(true)}
-          className={`relative w-12 h-7 rounded-full transition-colors duration-200 ${isDelivered ? "bg-[#0F1A30]" : "bg-[#D5DCE7]"}`}
-        >
-          <span className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${isDelivered ? "translate-x-5" : "translate-x-0"}`} />
-        </button>
       </div>
     </div>
 
