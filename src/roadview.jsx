@@ -228,6 +228,7 @@ const CamIcon = ({ size = 12 }) => (
  * variant
  *  - "form"  : 오더 등록 폼 라벨 줄(+ 경유 버튼과 같은 모양)
  *  - "inline": 오더정보 · 상세 화면의 주소 옆 작은 글자 버튼
+ *  - "icon"  : 글자 없이 카메라 아이콘만(오더 등록 폼 라벨 줄 — 담당자 · 문서 아이콘과 같은 모양, 칸이 좁아도 라벨을 안 가림)
  */
 export function RoadviewButton({ addr, name = "", variant = "form", className = "", label = "로드뷰" }) {
   const [open, setOpen] = useState(false);
@@ -239,6 +240,17 @@ export function RoadviewButton({ addr, name = "", variant = "form", className = 
   };
   const title = has ? "이 주소의 거리 사진(로드뷰)을 봐요" : "주소를 먼저 입력하면 로드뷰를 볼 수 있어요";
   const base = "inline-flex items-center gap-1 font-bold whitespace-nowrap shrink-0 transition disabled:opacity-40 disabled:cursor-not-allowed";
+  if (variant === "icon") {
+    return (
+      <>
+        <button type="button" tabIndex={-1} disabled={!has} onClick={onClick} title={has ? "로드뷰 — 이 주소의 거리 사진을 봐요" : title} aria-label="로드뷰"
+          className={`shrink-0 inline-flex items-center justify-center text-[#1B2B4B] hover:opacity-70 transition disabled:opacity-30 disabled:cursor-not-allowed ${className}`}>
+          <CamIcon size={18} />
+        </button>
+        {open && <RoadviewModal addr={cleanAddr(addr)} name={name} onClose={() => setOpen(false)} />}
+      </>
+    );
+  }
   const look = variant === "inline"
     ? "text-[11.5px] px-1.5 py-0.5 rounded-md text-[#4B5B78] border border-[#DCE3EE] bg-white hover:border-[#1B2B4B] hover:text-[#1B2B4B]"
     : "text-[11px] px-2 py-0.5 rounded-lg border bg-white text-[#1B2B4B] border-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white";

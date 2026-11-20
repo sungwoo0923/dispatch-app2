@@ -17221,8 +17221,8 @@ const similar = placeList.filter(p => {
     </label>
 
     {/* ⭐ 여기로 이동 (핵심) */}
-    <div className="flex items-center gap-1 shrink-0">
-    <RoadviewButton addr={form.상차지주소} name={form.상차지명} />
+    <div className="flex items-center gap-1.5 shrink-0">
+    <RoadviewButton addr={form.상차지주소} name={form.상차지명} variant="icon" />
 <button
   type="button"
   tabIndex={-1}   // ★ 탭 제외 유지
@@ -17400,8 +17400,8 @@ className={`
     </label>
 
     {/* ⭐ 여기로 이동 */}
-    <div className="flex items-center gap-1 shrink-0">
-    <RoadviewButton addr={form.하차지주소} name={form.하차지명} />
+    <div className="flex items-center gap-1.5 shrink-0">
+    <RoadviewButton addr={form.하차지주소} name={form.하차지명} variant="icon" />
 <button
   type="button"
   tabIndex={-1}
