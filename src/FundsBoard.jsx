@@ -6,6 +6,7 @@
 //  · 보유 자금 · 이번 달 순현금흐름 · 월평균 지출 → 운영 가능 개월수(런웨이) · 대출 잔액
 //  · 열람: 경리(입력·수정) + 대표(조회). 다른 직원에게는 메뉴가 보이지 않는다(보안 규칙도 경리·관리자만)
 import React from "react";
+import { runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 일괄 처리 진행 창
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where, arrayUnion } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import KpSubNav from "./KpSubNav";
@@ -94,7 +95,7 @@ function SetupPanel({ company, onClose }) {
     if (!ok.length) return alert("통장·현금을 하나 이상 입력해 주세요.");
     setBusy(true);
     try {
-      for (const r of ok) await addDoc(collection(db, "acctFunds"), { companyName: company, kind: r.kind, name: r.name.trim(), bank: r.bank || "", number: onlyDigits(r.number), holder: (r.holder || "").trim(), payType: isCard(r) ? (r.payType || "신용") : "", linkFundId: "", openingBalance: toInt(r.balance), openingDate: date, checks: [], active: true, createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" });
+      await runBulkTask({ count: (ok).length, label: "통장 · 카드", verb: "등록", unitWord: "건", task: async (progress) => { let _k = 0; for (const r of ok) { await addDoc(collection(db, "acctFunds"), { companyName: company, kind: r.kind, name: r.name.trim(), bank: r.bank || "", number: onlyDigits(r.number), holder: (r.holder || "").trim(), payType: isCard(r) ? (r.payType || "신용") : "", linkFundId: "", openingBalance: toInt(r.balance), openingDate: date, checks: [], active: true, createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" }); progress(++_k); } } });
       onClose();
     } catch (e) {
       // ⭐ 2026-11-02 점검 — 권한 없음 등으로 저장 실패 시 안내 없이 멈추던 문제: 오류 안내 추가

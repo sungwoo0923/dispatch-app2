@@ -8,6 +8,7 @@
 //  · 팀 순위 · 목표·규정(인센티브 규정은 영업 관리자가 정한다)
 //  계산은 src/salesCore.js, 자료는 src/salesData.js
 import React from "react";
+import { runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 일괄 처리 진행 창
 import { addDoc, collection, deleteDoc, doc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { db } from "./firebase";
@@ -554,7 +555,7 @@ function Incentive({ B, who, company, isViewer }) {
     const list = team.filter((t) => t.total > 0 && saved(t.uid)?.status !== "지급완료");
     if (!list.length) { kpAlert("확정할 인센티브가 없습니다."); return; }
     if (!(await kpConfirm(`${Number(ym.slice(5))}월 인센티브를 ${list.length}명 한 번에 확정할까요?\n합계 ${won(list.reduce((s, t) => s + (p.collectOnly ? t.confirmed : t.total), 0))}원`, { title: "전체 확정", okText: "확정" }))) return;
-    run(async () => { for (const t of list) await confirmOne(t, t.name, true); kpAlert(`${list.length}명 확정했습니다.`); });
+    run(async () => { await runBulkTask({ count: (list).length, label: "인센티브", verb: "확정", unitWord: "명", task: async (progress) => { let _k = 0; for (const t of list) { await confirmOne(t, t.name, true); progress(++_k); } } }); kpAlert(`${list.length}명 확정했습니다.`); });
   };
   const markPaid = async (u, name) => {
     const s = saved(u); if (!s) return;

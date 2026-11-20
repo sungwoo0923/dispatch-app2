@@ -7,6 +7,7 @@
 //  · 올린 내용은 이 브라우저 탭에만 잠깐 둔다(sessionStorage) — 회사 서버에 통장 원본을 저장하지 않는다
 //  읽기 · 맞추기 식: src/bankStmtCore.js (테스트 scripts/bankStmt.test.mjs)
 import React from "react";
+import { runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 일괄 처리 진행 창
 import { addDoc, arrayUnion, collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { BookHero, BookCard, Chip, MONO } from "./OfficeBooks";
@@ -179,7 +180,7 @@ export default function BankStatementBook({ company, isViewer = false }) {
     const todo = txns.filter((t) => stateOf(t) === "none");
     if (!todo.length || !(await kpConfirm(`지출결의와 안 맞고 장부에도 없는 출금 ${todo.length}건을 수입·지출 장부에 넣을까요?\n계정과목은 자동으로 골라 두니, 장부에서 확인해 주세요.`))) return;
     setBusy(true);
-    try { for (const t of todo) await toLedger(t); setMsg(`${todo.length}건을 장부에 넣었어요.`); }
+    try { await runBulkTask({ count: (todo).length, label: "출금", verb: "장부 반영", unitWord: "건", task: async (progress) => { let _k = 0; for (const t of todo) { await toLedger(t); progress(++_k); } } }); setMsg(`${todo.length}건을 장부에 넣었어요.`); }
     catch (er) { setMsg(`장부에 넣다가 멈췄어요: ${er.message}`); } finally { setBusy(false); }
   };
   const run = (fn) => async () => { setBusy(true); setMsg(""); try { await fn(); } catch (er) { setMsg(`처리하지 못했어요: ${er.message}`); } finally { setBusy(false); } };

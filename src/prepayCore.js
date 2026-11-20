@@ -261,14 +261,14 @@ export function driverPatchFrom(driver, entries) {
 //  계좌(기사관리 정산계좌)가 없는 기사는 빼고 missing 으로 알려 준다
 export function yongchaTransferRows(summary = [], driverByPlate = new Map(), { period = "", payer = "", vatRate = 0.1 } = {}) {
   const cut = (v, n = 7) => String(v || "").replace(/\s+/g, "").slice(0, n);
-  const rows = []; const missing = [];
+  const rows = []; const missing = []; const details = []; const missingDetail = [];
   for (const g of summary || []) {
     const supply = Math.round(Number(g.미지급액) || 0);
     if (!(supply > 0)) continue;
     const d = driverByPlate.get(normPlate(g.차량번호)) || {};
     const a = d.정산계좌 && typeof d.정산계좌 === "object" ? d.정산계좌 : {};
     const bank = String(a.bank || "").trim(); const acct = onlyDigits(a.acct);
-    if (!bank || !acct) { missing.push(`${g.이름 || d.이름 || "-"}(${g.차량번호})`); continue; }
+    if (!bank || !acct) { missing.push(`${g.이름 || d.이름 || "-"}(${g.차량번호})`); missingDetail.push({ 차량번호: g.차량번호, 이름: g.이름 || d.이름 || "", 건수: g.미지급 || 0, 기사운임: supply, 등록됨: !!d.id || !!d.차량번호 }); continue; }
     const withVat = !!onlyDigits(d.사업자번호);
     const vat = withVat ? Math.round(supply * vatRate) : 0;
     rows.push({
@@ -276,6 +276,7 @@ export function yongchaTransferRows(summary = [], driverByPlate = new Map(), { p
       "받는분 통장표시": cut(payer || "운송료"), "내 통장표시": cut(`용차${g.이름 || ""}`),
       메모: `${period ? `${period} ` : ""}${g.차량번호} 운임 ${g.미지급}건 · 기사운임 ${supply.toLocaleString()}${withVat ? ` + 부가세 ${vat.toLocaleString()}` : ""}`,
     });
+    details.push({ 차량번호: g.차량번호, 이름: g.이름 || d.이름 || "", 건수: g.미지급 || 0, 기사운임: supply, 부가세: vat, 사업자: withVat });
   }
-  return { rows, missing, total: rows.reduce((s, r) => s + r.금액, 0) };
+  return { rows, missing, details, missingDetail, total: rows.reduce((s, r) => s + r.금액, 0) };
 }

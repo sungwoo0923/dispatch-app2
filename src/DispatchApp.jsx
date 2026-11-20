@@ -4,7 +4,7 @@ import { isViewerNow } from "./blind"; // 🧾 특수운임 버튼(조회전용 
 import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon, usePlan } from "./plans";
 import { kpConfirm, kpPrompt } from "./kpDialog";
 import { editLossReason, lossReasonOf } from "./lossReason"; // 📑 2026-11-15 손실 오더 손실 사유
-import { runDelete, commitDeletes, deleteDocsAtomic, runUpload } from "./DeleteProgress";
+import { runDelete, commitDeletes, deleteDocsAtomic, runUpload, runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 runBulkTask — 일괄 저장 · 수정 진행 창
 import { SHEET_LINK_FIELDS, stripSheetLink } from "./sheetLinkFields"; // ⭐ 2026-11-17 복사본에 구글시트 줄 주소를 넘기지 않는다 // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제(writeBatch)
 import ProInsight from "./ProInsight";
 import NameIdToggle from "./NameIdToggle"; // ⭐ 2026-11-09 계정 이름 ↔ 아이디
@@ -73,7 +73,7 @@ import { subscribeUsersLive } from "./usersLive";
 import { useUserProfiles } from "./userProfilesLive"; // 🔒 2026-11-07 인사 프로필은 우리 회사 직원 한 건씩
 const AdminMenu = lazyView(() => import("./AdminMenu"));
 import FleetExtraFields, { DriverPayFields } from "./FleetDriverExtra"; // 💳 2026-11-20 용차 기사 정산정보(사업자 · 계좌)
-import { formatAccount as fmtAcctByBank } from "./bankUtil";
+import { formatAccountView as fmtAcctByBank } from "./bankUtil"; // 👀 화면용(긴 계좌도 자르지 않음)
 import { fmtBizNo } from "./formatInput";
 import DriverVehicleChangeModal, { DriverMergeModal } from "./DriverVehicleChange"; // ⭐ 2026-11-11 기사 차량 변경(계정은 그대로)
 import { useFixedRouteAutoDispatch, FixedRouteEditNotice } from "./FixedRoutes";
@@ -3028,7 +3028,7 @@ const FreightHomeDeck = React.lazy(() => import("./freight/FreightHomeDeck")); /
 const FreightRevenueStrip = React.lazy(() => import("./freight/FreightSettle").then((m) => ({ default: m.FreightRevenueStrip })));
 import { allowedModules } from "./freight/freightCore";
 import { useBetaOn, PayBadge, PayPopup, CallDepositDesk, PayNoticeToggle, queuePayNotice, DateField, OUT_KEY, DispatchWayPicker, isCaughtCall } from "./CallPay";
-import PrepayImportModal, { DriverPayImportModal } from "./PrepayImport"; // 💳 2026-11-20 선정산 파일(국세청승인번호 양식) → 용차지급 자동 반영 + 기사 정산정보
+import PrepayImportModal, { DriverPayImportModal, TransferPreviewModal } from "./PrepayImport"; // 💳 2026-11-20 선정산 파일(국세청승인번호 양식) → 용차지급 자동 반영 + 기사 정산정보
 import { isPrepaySheet, parsePrepayRows, yongchaTransferRows, normPlate as prepayPlate } from "./prepayCore"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
 import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
 import { DriverGuideSendModal, GUIDE_BTN, guideSentLabel, isFleetGrade } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
@@ -28714,7 +28714,7 @@ const handleCloseFileUpload = async (e) => {
 const bulkFixCloseFileIssues = async (items, fieldKey, value) => {
   if (!value) { showAlert("적용할 값을 먼저 선택하세요."); return; }
   const ids = [...new Set(items.map(it => it.rowId))];
-  await Promise.all(ids.map(id => patchDispatch(id, { [fieldKey]: value })));
+  await runBulkTask({ count: ids.length, label: "오더", verb: "수정", task: (progress) => { let k = 0; return Promise.all(ids.map(id => Promise.resolve(patchDispatch(id, { [fieldKey]: value })).finally(() => progress(++k)))); } });
   showAlert(`${ids.length}건의 ${fieldKey}이(가) "${value}"(으)로 일괄 수정되었습니다.`);
   setTimeout(() => {
     runDailyClose();
@@ -34887,7 +34887,7 @@ const computeCloseFileIssues = (raw) => {
 const bulkFixCloseFileIssues = async (items, fieldKey, value) => {
   if (!value) { showAlert("적용할 값을 먼저 선택하세요."); return; }
   const ids = [...new Set(items.map(it => it.rowId))];
-  await Promise.all(ids.map(id => patchDispatch(id, { [fieldKey]: value })));
+  await runBulkTask({ count: ids.length, label: "오더", verb: "수정", task: (progress) => { let k = 0; return Promise.all(ids.map(id => Promise.resolve(patchDispatch(id, { [fieldKey]: value })).finally(() => progress(++k)))); } });
   showAlert(`${ids.length}건의 ${fieldKey}이(가) "${value}"(으)로 일괄 수정되었습니다.`);
   setTimeout(() => {
     runDailyClose();
@@ -40825,9 +40825,10 @@ setCopyPlaceOptions(list);
           <button
             className="bg-blue-500 px-3 py-1 rounded"
             onClick={async () => {
-              for (const row of backupDeleted) {
-                await patchDispatch(row._id, row);
-              }
+              await runBulkTask({ count: backupDeleted.length, label: "오더", verb: "되돌리기", task: async (progress) => {
+                let k = 0;
+                for (const row of backupDeleted) { await patchDispatch(row._id, row); progress(++k); }
+              } });
               setUndoVisible(false);
               showAlert("삭제가 복구되었습니다.");
             }}
@@ -48652,10 +48653,11 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const next = row.정산상태 === "정산완료" ? "미정산" : "정산완료";
   const dateStr = next === "정산완료" ? todayStr8() : "";
 
-  for (const r of row._rows || []) {
-    if (!r._id) continue;
-    await patchMonthOnDoc(r._id, row.yyyymm, next, dateStr);
-  }
+  const _rs = (row._rows || []).filter((r) => r._id);
+  await runBulkTask({ count: _rs.length, label: "오더", verb: next === "정산완료" ? "정산완료 처리" : "미정산 처리", task: async (progress) => {
+    let k = 0;
+    for (const r of _rs) { await patchMonthOnDoc(r._id, row.yyyymm, next, dateStr); progress(++k); }
+  } });
 
   // ★ 로컬 즉시 반영 (안전한 버전)
   setDispatchData(prev => prev.map(d => {
@@ -48680,6 +48682,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const allIds = [];
   const patchMap = {}; // id → { yyyymm → status }
 
+  const _total = targets.reduce((n, row) => n + (row._rows || []).filter((r) => r._id).length, 0);
+  await runBulkTask({ count: _total, label: "오더", verb: "정산완료 처리", task: async (progress) => {
   for (const row of targets) {
     for (const r of row._rows || []) {
       if (!r._id) continue;
@@ -48687,8 +48691,10 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
       if (!patchMap[r._id]) patchMap[r._id] = {};
       patchMap[r._id][row.yyyymm] = "정산완료";
       await patchMonthOnDoc(r._id, row.yyyymm, "정산완료", todayStr8());
+      progress(allIds.length);
     }
   }
+  } });
 
   // ★ 로컬 즉시 반영
   if (typeof setDispatchData === "function") {
@@ -48716,6 +48722,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const allIds = [];
   const patchMap = {};
 
+  const _total = monthRows.reduce((n, row) => n + (row._rows || []).filter((r) => r._id).length, 0);
+  await runBulkTask({ count: _total, label: "오더", verb: "정산완료 처리", task: async (progress) => {
   for (const row of monthRows) {
     for (const r of row._rows || []) {
       if (!r._id) continue;
@@ -48723,8 +48731,10 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
       if (!patchMap[r._id]) patchMap[r._id] = {};
       patchMap[r._id][row.yyyymm] = "정산완료";
       await patchMonthOnDoc(r._id, row.yyyymm, "정산완료", todayStr8());
+      progress(allIds.length);
     }
   }
+  } });
 
   // ★ 로컬 즉시 반영
   if (typeof setDispatchData === "function") {
@@ -49529,7 +49539,7 @@ const handleBatchSettle = async (targetStatus) => {
   // 이름까지 맞은 것만 한꺼번에(금액만 맞은 건 사람이 확인)
   const applyAllBankMatches = async () => {
     const list = (bankMatchResult?.matches || []).filter(m => m.confidence === "이름일치" || m.confidence === "별칭");
-    for (const m of list) await applyOneMatch(m);
+    await runBulkTask({ count: list.length, label: "입금", verb: "반영", task: async (progress) => { let k = 0; for (const m of list) { await applyOneMatch(m); progress(++k); } } });
     setBankMatchResult(prev => ({ ...prev, matches: prev.matches.filter(m => !list.includes(m)) }));
     sflowToast(`${list.length}건 입금 반영 완료`, "success");
   };
@@ -49728,7 +49738,7 @@ const handleBatchSettle = async (targetStatus) => {
   const onStmtBulk = async (action, groups) => {
     if (action === "작성") {
       const todo = groups.filter(g => g.stage === "미작성");
-      for (const g of todo) await setStmtStage(g.client, g.yyyymm, "작성", { extra: { ...stmtSnap(g), excludedIds: [] } });
+      await runBulkTask({ count: todo.length, label: "명세서", verb: "작성", unitWord: "곳", task: async (progress) => { let k = 0; for (const g of todo) { await setStmtStage(g.client, g.yyyymm, "작성", { extra: { ...stmtSnap(g), excludedIds: [] } }); progress(++k); } } });
       sflowToast(todo.length ? `${todo.length}곳 작성 완료` : "이미 모두 작성했어요", "success");
       return;
     }
@@ -49767,7 +49777,7 @@ const handleBatchSettle = async (targetStatus) => {
   const saveStageAsk = async ({ date, note }) => {
     const t = stageAsk; if (!t) return;
     setStageAsk(null);
-    for (const g of t.groups) await setStmtStage(g.client, g.yyyymm, t.stage, { date, note, sub: g.sub || "", extra: stageIdx(g.stage) === 0 ? { ...stmtSnap(g), excludedIds: [] } : null });
+    await runBulkTask({ count: t.groups.length, label: "정산", verb: `${stageLabel(t.stage)} 기록`, unitWord: "곳", task: async (progress) => { let k = 0; for (const g of t.groups) { await setStmtStage(g.client, g.yyyymm, t.stage, { date, note, sub: g.sub || "", extra: stageIdx(g.stage) === 0 ? { ...stmtSnap(g), excludedIds: [] } : null }); progress(++k); } } });
     sflowToast(`${t.groups.length > 1 ? `${t.groups.length}곳 ` : ""}${stageLabel(t.stage)} 기록`, "success");
   };
   const pipeNav = useMemo(() => [...pipeGroups].sort((a, b) => stageIdx(a.stage) - stageIdx(b.stage) || b.total - a.total), [pipeGroups]);
@@ -53018,7 +53028,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const bulkPay = async (ids, status) => {
     if (!ids.length) return alert("처리할 건을 먼저 선택해 주세요.");
     if (!(await kpConfirm(`${ids.length}건을 ${status === "지급완료" ? "지급완료" : status}하시겠습니까?`, { title: status, okText: "네", cancelText: "취소" }))) return;
-    await Promise.all(ids.map(id => pay(id, status)));
+    await runBulkTask({ count: ids.length, label: "오더", verb: status === "지급완료" ? "지급 처리" : `${status} 처리`, task: (progress) => { let k = 0; return Promise.all(ids.map(id => pay(id, status).finally(() => progress(++k)))); } });
     setSelectedIds(new Set());
     alert(`${ids.length}건을 ${status} 처리했습니다.`);
   };
@@ -53029,7 +53039,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     if (!unpaid.length) return alert("미지급 건이 없습니다.");
     const unpaidSum = unpaid.reduce((s, r) => s + toInt(r.기사운임), 0);
     if (!(await kpConfirm(`${rows[0]?.이름 || "이 기사"}의 미지급 ${unpaid.length}건(${unpaidSum.toLocaleString()}원)을 지급완료 처리하시겠습니까?`, { title: "지급완료", okText: "지급완료", cancelText: "취소" }))) return;
-    await Promise.all(unpaid.map(r => pay(r._id, "지급완료")));
+    await runBulkTask({ count: unpaid.length, label: "오더", verb: "지급 처리", task: (progress) => { let k = 0; return Promise.all(unpaid.map(r => pay(r._id, "지급완료").finally(() => progress(++k)))); } });
     alert(`${unpaid.length}건을 지급완료 처리했습니다.`);
   };
 
@@ -53218,14 +53228,17 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     return m;
   }, [payDrivers]);
   const acctOf = (plate) => { const a = payDriverByPlate.get(prepayPlate(plate))?.정산계좌; return a && typeof a === "object" && a.acct ? a : null; };
-  const exportTransfer = async () => {
+  // 🏦 대량이체 — 확인 문구 대신 게시판(표) 미리보기 창 → [엑셀 받기]
+  const [transferPlan, setTransferPlan] = useState(null); // { period, plan }
+  const exportTransfer = () => {
     if (!searched) return alert("기간을 정하고 조회한 뒤에 받아 주세요.");
     const period = loadStart && loadEnd ? `${loadStart.slice(5).replace("-", "/")}~${loadEnd.slice(5).replace("-", "/")}` : "";
-    const { rows, missing, total } = yongchaTransferRows(driverSummary, payDriverByPlate, { period, payer: getTenant() || companyName, vatRate });
-    if (!rows.length) {
-      return alert(missing.length ? `미지급 기사님 모두 기사관리에 정산계좌가 없어요.\n\n${missing.join(", ")}\n\n기사관리에서 계좌를 등록하거나, 선정산 파일을 올리면 저절로 채워져요.` : "이 기간에 지급할(미지급) 용차 운임이 없어요.");
-    }
-    if (!await kpConfirm(`${rows.length}명 · ${total.toLocaleString()}원을 대량이체 엑셀로 받을까요?\n사업자번호가 있는 기사님은 기사운임 + 부가세 10%예요.${missing.length ? `\n\n계좌가 없는 ${missing.length}명은 빠져요: ${missing.join(", ")}` : ""}`, { title: "대량이체 엑셀", okText: "받기" })) return;
+    const plan = yongchaTransferRows(driverSummary, payDriverByPlate, { period, payer: getTenant() || companyName, vatRate });
+    if (!plan.rows.length && !plan.missingDetail.length) return alert("이 기간에 지급할(미지급) 용차 운임이 없어요.");
+    setTransferPlan({ period, plan });
+  };
+  const downloadTransfer = (plan) => {
+    const { rows } = plan;
     const ws = XLSX.utils.json_to_sheet(rows, { header: ["은행", "계좌번호", "예금주", "금액", "받는분 통장표시", "내 통장표시", "메모"] });
     ws["!cols"] = [{ wch: 12 }, { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 40 }];
     rows.forEach((_, i) => { const c = ws[XLSX.utils.encode_cell({ r: i + 1, c: 1 })]; if (c) { c.t = "s"; c.v = String(c.v); } }); // 계좌번호 앞자리 0 보존
@@ -53239,6 +53252,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     try {
       let dispatchCount = 0;
       let totalAmt = 0;
+      const _n = payExcelPreview.matched.reduce((n, m) => n + (m.isSumMatch ? m.sumRecords.length : 1), 0);
+      await runBulkTask({ count: _n, label: "오더", verb: "지급 처리", task: async (progress) => {
       for (const m of payExcelPreview.matched) {
         const patch = { 지급상태: "지급완료", 지급일: m.지급일 || selectedPayDate, __system: true };
         if (m.excelInsurance > 0) patch.산재보험료 = m.excelInsurance;
@@ -53248,7 +53263,9 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
           await patchDispatch(m.dispatch._id, patch); syncPayLedger(m.dispatch, "지급완료", patch.지급일); dispatchCount++;
         }
         totalAmt += m.excelAmt || 0;
+        progress(dispatchCount);
       }
+      } });
       setPayExcelPreview(null);
       setPayExcelDone({ excelCount: payExcelPreview.matched.length, dispatchCount, totalAmt });
     } catch (err) {
@@ -53543,6 +53560,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
         </div>
       )}
       {/* ── 엑셀 업로드 미리보기 / 완료 모달 ── */}
+      {transferPlan && <TransferPreviewModal period={transferPlan.period} plan={transferPlan.plan} onDownload={() => downloadTransfer(transferPlan.plan)} onClose={() => setTransferPlan(null)} />}
       {prepay && (
         <PrepayImportModal fileName={prepay.fileName} items={prepay.items} pool={base} allOrders={dispatchData} fleetPlates={fleetPlates}
           drivers={payDrivers || []} defaultPayDate={selectedPayDate} patchDispatch={patchDispatch}
@@ -53864,9 +53882,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
     });
     if (!targets.length) return showAlert("변환할 번호가 없습니다. 이미 모두 정규화되어 있습니다.");
     if (!await kpConfirm(`${targets.length}건의 전화번호를 자동 정규화하시겠습니까?\n\n예시:\n${targets.slice(0,3).map(d=>`${d.이름}: ${d.전화번호} → ${normalizePhone(d.전화번호)}`).join("\n")}`)) return;
-    for (const d of targets) {
-      await upsertDriver({ ...d, 전화번호: normalizePhone(d.전화번호) });
-    }
+    await runBulkTask({ count: targets.length, label: "기사 전화번호", verb: "정리", task: async (progress) => { let k = 0; for (const d of targets) { await upsertDriver({ ...d, 전화번호: normalizePhone(d.전화번호) }); progress(++k); } } });
     showAlert(`전화번호 ${targets.length}건을 정규화했습니다.`);
   };
 
@@ -54842,9 +54858,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               {cleanupTab === "연락처정규화" && phoneNormTargets.length > 0 && (
                 <button
                   onClick={async () => {
-                    for (const d of phoneNormTargets) {
-                      await upsertDriver({ ...d, 전화번호: normalizePhone(d.전화번호) });
-                    }
+                    await runBulkTask({ count: phoneNormTargets.length, label: "기사 전화번호", verb: "정리", task: async (progress) => { let k = 0; for (const d of phoneNormTargets) { await upsertDriver({ ...d, 전화번호: normalizePhone(d.전화번호) }); progress(++k); } } });
                     setCleanupDone(true);
                     showAlert(`전화번호 ${phoneNormTargets.length}건을 정규화했습니다.`);
                   }}

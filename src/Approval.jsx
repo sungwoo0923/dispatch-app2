@@ -17,7 +17,7 @@
 //    문서는 지우지 않고 모두의 보관함에 "결재 취소" 도장으로 남는다(감사 기록). 연차 사용일수도 자동 복구.
 import { defaultFundId } from "./ledgerAuto";
 import { syncExpensesWithApproval, syncExpensesPaid } from "./vehicleExpense"; // 🧾 2026-11-10 차량 비용 영수증 ↔ 지출결의 상태
-import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
+import { runDelete, runBulkTask } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import React from "react";
 import { useListKeys } from "./useListKeys";
 import { kpConfirm, kpPrompt } from "./kpDialog";
@@ -2700,13 +2700,15 @@ function AutoApproveCard({ company, me, todo = [] }) {
       if (v.on) {
         const cfg2 = { autoApprovers: { [me.uid]: v } };
         let n = 0;
-        for (const d of todo) {
+        await runBulkTask({ count: (todo).length, label: "결재 문서", verb: "자동 승인", unitWord: "건", task: async (progress) => { let _k = 0;
+        for (const d of todo) { progress(_k++);
           const r = runAutoApprove(d, cfg2);
           if (!r.changed) continue;
           await updateDoc(doc(db, "approvals", d.id), { line: r.line, step: r.step, status: r.status, drafterUnread: true, history: arrayUnion(...r.hist), updatedAt: serverTimestamp() });
           if (r.status === "approved") runApprovedHooks(d, company, me);
           n += 1;
         }
+        } });
         if (n) window.alert(`지금 대기 중이던 문서 ${n}건을 자동 승인했습니다.`);
       }
       setOpen(false); setF(null);

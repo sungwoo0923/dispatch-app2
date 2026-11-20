@@ -19,6 +19,7 @@
 //  🏦 은행 입금 후보 — 은행 입금 연동(팝빌)이 받아 둔 입금 가운데 금액(청구운임 또는 부가세 포함)이 같은 것을 입금 확인 화면에서 제안한다(적용은 사람이 누른다)
 //   officeAttach: 숫자              사무실(운송사)이 올린 첨부 수 → 첨부 아이콘을 파란색으로(기사가 올린 것은 초록)
 import React from "react";
+import { runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 일괄 처리 진행 창
 import { createPortal } from "react-dom";
 import { useCompanyFeatures } from "./companyFeatures";
 import { getTenant } from "./fsTenant";
@@ -295,7 +296,7 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
     await patchDispatch(id, { ...basePatch(), ...(deposited && out ? { 입금일: f.depDate || today(), 입금자명: f.depName.trim().slice(0, 40), 입금메모: f.depMemo.trim().slice(0, 200) } : {}), __system: true });
     if (deposited && out && f.depDate !== (row?.입금일 || "")) await setCallDeposit({ row, done: true, date: f.depDate, name: f.depName, txnId: row?.입금거래id || "", memo: f.depMemo, patchDispatch, company }); // 장부 날짜도 맞춘다
     if (invMany && f.inv !== (row?.계산서일 || "")) { // 체크한 다른 오더도 같은 계산서 날짜로
-      for (const o of bulkRows) await patchDispatch(o._id || o.id, { 계산서일: f.inv, ...(isCaughtCall(o) ? { 청구메모: f.inv ? (f.billMemo.trim() || "계산서 일괄 발행").slice(0, 200) : "" } : {}), __system: true });
+      await runBulkTask({ count: (bulkRows).length, label: "오더", verb: "계산서 날짜 저장", unitWord: "건", task: async (progress) => { let _k = 0; for (const o of bulkRows) { await patchDispatch(o._id || o.id, { 계산서일: f.inv, ...(isCaughtCall(o) ? { 청구메모: f.inv ? (f.billMemo.trim() || "계산서 일괄 발행").slice(0, 200) : "" } : {}), __system: true }); progress(++_k); } } });
       onClose?.();
     }
   });
@@ -313,7 +314,7 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
     const n2 = withOthers ? undoMany.length : 0;
     if (!(await kpConfirm(`입금완료를 취소할까요?${n2 ? `\n체크한 다른 오더 ${n2}건도 같이 취소돼요.` : ""} 수입·지출 장부에 자동으로 들어간 줄도 함께 지워집니다.`))) return;
     await setCallDeposit({ row, done: false, patchDispatch, company });
-    if (n2) { for (const o of undoMany) await setCallDeposit({ row: o, done: false, patchDispatch, company }); onClose?.(); }
+    if (n2) { await runBulkTask({ count: (undoMany).length, label: "오더", verb: "입금 취소", unitWord: "건", task: async (progress) => { let _k = 0; for (const o of undoMany) { await setCallDeposit({ row: o, done: false, patchDispatch, company }); progress(++_k); } } }); onClose?.(); }
   });
   // 같이 체크한 오더 — 입금완료 · 지급완료 건은 빼고 계산서 날짜만 맞춘다
   const otherRows = (others || []).filter((o) => (o._id || o.id) !== id);
@@ -520,7 +521,7 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
       if (!String(memo).trim()) return window.alert("입금 메모를 입력해 주세요.");
     }
     setBusy(true);
-    try { for (const r of list) await setCallDeposit({ row: r, done, date, name: done ? (r.입금자명 || r.입금증빙?.payer || r.계산서스캔?.payer || "") : "", memo, patchDispatch, company }); setSel(new Set()); }
+    try { await runBulkTask({ count: (list).length, label: "오더", verb: "입금 처리", unitWord: "건", task: async (progress) => { let _k = 0; for (const r of list) { await setCallDeposit({ row: r, done, date, name: done ? (r.입금자명 || r.입금증빙?.payer || r.계산서스캔?.payer || "") : "", memo, patchDispatch, company }); progress(++_k); } } }); setSel(new Set()); }
     catch (e) { window.alert(`처리하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); }
   };
   const picked = rows.filter((r) => sel.has(idOf(r)));
@@ -534,7 +535,7 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
     const memo = await kpPrompt(`${scope}을 계산서 발행(${date})으로 바꿀까요?\n청구 메모(선택)`, "계산서 일괄 발행", { title: "계산서 발행", placeholder: "예: 11월분 세금계산서 발행", okText: `${list.length}건 발행` });
     if (memo == null) return;
     setBusy(true);
-    try { for (const r of list) await patchDispatch(idOf(r), { 계산서일: date, 청구메모: String(memo || "").trim().slice(0, 200) || "계산서 일괄 발행", __system: true }); setSel(new Set()); }
+    try { await runBulkTask({ count: (list).length, label: "오더", verb: "계산서 발행", unitWord: "건", task: async (progress) => { let _k = 0; for (const r of list) { await patchDispatch(idOf(r), { 계산서일: date, 청구메모: String(memo || "").trim().slice(0, 200) || "계산서 일괄 발행", __system: true }); progress(++_k); } } }); setSel(new Set()); }
     catch (e) { window.alert(`처리하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); }
   };
   const th = "px-3 py-2.5 text-[12.5px] font-bold text-white whitespace-nowrap text-center";

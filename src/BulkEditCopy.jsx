@@ -18,6 +18,7 @@ import { staffOptionsOf, ownerOfOrder, matchOwner } from "./orderOwner";
 import { CompanyOptionPicker } from "./companyOptionPicker"; // 지급방식·배차방식·상하차방법은 회사 목록(배차관리와 같은 목록)
 import { DispatchWayPicker } from "./CallPay"; // 💳 배차방식 — 먼저 IN/OUT, 그다음 방식
 import { placeSearch } from "./placeSearch"; // 🔎 오더등록과 같은 검색
+import { runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 일괄수정 · 복사 진행 창
 import { payTypeStatusPatch } from "./dispatchStatus"; // 지급방식이 바뀌면 배차상태도 오더등록과 같게
 
 const pad = (n) => String(n).padStart(2, "0");
@@ -385,7 +386,9 @@ function EditTab({ rows, opts, lists, drivers, patchDispatch, upsertDriver, onCl
     let ok = 0, skipped = 0;
     const newDrivers = new Map();
     try {
+      await runBulkTask({ count: changes.length, label: "오더", verb: "수정", task: async (progress) => {
       for (const [r, c] of changes) {
+        progress(ok + skipped);
         const patch = { ...c };
         // 기사 정보가 새로 들어가면 배차완료로(patchDispatch가 배차확정일시·기사 알림을 처리) — 오더등록 스마트검색과 같게
         if ("차량번호" in c && String(c.차량번호 || "").trim() && !String(r.차량번호 || "").trim() && (r.배차상태 || "배차중") === "배차중") patch.배차상태 = "배차완료";
@@ -396,6 +399,7 @@ function EditTab({ rows, opts, lists, drivers, patchDispatch, upsertDriver, onCl
         const cur = edited[idOf(r)];
         if (("차량번호" in c || "이름" in c) && cur.차량번호 && cur.이름 && !(drivers || []).some((x) => plateKey(x.차량번호) === plateKey(cur.차량번호))) newDrivers.set(plateKey(cur.차량번호), cur);
       }
+      } });
       // 새 기사 → 기사관리에 등록(오더등록과 같게)
       let nd = 0;
       if (upsertDriver) for (const d of newDrivers.values()) { try { await upsertDriver({ 차량번호: d.차량번호, 이름: d.이름, 전화번호: telDigits(d.전화번호) ? fmtTel(d.전화번호) : "" }); nd += 1; } catch { /* 등록 실패해도 오더는 저장됨 */ } }
@@ -666,6 +670,7 @@ function CopyTab({ rows, onCopyOne, onClose, isViewer, toast }) {
     setBusy({ done: 0, total: expanded.length });
     let ok = 0;
     try {
+      await runBulkTask({ count: expanded.length, label: "오더", verb: "복사 등록", task: async (progress) => {
       for (const d of expanded) {
         const src = rows[d.i]; const p = plans[d.i];
         const order = { ...src, 상차일: d.상차일, 하차일: d.하차일, 상차시간: p.상차시간, 상차시간기준: p.상차시간기준 || null, 하차시간: p.하차시간, 하차시간기준: p.하차시간기준 || null };
@@ -673,8 +678,9 @@ function CopyTab({ rows, onCopyOne, onClose, isViewer, toast }) {
         const ow = ownerOf(d.i); if (ow && !ow.orig) order._owner = ow;
         const res = await onCopyOne(order);
         if (res === false) break;
-        ok += 1; setBusy({ done: ok, total: expanded.length });
+        ok += 1; setBusy({ done: ok, total: expanded.length }); progress(ok);
       }
+      } });
       if (ok) toast?.(`${ok}건 복사 등록했어요${ok < expanded.length ? ` (${expanded.length - ok}건은 등록 안 됨)` : ""}`, "success");
       if (ok === expanded.length) onClose?.();
     } catch (e) {
