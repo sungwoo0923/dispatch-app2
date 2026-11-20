@@ -7,6 +7,7 @@
 //  · 여러 창이 한꺼번에 불려도 겹치지 않고 하나씩 차례로 뜬다
 import React from "react";
 import { createRoot } from "react-dom/client";
+import { isDoneNotice, showSaved } from "./saveFeedback"; // ✅ 2026-11-20 짧은 완료 알림은 위쪽 "✓ …" 알림으로(떴다 사라짐)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 
@@ -71,7 +72,12 @@ function open(props) {
   return p;
 }
 export const kpConfirm = (message, opts = {}) => open({ message, ...opts });
-export const kpAlert = (message, opts = {}) => open({ message, alertOnly: true, ...opts });
+// ✅ 2026-11-20 "저장되었습니다" · "수정 완료"처럼 짧은 완료 알림은 [확인]을 누르게 하지 않고 위쪽 알림으로(1.8초 뒤 사라짐)
+//  · 제목(title)을 준 알림 · opts.keep 은 지금처럼 창으로 · 오류 · 안내 문구는 그대로 창
+export const kpAlert = (message, opts = {}) => {
+  if (!opts.keep && !opts.title && isDoneNotice(message)) { showSaved(String(message).trim()); return Promise.resolve(true); }
+  return open({ message, alertOnly: true, ...opts });
+};
 export const kpPrompt = (message, defaultValue = "", opts = {}) => open({ message, prompt: true, defaultValue, ...opts });
 
 // 🔔 브라우저 기본 알림창(window.alert) → 프로그램 디자인 알림창
