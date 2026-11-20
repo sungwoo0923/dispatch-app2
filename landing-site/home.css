@@ -304,6 +304,21 @@ html.kp-editing .head h2 { -webkit-text-fill-color: #fff; background: none; }
 .submit-btn { grid-column: 1 / -1; height: 56px; border: 0; border-radius: 14px; background: linear-gradient(120deg, var(--btn1), var(--btn2)); color: #fff; font-weight: 700; font-size: 16px; cursor: pointer; font-family: inherit; box-shadow: 0 14px 30px -12px rgba(79,139,255,.7); }
 .submit-btn:disabled { opacity: .6; }
 .error-text { grid-column: 1 / -1; color: #FF8A8E; font-weight: 600; font-size: 14px; }
+/* 2026-11-20 문의 폼 업그레이드 — 유형 탭(무료 체험 / 도입 상담) · 동의 체크 */
+.inq-type { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 5px; margin-bottom: 20px; border-radius: 14px; background: rgba(8,16,31,.6); box-shadow: inset 0 0 0 1px rgba(143,176,240,.2); }
+.inq-type button { height: 44px; border: 0; border-radius: 10px; background: transparent; color: var(--t3); font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; transition: background .15s, color .15s; }
+.inq-type button.on { background: linear-gradient(120deg, var(--btn1), var(--btn2)); color: #fff; box-shadow: 0 8px 20px -10px rgba(79,139,255,.8); }
+.inq-type button:focus-visible { outline: 2px solid var(--glow); outline-offset: 2px; }
+.form-card .inq-agree { display: grid; gap: 10px; padding: 14px 16px; border-radius: 12px; background: rgba(8,16,31,.45); box-shadow: inset 0 0 0 1px rgba(143,176,240,.16); }
+.form-card label.chk { display: flex; align-items: flex-start; gap: 10px; margin: 0; font-size: 14px; font-weight: 600; color: var(--t2); cursor: pointer; line-height: 1.5; }
+.form-card label.chk input { width: 20px; height: 20px; flex: none; margin: 1px 0 0; padding: 0; box-shadow: none; accent-color: var(--glow); cursor: pointer; }
+.form-card label.chk b { color: #fff; }
+.form-card label.chk small { color: var(--t4); font-weight: 500; }
+.inq-agree details { margin: -4px 0 0 30px; font-size: 13px; color: var(--t3); }
+.inq-agree summary { cursor: pointer; font-weight: 600; color: var(--t4); }
+.inq-agree details p { margin: 8px 0 0; line-height: 1.7; }
+.cta-band .btn + .btn { margin-left: 10px; }
+@media (max-width: 560px) { .cta-band .btn + .btn { margin: 10px 0 0; } }
 .success-box { text-align: center; padding: 60px 10px; }
 .success-box .check { width: 64px; height: 64px; border-radius: 50%; background: rgba(43,209,126,.14); color: #7EF0B5; display: grid; place-items: center; margin: 0 auto 18px; }
 .success-box .check svg.i { width: 32px; height: 32px; }

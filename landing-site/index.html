@@ -588,7 +588,7 @@
       <div data-k="e670" class="inq-info">
         <span data-k="e671" class="eyebrow">FREE TRIAL</span>
         <h2 data-k="e672">직접 운영해 보고<br data-k="e673" />결정하세요</h2>
-        <p data-k="e674">신청하시면 담당자가 연락드려 체험 계정을 개설해 드립니다.</p>
+        <p data-k="e674">체험을 신청하면 담당자가 연락드려 체험 계정을 만들어 드려요. 궁금한 점만 있으면 신청 칸 맨 위 <b data-k="e2162">도입 상담 · 문의</b> 탭을 누르고 남겨 주세요.</p>
         <ul data-k="e675">
           <li data-k="e676"><svg data-k="e677" class="i"><use href="#i-check"/></svg>엑셀 거래처·기사 자료 이관 지원</li>
           <li data-k="e678"><svg data-k="e679" class="i"><use href="#i-check"/></svg>PC 프로그램&nbsp;· 직원용 모바일&nbsp;· 기사앱 모두 제공</li>
@@ -596,6 +596,10 @@
         </ul>
       </div>
       <div data-k="e682" class="form-card">
+        <div data-k="e2163" class="inq-type" role="tablist" aria-label="신청 유형">
+          <button data-k="e2164" type="button" role="tab" class="on" aria-selected="true" data-inq="무료체험">무료 체험 신청</button>
+          <button data-k="e2165" type="button" role="tab" aria-selected="false" data-inq="도입문의">도입 상담 · 문의</button>
+        </div>
         <form data-k="e683" id="inquiryForm">
           <div data-k="e684"><label data-k="e685" for="f-company">회사명 *</label><input data-k="e686" id="f-company" autocomplete="organization" placeholder="회사명" /></div>
           <div data-k="e687"><label data-k="e688" for="f-name">담당자명 *</label><input data-k="e689" id="f-name" autocomplete="name" placeholder="담당자 성함" /></div>
@@ -604,14 +608,21 @@
           <div data-k="e696"><label data-k="e697" for="f-vehicles">운영 차량 대수</label><select data-k="e698" id="f-vehicles"><option data-k="e699" value="">선택해 주세요</option><option data-k="e700">10대 미만</option><option data-k="e701">10~30대</option><option data-k="e702">30~100대</option><option data-k="e703">100대 이상</option></select></div>
           <div data-k="e704"><label data-k="e705" for="f-staff">배차 담당 인원</label><select data-k="e706" id="f-staff"><option data-k="e707" value="">선택해 주세요</option><option data-k="e708">1~2명</option><option data-k="e709">3~5명</option><option data-k="e710">6~10명</option><option data-k="e711">10명 이상</option></select></div>
           <div data-k="e712" class="full"><label data-k="e713" for="f-current">현재 배차 관리 방식</label><select data-k="e714" id="f-current"><option data-k="e715" value="">선택해 주세요</option><option data-k="e716">엑셀</option><option data-k="e717">다른 배차 프로그램</option><option data-k="e718">수기·메모</option><option data-k="e719">기타</option></select></div>
+          <div data-k="e2166"><label data-k="e2167" for="f-plan">관심 요금제</label><select data-k="e2168" id="f-plan"><option data-k="e2169" value="">아직 모르겠어요</option><option data-k="e2170">라이트 (1~3인)</option><option data-k="e2171">베이직 (4~6인)</option><option data-k="e2172">스탠다드 (7~10인)</option><option data-k="e2173">프로 (11인 이상)</option></select></div>
+          <div data-k="e2174"><label data-k="e2175" for="f-calltime">연락받기 편한 시간</label><select data-k="e2176" id="f-calltime"><option data-k="e2177" value="">아무 때나 괜찮아요</option><option data-k="e2178">오전 (9~12시)</option><option data-k="e2179">오후 (13~18시)</option><option data-k="e2180">문자로 먼저 주세요</option></select></div>
           <div data-k="e720" class="full"><label data-k="e721" for="f-message">문의 내용</label><textarea data-k="e722" id="f-message" rows="4" placeholder="필요한 기능이나 궁금한 점을 자유롭게 남겨 주세요."></textarea></div>
+          <div data-k="e2181" class="full inq-sys inq-agree">
+            <label data-k="e2182" class="chk"><input type="checkbox" id="f-privacy" /><span data-k="e2183"><b>[필수]</b> 개인정보 수집 · 이용에 동의해요</span></label>
+            <details data-k="e2184"><summary data-k="e2185">자세히 보기</summary><p data-k="e2186">수집 항목: 회사명, 담당자명, 연락처, 이메일, 회사 규모, 문의 내용<br />쓰는 곳: 체험 계정 만들기, 상담 연락, 견적 안내<br />보관 기간: 상담이 끝나고 1년 뒤 삭제해요<br />동의하지 않을 수 있지만, 그러면 신청을 받을 수 없어요.</p></details>
+            <label data-k="e2187" class="chk"><input type="checkbox" id="f-marketing" /><span data-k="e2188"><b>[선택]</b> 새 기능 소식 · 운송 업무 팁을 이메일 · 문자로 받을게요 <small>(광고성 정보 · 언제든 수신거부 가능)</small></span></label>
+          </div>
           <div data-k="e723" id="form-error" class="error-text" style="display:none;"></div>
           <button data-k="e724" type="submit" id="submitBtn" class="submit-btn">무료 체험 신청</button>
         </form>
         <div data-k="e725" id="successBox" class="success-box" style="display:none;">
           <div data-k="e726" class="check"><svg data-k="e727" class="i"><use href="#i-check"/></svg></div>
-          <h3 data-k="e728">체험 신청이 접수되었습니다</h3>
-          <p data-k="e729">담당자 확인 후 남겨 주신 연락처로 안내드리겠습니다.</p>
+          <h3 data-k="e728" id="successTitle">체험 신청이 접수되었습니다</h3>
+          <p data-k="e729" id="successDesc">담당자 확인 후 남겨 주신 연락처로 안내드리겠습니다.</p>
         </div>
       </div>
     </div>
@@ -623,6 +634,7 @@
     <h2 data-k="e732">내일 아침 배차부터,<br data-k="e733" />엑셀 없는 운송 업무를 시작하세요</h2>
     <p data-k="e734">신청 후 담당자가 초기 설정과 데이터 이관까지 함께 진행합니다.</p>
     <a data-k="e735" class="btn btn-primary btn-lg" href="#inquiry-form">무료 체험 신청 <svg data-k="e736" class="i"><use href="#i-arrow"/></svg></a>
+    <a data-k="e2189" class="btn btn-line btn-lg" href="#inquiry-form" data-inq="도입문의">도입 상담 · 문의</a>
   </div>
 </section>
 
@@ -756,6 +768,40 @@
   let db = null;
   const getDb = () => dbReady.then(() => (db = db || getFirestore(app)));
 
+  // 📝 2026-11-20 문의 폼 업그레이드 — 한 폼에서 "무료 체험 신청 / 도입 상담 · 문의"를 탭으로 고른다
+  //  · 탭에 따라 버튼 · 안내 문구 · 완료 문구가 바뀌고, type 으로 저장된다(관리센터 › 도입 문의에서 구분)
+  //  · [필수] 개인정보 동의 · [선택] 광고성 정보 수신 동의(정보통신망법 제50조 — 동의 날짜를 함께 남긴다)
+  //  · 어디서 들어왔는지(utm · 이전 페이지)를 같이 저장 → 광고 · 블로그 효과를 숫자로 본다
+  const INQ_MODE = {
+    "무료체험": { btn: "무료 체험 신청", ph: "필요한 기능이나 궁금한 점을 자유롭게 남겨 주세요.", ok: "체험 신청이 접수되었습니다", okDesc: "담당자 확인 후 남겨 주신 연락처로 체험 계정을 안내드릴게요." },
+    "도입문의": { btn: "상담 신청하기", ph: "궁금한 점을 적어 주세요. 예) 지입차 30대인데 정산까지 되나요?", ok: "상담 신청이 접수되었습니다", okDesc: "담당자가 확인하고 남겨 주신 연락처로 연락드릴게요." },
+  };
+  let inqMode = "무료체험";
+  const setInqMode = (m) => {
+    if (!INQ_MODE[m]) m = "무료체험";
+    inqMode = m;
+    document.querySelectorAll(".inq-type [data-inq]").forEach((b) => { const on = b.dataset.inq === m; b.classList.toggle("on", on); b.setAttribute("aria-selected", on ? "true" : "false"); });
+    const btn = document.getElementById("submitBtn"); if (btn && !btn.disabled) btn.textContent = INQ_MODE[m].btn;
+    const ta = document.getElementById("f-message"); if (ta) ta.placeholder = INQ_MODE[m].ph;
+  };
+  document.addEventListener("click", (e) => {
+    const t = e.target.closest && e.target.closest(".inq-type [data-inq], a[href='#inquiry-form']");
+    if (!t || document.documentElement.classList.contains("kp-editing")) return;
+    setInqMode(t.dataset.inq || "무료체험");
+  });
+  // 주소 끝이 #consult 면(광고 · 블로그 링크용) 상담 탭으로 열고 폼으로 내려간다
+  if (location.hash === "#consult") { setInqMode("도입문의"); document.getElementById("inquiry-form")?.scrollIntoView(); }
+  // 유입 경로 — 첫 방문 때 한 번 기억(저장소가 막힌 브라우저면 지금 주소만 쓴다)
+  const readSource = () => {
+    const q = new URLSearchParams(location.search), now = {};
+    ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"].forEach((k) => { const v = q.get(k); if (v) now[k] = v.slice(0, 100); });
+    if (document.referrer && !document.referrer.startsWith(location.origin)) now.referrer = document.referrer.slice(0, 300);
+    let first = null;
+    try { first = JSON.parse(sessionStorage.getItem("kpLeadSrc") || "null"); if (!first && Object.keys(now).length) sessionStorage.setItem("kpLeadSrc", JSON.stringify(now)); } catch (_) {}
+    return { ...(first || now), landing: location.pathname.slice(0, 100) };
+  };
+  readSource();
+
   document.addEventListener("submit", async (e) => {
     if (e.target.id !== "inquiryForm") return;
     e.preventDefault();
@@ -770,12 +816,16 @@
     const missing = [...form.querySelectorAll("[required]")].find((el) => !(el.value || "").trim());
     const companyName = val("f-company"), name = val("f-name"), phone = val("f-phone"), email = val("f-email");
     const message = val("f-message"), vehicles = val("f-vehicles"), staffCount = val("f-staff"), currentTool = val("f-current");
+    const planInterest = val("f-plan"), callTime = val("f-calltime");
+    const privacyAgreed = !!document.getElementById("f-privacy")?.checked;
+    const marketingAgreed = !!document.getElementById("f-marketing")?.checked;
+    const fail = (msg) => { errorBox.textContent = msg; errorBox.style.display = "block"; };
 
-    if (!companyName || !name || !phone || missing) {
-      errorBox.textContent = missing ? "필수 항목(*)을 모두 입력해 주세요." : "회사명, 담당자명, 연락처는 필수 입력입니다.";
-      errorBox.style.display = "block";
-      return;
-    }
+    if (!companyName || !name || !phone || missing) return fail(missing ? "필수 항목(*)을 모두 입력해 주세요." : "회사명, 담당자명, 연락처는 필수 입력입니다.");
+    if (phone.replace(/\D/g, "").length < 9) return fail("연락처를 다시 확인해 주세요. 예) 010-1234-5678");
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail("이메일 주소를 다시 확인해 주세요.");
+    if (inqMode === "도입문의" && !message) return fail("상담받고 싶은 내용을 문의 내용 칸에 적어 주세요.");
+    if (!privacyAgreed) return fail("개인정보 수집 · 이용에 동의해야 신청할 수 있어요.");
     errorBox.style.display = "none";
     submitBtn.disabled = true;
     submitBtn.textContent = "전송 중...";
@@ -783,18 +833,27 @@
     try {
       await addDoc(collection(await getDb(), "landingInquiries"), {
         companyName, name, phone, email, message,
-        type: "무료체험",
-        vehicles, staffCount, currentTool, extra,
+        type: inqMode,
+        vehicles, staffCount, currentTool, planInterest, callTime, extra,
+        privacyConsent: true, consentVersion: "2026-11-20",
+        // 광고성 정보 수신 동의 — 동의한 사람에게만 소식 메일 · 문자를 보낸다(동의일은 2년마다 다시 확인)
+        marketingConsent: marketingAgreed,
+        marketingChannels: marketingAgreed ? ["이메일", "문자"] : [],
+        marketingConsentAt: marketingAgreed ? serverTimestamp() : null,
+        source: readSource(),
         status: "신규",
         createdAt: serverTimestamp(),
       });
       form.style.display = "none";
+      document.querySelector(".inq-type")?.setAttribute("hidden", "");
+      document.getElementById("successTitle").textContent = INQ_MODE[inqMode].ok;
+      document.getElementById("successDesc").textContent = INQ_MODE[inqMode].okDesc + (marketingAgreed ? " 소식 받기에 동의해 주셔서 감사해요." : "");
       document.getElementById("successBox").style.display = "block";
     } catch (err) {
       errorBox.textContent = "신청 전송에 실패했습니다. 잠시 후 다시 시도해주세요.";
       errorBox.style.display = "block";
       submitBtn.disabled = false;
-      submitBtn.textContent = "무료 체험 신청";
+      submitBtn.textContent = INQ_MODE[inqMode].btn;
     }
   });
 </script>
