@@ -314,22 +314,42 @@ function TodayPanel({ go, openCompany }) {
 
 // ═══════════════════════ 도입 문의 ═══════════════════════
 const LEAD_STATUS = ["신규", "상담중", "견적 발송", "계약", "보류", "완료"];
+// 📝 2026-11-20 홈페이지 문의 폼 업그레이드 — 한 폼에서 "무료체험 / 도입문의"를 골라 들어온다
+//  · 광고 수신 동의(marketingConsent)한 곳만 소식 메일 · 문자를 보낼 수 있다(정보통신망법 제50조) → 따로 걸러 보고 이메일을 복사
+const LEAD_FILTERS = [["all", "전체"], ["무료체험", "무료체험"], ["도입문의", "도입문의"], ["mkt", "광고 수신 동의"]];
+const leadType = (q) => (q.type === "도입문의" ? "도입문의" : q.type === "무료체험" ? "무료체험" : "");
+const leadSource = (s) => !s ? "" : [s.utm_source, s.utm_medium, s.utm_campaign].filter(Boolean).join(" · ") || (s.referrer ? s.referrer.replace(/^https?:\/\//, "").split("/")[0] : "") || "직접 방문";
 function InquiriesPanel({ toQuote }) {
-  const list = useCol("landingInquiries");
+  const all = useCol("landingInquiries");
   const [sel, setSel] = React.useState(null);
-  if (!list) return <div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>;
-  const cur = list.find((x) => x.id === sel);
+  const [filter, setFilter] = React.useState("all");
+  const [copied, setCopied] = React.useState("");
+  if (!all) return <div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>;
+  const list = all.filter((q) => filter === "all" ? true : filter === "mkt" ? q.marketingConsent === true : leadType(q) === filter);
+  const mktEmails = [...new Set(all.filter((q) => q.marketingConsent === true && q.email).map((q) => q.email.trim()))];
+  const copyEmails = async () => {
+    try { await navigator.clipboard.writeText(mktEmails.join(", ")); setCopied(`이메일 ${mktEmails.length}개를 복사했어요`); }
+    catch { setCopied("복사하지 못했어요. 다시 눌러 주세요"); }
+    setTimeout(() => setCopied(""), 2500);
+  };
+  const cur = all.find((x) => x.id === sel);
   return (
     <div className="space-y-4">
       <Hero en="CLIENTS · LEADS" title="도입 문의" desc="홈페이지로 들어온 문의를 상담 단계별로 관리하고, 바로 견적서로 넘깁니다." />
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px] items-start">
         <Card code="INBOX" title={`문의 ${list.length}건`} bodyClass="p-0">
+          <div className="flex flex-wrap items-center gap-1.5 px-3 py-2.5 border-b border-[#EEF1F6]">
+            {LEAD_FILTERS.map(([k, l]) => (
+              <button key={k} type="button" onClick={() => setFilter(k)} className={`h-8 px-3 rounded-lg text-[12.5px] font-black border ${filter === k ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#DCE3EE] text-[#3A4A66]"}`}>{l}</button>))}
+            {filter === "mkt" && (
+              <button type="button" onClick={copyEmails} disabled={!mktEmails.length} className="ml-auto h-8 px-3 rounded-lg text-[12.5px] font-black bg-[#0F1A30] text-white disabled:opacity-40" title="광고 수신에 동의한 곳의 이메일만 복사해요. 보낼 때 제목에 (광고)를 붙이고 수신거부 방법을 넣어 주세요.">{copied || `동의한 이메일 복사 (${mktEmails.length})`}</button>)}
+          </div>
           {list.length === 0 ? <div className="py-16 text-center text-[#9AA9C3]">들어온 도입 문의가 없습니다.</div> : (
             <div className="overflow-x-auto"><table className="w-full text-[14px] whitespace-nowrap">
               <thead><tr className="bg-[#1B2B4B] text-white">{["회사", "담당자", "연락처", "규모", "접수일", "상태"].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold">{h}</th>)}</tr></thead>
               <tbody>{list.map((q) => (
                 <tr key={q.id} onClick={() => setSel(q.id)} className={`border-t border-[#EEF1F6] cursor-pointer ${sel === q.id ? "bg-[#EEF3FB]" : "hover:bg-[#F5F8FD]"}`}>
-                  <td className="px-3 py-2.5 font-black text-[#0F1A30]">{q.companyName}{q.type === "무료체험" && <span className="ml-1.5 px-1.5 py-0.5 rounded-md border border-[#1B2B4B] text-[10.5px] font-black text-[#1B2B4B]">무료체험</span>}</td>
+                  <td className="px-3 py-2.5 font-black text-[#0F1A30]">{q.companyName}{leadType(q) && <span className={`ml-1.5 px-1.5 py-0.5 rounded-md border text-[10.5px] font-black ${leadType(q) === "무료체험" ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-[#9AA9C3] text-[#5B6B85]"}`}>{leadType(q)}</span>}{q.marketingConsent === true && <span className="ml-1 px-1.5 py-0.5 rounded-md bg-[#EEF3FB] text-[10.5px] font-black text-[#2D5BD8]" title="광고성 정보 수신 동의">수신동의</span>}</td>
                   <td className="px-3 py-2.5 text-center">{q.name}</td>
                   <td className="px-3 py-2.5 text-center" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{fmtPhone(q.phone) || q.phone}</td>
                   <td className="px-3 py-2.5 text-center text-[#5B6B85]">{q.vehicles || "-"}</td>
@@ -342,7 +362,9 @@ function InquiriesPanel({ toQuote }) {
         <Card code="DETAIL" title={cur ? cur.companyName : "문의를 선택하세요"}>
           {!cur ? <div className="py-10 text-center text-[#9AA9C3]">왼쪽 목록에서 문의를 누르면 상세가 보입니다.</div> : (
             <div className="space-y-3">
-              {[["담당자", cur.name], ["연락처", fmtPhone(cur.phone) || cur.phone], ["이메일", cur.email], ["차량·규모", cur.vehicles], ["문의 유형", cur.type], ["문의 내용", cur.message || cur.content]].filter(([, v]) => v).map(([k, v]) => (
+              {[["담당자", cur.name], ["연락처", fmtPhone(cur.phone) || cur.phone], ["이메일", cur.email], ["차량·규모", cur.vehicles], ["배차 인원", cur.staffCount], ["현재 방식", cur.currentTool], ["관심 요금제", cur.planInterest], ["연락 시간", cur.callTime], ["문의 유형", cur.type],
+                ["광고 수신", cur.marketingConsent === true ? `동의 (${(cur.marketingChannels || []).join(" · ") || "이메일 · 문자"}${msOf(cur.marketingConsentAt) ? ` · ${ymd(new Date(msOf(cur.marketingConsentAt)))}` : ""})` : cur.marketingConsent === false ? "동의 안 함" : ""],
+                ["유입 경로", leadSource(cur.source)], ["문의 내용", cur.message || cur.content]].filter(([, v]) => v).map(([k, v]) => (
                 <div key={k} className="grid grid-cols-[80px_1fr] gap-2 text-[14px]"><span className="font-bold text-[#7A879C]">{k}</span><span className="font-semibold text-[#0F1A30] whitespace-pre-wrap">{v}</span></div>
               ))}
               <div><div className="text-[12px] font-bold text-[#7A879C] mb-1.5">상담 단계</div>

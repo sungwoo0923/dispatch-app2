@@ -304,7 +304,7 @@
       sections: top.map(function (c) { var k = c.getAttribute("data-k"); return { key: k, label: secLabel(c), hidden: !!(allEls[k] && allEls[k].hidden) }; }),
       nav: $$("#nav > a, .header-cta > a").map(function (a) { return { key: a.getAttribute("data-k"), text: a.textContent.trim(), href: a.getAttribute("href"), group: a.parentElement.id === "nav" ? "메뉴" : "오른쪽 버튼" }; }),
       footer: $$(".footer-links > a").map(function (a) { return { key: a.getAttribute("data-k"), text: a.textContent.trim(), href: a.getAttribute("href") }; }),
-      form: $$("#inquiryForm > div").filter(function (d) { return $("input, select, textarea", d); }).map(function (d) {
+      form: $$("#inquiryForm > div").filter(function (d) { return !d.classList.contains("inq-sys") && $("input, select, textarea", d); }).map(function (d) {
         var f = $("input, select, textarea", d), l = $("label", d);
         return { key: d.getAttribute("data-k"), labelKey: l && l.getAttribute("data-k"), inputKey: f.getAttribute("data-k"), label: l ? l.textContent.trim() : "", type: f.tagName.toLowerCase(), placeholder: f.getAttribute("placeholder") || "", required: f.hasAttribute("required") || /\*/.test(l ? l.textContent : ""), options: f.tagName === "SELECT" ? Array.prototype.map.call(f.options, function (o) { return o.textContent; }) : null, extra: f.hasAttribute("data-extra") };
       }),
@@ -660,7 +660,7 @@
         var target = m.ref ? byKey(m.ref) : sel;
         var nk2 = newKey("n"), kind = m.kind, pos = m.pos || "after", ref2 = target;
         if (/^section/.test(kind)) { ref2 = target; while (ref2 && ref2.parentElement !== document.body) ref2 = ref2.parentElement; if (!ref2) ref2 = $("#inquiry-form") || document.body.lastElementChild; }
-        if (/^field/.test(kind)) { var fs = $$("#inquiryForm > div").filter(function (d) { return $("input, select, textarea", d); }); ref2 = fs[fs.length - 1]; pos = "after"; }
+        if (/^field/.test(kind)) { var fs = $$("#inquiryForm > div").filter(function (d) { return !d.classList.contains("inq-sys") && $("input, select, textarea", d); }); ref2 = fs[fs.length - 1]; pos = "after"; }
         if (kind === "nav-link") { var nl = $$("#nav > a"); ref2 = nl[nl.length - 1]; pos = "after"; }
         if (!ref2) { tip("먼저 넣을 위치의 요소를 고르세요"); return; }
         state.ops.push({ op: "add", kind: kind, key: nk2, ref: ref2.getAttribute("data-k"), pos: pos });

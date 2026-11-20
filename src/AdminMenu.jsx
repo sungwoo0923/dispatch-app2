@@ -1618,6 +1618,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
                         <td className="px-4 py-3 font-semibold text-gray-800">
                           {q.companyName}
                           {q.type === "무료체험" && <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-600 align-middle">무료체험</span>}
+                          {q.type === "도입문의" && <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-600 align-middle">도입문의</span>}
+                          {q.marketingConsent === true && <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-600 align-middle">수신동의</span>}
                           {q.vehicles && <span className="ml-1.5 text-[11px] font-semibold text-gray-500">{q.vehicles}</span>}
                         </td>
                         <td className="px-4 py-3 text-gray-600">{q.name}</td>
@@ -1944,6 +1946,17 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
               {(selectedLandingInquiry.vehicles || selectedLandingInquiry.staffCount || selectedLandingInquiry.currentTool) && (
                 <div className="grid grid-cols-3 gap-2">
                   {[["운영 차량", selectedLandingInquiry.vehicles], ["배차 인원", selectedLandingInquiry.staffCount], ["현재 방식", selectedLandingInquiry.currentTool]].map(([l, v]) => (
+                    <div key={l} className="bg-gray-50 rounded-lg p-2.5">
+                      <div className="text-[11px] font-semibold text-gray-500 mb-0.5">{l}</div>
+                      <div className="text-[13px] font-bold text-gray-800">{v || "-"}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* 📝 2026-11-20 문의 폼 업그레이드 — 관심 요금제 · 연락 시간 · 광고 수신 동의 */}
+              {(selectedLandingInquiry.planInterest || selectedLandingInquiry.callTime || selectedLandingInquiry.marketingConsent !== undefined) && (
+                <div className="grid grid-cols-3 gap-2">
+                  {[["관심 요금제", selectedLandingInquiry.planInterest], ["연락 시간", selectedLandingInquiry.callTime], ["광고 수신", selectedLandingInquiry.marketingConsent === true ? "동의" : selectedLandingInquiry.marketingConsent === false ? "동의 안 함" : ""]].map(([l, v]) => (
                     <div key={l} className="bg-gray-50 rounded-lg p-2.5">
                       <div className="text-[11px] font-semibold text-gray-500 mb-0.5">{l}</div>
                       <div className="text-[13px] font-bold text-gray-800">{v || "-"}</div>
