@@ -3028,7 +3028,7 @@ const FreightHomeDeck = React.lazy(() => import("./freight/FreightHomeDeck")); /
 const FreightRevenueStrip = React.lazy(() => import("./freight/FreightSettle").then((m) => ({ default: m.FreightRevenueStrip })));
 import { allowedModules } from "./freight/freightCore";
 import { useBetaOn, PayBadge, PayPopup, CallDepositDesk, PayNoticeToggle, queuePayNotice, DateField, OUT_KEY, DispatchWayPicker, isCaughtCall } from "./CallPay";
-import PrepayImportModal from "./PrepayImport"; // 💳 2026-11-20 선정산 파일(국세청승인번호 양식) → 용차지급 자동 반영 + 기사 정산정보
+import PrepayImportModal, { DriverPayImportModal } from "./PrepayImport"; // 💳 2026-11-20 선정산 파일(국세청승인번호 양식) → 용차지급 자동 반영 + 기사 정산정보
 import { isPrepaySheet, parsePrepayRows, yongchaTransferRows, normPlate as prepayPlate } from "./prepayCore"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
 import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
 import { DriverGuideSendModal, GUIDE_BTN, guideSentLabel, isFleetGrade } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
@@ -53794,6 +53794,38 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
   });
   React.useEffect(() => { if (!drvToast) return undefined; const t = setTimeout(() => setDrvToast(""), 2200); return () => clearTimeout(t); }, [drvToast]);
 
+  // 🪪 2026-11-20 [정산정보 가져오기] — 선정산 파일(여러 개)에서 차량번호로 기사를 찾아 사업자번호 · 계좌만 채운다
+  const [payInfoImport, setPayInfoImport] = React.useState(null); // { fileNames, items }
+  const onPayInfoFiles = async (e) => {
+    const files = [...(e.target.files || [])];
+    e.target.value = "";
+    if (!files.length) return;
+    const items = []; const names = []; const skipped = [];
+    for (const f of files) {
+      try {
+        const buf = await f.arrayBuffer();
+        const wb = XLSX.read(new Uint8Array(buf), { type: "array" });
+        const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" });
+        if (!isPrepaySheet(raw)) { skipped.push(f.name); continue; }
+        const its = parsePrepayRows(raw);
+        its.forEach((it) => { it.key = `${f.name}:${it.key}`; });
+        items.push(...its); names.push(f.name);
+      } catch { skipped.push(f.name); }
+    }
+    if (!items.length) return showAlert(`선정산 마감 파일(국세청승인번호 · 차량번호 · 사업자번호가 있는 양식)을 골라 주세요.${skipped.length ? `\n\n읽지 못한 파일: ${skipped.join(", ")}` : ""}`);
+    if (skipped.length) showAlert(`이 파일은 선정산 양식이 아니라 빼고 읽었어요: ${skipped.join(", ")}`);
+    setPayInfoImport({ fileNames: names, items });
+  };
+  // 기사관리에 없는 차량 → 대용량 업로드 양식 열 그대로(+ 정산 정보) 엑셀
+  const downloadMissingPayInfo = (its) => {
+    const rows = its.map((it) => ({ 차량번호: it.plate, 이름: it.ceo || "", 전화번호: it.phone || "", 등급: "일반", 메모: it.company || "",
+      사업자번호: it.bizNo ? fmtBizNo(it.bizNo) : "", 상호: it.company || "", 대표자: it.ceo || "", 은행: it.bank || "", 계좌번호: it.acct || "", 예금주: it.holder || "" }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    rows.forEach((_, i) => { const c = ws[XLSX.utils.encode_cell({ r: i + 1, c: 9 })]; if (c) { c.t = "s"; c.v = String(c.v); } }); // 계좌번호 앞자리 0 보존
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "기사관리에 없는 차량");
+    XLSX.writeFile(wb, `기사관리_미등록차량_${new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)}.xlsx`);
+  };
+
   // 기사정리 팝업 상태
   const [cleanupOpen, setCleanupOpen] = React.useState(false);
   const [cleanupTab, setCleanupTab] = React.useState("연락처정규화"); // "연락처정규화" | "중복기사정리"
@@ -54168,6 +54200,12 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               onFile={(e) => { setDriverBulkOpen(false); onExcel(e); }}
             />
           )}
+          {/* 🪪 2026-11-20 선정산 파일 → 기사 정산정보(사업자번호 · 계좌) */}
+          <label title="선정산 마감 파일(여러 개 한 번에)을 고르면 차량번호로 기사를 찾아 사업자번호 · 상호 · 대표자 · 은행 · 계좌 · 예금주를 채워요" className="h-11 px-4 inline-flex items-center rounded-[13px] bg-white border border-[#E3E8F0] text-[#0F1A30] text-[13px] font-bold cursor-pointer hover:border-[#4B6CB7] transition whitespace-nowrap">
+            정산정보 가져오기
+            <input type="file" accept=".xlsx,.xls" multiple className="hidden" onChange={onPayInfoFiles} />
+          </label>
+          {payInfoImport && <DriverPayImportModal fileNames={payInfoImport.fileNames} items={payInfoImport.items} drivers={drivers} onDownloadMissing={downloadMissingPayInfo} onClose={() => setPayInfoImport(null)} />}
           <button onClick={downloadExcel} className="h-11 px-4 rounded-[13px] bg-white border border-[#E3E8F0] text-[#0F1A30] text-[13px] font-bold hover:border-[#4B6CB7] transition">
             <EditableText id="driver.toolbar.엑셀다운로드" defaultText="엑셀 다운로드" />
           </button>

@@ -241,3 +241,180 @@ export default function PrepayImportModal({ fileName = "", items, pool, allOrder
   );
   return createPortal(body, document.body);
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// 🪪 2026-11-20 기사관리 › [정산정보 가져오기] — 선정산 파일(여러 개 한 번에)에서 차량번호로 기사를 찾아
+//  사업자번호 · 상호 · 대표자 · 은행 · 계좌번호 · 예금주만 채운다(지급 처리는 하지 않음).
+//  같은 차량이 여러 줄이면 계산서 날짜가 가장 늦은 줄 값. 기사관리에 없는 차량은 엑셀로 받아 등록에 쓸 수 있다.
+// ══════════════════════════════════════════════════════════════════════
+export function DriverPayImportModal({ fileNames = [], items = [], drivers = [], onClose, onDownloadMissing }) {
+  const latest = React.useMemo(() => {
+    const m = new Map();
+    [...items].sort((a, b) => String(a.invoiceDate).localeCompare(String(b.invoiceDate))).forEach((it) => { if (it.plateKey) m.set(it.plateKey, it); });
+    return m;
+  }, [items]);
+  const driverByPlate = React.useMemo(() => {
+    const m = new Map();
+    (drivers || []).forEach((d) => { const k = normPlate(d.차량번호 || d.carNo || ""); if (k && !m.has(k)) m.set(k, d); });
+    return m;
+  }, [drivers]);
+  const [overwrite, setOverwrite] = React.useState(false);
+  const rows = React.useMemo(() => [...latest.values()].map((it) => {
+    const d = driverByPlate.get(it.plateKey);
+    if (!d?.id) return { it, d: null, fill: {}, conflicts: [], kind: "missing" };
+    const { fill, conflicts } = driverPayDiff(d, it);
+    return { it, d, fill, conflicts, kind: conflicts.length ? "conflict" : Object.keys(fill).length ? "fill" : "same" };
+  }), [latest, driverByPlate]);
+  const matched = rows.filter((r) => r.d);
+  const missing = rows.filter((r) => !r.d);
+  const willChange = (r) => r.d && (Object.keys(r.fill).length > 0 || (overwrite && r.conflicts.length > 0));
+  const [checked, setChecked] = React.useState(() => new Set(rows.filter((r) => r.d && Object.keys(r.fill).length).map((r) => r.it.plateKey)));
+  React.useEffect(() => { // 덮어쓰기를 켜면 다른 값 있는 기사도 체크
+    if (overwrite) setChecked((s) => { const n = new Set(s); rows.filter((r) => r.kind === "conflict").forEach((r) => n.add(r.it.plateKey)); return n; });
+  }, [overwrite, rows]);
+  const [filter, setFilter] = React.useState("all");
+  const [busy, setBusy] = React.useState(false);
+  const [done, setDone] = React.useState(null);
+  React.useEffect(() => {
+    const k = (e) => { if (e.key === "Escape" && !busy) { e.stopPropagation(); onClose(); } };
+    window.addEventListener("keydown", k, true);
+    return () => window.removeEventListener("keydown", k, true);
+  }, [busy, onClose]);
+
+  const cnt = (k) => rows.filter((r) => r.kind === k).length;
+  const shown = rows.filter((r) => filter === "all" || r.kind === filter)
+    .sort((a, b) => ["fill", "conflict", "same", "missing"].indexOf(a.kind) - ["fill", "conflict", "same", "missing"].indexOf(b.kind) || String(a.it.plate).localeCompare(String(b.it.plate), "ko"));
+  const picked = matched.filter((r) => checked.has(r.it.plateKey) && willChange(r));
+  const toggle = (k) => setChecked((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n; });
+
+  const apply = async () => {
+    if (busy || !picked.length) return;
+    setBusy(true);
+    let n = 0;
+    try {
+      for (const r of picked) {
+        const entries = { ...r.fill };
+        if (overwrite) r.conflicts.forEach((c) => { entries[c.path] = c.next; });
+        if (!Object.keys(entries).length) continue;
+        await updateDoc(doc(db, "drivers", r.d.id), { ...driverPatchFrom(r.d, entries), 정산정보출처: `선정산 파일 ${r.it.invoiceDate || ""}`.trim() });
+        n++;
+      }
+      setDone({ n });
+    } catch (e) {
+      window.alert(`저장 중 오류가 났어요: ${e.message}\n여기까지 ${n}명은 저장됐어요.`);
+    } finally { setBusy(false); }
+  };
+
+  const KIND = {
+    fill: { label: "채울 칸 있음", cls: "bg-[#0F1A30] text-white" },
+    conflict: { label: "다른 값", cls: "bg-white text-[#0F1A30] border border-[#0F1A30]" },
+    same: { label: "이미 같음", cls: "bg-[#EEF3FC] text-[#1B2B4B] border border-[#C9D6EE]" },
+    missing: { label: "기사관리에 없음", cls: "bg-[#F4F6FA] text-[#5B6B85] border border-[#DCE3EE]" },
+  };
+  const chk = "w-4 h-4 accent-[#1B2B4B]";
+  const td = "px-2.5 py-2.5 text-center border-b border-[#EEF1F6]";
+  const curAcct = (d) => (d?.정산계좌?.acct ? `${d.정산계좌.bank || ""} ${formatAccount(d.정산계좌.bank, d.정산계좌.acct)}` : "");
+
+  return createPortal(
+    <div className="fixed inset-0 z-[99999] bg-[#0B1428]/60 flex items-center justify-center p-3" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
+      <div className="bg-white rounded-[22px] shadow-[0_40px_100px_rgba(0,0,0,0.45)] w-[1320px] max-w-[98vw] h-[88vh] max-h-[920px] flex flex-col overflow-hidden" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="shrink-0 px-6 py-4 flex items-center gap-3 text-white" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+          <div className="min-w-0 flex-1">
+            <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]">DRIVER · PAYMENT INFO</div>
+            <div className="text-[17px] font-black truncate">정산정보 가져오기 <span className="text-white/50 text-[13px] font-bold ml-1">{fileNames.length > 1 ? `파일 ${fileNames.length}개` : fileNames[0] || ""}</span></div>
+          </div>
+          <button type="button" disabled={busy} onClick={onClose} className="h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 hover:bg-white/20 text-[13px] font-bold">닫기 ✕</button>
+        </div>
+
+        {done ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 py-14 px-6 text-center">
+            <div className="text-[20px] font-black text-[#0F1A30]">가져왔어요</div>
+            <div className="text-[14.5px] text-[#3A4A66]" style={NUM}>기사 <b>{done.n}명</b>의 사업자번호 · 정산계좌를 채웠어요. 기사관리 표의 사업자번호 · 정산계좌 칸에서 볼 수 있어요.</div>
+            <button type="button" onClick={onClose} className="mt-2 h-11 px-8 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black">확인</button>
+          </div>
+        ) : (
+          <>
+            <div className="shrink-0 px-6 pt-5 pb-4 border-b border-[#EEF1F6] space-y-4 bg-[#F7F9FC]">
+              <div className="grid grid-cols-5 gap-3" style={NUM}>
+                {[["VEHICLES", "파일 차량", `${rows.length}대`, `계산서 ${items.length}장`],
+                  ["FILL", "채울 칸 있음", `${cnt("fill")}명`, "빈 칸을 채워요", true],
+                  ["DIFFERENT", "다른 값", `${cnt("conflict")}명`, "빈 칸만 채워요"],
+                  ["SAME", "이미 같음", `${cnt("same")}명`, "바꿀 것 없음"],
+                  ["MISSING", "기사관리에 없음", `${cnt("missing")}대`, "엑셀로 받아 등록"]].map(([en, l, v, sub, hot]) => (
+                  <div key={en} className={`rounded-2xl px-4 py-3 border text-center ${hot ? "bg-[#0F1A30] border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}>
+                    <div className={`text-[9.5px] font-extrabold tracking-[0.22em] ${hot ? "text-[#8FB0F0]" : "text-[#9AA9C3]"}`}>{en}</div>
+                    <div className={`text-[12px] font-bold whitespace-nowrap ${hot ? "text-white/70" : "text-[#5B6B85]"}`}>{l}</div>
+                    <div className={`text-[19px] font-black leading-tight whitespace-nowrap ${hot ? "text-white" : "text-[#0F1A30]"}`}>{v}</div>
+                    <div className={`text-[11px] font-semibold whitespace-nowrap ${hot ? "text-white/50" : "text-[#9AA9C3]"}`}>{sub}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between gap-4 whitespace-nowrap">
+                <div className="flex items-center gap-4">
+                  <div className="inline-flex rounded-xl border border-[#DCE3EE] bg-white p-0.5">
+                    {[["all", "전체", rows.length], ["fill", "채울 칸 있음", cnt("fill")], ["conflict", "다른 값", cnt("conflict")], ["same", "이미 같음", cnt("same")], ["missing", "기사관리에 없음", cnt("missing")]].map(([k, l, n]) => (
+                      <button key={k} type="button" onClick={() => setFilter(k)} className={`h-8 px-3 rounded-[9px] text-[12.5px] font-black whitespace-nowrap transition ${filter === k ? "bg-[#0F1A30] text-white" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>
+                        {l} <span className={filter === k ? "text-white/60" : "text-[#9AA9C3]"} style={NUM}>{n}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {cnt("conflict") > 0 && <Switch on={overwrite} set={setOverwrite} label={`다른 값도 파일 값으로 바꾸기 ${cnt("conflict")}명`} tip="기사관리에 이미 적힌 사업자번호 · 계좌가 파일과 다르면 파일 값으로 바꿔요" />}
+                </div>
+                {missing.length > 0 && onDownloadMissing && (
+                  <button type="button" onClick={() => onDownloadMissing(missing.map((r) => r.it))} className="h-9 px-3.5 rounded-xl border border-[#1B2B4B] bg-white text-[13px] font-black text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition">기사관리에 없는 차량 엑셀 ({missing.length}대)</button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-auto">
+              <table className="min-w-full text-[13px] whitespace-nowrap" style={NUM}>
+                <thead className="sticky top-0 z-[1]">
+                  <tr className="bg-[#0B1428]">
+                    {["", "상태", "차량번호", "기사명", "등급", "사업자번호", "상호 · 대표", "정산계좌(파일)", "지금 기사관리", "바뀌는 칸"].map((h, i) => <th key={i} className="px-2.5 py-3 text-center text-white font-bold border-b border-white/10">{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.length === 0 && <tr><td colSpan={10} className="py-16 text-center text-[13px] text-[#9AA9C3]">해당하는 차량이 없어요</td></tr>}
+                  {shown.map((r, i) => {
+                    const can = willChange(r);
+                    const on = can && checked.has(r.it.plateKey);
+                    const k = KIND[r.kind];
+                    const changes = [...Object.keys(r.fill).map((p) => DRIVER_FIELD_LABEL[p]), ...(overwrite ? r.conflicts.map((c) => `${c.label}(변경)`) : [])].filter(Boolean);
+                    return (
+                      <tr key={r.it.plateKey} onClick={() => can && toggle(r.it.plateKey)} className={`${can ? "cursor-pointer" : ""} ${on ? "bg-[#EEF3FC]" : i % 2 ? "bg-[#FAFBFD]" : "bg-white"} hover:bg-[#EEF3FC]/60 transition`}>
+                        <td className={td}><input type="checkbox" className={chk} disabled={!can} checked={on} onClick={(e) => e.stopPropagation()} onChange={() => toggle(r.it.plateKey)} /></td>
+                        <td className={td}><span className={`inline-flex h-6 px-2 items-center rounded-md text-[11.5px] font-black ${k.cls}`}>{k.label}</span></td>
+                        <td className={`${td} font-bold text-[#0F1A30]`}>{r.it.plate}</td>
+                        <td className={`${td} text-[#0F1A30]`}>{r.d ? (r.d.이름 || "-") : "-"}</td>
+                        <td className={`${td} text-[#5B6B85]`}>{r.d ? (r.d.등급 || "일반") : "-"}</td>
+                        <td className={`${td} font-semibold text-[#0F1A30]`}>{fmtBizNo(r.it.bizNo) || "-"}</td>
+                        <td className={td}><span className="font-semibold text-[#0F1A30]">{r.it.company || "-"}</span>{r.it.ceo && <span className="text-[#7A89A3]"> · {r.it.ceo}</span>}</td>
+                        <td className={td}>{r.it.acct ? <><b className="text-[#1B2B4B]">{r.it.bank}</b> {formatAccount(r.it.bank, r.it.acct)}{r.it.holder && <span className="text-[#7A89A3]"> · {r.it.holder}</span>}</> : "-"}</td>
+                        <td className={`${td} text-[12.5px] text-[#7A89A3]`} title={[r.d?.사업자번호 ? `사업자번호 ${fmtBizNo(r.d.사업자번호)}` : "", r.d ? curAcct(r.d) : "", ...r.conflicts.map((c) => `${c.label}: 지금 ${c.cur} → 파일 ${c.next}`)].filter(Boolean).join("\n") || undefined}>
+                          {r.d ? ([r.d.사업자번호 ? "사업자번호" : "", r.d.정산계좌?.acct ? "계좌" : ""].filter(Boolean).join(" · ") || "비어 있음") + (r.d.사업자번호 || r.d.정산계좌?.acct ? " 있음" : "") : "-"}
+                        </td>
+                        <td className={`${td} text-[12.5px] ${changes.length ? "font-bold text-[#0F1A30]" : "text-[#9AA9C3]"}`} title={changes.join(" · ") || undefined}>{r.d ? (changes.length ? `${changes.length}칸` : r.kind === "conflict" ? "덮어쓰기 꺼짐" : "-") : "-"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="shrink-0 px-6 py-3.5 border-t border-[#EEF1F6] flex items-center gap-3 whitespace-nowrap bg-white">
+              <div className="text-[13.5px] text-[#3A4A66] flex-1 min-w-0 truncate" style={NUM}>
+                선택 <b className="text-[#0F1A30]">{picked.length}명</b>의 사업자번호 · 상호 · 대표자 · 은행 · 계좌 · 예금주를 채워요 · 지급 처리는 하지 않아요
+              </div>
+              <button type="button" disabled={busy} onClick={onClose} className="h-11 px-5 rounded-xl border border-[#DCE3EE] text-[14px] font-bold text-[#3A4A66]">취소</button>
+              <button type="button" disabled={busy || !picked.length} onClick={apply} className="h-11 px-6 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-40">
+                {busy ? "저장하는 중…" : `${picked.length}명 정산정보 저장`}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+const DRIVER_FIELD_LABEL = { 사업자번호: "사업자번호", 사업자상호: "상호", 사업자대표: "대표자", "정산계좌.bank": "은행", "정산계좌.acct": "계좌", "정산계좌.holder": "예금주" };
