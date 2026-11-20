@@ -72,7 +72,9 @@ import { DateTimeSelect } from "./kpTimePick"; // ⏱ 2026-11-04 예약발송 �
 import { subscribeUsersLive } from "./usersLive";
 import { useUserProfiles } from "./userProfilesLive"; // 🔒 2026-11-07 인사 프로필은 우리 회사 직원 한 건씩
 const AdminMenu = lazyView(() => import("./AdminMenu"));
-import FleetExtraFields from "./FleetDriverExtra";
+import FleetExtraFields, { DriverPayFields } from "./FleetDriverExtra"; // 💳 2026-11-20 용차 기사 정산정보(사업자 · 계좌)
+import { formatAccount as fmtAcctByBank } from "./bankUtil";
+import { fmtBizNo } from "./formatInput";
 import DriverVehicleChangeModal, { DriverMergeModal } from "./DriverVehicleChange"; // ⭐ 2026-11-11 기사 차량 변경(계정은 그대로)
 import { useFixedRouteAutoDispatch, FixedRouteEditNotice } from "./FixedRoutes";
 import { isMasterKey } from "./monthCompare"; // ⭐ 2026-11-03 최고관리자 계정은 담당자 이름 대신 "최고관리자"
@@ -3025,7 +3027,9 @@ const FreightWorkspace = React.lazy(() => import("./freight/FreightWorkspace"));
 const FreightHomeDeck = React.lazy(() => import("./freight/FreightHomeDeck")); // 🧭 2026-11-18 컨테이너 · 해상 · 항공 HOME
 const FreightRevenueStrip = React.lazy(() => import("./freight/FreightSettle").then((m) => ({ default: m.FreightRevenueStrip })));
 import { allowedModules } from "./freight/freightCore";
-import { useBetaOn, PayBadge, PayPopup, CallDepositDesk, PayNoticeToggle, queuePayNotice, DateField, OUT_KEY, DispatchWayPicker, isCaughtCall } from "./CallPay"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
+import { useBetaOn, PayBadge, PayPopup, CallDepositDesk, PayNoticeToggle, queuePayNotice, DateField, OUT_KEY, DispatchWayPicker, isCaughtCall } from "./CallPay";
+import PrepayImportModal from "./PrepayImport"; // 💳 2026-11-20 선정산 파일(국세청승인번호 양식) → 용차지급 자동 반영 + 기사 정산정보
+import { isPrepaySheet, parsePrepayRows } from "./prepayCore"; // 💳 2026-11-11 오더별 정산 표시(시험 — 테스트운송사)
 import { BRAND, LogisMark, LogisWordmark, LogisTag } from "./brand";
 import { DriverGuideSendModal, GUIDE_BTN, guideSentLabel, isFleetGrade } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
 // ⭐ 2026-11-06 로지스웹 허브(운송사 간 오더 거래소) — [저장 + 허브 등록]
@@ -52860,6 +52864,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const [payExcelPreview, setPayExcelPreview] = useState(null); // { matched, unmatched }
   const [payExcelConfirming, setPayExcelConfirming] = useState(false);
   const [payExcelDone, setPayExcelDone] = useState(null); // { excelCount, dispatchCount, totalAmt }
+  const [prepay, setPrepay] = useState(null); // 💳 2026-11-20 선정산 파일 { fileName, items }
 
   // 빠른 기간 선택
   const setThisMonth = () => {
@@ -53044,6 +53049,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
       수수료율: marginPctText(toInt(r.청구운임) - toInt(r.기사운임) - paidOut(r), toInt(r.청구운임)), // ⭐ 2026-11-17 매출 대비 %
       ...(fareRP.on ? { 운임구분: r.운임구분 || "" } : {}),
       지급방식: r.지급방식 || "", 배차방식: r.배차방식 || "", 메모: r.메모 || "",
+      국세청승인번호: r.국세청승인번호 || "", 계산서일자: r.계산서일자 || "", // 💳 2026-11-20 선정산 파일 반영분
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
@@ -53063,6 +53069,14 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 
         // 실제 헤더 행 찾기 (첫 행이 제목일 수 있어 동적으로 감지)
         const rawArr = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" });
+        // 💳 2026-11-20 선정산 마감 파일(국세청승인번호 · 선정산 신청액 양식)은 상차일이 없다 → 계산서 날짜 · 금액으로 맞추는 창으로
+        if (isPrepaySheet(rawArr)) {
+          const items = parsePrepayRows(rawArr);
+          if (!items.length) { alert("선정산 파일에 내용이 없어요."); return; }
+          if (!driversReady) { alert("기사 목록을 불러오는 중이에요. 잠시 뒤 다시 올려 주세요."); return; }
+          setPrepay({ fileName: file.name, items });
+          return;
+        }
         const headerRowIdx = rawArr.findIndex(row =>
           row.some(cell => ["차량번호", "차주이름", "상차일", "운송료"].includes(String(cell || "").trim()))
         );
@@ -53360,16 +53374,16 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="bg-[#0B1428]">
-                  {["", "순번", "상차일", "거래처명", "상차지", "하차지", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "부가세(10%)", `산재보험료(${insuranceRate}%)`, "수수료", "지급방식", "배차방식", "지급상태", "지급일"].map((h, hi) => (
+                  {["", "순번", "상차일", "거래처명", "상차지", "하차지", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "부가세(10%)", `산재보험료(${insuranceRate}%)`, "수수료", "지급방식", "배차방식", "지급상태", "지급일", "국세청승인번호"].map((h, hi) => (
                     <SortTh key={h || "_chk"} k={h ? (hi === 12 ? "산재보험료" : h) : ""} sort={paySort.sort} onSort={paySort.toggle} className="px-3 py-3 text-white font-bold text-center whitespace-nowrap border-b border-white/10">{h ? <EditableText id={`settlement.table.header.${h}`} defaultText={h} /> : h}</SortTh>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {!searched ? (
-                  <tr><td colSpan={16} className="text-center py-20 text-gray-500 text-[13px]">이번달 / 지난달 버튼 또는 날짜를 설정하고 <b className="text-[#1B2B4B]">조회</b> 버튼을 눌러주세요.</td></tr>
+                  <tr><td colSpan={19} className="text-center py-20 text-gray-500 text-[13px]">이번달 / 지난달 버튼 또는 날짜를 설정하고 <b className="text-[#1B2B4B]">조회</b> 버튼을 눌러주세요.</td></tr>
                 ) : filtered.length === 0 ? (
-                  <tr><td colSpan={16} className="text-center py-16 text-gray-500 text-[13px]">조회된 데이터가 없습니다.</td></tr>
+                  <tr><td colSpan={19} className="text-center py-16 text-gray-500 text-[13px]">조회된 데이터가 없습니다.</td></tr>
                 ) : paySorted.map((r, i) => {
                   const isDone = (r.지급상태 || "지급중") === "지급완료";
                   const fee = orderProfit(r); // ⭐ 2026-11-17 한 식(청구 − 기사 − 지게차·특수운임 회사 지급분)
@@ -53412,6 +53426,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                           ? <DateField value={r.지급일 || ""} width={140} onChange={(d) => changePayDate(r, d)} />
                           : (r.지급일 || "-")}
                       </td>
+                      {/* 💳 2026-11-20 선정산 파일로 지급한 오더 — 세금계산서 국세청승인번호(앞 8자리 = 계산서 작성일) */}
+                      <td className="px-3 py-2.5 text-center text-gray-500 border-b border-gray-100 whitespace-nowrap text-[11px]" title={r.계산서일자 ? `계산서 작성일 ${r.계산서일자}` : undefined}>{r.국세청승인번호 || "-"}</td>
                     </tr>
                   );
                 })}
@@ -53426,7 +53442,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                     <td className="px-3 py-3 text-right text-[#8FB0F0] font-bold">{won(kpi.vatTotal)}</td>
                     <td className="px-3 py-3 text-right text-[#8FB0F0] font-bold">{won(kpi.insuranceTotal)}</td>
                     <td className={`px-3 py-3 text-right font-bold ${kpi.fee > 0 ? "text-[#FF8A8E]" : kpi.fee < 0 ? "text-[#8FB0F0]" : "text-white"}`}>{won(kpi.fee)}<MarginPct dark profit={kpi.fee} sales={kpi.sale} /></td>{/* ⭐ 2026-11-17 수수료 합계 — 플러스 빨강 · 마이너스 파랑 */}
-                    <td colSpan={4} className="px-3 py-3 text-center text-white/60 text-[11px]">
+                    <td colSpan={5} className="px-3 py-3 text-center text-white/60 text-[11px]">
                       지급완료 {kpi.done}건 / 미지급 {kpi.undone}건 (미지급액 {won(kpi.undoneAmt)}원)
                     </td>
                   </tr>
@@ -53500,6 +53516,11 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
         </div>
       )}
       {/* ── 엑셀 업로드 미리보기 / 완료 모달 ── */}
+      {prepay && (
+        <PrepayImportModal fileName={prepay.fileName} items={prepay.items} pool={base} allOrders={dispatchData} fleetPlates={fleetPlates}
+          drivers={payDrivers || []} defaultPayDate={selectedPayDate} patchDispatch={patchDispatch}
+          onPaid={(o, d) => syncPayLedger(o, "지급완료", d)} onClose={() => setPrepay(null)} />
+      )}
       {payExcelOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[99999]">
           <div className="bg-white rounded-2xl shadow-2xl w-[860px] max-h-[90vh] flex flex-col overflow-hidden">
@@ -53870,6 +53891,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
       case "거주지": return fleet ? r.거주지 : "";
       case "근무가능요일": return fleet && Array.isArray(r.근무요일) ? r.근무요일.join(",") : "";
       case "등급": return g;
+      case "정산계좌": return r.정산계좌?.acct ? `${r.정산계좌.bank || ""} ${r.정산계좌.acct}` : "";
       case "팝업": return !(r.메모 || "").trim() ? "" : (g === "블랙" ? "ON" : r.팝업표시 === true ? "ON" : "OFF");
       default: return r[key];
     }
@@ -54364,7 +54386,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                         checked={filtered.length > 0 && selected.size === filtered.length}
                       />
                     </th>
-                    {[["순번",""],["담당자",""],["차량번호","w-[92px]"],["차량종류",""],["이름",""],["전화번호",""],["등록일",""],["거주지",""],["근무가능요일",""],["등급",""],["메모",""],["팝업",""],["삭제",""]].map(([h,w]) => (
+                    {[["순번",""],["담당자",""],["차량번호","w-[92px]"],["차량종류",""],["이름",""],["전화번호",""],["사업자번호",""],["정산계좌",""],["등록일",""],["거주지",""],["근무가능요일",""],["등급",""],["메모",""],["팝업",""],["삭제",""]].map(([h,w]) => (
                       h === "담당자" ? (
                         <th key={h} className={`px-2 py-2 text-white font-bold text-center whitespace-nowrap ${w}`}>
                           {/* ⭐ 2026-11-02 누르면 담당자 목록 — 고른 담당자의 차량이 맨 위로 */}
@@ -54385,7 +54407,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                 <tbody>
                   {paged.length === 0 ? (
                     <tr>
-                      <td colSpan={14} className="text-center py-16 text-gray-500 text-[14px]">
+                      <td colSpan={16} className="text-center py-16 text-gray-500 text-[14px]">
                         {q.trim() ? "검색 결과가 없습니다." : "데이터가 없습니다."}
                       </td>
                     </tr>
@@ -54416,6 +54438,11 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                         <td className="px-2 py-2.5 text-center whitespace-nowrap"><VehicleTypeBadge type={r.차량종류} ton={r.차량톤수} /></td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{r.이름||"-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap">{formatPhone(r.전화번호)||"-"}</td>
+                        {/* 💳 2026-11-20 정산정보 — 사업자번호 · 은행 계좌(예금주는 마우스를 올리면 · 상호도) */}
+                        <td className="px-2 py-2.5 text-center whitespace-nowrap text-[12px] text-gray-600" style={{ fontVariantNumeric: "tabular-nums" }} title={[r.사업자상호, r.사업자대표].filter(Boolean).join(" · ") || undefined}>{r.사업자번호 ? fmtBizNo(r.사업자번호) : "-"}</td>
+                        <td className="px-2 py-2.5 text-center whitespace-nowrap text-[12px] text-gray-600" style={{ fontVariantNumeric: "tabular-nums" }} title={r.정산계좌?.holder ? `예금주 ${r.정산계좌.holder}` : undefined}>
+                          {r.정산계좌?.acct ? <><span className="font-bold text-[#1B2B4B]">{r.정산계좌.bank || ""}</span> {fmtAcctByBank(r.정산계좌.bank, r.정산계좌.acct)}{r.정산계좌.holder ? <span className="text-gray-400"> · {r.정산계좌.holder}</span> : null}</> : "-"}
+                        </td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500 text-[12px]">{displayRegDate(r) || "-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500">{(grade==="지입"||grade==="직영"||grade==="임대") ? (r.거주지 || "-") : "-"}</td>
                         <td className="px-3 py-2.5 text-center whitespace-nowrap text-gray-500 text-[12px]">{(grade==="지입"||grade==="직영"||grade==="임대") ? (Array.isArray(r.근무요일) && r.근무요일.length ? r.근무요일.join(",") : (typeof r.근무요일 === "string" && r.근무요일.trim()) || "-") : "-"}</td>
@@ -54633,6 +54660,8 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                   <FleetExtraFields value={editDriverModal} onChange={setEditDriverModal} company={userCompany} />
                 </>
               )}
+              {/* 💳 2026-11-20 용차 기사 정산정보(지입 · 직영 · 임대는 위 지입 기본정보 칸에 있음) */}
+              {!isFleetGrade(editDriverModal.등급) && <DriverPayFields value={editDriverModal} onChange={setEditDriverModal} />}
               {/* ⭐ 2026-11-07 세금계산서 발행 기사 — 켜면 이 기사 운임의 10%를 회계관리 예상 부가세의 매입세액으로 뺀다 */}
               <div className="col-span-2 flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2.5">
                 <div>
