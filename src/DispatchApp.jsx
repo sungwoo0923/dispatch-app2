@@ -5258,7 +5258,7 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     // 지입 기사에게 "배차가 취소되었습니다" 알림을 남긴다(기사 앱 알림종).
     if (prev?.차량번호) {
       const canceledDriver = drivers.find(d => normalizePlate(d.차량번호) === normalizePlate(prev.차량번호));
-      if (canceledDriver?.등급 === "지입") {
+      if (isFleetGrade(canceledDriver?.등급)) {
         addDoc(collection(db, "driver_notifications"), {
           driverId: canceledDriver.id,
           type: "canceled",
@@ -5285,7 +5285,7 @@ const patchDispatch = async (_id, patch, knownPrev) => {
         // 필드만 고치는 저장에는 재알림하지 않는다) 기사확인상태를 "대기"로 걸어
         // 기사 앱에서 오더수락/거절 카드 + 상단 배너 알림이 뜨게 한다.
         if (
-          driver.등급 === "지입" && !!driver.uid && // ⭐ 2026-11-02 기사앱을 아직 안 쓰는(가입 안 한) 지입 기사는 승인대기 없이 바로 배차완료
+          isFleetGrade(driver.등급) && !!driver.uid && // ⭐ 2026-11-02 기사앱을 아직 안 쓰는(가입 안 한) 지입 기사는 승인대기 없이 바로 배차완료
           "차량번호" in patch &&
           normalizePlate(patch.차량번호) !== normalizePlate(prev?.차량번호)
         ) {
@@ -5474,6 +5474,8 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     SHIPPER_MIRROR_FIELDS.forEach((key) => {
       if (key in cleanPatch) mirrorPatch[key] = cleanPatch[key];
     });
+    // 🛠 2026-11-20 오더 칸(상차지담당자 · 상차지담당자번호) → 화주사 사본 칸(상차담당자명 · 상차담당자번호) — 예전엔 이름이 달라 담당자를 고쳐도 사본에 안 갔다
+    Object.entries({ 상차지담당자: "상차담당자명", 상차지담당자번호: "상차담당자번호", 하차지담당자: "하차담당자명", 하차지담당자번호: "하차담당자번호" }).forEach(([from, to]) => { if (from in cleanPatch) mirrorPatch[to] = cleanPatch[from]; });
     if ("차량번호" in cleanPatch || "배차완료일시" in cleanPatch) {
       const mirrorPlate = String(cleanPatch.차량번호 ?? prev.차량번호 ?? "").trim();
       mirrorPatch.배차상태 = mirrorPlate ? "배차완료" : "배차중";
@@ -5635,7 +5637,7 @@ const _prepRemoveDispatch = async (arg, opts = {}) => {
   // (실제 OS 푸시는 배차상태→"배차취소" 전환을 보는 Cloud Function이 보낸다).
   if (data?.기사확인상태 && data.기사확인상태 !== "거절" && data?.차량번호) {
     const canceledDriver = drivers.find(d => normalizePlate(d.차량번호) === normalizePlate(data.차량번호));
-    if (canceledDriver?.등급 === "지입") {
+    if (isFleetGrade(canceledDriver?.등급)) {
       // ⭐ 2026-11-05 기사앱 "삭제된 오더" 팝업용 안내 문서(오더 요약 포함) — 따로 저장, 삭제는 기다리지 않는다
       writeOrderDeletedNotice(db, { driverId: canceledDriver.id, orderId: id, data });
     }
@@ -8682,7 +8684,7 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
       if (fixedAwaitRef.current.has(key)) return;
       const list = byPlate.get(normalizePlate(r.차량번호)) || [];
       if (!list.length) return; // 기사 목록에 없는 차량은 판단하지 않는다
-      if (list.some((d) => d.등급 === "지입" && !!d.uid)) return; // 기사앱 가입한 지입 기사 → 수락을 기다리는 게 맞다
+      if (list.some((d) => isFleetGrade(d.등급) && !!d.uid)) return; // 기사앱 가입한 지입 기사 → 수락을 기다리는 게 맞다
       fixedAwaitRef.current.add(key);
       updateDoc(doc(db, r.__col || "orders", r._id), { 기사확인상태: null, 배차상태: "배차완료", 상태: "배차완료" }).catch(() => fixedAwaitRef.current.delete(key));
     });
@@ -8702,7 +8704,7 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
       if (String(rec.차량번호 || "").trim()) {
         const dv = drivers.find((d) => normalizePlate(d.차량번호) === normalizePlate(rec.차량번호));
         if (dv) { rec.이름 = rec.이름 || dv.이름 || ""; rec.전화번호 = rec.전화번호 || dv.전화번호 || ""; }
-        if (dv?.등급 === "지입" && !!dv.uid) {
+        if (isFleetGrade(dv?.등급) && !!dv.uid) {
           rec.기사확인상태 = "대기"; rec.배차상태 = "승인대기";
           addDoc(collection(db, "driver_notifications"), { driverId: dv.id, type: "new_order", orderId: null, title: "배차오더가 도착했습니다", body: `${rec.거래처명 || ""} ${rec.상차지명 || "-"} → ${rec.하차지명 || "-"}`, createdAt: serverTimestamp(), read: false }).catch(() => {});
         }
@@ -13107,7 +13109,7 @@ const submitMultiRegister = async () => {
       let 슬롯기사확인상태 = {};
       if (s.차량번호) {
         const assignedDriverMR = drivers.find(d => normalizePlate(d.차량번호) === normalizePlate(s.차량번호));
-        if (assignedDriverMR?.등급 === "지입" && !!assignedDriverMR.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
+        if (isFleetGrade(assignedDriverMR?.등급) && !!assignedDriverMR.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기
           슬롯기사확인상태 = { 기사확인상태: "대기" };
           addDoc(collection(db, "driver_notifications"), {
             driverId: assignedDriverMR.id,
@@ -14516,7 +14518,7 @@ if (rec.차량번호) {
 // 기사확인상태를 "대기"로 걸어 기사 앱에서 오더수락/거절 알림이 뜨게 한다.
 if (rec.차량번호) {
   const assignedDriver = drivers.find(d => normalizePlate(d.차량번호) === normalizePlate(rec.차량번호));
-  if (assignedDriver?.등급 === "지입" && !!assignedDriver.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기(아니면 배차완료)
+  if (isFleetGrade(assignedDriver?.등급) && !!assignedDriver.uid) { // ⭐ 2026-11-02 기사앱 가입한 지입 기사만 승인대기(아니면 배차완료)
     rec.기사확인상태 = "대기";
     rec.배차상태 = "승인대기";
     addDoc(collection(db, "driver_notifications"), {
@@ -51128,7 +51130,7 @@ const handleBatchSettle = async (targetStatus) => {
                             </div>
                             {s.status === "pending" && (
                               <button
-                                onClick={() => deleteDoc(doc(db, "scheduledEmails", s.id)).catch(() => {})}
+                                onClick={async () => { if (!(await kpConfirm(`${s.meta?.client || s.to} 예약 메일을 취소할까요?\n예약한 시간에 보내지 않아요.`, { title: "예약 취소", okText: "예약 취소", danger: true }))) return; deleteDoc(doc(db, "scheduledEmails", s.id)).catch(() => {}); }} // 🗑 2026-11-20 삭제 확인창
                                 className="px-3 py-1.5 rounded-lg border border-[#E3E8F0] text-[11px] font-semibold text-[#7A89A3] hover:bg-[#F3F6FA] hover:text-[#0B1428] hover:border-[#C9D6EE] transition shrink-0"
                               >
                                 예약취소

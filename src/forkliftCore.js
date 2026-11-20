@@ -15,8 +15,8 @@
 //       청구 추가  → 청구 600,000 · 기사 400,000 · 수익 100,000
 // ⭐ 2026-11-17 수익 계산(fkNum · paidOut · orderProfit · profitTotals 등)은 functions/profitCore.mjs 로 옮겼다 —
 //  서버(AI 비서 · 일일 보고서)와 같은 파일을 쓰려고. 여기서는 다시 내보내기만 한다(가져오는 곳 그대로).
-import { fkNum, fkAmount, SPECIAL_TYPES, sfType, sfItems, sfPayee, sfMode, sfTotals, paidOut, orderProfit, orderCost, profitRate, profitTotals } from "../functions/profitCore.mjs";
-export { fkNum, fkAmount, SPECIAL_TYPES, sfType, sfItems, sfPayee, sfMode, sfTotals, paidOut, orderProfit, orderCost, profitRate, profitTotals };
+import { fkNum, fkAmount, SPECIAL_TYPES, sfType, sfItems, sfPayee, sfMode, sfTotals, paidOut, orderProfit, orderCost, profitRate, profitTotals, nextFee } from "../functions/profitCore.mjs";
+export { fkNum, fkAmount, SPECIAL_TYPES, sfType, sfItems, sfPayee, sfMode, sfTotals, paidOut, orderProfit, orderCost, profitRate, profitTotals, nextFee };
 
 export const FORKLIFT_MODES = [
   { key: "기사", label: "기사운임에서 차감", short: "기사 차감" },

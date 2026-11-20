@@ -47,6 +47,7 @@ import { AiHq, AI_TEAM_TABS } from "./AiTeamPanel"; // 🤖 2026-11-06 AI 팀 ·
 import { G, NUM, ADM_CSS, AdmHero, AdmPanel, AdmClock, AdmBtn, AdmEmpty, Seg } from "./adminCenter/admUi";
 import { CommandDeck, TrafficView, CarrierUsageView, WalletView } from "./adminCenter/OpsScreens";
 import { isAdminDemo } from "./adminCenter/useOpsData";
+import AdminSearch, { adminSearchEntries } from "./adminCenter/AdminSearch"; // 🔎 2026-11-20 상단 메뉴 검색
 const DEMO_STATS = () => (isAdminDemo() ? window.__kpAdminDemoStats || null : null); // 개발 /preview-admin 화면 점검용
 import { RemoteSupportAdminPanel } from "./RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
 import { CustomSelect } from "./CustomSelect";
@@ -1327,10 +1328,12 @@ function PlatformCenterInner({ user }) {
   else if (tab === "privateFare") body = <><Hero en="SECURITY · PRIVATE FARE" title="비공개 운임" desc="운송사와 사람을 골라 비공개 운임을 켜요. 켜진 사람의 임원 화면에 메뉴가 생기고, 비밀번호로 들어가요. 그 사람이 정한 금액은 최고관리자도 볼 수 없어요." /><React.Suspense fallback={<AdmEmpty />}><PrivateFareAdminLazy /></React.Suspense></>;
   else if (tab === "subAdmin") body = <><Hero en="SECURITY · SUB ADMIN" title="부관리자" desc="최고관리자와 같은 권한을 가진 부관리자(1명)를 보고 지정 · 해제해요." /><SubAdminPanel /></>;
 
+  // 🔎 상단 메뉴 검색 — 메뉴 · 화면 안 작은 탭까지(휴대폰에서 못 쓰는 화면은 뺌)
+  const searchEntries = adminSearchEntries(sectionsView, SUBTABS).filter((e) => !(phone && PHONE_HIDE.has(e.tab)));
   const subBar = subs.length > 1 ? <div className="mb-3 sm:mb-4 flex"><Seg value={tab} onChange={setTab} items={subs} /></div> : null;
   const content = <>{subBar}<div key={tab} className="adm-in">{body}</div></>;
 
-  if (phone) return <PlatformMobileShell user={user} sections={sectionsView} section={sectionView} tab={tab} curItem={curItem} setTab={setTab} toApp={toApp} logout={logout} secBadge={secBadge}>{content}</PlatformMobileShell>;
+  if (phone) return <PlatformMobileShell searchEntries={searchEntries} user={user} sections={sectionsView} section={sectionView} tab={tab} curItem={curItem} setTab={setTab} toApp={toApp} logout={logout} secBadge={secBadge}>{content}</PlatformMobileShell>;
 
   return (
     <div className="kp-adm kp-pcenter min-h-screen">
@@ -1388,7 +1391,8 @@ function PlatformCenterInner({ user }) {
             <span style={{ color: "rgba(215,188,130,.35)" }}>/</span>
             <span className="text-[16px] font-black whitespace-nowrap" style={{ color: G.ink }}>{curItem?.label || ""}</span>
           </div>
-          <div className="ml-auto flex items-center gap-2.5 shrink-0">
+          <div className="flex-1 min-w-[200px] flex justify-center px-2"><AdminSearch entries={searchEntries} onPick={setTab} /></div>
+          <div className="flex items-center gap-2.5 shrink-0">
             <span className="hidden xl:inline-flex items-center gap-2 h-9 px-3 rounded-xl" style={{ background: "rgba(255,255,255,.04)", border: `1px solid ${G.line}` }}><span className="text-[10px] font-extrabold tracking-[0.2em]" style={{ ...NUM, color: G.goldDim }}>KST</span><Clock /></span>
           </div>
         </header>
@@ -1450,7 +1454,7 @@ const PM_MOBILE_CSS = `
 .kp-pm .pm-item[data-on="0"] { background: rgba(255,255,255,.03); color: rgba(226,232,245,.75); border-color: rgba(215,188,130,.14); }
 `;
 // ⭐ 2026-11-02 관리자센터 — 버튼을 손가락 크기로, 처리 대기 배지, 지금 접속 알약
-function PlatformMobileShell({ user, sections = SECTIONS, section, tab, curItem, setTab, toApp, logout, secBadge = () => 0, children }) {
+function PlatformMobileShell({ searchEntries = [], user, sections = SECTIONS, section, tab, curItem, setTab, toApp, logout, secBadge = () => 0, children }) {
   const secRef = React.useRef(null);
   const subRef = React.useRef(null);
   // 고른 메뉴가 화면 밖이면 가운데로 끌어온다
@@ -1470,6 +1474,7 @@ function PlatformMobileShell({ user, sections = SECTIONS, section, tab, curItem,
             <div className="text-[9px] font-extrabold tracking-[0.3em] mt-1 truncate whitespace-nowrap" style={{ ...NUM, color: G.gold }}>ADMIN CENTER</div>
           </div>
           <HeaderLivePill phone onClick={() => setTab("live")} />
+          <AdminSearch phone entries={searchEntries} onPick={setTab} />
           <button type="button" onClick={toApp} className="adm-btn-gold shrink-0 h-9 px-2.5 rounded-[10px] text-[13px] font-black whitespace-nowrap">배차앱 ↗</button>
           <button type="button" onClick={logout} aria-label="로그아웃" className="adm-btn shrink-0 h-9 w-9 rounded-[10px] flex items-center justify-center" title={user?.email || "로그아웃"}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
