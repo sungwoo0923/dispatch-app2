@@ -12,6 +12,27 @@ import React from "react";
 //  → 조각 파일을 못 받은 직후의 이 오류도 같은 경우로 보고 한 번 새로고침한다(새 버전 화면으로 열린다)
 const isStaleLazyError = (e) => { try { return /Cannot read propert(y|ies) of undefined \(reading '|undefined is not an object \(evaluating '|\.default is undefined|is undefined$/i.test(String(e?.message || e || "")) && Date.now() - Number(window.__kpPreloadFailed || 0) < 60000; } catch { return false; } };
 export const isChunkLoadError = (e) => isStaleLazyError(e) || /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|ChunkLoadError|Loading chunk [\w-]+ failed|Unable to preload CSS/i.test(String(e?.message || e || ""));
+// 🛠 2026-11-20 지금 자동 새로고침을 할 수 있는지(30초 안에 이미 했으면 false) — 화면에 "오류" 대신 "새 버전 여는 중"을 보여 줄지 정한다
+function canReloadNow() {
+  try { return Date.now() - Number(sessionStorage.getItem("kpChunkReloadAt") || 0) >= 30000; } catch { return true; }
+}
+
+// 🛠 2026-11-20 배포 직후 메뉴(예: 정산관리)를 처음 열 때 ⚠ 오류 화면이 잠깐 번쩍였다가 새로고침되던 것
+//  → 곧 자동 새로고침될 경우엔 오류 화면 대신 조용한 "새 버전으로 여는 중" 화면을 보여 준다
+function UpdatingScreen({ full = true }) {
+  return (
+    <div style={{
+      minHeight: full ? "100vh" : 240, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      padding: 24, textAlign: "center", background: full ? "#F5F7FA" : "transparent", fontFamily: "sans-serif",
+    }}>
+      <div style={{ width: 28, height: 28, borderRadius: "50%", border: "3px solid #DCE3EE", borderTopColor: "#1B2B4B", animation: "kpUpdSpin .8s linear infinite" }} />
+      <style>{"@keyframes kpUpdSpin{to{transform:rotate(360deg)}}"}</style>
+      <div style={{ marginTop: 14, fontSize: 15, fontWeight: 800, color: "#1B2B4B" }}>새 버전으로 여는 중이에요</div>
+      <div style={{ marginTop: 6, fontSize: 12.5, color: "#7A89A3" }}>프로그램이 업데이트돼서 잠깐 새로 불러와요</div>
+    </div>
+  );
+}
+
 export function reloadOnce() {
   try {
     const last = Number(sessionStorage.getItem("kpChunkReloadAt") || 0);
@@ -53,17 +74,18 @@ export default class ErrorBoundary extends React.Component {
   }
 
   static getDerivedStateFromError(error) {
-    return { error };
+    return { error, updating: isChunkLoadError(error) && canReloadNow() };
   }
 
   componentDidCatch(error, info) {
     console.error("[ErrorBoundary] 화면 오류:", error, info?.componentStack);
     // ⭐ 2026-11-01 새 버전 배포 직후 — 열려 있던 화면이 예전 파일(지금은 서버에 없는 조각 파일)을 불러오다 실패하면
     //    이 안내가 떴다(새로고침하면 해결). 이런 "화면 파일 불러오기 실패"는 자동으로 한 번 새로고침한다.
-    if (isChunkLoadError(error)) reloadOnce();
+    if (isChunkLoadError(error) && !reloadOnce() && this.state.updating) this.setState({ updating: false }); // 새로고침을 못 하면 안내 화면으로
   }
 
   render() {
+    if (this.state.error && this.state.updating) return <UpdatingScreen />;
     if (this.state.error) {
       return (
         <div style={{
@@ -104,13 +126,14 @@ export default class ErrorBoundary extends React.Component {
 // ⭐ 2026-11-10 화면 일부만 감싸는 오류 경계 — 그 부분만 안내로 바꾸고 나머지 프로그램은 그대로 쓴다
 export class SectionBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
-  static getDerivedStateFromError(error) { return { error }; }
+  static getDerivedStateFromError(error) { return { error, updating: isChunkLoadError(error) && canReloadNow() }; }
   componentDidCatch(error, info) {
     console.error(`[SectionBoundary:${this.props.name || ""}]`, error, info?.componentStack);
-    if (isChunkLoadError(error)) reloadOnce();
+    if (isChunkLoadError(error) && !reloadOnce() && this.state.updating) this.setState({ updating: false }); // 새로고침을 못 하면 안내 화면으로
   }
   render() {
     if (!this.state.error) return this.props.children;
+    if (this.state.updating) return <UpdatingScreen full={false} />;
     const msg = String(this.state.error?.message || this.state.error || "").slice(0, 300);
     return (
       <div style={{ padding: "28px 20px", borderRadius: 18, border: "1px solid #F5C2C2", background: "#FFF8F8", textAlign: "center" }}>
