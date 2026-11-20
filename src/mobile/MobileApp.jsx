@@ -1,4 +1,5 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
+import { RoadviewButton } from "../roadview"; // 📷 2026-11-20 상·하차지 로드뷰
 import { SpecialFareTag, SpecialFareLine } from "../specialFareTag"; // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import { readPendingApproval, clearPendingApproval } from "../pendingOpen"; // 🛠 2026-11-17 결재 화면 이동 요청을 새로고침 뒤에도 이어서
 import { MarginPct } from "../marginPct"; // ⭐ 2026-11-17 배차 합계 다이얼 — 수수료 아래 수수료율(수수료 ÷ 청구)
@@ -13077,7 +13078,7 @@ const handleAssignClick = async () => {
             <div className="text-[14.5px] font-black text-[#0F1A30] truncate">{order.상차지명 || "-"}</div>
             <div className="text-[11.5px] font-bold text-[#1B2B4B] shrink-0">{상차일시 || "-"}</div>
           </div>
-          {order.상차지주소 && <div className="text-[12px] text-[#7A879C] mt-0.5">{order.상차지주소}</div>}
+          {order.상차지주소 && <div className="flex items-start gap-2 mt-0.5"><div className="flex-1 min-w-0 text-[12px] text-[#7A879C]">{order.상차지주소}</div><RoadviewButton addr={order.상차지주소} variant="inline" /></div>}
         </div>
         {validStops(order.경유상차목록 || order.경유지_상차).map((s, i) => <StopBlock key={`p${i}`} s={s} i={i} kind="상" />)}
         {validStops(order.경유하차목록 || order.경유지_하차).map((s, i) => <StopBlock key={`d${i}`} s={s} i={i} kind="하" />)}
@@ -13087,7 +13088,7 @@ const handleAssignClick = async () => {
             <div className="text-[14.5px] font-black text-[#0F1A30] truncate">{order.하차지명 || "-"}</div>
             <div className="text-[11.5px] font-bold text-[#1B2B4B] shrink-0">{하차일시 || "-"}</div>
           </div>
-          {order.하차지주소 && <div className="text-[12px] text-[#7A879C] mt-0.5">{order.하차지주소}</div>}
+          {order.하차지주소 && <div className="flex items-start gap-2 mt-0.5"><div className="flex-1 min-w-0 text-[12px] text-[#7A879C]">{order.하차지주소}</div><RoadviewButton addr={order.하차지주소} variant="inline" /></div>}
         </div>
       </div>
     </div>
@@ -15383,6 +15384,7 @@ const pickDrop = (c) => {
           )}
         </div>
 
+        <div className="flex items-end gap-2">
         <input autoComplete="off"
           className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
           placeholder="상차지 주소"
@@ -15391,6 +15393,8 @@ const pickDrop = (c) => {
             update("상차지주소", e.target.value)
           }
         />
+        <RoadviewButton addr={form.상차지주소} variant="inline" className="mb-1" />
+        </div>
 
         <input autoComplete="off"
           className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
@@ -15554,6 +15558,7 @@ const pickDrop = (c) => {
           )}
         </div>
 
+        <div className="flex items-end gap-2">
         <input autoComplete="off"
           className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
           placeholder="하차지 주소"
@@ -15562,6 +15567,8 @@ const pickDrop = (c) => {
             update("하차지주소", e.target.value)
           }
         />
+        <RoadviewButton addr={form.하차지주소} variant="inline" className="mb-1" />
+        </div>
 
         <input autoComplete="off"
           className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"

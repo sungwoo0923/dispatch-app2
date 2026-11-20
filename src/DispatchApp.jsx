@@ -142,6 +142,7 @@ import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnable
 import { PopupPrefsSection } from "./popupPrefs"; // ⭐ 2026-11-07 팝업 알림 켜고 끄기(계정별)
 import { CustomSelect } from "./CustomSelect";
 import { estimateDistanceFare, geocodeAddress, haversineKm, specialSurcharge } from "./tmapFareCalc";
+import { RoadviewButton } from "./roadview"; // 📷 2026-11-20 상·하차지 로드뷰(카카오맵) — 차량 진입 확인용
 import { useCustomRoles, findCustomRole, getMenuAccess, roleScreen, useRoleView, applyRoleMenus, ROLE_LABELS, hiddenInSwitchView, switchViewFor, builtinHidesMenu, EXEC_VIEW } from "./customRoles";
 import { isExecTeam } from "./teamNames";
 import { usePrivateFareGrant, PF_MENU } from "./privateFareGrant"; // 🔐 2026-11-18 비공개 운임(임원 화면 · 관리자센터에서 지정)
@@ -6435,7 +6436,10 @@ function OrderInfoModal({ row, onClose, lunchByName }) {
         <span className="text-[15px] font-black text-[#0F1A30]">{s.name || "-"}</span>
         {s.time && <span className="px-2 py-0.5 rounded-md bg-[#EEF2F8] text-[12px] font-black text-[#1B2B4B]">{s.time}</span>}
       </div>
-      <div className="text-[13px] font-semibold text-[#3A4A66] mt-0.5 break-words">{s.addr || "-"}</div>
+      <div className="flex items-start gap-2 mt-0.5">
+        <div className="flex-1 min-w-0 text-[13px] font-semibold text-[#3A4A66] break-words">{s.addr || "-"}</div>
+        {s.addr && <RoadviewButton addr={s.addr} variant="inline" className="mt-px" />}
+      </div>
       {(s.extra || []).filter(Boolean).length > 0 && <div className="text-[12px] font-semibold text-[#7A89A3] mt-0.5">{s.extra.filter(Boolean).join(" · ")}</div>}
     </div>
   );
@@ -17217,7 +17221,8 @@ const similar = placeList.filter(p => {
     </label>
 
     {/* ⭐ 여기로 이동 (핵심) */}
-    
+    <div className="flex items-center gap-1 shrink-0">
+    <RoadviewButton addr={form.상차지주소} />
 <button
   type="button"
   tabIndex={-1}   // ★ 탭 제외 유지
@@ -17241,6 +17246,7 @@ className={`
 >
 {hasPickupStops ? `경유 ${pickupCount}곳` : "+ 경유"}
 </button>
+    </div>
   </div>
 
   <input autoComplete="off"
@@ -17394,6 +17400,8 @@ className={`
     </label>
 
     {/* ⭐ 여기로 이동 */}
+    <div className="flex items-center gap-1 shrink-0">
+    <RoadviewButton addr={form.하차지주소} />
 <button
   type="button"
   tabIndex={-1}
@@ -17420,6 +17428,7 @@ className={`
 >
 {hasDropStops ? `경유 ${dropCount}곳` : "+ 경유"}
 </button>
+    </div>
   </div>
 
   <input autoComplete="off"
