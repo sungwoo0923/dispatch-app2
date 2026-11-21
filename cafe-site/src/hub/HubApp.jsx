@@ -579,7 +579,6 @@ export default function HubApp() {
         <PushCard me={me} toast={toast} />
         {takerish && <AlertCard me={me} onOpen={() => setAlertOpen(true)} light />}
         {poster && !linked && <button type="button" onClick={() => go("places")} className="lg:hidden w-full h-12 px-4 rounded-2xl bg-[#F5F7FB] flex items-center gap-2 text-[16px] font-bold text-[#1B2B4B]"><HI name="pin" size={18} />고객관리<HI name="chevron" size={18} className="ml-auto" /></button>}
-        {me.source === "logisweb-staff" && <a href="/exchange" className="h-12 px-4 rounded-2xl bg-[#F5F7FB] flex items-center gap-2 text-[16px] font-bold text-[#1B2B4B]"><HI name="swap" size={18} />운송사 거래소<HI name="chevron" size={18} className="ml-auto" /></a>}
       </div>
     </HubWallet>
   );
