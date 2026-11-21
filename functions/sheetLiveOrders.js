@@ -100,7 +100,7 @@ function makeSheetLive({ db, FieldValue, sheetsApiFor, parseSpreadsheetId, quote
   }
   const placesFor = async (co) => (await db.collection("places").where("companyName", "==", co).get()).docs.map((d) => { const x = d.data() || {}; const c = (Array.isArray(x.contacts) && (x.contacts.find((k) => k.isPrimary) || x.contacts[0])) || {}; return { name: x.업체명 || "", address: x.주소 || "", phone: c.phone || x.담당자번호 || "", person: c.name || x.담당자 || "" }; }).filter((p) => p.name);
   const nkP = (v) => String(v || "").normalize("NFC").toLowerCase().replace(/\s+/g, "").replace(/[^\w가-힣-]/g, "");
-  const placeDocId = (co, name, nm) => { const k = String(nm(name) || "").replace(/\//g, "_"); return co && co !== "돌캐" ? `${co.replace(/\//g, "_")}__${k}` : k; }; // src/coKey.js coDocKey + CarrierMigratePanel placeKey 와 같게
+  const placeDocId = (co, name, nm) => { const k = String(nm(name) || "").replace(/\//g, "_"); return co && co !== "(회사없음)" ? `${co.replace(/\//g, "_")}__${k}` : k; }; // src/coKey.js coDocKey + CarrierMigratePanel placeKey 와 같게
   async function registerPlaces(co, cfg, list, have, nm) {
     if (!list.length) return 0;
     const seen = new Set(Array.isArray(cfg.placeSeen) ? cfg.placeSeen : []);

@@ -467,7 +467,7 @@ async function syncBoard({ db, FieldValue, form: form0, readTabs, readTab, write
       for (const name of add) {
         if (seen.has(nm(name)) || n3 >= 200) continue; seen.add(nm(name));
         const key = name.replace(/[/\\#?[\]]/g, "_");
-        const id = co && co !== "돌캐" ? `${co}__${key}` : key; // src/coKey.js coDocKey와 같은 규칙
+        const id = co && co !== "(회사없음)" ? `${co}__${key}` : key; // src/coKey.js coDocKey와 같은 규칙
         b3.set(db.collection("clients").doc(id), { id, 거래처명: name, companyName: co, 등록경로: "구글시트 배차표", 배차표Id: form.id, createdAt: FieldValue.serverTimestamp() }, { merge: true });
         n3 += 1;
       }

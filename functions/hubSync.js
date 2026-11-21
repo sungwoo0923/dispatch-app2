@@ -18,7 +18,7 @@
 
 const MARKET_NAME = "로지스웹 허브";
 const LW_DISPATCH = "로지스허브"; // 배차방식 목록에 추가한 값(src/companyDropdownOptions.jsx)
-const DEFAULT_COMPANY = "돌캐";
+const DEFAULT_COMPANY = "(회사없음)"; // ⭐ 2026-11-21 기본 회사 없음(돌캐 초기화)
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const lwId = (id) => `hub_${id}`;
 const num = (v) => Math.round(Number(String(v ?? "").replace(/[^\d.-]/g, "")) || 0);
@@ -182,7 +182,9 @@ async function handlePostRequest(db, FieldValue, reqId, r) {
   if (u.approved === false || ["driver", "shipper", "cafeUser"].includes(u.role)) return fail("등록할 수 없는 계정이에요");
   if (!os.exists) return fail("원래 오더가 없어요");
   const lw = os.data();
-  const co = String(lw.companyName || u.companyName || "").trim();
+  // ⭐ 2026-11-21 회사 칸이 없는 오더는 어느 회사 것인지 알 수 없어 허브에 올리지 않는다(부르는 사람 회사로 보지 않는다)
+  const co = String(lw.companyName || "").trim();
+  if (!co && u.role !== "totalMaster") return fail("회사 정보가 없는 오더라 허브에 올릴 수 없어요");
   if (u.role !== "totalMaster" && co !== String(u.companyName || "").trim()) return fail("다른 회사 오더예요");
   if (lw.허브오더Id && lw.허브상태 && lw.허브상태 !== "허브취소") return fail("이미 허브에 올린 오더예요");
   // 허브 회원(없으면 로지스웹 운송사로 바로 만든다 — 허브 로그인과 같은 내용)

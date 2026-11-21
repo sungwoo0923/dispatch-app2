@@ -104,7 +104,8 @@ async function onListingUpdate(db, FieldValue, id, before, after) {
   const oref = db.collection("orders").doc(takerOrderDocId(id));
   await db.runTransaction(async (tx) => {
     const o = await tx.get(oref);
-    if (!o.exists) {
+    // ⭐ 2026-11-21 매칭취소 뒤 다른 운송사와 다시 매칭되면 예전 수행사 오더를 새 수행사 것으로 덮어쓴다(예전 회사에 주소·연락처가 남지 않게)
+    if (!o.exists || o.data().companyName !== takerCompany) {
       tx.set(oref, { ...buildTakerOrder(listing, id, detailSnap.exists ? detailSnap.data() : null, reqSnap.exists ? reqSnap.data() : null, takerCompany), 작성자: takerSnap.exists ? (takerSnap.data().email || "") : "", createdAt: FieldValue.serverTimestamp() });
     }
     if (after.takerOrderId !== oref.id) tx.update(lref, { takerOrderId: oref.id, updatedAt: FieldValue.serverTimestamp() });
@@ -112,7 +113,8 @@ async function onListingUpdate(db, FieldValue, id, before, after) {
   if (after.posterOrderId) {
     const pref = db.collection("orders").doc(after.posterOrderId);
     const ps = await pref.get();
-    if (ps.exists) {
+    // ⭐ 2026-11-21 올린 운송사 자기 회사 오더에만 반영(다른 회사 오더 번호를 적어 넣어도 쓰지 않는다)
+    if (ps.exists && ps.data().companyName === listing.companyName) {
       const p = mirrorPatch(ps.data(), null, listing, "matched");
       if (p) await pref.update(p);
     }
@@ -154,7 +156,8 @@ async function onTakerOrderUpdate(db, FieldValue, orderId, before, after) {
   if (listing.posterOrderId) {
     const pref = db.collection("orders").doc(listing.posterOrderId);
     const ps = await pref.get();
-    if (ps.exists) {
+    // ⭐ 2026-11-21 올린 운송사 자기 회사 오더에만 반영(다른 회사 오더 번호를 적어 넣어도 쓰지 않는다)
+    if (ps.exists && ps.data().companyName === listing.companyName) {
       const p = mirrorPatch(ps.data(), after, listing, listing.status);
       if (p) await pref.update(p);
     }

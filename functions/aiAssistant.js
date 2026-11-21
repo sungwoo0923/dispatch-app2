@@ -19,7 +19,7 @@ const MAX_HISTORY_BYTES = 700 * 1024;
 const MAX_TEXT = 8000;
 const DAILY_TURNS = 300; // 사람마다 하루(한국 날짜) 질문 수
 const SUPER_EMAIL = "tjddnqkf@naver.com";
-const DEFAULT_CO = "돌캐";
+const DEFAULT_CO = "(회사없음)"; // ⭐ 2026-11-21 기본 회사 없음(돌캐 초기화)
 const ORDER_COLS = ["orders", "dispatch"];
 
 const kstYmd = (ms = Date.now()) => new Date(ms + 9 * 3600e3).toISOString().slice(0, 10);

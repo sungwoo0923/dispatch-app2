@@ -80,7 +80,7 @@ export function PlatformLiveProvider({ children, demo = null }) { // 🛰 2026-1
     // 1) 계정
     (users || []).forEach((u) => {
       if (isTM(u) || u.role === "cafeUser") return;
-      const name = normCo(u.companyName) || "돌캐";
+      const name = normCo(u.companyName) || "(회사없음)";
       const created = tsMs(u.createdAt);
       if (u.role === "shipper") { const s = srec(name); s.users += 1; if (u.approved === false) s.pending += 1; return; }
       const c = rec(name);
@@ -104,7 +104,7 @@ export function PlatformLiveProvider({ children, demo = null }) { // 🛰 2026-1
       const kind = s.kind === "mobile" ? "mobile" : "pc";
       const p = people[uid] || (people[uid] = {
         uid, name: u?.name || s.name || s.email || "-", email: u?.email || s.email || "",
-        company: normCo(u?.companyName || s.companyName) || "돌캐", role: u?.role || s.role || "", team: u?.team || "",
+        company: normCo(u?.companyName || s.companyName) || "(회사없음)", role: u?.role || s.role || "", team: u?.team || "",
         lastSeen: 0, pc: 0, mobile: 0, devices: [],
       });
       p.lastSeen = Math.max(p.lastSeen, seen);
@@ -170,7 +170,7 @@ export function PlatformLiveProvider({ children, demo = null }) { // 🛰 2026-1
     (cApps || []).forEach((a) => { const at = tsMs(a.createdAt); if (at > since) signups.push({ id: `c_${a.id}`, kind: "shipper", title: normCo(a.companyName), sub: `화주사 가입 · ${a.name || ""}`, status: a.status, at }); });
     (users || []).forEach((u) => {
       const at = tsMs(u.createdAt); if (at <= since || isTM(u) || u.role === "cafeUser" || u.role === "shipper") return;
-      signups.push({ id: `u_${u.id}`, kind: u.role === "driver" ? "driver" : "staff", title: u.name || u.email || "-", sub: `${normCo(u.companyName) || "돌캐"} · ${u.role === "driver" ? "기사" : (ROLE_LABELS[u.role] || "직원")}${u.position ? ` · ${u.position}` : ""}`, status: u.approved === false ? "pending" : "approved", at, company: normCo(u.companyName) });
+      signups.push({ id: `u_${u.id}`, kind: u.role === "driver" ? "driver" : "staff", title: u.name || u.email || "-", sub: `${normCo(u.companyName) || "(회사없음)"} · ${u.role === "driver" ? "기사" : (ROLE_LABELS[u.role] || "직원")}${u.position ? ` · ${u.position}` : ""}`, status: u.approved === false ? "pending" : "approved", at, company: normCo(u.companyName) });
     });
     signups.sort((a, b) => b.at - a.at);
 

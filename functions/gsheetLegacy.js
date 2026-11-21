@@ -15,7 +15,7 @@ function isProfileOwnOrder(scope, d) {
   if (!scope.includeFixed && (d.배차표Id || d._autoSheet || d.고정노선Id || d.등록기기 === "배차표")) return false;
   return true;
 }
-const LEGACY_DOLCAE_SCOPE = Object.freeze({ companyName: GSHEET_TARGET_COMPANY, defaultCompany: GSHEET_TARGET_COMPANY, includeFixed: false });
+const LEGACY_DOLCAE_SCOPE = Object.freeze({ companyName: GSHEET_TARGET_COMPANY, defaultCompany: "", includeFixed: false }); // ⭐ 2026-11-21 회사명 빈 오더를 돌캐 시트로 보내지 않는다(돌캐 초기화)
 
 // ⭐ 2026-11-06 돌캐 시트에는 돌캐 오더만 — "내 오더만 보내기"가 작성자 이메일만 보고 회사를 안 봐서,
 //  최고관리자가 다른 운송사(예: 태진)에서 고정노선·배차표 오더를 만들면 그 오더까지 돌캐 시트에 들어갔다.

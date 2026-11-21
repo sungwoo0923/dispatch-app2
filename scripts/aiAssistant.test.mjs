@@ -129,7 +129,8 @@ eq("조회전용은 배차관리 읽기", A.builtinDefault("viewer").배차관�
   const db = fakeDb(seed());
   db.store.users.u7 = { role: "admin", companyName: "돌캐", name: "기본", approved: true };
   const { calls } = await run(db, "u7", { text: "오늘" }, (p, i) => (i === 0 ? toolUse("s", "search_orders", {}) : textMsg("ok")));
-  eq("기본 회사는 회사명 없는 예전 오더 포함", JSON.parse(lastToolResults(calls[1])[0].content).rows.map((r) => r.id), ["L"]);
+  // ⭐ 2026-11-21 기본 회사 없음 — 회사명 없는 예전 오더는 어느 회사(돌캐 포함)에도 안 보인다
+  eq("회사명 없는 예전 오더는 어느 회사에도 안 보임", JSON.parse(lastToolResults(calls[1])[0].content).rows.map((r) => r.id).includes("L"), false);
 }
 {
   const db = fakeDb(seed());

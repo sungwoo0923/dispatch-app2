@@ -173,7 +173,7 @@ const TOOLS = {
       const co = {}; const sh = {};
       users.forEach((u) => {
         if (u.role === "totalMaster" || u.role === "cafeUser") return;
-        const n = normCo(u.companyName) || "돌캐";
+        const n = normCo(u.companyName) || "(회사없음)";
         if (u.role === "shipper") { const s = sh[n] || (sh[n] = { users: 0, pending: 0 }); s.users += 1; if (u.approved === false) s.pending += 1; return; }
         const c = co[n] || (co[n] = { staff: 0, admins: 0, pendingStaff: 0, drivers: 0, quit: 0, newLast30d: 0 });
         if (tsMs(u.createdAt) > Date.now() - 30 * 864e5) c.newLast30d += 1;

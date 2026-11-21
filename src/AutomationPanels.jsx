@@ -36,7 +36,7 @@ const nextRunDate = (t) => {
 };
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const sel = "h-9 px-2.5 rounded-xl border border-[#DCE3EE] text-[13px] font-bold text-[#0F1A30] bg-white outline-none focus:border-[#4B6CB7]";
-const companyNow = () => localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "돌캐";
+const companyNow = () => localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "(회사없음)";
 
 // 오더 내용만 남긴다(이력·시스템 값·날짜 제외) — 날짜는 만들 때마다 새로 정한다
 const SKIP = new Set(["_id", "id", "__col", "history", "createdAt", "updatedAt", "_lastModified", "상차일", "하차일", "등록일", "배차상태", "상태",

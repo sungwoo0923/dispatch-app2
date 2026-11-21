@@ -11,7 +11,7 @@ import { Navigate, useNavigate, useParams, useLocation } from "react-router-dom"
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
-import { HI, Btn, Chip, Badge, Card, Empty, Seg, HubMark, NAVY_BG, HUB_CSS, NUMS, useToast, Avatar, selectCls, inputCls, Drawer, Field } from "./hubUi";
+import { HI, Btn, Chip, Badge, Card, Empty, Seg, HubMark, NAVY_BG, HUB_CSS, NUMS, useToast, Avatar, selectCls, inputCls, Drawer, Field, MultiSelect } from "./hubUi";
 import { ROLES, canPost, canTake, SIDO_LIST, sigunguOf, HUB_VEHICLES, HUB_TONS, tonValue, regionLL, kmBetweenLL, nearestRegion, ago, ACTIVE, speakText, routeText, manwon, kstYmd, tsMs, DOC_TYPES, isLinked, stageOf, payKind } from "./hubConstants";
 import { subscribeMember, subscribeBoard, refreshBoard, subscribeMine, subscribeCompanyPosts, subscribeNotices, markRead, updatePrefs, localSession, subscribeHubConfig, subscribeWallet, subscribeAnnouncements, enableHubPush, pushEnabledHere, disableHubPush, fetchPrivate, subscribeDevice, callHub } from "./hubApi";
 import { createClaimsSync } from "../../../src/claimsSync";
@@ -26,12 +26,14 @@ import HubOrderDetail from "./HubOrderDetail";
 import HubPostForm from "./HubPostForm";
 import HubAdmin from "./HubAdmin";
 import HubPlaces from "./HubPlaces";
+import HubSettle from "./HubSettle"; // ⭐ 2026-11-21 운송사 간 정산(거래처별 · 월별 · 상계)
 import { kpAlert } from "../../../src/kpDialog"; // 브라우저 기본 알림창 대신 프로그램 디자인 알림창
 
 const TOTAL_MASTER_EMAIL = "tjddnqkf@naver.com";
 const readLS = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
 const writeLS = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* 무시 */ } };
-const DEFAULT_F = { from: [], to: [], vehicle: "", ton: "", day: "", urgent: false, fav: false, sort: "new" };
+const DEFAULT_F = { from: [], to: [], vehicle: "", ton: "", day: "", urgent: false, fav: false, sort: "new", q: "" };
+const SORTS = [["new", "최신순"], ["fare", "운임 높은순"], ["perkm", "km당 운임 높은순"], ["time", "상차 빠른순"], ["near", "가까운 순"]];
 const TON_RANGES = [["", "전체 톤수"], ["s", "1.4톤 이하", 0, 1.4], ["m", "2.5~3.5톤", 2.5, 3.5], ["l", "5톤(축)", 4.5, 6], ["xl", "8~11톤", 8, 11], ["xxl", "14톤 이상", 14, 99]];
 const TAB_ALIAS = { wallet: "my", me: "my" };
 
@@ -137,7 +139,7 @@ function BoardSettings({ me, auto, onClose, toast }) {
           <div className="flex items-center gap-2"><HI name="gps" size={18} className="text-[#2D4C82]" /><span className="text-[16px] font-extrabold text-[#0F1A30]">내 위치</span><span className="ml-auto text-[14px] font-bold text-[#55657F]" data-testid="bs-auto">{auto ? `${auto.sido} ${auto.sigungu || ""}` : "위치를 찾고 있어요"}</span></div>
           <Seg value={manual ? "manual" : "gps"} onChange={(v) => { setManual(v === "manual"); if (v === "gps" && auto) setMy(auto); }} options={[["gps", "자동(GPS)"], ["manual", "직접 고르기"]]} />
           <RegionPick v={manual ? my : auto || my} disabled={!manual} onSido={(s) => setMy({ sido: s, sigungu: "" })} onSgg={(g) => setMy((p) => ({ ...p, sigungu: g }))} testid="bs-my" />
-          <Field label="범위"><Seg value={level} onChange={setLevel} options={[["sgg", "시·군·구"], ["sido", "시·도 전체"]]} /></Field>
+          <Field label="범위" hint={level === "all" ? "전국 운송사가 올린 모든 오더를 봐요(아래 지역은 쓰지 않아요)" : undefined}><Seg value={level} onChange={setLevel} options={[["sgg", "시·군·구"], ["sido", "시·도 전체"], ["all", "전국"]]} /></Field>
         </Card>
         <Card className="p-4 space-y-3">
           <div className="text-[16px] font-extrabold text-[#0F1A30]">상차 지역 더 보기 <span className="text-[14px] font-bold text-[#5F6E87]">최대 3곳</span></div>
@@ -281,7 +283,7 @@ export default function HubApp() {
   const bset = me?.prefs?.board || {};
   const myRegion = bset.my || gpsRegion || (me?.home?.sido ? { sido: me.home.sido, sigungu: me.home.sigungu || "" } : null);
   const boardKeys = useMemo(() => {
-    if (!takerish) return null;
+    if (!takerish || bset.level === "all") return null; // ⭐ 2026-11-21 전국 보기 — 지역으로 거르지 않는다
     const ks = [keyOf(myRegion, bset.level), ...(bset.extra || []).map((r) => keyOf(r))].filter(Boolean);
     return ks.length ? [...new Set(ks)] : null;
   }, [takerish, myRegion?.sido, myRegion?.sigungu, bset.level, JSON.stringify(bset.extra || [])]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -325,9 +327,12 @@ export default function HubApp() {
     const today = kstYmd(), tom = kstYmd(1);
     const rng = TON_RANGES.find((r) => r[0] === f.ton);
     const now = Date.now();
+    const fromOk = !takerish || !boardKeys; // 지역 보드(차주 · 운송사)는 상차 지역을 오더 설정에서 고른다 — 숨은 필터가 남지 않게
+    const qk = String(f.q || "").trim().toLowerCase();
     const list = board.filter((o) => {
       if (o.showAt && o.showAt > now && o.posterUid !== me?.uid) return false; // 차주앱 표시 예약
-      if (f.from.length && !f.from.includes(o.상차시도)) return false;
+      if (fromOk && f.from.length && !f.from.includes(o.상차시도)) return false;
+      if (qk && ![o.상차시도, o.상차시군구, o.하차시도, o.하차시군구, o.화물내용, o.차량종류, o.차량톤수, o.posterCompany, o.posterName, o.id].join(" ").toLowerCase().includes(qk)) return false;
       if (f.to.length && !f.to.includes(o.하차시도)) return false;
       if (f.vehicle && !String(o.차량종류 || "").includes(f.vehicle)) return false;
       if (rng && rng[2] != null) { const t = o.톤수값 || tonValue(o.차량톤수); if (t < rng[2] || t > rng[3]) return false; }
@@ -346,7 +351,7 @@ export default function HubApp() {
       near: (a, b) => (a.near || 9999) - (b.near || 9999),
     }[f.sort] || (() => 0);
     return list.sort(s);
-  }, [board, f, favSet, myPos, me?.uid]);
+  }, [board, f, favSet, myPos, me?.uid, takerish, boardKeys]);
 
   const returns = useMemo(() => {
     if (!activeJob) return [];
@@ -379,66 +384,94 @@ export default function HubApp() {
     ...(takerish ? [["jobs", "내 배차", "truck", activeJobs]] : []),
     ...(poster ? [["posts", "등록내역", "list", postsWaiting]] : []),
     ...(poster && !linked ? [["places", "고객관리", "pin", 0]] : []),
+    ...(poster || takerish ? [["settle", "정산", "won", 0]] : []),
     ["my", "마이페이지", "user", 0],
     ["notices", "알림", "bell", unread],
     ...(isAdmin ? [["admin", "관리자", "shield", 0]] : []),
   ];
-  const MTABS = TABS.filter(([k]) => k !== "notices" && k !== "admin").slice(0, 5);
+  // 휴대폰 아래 탭은 5칸 — 마이페이지는 늘 보이게(고객관리는 PC 메뉴 · 마이페이지에서)
+  const MPRI = ["board", "jobs", "posts", "settle", "places"];
+  const MTABS = [...MPRI.map((k) => TABS.find((t) => t[0] === k)).filter(Boolean).slice(0, 4), TABS.find((t) => t[0] === "my")];
   const go = (k) => { setTab(k); if (openId || loc.pathname === "/admin") nav("/"); window.scrollTo({ top: 0 }); };
   const openOrder = (o) => nav(`/order/${o.id}`);
   const closeOrder = () => nav(tab === "admin" ? "/admin" : "/");
   const setFilter = (k, v) => setF((p) => ({ ...p, [k]: v }));
-  const toggleIn = (k, v) => setF((p) => ({ ...p, [k]: p[k].includes(v) ? p[k].filter((x) => x !== v) : [...p[k], v] }));
   const askNear = () => {
     if (!navigator.geolocation) { toast("이 기기는 위치를 쓸 수 없어요"); return; }
     navigator.geolocation.getCurrentPosition((p) => { const r = nearestRegion(p.coords.latitude, p.coords.longitude); setMyPos({ ...r, ll: [p.coords.latitude, p.coords.longitude] }); setFilter("sort", "near"); toast(`${r.sido} ${r.sigungu || ""} 가까운 순`); },
       () => toast("위치 권한을 켜면 가까운 순으로 보여 드려요"), { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 });
   };
-  const activeN = f.from.length + f.to.length + (f.vehicle ? 1 : 0) + (f.ton ? 1 : 0) + (f.day ? 1 : 0) + (f.urgent ? 1 : 0) + (f.fav ? 1 : 0);
+  const fromOn = !takerish || !boardKeys;
+  const activeN = (fromOn ? f.from.length : 0) + f.to.length + (f.vehicle ? 1 : 0) + (f.ton ? 1 : 0) + (f.day ? 1 : 0) + (f.urgent ? 1 : 0) + (f.fav ? 1 : 0);
   const alertOn = !!me.prefs?.alert?.on;
-  const regionLabel = boardKeys ? boardKeys.join(", ") : "전국";
+  const regionLabel = boardKeys ? boardKeys.join(", ") : "전국 오더 전체";
+  // 시·도별 모집중 개수(드롭다운 옆 숫자 · 전국 네트워크 판)
+  const sidoCount = (side) => { const m = {}; board.forEach((o) => { const k = o[`${side}시도`]; if (k) m[k] = (m[k] || 0) + 1; }); return m; };
+  const fromCnt = sidoCount("상차"), toCnt = sidoCount("하차");
+  const sidoOpts = (cnt) => SIDO_LIST.map((x) => [x, x, cnt[x] || 0]);
 
   const FilterBody = (
-    <div className="space-y-5">
-      <div>
-        <div className="text-[15px] font-extrabold text-[#0F1A30] mb-2">하차 지역</div>
-        <div className="flex flex-wrap gap-1.5">{SIDO_LIST.map((s) => <Chip key={s} on={f.to.includes(s)} onClick={() => toggleIn("to", s)} className="h-10 px-3.5">{s}</Chip>)}</div>
-      </div>
-      {!takerish && (
-        <div>
-          <div className="text-[15px] font-extrabold text-[#0F1A30] mb-2">상차 지역</div>
-          <div className="flex flex-wrap gap-1.5">{SIDO_LIST.map((s) => <Chip key={s} on={f.from.includes(s)} onClick={() => toggleIn("from", s)} className="h-10 px-3.5" data-testid={`f-from-${s}`}>{s}</Chip>)}</div>
-        </div>
-      )}
+    <div className="space-y-4">
+      {fromOn && <Field label="상차 지역"><MultiSelect value={f.from} onChange={(v) => setFilter("from", v)} options={sidoOpts(fromCnt)} placeholder="전국" title="어디서 싣나요" testid="f-from" cols={2} /></Field>}
+      <Field label="하차 지역"><MultiSelect value={f.to} onChange={(v) => setFilter("to", v)} options={sidoOpts(toCnt)} placeholder="전국" title="어디에 내리나요" testid="f-to" cols={2} /></Field>
       <div className="grid grid-cols-2 gap-2.5">
-        <Field label="차종"><select className={selectCls} value={f.vehicle} onChange={(e) => setFilter("vehicle", e.target.value)}><option value="">전체 차종</option>{HUB_VEHICLES.map((v) => <option key={v}>{v}</option>)}</select></Field>
-        <Field label="톤수"><select className={selectCls} value={f.ton} onChange={(e) => setFilter("ton", e.target.value)}>{TON_RANGES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
+        <Field label="차종"><select className={selectCls} value={f.vehicle} onChange={(e) => setFilter("vehicle", e.target.value)} data-testid="f-vehicle"><option value="">전체 차종</option>{HUB_VEHICLES.map((v) => <option key={v}>{v}</option>)}</select></Field>
+        <Field label="톤수"><select className={selectCls} value={f.ton} onChange={(e) => setFilter("ton", e.target.value)} data-testid="f-ton">{TON_RANGES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
+        <Field label="상차일"><select className={selectCls} value={f.day} onChange={(e) => setFilter("day", e.target.value)} data-testid="f-day"><option value="">전체</option><option value="today">오늘</option><option value="tomorrow">내일</option></select></Field>
+        <Field label="보기"><select className={selectCls} value={f.urgent ? "urgent" : f.fav ? "fav" : ""} onChange={(e) => setF((p) => ({ ...p, urgent: e.target.value === "urgent", fav: e.target.value === "fav" }))} data-testid="f-only"><option value="">모든 오더</option><option value="urgent">긴급만</option><option value="fav">즐겨찾는 등록자만</option></select></Field>
       </div>
-      <div>
-        <div className="text-[15px] font-extrabold text-[#0F1A30] mb-2">상차일</div>
-        <Seg value={f.day} onChange={(v) => setFilter("day", v)} options={[["", "전체"], ["today", "오늘"], ["tomorrow", "내일"]]} />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Chip on={f.urgent} onClick={() => setFilter("urgent", !f.urgent)}><HI name="bolt" size={15} />긴급만</Chip>
-        <Chip on={f.fav} onClick={() => setFilter("fav", !f.fav)}><HI name="heart" size={15} />즐겨찾는 등록자</Chip>
-      </div>
-      <Btn kind="ghost" size="md" className="w-full" onClick={() => setF({ ...DEFAULT_F, sort: f.sort })}>초기화</Btn>
+      <Btn kind="ghost" size="md" className="w-full" disabled={!activeN} onClick={() => setF({ ...DEFAULT_F, sort: f.sort, q: f.q })}>조건 초기화{activeN ? ` (${activeN})` : ""}</Btn>
     </div>
+  );
+
+  // ⭐ 2026-11-21 전국 네트워크 판 — 지금 보이는 모집중 오더의 상차 지역 순위 · 참여 운송사 수 · 평균 운임(누르면 그 지역만)
+  const coN = new Set(board.map((o) => o.posterCompany || o.posterUid)).size;
+  const fares = board.map((o) => Number(o.운임) || 0).filter(Boolean);
+  const avgFare = fares.length ? Math.round(fares.reduce((x, y) => x + y, 0) / fares.length / 10000) * 10000 : 0;
+  const topSido = Object.entries(fromCnt).sort((x, y) => y[1] - x[1]).slice(0, 6);
+  const maxSido = topSido[0]?.[1] || 1;
+  const NetworkCard = board.length > 0 && (
+    <Card className="p-5" data-testid="network-card">
+      <div className="flex items-center gap-2"><HI name="live" size={17} className="text-[#2D4C82]" /><span className="text-[15.5px] font-extrabold text-[#0F1A30]">{boardKeys ? "내 지역 네트워크" : "전국 네트워크"}</span><span className="ml-auto text-[12.5px] font-bold text-[#8A97AD]">실시간</span></div>
+      <div className="grid grid-cols-3 gap-2 mt-3">
+        {[["모집중", `${board.length}`], ["운송사", `${coN}`], ["평균 운임", avgFare ? manwon(avgFare) : "-"]].map(([l, v]) => (
+          <div key={l} className="rounded-xl bg-[#F5F7FB] px-2.5 py-2 min-w-0"><div className="text-[12.5px] font-bold text-[#5F6E87]">{l}</div><div className="text-[16px] font-extrabold text-[#0F1A30] truncate" style={NUMS}>{v}</div></div>
+        ))}
+      </div>
+      <div className="mt-3.5 space-y-1.5">
+        {topSido.map(([k, n]) => (
+          <button key={k} type="button" disabled={!fromOn} onClick={() => setFilter("from", f.from.length === 1 && f.from[0] === k ? [] : [k])} className={`w-full flex items-center gap-2.5 h-8 rounded-lg px-1 text-left ${fromOn ? "hover:bg-[#F5F8FD]" : "cursor-default"}`}>
+            <span className={`w-10 text-[13.5px] font-bold ${f.from.includes(k) ? "text-[#0F1A30]" : "text-[#3A4A66]"}`}>{k}</span>
+            <span className="flex-1 h-2 rounded-full bg-[#EEF2F8] overflow-hidden"><span className="block h-full rounded-full" style={{ width: `${Math.max(6, (n / maxSido) * 100)}%`, background: f.from.includes(k) ? "#0F1A30" : "linear-gradient(90deg,#1B2B4B,#2D4C82)" }} /></span>
+            <span className="w-8 text-right text-[13.5px] font-extrabold text-[#0F1A30]" style={NUMS}>{n}</span>
+          </button>
+        ))}
+      </div>
+      {fromOn && <div className="mt-2 text-[12.5px] text-[#8A97AD]">지역을 누르면 그 지역에서 싣는 오더만 보여요</div>}
+    </Card>
   );
 
   const RegionBar = takerish && (
     <button type="button" onClick={() => setBoardSet(true)} className="w-full rounded-2xl bg-white ring-1 ring-inset ring-[#DCE3EE] px-4 py-3 flex items-center gap-2.5 text-left" data-testid="region-bar">
-      <span className="w-9 h-9 rounded-xl bg-[#0F1A30] text-[#8FB0F0] inline-flex items-center justify-center shrink-0"><HI name="gps" size={17} /></span>
+      <span className="w-9 h-9 rounded-xl bg-[#0F1A30] text-[#8FB0F0] inline-flex items-center justify-center shrink-0"><HI name={boardKeys ? "gps" : "map"} size={17} /></span>
       <span className="min-w-0 flex-1"><span className="block text-[13px] font-bold text-[#5F6E87]">상차 지역</span><span className="block text-[15.5px] font-extrabold text-[#0F1A30] truncate" data-testid="region-keys">{regionLabel}</span></span>
       <span className="h-9 px-3 rounded-xl bg-[#EAF0FA] text-[14px] font-bold text-[#1B2B4B] inline-flex items-center shrink-0" data-testid="btn-board-settings">오더 설정</span>
     </button>
   );
 
+  // 검색 + 정렬(드롭다운) + 필터(휴대폰)
   const SortBar = (
-    <div className="flex items-center gap-2 overflow-x-auto hub-scroll -mx-4 px-4 lg:mx-0 lg:px-0 pb-1">
-      <button type="button" onClick={() => setFilterOpen(true)} className="lg:hidden h-11 px-4 rounded-full bg-[#0F1A30] text-white text-[15px] font-bold inline-flex items-center gap-1.5 shrink-0" data-testid="btn-filter"><HI name="sliders" size={16} />필터{activeN ? ` ${activeN}` : ""}</button>
-      {[["new", "최신순"], ["fare", "운임 높은순"], ["perkm", "km당 운임"], ["time", "상차 빠른순"]].map(([k, l]) => <Chip key={k} on={f.sort === k} onClick={() => setFilter("sort", k)}>{l}</Chip>)}
-      <Chip on={f.sort === "near"} onClick={askNear} data-testid="btn-near"><HI name="gps" size={15} />가까운 순</Chip>
+    <div className="flex flex-wrap lg:flex-nowrap items-center gap-2">
+      <div className="relative basis-full lg:basis-auto flex-1 min-w-0">
+        <HI name="search" size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5F6E87]" />
+        <input className={`${inputCls} pl-10 pr-10`} value={f.q || ""} onChange={(e) => setFilter("q", e.target.value)} placeholder="지역 · 화물 · 운송사 · 화물번호 검색" data-testid="board-q" />
+        {f.q && <button type="button" onClick={() => setFilter("q", "")} aria-label="검색어 지우기" className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg inline-flex items-center justify-center text-[#5F6E87] hover:bg-[#F2F5FA]"><HI name="close" size={16} /></button>}
+      </div>
+      <select className={`${selectCls} flex-1 lg:flex-none lg:!w-auto font-bold`} value={f.sort} aria-label="정렬" data-testid="board-sort"
+        onChange={(e) => (e.target.value === "near" ? askNear() : setFilter("sort", e.target.value))}>
+        {SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+      </select>
+      <button type="button" onClick={() => setFilterOpen(true)} className="lg:hidden relative h-12 w-12 rounded-2xl bg-[#0F1A30] text-white inline-flex items-center justify-center shrink-0" aria-label="필터" data-testid="btn-filter"><HI name="sliders" size={18} />{activeN > 0 && <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-[#8FB0F0] text-[#0B1428] text-[12.5px] font-extrabold inline-flex items-center justify-center">{activeN}</span>}</button>
     </div>
   );
 
@@ -451,6 +484,7 @@ export default function HubApp() {
         <aside className="hidden lg:block">
           <div className="sticky top-[88px] space-y-3">
             <Card className="p-5">{FilterBody}</Card>
+            {NetworkCard}
             {taker && <AlertCard me={me} onOpen={() => setAlertOpen(true)} />}
           </div>
         </aside>
@@ -531,19 +565,20 @@ export default function HubApp() {
     </Card>
   );
 
-  const titles = { board: "실시간 오더", jobs: "내 배차", posts: "등록내역", places: "고객관리", my: "마이페이지", notices: "알림", admin: "허브 관리자" };
+  const titles = { settle: "운송사 간 정산", board: "실시간 오더", jobs: "내 배차", posts: "등록내역", places: "고객관리", my: "마이페이지", notices: "알림", admin: "허브 관리자" };
   let body = null;
   if (tab === "board") body = BoardView;
   else if (tab === "jobs" && takerish) body = <JobsView />;
   else if (tab === "posts" && poster) body = <PostsView me={me} posts={posts} openOrder={openOrder} onPost={() => setForm({})} />;
   else if (tab === "places" && poster && !linked) body = <HubPlaces me={me} toast={toast} />;
+  else if (tab === "settle" && (poster || takerish)) body = <HubSettle me={me} posts={posts} jobs={jobs} openOrder={openOrder} toast={toast} />;
   else if (tab === "notices") body = NoticesView;
   else if (tab === "my") body = (
     <HubWallet me={me} cfg={cfg} toast={toast} jobs={jobs} posts={posts} notices={notices} openOrder={openOrder} logout={logout} isAdmin={isAdmin}>
       <div className="mt-3 space-y-2">
         <PushCard me={me} toast={toast} />
         {takerish && <AlertCard me={me} onOpen={() => setAlertOpen(true)} light />}
-        {me.source === "logisweb-staff" && <a href="/exchange" className="h-12 px-4 rounded-2xl bg-[#F5F7FB] flex items-center gap-2 text-[16px] font-bold text-[#1B2B4B]"><HI name="swap" size={18} />운송사 거래소<HI name="chevron" size={18} className="ml-auto" /></a>}
+        {poster && !linked && <button type="button" onClick={() => go("places")} className="lg:hidden w-full h-12 px-4 rounded-2xl bg-[#F5F7FB] flex items-center gap-2 text-[16px] font-bold text-[#1B2B4B]"><HI name="pin" size={18} />고객관리<HI name="chevron" size={18} className="ml-auto" /></button>}
       </div>
     </HubWallet>
   );

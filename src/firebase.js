@@ -58,7 +58,7 @@ const firebaseConfig = {
 const USE_EMU = import.meta.env.VITE_USE_EMULATOR === "1"; // (포트는 VITE_EMU_AUTH_PORT·VITE_EMU_FS_PORT로 바꿀 수 있음 — 2026-11-06 테스트용)
 if (USE_EMU) firebaseConfig.projectId = "demo-kpflow";
 // 회사명이 비어있는 옛 문서를 어느 회사 소속으로 볼지
-export const DEFAULT_COMPANY = "돌캐";
+export const DEFAULT_COMPANY = "(회사없음)"; // ⭐ 2026-11-21 기본 회사 없음 — 회사명이 빈 예전 문서는 어느 운송사에도 속하지 않는다(돌캐 초기화 · 대표님 확정)
 export const FUNCTIONS_BASE = USE_EMU ? "http://127.0.0.1:5001/demo-kpflow/us-central1" : `https://us-central1-${firebaseConfig.projectId}.cloudfunctions.net`;
 
 const app = initializeApp(firebaseConfig);

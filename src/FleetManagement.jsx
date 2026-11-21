@@ -1999,6 +1999,31 @@ function buildFleetUploadUrl(order) {
   return `${window.location.origin}/u/${code}`;
 }
 
+// ─── 오더 재발송 — 기사확인상태:"대기"를 null→"대기"로 두 번 빠르게 써서
+// Cloud Function(notifyFleetDriverNewOrder)의 "새로 대기로 바뀐 경우만" 가드를
+// 다시 통과시킨다. 차량번호는 그대로 두므로 다른 안전망 로직과는 충돌하지 않는다.
+// (2026-11-18 기사복사 통일 커밋에서 실수로 지워져 우클릭 [재발송]이 ReferenceError로 죽던 것을 되살림)
+async function resendOrderToDriver(order, driver) {
+  const col = order.__col || "orders";
+  try {
+    await updateDoc(doc(db, col, order._id), { 기사확인상태: null });
+    await new Promise((res) => setTimeout(res, 400));
+    await updateDoc(doc(db, col, order._id), { 기사확인상태: "대기" });
+    addDoc(collection(db, "driver_notifications"), {
+      driverId: driver.id,
+      type: "new_order",
+      orderId: order._id,
+      title: "배차오더가 도착했습니다",
+      body: `${order.거래처명 || ""} ${order.상차지명 || "-"} → ${order.하차지명 || "-"}`,
+      createdAt: serverTimestamp(),
+      read: false,
+    }).catch(() => {});
+    window.alert("기사에게 오더를 다시 전송했습니다.");
+  } catch {
+    window.alert("재발송에 실패했습니다. 잠시 후 다시 시도해주세요.");
+  }
+}
+
 function buildOrderCopyText(order, driver, mode) {
   // 📋 2026-11-18 배차현황 · 실시간배차현황 · 모바일 기사복사와 같은 글(src/driverCopyText.js) — 경유지 · 회사 ⚙ 문구 설정도 그대로
   const r = { ...order, 차량번호: driver?.차량번호 || order.차량번호 || "", 이름: driver?.이름 || order.이름 || "", 전화번호: driver?.전화번호 || order.전화번호 || "" };

@@ -57,7 +57,7 @@ function isPushTypeEnabled(prefs, type) {
   return PUSH_TYPES_DEFAULT_ON.includes(type);
 }
 // ⭐ 2026-11-01 운송사별 분리 — 그 오더의 회사 직원에게만(기사·화주 제외). 예전엔 모든 회사 사용자 전원에게 갔다.
-const PUSH_DEFAULT_COMPANY = "돌캐";
+const PUSH_DEFAULT_COMPANY = "(회사없음)"; // ⭐ 2026-11-21 기본 회사 없음(돌캐 초기화)
 const NON_STAFF_ROLES = new Set(["driver", "shipper", "cafeUser"]);
 async function getTokensForType(type, companyName) {
   const co = String(companyName || PUSH_DEFAULT_COMPANY).trim();
@@ -589,10 +589,10 @@ function normalizePlateServer(v = "") {
 async function findDriverByPlate(rawPlate, companyName, extraFilter) {
   const plate = normalizePlateServer(rawPlate || "");
   if (!plate) return null;
-  const co = String(companyName || "돌캐").trim();
+  const co = String(companyName || "(회사없음)").trim();
   const snap = await db.collection("drivers").where("차량번호", "==", rawPlate).limit(20).get();
   return snap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === plate
-    && String(d.data().companyName || "돌캐").trim() === co
+    && String(d.data().companyName || "(회사없음)").trim() === co
     && (!extraFilter || extraFilter(d))) || null;
 }
 
@@ -683,7 +683,7 @@ exports.notifyFleetDriverNewOrder =
             await db.collection("driver_notifications").add({
               driverId: cDriverDoc.id, type: "canceled", orderId: context.params.dispatchId,
               // 🔒 2026-11-07 회사명도 기록 — 잠금 뒤 운송사 화면은 회사 조건으로 조회한다(없으면 기사 본인만 보임)
-              companyName: String(before?.companyName || after.companyName || cDriverDoc.data()?.companyName || "").trim() || "돌캐",
+              companyName: String(before?.companyName || after.companyName || cDriverDoc.data()?.companyName || "").trim() || "(회사없음)",
               title: "배차가 취소되었습니다", body, createdAt: FieldValue.serverTimestamp(), read: false,
             }).catch(() => {});
           }
@@ -944,7 +944,7 @@ exports.notifyUnassignedUrgent = functions.pubsub
     const URGENT_WINDOW_MIN = 60; // 상차 1시간 전부터 임박으로 취급
 
     const tokenCache = {}; // ⭐ 회사별 직원에게만
-    const tokensFor = async (co) => { const k = String(co || "돌캐"); if (!tokenCache[k]) tokenCache[k] = await getTokensForType("미배차", k); return tokenCache[k]; };
+    const tokensFor = async (co) => { const k = String(co || "(회사없음)"); if (!tokenCache[k]) tokenCache[k] = await getTokensForType("미배차", k); return tokenCache[k]; };
     const templateConfig = await getNotificationTemplateConfig();
     const notifFields = getNotifFieldsForType(templateConfig, "미배차");
 
@@ -1049,7 +1049,7 @@ exports.notifyFleetOrderModified =
 
       await db.collection("driver_notifications").add({
         driverId: driverDoc.id, type: "order_modified", orderId: dispatchId,
-        companyName: String(after.companyName || driverDoc.data()?.companyName || "").trim() || "돌캐", // 🔒 2026-11-07 회사명
+        companyName: String(after.companyName || driverDoc.data()?.companyName || "").trim() || "(회사없음)", // 🔒 2026-11-07 회사명
         title, body, changed: labels, createdAt: FieldValue.serverTimestamp(), read: false,
       }).catch(() => {});
 
@@ -1239,7 +1239,7 @@ exports.notifyFleetLateArrival = functions.pubsub
             }, `지입 ${c.label}지연(기사)`);
             await db.collection("driver_notifications").add({
               driverId: driverDoc.id, type: `late_${c.kind}`, orderId: docSnap.id,
-              companyName: String(o.companyName || drv?.companyName || "").trim() || "돌캐", // 🔒 2026-11-07 회사명
+              companyName: String(o.companyName || drv?.companyName || "").trim() || "(회사없음)", // 🔒 2026-11-07 회사명
               title: `${c.label}시간 알림 (${t24})`,
               body: `${c.label}지 [${place}] 도착이 늦어지고 있습니다. ${distText}.`,
               createdAt: FieldValue.serverTimestamp(), read: false,
@@ -2491,7 +2491,7 @@ async function syncOneDispatchToGsheet(docId, eventData, eventBefore) {
   // "내 오더만 보내기" 표시가 있는 오더는 회사명과 상관없이 대상, 전체 연결이 꺼져 있으면 그 오더만 대상
   if (!GSHEET_PROGRAM_LINK_ENABLED && !(data._gsheetMine && (data._gsheetMineSent || [docId, docId.split("/").pop()].includes(data._gsheetSync?.doc)))) return;
   // ⭐ 블라인드는 프로그램 화면에서만 숨기는 것 — "내 오더" 표시가 있으면 시트에는 그대로 둔다
-  const outOfScope = (!data._gsheetMine && ((data.companyName || "돌캐") !== GSHEET_TARGET_COMPANY || data.블라인드 === true));
+  const outOfScope = (!data._gsheetMine && ((data.companyName || "(회사없음)") !== GSHEET_TARGET_COMPANY || data.블라인드 === true));
   // 새로 생긴 문서에 딸려온 옛 방식 포인터(문서ID 없음)는 복사 원본의 것 — 무시
   const createdNow = !eventBefore;
   let ptr = ownGsheetPtr(data, docId);
@@ -2724,12 +2724,12 @@ exports.backfillGsheetMonth = functions
       //
       // ⭐ 원래 where("companyName","==",GSHEET_TARGET_COMPANY)로 걸렀었는데, 이건
       // Firestore 등호(==) 필터의 특성상 companyName 필드가 아예 없는 문서를
-      // 통째로 조회 결과에서 제외해버린다. 화면 표시는 (companyName || "돌캐")
+      // 통째로 조회 결과에서 제외해버린다. 화면 표시는 (companyName || "(회사없음)")
       // 폴백이 곳곳에 있어 정상으로 보였지만, 실제로 모바일 등록 화면이 이 필드를
       // 아예 안 써넣고 있었던 게 뒤늦게 발견됨 — 그 결과 모바일로 등록한 오더가
       // 백필에서 전부 빠지고 있었다(1일 52건 중 42건만 전송되는 등). 그래서
       // companyName으로 미리 거르지 않고 그 달 상차일 범위로만 조회한 뒤, 표시와
-      // 동일한 (companyName || "돌캐") 폴백으로 메모리에서 걸러 다른 회사 오더가
+      // 동일한 (companyName || "(회사없음)") 폴백으로 메모리에서 걸러 다른 회사 오더가
       // 섞이지 않게 한다.
       // ⭐ "orders" 컬렉션에는 화주사가 직접 등록한 오더뿐 아니라, 운송사가 dispatch의
       // 오더를 화주사에게 전송할 때 자동 생성되는 사본(source==="transport_transmit")도
@@ -2750,7 +2750,7 @@ exports.backfillGsheetMonth = functions
           const data = d.data();
           if (data.source === "transport_transmit") return;
           if (data.블라인드 === true) return; // ★ 실시간 동기화와 같은 기준(예전 백필은 블라인드 오더까지 올려 시트가 더 많았다)
-          if ((data.companyName || "돌캐") === GSHEET_TARGET_COMPANY) {
+          if ((data.companyName || "(회사없음)") === GSHEET_TARGET_COMPANY) {
             items.push({ docId: `${col}/${d.id}`, data });
           }
         });
@@ -3092,7 +3092,7 @@ async function backfillGsheetClientTab({ tabName, collectionName, columns, build
   const items = [];
   snap.docs.forEach((d) => {
     const data = d.data();
-    if ((data.companyName || "돌캐") !== GSHEET_TARGET_COMPANY) return;
+    if ((data.companyName || "(회사없음)") !== GSHEET_TARGET_COMPANY) return;
     items.push(data);
   });
   items.sort((a, b) => String(a[sortField] || "").localeCompare(String(b[sortField] || ""), "ko"));
@@ -3468,7 +3468,7 @@ exports.syncDispatchToGoogleSheet =
 
       if (!after) {
         // 문서가 완전삭제됨 — 시트에 남은 이 오더의 줄을 오더ID(또는 예전 줄번호)로 찾아 지운다
-        if (before && (GSHEET_PROGRAM_LINK_ENABLED ? (before._gsheetMine || (before.companyName || "돌캐") === GSHEET_TARGET_COMPANY) : true) && before.source !== "transport_transmit") {
+        if (before && (GSHEET_PROGRAM_LINK_ENABLED ? (before._gsheetMine || (before.companyName || "(회사없음)") === GSHEET_TARGET_COMPANY) : true) && before.source !== "transport_transmit") {
           try {
             await removeDocFromGsheet(`${col}/${dispatchId}`, before);
           } catch (e) {
@@ -3538,7 +3538,7 @@ exports.checkGsheetMonth = functions
         snap.docs.forEach((d) => {
           const x = d.data();
           if (x.source === "transport_transmit" || x.블라인드 === true) return;
-          if ((x.companyName || "돌캐") !== GSHEET_TARGET_COMPANY) return;
+          if ((x.companyName || "(회사없음)") !== GSHEET_TARGET_COMPANY) return;
           if (isGsheetCanceled(x)) return;
           program.set(`${col}/${d.id}`, String(x["상차일"] || "").trim());
         });
@@ -3698,7 +3698,7 @@ exports.tenantMigrate = functions.runWith({ timeoutSeconds: 300, memory: "512MB"
       const x = d.data() || {};
       const c = typeof x.companyName === "string" ? x.companyName.trim() : "";
       if (c) return;
-      const fb = (typeof x.company === "string" && x.company.trim()) || (typeof x.운송사명 === "string" && x.운송사명.trim()) || "돌캐";
+      const fb = (typeof x.company === "string" && x.company.trim()) || (typeof x.운송사명 === "string" && x.운송사명.trim()) || "(회사없음)";
       batch.update(d.ref, { companyName: fb }); n += 1;
     });
     if (n) await batch.commit();
@@ -4702,11 +4702,11 @@ async function isBulkModeFor(company) {
   }
   const v = _bulkModeCache.v;
   if (!v || (v.until?.toMillis?.() || 0) < Date.now()) return false;
-  return (v.companies || []).includes(company || "돌캐");
+  return (v.companies || []).includes(company || "(회사없음)");
 }
 // ⭐ 홈 화면 합계(PC에 하루 저장)를 다시 계산하라는 표시 — 초기화·복원·가져오기 취소가 끝나면 남긴다
 function bumpDataVersion(company) {
-  return db.collection("systemConfig").doc("dataVersion").set({ [company || "돌캐"]: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
+  return db.collection("systemConfig").doc("dataVersion").set({ [company || "(회사없음)"]: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
 }
 async function setBulkMode(company, on, { wait = true } = {}) {
   const ref = db.collection("adminSecrets").doc("bulkMode");
@@ -4737,7 +4737,7 @@ async function requireAdminRole(req, body) {
   // 🔒 2026-11-07 승인 전·퇴사 계정은 거절(예전엔 가입만 하고 승인 안 된 "관리자" 계정도 다른 회사 이름으로 관리자 기능을 부를 수 있었다)
   if (!isTM && (!u.exists || ud.approved === false || ud.employmentStatus === "퇴사")) throw Object.assign(new Error("사용 권한이 없습니다."), { status: 403 });
   if (!isTM && !["admin", "allMgr"].includes(ud.role)) throw Object.assign(new Error("관리자만 사용할 수 있습니다."), { status: 403 });
-  const company = isTM ? String(body?.company || ud.companyName || "돌캐") : String(ud.companyName || "돌캐");
+  const company = isTM ? String(body?.company || ud.companyName || "(회사없음)") : String(ud.companyName || "(회사없음)");
   return { decoded, isTM, company, email: decoded.email || "" };
 }
 
@@ -4751,7 +4751,7 @@ async function requireStaff(req, body) {
   const ud = u.exists ? u.data() : {};
   const isTM = decoded.email === "tjddnqkf@naver.com" || ud.role === "totalMaster";
   if (!isTM && (ud.approved === false || ["driver", "shipper", "cafeUser"].includes(ud.role) || !u.exists || ud.employmentStatus === "퇴사")) throw Object.assign(new Error("사용 권한이 없습니다."), { status: 403 }); // 🔒 2026-11-07 퇴사·배차마당 계정 제외
-  const company = isTM ? String(body?.company || ud.companyName || "돌캐") : String(ud.companyName || "돌캐");
+  const company = isTM ? String(body?.company || ud.companyName || "(회사없음)") : String(ud.companyName || "(회사없음)");
   return { decoded, isTM, company, email: decoded.email || "", name: ud.name || "" };
 }
 
@@ -4765,7 +4765,7 @@ exports.archiveDeletedOrder = functions.firestore.document("{col}/{orderId}").on
   const data = snap.data();
   if (!data || data.source === "transport_transmit") return; // 화주사 전송 사본은 원본이 따로 있다
   if (data._seed) return; // 🧪 테스트 데이터는 휴지통에 넣지 않는다
-  const company = data.companyName || "돌캐";
+  const company = data.companyName || "(회사없음)";
   if (await isBulkModeFor(company)) return; // 운송사 초기화·가져오기 취소는 자체 보관함이 있다
   const log = await db.collection("deletedOrders").doc(`${col}_${orderId}`).get().catch(() => null);
   await db.collection("orderTrash").doc(`${col}_${orderId}`).set({
@@ -4786,7 +4786,7 @@ const readBeforeDelete = async (col, id, atMs) => {
 const trashRow = (col, id, at, data, by, source) => ({
   col, id, at, source, deletedBy: by || "",
   상차일: data.상차일 || "", 거래처명: data.거래처명 || "", 상차지명: data.상차지명 || "", 하차지명: data.하차지명 || "",
-  차량번호: data.차량번호 || "", 청구운임: data.청구운임 || 0, 배차상태: data.배차상태 || "", 회사: data.companyName || "돌캐",
+  차량번호: data.차량번호 || "", 청구운임: data.청구운임 || 0, 배차상태: data.배차상태 || "", 회사: data.companyName || "(회사없음)",
 });
 
 //  POST { action: "list", from, to }  → 그 기간(지운 날, 한국시간)에 지운 오더 — 휴지통 우선, 없으면(최고관리자) 시점 복구로 읽기
@@ -4803,7 +4803,7 @@ exports.restoreDeleted = functions.runWith({ timeoutSeconds: 300, memory: "512MB
   body = body || {};
   try {
     const me = await requireAdminRole(req, body);
-    const mine = (c) => me.isTM || (c || "돌캐") === me.company;
+    const mine = (c) => me.isTM || (c || "(회사없음)") === me.company;
     if (body.action === "list") {
       const from = String(body.from || body.date || ""); const to = String(body.to || body.from || body.date || "");
       if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || to < from) { res.status(400).json({ error: "날짜를 확인해 주세요." }); return; }
@@ -4856,7 +4856,7 @@ exports.restoreDeleted = functions.runWith({ timeoutSeconds: 300, memory: "512MB
           if (data && mine(data.companyName)) got.push({ ...x, data });
         }));
       }
-      const companies = [...new Set(got.map((g) => g.data.companyName || "돌캐"))];
+      const companies = [...new Set(got.map((g) => g.data.companyName || "(회사없음)"))];
       for (const c of companies) await setBulkMode(c, true); // 되살리는 동안 "신규 오더" 알림이 쏟아지지 않게
       let restored = 0;
       try {
@@ -4940,7 +4940,7 @@ async function generateRecurringOrders(date, { company = null, ids = null, check
   let created = 0; const names = [];
   for (const t of snap.docs) {
     const tp = t.data();
-    if (company && (tp.companyName || "돌캐") !== company) continue;
+    if (company && (tp.companyName || "(회사없음)") !== company) continue;
     if (ids && !ids.includes(t.id)) continue;
     if (checkDays && !(tp.days || []).includes(dow)) continue;
     if ((tp.skipDates || []).includes(date)) continue;
@@ -4954,7 +4954,7 @@ async function generateRecurringOrders(date, { company = null, ids = null, check
     const id = `rec_${t.id}_${date}`;
     Object.assign(o, {
       _id: id, 상차일: date, 하차일: addDaysStr(date, Number(tp.dropOffset) || 0), 등록일: kstDateStr(),
-      companyName: o.companyName || tp.companyName || "돌캐",
+      companyName: o.companyName || tp.companyName || "(회사없음)",
       배차상태: hasDriver ? "배차완료" : "배차중",
       ...(hasDriver ? { 배차확정일시: FieldValue.serverTimestamp(), 배차확정자: "정기 오더", 배차완료일시: Date.now() } : {}),
       작성자: tp.createdBy || "", 등록기기: "정기", 정기오더: { id: t.id, name: tp.name || "" }, _recurring: true,
@@ -4997,7 +4997,7 @@ async function buildDailySummary(company, date) {
     const snap = await db.collection(col).where("상차일", "in", [date, tomorrow]).get();
     snap.docs.forEach((d) => {
       const x = d.data();
-      if (x.source === "transport_transmit" || isCanceledOrder(x) || (x.companyName || "돌캐") !== company) return;
+      if (x.source === "transport_transmit" || isCanceledOrder(x) || (x.companyName || "(회사없음)") !== company) return;
       rows[String(x.상차일)]?.push(x);
     });
   }
@@ -5109,7 +5109,7 @@ async function pushInternalMail(m) {
   for (let i = 0; i < to.length; i += 100) {
     const docs = await db.getAll(...to.slice(i, i + 100).map((uid) => db.collection("users").doc(uid)));
     const pk = isOrder ? "인사발령" : m.kind === "closeReport" ? "마감보고" : "사내메일";
-    docs.forEach((d) => { if (d.exists && (d.data().companyName || "돌캐") === (m.company || "돌캐") && isPushTypeEnabled(d.data().pushPrefs, pk)) tokens.push(...userTokens(d.data())); });
+    docs.forEach((d) => { if (d.exists && (d.data().companyName || "(회사없음)") === (m.company || "(회사없음)") && isPushTypeEnabled(d.data().pushPrefs, pk)) tokens.push(...userTokens(d.data())); });
   }
   const head = isOrder ? "◆ 인사발령" : m.kind === "hr" ? "◆ 인사관리부" : m.kind === "closeReport" ? "▸ 마감보고" : m.kind === "approval" ? `✎ 전자결재 · ${m.fromName || ""}` : `▸ ${m.important ? "[중요] " : ""}${m.fromName || "사내메일"}`;
   const body = m.kind === "closeReport" ? String(m.body || "") : `${m.subject || ""}${m.body ? `\n${String(m.body).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
@@ -5170,7 +5170,7 @@ const NOTICE_ADMIN_ROLES = ["admin", "totalMaster", "superadmin"];
 //  기사(driver)가 들어 있으면 같은 회사 기사(승인된 계정)에게도 보낸다. 직원(internal)이 빠져 있으면 직원에게는 보내지 않는다.
 //  (화주사 대상 공지라도 직원은 예전처럼 받는다 — audiences가 없을 때와 같게)
 async function sendNoticePush(n) {
-  const company = n.companyName || "돌캐";
+  const company = n.companyName || "(회사없음)";
   const teams = Array.isArray(n.teams) ? n.teams : [];
   const teamsN = teams.map(normTeamSrv).filter(Boolean);
   const auds = Array.isArray(n.audiences) && n.audiences.length ? n.audiences : null;
@@ -5526,7 +5526,7 @@ exports.notifySignup = functions.firestore.document("users/{uid}").onWrite(async
   const becamePending = !b || b.approved !== false || ["deleted", "withdrawn"].includes(b.status) || b.employmentStatus === "퇴사";
   if (!becamePending) return null;
   if (["shipper", "cafeUser", "totalMaster"].includes(u.role)) return null;
-  const company = u.companyName || "돌캐";
+  const company = u.companyName || "(회사없음)";
   const admins = await db.collection("users").where("companyName", "==", company).get();
   const tokens = [];
   admins.forEach((d) => {
@@ -5729,7 +5729,7 @@ exports.automation = functions.runWith({ timeoutSeconds: 300, memory: "512MB" })
       if (body.preview) { res.json({ ...sm, at: Date.now() }); return; }
       const to = (Array.isArray(body.to) ? body.to : []).map(String).slice(0, 100);
       if (!to.length) { res.status(400).json({ error: "받을 사람을 골라 주세요." }); return; }
-      const users = (await db.getAll(...to.map((uid) => db.collection("users").doc(uid)))).filter((d) => d.exists && (d.data().companyName || "돌캐") === me.company);
+      const users = (await db.getAll(...to.map((uid) => db.collection("users").doc(uid)))).filter((d) => d.exists && (d.data().companyName || "(회사없음)") === me.company);
       const memo = String(body.memo || "").slice(0, 500);
       const check = body.check && typeof body.check === "object" ? body.check : null;
       const sender = me.name || me.email.split("@")[0];
@@ -6095,7 +6095,7 @@ async function runRouteBoardSync(form, { force = false, range = null, mt: mt0 = 
   const sid = parseSpreadsheetId(form.sheetUrl);
   if (!sid) return { skipped: "no-sheet" };
   // 🔒 2026-11-07 이 양식의 회사가 주인인 시트만(다른 회사 시트 주소를 넣은 양식은 가져오지 않는다 — functions/sheetGuard.js)
-  await sheetGuard.assertSheetOwner(sid, form.companyName || "돌캐", { by: `routeBoard:${form.id || ""}` });
+  await sheetGuard.assertSheetOwner(sid, form.companyName || "(회사없음)", { by: `routeBoard:${form.id || ""}` });
   const before = mt0 != null ? mt0 : await sheetModifiedTime(sid);
   const r = await runRouteBoardSyncRaw(form, sid, { force, range });
   // 우리가 시트에 쓴 경우(칸 쓰기·줄 끼우기)엔 modifiedTime이 바뀌었으니 다시 받아 둔다(다음 확인이 "바뀜"으로 헛돌지 않게)
@@ -6438,7 +6438,7 @@ async function computePlatformStats({ full = true } = {}) {
   const from = `${prevMonth}-01` < d30 ? `${prevMonth}-01` : d30;
   const companies = {};
   const co = (name) => {
-    const k = String(name || "돌캐").trim() || "돌캐";
+    const k = String(name || "(회사없음)").trim() || "(회사없음)";
     if (!companies[k]) companies[k] = {
       name: k, kind: "transport", staff: 0, admins: 0, drivers: 0, shippers: 0, pending: 0, quit: 0,
       online: 0, onlineNow: 0, onlinePc: 0, onlineMobile: 0, lastSeen: 0,
@@ -6476,7 +6476,7 @@ async function computePlatformStats({ full = true } = {}) {
   users.docs.forEach((d) => {
     const u = d.data() || {};
     if (u.role === "totalMaster" || u.email === "tjddnqkf@naver.com" || u.role === "cafeUser") return;
-    userCompany[d.id] = String(u.companyName || "").trim() || "돌캐"; // ⭐ 2026-11-02 관리자센터 — 회사명 앞뒤 공백 제거
+    userCompany[d.id] = String(u.companyName || "").trim() || "(회사없음)"; // ⭐ 2026-11-02 관리자센터 — 회사명 앞뒤 공백 제거
     if (u.role === "shipper") {
       const k = String(u.companyName || "").trim();
       if (shippers[k]) shippers[k].users += 1;
@@ -6538,7 +6538,7 @@ async function computePlatformStats({ full = true } = {}) {
   const cut = addDaysStr(today, -2);
   const buckets = {};
   const addB = (name, day, cnt, sale, profit, fixed) => {
-    const k = String(name || "돌캐").trim() || "돌캐";
+    const k = String(name || "(회사없음)").trim() || "(회사없음)";
     const b = buckets[k] || (buckets[k] = {});
     const x = b[day] || (b[day] = [0, 0, 0, 0]);
     x[0] += cnt; x[1] += sale; x[2] += profit; x[3] += fixed;
@@ -6634,7 +6634,7 @@ async function computePlatformStats({ full = true } = {}) {
       const prefs = [...parents.values()];
       for (let i = 0; i < prefs.length; i += 300) {
         const got = await db.getAll(...prefs.slice(i, i + 300), { fieldMask: ["companyName"] });
-        got.forEach((x) => { if (x.exists) owner[x.ref.path] = String(x.get("companyName") || "").trim() || "돌캐"; });
+        got.forEach((x) => { if (x.exists) owner[x.ref.path] = String(x.get("companyName") || "").trim() || "(회사없음)"; });
       }
       const per = {}; let knownKB = 0; let knownN = 0; const unknown = {};
       att.docs.forEach((d) => {

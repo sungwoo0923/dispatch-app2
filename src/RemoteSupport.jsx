@@ -534,7 +534,7 @@ function RequesterModal({ uid, user, profile, company, mobile, active, latest, h
     setBusy(true);
     try {
       await addDoc(collection(db, "supportRequests"), {
-        companyName: profile?.companyName || company || "돌캐", uid, email: user?.email || "",
+        companyName: profile?.companyName || company || "(회사없음)", uid, email: user?.email || "",
         name: profile?.name || myNameNow(user?.displayName || user?.email), team: profile?.team || "", position: profile?.position || "",
         phone, message: msg.trim().slice(0, 2000), method, mode: method, status: "pending",
         device: mobile || isPhoneUA() ? "mobile" : "pc", createdAt: serverTimestamp(), decidedAt: null, decidedBy: "", rejectReason: "",
