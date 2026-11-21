@@ -1,7 +1,7 @@
 // ======================= cafe-site/src/hub/hubUi.jsx =======================
 // ⭐ 2026-11-06 로지스웹 허브 콜 — 화면 부품(로지스웹 디자인 언어: 네이비 #0B1428/#0F1A30/#1B2B4B/#2D4C82 + 포인트 #8FB0F0)
 //  기본 산세리프 글꼴만(고정폭 글꼴 없음) · 휴대폰 글자 15px 이상 · 누르는 곳 48px 이상
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { fileUrl } from "./hubApi";
 
 const P = {
@@ -145,6 +145,56 @@ export function Stars({ value = 0, onChange, size = 20 }) {
           : <span key={n} className={on ? "text-[#2D4C82]" : "text-[#D3DAE6]"}>{s}</span>;
       })}
     </span>
+  );
+}
+
+// ⭐ 2026-11-21 여러 개 고르는 드롭다운(지역 · 차종 등) — 칩 17개를 늘어놓지 않고 한 칸에 접어 둔다
+//  options: ["경기", ...] 또는 [[값, 이름, 개수?], ...] · value: 고른 값 배열(비우면 전체)
+export function MultiSelect({ value = [], onChange, options = [], placeholder = "전체", title, testid, cols = 3 }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const h = (e) => { if (box.current && !box.current.contains(e.target)) setOpen(false); };
+    const k = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", h); document.addEventListener("touchstart", h); window.addEventListener("keydown", k);
+    return () => { document.removeEventListener("mousedown", h); document.removeEventListener("touchstart", h); window.removeEventListener("keydown", k); };
+  }, [open]);
+  const opts = options.map((o) => (Array.isArray(o) ? { v: o[0], l: o[1] ?? o[0], n: o[2] } : { v: o, l: o }));
+  const names = opts.filter((o) => value.includes(o.v)).map((o) => o.l);
+  const text = !names.length ? placeholder : names.length <= 2 ? names.join(", ") : `${names.slice(0, 2).join(", ")} 외 ${names.length - 2}`;
+  const tog = (v) => onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v]);
+  return (
+    <div ref={box} className="relative" data-testid={testid}>
+      <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)}
+        className={`${inputCls} flex items-center gap-2 text-left ${open ? "border-[#2D4C82] ring-4 ring-[#2D4C82]/10" : ""}`}>
+        <span className={`flex-1 truncate ${names.length ? "text-[#0F1A30] font-bold" : "text-[#66758E]"}`}>{text}</span>
+        {names.length > 0 && <span className="h-6 min-w-[24px] px-1.5 rounded-full bg-[#0F1A30] text-white text-[12.5px] font-extrabold inline-flex items-center justify-center" style={NUMS}>{names.length}</span>}
+        <HI name="down" size={16} className={`text-[#55657F] transition ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div role="listbox" aria-multiselectable="true" className="absolute z-[60] left-0 right-0 mt-2 min-w-[260px] bg-white rounded-2xl ring-1 ring-inset ring-[#DCE3EE] shadow-[0_24px_60px_rgba(11,20,40,.18)] p-2 hub-fade">
+          <div className="flex items-center justify-between px-2 pt-1 pb-2">
+            <span className="text-[13.5px] font-bold text-[#5F6E87]">{title || "여러 개 고를 수 있어요"}</span>
+            <button type="button" onClick={() => onChange([])} className="h-8 px-2.5 rounded-lg text-[13.5px] font-bold text-[#1B2B4B] hover:bg-[#F2F5FA]">전체</button>
+          </div>
+          <div className="grid gap-1 max-h-[280px] overflow-y-auto hub-scroll" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))` }}>
+            {opts.map((o) => {
+              const on = value.includes(o.v);
+              return (
+                <button key={o.v} type="button" role="option" aria-selected={on} onClick={() => tog(o.v)}
+                  className={`h-10 px-2.5 rounded-xl text-[14.5px] font-bold inline-flex items-center gap-1.5 transition ${on ? "bg-[#0F1A30] text-white" : "text-[#3A4A66] hover:bg-[#F2F5FA]"}`}>
+                  <span className={`w-4 h-4 rounded-[5px] shrink-0 inline-flex items-center justify-center ${on ? "bg-[#8FB0F0] text-[#0B1428]" : "ring-1 ring-inset ring-[#C7D3E8]"}`}>{on && <HI name="check" size={11} stroke={3} />}</span>
+                  <span className="truncate">{o.l}</span>
+                  {o.n ? <span className={`ml-auto text-[12.5px] ${on ? "text-white/70" : "text-[#8A97AD]"}`} style={NUMS}>{o.n}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+          <Btn size="md" className="w-full mt-2" onClick={() => setOpen(false)}>{names.length ? `${names.length}곳 적용` : "닫기"}</Btn>
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -21593,7 +21593,7 @@ function ERPEmployeeList({ userCompany, cardVersionB, accent }) {
 
   useEffect(() => {
     if (!userCompany) { setLoading(false); return; }
-    const q = query(collection(db, "users"), where("company", "==", userCompany));
+    const q = query(collection(db, "users"), where("companyName", "==", userCompany)); // ⭐ 2026-11-21 사용자 문서 칸 이름은 companyName
     const unsub = onSnapshot(q, snap => {
       setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
