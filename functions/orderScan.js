@@ -39,7 +39,7 @@ async function scanUserOf(db, auth) {
     const okUser = email === SUPER_EMAIL || d.role === "totalMaster"
       || (d.approved !== false && d.employmentStatus !== "퇴사" && d.role !== "cafeUser");
     if (okUser) {
-      const co = d.role === "shipper" ? (d.companyName || "") : (d.companyName || "돌캐");
+      const co = d.role === "shipper" ? (d.companyName || "") : (d.companyName || "(회사없음)");
       if (d.role !== "totalMaster" && email !== SUPER_EMAIL && co) {
         const plan = await db.collection("companyPlans").doc(co).get().catch(() => null);
         if (plan?.exists && plan.data()?.status === "ended") throw new ScanError("permission-denied", "계약이 끝난 회사는 쓸 수 없어요");
@@ -49,7 +49,7 @@ async function scanUserOf(db, auth) {
   }
   const m = await db.collection("hubMembers").doc(uid).get();
   if (m.exists && m.data()?.status === "approved") return { kind: "hub", key: companyKeyOf(m.data(), uid) };
-  if (email === SUPER_EMAIL) return { kind: "lw", key: "lw:돌캐" };
+  if (email === SUPER_EMAIL) return { kind: "lw", key: "lw:(회사없음)" };
   throw new ScanError("permission-denied", "승인된 계정만 쓸 수 있어요");
 }
 

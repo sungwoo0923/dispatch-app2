@@ -49,9 +49,9 @@ async function callerOf(db, auth, { allowSignup = false } = {}) {
   const u = await db.collection("users").doc(uid).get();
   const d = u.exists ? (u.data() || {}) : {};
   const isTM = email === SUPER_EMAIL || d.role === "totalMaster";
-  if (isTM) return { uid, tier: "staff", co: d.companyName || "돌캐", isTM: true, isAdmin: true };
+  if (isTM) return { uid, tier: "staff", co: d.companyName || "(회사없음)", isTM: true, isAdmin: true };
   if (u.exists && d.approved !== false && d.employmentStatus !== "퇴사" && d.role !== "cafeUser") {
-    const co = d.companyName || "돌캐";
+    const co = d.companyName || "(회사없음)";
     if (co) {
       const plan = await db.collection("companyPlans").doc(co).get().catch(() => null);
       if (plan?.exists && plan.data()?.status === "ended") throw new PdError("permission-denied", "계약이 끝난 회사는 쓸 수 없어요");

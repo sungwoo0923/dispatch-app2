@@ -449,7 +449,7 @@ function UsagePanel() {
         right={<button type="button" onClick={refresh} disabled={busy} className="h-10 px-4 rounded-xl bg-white/10 ring-1 ring-white/25 text-white text-[13px] font-black disabled:opacity-60">{busy ? "집계 중…" : "지금 갱신"}</button>} />
       {!locked && (
         <div className="rounded-2xl border border-[#F7C97A] bg-[#FFF8EC] px-5 py-3.5 text-[13px] text-[#8A4B08]">
-          <b>서버 분리가 아직 꺼져 있습니다.</b> 사용량은 모든 문서의 회사명 기준으로 세므로 회사명이 정확하면 지금도 맞습니다. 다만 회사명이 빈 예전 문서는 돌캐로 잡히니, <b>데이터 › 운송사 분리</b>에서 1단계(회사명 채우기)를 먼저 해 두면 더 정확합니다.
+          <b>서버 분리가 아직 꺼져 있습니다.</b> 사용량은 모든 문서의 회사명 기준으로 세므로 회사명이 정확하면 지금도 맞습니다. 다만 회사명이 빈 예전 문서는 어느 운송사에도 잡히지 않으니, <b>데이터 › 운송사 분리</b>에서 1단계(회사명 채우기)를 먼저 해 두면 더 정확합니다.
         </div>
       )}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1028,7 +1028,7 @@ function EmptyCompanyCheck() {
   return (
     <Card code="CHECK" title="회사명 없는 데이터 점검" right={<button type="button" onClick={scanAll} disabled={!!busy} className="h-9 px-4 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-50">{busy === "scan" ? "점검 중…" : "전체 점검"}</button>}>
       <div className="text-[13px] text-[#5B6B85] leading-relaxed">
-        회사명이 빈 데이터는 오더·기사·거래처 등은 <b>돌캐 것</b>으로, 기사앱 기록(GPS·운행일지·사진·서류·알림)은 <b>모든 운송사에 보이는 것</b>으로 처리되고 있습니다. 어떤 데이터가 몇 건이고 언제 것인지 확인한 뒤, <b>기준일 이전</b> 것은 지울 수 있습니다(최근 것은 남겨 두고 1단계로 회사명을 채우세요).
+        회사명이 빈 데이터는 오더·기사·거래처 등은 <b>어느 운송사 것도 아닌 것(회사없음)</b>으로, 기사앱 기록(GPS·운행일지·사진·서류·알림)은 <b>모든 운송사에 보이는 것</b>으로 처리되고 있습니다. 어떤 데이터가 몇 건이고 언제 것인지 확인한 뒤, <b>기준일 이전</b> 것은 지울 수 있습니다(최근 것은 남겨 두고 1단계로 회사명을 채우세요).
       </div>
       <div className="mt-3 flex items-center gap-2 flex-wrap">
         <span className="text-[12.5px] font-black text-[#3A4A66]">삭제 기준일</span>
@@ -1066,7 +1066,7 @@ function TenancyPanel() {
   const [msg, setMsg] = React.useState("");
   React.useEffect(() => onSnapshot(doc(db, "systemConfig", "tenancy"), (s) => setCfg(s.exists() ? s.data() : {}), () => setCfg({})), []);
   const run = async () => {
-    if (!(await kpConfirm("회사명이 빈칸인 예전 문서에 운송사를 적습니다.\n· 화주사가 보낸 오더 → 받은 운송사\n· 나머지 → 돌캐(운송사 칸이 생기기 전부터 쓰던 운송사)\n이미 회사명이 있는 문서는 건드리지 않습니다.\n오래 걸릴 수 있으니 창을 닫지 마세요. 진행할까요?"))) return;
+    if (!(await kpConfirm("회사명이 빈칸인 예전 문서에 운송사를 적습니다.\n· 화주사가 보낸 오더 → 받은 운송사\n· 나머지 → (회사없음) 표시(어느 운송사에도 보이지 않아요)\n이미 회사명이 있는 문서는 건드리지 않습니다.\n오래 걸릴 수 있으니 창을 닫지 마세요. 진행할까요?"))) return;
     setBusy(true); setMsg("");
     try {
       const token = await auth.currentUser?.getIdToken();
@@ -1103,7 +1103,7 @@ function TenancyPanel() {
       <Card code="STEPS" title="순서대로 진행">
         <div className="grid gap-3 lg:grid-cols-3">
           {step(1, "예전 데이터 회사명 채우기", !!cfg?.backfilledAt, <>
-            운송사 칸이 생기기 전 문서(회사명 빈칸)에 운송사를 적습니다. 화주사가 보낸 오더는 받은 운송사로, 나머지는 원래 쓰던 운송사 <b>돌캐</b>로 들어갑니다. 지금도 빈칸은 돌캐 데이터로 보이고 있어 화면 변화는 없고, 서버 잠금을 켜기 위한 정리입니다.
+            운송사 칸이 생기기 전 문서(회사명 빈칸)에 운송사를 적습니다. 화주사가 보낸 오더는 받은 운송사로, 나머지는 <b>(회사없음)</b>으로 표시돼 어느 운송사에도 보이지 않습니다. 기본 회사는 없으니(2026-11-21) 필요 없으면 아래에서 지우면 됩니다.
             <button type="button" disabled={busy} onClick={run} className="mt-3 w-full h-10 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-50">{busy ? "정리 중…" : cfg?.backfilledAt ? "다시 실행" : "실행"}</button>
           </>)}
           {step(2, "서버 분리 켜기", cfg?.serverFilter === true, <>

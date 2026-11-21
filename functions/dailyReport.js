@@ -65,7 +65,7 @@ function makeIsCountable(setting) {
 const isCancelled = (r) => r?.배차상태 === "배차취소" || ["취소", "배차취소", "오더취소", "취소됨"].includes(r?.상태);
 const dateOf = (r) => String(r?.상차일자 || r?.상차일 || r?.상차 || "").slice(0, 10);
 
-module.exports = function makeDailyReport({ db, FieldValue, sendPushAndCleanup, userTokens, sendMail, validMail, defaultCompany = "돌캐" }) {
+module.exports = function makeDailyReport({ db, FieldValue, sendPushAndCleanup, userTokens, sendMail, validMail, defaultCompany = "(회사없음)" }) {
   async function companyNumbers(co, today, p) {
     const b = basisOf(today, p);
     const ym = b.end.slice(0, 7);

@@ -202,10 +202,10 @@ eq("기존 수식 칸은 계산열", lp.columns.filter((c) => c.mode === "calc")
 eq("오더ID 칸", lp.columns.find((c) => c.mode === "id").header, "오더ID");
 eq("기존 시트 새 동의어 사전으로도 같은 칸", C.autoMapColumns(LEGACY_SAMPLE_ROWS[0], LEGACY_SAMPLE_ROWS.slice(1)).filter((c) => c.field).map((c) => [c.header, c.field]).filter(([hd, f]) => fromProfile[f] !== LEGACY_SAMPLE_ROWS[0].indexOf(hd)), []);
 eq("돌캐 월 탭 이름", C.tabForDate(lp, "2026-11-07", ["26년10월", "26년11월"]), { tab: "26년11월", exists: true });
-// isGsheetDolcaeOrder(돌캐 필터) — 예전 코드와 같은 결과
-const oldDolcae = (d) => { if (!d) return false; if ((d.companyName || "돌캐") !== "돌캐") return false; if (d.배차표Id || d._autoSheet || d.고정노선Id || d.등록기기 === "배차표") return false; return true; };
+// isGsheetDolcaeOrder(돌캐 필터) — ⭐ 2026-11-21 회사명 빈 오더는 돌캐로 보지 않는다(기본 회사 없음)
+const oldDolcae = (d) => { if (!d) return false; if ((d.companyName || "") !== "돌캐") return false; if (d.배차표Id || d._autoSheet || d.고정노선Id || d.등록기기 === "배차표") return false; return true; };
 const cases = [null, {}, { companyName: "돌캐" }, { companyName: "태진" }, { companyName: "돌캐", 배차표Id: "b1" }, { companyName: "돌캐", _autoSheet: true }, { companyName: "돌캐", 고정노선Id: "f" }, { 등록기기: "배차표" }, { companyName: "돌캐", 등록기기: "PC" }];
-eq("돌캐 필터 예전과 같음", cases.map(L.isGsheetDolcaeOrder), cases.map(oldDolcae));
+eq("돌캐 필터(회사명 빈 오더 제외)", cases.map(L.isGsheetDolcaeOrder), cases.map(oldDolcae));
 eq("일반화: 테스트운송 프로필은 테스트운송 오더만", [{ companyName: "테스트운송" }, { companyName: "돌캐" }, { companyName: "테스트운송", 배차표Id: "x" }].map((d) => L.isProfileOwnOrder({ companyName: "테스트운송" }, d)), [true, false, false]);
 
 // ── 9) 배차표 양식 만들기 ──

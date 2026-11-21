@@ -15,7 +15,7 @@ import { meterRead, meterWrite } from "./usageMeter"; // 💰 2026-11-04 회사�
 
 export * from "kp-firestore-base";
 
-const DEFAULT_CO = "돌캐";
+const DEFAULT_CO = "(회사없음)"; // ⭐ 2026-11-21 기본 회사 없음(src/firebase.js DEFAULT_COMPANY)
 // 회사명이 없으면 기본 회사로 보는 컬렉션
 const STRICT = new Set([
   "orders", "dispatch", "dispatch_test", "drivers", "clients", "places", "fixedClients", "users", "recurringOrders",

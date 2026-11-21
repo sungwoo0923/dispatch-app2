@@ -138,7 +138,7 @@ export async function loginLogiswebStaff({ companyName, companyCode, email, pass
   if (u.userStatus === "banned" || u.userStatus === "suspended") await fail("정지된 계정이에요. 관리자에게 문의하세요.");
   if (u.approved === false) await fail("로지스웹 관리자 승인 대기 중인 계정이에요.");
   if (u.employmentStatus === "퇴사") await fail("퇴사 처리된 계정이에요.");
-  const plan = await getDoc(doc(db, "companyPlans", String(u.companyName || "돌캐").trim() || "돌캐")).catch(() => null);
+  const plan = await getDoc(doc(db, "companyPlans", String(u.companyName || "(회사없음)").trim() || "(회사없음)")).catch(() => null);
   if (u.role !== "totalMaster" && plan?.exists() && plan.data()?.status === "ended") await fail("계약이 종료된 운송사이에요.");
   return ensureLinkedMember(uid, {
     role: "carrier", source: "logisweb-staff", email: cred.user.email || "",

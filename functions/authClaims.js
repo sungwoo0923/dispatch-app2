@@ -52,7 +52,7 @@ function contractCoOf(u) {
     const l = getOr(u, "linkedTransportCompany", null);
     return isMap(l) ? getOr(l, "companyName", "") : "";
   }
-  return getOr(u, "companyName", "돌캐");
+  return getOr(u, "companyName", "(계정회사없음)"); // ⭐ 2026-11-21 기본 회사 없음 — 회사 없는 계정은 어떤 문서와도 회사가 맞지 않게
 }
 
 // 권한 관리 — 직접 만든 역할 정보(규칙 isExecRoleUser · fundsMenuLevel과 같은 순서)

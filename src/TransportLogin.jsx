@@ -315,7 +315,7 @@ export default function TransportLogin() {
 
         // ⭐ 2026-11-06 계약종료된 운송사 — 로그인 단계에서 바로 안내(관리센터 › 이용 계약·만료). 부관리자는 예외
         if (!isSubAdmin) {
-          const plan = await getDoc(doc(db, "companyPlans", String(userData.companyName || "돌캐").trim() || "돌캐")).catch(() => null);
+          const plan = await getDoc(doc(db, "companyPlans", String(userData.companyName || "(회사없음)").trim() || "(회사없음)")).catch(() => null);
           if (plan?.exists() && plan.data()?.status === "ended") {
             sessionStorage.removeItem("transportValidating");
             window.__kpGateInline = false;

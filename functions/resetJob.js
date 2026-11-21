@@ -26,7 +26,7 @@ const RESET_SKIP_COLLECTIONS = new Set(["adminSecrets", "resetLogs", "resetBacku
 const RESET_ORDER_COLLECTIONS = new Set(["orders", "dispatch"]);
 const RESET_KEEP_DAYS = 7;
 // 회사명이 비어 있는 예전 데이터는 프로그램이 "돌캐" 것으로 본다(화면의 companyName || "돌캐" 규칙)
-const RESET_LEGACY_COMPANY = "돌캐";
+const RESET_LEGACY_COMPANY = "(회사없음)"; // ⭐ 2026-11-21 기본 회사 없음(돌캐 초기화)
 const RESET_LEGACY_COLLECTIONS = [
   "dispatch", "orders", "fixedClients", "clients", "places", "drivers", "schedules", "notices", "handovers",
   "multiRateSheets", "deletedOrders", "scheduledEmails", "emailLogs", "acctPayments", "attendance",

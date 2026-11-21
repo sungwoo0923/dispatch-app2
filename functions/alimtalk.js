@@ -49,7 +49,7 @@ function makeAlimtalk({ db, FieldValue, getPopbill, callerOf, now = () => Date.n
   // 한 오더 보내기 — { status, items } (오더에 알림톡결과로도 남긴다)
   async function sendFor({ col, id, order, force = false, targets = null, by = "auto" }) {
     const C = await core();
-    const co = String(order.companyName || "돌캐");
+    const co = String(order.companyName || "(회사없음)");
     const settings = await settingsOf(co);
     const plate = C.normPlate(order.차량번호);
     const want = (targets && targets.length ? targets : C.ALIMTALK_TARGETS).filter((t) => (t === "client" ? settings.toClient : settings.toDriver));
@@ -125,7 +125,7 @@ function makeAlimtalk({ db, FieldValue, getPopbill, callerOf, now = () => Date.n
     const s = await db.collection(col).doc(id).get();
     if (!s.exists) throw err("not-found", "오더를 찾지 못했어요");
     const order = s.data() || {};
-    if (!who.isTM && String(order.companyName || "돌캐") !== who.co) throw err("permission-denied", "우리 회사 오더만 보낼 수 있어요");
+    if (!who.isTM && String(order.companyName || "(회사없음)") !== who.co) throw err("permission-denied", "우리 회사 오더만 보낼 수 있어요");
     const C = await core();
     if (!C.isAssignedDone(order)) throw err("failed-precondition", "배차완료된 오더만 보낼 수 있어요");
     const targets = Array.isArray(data?.targets) ? data.targets.filter((t) => C.ALIMTALK_TARGETS.includes(t)) : null;
