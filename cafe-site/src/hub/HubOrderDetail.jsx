@@ -378,7 +378,7 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
               <Row k="필요 차량" v={`${o.차량톤수 || ""} ${o.차량종류 || ""}${o.대수 && o.대수 !== "1대" ? ` ${o.대수}` : ""}`} strong />
               <Row k="화물" v={o.화물내용} />
               <Row k="중량" v={o.중량 ? `${o.중량} 이하` : ""} />
-              <Row k="파레트" v={o.파레트 ? `${o.파레트}개` : ""} />
+              <Row k="화물 단위" v={o.화물타입 && o.화물수량 ? `${o.화물수량}${o.화물타입}` : o.파레트 ? `${o.파레트}파레트` : ""} />
               <Row k="상하차" v={[o.상차방법, o.하차방법].filter(Boolean).join(" / ")} />
               <Row k="운행" v={`${o.운행유형 || "편도"}, ${o.적재 === "혼적" ? "혼적" : "독차"}`} />
               <Row k="지불" v={o.지급방식} />

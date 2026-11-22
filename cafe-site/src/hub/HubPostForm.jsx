@@ -17,9 +17,11 @@ import { scanToHub, hubToScan } from "./hubScan";
 import { hubScanAi } from "./hubScanAi"; // 🧠 2026-11-07 오더 스캔 정밀 인식(서버 글자 인식 · AI 칸 정리 · 회사별 학습)
 import { AddressInput, PlaceInput } from "./hubAddress";
 import { HubBizCheck, hubBizVerdict } from "./hubPublicData"; // 🏛 2026-11-07 의뢰자 사업자 상태(국세청)
+import { HubDatePick, HubTimePick } from "./hubDateTime"; // ⭐ 2026-11-22 로지스웹과 같은 날짜(당일 · 내일 · 월상) · 시간(오전/오후 · 30분) 고르기
 const OrderScanModal = lazy(() => import("../../../src/OrderScanModal"));
 
-const HOURS = Array.from({ length: 24 }, (_, h) => [`${String(h).padStart(2, "0")}:00`, `${String(h).padStart(2, "0")}:30`]).flat();
+// ⭐ 2026-11-22 화물 단위(로지스웹 배차 프로그램 화물타입과 같은 값 — 선택안함 = 프로그램의 "없음")
+const CARGO_UNITS = [["", "선택안함"], ["파레트", "파레트"], ["박스", "박스"], ["통", "통"]];
 const money = (v) => { const d = String(v).replace(/[^\d]/g, "").slice(0, 9); return d ? Number(d).toLocaleString() : ""; };
 const numOf = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
 const blank = (me) => {
@@ -28,9 +30,10 @@ const blank = (me) => {
     상차시도: "", 상차시군구: "", 상차지명: "", 상차지주소: "", 상차담당자: "", 상차연락처: me?.phone || "",
     하차시도: "", 하차시군구: "", 하차지명: "", 하차지주소: "", 하차담당자: "", 하차연락처: "",
     상차일: kstYmd(), 상차시간: "09:00", 하차일: kstYmd(), 하차시간: "",
-    화물내용: "", 중량: "", 파레트: "", 차량종류: d.차량종류 || "윙바디", 차량톤수: d.차량톤수 || "5톤", 상차방법: d.상차방법 || "지게차", 하차방법: d.하차방법 || "지게차", 대수: "1대",
+    화물내용: "", 중량: "", 파레트: "", 화물타입: "", 화물수량: "", 차량종류: d.차량종류 || "윙바디", 차량톤수: d.차량톤수 || "5톤", 상차방법: d.상차방법 || "지게차", 하차방법: d.하차방법 || "지게차", 대수: "1대",
     운임: "", 수수료: "", 지급방식: d.지급방식 || "인수증", 긴급: false, 운행유형: "편도", 적재: "독차", 예약: false, 표시: "now", showAt: "", 공개메모: "", 메모: "",
-    의뢰자구분: d.의뢰자구분 || (me?.role === "shipper" ? "화주" : ""), 의뢰자사업자번호: "", 의뢰자명: "",
+    // ⭐ 2026-11-22 의뢰자는 계정 정보로 자동 입력(운송사 → 운수사, 화주 → 화주 · 회사명 · 사업자번호) — 바꿀 수 있다
+    의뢰자구분: d.의뢰자구분 || (me?.role === "shipper" ? "화주" : me?.role === "carrier" ? "운수사" : ""), 의뢰자사업자번호: fmtBizNo(String(me?.bizNo || "")), 의뢰자명: me?.companyName || "",
   };
 };
 // 중량 칸은 숫자만(톤 이하) — 저장은 "4.5톤"
@@ -69,7 +72,7 @@ function lwToForm(r) {
 function hubToForm(o, d) {
   return {
     상차시도: o.상차시도 || "", 상차시군구: o.상차시군구 || "", 하차시도: o.하차시도 || "", 하차시군구: o.하차시군구 || "", 상차시간: o.상차시간 || "", 하차시간: o.하차시간 || "",
-    화물내용: o.화물내용 || "", 중량: weightNum(o.중량), 파레트: o.파레트 ? String(o.파레트) : "", 차량종류: o.차량종류 || "", 차량톤수: o.차량톤수 || "", 상차방법: o.상차방법 || "", 하차방법: o.하차방법 || "",
+    화물내용: o.화물내용 || "", 중량: weightNum(o.중량), 파레트: o.파레트 ? String(o.파레트) : "", 화물타입: o.화물타입 || (o.파레트 ? "파레트" : ""), 화물수량: o.화물수량 ? String(o.화물수량) : o.파레트 ? String(o.파레트) : "", 차량종류: o.차량종류 || "", 차량톤수: o.차량톤수 || "", 상차방법: o.상차방법 || "", 하차방법: o.하차방법 || "",
     대수: o.대수 || "1대", 운임: money(String(o.운임 || "")), 수수료: money(String(o.수수료 || "")), 지급방식: o.지급방식 === "예치금" ? "인수증" : o.지급방식 || "인수증", 긴급: !!o.긴급, 운행유형: o.운행유형 || "편도", 적재: o.적재 || "독차", 공개메모: o.공개메모 || "",
     ...(d ? { 상차지명: d.상차지명 || "", 상차지주소: d.상차지주소 || "", 상차담당자: d.상차담당자 || "", 상차연락처: d.상차연락처 || "", 하차지명: d.하차지명 || "", 하차지주소: d.하차지주소 || "", 하차담당자: d.하차담당자 || "", 하차연락처: d.하차연락처 || "", 메모: d.메모 || "", 의뢰자구분: d.의뢰자구분 || "", 의뢰자사업자번호: d.의뢰자사업자번호 || "", 의뢰자명: d.의뢰자명 || "" } : {}),
   };
@@ -139,8 +142,9 @@ function PostSettings({ me, onClose, toast }) {
 }
 
 export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg = {}, wallet = null, openWallet }) {
-  const [f, setF] = useState(() => (editing ? { ...blank(me), ...editing.pub, ...(editing.detail || {}), 중량: weightNum(editing.pub.중량), 운임: money(String(editing.pub.운임 || "")), 수수료: money(String(editing.pub.수수료 || "")), 파레트: String(editing.pub.파레트 || ""), 표시: editing.pub.showAt ? "later" : "now", showAt: editing.pub.showAt ? new Date(editing.pub.showAt + 9 * 3600e3).toISOString().slice(0, 16) : "" } : blank(me)));
+  const [f, setF] = useState(() => (editing ? { ...blank(me), ...editing.pub, ...(editing.detail || {}), 중량: weightNum(editing.pub.중량), 운임: money(String(editing.pub.운임 || "")), 수수료: money(String(editing.pub.수수료 || "")), 파레트: String(editing.pub.파레트 || ""), 화물타입: editing.pub.화물타입 || (editing.pub.파레트 ? "파레트" : ""), 화물수량: String(editing.pub.화물수량 || editing.pub.파레트 || ""), 표시: editing.pub.showAt ? "later" : "now", showAt: editing.pub.showAt ? new Date(editing.pub.showAt + 9 * 3600e3).toISOString().slice(0, 16) : "" } : blank(me)));
   const [err, setErr] = useState("");
+  const [bad, setBad] = useState(() => new Set()); // ⭐ 2026-11-22 빠진 필수 칸(빨간 테두리)
   const [busy, setBusy] = useState(false);
   const [scan, setScan] = useState(false);
   const [copy, setCopy] = useState(false);
@@ -153,8 +157,11 @@ export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg =
     if (linked) { let on = true; fetchLwPlaces(me).then((r) => on && setPlaces(r)); return () => { on = false; }; }
     return subscribeHubPlaces(me, setPlaces);
   }, [me.uid, linked]); // eslint-disable-line react-hooks/exhaustive-deps
-  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const clearBad = (k) => setBad((b) => { if (!b.has(k)) return b; const n = new Set(b); n.delete(k); return n; });
+  const set = (k, v) => { clearBad(k); setF((p) => ({ ...p, [k]: v })); };
   const inp = (k, fmt) => (e) => set(k, fmt ? fmt(e.target.value) : e.target.value);
+  // 필수 칸 감싸기 — 비었으면 빨간 테두리 · 그 칸으로 이동(data-pf)
+  const need = (k, node, msg) => <div data-pf={k} className={bad.has(k) ? "pf-bad" : ""}>{node}{bad.has(k) && msg && <div className="mt-1 text-[13.5px] font-bold text-[#E5484D]">{msg}</div>}</div>;
   const km = useMemo(() => estimateKm(f.상차시도, f.상차시군구, f.하차시도, f.하차시군구), [f.상차시도, f.상차시군구, f.하차시도, f.하차시군구]);
   const fareN = numOf(f.운임);
   const ref = referenceFare(f.차량톤수, km) * (f.운행유형 === "왕복" ? 1.6 : 1);
@@ -189,23 +196,38 @@ export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg =
 
   const save = async () => {
     setErr("");
-    if (!f.상차지주소.trim() || !f.하차지주소.trim()) return setErr("상차지와 하차지 주소를 입력해 주세요");
-    if (!f.상차시도 || !f.하차시도) return setErr("주소에서 지역을 찾지 못했어요. 시·도를 골라 주세요");
-    if (!f.상차일) return setErr("상차일을 골라 주세요");
-    if (f.하차일 && f.하차일 < f.상차일) return setErr("하차일이 상차일보다 빨라요");
-    if (!f.화물내용.trim()) return setErr("화물 내용을 입력해 주세요");
-    if (!f.의뢰자구분) return setErr("의뢰자구분을 골라 주세요");
+    // ⭐ 2026-11-22 빠진 필수 칸을 모두 빨간 테두리로 표시하고, 첫 칸으로 이동해 커서를 둔다
     const biz = String(f.의뢰자사업자번호 || "").replace(/[^\d]/g, "");
-    if (f.의뢰자구분 === "운수사" && !biz) return setErr("운수사는 사업자번호를 넣어 주세요");
-    if (biz && !bizNoValid(biz)) return setErr("사업자번호를 다시 확인해 주세요");
-    if (biz && biz === String(me.bizNo || "").replace(/[^\d]/g, "")) return setErr("내 사업자번호는 의뢰자로 쓸 수 없어요");
-    if (biz && (await hubBizVerdict(biz)).block) return setErr("폐업한 사업자예요. 의뢰자 사업자번호를 확인해 주세요");
-    if (fareN && fareN < 10000) return setErr("운송료는 원 단위로 넣어 주세요");
-    if (f.표시 === "later" && !f.showAt) return setErr("차주앱에 보일 시각을 골라 주세요");
+    const fails = [];
+    if (!f.상차지주소.trim()) fails.push(["상차지주소", "상차지 주소를 입력해 주세요"]);
+    else if (!f.상차시도) fails.push(["상차시도", "상차지 시·도를 골라 주세요"]);
+    if (!f.상차일) fails.push(["상차일", "상차일을 골라 주세요"]);
+    if (!f.하차지주소.trim()) fails.push(["하차지주소", "하차지 주소를 입력해 주세요"]);
+    else if (!f.하차시도) fails.push(["하차시도", "하차지 시·도를 골라 주세요"]);
+    if (f.하차일 && f.상차일 && f.하차일 < f.상차일) fails.push(["하차일", "하차일이 상차일보다 빨라요"]);
+    if (!f.화물내용.trim()) fails.push(["화물내용", "화물 내용을 입력해 주세요"]);
+    if (f.화물타입 && !numOf(f.화물수량)) fails.push(["화물수량", `${f.화물타입} 수량을 넣어 주세요`]);
+    if (!f.의뢰자구분) fails.push(["의뢰자구분", "의뢰자구분을 골라 주세요"]);
+    if (f.의뢰자구분 === "운수사" && !biz) fails.push(["의뢰자사업자번호", "운수사는 사업자번호를 넣어 주세요"]);
+    else if (biz && !bizNoValid(biz)) fails.push(["의뢰자사업자번호", "사업자번호를 다시 확인해 주세요"]);
+    if (fareN && fareN < 10000) fails.push(["운임", "운송료는 원 단위로 넣어 주세요"]);
+    if (f.표시 === "later" && !f.showAt) fails.push(["showAt", "차주앱에 보일 시각을 골라 주세요"]);
+    if (fails.length) {
+      setBad(new Set(fails.map((x) => x[0])));
+      setErr(fails[0][1]);
+      setTimeout(() => {
+        const el = document.querySelector(`[data-pf="${fails[0][0]}"]`);
+        el?.scrollIntoView({ block: "center", behavior: "smooth" });
+        el?.querySelector("input, select, textarea, button")?.focus({ preventScroll: true });
+      }, 30);
+      return;
+    }
+    if (biz && (await hubBizVerdict(biz)).block) { setBad(new Set(["의뢰자사업자번호"])); return setErr("폐업한 사업자예요. 의뢰자 사업자번호를 확인해 주세요"); }
     if (short) return setErr(`잔액이 부족해요. 운송료 ${fareN.toLocaleString()}원이 필요해요`);
     setBusy(true);
     try {
-      const ff = { ...f, 수수료: feeShown, 중량: f.중량 ? `${weightNum(f.중량)}톤` : "", showAt: f.표시 === "later" ? `${f.showAt}:00+09:00` : "", 예약: f.예약 || f.표시 === "later" };
+      const qty = numOf(f.화물수량);
+      const ff = { ...f, 화물수량: f.화물타입 ? qty : 0, 파레트: f.화물타입 === "파레트" ? qty : 0, 수수료: feeShown, 중량: f.중량 ? `${weightNum(f.중량)}톤` : "", showAt: f.표시 === "later" ? `${f.showAt}:00+09:00` : "", 예약: f.예약 || f.표시 === "later" };
       if (editing) { await updateOrder(editing.id, ff); toast?.("수정했어요"); }
       else { const id = await postOrder(me, ff); toast?.("등록했어요"); onDone?.(id); scanAi?.commit(hubToScan(f)).catch(() => {}); }
       onClose();
@@ -217,20 +239,21 @@ export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg =
   const Place = (side, label) => (
     <Section icon="pin" title={`${label}지`} right={<span className="text-[13px] font-bold text-[#5F6E87]">{f[`${side}시도`] ? `${f[`${side}시도`]} ${f[`${side}시군구`] || ""}` : ""}</span>}>
       <Field label={`${label}지명`}><PlaceInput value={f[`${side}지명`]} onChange={(v) => set(`${side}지명`, v)} places={places} onPick={pickPlace(side)} source={linked ? "로지스웹 상하차지거래처" : "고객관리"} testid={`pf-${side}-name`} /></Field>
-      <Field label="주소" required><AddressInput value={f[`${side}지주소`]} onChange={(v) => set(`${side}지주소`, v)} onPick={pickAddr(side)} testid={`pf-${side}-addr`} /></Field>
+      <Field label="주소" required>{need(`${side}지주소`, <AddressInput value={f[`${side}지주소`]} onChange={(v) => set(`${side}지주소`, v)} onPick={(a) => { clearBad(`${side}시도`); pickAddr(side)(a); }} testid={`pf-${side}-addr`} />)}</Field>
       <div className="grid grid-cols-2 gap-2.5">
-        <Field label="시·도"><select className={selectCls} value={f[`${side}시도`]} onChange={(e) => setF((p) => ({ ...p, [`${side}시도`]: e.target.value, [`${side}시군구`]: "" }))} data-testid={`pf-${side}-sido`}><option value="">선택</option>{SIDO_LIST.map((s) => <option key={s}>{s}</option>)}</select></Field>
+        <Field label="시·도">{need(`${side}시도`, <select className={selectCls} value={f[`${side}시도`]} onChange={(e) => { clearBad(`${side}시도`); setF((p) => ({ ...p, [`${side}시도`]: e.target.value, [`${side}시군구`]: "" })); }} data-testid={`pf-${side}-sido`}><option value="">선택</option>{SIDO_LIST.map((s) => <option key={s}>{s}</option>)}</select>)}</Field>
         <Field label="시·군·구"><select className={selectCls} value={f[`${side}시군구`]} onChange={inp(`${side}시군구`)} disabled={!f[`${side}시도`]} data-testid={`pf-${side}-sgg`}><option value="">선택</option>{sigunguOf(f[`${side}시도`]).map((s) => <option key={s}>{s}</option>)}</select></Field>
         <Field label="담당자"><input className={inputCls} value={f[`${side}담당자`]} onChange={inp(`${side}담당자`)} placeholder="이름" /></Field>
         <Field label="연락처"><input className={inputCls} inputMode="numeric" value={f[`${side}연락처`]} onChange={inp(`${side}연락처`, fmtPhone)} placeholder="010-0000-0000" /></Field>
-        <Field label={`${label}일`} required><input type="date" className={inputCls} value={f[`${side}일`]} onChange={inp(`${side}일`)} data-testid={`pf-${side}-date`} /></Field>
-        <Field label="시간"><select className={selectCls} value={f[`${side}시간`]} onChange={inp(`${side}시간`)}><option value="">협의</option><option>즉시</option>{HOURS.map((h) => <option key={h}>{h}</option>)}</select></Field>
       </div>
+      <Field label={`${label}일`} required={side === "상차"}>{need(`${side}일`, <HubDatePick value={f[`${side}일`]} onChange={(v) => set(`${side}일`, v)} testid={`pf-${side}-date`} bad={bad.has(`${side}일`)} />)}</Field>
+      <Field label={`${label}시간`}><HubTimePick value={f[`${side}시간`]} onChange={(v) => set(`${side}시간`, v)} testid={`pf-${side}-time`} /></Field>
     </Section>
   );
 
   return (
     <Drawer onClose={onClose} closeOnBackdrop={false} title={editing ? "오더 수정" : "화물등록"} sub="주소와 연락처는 배차가 확정되면 보여요" width={680} testid="post-form">
+      <style>{`.pf-bad :is(input, select, textarea, button[data-testid$="-date"]){border-color:#E5484D !important;box-shadow:0 0 0 4px rgba(229,72,77,.14) !important}`}</style>
       <div className="flex-1 overflow-y-auto hub-scroll p-4 lg:p-5 space-y-3.5">
         {!editing && (
           <div className="grid grid-cols-3 gap-2">
@@ -255,15 +278,20 @@ export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg =
             <Field label="하차방법"><Sel value={f.하차방법} onChange={(v) => set("하차방법", v)} options={LOAD_METHODS} none="협의" testid="pf-unload" /></Field>
             <Field label="대수"><Sel value={f.대수} onChange={(v) => set("대수", v)} options={COUNT_OPTIONS} testid="pf-count" /></Field>
             <Field label="화물중량"><div className="relative"><input className={`${inputCls} pr-[72px] text-right`} inputMode="decimal" value={f.중량} onChange={inp("중량", (v) => weightNum(v).slice(0, 5))} placeholder="0" data-testid="pf-weight" /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-[14.5px] font-bold text-[#5F6E87]">톤 이하</span></div></Field>
-            <Field label="화물" required className="col-span-2"><input className={inputCls} value={f.화물내용} onChange={inp("화물내용")} placeholder="예: 전자부품 박스" data-testid="pf-cargo" /></Field>
-            <Field label="파레트"><input className={inputCls} inputMode="numeric" value={f.파레트} onChange={inp("파레트", (v) => v.replace(/[^\d]/g, "").slice(0, 3))} placeholder="0" data-testid="pf-pallet" /></Field>
+            <Field label="화물" required className="col-span-2">
+              <div className="grid grid-cols-[minmax(0,1fr)_120px_96px] gap-2">
+                {need("화물내용", <input className={inputCls} value={f.화물내용} onChange={inp("화물내용")} placeholder="예: 전자부품" data-testid="pf-cargo" />)}
+                <select className={selectCls} value={f.화물타입} onChange={(e) => { const v = e.target.value; set("화물타입", v); if (!v) set("화물수량", ""); }} data-testid="pf-cargo-unit">{CARGO_UNITS.map(([v, l]) => <option key={l} value={v}>{l}</option>)}</select>
+                {need("화물수량", <input className={`${inputCls} text-right`} inputMode="numeric" disabled={!f.화물타입} value={f.화물수량} onChange={inp("화물수량", (v) => v.replace(/[^\d]/g, "").slice(0, 4))} placeholder={f.화물타입 ? "수량" : "-"} data-testid="pf-cargo-qty" />)}
+              </div>
+            </Field>
           </div>
         </Section>
         <Section icon="won" title="운송료">
           <Field label="지불방식"><Sel value={f.지급방식} onChange={(v) => set("지급방식", v)} options={PAY_METHODS} testid="pf-pay" /></Field>
           <Field label="운송료(원)">
             <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1.5">
-              <input className={`${inputCls} text-right font-extrabold`} inputMode="numeric" value={f.운임} onChange={inp("운임", money)} placeholder="0" style={NUMS} data-testid="pf-fare" />
+              {need("운임", <input className={`${inputCls} text-right font-extrabold`} inputMode="numeric" value={f.운임} onChange={inp("운임", money)} placeholder="0" style={NUMS} data-testid="pf-fare" />)}
               <button type="button" onClick={() => step(5000)} className="h-12 px-3 rounded-2xl bg-[#EAF0FA] text-[14px] font-bold text-[#1B2B4B]" data-testid="pf-fare-up">▲5,000</button>
               <button type="button" onClick={() => step(-5000)} className="h-12 px-3 rounded-2xl bg-[#F2F5FA] text-[14px] font-bold text-[#55657F]" data-testid="pf-fare-down">▼5,000</button>
             </div>
@@ -283,16 +311,16 @@ export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg =
             {kind === "deposit" && <div className="mt-1 flex items-center gap-2 flex-wrap font-bold text-[#0F1A30]" style={NUMS}><span>내 잔액 {avail.toLocaleString()}원</span>{short && <span className="text-[#2D4C82]">잔액이 부족해요</span>}{short && openWallet && <button type="button" onClick={openWallet} className="ml-auto h-9 px-3 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-bold" data-testid="pf-go-wallet">충전하기</button>}</div>}
           </div>
         </Section>
-        <Section icon="building" title="의뢰자">
+        <Section icon="building" title="의뢰자" sub="계정 정보로 채워져 있어요">
           <div className="grid grid-cols-2 gap-2.5">
-            <Field label="의뢰자구분" required><Sel value={f.의뢰자구분} onChange={(v) => set("의뢰자구분", v)} options={REQUESTER_TYPES} none="선택" testid="pf-req-type" /></Field>
-            <Field label={`사업자번호${f.의뢰자구분 === "운수사" ? "" : "(선택)"}`} required={f.의뢰자구분 === "운수사"}><input className={inputCls} inputMode="numeric" value={f.의뢰자사업자번호} onChange={inp("의뢰자사업자번호", fmtBizNo)} placeholder="000-00-00000" data-testid="pf-req-biz" /><div className="mt-1.5"><HubBizCheck value={f.의뢰자사업자번호} size="sm" /></div></Field>
+            <Field label="의뢰자구분" required>{need("의뢰자구분", <Sel value={f.의뢰자구분} onChange={(v) => set("의뢰자구분", v)} options={REQUESTER_TYPES} none="선택" testid="pf-req-type" />)}</Field>
+            <Field label={`사업자번호${f.의뢰자구분 === "운수사" ? "" : "(선택)"}`} required={f.의뢰자구분 === "운수사"}>{need("의뢰자사업자번호", <input className={inputCls} inputMode="numeric" value={f.의뢰자사업자번호} onChange={inp("의뢰자사업자번호", fmtBizNo)} placeholder="000-00-00000" data-testid="pf-req-biz" />)}<div className="mt-1.5"><HubBizCheck value={f.의뢰자사업자번호} size="sm" /></div></Field>
             <Field label="의뢰자명" className="col-span-2"><input className={inputCls} value={f.의뢰자명} onChange={inp("의뢰자명")} placeholder="선택 사항" data-testid="pf-req-name" /></Field>
           </div>
         </Section>
         <Section icon="memo" title="기타">
           <Field label="차주앱 표시"><Seg value={f.표시} onChange={(v) => set("표시", v)} options={[["now", "즉시"], ["later", "예약"]]} /></Field>
-          {f.표시 === "later" && <Field label="보일 시각"><input type="datetime-local" className={inputCls} value={f.showAt} onChange={inp("showAt")} data-testid="pf-showat" /></Field>}
+          {f.표시 === "later" && <Field label="보일 시각">{need("showAt", <input type="datetime-local" className={inputCls} value={f.showAt} onChange={inp("showAt")} data-testid="pf-showat" />)}</Field>}
           <Field label="기타내용" hint="모두에게 보여요. 연락처와 주소는 쓰지 마세요"><textarea rows={2} className={`${inputCls} h-auto py-3`} value={f.공개메모} onChange={inp("공개메모")} placeholder="예: 리프트 필요, 대기 30분" /></Field>
           <Field label="차주 메모" hint="배차된 차주에게만 보여요"><textarea rows={2} className={`${inputCls} h-auto py-3`} value={f.메모} onChange={inp("메모")} placeholder="예: 정문 경비실에 알려 주세요" /></Field>
         </Section>
