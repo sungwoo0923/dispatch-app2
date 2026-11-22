@@ -59,6 +59,7 @@ const mixLabelOf = (o) => o?.혼적여부 || (o?.혼적 === true ? "혼적" : "�
 // 💬 2026-11-08 사장님 요청 — 카카오 알림톡은 PC·모바일 화면에서 모두 뺐다(새 오더는 알림톡:false → 서버 트리거가 보내지 않는다)
 import { UrgentBadge, URGENT_BAR, URGENT_TINT } from "../urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조
 import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
+import { watchOrderAttachments } from "../orderAttachments"; // 📎 2026-11-22 첨부를 여러 곳에서 모아 본다
 import { sendSingleUploadSms, MobileAttachSheet, FareHistorySheet, FareHistoryDetailSheet, DriverConflictSheet } from "./mobileShared"; // ⭐ 2026-11-17 화면마다 복사돼 있던 팝업 · 문자 → 한 곳(mobileShared.jsx)
 import RouteMapModal from "../RouteMapModal";
 import southKorea from "@svg-maps/south-korea";
@@ -10468,7 +10469,7 @@ function CardAttachViewer({ order, onClose, showToast, showSuccess }) {
   const [isViewed, setIsViewed] = useState(order.attachViewed === true);
   const [viewedBusy, setViewedBusy] = useState(false);
 
-  const col = order.__col || order._col || "dispatch";
+  const col = order.__col || order._col || "orders";
   const docId = order._id || order.id;
 
   // ⭐ 버그수정(2026-10-28) — 팝업을 연 동안 PC에서 완료처리/미완료로 바꾸면 여기에도 바로 반영
@@ -10484,11 +10485,8 @@ function CardAttachViewer({ order, onClose, showToast, showSuccess }) {
 
   useEffect(() => {
     setLoading(true);
-    const unsub = onSnapshot(collection(db, col, docId, "attachments"), snap => {
-      setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
-    return () => unsub();
+    // 📎 2026-11-22 이 오더 · 다른 컬렉션 · 연결 오더의 첨부를 모두 합쳐 본다(카드 📎 숫자와 같게)
+    return watchOrderAttachments(order, (rows) => { setItems(rows); setLoading(false); });
   }, [order]);
 
   // PC 첨부파일 팝업과 동일하게, 잠금 관련 필드는 문서를 직접 구독해 실시간으로
@@ -12650,16 +12648,12 @@ const pickupTimeText = order.상차시간
       return;
     }
     setAttachLoading(true);
-    const col = order.__col || "orders";
-    const docId = order._id || order.id;
-    const colRef = collection(db, col, docId, "attachments");
-    const unsub = onSnapshot(colRef, (snap) => {
-      const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // 📎 2026-11-22 이 오더 · 다른 컬렉션 · 연결 오더의 첨부를 모두 합쳐 본다(카드 📎 숫자와 같게)
+    return watchOrderAttachments(order, (items) => {
       setAttachItems(items);
       setLiveAttachCount(items.length);
       setAttachLoading(false);
     });
-    return () => unsub();
   }, [showAttachments]);
 
   // ⭐ 첨부파일을 "열람"만 해서는 확인 처리하지 않고, 실제로 1장 이상 저장했을
