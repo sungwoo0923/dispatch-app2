@@ -6,7 +6,7 @@ DEFS='''<defs>
 <radialGradient id="sph" cx=".38" cy=".3" r=".78"><stop offset="0" stop-color="#2F5199" stop-opacity=".85"/><stop offset=".65" stop-color="#132447" stop-opacity=".9"/><stop offset="1" stop-color="#091224" stop-opacity=".95"/></radialGradient>
 <radialGradient id="rim" cx=".5" cy=".5" r=".5"><stop offset=".88" stop-color="#8FB0F0" stop-opacity="0"/><stop offset=".965" stop-color="#8FB0F0" stop-opacity=".55"/><stop offset="1" stop-color="#8FB0F0" stop-opacity="0"/></radialGradient>
 <radialGradient id="gd"><stop offset="0" stop-color="#FFD27A" stop-opacity=".9"/><stop offset=".35" stop-color="#FFD27A" stop-opacity=".25"/><stop offset="1" stop-color="#FFD27A" stop-opacity="0"/></radialGradient>
-<filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<filter id="glow" filterUnits="userSpaceOnUse" x="0" y="0" width="1440" height="1440"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
 </defs>'''
 TILE='<rect width="1440" height="1440" rx="300" fill="url(#bg)"/><rect width="1440" height="1440" rx="300" fill="url(#gl)"/>'
 CX,CY,R=720,720,500

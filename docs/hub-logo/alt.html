@@ -1,0 +1,14 @@
+<html><head><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet"><style>body{margin:0;background:#EEF1F6;font-family:'Noto Sans KR';padding:46px;width:2100px;box-sizing:border-box;color:#0F1A30}
+h1{font-size:40px;margin:0 0 6px;font-weight:900}p.s{margin:0 0 30px;font-size:21px;color:#55657F}
+.g{display:grid;grid-template-columns:repeat(3,1fr);gap:26px}.c{background:#fff;border-radius:26px;padding:22px;box-shadow:0 14px 40px rgba(15,26,48,.07)}
+.c img.b{width:100%;display:block}.t{font-size:23px;font-weight:900;margin-top:14px}.k{display:inline-block;font-size:15px;color:#fff;background:#0F1A30;border-radius:7px;padding:1px 8px;margin-right:8px;vertical-align:3px}
+.d{font-size:16px;color:#55657F;line-height:1.55;margin-top:6px;min-height:100px}.sm{display:flex;gap:12px;align-items:flex-end;margin-top:12px}
+.lk{display:flex;align-items:center;gap:12px;border-radius:16px;padding:14px 16px;margin-top:14px;background:radial-gradient(120% 140% at 90% -20%,#2D4C82 0%,#1B2B4B 45%,#0F1A30 80%,#0B1428 100%)}.wm{font-size:19px;font-weight:900;letter-spacing:.13em;color:#fff}.hub{font-weight:900;font-size:12px;letter-spacing:.08em;border-radius:5px;padding:1px 6px;margin-left:6px;background:#8FB0F0;color:#0B1428}</style></head><body>
+<h1>로지스웹 허브 로고 — 지구가 아닌 시안</h1><p class="s">전국 물류 네트워크 허브를 여러 방식으로 — 같은 네이비 · 흰 선 · 금색 허브 하나</p><div class="g" id="g"></div>
+<script>const O=[["L","L_korea_net","한반도 네트워크","실제 전국 지도 위 시 · 도 거점을 그물로 잇고, 대전(전국 물류의 한가운데) 금색 허브에서 서울 · 부산 · 광주 · 강원 · 제주로 노선이 뻗어요. '전국'이 가장 바로 읽혀요."],
+["M","M_h_monogram","H 모노그램","HUB의 H — 두 기둥(거점 4개씩)과 가운데 다리, 그 위의 금색 허브. 흐린 대각선이 모든 거점을 서로 이어요. 단순 · 강한 기업 로고 느낌."],
+["N","N_loop","순환 노선 ∞","끊기지 않는 물류 흐름. 8자 노선 위를 거점이 돌고, 교차점이 허브예요. 화살표로 방향(흐름)을 보여요."],
+["O","O_cargo_cube","화물 큐브","물류의 상징인 박스를 네트워크 선으로 그렸어요. 면마다 격자(적재) + 빛나는 모서리 + 가운데 금색 허브."],
+["P","P_radar","레이더 관제","동심원 레이더가 돌며 전국 거점을 찾아 허브와 잇는 모습 — 실시간 관제 · 매칭 느낌."],
+["Q","Q_all_roads","모든 길이 허브로","아래에서 뻗은 고속도로 차선과 옆길들이 한 점(금색 허브)으로 모여요. 움직임 · 속도감이 가장 커요."]];
+document.getElementById("g").innerHTML=O.map(([k,f,t,d])=>`<div class="c"><img class="b" src="${f}.svg"><div class="t"><span class="k">${k}</span>${t}</div><div class="d">${d}</div><div class="sm"><img src="${f}.svg" width="72"><img src="${f}.svg" width="44"><img src="${f}.svg" width="24"></div><div class="lk"><img src="${f}.svg" width="46"><div><span class="wm">LOGISWEB</span><span class="hub">HUB</span></div></div></div>`).join("");</script></body></html>
