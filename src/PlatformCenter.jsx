@@ -39,6 +39,10 @@ import { toBoardNotice } from "./PlatformNoticeBanner";
 import { compressImage } from "./InternalMail";
 const PrivateFareAdminLazy = React.lazy(() => import("./adminCenter/PrivateFareAdmin")); // 🔐 2026-11-18 비공개 운임 지정
 const HomepageEditor = React.lazy(() => import("./HomepageEditor")); // ⭐ 2026-11-03 소개 홈페이지 편집기
+// 📣 2026-11-23 홍보 — 영상 편집실 · 블로그 원고 · 홍보 설정(src/promo/)
+const PromoVideo = React.lazy(() => import("./promo/PromoHub").then((m) => ({ default: m.PromoVideo })));
+const PromoBlog = React.lazy(() => import("./promo/PromoHub").then((m) => ({ default: m.PromoBlog })));
+const PromoSettings = React.lazy(() => import("./promo/PromoSettings"));
 const HubMembersAdmin = React.lazy(() => import("./HubMembersAdmin")); // ⭐ 2026-11-06 허브 회원 승인
 const CostPanel = React.lazy(() => import("./CostPanel"));
 const IntegrationSettings = React.lazy(() => import("./IntegrationSettings")); // 🔌 2026-11-07 연동 설정 // 💰 2026-11-04 비용 · 손익(최고관리자 전용)
@@ -89,7 +93,7 @@ const SUBTABS = {
   tenancy: [["tenancy", "운송사 분리"], ["companyReset", "운송사 초기화"]],
 };
 // 휴대폰에서는 쓸 수 없어 숨기는 화면(넓은 화면 편집기 · 휴대폰 미리보기)
-const PHONE_HIDE = new Set(["homepage", "brand", "mobilePreview"]);
+const PHONE_HIDE = new Set(["homepage", "brand", "mobilePreview", "mkt:video"]); // 📣 영상 편집실은 넓은 화면에서만
 const it = (key, label, en, icon, extra = {}) => ({ key, label, en, icon, also: (SUBTABS[key] || []).map(([k]) => k).filter((k) => k !== key), ...extra });
 const SECTIONS = [
   { key: "command", label: "관제", en: "COMMAND", icon: "pulse", items: [
@@ -113,6 +117,12 @@ const SECTIONS = [
     it("sales:quote", "견적", "QUOTATION", "file"),
     it("contract:list", "계약", "CONTRACTS", "pen"),
     it("contract:life", "이용 기간 · 만료", "LIFECYCLE", "hourglass"),
+  ] },
+  // 📣 2026-11-23 홍보(사용자 요청) — 관리자센터에서 영상 · 블로그 글을 고치고 미리 보고 만들고 올린다
+  { key: "promo", label: "홍보", en: "MARKETING", icon: "send", items: [
+    it("mkt:video", "영상 편집실", "VIDEO EDITOR", "star"),
+    it("mkt:blog", "블로그 원고", "BLOG", "pen"),
+    it("mkt:settings", "홍보 설정", "PROMO SETTINGS", "key"),
   ] },
   { key: "billing", label: "청구 · 수납", en: "BILLING", icon: "money", items: [
     it("sales:plans", "요금제", "PRICING", "sheet"),
@@ -1276,6 +1286,8 @@ function PlatformCenterInner({ user }) {
     }
   }, [tab, phone, setTab]);
   React.useEffect(() => { document.title = "LogisWeb 관리자센터"; }, []);
+  // 📣 다른 화면에서 메뉴 이동(예: AI 본부 영상 작업실 → 홍보 › 영상 편집실)
+  React.useEffect(() => { const k = (e) => { if (typeof e.detail === "string" && itemOf(e.detail)) setTab(e.detail); }; window.addEventListener("kp-admin-go", k); return () => window.removeEventListener("kp-admin-go", k); }, [setTab]);
   const toApp = () => { try { sessionStorage.setItem("kpEntry", "app"); } catch { /* 무시 */ } navigate("/app"); };
   const logout = async () => { if (!(await kpConfirm("로그아웃할까요?"))) return; try { sessionStorage.removeItem("kpEntry"); } catch { /* 무시 */ } await signOut(auth).catch(() => {}); navigate("/login"); };
   const openContract = (patch) => { setContractCtx((c) => ({ initial: null, fromQuote: null, ...patch, key: c.key + 1 })); setTab("contract:new"); };
@@ -1287,8 +1299,12 @@ function PlatformCenterInner({ user }) {
   const [hubPending, setHubPending] = React.useState(0);
   React.useEffect(() => onSnapshot(query(collection(db, "hubMembers"), where("status", "==", "pending"), limit(200)), (s) => setHubPending(s.size), () => setHubPending(0)), []);
   // 메뉴 배지(처리 대기 개수) — 합친 메뉴는 안의 화면 배지를 더한다
+  // 📣 블로그 원고 "검토 대기"(매주 자동 초안 포함) 개수
+  const [blogReview, setBlogReview] = React.useState(0);
+  React.useEffect(() => onSnapshot(query(collection(db, "mktBlog"), where("status", "==", "review"), limit(50)), (s) => setBlogReview(s.size), () => setBlogReview(0)), []);
   const P = live?.pending;
   const raw = {
+    "mkt:blog": blogReview,
     applications: P ? P.transport.length + P.shipper.length : 0,
     hubMembers: hubPending,
     inquiries: P ? P.inquiries.length : 0,
@@ -1327,6 +1343,9 @@ function PlatformCenterInner({ user }) {
   else if (tab === "cost:pnl") body = <React.Suspense fallback={<AdmEmpty />}><CostPanel openUsage={() => setTab("usage:limits")} /></React.Suspense>;
   else if (tab === "notices") body = <NoticesPanel />;
   else if (tab === "notifTemplate") body = <><Hero en="OPERATIONS · MESSAGES" title="알림 문구" desc="배차 알림 등 자동으로 보내는 문구를 관리해요." /><NotifTemplatePanel /></>;
+  else if (tab === "mkt:video") body = <><Hero en="MARKETING · VIDEO EDITOR" title="영상 편집실" desc="숏츠 · 홍보영상의 장면 글 · 화면 · 나레이션 목소리 · 배경음악을 고치며 바로 미리 보고, 영상 파일을 만들어 내려받거나 유튜브에 올려요." /><React.Suspense fallback={<AdmEmpty>편집실을 여는 중이에요…</AdmEmpty>}><PromoVideo /></React.Suspense></>;
+  else if (tab === "mkt:blog") body = <><Hero en="MARKETING · BLOG" title="블로그 원고" desc="블로그 글을 쓰고 고치고, 홈페이지 · 네이버 모양으로 미리 본 뒤 발행해요. 매주 월요일엔 AI 초안이 '검토 대기'로 들어와요." /><React.Suspense fallback={<AdmEmpty>원고를 여는 중이에요…</AdmEmpty>}><PromoBlog go={setTab} /></React.Suspense></>;
+  else if (tab === "mkt:settings") body = <><Hero en="MARKETING · SETTINGS" title="홍보 설정" desc="나레이션 음성 키 · 유튜브 연결 · 네이버 블로그 · 매주 자동 초안 주제 · AI가 지킬 홍보 기준표를 정해요." /><React.Suspense fallback={<AdmEmpty />}><PromoSettings /></React.Suspense></>;
   else if (tab === "homepage") body = phone
     ? <><Hero en="OPERATIONS · HOMEPAGE" title="홈페이지" desc="" /><AdmPanel><div className="text-[14px] leading-relaxed" style={{ color: G.sub }}>홈페이지 편집은 PC 화면에서 해 주세요. 사진 · 글자 위치를 끌어서 옮기는 편집이라 넓은 화면이 필요해요.<br /><a className="font-black" style={{ color: G.goldHi }} href="https://www.logisweb.co.kr/" target="_blank" rel="noopener noreferrer">지금 홈페이지 보기 ↗</a></div></AdmPanel></>
     : <React.Suspense fallback={<AdmEmpty>편집기를 여는 중이에요…</AdmEmpty>}><HomepageEditor /></React.Suspense>;

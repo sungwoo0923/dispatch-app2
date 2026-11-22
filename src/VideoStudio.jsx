@@ -38,6 +38,17 @@ function Chip({ on, onClick, children, sub }) {
 }
 const lbl = "block text-[12px] font-extrabold tracking-[0.04em] mb-1.5";
 
+// 📣 2026-11-23 기획안 → 관리자센터 › 홍보 › 영상 편집실(장면 · 나레이션을 그대로 옮겨 실제 영상으로 만든다)
+async function toEditor(plan, inp) {
+  const [{ addDoc, collection, serverTimestamp }, { db }, kit] = await Promise.all([import("firebase/firestore"), import("./firebase"), import("./promo/promoKit")]);
+  const wide = inp?.kind !== "숏츠"; const p = kit.newProject(wide ? "wide" : "shorts"); p.title = plan.title || p.title;
+  p.scenes = (plan.scenes || []).map((s, i, a) => kit.newScene(i === a.length - 1 ? "cta" : "title", { kicker: i === 0 ? "" : s.title || "", title: (s.subtitles || [])[0] || s.title || "", sub: (s.subtitles || []).slice(1, 2).join(" "), narration: inp?.narration === "자막만" ? "" : s.narration || "", caption: inp?.narration === "자막만" ? (s.subtitles || []).join(" ") : "", dur: Math.max(2, (Number(s.end) || 0) - (Number(s.start) || 0)) }));
+  if (!p.scenes.length) return;
+  const r = await addDoc(collection(db, "mktVideos"), { ...JSON.parse(JSON.stringify(p)), fromPlan: true, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  try { sessionStorage.setItem("kpOpenVideo", r.id); } catch { /* 무시 */ }
+  window.dispatchEvent(new CustomEvent("kp-admin-go", { detail: "mkt:video" }));
+}
+
 function PlanStudio() {
   const [f, setF] = React.useState({ kind: "숏츠", topic: "", seconds: 30, audience: AUDIENCE[0], mood: MOODS[0], platform: "유튜브 쇼츠", narration: "내레이션", notes: "" });
   const [busy, setBusy] = React.useState(false);
@@ -150,6 +161,7 @@ function PlanStudio() {
               <button type="button" onClick={() => downloadText(`${name}.srt`, toSrt(plan.scenes), "application/x-subrip;charset=utf-8")} className="h-9 px-3.5 rounded-xl text-[13px] font-black inline-flex items-center gap-1.5" style={GOLD_BTN}><ShellIcon name="file" size={14} />자막 SRT 받기</button>
               <button type="button" onClick={() => downloadText(`${name}_배경음악_큐시트.csv`, cueSheetCsv(plan), "text/csv;charset=utf-8")} className="adm-btn h-9 px-3.5 rounded-xl text-[13px] font-black inline-flex items-center gap-1.5"><ShellIcon name="sheet" size={14} />음악 큐시트(엑셀)</button>
               <button type="button" onClick={copyAll} className="adm-btn h-9 px-3.5 rounded-xl text-[13px] font-black">{copied ? "복사했어요" : "기획안 전체 복사"}</button>
+              <button type="button" onClick={() => toEditor(plan, inp)} className="adm-btn h-9 px-3.5 rounded-xl text-[13px] font-black">🎬 영상 편집실에서 만들기</button>
               <span className="ml-auto self-center text-[11px] font-bold" style={{ ...NUM, color: G.dim }}>약 {Math.max(1, Math.round(usd(cur.usage) * 1400))}원</span>
             </div>
           </section>

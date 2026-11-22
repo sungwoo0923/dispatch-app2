@@ -132,6 +132,15 @@ service firebase.storage {
 
     // ⭐ 2026-11-07 화면 편집 모드 — 바꾼 로고·배너·안내 이미지(src/uiConfig.js uploadImage)
     //  읽기: 누구나(로그인 전 화면에도 보이는 로고) · 올리기·지우기: 최고관리자만 · PNG/JPG/WEBP/GIF 3MB 미만(SVG는 받지 않음)
+    // 📣 2026-11-23 관리자센터 › 홍보 — 나레이션 음성 · 배경음악 · 직접 올린 사진/영상 · 만든 영상 · 블로그 카드
+    //  읽기: 누구나(홈페이지 블로그 · 유튜브 업로드 · 미리보기) · 올리기 · 지우기: 최고관리자만, 300MB 미만 사진 · 영상 · 소리
+    match /marketing/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if hubAdmin() && request.resource.size < 300 * 1024 * 1024
+        && request.resource.contentType.matches('(image|video|audio)/.*');
+      allow delete: if hubAdmin();
+    }
+
     match /uiAssets/{file} {
       allow read: if true;
       allow create: if hubAdmin() && request.resource != null && request.resource.size < 3 * 1024 * 1024
