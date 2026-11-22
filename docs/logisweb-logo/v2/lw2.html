@@ -1,0 +1,17 @@
+<html><head><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&family=Nunito:wght@900&display=swap" rel="stylesheet"><style>body{margin:0;background:#F4F6FA;font-family:'Noto Sans KR';padding:46px;width:2300px;box-sizing:border-box;color:#0F1A30}
+h1{font-size:40px;margin:0 0 6px;font-weight:900}p.s{margin:0 0 28px;font-size:21px;color:#55657F}.g{display:grid;grid-template-columns:repeat(4,1fr);gap:24px}
+.c{background:#fff;border-radius:24px;padding:20px;box-shadow:0 12px 34px rgba(15,26,48,.06)}.c img.b{width:100%;display:block}.t{font-size:22px;font-weight:900;margin-top:12px}.d{font-size:15.5px;color:#55657F;line-height:1.5;margin-top:5px;min-height:70px}
+.sm{display:flex;gap:10px;align-items:flex-end;margin-top:8px}.lk{display:flex;align-items:center;gap:14px;border-radius:16px;padding:14px 18px;margin-top:12px}.wm{font-family:Nunito;font-weight:900;font-size:28px;line-height:1}.ko{font-size:13px;font-weight:800;opacity:.6;margin-top:4px}
+.pair{display:flex;gap:12px;align-items:center;margin-top:12px;font-size:14px;font-weight:800;color:#55657F}</style></head><body>
+<h1>로지스웹 새 로고 — 처음부터 새 아이디어</h1><p class="s">로지스웹 = 운송사가 매일 쓰는 배차 · 관리 프로그램. 그 성격을 8가지 방식으로 — 네이비 · 하늘색 · 금색 한 점</p><div class="g" id="g"></div>
+<script>const O=[["X1_route_L","X1 노선 L","출발 · 경유 · 도착 거점을 잇는 노선이 L 모양. 모퉁이 금색 점이 배차 허브 — '길을 잇는 프로그램'."],
+["X2_board_tiles","X2 배차판 타일","프로그램 화면 같은 2×2 칸 중 한 칸이 금색 화살표(배차 완료). 업무 프로그램 · 앱다운 느낌."],
+["X3_road_W","X3 도로 W","W 자를 고속도로로 — 가운데 차선 점선, 끝에 금색 도착점. 물류 회사가 바로 읽혀요."],
+["X4_shield_L","X4 방패 L","방패 안의 L 체크 — 믿을 수 있는 데이터 · 정산 · 보안. 계약 · 금융 느낌의 신뢰감."],
+["X5_web_quadrant","X5 웹 사분원","거미줄(Web)처럼 퍼지는 동심 호 · 방사선, 모서리 L이 중심. 이름 '웹'을 그대로 그렸어요."],
+["X6_box_LW","X6 화물 박스","평면 입체 상자 옆면에 L · W. 금색 뚜껑. 지금 로고의 입체감을 상자로 다시 해석."],
+["X7_hook_arrow","X7 갈고리 화살표","l 자가 아래에서 꺾여 오른쪽으로 달리는 화살표, 출발점 금색. 출발 → 도착, 가장 단순 · 강렬."],
+["X8_growth_bars","X8 성장 막대","세 막대가 오르며 L 윤곽, 꼭대기 금색 점. 매출 · 실적 · 성장 — 경영 프로그램 느낌."]];
+document.getElementById("g").innerHTML=O.map(([f,t,d])=>`<div class="c"><img class="b" src="${f}.svg"><div class="t">${t}</div><div class="d">${d}</div><div class="sm"><img src="${f}.svg" width="72"><img src="${f}.svg" width="44"><img src="${f}.svg" width="24"></div>
+<div class="lk" style="background:#0F1A30"><img src="${f}.svg" width="52"><div><div class="wm" style="color:#fff">LogisWeb</div><div class="ko" style="color:#fff">로지스웹 · 배차 관리 프로그램</div></div></div>
+<div class="pair"><img src="${f}.svg" width="50" style="border-radius:12px"><img src="../../../cafe-site/public/brand/hub-mark.svg" width="50" style="border-radius:12px">← 허브 로고와 나란히</div></div>`).join("");</script></body></html>
