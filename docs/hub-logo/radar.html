@@ -1,0 +1,12 @@
+<html><head><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet"><style>body{margin:0;background:#EEF1F6;font-family:'Noto Sans KR';padding:46px;width:2100px;box-sizing:border-box;color:#0F1A30}
+h1{font-size:40px;margin:0 0 6px;font-weight:900}p.s{margin:0 0 28px;font-size:21px;color:#55657F}.g{display:grid;grid-template-columns:repeat(3,1fr);gap:26px}
+.c{background:#fff;border-radius:26px;padding:22px;box-shadow:0 14px 40px rgba(15,26,48,.07)}.c img.b{width:100%;display:block}.t{font-size:24px;font-weight:900;margin-top:14px}.k{display:inline-block;font-size:15px;color:#fff;background:#0F1A30;border-radius:7px;padding:1px 8px;margin-right:8px;vertical-align:3px}
+.d{font-size:16.5px;color:#55657F;line-height:1.55;margin-top:6px;min-height:78px}.sm{display:flex;gap:12px;align-items:flex-end;margin-top:12px}
+.lk{display:flex;align-items:center;gap:14px;border-radius:16px;padding:14px 18px;margin-top:14px}.wm{font-size:21px;font-weight:900;letter-spacing:.13em}.hub{font-weight:900;font-size:12.5px;letter-spacing:.08em;border-radius:5px;padding:1px 6px;margin-left:6px}</style></head><body>
+<h1>로지스웹 허브 로고 — 레이더 관제 × 와이어 지구</h1><p class="s">F3(와이어 지구 + 궤도)에 레이더 관제(훑는 빛 · 눈금 · 블립)를 합쳤어요 — 실시간으로 전국 · 세계 물류를 지켜보는 허브</p><div class="g" id="g"></div>
+<script>const O=[["R1","R1_radar_globe","레이더 지구","F3 그대로에 레이더 빛이 지구 위를 훑고, 바깥에 점선 레이더 고리. '실시간 관제 중인 네트워크'가 한눈에."],
+["R2","R2_hud_scope","관제 HUD","관제실 화면처럼 — 지구를 감싼 레이더 스코프(각도 눈금), 네 모서리 꺾쇠, 스코프 위 깜빡이는 블립. 가장 '스마트 · 디지털'."],
+["R3","R3_minimal_radar","미니멀 레이더","거점 그물을 빼고 지구 · 레이더 · 궤도 · 노선 5개만. 가장 깔끔하고 작게 줄여도 또렷해요."]];
+document.getElementById("g").innerHTML=O.map(([k,f,t,d])=>`<div class="c"><img class="b" src="${f}.svg"><div class="t"><span class="k">${k}</span>${t}</div><div class="d">${d}</div><div class="sm"><img src="${f}.svg" width="96"><img src="${f}.svg" width="56"><img src="${f}.svg" width="32"><img src="${f}.svg" width="20"></div>
+<div class="lk" style="background:radial-gradient(120% 140% at 90% -20%,#2D4C82 0%,#1B2B4B 45%,#0F1A30 80%,#0B1428 100%)"><img src="${f}.svg" width="54"><div><span class="wm" style="color:#fff">LOGISWEB</span><span class="hub" style="background:#8FB0F0;color:#0B1428">HUB</span></div></div>
+<div class="lk" style="background:#F5F7FB;border:1px solid #E3E8F0"><img src="${f}.svg" width="54"><div><span class="wm" style="color:#0F1A30">LOGISWEB</span><span class="hub" style="background:#1B2B4B;color:#fff">HUB</span></div></div></div>`).join("");</script></body></html>
