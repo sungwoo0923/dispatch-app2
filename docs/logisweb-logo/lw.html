@@ -1,0 +1,15 @@
+<html><head><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&family=Nunito:wght@800;900&display=swap" rel="stylesheet"><style>body{margin:0;background:#F4F6FA;font-family:'Noto Sans KR';padding:46px;width:2300px;box-sizing:border-box;color:#0F1A30}
+h1{font-size:40px;margin:0 0 6px;font-weight:900}p.s{margin:0 0 28px;font-size:21px;color:#55657F}.g{display:grid;grid-template-columns:repeat(4,1fr);gap:24px}
+.c{background:#fff;border-radius:24px;padding:20px;box-shadow:0 12px 34px rgba(15,26,48,.06)}.c img.b{width:100%;display:block}.t{font-size:22px;font-weight:900;margin-top:12px}.d{font-size:15.5px;color:#55657F;line-height:1.5;margin-top:5px;min-height:70px}
+.sm{display:flex;gap:10px;align-items:flex-end;margin-top:8px}.lk{display:flex;align-items:center;gap:14px;border-radius:16px;padding:14px 18px;margin-top:12px}
+.wm{font-family:Nunito;font-weight:900;font-size:30px;letter-spacing:.01em;line-height:1}.ul{height:4px;border-radius:4px;margin-top:6px;background:linear-gradient(90deg,rgba(255,210,122,.2),#FFD27A);position:relative}.ul:after{content:"";position:absolute;right:-4px;top:-4px;width:12px;height:12px;border-radius:50%;background:#FFD27A;box-shadow:0 0 10px #FFD27A}
+.pair{display:flex;gap:12px;align-items:center;margin-top:12px;font-size:14px;font-weight:800;color:#55657F}</style></head><body>
+<h1>로지스웹 새 로고 시안 — 허브 로고와 한 가족</h1><p class="s">허브 로고(hub + 금색 일자 선)와 같은 굵기 · 둥근 끝 · 금색 선으로, 로지스웹(부모) → 로지스웹 허브(자식)가 한눈에 이어지게</p><div class="g" id="g"></div>
+<script>const O=[["W0_current.svg","(지금) 로지스웹 마크","기울어진 L · W 기둥 + 꺾인 금색 선. 비교용.","LOGISWEB"],
+["W1_lw.svg","W1 소문자 lw","허브 로고와 똑같은 글자 굵기 · 둥근 끝 · 금색 일자 선. 둘을 나란히 두면 쌍둥이처럼 — 가장 통일감 있어요.","logisweb"],
+["W2_LW.svg","W2 대문자 LW","같은 굵기의 대문자. 더 단단하고 공식적인 기업 느낌 — 계약서 · 명함 · 간판에 잘 어울려요.","LOGISWEB"],
+["W3_mark_flat.svg","W3 지금 마크 다듬기","익숙한 L · W 기둥은 그대로 두고 평면으로 단순하게, 꺾인 선 대신 허브와 같은 금색 일자 선. 바꿔도 고객이 알아봐요.","LOGISWEB"]];
+document.getElementById("g").innerHTML=O.map(([f,t,d,w])=>`<div class="c"><img class="b" src="${f}"><div class="t">${t}</div><div class="d">${d}</div><div class="sm"><img src="${f}" width="72"><img src="${f}" width="44"><img src="${f}" width="24"></div>
+<div class="lk" style="background:#0F1A30"><img src="${f}" width="54"><div><div class="wm" style="color:#fff">${w}</div><div class="ul"></div></div></div>
+<div class="lk" style="background:#F4F6FA"><img src="${f}" width="54"><div><div class="wm" style="color:#0F1A30">${w}</div><div class="ul"></div></div></div>
+<div class="pair"><img src="${f}" width="52" style="border-radius:12px"><img src="../../cafe-site/public/brand/hub-mark.svg" width="52" style="border-radius:12px">← 로지스웹 · 로지스웹 허브 나란히</div></div>`).join("");</script></body></html>
