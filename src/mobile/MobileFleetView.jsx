@@ -19,6 +19,7 @@ import VehicleCarePanel from "../VehicleCarePanel";
 import { careSummary, vehicleDefaults } from "../vehicleCare";
 import CustomDatePicker from "../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 import MobileSelect from "./MobileSelect"; // 📱 2026-11-10 상태 필터 — 버튼 10개 대신 드롭다운
+import { TrafficOverlay } from "../trafficLayer"; // 🚦 2026-11-22 교통 돌발상황(ITS)
 
 const NAVY = "#1B2B4B";
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
@@ -1450,6 +1451,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
               <MapRecenter center={mapCenter || mapSelected?.location} />
               {displayPath.length >= 2 && <FitPath points={displayPath} resetKey={mapSelected?.id} />}
               <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+              <TrafficOverlay />{/* 🚦 2026-11-22 사고 · 공사 · 통제 */}
 
               {/* ⭐ 이동 동선 — 점 대신 매끈한 선 + 출발점/상태 변경 지점만 표시(PC와 동일) */}
               {selectedPath.length >= 2 && <LeafletTrack points={selectedPath} statusColors={STATUS_COLORS} />}

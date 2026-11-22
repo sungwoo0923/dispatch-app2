@@ -5,6 +5,7 @@ import { collection, onSnapshot, doc, getDoc } from "firebase/firestore";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { TrafficOverlay } from "../trafficLayer"; // 🚦 2026-11-22 교통 돌발상황(ITS)
 
 // Pulse Animated Marker
 const blueIcon = L.divIcon({
@@ -132,6 +133,7 @@ export default function DriverMap({ onSelect, center }) {
           <SetViewOnLocationChange center={center} />
 
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          <TrafficOverlay />{/* 🚦 2026-11-22 사고 · 공사 · 통제 */}
 
           {drivers.map((d) => (
             <Marker

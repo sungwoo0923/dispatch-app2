@@ -4,6 +4,7 @@ import { collection, doc, onSnapshot, query, where, orderBy } from "firebase/fir
 import { normalizeAddrSpacing, pickTmapCoord, geoDebugLog } from "./tmapFareCalc";
 import { drawTmapTrafficRoute, drawTmapTrack, clearTmapOverlays, TRAFFIC_LEGEND, TRACK_COLOR } from "./mapStyle";
 import { loadTmap } from "./tmapLoader";
+import { attachTmapTraffic } from "./trafficTmap"; // 🚦 2026-11-22 교통 돌발상황(ITS)
 
 function kstDateStr(d = new Date()) {
   return new Date(d.getTime() + 9 * 3600_000).toISOString().slice(0, 10);
@@ -151,6 +152,7 @@ export default function RouteMapModal({ pickupAddr, dropAddr, pickupName, dropNa
         zoom: 11,
       });
       mapObjRef.current = map;
+      attachTmapTraffic(map, mapId); // 🚦 2026-11-22 사고 · 공사 · 통제
 
       const API_BASE = import.meta.env.VITE_API_BASE || "";
       const viaAddrs = [...viaPickup, ...viaDrop].filter(Boolean);

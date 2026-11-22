@@ -245,9 +245,9 @@ export function FleetLiveButton({ rows, mobile, dark = false, size = "sm", class
     <>
       <button type="button" onClick={() => setOpen(true)} className={`kp-live-btn ${h} ${className}`}
         style={dark ? { background: "rgba(255,255,255,.06)", borderColor: "rgba(255,255,255,.16)" } : undefined}
-        title="배차완료된 지입·직영·임대 기사(기사앱)의 실시간 위치를 지도에서 한 번에 보기">
+        title="운송 관제센터 — 배차완료 지입·직영·임대 차량의 실시간 위치 · 정상/지연/문제 상태 · 가는 길 사고·공사를 한 화면에서">
         <span className={`kp-live-dot ${liveN ? "on" : ""}`} style={{ background: liveN ? LIVE_COLORS.live : LIVE_COLORS.stale }} />
-        실시간 관제
+        관제센터{/* 🛰️ 2026-11-22 "실시간 관제" → 운송 관제센터 */}
         <span className="n">{groups.length}</span>
       </button>
       {open && <LiveMapPortal kind="fleet" rows={rows} mobile={autoMobile(mobile)} onClose={() => setOpen(false)} />}

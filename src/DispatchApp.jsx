@@ -20,6 +20,7 @@ import { CopyTemplateHost, openCopyTemplateEditor } from "./CopyTemplateEditor";
 import OnboardingHost from "./Onboarding";
 import PlatformNoticeBanner from "./PlatformNoticeBanner";
 import { loadTmap } from "./tmapLoader";
+import { attachTmapTraffic } from "./trafficTmap"; // 🚦 2026-11-22 교통 돌발상황(ITS)
 import { imeFocusRef } from "./imeFocus";
 import { hideBlind, isBlindHidden, canSeeBlind } from "./blind";
 import { cleanMgrRows, mgrName } from "./mgrPlaceholder";
@@ -12106,6 +12107,7 @@ React.useEffect(() => {
         height: "100%",
         zoom: 10
       });
+      attachTmapTraffic(map, "route-map"); // 🚦 2026-11-22 사고 · 공사 · 통제
       // ⭐ 모달이 내용 기준 자동 높이라 지도를 만드는 시점엔 레이아웃이 아직
       // 최종 크기로 자리잡지 않았을 수 있다 — TMAP이 그 순간의(더 작은) 칸
       // 크기를 기준으로 내부 크기를 굳혀버려, 실제로는 칸이 더 큰데도 지도만
@@ -22491,6 +22493,7 @@ function LiveLocationPopup({ row, onClose }) {
       const pos = new window.Tmapv2.LatLng(loc.lat, loc.lng);
       if (!mapObjRef.current) {
         mapObjRef.current = new window.Tmapv2.Map(mapElId, { center: pos, width: "100%", height: "600px", zoom: 15 });
+        attachTmapTraffic(mapObjRef.current, mapElId); // 🚦 2026-11-22 사고 · 공사 · 통제
       } else {
         mapObjRef.current.setCenter(pos);
       }

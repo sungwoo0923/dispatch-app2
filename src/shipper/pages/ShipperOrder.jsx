@@ -1,4 +1,5 @@
 import { loadTmap } from "../../tmapLoader";
+import { attachTmapTraffic } from "../../trafficTmap"; // 🚦 2026-11-22 교통 돌발상황(ITS)
 import { drawTmapTrafficRoute } from "../../mapStyle";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { db, auth } from "../../firebase";
@@ -237,6 +238,7 @@ export default function ShipperOrder({ editData, onClose }) {
       center: new window.Tmapv2.LatLng(coords.start.lat, coords.start.lon),
       width: "100%", height: "100%", zoom: 10,
     });
+    attachTmapTraffic(map, "shipper-map"); // 🚦 2026-11-22 사고 · 공사 · 통제
     try {
       // 운송사 프로그램과 동일하게 서버 프록시(/api/route)를 통해 경로를 조회한다.
       // (Tmap API를 브라우저에서 직접 호출하면 CORS로 막혀 지도에 경로/마커가 전혀

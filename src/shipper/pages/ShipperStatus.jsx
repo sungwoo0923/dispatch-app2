@@ -1,5 +1,6 @@
 import CustomDatePicker from "../../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 import { loadTmap } from "../../tmapLoader";
+import { attachTmapTraffic } from "../../trafficTmap"; // 🚦 2026-11-22 교통 돌발상황(ITS)
 import { imeFocusRef } from "../../imeFocus";
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { db, auth } from "../../firebase";
@@ -1686,6 +1687,7 @@ function ShipperLiveLocationPopup({ order, onClose }) {
       const pos = new window.Tmapv2.LatLng(loc.lat, loc.lng);
       if (!mapObjRef.current) {
         mapObjRef.current = new window.Tmapv2.Map(mapElId, { center: pos, width: "100%", height: "340px", zoom: 15 });
+        attachTmapTraffic(mapObjRef.current, mapElId); // 🚦 2026-11-22 사고 · 공사 · 통제
       } else {
         mapObjRef.current.setCenter(pos);
       }

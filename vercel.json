@@ -52,6 +52,12 @@
       "regions": [
         "icn1"
       ]
+    },
+    "api/traffic.js": {
+      "maxDuration": 15,
+      "regions": [
+        "icn1"
+      ]
     }
   },
   "routes": [

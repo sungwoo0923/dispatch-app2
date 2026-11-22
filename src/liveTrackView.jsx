@@ -7,6 +7,7 @@ import "leaflet/dist/leaflet.css";
 import { MapContainer, TileLayer, Marker, useMap } from "react-leaflet";
 import L from "leaflet";
 import { LeafletTrack } from "./mapLeaflet";
+import { TrafficOverlay } from "./trafficLayer"; // 🚦 2026-11-22 사고 · 공사 · 통제 표시
 import { cleanTrack } from "./mapStyle";
 import { haversineKm } from "./tmapFareCalc";
 import { LIVE_MONO as MONO, LIVE_COLORS, liveState, liveAgeText, useLiveNow } from "./liveCore";
@@ -33,15 +34,16 @@ function cachedIcon(key, make) {
   return ic;
 }
 export function truckIcon(o) {
-  return cachedIcon(`t|${o.plate}|${o.state}|${o.selected ? 1 : 0}|${o.speed || 0}`, () => makeTruckIcon(o));
+  return cachedIcon(`t|${o.plate}|${o.state}|${o.selected ? 1 : 0}|${o.speed || 0}|${o.tone || ""}`, () => makeTruckIcon(o));
 }
-function makeTruckIcon({ plate, state, selected, speed }) {
+// 🛰️ 2026-11-22 관제센터 — tone(관제 상태 색: 정상 · 지연 · 문제 · 신호 끊김)을 주면 테두리 점 · 맥박을 그 색으로
+function makeTruckIcon({ plate, state, selected, speed, tone }) {
   const bg = state === "stale" ? "#64748B" : C.navy;
   const size = selected ? 46 : 40;
-  const ring = LIVE_COLORS[state] || LIVE_COLORS.stale;
-  const pulse = state === "live" || state === "recent"
+  const ring = tone || LIVE_COLORS[state] || LIVE_COLORS.stale;
+  const pulse = state === "live" || state === "recent" || (tone && tone !== LIVE_COLORS.stale)
     ? `<span style="position:absolute;inset:0;border-radius:50%;background:${ring};opacity:.35;animation:kpLivePing 1.9s cubic-bezier(0,0,.2,1) infinite;"></span>` : "";
-  const shadow = selected ? `box-shadow:0 0 0 3px #fff,0 0 0 6px ${C.accent},0 8px 20px rgba(11,20,40,.45);` : `box-shadow:0 0 0 2px #fff,0 4px 12px rgba(11,20,40,.35);`;
+  const shadow = selected ? `box-shadow:0 0 0 3px #fff,0 0 0 6px ${tone || C.accent},0 8px 20px rgba(11,20,40,.45);` : tone ? `box-shadow:0 0 0 2px #fff,0 0 0 4px ${tone},0 4px 12px rgba(11,20,40,.35);` : `box-shadow:0 0 0 2px #fff,0 4px 12px rgba(11,20,40,.35);`;
   const truck = `<svg width="${selected ? 24 : 21}" height="${selected ? 24 : 21}" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4h13v11H1z"/><path d="M14 8h4l3 3v4h-7z"/><circle cx="5.5" cy="17.5" r="2"/><circle cx="17.5" cy="17.5" r="2"/></svg>`;
   const dot = `<span style="position:absolute;right:-1px;top:-1px;width:11px;height:11px;border-radius:50%;background:${ring};border:2px solid #fff;"></span>`;
   const spd = speed > 0 && state !== "stale" ? `<span style="margin-left:6px;color:${C.accent};font-weight:700;">${speed}km/h</span>` : "";
@@ -86,10 +88,11 @@ export function FlyTo({ target }) {
   return null;
 }
 
-export function BaseMap({ center, zoom = 13, children, onTileError }) {
+export function BaseMap({ center, zoom = 13, children, onTileError, traffic = true, trafficHighlight }) {
   return (
     <MapContainer center={center} zoom={zoom} scrollWheelZoom zoomControl={false} attributionControl style={{ height: "100%", width: "100%" }}>
       <TileLayer className="kp-lv-tiles" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" eventHandlers={{ tileerror: onTileError }} />
+      {traffic && <TrafficOverlay dark highlight={trafficHighlight} />}
       {children}
     </MapContainer>
   );
