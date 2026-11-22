@@ -1,0 +1,10 @@
+<html><head><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet"><style>body{margin:0;background:#F4F6FA;font-family:'Noto Sans KR';padding:46px;width:2300px;box-sizing:border-box;color:#0F1A30}
+h1{font-size:40px;margin:0 0 6px;font-weight:900}p.s{margin:0 0 28px;font-size:21px;color:#55657F}.g{display:grid;grid-template-columns:repeat(5,1fr);gap:22px}
+.c{background:#fff;border-radius:24px;padding:20px;box-shadow:0 12px 34px rgba(15,26,48,.06)}.c img.b{width:100%;display:block}.t{font-size:21px;font-weight:900;margin-top:12px}.d{font-size:15px;color:#55657F;line-height:1.5;margin-top:5px;min-height:66px}
+.sm{display:flex;gap:10px;align-items:flex-end;margin-top:8px}.lk{display:flex;align-items:center;gap:12px;border-radius:14px;padding:12px 16px;margin-top:12px}.wm{font-size:20px;font-weight:900}.en{font-size:12px;font-weight:800;letter-spacing:.14em;opacity:.6}</style></head><body>
+<h1>U3 hub 글자 로고 — 로지스웹 금색 노선 선</h1><p class="s">로지스웹 마크처럼 왼쪽에서 흐리게 시작해 꺾였다가 오른쪽 위 빛나는 금색 점으로 — 같은 집안 느낌</p><div class="g" id="g"></div>
+<script>const O=[["../../../public/brand/logisweb-mark-square.svg","(참고) 로지스웹 마크","아래 금색 선 — 흐리게 시작 · 꺾임 · 빛나는 점"],
+["U3a_route_v.svg","A 로지스웹과 같은 꺾임","왼쪽 → 가운데 아래 → 오른쪽 위. 로지스웹 마크와 나란히 두면 한 가족."],["U3b_route_soft.svg","B 완만한 꺾임","글자 아래를 길게 받치고 끝에서 살짝 올라가요. 더 차분하고 고급스러워요."],
+["U3c_route_from_b.svg","C 한 붓 노선","아래로 돌아 b 옆으로 올라가는 한 붓 노선. 움직임이 가장 커요."],["U3d_light.svg","D 밝은 바탕","A와 같은 선, 네이비 글자. 흰 화면 · 인쇄용."]];
+document.getElementById("g").innerHTML=O.map(([f,t,d])=>`<div class="c"><img class="b" src="${f}"><div class="t">${t}</div><div class="d">${d}</div><div class="sm"><img src="${f}" width="80"><img src="${f}" width="48"><img src="${f}" width="28"></div>
+<div class="lk" style="background:#0F1A30"><img src="${f}" width="50"><div><div class="wm" style="color:#fff">로지스웹 허브</div><div class="en" style="color:#fff">LOGISWEB HUB</div></div></div></div>`).join("");</script></body></html>
