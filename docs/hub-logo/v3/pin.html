@@ -1,0 +1,12 @@
+<html><head><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet"><style>body{margin:0;background:#F4F6FA;font-family:'Noto Sans KR';padding:46px;width:2100px;box-sizing:border-box;color:#0F1A30}
+h1{font-size:40px;margin:0 0 6px;font-weight:900}p.s{margin:0 0 28px;font-size:21px;color:#55657F}.g{display:grid;grid-template-columns:repeat(3,1fr);gap:26px}
+.c{background:#fff;border-radius:26px;padding:22px;box-shadow:0 12px 34px rgba(15,26,48,.06)}.c img.b{width:100%;display:block}.t{font-size:24px;font-weight:900;margin-top:14px}.k{display:inline-block;font-size:15px;color:#fff;background:#0F1A30;border-radius:7px;padding:1px 8px;margin-right:8px;vertical-align:3px}
+.d{font-size:16.5px;color:#55657F;line-height:1.55;margin-top:6px;min-height:76px}.sm{display:flex;gap:12px;align-items:flex-end;margin-top:10px}
+.lk{display:flex;align-items:center;gap:14px;border-radius:16px;padding:14px 18px;margin-top:12px}.wm{font-size:22px;font-weight:900}.en{font-size:13px;font-weight:800;letter-spacing:.14em;opacity:.6}</style></head><body>
+<h1>로지스웹 허브 로고 — 핀 × 디지털 지구</h1><p class="s">S6 위치 핀 안에 디지털 지구 — 경위선 · 전국 거점 그물 · 한국 금색 허브에서 세계로 뻗는 노선</p><div class="g" id="g"></div>
+<script>const O=[["T1","T1_pin_globe","흰 핀 + 디지털 지구","S6 그대로, 박스 자리에 네이비 디지털 지구. 핀(어디서든) + 지구(네트워크) + 금색 한국 허브 — 의미가 한 번에 읽혀요."],
+["T2","T2_navy_pin","네이비 핀 · 밝은 바탕","밝은 하늘색 바탕에 네이비 핀. 흰 화면 · 인쇄물 · 명함에 잘 어울리는 밝은 버전."],
+["T3","T3_globe_head","지구가 핀 머리","지구 자체가 핀 머리가 되고 아래로 꼬리와 위치 고리. 가장 크게 지구가 보여 '전국 · 세계 네트워크' 느낌이 강해요."]];
+document.getElementById("g").innerHTML=O.map(([k,f,t,d])=>`<div class="c"><img class="b" src="${f}.svg"><div class="t"><span class="k">${k}</span>${t}</div><div class="d">${d}</div><div class="sm"><img src="${f}.svg" width="96"><img src="${f}.svg" width="56"><img src="${f}.svg" width="32"><img src="${f}.svg" width="20"></div>
+<div class="lk" style="background:#0F1A30"><img src="${f}.svg" width="54"><div><div class="wm" style="color:#fff">로지스웹 허브</div><div class="en" style="color:#fff">LOGISWEB HUB</div></div></div>
+<div class="lk" style="background:#F4F6FA"><img src="${f}.svg" width="54"><div><div class="wm">로지스웹 허브</div><div class="en">LOGISWEB HUB</div></div></div></div>`).join("");</script></body></html>
