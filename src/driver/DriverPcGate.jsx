@@ -20,6 +20,7 @@ export default function DriverPcGate({ children }) {
         <div className="mt-6 grid gap-2.5">
           <a href="/driver-guide" className="h-12 rounded-2xl bg-white text-[#0F1A30] text-[15px] font-black flex items-center justify-center">기사앱 설치 안내 보기</a>
           <a href="/login" className="h-12 rounded-2xl bg-white/[0.08] ring-1 ring-white/15 text-[14.5px] font-black flex items-center justify-center hover:bg-white/[0.14]">운송사 · 화주사 로그인으로</a>
+          <a href="/driver-view" className="h-10 text-[13px] font-bold text-white/50 flex items-center justify-center hover:text-white">관리자로 기사 화면 보기</a>
         </div>
       </div>
     </div>

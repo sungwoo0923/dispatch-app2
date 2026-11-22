@@ -400,6 +400,8 @@ export default function DriverLogin() {
               {/* 📍 2026-11-16 APK에서 직원(사무실) 계정으로 — 백그라운드 자동 출근용 */}
               {driverApp && isNativeApk() && <button onClick={() => setApkStaffMode(true)} data-kp="apk-staff-login" className="h-11 rounded-xl border border-[#E3E8F0] text-[#5B6B85] text-[15px] font-bold flex items-center justify-center hover:bg-[#F4F6FA]">직원(사무실) 계정으로 로그인</button>}
             </div>
+            {/* 👀 2026-11-22 관리자 — 기사를 골라 그 기사앱 화면을 보기 전용으로(웹에서만, src/driver/DriverViewAs.jsx) */}
+            {!driverApp && <button onClick={() => navigate("/driver-view")} data-kp="driver-view" className="w-full mt-3 h-10 text-[13px] font-bold text-[#9AA9C3] hover:text-[#0F1A30] inline-flex items-center justify-center gap-1.5">관리자로 기사 화면 보기</button>}
           </div>
           <div className="flex justify-center mt-4 text-[13.5px] font-bold tracking-[0.2em] text-[#B4BFD0]"><LogisTag height={7.5} chip spot="loginForm" text="DRIVER" /></div>
         </div>
