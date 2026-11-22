@@ -54,7 +54,7 @@
       ]
     },
     "api/traffic.js": {
-      "maxDuration": 15,
+      "maxDuration": 30,
       "regions": [
         "icn1"
       ]

@@ -58,7 +58,7 @@ export function normalizeCctv(it) {
 
 async function fetchEvents(key) {
   const q = new URLSearchParams({ apiKey: key, type: "all", eventType: "all", getType: "json", ...Object.fromEntries(Object.entries(KOREA).map(([k, v]) => [k, String(v)])) });
-  const r = await withTimeout(`${ITS}/eventInfo?${q}`, 7000);
+  const r = await withTimeout(`${ITS}/eventInfo?${q}`, 12000);
   const text = await r.text();
   let data; try { data = JSON.parse(text); } catch { throw new Error(`ITS 응답을 읽지 못했어요 (${r.status})`); }
   const code = data?.header?.resultCode;
@@ -98,6 +98,25 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: false, reason: "no-key", items: [] });
   }
   try {
+    // 🔧 점검용 — ITS 주소별로 연결되는지 · 몇 초 걸리는지(키 값은 내보내지 않는다)
+    if (kind === "diag") {
+      const box = "minX=126.9&maxX=127.2&minY=37.4&maxY=37.6";
+      const targets = [
+        ["https-9443", `https://openapi.its.go.kr:9443/eventInfo?apiKey=${encodeURIComponent(key)}&type=all&eventType=all&${box}&getType=json`],
+        ["https-443", `https://openapi.its.go.kr/eventInfo?apiKey=${encodeURIComponent(key)}&type=all&eventType=all&${box}&getType=json`],
+        ["http-9443", `http://openapi.its.go.kr:9443/eventInfo?apiKey=${encodeURIComponent(key)}&type=all&eventType=all&${box}&getType=json`],
+      ];
+      const out = await Promise.all(targets.map(async ([name, url]) => {
+        const t0 = Date.now();
+        try {
+          const r = await withTimeout(url, 11000);
+          const text = await r.text();
+          return { name, status: r.status, ms: Date.now() - t0, body: text.slice(0, 300).split(key).join("***") };
+        } catch (e) { return { name, error: String(e?.cause?.code || e?.message || e), ms: Date.now() - t0 }; }
+      }));
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ ok: true, keyLength: key.length, out });
+    }
     if (kind === "cctv") {
       const lat = num(req.query.lat), lng = num(req.query.lng);
       const r = Math.min(0.2, Math.max(0.01, num(req.query.r) || 0.06));
