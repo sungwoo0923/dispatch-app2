@@ -70,7 +70,7 @@ export default function HubLogin() {
     } finally { setBusy(false); }
   };
   const finish = async (m) => {
-    if (m.admin) { nav("/admin", { replace: true }); return; } // 최고관리자 · 부관리자 — 바로 관리자 화면
+    if (m.admin) { await claimSession(m.id).catch(() => {}); nav("/admin", { replace: true }); return; } // 관리자도 이 기기 번호를 남긴다(예전 번호가 남아 바로 튕기지 않게) // 최고관리자 · 부관리자 — 바로 관리자 화면
     if (m.needSignup) { nav("/signup?role=driver", { replace: true, state: { phone: f.phone } }); return; }
     await claimSession(m.uid || m.id);
     try { localStorage.setItem(SAVE_KEY, JSON.stringify({ role, mode: admin ? "hub" : mode, email: f.email, companyName: f.companyName, companyCode: f.companyCode, carNo: f.carNo, name: f.name })); } catch { /* 무시 */ }

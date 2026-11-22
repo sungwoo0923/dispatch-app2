@@ -789,13 +789,13 @@ service cloud.firestore {
         && (
           // 승인 후에는 알림 · 오더 설정 · 즐겨찾기 · 기기 번호 · 프로필 사진 · 실계좌만(차량·서류를 바꾸려면 다시 심사)
           (resource.data.get('status', '') == 'approved' && request.resource.data.get('status', '') == 'approved'
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['prefs', 'activeSession', 'lastLoginAt', 'updatedAt', 'photoPath', 'fcmTokens', 'fcmTokenAt', 'fcmTokensOut', 'bank'])
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['prefs', 'activeSession', 'activeSessionPc', 'lastLoginAt', 'updatedAt', 'photoPath', 'fcmTokens', 'fcmTokenAt', 'fcmTokensOut', 'bank'])
             && hubBankOk(request.resource.data.get('bank', null))) ||
           // 승인 대기 중 신청서 고치기 · 거절 뒤 다시 제출
           (resource.data.get('source', '') == 'signup' && resource.data.get('status', '') in ['pending', 'rejected']
             && request.resource.data.get('status', '') == 'pending' && hubBankOk(request.resource.data.get('bank', null))) ||
-          // 어떤 상태든 기기 번호(한 계정 한 기기)
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activeSession', 'lastLoginAt'])));
+          // 어떤 상태든 기기 번호(한 계정 PC 1대 + 휴대폰 1대 — 2026-11-22 activeSessionPc 추가)
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activeSession', 'activeSessionPc', 'lastLoginAt'])));
       allow delete: if hubAdmin();
     }
     // ⭐ 2026-11-06 정산 계좌(운임 받을 실계좌) — 은행(목록에서 고름) · 계좌번호 · 예금주만
