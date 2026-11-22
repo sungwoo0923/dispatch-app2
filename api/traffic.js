@@ -40,7 +40,9 @@ export function normalizeEvent(it, i = 0) {
   if (lat == null || lng == null || lat < 32 || lat > 40 || lng < 123 || lng > 133) return null;
   const type = str(it.eventType), detail = str(it.eventDetailType), msg = str(it.message);
   const lanes = str(it.lanesBlocked), blockType = str(it.lanesBlockType);
-  const blocked = /전면|전차로|차단|통제/.test(`${blockType} ${lanes} ${detail}`) && !/부분/.test(blockType);
+  // 전면통제 — 차로 칸 · 세부 유형 · 설명 글(ITS는 "전면통제"를 설명 글에만 적는 경우가 많다)에서 찾는다. "부분통제"만 있으면 아님
+  const blocked = /전면\s*(통제|차단)|전\s*차로\s*(통제|차단)/.test(`${blockType} ${lanes} ${detail} ${msg}`)
+    || (/전면|전차로|차단/.test(`${blockType} ${lanes}`) && !/부분/.test(`${blockType} ${lanes}`));
   const start = itsTime(it.startDate);
   return {
     id: `${str(it.linkId) || "x"}-${lat.toFixed(4)}-${lng.toFixed(4)}-${str(it.startDate) || i}`,

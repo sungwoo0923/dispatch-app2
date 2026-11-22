@@ -7,7 +7,7 @@
 //   · 지연 예상: 하차 약속 시간보다 10분 넘게 늦을 듯 · 상차 시간이 15분 넘게 지났는데 상차 전 ·
 //               가는 길에 공사 · 기상 · 예정에 없는 곳에서 20분 넘게 정차
 //  도착 예상은 1단계에서 직선거리 × 1.3 ÷ 평균 45km/h 로 어림한다(2단계에서 Tmap 실제 경로 시간으로 바꾼다).
-import { distKm, incidentsNear, isSevere, kindMeta } from "./trafficCore.js";
+import { distKm, incidentsNear, isSevere, kindMeta, isRelevant } from "./trafficCore.js";
 
 export const LEVELS = {
   alert: { key: "alert", label: "문제", en: "ALERT", color: "#F87171", rank: 0 },
@@ -91,7 +91,7 @@ export function classifyVehicle({ entry, live, order, phase, loaded, pickupGeo, 
   const target = loaded ? dropGeo : (pickupGeo || dropGeo);
   let near = [];
   if (pos && !stale && phase !== "하차지도착") {
-    near = incidentsNear(events, pos, target);
+    near = incidentsNear(events.filter((ev) => isRelevant(ev, now)), pos, target); // 장기 공사는 경보에서 뺀다
     for (const n of near.slice(0, 3)) {
       const m = kindMeta(n.ev);
       const where = n.where === "near" ? `근처 ${n.km < 1 ? `${Math.round(n.km * 1000)}m` : `${n.km.toFixed(1)}km`}` : `가는 길 ${n.km.toFixed(1)}km 앞`;

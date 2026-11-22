@@ -2,7 +2,7 @@
 //  node scripts/controlTower.test.mjs
 import assert from "node:assert/strict";
 import { classifyVehicle, parseHm, dueMs, updateStopMemo, countLevels, hhmm } from "../src/controlTowerCore.js";
-import { incidentsNear, segDistKm, visibleIncidents, isSevere } from "../src/trafficCore.js";
+import { incidentsNear, segDistKm, visibleIncidents, isSevere, isLongWork } from "../src/trafficCore.js";
 import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -50,6 +50,39 @@ t("ITS 돌발 정리", () => {
   console.log("✓ 실제 ITS 응답 형식(사장님 휴대폰 화면) 정리 · 서버와 같음");
 }
 
+{
+  const its = await import("../src/itsCore.js");
+  const msg = "<공사>::국회대로::목동9137::목동9137::양방향 전체차로::[공사/통제]국회대로 지하차도 및 상부공원화 건설공사에 따른 경인1지하차도 폐쇄/장소 : 국회대로(양방향) 경인1지하차도/통제 : 지하차도 전면통제(지하차도 개통전까지 지상통행 가능)::지하시설 작업 서울청";
+  const pm = its.prettyMessage(msg, "국회대로");
+  assert.equal(pm.where, "국회대로", "목동9137 같은 지점 번호는 빼요");
+  assert.equal(pm.lanes, "양방향 전체차로");
+  assert.deepEqual(pm.lines, ["국회대로 지하차도 및 상부공원화 건설공사에 따른 경인1지하차도 폐쇄", "장소: 국회대로(양방향) 경인1지하차도", "통제: 지하차도 전면통제(지하차도 개통전까지 지상통행 가능)"]);
+  assert.equal(pm.org, "지하시설 작업 서울청");
+  assert.equal(its.prettyMessage("<공사>::올림픽대로::청담IC::강남구송파구::4차로::[공사]보수/부분통제::유지보수 서울청").where, "올림픽대로 (청담IC → 강남구송파구)");
+  const full = its.normalizeEvent({ eventType: "공사", coordX: "126.88", coordY: "37.52", message: msg, startDate: "20261031000000" });
+  assert.equal(full.blocked, true, "설명 글의 전면통제도 통제로 봐요");
+  const part = its.normalizeEvent({ eventType: "공사", coordX: "127.0", coordY: "37.5", message: "<공사>::올림픽대로::a::b::1차로::[공사]보수/부분통제::서울청", startDate: "20260903000000" });
+  assert.equal(part.blocked, false, "부분통제는 통제가 아니에요");
+  console.log("✓ ITS 설명 글 정리 · 전면통제 찾기");
+}
+
+t("장기 공사는 기본으로 숨기고, 관제 경보에서도 뺀다", () => {
+  const now = Date.parse("2026-11-22T13:00:00+09:00");
+  const old = { id: "o", kind: "work", blocked: false, lat: 37, lng: 127, start: "2026-08-26T00:00:00+09:00" };
+  const fresh = { id: "f", kind: "work", blocked: false, lat: 37, lng: 127, start: "2026-11-22T09:00:00+09:00" };
+  const closed = { id: "c", kind: "work", blocked: true, lat: 37, lng: 127, start: "2026-08-26T00:00:00+09:00" };
+  const acc = { id: "a", kind: "accident", lat: 37, lng: 127, start: "2026-11-20T09:00:00+09:00" };
+  assert.equal(isLongWork(old, now), true);
+  assert.equal(isLongWork(fresh, now), false, "오늘 시작한 공사는 보여요");
+  assert.equal(isLongWork(closed, now), false, "전면통제는 오래돼도 보여요");
+  assert.equal(isLongWork(acc, now), false);
+  const b = { north: 38, south: 36, east: 128, west: 126 };
+  assert.deepEqual(visibleIncidents([old, fresh, closed, acc], b, 12, { now }).map((x) => x.id), ["f", "c", "a"]);
+  assert.equal(visibleIncidents([old, fresh, closed, acc], b, 12, { now, longWork: true }).length, 4);
+  const r = classifyVehicle({ entry: { lat: 37.0, lng: 127.0, speed: 50, updatedMs: now }, live: "live", phase: "운송중", loaded: true, dropGeo: { lat: 37.05, lng: 127.0 }, order: {}, events: [old], now });
+  assert.equal(r.level, "ok", "장기 공사만 있으면 정상");
+});
+
 t("가는 길 · 근처 돌발", () => {
   const pos = { lat: 37.0, lng: 127.0 }, target = { lat: 37.5, lng: 127.0 };
   const ahead = { id: "a", kind: "accident", lat: 37.25, lng: 127.005 };
@@ -64,8 +97,8 @@ t("가는 길 · 근처 돌발", () => {
 t("지도에 보일 돌발 — 멀리서 보면 공사 숨김", () => {
   const items = [{ id: 1, kind: "work", lat: 37, lng: 127 }, { id: 2, kind: "accident", lat: 37, lng: 127 }, { id: 3, kind: "accident", lat: 35, lng: 129 }];
   const b = { north: 37.5, south: 36.5, east: 127.5, west: 126.5 };
-  assert.deepEqual(visibleIncidents(items, b, 8).map((x) => x.id), [2]);
-  assert.deepEqual(visibleIncidents(items, b, 12).map((x) => x.id), [1, 2]);
+  assert.deepEqual(visibleIncidents(items, b, 8, { longWork: true }).map((x) => x.id), [2]);
+  assert.deepEqual(visibleIncidents(items, b, 12, { longWork: true }).map((x) => x.id), [1, 2]);
 });
 
 const NOW = Date.parse("2026-11-22T13:00:00+09:00");
