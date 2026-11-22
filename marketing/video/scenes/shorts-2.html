@@ -1,0 +1,81 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>숏츠2 · 실시간 관제</title>
+<link rel="stylesheet" href="../base.css"><link rel="stylesheet" href="_shorts.css">
+<style>
+.ring{position:absolute;left:50%;top:50%;border-radius:50%;border:4px solid rgba(255,90,95,.6);transform:translate(-50%,-50%)}
+.map{position:absolute;left:60px;top:430px;width:960px;height:860px;border-radius:36px;overflow:hidden;background:#0c1730;box-shadow:0 0 0 3px rgba(143,176,240,.3)}
+.zone{position:absolute;width:260px;height:260px;border-radius:50%;border:4px dashed rgba(143,176,240,.7);background:rgba(79,139,255,.12)}
+.zone b{position:absolute;left:50%;top:-70px;transform:translateX(-50%);white-space:nowrap;font-size:36px}
+.truck{position:absolute;left:0;top:0;width:110px;height:110px;border-radius:50%;background:#fff;color:#0F1A30;font-size:60px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 12px rgba(79,139,255,.35),0 0 60px #4F8BFF}
+.st{position:absolute;left:50%;top:1300px;transform:translateX(-50%)}
+.badge{position:absolute;left:50%;transform:translateX(-50%);top:330px;white-space:nowrap;font-size:52px;font-weight:900;padding:18px 44px;border-radius:999px}
+</style></head><body>
+<div class="grid"></div>
+<div class="glow" style="width:900px;height:900px;left:90px;top:300px"></div>
+
+<section class="full" data-in="0" data-out="3.7" data-d="0.2">
+  <div class="abs center" style="left:0;right:0;top:220px">
+    <div class="chip" style="font-size:38px" data-in="0" data-a="down">배차실 하루 루틴</div>
+    <div class="h1" style="margin-top:40px" data-in="0.1" data-a="up">"기사님,<br>지금 <span class="mark">어디세요?</span>"</div>
+  </div>
+  <div class="abs" style="left:540px;top:1020px">
+    <div class="ring" data-base="translate(-50%,-50%)" style="width:260px;height:260px" data-in="0.4" data-a="zoom"></div>
+    <div class="ring" data-base="translate(-50%,-50%)" style="width:420px;height:420px" data-in="0.7" data-a="zoom"></div>
+    <div class="ring" data-base="translate(-50%,-50%)" style="width:580px;height:580px" data-in="1.0" data-a="zoom"></div>
+    <div class="abs" style="left:-100px;top:-120px;font-size:180px;line-height:1" data-in="0.3" data-a="pop">📞</div>
+  </div>
+  <div class="abs center" style="left:0;right:0;top:1250px" data-in="1.6" data-a="pop"><div class="chip" style="font-size:44px;background:#3a1420;border-color:rgba(255,90,95,.6)">오늘 확인 전화 <b class="red" data-in="1.6" data-count="0,27" data-cd="1.4" data-suf="통">27통</b></div></div>
+</section>
+
+<section class="full" data-in="3.7" data-out="7.9" data-d="0.25">
+  <div class="abs center" style="left:0;right:0;top:170px">
+    <div class="chip" style="font-size:38px" data-in="3.7" data-a="down">LogisWeb 기사앱</div>
+    <div class="h2" style="margin-top:26px" data-in="3.8" data-a="up">화면 꺼져도 <span class="hl">위치 자동 전송</span></div>
+  </div>
+  <div class="phone abs" style="left:290px;top:420px;width:500px" data-in="3.8" data-a="up">
+    <div class="scr" style="height:880px"><video data-v="3.8" data-rate="1.2" data-in="3.8" data-a="none"><source src="../../../landing-site/video/d-home.webm" type="video/webm"></video></div>
+  </div>
+  <div class="abs" style="left:60px;top:700px" data-in="5.0" data-a="left"><span class="tick"><b>●</b>GPS 활성</span></div>
+  <div class="abs" style="right:50px;top:1000px" data-in="5.6" data-a="right"><span class="tick"><b>✓</b>운송중</span></div>
+</section>
+
+<section class="full" data-in="7.9" data-out="10.6" data-d="0.25">
+  <div class="abs center" style="left:0;right:0;top:170px">
+    <div class="chip" style="font-size:38px" data-in="7.9" data-a="down">실제 화면 · 지입차 실시간 위치</div>
+    <div class="h2" style="margin-top:26px" data-in="8.0" data-a="up">우리 차, <span class="hl">지도 한 장에</span></div>
+  </div>
+  <div class="clip" style="top:420px;height:860px" data-in="7.9" data-a="up">
+    <video data-v="7.9" data-vfrom="3" data-rate="1.5" style="width:1440px;left:-430px;top:0" data-in="7.9" data-a="none" data-pan="0,0,360,0"><source src="../../../landing-site/video/live-map.webm" type="video/webm"></video>
+  </div>
+</section>
+
+<section class="full" data-in="10.6" data-out="15.6" data-d="0.25">
+  <div class="abs center" style="left:0;right:0;top:170px">
+    <div class="chip" style="font-size:38px" data-in="10.6" data-a="down">지오펜스 자동 판정</div>
+    <div class="h2" style="margin-top:26px" data-in="10.7" data-a="up">전화 없이 <span class="hl">상태가 알아서</span></div>
+  </div>
+  <div class="map" data-in="10.6" data-a="up">
+    <div class="grid" style="background-size:80px 80px"></div>
+    <svg class="abs" style="left:0;top:0" width="960" height="860"><path d="M200 640 C 380 640, 420 260, 760 240" stroke="#4F8BFF" stroke-width="10" fill="none" stroke-dasharray="22 18" opacity=".8"/></svg>
+    <div class="zone" style="left:70px;top:510px"><b>📦 상차지</b></div>
+    <div class="zone" style="left:630px;top:110px"><b>🏁 하차지</b></div>
+    <div class="truck" data-in="12.0" data-a="none" data-pan="145,585,705,185" data-pt="2.4" style="z-index:2"><span style="display:inline-block;transform:scaleX(-1)">🚚</span></div>
+    <div class="badge" data-base="translateX(-50%)" style="background:#2D5BD8" data-in="10.8" data-out="12.0" data-a="pop">상차지 도착</div>
+    <div class="badge" data-base="translateX(-50%)" style="background:#2BD17E;color:#08101F" data-in="12.1" data-out="14.3" data-a="pop">운송중 · 72km/h</div>
+    <div class="badge" data-base="translateX(-50%)" style="background:#F5A524;color:#08101F" data-in="14.4" data-a="pop">하차지 도착 ✓</div>
+  </div>
+</section>
+<section class="full" data-in="15.6" data-out="99" data-d="0.3">
+  <div class="glow" style="width:700px;height:700px;left:190px;top:350px;opacity:.5"></div>
+  <div class="abs center" style="left:0;right:0;top:260px">
+    <div class="h2" data-in="15.6" data-a="up">확인 전화 대신,<br><span class="hl">지도 한 번</span></div>
+    <img src="../../../landing-site/brand/logisweb-mark.svg" style="width:220px;height:220px;margin-top:70px" data-in="15.9" data-a="pop">
+    <div class="logo-w" style="font-size:120px;margin-top:20px" data-in="16.1" data-a="up">Logis<span>Web</span></div>
+    <div class="sub" style="margin-top:16px" data-in="16.3" data-a="up">배차부터 정산까지, 한 화면에서</div>
+    <div class="cta" data-in="16.7" data-a="pop">무료 체험 신청하기</div>
+    <div class="sub" style="margin-top:40px;font-size:40px" data-in="17.1" data-a="up">검색창에 <b style="color:#fff">"로지스웹"</b></div>
+  </div>
+</section>
+<div id="cap"></div>
+<script>window.SCENE={w:1080,h:1920,fps:30,duration:21,voice:[0.35,3.85,8.0,10.75,15.7],music:"music-upbeat.wav",musicVol:0.45};</script>
+<script src="../engine.js"></script>
+</body></html>

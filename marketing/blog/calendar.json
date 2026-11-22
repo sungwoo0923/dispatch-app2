@@ -1,0 +1,29 @@
+{
+  "_note": "매주 자동 블로그 주제 목록. 위에서부터 아직 안 쓴 주제를 하나씩 써요. 주제를 바꾸거나 더하려면 이 목록만 고치면 돼요. done 은 자동으로 채워져요.",
+  "topics": [
+    {"slug":"kakao-order-auto","title":"카톡 오더 자동 입력","keywords":"배차프로그램, 카톡 오더","done":"2026-11-23"},
+    {"slug":"gps-control","title":"지입차 실시간 관제","keywords":"지입차 관리 프로그램, 차량 관제","done":"2026-11-30"},
+    {"slug":"month-end-settle","title":"월말 정산 엑셀 없이","keywords":"운송사 정산 프로그램","done":"2026-12-07"},
+    {"slug":"excel-vs-tms","title":"엑셀 배차 vs TMS 체크리스트","keywords":"운송관리시스템, TMS 도입","done":"2026-12-14"},
+    {"slug":"live-board-double-dispatch","title":"중복 배차 · 오더 누락을 막는 실시간배차현황 쓰는 법","keywords":"중복 배차, 실시간 배차 현황","angle":"여러 담당자가 동시에 배차할 때 생기는 사고와 실시간 동기화","img":"real-board.jpg"},
+    {"slug":"fare-lookup","title":"이 구간 운임 얼마가 적당할까? 실거래 운임 조회로 견적 내는 법","keywords":"화물 운임 조회, 화물 운임표","angle":"운임 이력 기반 최저 · 평균 · 최고, 단가표 발행","img":"real-fare.jpg"},
+    {"slug":"pod-photo","title":"인수증 사진, 카톡으로 다시 보내지 마세요","keywords":"인수증 관리, 화물 인수증","angle":"기사앱 사진이 오더에 자동 연결되는 흐름","img":"m-driver-order.jpg"},
+    {"slug":"driver-app-guide","title":"기사님이 처음 쓰는 기사앱, 설치부터 오더 받기까지","keywords":"화물 기사 앱, 기사앱","angle":"기사 입장에서 쉬운 사용법, 무료 · 무제한","img":"m-driver.jpg"},
+    {"slug":"e-approval-freight","title":"운임 변경 품의, 종이 대신 전자결재로","keywords":"운송사 전자결재, 전자결재 양식","angle":"운송 실무 양식 31종, 모바일 승인, 전자 도장","img":"real-approval.jpg"},
+    {"slug":"revenue-dashboard","title":"이번 달 매출 · 매익률, 대표님이 바로 보는 방법","keywords":"운송사 매출 관리, 매익률","angle":"매출 대시보드, 월말 예상 매출, 거래처 순위","img":"real-revenue.jpg"},
+    {"slug":"new-dispatcher-onboarding","title":"신입 배차 담당자, 일주일 만에 혼자 배차하게 만드는 법","keywords":"배차 업무, 배차 담당자","angle":"거래처 · 기사 자동 채움, 변경 이력, 실수 줄이기","img":"real-dispatch.jpg"},
+    {"slug":"fixed-route","title":"매일 같은 노선, 정기 오더로 한 번에 등록하기","keywords":"정기 오더, 고정 노선 관리","angle":"오더 복사 · 정기오더 · 다중 등록, 고정노선 현황","img":"real-board.jpg"},
+    {"slug":"geofence","title":"지오펜스가 뭐예요? 상차 · 하차가 자동으로 바뀌는 원리","keywords":"지오펜스, 화물차 위치 추적","angle":"쉬운 말로 개념 설명 + 배차실이 얻는 것","img":"real-livemap.jpg"},
+    {"slug":"shipper-portal","title":"화주사 전화 줄이는 법: 화주사 포털 무료로 열어 주기","keywords":"화주사 포털, 화물 조회","angle":"화주가 직접 진행 상황을 보게 하기","img":"real-home.jpg"},
+    {"slug":"payout-statement","title":"지입 기사 지급명세서, 공제까지 자동으로","keywords":"지입 정산, 지급명세서","angle":"지입료 · 부가세 · 과태료 공제, 대량이체, 앱 발송","img":"real-settle.jpg"},
+    {"slug":"month-close-check","title":"월 마감 전에 꼭 보는 점검표 5가지","keywords":"월 마감, 운송사 마감","angle":"운임 누락 · 지급 방식 불일치 등 점검, 마감 점검 기능","img":"real-revenue2.jpg"},
+    {"slug":"broker-solo","title":"1인 주선사도 배차프로그램이 필요할까?","keywords":"1인 주선사, 화물 주선","angle":"라이트 요금제, 작은 규모에서 얻는 것","img":"real-scan.jpg"},
+    {"slug":"mobile-dispatch","title":"사무실 밖에서도 배차: 휴대폰으로 확인하고 승인하기","keywords":"모바일 배차, 배차 앱","angle":"직원용 모바일 화면, 등록내역, 모바일 결재","img":"m-home.jpg"},
+    {"slug":"groupware-logistics","title":"카톡 단톡방 대신 사내 메신저 · 게시판 · 근태를 한곳에","keywords":"운송사 그룹웨어, 사내 메신저","angle":"업무 대화와 개인 카톡 분리, 근태 · 연차","img":"real-home.jpg"},
+    {"slug":"data-migration","title":"쓰던 엑셀 데이터, 그대로 옮길 수 있나요? 도입 순서 총정리","keywords":"TMS 도입, 데이터 이관","angle":"거래처 · 기사 · 운임 이관, 무료 체험 → 도입 결정","img":"real-board.jpg"},
+    {"slug":"pricing-guide","title":"배차프로그램 요금, 우리 회사는 어떤 요금제가 맞을까?","keywords":"배차프로그램 가격, TMS 비용","angle":"직원 수 · 오더 수로 고르는 법","img":"real-home.jpg"},
+    {"slug":"peak-season","title":"물량 몰리는 연말 · 명절, 배차실이 버티는 법","keywords":"명절 물류, 성수기 배차","angle":"긴급 오더 팝업, 미배차 알림, 실시간 공유","img":"real-board.jpg"},
+    {"slug":"call-center-24","title":"화물정보망 전송까지 한 번에: 배차 방식 관리","keywords":"화물정보망, 24시콜","angle":"배차 방식(24시 · 인성 · 직접), 지급 방식 관리","img":"real-dispatch.jpg"},
+    {"slug":"founder-story","title":"배차팀장이 직접 프로그램을 만든 이유","keywords":"로지스웹, 배차팀장","angle":"현장 10년의 불편 → 하나씩 해결한 이야기","img":"real-home.jpg"}
+  ]
+}

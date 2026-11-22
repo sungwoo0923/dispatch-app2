@@ -1,0 +1,50 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>블로그 카드</title>
+<link rel="stylesheet" href="../../video/base.css">
+<style>
+body{width:1080px;height:1080px}
+body.cover .title{font-size:76px}
+.wrap{position:absolute;inset:0;padding:90px 80px}
+.cat{font-size:34px}
+.title{font-size:86px;font-weight:900;line-height:1.2;margin-top:34px;white-space:pre-line}
+.sub{font-size:38px;font-weight:600;color:var(--t2);margin-top:28px;line-height:1.45;white-space:pre-line}
+.foot{position:absolute;left:80px;right:80px;bottom:60px;display:flex;align-items:center;gap:18px;font-size:32px;color:var(--t2)}
+.foot img{width:64px;height:64px}
+.foot .logo-w{font-size:44px;color:#fff}
+.foot .url{margin-left:auto;font-weight:700}
+.shotbox{position:absolute;left:80px;right:80px;bottom:150px;border-radius:24px;overflow:hidden;box-shadow:0 40px 100px -20px rgba(0,0,0,.8),0 0 0 2px rgba(143,176,240,.3);background:#fff}
+.shotbox .bar{height:38px;background:#1B2B4B;display:flex;align-items:center;gap:9px;padding:0 16px}
+.shotbox .bar i{width:12px;height:12px;border-radius:50%;background:#FF5F57}.shotbox .bar i:nth-child(2){background:#FEBC2E}.shotbox .bar i:nth-child(3){background:#28C840}
+.shotbox .bar b{margin-left:10px;font:600 17px Pretendard;color:#A9C0EC}
+.shotbox .im{overflow:hidden}
+.shotbox img{display:block;width:100%}
+.pts{margin-top:44px;display:flex;flex-direction:column;gap:18px}
+.pt{display:flex;gap:28px;align-items:flex-start;padding:22px 30px;border-radius:24px;background:linear-gradient(150deg,rgba(34,55,95,.9),rgba(22,38,74,.9));border:2px solid rgba(143,176,240,.25)}
+.pt .n{flex:none;width:64px;height:64px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:900}
+.pt .tx{font-size:37px;font-weight:700;line-height:1.35}
+.pt .tx small{display:block;font-size:28px;font-weight:500;color:var(--t2);margin-top:6px}
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:50px}
+.vs .col{border-radius:26px;padding:34px;font-size:34px;line-height:1.6}
+.vs .a{background:rgba(255,90,95,.1);border:2px solid rgba(255,90,95,.4)}
+.vs .b{background:rgba(43,209,126,.1);border:2px solid rgba(43,209,126,.5)}
+.vs h3{font-size:40px;margin-bottom:16px}
+</style></head><body>
+<div class="grid"></div><div class="glow" style="width:800px;height:700px;left:140px;top:120px"></div>
+<div class="wrap" id="w"></div>
+<div class="foot"><img src="../../../landing-site/brand/logisweb-mark.svg"><span class="logo-w">Logis<span>Web</span></span><span>운송사 통합 TMS</span><span class="url">logisweb.co.kr</span></div>
+<script>
+// 사용: card.html#<JSON> — {kind:"cover"|"points"|"shot"|"vs", cat, title, sub, img, crop, label, points:[[제목,설명]], a:[], b:[]}
+const c = JSON.parse(decodeURIComponent(location.hash.slice(1) || "{}"));
+const esc = (s) => String(s || "").replace(/[&<>]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[m])).replace(/\*\*(.+?)\*\*/g, '<span class="hl">$1</span>');
+const img = (p) => (p && !p.includes("/") ? "../../../landing-site/img/" + p : p);
+let h = `<span class="chip cat">${esc(c.cat || "LogisWeb 블로그")}</span><div class="title">${esc(c.title)}</div>`;
+if (c.sub) h += `<div class="sub">${esc(c.sub)}</div>`;
+if (c.kind === "points") h += `<div class="pts">${(c.points || []).map((p, i) => `<div class="pt"><span class="n">${i + 1}</span><span class="tx">${esc(p[0])}${p[1] ? `<small>${esc(p[1])}</small>` : ""}</span></div>`).join("")}</div>`;
+if (c.kind === "vs") h += `<div class="vs"><div class="col a"><h3>😩 ${esc(c.aTitle || "엑셀 · 수작업")}</h3>${(c.a || []).map(esc).join("<br>")}</div><div class="col b"><h3>✅ ${esc(c.bTitle || "LogisWeb")}</h3>${(c.b || []).map(esc).join("<br>")}</div></div>`;
+document.getElementById("w").innerHTML = h;
+if ((c.kind === "cover" || c.kind === "shot") && c.img) {
+  const hgt = c.kind === "cover" ? 360 : 560; document.body.classList.add(c.kind);
+  const crop = c.crop || "50% 0%";
+  document.body.insertAdjacentHTML("beforeend", `<div class="shotbox" style="${c.kind === "cover" ? "transform:rotate(-2deg);right:40px;left:120px" : ""}"><div class="bar"><i></i><i></i><i></i><b>${esc(c.label || "LogisWeb")}</b></div><div class="im" style="height:${hgt}px"><img src="${img(c.img)}" style="height:100%;object-fit:cover;object-position:${crop};transform:scale(${c.zoom || 1});transform-origin:${crop}"></div></div>`);
+}
+window.__done = Promise.all([document.fonts.ready, ...[...document.images].map((i) => i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r; }))]);
+</script></body></html>
