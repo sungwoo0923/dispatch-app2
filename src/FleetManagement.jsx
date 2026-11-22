@@ -65,6 +65,7 @@ import { fmtPhone } from "./formatInput";
 import { runDelete, commitDeletes } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { isOnDuty, forceCheckout, liveOdometer } from "./driverDuty"; // 🚚 2026-11-09 퇴근처리 · 누적 키로수
 import { ensureUploadToken } from "./uploadTokenClient"; // ⭐ 2026-11-08 업로드 링크 토큰(발급 시각·만료)
+import { TrafficOverlay } from "./trafficLayer"; // 🚦 2026-11-22 교통 돌발상황(ITS)
 const VehicleLedger = lazyView(() => import("./VehicleLedger"));
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
@@ -834,6 +835,7 @@ function FleetMap({ drivers, center, onSelect, selectedPath = [], fitAllCount = 
       <FitAll count={fitAllCount} drivers={drivers} />
       {selectedPath.length >= 2 && <FitPath points={selectedPath} resetKey={selectedDriver?.id} />}
       <TileLayer className="fc-map-tiles" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+      <TrafficOverlay />{/* 🚦 2026-11-22 사고 · 공사 · 통제 */}
 
       {/* ⭐ 이동 동선 — 예전엔 GPS 점을 하나하나 원으로 찍어 다닥다닥 보였다. 도로에 맞춘
           경로(OSRM, 없으면 GPS)를 매끈한 선 하나로 그리고, 출발점과 상태가 바뀐 지점만 표시 */}
@@ -2618,6 +2620,7 @@ function DriverJourneyPanel({ driver, orders, live, onClose, dispatchData }) {
           <div style={{ position: "relative", height: 380, borderRadius: 12, overflow: "hidden", border: "1px solid #dbe1ea", background: "#fff", marginBottom: 8 }}>
             <MapContainer center={loc || [37.45, 126.8]} zoom={11} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
               <TileLayer className="fm-journey-tiles" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+              <TrafficOverlay />
               <JourneyFit points={points} fitKey={fitKey} />
               {legs.map(l => (
                 <Polyline key={l.id} positions={l.path}
@@ -3835,6 +3838,7 @@ function FleetLiveMapModal({ drivers, liveById, dispatchData, onClose }) {
             <style>{`.fm-live-tiles{filter:grayscale(.85) contrast(.95) brightness(1.04);}`}</style>
             <MapContainer center={[37.45, 126.9]} zoom={10} scrollWheelZoom style={{ height: "100%", width: "100%" }}>
               <TileLayer className="fm-live-tiles" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+              <TrafficOverlay />
               <LiveMapController target={target} fitKey={fitKey} points={points} />
               {located.map(r => (
                 <Marker
