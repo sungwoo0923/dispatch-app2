@@ -5,6 +5,7 @@
 //    → 지도가 몇 개 열려 있어도 브라우저당 90초에 1번만 받는다(구독자가 없으면 멈춘다).
 //  · 켜기/끄기: 지도 위 [교통정보] 버튼. 이 기기에 기억하고, 열린 지도 전부에 같이 적용된다.
 import React from "react";
+import { eventsUrl, cctvUrl, parseEvents, parseCctv } from "./itsCore.js";
 
 export const TRAFFIC_KINDS = {
   accident: { label: "사고", icon: "🚨", color: "#EF4444", rank: 0 },
@@ -105,17 +106,53 @@ const _subs = new Set();
 let _timer = null, _inflight = null;
 const emit = () => _subs.forEach((fn) => { try { fn(); } catch { /* 무시 */ } });
 
+// ─── ITS 부르기 ───────────────────────────────────────────────────────────────
+// ITS가 클라우드 서버 접속을 막아서(2026-11-22) 브라우저가 직접 부른다. 키는 /api/traffic?kind=config 에서 한 번 받는다.
+let _key = null; // null = 아직 · "" = 키 없음 · undefined = 이 사이트엔 중계 함수 없음
+async function getKey() {
+  if (_key !== null) return _key;
+  const r = await fetch("/api/traffic?kind=config", { cache: "no-store" });
+  if (r.status === 404 || !/json/.test(r.headers.get("content-type") || "")) { _key = undefined; return _key; }
+  const j = await r.json();
+  _key = j?.ok ? String(j.key || "") : "";
+  return _key;
+}
+const isNative = () => typeof window !== "undefined" && !!window.Capacitor?.isNativePlatform?.();
+// 기사앱(안드로이드)은 네이티브 HTTP로(웹 보안 규칙 CORS 영향 없음), 브라우저는 fetch
+async function getJson(url, ms = 12000) {
+  if (isNative()) {
+    try {
+      const { CapacitorHttp } = await import("@capacitor/core");
+      const r = await CapacitorHttp.get({ url, connectTimeout: ms, readTimeout: ms });
+      return typeof r.data === "string" ? JSON.parse(r.data) : r.data;
+    } catch { /* 아래 fetch 로 */ }
+  }
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, cache: "no-store" });
+    return JSON.parse(await r.text());
+  } finally { clearTimeout(t); }
+}
+
 async function load() {
   if (_inflight) return _inflight;
   if (_state.status === "idle") { _state = { ..._state, status: "loading" }; emit(); }
   _inflight = (async () => {
     try {
-      const r = await fetch("/api/traffic?kind=events", { cache: "no-store" });
+      const key = await getKey();
       // 중계 함수가 없는 사이트(로지스웹 허브 등)에서는 버튼까지 숨긴다
-      if (r.status === 404 || !/json/.test(r.headers.get("content-type") || "")) { _state = { status: "unavailable", items: [], at: Date.now(), reason: "" }; stop(); return; }
-      const j = await r.json();
-      if (j?.ok) _state = { status: "ok", items: Array.isArray(j.items) ? j.items : [], at: Date.now(), reason: "" };
-      else _state = { status: j?.reason === "no-key" ? "no-key" : "error", items: _state.items, at: Date.now(), reason: j?.message || j?.reason || "" };
+      if (key === undefined) { _state = { status: "unavailable", items: [], at: Date.now(), reason: "" }; stop(); return; }
+      if (!key) { _state = { status: "no-key", items: [], at: Date.now(), reason: "" }; return; }
+      try {
+        _state = { status: "ok", items: parseEvents(await getJson(eventsUrl(key))), at: Date.now(), reason: "" };
+      } catch (direct) {
+        // 직접 연결이 안 되면 서버로 한 번 더(나중에 고정 IP 중계를 붙이면 이쪽이 살아난다)
+        const r = await fetch("/api/traffic?kind=events", { cache: "no-store" });
+        const j = await r.json().catch(() => null);
+        if (j?.ok) _state = { status: "ok", items: Array.isArray(j.items) ? j.items : [], at: Date.now(), reason: "" };
+        else _state = { status: "error", items: _state.items, at: Date.now(), reason: `ITS 연결 실패 (${String(direct?.message || direct).slice(0, 80)})` };
+      }
     } catch (e) {
       _state = { status: "error", items: _state.items, at: Date.now(), reason: String(e?.message || e) };
     } finally { _inflight = null; emit(); }
@@ -171,9 +208,15 @@ export async function fetchCctvNear(lat, lng) {
   const k = `${lat.toFixed(3)},${lng.toFixed(3)}`;
   const hit = _cctvCache.get(k);
   if (hit && Date.now() - hit.at < 10 * 60 * 1000) return hit.v;
-  const r = await fetch(`/api/traffic?kind=cctv&lat=${lat}&lng=${lng}&r=0.06`);
-  const j = await r.json();
-  const v = { ok: !!j?.ok, reason: j?.reason || "", items: (j?.items || []).map((c) => ({ ...c, km: distKm(lat, lng, c.lat, c.lng) })) };
-  _cctvCache.set(k, { at: Date.now(), v });
+  const key = await getKey().catch(() => "");
+  if (!key) return { ok: false, reason: "no-key", items: [] };
+  const r = 0.06, box = { minX: lng - r, maxX: lng + r, minY: lat - r, maxY: lat + r };
+  const one = (type, cctvType) => getJson(cctvUrl(key, type, cctvType, box), 8000).then(parseCctv).catch(() => []);
+  // 4 = 실시간 스트리밍(HTTPS) · 1 = 실시간 스트리밍(HLS). 로지스웹은 https 라 https 주소를 먼저.
+  let list = (await Promise.all([one("ex", 4), one("its", 4)])).flat();
+  if (!list.length) list = (await Promise.all([one("ex", 1), one("its", 1)])).flat();
+  const items = list.map((c) => ({ ...c, km: distKm(lat, lng, c.lat, c.lng) })).sort((a, b) => a.km - b.km).slice(0, 12);
+  const v = { ok: true, reason: "", items };
+  if (items.length) _cctvCache.set(k, { at: Date.now(), v });
   return v;
 }
