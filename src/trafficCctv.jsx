@@ -4,7 +4,7 @@
 //  · 영상은 ITS가 주는 실시간 스트리밍(HLS). 크롬 · 엣지는 hls.js(필요할 때만 받음), 사파리 · 아이폰은 기본 재생.
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { fetchCctvNear, kindMeta, eventTitle, eventTimeText } from "./trafficCore";
+import { fetchCctvNear, kindMeta, eventTitle, eventTimeText, prettyMessage } from "./trafficCore";
 
 const Z = 10000090;
 let _host = null, _root = null;
@@ -75,9 +75,9 @@ function CctvModal({ ev, onClose }) {
         <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
           <span style={{ fontSize: 22, lineHeight: 1 }}>{m.icon}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 15.5, fontWeight: 900, color: m.color }}>{eventTitle(ev)}</div>
+            <div style={{ fontSize: 15.5, fontWeight: 900, color: m.color }}>{m.label} — {prettyMessage(ev.msg, ev.road).where || eventTitle(ev)}</div>
             <div style={{ marginTop: 4, fontSize: 12.5, fontWeight: 600, color: "rgba(207,224,255,.75)", lineHeight: 1.5 }}>
-              {[eventTimeText(ev), ev.lanes && `${ev.lanes} 차단`, ev.msg].filter(Boolean).join(" · ")}
+              {(() => { const pm = prettyMessage(ev.msg, ev.road); return [eventTimeText(ev), pm.lanes || (ev.lanes && `${ev.lanes} 차단`), ...pm.lines.slice(0, 2)].filter(Boolean).join(" · "); })()}
             </div>
           </div>
           <button type="button" onClick={onClose} aria-label="닫기" style={{ width: 34, height: 34, borderRadius: 11, border: "1px solid rgba(255,255,255,.14)", background: "rgba(255,255,255,.05)", color: "#E6EEFF", cursor: "pointer", fontSize: 18 }}>×</button>

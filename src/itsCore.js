@@ -30,7 +30,9 @@ export function normalizeEvent(it, i = 0) {
   if (lat == null || lng == null || lat < 32 || lat > 40 || lng < 123 || lng > 133) return null;
   const type = str(it.eventType), detail = str(it.eventDetailType), msg = str(it.message);
   const lanes = str(it.lanesBlocked), blockType = str(it.lanesBlockType);
-  const blocked = /전면|전차로|차단|통제/.test(`${blockType} ${lanes} ${detail}`) && !/부분/.test(blockType);
+  // 전면통제 — 차로 칸 · 세부 유형 · 설명 글(ITS는 "전면통제"를 설명 글에만 적는 경우가 많다)에서 찾는다. "부분통제"만 있으면 아님
+  const blocked = /전면\s*(통제|차단)|전\s*차로\s*(통제|차단)/.test(`${blockType} ${lanes} ${detail} ${msg}`)
+    || (/전면|전차로|차단/.test(`${blockType} ${lanes}`) && !/부분/.test(`${blockType} ${lanes}`));
   const start = itsTime(it.startDate);
   return {
     id: `${str(it.linkId) || "x"}-${lat.toFixed(4)}-${lng.toFixed(4)}-${str(it.startDate) || i}`,
@@ -45,6 +47,22 @@ export function normalizeCctv(it) {
   const url = str(it.cctvurl ?? it.cctvUrl);
   if (lat == null || lng == null || !url) return null;
   return { name: str(it.cctvname ?? it.cctvName) || "CCTV", lat, lng, url, format: str(it.cctvformat ?? it.cctvFormat), type: str(it.cctvtype ?? it.cctvType) };
+}
+
+// ITS 설명 글 정리 — "<공사>::국회대로::목동9137::목동9137::양방향 전체차로::[공사/통제]…/장소 : …/통제 : …::지하시설 작업 서울청"
+//  → { where: "국회대로", lanes: "양방향 전체차로", lines: ["…폐쇄", "장소: …", "통제: …"], org: "지하시설 작업 서울청" }
+const isNodeCode = (v) => !v || /\d{3,}/.test(v);
+export function prettyMessage(msg = "", road = "") {
+  const raw = String(msg || "").trim();
+  if (!raw) return { where: road, lanes: "", lines: [], org: "" };
+  if (!raw.includes("::")) return { where: road, lanes: "", lines: raw.split(/\s*\/\s*/).filter(Boolean), org: "" };
+  const p = raw.split("::").map((x) => x.trim());
+  const head = /^<.*>$/.test(p[0]) ? p.shift() : "";
+  void head;
+  const [r = road, from = "", to = "", lanes = "", body = "", ...rest] = p;
+  const span = !isNodeCode(from) && !isNodeCode(to) && from !== to ? ` (${from} → ${to})` : !isNodeCode(from) ? ` (${from})` : "";
+  const lines = String(body).replace(/^\[[^\]]*\]\s*/, "").split(/\s*\/\s*/).map((x) => x.replace(/\s*:\s*/, ": ").trim()).filter(Boolean);
+  return { where: `${r || road}${span}`, lanes, lines, org: rest.join(" ").replace(/\s+/g, " ").trim() };
 }
 
 export function eventsUrl(key, box = KOREA) {

@@ -5,7 +5,8 @@
 //    → 지도가 몇 개 열려 있어도 브라우저당 90초에 1번만 받는다(구독자가 없으면 멈춘다).
 //  · 켜기/끄기: 지도 위 [교통정보] 버튼. 이 기기에 기억하고, 열린 지도 전부에 같이 적용된다.
 import React from "react";
-import { eventsUrl, cctvUrl, parseEvents, parseCctv } from "./itsCore.js";
+import { eventsUrl, cctvUrl, parseEvents, parseCctv, prettyMessage } from "./itsCore.js";
+export { prettyMessage };
 
 export const TRAFFIC_KINDS = {
   accident: { label: "사고", icon: "🚨", color: "#EF4444", rank: 0 },
@@ -18,6 +19,16 @@ export const TRAFFIC_KINDS = {
 export const CONTROL_META = { label: "통제", icon: "⛔", color: "#DC2626" };
 export const kindMeta = (ev) => (ev?.blocked ? { ...TRAFFIC_KINDS[ev.kind] || TRAFFIC_KINDS.etc, ...CONTROL_META } : TRAFFIC_KINDS[ev?.kind] || TRAFFIC_KINDS.etc);
 // 관제에서 "문제"(빨강)로 볼 돌발 — 공사 · 기상 · 기타는 "주의"(노랑)
+// 🚦 2026-11-22 사장님 요청 — 몇 달째 이어지는 공사(부분통제)는 배차에 의미가 적어 기본으로 숨긴다
+//  "장기 공사" = 공사 · 기타 중 전면통제가 아니고, 시작한 지 하루(LONG_WORK_MS)가 넘은 것
+export const LONG_WORK_MS = 24 * 3600 * 1000;
+export function isLongWork(ev, now = Date.now()) {
+  if (!ev || ev.blocked || (ev.kind !== "work" && ev.kind !== "etc")) return false;
+  const t = Date.parse(ev.start || "");
+  return !t || now - t > LONG_WORK_MS;
+}
+// 관제 · 지도에 기본으로 보일 돌발(장기 공사 빼고)
+export const isRelevant = (ev, now = Date.now()) => !isLongWork(ev, now);
 export const isSevere = (ev) => !!ev && (ev.blocked || ev.kind === "accident" || ev.kind === "disaster" || ev.kind === "hazard");
 
 // ─── 거리 계산 ────────────────────────────────────────────────────────────────
@@ -78,6 +89,7 @@ export function ensureTrafficStyles() {
 .kp-trf-btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:999px;font:800 12px 'Noto Sans KR',system-ui,sans-serif;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(0,0,0,.18)}
 .kp-trf-btn.l{background:#fff;color:#1B2B4B;border:1px solid #D5DDEA}.kp-trf-btn.l.on{background:#1B2B4B;color:#fff;border-color:#1B2B4B}
 .kp-trf-btn.d{background:rgba(11,20,40,.78);color:#CFE0FF;border:1px solid rgba(143,176,240,.3)}.kp-trf-btn.d.on{background:rgba(143,176,240,.95);color:#0B1428;border-color:transparent}
+.kp-trf-row{display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap}.kp-trf-btn.sub{height:26px;padding:0 9px;font-size:11px}
 .kp-trf-btn .dot{width:8px;height:8px;border-radius:50%}
 .kp-trf-pop .leaflet-popup-content{margin:10px 12px;font-family:'Noto Sans KR',system-ui,sans-serif}`;
   document.head.appendChild(st);
@@ -97,6 +109,20 @@ export const subscribeTrafficOn = (fn) => { _onSubs.add(fn); return () => _onSub
 export function useTrafficOn() {
   const on = React.useSyncExternalStore(subscribeTrafficOn, isTrafficOn, isTrafficOn);
   return [on, setTrafficOn];
+}
+
+// 장기 공사 보기(기본 꺼짐 · 기기에 기억)
+const LW_KEY = "kp_traffic_longwork";
+let _lw = (() => { try { return localStorage.getItem(LW_KEY) === "1"; } catch { return false; } })();
+export const isLongWorkOn = () => _lw;
+export function setLongWorkOn(v) {
+  _lw = !!v;
+  try { localStorage.setItem(LW_KEY, _lw ? "1" : "0"); } catch { /* 무시 */ }
+  _onSubs.forEach((fn) => { try { fn(); } catch { /* 무시 */ } });
+}
+export function useLongWorkOn() {
+  const on = React.useSyncExternalStore(subscribeTrafficOn, isLongWorkOn, isLongWorkOn);
+  return [on, setLongWorkOn];
 }
 
 // ─── 돌발상황 데이터(브라우저 하나에 하나 · 90초마다) ──────────────────────────────
@@ -182,8 +208,9 @@ export function useIncidents(enabled = true) {
 }
 
 // 지도 영역 + 확대 수준에 맞게 보여 줄 것만 — 멀리서 볼 땐 공사 · 기타는 숨겨 화면이 복잡하지 않게
-export function visibleIncidents(items, bounds, zoom) {
+export function visibleIncidents(items, bounds, zoom, { longWork = false, now = Date.now() } = {}) {
   if (!Array.isArray(items) || !items.length) return [];
+  if (!longWork) items = items.filter((ev) => !isLongWork(ev, now));
   const pad = bounds ? Math.max(0.05, (bounds.north - bounds.south) * 0.1) : 0;
   const minor = zoom != null && zoom < 10;
   const out = items.filter((ev) => {
