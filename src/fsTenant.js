@@ -206,6 +206,14 @@ function previewSnapshot(ref, args) {
   const t = setTimeout(() => { try { cb?.(demo || (isDocRef(ref) ? emptyDocSnap(ref) : emptyQuerySnap(ref))); } catch (e) { console.warn(e); } }, 0);
   return () => clearTimeout(t);
 }
+// 👀 2026-11-22 관리자 "기사 화면 보기"(/driver-view) — 읽기는 그대로, 쓰기는 모두 막는다(기사 데이터가 실수로 바뀌지 않게)
+let viewOnly = false;
+export function setViewOnly(on) { viewOnly = !!on; }
+export const isViewOnly = () => viewOnly;
+const viewBlocked = () => {
+  try { window.dispatchEvent(new CustomEvent("kp:viewOnlyBlocked")); } catch { /* 무시 */ }
+  return Promise.reject(Object.assign(new Error("관리자 보기 전용 화면이라 저장하지 않았어요"), { code: "kp/view-only" }));
+};
 // 💰 사용량 표본 — 서버에서 받은 문서 수만 센다(캐시에서 온 스냅샷은 요금이 없으므로 제외). 실패해도 화면엔 영향 없음
 const countSnap = (snap) => {
   try {
@@ -226,9 +234,9 @@ const countW = (k = 1) => { try { if (bypass === 0) meterWrite(k); } catch { /* 
 export function getDoc(ref, ...rest) { return preview ? Promise.resolve(emptyDocSnap(ref)) : base.getDoc(ref, ...rest).then(countGet); }
 export function getDocFromCache(ref, ...rest) { return preview ? Promise.resolve(emptyDocSnap(ref)) : base.getDocFromCache(ref, ...rest); }
 export function getDocFromServer(ref, ...rest) { return preview ? Promise.resolve(emptyDocSnap(ref)) : base.getDocFromServer(ref, ...rest).then(countGet); }
-export function updateDoc(...a) { if (preview) return previewBlocked(); countW(); return base.updateDoc(...a); }
-export function deleteDoc(...a) { if (preview) return previewBlocked(); countW(); return base.deleteDoc(...a); }
-export function runTransaction(...a) { return preview ? previewBlocked() : base.runTransaction(...a); }
+export function updateDoc(...a) { if (viewOnly) return viewBlocked(); if (preview) return previewBlocked(); countW(); return base.updateDoc(...a); }
+export function deleteDoc(...a) { if (viewOnly) return viewBlocked(); if (preview) return previewBlocked(); countW(); return base.deleteDoc(...a); }
+export function runTransaction(...a) { if (viewOnly) return viewBlocked(); return preview ? previewBlocked() : base.runTransaction(...a); }
 
 export function onSnapshot(ref, ...args) {
   if (preview) return previewSnapshot(ref, args);
@@ -349,8 +357,8 @@ export function doc(first, ...rest) {
   return base.doc(first, ...rest);
 }
 
-export function addDoc(ref, data) { if (preview) return previewBlocked({ id: `preview-${Date.now()}`, path: "" }); countW(); return base.addDoc(ref, stampData(topCollectionId(ref), data)); }
-export function setDoc(ref, data, ...rest) { if (preview) return previewBlocked(); countW(); return base.setDoc(ref, stampData(docCollectionId(ref), data), ...rest); }
+export function addDoc(ref, data) { if (viewOnly) return viewBlocked(); if (preview) return previewBlocked({ id: `preview-${Date.now()}`, path: "" }); countW(); return base.addDoc(ref, stampData(topCollectionId(ref), data)); }
+export function setDoc(ref, data, ...rest) { if (viewOnly) return viewBlocked(); if (preview) return previewBlocked(); countW(); return base.setDoc(ref, stampData(docCollectionId(ref), data), ...rest); }
 export function writeBatch(db) {
   const b = base.writeBatch(db);
   const set = b.set.bind(b);
@@ -361,7 +369,8 @@ export function writeBatch(db) {
     b.update = (...a) => { ops += 1; return upd(...a); };
     b.delete = (...a) => { ops += 1; return del(...a); };
   } catch { /* 점검용 가짜 SDK */ }
-  if (preview) b.commit = () => previewBlocked();
+  if (viewOnly) b.commit = () => viewBlocked();
+  else if (preview) b.commit = () => previewBlocked();
   else { const commit = b.commit.bind(b); b.commit = (...a) => { countW(ops); ops = 0; return commit(...a); }; }
   return b;
 }

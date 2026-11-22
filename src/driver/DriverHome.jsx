@@ -7,6 +7,8 @@ import { kpConfirm } from "../kpDialog";
 import { deleteDocsAtomic } from "../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { html2canvas } from "../lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import { db, auth, DEFAULT_COMPANY, FUNCTIONS_BASE } from "../firebase";
+import { setViewOnly, setTenant } from "../fsTenant"; // 👀 2026-11-22 관리자 "기사 화면 보기" — 보기 전용(저장 막음) · 그 기사 회사로 보기
+import { readViewAs, clearViewAs } from "./DriverViewAs";
 import {
   doc,
   getDoc,
@@ -1085,6 +1087,8 @@ function useCollisionDetection(uid, driverRef, posRef, onCollision) {
 // ⭐ 2026-11-05 사장님 요청 — 기사앱은 고정폭(디지털) 글꼴을 쓰지 않고 상단 메뉴와 같은 기본 고딕으로(이름은 그대로 둔다)
 const DRV_MONO = "inherit";
 export default function DriverHome() {
+  // 👀 관리자 보기 전용 — /driver-view 에서 고른 기사(이 창에서만). App 라우트가 최고관리자일 때만 이 상태로 연다
+  const [viewAs] = useState(() => readViewAs());
   const [uid, setUid] = useState(null);
   const [driver, setDriver] = useState(null);
   const [activeTab, setActiveTab] = useState("home");
@@ -1190,7 +1194,13 @@ export default function DriverHome() {
 
   useEffect(() => {
     return onAuthStateChanged(auth, (u) => {
-      if (!u) { window.location.href = "/driver-login"; return; }
+      if (!u) { window.location.href = viewAs ? "/driver-view" : "/driver-login"; return; }
+      if (viewAs) { // 관리자 보기 — 고른 기사로 보고, 저장 · 푸시 등록은 하지 않는다
+        setViewOnly(true);
+        setTenant(viewAs.companyName || "");
+        setUid(viewAs.uid);
+        return;
+      }
       setUid(u.uid);
       // ⭐ 사용자 요청 — 지입 기사에게 새 오더 배정을 "앱을 꺼놔도" 알리려면 OS 푸시
       // (FCM)가 필요하다. 운송사 웹앱(MobileApp.jsx)은 이미 saveFcmToken()으로
@@ -1217,7 +1227,7 @@ export default function DriverHome() {
     });
   }, [uid]);
   useEffect(() => {
-    if (!uid || !driver || vehicleSetupCheckedRef.current) return;
+    if (viewAs || !uid || !driver || vehicleSetupCheckedRef.current) return; // 관리자 보기 — 기사 처음 설정 창은 띄우지 않는다
     vehicleSetupCheckedRef.current = true;
     if (shouldShowSetup(uid, driver)) setVehicleSetup(true);
   }, [uid, driver]);
@@ -1227,8 +1237,9 @@ export default function DriverHome() {
   //  · 같은 계정으로 다시 들어오므로 운행일지·서류·알림 등 기록은 그대로다. 로그인 칸은 휴대폰번호로 미리 채워 둔다.
   //  · 자동 로그인을 켜 둔 기사님은 휴대폰번호만 저장해 두고 그대로 둔다(다시 로그인할 일이 없음).
   const reloginCheckedRef = useRef(false);
+  useEffect(() => () => { if (viewAs) setViewOnly(false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!uid || !driver || reloginCheckedRef.current) return;
+    if (viewAs || !uid || !driver || reloginCheckedRef.current) return; // 관리자 보기에서는 다시 로그인 안내 없음
     reloginCheckedRef.current = true;
     try {
       if (localStorage.getItem("driverLoginV2") === "1") return;
@@ -1461,7 +1472,7 @@ export default function DriverHome() {
   }, [driver?.companyName]);
 
   const allLogs = useAllDriverLogs(uid);
-  const { pos, permissionDenied, resetTotalDist } = useGpsTracking(uid, driver);
+  const { pos, permissionDenied, resetTotalDist } = useGpsTracking(viewAs ? null : uid, driver); // 관리자 보기 — 내 PC 위치를 기사 위치로 쓰지 않는다
 
   // 오늘 로그 (홈탭 요약 + 상태표시용)
   const todayLogs = React.useMemo(() => {
@@ -1487,7 +1498,7 @@ export default function DriverHome() {
   // Keep refs in sync with latest state (avoid stale closures in collision hook)
   useEffect(() => { driverRef.current = driver; }, [driver]);
   useEffect(() => { posRef.current = pos; }, [pos]);
-  useCollisionDetection(uid, driverRef, posRef, (mag) => {
+  useCollisionDetection(viewAs ? null : uid, driverRef, posRef, (mag) => {
     setCollisionAlert({ magnitude: mag, time: new Date() });
   });
 
@@ -2100,7 +2111,16 @@ export default function DriverHome() {
     }
   }, [uid, statusLoading, driver, companyDefaultLoc, pos, updateStatus]);
 
+  // 👀 관리자 보기 끝내기 — 관리자 로그인은 그대로 두고 기사 고르기 화면으로
+  const exitView = () => { clearViewAs(); setViewOnly(false); window.location.replace("/driver-view"); };
+  useEffect(() => {
+    if (!viewAs) return undefined;
+    const h = () => showToast("관리자 보기 전용이라 저장되지 않아요");
+    window.addEventListener("kp:viewOnlyBlocked", h);
+    return () => window.removeEventListener("kp:viewOnlyBlocked", h);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const handleLogout = async () => {
+    if (viewAs) { exitView(); return; }
     // 직접 로그아웃한 직후엔 로그인 화면에서 자동 로그인하지 않도록 표시
     try { sessionStorage.setItem("driverJustLoggedOut", "1"); } catch (_) {}
     await stopNativeTracking();
@@ -2259,6 +2279,13 @@ export default function DriverHome() {
 
   return (
     <div className="kpd-root kpd-shell" style={{ display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: '"Pretendard", "Noto Sans KR", sans-serif' }}>
+      {viewAs && (
+        <div data-view-as style={{ position: "relative", zIndex: 2147483000, flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "calc(8px + env(safe-area-inset-top)) 14px 8px", background: "#0B1428", color: "#fff" }}>
+          <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.12em", color: "#8FB0F0", whiteSpace: "nowrap" }}>관리자 보기</span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{viewAs.companyName} · {viewAs.name} {viewAs.carNo} <span style={{ color: "rgba(255,255,255,.55)", fontWeight: 700 }}>· 저장 안 됨</span></span>
+          <button type="button" onClick={exitView} style={{ height: 32, padding: "0 12px", borderRadius: 10, background: "rgba(255,255,255,.12)", color: "#fff", fontSize: 12.5, fontWeight: 900, border: "1px solid rgba(255,255,255,.18)", whiteSpace: "nowrap" }} data-view-exit>나가기</button>
+        </div>
+      )}
       <style>{`@keyframes fmBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }`}</style>
 
       {/* ⭐ 2026-11-05 가운데 큰 팝업 — 삭제된 오더 안내 > 새 오더 승인/거절 > 출근 안내 (한 번에 하나만) */}
@@ -2926,7 +2953,7 @@ export default function DriverHome() {
       )}
 
       {/* ⭐ 2026-11-10 처음 로그인 — 현재 키로수(필수)를 가장 먼저, 저장하면 아래 차량 기본 설정이 이어서 뜬다 */}
-      {uid && driver && needFirstOdo(driver) && (
+      {!viewAs && uid && driver && needFirstOdo(driver) && ( /* 관리자 보기 — 기사 처음 설정 창은 띄우지 않는다 */
         <OdoFirstSheet uid={uid} by={`${driver.name || driver.이름 || "기사"}(기사)`} onDone={() => showToast("현재 키로수를 저장했습니다")} />
       )}
       {/* 🛠 2026-11-18 점검 — 새 오더 · 수정된 오더 · 삭제 안내 창이 떠 있으면 차량 설정은 기다린다(예전엔 설정 창이 오더 승인 창을 덮어 [승인]이 안 보였다) */}
