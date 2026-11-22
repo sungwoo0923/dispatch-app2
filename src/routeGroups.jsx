@@ -30,15 +30,25 @@ const readSel = (uid) => { try { const v = JSON.parse(localStorage.getItem(LS(ui
 // sel: "all" | "mine" | [묶음…]
 export function useRouteGroupFilter({ enabled, uid, profile, company = "" }) {
   const mine = React.useMemo(() => (Array.isArray(profile?.routeGroups) ? profile.routeGroups.filter(Boolean) : []), [profile?.routeGroups]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [selRaw, setSelRaw] = React.useState(() => readSel(uid));
-  React.useEffect(() => { setSelRaw(readSel(uid)); }, [uid]);
+  // ⭐ 2026-11-22 고른 탭은 계정에 저장(users/{uid}.routeGroupSel) — PC에서 고른 것이 휴대폰에서도, 휴대폰에서 고른 것이 PC에서도 그대로
+  //  (예전엔 이 기기 브라우저에만 저장돼 기기마다 달랐다). 계정 값이 없으면 이 기기에 저장된 값.
+  const validSel = (v) => (v === "all" || v === "mine" || Array.isArray(v) ? v : null);
+  const [selRaw, setSelRaw] = React.useState(() => validSel(profile?.routeGroupSel) ?? readSel(uid));
+  React.useEffect(() => { setSelRaw(validSel(profile?.routeGroupSel) ?? readSel(uid)); }, [uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  const acctSelKey = JSON.stringify(profile?.routeGroupSel ?? null);
+  React.useEffect(() => { const v = validSel(profile?.routeGroupSel); if (v) { setSelRaw(v); try { localStorage.setItem(LS(uid), JSON.stringify(v)); } catch { /* 무시 */ } } }, [acctSelKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // 지금 보는 화면(setScreen 으로 알려 준다) — 매출관리는 들어갈 때마다 [전체]
   const [screen, setScreenRaw] = React.useState("");
   const [tmpSel, setTmpSel] = React.useState("all");
   const setScreen = React.useCallback((sc) => { setScreenRaw(String(sc || "")); setTmpSel("all"); }, []);
   const allFirst = RG_ALL_FIRST.includes(screen);
   const sel = allFirst ? tmpSel : (selRaw ?? (mine.length ? "mine" : "all"));
-  const setSel = React.useCallback((v) => { if (allFirst) return setTmpSel(v); setSelRaw(v); try { localStorage.setItem(LS(uid), JSON.stringify(v)); } catch { /* 무시 */ } }, [uid, allFirst]);
+  const setSel = React.useCallback((v) => {
+    if (allFirst) return setTmpSel(v);
+    setSelRaw(v);
+    try { localStorage.setItem(LS(uid), JSON.stringify(v)); } catch { /* 무시 */ }
+    if (uid && !isViewerNow()) setDoc(doc(db, "users", uid), { routeGroupSel: v }, { merge: true }).catch(() => {}); // 다른 기기에도 그대로
+  }, [uid, allFirst]);
   const active = !enabled || !rgOnScreen(screen) || sel === "all" ? null : sel === "mine" ? (mine.length ? mine : null) : (sel.length ? sel : null);
   const key = active ? active.join("\u0001") : "";
   const filter = React.useCallback((rows) => {

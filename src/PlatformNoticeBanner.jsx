@@ -138,7 +138,7 @@ export default function PlatformNoticeBanner({ audience = "carrier", company = "
   const items = all.filter((n) => n.banner !== false && !read.has(n.id));
   if (!items.length) return null;
   const n = items[0];
-  const dismiss = () => markPlatformNoticeRead(n.id);
+  const dismiss = () => hidePlatformNoticeForever(n.id); // ⭐ 2026-11-22 닫으면 계정에 남겨 다른 기기 · 다음 접속에서도 다시 안 뜬다
   const strong = n.level === "중요" || n.level === "점검" || n.level === "긴급";
   return (
     <div className="relative text-white" style={{ background: strong ? "linear-gradient(90deg,#0B1428,#1B2B4B)" : "linear-gradient(90deg,#1B2B4B,#2D4C82)" }}>
