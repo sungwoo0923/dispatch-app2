@@ -1,0 +1,13 @@
+<html><head><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet"><style>body{margin:0;background:#EEF1F6;font-family:'Noto Sans KR';padding:46px;width:2300px;box-sizing:border-box;color:#0F1A30}
+h1{font-size:40px;margin:0 0 6px;font-weight:900}p.s{margin:0 0 30px;font-size:21px;color:#55657F}
+.g{display:grid;grid-template-columns:repeat(5,1fr);gap:26px}.c{background:#fff;border-radius:26px;padding:22px;box-shadow:0 14px 40px rgba(15,26,48,.07)}
+.c img.b{width:100%;display:block}.t{font-size:23px;font-weight:900;margin-top:14px}.k{display:inline-block;font-size:15px;color:#fff;background:#0F1A30;border-radius:7px;padding:1px 8px;margin-right:8px;vertical-align:3px}
+.d{font-size:16px;color:#55657F;line-height:1.55;margin-top:6px;min-height:100px}.sm{display:flex;gap:12px;align-items:flex-end;margin-top:12px}
+.lk{display:flex;align-items:center;gap:12px;border-radius:16px;padding:14px 16px;margin-top:14px;background:radial-gradient(120% 140% at 90% -20%,#2D4C82 0%,#1B2B4B 45%,#0F1A30 80%,#0B1428 100%)}.wm{font-size:19px;font-weight:900;letter-spacing:.13em;color:#fff}.hub{font-weight:900;font-size:12px;letter-spacing:.08em;border-radius:5px;padding:1px 6px;margin-left:6px;background:#8FB0F0;color:#0B1428}</style></head><body>
+<h1>로지스웹 허브 로고 — F3 계열 새 시안</h1><p class="s">같은 네이비 · 와이어 · 금색 허브 · 노선 언어로, 모양만 다르게</p><div class="g" id="g"></div>
+<script>const O=[["F3","F3_wirenet_orbit","(기준) 와이어 네트워크 + 궤도","지난번에 고르신 안 — 비교용"],
+["H","H_geodesic","지오데식 지구","지구를 삼각형 그물(지오데식)로 짰어요. 데이터 · 3D 그래픽 느낌이 가장 강한 '디지털 지구'."],
+["I","I_double_orbit","이중 궤도","엇갈린 궤도 두 개에 위성 노드가 돌아요. 위성 통신망 · 플랫폼처럼 '24시간 연결' 느낌."],
+["J","J_horizon","지평선 + 떠오르는 허브","우주에서 본 지구의 지평선 위로 금색 허브가 해처럼 떠오르고 노선이 퍼져요. 가로 배너 · 첫 화면에 특히 멋있어요."],
+["K","K_hex_circuit","육각 회로 배지","육각 테두리(허브 = 벌집 · 연결) 안에 지구, 테두리에서 회로 선이 들어와요. 반도체 · 기술 회사 같은 단단한 인상."]];
+document.getElementById("g").innerHTML=O.map(([k,f,t,d])=>`<div class="c"><img class="b" src="${f}.svg"><div class="t"><span class="k">${k}</span>${t}</div><div class="d">${d}</div><div class="sm"><img src="${f}.svg" width="72"><img src="${f}.svg" width="44"><img src="${f}.svg" width="24"></div><div class="lk"><img src="${f}.svg" width="46"><div><span class="wm">LOGISWEB</span><span class="hub">HUB</span></div></div></div>`).join("");</script></body></html>

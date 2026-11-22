@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1440 1440" width="256" height="256"><defs><linearGradient id="t93a" x1="0" y1="0" x2=".55" y2="1"><stop offset="0" stop-color="#2B4880"/><stop offset="1" stop-color="#16264A"/></linearGradient><radialGradient id="t93b" cx=".3" cy=".1" r=".8"><stop offset="0" stop-color="rgba(143,176,240,.22)"/><stop offset="1" stop-color="rgba(143,176,240,.22)" stop-opacity="0"/></radialGradient></defs><rect width="1440" height="1440" rx="300" fill="url(#t93a)"/><rect width="1440" height="1440" rx="300" fill="url(#t93b)"/><defs>
+<linearGradient id="m94l" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#D4DDEE"/></linearGradient>
+<linearGradient id="m94w" x1="0" y1="0" x2=".6" y2="1"><stop offset="0" stop-color="#4E6FB4"/><stop offset="1" stop-color="#34528F"/></linearGradient>
+<linearGradient id="m94g" gradientUnits="userSpaceOnUse" x1="190" y1="0" x2="1240" y2="0"><stop offset="0" stop-color="#FFD27A" stop-opacity="0"/><stop offset=".45" stop-color="#FFD27A"/><stop offset="1" stop-color="#FFD27A"/></linearGradient>
+<radialGradient id="m94d"><stop offset="0" stop-color="#FFD27A" stop-opacity=".7"/><stop offset="1" stop-color="#FFD27A" stop-opacity="0"/></radialGradient>
+</defs><g>
+<polyline points="190,982 867,1358 1240,1145" fill="none" stroke="url(#m94g)" stroke-width="8"/>
+<circle cx="1240" cy="1145" r="60" fill="url(#m94d)"/><circle cx="1240" cy="1145" r="17" fill="#FFD27A"/>
+<path d="M216 270 L367 186 L367 797 L552 902 L552 1076 L216 884 Z" fill="url(#m94l)"/>
+<path d="M552 440 L709 350 L709 988 L789 1030 L789 302 L945 212 L945 1025 L1024 983 L1024 168 L1182 77 L1182 1078 L867 1258 L552 1076 Z" fill="url(#m94w)" stroke="#9DB2DA" stroke-width="7" stroke-linejoin="miter"/>
+</g></svg>

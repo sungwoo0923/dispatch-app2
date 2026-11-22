@@ -14,7 +14,7 @@ self.addEventListener("push", (event) => {
   const body = data.body || payload.notification?.body || "";
   event.waitUntil(self.registration.showNotification(title, {
     body,
-    icon: "/brand/logisweb-mark-square.svg",
+    icon: "/brand/hub-icon-192.png",
     badge: "/favicon.svg",
     vibrate: [220, 120, 220],
     tag: data.tag || `hub-${Date.now()}`,

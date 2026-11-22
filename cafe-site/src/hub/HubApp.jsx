@@ -13,7 +13,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import { HI, Btn, Chip, Badge, Card, Empty, Seg, HubMark, NAVY_BG, HUB_CSS, NUMS, useToast, Avatar, selectCls, inputCls, Drawer, Field, MultiSelect } from "./hubUi";
 import { ROLES, canPost, canTake, SIDO_LIST, sigunguOf, HUB_VEHICLES, HUB_TONS, tonValue, regionLL, kmBetweenLL, nearestRegion, ago, ACTIVE, speakText, routeText, manwon, kstYmd, tsMs, DOC_TYPES, isLinked, stageOf, payKind } from "./hubConstants";
-import { subscribeMember, subscribeBoard, refreshBoard, subscribeMine, subscribeCompanyPosts, subscribeNotices, markRead, updatePrefs, localSession, subscribeHubConfig, subscribeWallet, subscribeAnnouncements, enableHubPush, pushEnabledHere, disableHubPush, fetchPrivate, subscribeDevice, callHub } from "./hubApi";
+import { subscribeMember, subscribeBoard, refreshBoard, subscribeMine, subscribeCompanyPosts, subscribeNotices, markRead, updatePrefs, localSession, sessionField, subscribeHubConfig, subscribeWallet, subscribeAnnouncements, enableHubPush, pushEnabledHere, disableHubPush, fetchPrivate, subscribeDevice, callHub } from "./hubApi";
 import { createClaimsSync } from "../../../src/claimsSync";
 // 🎫 2026-11-08 로그인 토큰 권한 — hubMembers/{uid}.claimsAt 이 바뀌면 토큰을 새로 받는다(승인·회사 키 변경이 다시 로그인 없이 바로 적용)
 const hubClaimsSync = createClaimsSync({ getUser: () => auth.currentUser, call: (name, data) => callHub(name, data) });
@@ -241,12 +241,14 @@ export default function HubApp() {
     getDoc(doc(db, "users", authUser.uid)).then((s) => setIsAdmin(authUser.email === TOTAL_MASTER_EMAIL || (s.exists() && s.data().role === "totalMaster"))).catch(() => setIsAdmin(authUser.email === TOTAL_MASTER_EMAIL)).finally(() => setAdminChecked(true));
     return subscribeMember(authUser.uid, (m) => { setMe(m ? { ...m, uid: authUser.uid } : null); if (m) hubClaimsSync.check(m.claimsAt); });
   }, [authUser]);
-  // 한 계정 한 기기 — 다른 기기에서 로그인하면 여기서 로그아웃
+  // 한 계정 PC 1대 + 휴대폰 1대 — 같은 종류의 다른 기기에서 로그인하면 여기서 로그아웃(관리자는 제외)
+  const sessKey = sessionField();
   useEffect(() => {
-    if (!me?.activeSession) return;
+    const cur = me?.[sessKey];
+    if (!cur || !adminChecked || isAdmin) return; // 관리자인지 확인한 뒤에만
     const mine = localSession();
-    if (mine && me.activeSession !== mine) { signOut(auth).then(() => { kpAlert("다른 기기에서 로그인해서 이 기기는 로그아웃했어요.", { title: "로그아웃했어요" }); nav("/login", { replace: true }); }); }
-  }, [me?.activeSession]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (mine && cur !== mine) { signOut(auth).then(() => { kpAlert(`다른 ${sessKey === "activeSessionPc" ? "PC" : "휴대폰"}에서 같은 계정으로 로그인해서 이 기기는 로그아웃했어요.`, { title: "로그아웃했어요" }); nav("/login", { replace: true }); }); }
+  }, [me?.[sessKey], isAdmin, adminChecked]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ⭐ 2026-11-07 허브 가입 차주는 등록 휴대폰에서만 — 앱이 켜질 때(로그인 유지 상태 포함) · 다른 휴대폰으로 옮겨질 때 확인
   const devCheck = !!me && !isAdmin && me.role === "driver" && me.source === "signup";
@@ -618,7 +620,7 @@ export default function HubApp() {
       <header className="sticky top-0 z-30 bg-[#EEF1F6]/90 backdrop-blur-md border-b border-[#E2E7EF] lg:bg-[#EEF1F6]/80">
         <div className="lg:hidden text-white px-4 pt-[env(safe-area-inset-top)]" style={NAVY_BG}>
           <div className="h-[60px] flex items-center gap-2">
-            <img src="/brand/logisweb-mark-square.svg" alt="" className="w-9 h-9 rounded-[10px]" />
+            <img src="/brand/hub-mark.svg" alt="" className="w-9 h-9 rounded-[10px]" />
             <div className="min-w-0 flex-1"><div className="text-[18px] font-extrabold leading-tight truncate">{titles[tab]}</div><div className="text-[13px] font-semibold text-white/55 truncate">{ROLES[me.role]?.label} {me.name}</div></div>
             <Balance dark />
             <button type="button" onClick={() => go("notices")} aria-label="알림" data-testid="btn-bell-m" className={`relative w-11 h-11 rounded-2xl inline-flex items-center justify-center shrink-0 ${tab === "notices" ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-white/10"}`}><HI name="bell" size={19} />{unread > 0 && <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-[#8FB0F0] text-[#0B1428] text-[13px] font-extrabold inline-flex items-center justify-center" data-testid="bell-count">{unread}</span>}</button>

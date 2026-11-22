@@ -70,13 +70,24 @@ export function missingDocs(role, docs = {}) {
   return (ROLE_DOCS[role]?.required || []).filter((k) => !docs?.[k]?.path);
 }
 
-// 한 계정 한 기기 — 로그인할 때 기기 번호를 남기고, 다른 기기에서 로그인하면 먼저 쓰던 기기는 로그아웃된다(계정 공유 방지)
+// 한 계정 PC 1대 + 휴대폰 1대(로지스웹 운송 프로그램과 같은 기준) — 로그인할 때 기기 번호를 남기고,
+//  같은 종류(PC끼리 · 휴대폰끼리)의 다른 기기에서 로그인하면 먼저 쓰던 기기만 로그아웃된다(계정 공유 방지).
+//  ⭐ 2026-11-22 예전엔 PC · 휴대폰 합쳐 1대라, 운송사 직원이 PC와 휴대폰을 같이 쓰면 서로 계속 튕겼다.
+//   PC는 activeSessionPc, 휴대폰은 activeSession(예전 칸 그대로 — 차주는 휴대폰만).
 const SESSION_KEY = "hubSession";
+const isPhone = () => {
+  if (typeof navigator === "undefined") return true;
+  if (navigator.userAgentData?.mobile) return true;
+  const ua = navigator.userAgent || "";
+  return /Android|iPhone|iPod|iPad|Mobile/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+};
+export const sessionField = () => (isPhone() ? "activeSession" : "activeSessionPc");
 export function localSession() { try { return localStorage.getItem(SESSION_KEY) || ""; } catch { return ""; } }
 export async function claimSession(uid) {
   const sid = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  // 서버에 먼저 쓰고 성공한 뒤에 이 기기 번호를 바꾼다(쓰기가 실패하면 번호가 어긋나 곧바로 로그아웃되던 문제)
+  try { await updateDoc(memberRef(uid), { [sessionField()]: sid, lastLoginAt: serverTimestamp() }); } catch { try { localStorage.removeItem(SESSION_KEY); } catch { /* 무시 */ } return ""; }
   try { localStorage.setItem(SESSION_KEY, sid); } catch { /* 무시 */ }
-  await updateDoc(memberRef(uid), { activeSession: sid, lastLoginAt: serverTimestamp() }).catch(() => {});
   return sid;
 }
 // ⭐ 2026-11-07 서버 함수(callable) — 차주 기기 등록 · 관리자 로그인 정보 변경 · 기기 초기화(functions/hubDriverAuth.js)
