@@ -1,0 +1,31 @@
+<html><head><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet"><style>
+body{margin:0;background:#EEF1F6;font-family:'Noto Sans KR';width:2200px;padding:48px;box-sizing:border-box;color:#0F1A30}
+h1{font-size:44px;margin:0 0 6px;font-weight:900}p.s{margin:0 0 30px;font-size:22px;color:#55657F}
+.g{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+.card{background:#fff;border-radius:28px;padding:30px;box-shadow:0 14px 40px rgba(15,26,48,.07)}
+.top{display:flex;gap:26px;align-items:center}.tile{width:200px;height:200px}.sm{display:flex;flex-direction:column;gap:14px;align-items:center}
+.t{font-size:30px;font-weight:900}.k{display:inline-block;font-size:17px;font-weight:900;color:#fff;background:#0F1A30;border-radius:8px;padding:2px 10px;margin-right:10px;vertical-align:4px}
+.d{font-size:19px;color:#55657F;line-height:1.6;margin-top:8px}
+.lock{display:flex;gap:16px;margin-top:22px}.lk{flex:1;border-radius:20px;padding:22px 24px;display:flex;align-items:center;gap:16px}
+.dark{background:radial-gradient(120% 140% at 90% -20%,#2D4C82 0%,#1B2B4B 45%,#0F1A30 80%,#0B1428 100%)}.light{background:#F5F7FB;border:1px solid #E3E8F0}
+.wm{font-size:25px;font-weight:900;letter-spacing:.14em;line-height:1}
+.hub{font-weight:900;font-size:15px;letter-spacing:.08em;border-radius:6px;padding:1px 8px;margin-left:8px}
+.sub{font-size:14px;font-weight:700;margin-top:6px}
+.rec{font-size:16px;font-weight:900;color:#2D4C82;margin-left:8px}
+</style></head><body>
+<h1>로지스웹 허브 대표 로고 시안</h1><p class="s">로지스웹 마크와 같은 색 · 같은 기울기(아이소메트릭) · 금색 포인트 한 곳 — 알록달록하지 않게, 네이비 한 톤</p>
+<div class="g" id="g"></div>
+<script>
+const O=[
+ ["A","network","전국 네트워크","가운데 금색 허브(로지스웹 허브)에 6개 운송사 노드가 연결돼요. '전국 운송사가 모이는 곳'이 가장 바로 읽혀요.",true],
+ ["B","bridge","H 브리지","로지스웹 마크의 기울어진 기둥 두 개를 다리로 이은 'H'. 운송사와 운송사를 잇는다는 뜻, 아래 금색 노선은 로지스웹 마크와 같아요. 한 가족 느낌이 가장 강해요.",true],
+ ["C","pin","핀 + 주고받기","지도 핀 안에 오가는 화살표 두 개 — '어디서든 오더를 주고받는다'. 휴대폰 아이콘으로 작게 봐도 잘 보여요.",false],
+ ["D","lw","로지스웹 마크 + HUB","지금 쓰는 로지스웹 마크 그대로 + HUB 배지. 새로 알릴 것이 없어 가장 안전하지만, 허브만의 얼굴은 약해요.",false],
+];
+const src=(k)=>k==="lw"?"../../public/brand/logisweb-mark-square.svg":`${{network:"A_network",bridge:"B_bridge",pin:"C_pin"}[k]}.svg`;
+document.getElementById("g").innerHTML=O.map(([id,k,t,d,rec])=>`<div class="card">
+<div class="top"><img class="tile" src="${src(k)}"><div class="sm"><img src="${src(k)}" width="64"><img src="${src(k)}" width="32"><img src="${src(k)}" width="20"></div>
+<div style="flex:1"><div class="t"><span class="k">${id}</span>${t}${rec?'<span class="rec">추천</span>':''}</div><div class="d">${d}</div></div></div>
+<div class="lock"><div class="lk dark"><img src="${src(k)}" width="58"><div><div style="display:flex;align-items:center"><span class="wm" style="color:#fff">LOGISWEB</span><span class="hub" style="background:#8FB0F0;color:#0B1428">HUB</span></div><div class="sub" style="color:rgba(255,255,255,.6)">로지스웹 허브 · 전국 운송사 오더 네트워크</div></div></div>
+<div class="lk light"><img src="${src(k)}" width="58"><div><div style="display:flex;align-items:center"><span class="wm" style="color:#0F1A30">LOGISWEB</span><span class="hub" style="background:#1B2B4B;color:#fff">HUB</span></div><div class="sub" style="color:#5F6E87">로지스웹 허브 · 전국 운송사 오더 네트워크</div></div></div></div></div>`).join("");
+</script></body></html>
