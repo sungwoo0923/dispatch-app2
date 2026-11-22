@@ -24,3 +24,17 @@ make("U3c_route_from_b.svg", [(170, 1000), (720, 1210), (1290, 1000), (1330, 760
 # D 밝은 바탕 버전(A와 같은 선, 네이비 글자)
 make("U3d_light.svg", [(170, 1020), (800, 1230), (1290, 1060)], bg="#F2F5FA", letters=NAVY)
 print("ok")
+
+# ── 2026-11-22 일자 선 + 약한 그라데이션
+def straight(name, y=1100, x0=200, x1=1270, w=12, c0=GOLD, o0=.25, c1=GOLD, bg=NAVY, letters=WHITE):
+    defs = (f'<defs><linearGradient id="st" gradientUnits="userSpaceOnUse" x1="{x0}" y1="0" x2="{x1}" y2="0">'
+            f'<stop offset="0" stop-color="{c0}" stop-opacity="{o0}"/><stop offset="1" stop-color="{c1}"/></linearGradient>'
+            f'<radialGradient id="dot"><stop offset="0" stop-color="{GOLD}" stop-opacity=".7"/><stop offset="1" stop-color="{GOLD}" stop-opacity="0"/></radialGradient></defs>')
+    body = (f'<g transform="translate(58 30) scale(.92)">{LETTERS.replace(WHITE, letters)}'
+            f'<line x1="{x0}" y1="{y}" x2="{x1}" y2="{y}" stroke="url(#st)" stroke-width="{w}" stroke-linecap="round"/>'
+            f'<circle cx="{x1}" cy="{y}" r="66" fill="url(#dot)"/><circle cx="{x1}" cy="{y}" r="24" fill="{GOLD}"/></g>')
+    open(name, "w").write(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 1440">{defs}<rect width="1440" height="1440" rx="300" fill="{bg}"/>{body}</svg>')
+straight("U3e_line_gold.svg")                                   # 금색 · 왼쪽이 옅게
+straight("U3f_line_sky_gold.svg", w=16, c0=SKY, o0=.35)        # 하늘색 → 금색
+straight("U3g_line_light.svg", bg="#F2F5FA", letters=NAVY, c0="#C9A24A", o0=.2)  # 밝은 바탕
+print("ok2")
