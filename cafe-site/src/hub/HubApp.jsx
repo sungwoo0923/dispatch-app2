@@ -251,7 +251,7 @@ export default function HubApp() {
   }, [me?.[sessKey], isAdmin, adminChecked]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ⭐ 2026-11-07 허브 가입 차주는 등록 휴대폰에서만 — 앱이 켜질 때(로그인 유지 상태 포함) · 다른 휴대폰으로 옮겨질 때 확인
-  const devCheck = !!me && !isAdmin && me.role === "driver" && me.source === "signup";
+  const devCheck = !!me && adminChecked && !isAdmin && me.role === "driver" && me.source === "signup"; // 관리자인지 확인한 뒤에만(관리자는 기기 확인 없음)
   const [devOk, setDevOk] = useState(undefined);
   useEffect(() => {
     if (!devCheck || !authUser) { setDevOk(undefined); return undefined; }

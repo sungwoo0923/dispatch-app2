@@ -69,7 +69,7 @@ export function shortHolidayLabel(name) {
 // 브라우저 기본 달력(type="date")을 대체하는 커스텀 날짜 선택기 — PC/모바일 공용.
 // 트리거는 그대로 두고 달력 패널만 document.body에 fixed 포지션 portal로 띄운다.
 const CustomDatePicker = React.forwardRef(function CustomDatePicker(
-  { value, onChange, className = "", placeholder = "날짜 선택", disabled = false, showIcon = false },
+  { value, onChange, className = "", placeholder = "날짜 선택", disabled = false, showIcon = false, display, testid },
   ref
 ) {
   const [open, setOpen] = React.useState(false);
@@ -151,11 +151,12 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
       <button
         type="button"
         ref={btnRef}
+        data-testid={testid}
         disabled={disabled}
         onClick={() => { if (disabled) return; setOpen((v) => !v); }}
         className={`${className} text-left ${showIcon ? "flex items-center justify-between gap-1.5" : ""}`}
       >
-        <span>{value || <span className="text-gray-400">{placeholder}</span>}</span>
+        <span>{value ? (display ? display(value) : value) : <span className="text-gray-400">{placeholder}</span>}</span>
         {showIcon && (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-70 shrink-0">
             <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />

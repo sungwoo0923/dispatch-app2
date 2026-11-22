@@ -42,7 +42,7 @@ export default function HubOrderCard({ o, onOpen, mine, fav, fresh, extraKm, com
         <div className="mt-3 flex items-center gap-x-2 gap-y-1 flex-wrap text-[15px] font-bold text-[#1B2B4B]">
           <span className="inline-flex items-center gap-1"><HI name="truck" size={16} className="text-[#2D4C82]" />{o.차량톤수} {o.차량종류}{o.대수 && o.대수 !== "1대" ? ` ${o.대수}` : ""}</span>
           {o.화물내용 && <><span className="w-px h-3.5 bg-[#D6DEEA]" aria-hidden="true" /><span className="truncate max-w-[60%]">{o.화물내용}</span></>}
-          {o.파레트 ? <><span className="w-px h-3.5 bg-[#D6DEEA]" aria-hidden="true" /><span>{o.파레트}파레트</span></> : null}
+          {o.화물타입 && o.화물수량 ? <><span className="w-px h-3.5 bg-[#D6DEEA]" aria-hidden="true" /><span>{o.화물수량}{o.화물타입}</span></> : o.파레트 ? <><span className="w-px h-3.5 bg-[#D6DEEA]" aria-hidden="true" /><span>{o.파레트}파레트</span></> : null}
           {o.중량 && <><span className="w-px h-3.5 bg-[#D6DEEA]" aria-hidden="true" /><span>{o.중량} 이하</span></>}
           {!compact && o.상차방법 && <><span className="w-px h-3.5 bg-[#D6DEEA]" aria-hidden="true" /><span className="text-[#55657F]">{o.상차방법}</span></>}
         </div>
