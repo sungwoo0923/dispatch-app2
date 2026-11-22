@@ -115,7 +115,7 @@ export default async function handler(req, res) {
         } catch (e) { return { name, error: String(e?.cause?.code || e?.message || e), ms: Date.now() - t0 }; }
       }));
       res.setHeader("Cache-Control", "no-store");
-      return res.status(200).json({ ok: true, keyLength: key.length, out });
+      return res.status(200).json({ ok: true, keyLength: key.length, region: process.env.VERCEL_REGION || "", out });
     }
     if (kind === "cctv") {
       const lat = num(req.query.lat), lng = num(req.query.lng);
