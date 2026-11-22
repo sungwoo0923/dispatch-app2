@@ -319,7 +319,7 @@ export function Empty({ icon = "inbox", title, desc, action }) {
 export function HubMark({ size = 36, dark = true, label = true }) {
   return (
     <span className="inline-flex items-center gap-2.5 select-none">
-      <img src="/brand/logisweb-mark-square.svg" alt="" width={size} height={size} className="rounded-[10px] shrink-0" style={{ width: size, height: size }} />
+      <img src="/brand/hub-mark.svg" alt="" width={size} height={size} className="rounded-[10px] shrink-0" style={{ width: size, height: size }} />
       {label && (
         <span className="flex flex-col leading-none gap-1">
           <span className="flex items-center gap-1.5">

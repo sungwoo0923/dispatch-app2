@@ -38,3 +38,9 @@ straight("U3e_line_gold.svg")                                   # 금색 · 왼�
 straight("U3f_line_sky_gold.svg", w=16, c0=SKY, o0=.35)        # 하늘색 → 금색
 straight("U3g_line_light.svg", bg="#F2F5FA", letters=NAVY, c0="#C9A24A", o0=.2)  # 밝은 바탕
 print("ok2")
+
+# ── 2026-11-22 확정: E 금색 일자 → 허브 사이트 아이콘 파일(cafe-site/public/brand)
+straight("../../../cafe-site/public/brand/hub-mark.svg")
+# 작은 크기(브라우저 탭 · 알림)용 — 선 · 점을 굵게
+straight("../../../cafe-site/public/brand/hub-mark-small.svg", w=34, o0=.45)
+print("brand ok")

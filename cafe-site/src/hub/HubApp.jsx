@@ -620,7 +620,7 @@ export default function HubApp() {
       <header className="sticky top-0 z-30 bg-[#EEF1F6]/90 backdrop-blur-md border-b border-[#E2E7EF] lg:bg-[#EEF1F6]/80">
         <div className="lg:hidden text-white px-4 pt-[env(safe-area-inset-top)]" style={NAVY_BG}>
           <div className="h-[60px] flex items-center gap-2">
-            <img src="/brand/logisweb-mark-square.svg" alt="" className="w-9 h-9 rounded-[10px]" />
+            <img src="/brand/hub-mark.svg" alt="" className="w-9 h-9 rounded-[10px]" />
             <div className="min-w-0 flex-1"><div className="text-[18px] font-extrabold leading-tight truncate">{titles[tab]}</div><div className="text-[13px] font-semibold text-white/55 truncate">{ROLES[me.role]?.label} {me.name}</div></div>
             <Balance dark />
             <button type="button" onClick={() => go("notices")} aria-label="알림" data-testid="btn-bell-m" className={`relative w-11 h-11 rounded-2xl inline-flex items-center justify-center shrink-0 ${tab === "notices" ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-white/10"}`}><HI name="bell" size={19} />{unread > 0 && <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-[#8FB0F0] text-[#0B1428] text-[13px] font-extrabold inline-flex items-center justify-center" data-testid="bell-count">{unread}</span>}</button>
