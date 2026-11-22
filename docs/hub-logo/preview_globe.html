@@ -1,0 +1,31 @@
+<html><head><link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet"><style>
+body{margin:0;background:#EEF1F6;font-family:'Noto Sans KR';width:2200px;padding:48px;box-sizing:border-box;color:#0F1A30}
+h1{font-size:44px;margin:0 0 6px;font-weight:900}p.s{margin:0 0 30px;font-size:22px;color:#55657F}
+.g{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+.card{background:#fff;border-radius:28px;padding:30px;box-shadow:0 14px 40px rgba(15,26,48,.07)}
+.top{display:flex;gap:26px;align-items:center}.tile{width:200px;height:200px}.sm{display:flex;flex-direction:column;gap:14px;align-items:center}
+.t{font-size:30px;font-weight:900}.k{display:inline-block;font-size:17px;font-weight:900;color:#fff;background:#0F1A30;border-radius:8px;padding:2px 10px;margin-right:10px;vertical-align:4px}
+.d{font-size:19px;color:#55657F;line-height:1.6;margin-top:8px}
+.lock{display:flex;gap:16px;margin-top:22px}.lk{flex:1;border-radius:20px;padding:22px 24px;display:flex;align-items:center;gap:16px}
+.dark{background:radial-gradient(120% 140% at 90% -20%,#2D4C82 0%,#1B2B4B 45%,#0F1A30 80%,#0B1428 100%)}.light{background:#F5F7FB;border:1px solid #E3E8F0}
+.wm{font-size:25px;font-weight:900;letter-spacing:.14em;line-height:1}
+.hub{font-weight:900;font-size:15px;letter-spacing:.08em;border-radius:6px;padding:1px 8px;margin-left:8px}
+.sub{font-size:14px;font-weight:700;margin-top:6px}
+.rec{font-size:16px;font-weight:900;color:#2D4C82;margin-left:8px}
+</style></head><body>
+<h1>로지스웹 허브 대표 로고 — 디지털 지구 시안</h1><p class="s">지구를 점 · 선으로 디지털화하고, 한국(금색 허브)에서 세계 도시로 물류 노선이 이어져 하나의 네트워크가 되는 모습 — 네이비 한 톤 + 금색 한 곳</p>
+<div class="g" id="g"></div>
+<script>
+const O=[
+ ["E","dot","도트 지구 네트워크","바다는 작은 점, 대륙은 큰 흰 점으로 찍은 디지털 지구. 한국의 금색 허브에서 세계 도시로 노선이 뻗어요. 가장 '디지털 · 전 세계 하나' 느낌이 강해요.",true],
+ ["F","wire","와이어 지구 + 궤도","경선 · 위선으로 짠 지구에 궤도 링이 감싸요. 대륙 점 + 노선 + 금색 허브. 기술 · 플랫폼 느낌, 작게 줄여도 형태가 또렷해요.",true],
+ ["G","pulse","허브 파동 지구","대륙 점만 남긴 깔끔한 지구에서 한국 허브로부터 금색 파동이 퍼져요. '전국에서 시작해 세계로' 라는 이야기가 담겨요.",false],
+ ["A","network","(이전) 전국 네트워크","가운데 금색 허브에 6개 노드 — 비교용 이전 시안.",false],
+];
+const src=(k)=>`${{network:"A_network",dot:"E_dotglobe",wire:"F_wireglobe",pulse:"G_pulseglobe"}[k]}.svg`;
+document.getElementById("g").innerHTML=O.map(([id,k,t,d,rec])=>`<div class="card">
+<div class="top"><img class="tile" src="${src(k)}"><div class="sm"><img src="${src(k)}" width="64"><img src="${src(k)}" width="32"><img src="${src(k)}" width="20"></div>
+<div style="flex:1"><div class="t"><span class="k">${id}</span>${t}${rec?'<span class="rec">추천</span>':''}</div><div class="d">${d}</div></div></div>
+<div class="lock"><div class="lk dark"><img src="${src(k)}" width="58"><div><div style="display:flex;align-items:center"><span class="wm" style="color:#fff">LOGISWEB</span><span class="hub" style="background:#8FB0F0;color:#0B1428">HUB</span></div><div class="sub" style="color:rgba(255,255,255,.6)">로지스웹 허브 · 전국 · 세계 물류 네트워크</div></div></div>
+<div class="lk light"><img src="${src(k)}" width="58"><div><div style="display:flex;align-items:center"><span class="wm" style="color:#0F1A30">LOGISWEB</span><span class="hub" style="background:#1B2B4B;color:#fff">HUB</span></div><div class="sub" style="color:#5F6E87">로지스웹 허브 · 전국 · 세계 물류 네트워크</div></div></div></div></div>`).join("");
+</script></body></html>
