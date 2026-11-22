@@ -249,7 +249,7 @@ export default function HubApp() {
   }, [me?.activeSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ⭐ 2026-11-07 허브 가입 차주는 등록 휴대폰에서만 — 앱이 켜질 때(로그인 유지 상태 포함) · 다른 휴대폰으로 옮겨질 때 확인
-  const devCheck = !!me && me.role === "driver" && me.source === "signup";
+  const devCheck = !!me && !isAdmin && me.role === "driver" && me.source === "signup";
   const [devOk, setDevOk] = useState(undefined);
   useEffect(() => {
     if (!devCheck || !authUser) { setDevOk(undefined); return undefined; }
@@ -365,8 +365,9 @@ export default function HubApp() {
   if (authUser === undefined || me === undefined) return <Loading />;
   if (authUser === null) return <Navigate to="/login" replace />;
   const logout = async () => { await signOut(auth); nav("/login", { replace: true }); };
-  if (me === null && !adminChecked) return <Loading />;
-  if (me === null && isAdmin) return <AdminOnly admin={{ uid: authUser.uid, email: authUser.email }} cfg={cfg} logout={logout} />;
+  if (!adminChecked) return <Loading />; // 관리자인지 알기 전엔 차주 제한 · 가입 화면으로 보내지 않는다
+  // ⭐ 2026-11-22 최고관리자 · 부관리자 — 허브 회원 기록이 없거나 차주 · 승인 전 기록이면 관리자 화면으로(차주 휴대폰 제한 · 승인 대기 화면 없이)
+  if (isAdmin && (me === null || me.role === "driver" || me.status !== "approved")) return <AdminOnly admin={{ uid: authUser.uid, email: authUser.email }} cfg={cfg} logout={logout} />;
   if (me === null) return <Navigate to="/signup" replace />;
   // 차주 화면은 휴대폰에서만(화주 · 운송사는 PC도)
   if (me.role === "driver" && !isMobileDevice()) return <DriverPcBlock onLogout={logout} />;
