@@ -15,7 +15,7 @@ import { createPortal } from "react-dom";
 import { db, DEFAULT_COMPANY } from "./firebase";
 import { arrayUnion, collection, doc, onSnapshot, query, updateDoc, where } from "firebase/firestore";
 import { canSeeNotice } from "./NoticeBoard";
-import { usePlatformNotices, usePlatformRead, markPlatformNoticeRead, PlatformBadge, hidePlatformNoticeForever, closePlatformNoticeForSession, platformSessionClosed } from "./PlatformNoticeBanner";
+import { usePlatformNotices, usePlatformRead, markPlatformNoticeRead, PlatformBadge, hidePlatformNoticeForever, platformSessionClosed } from "./PlatformNoticeBanner";
 import { RichHtml } from "./richText";
 import { DAY_MS, isNoticeUnread, noticeAtMs, toMs, useMinuteTick } from "./notifyCore";
 import { isPopupOn, popupCatOfNotify, usePopupPrefs } from "./popupPrefs";
@@ -421,7 +421,9 @@ export default function NotifyCenter({ uid, role, team = "", company = "", mobil
   if (!uid || loading || !myTurn || !live.length || !fresh) return null;
   const finish = (it) => {
     setDone((p) => new Set(p).add(it.key));
-    if (it.src === "platform") { closePlatformNoticeForSession(it.id); return; } // 확인 = 이번 접속에서만(다음에 켜면 또 뜸)
+    // ⭐ 2026-11-22 플랫폼 공지는 계정마다 한 번만 — [확인]을 누르면 계정에 읽음으로 남겨 다시 로그인 · 다른 기기에서도 다시 뜨지 않는다
+    //  (예전엔 이번 접속에서만 닫혀 로그인할 때마다 다시 떴다). 다시 보려면 공지사항 목록에서 열면 된다.
+    if (it.src === "platform") { hidePlatformNoticeForever(it.id); return; }
     markRead(it, uid).then(() => { if (it.mark?.t === "local") bumpLocal(); });
   };
   const closeLater = () => { const s = new Set(later); live.forEach((x) => s.add(x.key)); writeLater(s); setLater(s); };

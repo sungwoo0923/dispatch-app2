@@ -277,7 +277,10 @@ const deleteOrdersAtomicMobile = (items) => deleteOrdersWithLogAtomic(items, { l
 
 // 🔥 role 기반 컬렉션 분기
 const role = localStorage.getItem("role") || "user";
-const collName = "dispatch";
+const collName = "dispatch"; // 예전 오더(이미 dispatch 에 있는 것)를 고칠 때 쓰는 기본값 — 목록은 문서마다 __col 로 정확한 곳을 안다
+// ⭐ 2026-11-22 새 오더는 PC와 같은 orders 에 만든다 — 예전엔 모바일 새 오더만 dispatch 에 저장돼
+//  구글시트 쓰기(functions queueOrderSheetPush) · 허브 연결 등 orders 를 보는 서버 자동화에 빠졌다("모바일로 등록한 오더가 시트에 안 들어가요")
+const NEW_ORDER_COL = "orders";
 
 // ⭐ 복수근무일(묶음) 오더의 근무일자목록을 안전하게 배열로 복원 — PC(DispatchApp)의
 // _parseWorkDates와 동일 로직. Firestore 저장 시 배열이 {0:"...",1:"..."} 형태의
@@ -2887,7 +2890,8 @@ const quickRange = (days) => {
   }, [orders, canceledOrders, extraSplit, extraMap.size]);
   // 🗂 2026-11-13 담당노선구분(켠 운송사만) — 고른 묶음만(목록 · 미배차 · 매출 등 아래 allOrders 를 쓰는 화면이 모두 따른다 · src/routeGroups.jsx)
   const rgM = useRouteGroupFilter({ enabled: useCompanyFeatures(userCompany).routeGroups === true, uid: user?.uid, profile: myProfM, company: userCompany }); // ⭐ 2026-11-17 company — 담당노선 주인(배차담당자 자동 지정)
-  useEffect(() => { rgM.setScreen(page === "sales" ? "매출관리" : page === "dept" ? "정산관리" : page); }, [page, rgM.setScreen]); // eslint-disable-line react-hooks/exhaustive-deps -- 🗂 매출관리 · 정산(경리 · 임원 화면)은 들어갈 때마다 [전체]부터
+  // ⭐ 2026-11-22 휴대폰 화면 이름 → PC 화면 이름(배차현황 · 실시간배차현황) — 예전엔 "list"를 그대로 넘겨 탭을 골라도 걸러지지 않았다
+  useEffect(() => { rgM.setScreen(page === "sales" ? "매출관리" : page === "dept" ? "정산관리" : page === "list" ? "배차현황" : page === "unassigned" ? "실시간배차현황" : page); }, [page, rgM.setScreen]); // eslint-disable-line react-hooks/exhaustive-deps -- 🗂 매출관리 · 정산(경리 · 임원 화면)은 들어갈 때마다 [전체]부터
   const allOrdersPreRG = allOrdersCombined.orders;
   const allOrders = useMemo(() => rgM.filter(allOrdersPreRG) || [], [allOrdersPreRG, rgM.filter]);
   // ⭐ 2026-11-04 고정노선(구글시트 배차표) 오더는 고정노선현황에서만 — 일반 배차현황·미배차·정보미전달에는 넣지 않는다(PC와 같음)
@@ -5058,7 +5062,7 @@ const groupedByDate = useMemo(() => {
         };
         delete finalData._owner;
         if (form._owner) applyOwner(finalData, form._owner); // 👤 복사본 — 고른 배차담당자로
-        const writePromise = setDoc(doc(db, collName, newId), finalData);
+        const writePromise = setDoc(doc(db, NEW_ORDER_COL, newId), finalData);
 
         // ★ PC 거래처관리(places) 동기화 — 오더 저장 자체와 무관하니 기다리지 않는다.
         syncPlaceFromOrder(rowData, pendingMemoExtra).catch(() => {});
@@ -5075,7 +5079,7 @@ const groupedByDate = useMemo(() => {
             matchedShipper = await findApprovedShipperLiveMobile(myCompanyName, rowData.거래처명);
           }
           if (matchedShipper) {
-            autoTransmitToShipperMobile({ ...rowData, _id: newId, __col: collName }, matchedShipper).catch((e) =>
+            autoTransmitToShipperMobile({ ...rowData, _id: newId, __col: NEW_ORDER_COL }, matchedShipper).catch((e) =>
               console.error("자동 화주사 전송 실패:", e)
             );
           }
@@ -7312,7 +7316,7 @@ setOpenMemo={setOpenMemo}
                   // 월 마감에서 바로 추가 — PC 오더 등록과 같은 기본 칸(등록자 · 등록 시각 · 회사)
                   const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}${Math.random().toString(36).slice(2)}`;
                   const email = auth.currentUser?.email || "";
-                  await setDoc(doc(db, collName, id), { ...rec, _id: id, companyName: pcViewCompany, 작성자: email, createdByEmail: email, createdByUid: auth.currentUser?.uid || "", createdAt: Date.now(), updatedAt: Date.now(), 알림톡: false });
+                  await setDoc(doc(db, NEW_ORDER_COL, id), { ...rec, _id: id, companyName: pcViewCompany, 작성자: email, createdByEmail: email, createdByUid: auth.currentUser?.uid || "", createdAt: Date.now(), updatedAt: Date.now(), 알림톡: false });
                   return true;
                 }} />
             </React.Suspense>
