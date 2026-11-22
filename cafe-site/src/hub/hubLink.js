@@ -8,7 +8,7 @@
 //  허브에서 정보를 바꾸지 않는다 — 차량·연락처는 로지스웹 프로그램에서 고친다.
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, reauthenticateWithCredential, EmailAuthProvider, signOut } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { auth, db } from "../firebase";
+import { auth, db, USE_EMU } from "../firebase";
 import { M } from "./hubApi";
 import { bindDevice } from "./hubDevice";
 
@@ -108,6 +108,61 @@ export function authErrorText(e) {
   return e?.message || "처리 중 오류가 생겼어요.";
 }
 
+// ⭐ 2026-11-22 최고관리자 · 부관리자 — 어느 탭에서든 이메일 · 비밀번호만 맞으면 회사명 · 회사코드 · 유형 확인 없이 관리자로 들어간다
+async function adminOf(cred) {
+  if (String(cred?.user?.email || "").toLowerCase() === TOTAL_MASTER_EMAIL) return { id: cred.user.uid, admin: true };
+  const us = await getDoc(doc(db, "users", cred.user.uid)).catch(() => null);
+  const u = us?.exists() ? us.data() : null;
+  if (u?.role === "totalMaster" && u.userStatus !== "banned" && u.userStatus !== "suspended") return { id: cred.user.uid, admin: true };
+  return null;
+}
+// 관리자 로그인(아래 [관리자 로그인]) — 관리자가 아니면 로그아웃하고 안내
+export async function loginHubAdmin({ email, password }) {
+  if (!String(email || "").trim() || !password) throw hubErr("이메일과 비밀번호를 입력해 주세요.");
+  const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+  const a = await adminOf(cred);
+  if (!a) await fail("관리자 계정이 아니에요. 위에서 회원 유형을 골라 로그인해 주세요.");
+  return a;
+}
+
+// ⭐ 2026-11-22 회사코드 찾기(로지스웹 운송사 로그인 src/TransportLogin.jsx 와 같은 방식) — 이메일 · 비밀번호로 "따로" 확인해서
+//  그 계정의 회사명 · 회사코드만 돌려준다(지금 로그인 상태에는 영향 없음). 직원 계정에 코드가 없으면 회사의 승인 기록에서 찾는다.
+export async function findMyCompanyCode({ email, password }) {
+  const { initializeApp, getApps } = await import("firebase/app");
+  const { getAuth } = await import("firebase/auth");
+  const { getFirestore, collection, query, where, getDocs } = await import("firebase/firestore");
+  const app2 = getApps().find((a) => a.name === "hubCodeLookup") || initializeApp(auth.app.options, "hubCodeLookup");
+  const a2 = getAuth(app2);
+  if (USE_EMU) { // 시험(에뮬레이터)일 때만 — 따로 만든 연결도 가상 서버로
+    const { connectAuthEmulator } = await import("firebase/auth");
+    const { connectFirestoreEmulator, getFirestore: gf } = await import("firebase/firestore");
+    try { connectAuthEmulator(a2, `http://127.0.0.1:${import.meta.env.VITE_EMU_AUTH_PORT || 9099}`, { disableWarnings: true }); } catch { /* 이미 연결 */ }
+    try { connectFirestoreEmulator(gf(app2), "127.0.0.1", Number(import.meta.env.VITE_EMU_FS_PORT || 8080)); } catch { /* 이미 연결 */ }
+  }
+  try {
+    const cred = await signInWithEmailAndPassword(a2, String(email || "").trim(), password);
+    const db2 = getFirestore(app2);
+    const s = await getDoc(doc(db2, "users", cred.user.uid));
+    const u = s.exists() ? s.data() : null;
+    if (!u) throw hubErr("로지스웹에 등록된 계정이 없어요.");
+    if (u.role === "totalMaster" || String(cred.user.email || "").toLowerCase() === TOTAL_MASTER_EMAIL) return { admin: true };
+    if (u.approved === false) throw hubErr("아직 승인 전이라 회사코드가 없어요. 승인되면 알려 드려요.");
+    let code = String(u.companyCode || "");
+    if (!code && u.companyName && u.role !== "shipper") {
+      const apps = await getDocs(query(collection(db2, "transportApplications"), where("companyName", "==", String(u.companyName)))).catch(() => null);
+      code = String((apps?.docs || []).map((d) => d.data()).find((x) => (x.status === "approved" || x.status === "승인") && x.companyCode)?.companyCode || "");
+    }
+    return { companyName: String(u.companyName || ""), companyCode: code };
+  } finally { signOut(a2).catch(() => {}); }
+}
+
+// 공개 운송사 목록(가입 · 로그인 회사명 검색 — 로그인 전에도 읽힘, src/publicCompanies.js 와 같은 컬렉션)
+export async function readPublicCompanies() {
+  const { collection, getDocs } = await import("firebase/firestore");
+  const s = await getDocs(collection(db, "publicCompanies"));
+  return s.docs.map((d) => d.data()).filter((c) => c.companyName && !c.hidden);
+}
+
 async function ensureLinkedMember(uid, data) {
   const ref = doc(db, M, uid);
   const s = await getDoc(ref).catch(() => null);
@@ -123,8 +178,11 @@ async function ensureLinkedMember(uid, data) {
 
 // 운송사 직원(→ 허브 "운송사")
 export async function loginLogiswebStaff({ companyName, companyCode, email, password }) {
-  if (!companyName.trim() || !companyCode.trim() || !email.trim() || !password) throw Object.assign(new Error("회사명, 회사코드, 이메일, 비밀번호를 모두 입력해 주세요."), { hub: true });
+  if (!email.trim() || !password) throw hubErr("이메일과 비밀번호를 입력해 주세요.");
   const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+  const adm = await adminOf(cred);
+  if (adm) return adm; // 최고관리자 · 부관리자는 회사명 · 회사코드 없이
+  if (!companyName.trim()) await fail("회사명을 입력해 주세요. [조회]로 찾을 수 있어요.");
   const uid = cred.user.uid;
   const us = await getDoc(doc(db, "users", uid)).catch(() => null);
   if (!us?.exists()) await fail("로지스웹에 등록된 계정 정보가 없어요.");
@@ -134,7 +192,8 @@ export async function loginLogiswebStaff({ companyName, companyCode, email, pass
   const isSub = u.role === "totalMaster" && u.subAdmin === true;
   const master = cred.user.email === TOTAL_MASTER_EMAIL;
   if (!master && !isSub && !sameText(u.companyName, companyName)) await fail("회사명이 일치하지 않아요.");
-  if (!master && !isSub && u.companyCode && u.companyCode !== companyCode.trim()) await fail("회사코드가 일치하지 않아요.");
+  if (!master && !isSub && u.companyCode && !companyCode.trim()) await fail("회사코드를 입력해 주세요. [회사코드 찾기]로 확인할 수 있어요.");
+  if (!master && !isSub && u.companyCode && u.companyCode !== companyCode.trim()) await fail("회사코드가 일치하지 않아요. [회사코드 찾기]로 확인해 주세요.");
   if (u.userStatus === "banned" || u.userStatus === "suspended") await fail("정지된 계정이에요. 관리자에게 문의하세요.");
   if (u.approved === false) await fail("로지스웹 관리자 승인 대기 중인 계정이에요.");
   if (u.employmentStatus === "퇴사") await fail("퇴사 처리된 계정이에요.");
@@ -183,8 +242,11 @@ export async function loginLogiswebDriver({ companyName, carNo, name }) {
 
 // 화주사(→ 허브 "화주")
 export async function loginLogiswebShipper({ companyName, companyCode, email, password }) {
-  if (!companyName.trim() || !companyCode.trim() || !email.trim() || !password) throw Object.assign(new Error("회사명, 회사코드, 이메일, 비밀번호를 모두 입력해 주세요."), { hub: true });
+  if (!email.trim() || !password) throw hubErr("이메일과 비밀번호를 입력해 주세요.");
   const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+  const adm = await adminOf(cred);
+  if (adm) return adm;
+  if (!companyName.trim() || !companyCode.trim()) await fail("회사명과 회사코드를 입력해 주세요. [회사코드 찾기]로 확인할 수 있어요.");
   const us = await getDoc(doc(db, "users", cred.user.uid)).catch(() => null);
   if (!us?.exists()) await fail("로지스웹에 등록된 화주 계정이 없어요.");
   const u = us.data();
@@ -201,6 +263,8 @@ export async function loginLogiswebShipper({ companyName, companyCode, email, pa
 // 허브 회원(가입 신청한 계정) 로그인 — 승인 상태는 화면(HubApp)이 보고 안내한다
 export async function loginHubMember({ email, password, role }) {
   const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+  const adm = await adminOf(cred);
+  if (adm) return adm; // 최고관리자는 고른 유형(차주 · 화주 · 운송사)과 상관없이 관리자로
   const s = await getDoc(doc(db, M, cred.user.uid)).catch(() => null);
   if (!s?.exists()) {
     const us = await getDoc(doc(db, "users", cred.user.uid)).catch(() => null);

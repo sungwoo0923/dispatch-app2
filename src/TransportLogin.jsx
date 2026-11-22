@@ -6,7 +6,9 @@ import { auth, db } from "./firebase";
 import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut, setPersistence, browserLocalPersistence, browserSessionPersistence, getAuth, multiFactor } from "firebase/auth";
 import { initializeApp, getApps } from "firebase/app";
 import BigCheck from "./components/BigCheck";
-import { doc, getDoc, getFirestore, collection, getDocs, query, where } from "firebase/firestore";
+import { doc, getDoc, getFirestore, collection, getDocs, query, where, updateDoc, serverTimestamp } from "firebase/firestore";
+import SignupWelcomeCard from "./SignupWelcomeCard"; // 🎉 2026-11-22 승인 뒤 첫 로그인 — 가입 완료 카드(회사코드)
+import { readPublicCompanies } from "./publicCompanies"; // 🔎 2026-11-22 회사명 조회
 import { useNavigate, Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useMfaPrompt, mfaErrorText } from "./MfaModal";
@@ -40,6 +42,15 @@ export default function TransportLogin() {
   const [pw, setPw] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [welcome, setWelcome] = useState(null); // 🎉 가입 완료 카드 { companyName, companyCode, name, email }
+  const [coList, setCoList] = useState(null); // 🔎 회사명 조회(공개 운송사 목록)
+  const [coOpen, setCoOpen] = useState(false);
+  const [coBusy, setCoBusy] = useState(false);
+  const openCoSearch = async () => {
+    if (coList) { setCoOpen(true); return; }
+    setCoBusy(true);
+    try { setCoList(await readPublicCompanies()); } catch { setCoList([]); } finally { setCoBusy(false); setCoOpen(true); }
+  };
   const [previewInfo, setPreviewInfo] = useState(null); // 승인 대기 계정 — 둘러보기 버튼
   const [msg, setMsg] = useState(null);
   const [showPopup, setShowPopup] = useState(false);
@@ -236,13 +247,13 @@ export default function TransportLogin() {
     }
   };
 
-  const login = async () => {
+  const login = async (codeOverride) => {
     setError(null); setPreviewInfo(null);
     setMsg(null);
 
     // 🛠 2026-11-14 회사코드는 로그인 뒤 계정 확인에서 따진다 — 최고관리자 · 부관리자는 코드 없이(아무 운송사로나 들어간다),
     //  일반 계정은 "회사코드를 입력해주세요"로 막힌다(예전엔 최고관리자도 새 PC에서 코드부터 찾아야 했다)
-    if (!companyName.trim()) return setError("회사명을 입력해주세요.");
+    // ⭐ 2026-11-22 회사명은 로그인 뒤 확인 — 최고관리자 · 부관리자는 회사명 · 회사코드 없이 들어간다
     if (!email.trim() || !pw.trim()) return setError("이메일과 비밀번호를 입력해주세요.");
 
     try {
@@ -272,8 +283,8 @@ export default function TransportLogin() {
       }
       const uid = credential.user.uid;
       const inputEmail = email.trim().toLowerCase();
-      const inputCompanyName = companyName.trim();
-      const inputCompanyCode = companyCode.trim();
+      let inputCompanyName = companyName.trim();
+      const inputCompanyCode = (typeof codeOverride === "string" ? codeOverride : companyCode).trim();
       let needGate = inputEmail === TOTAL_MASTER_EMAIL;
       let userMfa = ""; // 일반 계정이 켠 2차 인증 방식(pin | keypad)
 
@@ -281,9 +292,9 @@ export default function TransportLogin() {
         const userSnap = await getDoc(doc(db, "users", uid));
 
         if (!userSnap.exists()) {
+          await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("transportValidating");
           window.__kpGateInline = false;
-          await signOut(auth);
           setError("등록된 계정 정보가 없습니다.");
           return;
         }
@@ -294,9 +305,9 @@ export default function TransportLogin() {
         // ⭐ 2026-11-06 허브 이름은 src/orderMarketConfig.js
         const OTHER_LOGIN = { shipper: "화주사 로그인", driver: "기사앱", cafeUser: MARKET_NAME };
         if (OTHER_LOGIN[userData.role]) {
+          await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("transportValidating");
           window.__kpGateInline = false;
-          await signOut(auth);
           setError(`운송사 계정이 아닙니다. ${OTHER_LOGIN[userData.role]} 화면에서 로그인해주세요.`);
           return;
         }
@@ -305,10 +316,18 @@ export default function TransportLogin() {
         const isSubAdmin = userData.role === "totalMaster" && userData.subAdmin === true && userData.userStatus !== "banned" && userData.userStatus !== "suspended";
         needGate = userData.role === "totalMaster";
         if (userData.mfaOpt === true) userMfa = userData.mfaKind === "keypad" ? "keypad" : "pin";
-        if (!isSubAdmin && (userData.companyName || "") !== inputCompanyName) {
+        if (!isSubAdmin && !inputCompanyName) {
+          await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("transportValidating");
           window.__kpGateInline = false;
-          await signOut(auth);
+          setError("회사명을 입력해주세요. [조회]를 누르면 찾을 수 있어요.");
+          return;
+        }
+        if (isSubAdmin && !inputCompanyName) inputCompanyName = localStorage.getItem("loginCompany") || "";
+        if (!isSubAdmin && (userData.companyName || "") !== inputCompanyName) {
+          await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
+          sessionStorage.removeItem("transportValidating");
+          window.__kpGateInline = false;
           setError("회사명이 일치하지 않습니다. 가입한 회사명을 정확히 입력해주세요.");
           return;
         }
@@ -317,51 +336,59 @@ export default function TransportLogin() {
         if (!isSubAdmin) {
           const plan = await getDoc(doc(db, "companyPlans", String(userData.companyName || "(회사없음)").trim() || "(회사없음)")).catch(() => null);
           if (plan?.exists() && plan.data()?.status === "ended") {
+            await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
             sessionStorage.removeItem("transportValidating");
             window.__kpGateInline = false;
-          await signOut(auth);
             setError("계약이 종료되었습니다. 관리자에게 문의해 주세요.");
             return;
           }
         }
 
         if (userData.userStatus === "banned") {
+          await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("transportValidating");
           window.__kpGateInline = false;
-          await signOut(auth);
           setError("영구 정지된 계정입니다. 관리자에게 문의하세요.");
           return;
         }
 
         if (userData.userStatus === "suspended") {
+          await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("transportValidating");
           window.__kpGateInline = false;
-          await signOut(auth);
           setError("사용 정지된 계정입니다. 관리자에게 문의하세요.");
           return;
         }
 
         if (!userData.approved) {
+          await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("transportValidating");
           window.__kpGateInline = false;
-          await signOut(auth);
           setPreviewInfo({ co: userData.companyName || "", plan: userData.requestedPlan || "" });
           setError("관리자 승인 대기 중입니다. 승인 후 로그인이 가능합니다.");
           return;
         }
 
+        // 🎉 2026-11-22 승인 뒤 첫 로그인 — 회사코드를 몰라도 비밀번호가 맞으면 "가입 완료" 카드로 회사코드를 보여 주고 이어서 로그인
+        if (userData.companyCode && !isSubAdmin && !userData.welcomeSeenAt && userData.companyCode !== inputCompanyCode) {
+          await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
+          sessionStorage.removeItem("transportValidating");
+          window.__kpGateInline = false;
+          setWelcome({ companyName: userData.companyName || inputCompanyName, companyCode: userData.companyCode, name: userData.name || "", email: email.trim(), plan: userData.requestedPlan || "" });
+          return;
+        }
         if (userData.companyCode && !isSubAdmin) {
           if (!inputCompanyCode) {
+            await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
             sessionStorage.removeItem("transportValidating");
             window.__kpGateInline = false;
-          await signOut(auth);
             setError("회사코드를 입력해주세요. 코드는 가입 승인 시 이메일로 안내받으셨습니다.");
             return;
           }
           if (userData.companyCode !== inputCompanyCode) {
+            await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
             sessionStorage.removeItem("transportValidating");
             window.__kpGateInline = false;
-          await signOut(auth);
             setError("회사코드가 일치하지 않습니다. 승인 안내 이메일을 확인해주세요.");
             return;
           }
@@ -369,8 +396,11 @@ export default function TransportLogin() {
 
         safeLocalSet("loginCompany", inputCompanyName);
         safeLocalSet("userCompany", inputCompanyName);
+        // 가입 완료 카드를 봤다는 표시(다음부터는 카드 없이 회사코드로 로그인)
+        if (!userData.welcomeSeenAt) updateDoc(doc(db, "users", uid), { welcomeSeenAt: serverTimestamp() }).catch(() => {});
       } else {
-        // totalMaster: loginCompany를 반드시 갱신해야 헤더에 올바른 회사명이 표시됨
+        // totalMaster: loginCompany를 반드시 갱신해야 헤더에 올바른 회사명이 표시됨 — 비워 두면 지난번 회사 그대로
+        if (!inputCompanyName) inputCompanyName = localStorage.getItem("loginCompany") || "";
         safeLocalSet("loginCompany", inputCompanyName);
       }
       safeLocalSet("userCompany", inputCompanyName);
@@ -382,7 +412,7 @@ export default function TransportLogin() {
       }
 
       try {
-        safeLocalSet(SAVED_KEY, JSON.stringify(rememberInfo
+        safeLocalSet(SAVED_KEY, JSON.stringify((rememberInfo || typeof codeOverride === "string")
           ? { remember: true, autoLogin, companyCode: inputCompanyCode, companyName: inputCompanyName, email: email.trim() }
           : { remember: false, autoLogin }));
       } catch { /* 저장 실패 무시 */ }
@@ -558,9 +588,28 @@ export default function TransportLogin() {
               <input type="text" placeholder="승인 후 발급된 코드" value={companyCode} onChange={(e) => setCompanyCode(e.target.value.toUpperCase())} onKeyDown={handleKeyDown}
                 className={`${inputCls} ${companyCode ? "tracking-[0.12em] tabular-nums" : ""}`} />
             ))}
+            <div className="relative">
             {field("company", "회사명", (
-              <input type="text" placeholder="가입한 회사명" value={companyName} onChange={(e) => setCompanyName(e.target.value)} onKeyDown={handleKeyDown} className={inputCls} />
+              <>
+                <input type="text" placeholder="가입한 회사명 (최고관리자는 비워도 돼요)" value={companyName} onChange={(e) => { setCompanyName(e.target.value); if (coList) setCoOpen(true); }} onKeyDown={handleKeyDown} className={inputCls} />
+                <button type="button" onClick={() => (coOpen ? setCoOpen(false) : openCoSearch())} disabled={coBusy} data-co-search className="text-[11.5px] font-extrabold text-[#4B6CB7] hover:underline shrink-0">{coBusy ? "조회 중" : "조회"}</button>
+              </>
             ))}
+            {coOpen && (() => {
+              const k = companyName.replace(/\s+/g, "").toLowerCase();
+              const hits = (coList || []).filter((c) => !k || String(c.companyName).replace(/\s+/g, "").toLowerCase().includes(k)).slice(0, 30);
+              return (
+                <div className="absolute z-30 left-0 right-0 -mt-2 mb-3 bg-white border border-[#DCE3EE] rounded-[13px] shadow-[0_18px_40px_rgba(15,26,48,.18)] max-h-[240px] overflow-y-auto" data-co-list>
+                  {hits.length ? hits.map((c) => (
+                    <button key={c.companyName} type="button" onClick={() => { setCompanyName(c.companyName); setCoOpen(false); }} className="w-full text-left px-4 py-2.5 hover:bg-[#EEF3FC] border-b border-[#EEF1F6] last:border-0">
+                      <div className="text-[13.5px] font-bold text-[#1B2B4B]">{c.companyName}</div>
+                      {c.address && <div className="text-[11.5px] text-[#7A89A3] truncate">{c.address}</div>}
+                    </button>
+                  )) : <div className="px-4 py-3 text-[12.5px] text-[#7A89A3]">{companyName ? `"${companyName}"(으)로 등록된 회사가 없어요` : "등록된 회사가 없어요"}</div>}
+                </div>
+              );
+            })()}
+            </div>
             {field("email", "이메일", (
               <input type="email" placeholder="name@company.com" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={handleKeyDown} className={inputCls} />
             ))}
@@ -668,6 +717,17 @@ export default function TransportLogin() {
         </div>
       )}
 
+      {welcome && (
+        <SignupWelcomeCard info={welcome} onClose={() => setWelcome(null)}
+          onContinue={() => {
+            const w = welcome;
+            setWelcome(null);
+            setCompanyCode(w.companyCode);
+            if (!companyName.trim()) setCompanyName(w.companyName);
+            setRememberInfo(true);
+            login(w.companyCode);
+          }} />
+      )}
       {/* 회사코드 찾기 모달 */}
       {pwReset && (
         <PasswordResetSms initialEmail={email.trim()} onClose={() => setPwReset(false)}
