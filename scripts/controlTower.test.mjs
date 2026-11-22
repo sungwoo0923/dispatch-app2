@@ -38,6 +38,18 @@ t("ITS 돌발 정리", () => {
   assert.equal(isSevere({ kind: "work" }), false);
 });
 
+{
+  const its = await import("../src/itsCore.js");
+  const raw = { type: "고속도로", eventType: "공사", eventDetailType: "", startDate: "20260903000000", coordX: "127.069528", coordY: "37.518514", linkId: "1230004600", roadName: "올림픽대로", roadNo: "88", roadDrcType: "", lanesBlockType: "", lanesBlocked: "", message: "<공사>::올림픽대로::부분통제", endDate: "20270226000000" };
+  assert.deepEqual(its.normalizeEvent(raw, 0), normalizeEvent(raw, 0));
+  const list = its.parseEvents({ header: { resultCode: 0, resultMsg: "SUCCESS" }, body: { totalCount: 2, items: [raw, raw] } });
+  assert.equal(list.length, 1, "같은 돌발은 한 번만");
+  assert.equal(list[0].kind, "work");
+  assert.throws(() => its.parseEvents({ header: { resultCode: 9, resultMsg: "인증키 오류" } }), /인증키/);
+  assert.match(its.eventsUrl("K"), /^https:\/\/openapi\.its\.go\.kr:9443\/eventInfo\?apiKey=K&/);
+  console.log("✓ 실제 ITS 응답 형식(사장님 휴대폰 화면) 정리 · 서버와 같음");
+}
+
 t("가는 길 · 근처 돌발", () => {
   const pos = { lat: 37.0, lng: 127.0 }, target = { lat: 37.5, lng: 127.0 };
   const ahead = { id: "a", kind: "accident", lat: 37.25, lng: 127.005 };

@@ -5,6 +5,7 @@
 //  · ?kind=events            : 전국 돌발상황(사고 · 공사 · 기상 · 재난 · 기타돌발) — 모든 지도가 이 1건을 같이 쓴다
 //                              (CDN 60초 캐시 → 사용자가 많아도 ITS 호출은 1분에 1번 정도)
 //  · ?kind=cctv&lat=&lng=&r= : 그 지점 근처 CCTV(고속도로 + 국도) — 사고 아이콘의 [CCTV 보기]
+//  · ?kind=config            : 브라우저용 키 — ITS가 클라우드 서버 접속을 막아(2026-11-22 점검) 실제로는 브라우저가 ITS를 바로 부른다(src/itsCore.js)
 //  · 키가 없으면 { ok:false, reason:"no-key" } 를 200으로 준다(지도는 "교통정보 연결 전"만 보여 준다).
 const ITS = "https://openapi.its.go.kr:9443";
 const KOREA = { minX: 124.5, maxX: 131.9, minY: 33.0, maxY: 38.7 };
@@ -58,7 +59,7 @@ export function normalizeCctv(it) {
 
 async function fetchEvents(key) {
   const q = new URLSearchParams({ apiKey: key, type: "all", eventType: "all", getType: "json", ...Object.fromEntries(Object.entries(KOREA).map(([k, v]) => [k, String(v)])) });
-  const r = await withTimeout(`${ITS}/eventInfo?${q}`, 12000);
+  const r = await withTimeout(`${ITS}/eventInfo?${q}`, 6000);
   const text = await r.text();
   let data; try { data = JSON.parse(text); } catch { throw new Error(`ITS 응답을 읽지 못했어요 (${r.status})`); }
   const code = data?.header?.resultCode;
@@ -116,6 +117,11 @@ export default async function handler(req, res) {
       }));
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({ ok: true, keyLength: key.length, region: process.env.VERCEL_REGION || "", out });
+    }
+    // 브라우저용 키 — ITS가 클라우드 서버 접속을 막아서 브라우저가 직접 부른다(사장님 결정 2026-11-22). 무료 공공데이터 키(Tmap 키와 같은 방식).
+    if (kind === "config") {
+      res.setHeader("Cache-Control", "s-maxage=300");
+      return res.status(200).json({ ok: true, key });
     }
     if (kind === "cctv") {
       const lat = num(req.query.lat), lng = num(req.query.lng);
