@@ -689,9 +689,9 @@ export default function AttendanceBoard({ userCompany, role, user }) {
           {isAdmin && (
             <>
               <button onClick={() => setShowEmpFilter(v => !v)} className={btnCls(showEmpFilter)}>직원 관리</button>
-              <button onClick={() => { if (!showOfficePanel && officeLocation && !officeInput.lat) setOfficeInput({ lat: String(officeLocation.lat ?? ""), lng: String(officeLocation.lng ?? ""), address: officeLocation.address || "" }); setShowOfficePanel(v => !v); setShowHolidayPanel(false); }}
-                className={btnCls(showOfficePanel)}>출근지 설정</button>
-              <button onClick={() => { setShowHolidayPanel(v => !v); setShowOfficePanel(false); }} className={btnCls(showHolidayPanel)}>공휴일 관리</button>
+              <button onClick={() => { if (!showOfficePanel && officeLocation && !officeInput.lat) setOfficeInput({ lat: String(officeLocation.lat ?? ""), lng: String(officeLocation.lng ?? ""), address: officeLocation.address || "" }); setShowOfficePanel(true); }}
+                className={btnCls(false)}>출근지 설정</button>
+              <button onClick={() => setShowHolidayPanel(true)} className={btnCls(false)}>공휴일 관리</button>
               <button onClick={() => { setWeekPanelInit({ tab: "company", uid: "" }); setShowWeekPanel(true); }} className={btnCls(false)}>근무 요일 · {weekdaysText(coWeekdays)}</button>
             </>
           )}
@@ -700,9 +700,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
 
       {/* 출근지 설정 패널 */}
       {isAdmin && showOfficePanel && (
-        <section className="bg-white rounded-2xl border border-[#E3E8F0] p-5">
-          <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8A97AD]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>OFFICE · GEOFENCE</div>
-          <div className="text-[16px] font-black text-[#0F1A30] mb-3">출근지 설정</div>
+        <SheetModal eyebrow="OFFICE · GEOFENCE" title="출근지 설정" sub="출근지 반경 안에 들어오면 자동 출근 · 반경 밖으로 나가면 자동 퇴근돼요." onClose={() => setShowOfficePanel(false)}>
           {officeLocation && (
             <div className="mb-3 px-3.5 py-2.5 rounded-xl bg-[#EEF3FC] border border-[#D5E0F3] text-[13.5px] text-[#1B2B4B]">
               <span className="font-black">현재 출근지</span> · {officeLocation.address || `${officeLocation.lat}, ${officeLocation.lng}`}
@@ -759,7 +757,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
               <button onClick={() => setShowOfficePanel(false)} className={btnCls(false)}>닫기</button>
             </div>
           </div>
-        </section>
+        </SheetModal>
       )}
 
       {/* 공휴일 관리 패널 */}
@@ -770,8 +768,8 @@ export default function AttendanceBoard({ userCompany, role, user }) {
       )}
 
       {isAdmin && showHolidayPanel && (
-        <section className="bg-white rounded-2xl border border-[#E3E8F0] p-5">
-          <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8A97AD]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>HOLIDAYS · {year}</div>
+        <SheetModal eyebrow={`HOLIDAYS · ${year}`} title="공휴일 관리" sub="법정공휴일은 자동으로 들어가요. 회사만 쉬는 날(창립기념일 등)은 아래에서 더하면 돼요." onClose={() => setShowHolidayPanel(false)}
+          footer={<button onClick={() => setShowHolidayPanel(false)} className="h-11 px-6 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-black">완료</button>}>
           <div className="text-[16px] font-black text-[#0F1A30] mb-2">대한민국 법정공휴일 <span className="text-[13px] font-bold text-[#8A97AD]">({year}년, 자동 반영)</span></div>
           <div className="flex flex-wrap gap-2 mb-5">
             {(KR_NATIONAL_HOLIDAYS[year] || []).map(([d, label]) => (
@@ -800,7 +798,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
               <div className="text-[13px] text-[#8A97AD]">등록된 회사 지정 휴일이 없습니다.</div>
             )}
           </div>
-        </section>
+        </SheetModal>
       )}
 
       {/* 오늘 내 출퇴근 + 거절된 요청 */}
@@ -1202,7 +1200,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
 
       {/* 근무시간 편집 모달 */}
       {editScheduleEmp && (
-        <div className="fixed inset-0 bg-black/50 z-[999999] flex items-center justify-center p-4" onClick={() => setEditScheduleEmp(null)}>
+        <div className="fixed inset-0 bg-black/50 z-[999999] flex items-center justify-center p-4" >
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-xs p-5" onClick={e => e.stopPropagation()}>
             <div className="text-[16px] font-black text-[#0F1A30] mb-1">{editScheduleEmp.name || editScheduleEmp.email}</div>
             <div className="text-[13px] text-[#8A97AD] mb-4">근무 요일과 정규 근무시간을 정해요.</div>
@@ -1303,10 +1301,38 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   );
 }
 
+// 🪟 2026-11-23 설정 팝업(출근지 · 공휴일) — 펼침 패널 대신(사용자 요청) · 바깥을 눌러도 닫히지 않음(× · 닫기 · Esc)
+function SheetModal({ eyebrow, title, sub, onClose, footer, children }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-[99990] bg-[#0F1A30]/50 backdrop-blur-[2px] flex items-center justify-center p-4">
+      <div className="w-full max-w-[720px] max-h-[92vh] bg-white rounded-[24px] shadow-[0_30px_80px_-20px_rgba(15,26,48,0.55)] overflow-hidden flex flex-col">
+        <div className="relative px-6 pt-5 pb-4 text-white shrink-0" style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>
+          <span className="absolute inset-0 opacity-[0.08] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "14px 14px" }} />
+          <div className="relative flex items-start justify-between gap-3">
+            <div>
+              <div className="text-[10.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>{eyebrow}</div>
+              <div className="text-[19px] font-black mt-0.5">{title}</div>
+              {sub && <div className="text-[12.5px] text-white/70 mt-0.5">{sub}</div>}
+            </div>
+            <button onClick={onClose} aria-label="닫기" className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-[18px] leading-none shrink-0">×</button>
+          </div>
+        </div>
+        <div className="px-6 py-5 overflow-y-auto">{children}</div>
+        {footer && <div className="px-6 py-4 border-t border-[#EEF1F6] flex justify-end gap-2 shrink-0">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
 // 공용 모달 — 네이비 헤더 + mono 라벨
 function Modal({ title, eyebrow, count, onClose, narrow = false, children }) {
   return (
-    <div className="fixed inset-0 bg-[#0F1A30]/45 z-[99999] flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-[#0F1A30]/45 z-[99999] flex items-center justify-center p-4">{/* 바깥을 눌러도 닫히지 않음(사용자 요청) */}
       <div className={`bg-white rounded-2xl shadow-2xl w-full ${narrow ? "max-w-sm" : "max-w-md"} overflow-hidden`} onClick={e => e.stopPropagation()}>
         <div className="bg-[#0F1A30] px-5 py-3.5 flex items-center justify-between">
           <div className="min-w-0">

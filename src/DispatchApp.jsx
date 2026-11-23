@@ -3692,6 +3692,7 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
       {/* 펼쳤을 때 */}
       <div
         className={`fixed inset-0 z-[9990] bg-[#0F1A30]/40 backdrop-blur-[2px] transition-opacity duration-200 ${open ? "opacity-100" : "opacity-0 pointer-events-none"}`}
+        data-backdrop-close /* 왼쪽 메뉴 — 바깥을 누르면 닫힘(서랍) */
         onClick={onClose}
       />
       <aside
@@ -50150,7 +50151,7 @@ const handleBatchSettle = async (targetStatus) => {
                 onSel={(g) => openStmt(g.client, g.yyyymm)} disabled={isViewer}
                 onBulkSend={(gs) => onStmtBulk("발송", gs)} /> : railOpen && createPortal(
                 <div className="fixed inset-0 z-[9990] flex" data-kp="stmt-rail-drawer">
-                  <div className="absolute inset-0 bg-[#0B1324]/35 backdrop-blur-[1px]" onClick={() => setRailOpen(false)} />
+                  <div className="absolute inset-0 bg-[#0B1324]/35 backdrop-blur-[1px]" data-backdrop-close onClick={() => setRailOpen(false)} />
                   <aside className="relative h-full w-[360px] max-w-[92vw] bg-white shadow-[12px_0_40px_rgba(11,19,36,.25)] flex flex-col kp-drawer-in">
                     <div className="flex items-center gap-2 px-4 h-14 border-b border-[#E3E8F0] shrink-0">
                       <div className="mr-auto"><div className="text-[10.5px] font-bold tracking-[0.18em] text-[#4B6CB7]">CLIENTS</div><div className="text-[16px] font-black text-[#0F1A30] leading-tight">거래처 목록</div></div>
