@@ -2997,7 +2997,7 @@ export default function ApprovalCenter({ company, me, page, setPage, openId, onO
 
       {isCat && (
         <>
-          <Composer key={`${page}-${preset?.editId || preset?.id || preset?.presetKey || "new"}${page === "report" && canHr ? "-hr" : ""}`} canHr={canHr} myDocs={mineL} company={company} me={meFull} staff={staff} cat={page} preset={preset?.cat === page ? preset : null}
+          <Composer key={`${page}-${preset?.editId || preset?.id || preset?.presetKey || (preset?.cat === page && preset?.form ? `${preset.form}:${preset.docId || ""}` : "new")}${page === "report" && canHr ? "-hr" : ""}`} canHr={canHr} myDocs={mineL} company={company} me={meFull} staff={staff} cat={page} preset={preset?.cat === page ? preset : null}
             leave={leave} getLive={(id) => (list || []).find((x) => x.id === id)}
             onDone={() => { if (preset?.presetKey && nextQueued()) return; setPreset(null); setPage("mine"); }} />
         </>
