@@ -74,7 +74,8 @@ const PRE_A = `${A}__12가3456`;
   await t("drivers: 기사 본인(문서 이름 = uid)", () => assertSucceeds(getDoc(doc(DA, "drivers/drvA"))));
   await t("drivers: 기사 본인(uid 칸 = 나)", () => assertSucceeds(getDoc(doc(DA2, "drivers/linkedX"))));
   await t("drivers: 다른 기사 문서 거절", () => assertFails(getDoc(doc(DA2, "drivers/drvA"))));
-  await t("drivers: 회사명 없는 예전 문서 — 기본 회사(돌캐) 직원 읽기", () => assertSucceeds(getDoc(doc(UD, "drivers/12가9999"))));
+  // 🔒 2026-11-23 기본 회사가 없어져(2026-11-21) 회사명 없는 예전 문서는 어느 운송사 직원에게도 안 보인다(최고관리자만)
+  await t("drivers: 회사명 없는 예전 문서 — 기본 회사였던 직원도 거절", () => assertFails(getDoc(doc(UD, "drivers/12가9999"))));
   await t("drivers: 회사명 없는 예전 문서 — 다른 회사·새 계정 거절", async () => {
     await assertFails(getDoc(doc(UA, "drivers/12가9999")));
     await assertFails(getDoc(doc(NEW, "drivers/12가9999")));
@@ -87,8 +88,9 @@ const PRE_A = `${A}__12가3456`;
   await t("orders: 로그인 안 한 사람 한 건 읽기 거절(예전: 누구나)", () => assertFails(getDoc(doc(ANON, "orders/oA"))));
   await t("orders: 허브 계정 거절", () => assertFails(getDoc(doc(HUB, "orders/oA"))));
   await t("orders: 다른 회사 거절", () => assertFails(getDoc(doc(UB, "orders/oA"))));
-  await t("orders: 같은 회사 직원·기사 읽기", async () => { await assertSucceeds(getDoc(doc(UA, "orders/oA"))); await assertSucceeds(getDoc(doc(DA, "orders/oA"))); });
-  await t("orders: 그 오더의 화주 읽기 / 다른 화주 거절", async () => { await assertSucceeds(getDoc(doc(SS, "orders/oS"))); await assertFails(getDoc(doc(ST, "orders/oS"))); });
+  // 🔒 2026-11-23 원본 오더는 운송사 직원만 — 기사는 driverOrders, 화주는 shipperOrders 사본(운임 칸 일부만)
+  await t("orders: 같은 회사 직원 읽기 · 기사는 원본 거절", async () => { await assertSucceeds(getDoc(doc(UA, "orders/oA"))); await assertFails(getDoc(doc(DA, "orders/oA"))); });
+  await t("orders: 화주는 원본 거절(사본만)", async () => { await assertFails(getDoc(doc(SS, "orders/oS"))); await assertFails(getDoc(doc(ST, "orders/oS"))); });
   await t("orders: 로그인 안 한 사람 attachCount·잠금 수정 거절(예전 isPublicOrderUpdate)", async () => {
     await assertFails(updateDoc(doc(ANON, "orders/oA"), { attachCount: 5 }));
     await assertFails(updateDoc(doc(ANON, "orders/oA"), { 업로드잠금: true }));
@@ -126,7 +128,8 @@ const PRE_A = `${A}__12가3456`;
     await assertSucceeds(setDoc(doc(UA, "orders/oA/attachments/s1"), { base64: "x" }));
     await assertSucceeds(deleteDoc(doc(UA, "orders/oA/attachments/s1")));
   });
-  await t("attachments: 같은 회사 기사(기사앱) 올리기", () => assertSucceeds(setDoc(doc(DA, "orders/oA/attachments/d1"), { base64: "x" })));
+  // 🔒 2026-11-23 기사는 나에게 배정된 오더(기사용 사본이 있는 오더)의 첨부만
+  await t("attachments: 배정 안 된 오더는 기사 올리기 거절", () => assertFails(setDoc(doc(DA, "orders/oA/attachments/d1"), { base64: "x" })));
   await t("attachments: 그 오더 화주 읽기", () => assertSucceeds(getDocs(collection(SS, "orders/oS/attachments"))));
   // 🧾 2026-11-12 정산 증빙서류(evidence) — 그 오더 회사의 사무 직원만
   await t("증빙서류: 같은 회사 직원 읽기·목록·올리기·고치기·지우기", async () => {
@@ -150,8 +153,9 @@ const PRE_A = `${A}__12가3456`;
     await assertFails(getDoc(doc(HUB, "orders/oA/evidence/e1")));
     await assertFails(getDoc(doc(ANON, "orders/oA/evidence/e1")));
   });
-  await t("attachments: 회사명 없는 수동 업로드 — 사무 직원 한 건 읽기 / 로그인 안 함·화주·허브 거절", async () => {
-    await assertSucceeds(getDoc(doc(UA, "driver_uploads/mu1/attachments/m1")));
+  // 🔒 2026-11-23 회사명 없는 부모 문서의 첨부는 최고관리자만(예전엔 모든 운송사 사무 직원)
+  await t("attachments: 회사명 없는 수동 업로드 — 다른 운송사 사무 직원 · 로그인 안 함 · 화주 · 허브 거절", async () => {
+    await assertFails(getDoc(doc(UA, "driver_uploads/mu1/attachments/m1")));
     await assertFails(getDoc(doc(ANON, "driver_uploads/mu1/attachments/m1")));
     await assertFails(getDoc(doc(SS, "driver_uploads/mu1/attachments/m1")));
     await assertFails(getDoc(doc(HUB, "driver_uploads/mu1/attachments/m1")));
@@ -168,7 +172,8 @@ const PRE_A = `${A}__12가3456`;
     await assertFails(getDoc(doc(HUB, `drivers/${PRE_A}`)));
     await assertFails(getDoc(doc(UB, `drivers/${PRE_A}`)));
   });
-  await t("잠금 전: 승인된 직원 오더 목록(예전과 같음)", () => assertSucceeds(getDocs(collection(UB, "orders"))));
+  // 🔒 2026-11-23 스위치와 상관없이 늘 잠금 — 회사 조건 없는 오더 목록은 거절
+  await t("잠금 전에도: 회사 조건 없는 오더 목록 거절", () => assertFails(getDocs(collection(UB, "orders"))));
 
   await env.cleanup();
   console.log(out.join("\n"));

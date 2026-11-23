@@ -13,13 +13,23 @@ const KEYS = [
   "mobileNotifs", "homePastStats", "rateCardHistory", "dispatchDateState", "dispatchStatusState", "mobileLastSyncAt",
   "attachments", "detailAttachments", "call24_ddPwd", "call24_ddID", "userName", "uid", "userCompany", "role",
   "shipperCompany", "shipperCode", "transportCode", "fixedTransport", "routeBoard:last", "seenToasts", "kpServerFilter",
+  // 🔒 2026-11-23 배차 화면 저장본(최근 오더 · 기사 · 거래처 · 작성 중 오더 · 수정 중 칸)과 내 이름 — 같은 PC를 다른 운송사 사람이 쓸 때 앞 사람 것이 잠깐이라도 보이지 않게
+  "dispatchData", "drivers", "clients", "dispatchForm", "realtimeEdit", "kpMyName", "loginCompany", "kpRecentCompanies", "kpDriverViewCo",
 ];
 const PREFIXES = [
   "saved_attach_", "attach_", "shownNotifs_", "urgentSeen_", "urgentSnoozed_", "mobileUrgentSeen_", "fixedTransport_",
-  "shipperOrderDraft_", "vcLater_", "fcConfig_", "kpMsgToastSeen:",
+  "shipperOrderDraft_", "vcLater_", "fcConfig_", "kpMsgToastSeen:", "kpDlSig:",
 ];
 
+// 🔒 2026-11-23 예전 오더 보관본(IndexedDB kpOrderHistory — PC · 폰 13개월)도 지운다 — 회사별로 따로 보관해 다른 회사 화면에 섞이진 않지만,
+//  같은 PC를 다른 운송사 사람이 쓸 때 앞 사람 회사 오더가 기기에 남아 있지 않게
+function purgeHistoryCache() {
+  try { if (typeof indexedDB !== "undefined") indexedDB.deleteDatabase("kpOrderHistory"); } catch { /* 무시 */ }
+}
 export function purgeAccountStorage() {
+  purgeHistoryCache();
+  // 🔒 2026-11-23 탭 저장소(sessionStorage)의 앞 사람 자료 — 결재 자동 입력 · 영수증 대기열 · 견적 초안 · 화면 잠금 해제 표시(로그아웃해도 같은 탭에 남았다)
+  ["kpApPreset", "kpApPresetQueue", "exec_intel_ok", "sales_ok", "kpQuoteSeed", "kpHrTab", "kpFundsTab", "kpSalesTab"].forEach((k) => { try { sessionStorage.removeItem(k); } catch { /* 무시 */ } });
   try {
     const all = Object.keys(localStorage);
     all.forEach((k) => {

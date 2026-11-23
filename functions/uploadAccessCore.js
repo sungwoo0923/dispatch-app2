@@ -178,7 +178,23 @@ function judgePreRegistered({ pre, legacy, name, companyName, uid }) {
   return { ok: true, use };
 }
 
+// 🔒 2026-11-23 기사 통합 업로드 링크(/driver-upload)의 회사 서명 — 예전엔 주소의 co(회사 이름)를 누구나 바꿔 넣어
+//  차량번호 + 이름만 알면 다른 운송사 기사의 날짜별 오더(거래처 · 상하차지 · 화물)를 볼 수 있었다.
+//  이제 링크에 그 회사만 아는 서명(cs)을 같이 넣는다(서버 비밀키로 만든 값 — 회사 이름을 바꾸면 맞지 않는다).
+//  서명 없는 예전 링크는 UNSIGNED_LINK_UNTIL 까지만, 더 엄격한 횟수 제한으로 받는다(그사이 새 링크로 바뀐다).
+const UNSIGNED_LINK_UNTIL = "2026-12-07";
+function coLinkSig(secret, co) {
+  return hmac(secret, `dlco:${String(co || "").trim()}`).slice(0, 22);
+}
+function verifyCoLinkSig(secret, co, sig) {
+  return !!secret && typeof sig === "string" && sig.length === 22 && safeEqual(coLinkSig(secret, co), sig);
+}
+function unsignedLinkAllowed(now = Date.now()) {
+  return now < Date.parse(`${UNSIGNED_LINK_UNTIL}T00:00:00+09:00`);
+}
+
 module.exports = {
+  UNSIGNED_LINK_UNTIL, coLinkSig, verifyCoLinkSig, unsignedLinkAllowed,
   DEFAULT_CO, UPLOAD_TOKEN_TTL_MS, LEGACY_UNTIL_DEFAULT, GRANT_TTL_MS, DELETE_WINDOW_MS, UPLOAD_COLS, MAX_B64,
   safeEqual, signGrant, verifyGrant, newGrant, legacyUntilMs, toMs, evaluateAccess, pickView, mirrorOf, checkFile,
   rateStep, createMemoryLimiter, keyHash, plateOf, normText, coDocKey, judgePreRegistered, b64u,

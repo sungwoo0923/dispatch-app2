@@ -60,8 +60,10 @@ preloadTmapWhenIdle();
     /QuotaExceededError/i.test(msg) || (/FIRESTORE/.test(msg) && /INTERNAL ASSERTION FAILED/i.test(msg));
 
   async function recoverAndReload() {
-    if (sessionStorage.getItem(RELOAD_GUARD_KEY)) return; // 이미 한 번 시도했으면 반복 안 함
-    sessionStorage.setItem(RELOAD_GUARD_KEY, "1");
+    // ⚡ 2026-11-23 10분 안에 이미 한 번 시도했으면 반복 안 함 — 예전엔 한 번 고치면 그 탭에선 다시는 고치지 않아 두 번째부터 먹통으로 남았다
+    const lastTry = Number(sessionStorage.getItem(RELOAD_GUARD_KEY) || 0);
+    if (lastTry > 1 && Date.now() - lastTry < 10 * 60 * 1000) return;
+    sessionStorage.setItem(RELOAD_GUARD_KEY, String(Date.now()));
     console.warn("[APP] Firestore 로컬 저장공간 문제 감지 — 캐시 정리 후 새로고침합니다.");
     // ⭐ 로그인·회사 정보는 남긴다 — 예전엔 전부 지워서 로그인은 유지된 채 회사명만 사라져
     // 회사관리·매출관리 등이 "로딩 중"에서 멈췄다.

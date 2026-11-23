@@ -8,7 +8,15 @@ function cleanAddress(addr = "") {
     .trim();
 }
 
+// ⚡ 2026-11-23 티맵 요청마다 5초 제한 · 전체 22초 안에 끝낸다(예전엔 제한이 없어 길을 못 찾으면 20번 넘게 연달아 물어 504로 끝났다)
+const tfetch = (url, opts = {}, ms = 5000) => {
+  const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(t));
+};
+
 export default async function handler(req, res) {
+  const deadline = Date.now() + 22000;
+  let tmapBusy = false; // 티맵이 한도 초과 · 서버 오류를 돌려주면 더 묻지 않는다
 
   // ✅ CORS 헤더
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -37,7 +45,7 @@ export default async function handler(req, res) {
     // =========================
     const convertToJibun = async (addr) => {
       try {
-        const r = await fetch(
+        const r = await tfetch(
           "https://apis.openapi.sk.com/tmap/geo/convertAddress?version=1&format=json",
           {
             method: "POST",
@@ -76,7 +84,7 @@ export default async function handler(req, res) {
         "?version=1&format=json&fullAddr=" +
         encodeURIComponent(addr);
 
-      const r = await fetch(url, {
+      const r = await tfetch(url, {
         method: "GET",
         headers: { appKey: TMAP_KEY },
       });
@@ -173,7 +181,7 @@ export default async function handler(req, res) {
         if (passList.length > 0) {
           body.passList = passList.map(p => `${p.lon},${p.lat}`).join("_");
         }
-        const routeRes = await fetch(
+        const routeRes = await tfetch(
           "https://apis.openapi.sk.com/tmap/routes?version=1&format=json",
           {
             method: "POST",
@@ -185,7 +193,7 @@ export default async function handler(req, res) {
           }
         );
 
-        if (!routeRes.ok) return null;
+        if (!routeRes.ok) { if (routeRes.status === 429 || routeRes.status >= 500) tmapBusy = true; return null; }
 
         const json = await routeRes.json();
         const features = json?.features;
@@ -213,6 +221,7 @@ export default async function handler(req, res) {
 
       // 출발지 이동
       for (const [dx, dy] of offsets) {
+        if (tmapBusy || Date.now() > deadline) return null;
         const r = await tryRoute(
           start.lon + dx,
           start.lat + dy,
@@ -225,6 +234,7 @@ export default async function handler(req, res) {
 
       // 도착지 이동
       for (const [dx, dy] of offsets) {
+        if (tmapBusy || Date.now() > deadline) return null;
         const r = await tryRoute(
           start.lon,
           start.lat,
@@ -237,11 +247,13 @@ export default async function handler(req, res) {
 
       // 둘 다 이동
       for (const [dx, dy] of offsets) {
+        if (tmapBusy || Date.now() > deadline) return null;
         const r = await tryRoute(
           start.lon + dx,
           start.lat + dy,
           end.lon + dx,
-          end.lat + dy
+          end.lat + dy,
+          viaCoords
         );
         if (r) return r;
       }

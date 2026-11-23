@@ -18,6 +18,7 @@ function useUnderRightDrawer(ref) {
   const [under, setUnder] = React.useState(false);
   React.useEffect(() => {
     const check = () => {
+      if (document.hidden) return; // ⚡ 2026-11-23 안 보이는 탭에서는 살피지 않는다
       const el = ref.current;
       if (!el || typeof document.elementsFromPoint !== "function") return;
       const r = el.getBoundingClientRect();
@@ -31,8 +32,10 @@ function useUnderRightDrawer(ref) {
       setUnder((p) => (p === hit ? p : hit));
     };
     check();
-    const t = setInterval(check, 800);
-    return () => clearInterval(t);
+    const t = setInterval(check, 2000); // ⚡ 2026-11-23 0.8초 → 2초(떠 있는 버튼 3개가 하루 종일 화면을 재던 것) · 누를 때는 바로 살핀다
+    const onClick = () => setTimeout(check, 350);
+    document.addEventListener("click", onClick, { capture: true, passive: true });
+    return () => { clearInterval(t); document.removeEventListener("click", onClick, { capture: true }); };
   }, [ref]);
   return under;
 }

@@ -3,6 +3,7 @@
 //  "기존 회사 추가 가입"에서 회사명을 검색할 때 쓴다(이름·주소만 담는다).
 //  · 운송사 직원이 로그인하면 자기 회사를 올리고, 최고관리자가 로그인하면 승인된 운송사 전체를 채운다.
 import { collection, doc, getDoc, getDocs, query, setDoc, where, serverTimestamp } from "firebase/firestore";
+import { fetchLinkedCompanyInfo } from "./linkedCompanyInfo";
 import { db } from "./firebase";
 
 const idOf = (name) => String(name || "").trim().replace(/[/\\.#$[\]]/g, "_").slice(0, 120);
@@ -28,9 +29,8 @@ export async function readTransportListForShipper(uid) {
     const me = uid ? await getDoc(doc(db, "users", uid)) : null;
     const linked = me?.exists() ? String(me.data()?.linkedTransportCompany?.companyName || "").trim() : "";
     if (linked) {
-      const s = await getDocs(query(collection(db, "transportApplications"), where("companyName", "==", linked), where("status", "==", "approved")));
-      const code = s.docs.map((d) => d.data()?.companyCode).find(Boolean) || "";
-      list.set(linked, { name: linked, code });
+      const info = await fetchLinkedCompanyInfo(); // 🔒 2026-11-23 연동 운송사 코드는 서버가(신청서를 직접 읽지 않는다)
+      list.set(linked, { name: linked, code: info?.companyCode || "" });
     }
   } catch { /* 무시 */ }
   return [...list.values()];

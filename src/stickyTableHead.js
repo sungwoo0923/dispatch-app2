@@ -130,10 +130,19 @@ export function installStickyTableHeads() {
   let timer = 0;
   const run = () => { timer = 0; requestAnimationFrame(() => { try { scanTables(); } catch { /* 무시 */ } }); };
   const soon = (ms = 350) => { if (!timer) timer = setTimeout(run, ms); };
-  const mo = new MutationObserver(() => soon());
+  // ⚡ 2026-11-23 표가 새로 생기거나 없어질 때만 다시 살핀다 — 예전엔 화면 글자 하나만 바뀌어도(실시간 목록 · 시계 · 알림) 페이지 전체 표를 다시 재서 버벅였다
+  const hasTable = (n) => n && n.nodeType === 1 && (n.tagName === "TABLE" || (n.firstElementChild && !!n.querySelector?.("table")));
+  const mo = new MutationObserver((list) => {
+    if (timer) return;
+    for (const m of list) {
+      for (const n of m.addedNodes) if (hasTable(n)) { soon(); return; }
+      for (const n of m.removedNodes) if (hasTable(n)) { soon(); return; }
+    }
+  });
   const start = () => { mo.observe(document.body, { childList: true, subtree: true }); soon(0); };
   if (document.body) start(); else window.addEventListener("DOMContentLoaded", start, { once: true });
   window.addEventListener("resize", () => soon(150));
   ["kp-screen-fit", "kp-collayout-applied"].forEach((e) => window.addEventListener(e, () => soon(100)));
-  setInterval(() => { if (!document.hidden) soon(0); }, 2000); // 탭 전환(숨김 · 보임만 바뀌는 화면) 대비
+  setInterval(() => { if (!document.hidden) soon(0); }, 6000); // 탭 전환(숨김 · 보임만 바뀌는 화면) 대비 · ⚡ 2026-11-23 2초 → 6초
+  document.addEventListener("click", () => soon(250), { capture: true, passive: true }); // 탭 · 메뉴를 누르면 곧바로 다시 살핀다
 }

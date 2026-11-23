@@ -6,6 +6,7 @@ import { collection, query, where, onSnapshot, getDocs } from "firebase/firestor
 import { doc, getDoc } from "firebase/firestore";
 import { html2canvas } from "../../lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import jsPDF from "jspdf";
+import { fetchLinkedCompanyInfo } from "../../linkedCompanyInfo"; // 🔒 2026-11-23
 import { sendCompanyMail, isMailSetupNeeded } from "../../companyMail"; // ✉️ 2026-11-08 운송사별 발신 메일
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
@@ -99,13 +100,7 @@ export default function ShipperSettlement() {
   useEffect(() => {
     const linked = userData?.linkedTransportCompany;
     if (!linked?.companyName) return;
-    getDocs(query(
-      collection(db, "transportApplications"),
-      where("companyName", "==", linked.companyName),
-      where("status", "==", "approved"),
-    )).then(snap => {
-      if (!snap.empty) setTransportEmail(snap.docs[0].data()?.email || "");
-    }).catch(() => {});
+    fetchLinkedCompanyInfo().then((info) => { if (info?.email) setTransportEmail(info.email); }).catch(() => {}); // 🔒 2026-11-23 서버가 필요한 칸만
   }, [userData]);
 
   useEffect(() => {
@@ -114,9 +109,9 @@ export default function ShipperSettlement() {
     const isSubMaster = userData?.permissions?.subMaster === true;
     let q;
     if (isMaster || isSubMaster) {
-      q = query(collection(db, "orders"), where("shipperCompany", "==", userData.companyName));
+      q = query(collection(db, "shipperOrders"), where("shipperCompany", "==", userData.companyName), where("companyName", "==", userData?.linkedTransportCompany?.companyName || "(연동없음)"));
     } else {
-      q = query(collection(db, "orders"), where("shipperUid", "==", user.uid));
+      q = query(collection(db, "shipperOrders"), where("shipperUid", "==", user.uid));
     }
     const unsub = onSnapshot(q, (snap) => {
       setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));

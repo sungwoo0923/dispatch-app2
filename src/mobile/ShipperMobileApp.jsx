@@ -541,7 +541,7 @@ export default function ShipperMobileApp() {
 
   useEffect(() => {
     if (!user || !userData) return;
-    const q = query(collection(db, "orders"), where("shipperCompany", "==", userData.companyName));
+    const q = query(collection(db, "shipperOrders"), where("shipperCompany", "==", userData.companyName), where("companyName", "==", userData?.linkedTransportCompany?.companyName || "(연동없음)"));
     const unsub = onSnapshot(q, (snap) => {
       // 지급방식이 "손실"인 오더는 운송사가 화주사에게 청구하지 않고 자진 부담하는
       // 건이라 화주사 화면에는 아예 없었던 것처럼 제외한다 (운송사 화면엔 그대로 유지).
@@ -841,6 +841,7 @@ export default function ShipperMobileApp() {
         <InternalMessenger
           user={user}
           userCompany={userData.companyName}
+          role="shipper"
           linkedCompanyName={userData?.linkedTransportCompany?.companyName || ""}
           mobileMode={true}
           mobileVisible={showMessenger}

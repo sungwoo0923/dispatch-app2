@@ -97,7 +97,7 @@ export default function SettingsUsers() {
     lastCo = me.companyName;
     try { unsub(); } catch { /* 무시 */ }
     if (!alive || !me.companyName) return;
-    unsub = onSnapshot(query(collection(db, "users"), where("companyName", "==", me.companyName)), (snap) => {
+    unsub = onSnapshot(query(collection(db, "users"), where("companyName", "==", me.companyName), where("role", "==", "shipper")), (snap) => { // 🔒 2026-11-23 같은 이름의 운송사 직원이 섞이지 않게
       const arr = snap.docs.map(d => ({
         uid: d.id,   // 핵심: uid = 문서ID로 강제
         ...d.data()

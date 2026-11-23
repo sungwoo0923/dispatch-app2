@@ -61,8 +61,10 @@ export function setTenant(co) { tenant = norm(co); }
 // 🔒 2단계(서버 규칙 잠금) — 예전 문서에 회사명을 다 채운 뒤(관리센터 › 운송사 분리) 켜진다.
 //  켜지면 회사 데이터 조회에 "companyName == 우리 회사" 조건을 붙여 서버에서부터 우리 회사 것만 받는다
 //  (서버 규칙이 회사가 다른 조회를 거부하므로 반드시 필요).
-let serverFilter = (() => { try { return localStorage.getItem("kpServerFilter") === "1"; } catch { return false; } })();
-export function setServerFilter(on) { serverFilter = !!on; try { localStorage.setItem("kpServerFilter", on ? "1" : "0"); } catch { /* 무시 */ } }
+// 🔒 2026-11-23 서버 규칙이 스위치와 상관없이 늘 잠그므로(firestore.rules locked()) 화면도 늘 회사 조건을 붙인다
+//  (예전엔 로그인 직후 · 스위치를 읽기 전에는 조건 없이 조회해 거부된 뒤 다시 조회했다)
+let serverFilter = true;
+export function setServerFilter() { serverFilter = true; }
 export const isServerFilterOn = () => serverFilter;
 export function getTenant() { return bypass > 0 ? "" : tenant; }
 export function pushTenantBypass() { bypass += 1; return () => { bypass = Math.max(0, bypass - 1); }; }
@@ -376,8 +378,11 @@ export function writeBatch(db) {
 }
 
 // 기사 통합 업로드 링크(/driver-upload)에 회사를 붙인다 — 같은 날 같은 차량·이름이 다른 운송사에 있어도 섞이지 않게
+//  🔒 2026-11-23 회사 서명(cs)도 같이 — 서버가 그 회사가 보낸 링크인지 확인한다(src/driverLinkSig.js 가 로그인 때 받아 둔다)
 export function withCo(url) {
   const t = getTenant();
   if (!t) return url;
-  return `${url}${url.includes("?") ? "&" : "?"}co=${encodeURIComponent(t)}`;
+  let cs = "";
+  try { cs = localStorage.getItem(`kpDlSig:${t}`) || ""; } catch { cs = ""; }
+  return `${url}${url.includes("?") ? "&" : "?"}co=${encodeURIComponent(t)}${cs ? `&cs=${encodeURIComponent(cs)}` : ""}`;
 }

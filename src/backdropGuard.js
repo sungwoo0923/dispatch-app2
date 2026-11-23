@@ -53,6 +53,14 @@ let installed = false;
 export function installBackdropGuard() {
   if (installed || typeof window === "undefined") return;
   installed = true;
-  const stop = (e) => { if (isDimBackdrop(e.target)) e.stopPropagation(); };
+  // ⚡ 2026-11-23 한 번 누르면 pointerdown · mousedown · click 이 잇달아 온다 — 같은 곳이면 0.6초 동안 판정을 다시 쓴다(매번 크기 · 스타일을 재지 않게)
+  let last = { t: null, at: 0, v: false };
+  const stop = (e) => {
+    const now = Date.now();
+    let v;
+    if (last.t === e.target && now - last.at < 600) v = last.v;
+    else { v = isDimBackdrop(e.target); last = { t: e.target, at: now, v }; }
+    if (v) e.stopPropagation();
+  };
   EVENTS.forEach((t) => window.addEventListener(t, stop, { capture: true, passive: true }));
 }

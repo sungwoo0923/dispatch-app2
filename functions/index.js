@@ -59,16 +59,39 @@ function isPushTypeEnabled(prefs, type) {
 // ⭐ 2026-11-01 운송사별 분리 — 그 오더의 회사 직원에게만(기사·화주 제외). 예전엔 모든 회사 사용자 전원에게 갔다.
 const PUSH_DEFAULT_COMPANY = "(회사없음)"; // ⭐ 2026-11-21 기본 회사 없음(돌캐 초기화)
 const NON_STAFF_ROLES = new Set(["driver", "shipper", "cafeUser"]);
+// ⚡ 2026-11-23 예전엔 알림 한 번마다 users 전체(모든 회사 · 기사 · 화주)를 읽었다 → 그 회사 직원만 읽고 1분 동안 재사용
+//  (회사 이름 앞뒤 공백까지 같이 찾는다. 기본 회사 "(회사없음)"만 예전처럼 전체에서 찾는다 — 회사 없는 계정 + 최고관리자)
+const _coUsersCache = new Map(); // co → { at, docs }
+async function companyUserDocs(co) {
+  const hit = _coUsersCache.get(co);
+  if (hit && Date.now() - hit.at < 60000) return hit.docs;
+  const snap = co === PUSH_DEFAULT_COMPANY
+    ? await db.collection("users").get()
+    : await db.collection("users").where("companyName", "in", [...new Set([co, `${co} `, ` ${co}`])]).get();
+  const docs = snap.docs.map((d) => d.data());
+  if (_coUsersCache.size > 200) _coUsersCache.clear();
+  _coUsersCache.set(co, { at: Date.now(), docs });
+  return docs;
+}
+// 🔒 2026-11-23 받는 사람이 그 회사 사람인지 — 문서에 적힌 uid(등록자 · 결재선 · 참조 · 담당자)는 화면이 적는 값이라
+//  다른 운송사 사람 uid 를 넣으면 그 사람에게 우리 회사 내용이 알림으로 갔다
+function sameCoUser(u, co) {
+  if (!u) return false;
+  if (u.role === "totalMaster") return true;
+  return String(u.companyName || "").trim() === String(co || "").trim() && String(co || "").trim() !== ""
+    && u.approved !== false && u.employmentStatus !== "퇴사" && !NON_STAFF_ROLES.has(u.role);
+}
 async function getTokensForType(type, companyName) {
   const co = String(companyName || PUSH_DEFAULT_COMPANY).trim();
-  const snap = await db.collection("users").get();
+  const docs = await companyUserDocs(co);
   const tokens = [];
-  snap.docs.forEach((d) => {
-    const u = d.data();
+  docs.forEach((u) => {
     const ts = userTokens(u);
     if (!ts.length) return;
     if (NON_STAFF_ROLES.has(u.role)) return;
     if (u.approved === false || u.employmentStatus === "퇴사") return;
+    // 🔒 2026-11-23 회사 없는 오더("(회사없음)")는 최고관리자에게만 — 예전엔 회사 칸이 빈 모든 계정(가입 대기 · 예전 계정)에 갔다
+    if (co === PUSH_DEFAULT_COMPANY && u.role !== "totalMaster") return;
     if (u.role !== "totalMaster" && String(u.companyName || PUSH_DEFAULT_COMPANY).trim() !== co) return;
     if (u.role === "totalMaster" && co !== PUSH_DEFAULT_COMPANY) return; // 최고관리자는 기본 회사 알림만
     if (!isPushTypeEnabled(u.pushPrefs, type)) return;
@@ -311,11 +334,11 @@ function buildNotifBody(fieldKeys, d) {
 /* ==============================
    ◆ 신규 오더 알림
 ============================== */
-exports.notifyNewDispatch =
+const _notifyNewDispatch = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onCreate(async (snap, context) => {
-      const { col } = context.params;
+      const col = COL;
       if (!["dispatch", "orders"].includes(col)) return;
 
       const data = snap.data();
@@ -356,15 +379,18 @@ exports.notifyNewDispatch =
         apns: { payload: { aps: { sound: "default" } } },
       }, type);
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.notifyNewDispatch = _notifyNewDispatch("orders");
+exports.notifyNewDispatchLegacy = _notifyNewDispatch("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
 /* ==============================
    ▸ 배차완료 알림
 ============================== */
-exports.notifyDispatchDone =
+const _notifyDispatchDone = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onUpdate(async (change, context) => {
-      const { col } = context.params;
+      const col = COL;
       if (!["dispatch", "orders"].includes(col)) return;
 
       const before = change.before.data();
@@ -396,16 +422,19 @@ exports.notifyDispatchDone =
         apns: { payload: { aps: { sound: "default" } } },
       }, "배차완료");
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.notifyDispatchDone = _notifyDispatchDone("orders");
+exports.notifyDispatchDoneLegacy = _notifyDispatchDone("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
 /* ==============================
    ↻ 재배차 알림 — 배차완료(기사 배정) 상태였다가, 그 기사가 빠지고 다시
    "배차중" 상태로 돌아간 경우("재배차 필요"). notifyDispatchDone과 반대 방향.
 ============================== */
-exports.notifyRedispatch =
+const _notifyRedispatch = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onUpdate(async (change, context) => {
-      const { col } = context.params;
+      const col = COL;
       if (!["dispatch", "orders"].includes(col)) return;
 
       const before = change.before.data();
@@ -436,16 +465,19 @@ exports.notifyRedispatch =
         apns: { payload: { aps: { sound: "default" } } },
       }, "재배차");
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.notifyRedispatch = _notifyRedispatch("orders");
+exports.notifyRedispatchLegacy = _notifyRedispatch("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
 /* ==============================
    ✕ 배차취소 알림 — 오더가 취소(소프트: 배차상태→배차취소)되거나
    완전삭제된 경우.
 ============================== */
-exports.notifyDispatchCanceled =
+const _notifyDispatchCanceled = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onUpdate(async (change, context) => {
-      const { col } = context.params;
+      const col = COL;
       if (!["dispatch", "orders"].includes(col)) return;
 
       const before = change.before.data();
@@ -507,12 +539,15 @@ exports.notifyDispatchCanceled =
         }, "배차취소(취소상태 전환)");
       }
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.notifyDispatchCanceled = _notifyDispatchCanceled("orders");
+exports.notifyDispatchCanceledLegacy = _notifyDispatchCanceled("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
-exports.notifyDispatchDeleted =
+const _notifyDispatchDeleted = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onDelete(async (snap, context) => {
-      const { col } = context.params;
+      const col = COL;
       if (!["dispatch", "orders"].includes(col)) return;
 
       const data = snap.data();
@@ -580,6 +615,9 @@ exports.notifyDispatchDeleted =
         }
       }
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.notifyDispatchDeleted = _notifyDispatchDeleted("orders");
+exports.notifyDispatchDeletedLegacy = _notifyDispatchDeleted("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
 function normalizePlateServer(v = "") {
   return String(v).replace(/\s+/g, "").toUpperCase();
@@ -610,11 +648,11 @@ async function findDriverByPlate(rawPlate, companyName, extraFilter) {
 // 만에 끝나는 실행이 반복됐는데, 이는 그 오더가 생성된 뒤 다른 필드가 바뀔
 // 때마다 onUpdate가 불렸지만 매번 "이미 대기"라 조기 종료된 것이었다). 생성/
 // 수정을 모두 받는 onWrite로 바꾼다.
-exports.notifyFleetDriverNewOrder =
+const _notifyFleetDriverNewOrder = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onWrite(async (change, context) => {
-      const { col } = context.params;
+      const col = COL;
       if (!["dispatch", "orders"].includes(col)) return;
 
       const before = change.before.exists ? change.before.data() : null;
@@ -732,15 +770,18 @@ exports.notifyFleetDriverNewOrder =
         apns: { payload: { aps: { sound: "default" } } },
       }, "지입기사 신규오더 배정");
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.notifyFleetDriverNewOrder = _notifyFleetDriverNewOrder("orders");
+exports.notifyFleetDriverNewOrderLegacy = _notifyFleetDriverNewOrder("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
 /* ==============================
    ⊘ 지입 기사 — 오더 거절 알림(배차담당자 본인에게 OS 푸시)
 ============================== */
-exports.notifyDispatcherOrderRejected =
+const _notifyDispatcherOrderRejected = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onUpdate(async (change, context) => {
-      const { col } = context.params;
+      const col = COL;
       if (!["dispatch", "orders"].includes(col)) return;
 
       const before = change.before.data();
@@ -763,7 +804,7 @@ exports.notifyDispatcherOrderRejected =
       let eligible = 0; // ⭐ 2026-11-17 배차 일을 하는 담당자(운송 화면) — 아무도 없으면 회사 '재배차' 알림 대상에게
       if (recipUids.length) {
         const uSnaps = await db.getAll(...recipUids.map((uid) => db.collection("users").doc(uid)));
-        uSnaps.forEach((d) => { if (d.exists && notifyUserAllows(d.data(), "기사거절")) { eligible++; token.push(...userTokens(d.data())); } });
+        uSnaps.forEach((d) => { if (d.exists && sameCoUser(d.data(), co) && notifyUserAllows(d.data(), "기사거절")) { eligible++; token.push(...userTokens(d.data())); } });
         token = [...new Set(token)];
       }
       if (!eligible) token = await getTokensForType("재배차", co);
@@ -786,6 +827,9 @@ exports.notifyDispatcherOrderRejected =
         apns: { payload: { aps: { sound: "default" } } },
       }, "지입기사 오더거절(담당자 알림)");
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.notifyDispatcherOrderRejected = _notifyDispatcherOrderRejected("orders");
+exports.notifyDispatcherOrderRejectedLegacy = _notifyDispatcherOrderRejected("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
 /* ==============================
    ⏰ 2026-11-05 기사 출근 알림 — 출근을 자주 잊는(특히 연세 있는) 기사님께 OS 푸시로 알려준다.
@@ -934,7 +978,7 @@ function normalizeTimeToHHMM(t) {
 // 안 뜨고 있었던 것으로 보인다. 긴급오더 알림(notifyNewDispatch)과 똑같이
 // 전체 사용자에게 보내도록 바꿔 이 매칭 문제 자체를 없앴다 — 미배차 임박은
 // 등록자 한 명만의 문제가 아니라 팀 전체가 알아야 할 상황이기도 하다.
-exports.notifyUnassignedUrgent = functions.pubsub
+exports.notifyUnassignedUrgent = functions.runWith({ timeoutSeconds: 240 }).pubsub // ⚡ 2026-11-23 기본 60초면 오더 · 파일이 많을 때 중간에 끊겼다
   .schedule("every 5 minutes")
   .timeZone("Asia/Seoul")
   .onRun(async () => {
@@ -1016,11 +1060,11 @@ const ORDER_WATCH_GROUPS = [
   ["담당자 연락처", ["상차지담당자", "상차지담당자번호", "하차지담당자", "하차지담당자번호"]],
   ["전달사항", ["전달사항"]],
 ];
-exports.notifyFleetOrderModified =
+const _notifyFleetOrderModified = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onUpdate(async (change, context) => {
-      const { col, dispatchId } = context.params;
+      const col = COL; const { dispatchId } = context.params;
       if (!["dispatch", "orders"].includes(col)) return;
       const before = change.before.data();
       const after = change.after.data();
@@ -1064,6 +1108,9 @@ exports.notifyFleetOrderModified =
         }, "지입기사 오더수정");
       }
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.notifyFleetOrderModified = _notifyFleetOrderModified("orders");
+exports.notifyFleetOrderModifiedLegacy = _notifyFleetOrderModified("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
 /* ==============================
    ▸ 지입 기사 — 상차/하차 시간 지연 알림
@@ -1133,7 +1180,7 @@ async function getUserToken(uid, cat = "") {
   return cat && !notifyUserAllows(u.data(), cat) ? [] : userTokens(u.data());
 }
 
-exports.notifyFleetLateArrival = functions.pubsub
+exports.notifyFleetLateArrival = functions.runWith({ timeoutSeconds: 240 }).pubsub // ⚡ 2026-11-23 기본 60초면 오더 · 파일이 많을 때 중간에 끊겼다
   .schedule("every 5 minutes")
   .timeZone("Asia/Seoul")
   .onRun(async () => {
@@ -1211,6 +1258,8 @@ exports.notifyFleetLateArrival = functions.pubsub
           const mgrUids = [...new Set([drv["담당자"]?.uid, o["createdByUid"]].filter(Boolean))];
           const mgrTokens = [];
           for (const uid of mgrUids) {
+            const mu = await db.collection("users").doc(uid).get().catch(() => null);
+            if (!mu?.exists || !sameCoUser(mu.data(), o.companyName)) continue; // 🔒 2026-11-23 그 회사 사람에게만
             for (const t of await getUserToken(uid, "기사지연")) if (!mgrTokens.includes(t)) mgrTokens.push(t);
           }
           if (mgrTokens.length) {
@@ -1260,7 +1309,7 @@ exports.notifyFleetLateArrival = functions.pubsub
    사용자가 "잠금"을 걸어두지 않은(잠금 !== true) 파일만 삭제한다.
    잠긴 파일은 아무리 오래돼도 이 정리에서 제외된다.
 ============================== */
-exports.cleanupOldAttachments = functions.pubsub
+exports.cleanupOldAttachments = functions.runWith({ timeoutSeconds: 540 }).pubsub // ⚡ 2026-11-23 기본 60초면 오더 · 파일이 많을 때 중간에 끊겼다
   .schedule("every 24 hours")
   .onRun(async () => {
     const cutoff = new Date();
@@ -1321,9 +1370,22 @@ exports.notifyChatMessage = functions.firestore
     const mentioned = new Set(Array.isArray(data.mentions) ? data.mentions : []);
     const tokens = [];
     const mentionTokens = [];
+    // 🔒 2026-11-23 보낸 사람과 같은 운송사 · 연동 관계(화주 ↔ 연동 운송사)인 사람에게만 — 방에 다른 운송사 사람을 넣어도 대화 내용이 알림으로 가지 않게
+    const sender = data.senderUid ? (await db.collection("users").doc(data.senderUid).get().catch(() => null))?.data() || null : null;
+    const coOf = (u) => String(u?.companyName || "").trim();
+    const linkOf = (u) => String(u?.linkedTransportCompany?.companyName || "").trim();
+    const related = (u) => {
+      if (!sender || !u) return false;
+      if (sender.role === "totalMaster" || u.role === "totalMaster") return true;
+      const sShip = sender.role === "shipper"; const uShip = u.role === "shipper";
+      if (!sShip && !uShip) return coOf(sender) !== "" && coOf(sender) === coOf(u);
+      if (sShip && uShip) return coOf(sender) !== "" && coOf(sender) === coOf(u) && linkOf(sender) === linkOf(u);
+      return sShip ? linkOf(sender) !== "" && linkOf(sender) === coOf(u) : linkOf(u) !== "" && linkOf(u) === coOf(sender);
+    };
     await Promise.all(members.map(async (uid) => {
       try {
         const uSnap = await db.collection("users").doc(uid).get();
+        if (!related(uSnap.data())) return;
         if (isPushTypeEnabled(uSnap.data()?.pushPrefs, "메신저")) (mentioned.has(uid) ? mentionTokens : tokens).push(...userTokens(uSnap.data()));
       } catch (e) {
         console.warn("메신저 알림용 토큰 조회 실패:", uid, e?.message || e);
@@ -3405,11 +3467,11 @@ exports.backfillGsheetFareHistory = functions
     }
   });
 
-exports.syncDispatchToGoogleSheet =
+const _syncDispatchToGoogleSheet = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onWrite(async (change, context) => {
-      const { col, dispatchId } = context.params;
+      const col = COL; const { dispatchId } = context.params;
       if (!["dispatch", "orders"].includes(col)) return;
 
       const after = change.after.exists ? change.after.data() : null;
@@ -3492,6 +3554,9 @@ exports.syncDispatchToGoogleSheet =
         console.error("▥ 구글시트 동기화 실패:", e?.message || e);
       }
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.syncDispatchToGoogleSheet = _syncDispatchToGoogleSheet("orders");
+exports.syncDispatchToGoogleSheetLegacy = _syncDispatchToGoogleSheet("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
 // 모든 월별 탭에 "시트 직접 입력 도우미"(필수칸 표시·목록 선택 등)를 적용 — 관리자메뉴 버튼
 // 호출: GET .../applyGsheetGuides?key=<GSHEET_BACKFILL_KEY>
@@ -3715,6 +3780,7 @@ const _uploadAccess = require("./uploadAccess")({ functions, db, getAuth, FieldV
 exports.uploadAccess = _uploadAccess.uploadAccess;
 exports.driverSearch = _uploadAccess.driverSearch;
 exports.driverLoginLink = _uploadAccess.driverLoginLink;
+exports.driverLinkSig = _uploadAccess.driverLinkSig; // 🔒 2026-11-23 기사 업로드 링크 회사 서명
 const _publicLimited = _uploadAccess.limited;
 const _publicIp = _uploadAccess.clientIp;
 // ⭐ 2026-11-11 기사 차량 변경(계정은 그대로, 차량번호만) · 휴대폰번호 로그인 — functions/driverVehicle.js
@@ -3771,7 +3837,7 @@ async function canFreeAuthAccount(u) {
     const st = snap.data().status;
     return st === "deleted" || st === "withdrawn";
   }
-  // users 문서가 없는 계정은 "운송사 삭제(초기화)로 사용 중지된 계정"일 때만 — 다른 서비스(KP-Planner 등) 전용 계정은 건드리지 않는다
+  // users 문서가 없는 계정은 "운송사 삭제(초기화)로 사용 중지된 계정"일 때만 — 다른 서비스 전용 계정은 건드리지 않는다
   if (!u.disabled) return false;
   const bk = await db.collection("resetBackups").where("accountUids", "array-contains", u.uid).limit(1).get().catch(() => ({ empty: true }));
   return !bk.empty;
@@ -3854,6 +3920,7 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
     const tok = await getAuth().verifyIdToken(m[1]).catch(() => null);
     if (!tok) { res.status(401).json({ error: "BAD_TOKEN" }); return; }
     const uid = tok.uid;
+    if (await _publicLimited(res, [[`lds:uid:${uid}`, 10, 10 * 60e3], [`lds:ip:${_publicIp(req)}`, 30, 10 * 60e3]])) return; // 🔒 2026-11-23 맞춰 보기 반복 막기
     const email = String(tok.email || "").toLowerCase();
     const b = (req.body && typeof req.body === "object") ? req.body : {};
     const s = (v, n = 200) => String(v ?? "").trim().slice(0, n);
@@ -3884,6 +3951,10 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
       const legacy = await db.collection("drivers").where("차량번호", "in", raws).get().catch(() => ({ docs: [] }));
       legacy.docs.forEach((d) => { if (!String(d.data().companyName || "").trim()) cands.set(d.id, d); });
     }
+    // 🔒 2026-11-23 사용자 요청 — 기사관리에 등록된 기사와 "차량번호 · 이름 · 연락처 · 운송사"가 모두 맞아야 연결한다(예전엔 이름만 맞아도 연결 · 승인)
+    //  · 모두 맞고 + 등록된 번호로 문자 인증(phoneIdToken)까지 하면 → 자동 승인
+    //  · 모두 맞지만 문자 인증을 안 했으면 → 연결은 하되 승인 대기(운송사 직원이 승인)
+    //  · 하나라도 다르면 연결하지 않는다(conflict — 화면이 "등록 정보와 다르다"고 안내)
     const myDigits = drvDigits(phone);
     let best = null;
     let bestScore = 0;
@@ -3895,8 +3966,21 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
       const xd = drvDigits(x.전화번호 || x.phone);
       const samePhone = myDigits.length >= 9 && xd.length >= 9 && xd === myDigits;
       const sameName = drvName(x.이름 || x.name) !== "" && drvName(x.이름 || x.name) === drvName(name);
-      const score = (samePhone ? 2 : 0) + (sameName ? 1 : 0);
-      if (score > bestScore) { best = d; bestScore = score; }
+      if (!samePhone || !sameName) continue;
+      if (String(x.companyName || "").trim() && String(x.companyName).trim() !== co) continue;
+      best = d; bestScore = 3;
+    }
+    // 문자 인증 — 기사관리에 등록된 번호로 받은 인증인지(10분 안)
+    let smsOk = false;
+    if (best && b.phoneIdToken) {
+      const pt = await getAuth().verifyIdToken(String(b.phoneIdToken)).catch(() => null);
+      const got = drvDigits(pt?.phone_number).replace(/^82/, "0");
+      const reg = drvDigits((best.data() || {}).전화번호 || (best.data() || {}).phone);
+      smsOk = !!pt && got.length >= 10 && got === reg && Date.now() - Number(pt.auth_time || 0) * 1000 < 10 * 60 * 1000;
+      // 문자 인증 때 생긴 전화번호 임시 계정은 지운다(이메일 없는 전화 전용 계정만)
+      if (pt?.uid && pt.uid !== uid && !pt.email) {
+        try { const pu = await getAuth().getUser(pt.uid); if (!pu.email && pu.providerData.every((x) => x.providerId === "phone")) await getAuth().deleteUser(pt.uid); } catch { /* 무시 */ }
+      }
     }
     if (!best) {
       // ⭐ 2026-11-08 보안 — 화면이 drivers/{차량번호}를 직접 읽지 않게 됐다. 같은 회사에 이 차량번호 선등록 문서가 있는데
@@ -3941,10 +4025,10 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
       ...merged,
       uid,
       companyName: co,
-      approved: true,
+      approved: smsOk,
       linkedFromDriverId: best.id !== uid ? best.id : (base.linkedFromDriverId || ""),
       linkedAt: now,
-      linkedBy: "기사 가입 자동 연결",
+      linkedBy: smsOk ? "기사 가입 자동 연결(문자 인증)" : "기사 가입 연결(문자 인증 전 — 승인 대기)",
       createdAt: base.createdAt || now,
       updatedAt: now,
     };
@@ -3961,7 +4045,8 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
       hireDate,
       정산계좌: drvFilled(merged.정산계좌) ? merged.정산계좌 : null,
       사업자번호: pick("사업자번호"), 사업자상호: pick("사업자상호"),
-      approved: true,
+      approved: smsOk,
+      phoneVerified: smsOk,
       termsAgreed: b.termsAgreed === true, privacyAgreed: b.privacyAgreed === true, gpsAgreed: b.gpsAgreed === true,
       linkedDriverAuto: true,
       linkedFromDriverId: driverDoc.linkedFromDriverId,
@@ -3983,8 +4068,8 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
       const docs = await db.collection("driver_documents").where("driverId", "==", best.id).get().catch(() => ({ docs: [] }));
       for (const d of docs.docs) await d.ref.set({ driverId: uid }, { merge: true }).catch(() => {});
     }
-    console.log(`🔗 기사 가입 자동 연결: ${co} ${plate} ${name} → ${best.id} ⇒ drivers/${uid} (점수 ${bestScore})`);
-    res.status(200).json({ linked: true, driverId: uid, from: best.id, name: userDoc.name });
+    console.log(`🔗 기사 가입 연결: ${co} ${plate} ${name} → ${best.id} ⇒ drivers/${uid} (${smsOk ? "문자 인증 · 자동 승인" : "승인 대기"})`);
+    res.status(200).json({ linked: true, approved: smsOk, driverId: uid, from: best.id, name: userDoc.name });
   } catch (e) {
     if (e?.code === "GONE" || e?.code === "TAKEN") { res.status(200).json({ linked: false, reason: e.code }); return; }
     console.error("기사 가입 자동 연결 실패:", e);
@@ -3994,6 +4079,116 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
 
 // 🏢 가입 화면 "기존 회사" 검색 — 로그인 전에는 규칙상 transportApplications 를 읽을 수 없어
 //  항상 "등록된 운송사가 없습니다"가 떴다. 승인된 운송사의 회사명·주소만 내려준다(다른 정보 없음).
+// 🔒 2026-11-23 역할별 오더 사본(기사 · 화주) — 설명은 functions/roleMirror.js 맨 위
+const _roleMirror = require("./roleMirror");
+const _roleMirrorTrigger = (COL) => functions.runWith({ timeoutSeconds: 60, memory: "256MB" }).firestore.document(`${COL}/{orderId}`)
+  .onWrite(async (change, context) => {
+    try {
+      await _roleMirror.syncOne(db, FieldValue, COL, context.params.orderId,
+        change.before.exists ? change.before.data() : null, change.after.exists ? change.after.data() : null);
+    } catch (e) { console.error("[역할 사본] 실패:", COL, context.params.orderId, e?.message || e); throw e; }
+  });
+exports.roleMirrorOrders = _roleMirrorTrigger("orders");
+exports.roleMirrorDispatch = _roleMirrorTrigger("dispatch");
+// 기존 오더 사본 채우기 — 배포 뒤 10분마다 최근 오더부터 차례로(끝나면 멈춘다 · 진행은 systemConfig/roleMirror)
+exports.roleMirrorBackfill = functions.runWith({ timeoutSeconds: 540, memory: "512MB" }).pubsub.schedule("every 10 minutes").timeZone("Asia/Seoul").onRun(async () => {
+  const ref = db.collection("systemConfig").doc("roleMirror");
+  const st = (await ref.get()).data() || {};
+  if (st.done === true && st.ver === 1) return null;
+  const deadline = Date.now() + 480e3;
+  let col = st.col || "orders"; let lastDay = st.lastDay ?? null; let lastId = st.lastId ?? null; let n = 0;
+  while (Date.now() < deadline) {
+    let q = db.collection(col).orderBy("상차일", "desc").orderBy("__name__", "desc").limit(200);
+    if (lastDay !== null && lastId) q = q.startAfter(lastDay, db.collection(col).doc(lastId));
+    const snap = await q.get();
+    if (snap.empty) {
+      if (col === "orders") { col = "dispatch"; lastDay = null; lastId = null; continue; }
+      await ref.set({ done: true, ver: 1, finishedAt: FieldValue.serverTimestamp() }, { merge: true });
+      console.log(`[역할 사본] 채우기 끝 (+${n})`);
+      return null;
+    }
+    for (const d of snap.docs) {
+      await _roleMirror.syncOne(db, FieldValue, col, d.id, null, d.data() || {}, { force: true }).catch((e) => console.warn("[역할 사본] 채우기 실패:", col, d.id, e?.message || e));
+      n += 1;
+    }
+    const last = snap.docs[snap.docs.length - 1];
+    lastDay = String(last.data()?.상차일 ?? ""); lastId = last.id;
+    await ref.set({ col, lastDay, lastId, ver: 1, done: false, count: FieldValue.increment(snap.size), at: FieldValue.serverTimestamp() }, { merge: true });
+  }
+  console.log(`[역할 사본] 채우는 중 — 이번 ${n}건(다음 실행에서 이어서)`);
+  return null;
+});
+
+// 🔒 2026-11-23 화주 메신저 — 연동 운송사 직원 대화 상대 목록(공유해도 되는 칸만: 이름 · 직급 · 팀 · 사진)
+//  예전엔 화주 화면이 연동 운송사 직원 문서(users)를 통째로 받아 휴대폰 · 이메일 · 인사 기록 · 퇴사 사유까지 브라우저에 왔다.
+//  이제 보안 규칙은 화주가 운송사 직원 문서를 못 읽게 막고, 이 함수가 필요한 칸만 돌려준다(승인 · 재직 중인 사무 직원만 — 기사 제외).
+exports.linkedStaffList = functions.https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "linkedStaffList"))) return;
+  try {
+    const m = String(req.headers.authorization || "").match(/^Bearer (.+)$/);
+    const tok = m ? await getAuth().verifyIdToken(m[1]).catch(() => null) : null;
+    if (!tok) { res.status(401).json({ error: "NO_TOKEN" }); return; }
+    const me = (await db.collection("users").doc(tok.uid).get()).data() || {};
+    if (me.role !== "shipper" || me.approved === false || me.employmentStatus === "퇴사") { res.status(403).json({ error: "SHIPPER_ONLY" }); return; }
+    const co = String(me.linkedTransportCompany?.companyName || "").trim();
+    if (!co) { res.status(200).json({ company: "", staff: [] }); return; }
+    const [us, ps] = await Promise.all([
+      db.collection("users").where("companyName", "==", co).get(),
+      db.collection("chat_profiles").where("company", "==", co).get().catch(() => ({ docs: [] })),
+    ]);
+    const prof = new Map(ps.docs.map((d) => [d.id, d.data() || {}]));
+    const staff = us.docs.map((d) => ({ uid: d.id, x: d.data() || {} }))
+      .filter(({ x }) => x.approved !== false && x.employmentStatus !== "퇴사" && !["driver", "shipper", "cafeUser", "viewer", "totalMaster"].includes(x.role))
+      .map(({ uid, x }) => { const p = prof.get(uid) || {}; return { uid, name: p.name || x.name || "", position: x.position || x.직책 || p.position || "", team: x.team || "", photo: p.photo || x.photo || "", statusMsg: p.statusMsg || "" }; });
+    res.set("Cache-Control", "no-store");
+    res.status(200).json({ company: co, staff });
+  } catch (e) { console.error("linkedStaffList 실패:", e); res.status(500).json({ error: "FAILED" }); }
+});
+
+// 🔒 2026-11-23 연동 운송사(화주) · 소속 운송사(기사) 연락처 — 가입 신청서(직인 이미지 · 회사 코드 · 신청인 정보)를 통째로 읽던 것 대신
+//  공유해도 되는 칸만: 회사명 · 대표자 · 사업자번호 · 주소 · 대표 전화 · 이메일(화주만 — 정산서 받을 주소) · 회사 코드(화주만 — 오더 전송용)
+exports.linkedCompanyInfo = functions.https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "linkedCompanyInfo"))) return;
+  try {
+    const m = String(req.headers.authorization || "").match(/^Bearer (.+)$/);
+    const tok = m ? await getAuth().verifyIdToken(m[1]).catch(() => null) : null;
+    if (!tok) { res.status(401).json({ error: "NO_TOKEN" }); return; }
+    const me = (await db.collection("users").doc(tok.uid).get()).data() || {};
+    if (me.approved === false || me.employmentStatus === "퇴사") { res.status(403).json({ error: "NOT_APPROVED" }); return; }
+    const shipper = me.role === "shipper";
+    if (!shipper && me.role !== "driver") { res.status(403).json({ error: "SHIPPER_OR_DRIVER_ONLY" }); return; }
+    const co = String(shipper ? me.linkedTransportCompany?.companyName || "" : me.companyName || "").trim();
+    if (!co) { res.status(200).json({ info: null }); return; }
+    const snap = await db.collection("transportApplications").where("companyName", "==", co).get();
+    const all = snap.docs.map((d) => d.data() || {});
+    const a = all.find((x) => x.type === "신규" && x.status === "approved") || all.find((x) => x.status === "approved") || null;
+    const info = !a ? { companyName: co } : {
+      companyName: co, representative: a.representative || a.name || "", businessNumber: a.businessNumber || "",
+      address: a.address || "", phone: a.phone || a.tel || a.연락처 || "",
+      ...(shipper ? { email: a.email || "", companyCode: a.companyCode || "" } : {}),
+    };
+    // 기사 — 내 차량 보험사(교통사고 접수 버튼용). 차량 장부(비용 등)는 기사가 직접 읽지 않는다
+    if (!shipper) {
+      const plateKey = String(me.carNo || me.차량번호 || "").replace(/[^0-9가-힣A-Za-z]/g, "");
+      if (plateKey) {
+        let v = (await db.collection("vehicleLedger").doc(`${co.replace(/\//g, "_")}__${plateKey}`).get().catch(() => null))?.data() || null;
+        if (!v) v = (await db.collection("vehicleLedger").where("companyName", "==", co).where("plateKey", "==", plateKey).limit(1).get().catch(() => null))?.docs?.[0]?.data() || null;
+        if (v) info.insurer = { 보험사: String(v.보험사 || ""), 보험사전화: String(v.보험사전화 || "") };
+      }
+    }
+    res.set("Cache-Control", "no-store");
+    res.status(200).json({ info });
+  } catch (e) { console.error("linkedCompanyInfo 실패:", e); res.status(500).json({ error: "FAILED" }); }
+});
+
 exports.findCompany = functions.https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -4008,7 +4203,9 @@ exports.findCompany = functions.https.onRequest(async (req, res) => {
   // ⭐ 2026-11-01 신규 가입 회사명 중복확인 — 승인된 회사 + 승인 대기 중인 신규 신청까지(띄어쓰기·대소문자 무시). 결과는 있음/없음만
   if (req.query.dup === "1") {
     try {
-      const norm = (x) => String(x || "").toLowerCase().replace(/\s+/g, "");
+      // 🔒 2026-11-23 회사 메일 · 급여 비밀번호 보관 이름(safeId — 공백 · / · # · ? · [ ] · _ 를 같은 글자로 본다)이 겹치는 이름도 "이미 있음"
+      //  (예: "한국 운송" 과 "한국_운송" — 겹치면 나중 회사가 앞 회사 메일함 · 급여 비밀번호에 닿을 수 있었다)
+      const norm = (x) => String(x || "").toLowerCase().replace(/[\s/#?[\]_]+/g, "").slice(0, 80);
       const key = norm(q);
       const [apps, plan] = await Promise.all([
         db.collection("transportApplications").where("type", "==", "신규").get(),
@@ -4757,7 +4954,8 @@ async function requireStaff(req, body) {
 
 // 🗑️ 휴지통 — 오더가 어떤 화면·경로로 지워지든(PC·모바일·선택삭제·기사앱) 지우기 직전 내용을 7일 보관한다.
 //    (예전엔 삭제 기록에 오더 번호만 남아 Firebase 시점 복구 설정이 없으면 되살릴 수 없었다)
-exports.archiveDeletedOrder = functions.firestore.document("{col}/{orderId}").onDelete(async (snap, ctx) => {
+// ⚡ 2026-11-23 휴지통을 없애 아무 일도 안 하는데 모든 삭제마다 불리던 함수 — 배포에서 뺌
+const _archiveDeletedOrderOff = () => functions.firestore.document("{col}/{orderId}").onDelete(async (snap, ctx) => {
   const { col, orderId } = ctx.params;
   if (!["orders", "dispatch"].includes(col)) return;
   return; // 🗑 2026-11-14 사용자 요청 — 휴지통 기능을 없앴다. 지운 오더를 더는 보관하지 않는다(남아 있던 보관분은 매시간 정리 때 모두 지운다)
@@ -4954,7 +5152,8 @@ async function generateRecurringOrders(date, { company = null, ids = null, check
     const id = `rec_${t.id}_${date}`;
     Object.assign(o, {
       _id: id, 상차일: date, 하차일: addDaysStr(date, Number(tp.dropOffset) || 0), 등록일: kstDateStr(),
-      companyName: o.companyName || tp.companyName || "(회사없음)",
+      // 🔒 2026-11-23 회사는 정기 오더 문서(규칙이 확인한 회사)로만 — 안쪽 오더 값(order.companyName)으로 다른 운송사 오더를 만들 수 있었다
+      companyName: tp.companyName || "(회사없음)", company: tp.companyName || "",
       배차상태: hasDriver ? "배차완료" : "배차중",
       ...(hasDriver ? { 배차확정일시: FieldValue.serverTimestamp(), 배차확정자: "정기 오더", 배차완료일시: Date.now() } : {}),
       작성자: tp.createdBy || "", 등록기기: "정기", 정기오더: { id: t.id, name: tp.name || "" }, _recurring: true,
@@ -5106,10 +5305,13 @@ async function pushInternalMail(m) {
   const tokens = [];
   // ⭐ 2026-11-02 점검 — kind:"hr"에는 이력서 제출·연차 촉진·증명서 발급도 섞여 있다 — 제목이 [인사발령…]인 것만 '인사발령' 설정·제목으로
   const isOrder = m.kind === "hr" && /^\[인사발령/.test(String(m.subject || ""));
+  // 🔒 2026-11-23 회사는 보낸 사람 계정 기준(메일 문서의 company 칸은 화면이 적어 다른 회사로 바꿀 수 있었다)
+  let co = m.company || "(회사없음)";
+  if (m.fromUid) { const f = await db.collection("users").doc(m.fromUid).get().catch(() => null); if (f?.exists && f.data().role !== "totalMaster") co = String(f.data().companyName || "").trim() || "(회사없음)"; }
   for (let i = 0; i < to.length; i += 100) {
     const docs = await db.getAll(...to.slice(i, i + 100).map((uid) => db.collection("users").doc(uid)));
     const pk = isOrder ? "인사발령" : m.kind === "closeReport" ? "마감보고" : "사내메일";
-    docs.forEach((d) => { if (d.exists && (d.data().companyName || "(회사없음)") === (m.company || "(회사없음)") && isPushTypeEnabled(d.data().pushPrefs, pk)) tokens.push(...userTokens(d.data())); });
+    docs.forEach((d) => { if (d.exists && String(d.data().companyName || "").trim() === co && co !== "(회사없음)" && isPushTypeEnabled(d.data().pushPrefs, pk)) tokens.push(...userTokens(d.data())); });
   }
   const head = isOrder ? "◆ 인사발령" : m.kind === "hr" ? "◆ 인사관리부" : m.kind === "closeReport" ? "▸ 마감보고" : m.kind === "approval" ? `✎ 전자결재 · ${m.fromName || ""}` : `▸ ${m.important ? "[중요] " : ""}${m.fromName || "사내메일"}`;
   const body = m.kind === "closeReport" ? String(m.body || "") : `${m.subject || ""}${m.body ? `\n${String(m.body).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
@@ -5156,7 +5358,8 @@ exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(
   }
   for (const [uid, title, body, pk = "결재결과"] of msgs) {
     const u = await db.collection("users").doc(uid).get();
-    const tok = u.exists && isPushTypeEnabled(u.data().pushPrefs, pk) ? userTokens(u.data()) : [];
+    // 🔒 2026-11-23 결재 문서 회사(company) 사람에게만 — 결재선 · 참조에 다른 운송사 uid 를 넣어도 그 사람에게 안 간다
+    const tok = u.exists && sameCoUser(u.data(), a.company || a.companyName) && isPushTypeEnabled(u.data().pushPrefs, pk) ? userTokens(u.data()) : [];
     if (tok.length) await sendPushAndCleanup(tok, { notification: { title, body }, android: { priority: "high" } }, "전자결재").catch((e) => console.error("결재 푸시 실패:", e));
   }
   return null;
@@ -7141,8 +7344,9 @@ const PB_RUN = POPBILL_ON ? { secrets: ["POPBILL_LINK_ID", "POPBILL_SECRET_KEY"]
 const _alimtalk = require("./alimtalk").makeAlimtalk({ db, FieldValue, getPopbill: getPopbillAdapter, callerOf: _publicData.callerOf });
 const _bankSync = require("./bankSync").makeBankSync({ db, FieldValue, getPopbill: getPopbillAdapter, callerOf: _publicData.callerOf });
 const ALIMTALK_OFF = true;
-exports.alimtalkOnOrderWrite = functions.runWith({ ...PB_RUN, timeoutSeconds: 60, memory: "256MB" }).firestore
-  .document("{col}/{dispatchId}")
+// ⚡ 2026-11-23 알림톡을 끈 동안은 배포하지 않는다(모든 컬렉션 쓰기마다 불리던 것) — 다시 쓰려면 ALIMTALK_OFF = false
+if (!ALIMTALK_OFF) exports.alimtalkOnOrderWrite = functions.runWith({ ...PB_RUN, timeoutSeconds: 60, memory: "256MB" }).firestore
+  .document("orders/{dispatchId}")
   .onWrite(async (change, context) => {
     // 💬 2026-11-08 사장님 요청 — 알림톡 사용 안 함(PC·모바일 화면에서 뺐다). 다시 쓰려면 이 줄만 지운다
     if (ALIMTALK_OFF) return null;

@@ -76,6 +76,7 @@ export default function DriverSearchPage() {
   const sourceFixed = params.get("source") === "fixed";
   // 🏢 운송사가 보낸 링크에는 회사(co)가 붙어 있다 — 그 회사 오더만 찾는다(예전 링크는 회사 없이 그대로)
   const linkCo = (params.get("co") || "").trim();
+  const linkCs = (params.get("cs") || "").trim(); // 🔒 2026-11-23 회사 서명 — 서버가 그 회사가 보낸 링크인지 확인
   const [date, setDate] = useState(params.get("date") || todayKSTStr());
   const [vehicleNo, setVehicleNo] = useState(params.get("vehicle") || "");
   const [name, setName] = useState(params.get("name") || "");
@@ -107,11 +108,12 @@ export default function DriverSearchPage() {
     // ⭐ 2026-11-08 보안 — 서버(driverSearch)만 쓴다. 로그인 없는 화면이 오더 목록을 직접 읽던 예전 방식은 규칙이 막는다.
     //  결과에는 오더의 업로드토큰 대신 그 오더 하나에만 쓰이는 6시간짜리 허가증(grant)이 온다.
     try {
-      const qs = new URLSearchParams({ date, vehicle: trimVehicle, name: trimName, ...(linkCo ? { co: linkCo } : {}), ...(sourceFixed ? { source: "fixed" } : {}) });
+      const qs = new URLSearchParams({ date, vehicle: trimVehicle, name: trimName, ...(linkCo ? { co: linkCo } : {}), ...(linkCs ? { cs: linkCs } : {}), ...(sourceFixed ? { source: "fixed" } : {}) });
       const r = await fetch(`${FUNCTIONS_BASE}/driverSearch?${qs.toString()}`);
       const j = await r.json().catch(() => null);
       if (r.ok && Array.isArray(j?.results)) setResults(j.results);
       else if (r.status === 429) setError("검색을 너무 여러 번 했습니다. 잠시 후 다시 시도해주세요.");
+      else if (j?.error === "NEED_NEW_LINK") setError("예전 링크예요. 운송사에 새 업로드 링크를 다시 받아 주세요.");
       else setError("검색 중 오류가 발생했습니다. 다시 시도해주세요.");
     } catch (e) {
       console.error(e);

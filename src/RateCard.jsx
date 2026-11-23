@@ -11,7 +11,6 @@ import { db } from "./firebase";
 import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, serverTimestamp } from "firebase/firestore";
 import KpSubNav from "./KpSubNav";
 import { useTableSort, sortRows, SortTh } from "./tableSort";
-import BidQuote from "./BidQuote"; // 🧮 2026-11-23 입찰견적 — 업체 견적 양식 붙여넣기 → 칸마다 원가 · 권장가 · 마진 · 이상 단가 알림
 
 // 단가표 메뉴 전체에서 쓰는 표준 차량톤수 목록 — 다목적지 단가표의 기본(삭제 불가) 컬럼으로도 사용된다.
 const STANDARD_TON_LABELS = ["다마스/라보","1톤","1.4톤","2.5톤","3.5톤","3.5톤광폭","5톤","5톤축","5톤플축","8톤","11톤","11톤축","15톤","18톤","25톤"];
@@ -931,7 +930,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
       items={[
         { key: "노선별", label: "노선별 단가표", en: "ROUTE", icon: "route" },
         { key: "다목적지", label: "다목적지 단가표", en: "MULTI DEST", icon: "pin", badge: multiSheets.length, soft: true, badgeTitle: `저장된 단가표 ${multiSheets.length}개` },
-        { key: "입찰견적", label: "입찰견적", en: "BID QUOTE", icon: "chart" },
+        // 🧹 2026-11-23 입찰견적 메뉴는 뺌(사용자 요청) — 화면 코드(BidQuote.jsx)는 남겨 둠
       ]}
       actionsLabel="도구"
       actions={[
@@ -970,7 +969,6 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
         </div>
       </div>
 
-      {pageMode === "입찰견적" && <BidQuote dispatchData={dispatchData} userCompany={userCompany} clients={clients} />}
 
       {pageMode === "노선별" && (
       <div className="grid grid-cols-1 md:grid-cols-[360px_1fr] gap-4 md:gap-5 items-start">

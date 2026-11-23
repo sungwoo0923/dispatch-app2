@@ -90,7 +90,7 @@ const [form, setForm] = useState({
 // ================= 실시간 현황판: 오늘 운송사가 배차완료/수정한 이벤트만 수집 =================
 useEffect(() => {
   if (!companyName) return;
-  const q = query(collection(db, "orders"), where("shipperCompany", "==", companyName));
+  const q = query(collection(db, "shipperOrders"), where("shipperCompany", "==", companyName), where("companyName", "==", userData?.linkedTransportCompany?.companyName || "(연동없음)"));
   const unsub = onSnapshot(q, (snap) => {
     const evts = [];
     snap.docs.forEach((d) => {
@@ -113,7 +113,7 @@ useEffect(() => {
     setLiveEvents(evts);
   });
   return () => unsub();
-}, [companyName]);
+}, [companyName, userData?.linkedTransportCompany?.companyName]);
 
 // ================= 최고관리자 강제 업데이트 감지 =================
 // 화주사 클라이언트가 서비스워커 자동 갱신을 놓치는 경우를 대비해, 최고관리자가
@@ -161,7 +161,7 @@ const gCancelReqFirstLoadRef = useRef(true);
 
 useEffect(() => {
   if (!companyName) return;
-  const q = query(collection(db, "orders"), where("shipperCompany", "==", companyName));
+  const q = query(collection(db, "shipperOrders"), where("shipperCompany", "==", companyName), where("companyName", "==", userData?.linkedTransportCompany?.companyName || "(연동없음)"));
   const unsub = onSnapshot(q, (snap) => {
     const docs = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
@@ -264,7 +264,7 @@ useEffect(() => {
     }
   });
   return () => unsub();
-}, [companyName]);
+}, [companyName, userData?.linkedTransportCompany?.companyName]);
 
 const handleGlobalToastClick = (t) => {
   setGlobalToasts((prev) => prev.filter((x) => x.id !== t.id));
@@ -485,6 +485,7 @@ const isSubMaster = isTotalMasterUser || userData?.permissions?.subMaster;
       <InternalMessenger
         user={user}
         userCompany={companyName}
+        role="shipper"
         linkedCompanyName={userData?.linkedTransportCompany?.companyName || ""}
         themeColor="#1B2B4B"
         excludeRoles={["driver", "viewer"]}

@@ -40,7 +40,7 @@ import { haversineKm } from "../tmapFareCalc";
 import VehicleCarePanel, { VehicleSetupWizard, shouldShowSetup } from "../VehicleCarePanel";
 import { VehicleExpenseCards, PhotoDueCard } from "./DriverVehicleExpense"; // 🧾 2026-11-10 비용 영수증 · 정기 차량 사진
 import { careSummary, vehicleDefaults } from "../vehicleCare";
-import { vehicleDocId, normPlate, insurerPhone } from "../vehicleLedgerData"; // 🚨 2026-11-10 교통사고 접수 → 내 차량 보험사 번호
+import { insurerPhone } from "../vehicleLedgerData"; // 🚨 2026-11-10 교통사고 접수 → 내 차량 보험사 번호
 import { toYmd } from "../../functions/fleetCareCore.mjs";
 import DriverDocBox, { useDriverInbox, DriverPayInfoCard } from "./DriverDocBox";
 import DriverNotices from "./DriverNotices"; // ⭐ 2026-11-03 회사 공지(공개 대상 "기사")
@@ -55,6 +55,7 @@ import CustomDatePicker from "../CustomDatePicker"; // 📅 2026-11-07 날짜는
 import "./driverTheme.css"; // ⭐ 2026-11-08 기사앱 리디자인 공통 테마
 import { useCompanyFeature } from "../companyFeatures";
 // ⭐ 2026-11-08 업체 요청(회사별 기능) — 퇴근 키로수 입력 · 엔진오일(5만km, 4만km 알림)·타이어 표시
+import { fetchLinkedCompanyInfo } from "../linkedCompanyInfo";
 import { ODO_OIL_FEATURE, needOilConfirm, saveCheckoutKm, saveOilAck, oilInfo, OdoCheckoutSheet, OilAlertSheet, ChangeRecordSheet, OilTireCard, needFirstOdo, OdoFirstSheet } from "./DriverOdoOil";
 
 // ⭐ 오더 타임라인 — 기사 행동(수락/거절/수정확인/상차지도착/상차완료/운송완료 등)을
@@ -359,14 +360,11 @@ function DispatcherLine({ order: o }) {
     // ⭐ 실명은 users 문서(내 정보의 이름)를 최우선으로 쓴다 — 오더에 저장된 등록자명은
     // 저장 시점에 실명이 아직 안 불러와져 계정 아이디(이메일 앞부분)로 들어간 경우가 있다.
     // 모바일로 등록한 예전 오더는 createdByUid가 없어 이메일로 찾는다.
-    const p = uid
-      ? getDoc(doc(db, "users", uid)).then(snap => (snap.exists() ? snap.data() : {}))
-      : creatorEmail
-        ? getDocs(query(collection(db, "users"), where("email", "==", creatorEmail), limit(1))).then(snap => (snap.docs[0]?.data() || {}))
-        : Promise.resolve({});
-    p.then(apply).catch(() => apply({}));
+    // 🔒 2026-11-23 기사는 직원 문서(users)를 읽지 않는다 — 서버가 기사용 오더 사본에 담당자 이름 · 전화(o.담당자)를 넣어 준다
+    void uid; void creatorEmail;
+    apply(o?.담당자 && typeof o.담당자 === "object" ? o.담당자 : {});
     return () => { cancelled = true; };
-  }, [o?.createdByUid, creatorEmail]);
+  }, [o?.createdByUid, creatorEmail, o?.담당자?.name, o?.담당자?.phone]); // eslint-disable-line react-hooks/exhaustive-deps
   // 계정 아이디(이메일 또는 이메일 앞부분)는 이름이 아니므로 건너뛴다
   const idPart = creatorEmail.split("@")[0];
   const isAccountId = (v) => { const t = String(v || "").trim().toLowerCase(); return !t || t.includes("@") || (idPart && t === idPart); };
@@ -812,6 +810,9 @@ function useGpsTracking(uid, driverData) {
   const totalDistRef = useRef(0);           // running total — avoids stale closure bug
   const distInitializedRef = useRef(false); // true once synced from Firestore
   const lastGpsStoreRef = useRef(null);     // last point stored to gps_tracks
+  const lastDrvWriteRef = useRef({ at: 0, lat: null, lng: null }); // ⚡ 2026-11-23 drivers 위치 문서를 마지막으로 쓴 때
+  const movedPendingRef = useRef(false);
+  const distPendingRef = useRef(false);
   const lastGpsTimeRef = useRef(0);         // timestamp of last gps_tracks write
 
   // Initialize totalDistRef once when driverData first loads from Firestore
@@ -884,6 +885,7 @@ function useGpsTracking(uid, driverData) {
     distInitializedRef.current = true;
     lastPosRef.current = null;
     lastGpsStoreRef.current = null;
+    lastDrvWriteRef.current = { at: 0, lat: null, lng: null };
   }, []);
 
   useEffect(() => {
@@ -924,6 +926,17 @@ function useGpsTracking(uid, driverData) {
           timestamp: serverTimestamp(), date: kstDateStr(),
         }).catch(() => {});
       }
+      // ⚡ 2026-11-23 기사 위치 문서는 10초에 한 번(또는 50m 넘게 움직였을 때)만 쓴다 — 예전엔 GPS가 올 때마다(1초에 한 번꼴) 써서
+      //  배차 화면 전체가 계속 다시 그려지고 서버 함수 · 쓰기 비용이 커졌다. 거리 · 움직인 시각은 모아 두었다가 같이 쓴다
+      if (updateData.lastMovedAt) movedPendingRef.current = true;
+      if (updateData.totalDistance != null) distPendingRef.current = true;
+      const lw = lastDrvWriteRef.current;
+      const sinceW = nowMs - lw.at;
+      const distW = lw.lat != null ? calcDist(lw.lat, lw.lng, lat, lng) : 999;
+      if (sinceW < 10000 && distW < 0.05) return;
+      lastDrvWriteRef.current = { at: nowMs, lat, lng };
+      if (distPendingRef.current) { updateData.totalDistance = totalDistRef.current; distPendingRef.current = false; }
+      if (movedPendingRef.current) { updateData.lastMovedAt = serverTimestamp(); movedPendingRef.current = false; }
       try { await updateDoc(doc(db, "drivers", uid), updateData); } catch (_) {}
     };
 
@@ -1286,18 +1299,17 @@ export default function DriverHome() {
     const curKey = histPlate(plate);
     // 지금 차량의 진행 중 오더는 날짜와 상관없이 보여준다(놓치면 안 됨). 완료 건 · 예전 차량 건은 내가 탄 기간만.
     const mine = (o) => !hist || (histPlate(o.차량번호) === curKey && o.기사확인상태 !== "완료") || !!periodFor(driver, o.차량번호, o.상차일 || "");
-    const unsubs = ["orders", "dispatch"].map((col) => {
-      const q = query(collection(db, col), plates.length === 1 ? where("차량번호", "==", plates[0]) : where("차량번호", "in", plates));
-      return onSnapshot(q, (snap) => {
-        setMyOrdersByCol(prev => ({
-          ...prev,
-          [col]: snap.docs.map(d => ({ _id: d.id, __col: col, ...d.data() })).filter(mine),
-        }));
-      }, () => {});
-    });
-    return () => unsubs.forEach(u => u());
+    // 🔒 2026-11-23 기사는 운송사 원본 오더를 읽지 않는다 — 서버가 나에게 배정된 오더만 기사용 사본(driverOrders)으로 만들어 준다
+    //  (청구운임 · 수수료 · 이익 등은 빠져 있고 기사운임만 있다). 수락 · 거절 · 완료 쓰기는 원본(__col/_id)에 그대로 한다
+    const me = uid; // 관리자 보기(viewAs)면 그 기사 uid
+    if (!me) return undefined;
+    const unsub = onSnapshot(query(collection(db, "driverOrders"), where("driverUid", "==", me)), (snap) => {
+      const rows = snap.docs.map((d) => { const x = d.data() || {}; return { ...x, _id: x.orderId || d.id, __col: x.col || "orders" }; }).filter(mine);
+      setMyOrdersByCol({ orders: rows.filter((r) => r.__col !== "dispatch"), dispatch: rows.filter((r) => r.__col === "dispatch") });
+    }, () => {});
+    return () => unsub();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [driver?.등급, driver?.차량번호, driver?.carNo, plateHistKey]);
+  }, [driver?.등급, driver?.차량번호, driver?.carNo, plateHistKey, uid]);
   // ⭐ 2026-11-11 배차자가 내 차량을 바꾸면, 이 폰에 저장된 로그인 정보(자동 로그인)도 새 차량번호 · 휴대폰번호로 맞춰 둔다
   useEffect(() => {
     if (!driver) return;
@@ -1445,9 +1457,8 @@ export default function DriverHome() {
     let off = false;
     (async () => {
       try {
-        let d = await getDoc(doc(db, "vehicleLedger", vehicleDocId(co, plate)));
-        let v = d.exists() ? d.data() : null;
-        if (!v) { const q = await getDocs(query(collection(db, "vehicleLedger"), where("companyName", "==", co), where("plateKey", "==", normPlate(plate)))); v = q.docs[0]?.data() || null; }
+        // 🔒 2026-11-23 차량 장부(비용 등)는 기사가 직접 읽지 않는다 — 서버가 내 차량 보험사 이름 · 번호만 준다
+        const v = (await fetchLinkedCompanyInfo())?.insurer || null;
         if (!off) setInsurer(v ? { name: String(v.보험사 || "").trim(), phone: insurerPhone(v) } : null);
       } catch { if (!off) setInsurer(null); }
     })();
@@ -1462,10 +1473,8 @@ export default function DriverHome() {
     if (!co) { setCompanyContact(null); return; }
     (async () => {
       try {
-        const q = query(collection(db, "transportApplications"), where("companyName", "==", co));
-        const snap = await getDocs(q);
-        const found = snap.docs.map(d => d.data()).find(d => d.type === "신규" && d.status === "approved") || snap.docs[0]?.data();
-        const phone = found?.phone || found?.연락처 || "";
+        const found = await fetchLinkedCompanyInfo(); // 🔒 2026-11-23 운송사 대표 전화만(서버) — 신청서를 직접 읽지 않는다
+        const phone = found?.phone || "";
         setCompanyContact(phone ? { name: co, phone } : null);
       } catch { setCompanyContact(null); }
     })();

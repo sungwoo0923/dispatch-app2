@@ -577,10 +577,16 @@ export function useFixedRouteAutoDispatch(company) {
     if (!company) return undefined;
     // ⭐ 2026-11-05 앱을 켜 둔 채 날짜(달)가 바뀌어도 이어서 채운다 — 처음 한 번 + 1시간마다 "오늘 날짜가 바뀌었으면" 한 번
     let ranOn = ""; let latest = null;
+    // ⚡ 2026-11-23 이 기기에서 오늘 같은 노선으로 이미 채웠으면 건너뛴다 — 예전엔 새로고침 · 화면을 열 때마다 모든 노선의 날짜별 오더를 하나씩 다시 확인했다
+    //  (노선을 고치면 서명이 바뀌어 다시 채운다)
+    const gateKey = `kpFrAuto:${company}`;
+    const sigOf = (list) => list.map((r) => { const u = r.updatedAt; return `${r.id}:${u?.toMillis ? u.toMillis() : (u || "")}`; }).sort().join(",");
     const run = () => {
       if (!latest || ranOn === kst()) return;
       ranOn = kst();
-      ensureFixedRouteOrders(latest, { force: true }).catch(() => {});
+      const mark = `${kst()}|${sigOf(latest)}`;
+      try { if (localStorage.getItem(gateKey) === mark) return; } catch { /* 무시 */ }
+      ensureFixedRouteOrders(latest, { force: true }).then(() => { try { localStorage.setItem(gateKey, mark); } catch { /* 무시 */ } }).catch(() => {});
     };
     const unsub = onSnapshot(query(collection(db, "fixedRoutes"), where("companyName", "==", company)), (s) => {
       latest = s.docs.map((d) => ({ id: d.id, ...d.data() }));

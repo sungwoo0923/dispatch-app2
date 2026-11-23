@@ -316,16 +316,16 @@ export default function ShipperStatus() {
     let q;
     if (isMaster || isSubMaster) {
       q = query(
-        collection(db, "orders"),
-        where("shipperCompany", "==", userData.companyName)
+        collection(db, "shipperOrders"),
+        where("shipperCompany", "==", userData.companyName), where("companyName", "==", userData?.linkedTransportCompany?.companyName || "(연동없음)")
       );
     } else {
       // 운송사에서 전송한 오더에는 shipperUid가 없으므로(등록자=운송사),
       // 일반/운송권한 직원도 회사 전체 오더 목록을 봐야 함(개인 등록분만 보이던 버그 수정)
       const threeMonthsAgo = get3MonthsAgo();
       q = query(
-        collection(db, "orders"),
-        where("shipperCompany", "==", userData.companyName),
+        collection(db, "shipperOrders"),
+        where("shipperCompany", "==", userData.companyName), where("companyName", "==", userData?.linkedTransportCompany?.companyName || "(연동없음)"),
         where("상차일", ">=", threeMonthsAgo)
       );
     }

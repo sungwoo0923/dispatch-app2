@@ -896,8 +896,10 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const tabGroups = [
     { key: "members", label: "회원 관리", tabs: ["members"] },
     { key: "shipperMgmt", label: "화주사 관리", tabs: ["linked", "transmit", "inquiries", "landingInquiries"] },
-    { key: "ops", label: "운영 관리", tabs: ["loginSessions", "sessionLogs", "permissions"] }, // 🧹 2026-11-15 구글시트 연동 → 관리센터 › 데이터 › 구글시트 연동으로 합침 · 데이터 점검 뺌 · ⭐ 2026-11-06 운송사 초기화는 관리자 관리센터(보안·데이터 › 운송사 초기화)로만 옮김 · 🔗 2026-11-07 구글시트 메뉴 셋 → "구글시트 연동" 하나 · 블라인드 모드 · 화주사 강제 업데이트는 뺌(강제 업데이트는 관리센터에 남음)
-    { key: "settings", label: "환경 설정", tabs: ["billing", "setup", "copyTemplate"] }, // 🧹 2026-11-14 로그인 화면 꾸미기 · 알림 문구는 관리센터 › 운영에서만(같은 화면이 두 곳에 있었다)
+    // 🧹 2026-11-23 최고관리자는 로그인 관리 · 접속이력을 관리센터에서 본다 → 여기서는 뺌(회사 관리자 · 인사는 로그인 관리 그대로)
+    { key: "ops", label: "운영 관리", tabs: isTotalMaster ? ["permissions"] : ["loginSessions", "sessionLogs", "permissions"] }, // 🧹 2026-11-15 구글시트 연동 → 관리센터 › 데이터 › 구글시트 연동으로 합침 · 데이터 점검 뺌 · ⭐ 2026-11-06 운송사 초기화는 관리자 관리센터(보안·데이터 › 운송사 초기화)로만 옮김 · 🔗 2026-11-07 구글시트 메뉴 셋 → "구글시트 연동" 하나 · 블라인드 모드 · 화주사 강제 업데이트는 뺌(강제 업데이트는 관리센터에 남음)
+    // 🧹 2026-11-23 기사복사 문구는 배차현황에서 바로 고칠 수 있어 관리자메뉴에서는 뺌(사용자 요청)
+    { key: "settings", label: "환경 설정", tabs: ["billing", "setup"] }, // 🧹 2026-11-14 로그인 화면 꾸미기 · 알림 문구는 관리센터 › 운영에서만(같은 화면이 두 곳에 있었다)
   ]
     .map((g) => ({ ...g, tabs: g.tabs.filter((t) => (!REQUIRES_MASTER_TABS.has(t) || isTotalMaster || (t === "permissions" && masterPerms)) && (t !== "billing" || billingAcc.view)) })) // 💳 구독·결제는 경리·재무·임원·대표만(billingAccess.js)
     // 🏢 부서 관리자메뉴 — 경리: 회원 승인 + 구독·결제 / 인사: 회원(인사권) + 로그인 관리. 배차용(기사복사 문구·화주사 등)은 뺀다

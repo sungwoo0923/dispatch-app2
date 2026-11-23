@@ -58,6 +58,24 @@
       "regions": [
         "icn1"
       ]
+    },
+    "api/route.js": {
+      "maxDuration": 30,
+      "regions": [
+        "icn1"
+      ]
+    },
+    "api/notify.js": {
+      "maxDuration": 20,
+      "regions": [
+        "icn1"
+      ]
+    },
+    "api/myip.js": {
+      "maxDuration": 10,
+      "regions": [
+        "icn1"
+      ]
     }
   },
   "routes": [

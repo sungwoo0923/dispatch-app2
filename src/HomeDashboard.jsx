@@ -659,7 +659,9 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       if (endDate && endDate <= "2026-06-16") {
         const approvers = s.approvers || (s.approverUid ? [{ uid: s.approverUid, name: s.approverName, status: s.approvalStatus }] : []);
         const needsMigration = approvers.length === 0 || approvers.some(a => a.status === "pending");
-        if (needsMigration) {
+        if (needsMigration && !window.__kpSchedMigrated?.has(s.id)) {
+          // ⚡ 2026-11-23 같은 일정은 화면을 연 동안 한 번만 시도(권한 없어 실패하는 일정을 목록이 바뀔 때마다 모든 기기가 다시 쓰던 것)
+          (window.__kpSchedMigrated || (window.__kpSchedMigrated = new Set())).add(s.id);
           const updatedApprovers = approvers.length > 0
             ? approvers.map(a => ({ ...a, status: "approved" }))
             : [{ uid: "migrated", name: "자동승인", status: "approved" }];
