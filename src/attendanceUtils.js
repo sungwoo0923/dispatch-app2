@@ -15,6 +15,55 @@ export function isWeekend(dateStr) {
   return day === 0 || day === 6;
 }
 
+// 🗓 2026-11-23 근무 요일 — 회사 전체(companySettings.workWeekdays) + 직원별(users.workWeekdays, 비어 있으면 회사 설정)
+//  요일 번호: 0 일 · 1 월 · … · 6 토. 아무것도 안 정한 회사는 지금처럼 월~금.
+//  · 근무 요일이 아닌 날 = 쉬는 날(출근기록부 "휴무" · 미출근으로 안 셈 · 자동 출근 안 함 · 연차 일수에서 뺌)
+//  · 쉬는 날 나와서 일하면 "휴일근무"(attendance.offDayWork) — 근무 요일이 원래 그 날인 직원(예: 월~토)은 평소 출근
+export const DEFAULT_WORK_WEEKDAYS = [1, 2, 3, 4, 5];
+export const WEEKDAY_NAMES = ["일", "월", "화", "수", "목", "금", "토"];
+export const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0]; // 화면에는 월요일부터
+export function normWeekdays(v) {
+  if (!Array.isArray(v)) return null;
+  const out = [...new Set(v.map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))];
+  return out.length ? out.sort((a, b) => a - b) : null;
+}
+// 직원 한 명의 근무 요일 — 직원 설정 → 회사 설정 → 월~금
+export function workWeekdaysOf(emp, companyWeekdays) {
+  return normWeekdays(emp?.workWeekdays) || normWeekdays(companyWeekdays) || DEFAULT_WORK_WEEKDAYS;
+}
+export const dayOfWeek = (dateStr) => new Date(dateStr + "T00:00:00").getDay();
+// 근무 요일이 아닌 날(공휴일은 따로 isHoliday)
+export function isRestDay(dateStr, weekdays) {
+  return !(normWeekdays(weekdays) || DEFAULT_WORK_WEEKDAYS).includes(dayOfWeek(dateStr));
+}
+// 쉬는 날 = 근무 요일이 아님 또는 공휴일(회사 휴일 포함)
+export function isOffDay(dateStr, weekdays, holidays) {
+  return isRestDay(dateStr, weekdays) || isHoliday(dateStr, holidays);
+}
+// [1,2,3,4,5] → "월~금" · [1,2,3,4,5,6] → "월~토" · [0,6] → "토·일" · [1,3,5] → "월·수·금"
+export function weekdaysText(weekdays) {
+  const w = normWeekdays(weekdays) || DEFAULT_WORK_WEEKDAYS;
+  const ord = WEEKDAY_ORDER.filter((d) => w.includes(d));
+  if (ord.length === 7) return "매일";
+  // 월요일부터 이어지는 묶음이면 "월~토"
+  const idx = ord.map((d) => WEEKDAY_ORDER.indexOf(d));
+  const run = idx.every((v, i) => i === 0 || v === idx[i - 1] + 1);
+  if (run && ord.length >= 3) return `${WEEKDAY_NAMES[ord[0]]}~${WEEKDAY_NAMES[ord[ord.length - 1]]}`;
+  return ord.map((d) => WEEKDAY_NAMES[d]).join("·");
+}
+// 기간 안의 근무일 수(근무 요일 · 공휴일 제외) — 휴가 일수 계산
+export function workDaysBetween(startStr, endStr, weekdays, holidays) {
+  if (!startStr) return 0;
+  const a = new Date(startStr + "T00:00:00"); const b = new Date((endStr || startStr) + "T00:00:00");
+  if (isNaN(a) || isNaN(b) || b < a) return 0;
+  let n = 0;
+  for (let d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) {
+    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (!isOffDay(ds, weekdays, holidays)) n += 1;
+  }
+  return n;
+}
+
 // 이름 끝의 숫자(여분계정 구분용, 예: "박성우2")를 제거하고 공백을 정리해 동일인 여부를 비교하기 위한 정규화
 function normalizeName(name) {
   return (name || "").replace(/\s+/g, "").replace(/\d+$/, "");

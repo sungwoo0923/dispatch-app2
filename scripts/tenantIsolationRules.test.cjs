@@ -100,6 +100,12 @@ const A_CO = "에이운송", B_CO = "비운송";
   await t("users: 같은 회사 관리자가 직원을 다른 회사로 옮기기 거절", () => assertFails(updateDoc(doc(AA, "users/userA2"), { companyName: B_CO })));
   await t("users: 인사 담당이 동료 입사일·직책 고치기", () => assertSucceeds(updateDoc(doc(as("hrA"), "users/userA2"), { hireDate: "2023-01-01", position: "과장", team: "영업팀" })));
   await t("users: 인사 담당이 다른 회사 직원 고치기 거절", () => assertFails(updateDoc(doc(as("hrA"), "users/userB"), { position: "과장" })));
+  // 🗓 2026-11-23 근무 요일 — 회사 전체는 관리자 · 인사, 직원별은 인사가 바꾸고 본인은 못 바꾼다
+  await t("companySettings: 인사 담당이 회사 근무 요일 정하기", () => assertSucceeds(setDoc(doc(as("hrA"), "companySettings/" + A_CO), { companyName: A_CO, workWeekdays: [1, 2, 3, 4, 5, 6] }, { merge: true })));
+  await t("companySettings: 실무자는 회사 근무 요일 못 바꿈", () => assertFails(setDoc(doc(UA, "companySettings/" + A_CO), { companyName: A_CO, workWeekdays: [0, 6] }, { merge: true })));
+  await t("companySettings: 다른 회사 근무 요일 거절", () => assertFails(setDoc(doc(AB, "companySettings/" + A_CO), { companyName: A_CO, workWeekdays: [1] }, { merge: true })));
+  await t("users: 인사 담당이 직원 근무 요일 정하기", () => assertSucceeds(updateDoc(doc(as("hrA"), "users/userA2"), { workWeekdays: [0, 6] })));
+  await t("users: 본인 근무 요일 스스로 바꾸기 거절", () => assertFails(updateDoc(doc(UA, "users/userA"), { workWeekdays: [0] })));
   await t("users: 사무 직원이 우리 회사 기사 승인", () => assertSucceeds(updateDoc(doc(UA, "users/drvA2"), { approved: true })));
   await t("users: 사무 직원이 기사를 관리자로 바꾸기 거절", () => assertFails(updateDoc(doc(UA, "users/drvA2"), { role: "admin" })));
   await t("users: 다른 회사 직원이 우리 기사 승인 거절", () => assertFails(updateDoc(doc(UB, "users/drvA2"), { approved: false })));

@@ -360,6 +360,13 @@ service cloud.firestore {
       allow update: if isApproved() && myCo() == co && !(myRole() in ['driver', 'shipper', 'viewer', 'cafeUser'])
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['routeGroupOwners'])
         && request.resource.data.routeGroupOwners is map;
+      // 🗓 2026-11-23 회사 근무 요일(workWeekdays: [0~6] — 0 일 · 6 토) — 관리자 · 인사 담당이 출근기록부 › 근무 요일에서 정한다(이 칸만)
+      allow create: if isApproved() && myCo() == co && (myRole() in ['admin', 'allMgr', 'test'] || isHrStaff())
+        && request.resource.data.keys().hasOnly(['companyName', 'workWeekdays'])
+        && request.resource.data.get('companyName', '') == co && request.resource.data.workWeekdays is list && request.resource.data.workWeekdays.size() <= 7;
+      allow update: if isApproved() && myCo() == co && (myRole() in ['admin', 'allMgr', 'test'] || isHrStaff())
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyName', 'workWeekdays'])
+        && request.resource.data.get('companyName', co) == co && request.resource.data.workWeekdays is list && request.resource.data.workWeekdays.size() <= 7;
       // ⭐ 2026-11-17 노선별 고정 특수운임을 구글시트에서 들어오는 오더에도 적용할지(routePresetSheet: true/false) — 관리자(운송 · 통합)만 · 이 칸만
       //  서버(functions/sheetLiveOrders.js)가 읽는다. 프리셋 자체는 forkliftPresets(사무 직원이 쓰는 기존 규칙 그대로)
       allow create: if isApproved() && myCo() == co && myRole() in ['admin', 'allMgr', 'test']
@@ -1496,7 +1503,7 @@ service cloud.firestore {
     //  운송사 직원은 부서·직책도(경리·인사·임원 권한이 부서/직책 이름으로 정해진다) — 인사·관리자는 예외
     function selfKeepOk() {
       return resource == null || resource.data.get('approved', true) == false || isTotalMasterUser()
-        || (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['companyName', 'linkedTransportCompany', 'permissions', 'subAdmin', 'subAdminPrevRole', 'employmentStatus', 'companyCode', 'resignedAt', 'workScope', 'mfaOpt', 'mfaKind', 'bioKeys', 'legacyTeam'])
+        || (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['companyName', 'linkedTransportCompany', 'permissions', 'subAdmin', 'subAdminPrevRole', 'employmentStatus', 'companyCode', 'resignedAt', 'workScope', 'mfaOpt', 'mfaKind', 'bioKeys', 'legacyTeam', 'workWeekdays'])
           // ⭐ 2026-11-09 마스터 위임 — 본인 마스터는 "내려놓기(true → false)"만 스스로 할 수 있다(예전엔 막혀 위임 후 마스터가 2명 남았다)
           && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['isMaster']) || request.resource.data.get('isMaster', false) == false)
           && (resource.data.get('role', '') in ['shipper', 'cafeUser'] || isHrStaff() || isCompanyAdmin(myCo())
