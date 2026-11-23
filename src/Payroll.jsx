@@ -22,7 +22,8 @@ import { BookHero, BookCard } from "./OfficeBooks";
 import { isTMUser } from "./staffFilter";
 import { personName } from "./userNames";
 import { calcPayslipFull, hoursFromAttendance, ratesFor, presetFor, RATE_FIELDS, wonFmt, FREELANCE, annualBreakdown } from "./payrollCalc";
-import { isWeekend, isHoliday } from "./attendanceUtils";
+import { isOffDay, workWeekdaysOf } from "./attendanceUtils"; // 🗓 2026-11-23 근무 요일
+import { useCompanyWorkWeekdays } from "./workWeekdays";
 import { upsertAutoEntry } from "./ledgerAuto";
 import { usePayrollAccess } from "./payrollAccess";
 import { BANK_NAMES, formatAccount, onlyDigits, parseBankText } from "./bankUtil";
@@ -328,7 +329,9 @@ function usePayrollMonth(company, ym, ro) {
   const empMap = React.useMemo(() => Object.fromEntries((emps || []).map((e) => [e.uid, e])), [emps]);
   const slipMap = React.useMemo(() => Object.fromEntries((slips || []).map((s) => [s.uid, s])), [slips]);
   const prevMap = React.useMemo(() => Object.fromEntries((allSlips || []).filter((x) => x.ym === shiftYm(ym, -1)).map((s) => [s.uid, s])), [allSlips, ym]);
-  const isOff = React.useCallback((d) => isWeekend(d) || isHoliday(d, hols || []), [hols]);
+  // 🗓 2026-11-23 쉬는 날 = 직원 근무 요일(직원 설정 → 회사 설정 → 월~금)이 아닌 날 · 공휴일 — 쉬는 날 일한 시간은 휴일근로로
+  const coWeekdays = useCompanyWorkWeekdays(company);
+  const isOffFor = React.useCallback((u) => (d) => isOffDay(d, workWeekdaysOf(u, coWeekdays), hols || []), [hols, coWeekdays]);
   const monthStart = `${ym}-01`; const monthEnd = lastDayOf(ym);
   const people = (staff || []).filter((u) => {
     if (slipMap[u.id]) return true;
@@ -341,7 +344,7 @@ function usePayrollMonth(company, ym, ro) {
     const slip = slipMap[u.id];
     const locked = ["confirmed", "paid"].includes(slip?.status);
     if (locked && slip?.result) return { u, emp, slip, locked, result: slip.result, input: slip.input || {}, att: slip.att || {}, rates: slip.rates || run?.rates || curRates };
-    const a = hoursFromAttendance((att || []).filter((r) => r.uid === u.id), isOff);
+    const a = hoursFromAttendance((att || []).filter((r) => r.uid === u.id), isOffFor(u));
     const input = slip?.input || {};
     return { u, emp, slip, locked: false, result: empReady(emp) ? calcPayslipFull(emp, monthOf(input, a), curRates) : null, input, att: a, rates: curRates };
   });

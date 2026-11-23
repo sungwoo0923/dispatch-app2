@@ -10,8 +10,12 @@ import { geocodeAddress } from "./tmapFareCalc";
 import { db, DEFAULT_COMPANY } from "./firebase";
 import { isTMUser } from "./staffFilter";
 import { RadiusEditor, officeRadii, DEFAULT_IN_RADIUS, DEFAULT_OUT_RADIUS } from "./attendanceQuick";
-import { ATTENDANCE_STATUS_COLOR, isWeekend, findApprovedLeaveForDate, isHoliday, getHolidayLabel, KR_NATIONAL_HOLIDAYS, approvalLeaveOn, hrLeaveOn, attendanceSourceText } from "./attendanceUtils";
+import { ATTENDANCE_STATUS_COLOR, findApprovedLeaveForDate, isHoliday, getHolidayLabel, KR_NATIONAL_HOLIDAYS, approvalLeaveOn, hrLeaveOn, attendanceSourceText } from "./attendanceUtils";
 import { useCustomRoles } from "./customRoles";
+// 🗓 2026-11-23 근무 요일(회사 전체 + 직원별) · 휴일근무 · 대체휴무
+import { DEFAULT_WORK_WEEKDAYS, WEEKDAY_NAMES, WEEKDAY_ORDER, workWeekdaysOf, isRestDay, isOffDay, weekdaysText, normWeekdays } from "./attendanceUtils";
+import { saveCompanyWorkWeekdays, grantCompDay } from "./workWeekdays";
+import { useLeaveBasis } from "./leaveBasis";
 import {
   APPROVER_GROUP_LABEL, isHrStaffUser, isExecUser, canApproveAttendanceReq, canEditAttendanceOf, markNotifSeen,
   approveChangeReq, rejectChangeReq, approveCheckInReq, rejectCheckInReq, submitChangeReq, submitCheckInReq,
@@ -88,6 +92,14 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   const [editScheduleEmp, setEditScheduleEmp] = useState(null);
   const [editWorkStart, setEditWorkStart] = useState("09:00");
   const [editWorkEnd, setEditWorkEnd] = useState("18:00");
+  const [editWdMode, setEditWdMode] = useState("company"); // company(회사 설정 따름) | custom(이 직원만)
+  const [editWd, setEditWd] = useState(DEFAULT_WORK_WEEKDAYS);
+  // 🗓 회사 근무 요일
+  const [coWeekdays, setCoWeekdays] = useState(DEFAULT_WORK_WEEKDAYS);
+  const [showWeekPanel, setShowWeekPanel] = useState(false);
+  const [coWdInput, setCoWdInput] = useState(null);
+  const [offDayReq, setOffDayReq] = useState(false); // 출근 요청 모달이 "휴일 출근"인지
+  const [offDayReason, setOffDayReason] = useState("");
 
   const [hiddenEmpUids, setHiddenEmpUids] = useState([]);
   const [showEmpFilter, setShowEmpFilter] = useState(false);
@@ -163,6 +175,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
       setOfficeLocation(data?.officeLocation || null);
       if (!radiusDirtyRef.current) setRadiusInput(officeRadii(data?.officeLocation)); // 고치는 중엔 덮어쓰지 않음
       setHiddenEmpUids(data?.hiddenEmployees || []);
+      setCoWeekdays(normWeekdays(data?.workWeekdays) || DEFAULT_WORK_WEEKDAYS);
     }, () => {});
     return () => unsub();
   }, [company]);
@@ -245,7 +258,19 @@ export default function AttendanceBoard({ userCompany, role, user }) {
 
   // ─── 직원별 근무시간 저장 ───────────────────────────────────
   const saveWorkSchedule = async (uid) => {
-    await setDoc(doc(db, "users", uid), { workStartTime: editWorkStart, workEndTime: editWorkEnd }, { merge: true });
+    // 🗓 근무 요일 — 비우면(null) 회사 설정. 바뀐 경우에만 적는다(본인 근무 요일은 보안 규칙상 본인이 못 바꾼다)
+    const nextWd = editWdMode === "custom" ? (normWeekdays(editWd) || DEFAULT_WORK_WEEKDAYS) : null;
+    const curWd = normWeekdays(empOf(uid)?.workWeekdays);
+    const wdChanged = JSON.stringify(nextWd) !== JSON.stringify(curWd);
+    try {
+      await setDoc(doc(db, "users", uid), {
+        workStartTime: editWorkStart, workEndTime: editWorkEnd,
+        ...(wdChanged ? { workWeekdays: nextWd } : {}),
+      }, { merge: true });
+    } catch (e) {
+      alert(uid === user?.uid && wdChanged ? "내 근무 요일은 다른 인사 담당자가 바꿔야 해요." : `저장하지 못했습니다: ${e?.message || e}`);
+      return;
+    }
     setEditScheduleEmp(null);
   };
 
@@ -408,12 +433,16 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     return activeEmployees.filter(e => (!mineOnly || e.uid === user?.uid) && (!kw || `${e.name || ""} ${e.email || ""} ${e.team || ""}`.includes(kw)));
   }, [activeEmployees, mineOnly, search, user?.uid]);
 
+  // 🗓 직원별 근무 요일(직원 설정 → 회사 설정 → 월~금)
+  const empOf = (uid) => employees.find(e => e.uid === uid);
+  const wdOf = (emp) => workWeekdaysOf(emp, coWeekdays);
+  const offFor = (emp, ds) => isOffDay(ds, wdOf(emp), holidays);
   const resolveStatus = (uid, ds, name) => {
     const rec = recordMap[`${uid}_${ds}`];
     if (rec && rec.status) return { status: rec.status, rec };
     if (ds > todayDateStr) return { status: null, rec: null };
     if (isHoliday(ds, holidays)) return { status: "공휴일", rec: null };
-    if (isWeekend(ds)) return { status: "휴무", rec: null };
+    if (isRestDay(ds, wdOf(empOf(uid)))) return { status: "휴무", rec: null }; // 🗓 이 직원의 근무 요일이 아닌 날
     const leave = findApprovedLeaveForDate(schedules, uid, ds, name) || approvalLeaveOn(leaveAprs, uid, ds) || hrLeaveOn(employees.find((e) => e.uid === uid), ds);
     if (leave) return { status: leave, rec: null };
     return { status: null, rec: null };
@@ -428,7 +457,8 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   // 오늘 현재 사용자 출근 레코드
   const myTodayRec = user?.uid ? recordMap[`${user.uid}_${todayDateStr}`] : null;
   const isCurMonth = month === todayM && year === todayY;
-  const todayOff = isWeekend(todayDateStr) || isHoliday(todayDateStr, holidays);
+  const todayOff = isOffDay(todayDateStr, coWeekdays, holidays); // 회사 기준(머리줄 표시)
+  const myTodayOff = myEmp ? offFor(myEmp, todayDateStr) : todayOff; // 나 기준(출근 버튼)
 
   // ─── 오늘 KPI (보고 있는 달과 무관하게 오늘 기준 · 숨김 직원 제외) ───
   const [todayRecs, setTodayRecs] = useState([]);
@@ -442,19 +472,21 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     const recOf = (uid) => (isCurMonth ? recordMap[`${uid}_${todayDateStr}`] : todayRecs.find(r => r.uid === uid));
     const monthStart = `${todayDateStr.slice(0, 7)}-01`;
     const staff = employees.filter(e => !hiddenEmpUids.includes(e.uid) && !(e.employmentStatus === "퇴사" && String(e.resignedAt || "0000") < monthStart));
-    let present = 0, late = 0, leave = 0, outside = 0, absent = 0;
+    let present = 0, late = 0, leave = 0, outside = 0, absent = 0, offCount = 0;
     staff.forEach(e => {
       const rec = recOf(e.uid);
+      const off = offFor(e, todayDateStr); // 🗓 이 직원이 오늘 쉬는 날인지(근무 요일 · 공휴일)
+      if (off) offCount++;
       let st = rec?.status || null;
-      if (!st && !todayOff) st = findApprovedLeaveForDate(schedules, e.uid, todayDateStr, e.name || e.email) || approvalLeaveOn(leaveAprs, e.uid, todayDateStr) || hrLeaveOn(e, todayDateStr);
+      if (!st && !off) st = findApprovedLeaveForDate(schedules, e.uid, todayDateStr, e.name || e.email) || approvalLeaveOn(leaveAprs, e.uid, todayDateStr) || hrLeaveOn(e, todayDateStr);
       if (st && WORK_SET.has(st)) { present++; if (st === "외근") outside++; if (st === "출근" && isLate(rec, e)) late++; }
       else if (st && LEAVE_SET.has(st)) leave++;
-      else if (!st && !todayOff) absent++;
+      else if (!st && !off) absent++;
     });
-    const base = staff.length - leave;
-    return { total: staff.length, present, late, leave, outside, absent, rate: base > 0 ? Math.round((present / base) * 100) : 0 };
+    const base = staff.length - leave - offCount;
+    return { total: staff.length, present, late, leave, outside, absent, offAll: staff.length > 0 && offCount === staff.length, rate: base > 0 ? Math.min(100, Math.round((present / base) * 100)) : 0 };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employees, hiddenEmpUids, recordMap, todayRecs, isCurMonth, todayDateStr, todayOff, schedules, leaveAprs]);
+  }, [employees, hiddenEmpUids, recordMap, todayRecs, isCurMonth, todayDateStr, todayOff, schedules, leaveAprs, coWeekdays, holidays]);
 
   // ─── 출근 수정 저장 (인사팀) ─────────────────────────────────
   const saveEdit = async (status, checkInTime, checkOutTime, lateReason) => {
@@ -484,11 +516,33 @@ export default function AttendanceBoard({ userCompany, role, user }) {
       uid, name, date, month: date.slice(0, 7),
       status, checkInTime: checkInTime || null, checkOutTime: checkOutTime || null,
       lateReason: (status === "출근" && lateReason) ? lateReason : null,
+      offDayWork: WORK_SET.has(status) && offFor(empOf(uid), date), // 🗓 쉬는 날 근무 = 휴일근무
       source: "manual", editedBy: user?.uid || "", editedByName: editorName, editedAt: new Date().toISOString(),
       companyName: company,
       history: arrayUnion(historyEntry),
     }, { merge: true });
     setEditCell(null);
+  };
+
+  // ─── 🗓 휴일근무 → 대체휴무 1일(연차 +1일) ─────────────────────
+  const leaveBasis = useLeaveBasis(company);
+  const giveCompDay = async (cell) => {
+    if (!(await kpConfirm(`${cell.name}님 ${cell.date} 휴일근무에 대체휴무 1일을 줄까요?\n· 연차에 +1일로 더해져요(인사관리부 연차 조정에 기록)\n· 같은 날은 한 번만 줄 수 있어요`, { title: "대체휴무 주기", okText: "주기" }))) return;
+    const r = await grantCompDay({ uid: cell.uid, date: cell.date, company, byEmail: user?.email || "", byName: myName || "", basis: leaveBasis });
+    if (!r.ok) { alert(r.reason); return; }
+    setEditCell(null);
+  };
+  const saveCoWeekdays = async () => {
+    const w = normWeekdays(coWdInput);
+    if (!w) { alert("근무 요일을 하루 이상 골라 주세요."); return; }
+    try { await saveCompanyWorkWeekdays(company, w); setShowWeekPanel(false); }
+    catch (e) { alert(`저장하지 못했습니다: ${e?.message || e}`); }
+  };
+  const openSchedule = (emp) => {
+    setEditWorkStart(emp.workStartTime || "09:00"); setEditWorkEnd(emp.workEndTime || "18:00");
+    const own = normWeekdays(emp.workWeekdays);
+    setEditWdMode(own ? "custom" : "company"); setEditWd(own || coWeekdays);
+    setEditScheduleEmp(emp);
   };
 
   // ─── 공휴일 관리 ─────────────────────────────────────────────
@@ -508,7 +562,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     const out = {};
     visibleEmployees.forEach(emp => {
       const counts = {};
-      let lateCount = 0;
+      let lateCount = 0, offWork = 0, compDays = 0;
       dayList.forEach(d => {
         const ds = dsOf(d);
         if (ds > todayDateStr) return;
@@ -516,14 +570,15 @@ export default function AttendanceBoard({ userCompany, role, user }) {
         if (!status) return;
         counts[status] = (counts[status] || 0) + 1;
         if (status === "출근" && rec && isLate(rec, emp)) lateCount++;
+        if (WORK_SET.has(status) && offFor(emp, ds)) { offWork++; if (rec?.compDay) compDays++; } // 🗓 휴일근무
       });
       const work = ["출근", "외근", "조퇴"].reduce((s, k) => s + (counts[k] || 0), 0);
       const leave = [...LEAVE_SET].reduce((s, k) => s + (counts[k] || 0), 0);
-      out[emp.uid] = { counts, lateCount, work, leave };
+      out[emp.uid] = { counts, lateCount, work, leave, offWork, compDays };
     });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleEmployees, dayList.length, year, month, recordMap, schedules, holidays, todayDateStr, employees, leaveAprs]);
+  }, [visibleEmployees, dayList.length, year, month, recordMap, schedules, holidays, todayDateStr, employees, leaveAprs, coWeekdays]);
   const summaryData = summaryEmp ? (monthAgg[summaryEmp.uid] || (() => {
     const counts = {}; let lateCount = 0;
     dayList.forEach(d => { const ds = dsOf(d); if (ds > todayDateStr) return; const { status, rec } = resolveStatus(summaryEmp.uid, ds, summaryEmp.name || summaryEmp.email); if (!status) return; counts[status] = (counts[status] || 0) + 1; if (status === "출근" && rec && isLate(rec, summaryEmp)) lateCount++; });
@@ -564,7 +619,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
               <div className="text-[11.5px] font-extrabold tracking-[0.3em] text-[#9FB4DA]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ATTENDANCE · {year}.{String(month).padStart(2, "0")}</div>
               <h2 className="mt-1.5 text-[26px] md:text-[28px] font-black tracking-tight">출근기록부</h2>
               <div className="mt-1 text-[13.5px] text-white/65 font-semibold">
-                {company || "회사"} · 직원 {activeEmployees.length}명 · 오늘 <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{todayDateStr.replace(/-/g, ".")}</span> ({todayWd}){todayOff && <span className="ml-1.5 text-[#FFB4A8]">{getHolidayLabel(todayDateStr, holidays) || "주말"}</span>}
+                {company || "회사"} · 직원 {activeEmployees.length}명 · 오늘 <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{todayDateStr.replace(/-/g, ".")}</span> ({todayWd}){todayOff && <span className="ml-1.5 text-[#FFB4A8]">{getHolidayLabel(todayDateStr, holidays) || "쉬는 날"}</span>}
               </div>
             </div>
             <div className="flex items-center gap-1.5 bg-white/[0.08] border border-white/15 rounded-2xl p-1.5">
@@ -582,8 +637,8 @@ export default function AttendanceBoard({ userCompany, role, user }) {
               { k: "TODAY · IN", l: "오늘 출근", v: kpi.present, u: "명", sub: kpi.outside ? `외근 ${kpi.outside}명 포함` : `전체 ${kpi.total}명` },
               { k: "LATE", l: "지각", v: kpi.late, u: "명", sub: "정규 출근시간 이후", warn: kpi.late > 0 },
               { k: "LEAVE", l: "휴가", v: kpi.leave, u: "명", sub: "연차·반차·병가·경조사·휴직" },
-              { k: "ABSENT", l: "미출근", v: todayOff ? "—" : kpi.absent, u: todayOff ? "" : "명", sub: todayOff ? "오늘은 휴일입니다" : "기록·휴가 없음", warn: !todayOff && kpi.absent > 0 },
-              { k: "RATE", l: "출근율", v: todayOff ? "—" : kpi.rate, u: todayOff ? "" : "%", sub: "휴가자 제외 기준", bar: todayOff ? null : kpi.rate },
+              { k: "ABSENT", l: "미출근", v: kpi.offAll ? "—" : kpi.absent, u: kpi.offAll ? "" : "명", sub: kpi.offAll ? "오늘은 모두 쉬는 날이에요" : "기록·휴가 없음(쉬는 날인 직원 빼고)", warn: !kpi.offAll && kpi.absent > 0 },
+              { k: "RATE", l: "출근율", v: kpi.offAll ? "—" : kpi.rate, u: kpi.offAll ? "" : "%", sub: "휴가자 · 쉬는 날 직원 제외", bar: kpi.offAll ? null : kpi.rate },
             ].map(t => (
               <div key={t.k} className="rounded-2xl bg-white/[0.07] border border-white/[0.12] px-4 py-3 min-w-0 backdrop-blur-sm">
                 <div className="flex items-center justify-between gap-2">
@@ -641,7 +696,8 @@ export default function AttendanceBoard({ userCompany, role, user }) {
               <button onClick={() => setShowEmpFilter(v => !v)} className={btnCls(showEmpFilter)}>직원 관리</button>
               <button onClick={() => { if (!showOfficePanel && officeLocation && !officeInput.lat) setOfficeInput({ lat: String(officeLocation.lat ?? ""), lng: String(officeLocation.lng ?? ""), address: officeLocation.address || "" }); setShowOfficePanel(v => !v); setShowHolidayPanel(false); }}
                 className={btnCls(showOfficePanel)}>출근지 설정</button>
-              <button onClick={() => { setShowHolidayPanel(v => !v); setShowOfficePanel(false); }} className={btnCls(showHolidayPanel)}>공휴일 관리</button>
+              <button onClick={() => { setShowHolidayPanel(v => !v); setShowOfficePanel(false); setShowWeekPanel(false); }} className={btnCls(showHolidayPanel)}>공휴일 관리</button>
+              <button onClick={() => { setCoWdInput(coWeekdays); setShowWeekPanel(v => !v); setShowOfficePanel(false); setShowHolidayPanel(false); }} className={btnCls(showWeekPanel)}>근무 요일 · {weekdaysText(coWeekdays)}</button>
             </>
           )}
         </div>
@@ -712,6 +768,41 @@ export default function AttendanceBoard({ userCompany, role, user }) {
       )}
 
       {/* 공휴일 관리 패널 */}
+      {/* 🗓 근무 요일 설정 — 회사 전체 + 직원별 */}
+      {isAdmin && showWeekPanel && (
+        <section className="bg-white rounded-2xl border border-[#E3E8F0] p-5" data-kp="work-weekdays">
+          <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8A97AD]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>WORK DAYS</div>
+          <div className="text-[16px] font-black text-[#0F1A30]">근무 요일</div>
+          <div className="text-[13px] text-[#5B6B85] mt-0.5 mb-3">회사 전체 근무 요일을 정하면 모든 직원에게 적용돼요. 다른 직원만 따로 정하려면 아래 목록에서 [바꾸기]를 누르면 돼요. 근무 요일이 아닌 날은 "휴무"로 보이고, 미출근으로 세지 않아요.</div>
+          <div className="text-[13px] font-black text-[#3A4A66] mb-1.5">회사 전체</div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {WEEKDAY_ORDER.map(d => {
+              const on = (coWdInput || []).includes(d);
+              return <button key={d} onClick={() => setCoWdInput(v => (on ? (v || []).filter(x => x !== d) : [...(v || []), d]))}
+                className={`w-10 h-10 rounded-xl text-[14px] font-black border transition ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : `bg-white border-[#DCE3EE] ${d === 0 ? "text-[#D23F3F]" : d === 6 ? "text-[#2D5BD8]" : "text-[#5B6B85]"}`}`}>{WEEKDAY_NAMES[d]}</button>;
+            })}
+            <span className="w-px h-7 bg-[#E3E8F0] mx-1" />
+            {[["월~금", [1, 2, 3, 4, 5]], ["월~토", [1, 2, 3, 4, 5, 6]], ["매일", [0, 1, 2, 3, 4, 5, 6]]].map(([l, v]) => (
+              <button key={l} onClick={() => setCoWdInput(v)} className="h-9 px-3 rounded-xl border border-[#DCE3EE] text-[13px] font-bold text-[#3A4A66] hover:bg-[#F5F7FB]">{l}</button>
+            ))}
+            <button onClick={saveCoWeekdays} className="h-10 px-5 rounded-xl bg-[#1B2B4B] text-white text-[13.5px] font-black ml-auto">저장 · {weekdaysText(coWdInput)}</button>
+          </div>
+          <div className="text-[13px] font-black text-[#3A4A66] mt-5 mb-1.5">직원별</div>
+          <div className="max-h-64 overflow-y-auto divide-y divide-[#EEF1F6] rounded-xl border border-[#E3E8F0]">
+            {activeEmployees.map(emp => {
+              const own = normWeekdays(emp.workWeekdays);
+              return (
+                <div key={emp.uid} className="flex items-center gap-3 px-3.5 py-2">
+                  <span className="flex-1 text-[14px] font-bold text-[#0F1A30]">{emp.name || emp.email}<span className="ml-2 text-[12px] font-semibold text-[#8A97AD]">{[emp.team, emp.position].filter(Boolean).join(" · ")}</span></span>
+                  <span className={`text-[12.5px] font-black px-2 py-0.5 rounded-md ${own ? "bg-[#EEF3FC] text-[#1B2B4B]" : "text-[#8A97AD]"}`}>{own ? `따로 · ${weekdaysText(own)}` : `회사 설정 · ${weekdaysText(coWeekdays)}`}</span>
+                  <button onClick={() => openSchedule(emp)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#3A4A66] hover:bg-[#F5F7FB]">바꾸기</button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {isAdmin && showHolidayPanel && (
         <section className="bg-white rounded-2xl border border-[#E3E8F0] p-5">
           <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8A97AD]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>HOLIDAYS · {year}</div>
@@ -765,18 +856,21 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                 {(myTodayRec?.status === "출근" || myTodayRec?.checkInTime) && !myTodayRec?.checkOutTime && (
                   <button onClick={handleCheckOut} className="h-10 px-5 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-black hover:bg-[#243a60] transition">퇴근</button>
                 )}
-                {!myTodayRec?.status && !todayOff && (() => {
+                {!myTodayRec?.status && (() => {
                   const myPendingReq = checkInRequests.find(r => r.uid === user?.uid && r.date === todayDateStr);
                   return myPendingReq ? (
-                    <div className="h-10 px-4 rounded-xl bg-[#F5F7FB] border border-[#E3E8F0] text-[13px] font-black text-[#5B6B85] inline-flex items-center">출근 요청 승인 대기 중</div>
+                    <div className="h-10 px-4 rounded-xl bg-[#F5F7FB] border border-[#E3E8F0] text-[13px] font-black text-[#5B6B85] inline-flex items-center">{myPendingReq.offDay ? "휴일 출근" : "출근"} 요청 승인 대기 중</div>
                   ) : (
+                    // 🗓 쉬는 날(근무 요일 아님 · 공휴일)이면 "휴일 출근 요청" — 승인되면 휴일근무로 기록
                     <button onClick={() => {
                       const n = new Date();
                       setRequestCheckInTime(String(n.getHours()).padStart(2, "0") + ":" + String(n.getMinutes()).padStart(2, "0"));
+                      setOffDayReq(myTodayOff); setOffDayReason("");
                       setShowCheckInRequestModal(true);
                     }} disabled={requestingCheckIn}
-                      className="h-10 px-4 rounded-xl border-2 border-[#1B2B4B] text-[#1B2B4B] text-[13.5px] font-black hover:bg-[#1B2B4B] hover:text-white transition disabled:opacity-50">
-                      {requestingCheckIn ? "요청 중..." : "출근 요청"}
+                      title={myTodayOff ? "오늘은 근무 요일이 아니에요. 나와서 일했다면 휴일 출근으로 요청하면 돼요" : ""}
+                      className={`h-10 px-4 rounded-xl border-2 text-[13.5px] font-black transition disabled:opacity-50 ${myTodayOff ? "border-[#7C5CC4] text-[#7C5CC4] hover:bg-[#7C5CC4] hover:text-white" : "border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white"}`}>
+                      {requestingCheckIn ? "요청 중..." : myTodayOff ? "휴일 출근 요청" : "출근 요청"}
                     </button>
                   );
                 })()}
@@ -808,6 +902,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
         <span className="h-7 px-2.5 rounded-lg text-[12.5px] font-black inline-flex items-center bg-[#FFF1F1] text-[#C0352F] border border-[#F6D2D2]">공휴일</span>
         <span className="h-7 px-2.5 rounded-lg text-[12.5px] font-black inline-flex items-center gap-1.5 bg-white border border-[#E3E8F0] text-[#3A4A66]"><span className="w-2 h-2 rounded-full bg-[#E5484D]" />지각</span>
         <span className="h-7 px-2.5 rounded-lg text-[12.5px] font-black inline-flex items-center gap-1.5 bg-white border border-[#E3E8F0] text-[#3A4A66]"><span className="w-2 h-2 rounded-full bg-[#E5A93B]" />요청 대기</span>
+        <span className="h-7 px-2.5 rounded-lg text-[12.5px] font-black inline-flex items-center gap-1.5 bg-white border border-[#E3E8F0] text-[#3A4A66]" title="근무 요일이 아닌 날 · 공휴일에 일함(초록은 대체휴무를 줌)"><span className="px-[3px] rounded text-[9px] leading-[13px] font-black bg-[#7C5CC4] text-white">휴</span>휴일근무</span>
         <span className="h-7 px-2.5 rounded-lg text-[12.5px] font-black inline-flex items-center gap-1.5 bg-[#FFF4D6] border border-[#E7D3A1] text-[#6B5320]">내 기록</span>
         {monthHolidays.map(([ds, label]) => (
           <span key={ds} className="h-7 px-2.5 rounded-lg text-[12.5px] font-bold inline-flex items-center bg-[#FFF1F1] text-[#C0352F]"><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{ds.slice(5).replace("-", ".")}</span>&nbsp;{label}</span>
@@ -874,6 +969,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                       <div className="mt-0.5 text-[11.5px] font-semibold text-[#8A97AD] truncate max-w-[156px]">
                         {[emp.team, emp.position].filter(Boolean).join(" · ") || "부서 미지정"}
                         <span className="ml-1.5 tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{emp.workStartTime ? `${emp.workStartTime}~${emp.workEndTime || "?"}` : ""}</span>
+                        {normWeekdays(emp.workWeekdays) && <span className="ml-1.5 text-[#2D4C82] font-black">{weekdaysText(emp.workWeekdays)}</span>}
                       </div>
                     </td>
                     {dayList.map(d => {
@@ -891,12 +987,15 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                       const clickable = editable || (me && ds <= todayDateStr);
                       const isToday = ds === todayDateStr;
                       const past = ds < todayDateStr;
-                      const missing = !effStatus && (past || isToday) && !holiday && wd !== 0 && wd !== 6;
+                      const restDay = isRestDay(ds, wdOf(emp)); // 🗓 이 직원의 근무 요일이 아닌 날
+                      const offWork = WORK_SET.has(effStatus) && (restDay || holiday); // 휴일근무
+                      const missing = !effStatus && (past || isToday) && !holiday && !restDay;
                       const tooltip = [
                         holiday ? `공휴일: ${getHolidayLabel(ds, holidays)}` : "",
                         effStatus ? `상태: ${effStatus}` : (missing ? "기록 없음" : ""),
                         checkIn ? `출근 ${checkIn}` : "", checkOut ? `퇴근 ${checkOut}` : "",
                         late ? "지각" : "", rec?.lateReason ? `사유: ${rec.lateReason}` : "",
+                        offWork ? `휴일근무${rec?.compDay ? " · 대체휴무 줌" : ""}` : "",
                         pending ? `수정 요청 대기(${pending.requestedStatus})` : "",
                         hasRejected ? `요청 거절: ${rejectedChangeMap[key]}` : "",
                         editable ? "클릭: 기록 수정" : (me && clickable ? "클릭: 수정 요청" : ""),
@@ -909,7 +1008,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                       else if (missing) { chipCls = "bg-white text-[#C3CAD6] border border-dashed border-[#D5DCE6]"; text = "—"; }
                       else { chipCls = "bg-transparent text-transparent"; text = ""; }
                       return (
-                        <td key={d} className={`px-[3px] py-1.5 text-center border-b border-[#EEF1F6] ${isToday ? "bg-[#2D4C82]/[0.09] border-x border-x-[#2D4C82]/25" : (holiday || wd === 0) ? "bg-[#FFF8F8]" : wd === 6 ? "bg-[#F7F9FF]" : ""}`}>
+                        <td key={d} className={`px-[3px] py-1.5 text-center border-b border-[#EEF1F6] ${isToday ? "bg-[#2D4C82]/[0.09] border-x border-x-[#2D4C82]/25" : (holiday || (restDay && wd === 0)) ? "bg-[#FFF8F8]" : restDay ? "bg-[#F7F9FF]" : ""}`}>
                           <button
                             type="button"
                             disabled={!clickable}
@@ -920,6 +1019,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                           >
                             {text}
                             {late && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#E5484D] ring-2 ring-white" />}
+                            {offWork && <span className={`absolute -top-1.5 -left-1 px-[3px] rounded text-[9px] leading-[13px] font-black ring-2 ring-white ${rec?.compDay ? "bg-[#2E9E6A] text-white" : "bg-[#7C5CC4] text-white"}`}>휴</span>}
                             {pending && !late && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#E5A93B] ring-2 ring-white" />}
                             {hasRejected && !late && !pending && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#E5484D] ring-2 ring-white" />}
                           </button>
@@ -1030,6 +1130,20 @@ export default function AttendanceBoard({ userCompany, role, user }) {
         <Modal title={`${editCell.name} · ${editCell.date}`} eyebrow="EDIT · HR ONLY" onClose={() => setEditCell(null)} narrow>
           <div className="text-[13px] text-[#5B6B85] mb-3">출근 상태 및 시간을 직접 수정합니다. 수정 이력이 남습니다.</div>
           <AttSourceInfo rec={editCell.current} />
+          {(() => {
+            // 🗓 쉬는 날 근무(휴일근무) — 대체휴무 1일
+            const off = offFor(empOf(editCell.uid), editCell.date);
+            const worked = WORK_SET.has(editCell.current?.status);
+            if (!off) return null;
+            return (
+              <div className="mb-3 rounded-xl bg-[#F8F5FE] border border-[#E2D8F6] px-3 py-2.5 text-[12.5px] text-[#5B3FA8]">
+                <b>{editCell.date}</b>은 이 직원의 쉬는 날({weekdaysText(wdOf(empOf(editCell.uid)))} 근무)이에요. 출근으로 저장하면 <b>휴일근무</b>로 기록돼요.
+                {worked && (editCell.current?.compDay
+                  ? <div className="mt-1.5 font-black text-[#18794E]">대체휴무 {editCell.current.compDay.days || 1}일을 줬어요{editCell.current.compDay.byName ? ` (${editCell.current.compDay.byName})` : ""}</div>
+                  : <button onClick={() => giveCompDay(editCell)} className="mt-2 h-8 px-3 rounded-lg bg-[#7C5CC4] text-white text-[12.5px] font-black">대체휴무 1일 주기(연차 +1일)</button>)}
+              </div>
+            );
+          })()}
           <EditForm editCell={editCell} onSave={saveEdit} onCancel={() => setEditCell(null)} />
         </Modal>
       )}
@@ -1083,8 +1197,14 @@ export default function AttendanceBoard({ userCompany, role, user }) {
 
       {/* 출근 요청 시간 입력 모달 */}
       {showCheckInRequestModal && (
-        <Modal title="출근 요청" eyebrow="CHECK-IN · REQUEST" onClose={() => setShowCheckInRequestModal(false)} narrow>
+        <Modal title={offDayReq ? "휴일 출근 요청" : "출근 요청"} eyebrow="CHECK-IN · REQUEST" onClose={() => setShowCheckInRequestModal(false)} narrow>
           <div className="text-[13px] text-[#5B6B85] mb-4">실제 출근한 시간을 입력하세요. <b className="text-[#1B2B4B]">{myApproverLabel}</b> 승인 후 출근 처리됩니다.</div>
+          {offDayReq && (
+            <div className="mb-4">
+              <div className="mb-2 px-3 py-2 rounded-xl bg-[#F4F0FC] text-[12.5px] font-bold text-[#5B3FA8]">오늘은 내 근무 요일({weekdaysText(wdOf(myEmp))})이 아니에요. 승인되면 "휴일근무"로 기록되고, 인사팀이 대체휴무를 줄 수 있어요.</div>
+              <input type="text" value={offDayReason} onChange={e => setOffDayReason(e.target.value)} placeholder="사유(예: 긴급 배차 · 월말 마감)" className={`${inputCls} w-full`} />
+            </div>
+          )}
           <label className="block mb-4">
             <div className="text-[13px] font-bold text-[#3A4A66] mb-1">출근 시간</div>
             <HourMinuteSelect value={requestCheckInTime} onChange={e => setRequestCheckInTime(e.target.value)} className={`${inputCls} w-full h-11 text-[16px] text-left`} />
@@ -1098,7 +1218,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                 const [h, m] = requestCheckInTime.split(":").map(Number);
                 const dt = new Date(todayDateStr + "T00:00:00");
                 dt.setHours(h, m, 0, 0);
-                const r = await submitCheckInReq({ requester: meProfile, date: todayDateStr, requestedAt: dt.toISOString(), company, employees, customRoles });
+                const r = await submitCheckInReq({ requester: meProfile, date: todayDateStr, requestedAt: dt.toISOString(), company, employees, customRoles, offDay: offDayReq, reason: offDayReason });
                 if (!r.count) alert("승인할 담당자가 없어 요청만 저장했습니다. 인사팀·임원 지정 여부를 확인해 주세요.");
                 setShowCheckInRequestModal(false);
               } catch (e) {
@@ -1119,8 +1239,26 @@ export default function AttendanceBoard({ userCompany, role, user }) {
         <div className="fixed inset-0 bg-black/50 z-[999999] flex items-center justify-center p-4" onClick={() => setEditScheduleEmp(null)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-xs p-5" onClick={e => e.stopPropagation()}>
             <div className="text-[16px] font-black text-[#0F1A30] mb-1">{editScheduleEmp.name || editScheduleEmp.email}</div>
-            <div className="text-[13px] text-[#8A97AD] mb-4">정규 근무시간을 설정합니다.</div>
+            <div className="text-[13px] text-[#8A97AD] mb-4">근무 요일과 정규 근무시간을 정해요.</div>
             <div className="space-y-3">
+              <div>
+                <div className="text-[13px] font-bold text-[#3A4A66] mb-1.5">근무 요일</div>
+                <div className="flex p-1 rounded-xl bg-[#EEF2F8] gap-1 mb-2">
+                  {[["company", `회사 설정(${weekdaysText(coWeekdays)})`], ["custom", "이 직원만 따로"]].map(([k, l]) => (
+                    <button key={k} onClick={() => { setEditWdMode(k); if (k === "custom" && !normWeekdays(editWd)) setEditWd(coWeekdays); }}
+                      className={`flex-1 h-8 rounded-[9px] text-[12px] font-bold ${editWdMode === k ? "bg-white text-[#0F1A30] shadow" : "text-[#5B6B85]"}`}>{l}</button>
+                  ))}
+                </div>
+                {editWdMode === "custom" && (
+                  <div className="flex gap-1">
+                    {WEEKDAY_ORDER.map(d => {
+                      const on = editWd.includes(d);
+                      return <button key={d} onClick={() => setEditWd(v => (on ? v.filter(x => x !== d) : [...v, d]))}
+                        className={`flex-1 h-9 rounded-lg text-[13px] font-black border ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : `bg-white border-[#DCE3EE] ${d === 0 ? "text-[#D23F3F]" : d === 6 ? "text-[#2D5BD8]" : "text-[#5B6B85]"}`}`}>{WEEKDAY_NAMES[d]}</button>;
+                    })}
+                  </div>
+                )}
+              </div>
               <label className="block">
                 <div className="text-[13px] font-bold text-[#3A4A66] mb-1.5">출근 시간</div>
                 <HourMinuteSelect value={editWorkStart} onChange={e => setEditWorkStart(e.target.value)} className={`${inputCls} w-full text-left`} />
@@ -1131,7 +1269,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
               </label>
               <div className="flex gap-2 pt-1">
                 <button onClick={() => setEditScheduleEmp(null)} className="flex-1 h-10 rounded-xl border border-[#DCE3EE] text-[#5B6B85] text-[13.5px] font-bold">취소</button>
-                <button onClick={() => saveWorkSchedule(editScheduleEmp.uid)} className="flex-1 h-10 rounded-xl bg-[#1B2B4B] text-white text-[13.5px] font-black">저장</button>
+                <button onClick={() => { if (editWdMode === "custom" && !normWeekdays(editWd)) { alert("근무 요일을 하루 이상 골라 주세요."); return; } saveWorkSchedule(editScheduleEmp.uid); }} className="flex-1 h-10 rounded-xl bg-[#1B2B4B] text-white text-[13.5px] font-black">저장</button>
               </div>
             </div>
           </div>
@@ -1143,10 +1281,10 @@ export default function AttendanceBoard({ userCompany, role, user }) {
         <Modal title={summaryEmp.name || summaryEmp.email} eyebrow={`SUMMARY · ${year}.${String(month).padStart(2, "0")}`} onClose={() => setSummaryEmp(null)} narrow>
           <div className="mb-4 px-3.5 py-3 rounded-xl bg-[#F5F7FB] border border-[#E3E8F0] flex items-center justify-between">
             <div>
-              <div className="text-[12.5px] font-bold text-[#8A97AD]">정규 근무시간</div>
-              <div className="text-[15px] font-black text-[#0F1A30] mt-0.5 tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{summaryEmp.workStartTime || "-"} ~ {summaryEmp.workEndTime || "-"}</div>
+              <div className="text-[12.5px] font-bold text-[#8A97AD]">근무 요일 · 정규 근무시간</div>
+              <div className="text-[15px] font-black text-[#0F1A30] mt-0.5 tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{weekdaysText(wdOf(summaryEmp))}{normWeekdays(summaryEmp.workWeekdays) ? "" : <span className="text-[11.5px] font-bold text-[#8A97AD]"> (회사)</span>} · {summaryEmp.workStartTime || "-"} ~ {summaryEmp.workEndTime || "-"}</div>
             </div>
-            <button onClick={(e) => { e.stopPropagation(); setEditWorkStart(summaryEmp.workStartTime || "09:00"); setEditWorkEnd(summaryEmp.workEndTime || "18:00"); setEditScheduleEmp(summaryEmp); }} className={btnCls(false)}>설정</button>
+            <button onClick={(e) => { e.stopPropagation(); openSchedule(summaryEmp); }} className={btnCls(false)}>설정</button>
           </div>
           <div className="grid grid-cols-2 gap-2 mb-4">
             {Object.keys(ATTENDANCE_STATUS_COLOR).map(key => (
@@ -1157,6 +1295,12 @@ export default function AttendanceBoard({ userCompany, role, user }) {
                 </div>
               ) : null
             ))}
+            {summaryData.offWork > 0 && (
+              <div className="flex items-center justify-between px-3 py-2.5 rounded-xl border border-[#E2D8F6] bg-[#F8F5FE]" title="근무 요일이 아닌 날 · 공휴일에 일한 날">
+                <span className="text-[13px] font-black text-[#5B3FA8]">휴일근무</span>
+                <span className="text-[16px] font-black text-[#5B3FA8] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{summaryData.offWork}<span className="text-[12px] ml-0.5">일</span>{summaryData.compDays ? <span className="text-[11.5px] ml-1 text-[#2E9E6A]">대체휴무 {summaryData.compDays}</span> : null}</span>
+              </div>
+            )}
             {summaryData.lateCount > 0 && (
               <div className="flex items-center justify-between px-3 py-2.5 rounded-xl border border-[#F6D2D2] bg-[#FFF8F8]">
                 <span className="text-[13px] font-black text-[#C0352F]">지각</span>
@@ -1240,7 +1384,7 @@ function ReqRowShell({ title, sub, reason, group, onApprove, onReject }) {
 }
 
 function CheckInReqRow({ req, onApprove, onReject }) {
-  return <ReqRowShell title={req.name} sub={`${req.date} · ${fmtTime(req.requestedAt)} 출근 요청`} group={req.approverGroup} onApprove={() => onApprove(req)} onReject={(r) => onReject(req, r)} />;
+  return <ReqRowShell title={req.name} sub={`${req.date} · ${fmtTime(req.requestedAt)} ${req.offDay ? "휴일 출근" : "출근"} 요청`} reason={req.offDay ? req.reason : undefined} group={req.approverGroup} onApprove={() => onApprove(req)} onReject={(r) => onReject(req, r)} />;
 }
 
 function ChangeReqRow({ req, onApprove, onReject }) {

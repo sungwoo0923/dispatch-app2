@@ -138,10 +138,11 @@ import AiAssistant from "./AiAssistant";
 import InternalMessenger from "./InternalMessenger";
 import { calcLeaveBalance } from "./leaveUtils";
 import { useMyLeaveExtras, useLeaveBasis } from "./leaveBasis"; // ⭐ 2026-11-07 내정보 연차 = 전자결재 연차 현황
+import { useCompanyWorkWeekdays } from "./workWeekdays"; // 🗓 2026-11-23 회사 근무 요일
 import { receivablesOf, invoiceDriverPlates, isTaxInvoiceSale, statementRowsOf, stmtIncludePrepaidOf, isPrepaidPay } from "./arAging"; // ⭐ 2026-11-07 미수금(부가세 포함) · 예상 부가세 공용 계산
 import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_BADGE_CLASS, TEAM_BADGE_CLASS_UNASSIGNED } from "./hrConstants";
 const AttendanceBoard = lazyView(() => import("./AttendanceBoard"));
-import { todayStr as attendanceTodayStr, isWeekend, findApprovedLeaveForDate, isHoliday, isScheduleApproved, LEAVE_TYPE_LABEL, ATTENDANCE_STATUS_COLOR, approvalLeaveOn, hrLeaveOn } from "./attendanceUtils";
+import { todayStr as attendanceTodayStr, isRestDay, workWeekdaysOf, findApprovedLeaveForDate, isHoliday, isScheduleApproved, LEAVE_TYPE_LABEL, ATTENDANCE_STATUS_COLOR, approvalLeaveOn, hrLeaveOn } from "./attendanceUtils";
 const FreightRateInquiry = lazyView(() => import("./FreightRateInquiry"));
 import { isNotificationsEnabled, setNotificationsEnabled, useNotificationsEnabled } from "./notificationSettings";
 import { PopupPrefsSection } from "./popupPrefs"; // ⭐ 2026-11-07 팝업 알림 켜고 끄기(계정별)
@@ -58455,6 +58456,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
   const [resumes, setResumes] = React.useState({}); // uid -> resume data
   const [selectedUid, setSelectedUid] = React.useState(null);
   const hrLeaveBasis = useLeaveBasis(company); // ⭐ 2026-11-07 회사 연차 회기 기준
+  const coWeekdays = useCompanyWorkWeekdays(company); // 🗓 2026-11-23 회사 근무 요일(직원별 설정이 있으면 그것)
   // 🔗 2026-11-01 전자결재 근태 승인분(연차·반차·병가·외근·육아휴직 등) → 근태/근속 현황
   const [leaveAprs, setLeaveAprs] = React.useState([]);
   React.useEffect(() => {
@@ -58543,7 +58545,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
       const days = []; const lates = [];
       for (let d = 1; d <= dim; d++) {
         const ds = `${monthStr}-${String(d).padStart(2, "0")}`;
-        const off = isHoliday(ds, holidays) || isWeekend(ds);
+        const off = isHoliday(ds, holidays) || isRestDay(ds, workWeekdaysOf(m, coWeekdays)); // 🗓 직원 근무 요일
         if (d > numDaysSoFar) { days.push({ d, ds, status: off ? "휴일" : "", future: true }); continue; }
         const rec = records.find(r => r.uid === m.uid && r.date === ds);
         let status = rec?.status;
@@ -58574,7 +58576,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
       }
       return { ...m, hireDate, tenureLabel, leave, workDays, leaveDays, sickDays, lateDays, fieldM, days, lates, startHm, pendingApprovals, team: m.team || "미배정" };
     }).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-  }, [members, profiles, schedules, holidays, records, monthStr, numDaysSoFar, selfOnly, userId, leaveAprs, hrLeaveBasis]);
+  }, [members, profiles, schedules, holidays, records, monthStr, numDaysSoFar, selfOnly, userId, leaveAprs, hrLeaveBasis, coWeekdays]);
 
   const filteredRows = React.useMemo(() => {
     return rows.filter(r => {

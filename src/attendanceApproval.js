@@ -154,6 +154,7 @@ export async function approveCheckInReq(req, approver, company) {
     tx.set(doc(db, "attendance", `${d.date}_${d.uid}`), {
       uid: d.uid, name: d.name, date: d.date, month: d.date.slice(0, 7), companyName: company,
       status: "출근", checkInTime: d.requestedAt, source: "request_approved",
+      ...(d.offDay ? { offDayWork: true } : {}), // 🗓 2026-11-23 쉬는 날 나와서 일함(휴일근무)
       editedBy: approver.uid || "", editedByName: approver.name || "", editedAt: new Date().toISOString(),
     }, { merge: true });
     return true;
@@ -198,17 +199,20 @@ export async function submitChangeReq({ requester, date, status, checkIn, checkO
   return { id: ref.id, group, count: uids.length };
 }
 
-export async function submitCheckInReq({ requester, date, requestedAt, company, employees, customRoles }) {
+// offDay: 근무 요일이 아닌 날(또는 공휴일) 나와서 일하는 "휴일 출근" 요청 — 승인되면 attendance.offDayWork
+export async function submitCheckInReq({ requester, date, requestedAt, company, employees, customRoles, offDay = false, reason = "" }) {
   const { group, uids } = resolveApprovers(requester, employees, customRoles);
   const name = requester.name || requester.email || "";
   const ref = await addDoc(collection(db, "attendanceRequests"), {
     uid: requester.uid, name, date, requestedAt, companyName: company, status: "pending",
     approverGroup: group, approverUids: uids, createdAt: serverTimestamp(),
+    ...(offDay ? { offDay: true, reason: String(reason || "").trim() } : {}),
   });
+  const tag = offDay ? "휴일출근요청" : "출근요청";
   await notifyApprovers(uids, {
     type: "attendance_check_in_request", fromName: name, fromUid: requester.uid, date,
     checkInReqId: ref.id, approverGroup: group, companyName: company,
-    msg: `[출근요청] ${name}님이 ${date} 출근 요청을 했습니다.${group === "exec" ? " (인사팀 본인 요청 · 임원 승인)" : ""}`,
+    msg: `[${tag}] ${name}님이 ${date} ${offDay ? "휴일 출근" : "출근"} 요청을 했습니다.${offDay && reason ? ` (사유: ${String(reason).trim()})` : ""}${group === "exec" ? " (인사팀 본인 요청 · 임원 승인)" : ""}`,
   });
   return { id: ref.id, group, count: uids.length };
 }

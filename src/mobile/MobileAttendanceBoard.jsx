@@ -5,7 +5,7 @@ import { collection, doc, onSnapshot, query, setDoc, where } from "firebase/fire
 import { db, DEFAULT_COMPANY } from "../firebase";
 import { HourMinuteSelect } from "../kpTimePick"; // ⏱ 2026-11-07 시간은 프로그램 시·분 선택으로
 import MobileSelect from "./MobileSelect"; // ⭐ 2026-11-02 기본 select → 남색 바텀시트 선택기
-import { ATTENDANCE_STATUS_COLOR, isWeekend, isHoliday, findApprovedLeaveForDate, attendanceSourceText } from "../attendanceUtils";
+import { ATTENDANCE_STATUS_COLOR, isHoliday, findApprovedLeaveForDate, attendanceSourceText, DEFAULT_WORK_WEEKDAYS, normWeekdays, workWeekdaysOf, isRestDay, isOffDay, weekdaysText } from "../attendanceUtils"; // 🗓 2026-11-23 근무 요일(회사 · 직원별)
 // 🕘 2026-11-16 이 날 출퇴근이 어떻게 기록됐는지(자동 · 직접 누름 · 관리자 수정)
 function SourceLine({ rec }) {
   const t = attendanceSourceText(rec);
@@ -74,6 +74,9 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
 
   // 출근 요청 시간 모달
   const [showCheckInRequestModal, setShowCheckInRequestModal] = useState(false);
+  const [coWeekdays, setCoWeekdays] = useState(DEFAULT_WORK_WEEKDAYS); // 🗓 회사 근무 요일
+  const [offDayReq, setOffDayReq] = useState(false);
+  const [offDayReason, setOffDayReason] = useState("");
   const [requestCheckInTime, setRequestCheckInTime] = useState("");
 
   // 모바일 날짜 셀 편집 (hrManager 권한용)
@@ -154,6 +157,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
     const unsub = onSnapshot(doc(db, "companySettings", company), snap => {
       const data = snap.data();
       setOfficeLocation(data?.officeLocation || null);
+      setCoWeekdays(normWeekdays(data?.workWeekdays) || DEFAULT_WORK_WEEKDAYS);
       if (!radiusDirtyRef.current) setRadiusInput(officeRadii(data?.officeLocation)); // 고치는 중엔 덮어쓰지 않음
       if (data?.officeLocation) {
         setOfficeInput({ lat: String(data.officeLocation.lat), lng: String(data.officeLocation.lng), address: data.officeLocation.address || "" });
@@ -273,12 +277,14 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
   for (let i = 0; i < firstWeekday; i++) cells.push(null);
   for (let d = 1; d <= numDays; d++) cells.push(d);
 
+  const myWeekdays = workWeekdaysOf(myUserDoc, coWeekdays);
+  const todayOffMine = isOffDay(todayDateStr, myWeekdays, holidays);
   const resolveStatus = (ds) => {
     const rec = recordMap[ds];
     if (rec && rec.status) return { status: rec.status, rec };
     if (ds > todayDateStr) return { status: null, rec: null };
     if (isHoliday(ds, holidays)) return { status: "공휴일", rec: null };
-    if (isWeekend(ds)) return { status: "휴무", rec: null };
+    if (isRestDay(ds, myWeekdays)) return { status: "휴무", rec: null }; // 🗓 내 근무 요일이 아닌 날
     const leave = findApprovedLeaveForDate(schedules, uid, ds, myName);
     if (leave) return { status: leave, rec: null };
     return { status: null, rec: null };
@@ -501,20 +507,22 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
                   {checkingOut ? "처리 중..." : "퇴근"}
                 </button>
               )}
-              {!todayRec?.status && !isWeekend(todayDateStr) && !isHoliday(todayDateStr, holidays) && (
+              {!todayRec?.status && (
                 (() => {
                   const myPendingReq = checkInRequests.find(r => r.uid === uid && r.date === todayDateStr);
                   return myPendingReq ? (
                     <div className="text-[12px] text-gray-600 font-bold px-3 py-2 bg-gray-100 rounded-xl">요청 대기 중...</div>
                   ) : (
+                    // 🗓 쉬는 날이면 "휴일 출근 요청" — 승인되면 휴일근무로 기록
                     <button onClick={async () => {
-                      if (!(await insideOrWarn("출근 요청"))) return;
+                      if (!(await insideOrWarn(todayOffMine ? "휴일 출근 요청" : "출근 요청"))) return;
                       const n = new Date();
                       setRequestCheckInTime(String(n.getHours()).padStart(2, "0") + ":" + String(n.getMinutes()).padStart(2, "0"));
+                      setOffDayReq(todayOffMine); setOffDayReason("");
                       setShowCheckInRequestModal(true);
                     }} disabled={requestingCheckIn}
-                      className="px-4 py-2.5 rounded-xl border-2 border-[var(--attn-accent)] text-[var(--attn-accent)] text-[12px] font-bold disabled:opacity-50">
-                      {requestingCheckIn ? "요청 중..." : "출근 요청"}
+                      className={`px-4 py-2.5 rounded-xl border-2 text-[12px] font-bold disabled:opacity-50 ${todayOffMine ? "border-[#7C5CC4] text-[#7C5CC4]" : "border-[var(--attn-accent)] text-[var(--attn-accent)]"}`}>
+                      {requestingCheckIn ? "요청 중..." : todayOffMine ? "휴일 출근 요청" : "출근 요청"}
                     </button>
                   );
                 })()
@@ -577,6 +585,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
                 <div className="text-[11px] font-bold text-gray-500 mb-0.5">{d}</div>
                 <div className={`w-full mx-0.5 rounded text-[9px] font-bold py-1 text-center ${colorCls}`}>{label || "·"}</div>
                 {late && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-red-500" />}
+                {["출근", "외근", "조퇴"].includes(status) && isOffDay(ds, myWeekdays, holidays) && <div className="absolute top-0 left-0.5 px-[2px] rounded text-[8px] leading-[11px] font-black bg-[#7C5CC4] text-white" title="휴일근무">휴</div>}
                 {hasRejected && !late && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-red-500" title={rejectedChangeMap[ds]} />}
               </div>
             );
@@ -602,8 +611,15 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
       {showCheckInRequestModal && (
         <div className="fixed inset-0 z-[9999] bg-black/40 flex items-center justify-center px-4">
           <div className="bg-white rounded-2xl p-5 w-full max-w-sm max-h-[90vh] overflow-y-auto">
-            <div className="text-[15px] font-bold text-[var(--attn-accent)] mb-1">출근 요청</div>
+            <div className="text-[15px] font-bold text-[var(--attn-accent)] mb-1">{offDayReq ? "휴일 출근 요청" : "출근 요청"}</div>
             <div className="text-[12px] text-gray-500 mb-4">실제 출근한 시간을 입력하세요. {myApproverLabel} 승인 후 출근 처리됩니다.</div>
+            {offDayReq && (
+              <div className="mb-4">
+                <div className="mb-2 px-3 py-2 rounded-xl bg-[#F4F0FC] text-[12px] font-bold text-[#5B3FA8]">오늘은 내 근무 요일({weekdaysText(myWeekdays)})이 아니에요. 승인되면 "휴일근무"로 기록돼요.</div>
+                <input type="text" value={offDayReason} onChange={e => setOffDayReason(e.target.value)} placeholder="사유(예: 긴급 배차)"
+                  className="w-full h-11 px-3 rounded-xl border-2 border-gray-200 bg-white text-[14px]" />
+              </div>
+            )}
             <div className="mb-4">
               <div className="text-[12px] font-semibold text-gray-600 mb-1">출근 시간</div>
               <HourMinuteSelect value={requestCheckInTime} onChange={e => setRequestCheckInTime(e.target.value)}
@@ -619,7 +635,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
                   const [h, m] = requestCheckInTime.split(":").map(Number);
                   const dt = new Date(todayDateStr + "T00:00:00");
                   dt.setHours(h, m, 0, 0);
-                  const r = await submitCheckInReq({ requester: meProfile, date: todayDateStr, requestedAt: dt.toISOString(), company, employees: staff, customRoles });
+                  const r = await submitCheckInReq({ requester: meProfile, date: todayDateStr, requestedAt: dt.toISOString(), company, employees: staff, customRoles, offDay: offDayReq, reason: offDayReason });
                   if (!r.count) alert("승인할 담당자가 없어 요청만 저장했습니다.");
                   setShowCheckInRequestModal(false);
                 } catch (e) {

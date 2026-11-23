@@ -39,9 +39,11 @@ import { isHrStaffUser } from "./hrHandover";
 import { useLeaveGuard, draftStore, confirmLeave } from "./leaveGuard";
 import {
   APPROVAL_CATS, APPROVAL_FORMS, formOf, formsOfCat, initialData, todayYmd, missingFields, fieldText, suggestLine,
-  itemsTotal, costsTotal, fmtWon, dayDiff, bizDays, leaveEntitlement, leaveUseOf,
+  itemsTotal, costsTotal, fmtWon, dayDiff, bizDays, offWord, leaveEntitlement, leaveUseOf,
   blankSpendRow, spendRowTotal, spendLinesOf, spendTotals, wonKorean, rowsOf, ACCOUNTS,
 } from "./approvalForms";
+import { useCompanyWorkWeekdays } from "./workWeekdays"; // 🗓 2026-11-23 근무 요일 → 휴가 일수
+import { workWeekdaysOf, DEFAULT_WORK_WEEKDAYS } from "./attendanceUtils";
 import { needsBizLine, suggestBizLine, validateBizLine, isFinPerson, isCeoPerson, isExecNonCeo, PLAN_LINK_FORMS, budgetTotal } from "./bizPlan"; // 📑 2026-11-08 사업계획서
 import { ApprovalAttachInput, ApprovalAttachPanel, removeApFile, apUrlBlob } from "./ApprovalFiles"; // 📎 2026-11-08 첨부 파일(Storage)
 import { inDocDir, fmtSize, AP_FILE_COUNT } from "./approvalFiles";
@@ -1299,7 +1301,7 @@ function FieldInput({ f, value, onChange, staff, meUid, ctx }) {
           <span className="text-[#5B6B85] font-bold">~</span>
           <div className="flex-1 min-w-0"><CustomDatePicker value={v.end || ""} onChange={(e) => onChange({ ...v, end: e.target.value && v.start && e.target.value < v.start ? v.start : e.target.value })} className={inp} showIcon placeholder="종료일" /></div>
         </div>
-        {n > 0 && <div className="mt-1 text-[13px] font-bold text-[#1B2B4B]">총 {n}일{!f.calendar && bizDays(v) !== n ? ` · 주말·공휴일 빼면 ${bizDays(v)}일` : ""}</div>}
+        {n > 0 && (() => { const vw = ctx?.workWeekdays ? { ...v, workWeekdays: ctx.workWeekdays } : v; const b = bizDays(vw); return <div className="mt-1 text-[13px] font-bold text-[#1B2B4B]">총 {n}일{!f.calendar && b !== n ? ` · ${offWord(vw)} 빼면 ${b}일` : ""}</div>; })()}
       </div>
     );
   }
@@ -1691,7 +1693,17 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
   const hrOpt = useHrOptions(company);
   const refs = useApprovalRefs(company, { clients: form.fields.some((f) => f.pick === "clients"), cars: form.fields.some((f) => f.pick === "cars" || f.pick === "carDriver") });
   const plans = useApprovedPlans(company, form.fields.some((f) => f.type === "plan"));
-  const fieldCtx = { hr: hrOpt, refs, data, plans };
+  // 🗓 2026-11-23 내 근무 요일(직원 설정 → 회사 설정 → 월~금) — 휴가 기간 일수를 이 요일로 센다(상신할 때 기간 값에 같이 저장)
+  const coWeekdays = useCompanyWorkWeekdays(company);
+  const myWeekdays = workWeekdaysOf((staff || []).find((u) => (u.uid || u.id) === me.uid) || me, coWeekdays);
+  const customWd = myWeekdays.join() !== DEFAULT_WORK_WEEKDAYS.join() ? myWeekdays : null;
+  const withWd = (d) => {
+    if (!customWd || !d) return d;
+    const out = { ...d };
+    (form?.fields || []).forEach((f) => { if (f.type === "daterange" && !f.calendar && out[f.k]?.start) out[f.k] = { ...out[f.k], workWeekdays: customWd }; });
+    return out;
+  };
+  const fieldCtx = { hr: hrOpt, refs, data, plans, workWeekdays: customWd };
   const setField = (f, v) => setData((p) => { const n = { ...p, [f.k]: v }; const extra = form.autofill ? form.autofill(f.k, v, p, { staff }) : null; return extra ? { ...n, ...extra } : n; });
   const docName = String(form.title || form.label).replace(/\s+/g, "").replace(/·/g, "·");
   const autoTitle = `${todayDots()} ${docName}_${me.name || ""}${me.position ? ` ${me.position}` : ""}`; // ⭐ 2026-11-02 이름·직책 사이 띄어쓰기
@@ -1721,7 +1733,8 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
     if (upBusy > 0) { setMsg("첨부 파일을 올리는 중이에요. 다 올라간 뒤 다시 눌러 주세요."); return; }
     const pdRaw0 = form.prepare ? form.prepare(data) : data;
     const pdRaw = pdRaw0; // ⭐ 2026-11-09 계정과목은 작성자 누구나 고른다(경리는 지급할 때 바꾸거나 새로 추가) // ⭐ 2026-11-02 지출결의 — 빈 행 빼고 예전 칸(지출처·입금계좌·지출일) 채움
-    const pd = form.fields.some((f) => f.type === "plan") && !pdRaw.planId ? { ...pdRaw, planId: "", planName: "" } : pdRaw;
+    const pd0 = form.fields.some((f) => f.type === "plan") && !pdRaw.planId ? { ...pdRaw, planId: "", planName: "" } : pdRaw;
+    const pd = withWd(pd0); // 🗓 휴가 기간에 내 근무 요일을 같이 저장
     const fileMeta = files.slice(0, AP_FILE_COUNT).map(({ name, size, type, path, uploadedBy, uploadedByName, at }) => ({ name, size, type, path, uploadedBy: uploadedBy || "", uploadedByName: uploadedByName || "", at: at || Date.now() }));
     if (editId) {
       const live = getLive?.(editId);
@@ -1803,7 +1816,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
     </div>
     <div className="kp-ap-split grid gap-5" style={{ gridTemplateColumns: "minmax(420px, 520px) 1fr" }}>
       <div className="space-y-4">
-        {(formKey === "annual" || formKey === "half") && <LeaveCard leave={leave} thisDays={editId ? 0 : (leaveUseOf({ cat, form: formKey, data })?.days || 0)} />}
+        {(formKey === "annual" || formKey === "half") && <LeaveCard leave={leave} thisDays={editId ? 0 : (leaveUseOf({ cat, form: formKey, data: withWd(data) })?.days || 0)} />}
         <div className="rounded-2xl border border-[#E3E8F0] bg-white p-5 space-y-3.5">
           <div>
             <div className="text-[12px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>FORM</div>

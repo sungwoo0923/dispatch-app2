@@ -15,7 +15,7 @@ export const APPROVAL_CATS = [
   { key: "report", label: "업무 보고·인사", en: "REPORT", icon: "list", desc: "일일 업무일지 · 업무 보고서 · 출장 보고서 · 회의록 · 교육 결과 · 시말서 · 사직서" },
 ];
 
-import { isWeekend, isHoliday } from "./attendanceUtils";
+import { isWeekend, isHoliday, isRestDay, normWeekdays } from "./attendanceUtils";
 import { leavePeriodOf } from "./payrollCalc"; // ⭐ 2026-11-07 회계연도 기준 연차 회기
 
 const won = (n) => `${Math.round(Number(n) || 0).toLocaleString("ko-KR")}원`;
@@ -29,14 +29,18 @@ const dayDiff = (r) => {
 // 주말·공휴일(대체·임시공휴일 포함)을 뺀 실제 근무일 수 — 휴가 일수는 이걸로 센다
 const pad = (n) => String(n).padStart(2, "0");
 const dstr = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+//  🗓 2026-11-23 기간 값에 그 직원의 근무 요일(r.workWeekdays — 상신할 때 같이 저장)이 있으면 그 요일로 센다(예: 월~토 근무면 토요일도 휴가 1일)
+//     없으면(예전 문서 · 월~금 직원) 지금처럼 주말을 뺀다
 export const bizDays = (r) => {
   if (!r?.start) return 0;
   const a = new Date(`${r.start}T00:00:00`); const b = new Date(`${r.end || r.start}T00:00:00`);
   if (isNaN(a) || isNaN(b) || b < a) return 0;
+  const wd = normWeekdays(r.workWeekdays);
   let n = 0;
-  for (let d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) { const k = dstr(d); if (!isWeekend(k) && !isHoliday(k, [])) n += 1; }
+  for (let d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) { const k = dstr(d); if (!(wd ? isRestDay(k, wd) : isWeekend(k)) && !isHoliday(k, [])) n += 1; }
   return n;
 };
+export const offWord = (r) => (normWeekdays(r?.workWeekdays) ? "쉬는 날·공휴일" : "주말·공휴일");
 export const rangeText = (r) => (r?.start ? (r.end && r.end !== r.start ? `${r.start} ~ ${r.end}` : r.start) : "");
 const itemsTotal = (rows) => (rows || []).reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.price) || 0), 0);
 const costsTotal = (rows) => (rows || []).reduce((s, r) => s + (Number(r.amount) || 0), 0);
@@ -605,7 +609,7 @@ export function fieldText(f, v, staff) {
   if (v === undefined || v === null || v === "") return "";
   if (f.type === "bank") return bankText(v);
   if (f.type === "spendLines") return (Array.isArray(v) ? v : []).filter(rowFilled).map((r, i) => `${i + 1}. ${r.date || ""} ${r.vendor || ""} ${r.memo || ""} ${won(spendRowTotal(r))}`.replace(/\s+/g, " ")).join("\n");
-  if (f.type === "daterange") { const n = dayDiff(v); const b = f.calendar ? n : bizDays(v); return v.start ? `${rangeText(v)}${n ? ` (${n}일${b !== n ? ` · 주말·공휴일 빼고 ${b}일` : ""})` : ""}` : ""; }
+  if (f.type === "daterange") { const n = dayDiff(v); const b = f.calendar ? n : bizDays(v); return v.start ? `${rangeText(v)}${n ? ` (${n}일${b !== n ? ` · ${offWord(v)} 빼고 ${b}일` : ""})` : ""}` : ""; }
   if (f.type === "money") return Number(v) ? won(v) : "";
   if (f.type === "checks") return (v || []).map((x) => `☑ ${x}`).join("\n");
   if (f.type === "timerange") { const t = (hm) => { if (!hm) return ""; const [h, m] = hm.split(":").map(Number); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${String(m).padStart(2, "0")}`; }; return v?.start ? `${t(v.start)}${v.end ? ` ~ ${t(v.end)}` : ""}` : ""; }

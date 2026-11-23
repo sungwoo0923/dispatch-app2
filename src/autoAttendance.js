@@ -9,7 +9,7 @@
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from "firebase/firestore";
 import { db } from "./firebase";
 import { workWindow } from "./lateRule";
-import { approvalLeaveOn, findApprovedLeaveForDate, isHoliday, isWeekend } from "./attendanceUtils";
+import { approvalLeaveOn, findApprovedLeaveForDate, isHoliday, isRestDay, workWeekdaysOf, normWeekdays } from "./attendanceUtils";
 
 export const HALF_LEAVES = ["오전반차", "오후반차"];
 const NOT_LEAVE = ["외근", "조퇴"]; // 출근은 하는 날
@@ -64,7 +64,10 @@ export async function tryAutoCheckIn({ uid, name, company, source = "auto" }) {
   const now = kstNowMin();
   if (now < w.inFrom) return { ok: false, reason: "early", retryAt: w.inFrom };
   if (now > w.inUntil) return { ok: false, reason: "late" };
-  if (isWeekend(today) || isHoliday(today, hol)) return { ok: false, reason: "weekend", weekend: true };
+  // 🗓 2026-11-23 근무 요일(직원 설정 → 회사 설정 → 월~금)이 아닌 날 · 공휴일은 자동 출근 안 함(휴일 출근은 요청 → 승인)
+  let coDays = null;
+  try { coDays = normWeekdays((await getDoc(doc(db, "companySettings", company))).data()?.workWeekdays); } catch { /* 무시 */ }
+  if (isRestDay(today, workWeekdaysOf(me, coDays)) || isHoliday(today, hol)) return { ok: false, reason: "weekend", weekend: true };
   await setDoc(ref, {
     uid, name: userName, date: today, month: today.slice(0, 7),
     status: leave || "출근", checkInTime: new Date().toISOString(), source, companyName: company,
