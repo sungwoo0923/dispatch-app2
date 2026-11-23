@@ -11,6 +11,7 @@ import { db } from "./firebase";
 import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, serverTimestamp } from "firebase/firestore";
 import KpSubNav from "./KpSubNav";
 import { useTableSort, sortRows, SortTh } from "./tableSort";
+import BidQuote from "./BidQuote"; // 🧮 2026-11-23 입찰견적 — 업체 견적 양식 붙여넣기 → 칸마다 원가 · 권장가 · 마진 · 이상 단가 알림
 
 // 단가표 메뉴 전체에서 쓰는 표준 차량톤수 목록 — 다목적지 단가표의 기본(삭제 불가) 컬럼으로도 사용된다.
 const STANDARD_TON_LABELS = ["다마스/라보","1톤","1.4톤","2.5톤","3.5톤","3.5톤광폭","5톤","5톤축","5톤플축","8톤","11톤","11톤축","15톤","18톤","25톤"];
@@ -930,6 +931,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
       items={[
         { key: "노선별", label: "노선별 단가표", en: "ROUTE", icon: "route" },
         { key: "다목적지", label: "다목적지 단가표", en: "MULTI DEST", icon: "pin", badge: multiSheets.length, soft: true, badgeTitle: `저장된 단가표 ${multiSheets.length}개` },
+        { key: "입찰견적", label: "입찰견적", en: "BID QUOTE", icon: "chart" },
       ]}
       actionsLabel="도구"
       actions={[
@@ -940,11 +942,11 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
       {/* ── 머리줄 ── */}
       <div className="flex items-end justify-between gap-3 flex-wrap mb-5">
         <div>
-          <Eyebrow>RATE CARD · {pageMode === "노선별" ? "ROUTE" : "MULTI DESTINATION"}</Eyebrow>
-          <h1 className="text-[22px] font-black text-[#0F1A30] tracking-tight mt-0.5">{pageMode === "노선별" ? "노선별 단가표" : "다목적지 단가표"}</h1>
+          <Eyebrow>RATE CARD · {pageMode === "노선별" ? "ROUTE" : pageMode === "입찰견적" ? "BID QUOTE" : "MULTI DESTINATION"}</Eyebrow>
+          <h1 className="text-[22px] font-black text-[#0F1A30] tracking-tight mt-0.5">{pageMode === "노선별" ? "노선별 단가표" : pageMode === "입찰견적" ? "입찰견적" : "다목적지 단가표"}</h1>
           {/* ⭐ 2026-11-02 화면 점검 — 모바일에서 마지막 글자만 다음 줄로 떨어지지 않게 break-keep + text-balance */}
           <p className="text-[13px] text-[#5B6B85] mt-0.5 break-keep [text-wrap:balance]">
-            {pageMode === "노선별" ? "과거 배차 실적으로 노선·톤수별 권장 단가를 자동 계산합니다" : "기준지 1곳 → 하차지 여러 곳의 톤수·구간별 단가를 한 표로 관리합니다"}
+            {pageMode === "노선별" ? "과거 배차 실적으로 노선·톤수별 권장 단가를 자동 계산합니다" : pageMode === "입찰견적" ? "업체 견적 양식을 붙여 넣으면 칸마다 원가 · 권장가 · 마진을 계산하고, 손해 나거나 앞뒤가 안 맞는 단가를 알려줘요" : "기준지 1곳 → 하차지 여러 곳의 톤수·구간별 단가를 한 표로 관리합니다"}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -955,7 +957,7 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                 <PrintIcon />인쇄 / PDF 저장
               </button>
             </>
-          ) : (
+          ) : pageMode === "입찰견적" ? null : (
             selectedSheet && (
               <>
                 <button onClick={() => setMultiUploadOpen(true)} className="h-10 px-4 rounded-xl bg-white border border-[#DCE3EF] text-[#1B2B4B] text-[13px] font-bold hover:bg-[#F5F8FD] transition">엑셀 업로드</button>
@@ -967,6 +969,8 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
           )}
         </div>
       </div>
+
+      {pageMode === "입찰견적" && <BidQuote dispatchData={dispatchData} userCompany={userCompany} clients={clients} />}
 
       {pageMode === "노선별" && (
       <div className="grid grid-cols-1 md:grid-cols-[360px_1fr] gap-4 md:gap-5 items-start">

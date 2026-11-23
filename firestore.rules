@@ -2495,6 +2495,20 @@ service cloud.firestore {
         && request.resource.data.get('companyName', '') == myCo());
       allow create: if isTotalMasterUser() || (isOfficeStaff() && request.resource.data.get('companyName', '') == myCo());
     }
+    // 🧮 2026-11-23 단가표 › 입찰견적(bidQuotes) · 회사별 할증 · 마진 기본값(bidCostProfiles) — 단가표와 같게 사무 직원 · 내 회사만
+    match /bidQuotes/{id} {
+      allow read, delete: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '') == myCo());
+      allow update: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '') == myCo()
+        && request.resource.data.get('companyName', '') == myCo());
+      allow create: if isTotalMasterUser() || (isOfficeStaff() && request.resource.data.get('companyName', '') == myCo());
+    }
+    match /bidCostProfiles/{id} {
+      allow read: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '') == myCo());
+      allow update: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '') == myCo()
+        && request.resource.data.get('companyName', '') == myCo());
+      allow create: if isTotalMasterUser() || (isOfficeStaff() && request.resource.data.get('companyName', '') == myCo());
+      allow delete: if isTotalMasterUser();
+    }
     //  plManual/{연도} (기본 회사 예전 문서, 회사명 없음) · plManual/{회사__연도}
     match /plManual/{id} {
       allow read: if isTotalMasterUser() || (isOfficeStaff() && (resource == null
@@ -2808,7 +2822,9 @@ service cloud.firestore {
         // 💬🏦 2026-11-08 팝빌 자동화(알림톡 · 계좌조회) — 위에서 따로 정함(빠지면 승인된 직원 누구나 다른 회사 입금 · 발송 기록을 읽는다)
         'popbillSettings', 'bankSyncState', 'bankAliases', 'bankTxns', 'alimtalkLogs', 'smsLogs', 'messageUsage',
         // ✉️ 2026-11-08 운송사별 발신 메일 — 위에서 따로 정함(빠지면 승인된 직원 누구나 다른 회사 메일 설정 · 암호문을 읽는다)
-        'companyMailSettings', 'companyMailSecrets', 'companyMailUsage'];
+        'companyMailSettings', 'companyMailSecrets', 'companyMailUsage',
+        // 🧮 2026-11-23 입찰견적 — 위에서 따로 정함(빠지면 기사 계정도 회사 입찰 단가를 읽는다)
+        'bidQuotes', 'bidCostProfiles'];
 
     }
   }
