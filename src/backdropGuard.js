@@ -8,7 +8,9 @@
 //    · 흰 바탕 전체 화면(불투명)은 팝업 배경이 아니라 그대로
 //  · 예외: data-backdrop-close 가 붙은 층(왼쪽 메뉴 · 옆 서랍처럼 바깥을 눌러 닫는 게 자연스러운 곳)
 //  ⚠ 기본 동작(스크롤 · 포커스)은 막지 않고 전달만 멈춘다(stopPropagation)
-const EVENTS = ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "touchstart", "touchend"];
+// 🛠 2026-11-23 "누르기 · 클릭"만 막는다 — 떼기(mouseup · pointerup · touchend)까지 막았더니 지도를 끌다가 팝업 바깥에서 손을 떼면
+//  지도가 "끌기 끝"을 못 받아 마우스를 계속 따라다녔다(관제센터). 떼기는 그대로 전달해 끌기 · 선택이 정상으로 끝나게.
+const EVENTS = ["pointerdown", "mousedown", "click", "touchstart"];
 
 const alphaOf = (color) => {
   const m = String(color || "").match(/rgba?\(([^)]+)\)/);

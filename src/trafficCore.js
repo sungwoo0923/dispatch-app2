@@ -96,8 +96,9 @@ export function ensureTrafficStyles() {
 }
 
 // ─── 켜기/끄기(기기에 기억 · 열린 지도 모두 같이) ─────────────────────────────────
-const LS_KEY = "kp_traffic_layer";
-let _on = (() => { try { return localStorage.getItem(LS_KEY) !== "0"; } catch { return true; } })();
+// 🚦 2026-11-23 기본은 숨김(사용자 요청: "교통정보가 너무 많아 — 누르면 나오게, 모든 지도") → 새 저장 이름으로 모두 꺼진 채 시작
+const LS_KEY = "kp_traffic_layer_v2";
+let _on = (() => { try { return localStorage.getItem(LS_KEY) === "1"; } catch { return false; } })();
 const _onSubs = new Set();
 export const isTrafficOn = () => _on;
 export function setTrafficOn(v) {
