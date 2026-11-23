@@ -10892,8 +10892,15 @@ function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriv
         onClick={e => e.stopPropagation()}
       >
         <div className={`w-10 h-1 rounded-full mx-auto mb-3 ${bStyle ? "bg-[#1B2B4B]/15" : "bg-blue-100"}`} />
-        <div className={`px-4 pb-2 text-[12px] ${bStyle ? "font-bold text-[#1B2B4B]/50 tracking-wide uppercase" : "font-semibold text-blue-600/60 tracking-wide uppercase"}`}>
-          {order.상차지명 || "-"} → {order.하차지명 || "-"}
+        {/* ✅ 2026-11-24 닫기 버튼(사용자 요청) — 오른쪽 위 X · 맨 아래 [닫기] */}
+        <div className="flex items-center gap-2 px-4 pb-2">
+          <div className={`flex-1 min-w-0 truncate text-[12px] ${bStyle ? "font-bold text-[#1B2B4B]/50 tracking-wide uppercase" : "font-semibold text-blue-600/60 tracking-wide uppercase"}`}>
+            {order.상차지명 || "-"} → {order.하차지명 || "-"}
+          </div>
+          <button type="button" aria-label="닫기" onClick={(e) => { e.stopPropagation(); onClose(); }}
+            className="shrink-0 w-8 h-8 -mr-1 rounded-full flex items-center justify-center text-gray-500 bg-gray-100 active:bg-gray-200">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
         </div>
         {menuItems.filter((it) => typeof it.action === "function").map((item, i) => (
           <button
@@ -10912,6 +10919,10 @@ function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriv
             </div>
           </button>
         ))}
+        <div className="px-4 pt-3 border-t border-gray-100">
+          <button type="button" onClick={(e) => { e.stopPropagation(); onClose(); }}
+            className="w-full h-12 rounded-xl bg-gray-100 text-gray-700 text-[15px] font-bold active:bg-gray-200">닫기</button>
+        </div>
       </div>
     </div>
   );
