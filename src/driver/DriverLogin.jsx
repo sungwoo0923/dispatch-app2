@@ -1,14 +1,13 @@
 // src/driver/DriverLogin.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { auth, db, FUNCTIONS_BASE } from "../firebase";
-import { signInWithCustomToken, signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { usePhoneCheck, toE164 } from "../MfaModal"; // 🔒 2026-11-23 휴대폰 문자 인증
+import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import { readPublicCompanies } from "../publicCompanies"; // ⭐ 2026-11-10 소속 운송사명 검색 드롭다운
 import BigCheck from "../components/BigCheck";
 import { LogisMark, LogisWordmark, LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
-import { isPhoneLoginId, isPartialPhone, phoneDigits } from "./driverEmail"; // ⭐ 2026-11-11 휴대폰번호 로그인
+import { legacyDriverEmail, scopedDriverEmail, signInDriver, isPhoneLoginId, isPartialPhone, phoneDigits, resolveDriverPhone, signInDriverAccount } from "./driverEmail"; // ⭐ 2026-11-11 휴대폰번호 로그인
 import { isDriverAppContext, peekDriverAppOnlyKick, clearDriverAppOnlyKick, DRIVER_APP_ONLY_ERROR, isNativeApk, setApkStaffMode } from "./driverAppContext"; // ⭐ 2026-11-08 기사앱은 기사 계정만
 import { checkDriverUserDoc, describeDriverLoginError, driverLoginError, keepDriverLoginError, takeDriverLoginError, setDriverBusy } from "./driverLoginErrors"; // ⭐ 2026-11-05 실패 사유 안내
 
@@ -55,36 +54,6 @@ export default function DriverLogin() {
   const driverApp = isDriverAppContext();
   const [loggingIn, setLoggingIn] = useState(false);
   const busyRef = useRef(false);
-  // 🔒 2026-11-23 휴대폰 문자 인증 창 — askSms(번호) 가 인증 토큰을 돌려준다(취소하면 driver/sms-cancel)
-  const smsHolderRef = useRef(null);
-  const { send: smsSend, confirm: smsConfirm } = usePhoneCheck(smsHolderRef);
-  const [smsAsk, setSmsAsk] = useState(null); // { phone, code, step: "phone" | "code", msg, busy }
-  const smsWaitRef = useRef(null);
-  const askSms = (phone) => new Promise((resolve, reject) => {
-    smsWaitRef.current = { resolve, reject };
-    setSmsAsk({ phone: phone ? String(phone).replace(/\D/g, "").replace(/^(\d{3})(\d{3,4})(\d{4})$/, "$1-$2-$3") : "", code: "", step: "phone", msg: "", busy: false });
-  });
-  const smsCancel = () => { const w = smsWaitRef.current; smsWaitRef.current = null; setSmsAsk(null); w?.reject(driverLoginError("driver/sms-cancel")); };
-  const smsErrText = (e) => {
-    const c = String(e?.code || "");
-    if (c === "auth/invalid-verification-code") return "인증번호가 맞지 않아요.";
-    if (c === "auth/code-expired") return "인증번호 시간이 지났어요. 다시 받아 주세요.";
-    if (c === "auth/too-many-requests") return "문자를 너무 많이 요청했어요. 잠시 뒤 다시 해 주세요.";
-    if (c === "auth/invalid-phone-number") return "휴대폰번호를 확인해 주세요.";
-    return "문자 인증을 하지 못했어요. 잠시 뒤 다시 해 주세요.";
-  };
-  const smsSendCode = async () => {
-    const e164 = toE164(smsAsk?.phone || "");
-    if (!/^\+8210\d{7,8}$/.test(e164)) { setSmsAsk((x) => ({ ...x, msg: "010으로 시작하는 휴대폰번호를 끝까지 넣어 주세요." })); return; }
-    setSmsAsk((x) => ({ ...x, busy: true, msg: "" }));
-    try { await smsSend(e164); setSmsAsk((x) => ({ ...x, busy: false, step: "code", code: "", msg: "인증번호를 보냈어요. 문자로 받은 6자리를 넣어 주세요." })); }
-    catch (e) { setSmsAsk((x) => ({ ...x, busy: false, msg: smsErrText(e) })); }
-  };
-  const smsCheck = async () => {
-    setSmsAsk((x) => ({ ...x, busy: true, msg: "" }));
-    try { const tok = await smsConfirm(String(smsAsk?.code || "").trim()); const w = smsWaitRef.current; smsWaitRef.current = null; setSmsAsk(null); w?.resolve(tok); }
-    catch (e) { setSmsAsk((x) => ({ ...x, busy: false, msg: smsErrText(e) })); }
-  };
   const restoredErrRef = useRef(!!error); // 재마운트 전에 떠 있던 실패 안내가 있었는지
   const navigate = useNavigate();
 
@@ -100,8 +69,7 @@ export default function DriverLogin() {
       sessionStorage.removeItem("driverJustLoggedOut");
       const sv = loadSaved();
       // 방금 실패 안내가 떠 있으면 자동 로그인으로 다시 시도하지 않는다(같은 실패가 반복되며 안내가 사라짐)
-      // 🔒 2026-11-23 로그인은 문자 인증이라 저절로 하지 않는다(로그인해 둔 휴대폰은 앱을 열면 그대로 들어간다)
-      void justLoggedOut; void sv;
+      if (!justLoggedOut && !restoredErrRef.current && sv?.autoLogin && sv.companyName && (sv.carNo || sv.phone) && sv.name) login(sv);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -136,36 +104,107 @@ export default function DriverLogin() {
     }
 
     // 한 가지 정보(휴대폰번호 또는 차량번호)로 로그인 확인 — 성공: { uid, carNo, u } / 실패: 사유 코드를 던짐
-    // 🔒 2026-11-23 로그인 = 휴대폰 문자 인증 — 예전엔 비밀번호가 차량번호라 차량번호 · 이름 · 운송사만 알면 누구나 로그인했다.
-    //  운송사 · 이름 · 휴대폰(또는 차량번호)을 넣으면 휴대폰 인증번호를 받고, 서버(driverSmsLogin)가 운송사에 등록된 그 기사 번호인지 확인해
-    //  로그인시킨다. 이미 로그인해 둔 휴대폰은 다시 묻지 않는다(로그아웃하거나 새 휴대폰이면 다시 인증).
     const attempt = async (idRaw) => {
       const usePhone = isPhoneLoginId(idRaw);
-      ctx.carNo = usePhone ? "" : idRaw;
+      let carNo = usePhone ? "" : idRaw;
+      ctx.carNo = carNo;
       ctx.phone = usePhone ? phoneDigits(idRaw) : "";
-      const phoneIdToken = await askSms(usePhone ? phoneDigits(idRaw) : String(loadSaved()?.phone || ""));
-      let r;
-      try {
-        const res = await fetch(`${FUNCTIONS_BASE}/driverSmsLogin`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companyName, name, loginId: idRaw, phoneIdToken }),
-        });
-        if (res.status === 429) throw Object.assign(new Error("too many"), { code: "auth/too-many-requests" });
-        r = await res.json().catch(() => null);
-        if (!res.ok || !r) throw driverLoginError("driver/network");
-      } catch (e) { if (e?.code) throw e; throw driverLoginError("driver/network", { cause: e }); }
-      if (!r.ok) {
-        const map = { NOT_MATCH: "driver/sms-not-match", PHONE_MISMATCH: "driver/sms-not-match", PENDING: "driver/pending", REJECTED: "driver/rejected", RETIRED: "driver/retired", SMS_REQUIRED: "driver/sms-required" };
-        if (r.code === "DISABLED") throw Object.assign(new Error("disabled"), { code: "auth/user-disabled" });
-        throw driverLoginError(map[r.code] || "driver/sms-not-match");
+      let uid;
+      if (usePhone) {
+        const pr = await resolveDriverPhone(FUNCTIONS_BASE, { companyName, phone: idRaw, name });
+        if (pr?.error === "rate") throw Object.assign(new Error("too many"), { code: "auth/too-many-requests" });
+        if (pr?.error) throw driverLoginError("driver/network", { cause: pr.cause });
+        if (pr?.ok && pr.email) {
+          carNo = String(pr.carNo || "");
+          ctx.carNo = carNo;
+          try {
+            uid = (await signInDriverAccount(auth, pr.email, carNo)).user.uid;
+          } catch (e) {
+            if (["auth/network-request-failed", "auth/too-many-requests", "auth/user-disabled"].includes(e?.code)) throw e;
+            throw driverLoginError("driver/phone-not-registered", { cause: e });
+          }
+        } else if (pr?.ok && pr.pre && pr.carNo) {
+          // PC 기사관리에 미리 등록만 된 기사 — 그 차량번호로 아래 연결 절차를 탄다
+          carNo = String(pr.carNo);
+          ctx.carNo = carNo;
+        } else if (pr?.code === "NAME_MISMATCH") throw driverLoginError("driver/name-mismatch");
+        else if (pr?.code === "COMPANY_MISMATCH") throw driverLoginError("driver/company-mismatch");
+        else if (pr?.code === "DISABLED") throw Object.assign(new Error("disabled"), { code: "auth/user-disabled" });
+        else throw driverLoginError("driver/phone-not-registered");
       }
-      const cred = r.token ? await signInWithCustomToken(auth, r.token) : await signInWithEmailAndPassword(auth, r.email, r.password);
-      const uid = cred.user.uid;
+
+      let email = legacyDriverEmail(carNo);
+      const password = carNo;
+      if (!uid) try {
+        // ⭐ 2026-11-01 예전 계정 → 회사별 계정 순서로 로그인(다른 운송사 같은 차량번호 대응)
+        const r = await signInDriver(auth, db, companyName, carNo);
+        uid = r.uid;
+        email = r.email;
+      } catch (signInErr) {
+        // ⭐ 2026-11-05 인터넷 끊김·시도 과다·정지 계정은 계정 만들기를 시도하지 않고 바로 안내
+        if (["auth/network-request-failed", "auth/too-many-requests", "auth/user-disabled"].includes(signInErr?.code)) throw signInErr;
+        // 다른 운송사 계정만 있었으면 "운송사가 다름", 그 외에는 "등록된 차량번호 없음"으로 안내
+        const failErr = signInErr?.code === "driver/other-company" ? signInErr : driverLoginError("driver/not-registered", { cause: signInErr });
+        // ⭐ 사용자 요청 — 관리자가 PC 기사관리에서 지입차를 미리 등록해두면(차량번호로
+        // 문서만 만들어짐, 인증 계정은 아직 없음) 그 기사님이 여기서 바로 로그인하려 해도
+        // 로그인용 계정 자체가 없어 매번 실패했다(기사 등록 화면을 따로 거쳐야만 했음).
+        // 로그인 시도 중 "그런 계정이 없음" 류 오류가 나면, 입력한 차량번호로 미리
+        // 등록된 문서가 있는지 확인해서 이름·회사명이 맞으면 바로 그 자리에서 계정을
+        // 만들어 이어받는다 — 기사 입장에서는 그냥 "로그인"만 하면 되는 경험이 된다.
+        // ⭐ 버그수정 — drivers 컬렉션은 보안규칙상 로그인한 사용자만 읽을 수 있는데,
+        // 이 조회를 계정 생성보다 먼저 하면 아직 비로그인 상태라 매번 permission-denied가
+        // 나서 선등록 문서가 실제로 있어도 절대 못 찾았다. 계정을 먼저 만들어 로그인 상태를
+        // 확보한 뒤 조회하고, 선등록 문서가 없거나 이름·회사명이 다르면 방금 만든
+        // 계정을 그 자리에서 삭제해 원상복구한다.
+        let res;
+        try {
+          res = await createUserWithEmailAndPassword(auth, email, password);
+        } catch (createErr) {
+          if (createErr?.code === "auth/network-request-failed") throw createErr;
+          // 예전 계정 이름을 다른 운송사 기사가 쓰고 있으면 회사별 계정으로 만든다
+          if (createErr?.code !== "auth/email-already-in-use") throw failErr;
+          try {
+            email = scopedDriverEmail(companyName, carNo);
+            res = await createUserWithEmailAndPassword(auth, email, password);
+          } catch (e2) { throw e2?.code === "auth/network-request-failed" ? e2 : failErr; }
+        }
+        uid = res.user.uid;
+
+        // ⭐ 2026-11-08 보안 — PC 선등록 문서(drivers/{회사__차량번호} 또는 drivers/{차량번호})를 화면이 직접 읽지 않는다.
+        //  (예전엔 그래서 규칙이 "로그인한 누구나 drivers/{차량번호} 읽기"였고, 아무 계정이나 다른 회사 기사 이름·전화번호를 볼 수 있었다)
+        //  서버(driverLoginLink)가 이름·회사를 확인하고 users·drivers 문서를 만들고 선등록 문서를 정리한다. 결과 코드만 돌려준다.
+        let link = null;
+        try {
+          const idToken = await res.user.getIdToken();
+          const ctl = new AbortController();
+          const timer = setTimeout(() => ctl.abort(), 20000);
+          const r = await fetch(`${FUNCTIONS_BASE}/driverLoginLink`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+            body: JSON.stringify({ companyName, carNo, name }),
+            signal: ctl.signal,
+          }).finally(() => clearTimeout(timer));
+          link = r.ok ? await r.json() : { error: r.status === 429 ? "rate" : "server" };
+        } catch (linkErr) {
+          link = { error: "network", cause: linkErr };
+        }
+        if (!link?.linked) {
+          await res.user.delete().catch(() => {});
+          if (link?.error === "network") throw driverLoginError("driver/network", { cause: link.cause });
+          if (link?.error === "rate") throw Object.assign(new Error("too many"), { code: "auth/too-many-requests" });
+          if (link?.error) throw driverLoginError("driver/network");
+          if (link?.code === "USE_REGISTER") throw driverLoginError("driver/use-register");
+          if (link?.code === "NAME_MISMATCH") throw driverLoginError("driver/name-mismatch");
+          if (link?.code === "COMPANY_MISMATCH") throw driverLoginError("driver/company-mismatch");
+          throw failErr;
+        }
+      }
+
       const snap = await getDoc(doc(db, "users", uid));
       const u = snap.exists() ? snap.data() : null;
       const bad = checkDriverUserDoc(u, { name, companyName });
       if (bad) throw driverLoginError(bad, { reason: u?.rejectReason || u?.rejectedReason || u?.거절사유 || "" });
-      return { uid, carNo: String(u?.carNo || ctx.carNo || ""), u };
+      return { uid, carNo, u };
     };
 
     busyRef.current = true;
@@ -178,7 +217,7 @@ export default function DriverLogin() {
       const STOP = ["driver/network", "auth/network-request-failed", "auth/too-many-requests", "auth/user-disabled", "driver/pending", "driver/rejected", "driver/retired", "driver/suspended", "driver/use-register"];
       let done = null;
       let lastErr = null;
-      for (const id of ids.slice(0, 1)) { // 🔒 문자 인증은 한 번만
+      for (const id of ids) {
         try { done = await attempt(id); break; } catch (e) {
           lastErr = e;
           await signOut(auth).catch(() => {});
@@ -207,7 +246,6 @@ export default function DriverLogin() {
       setDriverBusy(false);
       navigate("/driver-home", { replace: true });
     } catch (err) {
-      if (err?.code === "driver/sms-cancel") { await signOut(auth).catch(() => {}); return; } // 문자 인증 창을 닫음 — 안내 없이
       console.error("[기사 로그인 실패]", err?.code || "", err);
       // ⭐ 2026-11-08 기사앱 안에서는 기사 아닌 계정 안내를 "기사 전용 앱"으로
       setError(driverApp && err?.code === "driver/not-driver" ? { ...DRIVER_APP_ONLY_ERROR } : describeDriverLoginError(err, ctx));
@@ -404,37 +442,6 @@ export default function DriverLogin() {
               <button onClick={() => { setError(null); navigate("/driver-register"); }} className="h-14 rounded-2xl border-2 border-[#0F1A30] text-[#0F1A30] text-[17px] font-black">기사 등록하기</button>
             )}
             <button autoFocus onClick={() => setErrorPopup(false)} className="h-14 rounded-2xl text-white text-[18px] font-black" style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>확인</button>
-          </div>
-        </div>
-      </div>
-    )}
-    {smsAsk && (
-      <div className="fixed inset-0 z-[1000] bg-[#061832]/60 flex items-end sm:items-center justify-center" data-kp="driver-sms-login">
-        <div className="w-full sm:max-w-[420px] bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-          <div className="bg-[#1B2B4B] px-6 py-4">
-            <div className="text-white font-black text-[19px]">휴대폰 인증</div>
-            <div className="text-white/70 text-[14.5px] mt-0.5 font-bold">운송사에 등록된 휴대폰번호로 인증하면 로그인돼요</div>
-          </div>
-          <div className="p-5 grid gap-3">
-            <input value={smsAsk.phone} type="tel" inputMode="numeric" disabled={smsAsk.step === "code"} placeholder="010-0000-0000"
-              onChange={(e) => setSmsAsk((x) => ({ ...x, phone: e.target.value.replace(/[^0-9-]/g, "") }))}
-              className="h-14 px-4 rounded-2xl border border-[#DCE3EE] bg-[#F5F7FB] text-[19px] font-black tabular-nums disabled:opacity-70" />
-            {smsAsk.step === "code" && (
-              <input value={smsAsk.code} inputMode="numeric" maxLength={6} autoFocus placeholder="인증번호 6자리"
-                onChange={(e) => setSmsAsk((x) => ({ ...x, code: e.target.value.replace(/\D/g, "") }))}
-                className="h-14 px-4 rounded-2xl border-2 border-[#1B2B4B] text-[21px] font-black tabular-nums tracking-[0.3em]" />
-            )}
-            {smsAsk.msg && <div className={`text-[15px] font-bold ${smsAsk.step === "code" && !/않|못|지났|많이|확인/.test(smsAsk.msg) ? "text-[#2D4C82]" : "text-[#B4342A]"}`}>{smsAsk.msg}</div>}
-            {smsAsk.step === "code" ? (
-              <>
-                <button type="button" disabled={smsAsk.busy || smsAsk.code.length !== 6} onClick={smsCheck} className="h-14 rounded-2xl bg-[#1B2B4B] text-white text-[18px] font-black disabled:opacity-50">{smsAsk.busy ? "확인 중…" : "확인하고 로그인"}</button>
-                <button type="button" disabled={smsAsk.busy} onClick={() => setSmsAsk((x) => ({ ...x, step: "phone", code: "", msg: "" }))} className="h-12 rounded-2xl border border-[#DCE3EE] text-[#3A4A66] text-[16px] font-black">번호 다시 넣기</button>
-              </>
-            ) : (
-              <button type="button" disabled={smsAsk.busy} onClick={smsSendCode} className="h-14 rounded-2xl bg-[#1B2B4B] text-white text-[18px] font-black disabled:opacity-50">{smsAsk.busy ? "보내는 중…" : "인증번호 받기"}</button>
-            )}
-            <button type="button" onClick={smsCancel} className="h-11 text-[15.5px] font-black text-[#7A89A3]">취소</button>
-            <div ref={smsHolderRef} />
           </div>
         </div>
       </div>

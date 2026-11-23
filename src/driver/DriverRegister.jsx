@@ -671,7 +671,7 @@ export default function DriverRegister() {
       {success === "linked" ? (
         <>
           <h2 className="mt-5 text-[23px] font-black text-[#0F1A30]">등록된 기사 정보와 연결되었습니다</h2>
-          <p className="mt-2 text-[17px] font-bold text-[#5B6B85] leading-relaxed">휴대폰 인증까지 끝나 바로 사용할 수 있습니다.<br />로그인 화면에서 <span className="text-[#1B2B4B]">로그인</span>을 누르고 휴대폰 인증을 한 번 더 해 주세요.</p>
+          <p className="mt-2 text-[17px] font-bold text-[#5B6B85] leading-relaxed">휴대폰 인증까지 끝나 바로 사용할 수 있습니다.<br />로그인 화면에서 <span className="text-[#1B2B4B]">로그인</span>만 눌러주세요.</p>
         </>
       ) : success === "linkedPending" ? (
         <>
