@@ -812,6 +812,9 @@ function useGpsTracking(uid, driverData) {
   const totalDistRef = useRef(0);           // running total — avoids stale closure bug
   const distInitializedRef = useRef(false); // true once synced from Firestore
   const lastGpsStoreRef = useRef(null);     // last point stored to gps_tracks
+  const lastDrvWriteRef = useRef({ at: 0, lat: null, lng: null }); // ⚡ 2026-11-23 drivers 위치 문서를 마지막으로 쓴 때
+  const movedPendingRef = useRef(false);
+  const distPendingRef = useRef(false);
   const lastGpsTimeRef = useRef(0);         // timestamp of last gps_tracks write
 
   // Initialize totalDistRef once when driverData first loads from Firestore
@@ -884,6 +887,7 @@ function useGpsTracking(uid, driverData) {
     distInitializedRef.current = true;
     lastPosRef.current = null;
     lastGpsStoreRef.current = null;
+    lastDrvWriteRef.current = { at: 0, lat: null, lng: null };
   }, []);
 
   useEffect(() => {
@@ -924,6 +928,17 @@ function useGpsTracking(uid, driverData) {
           timestamp: serverTimestamp(), date: kstDateStr(),
         }).catch(() => {});
       }
+      // ⚡ 2026-11-23 기사 위치 문서는 10초에 한 번(또는 50m 넘게 움직였을 때)만 쓴다 — 예전엔 GPS가 올 때마다(1초에 한 번꼴) 써서
+      //  배차 화면 전체가 계속 다시 그려지고 서버 함수 · 쓰기 비용이 커졌다. 거리 · 움직인 시각은 모아 두었다가 같이 쓴다
+      if (updateData.lastMovedAt) movedPendingRef.current = true;
+      if (updateData.totalDistance != null) distPendingRef.current = true;
+      const lw = lastDrvWriteRef.current;
+      const sinceW = nowMs - lw.at;
+      const distW = lw.lat != null ? calcDist(lw.lat, lw.lng, lat, lng) : 999;
+      if (sinceW < 10000 && distW < 0.05) return;
+      lastDrvWriteRef.current = { at: nowMs, lat, lng };
+      if (distPendingRef.current) { updateData.totalDistance = totalDistRef.current; distPendingRef.current = false; }
+      if (movedPendingRef.current) { updateData.lastMovedAt = serverTimestamp(); movedPendingRef.current = false; }
       try { await updateDoc(doc(db, "drivers", uid), updateData); } catch (_) {}
     };
 

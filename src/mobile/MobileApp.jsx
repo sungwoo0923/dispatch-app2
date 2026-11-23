@@ -2241,8 +2241,12 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   React.useEffect(() => { setDispatchAlertsOn(dispatchAlertsOnM); }, [dispatchAlertsOnM]);
   // 휴대폰 푸시는 서버가 받는 사람을 고른다 — 지금 보는 화면을 users/{uid}.activeView 에 적어 둔다(바뀔 때만 · PC와 같은 칸)
   const notifyActiveViewM = activeViewOf(notifyCtxM);
+  //  ⚡ 2026-11-23 이 기기에서 화면이 바뀌었을 때만 적는다(PC · 휴대폰이 서로 덮어쓰며 끝없이 주고받던 것)
+  const activeViewSentRefM = useRef("");
   React.useEffect(() => {
-    if (!user?.uid || !myProfM || ["driver", "shipper"].includes(realRole) || myProfM.activeView === notifyActiveViewM) return;
+    if (!user?.uid || !myProfM || ["driver", "shipper"].includes(realRole) || activeViewSentRefM.current === notifyActiveViewM) return;
+    activeViewSentRefM.current = notifyActiveViewM;
+    if (myProfM.activeView === notifyActiveViewM) return;
     updateDoc(doc(db, "users", user.uid), { activeView: notifyActiveViewM, activeViewAt: Date.now() }).catch(() => {});
   }, [user?.uid, notifyActiveViewM, !!myProfM, myProfM?.activeView]); // eslint-disable-line react-hooks/exhaustive-deps
   // 📊 2026-11-06 일일 경영 보고 — 기존 임원 판정(isExecM) 그대로(src/dailyReport.js canSeeBriefing)
@@ -3643,6 +3647,7 @@ useEffect(() => {
 }, []);
 
 // 🔔 상차 임박 2시간 이내 감지 (⏱ 시간 흐름 포함)
+const nearPickupAlertRef = useRef({ key: "", at: 0 });
 useEffect(() => {
   if (!orders.length || !alarmEnabled || !dispatchAlertsOnM) return; // ⭐ 2026-11-17 운송 화면일 때만
 
@@ -3668,7 +3673,11 @@ useEffect(() => {
 
     if (nearOrders.length > 0) {
   if (toastMuted) return;   // ▲ 이 줄이 핵심
-
+  // ⚡ 2026-11-23 오더가 바뀔 때마다(다른 사람 수정 포함) 같은 알림 · 진동이 또 울리던 것 — 대상 오더가 달라졌거나 10분이 지났을 때만
+  const key = nearOrders.map((o) => o._id || o.id).sort().join(",");
+  const lastNear = nearPickupAlertRef.current;
+  if (lastNear.key === key && Date.now() - lastNear.at < 10 * 60 * 1000) return;
+  nearPickupAlertRef.current = { key, at: Date.now() };
   setToast(`상차 2시간 이내 미배차 ${nearOrders.length}건 · 확인해 주세요`);
   navigator.vibrate?.(200);
 }
@@ -3805,13 +3814,19 @@ useEffect(() => {
     // 필터가 통째로 빠져있어 다른 회사의 기사 목록까지 그대로 받아오고 있었다 —
     // PC와 동일한 기준(companyName 없는 옛 문서는 "돌캐"로 취급)으로 맞춘다.
     const co = userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
+    // ⚡ 2026-11-23 위치 · 속도만 바뀐 변경은 15초에 한 번만 화면에 반영(운행 중 기사 위치가 올 때마다 앱 전체를 다시 그리던 것)
+    const live = { sig: "", at: 0, timer: 0, list: [] };
+    const apply = () => { live.at = Date.now(); live.timer = 0; const l = live.list; startTransition(() => setDrivers(l)); };
     const unsub = onSnapshot(collection(db, "drivers"), (snap) => {
       const list = snap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
         .filter((d) => (d.companyName || DEFAULT_COMPANY) === co);
-      startTransition(() => setDrivers(list)); // 끊김 방지(낮은 우선순위)
-    });
-    return () => unsub();
+      const sig = list.map((d) => { const { location, speed, updatedAt, totalDistance, lastMovedAt, heartbeatAt, active, nativeTracking, ...rest } = d; return JSON.stringify(rest); }).join("\n"); // eslint-disable-line no-unused-vars
+      live.list = list;
+      if (sig !== live.sig || Date.now() - live.at >= 15000) { live.sig = sig; clearTimeout(live.timer); apply(); } // 끊김 방지(낮은 우선순위)
+      else if (!live.timer) live.timer = setTimeout(apply, 15000 - (Date.now() - live.at));
+    }, (err) => console.warn("[기사 목록] 구독 실패", err?.code || err));
+    return () => { clearTimeout(live.timer); unsub(); };
   }, [userCompany, readyStage3]);
 
   // 🔥 하차지 거래처(places)도 clients에 병합

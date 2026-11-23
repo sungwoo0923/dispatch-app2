@@ -4515,6 +4515,7 @@ const liveWindowStart = pcLiveWindowStart(); // ★ 13개월 → 최근 7일~(�
   // 때마다" PC 전체가 순간 렉걸리던 원인) — 실제로 변경된 문서만 다시 가공한다.
   const ordersRowMap = new Map();
   const ordersRawPrev = new Map(); // id -> 직전 raw doc.data() (위치 전용 변경 감지용)
+  const driversLiveRef = { current: { sig: "", at: 0, timer: 0, arr: [] } }; // ⚡ 2026-11-23 기사 위치만 바뀐 변경 모아 반영
   // 기사님이 업로드링크 화면에서 위치공유를 켜두면 GPS 콜백마다 위치/위치갱신일시
   // 두 필드만 바뀐 채 계속 write가 들어오는데, 이 두 필드만 바뀐 경우까지 매번
   // 전체 목록을 다시 그리면 위치공유가 켜져 있는 내내 PC 화면이 계속 버벅였다.
@@ -4876,8 +4877,13 @@ const liveWindowStart = pcLiveWindowStart(); // ★ 13개월 → 최근 7일~(�
         const arr = snap.docs
           .map(d => ({ ...d.data(), id: d.id }))
           .filter(d => (d.companyName || DEFAULT_COMPANY) === viewCompany);
-        setDrivers(arr);
-        idleSave("drivers", arr);
+        // ⚡ 2026-11-23 기사 앱은 운행 중 위치를 수시로 적는다 — 위치 · 속도만 바뀐 거면 15초에 한 번만 화면에 반영(예전엔 올 때마다 배차 화면 전체를 다시 그렸다)
+        const live = driversLiveRef.current;
+        const sig = arr.map((d) => { const { location, speed, updatedAt, totalDistance, lastMovedAt, heartbeatAt, active, nativeTracking, ...rest } = d; return JSON.stringify(rest); }).join("\n"); // eslint-disable-line no-unused-vars
+        const apply = () => { live.at = Date.now(); live.timer = 0; setDrivers(live.arr); idleSave("drivers", live.arr); };
+        live.arr = arr;
+        if (sig !== live.sig || Date.now() - live.at >= 15000) { live.sig = sig; clearTimeout(live.timer); apply(); }
+        else if (!live.timer) live.timer = setTimeout(apply, 15000 - (Date.now() - live.at));
         markBootBase(pcBootStore, "drivers");
       }, (err) => { console.warn("[기사 목록] 구독 실패", err?.code || err); markBootBase(pcBootStore, "drivers"); })
     );
@@ -4893,7 +4899,7 @@ const liveWindowStart = pcLiveWindowStart(); // ★ 13개월 → 최근 7일~(�
       markBootBase(pcBootStore, "clients");
     }, (err) => { console.warn("[거래처 목록] 구독 실패", err?.code || err); markBootBase(pcBootStore, "clients"); }));
 
-    return () => unsubs.forEach(u => u && u());
+    return () => { clearTimeout(driversLiveRef.current.timer); unsubs.forEach(u => u && u()); };
   }, [user, userCompany, role]);
 
   // ===================== 실시간배차현황 전용 — 어제~내일만 실시간 구독 =====================
@@ -4954,7 +4960,8 @@ const liveWindowStart = pcLiveWindowStart(); // ★ 13개월 → 최근 7일~(�
           );
         recompute();
         markReady("orders");
-      }
+      },
+      (err) => { console.warn("[실시간배차현황 orders] 구독 실패", err?.code || err); markReady("orders"); } // ⚡ 2026-11-23 실패해도 화면이 "불러오는 중"에 멈추지 않게
     );
     const unsub2 = onSnapshot(
       query(collection(db, "dispatch"), where("상차일", ">=", from), where("상차일", "<=", to)),
@@ -4964,7 +4971,8 @@ const liveWindowStart = pcLiveWindowStart(); // ★ 13개월 → 최근 7일~(�
           .filter((row) => row.배차상태 !== "배차취소" && !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태));
         recompute();
         markReady("dispatch");
-      }
+      },
+      (err) => { console.warn("[실시간배차현황 dispatch] 구독 실패", err?.code || err); markReady("dispatch"); } // ⚡ 2026-11-23 실패해도 화면이 "불러오는 중"에 멈추지 않게
     );
 
     return () => { unsub1(); unsub2(); };
@@ -7814,16 +7822,30 @@ function subscribeLiveWithFallback(col, start, handler, name) {
       empty: !snap.docs.some(inWin),
     };
   };
-  unsub = onSnapshot(query(collection(db, col), where("상차일", ">=", start)), { includeMetadataChanges: true }, handler, (err) => {
-    console.warn(`[실시간 ${name}] 구독 실패 → 대체 구독으로 전환`, err?.code || err);
-    try { unsub(); } catch { /* 무시 */ }
-    unsub = onSnapshot(query(collection(db, col)), { includeMetadataChanges: true }, (snap) => handler(filtered(snap)), (err2) => {
-      console.warn(`[실시간 ${name}] 대체 구독도 실패`, err2?.code || err2);
-      // 그래도 안 되면 저장본(캐시)으로라도 화면을 연다
-      pcBootStore.set((st) => ({ ...st, cache: { ...st.cache, [name]: true }, server: { ...st.server, [name]: true } }));
+  // ⚡ 2026-11-23 잠깐 끊김 · 권한 확인 중 오류에도 "전체 오더(모든 기간)" 구독으로 바꾸던 것 → 그때는 같은 범위로 잠시 뒤 다시 붙는다.
+  //  색인(index)이 없다는 오류(failed-precondition)일 때만 예전처럼 대체 구독으로 바꾼다.
+  let stopped = false; let tries = 0; let retryT = 0;
+  const openCache = () => pcBootStore.set((st) => ({ ...st, cache: { ...st.cache, [name]: true }, server: { ...st.server, [name]: true } }));
+  const subscribe = () => {
+    unsub = onSnapshot(query(collection(db, col), where("상차일", ">=", start)), { includeMetadataChanges: true }, (snap) => { tries = 0; handler(snap); }, (err) => {
+      try { unsub(); } catch { /* 무시 */ }
+      if (stopped) return;
+      if (String(err?.code || "") === "failed-precondition") {
+        console.warn(`[실시간 ${name}] 색인 없음 → 대체 구독으로 전환`, err?.code || err);
+        unsub = onSnapshot(query(collection(db, col)), { includeMetadataChanges: true }, (snap) => handler(filtered(snap)), (err2) => {
+          console.warn(`[실시간 ${name}] 대체 구독도 실패`, err2?.code || err2);
+          openCache(); // 그래도 안 되면 저장본(캐시)으로라도 화면을 연다
+        });
+        return;
+      }
+      tries += 1;
+      console.warn(`[실시간 ${name}] 구독 끊김 → ${tries}번째 다시 연결`, err?.code || err);
+      if (tries >= 2) openCache(); // 오래 걸리면 저장본으로 먼저 화면을 연다
+      retryT = setTimeout(() => { if (!stopped) subscribe(); }, Math.min(60000, 2000 * 2 ** Math.min(tries, 5)));
     });
-  });
-  return () => unsub();
+  };
+  subscribe();
+  return () => { stopped = true; clearTimeout(retryT); try { unsub(); } catch { /* 무시 */ } };
 }
 
 function PcBootOverlay({ onDone, dept = null }) {
@@ -8577,8 +8599,12 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   const notifyActiveView = activeViewOf(notifyCtx);
   React.useEffect(() => { setDispatchAlertsOn(!dispatchAlertsOff); }, [dispatchAlertsOff]);
   // 휴대폰 푸시는 서버가 받는 사람을 고른다 — 지금 보는 화면을 users/{uid}.activeView 에 적어 둔다(바뀔 때만 · 모바일도 같은 칸)
+  //  ⚡ 2026-11-23 이 기기에서 화면이 바뀌었을 때만 적는다 — 예전엔 PC · 휴대폰이 서로 다른 화면이면 상대가 적은 값을 보고 다시 덮어써 끝없이 주고받았다
+  const activeViewSentRef = useRef("");
   React.useEffect(() => {
-    if (!user?.uid || !myProfileDoc || myProfileDoc.activeView === notifyActiveView) return;
+    if (!user?.uid || !myProfileDoc || activeViewSentRef.current === notifyActiveView) return;
+    activeViewSentRef.current = notifyActiveView;
+    if (myProfileDoc.activeView === notifyActiveView) return;
     updateDoc(doc(db, "users", user.uid), { activeView: notifyActiveView, activeViewAt: Date.now() }).catch(() => {});
   }, [user?.uid, notifyActiveView, !!myProfileDoc, myProfileDoc?.activeView]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (workScope && !scopeAllows(workScope, menu) && !isBizMenu(menu)) setMenu("HOME"); else if (workScope && isBizMenu(menu)) setMenu("HOME"); }, [workScope, menu]);

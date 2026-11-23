@@ -59,12 +59,25 @@ function isPushTypeEnabled(prefs, type) {
 // ⭐ 2026-11-01 운송사별 분리 — 그 오더의 회사 직원에게만(기사·화주 제외). 예전엔 모든 회사 사용자 전원에게 갔다.
 const PUSH_DEFAULT_COMPANY = "(회사없음)"; // ⭐ 2026-11-21 기본 회사 없음(돌캐 초기화)
 const NON_STAFF_ROLES = new Set(["driver", "shipper", "cafeUser"]);
+// ⚡ 2026-11-23 예전엔 알림 한 번마다 users 전체(모든 회사 · 기사 · 화주)를 읽었다 → 그 회사 직원만 읽고 1분 동안 재사용
+//  (회사 이름 앞뒤 공백까지 같이 찾는다. 기본 회사 "(회사없음)"만 예전처럼 전체에서 찾는다 — 회사 없는 계정 + 최고관리자)
+const _coUsersCache = new Map(); // co → { at, docs }
+async function companyUserDocs(co) {
+  const hit = _coUsersCache.get(co);
+  if (hit && Date.now() - hit.at < 60000) return hit.docs;
+  const snap = co === PUSH_DEFAULT_COMPANY
+    ? await db.collection("users").get()
+    : await db.collection("users").where("companyName", "in", [...new Set([co, `${co} `, ` ${co}`])]).get();
+  const docs = snap.docs.map((d) => d.data());
+  if (_coUsersCache.size > 200) _coUsersCache.clear();
+  _coUsersCache.set(co, { at: Date.now(), docs });
+  return docs;
+}
 async function getTokensForType(type, companyName) {
   const co = String(companyName || PUSH_DEFAULT_COMPANY).trim();
-  const snap = await db.collection("users").get();
+  const docs = await companyUserDocs(co);
   const tokens = [];
-  snap.docs.forEach((d) => {
-    const u = d.data();
+  docs.forEach((u) => {
     const ts = userTokens(u);
     if (!ts.length) return;
     if (NON_STAFF_ROLES.has(u.role)) return;
@@ -311,11 +324,11 @@ function buildNotifBody(fieldKeys, d) {
 /* ==============================
    ◆ 신규 오더 알림
 ============================== */
-exports.notifyNewDispatch =
+const _notifyNewDispatch = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onCreate(async (snap, context) => {
-      const { col } = context.params;
+      const col = COL;
       if (!["dispatch", "orders"].includes(col)) return;
 
       const data = snap.data();
@@ -356,15 +369,18 @@ exports.notifyNewDispatch =
         apns: { payload: { aps: { sound: "default" } } },
       }, type);
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.notifyNewDispatch = _notifyNewDispatch("orders");
+exports.notifyNewDispatchLegacy = _notifyNewDispatch("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
 /* ==============================
    ▸ 배차완료 알림
 ============================== */
-exports.notifyDispatchDone =
+const _notifyDispatchDone = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onUpdate(async (change, context) => {
-      const { col } = context.params;
+      const col = COL;
       if (!["dispatch", "orders"].includes(col)) return;
 
       const before = change.before.data();
@@ -396,16 +412,19 @@ exports.notifyDispatchDone =
         apns: { payload: { aps: { sound: "default" } } },
       }, "배차완료");
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.notifyDispatchDone = _notifyDispatchDone("orders");
+exports.notifyDispatchDoneLegacy = _notifyDispatchDone("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
 /* ==============================
    ↻ 재배차 알림 — 배차완료(기사 배정) 상태였다가, 그 기사가 빠지고 다시
    "배차중" 상태로 돌아간 경우("재배차 필요"). notifyDispatchDone과 반대 방향.
 ============================== */
-exports.notifyRedispatch =
+const _notifyRedispatch = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onUpdate(async (change, context) => {
-      const { col } = context.params;
+      const col = COL;
       if (!["dispatch", "orders"].includes(col)) return;
 
       const before = change.before.data();
@@ -436,16 +455,19 @@ exports.notifyRedispatch =
         apns: { payload: { aps: { sound: "default" } } },
       }, "재배차");
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.notifyRedispatch = _notifyRedispatch("orders");
+exports.notifyRedispatchLegacy = _notifyRedispatch("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
 /* ==============================
    ✕ 배차취소 알림 — 오더가 취소(소프트: 배차상태→배차취소)되거나
    완전삭제된 경우.
 ============================== */
-exports.notifyDispatchCanceled =
+const _notifyDispatchCanceled = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onUpdate(async (change, context) => {
-      const { col } = context.params;
+      const col = COL;
       if (!["dispatch", "orders"].includes(col)) return;
 
       const before = change.before.data();
@@ -507,12 +529,15 @@ exports.notifyDispatchCanceled =
         }, "배차취소(취소상태 전환)");
       }
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.notifyDispatchCanceled = _notifyDispatchCanceled("orders");
+exports.notifyDispatchCanceledLegacy = _notifyDispatchCanceled("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
-exports.notifyDispatchDeleted =
+const _notifyDispatchDeleted = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onDelete(async (snap, context) => {
-      const { col } = context.params;
+      const col = COL;
       if (!["dispatch", "orders"].includes(col)) return;
 
       const data = snap.data();
@@ -580,6 +605,9 @@ exports.notifyDispatchDeleted =
         }
       }
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.notifyDispatchDeleted = _notifyDispatchDeleted("orders");
+exports.notifyDispatchDeletedLegacy = _notifyDispatchDeleted("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
 function normalizePlateServer(v = "") {
   return String(v).replace(/\s+/g, "").toUpperCase();
@@ -610,11 +638,11 @@ async function findDriverByPlate(rawPlate, companyName, extraFilter) {
 // 만에 끝나는 실행이 반복됐는데, 이는 그 오더가 생성된 뒤 다른 필드가 바뀔
 // 때마다 onUpdate가 불렸지만 매번 "이미 대기"라 조기 종료된 것이었다). 생성/
 // 수정을 모두 받는 onWrite로 바꾼다.
-exports.notifyFleetDriverNewOrder =
+const _notifyFleetDriverNewOrder = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onWrite(async (change, context) => {
-      const { col } = context.params;
+      const col = COL;
       if (!["dispatch", "orders"].includes(col)) return;
 
       const before = change.before.exists ? change.before.data() : null;
@@ -732,15 +760,18 @@ exports.notifyFleetDriverNewOrder =
         apns: { payload: { aps: { sound: "default" } } },
       }, "지입기사 신규오더 배정");
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.notifyFleetDriverNewOrder = _notifyFleetDriverNewOrder("orders");
+exports.notifyFleetDriverNewOrderLegacy = _notifyFleetDriverNewOrder("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
 /* ==============================
    ⊘ 지입 기사 — 오더 거절 알림(배차담당자 본인에게 OS 푸시)
 ============================== */
-exports.notifyDispatcherOrderRejected =
+const _notifyDispatcherOrderRejected = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onUpdate(async (change, context) => {
-      const { col } = context.params;
+      const col = COL;
       if (!["dispatch", "orders"].includes(col)) return;
 
       const before = change.before.data();
@@ -786,6 +817,9 @@ exports.notifyDispatcherOrderRejected =
         apns: { payload: { aps: { sound: "default" } } },
       }, "지입기사 오더거절(담당자 알림)");
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.notifyDispatcherOrderRejected = _notifyDispatcherOrderRejected("orders");
+exports.notifyDispatcherOrderRejectedLegacy = _notifyDispatcherOrderRejected("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
 /* ==============================
    ⏰ 2026-11-05 기사 출근 알림 — 출근을 자주 잊는(특히 연세 있는) 기사님께 OS 푸시로 알려준다.
@@ -934,7 +968,7 @@ function normalizeTimeToHHMM(t) {
 // 안 뜨고 있었던 것으로 보인다. 긴급오더 알림(notifyNewDispatch)과 똑같이
 // 전체 사용자에게 보내도록 바꿔 이 매칭 문제 자체를 없앴다 — 미배차 임박은
 // 등록자 한 명만의 문제가 아니라 팀 전체가 알아야 할 상황이기도 하다.
-exports.notifyUnassignedUrgent = functions.pubsub
+exports.notifyUnassignedUrgent = functions.runWith({ timeoutSeconds: 240 }).pubsub // ⚡ 2026-11-23 기본 60초면 오더 · 파일이 많을 때 중간에 끊겼다
   .schedule("every 5 minutes")
   .timeZone("Asia/Seoul")
   .onRun(async () => {
@@ -1016,11 +1050,11 @@ const ORDER_WATCH_GROUPS = [
   ["담당자 연락처", ["상차지담당자", "상차지담당자번호", "하차지담당자", "하차지담당자번호"]],
   ["전달사항", ["전달사항"]],
 ];
-exports.notifyFleetOrderModified =
+const _notifyFleetOrderModified = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onUpdate(async (change, context) => {
-      const { col, dispatchId } = context.params;
+      const col = COL; const { dispatchId } = context.params;
       if (!["dispatch", "orders"].includes(col)) return;
       const before = change.before.data();
       const after = change.after.data();
@@ -1064,6 +1098,9 @@ exports.notifyFleetOrderModified =
         }, "지입기사 오더수정");
       }
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.notifyFleetOrderModified = _notifyFleetOrderModified("orders");
+exports.notifyFleetOrderModifiedLegacy = _notifyFleetOrderModified("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
 /* ==============================
    ▸ 지입 기사 — 상차/하차 시간 지연 알림
@@ -1133,7 +1170,7 @@ async function getUserToken(uid, cat = "") {
   return cat && !notifyUserAllows(u.data(), cat) ? [] : userTokens(u.data());
 }
 
-exports.notifyFleetLateArrival = functions.pubsub
+exports.notifyFleetLateArrival = functions.runWith({ timeoutSeconds: 240 }).pubsub // ⚡ 2026-11-23 기본 60초면 오더 · 파일이 많을 때 중간에 끊겼다
   .schedule("every 5 minutes")
   .timeZone("Asia/Seoul")
   .onRun(async () => {
@@ -1260,7 +1297,7 @@ exports.notifyFleetLateArrival = functions.pubsub
    사용자가 "잠금"을 걸어두지 않은(잠금 !== true) 파일만 삭제한다.
    잠긴 파일은 아무리 오래돼도 이 정리에서 제외된다.
 ============================== */
-exports.cleanupOldAttachments = functions.pubsub
+exports.cleanupOldAttachments = functions.runWith({ timeoutSeconds: 540 }).pubsub // ⚡ 2026-11-23 기본 60초면 오더 · 파일이 많을 때 중간에 끊겼다
   .schedule("every 24 hours")
   .onRun(async () => {
     const cutoff = new Date();
@@ -3405,11 +3442,11 @@ exports.backfillGsheetFareHistory = functions
     }
   });
 
-exports.syncDispatchToGoogleSheet =
+const _syncDispatchToGoogleSheet = (COL) =>
   functions.firestore
-    .document("{col}/{dispatchId}")
+    .document(`${COL}/{dispatchId}`)
     .onWrite(async (change, context) => {
-      const { col, dispatchId } = context.params;
+      const col = COL; const { dispatchId } = context.params;
       if (!["dispatch", "orders"].includes(col)) return;
 
       const after = change.after.exists ? change.after.data() : null;
@@ -3492,6 +3529,9 @@ exports.syncDispatchToGoogleSheet =
         console.error("▥ 구글시트 동기화 실패:", e?.message || e);
       }
     });
+// ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
+exports.syncDispatchToGoogleSheet = _syncDispatchToGoogleSheet("orders");
+exports.syncDispatchToGoogleSheetLegacy = _syncDispatchToGoogleSheet("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
 // 모든 월별 탭에 "시트 직접 입력 도우미"(필수칸 표시·목록 선택 등)를 적용 — 관리자메뉴 버튼
 // 호출: GET .../applyGsheetGuides?key=<GSHEET_BACKFILL_KEY>
@@ -4757,7 +4797,8 @@ async function requireStaff(req, body) {
 
 // 🗑️ 휴지통 — 오더가 어떤 화면·경로로 지워지든(PC·모바일·선택삭제·기사앱) 지우기 직전 내용을 7일 보관한다.
 //    (예전엔 삭제 기록에 오더 번호만 남아 Firebase 시점 복구 설정이 없으면 되살릴 수 없었다)
-exports.archiveDeletedOrder = functions.firestore.document("{col}/{orderId}").onDelete(async (snap, ctx) => {
+// ⚡ 2026-11-23 휴지통을 없애 아무 일도 안 하는데 모든 삭제마다 불리던 함수 — 배포에서 뺌
+const _archiveDeletedOrderOff = () => functions.firestore.document("{col}/{orderId}").onDelete(async (snap, ctx) => {
   const { col, orderId } = ctx.params;
   if (!["orders", "dispatch"].includes(col)) return;
   return; // 🗑 2026-11-14 사용자 요청 — 휴지통 기능을 없앴다. 지운 오더를 더는 보관하지 않는다(남아 있던 보관분은 매시간 정리 때 모두 지운다)
@@ -7141,8 +7182,9 @@ const PB_RUN = POPBILL_ON ? { secrets: ["POPBILL_LINK_ID", "POPBILL_SECRET_KEY"]
 const _alimtalk = require("./alimtalk").makeAlimtalk({ db, FieldValue, getPopbill: getPopbillAdapter, callerOf: _publicData.callerOf });
 const _bankSync = require("./bankSync").makeBankSync({ db, FieldValue, getPopbill: getPopbillAdapter, callerOf: _publicData.callerOf });
 const ALIMTALK_OFF = true;
-exports.alimtalkOnOrderWrite = functions.runWith({ ...PB_RUN, timeoutSeconds: 60, memory: "256MB" }).firestore
-  .document("{col}/{dispatchId}")
+// ⚡ 2026-11-23 알림톡을 끈 동안은 배포하지 않는다(모든 컬렉션 쓰기마다 불리던 것) — 다시 쓰려면 ALIMTALK_OFF = false
+if (!ALIMTALK_OFF) exports.alimtalkOnOrderWrite = functions.runWith({ ...PB_RUN, timeoutSeconds: 60, memory: "256MB" }).firestore
+  .document("orders/{dispatchId}")
   .onWrite(async (change, context) => {
     // 💬 2026-11-08 사장님 요청 — 알림톡 사용 안 함(PC·모바일 화면에서 뺐다). 다시 쓰려면 이 줄만 지운다
     if (ALIMTALK_OFF) return null;

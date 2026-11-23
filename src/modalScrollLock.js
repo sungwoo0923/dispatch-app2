@@ -31,14 +31,22 @@ const canScroll = (el, dx, dy) => {
   return false;
 };
 // 대상 → 가장 가까운 팝업 오버레이까지 올라가며: 그 안에서 스크롤 가능한 상자가 있나
+// ⚡ 2026-11-23 휠 · 손가락 스크롤은 1초에 수십 번 온다 — 같은 곳에서 계속 굴리면 "팝업 안인가" 판정을 0.5초 동안 다시 쓰고
+//  (예전엔 매번 위로 올라가며 모든 상자의 스타일 · 크기를 다시 재서 긴 표에서 스크롤이 버벅였다)
+const _chainCache = { target: null, at: 0, chain: null, overlay: null };
 function decide(target, dx, dy) {
-  let el = target && target.nodeType === 1 ? target : target?.parentElement;
-  const chain = [];
-  let overlay = null;
-  while (el && el !== document.body && el !== document.documentElement) {
-    chain.push(el);
-    if (isOverlay(el)) { overlay = el; break; }
-    el = el.parentElement;
+  let chain; let overlay = null;
+  const now = Date.now();
+  if (_chainCache.target === target && now - _chainCache.at < 500) { chain = _chainCache.chain; overlay = _chainCache.overlay; }
+  else {
+    let el = target && target.nodeType === 1 ? target : target?.parentElement;
+    chain = [];
+    while (el && el !== document.body && el !== document.documentElement) {
+      chain.push(el);
+      if (isOverlay(el)) { overlay = el; break; }
+      el = el.parentElement;
+    }
+    Object.assign(_chainCache, { target, at: now, chain, overlay });
   }
   if (!overlay) return "pass"; // 팝업 밖(일반 화면) — 그대로
   // 지도·캔버스처럼 스스로 끌기를 처리하는 곳은 그대로

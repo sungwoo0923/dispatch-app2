@@ -515,11 +515,22 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       if (!cancelled) setFriends([...sameCompany, ...linked]);
     };
     refresh();
-    const unsub1 = onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), refresh);
+    // ⚡ 2026-11-23 직원 문서는 알림 토큰 · 보는 화면 · 팝업 설정 등으로 수시로 바뀐다 — 예전엔 그때마다 회사 직원 · 프로필을 두 번 통째로 다시 읽었다
+    //  → 대화 상대 목록에 보이는 값(이름 · 직급 · 팀 · 전화 · 사진 · 승인 · 권한)이 바뀌었을 때만, 1초 모아서 다시 읽는다
+    const sigs = {}; let timer = 0;
+    const onUsers = (key) => (snap) => {
+      const sig = snap.docs.map((d) => { const u = d.data() || {}; return [d.id, u.name, u.displayName, u.position, u.직책, u.team, u.phone, u.phoneNumber, u.전화번호, u.photo, u.email, u.approved, u.role].join("|"); }).sort().join("\n");
+      if (sigs[key] === sig) return;
+      const first = sigs[key] === undefined;
+      sigs[key] = sig;
+      if (first) return; // 처음 한 번은 위 refresh()가 이미 읽었다
+      clearTimeout(timer); timer = setTimeout(refresh, 1000);
+    };
+    const unsub1 = onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), onUsers("co"), () => {});
     const unsub2 = linkedCompanyName
-      ? onSnapshot(query(collection(db, "users"), where("companyName", "==", linkedCompanyName)), refresh)
+      ? onSnapshot(query(collection(db, "users"), where("companyName", "==", linkedCompanyName)), onUsers("linked"), () => {})
       : null;
-    return () => { cancelled = true; unsub1(); unsub2?.(); };
+    return () => { cancelled = true; clearTimeout(timer); unsub1(); unsub2?.(); };
   }, [company, myUid, linkedCompanyName]);
 
   // ── 채팅방 목록 ──
