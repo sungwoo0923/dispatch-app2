@@ -68,6 +68,14 @@ import southKorea from "@svg-maps/south-korea";
 import { canSeeNotice } from "../NoticeBoard";
 import React, { useState, useMemo, useEffect, useRef, startTransition, useSyncExternalStore } from "react";
 import { withCo, getTenant } from "../fsTenant";
+import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "../orderHistoryCache"; // ⚡ 2026-11-23 13개월 오더 폰 보관
+// ⚡ 2026-11-23 운임 참고용 13개월 오더는 화면을 열 때 한 번만 받는다 — 예전엔 실시간 구독이라 누가 오더를 고칠 때마다 받고,
+//  30분 뒤 다시 열면 13개월을 통째로 또 받았다(운임 비교에는 실시간이 필요 없다)
+const onceSnapM = (q, cb) => {
+  let alive = true;
+  getDocs(q).then((snap) => { if (alive) cb({ docChanges: () => snap.docs.map((doc) => ({ type: "added", doc })) }); }).catch(() => {});
+  return () => { alive = false; };
+};
 // 📱 PC와 같은 화면(매출관리·운임조회·단가표·지입차관리·전자결재·직원관리) — 메뉴를 열 때만 불러온다
 import { runMobileBack } from "../mobileBack"; // 🔙 2026-11-10 덮어 뜬 창 뒤로가기로 닫기
 const MobilePcView = React.lazy(() => import("./MobilePcViews"));
@@ -2811,17 +2819,58 @@ const quickRange = (days) => {
     const liveStart = mobileLiveStart();
     const midStart = (() => { const d = new Date(`${liveStart}T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 2); return d.toISOString().slice(0, 10); })();
     const quiet = !!opts?.quiet;
-    fullLoadingRef.current = (async () => {
+    // ⚡ 2026-11-23 PC처럼 이 폰에 13개월 오더를 보관해 두고, 다음부터는 그 뒤에 바뀐 것 · 지워진 것만 받는다
+    //  (예전엔 앱을 켤 때마다 13개월을 통째로 다시 받아 LTE 데이터 · 서버 읽기가 컸다). 보관은 회사별 · 3일 · 초기화(dataVersion)되면 새로 받는다
+    const co = String(getTenant() || userCompany || localStorage.getItem("userCompany") || "").trim();
+    const cacheKey = co ? `m:${co}` : "";
+    const toRows = (docs) => docs.map(({ col, id, data }) => ({ __col: col, ...textifyOrder(data || {}), _id: id, id })).filter((o) => o.source !== "transport_transmit");
+    const rawFetch = async (lo, hi) => {
+      const parts = await Promise.all(["dispatch", "orders"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", lo), where("상차일", "<", hi)))
+        .then((snap) => snap.docs.map((d) => ({ col, id: d.id, data: d.data() || {} })))));
+      return parts.flat();
+    };
+    const fullFetch = async (dv) => {
+      const startedAt = Date.now();
       const recent = await fetchRows((c) => query(c, where("상차일", ">=", midStart), where("상차일", "<", liveStart)), { quiet, urgent: !quiet });
       if (recent === null) return;
       loadedRangesRef.current.push([midStart, prevDayStr(liveStart)]);
-      const older = await fetchRows((c) => query(c, where("상차일", ">=", hStart), where("상차일", "<", midStart)), { quiet: true });
-      if (older === null) return;
+      if (!cacheKey) {
+        const older = await fetchRows((c) => query(c, where("상차일", ">=", hStart), where("상차일", "<", midStart)), { quiet: true });
+        if (older === null) return;
+      } else {
+        let docs;
+        try { docs = await rawFetch(hStart, liveStart); } catch { return; }
+        mergeExtra(toRows(docs.filter((x) => String(x.data?.상차일 || "") < midStart)));
+        writeHistoryCache(cacheKey, { savedAt: startedAt, fullAt: startedAt, dv, hStart, liveStart }, docs);
+      }
       fullLoadedRef.current = true;
       loadedRangesRef.current.push([hStart, prevDayStr(midStart)]);
+    };
+    fullLoadingRef.current = (async () => {
+      if (!cacheKey) return fullFetch(0);
+      let dv = 0;
+      try { const t = (await getDoc(doc(db, "systemConfig", "dataVersion"))).data()?.[co]; dv = t?.toMillis ? t.toMillis() : 0; } catch { dv = -1; }
+      const cache = dv >= 0 ? await readHistoryCache(cacheKey) : null;
+      const usable = cache && cache.dv === dv && cache.hStart <= hStart && Date.now() - cache.fullAt < HISTORY_CACHE_MAX_AGE && cache.liveStart <= liveStart;
+      if (!usable) return fullFetch(dv < 0 ? 0 : dv);
+      try {
+        const startedAt = Date.now();
+        const delta = await fetchHistoryDelta({ since: cache.savedAt, gapFrom: cache.liveStart, gapTo: liveStart });
+        const map = new Map(cache.docs.map((x) => [`${x.col}/${x.id}`, x]));
+        delta.changed.forEach((x) => map.set(`${x.col}/${x.id}`, x));
+        delta.deleted.forEach((k) => map.delete(k));
+        const docs = [...map.values()].filter((x) => { const d = String(x.data?.상차일 || ""); return d >= hStart && d < liveStart; });
+        const keep = new Set(docs.map((x) => `${x.col}/${x.id}`));
+        const gone = [...delta.deleted, ...delta.changed.map((x) => `${x.col}/${x.id}`).filter((k) => !keep.has(k))];
+        if (gone.length) setExtraMap((prev) => { let next = null; gone.forEach((k) => { if (prev.has(k)) { next = next || new Map(prev); next.delete(k); } }); return next || prev; });
+        mergeExtra(toRows(docs), { urgent: !quiet });
+        writeHistoryCache(cacheKey, { savedAt: startedAt, fullAt: cache.fullAt, dv, hStart: cache.hStart, liveStart }, docs);
+        fullLoadedRef.current = true;
+        loadedRangesRef.current.push([hStart, prevDayStr(liveStart)]);
+      } catch (e) { console.warn("[예전 오더 보관본] 바뀐 것만 받기 실패 → 전체 다시 받기", e?.code || e); return fullFetch(dv); }
     })().finally(() => { fullLoadingRef.current = null; });
     return fullLoadingRef.current;
-  }, [fetchRows]);
+  }, [fetchRows, mergeExtra, userCompany]); // eslint-disable-line react-hooks/exhaustive-deps
   // ⭐ 여러 사용자 실시간 일치 — 미배차 전부 + 앱을 연 뒤 누군가 등록·수정한 오더(날짜 무관) +
   // 삭제 기록을 실시간으로 받아 예전 오더 보관소에 반영(최근 7일~은 원래 실시간)
   // ⭐ LTE 속도 — 이 구독(미배차 전체·변경분·삭제기록)도 오더를 먼저 받은 뒤 시작한다. 기준 시각은 앱을 연 순간으로
@@ -3595,7 +3644,9 @@ React.useEffect(() => {
     if (endDate && endDate <= "2026-06-16") {
       const approvers = s.approvers || (s.approverUid ? [{ uid: s.approverUid, name: s.approverName, status: s.approvalStatus }] : []);
       const needsMigration = approvers.length === 0 || approvers.some(a => a.status === "pending");
-      if (needsMigration) {
+      if (needsMigration && !window.__kpSchedMigrated?.has(s.id)) {
+          // ⚡ 2026-11-23 같은 일정은 화면을 연 동안 한 번만 시도(권한 없어 실패하는 일정을 목록이 바뀔 때마다 모든 기기가 다시 쓰던 것)
+          (window.__kpSchedMigrated || (window.__kpSchedMigrated = new Set())).add(s.id);
         const updatedApprovers = approvers.length > 0
           ? approvers.map(a => ({ ...a, status: "approved" }))
           : [{ uid: "migrated", name: "자동승인", status: "approved" }];
@@ -19308,8 +19359,8 @@ const [showAddressConfirmPopup, setShowAddressConfirmPopup] = useState(false);
       snap.docChanges().forEach((ch) => { if (ch.type === "removed") cache.delete(ch.doc.id); else cache.set(ch.doc.id, mapDoc(ch.doc)); });
       if (!timer) timer = setTimeout(merge, 300);
     };
-    const unsub1 = onSnapshot(query(collection(db, "dispatch"), where("상차일", ">=", liveWindowStart)), apply(dispatchCache));
-    const unsub2 = onSnapshot(query(collection(db, "orders"), where("상차일", ">=", liveWindowStart)), apply(ordersCache));
+    const unsub1 = onceSnapM(query(collection(db, "dispatch"), where("상차일", ">=", liveWindowStart)), apply(dispatchCache));
+    const unsub2 = onceSnapM(query(collection(db, "orders"), where("상차일", ">=", liveWindowStart)), apply(ordersCache));
     return () => { unsub1(); unsub2(); if (timer) clearTimeout(timer); };
   }, []);
 

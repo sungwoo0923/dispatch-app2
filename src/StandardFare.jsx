@@ -3,6 +3,13 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수수료 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표와 같은 식
 import { db } from "./firebase";
 import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
+// ⚡ 2026-11-23 운임 참고용 13개월 오더는 화면을 열 때 한 번만 받는다 — 예전엔 실시간 구독이라 누가 오더를 고칠 때마다 받고,
+//  30분 뒤 다시 열면 13개월을 통째로 또 받았다(운임 비교에는 실시간이 필요 없다)
+const onceSnap = (q, cb) => {
+  let alive = true;
+  getDocs(q).then((snap) => { if (alive) cb({ docChanges: () => snap.docs.map((doc) => ({ type: "added", doc })) }); }).catch(() => {});
+  return () => { alive = false; };
+};
 import { KOREAN_HOLIDAYS } from "./CustomDatePicker"; // ⭐ 2026-11-04 특수운임 제거
 import { CustomSelect } from "./CustomSelect";
 import { SpecialFareTag } from "./specialFareTag"; // 🏷 2026-11-18 자사운임표 이력 — 특수운임 붙은 오더 표시
@@ -732,12 +739,12 @@ export default function StandardFare({ embedded = false, defaultTab = "표준운
       if (!timer) timer = setTimeout(flush, 300);
     };
 
-    const unsub1 = onSnapshot(query(collection(db, "dispatch"), where("상차일", ">=", liveWindowStart)), apply(dispatchCache), () => {});
+    const unsub1 = onceSnap(query(collection(db, "dispatch"), where("상차일", ">=", liveWindowStart)), apply(dispatchCache));
     // "orders" 컬렉션에는 이 운송사가 직접 등록한 오더 외에, autoTransmitToShipper로
     // 화주사 화면에 전송한 사본(source: "transport_transmit")도 함께 들어있다. 이
     // 사본은 originId로 가리키는 원본이 "dispatch"(또는 "orders") 쪽에 이미 별도
     // 문서로 존재하므로, 그대로 합치면 같은 오더가 서로 다른 id로 두 번 집계된다.
-    const unsub2 = onSnapshot(query(collection(db, "orders"), where("상차일", ">=", liveWindowStart)), apply(ordersCache, (r) => r.source !== "transport_transmit"), () => {});
+    const unsub2 = onceSnap(query(collection(db, "orders"), where("상차일", ">=", liveWindowStart)), apply(ordersCache, (r) => r.source !== "transport_transmit"));
     return () => { unsub1(); unsub2(); if (timer) clearTimeout(timer); };
   }, [liveWindowStart]);
 

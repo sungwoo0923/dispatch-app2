@@ -19,7 +19,13 @@ const PREFIXES = [
   "shipperOrderDraft_", "vcLater_", "fcConfig_", "kpMsgToastSeen:",
 ];
 
+// 🔒 2026-11-23 예전 오더 보관본(IndexedDB kpOrderHistory — PC · 폰 13개월)도 지운다 — 회사별로 따로 보관해 다른 회사 화면에 섞이진 않지만,
+//  같은 PC를 다른 운송사 사람이 쓸 때 앞 사람 회사 오더가 기기에 남아 있지 않게
+function purgeHistoryCache() {
+  try { if (typeof indexedDB !== "undefined") indexedDB.deleteDatabase("kpOrderHistory"); } catch { /* 무시 */ }
+}
 export function purgeAccountStorage() {
+  purgeHistoryCache();
   try {
     const all = Object.keys(localStorage);
     all.forEach((k) => {

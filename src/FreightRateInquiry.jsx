@@ -5,7 +5,14 @@ import { useSubnavTarget } from "./navMenus";
 import southKorea from "@svg-maps/south-korea";
 import StandardFare from "./StandardFare";
 import { db } from "./firebase";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
+// ⚡ 2026-11-23 운임 참고용 13개월 오더는 화면을 열 때 한 번만 받는다 — 예전엔 실시간 구독이라 누가 오더를 고칠 때마다 받고,
+//  30분 뒤 다시 열면 13개월을 통째로 또 받았다(운임 비교에는 실시간이 필요 없다)
+const onceSnap = (q, cb) => {
+  let alive = true;
+  getDocs(q).then((snap) => { if (alive) cb({ docChanges: () => snap.docs.map((doc) => ({ type: "added", doc })) }); }).catch(() => {});
+  return () => { alive = false; };
+};
 
 // ─── 한국 지도 SVG 경로 (실제 지리 데이터) ─────────────────────────────
 // viewBox="0 0 524 631" — @svg-maps/south-korea 패키지 기준
@@ -634,8 +641,8 @@ function NationalFareTab() {
     let t=null;
     const flush=()=>{t=null;React.startTransition(()=>{const m=new Map(c1);c2.forEach((v,k)=>m.set(k,v));setDispatchData([...m.values()]);});};
     const apply=(cache)=>(snap)=>{snap.docChanges().forEach(ch=>{if(ch.type==="removed")cache.delete(ch.doc.id);else cache.set(ch.doc.id,{_id:ch.doc.id,...ch.doc.data()});});if(!t)t=setTimeout(flush,300);};
-    const u1=onSnapshot(query(collection(db,"dispatch"),where("상차일",">=",liveWindowStart)),apply(c1),()=>{});
-    const u2=onSnapshot(query(collection(db,"orders"),where("상차일",">=",liveWindowStart)),apply(c2),()=>{});
+    const u1=onceSnap(query(collection(db,"dispatch"),where("상차일",">=",liveWindowStart)),apply(c1));
+    const u2=onceSnap(query(collection(db,"orders"),where("상차일",">=",liveWindowStart)),apply(c2));
     return()=>{u1();u2();if(t)clearTimeout(t);};
   },[wantHistory]);
   useEffect(()=>{

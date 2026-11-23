@@ -21,6 +21,11 @@ const _hubDriverAuth = require("./hubDriverAuth");
 function register({ functions, db, FieldValue, sendPushAndCleanup, userTokens, getStorage, getAuth }) {
   // ⭐ 2026-11-07 차주 로그인(차량번호 + 휴대폰번호) · 등록 기기 — hubBindDevice · hubAdminResetDevice · hubAdminSetDriverLogin(functions/hubDriverAuth.js)
   const out = { ..._hubDriverAuth.register({ functions, db, FieldValue, getAuth }) };
+  // ⚡ 2026-11-23 돈 처리 실패가 로그에만 남고 사라지던 것 — 실패 기록(hubTriggerErrors, 서버만 읽고 씀)을 남기고,
+  //  원장 키로 두 번 반영되지 않는 충전 · 조정은 자동으로 다시 시도한다(1시간 넘은 이벤트는 포기하고 기록만)
+  const logFail = (kind, id, e) => db.collection("hubTriggerErrors").add({ kind, id, error: String(e?.message || e).slice(0, 500), at: FieldValue.serverTimestamp() }).catch(() => {});
+  const tooOld = (context) => { const t = Date.parse(context?.timestamp || ""); return t && Date.now() - t > 3600e3; };
+  const retryFn = functions.runWith({ failurePolicy: true });
   out.hubOrderOnWrite = functions.firestore
     .document("hubOrders/{id}")
     .onWrite(async (change, context) => {
@@ -28,16 +33,22 @@ function register({ functions, db, FieldValue, sendPushAndCleanup, userTokens, g
         await _hubCall.onHubOrderWrite(db, FieldValue, context.params.id, change.before.exists ? change.before.data() : null, change.after.exists ? change.after.data() : null, { storage: getStorage() });
       } catch (e) { console.error("[허브 콜] 집계 실패:", e); }
     });
-  out.hubChargeOnWrite = functions.firestore.document("hubCharges/{id}").onWrite(async (change, context) => {
+  out.hubChargeOnWrite = retryFn.firestore.document("hubCharges/{id}").onWrite(async (change, context) => {
     const a = change.after.exists ? change.after.data() : null;
     if (!a || a.status !== "confirmed" || a.creditedAt) return;
-    try { await _hubWallet.creditCharge(db, FieldValue, context.params.id); } catch (e) { console.error("[허브 예치금] 충전 반영 실패:", e); }
+    try { await _hubWallet.creditCharge(db, FieldValue, context.params.id); } catch (e) {
+      console.error("[허브 예치금] 충전 반영 실패:", e); await logFail("charge", context.params.id, e);
+      if (!tooOld(context)) throw e; // 다시 시도(원장 키 charge_{id} 로 두 번 반영되지 않는다)
+    }
   });
   out.hubPayoutOnWrite = functions.firestore.document("hubPayouts/{id}").onWrite(async (change, context) => {
-    try { await _hubWallet.onPayoutWrite(db, FieldValue, context.params.id, change.before.exists ? change.before.data() : null, change.after.exists ? change.after.data() : null); } catch (e) { console.error("[허브 예치금] 지급 처리 실패:", e); }
+    try { await _hubWallet.onPayoutWrite(db, FieldValue, context.params.id, change.before.exists ? change.before.data() : null, change.after.exists ? change.after.data() : null); } catch (e) { console.error("[허브 예치금] 지급 처리 실패:", e); await logFail("payout", context.params.id, e); } // 외부 지급 요청이 섞여 자동 재시도는 하지 않는다
   });
-  out.hubAdjustOnCreate = functions.firestore.document("hubAdjustments/{id}").onCreate(async (snap, context) => {
-    try { await _hubWallet.applyAdjustment(db, FieldValue, context.params.id); } catch (e) { console.error("[허브 예치금] 조정 실패:", e); }
+  out.hubAdjustOnCreate = retryFn.firestore.document("hubAdjustments/{id}").onCreate(async (snap, context) => {
+    try { await _hubWallet.applyAdjustment(db, FieldValue, context.params.id); } catch (e) {
+      console.error("[허브 예치금] 조정 실패:", e); await logFail("adjust", context.params.id, e);
+      if (!tooOld(context)) throw e; // 다시 시도(원장 키 adj_{id})
+    }
   });
   out.hubNoticeOnCreate = functions.firestore.document("hubNotices/{id}").onCreate(async (snap) => {
     const n = snap.data() || {};
@@ -66,7 +77,7 @@ function register({ functions, db, FieldValue, sendPushAndCleanup, userTokens, g
     catch (e) { console.error("[허브 등록 요청] 실패:", e); await snap.ref.update({ status: "failed", reason: "잠시 뒤 다시 시도해 주세요" }).catch(() => {}); }
   });
   out.hubWithdrawOnWrite = functions.firestore.document("hubWithdrawals/{id}").onWrite(async (change, context) => {
-    try { await _hubWallet.onWithdrawWrite(db, FieldValue, context.params.id, change.before.exists ? change.before.data() : null, change.after.exists ? change.after.data() : null); } catch (e) { console.error("[허브 출금] 처리 실패:", e); }
+    try { await _hubWallet.onWithdrawWrite(db, FieldValue, context.params.id, change.before.exists ? change.before.data() : null, change.after.exists ? change.after.data() : null); } catch (e) { console.error("[허브 출금] 처리 실패:", e); await logFail("withdraw", context.params.id, e); }
   });
   out.hubPayoutDaily = functions.pubsub.schedule("7 9 * * *").timeZone("Asia/Seoul").onRun(async () => {
     try { const n = await _hubWallet.runDuePayouts(db, FieldValue); console.log(`[허브 지급] 오늘 지급 요청 ${n}건`); } catch (e) { console.error("[허브 지급] 예정일 처리 실패:", e); }
