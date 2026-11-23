@@ -149,7 +149,7 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge }) {
         <video ref={vRef} src={course.video} playsInline preload="metadata" className="w-full h-full block" style={{ objectFit: "contain" }}
           onLoadedMetadata={(e) => setDur(e.currentTarget.duration || 0)} onTimeUpdate={onTime}
           onPlay={() => setPlaying(true)} onPause={() => { setPlaying(false); persist(true); }} onEnded={() => { setPlaying(false); maxRef.current = dur; persist(true); }}
-          onSeeking={(e) => { if (e.currentTarget.currentTime > maxRef.current + 1.5) e.currentTarget.currentTime = maxRef.current; }}
+          onSeeking={(e) => { if (e.currentTarget.currentTime > maxRef.current + 1.5) { e.currentTarget.currentTime = maxRef.current; lastT.current = maxRef.current; setNotice("처음 보는 부분은 건너뛸 수 없어요"); setTimeout(() => setNotice(""), 2200); } }}
           onClick={toggle} controlsList="nodownload noplaybackrate" disablePictureInPicture />
         {!playing && (
           <button type="button" onClick={toggle} className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(11,20,40,0.35)" }}>

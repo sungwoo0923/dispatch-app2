@@ -5,7 +5,7 @@
 //  · 기록: eduRecords/{회사}__{uid}__{교육id}__{기간}  — 본인이 만들고 고칠 수 없다(서명 기록) · 같은 회사 사무 직원이 본다
 //  · 보던 위치: eduProgress/{uid}__{교육id} — 본인만
 
-// 교육 목록(1단계: 기사 교육 2편 + 안전수칙 서약서 + 직원 사무실 안전 확인서) — 영상은 public/edu/*.webm
+// 교육 목록(1단계: 기사 교육 2편 + 안전수칙 서약서 + 직원 사무실 안전 확인서) — 영상은 public/edu/*.mp4(marketing/edu/build.mjs 로 만든다)
 export const EDU_COURSES = [
   {
     id: "drv_load",
@@ -14,8 +14,8 @@ export const EDU_COURSES = [
     emoji: "📦",
     title: "화물 적재 · 결박 안전",
     summary: "짐이 쏟아지지 않게 싣고 묶는 법",
-    minutes: 5,
-    video: "/edu/drv_load.webm",
+    minutes: 4,
+    video: "/edu/drv_load.mp4",
     cycle: "yearly",
     pledge: "화물 적재 · 결박 안전교육 영상을 끝까지 시청했으며, 적재 기준을 지키고 출발 전 결박 상태를 직접 확인하겠습니다.",
   },
@@ -26,8 +26,8 @@ export const EDU_COURSES = [
     emoji: "🚧",
     title: "상 · 하차장 안전",
     summary: "지게차 주변 · 후진 · 끼임 사고 막기",
-    minutes: 5,
-    video: "/edu/drv_dock.webm",
+    minutes: 3,
+    video: "/edu/drv_dock.mp4",
     cycle: "yearly",
     pledge: "상 · 하차장 안전교육 영상을 끝까지 시청했으며, 작업장 안전수칙과 현장 안내자의 지시를 따르겠습니다.",
   },
