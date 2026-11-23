@@ -2,6 +2,7 @@
 import { RoadviewButton } from "../roadview"; // 📷 2026-11-20 상·하차지 로드뷰
 import { isFleetGrade } from "../fleetGradesCore"; // 🚛 2026-11-20 사용자 요청 — 지입 · 직영 · 임대 · 분양(isFleetGrade) 모두 기사앱 오더 수락/거절 · 같은 기사앱 화면(예전엔 지입만)
 import { useFleetDispatchWayInstall } from "../fleetDispatchWay"; // 🚛 2026-11-23 지입차로 배차하면 배차방식 자동(회사별)
+import ToolMenuButton from "../toolMenu"; // 🧰 2026-11-23 운행 옵션(혼적 · 왕복 · 긴급) 하나로
 import { SpecialFareTag, SpecialFareLine } from "../specialFareTag"; // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import { readPendingApproval, clearPendingApproval } from "../pendingOpen"; // 🛠 2026-11-17 결재 화면 이동 요청을 새로고침 뒤에도 이어서
 import { MarginPct } from "../marginPct"; // ⭐ 2026-11-17 배차 합계 다이얼 — 수수료 아래 수수료율(수수료 ÷ 청구)
@@ -15839,35 +15840,24 @@ const pickDrop = (c) => {
           }
         />
         <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
+        {/* 🧰 2026-11-23 [혼적] · [왕복] · [긴급] → [운행 옵션] 하나(누르면 체크 목록) — 넣는 값 · 왕복의 회전 줄은 예전 그대로 · 켜지 않으면 독차 */}
         <RowLabelInput
-          label="혼적"
+          label="운행 옵션"
           input={
-            /* ⭐ 2026-11-09 독차 버튼 제거 — 혼적을 켜지 않으면(또는 다시 끄면) 자동으로 독차 */
-            <div className="flex gap-2 items-center text-sm">
-              <button type="button"
-                onClick={() => update("혼적여부", form.혼적여부 === "혼적" ? "독차" : "혼적")}
-                aria-pressed={form.혼적여부 === "혼적"}
-                className={`px-3 py-1.5 rounded-lg text-[12.5px] font-bold border transition ${form.혼적여부 === "혼적" ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300"}`}>
-                혼적
-              </button>
-              <span className="text-[11px] text-gray-400">선택하지 않으면 독차</span>
-            </div>
-          }
-        />
-        <RowLabelInput
-          label="왕복/긴급"
-          input={
-            <div className="flex items-center gap-1.5 flex-nowrap whitespace-nowrap">
-              <button type="button"
-                onClick={() => setForm(p => p.운행유형 === "왕복" ? { ...p, 운행유형: "편도", 회전수: 1, 회전방식: "묶기" } : { ...p, 운행유형: "왕복" })}
-                className={`shrink-0 whitespace-nowrap px-2.5 py-1.5 text-[13px] font-bold rounded-lg border transition-all ${form.운행유형 === "왕복" ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-300"}`}>
-                왕복
-              </button>
-              <button type="button"
-                onClick={() => update("긴급", !form.긴급)}
-                className={`shrink-0 whitespace-nowrap px-2.5 py-1.5 text-[13px] font-bold rounded-lg border transition-all ${form.긴급 ? "bg-red-600 text-white border-red-600" : "bg-white text-gray-600 border-gray-300"}`}>
-                긴급
-              </button>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {(() => {
+                const optOn = [form.혼적여부 === "혼적" && "혼적", form.운행유형 === "왕복" && "왕복", form.긴급 && "긴급"].filter(Boolean);
+                return (
+                  <ToolMenuButton testId="m-run-options" align="left" minWidth={240} menuTitle="운행 옵션 — 켜고 끌 항목을 눌러요"
+                    className={`shrink-0 whitespace-nowrap px-2.5 py-1.5 text-[13px] font-bold rounded-lg border transition-all ${form.긴급 ? "bg-red-600 text-white border-red-600" : optOn.length ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300"}`}
+                    label={<>{optOn.length ? optOn.join(" · ") : "옵션 없음"}</>}
+                    items={[
+                      { key: "mix", label: "혼적", desc: "다른 짐과 같이 실어요(끄면 독차)", checked: form.혼적여부 === "혼적", onClick: () => update("혼적여부", form.혼적여부 === "혼적" ? "독차" : "혼적") },
+                      { key: "round", label: "왕복", desc: "켜면 아래에 회전 줄이 생겨요", checked: form.운행유형 === "왕복", onClick: () => setForm(p => p.운행유형 === "왕복" ? { ...p, 운행유형: "편도", 회전수: 1, 회전방식: "묶기" } : { ...p, 운행유형: "왕복" }) },
+                      { key: "urgent", label: "긴급", desc: "급한 오더로 표시해요", checked: !!form.긴급, onClick: () => update("긴급", !form.긴급) },
+                    ]} />
+                );
+              })()}
               {canSeeBlind() && (
                 <button type="button"
                   onClick={() => update("블라인드", !form.블라인드)}
