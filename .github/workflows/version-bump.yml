@@ -22,7 +22,7 @@ permissions:
 jobs:
   bump:
     runs-on: ubuntu-latest
-    if: ${{ !startsWith(github.event.head_commit.message, 'chore: version') }}
+    if: "!startsWith(github.event.head_commit.message, 'chore: version')"
     steps:
       - uses: actions/checkout@v4
         with:
