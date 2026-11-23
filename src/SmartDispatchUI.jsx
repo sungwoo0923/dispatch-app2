@@ -6,7 +6,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { readHistoryCache } from "./orderHistoryCache";
 import { getTenant } from "./fsTenant";
-import { parseQuickLine, buildRoutes, findRoutes, suggestDrivers, busyByDate, todayTodo, slimOrder, ymd } from "./smartDispatch";
+import { parseQuickLine, buildRoutes, findRoutes, suggestDrivers, makeSuggester, busyByDate, todayTodo, slimOrder, ymd } from "./smartDispatch";
 
 const NUM = { fontVariantNumeric: "tabular-nums", fontFeatureSettings: '"tnum"' };
 const won = (v) => { const n = parseInt(String(v || "").replace(/[^\d-]/g, ""), 10); return n > 0 ? n.toLocaleString() : ""; };
@@ -174,7 +174,8 @@ export function QuickOrderLine({ rows = [], userCompany = "", canMoney = false, 
 export function useDriverSuggest(rows, userCompany = "") {
   const all = useOrderHistoryLite(rows, userCompany);
   const busy = React.useMemo(() => busyByDate(rows), [rows]);
-  return React.useCallback((order) => suggestDrivers(order, all, { limit: 20, busy: busy.get(String(order?.상차일 || "")), today: ymd(new Date()) }), [all, busy]);
+  // 🚚 2026-11-23 이력을 한 번 묶어 두고(makeSuggester) 오더마다 관련 줄만 본다 — 결과는 예전과 같다
+  return React.useMemo(() => makeSuggester(all, { busyByDay: busy, today: ymd(new Date()), limit: 20 }), [all, busy]);
 }
 
 // 줄마다 작은 드롭다운 하나 — 누르면 추천순 목록 + 검색(이름·차량번호·전화)
@@ -225,10 +226,10 @@ export function DriverSuggestCell({ order, pick, onAssign, drivers = [], disable
     <span data-kp="driver-suggest" data-variant={variant} onDoubleClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
       {caret ? (
         <button ref={btn} type="button" disabled={disabled} onClick={toggle} tabIndex={-1} data-kp="driver-suggest-caret"
-          title={`추천 기사 ${list.length}명 — ${top ? `${top.이름}(${top.차량번호}) 외` : ""} 눌러서 골라 배정 (직접 입력도 돼요)`}
-          className={`inline-flex items-center gap-0.5 h-[22px] pl-1.5 pr-1 rounded-md border text-[10.5px] font-black transition disabled:opacity-50 ${open ? "border-[#1B2B4B] bg-[#1B2B4B] text-white" : "border-[#C9D3E4] bg-[#F1F5FC] text-[#1B2B4B] hover:border-[#1B2B4B]"}`} style={NUM}>
-          추천 {list.length}
-          <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2 3.5 5 6.5 8 3.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          title={`추천 기사 ${list.length}명${top ? ` — 1순위 ${top.이름}(${top.차량번호})` : ""} · 눌러서 골라 배정 (차량번호를 직접 입력해도 돼요)`}
+          className={`inline-flex items-center justify-center gap-px h-[20px] min-w-[24px] px-1 rounded-md border text-[10px] font-black leading-none transition disabled:opacity-50 ${open ? "border-[#1B2B4B] bg-[#1B2B4B] text-white" : "border-[#C9D3E4] bg-[#EEF3FB] text-[#1B2B4B] hover:border-[#1B2B4B]"}`} style={NUM}>
+          {list.length}
+          <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M2 3.5 5 6.5 8 3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
       ) : (
       <button ref={btn} type="button" disabled={disabled} onClick={toggle} title="추천 기사 보기 · 검색해서 배정 (↑↓ 고르기 · Enter 배정 · Esc 닫기)"
@@ -276,6 +277,19 @@ export function DriverSuggestCell({ order, pick, onAssign, drivers = [], disable
             ))}
           </div>
         </div>, document.body)}
+    </span>
+  );
+}
+
+// 🚚 2026-11-23 실시간배차현황 · 배차현황 차량번호 칸의 추천 기사 ▾ — 표(부모)가 한 번 계산해 Context로 내려준다
+//  (줄 컴포넌트가 memo 라 prop 대신 Context — 이력이 새로 들어오면 칸만 다시 그린다)
+export const PlateSuggestCtx = React.createContext(null);
+export function PlateSuggestCaret({ order, disabled = false }) {
+  const ctx = React.useContext(PlateSuggestCtx);
+  if (!ctx || !order) return null;
+  return (
+    <span style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", zIndex: 2 }}>
+      <DriverSuggestCell variant="caret" order={order} pick={ctx.pick} drivers={ctx.drivers} disabled={disabled || ctx.disabled} onAssign={ctx.onAssign} />
     </span>
   );
 }

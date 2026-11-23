@@ -3007,7 +3007,7 @@ import { usePageSize, PageSizeChip } from "./pageSizePref"; // 📄 2026-11-17 �
 import { useRouteGroupFilter, RouteGroupBar, routeGroupOf, RouteGroupField, SheetLiveChip, rgOnScreen, RG_NONE, rgLabel, RG_TAB_OFF, RouteGroupSelect, filterRouteGroup } from "./routeGroups";
 import { MarginPct, marginPctText, profitCls, profitRateCls } from "./marginPct"; // ⭐ 2026-11-17 정산관리 수익 · 수수료 옆 매출 대비 % · 이익 색(플러스 빨강 · 마이너스 파랑)
 import { settleStartTab } from "./settleStart";
-import { QuickOrderLine, useDriverSuggest, DriverSuggestCell, AssignConfirm } from "./SmartDispatchUI"; // ⭐ 2026-11-13 빠른 등록 · 추천 기사
+import { QuickOrderLine, useDriverSuggest, DriverSuggestCell, AssignConfirm, PlateSuggestCtx, PlateSuggestCaret } from "./SmartDispatchUI"; // ⭐ 2026-11-13 빠른 등록 · 추천 기사
 const SettleHome = React.lazy(() => import("./SettleHome")); // 🧭 정산 홈(처음 열 때 받는다)
 const StmtCompareModal = React.lazy(() => import("./StmtCompare")); // ⭐ 2026-11-17 업체 명세서 비교(거래처정산)
 const MonthClose = React.lazy(() => import("./MonthClose")); // ✅ 2026-11-16 월 마감 리디자인(배차자 1차 — 범위 고르기 · 시각화 · 그 자리에서 고치기)
@@ -24862,12 +24862,13 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   <td className={`${cell} relative`}>
                     {/* ⭐ 2026-11-05 LIVE — 칩 대신 차량번호 입력칸 왼쪽 위 모서리의 6px 점(폭 0 · 칸 너비 그대로) */}
                     {r.배차상태 === "배차완료" && <LiveDriverChip order={r} variant="pin" />}
+                    <PlateSuggestCaret order={r} />{/* 🚚 2026-11-23 추천 기사 ▾ — 있을 때만 · 직접 입력은 그대로 */}
                     <input autoComplete="off"
                       name="차량번호"
                       data-id={r._id}
                       type="text"
                       value={r.차량번호 || ""}
-                      className="border p-0.5 rounded w-[120px] min-w-[100px] text-[14px] font-medium"
+                      className="border p-0.5 pr-[30px] rounded w-[120px] min-w-[100px] text-[14px] font-medium"
                       onChange={(e) => {
   const v = e.target.value;
   const isEmpty = v.trim() === "";
@@ -25470,6 +25471,21 @@ function RealtimeStatus({
 useFleetLivePublish(drivers); // ⭐ 2026-11-05 실시간 관제 색인(같은 배열이면 아무것도 안 함)
 // ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 / 수정 창 / 운임구분 열(규칙 사용 회사만)
 const fareR = useFareRules(getTenant() || userCompany);
+  // 🚚 2026-11-23 차량번호 칸 추천 기사 ▾(미배차현황 추천 기사와 같은 목록) — 고르면 배정 확인 창 → 배정
+  const plateSuggestPick = useDriverSuggest(historyDispatchData, userCompany);
+  const [plateAssignAsk, setPlateAssignAsk] = React.useState(null);
+  const [plateAssignBusy, setPlateAssignBusy] = React.useState(false);
+  const plateSuggestCtx = React.useMemo(() => ({ pick: plateSuggestPick, drivers, disabled: !!isViewer, onAssign: (o, d) => setPlateAssignAsk({ order: o, driver: d }) }), [plateSuggestPick, drivers, isViewer]);
+  const doPlateAssign = async () => {
+    if (!plateAssignAsk || plateAssignBusy) return;
+    const { order: o, driver: d } = plateAssignAsk;
+    setPlateAssignBusy(true);
+    try {
+      const ok = await patchDispatch(o._id, { 차량번호: d.차량번호, 이름: d.이름, 전화번호: formatPhone(d.전화번호 || ""), 배차상태: "배차완료", updatedAt: Date.now(), __col: o.__col });
+      if (ok !== false) window.__sflowShowToast?.(`${d.이름} 기사 배정 완료`);
+    } catch (e) { console.error(e); window.__sflowShowToast?.("배정 중 오류가 발생했습니다.", "err"); }
+    setPlateAssignBusy(false); setPlateAssignAsk(null);
+  };
 const fareOn = fareR.on;
 const cpCargoTypeOptions = useCompanyDropdownOptions("화물타입", role, userCompany); // 오더복사 수정 창 단위(회사별 설정)
 const cpTonTypeOptions = useCompanyDropdownOptions("톤수타입", role, userCompany);
@@ -29558,6 +29574,7 @@ const head = isDark
           </thead>
 
           <tbody {...rtLongPress.tbodyProps} className={`kp-rt-body ${isDark ? "kp-rt-dark" : ""} ${rtLongPress.selectMode ? "kp-select-mode" : ""}`}>
+          <PlateSuggestCtx.Provider value={plateSuggestCtx}>
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={27} className="py-16 text-center text-[13px] text-gray-500">
@@ -29619,8 +29636,10 @@ const head = isDark
                 fareRules={fareOn ? fareR.rules : null}
               />
             ))}
+          </PlateSuggestCtx.Provider>
           </tbody>
         </table>
+        <AssignConfirm target={plateAssignAsk} busy={plateAssignBusy} onCancel={() => setPlateAssignAsk(null)} onOk={doPlateAssign} />
       </div>
       {filtered.length > rtVisible.length && (
         <KpMoreRows shown={rtVisible.length} total={filtered.length} onMore={rtShowMore} />
@@ -34004,6 +34023,21 @@ function DispatchStatus({
   fixedForm = null,
   fixedActions = null, // ⭐ 2026-11-06 고정노선현황 오른쪽 클릭 메뉴(오더 추가·시트 열기·지금 맞추기)
 }) {
+  // 🚚 2026-11-23 차량번호 칸 추천 기사 ▾(미배차현황 추천 기사와 같은 목록) — 고르면 배정 확인 창 → 배정
+  const plateSuggestPick = useDriverSuggest(dispatchData, userCompany);
+  const [plateAssignAsk, setPlateAssignAsk] = React.useState(null);
+  const [plateAssignBusy, setPlateAssignBusy] = React.useState(false);
+  const plateSuggestCtx = React.useMemo(() => ({ pick: plateSuggestPick, drivers, disabled: !!isViewer, onAssign: (o, d) => setPlateAssignAsk({ order: o, driver: d }) }), [plateSuggestPick, drivers, isViewer]);
+  const doPlateAssign = async () => {
+    if (!plateAssignAsk || plateAssignBusy) return;
+    const { order: o, driver: d } = plateAssignAsk;
+    setPlateAssignBusy(true);
+    try {
+      const ok = await patchDispatch(o._id, { 차량번호: d.차량번호, 이름: d.이름, 전화번호: formatPhone(d.전화번호 || ""), 배차상태: "배차완료", updatedAt: Date.now(), __col: o.__col });
+      if (ok !== false) window.__sflowShowToast?.(`${d.이름} 기사 배정 완료`);
+    } catch (e) { console.error(e); window.__sflowShowToast?.("배정 중 오류가 발생했습니다.", "err"); }
+    setPlateAssignBusy(false); setPlateAssignAsk(null);
+  };
 useFleetLivePublish(drivers); // ⭐ 2026-11-05 실시간 관제 색인(같은 배열이면 아무것도 안 함)
 // ⭐ 2026-11-02 운임규칙 — 오더 복사·수정 패널 / 수정 창 / 운임구분 열(규칙 사용 회사만)
 const fareR = useFareRules(getTenant() || userCompany);
@@ -37729,6 +37763,7 @@ return (
           </thead>
 
           <tbody {...dsLongPress.tbodyProps} className={dsLongPress.selectMode ? "kp-select-mode" : ""}>
+          <PlateSuggestCtx.Provider value={plateSuggestCtx}>
             {pageRows.length === 0 && (
               <tr>
                 <td colSpan={29} className="py-16 text-center text-[13px] text-gray-500">
@@ -38000,8 +38035,9 @@ return (
                   <td className="border text-center whitespace-nowrap w-[120px] max-w-[120px] relative">
                     {/* ⭐ 2026-11-05 LIVE — 칩 대신 차량번호 입력칸 왼쪽 위 모서리의 6px 점(폭 0 · 칸 너비 그대로) */}
                     {row.배차상태 === "배차완료" && <LiveDriverChip order={row} variant="pin" />}
+                    <PlateSuggestCaret order={row} />{/* 🚚 2026-11-23 추천 기사 ▾ — 있을 때만 · 직접 입력은 그대로 */}
                     <input autoComplete="off"
-                      className="border rounded px-1 py-0.5 text-center w-[118px]"
+                      className="border rounded pl-1 pr-[28px] py-0.5 text-center w-[118px]"
                       value={row.차량번호 || ""}
                       onChange={(e) => {
                         const v = e.target.value;
@@ -38204,8 +38240,10 @@ return (
                 </tr>
               );
             })}
+          </PlateSuggestCtx.Provider>
           </tbody>
         </table>
+        <AssignConfirm target={plateAssignAsk} busy={plateAssignBusy} onCancel={() => setPlateAssignAsk(null)} onOk={doPlateAssign} />
       </div>
       <StickyHScrollbar targetRef={dsTableWrapRef} />
       {payOn && payPopId && (() => { const pr = (dispatchData || []).find((x) => getId(x) === payPopId); return pr ? <PayPopup row={pr} onClose={() => setPayPopId("")} patchDispatch={patchDispatch} canEdit={!isViewer} company={userCompany}

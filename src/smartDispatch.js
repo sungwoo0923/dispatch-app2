@@ -143,6 +143,32 @@ export function suggestDrivers(order, rows, { limit = 3, busy = null, today = "9
   return list.sort((x, y) => (x.busy - y.busy) || (y.score - x.score) || String(y.last).localeCompare(String(x.last))).slice(0, limit);
 }
 
+// 🚚 2026-11-23 같은 결과를 빠르게 — 이력을 한 번 묶어 두고 오더마다 관련 줄만 본다
+//  (실시간배차현황 · 배차현황은 줄이 많아 오더마다 이력 전체를 훑으면 느리다). 결과는 suggestDrivers 와 같다
+export function makeSuggester(rows, { busyByDay = null, today = "9999", limit = 20 } = {}) {
+  const idx = new Map(); // "a|b" · "b|c" · "a|c" → 줄들
+  const push = (k, r) => { let l = idx.get(k); if (!l) idx.set(k, (l = [])); l.push(r); };
+  for (const r of rows || []) {
+    if (!String(r?.차량번호 || "").trim() || !String(r.이름 || "").trim() || isCanceled(r)) continue;
+    const ra = nk(r.상차지명), rb = nk(r.하차지명), rc = nk(r.거래처명);
+    if (ra && rb) push(`ab|${ra}|${rb}`, r);
+    if (rb && rc) push(`bc|${rb}|${rc}`, r);
+    if (ra && rc) push(`ac|${ra}|${rc}`, r);
+  }
+  const cache = new Map();
+  return (order) => {
+    if (!order) return [];
+    const a = nk(order.상차지명), b = nk(order.하차지명), c = nk(order.거래처명), d = String(order.상차일 || "");
+    const key = `${a}|${b}|${c}|${d}|${order._id || ""}`;
+    if (cache.has(key)) return cache.get(key);
+    const cand = new Set([...(idx.get(`ab|${a}|${b}`) || []), ...(idx.get(`bc|${b}|${c}`) || []), ...(idx.get(`ac|${a}|${c}`) || [])]);
+    const out = suggestDrivers(order, [...cand], { limit, busy: busyByDay ? busyByDay.get(d) : null, today });
+    if (cache.size > 3000) cache.clear();
+    cache.set(key, out);
+    return out;
+  };
+}
+
 // 날짜별 이미 배차된 차량 → Map(상차일 → Set(차량번호))
 export function busyByDate(rows) {
   const m = new Map();
