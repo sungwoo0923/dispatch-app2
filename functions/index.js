@@ -73,6 +73,14 @@ async function companyUserDocs(co) {
   _coUsersCache.set(co, { at: Date.now(), docs });
   return docs;
 }
+// 🔒 2026-11-23 받는 사람이 그 회사 사람인지 — 문서에 적힌 uid(등록자 · 결재선 · 참조 · 담당자)는 화면이 적는 값이라
+//  다른 운송사 사람 uid 를 넣으면 그 사람에게 우리 회사 내용이 알림으로 갔다
+function sameCoUser(u, co) {
+  if (!u) return false;
+  if (u.role === "totalMaster") return true;
+  return String(u.companyName || "").trim() === String(co || "").trim() && String(co || "").trim() !== ""
+    && u.approved !== false && u.employmentStatus !== "퇴사" && !NON_STAFF_ROLES.has(u.role);
+}
 async function getTokensForType(type, companyName) {
   const co = String(companyName || PUSH_DEFAULT_COMPANY).trim();
   const docs = await companyUserDocs(co);
@@ -82,6 +90,8 @@ async function getTokensForType(type, companyName) {
     if (!ts.length) return;
     if (NON_STAFF_ROLES.has(u.role)) return;
     if (u.approved === false || u.employmentStatus === "퇴사") return;
+    // 🔒 2026-11-23 회사 없는 오더("(회사없음)")는 최고관리자에게만 — 예전엔 회사 칸이 빈 모든 계정(가입 대기 · 예전 계정)에 갔다
+    if (co === PUSH_DEFAULT_COMPANY && u.role !== "totalMaster") return;
     if (u.role !== "totalMaster" && String(u.companyName || PUSH_DEFAULT_COMPANY).trim() !== co) return;
     if (u.role === "totalMaster" && co !== PUSH_DEFAULT_COMPANY) return; // 최고관리자는 기본 회사 알림만
     if (!isPushTypeEnabled(u.pushPrefs, type)) return;
@@ -794,7 +804,7 @@ const _notifyDispatcherOrderRejected = (COL) =>
       let eligible = 0; // ⭐ 2026-11-17 배차 일을 하는 담당자(운송 화면) — 아무도 없으면 회사 '재배차' 알림 대상에게
       if (recipUids.length) {
         const uSnaps = await db.getAll(...recipUids.map((uid) => db.collection("users").doc(uid)));
-        uSnaps.forEach((d) => { if (d.exists && notifyUserAllows(d.data(), "기사거절")) { eligible++; token.push(...userTokens(d.data())); } });
+        uSnaps.forEach((d) => { if (d.exists && sameCoUser(d.data(), co) && notifyUserAllows(d.data(), "기사거절")) { eligible++; token.push(...userTokens(d.data())); } });
         token = [...new Set(token)];
       }
       if (!eligible) token = await getTokensForType("재배차", co);
@@ -1248,6 +1258,8 @@ exports.notifyFleetLateArrival = functions.runWith({ timeoutSeconds: 240 }).pubs
           const mgrUids = [...new Set([drv["담당자"]?.uid, o["createdByUid"]].filter(Boolean))];
           const mgrTokens = [];
           for (const uid of mgrUids) {
+            const mu = await db.collection("users").doc(uid).get().catch(() => null);
+            if (!mu?.exists || !sameCoUser(mu.data(), o.companyName)) continue; // 🔒 2026-11-23 그 회사 사람에게만
             for (const t of await getUserToken(uid, "기사지연")) if (!mgrTokens.includes(t)) mgrTokens.push(t);
           }
           if (mgrTokens.length) {
@@ -1358,9 +1370,22 @@ exports.notifyChatMessage = functions.firestore
     const mentioned = new Set(Array.isArray(data.mentions) ? data.mentions : []);
     const tokens = [];
     const mentionTokens = [];
+    // 🔒 2026-11-23 보낸 사람과 같은 운송사 · 연동 관계(화주 ↔ 연동 운송사)인 사람에게만 — 방에 다른 운송사 사람을 넣어도 대화 내용이 알림으로 가지 않게
+    const sender = data.senderUid ? (await db.collection("users").doc(data.senderUid).get().catch(() => null))?.data() || null : null;
+    const coOf = (u) => String(u?.companyName || "").trim();
+    const linkOf = (u) => String(u?.linkedTransportCompany?.companyName || "").trim();
+    const related = (u) => {
+      if (!sender || !u) return false;
+      if (sender.role === "totalMaster" || u.role === "totalMaster") return true;
+      const sShip = sender.role === "shipper"; const uShip = u.role === "shipper";
+      if (!sShip && !uShip) return coOf(sender) !== "" && coOf(sender) === coOf(u);
+      if (sShip && uShip) return coOf(sender) !== "" && coOf(sender) === coOf(u) && linkOf(sender) === linkOf(u);
+      return sShip ? linkOf(sender) !== "" && linkOf(sender) === coOf(u) : linkOf(u) !== "" && linkOf(u) === coOf(sender);
+    };
     await Promise.all(members.map(async (uid) => {
       try {
         const uSnap = await db.collection("users").doc(uid).get();
+        if (!related(uSnap.data())) return;
         if (isPushTypeEnabled(uSnap.data()?.pushPrefs, "메신저")) (mentioned.has(uid) ? mentionTokens : tokens).push(...userTokens(uSnap.data()));
       } catch (e) {
         console.warn("메신저 알림용 토큰 조회 실패:", uid, e?.message || e);
@@ -4995,7 +5020,8 @@ async function generateRecurringOrders(date, { company = null, ids = null, check
     const id = `rec_${t.id}_${date}`;
     Object.assign(o, {
       _id: id, 상차일: date, 하차일: addDaysStr(date, Number(tp.dropOffset) || 0), 등록일: kstDateStr(),
-      companyName: o.companyName || tp.companyName || "(회사없음)",
+      // 🔒 2026-11-23 회사는 정기 오더 문서(규칙이 확인한 회사)로만 — 안쪽 오더 값(order.companyName)으로 다른 운송사 오더를 만들 수 있었다
+      companyName: tp.companyName || "(회사없음)", company: tp.companyName || "",
       배차상태: hasDriver ? "배차완료" : "배차중",
       ...(hasDriver ? { 배차확정일시: FieldValue.serverTimestamp(), 배차확정자: "정기 오더", 배차완료일시: Date.now() } : {}),
       작성자: tp.createdBy || "", 등록기기: "정기", 정기오더: { id: t.id, name: tp.name || "" }, _recurring: true,
@@ -5147,10 +5173,13 @@ async function pushInternalMail(m) {
   const tokens = [];
   // ⭐ 2026-11-02 점검 — kind:"hr"에는 이력서 제출·연차 촉진·증명서 발급도 섞여 있다 — 제목이 [인사발령…]인 것만 '인사발령' 설정·제목으로
   const isOrder = m.kind === "hr" && /^\[인사발령/.test(String(m.subject || ""));
+  // 🔒 2026-11-23 회사는 보낸 사람 계정 기준(메일 문서의 company 칸은 화면이 적어 다른 회사로 바꿀 수 있었다)
+  let co = m.company || "(회사없음)";
+  if (m.fromUid) { const f = await db.collection("users").doc(m.fromUid).get().catch(() => null); if (f?.exists && f.data().role !== "totalMaster") co = String(f.data().companyName || "").trim() || "(회사없음)"; }
   for (let i = 0; i < to.length; i += 100) {
     const docs = await db.getAll(...to.slice(i, i + 100).map((uid) => db.collection("users").doc(uid)));
     const pk = isOrder ? "인사발령" : m.kind === "closeReport" ? "마감보고" : "사내메일";
-    docs.forEach((d) => { if (d.exists && (d.data().companyName || "(회사없음)") === (m.company || "(회사없음)") && isPushTypeEnabled(d.data().pushPrefs, pk)) tokens.push(...userTokens(d.data())); });
+    docs.forEach((d) => { if (d.exists && String(d.data().companyName || "").trim() === co && co !== "(회사없음)" && isPushTypeEnabled(d.data().pushPrefs, pk)) tokens.push(...userTokens(d.data())); });
   }
   const head = isOrder ? "◆ 인사발령" : m.kind === "hr" ? "◆ 인사관리부" : m.kind === "closeReport" ? "▸ 마감보고" : m.kind === "approval" ? `✎ 전자결재 · ${m.fromName || ""}` : `▸ ${m.important ? "[중요] " : ""}${m.fromName || "사내메일"}`;
   const body = m.kind === "closeReport" ? String(m.body || "") : `${m.subject || ""}${m.body ? `\n${String(m.body).replace(/\s+/g, " ").slice(0, 80)}` : ""}`;
@@ -5197,7 +5226,8 @@ exports.notifyApproval = functions.firestore.document("approvals/{id}").onWrite(
   }
   for (const [uid, title, body, pk = "결재결과"] of msgs) {
     const u = await db.collection("users").doc(uid).get();
-    const tok = u.exists && isPushTypeEnabled(u.data().pushPrefs, pk) ? userTokens(u.data()) : [];
+    // 🔒 2026-11-23 결재 문서 회사(company) 사람에게만 — 결재선 · 참조에 다른 운송사 uid 를 넣어도 그 사람에게 안 간다
+    const tok = u.exists && sameCoUser(u.data(), a.company || a.companyName) && isPushTypeEnabled(u.data().pushPrefs, pk) ? userTokens(u.data()) : [];
     if (tok.length) await sendPushAndCleanup(tok, { notification: { title, body }, android: { priority: "high" } }, "전자결재").catch((e) => console.error("결재 푸시 실패:", e));
   }
   return null;

@@ -46,7 +46,7 @@ export default function ShipperHome() {
     const isSubMaster = userData?.permissions?.subMaster === true;
     let q;
     if (isMaster || isSubMaster) {
-      q = query(collection(db, "orders"), where("shipperCompany", "==", userData.companyName));
+      q = query(collection(db, "orders"), where("shipperCompany", "==", userData.companyName), where("companyName", "==", userData?.linkedTransportCompany?.companyName || "(연동없음)"));
     } else {
       q = query(collection(db, "orders"), where("shipperUid", "==", user.uid));
     }

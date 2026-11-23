@@ -205,7 +205,8 @@ const A_CO = "에이운송", B_CO = "비운송";
   await env.clearFirestore();
   await seed(false);
   await t("잠금 전: 직원 명부는 그래도 회사별", () => assertFails(getDoc(doc(as("userB"), "users/userA2"))));
-  await t("잠금 전: 기사 기록은 예전처럼 열림(스위치 켜야 분리)", () => assertSucceeds(getDocs(collection(as("adminB"), "gps_tracks"))));
+  // 🔒 2026-11-23 스위치와 상관없이 늘 잠금
+  await t("잠금 전에도: 회사 조건 없는 기사 기록 목록 거절", () => assertFails(getDocs(collection(as("adminB"), "gps_tracks"))));
 
   await env.cleanup();
   console.log(out.join("\n"));

@@ -317,7 +317,7 @@ export default function ShipperStatus() {
     if (isMaster || isSubMaster) {
       q = query(
         collection(db, "orders"),
-        where("shipperCompany", "==", userData.companyName)
+        where("shipperCompany", "==", userData.companyName), where("companyName", "==", userData?.linkedTransportCompany?.companyName || "(연동없음)")
       );
     } else {
       // 운송사에서 전송한 오더에는 shipperUid가 없으므로(등록자=운송사),
@@ -325,7 +325,7 @@ export default function ShipperStatus() {
       const threeMonthsAgo = get3MonthsAgo();
       q = query(
         collection(db, "orders"),
-        where("shipperCompany", "==", userData.companyName),
+        where("shipperCompany", "==", userData.companyName), where("companyName", "==", userData?.linkedTransportCompany?.companyName || "(연동없음)"),
         where("상차일", ">=", threeMonthsAgo)
       );
     }

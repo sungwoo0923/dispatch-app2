@@ -476,7 +476,10 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   // linkedCompanyName이 있으면(화주사<->연동 운송사) 해당 회사 구성원도 함께 불러와
   // "연동" 표시와 함께 대화 상대로 노출한다.
   const loadCompanyUsers = async (companyName, crossCompany) => {
-    const userSnap = await getDocs(query(collection(db, "users"), where("companyName", "==", companyName)));
+    // 🔒 2026-11-23 화주 계정의 "같은 회사"는 화주 계정만 — 이름이 같은 운송사 직원이 섞이지 않게(서버 규칙도 같다)
+    const userSnap = await getDocs(role === "shipper" && !crossCompany
+      ? query(collection(db, "users"), where("companyName", "==", companyName), where("role", "==", "shipper"))
+      : query(collection(db, "users"), where("companyName", "==", companyName)));
     const userList = userSnap.docs
       .map(d => ({ uid: d.id || d.uid, ...d.data() }))
       .filter(u => (u.uid || u.id) !== myUid && u.approved !== false && !excludeRoles.includes(u.role));
@@ -526,7 +529,9 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       if (first) return; // 처음 한 번은 위 refresh()가 이미 읽었다
       clearTimeout(timer); timer = setTimeout(refresh, 1000);
     };
-    const unsub1 = onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), onUsers("co"), () => {});
+    const unsub1 = onSnapshot(role === "shipper"
+      ? query(collection(db, "users"), where("companyName", "==", company), where("role", "==", "shipper"))
+      : query(collection(db, "users"), where("companyName", "==", company)), onUsers("co"), () => {});
     const unsub2 = linkedCompanyName
       ? onSnapshot(query(collection(db, "users"), where("companyName", "==", linkedCompanyName)), onUsers("linked"), () => {})
       : null;

@@ -136,6 +136,7 @@ export default function ShipperOrder({ editData, onClose }) {
   const editId = params.get("edit");
 
   const [company, setCompany] = useState("");
+  const [linkedCo, setLinkedCo] = useState(""); // 🔒 2026-11-23 연동 운송사 — 같은 이름의 다른 화주사 오더가 섞이지 않게 오더 조회에 같이 건다
   const [loading, setLoading] = useState(!!editId);
   const [suggestions, setSuggestions] = useState([]);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -320,6 +321,7 @@ export default function ShipperOrder({ editData, onClose }) {
         const name = d.companyName || d.회사명 || d.company || d.거래처명 || "";
         setCompany(name);
         setCompanyEdit(name);
+        setLinkedCo(d.linkedTransportCompany?.companyName || "");
       } else {
         setCompany(`(주)${user.email?.split("@")[0] || "화주사"}`);
       }
@@ -582,6 +584,7 @@ export default function ShipperOrder({ editData, onClose }) {
       const q = query(
         collection(db, "orders"),
         where("shipperCompany", "==", company),
+        where("companyName", "==", linkedCo || "(연동없음)"),
         limit(200)
       );
       const snap = await getDocs(q);
@@ -628,7 +631,7 @@ export default function ShipperOrder({ editData, onClose }) {
     if (onClose || !company) return;
     let alive = true;
     setHistoryLoading(true);
-    getDocs(query(collection(db, "orders"), where("shipperCompany", "==", company), limit(200)))
+    getDocs(query(collection(db, "orders"), where("shipperCompany", "==", company), where("companyName", "==", linkedCo || "(연동없음)"), limit(200)))
       .then((snap) => {
         if (!alive) return;
         setHistory(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((o) => o.지급방식 !== "손실")
@@ -637,7 +640,7 @@ export default function ShipperOrder({ editData, onClose }) {
       .catch(() => alive && setHistory([]))
       .finally(() => alive && setHistoryLoading(false));
     return () => { alive = false; };
-  }, [company, onClose]);
+  }, [company, linkedCo, onClose]);
   // 자주 쓰는 상/하차지 한 번 누르면 이름·주소·담당자를 채운다
   const pickPlace = (type, p) => {
     setForm((f) => ({

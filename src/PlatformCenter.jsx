@@ -1106,9 +1106,9 @@ function TenancyPanel() {
             운송사 칸이 생기기 전 문서(회사명 빈칸)에 운송사를 적습니다. 화주사가 보낸 오더는 받은 운송사로, 나머지는 <b>(회사없음)</b>으로 표시돼 어느 운송사에도 보이지 않습니다. 기본 회사는 없으니(2026-11-21) 필요 없으면 아래에서 지우면 됩니다.
             <button type="button" disabled={busy} onClick={run} className="mt-3 w-full h-10 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-50">{busy ? "정리 중…" : cfg?.backfilledAt ? "다시 실행" : "실행"}</button>
           </>)}
-          {step(2, "서버 분리 켜기", cfg?.serverFilter === true, <>
-            모든 화면이 "우리 회사" 조건을 붙여 조회합니다. 직원들은 새로고침 한 번이면 적용됩니다.
-            <button type="button" onClick={() => toggle(!cfg?.serverFilter)} className={`mt-3 w-full h-10 rounded-xl text-[13.5px] font-black ${cfg?.serverFilter ? "border border-[#DCE3EE] text-[#3A4A66]" : "bg-[#0F1A30] text-white"}`}>{cfg?.serverFilter ? "끄기" : "켜기"}</button>
+          {step(2, "서버 분리 — 늘 켜짐", true, <>
+            {/* 🔒 2026-11-23 서버 규칙이 스위치와 상관없이 늘 운송사를 나눈다(끌 수 없음) — 사용자 요청: 운송사끼리 어떤 정보도 절대 노출되면 안 된다 */}
+            서버 규칙이 늘 운송사를 나눠요. 다른 운송사의 오더 · 기사 · 거래처 · 직원 · 결재는 서버에서부터 거부돼요. 끌 수 없어요.
           </>)}
           {step(3, "규칙 · 색인 배포", false, <>
             규칙 · 색인은 main 에 올리면 자동으로 배포돼요(GitHub Actions). 따로 할 일은 없어요.
