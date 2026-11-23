@@ -631,4 +631,38 @@ async function world(mode, opts = {}) {
   assert.deepEqual(u.cells.map((x) => [x.a1, x.value]), [["C7", "창동식자재,고양유통,의왕물류"]]);
   console.log("하차 경유지(쉼표로 이어 쓰기) OK");
 }
+
+// 🌾 2026-11-23 만세보령 탭 — 시트 출발지는 항상 "보령"(가져올 때 "보령" = 상차지 "만세보령" · 사용자 신고: 상차지를 보령으로 바꿔도 시트는 만세보령 그대로)
+{
+  const H = ["상차일자", "출발지", "", "도착지", "", "입고시간", "KG", "개수", "소계(중량)", "운송사", "차량번호", "이름", "연락처", "비고", "운송료", "추가비용", "합계", "운송료", "추가비용", "합계", "이익", "마감월"];
+  const r = (from) => ["2026. 11. 20", from, "", "음성", "오뚜기", "당착", "20", "1000", "20,000", "임대", "세종86바3203", "고운환", "010-4469-0000", "", "510,000", "", "510,000", "480,000", "", "480,000", "30,000", "26년11월"];
+  const rows = [["▣ 만세보령 농협쌀 조합"], ["주소 : 충청남도 보령시 남포면 월전로 383"], ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "매출", "", "", "매입"], H, r("보령"), r("만세보령")];
+  const ctx = makePushContext([{ title: "만세보령", rows }], JY, {});
+  const [a, b] = ctx.built.orders.filter((o) => o.__tab === "만세보령");
+  assert.equal(a.상차지명, "만세보령", "시트 보령 → 프로그램 만세보령(가져오기 규칙 그대로)");
+  const docA = forOrderDoc(a, { company: "JY로지스틱스", batchId: "t" });
+  // ① 프로그램에서 상차지를 "보령"으로 → 시트는 이미 보령이라 바꿀 칸 없음 · 프로그램 값 고정(보라색)도 아님
+  const u1 = planUpdate(ctx, docA, { ...docA, 상차지명: "보령" });
+  assert.equal(u1.ok, true); assert.deepEqual(u1.cells, []); assert.deepEqual(u1.unpushed, []);
+  assert.equal(u1.docPatch._programKeys.includes("상차지명"), false);
+  // ② 예전에 "만세보령"으로 써 둔 줄 — 상차지를 보령으로 바꾸면 시트 출발지가 보령으로
+  const docB = forOrderDoc(b, { company: "JY로지스틱스", batchId: "t" });
+  const u2 = planUpdate(ctx, docB, { ...docB, 상차지명: "보령" });
+  assert.equal(u2.ok, true); assert.deepEqual(u2.cells.map((c) => [c.a1, c.value]), [["B6", "보령"]], "출발지 칸이 보령으로");
+  assert.deepEqual(u2.unpushed, []);
+  // ③ 같은 줄에서 다른 칸(기사운임)만 고쳐도 잘못 적힌 출발지를 같이 고친다
+  const ctx3 = makePushContext([{ title: "만세보령", rows }], JY, {});
+  const b3 = forOrderDoc(ctx3.built.orders.filter((o) => o.__tab === "만세보령")[1], { company: "JY로지스틱스", batchId: "t" });
+  const u3 = planUpdate(ctx3, b3, { ...b3, 기사운임: "470000" });
+  assert.equal(u3.ok, true); assert.equal(Object.fromEntries(u3.cells.map((c) => [c.a1, c.value])).B6, "보령");
+  // ④ 프로그램에서 새로 등록(상차지 만세보령이든 보령이든) → 시트 출발지 보령
+  for (const from of ["만세보령", "보령"]) {
+    const ctx4 = makePushContext([{ title: "만세보령", rows: rows.slice(0, 5) }], JY, {});
+    const c = planCreate(ctx4, { 상차일: "2026-11-21", 하차일: "2026-11-21", 거래처명: "만세보령", 상차지명: from, 하차지명: "음성", 청구운임: "510000", 기사운임: "480000" }, "만세보령", { rowCount: 100 });
+    assert.equal(c.ok, true, c.reason);
+    assert.equal(Object.fromEntries(c.cells.map((x) => [x.a1, x.value])).B6, "보령", `새 오더(${from}) → 시트 출발지 보령`);
+  }
+  console.log("만세보령 출발지(시트는 항상 보령) OK");
+}
+
 console.log("sheetPush: 모두 통과");
