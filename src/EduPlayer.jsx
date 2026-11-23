@@ -4,7 +4,10 @@
 //  · 관리자가 "서약서로 대체"를 허락한 기사는 영상 대신 서약서 서명으로 이수할 수 있다(기록에 mode: "pledge")
 //  · 저장은 api(기본: Firestore) — 미리보기 · 테스트는 가짜 api를 넣는다
 import React from "react";
-import { WATCH_RATIO, watchedEnough, eduPeriod, eduRecordId, eduProgressId } from "./safetyEdu";
+import { WATCH_RATIO, watchedEnough, eduPeriod, eduRecordId, eduProgressId, fmtLen, certNo } from "./safetyEdu";
+import { EduIcon, EduTile } from "./eduIcons";
+import { MONO, HERO_BG } from "./OfficeBooks";
+const EN = { fontFamily: MONO, fontVariantNumeric: "tabular-nums" };
 
 const NAVY = "#1B2B4B";
 const INK = "#0B1428";
@@ -60,26 +63,28 @@ const fmt = (s) => { s = Math.max(0, Math.floor(s || 0)); return `${Math.floor(s
 
 function Header({ course, step, onClose }) {
   const steps = course.kind === "video" ? ["영상 보기", "이수 서명"] : ["읽기", "서명"];
-  return (
-    <div className="shrink-0 px-4 pt-3 pb-3 bg-white" style={{ borderBottom: `1px solid ${LINE}` }}>
-      <div className="flex items-center gap-2">
-        <span className="text-[20px] leading-none">{course.emoji}</span>
+  return (<>
+    <div className="shrink-0 text-white" style={{ background: HERO_BG }}>
+      <div className="px-4 pt-3.5 pb-3 flex items-center gap-3">
+        <span className="w-10 h-10 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center shrink-0"><EduIcon name={course.icon} size={20} /></span>
         <div className="flex-1 min-w-0">
-          <div className="text-[16px] font-extrabold truncate" style={{ color: INK }}>{course.title}</div>
-          <div className="text-[12px] font-medium" style={{ color: SUB }}>{course.kind === "video" ? `영상 약 ${course.minutes}분` : `읽기 약 ${course.minutes}분`} · {course.summary}</div>
+          <div className="text-[10.5px] font-extrabold tracking-[0.1em] text-[#8FB0F0]" style={EN}>{course.code} · {course.kind === "video" ? `VIDEO ${fmtLen(course)}` : "E-DOCUMENT"}</div>
+          <div className="text-[16.5px] font-black truncate">{course.title}</div>
         </div>
-        <button type="button" aria-label="닫기" onClick={onClose} className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "#F1F4F8", color: SUB }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+        <button type="button" aria-label="닫기" onClick={onClose} className="w-9 h-9 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center shrink-0">
+          <EduIcon name="close" size={16} stroke={2.4} />
         </button>
       </div>
-      <div className="flex items-center gap-2 mt-3">
+    </div>
+    <div className="shrink-0 px-4 py-2.5 bg-white" style={{ borderBottom: `1px solid ${LINE}` }}>
+      <div className="flex items-center gap-2">
         {steps.map((s, i) => (
           <React.Fragment key={s}>
             {i > 0 && <div className="flex-1 h-px" style={{ background: LINE }} />}
             <div className="flex items-center gap-1.5">
               <span className="w-5 h-5 rounded-full text-[11px] font-black flex items-center justify-center"
                 style={i < step ? { background: NAVY, color: "#fff" } : i === step ? { border: `1.5px solid ${NAVY}`, color: NAVY } : { border: `1.5px solid ${LINE}`, color: "#A9B5C8" }}>
-                {i < step ? "✓" : i + 1}
+                {i < step ? <EduIcon name="check" size={12} stroke={3} /> : i + 1}
               </span>
               <span className="text-[12.5px] font-bold" style={{ color: i <= step ? INK : "#A9B5C8" }}>{s}</span>
             </div>
@@ -87,7 +92,7 @@ function Header({ course, step, onClose }) {
         ))}
       </div>
     </div>
-  );
+  </>);
 }
 
 // 영상 보기 — 앞으로 건너뛰기 막기 + 실제로 본 시간 세기
@@ -154,7 +159,7 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge }) {
         {!playing && (
           <button type="button" onClick={toggle} className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(11,20,40,0.35)" }}>
             <span className="w-16 h-16 rounded-full bg-white/95 flex items-center justify-center shadow-lg">
-              <svg width="26" height="26" viewBox="0 0 24 24" fill={NAVY}><path d="M8 5v14l11-7z" /></svg>
+              <EduIcon name="play" size={26} style={{ color: NAVY, marginLeft: 3 }} />
             </span>
           </button>
         )}
@@ -163,28 +168,31 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge }) {
       {/* 재생 막대 — 누르거나 끌어서 옮길 수 없다 */}
       <div className="mt-3 flex items-center gap-2.5">
         <button type="button" onClick={toggle} className="w-9 h-9 rounded-full flex items-center justify-center text-white shrink-0" style={{ background: NAVY }}>
-          {playing ? <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M6 5h4v14H6zM14 5h4v14h-4z" /></svg> : <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z" /></svg>}
+          <EduIcon name={playing ? "pause" : "play"} size={15} />
         </button>
-        <button type="button" onClick={back10} className="h-9 px-2.5 rounded-lg bg-white text-[12.5px] font-bold shrink-0" style={{ border: `1px solid ${LINE}`, color: SUB }}>↺ 10초</button>
+        <button type="button" onClick={back10} className="h-9 px-2.5 rounded-lg bg-white text-[12.5px] font-bold shrink-0 inline-flex items-center gap-1" style={{ border: `1px solid ${LINE}`, color: SUB }}><EduIcon name="replay" size={14} />10초</button>
         <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "#DDE3EC" }}>
           <div className="h-full rounded-full" style={{ width: `${playedPct}%`, background: NAVY }} />
         </div>
-        <span className="text-[12px] font-bold tabular-nums shrink-0" style={{ color: SUB }}>{fmt(t)} / {fmt(dur)}</span>
+        <span className="text-[12px] font-bold tabular-nums shrink-0" style={{ ...EN, color: SUB }}>{fmt(t)} / {fmt(dur)}</span>
       </div>
 
       <div className="mt-4 rounded-2xl bg-white p-4" style={{ border: `1px solid ${LINE}` }}>
         <div className="flex items-center justify-between">
-          <span className="text-[13.5px] font-extrabold" style={{ color: INK }}>시청 진행</span>
-          <span className="text-[13.5px] font-extrabold tabular-nums" style={{ color: done ? NAVY : SUB }}>{Math.floor(pct)}%</span>
+          <span className="text-[13.5px] font-extrabold inline-flex items-center gap-1.5" style={{ color: INK }}><EduIcon name="eye" size={15} style={{ color: NAVY }} />시청 진행</span>
+          <span className="text-[14px] font-black tabular-nums" style={{ ...EN, color: done ? NAVY : SUB }}>{Math.floor(pct)}%</span>
         </div>
         <div className="mt-2 h-2 rounded-full overflow-hidden" style={{ background: "#EEF1F6" }}>
           <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: NAVY }} />
         </div>
-        <ul className="mt-3 space-y-1 text-[12.5px] font-medium" style={{ color: SUB }}>
-          <li>· 끝까지 봐야 이수 서명을 할 수 있어요.</li>
-          <li>· 처음 보는 부분은 건너뛸 수 없어요. 본 부분은 다시 볼 수 있어요.</li>
-          <li>· 중간에 나가도 다음에 보던 곳부터 이어서 봐요.</li>
-        </ul>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          {[["lock", "건너뛰기 불가"], ["replay", "다시 보기 가능"], ["clock", "이어서 보기"]].map(([ic, l]) => (
+            <div key={l} className="rounded-xl px-2 py-2.5 flex flex-col items-center gap-1 text-center" style={{ background: "#F6F8FB" }}>
+              <EduIcon name={ic} size={16} style={{ color: NAVY }} />
+              <span className="text-[11.5px] font-bold leading-tight" style={{ color: SUB }}>{l}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       <button type="button" disabled={!done} onClick={onNext}
@@ -248,7 +256,7 @@ function SignStep({ course, user, mode, pledgeCourse, busy, onSubmit }) {
     <div className="flex-1 overflow-y-auto px-4 py-4" style={{ background: "#F6F8FB" }}>
       {mode === "pledge" && (
         <div className="mb-3 rounded-xl px-3.5 py-2.5 text-[12.5px] font-bold" style={{ background: "#EEF1F6", color: NAVY }}>
-          📝 관리자 설정으로 영상 대신 서약서 서명으로 이수해요
+          <span className="inline-flex items-center gap-1.5"><EduIcon name="pledge" size={14} />관리자 설정으로 영상 대신 서약서 서명으로 이수해요</span>
         </div>
       )}
       <div className="rounded-2xl bg-white p-4" style={{ border: `1px solid ${LINE}` }}>
@@ -276,7 +284,7 @@ function SignStep({ course, user, mode, pledgeCourse, busy, onSubmit }) {
   );
 }
 
-function DoneStep({ course, mode, onClose }) {
+function DoneStep({ course, mode, rec, onClose }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 text-center" style={{ background: "#F6F8FB" }}>
       <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: NAVY }}>
@@ -286,6 +294,11 @@ function DoneStep({ course, mode, onClose }) {
       <div className="mt-1.5 text-[13.5px] font-medium leading-relaxed" style={{ color: SUB }}>
         {course.title}{mode === "pledge" ? " (서약서로 이수)" : ""}<br />이수 기록이 회사에 전달됐어요.
       </div>
+      {rec && (
+        <div className="mt-4 inline-flex items-center gap-2 h-9 px-3.5 rounded-xl bg-white text-[12.5px] font-bold" style={{ border: `1px solid ${LINE}`, color: SUB }}>
+          <EduIcon name="cert" size={15} style={{ color: NAVY }} />이수증 번호 <b style={{ ...EN, color: INK }}>{certNo(rec)}</b>
+        </div>
+      )}
       <button type="button" onClick={onClose} className="mt-6 w-full max-w-[320px] h-12 rounded-2xl text-[15px] font-extrabold text-white" style={{ background: NAVY }}>확인</button>
     </div>
   );
@@ -297,6 +310,7 @@ export default function EduPlayer({ course, user, mayPledge = false, pledgeCours
   const [mode, setMode] = React.useState(course.kind === "doc" ? "doc" : "video");
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
+  const [doneRec, setDoneRec] = React.useState(null);
   const submit = async (sig) => {
     setBusy(true); setErr("");
     try {
@@ -308,7 +322,7 @@ export default function EduPlayer({ course, user, mayPledge = false, pledgeCours
         device: typeof navigator !== "undefined" ? String(navigator.userAgent || "").slice(0, 160) : "",
       };
       await api.saveRecord(id, rec);
-      setStep("done"); onDone?.(rec);
+      setDoneRec(rec); setStep("done"); onDone?.(rec);
     } catch (e) { setErr("저장하지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요."); console.warn(e); }
     setBusy(false);
   };
@@ -320,7 +334,7 @@ export default function EduPlayer({ course, user, mayPledge = false, pledgeCours
         {step === "main" && course.kind === "video" && <VideoStep course={course} user={user} api={api} mayPledge={mayPledge} onNext={() => { setMode("video"); setStep("sign"); }} onPledge={() => { setMode("pledge"); setStep("sign"); }} />}
         {step === "main" && course.kind === "doc" && <DocStep course={course} onNext={() => setStep("sign")} />}
         {step === "sign" && <SignStep course={course} user={user} mode={mode} pledgeCourse={pledgeCourse} busy={busy} onSubmit={submit} />}
-        {step === "done" && <DoneStep course={course} mode={mode} onClose={onClose} />}
+        {step === "done" && <DoneStep course={course} mode={mode} rec={doneRec} onClose={onClose} />}
         {err && <div className="shrink-0 px-4 py-2 text-[13px] font-bold text-center" style={{ background: "#FDF1F1", color: "#B42318" }}>{err}</div>}
       </div>
     </div>

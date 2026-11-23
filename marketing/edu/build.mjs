@@ -60,7 +60,7 @@ const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8">
 *{box-sizing:border-box;margin:0;padding:0}
 body{width:1280px;height:720px;overflow:hidden;position:relative;background:#F6F8FB;font-family:"Noto Sans KR",sans-serif;color:#0B1428;letter-spacing:-0.02em;word-break:keep-all}
 .top{position:absolute;left:0;right:0;top:0;height:64px;display:flex;align-items:center;gap:14px;padding:0 44px;background:#fff;border-bottom:1px solid #E3E8F0}
-.chip{height:32px;padding:0 14px;border-radius:999px;background:#1B2B4B;color:#fff;font-weight:900;font-size:15px;display:flex;align-items:center;gap:6px}
+.chip{height:32px;padding:0 14px;border-radius:10px;background:linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%);color:#fff;font-weight:900;font-size:13px;letter-spacing:.1em;display:flex;align-items:center;gap:8px}
 .ttl{font-weight:900;font-size:19px}
 .pg{margin-left:auto;font-weight:700;font-size:15px;color:#6B7A93}
 .bar{position:absolute;left:0;top:64px;height:4px;background:#1B2B4B}
@@ -73,7 +73,7 @@ body{width:1280px;height:720px;overflow:hidden;position:relative;background:#F6F
 .cover{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
 #cap{position:absolute;left:0;right:0;margin:0 auto;width:fit-content;bottom:26px;max-width:1180px;padding:12px 28px;border-radius:14px;background:rgba(11,20,40,.88);color:#fff;font-size:31px;font-weight:700;line-height:1.4;text-align:center}
 </style></head><body>
-<div class="top"><span class="chip">🦺 안전교육</span><span class="ttl">${esc(C.title)}</span><span class="pg" id="pg"></span></div>
+<div class="top"><span class="chip"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>SAFETY TRAINING</span><span class="ttl">${esc(C.title)}</span><span class="pg" id="pg"></span></div>
 ${slides.map((s, i) => `<section class="slide" data-in="${s.t0.toFixed(2)}" data-out="${(s.t1 - 0.05).toFixed(2)}" data-a="fade" data-d="0.35">
   ${i === 0 ? `<div class="art" style="left:390px;width:500px;height:350px;top:130px" data-in="${(s.t0 + 0.1).toFixed(2)}" data-a="up" data-dist="30">${ARTS[s.art]()}</div>
   <div style="position:absolute;left:0;right:0;top:38px;text-align:center;font-size:44px;font-weight:900" data-in="${s.t0.toFixed(2)}" data-a="up" data-dist="20">${esc(s.head)}</div>`

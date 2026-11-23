@@ -11,7 +11,8 @@ export const EDU_COURSES = [
     id: "drv_load",
     audience: "driver",
     kind: "video",
-    emoji: "📦",
+    icon: "cargo",
+    code: "EDU-D01",
     title: "화물 적재 · 결박 안전",
     summary: "짐이 쏟아지지 않게 싣고 묶는 법",
     minutes: 4,
@@ -23,7 +24,8 @@ export const EDU_COURSES = [
     id: "drv_dock",
     audience: "driver",
     kind: "video",
-    emoji: "🚧",
+    icon: "dock",
+    code: "EDU-D02",
     title: "상 · 하차장 안전",
     summary: "지게차 주변 · 후진 · 끼임 사고 막기",
     minutes: 3,
@@ -35,7 +37,8 @@ export const EDU_COURSES = [
     id: "drv_pledge",
     audience: "driver",
     kind: "doc",
-    emoji: "✍️",
+    icon: "pledge",
+    code: "EDU-D03",
     title: "안전수칙 준수 서약서",
     summary: "운행 · 작업 안전수칙을 지키겠다는 약속",
     minutes: 2,
@@ -52,7 +55,8 @@ export const EDU_COURSES = [
     id: "staff_office",
     audience: "staff",
     kind: "doc",
-    emoji: "🏢",
+    icon: "office",
+    code: "EDU-S01",
     title: "사무실 안전 · 화재 대피 수칙 확인서",
     summary: "사무실 안전과 불났을 때 대피하는 법",
     minutes: 2,
@@ -94,4 +98,22 @@ export function eduStatusOf(record) {
   if (!record) return { key: "todo", label: "미이수" };
   if (record.mode === "pledge") return { key: "pledge", label: "서약서로 이수" };
   return { key: "done", label: "이수" };
+}
+
+// 영상 길이(초) — 목록에 "3:22"처럼 보인다(marketing/edu/build.mjs 로 만든 실제 길이)
+export const VIDEO_SEC = { drv_load: 202, drv_dock: 157 };
+export const fmtLen = (c) => (c.kind === "video" && VIDEO_SEC[c.id] ? `${Math.floor(VIDEO_SEC[c.id] / 60)}:${String(VIDEO_SEC[c.id] % 60).padStart(2, "0")}` : `${c.minutes}분`);
+
+// 🔏 디지털 이수증 — 이수 기록 문서 이름으로 이수증 번호, 기록 내용으로 확인 코드를 만든다(같은 기록이면 언제 봐도 같은 값)
+function fnv(str) { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h >>> 0; }
+export function certNo(rec) {
+  const c = courseById(rec?.courseId);
+  const id = eduRecordId(rec?.companyName, rec?.uid, rec?.courseId, rec?.period);
+  return `${c?.code || "EDU"}-${rec?.period === "once" ? "0000" : rec?.period}-${fnv(id).toString(36).toUpperCase().padStart(7, "0").slice(-7)}`;
+}
+export function verifyCode(rec) {
+  const ms = rec?.signedAt?.seconds || (rec?.signedAt?.toMillis ? Math.floor(rec.signedAt.toMillis() / 1000) : 0);
+  const raw = [rec?.companyName, rec?.uid, rec?.courseId, rec?.period, rec?.mode, ms, String(rec?.signImage || "").length].join("|");
+  const a = fnv(raw).toString(16).toUpperCase().padStart(8, "0"), b = fnv(raw + "#").toString(16).toUpperCase().padStart(8, "0");
+  return `${a.slice(0, 4)}-${a.slice(4)}-${b.slice(0, 4)}`;
 }
