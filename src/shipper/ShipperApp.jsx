@@ -90,7 +90,7 @@ const [form, setForm] = useState({
 // ================= 실시간 현황판: 오늘 운송사가 배차완료/수정한 이벤트만 수집 =================
 useEffect(() => {
   if (!companyName) return;
-  const q = query(collection(db, "orders"), where("shipperCompany", "==", companyName), where("companyName", "==", userData?.linkedTransportCompany?.companyName || "(연동없음)"));
+  const q = query(collection(db, "shipperOrders"), where("shipperCompany", "==", companyName), where("companyName", "==", userData?.linkedTransportCompany?.companyName || "(연동없음)"));
   const unsub = onSnapshot(q, (snap) => {
     const evts = [];
     snap.docs.forEach((d) => {
@@ -161,7 +161,7 @@ const gCancelReqFirstLoadRef = useRef(true);
 
 useEffect(() => {
   if (!companyName) return;
-  const q = query(collection(db, "orders"), where("shipperCompany", "==", companyName), where("companyName", "==", userData?.linkedTransportCompany?.companyName || "(연동없음)"));
+  const q = query(collection(db, "shipperOrders"), where("shipperCompany", "==", companyName), where("companyName", "==", userData?.linkedTransportCompany?.companyName || "(연동없음)"));
   const unsub = onSnapshot(q, (snap) => {
     const docs = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))

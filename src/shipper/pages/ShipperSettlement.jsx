@@ -109,9 +109,9 @@ export default function ShipperSettlement() {
     const isSubMaster = userData?.permissions?.subMaster === true;
     let q;
     if (isMaster || isSubMaster) {
-      q = query(collection(db, "orders"), where("shipperCompany", "==", userData.companyName), where("companyName", "==", userData?.linkedTransportCompany?.companyName || "(연동없음)"));
+      q = query(collection(db, "shipperOrders"), where("shipperCompany", "==", userData.companyName), where("companyName", "==", userData?.linkedTransportCompany?.companyName || "(연동없음)"));
     } else {
-      q = query(collection(db, "orders"), where("shipperUid", "==", user.uid));
+      q = query(collection(db, "shipperOrders"), where("shipperUid", "==", user.uid));
     }
     const unsub = onSnapshot(q, (snap) => {
       setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));

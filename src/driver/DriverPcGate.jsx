@@ -7,8 +7,8 @@ import { isDesktopBrowser } from "./driverAppContext";
 import { LogisMark } from "../brand";
 
 export default function DriverPcGate({ children }) {
-  const bypass = (() => { try { return new URLSearchParams(window.location.search).get("pc") === "1"; } catch { return false; } })();
-  if (!isDesktopBrowser() || bypass) return children;
+  // 🔒 2026-11-23 기사는 휴대폰(기사앱)에서만 — 주소에 ?pc=1 을 붙여 PC에서 열던 길도 닫았다(관리자는 [관리자로 기사 화면 보기])
+  if (!isDesktopBrowser()) return children;
   return (
     <div className="min-h-screen flex items-center justify-center p-5 text-white" data-kp="driver-pc-gate"
       style={{ background: "radial-gradient(900px 420px at 80% -10%, rgba(110,149,232,.28), transparent 60%), linear-gradient(135deg,#060C1A 0%,#0F1A30 50%,#1B2B4B 100%)", fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕',sans-serif" }}>

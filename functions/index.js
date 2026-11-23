@@ -4079,6 +4079,46 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
 
 // 🏢 가입 화면 "기존 회사" 검색 — 로그인 전에는 규칙상 transportApplications 를 읽을 수 없어
 //  항상 "등록된 운송사가 없습니다"가 떴다. 승인된 운송사의 회사명·주소만 내려준다(다른 정보 없음).
+// 🔒 2026-11-23 역할별 오더 사본(기사 · 화주) — 설명은 functions/roleMirror.js 맨 위
+const _roleMirror = require("./roleMirror");
+const _roleMirrorTrigger = (COL) => functions.runWith({ timeoutSeconds: 60, memory: "256MB" }).firestore.document(`${COL}/{orderId}`)
+  .onWrite(async (change, context) => {
+    try {
+      await _roleMirror.syncOne(db, FieldValue, COL, context.params.orderId,
+        change.before.exists ? change.before.data() : null, change.after.exists ? change.after.data() : null);
+    } catch (e) { console.error("[역할 사본] 실패:", COL, context.params.orderId, e?.message || e); throw e; }
+  });
+exports.roleMirrorOrders = _roleMirrorTrigger("orders");
+exports.roleMirrorDispatch = _roleMirrorTrigger("dispatch");
+// 기존 오더 사본 채우기 — 배포 뒤 10분마다 최근 오더부터 차례로(끝나면 멈춘다 · 진행은 systemConfig/roleMirror)
+exports.roleMirrorBackfill = functions.runWith({ timeoutSeconds: 540, memory: "512MB" }).pubsub.schedule("every 10 minutes").timeZone("Asia/Seoul").onRun(async () => {
+  const ref = db.collection("systemConfig").doc("roleMirror");
+  const st = (await ref.get()).data() || {};
+  if (st.done === true && st.ver === 1) return null;
+  const deadline = Date.now() + 480e3;
+  let col = st.col || "orders"; let lastDay = st.lastDay ?? null; let lastId = st.lastId ?? null; let n = 0;
+  while (Date.now() < deadline) {
+    let q = db.collection(col).orderBy("상차일", "desc").orderBy("__name__", "desc").limit(200);
+    if (lastDay !== null && lastId) q = q.startAfter(lastDay, db.collection(col).doc(lastId));
+    const snap = await q.get();
+    if (snap.empty) {
+      if (col === "orders") { col = "dispatch"; lastDay = null; lastId = null; continue; }
+      await ref.set({ done: true, ver: 1, finishedAt: FieldValue.serverTimestamp() }, { merge: true });
+      console.log(`[역할 사본] 채우기 끝 (+${n})`);
+      return null;
+    }
+    for (const d of snap.docs) {
+      await _roleMirror.syncOne(db, FieldValue, col, d.id, null, d.data() || {}, { force: true }).catch((e) => console.warn("[역할 사본] 채우기 실패:", col, d.id, e?.message || e));
+      n += 1;
+    }
+    const last = snap.docs[snap.docs.length - 1];
+    lastDay = String(last.data()?.상차일 ?? ""); lastId = last.id;
+    await ref.set({ col, lastDay, lastId, ver: 1, done: false, count: FieldValue.increment(snap.size), at: FieldValue.serverTimestamp() }, { merge: true });
+  }
+  console.log(`[역할 사본] 채우는 중 — 이번 ${n}건(다음 실행에서 이어서)`);
+  return null;
+});
+
 // 🔒 2026-11-23 화주 메신저 — 연동 운송사 직원 대화 상대 목록(공유해도 되는 칸만: 이름 · 직급 · 팀 · 사진)
 //  예전엔 화주 화면이 연동 운송사 직원 문서(users)를 통째로 받아 휴대폰 · 이메일 · 인사 기록 · 퇴사 사유까지 브라우저에 왔다.
 //  이제 보안 규칙은 화주가 운송사 직원 문서를 못 읽게 막고, 이 함수가 필요한 칸만 돌려준다(승인 · 재직 중인 사무 직원만 — 기사 제외).
@@ -4130,12 +4170,20 @@ exports.linkedCompanyInfo = functions.https.onRequest(async (req, res) => {
     const snap = await db.collection("transportApplications").where("companyName", "==", co).get();
     const all = snap.docs.map((d) => d.data() || {});
     const a = all.find((x) => x.type === "신규" && x.status === "approved") || all.find((x) => x.status === "approved") || null;
-    if (!a) { res.status(200).json({ info: { companyName: co } }); return; }
-    const info = {
+    const info = !a ? { companyName: co } : {
       companyName: co, representative: a.representative || a.name || "", businessNumber: a.businessNumber || "",
       address: a.address || "", phone: a.phone || a.tel || a.연락처 || "",
       ...(shipper ? { email: a.email || "", companyCode: a.companyCode || "" } : {}),
     };
+    // 기사 — 내 차량 보험사(교통사고 접수 버튼용). 차량 장부(비용 등)는 기사가 직접 읽지 않는다
+    if (!shipper) {
+      const plateKey = String(me.carNo || me.차량번호 || "").replace(/[^0-9가-힣A-Za-z]/g, "");
+      if (plateKey) {
+        let v = (await db.collection("vehicleLedger").doc(`${co.replace(/\//g, "_")}__${plateKey}`).get().catch(() => null))?.data() || null;
+        if (!v) v = (await db.collection("vehicleLedger").where("companyName", "==", co).where("plateKey", "==", plateKey).limit(1).get().catch(() => null))?.docs?.[0]?.data() || null;
+        if (v) info.insurer = { 보험사: String(v.보험사 || ""), 보험사전화: String(v.보험사전화 || "") };
+      }
+    }
     res.set("Cache-Control", "no-store");
     res.status(200).json({ info });
   } catch (e) { console.error("linkedCompanyInfo 실패:", e); res.status(500).json({ error: "FAILED" }); }

@@ -347,7 +347,7 @@ export default function ShipperOrder({ editData, onClose }) {
 
   useEffect(() => {
     if (!editId) return;
-    getDoc(doc(db, "orders", editId)).then(snap => {
+    getDoc(doc(db, "shipperOrders", `orders__${editId}`)).then(snap => { // 🔒 2026-11-23 화주용 사본(청구운임만) — 원본은 운송사만 읽는다
       if (snap.exists()) {
         const data = snap.data();
         const { num, unit } = parseTonnage(data.차량톤수 || "");
@@ -514,8 +514,10 @@ export default function ShipperOrder({ editData, onClose }) {
     await upsertPlace({ name: form.하차지명, address: form.하차지주소, 담당자명: form.하차담당자명, 담당자번호: form.하차담당자번호, 메모: form.하차메모 }, "하차");
 
     const 차량톤수Combined = form.차량톤수단위 === "없음" ? "" : form.차량톤수 ? `${form.차량톤수}${form.차량톤수단위}` : "";
+    // 🔒 2026-11-23 화주용 사본에서 불러온 칸(사본 번호 · 원본 위치 · 소속)은 원본에 다시 쓰지 않는다
+    const { id: _sid, _id: _sid2, orderId: _soid, col: _scol, mirroredAt: _smat, shipperUid: _suid, companyName: _sco, ...formOnly } = form; // eslint-disable-line no-unused-vars
     const saveForm = {
-      ...form,
+      ...formOnly,
       차량톤수: 차량톤수Combined,
       화물내용: buildCargoSummary(cargoRows),
       화물목록: cargoRows,
@@ -582,7 +584,7 @@ export default function ShipperOrder({ editData, onClose }) {
       // 오더등록자(shipperUid) 기준으로 찾으면 다른 담당자가 등록한 오더나 전송받은 오더가
       // 전부 빠져 검색결과가 비어있던 문제 — 화주사(회사) 전체 오더를 대상으로 검색한다.
       const q = query(
-        collection(db, "orders"),
+        collection(db, "shipperOrders"),
         where("shipperCompany", "==", company),
         where("companyName", "==", linkedCo || "(연동없음)"),
         limit(200)
@@ -631,7 +633,7 @@ export default function ShipperOrder({ editData, onClose }) {
     if (onClose || !company) return;
     let alive = true;
     setHistoryLoading(true);
-    getDocs(query(collection(db, "orders"), where("shipperCompany", "==", company), where("companyName", "==", linkedCo || "(연동없음)"), limit(200)))
+    getDocs(query(collection(db, "shipperOrders"), where("shipperCompany", "==", company), where("companyName", "==", linkedCo || "(연동없음)"), limit(200)))
       .then((snap) => {
         if (!alive) return;
         setHistory(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((o) => o.지급방식 !== "손실")

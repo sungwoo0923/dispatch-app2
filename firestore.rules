@@ -175,11 +175,13 @@ service cloud.firestore {
     }
     // 같은 운송사 직원·기사
     function coMatch(d) {
-      return isTotalMasterUser() || (isApproved() && (!locked() || (!isShipperUser() && d.companyName == myCo())));
+      // 🔒 2026-11-23 기사는 회사 데이터를 못 본다(기사앱에 필요한 것은 따로 정한 규칙 — 기사용 오더 사본 · 내 기록 · 기사 공지 등)
+      //  (규칙 계산 한도 1000 — 역할은 한 번만 보고, 화주 · 기사를 뺀 뒤라 회사 이름은 myCoAny 로 바로 비교)
+      return isTotalMasterUser() || (isApproved() && !(myRoleRaw() in ['shipper', 'driver']) && d.companyName == myCoAny());
     }
     // 새 문서는 반드시 우리 회사 이름으로
     function coCreate() {
-      return isTotalMasterUser() || (isApproved() && (!locked() || (!isShipperUser() && request.resource.data.get('companyName', '') == myCo())));
+      return isTotalMasterUser() || (isApproved() && !(myRoleRaw() in ['shipper', 'driver']) && request.resource.data.get('companyName', '') == myCoAny());
     }
     // 수정해도 회사는 못 바꾼다
     function coKeep() {
@@ -190,6 +192,16 @@ service cloud.firestore {
       // 🔒 2026-11-23 같은 이름의 다른 화주사(다른 운송사에 연동)가 이 오더를 보지 못하게 — 연동 운송사 오더만(본인이 올린 오더는 그대로)
       return isApproved() && isShipperUser() && (d.get('shipperUid', '') == request.auth.uid
         || (d.get('shipperCompany', '') == myCoAny() && myLinkedCo() != '' && d.get('companyName', '') == myLinkedCo()));
+    }
+    // 🔒 2026-11-23 기사용 오더 사본(driverOrders/{컬렉션}__{id})에 적힌 기사 = 나
+    function driverAssignedKey(key) {
+      let p = /databases/$(database)/documents/driverOrders/$(key);
+      return isApproved() && myRole() == 'driver' && exists(p) && get(p).data.get('driverUid', '') == request.auth.uid;
+    }
+    function driverAssigned(path) {
+      let key = path[3] + '__' + path[4];
+      let p = /databases/$(database)/documents/driverOrders/$(key);
+      return isApproved() && myRole() == 'driver' && exists(p) && get(p).data.get('driverUid', '') == request.auth.uid;
     }
     function shipperCreate() {
       return isApproved() && isShipperUser() && request.resource.data.get('shipperUid', '') == request.auth.uid;
@@ -206,23 +218,41 @@ service cloud.firestore {
     //   "오더 id만 알면 누구나"로 열어 두었다. 이제 업로드 페이지는 서버 함수(uploadAccess)가 링크 토큰을 확인한 뒤 대신 읽고 쓴다.
     //   목록의 "!locked()(잠금 전 누구나 — 로그인 안 한 사람 포함)"도 뺐다(잠금 전에도 승인된 계정만 — coMatch가 잠금 전엔 승인된 누구나).
     //   기사 통합 업로드 검색은 서버 함수(driverSearch).
+    // 🔒 2026-11-23 역할별 오더 사본(서버만 쓴다) — 기사: 나에게 배정된 것만 · 화주: 내 화주사 + 연동 운송사 것(또는 내가 올린 것)만
+    match /driverOrders/{id} {
+      allow read: if isTotalMasterUser() || (isApproved() && myRole() == 'driver' && resource.data.get('driverUid', '') == request.auth.uid);
+      allow write: if false;
+    }
+    match /shipperOrders/{id} {
+      allow read: if isTotalMasterUser() || (isApproved() && isShipperUser() && (resource.data.get('shipperUid', '') == request.auth.uid
+        || (resource.data.get('shipperCompany', '') == myCoAny() && myLinkedCo() != '' && resource.data.get('companyName', '') == myLinkedCo())));
+      allow write: if false;
+    }
     match /orders/{id} {
-      allow get, list: if coMatch(resource.data) || shipperOwns(resource.data);
+      // 🔒 2026-11-23 원본 오더는 운송사 직원만 읽는다 — 기사는 driverOrders(기사운임만), 화주는 shipperOrders(청구운임만) 사본을 읽는다(functions/roleMirror.js)
+      allow get, list: if coMatch(resource.data);
       // 🛠 2026-11-16 없는 문서는 승인된 계정이면 "없음"만 알 수 있게(화면이 orders · dispatch 중 어디 있는지 찾을 때 — 예전엔 직원 계정에서 거부돼 예전 오더 저장 · 삭제가 실패)
       allow get: if resource == null && isApproved();
       allow create: if coCreate() || shipperCreate();
-      allow update: if (coMatch(resource.data) && coKeep()) || (shipperOwns(resource.data) && request.resource.data.get('companyName', '') == resource.data.get('companyName', '')
-        && request.resource.data.get('shipperUid', '') == resource.data.get('shipperUid', ''));
-      allow delete: if coMatch(resource.data) || shipperOwns(resource.data) || (resource == null && isApproved());
+      allow update: if (coMatch(resource.data) && coKeep())
+        // 화주 — 내 오더의 수정 · 취소 요청 칸만(운송사 · 기사 운임 · 배정 칸은 못 바꾼다)
+        || (shipperOwns(resource.data) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['기사운임', '수수료', '기사확인상태', '기사타임라인', '기사확인값', '배차확정자', '배차확정자Uid', 'companyName', 'shipperUid', 'createdByUid', '차량번호', '이름', '전화번호', '청구사업자']))
+        // 기사 — 나에게 배정된 오더의 수락 · 거절 · 진행 · 완료 칸만
+        || (driverAssigned(request.path) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['기사확인상태', '기사확인일시', '기사확인값', '기사거절사유', '기사완료일시', '기사타임라인', '배차상태', '배차확정일시', '배차확정자', '상차완료일시', '상차지도착주소', '상태', '수정재승인', '수정확인일시', '수정확인항목', '수정거절', '수정거절항목', '업체전달상태', '완료회차', '회차완료일시', 'attachCount', '이름', '전화번호', '차량번호', 'updatedAt', '_lastModified']));
+      allow delete: if coMatch(resource.data) || (resource == null && isApproved() && myRole() != 'driver');
     }
     match /dispatch/{id} {
-      allow get, list: if coMatch(resource.data) || shipperOwns(resource.data);
+      // 🔒 2026-11-23 원본 오더는 운송사 직원만 읽는다 — 기사는 driverOrders(기사운임만), 화주는 shipperOrders(청구운임만) 사본을 읽는다(functions/roleMirror.js)
+      allow get, list: if coMatch(resource.data);
       // 🛠 2026-11-16 없는 문서는 승인된 계정이면 "없음"만 알 수 있게(화면이 orders · dispatch 중 어디 있는지 찾을 때 — 예전엔 직원 계정에서 거부돼 예전 오더 저장 · 삭제가 실패)
       allow get: if resource == null && isApproved();
       allow create: if coCreate() || shipperCreate();
-      allow update: if (coMatch(resource.data) && coKeep()) || (shipperOwns(resource.data) && request.resource.data.get('companyName', '') == resource.data.get('companyName', '')
-        && request.resource.data.get('shipperUid', '') == resource.data.get('shipperUid', ''));
-      allow delete: if coMatch(resource.data) || shipperOwns(resource.data) || (resource == null && isApproved());
+      allow update: if (coMatch(resource.data) && coKeep())
+        // 화주 — 내 오더의 수정 · 취소 요청 칸만(운송사 · 기사 운임 · 배정 칸은 못 바꾼다)
+        || (shipperOwns(resource.data) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['기사운임', '수수료', '기사확인상태', '기사타임라인', '기사확인값', '배차확정자', '배차확정자Uid', 'companyName', 'shipperUid', 'createdByUid', '차량번호', '이름', '전화번호', '청구사업자']))
+        // 기사 — 나에게 배정된 오더의 수락 · 거절 · 진행 · 완료 칸만
+        || (driverAssigned(request.path) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['기사확인상태', '기사확인일시', '기사확인값', '기사거절사유', '기사완료일시', '기사타임라인', '배차상태', '배차확정일시', '배차확정자', '상차완료일시', '상차지도착주소', '상태', '수정재승인', '수정확인일시', '수정확인항목', '수정거절', '수정거절항목', '업체전달상태', '완료회차', '회차완료일시', 'attachCount', '이름', '전화번호', '차량번호', 'updatedAt', '_lastModified']));
+      allow delete: if coMatch(resource.data) || (resource == null && isApproved() && myRole() != 'driver');
     }
     match /dispatch_test/{id} {
       allow read, delete: if coMatch(resource.data);
@@ -359,7 +389,7 @@ service cloud.firestore {
     //  그 회사 승인 직원은 읽기만(켜진 회사에만 메뉴가 보이게)
     // ⭐ 2026-11-03 회사 설정(공지 작성 권한 등) — 같은 회사는 읽고, 그 회사 마스터·최고관리자만 바꾼다
     match /companySettings/{co} {
-      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co && myRole() != 'driver'); // 🔒 2026-11-23 기사 제외(출근지는 fleet_settings 복사본)
       // 🗓 2026-11-23 회사 근무 요일(workWeekdays: [0~6] — 0 일 · 6 토) — 관리자 · 인사 담당이 출근기록부 › 근무 요일에서 정한다(이 칸만)
       //  🛠 맨 앞에 두고 싼 조건(바꾸는 칸)부터 본다 — 뒤에 있으면 앞 규칙 계산이 한도(1000)를 다 써서 인사 담당 저장이 거부됐다
       allow create: if request.resource.data.keys().hasOnly(['companyName', 'workWeekdays'])
@@ -479,7 +509,10 @@ service cloud.firestore {
           'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk', 'vehicleCardTx', 'vehicleCareSettings', 'vehicleCostReports', 'salesLeads', 'salesActivities']
         // ⭐ 2026-11-02 점검 — 없는 문서를 getDoc하면 resource가 null이라 coMatch(resource.data)가 오류 → 거부되던 문제
         //  (ledgerAuto.js 자동 장부의 "새 줄인지" 확인). 없는 문서는 승인된 계정이면 "없음"만 알 수 있게 허용
-        && ((resource == null && isApproved()) || coMatch(resource.data)) && !driverOfficeBlocked(tcol);
+        && (((resource == null && isApproved()) || coMatch(resource.data)) && !driverOfficeBlocked(tcol)
+          // 🔒 2026-11-23 기사 — 회사 차종 목록 · 내 완료 보관 기록만
+          || (isApproved() && myRole() == 'driver' && resource != null && ((tcol == 'vehicleTypes' && resource.data.get('companyName', '') == myCo())
+            || (tcol == 'driver_completed_archive' && resource.data.get('driverId', '') == request.auth.uid))));
       allow create: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
           'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk', 'vehicleCardTx', 'vehicleCareSettings', 'vehicleCostReports', 'salesLeads', 'salesActivities']
         && coCreate() && !driverOfficeBlocked(tcol);
@@ -560,7 +593,8 @@ service cloud.firestore {
     function attParentOk(col, orderId) {
       let p = /databases/$(database)/documents/$(col)/$(orderId);
       return isTotalMasterUser() || (isApproved() && (!locked()
-        || (exists(p) && ((!isShipperUser() && get(p).data.get('companyName', '') == myCo()) || shipperOwns(get(p).data)))));
+        || (exists(p) && ((!(myRoleRaw() in ['shipper', 'driver']) && get(p).data.get('companyName', '') == myCoAny()) || shipperOwns(get(p).data)))))
+        || (col in ['orders', 'dispatch'] && driverAssignedKey(col + '__' + orderId)); // 🔒 2026-11-23 기사는 나에게 배정된 오더의 첨부만
     }
     function attLegacyParentGet(col, orderId) {
       let p = /databases/$(database)/documents/$(col)/$(orderId);
@@ -1484,7 +1518,7 @@ service cloud.firestore {
     // 이 사람(d)의 users 문서를 볼 수 있는가
     function userVisible(d) {
       return isTotalMasterUser() || (isApproved() && (
-        (!isShipperUser() && ((d.get('role', '') != 'shipper' && d.get('companyName', '(회사없음)') == myCo()) || linkedCoOf(d) == myCo())) ||
+        (!(myRoleRaw() in ['shipper', 'driver']) && ((d.get('role', '') != 'shipper' && d.get('companyName', '(회사없음)') == myCoAny()) || linkedCoOf(d) == myCoAny())) ||
         // 🔒 2026-11-23 화주는 같은 화주사 화주 계정만 — 연동 운송사 직원 문서(휴대폰 · 인사 기록 등)는 못 읽는다(메신저는 서버 linkedStaffList 가 이름 · 직급만 준다)
         (isShipperUser() && d.get('role', '') == 'shipper' && d.get('companyName', '') == myCoAny())));
     }
@@ -2393,7 +2427,11 @@ service cloud.firestore {
     }
     function looseRead(d) {
       return isTotalMasterUser() || looseOwner(d)
-        || (isApproved() && (!locked() || (!isShipperUser() && d.get('companyName', '') == myCo())));
+        || (isApproved() && !(myRoleRaw() in ['shipper', 'driver']) && d.get('companyName', '') == myCoAny()); // 🔒 2026-11-23 기사는 내 기록만
+    }
+    // 기사가 보는 회사 설정(출근지 · 휴일)
+    function looseDriverCo(c, d) {
+      return c in ['fleet_settings', 'holidays'] && isApproved() && myRole() == 'driver' && d.get('companyName', '') == myCo();
     }
     function looseLegacyGet(d) {
       return isTotalMasterUser() && !('companyName' in d); // 🔒 2026-11-23 회사 칸 없는 예전 기록은 최고관리자만(예전엔 모든 운송사 직원 · 기사)
@@ -2408,11 +2446,11 @@ service cloud.firestore {
       allow get: if lcol in ['driver_logs', 'gps_tracks', 'driver_photo_logs', 'driver_notifications', 'location_change_requests',
           'emergency_alerts', 'collision_alerts', 'cargo_temp', 'cargo_camera', 'deliverySignatureHistory', 'attendance', 'holidays',
           'fleet_settings', 'importBatches', 'driver_documents', 'driver_uploads']
-        && (looseRead(resource.data) || looseLegacyGet(resource.data));
+        && (looseRead(resource.data) || looseLegacyGet(resource.data) || looseDriverCo(lcol, resource.data));
       allow list: if lcol in ['driver_logs', 'gps_tracks', 'driver_photo_logs', 'driver_notifications', 'location_change_requests',
           'emergency_alerts', 'collision_alerts', 'cargo_temp', 'cargo_camera', 'deliverySignatureHistory', 'attendance', 'holidays',
           'fleet_settings', 'importBatches', 'driver_documents', 'driver_uploads']
-        && looseRead(resource.data);
+        && (looseRead(resource.data) || looseDriverCo(lcol, resource.data));
       allow create: if lcol in ['driver_logs', 'gps_tracks', 'driver_photo_logs', 'driver_notifications', 'location_change_requests',
           'emergency_alerts', 'collision_alerts', 'cargo_temp', 'cargo_camera', 'deliverySignatureHistory', 'attendance', 'holidays',
           'fleet_settings', 'importBatches', 'driver_documents']

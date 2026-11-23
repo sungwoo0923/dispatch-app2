@@ -49,6 +49,19 @@ await seed("salesLeads/sl", { companyName: "A운송", name: "리드" });
 await seed("vehicleLedger/vl", { companyName: "A운송", plateKey: "11가1111" });
 await seed("transportApplications/ta", { companyName: "A운송", type: "신규", status: "approved", companyCode: "SECRET", 직인: "data:image/png;base64,xx" });
 await seed("someUnruledCol/x", { companyName: "A운송", v: 1 });
+// 역할별 사본(서버가 만든다 — 여기서는 미리 넣어 둔다)
+await seed("orders/a2", { companyName: "A운송", 차량번호: "11가1111", 청구운임: 300000, 기사운임: 250000, 상차일: "2026-11-23", 기사확인상태: "대기" });
+await seed("driverOrders/orders__a2", { companyName: "A운송", driverUid: "aDrv", orderId: "a2", col: "orders", 기사운임: 250000 });
+await seed("driverOrders/orders__a9", { companyName: "A운송", driverUid: "someoneElse", orderId: "a9", col: "orders", 기사운임: 1 });
+await seed("shipperOrders/orders__a1", { companyName: "A운송", shipperCompany: "삼성", orderId: "a1", col: "orders", 청구운임: 300000 });
+await seed("shipperOrders/orders__c1", { companyName: "C운송", shipperCompany: "삼성", orderId: "c1", col: "orders", 청구운임: 1 });
+await seed("vehicleTypes/A운송", { companyName: "A운송", custom: ["윙"] });
+await seed("driver_completed_archive/mine", { companyName: "A운송", driverId: "aDrv" });
+await seed("driver_completed_archive/other", { companyName: "A운송", driverId: "otherDrv" });
+await seed("companySettings/A운송", { companyName: "A운송", bizList: [] });
+await seed("gps_tracks/g1", { companyName: "A운송", driverId: "otherDrv", lat: 1, lng: 2 });
+await seed("gps_tracks/g2", { companyName: "A운송", driverId: "aDrv", lat: 1, lng: 2 });
+await seed("fleet_settings/co_A운송", { companyName: "A운송", defaultCheckInLocation: { lat: 1, lng: 2 } });
 
 let n = 0;
 function as(uid) {
@@ -85,6 +98,7 @@ await no("A 직원: B 오더 고치기", updateDoc(doc(aAdmin, "orders/b1"), { �
 await no("A 직원: 결재 company 를 B 로", setDoc(doc(aAdmin, "approvals/x"), { companyName: "A운송", company: "B운송", cat: "expense", drafterUid: "aAdmin", participants: ["aAdmin"], status: "pending" }));
 await no("A 직원: 회사 칸 빼고 근태 기록 만들기", setDoc(doc(aAdmin, "attendance/x"), { uid: "aAdmin" }));
 await no("A 기사: B 오더", getDoc(doc(aDrv, "orders/b1")));
+await ok("A 직원: 우리 회사 원본 오더(운송사 직원은 그대로)", getDoc(doc(aAdmin, "orders/a2")));
 
 console.log("② 가입만 한 사람(승인 전) — 스스로 다른 운송사 관리자 되기");
 const att = as("attacker");
@@ -105,10 +119,13 @@ await ok("내 계정 회사(C)로 기사 문서 만들기", setDoc(doc(att2, "dr
 await no("내 기사 문서 회사를 B 로 바꾸기", updateDoc(doc(att2, "drivers/attacker2"), { companyName: "B운송" }));
 
 console.log("③ 화주 — 같은 이름 · 운송사와 같은 이름");
-await ok("화주 삼성(A 연동): A 가 보낸 오더 한 건", getDoc(doc(shipS, "orders/a1")));
-await ok("화주 삼성(A 연동): A 가 보낸 오더 목록", getDocs(query(collection(shipS, "orders"), where("shipperCompany", "==", "삼성"), where("companyName", "==", "A운송"))));
-await no("화주 삼성(A 연동): C 가 다른 '삼성'에 보낸 오더", getDoc(doc(shipS, "orders/c1")));
-await no("화주 삼성: 운송사 조건 없는 오더 목록", getDocs(query(collection(shipS, "orders"), where("shipperCompany", "==", "삼성"))));
+await no("화주 삼성(A 연동): 원본 오더(기사운임 · 수수료가 들어 있음)", getDoc(doc(shipS, "orders/a1")));
+await ok("화주 삼성(A 연동): 화주용 사본 한 건", getDoc(doc(shipS, "shipperOrders/orders__a1")));
+await ok("화주 삼성(A 연동): 화주용 사본 목록", getDocs(query(collection(shipS, "shipperOrders"), where("shipperCompany", "==", "삼성"), where("companyName", "==", "A운송"))));
+await no("화주 삼성(A 연동): C 가 다른 '삼성'에 보낸 사본", getDoc(doc(shipS, "shipperOrders/orders__c1")));
+await no("화주 삼성: 운송사 조건 없는 사본 목록", getDocs(query(collection(shipS, "shipperOrders"), where("shipperCompany", "==", "삼성"))));
+await no("화주 삼성: 원본 오더의 기사운임 바꾸기", updateDoc(doc(shipS, "orders/a1"), { 기사운임: 1 }));
+await ok("화주 삼성: 원본 오더에 수정 요청", updateDoc(doc(shipS, "orders/a1"), { 수정요청: true }));
 await no("화주 삼성: 받은 오더를 다른 운송사로 옮기기", updateDoc(doc(shipS, "orders/a1"), { companyName: "C운송" }));
 await no("'B운송' 이름 화주: B 오더", getDoc(doc(shipFake, "orders/b1")));
 await no("'B운송' 이름 화주: B 직원 목록", getDocs(query(collection(shipFake, "users"), where("companyName", "==", "B운송"))));
@@ -118,8 +135,28 @@ await no("'B운송' 이름 화주: B 결재", getDoc(doc(shipFake, "approvals/ba
 await ok("'B운송' 이름 화주: 같은 화주사 화주 목록", getDocs(query(collection(shipFake, "users"), where("companyName", "==", "B운송"), where("role", "==", "shipper"))));
 
 console.log("⑤ 기사 — 같은 회사라도 사무 자료는 못 봄");
-await ok("A 기사: 우리 회사 오더(내 차량 오더 화면)", getDoc(doc(aDrv, "orders/a1")));
-await ok("A 기사: 차량 장부", getDoc(doc(aDrv, "vehicleLedger/vl")));
+await no("A 기사: 원본 오더(청구운임 · 수수료가 들어 있음)", getDoc(doc(aDrv, "orders/a2")));
+await no("A 기사: 회사 오더 목록", getDocs(query(collection(aDrv, "orders"), where("companyName", "==", "A운송"))));
+await ok("A 기사: 나에게 배정된 기사용 사본", getDoc(doc(aDrv, "driverOrders/orders__a2")));
+await ok("A 기사: 내 기사용 사본 목록", getDocs(query(collection(aDrv, "driverOrders"), where("driverUid", "==", "aDrv"))));
+await no("A 기사: 다른 기사에게 배정된 사본", getDoc(doc(aDrv, "driverOrders/orders__a9")));
+await ok("A 기사: 배정된 오더 수락", updateDoc(doc(aDrv, "orders/a2"), { 기사확인상태: "수락" }));
+await no("A 기사: 배정된 오더의 기사운임 바꾸기", updateDoc(doc(aDrv, "orders/a2"), { 기사운임: 999999 }));
+await no("A 기사: 배정 안 된 오더 고치기", updateDoc(doc(aDrv, "orders/a1"), { 기사확인상태: "수락" }));
+await no("A 기사: 차량 장부(비용)", getDoc(doc(aDrv, "vehicleLedger/vl")));
+await ok("A 기사: 회사 차종 목록", getDoc(doc(aDrv, "vehicleTypes/A운송")));
+await ok("A 기사: 내 완료 보관 기록", getDoc(doc(aDrv, "driver_completed_archive/mine")));
+await no("A 기사: 다른 기사 완료 보관 기록", getDoc(doc(aDrv, "driver_completed_archive/other")));
+await no("A 기사: 회사 설정", getDoc(doc(aDrv, "companySettings/A운송")));
+await no("A 기사: 같은 회사 직원 문서", getDoc(doc(aDrv, "users/aAdmin")));
+await no("A 기사: 같은 회사 직원 목록", getDocs(query(collection(aDrv, "users"), where("companyName", "==", "A운송"))));
+await ok("A 기사: 내 계정 문서", getDoc(doc(aDrv, "users/aDrv")));
+await no("A 기사: 같은 회사 기사 목록", getDocs(query(collection(aDrv, "drivers"), where("companyName", "==", "A운송"))));
+await ok("A 기사: 배정된 오더에 사진 첨부", setDoc(doc(aDrv, "orders/a2/attachments/p1"), { base64: "x" }));
+await ok("A 기사: 내 위치 기록", getDoc(doc(aDrv, "gps_tracks/g2")));
+await no("A 기사: 다른 기사 위치 기록", getDoc(doc(aDrv, "gps_tracks/g1")));
+await no("A 기사: 회사 기사 위치 기록 목록", getDocs(query(collection(aDrv, "gps_tracks"), where("companyName", "==", "A운송"))));
+await ok("A 기사: 회사 출근지 설정", getDoc(doc(aDrv, "fleet_settings/co_A운송")));
 await no("A 기사: 거래처", getDoc(doc(aDrv, "clients/ac")));
 await no("A 기사: 회계 장부", getDoc(doc(aDrv, "acctLedger/al")));
 await no("A 기사: 입사 지원서", getDoc(doc(aDrv, "hrResumes/hr")));

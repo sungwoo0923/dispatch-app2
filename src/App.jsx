@@ -1179,7 +1179,7 @@ export default function App() {
           />
           <Route
             path="/driver-home"
-            element={user && role === "driver" && approved ? <DriverHome /> : (user && role === "totalMaster" && readViewAs()) ? <DriverHome /> : ((user && roleFor !== user.uid) || window.__kpDriverLeaving ? routeFallback : <Navigate to="/driver-login" replace />)}
+            element={user && role === "driver" && approved ? <DriverPcGate><DriverHome /></DriverPcGate> : (user && role === "totalMaster" && readViewAs()) ? <DriverHome /> : ((user && roleFor !== user.uid) || window.__kpDriverLeaving ? routeFallback : <Navigate to="/driver-login" replace />)}
           />
           {/* 👀 2026-11-22 관리자 "기사 화면 보기" — 최고관리자 · 부관리자가 기사를 골라 그 기사앱 화면을 보기 전용으로 연다 */}
           <Route path="/driver-view" element={<DriverViewAs />} />
