@@ -89,6 +89,9 @@ export function describeDriverLoginError(err, ctx = {}) {
   if (code === "driver/rejected") return { ...base, tone: "stop", title: "가입 신청이 거절되었습니다", message: reason ? `거절 사유: ${reason}` : "소속 운송사 관리자가 가입 신청을 거절했습니다.", hint: "운송사명·차량번호·이름이 맞는지 확인하고 운송사 관리자에게 문의해 주세요." };
   if (code === "driver/name-mismatch") return { ...base, tone: "error", title: "이름이 다릅니다", message: `${idText}로 등록된 기사 이름과 입력하신 이름${nm ? `('${nm}')` : ""}이 다릅니다.`.replace(/\s+로/, "로"), hint: "가입할 때 적은 실명을 띄어쓰기 없이 정확히 입력해 주세요." };
   if (code === "driver/company-mismatch" || code === "driver/other-company") return { ...base, tone: "error", title: "소속 운송사가 다릅니다", message: `${idText}는 ${co ? `'${co}'` : "입력하신 운송사"} 소속으로 등록되어 있지 않습니다.`, hint: "가입할 때 고른 운송사명을 정확히 입력해 주세요. 다른 운송사로 옮기셨다면 그 운송사로 새로 기사 등록을 해주세요." };
+  // 🔒 2026-11-23 휴대폰 문자 로그인
+  if (code === "driver/sms-not-match") return { ...base, code: "driver/not-registered", tone: "error", title: "등록된 기사 정보와 맞지 않아요", message: "운송사 · 이름 · 휴대폰번호(또는 차량번호)가 운송사에 등록된 기사 정보와 다르거나, 아직 가입하지 않았어요.", hint: "인증한 휴대폰번호가 운송사에 등록된 번호인지 확인해 주세요. 처음이시면 아래 '기사 등록하기'를 눌러 주세요." };
+  if (code === "driver/sms-required") return { ...base, tone: "error", title: "휴대폰 인증이 필요해요", message: "인증 시간이 지났거나 인증을 마치지 않았어요.", hint: "로그인을 다시 눌러 인증번호를 받아 주세요." };
   // 🔒 2026-11-23 처음 쓰는 기사(운송사가 미리 등록만 해 둔 상태)는 로그인 화면에서 바로 연결하지 않는다 — 가입하기에서 문자 인증으로
   if (code === "driver/use-register") return { ...base, tone: "wait", title: "처음이시면 가입이 필요해요", message: "운송사가 기사님 정보를 미리 등록해 두었어요. 아래 '기사 등록하기'에서 등록된 휴대폰으로 문자 인증을 하면 바로 쓸 수 있어요.", hint: "차량번호 · 이름 · 휴대폰번호 · 운송사명을 운송사에 등록된 그대로 넣어 주세요." };
   if (code === "driver/not-driver") return { ...base, tone: "error", title: "기사 계정이 아닙니다", message: "이 정보는 운송사 직원 또는 화주사 계정입니다.", hint: "가입하신 로그인 화면(운송사/화주사)에서 로그인해 주세요." };

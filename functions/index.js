@@ -4063,6 +4063,8 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
       if (best.id !== uid) t.delete(best.ref);
     });
     if (hireDate) await db.collection("userProfiles").doc(uid).set({ hireDate }, { merge: true }).catch(() => {});
+    // 🔒 2026-11-23 가입하자마자 차량번호 비밀번호를 없앤다 — 로그인은 휴대폰 문자 인증으로(driverSmsLogin)
+    await _rotateDriverPassword(uid).catch((e) => console.warn("가입 기사 비밀번호 바꾸기 실패:", e?.message || e));
     // PC에서 예전 문서 이름으로 올려 둔 기사 서류도 새 문서로 옮긴다
     if (best.id !== uid) {
       const docs = await db.collection("driver_documents").where("driverId", "==", best.id).get().catch(() => ({ docs: [] }));
@@ -4116,6 +4118,80 @@ exports.roleMirrorBackfill = functions.runWith({ timeoutSeconds: 540, memory: "5
     await ref.set({ col, lastDay, lastId, ver: 1, done: false, count: FieldValue.increment(snap.size), at: FieldValue.serverTimestamp() }, { merge: true });
   }
   console.log(`[역할 사본] 채우는 중 — 이번 ${n}건(다음 실행에서 이어서)`);
+  return null;
+});
+
+// 🔒 2026-11-23 기사 로그인 = 휴대폰 문자 인증(사용자 요청: 새 기기에서는 문자 인증) — 예전엔 비밀번호가 차량번호라
+//  차량번호 · 이름 · 운송사만 알면 누구나 그 기사로 로그인할 수 있었다.
+//  · 화면: 운송사 · 이름 · 휴대폰(또는 차량번호) → 휴대폰 문자 인증(Firebase) → 이 함수에 { companyName, name, loginId, phoneIdToken }
+//  · 서버: 문자 인증한 번호 = 운송사에 등록된 그 기사 번호인지 확인 → 그 기사 계정으로 로그인할 수 있는 1회용 토큰(custom token)
+//  · 처음 이렇게 로그인하면 차량번호 비밀번호를 무작위로 바꾼다 → 차량번호로는 더 이상 로그인 안 됨(다른 기기의 예전 로그인도 끊김)
+//  · 아직 바꾸지 않은 기사 계정은 2026-12-07부터 매일 새벽 차례로 바꾼다(driverPwRotate)
+const _drvDigitsKr = (v) => String(v || "").replace(/\D/g, "").replace(/^82/, "0");
+const _drvNorm = (v) => String(v || "").replace(/\s+/g, "").toLowerCase();
+async function _rotateDriverPassword(uid) {
+  await getAuth().updateUser(uid, { password: require("crypto").randomBytes(24).toString("base64url") });
+  await db.collection("users").doc(uid).set({ pwRotatedAt: FieldValue.serverTimestamp() }, { merge: true });
+}
+exports.driverSmsLogin = functions.https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "driverSmsLogin"))) return;
+  if (req.method !== "POST") { res.status(405).json({ error: "POST_ONLY" }); return; }
+  try {
+    if (await _publicLimited(res, [[`dsl:ip:${_publicIp(req)}`, 20, 10 * 60e3]])) return;
+    const b = req.body && typeof req.body === "object" ? req.body : {};
+    const co = String(b.companyName || "").trim().slice(0, 100);
+    const name = String(b.name || "").trim().slice(0, 40);
+    const loginId = String(b.loginId || "").trim().slice(0, 30);
+    if (!co || !name || !loginId) { res.status(400).json({ error: "BAD_PARAMS" }); return; }
+    const pt = await getAuth().verifyIdToken(String(b.phoneIdToken || "")).catch(() => null);
+    const got = _drvDigitsKr(pt?.phone_number);
+    if (!pt || got.length < 10 || Date.now() - Number(pt.auth_time || 0) * 1000 > 10 * 60 * 1000) { res.status(200).json({ ok: false, code: "SMS_REQUIRED" }); return; }
+    // 문자 인증 때 생긴 전화번호 임시 계정은 지운다
+    if (pt.uid && !pt.email) { try { const pu = await getAuth().getUser(pt.uid); if (!pu.email && pu.providerData.every((x) => x.providerId === "phone")) await getAuth().deleteUser(pt.uid); } catch { /* 무시 */ } }
+    const byPhone = /^01[016789]\d{7,8}$/.test(_drvDigitsKr(loginId));
+    const plate = byPhone ? "" : drvPlate(loginId);
+    if (byPhone && _drvDigitsKr(loginId) !== got) { res.status(200).json({ ok: false, code: "PHONE_MISMATCH" }); return; }
+    const snap = await db.collection("users").where("companyName", "==", co).where("role", "==", "driver").get();
+    const hits = snap.docs.map((d) => ({ uid: d.id, x: d.data() || {} })).filter(({ x }) =>
+      _drvNorm(x.name || x.이름) === _drvNorm(name)
+      && [x.phone, x.전화번호].map(_drvDigitsKr).includes(got)
+      && (!plate || drvPlate(x.carNo || x.차량번호) === plate));
+    if (!hits.length) { res.status(200).json({ ok: false, code: "NOT_MATCH" }); return; }
+    const { uid, x } = hits[0];
+    if (x.employmentStatus === "퇴사") { res.status(200).json({ ok: false, code: "RETIRED" }); return; }
+    if (x.approved === false) { res.status(200).json({ ok: false, code: x.rejected || x.status === "rejected" ? "REJECTED" : "PENDING" }); return; }
+    const au = await getAuth().getUser(uid).catch(() => null);
+    if (!au) { res.status(200).json({ ok: false, code: "NOT_MATCH" }); return; }
+    if (au.disabled) { res.status(200).json({ ok: false, code: "DISABLED" }); return; }
+    if (!x.pwRotatedAt) await _rotateDriverPassword(uid); // 차량번호 비밀번호를 없앤다(그 전에 로그인해 둔 다른 기기도 끊긴다)
+    console.log(`📱 기사 문자 로그인: ${co} ${name} (${uid})`);
+    try {
+      const token = await getAuth().createCustomToken(uid);
+      res.status(200).json({ ok: true, token });
+    } catch (e) {
+      // 1회용 토큰을 못 만드는 환경(서비스 계정 권한) — 새 무작위 비밀번호를 만들어 방금 문자 인증한 이 기기에만 준다
+      console.warn("기사 문자 로그인 — 토큰 대신 1회 비밀번호:", e?.message || e);
+      const pw = require("crypto").randomBytes(24).toString("base64url");
+      await getAuth().updateUser(uid, { password: pw });
+      res.status(200).json({ ok: true, email: au.email || "", password: pw });
+    }
+  } catch (e) { console.error("driverSmsLogin 실패:", e); res.status(500).json({ error: "FAILED" }); }
+});
+// 문자 로그인을 아직 안 한 기사 계정의 차량번호 비밀번호 — 2026-12-07부터 매일 새벽 차례로 바꾼다(그 기사는 다음 로그인 때 문자 인증)
+exports.driverPwRotate = functions.runWith({ timeoutSeconds: 540, memory: "256MB" }).pubsub.schedule("17 3 * * *").timeZone("Asia/Seoul").onRun(async () => {
+  if (Date.now() < Date.parse("2026-12-07T00:00:00+09:00")) return null;
+  const deadline = Date.now() + 480e3; let n = 0;
+  const snap = await db.collection("users").where("role", "==", "driver").get();
+  for (const d of snap.docs) {
+    if (Date.now() > deadline) break;
+    if (d.data()?.pwRotatedAt) continue;
+    try { await _rotateDriverPassword(d.id); n += 1; } catch (e) { if (e?.code !== "auth/user-not-found") console.warn("기사 비밀번호 바꾸기 실패:", d.id, e?.message || e); }
+  }
+  console.log(`[기사 비밀번호] 차량번호 비밀번호 ${n}개 바꿈`);
   return null;
 });
 
