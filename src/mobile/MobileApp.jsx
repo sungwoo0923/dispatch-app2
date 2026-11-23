@@ -1,6 +1,7 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import { RoadviewButton } from "../roadview"; // 📷 2026-11-20 상·하차지 로드뷰
 import { isFleetGrade } from "../fleetGradesCore"; // 🚛 2026-11-20 사용자 요청 — 지입 · 직영 · 임대 · 분양(isFleetGrade) 모두 기사앱 오더 수락/거절 · 같은 기사앱 화면(예전엔 지입만)
+import { useFleetDispatchWayInstall } from "../fleetDispatchWay"; // 🚛 2026-11-23 지입차로 배차하면 배차방식 자동(회사별)
 import { SpecialFareTag, SpecialFareLine } from "../specialFareTag"; // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import { readPendingApproval, clearPendingApproval } from "../pendingOpen"; // 🛠 2026-11-17 결재 화면 이동 요청을 새로고침 뒤에도 이어서
 import { MarginPct } from "../marginPct"; // ⭐ 2026-11-17 배차 합계 다이얼 — 수수료 아래 수수료율(수수료 ÷ 청구)
@@ -2923,6 +2924,7 @@ const [isRefreshing, setIsRefreshing] = useState(false);
   const [orderIssuesScope, setOrderIssuesScope] = useState("thisMonth"); // "thisMonth" | "twoMonths"
   const [drivers, setDrivers] = useState([]);
   useFleetLivePublish(drivers); // ⭐ 2026-11-05 이미 받는 drivers로 실시간 관제 색인 갱신(추가 읽기 없음)
+  useFleetDispatchWayInstall(drivers, userCompany); // 🚛 2026-11-23 지입차로 배차하면 배차방식 자동(회사 설정)
   const [clients, setClients] = useState([]);
   const [places, setPlaces] = useState([]);
   const [fixedClientRows, setFixedClientRows] = useState([]);

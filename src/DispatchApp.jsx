@@ -1,5 +1,6 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
 import { useCompanyFleetGrades } from "./fleetGrades"; // 🚛 지입차 구분(지입·직영·임대 + 회사 전용 분양)
+import { useFleetDispatchWayInstall, FleetDispatchWayButton } from "./fleetDispatchWay"; // 🚛 2026-11-23 지입차 배차방식 자동(회사별)
 import { isViewerNow } from "./blind"; // 🧾 특수운임 버튼(조회전용 숨김)
 import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon, usePlan } from "./plans";
 import { kpConfirm, kpPrompt } from "./kpDialog";
@@ -4318,6 +4319,7 @@ function useRealtimeCollections(user, userCompany, role) {
   }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
   const [drivers, setDrivers] = useState(() => safeLoad("drivers", []));
   useFleetLivePublish(drivers); // ⭐ 2026-11-05 이미 받는 drivers로 실시간 관제 색인(차량번호별) 갱신 — 추가 읽기 없음
+  useFleetDispatchWayInstall(drivers, userCompany); // 🚛 2026-11-23 지입차로 배차하면 배차방식 자동(회사 설정 · 저장 직전)
   const [clients, setClients] = useState(() => safeLoad("clients", []));
   // 🔔 위 캐시(dispatchData)는 이전 세션의 오래된 스냅샷이라, orders/dispatch 두
   // 컬렉션 모두에서 "진짜" 첫 응답을 받기 전까지는 attachCount 등을 비교해 알림을
@@ -9628,6 +9630,7 @@ return (
             ]}>
             {기사관리Tab.startsWith("d:") && (
               <DriverManagement
+                canEditFleetWay={(realRole || role) === "totalMaster" || myProfileDoc?.isMaster === true}
                 drivers={drivers}
                 upsertDriver={upsertDriverSafe}
                 removeDriver={removeDriverSafe}
@@ -53755,7 +53758,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 }
 // ===================== DispatchApp.jsx (PART 9/9) — END =====================
 // ===================== DispatchApp.jsx (PART 10/10) — START =====================
-function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, showAlert = (m) => alert(m), userCompany = "", grade = "", onGrade, mobile = false }) {
+function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, showAlert = (m) => alert(m), userCompany = "", grade = "", onGrade, mobile = false, canEditFleetWay = false }) {
   // ⭐ 2026-11-06 mobile — 모바일 앱(기사관리)에서: 버튼은 기사등록·기사정리·선택삭제만, 표 대신 카드 목록(누르면 상세 시트)
   const extraFleet = useCompanyFleetGrades(userCompany); // 🚛 2026-11-12 회사 전용 지입차 구분(분양 등) — 그 회사만 선택 목록에
   const [guideFor, setGuideFor] = React.useState(null); // ⭐ 2026-11-06 [앱 안내 보내기] 대상 기사 배열
@@ -54191,6 +54194,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
           </div>
         )}
         {!mobile && <div className="ml-auto flex items-center gap-2">
+          <FleetDispatchWayButton company={userCompany} isMaster={canEditFleetWay} />{/* 🚛 2026-11-23 지입차 배차방식 자동 */}
           <button type="button" className={GUIDE_BTN} title="선택한 기사님(없으면 지입·직영·임대 전체)에게 기사앱 설치 안내를 보냅니다"
             onClick={() => { const sel = drivers.filter((d) => selected.has(d.id)); const list = sel.length ? sel : filtered.filter((d) => isFleetGrade(d.등급)); if (!list.length) { showAlert("안내를 보낼 기사님을 선택해 주세요."); return; } setGuideFor(list); }}>
             앱 안내 보내기{selected.size ? ` (${selected.size})` : ""}
