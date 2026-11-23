@@ -10,7 +10,8 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { addCompanyDropdownOption, removeCompanyDropdownOption, renameCompanyDropdownOption, useCompanyOptionList, filterByScope } from "./companyDropdownOptions";
 import { uiOptionLabel, useUiConfigVersion } from "./uiConfig"; // ⭐ 2026-11-07 화면 편집 — 보이는 이름만 바꾸기(저장값 그대로)
-import { kpConfirm, kpPrompt } from "./kpDialog";
+import { kpConfirm, kpPrompt, kpAlert } from "./kpDialog";
+import { PIN_KEYS, PIN_MAX, usePins, applyPins, togglePin } from "./optionPins"; // 📌 2026-11-23 자주 쓰는 방식 맨 위 고정
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const FONT = "'Pretendard','Noto Sans KR',sans-serif";
@@ -117,7 +118,11 @@ function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allo
   const menu = React.useRef(null);
   const searchRef = React.useRef(null);
 
-  const list = React.useMemo(() => filterByScope(co.list, co.scopes, scope, cur), [co.list, co.scopes, scope, cur]); // eslint-disable-line react-hooks/exhaustive-deps
+  const canPin = PIN_KEYS.includes(optKey);
+  const pins = usePins(optKey);
+  const list = React.useMemo(() => applyPins(filterByScope(co.list, co.scopes, scope, cur), canPin ? pins : []), [co.list, co.scopes, scope, cur, pins, canPin]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pinSet = React.useMemo(() => new Set(canPin ? pins : []), [pins, canPin]);
+  const doPin = async (v) => { const r = await togglePin(optKey, v); if (!r.ok) kpAlert(r.reason, { title: "자주 쓰는 방식" }); };
   const nq = q.replace(/\s/g, "").toLowerCase();
   const filtered = nq ? list.filter((v) => v.replace(/\s/g, "").toLowerCase().includes(nq)) : list;
   const opts = [
@@ -215,7 +220,10 @@ function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allo
   const row = (o, i) => {
     const sel = o.none ? !cur : o.v === cur;
     return (
-      <div key={`${o.v}_${i}`} role="option" aria-selected={sel} data-opt-idx={i}
+      <React.Fragment key={`${o.v}_${i}`}>
+      {canPin && !nq && !o.none && !o.legacy && pinSet.has(o.v) && (i === 0 || !pinSet.has(opts[i - 1]?.v) ) ? <div style={{ margin: "4px 16px 2px", fontSize: 10.5, fontWeight: 900, letterSpacing: "0.08em", color: "#8E9BB2" }}>📌 자주 쓰는 방식</div> : null}
+      {canPin && !nq && !o.none && !o.legacy && !pinSet.has(o.v) && i > 0 && pinSet.has(opts[i - 1]?.v) ? <div style={{ margin: "4px 16px", borderTop: "1px dashed #DCE3EE" }} /> : null}
+      <div role="option" aria-selected={sel} data-opt-idx={i}
         onMouseEnter={() => setAct(i)} onMouseDown={(e) => e.preventDefault()} onClick={() => onPick(o.v)}
         style={{ display: "flex", alignItems: "center", gap: 10, height: ROW, margin: "0 6px", padding: "0 10px", borderRadius: 10, cursor: "pointer", userSelect: "none", background: i === act ? "#EEF3FC" : "transparent" }}>
         <span style={{ width: 15, height: 15, borderRadius: 999, flexShrink: 0, display: "grid", placeItems: "center", border: `2px solid ${sel ? "#1B2B4B" : "#C9D5EA"}`, background: sel ? "#1B2B4B" : "#fff" }}>
@@ -228,6 +236,12 @@ function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allo
         {allowAdd && o.legacy ? <button type="button" disabled={busy} data-opt-adopt="1" title="이 값을 목록에 넣어요 — 그다음부터 이름 바꾸기 · 삭제가 돼요"
           onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); doAdopt(o.v); }}
           style={{ height: 24, padding: "0 8px", borderRadius: 7, border: "1px solid #F3C99B", background: "#FFF7ED", color: "#B54708", fontSize: 11.5, fontWeight: 900, whiteSpace: "nowrap", cursor: "pointer" }}>목록에 추가</button> : null}
+        {canPin && !o.none && !o.legacy ? (() => { const on = pinSet.has(o.v); return (
+          <button type="button" data-opt-pin={on ? "on" : "off"} title={on ? "맨 위 고정 풀기" : `맨 위에 고정(최대 ${PIN_MAX}개 · 나만)`} aria-label={on ? `${o.v} 고정 풀기` : `${o.v} 맨 위에 고정`}
+            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); doPin(o.v); }}
+            style={{ width: 28, height: 28, flexShrink: 0, display: "grid", placeItems: "center", borderRadius: 8, border: 0, background: on ? "#EEF3FC" : "transparent", color: on ? "#1B2B4B" : "#B8C4D8", cursor: "pointer" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill={on ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" /></svg>
+          </button>); })() : null}
         {allowAdd && !o.none && !o.legacy ? <button type="button" disabled={busy} data-opt-rename="1" title={`${o.v} 이름 바꾸기`} aria-label={`${o.v} 이름 바꾸기`}
           onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); doRename(o.v); }}
           style={{ width: 28, height: 28, flexShrink: 0, display: "grid", placeItems: "center", borderRadius: 8, border: 0, background: "transparent", color: "#9AA9C3", cursor: "pointer" }}>
@@ -235,6 +249,7 @@ function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allo
         </button> : null}
         {allowAdd && !o.none && !o.legacy ? <OptTrash title={`${o.v} 삭제`} onClick={() => doRemove(o.v)} disabled={busy} /> : null}
       </div>
+      </React.Fragment>
     );
   };
 

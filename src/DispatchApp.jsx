@@ -15,6 +15,7 @@ import { EXEC_MENUS, execMenuLabel, menuName } from "./execMenus";
 import { ExecModeContext } from "./execUi"; // 👑 2026-11-17 임원 화면 디자인 시스템
 const EXEC_SKIN_MENUS = ["HOME", "일일경영보고", "경영분석", "결재대기", "직원정보", "자금현황", "비공개운임", "스케줄", "영업관리", "결재함", "직원일정"]; // 임원 화면에서 남색 · 골드로 그리는 메뉴 // 📈 2026-11-08 임원 화면 · 경영 분석 · 결재 대기 · 직원 정보
 import BulkUploadChooser, { downloadTemplateXlsx } from "./BulkUploadChooser";
+import ToolMenuButton from "./toolMenu"; // 🧰 2026-11-23 툴바 정리 — 비슷한 버튼을 하나로
 import { buildCopyText, getCopyTpl, useCopyTemplates } from "./copyTemplates";
 import { buildDriverCopyText, copyVarsOf } from "./driverCopyText"; // 📋 2026-11-18 기사복사 문구 — PC · 모바일 같은 글
 import { CopyTemplateHost, openCopyTemplateEditor } from "./CopyTemplateEditor";
@@ -15915,19 +15916,22 @@ React.useEffect(() => {
 
   {/* ⭐ 2026-11-09 독차 버튼 제거 — 혼적·왕복이 아니면 자동으로 독차 */}
 
-{/* 혼적 */}
-<button type="button" onClick={() => setForm((p) => ({ ...p, 혼적: !p.혼적, 독차: !!p.혼적 }))} /* ⭐ 2026-11-09 혼적을 끄면 독차 */
-  aria-pressed={!!form.혼적} className={dmToggleCls(!!form.혼적)}>
-  <DmDot on={!!form.혼적} />혼적
-</button>
-
-{/* 왕복 */}
-<button type="button" onClick={() => setForm((p) => p.운행유형 === "왕복"
-  ? { ...p, 운행유형: "편도", 회전수: 1, 회전방식: "묶기" }
-  : { ...p, 운행유형: "왕복" })}
-  aria-pressed={form.운행유형 === "왕복"} className={dmToggleCls(form.운행유형 === "왕복")}>
-  <DmDot on={form.운행유형 === "왕복"} />왕복
-</button>
+{/* 🧰 2026-11-23 [혼적] · [왕복] · [긴급] 버튼 3개 → [운행 옵션] 하나(누르면 체크 목록) — 켜고 끄는 값 · 왕복의 회전 칸은 예전 그대로 */}
+{(() => {
+  const optOn = [form.혼적 && "혼적", form.운행유형 === "왕복" && "왕복", form.긴급 && "긴급"].filter(Boolean);
+  return (
+    <ToolMenuButton testId="order-run-options" align="left" minWidth={230} menuTitle="운행 옵션 — 켜고 끌 항목을 눌러요" active={optOn.length > 0}
+      className={`${dmToggleCls(optOn.length > 0)} ${form.긴급 ? "!bg-[#0F1A30] !border-[#0F1A30]" : ""}`}
+      label={<><DmDot on={optOn.length > 0} alert={!!form.긴급} />운행 옵션<span className={`font-bold ${optOn.length ? "opacity-90" : "opacity-60"}`}>· {optOn.length ? optOn.join(" · ") : "옵션 없음"}</span></>}
+      items={[
+        { key: "mix", label: "혼적", desc: "다른 짐과 같이 실어요(끄면 독차)", checked: !!form.혼적, onClick: () => setForm((p) => ({ ...p, 혼적: !p.혼적, 독차: !!p.혼적 })) /* ⭐ 2026-11-09 혼적을 끄면 독차 */ },
+        { key: "round", label: "왕복", desc: "켜면 회전 수를 고를 수 있어요", checked: form.운행유형 === "왕복", onClick: () => setForm((p) => p.운행유형 === "왕복"
+          ? { ...p, 운행유형: "편도", 회전수: 1, 회전방식: "묶기" }
+          : { ...p, 운행유형: "왕복" }) },
+        { key: "urgent", label: "긴급", desc: "급한 오더로 표시해요", checked: !!form.긴급, onClick: () => onChange("긴급", !form.긴급) },
+      ]} />
+  );
+})()}
 
 {/* ⭐ 회전 운행 — 같은 상/하차지를 2회 이상 반복 (묶기: 1건+회전수 / 나누기: N건 분리) */}
 {form.운행유형 === "왕복" && <RotationPicker
@@ -15936,11 +15940,6 @@ React.useEffect(() => {
   onChange={(c, m) => setForm((p) => ({ ...p, 회전수: c, 회전방식: m }))}
 />}
 
-{/* 긴급 */}
-<button type="button" onClick={() => onChange("긴급", !form.긴급)}
-  aria-pressed={!!form.긴급} className={`${dmToggleCls(!!form.긴급)} ${form.긴급 ? "!bg-[#0F1A30] !border-[#0F1A30]" : ""}`}>
-  <DmDot on={!!form.긴급} alert />긴급
-</button>
 
 {/* ⭐ 블라인드 — 최고관리자에게만 보이는 버튼. 켜고 등록하면 최고관리자 외 누구의 배차목록에도 안 보인다 */}
 {canSeeBlind() && (
@@ -16767,12 +16766,16 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
                 <textarea className={mrTextareaCls} rows={2} value={currentMultiSlot.메모 || ""} onChange={e => updateMultiSlot("메모", e.target.value)} />
               </div>
 
+              {/* 🧰 2026-11-23 [긴급 오더] · [혼적] 체크 → [운행 옵션] 하나(단일 등록과 같은 모양) — 넣는 값은 예전 그대로 */}
               <div className="col-span-2 flex items-center gap-2">
-                <input type="checkbox" id="mrUrgent" checked={!!currentMultiSlot.긴급} onChange={e => updateMultiSlot("긴급", e.target.checked)} />
-                <label htmlFor="mrUrgent" className="text-[13px] font-bold text-gray-700 cursor-pointer">긴급 오더</label>
-                {/* 🚚 2026-11-09 혼적 — 단일 등록과 같게(끄면 독차) */}
-                <input type="checkbox" id="mrMixed" className="ml-4" checked={!!currentMultiSlot.혼적} onChange={e => updateMultiSlot("혼적", e.target.checked)} />
-                <label htmlFor="mrMixed" className="text-[13px] font-bold text-gray-700 cursor-pointer">혼적</label>
+                <ToolMenuButton testId="multi-run-options" align="left" minWidth={230} menuTitle="운행 옵션 — 켜고 끌 항목을 눌러요"
+                  className={`h-9 px-3 rounded-[10px] border text-[13px] font-bold transition ${(currentMultiSlot.혼적 || currentMultiSlot.긴급) ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:border-[#2D4C82]"}`}
+                  label={<>운행 옵션<span className="opacity-80">· {[currentMultiSlot.혼적 && "혼적", currentMultiSlot.긴급 && "긴급"].filter(Boolean).join(" · ") || "옵션 없음"}</span></>}
+                  items={[
+                    /* 🚚 2026-11-09 혼적 — 단일 등록과 같게(끄면 독차) */
+                    { key: "mix", label: "혼적", desc: "다른 짐과 같이 실어요(끄면 독차)", checked: !!currentMultiSlot.혼적, onClick: () => updateMultiSlot("혼적", !currentMultiSlot.혼적) },
+                    { key: "urgent", label: "긴급 오더", desc: "급한 오더로 표시해요", checked: !!currentMultiSlot.긴급, onClick: () => updateMultiSlot("긴급", !currentMultiSlot.긴급) },
+                  ]} />
               </div>
             </div>
 
@@ -37698,10 +37701,6 @@ return (
   const msg=`[인수증 업로드 안내]\n운송 완료 후 아래 링크를 통해 인수증을 업로드해 주시기 바랍니다.\n\n여기를 눌러 업로드해주세요\n${url}\n\n날짜·차량번호·이름을 확인 후 검색하여 오더를 선택해 업로드해 주세요.\n미업로드 시 운임 정산이 지연될 수 있습니다.`;
   setBulkUploadConfirm5({ phones, body: msg });
 }} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="status.toolbar.업로드링크" defaultText="업로드링크" />{selected.size>1?` (${selected.size})`:""}</button>
-          {/* 📥 대용량 업로드 — 과거 오더 이관·초기 세팅용이라 회사 관리자·최고관리자만 보인다(일반 직원은 숨김) */}
-          {(role === "admin" || role === "totalMaster") && (
-          <button type="button" onClick={() => setBulkChooserOpen(true)} className="px-2 py-1 rounded-lg bg-gray-700 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" title="엑셀로 오더를 한꺼번에 등록합니다 (관리자 전용)"><EditableText id="status.toolbar.대용량업로드" defaultText="대용량 업로드" /></button>
-          )}
           {bulkChooserOpen && (
             <BulkUploadChooser
               onClose={() => setBulkChooserOpen(false)}
@@ -37711,7 +37710,12 @@ return (
           )}
           <button className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");{const bad=fixedForm&&(dispatchData||[]).find((x)=>selected.has(getId(x))&&!frCanEdit(x));if(bad)return frLockAlert(bad);}setShowDeletePopup(true);}}><EditableText id="status.toolbar.선택삭제" defaultText="선택삭제" /></button>
           <button className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>setSelected(new Set())}><EditableText id="status.toolbar.선택초기화" defaultText="선택초기화" /></button>
-          <button className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={downloadExcel}><EditableText id="status.toolbar.엑셀다운" defaultText="엑셀다운" /></button>
+          {/* 🧰 2026-11-23 툴바 정리 — [대용량 업로드](관리자 · 최고관리자만) + [엑셀다운] → [엑셀 관리] */}
+          <ToolMenuButton label="엑셀 관리" testId="status-excel-menu" menuTitle="엑셀로 가져오기 · 내보내기" minWidth={250}
+            className="h-auto px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" items={[
+            { key: "down", label: "엑셀 다운로드", desc: "지금 목록을 엑셀로 받아요", onClick: downloadExcel },
+            { key: "bulk", label: "대용량 업로드", desc: "엑셀로 오더를 한꺼번에 등록해요(양식 받기 포함 · 관리자 전용)", hidden: !(role === "admin" || role === "totalMaster"), onClick: () => setBulkChooserOpen(true) },
+          ]} />
           {/* 🧹 2026-11-16 일마감 버튼은 뺐다(사용자 요청) — 마감은 배차현황 › 월 마감에서 */}
         </div>
       </div>
@@ -54234,6 +54238,17 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
     블랙: drivers.filter(d=>d.등급==="블랙").length,
   }), [drivers]);
 
+  // 🧰 2026-11-23 [검색] — 칸이 비어 있으면 전체 기사(예전 [전체보기] 대신)
+  const runDriverSearch = () => {
+    if (!q.trim()) { setShowAll(true); setGradeFilter("전체"); setSearched(false); return; }
+    setSearched(true);
+  };
+  // 🧰 2026-11-23 [등록·정리] 목록 — 예전 [+ 기사 등록] · [기사정리] 버튼과 같은 동작
+  const driverRegItems = [
+    { key: "add", label: "기사 등록", desc: "새 기사님을 한 명 등록해요", onClick: () => setShowAddForm(true) },
+    { key: "clean", label: "기사 정리", desc: "전화번호를 한 모양으로 맞추고, 겹친 기사를 정리해요", onClick: () => { setCleanupOpen(true); setCleanupQ(""); setCleanupQField("전체"); setCleanupSelected(new Set()); setCleanupDone(false); } },
+  ];
+
   return (
     <div className={mobile ? "p-1" : "p-4"}>
 
@@ -54277,17 +54292,17 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
             placeholder={mobile ? "차량번호·기사명·연락처" : "차량번호 · 기사명 · 연락처로 찾기 (Enter)"}
             value={q}
             onChange={e => { setQ(e.target.value); setSearched(false); }}
-            onKeyUp={e => { if (e.key==="Enter") setSearched(true); }}
+            onKeyUp={e => { if (e.key==="Enter") runDriverSearch(); }}
           />
-          <button onClick={()=>setSearched(true)} className={`h-9 mr-1.5 ${mobile ? "px-3.5 text-[14px]" : "px-5 text-[13.5px]"} shrink-0 rounded-[12px] bg-[#0F1A30] text-white font-black hover:bg-[#1B2B4B]`}>검색</button>
+          <button onClick={runDriverSearch} className={`h-9 mr-1.5 ${mobile ? "px-3.5 text-[14px]" : "px-5 text-[13.5px]"} shrink-0 rounded-[12px] bg-[#0F1A30] text-white font-black hover:bg-[#1B2B4B]`}>검색</button>
         </div>
         {/* 🔁 2026-11-07 중복 정리 — 검색줄 옆 등급 버튼(전체·일반·직영·지입·임대·블랙)은 바로 위 숫자 타일 · 왼쪽 메뉴와 같은 거르기라 뺐다.
              숫자 타일이 검색 중에는 검색 결과 안에서만 거르도록(예전 등급 버튼 동작) 맞췄다 */}
         <span className={`${mobile ? "text-[14px]" : "text-[13px]"} font-bold text-[#5B6B85] px-1 whitespace-nowrap`}>총 <b className="text-[#0F1A30] tabular-nums">{filtered.length}</b>명{mobile && selected.size > 0 && <> · 선택 <b className="text-[#2D4C82] tabular-nums">{selected.size}</b></>}</span>
         {mobile && (
           <div className="ml-auto flex items-center gap-1.5">
-            <button onClick={() => setShowAddForm(true)} className="h-11 px-3.5 rounded-[13px] text-[14px] font-black text-white whitespace-nowrap" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>+ 기사등록</button>
-            <button onClick={() => { setCleanupOpen(true); setCleanupQ(""); setCleanupQField("전체"); setCleanupSelected(new Set()); setCleanupDone(false); }} className="h-11 px-3 rounded-[13px] bg-white border border-[#E3E8F0] text-[#0F1A30] text-[14px] font-bold whitespace-nowrap">기사정리</button>
+            <ToolMenuButton label="등록·정리" testId="driver-reg-menu" items={driverRegItems}
+              className="h-11 px-3.5 rounded-[13px] text-[14px] font-black text-white whitespace-nowrap" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }} />
             <button onClick={removeSelected} className="h-11 px-3 rounded-[13px] bg-white border border-[#0F1A30] text-[#0F1A30] text-[14px] font-black whitespace-nowrap">선택삭제</button>
           </div>
         )}
@@ -54304,18 +54319,12 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
             onClick={() => { const sel = drivers.filter((d) => selected.has(d.id)); const list = sel.length ? sel : filtered.filter((d) => isFleetGrade(d.등급)); if (!list.length) { showAlert("안내를 보낼 기사님을 선택해 주세요."); return; } setGuideFor(list); }}>
             앱 안내 보내기{selected.size ? ` (${selected.size})` : ""}
           </button>
-          <button onClick={() => setShowAddForm(true)}
-            className="h-11 px-4 rounded-[13px] text-[13.5px] font-black text-white shadow-[0_10px_22px_rgba(15,26,48,0.25)] hover:brightness-110 transition" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
-            + <EditableText id="driver.toolbar.기사등록" defaultText="기사 등록" />
-          </button>
-          <button
-            onClick={() => { setShowAll(v=>!v); setQ(""); setSearched(false); setGradeFilter("전체"); }}
-            className={`h-11 px-4 rounded-[13px] text-[13px] font-bold transition ${showAll ? "bg-[#0F1A30] text-white" : "bg-white border border-[#E3E8F0] text-[#0F1A30] hover:border-[#4B6CB7]"}`}>
-            {showAll ? <EditableText id="driver.toolbar.전체보기닫기" defaultText="전체보기 닫기" /> : <EditableText id="driver.toolbar.전체보기" defaultText="전체보기" />}
-          </button>
-          <button type="button" onClick={() => setDriverBulkOpen(true)} className="h-11 px-4 inline-flex items-center rounded-[13px] bg-white border border-[#E3E8F0] text-[#0F1A30] text-[13px] font-bold cursor-pointer hover:border-[#4B6CB7] transition">
-            <EditableText id="driver.toolbar.엑셀업로드" defaultText="대용량 업로드" />
-          </button>
+          {/* 🧰 2026-11-23 툴바 정리 — [전체보기]·[닫기]는 뺐다(빈 칸으로 [검색]하면 전체) · 엑셀 버튼 3개 → [엑셀 관리] · 기사 등록 + 기사 정리 → [등록·정리] */}
+          <ToolMenuButton label="엑셀 관리" testId="driver-excel-menu" menuTitle="엑셀로 가져오기 · 내보내기" minWidth={260} items={[
+            { key: "bulk", label: "대용량 업로드", desc: "엑셀로 기사를 한꺼번에 등록 · 수정해요(양식 받기 포함)", onClick: () => setDriverBulkOpen(true) },
+            { key: "payinfo", label: "정산정보 가져오기", desc: "선정산 마감 파일로 사업자번호 · 계좌를 채워요", file: { accept: ".xlsx,.xls", multiple: true, onChange: onPayInfoFiles } },
+            { key: "down", label: "엑셀 다운로드", desc: "지금 목록을 엑셀로 받아요", onClick: downloadExcel },
+          ]} />
           {driverBulkOpen && (
             <BulkUploadChooser
               title="기사 대용량 업로드" subtitle="엑셀로 기사를 한꺼번에 등록·수정합니다. 처음이면 양식부터 받아 주세요."
@@ -54330,20 +54339,9 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               onFile={(e) => { setDriverBulkOpen(false); onExcel(e); }}
             />
           )}
-          {/* 🪪 2026-11-20 선정산 파일 → 기사 정산정보(사업자번호 · 계좌) */}
-          <label title="선정산 마감 파일(여러 개 한 번에)을 고르면 차량번호로 기사를 찾아 사업자번호 · 상호 · 대표자 · 은행 · 계좌 · 예금주를 채워요" className="h-11 px-4 inline-flex items-center rounded-[13px] bg-white border border-[#E3E8F0] text-[#0F1A30] text-[13px] font-bold cursor-pointer hover:border-[#4B6CB7] transition whitespace-nowrap">
-            정산정보 가져오기
-            <input type="file" accept=".xlsx,.xls" multiple className="hidden" onChange={onPayInfoFiles} />
-          </label>
           {payInfoImport && <DriverPayImportModal fileNames={payInfoImport.fileNames} items={payInfoImport.items} drivers={drivers} onDownloadMissing={downloadMissingPayInfo} onClose={() => setPayInfoImport(null)} />}
-          <button onClick={downloadExcel} className="h-11 px-4 rounded-[13px] bg-white border border-[#E3E8F0] text-[#0F1A30] text-[13px] font-bold hover:border-[#4B6CB7] transition">
-            <EditableText id="driver.toolbar.엑셀다운로드" defaultText="엑셀 다운로드" />
-          </button>
-          <button
-            onClick={() => { setCleanupOpen(true); setCleanupQ(""); setCleanupQField("전체"); setCleanupSelected(new Set()); setCleanupDone(false); }}
-            className="h-11 px-4 rounded-[13px] bg-white border border-[#E3E8F0] text-[#0F1A30] text-[13px] font-bold hover:border-[#4B6CB7] transition">
-            <EditableText id="driver.toolbar.기사정리" defaultText="기사정리" />
-          </button>
+          <ToolMenuButton label="등록·정리" testId="driver-reg-menu" items={driverRegItems}
+            className="h-11 px-4 rounded-[13px] text-[13.5px] font-black text-white shadow-[0_10px_22px_rgba(15,26,48,0.25)] hover:brightness-110 transition whitespace-nowrap" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }} />
           <button onClick={removeSelected} className="h-11 px-4 rounded-[13px] bg-white border border-[#0F1A30] text-[#0F1A30] text-[13px] font-black hover:bg-[#0F1A30] hover:text-white transition">
             <EditableText id="driver.toolbar.선택삭제" defaultText="선택 삭제" />
           </button>
@@ -55345,6 +55343,7 @@ function KpEmptySearch({ en, title, sub }) {
 
 function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlace, places: placesProp = [], showAlert = (m) => alert(m), hideTabs = false, initialTab = "하차지", userCompany = "", mobile = false, canMerge = false }) {
   const [mergeOpen, setMergeOpen] = React.useState(false); // ⭐ 2026-11-17 거래처 합치기 창(관리자급만 — canMerge)
+  const [bizBulkOpen, setBizBulkOpen] = React.useState(false); // 🧰 2026-11-23 [등록·정리] › 사업자 상태 확인 창
   // ⭐ 2026-11-06 mobile — 모바일 앱 거래처관리: 버튼은 신규등록·거래처정리·선택삭제만, 표 대신 카드(누르면 상세 시트)
   const [mSheet, setMSheet] = React.useState(null); // { kind: "place"|"client", r }
   const normalizePlaceRow = (d) => {
@@ -56356,21 +56355,16 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               <span className="text-[13px] font-bold text-[#5B6B85] px-1 whitespace-nowrap">선택 <b className="text-[#2D4C82] tabular-nums">{placeSelInView.toLocaleString()}</b>건</span>
             )}
             <div className={`ml-auto flex items-center ${mobile ? "gap-1.5" : "gap-2"}`}>
-              <button onClick={() => setShowNewPlaceForm(true)}
-                className={KP_BTN_PRIMARY} style={KP_BTN_PRIMARY_BG}>
-                + <EditableText id="client.dropPlace.toolbar.신규등록" defaultText="신규등록" />
-              </button>
-              {!mobile && <button type="button" onClick={() => setClientBulkKind("place")} className={`${KP_BTN} cursor-pointer inline-flex items-center`}>
-                <EditableText id="client.dropPlace.toolbar.엑셀업로드" defaultText="대용량 업로드" />
-              </button>}
-              {/* 🧹 2026-11-12 [담당자 정리] — 담당자번호는 번호만(하이픈 넣기), 담당자는 이름만(님 · 직함 떼기), 이름이 아닌 글은 메모로 · 🏷 JY로지스틱스만 */}
-              {!mobile && isJyCompany(userCompany) && <button type="button" data-kp="place-contact-clean" onClick={cleanPlaceContactsAll} className={`${KP_BTN} cursor-pointer inline-flex items-center`} title="담당자번호 칸에는 번호만, 담당자 칸에는 이름만 남기고 나머지는 메모로 옮깁니다">담당자 정리</button>}
-              {!mobile && <button onClick={downloadPlaceExcel}
-                className={KP_BTN}><EditableText id="client.dropPlace.toolbar.다운로드" defaultText="다운로드" /></button>}
-              <button onClick={() => { setPlaceDupOpen(true); setPlaceDupDone(false); setPlaceDupSelected(new Set()); }}
-                className={KP_BTN}>
-                <EditableText id="client.dropPlace.toolbar.거래처정리" defaultText="거래처정리" />
-              </button>
+              {/* 🧰 2026-11-23 툴바 정리 — 업로드 · 다운로드 → [엑셀 관리] · 신규등록 · 담당자 정리 · 거래처정리 → [등록·정리] */}
+              <ToolMenuButton label="엑셀 관리" testId="place-excel-menu" menuTitle="엑셀로 가져오기 · 내보내기" minWidth={250} items={[
+                { key: "bulk", label: "대용량 업로드", desc: "엑셀로 상하차지를 한꺼번에 등록해요(양식 받기 포함)", hidden: mobile, onClick: () => setClientBulkKind("place") },
+                { key: "down", label: "엑셀 다운로드", desc: "상하차지 목록을 엑셀로 받아요", hidden: mobile, onClick: downloadPlaceExcel },
+              ]} />
+              <ToolMenuButton label="등록·정리" testId="place-reg-menu" minWidth={260} className={KP_BTN_PRIMARY} style={KP_BTN_PRIMARY_BG} items={[
+                { key: "add", label: "신규 등록", desc: "상하차지를 한 곳 새로 등록해요", onClick: () => setShowNewPlaceForm(true) },
+                { key: "contact", label: "담당자 정리", desc: "담당자번호는 번호만, 담당자는 이름만 남기고 나머지는 메모로 옮겨요", hidden: mobile || !isJyCompany(userCompany), onClick: cleanPlaceContactsAll },
+                { key: "dup", label: "거래처 정리", desc: "이름 · 주소가 겹친 상하차지를 찾아 정리해요", onClick: () => { setPlaceDupOpen(true); setPlaceDupDone(false); setPlaceDupSelected(new Set()); } },
+              ]} />
               <button onClick={removeSelectedPlaces}
                 className={KP_BTN_DANGER}>
                 <EditableText id="client.dropPlace.toolbar.선택삭제" defaultText="선택삭제" /> {placeSelected.size > 0 && `(${placeSelected.size})`}
@@ -56790,28 +56784,18 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
               {showAllClients ? <EditableText id="client.baseClient.toolbar.전체보기닫기" defaultText="전체보기 닫기" /> : <EditableText id="client.baseClient.toolbar.전체보기" defaultText="전체보기" />}
             </button>}
             {!mobile && <div className="ml-auto flex flex-wrap items-center gap-2">
-              <button onClick={() => { setShowImportPopup(true); setImportQ(""); setImportSelected([]); }}
-                className={KP_BTN}>
-                <EditableText id="client.baseClient.toolbar.하차지에서불러오기" defaultText="상하차지에서 불러오기" />
-              </button>
+              {/* 🧰 2026-11-23 툴바 정리 — 업로드 · 다운로드 → [엑셀 관리] · 신규등록 · 상하차지에서 불러오기 · 거래처 합치기 · 사업자 상태 확인 → [등록·정리] */}
+              <ToolMenuButton label="엑셀 관리" testId="client-excel-menu" menuTitle="엑셀로 가져오기 · 내보내기" minWidth={250} items={[
+                { key: "bulk", label: "대용량 업로드", desc: "엑셀로 거래처를 한꺼번에 등록해요(양식 받기 포함)", onClick: () => setClientBulkKind("client") },
+                { key: "down", label: "엑셀 다운로드", desc: "거래처 목록을 엑셀로 받아요", onClick: downloadClientExcel },
+              ]} />
               {mismatchCandidates.length > 0 && (
                 <button onClick={() => { setMismatchSelected(new Set(mismatchCandidates.map(m => m.client.id || m.client.거래처명))); setShowMismatchPopup(true); }}
                   className={KP_BTN_DANGER}>
                   <EditableText id="client.baseClient.toolbar.담당자불일치복구" defaultText="담당자 불일치 복구" /> ({mismatchCandidates.length})
                 </button>
               )}
-              <button type="button" onClick={() => setClientBulkKind("client")} className={`${KP_BTN} cursor-pointer inline-flex items-center`}>
-                <EditableText id="client.baseClient.toolbar.엑셀업로드" defaultText="대용량 업로드" />
-              </button>
-              <button onClick={downloadClientExcel}
-                className={KP_BTN}><EditableText id="client.baseClient.toolbar.다운로드" defaultText="다운로드" /></button>
-              <ClientBizBulkButton clients={rows} className={KP_BTN} />
-              {/* ⭐ 2026-11-17 거래처 합치기 — 같은 회사가 이름 둘로 등록됐을 때(관리자급만) */}
-              {canMerge && <button type="button" data-testid="open-client-merge"
-                onClick={() => { if (!selected.size) return showAlert("합칠 거래처를 체크해 주세요.\n(같은 회사인 거래처 2곳 이상)"); setMergeOpen(true); }}
-                className={KP_BTN}>
-                <EditableText id="client.baseClient.toolbar.거래처합치기" defaultText="거래처 합치기" /> {selected.size > 1 && `(${selected.size})`}
-              </button>}
+              <ClientBizBulkButton clients={rows} open={bizBulkOpen} onClose={() => setBizBulkOpen(false)} />
               <button onClick={removeSelectedFn}
                 className={KP_BTN_DANGER}>
                 <EditableText id="client.baseClient.toolbar.선택삭제" defaultText="선택삭제" /> {selected.size > 0 && `(${selected.size})`}
@@ -56827,10 +56811,12 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
                 className={KP_BTN}>
                 <EditableText id="client.baseClient.toolbar.선택수정" defaultText="선택수정" /> {selected.size === 1 && "(1)"}
               </button>
-              <button onClick={() => setShowNewClientModal(true)}
-                className={KP_BTN_PRIMARY} style={KP_BTN_PRIMARY_BG}>
-                + 신규등록
-              </button>
+              <ToolMenuButton label="등록·정리" testId="client-reg-menu" minWidth={270} className={KP_BTN_PRIMARY} style={KP_BTN_PRIMARY_BG} items={[
+                { key: "add", label: "신규 등록", desc: "거래처를 한 곳 새로 등록해요", onClick: () => setShowNewClientModal(true) },
+                { key: "import", label: "상하차지에서 불러오기", desc: "상하차지에 있는 업체를 골라 기본거래처로 옮겨요", onClick: () => { setShowImportPopup(true); setImportQ(""); setImportSelected([]); } },
+                { key: "merge", label: `거래처 합치기${selected.size > 1 ? ` (${selected.size})` : ""}`, desc: "같은 회사가 이름 둘로 등록됐을 때 체크한 거래처를 하나로 합쳐요", hidden: !canMerge, onClick: () => { if (!selected.size) return showAlert("합칠 거래처를 체크해 주세요.\n(같은 회사인 거래처 2곳 이상)"); setMergeOpen(true); } },
+                { key: "biz", label: "사업자 상태 확인", desc: "국세청에서 휴업 · 폐업인지 한 번에 확인해요", onClick: () => setBizBulkOpen(true) },
+              ]} />
             </div>}
           </div>
 

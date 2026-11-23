@@ -47,13 +47,17 @@ export const mainWeather = createWeatherStore({
 // ─────────────── 사업자 상태 ───────────────
 export function BizCheck(props) { return <BizStatusCheck checker={mainBiz} {...props} />; }
 export const bizGuardMain = (value, opts) => bizGuard(mainBiz, value, kpConfirm, opts);
-export function ClientBizBulkButton({ clients, className = "" }) {
-  const [open, setOpen] = React.useState(false);
+// 🧰 2026-11-23 open · onClose 를 넘기면 버튼 없이 창만(거래처관리 [등록·정리] 목록에서 연다)
+export function ClientBizBulkButton({ clients, className = "", open: openProp, onClose }) {
+  const [openSelf, setOpenSelf] = React.useState(false);
+  const controlled = typeof openProp === "boolean";
+  const open = controlled ? openProp : openSelf;
+  const close = () => (controlled ? onClose?.() : setOpenSelf(false));
   const rows = React.useMemo(() => (clients || []).map((c) => ({ id: c.id || c.거래처명, name: c.거래처명 || "", bizNo: c.사업자번호 || "" })), [clients]);
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className={className} data-testid="biz-bulk-open">사업자 상태 확인</button>
-      {open && <BizBulkCheck rows={rows} checker={mainBiz} onClose={() => setOpen(false)} />}
+      {!controlled && <button type="button" onClick={() => setOpenSelf(true)} className={className} data-testid="biz-bulk-open">사업자 상태 확인</button>}
+      {open && <BizBulkCheck rows={rows} checker={mainBiz} onClose={close} />}
     </>
   );
 }
