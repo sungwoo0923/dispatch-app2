@@ -24867,13 +24867,14 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   <td className={`${cell} relative`}>
                     {/* ⭐ 2026-11-05 LIVE — 칩 대신 차량번호 입력칸 왼쪽 위 모서리의 6px 점(폭 0 · 칸 너비 그대로) */}
                     {r.배차상태 === "배차완료" && <LiveDriverChip order={r} variant="pin" />}
-                    <div className="flex items-center gap-1">{/* 🛠 2026-11-23 입력칸 + 추천 기사 ▾ 나란히(겹치지 않게) */}
+                    {/* 🛠 2026-11-23 추천 기사 ▾ 를 차량번호 칸 "안" 오른쪽 끝에(글자와 겹치지 않게 칸을 조금 넓힘) — 테두리는 바깥 상자가 그린다 */}
+                    <div className="flex items-center border rounded bg-white w-[150px] min-w-[130px] pr-0.5 focus-within:border-[#1B2B4B] focus-within:ring-1 focus-within:ring-[#1B2B4B]/30">
                     <input autoComplete="off"
                       name="차량번호"
                       data-id={r._id}
                       type="text"
                       value={r.차량번호 || ""}
-                      className="border p-0.5 rounded w-[120px] min-w-[100px] text-[14px] font-medium"
+                      className="flex-1 min-w-0 !border-0 !shadow-none bg-transparent p-0.5 text-[14px] font-medium focus:outline-none"
                       onChange={(e) => {
   const v = e.target.value;
   const isEmpty = v.trim() === "";
@@ -38048,12 +38049,13 @@ return (
                   </td>
 
                   {/* 차량번호(항상 활성화) · ⭐ 2026-11-05 지입·직영·임대 기사앱 LIVE 표시가 붙으면 그만큼 칸이 넓어진다 */}
-                  <td className="border text-center whitespace-nowrap w-[158px] max-w-[158px] relative">
+                  <td className="border text-center whitespace-nowrap w-[160px] max-w-[160px] relative">
                     {/* ⭐ 2026-11-05 LIVE — 칩 대신 차량번호 입력칸 왼쪽 위 모서리의 6px 점(폭 0 · 칸 너비 그대로) */}
                     {row.배차상태 === "배차완료" && <LiveDriverChip order={row} variant="pin" />}
-                    <div className="flex items-center justify-center gap-1 px-0.5">{/* 🛠 2026-11-23 입력칸 + 추천 기사 ▾ 나란히(겹치지 않게) */}
+                    {/* 🛠 2026-11-23 추천 기사 ▾ 를 차량번호 칸 "안" 오른쪽 끝에(글자와 겹치지 않게 칸을 조금 넓힘) — 테두리는 바깥 상자가 그린다 */}
+                    <div className="mx-auto flex items-center border rounded bg-white w-[154px] pr-0.5 focus-within:border-[#1B2B4B] focus-within:ring-1 focus-within:ring-[#1B2B4B]/30">
                     <input autoComplete="off"
-                      className="border rounded px-1 py-0.5 text-center w-[118px]"
+                      className="flex-1 min-w-0 !border-0 !shadow-none bg-transparent px-1 py-0.5 text-center focus:outline-none"
                       value={row.차량번호 || ""}
                       onChange={(e) => {
                         const v = e.target.value;
