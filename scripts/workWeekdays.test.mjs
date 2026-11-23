@@ -2,7 +2,7 @@
 // 실행: node scripts/workWeekdays.test.mjs
 import { register } from "node:module";
 register("./extResolve.mjs", import.meta.url); // src는 확장자 없이 가져오므로 .js를 붙여 찾게
-const { DEFAULT_WORK_WEEKDAYS, normWeekdays, workWeekdaysOf, isRestDay, isOffDay, weekdaysText, workDaysBetween } = await import("../src/attendanceUtils.js");
+const { DEFAULT_WORK_WEEKDAYS, normWeekdays, workWeekdaysOf, isRestDay, isOffDay, weekdaysText, workDaysBetween, suggestWeekdays, offDayWorkersByWeekday, monthWorkDays } = await import("../src/attendanceUtils.js");
 const { bizDays, leaveUseOf, offWord } = await import("../src/approvalForms.js");
 
 let pass = 0, fail = 0;
@@ -38,6 +38,24 @@ eq(offWord(range), "주말·공휴일", "예전 문서 글자 그대로");
 eq(offWord({ workWeekdays: MON_SAT }), "쉬는 날·공휴일", "근무 요일이 있으면 '쉬는 날'");
 eq(leaveUseOf({ cat: "leave", form: "annual", data: { kind: "연차", period: { ...range, workWeekdays: MON_SAT } } }).days, 3, "전자결재 연차도 저장된 근무 요일로 셈");
 eq(leaveUseOf({ cat: "leave", form: "annual", data: { kind: "연차", period: range } }).days, 2, "근무 요일 없는 예전 문서는 그대로");
+
+// 5) 출근 기록으로 근무 요일 추천 — 2026-10-26(월) ~ 11-22(일) 4주, 월~토 출근
+const recs = [];
+for (let d = new Date("2026-10-26T00:00:00"); d <= new Date("2026-11-22T00:00:00"); d.setDate(d.getDate() + 1)) {
+  const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  if (d.getDay() !== 0) recs.push({ date: ds, status: "출근" });
+}
+const sg = suggestWeekdays(recs, { from: "2026-10-26", to: "2026-11-22" });
+eq(sg.weekdays, MON_SAT, "4주 월~토 출근 → 월~토 추천");
+eq(suggestWeekdays(recs.filter((r, i) => i % 3 === 0 || !r.date.endsWith("1")).filter((r) => new Date(r.date + "T00:00:00").getDay() !== 6), { from: "2026-10-26", to: "2026-11-22" }).weekdays, [1, 2, 3, 4, 5], "토요일을 안 나오면 월~금");
+eq(suggestWeekdays(recs.slice(0, 3), { from: "2026-10-26", to: "2026-11-22" }), null, "기록이 너무 적으면 추천 안 함");
+eq(sg.rate[6], 1, "토요일 출근 비율 100%");
+// 6) 회사 기준 쉬는 날 출근한 직원(회사 기준 따르는 직원만)
+const emps = [{ uid: "a" }, { uid: "b", workWeekdays: MON_SAT }, { uid: "c" }];
+const wk = offDayWorkersByWeekday([{ uid: "a", date: SAT, status: "출근" }, { uid: "b", date: SAT, status: "출근" }, { uid: "c", date: SAT, status: "연차" }, { uid: "c", date: MON, status: "출근" }], emps, DEFAULT_WORK_WEEKDAYS, []);
+eq(wk, { 6: ["a"] }, "토요일 출근한 회사 기준 직원 = a(개별 설정 b · 연차 c 빼고)");
+// 7) 한 달 근무일
+eq([monthWorkDays("2026-11", DEFAULT_WORK_WEEKDAYS, []), monthWorkDays("2026-11", MON_SAT, []), monthWorkDays("2026-11", WEEKEND, [])], [21, 25, 9], "2026년 11월 근무일: 주5일 21 · 주6일 25 · 주말 9");
 
 console.log(`workWeekdays: ${pass} 통과 · ${fail} 실패`);
 if (fail) process.exit(1);

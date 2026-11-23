@@ -51,6 +51,43 @@ export function weekdaysText(weekdays) {
   if (run && ord.length >= 3) return `${WEEKDAY_NAMES[ord[0]]}~${WEEKDAY_NAMES[ord[ord.length - 1]]}`;
   return ord.map((d) => WEEKDAY_NAMES[d]).join("·");
 }
+// 🧠 출근 기록으로 근무 요일 추천 — 최근 기록(records: [{ date, status }])에서 요일별 출근 비율이 절반 이상인 요일
+//  · 기간 안에 그 요일이 몇 번 있었는지(공휴일 제외)를 분모로 센다 · 출근 기록이 4일 미만이면 추천하지 않음(null)
+const WORK_STATUSES = ["출근", "외근", "조퇴"];
+export function suggestWeekdays(records = [], { from, to, holidays = [], minRate = 0.5 } = {}) {
+  if (!from || !to) return null;
+  const worked = new Set((records || []).filter((r) => r?.date >= from && r?.date <= to && WORK_STATUSES.includes(r.status)).map((r) => r.date));
+  if (worked.size < 4) return null;
+  const total = [0, 0, 0, 0, 0, 0, 0], hit = [0, 0, 0, 0, 0, 0, 0];
+  const a = new Date(from + "T00:00:00"), b = new Date(to + "T00:00:00");
+  for (let d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) {
+    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (isHoliday(ds, holidays)) continue;
+    total[d.getDay()] += 1; if (worked.has(ds)) hit[d.getDay()] += 1;
+  }
+  const rate = total.map((t, i) => (t ? hit[i] / t : 0));
+  const days = normWeekdays(rate.map((r, i) => (r >= minRate ? i : -1)).filter((i) => i >= 0));
+  return days ? { weekdays: days, rate, workedDays: worked.size } : null;
+}
+// 이번 달 회사 기준 쉬는 날에 출근한 직원 — 요일별 { 요일: [uid…] } (회사 기준을 따르는 직원만)
+export function offDayWorkersByWeekday(records = [], employees = [], companyWeekdays, holidays = []) {
+  const follow = new Set((employees || []).filter((e) => !normWeekdays(e.workWeekdays)).map((e) => e.uid));
+  const out = {};
+  (records || []).forEach((r) => {
+    if (!follow.has(r.uid) || !WORK_STATUSES.includes(r.status) || !r.date) return;
+    if (isHoliday(r.date, holidays) || !isRestDay(r.date, companyWeekdays)) return;
+    const d = dayOfWeek(r.date);
+    (out[d] = out[d] || new Set()).add(r.uid);
+  });
+  return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v]]));
+}
+// 한 달 근무일 수(근무 요일 · 공휴일 제외) — "이번 달 근무일 ○일" 미리보기
+export function monthWorkDays(ym, weekdays, holidays = []) {
+  const [y, m] = String(ym).split("-").map(Number);
+  if (!y || !m) return 0;
+  const last = new Date(y, m, 0).getDate();
+  return workDaysBetween(`${ym}-01`, `${ym}-${String(last).padStart(2, "0")}`, weekdays, holidays);
+}
 // 기간 안의 근무일 수(근무 요일 · 공휴일 제외) — 휴가 일수 계산
 export function workDaysBetween(startStr, endStr, weekdays, holidays) {
   if (!startStr) return 0;

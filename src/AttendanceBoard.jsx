@@ -14,7 +14,8 @@ import { ATTENDANCE_STATUS_COLOR, findApprovedLeaveForDate, isHoliday, getHolida
 import { useCustomRoles } from "./customRoles";
 // 🗓 2026-11-23 근무 요일(회사 전체 + 직원별) · 휴일근무 · 대체휴무
 import { DEFAULT_WORK_WEEKDAYS, WEEKDAY_NAMES, WEEKDAY_ORDER, workWeekdaysOf, isRestDay, isOffDay, weekdaysText, normWeekdays } from "./attendanceUtils";
-import { saveCompanyWorkWeekdays, grantCompDay } from "./workWeekdays";
+import { grantCompDay } from "./workWeekdays";
+import WorkWeekdaysModal from "./WorkWeekdaysModal"; // 🗓 근무 요일 설정 팝업
 import { useLeaveBasis } from "./leaveBasis";
 import {
   APPROVER_GROUP_LABEL, isHrStaffUser, isExecUser, canApproveAttendanceReq, canEditAttendanceOf, markNotifSeen,
@@ -97,7 +98,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
   // 🗓 회사 근무 요일
   const [coWeekdays, setCoWeekdays] = useState(DEFAULT_WORK_WEEKDAYS);
   const [showWeekPanel, setShowWeekPanel] = useState(false);
-  const [coWdInput, setCoWdInput] = useState(null);
+  const [weekPanelInit, setWeekPanelInit] = useState({ tab: "company", uid: "" });
   const [offDayReq, setOffDayReq] = useState(false); // 출근 요청 모달이 "휴일 출근"인지
   const [offDayReason, setOffDayReason] = useState("");
 
@@ -532,12 +533,6 @@ export default function AttendanceBoard({ userCompany, role, user }) {
     if (!r.ok) { alert(r.reason); return; }
     setEditCell(null);
   };
-  const saveCoWeekdays = async () => {
-    const w = normWeekdays(coWdInput);
-    if (!w) { alert("근무 요일을 하루 이상 골라 주세요."); return; }
-    try { await saveCompanyWorkWeekdays(company, w); setShowWeekPanel(false); }
-    catch (e) { alert(`저장하지 못했습니다: ${e?.message || e}`); }
-  };
   const openSchedule = (emp) => {
     setEditWorkStart(emp.workStartTime || "09:00"); setEditWorkEnd(emp.workEndTime || "18:00");
     const own = normWeekdays(emp.workWeekdays);
@@ -696,8 +691,8 @@ export default function AttendanceBoard({ userCompany, role, user }) {
               <button onClick={() => setShowEmpFilter(v => !v)} className={btnCls(showEmpFilter)}>직원 관리</button>
               <button onClick={() => { if (!showOfficePanel && officeLocation && !officeInput.lat) setOfficeInput({ lat: String(officeLocation.lat ?? ""), lng: String(officeLocation.lng ?? ""), address: officeLocation.address || "" }); setShowOfficePanel(v => !v); setShowHolidayPanel(false); }}
                 className={btnCls(showOfficePanel)}>출근지 설정</button>
-              <button onClick={() => { setShowHolidayPanel(v => !v); setShowOfficePanel(false); setShowWeekPanel(false); }} className={btnCls(showHolidayPanel)}>공휴일 관리</button>
-              <button onClick={() => { setCoWdInput(coWeekdays); setShowWeekPanel(v => !v); setShowOfficePanel(false); setShowHolidayPanel(false); }} className={btnCls(showWeekPanel)}>근무 요일 · {weekdaysText(coWeekdays)}</button>
+              <button onClick={() => { setShowHolidayPanel(v => !v); setShowOfficePanel(false); }} className={btnCls(showHolidayPanel)}>공휴일 관리</button>
+              <button onClick={() => { setWeekPanelInit({ tab: "company", uid: "" }); setShowWeekPanel(true); }} className={btnCls(false)}>근무 요일 · {weekdaysText(coWeekdays)}</button>
             </>
           )}
         </div>
@@ -768,39 +763,10 @@ export default function AttendanceBoard({ userCompany, role, user }) {
       )}
 
       {/* 공휴일 관리 패널 */}
-      {/* 🗓 근무 요일 설정 — 회사 전체 + 직원별 */}
+      {/* 🗓 근무 요일 설정 팝업 — 회사 전체 · 개별 설정(src/WorkWeekdaysModal.jsx) */}
       {isAdmin && showWeekPanel && (
-        <section className="bg-white rounded-2xl border border-[#E3E8F0] p-5" data-kp="work-weekdays">
-          <div className="text-[11px] font-extrabold tracking-[0.24em] text-[#8A97AD]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>WORK DAYS</div>
-          <div className="text-[16px] font-black text-[#0F1A30]">근무 요일</div>
-          <div className="text-[13px] text-[#5B6B85] mt-0.5 mb-3">회사 전체 근무 요일을 정하면 모든 직원에게 적용돼요. 다른 직원만 따로 정하려면 아래 목록에서 [바꾸기]를 누르면 돼요. 근무 요일이 아닌 날은 "휴무"로 보이고, 미출근으로 세지 않아요.</div>
-          <div className="text-[13px] font-black text-[#3A4A66] mb-1.5">회사 전체</div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {WEEKDAY_ORDER.map(d => {
-              const on = (coWdInput || []).includes(d);
-              return <button key={d} onClick={() => setCoWdInput(v => (on ? (v || []).filter(x => x !== d) : [...(v || []), d]))}
-                className={`w-10 h-10 rounded-xl text-[14px] font-black border transition ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : `bg-white border-[#DCE3EE] ${d === 0 ? "text-[#D23F3F]" : d === 6 ? "text-[#2D5BD8]" : "text-[#5B6B85]"}`}`}>{WEEKDAY_NAMES[d]}</button>;
-            })}
-            <span className="w-px h-7 bg-[#E3E8F0] mx-1" />
-            {[["월~금", [1, 2, 3, 4, 5]], ["월~토", [1, 2, 3, 4, 5, 6]], ["매일", [0, 1, 2, 3, 4, 5, 6]]].map(([l, v]) => (
-              <button key={l} onClick={() => setCoWdInput(v)} className="h-9 px-3 rounded-xl border border-[#DCE3EE] text-[13px] font-bold text-[#3A4A66] hover:bg-[#F5F7FB]">{l}</button>
-            ))}
-            <button onClick={saveCoWeekdays} className="h-10 px-5 rounded-xl bg-[#1B2B4B] text-white text-[13.5px] font-black ml-auto">저장 · {weekdaysText(coWdInput)}</button>
-          </div>
-          <div className="text-[13px] font-black text-[#3A4A66] mt-5 mb-1.5">직원별</div>
-          <div className="max-h-64 overflow-y-auto divide-y divide-[#EEF1F6] rounded-xl border border-[#E3E8F0]">
-            {activeEmployees.map(emp => {
-              const own = normWeekdays(emp.workWeekdays);
-              return (
-                <div key={emp.uid} className="flex items-center gap-3 px-3.5 py-2">
-                  <span className="flex-1 text-[14px] font-bold text-[#0F1A30]">{emp.name || emp.email}<span className="ml-2 text-[12px] font-semibold text-[#8A97AD]">{[emp.team, emp.position].filter(Boolean).join(" · ")}</span></span>
-                  <span className={`text-[12.5px] font-black px-2 py-0.5 rounded-md ${own ? "bg-[#EEF3FC] text-[#1B2B4B]" : "text-[#8A97AD]"}`}>{own ? `따로 · ${weekdaysText(own)}` : `회사 설정 · ${weekdaysText(coWeekdays)}`}</span>
-                  <button onClick={() => openSchedule(emp)} className="h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#3A4A66] hover:bg-[#F5F7FB]">바꾸기</button>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+        <WorkWeekdaysModal company={company} employees={activeEmployees} coWeekdays={coWeekdays} holidays={holidays} records={isCurMonth ? records : []}
+          myUid={user?.uid || ""} initialTab={weekPanelInit.tab} initialUid={weekPanelInit.uid} onClose={() => setShowWeekPanel(false)} />
       )}
 
       {isAdmin && showHolidayPanel && (
@@ -1244,7 +1210,7 @@ export default function AttendanceBoard({ userCompany, role, user }) {
               <div>
                 <div className="text-[13px] font-bold text-[#3A4A66] mb-1.5">근무 요일</div>
                 <div className="flex p-1 rounded-xl bg-[#EEF2F8] gap-1 mb-2">
-                  {[["company", `회사 설정(${weekdaysText(coWeekdays)})`], ["custom", "이 직원만 따로"]].map(([k, l]) => (
+                  {[["company", `회사 기준(${weekdaysText(coWeekdays)})`], ["custom", "개별 설정"]].map(([k, l]) => (
                     <button key={k} onClick={() => { setEditWdMode(k); if (k === "custom" && !normWeekdays(editWd)) setEditWd(coWeekdays); }}
                       className={`flex-1 h-8 rounded-[9px] text-[12px] font-bold ${editWdMode === k ? "bg-white text-[#0F1A30] shadow" : "text-[#5B6B85]"}`}>{l}</button>
                   ))}
