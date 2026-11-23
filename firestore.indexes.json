@@ -514,7 +514,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "상차일",
+          "fieldPath": "`상차일`",
           "order": "ASCENDING"
         }
       ]
