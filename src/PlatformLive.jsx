@@ -37,12 +37,14 @@ const kstMonth = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 
 const isTM = (u) => u && (u.role === "totalMaster" || u.email === TM_EMAIL);
 
 // ─── 구독 ───
-function useLiveCol(make, deps) {
+// 🩺 2026-11-23 읽기에 실패하면(권한 · 연결) 예전엔 조용히 빈 목록 → 접속자 "0명"으로 보여 진짜 0명과 구별이 안 됐다
+//  → onErr(코드)로 알려 화면에 "불러오지 못했어요"를 띄운다
+function useLiveCol(make, deps, onErr) {
   const [list, setList] = React.useState(null);
   React.useEffect(() => {
     let q;
-    try { q = make(); } catch { setList([]); return undefined; }
-    return onSnapshot(q, (s) => setList(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setList((v) => v || []));
+    try { q = make(); } catch (e) { setList([]); onErr?.(String(e?.code || e?.message || "query")); return undefined; }
+    return onSnapshot(q, (s) => { onErr?.(""); setList(s.docs.map((d) => ({ id: d.id, ...d.data() }))); }, (e) => { onErr?.(String(e?.code || e?.message || "error")); setList((v) => v || []); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
   return list;
@@ -53,8 +55,10 @@ export const usePlatformLive = () => React.useContext(Ctx);
 
 // 최고관리자 화면(PlatformCenter) 맨 바깥에 한 번만 — 자식 화면들이 같은 구독을 나눠 쓴다
 export function PlatformLiveProvider({ children, demo = null }) { // 🛰 2026-11-18 demo — 개발 /preview-admin 화면 점검용(실제 화면에선 안 씀)
-  const users = useLiveCol(() => collection(db, "users"), []);
-  const sessions = useLiveCol(() => query(collection(db, "loginSessions"), where("active", "==", true)), []);
+  const [usersErr, setUsersErr] = React.useState("");
+  const [sessionsErr, setSessionsErr] = React.useState("");
+  const users = useLiveCol(() => collection(db, "users"), [], setUsersErr);
+  const sessions = useLiveCol(() => query(collection(db, "loginSessions"), where("active", "==", true)), [], setSessionsErr);
   const tApps = useLiveCol(() => collection(db, "transportApplications"), []);
   const cApps = useLiveCol(() => collection(db, "companyApplications"), []);
   const planReqs = useLiveCol(() => query(collection(db, "planRequests"), orderBy("createdAt", "desc"), limit(200)), []);
@@ -196,12 +200,13 @@ export function PlatformLiveProvider({ children, demo = null }) { // 🛰 2026-1
       if (!cur || (rec.linkStatus === "approved" && cur.linkStatus !== "approved") || (!cur.linked && rec.linked)) shipperApps[n] = rec; });
 
     return {
+      errors: { users: usersErr, sessions: sessionsErr },
       ready, now, companies, shippers, shipperApps, onlineList, totals, appInfo, signups, dupes,
       pending: { transport: pendingT, shipper: pendingC, planReqs: openPlanReqs, inquiries: newInquiries, staffByCo: pendingStaffByCo, support: pendingSupport,
         total: pendingT.length + pendingC.length + openPlanReqs.length + newInquiries.length + pendingSupport.length },
       planMap, invoiceMap, planReqMap, month,
     };
-  }, [users, sessions, tApps, cApps, planReqs, inquiries, plans, invoices, supportReqs, now]);
+  }, [users, sessions, tApps, cApps, planReqs, inquiries, plans, invoices, supportReqs, now, usersErr, sessionsErr]);
   return <Ctx.Provider value={demo || value}>{children}</Ctx.Provider>;
 }
 
@@ -368,7 +373,8 @@ export function LiveNowPanel({ compact = false, onMore, onCompany }) {
           <span className="sm:ml-auto text-[12.5px] text-[#7A879C] font-semibold">한 사람이 PC·휴대폰 둘 다 써도 1명 · 5분마다 활동 기록</span>
         </div>
       )}
-      {!live.ready ? <div className="py-12 text-center text-[#9AA9C3]">불러오는 중…</div>
+      {live.errors?.sessions ? <div className="py-10 px-6 text-center text-[14px] font-bold text-[#B42318] leading-relaxed">접속 기록을 불러오지 못했어요 ({live.errors.sessions})<br /><span className="text-[12.5px] font-semibold text-[#7A879C]">그래서 접속자 수가 실제와 다르게 0으로 보일 수 있어요. 새로고침해도 계속되면 알려 주세요.</span></div>
+        : !live.ready ? <div className="py-12 text-center text-[#9AA9C3]">불러오는 중…</div>
         : shown.length === 0 ? <div className="py-12 text-center text-[#9AA9C3] text-[14px]">{mode === "now" ? "최근 10분 안에 활동한 사람이 없습니다" : "최근 24시간 접속이 없습니다"}</div> : (
           <ul className={`divide-y divide-[#EEF1F6] ${compact ? "" : "max-h-[640px] overflow-y-auto"}`}>
             {shown.map((p) => (

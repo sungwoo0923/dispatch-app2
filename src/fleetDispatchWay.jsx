@@ -12,7 +12,7 @@ import { getTenant } from "./fsTenant";
 import { setOrderTransform } from "./orderWrite";
 import { autoWayFor, normalizeWayMap, SETTING_KEY } from "./fleetDispatchWayCore";
 import { BASE_FLEET_GRADES, useCompanyFleetGrades } from "./fleetGrades";
-import { useCompanyDropdownOptions } from "./companyDropdownOptions";
+import CompanyOptionPicker from "./companyOptionPicker"; // 프로그램 공용 선택기(지급방식 · 배차방식과 같은 모양)
 
 const coOf = (company) => String(company || (() => { try { return getTenant(); } catch { return ""; } })() || DEFAULT_COMPANY).trim();
 
@@ -68,7 +68,6 @@ function FleetDispatchWayModal({ company, isMaster, onClose }) {
   const { co, map } = useFleetDispatchWay(company);
   const extra = useCompanyFleetGrades(co);
   const grades = [...BASE_FLEET_GRADES, ...extra];
-  const ways = useCompanyDropdownOptions("배차방식");
   const [draft, setDraft] = React.useState(null);
   const [ask, setAsk] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
@@ -94,14 +93,14 @@ function FleetDispatchWayModal({ company, isMaster, onClose }) {
           이 구분의 기사로 배차하면 배차방식이 자동으로 들어가요. 비워 두면 그 구분은 바꾸지 않아요.
           <br />표 · 등록 창 · 수정 창 · 모바일 어디서 배차해도 똑같이 적용돼요.
         </div>
-        <datalist id="kp-fleet-way-list">{ways.map((w) => <option key={w} value={w} />)}</datalist>
         <div className="mt-4 flex flex-col gap-2.5">
           {grades.map((g) => (
-            <label key={g} className="flex items-center gap-3">
+            <div key={g} className="flex items-center gap-3">
               <span className="w-12 shrink-0 text-[14px] font-black text-[#1B2B4B]">{g}</span>
-              <input list="kp-fleet-way-list" value={cur[g] || ""} onChange={(e) => set(g, e.target.value)} placeholder="안 씀"
-                disabled={!isMaster} className="flex-1 h-10 px-3 rounded-lg border border-[#D5DDEA] text-[14px] font-bold text-[#0F1A30] disabled:bg-[#F4F6FA]" />
-            </label>
+              <CompanyOptionPicker optKey="배차방식" value={cur[g] || ""} onChange={(v) => set(g, v)} disabled={!isMaster}
+                placeholder="안 씀" noneLabel="안 씀 (자동으로 바꾸지 않음)" allowAdd={false} userCompany={co}
+                className="flex-1 h-10 px-3 rounded-lg border border-[#D5DDEA] bg-white text-[14px] font-bold text-[#0F1A30] disabled:bg-[#F4F6FA]" />
+            </div>
           ))}
         </div>
         {!isMaster && <div className="mt-3 text-[12px] font-bold text-[#B45309]">회사 마스터만 바꿀 수 있어요.</div>}

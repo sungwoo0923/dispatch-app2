@@ -11,6 +11,7 @@
 import React, { useState } from "react";
 import { db, doc, onSnapshot, setDoc, getDoc, DEFAULT_COMPANY } from "./firebase";
 import { arrayUnion } from "firebase/firestore";
+import { applyPins, getPins } from "./optionPins"; // 📌 2026-11-23 자주 쓰는 방식 맨 위 고정(계정별)
 import { getTenant } from "./fsTenant";
 import { useEditMode } from "./EditMode";
 import { uiOptionList, useUiConfigVersion } from "./uiConfig"; // ⭐ 2026-11-07 화면 편집 — 프로그램 기본 목록(회사가 바꾼 적 없을 때) 더하기·숨기기·순서
@@ -150,7 +151,7 @@ export function useCompanyDropdownSync(role, userCompany) {
 // eslint-disable-next-line no-unused-vars
 export function dropdownList(key, fallback = [], current) {
   const co = _syncCo || resolveCompanyKey();
-  let list = listFromStored(companyOptionsSnapshot(co).opts?.[key], key);
+  let list = applyPins(listFromStored(companyOptionsSnapshot(co).opts?.[key], key), getPins(key)); // 📌 2026-11-23 내가 고정한 방식이 맨 위
   const cur = clean(current);
   if (cur && !list.includes(cur)) list = [...list, cur]; // 예전에 저장된 값도 보이게
   return list;
