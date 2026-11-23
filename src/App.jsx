@@ -30,7 +30,7 @@ const claimsSync = createClaimsSync({ getUser: () => auth.currentUser, call: fet
 import { ContractEndedScreen, useContractStatusFor } from "./companyContract"; // ⭐ 2026-11-06 계약종료 — 회사 전체 접속 차단 화면
 import { setBlindViewerRole } from "./blind";
 import {
-  checkLoginSession, replaceAndCreate, watchMySession, startHeartbeat, installEndOnSignOut,
+  checkLoginSession, replaceAndCreate, watchMySession, startHeartbeat, installEndOnSignOut, createSession,
   KIND_LABEL, END_REASON_LABEL, sessionLastMs, timeAgo,
 } from "./loginSessions";
 import { LoginManagerModal } from "./LoginManager";
@@ -288,14 +288,26 @@ export default function App() {
   const sessionGateRef = useRef({ uid: null, stop: null });
   // ⭐ 2026-11-06 모바일 미리보기 iframe은 로그인 세션을 따로 기록·감시하지 않는다(부모 창 세션을 끝내거나 중복 로그인으로 보지 않게)
   useEffect(() => { if (!IS_MOBILE_PREVIEW) installEndOnSignOut(); }, []);
-  const startSessionWatch = (id) => {
+  const startSessionWatch = (id, info) => {
+    if (info) sessionGateRef.current.info = info;
     const unwatch = watchMySession(id, (reason) => {
       // ⭐ 2026-11-01 내가 직접 로그아웃한 경우(logout)는 "끊겼습니다" 안내·재로그아웃을 하지 않는다
       if (reason === "logout") return;
       setKickedReason(reason);
       signOut(auth).catch(() => {});
     });
-    const stopBeat = startHeartbeat(id);
+    // 🛠 2026-11-23 세션 문서가 사라져 활동 기록이 안 되면 새 세션을 만들어 이어서 기록(관리센터 접속 표시가 끊기지 않게)
+    const stopBeat = startHeartbeat(id, {
+      onLost: async () => {
+        const u = auth.currentUser;
+        if (!u || sessionGateRef.current.uid !== u.uid) return;
+        try {
+          sessionGateRef.current.stop?.();
+          const nid = await createSession(u, sessionGateRef.current.info || { role });
+          startSessionWatch(nid);
+        } catch (e) { console.warn("로그인 세션 다시 만들기 실패:", e?.message || e); }
+      },
+    });
     sessionGateRef.current.stop = () => { unwatch(); stopBeat(); };
   };
   useEffect(() => {
@@ -312,28 +324,30 @@ export default function App() {
     }
     if (sessionGateRef.current.uid === user.uid) return;
     sessionGateRef.current = { uid: user.uid, stop: null };
-    let cancelled = false;
+    // 🛠 2026-11-23 예전엔 시작 중 권한(role)이 한 번 바뀌면 진행 중이던 확인이 취소되고, 다시 실행될 땐 "이미 확인함"으로 건너뛰어
+    //  그 화면에서는 로그인 세션이 아예 안 만들어졌다(관리센터 "접속 기록 없음"). 이제 취소하지 않고 로그인한 사람만 확인한다.
     const run = async () => {
       // 로그인 화면이 회사코드 등을 확인하는 중(잠깐 로그인했다가 다시 로그아웃할 수 있음)이면 끝날 때까지 기다린다
       for (let i = 0; i < 60; i++) {
         if (sessionStorage.getItem("transportValidating") !== "true" && sessionStorage.getItem("shipperValidating") !== "true" && !isDriverBusy()) break;
         await new Promise((r) => setTimeout(r, 500));
       }
-      if (cancelled || auth.currentUser?.uid !== user.uid) return;
+      if (auth.currentUser?.uid !== user.uid) { if (sessionGateRef.current.uid === user.uid) sessionGateRef.current.uid = null; return; }
       const info = { ...(sessionLogRef.current.info || {}), role };
       try {
         const res = await checkLoginSession(user, info);
-        if (cancelled) return;
-        if (res.status === "ok") startSessionWatch(res.id);
+        if (auth.currentUser?.uid !== user.uid) return;
+        if (res.status === "ok") startSessionWatch(res.id, info);
         else if (res.status === "revoked") { setKickedReason(res.reason); signOut(auth).catch(() => {}); }
         else if (res.status === "conflict") setSessionConflict({ ...res, info });
       } catch (e) {
         // 세션 기록이 안 되더라도(권한·네트워크) 로그인 자체는 막지 않는다
         console.warn("로그인 세션 확인 실패:", e?.message || e);
+        // 실패하면 다음 기회(권한 확정 · 다시 로그인)에 한 번 더 시도
+        if (sessionGateRef.current.uid === user.uid && !sessionGateRef.current.stop) sessionGateRef.current.uid = null;
       }
     };
     run();
-    return () => { cancelled = true; };
   }, [user, role]);
   const acceptSessionConflict = async () => {
     if (!sessionConflict || !user) return;
@@ -341,7 +355,7 @@ export default function App() {
     try {
       const id = await replaceAndCreate(user, sessionConflict.info, sessionConflict.conflicts);
       setSessionConflict(null);
-      startSessionWatch(id);
+      startSessionWatch(id, sessionConflict.info);
     } catch (e) {
       alert(`기존 로그인을 끊지 못했습니다: ${e?.message || e}`);
     } finally {
