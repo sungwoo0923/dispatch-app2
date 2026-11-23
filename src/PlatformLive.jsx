@@ -11,6 +11,7 @@ import React from "react";
 import { collection, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { db } from "./firebase";
 import { ROLE_LABELS as BASE_ROLE_LABELS } from "./customRoles";
+import { watchRelease, latestVersion } from "./releaseGate"; // 🆙 2026-11-23 직원별 화면 버전 — 가입자가 따라갈 버전과 비교
 
 export const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const TM_EMAIL = "tjddnqkf@naver.com";
@@ -67,6 +68,16 @@ export function PlatformLiveProvider({ children, demo = null }) { // 🛰 2026-1
   const invoices = useLiveCol(() => collection(db, "platformInvoices"), []);
   // ⭐ 2026-11-02 원격지원 — 직원의 원격 지원 요청(승인 대기 수를 처리 대기·메뉴 배지에)
   const supportReqs = useLiveCol(() => query(collection(db, "supportRequests"), orderBy("createdAt", "desc"), limit(200)), []);
+  // 🆙 2026-11-23 가입자가 따라갈 화면 버전 — [업데이트 배포]로 고정한 버전, 잠금이 꺼져 있으면 올라온 최신
+  const [rel, setRel] = React.useState(null);
+  const [latest, setLatest] = React.useState(null);
+  React.useEffect(() => { if (demo) return undefined; return watchRelease(setRel); }, [demo]);
+  React.useEffect(() => {
+    if (demo) return undefined;
+    const f = () => latestVersion().then(setLatest).catch(() => {});
+    f(); const t = setInterval(f, 5 * 60 * 1000); return () => clearInterval(t);
+  }, [demo]);
+  const target = rel && rel.enabled !== false && rel.url && rel.build ? { version: rel.version || "", build: rel.build } : latest?.build ? { version: latest.version || "", build: latest.build } : null;
   // 30초마다 "지금/24시간" 경계를 다시 계산
   const [now, setNow] = React.useState(() => Date.now());
   React.useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(t); }, []);
@@ -114,7 +125,9 @@ export function PlatformLiveProvider({ children, demo = null }) { // 🛰 2026-1
       p.lastSeen = Math.max(p.lastSeen, seen);
       p[kind] = Math.max(p[kind], seen);
       // 📍 2026-11-13 지금 보는 화면 — 가장 최근에 화면을 바꾼 기기 기준(src/screenReport.js)
-      if (s.screen && Number(s.screenAt || 0) >= (p.screenAt || 0)) { p.screen = s.screen; p.screenAt = Number(s.screenAt || 0); p.screenApp = s.screenApp || kind; p.screenHidden = !!s.screenHidden; p.ver = s.appVer || ""; p.build = s.appBuild || ""; }
+      if (s.screen && Number(s.screenAt || 0) >= (p.screenAt || 0)) { p.screen = s.screen; p.screenAt = Number(s.screenAt || 0); p.screenApp = s.screenApp || kind; p.screenHidden = !!s.screenHidden; }
+      // 🆙 2026-11-23 화면 버전 — 가장 최근에 활동한 기기 기준(예전 화면은 버전을 안 적어서 빈 값)
+      if (seen >= (p.verSeen || 0)) { p.verSeen = seen; p.ver = s.appVer || ""; p.build = s.appBuild || ""; }
       p.devices.push({ kind, device: s.device || "", seen });
     });
     const plist = Object.values(people);
@@ -127,11 +140,12 @@ export function PlatformLiveProvider({ children, demo = null }) { // 🛰 2026-1
       t.lastSeen = Math.max(t.lastSeen, p.lastSeen);
       if (p.day) t.online24h += 1;
       if (p.now) t.onlineNow += 1;
+      if (p.day && !p.isShipper && verState(p, target) !== "ok" && verState(p, target) !== "") t.oldVer = (t.oldVer || 0) + 1;
       if (!p.isShipper) {
         if (now - p.pc < DAY_MS) t.onlinePc += 1;
         if (now - p.mobile < DAY_MS) t.onlineMobile += 1;
         const st = t.staffList.find((x) => x.uid === p.uid);
-        if (st) Object.assign(st, { lastSeen: p.lastSeen, now: p.now, pc: p.pc, mobile: p.mobile, screen: p.screen, screenAt: p.screenAt, screenApp: p.screenApp, screenHidden: p.screenHidden });
+        if (st) Object.assign(st, { lastSeen: p.lastSeen, now: p.now, pc: p.pc, mobile: p.mobile, screen: p.screen, screenAt: p.screenAt, screenApp: p.screenApp, screenHidden: p.screenHidden, ver: p.ver, build: p.build });
       }
     });
     const onlineList = plist.filter((p) => p.day).sort((a, b) => b.lastSeen - a.lastSeen);
@@ -201,13 +215,20 @@ export function PlatformLiveProvider({ children, demo = null }) { // 🛰 2026-1
 
     return {
       errors: { users: usersErr, sessions: sessionsErr },
-      ready, now, companies, shippers, shipperApps, onlineList, totals, appInfo, signups, dupes,
+      ready, now, target, companies, shippers, shipperApps, onlineList, totals, appInfo, signups, dupes,
       pending: { transport: pendingT, shipper: pendingC, planReqs: openPlanReqs, inquiries: newInquiries, staffByCo: pendingStaffByCo, support: pendingSupport,
         total: pendingT.length + pendingC.length + openPlanReqs.length + newInquiries.length + pendingSupport.length },
       planMap, invoiceMap, planReqMap, month,
     };
-  }, [users, sessions, tApps, cApps, planReqs, inquiries, plans, invoices, supportReqs, now, usersErr, sessionsErr]);
+  }, [users, sessions, tApps, cApps, planReqs, inquiries, plans, invoices, supportReqs, now, usersErr, sessionsErr, target?.build]); // eslint-disable-line react-hooks/exhaustive-deps
   return <Ctx.Provider value={demo || value}>{children}</Ctx.Provider>;
+}
+
+// 🆙 2026-11-23 화면 버전 상태 — "ok"(따라갈 버전 이상) · "old"(이전 버전) · "unknown"(버전을 안 적는 예전 화면) · ""(비교할 기준 없음)
+export function verState(p, target) {
+  if (!target?.build || !p?.lastSeen) return "";
+  if (!p.build) return "unknown";
+  return p.build >= target.build ? "ok" : "old";
 }
 
 // ─── 캐시(집계 문서) + 실시간 합치기 ───
@@ -236,7 +257,7 @@ export function mergeCompanies(statsCompanies, live) {
     return {
       ...c,
       staff: l?.staff || 0, admins: l?.admins || 0, pending: l?.pending || 0, drivers: l?.drivers || 0, quit: l?.quit || 0,
-      online: l?.online24h || 0, onlineNow: l?.onlineNow || 0, onlinePc: l?.onlinePc || 0, onlineMobile: l?.onlineMobile || 0,
+      online: l?.online24h || 0, onlineNow: l?.onlineNow || 0, onlinePc: l?.onlinePc || 0, onlineMobile: l?.onlineMobile || 0, oldVer: l?.oldVer || 0,
       lastSeen: Math.max(c.lastSeen || 0, l?.lastSeen || 0), staffList: l?.staffList || [], live: true,
       plan: live.planMap[c.name] || null, invoice: live.invoiceMap[c.name] || null, planReqs: live.planReqMap[c.name] || [],
     };
@@ -559,12 +580,24 @@ export function HealthCard({ c, today, onOpen }) {
       </div>
       <div className="flex flex-wrap gap-1.5">
         {inactive && (c.staff > 0 || c.m.cnt > 0) && <Pill tone="dark">{inactiveDays == null ? "접속 기록 없음" : `${inactiveDays}일째 미접속`}</Pill>}
+        {c.oldVer > 0 && <Pill tone="line" title="24시간 안에 접속한 직원 중 최신 화면이 아닌 사람 — 새로고침하면 바뀌어요">이전 버전 {c.oldVer}명</Pill>}
         {c.pending > 0 && <Pill tone="line">직원 승인 대기 {c.pending}</Pill>}
         {c.planReqs?.length > 0 && <Pill tone="line">요금제 변경 요청</Pill>}
         <Pill tone="soft">{planId ? (PLAN_NAMES[planId] || planId) : "요금제 미지정"}</Pill>
         {inv && <Pill tone={inv === "입금완료" ? "solid" : inv === "연체" ? "dark" : "soft"}>{inv}</Pill>}
       </div>
     </button>
+  );
+}
+
+// 🆙 2026-11-23 직원별 화면 버전 칩 — 최신 / 이전 버전 / 버전 모름(버전을 안 적는 예전 화면)
+export function VerChip({ p, target }) {
+  const st = verState(p, target);
+  if (!st) return null;
+  const txt = st === "ok" ? `v${p.ver} 최신` : st === "old" ? `이전 버전 v${p.ver || "?"}` : "이전 버전";
+  const tip = st === "ok" ? "가입자 화면 버전과 같아요" : `지금 배포된 화면은 v${target.version || "?"} 예요. 이 직원이 새로고침(F5)하면 바뀌어요.${st === "unknown" ? " (버전을 기록하기 전 예전 화면)" : ""}`;
+  return (
+    <span title={tip} className={`inline-flex items-center h-6 px-2 rounded-md text-[11.5px] font-black whitespace-nowrap tabular-nums ${st === "ok" ? "bg-[#EEF3FC] text-[#2D4C82]" : "bg-[#FFF6E5] text-[#9A5B00] border border-[#F3D9A4]"}`}>{txt}</span>
   );
 }
 
@@ -586,7 +619,7 @@ export function StaffList({ list = [] }) {
               {!s.approved && <Pill tone="line">승인 대기</Pill>}
             </div>
             <div className="text-[12px] text-[#7A879C] font-semibold truncate">{[s.team, s.position].filter(Boolean).join(" · ") || s.email}{s.createdAt ? ` · 가입 ${ymdOf(s.createdAt).slice(2)}` : ""}</div>
-            <div className="mt-1"><ScreenChip p={s} now={now} /></div>
+            <div className="mt-1 flex items-center gap-1.5 flex-wrap"><ScreenChip p={s} now={now} /><VerChip p={s} target={live?.target} /></div>
           </div>
           <div className="text-right shrink-0">
             <div className="flex justify-end"><KindChips p={s} now={now} /></div>

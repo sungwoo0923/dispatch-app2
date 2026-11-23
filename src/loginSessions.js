@@ -10,6 +10,14 @@ import { db, auth } from "./firebase";
 import {
   collection, doc, setDoc, updateDoc, getDoc, getDocs, query, where, onSnapshot, serverTimestamp, writeBatch,
 } from "firebase/firestore";
+
+/* global __APP_VERSION__, __BUILD_TIME__ */
+// 🆙 2026-11-23 화면 버전 — 로그인 · 5분마다 활동 기록 때 같이 적는다
+const verFields = () => {
+  const v = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "";
+  const b = typeof __BUILD_TIME__ !== "undefined" ? __BUILD_TIME__ : "";
+  return v && v !== "dev" ? { appVer: v, appBuild: b } : {};
+};
 import { beforeAuthStateChanged } from "firebase/auth";
 
 export const SESSIONS_COLL = "loginSessions";
@@ -123,6 +131,7 @@ export async function createSession(user, info, kind = getDeviceKind()) {
     companyName: info.companyName || "",
     kind,
     device: getDeviceLabel(),
+    ...verFields(), // 🆙 2026-11-23 이 기기가 쓰는 화면 버전(관리센터 운송사관제에서 "이전 버전" 확인)
     createdAt: serverTimestamp(),
     lastSeen: serverTimestamp(),
     active: true,
@@ -170,7 +179,7 @@ export function startHeartbeat(id, { onLost } = {}) {
   let lost = false;
   const beat = () => {
     if (document.visibilityState !== "visible" || lost) return;
-    updateDoc(doc(db, SESSIONS_COLL, id), { lastSeen: serverTimestamp(), device: getDeviceLabel() }).catch((e) => {
+    updateDoc(doc(db, SESSIONS_COLL, id), { lastSeen: serverTimestamp(), device: getDeviceLabel(), ...verFields() }).catch((e) => {
       const code = String(e?.code || "");
       if (!lost && (code.includes("not-found") || code.includes("permission-denied"))) { lost = true; onLost?.(); }
     });
