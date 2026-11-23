@@ -1,0 +1,58 @@
+# 📝 2026-11-23 블로그 홈페이지 반영 — 매시간 17분(+ 손으로 Run workflow)
+#  관리자센터 › 홍보 › 블로그 원고에서 [발행하기]한 글을 가져와 홈페이지 블로그(logisweb.co.kr/blog) · RSS · sitemap 을 다시 만들고 main 에 올린다
+#  (landing-site 가 바뀌면 Vercel 이 홈페이지를 자동 배포). 바뀐 게 없으면 아무것도 올리지 않는다.
+#  필요한 비밀값: FIREBASE_SERVICE_ACCOUNT (Firebase 배포에 쓰는 것과 같음)
+#  ※ 매주 AI 초안은 서버(Firebase mktWeeklyDraft)가 만들어 관리자센터 "검토 대기"에 넣는다 — 여기서는 발행된 글만 옮긴다
+name: 블로그 홈페이지 반영
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency: blog-sync
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 서비스 계정
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA" ]; then echo "::error::FIREBASE_SERVICE_ACCOUNT 비밀값이 없어요"; exit 1; fi
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+      - name: 도구 설치
+        run: cd marketing && npm init -y >/dev/null && npm i --no-save firebase-admin@12 >/dev/null
+      - name: 관리자센터 글 가져오기
+        run: node marketing/blog/scripts/pull.mjs
+      - name: 카드 그림 · 홈페이지 블로그 만들기
+        run: |
+          NEED=$(for d in marketing/blog/posts/*/; do [ -f "$d/cards.json" ] && [ ! -f "$d/card-1.jpg" ] && echo "$d"; done)
+          if [ -n "$NEED" ]; then
+            cd marketing && npm i --no-save playwright@1.63.0 >/dev/null && npx playwright install --with-deps chromium >/dev/null && cd ..
+            sudo apt-get install -y fonts-noto-cjk >/dev/null
+            node marketing/blog/scripts/render-cards.mjs
+          fi
+          node marketing/blog/scripts/build.mjs
+          rm -rf marketing/node_modules marketing/package.json marketing/package-lock.json
+      - name: 바뀐 것만 올리기
+        run: |
+          git add marketing/blog landing-site/blog landing-site/sitemap.xml
+          if git diff --cached --quiet; then echo "바뀐 것 없음"; exit 0; fi
+          git config user.name "logisweb-blog-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "블로그: 관리자센터 발행 글 홈페이지 반영"
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && exit 0; sleep 5; done
+          exit 1

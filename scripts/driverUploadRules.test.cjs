@@ -82,7 +82,7 @@ const PRE_A = `${A}__12가3456`;
   });
   await t("drivers: 같은 회사 목록", () => assertSucceeds(getDocs(query(collection(UA, "drivers"), where("companyName", "==", A)))));
   await t("drivers: 다른 회사 목록 거절", () => assertFails(getDocs(query(collection(UB, "drivers"), where("companyName", "==", A)))));
-  await t("drivers: 새 계정이 자기 uid 문서 만들기(가입 흐름 유지)", () => assertSucceeds(setDoc(doc(NEW, "drivers/newDriverNoDoc"), { uid: "newDriverNoDoc", companyName: A })));
+  await t("drivers: 새 계정이 자기 uid 문서 만들기(가입 흐름 유지)", () => assertSucceeds(setDoc(doc(NEW, "drivers/newDriverNoDoc"), { uid: "newDriverNoDoc", companyName: A, approved: false })));
 
   // ── 오더 한 건 ──
   await t("orders: 로그인 안 한 사람 한 건 읽기 거절(예전: 누구나)", () => assertFails(getDoc(doc(ANON, "orders/oA"))));

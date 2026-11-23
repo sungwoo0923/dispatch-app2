@@ -55,8 +55,13 @@ async function driverOwnerOf(db, o) {
     if (!h.length || !day) return true;
     return h.some((e) => (!e.시작 || day >= e.시작) && (!e.종료 || day <= e.종료));
   };
-  const hit = cands.find(covers) || cands[0];
-  return hit.x.uid;
+  // 🔒 2026-11-23 그 계정이 지금도 승인된 같은 회사 기사여야(승인 전 · 퇴사 · 다른 회사로 옮긴 계정에 오더가 가지 않게)
+  for (const c of [cands.find(covers), ...cands].filter(Boolean)) {
+    const u = await db.collection("users").doc(String(c.x.uid)).get().catch(() => null);
+    const x = u?.exists ? u.data() || {} : null;
+    if (x && x.approved === true && x.role === "driver" && String(x.companyName || "").trim() === co) return c.x.uid;
+  }
+  return null;
 }
 
 // 기사에게 보여 줄 담당자(오더를 배차한 직원) — 이름 · 회사 대표 전화 대신 그 직원 전화(업무용)

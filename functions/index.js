@@ -7123,6 +7123,47 @@ exports.aiVideoPlan = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeou
   }
 });
 
+// 📣 2026-11-23 관리자센터 › 홍보(영상 편집실 · 블로그 원고 · 홍보 설정) — 설명은 functions/promo.js 맨 위
+//  mktAi: { action, input } — blogDraft · rewrite · titles · ytMeta · videoScript(Claude) / tts(Gemini) / geminiKey(키 저장 · 상태) / weeklyNow(초안 지금 만들기)
+const promo = require("./promo");
+exports.mktAi = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 180, memory: "512MB" }).https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "mktAi"))) return;
+  if (req.method !== "POST") { res.status(405).json({ error: "POST만 허용됩니다." }); return; }
+  if (!(await isTotalMasterReq(req))) { res.status(403).json({ error: "최고관리자·부관리자만 사용할 수 있습니다." }); return; }
+  let body = req.body; if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
+  const action = String(body?.action || ""); const input = body?.input || {};
+  try {
+    if (action === "tts") { res.json(await promo.runTts({ db, text: input.text, voice: input.voice, style: input.style })); return; }
+    if (action === "geminiKey") {
+      const k = String(input.key || "").trim();
+      if (k) {
+        if (!/^[A-Za-z0-9_-]{20,80}$/.test(k)) { res.status(400).json({ error: "키 모양이 이상해요. Google AI Studio 에서 받은 키를 그대로 붙여 넣어 주세요." }); return; }
+        await db.doc("platformSecrets/gemini").set({ key: k, at: FieldValue.serverTimestamp() });
+      } else if (input.clear) await db.doc("platformSecrets/gemini").delete();
+      const cur = await promo.geminiKey(db);
+      res.json({ ok: true, set: !!cur, hint: cur ? `${cur.slice(0, 4)}…${cur.slice(-4)}` : "" });
+      return;
+    }
+    if (action === "weeklyNow") { res.json(await promo.weeklyDraft({ db, FieldValue, force: !!input.force })); return; }
+    const out = await promo.runPromoAi({ db, action, input });
+    db.collection("aiTeamLogs").add({ team: "marketing", question: `[홍보 ${action}] ${String(input.topic || input.title || "").slice(0, 200)}`, answer: String(out.out?.title || "").slice(0, 300), tools: ["promo"], usage: out.usage, model: out.model, at: FieldValue.serverTimestamp() }).catch(() => {});
+    res.json(out);
+  } catch (e) {
+    if (e?.user) { res.status(e.status || 500).json({ error: e.message }); return; }
+    const { status, msg } = aiTeams.apiErrorMessage(e);
+    console.error("[홍보 mktAi] 실패:", action, e);
+    res.status(status).json({ error: msg });
+  }
+});
+// ⏰ 매주 월요일 07:13(한국시간) — 다음 주제로 블로그 초안(검토 대기)을 만든다. 홍보 설정에서 끌 수 있다.
+exports.mktWeeklyDraft = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 300, memory: "512MB" })
+  .pubsub.schedule("13 7 * * 1").timeZone("Asia/Seoul")
+  .onRun(async () => { const r = await promo.weeklyDraft({ db, FieldValue }).catch((e) => ({ error: String(e?.message || e) })); console.log("[매주 블로그 초안]", JSON.stringify(r)); return null; });
+
 // 🧠 2026-11-07 오더 스캔 정밀 인식 — 설명은 functions/orderScan.js 맨 위
 //  orderScanOcr: Google Cloud Vision 글자 인식(줄 위치 포함) · orderScanExtract: Claude(Haiku)로 배차 등록 칸 정리
 //  둘 다 호출형(callable) · 로그인 + 승인된 사람만 · 사람마다 하루 횟수 제한(scanUsage) · 실패하면 화면이 예전 방식으로 넘어간다

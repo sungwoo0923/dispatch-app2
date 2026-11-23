@@ -114,8 +114,8 @@ await updateDoc(doc(att, "users/attacker"), { carNo: "33다3333" });
 await no("승인 대기 → 내 차량번호로 B 선등록 기사 문서 지우기", deleteDoc(doc(att, "drivers/B운송__33다3333")));
 const att2 = as("attacker2");
 await ok("기사 가입 신청(approved:false)", setDoc(doc(att2, "users/attacker2"), { companyName: "C운송", role: "driver", approved: false, name: "y" }));
-await no("내 계정 회사(C)와 다른 회사(B)로 기사 문서 만들기", setDoc(doc(att2, "drivers/attacker2"), { companyName: "B운송", name: "y" }));
-await ok("내 계정 회사(C)로 기사 문서 만들기", setDoc(doc(att2, "drivers/attacker2"), { companyName: "C운송", name: "y" }));
+await no("내 계정 회사(C)와 다른 회사(B)로 기사 문서 만들기", setDoc(doc(att2, "drivers/attacker2"), { companyName: "B운송", name: "y", uid: "attacker2", approved: false }));
+await ok("내 계정 회사(C)로 기사 문서 만들기", setDoc(doc(att2, "drivers/attacker2"), { companyName: "C운송", name: "y", uid: "attacker2", approved: false }));
 await no("내 기사 문서 회사를 B 로 바꾸기", updateDoc(doc(att2, "drivers/attacker2"), { companyName: "B운송" }));
 
 console.log("③ 화주 — 같은 이름 · 운송사와 같은 이름");
@@ -132,7 +132,8 @@ await no("'B운송' 이름 화주: B 직원 목록", getDocs(query(collection(sh
 await no("'B운송' 이름 화주: B 직원 문서", getDoc(doc(shipFake, "users/bAdmin")));
 await no("'B운송' 이름 화주: B 회사 설정", getDoc(doc(shipFake, "companySettings/B운송")));
 await no("'B운송' 이름 화주: B 결재", getDoc(doc(shipFake, "approvals/bap")));
-await ok("'B운송' 이름 화주: 같은 화주사 화주 목록", getDocs(query(collection(shipFake, "users"), where("companyName", "==", "B운송"), where("role", "==", "shipper"))));
+await ok("'B운송' 이름 화주: 같은 화주사 화주 목록", getDocs(query(collection(shipFake, "users"), where("companyName", "==", "B운송"), where("role", "==", "shipper"), where("linkedTransportCompany.companyName", "==", "A운송"))));
+await no("'B운송' 이름 화주: 같은 이름 화주라도 연동 운송사 조건 없이 목록", getDocs(query(collection(shipFake, "users"), where("companyName", "==", "B운송"), where("role", "==", "shipper"))));
 
 console.log("⑤ 기사 — 같은 회사라도 사무 자료는 못 봄");
 await no("A 기사: 원본 오더(청구운임 · 수수료가 들어 있음)", getDoc(doc(aDrv, "orders/a2")));
@@ -176,6 +177,28 @@ console.log("④ 로그인 없는 위치 공유");
 await ok("위치만 쓰기", setDoc(doc(anon, "liveLocations/a1"), { 위치: { lat: 1, lng: 2 } }));
 await no("위치 문서에 회사 이름 끼우기", setDoc(doc(anon, "liveLocations/z1"), { 위치: { lat: 1, lng: 2 }, companyName: "B운송" }));
 await no("로그인 없이 기사 업로드 기록 만들기", addDoc(collection(anon, "driver_uploads"), { companyName: "B운송" }));
+
+console.log("⑦ 2026-11-23 추가 점검 — 위치 보기 · 서버 사본 · 화주 오더 · 기사 본인 문서 · 메신저");
+const bAdmin = as("bAdmin");
+await ok("A 직원: A 오더 위치 보기", getDoc(doc(aAdmin, "liveLocations/a1")));
+await no("B 직원: A 오더 위치 보기", getDoc(doc(bAdmin, "liveLocations/a1")));
+await no("로그인 없이 위치 보기", getDoc(doc(anon, "liveLocations/a1")));
+await ok("화주 삼성: 내 오더 위치 보기", getDoc(doc(shipS, "liveLocations/a1")));
+await no("A 기사: 위치 문서 보기(기사는 업로드 페이지에서 쓰기만)", getDoc(doc(aDrv, "liveLocations/a1")));
+await no("A 직원: 기사 사본 직접 만들기(서버만)", setDoc(doc(aAdmin, "driverOrders/orders__x"), { companyName: "A운송", driverUid: "aDrv" }));
+await no("A 직원: 화주 사본 직접 만들기(서버만)", setDoc(doc(aAdmin, "shipperOrders/orders__x"), { companyName: "A운송", shipperCompany: "삼성" }));
+await no("화주 삼성: 연동 안 된 B 운송사로 오더 넣기", addDoc(collection(shipS, "orders"), { companyName: "B운송", shipperCompany: "삼성", shipperUid: "shipS" }));
+await no("화주 삼성: 다른 화주사 이름으로 오더 넣기", addDoc(collection(shipS, "orders"), { companyName: "A운송", shipperCompany: "LG", shipperUid: "shipS" }));
+await ok("화주 삼성: 연동 운송사로 내 오더 넣기", addDoc(collection(shipS, "orders"), { companyName: "A운송", shipperCompany: "삼성", shipperUid: "shipS" }));
+await seed("drivers/aDrv", { companyName: "A운송", uid: "aDrv", 차량번호: "11가1111", carNo: "11가1111", approved: true });
+await no("A 기사: 내 기사 문서 차량번호 바꾸기(다른 차 오더 받기)", updateDoc(doc(aDrv, "drivers/aDrv"), { 차량번호: "22나2222" }));
+await ok("A 기사: 내 기사 문서 출근 알림 바꾸기", updateDoc(doc(aDrv, "drivers/aDrv"), { 출근알림: true }));
+await no("가입자: 기사 문서를 approved 없이 만들기", setDoc(doc(as("attacker3"), "drivers/attacker3"), { companyName: "A운송", uid: "attacker3" }));
+await no("A 기사: 다른 기사 이름으로 운행일지 넣기", addDoc(collection(aDrv, "driver_logs"), { companyName: "A운송", uid: "otherDrv" }));
+await ok("A 기사: 내 운행일지 넣기", addDoc(collection(aDrv, "driver_logs"), { companyName: "A운송", uid: "aDrv" }));
+await no("화주 삼성: 메신저 프로필 회사를 운송사 이름으로", setDoc(doc(shipS, "chat_profiles/shipS"), { company: "A운송" }));
+await ok("화주 삼성: 메신저 프로필 회사 = (화주)삼성", setDoc(doc(shipS, "chat_profiles/shipS"), { company: "(화주)삼성" }));
+await no("가입 대기: 메신저 프로필 만들기", setDoc(doc(as("attacker"), "chat_profiles/attacker"), { company: "A운송" }));
 
 console.log(`\n운송사 분리 규칙 테스트 통과 (${pass}개)`);
 process.exit(0);

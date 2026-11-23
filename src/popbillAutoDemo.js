@@ -1,7 +1,7 @@
 // ======================= src/popbillAutoDemo.js =======================
 // 🧪 개발 전용(둘러보기 demo=1) — 알림톡 · 은행 입금 화면 점검용 메모리 저장소. 배포 빌드에서는 src/popbillAuto.js의 DEV 분기가 빠져 포함되지 않는다.
 //  팝빌은 "연결 전" 상태로 둔다(실제 팝빌 호출 없음).
-const CLIENTS = ["(주)한빛물류센터", "대한통운 평택허브", "삼성전자 기흥캠퍼스 자재팀", "LG디스플레이 파주", "CJ대한통운"];
+const CLIENTS = ["(주)한빛물류센터", "한결물류 평택허브", "세진전자 기흥공장 자재팀", "엘림디스플레이 파주", "대성로지텍"];
 const ymd = (off) => new Date(Date.now() + 9 * 3600e3 + off * 864e5).toISOString().slice(0, 10);
 const store = {
   settings: {
@@ -13,7 +13,7 @@ const store = {
   txns: [
     { id: "d1", companyName: "테스트운송", bankName: "기업은행", account: "******1234", date: ymd(0), time: "09:12", amount: 1650000, name: "한빛물류", status: "auto", match: { client: CLIENTS[0], kind: "정산완료", confidence: "이름일치", alloc: [{ yyyymm: ymd(-30).slice(0, 7), amount: 1650000, full: true }] }, decidedAt: Date.now() - 50 * 60e3 },
     { id: "d2", companyName: "테스트운송", bankName: "기업은행", account: "******1234", date: ymd(0), time: "10:41", amount: 880000, name: "김민수", status: "review", reason: "맞는 거래처·금액 없음", suggestions: [{ client: CLIENTS[2], reason: "남은 미수금이 있어요", score: 0.4 }, { client: CLIENTS[3], reason: "남은 미수금이 있어요", score: 0.3 }] },
-    { id: "d3", companyName: "테스트운송", bankName: "기업은행", account: "******1234", date: ymd(-1), time: "16:05", amount: 2200000, name: "CJ대한통운(주)", status: "review", reason: "정산+일부입금", suggestions: [{ client: CLIENTS[4], reason: "이름일치 · 정산+일부입금", score: 2 }, { client: CLIENTS[1], reason: "입금자명이 비슷해요", score: 0.6 }], match: { client: CLIENTS[4], kind: "정산+일부입금", confidence: "이름일치" } },
+    { id: "d3", companyName: "테스트운송", bankName: "기업은행", account: "******1234", date: ymd(-1), time: "16:05", amount: 2200000, name: "대성로지텍(주)", status: "review", reason: "정산+일부입금", suggestions: [{ client: CLIENTS[4], reason: "이름일치 · 정산+일부입금", score: 2 }, { client: CLIENTS[1], reason: "입금자명이 비슷해요", score: 0.6 }], match: { client: CLIENTS[4], kind: "정산+일부입금", confidence: "이름일치" } },
   ],
   aliases: {},
 };

@@ -1,0 +1,10 @@
+body{width:1080px;height:1920px}
+.h1{font-size:100px;font-weight:900;line-height:1.16}
+.h2{font-size:70px;font-weight:800;line-height:1.25}
+.sub{font-size:44px;font-weight:600;color:var(--t2)}
+#cap{top:1430px;font-size:46px;line-height:1.35}
+.clip{position:absolute;left:50px;width:980px;overflow:hidden;border-radius:30px;box-shadow:0 50px 140px -30px rgba(0,0,0,.85),0 0 0 3px rgba(143,176,240,.35);background:#fff}
+.clip video,.clip img{position:absolute}
+.tick{display:inline-flex;align-items:center;gap:10px;font-size:38px;font-weight:800;padding:14px 22px;border-radius:22px;background:#0E2A22;border:2px solid rgba(43,209,126,.6);color:#fff}
+.tick b{color:var(--ok)}
+.cta{margin-top:70px;padding:34px 70px;border-radius:999px;background:linear-gradient(135deg,#2D5BD8,#4F8BFF);font-size:56px;font-weight:900;box-shadow:0 30px 80px -20px rgba(79,139,255,.8)}

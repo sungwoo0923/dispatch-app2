@@ -50,22 +50,26 @@ service cloud.firestore {
     }
     // 부서·직책 — 규칙의 이름 조건을 서버가 미리 계산해 둔 값
     function myTeamFin() {
-      return ck() ? tk('fin', false) == true : (string(myUser().get('team', '')).matches('.*(경리|회계|재무).*') || string(myUser().get('legacyTeam', '')).matches('.*(경리|회계|재무).*'));
+      return staffAttrOk() && (ck() ? tk('fin', false) == true : (string(myUser().get('team', '')).matches('.*(경리|회계|재무).*') || string(myUser().get('legacyTeam', '')).matches('.*(경리|회계|재무).*')));
+    }
+    // 🔒 2026-11-23 부서 · 직책으로 주는 권한(경리 · 인사 · 임원 · 대표)은 운송사 직원만 — 기사 · 화주가 부서 · 직책을 적어 권한을 얻지 못하게
+    function staffAttrOk() {
+      return !(myRoleRaw() in ['driver', 'shipper', 'cafeUser']);
     }
     function myTeamPay() {
-      return ck() ? tk('pay', false) == true : (string(myUser().get('team', '')).matches('.*(재무|경리|회계|총무).*') || string(myUser().get('legacyTeam', '')).matches('.*(재무|경리|회계|총무).*'));
+      return staffAttrOk() && (ck() ? tk('pay', false) == true : (string(myUser().get('team', '')).matches('.*(재무|경리|회계|총무).*') || string(myUser().get('legacyTeam', '')).matches('.*(재무|경리|회계|총무).*')));
     }
     function myTeamHr() {
-      return ck() ? tk('hr', false) == true : (string(myUser().get('team', '')).matches('.*인사.*') || string(myUser().get('legacyTeam', '')).matches('.*인사.*'));
+      return staffAttrOk() && (ck() ? tk('hr', false) == true : (string(myUser().get('team', '')).matches('.*인사.*') || string(myUser().get('legacyTeam', '')).matches('.*인사.*')));
     }
     function myTeamExec() {
-      return ck() ? tk('tx', false) == true : myUser().get('team', '') == '임원';
+      return staffAttrOk() && (ck() ? tk('tx', false) == true : myUser().get('team', '') == '임원');
     }
     function myPosExec() {
-      return ck() ? tk('xp', false) == true : myUser().get('position', '') in ['이사', '상무', '전무', '부사장', '사장', '대표', '대표이사', '본부장', '임원'];
+      return staffAttrOk() && (ck() ? tk('xp', false) == true : myUser().get('position', '') in ['이사', '상무', '전무', '부사장', '사장', '대표', '대표이사', '본부장', '임원']);
     }
     function myPosCeo() {
-      return ck() ? tk('ceo', false) == true : myUser().get('position', '') in ['대표', '대표이사', '사장'];
+      return staffAttrOk() && (ck() ? tk('ceo', false) == true : myUser().get('position', '') in ['대표', '대표이사', '사장']);
     }
     // 토큰 기준 승인(isApproved의 문서 기준과 같은 계산 — 계약종료 ce는 서버가 companyPlans를 보고 넣는다)
     function claimApproved() {
@@ -204,7 +208,10 @@ service cloud.firestore {
       return isApproved() && myRole() == 'driver' && exists(p) && get(p).data.get('driverUid', '') == request.auth.uid;
     }
     function shipperCreate() {
-      return isApproved() && isShipperUser() && request.resource.data.get('shipperUid', '') == request.auth.uid;
+      // 🔒 2026-11-23 화주가 올리는 오더는 내 화주사 이름 + 연동 운송사로만(다른 운송사 목록에 끼워 넣지 못하게)
+      return isApproved() && isShipperUser() && request.resource.data.get('shipperUid', '') == request.auth.uid
+        && request.resource.data.get('shipperCompany', '') == myCoAny()
+        && myLinkedCo() != '' && request.resource.data.get('companyName', '') == myLinkedCo();
     }
 
     // (예전 isPublicOrderUpdate — 로그인 없는 업로드 페이지의 오더 칸 수정 — 은 2026-11-08 서버 함수 uploadAccess로 옮겨 없앴다)
@@ -236,7 +243,8 @@ service cloud.firestore {
       allow create: if coCreate() || shipperCreate();
       allow update: if (coMatch(resource.data) && coKeep())
         // 화주 — 내 오더의 수정 · 취소 요청 칸만(운송사 · 기사 운임 · 배정 칸은 못 바꾼다)
-        || (shipperOwns(resource.data) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['기사운임', '수수료', '기사확인상태', '기사타임라인', '기사확인값', '배차확정자', '배차확정자Uid', 'companyName', 'shipperUid', 'createdByUid', '차량번호', '이름', '전화번호', '청구사업자']))
+        || (shipperOwns(resource.data) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['기사운임', '수수료', '기사확인상태', '기사타임라인', '기사확인값', '배차확정자', '배차확정자Uid', 'companyName', 'shipperUid', 'createdByUid', '차량번호', '이름', '전화번호', '청구사업자',
+          '블라인드', '_seed', 'shipperCompany', 'source', 'originCol', 'originId', '_transmittedOrderId']))
         // 기사 — 나에게 배정된 오더의 수락 · 거절 · 진행 · 완료 칸만
         || (driverAssigned(request.path) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['기사확인상태', '기사확인일시', '기사확인값', '기사거절사유', '기사완료일시', '기사타임라인', '배차상태', '배차확정일시', '배차확정자', '상차완료일시', '상차지도착주소', '상태', '수정재승인', '수정확인일시', '수정확인항목', '수정거절', '수정거절항목', '업체전달상태', '완료회차', '회차완료일시', 'attachCount', '이름', '전화번호', '차량번호', 'updatedAt', '_lastModified']));
       allow delete: if coMatch(resource.data) || (resource == null && isApproved() && myRole() != 'driver');
@@ -249,7 +257,8 @@ service cloud.firestore {
       allow create: if coCreate() || shipperCreate();
       allow update: if (coMatch(resource.data) && coKeep())
         // 화주 — 내 오더의 수정 · 취소 요청 칸만(운송사 · 기사 운임 · 배정 칸은 못 바꾼다)
-        || (shipperOwns(resource.data) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['기사운임', '수수료', '기사확인상태', '기사타임라인', '기사확인값', '배차확정자', '배차확정자Uid', 'companyName', 'shipperUid', 'createdByUid', '차량번호', '이름', '전화번호', '청구사업자']))
+        || (shipperOwns(resource.data) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['기사운임', '수수료', '기사확인상태', '기사타임라인', '기사확인값', '배차확정자', '배차확정자Uid', 'companyName', 'shipperUid', 'createdByUid', '차량번호', '이름', '전화번호', '청구사업자',
+          '블라인드', '_seed', 'shipperCompany', 'source', 'originCol', 'originId', '_transmittedOrderId']))
         // 기사 — 나에게 배정된 오더의 수락 · 거절 · 진행 · 완료 칸만
         || (driverAssigned(request.path) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['기사확인상태', '기사확인일시', '기사확인값', '기사거절사유', '기사완료일시', '기사타임라인', '배차상태', '배차확정일시', '배차확정자', '상차완료일시', '상차지도착주소', '상태', '수정재승인', '수정확인일시', '수정확인항목', '수정거절', '수정거절항목', '업체전달상태', '완료회차', '회차완료일시', 'attachCount', '이름', '전화번호', '차량번호', 'updatedAt', '_lastModified']));
       allow delete: if coMatch(resource.data) || (resource == null && isApproved() && myRole() != 'driver');
@@ -274,6 +283,7 @@ service cloud.firestore {
       allow delete: if coMatch(resource.data) && !(myRole() in ['driver', 'shipper', 'cafeUser', 'viewer']);
     }
     match /fixedClients/{id} {
+      allow get: if resource == null && isApproved() && !(myRoleRaw() in ['driver', 'shipper', 'cafeUser']); // 🛠 2026-11-23 없는 문서는 직원이 "없음"만 확인(새로 만들기 전 확인)
       allow get, list: if coMatch(resource.data);
       allow update: if coMatch(resource.data) && coKeep();
       allow create: if coCreate();
@@ -311,7 +321,7 @@ service cloud.firestore {
     // 📷 정기 차량 사진 — 설정(vehiclePhotoSettings/{회사})은 같은 회사 누구나 읽고 사무 직원만 바꾼다.
     //  사진(vehiclePhotos/{uid_기간_부위})은 기사가 본인 것만 올리고 다시 찍기(덮어쓰기)할 수 있다. 직원은 같은 회사 전체.
     match /vehiclePhotoSettings/{co} {
-      allow read: if isTotalMasterUser() || (isSignedIn() && myCo() == co);
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co); // 🔒 2026-11-23 승인된 계정만
       allow write: if isOfficeStaff() && (isTotalMasterUser() || myCo() == co) && request.resource.data.get('companyName', '') == co;
     }
     match /vehiclePhotos/{id} {
@@ -341,6 +351,7 @@ service cloud.firestore {
     }
     // 🛣 고정노선(지입차관리 › 고정노선) — 직원만
     match /fixedRoutes/{id} {
+      allow get: if resource == null && isApproved() && !(myRoleRaw() in ['driver', 'shipper', 'cafeUser']); // 🛠 2026-11-23 없는 문서는 직원이 "없음"만 확인(새로 만들기 전 확인)
       allow read, update, delete: if isOfficeStaff() && coMatch(resource.data);
       allow create: if isOfficeStaff() && coCreate();
     }
@@ -359,6 +370,7 @@ service cloud.firestore {
     }
     // ⭐ 2026-11-02 배차표 양식(고정노선 › 배차표) — 회사 직원(기사·화주 제외)만
     match /routeBoards/{id} {
+      allow get: if resource == null && isApproved() && !(myRoleRaw() in ['driver', 'shipper', 'cafeUser']); // 🛠 2026-11-23 없는 문서는 직원이 "없음"만 확인(새로 만들기 전 확인)
       allow read, update, delete: if isOfficeStaff() && coMatch(resource.data);
       allow create: if isOfficeStaff() && coCreate();
     }
@@ -580,8 +592,8 @@ service cloud.firestore {
     match /shortLinks/{code} {
       allow get: if true;
       allow list: if false;
-      allow create: if isApproved();
-      allow update: if isApproved() && request.resource.data.get('id', '') == resource.data.get('id', '');
+      allow create: if isOfficeStaff(); // 🔒 2026-11-23 짧은 링크는 운송사 사무 직원만 만든다
+      allow update: if isOfficeStaff() && request.resource.data.get('id', '') == resource.data.get('id', '');
       allow delete: if isTotalMasterUser();
     }
 
@@ -627,8 +639,21 @@ service cloud.firestore {
 
     // 실시간 위치공유 — 업로드 페이지에서 오더 id로만 쓰고 읽는다. 전체 목록 열람은 로그인 사용자만.
     //  ⭐ 2026-11-07 보안 — 목록·삭제는 최고관리자 또는 (잠금 후) 같은 회사 문서만
+    // 🔒 2026-11-23 위치 보기는 그 오더의 운송사 직원 · 그 오더의 화주만(예전엔 오더 번호만 알면 누구나)
+    function liveCoOk(id) {
+      let o = /databases/$(database)/documents/orders/$(id);
+      let d = /databases/$(database)/documents/dispatch/$(id);
+      return (exists(o) && get(o).data.get('companyName', '') == myCoAny()) || (exists(d) && get(d).data.get('companyName', '') == myCoAny());
+    }
+    function liveShipOk(key) {
+      let p = /databases/$(database)/documents/shipperOrders/$(key);
+      return exists(p) && (get(p).data.get('shipperUid', '') == request.auth.uid
+        || (get(p).data.get('shipperCompany', '') == myCoAny() && myLinkedCo() != '' && get(p).data.get('companyName', '') == myLinkedCo()));
+    }
     match /liveLocations/{id} {
-      allow get: if true;
+      allow get: if isTotalMasterUser() || (isApproved() && (
+        (!(myRoleRaw() in ['shipper', 'driver', 'cafeUser']) && liveCoOk(id))
+        || (myRoleRaw() == 'shipper' && (liveShipOk('orders__' + id) || liveShipOk('dispatch__' + id)))));
       // 🔒 2026-11-23 위치 칸만 쓸 수 있다 — 회사 이름을 넣어 다른 운송사 목록에 끼워 넣던 것 · 회사 이름을 바꾸던 것을 막는다
       allow create: if request.resource.data.keys().hasOnly(['위치', '위치갱신일시'])
         || (isApproved() && request.resource.data.keys().hasOnly(['위치', '위치갱신일시', 'companyName']) && request.resource.data.get('companyName', '') == myCo());
@@ -666,7 +691,9 @@ service cloud.firestore {
       return after.difference(before).hasOnly([request.auth.uid]) && before.difference(after).hasOnly([request.auth.uid]);
     }
     match /cafeOrders/{orderId} {
-      allow read: if isSignedIn();
+      // 🔒 2026-11-23 오더마켓 글은 운송사 사무 직원 · 배차마당 회원 · 올린 사람 · 잡은 사람만(기사 · 화주 · 가입 대기 계정은 못 본다)
+      allow read: if isTotalMasterUser() || isMarketCompany() || mkPoster(resource.data) || mkTaker(resource.data)
+        || (isSignedIn() && myRoleRaw() == 'cafeUser');
       // 새 글 — 우리 회사 이름으로, 모집중 상태로, 정확한 주소·지명·연락처 없이
       allow create: if isMarketCompany()
         && request.resource.data.get('v', 0) == 2
@@ -777,6 +804,9 @@ service cloud.firestore {
     // 회사 키(functions/hubSync.js companyKeyOf와 같은 계산)
     function hubKeyOf(m, uid) {
       return m.get('companyKey', '') != '' ? m.get('companyKey', '')
+        // 🔒 2026-11-23 기사 · 화주 계정으로 들어온 허브 회원은 운송사와 다른 키(운송사 오더 기록 · 고객 · 스캔 학습을 같이 쓰지 않게)
+        : m.get('source', '') == 'logisweb-driver' ? 'lwd:' + uid
+        : m.get('source', '') == 'logisweb-shipper' ? 'lws:' + m.get('companyName', '')
         : (m.get('source', 'signup') != 'signup' ? 'lw:' + m.get('companyName', '')
           : (m.get('bizNo', '').replace('[^0-9]', '') != '' ? 'biz:' + m.get('bizNo', '').replace('[^0-9]', '') : 'uid:' + uid));
     }
@@ -1398,8 +1428,7 @@ service cloud.firestore {
     }
     //  ⭐ 2026-11-07 보안 — 한 건 조회는 우리 회사(화주는 연동 운송사) 것만 · 전체 목록은 최고관리자만(예전엔 로그인한 누구나 모든 회사 요금제·계약 상태)
     match /companyPlans/{company} {
-      allow get: if isTotalMasterUser() || (isSignedIn() && (ck() || exists(/databases/$(database)/documents/users/$(request.auth.uid)))
-        && (myCo() == company || myLinkedCo() == company));
+      allow get: if isTotalMasterUser() || (isApproved() && (myCo() == company || myLinkedCo() == company)); // 🔒 2026-11-23 승인된 계정만(가입 대기 계정이 남의 회사 요금제 · 계약 상태를 보던 것)
       allow list: if isTotalMasterUser();
       allow write: if isTotalMasterUser();
     }
@@ -1418,6 +1447,18 @@ service cloud.firestore {
       // ⭐ 2026-11-01 요금제 변경 요청은 경리팀(경리·경리+인사·경리/회계 부서)만 · 2026-11-03 재무 부서 · 최고관리자 추가(임원·대표는 보기만)
       allow create: if isTotalMasterUser() || (isApproved() && request.resource.data.company == myCoRaw() && isBillingFinance());
       allow read, update, delete: if isTotalMasterUser();
+    }
+    // 📣 2026-11-23 관리자센터 › 홍보 — 영상 편집실 프로젝트 · 블로그 원고는 최고관리자 · 부관리자만
+    //  홈페이지 블로그는 GitHub 자동 작업(서비스 계정)이 발행된 글만 읽어 정적 페이지로 만든다
+    match /mktVideos/{docId} {
+      allow read, write: if isTotalMasterUser();
+    }
+    match /mktBlog/{docId} {
+      allow read, write: if isTotalMasterUser();
+    }
+    // 🔐 Gemini 키 등 서버만 읽는 비밀값 — 화면(브라우저)에서는 아무도 읽고 쓰지 못한다(서버 mktAi 가 넣고 읽음)
+    match /platformSecrets/{docId} {
+      allow read, write: if false;
     }
     match /siteConfig/{docId} {
       allow get, list: if isTotalMasterUser();
@@ -1520,14 +1561,15 @@ service cloud.firestore {
       return isTotalMasterUser() || (isApproved() && (
         (!(myRoleRaw() in ['shipper', 'driver']) && ((d.get('role', '') != 'shipper' && d.get('companyName', '(회사없음)') == myCoAny()) || linkedCoOf(d) == myCoAny())) ||
         // 🔒 2026-11-23 화주는 같은 화주사 화주 계정만 — 연동 운송사 직원 문서(휴대폰 · 인사 기록 등)는 못 읽는다(메신저는 서버 linkedStaffList 가 이름 · 직급만 준다)
-        (isShipperUser() && d.get('role', '') == 'shipper' && d.get('companyName', '') == myCoAny())));
+        (isShipperUser() && d.get('role', '') == 'shipper' && d.get('companyName', '') == myCoAny() && linkedCoOf(d) == myLinkedCo())));
     }
     // 내가 관리할 수 있는 범위의 사람 — 같은 운송사 직원·기사 / 우리 회사에 연동된 화주 / (화주사 계정은) 같은 화주사 사람
     //  (규칙 계산 한도 1,000개 때문에 내 문서·역할·회사를 한 번만 읽어 넘긴다)
     function scopeOf(d, co, shipper) {
       return (!shipper && ((d.get('role', '') != 'shipper' && d.get('companyName', '(회사없음)') == co)
           || (d.get('role', '') == 'shipper' && linkedCoOf(d) == co)))
-        || (shipper && d.get('role', '') == 'shipper' && d.get('companyName', '') == co);
+        // 🔒 2026-11-23 화주사 관리는 같은 화주사 + 같은 연동 운송사만 · 연동 운송사는 화주가 바꾸지 못한다(아래 otherUserWriteOk)
+        || (shipper && d.get('role', '') == 'shipper' && d.get('companyName', '') == co && linkedCoOf(d) == myLinkedCo());
     }
     function userInMyScope(d) {
       return isApproved() && !(myRole() in ['driver', 'cafeUser', 'viewer'])
@@ -1536,18 +1578,21 @@ service cloud.firestore {
     // 역할·승인·권한·회사를 바꿀 수 있는 사람(회사 관리자급 · 인사 · 회사 마스터 · 화주사 마스터 · 임원 역할) — isCompanyAdmin · isHrStaff와 같은 기준
     function mgrOf(me) {
       let r = me.get('role', '');
-      return me.get('isMaster', false) == true || r in ['admin', 'allMgr', 'hrManager', 'hrAcct', 'hrStaff', 'totalMaster']
-        || (r == 'shipper' && me.get('permissions', {}).get('master', false) == true)
-        || string(me.get('team', '')).matches('.*인사.*') || isExecRoleUser();
+      // 🔒 2026-11-23 화주 · 기사는 부서 · 직책으로 관리자가 되지 않는다(화주는 화주사 마스터 권한만)
+      return r == 'shipper' ? me.get('permissions', {}).get('master', false) == true
+        : (!(r in ['driver', 'cafeUser']) && (me.get('isMaster', false) == true || r in ['admin', 'allMgr', 'hrManager', 'hrAcct', 'hrStaff', 'totalMaster']
+          || string(me.get('team', '')).matches('.*인사.*') || isExecRoleUser()));
     }
     function userManager() {
       return ck()
-        ? (tk('ms', false) == true || tk('r', '') in ['admin', 'allMgr', 'hrManager', 'hrAcct', 'hrStaff', 'totalMaster']
-          || (tk('r', '') == 'shipper' && tk('pm', false) == true) || tk('hr', false) == true || tk('exec', false) == true)
+        ? (tk('r', '') == 'shipper' ? tk('pm', false) == true
+          : (!(tk('r', '') in ['driver', 'cafeUser']) && (tk('ms', false) == true || tk('r', '') in ['admin', 'allMgr', 'hrManager', 'hrAcct', 'hrStaff', 'totalMaster']
+            || tk('hr', false) == true || tk('exec', false) == true)))
         : mgrOf(myUser());
     }
     function userSensitiveKeys() {
-      return ['role', 'approved', 'isMaster', 'permissions', 'subAdmin', 'subAdminPrevRole', 'companyName', 'linkedTransportCompany', 'companyCode', 'businessNumber', 'workScope', 'legacyTeam']; // workScope: 업무 범위(2026-11-13) · legacyTeam: 예전 부서 이름(서버만 적는다 · 2026-11-17)
+      return ['role', 'approved', 'isMaster', 'permissions', 'subAdmin', 'subAdminPrevRole', 'companyName', 'linkedTransportCompany', 'companyCode', 'businessNumber', 'workScope', 'legacyTeam',
+        'team', 'position', 'employmentStatus', 'mfaOpt', 'bioKeys', 'carNo', '차량번호']; // 🔒 2026-11-23 부서 · 직책 · 재직 · 2차 인증 · 차량번호도 관리 권한자만 // workScope: 업무 범위(2026-11-13) · legacyTeam: 예전 부서 이름(서버만 적는다 · 2026-11-17)
     }
     function otherUserWriteOk() {
       let r = myRole();
@@ -1571,8 +1616,9 @@ service cloud.firestore {
         || (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['companyName', 'linkedTransportCompany', 'permissions', 'subAdmin', 'subAdminPrevRole', 'employmentStatus', 'companyCode', 'resignedAt', 'workScope', 'mfaOpt', 'mfaKind', 'bioKeys', 'legacyTeam', 'workWeekdays'])
           // ⭐ 2026-11-09 마스터 위임 — 본인 마스터는 "내려놓기(true → false)"만 스스로 할 수 있다(예전엔 막혀 위임 후 마스터가 2명 남았다)
           && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['isMaster']) || request.resource.data.get('isMaster', false) == false)
-          && (resource.data.get('role', '') in ['shipper', 'cafeUser'] || isHrStaff() || isCompanyAdmin(myCo())
-            || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['team', 'position'])));
+          // (규칙 계산 한도 1000 — 부서 · 직책을 안 바꾸면 비싼 인사 · 관리자 확인을 건너뛴다)
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['team', 'position'])
+            || resource.data.get('role', '') in ['shipper', 'cafeUser'] || isHrStaff() || isCompanyAdmin(myCo())));
     }
     match /users/{userId} {
       allow get: if (isSignedIn() && request.auth.uid == userId) || userVisible(resource.data);
@@ -1624,25 +1670,26 @@ service cloud.firestore {
       return !(o is number) || !(n is number) || o == 0 || n >= o;
     }
     match /drivers/{driverId} {
+      allow get: if resource == null && isApproved() && !(myRoleRaw() in ['driver', 'shipper', 'cafeUser']); // 🛠 2026-11-23 없는 문서는 직원이 "없음"만 확인(새로 만들기 전 확인)
       allow get: if driverDocSelf(driverId) || driverDocStaff();
       // 🔒 기사·지입차 목록은 같은 운송사만
       allow list: if coMatch(resource.data);
       // 🔒 2026-11-23 본인 기사 문서는 내 계정 회사로만 · 스스로 승인 표시 못 함(예전엔 아무 회사 이름으로 만들 수 있었다)
       allow create: if coCreate() || (isSignedIn() && request.auth.uid == driverId
-        && request.resource.data.get('approved', false) != true
+        && request.resource.data.get('approved', true) == false && request.resource.data.get('uid', '') == request.auth.uid
         // 가입할 때는 users 문서와 같이(동시에) 만든다 — users 문서가 이미 있으면 그 회사와 같아야
         && (!exists(/databases/$(database)/documents/users/$(request.auth.uid)) || request.resource.data.get('companyName', '') == myCoRawAny()));
       // 🚚 2026-11-09 누적 키로수 — 기사 본인은 계기판 키로수(care.odometer)를 줄일 수 없다(처음 입력 · 퇴근 누적 · 퇴근 때 계기판 입력은 늘어나기만).
       //  고치기(줄이기)는 운송사 직원만(위 coMatch 경로)
       allow update: if (coMatch(resource.data) && coKeep() && (myRole() != 'driver' || driverOdoNoDecrease())) || (isSignedIn() && request.auth.uid == driverId && driverOdoNoDecrease()
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['companyName', 'approved', 'uid']));
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['companyName', 'approved', 'uid', '차량번호', 'carNo', '차량이력']));
       // 가입 후 선등록 문서(drivers/{차량번호}) 정리 — 승인 전에는 본인 차량번호 문서만
       // ⭐ 2026-11-02 점검 — 기본 회사가 아닌 운송사의 선등록 문서(회사__차량번호)도 본인이 정리할 수 있게(중복 기사 문서 방지)
+      // 🔒 2026-11-23 기사 본인 정리는 우리 회사 선등록 문서(회사__차량번호)만 — 차량번호만 적힌 예전 문서 · 다른 회사 문서는 못 지운다
       allow delete: if coMatch(resource.data) || (isApproved() && myRole() == 'driver' &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
         myUser().get('carNo', '') is string && myUser().get('carNo', '') != '' &&
-        (plateId(myUser().carNo) == driverId ||
-         myUser().get('companyName', '').trim() + '__' + plateId(myUser().carNo) == driverId));
+        resource.data.get('companyName', '') == myCoAny() &&
+        myUser().get('companyName', '').trim() + '__' + plateId(myUser().carNo) == driverId);
     }
     // ⭐ 2026-11-05 기사 가입 승인·거절 처리 기록(거절 사유 등) — 같은 운송사 직원만 보고 남긴다. 고치거나 지울 수 없음
     match /driverSignupLogs/{id} {
@@ -2307,7 +2354,7 @@ service cloud.firestore {
     //  회사 키: 배차 프로그램 계정 "lw:" + 내 회사명(myCo) · 허브 회원은 허브 회사 키(hubMyKey) — 같은 회사만 읽고 쓴다
     //  (로지스웹 계정으로 들어온 허브 회원은 키가 "lw:회사명"이라 배차 프로그램과 같은 기록을 쓴다)
     function scanKeyOk(key) {
-      return (isApproved() && key == 'lw:' + myCo()) || (hubActive() && key == hubMyKey());
+      return (isApproved() && !(myRoleRaw() in ['driver', 'shipper', 'cafeUser']) && key == 'lw:' + myCoAny()) || (hubActive() && key == hubMyKey()); // 🔒 2026-11-23 기사 · 화주 제외
     }
     function scanLearnOk(d, key) {
       return d.keys().hasOnly(['fp', 'labels', 'head', 'text', 'fields', 'changed', 'aliases', 'labelMap', 'companyKey', 'uid', 'updatedAtMs', 'updatedAt'])
@@ -2437,7 +2484,9 @@ service cloud.firestore {
       return isTotalMasterUser() && !('companyName' in d); // 🔒 2026-11-23 회사 칸 없는 예전 기록은 최고관리자만(예전엔 모든 운송사 직원 · 기사)
     }
     function looseCreate() {
-      return isTotalMasterUser() || (isApproved() && request.resource.data.get('companyName', '') == myCo()); // 🔒 2026-11-23 회사 칸을 빼고 만들 수 없게
+      return isTotalMasterUser() || (isApproved() && request.resource.data.get('companyName', '') == myCo() // 🔒 2026-11-23 회사 칸을 빼고 만들 수 없게
+        // 기사는 내 기록만(기사 id 칸이 나) — 다른 기사 이름으로 운행일지 · 출근 기록을 넣지 못하게
+        && (myRoleRaw() != 'driver' || request.resource.data.get('driverId', request.resource.data.get('driverUid', request.resource.data.get('uid', ''))) == request.auth.uid));
     }
     function looseKeep() {
       return isTotalMasterUser() || request.resource.data.get('companyName', '') == resource.data.get('companyName', '');
@@ -2466,10 +2515,10 @@ service cloud.firestore {
     // ── 💬 사내 메신저 — 방 참여자만(다른 회사 사람은 초대받아야만 — 화주↔연동 운송사 대화)
     function chatMember(rid) {
       let p = /databases/$(database)/documents/chat_rooms/$(rid);
-      return isSignedIn() && rid is string && rid != '' && exists(p) && request.auth.uid in get(p).data.get('members', []);
+      return isApproved() && rid is string && rid != '' && exists(p) && request.auth.uid in get(p).data.get('members', []); // 🔒 2026-11-23 퇴사 · 계약종료 계정 제외
     }
     match /chat_rooms/{rid} {
-      allow read: if isSignedIn() && request.auth.uid in resource.data.get('members', []);
+      allow read: if isApproved() && request.auth.uid in resource.data.get('members', []);
       allow create: if isApproved() && request.auth.uid in request.resource.data.get('members', []);
       allow update, delete: if isApproved() && request.auth.uid in resource.data.get('members', []);
     }
@@ -2491,11 +2540,12 @@ service cloud.firestore {
     match /chat_profiles/{uid} {
       allow get: if (isSignedIn() && request.auth.uid == uid) || chatProfileVisible(resource.data);
       allow list: if chatProfileVisible(resource.data);
-      allow create: if isSignedIn() && request.auth.uid == uid
-        && (isTotalMasterUser() || request.resource.data.get('company', '') == myCoAny() || request.resource.data.get('company', '') == '');
-      allow update: if isSignedIn() && request.auth.uid == uid
+      // 🔒 2026-11-23 승인된 계정만 · 회사 칸은 내 회사(화주는 "(화주)" 붙은 이름) — 같은 이름 화주 · 가입 대기가 운송사 메신저 목록에 끼지 않게
+      allow create: if isApproved() && request.auth.uid == uid
+        && (isTotalMasterUser() || request.resource.data.get('company', '') == myCo() || request.resource.data.get('company', '') == '');
+      allow update: if isApproved() && request.auth.uid == uid
         && (isTotalMasterUser() || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['company'])
-          || request.resource.data.get('company', '') == myCoAny());
+          || request.resource.data.get('company', '') == myCo());
       allow delete: if isTotalMasterUser();
     }
 
@@ -2529,7 +2579,8 @@ service cloud.firestore {
       allow read: if isTotalMasterUser()
         || (isSignedIn() && resource.data.get('userId', '') == request.auth.uid)
         || (isApproved() && !isShipperUser() && linkedCoOf(resource.data) == myCo())
-        || (isApproved() && isShipperUser() && resource.data.get('companyName', '') == myCoAny());
+        // 🔒 2026-11-23 같은 이름의 다른 화주사 신청서가 보이지 않게 — 연동 운송사도 같아야
+        || (isApproved() && isShipperUser() && resource.data.get('companyName', '') == myCoAny() && linkedCoOf(resource.data) == myLinkedCo());
       allow update: if isTotalMasterUser()
         || (isApproved() && !isShipperUser() && userManager() && linkedCoOf(resource.data) == myCo()
           && (linkedCoOf(request.resource.data) == myCo() || linkedCoOf(request.resource.data) == '')
@@ -2839,6 +2890,8 @@ service cloud.firestore {
         'pnkMembers', 'pnkPosts', 'pnkFiles', 'pnkTasks', 'pnkEvents', 'pnkSales', 'pnkServices', 'pnkReleases', 'pnkCompany', 'pnkFinance', 'pnkMail',
         // 🔒 2026-11-23 따로 정한 규칙이 있는데 이 목록에 빠져 있던 것(공용 규칙이 기사 · 다른 역할에게 열어 주던 것)
         'forkliftDrivers', 'forkliftPresets', 'companyPayFlags', 'brandHistory', 'hubTriggerErrors',
+        // 🔒 2026-11-23 서버만 쓰는 역할별 오더 사본 · 서버 잠금 · 횟수 제한(공용 규칙으로 직원이 만들어 넣던 것)
+        'driverOrders', 'shipperOrders', 'sheetLiveLock', 'apiRateLimits',
         //  사번 색인 · 전자결재 · 출퇴근 · 메일 서버 비밀값(서버만) · 외부 발송 횟수(서버만)
         'pnkEmpIndex', 'pnkApprovals', 'pnkAttendance', 'pnkMailSecrets', 'pnkMailUsage', 'pnkMfaSecrets', 'pnkMfaSessions', 'pnkUi', 'pnkUiHistory', 'pnkInquiries', 'pnkSite',
         'logisPasskeys', 'logisPasskeyChal', 'passwordResetSms', // 👆 얼굴 · 지문 로그인 공개키 · 한 번 쓰는 확인값(서버만 — functions/logisPasskey.js)
@@ -2859,6 +2912,8 @@ service cloud.firestore {
         'vehicleExpenses', 'vehiclePhotoSettings', 'vehiclePhotos',
         // 💰 2026-11-04 플랫폼 운영 문서 — 위에서 따로 정함(예전엔 siteConfig가 이 목록에 없어 승인된 고객사 직원도 요금·관제 집계를 읽을 수 있었다)
         'siteConfig', 'platformConfig', 'platformUsage', 'usageCounters',
+        // 📣 2026-11-23 홍보(영상 편집실 · 블로그 원고) · 서버 비밀값 — 위에서 따로 정함(빠지면 승인된 직원이 회사명 없는 원고를 읽고 쓴다)
+        'mktVideos', 'mktBlog', 'platformSecrets',
         // ⭐ 2026-11-05 기사 가입 처리 기록 — 위에서 따로 정함
         'driverSignupLogs',
         // ⭐ 2026-11-11 기사 합치기 기록 — 서버만 쓴다(여기에 넣어 화면에서는 읽기·쓰기 모두 막음)

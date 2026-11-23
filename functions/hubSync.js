@@ -33,6 +33,9 @@ const makePlaceKey = (name = "") => String(name).toLowerCase().replace(/\(주\)|
 // 회사 키 — 같은 회사끼리만 오더 기록 · 고객관리 · 오더복사를 나눈다(규칙 hubKeyOf와 같은 계산)
 function companyKeyOf(m, uid) {
   if (m?.companyKey) return m.companyKey;
+  // 🔒 2026-11-23 기사 · 화주 계정으로 들어온 허브 회원은 운송사와 다른 키(규칙 hubKeyOf · authClaims 와 같은 계산)
+  if (m?.source === "logisweb-driver") return `lwd:${uid}`;
+  if (m?.source === "logisweb-shipper") return `lws:${m.companyName || ""}`;
   if (m?.source && m.source !== "signup") return `lw:${m.companyName || ""}`;
   const d = String(m?.bizNo || "").replace(/[^\d]/g, "");
   return d ? `biz:${d}` : `uid:${uid}`;

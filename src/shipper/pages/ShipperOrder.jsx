@@ -510,6 +510,7 @@ export default function ShipperOrder({ editData, onClose }) {
     // ✅ 2026-11-23 오더 수정 저장 전에 한 번 묻기(사용자 요청) — 새 오더 등록은 묻지 않는다 · 취소하면 false(미리보기 창은 그대로)
     if ((editId || editData?.id) && !(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return false;
     const effectiveCompany = companyEditable ? companyEdit : company;
+    if (!(editId || editData) && !linkedCo) { alert("연동된 운송사가 없어서 오더를 보낼 수 없어요. 운송사 연동을 먼저 해 주세요."); return false; }
     await upsertPlace({ name: form.상차지명, address: form.상차지주소, 담당자명: form.상차담당자명, 담당자번호: form.상차담당자번호, 메모: form.상차메모 }, "상차");
     await upsertPlace({ name: form.하차지명, address: form.하차지주소, 담당자명: form.하차담당자명, 담당자번호: form.하차담당자번호, 메모: form.하차메모 }, "하차");
 
@@ -552,7 +553,7 @@ export default function ShipperOrder({ editData, onClose }) {
         shipperUid: user.uid,
         작성자: user.email,
         거래처명: effectiveCompany,
-        shipperCompany: effectiveCompany,
+        shipperCompany: company, // 🔒 2026-11-23 화주사 이름은 내 계정 회사 그대로(거래처명만 바꿔 적을 수 있다 — 서버 규칙도 같다)
         배차상태: "배차중",
         업체전달상태: "미전달",
         화주사확인대기: true,
@@ -561,8 +562,9 @@ export default function ShipperOrder({ editData, onClose }) {
         role: "shipper",
         source: "shipper",
         // ⭐ 2026-11-02 점검 — 운송사명 앞뒤 공백 제거 후 저장(운송사 매칭 정확도)
-        company: form.운송사명?.trim() || "",
-        companyName: form.운송사명?.trim() || "", // ◆ 받는 운송사(운송사 화면이 회사별로 거름)
+        // 🔒 2026-11-23 받는 운송사는 연동된 운송사로만(다른 운송사 오더 목록에 끼워 넣지 못하게 — 서버 규칙도 같다)
+        company: linkedCo || form.운송사명?.trim() || "",
+        companyName: linkedCo || form.운송사명?.trim() || "", // ◆ 받는 운송사(운송사 화면이 회사별로 거름)
         companyCode: form.운송사코드 || "",
       });
     }

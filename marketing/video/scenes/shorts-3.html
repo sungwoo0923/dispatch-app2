@@ -1,0 +1,72 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>숏츠3 · 월말 정산</title>
+<link rel="stylesheet" href="../base.css"><link rel="stylesheet" href="_shorts.css">
+<style>
+.xl{position:absolute;width:620px;height:340px;border-radius:18px;background:#fff;color:#1d6f42;box-shadow:0 30px 60px rgba(0,0,0,.5);overflow:hidden}
+.xl .t{height:56px;background:#1d6f42;color:#fff;font:700 28px Pretendard;display:flex;align-items:center;padding:0 22px}
+.xl .g{position:absolute;inset:56px 0 0 0;background-image:linear-gradient(#d9e3dc 2px,transparent 2px),linear-gradient(90deg,#d9e3dc 2px,transparent 2px);background-size:120px 44px}
+.flow{display:flex;flex-direction:column;align-items:center;gap:18px}
+.flow .n{font-size:50px;font-weight:800;padding:26px 50px;border-radius:26px;background:linear-gradient(150deg,#22375F,#16264A);border:2px solid rgba(143,176,240,.4);width:640px;text-align:center}
+.flow .ar{font-size:50px;color:var(--glow);line-height:1}
+</style></head><body>
+<div class="grid"></div>
+<div class="glow" style="width:900px;height:900px;left:90px;top:300px"></div>
+
+<section class="full" data-in="0" data-out="3.6" data-d="0.2">
+  <div class="abs center" style="left:0;right:0;top:200px">
+    <div class="chip" style="font-size:38px" data-in="0" data-a="down">매달 말일 풍경</div>
+    <div class="h1" style="margin-top:40px" data-in="0.1" data-a="up">월말 정산,<br>엑셀 <span class="red">열 개</span> 띄우셨죠?</div>
+  </div>
+  <div class="xl" data-base="rotate(-6deg)" style="left:60px;top:700px" data-in="0.5" data-a="pop"><div class="t">거래처정산_11월.xlsx</div><div class="g"></div></div>
+  <div class="xl" style="left:400px;top:760px" data-in="0.8" data-a="pop"><div class="t">기사지급_최종.xlsx</div><div class="g"></div></div>
+  <div class="xl" style="left:110px;top:880px" data-in="1.1" data-a="pop"><div class="t">기사지급_최종_진짜최종.xlsx</div><div class="g"></div></div>
+  <div class="xl" style="left:420px;top:960px" data-in="1.4" data-a="pop"><div class="t">매출집계(수정3).xlsx</div><div class="g"></div></div>
+</section>
+
+<section class="full" data-in="3.6" data-out="7.2" data-d="0.25">
+  <div class="abs center" style="left:0;right:0;top:200px">
+    <div class="chip" style="font-size:38px" data-in="3.6" data-a="down">LogisWeb은</div>
+    <div class="h2" style="margin-top:26px" data-in="3.7" data-a="up">배차할 때 넣은 운임이<br><span class="hl">그대로 정산</span>으로</div>
+  </div>
+  <div class="abs flow" style="left:0;right:0;top:620px">
+    <div class="n" data-in="4.0" data-a="up">🚚 배차 운임 입력</div><div class="ar" data-in="4.3">↓</div>
+    <div class="n" data-in="4.5" data-a="up">🧾 거래처 청구</div><div class="ar" data-in="4.8">↓</div>
+    <div class="n" data-in="5.0" data-a="up">💸 기사 지급</div><div class="ar" data-in="5.3">↓</div>
+    <div class="n" data-in="5.5" data-a="up" style="border-color:var(--ok)">📒 회계 장부 <b class="ok">자동</b></div>
+  </div>
+</section>
+
+<section class="full" data-in="7.2" data-out="12.5" data-d="0.25">
+  <div class="abs center" style="left:0;right:0;top:170px">
+    <div class="chip" style="font-size:38px" data-in="7.2" data-a="down">실제 화면 · 지입정산</div>
+    <div class="h2" style="margin-top:26px" data-in="7.3" data-a="up">지급명세서 <span class="hl">일괄 발송</span></div>
+  </div>
+  <div class="clip" style="top:420px;height:860px;background:#eef2f8" data-in="7.2" data-a="up">
+    <img src="../../../landing-site/img/real-settle.jpg" style="width:2000px;left:-180px;top:-150px" data-in="7.2" data-a="none" data-pan="0,0,-640,-80" data-pd="1.5" data-pt="3">
+  </div>
+  <div class="abs center" style="left:0;right:0;top:1310px" data-in="9.2" data-a="pop"><span class="tick" style="font-size:44px"><b>✓</b>10명 · 178,321,000원 한 번에</span></div>
+</section>
+
+<section class="full" data-in="12.5" data-out="15.1" data-d="0.25">
+  <div class="abs center" style="left:0;right:0;top:170px">
+    <div class="chip" style="font-size:38px" data-in="12.5" data-a="down">모바일 전자결재</div>
+    <div class="h2" style="margin-top:26px" data-in="12.6" data-a="up">결재도 <span class="hl">휴대폰으로</span></div>
+  </div>
+  <div class="phone abs" style="left:290px;top:420px;width:500px" data-in="12.5" data-a="up">
+    <div class="scr" style="height:880px"><video data-v="12.5" data-vfrom="2" data-rate="2.2" data-in="12.5" data-a="none"><source src="../../../landing-site/video/m-approval.webm" type="video/webm"></video></div>
+  </div>
+</section>
+<section class="full" data-in="15.1" data-out="99" data-d="0.3">
+  <div class="glow" style="width:700px;height:700px;left:190px;top:350px;opacity:.5"></div>
+  <div class="abs center" style="left:0;right:0;top:260px">
+    <div class="h2" data-in="15.1" data-a="up">월말 야근,<br><span class="hl">이제 그만</span></div>
+    <img src="../../../landing-site/brand/logisweb-mark.svg" style="width:220px;height:220px;margin-top:70px" data-in="15.4" data-a="pop">
+    <div class="logo-w" style="font-size:120px;margin-top:20px" data-in="15.6" data-a="up">Logis<span>Web</span></div>
+    <div class="sub" style="margin-top:16px" data-in="15.8" data-a="up">배차부터 정산까지, 한 화면에서</div>
+    <div class="cta" data-in="16.2" data-a="pop">무료 체험 신청하기</div>
+    <div class="sub" style="margin-top:40px;font-size:40px" data-in="16.6" data-a="up">검색창에 <b style="color:#fff">"로지스웹"</b></div>
+  </div>
+</section>
+<div id="cap"></div>
+<script>window.SCENE={w:1080,h:1920,fps:30,duration:21,voice:[0.35,3.75,7.35,12.6,15.25],music:"music-upbeat.wav",musicVol:0.45};</script>
+<script src="../engine.js"></script>
+</body></html>
