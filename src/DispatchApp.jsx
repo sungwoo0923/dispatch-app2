@@ -24867,13 +24867,13 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                   <td className={`${cell} relative`}>
                     {/* ⭐ 2026-11-05 LIVE — 칩 대신 차량번호 입력칸 왼쪽 위 모서리의 6px 점(폭 0 · 칸 너비 그대로) */}
                     {r.배차상태 === "배차완료" && <LiveDriverChip order={r} variant="pin" />}
-                    <PlateSuggestCaret order={r} />{/* 🚚 2026-11-23 추천 기사 ▾ — 있을 때만 · 직접 입력은 그대로 */}
+                    <div className="flex items-center gap-1">{/* 🛠 2026-11-23 입력칸 + 추천 기사 ▾ 나란히(겹치지 않게) */}
                     <input autoComplete="off"
                       name="차량번호"
                       data-id={r._id}
                       type="text"
                       value={r.차량번호 || ""}
-                      className="border p-0.5 pr-[30px] rounded w-[120px] min-w-[100px] text-[14px] font-medium"
+                      className="border p-0.5 rounded w-[120px] min-w-[100px] text-[14px] font-medium"
                       onChange={(e) => {
   const v = e.target.value;
   const isEmpty = v.trim() === "";
@@ -24903,6 +24903,8 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                         handleCarInput(r._id, e.currentTarget.value);
                       }}
                     />
+                    <PlateSuggestCaret order={r} />{/* 🚚 추천 기사 ▾ — 있을 때만 · 직접 입력은 그대로 */}
+                    </div>
                     {/* ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 — 기사앱 실시간 위치(LIVE) */}
 
 
@@ -25485,8 +25487,12 @@ const fareR = useFareRules(getTenant() || userCompany);
     if (!plateAssignAsk || plateAssignBusy) return;
     const { order: o, driver: d } = plateAssignAsk;
     setPlateAssignBusy(true);
+    // 🛠 2026-11-23 배정 직후 이 줄을 화면에서도 바로 바꾼다(차량번호 칸 직접 입력과 같게) — 예전엔 저장만 하고 화면 줄은 그대로라
+    //  칸에 입력하다 만 값이 남아 있으면 차량번호 · 기사명 · 전화번호가 빈 칸으로 보였다
+    const assigned = { 차량번호: d.차량번호, 이름: d.이름, 전화번호: formatPhone(d.전화번호 || ""), 배차상태: "배차완료", updatedAt: Date.now() };
     try {
-      const ok = await patchDispatch(o._id, { 차량번호: d.차량번호, 이름: d.이름, 전화번호: formatPhone(d.전화번호 || ""), 배차상태: "배차완료", updatedAt: Date.now(), __col: o.__col });
+      setRows((prev) => prev.map((r) => (r._id === o._id ? { ...r, ...assigned } : r)));
+      const ok = await patchDispatch(o._id, { ...assigned }, o); // 화면 줄(o)을 그대로 넘겨 컬렉션(orders · dispatch)을 정확히
       if (ok !== false) window.__sflowShowToast?.(`${d.이름} 기사 배정 완료`);
     } catch (e) { console.error(e); window.__sflowShowToast?.("배정 중 오류가 발생했습니다.", "err"); }
     setPlateAssignBusy(false); setPlateAssignAsk(null);
@@ -34037,8 +34043,12 @@ function DispatchStatus({
     if (!plateAssignAsk || plateAssignBusy) return;
     const { order: o, driver: d } = plateAssignAsk;
     setPlateAssignBusy(true);
+    // 🛠 2026-11-23 배정 직후 이 줄의 "입력 중인 값"(edited)을 지운다 — 예전엔 차량번호 칸에 입력하다 만 값(빈 칸 등)이 남아
+    //  저장은 됐는데 화면에는 차량번호 · 기사명 · 전화번호가 빈 칸으로 보였다(직접 입력 → 확인 창 배정과 같게)
+    const assigned = { 차량번호: d.차량번호, 이름: d.이름, 전화번호: formatPhone(d.전화번호 || ""), 배차상태: "배차완료", updatedAt: Date.now() };
     try {
-      const ok = await patchDispatch(o._id, { 차량번호: d.차량번호, 이름: d.이름, 전화번호: formatPhone(d.전화번호 || ""), 배차상태: "배차완료", updatedAt: Date.now(), __col: o.__col });
+      setEdited((prev) => { if (!prev[o._id]) return prev; const next = { ...prev }; delete next[o._id]; return next; });
+      const ok = await patchDispatch(o._id, { ...assigned }, o); // 화면 줄(o)을 그대로 넘겨 컬렉션(orders · dispatch)을 정확히
       if (ok !== false) window.__sflowShowToast?.(`${d.이름} 기사 배정 완료`);
     } catch (e) { console.error(e); window.__sflowShowToast?.("배정 중 오류가 발생했습니다.", "err"); }
     setPlateAssignBusy(false); setPlateAssignAsk(null);
@@ -38038,12 +38048,12 @@ return (
                   </td>
 
                   {/* 차량번호(항상 활성화) · ⭐ 2026-11-05 지입·직영·임대 기사앱 LIVE 표시가 붙으면 그만큼 칸이 넓어진다 */}
-                  <td className="border text-center whitespace-nowrap w-[120px] max-w-[120px] relative">
+                  <td className="border text-center whitespace-nowrap w-[158px] max-w-[158px] relative">
                     {/* ⭐ 2026-11-05 LIVE — 칩 대신 차량번호 입력칸 왼쪽 위 모서리의 6px 점(폭 0 · 칸 너비 그대로) */}
                     {row.배차상태 === "배차완료" && <LiveDriverChip order={row} variant="pin" />}
-                    <PlateSuggestCaret order={row} />{/* 🚚 2026-11-23 추천 기사 ▾ — 있을 때만 · 직접 입력은 그대로 */}
+                    <div className="flex items-center justify-center gap-1 px-0.5">{/* 🛠 2026-11-23 입력칸 + 추천 기사 ▾ 나란히(겹치지 않게) */}
                     <input autoComplete="off"
-                      className="border rounded pl-1 pr-[28px] py-0.5 text-center w-[118px]"
+                      className="border rounded px-1 py-0.5 text-center w-[118px]"
                       value={row.차량번호 || ""}
                       onChange={(e) => {
                         const v = e.target.value;
@@ -38067,6 +38077,8 @@ return (
                         handleCarInput(id, e.target.value);
                       }}
                     />
+                    <PlateSuggestCaret order={row} />{/* 🚚 추천 기사 ▾ — 있을 때만 · 직접 입력은 그대로 */}
+                    </div>
                   </td>
                   <td className="border text-center whitespace-nowrap max-w-[80px] w-[80px] overflow-hidden text-ellipsis" title={row.이름 || ""}>{row.이름}</td>
                   <td className="border text-center">
