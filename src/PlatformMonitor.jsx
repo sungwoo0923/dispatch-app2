@@ -431,7 +431,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <DupeWarning compact />
           <div style={{ display: "grid", gridTemplateColumns: phone ? "repeat(2, minmax(0,1fr))" : "repeat(4, minmax(0,1fr))", gap: phone ? 8 : 12 }}>
-            <Tile dark code="LIVE" label="지금 접속 중" value={LT.onlineNow} unit="명" foot={live?.ready ? `PC ${LT.pcNow} · 모바일 ${LT.mobileNow} · 24시간 ${LT.online24h}명` : "불러오는 중…"} onClick={() => setTab("live")} />
+            <Tile dark code="LIVE" label="지금 접속 중" value={LT.onlineNow} unit="명" foot={live?.errors?.sessions ? `⚠ 접속 기록을 불러오지 못함(${live.errors.sessions}) — 0이 아닐 수 있어요` : live?.ready ? `PC ${LT.pcNow} · 모바일 ${LT.mobileNow} · 24시간 ${LT.online24h}명` : "불러오는 중…"} onClick={() => setTab("live")} />
             <Tile code="CARRIERS" label="가입 운송사" value={companies.length} unit="곳" foot={`활성 ${companies.filter((c) => c.status.key === "active").length} · 신규 ${companies.filter((c) => c.status.key === "new").length} · 휴면 ${companies.filter((c) => c.status.key === "dormant").length}`} onClick={() => setTab("companies")} />
             <Tile code="ACCOUNTS" label="전체 계정" value={(T.staff + T.drivers + T.shipperUsers).toLocaleString()} unit="명" foot={`직원 ${T.staff} · 기사 ${T.drivers} · 화주 ${T.shipperUsers}${T.pending ? ` · 대기 ${T.pending}` : ""}`} />
             <Tile code="QUEUE" label="처리 대기" value={live?.pending?.total ?? 0} unit="건" foot={live ? `가입 ${live.pending.transport.length + live.pending.shipper.length} · 요금제 ${live.pending.planReqs.length} · 문의 ${live.pending.inquiries.length}${live.pending.support?.length ? ` · 원격지원 ${live.pending.support.length}` : ""}` : "-"} onClick={() => setTab("todo")} />
