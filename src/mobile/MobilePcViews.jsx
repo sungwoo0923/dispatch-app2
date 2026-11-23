@@ -35,6 +35,7 @@ import { FundsWorkspace, FundsBoard, isCeoPosition } from "../FundsBoard";
 import { LeaveLedger, OnboardingBoard, CertIssuer } from "../HrTools";
 import { ExecApprovals, TeamSchedule, ExecScheduleBoard, canWriteExecSchedule } from "../ExecSuite";
 import HrHub, { CompanyRules } from "../HrHub";
+import { SafetyEduMine } from "../SafetyEdu"; // 🦺 2026-11-24 안전교육(내 교육)
 import AttendanceBoard from "../AttendanceBoard";
 import { useMyProfile, personName } from "../userNames";
 import MobileFleetView from "./MobileFleetView";
@@ -313,6 +314,7 @@ export default function MobilePcView({ kind, users = [], dispatchData = [], carr
     else if (k === "farerules") body = wrap(<FareRulesSettings company={userCompany} mobile canEdit={role !== "viewer"} myName={me?.name || ""} />); // ⭐ 2026-11-02 운임규칙
     else if (k === "routefare") body = wrap(<RouteSpecialPresets mobile canEdit={role !== "viewer"} canAdmin={["admin", "allMgr", "test", "totalMaster"].includes(role) || me?.isMaster === true} />); // ⭐ 2026-11-17 노선별 고정 특수운임
     else if (k === "board") body = <MobileBoard company={userCompany} me={{ ...(me || {}), role }} />;
+    else if (k === "safety") body = wrap(<SafetyEduMine user={{ uid: me?.uid, name: me?.name || me?.displayName || "", companyName: userCompany, role: "staff" }} audience="staff" title="" />);
     else if (k === "rules") body = wrap(<CompanyRules company={userCompany} canEdit={role === "hrManager" || role === "totalMaster"} />);
     else if (k === "funds") body = wrap(<FundsBoard company={userCompany} canEdit={false} />);
     else if (k === "pfvault") body = <React.Suspense fallback={<Loading />}><div className="px-2 py-2"><PrivateFareVault company={userCompany} dispatchData={salesData} /></div></React.Suspense>;
