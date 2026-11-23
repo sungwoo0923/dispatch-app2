@@ -12,7 +12,29 @@ const API_KEY = "AIzaSyDaCTK03VbaXQCEKEiD7yp2KIzzX5x64a4"; // 웹 화면에 이�
 const PIN_URL = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/publicRelease/current?key=${API_KEY}`;
 const HOST_OK = /^[a-z0-9-]+\.vercel\.app$/; // 배포 주소는 Vercel 주소만(다른 곳을 대신 불러오지 않게)
 
+const BUILDS_URL = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/publicRelease/builds?key=${API_KEY}`;
+
 let pinCache = { at: 0, pin: null };
+let buildsCache = { at: 0, urls: [] };
+// 🛠 2026-11-23 최근에 올린 화면들의 배포 주소(관리자가 열 때마다 publicRelease/builds 에 기록) — 새것부터
+//  관리자 화면은 항상 최신이라, 화면을 켜 둔 사이 새 버전이 올라가면 그 화면의 조각 파일은 배포한 버전에도 최신에도 없다
+//  → 예전엔 못 찾아 "프로그램이 업데이트돼서 잠깐 새로 불러와요"로 저절로 새로고침됐다. 이제 이 주소들에서도 찾아 준다.
+async function readBuildUrls(now = Date.now()) {
+  if (now - buildsCache.at < 60000) return buildsCache.urls;
+  try {
+    const r = await withTimeout(BUILDS_URL, {}, 2500);
+    if (!r.ok) throw new Error(`builds ${r.status}`);
+    const f = (await r.json()).fields || {};
+    const urls = Object.values(f)
+      .map((x) => x?.mapValue?.fields || {})
+      .map((m) => ({ url: m.url?.stringValue || "", build: m.build?.stringValue || "" }))
+      .filter((b) => HOST_OK.test(b.url))
+      .sort((a, b) => (b.build > a.build ? 1 : -1))
+      .map((b) => b.url);
+    buildsCache = { at: now, urls: [...new Set(urls)].slice(0, 8) };
+  } catch { buildsCache = { at: now - 50000, urls: buildsCache.urls }; }
+  return buildsCache.urls;
+}
 const htmlCache = new Map(); // 주소 → HTML (배포 하나의 파일은 바뀌지 않는다)
 
 const withTimeout = async (url, opts = {}, ms = 4000) => {
@@ -80,11 +102,18 @@ export default async function handler(req, res) {
     }
     // 예전 버전 화면의 파일(/assets/*) — 최신 배포에 없는 것만 여기로 온다
     if (q.asset) {
+      // 다른 배포가 대신 찾으러 온 요청이면 여기서 끝(배포끼리 서로 계속 묻지 않게)
+      if (req.headers?.["x-kp-asset-hop"]) { res.status(404).send("Not Found"); return; }
       const pin = await readPin();
       const name = String(q.asset).replace(/\.\.+/g, "");
-      if (!pin || !/^[\w./@-]+$/.test(name)) { res.status(404).send("Not Found"); return; }
-      const r = await withTimeout(`https://${pin.url}/assets/${name}`, { headers: bypass() }, 8000);
-      if (!r.ok) { res.status(404).send("Not Found"); return; }
+      if (!/^[\w./@-]+$/.test(name)) { res.status(404).send("Not Found"); return; }
+      // 배포한 버전 → 최근에 올린 화면들 순서로 찾는다(파일 이름에 내용 해시가 있어 같은 이름이면 같은 파일)
+      const hosts = [...new Set([pin?.url, ...(await readBuildUrls())].filter((h) => h && h !== process.env.VERCEL_URL))];
+      let r = null;
+      for (const h of hosts) {
+        try { const x = await withTimeout(`https://${h}/assets/${name}`, { headers: { ...bypass(), "x-kp-asset-hop": "1" } }, 6000); if (x.ok) { r = x; break; } } catch { /* 다음 주소 */ }
+      }
+      if (!r) { res.status(404).send("Not Found"); return; }
       res.setHeader("Content-Type", r.headers.get("content-type") || "application/octet-stream");
       // 파일 이름에 내용 해시가 들어 있어 바뀌지 않는다 → Vercel CDN 에도 오래 보관(같은 파일로 이 함수가 다시 불리지 않게)
       res.setHeader("Cache-Control", "public, max-age=31536000, s-maxage=31536000, immutable");
