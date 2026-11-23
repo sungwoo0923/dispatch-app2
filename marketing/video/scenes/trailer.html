@@ -1,0 +1,158 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>예고편 · LogisWeb</title>
+<link rel="stylesheet" href="../base.css">
+<style>
+body{width:1920px;height:1080px;background:#04080f}
+.big{font-size:96px;font-weight:900;line-height:1.2;text-align:center}
+.mid{font-size:64px;font-weight:800;line-height:1.3;text-align:center}
+.small{font-size:38px;font-weight:600;color:var(--t2)}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+.bars:before,.bars:after{content:"";position:absolute;left:0;right:0;height:70px;background:#000;z-index:50}
+.bars:before{top:0}.bars:after{bottom:0}
+.lab{position:absolute;left:140px;top:170px}
+.lab .k{font-size:30px;font-weight:700;letter-spacing:.3em;color:var(--sky)}
+.lab .t{font-size:84px;font-weight:900;line-height:1.15;margin-top:14px}
+.shot{position:absolute;right:90px;top:140px;width:1140px}
+.bub{position:absolute;font-size:30px;line-height:1.35}
+.miss{display:flex;align-items:center;gap:20px;padding:20px 30px;border-radius:20px;background:rgba(255,90,95,.12);border:1px solid rgba(255,90,95,.4);font-size:34px;font-weight:700;width:640px}
+.xl{position:absolute;width:560px;height:330px;border-radius:14px;background:#fff;color:#1d6f42;box-shadow:0 30px 60px rgba(0,0,0,.5);overflow:hidden}
+.xl .t{height:50px;background:#1d6f42;color:#fff;font:700 26px Pretendard;display:flex;align-items:center;padding:0 20px}
+.xl .g{position:absolute;inset:50px 0 0 0;background-image:linear-gradient(#d9e3dc 2px,transparent 2px),linear-gradient(90deg,#d9e3dc 2px,transparent 2px);background-size:110px 40px}
+.chain{display:flex;gap:16px;align-items:center;font-size:38px;font-weight:800}
+.chain span.n{padding:18px 28px;border-radius:18px;background:linear-gradient(150deg,#22375F,#16264A);border:2px solid rgba(143,176,240,.4)}
+.chain i{color:var(--glow);font-style:normal}
+.vign{position:absolute;inset:0;background:radial-gradient(70% 70% at 50% 50%,transparent 40%,rgba(0,0,0,.75));pointer-events:none;z-index:40}
+</style></head><body class="bars">
+<div class="grid" data-in="32.4" data-a="fade" data-d="1.5"></div>
+
+<!-- 1. 밤 9시 -->
+<section class="full" data-in="0" data-out="8.5" data-d="1">
+  <div class="glow" style="width:700px;height:500px;left:610px;top:300px;opacity:.25;background:#8FB0F0"></div>
+  <div class="abs center" style="left:0;right:0;top:300px">
+    <div class="mono" style="font-size:200px;font-weight:700;color:#fff;letter-spacing:.05em" data-in="0.6" data-a="blur" data-d="1.2">21:04</div>
+    <div class="mid" style="margin-top:40px;color:var(--t2)" data-in="3.5" data-a="up" data-d="1">배차실의 불은,</div>
+    <div class="mid" data-in="5.6" data-a="up" data-d="1">아직 꺼지지 않았습니다.</div>
+  </div>
+</section>
+
+<!-- 2a 카톡 오더 -->
+<section class="full" data-in="8.5" data-out="11.8" data-d="0.15">
+  <div class="bubble bub" style="left:180px;top:150px" data-in="8.55" data-a="pop" data-d=".3">[오더] 대성식품 → 평택 포승 · 11톤 윙</div>
+  <div class="bubble w bub" style="left:1100px;top:220px" data-in="8.75" data-a="pop" data-d=".3">인천 서구 → 구미 1공단 · 5톤 냉장</div>
+  <div class="bubble bub" style="left:300px;top:700px" data-in="8.95" data-a="pop" data-d=".3">급) 이천 → 대구 달서 · 오후 2시 도착</div>
+  <div class="bubble w bub" style="left:1150px;top:760px" data-in="9.15" data-a="pop" data-d=".3">김포 → 대전 관평 · 1톤 탑 · 23만</div>
+  <div class="bubble bub" style="left:120px;top:430px" data-in="9.4" data-a="pop" data-d=".3">내일 오전 상차 3건 추가요</div>
+  <div class="bubble w bub" style="left:1250px;top:610px" data-in="9.6" data-a="pop" data-d=".3">운임 변경됐어요 52→55</div>
+  <div class="abs center" style="left:0;right:0;top:440px;z-index:5"><div class="big" style="text-shadow:0 10px 40px #000" data-in="8.6" data-a="zoom" data-d=".5">쏟아지는 <span class="warn">카톡 오더</span></div></div>
+</section>
+
+<!-- 2b 전화 -->
+<section class="full" data-in="11.8" data-out="15.9" data-d="0.15">
+  <div class="abs" style="left:160px;top:300px;display:flex;flex-direction:column;gap:18px">
+    <div class="miss" data-in="11.9" data-a="right">📞 이민수 기사님 <span class="red" style="margin-left:auto">부재중</span></div>
+    <div class="miss" data-in="12.2" data-a="right">📞 박정훈 기사님 <span class="red" style="margin-left:auto">통화중</span></div>
+    <div class="miss" data-in="12.5" data-a="right">📞 노승철 기사님 <span class="red" style="margin-left:auto">부재중</span></div>
+    <div class="miss" data-in="12.8" data-a="right">📞 대성식품 담당자 <span class="red" style="margin-left:auto">"차 어디쯤이에요?"</span></div>
+  </div>
+  <div class="abs" style="left:960px;top:330px;width:860px"><div class="big" style="text-align:left" data-in="12.0" data-a="left">끊이지 않는<br><span class="red">위치 확인 전화</span></div></div>
+</section>
+
+<!-- 2c 월말 정산 -->
+<section class="full" data-in="15.9" data-out="19.5" data-d="0.2">
+  <div class="xl" data-base="rotate(-5deg)" style="left:150px;top:420px" data-in="16.0" data-a="pop"><div class="t">거래처정산_11월.xlsx</div><div class="g"></div></div>
+  <div class="xl" style="left:560px;top:520px" data-in="16.3" data-a="pop"><div class="t">기사지급_최종_진짜최종.xlsx</div><div class="g"></div></div>
+  <div class="xl" data-base="rotate(4deg)" style="left:1000px;top:430px" data-in="16.6" data-a="pop"><div class="t">매출집계(수정3).xlsx</div><div class="g"></div></div>
+  <div class="xl" style="left:1250px;top:580px" data-in="16.9" data-a="pop"><div class="t">미수금_확인필요.xlsx</div><div class="g"></div></div>
+  <div class="abs center" style="left:0;right:0;top:170px"><div class="big" data-in="17.4" data-a="zoom">그리고, <span class="warn">월말 정산</span></div></div>
+</section>
+
+<!-- 3 원인 -->
+<section class="full" data-in="19.5" data-out="26.7" data-d="0.6">
+  <div class="abs center" style="left:0;right:0;top:330px">
+    <div class="mid" style="color:var(--t2)" data-in="19.8" data-a="blur" data-d=".9">문제는 사람이 아니었습니다.</div>
+    <div class="big" style="margin-top:60px" data-in="23.1" data-a="up" data-d=".8">일이, <span class="mark">손에</span> 의존하고 있었던 겁니다.</div>
+  </div>
+</section>
+
+<!-- 4 만든 사람 -->
+<section class="full" data-in="26.7" data-out="32.3" data-d="0.6">
+  <div class="abs center" style="left:0;right:0;top:300px">
+    <div class="small" data-in="27.0" data-a="up">그래서,</div>
+    <div class="big" style="margin-top:30px" data-in="27.9" data-a="up"><span class="hl" data-in="27.9" data-count="0,10" data-cd="1.4" data-suf="년">10년</span> 배차 현장이</div>
+    <div class="big" data-in="30.1" data-a="up">직접 만들었습니다.</div>
+  </div>
+</section>
+
+<!-- 5 로고 -->
+<div class="flash" data-in="32.35" data-out="32.75" data-d=".02" style="z-index:60"></div>
+<section class="full" data-in="32.4" data-out="34.95" data-d="0.3">
+  <div class="glow" style="width:900px;height:700px;left:510px;top:190px;opacity:.55"></div>
+  <div class="abs center" style="left:0;right:0;top:250px">
+    <img src="../../../landing-site/brand/logisweb-mark.svg" style="width:300px;height:300px" data-in="32.45" data-a="zoom" data-d=".6" data-kb="1,1.06">
+    <div class="logo-w" style="font-size:150px;margin-top:20px" data-in="32.9" data-a="up">Logis<span>Web</span></div>
+  </div>
+</section>
+
+<!-- 6 오더 스캔 -->
+<section class="full" data-in="34.95" data-out="38.8" data-d="0.3">
+  <div class="lab"><div class="k" data-in="35.0" data-a="up">ORDER SCAN</div><div class="t" data-in="35.1" data-a="up">오더는,<br><span class="hl">붙여넣기<br>한 번으로</span></div></div>
+  <div class="browser shot" data-in="35.0" data-a="left"><div class="bar"><i></i><i></i><i></i><b>LogisWeb · 오더 스캔</b></div>
+    <video data-v="35.0" data-vfrom="4" data-rate="2.4" data-in="35" data-a="none"><source src="../../../landing-site/video/scan-text.webm" type="video/webm"></video></div>
+</section>
+
+<!-- 7 실시간 배차 -->
+<section class="full" data-in="38.8" data-out="42.6" data-d="0.3">
+  <div class="lab"><div class="k" data-in="38.85" data-a="up">LIVE BOARD</div><div class="t" data-in="38.95" data-a="up">배차는,<br><span class="hl">모두가<br>실시간으로</span></div></div>
+  <div class="browser shot" style="height:740px" data-in="38.85" data-a="left"><div class="bar"><i></i><i></i><i></i><b>LogisWeb · 실시간배차현황</b></div>
+    <div style="overflow:hidden;height:696px"><img src="../../../landing-site/img/real-board.jpg" data-in="38.85" data-a="none" data-kb="1.0,1.12" style="transform-origin:30% 40%"></div></div>
+</section>
+
+<!-- 8 관제 -->
+<section class="full" data-in="42.6" data-out="46.3" data-d="0.3">
+  <div class="lab"><div class="k" data-in="42.65" data-a="up">REAL-TIME CONTROL</div><div class="t" data-in="42.75" data-a="up">차량은,<br><span class="hl">지도 위에서</span></div></div>
+  <div class="browser shot" data-in="42.65" data-a="left"><div class="bar"><i></i><i></i><i></i><b>LogisWeb · 지입차 실시간 위치</b></div>
+    <video data-v="42.65" data-vfrom="2" data-rate="1.6" data-in="42.65" data-a="none"><source src="../../../landing-site/video/live-map.webm" type="video/webm"></video></div>
+  <div class="phone abs" style="left:620px;top:560px;width:250px;padding:10px;border-radius:36px" data-in="43.4" data-a="up"><div class="scr" style="height:430px;border-radius:28px"><video data-v="43.4" data-in="43.4" data-a="none"><source src="../../../landing-site/video/d-home.webm" type="video/webm"></video></div></div>
+</section>
+
+<!-- 9 정산·결재·끝까지 -->
+<section class="full" data-in="46.3" data-out="48.9" data-d="0.25">
+  <div class="lab"><div class="k" data-in="46.35" data-a="up">SETTLEMENT</div><div class="t" data-in="46.45" data-a="up">정산과</div></div>
+  <div class="browser shot" style="height:740px" data-in="46.35" data-a="left"><div class="bar"><i></i><i></i><i></i><b>LogisWeb · 지입정산관리</b></div>
+    <div style="overflow:hidden;height:696px"><img src="../../../landing-site/img/real-settle.jpg" data-in="46.35" data-a="none" data-kb="1.0,1.1" style="transform-origin:60% 20%"></div></div>
+</section>
+<section class="full" data-in="48.9" data-out="51.3" data-d="0.25">
+  <div class="lab"><div class="k" data-in="48.95" data-a="up">E-APPROVAL</div><div class="t" data-in="49.05" data-a="up">결재까지.</div></div>
+  <div class="browser shot" data-in="48.95" data-a="left"><div class="bar"><i></i><i></i><i></i><b>LogisWeb · 전자결재</b></div>
+    <video data-v="48.95" data-vfrom="6" data-rate="2.5" data-in="48.95" data-a="none"><source src="../../../landing-site/video/approval.webm" type="video/webm"></video></div>
+</section>
+<section class="full" data-in="51.3" data-out="54.8" data-d="0.3">
+  <div style="position:absolute;inset:70px 0;overflow:hidden;opacity:.35"><img src="../../../landing-site/img/real-revenue.jpg" style="width:100%" data-in="51.3" data-a="none" data-kb="1.05,1.15"></div>
+  <div class="vign"></div>
+  <div class="abs center" style="left:0;right:0;top:290px;z-index:41">
+    <div class="mid" data-in="51.4" data-a="up">한 번 입력한 데이터로,</div>
+    <div class="chain" style="margin-top:50px" data-in="51.8" data-a="up">
+      <span class="n">오더</span><i>→</i><span class="n">배차</span><i>→</i><span class="n">관제</span><i>→</i><span class="n">인수증</span><i>→</i><span class="n">정산</span><i>→</i><span class="n">매출</span></div>
+    <div class="big hl" style="margin-top:50px" data-in="53.4" data-a="zoom">끝까지.</div>
+  </div>
+</section>
+
+<!-- 10 엔딩 -->
+<section class="full" data-in="54.8" data-out="99" data-d="0.6">
+  <div class="glow" style="width:1000px;height:700px;left:460px;top:200px;opacity:.45"></div>
+  <div class="abs center" style="left:0;right:0;top:250px" data-in="54.8" data-out="62.6" data-a="fade">
+    <div class="mid" data-in="55.2" data-a="up">배차부터 정산까지,</div>
+    <div class="big" style="margin-top:20px" data-in="58.3" data-a="up">운송사 업무를 <span class="hl">한 화면에서</span></div>
+  </div>
+  <div class="abs center" style="left:0;right:0;top:190px">
+    <img src="../../../landing-site/brand/logisweb-mark.svg" style="width:220px;height:220px" data-in="62.8" data-a="pop">
+    <div class="logo-w" style="font-size:130px;margin-top:10px" data-in="62.95" data-a="up">Logis<span>Web</span></div>
+    <div class="small" style="margin-top:10px" data-in="63.4" data-a="up">운송사 통합 운송관리시스템(TMS) · PC · 모바일 · 기사앱</div>
+    <div style="margin-top:50px;display:flex;gap:30px;align-items:center" data-in="64.0" data-a="up">
+      <span style="padding:24px 54px;border-radius:999px;background:linear-gradient(135deg,#2D5BD8,#4F8BFF);font-size:44px;font-weight:900">무료 체험 신청</span>
+      <span class="mono" style="font-size:44px;font-weight:700;color:var(--t2)">logisweb.co.kr</span></div>
+  </div>
+</section>
+<div class="vign"></div>
+<script>window.SCENE={w:1920,h:1080,fps:30,duration:68,voice:[1.0,8.6,19.8,27.0,33.0,35.6,39.2,42.9,46.6,55.2],music:"music-trailer.wav",musicVol:0.55,voiceVol:1.7};</script>
+<script src="../engine.js"></script>
+</body></html>
