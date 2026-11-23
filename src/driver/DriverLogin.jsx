@@ -193,6 +193,7 @@ export default function DriverLogin() {
           if (link?.error === "network") throw driverLoginError("driver/network", { cause: link.cause });
           if (link?.error === "rate") throw Object.assign(new Error("too many"), { code: "auth/too-many-requests" });
           if (link?.error) throw driverLoginError("driver/network");
+          if (link?.code === "USE_REGISTER") throw driverLoginError("driver/use-register");
           if (link?.code === "NAME_MISMATCH") throw driverLoginError("driver/name-mismatch");
           if (link?.code === "COMPANY_MISMATCH") throw driverLoginError("driver/company-mismatch");
           throw failErr;
@@ -213,7 +214,7 @@ export default function DriverLogin() {
     try {
       if (typeof navigator !== "undefined" && navigator.onLine === false) throw driverLoginError("driver/network");
       // 계정 상태(승인 대기·정지 등)나 연결 문제로 막힌 것이면 다른 정보로 다시 시도하지 않는다
-      const STOP = ["driver/network", "auth/network-request-failed", "auth/too-many-requests", "auth/user-disabled", "driver/pending", "driver/rejected", "driver/retired", "driver/suspended"];
+      const STOP = ["driver/network", "auth/network-request-failed", "auth/too-many-requests", "auth/user-disabled", "driver/pending", "driver/rejected", "driver/retired", "driver/suspended", "driver/use-register"];
       let done = null;
       let lastErr = null;
       for (const id of ids) {

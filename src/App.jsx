@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { lazyRetry } from "./lazyRetry"; // 🛠 2026-11-18 새 버전 배포 뒤 화면 파일을 못 받으면 오류 화면 대신 새로 열기
 import { setTenant, setTenantRole, setServerFilter, setPreviewMode, isPreviewMode } from "./fsTenant";
+import { ensureDriverLinkSig } from "./driverLinkSig"; // 🔒 2026-11-23 기사 업로드 링크 회사 서명
 import { purgeOnSignOut, noteSignedInUid } from "./sessionPurge"; // 🔒 2026-11-07 계정 바꿀 때 앞 사람(다른 회사) 데이터 정리
 import { setUsageMeter } from "./usageMeter"; // 💰 2026-11-04 회사별 서버 사용량 표본
 import { setPreviewPlan } from "./plans";
@@ -747,6 +748,12 @@ export default function App() {
   // 🏢 운송사 로그인 화면이 회사명·회사코드 확인을 끝낸 뒤 알려주는 회사 — 최고관리자는 로그인 직후
   //  사용자 문서가 먼저 도착하면 "지난번에 들어갔던 회사"로 데이터를 걸러서, 돌캐로 들어가도 다른
   //  운송사 공지·오더가 보였다(헤더만 새 회사). 확인이 끝난 회사로 다시 맞춘다.
+  // 🔒 2026-11-23 기사 업로드 링크 회사 서명을 미리 받아 둔다(운송사 직원 · 최고관리자 — 링크를 만들 때 바로 붙게)
+  useEffect(() => {
+    if (!user || !role || ["driver", "shipper", "cafeUser"].includes(role)) return;
+    const co = String(userCompany || "").trim();
+    if (co) ensureDriverLinkSig(co);
+  }, [user, role, userCompany]);
   useEffect(() => {
     const onCo = (e) => {
       const co = String(e.detail || "").trim();
@@ -883,7 +890,7 @@ export default function App() {
           safeSetItem("role", dataRole);
         } else if (isMasterEmail) {
           setMasterPcPhone("");
-          // users 문서 자체가 없어도(예: KP-Planner 전용으로만 가입해본 경우) 이
+          // users 문서 자체가 없어도(예: 다른 서비스 전용으로만 가입해본 경우) 이
           // 이메일은 무조건 최고관리자로 들어가야 한다.
           setRole("totalMaster");
           setApproved(true);

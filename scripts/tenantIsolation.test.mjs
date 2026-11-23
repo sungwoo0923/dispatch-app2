@@ -42,6 +42,13 @@ await seed("companySettings/B운송", { companyName: "B운송", secret: "x" });
 await seed("approvals/bap", { companyName: "B운송", company: "B운송", cat: "expense", participants: ["bStaff"], drafterUid: "bStaff", status: "pending" });
 await seed("notices/bn", { companyName: "B운송", title: "B공지", audience: "internal" });
 await seed("attendance/2026-11-23_bStaff", { uid: "bStaff", date: "2026-11-23" }); // 회사 칸 없는 예전 기록
+await seed("clients/ac", { companyName: "A운송", 거래처명: "A거래처" });
+await seed("acctLedger/al", { companyName: "A운송", 금액: 1000 });
+await seed("hrResumes/hr", { companyName: "A운송", name: "지원자" });
+await seed("salesLeads/sl", { companyName: "A운송", name: "리드" });
+await seed("vehicleLedger/vl", { companyName: "A운송", plateKey: "11가1111" });
+await seed("transportApplications/ta", { companyName: "A운송", type: "신규", status: "approved", companyCode: "SECRET", 직인: "data:image/png;base64,xx" });
+await seed("someUnruledCol/x", { companyName: "A운송", v: 1 });
 
 let n = 0;
 function as(uid) {
@@ -109,6 +116,24 @@ await no("'B운송' 이름 화주: B 직원 문서", getDoc(doc(shipFake, "users
 await no("'B운송' 이름 화주: B 회사 설정", getDoc(doc(shipFake, "companySettings/B운송")));
 await no("'B운송' 이름 화주: B 결재", getDoc(doc(shipFake, "approvals/bap")));
 await ok("'B운송' 이름 화주: 같은 화주사 화주 목록", getDocs(query(collection(shipFake, "users"), where("companyName", "==", "B운송"), where("role", "==", "shipper"))));
+
+console.log("⑤ 기사 — 같은 회사라도 사무 자료는 못 봄");
+await ok("A 기사: 우리 회사 오더(내 차량 오더 화면)", getDoc(doc(aDrv, "orders/a1")));
+await ok("A 기사: 차량 장부", getDoc(doc(aDrv, "vehicleLedger/vl")));
+await no("A 기사: 거래처", getDoc(doc(aDrv, "clients/ac")));
+await no("A 기사: 회계 장부", getDoc(doc(aDrv, "acctLedger/al")));
+await no("A 기사: 입사 지원서", getDoc(doc(aDrv, "hrResumes/hr")));
+await no("A 기사: 영업 리드", getDoc(doc(aDrv, "salesLeads/sl")));
+await no("A 기사: 운송사 가입 신청서(직인 · 회사 코드)", getDoc(doc(aDrv, "transportApplications/ta")));
+await no("A 기사: 따로 규칙 없는 컬렉션", getDoc(doc(aDrv, "someUnruledCol/x")));
+await ok("A 직원: 거래처(사무 직원은 그대로)", getDoc(doc(aAdmin, "clients/ac")));
+await ok("A 직원: 가입 신청서(사무 직원은 그대로)", getDoc(doc(aAdmin, "transportApplications/ta")));
+
+console.log("⑥ 화주 — 연동 운송사와 공유해도 되는 것만");
+await no("화주 삼성(A 연동): A 직원 문서", getDoc(doc(shipS, "users/aAdmin")));
+await no("화주 삼성(A 연동): A 직원 목록", getDocs(query(collection(shipS, "users"), where("companyName", "==", "A운송"))));
+await no("화주 삼성(A 연동): A 가입 신청서(직인 · 회사 코드)", getDoc(doc(shipS, "transportApplications/ta")));
+await no("화주 삼성(A 연동): A 거래처", getDoc(doc(shipS, "clients/ac")));
 
 console.log("④ 로그인 없는 위치 공유");
 await ok("위치만 쓰기", setDoc(doc(anon, "liveLocations/a1"), { 위치: { lat: 1, lng: 2 } }));

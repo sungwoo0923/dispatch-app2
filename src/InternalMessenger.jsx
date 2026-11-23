@@ -7,7 +7,7 @@ import {
   serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc,
   getDocs, where, arrayUnion, arrayRemove, increment
 } from "firebase/firestore";
-import { db, auth, storage } from "./firebase";
+import { db, auth, storage, FUNCTIONS_BASE } from "./firebase";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { fmtPhone } from "./formatInput";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
@@ -476,6 +476,15 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
   // linkedCompanyName이 있으면(화주사<->연동 운송사) 해당 회사 구성원도 함께 불러와
   // "연동" 표시와 함께 대화 상대로 노출한다.
   const loadCompanyUsers = async (companyName, crossCompany) => {
+    // 🔒 2026-11-23 화주가 보는 연동 운송사 직원은 서버(linkedStaffList)가 공유해도 되는 칸(이름 · 직급 · 팀 · 사진)만 준다
+    if (role === "shipper" && crossCompany) {
+      try {
+        const t = await auth.currentUser?.getIdToken();
+        const r = await fetch(`${FUNCTIONS_BASE}/linkedStaffList`, { headers: { Authorization: `Bearer ${t}` } });
+        const j = r.ok ? await r.json() : { staff: [] };
+        return (j.staff || []).filter((u) => u.uid !== myUid).map((u) => ({ ...u, email: "", phone: "", name: u.name || "운송사 직원", company: companyName, crossCompany: true }));
+      } catch { return []; }
+    }
     // 🔒 2026-11-23 화주 계정의 "같은 회사"는 화주 계정만 — 이름이 같은 운송사 직원이 섞이지 않게(서버 규칙도 같다)
     const userSnap = await getDocs(role === "shipper" && !crossCompany
       ? query(collection(db, "users"), where("companyName", "==", companyName), where("role", "==", "shipper"))
@@ -532,7 +541,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     const unsub1 = onSnapshot(role === "shipper"
       ? query(collection(db, "users"), where("companyName", "==", company), where("role", "==", "shipper"))
       : query(collection(db, "users"), where("companyName", "==", company)), onUsers("co"), () => {});
-    const unsub2 = linkedCompanyName
+    const unsub2 = linkedCompanyName && role !== "shipper" // 🔒 화주는 운송사 직원 문서를 직접 못 읽는다(위 linkedStaffList)
       ? onSnapshot(query(collection(db, "users"), where("companyName", "==", linkedCompanyName)), onUsers("linked"), () => {})
       : null;
     return () => { cancelled = true; clearTimeout(timer); unsub1(); unsub2?.(); };
@@ -984,6 +993,9 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     try {
       const room = await ensureRoom(); if (!room) return;
       const snap = orderSnapshot(o, o.__col);
+      // 🔒 2026-11-23 방에 다른 회사 사람(연동 화주 · 운송사)이 있거나 내가 화주면 운임(청구 · 기사)은 빼고 보낸다 — 마진 · 기사 운임이 새지 않게
+      const sameCoOnly = role !== "shipper" && (room.members || []).every((uid) => uid === myUid || (friends || []).some((f) => f.uid === uid && !f.crossCompany));
+      if (!sameCoOnly) { delete snap.청구운임; delete snap.기사운임; }
       await postMsg(room, { type: "order", text: orderSummary(snap), order: snap }, orderLast(snap));
     } catch (e) { alert(`오더를 보내지 못했습니다 — ${e?.message || e}`); }
   };
@@ -1485,7 +1497,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     onAddReaction: addReaction,
     onSendToSelf: sendToSelf,
     // ⭐ 2026-11-06 실무 기능
-    onShareOrder: () => setOrderPickOpen(true),
+    onShareOrder: role === "shipper" ? null : () => setOrderPickOpen(true), // 🔒 2026-11-23 화주는 오더 공유 목록을 쓰지 않는다(운송사 오더 목록이 열리지 않게)
     onPin: pinMessage, onUnpin: unpinMessage,
     onForward: openForward,
     quickReplies, onSaveQuickReplies: saveQuickReplies,

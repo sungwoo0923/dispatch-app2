@@ -253,14 +253,21 @@ module.exports = function makeUploadAccess({ functions, db, getAuth, FieldValue,
     const name = String(req.query.name || "").trim();
     const co = String(req.query.co || "").trim() || C.DEFAULT_CO;
     const fixed = req.query.source === "fixed";
+    const cs = String(req.query.cs || "").trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !vehicle || !name || vehicle.length > 30 || name.length > 40 || co.length > 60) {
       res.status(400).json({ error: "BAD_PARAMS" }); return;
     }
     try {
       const tok = await bearerUser(req);
       const staff = tok ? await isStaffOf(tok, co) : false;
-      if (!staff && await limited(res, [[`ds:ip:${clientIp(req)}`, 30, 10 * 60e3]])) return;
       const sec = secret();
+      // 🔒 2026-11-23 회사 서명(cs) 확인 — 그 회사가 보낸 링크만. 서명 없는 예전 링크는 정해진 날까지만 · 10분 10회
+      const signed = C.verifyCoLinkSig(sec, co, cs);
+      if (!staff && !signed) {
+        if (!C.unsignedLinkAllowed()) { res.status(403).json({ error: "NEED_NEW_LINK" }); return; }
+        if (await limited(res, [[`ds:ip:${clientIp(req)}`, 10, 10 * 60e3], [`ds:co:${C.keyHash(co)}`, 300, 60 * 60e3]])) return;
+      }
+      if (!staff && signed && await limited(res, [[`ds:ip:${clientIp(req)}`, 30, 10 * 60e3]])) return;
       const pick = (id, col, x) => ({
         _id: id, _col: col, 상차일: x.상차일 || x.날짜 || "", 차량번호: x.차량번호 || "", 이름: x.이름 || "", 거래처명: x.거래처명 || "",
         상차지명: x.상차지명 || "", 하차지명: x.하차지명 || "", 화물내용: x.화물내용 || "", 배차상태: x.배차상태 || "", attachCount: x.attachCount || 0,
@@ -310,6 +317,9 @@ module.exports = function makeUploadAccess({ functions, db, getAuth, FieldValue,
       const uid = tok.uid;
       const userRef = db.collection("users").doc(uid);
       if ((await userRef.get()).exists) { res.status(200).json({ linked: false, code: "ALREADY" }); return; }
+      // 🔒 2026-11-23 로그인 화면에서 차량번호 · 이름 · 회사만으로 미리 등록된 기사에 연결 · 승인하던 길을 닫는다
+      //  (그 세 가지는 남도 알 수 있다) — 처음 쓰는 기사는 [가입하기]에서 연락처 확인 + 문자 인증으로 연결한다(linkDriverSignup)
+      res.status(200).json({ linked: false, code: "USE_REGISTER" }); return; // eslint-disable-line no-unreachable
       const plate = C.plateOf(carNo);
       const preKey = C.coDocKey(co, plate);
       const [preSnap, legacySnap] = await Promise.all([
@@ -359,5 +369,20 @@ module.exports = function makeUploadAccess({ functions, db, getAuth, FieldValue,
   });
 
   // ⭐ 2026-11-11 cors · bearerUser · isStaffOf — 기사 차량 변경(driverVehicle.js)이 같이 쓴다
-  return { uploadAccess, driverSearch, driverLoginLink, rateLimit, limited, clientIp, cors, bearerUser, isStaffOf, _crypto: crypto };
+  // 🔒 2026-11-23 우리 회사 기사 업로드 링크 서명 받기 — 로그인한 운송사 직원(기사 · 화주 제외)만, 자기 회사 것만(최고관리자는 보고 있는 회사)
+  const driverLinkSig = functions.runWith({ secrets: ["UPLOAD_TOKEN_SECRET"] }).https.onRequest(async (req, res) => {
+    if (cors(req, res, "GET, OPTIONS")) return;
+    try {
+      const tok = await bearerUser(req);
+      if (!tok) { res.status(401).json({ error: "NO_TOKEN" }); return; }
+      const co = String(req.query.co || "").trim().slice(0, 100);
+      if (!co || !(await isStaffOf(tok, co))) { res.status(403).json({ error: "NOT_STAFF" }); return; }
+      const sec = secret();
+      if (!sec) { res.status(503).json({ error: "NO_SECRET" }); return; }
+      res.set("Cache-Control", "no-store");
+      res.status(200).json({ co, cs: C.coLinkSig(sec, co) });
+    } catch (e) { console.error("driverLinkSig 실패:", e); res.status(500).json({ error: "FAILED" }); }
+  });
+
+  return { uploadAccess, driverSearch, driverLoginLink, driverLinkSig, rateLimit, limited, clientIp, cors, bearerUser, isStaffOf, _crypto: crypto };
 };

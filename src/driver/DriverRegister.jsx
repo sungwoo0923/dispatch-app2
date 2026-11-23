@@ -14,6 +14,7 @@ import { addDoc, collection } from "firebase/firestore";
 import { BANK_NAMES, accountLengths, formatAccount, validateAccount, onlyDigits } from "../bankUtil";
 import { compressImage } from "../InternalMail";
 import { LogisMark } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
+import { usePhoneCheck, toE164 } from "../MfaModal"; // 🔒 2026-11-23 휴대폰 문자 인증(운송사가 등록해 둔 번호면 바로 승인)
 
 // ⭐ 사용자 요청 — 차량종류/톤수/거주지를 가입할 때 드롭다운으로 선택하게 한다
 // (이전엔 "1톤"/"카고"가 뒤섞인 한 줄짜리 목록 하나만 있었음). 차종은 "직접입력"을
@@ -248,6 +249,32 @@ export default function DriverRegister() {
   const [carNo, setCarNo] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  // 🔒 2026-11-23 휴대폰 문자 인증 — 운송사가 기사관리에 미리 등록한 기사가 그 번호로 인증하면 자동 승인(안 하면 승인 대기)
+  const smsHolderRef = useRef(null);
+  const { send: smsSend, confirm: smsConfirm } = usePhoneCheck(smsHolderRef);
+  const [sms, setSms] = useState({ step: "idle", code: "", token: "", phone: "", msg: "", busy: false }); // idle → sent → ok
+  const smsFor = onlyDigits(phone);
+  const smsVerified = sms.step === "ok" && sms.phone === smsFor && !!sms.token;
+  const smsErrText = (e) => {
+    const c = String(e?.code || "");
+    if (c === "auth/invalid-verification-code") return "인증번호가 맞지 않아요.";
+    if (c === "auth/code-expired") return "인증번호 시간이 지났어요. 다시 받아 주세요.";
+    if (c === "auth/too-many-requests") return "문자를 너무 많이 요청했어요. 잠시 뒤 다시 해 주세요.";
+    if (c === "auth/invalid-phone-number") return "휴대폰번호를 확인해 주세요.";
+    return "문자 인증을 하지 못했어요. 인증 없이 가입하면 운송사 승인 뒤에 쓸 수 있어요.";
+  };
+  const sendSms = async () => {
+    const e164 = toE164(phone);
+    if (!/^\+8210\d{7,8}$/.test(e164)) { setSms((x) => ({ ...x, msg: "010으로 시작하는 휴대폰번호를 끝까지 넣어 주세요." })); return; }
+    setSms((x) => ({ ...x, busy: true, msg: "" }));
+    try { await smsSend(e164); setSms({ step: "sent", code: "", token: "", phone: smsFor, msg: "인증번호를 보냈어요. 문자로 받은 6자리를 넣어 주세요.", busy: false }); }
+    catch (e) { setSms((x) => ({ ...x, busy: false, msg: smsErrText(e) })); }
+  };
+  const checkSms = async () => {
+    setSms((x) => ({ ...x, busy: true, msg: "" }));
+    try { const token = await smsConfirm(sms.code.trim()); setSms((x) => ({ ...x, step: "ok", token, busy: false, msg: "인증됐어요." })); }
+    catch (e) { setSms((x) => ({ ...x, busy: false, msg: smsErrText(e) })); }
+  };
   const [vehicleCategory, setVehicleCategory] = useState("");
   const [vehicleCategoryCustom, setVehicleCategoryCustom] = useState("");
   const [tonnage, setTonnage] = useState("");
@@ -392,6 +419,7 @@ export default function DriverRegister() {
       const [link] = await Promise.all([
         tryAutoLink(res.user, {
           companyName: co, carNo: plate, name: name.trim(), phone: phoneStr,
+          ...(smsVerified ? { phoneIdToken: sms.token } : {}), // 🔒 등록된 번호로 문자 인증까지 했으면 서버가 자동 승인
           차량종류: category, 차량톤수: tonnage, 거주지: residence, 요청사항: requestNote.trim(),
           hireDate: hireDate || "", ...payInfo,
           termsAgreed, privacyAgreed, gpsAgreed,
@@ -404,7 +432,7 @@ export default function DriverRegister() {
         // ⭐ 2026-11-05 사진 저장은 완료 화면을 띄운 뒤 뒤에서 마저 한다
         finishInBackground([bizDoc(uid)]);
         setPhase(4);
-        setSuccess("linked");
+        setSuccess(link.approved === false ? "linkedPending" : "linked"); // 🔒 2026-11-23 문자 인증 안 했으면 연결만 하고 승인 대기
         console.info("[기사 가입] 단계별 시간(ms)", marks);
         return;
       }
@@ -413,7 +441,7 @@ export default function DriverRegister() {
         await res.user.delete().catch(() => {});
         created = null;
         setDriverBusy(false);
-        setError("이미 등록된 차량번호인데 이름·회사명이 다릅니다. 관리자에게 문의해주세요.");
+        setError("운송사에 이미 등록된 차량번호인데, 이름 · 휴대폰번호 · 운송사명 중 다른 것이 있어요. 운송사에 등록된 그대로 넣거나 운송사에 문의해 주세요.");
         return;
       }
       setPhase(3);
@@ -643,7 +671,12 @@ export default function DriverRegister() {
       {success === "linked" ? (
         <>
           <h2 className="mt-5 text-[23px] font-black text-[#0F1A30]">등록된 기사 정보와 연결되었습니다</h2>
-          <p className="mt-2 text-[17px] font-bold text-[#5B6B85] leading-relaxed">승인 없이 바로 사용할 수 있습니다.<br />로그인 화면에서 <span className="text-[#1B2B4B]">로그인</span>만 눌러주세요.</p>
+          <p className="mt-2 text-[17px] font-bold text-[#5B6B85] leading-relaxed">휴대폰 인증까지 끝나 바로 사용할 수 있습니다.<br />로그인 화면에서 <span className="text-[#1B2B4B]">로그인</span>만 눌러주세요.</p>
+        </>
+      ) : success === "linkedPending" ? (
+        <>
+          <h2 className="mt-5 text-[23px] font-black text-[#0F1A30]">등록된 기사 정보와 연결되었습니다</h2>
+          <p className="mt-2 text-[17px] font-bold text-[#5B6B85] leading-relaxed">휴대폰 인증을 하지 않아 운송사 승인 대기 중입니다.<br />승인되면 바로 로그인할 수 있습니다.</p>
         </>
       ) : (
         <>
@@ -710,6 +743,27 @@ export default function DriverRegister() {
       </Field>
       <Field label="휴대폰번호" req>
         <input value={phone} type="tel" inputMode="numeric" onChange={(e) => setPhone(fmtPhone(e.target.value))} onKeyDown={onEnter} placeholder="010-0000-0000" className={`${inputCls} tabular-nums tracking-wide`} />
+        {/* 🔒 2026-11-23 문자 인증 — 운송사가 등록해 둔 번호로 인증하면 가입하자마자 바로 쓸 수 있어요 */}
+        <div className="mt-2 rounded-2xl border border-[#DCE3EE] bg-[#F7F9FC] p-3" data-kp="driver-sms">
+          {smsVerified ? (
+            <div className="text-[15.5px] font-black text-[#0F7A43]">✓ 휴대폰 인증 완료</div>
+          ) : (
+            <>
+              <div className="text-[14.5px] font-bold text-[#5B6B85] leading-snug">운송사에 등록된 번호로 문자 인증을 하면 <b className="text-[#1B2B4B]">바로 승인</b>돼요. 안 하면 운송사가 승인한 뒤에 쓸 수 있어요.</div>
+              {sms.step === "sent" && sms.phone === smsFor ? (
+                <div className="mt-2 flex gap-2">
+                  <input value={sms.code} inputMode="numeric" maxLength={6} onChange={(e) => setSms((x) => ({ ...x, code: e.target.value.replace(/\D/g, "") }))} placeholder="인증번호 6자리" className={`${inputCls} tabular-nums flex-1`} />
+                  <button type="button" disabled={sms.busy || sms.code.length !== 6} onClick={checkSms} className="shrink-0 h-14 px-4 rounded-2xl bg-[#1B2B4B] text-white text-[16px] font-black disabled:opacity-50">확인</button>
+                </div>
+              ) : null}
+              <button type="button" disabled={sms.busy || smsFor.length < 10} onClick={sendSms} className="mt-2 w-full h-12 rounded-2xl border-2 border-[#1B2B4B] text-[#1B2B4B] text-[16px] font-black disabled:opacity-40">
+                {sms.busy ? "보내는 중…" : sms.step === "sent" && sms.phone === smsFor ? "인증번호 다시 받기" : "인증번호 받기"}
+              </button>
+            </>
+          )}
+          {sms.msg && !smsVerified && <div className="mt-1.5 text-[14px] font-bold text-[#B4342A]">{sms.msg}</div>}
+          <div ref={smsHolderRef} />
+        </div>
       </Field>
 
       <div className="pt-1">

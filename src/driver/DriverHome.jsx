@@ -55,6 +55,7 @@ import CustomDatePicker from "../CustomDatePicker"; // 📅 2026-11-07 날짜는
 import "./driverTheme.css"; // ⭐ 2026-11-08 기사앱 리디자인 공통 테마
 import { useCompanyFeature } from "../companyFeatures";
 // ⭐ 2026-11-08 업체 요청(회사별 기능) — 퇴근 키로수 입력 · 엔진오일(5만km, 4만km 알림)·타이어 표시
+import { fetchLinkedCompanyInfo } from "../linkedCompanyInfo";
 import { ODO_OIL_FEATURE, needOilConfirm, saveCheckoutKm, saveOilAck, oilInfo, OdoCheckoutSheet, OilAlertSheet, ChangeRecordSheet, OilTireCard, needFirstOdo, OdoFirstSheet } from "./DriverOdoOil";
 
 // ⭐ 오더 타임라인 — 기사 행동(수락/거절/수정확인/상차지도착/상차완료/운송완료 등)을
@@ -1477,10 +1478,8 @@ export default function DriverHome() {
     if (!co) { setCompanyContact(null); return; }
     (async () => {
       try {
-        const q = query(collection(db, "transportApplications"), where("companyName", "==", co));
-        const snap = await getDocs(q);
-        const found = snap.docs.map(d => d.data()).find(d => d.type === "신규" && d.status === "approved") || snap.docs[0]?.data();
-        const phone = found?.phone || found?.연락처 || "";
+        const found = await fetchLinkedCompanyInfo(); // 🔒 2026-11-23 운송사 대표 전화만(서버) — 신청서를 직접 읽지 않는다
+        const phone = found?.phone || "";
         setCompanyContact(phone ? { name: co, phone } : null);
       } catch { setCompanyContact(null); }
     })();

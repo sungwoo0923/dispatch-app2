@@ -137,8 +137,23 @@ t("judgePreRegistered: 이름 다름 / 이미 다른 계정과 연결", () => {
   assert.strictEqual(C.judgePreRegistered({ pre: { 이름: "홍길동", companyName: "에이", uid: "other" }, name: "홍길동", companyName: "에이", uid: "u1" }).code, "NOT_FOUND");
 });
 t("coDocKey: 기본 회사는 차량번호 그대로", () => {
-  assert.strictEqual(C.coDocKey("돌캐", "12가3456"), "12가3456");
+  assert.strictEqual(C.coDocKey(C.DEFAULT_CO, "12가3456"), "12가3456"); // 기본 회사는 2026-11-21 부터 "(회사없음)"
   assert.strictEqual(C.coDocKey("에이", "12가3456"), "에이__12가3456");
+});
+
+// 🔒 2026-11-23 기사 업로드 링크 회사 서명
+t("coLinkSig: 같은 회사 · 같은 비밀키만 맞다", () => {
+  const sig = C.coLinkSig("sec", "A운송");
+  assert.strictEqual(sig.length, 22);
+  assert.ok(C.verifyCoLinkSig("sec", "A운송", sig));
+  assert.ok(!C.verifyCoLinkSig("sec", "B운송", sig), "회사 이름을 바꾸면 안 맞아야");
+  assert.ok(!C.verifyCoLinkSig("other", "A운송", sig), "비밀키가 다르면 안 맞아야");
+  assert.ok(!C.verifyCoLinkSig("sec", "A운송", ""), "서명 없으면 안 맞아야");
+  assert.ok(!C.verifyCoLinkSig("", "A운송", sig), "비밀키 없으면 안 맞아야");
+});
+t("unsignedLinkAllowed: 정해진 날까지만", () => {
+  assert.ok(C.unsignedLinkAllowed(Date.parse("2026-11-30T00:00:00+09:00")));
+  assert.ok(!C.unsignedLinkAllowed(Date.parse("2026-12-07T00:00:01+09:00")));
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -3780,6 +3780,7 @@ const _uploadAccess = require("./uploadAccess")({ functions, db, getAuth, FieldV
 exports.uploadAccess = _uploadAccess.uploadAccess;
 exports.driverSearch = _uploadAccess.driverSearch;
 exports.driverLoginLink = _uploadAccess.driverLoginLink;
+exports.driverLinkSig = _uploadAccess.driverLinkSig; // 🔒 2026-11-23 기사 업로드 링크 회사 서명
 const _publicLimited = _uploadAccess.limited;
 const _publicIp = _uploadAccess.clientIp;
 // ⭐ 2026-11-11 기사 차량 변경(계정은 그대로, 차량번호만) · 휴대폰번호 로그인 — functions/driverVehicle.js
@@ -3836,7 +3837,7 @@ async function canFreeAuthAccount(u) {
     const st = snap.data().status;
     return st === "deleted" || st === "withdrawn";
   }
-  // users 문서가 없는 계정은 "운송사 삭제(초기화)로 사용 중지된 계정"일 때만 — 다른 서비스(KP-Planner 등) 전용 계정은 건드리지 않는다
+  // users 문서가 없는 계정은 "운송사 삭제(초기화)로 사용 중지된 계정"일 때만 — 다른 서비스 전용 계정은 건드리지 않는다
   if (!u.disabled) return false;
   const bk = await db.collection("resetBackups").where("accountUids", "array-contains", u.uid).limit(1).get().catch(() => ({ empty: true }));
   return !bk.empty;
@@ -3919,6 +3920,7 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
     const tok = await getAuth().verifyIdToken(m[1]).catch(() => null);
     if (!tok) { res.status(401).json({ error: "BAD_TOKEN" }); return; }
     const uid = tok.uid;
+    if (await _publicLimited(res, [[`lds:uid:${uid}`, 10, 10 * 60e3], [`lds:ip:${_publicIp(req)}`, 30, 10 * 60e3]])) return; // 🔒 2026-11-23 맞춰 보기 반복 막기
     const email = String(tok.email || "").toLowerCase();
     const b = (req.body && typeof req.body === "object") ? req.body : {};
     const s = (v, n = 200) => String(v ?? "").trim().slice(0, n);
@@ -3949,6 +3951,10 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
       const legacy = await db.collection("drivers").where("차량번호", "in", raws).get().catch(() => ({ docs: [] }));
       legacy.docs.forEach((d) => { if (!String(d.data().companyName || "").trim()) cands.set(d.id, d); });
     }
+    // 🔒 2026-11-23 사용자 요청 — 기사관리에 등록된 기사와 "차량번호 · 이름 · 연락처 · 운송사"가 모두 맞아야 연결한다(예전엔 이름만 맞아도 연결 · 승인)
+    //  · 모두 맞고 + 등록된 번호로 문자 인증(phoneIdToken)까지 하면 → 자동 승인
+    //  · 모두 맞지만 문자 인증을 안 했으면 → 연결은 하되 승인 대기(운송사 직원이 승인)
+    //  · 하나라도 다르면 연결하지 않는다(conflict — 화면이 "등록 정보와 다르다"고 안내)
     const myDigits = drvDigits(phone);
     let best = null;
     let bestScore = 0;
@@ -3960,8 +3966,21 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
       const xd = drvDigits(x.전화번호 || x.phone);
       const samePhone = myDigits.length >= 9 && xd.length >= 9 && xd === myDigits;
       const sameName = drvName(x.이름 || x.name) !== "" && drvName(x.이름 || x.name) === drvName(name);
-      const score = (samePhone ? 2 : 0) + (sameName ? 1 : 0);
-      if (score > bestScore) { best = d; bestScore = score; }
+      if (!samePhone || !sameName) continue;
+      if (String(x.companyName || "").trim() && String(x.companyName).trim() !== co) continue;
+      best = d; bestScore = 3;
+    }
+    // 문자 인증 — 기사관리에 등록된 번호로 받은 인증인지(10분 안)
+    let smsOk = false;
+    if (best && b.phoneIdToken) {
+      const pt = await getAuth().verifyIdToken(String(b.phoneIdToken)).catch(() => null);
+      const got = drvDigits(pt?.phone_number).replace(/^82/, "0");
+      const reg = drvDigits((best.data() || {}).전화번호 || (best.data() || {}).phone);
+      smsOk = !!pt && got.length >= 10 && got === reg && Date.now() - Number(pt.auth_time || 0) * 1000 < 10 * 60 * 1000;
+      // 문자 인증 때 생긴 전화번호 임시 계정은 지운다(이메일 없는 전화 전용 계정만)
+      if (pt?.uid && pt.uid !== uid && !pt.email) {
+        try { const pu = await getAuth().getUser(pt.uid); if (!pu.email && pu.providerData.every((x) => x.providerId === "phone")) await getAuth().deleteUser(pt.uid); } catch { /* 무시 */ }
+      }
     }
     if (!best) {
       // ⭐ 2026-11-08 보안 — 화면이 drivers/{차량번호}를 직접 읽지 않게 됐다. 같은 회사에 이 차량번호 선등록 문서가 있는데
@@ -4006,10 +4025,10 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
       ...merged,
       uid,
       companyName: co,
-      approved: true,
+      approved: smsOk,
       linkedFromDriverId: best.id !== uid ? best.id : (base.linkedFromDriverId || ""),
       linkedAt: now,
-      linkedBy: "기사 가입 자동 연결",
+      linkedBy: smsOk ? "기사 가입 자동 연결(문자 인증)" : "기사 가입 연결(문자 인증 전 — 승인 대기)",
       createdAt: base.createdAt || now,
       updatedAt: now,
     };
@@ -4026,7 +4045,8 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
       hireDate,
       정산계좌: drvFilled(merged.정산계좌) ? merged.정산계좌 : null,
       사업자번호: pick("사업자번호"), 사업자상호: pick("사업자상호"),
-      approved: true,
+      approved: smsOk,
+      phoneVerified: smsOk,
       termsAgreed: b.termsAgreed === true, privacyAgreed: b.privacyAgreed === true, gpsAgreed: b.gpsAgreed === true,
       linkedDriverAuto: true,
       linkedFromDriverId: driverDoc.linkedFromDriverId,
@@ -4048,8 +4068,8 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
       const docs = await db.collection("driver_documents").where("driverId", "==", best.id).get().catch(() => ({ docs: [] }));
       for (const d of docs.docs) await d.ref.set({ driverId: uid }, { merge: true }).catch(() => {});
     }
-    console.log(`🔗 기사 가입 자동 연결: ${co} ${plate} ${name} → ${best.id} ⇒ drivers/${uid} (점수 ${bestScore})`);
-    res.status(200).json({ linked: true, driverId: uid, from: best.id, name: userDoc.name });
+    console.log(`🔗 기사 가입 연결: ${co} ${plate} ${name} → ${best.id} ⇒ drivers/${uid} (${smsOk ? "문자 인증 · 자동 승인" : "승인 대기"})`);
+    res.status(200).json({ linked: true, approved: smsOk, driverId: uid, from: best.id, name: userDoc.name });
   } catch (e) {
     if (e?.code === "GONE" || e?.code === "TAKEN") { res.status(200).json({ linked: false, reason: e.code }); return; }
     console.error("기사 가입 자동 연결 실패:", e);
@@ -4059,6 +4079,68 @@ exports.linkDriverSignup = functions.https.onRequest(async (req, res) => {
 
 // 🏢 가입 화면 "기존 회사" 검색 — 로그인 전에는 규칙상 transportApplications 를 읽을 수 없어
 //  항상 "등록된 운송사가 없습니다"가 떴다. 승인된 운송사의 회사명·주소만 내려준다(다른 정보 없음).
+// 🔒 2026-11-23 화주 메신저 — 연동 운송사 직원 대화 상대 목록(공유해도 되는 칸만: 이름 · 직급 · 팀 · 사진)
+//  예전엔 화주 화면이 연동 운송사 직원 문서(users)를 통째로 받아 휴대폰 · 이메일 · 인사 기록 · 퇴사 사유까지 브라우저에 왔다.
+//  이제 보안 규칙은 화주가 운송사 직원 문서를 못 읽게 막고, 이 함수가 필요한 칸만 돌려준다(승인 · 재직 중인 사무 직원만 — 기사 제외).
+exports.linkedStaffList = functions.https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "linkedStaffList"))) return;
+  try {
+    const m = String(req.headers.authorization || "").match(/^Bearer (.+)$/);
+    const tok = m ? await getAuth().verifyIdToken(m[1]).catch(() => null) : null;
+    if (!tok) { res.status(401).json({ error: "NO_TOKEN" }); return; }
+    const me = (await db.collection("users").doc(tok.uid).get()).data() || {};
+    if (me.role !== "shipper" || me.approved === false || me.employmentStatus === "퇴사") { res.status(403).json({ error: "SHIPPER_ONLY" }); return; }
+    const co = String(me.linkedTransportCompany?.companyName || "").trim();
+    if (!co) { res.status(200).json({ company: "", staff: [] }); return; }
+    const [us, ps] = await Promise.all([
+      db.collection("users").where("companyName", "==", co).get(),
+      db.collection("chat_profiles").where("company", "==", co).get().catch(() => ({ docs: [] })),
+    ]);
+    const prof = new Map(ps.docs.map((d) => [d.id, d.data() || {}]));
+    const staff = us.docs.map((d) => ({ uid: d.id, x: d.data() || {} }))
+      .filter(({ x }) => x.approved !== false && x.employmentStatus !== "퇴사" && !["driver", "shipper", "cafeUser", "viewer", "totalMaster"].includes(x.role))
+      .map(({ uid, x }) => { const p = prof.get(uid) || {}; return { uid, name: p.name || x.name || "", position: x.position || x.직책 || p.position || "", team: x.team || "", photo: p.photo || x.photo || "", statusMsg: p.statusMsg || "" }; });
+    res.set("Cache-Control", "no-store");
+    res.status(200).json({ company: co, staff });
+  } catch (e) { console.error("linkedStaffList 실패:", e); res.status(500).json({ error: "FAILED" }); }
+});
+
+// 🔒 2026-11-23 연동 운송사(화주) · 소속 운송사(기사) 연락처 — 가입 신청서(직인 이미지 · 회사 코드 · 신청인 정보)를 통째로 읽던 것 대신
+//  공유해도 되는 칸만: 회사명 · 대표자 · 사업자번호 · 주소 · 대표 전화 · 이메일(화주만 — 정산서 받을 주소) · 회사 코드(화주만 — 오더 전송용)
+exports.linkedCompanyInfo = functions.https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "linkedCompanyInfo"))) return;
+  try {
+    const m = String(req.headers.authorization || "").match(/^Bearer (.+)$/);
+    const tok = m ? await getAuth().verifyIdToken(m[1]).catch(() => null) : null;
+    if (!tok) { res.status(401).json({ error: "NO_TOKEN" }); return; }
+    const me = (await db.collection("users").doc(tok.uid).get()).data() || {};
+    if (me.approved === false || me.employmentStatus === "퇴사") { res.status(403).json({ error: "NOT_APPROVED" }); return; }
+    const shipper = me.role === "shipper";
+    if (!shipper && me.role !== "driver") { res.status(403).json({ error: "SHIPPER_OR_DRIVER_ONLY" }); return; }
+    const co = String(shipper ? me.linkedTransportCompany?.companyName || "" : me.companyName || "").trim();
+    if (!co) { res.status(200).json({ info: null }); return; }
+    const snap = await db.collection("transportApplications").where("companyName", "==", co).get();
+    const all = snap.docs.map((d) => d.data() || {});
+    const a = all.find((x) => x.type === "신규" && x.status === "approved") || all.find((x) => x.status === "approved") || null;
+    if (!a) { res.status(200).json({ info: { companyName: co } }); return; }
+    const info = {
+      companyName: co, representative: a.representative || a.name || "", businessNumber: a.businessNumber || "",
+      address: a.address || "", phone: a.phone || a.tel || a.연락처 || "",
+      ...(shipper ? { email: a.email || "", companyCode: a.companyCode || "" } : {}),
+    };
+    res.set("Cache-Control", "no-store");
+    res.status(200).json({ info });
+  } catch (e) { console.error("linkedCompanyInfo 실패:", e); res.status(500).json({ error: "FAILED" }); }
+});
+
 exports.findCompany = functions.https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -4073,7 +4155,9 @@ exports.findCompany = functions.https.onRequest(async (req, res) => {
   // ⭐ 2026-11-01 신규 가입 회사명 중복확인 — 승인된 회사 + 승인 대기 중인 신규 신청까지(띄어쓰기·대소문자 무시). 결과는 있음/없음만
   if (req.query.dup === "1") {
     try {
-      const norm = (x) => String(x || "").toLowerCase().replace(/\s+/g, "");
+      // 🔒 2026-11-23 회사 메일 · 급여 비밀번호 보관 이름(safeId — 공백 · / · # · ? · [ ] · _ 를 같은 글자로 본다)이 겹치는 이름도 "이미 있음"
+      //  (예: "한국 운송" 과 "한국_운송" — 겹치면 나중 회사가 앞 회사 메일함 · 급여 비밀번호에 닿을 수 있었다)
+      const norm = (x) => String(x || "").toLowerCase().replace(/[\s/#?[\]_]+/g, "").slice(0, 80);
       const key = norm(q);
       const [apps, plan] = await Promise.all([
         db.collection("transportApplications").where("type", "==", "신규").get(),

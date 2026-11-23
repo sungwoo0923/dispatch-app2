@@ -80,7 +80,8 @@ const A_CO = "에이운송", B_CO = "비운송";
   await t("users: 다른 회사 목록 거절", () => assertFails(getDocs(query(collection(UA, "users"), where("companyName", "==", B_CO)))));
   await t("users: 연동 화주 목록(linkedTransportCompany 조건)", () => assertSucceeds(getDocs(query(collection(AA, "users"), where("linkedTransportCompany.companyName", "==", A_CO)))));
   await t("users: 다른 회사 연동 화주 목록 거절", () => assertFails(getDocs(query(collection(AA, "users"), where("linkedTransportCompany.companyName", "==", B_CO)))));
-  await t("users: 화주 → 연동 운송사 직원 목록", () => assertSucceeds(getDocs(query(collection(SS, "users"), where("companyName", "==", A_CO)))));
+  // 🔒 2026-11-23 화주는 연동 운송사 직원 문서를 직접 못 읽는다(메신저 목록은 서버 linkedStaffList 가 이름 · 직급만)
+  await t("users: 화주 → 연동 운송사 직원 목록 거절", () => assertFails(getDocs(query(collection(SS, "users"), where("companyName", "==", A_CO)))));
   await t("users: 화주 → 연동 안 된 운송사 목록 거절", () => assertFails(getDocs(query(collection(SS, "users"), where("companyName", "==", B_CO)))));
   await t("users: 승인 대기 계정은 본인만", () => assertSucceeds(getDoc(doc(PEND, "users/pend"))));
   await t("users: 승인 대기 계정이 남의 문서 읽기 거절", () => assertFails(getDoc(doc(PEND, "users/userB"))));
@@ -149,7 +150,8 @@ const A_CO = "에이운송", B_CO = "비운송";
   await t("transportApplications: 우리 회사 목록", () => assertSucceeds(getDocs(query(collection(UA, "transportApplications"), where("companyName", "==", A_CO)))));
   await t("transportApplications: 다른 회사 신청서(직인) 읽기 거절", () => assertFails(getDoc(doc(UB, "transportApplications/tA"))));
   await t("transportApplications: 전체 목록 거절", () => assertFails(getDocs(collection(UA, "transportApplications"))));
-  await t("transportApplications: 연동 화주 → 연동 운송사 정보", () => assertSucceeds(getDoc(doc(SS, "transportApplications/tA"))));
+  // 🔒 2026-11-23 화주는 신청서(직인 · 회사 코드)를 직접 못 읽는다(연락처는 서버 linkedCompanyInfo)
+  await t("transportApplications: 연동 화주 → 신청서 직접 읽기 거절", () => assertFails(getDoc(doc(SS, "transportApplications/tA"))));
   await t("transportApplications: 다른 회사 신청서 삭제 거절", () => assertFails(deleteDoc(doc(AB, "transportApplications/tA"))));
   await t("transportApplications: 우리 회사가 스스로 승인 상태 바꾸기 거절", () => assertFails(updateDoc(doc(AA, "transportApplications/tA"), { status: "rejected" })));
   await t("transportApplications: 우리 회사 직인 바꾸기", () => assertSucceeds(updateDoc(doc(AA, "transportApplications/tA"), { 직인이미지: "data:y" })));

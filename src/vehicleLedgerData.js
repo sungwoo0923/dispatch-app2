@@ -5,7 +5,7 @@
 //                                       유류카드번호, 유류카드사, 하이패스, GPS, 덮개, 박스, 박스메모, 메모,
 //                                       repairs[], structures[], driverHist[], logs[], createdAt, updatedAt, updatedBy }
 //   vehicleLedgerFiles/{파일id_조각번호} = { companyName, vehicleId, fileId, idx, total, name, type, data } — 증빙(사진·PDF)
-//     Storage 규칙이 kp-planner/ 경로만 열려 있어 Firestore에 압축 base64로 나눠(조각당 ~900KB) 저장한다.
+//     Storage 에 차량 장부 파일용 경로가 따로 없어 Firestore에 압축 base64로 나눠(조각당 ~900KB) 저장한다.
 import { doc, getDoc, writeBatch } from "firebase/firestore";
 import { db } from "./firebase";
 import { toYmd, arr } from "../functions/fleetCareCore.mjs";

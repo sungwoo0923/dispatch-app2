@@ -18,7 +18,7 @@ const KEYS = [
 ];
 const PREFIXES = [
   "saved_attach_", "attach_", "shownNotifs_", "urgentSeen_", "urgentSnoozed_", "mobileUrgentSeen_", "fixedTransport_",
-  "shipperOrderDraft_", "vcLater_", "fcConfig_", "kpMsgToastSeen:",
+  "shipperOrderDraft_", "vcLater_", "fcConfig_", "kpMsgToastSeen:", "kpDlSig:",
 ];
 
 // 🔒 2026-11-23 예전 오더 보관본(IndexedDB kpOrderHistory — PC · 폰 13개월)도 지운다 — 회사별로 따로 보관해 다른 회사 화면에 섞이진 않지만,

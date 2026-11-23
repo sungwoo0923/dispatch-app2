@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { auth, db } from "../../firebase";
+import { fetchLinkedCompanyInfo } from "../../linkedCompanyInfo"; // 🔒 2026-11-23
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
@@ -36,15 +37,9 @@ export default function SettingsTransport() {
         // Fetch transport detail from transportApplications
         const linked = data.linkedTransportCompany;
         if (linked?.companyName) {
-          const q = query(
-            collection(db, "transportApplications"),
-            where("companyName", "==", linked.companyName),
-            where("status", "==", "approved")
-          );
-          const tSnap = await getDocs(q);
-          if (!tSnap.empty) {
-            setTransportDetail(tSnap.docs[0].data());
-          }
+          // 🔒 2026-11-23 공유해도 되는 칸만(서버 linkedCompanyInfo) — 신청서를 직접 읽지 않는다
+          const info = await fetchLinkedCompanyInfo();
+          if (info) setTransportDetail(info);
         }
       } catch (e) {
         console.error(e);

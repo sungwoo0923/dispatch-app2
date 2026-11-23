@@ -89,6 +89,8 @@ export function describeDriverLoginError(err, ctx = {}) {
   if (code === "driver/rejected") return { ...base, tone: "stop", title: "가입 신청이 거절되었습니다", message: reason ? `거절 사유: ${reason}` : "소속 운송사 관리자가 가입 신청을 거절했습니다.", hint: "운송사명·차량번호·이름이 맞는지 확인하고 운송사 관리자에게 문의해 주세요." };
   if (code === "driver/name-mismatch") return { ...base, tone: "error", title: "이름이 다릅니다", message: `${idText}로 등록된 기사 이름과 입력하신 이름${nm ? `('${nm}')` : ""}이 다릅니다.`.replace(/\s+로/, "로"), hint: "가입할 때 적은 실명을 띄어쓰기 없이 정확히 입력해 주세요." };
   if (code === "driver/company-mismatch" || code === "driver/other-company") return { ...base, tone: "error", title: "소속 운송사가 다릅니다", message: `${idText}는 ${co ? `'${co}'` : "입력하신 운송사"} 소속으로 등록되어 있지 않습니다.`, hint: "가입할 때 고른 운송사명을 정확히 입력해 주세요. 다른 운송사로 옮기셨다면 그 운송사로 새로 기사 등록을 해주세요." };
+  // 🔒 2026-11-23 처음 쓰는 기사(운송사가 미리 등록만 해 둔 상태)는 로그인 화면에서 바로 연결하지 않는다 — 가입하기에서 문자 인증으로
+  if (code === "driver/use-register") return { ...base, tone: "wait", title: "처음이시면 가입이 필요해요", message: "운송사가 기사님 정보를 미리 등록해 두었어요. 아래 '기사 등록하기'에서 등록된 휴대폰으로 문자 인증을 하면 바로 쓸 수 있어요.", hint: "차량번호 · 이름 · 휴대폰번호 · 운송사명을 운송사에 등록된 그대로 넣어 주세요." };
   if (code === "driver/not-driver") return { ...base, tone: "error", title: "기사 계정이 아닙니다", message: "이 정보는 운송사 직원 또는 화주사 계정입니다.", hint: "가입하신 로그인 화면(운송사/화주사)에서 로그인해 주세요." };
   if (code === "driver/no-user-doc") return { ...base, tone: "error", title: "가입 정보를 찾을 수 없습니다", message: "계정은 있지만 기사 가입 정보가 없습니다(거절되었거나 삭제되었을 수 있습니다).", hint: "기사 등록을 다시 하시거나 운송사 관리자에게 문의해 주세요." };
   if (code === "driver/phone-incomplete") return { ...base, tone: "error", title: "휴대폰번호를 끝까지 입력해 주세요", message: "휴대폰번호는 010부터 전체 번호를 넣어야 합니다.", hint: "예: 01012345678 (차량번호로 로그인하시려면 차량번호 전체를 넣어주세요.)" };

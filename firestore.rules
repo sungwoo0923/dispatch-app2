@@ -466,21 +466,29 @@ service cloud.firestore {
     }
     // 🔒 회사 데이터(거래처·하차지·정기오더·삭제기록·알림·일정·메일·인사·근태신청·회계·결재선 · 2026-11-07 arDesk 거래명세서 단계·미수금 메모)
     // ⭐ 2026-11-02 점검 — approvalSettings(결재 설정)는 아래 전자결재 쪽 전용 규칙으로 옮김(누구나 임원 자동 승인을 켜던 문제)
+    // 🔒 2026-11-23 기사는 사무 자료(거래처 · 하차지 · 회계 · 인사 · 영업 · 메일 기록 · 일정 등)를 못 읽고 못 쓴다 — 기사앱에 필요한 것(차량 장부 · 차종 · 정비 설정 · 알림 · 완료 보관)만
+    function driverOfficeBlocked(c) {
+      return c in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes',
+          'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets',
+          'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedgerFiles', 'arDesk', 'vehicleCardTx', 'vehicleCostReports',
+          'salesLeads', 'salesActivities']
+        && myRole() == 'driver';
+    }
     match /{tcol}/{id} {
       allow read: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
           'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk', 'vehicleCardTx', 'vehicleCareSettings', 'vehicleCostReports', 'salesLeads', 'salesActivities']
         // ⭐ 2026-11-02 점검 — 없는 문서를 getDoc하면 resource가 null이라 coMatch(resource.data)가 오류 → 거부되던 문제
         //  (ledgerAuto.js 자동 장부의 "새 줄인지" 확인). 없는 문서는 승인된 계정이면 "없음"만 알 수 있게 허용
-        && ((resource == null && isApproved()) || coMatch(resource.data));
+        && ((resource == null && isApproved()) || coMatch(resource.data)) && !driverOfficeBlocked(tcol);
       allow create: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
           'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk', 'vehicleCardTx', 'vehicleCareSettings', 'vehicleCostReports', 'salesLeads', 'salesActivities']
-        && coCreate();
+        && coCreate() && !driverOfficeBlocked(tcol);
       allow update: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
           'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk', 'vehicleCardTx', 'vehicleCareSettings', 'vehicleCostReports', 'salesLeads', 'salesActivities']
-        && coMatch(resource.data) && coKeep();
+        && coMatch(resource.data) && coKeep() && !driverOfficeBlocked(tcol);
       allow delete: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
           'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk', 'vehicleCardTx', 'vehicleCareSettings', 'vehicleCostReports', 'salesLeads', 'salesActivities']
-        && coMatch(resource.data);
+        && coMatch(resource.data) && !driverOfficeBlocked(tcol);
     }
     // 💰 자금(통장·현금 잔액) — 경리(test)·관리자(대표 등)만. 화면에서는 경리 + 대표 직책만 보이게 한다
     // ⭐ 2026-11-02 점검 — 권한 관리에서 직접 만든 역할에 '자금관리' 메뉴를 켜면(읽기 → 조회, 쓰기 → 등록·수정·삭제) 자금 데이터도 허용
@@ -1477,8 +1485,8 @@ service cloud.firestore {
     function userVisible(d) {
       return isTotalMasterUser() || (isApproved() && (
         (!isShipperUser() && ((d.get('role', '') != 'shipper' && d.get('companyName', '(회사없음)') == myCo()) || linkedCoOf(d) == myCo())) ||
-        (isShipperUser() && ((d.get('role', '') == 'shipper' && d.get('companyName', '') == myCoAny())
-          || (myLinkedCo() != '' && d.get('companyName', '') == myLinkedCo())))));
+        // 🔒 2026-11-23 화주는 같은 화주사 화주 계정만 — 연동 운송사 직원 문서(휴대폰 · 인사 기록 등)는 못 읽는다(메신저는 서버 linkedStaffList 가 이름 · 직급만 준다)
+        (isShipperUser() && d.get('role', '') == 'shipper' && d.get('companyName', '') == myCoAny())));
     }
     // 내가 관리할 수 있는 범위의 사람 — 같은 운송사 직원·기사 / 우리 회사에 연동된 화주 / (화주사 계정은) 같은 화주사 사람
     //  (규칙 계산 한도 1,000개 때문에 내 문서·역할·회사를 한 번만 읽어 넘긴다)
@@ -2461,8 +2469,8 @@ service cloud.firestore {
         && request.resource.data.get('status', 'pending') in ['pending', '대기', ''];
       allow read: if isTotalMasterUser()
         || (isSignedIn() && resource.data.get('userId', '') == request.auth.uid)
-        || (isApproved() && !isShipperUser() && resource.data.get('companyName', '') == myCo())
-        || (isApproved() && isShipperUser() && myLinkedCo() != '' && resource.data.get('companyName', '') == myLinkedCo());
+        // 🔒 2026-11-23 화주 · 기사는 신청서(직인 · 회사 코드 · 신청인 정보)를 직접 못 읽는다 — 연락처는 서버 linkedCompanyInfo 가 필요한 칸만 준다
+        || (isApproved() && !isShipperUser() && myRole() != 'driver' && resource.data.get('companyName', '') == myCo());
       allow update: if isTotalMasterUser()
         || (isApproved() && !isShipperUser() && !(myRole() in ['driver', 'viewer', 'cafeUser'])
           && resource.data.get('companyName', '') == myCo()
@@ -2771,14 +2779,15 @@ service cloud.firestore {
     }
 
     // ⭐ 2026-11-07 공용 규칙도 회사 검사 — 따로 규칙이 없는 컬렉션은 "문서의 companyName == 내 회사"인 문서만(최고관리자는 전체).
+    //  🔒 2026-11-23 기사는 공용 규칙으로 아무것도 못 읽는다(기사앱이 쓰는 컬렉션은 모두 따로 규칙이 있다)
     //  예전: 승인된 계정이면 회사와 상관없이 모두 읽고 쓰기(users·메신저·기사 위치·운송사 신청서·시스템 스위치까지 — 이 목록에 없던 컬렉션 전부)
     //  ⚠ 따로 규칙을 둔 컬렉션은 반드시 아래 제외 목록에 넣는다(규칙은 "하나라도 허용하면 허용" — 빠지면 이 규칙이 따로 정한 규칙을 덮는다)
     function catchAllRead() {
-      return isTotalMasterUser() || (isApproved() && !isShipperUser()
+      return isTotalMasterUser() || (isApproved() && !isShipperUser() && myRole() != 'driver'
         && (resource == null || resource.data.get('companyName', '') == myCo()));
     }
     function catchAllWrite() {
-      return isTotalMasterUser() || (isApproved() && !isShipperUser()
+      return isTotalMasterUser() || (isApproved() && !isShipperUser() && myRole() != 'driver'
         && (resource == null || resource.data.get('companyName', '') == myCo())
         && (request.method == 'delete' || request.resource.data.get('companyName', '') == myCo()));
     }
@@ -2790,6 +2799,8 @@ service cloud.firestore {
       return col in [
         // 🏢 2026-11-10 PnK PROJECT 사내 인트라넷 — 위에서 따로 정함(빠지면 로지스웹 고객사 직원이 읽고 쓸 수 있다)
         'pnkMembers', 'pnkPosts', 'pnkFiles', 'pnkTasks', 'pnkEvents', 'pnkSales', 'pnkServices', 'pnkReleases', 'pnkCompany', 'pnkFinance', 'pnkMail',
+        // 🔒 2026-11-23 따로 정한 규칙이 있는데 이 목록에 빠져 있던 것(공용 규칙이 기사 · 다른 역할에게 열어 주던 것)
+        'forkliftDrivers', 'forkliftPresets', 'companyPayFlags', 'brandHistory', 'hubTriggerErrors',
         //  사번 색인 · 전자결재 · 출퇴근 · 메일 서버 비밀값(서버만) · 외부 발송 횟수(서버만)
         'pnkEmpIndex', 'pnkApprovals', 'pnkAttendance', 'pnkMailSecrets', 'pnkMailUsage', 'pnkMfaSecrets', 'pnkMfaSessions', 'pnkUi', 'pnkUiHistory', 'pnkInquiries', 'pnkSite',
         'logisPasskeys', 'logisPasskeyChal', 'passwordResetSms', // 👆 얼굴 · 지문 로그인 공개키 · 한 번 쓰는 확인값(서버만 — functions/logisPasskey.js)

@@ -378,8 +378,11 @@ export function writeBatch(db) {
 }
 
 // 기사 통합 업로드 링크(/driver-upload)에 회사를 붙인다 — 같은 날 같은 차량·이름이 다른 운송사에 있어도 섞이지 않게
+//  🔒 2026-11-23 회사 서명(cs)도 같이 — 서버가 그 회사가 보낸 링크인지 확인한다(src/driverLinkSig.js 가 로그인 때 받아 둔다)
 export function withCo(url) {
   const t = getTenant();
   if (!t) return url;
-  return `${url}${url.includes("?") ? "&" : "?"}co=${encodeURIComponent(t)}`;
+  let cs = "";
+  try { cs = localStorage.getItem(`kpDlSig:${t}`) || ""; } catch { cs = ""; }
+  return `${url}${url.includes("?") ? "&" : "?"}co=${encodeURIComponent(t)}${cs ? `&cs=${encodeURIComponent(cs)}` : ""}`;
 }
