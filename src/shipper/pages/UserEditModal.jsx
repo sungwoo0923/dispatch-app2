@@ -110,6 +110,8 @@ const reject = async () => {
   onClose();
 };
 const save = async () => {
+  // ✅ 2026-11-23 수정 저장 전에 한 번 묻기(사용자 요청)
+  if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
   try {
 await updateDoc(doc(db, "users", user.uid), {
   department: form.department,

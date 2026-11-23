@@ -541,6 +541,8 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
     updateDoc(doc(db, "drivers", linkRaw.id), patch).then(() => toast(`점검·소모품 마지막 교체 ${keys.length}개 자동 반영`)).catch(() => {});
   };
   const saveRow = async (kind, r, pendingFiles = []) => {
+    // ✅ 2026-11-23 이미 있는 줄을 고칠 때만 저장 전에 한 번 묻기(사용자 요청) — 새 줄 추가는 묻지 않는다
+    if (r.id && (v[kind] || []).some((x) => x.id === r.id) && !(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     const row = { ...r, id: r.id || uid() };
     if (kind === "driverHist") row.연락처 = fmtPhone(row.연락처);
     await mutate((d) => {
@@ -585,6 +587,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
     });
     if (!normPlate(edit.차량번호)) { toast("차량번호를 입력하세요"); return; }
     if (!changes.length) { setEdit(null); return; }
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     if (next.차량번호 !== undefined) next.plateKey = normPlate(next.차량번호);
     if (next.용도 !== undefined) next.차량종류 = next.용도; // ⭐ 2026-11-02 다른 화면과 같은 이름(차량종류)으로도 저장
     await mutate((d) => ({ ...next, logs: [...(d.logs || []), ...changes] }));

@@ -1311,6 +1311,7 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
   const handleApprove = async (uid, doApprove) => {
     if (approvingId) return;
     if (!doApprove && !await kpConfirm("이 기사의 승인을 취소할까요? 기사앱 사용이 막힙니다.")) return;
+    if (doApprove && !(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // ✅ 2026-11-23 승인도 한 번 묻기(승인 취소는 위에서 묻는다)
     setApprovingId(uid);
     try {
       await updateDoc(doc(db, "users", uid), { approved: doApprove });
@@ -6246,6 +6247,8 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
 
   // 지입차 담당자 배정/위임 — drivers/{driverId} 문서의 담당자 필드를 바로 갱신한다.
   const assignDriverManager = useCallback(async (driverId, staff) => {
+    // ✅ 2026-11-23 수정 저장 전에 한 번 묻기(사용자 요청)
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     try {
       await updateDoc(doc(db, "drivers", driverId), {
         담당자: staff ? { uid: staff.id, name: staff.name } : null,
@@ -6875,6 +6878,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
   // ── 출근지 저장 ───────────────────────────────────────────────────────────
   const handleSaveDriverCheckInLoc = useCallback(async (loc) => {
     if (!checkInLocModal) return;
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     try {
       await updateDoc(doc(db, "drivers", checkInLocModal.driverId), { checkInLocation: loc });
     } catch (e) { console.error("checkInLocation save:", e); }
@@ -6890,6 +6894,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
 
   const handleSaveDriverDropLoc = useCallback(async (loc) => {
     if (!dropLocModal) return;
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     try {
       await updateDoc(doc(db, "drivers", dropLocModal.driverId), { dropLocation: loc });
     } catch (e) { console.error("dropLocation save:", e); }

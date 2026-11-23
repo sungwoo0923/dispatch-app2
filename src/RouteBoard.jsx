@@ -499,6 +499,8 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
     if (!f.groups.length || f.groups.some((g) => !g.name.trim())) return kpAlert("묶음(상차지) 이름을 입력해 주세요.");
     if ((f.tabMode === "monthly" || f.tabMode === "single") && !f.columns.some((c) => c.kind === "date")) return kpAlert("월별 탭 · 한 탭 시트는 날짜 칸이 있어야 해요. 날짜 칸 종류를 '날짜(월별 탭)'로 바꿔 주세요.");
     if (f.columns.filter((c) => c.kind === "date").length > 1) return kpAlert("날짜 칸은 하나만 정해 주세요.");
+    // ✅ 2026-11-23 수정 저장 전에 한 번 묻기(사용자 요청) — 새 양식 만들기는 묻지 않는다
+    if (f.id && !(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     setBusy(true);
     try {
       const data = { ...f, sheetUrl: String(f.sheetUrl || "").trim(), companyName: co, columns: f.columns.map((c) => JSON.parse(JSON.stringify({ ...c, label: c.label.trim() }))), updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "" };
@@ -943,7 +945,7 @@ export default function RouteBoard({ companyName = "" }) {
     const k = `${form.id}|${date}`; if (syncedRef.current === k) return;
     syncedRef.current = k; syncNow(true);
   }, [form?.id, form?.sheetUrl, date, orders === null]); // eslint-disable-line react-hooks/exhaustive-deps
-  const keepRow = (r) => { setKeepKeys((s0) => new Set([...s0, r.key])); if (r._id) setDoc(doc(db, "orders", r._id), { 시트삭제됨: false, 시트유지: true }, { merge: true }).catch(() => {}); };
+  const keepRow = async (r) => { if (r._id && !(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; setKeepKeys((s0) => new Set([...s0, r.key])); if (r._id) setDoc(doc(db, "orders", r._id), { 시트삭제됨: false, 시트유지: true }, { merge: true }).catch(() => {}); };
   const isGone = (r) => (sheetDiff?.gone?.has(r.key) || r.sheetGone) && !keepKeys.has(r.key);
   const addedCount = Object.values(sheetDiff?.added || {}).reduce((a, v) => a + v.length, 0);
   const goneCount = Object.values(rows).flat().filter(isGone).length;
@@ -957,6 +959,16 @@ export default function RouteBoard({ companyName = "" }) {
   }, [goneSig, dirty, busy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async () => {
+    // 이미 있는 줄을 고치거나 지우거나 순서를 바꿨을 때만 묻는다(새 줄만 적었으면 묻지 않는다)
+    {
+      const prevMap = new Map((orders || []).map((o) => [o._id, o]));
+      const touched = form.groups.some((g) => (rows[g.name] || []).some((r, i) => {
+        if (!r._id) return false;
+        const pv = prevMap.get(r._id);
+        return r.dirty || rowEmpty(form, r) || (pv && (pv.배차표순번 !== i + 1 || pv.배차표묶음 !== g.name));
+      }));
+      if (touched && !(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
+    }
     setBusy("save");
     try {
       const prevById = new Map((orders || []).map((o) => [o._id, o]));

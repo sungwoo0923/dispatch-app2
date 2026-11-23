@@ -808,7 +808,7 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
 // 그대로 재사용해서, 이미 등록된 오더도 근무일을 다시 골라 수정할 수 있게 한다.
 // 4파트(실시간배차현황)/5파트(배차현황)/모바일에서 공용으로 쓴다. 저장하면
 // 근무일자목록 + 상차일(최솟값)/하차일(최댓값)을 함께 patchDispatch한다.
-function WorkDatesEditModal({ row, companyName, onClose, onSave }) {
+function WorkDatesEditModal({ row, companyName, onClose, onSave, confirmEdit = false }) {
   const initWorkDates = _parseWorkDates(row?.근무일자목록);
   // ⭐ "상차일 하나 + 하차일 하나"를 그냥 순서대로 고른 것과, "근무일을 여러 날 따로
   // 골라 묶음으로 등록"하는 것은 서로 다른 조작이다. 기존엔 이 팝업이 무조건
@@ -849,6 +849,8 @@ function WorkDatesEditModal({ row, companyName, onClose, onSave }) {
       setSaveError(REVERSED_DATE_ORDER_MSG);
       return;
     }
+    // confirmEdit: 오더에 바로 저장하는 경우만 묻는다(복사/수정 패널 안의 날짜 고르기는 패널 [수정 저장]에서 묻는다)
+    if (confirmEdit && !(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     setSaving(true);
     // ⚠️ 저장 응답이 영영 오지 않으면 "저장 중..."에 갇혀 아무 안내 없이 멈춰있던
     // 문제가 있었다 — 일정 시간 안에 끝나지 않으면 타임아웃 처리로 버튼을 되돌리고
@@ -1891,6 +1893,8 @@ function BulkEditModal({ rows, patchDispatch, onClose, onDateShift }) {
     }).filter(Boolean);
 
     if (jobs.length === 0) { onClose(); return; }
+    // ✅ 2026-11-23 수정 저장 전에 한 번 묻기(사용자 요청)
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
 
     setSaveProgress({ done: 0, total: jobs.length });
     setSaving(true);
@@ -2086,6 +2090,7 @@ function BulkDateShiftModal({ rows, patchDispatch, onClose }) {
       return Object.keys(patch).length ? { id, col: r.__col, patch } : null;
     }).filter(Boolean);
     if (jobs.length === 0) { onClose(); return; }
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
 
     setSaveProgress({ done: 0, total: jobs.length });
     setSaving(true);
@@ -10803,6 +10808,7 @@ const [placeConflictOpen, setPlaceConflictOpen] = React.useState(false);
       }, [vehicleSpecOpen, userCompany]);
       const saveVehicleSpecEdit = async (values) => {
         if (!vehicleSpecEdit) return;
+        if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
         const { table, index } = vehicleSpecEdit;
         const nextOverrides = { ...specOverrides, [table]: { ...specOverrides[table], [index]: values } };
         setSpecOverrides(nextOverrides);
@@ -10815,6 +10821,7 @@ const [placeConflictOpen, setPlaceConflictOpen] = React.useState(false);
       };
       const resetVehicleSpecEdit = async () => {
         if (!vehicleSpecEdit) return;
+        if (!(await kpConfirm("수정하시겠습니까?\n이 칸을 기본 제원값으로 되돌려요.", { okText: "저장" }))) return;
         const { table, index } = vehicleSpecEdit;
         const nextTable = { ...specOverrides[table] };
         delete nextTable[index];
@@ -12689,8 +12696,9 @@ const hasMultiRegOrderMemoFor = (type, groupKey) => {
   const found = mergedClients.find(c => normalizeKey(c.업체명 || "") === normalizeKey(name));
   return !!String(found?.오더메모 || "").trim();
 };
-const saveMultiRegOrderMemo = (memo, popupShow, notice) => {
+const saveMultiRegOrderMemo = async (memo, popupShow, notice) => {
   if (!multiRegOrderMemoPopup) return;
+  if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
   const { name } = multiRegOrderMemoPopup;
   const clientMatch = (clients || []).find(c => normalizeKey(c.업체명 || c.거래처명) === normalizeKey(name));
   if (clientMatch) {
@@ -19883,6 +19891,7 @@ className={`
                     className="flex-1 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold"
                     onClick={async () => {
                       if (!editContactData.name.trim()) return showAlert("이름을 입력하세요.");
+                      if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
                       const updated = contactPopup.contacts.map((x, idx) =>
                         idx === i ? { ...x, name: editContactData.name.trim(), phone: editContactData.phone.trim() } : x
                       );
@@ -22604,7 +22613,7 @@ function formatWaypointTime(stop, type, orderDate) {
   return time;
 }
 
-function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeOptions = [], orderDate = "" }) {
+function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeOptions = [], orderDate = "", confirmEdit = false }) {
   const [open, setOpen] = React.useState(false);
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
@@ -22663,6 +22672,7 @@ function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeO
         open={editModalOpen}
         onClose={() => setEditModalOpen(false)}
         onSave={newList => { if (onSave) onSave(newList); }}
+        confirmEdit={confirmEdit}
         list={validList}
         type={type}
         placeRows={placeRows}
@@ -22672,7 +22682,7 @@ function StopBadge({ count, list, type = "pickup", onSave, placeRows = [], timeO
     </>
   );
 }
-function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editable = false, placeRows = [], timeOptions = [], orderDate = "" }) {
+function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editable = false, placeRows = [], timeOptions = [], orderDate = "", confirmEdit = false }) {
   const [open, setOpen] = React.useState(false);
   const [editModalOpen, setEditModalOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
@@ -22744,6 +22754,7 @@ function StopInlineBadge({ count = 0, list = [], type = "pickup", onEdit, editab
         open={editModalOpen}
         onClose={() => setEditModalOpen(false)}
         onSave={newList => { if (onEdit) onEdit(newList); setEditModalOpen(false); }}
+        confirmEdit={confirmEdit}
         list={list}
         type={type}
         placeRows={placeRows}
@@ -22836,7 +22847,7 @@ function WaypointViewModal({ list = [], type = "drop", orderDate = "", onClose, 
 }
 
 // ===================== StopEditModal (경유지 수정 팝업 — 3파트와 동일 구조) =====================
-function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], timeOptions = [], orderDate = "" }) {
+function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], timeOptions = [], orderDate = "", confirmEdit = false }) {
   // ⭐ 이 팝업은 role/userCompany를 prop으로 못 받는 위치라(여러 단계 위에서 호출됨),
   // 훅 내부의 localStorage 전용 대체 규칙을 쓴다(resolveCompany와 거의 동일한 결과).
   const cargoTypeOptionsCustom = useCompanyDropdownOptions("화물타입");
@@ -22933,7 +22944,9 @@ function StopEditModal({ open, onClose, onSave, list, type, placeRows = [], time
     void lq; return placeSearch(placeRows, q).slice(0, 30); // ⭐ 2026-11-03 공용 검색
   }
 
-  function handleSave() {
+  async function handleSave() {
+    // confirmEdit: 오더에 바로 저장하는 경유지 수정만 묻는다(등록 · 수정 폼 안에서 고르는 건 폼 저장 때 묻는다)
+    if (confirmEdit && !(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     const CARGO_SFXS = ["파레트","파렛트","박스","통"];
     const TON_SFXS = ["톤","kg","KG"];
     const finalList = editList.map(s => {
@@ -24800,7 +24813,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
     {String(r.운행유형 || "").trim() === "왕복" && <RoundTripBadge />}<RotationBadge order={r} />
 
 {r.__pickupStops?.length > 0 && (
-  <StopInlineBadge count={r.__pickupStops.length} list={r.__pickupStops} type="pickup"
+  <StopInlineBadge count={r.__pickupStops.length} list={r.__pickupStops} type="pickup" confirmEdit
     placeRows={placeRows} timeOptions={timeOptions} orderDate={r.상차일 || ""}
     onEdit={newList => patchDispatch(r._id, { 경유상차목록: newList, 경유지_상차: newList, 경유지상차: newList })}
   />
@@ -24818,7 +24831,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
     <AddressCell text={r.하차지명} max={8} popupTitle="하차지명 전체보기" />
 
 {r.__dropStops?.length > 0 && (
-  <StopInlineBadge count={r.__dropStops.length} list={r.__dropStops} type="drop"
+  <StopInlineBadge count={r.__dropStops.length} list={r.__dropStops} type="drop" confirmEdit
     placeRows={placeRows} timeOptions={timeOptions} orderDate={r.하차일 || ""}
     onEdit={newList => patchDispatch(r._id, { 경유하차목록: newList, 경유지_하차: newList, 경유지하차: newList })}
   />
@@ -24903,8 +24916,9 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                         title="클릭 시 배차중으로 전환"
                         className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap bg-sky-500 text-white hover:bg-sky-600 transition"
                         style={{ animation: "shipperReqBlink 1.4s ease-in-out infinite" }}
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation();
+                          if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // ✅ 2026-11-23 한 번 묻기
                           // rows는 dispatchData 변경 → useEffect → startTransition 을 거쳐야 반영되는
                           // 별도 로컬 상태라, patchDispatch의 낙관적 업데이트만으로는 뱃지가 즉시
                           // 바뀌지 않고 그 체인이 다 끝날 때까지 지연되어 보였다 — 여기서 직접
@@ -27779,6 +27793,7 @@ const driverPanelCallbackRef = React.useRef(null);
   // ------------------------
   // 📌 차량번호 입력(auto-match + 신규기사 등록)
   // ------------------------
+  const carClearAskRef = React.useRef(new Set()); // 차량번호 지우기 확인창이 떠 있는 줄
   const handleCarInput = async (id, rawVal, keyEvent) => {
   if (keyEvent && keyEvent.key === "Enter") {
     keyEvent.preventDefault();
@@ -27786,6 +27801,7 @@ const driverPanelCallbackRef = React.useRef(null);
   }
 
   if (isRegistering) return;
+  if (carClearAskRef.current.has(id)) return; // 묻는 창이 떠서 칸에서 포커스가 빠질 때(onBlur) 한 번 더 불리는 것 막기
 
   const v = normalizePlate(rawVal);
   const idx = rows.findIndex((r) => r._id === id);
@@ -27798,6 +27814,18 @@ const driverPanelCallbackRef = React.useRef(null);
 
   // 차량번호 삭제 → 기사 정보 초기화
   if (!v) {
+    // ✅ 2026-11-23 저장돼 있던 차량번호를 지울 때만 묻기(사용자 요청) — 취소하면 원래 차량번호 · 기사로 되돌린다
+    //  · 입력하는 동안 rows가 같이 바뀌므로 원래 값은 dispatchData에서 찾는다
+    const orig = (dispatchData || []).find((r) => r._id === id);
+    if (orig && String(orig.차량번호 || "").trim()) {
+      carClearAskRef.current.add(id);
+      const ok = await kpConfirm("수정하시겠습니까?", { okText: "저장" });
+      carClearAskRef.current.delete(id);
+      if (!ok) {
+        setRows((prev) => prev.map((r) => (r._id === id ? { ...r, 차량번호: orig.차량번호 || "", 이름: orig.이름 || "", 전화번호: orig.전화번호 || "", 배차상태: orig.배차상태 || r.배차상태 } : r)));
+        return;
+      }
+    }
     const updated = {
       차량번호: "",
       이름: "",
@@ -28722,6 +28750,7 @@ const handleCloseFileUpload = async (e) => {
 const bulkFixCloseFileIssues = async (items, fieldKey, value) => {
   if (!value) { showAlert("적용할 값을 먼저 선택하세요."); return; }
   const ids = [...new Set(items.map(it => it.rowId))];
+  if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
   await runBulkTask({ count: ids.length, label: "오더", verb: "수정", task: (progress) => { let k = 0; return Promise.all(ids.map(id => Promise.resolve(patchDispatch(id, { [fieldKey]: value })).finally(() => progress(++k)))); } });
   showAlert(`${ids.length}건의 ${fieldKey}이(가) "${value}"(으)로 일괄 수정되었습니다.`);
   setTimeout(() => {
@@ -29119,6 +29148,7 @@ const head = isDark
 {workDatesEditRow && (
   <WorkDatesEditModal
     row={workDatesEditRow}
+    confirmEdit
     companyName={userCompany}
     onClose={() => setWorkDatesEditRow(null)}
     onSave={async (patch) => {
@@ -29730,6 +29760,7 @@ const head = isDark
       showAlert(REVERSED_DATE_ORDER_MSG);
       return;
     }
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
 
     // ✅ 화물내용: 이미 onChange에서 동기화되어 있으므로 그대로 사용
@@ -32002,6 +32033,7 @@ value={copyTarget?.화물수량 || ""}
   className="px-5 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#0F1A30] text-white font-semibold"
   onClick={async () => {
     if (isViewer) return showAlert("조회전용 권한으로 저장할 수 없습니다.");
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     if (!(await editDrvEdit.finish(editTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
     // ✅ 저장 직전 경유지 + 화물내용 최종 동기화
 const syncedEditTarget = {
@@ -32773,7 +32805,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
             <div className="px-4 py-2 border-t border-gray-100">
               <div className="text-[11.5px] font-black text-gray-500 mb-1.5">청구 사업자 바꾸기{ids.length > 1 ? ` (${ids.length}건)` : ""}</div>
               <BizSelect inline biz={rtBiz} value={ids.length === 1 ? cur : null} size="sm" onClose={() => setContextMenu(null)}
-                onChange={(v) => { ids.forEach((x) => patchDispatch(x, { 청구사업자: v })); const _r = ids.length === 1 ? contextMenu.row : null; if (_r) rememberBiz(rtBiz, { ..._r, 청구사업자: v }); setContextMenu(null); }} />
+                onChange={async (v) => { if (ids.length === 1 && v === cur) { setContextMenu(null); return; } if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; ids.forEach((x) => patchDispatch(x, { 청구사업자: v })); const _r = ids.length === 1 ? contextMenu.row : null; if (_r) rememberBiz(rtBiz, { ..._r, 청구사업자: v }); setContextMenu(null); }} />
             </div>
           ); })()}
           <div className="border-t border-gray-100 my-1"/>
@@ -33476,6 +33508,7 @@ setConfirmChange(null);
             <button
               onClick={async () => {
                 if (!targetDate) return;
+                if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
                 const sender = auth?.currentUser?.email ?? "unknown";
                 const nextState = allDone ? "미전달" : "전달완료";
                 for (const r of targets) {
@@ -33859,7 +33892,10 @@ function NoteIconCell({ value = "", onSave }) {
   const iconColor = has ? "#1B2B4B" : "#cbd5e1";
 
   const handleOpen = () => { setDraft(clean); setEditing(false); setOpen(true); };
-  const handleSave = () => { if (onSave) onSave(draft); setOpen(false); };
+  const handleSave = async () => {
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
+    if (onSave) onSave(draft); setOpen(false);
+  };
 
   return (
     <div className="flex items-center justify-center">
@@ -34895,6 +34931,7 @@ const computeCloseFileIssues = (raw) => {
 const bulkFixCloseFileIssues = async (items, fieldKey, value) => {
   if (!value) { showAlert("적용할 값을 먼저 선택하세요."); return; }
   const ids = [...new Set(items.map(it => it.rowId))];
+  if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
   await runBulkTask({ count: ids.length, label: "오더", verb: "수정", task: (progress) => { let k = 0; return Promise.all(ids.map(id => Promise.resolve(patchDispatch(id, { [fieldKey]: value })).finally(() => progress(++k)))); } });
   showAlert(`${ids.length}건의 ${fieldKey}이(가) "${value}"(으)로 일괄 수정되었습니다.`);
   setTimeout(() => {
@@ -36335,6 +36372,7 @@ if (mode === "driver") {
     });
 
   // ======================= 차량번호 입력 처리 (최종 안정판) =======================
+  const carClearAskRef = React.useRef(new Set()); // 차량번호 지우기 확인창이 떠 있는 줄
   const handleCarInput = async (id, rawVal) => {
     const v = (rawVal || "").trim();
 
@@ -36350,6 +36388,17 @@ if (mode === "driver") {
     // 1️⃣ 차량번호를 "완전히 삭제"했을 때
     // =====================================================
     if (!v) {
+      // ✅ 2026-11-23 저장돼 있던 차량번호를 지울 때만 묻기(사용자 요청) — 취소하면 입력칸을 원래 차량번호로
+      if (String(row.차량번호 || "").trim()) {
+        if (carClearAskRef.current.has(id)) return; // 묻는 창 때문에 onBlur로 한 번 더 불린 것
+        carClearAskRef.current.add(id);
+        const ok = await kpConfirm("수정하시겠습니까?", { okText: "저장" });
+        carClearAskRef.current.delete(id);
+        if (!ok) {
+          setEdited((prev) => { if (!prev[id]) return prev; const { 차량번호: _a, 이름: _b, 전화번호: _c, 배차상태: _d, ...rest } = prev[id]; return { ...prev, [id]: rest }; });
+          return;
+        }
+      }
       setDriverConfirmInfo(null);
       setDriverSelectInfo(null);
       setTimeout(() => patchDispatch(id, {
@@ -37262,6 +37311,7 @@ return (
 {workDatesEditRow && (
   <WorkDatesEditModal
     row={workDatesEditRow}
+    confirmEdit
     companyName={userCompany}
     onClose={() => setWorkDatesEditRow(null)}
     onSave={async (patch) => {
@@ -37847,7 +37897,7 @@ return (
       const list=[..._s(row.경유상차목록),..._s(row.경유지_상차)]
         .filter(s=>s&&(s.업체명?.trim()||s.주소?.trim()))
         .filter((s,i,arr)=>{const k=s.업체명||s.주소;return arr.findIndex(x=>(x.업체명||x.주소)===k)===i;});
-      return list.length>0?<StopBadge count={list.length} list={list} type="pickup" onSave={(newList)=>patchDispatch(row._id,{경유상차목록:newList,경유지_상차:newList,경유지상차:newList,__col:row.__col})} placeRows={placeRows} timeOptions={timeOptions} orderDate={row.상차일||""}/>:null;
+      return list.length>0?<StopBadge count={list.length} list={list} type="pickup" confirmEdit onSave={(newList)=>patchDispatch(row._id,{경유상차목록:newList,경유지_상차:newList,경유지상차:newList,__col:row.__col})} placeRows={placeRows} timeOptions={timeOptions} orderDate={row.상차일||""}/>:null;
     })()}
   </div>
 
@@ -37859,7 +37909,7 @@ return (
       const list=[..._s(row.경유하차목록),..._s(row.경유지_하차)]
         .filter(s=>s&&(s.업체명?.trim()||s.주소?.trim()))
         .filter((s,i,arr)=>{const k=s.업체명||s.주소;return arr.findIndex(x=>(x.업체명||x.주소)===k)===i;});
-      return list.length>0?<StopBadge count={list.length} list={list} type="drop" onSave={(newList)=>patchDispatch(row._id,{경유하차목록:newList,경유지_하차:newList,경유지하차:newList,__col:row.__col})} placeRows={placeRows} timeOptions={timeOptions} orderDate={row.하차일||""}/>:null;
+      return list.length>0?<StopBadge count={list.length} list={list} type="drop" confirmEdit onSave={(newList)=>patchDispatch(row._id,{경유하차목록:newList,경유지_하차:newList,경유지하차:newList,__col:row.__col})} placeRows={placeRows} timeOptions={timeOptions} orderDate={row.하차일||""}/>:null;
     })()}
   </div>
 
@@ -37985,8 +38035,9 @@ return (
                   <div className="relative inline-block">
                     {row.화주사확인대기 ? (
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           if (isViewer) return;
+                          if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // ✅ 2026-11-23 한 번 묻기
                           // localOverrides를 직접 갱신해 클릭 즉시 뱃지가 바뀌도록 한다
                           // (dispatchData 갱신만 기다리면 반영까지 지연이 느껴졌다)
                           setLocalOverrides(prev => ({ ...prev, [row._id]: { ...(prev[row._id] || {}), 화주사확인대기: false, 배차중전환일시: Date.now() } }));
@@ -39253,6 +39304,7 @@ return (
              <button
   className="px-5 py-2 rounded-lg bg-[#1B2B4B] hover:bg-[#0F1A30] text-white font-semibold"
   onClick={async () => {
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     if (!(await editDrvEdit.finish(editTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
     // 1) Firestore 저장
     const ALLOWED_FIELDS = [
@@ -39458,6 +39510,7 @@ return (
       showAlert(REVERSED_DATE_ORDER_MSG);
       return;
     }
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
 
     // ✅ 화물내용: 이미 onChange에서 동기화되어 있음
@@ -41404,6 +41457,7 @@ setCopyPlaceOptions(list);
             <button
               onClick={async () => {
                 if (!targetDate) return;
+                if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
                 const sender = auth?.currentUser?.email ?? "unknown";
                 const nextState = allDone ? "미전달" : "전달완료";
                 for (const r of targets) {
@@ -41579,8 +41633,9 @@ setCopyPlaceOptions(list);
             owner={routeOwnerName(r, userNameMap)} locked={!isViewer && !frCanEdit(r)} disabled={isViewer} onClose={close}
             onAdd={fixedActions?.addOrder || null}
             onEdit={() => { if (!frCanEdit(r)) { frLockAlert(r); return; } setFixedEditId(_id); }}
-            onAssign={(name) => {
+            onAssign={async (name) => {
               const bad = rowsOfIds.find((x) => !frCanEdit(x)); if (bad) { frLockAlert(bad); return; }
+              if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // ✅ 2026-11-23 한 번 묻기
               ids.forEach((x) => patchDispatch(x, { 배차확정자: name || null, 담당자지정자: me, 담당자지정일시: Date.now() }));
               showAlert(name ? `담당자를 ${name}(으)로 지정했습니다${ids.length > 1 ? ` (${ids.length}건)` : ""}` : "담당자를 비웠습니다");
             }}
@@ -41777,7 +41832,7 @@ setCopyPlaceOptions(list);
             <div className="px-4 py-2 border-t border-gray-100">
               <div className="text-[11.5px] font-black text-gray-500 mb-1.5">청구 사업자 바꾸기{ids.length > 1 ? ` (${ids.length}건)` : ""}</div>
               <BizSelect inline biz={dsBiz} value={ids.length === 1 ? cur : null} size="sm" onClose={() => setContextMenuDS(null)}
-                onChange={(v) => { ids.forEach((x) => patchDispatch(x, { 청구사업자: v })); const _r = ids.length === 1 ? contextMenuDS.row : null; if (_r) rememberBiz(dsBiz, { ..._r, 청구사업자: v }); setContextMenuDS(null); }} />
+                onChange={async (v) => { if (ids.length === 1 && v === cur) { setContextMenuDS(null); return; } if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; ids.forEach((x) => patchDispatch(x, { 청구사업자: v })); const _r = ids.length === 1 ? contextMenuDS.row : null; if (_r) rememberBiz(dsBiz, { ..._r, 청구사업자: v }); setContextMenuDS(null); }} />
             </div>
           ); })()}
           <div className="border-t border-gray-100 my-1"/>
@@ -46930,8 +46985,9 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                     onClick={async () => {
                       if (isViewer) { showToast("조회전용 권한으로는 수정할 수 없습니다.", "err"); return; }
                       if (!copyTarget?._id) { showToast("수정할 오더 정보를 찾을 수 없습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.", "err"); return; }
-                      if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
                       if (isReversedDateOrder(copyTarget?.상차일, copyTarget?.하차일)) { showToast(REVERSED_DATE_ORDER_MSG, "err"); return; }
+                      if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
+                      if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
                       const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
                       const payload = { ...copyTarget, 화물내용: finalCargo, 독차: dokchaOn(copyTarget), updatedAt: Date.now() }; // ⭐ 2026-11-06 독차 기본
                       const ok = await patchDispatch(copyTarget._id, payload);
@@ -47833,7 +47889,14 @@ function ArClientInfo({ client, name, upsertClient, isViewer }) {
   const c = client || {};
   const [rule, setRule] = React.useState(c.결제일 || "");
   React.useEffect(() => { setRule(c.결제일 || ""); }, [c.결제일]);
-  const save = (v) => { setRule(v); if (!isViewer && client) upsertClient?.({ ...client, 결제일: v }); };
+  // ✅ 2026-11-23 결제 조건이 바뀔 때만 한 번 묻기 — 취소하면 원래 조건으로 되돌린다
+  const save = async (v) => {
+    if (isViewer || !client) return;
+    if (v === (c.결제일 || "")) { setRule(v); return; }
+    setRule(v);
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) { setRule(c.결제일 || ""); return; }
+    upsertClient?.({ ...client, 결제일: v });
+  };
   const rows = [["사업자번호", c.사업자번호], ["대표자", c.대표자], ["담당자", c.담당자], ["연락처", c.연락처], ["이메일", c.이메일], ["주소", c.주소]];
   return (
     <div className="mb-4 rounded-2xl border border-[#E3E8F0] bg-white overflow-hidden">
@@ -48457,6 +48520,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const saveEdit = async () => {
     const targetName = editInfo.거래처명 || client;
     if (!targetName) return showAlert("거래처명을 입력하세요.");
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     const original = (clients || []).find(c => c.거래처명 === client) || {};
     const merged = { ...original, ...editInfo, 거래처명: targetName };
     if (upsertClient) {
@@ -50660,6 +50724,7 @@ const handleBatchSettle = async (targetStatus) => {
                       if (isViewer) return showAlert("조회전용 권한으로는 수정할 수 없습니다.");
                       if (!orderPopup._id) return showAlert("저장할 수 없는 오더입니다.");
                       if (typeof patchDispatch === "function") {
+                        if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
                         await patchDispatch(orderPopup._id, orderPopupEdit);
                         showAlert("수정 내용이 저장되었습니다.");
                         setOrderPopup(null);
@@ -53021,6 +53086,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   // 지급일만 고치기(지급완료 상태 그대로)
   const changePayDate = async (row, d) => {
     if (!patchDispatch || !row || !d || d === (row.지급일 || "")) return;
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // ✅ 2026-11-23 지급일 바꾸기 전에 한 번 묻기
     await patchDispatch(row._id, { 지급일: d, __system: true });
     syncPayLedger(row, "지급완료", d);
   };
@@ -54011,6 +54077,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
   const saveEditDriver = async () => {
     if (!editDriverModal) return;
     if (!editDriverModal.id) return showAlert("기사 정보를 찾을 수 없어 수정할 수 없습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.");
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     // 블랙 등급은 메모가 있으면 무조건 팝업이 뜨도록 별도로 처리되므로(팝업표시 값과 무관),
     // 저장 시점에도 사용자에게 혼란을 주지 않도록 항상 팝업표시:true로 맞춰 저장한다.
     const 팝업표시 = editDriverModal.등급 === "블랙" ? true : editDriverModal.팝업표시 === true;
@@ -54816,7 +54883,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
           onEdit={(r) => setEditDriverModal({ ...r })}
           onGuide={(rows) => setGuideFor(rows)}
           onGrade={async (rows, g) => {
-            if (rows.length > 1 && !(await kpConfirm(`${rows.length}명의 등급을 「${g}」(으)로 바꿀까요?`))) return;
+            if (!(await kpConfirm(rows.length > 1 ? `${rows.length}명의 등급을 「${g}」(으)로 바꿀까요?` : "수정하시겠습니까?", { okText: rows.length > 1 ? "확인" : "저장" }))) return; // ✅ 2026-11-23 한 명일 때도 묻기
             for (const r of rows) { const { vehicle: _v, care: _c, careLogs: _cl, ...rest } = r; await upsertDriver({ ...rest, 등급: g, ...(g === "블랙" ? { 팝업표시: true } : {}) }); }
             setDrvToast(`등급을 「${g}」(으)로 바꿨습니다${rows.length > 1 ? ` · ${rows.length}명` : ""}`);
           }}
@@ -54915,6 +54982,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
                           <td className="px-4 py-3 text-[13px] font-semibold text-[#1B2B4B] whitespace-nowrap">{normalizePhone(d.전화번호)}</td>
                           <td className="px-4 py-3 text-center">
                             <button onClick={async () => {
+                              if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
                               await upsertDriver({ ...d, 전화번호: normalizePhone(d.전화번호) });
                               showAlert("전화번호를 정규화했습니다.");
                             }} className="px-3 py-1 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[12px] font-semibold hover:bg-[#1B2B4B] hover:text-white transition">
@@ -55658,6 +55726,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     const id = editClientModal.id || editClientModal.거래처명;
     if (!id) return;
     const original = rows.find(r => (r.id || r.거래처명) === id) || {};
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // 이름을 바꿨으면 아래에서 과거 오더도 바꿀지 한 번 더 묻는다
     if (!(await bizGuardMain(editClientModal.사업자번호, { label: "거래처" }))) return; // 🏛 국세청 조회 결과 휴업 · 폐업이면 한 번 더 묻는다
     const { _dragOver, ...data } = editClientModal;
     // 담당자 목록에서 대표(또는 첫 번째) 담당자를 평면 필드(담당자/연락처)에도 반영 —
@@ -55723,6 +55792,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     const id = editPlaceModal.id || editPlaceModal.업체명;
     if (!id) return;
     const original = placeRows.find(r => (r.id || r.업체명) === id) || {};
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     // upsertPlace는 place._id로 대상 문서를 찾는데, editPlaceModal은 .id만 갖고 있어
     // _id가 한 번도 전달되지 않았다. 그 결과 매번 업체명으로 문서를 다시 찾는 폴백
     // 경로를 타게 되어, 같은 업체명의 문서가 여러 개면 엉뚱한 문서를 수정/조회하게
@@ -56034,6 +56104,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
 
   const handlePlaceBlur = async (row, key, val) => {
     if (key !== "등급" && (row[key] || "") === val) return;
+    if (key === "등급" && (row.등급 || "일반") === val) return;
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // ✅ 2026-11-23 취소하면 고르기 전 등급 그대로
     setPlaceRows(prev => prev.map(p => p.id === row.id ? { ...p, [key]: val } : p));
     const updateData = { ...row, _id: row.id, [key]: val };
     if (key === "등급" && val !== "일반") updateData.등급변경일 = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -57520,6 +57592,7 @@ function PaymentDateRuleSection({ companyName }) {
   const handleSave = async () => {
     const n = Math.round(Number(days));
     if (!Number.isFinite(n) || n < 0 || n > 365) { setMsg("0~365 사이 숫자로 입력해 주세요."); return; }
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     setSaving(true);
     try {
       await setDoc(doc(db, "companySettings", companyName.trim()), { 결제일규칙: { payDays: n } }, { merge: true });
@@ -57811,6 +57884,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
   const openEdit = () => { setDraftName(displayName || ""); setDraftPhone(phone); setEditOpen(true); };
   const saveInfo = async () => {
     if (!user?.uid) return;
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     setSavingInfo(true);
     try {
       // ⭐ 2026-11-02 점검 — 연락처를 phone·전화번호 두 필드에 함께 저장(회원관리·조직도·인사관리는 phone을 읽음)
@@ -58552,6 +58626,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
   const cancelEdit = () => { setDraft(null); setEditMode(false); };
   const saveResume = async () => {
     if (!selectedUid || !draft) return;
+    if (resumes[selectedUid] && !(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // 처음 쓰는 이력서는 묻지 않는다
     setSaving(true);
     try {
       // ⭐ 2026-11-01 본인이 작성·저장하면 인사팀에 "새 이력서"로 표시 + 사내메일 알림
@@ -58620,6 +58695,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
   };
 
   const setTeam = async (uid, team) => {
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // ✅ 2026-11-23 팀 바꾸기 전에 한 번 묻기(취소하면 원래 팀 그대로)
     try { await setDoc(doc(db, "users", uid), { team }, { merge: true }); }
     catch (err) { alert("팀 변경 실패: " + err.message); }
   };

@@ -3,6 +3,7 @@ import { auth, db } from "../../firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import BankAccountInput from "../../BankAccountInput"; // ⭐ 2026-11-07 은행정보 — 은행 고르기 + 계좌번호 자동 하이픈(저장은 예전처럼 글자 한 줄)
 import { bankText, parseBankText } from "../../bankUtil";
+import { kpConfirm } from "../../kpDialog";
 
 const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 bg-white focus:ring-2 focus:ring-[#1B2B4B]/40 focus:border-[#1B2B4B] outline-none";
 const labelCls = "block text-xs font-bold text-gray-600 mb-1";
@@ -130,6 +131,8 @@ function EditModal({ data, setData, onClose }) {
   const bankChanged = bankText(bankObj) !== bankText(parseBankText(data.bank || ""));
 
   const handleSave = async () => {
+    // ✅ 2026-11-23 수정 저장 전에 한 번 묻기(사용자 요청)
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     const user = auth.currentUser;
     const next = { ...form, bank: bankChanged ? bankText(bankObj) : form.bank };
     await updateDoc(doc(db, "users", user.uid), next);

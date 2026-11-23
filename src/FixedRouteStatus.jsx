@@ -207,7 +207,8 @@ function Cell({ value, onCommit, numeric, wide, placeholder, disabled, title, st
   const [v, setV] = React.useState(value);
   const [edit, setEdit] = React.useState(false);
   React.useEffect(() => { if (!edit) setV(value); }, [value, edit]);
-  const commit = () => { setEdit(false); if (String(v) !== String(value)) onCommit(v); };
+  // ✅ 2026-11-23 바뀐 칸만 "수정하시겠습니까?" — 취소(false)면 원래 값으로 되돌린다
+  const commit = async () => { if (String(v) !== String(value)) { const r = await onCommit(v); if (r === false) setV(value); } setEdit(false); };
   if (disabled) return <ViewText value={value} strong={strong} numeric={numeric} placeholder={placeholder} />; // ⭐ 수정 모드가 아닐 땐 글자만
   return (
     <input value={v} disabled={disabled} title={title} placeholder={placeholder} inputMode={numeric ? "numeric" : undefined}
@@ -229,8 +230,8 @@ function VehicleCell({ field, value, drivers, disabled, onPick, onCommit, placeh
   const sub = (d) => [field !== "차량번호" && d.차량번호, field !== "이름" && d.이름, field !== "전화번호" && d.전화번호, d.등급].filter(Boolean).join(" · ");
   return (
     <BoardSuggest value={v} onChange={setV} items={drivers} k={DRV_KEY[field]} sub={sub} title="기사관리" placeholder={placeholder}
-      onPick={(d) => { picked.current = true; setV(d[DRV_KEY[field]] || ""); onPick(d); }}
-      onBlur={() => { setTimeout(() => { if (!picked.current && String(v) !== String(value)) onCommit(v); picked.current = false; }, 160); }}
+      onPick={(d) => { picked.current = true; setV(d[DRV_KEY[field]] || ""); Promise.resolve(onPick(d)).then((r) => { if (r === false) setV(value); }); }}
+      onBlur={() => { setTimeout(() => { if (!picked.current && String(v) !== String(value)) Promise.resolve(onCommit(v)).then((r) => { if (r === false) setV(value); }); picked.current = false; }, 160); }}
       onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
       className={`kp-frs-cell ${field === "차량번호" ? "min-w-[118px]" : "min-w-[90px]"} text-center font-semibold`} inputProps={{ onClick: (e) => e.stopPropagation(), onDoubleClick: (e) => e.stopPropagation() }} />
   );
@@ -253,15 +254,17 @@ function CarrierCell({ value, clients, disabled, onCommit }) {
   return (
     <BoardSuggest value={v} onChange={setV} items={clients} k="거래처명" title="기본거래처" placeholder="직접 입력"
       sub={(x) => [x.담당자, x.연락처 || x.담당자번호 || x.전화번호].filter(Boolean).join(" · ")}
-      onPick={(x) => { picked.current = true; const n = x.거래처명 || ""; setV(n); if (n !== String(value || "")) onCommit(n); }}
-      onBlur={() => { setTimeout(() => { if (!picked.current && String(v).trim() !== String(value || "")) onCommit(v); picked.current = false; }, 160); }}
+      onPick={(x) => { picked.current = true; const n = x.거래처명 || ""; setV(n); if (n !== String(value || "")) Promise.resolve(onCommit(n)).then((r) => { if (r === false) setV(value); }); }}
+      onBlur={() => { setTimeout(() => { if (!picked.current && String(v).trim() !== String(value || "")) Promise.resolve(onCommit(v)).then((r) => { if (r === false) setV(value); }); picked.current = false; }, 160); }}
       onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
       className="kp-frs-cell min-w-[96px] text-center font-semibold" inputProps={{ onClick: (e) => e.stopPropagation(), onDoubleClick: (e) => e.stopPropagation() }} />
   );
 }
 
 // 한 줄의 칸들(시트 열 순서) — 고치면 바로 오더에 저장(patchDispatch) → 서버가 30초 안에 시트에도 써 준다
-export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch, disabled: viewer = false, editing = false }) {
+export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch: savePatch, disabled: viewer = false, editing = false }) {
+  // ✅ 2026-11-23 칸을 고쳐 저장하기 전에 한 번 묻기(사용자 요청) — 취소하면 false(칸은 원래 값으로)
+  const onPatch = async (p) => { if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return false; return savePatch(p); };
   const disabled = viewer || !editing; // ⭐ 2026-11-03 줄을 두 번 눌러 수정 모드일 때만 칸이 열린다(실수 방지)
   const carrierF = useRouteCarrierFilter(); // ⭐ 2026-11-05 정산·매출에서 빠지는 운송업체면 칸에 "제외" 표시
   const carrierItems = React.useMemo(() => { const seen = new Set(); return (clients || []).map((x) => ({ ...x, 거래처명: String(x.거래처명 || x.업체명 || "").trim() })).filter((x) => x.거래처명 && !seen.has(x.거래처명) && seen.add(x.거래처명)); }, [clients]);
@@ -330,7 +333,7 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
         if (c.kind === "calc") return <td key={c.id} className={`${td} text-[13.5px] font-black tabular-nums ${c.field === "수수료" && orderProfit(row) < 0 ? "text-red-600" : "text-[#0F1A30]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} title="자동 계산(청구운임 − 기사운임 − 회사가 따로 준 지게차·특수운임)">{v}</td>;
         if (c.kind === "field" && c.field === "배차상태") return <td key={c.id} className={td}>{statusChip}</td>;
         if (c.kind === "field" && DRV_KEY[c.field]) {
-          const pick = (d) => onPatch({ 차량번호: d.차량번호 || "", 이름: d.이름 || "", 전화번호: d.전화번호 || "", ...(row.배차상태 === "배차중" || !row.배차상태 ? { 배차상태: "배차완료" } : {}) });
+          const pick = (d) => (normPlate(d.차량번호 || "") === normPlate(row.차량번호 || "") && (d.이름 || "") === (row.이름 || "") && (d.전화번호 || "") === (row.전화번호 || "")) ? undefined : onPatch({ 차량번호: d.차량번호 || "", 이름: d.이름 || "", 전화번호: d.전화번호 || "", ...(row.배차상태 === "배차중" || !row.배차상태 ? { 배차상태: "배차완료" } : {}) });
           return <td key={c.id} className={`${td} bg-[#F3F7FF] relative`} title="차량번호·이름·번호 일부만 쳐도 기사관리에서 찾아 채웁니다">{c.field === "차량번호" && st === "배차완료" && <LiveDriverChip order={row} variant="pin" />}<VehicleCell field={c.field} value={v} drivers={drivers} disabled={disabled} onPick={pick} onCommit={(x) => commit(c, x)} placeholder={c.field === "차량번호" && !v ? "미배차" : ""} />{/* ⭐ 2026-11-05 LIVE — 칩 대신 칸 왼쪽 위 6px 점(폭 0 · 칸 너비 그대로) */}</td>;
         }
         if (isCarrierCol(c)) {
@@ -573,10 +576,12 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
   const base = () => list.map((c) => ({ name: c.name, on: c.on, rate: c.rate }));
   // 💸 2026-11-09 업체별 수수료율 — 저장하면 그 업체의 고정노선 오더 중 기사운임이 비었거나 자동 계산된 오더를 바로 다시 계산
   //  (기사운임 = 청구운임 × (1 − 수수료율%) · 수수료 = 청구 − 기사 · 사람이 넣은 기사운임은 그대로 — functions/carrierFareCore.mjs)
-  const setRate = async (name, raw) => {
+  const setRate = async (name, raw, inputEl) => {
     const r = cleanRate(raw);
     const cur = list.find((c) => c.name === name);
     if (!cur || (cur.rate ?? null) === r) return;
+    // ✅ 2026-11-23 바뀔 때만 한 번 묻기 — 취소하면 칸을 원래 수수료율로
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) { if (inputEl) inputEl.value = cur.rate ?? ""; return; }
     const next = base().map((c) => (c.name === name ? { ...c, rate: r } : c));
     const ok = await persist(next, removedOf(), r == null ? `'${name}' 수수료율을 지웠습니다` : `'${name}' 수수료율 ${r}% 저장`);
     if (!ok) return;
@@ -595,8 +600,8 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
     finally { setBusy(false); }
   };
   const removedOf = () => [...(setting?.removed || [])];
-  const toggle = (name) => persist(base().map((c) => (c.name === name ? { ...c, on: !c.on } : c)), removedOf(), `'${name}' ${list.find((c) => c.name === name)?.on ? "숨겼습니다(화면·정산·매출에서 빠짐)" : "다시 보이게 했습니다(화면·정산·매출 포함)"}`);
-  const setAll = (on) => persist(base().map((c) => ({ ...c, on })), removedOf(), on ? "모두 보이게 했습니다" : "모두 숨겼습니다");
+  const toggle = async (name) => (await kpConfirm("수정하시겠습니까?", { okText: "저장" })) && persist(base().map((c) => (c.name === name ? { ...c, on: !c.on } : c)), removedOf(), `'${name}' ${list.find((c) => c.name === name)?.on ? "숨겼습니다(화면·정산·매출에서 빠짐)" : "다시 보이게 했습니다(화면·정산·매출 포함)"}`);
+  const setAll = async (on) => (await kpConfirm("수정하시겠습니까?", { okText: "저장" })) && persist(base().map((c) => ({ ...c, on })), removedOf(), on ? "모두 보이게 했습니다" : "모두 숨겼습니다");
   const remove = async (name) => {
     const n = countOf.get(carrierKey(name)) || 0;
     if (!(await kpConfirm(`'${name}'을(를) 목록에서 삭제할까요?${n ? `\n이 업체 고정노선 오더 ${n}건은 프로그램 어디에도 보이지 않고 정산·매출에서도 빠집니다(시트 연동은 그대로).` : ""}\n같은 이름으로 다시 추가하면 되살아납니다.`))) return;
@@ -666,7 +671,7 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
               <label className="shrink-0 flex items-center gap-1" title="수수료율(%) — 기사운임이 비어 있으면 청구운임 × (1 − 수수료율)로 자동 계산합니다. 비우면 자동 계산 안 함">
                 <span className="text-[11.5px] font-bold text-[#7A8AA6] hidden sm:inline">수수료</span>
                 <input key={`${c.name}_${c.rate ?? ""}`} defaultValue={c.rate ?? ""} disabled={busy || !canEdit} inputMode="decimal" placeholder="–" data-kp="carrier-rate"
-                  onBlur={(e) => setRate(c.name, e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) e.currentTarget.blur(); }}
+                  onBlur={(e) => setRate(c.name, e.target.value, e.target)} onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) e.currentTarget.blur(); }}
                   className="w-[62px] h-9 px-2 rounded-lg border border-[#DCE3EE] bg-white text-right text-[14px] font-black text-[#0F1A30] tabular-nums outline-none focus:border-[#2D4C82] disabled:opacity-60" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} />
                 <span className="text-[13px] font-black text-[#5B6B85]">%</span>
               </label>

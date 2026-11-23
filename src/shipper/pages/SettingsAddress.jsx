@@ -107,6 +107,8 @@ export default function SettingsAddress() {
     if (!form.name.trim()) { alert("회사명을 입력하세요"); return; }
     const user = auth.currentUser;
     if (!user) return;
+    // ✅ 2026-11-23 수정 저장 전에 한 번 묻기(사용자 요청) — 새 주소 추가는 묻지 않는다
+    if (editItem && !(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     setSaving(true);
     try {
       if (editItem) {
