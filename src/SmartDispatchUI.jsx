@@ -284,12 +284,15 @@ export function DriverSuggestCell({ order, pick, onAssign, drivers = [], disable
 // 🚚 2026-11-23 실시간배차현황 · 배차현황 차량번호 칸의 추천 기사 ▾ — 표(부모)가 한 번 계산해 Context로 내려준다
 //  (줄 컴포넌트가 memo 라 prop 대신 Context — 이력이 새로 들어오면 칸만 다시 그린다)
 export const PlateSuggestCtx = React.createContext(null);
+// 🛠 2026-11-23 입력칸 위에 겹쳐 띄우던 것(차량번호 글자를 가림) → 차량번호 칸 상자 안 오른쪽 끝(글자 옆)에. 추천이 없는 줄도 같은 폭을 비워 글자 위치를 맞춘다
+export const PLATE_CARET_W = 28;
 export function PlateSuggestCaret({ order, disabled = false }) {
   const ctx = React.useContext(PlateSuggestCtx);
   if (!ctx || !order) return null;
+  const has = (ctx.pick?.(order) || []).length > 0;
   return (
-    <span style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", zIndex: 2 }}>
-      <DriverSuggestCell variant="caret" order={order} pick={ctx.pick} drivers={ctx.drivers} disabled={disabled || ctx.disabled} onAssign={ctx.onAssign} />
+    <span className="shrink-0 inline-flex items-center justify-end" style={{ width: PLATE_CARET_W }}>
+      {has && <DriverSuggestCell variant="caret" order={order} pick={ctx.pick} drivers={ctx.drivers} disabled={disabled || ctx.disabled} onAssign={ctx.onAssign} />}
     </span>
   );
 }
