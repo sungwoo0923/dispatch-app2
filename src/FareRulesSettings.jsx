@@ -126,6 +126,8 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
   const ruleLabel = (r) => `${r.name}(${fareRuleCalcLabel(r)})`;
   const onSaveRule = async (r) => {
     const prev = fr.rules.find((x) => x.id === r.id);
+    // ✅ 2026-11-23 규칙 수정 저장 전에 한 번 묻기(사용자 요청) — 새 규칙 추가는 묻지 않는다
+    if (prev && !(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     const rules = prev ? fr.rules.map((x) => (x.id === r.id ? { ...x, ...r } : x)) : [...fr.rules, { ...r, id: newId(), active: true }];
     setEditing(null);
     await save({ rules }, prev ? `규칙 수정 ${ruleLabel(prev)} → ${ruleLabel(r)}` : `규칙 추가 ${ruleLabel(r)}`);

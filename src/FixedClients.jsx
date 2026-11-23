@@ -639,6 +639,8 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
   const saveEditPopup = async () => {
     if (isViewer) { _viewerAlert(); return; }
     if (!editPopupRow) return;
+    // ✅ 2026-11-23 수정 저장 전에 한 번 묻기(사용자 요청)
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     if (editPopupRow.거래처명) {
       saveClientConfig(editPopupRow.거래처명, {
         기사단가: Number(editPopupRow.기사단가 || 0),
@@ -709,6 +711,7 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
       else { staticPatch[key] = value; }
     });
     if (!Object.keys(staticPatch).length && !autoFields.size) { alert("변경할 항목을 선택하세요."); return; }
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     for (const r of targets) {
       const perRowPatch = { ...staticPatch };
       if (autoFields.has("선결제")) perRowPatch.선결제 = Number(r.수량 || 0) * 360;
@@ -998,6 +1001,8 @@ export default function FixedClients({ drivers = [], upsertDriver, userCompany =
             onClick={async()=>{
               const r=contextMenuFC.row;
               if(!r?.id){setContextMenuFC(null);return;}
+              setContextMenuFC(null);
+              if(!(await kpConfirm("수정하시겠습니까?",{okText:"저장"})))return; // ✅ 2026-11-23 한 번 묻기
               await updateDoc(doc(db,"fixedClients",r.id),{정산완료:!r.정산완료});
               setContextMenuFC(null);
             }}>

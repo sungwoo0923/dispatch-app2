@@ -1,6 +1,6 @@
 // 배차 빠른 도구 계산 검증 — node scripts/smartDispatch.test.mjs
 import assert from "node:assert/strict";
-import { parseQuickLine, buildRoutes, findRoutes, suggestDrivers, busyByDate, todayTodo } from "../src/smartDispatch.js";
+import { parseQuickLine, buildRoutes, findRoutes, suggestDrivers, makeSuggester, busyByDate, todayTodo } from "../src/smartDispatch.js";
 const T = "2026-11-13";
 let n = 0; const ok = (name, fn) => { fn(); n += 1; console.log("  ✓", name); };
 const rows = [
@@ -54,5 +54,12 @@ ok("오늘 할 일 숫자", () => {
   assert.equal(t.today, 2); assert.equal(t.todayDone, 1);
   assert.equal(t.tomorrow, 1); assert.equal(t.tomorrowOpen, 1);
   assert.equal(t.noFare, 1); assert.equal(t.noDriverFare, 1);
+});
+ok("makeSuggester = suggestDrivers (색인으로 빠르게 · 결과 같음)", () => {
+  const busy = busyByDate(rows);
+  const fast = makeSuggester(rows, { busyByDay: busy, today: T, limit: 20 });
+  for (const o of [...rows, { 거래처명: "가나물산", 상차지명: "가나 평택공장", 하차지명: "다라 물류센터", 상차일: T }, { 상차지명: "없는곳", 하차지명: "모름" }]) {
+    assert.deepEqual(fast(o), suggestDrivers(o, rows, { limit: 20, busy: busy.get(String(o.상차일 || "")), today: T }));
+  }
 });
 console.log(`smartDispatch: ${n}건 통과`);

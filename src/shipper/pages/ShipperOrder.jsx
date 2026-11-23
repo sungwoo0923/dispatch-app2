@@ -281,7 +281,7 @@ export default function ShipperOrder({ editData, onClose }) {
   useEffect(() => {
     if (!previewOpen) return;
     const handler = (e) => {
-      if (e.key === "Enter") { e.preventDefault(); submit().then(() => setPreviewOpen(false)); }
+      if (e.key === "Enter") { e.preventDefault(); submit().then((ok) => { if (ok !== false) setPreviewOpen(false); }); }
       if (e.key === "Escape") setPreviewOpen(false);
     };
     window.addEventListener("keydown", handler);
@@ -505,6 +505,8 @@ export default function ShipperOrder({ editData, onClose }) {
 
   const submit = async () => {
     if (!validate()) return;
+    // ✅ 2026-11-23 오더 수정 저장 전에 한 번 묻기(사용자 요청) — 새 오더 등록은 묻지 않는다 · 취소하면 false(미리보기 창은 그대로)
+    if ((editId || editData?.id) && !(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return false;
     const effectiveCompany = companyEditable ? companyEdit : company;
     await upsertPlace({ name: form.상차지명, address: form.상차지주소, 담당자명: form.상차담당자명, 담당자번호: form.상차담당자번호, 메모: form.상차메모 }, "상차");
     await upsertPlace({ name: form.하차지명, address: form.하차지주소, 담당자명: form.하차담당자명, 담당자번호: form.하차담당자번호, 메모: form.하차메모 }, "하차");
@@ -1302,7 +1304,7 @@ export default function ShipperOrder({ editData, onClose }) {
               </div>
               <div className="flex gap-2 pt-4">
                 <button onClick={() => setPreviewOpen(false)} className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg font-semibold text-sm">취소</button>
-                <button onClick={async () => { await submit(); setPreviewOpen(false); }}
+                <button onClick={async () => { if ((await submit()) !== false) setPreviewOpen(false); }}
                   className="flex-1 py-2.5 bg-[#1B2B4B] hover:opacity-90 text-white rounded-lg font-bold text-sm">배차요청</button>
               </div>
             </div>

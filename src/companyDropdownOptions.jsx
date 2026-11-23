@@ -14,6 +14,7 @@ import { arrayUnion } from "firebase/firestore";
 import { getTenant } from "./fsTenant";
 import { useEditMode } from "./EditMode";
 import { uiOptionList, useUiConfigVersion } from "./uiConfig"; // ⭐ 2026-11-07 화면 편집 — 프로그램 기본 목록(회사가 바꾼 적 없을 때) 더하기·숨기기·순서
+import { kpConfirm } from "./kpDialog";
 
 // ⭐ 기존 하드코딩 값 그대로 + 사용자가 요청한 "리프트" 추가(상/하차방법만)
 // ⭐ 2026-11-02 화면마다 조금씩 달랐던 목록(등록폼: 계좌이체 / 표·수정창: 손실·개인·취소 / 실시간: 고정기사)을
@@ -296,6 +297,7 @@ function DropdownOptionsEditorModal({ optKey, label, role, userCompany, initialO
   };
 
   const save = async () => {
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // ✅ 2026-11-23 목록 저장 전에 한 번 묻기(사용자 요청)
     setSaving(true);
     try {
       const cleaned = list.map((x) => x.trim()).filter(Boolean);

@@ -9,6 +9,7 @@ import { db } from "./firebase";
 import { collection, doc, onSnapshot, query, setDoc, where, serverTimestamp } from "firebase/firestore";
 import CustomDatePicker from "./CustomDatePicker";
 import useNarrow from "./useNarrow"; // 📱 2026-11-10 휴대폰 폭 — 단계 표시 2줄 · 명세서 표 칸 줄이기
+import { kpConfirm } from "./kpDialog";
 
 export const SD = { ink: "#0F1A30", navy: "#1B2B4B", blue: "#2D4C82", sub: "#5B6B85", mute: "#9AA9C3", line: "#E3E8F0", hair: "#EEF2F8", soft: "#F4F6FA", sky: "#8FB0F0", ice: "#CFE0FF" };
 const NUM = { fontVariantNumeric: "tabular-nums" };
@@ -553,9 +554,16 @@ export function StatementLineGrid({ rows, included, onToggle, onToggleAll, onAmo
   }, []);
   const [edit, setEdit] = React.useState({});
   const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const asking = React.useRef(new Set()); // 묻는 창이 뜨면 칸에서 포커스가 빠져(onBlur) 한 번 더 불리는 것 막기
   const commit = async (r, i, move) => {
+    if (asking.current.has(r._id)) return;
+    asking.current.add(r._id);
+    try { await commitOne(r, i, move); } finally { asking.current.delete(r._id); }
+  };
+  const commitOne = async (r, i, move) => {
     const v = edit[r._id];
-    if (v != null && toInt(v) !== toInt(r.청구운임) && toInt(v) > 0) await onAmount?.(r, toInt(v));
+    // ✅ 2026-11-23 금액이 바뀌었을 때만 "수정하시겠습니까?" — 취소하면 원래 금액으로(아래에서 입력값을 지운다)
+    if (v != null && toInt(v) !== toInt(r.청구운임) && toInt(v) > 0 && (await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) await onAmount?.(r, toInt(v));
     setEdit((e) => { const n = { ...e }; delete n[r._id]; return n; });
     if (move) refs.current[i + move]?.focus();
   };

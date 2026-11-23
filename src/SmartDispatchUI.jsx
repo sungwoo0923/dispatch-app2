@@ -6,7 +6,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { readHistoryCache } from "./orderHistoryCache";
 import { getTenant } from "./fsTenant";
-import { parseQuickLine, buildRoutes, findRoutes, suggestDrivers, busyByDate, todayTodo, slimOrder, ymd } from "./smartDispatch";
+import { parseQuickLine, buildRoutes, findRoutes, suggestDrivers, makeSuggester, busyByDate, todayTodo, slimOrder, ymd } from "./smartDispatch";
 
 const NUM = { fontVariantNumeric: "tabular-nums", fontFeatureSettings: '"tnum"' };
 const won = (v) => { const n = parseInt(String(v || "").replace(/[^\d-]/g, ""), 10); return n > 0 ? n.toLocaleString() : ""; };
@@ -174,11 +174,13 @@ export function QuickOrderLine({ rows = [], userCompany = "", canMoney = false, 
 export function useDriverSuggest(rows, userCompany = "") {
   const all = useOrderHistoryLite(rows, userCompany);
   const busy = React.useMemo(() => busyByDate(rows), [rows]);
-  return React.useCallback((order) => suggestDrivers(order, all, { limit: 20, busy: busy.get(String(order?.상차일 || "")), today: ymd(new Date()) }), [all, busy]);
+  // 🚚 2026-11-23 이력을 한 번 묶어 두고(makeSuggester) 오더마다 관련 줄만 본다 — 결과는 예전과 같다
+  return React.useMemo(() => makeSuggester(all, { busyByDay: busy, today: ymd(new Date()), limit: 20 }), [all, busy]);
 }
 
 // 줄마다 작은 드롭다운 하나 — 누르면 추천순 목록 + 검색(이름·차량번호·전화)
-export function DriverSuggestCell({ order, pick, onAssign, drivers = [], disabled = false }) {
+// 🚚 2026-11-23 variant="caret" — 실시간 · 배차현황 차량번호 칸 오른쪽의 작은 ▾(추천 기사가 있을 때만). 칸은 그대로 직접 입력
+export function DriverSuggestCell({ order, pick, onAssign, drivers = [], disabled = false, variant = "cell" }) {
   const list = React.useMemo(() => pick(order), [pick, order]);
   const [open, setOpen] = React.useState(false);
   const [pos, setPos] = React.useState(null);
@@ -218,8 +220,18 @@ export function DriverSuggestCell({ order, pick, onAssign, drivers = [], disable
   React.useEffect(() => { if (open) box.current?.querySelector(`[data-i="${idx}"]`)?.scrollIntoView({ block: "nearest" }); }, [idx, open]);
   const close = () => { setOpen(false); setTimeout(() => btn.current?.focus(), 0); };
   const top = list[0];
+  const caret = variant === "caret";
+  if (caret && !list.length && !open) return null; // 추천이 없으면 칸을 그대로(직접 입력만)
   return (
-    <span data-kp="driver-suggest" onDoubleClick={(e) => e.stopPropagation()}>
+    <span data-kp="driver-suggest" data-variant={variant} onDoubleClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+      {caret ? (
+        <button ref={btn} type="button" disabled={disabled} onClick={toggle} tabIndex={-1} data-kp="driver-suggest-caret"
+          title={`추천 기사 ${list.length}명${top ? ` — 1순위 ${top.이름}(${top.차량번호})` : ""} · 눌러서 골라 배정 (차량번호를 직접 입력해도 돼요)`}
+          className={`inline-flex items-center justify-center gap-px h-[20px] min-w-[24px] px-1 rounded-md border text-[10px] font-black leading-none transition disabled:opacity-50 ${open ? "border-[#1B2B4B] bg-[#1B2B4B] text-white" : "border-[#C9D3E4] bg-[#EEF3FB] text-[#1B2B4B] hover:border-[#1B2B4B]"}`} style={NUM}>
+          {list.length}
+          <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M2 3.5 5 6.5 8 3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </button>
+      ) : (
       <button ref={btn} type="button" disabled={disabled} onClick={toggle} title="추천 기사 보기 · 검색해서 배정 (↑↓ 고르기 · Enter 배정 · Esc 닫기)"
         onKeyDown={(e) => { if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); toggle(e); } }}
         className={`inline-flex items-center gap-1.5 h-7 w-[132px] pl-2.5 pr-2 rounded-lg border bg-white text-[12px] transition disabled:opacity-50 ${open ? "border-[#1B2B4B] shadow-[0_0_0_3px_rgba(27,43,75,0.08)]" : top ? "border-[#C9D3E4] hover:border-[#1B2B4B]" : "border-[#E3E8F1] hover:border-[#1B2B4B]"}`}>
@@ -229,6 +241,7 @@ export function DriverSuggestCell({ order, pick, onAssign, drivers = [], disable
         </> : <span className="font-semibold text-[#A6B3C8]">기사 선택</span>}
         <svg className="ml-auto shrink-0" width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5 5 6.5 8 3.5" stroke="#5B6B86" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>
+      )}
       {open && pos && createPortal(
         <div ref={box} data-kp="driver-suggest-pop" style={{ position: "fixed", left: pos.left, top: pos.top, width: 340, zIndex: 99990 }}
           className="rounded-xl border border-[#DCE3EE] bg-white shadow-[0_18px_40px_rgba(15,26,48,0.2)] overflow-hidden text-left" onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
@@ -264,6 +277,19 @@ export function DriverSuggestCell({ order, pick, onAssign, drivers = [], disable
             ))}
           </div>
         </div>, document.body)}
+    </span>
+  );
+}
+
+// 🚚 2026-11-23 실시간배차현황 · 배차현황 차량번호 칸의 추천 기사 ▾ — 표(부모)가 한 번 계산해 Context로 내려준다
+//  (줄 컴포넌트가 memo 라 prop 대신 Context — 이력이 새로 들어오면 칸만 다시 그린다)
+export const PlateSuggestCtx = React.createContext(null);
+export function PlateSuggestCaret({ order, disabled = false }) {
+  const ctx = React.useContext(PlateSuggestCtx);
+  if (!ctx || !order) return null;
+  return (
+    <span style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", zIndex: 2 }}>
+      <DriverSuggestCell variant="caret" order={order} pick={ctx.pick} drivers={ctx.drivers} disabled={disabled || ctx.disabled} onAssign={ctx.onAssign} />
     </span>
   );
 }

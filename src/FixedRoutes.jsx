@@ -1013,6 +1013,8 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
     return { ...p, stops, fareMode: "stop", fareClient: "", fareDriver: "" };
   });
   const save = async () => {
+    // ✅ 2026-11-23 노선 수정 저장 전에 한 번 묻기(사용자 요청) — 새 노선 등록은 묻지 않는다
+    if (form?.id && !(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     setBusy(true);
     try {
       // ⭐ 2026-11-05 화면 모양(기본 화물·운임 방식) → 저장 모양(생성기가 읽는 정류지 칸) — toRoute
@@ -1124,6 +1126,7 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
         await updateDoc(doc(db, "fixedRoutes", r.id), { active: false, ...by });
         flash(`"${r.name}" 운행 OFF — 앞으로 배차를 만들지 않습니다`);
       } else {
+        if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // ✅ 2026-11-23 운행 ON도 한 번 묻기(OFF는 위에서 묻는다)
         await updateDoc(doc(db, "fixedRoutes", r.id), { active: true, ...by });
         const n = r.autoDispatch ? await runGen([{ ...r, active: true }], { full: true }) : 0;
         flash(`"${r.name}" 운행 ON${n ? ` — 배차 ${n}건을 만들었습니다` : ""}`);

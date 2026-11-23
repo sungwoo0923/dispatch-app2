@@ -23,14 +23,25 @@ const guardOf = async (ref, data) => {
   if (msg) { try { window.alert(msg); } catch { /* 무시 */ } throw Object.assign(new Error(msg), { code: "final-locked" }); }
 };
 
+// 🚛 2026-11-23 저장 직전에 값을 고쳐 넣는 자리(PC · 모바일 공통) — 지입차 배차 시 배차방식 자동(src/fleetDispatchWay.jsx)
+//  fn(ref, data, { merge }) → 고친 data(그대로면 같은 객체). 실패하면 원래 값으로 저장한다(저장 자체는 막지 않음)
+let TRANSFORM = null;
+export const setOrderTransform = (fn) => { TRANSFORM = typeof fn === "function" ? fn : null; return () => { if (TRANSFORM === fn) TRANSFORM = null; }; };
+const transformOf = async (ref, data, opts) => {
+  if (!TRANSFORM || !isOrderDocRef(ref) || !data || typeof data !== "object" || Array.isArray(data)) return data;
+  try { return (await TRANSFORM(ref, data, opts)) || data; } catch { return data; }
+};
+
 export async function updateDoc(ref, data, ...rest) {
   // updateDoc(ref, "필드", 값, ...) 형태는 그대로 통과
   if (typeof data === "string") return fbUpdateDoc(ref, data, ...rest);
+  data = await transformOf(ref, data, { update: true });
   await guardOf(ref, data);
   return fbUpdateDoc(ref, stamp(ref, data), ...rest);
 }
 
 export async function setDoc(ref, data, options) {
+  data = await transformOf(ref, data, { merge: !!options?.merge });
   await guardOf(ref, data);
   return options === undefined ? fbSetDoc(ref, stamp(ref, data)) : fbSetDoc(ref, stamp(ref, data), options);
 }

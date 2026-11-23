@@ -1,6 +1,7 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
 import { RoadviewButton } from "../roadview"; // 📷 2026-11-20 상·하차지 로드뷰
 import { isFleetGrade } from "../fleetGradesCore"; // 🚛 2026-11-20 사용자 요청 — 지입 · 직영 · 임대 · 분양(isFleetGrade) 모두 기사앱 오더 수락/거절 · 같은 기사앱 화면(예전엔 지입만)
+import { useFleetDispatchWayInstall } from "../fleetDispatchWay"; // 🚛 2026-11-23 지입차로 배차하면 배차방식 자동(회사별)
 import { SpecialFareTag, SpecialFareLine } from "../specialFareTag"; // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import { readPendingApproval, clearPendingApproval } from "../pendingOpen"; // 🛠 2026-11-17 결재 화면 이동 요청을 새로고침 뒤에도 이어서
 import { MarginPct } from "../marginPct"; // ⭐ 2026-11-17 배차 합계 다이얼 — 수수료 아래 수수료율(수수료 ÷ 청구)
@@ -2923,6 +2924,7 @@ const [isRefreshing, setIsRefreshing] = useState(false);
   const [orderIssuesScope, setOrderIssuesScope] = useState("thisMonth"); // "thisMonth" | "twoMonths"
   const [drivers, setDrivers] = useState([]);
   useFleetLivePublish(drivers); // ⭐ 2026-11-05 이미 받는 drivers로 실시간 관제 색인 갱신(추가 읽기 없음)
+  useFleetDispatchWayInstall(drivers, userCompany); // 🚛 2026-11-23 지입차로 배차하면 배차방식 자동(회사 설정)
   const [clients, setClients] = useState([]);
   const [places, setPlaces] = useState([]);
   const [fixedClientRows, setFixedClientRows] = useState([]);
@@ -10526,6 +10528,7 @@ function CardAttachViewer({ order, onClose, showToast, showSuccess }) {
   // 완료처리/미완료 수동 토글 — PC 첨부현황 화면과 동일하게 attachViewed만 뒤집는다.
   const handleToggleViewed = async () => {
     if (viewedBusy) return;
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // ✅ 2026-11-23 완료처리 바꾸기 전에 한 번 묻기
     setViewedBusy(true);
     const nextVal = !isViewed;
     try {
@@ -10996,6 +10999,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
   };
 
   const handleSave = async () => {
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     setSaving(true);
     try {
       const col = order.__col || "orders";
@@ -12053,6 +12057,7 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
     const changed = {};
     Object.entries(patch).forEach(([k, v]) => { if (String(order[k] ?? "") !== String(v ?? "")) changed[k] = v; });
     if (!Object.keys(changed).length) { onClose(); return; }
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     setSaving(true);
     try {
       const id = order.id || order._id;
@@ -12436,6 +12441,8 @@ function MobileOrderDetail({
   }, [showDetailFareHistory, orders, order.상차지주소, order.하차지주소, order.상차지명, order.하차지명, order.차종, order.차량종류, order.거래처명, order.화물내용, order.톤수, order.차량톤수, order.경유상차목록, order.경유하차목록, order.id]);
 
   const applyFareDirectly = async (claim, drv) => {
+    if (!(order.id || order._id)) return;
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // 취소하면 운임이력 창은 그대로 둔다
     setShowDetailFareHistory(false);
     setDetailFareDetailItem(null);
     const col = order.__col || order._col || "dispatch";
@@ -12678,6 +12685,7 @@ const pickupTimeText = order.상차시간
   // 표시하거나 되돌릴 수 있다. PC와 같은 attachViewed 필드라 PC에도 그대로 반영된다.
   const handleToggleDetailAttachViewed = async () => {
     if (detailAttachViewedBusy) return;
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // ✅ 2026-11-23 완료처리 바꾸기 전에 한 번 묻기
     setDetailAttachViewedBusy(true);
     const nextVal = !detailAttachViewed;
     const col = order.__col || "orders";
@@ -12875,7 +12883,7 @@ const handleAssignClick = async () => {
     if (!carNo) { alert("차량번호를 입력해주세요."); return; }
     if (!name || !phone) {
       if (!(await kpConfirm("기사 이름 또는 연락처가 비어 있습니다. 그대로 배차하시겠습니까?"))) return;
-    }
+    } else if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // 위에서 이미 물었으면 다시 묻지 않는다
     onAssignDriver({ 차량번호: carNo, 이름: name, 전화번호: phone });
   };
 
@@ -13292,7 +13300,7 @@ const handleAssignClick = async () => {
                         <input autoComplete="off" className="w-full border border-gray-300 rounded-lg px-2 py-1 text-sm mb-2 focus:outline-none focus:border-[#1B2B4B]" placeholder="전화번호" inputMode="tel" value={editingDriverData.전화번호} onChange={e => setEditingDriverData(p => ({ ...p, 전화번호: formatPhoneLive(e.target.value) }))} onPointerDown={e => e.stopPropagation()} />
                         <div className="flex gap-2">
                           <button type="button" className="flex-1 py-2.5 rounded-lg bg-blue-600 text-white text-xs font-bold"
-                            onPointerDown={async (e) => { e.preventDefault(); if (!String(editingDriverData.이름 || "").trim()) { alert("기사 이름을 입력해 주세요."); return; } try { await updateDoc(doc(db, "drivers", d.id), { 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 }); } catch (err) { alert("기사 정보 저장에 실패했습니다.\n" + (err?.message || err)); return; } setSmartMatched(prev => prev.map(m => m.id === d.id ? { ...m, 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 } : m)); setEditingDriverId(null); }}>저장</button>
+                            onPointerDown={async (e) => { e.preventDefault(); if (!String(editingDriverData.이름 || "").trim()) { alert("기사 이름을 입력해 주세요."); return; } if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; try { await updateDoc(doc(db, "drivers", d.id), { 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 }); } catch (err) { alert("기사 정보 저장에 실패했습니다.\n" + (err?.message || err)); return; } setSmartMatched(prev => prev.map(m => m.id === d.id ? { ...m, 이름: editingDriverData.이름, 전화번호: editingDriverData.전화번호 } : m)); setEditingDriverId(null); }}>저장</button>
                           <button type="button" className="px-4 py-2.5 rounded-lg bg-gray-200 text-gray-700 text-xs" onPointerDown={e => { e.preventDefault(); setEditingDriverId(null); }}>취소</button>
                         </div>
                       </div>
@@ -16252,6 +16260,13 @@ const pickDrop = (c) => {
       <div className="mt-4 mb-8 space-y-2">
         <button
           onClick={async () => {
+            // ✅ 2026-11-23 오더 수정 저장 전에 한 번 묻기(사용자 요청) — 새 오더 등록은 묻지 않는다
+            //  · 기사 이름·전화 변경(아래 finish)이 기사관리에 바로 저장되므로 그보다 먼저 묻는다
+            if (form._editId) {
+              if (!validateRequiredMobile()) return;
+              const reversed = form.상차일 && form.하차일 && form.하차일 < form.상차일; // 날짜 역순은 저장할 때 안내가 뜬다
+              if (!reversed && !(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
+            }
             if (!(await mfDrvEdit.finish(mfDrvCur))) return; // ⭐ 2026-11-05 [수정] 중이면 먼저 변경/별도추가 선택
             if (!validateRequiredMobile()) return;
             // ⭐ 신규 기사면 여기서 자동 등록 — 아래 저장/등록과 별도 버튼을 누를 필요 없다.

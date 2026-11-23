@@ -298,8 +298,10 @@ function Dates({ driverId, by, care, busy, run, large }) {
   // ⭐ 2026-11-02 예전엔 달력에서 날짜를 누르는 순간 저장돼 실수로 바꿔도 되돌릴 수 없었다 →
   //   날짜를 고르면 [저장]·[취소]가 나오고, [저장]을 눌러야 저장된다. 달력의 '지우기'로 비운 뒤 저장하면 만기일을 없앤다.
   const [draft, setDraft] = React.useState({}); // { key: "YYYY-MM-DD" | "" }
-  const saveOne = (d, v) => {
+  const saveOne = async (d, v) => {
     const x = draft[d.key];
+    // ✅ 2026-11-23 수정 저장 전에 한 번 묻기(사용자 요청)
+    if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
     run(async () => {
       await save(driverId, by, { care: { dates: { [d.key]: x || "" } } }, { kind: "만기", item: d.key, itemLabel: d.label, date: today(), memo: x ? `${v || "없음"} → ${x}` : `${v} → 지움` });
       setDraft((p) => { const n = { ...p }; delete n[d.key]; return n; });
@@ -380,7 +382,7 @@ function Spec({ driverId, by, vehicle, busy, run, large }) {
         {F({ k: "차대번호", label: "차대번호(VIN)" })}
       </div>
       {s && <div style={{ fontSize: 12.5, color: "#7A879C", marginTop: 6, lineHeight: 1.6 }}>{v.톤} 표준 — 적재함 {s.l}×{s.w}{s.h ? `×${s.h}` : ""}cm · 최대 {s.maxKg.toLocaleString()}kg · {s.axle} · 대표 차종 {s.models.join(", ")}</div>}
-      <button type="button" disabled={busy} onClick={() => run(() => save(driverId, by, { vehicle: v, ...(v.톤 ? { 차량톤수: v.톤 } : {}), ...(v.적재함 ? { 차량종류: v.적재함 } : {}) }, { kind: "제원", date: today(), memo: [v.톤, v.적재함, v.모델].filter(Boolean).join(" ") }))} style={{ ...btn(), width: "100%", marginTop: 10 }}>{busy ? "저장 중…" : "제원 저장"}</button>
+      <button type="button" disabled={busy} onClick={async () => { if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; run(() => save(driverId, by, { vehicle: v, ...(v.톤 ? { 차량톤수: v.톤 } : {}), ...(v.적재함 ? { 차량종류: v.적재함 } : {}) }, { kind: "제원", date: today(), memo: [v.톤, v.적재함, v.모델].filter(Boolean).join(" ") })); }} style={{ ...btn(), width: "100%", marginTop: 10 }}>{busy ? "저장 중…" : "제원 저장"}</button>
     </>
   );
 }
@@ -430,12 +432,12 @@ function Logs({ driverId, by, logs, odo, busy, run, staff = false, rawLogs, co =
   const withIdx = normCareLogs(raw.map((x, i) => ({ ...x, _ri: i })));
   const shown = (withIdx.length ? withIdx : logs).filter((l) => l.kind !== "주행거리").slice(0, 60);
   const rewrite = (fn) => setDoc(doc(db, "drivers", driverId), { careLogs: fn(raw.map((x) => ({ ...x }))), careUpdatedAt: serverTimestamp(), careUpdatedBy: by || "" }, { merge: true });
-  const saveEdit = () => run(async () => {
+  const saveEdit = async () => { if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; run(async () => {
     const i = ed._ri;
     await rewrite((arr) => { arr[i] = { ...arr[i], kind: ed.kind, date: ed.date, km: num(ed.km) || null, liters: num(ed.liters) || null, cost: num(ed.cost), memo: ed.memo || "", files: ed.files || [], editedAt: Date.now(), editedBy: by || "" }; return arr; });
     if (ed._removed?.length) deleteEvidence(ed._removed).catch(() => {});
     setEd(null);
-  }, "기록을 고쳤어요");
+  }, "기록을 고쳤어요"); };
   const delLog = async (l) => {
     if (!(await kpConfirm("이 기록을 삭제할까요?", { title: "기록 삭제", okText: "삭제", danger: true }))) return;
     await run(async () => {
