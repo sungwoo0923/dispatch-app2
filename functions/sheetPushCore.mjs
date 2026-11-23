@@ -68,7 +68,8 @@ const dropStops = (o) => { const list = Array.isArray(o?.경유하차목록) && 
   return list.map((v) => cell(typeof v === "string" ? v : v?.업체명).replace(/[,，+]/g, " ").trim()).filter(Boolean); };
 // 메모 비교 — 가져오기가 덧붙이는 "경유 창동식자재,고양유통" 꼬리표는 빼고 본다(경유지를 시트에 쓰면 다시 읽을 때 붙는다)
 const memoCore = (v) => cell(v).split(" · ").map((x) => x.trim()).filter((x) => x && !/^경유 /.test(x)).join(" · ");
-export function pushSame(k, a, b, preset = null) {
+export function pushSame(k, a, b, preset = null, tab = "") {
+  const sp = samePlaceTab(k, a, b, preset, tab); if (sp !== null) return sp;
   if (k === "메모" && preset?.multiDropStops) return memoCore(a) === memoCore(b);
   // ⭐ 2026-11-19 배차방식 — 시트 운송사 글이 가져오기 규칙으로 바뀌어 읽혀도(JY: 시트 "전국특송" → 프로그램 "24시") 같은 회사면 쓴 것으로 본다
   //  예전엔 프로그램 "전국특송"을 써 보고 다시 읽은 "24시"와 달라 쓰기를 포기했다(사용자 신고: 배차방식이 시트에 안 들어감)
@@ -165,6 +166,22 @@ export function pickTab(ctx, order, pushTabs = []) {
 
 // ── 오더의 한 칸 → 시트의 어느 칸에 무엇을 쓰나 ──────────────────────────
 //  → [{ c, v, optional }] (optional: 수식 칸이면 그 칸만 건너뛴다) · null = 이 탭 양식으로는 쓸 수 없음
+// ⭐ 2026-11-23 탭별 출발지 별칭(가져오기 규칙 fromAliases — 만세보령 탭: 시트 "보령" = 프로그램 "만세보령")을 쓸 때도 거꾸로
+//  예전엔 프로그램 상차지명을 그대로 써서 시트에 "만세보령"이 들어가거나, "보령"을 써 보고 다시 읽으면 "만세보령"이 돼
+//  "똑같이 읽히지 않는다"며 쓰기를 포기했다(사용자 신고: 상차지를 보령으로 바꿔도 시트 출발지는 만세보령 그대로).
+//  → 이 탭에서는 두 이름을 같은 곳으로 보고, 시트에는 항상 시트 이름("보령")으로 쓴다.
+const aliasesOf = (preset, tab) => (tab && preset?.fromAliases?.[tab]) || null;
+export function aliasPlace(preset, tab, v) {
+  const A = aliasesOf(preset, tab); const c = cell(v);
+  return A && Object.prototype.hasOwnProperty.call(A, c) ? cell(A[c]) : c;
+}
+function sheetAliasName(env, name) {
+  const A = aliasesOf(env.preset, env.tab); const c = cell(name);
+  if (!A) return c;
+  const hit = Object.keys(A).find((k) => cell(A[k]) === c);
+  return hit || c;
+}
+const samePlaceTab = (k, a, b, preset, tab) => (k === "상차지명" && aliasesOf(preset, tab) ? aliasPlace(preset, tab, a) === aliasPlace(preset, tab, b) : null);
 function sheetPlaceName(env, name) {
   const P = env.rule?.places || {};
   const keys = Object.keys(P).filter((k) => P[k][0] === name);
@@ -298,7 +315,7 @@ function fieldEdits(k, o, env) {
     case "상차지명": {
       if (rule?.fromFixed) return null;
       const via = rule?.splitVia && Array.isArray(o.경유상차목록) ? o.경유상차목록.map((v) => cell(v?.업체명)).filter(Boolean) : [];
-      return one(L.cols.from, [o.상차지명, ...via].map((n) => sheetPlaceName(env, cell(n))).filter(Boolean).join("+"));
+      return one(L.cols.from, [o.상차지명, ...via].map((n) => sheetPlaceName(env, sheetAliasName(env, cell(n)))).filter(Boolean).join("+"));
     }
     case "상차지주소": return rule?.fromFixed ? one(L.cols.from, o.상차지주소) : null;
     case "하차지명": {
@@ -396,7 +413,7 @@ function fitEdits(ctx, title, rowNo, baseRow, target, fields, env) {
     const writeRow = [...baseRow];
     byField.forEach((list) => list.forEach((x) => { if (!x.virtual) writeRow[x.c] = x.v; }));
     if (!d.o) return { row, writeRow, d, fields: [...byField.keys()] }; // 줄 자체가 오더로 읽히지 않는다 — 부른 쪽이 되돌린다
-    const bad = [...byField.keys()].filter((k) => !pushSame(k, d.o[k], target[k], env.preset) || (k === "하차시간" && (!sameValue("하차일", d.o.하차일, target.하차일) || !sameValue("상차일", d.o.상차일, target.상차일))));
+    const bad = [...byField.keys()].filter((k) => !pushSame(k, d.o[k], target[k], env.preset, title) || (k === "하차시간" && (!sameValue("하차일", d.o.하차일, target.하차일) || !sameValue("상차일", d.o.상차일, target.상차일))));
     if (!bad.length) return { row, writeRow, d, fields: [...byField.keys()] };
     d.undo();
     // ⭐ 2026-11-17 운임 · 특수운임을 추가 칸까지 같이 써 봤는데 똑같이 읽히지 않으면 → 예전 방식(운송료 칸만)으로 한 번 더
@@ -430,6 +447,12 @@ export function planUpdate(ctx, before, after, opts = {}) {
   if ((changed.includes("경유하차목록") || changed.includes("경유지_하차")) && !pushKeys.includes("하차지명") && cell(after.하차지명)) pushKeys.push("하차지명");
   // ⭐ 2026-11-19 예전에 숫자로 들어가 앞의 0 · 하이픈이 빠진 연락처 칸(1024108291)은 이 오더를 다시 쓸 때 같이 고친다
   const pc = env.L.cols.phone; if (pc !== undefined && pc >= 0 && cell(after.전화번호) && /^\d+$/.test(cell(base[pc])) && !pushKeys.includes("전화번호")) pushKeys.push("전화번호"); // 날짜가 바뀌면 입고시간(당착 · 야상 · 월착)도
+  // ⭐ 2026-11-23 예전에 별칭 대신 프로그램 이름("만세보령")으로 써 둔 출발지 칸은 이 오더를 다시 쓸 때 시트 이름("보령")으로 같이 고친다
+  const A = aliasesOf(ctx.preset, title), fc = env.L.cols.from;
+  if (A && fc !== undefined && fc >= 0 && !pushKeys.includes("상차지명") && cell(after.상차지명)) {
+    const cur = cell(base[fc]).split("+")[0].trim();
+    if (cur && !Object.prototype.hasOwnProperty.call(A, cur) && Object.values(A).map(cell).includes(cur)) pushKeys.push("상차지명");
+  }
   const fit = fitEdits(ctx, title, rowNo, base, after, pushKeys, env);
   if (!fit || !fit.d.o) { fit?.d.undo(); return fail("고친 값을 쓰면 시트의 그 줄을 오더로 읽을 수 없게 됩니다"); }
   ctx.built = fit.d.built;
@@ -437,9 +460,9 @@ export function planUpdate(ctx, before, after, opts = {}) {
   // 프로그램 값 그대로 두는 칸: 예전 것 중 이번에 시트와 같아진 것은 빼고, 이번에 고쳤는데 시트로는 못 옮긴 것을 더한다
   const pk = new Set(Array.isArray(before._programKeys) ? before._programKeys : []);
   const sb = { ...(before._sheetBase || {}) };
-  changed.forEach((k) => { if (sameValue(k, o[k], after[k])) { pk.delete(k); delete sb[k]; } else { pk.add(k); sb[k] = o[k] ?? ""; } });
+  changed.forEach((k) => { if (samePlaceTab(k, o[k], after[k], ctx.preset, title) ?? sameValue(k, o[k], after[k])) { pk.delete(k); delete sb[k]; } else { pk.add(k); sb[k] = o[k] ?? ""; } });
   const cells = cellsOf(title, rowNo, base, fit.writeRow);
-  return { ok: true, kind: "update", tab: title, row: rowNo, cells, pushed: fit.fields.filter((k) => pushSame(k, o[k], after[k], ctx.preset)), unpushed: changed.filter((k) => !pushSame(k, o[k], after[k], ctx.preset)),
+  return { ok: true, kind: "update", tab: title, row: rowNo, cells, pushed: fit.fields.filter((k) => pushSame(k, o[k], after[k], ctx.preset, title)), unpushed: changed.filter((k) => !pushSame(k, o[k], after[k], ctx.preset, title)),
     // _sheetKeys: 지금 시트에서 읽히는 칸 — 프로그램에서 배차해 시트에 쓴 차량 · 기사를 나중에 시트에서 지우면 프로그램에서도 비워지게(없으면 "시트에 원래 없던 값"으로 보고 남겨 뒀다)
     docPatch: { 이전출처: `${title}!${rowNo}`, _programKeys: [...pk], _sheetBase: sb, ...wayRaw(env.L, fit.writeRow), _sheetKeys: uniq([...(Array.isArray(before._sheetKeys) ? before._sheetKeys : []), ...Object.keys(o).filter((k) => !k.startsWith("__") && !empty(o[k]))]) } };
 }
@@ -492,8 +515,8 @@ export function planCreate(ctx, order, title, { rowCount = 0, atRow = 0, taken =
   const keys = Object.keys(o).filter((k) => !k.startsWith("__") && !empty(o[k]));
   const pk = []; const sb = {};
   // 시트에서 읽히는 값이 프로그램 값과 다른 칸은 프로그램 값을 둔다(등록일 · 하차일 · 거래처명 등) — 탭에서 오는 값(이전출처 · 담당노선구분)만 시트를 따른다
-  keys.forEach((k) => { if (k === "이전출처" || k === "담당노선구분") return; if (!sameValue(k, order[k], o[k])) { pk.push(k); sb[k] = o[k]; } });
-  return { ok: true, kind: "create", tab: title, row: rowNo, cells: cellsOf(title, rowNo, base, fit.writeRow), pushed: fit.fields.filter((k) => pushSame(k, o[k], order[k], ctx.preset)), unpushed: fields.filter((k) => !pushSame(k, o[k], order[k], ctx.preset)),
+  keys.forEach((k) => { if (k === "이전출처" || k === "담당노선구분") return; if (!(samePlaceTab(k, order[k], o[k], ctx.preset, title) ?? sameValue(k, order[k], o[k]))) { pk.push(k); sb[k] = o[k]; } });
+  return { ok: true, kind: "create", tab: title, row: rowNo, cells: cellsOf(title, rowNo, base, fit.writeRow), pushed: fit.fields.filter((k) => pushSame(k, o[k], order[k], ctx.preset, title)), unpushed: fields.filter((k) => !pushSame(k, o[k], order[k], ctx.preset, title)),
     docPatch: { 이전출처: `${title}!${rowNo}`, 담당노선구분: title, 시트연동: true, _sheetKeys: keys, _programKeys: pk, _sheetBase: sb, ...wayRaw(env.L, fit.writeRow), ...(!cell(order0.마감월) && cell(o.마감월) === cell(order.마감월) ? { 마감월: order.마감월 } : {}) } };
 }
 
