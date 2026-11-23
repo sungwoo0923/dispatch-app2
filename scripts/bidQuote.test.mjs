@@ -3,7 +3,10 @@
 import {
   BID_DEFAULTS as P, splitPasted, parseBidGrid, parseSizeLabel, rateForTon, tableCost, tonForKg, cellCost, tiers,
   evaluateBid, fillBids, adjustBids, bidToTsv, historyStats, marginOf, mergeVolumes, isBackhaulAddr,
+  findTables, titleHints, colName, carryOverDests, similarProject, resultInsight,
 } from "../src/bidQuoteCore.js";
+import { readWorkbook, writeBids } from "../src/bidExcel.js";
+import ExcelJS from "exceljs";
 
 let pass = 0, fail = 0;
 const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; if (!cond) console.log("  ✗", msg, extra); };
@@ -111,6 +114,67 @@ eq(bidToTsv(g, { withLabels: false }).split("\n")[0], "100000\t105000", "원래 
 eq(bidToTsv(g2, { withLabels: false }).split("\n")[0], "150000\t200000\t\t350000", "행=도착지 표도 원래 방향 그대로");
 ok(evaluateBid(g).sum.vol === 0 || true, "요약 계산");
 ok(isBackhaulAddr("강원도 원주시 문막읍"), "강원 = 귀로 어려운 지역");
+
+// 10) 시트 한 장에서 표 여러 개 찾기 · 칸 주소 · 제목에서 출발지 · 혼적/독차
+eq(colName(0), "A", "A칸"); eq(colName(17), "R", "R칸"); eq(colName(27), "AB", "AB칸");
+eq(titleHints("3) 2027년 LCL(공장 수입혼적) 부산發 견적"), { origin: "부산", mode: "혼적" }, "제목 → 부산 · 혼적");
+eq(titleHints("4) 2026년 LCL(공장 수입독차) 부산發 견적").mode, "독차", "LCL 독차는 독차");
+const sheet = [
+  ["", "1) 2027년 혼적 부산發 견적"],
+  [],
+  ["", "중량", "", "울산", "김천", "울산", "김천"],
+  ["", "300", "미만", "5", "1", "100000", ""],
+  ["", "600", "미만", "2", "0", "", ""],
+  ["", "계", "", "7", "1"],
+  [],
+  ["", "2) 2027년 독차 인천發 견적"],
+  ["", "구분", "", "1 TON", "5 TON", "기타 추가 사항"],
+  ["", "울산공장", "", "", "", "보세 수수료"],
+  ["", "김천공장"],
+  ["", "☞ ALL-IN 운임 기준"],
+];
+const tabs = findTables(sheet);
+eq(tabs.length, 2, "표 2개");
+eq([tabs[0].origin, tabs[0].mode, tabs[0].destOn, tabs[0].hasVolume], ["부산", "혼적", "col", true], "첫 표: 부산 혼적 · 물량 있음");
+eq(tabs[0].addrs["s0|d0"], "F4", "300kg 울산 단가 칸 = F4");
+eq(tabs[0].addrs["s1|d1"], "G5", "600kg 김천 단가 칸 = G5");
+eq([tabs[1].origin, tabs[1].mode, tabs[1].destOn], ["인천", "독차", "row"], "둘째 표: 인천 독차 · 행=도착지");
+eq(tabs[1].sizes.map((x) => x.label), ["1 TON", "5 TON"], "톤수 모양 아닌 칸(기타 추가 사항)은 빼요");
+eq(tabs[1].dests.map((x) => x.label), ["울산공장", "김천공장"], "단가가 빈 양식 줄도 읽고, 안내문 줄에서 끝나요");
+eq(tabs[1].addrs["s1|d1"], "E11", "5톤 김천 = E11");
+
+// 11) 원본 엑셀에 단가 써넣기 — 다른 칸 · 서식은 그대로
+{
+  const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet("견적");
+  sheet.forEach((r, i) => r.forEach((v, j) => { if (v !== "") ws.getCell(i + 1, j + 1).value = /^\d+$/.test(v) ? Number(v) : v; }));
+  ws.getCell("F4").font = { bold: true }; ws.mergeCells("B1:E1");
+  const buf = await wb.xlsx.writeBuffer();
+  const read = await readWorkbook(buf);
+  eq(findTables(read[0].aoa).length, 2, "엑셀로 읽어도 표 2개");
+  const { buffer, count } = await writeBids(buf, "견적", { F4: 123000, E11: 456000, G5: 0 });
+  eq(count, 2, "0원 칸은 건너뛰어요");
+  const wb2 = new ExcelJS.Workbook(); await wb2.xlsx.load(buffer);
+  const w2 = wb2.getWorksheet("견적");
+  eq([w2.getCell("F4").value, w2.getCell("E11").value, w2.getCell("D4").value], [123000, 456000, 5], "단가만 들어가고 물량은 그대로");
+  eq(w2.getCell("F4").font?.bold, true, "서식 그대로");
+}
+
+// 12) 양식 기억 · 결과로 본 감
+const prevP = { id: "p1", dests: [{ label: "울산", address: "울산 동구", km: 55, backhaul: false }, { label: "김천", address: "김천시", km: 170 }] };
+const co = carryOverDests([{ label: "울산", address: "", km: 0 }, { label: "문막", address: "", km: 0 }], [prevP]);
+eq([co.hit, co.dests[0].km, co.dests[1].km], [1, 55, 0], "같은 도착지 주소 · 거리를 이어 받아요");
+ok(similarProject([{ label: "울산" }, { label: "김천" }], [prevP])?.id === "p1", "도착지가 같은 지난 입찰을 찾아요");
+ok(similarProject([{ label: "부산" }, { label: "대구" }], [prevP]) === null, "다르면 안 찾아요");
+const hist = [
+  { id: "a", client: "KCC", status: "탈락", result: { gapPct: 8 } },
+  { id: "b", client: "KCC", status: "탈락", result: { gapPct: 6 } },
+  { id: "c", client: "KCC", status: "낙찰", result: {} },
+  { id: "d", client: "다른곳", status: "낙찰", result: {} },
+];
+const ins = resultInsight(hist, "KCC");
+eq([ins.scope, ins.n, ins.won, ins.lostGap], ["same", 3, 1, 7], "KCC 3건 · 낙찰 1 · 탈락 때 평균 7% 비쌌어요");
+eq(resultInsight(hist, "새화주").scope, "all", "처음 화주면 전체로");
+eq(resultInsight([], "KCC"), null, "결과가 없으면 없음");
 
 function money(v) { return Number(String(v ?? "").replace(/[^\d]/g, "")) || 0; }
 console.log(`bidQuote: ${pass} 통과 · ${fail} 실패`);

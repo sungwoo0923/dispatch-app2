@@ -120,22 +120,45 @@ const LABEL_HEAD = /구분|중량|톤수|차종|차량|kg|㎏|b\/l|구간|지역
 const isNumCell = (c) => /^-?[\d,\s.]+원?$/.test(c);
 const isMoneyCell = (c) => isNumCell(c) && toNum(c) > 0;
 
-// rows(2차원 글자) → { destOn, sizeKind, dests, sizes, cells } — 머리줄 = 맨 윗줄, 머리줄 앞 빈칸 · "구분" 칸 = 이름 칸
+// 엑셀 칸 이름(0 → A, 26 → AA)
+export const colName = (c) => { let s = "", n = c + 1; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+const TOTAL_ROW = /^(계|합계|소계|총계|total|sum)$/i;
+
+// rows(2차원 글자) → { destOn, sizeKind, dests, sizes, cells, addrs } — 머리줄 앞 빈칸 · "구분" 칸 = 이름 칸
+//  · 줄마다 r.__r(원래 줄 번호)이 있으면 그대로 쓰고, 없으면 순서대로 — addrs 는 단가 칸의 엑셀 주소(예: "R7")
+//  · 표 끝: 빈 줄 · "계" 줄 · 표가 아닌 줄
 export function parseBidGrid(rows, opt = {}) {
-  const R = (rows || []).filter((r) => r && r.some((c) => cellText(c)));
+  const src = (rows || []).map((r, i) => { const a = (r || []).slice(); a.__r = r?.__r ?? i; return a; });
+  const R = src.filter((r) => r.some((c) => cellText(c)));
   if (R.length < 2) return null;
   // 머리줄: 글자가 2칸 이상이고 숫자만 있는 줄이 아닌 첫 줄
   let hi = R.findIndex((r) => r.filter((c) => cellText(c) && !isMoneyCell(cellText(c))).length >= 2);
   if (hi < 0) hi = 0;
+  const headStart = R[hi].__r;
   // 머리줄이 여러 줄(예: KCC / KCC실리콘 → 공장 이름)이면 단가가 시작되기 바로 위 줄을 머리줄로
   for (let i = hi + 1; i < Math.min(R.length, hi + 4); i++) {
+    if (R[hi].filter((c) => looksLikeSize(cellText(c))).length >= 2) break; // 톤수 머리줄을 찾았으면 그 아래는 몸통
     const r = R[i];
-    const filled = r.filter((c) => cellText(c));
-    if (filled.length >= 2 && filled.filter((c) => !isMoneyCell(cellText(c))).length >= filled.length - 1 && !r.slice(1).some((c) => isMoneyCell(cellText(c)))) hi = i;
+    const f = r.filter((c) => cellText(c));
+    if (f.length >= 2 && f.filter((c) => !isMoneyCell(cellText(c))).length >= f.length - 1 && !r.slice(1).some((c) => isMoneyCell(cellText(c)))) hi = i;
     else break;
   }
   const head = R[hi].map(cellText);
-  const body = R.slice(hi + 1);
+  // 몸통: 빈 줄 · "계" 줄 앞까지
+  const body = [];
+  for (let i = hi + 1; i < R.length; i++) {
+    const r = R[i];
+    if (i > hi + 1 && r.__r - R[i - 1].__r > 1) break;
+    if (r.slice(0, 4).some((c) => TOTAL_ROW.test(cellText(c)))) break;
+    if (!r.some((c) => isNumCell(cellText(c)) && cellText(c))) {
+      // 단가가 비어 있는 양식 줄(이름만 있음)은 남기고, 안내문 · 주석 줄이면 표 끝
+      const t = r.map(cellText).filter(Boolean);
+      const note = !t.length || t[0].length > 20 || /^[☞※*\-·▷⇒①-⑩(\[]/.test(t[0]);
+      if (note) { if (body.length) break; continue; }
+    }
+    body.push(r);
+  }
+  if (!body.length) return null;
   const width = Math.max(head.length, ...body.map((r) => r.length));
   // 이름 칸 수
   let labelCols = opt.labelCols ?? -1;
@@ -149,39 +172,113 @@ export function parseBidGrid(rows, opt = {}) {
     if (!labelCols) labelCols = 1;
   }
   // 이름 칸 병합(위 칸 값 이어 쓰기)
-  const filled = body.map((r) => r.slice());
-  for (let c = 0; c < labelCols - 1; c++) for (let i = 1; i < filled.length; i++) if (!cellText(filled[i][c]) && filled.slice(i).length) filled[i][c] = filled[i - 1][c];
-  const rowLabels = filled.map((r) => r.slice(0, labelCols).map(cellText).filter(Boolean).join(" "));
-  const colLabels = []; for (let c = labelCols; c < width; c++) colLabels.push({ c, label: cellText(head[c]) });
-  const usedCols = colLabels.filter((x) => x.label);
+  const filled = body.map((r) => { const a = r.slice(); a.__r = r.__r; return a; });
+  for (let c = 0; c < labelCols - 1; c++) for (let i = 1; i < filled.length; i++) if (!cellText(filled[i][c])) filled[i][c] = filled[i - 1][c];
+  const lab = (r) => r.slice(0, labelCols).map(cellText).filter(Boolean).join(" ");
+  const bodyRows = filled.filter((r) => lab(r));
+  const rowLabels = bodyRows.map(lab);
+  const colLabels = []; for (let c = labelCols; c < width; c++) colLabels.push({ c, label: cellText(head[c]).replace(/\n/g, " ").replace(/\s+/g, " ") });
+  const usedCols = colLabels.filter((x) => x.label && !/^(비고|메모|합계|계)$/.test(x.label));
   // 같은 이름이 다시 나오면 앞 묶음 = 물량, 뒤 묶음 = 단가
   const seen = new Map(); let split = -1;
   usedCols.forEach((x, i) => { if (split < 0 && seen.has(x.label)) split = i; seen.set(x.label, i); });
   const volCols = split > 0 ? usedCols.slice(0, split) : [];
   const priceCols = split > 0 ? usedCols.slice(split).filter((x) => volCols.some((v) => v.label === x.label)) : usedCols;
+  if (!priceCols.length || !rowLabels.length) return null;
   // 방향: 머리줄이 톤수 모양이면 열 = 규격, 행 = 도착지
   const sizeLike = priceCols.filter((x) => looksLikeSize(x.label)).length;
   const destOn = opt.destOn || (sizeLike >= Math.max(2, priceCols.length * 0.6) ? "row" : "col");
+  // 열 = 규격이면 규격 모양이 아닌 칸(예: "기타 추가 사항")은 뺀다
+  if (destOn === "row" && sizeLike >= 2) { const keep = priceCols.filter((x) => looksLikeSize(x.label)); priceCols.length = 0; priceCols.push(...keep); }
   const sizeLabels = destOn === "col" ? rowLabels : priceCols.map((x) => x.label);
   const destLabels = destOn === "col" ? priceCols.map((x) => x.label) : rowLabels;
   const kinds = sizeLabels.map((l) => parseSizeLabel(l).kind);
   const sizeKind = opt.sizeKind || (["weight", "ton", "pallet"].map((k) => [k, kinds.filter((x) => x === k).length]).sort((a, b) => b[1] - a[1])[0][0]);
-  const dests = destLabels.map((label, i) => ({ key: `d${i}`, label: label.replace(/\n/g, " "), address: "", km: 0, backhaul: false }));
+  const dests = destLabels.map((label, i) => ({ key: `d${i}`, label, address: "", km: 0, backhaul: false }));
   const sizes = sizeLabels.map((label, i) => {
     const s = parseSizeLabel(label, sizeKind);
     return { key: `s${i}`, label: s.label, value: s.value, cargo: s.cargo, perTon: s.perTon, trailer: s.trailer };
   });
-  const cells = {};
-  filled.forEach((r, ri) => {
+  const cells = {}; const addrs = {};
+  bodyRows.forEach((r, ri) => {
     priceCols.forEach((pc, ci) => {
       const vc = volCols.find((v) => v.label === pc.label);
       const price = money(r[pc.c]); const vol = vc ? toNum(r[vc.c]) : 0;
       const sKey = destOn === "col" ? `s${ri}` : `s${ci}`; const dKey = destOn === "col" ? `d${ci}` : `d${ri}`;
+      addrs[`${sKey}|${dKey}`] = `${colName(pc.c)}${r.__r + 1}`;
       if (price || vol) cells[`${sKey}|${dKey}`] = { prev: price, bid: price, vol };
     });
   });
-  return { destOn, sizeKind, labelCols, dests, sizes, cells, hasVolume: volCols.length > 0 };
+  const endRow = body[body.length - 1].__r;
+  return { destOn, sizeKind, labelCols, dests, sizes, cells, addrs, hasVolume: volCols.length > 0, headStart, headRow: R[hi].__r, endRow };
 }
+
+// 시트 하나(2차원 값, A1 = [0][0]) 안의 표를 모두 찾는다 — 표 위 한 줄 제목에서 출발지(○○發) · 혼적/독차를 읽는다
+export function findTables(aoa = []) {
+  const rows = aoa.map((r, i) => { const a = (r || []).map(cellText); a.__r = i; return a; });
+  const out = []; let from = 0;
+  for (let guard = 0; guard < 20 && from < rows.length; guard++) {
+    const g = parseBidGrid(rows.slice(from));
+    if (!g) break;
+    if (g.dests.length && g.sizes.length && (g.dests.length * g.sizes.length) >= 2) {
+      let title = "";
+      for (let r = Math.max(0, g.headStart - 3); r < g.headRow && !title; r++) {
+        const t0 = (rows[r] || []).find(Boolean) || "";
+        if (t0.length >= 8 && !/금액단위/.test(t0) && /\d\)|견적|운송|운임|입찰/.test(t0)) title = t0;
+      }
+      out.push({ ...g, title, ...titleHints(title) });
+    }
+    from = g.endRow + 1;
+  }
+  return out;
+}
+export function titleHints(title = "") {
+  const t = String(title || "");
+  const origin = (t.match(/([가-힣A-Za-z]{2,})\s*(?:發|발\b|출발)/) || [])[1] || "";
+  const mode = /독차/.test(t) ? "독차" : /혼적|LCL/i.test(t) ? "혼적" : /FCL/i.test(t) ? "독차" : "";
+  return { origin, mode };
+}
+
+// 지난 입찰에서 같은 도착지 이름의 주소 · 거리 · 귀로 표시를 이어 받는다(양식 기억)
+export function carryOverDests(dests = [], others = []) {
+  const pool = {};
+  others.forEach((o) => (o.dests || []).forEach((d) => { if ((d.address || d.km) && !pool[d.label]) pool[d.label] = d; }));
+  let hit = 0;
+  const next = dests.map((d) => {
+    const o = pool[d.label];
+    if (!o) return d;
+    hit++;
+    return { ...d, address: d.address || o.address || "", km: d.km || o.km || 0, backhaul: d.backhaul || !!o.backhaul };
+  });
+  return { dests: next, hit };
+}
+// 같은 도착지 구성이 가장 비슷한 지난 입찰(도착지 이름이 70% 넘게 같으면)
+export function similarProject(dests = [], others = []) {
+  const set = new Set(dests.map((d) => d.label));
+  let best = null, bestScore = 0;
+  others.forEach((o) => {
+    const labels = (o.dests || []).map((d) => d.label);
+    if (!labels.length || !set.size) return;
+    const same = labels.filter((l) => set.has(l)).length;
+    const score = same / Math.max(set.size, labels.length);
+    if (score > bestScore) { bestScore = score; best = o; }
+  });
+  return bestScore >= 0.7 ? best : null;
+}
+
+// 지난 입찰 결과로 본 감(낙찰 · 탈락 + 낙찰가와 차이 %) — 같은 화주가 있으면 그것만
+export function resultInsight(list = [], client = "", excludeId = "") {
+  const done = list.filter((x) => x.id !== excludeId && (x.status === "낙찰" || x.status === "탈락"));
+  const same = client ? done.filter((x) => (x.client || "").trim() && (x.client || "").trim() === client.trim()) : [];
+  const base = same.length ? same : done;
+  if (!base.length) return null;
+  const won = base.filter((x) => x.status === "낙찰").length;
+  const gaps = base.map((x) => Number(x.result?.gapPct)).filter((v) => Number.isFinite(v) && v !== 0);
+  const lostGaps = base.filter((x) => x.status === "탈락").map((x) => Number(x.result?.gapPct)).filter((v) => Number.isFinite(v) && v > 0);
+  const avg = (a) => (a.length ? Math.round((a.reduce((s, v) => s + v, 0) / a.length) * 10) / 10 : 0);
+  return { scope: same.length ? "same" : "all", n: base.length, won, lost: base.length - won, winRate: won / base.length, avgGap: avg(gaps), lostGap: avg(lostGaps) };
+}
+
 // 물량만 따로 붙여 넣을 때(같은 모양 표) — cells 에 vol 을 채운다
 export function mergeVolumes(project, rows) {
   const g = parseBidGrid(rows, { destOn: project.destOn, sizeKind: project.sizeKind });
