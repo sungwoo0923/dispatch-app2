@@ -137,7 +137,9 @@ function computeHubClaims(m, uid) {
   }
   const src = getOr(m, "source", "signup");
   const key = getOr(m, "companyKey", "") !== "" ? m.companyKey
-    : (src !== "signup" ? `lw:${getOr(m, "companyName", "")}`
+    // 🔒 2026-11-23 기사 · 화주 계정으로 들어온 허브 회원은 운송사와 다른 키(운송사 오더 기록 · 고객 · 스캔 학습을 같이 쓰지 않게)
+    : (src === "logisweb-driver" ? `lwd:${uid}` : src === "logisweb-shipper" ? `lws:${getOr(m, "companyName", "")}`
+      : src !== "signup" ? `lw:${getOr(m, "companyName", "")}`
       : (String(getOr(m, "bizNo", "") || "").replace(/[^0-9]/g, "") !== "" ? `biz:${String(m.bizNo).replace(/[^0-9]/g, "")}` : `uid:${uid}`));
   return {
     hv: CLAIMS_V,

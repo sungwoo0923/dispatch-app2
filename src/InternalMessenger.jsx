@@ -455,7 +455,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       } else {
         getDoc(doc(db, "users", myUid)).then(userSnap => {
           const u = userSnap.exists() ? userSnap.data() : {};
-          const effectiveCompany = company || u.companyName || "";
+          // 🔒 2026-11-23 화주 프로필의 회사 칸은 "(화주)" 를 붙여 운송사 이름과 섞이지 않게(서버 규칙도 같다)
+          const effectiveCompany = role === "shipper" ? `(화주)${company || u.companyName || ""}` : (company || u.companyName || "");
           const defaultProfile = {
             uid: myUid, email: myEmail, company: effectiveCompany,
             name: u.name || u.displayName || auth.currentUser?.displayName || myEmail.split("@")[0] || "나",
@@ -487,13 +488,13 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     }
     // 🔒 2026-11-23 화주 계정의 "같은 회사"는 화주 계정만 — 이름이 같은 운송사 직원이 섞이지 않게(서버 규칙도 같다)
     const userSnap = await getDocs(role === "shipper" && !crossCompany
-      ? query(collection(db, "users"), where("companyName", "==", companyName), where("role", "==", "shipper"))
+      ? query(collection(db, "users"), where("companyName", "==", companyName), where("role", "==", "shipper"), where("linkedTransportCompany.companyName", "==", linkedCompanyName || "(연동없음)")) // 🔒 같은 연동 운송사 화주만
       : query(collection(db, "users"), where("companyName", "==", companyName)));
     const userList = userSnap.docs
       .map(d => ({ uid: d.id || d.uid, ...d.data() }))
       .filter(u => (u.uid || u.id) !== myUid && u.approved !== false && !excludeRoles.includes(u.role));
 
-    const profileSnap = await getDocs(query(collection(db, PROFILES_COLL), where("company", "==", companyName)));
+    const profileSnap = await getDocs(query(collection(db, PROFILES_COLL), where("company", "==", role === "shipper" && !crossCompany ? `(화주)${companyName}` : companyName)));
     const profileMap = {};
     profileSnap.docs.forEach(d => { profileMap[d.id] = d.data(); });
 
@@ -539,7 +540,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       clearTimeout(timer); timer = setTimeout(refresh, 1000);
     };
     const unsub1 = onSnapshot(role === "shipper"
-      ? query(collection(db, "users"), where("companyName", "==", company), where("role", "==", "shipper"))
+      ? query(collection(db, "users"), where("companyName", "==", company), where("role", "==", "shipper"), where("linkedTransportCompany.companyName", "==", linkedCompanyName || "(연동없음)"))
       : query(collection(db, "users"), where("companyName", "==", company)), onUsers("co"), () => {});
     const unsub2 = linkedCompanyName && role !== "shipper" // 🔒 화주는 운송사 직원 문서를 직접 못 읽는다(위 linkedStaffList)
       ? onSnapshot(query(collection(db, "users"), where("companyName", "==", linkedCompanyName)), onUsers("linked"), () => {})

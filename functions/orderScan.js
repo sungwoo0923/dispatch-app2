@@ -19,6 +19,9 @@ const WEEK = ["일", "월", "화", "수", "목", "금", "토"];
 
 function companyKeyOf(m, uid) {
   if (m?.companyKey) return m.companyKey;
+  // 🔒 2026-11-23 기사 · 화주 계정으로 들어온 허브 회원은 운송사와 다른 키(규칙 hubKeyOf · authClaims 와 같은 계산)
+  if (m?.source === "logisweb-driver") return `lwd:${uid}`;
+  if (m?.source === "logisweb-shipper") return `lws:${m.companyName || ""}`;
   if (m?.source && m.source !== "signup") return `lw:${m.companyName || ""}`;
   const d = String(m?.bizNo || "").replace(/[^\d]/g, "");
   return d ? `biz:${d}` : `uid:${uid}`;
@@ -39,12 +42,13 @@ async function scanUserOf(db, auth) {
     const okUser = email === SUPER_EMAIL || d.role === "totalMaster"
       || (d.approved !== false && d.employmentStatus !== "퇴사" && d.role !== "cafeUser");
     if (okUser) {
+      if (d.role === "driver") throw new ScanError("permission-denied", "기사 계정은 오더 스캔을 쓸 수 없어요"); // 🔒 2026-11-23
       const co = d.role === "shipper" ? (d.companyName || "") : (d.companyName || "(회사없음)");
       if (d.role !== "totalMaster" && email !== SUPER_EMAIL && co) {
         const plan = await db.collection("companyPlans").doc(co).get().catch(() => null);
         if (plan?.exists && plan.data()?.status === "ended") throw new ScanError("permission-denied", "계약이 끝난 회사는 쓸 수 없어요");
       }
-      return { kind: "lw", key: `lw:${co}` };
+      return { kind: "lw", key: d.role === "shipper" ? `lws:${co}` : `lw:${co}` }; // 🔒 2026-11-23 화주는 운송사와 다른 키
     }
   }
   const m = await db.collection("hubMembers").doc(uid).get();
