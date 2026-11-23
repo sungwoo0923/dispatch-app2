@@ -311,7 +311,7 @@ service cloud.firestore {
     // 📷 정기 차량 사진 — 설정(vehiclePhotoSettings/{회사})은 같은 회사 누구나 읽고 사무 직원만 바꾼다.
     //  사진(vehiclePhotos/{uid_기간_부위})은 기사가 본인 것만 올리고 다시 찍기(덮어쓰기)할 수 있다. 직원은 같은 회사 전체.
     match /vehiclePhotoSettings/{co} {
-      allow read: if isTotalMasterUser() || (isSignedIn() && myCo() == co);
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co); // 🔒 2026-11-23 승인된 계정만
       allow write: if isOfficeStaff() && (isTotalMasterUser() || myCo() == co) && request.resource.data.get('companyName', '') == co;
     }
     match /vehiclePhotos/{id} {
@@ -580,8 +580,8 @@ service cloud.firestore {
     match /shortLinks/{code} {
       allow get: if true;
       allow list: if false;
-      allow create: if isApproved();
-      allow update: if isApproved() && request.resource.data.get('id', '') == resource.data.get('id', '');
+      allow create: if isOfficeStaff(); // 🔒 2026-11-23 짧은 링크는 운송사 사무 직원만 만든다
+      allow update: if isOfficeStaff() && request.resource.data.get('id', '') == resource.data.get('id', '');
       allow delete: if isTotalMasterUser();
     }
 
@@ -666,7 +666,9 @@ service cloud.firestore {
       return after.difference(before).hasOnly([request.auth.uid]) && before.difference(after).hasOnly([request.auth.uid]);
     }
     match /cafeOrders/{orderId} {
-      allow read: if isSignedIn();
+      // 🔒 2026-11-23 오더마켓 글은 운송사 사무 직원 · 배차마당 회원 · 올린 사람 · 잡은 사람만(기사 · 화주 · 가입 대기 계정은 못 본다)
+      allow read: if isTotalMasterUser() || isMarketCompany() || mkPoster(resource.data) || mkTaker(resource.data)
+        || (isSignedIn() && myRoleRaw() == 'cafeUser');
       // 새 글 — 우리 회사 이름으로, 모집중 상태로, 정확한 주소·지명·연락처 없이
       allow create: if isMarketCompany()
         && request.resource.data.get('v', 0) == 2
@@ -1398,8 +1400,7 @@ service cloud.firestore {
     }
     //  ⭐ 2026-11-07 보안 — 한 건 조회는 우리 회사(화주는 연동 운송사) 것만 · 전체 목록은 최고관리자만(예전엔 로그인한 누구나 모든 회사 요금제·계약 상태)
     match /companyPlans/{company} {
-      allow get: if isTotalMasterUser() || (isSignedIn() && (ck() || exists(/databases/$(database)/documents/users/$(request.auth.uid)))
-        && (myCo() == company || myLinkedCo() == company));
+      allow get: if isTotalMasterUser() || (isApproved() && (myCo() == company || myLinkedCo() == company)); // 🔒 2026-11-23 승인된 계정만(가입 대기 계정이 남의 회사 요금제 · 계약 상태를 보던 것)
       allow list: if isTotalMasterUser();
       allow write: if isTotalMasterUser();
     }
@@ -2529,7 +2530,8 @@ service cloud.firestore {
       allow read: if isTotalMasterUser()
         || (isSignedIn() && resource.data.get('userId', '') == request.auth.uid)
         || (isApproved() && !isShipperUser() && linkedCoOf(resource.data) == myCo())
-        || (isApproved() && isShipperUser() && resource.data.get('companyName', '') == myCoAny());
+        // 🔒 2026-11-23 같은 이름의 다른 화주사 신청서가 보이지 않게 — 연동 운송사도 같아야
+        || (isApproved() && isShipperUser() && resource.data.get('companyName', '') == myCoAny() && linkedCoOf(resource.data) == myLinkedCo());
       allow update: if isTotalMasterUser()
         || (isApproved() && !isShipperUser() && userManager() && linkedCoOf(resource.data) == myCo()
           && (linkedCoOf(request.resource.data) == myCo() || linkedCoOf(request.resource.data) == '')
