@@ -88,8 +88,12 @@ export async function checkLoginSession(user, info) {
   const kind = getDeviceKind();
   const stored = getStoredSession();
   if (stored && stored.uid === user.uid && stored.id) {
-    const snap = await getDoc(doc(db, SESSIONS_COLL, stored.id));
-    if (snap.exists()) {
+    // 🛠 2026-11-23 기억해 둔 세션 문서가 지워졌으면(서버가 7일 지난 기록을 지움) 예전 보안 규칙은 "없음" 대신 "권한 없음"을 돌려줘
+    //  여기서 오류로 멈췄다 → 그 브라우저는 앱을 다시 열어도 접속 기록이 영영 안 생겼다(관리센터 "접속 기록 없음").
+    //  읽기 오류는 "문서 없음"으로 보고 새로 만든다.
+    let snap = null;
+    try { snap = await getDoc(doc(db, SESSIONS_COLL, stored.id)); } catch { snap = null; }
+    if (snap && snap.exists()) {
       const d = snap.data();
       if (d.active === false) {
         storeSession(null);
@@ -161,10 +165,15 @@ export function watchMySession(id, onRevoked) {
 }
 
 // 마지막 활동 시각 갱신(5분마다, 화면이 보일 때만)
-export function startHeartbeat(id) {
+// 🛠 2026-11-23 onLost — 세션 문서가 없어져 갱신이 안 되면(서버 정리 · 지워짐) 한 번 알려 준다 → 새 세션을 만들어 이어서 기록
+export function startHeartbeat(id, { onLost } = {}) {
+  let lost = false;
   const beat = () => {
-    if (document.visibilityState !== "visible") return;
-    updateDoc(doc(db, SESSIONS_COLL, id), { lastSeen: serverTimestamp(), device: getDeviceLabel() }).catch(() => {});
+    if (document.visibilityState !== "visible" || lost) return;
+    updateDoc(doc(db, SESSIONS_COLL, id), { lastSeen: serverTimestamp(), device: getDeviceLabel() }).catch((e) => {
+      const code = String(e?.code || "");
+      if (!lost && (code.includes("not-found") || code.includes("permission-denied"))) { lost = true; onLost?.(); }
+    });
   };
   beat();
   const t = setInterval(beat, HEARTBEAT_MS);

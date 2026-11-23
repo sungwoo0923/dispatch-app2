@@ -1585,7 +1585,10 @@ service cloud.firestore {
     match /loginSessions/{id} {
       allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
       // ⭐ 2026-11-07 보안 — 다른 사람 기록은 같은 회사 사무 직원만(예전엔 승인된 누구나 모든 회사 로그인 기록·기기를 봤다)
-      allow get, list: if isSignedIn() && (resource.data.uid == request.auth.uid || isTotalMasterUser()
+      // 🛠 2026-11-23 없는 문서(서버가 지운 내 예전 세션) 한 건 읽기는 "없음"으로 — 예전엔 권한 오류가 나서 앱이 새 세션을 못 만들었다
+      allow get: if isSignedIn() && (resource == null || resource.data.uid == request.auth.uid || isTotalMasterUser()
+        || (isOfficeStaff() && resource.data.get('companyName', '') == myCo()));
+      allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isTotalMasterUser()
         || (isOfficeStaff() && resource.data.get('companyName', '') == myCo()));
       // ⭐ 최고관리자의 로그인은 본인 또는 최고관리자만 끊을 수 있다(관리자도 불가)
       allow update: if isSignedIn() && (
