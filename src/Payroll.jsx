@@ -622,7 +622,7 @@ function PayrollRun({ pm, company, ym, ro, fit, selId, setSelId, gate }) {
   return (
     <div className="space-y-3" data-testid="payroll-run">
       {drawer && (
-        <div className="fixed inset-0 z-[9000] bg-[#0F1A30]/45 flex" onClick={() => setDrawer(false)}>
+        <div className="fixed inset-0 z-[9000] bg-[#0F1A30]/45 flex" data-backdrop-close onClick={() => setDrawer(false)}>
           <div className="w-[88vw] max-w-[340px] h-full bg-[#F4F6FA] p-2 flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-1.5 py-1.5"><b className="text-[16px] text-[#0F1A30]">직원 목록</b><button type="button" onClick={() => setDrawer(false)} className="w-10 h-10 rounded-xl border border-[#DCE3EE] bg-white text-[#1B2B4B] font-black" aria-label="닫기">✕</button></div>
             <div className="flex-1 min-h-0 [&>div]:h-full [&>div]:max-h-none">{list}</div>

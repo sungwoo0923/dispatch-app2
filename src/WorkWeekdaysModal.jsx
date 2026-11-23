@@ -13,6 +13,7 @@ import {
   suggestWeekdays, offDayWorkersByWeekday,
 } from "./attendanceUtils";
 import { saveCompanyWorkWeekdays, saveEmployeeWorkWeekdays } from "./workWeekdays";
+import { kpConfirm } from "./kpDialog";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const PRESETS = [
@@ -97,7 +98,7 @@ function StaffCombo({ employees, value, onChange, coWeekdays }) {
             if (ev.key === "ArrowDown") { ev.preventDefault(); setOpen(true); setHi((h) => Math.min(h + 1, list.length - 1)); }
             else if (ev.key === "ArrowUp") { ev.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
             else if (ev.key === "Enter" && open && list[hi]) { ev.preventDefault(); pick(list[hi]); }
-            else if (ev.key === "Escape") setOpen(false);
+            else if (ev.key === "Escape" && open) { ev.stopPropagation(); setOpen(false); }
           }}
           className="flex-1 min-w-0 bg-transparent !border-0 !shadow-none text-[14.5px] font-bold text-[#0F1A30] placeholder:text-[#9AA9C3] placeholder:font-medium focus:outline-none" />
         {sel && !open && <span className="text-[12px] font-semibold text-[#8A97AD] truncate max-w-[140px]">{[sel.team, sel.position].filter(Boolean).join(" · ")}</span>}
@@ -175,12 +176,26 @@ export default function WorkWeekdaysModal({ company, employees = [], coWeekdays 
     setBusy(false);
   };
 
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   const goEmp = (u) => { setTab("person"); setUid(u); };
+  // 개별 설정 해제 → 회사 기준으로 되돌리기
+  const resetToCompany = async (e) => {
+    if (e.uid === myUid) { setDone("내 근무 요일은 다른 인사 담당자가 바꿔야 해요."); return; }
+    if (!(await kpConfirm(`${e.name || e.email}님의 개별 설정(${weekdaysText(e.workWeekdays)})을 해제하고 회사 기준(${weekdaysText(coWeekdays)})으로 되돌릴까요?`, { title: "개별 설정 해제", okText: "해제" }))) return;
+    setBusy(true);
+    try { await saveEmployeeWorkWeekdays(e.uid, null); setDone(`${e.name || e.email}님을 회사 기준(${weekdaysText(coWeekdays)})으로 되돌렸어요`); }
+    catch (err) { setDone(`해제하지 못했어요: ${err?.message || err}`); }
+    setBusy(false);
+  };
   const offDays = Object.keys(offWorkers).map(Number).sort((a, b) => WEEKDAY_ORDER.indexOf(a) - WEEKDAY_ORDER.indexOf(b));
   const nameOf = (u) => { const e = employees.find((x) => x.uid === u); return e ? (e.name || e.email) : ""; };
 
   return (
-    <div className="fixed inset-0 z-[99999] bg-[#0F1A30]/50 backdrop-blur-[2px] flex items-center justify-center p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()} data-kp="work-weekdays-modal">
+    <div className="fixed inset-0 z-[99999] bg-[#0F1A30]/50 backdrop-blur-[2px] flex items-center justify-center p-4" data-kp="work-weekdays-modal">{/* 바깥을 눌러도 닫히지 않음 */}
       <div className="w-full max-w-[560px] max-h-[92vh] bg-white rounded-[24px] shadow-[0_30px_80px_-20px_rgba(15,26,48,0.55)] overflow-hidden flex flex-col">
         {/* 머리 */}
         <div className="relative px-6 pt-5 pb-4 text-white" style={{ background: "linear-gradient(120deg, #0F1A30 0%, #1B2B4B 55%, #2D4C82 100%)" }}>
@@ -225,12 +240,24 @@ export default function WorkWeekdaysModal({ company, employees = [], coWeekdays 
               )}
               {custom.length > 0 && (
                 <div>
-                  <div className="text-[12.5px] font-black text-[#3A4A66] mb-1.5">개별 설정된 직원</div>
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex items-end justify-between mb-1.5">
+                    <div className="text-[12.5px] font-black text-[#3A4A66]">개별 설정된 직원 {custom.length}명</div>
+                    <div className="text-[11.5px] text-[#8A97AD]">이름을 누르면 수정 · × 를 누르면 회사 기준으로</div>
+                  </div>
+                  <div className="rounded-2xl border border-[#EEE8FA] divide-y divide-[#F1ECFB] overflow-hidden">
                     {custom.map((e) => (
-                      <button key={e.uid} onClick={() => goEmp(e.uid)} className="h-8 px-3 rounded-full border border-[#E2D8F6] bg-white text-[12.5px] font-bold text-[#3A2A6E] hover:bg-[#F8F5FE]">
-                        {e.name || e.email} <span className="text-[#7C5CC4]">{weekdaysText(e.workWeekdays)}</span>
-                      </button>
+                      <div key={e.uid} className="flex items-center gap-3 px-3.5 py-2.5 bg-white hover:bg-[#FBF9FF]">
+                        <button onClick={() => goEmp(e.uid)} className="flex-1 min-w-0 flex items-center gap-2.5 text-left">
+                          <span className="w-7 h-7 rounded-full bg-[#F4F0FC] text-[#5B3FA8] text-[12px] font-black flex items-center justify-center shrink-0">{String(e.name || e.email || "?").slice(0, 1)}</span>
+                          <span className="min-w-0">
+                            <span className="block text-[13.5px] font-bold text-[#0F1A30] truncate">{e.name || e.email}</span>
+                            <span className="block text-[11px] text-[#8A97AD] truncate">{[e.team, e.position].filter(Boolean).join(" · ") || "부서 미지정"}</span>
+                          </span>
+                        </button>
+                        <span className="text-[12px] font-black px-2 py-0.5 rounded-md bg-[#F4F0FC] text-[#5B3FA8] shrink-0">개별 · {weekdaysText(e.workWeekdays)}</span>
+                        <button onClick={() => resetToCompany(e)} disabled={busy} title="개별 설정 해제(회사 기준으로)" aria-label={`${e.name || e.email} 개별 설정 해제`}
+                          className="w-8 h-8 rounded-lg border border-[#E3E8F0] text-[#8A97AD] hover:text-[#C0352F] hover:border-[#F6D2D2] hover:bg-[#FFF5F5] text-[16px] leading-none shrink-0 disabled:opacity-40">×</button>
+                      </div>
                     ))}
                   </div>
                 </div>

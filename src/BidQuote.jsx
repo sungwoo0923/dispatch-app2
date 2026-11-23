@@ -89,7 +89,7 @@ const StepTitle = ({ title, sub }) => (
 
 function Modal({ title, onClose, children, wide }) {
   return (
-    <div className="fixed inset-0 z-[1000] bg-black/40 flex items-center justify-center p-3" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="fixed inset-0 z-[1000] bg-black/40 flex items-center justify-center p-3">{/* 바깥을 눌러도 닫히지 않음 */}
       <div className={`bg-white rounded-[20px] shadow-2xl w-full ${wide ? "max-w-[760px]" : "max-w-[520px]"} max-h-[92vh] flex flex-col`}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#EEF2F8]">
           <div className="text-[16px] font-black text-[#0F1A30]">{title}</div>
