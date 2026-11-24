@@ -4798,8 +4798,13 @@ const groupedByDate = useMemo(() => {
   const [useSeparateDates, setUseSeparateDates] = useState(false);
   const [orderDates, setOrderDates] = useState([]);
   const [orderDropDates, setOrderDropDates] = useState([]);
+  // 🛠 2026-11-24 오더 복사 창에서 건마다 고른 날짜 — 아래 수량 효과가 한 번만 그대로 받아 쓴다
+  //  (예전엔 수량이 바뀌는 순간 건별 날짜를 전부 첫 건 날짜로 덮어써서, 여러 건을 날짜를 다르게 복사해도 모두 같은 날짜로 등록됐다)
+  const copyPlanDatesRef = useRef(null);
   useEffect(() => {
+    const seed = copyPlanDatesRef.current; copyPlanDatesRef.current = null;
     if (multiCount <= 1) { setUseSeparateDates(false); return; }
+    if (seed && seed.length === multiCount) { setOrderDates(seed.map((x) => x.상차일 || "")); setOrderDropDates(seed.map((x) => x.하차일 || x.상차일 || "")); return; }
     setOrderDates(Array.from({ length: multiCount }, () => form.상차일 || ""));
     setOrderDropDates(Array.from({ length: multiCount }, () => form.하차일 || form.상차일 || ""));
   }, [multiCount]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -4906,6 +4911,13 @@ const groupedByDate = useMemo(() => {
       ...(form.담당노선구분 !== undefined ? { 담당노선구분: form.담당노선구분 || "" } : {}), // 🧭 2026-11-14 담당노선구분(켠 운송사)
       전달사항: form.전달사항 || "",
       전달사항고정: form.전달사항고정 === true,
+      // 🛠 2026-11-24 묶음(여러 근무일) — 달력에서 고른 근무일 목록을 함께 저장(PC와 같은 칸). 예전엔 모바일에서 묶음으로 골라도 목록이 저장되지 않았고,
+      //  PC에서 만든 묶음 오더를 모바일에서 날짜만 고치면 예전 근무일 목록이 그대로 남았다. 묶음을 건드린 적 없는 오더(칸이 없는 폼)는 그대로 둔다
+      ...((form.근무일자목록 !== undefined || form.복수근무일 !== undefined) ? (() => {
+        const wd = _parseWorkDates(form.근무일자목록);
+        const on = wd.length > 1 && wd[0] === (form.상차일 || "") && wd[wd.length - 1] === (form.하차일 || "");
+        return on ? { 근무일자목록: wd, 복수근무일: true } : { 근무일자목록: [], 복수근무일: false };
+      })() : {}),
       // 💬 2026-11-08 알림톡은 화면에서 뺐다 — 새 오더는 보내지 않음
       ...(!form._editId ? { 알림톡: false } : {}),
 
@@ -5281,7 +5293,7 @@ const handleOrderDuplicate0 = (order, plan = null) => {
   });
 
   // ⭐ 2026-11-06 복사 건수 — 2건 이상이면 등록창의 "수량 + 날짜 개별 설정"으로 그대로 넘긴다(등록을 누르면 그 수만큼)
-  if (plan && plan.length > 1) { setMultiCount(plan.length); setUseSeparateDates(true); setOrderDates(plan.map((x) => x.상차일)); setOrderDropDates(plan.map((x) => x.하차일)); }
+  if (plan && plan.length > 1) { copyPlanDatesRef.current = plan; setMultiCount(plan.length); setUseSeparateDates(true); setOrderDates(plan.map((x) => x.상차일)); setOrderDropDates(plan.map((x) => x.하차일)); }
   else { setMultiCount(1); setUseSeparateDates(false); }
   setSelectedOrder(null);
   setPrevPage("list");
@@ -5351,7 +5363,7 @@ const handleOrderDuplicateWithDriver0 = (order, plan = null) => {
     _owner: copyOwnerOf(order, plan), // 👤 2026-11-09 배차담당자 — 복사 창에서 고른 사람(처음엔 원본 담당자)
   });
   // ⭐ 2026-11-06 복사 건수 — 2건 이상이면 등록창의 "수량 + 날짜 개별 설정"으로 그대로 넘긴다(등록을 누르면 그 수만큼)
-  if (plan && plan.length > 1) { setMultiCount(plan.length); setUseSeparateDates(true); setOrderDates(plan.map((x) => x.상차일)); setOrderDropDates(plan.map((x) => x.하차일)); }
+  if (plan && plan.length > 1) { copyPlanDatesRef.current = plan; setMultiCount(plan.length); setUseSeparateDates(true); setOrderDates(plan.map((x) => x.상차일)); setOrderDropDates(plan.map((x) => x.하차일)); }
   else { setMultiCount(1); setUseSeparateDates(false); }
   setSelectedOrder(null);
   setPrevPage("list");
@@ -8291,7 +8303,6 @@ function MobileSideMenu({
   const closeN = useCloseInboxCount(); // 📥 배차마감 도착(경리 확인 대기) 숫자
   const deptOk = (m) => (!MENU_FEATURE[m] || planIncludes(planIdM, MENU_FEATURE[m])) && deptOkRaw(m);
   const canRevenue = ["admin", "totalMaster", "superadmin", "test", "viewer"].includes(role);
-  const canAdminMenu = isAdminRole || role === "viewer";
   // ⭐ 2026-11-04 권한 관리 — 최고관리자가 켠 회사의 마스터만(자기 회사 것만)
   const coFeatM = useCompanyFeatures();
   const canPermsM = role !== "totalMaster" && mobileUsers?.find((u) => u.id === currentUser?.uid)?.isMaster === true && coFeatM.masterRolePerms !== false; // ⭐ 2026-11-11 기본 켜짐
@@ -8418,33 +8429,24 @@ function MobileSideMenu({
               일정(휴가)·인수인계는 전자결재 안으로, 자사운임표는 통합운임조회 안으로 합쳤다(중복 메뉴 정리). */}
           {/* 🏢 경리·인사 권한 — 배차·운임·지입차 메뉴 대신 부서 업무 메뉴 */}
           {deptMode === "acct" && (
-            /* 🧭 2026-11-24 경리 화면 주업무 한 묶음 — 자금 · 총무 · 직원 · 기사도 여기로(따로 떨어져 있던 묶음 합침) */
+            /* 🧭 2026-11-24 PC 경리 화면과 같은 메뉴(DispatchApp DEPT_MENUS.acct) — 경리 · 회계(자금 · 비품 포함)가 맨 위
+               PC 경리 화면에 없는 거래처관리는 뺐다 · 배차현황 · 기사관리 · 관리자메뉴(회원 관리)는 아래 묶음 */
             <MenuSection title="경리 · 회계" en="ACCOUNTING" dark={dark} alwaysOpen>
               <MenuItem label="경리 홈" icon="dashboard" onClick={() => onGo?.("dept")} dark={dark} />
               {ok("정산관리") && <MenuItem label="정산관리" icon="receipt" badge={closeN || undefined} onClick={() => onGo?.("dept:settle")} dark={dark} />}
               {ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
               {ok("회계관리") && <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />}
+              {payM.canView && <MenuItem label="급여 계산" icon="money" onClick={() => onGo?.("dept:payroll")} dark={dark} />}{/* PC 회계관리 › 급여 계산(비밀번호 잠금) */}
               {ok("자금관리") && <MenuItem label="자금관리" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />}
-              {payM.canView && <MenuItem label="급여 계산" icon="money" onClick={() => onGo?.("dept:payroll")} dark={dark} />}{/* ⭐ 2026-11-06 직원 급여(⭐ 2026-11-07 경리만 · 비밀번호 잠금) */}
-              {ok("거래처관리") && <MenuItem label="거래처관리" icon="building" onClick={() => onGo?.("clients")} dark={dark} />}{/* ⭐ 2026-11-05 PC 경리(test)도 거래처관리를 본다 */}
               {ok("비품관리") && <MenuItem label="비품·자산" icon="list" onClick={() => onGo?.("dept:assets")} dark={dark} />}
-              {ok("기사관리") && <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} badge={staffSignupOk ? (alertCounts?.signupDriver || null) : null} dark={dark} />}
-              {((staffSignupOk && !acctOnly) || ok("기사관리")) && <MenuItem label="기사 제출 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />}
-              {staffSignupOk && <MenuItem label="직원 가입 승인" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />}
-              {staffSignupOk && <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />}
             </MenuSection>
           )}
           {deptMode === "hr" && (
+            /* 🧭 2026-11-24 PC 인사 화면과 같은 메뉴(DEPT_MENUS.hr) — 연차 · 출근 · 지입관리는 인사관리부 안 · 기사관리는 인사 화면에 없음 */
             <MenuSection title="인사" en="HUMAN RESOURCES" dark={dark} alwaysOpen>
               <MenuItem label="인사 홈" icon="dashboard" onClick={() => onGo?.("dept")} dark={dark} />
               {ok("인사관리부") && <MenuItem label="인사관리부" icon="idcard" onClick={() => onGo?.("dept:hr")} dark={dark} />}
-              <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />
-              <MenuItem label="연차 관리" icon="flag" onClick={() => onGo?.("dept:leave")} dark={dark} />{/* ⭐ 2026-11-07 연차 현황 + 연차 사용 촉진(근로기준법 61조) 한 화면 · 급여 대장은 경리만 */}
               {ok("증명서발급") && <MenuItem label="증명서 발급" icon="stamp" onClick={() => onGo?.("dept:cert")} dark={dark} />}
-              {staffSignupOk && <MenuItem label="직원 가입 승인" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />}
-              {staffSignupOk && <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />}
-              {ok("기사관리") && <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} badge={staffSignupOk ? (alertCounts?.signupDriver || null) : null} dark={dark} />}
-              {((staffSignupOk && !acctOnly) || ok("기사관리")) && <MenuItem label="기사 제출 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />}
             </MenuSection>
           )}
           {deptMode === "exec" && (
@@ -8459,9 +8461,8 @@ function MobileSideMenu({
               {pfOn && <MenuItem label="비공개 운임" icon="key" onClick={() => onGo?.("dept:pfvault")} dark={dark} />}{/* 🔐 2026-11-18 관리자센터에서 지정한 사람만 · 비밀번호로 열기 */}
               <MenuItem label="임원 스케줄" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />
               {(canRevenue || isExec) && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
+              <MenuItem label="영업관리" icon="trend" onClick={() => onGo?.("dept:sales")} dark={dark} />{/* PC 임원 화면 메뉴(DEPT_MENUS.exec)와 같게 */}
               {(isAdminRole || isExec) && ok("인사이트") && <MenuItem label="경영인텔리전스" icon="trend" onClick={onGoIntel} dark={dark} />}
-              {isAdminRole && <MenuItem label="회원 관리" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />}
-              {isAdminRole && <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />}
             </MenuSection>
           )}
           {deptMode === "sales" && (
@@ -8483,11 +8484,10 @@ function MobileSideMenu({
             {ok("배차현황") && <MenuItem label="고정노선현황" icon="route" onClick={() => onGo?.("fixedroute")} badge={fixedUnassignedCount > 0 ? fixedUnassignedCount : null} dark={dark} />}
             {ok("배차현황") && role !== "viewer" && <MenuItem label="월 마감" icon="check" onClick={() => onGo?.("monthclose")} dark={dark} />}
           </MenuSection>
-          {(ok("단가표") || ok("운임조회") || (fareMenu.feature && role !== "driver" && role !== "shipper")) && (
+          {(ok("단가표") || ok("운임조회")) && (
           <MenuSection title="운임" en="FARE" dark={dark} alwaysOpen>
             {role !== "test" && ok("단가표") && <MenuItem label="단가표" icon="money" onClick={onGoRateCard} dark={dark} />}
             {ok("운임조회") && <MenuItem label="운임조회" icon="globe" onClick={onGoNationalFare} dark={dark} />}
-            {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}
           </MenuSection>
           )}
           {((PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리")) || ok("지입차관리")) && (
@@ -8538,16 +8538,32 @@ function MobileSideMenu({
             <MenuItem label="안전교육" icon="shield" newKey="home:edu" onClick={() => onGo?.("dept:safety")} dark={dark} />
           </MenuSection>
           )}
-          {/* ⭐ 2026-11-14 관리 = PC 회사관리(운임 규칙 · 내정보 · 내 이력서 · 출근기록부) + 관리자메뉴(회원 관리 · 권한 관리) */}
-          <MenuSection title="회사관리" en="COMPANY" dark={dark} alwaysOpen badge={canAdminMenu && !deptMode ? (alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) : 0}>
-            {!!deptMode && fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}{/* 운송 화면은 [운임] 묶음에 */}
+          {/* 🧭 2026-11-24 경리 화면 — PC 처럼 배차현황(확인용) · 기사관리 묶음 */}
+          {deptMode === "acct" && (ok("배차현황") || ok("기사관리")) && (
+            <MenuSection title="기사 · 배차 확인" en="DRIVERS · CHECK" dark={dark} alwaysOpen badge={alertCounts?.drvDocs || 0}>
+              {ok("배차현황") && <MenuItem label="배차현황" icon="list" onClick={onGoList} dark={dark} />}
+              {ok("기사관리") && <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} dark={dark} />}
+              {ok("기사관리") && staffSignupOk && <MenuItem label="기사 제출 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />}
+            </MenuSection>
+          )}
+          {/* 🧭 2026-11-24 관리자메뉴 — PC 왼쪽 메뉴처럼 회사관리와 따로. 회원 관리 = 직원 목록 · 가입 승인
+              운송 화면: 관리자 · 최고관리자 · 조회전용(PC 규칙) / 경리 · 인사 · 임원 화면: PC 부서 메뉴에 관리자메뉴가 있어 보인다(경리사무원 · 인사사무원 제외) */}
+          {/* PC 규칙(DispatchApp menuState): 경리 · 인사 화면은 부서 메뉴에 있어 보임 · 그 밖은 관리자 · 최고관리자 · 조회전용만 · 권한 관리에서 숨기면 숨김(회사 마스터 관리자는 예외) */}
+          {(deptMode ? ((["acct", "hr"].includes(deptMode) && staffSignupOk) || (deptMode === "exec" && ["admin", "totalMaster", "viewer"].includes(role))) : ["admin", "totalMaster", "viewer"].includes(role))
+            && (ok("관리자메뉴") || (role === "admin" && mobileUsers?.find((u) => u.id === currentUser?.uid)?.isMaster === true)) && (
+            <MenuSection title="관리자메뉴" en="ADMIN" dark={dark} alwaysOpen badge={(alertCounts?.signupStaff || 0) + (!deptMode || deptMode === "acct" ? (alertCounts?.signupDriver || 0) : 0)}>
+              <MenuItem label="회원 관리" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />
+              {(!deptMode || deptMode === "acct") && <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />}
+              {!deptMode && canPermsM && <MenuItem label="권한 관리" icon="key" onClick={() => onGo?.("perms")} dark={dark} />}
+            </MenuSection>
+          )}
+          {/* ⭐ 2026-11-14 회사관리 = PC 회사관리(운임 규칙 · 내정보 · 내 이력서 · 출근기록부) */}
+          <MenuSection title="회사관리" en="COMPANY" dark={dark} alwaysOpen>
+            {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}{/* PC와 같은 자리(회사관리 › 운임 규칙) */}
             {/* ⭐ 2026-11-18 노선 특수운임 메뉴는 뺐다 → 오더 등록의 [특수운임 적용] › 고정노선운임 탭 */}
             <MenuItem label="내정보" icon="idcard" onClick={onGoMyInfo} dark={dark} />
             <MenuItem label="내 이력서" icon="file" onClick={() => onGo?.("dept:myresume")} dark={dark} />
             <MenuItem label="출근기록부" icon="clock" onClick={onGoAttendance} dark={dark} />
-            {canAdminMenu && !deptMode && <MenuItem label="회원 관리" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />}
-            {canAdminMenu && !deptMode && <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />}
-            {canAdminMenu && !deptMode && canPermsM && <MenuItem label="권한 관리" icon="key" onClick={() => onGo?.("perms")} dark={dark} />}
             <MenuItem label="설정" icon="key" onClick={onGoSettings} dark={dark} />
           </MenuSection>
           {(role === "totalMaster" || realRole === "totalMaster") && (
@@ -8792,7 +8808,6 @@ const MENU_SECTION_OPEN = {}; // ⭐ 2026-11-04 펼친 메뉴 묶음 기억(메�
 // ⭐ 2026-11-14 fold — PC 왼쪽 ≡ 메뉴와 같은 묶음(배차 · 운임 · 기사·거래처 · 매출·정산 · 관리). 접어 둘 수 있고 이 휴대폰에 기억한다.
 //   접혀 있을 때는 묶음 안의 알림 숫자 합(badge)을 제목 옆에 보여 준다.
 // 묶음 없이 혼자 있는 메뉴(거래처관리 · 정산관리 · 지입차관리) — 묶음 카드와 같은 모양, 제목 줄 없음
-const readMenuFold = () => { try { return JSON.parse(localStorage.getItem("kpmMenuFold") || "{}") || {}; } catch { return {}; } };
 // 🔀 2026-11-24 화면 전환 · 업무 영역 카드(메뉴 맨 위 · [회사 전환] 카드와 같은 모양)
 function WorkspaceCard({ view = "", onView, exec = null, biz = null }) {
   const rows = [];
@@ -8829,8 +8844,12 @@ function menuLabelsOf(children, out = []) {
 }
 function MenuSection({ title, en, children, dark, alwaysOpen = false, fold = false, openDefault = false, badge = 0 }) {
   const nav = React.useContext(MenuNavCtx);
-  const [open0, setOpen0] = useState(() => { if (!fold) return !!MENU_SECTION_OPEN[title]; const m = readMenuFold(); return m[title] === undefined ? openDefault : !!m[title]; });
-  const setOpen1 = (v) => setOpen0((p) => { const n = typeof v === "function" ? v(p) : v; MENU_SECTION_OPEN[title] = n; if (fold) { try { const m = readMenuFold(); m[title] = n; localStorage.setItem("kpmMenuFold", JSON.stringify(m)); } catch { /* 무시 */ } } return n; });
+  // 📂 2026-11-24 메뉴 묶음은 처음엔 펼쳐 두고, 제목을 누르면 언제든 접기(사용자 요청) — 이 휴대폰에 기억(kpmMenuFold2)
+  let foldKey = "kpmMenuFold";
+  if (nav && alwaysOpen) { fold = true; openDefault = true; alwaysOpen = false; foldKey = "kpmMenuFold2"; }
+  const readFold = () => { try { return JSON.parse(localStorage.getItem(foldKey) || "{}") || {}; } catch { return {}; } };
+  const [open0, setOpen0] = useState(() => { if (!fold) return !!MENU_SECTION_OPEN[title]; const m = readFold(); return m[title] === undefined ? openDefault : !!m[title]; });
+  const setOpen1 = (v) => setOpen0((p) => { const n = typeof v === "function" ? v(p) : v; MENU_SECTION_OPEN[title] = n; if (fold) { try { const m = readFold(); m[title] = n; localStorage.setItem(foldKey, JSON.stringify(m)); } catch { /* 무시 */ } } return n; });
   const q = nav ? menuNorm(nav.q) : "";
   const items = menuLabelsOf(children);
   if (q && !items.some((x) => menuNorm(x.k).includes(q) || menuNorm(x.l).includes(q))) return null; // 찾는 말이 없는 묶음은 숨김
@@ -12766,6 +12785,7 @@ function MobileOrderDetail({
       ...(order.고정노선Id ? { 고정노선Id: order.고정노선Id, 고정노선명: order.고정노선명 || "" } : {}),
       청구사업자: order.청구사업자 || "", 블라인드: order.블라인드 === true,
       ...(order.콜구분 !== undefined ? { 콜구분: order.콜구분 || "", 콜플랫폼: order.콜플랫폼 || "" } : {}),
+      ...(_parseWorkDates(order.근무일자목록).length > 0 || order.복수근무일 === true ? { 근무일자목록: _parseWorkDates(order.근무일자목록), 복수근무일: order.복수근무일 === true || (order.복수근무일 !== false && _parseWorkDates(order.근무일자목록).length > 1) } : {}), // 🛠 2026-11-24 묶음 근무일도 불러온다
       _editId: order.id,
       _returnToDetail: true,
     });
@@ -13230,6 +13250,7 @@ const handleAssignClick = async () => {
       // 🛠 2026-11-20 모바일 점검 — 수정 저장 때 이 칸들을 비우거나 바꾸지 않게 원래 값을 불러온다(예전엔 청구사업자가 지워지고 블라인드 오더가 풀렸다)
       청구사업자: order.청구사업자 || "", 블라인드: order.블라인드 === true,
       ...(order.콜구분 !== undefined ? { 콜구분: order.콜구분 || "", 콜플랫폼: order.콜플랫폼 || "" } : {}),
+      ...(_parseWorkDates(order.근무일자목록).length > 0 || order.복수근무일 === true ? { 근무일자목록: _parseWorkDates(order.근무일자목록), 복수근무일: order.복수근무일 === true || (order.복수근무일 !== false && _parseWorkDates(order.근무일자목록).length > 1) } : {}), // 🛠 2026-11-24 묶음 근무일도 불러온다
       _editId: order.id, _returnToDetail: true,
     });
   };
@@ -14910,8 +14931,9 @@ const orderCopyList = useMemo(() => {
     set화물타입(detectCargoType(form.화물내용 || ""));
   }, [form.화물내용]);
 
+  // 🛠 2026-11-24 상차일을 하차일보다 뒤로 옮기면 하차일도 같은 날로 — 예전엔 상차일만 내일로 바꾸면 "하차일이 상차일보다 앞설 수 없습니다"로 저장이 막혔다
   const update = (key, value) =>
-    setForm((p) => ({ ...p, [key]: value }));
+    setForm((p) => ({ ...p, [key]: value, ...(key === "상차일" && value && p.하차일 && String(p.하차일) < String(value) ? { 하차일: value } : {}) }));
 
   // ⭐ 복수근무일(묶음) — PC(DispatchApp)의 toggleWorkDate와 동일 로직. 근무일을
   // 하나씩 클릭할 때마다 켜고/끄고를 토글하고, 상차일/하차일은 그 목록의

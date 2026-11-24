@@ -977,6 +977,10 @@ function isReversedDateOrder(pickup, drop) {
   return !!pickup && !!drop && String(drop) < String(pickup);
 }
 const REVERSED_DATE_ORDER_MSG = "하차일은 상차일보다 빠를 수 없습니다. 날짜를 다시 확인해주세요.";
+// 🛠 2026-11-24 수정 화면에서 상차일을 하차일보다 뒤로 옮기면 하차일도 같은 날로 따라간다([복사 등록] 창과 같은 규칙)
+//  — 예전엔 상차일만 내일로 바꿔 저장하면 "하차일은 상차일보다 빠를 수 없습니다"로 저장이 막혀, 날짜가 안 바뀌는 것처럼 보였다
+const dropFollowsPickup = (pickup, drop) => !!pickup && !!drop && String(drop) < String(pickup);
+const withPickupDate = (p, v) => ({ ...p, 상차일: v, ...(dropFollowsPickup(v, p?.하차일) ? { 하차일: v } : {}) });
 
 // ⭐ addDispatch/patchDispatch/submitCopyOrderPC 등은 컴포넌트 바깥(또는 DispatchApp의
 // showAlert가 아직 선언되기 전)에 정의돼 있어 앱의 CustomAlert 상태(alertMsg)에 직접
@@ -2783,11 +2787,32 @@ const autoTransmitToShipper = async (savedRecord, shipperApp) => {
 // 컴포넌트의 "복사 등록" 버튼에서 공통으로 호출되므로 approvedShippers를 인자로 받는다.)
 // ⭐ 2026-11-06 배차 유형 — 혼적·왕복을 고르지 않았으면 독차가 기본(화면 표시·저장 모두 같은 기준)
 const dokchaOn = (p) => p?.독차 === true || (!p?.혼적 && String(p?.운행유형 || "").trim() !== "왕복");
-const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) => {
+// 🛠 2026-11-24 묶음(여러 근무일) 오더를 복사할 때 — 원본의 근무일 목록이 그대로 딸려 가서 새 오더가 "오늘 외 2일"처럼 예전 날짜를 달고 등록됐다.
+//  근무일 목록을 새 상차일에 맞춰 같은 간격으로 옮기고(하차일 = 마지막 근무일), 묶음이 아니면 목록을 비운다
+const copyWorkDatesFor = (src, pickup, drop) => {
+  const wd = _parseWorkDates(src?.근무일자목록);
+  if (!wd.length) return {};
+  const multi = src?.복수근무일 === true ? true : src?.복수근무일 === false ? false : wd.length > 1;
+  if (!multi || wd.length < 2) return { 근무일자목록: [], 복수근무일: false };
+  if (wd[0] === pickup && wd[wd.length - 1] === drop) return { 근무일자목록: wd, 복수근무일: true };
+  const delta = Math.round((new Date(`${pickup}T00:00:00`) - new Date(`${wd[0]}T00:00:00`)) / 86400000);
+  if (!Number.isFinite(delta)) return { 근무일자목록: [], 복수근무일: false };
+  const moved = wd.map((s) => _shiftDateStr(s, delta));
+  return { 근무일자목록: moved, 복수근무일: true, 하차일: moved[moved.length - 1] };
+};
+// 🛠 2026-11-24 [복사 등록] 창이 처음에 보여 줄 날짜 — 패널에서 상차일 · 하차일을 원본과 다르게 바꿨을 때만 그 날짜로 시작한다
+//  (안 바꿨으면 예전처럼 오늘 · orig가 없으면 = 원본을 못 찾았으면 오늘 · 새 오더 등록은 orig를 {}로 넘겨 패널 날짜 그대로)
+const copyInitDatesOf = (target, orig) => {
+  if (!target?.상차일 || !orig) return null;
+  if (String(target.상차일 || "") === String(orig.상차일 || "") && String(target.하차일 || "") === String(orig.하차일 || "")) return null;
+  return { 상차일: target.상차일, 하차일: target.하차일 || target.상차일 };
+};
+const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride, opts = {}) => {
   // ⭐ 지난 날짜 오더를 복사 등록하면 오늘 날짜로(하차일도 같은 간격만큼 함께 이동) — 오늘·앞날짜는 그대로
+  // 🛠 2026-11-24 "몇 건 복사?" 창에서 직접 고른 날짜(opts.keepDates)는 지난 날짜여도 그대로 — 예전엔 어제 날짜를 골라도 말없이 오늘로 등록됐다
   let _pickup = copyTarget.상차일 || todayStr();
-  let _drop = copyTarget.하차일 || todayStr();
-  if (_pickup < todayStr()) {
+  let _drop = copyTarget.하차일 || _pickup;
+  if (!opts.keepDates && _pickup < todayStr()) {
     const gap = Math.max(0, Math.round((new Date(`${_drop}T00:00:00`) - new Date(`${_pickup}T00:00:00`)) / 86400000)) || 0;
     _pickup = todayStr();
     const d = new Date(`${_pickup}T00:00:00`); d.setDate(d.getDate() + gap);
@@ -2810,6 +2835,7 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
     // 화주사(연동 사본)와 운송사 원본이 모두 의도한 날짜와 다르게 등록되는 문제가 있었다.
     상차일: _pickup,
     하차일: _drop,
+    ...copyWorkDatesFor(copyTarget, _pickup, _drop),
     등록일: todayStr(),
     // 복사 등록도 "새로 등록"하는 행위이므로, 원본이 모바일에서 만들어졌더라도
     // 이 복사본은 지금 실제로 등록하는 기기(PC) 기준으로 다시 표시한다.
@@ -2881,13 +2907,13 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride) =>
 
 // ⭐ 2026-11-06 [복사 등록] — "몇 건 복사?" 창(건마다 상차일·하차일, 처음엔 모두 오늘) → 그 수만큼 submitCopyOrderPC
 //   (지난 날짜 → 오늘, 화주사 전송 포인터 제거 등 submitCopyOrderPC 규칙은 그대로) · 취소/실패면 false, 성공이면 건수
-const submitCopyOrdersPC = async (copyTarget, approvedShippers, cargoOverride) => {
+const submitCopyOrdersPC = async (copyTarget, approvedShippers, cargoOverride, orig) => {
   // 👤 2026-11-12 패널에서 배차담당자를 골랐으면 "몇 건 복사?" 창도 그 사람으로 시작
-  const plan = await askCopyDates({ order: copyTarget?._owner && !copyTarget._owner.orig ? applyOwner({ ...copyTarget }, copyTarget._owner) : copyTarget, title: "복사 등록", sub: `${copyTarget?.거래처명 || ""} ${copyTarget?.상차지명 ? `· ${copyTarget.상차지명} → ${copyTarget.하차지명 || ""}` : ""}`.trim() || undefined });
+  const plan = await askCopyDates({ order: copyTarget?._owner && !copyTarget._owner.orig ? applyOwner({ ...copyTarget }, copyTarget._owner) : copyTarget, title: "복사 등록", dates: copyInitDatesOf(copyTarget, orig), sub: `${copyTarget?.거래처명 || ""} ${copyTarget?.상차지명 ? `· ${copyTarget.상차지명} → ${copyTarget.하차지명 || ""}` : ""}`.trim() || undefined });
   if (!plan || !plan.length) return false;
   let n = 0;
   for (const d of plan) {
-    const ok = await submitCopyOrderPC({ ...copyTarget, 상차일: d.상차일, 하차일: d.하차일, ...(d.담당자 ? { _owner: d.담당자 } : {}) }, approvedShippers, cargoOverride);
+    const ok = await submitCopyOrderPC({ ...copyTarget, 상차일: d.상차일, 하차일: d.하차일, ...(d.담당자 ? { _owner: d.담당자 } : {}) }, approvedShippers, cargoOverride, { keepDates: true });
     if (ok === false) return n ? n : false;
     n += 1;
   }
@@ -28008,6 +28034,14 @@ const driverPanelCallbackRef = React.useRef(null);
     const ids = Object.keys(edited);
     if (!ids.length) return showAlert("변경된 내용이 없습니다.");
 
+    // 🛠 2026-11-24 날짜 역순은 저장 전에 먼저 확인(배차현황과 같게) — 예전엔 "저장 완료"가 뜬 뒤에 저장이 거절돼 날짜가 안 바뀌었다
+    const reversedId = ids.find((id) => {
+      const orig = (dispatchData || []).find((r) => r._id === id) || (rows || []).find((r) => r._id === id);
+      const p = edited[id] || {};
+      return isReversedDateOrder("상차일" in p ? p.상차일 : orig?.상차일, "하차일" in p ? p.하차일 : orig?.하차일);
+    });
+    if (reversedId) return showAlert(REVERSED_DATE_ORDER_MSG);
+
     // ✅ UI 먼저
     showAlert("저장 완료");
     setEdited({});
@@ -28717,10 +28751,14 @@ const openDailyCloseIssueDetail = (rowId) => {
       });
       return;
     }
-    setEdited((prev) => ({
-      ...prev,
-      [id]: { ...(prev[id] || {}), [key]: value },
-    }));
+    setEdited((prev) => {
+      const cur = { ...(prev[id] || {}), [key]: value };
+      if (key === "상차일") { // 🛠 2026-11-24 상차일을 하차일보다 뒤로 옮기면 하차일도 같은 날로
+        const base = (dispatchData || []).find((r) => r._id === id) || (rows || []).find((r) => r._id === id) || {};
+        if (dropFollowsPickup(value, "하차일" in cur ? cur.하차일 : base.하차일)) cur.하차일 = value;
+      }
+      return { ...prev, [id]: cur };
+    });
   };
 
   // 오더목록에서 중요한 값(상/하차일·화물내용·차량종류·톤수)은 운임확인서(FareCertModal)의
@@ -29625,7 +29663,12 @@ flashRow(savedId);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 400);
 
-    patchDispatch(savedId, payload).catch(console.error);
+    // 🛠 2026-11-24 저장이 거절되면(최종마감 · 날짜 역순 등 — patchDispatch가 false) 화면에 먼저 반영해 둔 값을 원래대로 되돌린다
+    //  (예전엔 "수정 완료"로 보이다가 새로고침하면 예전 값으로 돌아갔다)
+    const _before = rows.find((r) => r._id === savedId);
+    Promise.resolve(patchDispatch(savedId, payload)).then((ok) => {
+      if (ok === false && _before) { setRows((prev) => prev.map((r) => (r._id === savedId ? _before : r))); sflowToast("저장되지 않았어요. 안내 창을 확인해 주세요.", "error"); }
+    }).catch(console.error);
     if (payload.상차지명) savePlaceSmart(payload.상차지명, payload.상차지주소||"", payload.상차지담당자||"", payload.상차지담당자번호||"", null, undefined,
       (payload.상차지오더메모 !== undefined || payload.상차지오더메모팝업표시 !== undefined || payload.상차지기사전달주의사항 !== undefined) ? { 오더메모: payload.상차지오더메모, 팝업표시: payload.상차지오더메모팝업표시, 기사전달주의사항: payload.상차지기사전달주의사항 } : undefined
     ).catch(console.error);
@@ -29653,7 +29696,7 @@ flashRow(savedId);
       return;
     }
     if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
-    const ok = await submitCopyOrdersPC(copyTarget, approvedShippers); // ⭐ 2026-11-06 몇 건·날짜 고르기
+    const ok = await submitCopyOrdersPC(copyTarget, approvedShippers, undefined, (rows || []).find((r) => r._id === copyTarget._id) || (dispatchData || []).find((r) => r._id === copyTarget._id)); // ⭐ 2026-11-06 몇 건·날짜 고르기 · 🛠 2026-11-24 패널에서 바꾼 날짜로 시작
     if (ok === false) return;
     sflowToast(ok > 1 ? `${ok}건 복사 등록 완료` : "복사 등록 완료", "success");
     setCopyPanelOpen(false);
@@ -29864,7 +29907,7 @@ checkWarningStatus(c.거래처명, "거래처");
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={cpInputStyle}
           value={copyTarget?.상차일 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 상차일:e.target.value}))}
+          onChange={(e)=>setCopyTarget(p=>withPickupDate(p, e.target.value))}
           multiSelect
           multiActive={copyTarget?.복수근무일 === true ? true : copyTarget?.복수근무일 === false ? false : _parseWorkDates(copyTarget?.근무일자목록).length > 1}
           onToggleMulti={() => setCopyTarget(p => {
@@ -30966,7 +31009,7 @@ value={copyTarget?.화물수량 || ""}
       disabled={(editTarget?.source === "shipper" || editTarget?.source === "shipper_mobile")}
       value={editTarget.상차일 || ""}
       onChange={(e) =>
-        setEditTarget((p) => ({ ...p, 상차일: e.target.value }))
+        setEditTarget((p) => withPickupDate(p, e.target.value))
       }
     />
   </div>
@@ -36212,6 +36255,7 @@ if (mode === "driver") {
         return { ...prev, [getId(row)]: cur0 };
       }
       const cur = { ...(prev[getId(row)] || {}), [key]: value };
+      if (key === "상차일" && dropFollowsPickup(value, "하차일" in cur ? cur.하차일 : row?.하차일)) cur.하차일 = value; // 🛠 2026-11-24 상차일을 하차일보다 뒤로 옮기면 하차일도 같은 날로
       if (key === "청구운임" || key === "기사운임") {
         cur.수수료 = orderProfit({ ...row, ...cur }); // ⭐ 2026-11-17 청구 − 기사 − 지게차·특수운임(회사 지급분)
       }
@@ -38267,7 +38311,7 @@ return (
       className="border p-2 rounded w-full"
       value={editTarget.상차일 || ""}
       onChange={(e) =>
-        setEditTarget((p) => ({ ...p, 상차일: e.target.value }))
+        setEditTarget((p) => withPickupDate(p, e.target.value))
       }
     />
   </div>
@@ -39434,7 +39478,7 @@ return (
     }
     if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
 
-    const ok = await submitCopyOrdersPC(copyTarget, approvedShippers); // ⭐ 2026-11-06 몇 건·날짜 고르기
+    const ok = await submitCopyOrdersPC(copyTarget, approvedShippers, undefined, (dispatchData || []).find((r) => getId(r) === getId(copyTarget))); // ⭐ 2026-11-06 몇 건·날짜 고르기 · 🛠 2026-11-24 패널에서 바꾼 날짜로 시작
     if (ok === false) return;
     sflowToast(ok > 1 ? `${ok}건 복사 등록 완료` : "복사 등록 완료", "success");
 
@@ -39658,7 +39702,7 @@ setCopyTarget(prev=>({
         disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
           className={cpInputStyle}
           value={copyTarget?.상차일 ?? ""}
-          onChange={(e)=>setCopyTarget(p=>({...p, 상차일:e.target.value}))}
+          onChange={(e)=>setCopyTarget(p=>withPickupDate(p, e.target.value))}
           multiSelect
           multiActive={copyTarget?.복수근무일 === true ? true : copyTarget?.복수근무일 === false ? false : _parseWorkDates(copyTarget?.근무일자목록).length > 1}
           onToggleMulti={() => setCopyTarget(p => {
@@ -46371,11 +46415,16 @@ function UnassignedStatus({ dispatchData, setDispatchData = () => {}, drivers = 
   const openUnEdit = (r) => {
     const latest = (dispatchData || []).find(d => d._id === r._id) || r;
     const rawCargo = String(latest?.화물내용 || "");
-    const cargoMatch = rawCargo.match(/(\d+)(.*)/);
+    // 🛠 2026-11-24 배차현황 패널과 같은 방식으로 나눈다 — 끝이 아는 단위(파레트 · 박스 …)면 [앞부분, 단위], 아니면 글자 전체를 수량 칸에
+    //  (예전엔 "숫자+나머지"로만 나눠서 "의류 박스"처럼 숫자로 시작하지 않으면 칸이 비고, 저장하면 화물내용이 지워졌다)
+    const cargoBase = rawCargo.split("+")[0];
+    const cargoSuffix = [...new Set(["파레트", "파렛트", "박스", "통", ...cargoTypeOptionsCustom])].sort((a, b) => b.length - a.length).find((x) => x && cargoBase.endsWith(x)) || "";
+    const cargoMatch = [null, cargoSuffix ? cargoBase.slice(0, -cargoSuffix.length).trim() : cargoBase, cargoSuffix];
     const rawTon = String(latest?.차량톤수 || "");
     const tonMatch = rawTon.match(/([\d.]+)(.*)/);
     setCopyTarget({
       ...latest,
+      화물내용: rawCargo,
       화물수량: cargoMatch ? cargoMatch[1] : "",
       화물타입: cargoMatch ? cargoMatch[2].trim() : "",
       톤수값: tonMatch ? tonMatch[1] : "",
@@ -46843,8 +46892,9 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       if (isReversedDateOrder(copyTarget?.상차일, copyTarget?.하차일)) { showToast(REVERSED_DATE_ORDER_MSG, "err"); return; }
                       if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
                       if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
-                      const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
+                      const finalCargo = copyTarget.화물내용 || ""; // 🛠 2026-11-24 입력할 때마다 맞춰 둔 화물내용을 그대로(예전엔 수량+단위로 다시 만들어, 숫자로 시작하지 않는 화물내용이 저장할 때 지워졌다)
                       const payload = { ...copyTarget, 화물내용: finalCargo, 독차: dokchaOn(copyTarget), updatedAt: Date.now() }; // ⭐ 2026-11-06 독차 기본
+                      ["화물수량", "화물타입", "톤수값", "톤수타입"].forEach((k) => { delete payload[k]; }); // 화면용 임시 칸은 저장하지 않는다(다른 패널과 같게)
                       const ok = await patchDispatch(copyTarget._id, payload);
                       if (ok === false) return;
                       showToast("오더 수정 완료");
@@ -46861,9 +46911,9 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       if (isViewer) { showToast("조회전용 권한으로는 등록할 수 없습니다.", "err"); return; }
                       if (!copyTarget) { showToast("복사할 데이터가 없습니다.", "err"); return; }
                       if (!(await cpDrvEdit.finish(copyTarget))) return; // ⭐ 2026-11-05 기사 이름·전화 [수정] 중이면 먼저 변경/별도추가 선택
-                      const finalCargo = copyTarget.화물타입 ? `${copyTarget.화물수량 || ""}${copyTarget.화물타입}` : (copyTarget.화물수량 || "");
+                      const finalCargo = copyTarget.화물내용 || ""; // 🛠 2026-11-24 입력할 때마다 맞춰 둔 화물내용을 그대로(예전엔 수량+단위로 다시 만들어, 숫자로 시작하지 않는 화물내용이 저장할 때 지워졌다)
                       const { __newOrder: _isNew, ...copySrc } = copyTarget; // 🧩 2026-11-16 월 마감 [+ 오더 추가] — 같은 패널로 새 오더 등록
-                      const ok = await submitCopyOrdersPC(copySrc, approvedShippers, finalCargo); // ⭐ 2026-11-06 몇 건·날짜 고르기
+                      const ok = await submitCopyOrdersPC(copySrc, approvedShippers, finalCargo, _isNew ? {} : (dispatchData || []).find((d) => d._id === copyTarget._id)); // ⭐ 2026-11-06 몇 건·날짜 고르기 · 🛠 2026-11-24 패널에서 바꾼 날짜로 시작(새 오더는 패널 날짜 그대로)
                       if (ok === false) return;
                       showToast(_isNew ? (ok > 1 ? `${ok}건 등록 완료` : "오더 등록 완료") : ok > 1 ? `${ok}건 복사 등록 완료` : "복사 등록 완료");
                       setCopyPanelOpen(false);
@@ -46960,7 +47010,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                           </svg>
                         </button>
                       </>}>
-                        <CustomDatePicker className={cpInputStyle} value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => ({...p, 상차일: e.target.value}))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
+                        <CustomDatePicker className={cpInputStyle} value={copyTarget?.상차일 ?? ""} onChange={(e) => setCopyTarget(p => withPickupDate(p, e.target.value))} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}
                           multiSelect
                           multiActive={copyTarget?.복수근무일 === true ? true : copyTarget?.복수근무일 === false ? false : _parseWorkDates(copyTarget?.근무일자목록).length > 1}
                           onToggleMulti={() => setCopyTarget(p => {
@@ -47300,7 +47350,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                         <input autoComplete="off" className="flex-1 min-w-0 w-0 px-3 py-2 text-[14.5px] font-bold outline-none" value={copyTarget?.화물수량 || ""} onChange={(e) => { const v = e.target.value; setCopyTarget(p => ({...p, 화물수량: v, 화물내용: p.화물타입 ? `${v}${p.화물타입}` : v})); }} placeholder="1" disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")} />
                         <CustomSelect className="shrink-0 w-[96px] pl-3 pr-6 py-2 bg-[#1B2B4B] text-white text-[14px] font-bold outline-none cursor-pointer" value={copyTarget?.화물타입 || ""} onChange={(e) => { const type = e.target.value; setCopyTarget(p => ({...p, 화물타입: type, 화물내용: type ? `${p.화물수량 || ""}${type}` : (p.화물수량 || "")})); }} disabled={(copyTarget?.source === "shipper" || copyTarget?.source === "shipper_mobile")}>
                           <option value="">없음</option>
-                          {cargoTypeOptionsCustom.map(v => <option key={v} value={v}>{v}</option>)}
+                          {[...new Set([...cargoTypeOptionsCustom, ...(copyTarget?.화물타입 ? [copyTarget.화물타입] : [])])].map(v => <option key={v} value={v}>{v}</option>)}
                         </CustomSelect>
                       </div>
                     </CpField>
