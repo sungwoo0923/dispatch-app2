@@ -51,6 +51,26 @@ export const IMAGES = {
   d_leave: "A driver doing a final walk-around at the dock, removing the wheel chock, closing the rear doors before departure.",
   d_report: "A dock supervisor and a driver talking, the supervisor writing on a tablet, near-miss report mood, calm.",
   d_end: "A clean and orderly loading dock at dusk with trucks lined up and workers in vests giving a thumbs up.",
+  // ── 직원(사무실) 산업안전보건
+  s_cover: "A bright modern Korean logistics company office with desks, monitors and employees working safely, a window showing trucks in a yard outside, hero shot.",
+  s_law: "A clean meeting room table with a safety handbook, a hard hat and a small office building model, calm professional mood.",
+  s_hazard: "An office floor with subtle hazard highlights: a cable across the walkway, an open lower drawer, a wet floor near a water dispenser, boxes blocking a corridor.",
+  s_trip: "A tidy office corridor with cables organized under covers, clear walkway, and boxes stored on shelves instead of the floor.",
+  s_drawer: "Close-up of an office cabinet with drawers closed and heavy files on the bottom shelf, a step stool next to a tall shelf.",
+  s_power: "A tidy office power strip with individual switches and only two plugs, cables neatly bundled under a desk, correct example.",
+  s_power_bad: "An overloaded power strip daisy-chained with many plugs and a space heater plugged in, cables tangled, slightly scorched outlet, wrong example.",
+  s_heater: "An office at the end of the day with an employee switching off a space heater and a power strip before leaving, evening light through the window.",
+  s_exit: "A clear emergency exit door with a green running-man style sign shape (no text) and an unobstructed corridor, fire extinguisher on the wall.",
+  s_fire: "Employees evacuating calmly down an office staircase, covering mouth and nose with a wet towel, crouching low, light smoke near the ceiling.",
+  s_assembly: "Office employees gathered at an outdoor assembly point in front of the building, a manager counting people with a tablet.",
+  s_ext: "A red fire extinguisher shown in four simple steps: pulling the safety pin, aiming the nozzle, squeezing the handle, sweeping side to side, clean diagram style.",
+  s_posture: "An employee sitting with correct posture at an ergonomic desk: monitor at eye level, feet flat, back supported, wrists straight.",
+  s_stretch: "An employee standing next to the desk doing a neck and shoulder stretch during a short break, plant and window in the background.",
+  s_lift: "An office worker lifting a heavy box of paper correctly by bending the knees with a straight back, a hand truck nearby.",
+  s_drive: "A company car parked in front of the office, an employee fastening the seat belt before a business trip, phone placed in a holder.",
+  s_firstaid: "An office first-aid kit and an AED defibrillator on the wall, an employee calling for help on the phone, calm.",
+  s_report: "An employee talking with a manager in the office, reporting a small near-miss, the manager noting it on a laptop, supportive mood.",
+  s_end: "A safe and tidy logistics office at sunset with employees leaving, lights being turned off, optimistic mood.",
 };
 
 export const COURSES = {
@@ -313,6 +333,110 @@ export const COURSES = {
       { type: "end", img: "d_end", lines: [
         { say: "끝까지 시청해 주셔서 감사합니다." },
         { say: "오늘도 안전한 작업 되세요. 이어서 이수 서명을 해 주세요." },
+      ] },
+    ],
+  },
+  staff_safety: {
+    title: "사무실 산업안전보건",
+    code: "EDU-S01",
+    slides: [
+      { type: "cover", img: "s_cover", sub: "사무실에서 다치지 않고 일하는 법", lines: [
+        { say: "사무실 산업안전보건 교육을 시작하겠습니다." },
+        { say: "사무실도 넘어짐, 화재, 근골격계 질환 같은 사고가 생기는 일터입니다." },
+        { say: "오늘은 사무실에서 꼭 지켜야 할 안전 수칙을 알아보겠습니다." },
+      ] },
+      { type: "law", head: "왜 교육을 받을까요", img: "s_law", quote: "사업주는 소속 근로자에게 고용노동부령으로 정하는 바에 따라 정기적으로 안전보건교육을 하여야 한다.", src: "산업안전보건법 제29조", lines: [
+        { say: "산업안전보건법은 회사가 직원에게 정기적으로 안전보건교육을 하도록 정하고 있습니다." },
+        { say: "교육은 나를 지키는 방법이자, 동료를 지키는 약속입니다." },
+      ] },
+      { type: "chapter", no: 1, title: "넘어짐 · 부딪힘", sub: "사무실 사고 1순위", img: "s_hazard", lines: [
+        { say: "사무실에서 가장 흔한 사고는 넘어지고 부딪히는 사고입니다." },
+      ] },
+      { type: "dodont", head: "통로는 비워 두기", good: { img: "s_trip", label: "전선 정리 · 통로 비우기" }, bad: { img: "s_hazard", label: "통로 전선 · 열린 서랍 · 젖은 바닥" }, lines: [
+        { say: "통로에 전선이나 상자를 두지 않습니다." },
+        { say: "젖은 바닥은 바로 닦고, 열린 서랍은 꼭 닫아 둡니다." },
+      ] },
+      { type: "points", head: "높은 곳 · 무거운 물건", img: "s_drawer", lines: [
+        { say: "무거운 서류는 아래 칸에, 가벼운 물건은 위 칸에 둡니다.", pt: "무거운 것은 아래 칸" },
+        { say: "높은 곳은 의자 말고 받침대나 사다리를 씁니다.", pt: "의자 말고 받침대 · 사다리" },
+        { say: "서랍은 한 번에 하나만 열어, 캐비닛이 넘어지지 않게 합니다.", pt: "서랍은 한 번에 하나만" },
+      ] },
+      { type: "chapter", no: 2, title: "전기 · 화재 예방", sub: "불은 작은 습관에서", img: "s_power", lines: [
+        { say: "다음은 전기와 화재 예방입니다." },
+      ] },
+      { type: "dodont", head: "멀티탭 바르게 쓰기", good: { img: "s_power", label: "개별 스위치 · 여유 있게" }, bad: { img: "s_power_bad", label: "문어발 · 난방기 함께 꽂기" }, lines: [
+        { say: "멀티탭에 여러 기기를 겹쳐 꽂지 않습니다." },
+        { say: "난방기처럼 전기를 많이 쓰는 기기는 벽 콘센트에 따로 꽂습니다." },
+      ] },
+      { type: "points", head: "퇴근 전 전원 끄기", img: "s_heater", lines: [
+        { say: "퇴근할 때는 난방기, 전열기, 커피포트 전원을 끕니다.", pt: "난방기 · 전열기 전원 끄기" },
+        { say: "뜨거워지거나 타는 냄새가 나는 전선은 바로 알립니다.", pt: "뜨거운 전선 · 타는 냄새 → 알리기" },
+        { say: "비상구와 소화기 앞에는 물건을 두지 않습니다.", pt: "비상구 · 소화기 앞 비우기" },
+      ] },
+      { type: "chapter", no: 3, title: "화재 대피", sub: "불이 나면 이렇게", img: "s_fire", lines: [
+        { say: "불이 났을 때 어떻게 대피하는지 알아보겠습니다." },
+      ] },
+      { type: "steps", head: "불이 나면", steps: [["signal", "알리기", "불이야 · 비상벨"], ["walk", "계단으로", "엘리베이터 금지"], ["slow", "낮은 자세", "젖은 수건으로 입 · 코"], ["flag", "집결지", "인원 확인 · 119"]], lines: [
+        { say: "먼저 크게 불이야 외치고, 비상벨을 누릅니다." },
+        { say: "엘리베이터는 타지 말고, 계단으로 대피합니다." },
+        { say: "연기가 있으면 젖은 수건으로 입과 코를 막고, 낮은 자세로 이동합니다." },
+        { say: "밖으로 나오면 집결 장소에서 인원을 확인하고, 119에 신고합니다." },
+      ] },
+      { type: "points", head: "소화기 쓰는 법", img: "s_ext", lines: [
+        { say: "안전핀을 뽑습니다.", pt: "안전핀 뽑기" },
+        { say: "노즐을 불 쪽으로 향하게 잡습니다.", pt: "노즐을 불 쪽으로" },
+        { say: "손잡이를 힘껏 움켜쥡니다.", pt: "손잡이 움켜쥐기" },
+        { say: "빗자루로 쓸듯이 불의 아래쪽을 좌우로 뿌립니다.", pt: "불 아래쪽을 쓸듯이" },
+      ] },
+      { type: "points", head: "대피 장소 확인", img: "s_assembly", lines: [
+        { say: "평소에 비상구 위치와 집결 장소를 미리 알아 둡니다.", pt: "비상구 · 집결 장소 미리 알기" },
+        { say: "작은 불이 아니면 끄려고 하지 말고 바로 대피합니다.", pt: "큰 불은 끄지 말고 대피" },
+      ] },
+      { type: "chapter", no: 4, title: "바른 자세 · 근골격계", sub: "오래 앉아 일할 때", img: "s_posture", lines: [
+        { say: "오래 앉아 일하는 사무직은 목과 허리, 손목을 조심해야 합니다." },
+      ] },
+      { type: "points", head: "바르게 앉기", img: "s_posture", lines: [
+        { say: "모니터는 눈높이에, 화면과는 팔 길이 정도 거리를 둡니다.", pt: "모니터는 눈높이 · 팔 길이 거리" },
+        { say: "등은 의자에 붙이고, 발은 바닥에 편하게 댑니다.", pt: "등은 의자에 · 발은 바닥에" },
+        { say: "키보드와 마우스를 쓸 때 손목이 꺾이지 않게 합니다.", pt: "손목은 곧게" },
+      ] },
+      { type: "points", head: "틈틈이 쉬기", img: "s_stretch", lines: [
+        { say: "한 시간에 한 번은 일어나서 목과 어깨를 풀어 줍니다.", pt: "1시간마다 일어나 스트레칭" },
+        { say: "먼 곳을 보며 눈도 쉬게 해 줍니다.", pt: "먼 곳 보며 눈 쉬기" },
+        { say: "통증이 계속되면 참지 말고 회사에 알립니다.", pt: "통증이 계속되면 알리기" },
+      ] },
+      { type: "points", head: "무거운 짐 옮기기", img: "s_lift", lines: [
+        { say: "무거운 상자는 무릎을 굽히고 허리를 펴서 듭니다.", pt: "무릎 굽히고 허리 펴기" },
+        { say: "많거나 무거우면 대차를 쓰거나 동료와 함께 옮깁니다.", pt: "대차 · 동료와 함께" },
+      ] },
+      { type: "chapter", no: 5, title: "외근 · 업무 운전", sub: "회사 차를 탈 때", img: "s_drive", lines: [
+        { say: "외근이나 업무로 운전할 때의 안전입니다." },
+      ] },
+      { type: "points", head: "업무 운전 안전", img: "s_drive", lines: [
+        { say: "출발 전에 안전띠를 매고, 휴대폰은 거치대에 둡니다.", pt: "안전띠 · 휴대폰 거치대" },
+        { say: "운전 중에는 전화나 메신저를 손에 들지 않습니다.", pt: "운전 중 휴대폰 금지" },
+        { say: "피곤하면 무리하지 말고 쉬었다 갑니다.", pt: "피곤하면 쉬었다 가기" },
+      ] },
+      { type: "chapter", no: 6, title: "응급 상황 · 신고", sub: "다쳤거나 아플 때", img: "s_firstaid", lines: [
+        { say: "마지막으로 응급 상황과 신고입니다." },
+      ] },
+      { type: "points", head: "응급 상황", img: "s_firstaid", lines: [
+        { say: "구급함과 자동심장충격기 위치를 미리 알아 둡니다.", pt: "구급함 · 자동심장충격기 위치" },
+        { say: "사람이 쓰러지면 119에 신고하고 주변에 도움을 요청합니다.", pt: "쓰러지면 119 · 도움 요청" },
+      ] },
+      { type: "points", head: "아찔했던 일도 알리기", img: "s_report", lines: [
+        { say: "다친 일은 작더라도 회사에 알려 기록을 남깁니다.", pt: "다친 일은 꼭 알리기" },
+        { say: "다칠 뻔한 일도 알려 주면 같은 사고를 막을 수 있습니다.", pt: "다칠 뻔한 일도 알리기" },
+      ] },
+      { type: "check", head: "오늘의 체크리스트", items: ["통로 · 비상구 비우기", "멀티탭 겹쳐 꽂지 않기", "퇴근 전 전원 끄기", "불나면 계단 · 낮은 자세", "모니터 눈높이 · 1시간마다 쉬기", "업무 운전 중 휴대폰 금지", "다칠 뻔한 일도 알리기"], lines: [
+        { say: "오늘 배운 내용을 체크리스트로 정리하겠습니다." },
+        { say: "통로와 비상구를 비우고, 멀티탭은 겹쳐 꽂지 않습니다." },
+        { say: "퇴근 전에는 전원을 끄고, 불이 나면 계단으로 낮게 대피합니다." },
+        { say: "바르게 앉고 틈틈이 쉬며, 다칠 뻔한 일도 꼭 알립니다." },
+      ] },
+      { type: "end", img: "s_end", lines: [
+        { say: "끝까지 시청해 주셔서 감사합니다." },
+        { say: "오늘도 안전한 하루 보내세요. 이어서 이수 서명을 해 주세요." },
       ] },
     ],
   },

@@ -21,8 +21,8 @@ async function tts(text) {
   const f = path.join(CACHE, `${h}.pcm`);
   if (fs.existsSync(f)) return fs.readFileSync(f);
   const body = JSON.stringify({ contents: [{ parts: [{ text }] }], generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE } } } } });
-  for (const m of ["gemini-3.8-flash-tts", "gemini-3.1-flash-tts-preview"]) {
-    for (let a = 0; a < 4; a++) {
+  for (const m of ["gemini-3.8-flash-tts", "gemini-3.1-flash-tts-preview", "gemini-3.8-flash-tts"]) {
+    for (let a = 0; a < 6; a++) {
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json" }, body });
       if (r.ok) {
         const d = (await r.json())?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData)?.inlineData?.data;
@@ -33,8 +33,8 @@ async function tts(text) {
         pcm = Buffer.from(pcm.subarray(Math.max(0, s - 1200) * 2, (Math.min(n - 1, e + 2400) + 1) * 2));
         fs.writeFileSync(f, pcm); return pcm;
       }
-      const t = await r.text(); console.error(`\n${m} ${r.status} ${t.slice(0, 160)}`);
-      if (r.status === 429 || r.status >= 500) await new Promise((z) => setTimeout(z, 6000 * (a + 1))); else break;
+      const t = await r.text(); console.error(`\n${m} ${r.status} ${t.slice(0, 80)}`);
+      if (r.status === 429 || r.status >= 500) await new Promise((z) => setTimeout(z, 20000 * (a + 1))); else break; // 분당 한도 — 천천히 다시
     }
   }
   if (arg("sheet") || arg("still") || arg("silent")) { MISSING++; return Buffer.alloc(Math.round(text.length * 0.17 * RATE) * 2); } // 미리보기는 길이만 어림(소리 없음)
@@ -43,7 +43,7 @@ async function tts(text) {
 let MISSING = 0;
 const lines = C.slides.flatMap((s, si) => s.lines.map((l, li) => ({ ...l, si, li })));
 let k = 0;
-await Promise.all([0, 1, 2].map(async (w) => { for (let i = w; i < lines.length; i += 3) { const l = lines[i]; l.pcm = await tts(l.say); l.dur = l.pcm.length / 2 / RATE; process.stdout.write(`\r나레이션 ${++k}/${lines.length}`); } }));
+await Promise.all([0].map(async (w) => { for (let i = w; i < lines.length; i += 1) { const l = lines[i]; l.pcm = await tts(l.say); l.dur = l.pcm.length / 2 / RATE; process.stdout.write(`\r나레이션 ${++k}/${lines.length}`); } }));
 console.log(MISSING ? `(음성 없는 줄 ${MISSING}개 — 미리보기용 길이 어림)` : "");
 
 // ── 2. 시간표(장면 시작 0.9초 뒤 첫 말 · 말 사이 0.55초 · 장면 끝 0.9초)
