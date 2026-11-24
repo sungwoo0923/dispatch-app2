@@ -12,6 +12,23 @@ const ROOT = path.dirname(url.fileURLToPath(import.meta.url));
 const CACHE = path.join(ROOT, ".cache"); fs.mkdirSync(CACHE, { recursive: true });
 const id = process.argv[2]; const arg = (k, d) => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] : d; };
 const C = COURSES[id]; if (!C) { console.error("교육 id:", Object.keys(COURSES).join(", ")); process.exit(1); }
+// 🔇 2026-11-24 Gemini 음성 = WAV(머리말 + data + C2PA 'AI 생성' 표시 상자) — 소리(data)만 꺼낸다.
+//  예전엔 머리말 44바이트만 떼고 나머지를 소리로 읽어, 문장 끝마다 C2PA 상자(약 7.6KB)가 0.17초짜리 큰 '지직' 잡음으로 들어갔다.
+function pcmOnly(buf) {
+  let pcm = buf;
+  if (buf.length > 12 && buf.subarray(0, 4).toString() === "RIFF") {
+    pcm = buf.subarray(44);
+    for (let o = 12; o + 8 <= buf.length;) {
+      const id = buf.subarray(o, o + 4).toString(), sz = buf.readUInt32LE(o + 4);
+      if (id === "data") { pcm = buf.subarray(o + 8, Math.min(buf.length, o + 8 + sz)); break; }
+      o += 8 + sz + (sz & 1);
+    }
+  }
+  const i = pcm.indexOf("C2PA");
+  if (i > 0 && pcm.subarray(i + 12, i + 16).toString() === "jumb") pcm = pcm.subarray(0, i - (i % 2));
+  return pcm;
+}
+
 const RATE = 24000, VOICE = arg("voice", "Kore"), W = 1920, H = 1080;
 const IMG = (n) => url.pathToFileURL(path.join(ROOT, "images", `${n}.jpg`)).href;
 
@@ -29,7 +46,7 @@ async function tts(text) {
       if (r.ok) {
         const d = (await r.json())?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData)?.inlineData?.data;
         if (!d) break;
-        let pcm = Buffer.from(d, "base64"); if (pcm.subarray(0, 4).toString() === "RIFF") pcm = pcm.subarray(44);
+        let pcm = pcmOnly(Buffer.from(d, "base64"));
         const n = pcm.length >> 1; let s = 0, e = n - 1;
         while (s < n && Math.abs(pcm.readInt16LE(s * 2)) < 600) s++; while (e > s && Math.abs(pcm.readInt16LE(e * 2)) < 600) e--;
         pcm = Buffer.from(pcm.subarray(Math.max(0, s - 1200) * 2, (Math.min(n - 1, e + 2400) + 1) * 2));
