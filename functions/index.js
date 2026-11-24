@@ -7171,9 +7171,10 @@ exports.mktAi = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSecon
   try {
     if (action === "tts") { res.json(await promo.runTts({ db, text: input.text, voice: input.voice, style: input.style })); return; }
     if (action === "geminiKey") {
-      const k = String(input.key || "").trim();
+      // 🛠 2026-11-24 붙여 넣을 때 딸려 온 공백 · 줄바꿈 · 따옴표 · "GEMINI_API_KEY=" 같은 앞말은 떼고 본다 · 새 형식 키(점 포함)도 받는다
+      const k = String(input.key || "").replace(/^\s*[A-Z_]*KEY\s*[=:]\s*/i, "").replace(/[\s"'`]/g, "");
       if (k) {
-        if (!/^[A-Za-z0-9_-]{20,80}$/.test(k)) { res.status(400).json({ error: "키 모양이 이상해요. Google AI Studio 에서 받은 키를 그대로 붙여 넣어 주세요." }); return; }
+        if (!/^[A-Za-z0-9._-]{20,200}$/.test(k)) { res.status(400).json({ error: "키 모양이 이상해요. Google AI Studio 에서 받은 키를 그대로 붙여 넣어 주세요." }); return; }
         await db.doc("platformSecrets/gemini").set({ key: k, at: FieldValue.serverTimestamp() });
       } else if (input.clear) await db.doc("platformSecrets/gemini").delete();
       const cur = await promo.geminiKey(db);

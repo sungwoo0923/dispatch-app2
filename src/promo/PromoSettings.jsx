@@ -44,7 +44,7 @@ export default function PromoSettings() {
     </AdmPanel>
     <AdmPanel code="NAVER" title="네이버 블로그">
       <label className="block text-[12.5px] mb-1" style={{ color: G.sub }}>블로그 아이디(blog.naver.com/<b>아이디</b>) — [네이버 글쓰기 열기]가 바로 우리 블로그 글쓰기로 가요</label>
-      <input defaultValue={s.naverBlogId || ""} onBlur={(e) => save({ naverBlogId: e.target.value.trim().replace(/^.*blog\.naver\.com\//, "").replace(/\/.*/, "") })} className="w-full h-9 rounded-lg px-3 text-[13px]" style={inp} />
+      <input key={s.naverBlogId || "-"} defaultValue={s.naverBlogId || ""} placeholder="예: logisweb (이메일 말고 아이디만)" onBlur={(e) => save({ naverBlogId: e.target.value.trim().replace(/^.*blog\.naver\.com\//, "").replace(/\/.*/, "").replace(/@.*$/, "") })} className="w-full h-9 rounded-lg px-3 text-[13px]" style={inp} />
     </AdmPanel>
     <AdmPanel code="WEEK" title="매주 자동 블로그 초안" right={<label className="flex items-center gap-2 text-[13px] font-black" style={{ color: s.autoDraft === false ? G.dim : G.ok }}><input type="checkbox" checked={s.autoDraft !== false} onChange={(e) => save({ autoDraft: e.target.checked })} />{s.autoDraft === false ? "꺼짐" : "켜짐"}</label>}>
       <div className="text-[12.5px] leading-relaxed mb-3" style={{ color: G.sub }}>매주 월요일 아침 7시 13분, 그 주에 글이 없으면 아래 목록에서 아직 안 쓴 주제로 AI가 초안을 써서 <b>블로그 원고 › 검토 대기</b>에 넣어요. 읽어 보고 고친 뒤 [발행하기]만 누르면 돼요.</div>
