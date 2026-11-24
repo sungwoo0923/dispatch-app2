@@ -32,6 +32,8 @@ export function installTableXNav() {
 .${NS}-nb{width:28px;height:28px;border-radius:9px;background:rgba(255,255,255,.08);color:${GOLD_HI};display:grid;place-items:center;font-weight:900;font-size:13px;line-height:1;font-family:inherit;cursor:pointer;border:0}
 .${NS}-nb:hover{background:rgba(255,255,255,.16)}
 .${NS}-track{position:relative;height:28px;border-radius:8px;background:rgba(255,255,255,.05);display:flex;overflow:hidden;cursor:pointer}
+.${NS}-x{width:24px;height:24px;border-radius:8px;background:transparent;color:rgba(226,232,245,.45);display:grid;place-items:center;font-size:15px;line-height:1;cursor:pointer;border:0;margin-left:-2px}
+.${NS}-x:hover{color:#fff;background:rgba(255,255,255,.1)}
 .${NS}-seg{flex:1;display:grid;place-items:center;font-weight:800;font-size:11px;line-height:1;font-family:inherit;color:rgba(226,232,245,.55);border-right:1px solid rgba(255,255,255,.06);white-space:nowrap;overflow:hidden;padding:0 6px;text-overflow:ellipsis}
 .${NS}-seg:last-of-type{border-right:0}
 .${NS}-seg:hover{color:#fff}
@@ -49,7 +51,7 @@ export function installTableXNav() {
   const more = mk("div", `${NS}-more`);
   const bar = mk("div", `${NS}-bar hide`);
   bar.style.display = "flex"; bar.style.opacity = "";
-  bar.innerHTML = `<button type="button" class="${NS}-nb" data-d="-1" aria-label="왼쪽">&#8249;</button><div class="${NS}-track"></div><button type="button" class="${NS}-nb" data-d="1" aria-label="오른쪽">&#8250;</button>`;
+  bar.innerHTML = `<button type="button" class="${NS}-nb" data-d="-1" aria-label="왼쪽">&#8249;</button><div class="${NS}-track"></div><button type="button" class="${NS}-nb" data-d="1" aria-label="오른쪽">&#8250;</button><button type="button" class="${NS}-x" title="잠깐 숨기기(1시간)" aria-label="잠깐 숨기기">&#215;</button>`;
   const track = bar.querySelector(`.${NS}-track`);
   const thumb = document.createElement("div"); thumb.className = `${NS}-thumb`;
 
@@ -58,6 +60,27 @@ export function installTableXNav() {
   let flow = 0; let flowRaf = 0; let dragging = null;
   const cache = new WeakMap();
 
+  // 잠깐 숨기기 — [×] 누르면 1시간 동안 화살표 · 막대 모두 숨김(이 브라우저)
+  let hideUntil = 0; try { hideUntil = Number(localStorage.getItem("kpXnavHide") || 0); } catch { /* 무시 */ }
+  // 화면 아래 가운데에 다른 막대(선택 모드 · 알림 등)가 떠 있으면 구역 막대를 띄우지 않는다(두 줄로 겹쳐 보이지 않게)
+  let busyAt = 0; let busy = false;
+  const bottomBusy = () => {
+    const now = Date.now(); if (now - busyAt < 250) return busy; busyAt = now;
+    const vw = window.innerWidth; const vh = window.innerHeight; busy = false;
+    for (const x of [vw / 2, vw / 2 - 180, vw / 2 + 180]) {
+      for (const y of [vh - 24, vh - 44]) {
+        const els = document.elementsFromPoint(x, y) || [];
+        for (const el of els) {
+          if (el.closest?.(`[class^="${NS}"],[class*=" ${NS}-"]`)) continue;
+          let n = el; let fixed = null;
+          while (n && n !== document.body) { if (getComputedStyle(n).position === "fixed") { fixed = n; break; } n = n.parentElement; }
+          if (fixed) { const r = fixed.getBoundingClientRect(); if (r.height < vh * 0.5 && r.bottom > vh - 90) { busy = true; return busy; } }
+          break; // 맨 위 요소만 본다
+        }
+      }
+    }
+    return busy;
+  };
   const show = (el, on) => { if (on) { el.style.display = ""; el.style.opacity = "1"; } else { el.style.opacity = "0"; el.style.display = "none"; } };
   const isWide = (el) => el.scrollWidth > el.clientWidth + MIN_EXTRA;
   // 마우스 아래에서 가로로 넘치는(표가 든) 상자 찾기 — 0.8초 동안 같은 요소는 다시 재지 않는다
@@ -96,7 +119,7 @@ export function installTableXNav() {
   };
 
   const place = () => {
-    if (!box || !box.isConnected || !isWide(box) || typing() || Date.now() > hoverUntil) { hideAll(); return; }
+    if (!box || !box.isConnected || !isWide(box) || typing() || Date.now() > hoverUntil || Date.now() < hideUntil) { hideAll(); return; }
     const r = box.getBoundingClientRect();
     const vh = window.innerHeight; const vw = window.innerWidth;
     const top = Math.max(r.top, 0); const bottom = Math.min(r.bottom, vh);
@@ -119,7 +142,7 @@ export function installTableXNav() {
       if (hidden.length) { const w = more.offsetWidth; Object.assign(more.style, { left: `${right - 60 - w}px`, top: `${midY - 12}px` }); }
     } else show(more, false);
     // ② 아래 구역 막대 — 표의 진짜 가로 막대(상자 아래 끝)가 화면 밖일 때만
-    const barOn = r.bottom > vh + 4 && r.top < vh - 140;
+    const barOn = r.bottom > vh + 4 && r.top < vh - 140 && !bottomBusy();
     if (barOn) {
       const key = `${box.scrollWidth}|${box.clientWidth}|${headCells(box).length}`;
       if (key !== segKey || !track.childElementCount) {
@@ -172,6 +195,13 @@ export function installTableXNav() {
     b.addEventListener("click", () => { clearTimeout(flowTimer); stopFlow(); if (box) box.scrollBy({ left: d * box.clientWidth * 0.8, behavior: "smooth" }); hoverUntil = Date.now() + 1500; wake(); });
   });
   bar.addEventListener("mousedown", (e) => e.preventDefault());
+  bar.querySelector(`.${NS}-x`).addEventListener("click", () => {
+    hideUntil = Date.now() + 60 * 60 * 1000; try { localStorage.setItem("kpXnavHide", String(hideUntil)); } catch { /* 무시 */ }
+    hideAll();
+    const tip = document.createElement("div"); tip.className = `${NS}-tip`; tip.textContent = "표 좌우 이동 도우미를 1시간 동안 숨겨요";
+    document.body.appendChild(tip); tip.style.left = `${Math.max(8, window.innerWidth / 2 - 130)}px`; tip.style.top = `${window.innerHeight - 64}px`;
+    setTimeout(() => { tip.style.opacity = "0"; setTimeout(() => tip.remove(), 400); }, 2400);
+  });
   bar.querySelectorAll(`.${NS}-nb`).forEach((b) => b.addEventListener("click", () => { if (box) box.scrollBy({ left: Number(b.dataset.d) * box.clientWidth * 0.8, behavior: "smooth" }); }));
   track.addEventListener("click", (e) => {
     if (!box || e.target === thumb) return;
