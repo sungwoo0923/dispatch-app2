@@ -15,7 +15,7 @@ export const EDU_COURSES = [
     code: "EDU-D01",
     title: "화물 적재 · 결박 안전",
     summary: "짐이 쏟아지지 않게 싣고 묶는 법",
-    minutes: 4,
+    minutes: 7,
     video: "/edu/drv_load.mp4",
     cycle: "yearly",
     pledge: "화물 적재 · 결박 안전교육 영상을 끝까지 시청했으며, 적재 기준을 지키고 출발 전 결박 상태를 직접 확인하겠습니다.",
@@ -28,7 +28,7 @@ export const EDU_COURSES = [
     code: "EDU-D02",
     title: "상 · 하차장 안전",
     summary: "지게차 주변 · 후진 · 끼임 사고 막기",
-    minutes: 3,
+    minutes: 5,
     video: "/edu/drv_dock.mp4",
     cycle: "yearly",
     pledge: "상 · 하차장 안전교육 영상을 끝까지 시청했으며, 작업장 안전수칙과 현장 안내자의 지시를 따르겠습니다.",
@@ -59,7 +59,7 @@ export const EDU_COURSES = [
     code: "EDU-S01",
     title: "사무실 산업안전보건",
     summary: "넘어짐 · 화재 대피 · 바른 자세 · 응급 상황",
-    minutes: 6,
+    minutes: 5,
     video: "/edu/staff_safety.mp4",
     cycle: "yearly",
     pledge: "사무실 산업안전보건 교육 영상을 끝까지 시청했으며, 교육받은 안전수칙을 업무 중 성실히 지키겠습니다.",
@@ -114,7 +114,7 @@ export function eduStatusOf(record) {
 }
 
 // 영상 길이(초) — 목록에 "3:22"처럼 보인다(marketing/edu/build.mjs 로 만든 실제 길이)
-export const VIDEO_SEC = { drv_load: 202, drv_dock: 157 };
+export const VIDEO_SEC = { drv_load: 436, drv_dock: 316, staff_safety: 282 };
 export const fmtLen = (c) => (c.kind === "video" && VIDEO_SEC[c.id] ? `${Math.floor(VIDEO_SEC[c.id] / 60)}:${String(VIDEO_SEC[c.id] % 60).padStart(2, "0")}` : `${c.minutes}분`);
 
 // 🔏 디지털 이수증 — 이수 기록 문서 이름으로 이수증 번호, 기록 내용으로 확인 코드를 만든다(같은 기록이면 언제 봐도 같은 값)
