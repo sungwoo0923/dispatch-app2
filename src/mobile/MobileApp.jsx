@@ -8287,7 +8287,6 @@ function MobileSideMenu({
   const closeN = useCloseInboxCount(); // 📥 배차마감 도착(경리 확인 대기) 숫자
   const deptOk = (m) => (!MENU_FEATURE[m] || planIncludes(planIdM, MENU_FEATURE[m])) && deptOkRaw(m);
   const canRevenue = ["admin", "totalMaster", "superadmin", "test", "viewer"].includes(role);
-  const canAdminMenu = isAdminRole || role === "viewer";
   // ⭐ 2026-11-04 권한 관리 — 최고관리자가 켠 회사의 마스터만(자기 회사 것만)
   const coFeatM = useCompanyFeatures();
   const canPermsM = role !== "totalMaster" && mobileUsers?.find((u) => u.id === currentUser?.uid)?.isMaster === true && coFeatM.masterRolePerms !== false; // ⭐ 2026-11-11 기본 켜짐
@@ -8466,11 +8465,10 @@ function MobileSideMenu({
             {ok("배차현황") && <MenuItem label="고정노선현황" icon="route" onClick={() => onGo?.("fixedroute")} badge={fixedUnassignedCount > 0 ? fixedUnassignedCount : null} dark={dark} />}
             {ok("배차현황") && role !== "viewer" && <MenuItem label="월 마감" icon="check" onClick={() => onGo?.("monthclose")} dark={dark} />}
           </MenuSection>
-          {(ok("단가표") || ok("운임조회") || (fareMenu.feature && role !== "driver" && role !== "shipper")) && (
+          {(ok("단가표") || ok("운임조회")) && (
           <MenuSection title="운임" en="FARE" dark={dark} alwaysOpen>
             {role !== "test" && ok("단가표") && <MenuItem label="단가표" icon="money" onClick={onGoRateCard} dark={dark} />}
             {ok("운임조회") && <MenuItem label="운임조회" icon="globe" onClick={onGoNationalFare} dark={dark} />}
-            {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}
           </MenuSection>
           )}
           {((PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리")) || ok("지입차관리")) && (
@@ -8531,7 +8529,9 @@ function MobileSideMenu({
           )}
           {/* 🧭 2026-11-24 관리자메뉴 — PC 왼쪽 메뉴처럼 회사관리와 따로. 회원 관리 = 직원 목록 · 가입 승인
               운송 화면: 관리자 · 최고관리자 · 조회전용(PC 규칙) / 경리 · 인사 · 임원 화면: PC 부서 메뉴에 관리자메뉴가 있어 보인다(경리사무원 · 인사사무원 제외) */}
-          {(deptMode ? (["acct", "hr", "exec"].includes(deptMode) && staffSignupOk) : canAdminMenu) && (
+          {/* PC 규칙(DispatchApp menuState): 경리 · 인사 화면은 부서 메뉴에 있어 보임 · 그 밖은 관리자 · 최고관리자 · 조회전용만 · 권한 관리에서 숨기면 숨김(회사 마스터 관리자는 예외) */}
+          {(deptMode ? ((["acct", "hr"].includes(deptMode) && staffSignupOk) || (deptMode === "exec" && ["admin", "totalMaster", "viewer"].includes(role))) : ["admin", "totalMaster", "viewer"].includes(role))
+            && (ok("관리자메뉴") || (role === "admin" && mobileUsers?.find((u) => u.id === currentUser?.uid)?.isMaster === true)) && (
             <MenuSection title="관리자메뉴" en="ADMIN" dark={dark} alwaysOpen badge={(alertCounts?.signupStaff || 0) + (!deptMode || deptMode === "acct" ? (alertCounts?.signupDriver || 0) : 0)}>
               <MenuItem label="회원 관리" icon="users" onClick={() => onGo?.("staff")} badge={alertCounts?.signupStaff || null} dark={dark} />
               {(!deptMode || deptMode === "acct") && <MenuItem label="기사 앱 계정 · 가입 승인" icon="truck" onClick={() => onGo?.("drvacc")} badge={alertCounts?.signupDriver || null} dark={dark} />}
@@ -8540,7 +8540,7 @@ function MobileSideMenu({
           )}
           {/* ⭐ 2026-11-14 회사관리 = PC 회사관리(운임 규칙 · 내정보 · 내 이력서 · 출근기록부) */}
           <MenuSection title="회사관리" en="COMPANY" dark={dark} alwaysOpen>
-            {!!deptMode && fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}{/* 운송 화면은 [운임] 묶음에 */}
+            {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}{/* PC와 같은 자리(회사관리 › 운임 규칙) */}
             {/* ⭐ 2026-11-18 노선 특수운임 메뉴는 뺐다 → 오더 등록의 [특수운임 적용] › 고정노선운임 탭 */}
             <MenuItem label="내정보" icon="idcard" onClick={onGoMyInfo} dark={dark} />
             <MenuItem label="내 이력서" icon="file" onClick={() => onGo?.("dept:myresume")} dark={dark} />
