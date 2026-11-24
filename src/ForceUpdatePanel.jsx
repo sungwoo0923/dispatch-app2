@@ -68,11 +68,38 @@ export default function ForceUpdatePanel() {
   };
   const left = active ? forceLeft(cfg, now) : 0;
   const total = active ? Math.max(1, (Number(cfg.fireAt) - Number(cfg.createdAt || cfg.fireAt)) / 1000) : 1;
+  // 📊 2026-11-24 적용률 — 지금 열려 있는(10분 안 활동) 대상 화면 중 예약 버전 이상으로 바뀐 비율(사용자 요청 "퍼센트도 같이")
+  //  예전엔 시작 뒤 10분 동안 무조건 "적용 중"만 보여 오래 걸리는 것처럼 보였다 → 모두 바뀌면 바로 "적용 완료"로 끝낸다
+  const prog = React.useMemo(() => {
+    if (!active || !cfg?.build) return null;
+    const inScope = (p) => {
+      if (/totalMaster/.test(String(p.role || ""))) return false;
+      if (p.isShipper) return !!cfg.shippers && cfg.scope !== "pick";
+      return cfg.scope !== "pick" || (cfg.companies || []).includes(p.company);
+    };
+    const list = (live?.onlineList || []).filter((p) => p.now && inScope(p));
+    const done = list.filter((p) => p.build && String(p.build) >= String(cfg.build)).length;
+    return { total: list.length, done, pct: list.length ? Math.round((done / list.length) * 100) : 100 };
+  }, [active, cfg, live]);
+  const finished = active && left <= 0 && prog && prog.done >= prog.total;
+  const endedRef = React.useRef("");
+  React.useEffect(() => {
+    if (!finished || endedRef.current === cfg.id) return undefined;
+    const t = setTimeout(() => { // 5초 더 지켜보고(늦게 들어온 화면) 끝낸다
+      endedRef.current = cfg.id;
+      setDoc(doc(db, ...FORCE_DOC), { active: false, doneAt: Date.now(), history: history.map((h) => (h.id === cfg.id ? { ...h, done: true, donePct: prog.pct, doneN: prog.total } : h)) }, { merge: true }).catch(() => { endedRef.current = ""; });
+      setMsg(`적용 완료 — 접속 중 ${prog.total}명 모두 v${cfg.version}`);
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [finished, cfg?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const stale = !!latest?.build && !!target?.build && String(target.build) < String(latest.build); // 배포 잠금 버전이 최신보다 예전
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,.9fr)] items-start" data-kp="force-panel">
       <AdmPanel code="FORCE UPDATE" title="강제 업데이트 예약">
         <div className="text-[12.5px] leading-relaxed" style={{ color: G.sub }}>고른 운송사에 정한 시간 뒤 <b style={{ color: G.goldHi }}>v{target?.version || "…"}</b> 을 적용해요. 그 사이 대상 화면 위 가운데에 안내와 남은 시간이 보이고, 시간이 되면 저절로 새로 고쳐져요.</div>
+        {stale && <div className="mt-3 rounded-xl px-3.5 py-2.5 text-[12.5px] font-bold leading-relaxed" style={{ background: "rgba(242,196,109,.08)", border: "1px solid rgba(242,196,109,.35)", color: G.warn }}>
+          배포 잠금이 v{target.version} 에 걸려 있어 그 버전으로 적용돼요. 최신 v{latest.version} 을 적용하려면 [업데이트 배포]에서 먼저 최신 버전을 배포해 주세요.</div>}
         <div className="text-[12px] font-extrabold tracking-[0.06em] mt-4 mb-2" style={{ color: G.dim }}>대상</div>
         <div className="inline-flex p-1 rounded-[14px] gap-1" style={{ background: "rgba(255,255,255,.04)", border: `1px solid ${G.line2}` }}>
           {[["all", "전체 운송사"], ["pick", "운송사 선택"]].map(([k, l]) => (
@@ -120,8 +147,13 @@ export default function ForceUpdatePanel() {
               <div className="flex items-center gap-2 text-[12px] font-black tracking-[0.12em]" style={{ color: G.gold }}>
                 <span className="w-2 h-2 rounded-full" style={{ background: G.gold, boxShadow: "0 0 0 4px rgba(215,188,130,.18)" }} />
                 <span className="truncate">{cfg.scope === "pick" ? (cfg.companies || []).join(" · ") : "전체 운송사"}{cfg.shippers ? " · 화주사" : ""}</span></div>
-              <div className="text-[44px] font-black tabular-nums mt-1 leading-none" style={{ color: G.ink }}>{left > 0 ? fmtLeft(left) : "적용 중"}</div>
-              <div className="h-1.5 rounded-full mt-3 overflow-hidden" style={{ background: "rgba(255,255,255,.07)" }}><div className="h-full" style={{ width: `${Math.min(100, (1 - left / total) * 100)}%`, background: "linear-gradient(90deg,#D7BC82,#F3E3BC)", transition: "width 1s linear" }} /></div>
+              <div className="flex items-end justify-between gap-3 mt-1">
+                <div className="text-[44px] font-black tabular-nums leading-none" style={{ color: G.ink }}>{left > 0 ? fmtLeft(left) : finished ? "적용 완료" : "적용 중"}</div>
+                {prog && <div className="text-right shrink-0"><div className="text-[30px] font-black tabular-nums leading-none" style={{ color: G.goldHi }}>{prog.pct}%</div>
+                  <div className="text-[11.5px] font-bold mt-1" style={{ color: G.dim }}>접속 중 {prog.done}/{prog.total}명 적용</div></div>}
+              </div>
+              {left > 0 && <div className="text-[11.5px] font-bold mt-2" style={{ color: G.dim }}>남은 시간 · 아래 막대는 적용률이에요</div>}
+              <div className="h-1.5 rounded-full mt-3 overflow-hidden" style={{ background: "rgba(255,255,255,.07)" }}><div className="h-full" style={{ width: `${prog ? prog.pct : Math.min(100, (1 - left / total) * 100)}%`, transition: "width .6s", background: "linear-gradient(90deg,#D7BC82,#F3E3BC)", transition: "width 1s linear" }} /></div>
               <div className="flex justify-between text-[12.5px] font-bold mt-2.5" style={{ color: G.sub }}><span>v{cfg.version} 적용</span><span>{fmtTime(Number(cfg.fireAt))} 시작</span></div>
               <div className="flex flex-wrap gap-2 mt-3.5">
                 <button type="button" disabled={busy} onClick={() => save({ fireAt: Math.max(Date.now(), Number(cfg.fireAt)) + 120000 }, "2분 미뤘어요.")} className="h-9 px-3.5 rounded-[11px] text-[13px] font-black" style={{ border: "1px solid rgba(215,188,130,.5)", color: G.goldHi }}>+2분 미루기</button>
@@ -134,7 +166,7 @@ export default function ForceUpdatePanel() {
           {!history.length ? <div className="text-[13.5px] py-2" style={{ color: G.dim }}>아직 기록이 없어요.</div> : history.map((h) => (
             <div key={h.id} className="flex justify-between gap-3 py-2.5 text-[13px]" style={{ borderBottom: `1px solid ${G.line2}`, color: G.sub }}>
               <span className="truncate">{fmtTime(h.at)} · {h.scope === "pick" ? (h.companies || []).join(" · ") : "전체 운송사"}{h.shippers ? " · 화주사" : ""} · {h.mins ? `${h.mins}분` : "즉시"}</span>
-              <b className="shrink-0" style={{ color: h.canceled ? G.dim : G.ok }}>{h.canceled ? "취소" : `v${h.version}`}</b></div>))}
+              <b className="shrink-0" style={{ color: h.canceled ? G.dim : G.ok }}>{h.canceled ? "취소" : `v${h.version}${h.done ? ` · ${h.donePct ?? 100}%` : ""}`}</b></div>))}
           <div className="text-[12.5px] mt-3 leading-relaxed" style={{ color: G.dim }}>이미 최신인 사람에게는 안내가 뜨지 않아요. 화면을 꺼 둔 사람은 다음에 열 때 배포한 버전으로 열려요.</div>
         </AdmPanel>
       </div>
