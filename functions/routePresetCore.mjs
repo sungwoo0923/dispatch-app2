@@ -46,7 +46,7 @@ export const itemMode = (it) => {
   const m = ["기사", "회사", "청구"].includes(it?.부담) ? it.부담 : TYPE_DEFAULT[t].mode;
   if (t === "지게차") return m;
   const p = itemPayee(it);
-  if (p === "없음") return "청구";
+  if (p === "없음") return m === "기사" ? "기사" : "청구"; // 🛠 2026-11-24 지급 없음 + 기사 차감 = 기사운임에서 빼고 회사 몫으로
   return p === "기사" && m === "기사" ? "청구" : m;
 };
 export const itemName = (it) => cell(it?.이름) || TYPE_LABEL[typeOf(it?.종류)];
@@ -208,7 +208,7 @@ export function applyPlanToRec(rec, plan) {
   const items = (plan.items || []).filter((x) => num(x.금액) > 0).map((x) => ({ 종류: x.종류 || "기타", 이름: cell(x.이름), 금액: num(x.금액), 부담: itemMode(x), 받는사람: itemPayee(x), 메모: cell(x.메모), ...(x.auto ? { auto: x.auto } : {}) }));
   for (const it of items) {
     const a = it.금액;
-    if (it.받는사람 === "없음") { C += a; continue; }
+    if (it.받는사람 === "없음") { if (it.부담 === "기사") D += a; else C += a; continue; }
     if (it.받는사람 === "기사") D -= a; else { ext += a; if (it.부담 === "기사") D += a; }
     if (it.부담 === "청구") C += a;
   }

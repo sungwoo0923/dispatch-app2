@@ -29,7 +29,7 @@ export const AI_TEAMS = [
   { key: "security", code: "SEC", name: "보안팀", en: "SECURITY", icon: "shield", desc: "로그인 기록 · 접속 세션 · 이상 징후 점검",
     access: ["보안 이벤트", "접속 이력", "접속 세션", "고객사 현황"],
     quick: ["최근 24시간 로그인 이상 징후 점검해줘", "기기를 너무 많이 쓰는 계정 있어?", "최근 7일 새벽 시간대 접속 기록 확인해줘"] },
-  { key: "marketing", code: "MKT", name: "홍보팀", en: "MARKETING", icon: "send", desc: "홍보 아이디어 · 홈페이지 문구 · 공지·SNS 초안 · 영상 작업실(숏츠 · 교육영상)",
+  { key: "marketing", code: "MKT", name: "홍보팀", en: "MARKETING", icon: "send", desc: "홍보 아이디어 · 홈페이지 문구 · 공지·SNS 초안 · 영상 기획(숏츠 · 교육영상)",
     access: ["도입 문의", "플랫폼 공지", "고객사 현황"],
     quick: ["이번 달 홍보 아이디어 5개 제안해줘", "홈페이지 메인 문구 3가지 버전 써줘", "신규 기능 안내 공지 초안 써줘", "블로그 글 초안: 배차 관리 프로그램을 바꿔야 하는 신호"] },
 ];
@@ -38,7 +38,7 @@ const TEAM_BY_KEY = Object.fromEntries(AI_TEAMS.map((t) => [t.key, t]));
 export const AI_TEAM_TABS = [{ key: "ai:hub", label: "AI 본부", en: "AI HQ", icon: "spark", also: AI_TEAMS.map((t) => `ai:${t.key}`) }];
 // 🎬 2026-11-18 홍보팀 영상 작업실 — 🧭 2026-11-24 메뉴 정리: 화면은 관리자센터 › 홍보 › 홍보 영상 › [영상 작업실] 탭 한 곳에만 둔다.
 //  명단의 이 줄은 그 탭으로 가는 바로가기(ai:video 주소는 PlatformCenter 가 홍보 메뉴로 연다)
-const VIDEO_ITEM = { key: "video", name: "영상 작업실", en: "VIDEO STUDIO", icon: "star", code: "VID", sub: "홍보 › 홍보 영상에서 열려요" };
+const VIDEO_ITEM = { key: "video", name: "영상 기획", en: "VIDEO PLANNING", icon: "star", code: "VID", sub: "홍보 › 홍보 영상에서 열려요" };
 
 // Claude Sonnet 5.5 단가(USD / 100만 토큰) — 화면 표시용 어림값
 const PRICE = { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 };

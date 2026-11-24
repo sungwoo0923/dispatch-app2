@@ -227,7 +227,7 @@ function moneyPlan(env, o) {
     const a = n0(x?.금액); if (!(a > 0)) continue;
     const t = SP_DEF[x.종류] ? x.종류 : "기타";
     const payee = ["기사", "외부", "없음"].includes(x.받는사람) ? x.받는사람 : SP_DEF[t][0];
-    const mode = payee === "없음" ? "청구" : ["기사", "회사", "청구"].includes(x.부담) ? x.부담 : SP_DEF[t][1];
+    const mode = payee === "없음" ? (x.부담 === "기사" ? "기사" : "청구") : ["기사", "회사", "청구"].includes(x.부담) ? x.부담 : SP_DEF[t][1];
     const name = nm(x.이름);
     let i = name ? pairs.findIndex((p) => !generic(p.name) && !forkNames.includes(nm(p.name)) && nm(p.name) === name) : -1;
     if (i < 0) {
@@ -236,7 +236,7 @@ function moneyPlan(env, o) {
       genericName.set(i, name);
     }
     if (payee === "기사" && mode === "청구") { amt[i].sale += a; amt[i].buy += a; }
-    else if (payee === "없음") amt[i].sale += a;
+    else if (payee === "없음" && mode === "청구") amt[i].sale += a;
     else if (payee === "기사" && mode === "회사") amt[i].buy += a;
     else return null; // 외부(회사가 따로 지급) · 기사 차감은 시트 칸으로 나타낼 수 없다
     if ((amt[i].sale && !pairs[i].sale.length) || (amt[i].buy && !pairs[i].buy.length)) return null;

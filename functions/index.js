@@ -4735,14 +4735,14 @@ exports.aiVideoPlan = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeou
     const out = await aiVideo.runVideoPlan({ input: body?.input || {} });
     db.collection("aiTeamLogs").add({
       team: "marketing", uid: decoded?.uid || "", email: decoded?.email || "",
-      question: `[영상 작업실] ${out.input.kind} ${out.input.seconds}초 · ${out.input.topic}`.slice(0, 500), answer: String(out.plan?.title || "").slice(0, 500),
+      question: `[영상 기획] ${out.input.kind} ${out.input.seconds}초 · ${out.input.topic}`.slice(0, 500), answer: String(out.plan?.title || "").slice(0, 500),
       tools: ["video"], usage: out.usage, model: out.model, at: FieldValue.serverTimestamp(),
-    }).catch((e) => console.error("[영상 작업실] 기록 실패:", e));
+    }).catch((e) => console.error("[영상 기획] 기록 실패:", e));
     res.json(out);
   } catch (e) {
     if (e?.user) { res.status(e.status || 500).json({ error: e.message }); return; } // 우리가 만든 안내(키 없음 · 거절 · 끊김)
     const { status, msg } = aiTeams.apiErrorMessage(e);
-    console.error("[영상 작업실] 실패:", e);
+    console.error("[영상 기획] 실패:", e);
     res.status(status).json({ error: msg });
   }
 });

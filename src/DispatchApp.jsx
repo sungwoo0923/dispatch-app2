@@ -332,8 +332,11 @@ function fareCertPhone(raw = "") {
   return raw || "-";
 }
 
+const FARE_CERT_SALE_KEY = "kpFareCertShowSale"; // 🧾 2026-11-24 운임정보에서 청구운임 보이기(기본) · 숨기기 — 이 PC에 기억
 function FareCertModal({ row, companyName, onClose }) {
   const [zoom, setZoom] = React.useState(1);
+  const [showSale, setShowSale] = React.useState(() => { try { return localStorage.getItem(FARE_CERT_SALE_KEY) !== "0"; } catch { return true; } });
+  const toggleSale = () => setShowSale((v) => { try { localStorage.setItem(FARE_CERT_SALE_KEY, v ? "0" : "1"); } catch { /* 무시 */ } return !v; });
   const captureRef = React.useRef(null);
   // ⭐ 2026-11-03 여러 사업자 — 오더의 청구 사업자가 추가 사업자면 그 사업자 이름·정보로 발급
   const fcBiz = useCompanyBiz(getTenant() || companyName);
@@ -343,6 +346,7 @@ function FareCertModal({ row, companyName, onClose }) {
   const issuerName = issuerBiz?.name || companyName;
 
   const 기사운임 = Number(String(r.기사운임 || "0").replace(/[^\d-]/g, "")) || 0;
+  const fb = fareBreakdown(r); // 🧾 2026-11-24 운임 내역(기본 운임 → 지게차 · 특수운임 → 최종)
   const issuedAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false });
   const docNo = `${(r.상차일 || "").replace(/-/g, "")}-${String(r._id || r.id || "").slice(-6).toUpperCase() || "000000"}`;
 
@@ -412,6 +416,7 @@ function FareCertModal({ row, companyName, onClose }) {
             <h3 className="text-[19px] font-black leading-tight"><EditableText id="popup.title.운임정보 미리보기" defaultText="운임확인서" /></h3>
           </div>
           <div className="relative flex items-center gap-1.5">
+            <button type="button" onClick={toggleSale} aria-pressed={showSale} title="운임확인서에 청구운임 · 수수료를 함께 보여 줄지 정해요. 이 PC에 기억돼요." className={`h-9 px-3 rounded-xl border text-[12.5px] font-bold ${showSale ? "bg-white text-[#0F1A30] border-white" : "bg-white/10 border-white/20 hover:bg-white/20"}`}>{showSale ? "청구운임 표시 중" : "청구운임 숨김"}</button>
             <div className="flex items-center rounded-xl bg-white/10 border border-white/15 h-9">
               <button type="button" onClick={() => setZoom((z) => Math.max(0.6, +(z - 0.1).toFixed(2)))} className="w-9 h-9 text-[16px] font-bold hover:bg-white/10 rounded-l-xl">−</button>
               <span className="text-[12px] w-12 text-center tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{Math.round(zoom * 100)}%</span>
@@ -477,6 +482,37 @@ function FareCertModal({ row, companyName, onClose }) {
                     <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 22, fontWeight: 900, marginTop: 2 }}>{(기사운임 + vat).toLocaleString()}원</div>
                   </div>
                 </div>
+                {/* 🧾 2026-11-24 운임 내역 — 운임구분 · 기본 운임 · 지게차 · 특수운임 항목 · 최종 운임(청구운임은 숨길 수 있다) */}
+                {(() => {
+                  const won = (n) => `${Math.round(n).toLocaleString()}원`;
+                  const delta = (n) => (n ? <span style={{ color: n > 0 ? "#2D4C82" : "#B4342A" }}>{n > 0 ? "+" : "−"}{Math.abs(Math.round(n)).toLocaleString()}</span> : <span style={{ color: "#B7C2D3" }}>·</span>);
+                  const th = { fontSize: 11, fontWeight: 800, color: "#5B6B85", padding: "8px 10px", background: "#F5F7FB", borderBottom: "1px solid #E3E8F0", textAlign: "left" };
+                  const td = { fontSize: 12.5, fontWeight: 700, color: "#0F1A30", padding: "8px 10px", borderBottom: "1px solid #EEF1F6", verticalAlign: "top" };
+                  const num = { ...td, textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
+                  const total = { ...num, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" };
+                  return (
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 900, color: "#0F1A30" }}>운임 내역</span>
+                        {fb.fareType && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#2D4C82", background: "#EEF3FC", borderRadius: 6, padding: "2px 8px" }}>운임구분 {fb.fareType}</span>}
+                      </div>
+                      <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #E3E8F0" }}>
+                        <thead><tr>
+                          <th style={th}>항목</th><th style={{ ...th, textAlign: "right" }}>금액</th><th style={th}>처리</th>
+                          <th style={{ ...th, textAlign: "right" }}>기사운임</th>{showSale && <th style={{ ...th, textAlign: "right" }}>청구운임</th>}
+                        </tr></thead>
+                        <tbody>
+                          <tr><td style={td}>기본 운임</td><td style={num}>{won(fb.baseDrv)}</td><td style={{ ...td, color: "#7A89A3" }}>특수운임을 넣기 전 운임</td><td style={num}>{won(fb.baseDrv)}</td>{showSale && <td style={num}>{won(fb.baseSale)}</td>}</tr>
+                          {fb.lines.map((l) => (
+                            <tr key={l.key}><td style={td}>{l.name}</td><td style={num}>{won(l.amount)}</td><td style={{ ...td, fontWeight: 600, color: "#5B6B85" }}>{l.how}</td><td style={num}>{delta(l.drv)}</td>{showSale && <td style={num}>{delta(l.sale)}</td>}</tr>
+                          ))}
+                          <tr><td style={{ ...td, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>최종 운임</td><td style={total} /><td style={{ ...td, background: "#F5F7FB", borderBottom: "none", color: "#5B6B85", fontWeight: 600 }}>{fb.paid ? `회사 별도 지급 ${won(fb.paid)}` : ""}</td><td style={total}>{won(fb.drv)}</td>{showSale && <td style={total}>{won(fb.sale)}</td>}</tr>
+                        </tbody>
+                      </table>
+                      {showSale && <div style={{ textAlign: "right", fontSize: 12, fontWeight: 800, color: "#3A4A66", marginTop: 6 }}>수수료(청구운임 − 기사운임 − 회사 별도 지급) <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: fb.profit < 0 ? "#B4342A" : "#0F1A30" }}>{won(fb.profit)}</b></div>}
+                    </div>
+                  );
+                })()}
                 <div style={{ border: "1px solid #E3E8F0", borderBottom: "none", display: "grid", gridTemplateColumns: "1fr 1fr", marginTop: 10 }}>
                   {cell("지급방식", r.지급방식)}
                   {cell("운송상태", done ? "운송완료" : (r.배차상태 || "배차완료"))}
@@ -3030,6 +3066,7 @@ import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChang
 import { SpecialFareTag, SpecialFareLine } from "./specialFareTag";
 import { FareShell, FareCard, FareRange, FareRow, FareVias, FareFilterPills, fareStats as calcFareStats } from "./FareResultUi"; // ⚠ 이 파일에 같은 이름 상태값(fareStats)이 있어 다른 이름으로 // 🎨 2026-11-24 운임조회 결과 창 새 디자인 // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import { withRoutePresets } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
+import { fareBreakdown } from "./forkliftCore"; // 🧾 2026-11-24 운임정보 운임 내역
 import { SpecialFareButton, ForkliftChip, ForkliftMark, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount, orderProfit, profitTotals } from "./forklift"; // 🏗 2026-11-09 지게차비용 · ⭐ 2026-11-17 수수료 한 식(orderProfit · profitTotals)
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";

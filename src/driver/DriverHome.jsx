@@ -2266,9 +2266,10 @@ export default function DriverHome() {
   }, [slideKey]);
 
   // 📱 2026-11-24 안드로이드 뒤로가기 버튼 — 예전엔 아무 창이 열려 있어도 앱이 바로 닫혔다(기사앱은 화면 이동 기록이 없어 Capacitor 기본 동작 = 앱 종료).
-  //  이제 ① 열린 창(알림함 · 사진 · 상세 · 시트 등)을 먼저 닫고 ② 다른 탭이면 홈 탭으로 ③ 홈 탭이면 앱을 뒤로 보낸다(종료 대신 내리기 — 다시 열면 그대로).
+  //  이제 ① 열린 창(알림함 · 사진 · 상세 · 시트 등)을 먼저 닫고 ② 다른 탭이면 홈 탭으로 ③ 홈 탭이면 "한 번 더 누르면 종료" 안내 후 2초 안에 다시 누르면 앱을 닫는다.
   //  꼭 답해야 하는 창(새 오더 · 변경 · 삭제 안내 · 출근 안내)은 뒤로가기로 닫지 않는다.
   const backRef = useRef(null);
+  const backExitRef = useRef(0); // 마지막으로 홈에서 뒤로가기를 누른 시각
   useEffect(() => {
     backRef.current = () => {
       const sel = document.querySelector(".kp-msel-ov"); // 고르기 목록(MobileSelect 바텀시트)이 열려 있으면 그것부터 닫는다
@@ -2289,7 +2290,11 @@ export default function DriverHome() {
       if (showNotifPanel) { setShowNotifPanel(false); return; }
       if (vehicleSetup && uid && !(driver && needFirstOdo(driver)) && !(deletedNotices.length > 0 || popupOrder || modOrder)) { setVehicleSetup(false); return; } // 화면에 떠 있을 때만(아래 렌더 조건과 같게)
       if (activeTab !== "home") { setActiveTab("home"); return; }
-      try { Promise.resolve(NativeAppPlugin.minimizeApp()).catch(() => NativeAppPlugin.exitApp()); } catch { /* 무시 */ }
+      // 🛠 2026-11-24 홈 탭에서는 "한 번 더 누르면 종료"(사용자 요청) — 2초 안에 다시 누르면 앱을 닫는다. 위치 전송(네이티브 서비스)은 앱을 닫아도 계속된다
+      const now = Date.now();
+      if (now - (backExitRef.current || 0) < 2000) { try { Promise.resolve(NativeAppPlugin.exitApp()).catch(() => {}); } catch { /* 무시 */ } return; }
+      backExitRef.current = now;
+      showToast("뒤로 버튼을 한 번 더 누르면 앱이 종료돼요.");
     };
   });
   useEffect(() => {

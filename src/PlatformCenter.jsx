@@ -91,7 +91,7 @@ const SUBTABS = {
   "contract:list": [["contract:list", "계약 현황"], ["contract:new", "계약서 작성"], ["contract:templates", "계약서 양식"]],
   usage: [["usage", "한눈에 보기"], ["usage:limits", "한도 · 초과 요금표"], ["msgUsage", "문자 · 알림톡"]],
   cost: [["cost", "내 주머니"], ["cost:pnl", "손익 · 원가 상세"]],
-  "mkt:video": [["mkt:video", "영상 편집실"], ["ai:video", "영상 작업실"]],
+  "mkt:video": [["mkt:video", "영상 편집실"], ["ai:video", "영상 기획"]],
   notices: [["notices", "플랫폼 공지"], ["notifTemplate", "알림 문구"]],
   brand: [["brand", "브랜드 디자인"], ["homepage", "홈페이지"], ["landingEdit", "로그인 화면"]],
   integrations: [["integrations", "API 연동"], ["sheetImport", "구글시트 연동"]],
@@ -1330,7 +1330,7 @@ function PlatformCenterInner({ user }) {
   } else if (tab === "command") body = <CommandDeck go={setTab} openCompany={openCompany} />;
   else if (tab === "todo") body = <TodayPanel go={setTab} openCompany={openCompany} />;
   else if (tab === "live") body = <TrafficView openCompany={openCompany} />;
-  else if (tab === "ai:video") body = <><Hero en="MARKETING · VIDEO STUDIO" title="영상 작업실" desc="완성된 홍보 숏츠를 보고 내려받거나, AI와 새 영상 기획안(장면 대본 · 배경음악 큐시트 · 자막)을 만들어요. 도움말 센터 교육 영상도 여기서 고쳐요." /><React.Suspense fallback={<AdmEmpty>작업실을 여는 중이에요…</AdmEmpty>}><VideoStudioLazy /></React.Suspense></>; // 🧭 2026-11-24 AI 본부 › 영상 작업실 → 홍보 › 홍보 영상 탭
+  else if (tab === "ai:video") body = <><Hero en="MARKETING · VIDEO PLANNING" title="영상 기획" desc="완성된 홍보 숏츠를 보고 내려받거나, AI와 새 영상 기획안(장면 대본 · 배경음악 큐시트 · 자막)을 만들어요. 도움말 센터 교육 영상도 여기서 고쳐요." /><React.Suspense fallback={<AdmEmpty>작업실을 여는 중이에요…</AdmEmpty>}><VideoStudioLazy /></React.Suspense></>; // 🧭 2026-11-24 AI 본부 › 영상 작업실 → 홍보 › 홍보 영상 탭
   else if (tab.startsWith("ai:")) body =<AiHq tab={tab} go={setTab} />; // 🤖 2026-11-18 AI 본부(명단 + 개요 · 팀 대화)
   // ⭐ 2026-11-02 원격지원 — 요청 목록 · 승인/거절/완료 · 화면 보기 · 원격 번호
   else if (tab === "support") body = <><Hero en="COMMAND · SUPPORT" title="원격 지원" desc="직원이 보낸 원격 지원 요청을 승인하거나, [원격 지원 걸기]로 직원에게 먼저 요청해요(직원이 수락해야 시작). 직원 화면을 실시간으로 보고 제어하거나(직원이 허용할 때만) 원격 프로그램 번호를 받아요." right={<Clock />} /><RemoteSupportAdminPanel me={user} /></>;

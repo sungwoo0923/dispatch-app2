@@ -184,7 +184,7 @@ export default function HubWallet({ me, cfg, toast, jobs = [], posts = [], notic
             <input className={`${inputCls} text-right font-extrabold`} inputMode="numeric" value={wamt} onChange={(e) => setWamt(money(e.target.value))} placeholder="출금할 금액" style={NUMS} data-testid="withdraw-amount" />
             <Btn onClick={withdraw} disabled={!!busy || !wamt || !me.bank?.number} data-testid="withdraw-submit">{busy === "wd" ? "신청하고 있어요" : "출금"}</Btn>
           </div>
-          <div className="text-[13.5px] text-[#5F6E87] mt-1.5">{me.bank?.number ? `${me.bank.bank} ${mask(me.bank.number)}로 보내드려요` : "출금계좌를 먼저 등록해 주세요"}</div>
+          <div className="text-[13.5px] text-[#5F6E87] mt-1.5">{me.bank?.number ? `신청하면 담당자가 확인한 뒤 ${me.bank.bank} ${mask(me.bank.number)}로 보내 드려요` : "출금계좌를 먼저 등록해 주세요"}</div>
           {wds.length > 0 && <div className="mt-2 divide-y divide-[#EEF1F6]" data-testid="withdraw-list">{wds.slice(0, 6).map((x) => <div key={x.id} className="flex items-center gap-2 py-2 text-[14.5px]"><Badge tone={WD_ST[x.status]?.[1]}>{WD_ST[x.status]?.[0] || x.status}</Badge><span className="font-extrabold shrink-0" style={NUMS}>{wonFull(x.amount)}</span>{(x.failReason || x.rejectReason) && <span className="min-w-0 truncate text-[13.5px] text-[#55657F]" data-testid="withdraw-reason">{x.failReason || x.rejectReason}</span>}<span className="text-[#5F6E87] ml-auto shrink-0">{ago(x.createdAt)}</span></div>)}</div>}
         </Sec>
         {(payouts.length > 0 || canTake(me)) && (

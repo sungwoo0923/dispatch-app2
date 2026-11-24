@@ -28,11 +28,12 @@ export const SPECIAL_TYPES = [
 ];
 export const sfType = (k) => SPECIAL_TYPES.find((t) => t.key === k) || SPECIAL_TYPES[SPECIAL_TYPES.length - 1];
 export const sfItems = (o) => (Array.isArray(o?.특수운임) ? o.특수운임 : []).filter((x) => x && fkNum(x.금액) > 0);
-// 받는사람 "없음" = 거래처에 추가 청구만 하고 따로 주는 돈은 없음
+// 받는사람 "없음" = 따로 주는 돈은 없음. 부담 "청구"면 거래처에 추가 청구만, 부담 "기사"면 기사운임에서 차감(회사 몫으로 남음)
+//  🛠 2026-11-24 기타 항목도 [기사 차감]이 되게(사용자 요청). 예: 기사 과태료 · 사고 공제를 기사운임에서 뺀다
 export const sfPayee = (it) => (it?.받는사람 === "외부" || it?.받는사람 === "기사" || it?.받는사람 === "없음" ? it.받는사람 : sfType(it?.종류).payee);
 export const sfMode = (it) => {
   const m = ["기사", "회사", "청구"].includes(it?.부담) ? it.부담 : sfType(it?.종류).mode;
-  if (sfPayee(it) === "없음") return "청구";
+  if (sfPayee(it) === "없음") return m === "기사" ? "기사" : "청구";
   return sfPayee(it) === "기사" && m === "기사" ? "청구" : m; // 기사에게 주는 돈을 기사에게서 뺄 수는 없다
 };
 // D = 기사운임에서 뺀 양(음수 = 더한 양) · C = 청구운임에 더한 양 · ext = 회사가 따로 지급(외부)
@@ -40,7 +41,7 @@ export function sfTotals(o) {
   let D = 0, C = 0, ext = 0;
   for (const it of sfItems(o)) {
     const a = Math.max(0, fkNum(it.금액)); const m = sfMode(it);
-    if (sfPayee(it) === "없음") { C += a; continue; }
+    if (sfPayee(it) === "없음") { if (m === "기사") D += a; else C += a; continue; }
     if (sfPayee(it) === "기사") D -= a; else { ext += a; if (m === "기사") D += a; }
     if (m === "청구") C += a;
   }

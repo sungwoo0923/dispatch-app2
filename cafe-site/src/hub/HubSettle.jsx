@@ -42,7 +42,7 @@ function settleLine(o, myUid) {
 function settleGuide(g) {
   if (g.direct > 0) return `직접 정산할 돈이 ${wonFull(g.direct)} 남아 있어요. ${g.party}에서 받으면 돼요.`;
   if (g.direct < 0) return `직접 정산할 돈이 ${wonFull(-g.direct)} 남아 있어요. ${g.party}에 보내면 돼요.`;
-  return "직접 주고받을 돈은 없어요. 허브 잔액에서 자동으로 정산돼요.";
+  return "직접 주고받을 돈은 없어요. 허브 잔액에 기록되고, 출금은 신청하면 담당자가 확인한 뒤 보내 드려요.";
 }
 
 function csvCell(v) { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }
@@ -149,7 +149,7 @@ export default function HubSettle({ me, posts = [], jobs = [], openOrder, toast 
           <Field label="포함 범위"><select className={selectCls} value={withActive ? "1" : "0"} onChange={(e) => setWithActive(e.target.value === "1")} data-testid="settle-range"><option value="0">운송완료만</option><option value="1">운송중 포함(예정)</option></select></Field>
         </div>
         <div className="mt-3 flex items-center gap-2 flex-wrap">
-          <span className="text-[13.5px] text-[#5F6E87] leading-snug flex-1 min-w-[200px]">인수증은 허브 잔액에서 자동으로 오가요. <b className="text-[#1B2B4B]">직접 정산</b> 금액만 서로 보내면 돼요.</span>
+          <span className="text-[13.5px] text-[#5F6E87] leading-snug flex-1 min-w-[200px]">인수증 운임은 허브 잔액에 먼저 기록되고, 실제 돈은 출금을 신청하면 담당자가 확인한 뒤 등록된 계좌로 보내 드려요. <b className="text-[#1B2B4B]">직접 정산</b> 금액만 서로 보내면 돼요.</span>
           <Btn kind="ghost" size="md" onClick={exportCsv} disabled={!lines.length} data-testid="settle-csv"><HI name="file" size={16} />엑셀 받기</Btn>
         </div>
       </Card>
