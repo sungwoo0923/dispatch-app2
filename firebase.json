@@ -1,7 +1,8 @@
 {
   "firestore": {
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
+    "rules": "firestore.deploy.rules",
+    "indexes": "firestore.indexes.json",
+    "predeploy": ["node scripts/stripRules.mjs"]
   },
   "storage": {
     "rules": "storage.rules"

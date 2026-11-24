@@ -1,2 +1,4 @@
 # 📝 업데이트 보관함 원본(public/updates.json) 갱신 — 실패해도 커밋은 막지 않는다
 node scripts/gen-updates.mjs >/dev/null 2>&1 && git add public/updates.json >/dev/null 2>&1 || true
+# 🔒 2026-11-24 보안 규칙 배포용 사본(주석 뺀 firestore.deploy.rules) — firestore.rules 가 바뀌면 같이 만든다(배포 때 predeploy 도 다시 만든다)
+node scripts/stripRules.mjs >/dev/null 2>&1 && git add firestore.deploy.rules >/dev/null 2>&1 || true

@@ -1,0 +1,2346 @@
+// 자동 생성 파일 — 고치지 마세요. 원본은 firestore.rules (node scripts/stripRules.mjs 가 주석을 빼서 만듦)
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function myUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function ck() {
+      return request.auth != null && request.auth.token.get('v', 0) == 1;
+    }
+    function tk(k, d) {
+      return request.auth.token.get(k, d);
+    }
+    function myRoleRaw() {
+      return ck() ? tk('r', '') : myUser().get('role', '');
+    }
+    function myRole() {
+      let r = myRoleRaw();
+      return (r in ['totalMaster', 'driver', 'shipper', 'cafeUser'] || !myIsMaster()) ? r : 'allMgr';
+    }
+    function myCoRawAny() {
+      return ck() ? tk('co', '') : myUser().get('companyName', '');
+    }
+    function myCoRaw() {
+      return myRoleRaw() == 'shipper' ? '(화주)' + myCoRawAny() : myCoRawAny();
+    }
+    function myIsMaster() {
+      return ck() ? tk('ms', false) == true : myUser().get('isMaster', false) == true;
+    }
+    function myLinkedCo() {
+      return ck() ? tk('sh', '') : linkedCoOf(myUser());
+    }
+    function myTeamFin() {
+      return staffAttrOk() && (ck() ? tk('fin', false) == true : (string(myUser().get('team', '')).matches('.*(경리|회계|재무).*') || string(myUser().get('legacyTeam', '')).matches('.*(경리|회계|재무).*')));
+    }
+    function staffAttrOk() {
+      return !(myRoleRaw() in ['driver', 'shipper', 'cafeUser']);
+    }
+    function myTeamPay() {
+      return staffAttrOk() && (ck() ? tk('pay', false) == true : (string(myUser().get('team', '')).matches('.*(재무|경리|회계|총무).*') || string(myUser().get('legacyTeam', '')).matches('.*(재무|경리|회계|총무).*')));
+    }
+    function myTeamHr() {
+      return staffAttrOk() && (ck() ? tk('hr', false) == true : (string(myUser().get('team', '')).matches('.*인사.*') || string(myUser().get('legacyTeam', '')).matches('.*인사.*')));
+    }
+    function myTeamExec() {
+      return staffAttrOk() && (ck() ? tk('tx', false) == true : myUser().get('team', '') == '임원');
+    }
+    function myPosExec() {
+      return staffAttrOk() && (ck() ? tk('xp', false) == true : myUser().get('position', '') in ['이사', '상무', '전무', '부사장', '사장', '대표', '대표이사', '본부장', '임원']);
+    }
+    function myPosCeo() {
+      return staffAttrOk() && (ck() ? tk('ceo', false) == true : myUser().get('position', '') in ['대표', '대표이사', '사장']);
+    }
+    function claimApproved() {
+      return ck() && tk('ap', false) == true && tk('st', false) == true && tk('r', '') != 'cafeUser'
+        && (tk('r', '') == 'totalMaster' || tk('ce', false) != true);
+    }
+    function isApproved() {
+      return isSignedIn() && (
+        request.auth.token.get('email', '') == "tjddnqkf@naver.com" ||
+        claimApproved() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         myUser().get('approved', true) != false &&
+         myUser().get('employmentStatus', '') != '퇴사' &&
+         myUser().get('role', '') != 'cafeUser' &&
+         (myUser().get('role', '') == 'totalMaster' || !contractEnded(myUser())))
+      );
+    }
+    function contractCoOf(u) {
+      return u.get('role', '') == 'shipper'
+        ? (u.get('linkedTransportCompany', null) is map ? u.linkedTransportCompany.get('companyName', '') : '')
+        : u.get('companyName', '(계정회사없음)');
+    }
+    function contractEnded(u) {
+      let co = contractCoOf(u);
+      return co is string && co != '' &&
+        exists(/databases/$(database)/documents/companyPlans/$(co)) &&
+        get(/databases/$(database)/documents/companyPlans/$(co)).data.get('status', '') == 'ended';
+    }
+    function plateId(carNo) {
+      return carNo.trim().replace('\\s+', '').upper();
+    }
+    function preKeyDoc(data) {
+      return /databases/$(database)/documents/drivers/$(data.get('companyName', '').trim() + '__' + plateId(data.carNo));
+    }
+    function preDocMatches(p, data) {
+      return exists(p) &&
+        get(p).data.get('이름', get(p).data.get('name', '')).trim() == data.get('name', '').trim() &&
+        get(p).data.get('companyName', '').trim() == data.get('companyName', '').trim();
+    }
+    function preRegisteredDriverOk(data) {
+      return data.get('role', '') == 'driver' &&
+        data.get('carNo', '') is string && data.get('carNo', '') != '' &&
+        (preDocMatches(preKeyDoc(data), data) ||
+         preDocMatches(/databases/$(database)/documents/drivers/$(plateId(data.carNo)), data));
+    }
+    function selfUserWriteOk(userId) {
+      return request.auth.uid == userId && (
+        ('approved' in request.resource.data && request.resource.data.approved == false
+          && request.resource.data.get('isMaster', false) != true
+          && !request.resource.data.keys().hasAny(['permissions', 'subAdmin', 'subAdminPrevRole'])) ||
+        request.resource.data.get('role', '') == 'cafeUser' ||
+        (resource != null &&
+         request.resource.data.get('approved', null) == resource.data.get('approved', null) &&
+         request.resource.data.get('role', null) == resource.data.get('role', null))
+      );
+    }
+    function isTotalMasterUser() {
+      return isSignedIn() && (
+        request.auth.token.get('email', '') == "tjddnqkf@naver.com" ||
+        ((!ck() || tk('tm', false) == true) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "totalMaster")
+      );
+    }
+    function myCoAny() {
+      let c = ck() ? tk('co', '') : myUser().get('companyName', '(계정회사없음)');
+      return c == '' ? '(계정회사없음)' : c;
+    }
+    function myCo() {
+      return myRoleRaw() == 'shipper' ? '(화주)' + myCoAny() : myCoAny();
+    }
+    function locked() {
+      return true;
+    }
+    function isShipperUser() {
+      return myRole() == 'shipper';
+    }
+    function coMatch(d) {
+      return isTotalMasterUser() || (isApproved() && !(myRoleRaw() in ['shipper', 'driver']) && d.companyName == myCoAny());
+    }
+    function coCreate() {
+      return isTotalMasterUser() || (isApproved() && !(myRoleRaw() in ['shipper', 'driver']) && request.resource.data.get('companyName', '') == myCoAny());
+    }
+    function coKeep() {
+      return isTotalMasterUser() || !locked() || request.resource.data.get('companyName', '') == resource.data.get('companyName', '');
+    }
+    function shipperOwns(d) {
+      return isApproved() && isShipperUser() && (d.get('shipperUid', '') == request.auth.uid
+        || (d.get('shipperCompany', '') == myCoAny() && myLinkedCo() != '' && d.get('companyName', '') == myLinkedCo()));
+    }
+    function driverAssignedKey(key) {
+      let p = /databases/$(database)/documents/driverOrders/$(key);
+      return isApproved() && myRole() == 'driver' && exists(p) && get(p).data.get('driverUid', '') == request.auth.uid;
+    }
+    function driverAssigned(path) {
+      let key = path[3] + '__' + path[4];
+      let p = /databases/$(database)/documents/driverOrders/$(key);
+      return isApproved() && myRole() == 'driver' && exists(p) && get(p).data.get('driverUid', '') == request.auth.uid;
+    }
+    function shipperCreate() {
+      return isApproved() && isShipperUser() && request.resource.data.get('shipperUid', '') == request.auth.uid
+        && request.resource.data.get('shipperCompany', '') == myCoAny()
+        && myLinkedCo() != '' && request.resource.data.get('companyName', '') == myLinkedCo();
+    }
+    match /driverOrders/{id} {
+      allow read: if isTotalMasterUser() || (isApproved() && myRole() == 'driver' && resource.data.get('driverUid', '') == request.auth.uid);
+      allow write: if false;
+    }
+    match /shipperOrders/{id} {
+      allow read: if isTotalMasterUser() || (isApproved() && isShipperUser() && (resource.data.get('shipperUid', '') == request.auth.uid
+        || (resource.data.get('shipperCompany', '') == myCoAny() && myLinkedCo() != '' && resource.data.get('companyName', '') == myLinkedCo())));
+      allow write: if false;
+    }
+    match /orders/{id} {
+      allow get, list: if coMatch(resource.data);
+      allow get: if resource == null && isApproved();
+      allow create: if coCreate() || shipperCreate();
+      allow update: if (coMatch(resource.data) && coKeep())
+        || (shipperOwns(resource.data) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['기사운임', '수수료', '기사확인상태', '기사타임라인', '기사확인값', '배차확정자', '배차확정자Uid', 'companyName', 'shipperUid', 'createdByUid', '차량번호', '이름', '전화번호', '청구사업자',
+          '블라인드', '_seed', 'shipperCompany', 'source', 'originCol', 'originId', '_transmittedOrderId']))
+        || (driverAssigned(request.path) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['기사확인상태', '기사확인일시', '기사확인값', '기사거절사유', '기사완료일시', '기사타임라인', '배차상태', '배차확정일시', '배차확정자', '상차완료일시', '상차지도착주소', '상태', '수정재승인', '수정확인일시', '수정확인항목', '수정거절', '수정거절항목', '업체전달상태', '완료회차', '회차완료일시', 'attachCount', '이름', '전화번호', '차량번호', 'updatedAt', '_lastModified']));
+      allow delete: if coMatch(resource.data) || (resource == null && isApproved() && myRole() != 'driver');
+    }
+    match /dispatch/{id} {
+      allow get, list: if coMatch(resource.data);
+      allow get: if resource == null && isApproved();
+      allow create: if coCreate() || shipperCreate();
+      allow update: if (coMatch(resource.data) && coKeep())
+        || (shipperOwns(resource.data) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['기사운임', '수수료', '기사확인상태', '기사타임라인', '기사확인값', '배차확정자', '배차확정자Uid', 'companyName', 'shipperUid', 'createdByUid', '차량번호', '이름', '전화번호', '청구사업자',
+          '블라인드', '_seed', 'shipperCompany', 'source', 'originCol', 'originId', '_transmittedOrderId']))
+        || (driverAssigned(request.path) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['기사확인상태', '기사확인일시', '기사확인값', '기사거절사유', '기사완료일시', '기사타임라인', '배차상태', '배차확정일시', '배차확정자', '상차완료일시', '상차지도착주소', '상태', '수정재승인', '수정확인일시', '수정확인항목', '수정거절', '수정거절항목', '업체전달상태', '완료회차', '회차완료일시', 'attachCount', '이름', '전화번호', '차량번호', 'updatedAt', '_lastModified']));
+      allow delete: if coMatch(resource.data) || (resource == null && isApproved() && myRole() != 'driver');
+    }
+    match /dispatch_test/{id} {
+      allow read, delete: if coMatch(resource.data);
+      allow create: if coCreate();
+      allow update: if coMatch(resource.data) && coKeep();
+    }
+    match /forkliftDrivers/{id} {
+      allow get, list: if coMatch(resource.data) && !(myRole() in ['driver', 'shipper', 'cafeUser']);
+      allow update: if coMatch(resource.data) && coKeep() && !(myRole() in ['driver', 'shipper', 'cafeUser', 'viewer']);
+      allow create: if coCreate() && !(myRole() in ['driver', 'shipper', 'cafeUser', 'viewer']);
+      allow delete: if coMatch(resource.data) && !(myRole() in ['driver', 'shipper', 'cafeUser', 'viewer']);
+    }
+    match /forkliftPresets/{id} {
+      allow get: if resource == null && isApproved() && !(myRole() in ['driver', 'shipper', 'cafeUser']);
+      allow get, list: if coMatch(resource.data) && !(myRole() in ['driver', 'shipper', 'cafeUser']);
+      allow update: if coMatch(resource.data) && coKeep() && !(myRole() in ['driver', 'shipper', 'cafeUser', 'viewer']);
+      allow create: if coCreate() && !(myRole() in ['driver', 'shipper', 'cafeUser', 'viewer']);
+      allow delete: if coMatch(resource.data) && !(myRole() in ['driver', 'shipper', 'cafeUser', 'viewer']);
+    }
+    match /fixedClients/{id} {
+      allow get: if resource == null && isApproved() && !(myRoleRaw() in ['driver', 'shipper', 'cafeUser']);
+      allow get, list: if coMatch(resource.data);
+      allow update: if coMatch(resource.data) && coKeep();
+      allow create: if coCreate();
+      allow delete: if coMatch(resource.data);
+    }
+    function isOfficeStaff() {
+      return isTotalMasterUser() || (isApproved() && !(myRole() in ['driver', 'shipper']));
+    }
+    match /{dcol}/{id} {
+      allow read: if dcol in ['driverStatements', 'fleetPenalties'] && (
+        (isOfficeStaff() && coMatch(resource.data)) || (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid));
+      allow create: if dcol in ['driverStatements', 'fleetPenalties'] && isOfficeStaff() && coCreate();
+      allow update: if dcol in ['driverStatements', 'fleetPenalties'] && (
+        (isOfficeStaff() && coMatch(resource.data) && coKeep()) ||
+        (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'confirmedAt', 'status', 'driverMemo', 'paidAt', 'objectedAt', 'driverAction'])));
+      allow delete: if dcol in ['driverStatements', 'fleetPenalties'] && isOfficeStaff() && coMatch(resource.data);
+    }
+    match /vehicleExpenses/{id} {
+      allow create: if isSignedIn() && request.resource.data.get('driverId', '') == request.auth.uid
+        && request.resource.data.get('companyName', '') == myCo() && request.resource.data.get('status', '') == '접수';
+      allow read: if (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid) || (isOfficeStaff() && coMatch(resource.data));
+      allow update: if (isOfficeStaff() && coMatch(resource.data) && coKeep())
+        || (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid && resource.data.get('status', '') == '반려'
+          && request.resource.data.get('status', '') == '접수'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['image', 'imgHash', 'takenAt', 'captured', 'status', 'rejectReason', 'updatedAt']));
+      allow delete: if (isOfficeStaff() && coMatch(resource.data))
+        || (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid && resource.data.get('status', '') in ['접수', '확인', '반려']
+          && resource.data.get('approvalId', '') == '');
+    }
+    match /vehiclePhotoSettings/{co} {
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
+      allow write: if isOfficeStaff() && (isTotalMasterUser() || myCo() == co) && request.resource.data.get('companyName', '') == co;
+    }
+    match /vehiclePhotos/{id} {
+      allow create: if isSignedIn() && request.resource.data.get('driverId', '') == request.auth.uid
+        && request.resource.data.get('companyName', '') == myCo() && id.matches(request.auth.uid + '_.*');
+      allow update: if (isOfficeStaff() && coMatch(resource.data) && coKeep())
+        || (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid && request.resource.data.get('driverId', '') == request.auth.uid
+          && request.resource.data.get('companyName', '') == resource.data.get('companyName', ''));
+      allow read: if (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid) || (isOfficeStaff() && coMatch(resource.data));
+      allow delete: if isOfficeStaff() && coMatch(resource.data);
+    }
+    match /driverContracts/{id} {
+      allow read: if (isOfficeStaff() && coMatch(resource.data)) || (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid);
+      allow create: if isOfficeStaff() && coCreate() && request.resource.data.get('status', '') == 'sent';
+      allow update: if (isOfficeStaff() && coMatch(resource.data) && coKeep())
+        || (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid && resource.data.get('status', '') != 'signed'
+          && request.resource.data.get('status', '') in ['read', 'signed']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'status', 'signedAt', 'signImage', 'signMethod', 'signName']));
+      allow delete: if isOfficeStaff() && coMatch(resource.data);
+    }
+    match /companyContracts/{id} {
+      allow read, update, delete: if isOfficeStaff() && coMatch(resource.data);
+      allow create: if isOfficeStaff() && coCreate();
+    }
+    match /fixedRoutes/{id} {
+      allow get: if resource == null && isApproved() && !(myRoleRaw() in ['driver', 'shipper', 'cafeUser']);
+      allow read, update, delete: if isOfficeStaff() && coMatch(resource.data);
+      allow create: if isOfficeStaff() && coCreate();
+    }
+    match /personalSchedules/{id} {
+      allow read, delete: if request.auth != null && resource.data.uid == request.auth.uid;
+      allow update: if request.auth != null && resource.data.uid == request.auth.uid && request.resource.data.uid == request.auth.uid;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+    }
+    match /freightJobs/{id} {
+      allow read: if isOfficeStaff() && coMatch(resource.data);
+      allow create: if isOfficeStaff() && coCreate() && myRole() != 'viewer';
+      allow update: if isOfficeStaff() && coMatch(resource.data) && coKeep() && myRole() != 'viewer';
+      allow delete: if isOfficeStaff() && coMatch(resource.data) && myRole() != 'viewer';
+    }
+    match /routeBoards/{id} {
+      allow get: if resource == null && isApproved() && !(myRoleRaw() in ['driver', 'shipper', 'cafeUser']);
+      allow read, update, delete: if isOfficeStaff() && coMatch(resource.data);
+      allow create: if isOfficeStaff() && coCreate();
+    }
+    match /sheetProfiles/{id} {
+      allow read: if isOfficeStaff() && (isTotalMasterUser() || resource.data.get('companyName', '') == myCo());
+      allow create: if isTotalMasterUser() || (isOfficeStaff() && isCompanyAdmin(myCo()) && request.resource.data.get('companyName', '') == myCo());
+      allow update: if isTotalMasterUser() || (isOfficeStaff() && isCompanyAdmin(myCo()) && resource.data.get('companyName', '') == myCo() && request.resource.data.get('companyName', '') == myCo());
+      allow delete: if isTotalMasterUser() || (isOfficeStaff() && isCompanyAdmin(myCo()) && resource.data.get('companyName', '') == myCo());
+    }
+    match /routeCarrierSettings/{co} {
+      allow read: if fareRulesStaff(co);
+      allow create, update: if (isTotalMasterUser() || (isOfficeStaff() && myCo() == co && (isCompanyAdmin(co) || myRole() == 'test')))
+        && request.resource.data.get('companyName', '') == co;
+      allow delete: if isTotalMasterUser() || isCompanyAdmin(co);
+    }
+    function fareRulesStaff(co) {
+      return isTotalMasterUser() || (isOfficeStaff() && myCo() == co);
+    }
+    match /companySettings/{co} {
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co && myRole() != 'driver');
+      allow create: if request.resource.data.keys().hasOnly(['companyName', 'workWeekdays'])
+        && request.resource.data.get('companyName', '') == co && request.resource.data.workWeekdays is list && request.resource.data.workWeekdays.size() <= 7
+        && isApproved() && myCo() == co && (myRole() in ['admin', 'allMgr', 'test'] || isHrStaff());
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyName', 'workWeekdays'])
+        && request.resource.data.get('companyName', co) == co && request.resource.data.workWeekdays is list && request.resource.data.workWeekdays.size() <= 7
+        && isApproved() && myCo() == co && (myRole() in ['admin', 'allMgr', 'test'] || isHrStaff());
+      allow write: if isTotalMasterUser() || (isApproved() && myCo() == co && myIsMaster());
+      allow create: if isApproved() && myCo() == co && myRole() in ['admin', 'allMgr', 'hrAcct', 'hrManager', 'test', 'acctStaff']
+        && request.resource.data.keys().hasOnly(['companyName', 'bizList', 'bizListAt', 'bizMemory']);
+      allow update: if isApproved() && myCo() == co && myRole() in ['admin', 'allMgr', 'hrAcct', 'hrManager', 'test', 'acctStaff']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyName', 'bizList', 'bizListAt', 'bizMemory']);
+      allow update: if isApproved() && myCo() == co && myRole() in ['admin', 'allMgr', 'hrAcct', 'hrManager', 'test', 'acctStaff', 'hrStaff', 'user']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bizMemory']);
+      allow create: if isApproved() && myCo() == co && !(myRole() in ['driver', 'shipper', 'viewer', 'cafeUser'])
+        && request.resource.data.keys().hasOnly(['companyName', 'routeGroupOwners'])
+        && request.resource.data.get('companyName', '') == co && request.resource.data.routeGroupOwners is map;
+      allow update: if isApproved() && myCo() == co && !(myRole() in ['driver', 'shipper', 'viewer', 'cafeUser'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['routeGroupOwners'])
+        && request.resource.data.routeGroupOwners is map;
+      allow create: if isApproved() && myCo() == co && myRole() in ['admin', 'allMgr', 'test']
+        && request.resource.data.keys().hasOnly(['companyName', 'routePresetSheet'])
+        && request.resource.data.get('companyName', '') == co && request.resource.data.routePresetSheet is bool;
+      allow update: if isApproved() && myCo() == co && myRole() in ['admin', 'allMgr', 'test']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['routePresetSheet'])
+        && request.resource.data.routePresetSheet is bool;
+    }
+    match /colStyles/{co} {
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
+      allow write: if isTotalMasterUser() || (isApproved() && myCo() == co && myRole() != 'viewer'
+        && request.resource.data.get('companyName', '') == co);
+    }
+    match /colLayouts/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null && request.auth.uid == uid && isApproved()
+        && request.resource.data.get('uid', '') == uid
+        && (isTotalMasterUser() || request.resource.data.get('companyName', '') == myCo());
+    }
+    match /colLayoutsCompany/{co} {
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
+      allow write: if isTotalMasterUser() || (isApproved() && myCo() == co && myRole() != 'viewer'
+        && myRole() != 'driver' && myRole() != 'shipper'
+        && request.resource.data.get('companyName', '') == co);
+    }
+    match /companyFeatures/{co} {
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
+      allow write: if isTotalMasterUser();
+    }
+    function fareFeatureOn(co) {
+      return !exists(/databases/$(database)/documents/companyFeatures/$(co))
+        || get(/databases/$(database)/documents/companyFeatures/$(co)).data.get('fareRules', true) != false;
+    }
+    match /fareRules/{co} {
+      allow read: if fareRulesStaff(co);
+      allow create: if fareRulesStaff(co) && myRole() != 'viewer' && (isTotalMasterUser() || fareFeatureOn(co))
+        && request.resource.data.get('companyName', '') == co;
+      allow update: if fareRulesStaff(co) && myRole() != 'viewer' && (isTotalMasterUser() || fareFeatureOn(co))
+        && request.resource.data.get('companyName', '') == co;
+      allow delete: if fareRulesStaff(co) && isCompanyAdmin(co);
+    }
+    function salesAdmin() {
+      return isTotalMasterUser() || (isApproved() && !isShipperUser()
+        && (myRole() in ['salesMgr', 'admin', 'allMgr'] || myIsMaster() || isExecRoleUser()));
+    }
+    match /salesAccounts/{id} {
+      allow read: if (resource == null && isApproved()) || coMatch(resource.data);
+      allow create: if coCreate() && myRole() != 'viewer'
+        && (request.resource.data.get('uid', '') == request.auth.uid || salesAdmin());
+      allow update: if coMatch(resource.data) && coKeep() && salesAdmin();
+      allow delete: if coMatch(resource.data) && salesAdmin();
+    }
+    match /salesPlans/{co} {
+      allow read: if (resource == null && isApproved()) || coMatch(resource.data);
+      allow create: if coCreate() && salesAdmin() && (isTotalMasterUser() || co == myCo());
+      allow update: if coMatch(resource.data) && coKeep() && salesAdmin();
+      allow delete: if isTotalMasterUser();
+    }
+    match /salesIncentives/{id} {
+      allow read: if (resource == null && isApproved())
+        || (coMatch(resource.data) && (resource.data.get('uid', '') == request.auth.uid
+          || myRole() in ['test', 'acctStaff', 'hrAcct'] || salesAdmin()));
+      allow create: if coCreate() && salesAdmin();
+      allow update: if coMatch(resource.data) && coKeep() && salesAdmin();
+      allow delete: if coMatch(resource.data) && salesAdmin();
+    }
+    function driverOfficeBlocked(c) {
+      return c in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes',
+          'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets',
+          'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedgerFiles', 'arDesk', 'vehicleCardTx', 'vehicleCostReports',
+          'salesLeads', 'salesActivities']
+        && myRole() == 'driver';
+    }
+    match /{tcol}/{id} {
+      allow read: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk', 'vehicleCardTx', 'vehicleCareSettings', 'vehicleCostReports', 'salesLeads', 'salesActivities']
+        && (((resource == null && isApproved()) || coMatch(resource.data)) && !driverOfficeBlocked(tcol)
+          || (isApproved() && myRole() == 'driver' && resource != null && ((tcol == 'vehicleTypes' && resource.data.get('companyName', '') == myCo())
+            || (tcol == 'driver_completed_archive' && resource.data.get('driverId', '') == request.auth.uid))));
+      allow create: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk', 'vehicleCardTx', 'vehicleCareSettings', 'vehicleCostReports', 'salesLeads', 'salesActivities']
+        && coCreate() && !driverOfficeBlocked(tcol);
+      allow update: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk', 'vehicleCardTx', 'vehicleCareSettings', 'vehicleCostReports', 'salesLeads', 'salesActivities']
+        && coMatch(resource.data) && coKeep() && !driverOfficeBlocked(tcol);
+      allow delete: if tcol in ['clients', 'places', 'recurringOrders', 'deletedOrders', 'driver_completed_archive', 'notifications',
+          'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests', 'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes', 'arDesk', 'vehicleCardTx', 'vehicleCareSettings', 'vehicleCostReports', 'salesLeads', 'salesActivities']
+        && coMatch(resource.data) && !driverOfficeBlocked(tcol);
+    }
+    function fundsMenuLevel() {
+      return ck() ? tk('fm', 'hidden') : fundsMenuLevelDoc();
+    }
+    function fundsMenuLevelDoc() {
+      let r = myUser().get('role', '');
+      let p = /databases/$(database)/documents/customRoles/$(r);
+      let ov = /databases/$(database)/documents/companyRoleOverrides/$(myUser().get('companyName', ''));
+      let g = exists(p) ? get(p).data : {};
+      let o = exists(ov) ? get(ov).data.get('roles', {}).get(r, {}) : {};
+      let menus = ('menus' in o) ? o.get('menus', {}) : g.get('menus', {});
+      return (r != '' && !(r in ['admin', 'allMgr', 'hrManager', 'hrAcct', 'user', 'test', 'viewer', 'totalMaster', 'driver', 'shipper'])
+        && (exists(p) || o.size() > 0)) ? menus.get('자금관리', 'hidden') : 'hidden';
+    }
+    match /acctFunds/{id} {
+      allow read: if coMatch(resource.data) && (isTotalMasterUser() || myRole() in ['test', 'admin', 'hrAcct', 'allMgr'] || isExecRoleUser() || fundsMenuLevel() in ['read', 'write']);
+      allow create: if coCreate() && (isTotalMasterUser() || myRole() in ['test', 'admin', 'hrAcct', 'allMgr'] || fundsMenuLevel() == 'write');
+      allow update: if coMatch(resource.data) && coKeep() && (isTotalMasterUser() || myRole() in ['test', 'admin', 'hrAcct', 'allMgr'] || fundsMenuLevel() == 'write');
+      allow delete: if coMatch(resource.data) && (isTotalMasterUser() || myRole() in ['test', 'admin', 'hrAcct', 'allMgr'] || fundsMenuLevel() == 'write');
+    }
+    match /places/{id} {
+      allow read, update, delete: if isApproved() && isShipperUser() && resource.data.get('userId', '') == request.auth.uid;
+      allow create: if isApproved() && isShipperUser() && request.resource.data.get('userId', '') == request.auth.uid;
+    }
+    match /notifications/{id} {
+      allow read: if isApproved() && resource.data.get('toUid', '') == request.auth.uid;
+      allow update: if isApproved() && resource.data.get('toUid', '') == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
+    }
+    match /smsRelay/{code} {
+      allow get: if true;
+      allow list, update: if false;
+      allow create: if isApproved() && code.size() >= 12
+        && request.resource.data.keys().hasOnly(['to', 'body', 'by', 'createdAt'])
+        && request.resource.data.by == request.auth.uid
+        && request.resource.data.to is list && request.resource.data.to.size() >= 1 && request.resource.data.to.size() <= 50
+        && request.resource.data.body is string && request.resource.data.body.size() <= 2000
+        && request.resource.data.createdAt == request.time;
+      allow delete: if isSignedIn() && resource.data.get('by', '') == request.auth.uid;
+    }
+    match /shortLinks/{code} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if isOfficeStaff();
+      allow update: if isOfficeStaff() && request.resource.data.get('id', '') == resource.data.get('id', '');
+      allow delete: if isTotalMasterUser();
+    }
+    function attParentOk(col, orderId) {
+      let p = /databases/$(database)/documents/$(col)/$(orderId);
+      return isTotalMasterUser() || (isApproved() && (!locked()
+        || (exists(p) && ((!(myRoleRaw() in ['shipper', 'driver']) && get(p).data.get('companyName', '') == myCoAny()) || shipperOwns(get(p).data)))))
+        || (col in ['orders', 'dispatch'] && driverAssignedKey(col + '__' + orderId));
+    }
+    function attLegacyParentGet(col, orderId) {
+      let p = /databases/$(database)/documents/$(col)/$(orderId);
+      return isTotalMasterUser() && exists(p) && !('companyName' in get(p).data);
+    }
+    match /{col}/{orderId}/attachments/{attId} {
+      allow get: if attParentOk(col, orderId) || attLegacyParentGet(col, orderId);
+      allow list, create, update, delete: if attParentOk(col, orderId);
+    }
+    match /{col}/{orderId}/evidence/{eid} {
+      allow read, write: if attParentOk(col, orderId) && (isTotalMasterUser() || !(myRole() in ['driver', 'shipper']));
+    }
+    match /driver_uploads/{id} {
+      allow create: if false;
+    }
+    match /landingInquiries/{id} {
+      allow create: if true;
+      allow get, list, update, delete: if isTotalMasterUser();
+    }
+    function liveCoOk(id) {
+      let o = /databases/$(database)/documents/orders/$(id);
+      let d = /databases/$(database)/documents/dispatch/$(id);
+      return (exists(o) && get(o).data.get('companyName', '') == myCoAny()) || (exists(d) && get(d).data.get('companyName', '') == myCoAny());
+    }
+    function liveShipOk(key) {
+      let p = /databases/$(database)/documents/shipperOrders/$(key);
+      return exists(p) && (get(p).data.get('shipperUid', '') == request.auth.uid
+        || (get(p).data.get('shipperCompany', '') == myCoAny() && myLinkedCo() != '' && get(p).data.get('companyName', '') == myLinkedCo()));
+    }
+    match /liveLocations/{id} {
+      allow get: if isTotalMasterUser() || (isApproved() && (
+        (!(myRoleRaw() in ['shipper', 'driver', 'cafeUser']) && liveCoOk(id))
+        || (myRoleRaw() == 'shipper' && (liveShipOk('orders__' + id) || liveShipOk('dispatch__' + id)))));
+      allow create: if request.resource.data.keys().hasOnly(['위치', '위치갱신일시'])
+        || (isApproved() && request.resource.data.keys().hasOnly(['위치', '위치갱신일시', 'companyName']) && request.resource.data.get('companyName', '') == myCo());
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['위치', '위치갱신일시']);
+      allow list, delete: if looseRead(resource.data);
+    }
+    function isMarketCompany() {
+      return isApproved() && !(myRole() in ['driver', 'shipper', 'cafeUser', 'viewer'])
+        && myCoRaw() != '';
+    }
+    function mkDoc(orderId) {
+      return get(/databases/$(database)/documents/cafeOrders/$(orderId)).data;
+    }
+    function mkPoster(d) {
+      return isSignedIn() && d.get('posterUid', '') == request.auth.uid;
+    }
+    function mkTaker(d) {
+      return isSignedIn() && d.get('takerUid', '') == request.auth.uid && d.get('status', '') in ['matched', 'dispatched', 'delivered'];
+    }
+    function mkV2(d) {
+      return d.get('v', 0) >= 2;
+    }
+    function mkOnlyMyUid() {
+      let before = resource.data.get('requesterUids', []).toSet();
+      let after = request.resource.data.get('requesterUids', []).toSet();
+      return after.difference(before).hasOnly([request.auth.uid]) && before.difference(after).hasOnly([request.auth.uid]);
+    }
+    match /cafeOrders/{orderId} {
+      allow read: if isTotalMasterUser() || isMarketCompany() || mkPoster(resource.data) || mkTaker(resource.data)
+        || (isSignedIn() && myRoleRaw() == 'cafeUser');
+      allow create: if isMarketCompany()
+        && request.resource.data.get('v', 0) == 2
+        && request.resource.data.get('posterUid', '') == request.auth.uid
+        && request.resource.data.get('companyName', '') == myCo()
+        && request.resource.data.get('status', '') == 'open'
+        && request.resource.data.get('takerUid', null) == null
+        && !request.resource.data.keys().hasAny(['상차지명', '상차지주소', '하차지명', '하차지주소', 'posterPhone', '상차지담당자번호', '하차지담당자번호']);
+      allow update: if
+        (mkPoster(resource.data)
+          && request.resource.data.get('posterUid', '') == resource.data.get('posterUid', '')
+          && request.resource.data.get('companyName', '') == resource.data.get('companyName', '')
+          && request.resource.data.get('v', 0) == resource.data.get('v', 0)
+          && (!mkV2(resource.data) || !request.resource.data.keys().hasAny(['상차지주소', '하차지주소', 'posterPhone']))
+          && (request.resource.data.get('takerUid', null) == null
+              || request.resource.data.get('takerUid', null) == resource.data.get('takerUid', null)
+              || (resource.data.get('status', '') == 'open'
+                  && exists(/databases/$(database)/documents/cafeOrders/$(orderId)/requests/$(request.resource.data.takerUid))
+                  && get(/databases/$(database)/documents/cafeOrders/$(orderId)/requests/$(request.resource.data.takerUid)).data.get('status', '') == 'pending'))) ||
+        (mkV2(resource.data) && isMarketCompany() && !mkPoster(resource.data)
+          && resource.data.get('status', '') == 'open' && resource.data.get('companyName', '') != myCo()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['requesterUids', 'updatedAt'])
+          && mkOnlyMyUid()) ||
+        (mkV2(resource.data) && mkTaker(resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'takerOrderId', 'dispatchedAt', 'deliveredAt', 'driverMasked', 'ratingByTaker', 'updatedAt'])
+          && request.resource.data.get('status', '') in ['matched', 'dispatched', 'delivered']
+          && (request.resource.data.get('takerOrderId', null) == resource.data.get('takerOrderId', null)
+              || request.resource.data.get('takerOrderId', '') == 'mkt_' + orderId)) ||
+        (!mkV2(resource.data) && isSignedIn()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'applicantUid', 'applicantName', 'applicantNickname', 'applyRequestedAt', 'confirmedAt', 'updatedAt'])
+          && request.resource.data.get('status', '') in ['open', 'applying', 'confirmed']);
+      allow delete: if mkPoster(resource.data);
+      match /private/{docId} {
+        allow read: if mkPoster(mkDoc(orderId)) || (docId == 'detail' && mkTaker(mkDoc(orderId)));
+        allow create, update: if docId in ['detail', 'settle'] && isSignedIn()
+          && getAfter(/databases/$(database)/documents/cafeOrders/$(orderId)).data.get('posterUid', '') == request.auth.uid;
+        allow delete: if mkPoster(mkDoc(orderId));
+      }
+      match /requests/{rid} {
+        allow get: if isSignedIn() && (request.auth.uid == rid || mkPoster(mkDoc(orderId)));
+        allow list: if mkPoster(mkDoc(orderId));
+        allow create: if isMarketCompany() && request.auth.uid == rid
+          && mkV2(mkDoc(orderId)) && mkDoc(orderId).get('status', '') == 'open'
+          && mkDoc(orderId).get('posterUid', '') != rid && mkDoc(orderId).get('companyName', '') != myCo()
+          && request.resource.data.get('takerUid', '') == rid
+          && request.resource.data.get('takerCompany', '') == myCo()
+          && request.resource.data.get('status', '') == 'pending';
+        allow update: if
+          (isMarketCompany() && request.auth.uid == rid
+            && request.resource.data.get('takerUid', '') == rid
+            && request.resource.data.get('takerCompany', '') == myCo()
+            && request.resource.data.get('status', '') in ['pending', 'withdrawn']
+            && (request.resource.data.get('status', '') == 'withdrawn' || mkDoc(orderId).get('status', '') == 'open')) ||
+          (mkPoster(mkDoc(orderId))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'decidedAt', 'updatedAt'])
+            && request.resource.data.get('status', '') in ['accepted', 'rejected', 'closed', 'cancelled']);
+        allow delete: if false;
+      }
+      match /contact/{docId} {
+        allow read: if isSignedIn() &&
+          mkDoc(orderId).status == "confirmed" &&
+          (request.auth.uid == mkDoc(orderId).posterUid || request.auth.uid == mkDoc(orderId).applicantUid);
+        allow write: if isSignedIn() && !mkV2(getAfter(/databases/$(database)/documents/cafeOrders/$(orderId)).data);
+      }
+    }
+    match /marketNotices/{id} {
+      allow read: if isSignedIn() && resource.data.get('toUid', '') == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.get('toUid', '') == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
+      allow create: if isMarketCompany()
+        && request.resource.data.get('fromUid', '') == request.auth.uid
+        && request.resource.data.get('toUid', '') is string && request.resource.data.get('toUid', '') != request.auth.uid
+        && request.resource.data.get('read', true) == false
+        && exists(/databases/$(database)/documents/cafeOrders/$(request.resource.data.get('orderId', '_')));
+      allow delete: if isSignedIn() && resource.data.get('toUid', '') == request.auth.uid;
+    }
+    function hubPath(uid) {
+      return /databases/$(database)/documents/hubMembers/$(uid);
+    }
+    function hubMe() {
+      return get(hubPath(request.auth.uid)).data;
+    }
+    function hubKeyOf(m, uid) {
+      return m.get('companyKey', '') != '' ? m.get('companyKey', '')
+        : m.get('source', '') == 'logisweb-driver' ? 'lwd:' + uid
+        : m.get('source', '') == 'logisweb-shipper' ? 'lws:' + m.get('companyName', '')
+        : (m.get('source', 'signup') != 'signup' ? 'lw:' + m.get('companyName', '')
+          : (m.get('bizNo', '').replace('[^0-9]', '') != '' ? 'biz:' + m.get('bizNo', '').replace('[^0-9]', '') : 'uid:' + uid));
+    }
+    function hck() {
+      return request.auth != null && request.auth.token.get('hv', 0) == 1;
+    }
+    function hubMyKey() {
+      return hck() ? tk('hk', '') : hubKeyOf(hubMe(), request.auth.uid);
+    }
+    function hubActive() {
+      return isSignedIn() && (
+        (hck() && tk('hs', false) == true && (tk('hsg', false) == true || isApproved())) ||
+        (exists(hubPath(request.auth.uid)) && hubMe().get('status', '') == 'approved'
+          && (hubMe().get('source', '') == 'signup' || isApproved())));
+    }
+    function hubCanPost() {
+      return hubActive() && hubMe().get('role', '') in ['shipper', 'carrier'];
+    }
+    function hubHasBank() {
+      let b = hubMe().get('bank', null);
+      return b is map && b.get('bank', '') != '' && b.get('number', '').size() >= 6 && b.get('holder', '') != '';
+    }
+    function hubDeviceOk() {
+      return !(hubMe().get('role', '') == 'driver' && hubMe().get('source', '') == 'signup')
+        || (exists(/databases/$(database)/documents/hubDevices/$(request.auth.uid))
+            && get(/databases/$(database)/documents/hubDevices/$(request.auth.uid)).data.get('id', null) != null);
+    }
+    function hubPlateLogin() {
+      return request.auth.token.get('email', '').matches('.*@hubdriver[.]run25[.]kr$');
+    }
+    function hubPlateOf(d) {
+      return d.get('vehicle', null) is map ? d.get('vehicle', null).get('plate', '') : '';
+    }
+    function hubCanTake() {
+      return hubActive() && hubMe().get('role', '') in ['driver', 'carrier'] && hubDeviceOk()
+        && hubMe().get('penalty', {}).get('blocked', false) != true && hubHasBank();
+    }
+    function hubAdmin() {
+      return isSignedIn() && (request.auth.token.get('email', '') == "tjddnqkf@naver.com" ||
+        ((!ck() || tk('tm', false) == true) && exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'totalMaster'));
+    }
+    function hubLinkOk(d) {
+      let u = myUser();
+      return isApproved() && d.get('companyName', '') == u.get('companyName', '') && (
+        (d.get('source', '') == 'logisweb-staff' && d.get('role', '') == 'carrier'
+          && !(u.get('role', '') in ['driver', 'shipper', 'cafeUser', 'viewer']) && u.get('companyName', '') != '') ||
+        (d.get('source', '') == 'logisweb-driver' && d.get('role', '') == 'driver'
+          && u.get('role', '') == 'driver' && u.get('approved', false) == true
+          && d.get('vehicle', {}).get('plate', '') == u.get('carNo', u.get('차량번호', ''))) ||
+        (d.get('source', '') == 'logisweb-shipper' && d.get('role', '') == 'shipper' && u.get('role', '') == 'shipper'));
+    }
+    match /hubMembers/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || hubAdmin());
+      allow list: if hubAdmin();
+      allow create: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.get('uid', '') == uid
+        && !request.resource.data.keys().hasAny(['verified', 'bizStatus', 'adminNote', 'penalty', 'reviewedAt', 'reviewedBy', 'approvedAt', 'rejectReason', 'isAdmin', 'companyKey', 'va'])
+        && hubBankOk(request.resource.data.get('bank', null))
+        && !request.resource.data.keys().hasAny(['boundDevice', 'deviceOk'])
+        && (!hubPlateLogin() || (request.resource.data.get('role', '') == 'driver' && request.resource.data.get('source', '') == 'signup'
+             && hubPlateOf(request.resource.data) + '@hubdriver.run25.kr' == request.auth.token.get('email', '')))
+        && ((request.resource.data.get('source', '') == 'signup' && request.resource.data.get('status', '') == 'pending'
+             && request.resource.data.get('role', '') in ['driver', 'shipper', 'carrier']
+             && !request.resource.data.keys().hasAny(['docsVerified']))
+          || (request.resource.data.get('status', '') == 'approved' && hubLinkOk(request.resource.data)));
+      allow update: if hubAdmin() || (isSignedIn() && request.auth.uid == uid
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'role', 'source', 'verified', 'docsVerified', 'bizStatus', 'adminNote', 'penalty', 'reviewedAt', 'reviewedBy', 'approvedAt', 'rejectReason', 'isAdmin', 'companyKey', 'va', 'boundDevice', 'deviceOk', 'login'])
+        && (!hubPlateLogin() || (request.resource.data.get('phone', '') == resource.data.get('phone', '')
+             && hubPlateOf(request.resource.data) == hubPlateOf(resource.data)
+             && request.resource.data.get('email', '') == resource.data.get('email', '')))
+        && (
+          (resource.data.get('status', '') == 'approved' && request.resource.data.get('status', '') == 'approved'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['prefs', 'activeSession', 'activeSessionPc', 'lastLoginAt', 'updatedAt', 'photoPath', 'fcmTokens', 'fcmTokenAt', 'fcmTokensOut', 'bank'])
+            && hubBankOk(request.resource.data.get('bank', null))) ||
+          (resource.data.get('source', '') == 'signup' && resource.data.get('status', '') in ['pending', 'rejected']
+            && request.resource.data.get('status', '') == 'pending' && hubBankOk(request.resource.data.get('bank', null))) ||
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['activeSession', 'activeSessionPc', 'lastLoginAt'])));
+      allow delete: if hubAdmin();
+    }
+    function hubBankOk(b) {
+      return b == null || (b is map && b.keys().hasOnly(['bank', 'number', 'holder', 'updatedAt'])
+        && b.get('bank', '') is string && b.get('bank', '').size() <= 30
+        && b.get('number', '') is string && b.get('number', '').size() <= 30
+        && b.get('holder', '') is string && b.get('holder', '').size() <= 40);
+    }
+    match /hubStats/{uid} {
+      allow read: if hubActive();
+      allow read: if hubAdmin();
+      allow write: if false;
+    }
+    match /hubQuota/{uid} {
+      allow get: if isSignedIn() && request.auth.uid == uid;
+      allow create: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['uid', 'count', 'day', 'lastPostAt'])
+        && request.resource.data.get('uid', '') == uid
+        && request.resource.data.get('count', 0) == 1
+        && request.resource.data.get('day', null) == request.time.date()
+        && request.resource.data.get('lastPostAt', null) == request.time;
+      allow update: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['uid', 'count', 'day', 'lastPostAt'])
+        && request.resource.data.get('uid', '') == uid
+        && request.resource.data.get('lastPostAt', null) == request.time
+        && request.time > resource.data.lastPostAt + duration.value(20, 's')
+        && request.resource.data.get('day', null) == request.time.date()
+        && (resource.data.get('day', null) == request.time.date()
+              ? (request.resource.data.get('count', 0) == resource.data.get('count', 0) + 1 && request.resource.data.get('count', 0) <= 30)
+              : request.resource.data.get('count', 0) == 1);
+      allow delete: if hubAdmin();
+    }
+    function hubEditKeys() {
+      return ['상차시도', '상차시군구', '하차시도', '하차시군구', '상차일', '상차시간', '하차일', '하차시간', '화물내용', '중량', '파레트', '화물타입', '화물수량',
+        '차량종류', '차량톤수', '톤수값', '상차방법', '하차방법', '운임', '수수료', '지급방식', '긴급', '운행유형', '적재', '공개메모', '거리km',
+        '상차지역', '대수', '예약', 'showAt', 'updatedAt'];
+    }
+    function hubOrd(id) {
+      return get(/databases/$(database)/documents/hubOrders/$(id)).data;
+    }
+    function hubWalletAvail(uid) {
+      return exists(/databases/$(database)/documents/hubWallets/$(uid))
+        ? get(/databases/$(database)/documents/hubWallets/$(uid)).data.get('available', 0) : 0;
+    }
+    function hubDepositOk(d, uid) {
+      return !(d.get('지급방식', '') in ['인수증', '예치금']) || hubWalletAvail(uid) >= d.get('운임', 0);
+    }
+    function hubPodOk(list) {
+      return list is list && list.size() <= 30;
+    }
+    function hubInvoiceOk(v) {
+      return v is map && v.keys().hasOnly(['no', 'date', 'amount', 'path', 'name', 'bizNo', 'at'])
+        && v.get('no', '') is string && v.get('no', '').size() >= 4 && v.get('no', '').size() <= 40
+        && v.get('date', '') is string && v.get('amount', 0) is number;
+    }
+    function hubOrdAfter(id) {
+      return getAfter(/databases/$(database)/documents/hubOrders/$(id)).data;
+    }
+    function hubSameCo(o) {
+      return o.get('posterCompanyKey', '') != '' && o.get('posterCompanyKey', '') == hubMyKey();
+    }
+    function hubPrivReadOk(o, docId) {
+      let me = request.auth.uid;
+      let poster = o.get('posterUid', '') == me;
+      let taker = o.get('takerUid', '') == me;
+      let st = o.get('status', '');
+      return (poster && !docId.matches('settle_.*'))
+        || (docId == 'detail' && hubActive() && hubSameCo(o))
+        || (taker && docId == 'match')
+        || (taker && docId == 'detail' && (st in ['loaded', 'delivered'] || (st == 'assigned' && o.get('confirmed', false) == true)))
+        || ((poster || taker) && docId == 'settle_' + me);
+    }
+    function hubWindowOver(d) {
+      return d.get('assignedAt', null) != null && request.time >= d.assignedAt + duration.value(10, 's');
+    }
+    function hubRatingOk(r) {
+      return r is map && r.keys().hasOnly(['score', 'comment']) && r.score is int && r.score >= 1 && r.score <= 5
+        && r.get('comment', '') is string && r.get('comment', '').size() <= 200;
+    }
+    function hubMatchOk(d) {
+      let me = hubMe();
+      return d.get('takerUid', '') == request.auth.uid
+        && d.get('role', '') == me.get('role', '') && d.get('source', '') == me.get('source', '')
+        && d.get('name', '') == me.get('name', '') && d.get('phone', '') == me.get('phone', '')
+        && d.get('companyName', '') == me.get('companyName', '')
+        && d.get('vehicle', null) == me.get('vehicle', null)
+        && d.get('docsVerified', false) == me.get('docsVerified', false)
+        && d.get('bizStatus', '') == me.get('bizStatus', '')
+        && d.get('photoPath', '') == me.get('photoPath', '');
+    }
+    function hubMoving(d) {
+      return (d.get('status', '') == 'assigned' && d.get('confirmed', false) == true) || d.get('status', '') == 'loaded';
+    }
+    function hubReturnOk(r, fare) {
+      return r is map && r.keys().hasOnly(['amount', 'reason', 'status', 'at', 'by'])
+        && r.amount is int && r.amount >= 0 && r.amount <= fare
+        && r.get('reason', '') is string && r.get('reason', '').size() <= 100
+        && r.status == 'proposed' && r.at == request.time && r.by == request.auth.uid;
+    }
+    match /hubOrders/{id} {
+      allow read: if hubActive() && (resource.data.get('status', '') == 'open'
+        || resource.data.get('posterUid', '') == request.auth.uid
+        || resource.data.get('takerUid', '') == request.auth.uid
+        || hubSameCo(resource.data));
+      allow read: if hubAdmin();
+      allow create: if hubCanPost()
+        && request.resource.data.keys().hasOnly(hubEditKeys().concat(['v', 'posterUid', 'posterRole', 'posterSource', 'posterCompany', 'posterName', 'posterVerified', 'posterCompanyKey', 'status', 'takerUid', 'takerRole', 'assignedAt', 'cancelCount', 'createdAt']))
+        && request.resource.data.get('v', 0) == 3
+        && request.resource.data.get('posterUid', '') == request.auth.uid
+        && request.resource.data.get('posterRole', '') == hubMe().get('role', '')
+        && request.resource.data.get('posterSource', '') == hubMe().get('source', '')
+        && request.resource.data.get('posterCompany', '') == hubMe().get('companyName', '')
+        && request.resource.data.get('posterName', '') == hubMe().get('name', '')
+        && request.resource.data.get('posterVerified', false) == hubMe().get('docsVerified', false)
+        && request.resource.data.get('posterCompanyKey', '') == hubMyKey()
+        && request.resource.data.get('status', '') == 'open'
+        && request.resource.data.get('takerUid', null) == null
+        && request.resource.data.get('cancelCount', 0) == 0
+        && request.resource.data.get('운임', 0) is number && request.resource.data.get('운임', 0) >= 0 && request.resource.data.get('운임', 0) <= 50000000
+        && hubDepositOk(request.resource.data, request.auth.uid)
+        && getAfter(/databases/$(database)/documents/hubQuota/$(request.auth.uid)).data.get('lastPostAt', null) == request.time;
+      allow update: if
+        (isSignedIn() && resource.data.get('posterUid', '') == request.auth.uid && (
+          (resource.data.status == 'open' && request.resource.data.status == 'open'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(hubEditKeys())
+            && hubDepositOk(request.resource.data, request.auth.uid)) ||
+          (resource.data.status in ['open', 'assigned'] && request.resource.data.status == 'cancelled'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledAt', 'updatedAt'])) ||
+          (resource.data.status == 'assigned' && request.resource.data.status == 'open'
+            && request.resource.data.takerUid == null && request.resource.data.takerRole == null && request.resource.data.assignedAt == null
+            && request.resource.data.get('confirmed', false) == false
+            && request.resource.data.get('releaseCount', 0) == resource.data.get('releaseCount', 0) + 1
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'takerUid', 'takerRole', 'assignedAt', 'confirmed', 'confirmedAt', 'releaseCount', 'lastReleaseReason', 'updatedAt'])) ||
+          (hubMoving(resource.data) && request.resource.data.status == resource.data.status
+            && resource.data.get('회차', {}).get('status', '') != 'proposed'
+            && hubReturnOk(request.resource.data.get('회차', null), resource.data.get('운임', 0))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['회차', 'updatedAt'])) ||
+          (resource.data.status == 'delivered' && request.resource.data.status == 'delivered'
+            && ('invoice' in resource.data) && !('invoiceOk' in resource.data)
+            && request.resource.data.invoiceOk is map && request.resource.data.invoiceOk.keys().hasOnly(['payDate', 'at', 'by'])
+            && request.resource.data.invoiceOk.payDate is string && request.resource.data.invoiceOk.payDate.size() == 10
+            && request.resource.data.invoiceOk.at == request.time && request.resource.data.invoiceOk.by == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['invoiceOk', 'updatedAt'])) ||
+          (resource.data.status == 'delivered' && request.resource.data.status == 'delivered'
+            && !('ratingByPoster' in resource.data) && hubRatingOk(request.resource.data.ratingByPoster)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratingByPoster', 'updatedAt'])))) ||
+        (hubCanTake() && resource.data.get('posterUid', '') != request.auth.uid
+          && resource.data.status == 'open' && request.resource.data.status == 'assigned'
+          && request.resource.data.takerUid == request.auth.uid
+          && request.resource.data.takerRole == hubMe().get('role', '')
+          && request.resource.data.assignedAt == request.time
+          && resource.data.get('cancelCount', 0) < 5
+          && hubDepositOk(resource.data, resource.data.get('posterUid', ''))
+          && request.resource.data.get('confirmed', false) == false
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'takerUid', 'takerRole', 'assignedAt', 'updatedAt'])
+          && getAfter(/databases/$(database)/documents/hubOrders/$(id)/private/match).data.get('takerUid', '') == request.auth.uid) ||
+        (isSignedIn() && resource.data.status == 'assigned' && resource.data.get('takerUid', '') == request.auth.uid
+          && request.time < resource.data.assignedAt + duration.value(10, 's')
+          && resource.data.get('confirmed', false) != true
+          && request.resource.data.status == 'open' && request.resource.data.takerUid == null
+          && request.resource.data.takerRole == null && request.resource.data.assignedAt == null
+          && request.resource.data.get('cancelCount', 0) == resource.data.get('cancelCount', 0) + 1
+          && request.resource.data.get('lastCancelUid', '') == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'takerUid', 'takerRole', 'assignedAt', 'cancelCount', 'lastCancelUid', 'lastCancelAt', 'updatedAt'])) ||
+        (isSignedIn() && (resource.data.get('takerUid', '') == request.auth.uid || resource.data.get('posterUid', '') == request.auth.uid)
+          && resource.data.status == 'assigned' && request.resource.data.status == 'assigned'
+          && resource.data.get('confirmed', false) != true && hubWindowOver(resource.data)
+          && hubDepositOk(resource.data, resource.data.get('posterUid', ''))
+          && request.resource.data.get('confirmed', false) == true && request.resource.data.get('confirmedAt', null) == request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['confirmed', 'confirmedAt', 'updatedAt'])) ||
+        (isSignedIn() && resource.data.get('takerUid', '') == request.auth.uid && hubWindowOver(resource.data) && hubDeviceOk()
+          && hubMoving(resource.data) && request.resource.data.status == 'delivered'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'deliveredAt', 'podPath', 'pod', 'podAt', 'updatedAt'])
+          && hubPodOk(request.resource.data.get('pod', []))) ||
+        (isSignedIn() && resource.data.get('takerUid', '') == request.auth.uid && hubMoving(resource.data)
+          && resource.data.get('회차', {}).get('status', '') == 'proposed'
+          && request.resource.data.get('회차', {}).get('amount', -1) == resource.data.get('회차', {}).get('amount', -2)
+          && request.resource.data.get('회차', {}).keys().hasOnly(['amount', 'reason', 'status', 'at', 'by', 'answeredAt'])
+          && request.resource.data.get('회차', {}).get('answeredAt', null) == request.time
+          && ((request.resource.data.get('회차', {}).get('status', '') == 'accepted' && request.resource.data.status == 'delivered'
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['회차', 'status', 'deliveredAt', 'updatedAt'])) ||
+              (request.resource.data.get('회차', {}).get('status', '') == 'rejected' && request.resource.data.status == resource.data.status
+                && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['회차', 'updatedAt'])))) ||
+        (isSignedIn() && resource.data.get('takerUid', '') == request.auth.uid && resource.data.status == 'delivered'
+          && request.resource.data.status == 'delivered'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pod', 'podPath', 'podAt', 'updatedAt'])
+          && hubPodOk(request.resource.data.get('pod', []))
+          && request.resource.data.get('pod', []).size() > resource.data.get('pod', []).size()) ||
+        (isSignedIn() && resource.data.get('takerUid', '') == request.auth.uid && resource.data.status == 'delivered'
+          && request.resource.data.status == 'delivered' && !('invoice' in resource.data)
+          && hubInvoiceOk(request.resource.data.invoice)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['invoice', 'updatedAt'])) ||
+        (isSignedIn() && resource.data.get('takerUid', '') == request.auth.uid
+          && resource.data.status == 'delivered' && request.resource.data.status == 'delivered'
+          && !('ratingByTaker' in resource.data) && hubRatingOk(request.resource.data.ratingByTaker)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratingByTaker', 'updatedAt'])) ||
+        hubAdmin();
+      allow delete: if (isSignedIn() && resource.data.get('posterUid', '') == request.auth.uid && resource.data.status in ['open', 'cancelled']) || hubAdmin();
+      match /private/{docId} {
+        allow read: if isSignedIn() && hubPrivReadOk(hubOrd(id), docId);
+        allow read: if hubAdmin();
+        allow create, update: if isSignedIn() && (
+          (docId == 'detail' && hubOrdAfter(id).get('posterUid', '') == request.auth.uid) ||
+          (docId == 'match' && hubOrdAfter(id).get('takerUid', '') == request.auth.uid
+            && hubOrdAfter(id).get('status', '') == 'assigned' && hubMatchOk(request.resource.data)) ||
+          (docId == 'settle_' + request.auth.uid && request.resource.data.keys().hasOnly(['text', 'updatedAt'])
+            && (hubOrdAfter(id).get('posterUid', '') == request.auth.uid || hubOrdAfter(id).get('takerUid', '') == request.auth.uid)));
+        allow create, update: if hubAdmin() && docId in ['detail', 'match'];
+        allow delete: if hubAdmin() || (isSignedIn() && (
+          hubOrd(id).get('posterUid', '') == request.auth.uid ||
+          (docId == 'match' && resource.data.get('takerUid', '') == request.auth.uid)));
+      }
+    }
+    function hubPlaceOk(d) {
+      return d.keys().hasOnly(['companyKey', 'uid', '이름', '주소', '담당자', '연락처', '시도', '시군구', 'count', 'lastUsedAt', 'updatedAt', 'createdAt'])
+        && d.get('주소', '') is string && d.get('주소', '').size() >= 2 && d.get('주소', '').size() <= 200
+        && d.get('이름', '') is string && d.get('이름', '').size() <= 60;
+    }
+    match /hubPlaces/{id} {
+      allow read, delete: if hubActive() && resource.data.get('companyKey', '') == hubMyKey();
+      allow create: if hubActive() && request.resource.data.get('companyKey', '') == hubMyKey()
+        && request.resource.data.get('uid', '') == request.auth.uid && hubPlaceOk(request.resource.data);
+      allow update: if hubActive() && resource.data.get('companyKey', '') == hubMyKey()
+        && request.resource.data.get('companyKey', '') == resource.data.get('companyKey', '') && hubPlaceOk(request.resource.data);
+      allow read, write: if hubAdmin();
+    }
+    match /hubNotices/{id} {
+      allow read, delete: if isSignedIn() && resource.data.get('toUid', '') == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.get('toUid', '') == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create: if hubActive()
+        && request.resource.data.get('fromUid', '') == request.auth.uid
+        && request.resource.data.get('toUid', '') is string && request.resource.data.get('toUid', '') != request.auth.uid
+        && request.resource.data.get('read', true) == false
+        && (hubOrd(request.resource.data.get('orderId', '_')).get('posterUid', '') == request.resource.data.get('toUid', '')
+            || hubOrd(request.resource.data.get('orderId', '_')).get('posterUid', '') == request.auth.uid);
+    }
+    function hubLiveRead(id) {
+      let o = hubOrd(id);
+      return isSignedIn() && hubMoving(o)
+        && (o.get('posterUid', '') == request.auth.uid || o.get('takerUid', '') == request.auth.uid || hubAdmin());
+    }
+    function hubLiveWrite(id) {
+      let o = hubOrd(id);
+      return isSignedIn() && o.get('takerUid', '') == request.auth.uid && hubMoving(o) && hubDeviceOk();
+    }
+    match /hubDevices/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || hubAdmin());
+      allow list: if hubAdmin();
+      allow write: if false;
+    }
+    match /hubLive/{orderId} {
+      allow read: if hubLiveRead(orderId);
+      allow create, update: if hubLiveWrite(orderId)
+        && request.resource.data.keys().hasOnly(['orderId', 'takerUid', 'posterUid', 'lat', 'lng', 'speed', 'accuracy', 'heading', 'updatedAt', 'plate', 'name', 'phone', 'status', 'source', 'lastTrack', 'lastTrackAt'])
+        && request.resource.data.get('takerUid', '') == request.auth.uid
+        && request.resource.data.get('orderId', '') == orderId
+        && request.resource.data.lat is number && request.resource.data.lng is number
+        && request.resource.data.get('updatedAt', null) == request.time;
+      allow delete: if hubAdmin();
+      match /track/{pid} {
+        allow read: if hubLiveRead(orderId);
+        allow create: if hubLiveWrite(orderId)
+          && request.resource.data.keys().hasOnly(['lat', 'lng', 'speed', 'accuracy', 'timestamp', 'source'])
+          && request.resource.data.lat is number && request.resource.data.lng is number
+          && request.resource.data.get('timestamp', null) == request.time;
+        allow delete: if hubAdmin();
+      }
+    }
+    match /hubWallets/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || hubAdmin());
+      allow list: if hubAdmin();
+      allow write: if false;
+    }
+    match /hubLedger/{id} {
+      allow read: if isSignedIn() && (resource.data.get('uid', '') == request.auth.uid || hubAdmin());
+      allow write: if false;
+    }
+    match /hubDebts/{id} {
+      allow read: if isSignedIn() && (resource.data.get('fromUid', '') == request.auth.uid || resource.data.get('toUid', '') == request.auth.uid || hubAdmin());
+      allow write: if false;
+    }
+    match /hubCharges/{id} {
+      allow read: if isSignedIn() && (resource.data.get('uid', '') == request.auth.uid || hubAdmin());
+      allow create: if hubActive() && request.resource.data.get('uid', '') == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'companyName', 'amount', 'depositor', 'status', 'memo', 'createdAt'])
+        && request.resource.data.get('status', '') == 'requested'
+        && request.resource.data.amount is int && request.resource.data.amount >= 10000 && request.resource.data.amount <= 100000000
+        && request.resource.data.get('depositor', '') is string && request.resource.data.get('depositor', '').size() <= 40
+        && request.resource.data.get('createdAt', null) == request.time;
+      allow update: if (hubAdmin() && resource.data.get('status', '') == 'requested'
+          && request.resource.data.get('status', '') in ['confirmed', 'rejected']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'confirmedAt', 'confirmedBy', 'rejectReason', 'updatedAt'])) ||
+        (isSignedIn() && resource.data.get('uid', '') == request.auth.uid && resource.data.get('status', '') == 'requested'
+          && request.resource.data.get('status', '') == 'cancelled'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']));
+      allow delete: if false;
+    }
+    match /hubPayouts/{id} {
+      allow read: if isSignedIn() && (resource.data.get('toUid', '') == request.auth.uid || resource.data.get('fromUid', '') == request.auth.uid || hubAdmin());
+      allow update: if hubAdmin() && resource.data.get('status', '') != 'paid'
+        && request.resource.data.get('status', '') in ['scheduled', 'queued', 'requested', 'paid', 'failed']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'paidAt', 'paidBy', 'memo', 'requestedAt', 'requestedBy', 'dueDate', 'updatedAt']);
+      allow update: if isSignedIn() && resource.data.get('fromUid', '') == request.auth.uid
+        && resource.data.get('status', '') in ['scheduled', 'requested']
+        && request.resource.data.get('status', '') == 'paid' && request.resource.data.get('paidAt', null) == request.time
+        && request.resource.data.get('paidBy', '') == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'paidAt', 'paidBy', 'memo', 'updatedAt']);
+      allow create, delete: if false;
+    }
+    match /hubWithdrawals/{id} {
+      allow read: if isSignedIn() && (resource.data.get('uid', '') == request.auth.uid || hubAdmin());
+      allow create: if hubActive() && hubHasBank() && request.resource.data.get('uid', '') == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'amount', 'bank', 'status', 'createdAt'])
+        && request.resource.data.status == 'requested'
+        && request.resource.data.amount is int && request.resource.data.amount >= 10000
+        && request.resource.data.amount <= hubWalletAvail(request.auth.uid)
+        && request.resource.data.bank == hubMe().bank
+        && request.resource.data.createdAt == request.time;
+      allow update: if hubAdmin() && resource.data.get('status', '') in ['requested', 'processing']
+        && request.resource.data.get('status', '') in ['paid', 'rejected']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'paidAt', 'paidBy', 'rejectReason', 'updatedAt']);
+      allow delete: if false;
+    }
+    match /hubPostRequests/{id} {
+      allow read: if isSignedIn() && (resource.data.get('uid', '') == request.auth.uid || hubAdmin());
+      allow create: if isApproved() && request.resource.data.get('uid', '') == request.auth.uid
+        && !(myRole() in ['driver', 'shipper', 'cafeUser', 'viewer'])
+        && (request.resource.data.get('companyName', '') == myCoRaw() || isTotalMasterUser())
+        && request.resource.data.get('status', '') == 'requested'
+        && request.resource.data.get('lwOrderId', '') is string && request.resource.data.get('lwOrderId', '').size() > 0
+        && request.resource.data.keys().hasOnly(['uid', 'companyName', 'lwOrderId', 'order', 'status', 'createdAt']);
+      allow update, delete: if false;
+    }
+    match /hubAdjustments/{id} {
+      allow read: if hubAdmin();
+      allow create: if hubAdmin()
+        && request.resource.data.keys().hasOnly(['uid', 'amount', 'bucket', 'memo', 'by', 'createdAt'])
+        && request.resource.data.amount is int && request.resource.data.amount != 0
+        && request.resource.data.get('bucket', 'available') in ['available', 'owed'];
+      allow update, delete: if false;
+    }
+    match /hubSettings/{id} {
+      allow read: if isSignedIn();
+      allow write: if hubAdmin();
+    }
+    match /hubAnnouncements/{id} {
+      allow read: if hubActive() || hubAdmin();
+      allow write: if hubAdmin();
+    }
+    match /hubReports/{id} {
+      allow create: if hubActive() && request.resource.data.get('reporterUid', '') == request.auth.uid
+        && request.resource.data.get('status', '') == 'open';
+      allow read: if hubAdmin() || (isSignedIn() && resource.data.get('reporterUid', '') == request.auth.uid);
+      allow update, delete: if hubAdmin();
+    }
+    match /siteConfig/landing {
+      allow get: if true;
+      allow list: if false;
+      allow write: if isTotalMasterUser();
+    }
+    match /siteConfig/videoEdits {
+      allow get: if request.auth != null;
+      allow list: if false;
+      allow write: if isTotalMasterUser();
+    }
+    match /siteConfig/brand {
+      allow get: if true;
+      allow list: if false;
+      allow write: if isTotalMasterUser();
+    }
+    match /brandHistory/{id} {
+      allow read, write: if isTotalMasterUser();
+    }
+    match /siteConfig/labels {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow write: if isTotalMasterUser();
+    }
+    match /textOverrides/{id} {
+      allow read: if isSignedIn();
+      allow write: if isTotalMasterUser();
+    }
+    match /textOverridesPublic/{id} {
+      allow read: if true;
+      allow write: if isTotalMasterUser();
+    }
+    function uiConfigOk(d) {
+      return d.keys().hasOnly(['v', 'els', 'blocks', 'menus', 'opts', 'fields', 'theme', 'rev', 'updatedAt', 'by', 'byUid'])
+        && d.get('v', 1) is int
+        && d.get('els', {}) is map && d.get('els', {}).size() <= 400
+        && d.get('blocks', {}) is map && d.get('blocks', {}).size() <= 100
+        && d.get('menus', {}) is map && d.get('menus', {}).size() <= 300
+        && d.get('opts', {}) is map && d.get('opts', {}).size() <= 10
+        && d.get('fields', {}) is map && d.get('fields', {}).size() <= 300
+        && (d.get('theme', null) == null || d.get('theme', null) is map)
+        && d.get('rev', 0) is int
+        && d.get('by', '') is string && d.get('by', '').size() <= 120
+        && d.get('byUid', '') == request.auth.uid;
+    }
+    match /uiConfig/{id} {
+      allow read: if true;
+      allow create, update: if isTotalMasterUser() && id == 'main' && uiConfigOk(request.resource.data);
+      allow delete: if isTotalMasterUser();
+    }
+    match /uiConfigHistory/{id} {
+      allow read, delete: if isTotalMasterUser();
+      allow create: if isTotalMasterUser() && request.resource.data.keys().hasOnly(['cfg', 'by', 'byUid', 'at', 'atMs', 'rev', 'note', 'n'])
+        && request.resource.data.cfg is map && request.resource.data.byUid == request.auth.uid;
+      allow update: if false;
+    }
+    match /salesQuotes/{id} {
+      allow read, write: if isTotalMasterUser();
+    }
+    match /contracts/{id} {
+      allow get: if true;
+      allow list, create, delete: if isTotalMasterUser();
+      allow update: if isTotalMasterUser()
+        || (resource.data.status == '발송'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedAt'])
+            && !('viewedAt' in resource.data))
+        || (resource.data.status == '발송'
+            && request.resource.data.status == '서명완료'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'signedAt', 'signer', 'signatureImg', 'signerAgent', 'signedHash', 'consent'])
+            && request.resource.data.signatureImg is string
+            && request.resource.data.signatureImg.size() < 600000);
+    }
+    match /platformNotices/{id} {
+      allow read: if isTotalMasterUser()
+        || (isSignedIn() && (resource.data.audience in ['all', 'carrier', 'shipper']
+            || myCo() in resource.data.targetCompanies));
+      allow write: if isTotalMasterUser();
+      allow update: if isApproved() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy']);
+    }
+    function isBillingFinance() {
+      return myRole() in ['test', 'hrAcct', 'allMgr', 'acctStaff'] || myTeamFin();
+    }
+    function isBillingViewer() {
+      return isBillingFinance() || isExecProfileUser();
+    }
+    match /platformInvoices/{id} {
+      allow read: if isTotalMasterUser()
+        || (isApproved() && resource.data.company == myCoRaw() && isBillingViewer());
+      allow write: if isTotalMasterUser();
+      allow update: if isApproved()
+        && resource.data.company == myCoRaw()
+        && isBillingFinance()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['payNotice']);
+    }
+    match /publicCompanies/{id} {
+      allow read: if true;
+      allow create: if isTotalMasterUser() || (isApproved() && !isShipperUser() && request.resource.data.get('companyName', '') == myCoRaw());
+      allow update: if isTotalMasterUser() || (isApproved() && !isShipperUser() && request.resource.data.get('companyName', '') == myCoRaw()
+        && resource.data.get('companyName', '') == myCoRaw());
+      allow delete: if isTotalMasterUser();
+    }
+    match /companyPlans/{company} {
+      allow get: if isTotalMasterUser() || (isApproved() && (myCo() == company || myLinkedCo() == company));
+      allow list: if isTotalMasterUser();
+      allow write: if isTotalMasterUser();
+    }
+    match /publicRelease/{id} {
+      allow read: if true;
+      allow write: if isTotalMasterUser();
+    }
+    match /publicPricing/{id} {
+      allow read: if isSignedIn();
+      allow write: if isTotalMasterUser();
+    }
+    match /planRequests/{id} {
+      allow create: if isTotalMasterUser() || (isApproved() && request.resource.data.company == myCoRaw() && isBillingFinance());
+      allow read, update, delete: if isTotalMasterUser();
+    }
+    match /mktVideos/{docId} {
+      allow read, write: if isTotalMasterUser();
+    }
+    match /mktBlog/{docId} {
+      allow read, write: if isTotalMasterUser();
+    }
+    match /platformSecrets/{docId} {
+      allow read, write: if false;
+    }
+    match /siteConfig/{docId} {
+      allow get, list: if isTotalMasterUser();
+      allow write: if isTotalMasterUser();
+    }
+    match /platformConfig/{docId} {
+      allow read, write: if isTotalMasterUser();
+    }
+    match /aiTeamLogs/{docId} {
+      allow read: if isTotalMasterUser();
+      allow write: if false;
+    }
+    match /securityEvents/{docId} {
+      allow read: if isTotalMasterUser();
+      allow update: if isTotalMasterUser()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ack', 'ackBy', 'ackAt']);
+      allow delete: if isTotalMasterUser();
+      allow create: if false;
+    }
+    match /securityProfiles/{uid} {
+      allow read, write: if false;
+    }
+    match /errorReports/{docId} {
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'name', 'role', 'companyName', 'section', 'message', 'stack', 'url', 'ua', 'version', 'status', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'new'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.message is string && request.resource.data.message.size() <= 1000
+        && request.resource.data.get('stack', '') is string && request.resource.data.get('stack', '').size() <= 4000
+        && request.resource.data.get('url', '').size() <= 300 && request.resource.data.get('ua', '').size() <= 300
+        && request.resource.data.get('section', '').size() <= 80 && request.resource.data.get('companyName', '').size() <= 80
+        && request.resource.data.get('name', '').size() <= 60 && request.resource.data.get('email', '').size() <= 120
+        && request.resource.data.get('role', '').size() <= 30 && request.resource.data.get('version', '').size() <= 30;
+      allow read, delete: if isTotalMasterUser();
+      allow update: if isTotalMasterUser()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'doneBy', 'doneAt', 'memo'])
+        && request.resource.data.status in ['new', 'done'];
+    }
+    match /platformUsage/{docId} {
+      allow read: if isTotalMasterUser();
+      allow write: if false;
+    }
+    match /usageCounters/{docId} {
+      allow read, delete: if isTotalMasterUser();
+      allow create: if isApproved() && !isShipperUser()
+        && request.resource.data.get('company', '') == myCo()
+        && request.resource.data.get('month', '') is string
+        && request.resource.data.month.matches('^[0-9]{4}-[0-9]{2}$')
+        && request.resource.data.keys().hasOnly(['company', 'month', 'reads', 'writes', 'sessions', 'updatedAt'])
+        && request.resource.data.get('reads', 0) is number && request.resource.data.get('reads', 0) < 5000000
+        && request.resource.data.get('writes', 0) is number && request.resource.data.get('writes', 0) < 1000000;
+      allow update: if isApproved() && !isShipperUser()
+        && resource.data.get('company', '') == myCo()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reads', 'writes', 'sessions', 'updatedAt'])
+        && request.resource.data.get('reads', 0) >= resource.data.get('reads', 0)
+        && request.resource.data.get('writes', 0) >= resource.data.get('writes', 0)
+        && request.resource.data.get('sessions', 0) >= resource.data.get('sessions', 0)
+        && request.resource.data.get('reads', 0) - resource.data.get('reads', 0) < 5000000
+        && request.resource.data.get('writes', 0) - resource.data.get('writes', 0) < 1000000;
+    }
+    function isHrStaff() {
+      return isSignedIn() && (
+        request.auth.token.get('email', '') == "tjddnqkf@naver.com" ||
+        myRole() in ['hrManager', 'hrAcct', 'allMgr', 'hrStaff', 'totalMaster'] ||
+        myTeamHr());
+    }
+    function hireDateSame() {
+      return resource == null ||
+        request.resource.data.get('hireDate', '') == resource.data.get('hireDate', '');
+    }
+    function linkedCoOf(d) {
+      return d.get('linkedTransportCompany', null) is map ? d.get('linkedTransportCompany', {}).get('companyName', '') : '';
+    }
+    function userVisible(d) {
+      return isTotalMasterUser() || (isApproved() && (
+        (!(myRoleRaw() in ['shipper', 'driver']) && ((d.get('role', '') != 'shipper' && d.get('companyName', '(회사없음)') == myCoAny()) || linkedCoOf(d) == myCoAny())) ||
+        (isShipperUser() && d.get('role', '') == 'shipper' && d.get('companyName', '') == myCoAny() && linkedCoOf(d) == myLinkedCo())));
+    }
+    function scopeOf(d, co, shipper) {
+      return (!shipper && ((d.get('role', '') != 'shipper' && d.get('companyName', '(회사없음)') == co)
+          || (d.get('role', '') == 'shipper' && linkedCoOf(d) == co)))
+        || (shipper && d.get('role', '') == 'shipper' && d.get('companyName', '') == co && linkedCoOf(d) == myLinkedCo());
+    }
+    function userInMyScope(d) {
+      return isApproved() && !(myRole() in ['driver', 'cafeUser', 'viewer'])
+        && scopeOf(d, myCoAny(), myRole() == 'shipper');
+    }
+    function mgrOf(me) {
+      let r = me.get('role', '');
+      return r == 'shipper' ? me.get('permissions', {}).get('master', false) == true
+        : (!(r in ['driver', 'cafeUser']) && (me.get('isMaster', false) == true || r in ['admin', 'allMgr', 'hrManager', 'hrAcct', 'hrStaff', 'totalMaster']
+          || string(me.get('team', '')).matches('.*인사.*') || isExecRoleUser()));
+    }
+    function userManager() {
+      return ck()
+        ? (tk('r', '') == 'shipper' ? tk('pm', false) == true
+          : (!(tk('r', '') in ['driver', 'cafeUser']) && (tk('ms', false) == true || tk('r', '') in ['admin', 'allMgr', 'hrManager', 'hrAcct', 'hrStaff', 'totalMaster']
+            || tk('hr', false) == true || tk('exec', false) == true)))
+        : mgrOf(myUser());
+    }
+    function userSensitiveKeys() {
+      return ['role', 'approved', 'isMaster', 'permissions', 'subAdmin', 'subAdminPrevRole', 'companyName', 'linkedTransportCompany', 'companyCode', 'businessNumber', 'workScope', 'legacyTeam',
+        'team', 'position', 'employmentStatus', 'mfaOpt', 'bioKeys', 'carNo', '차량번호'];
+    }
+    function otherUserWriteOk() {
+      let r = myRole();
+      let co = myCoAny();
+      let shipper = r == 'shipper';
+      let after = request.resource.data;
+      let aff = resource == null ? after.keys() : after.diff(resource.data).affectedKeys();
+      return isApproved() && !(r in ['driver', 'cafeUser', 'viewer'])
+        && (resource == null || scopeOf(resource.data, co, shipper)) && scopeOf(after, co, shipper)
+        && (!aff.hasAny(userSensitiveKeys())
+          || (!shipper && after.get('role', '') == 'driver' && (resource == null || resource.data.get('role', '') == 'driver')
+              && !aff.hasAny(['role', 'isMaster', 'permissions', 'subAdmin', 'subAdminPrevRole', 'companyName', 'linkedTransportCompany', 'companyCode']))
+          || userManager());
+    }
+    function selfKeepOk() {
+      return resource == null || resource.data.get('approved', true) == false || isTotalMasterUser()
+        || (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['companyName', 'linkedTransportCompany', 'permissions', 'subAdmin', 'subAdminPrevRole', 'employmentStatus', 'companyCode', 'resignedAt', 'workScope', 'mfaOpt', 'mfaKind', 'bioKeys', 'legacyTeam', 'workWeekdays'])
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['isMaster']) || request.resource.data.get('isMaster', false) == false)
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['team', 'position'])
+            || resource.data.get('role', '') in ['shipper', 'cafeUser'] || isHrStaff() || isCompanyAdmin(myCo())));
+    }
+    match /users/{userId} {
+      allow get: if (isSignedIn() && request.auth.uid == userId) || userVisible(resource.data);
+      allow list: if userVisible(resource.data);
+      allow create, update: if isSignedIn() && (
+        isTotalMasterUser() ||
+        (request.auth.uid != userId && otherUserWriteOk()) ||
+        (selfUserWriteOk(userId) && selfKeepOk())
+      ) && (hireDateSame() || isHrStaff()) && roleEscalationOk();
+      allow delete: if isTotalMasterUser() || (resource != null && request.auth.uid != userId && userInMyScope(resource.data)
+        && (resource.data.get('role', '') == 'driver' || userManager()));
+    }
+    function profileOwnerCo(userId) {
+      let p = /databases/$(database)/documents/users/$(userId);
+      return exists(p) ? get(p).data.get('companyName', '(회사없음)') : '';
+    }
+    function profileStaffOk(userId) {
+      return isTotalMasterUser() || (isOfficeStaff() && profileOwnerCo(userId) == myCo());
+    }
+    match /userProfiles/{userId} {
+      allow get: if (isSignedIn() && request.auth.uid == userId) || profileStaffOk(userId);
+      allow list: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '') == myCo());
+      allow create, update: if ((isSignedIn() && request.auth.uid == userId) || profileStaffOk(userId)) &&
+        (hireDateSame() || isHrStaff());
+      allow delete: if profileStaffOk(userId);
+    }
+    match /driver_documents/{id} {
+      allow create: if isSignedIn() && request.resource.data.get('driverId', '') == request.auth.uid;
+      allow read: if isSignedIn() && resource.data.get('driverId', '') == request.auth.uid;
+    }
+    function driverDocSelf(driverId) {
+      return isSignedIn() && (request.auth.uid == driverId || resource.data.get('uid', '') == request.auth.uid);
+    }
+    function driverDocStaff() {
+      return isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '(회사없음)') == myCo());
+    }
+    function driverOdoNoDecrease() {
+      let o = resource.data.get('care', {}).get('odometer', 0);
+      let n = request.resource.data.get('care', {}).get('odometer', 0);
+      return !(o is number) || !(n is number) || o == 0 || n >= o;
+    }
+    match /drivers/{driverId} {
+      allow get: if resource == null && isApproved() && !(myRoleRaw() in ['driver', 'shipper', 'cafeUser']);
+      allow get: if driverDocSelf(driverId) || driverDocStaff();
+      allow list: if coMatch(resource.data);
+      allow create: if coCreate() || (isSignedIn() && request.auth.uid == driverId
+        && request.resource.data.get('approved', true) == false && request.resource.data.get('uid', '') == request.auth.uid
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid)) || request.resource.data.get('companyName', '') == myCoRawAny()));
+      allow update: if (coMatch(resource.data) && coKeep() && (myRole() != 'driver' || driverOdoNoDecrease())) || (isSignedIn() && request.auth.uid == driverId && driverOdoNoDecrease()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['companyName', 'approved', 'uid', '차량번호', 'carNo', '차량이력']));
+      allow delete: if coMatch(resource.data) || (isApproved() && myRole() == 'driver' &&
+        myUser().get('carNo', '') is string && myUser().get('carNo', '') != '' &&
+        resource.data.get('companyName', '') == myCoAny() &&
+        myUser().get('companyName', '').trim() + '__' + plateId(myUser().carNo) == driverId);
+    }
+    match /driverSignupLogs/{id} {
+      allow read: if isOfficeStaff() && coMatch(resource.data);
+      allow create: if isOfficeStaff() && coCreate();
+    }
+    match /loginSessions/{id} {
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow get: if isSignedIn() && (resource == null || resource.data.uid == request.auth.uid || isTotalMasterUser()
+        || (isOfficeStaff() && resource.data.get('companyName', '') == myCo()));
+      allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isTotalMasterUser()
+        || (isOfficeStaff() && resource.data.get('companyName', '') == myCo()));
+      allow update: if isSignedIn() && (
+        resource.data.uid == request.auth.uid ||
+        isTotalMasterUser() ||
+        (isOfficeStaff() && resource.data.get('companyName', '') == myCo()
+          && resource.data.get('role', '') != 'totalMaster' && resource.data.get('email', '') != 'tjddnqkf@naver.com')
+      );
+      allow delete: if isTotalMasterUser();
+    }
+    match /adminSecrets/{id} {
+      allow read, write: if false;
+    }
+    match /resetBackups/{document=**} {
+      allow read, write: if false;
+    }
+    match /resetLocks/{id} {
+      allow read, write: if false;
+    }
+    match /resetJobs/{id} {
+      allow read: if isTotalMasterUser();
+      allow write: if false;
+    }
+    match /resetLogs/{id} {
+      allow read: if isTotalMasterUser();
+      allow write: if false;
+    }
+    match /internalMails/{id} {
+      allow read: if isApproved() && (request.auth.uid in resource.data.get('to', []) || resource.data.get('fromUid', '') == request.auth.uid);
+      allow create: if isApproved() && request.resource.data.get('fromUid', '') == request.auth.uid
+        && (isTotalMasterUser() || request.resource.data.get('company', myCo()) == myCo())
+        && request.resource.data.get('to', []) is list && request.resource.data.get('to', []).size() <= 500
+        && (!(request.resource.data.get('status', 'sent') in ['draft', 'scheduled']) || request.resource.data.get('to', []).size() == 0);
+      allow update: if isApproved() && (
+        (request.auth.uid in resource.data.get('to', [])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'deletedBy', 'starredBy', 'purgedBy']))
+        || (resource.data.get('fromUid', '') == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'deletedBy', 'starredBy', 'purgedBy', 'recalledFor']))
+        || (resource.data.get('fromUid', '') == request.auth.uid && resource.data.get('status', 'sent') in ['draft', 'scheduled']
+          && request.resource.data.get('fromUid', '') == request.auth.uid && request.resource.data.get('status', 'sent') in ['draft', 'scheduled']
+          && request.resource.data.get('to', []).size() == 0));
+      allow delete: if isApproved() && resource.data.get('fromUid', '') == request.auth.uid && resource.data.get('status', 'sent') in ['draft', 'scheduled'];
+    }
+    function isSuperEmail() {
+      return request.auth.token.get('email', '') == "tjddnqkf@naver.com"
+        || (isSignedIn() && (!ck() || (tk('tm', false) == true && tk('sa', false) == true))
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && myUser().get('role', '') == 'totalMaster' && myUser().get('subAdmin', false) == true);
+    }
+    function roleEscalationOk() {
+      return isTotalMasterUser() || (
+        (request.resource.data.get('role', '') != 'totalMaster'
+          || (resource != null && resource.data.get('role', '') == 'totalMaster'))
+        && request.resource.data.get('subAdmin', false) == (resource == null ? false : resource.data.get('subAdmin', false)));
+    }
+    function isCompanyAdmin(company) {
+      return isTotalMasterUser() ||
+        ((myRole() in ['admin', 'allMgr', 'hrManager', 'hrAcct'] || isExecRoleUser()) && myCoRaw() == company);
+    }
+    function isExecRoleUser() {
+      return ck() ? tk('exec', false) == true : isExecRoleUserDoc();
+    }
+    function isExecRoleUserDoc() {
+      let r = myUser().get('role', '');
+      let p = /databases/$(database)/documents/customRoles/$(r);
+      let ov = /databases/$(database)/documents/companyRoleOverrides/$(myUser().get('companyName', ''));
+      let g = exists(p) ? get(p).data : {};
+      let o = exists(ov) ? get(ov).data.get('roles', {}).get(r, {}) : {};
+      let scr = ('screen' in o) ? o.get('screen', null) : g.get('screen', null);
+      let lbl = o.get('label', '') != '' ? o.get('label', '') : (g.get('label', '') != '' ? g.get('label', '') : r);
+      return r != '' && !(r in ['admin', 'allMgr', 'hrManager', 'hrAcct', 'hrStaff', 'user', 'test', 'acctStaff', 'salesMgr', 'salesStaff', 'legalMgr', 'legalStaff', 'devMgr', 'devStaff', 'viewer', 'totalMaster', 'driver', 'shipper'])
+        && (exists(p) || o.size() > 0)
+        && (scr is string ? scr == 'exec' : string(lbl).matches('.*임원.*'));
+    }
+    function isAcctApprovalReader(d) {
+      return d.get('cat', '') in ['expense', 'leave'] && myCoRaw() == d.get('company', '')
+        && myRole() in ['test', 'acctStaff'];
+    }
+    function apAllReader(co) {
+      return isTotalMasterUser() || (myCoRaw() == co && (myRole() == 'allMgr' || isExecProfileUser()));
+    }
+    function apTeamReader(d) {
+      return d.get('drafter', {}).get('team', '') != '' && myCoRaw() == d.get('company', '')
+        && d.get('drafter', {}).get('team', '') == myUser().get('team', '')
+        && (myRole() in ['admin', 'hrManager', 'hrAcct'] || myUser().get('position', '') in ['과장', '차장', '부장', '팀장', '파트장', '실장', '본부장']);
+    }
+    function apHrFormReader(d) {
+      return d.get('form', '') in ['personnel', 'resign'] && myCoRaw() == d.get('company', '')
+        && (myRole() in ['admin', 'hrManager', 'hrAcct', 'test', 'acctStaff'] || myTeamHr() || myTeamFin());
+    }
+    function isExecUser() {
+      return myPosExec();
+    }
+    function apAff() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+    function apBizLineOk() {
+      let d = request.resource.data;
+      let n = d.line.size();
+      let fi = d.get('finIdx', -1);
+      let fin = get(/databases/$(database)/documents/users/$(d.line[fi].uid)).data;
+      let ceo = get(/databases/$(database)/documents/users/$(d.line[n - 1].uid)).data;
+      return n >= 2 && fi is int && fi >= 0 && fi < n - 1
+        && d.line[fi].get('kind', '') == '합의'
+        && fin.get('companyName', '') == myCo()
+        && (fin.get('role', '') in ['acctStaff', 'test'] || fin.get('team', '').matches('.*(재무|경리|회계|총무).*'))
+        && (myUser().get('position', '') in ['대표', '대표이사', '사장']
+          || (d.line[n - 1].get('kind', '결재') == '결재'
+              && ceo.get('companyName', '') == myCo()
+              && ceo.get('position', '') in ['대표', '대표이사', '사장']));
+    }
+    function apFilesOk() {
+      return !('files' in request.resource.data) || (request.resource.data.files is list && request.resource.data.files.size() <= 10);
+    }
+    function apCancelReqOk() {
+      return resource.data.get('status', '') == 'approved'
+        && resource.data.get('cancel', {}).get('status', '') != 'pending'
+        && !(resource.data.get('cat', '') == 'expense' && resource.data.get('paid', null) != null && resource.data.paid.get('at', null) != null)
+        && request.resource.data.cancel.get('status', '') == 'pending'
+        && request.resource.data.cancel.get('step', -1) == 0
+        && request.resource.data.cancel.line.size() == resource.data.line.size()
+        && request.resource.data.cancel.line[0].uid == resource.data.line[0].uid;
+    }
+    function isExecProfileUser() {
+      return isExecUser() || myTeamExec() || isExecRoleUser();
+    }
+    function approvalSettingsWriteOk(co) {
+      let before = resource == null ? {} : resource.data;
+      let after = request.resource.data;
+      let entry = after.get('autoApprovers', {}).get(request.auth.uid, {});
+      return isCompanyAdmin(co) || (co == myCo()
+        && after.get('autoApprovers', {}).diff(before.get('autoApprovers', {})).affectedKeys().hasOnly([request.auth.uid])
+        && ((isExecProfileUser()
+              && after.diff(before).affectedKeys().hasOnly(['autoApprovers', 'companyName', 'autoApproveDaily', 'updatedBy', 'updatedAt']))
+          || (after.diff(before).affectedKeys().hasOnly(['autoApprovers', 'companyName'])
+              && entry.get('exec', false) != true
+              && !(entry.get('position', '') is string && entry.get('position', '').trim() in ['이사', '상무', '전무', '부사장', '사장', '대표', '대표이사', '본부장', '임원']))));
+    }
+    match /approvalSettings/{co} {
+      allow read: if coMatch(resource.data);
+      allow create: if coCreate() && approvalSettingsWriteOk(co);
+      allow update: if coMatch(resource.data) && coKeep() && approvalSettingsWriteOk(co);
+      allow delete: if coMatch(resource.data) && isCompanyAdmin(co);
+    }
+    match /companyPayFlags/{co} {
+      allow read: if isApproved() && (myCoRaw() == co || isTotalMasterUser());
+      allow write: if false;
+    }
+    match /approvals/{id} {
+      allow read: if resource.data.get('form', '') == 'bizplan' && resource.data.get('status', '') == 'approved'
+        && isOfficeStaff() && resource.data.get('company', '') == myCo();
+      allow read: if (resource.data.get('form', '') == 'bizplan' || resource.data.get('planId', '') != '')
+        && isApproved() && resource.data.get('company', '') == myCo() && isExecProfileUser();
+      allow read: if resource.data.get('cat', '') == 'leave' && resource.data.get('company', '') == myCo() && isOfficeStaff();
+      allow read: if isApproved()
+        && (request.auth.uid in resource.data.get('participants', []) || isAcctApprovalReader(resource.data) || apHrFormReader(resource.data)
+          || apTeamReader(resource.data) || apAllReader(resource.data.get('company', '')));
+      allow create: if coCreate() && request.resource.data.get('drafterUid', '') == request.auth.uid
+        && (isTotalMasterUser() || request.resource.data.get('company', '') == myCo())
+        && apFilesOk()
+        && (request.resource.data.get('form', '') != 'bizplan' || apBizLineOk())
+        && (request.resource.data.get('status', '') == 'pending'
+          || (request.resource.data.get('status', '') == 'approved' && request.resource.data.get('form', '') == 'daily'
+              && request.resource.data.get('autoApproved', false) == true
+              && exists(/databases/$(database)/documents/approvalSettings/$(request.resource.data.get('company', '')))
+              && get(/databases/$(database)/documents/approvalSettings/$(request.resource.data.get('company', ''))).data.get('autoApproveDaily', false) == true))
+        && request.auth.uid in request.resource.data.get('participants', []);
+      allow update: if isApproved()
+        && resource.data.get('status', '') == 'approved'
+        && resource.data.get('cat', '') == 'expense'
+        && resource.data.get('cancel', {}).get('status', '') != 'pending'
+        && apAff().hasOnly(['paid', 'paidLines', 'history', 'updatedAt', 'drafterUnread'])
+        && (myRole() in ['test', 'acctStaff', 'hrAcct', 'allMgr', 'totalMaster'] || myTeamPay())
+        && (myCoRaw() == resource.data.get('company', '') || isTotalMasterUser());
+      allow update: if isApproved()
+        && resource.data.get('status', '') == 'approved'
+        && resource.data.get('cat', '') == 'expense'
+        && resource.data.get('cancel', {}).get('status', '') != 'pending'
+        && apAff().hasOnly(['paid', 'paidLines', 'history', 'updatedAt', 'drafterUnread'])
+        && myCoRaw() == resource.data.get('company', '')
+        && resource.data.line[resource.data.line.size() - 1].uid == request.auth.uid
+        && get(/databases/$(database)/documents/companyPayFlags/$(resource.data.get('company', ''))).data.get('payFallback', false) == true;
+      allow update: if isApproved() && request.auth.uid in resource.data.get('participants', [])
+        && request.resource.data.get('drafterUid', '') == resource.data.get('drafterUid', '')
+        && request.resource.data.get('participants', []) == resource.data.get('participants', [])
+        && request.resource.data.get('company', '') == resource.data.get('company', '')
+        && request.resource.data.get('form', '') == resource.data.get('form', '')
+        && apFilesOk()
+        && (apAff().hasOnly(['ccReadBy', 'seenBy', 'drafterUnread', 'history', 'updatedAt', 'hiddenBy'])
+          || (resource.data.get('status', '') == 'pending' && resource.data.line[resource.data.get('step', 0)].uid == request.auth.uid)
+          || (resource.data.get('cancel', {}).get('status', '') == 'pending'
+              && resource.data.cancel.line[resource.data.cancel.get('step', 0)].uid == request.auth.uid)
+          || (resource.data.drafterUid == request.auth.uid
+              && !apAff().hasAny(['line', 'step'])
+              && (request.resource.data.get('status', '') == resource.data.get('status', '')
+                || (resource.data.get('status', '') == 'pending' && request.resource.data.get('status', '') == 'withdrawn'))
+              && (resource.data.get('status', '') == 'pending'
+                || apAff().hasOnly(['ccReadBy', 'seenBy', 'drafterUnread', 'history', 'updatedAt', 'hiddenBy', 'cancel']))
+              && (!apAff().hasAny(['cancel']) || apCancelReqOk())));
+      allow update: if isApproved() && isCompanyAdmin(resource.data.get('company', ''))
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hiddenBy']);
+      allow delete: if false;
+    }
+    function canSeeBoard(b) {
+      return b == 'free' || isTotalMasterUser()
+        || (b == 'admin' && (myRole() in ['admin', 'allMgr', 'hrManager', 'hrAcct'] || isExecRoleUser()));
+    }
+    function isBoardAdmin() {
+      return isSuperEmail() || myRole() in ['admin', 'allMgr', 'totalMaster', 'hrManager', 'hrAcct'];
+    }
+    function noticePolicy() {
+      return exists(/databases/$(database)/documents/companySettings/$(myCo()))
+        ? get(/databases/$(database)/documents/companySettings/$(myCo())).data.get('noticeWriters', 'admin') : 'admin';
+    }
+    function canPostNotice() {
+      return isBoardAdmin() || (isApproved() && !(myRole() in ['viewer', 'driver', 'shipper', 'cafeUser']) && (
+        myIsMaster() || noticePolicy() == 'all' || (noticePolicy() == 'exec' && myTeamExec())));
+    }
+    function likesOnlyMine() {
+      let before = resource.data.get('likes', []).toSet();
+      let after = request.resource.data.get('likes', []).toSet();
+      return after.difference(before).hasOnly([request.auth.uid]) && before.difference(after).hasOnly([request.auth.uid]);
+    }
+    function commentsOk() {
+      return request.resource.data.get('comments', []) is list && request.resource.data.get('comments', []).size() <= 500;
+    }
+    function canTalkUser() {
+      return isTotalMasterUser() || !(myRole() in ['viewer', 'driver', 'shipper', 'cafeUser']);
+    }
+    match /notices/{id} {
+      allow read: if coMatch(resource.data) || (isApproved() && isShipperUser() && resource.data.get('audience', '') in ['shipper', 'all']
+          && myLinkedCo() != '' && resource.data.get('companyName', '') == myLinkedCo())
+        || (isApproved() && myRole() == 'driver' && 'driver' in resource.data.get('audiences', []) && resource.data.get('companyName', '') == myCo());
+      allow create: if coCreate() && canPostNotice();
+      allow update, delete: if coMatch(resource.data) && canPostNotice()
+        && (resource.data.get('authorUid', '') == request.auth.uid || resource.data.get('authorUid', '') == ''
+            || isTotalMasterUser());
+      allow delete: if coMatch(resource.data) && isApproved()
+        && (myRole() in ['admin', 'allMgr'] || myIsMaster());
+      allow update: if coMatch(resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']);
+      allow update: if coMatch(resource.data) && canTalkUser()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments', 'likes', 'readBy'])
+        && likesOnlyMine() && commentsOk();
+    }
+    match /handovers/{id} {
+      allow read: if coMatch(resource.data);
+      allow create: if coCreate();
+      allow update: if coMatch(resource.data) && (resource.data.get('authorUid', '') == request.auth.uid || resource.data.get('authorUid', '') == ''
+        || isTotalMasterUser()
+        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']));
+      allow delete: if coMatch(resource.data) && (resource.data.get('authorUid', '') == request.auth.uid || resource.data.get('authorUid', '') == ''
+        || isTotalMasterUser());
+    }
+    match /boardPosts/{id} {
+      allow read: if coMatch(resource.data) && canSeeBoard(resource.data.board);
+      allow create: if coCreate() && request.resource.data.get('authorUid', '') == request.auth.uid && canSeeBoard(request.resource.data.get('board', ''));
+      allow update: if coMatch(resource.data) && canSeeBoard(resource.data.board)
+        && request.resource.data.get('board', '') == resource.data.board
+        && (resource.data.get('authorUid', '') == request.auth.uid || isBoardAdmin()
+            || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'comments', 'likes'])
+                && likesOnlyMine() && commentsOk()));
+      allow delete: if coMatch(resource.data) && canSeeBoard(resource.data.board) && (resource.data.get('authorUid', '') == request.auth.uid || isTotalMasterUser());
+    }
+    match /companyRoleOverrides/{co} {
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
+      allow write: if isTotalMasterUser();
+      allow write: if isApproved() && myCo() == co && myIsMaster()
+        && (!exists(/databases/$(database)/documents/companyFeatures/$(co))
+          || get(/databases/$(database)/documents/companyFeatures/$(co)).data.get('masterRolePerms', true) != false)
+        && request.resource.data.get('companyName', co) == co;
+    }
+    match /customRoles/{key} {
+      allow read: if isApproved();
+      allow write: if isTotalMasterUser();
+    }
+    match /userPrefs/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+    function supAff() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+    match /supportRequests/{id} {
+      allow create: if isApproved() && !isShipperUser()
+        && request.resource.data.get('uid', '') == request.auth.uid
+        && request.resource.data.get('companyName', '') == myCo()
+        && request.resource.data.get('status', '') == 'pending';
+      allow create: if isTotalMasterUser()
+        && request.resource.data.get('status', '') == 'invited'
+        && request.resource.data.get('initiatedBy', '') == 'master'
+        && request.resource.data.get('uid', '') is string && request.resource.data.get('uid', '') != '';
+      allow read: if isTotalMasterUser() || (isSignedIn() && resource.data.get('uid', '') == request.auth.uid);
+      allow update: if isTotalMasterUser();
+      allow update: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid
+        && supAff().hasOnly(['status', 'anydeskId', 'sessionId', 'updatedAt', 'cancelledAt', 'endedAt', 'respondedAt'])
+        && (request.resource.data.get('status', '') == resource.data.get('status', '')
+          || (request.resource.data.get('status', '') in ['approved', 'declined'] && resource.data.get('status', '') == 'invited')
+          || (request.resource.data.get('status', '') == 'cancelled' && resource.data.get('status', '') in ['pending', 'approved'])
+          || (request.resource.data.get('status', '') == 'in_session' && resource.data.get('status', '') == 'approved')
+          || (request.resource.data.get('status', '') == 'done' && resource.data.get('status', '') == 'in_session'));
+      allow delete: if isTotalMasterUser();
+    }
+    match /supportSessions/{sid} {
+      allow create: if isApproved() && request.resource.data.get('requesterUid', '') == request.auth.uid
+        && request.resource.data.get('controlAllowed', false) != true;
+      allow read: if isTotalMasterUser() || (isSignedIn() && resource.data.get('requesterUid', '') == request.auth.uid);
+      allow update: if isSignedIn() && resource.data.get('requesterUid', '') == request.auth.uid
+        && request.resource.data.get('requesterUid', '') == resource.data.get('requesterUid', '');
+      allow update: if isTotalMasterUser()
+        && (request.resource.data.get('controlAllowed', false) != true || resource.data.get('controlAllowed', false) == true);
+      allow delete: if isTotalMasterUser();
+      match /controlCmds/{cid} {
+        allow create: if isTotalMasterUser()
+          && get(/databases/$(database)/documents/supportSessions/$(sid)).data.get('controlAllowed', false) == true;
+        allow read, delete: if isTotalMasterUser() || (isSignedIn()
+          && get(/databases/$(database)/documents/supportSessions/$(sid)).data.get('requesterUid', '') == request.auth.uid);
+      }
+      match /{sub}/{docId} {
+        allow read, write: if sub != 'controlCmds' && (isTotalMasterUser() || (isSignedIn()
+          && get(/databases/$(database)/documents/supportSessions/$(sid)).data.get('requesterUid', '') == request.auth.uid));
+      }
+    }
+    function payrollStaff() {
+      return isTotalMasterUser() || (isApproved()
+        && !(myRole() in ['driver', 'shipper', 'cafeUser'])
+        && (myRole() in ['test', 'acctStaff', 'hrAcct', 'allMgr']
+          || myTeamPay()));
+    }
+    function payUnlocked(co) {
+      let p = /databases/$(database)/documents/payrollUnlocks/$(request.auth.uid);
+      return isSignedIn() && exists(p) && get(p).data.get('companyName', '') == co && get(p).data.expiresAt > request.time;
+    }
+    function payOk(d) {
+      return payrollStaff() && payCo(d) && payUnlocked(d.get('companyName', ''));
+    }
+    function payrollEditor() {
+      return payrollStaff() && payUnlocked(myCo());
+    }
+    function leaveManager() {
+      return isApproved() && (isHrStaff() || myIsMaster());
+    }
+    function payCo(d) {
+      return isTotalMasterUser() || d.get('companyName', '') == myCo();
+    }
+    match /payrollSecrets/{co} {
+      allow read, write: if false;
+    }
+    match /payrollPwAttempts/{id} {
+      allow read, write: if false;
+    }
+    match /privateFareSettings/{co} {
+      allow get: if isSignedIn() && (resource == null ? isApproved() : request.auth.uid in resource.data.get('viewers', []));
+      allow list: if false;
+      allow create: if request.resource.data.viewers is list && request.resource.data.viewers.size() > 0 && request.resource.data.viewers.size() <= 10
+        && request.resource.data.get('companyName', '') != ''
+        && (isTotalMasterUser()
+          || (isApproved() && !isShipperUser() && request.resource.data.get('companyName', '') == myCo() && (myIsMaster() || myRole() == 'admin')));
+      allow update: if isSignedIn() && request.auth.uid in resource.data.get('viewers', [])
+        && request.resource.data.get('companyName', '') == resource.data.get('companyName', '')
+        && request.resource.data.viewers is list && request.resource.data.viewers.size() > 0 && request.resource.data.viewers.size() <= 10;
+      allow delete: if false;
+      match /fares/{oid} {
+        allow read, write: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/privateFareSettings/$(co)).data.get('viewers', []);
+      }
+    }
+    function pfGrantOk(uid) {
+      let g = /databases/$(database)/documents/privateFareGrants/$(uid);
+      return exists(g) && get(g).data.get('on', false) == true && get(g).data.get('companyName', '') == myCo();
+    }
+    function pfUnlocked(uid) {
+      let u = /databases/$(database)/documents/privateFareUnlocks/$(uid);
+      return exists(u) && get(u).data.expiresAt > request.time && get(u).data.get('companyName', '') == myCo();
+    }
+    function pfVaultOk(uid) {
+      return isSignedIn() && request.auth.uid == uid && isApproved() && pfGrantOk(uid) && pfUnlocked(uid);
+    }
+    match /privateFareGrants/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isTotalMasterUser());
+      allow create, update: if isTotalMasterUser() && request.resource.data.get('uid', '') == uid && request.resource.data.get('companyName', '') != '';
+      allow delete: if isTotalMasterUser();
+    }
+    match /privateFarePins/{uid} {
+      allow read, create, update: if false;
+      allow delete: if isTotalMasterUser();
+    }
+    match /privateFarePinAttempts/{uid} {
+      allow read, create, update: if false;
+      allow delete: if isTotalMasterUser();
+    }
+    match /privateFareUnlocks/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow create, update: if false;
+      allow delete: if isSignedIn() && (request.auth.uid == uid || isTotalMasterUser());
+    }
+    match /privateFareVaults/{uid} {
+      allow read, delete: if pfVaultOk(uid);
+      allow create, update: if pfVaultOk(uid) && request.resource.data.get('companyName', '') == myCo();
+      match /fares/{oid} {
+        allow read, write: if pfVaultOk(uid);
+      }
+    }
+    match /payrollUnlocks/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+    match /payrollSettings/{co} {
+      allow read: if isTotalMasterUser() || (myCo() == co && isApproved() && (payrollStaff() || leaveManager()));
+      allow create, update: if (isTotalMasterUser() || myCo() == co) && request.resource.data.get('companyName', '') == co && (
+        (payrollStaff() && payUnlocked(co))
+        || (leaveManager() && (resource == null
+          ? request.resource.data.keys().hasOnly(['companyName', 'leave', 'leaveUpdatedAt', 'leaveUpdatedBy'])
+          : request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyName', 'leave', 'leaveUpdatedAt', 'leaveUpdatedBy']))));
+      allow delete: if isTotalMasterUser();
+    }
+    match /payrollEmployees/{id} {
+      allow read: if (resource == null && payrollEditor()) || (resource != null && payOk(resource.data));
+      allow create: if payOk(request.resource.data);
+      allow update: if payOk(resource.data) && request.resource.data.get('companyName', '') == resource.data.get('companyName', '');
+      allow delete: if payOk(resource.data);
+    }
+    match /payrollRuns/{id} {
+      allow read: if (resource == null && payrollEditor()) || (resource != null && payOk(resource.data));
+      allow create: if payOk(request.resource.data);
+      allow update: if payOk(resource.data) && request.resource.data.get('companyName', '') == resource.data.get('companyName', '');
+      allow delete: if isTotalMasterUser();
+    }
+    function paySignKeys() {
+      return ['signedAt', 'signName', 'signImg'];
+    }
+    function paySignNotForged() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(paySignKeys())
+        || !request.resource.data.keys().hasAny(paySignKeys());
+    }
+    function paySignOk() {
+      let d = request.resource.data;
+      return resource.data.get('signedAt', null) == null
+        && resource.data.get('status', '') in ['confirmed', 'paid']
+        && d.diff(resource.data).affectedKeys().hasOnly(['readAt', 'signedAt', 'signName', 'signImg'])
+        && d.diff(resource.data).affectedKeys().hasAll(['signedAt', 'signName'])
+        && d.signedAt == request.time
+        && d.signName is string && d.signName.size() > 0 && d.signName.size() <= 30
+        && (!('signImg' in d) || (d.signImg is string && d.signImg.size() <= 60000
+          && (d.signImg == '' || d.signImg.matches('data:image/png;base64,[A-Za-z0-9+/=]+'))));
+    }
+    match /payslips/{id} {
+      allow read: if (resource != null && isSignedIn() && resource.data.get('uid', '') == request.auth.uid && resource.data.get('published', false) == true)
+        || (resource == null && payrollEditor())
+        || (resource != null && payOk(resource.data));
+      allow create: if payOk(request.resource.data) && !request.resource.data.keys().hasAny(paySignKeys());
+      allow update: if (payOk(resource.data)
+          && request.resource.data.get('companyName', '') == resource.data.get('companyName', '')
+          && request.resource.data.get('uid', '') == resource.data.get('uid', '')
+          && paySignNotForged()
+          && (resource.data.get('status', 'draft') == 'draft'
+            || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'published', 'publishedAt', 'publishedBy', 'paidAt', 'paidDate', 'updatedAt', 'updatedBy', 'unlockReason', 'signedAt', 'signName', 'signImg'])))
+        || (isSignedIn() && resource.data.get('uid', '') == request.auth.uid && resource.data.get('published', false) == true
+          && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']) || paySignOk()));
+      allow delete: if payOk(resource.data) && resource.data.get('status', 'draft') == 'draft';
+    }
+    match /hrNotices/{id} {
+      allow read: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
+      allow create: if isTotalMasterUser() || (isApproved() && request.resource.data.get('companyName', '') == myCo()
+        && request.resource.data.get('uid', '') is string
+        && (request.resource.data.get('kind', '') == 'leavePlan' || payrollEditor() || leaveManager()));
+      allow delete: if isTotalMasterUser();
+    }
+    match /leavePromotions/{id} {
+      allow read: if (resource != null && isSignedIn() && resource.data.get('uid', '') == request.auth.uid)
+        || (resource == null && isApproved())
+        || ((leaveManager() || isTotalMasterUser() || (isApproved() && myRole() in ['test', 'acctStaff'])) && payCo(resource.data));
+      allow create: if (leaveManager() || isTotalMasterUser()) && payCo(request.resource.data);
+      allow update: if ((leaveManager() || isTotalMasterUser()) && payCo(resource.data)
+          && request.resource.data.get('companyName', '') == resource.data.get('companyName', '')
+          && request.resource.data.get('log', []).hasAll(resource.data.get('log', [])))
+        || (isSignedIn() && resource.data.get('uid', '') == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['plan', 'log', 'updatedAt'])
+          && request.resource.data.get('log', []).size() == resource.data.get('log', []).size() + 1
+          && request.resource.data.get('log', []).hasAll(resource.data.get('log', []))
+          && request.resource.data.log[request.resource.data.log.size() - 1].get('type', '') == 'plan');
+      allow delete: if isTotalMasterUser();
+    }
+    match /dailyReportPrefs/{uid} {
+      allow read, delete: if isSignedIn() && request.auth.uid == uid;
+      allow create, update: if isApproved() && request.auth.uid == uid && request.resource.data.get('uid', '') == uid
+        && (isTotalMasterUser() || request.resource.data.get('companyName', '') == myCo());
+    }
+    match /dailyReportCompany/{co} {
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co);
+      allow create, update: if (isTotalMasterUser() || (isApproved() && myCo() == co && (isCompanyAdmin(co) || myIsMaster()
+          || myPosCeo())))
+        && request.resource.data.get('companyName', '') == co;
+      allow delete: if isTotalMasterUser();
+    }
+    match /dailyReportLogs/{id} {
+      allow read, write: if false;
+    }
+    function scanKeyOk(key) {
+      return (isApproved() && !(myRoleRaw() in ['driver', 'shipper', 'cafeUser']) && key == 'lw:' + myCoAny()) || (hubActive() && key == hubMyKey());
+    }
+    function scanLearnOk(d, key) {
+      return d.keys().hasOnly(['fp', 'labels', 'head', 'text', 'fields', 'changed', 'aliases', 'labelMap', 'companyKey', 'uid', 'updatedAtMs', 'updatedAt'])
+        && d.get('companyKey', '') == key && d.get('uid', '') == request.auth.uid
+        && d.get('fp', '') is string && d.get('fp', '').size() <= 16
+        && d.get('text', '') is string && d.get('text', '').size() <= 3000
+        && d.get('fields', {}) is map && d.get('fields', {}).size() <= 40
+        && d.get('labelMap', {}) is map && d.get('labelMap', {}).size() <= 40
+        && d.get('aliases', []) is list && d.get('aliases', []).size() <= 10;
+    }
+    match /scanLearn/{key} {
+      allow read, write: if false;
+      match /items/{id} {
+        allow read, delete: if scanKeyOk(key);
+        allow create, update: if scanKeyOk(key) && scanLearnOk(request.resource.data, key);
+      }
+    }
+    match /scanUsage/{id} {
+      allow read, write: if false;
+    }
+    match /aiAssistantLogs/{id} {
+      allow read: if isTotalMasterUser();
+      allow write: if false;
+    }
+    match /aiAssistantUsage/{id} {
+      allow read, write: if false;
+    }
+    match /bizStatusCache/{id} {
+      allow read, write: if false;
+    }
+    match /bizStatusUsage/{id} {
+      allow read, write: if false;
+    }
+    match /weatherUsage/{id} {
+      allow read, write: if false;
+    }
+    match /weatherCache/{id} {
+      allow read: if isApproved() || hubActive();
+      allow write: if false;
+    }
+    match /companyPopbill/{co} {
+      allow read, write: if false;
+    }
+    match /integrationConfig/{id} {
+      allow read: if isTotalMasterUser();
+      allow write: if false;
+    }
+    function popbillSettingsWriter(co) {
+      return isTotalMasterUser() || (isApproved() && myCo() == co
+        && (myUser().get('role', '') in ['admin', 'allMgr', 'hrManager', 'hrAcct'] || myUser().get('isMaster', false) == true));
+    }
+    match /popbillSettings/{co} {
+      allow read: if isTotalMasterUser() || (isOfficeStaff() && myCo() == co);
+      allow create, update: if popbillSettingsWriter(co)
+        && request.resource.data.keys().hasOnly(['companyName', 'alimtalk', 'bankAccounts', 'sms', 'updatedAt', 'updatedBy'])
+        && request.resource.data.get('companyName', co) == co;
+      allow delete: if isTotalMasterUser();
+    }
+    match /bankSyncState/{co} {
+      allow read: if isTotalMasterUser() || (isOfficeStaff() && myCo() == co);
+      allow write: if false;
+    }
+    match /bankAliases/{co} {
+      allow read: if isTotalMasterUser() || (isOfficeStaff() && myCo() == co);
+      allow write: if false;
+    }
+    match /bankTxns/{id} {
+      allow read: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '') == myCo());
+      allow write: if false;
+    }
+    match /alimtalkLogs/{id} {
+      allow read: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '') == myCo());
+      allow write: if false;
+    }
+    match /smsLogs/{id} {
+      allow read: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '') == myCo());
+      allow write: if false;
+    }
+    match /messageUsage/{id} {
+      allow read: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('company', '') == myCo());
+      allow write: if false;
+    }
+    match /companyMailSettings/{co} {
+      allow read: if isTotalMasterUser() || (isOfficeStaff() && myCo() == co);
+      allow write: if false;
+    }
+    match /companyMailSecrets/{id} {
+      allow read, write: if false;
+    }
+    match /companyMailUsage/{id} {
+      allow read, write: if false;
+    }
+    function looseOwner(d) {
+      return isSignedIn() && (d.get('driverId', '') == request.auth.uid || d.get('uid', '') == request.auth.uid || d.get('driverUid', '') == request.auth.uid);
+    }
+    function looseRead(d) {
+      return isTotalMasterUser() || looseOwner(d)
+        || (isApproved() && !(myRoleRaw() in ['shipper', 'driver']) && d.get('companyName', '') == myCoAny());
+    }
+    function looseDriverCo(c, d) {
+      return c in ['fleet_settings', 'holidays'] && isApproved() && myRole() == 'driver' && d.get('companyName', '') == myCo();
+    }
+    function looseLegacyGet(d) {
+      return isTotalMasterUser() && !('companyName' in d);
+    }
+    function looseCreate() {
+      return isTotalMasterUser() || (isApproved() && request.resource.data.get('companyName', '') == myCo()
+        && (myRoleRaw() != 'driver' || request.resource.data.get('driverId', request.resource.data.get('driverUid', request.resource.data.get('uid', ''))) == request.auth.uid));
+    }
+    function looseKeep() {
+      return isTotalMasterUser() || request.resource.data.get('companyName', '') == resource.data.get('companyName', '');
+    }
+    match /{lcol}/{id} {
+      allow get: if lcol in ['driver_logs', 'gps_tracks', 'driver_photo_logs', 'driver_notifications', 'location_change_requests',
+          'emergency_alerts', 'collision_alerts', 'cargo_temp', 'cargo_camera', 'deliverySignatureHistory', 'attendance', 'holidays',
+          'fleet_settings', 'importBatches', 'driver_documents', 'driver_uploads']
+        && (looseRead(resource.data) || looseLegacyGet(resource.data) || looseDriverCo(lcol, resource.data));
+      allow list: if lcol in ['driver_logs', 'gps_tracks', 'driver_photo_logs', 'driver_notifications', 'location_change_requests',
+          'emergency_alerts', 'collision_alerts', 'cargo_temp', 'cargo_camera', 'deliverySignatureHistory', 'attendance', 'holidays',
+          'fleet_settings', 'importBatches', 'driver_documents', 'driver_uploads']
+        && (looseRead(resource.data) || looseDriverCo(lcol, resource.data));
+      allow create: if lcol in ['driver_logs', 'gps_tracks', 'driver_photo_logs', 'driver_notifications', 'location_change_requests',
+          'emergency_alerts', 'collision_alerts', 'cargo_temp', 'cargo_camera', 'deliverySignatureHistory', 'attendance', 'holidays',
+          'fleet_settings', 'importBatches', 'driver_documents']
+        && looseCreate();
+      allow update, delete: if lcol in ['driver_logs', 'gps_tracks', 'driver_photo_logs', 'driver_notifications', 'location_change_requests',
+          'emergency_alerts', 'collision_alerts', 'cargo_temp', 'cargo_camera', 'deliverySignatureHistory', 'attendance', 'holidays',
+          'fleet_settings', 'importBatches', 'driver_documents', 'driver_uploads']
+        && (looseRead(resource.data) || looseLegacyGet(resource.data)) && (request.resource == null || looseKeep());
+    }
+    function chatMember(rid) {
+      let p = /databases/$(database)/documents/chat_rooms/$(rid);
+      return isApproved() && rid is string && rid != '' && exists(p) && request.auth.uid in get(p).data.get('members', []);
+    }
+    match /chat_rooms/{rid} {
+      allow read: if isApproved() && request.auth.uid in resource.data.get('members', []);
+      allow create: if isApproved() && request.auth.uid in request.resource.data.get('members', []);
+      allow update, delete: if isApproved() && request.auth.uid in resource.data.get('members', []);
+    }
+    match /chat_messages/{mid} {
+      allow read: if chatMember(resource.data.get('roomId', ''));
+      allow create: if isApproved() && request.resource.data.get('senderUid', '') == request.auth.uid
+        && chatMember(request.resource.data.get('roomId', ''));
+      allow update: if isApproved() && chatMember(resource.data.get('roomId', ''))
+        && request.resource.data.get('roomId', '') == resource.data.get('roomId', '')
+        && (resource.data.get('senderUid', '') == request.auth.uid
+          || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy', 'reactions']));
+      allow delete: if isApproved() && resource.data.get('senderUid', '') == request.auth.uid;
+    }
+    function chatProfileVisible(d) {
+      return isTotalMasterUser() || (isApproved() && (d.get('company', '') == myCo()
+        || (isShipperUser() && myLinkedCo() != '' && d.get('company', '') == myLinkedCo())));
+    }
+    match /chat_profiles/{uid} {
+      allow get: if (isSignedIn() && request.auth.uid == uid) || chatProfileVisible(resource.data);
+      allow list: if chatProfileVisible(resource.data);
+      allow create: if isApproved() && request.auth.uid == uid
+        && (isTotalMasterUser() || request.resource.data.get('company', '') == myCo() || request.resource.data.get('company', '') == '');
+      allow update: if isApproved() && request.auth.uid == uid
+        && (isTotalMasterUser() || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['company'])
+          || request.resource.data.get('company', '') == myCo());
+      allow delete: if isTotalMasterUser();
+    }
+    match /transportApplications/{id} {
+      allow create: if isSignedIn() && request.resource.data.get('userId', request.auth.uid) == request.auth.uid
+        && request.resource.data.get('status', 'pending') in ['pending', '대기', ''];
+      allow read: if isTotalMasterUser()
+        || (isSignedIn() && resource.data.get('userId', '') == request.auth.uid)
+        || (isApproved() && !isShipperUser() && myRole() != 'driver' && resource.data.get('companyName', '') == myCo());
+      allow update: if isTotalMasterUser()
+        || (isApproved() && !isShipperUser() && !(myRole() in ['driver', 'viewer', 'cafeUser'])
+          && resource.data.get('companyName', '') == myCo()
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['companyName', 'status', 'type', 'companyCode', 'userId']))
+        || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['address'])
+          && resource.data.get('address', '') == '')
+        || (isApproved() && userManager() && resource.data.get('companyName', '') == myCo() && resource.data.get('type', '') == '기존'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'processedAt'])
+          && request.resource.data.get('status', '') in ['approved', 'pending']);
+      allow delete: if isTotalMasterUser() || (isApproved() && resource.data.get('companyName', '') == myCo() && userManager());
+    }
+    match /companyApplications/{id} {
+      allow create: if isSignedIn() && request.resource.data.get('userId', request.auth.uid) == request.auth.uid
+        && request.resource.data.get('status', 'pending') == 'pending';
+      allow read: if isTotalMasterUser()
+        || (isSignedIn() && resource.data.get('userId', '') == request.auth.uid)
+        || (isApproved() && !isShipperUser() && linkedCoOf(resource.data) == myCo())
+        || (isApproved() && isShipperUser() && resource.data.get('companyName', '') == myCoAny() && linkedCoOf(resource.data) == myLinkedCo());
+      allow update: if isTotalMasterUser()
+        || (isApproved() && !isShipperUser() && userManager() && linkedCoOf(resource.data) == myCo()
+          && (linkedCoOf(request.resource.data) == myCo() || linkedCoOf(request.resource.data) == '')
+          && request.resource.data.get('userId', '') == resource.data.get('userId', ''))
+        || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['address'])
+          && resource.data.get('address', '') == '');
+      allow delete: if isTotalMasterUser() || (isApproved() && !isShipperUser() && userManager() && linkedCoOf(resource.data) == myCo());
+    }
+    match /companyEditRequests/{id} {
+      allow read: if isTotalMasterUser() || (isSignedIn() && resource.data.get('requestedByUserId', '') == request.auth.uid);
+      allow create: if isApproved() && request.resource.data.get('requestedByUserId', '') == request.auth.uid;
+      allow update: if isTotalMasterUser() || (isSignedIn() && resource.data.get('requestedByUserId', '') == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notifiedRequester']));
+      allow delete: if isTotalMasterUser();
+    }
+    match /inquiries/{id} {
+      allow read: if isTotalMasterUser() || (isSignedIn() && resource.data.get('userId', '') == request.auth.uid)
+        || (isOfficeStaff() && resource.data.get('transportCompany', '') == myCo());
+      allow create: if isApproved() && request.resource.data.get('userId', '') == request.auth.uid
+        && (!isShipperUser() || request.resource.data.get('transportCompany', '') == myLinkedCo());
+      allow update: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('transportCompany', '') == myCo()
+        && request.resource.data.get('transportCompany', '') == resource.data.get('transportCompany', '')
+        && request.resource.data.get('userId', '') == resource.data.get('userId', ''));
+      allow delete: if isTotalMasterUser();
+    }
+    match /shipper_orders/{id} {
+      allow read, update, delete: if isTotalMasterUser() || (isSignedIn() && resource.data.get('shipperUid', '') == request.auth.uid);
+      allow create: if isApproved() && request.resource.data.get('shipperUid', '') == request.auth.uid;
+    }
+    match /userSeenNotifs/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+    match /userSettings/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+    }
+    match /arPayments/{id} {
+      allow read, delete: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('company', '') == myCo());
+      allow update: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('company', '') == myCo()
+        && request.resource.data.get('company', '') == myCo());
+      allow create: if isTotalMasterUser() || (isOfficeStaff() && request.resource.data.get('company', '') == myCo());
+    }
+    match /multiRateSheets/{id} {
+      allow read, delete: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '') == myCo());
+      allow update: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '') == myCo()
+        && request.resource.data.get('companyName', '') == myCo());
+      allow create: if isTotalMasterUser() || (isOfficeStaff() && request.resource.data.get('companyName', '') == myCo());
+    }
+    match /bidQuotes/{id} {
+      allow read, delete: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '') == myCo());
+      allow update: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '') == myCo()
+        && request.resource.data.get('companyName', '') == myCo());
+      allow create: if isTotalMasterUser() || (isOfficeStaff() && request.resource.data.get('companyName', '') == myCo());
+    }
+    match /bidCostProfiles/{id} {
+      allow read: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '') == myCo());
+      allow update: if isTotalMasterUser() || (isOfficeStaff() && resource.data.get('companyName', '') == myCo()
+        && request.resource.data.get('companyName', '') == myCo());
+      allow create: if isTotalMasterUser() || (isOfficeStaff() && request.resource.data.get('companyName', '') == myCo());
+      allow delete: if isTotalMasterUser();
+    }
+    match /plManual/{id} {
+      allow read: if isTotalMasterUser() || (isOfficeStaff() && (resource == null
+        || resource.data.get('companyName', '(회사없음)') == myCo()));
+      allow create, update: if isTotalMasterUser() || (isOfficeStaff() && request.resource.data.get('companyName', '') == myCo()
+        && (resource == null || resource.data.get('companyName', '(회사없음)') == myCo()));
+      allow delete: if isTotalMasterUser();
+    }
+    match /systemConfig/{id} {
+      allow get: if isSignedIn();
+      allow list: if isTotalMasterUser();
+      allow write: if isTotalMasterUser();
+      allow create, update: if id == 'dataVersion' && isApproved() && !isShipperUser()
+        && (resource == null ? request.resource.data.keys().hasOnly([myCo()])
+          : request.resource.data.diff(resource.data).affectedKeys().hasOnly([myCo()]));
+    }
+    match /sessionLogs/{id} {
+      allow create: if isSignedIn() && request.resource.data.get('uid', '') == request.auth.uid;
+      allow read, update, delete: if isTotalMasterUser();
+    }
+    function pnkDoc() {
+      return /databases/$(database)/documents/pnkMembers/$(request.auth.uid);
+    }
+    function pnkMfaOk() {
+      return exists(/databases/$(database)/documents/pnkMfaSessions/$(request.auth.uid))
+        && get(/databases/$(database)/documents/pnkMfaSessions/$(request.auth.uid)).data.authTime == request.auth.token.auth_time
+        && get(/databases/$(database)/documents/pnkMfaSessions/$(request.auth.uid)).data.until > request.time;
+    }
+    function pnkIsTM() {
+      return request.auth.token.get('email', '') == "tjddnqkf@naver.com"
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'totalMaster');
+    }
+    function pnkTM() {
+      return pnkIsTM() && pnkMfaOk();
+    }
+    function pnkLogisweb() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    function pnkStaff() {
+      return isSignedIn() && (pnkIsTM() ? pnkMfaOk()
+        : (!pnkLogisweb() && exists(pnkDoc()) && get(pnkDoc()).data.get('status', '') == 'active' && get(pnkDoc()).data.get('empNo', '') != ''));
+    }
+    function pnkAdmin() {
+      return isSignedIn() && (pnkIsTM() ? pnkMfaOk()
+        : (!pnkLogisweb() && exists(pnkDoc()) && get(pnkDoc()).data.get('status', '') == 'active' && get(pnkDoc()).data.get('empNo', '') != ''
+          && get(pnkDoc()).data.get('role', '') in ['owner', 'admin']));
+    }
+    function pnkOnly(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+    match /pnkMembers/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || pnkStaff());
+      allow create: if isSignedIn() && (
+        (request.auth.uid == uid && request.resource.data.uid == uid && request.resource.data.status == 'pending' && request.resource.data.role == 'staff'
+          && request.resource.data.get('mailId', '') == '' && request.resource.data.get('empNo', '') == '' && !pnkLogisweb())
+        || (request.auth.uid == uid && pnkTM())
+        || (pnkAdmin() && request.resource.data.get('role', '') != 'owner'));
+      allow update: if isSignedIn() && (
+        (request.auth.uid == uid && pnkOnly(['name', 'phone', 'bio', 'birthday', 'updatedAt']))
+        || (pnkAdmin() && (pnkTM() || (request.resource.data.get('role', '') != 'owner' && resource.data.get('role', '') != 'owner'))));
+      allow delete: if pnkAdmin() && (pnkTM() || resource.data.get('role', '') != 'owner');
+    }
+    match /pnkPosts/{id} {
+      allow read: if pnkStaff();
+      allow create: if pnkStaff() && request.resource.data.authorUid == request.auth.uid
+        && (request.resource.data.board != 'notice' || pnkAdmin());
+      allow update: if pnkStaff() && (
+        ((resource.data.authorUid == request.auth.uid || pnkAdmin()) && request.resource.data.authorUid == resource.data.authorUid
+          && request.resource.data.board == resource.data.board)
+        || pnkOnly(['readBy', 'updatedAt']));
+      allow delete: if pnkStaff() && (resource.data.authorUid == request.auth.uid || pnkAdmin());
+      match /comments/{cid} {
+        allow read: if pnkStaff();
+        allow create: if pnkStaff() && request.resource.data.authorUid == request.auth.uid;
+        allow delete: if pnkStaff() && (resource.data.authorUid == request.auth.uid || pnkAdmin());
+      }
+    }
+    match /pnkFiles/{id} {
+      allow read: if pnkStaff() && (resource.data.get('adminOnly', false) != true || pnkAdmin());
+      allow create: if pnkStaff() && request.resource.data.uploaderUid == request.auth.uid
+        && (request.resource.data.get('adminOnly', false) != true || pnkAdmin());
+      allow update, delete: if pnkStaff() && (resource.data.uploaderUid == request.auth.uid || pnkAdmin());
+    }
+    match /pnkTasks/{id} {
+      allow read, update: if pnkStaff();
+      allow create: if pnkStaff() && request.resource.data.createdBy == request.auth.uid;
+      allow delete: if pnkStaff() && (resource.data.createdBy == request.auth.uid || pnkAdmin());
+    }
+    match /pnkEvents/{id} {
+      allow read, update: if pnkStaff();
+      allow create: if pnkStaff() && request.resource.data.createdBy == request.auth.uid;
+      allow delete: if pnkStaff() && (resource.data.createdBy == request.auth.uid || pnkAdmin());
+    }
+    match /pnkSales/{id} {
+      allow read, update: if pnkStaff();
+      allow create: if pnkStaff() && request.resource.data.createdBy == request.auth.uid;
+      allow delete: if pnkStaff() && (resource.data.createdBy == request.auth.uid || pnkAdmin());
+    }
+    match /pnkServices/{id} {
+      allow read: if pnkStaff();
+      allow write: if pnkAdmin();
+    }
+    match /pnkSite/live {
+      allow get: if true;
+      allow list: if false;
+      allow write: if pnkAdmin();
+    }
+    match /pnkSite/{id} {
+      allow read, write: if id != 'live' && pnkAdmin();
+    }
+    match /pnkInquiries/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['company', 'name', 'phone', 'email', 'topic', 'topics', 'extra', 'message', 'status', 'source', 'createdAt'])
+        && request.resource.data.keys().hasAll(['name', 'phone', 'message', 'status', 'createdAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 40
+        && request.resource.data.phone is string && request.resource.data.phone.size() >= 8 && request.resource.data.phone.size() <= 20
+        && request.resource.data.message is string && request.resource.data.message.size() <= 3000
+        && request.resource.data.get('company', '') is string && request.resource.data.get('company', '').size() <= 80
+        && request.resource.data.get('email', '') is string && request.resource.data.get('email', '').size() <= 120
+        && request.resource.data.get('topics', []) is list && request.resource.data.get('topics', []).size() <= 5
+        && request.resource.data.get('topic', '') is string && request.resource.data.get('topic', '').size() <= 40
+        && request.resource.data.get('extra', {}) is map && request.resource.data.get('extra', {}).size() <= 10
+        && request.resource.data.status == 'new' && request.resource.data.get('source', 'homepage') == 'homepage'
+        && request.resource.data.createdAt == request.time;
+      allow read, update: if pnkStaff();
+      allow delete: if pnkAdmin();
+    }
+    match /pnkReleases/{id} {
+      allow read: if pnkStaff();
+      allow create: if pnkStaff() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if pnkStaff() && (resource.data.createdBy == request.auth.uid || pnkAdmin());
+    }
+    match /pnkCompany/{docId} {
+      allow read: if pnkStaff() && (docId != 'secure' || pnkAdmin());
+      allow write: if pnkAdmin();
+    }
+    match /pnkFinance/{id} {
+      allow read, write: if pnkAdmin();
+    }
+    match /pnkMail/{id} {
+      allow read: if pnkStaff() && (request.auth.uid in resource.data.toUids || resource.data.fromUid == request.auth.uid);
+      allow create: if pnkStaff() && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.toUids is list && request.resource.data.toUids.size() <= 50
+        && request.resource.data.get('extStatus', '') in ['', 'queued'] && request.resource.data.get('direction', '') != 'in'
+        && request.resource.data.get('messageId', '') == '';
+      allow update: if pnkStaff() && (request.auth.uid in resource.data.toUids || resource.data.fromUid == request.auth.uid)
+        && pnkOnly(['readBy', 'trashBy', 'starBy', 'updatedAt']);
+    }
+    match /pnkUi/{id} {
+      allow read: if true;
+      allow write: if isSignedIn() && pnkTM();
+    }
+    match /pnkUiHistory/{id} {
+      allow read, write: if isSignedIn() && pnkTM();
+    }
+    match /pnkEmpIndex/{empNo} {
+      allow read: if pnkStaff();
+      allow create: if isSignedIn() && (pnkAdmin() || (pnkTM() && request.resource.data.uid == request.auth.uid));
+      allow delete: if pnkAdmin();
+    }
+    match /pnkApprovals/{id} {
+      allow read: if pnkStaff() && (request.auth.uid in resource.data.viewers || pnkAdmin());
+      allow create: if pnkStaff() && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.status == 'pending' && request.resource.data.step == 0
+        && request.auth.uid in request.resource.data.viewers
+        && request.resource.data.line is list && request.resource.data.line.size() >= 1 && request.resource.data.line.size() <= 8;
+      allow update: if pnkStaff() && resource.data.status == 'pending' && (
+        (resource.data.line[resource.data.step].uid == request.auth.uid
+          && pnkOnly(['line', 'step', 'status', 'updatedAt', 'doneAt'])
+          && request.resource.data.authorUid == resource.data.authorUid)
+        || (resource.data.authorUid == request.auth.uid && request.resource.data.status == 'canceled' && pnkOnly(['status', 'updatedAt', 'doneAt'])));
+      allow delete: if pnkAdmin();
+    }
+    match /pnkAttendance/{id} {
+      allow read: if pnkStaff();
+      allow create: if pnkStaff() && request.resource.data.uid == request.auth.uid && id == request.auth.uid + '_' + request.resource.data.date
+        && request.resource.data.date is string && request.resource.data.date.size() == 10;
+      allow update: if pnkStaff() && (pnkAdmin()
+        || (resource.data.uid == request.auth.uid && request.resource.data.uid == resource.data.uid && request.resource.data.date == resource.data.date
+          && pnkOnly(['outAt', 'outNote', 'note', 'place', 'workMin', 'updatedAt', 'outLate'])));
+      allow delete: if pnkAdmin();
+    }
+    function catchAllRead() {
+      return isTotalMasterUser() || (isApproved() && !isShipperUser() && myRole() != 'driver'
+        && (resource == null || resource.data.get('companyName', '') == myCo()));
+    }
+    function catchAllWrite() {
+      return isTotalMasterUser() || (isApproved() && !isShipperUser() && myRole() != 'driver'
+        && (resource == null || resource.data.get('companyName', '') == myCo())
+        && (request.method == 'delete' || request.resource.data.get('companyName', '') == myCo()));
+    }
+    match /{col}/{rest=**} {
+      allow read: if !catchAllExcluded(col) && catchAllRead();
+      allow write: if !catchAllExcluded(col) && catchAllWrite();
+    }
+    function catchAllExcluded(col) {
+      return col in [
+        'pnkMembers', 'pnkPosts', 'pnkFiles', 'pnkTasks', 'pnkEvents', 'pnkSales', 'pnkServices', 'pnkReleases', 'pnkCompany', 'pnkFinance', 'pnkMail',
+        'forkliftDrivers', 'forkliftPresets', 'companyPayFlags', 'brandHistory', 'hubTriggerErrors',
+        'driverOrders', 'shipperOrders', 'sheetLiveLock', 'apiRateLimits',
+        'pnkEmpIndex', 'pnkApprovals', 'pnkAttendance', 'pnkMailSecrets', 'pnkMailUsage', 'pnkMfaSecrets', 'pnkMfaSessions', 'pnkUi', 'pnkUiHistory', 'pnkInquiries', 'pnkSite',
+        'logisPasskeys', 'logisPasskeyChal', 'passwordResetSms',
+        'publicRelease',
+        'smsRelay',
+        'sheetLive',
+        'sheetPushQueue',
+        'adminSecrets', 'resetBackups', 'resetLogs', 'resetJobs', 'resetLocks', 'loginSessions', 'orderTrash', 'recurringRuns', 'internalMails', 'approvals', 'boardPosts', 'notices', 'handovers', 'salesQuotes', 'contracts', 'platformNotices', 'platformInvoices', 'companyPlans', 'publicPricing', 'planRequests', 'userPrefs', 'companyRoleOverrides', 'customRoles', 'supportRequests', 'supportSessions', 'driverStatements', 'fleetPenalties', 'driverContracts', 'fixedRoutes', 'routeBoards', 'freightJobs', 'personalSchedules', 'publicCompanies', 'companyContracts',
+        'orders', 'dispatch', 'dispatch_test', 'fixedClients', 'drivers', 'clients', 'places', 'recurringOrders', 'deletedOrders',
+        'driver_completed_archive', 'notifications', 'schedules', 'scheduledEmails', 'emailLogs', 'hrResumes', 'attendanceRequests',
+        'attendanceChangeRequests', 'acctPayments', 'approvalLines', 'acctLedger', 'acctRecurring', 'officeAssets', 'execSchedules', 'companyRules', 'hrSettings', 'retireCases', 'approvalSettings', 'acctFunds',
+        'fareRules', 'companyFeatures', 'companySettings', 'vehicleLedger', 'vehicleLedgerFiles', 'vehicleTypes',
+        'vehicleCardTx', 'vehicleCareSettings', 'vehicleCostReports',
+        'vehicleExpenses', 'vehiclePhotoSettings', 'vehiclePhotos',
+        'siteConfig', 'platformConfig', 'platformUsage', 'usageCounters',
+        'mktVideos', 'mktBlog', 'platformSecrets',
+        'driverSignupLogs',
+        'driverMergeLog',
+        'errorReports', 'securityEvents', 'securityProfiles',
+        'textOverrides', 'textOverridesPublic',
+        'uiConfig', 'uiConfigHistory',
+        'cafeOrders', 'marketNotices',
+        'hubMembers', 'hubStats', 'hubQuota', 'hubOrders', 'hubNotices', 'hubReports',
+        'hubLive', 'hubWallets', 'hubLedger', 'hubLedgerKeys', 'hubCharges', 'hubPayouts', 'hubAdjustments', 'hubDebts', 'hubSettings', 'hubAnnouncements',
+        'hubPlaces', 'hubWithdrawals', 'hubPostRequests',
+        'payrollSettings', 'payrollEmployees', 'payrollRuns', 'payslips', 'hrNotices', 'leavePromotions',
+        'payrollSecrets', 'payrollUnlocks', 'payrollPwAttempts',
+        'privateFareSettings',
+        'privateFareGrants', 'privateFarePins', 'privateFarePinAttempts', 'privateFareUnlocks', 'privateFareVaults',
+        'aiTeamLogs',
+        'dailyReportPrefs', 'dailyReportCompany', 'dailyReportLogs',
+        'scanLearn', 'scanUsage',
+        'aiAssistantLogs', 'aiAssistantUsage',
+        'salesLeads', 'salesActivities', 'salesAccounts', 'salesPlans', 'salesIncentives',
+        'sheetProfiles',
+        'arDesk',
+        'users', 'userProfiles', 'chat_rooms', 'chat_messages', 'chat_profiles', 'transportApplications', 'companyApplications',
+        'companyEditRequests', 'inquiries', 'landingInquiries', 'shipper_orders', 'userSeenNotifs', 'userSettings', 'arPayments', 'multiRateSheets',
+        'plManual', 'systemConfig', 'sessionLogs', 'shortLinks', 'driver_documents', 'driver_uploads', 'liveLocations', 'hubDevices',
+        'routeCarrierSettings', 'colStyles', 'colLayouts', 'colLayoutsCompany', 'transportApplications', 'driverSignupLogs',
+        'driver_logs', 'gps_tracks', 'driver_photo_logs', 'driver_notifications', 'location_change_requests', 'emergency_alerts',
+        'collision_alerts', 'cargo_temp', 'cargo_camera', 'deliverySignatureHistory', 'attendance', 'holidays', 'fleet_settings', 'importBatches',
+        'closeReports', 'contractNoticeLogs', 'fleet_late_alerts', 'geo_cache', 'dailyReportLogs', 'sheetRegistry',
+        'bizStatusCache', 'bizStatusUsage', 'weatherUsage', 'weatherCache', 'companyPopbill', 'integrationConfig',
+        'popbillSettings', 'bankSyncState', 'bankAliases', 'bankTxns', 'alimtalkLogs', 'smsLogs', 'messageUsage',
+        'companyMailSettings', 'companyMailSecrets', 'companyMailUsage',
+        'bidQuotes', 'bidCostProfiles'];
+    }
+  }
+}
