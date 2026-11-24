@@ -15,6 +15,7 @@
 // ⭐ 2026-11-07 개편 — 경리 전용 + 급여 비밀번호(PayrollGate) · 화면 꽉 채움(넓은 화면은 직원 목록 | 입력 | 명세서 3칸) · 연봉제 ·
 //  직원 급여 설정 2칸(왼쪽 목록·필터 / 오른쪽 상세 + 근로계약서) · 요율 카드 단순화 · 새 급여명세서(payslipDoc.js) · 신고·이체 탭(PayrollReports.jsx) ·
 //  발행하면 앱 알림(hrNotices 팝업) + 사내메일(푸시) · 전월 대비 변동 표시 · 직원은 내정보 › 급여명세서(MyPayslipsSection)
+import { useMultiCompany, GuestHrNotice } from "./MultiCompanySwitch"; // 🏢 2026-11-24
 import React from "react";
 import { arrayUnion, collection, deleteField, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
@@ -31,7 +32,7 @@ import { useHrOptions, EMPLOYMENT_STATUS_OPTIONS } from "./hrConstants";
 import { sendInternalMail } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
 import PayrollGate, { GateTimer, prefetchPayrollStatus, warmPayrollVerify } from "./PayrollGate";
-import { payslipHtml, PAYSLIP_CSS, printPayslips, TAX_NOTE } from "./payslipDoc";
+import { payslipHtml, PAYSLIP_CSS, printPayslips, TAX_NOTE, defaultSlipGuide, cleanSlipGuide, SLIP_GUIDE_MAX } from "./payslipDoc";
 import { COPY_GROUPS, COPY_DEFAULT, copyPatch, diffEmp, filterTargets, upsertTemplate, removeTemplate } from "./payrollCopy";
 import { isSigned, canSign, stampDate, signTimeText, signError, signPatch, clearSignPatch } from "./payslipSign";
 import { kstDay, kstYm, shiftYm, lastDayOf, safeId, slipId, runId, empId, toNum, ymLabel, blank, uniq, inp, numInp, NUMS, sec, Label, Note, H, Sel, Money, Seg, enterNext, useMedia, useCol, useDocData } from "./payrollUi";
@@ -286,7 +287,7 @@ function RunActions({ pm, gate, dark = false }) {
 }
 
 // ── 한 달 급여 데이터 · 처리(저장 · 확정 · 발행 · 지급) — 위 줄 합계와 계산 화면이 같이 쓴다 ──
-const EMP_BLANK = { payType: "monthly", employmentType: "정규직", baseMonthly: 0, annualSalary: 0, annualSeverance: false, annualMealIncluded: false, hourlyWage: 0, dailyWage: 0, meal: 200000, car: 0, positionAllow: 0, allowances: [], dependents: 1, children: 0, taxRatePct: 100, taxFixed: "", npBase: "", hiBase: "", npExempt: false, hiExempt: false, eiExempt: false, mealOrdinary: false, birthDate: "", payAccount: null, memo: "" };
+const EMP_BLANK = { payType: "monthly", employmentType: "정규직", baseMonthly: 0, annualSalary: 0, annualSeverance: false, annualMealIncluded: false, hourlyWage: 0, dailyWage: 0, meal: 200000, car: 0, positionAllow: 0, allowances: [], dependents: 1, children: 0, taxRatePct: 100, taxFixed: "", npBase: "", hiBase: "", npRate: "", hiRate: "", ltcRate: "", eiRate: "", npFixed: "", hiFixed: "", ltcFixed: "", eiFixed: "", npExempt: false, hiExempt: false, eiExempt: false, mealOrdinary: false, birthDate: "", payAccount: null, memo: "" };
 // 직원 급여 설정 문서 정리(저장용)
 function cleanEmp(f) {
   const clean = {
@@ -308,6 +309,7 @@ function monthOf(input = {}, a = {}) {
     workDays: pick("workDays"), regularHours: pick("regularHours"), otHours: pick("otHours"), nightHours: pick("nightHours"), holHours: pick("holHours"), holOverHours: pick("holOverHours"),
     weeklyHolidayHours: toNum(input.weeklyHolidayHours), bonus: toNum(input.bonus), extraPays: input.extraPays || [], extraDeducts: input.extraDeducts || [],
     taxOverride: input.taxOverride, localTaxOverride: input.localTaxOverride,
+    npOverride: input.npOverride, hiOverride: input.hiOverride, ltcOverride: input.ltcOverride, eiOverride: input.eiOverride, // ⭐ 2026-11-24 4대보험 이번 달 직접
   };
 }
 
@@ -374,7 +376,10 @@ function usePayrollMonth(company, ym, ro) {
     companyName: company, ym, uid: r.u.id, name: personName(r.u) || r.u.name || "", team: r.u.team || "", position: r.u.position || "",
     birthDate: r.u.birthDate || r.emp?.birthDate || "", hireDate: r.u.hireDate || "", phone: r.u.phone || "", payType: r.emp?.payType || "monthly", employmentType: r.emp?.employmentType || "",
     payDate: r.input?.payDate || run?.payDate || payDateDefault(), payAccount: r.input?.payAccount || r.emp?.payAccount || null,
-    input: r.input || {}, att: r.att || {}, result: r.result, rates: r.rates || curRates, updatedAt: serverTimestamp(), updatedBy: byName, ...extra,
+    input: r.input || {}, att: r.att || {}, result: r.result, rates: r.rates || curRates,
+    // ⭐ 2026-11-24 명세서 안내사항(경리 · 회계가 요율 · 설정에서 고친 문구) — 직원은 설정 문서를 못 읽어 명세서에 같이 남긴다 · 없으면 기본 문구
+    ...(cleanSlipGuide(settings?.slipGuide).length ? { guide: cleanSlipGuide(settings.slipGuide) } : {}),
+    updatedAt: serverTimestamp(), updatedBy: byName, ...extra,
   });
   const runPatch = (after, extra = {}) => ({ companyName: company, ym, totals: totalsOf(after), rates: curRates, payDate: run?.payDate || payDateDefault(), updatedAt: serverTimestamp(), updatedBy: byName, ...extra });
   // 이번 작업 뒤의 행 목록(확정·발행 여부를 덮어써서 달 전체 상태 판단)
@@ -690,6 +695,30 @@ const Mini = ({ value, onChange, options, disabled, label }) => (
     {options.map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={value === k} disabled={disabled} onClick={() => onChange(k)} className={`h-7 px-2 rounded-md text-[13px] font-black whitespace-nowrap disabled:cursor-not-allowed ${value === k ? "bg-white text-[#0F1A30] shadow-[0_1px_3px_rgba(15,26,48,0.15)]" : "text-[#7A879C]"} ${disabled && value !== k ? "opacity-50" : ""}`}>{l}</button>)}
   </span>
 );
+// ⭐ 2026-11-24 4대보험 직원별 요율 % · 고정 금액(업체 요청 — 공단 고지 금액이나 회사마다 다른 요율을 그대로 쓰기)
+//  비우면 회사 요율(급여 설정 › 요율)로 계산 · 고정 금액이 있으면 요율보다 먼저 · 이번 달만 바꿀 땐 공제 항목 칸에 직접
+const INS_ROWS = [["np", "국민연금", "npRate", "npFixed", "npEmp", "npExempt"], ["hi", "건강보험", "hiRate", "hiFixed", "hiEmp", "hiExempt"], ["ltc", "장기요양", "ltcRate", "ltcFixed", "ltcRatio", "hiExempt"], ["ei", "고용보험", "eiRate", "eiFixed", "eiEmp", "eiExempt"]];
+const pctClean = (v) => { const t = String(v ?? "").replace(/[^\d.]/g, ""); const i = t.indexOf("."); return i < 0 ? t : t.slice(0, i + 1) + t.slice(i + 1).replace(/\./g, "").slice(0, 3); };
+function InsOverrides({ v = {}, set, ro, free = false, rates = {}, wide = false }) {
+  return (
+    <div data-testid="ins-overrides">
+      <div className={`grid gap-x-2.5 gap-y-2 items-end ${wide ? "grid-cols-[minmax(0,90px)_minmax(0,1fr)_minmax(0,1fr)]" : "grid-cols-[minmax(0,78px)_minmax(0,1fr)_minmax(0,1fr)]"}`}>
+        <span /><span className="text-[13px] font-black text-[#3A4A66]">요율 %</span><span className="text-[13px] font-black text-[#3A4A66]">고정 금액(월)</span>
+        {INS_ROWS.map(([k, label, rk, fk, def, ex]) => {
+          const off = ro || free || !!v[ex];
+          return (
+            <React.Fragment key={k}>
+              <span className="text-[14px] font-black text-[#0F1A30] whitespace-nowrap self-center">{label}</span>
+              <div className="relative"><input disabled={off} inputMode="decimal" value={v[rk] ?? ""} onChange={(e) => set(rk, pctClean(e.target.value))} placeholder={`회사 ${rates[def] ?? ""}`} className={`${numInp} pr-7`} style={NUMS} aria-label={`${label} 요율`} data-testid={`ins-rate-${k}`} /><span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[13px] font-bold text-[#7A879C]">%</span></div>
+              <input disabled={off} inputMode="numeric" value={v[fk] ? wonFmt(v[fk]) : v[fk] === 0 || v[fk] === "0" ? "0" : ""} onChange={(e) => set(fk, e.target.value.replace(/[^\d]/g, ""))} placeholder="요율로 계산" className={numInp} style={NUMS} aria-label={`${label} 고정 금액`} data-testid={`ins-fixed-${k}`} />
+            </React.Fragment>
+          );
+        })}
+      </div>
+      <div className="mt-2 text-[13px] font-bold text-[#7A879C] leading-relaxed">비우면 회사 요율로 계산해요. 공단 고지 금액을 넣으면 그 금액이 먼저예요. 장기요양 요율은 건강보험료 대비예요. 이번 달만 바꿀 땐 공제 항목 칸에 바로 적으면 돼요.</div>
+    </div>
+  );
+}
 // 장부 한 줄(이름 · 설명 · 금액)
 const LedgerLine = ({ label, sub, amount, minus = false, tag, right, testid }) => (
   <div className="px-3.5 py-2 flex items-center gap-2 min-h-[44px]" data-testid={testid}>
@@ -701,7 +730,7 @@ const LedgerLine = ({ label, sub, amount, minus = false, tag, right, testid }) =
 // 금액 칸(장부 안 — 작고 오른쪽 정렬)
 const cellInp = "h-9 w-[118px] px-2.5 rounded-lg border border-[#DCE3EE] bg-white text-right text-[14.5px] font-black text-[#0F1A30] outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#8FB0F0]/40 disabled:bg-[#F5F7FB] disabled:text-[#7A879C] shrink-0";
 // 좁은 칸에서 명세서를 한 줄씩(인쇄 화면은 그대로)
-const NARROW_SLIP_CSS = ".kp-pay-narrow .ps .hero{grid-template-columns:minmax(0,1fr)}.kp-pay-narrow .ps .hd{padding:16px}.kp-pay-narrow .ps .tt{font-size:19px}.kp-pay-narrow .ps .who{text-align:left}.kp-pay-narrow .ps .net .v{font-size:30px}.kp-pay-narrow .ps .cols{grid-template-columns:minmax(0,1fr)}";
+const NARROW_SLIP_CSS = ".kp-pay-narrow .ps .hd{padding:16px;flex-wrap:wrap}.kp-pay-narrow .ps .tt{font-size:18px}.kp-pay-narrow .ps .who{text-align:left;order:3;flex-basis:100%}.kp-pay-narrow .ps .bd{padding:4px 16px 16px}.kp-pay-narrow .ps .sum{flex-direction:column;align-items:stretch;gap:10px}.kp-pay-narrow .ps .net .v{font-size:30px}.kp-pay-narrow .ps .tot{min-width:0}.kp-pay-narrow .ps .tbl{grid-template-columns:minmax(0,1fr);gap:4px}.kp-pay-narrow .ps .info{grid-template-columns:minmax(0,1fr)}.kp-pay-narrow .ps .eq em{margin-left:0;white-space:normal}";
 
 function Workspace({ company, ym, row, ro: roIn, busy, fit, w3, ledger2, pane, setPane, kinds, history, rates, runPayDate, slipDoc, onSave, onConfirm, onPublish, onUnlock, onPrev, onNext, pos, onDirty, onOpenList, editRef, actions: runActs = null }) {
   const u = row.u;
@@ -822,10 +851,18 @@ function Workspace({ company, ym, row, ro: roIn, busy, fit, w3, ledger2, pane, s
     <div className={card} data-testid="pay-deductions">
       {cardHead("DEDUCTIONS", "공제 항목", !ro && <button type="button" onClick={() => setS((p) => ({ ...p, dedRows: [...p.dedRows, { id: rid(), kind: "", amount: 0 }] }))} className="h-8 px-2.5 rounded-lg border border-[#1B2B4B] bg-white text-[13.5px] font-black text-[#1B2B4B]" data-testid="add-ded">+ 공제</button>)}
       <div className="divide-y divide-[#EEF1F6]">
-        {[["np", "국민연금", "npExempt"], ["hi", "건강보험", "hiExempt"], ["ltc", "장기요양보험", null], ["ei", "고용보험", "eiExempt"]].map(([k, l, ex]) => (
-          <LedgerLine key={k} label={l} sub={free ? "프리랜서는 적용 제외" : k === "ltc" ? "건강보험료 따라 계산" : (result?.deductions || []).find((d) => d.key === k)?.calc || "자동 계산"} amount={D(k)} minus
-            right={ex ? <Mini label={`${l} 적용`} disabled={ro || free} value={emp[ex] || free ? "n" : "y"} onChange={(v) => setEmp(ex, v === "n")} options={[["y", "적용"], ["n", "제외"]]} /> : null} />
-        ))}
+        {[["np", "국민연금", "npExempt"], ["hi", "건강보험", "hiExempt"], ["ltc", "장기요양보험", null], ["ei", "고용보험", "eiExempt"]].map(([k, l, ex]) => {
+          const exempted = free || (ex ? !!emp[ex] : !!emp.hiExempt);
+          return (
+            <LedgerLine key={k} label={l} sub={free ? "프리랜서는 적용 제외" : (result?.deductions || []).find((d) => d.key === k)?.calc || "자동 계산"}
+              tag={result?.insModes?.[k] === "manual" ? "직접" : result?.insModes?.[k] === "fixed" ? "고정" : result?.insModes?.[k] === "rate" ? "직원 요율" : null}
+              right={<span className="flex items-center gap-1.5 shrink-0">
+                {ex && <Mini label={`${l} 적용`} disabled={ro || free} value={emp[ex] || free ? "n" : "y"} onChange={(v) => setEmp(ex, v === "n")} options={[["y", "적용"], ["n", "제외"]]} />}
+                {/* ⭐ 2026-11-24 이번 달 금액 직접(비우면 자동) */}
+                <input disabled={ro || exempted} inputMode="numeric" value={input[`${k}Override`] ?? ""} onChange={(e) => setIn(`${k}Override`, e.target.value.replace(/[^\d]/g, ""))} placeholder={wonFmt(D(k))} className={cellInp} style={NUMS} aria-label={`${l} 이번 달 직접 입력`} data-testid={`ed-${k}`} />
+              </span>} />
+          );
+        })}
         <LedgerLine label={free ? "사업소득세" : "소득세"} sub={`자동 ${wonFmt(result?.autoTax)} · 칸에 적으면 그 금액`} right={<input disabled={ro} inputMode="numeric" value={input.taxOverride ?? ""} onChange={(e) => setIn("taxOverride", e.target.value.replace(/[^\d]/g, ""))} placeholder={wonFmt(D("tax"))} className={cellInp} style={NUMS} data-testid="ed-tax" aria-label="소득세 직접 입력" />} />
         <LedgerLine label="지방소득세" sub="소득세 × 10%" right={<input disabled={ro} inputMode="numeric" value={input.localTaxOverride ?? ""} onChange={(e) => setIn("localTaxOverride", e.target.value.replace(/[^\d]/g, ""))} placeholder={wonFmt(D("local"))} className={cellInp} style={NUMS} aria-label="지방소득세 직접 입력" />} />
         {s.dedRows.map((r) => (
@@ -915,6 +952,7 @@ function Workspace({ company, ym, row, ro: roIn, busy, fit, w3, ledger2, pane, s
               <div className="col-span-2"><Label hint="비우면 과세급여">국민연금 기준소득월액</Label><Money disabled={ro || free || emp.npExempt} value={emp.npBase} onChange={(v) => setEmp("npBase", v || "")} placeholder={`자동 ${wonFmt(result?.npBase)}`} /></div>
               <div className="col-span-2"><Label hint="비우면 과세급여">건강보험 보수월액</Label><Money disabled={ro || free || emp.hiExempt} value={emp.hiBase} onChange={(v) => setEmp("hiBase", v || "")} placeholder={`자동 ${wonFmt(result?.hiBase)}`} /></div>
             </div>
+            <div className="pt-1"><Label hint="직원별 · 매월">4대보험 요율 · 고정 금액</Label><InsOverrides v={emp} set={setEmp} ro={ro} free={free} rates={rates || {}} wide={wideBox} /></div>
             {result && <div className="text-[13.5px] font-bold text-[#5B6B85]">{(result.deductions || []).filter((d) => d.key === "tax").map((d) => d.calc)} → 소득세 <b className="text-[#0F1A30]" style={NUMS}>{wonFmt(D("tax"))}</b> · 지방소득세 <b className="text-[#0F1A30]" style={NUMS}>{wonFmt(D("local"))}</b></div>}
           </div>
         )}
@@ -1226,6 +1264,7 @@ function PayEmployees({ company, ro, fit = false, selId: selIdIn = null, setSelI
               <div><Label hint="비우면 과세급여">건강보험 보수월액</Label><Money disabled={ro} value={f.hiBase} onChange={(v) => set("hiBase", v || "")} placeholder="자동" /></div>
             </div>
             <div className="mt-2 text-[14px] font-bold text-[#5B6B85]">국민연금 제외: 만 60세 이상 등 · 고용보험 제외: 만 65세 이후 신규 등{f.employmentType === FREELANCE ? " · 프리랜서는 모두 제외로 계산" : ""}</div>
+            <div className="mt-3 pt-3 border-t border-[#EEF1F6]"><Label hint="비우면 회사 요율">직원별 요율 · 고정 금액</Label><InsOverrides v={f} set={set} ro={ro} free={f.employmentType === FREELANCE} rates={rates || {}} wide /></div>
           </BookCard>
           <div className="2xl:col-span-2">
             <BookCard en="PAY ACCOUNT" title="급여 지급 계좌">
@@ -1384,7 +1423,8 @@ function PayRates({ company, ro }) {
     if (settings !== undefined) {
       setF(ratesFor(settings || {}, year));
       setOpt({ small: !!settings?.small, payDay: settings?.payDay ?? 10, payNextMonth: settings?.payNextMonth !== false, ledgerOn: settings?.ledgerOn !== false,
-        customPayItems: (settings?.customPayItems || []).map((x) => (typeof x === "string" ? { label: x, taxable: true } : x)), customDeductItems: (settings?.customDeductItems || []).map((x) => (typeof x === "string" ? x : x?.label)).filter(Boolean) });
+        customPayItems: (settings?.customPayItems || []).map((x) => (typeof x === "string" ? { label: x, taxable: true } : x)), customDeductItems: (settings?.customDeductItems || []).map((x) => (typeof x === "string" ? x : x?.label)).filter(Boolean),
+        slipGuide: (cleanSlipGuide(settings?.slipGuide).length ? cleanSlipGuide(settings.slipGuide) : defaultSlipGuide(true)).join("\n") });
     }
   }, [settings, year]);
   if (!f || !opt) return <div className="py-16 text-center text-[15px] font-bold text-[#7A879C]">불러오는 중…</div>;
@@ -1396,6 +1436,8 @@ function PayRates({ company, ro }) {
         companyName: company, years: { [year]: { ...vals, small: !!opt.small } }, small: !!opt.small, payDay: toNum(opt.payDay) || 10, payNextMonth: !!opt.payNextMonth, ledgerOn: !!opt.ledgerOn,
         customPayItems: opt.customPayItems.filter((x) => String(x.label || "").trim()).map((x) => ({ label: x.label.trim(), taxable: x.taxable !== false })),
         customDeductItems: uniq(opt.customDeductItems.map((x) => String(x || "").trim())),
+        // 기본 문구와 같으면 비워 둔다(나중에 기본 문구가 바뀌면 따라가게)
+        slipGuide: cleanSlipGuide(opt.slipGuide).join("\n") === defaultSlipGuide(true).join("\n") ? [] : cleanSlipGuide(opt.slipGuide),
         updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "",
       }, { merge: true });
       setSaved("저장했어요");
@@ -1482,6 +1524,20 @@ function PayRates({ company, ro }) {
             </div>
           </div>
         </BookCard>
+        {/* ⭐ 2026-11-24 명세서 안내사항 — 경리 · 회계가 고친다(직원 명세서 맨 아래 '안내사항'). 한 줄 = 한 항목 */}
+        <div className="xl:col-span-2">
+          <BookCard en="PAYSLIP NOTICE" title="명세서 안내사항">
+            <div className="text-[14px] font-bold text-[#5B6B85] mb-2 leading-relaxed">직원 급여명세서 맨 아래 ‘안내사항’에 나오는 글이에요. <b className="text-[#0F1A30]">한 줄이 한 항목</b>이에요(최대 {SLIP_GUIDE_MAX}줄). 저장한 뒤 새로 저장 · 확정하는 명세서부터 바뀌고, 이미 발행한 명세서는 발행할 때 문구 그대로예요.</div>
+            <textarea disabled={ro} value={opt.slipGuide} onChange={(e) => setOpt((o) => ({ ...o, slipGuide: e.target.value }))} rows={8}
+              className="w-full px-3 py-2.5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] leading-relaxed outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#8FB0F0]/40 disabled:bg-[#F5F7FB]" data-testid="slip-guide" aria-label="명세서 안내사항" />
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <span className="text-[13.5px] font-bold text-[#7A879C]">{cleanSlipGuide(opt.slipGuide).length}줄{cleanSlipGuide(opt.slipGuide).join("\n") === defaultSlipGuide(true).join("\n") ? " · 기본 문구" : " · 회사에서 고친 문구"}</span>
+              <span className="flex-1" />
+              {!ro && <button type="button" onClick={() => setOpt((o) => ({ ...o, slipGuide: defaultSlipGuide(true).join("\n") }))} className="h-10 px-3.5 rounded-xl border border-[#1B2B4B] bg-white text-[14px] font-black text-[#1B2B4B]" data-testid="slip-guide-reset">기본 문구로</button>}
+            </div>
+            <div className="mt-2 text-[13px] font-bold text-[#7A879C]">근로기준법 제48조 제2항(임금명세서 교부) 문구는 지우지 않는 것을 권해요. 맨 아래 [요율 · 설정 저장]을 눌러야 저장돼요.</div>
+          </BookCard>
+        </div>
       </div>
       {!ro && (
         <div className="sticky bottom-2 z-10 flex items-center gap-3">
@@ -1495,7 +1551,12 @@ function PayRates({ company, ro }) {
 
 // ═════════════════ 내 급여명세서(직원 본인 — 발행된 것만) ═════════════════
 // ⭐ 2026-11-07 내정보 › 급여명세서 탭(MyPayslipsSection) · 모바일 내정보도 같은 것 · 명세서는 새 디자인(payslipDoc.js)
-export function MyPayslips({ company, uid: uidIn, compact = false }) {
+// 🏢 2026-11-24 다른 회사 화면에서는 안내만(내 급여는 원래 소속 회사에만)
+export function MyPayslips(props) {
+  const st = useMultiCompany();
+  return st.guest ? <GuestHrNotice what="급여명세서" /> : <MyPayslipsInner {...props} />;
+}
+function MyPayslipsInner({ company, uid: uidIn, compact = false }) {
   const uid = uidIn || auth.currentUser?.uid || "";
   const [rows, setRows] = React.useState(null);
   const [sel, setSel] = React.useState(null);
@@ -1537,7 +1598,7 @@ export function MyPayslips({ company, uid: uidIn, compact = false }) {
             <div className="space-y-2 min-w-0">
               <MySignBar slip={cur} uid={uid} />
               <div className="flex items-center justify-between gap-2 flex-wrap"><span className="text-[14px] font-bold text-[#5B6B85]">{ymLabel(cur.ym)} · {cur.status === "paid" ? `지급 완료 ${cur.paidDate || ""}` : "지급 예정"}</span><button type="button" onClick={() => printPayslips([cur], company || cur.companyName)} className="h-11 px-4 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black" data-testid="my-slip-print">인쇄 · PDF 저장</button></div>
-              <div className="rounded-[20px] bg-white border border-[#E3E8F0] p-3 md:p-5"><PayslipView slip={cur} company={company || cur.companyName} /></div>
+              <div className="min-w-0"><PayslipView slip={cur} company={company || cur.companyName} /></div>
             </div>
           )}
         </div>

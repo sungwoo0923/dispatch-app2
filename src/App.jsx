@@ -90,6 +90,8 @@ const ShipperPending = lazyRetry(() => import("./shipper/ShipperPending"));
 
 import NoAccess from "./NoAccess";
 import { securityLoginPing } from "./securityWatch"; // 🛡 2026-11-09 이상 접속 알림
+import { effectiveUser, multiStateOf, setMultiState } from "./multiCompany"; // 🏢 2026-11-24 여러 회사 오가기
+import { CompanySwitchedToast } from "./MultiCompanySwitch";
 const UploadPage = lazyRetry(() => import("./UploadPage"));
 const DriverSearchPage = lazyRetry(() => import("./DriverSearchPage"));
 const ShortLinkRedirect = lazyRetry(() => import("./ShortLinkRedirect"));
@@ -727,6 +729,36 @@ export default function App() {
     return () => clearTimeout(t);
   }, [loading]);
 
+  // 🛠 2026-11-24 로그인 화면을 켜 둔 사이 새 버전이 올라가면 — 로그인하자마자 예전 화면 조각 파일을 못 찾아(lazyRetry)
+  //  "들어갔다가 바로 또 로딩창"이 떴다. 로그인 전 화면에서 1분마다 · 탭을 다시 볼 때 버전을 확인해, 예전 화면이면
+  //  아무것도 입력하지 않고 있을 때 조용히 새로 고친다(로그인 뒤가 아니라 로그인 전에 한 번).
+  useEffect(() => {
+    if (user || IS_MOBILE_PREVIEW || !CUR_BUILD) return undefined;
+    let lastInput = 0; let stop = false;
+    const onInput = () => { lastInput = Date.now(); };
+    const idle = () => {
+      if (Date.now() - lastInput < 20000) return false;
+      const a = document.activeElement;
+      if (a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.value) return false;
+      try { if (sessionStorage.getItem("transportValidating") === "true" || sessionStorage.getItem("shipperValidating") === "true" || window.__kpGateInline) return false; } catch { /* 무시 */ }
+      return true;
+    };
+    const check = () => {
+      if (stop || document.visibilityState !== "visible" || !idle()) return;
+      targetVersion().then((v) => {
+        if (stop || !v?.build || v.build <= CUR_BUILD || auth.currentUser || !idle()) return;
+        try { const k = `kpLoginFresh:${v.build}`; if (sessionStorage.getItem(k)) return; sessionStorage.setItem(k, "1"); } catch { return; }
+        window.location.reload();
+      }).catch(() => {});
+    };
+    const t = setInterval(check, 60000);
+    const vis = () => { if (document.visibilityState === "visible") setTimeout(check, 500); };
+    document.addEventListener("visibilitychange", vis);
+    window.addEventListener("keydown", onInput, true); window.addEventListener("input", onInput, true);
+    const t0 = setTimeout(check, 4000);
+    return () => { stop = true; clearInterval(t); clearTimeout(t0); document.removeEventListener("visibilitychange", vis); window.removeEventListener("keydown", onInput, true); window.removeEventListener("input", onInput, true); };
+  }, [user]);
+
   // 업데이트 이벤트 - UpdateBanner.jsx가 처리하므로 App에서는 제거
 
   // 최고관리자용 접속이력(sessionLogs) 기록 — 로그인/로그아웃 시점을 남긴다.
@@ -768,6 +800,10 @@ export default function App() {
 
   // 인증 + 역할
   const unsubUserRef = useRef(null);
+  // 🏢 2026-11-24 여러 회사 계정 — [회사 전환]을 누른 뒤 새로 고칠 때까지는 지금 회사를 그대로 둔다
+  //  (문서가 토큰보다 먼저 바뀌어 화면만 새 회사로 넘어가 "권한 없음"이 나지 않게 — 전환 창이 토큰을 확인하고 새로 고친다)
+  const activeCoRef = useRef({ uid: "", v: null });
+  useEffect(() => { try { sessionStorage.removeItem("kpCoSwitching"); } catch { /* 무시 */ } }, []);
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       // ⭐ 2026-11-01 이전 계정의 users 구독을 끊는다(예전엔 return 값이 무시돼 로그아웃 뒤에도 남아 역할·승인값을 다시 써넣었다)
@@ -789,14 +825,18 @@ export default function App() {
         //  실제 로그아웃(로그인 확인 중 잠깐 나갔다 들어오는 경우 제외)이면 기기에 남은 회사 데이터·저장본을 지우고 새로 고친다
         let validating = false;
         try { validating = sessionStorage.getItem("transportValidating") === "true" || sessionStorage.getItem("shipperValidating") === "true"; } catch { /* 무시 */ }
-        if (wasSignedIn && !IS_MOBILE_PREVIEW && !isDriverBusy() && !validating && !isPreviewMode()) {
+        const willPurge = wasSignedIn && !IS_MOBILE_PREVIEW && !isDriverBusy() && !validating && !isPreviewMode();
+        if (willPurge) {
           setTimeout(() => { purgeOnSignOut(db).catch(() => {}); }, 400); // 로그아웃 기록(sessionLogs)을 먼저 보낸다
         }
         setUser(null);
         setRole(null);
         setApproved(false);
         setContractCo("");
-        setLoading(false);
+        setMultiState(null); activeCoRef.current = { uid: "", v: null };
+        // 🛠 2026-11-24 로그아웃 → 기기 정리 후 새로 고침 — 그 사이 로그인 화면을 잠깐 그렸다가 다시 로딩 화면이 떠 "로딩이 두 번"으로 보였다
+        //  → 새로 고칠 때까지 로딩 화면을 그대로 둔다(새로 고침이 늦어도 8초 뒤엔 위 안전장치가 로그인 화면을 연다)
+        setLoading(willPurge);
         return;
       }
       setUser(u);
@@ -806,7 +846,14 @@ export default function App() {
       const unsubUser = onSnapshot(doc(db, "users", u.uid), (snap) => {
         if (auth.currentUser?.uid !== u.uid) return;
         if (snap.exists()) {
-          const data = snap.data();
+          const raw0 = snap.data();
+          let switching = false;
+          try { switching = sessionStorage.getItem("kpCoSwitching") === "1"; } catch { /* 무시 */ }
+          if (!switching || activeCoRef.current.uid !== u.uid || activeCoRef.current.v === null) activeCoRef.current = { uid: u.uid, v: raw0.activeCompany ?? "" };
+          const raw = { ...raw0, activeCompany: activeCoRef.current.v };
+          setMultiState(isMasterEmail ? null : multiStateOf(u.uid, raw));
+          // 다른 회사로 들어가 있으면 회사 = 그 회사 · 역할 = 통합관리자(서버 토큰 · functions/multiCompany.js 와 같은 계산)
+          const data = isMasterEmail ? raw : effectiveUser(raw);
           if (!IS_MOBILE_PREVIEW) claimsSync.check(data.claimsAt);
           if (data.employmentStatus === "퇴사" && !isMasterEmail) {
             // ⭐ 2026-11-05 기사 로그인 화면이 확인 중이면 그 화면이 "퇴사 처리된 계정" 안내를 직접 띄운다(여기서 alert·로그아웃하면 안내가 사라짐)
@@ -1037,6 +1084,7 @@ export default function App() {
         : <AdminLoginGate key={`${user.uid}:${adminAuthAt}`} user={user} authTime={adminAuthAt} sub={user.email !== TOTAL_MASTER_EMAIL} onCancel={() => signOut(auth).catch(() => {})} />)}
 
       {user && <React.Suspense fallback={null}><ManualHost /></React.Suspense>}
+      {user && <CompanySwitchedToast />}
       {/* 🔐 2026-11-14 일반 계정 2차 인증(켠 계정만) — 로그인 화면 밖에서 들어온 경우(자동 로그인 · 다른 로그인 화면) */}
       {needUserMfa && !sessionConflict && !(window.__kpGateInline && window.location.pathname === "/transport-login") && (userAuthAt === null
         ? <div className="fixed inset-0 z-[100002]" style={{ background: "linear-gradient(135deg, #061832 0%, #0B2554 50%, #0D2B66 100%)" }} />

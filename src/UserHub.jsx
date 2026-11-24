@@ -16,7 +16,7 @@ const I = {
 const Badge = ({ n }) => (n > 0 ? <span className="min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-black text-white grid place-items-center tabular-nums" style={{ background: "#E5332A" }}>{n > 99 ? "99+" : n}</span> : null);
 
 // 🧭 2026-11-16 trigger(children)를 주면 그 모양(회사명 · 이름 칸)이 버튼이 된다 · onTriggerClick 이 있으면 누를 때 그걸 먼저(새 버전 업데이트)
-export default function UserHub({ name = "", mailUnread = 0, onMyInfo, onSupport, showSupport = true, children = null, onTriggerClick = null, align = "right", triggerClass = "", onSwitchCompany = null }) {
+export default function UserHub({ name = "", mailUnread = 0, onMyInfo, onSupport, showSupport = true, children = null, onTriggerClick = null, align = "right", triggerClass = "", onSwitchCompany = null, switchLabel = "" }) {
   const bell = useDriverEventCounts();
   const bellN = (bell.orders || 0) + (bell.docs || 0) + (bell.sos || 0) + (bell.checkout || 0);
   const total = mailUnread + bellN;
@@ -39,7 +39,8 @@ export default function UserHub({ name = "", mailUnread = 0, onMyInfo, onSupport
     { k: "bell", label: "알림 내역", sub: "기사 수락 · 서류 · 긴급", ico: I.bell, n: bellN, on: openBell },
     { k: "me", label: "내 정보", ico: I.me, on: onMyInfo },
     // 🔀 2026-11-19 최고관리자 · 부관리자만 — 다른 운송사 화면으로 바로(CompanySwitcher)
-    ...(onSwitchCompany ? [{ k: "company", label: "운송사 전환", sub: "로그아웃 없이 다른 운송사 화면으로", ico: I.swap, on: onSwitchCompany }] : []),
+    // 🏢 2026-11-24 여러 회사 계정(최고관리자가 정해 준 회사끼리) — [회사 전환]
+    ...(onSwitchCompany ? [{ k: "company", label: switchLabel || "운송사 전환", sub: switchLabel ? "정해진 회사끼리 로그아웃 없이" : "로그아웃 없이 다른 운송사 화면으로", ico: I.swap, on: onSwitchCompany }] : []),
     ...(showSupport ? [{ k: "support", label: "원격 지원 요청", sub: "사용이 어려우면 화면을 같이 봐요", ico: I.support, on: onSupport }] : []),
   ];
   const initial = String(name || "").trim().slice(0, 1) || "나";

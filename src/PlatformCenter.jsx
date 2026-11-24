@@ -32,6 +32,7 @@ const TestSeedPanel = React.lazy(() => import("./TestSeedPanel"));
 const BrandStudioLazy = React.lazy(() => import("./BrandStudio")); // 🎨 2026-11-15 브랜드 디자인
 const MobilePreviewPanelLazy = React.lazy(() => import("./MobilePreviewFrame").then((m) => ({ default: m.MobilePreviewPanel }))); // 📱 2026-11-14 관리센터 › 운영 › 모바일 화면
 import ReleasePanel from "./ReleasePanel"; // 🚦 업데이트 배포 잠금
+const MultiCompanyPanelLazy = React.lazy(() => import("./MultiCompanyAdmin")); // 🏢 2026-11-24 여러 회사 계정
 import { ContractLifecyclePanel, SubAdminPanel } from "./ContractLifecycle"; // ⭐ 2026-11-06 이용 계약 · 부관리자
 import SheetConnectHub from "./SheetConnectHub"; // 🧹 2026-11-15 관리자메뉴 › 구글시트 연동을 관리센터로 합침(배차일지 가져오기 포함)
 import NoticeBoard from "./NoticeBoard";
@@ -140,6 +141,7 @@ const SECTIONS = [
     it("sessions", "로그인 · 접속", "SESSIONS", "key"),
     it("securityEvents", "보안 · 오류 알림", "THREATS", "alert"),
     it("subAdmin", "부관리자", "SUB ADMIN", "user"),
+    it("multiCo", "여러 회사 계정", "MULTI COMPANY", "user"), // 🏢 2026-11-24 한 사람이 정해진 회사끼리 오가기(태진 · 큐런 대표 등)
     it("privateFare", "비공개 운임", "PRIVATE FARE", "eye"), // 🔐 2026-11-18 운송사 · 사람별 비공개 운임 지정
     it("sheetImport", "구글시트 연동", "SHEETS", "sheet"),
     it("tenancy", "운송사 분리 · 초기화", "ISOLATION", "shield"),
@@ -1367,6 +1369,7 @@ function PlatformCenterInner({ user }) {
     {/* 🧹 2026-11-14 '화주사 강제 업데이트' — 2026-11-15 고급 설정 안으로 */}
     <div><div className="text-[14px] font-black mb-2" style={{ color: G.ink }}>화주사 화면 강제 업데이트</div><ShipperForceUpdatePanel currentVersion={typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : ""} /></div></ReleasePanel></>;
   else if (tab === "privateFare") body = <><Hero en="SECURITY · PRIVATE FARE" title="비공개 운임" desc="운송사와 사람을 골라 비공개 운임을 켜요. 켜진 사람의 임원 화면에 메뉴가 생기고, 비밀번호로 들어가요. 그 사람이 정한 금액은 최고관리자도 볼 수 없어요." /><React.Suspense fallback={<AdmEmpty />}><PrivateFareAdminLazy /></React.Suspense></>;
+  else if (tab === "multiCo") body = <><Hero en="SECURITY · MULTI COMPANY" title="여러 회사 계정" desc="한 사람이 정해진 회사끼리 로그아웃 없이 오가며 쓰게 해요. 다른 회사에서는 통합관리자, 근태 · 급여 · 연차는 원래 소속 회사에만 남아요." /><React.Suspense fallback={null}><MultiCompanyPanelLazy /></React.Suspense></>;
   else if (tab === "subAdmin") body = <><Hero en="SECURITY · SUB ADMIN" title="부관리자" desc="최고관리자와 같은 권한을 가진 부관리자(1명)를 보고 지정 · 해제해요." /><SubAdminPanel /></>;
 
   // 🔎 상단 메뉴 검색 — 메뉴 · 화면 안 작은 탭까지(휴대폰에서 못 쓰는 화면은 뺌)

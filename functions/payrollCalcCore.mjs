@@ -169,7 +169,12 @@ export function hoursFromAttendance(records = [], isOffDay = () => false, { dail
 //    allowances:[{label, amount, taxable(기본 true), ordinary(통상임금 포함, 기본 true)}], dependents(본인 포함), children(8~20세),
 //    npBase?(신고 기준소득월액), hiBase?(보수월액), npExempt, hiExempt, eiExempt, taxRatePct(80|100|120), taxFixed?(간이세액표 금액 직접) }
 //  month(그 달 입력): { workDays, regularHours, otHours, nightHours, holHours, holOverHours, weeklyHolidayHours, bonus,
-//    extraPays:[{label, amount, taxable}], extraDeducts:[{label, amount}], taxOverride?, localTaxOverride? }
+//    extraPays:[{label, amount, taxable}], extraDeducts:[{label, amount}], taxOverride?, localTaxOverride?,
+//    npOverride?, hiOverride?, ltcOverride?, eiOverride?(이번 달 4대보험 금액 직접) }
+// ⭐ 2026-11-24 4대보험도 소득세처럼 직접 정할 수 있다(업체 요청 — 공단 고지 금액 · 회사마다 다른 요율)
+//  정하는 순서: 이번 달 직접 입력(month.xxOverride) → 직원별 고정 금액(emp.npFixed · hiFixed · ltcFixed · eiFixed)
+//             → 직원별 요율 %(emp.npRate · hiRate · ltcRate(건강보험료 대비) · eiRate) → 회사 요율(설정)
+//  회사 부담(인건비 참고)은 회사 요율 그대로
 export function calcPayslip(emp = {}, month = {}, rates = presetFor(2026)) {
   const R = { ...presetFor(rates?.year || 2026), ...(rates || {}) };
   const unit = num(R.roundUnit) || 10;
@@ -220,10 +225,23 @@ export function calcPayslip(emp = {}, month = {}, rates = presetFor(2026)) {
   const npBase0 = num(emp.npBase) || taxable;
   const npBase = Math.min(Math.max(Math.floor(npBase0 / 1000) * 1000, num(R.npMin)), num(R.npMax) || Infinity);
   const hiBase = num(emp.hiBase) || taxable;
-  const np = emp.npExempt ? 0 : floorTo(npBase * num(R.npEmp) / 100, unit);
-  const hi = emp.hiExempt ? 0 : floorTo(hiBase * num(R.hiEmp) / 100, unit);
-  const ltc = emp.hiExempt ? 0 : floorTo(hi * num(R.ltcRatio) / 100, unit);
-  const ei = emp.eiExempt ? 0 : floorTo(taxable * num(R.eiEmp) / 100, unit);
+  const has = (v) => v !== undefined && v !== null && v !== "";
+  // 이번 달 직접 → 직원별 고정 금액 → (요율 계산) 순서. mode: "manual" | "fixed" | "rate"(직원별 요율) | "auto"
+  const ins = (k, exempt, calcFn, rateKey, rateDefault) => {
+    if (exempt) return { amount: 0, mode: "exempt", rate: 0 };
+    if (has(month[`${k}Override`])) return { amount: floorTo(num(month[`${k}Override`]), unit), mode: "manual", rate: 0 };
+    if (has(emp[`${k}Fixed`])) return { amount: floorTo(num(emp[`${k}Fixed`]), unit), mode: "fixed", rate: 0 };
+    const own = has(emp[rateKey]);
+    const rate = own ? num(emp[rateKey]) : num(rateDefault);
+    return { amount: floorTo(calcFn(rate), unit), mode: own ? "rate" : "auto", rate };
+  };
+  const npR = ins("np", emp.npExempt, (r) => npBase * r / 100, "npRate", R.npEmp);
+  const hiR = ins("hi", emp.hiExempt, (r) => hiBase * r / 100, "hiRate", R.hiEmp);
+  const ltcR = ins("ltc", emp.hiExempt, (r) => hiR.amount * r / 100, "ltcRate", R.ltcRatio);
+  const eiR = ins("ei", emp.eiExempt, (r) => taxable * r / 100, "eiRate", R.eiEmp);
+  const np = npR.amount, hi = hiR.amount, ltc = ltcR.amount, ei = eiR.amount;
+  const insCalc = (x, autoText) => (x.mode === "exempt" ? "적용 제외" : x.mode === "manual" ? "직접 입력(이번 달)" : x.mode === "fixed" ? "직원별 고정 금액" : `${autoText}${x.rate}%${x.mode === "rate" ? "(직원별 요율)" : ""}`);
+  const insModes = { np: npR.mode, hi: hiR.mode, ltc: ltcR.mode, ei: eiR.mode };
   // 소득세
   const autoTax = simplifiedIncomeTax(taxable, { dependents: emp.dependents, children: emp.children, npMonthly: np, ratePct: emp.taxRatePct || 100 });
   const hasOv = month.taxOverride !== undefined && month.taxOverride !== null && month.taxOverride !== "";
@@ -233,10 +251,10 @@ export function calcPayslip(emp = {}, month = {}, rates = presetFor(2026)) {
   const localTax = hasLocalOv ? floorTo(num(month.localTaxOverride), 10) : floorTo(incomeTax * num(R.localTaxPct) / 100, 10);
   const taxMode = hasOv ? "manual" : hasFixed ? "fixed" : "auto";
   const deductions = [
-    { key: "np", label: "국민연금", amount: np, calc: emp.npExempt ? "적용 제외" : `기준소득월액 ${wonFmt(npBase)}원 × ${R.npEmp}%` },
-    { key: "hi", label: "건강보험", amount: hi, calc: emp.hiExempt ? "적용 제외" : `보수월액 ${wonFmt(hiBase)}원 × ${R.hiEmp}%` },
-    { key: "ltc", label: "장기요양보험", amount: ltc, calc: emp.hiExempt ? "적용 제외" : `건강보험료 × ${R.ltcRatio}%` },
-    { key: "ei", label: "고용보험", amount: ei, calc: emp.eiExempt ? "적용 제외" : `과세급여 ${wonFmt(taxable)}원 × ${R.eiEmp}%` },
+    { key: "np", label: "국민연금", amount: np, calc: insCalc(npR, `기준소득월액 ${wonFmt(npBase)}원 × `) },
+    { key: "hi", label: "건강보험", amount: hi, calc: insCalc(hiR, `보수월액 ${wonFmt(hiBase)}원 × `) },
+    { key: "ltc", label: "장기요양보험", amount: ltc, calc: insCalc(ltcR, "건강보험료 × ") },
+    { key: "ei", label: "고용보험", amount: ei, calc: insCalc(eiR, `과세급여 ${wonFmt(taxable)}원 × `) },
     { key: "tax", label: "소득세", amount: incomeTax, calc: taxMode === "manual" ? "직접 입력(이번 달)" : taxMode === "fixed" ? "직원별 고정 세액(간이세액표)" : `간이세액 근사치 · 공제대상가족 ${Math.max(1, num(emp.dependents) || 1)}명${num(emp.children) ? ` · 자녀 ${num(emp.children)}명` : ""}${(emp.taxRatePct || 100) !== 100 ? ` · ${emp.taxRatePct}%` : ""}` },
     { key: "local", label: "지방소득세", amount: localTax, calc: hasLocalOv ? "직접 입력" : `소득세 × ${R.localTaxPct}%` },
   ];
@@ -257,7 +275,7 @@ export function calcPayslip(emp = {}, month = {}, rates = presetFor(2026)) {
   if (taxMode === "auto" && taxable >= 1060000) warnings.push("소득세는 간이세액 근사치입니다 — 확정은 세무사/간이세액표 확인");
   return {
     earnings, deductions, gross, nonTaxable, taxable, totalDeduct, net, employer, costTotal: gross + employer.total,
-    ordinaryHourly, ordinaryMonthly, npBase, hiBase, taxMode, autoTax, small, warnings,
+    ordinaryHourly, ordinaryMonthly, npBase, hiBase, taxMode, autoTax, small, warnings, insModes,
     work: { workDays: num(month.workDays), regularHours: regH, otHours: oh, nightHours: nh, holHours: hh, holOverHours: ho, weeklyHolidayHours: num(month.weeklyHolidayHours) },
   };
 }

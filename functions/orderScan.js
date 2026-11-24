@@ -1,4 +1,5 @@
 // ======================= functions/orderScan.js =======================
+const { effectiveUser } = require("./multiCompany"); // 🏢 2026-11-24 여러 회사 오가기 — 지금 쓰는 회사 기준
 // 🧠 2026-11-07 오더 스캔 정밀 인식(서버) — 화면 설명은 src/OrderScanModal.jsx · src/orderScanAi.js 맨 위
 //  · orderScanOcr     캡처 이미지 → Google Cloud Vision(DOCUMENT_TEXT_DETECTION, 한·영) → 글 + 줄 위치(스캔 화면 줄 상자)
 //  · orderScanExtract 오더 글 → Claude(Haiku)가 배차 등록 칸으로 정리(JSON 스키마 · 칸마다 확신도)
@@ -38,7 +39,7 @@ async function scanUserOf(db, auth) {
   const email = auth.token?.email || "";
   const u = await db.collection("users").doc(uid).get();
   if (u.exists) {
-    const d = u.data() || {};
+    const d = effectiveUser(u.data() || {});
     const okUser = email === SUPER_EMAIL || d.role === "totalMaster"
       || (d.approved !== false && d.employmentStatus !== "퇴사" && d.role !== "cafeUser");
     if (okUser) {

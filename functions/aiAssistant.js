@@ -1,4 +1,5 @@
 // ======================= functions/aiAssistant.js =======================
+const { effectiveUser } = require("./multiCompany"); // 🏢 2026-11-24 여러 회사 오가기 — 지금 쓰는 회사 기준
 // 🤖 2026-11-07 배차 AI 비서(Claude) — 화면은 src/AiAssistant.jsx
 //  · 호출형 함수 aiAssistantChat(functions/index.js) → 이 파일의 runAssistantChat
 //  · Claude가 도구를 부르며 답한다(조회 도구 = 서버에서 우리 회사 데이터만 읽음).
@@ -183,7 +184,7 @@ async function assistantUserOf(db, auth, data = {}) {
   if (!uid) throw new AssistantError("unauthenticated", "로그인이 필요해요");
   const email = auth.token?.email || "";
   const s = await db.collection("users").doc(uid).get();
-  const d = s.exists ? s.data() || {} : null;
+  const d = s.exists ? effectiveUser(s.data() || {}) : null;
   const isTm = email === SUPER_EMAIL || d?.role === "totalMaster";
   if (!d && !isTm) throw new AssistantError("permission-denied", "승인된 직원 계정만 쓸 수 있어요");
   const role = isTm ? "totalMaster" : String(d.role || "user");
