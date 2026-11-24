@@ -10,7 +10,7 @@ import { doc, getDoc, getFirestore, collection, getDocs, query, where, updateDoc
 import SignupWelcomeCard from "./SignupWelcomeCard"; // 🎉 2026-11-22 승인 뒤 첫 로그인 — 가입 완료 카드(회사코드)
 import { readPublicCompanies } from "./publicCompanies"; // 🔎 2026-11-22 회사명 조회
 import { canMulti, multiCompaniesOf, activeCompanyOf } from "./multiCompany"; // 🏢 2026-11-24 여러 회사 오가기
-import { waitClaimsCompany } from "./MultiCompanySwitch";
+import { waitClaimsCompany, fetchMyCompanyCodes } from "./MultiCompanySwitch";
 import { useNavigate, Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useMfaPrompt, mfaErrorText } from "./MfaModal";
@@ -230,6 +230,13 @@ export default function TransportLogin() {
       if (!u) { setCodeError("등록된 계정 정보가 없습니다."); return; }
       if (u.role === "totalMaster") { setCodeMode("all"); return; } // 부관리자 — 모든 회사 검색
       setCodeLookupQ(String(u.companyName || ""));
+      // 🏢 2026-11-24 여러 회사 계정 — 오갈 수 있는 회사 코드도 같이(다른 회사 신청서는 규칙상 못 읽어 서버가 찾아 준다)
+      if (canMulti(u) && multiCompaniesOf(u).length) {
+        const list = await fetchMyCompanyCodes(cred.user);
+        const rows = list || [{ companyName: String(u.companyName || ""), companyCode: String(u.companyCode || ""), home: true }, ...multiCompaniesOf(u).map((c) => ({ companyName: c, companyCode: "" }))];
+        setCodeResults(rows.map((r) => ({ ...r, multi: true })));
+        return;
+      }
       // 🛠 2026-11-15 직원 계정(회사에 나중에 가입)은 계정에 코드가 없다 → 그 회사의 코드(가입 신청 승인 기록)를 찾아 보여 준다
       //  회사에도 코드가 없으면(관리센터에서 만든 운송사 등) 코드 없이 로그인하면 된다고 알려 준다(로그인은 계정에 코드가 있을 때만 코드를 확인한다)
       let code = String(u.companyCode || "");
@@ -374,14 +381,23 @@ export default function TransportLogin() {
         }
 
         // 🎉 2026-11-22 승인 뒤 첫 로그인 — 회사코드를 몰라도 비밀번호가 맞으면 "가입 완료" 카드로 회사코드를 보여 주고 이어서 로그인
-        if (userData.companyCode && !isSubAdmin && !userData.welcomeSeenAt && userData.companyCode !== inputCompanyCode) {
+        if (!multiOk && userData.companyCode && !isSubAdmin && !userData.welcomeSeenAt && userData.companyCode !== inputCompanyCode) {
           await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("transportValidating");
           window.__kpGateInline = false;
           setWelcome({ companyName: userData.companyName || inputCompanyName, companyCode: userData.companyCode, name: userData.name || "", email: email.trim(), plan: userData.requestedPlan || "" });
           return;
         }
-        if (userData.companyCode && !isSubAdmin) {
+        // 🏢 2026-11-24 여러 회사 계정이 다른 회사로 로그인 — 그 회사 코드(서버가 찾아 줌) 또는 내 원래 코드로 확인
+        let wantCode = String(userData.companyCode || "");
+        let okCodes = [wantCode];
+        if (multiOk) {
+          const list = await fetchMyCompanyCodes(credential.user);
+          const hit = (list || []).find((c) => c.companyName === inputCompanyName);
+          if (list) wantCode = String(hit?.companyCode || "") || wantCode;
+          okCodes = [wantCode, String(userData.companyCode || "")].filter(Boolean);
+        }
+        if (wantCode && !isSubAdmin) {
           if (!inputCompanyCode) {
             await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
             sessionStorage.removeItem("transportValidating");
@@ -389,7 +405,7 @@ export default function TransportLogin() {
             setError("회사코드를 입력해주세요. 코드는 가입 승인 시 이메일로 안내받으셨습니다.");
             return;
           }
-          if (userData.companyCode !== inputCompanyCode) {
+          if (!okCodes.includes(inputCompanyCode)) {
             await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
             sessionStorage.removeItem("transportValidating");
             window.__kpGateInline = false;
@@ -790,8 +806,8 @@ export default function TransportLogin() {
                   {codeResults.map(r => (
                     <div key={`${r.companyName}|${r.companyCode}`} className="flex items-center justify-between px-4 py-3 border-b border-gray-50 last:border-b-0 hover:bg-blue-50/30">
                       <div>
-                        <div className="text-[13px] font-semibold text-gray-800">{r.companyName}</div>
-                        <div className="text-[12px] tabular-nums text-[#1B2B4B] font-bold">{r.companyCode}</div>
+                        <div className="text-[13px] font-semibold text-gray-800">{r.companyName}{r.multi && <span className="ml-1.5 text-[11px] font-bold text-[#7A879C]">{r.home ? "원래 소속" : "통합관리자"}</span>}</div>
+                        <div className="text-[12px] tabular-nums text-[#1B2B4B] font-bold">{r.companyCode || (r.multi ? "코드 없이 로그인" : "")}</div>
                       </div>
                       <button
                         onClick={() => {

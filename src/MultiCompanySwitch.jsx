@@ -19,6 +19,17 @@ export function useMultiCompany() {
   return React.useSyncExternalStore(subscribeMulti, getMultiState, getMultiState);
 }
 
+// 내가 오갈 수 있는 회사들의 회사코드(서버 myCompanyCodes) — [{ companyName, companyCode, home }] · 실패하면 null
+export async function fetchMyCompanyCodes(user) {
+  try {
+    const t = await user.getIdToken();
+    const r = await fetch(`${FUNCTIONS_BASE}/myCompanyCodes`, { headers: { Authorization: `Bearer ${t}` } });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return Array.isArray(j?.companies) ? j.companies : null;
+  } catch { return null; }
+}
+
 // 서버가 로그인 토큰의 회사(co)를 바꿀 때까지 기다린다(보통 2~5초 · 5초가 지나면 다시 계산을 한 번 부탁)
 export async function waitClaimsCompany(u, co, ms = 30000) {
   const call = fetchCaller(FUNCTIONS_BASE, () => auth.currentUser);
