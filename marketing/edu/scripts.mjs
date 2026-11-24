@@ -29,7 +29,7 @@ export const IMAGES = {
   l_rest: "A truck parked at a Korean highway rest area, the driver re-tightening a cargo strap, evening light.",
   l_drive: "A truck driving smoothly on a highway at a safe distance from other vehicles, calm traffic, sunny day.",
   l_emergency: "A truck stopped on the highway shoulder with hazard lights on and a red warning triangle placed far behind it, the driver standing safely behind the guardrail making a phone call.",
-  l_end: "A neatly loaded and strapped truck leaving a logistics warehouse at sunrise, optimistic mood.",
+  l_end: "A neatly loaded and strapped truck leaving a modern steel-and-concrete logistics warehouse at sunrise, optimistic mood. Modern industrial architecture only, flat roofs, no traditional or Asian roofs.",
   // ── 상 · 하차장
   d_cover: "A modern Korean logistics warehouse loading dock with several trucks backed up to dock doors, forklifts working, workers in reflective vests and helmets, wide hero shot.",
   d_danger: "Busy loading dock area with a forklift, pedestrians and a reversing truck in the same space, subtle red hazard zones on the floor.",

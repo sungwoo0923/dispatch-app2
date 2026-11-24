@@ -106,7 +106,8 @@ function slideHtml(s, i) {
       <div class="chtitle">${esc(s.title)}</div><div class="chsub">${esc(s.sub)}</div>
     </div>
     <div class="chr"><div class="fill" ${kb(s)}><img src="${IMG(s.img)}"></div></div>`;
-  if (s.type === "points") return `
+  const nav = s.ch ? `<div class="cnav" data-in="${f2(s.t0 + 0.3)}" data-a="up" data-dist="14"><div class="h"><span>CHAPTER ${String(s.ch.no).padStart(2, "0")} / ${String(chapters.length).padStart(2, "0")}</span><b>${esc(s.ch.title)}</b></div><div class="dots">${chapters.map((c) => `<i class="${c.no === s.ch.no ? "on" : c.no < s.ch.no ? "done" : ""}"></i>`).join("")}</div></div>` : "";
+  if (s.type === "points") return nav + `
     <div class="pimg" data-in="${f2(s.t0 + 0.05)}" data-a="up" data-dist="24"><div class="fill" ${kb(s)}><img src="${IMG(s.img)}"></div></div>
     <div class="phead" data-in="${f2(s.t0 + 0.1)}" data-a="up" data-dist="16">${esc(s.head)}</div>
     <div class="plist">${pts.map((l, j) => `<div class="pt" data-in="${f2(l.t0)}" data-a="left" data-dist="18" data-d="0.45"><i>${String(j + 1).padStart(2, "0")}</i><span>${esc(l.pt)}</span></div>`).join("")}</div>`;
@@ -124,7 +125,7 @@ function slideHtml(s, i) {
         <div class="stno">${String(j + 1).padStart(2, "0")}</div><div class="stic">${ic(icn, 64, 1.7)}</div>
         <div class="stl">${esc(lab)}</div><div class="sts">${esc(sub)}</div>
       </div>`).join("")}</div>`;
-  if (s.type === "law") return `
+  if (s.type === "law") return (s.ch ? nav : "") + `
     <div class="pimg" data-in="${f2(s.t0 + 0.05)}" data-a="up" data-dist="24"><div class="fill" ${kb(s)}><img src="${IMG(s.img)}"></div></div>
     <div class="phead" data-in="${f2(s.t0 + 0.1)}" data-a="up" data-dist="16">${esc(s.head)}</div>
     <div class="law" data-in="${f2(s.t0 + 0.5)}" data-a="up" data-dist="20"><div class="q">“</div><div class="lq">${esc(s.quote)}</div><div class="ls">${ic("shield", 24, 2)}${esc(s.src)}</div></div>`;
@@ -189,10 +190,10 @@ img{display:block;width:100%;height:100%;object-fit:cover}
 .chr{position:absolute;left:760px;right:0;top:0;bottom:0;overflow:hidden}
 .pimg{position:absolute;left:64px;top:60px;width:1020px;height:770px;border-radius:32px;overflow:hidden;background:#fff;box-shadow:0 30px 60px -30px rgba(15,26,48,.35);border:1px solid #E3E8F0}
 .phead{position:absolute;left:1140px;right:64px;top:84px;font-size:50px;font-weight:900;line-height:1.22}
-.plist{position:absolute;left:1140px;right:64px;top:250px;display:flex;flex-direction:column;gap:18px}
-.pt{display:flex;align-items:center;gap:20px;background:#fff;border:1px solid #E3E8F0;border-radius:22px;padding:22px 26px;box-shadow:0 10px 24px -16px rgba(15,26,48,.25)}
+.plist{position:absolute;left:1140px;right:64px;top:236px;display:flex;flex-direction:column;gap:22px}
+.pt{display:flex;align-items:center;gap:22px;background:#fff;border:1px solid #E3E8F0;border-radius:24px;padding:28px 28px;box-shadow:0 10px 24px -16px rgba(15,26,48,.25)}
 .pt i{flex:none;font:800 22px "JetBrains Mono",monospace;font-style:normal;color:#fff;background:linear-gradient(135deg,#0B1428,#2D4C82);width:56px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center}
-.pt span{font-size:31px;font-weight:800;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pt span{font-size:33px;font-weight:800;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .law{position:absolute;left:1140px;right:64px;top:250px;background:#fff;border:1px solid #E3E8F0;border-radius:28px;padding:38px 40px 34px;box-shadow:0 20px 40px -24px rgba(15,26,48,.3)}
 .law .q{font:900 120px/0.7 Georgia,serif;color:#C9D5E8;height:60px}
 .lq{font-size:33px;font-weight:800;line-height:1.55}
@@ -222,6 +223,12 @@ img{display:block;width:100%;height:100%;object-fit:cover}
 .ckh svg{color:#fff;background:#1B2B4B;border-radius:12px;padding:6px;width:52px;height:52px}
 .ck{display:flex;align-items:center;gap:20px;font-size:31px;font-weight:800;padding:13px 0;border-bottom:1px solid #EEF1F6;white-space:nowrap}
 .cb{flex:none;width:44px;height:44px;border-radius:12px;background:#1B2B4B;color:#fff;display:flex;align-items:center;justify-content:center}
+.cnav{position:absolute;left:1140px;right:64px;top:690px;background:#fff;border:1px solid #E3E8F0;border-radius:22px;padding:22px 26px}
+.cnav .h{display:flex;align-items:center;justify-content:space-between;font:800 16px "JetBrains Mono",monospace;letter-spacing:.1em;color:#4B6CB7}
+.cnav .h b{font:900 22px "Noto Sans KR",sans-serif;letter-spacing:-.02em;color:#0F1A30}
+.cnav .dots{display:flex;gap:8px;margin-top:16px}
+.cnav .dots i{flex:1;height:10px;border-radius:6px;background:#E3E8F0}
+.cnav .dots i.done{background:#8A97AD}.cnav .dots i.on{background:linear-gradient(90deg,#1B2B4B,#2D4C82)}
 #cap{position:absolute;left:0;right:0;margin:0 auto;width:fit-content;max-width:1760px;bottom:40px;padding:16px 36px;border-radius:18px;background:rgba(11,20,40,.9);color:#fff;font-size:38px;font-weight:700;line-height:1.4;text-align:center;z-index:9;box-shadow:0 16px 40px -16px rgba(0,0,0,.5)}
 </style></head><body>
 ${slides.map((s, i) => `<section class="slide ${["cover", "end"].includes(s.type) ? "full" : ""}" data-in="${f2(s.t0)}" data-out="${f2(s.t1 - 0.02)}" data-a="fade" data-d="0.4">${slideHtml(s, i)}</section>`).join("\n")}
@@ -263,7 +270,7 @@ const out = path.join(outDir, `${id}.mp4`); // 아이폰 · 안드로이드 · P
 const fps = +arg("fps", 24);
 const ff = spawn("ffmpeg", ["-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(fps), "-c:v", "mjpeg", "-i", "-",
   "-f", "s16le", "-ar", String(RATE), "-ac", "1", "-i", wav,
-  "-c:v", "libx264", "-preset", "medium", "-crf", "21", "-tune", "animation", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+  "-c:v", "libx264", "-preset", "slow", "-crf", "25", "-tune", "animation", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
   "-c:a", "aac", "-b:a", "96k", "-shortest", out], { stdio: ["pipe", "inherit", "inherit"] });
 const n = Math.round(DUR * fps); const T = Date.now();
 for (let i = 0; i < n; i++) {
