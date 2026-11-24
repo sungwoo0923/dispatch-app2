@@ -71,6 +71,29 @@ export const IMAGES = {
   s_firstaid: "An office first-aid kit and an AED defibrillator on the wall, an employee calling for help on the phone, calm.",
   s_report: "An employee talking with a manager in the office, reporting a small near-miss, the manager noting it on a laptop, supportive mood.",
   s_end: "A safe and tidy logistics office at sunset with employees leaving, lights being turned off, optimistic mood.",
+  // ── 직장 내 성희롱 예방 · 괴롭힘 예방(사람 표정은 차분하게, 노골적인 장면 없이)
+  h_cover: "A calm, respectful modern Korean logistics office team meeting, diverse colleagues of different genders and ages listening attentively, warm atmosphere, hero shot.",
+  h_law: "A clean office desk with an open labor law book, a small balance scale and a pen, calm professional mood.",
+  h_words: "Two office colleagues at a desk, one making an uncomfortable personal remark while the other leans away with a troubled expression, subtle soft red tint on the speaker, non-explicit.",
+  h_touch: "An office scene where one colleague puts a hand on another's shoulder without consent and the other person stiffens and steps away, subtle red tint, non-explicit, tasteful.",
+  h_dinner: "A team dinner at a Korean restaurant table where one person is being pressured to sit next to a manager and pour drinks, looking uncomfortable, subtle red tint, non-explicit.",
+  h_message: "A smartphone screen glowing with many late-night chat messages from a superior, an employee in bed looking stressed, no readable text.",
+  h_customer: "A delivery driver in a navy uniform standing calmly beside a hand cart at a customer's loading dock, a customer staff member standing too close and leaning in with a personal remark, the driver leaning back with a polite but uncomfortable expression. Calm, no aggression, no physical fight, non-explicit, subtle soft red tint around the customer.",
+  h_bystander: "A colleague stepping in calmly to help a coworker who looks uncomfortable, offering support, office setting.",
+  h_report: "An employee speaking privately with an HR manager in a small meeting room with a closed door, confidential and supportive mood.",
+  h_process: "A clean isometric flow of an office reporting process: a person, a closed meeting room, a document folder, a shield, arranged left to right, no text.",
+  h_protect: "An employee being moved to a different desk area away from another person, a manager supporting, protective atmosphere.",
+  h_respect: "Colleagues giving each other a respectful professional handshake and nod in a bright office, positive mood.",
+  b_cover: "A modern Korean logistics office where colleagues collaborate respectfully around a table with a laptop, hero shot, calm mood.",
+  b_yell: "A manager loudly scolding an employee in front of the whole team in an open office, the employee looking down, others looking away, subtle red tint.",
+  b_exclude: "Office colleagues having lunch together while one employee sits alone at a desk, clearly left out, subtle red tint.",
+  b_work: "An employee overwhelmed by a huge pile of documents dumped on the desk late at night while others leave, subtle red tint.",
+  b_errand: "A manager making a junior employee carry personal shopping bags and run personal errands, subtle red tint, non-violent.",
+  b_driver: "A dispatcher at a desk shouting into a phone headset at a truck driver, the driver in the truck cab looking stressed, split scene, subtle red tint.",
+  b_good: "A manager giving calm, constructive feedback to an employee one-on-one in a small meeting room, both seated, respectful body language.",
+  b_report: "An employee writing a report on a laptop with a closed door meeting room and an HR manager waiting supportively, confidential mood.",
+  b_care: "A small team checking in on a colleague with coffee, supportive and caring office culture.",
+  b_end: "A bright modern logistics office at the end of the day, colleagues saying goodbye with smiles, optimistic mood.",
 };
 
 export const COURSES = {
@@ -110,7 +133,7 @@ export const COURSES = {
         { say: "앞쪽 격벽과 옆판, 뒷문 잠금장치도 함께 봅니다.", pt: "격벽 · 옆판 · 뒷문 잠금" },
       ] },
       { type: "points", head: "결박 장비 점검", img: "l_gear", lines: [
-        { say: "벨트가 찢어지거나 해진 곳, 기름에 젖은 곳은 없는지 봅니다.", pt: "벨트 찢김 · 해짐 · 오염" },
+        { say: "벨트가 찢어지거나 닳은 곳, 기름에 젖은 곳은 없는지 봅니다.", pt: "벨트 찢김 · 닳음 · 오염" },
         { say: "라쳇이 부드럽게 감기고 확실히 잠기는지 확인합니다.", pt: "라쳇 감김 · 잠김 확인" },
         { say: "체인은 고리가 벌어지거나 녹슨 곳이 없는지 봅니다.", pt: "체인 고리 벌어짐 · 녹" },
         { say: "상한 장비는 아끼지 말고, 바로 새것으로 바꿉니다.", pt: "상한 장비는 바로 교체" },
@@ -146,10 +169,10 @@ export const COURSES = {
       { type: "chapter", no: 5, title: "결박 방법", sub: "단단하게, 충분하게", img: "l_ratchet", lines: [
         { say: "다음은 실제로 묶는 방법입니다." },
       ] },
-      { type: "dodont", head: "벨트는 이렇게 걸어요", good: { img: "l_strap_good", label: "보호대 대고 · 꼬임 없이 · 잠금" }, bad: { img: "l_strap_bad", label: "모서리에 바로 · 꼬이고 해진 벨트" }, lines: [
+      { type: "dodont", head: "벨트는 이렇게 걸어요", good: { img: "l_strap_good", label: "보호대 대고 · 꼬임 없이 · 잠금" }, bad: { img: "l_strap_bad", label: "모서리에 바로 · 꼬이고 닳은 벨트" }, lines: [
         { say: "벨트는 꼬이지 않게 펴서, 짐 위를 눌러 주도록 겁니다." },
         { say: "모서리에는 반드시 보호대를 대서 벨트가 끊어지지 않게 합니다." },
-        { say: "해지거나 꼬인 벨트는 힘을 제대로 받지 못합니다." },
+        { say: "닳거나 꼬인 벨트는 힘을 제대로 받지 못합니다." },
       ] },
       { type: "points", head: "라쳇은 끝까지 잠그기", img: "l_ratchet", lines: [
         { say: "라쳇을 감아 벨트를 팽팽하게 당긴 뒤, 손잡이를 끝까지 닫아 잠급니다.", pt: "팽팽하게 · 손잡이 끝까지 잠금" },
@@ -437,6 +460,158 @@ export const COURSES = {
       { type: "end", img: "s_end", lines: [
         { say: "끝까지 시청해 주셔서 감사합니다." },
         { say: "오늘도 안전한 하루 보내세요. 이어서 이수 서명을 해 주세요." },
+      ] },
+    ],
+  },
+  staff_sh: {
+    title: "직장 내 성희롱 예방",
+    code: "EDU-S02",
+    slides: [
+      { type: "cover", img: "h_cover", sub: "서로 존중하는 일터를 위한 법정 의무교육", lines: [
+        { say: "직장 내 성희롱 예방교육을 시작하겠습니다." },
+        { say: "성희롱은 피해자에게 큰 상처를 남기고, 함께 일하는 모두의 일터를 무너뜨립니다." },
+        { say: "오늘은 무엇이 성희롱인지, 생겼을 때 어떻게 해야 하는지 알아보겠습니다." },
+      ] },
+      { type: "law", head: "회사가 해마다 하는 교육", img: "h_law", quote: "사업주는 직장 내 성희롱을 예방하고 근로자가 안전한 근로환경에서 일할 수 있는 여건을 조성하기 위하여 직장 내 성희롱의 예방을 위한 교육을 매년 실시하여야 한다.", src: "남녀고용평등법 제13조", lines: [
+        { say: "남녀고용평등법은 회사가 해마다 성희롱 예방교육을 하도록 정하고 있습니다." },
+        { say: "대표와 임원을 포함해, 모든 직원이 교육 대상입니다." },
+      ] },
+      { type: "chapter", no: 1, title: "성희롱이란", sub: "법이 정한 뜻", img: "h_words", lines: [
+        { say: "먼저 법이 말하는 직장 내 성희롱이 무엇인지 알아보겠습니다." },
+      ] },
+      { type: "points", head: "직장 내 성희롱의 뜻", img: "h_words", lines: [
+        { say: "직장에서의 지위를 이용하거나 업무와 관련해 일어난 일입니다.", pt: "지위를 이용하거나 업무와 관련해서" },
+        { say: "성적인 말이나 행동으로 성적 굴욕감이나 혐오감을 느끼게 하는 것입니다.", pt: "성적인 말 · 행동으로 굴욕감 · 혐오감" },
+        { say: "성적 요구를 거절했다는 이유로 불이익을 주는 것도 포함됩니다.", pt: "거절했다고 불이익 주기도 포함" },
+        { say: "판단 기준은 행위자의 의도가 아니라, 상대방이 어떻게 느꼈는지입니다.", pt: "기준은 의도가 아니라 상대가 느낀 것" },
+      ] },
+      { type: "steps", head: "성희롱의 유형", steps: [["talk", "말", "외모 평가 · 음담패설"], ["hand", "행동", "원치 않는 신체 접촉"], ["eye", "시각", "음란한 사진 · 영상"], ["phone", "온라인", "메신저 · 문자"]], lines: [
+        { say: "외모를 평가하거나 성적인 농담을 하는 말도 성희롱입니다." },
+        { say: "원하지 않는 신체 접촉은 짧고 가벼워도 성희롱입니다." },
+        { say: "음란한 사진이나 영상을 보여 주거나 붙여 두는 것도 해당됩니다." },
+        { say: "메신저나 문자로 보내는 성적인 말도 똑같이 성희롱입니다." },
+      ] },
+      { type: "chapter", no: 2, title: "이런 것도 성희롱", sub: "일상에서 흔한 예", img: "h_dinner", lines: [
+        { say: "일상에서 흔히 볼 수 있는 예를 보겠습니다." },
+      ] },
+      { type: "points", head: "회식 자리에서", img: "h_dinner", lines: [
+        { say: "상사 옆자리에 앉으라고 하거나 술을 따르라고 강요하는 것.", pt: "옆자리 · 술 따르기 강요" },
+        { say: "취했다는 이유로 몸을 만지거나 기대는 것도 성희롱입니다.", pt: "취했다는 핑계로 신체 접촉" },
+      ] },
+      { type: "points", head: "메신저 · 퇴근 후 연락", img: "h_message", lines: [
+        { say: "업무와 상관없이 밤늦게 사적인 연락을 반복하는 것.", pt: "밤늦은 사적인 연락 반복" },
+        { say: "외모나 사생활을 묻는 메시지도 상대가 불쾌하면 문제가 됩니다.", pt: "외모 · 사생활 캐묻기" },
+      ] },
+      { type: "points", head: "고객 · 거래처에서 생길 때", img: "h_customer", lines: [
+        { say: "화주나 거래처 직원 같은 고객에게 성희롱을 당할 수도 있습니다.", pt: "고객 · 거래처에 의한 성희롱" },
+        { say: "이때 회사는 근무 장소를 바꾸는 등 피해 직원을 보호해야 합니다.", pt: "회사는 피해 직원을 보호해야 해요" },
+        { say: "기사님과 현장 직원도 혼자 참지 말고 회사에 알려 주세요.", pt: "혼자 참지 말고 회사에 알리기" },
+      ] },
+      { type: "chapter", no: 3, title: "생겼을 때", sub: "피해자 · 목격자가 할 일", img: "h_report", lines: [
+        { say: "성희롱이 생겼을 때 어떻게 해야 하는지 알아보겠습니다." },
+      ] },
+      { type: "steps", head: "피해를 입었다면", steps: [["hand", "거부 표현", "싫다고 분명히"], ["pledge", "기록하기", "날짜 · 장소 · 내용"], ["user", "알리기", "인사 담당 · 대표"], ["phone", "외부 상담", "고용노동부 1350"]], lines: [
+        { say: "가능하다면 싫다는 뜻을 분명하게 표현합니다." },
+        { say: "언제, 어디서, 무슨 일이 있었는지 기록하고 메시지는 보관합니다." },
+        { say: "회사 인사 담당자나 대표에게 알립니다." },
+        { say: "회사에 말하기 어렵다면 고용노동부 1350으로 상담할 수 있습니다." },
+      ] },
+      { type: "points", head: "목격했다면", img: "h_bystander", lines: [
+        { say: "모른 척하지 말고, 피해자 곁에서 도움을 줍니다.", pt: "모른 척하지 않기" },
+        { say: "피해자가 원하면 함께 신고하거나 증인이 되어 줍니다.", pt: "원하면 함께 신고 · 증언" },
+        { say: "피해 사실을 다른 사람에게 함부로 옮기지 않습니다.", pt: "소문 내지 않기" },
+      ] },
+      { type: "chapter", no: 4, title: "회사의 조치", sub: "법이 정한 처리 절차", img: "h_process", lines: [
+        { say: "신고가 들어오면 회사는 법에 따라 이렇게 조치합니다." },
+      ] },
+      { type: "steps", head: "회사의 처리 절차", steps: [["search", "조사", "지체 없이 사실 확인"], ["shield", "보호", "근무 장소 변경 · 휴가"], ["pledge", "징계", "가해자 징계 · 근무 변경"], ["lock", "비밀 유지", "불이익 금지"]], lines: [
+        { say: "회사는 신고를 받으면 지체 없이 사실을 조사합니다." },
+        { say: "조사 중에도 피해자가 원하면 근무 장소를 바꾸거나 휴가를 줍니다." },
+        { say: "사실로 확인되면 가해자를 징계하고 근무 장소를 바꾸는 등 조치합니다." },
+        { say: "신고했다는 이유로 불이익을 주는 것은 법으로 금지되어 있고, 조사 내용은 비밀로 지켜집니다." },
+      ] },
+      { type: "check", head: "오늘의 체크리스트", items: ["기준은 상대방이 느낀 것", "말 · 행동 · 메신저 모두 해당", "회식 강요 · 신체 접촉 금지", "고객에 의한 피해도 알리기", "피해 · 목격 시 기록하고 알리기", "신고자 불이익 금지 · 비밀 유지"], lines: [
+        { say: "오늘 배운 내용을 정리하겠습니다." },
+        { say: "성희롱의 기준은 상대방이 느낀 것이고, 말과 행동, 메신저 모두 해당됩니다." },
+        { say: "피해를 입거나 목격하면 기록하고 알리세요. 신고자는 법으로 보호받습니다." },
+      ] },
+      { type: "end", img: "h_respect", lines: [
+        { say: "서로 존중하는 일터를 함께 만들어 주세요." },
+        { say: "끝까지 시청해 주셔서 감사합니다. 이어서 이수 서명을 해 주세요." },
+      ] },
+    ],
+  },
+  staff_bully: {
+    title: "직장 내 괴롭힘 예방",
+    code: "EDU-S03",
+    slides: [
+      { type: "cover", img: "b_cover", sub: "말 한마디가 일터를 바꿉니다", lines: [
+        { say: "직장 내 괴롭힘 예방교육을 시작하겠습니다." },
+        { say: "괴롭힘은 피해자의 몸과 마음을 다치게 하고, 팀 전체의 일할 힘을 빼앗습니다." },
+        { say: "오늘은 무엇이 괴롭힘인지, 어떻게 막고 대응하는지 알아보겠습니다." },
+      ] },
+      { type: "law", head: "법으로 금지된 행위", img: "h_law", quote: "사용자 또는 근로자는 직장에서의 지위 또는 관계 등의 우위를 이용하여 업무상 적정범위를 넘어 다른 근로자에게 신체적·정신적 고통을 주거나 근무환경을 악화시키는 행위를 하여서는 아니 된다.", src: "근로기준법 제76조의2", lines: [
+        { say: "근로기준법은 직장 내 괴롭힘을 금지하고 있습니다." },
+        { say: "지위나 관계의 우위를 이용해, 업무상 적정 범위를 넘어 고통을 주는 행위입니다." },
+      ] },
+      { type: "chapter", no: 1, title: "괴롭힘의 세 가지 조건", sub: "이 세 가지를 봐요", img: "b_yell", lines: [
+        { say: "괴롭힘인지 판단할 때는 세 가지를 봅니다." },
+      ] },
+      { type: "steps", head: "괴롭힘 판단 기준", steps: [["user", "우위 이용", "직급 · 경력 · 다수"], ["alert", "적정 범위 넘음", "업무와 무관 · 과도"], ["shield", "고통 · 환경 악화", "몸과 마음의 피해"]], lines: [
+        { say: "첫째, 직급이나 경력, 다수라는 관계의 우위를 이용했는지 봅니다." },
+        { say: "둘째, 업무와 관련 없거나 정도가 지나쳐 적정 범위를 넘었는지 봅니다." },
+        { say: "셋째, 상대에게 고통을 주거나 근무 환경을 나쁘게 만들었는지 봅니다." },
+      ] },
+      { type: "chapter", no: 2, title: "이런 것이 괴롭힘", sub: "흔한 예", img: "b_exclude", lines: [
+        { say: "괴롭힘에 해당하는 흔한 예를 보겠습니다." },
+      ] },
+      { type: "points", head: "폭언 · 공개적인 망신", img: "b_yell", lines: [
+        { say: "여러 사람 앞에서 소리치거나 모욕하는 것.", pt: "사람들 앞에서 소리치기 · 모욕" },
+        { say: "욕설이나 외모, 학력을 비하하는 말도 해당됩니다.", pt: "욕설 · 외모 · 학력 비하" },
+      ] },
+      { type: "points", head: "따돌림 · 무시", img: "b_exclude", lines: [
+        { say: "일부러 대화나 회의, 식사에서 빼놓는 것.", pt: "일부러 빼놓기" },
+        { say: "업무에 필요한 정보를 주지 않는 것도 괴롭힘이 될 수 있습니다.", pt: "필요한 정보 주지 않기" },
+      ] },
+      { type: "points", head: "과도한 업무 · 사적인 심부름", img: "b_work", lines: [
+        { say: "한 사람에게만 감당하기 어려운 일을 몰아주는 것.", pt: "한 사람에게 일 몰아주기" },
+        { say: "업무와 상관없는 개인 심부름을 시키는 것도 해당됩니다.", pt: "개인 심부름 시키기" },
+      ] },
+      { type: "points", head: "배차 · 운송 현장에서", img: "b_driver", lines: [
+        { say: "전화로 기사님께 욕설을 하거나 무리한 운행을 강요하는 것.", pt: "기사님께 욕설 · 무리한 운행 강요" },
+        { say: "특정 기사에게만 불리한 배차를 반복하는 것도 문제가 됩니다.", pt: "특정 기사에게 불리한 배차 반복" },
+      ] },
+      { type: "dodont", head: "지적과 괴롭힘의 차이", good: { img: "b_good", label: "따로 · 차분하게 · 업무 개선 중심" }, bad: { img: "b_yell", label: "공개적으로 · 인격 모욕" }, lines: [
+        { say: "업무상 필요한 지적은 괴롭힘이 아닙니다." },
+        { say: "다만 따로, 차분하게, 업무를 고치는 데 집중해서 말해야 합니다." },
+        { say: "사람들 앞에서 인격을 깎아내리면 지적이 아니라 괴롭힘이 됩니다." },
+      ] },
+      { type: "chapter", no: 3, title: "생겼을 때", sub: "신고와 회사의 조치", img: "b_report", lines: [
+        { say: "괴롭힘이 생겼을 때 어떻게 하는지 알아보겠습니다." },
+      ] },
+      { type: "steps", head: "피해 · 목격했다면", steps: [["pledge", "기록", "날짜 · 내용 · 증거"], ["user", "신고", "누구나 회사에"], ["phone", "외부 상담", "고용노동부 1350"]], lines: [
+        { say: "언제, 무슨 일이 있었는지 기록하고 메시지나 녹음을 보관합니다." },
+        { say: "피해자뿐 아니라 목격한 사람 누구나 회사에 신고할 수 있습니다." },
+        { say: "회사에 말하기 어렵다면 고용노동부 1350으로 상담할 수 있습니다." },
+      ] },
+      { type: "steps", head: "회사의 조치", steps: [["search", "조사", "지체 없이"], ["shield", "보호", "근무 장소 변경 · 휴가"], ["pledge", "징계", "가해자 조치"], ["lock", "보호", "불이익 금지 · 비밀"]], lines: [
+        { say: "회사는 신고를 받으면 지체 없이 조사합니다." },
+        { say: "피해자가 원하면 근무 장소를 바꾸거나 휴가를 주는 등 보호합니다." },
+        { say: "사실로 확인되면 가해자를 징계하는 등 필요한 조치를 합니다." },
+        { say: "신고했다는 이유로 불이익을 주면 안 되고, 조사 내용은 비밀로 지킵니다." },
+      ] },
+      { type: "points", head: "서로를 챙기는 문화", img: "b_care", lines: [
+        { say: "힘들어 보이는 동료에게 먼저 말을 걸어 주세요.", pt: "먼저 안부 묻기" },
+        { say: "농담이라도 상대가 불편해하면 바로 멈춥니다.", pt: "불편해하면 바로 멈추기" },
+      ] },
+      { type: "check", head: "오늘의 체크리스트", items: ["우위 · 적정 범위 · 고통 세 가지", "폭언 · 따돌림 · 몰아주기 금지", "개인 심부름 금지", "기사님께도 존중하는 말", "지적은 따로 · 차분하게", "누구나 신고 · 불이익 금지"], lines: [
+        { say: "오늘 배운 내용을 정리하겠습니다." },
+        { say: "우위를 이용해 적정 범위를 넘어 고통을 주면 괴롭힘입니다." },
+        { say: "지적은 따로 차분하게 하고, 기사님께도 존중하는 말을 씁니다." },
+      ] },
+      { type: "end", img: "b_end", lines: [
+        { say: "존중하는 말 한마디가 좋은 일터를 만듭니다." },
+        { say: "끝까지 시청해 주셔서 감사합니다. 이어서 이수 서명을 해 주세요." },
       ] },
     ],
   },

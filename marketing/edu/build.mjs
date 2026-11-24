@@ -84,6 +84,14 @@ const ICON = {
   signal: '<path d="M12 21V11"/><path d="M8.5 7.5a5 5 0 0 1 7 0M5.5 4.5a9 9 0 0 1 13 0"/><circle cx="12" cy="11" r="1.5"/>',
   door: '<rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M15 12h.01"/>',
   slow: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l-3 2"/>',
+  talk: '<path d="M4 5h16v11H9l-5 4Z"/><path d="M8 9.5h8M8 12.5h5"/>',
+  eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
+  phone: '<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 18.5h3"/>',
+  alert: '<path d="M12 3 2.5 20h19Z"/><path d="M12 10v4.5M12 17.5h.01"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  pledge: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h3"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/>',
 };
 const ic = (n, s = 40, sw = 1.9) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${ICON[n] || ICON.shield}</svg>`;
 const kb = (s) => `data-kb="1,1.07" data-in="${f2(s.t0)}" data-out="${f2(s.t1)}" data-a="none"`;

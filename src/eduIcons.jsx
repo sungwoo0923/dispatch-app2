@@ -22,6 +22,8 @@ const P = {
   truck: <><path d="M2.5 6h11v9h-11z" /><path d="M13.5 9H18l3.5 3.5V15h-8" /><circle cx="6.5" cy="17" r="1.8" /><circle cx="17" cy="17" r="1.8" /></>,
   close: <path d="M18 6 6 18M6 6l12 12" />,
   chevron: <path d="m9 6 6 6-6 6" />,
+  talk: <><path d="M4 5h16v11H9l-5 4Z" /><path d="M8 9.5h8M8 12.5h5" /></>,
+  users: <><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><circle cx="17" cy="9" r="2.8" /><path d="M16 14.2a5.5 5.5 0 0 1 5.5 5.8" /></>,
   bell: <><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z" /><path d="M10 20.5a2 2 0 0 0 4 0" /></>,
   eye: <><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" /><circle cx="12" cy="12" r="3" /></>,
 };
