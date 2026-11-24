@@ -4,6 +4,7 @@ import { useListKeys } from "./useListKeys";
 import { useSubnavTarget } from "./navMenus";
 import southKorea from "@svg-maps/south-korea";
 import StandardFare from "./StandardFare";
+import FareQuote from "./FareQuote"; // ⭐ 2026-11-24 운임 산출(단가표 · 노선 규칙 · 실거래 → 청구운임 · 기사운임 · 매출총이익)
 import { db } from "./firebase";
 import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
 // ⚡ 2026-11-23 운임 참고용 13개월 오더는 화면을 열 때 한 번만 받는다 — 예전엔 실시간 구독이라 누가 오더를 고칠 때마다 받고,
@@ -1353,15 +1354,16 @@ function CompanyFareTab() {
 
 // ─── 메인 컴포넌트 — 디지털 헤더 + 탭 ───────────────────────────────────────
 const FARE_TABS=[
+  {key:"운임산출",en:"QUOTE",desc:"거래처 · 구간 · 차종 기준 청구운임 및 지급운임 산출"},
   {key:"전국운임조회",en:"NATIONAL",desc:"지역·차종 기준 전국 시세 계산"},
   {key:"자사운임표",en:"COMPANY",desc:"우리 회사 실거래 운임 히스토리"},
 ];
 // 📱 forceTab·hideHeader — 모바일 앱이 같은 화면을 탭별로 열 때(머리말·탭은 모바일 화면이 따로 그린다)
-export default function FreightRateInquiry({ forceTab = "", hideHeader = false } = {}){
-  const [tabState,setActiveTab]=useState("전국운임조회");
+export default function FreightRateInquiry({ forceTab = "", hideHeader = false, company = "" } = {}){
+  const [tabState,setActiveTab]=useState("운임산출");
   const activeTab=forceTab||tabState;
   // ⭐ 상단 메뉴 › 운임조회 세부 메뉴에서 고른 탭으로 바로 이동
-  useSubnavTarget(forceTab ? "" : "FARE LOOKUP", ["전국운임조회","자사운임표"], setActiveTab, [["전국운임조회","전국운임조회"],["자사운임표","자사운임표"]]);
+  useSubnavTarget(forceTab ? "" : "FARE LOOKUP", ["운임산출","전국운임조회","자사운임표"], setActiveTab, [["운임산출","운임산출"],["전국운임조회","전국운임조회"],["자사운임표","자사운임표"]]);
   const MONO="'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
   return(
     <div className="w-full">
@@ -1385,6 +1387,7 @@ export default function FreightRateInquiry({ forceTab = "", hideHeader = false }
           </div>
         </div>
       </div>}
+      {activeTab==="운임산출"&&<FareQuote company={company}/>}
       {activeTab==="전국운임조회"&&<NationalFareTab/>}
       {activeTab==="자사운임표"&&<CompanyFareTab/>}
     </div>

@@ -9870,7 +9870,7 @@ return (
           </div>
         )}
 
-        {menu === "운임조회" && <FreightRateInquiry />}
+        {menu === "운임조회" && <FreightRateInquiry company={userCompany} />}
 
         {/* 👔 2026-10-31 임원 메뉴 */}
         {menu === "결재함" && menuState("결재함") === "ok" && <ExecApprovals company={deptCompany} me={{ uid: user?.uid, name: myProfileDoc?.name || user?.displayName || "", team: myProfileDoc?.team || "", position: myProfileDoc?.position || "", role }} />}
