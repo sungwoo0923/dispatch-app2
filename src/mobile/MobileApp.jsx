@@ -4794,8 +4794,13 @@ const groupedByDate = useMemo(() => {
   const [useSeparateDates, setUseSeparateDates] = useState(false);
   const [orderDates, setOrderDates] = useState([]);
   const [orderDropDates, setOrderDropDates] = useState([]);
+  // 🛠 2026-11-24 오더 복사 창에서 건마다 고른 날짜 — 아래 수량 효과가 한 번만 그대로 받아 쓴다
+  //  (예전엔 수량이 바뀌는 순간 건별 날짜를 전부 첫 건 날짜로 덮어써서, 여러 건을 날짜를 다르게 복사해도 모두 같은 날짜로 등록됐다)
+  const copyPlanDatesRef = useRef(null);
   useEffect(() => {
+    const seed = copyPlanDatesRef.current; copyPlanDatesRef.current = null;
     if (multiCount <= 1) { setUseSeparateDates(false); return; }
+    if (seed && seed.length === multiCount) { setOrderDates(seed.map((x) => x.상차일 || "")); setOrderDropDates(seed.map((x) => x.하차일 || x.상차일 || "")); return; }
     setOrderDates(Array.from({ length: multiCount }, () => form.상차일 || ""));
     setOrderDropDates(Array.from({ length: multiCount }, () => form.하차일 || form.상차일 || ""));
   }, [multiCount]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -4902,6 +4907,13 @@ const groupedByDate = useMemo(() => {
       ...(form.담당노선구분 !== undefined ? { 담당노선구분: form.담당노선구분 || "" } : {}), // 🧭 2026-11-14 담당노선구분(켠 운송사)
       전달사항: form.전달사항 || "",
       전달사항고정: form.전달사항고정 === true,
+      // 🛠 2026-11-24 묶음(여러 근무일) — 달력에서 고른 근무일 목록을 함께 저장(PC와 같은 칸). 예전엔 모바일에서 묶음으로 골라도 목록이 저장되지 않았고,
+      //  PC에서 만든 묶음 오더를 모바일에서 날짜만 고치면 예전 근무일 목록이 그대로 남았다. 묶음을 건드린 적 없는 오더(칸이 없는 폼)는 그대로 둔다
+      ...((form.근무일자목록 !== undefined || form.복수근무일 !== undefined) ? (() => {
+        const wd = _parseWorkDates(form.근무일자목록);
+        const on = wd.length > 1 && wd[0] === (form.상차일 || "") && wd[wd.length - 1] === (form.하차일 || "");
+        return on ? { 근무일자목록: wd, 복수근무일: true } : { 근무일자목록: [], 복수근무일: false };
+      })() : {}),
       // 💬 2026-11-08 알림톡은 화면에서 뺐다 — 새 오더는 보내지 않음
       ...(!form._editId ? { 알림톡: false } : {}),
 
@@ -5277,7 +5289,7 @@ const handleOrderDuplicate0 = (order, plan = null) => {
   });
 
   // ⭐ 2026-11-06 복사 건수 — 2건 이상이면 등록창의 "수량 + 날짜 개별 설정"으로 그대로 넘긴다(등록을 누르면 그 수만큼)
-  if (plan && plan.length > 1) { setMultiCount(plan.length); setUseSeparateDates(true); setOrderDates(plan.map((x) => x.상차일)); setOrderDropDates(plan.map((x) => x.하차일)); }
+  if (plan && plan.length > 1) { copyPlanDatesRef.current = plan; setMultiCount(plan.length); setUseSeparateDates(true); setOrderDates(plan.map((x) => x.상차일)); setOrderDropDates(plan.map((x) => x.하차일)); }
   else { setMultiCount(1); setUseSeparateDates(false); }
   setSelectedOrder(null);
   setPrevPage("list");
@@ -5347,7 +5359,7 @@ const handleOrderDuplicateWithDriver0 = (order, plan = null) => {
     _owner: copyOwnerOf(order, plan), // 👤 2026-11-09 배차담당자 — 복사 창에서 고른 사람(처음엔 원본 담당자)
   });
   // ⭐ 2026-11-06 복사 건수 — 2건 이상이면 등록창의 "수량 + 날짜 개별 설정"으로 그대로 넘긴다(등록을 누르면 그 수만큼)
-  if (plan && plan.length > 1) { setMultiCount(plan.length); setUseSeparateDates(true); setOrderDates(plan.map((x) => x.상차일)); setOrderDropDates(plan.map((x) => x.하차일)); }
+  if (plan && plan.length > 1) { copyPlanDatesRef.current = plan; setMultiCount(plan.length); setUseSeparateDates(true); setOrderDates(plan.map((x) => x.상차일)); setOrderDropDates(plan.map((x) => x.하차일)); }
   else { setMultiCount(1); setUseSeparateDates(false); }
   setSelectedOrder(null);
   setPrevPage("list");
@@ -12766,6 +12778,7 @@ function MobileOrderDetail({
       ...(order.고정노선Id ? { 고정노선Id: order.고정노선Id, 고정노선명: order.고정노선명 || "" } : {}),
       청구사업자: order.청구사업자 || "", 블라인드: order.블라인드 === true,
       ...(order.콜구분 !== undefined ? { 콜구분: order.콜구분 || "", 콜플랫폼: order.콜플랫폼 || "" } : {}),
+      ...(_parseWorkDates(order.근무일자목록).length > 0 || order.복수근무일 === true ? { 근무일자목록: _parseWorkDates(order.근무일자목록), 복수근무일: order.복수근무일 === true || (order.복수근무일 !== false && _parseWorkDates(order.근무일자목록).length > 1) } : {}), // 🛠 2026-11-24 묶음 근무일도 불러온다
       _editId: order.id,
       _returnToDetail: true,
     });
@@ -13230,6 +13243,7 @@ const handleAssignClick = async () => {
       // 🛠 2026-11-20 모바일 점검 — 수정 저장 때 이 칸들을 비우거나 바꾸지 않게 원래 값을 불러온다(예전엔 청구사업자가 지워지고 블라인드 오더가 풀렸다)
       청구사업자: order.청구사업자 || "", 블라인드: order.블라인드 === true,
       ...(order.콜구분 !== undefined ? { 콜구분: order.콜구분 || "", 콜플랫폼: order.콜플랫폼 || "" } : {}),
+      ...(_parseWorkDates(order.근무일자목록).length > 0 || order.복수근무일 === true ? { 근무일자목록: _parseWorkDates(order.근무일자목록), 복수근무일: order.복수근무일 === true || (order.복수근무일 !== false && _parseWorkDates(order.근무일자목록).length > 1) } : {}), // 🛠 2026-11-24 묶음 근무일도 불러온다
       _editId: order.id, _returnToDetail: true,
     });
   };
@@ -14910,8 +14924,9 @@ const orderCopyList = useMemo(() => {
     set화물타입(detectCargoType(form.화물내용 || ""));
   }, [form.화물내용]);
 
+  // 🛠 2026-11-24 상차일을 하차일보다 뒤로 옮기면 하차일도 같은 날로 — 예전엔 상차일만 내일로 바꾸면 "하차일이 상차일보다 앞설 수 없습니다"로 저장이 막혔다
   const update = (key, value) =>
-    setForm((p) => ({ ...p, [key]: value }));
+    setForm((p) => ({ ...p, [key]: value, ...(key === "상차일" && value && p.하차일 && String(p.하차일) < String(value) ? { 하차일: value } : {}) }));
 
   // ⭐ 복수근무일(묶음) — PC(DispatchApp)의 toggleWorkDate와 동일 로직. 근무일을
   // 하나씩 클릭할 때마다 켜고/끄고를 토글하고, 상차일/하차일은 그 목록의
