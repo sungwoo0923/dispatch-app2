@@ -7,6 +7,8 @@ import React from "react";
 import { db } from "./firebase";
 import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
 import { useRoutePresets } from "./routePreset";
+import { isJyCompany } from "./jyOnly";
+import { learnManse, isManse, REGIONS } from "./manseRateCore";
 import { quoteFare, historyStats, rateTons, quoteText, ARRIVALS } from "./fareQuoteCore";
 
 const won = (n) => Math.round(Number(n) || 0).toLocaleString("ko-KR");
@@ -57,8 +59,9 @@ export default function FareQuote({ company = "" }) {
   const co = company || (() => { try { return localStorage.getItem("userCompany") || localStorage.getItem("loginCompany") || ""; } catch { return ""; } })();
   const sheets = useRateSheets(co);
   const presets = useRoutePresets();
-  const [q, setQ] = React.useState({ 거래처명: "", 상차지명: "", 하차지명: "", 톤수: "11톤", 도착: "당착", 경유: 0 });
-  const set = (patch) => setQ((p) => ({ ...p, ...patch }));
+  const [q, setQ] = React.useState({ 거래처명: "", 상차지명: "", 하차지명: "", 톤수: "11톤", 도착: "당착", 경유: 0, 수량: "", 반품: "", 경유원거리: false });
+  // 만세보령은 상차지가 늘 만세보령 — 거래처를 넣으면 상차지를 채운다
+  const set = (patch) => setQ((p) => { const n = { ...p, ...patch }; if (patch.거래처명 !== undefined && isManse(n) && !String(p.상차지명).trim()) n.상차지명 = "만세보령"; return n; });
   const ready = !!(q.상차지명.trim() && q.하차지명.trim());
   const orders = useHistory(ready);
   const [copied, setCopied] = React.useState(false);
@@ -82,8 +85,14 @@ export default function FareQuote({ company = "" }) {
     return [rs ? "단가표 적용" : "", rp ? `노선 규칙 ${rp}건` : ""].filter(Boolean).join(" · ");
   }, [q.거래처명, sheets, presets]);
 
-  const hist = React.useMemo(() => (ready && orders ? historyStats(orders, q, { today: today() }) : null), [ready, orders, q.거래처명, q.상차지명, q.하차지명, q.톤수]); // eslint-disable-line react-hooks/exhaustive-deps
-  const r = React.useMemo(() => (ready ? quoteFare({ q, sheets, presets, hist }) : null), [ready, q, sheets, presets, hist]);
+  const manseOn = isManse(q);
+  const hist = React.useMemo(() => (ready && orders ? historyStats(orders, manseOn ? { ...q, 톤수: "" } : q, { today: today() }) : null), [ready, orders, manseOn, q.거래처명, q.상차지명, q.하차지명, q.톤수]); // eslint-disable-line react-hooks/exhaustive-deps
+  const jy = isJyCompany(co);
+  // 🌾 만세보령(JY) — 지난 오더(구글시트에서 들어온 기록)로 하차지 지역 · 추가요금 · 기사운임을 배운다
+  const manse = React.useMemo(() => (jy && orders ? learnManse(orders) : null), [jy, orders]);
+  const addr = React.useMemo(() => { const t = nkz(q.하차지명); const o = t && (orders || []).find((x) => nkz(x.하차지명) === t && x.하차지주소); return o ? o.하차지주소 : ""; }, [orders, q.하차지명]);
+  const r = React.useMemo(() => (ready ? quoteFare({ q: { ...q, 하차지주소: addr }, sheets, presets, hist, aliases: jy, manse }) : null), [ready, q, addr, sheets, presets, hist, jy, manse]);
+  const mPlace = manseOn && manse ? manse.places[nkz(q.하차지명)] : null;
   const has = !!(r && r.total.sale > 0);
   const autoRule = !!(r && r.lines.some((l) => l.tag === "노선 규칙"));
   const copy = () => { if (!r) return; navigator.clipboard?.writeText(quoteText(q, r)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }).catch(() => {}); };
@@ -109,12 +118,22 @@ export default function FareQuote({ company = "" }) {
             <Field label="하차지" value={q.하차지명} onChange={(v) => set({ 하차지명: v })} list="fq-to" dot="to" testid="to" />
           </div>
         </div>
+        {manseOn && jy ? (
+          <div className="mt-5"><Lbl>수량 <span className="font-medium">20kg 포 기준</span></Lbl>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="수량(포)" value={q.수량} onChange={(v) => set({ 수량: v.replace(/[^\d]/g, "") })} placeholder="예: 1000" hint="포" testid="bags" />
+              <Field label="반품 회수(포)" value={q.반품} onChange={(v) => set({ 반품: v.replace(/[^\d]/g, "") })} placeholder="반품 회수" hint="포" testid="ret" />
+            </div>
+            {q.경유 > 0 && <label className="mt-2 flex items-center gap-2 text-[13px] font-bold text-[#0F1A30]"><input type="checkbox" checked={!!q.경유원거리} onChange={(e) => set({ 경유원거리: e.target.checked })} />추가 하차지가 50km 이상(수도권)</label>}
+          </div>
+        ) : (
         <div className="mt-5"><Lbl>차종 · 톤급</Lbl>
           <div className="flex flex-wrap gap-1.5">
             {tons.map((t) => <button key={t} type="button" onClick={() => set({ 톤수: t })} data-fq-ton={t}
               className={`h-9 px-3 rounded-[10px] border-[1.5px] text-[13px] font-bold transition ${nkz(q.톤수) === nkz(t) ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white text-[#3C4A63] border-[#E3E8F0] hover:border-[#2D4C82]"}`}>{t}</button>)}
           </div>
         </div>
+        )}
         <div className="mt-5"><Lbl>도착 구분 · 부대비용 {autoRule && <Tag>노선 규칙 자동 적용</Tag>}</Lbl>
           <div className="flex items-center justify-between py-2.5">
             <span className="text-[14px] font-bold text-[#0F1A30]">도착 구분</span>
@@ -137,8 +156,8 @@ export default function FareQuote({ company = "" }) {
             <div className="text-[17px] lg:text-[19px] font-black truncate max-w-[40%] text-right">{q.하차지명 || "하차지"}</div>
           </div>
           <div className="relative flex flex-wrap gap-2 mt-4 text-[12px] font-bold">
-            {[q.톤수, q.도착 === "야상" ? "야상 · 전일 18시 이후 상차" : q.도착, q.경유 ? `경유 ${q.경유}곳` : ""].filter(Boolean).map((x) => <span key={x} className="px-2.5 py-1 rounded-lg bg-white/[0.08] border border-white/10 text-white/80">{x}</span>)}
-            {r && r.base.src !== "none" && <span className="px-2.5 py-1 rounded-lg border border-white/25">산출 기준 · {r.base.src === "rate" ? `${r.rate?.sheetName || ""} 단가표` : "자사 실거래"}{autoRule ? " + 노선 규칙" : ""}</span>}
+            {[manseOn && r?.manse ? `${r.manse.bags.toLocaleString("ko-KR")}포 · ${r.manse.tier.ton}` : q.톤수, manseOn && r?.manse ? `${r.manse.region}${r.manse.regionSrc === "기록" ? "" : " · 주소 판별"}` : "", q.도착 === "야상" ? "야상 · 전일 18시 이후 상차" : q.도착, q.경유 ? `경유 ${q.경유}곳` : ""].filter(Boolean).map((x) => <span key={x} className="px-2.5 py-1 rounded-lg bg-white/[0.08] border border-white/10 text-white/80">{x}</span>)}
+            {r && r.base.src !== "none" && <span className="px-2.5 py-1 rounded-lg border border-white/25">산출 기준 · {r.base.src === "rate" ? `${r.rate?.sheetName || ""} 단가표` : r.base.src === "manse" ? "만세보령 단가표" : "자사 실거래"}{autoRule ? " + 노선 규칙" : ""}</span>}
           </div>
           <div className="relative grid grid-cols-1 sm:grid-cols-[1.25fr_1.25fr_1fr] gap-3 mt-5">
             <div className="rounded-2xl bg-white text-[#0F1A30] px-[18px] py-4" data-fq-sale={r?.total.sale || 0}>
@@ -203,7 +222,7 @@ export default function FareQuote({ company = "" }) {
           </div>
 
           <div className="bg-white border border-[#E3E8F0] rounded-[20px] p-5">
-            <div className="flex items-baseline gap-2 mb-3.5"><span className="text-[15px] font-black text-[#0F1A30]">자사 실거래 비교</span><span className="text-[12px] text-[#6B7A93]">동일 구간 · {q.톤수 || "전체 톤급"} · 최근 6개월</span></div>
+            <div className="flex items-baseline gap-2 mb-3.5"><span className="text-[15px] font-black text-[#0F1A30]">자사 실거래 비교</span><span className="text-[12px] text-[#6B7A93]">동일 구간 · {manseOn ? "전체 수량" : q.톤수 || "전체 톤급"} · 최근 6개월</span></div>
             {!ready ? <div className="py-10 text-center text-[13px] text-[#8A97AD]">구간을 넣으면 비교해요.</div>
               : !orders ? <div className="py-10 text-center text-[13px] text-[#8A97AD]">불러오는 중…</div>
               : !hist?.count ? <div className="py-10 text-center text-[13px] text-[#8A97AD]">같은 구간 기록이 없어요.</div>
@@ -230,6 +249,27 @@ export default function FareQuote({ company = "" }) {
               })()}
           </div>
         </div>
+        {manseOn && jy && manse && (() => {
+          const list = Object.values(manse.places).sort((a, b) => b.count - a.count);
+          const won0 = (n) => (n ? `+${won(n)}` : "—");
+          return (
+            <div className="bg-white border border-[#E3E8F0] rounded-[20px] p-5 mt-4" data-manse-learn="1">
+              <div className="flex flex-wrap items-baseline gap-2 mb-1"><span className="text-[15px] font-black text-[#0F1A30]">만세보령 시트 기록 판별</span><span className="text-[12px] text-[#6B7A93]">최근 6개월 {manse.count}건 · 적용 단가 {manse.version === "fuel" ? "유류비 인상" : "2024.9.6"} (일치 {manse.vote.fuel} : {manse.vote.base})</span></div>
+              <div className="text-[11.5px] text-[#8A97AD] mb-3 break-keep">하차지마다 시트 금액이 어느 지역 · 구간 금액과 맞는지 찾았어요. 표와 안 맞는 하차지는 주소로 지역을 정하고 ‘확인 필요’로 표시해요. {REGIONS.map((g) => `${g} ${list.filter((x) => x.region === g).length}곳`).join(" · ")}</div>
+              <div className="max-h-[320px] overflow-y-auto">
+                <div className="grid grid-cols-[1fr_64px_80px_84px] gap-x-3 text-[11.5px] font-bold text-[#6B7A93] pb-2 border-b border-[#E3E8F0] sticky top-0 bg-white"><span>하차지</span><span>지역</span><span className="text-right">추가요금</span><span className="text-right">시트 일치</span></div>
+                {list.map((x) => (
+                  <div key={x.하차지명} className={`grid grid-cols-[1fr_64px_80px_84px] gap-x-3 py-2 border-b border-[#F0F3F7] text-[13px] tabular-nums ${mPlace && mPlace.하차지명 === x.하차지명 ? "bg-[#F2F6FC]" : ""}`}>
+                    <button type="button" onClick={() => set({ 하차지명: x.하차지명 })} className="text-left font-bold text-[#0F1A30] truncate hover:underline">{x.하차지명}</button>
+                    <span className="text-[#3C4A63]">{x.region || "모름"}</span>
+                    <span className="text-right text-[#0F1A30] font-bold">{won0(x.surcharge)}</span>
+                    <span className={`text-right ${x.src === "기록" ? "text-[#3C4A63]" : "text-[#0F1A30] font-black"}`}>{x.src === "기록" ? `${x.matched}/${x.checked}건` : x.mismatch ? "확인 필요" : "경유만"}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
         <div className="flex gap-2.5 mt-4">
           <button type="button" disabled={!has} onClick={copy} className="flex-1 h-[50px] rounded-[14px] bg-[#0F1A30] text-white text-[15px] font-extrabold disabled:opacity-40">{copied ? "복사했어요" : "견적서 복사"}</button>
         </div>

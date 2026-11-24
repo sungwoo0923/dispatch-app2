@@ -97,6 +97,9 @@ import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고�
 import ColumnStyleHost from "./ColumnStyle"; // 🎨 2026-11-03 컬럼명 오른쪽 클릭 → 색 변경 // ⭐ 2026-11-03 배차현황 › 고정노선현황
 import { splitContactCell, isCleanPhone, cleanPlaceContacts } from "./contactCell"; // ☎ 담당자번호 칸에는 번호만
 import { isJyCompany } from "./jyOnly"; // 🏷 JY로지스틱스 전용 기능(단가표 자동 입력 등)
+import { findRate } from "./fareQuoteCore";
+import { aliasKeys, aliasKey } from "./jyAliases";
+import { isManse, learnManse, quoteManse } from "./manseRateCore"; // 🌾 만세보령 지역 × 수량 단가 // 🏷 2026-11-24 단가표 고르기(운임 산출과 같은 규칙 · JY 별칭)
 import QuickNav from "./QuickNav";
 import { ManualHost, ManualButton } from "./WorkManual"; // 📘 2026-11-14 업무 매뉴얼 · 회계용어 창(정산 · 회계 · 자금 · 비품) // 🔎 2026-11-12 통합 검색(Ctrl+K) · 자주 쓰는 메뉴 · 도움말 센터
 import { useScreenFit, ScreenSettingsButton, BrowserZoomNotice } from "./ScreenFit"; // 🖥 2026-11-10 화면 맞춤 · 브라우저 확대 안내
@@ -2996,7 +2999,8 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동 계산)
 import FareRulesSettings from "./FareRulesSettings";
 import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
-import { SpecialFareTag, SpecialFareLine } from "./specialFareTag"; // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
+import { SpecialFareTag, SpecialFareLine } from "./specialFareTag";
+import { FareShell, FareCard, FareRange, FareRow, FareVias, FareFilterPills, fareStats } from "./FareResultUi"; // 🎨 2026-11-24 운임조회 결과 창 새 디자인 // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import { withRoutePresets } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
 import { SpecialFareButton, ForkliftChip, ForkliftMark, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount, orderProfit, profitTotals } from "./forklift"; // 🏗 2026-11-09 지게차비용 · ⭐ 2026-11-17 수수료 한 식(orderProfit · profitTotals)
 import { useTableSort, sortRows, SortTh } from "./tableSort";
@@ -14714,7 +14718,7 @@ const ROUND_DISCOUNT = 0.9; // ★ 10% 할인 (조정 가능)
           // 💰 2026-11-12 낱말 순서만 다른 이름도 같은 곳("용인 네이버" = "네이버용인")
           const tok = (v) => String(v || "").trim().split(/\s+/).map(normRateText).filter(Boolean).sort().join("|");
           const wordHit = isJyCompany(userCompany) && !!(dropName && rName && dropName.length === rName.length && tok(form.하차지명).includes("|") && [...tok(form.하차지명).split("|")].every((w) => rName.includes(w)));
-          const nameHit = !!(dropName && rName && (rName.includes(dropName) || dropName.includes(rName))) || wordHit;
+          const nameHit = !!(dropName && rName && (rName.includes(dropName) || dropName.includes(rName))) || wordHit || (isJyCompany(userCompany) && aliasKeys(form.하차지명).includes(aliasKey(r.name)));
           const addrHit = !!(dropAddr && rAddr && dropAddr.length >= 6 && rAddr.length >= 6 && (rAddr.includes(dropAddr) || dropAddr.includes(rAddr)));
           if (nameHit || addrHit) results.push({ sheet, row: r, nameHit, addrHit });
         });
@@ -14725,32 +14729,22 @@ const ROUND_DISCOUNT = 0.9; // ★ 10% 할인 (조정 가능)
     //  청구운임을 자동으로 넣는다(단가표 줄에 매입 단가 buyPrices가 있으면 기사운임도). 사람이 직접 넣은 금액은 덮어쓰지 않는다.
     //  · 맞는 줄 고르기: 하차지명이 같고(이름 일치) 톤수 칸이 똑같은 것 → 기준지가 거래처명 · 상차지명과 맞는 것 우선
     //  · 후보가 여러 개인데 금액이 서로 다르면 넣지 않는다(단가표 버튼으로 직접 확인)
+    const manseOn = isJyCompany(userCompany) && isManse(form);
+    const manseLearned = React.useMemo(() => (manseOn && Array.isArray(dispatchData) && dispatchData.length ? learnManse(dispatchData) : null), [manseOn, dispatchData]); // eslint-disable-line react-hooks/exhaustive-deps
+    // 🏷 2026-11-24 고르기 규칙은 src/fareQuoteCore.js findRate(운임조회 › 운임 산출과 같음) + JY 별칭(평택초저온 = 베베숲 평택 · 에이제이 = 제이글로벌 …)
     const autoRate = React.useMemo(() => {
       if (!isJyCompany(userCompany)) return null; // 🏷 JY로지스틱스만
       // 톤수 칸이 비어 있고 차량종류 칸에 톤수("11톤")를 골랐으면 그 톤수로 찾는다
-      const ton = normRateText(form.차량톤수) || (/^\d+(\.\d+)?\s*톤/.test(String(form.차량종류 || "").trim()) ? normRateText(form.차량종류) : "");
-      const drop = normRateText(form.하차지명);
-      if (!ton || !drop) return null;
-      const bases = [form.거래처명, form.상차지명].map(normRateText).filter(Boolean);
-      const cands = [];
-      rateSheetMatches.forEach(({ sheet, row, nameHit }) => {
-        if (!nameHit) return;
-        const col = (sheet.columns || []).find((c) => normRateText(c.label) === ton);
-        const sale = col ? Number(String(row.prices?.[col.id] ?? "").replace(/[^\d]/g, "")) || 0 : 0;
-        if (!sale) return;
-        const buy = Number(String(row.buyPrices?.[col.id] ?? "").replace(/[^\d]/g, "")) || 0;
-        const bn = normRateText(sheet.baseName);
-        const baseHit = !!bn && bases.some((x) => x.includes(bn) || bn.includes(x));
-        const exact = normRateText(row.name) === drop;
-        cands.push({ sale, buy, baseHit, exact, label: `${sheet.baseName || ""} → ${row.name} · ${col.label}` });
-      });
-      if (!cands.length) return null;
-      const rank = (c) => (c.baseHit ? 2 : 0) + (c.exact ? 1 : 0);
-      const top = Math.max(...cands.map(rank));
-      const best = cands.filter((c) => rank(c) === top);
-      if (new Set(best.map((c) => `${c.sale}/${c.buy}`)).size > 1) return null;
-      return best[0];
-    }, [rateSheetMatches, form.차량톤수, form.차량종류, form.하차지명, form.거래처명, form.상차지명]);
+      const ton = String(form.차량톤수 || "").trim() || (/^\d+(\.\d+)?\s*톤/.test(String(form.차량종류 || "").trim()) ? String(form.차량종류).trim() : "");
+      // 🌾 2026-11-24 만세보령 — 지역 × 수량(포) 단가표 + 비고 추가요금 · 기사운임은 지난 오더(구글시트 기록)로 배운 값(src/manseRateCore.js)
+      if (isManse(form)) {
+        const m = manseLearned ? quoteManse(form, manseLearned) : null;
+        return m && m.sale ? { sale: m.sale, buy: m.buy || 0, label: `만세보령 ${m.tier.label}` } : null;
+      }
+      const r = findRate(multiRateSheets, { 거래처명: form.거래처명, 상차지명: form.상차지명, 하차지명: form.하차지명, 톤수: ton }, { aliases: true });
+      if (!r || r.ambiguous) return null;
+      return { ...r, label: `${r.sheetName || ""} → ${r.rowName} · ${r.ton}` };
+    }, [multiRateSheets, manseLearned, form.차량톤수, form.차량종류, form.하차지명, form.하차지주소, form.화물내용, form.경유하차목록, form.거래처명, form.상차지명]);
     const autoRateRef = React.useRef({ sale: "", buy: "" }); // 마지막으로 자동 입력한 금액(사람이 고쳤는지 구분)
     React.useEffect(() => {
       if (!autoRate || !canMoney) return;
@@ -21473,303 +21467,58 @@ setConfirmChange(null);
     const range = rangeMax - rangeMin || 1;
     return Math.min(100, Math.max(0, ((fare - rangeMin) / range) * 100));
   };
-
+  // 🎨 2026-11-24 새 디자인(src/FareResultUi.jsx) — 운임조회 › 운임 산출과 같은 모양 · 계산은 위 그대로
+  const _apply = (v) => { onChange("청구운임", String(v)); setFareModalOpen(false); };
+  const _stats = fareStats(sortedHistory);
+  const _shown = sortedHistory.filter((r) => fare3Filter === "all" || (r._match?.label || "경로일치") === fare3Filter);
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[99999] p-4">
-      <div className="bg-white rounded-2xl w-[580px] max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
-
-        {/* 헤더 */}
-        <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between shrink-0">
+    <FareShell zClass="z-[99999]" from={form.상차지명} to={form.하차지명} stats={_stats} kpiLabel="대표 청구운임" onClose={() => setFareModalOpen(false)}
+      chips={[form.차량톤수, form.차량종류, form.화물내용, trend ? (trend === "up" ? "최근 상승 추세" : trend === "down" ? "최근 하락 추세" : "최근 안정적") : ""]}>
+      <FareCard title="운임 분포" sub={`${rangeCount}건${_rangeTonInput != null ? ` · ${form.차량톤수 || _rangeTonInput + "톤"} 이하` : ""}`}>
+        {rangeCount === 0 ? <div className="py-6 text-center text-[13px] text-[#8A97AD]">입력한 톤수 이하의 과거 이력이 없어요.</div> : (
+          <FareRange min={rangeMin} max={rangeMax} marker={rangeModeFare} markerLabel="대표" sales={_rangeFares.map((x) => x.fare)} onApply={_apply}
+            quick={[
+              { label: "최저 운임", sub: "가장 낮은 이력", value: rangeMin },
+              { label: "대표 운임", sub: `가장 많이 청구(${rangeModeCount}건)`, value: rangeModeFare, strong: true },
+              { label: "최고 운임", sub: "가장 높은 이력", value: rangeMax },
+              ...(aiResult.fare ? [{ label: "AI 추천", sub: aiResult.reason === "EXACT" ? "동일 조건 기반" : "유사 조건 기반", value: aiResult.fare }] : []),
+            ]} />
+        )}
+      </FareCard>
+      {modeFare != null && (
+        <div className="bg-white border border-[#0F1A30] rounded-[20px] px-5 py-4 flex items-center justify-between gap-3">
           <div>
-            <div className="text-white font-bold text-[17px] tracking-tight">운임 조회 결과</div>
-            <div className="text-white/55 text-[12px] mt-1 font-medium">
-              {form.상차지명 || "-"} → {form.하차지명 || "-"}
-              {form.차량톤수 && <span className="mx-1.5 text-white/30">·</span>}
-              {form.차량톤수 && <span>{form.차량톤수}</span>}
-              {form.화물내용 && <span className="mx-1.5 text-white/30">·</span>}
-              {form.화물내용 && <span>{form.화물내용}</span>}
-            </div>
+            <div className="text-[12px] font-bold text-[#6B7A93]">이 톤수 · 화물의 평소 운임(최빈값)</div>
+            <div className="text-[22px] font-black text-[#0F1A30] tabular-nums mt-0.5">{modeFare.toLocaleString()}원</div>
+            <div className="text-[11.5px] text-[#6B7A93] mt-0.5">동일 조건 {tier0Total}건 중 {modeCount}건({modeSharePct}%)</div>
           </div>
-          <button onClick={() => setFareModalOpen(false)}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl flex items-center justify-center transition mt-0.5">
-            ×
-          </button>
+          <button type="button" onClick={() => _apply(modeFare)} className="shrink-0 h-10 px-4 text-[13px] font-extrabold text-white bg-[#0F1A30] rounded-xl">이 금액 적용</button>
         </div>
-
-        <div className="flex-1 overflow-y-auto">
-
-          {/* 운임 범위 요약 — 지금 입력한 톤수 안에 드는 이력만으로 범위를 잡는다 */}
-          <div className="px-6 py-5 border-b border-gray-100">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                조회 운임 범위 ({rangeCount}건{_rangeTonInput != null ? ` · ${form.차량톤수 || _rangeTonInput + "톤"} 이하` : ""})
-              </span>
-              {trend && (
-                <span className="text-[12px] font-bold text-gray-500">
-                  {trend === "up" ? "상승 추세" : trend === "down" ? "하락 추세" : "안정적"}
-                </span>
-              )}
-            </div>
-
-            {rangeCount === 0 ? (
-              <div className="py-6 text-center text-[13px] font-semibold text-gray-500">
-                입력한 톤수 이하의 과거 이력이 없습니다.
-              </div>
-            ) : (
-            <>
-            {/* 최저~최고 */}
-            <div className="flex items-baseline gap-2 mt-1 mb-4">
-              <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{rangeMin.toLocaleString()}</span>
-              <span className="text-[18px] font-bold text-gray-400">~</span>
-              <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{rangeMax.toLocaleString()}</span>
-              <span className="text-[14px] font-semibold text-gray-500 mb-0.5">원</span>
-            </div>
-
-            {/* 범위 바 */}
-            <div className="relative h-2 bg-gray-100 rounded-full mb-2">
-              <div className="absolute inset-0 bg-gray-200 rounded-full" />
-              {/* 대표(최다 청구) 마커 */}
-              <div
-                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
-                style={{ left: `calc(${getRangeBarPct(rangeModeFare)}% - 6px)` }}
-              />
-            </div>
-            <div className="flex justify-between text-[11px] font-semibold text-gray-500">
-              <span>최저 {rangeMin.toLocaleString()}원</span>
-              <span className="text-[#1B2B4B] font-bold">대표 {rangeModeFare.toLocaleString()}원</span>
-              <span>최고 {rangeMax.toLocaleString()}원</span>
-            </div>
-
-            {/* 빠른 적용 버튼 - AI 추천 통합 */}
-<div className="grid grid-cols-4 gap-2 mt-4">
-  {[
-    { label: "최저 운임", sub: "가장 저렴한 이력", value: rangeMin, ai: false },
-    { label: "대표 운임", sub: `가장 많이 청구된 금액(${rangeModeCount}건)`, value: rangeModeFare, ai: false },
-    { label: "최고 운임", sub: "가장 높은 이력",   value: rangeMax, ai: false },
-    ...(aiResult.fare ? [{
-      label: "AI 추천",
-      sub: aiResult.reason === "EXACT" ? "동일 조건 기반" : "유사 조건 기반",
-      value: aiResult.fare,
-      ai: true
-    }] : []),
-  ].map(({ label, sub, value, ai }) => (
-    <button key={label}
-      onClick={() => { onChange("청구운임", String(value)); setFareModalOpen(false); }}
-      className={`rounded-xl border px-3 py-3 text-center transition group active:scale-95
-        ${ai
-          ? "border-gray-300 bg-gray-50 hover:bg-[#1B2B4B] hover:border-[#1B2B4B]"
-          : "border-gray-200 bg-gray-50 hover:bg-[#1B2B4B] hover:border-[#1B2B4B]"
-        }`}>
-      <div className="text-[10px] font-bold mb-1 text-gray-500 group-hover:text-white/60">
-        {label}
-      </div>
-      <div className="text-[18px] font-extrabold leading-none text-[#1B2B4B] group-hover:text-white">
-        {value.toLocaleString()}
-      </div>
-      <div className="text-[10px] mt-1 text-gray-500 group-hover:text-white/50">
-        {sub}
-      </div>
-    </button>
-  ))}
-</div>
-            </>
-            )}
-          </div>
-
-          {/* 과거 운송 기록 */}
-          {sortedHistory.length > 0 && (
-            <div className="px-6 pt-4 pb-6">
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
-                <FareSortDropdown value={fareSortMode} onChange={setFareSortMode} />
-              </div>
-
-              {/* 대표운임(최빈값) — 지금과 같은 화물/톤수 조건에서 가장 자주 청구된 "평소 가격".
-                  목록이 최신순/이력순으로 섞여 있어도 이 카드가 항상 기준값 역할을 한다. */}
-              {modeFare != null && (
-                <div className="mb-3 px-4 py-3 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-xl flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-[11px] font-bold text-[#1B2B4B]">이 톤수·화물의 평소 운임(최빈값)</div>
-                    <div className="text-[18px] font-black text-[#1B2B4B] mt-0.5">{modeFare.toLocaleString()}원</div>
-                    <div className="text-[11px] text-gray-500 mt-0.5">동일 조건 {tier0Total}건 중 {modeCount}건({modeSharePct}%)이 이 가격으로 청구됨</div>
-                  </div>
-                  <button onClick={() => { onChange("청구운임", String(modeFare)); setFareModalOpen(false); }}
-                    className="shrink-0 px-3 py-2 text-[12px] font-bold text-white bg-[#1B2B4B] hover:bg-[#243a60] rounded-lg transition">
-                    이 금액 적용
-                  </button>
-                </div>
-              )}
-
-              {/* 필터 — 버튼 여러 개 대신 드롭다운 하나로 선택 */}
-              {(() => {
-                const counts = { "완전일치": 0, "부분일치": 0, "톤수일치": 0, "경로일치": 0 };
-                sortedHistory.forEach(r => {
-                  const lbl = r._match?.label || "경로일치";
-                  counts[lbl] = (counts[lbl] || 0) + 1;
-                });
-                const tabs = ["all", "완전일치", "부분일치", "톤수일치", "경로일치"];
-                return (
-                  <CustomSelect value={fare3Filter} onChange={e => setFare3Filter(e.target.value)}
-                    className="mb-3 text-[12px] font-bold text-[#1B2B4B] border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none cursor-pointer bg-white">
-                    {tabs.map(t => {
-                      const cnt = t === "all" ? sortedHistory.length : (counts[t] || 0);
-                      if (t !== "all" && cnt === 0) return null;
-                      return <option key={t} value={t}>{t === "all" ? `전체 ${cnt}건` : `${t} ${cnt}건`}</option>;
-                    })}
-                  </CustomSelect>
-                );
-              })()}
-              <div className="space-y-2">
-                {sortedHistory.map((r, idx) => {
-                  const matchLabel = r._match?.label || "경로일치";
-                  if (fare3Filter !== "all" && matchLabel !== fare3Filter) return null;
-                  const fare = Number(String(r.청구운임||"0").replace(/[^\d]/g,""));
-                  const { label: fareLabel, cls: fareCls } = getFareTag(fare);
-                  const sameCargo = getTotalPalletFromOrder(r) === getTotalPalletFromOrder(form);
-                  const sameTon = getTotalTonFromOrder(r) === getTotalTonFromOrder(form);
-                  const isTop = idx === 0;
-                  const barPct = getBarPct(fare);
-
-                  return (
-                    <div key={idx}
-                      className={`rounded-xl border overflow-hidden ${isTop ? "border-[#1B2B4B]/40" : "border-gray-150"}`}>
-
-                      {isTop && (
-                        <div className="bg-[#1B2B4B] px-4 py-1.5 flex items-center gap-1.5">
-                          <span className="text-white text-[11px] font-bold">최근 유사 운송</span>
-                        </div>
-                      )}
-
-                      <div className="px-4 py-3 bg-white">
-                        {/* 날짜 + 태그 — 뱃지(알약형) 대신 네모난 틀, 색은 네이비/회색/주황(경고)만 사용 */}
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[13px] font-bold text-gray-600">{r.상차일}</span>
-                          <div className="flex gap-1 flex-wrap justify-end">
-                            <span className={`px-2 py-0.5 text-[11px] font-bold rounded border ${
-                              matchLabel === "완전일치" ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-gray-300 text-gray-500"
-                            }`}>{matchLabel}</span>
-                            {r._palletCount != null && (
-                          <span className={`px-2 py-0.5 text-[11px] font-bold rounded border ${
-                            r._palletCount === _inputPalletNum ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-gray-300 text-gray-500"
-                          }`}>{r._palletCount}파렛</span>
-                        )}
-                        {r._boxCount != null && r._boxCount >= 0 && (
-                          <span className={`px-2 py-0.5 text-[11px] font-bold rounded border ${
-                            r._boxCount === _inputBoxNum ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-gray-300 text-gray-500"
-                          }`}>{r._boxCount}박스</span>
-                        )}
-                        {r._cargoText && (
-                          <span className={`px-2 py-0.5 text-[11px] font-bold rounded border ${
-                            r._cargoText === _inputCargoStr ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-gray-300 text-gray-500"
-                          }`}>{r._cargoText}</span>
-                        )}
-                        {modeRow && r === modeRow && (r._groupSize || 1) > 1 && (
-                          <span className="px-2 py-0.5 text-[10px] font-bold rounded border border-[#1B2B4B] text-[#1B2B4B]">가장 흔한 운임 {r._groupSize}건</span>
-                        )}
-                        {(!modeRow || r !== modeRow) && r._groupSize > 1 && (
-                          <span className="px-2 py-0.5 text-[10px] rounded border border-gray-300 text-gray-500">이력 {r._groupSize}건</span>
-                        )}
-                        {isOutlierRow(r) && (
-                          <span className="px-2 py-0.5 text-[10px] font-bold rounded border border-orange-300 text-orange-700">이례적 청구(반복없음)</span>
-                        )}
-                        <SpecialFareTag row={r} size="sm" />
-                        <span className={`px-2 py-0.5 text-[11px] font-bold rounded border ${fareCls}`}>{fareLabel}</span>
-                          </div>
-                        </div>
-
-                        {/* 루트 */}
-                        <div className="text-[14px] font-extrabold text-gray-900 mb-1">
-                          {r.상차지명 || "-"} → {r.하차지명 || "-"}
-                        </div>
-                        {(() => {
-                          const sa=v=>{if(Array.isArray(v))return v;if(typeof v==="string"&&v.trim().startsWith("["))try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];}return[];};
-                          const toN=s=>typeof s==="string"?s:(s?.업체명||s?.지명||s?.주소||"");
-                          const parseMainVias=(name)=>{const ms=[...String(name||"").matchAll(/(\d+)\.\s*([^\d\n.]+)/g)];return ms.length>1?ms.sort((a,b)=>+a[1]-+b[1]).slice(1).map(m=>m[2].trim()):[];};
-                          const pV=[...new Set([...sa(r.경유상차목록||[]),...sa(r.경유지_상차||[]),...sa(r.경유지상차||[])].map(toN).filter(Boolean))];
-                          const dV=[...new Set([...sa(r.경유하차목록||[]),...sa(r.경유지_하차||[]),...sa(r.경유지하차||[])].map(toN).filter(Boolean))];
-                          const allPV=pV.length?pV:parseMainVias(r.상차지명);
-                          const allDV=dV.length?dV:parseMainVias(r.하차지명);
-                          if(!allPV.length&&!allDV.length)return null;
-                          return(
-                            <div className="flex items-center gap-1 flex-wrap mb-1">
-                              <span className="px-2 py-0.5 border border-[#1B2B4B]/30 text-[#1B2B4B] text-[10px] font-bold rounded">경유 포함</span>
-                              {allPV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-gray-500 border border-gray-200 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
-                              {allDV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-gray-500 border border-gray-200 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
-                            </div>
-                          );
-                        })()}
-                        <div className="text-[13px] font-semibold text-gray-600 mb-2">
-                          {r.차량종류 || "-"} / {r.차량톤수 || "-"}
-                          {r.화물내용 && <span> · {r.화물내용}</span>}
-                        </div>
-                        <SpecialFareLine row={r} className="mb-2" />
-
-                        {/* 운임 위치 바 */}
-                        <div className="relative h-1.5 bg-gray-100 rounded-full mb-3">
-                          <div
-                            className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#1B2B4B] border-2 border-white shadow"
-                            style={{ left: `calc(${barPct}% - 5px)` }}
-                          />
-                        </div>
-
-                        {/* 기사 + 운임 + 버튼 */}
-                        <div className="flex items-center justify-between">
-                          <div className="flex flex-col gap-0.5">
-                            <div className="text-[13px] font-bold text-gray-800">
-                              기사: {r.이름 || "-"}
-                            </div>
-                            <div className="text-[12px] text-gray-500">
-                              기사운임: <span className="font-bold text-gray-700">{Number(r.기사운임||0).toLocaleString()}원</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-baseline gap-1">
-                              <span className="text-[20px] font-extrabold text-[#1B2B4B]">
-                                {fare.toLocaleString()}원
-                              </span>
-                              {(() => {
-                                const fares = sortedHistory.map(r2 => Number(String(r2.청구운임||"0").replace(/[^\d]/g,""))).filter(f => f > 0);
-                                const avg = fares.length ? Math.round(fares.reduce((a,b)=>a+b,0)/fares.length) : 0;
-                                const diff = fare - avg;
-                                if (!avg || Math.abs(diff) < 1000) return <span className="text-[11px] text-gray-500 ml-1">평균</span>;
-                                return (
-                                  <span className={`text-[11px] ml-1 font-semibold ${diff > 0 ? "text-red-500" : "text-blue-500"}`}>
-                                    {diff > 0 ? `+${diff.toLocaleString()}` : diff.toLocaleString()}원
-                                  </span>
-                                );
-                              })()}
-                            </div>
-                            <button
-                              onClick={() => { onChange("청구운임", String(r.청구운임)); setFareModalOpen(false); }}
-                              className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition active:scale-95">
-                              적용
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {sortedHistory.length === 0 && (
-            <div className="py-12 text-center text-[13px] font-semibold text-gray-500">
-              과거 운송 기록이 없습니다.
-            </div>
-          )}
+      )}
+      <FareCard title="과거 운송 기록" sub={`${_shown.length}건`} right={<FareSortDropdown value={fareSortMode} onChange={setFareSortMode} />}>
+        <FareFilterPills records={sortedHistory} filter={fare3Filter} setFilter={setFare3Filter} />
+        <div className="space-y-2">
+          {_shown.map((r, idx) => {
+            const fare = Number(String(r.청구운임 || "0").replace(/[^\d]/g, ""));
+            const matchLabel = r._match?.label || "경로일치";
+            return (
+              <FareRow key={idx} rec={r} top={idx === 0 && fare3Filter === "all"} avg={_stats?.saleAvg || 0} pct={getBarPct(fare)} onApply={() => _apply(r.청구운임)}
+                tags={[
+                  { text: matchLabel, strong: matchLabel === "완전일치" },
+                  r._palletCount != null && { text: `${r._palletCount}파렛`, strong: r._palletCount === _inputPalletNum },
+                  r._boxCount != null && r._boxCount >= 0 && { text: `${r._boxCount}박스`, strong: r._boxCount === _inputBoxNum },
+                  r._cargoText && { text: r._cargoText, strong: r._cargoText === _inputCargoStr },
+                  modeRow && r === modeRow && (r._groupSize || 1) > 1 ? { text: `가장 흔한 운임 ${r._groupSize}건`, strong: true } : r._groupSize > 1 ? { text: `이력 ${r._groupSize}건` } : null,
+                  isOutlierRow(r) && { text: "이례적 청구(반복없음)", warn: true },
+                  { text: getFareTag(fare).label },
+                ]}
+                vias={<FareVias rec={r} />} extra={{ tag: <SpecialFareTag row={r} size="sm" />, line: <SpecialFareLine row={r} className="mt-1" /> }} />
+            );
+          })}
+          {!sortedHistory.length && <div className="py-10 text-center text-[13px] text-[#8A97AD]">과거 운송 기록이 없어요.</div>}
         </div>
-
-        {/* 닫기 */}
-        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
-          <button onClick={() => setFareModalOpen(false)}
-            className="w-full py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[14px] font-bold transition">
-            닫기
-          </button>
-        </div>
-      </div>
-    </div>
+      </FareCard>
+    </FareShell>
   );
 })()}
         {/* ⭐ 4파트 동일한 실시간배차현황 테이블 */} 

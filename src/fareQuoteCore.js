@@ -4,6 +4,8 @@
 //   ① 기본 운임 = 단가표(multiRateSheets — 오더등록 "단가표 자동 입력"과 같은 고르기) → 없으면 자사 실거래 최빈값
 //   ② 부대비용 = 고정노선운임(functions/routePresetCore.mjs planRoutePreset — 오더등록 자동 적용과 같은 계산)
 //   ③ 합계 = applyPlanToRec(서버 · 구글시트 가져오기와 같은 계산)
+import { aliasKeys, aliasKey } from "./jyAliases.js";
+import { isManse, quoteManse } from "./manseRateCore.js";
 import { planRoutePreset, applyPlanToRec, itemName, itemPayee, itemMode, nk, num } from "../functions/routePresetCore.mjs";
 
 export const ARRIVALS = ["당착", "야상", "익착", "월착"];
@@ -13,23 +15,30 @@ const tonKey = (v) => normRate(v).replace(/톤$/, "");
 // ── 단가표 고르기(src/DispatchApp.jsx autoRate와 같은 순서) ──────────────
 //  하차지명이 맞는 줄 + 톤수 칸 → 기준지(거래처 · 상차지)가 맞는 것 > 하차지 이름이 똑같은 것
 //  가장 맞는 후보들의 금액이 서로 다르면 ambiguous(직접 확인)
-export function findRate(sheets = [], q = {}) {
+//  aliases(JY): 같은 곳의 다른 이름(평택초저온 = 베베숲 평택 · 에브리데이 시화 = 트레이더스 시화 · 에이제이 = 제이글로벌)도 맞는 것으로 본다
+export function findRate(sheets = [], q = {}, { aliases = false } = {}) {
   const ton = tonKey(q.톤수);
   const drop = normRate(q.하차지명);
   if (!ton || !drop) return null;
   const bases = [q.거래처명, q.상차지명].map(normRate).filter(Boolean);
+  const dropA = aliases ? aliasKeys(q.하차지명) : [];
+  const baseA = aliases ? [q.거래처명, q.상차지명].flatMap(aliasKeys) : [];
   const cands = [];
   (sheets || []).forEach((sheet) => {
     (sheet.rows || []).forEach((row) => {
       const rName = normRate(row.name);
-      if (!rName || !(rName.includes(drop) || drop.includes(rName))) return;
+      // 낱말 순서만 다른 이름도 같은 곳("용인 네이버" = "네이버용인") — 오더등록 단가표 자동 입력과 같은 규칙(JY)
+      const words = String(q.하차지명 || "").trim().split(/\s+/).map(normRate).filter(Boolean);
+      const wordHit = aliases && words.length > 1 && rName.length === drop.length && words.every((w) => rName.includes(w));
+      const aliasHit = aliases && (dropA.includes(aliasKey(row.name)) || wordHit);
+      if (!rName || !(rName.includes(drop) || drop.includes(rName) || aliasHit)) return;
       const col = (sheet.columns || []).find((c) => tonKey(c.label) === ton);
       const sale = col ? num(row.prices?.[col.id]) : 0;
       if (!sale) return;
       const buy = num(row.buyPrices?.[col.id]);
       const bn = normRate(sheet.baseName);
-      const baseHit = !!bn && bases.some((x) => x.includes(bn) || bn.includes(x));
-      cands.push({ sale, buy, baseHit, exact: rName === drop, sheetName: String(sheet.baseName || "").trim(), rowName: String(row.name || "").trim(), ton: col.label });
+      const baseHit = !!bn && (bases.some((x) => x.includes(bn) || bn.includes(x)) || (aliases && baseA.includes(aliasKey(sheet.baseName))));
+      cands.push({ sale, buy, baseHit, exact: rName === drop || aliasHit, sheetName: String(sheet.baseName || "").trim(), rowName: String(row.name || "").trim(), ton: col.label });
     });
   });
   if (!cands.length) return null;
@@ -94,10 +103,13 @@ export function arrivalDates(arrival, today) {
 //  q = { 거래처명, 상차지명, 하차지명, 톤수, 도착, 경유 }
 //  → { base: { sale, buy, src: "rate"|"history"|"none", label }, lines: [{ key, name, tag, why, sale, pay, payTo }], total: { sale, driver, external, pay, profit, margin } }
 const won = (n) => Math.round(Number(n) || 0).toLocaleString("ko-KR");
-export function quoteFare({ q = {}, sheets = [], presets = [], hist = null, today = "" } = {}) {
-  const rate = findRate(sheets, q);
+//  manse(JY · learnManse 결과): 거래처가 만세보령이면 지역 × 수량(포) 단가표로 기본 운임 · 비고 추가요금을 정한다(q.수량 · q.반품 · q.경유원거리)
+export function quoteFare({ q = {}, sheets = [], presets = [], hist = null, today = "", aliases = false, manse = null } = {}) {
+  const mq = manse && isManse(q) ? quoteManse({ ...q, 경유: Number(q.경유) || 0 }, manse) : null;
+  const rate = mq ? null : findRate(sheets, q, { aliases });
   let base = { sale: 0, buy: 0, src: "none", label: "" };
-  if (rate && !rate.ambiguous) base = { sale: rate.sale, buy: rate.buy || (hist?.buy?.mode || 0), src: "rate", label: `${rate.sheetName ? `${rate.sheetName} 단가표` : "단가표"} · ${rate.ton} 기준`, buySrc: rate.buy ? "rate" : hist?.buy ? "history" : "none" };
+  if (mq) base = { sale: mq.sale, buy: mq.buy, src: "manse", label: mq.lines[0].why, buySrc: mq.buySrc === "기록" ? "history" : mq.buySrc ? "margin" : "none" };
+  else if (rate && !rate.ambiguous) base = { sale: rate.sale, buy: rate.buy || (hist?.buy?.mode || 0), src: "rate", label: `${rate.sheetName ? `${rate.sheetName} 단가표` : "단가표"} · ${rate.ton} 기준`, buySrc: rate.buy ? "rate" : hist?.buy ? "history" : "none" };
   else if (hist?.sale) base = { sale: hist.sale.mode, buy: hist.buy?.mode || 0, src: "history", label: `자사 실거래 ${hist.count}건 최빈값`, buySrc: hist.buy ? "history" : "none" };
   const stops = Math.max(0, Math.min(9, Number(q.경유) || 0));
   const order = {
@@ -107,7 +119,8 @@ export function quoteFare({ q = {}, sheets = [], presets = [], hist = null, toda
   const plan = planRoutePreset(order, presets);
   const rec = plan ? applyPlanToRec(order, plan) : { ...order, 외부지급합: 0 };
   const lines = [];
-  if (base.sale || base.buy) lines.push({ key: "base", name: "기본 운임", tag: base.src === "rate" ? "단가표" : "실거래", why: base.label + (base.src === "rate" && base.buySrc === "history" ? " · 매입은 실거래 최빈값" : ""), sale: base.sale, pay: base.buy, payTo: "기사" });
+  if (mq) mq.lines.forEach((l, i) => lines.push({ ...l, why: i === 0 ? `${l.why}${mq.buySrc === "기록" ? " · 기사운임 시트 기록 최빈값" : mq.buySrc === "마진" ? " · 기사운임 = 청구 − 지역 마진(시트 기록)" : ""}` : l.why, pay: i === 0 ? Math.max(0, mq.buy - mq.lines.filter((x) => x.key !== "base").reduce((t, x) => t + x.pay, 0)) : l.pay, payTo: "기사" }));
+  else if (base.sale || base.buy) lines.push({ key: "base", name: "기본 운임", tag: base.src === "rate" ? "단가표" : "실거래", why: base.label + (base.src === "rate" && base.buySrc === "history" ? " · 매입은 실거래 최빈값" : ""), sale: base.sale, pay: base.buy, payTo: "기사" });
   if (plan?.fork && num(plan.fork.지게차비용) > 0) {
     const F = num(plan.fork.지게차비용); const m = plan.fork.지게차부담;
     lines.push({ key: "fork", name: "지게차 대행료", tag: "노선 규칙", why: m === "청구" ? "청구액 동일 지급 · 지게차 기사 정산" : m === "기사" ? "기사운임에서 차감 · 지게차 기사 정산" : "회사 부담 · 지게차 기사 정산", sale: m === "청구" ? F : 0, pay: F, payTo: "외부", driverDelta: m === "기사" ? -F : 0 });
@@ -121,7 +134,7 @@ export function quoteFare({ q = {}, sheets = [], presets = [], hist = null, toda
   });
   const sale = num(rec.청구운임), driver = num(rec.기사운임), external = num(rec.외부지급합);
   const profit = sale - driver - external;
-  return { rate, base, lines, plan, stops, order: rec, total: { sale, driver, external, pay: driver + external, profit, margin: sale ? Math.round((profit / sale) * 1000) / 10 : 0 } };
+  return { rate, manse: mq, base, lines, plan, stops, order: rec, total: { sale, driver, external, pay: driver + external, profit, margin: sale ? Math.round((profit / sale) * 1000) / 10 : 0 } };
 }
 function condWhy(it) {
   const c = it.조건;
