@@ -1,5 +1,6 @@
 // ======================= src/freight/FreightSettle.jsx =======================
 // 🧾 2026-11-12 컨테이너 · 해상 · 항공 정산(청구 · 입금 · 지급) · 직원 업무 담당 · 매출관리 요약 줄
+import { isTMUser } from "../staffFilter"; // 🧑‍💻 2026-11-24 최고관리자는 회사 직원이 아님
 import React from "react";
 import { collection, onSnapshot, doc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
@@ -94,7 +95,7 @@ export function StaffBizPage({ modules, canEdit }) {
   const [busy, setBusy] = React.useState("");
   const [q, setQ] = React.useState("");
   React.useEffect(() => onSnapshot(collection(db, "users"), (snap) => {
-    setStaff(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((u) => u.approved !== false && !["driver", "shipper", "cafeUser"].includes(u.role) && u.employmentStatus !== "퇴사")
+    setStaff(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((u) => u.approved !== false && !["driver", "shipper", "cafeUser"].includes(u.role) && !isTMUser(u) && u.employmentStatus !== "퇴사")
       .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ko")));
   }, () => setStaff([])), []);
   const save = async (u, patch) => {

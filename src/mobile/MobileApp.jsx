@@ -1,4 +1,5 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
+import { isTMUser, TM_AFFIL } from "../staffFilter"; // 🧑‍💻 2026-11-24 최고관리자 소속 = 로지스웹 · 개발자
 import { installKeyboardLift } from "./keyboardLift"; // ⌨️ 2026-11-24 자판 위로 입력칸 올리기
 import { MultiCompanyCard } from "../MultiCompanySwitch"; // 🏢 2026-11-24 여러 회사 오가기
 import { useNewSeen, markNewSeen } from "../newFeatures"; // ✨ 2026-11-24 새 메뉴 NEW 표시
@@ -18023,7 +18024,8 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
   const myEmail = currentUser?.email || "";
   const myRole = me?.role || me?.직책 || "";
   const myPhone = me?.phone || me?.전화번호 || "";
-  const myCompany = userCompany || me?.companyName || localStorage.getItem("userCompany") || "";
+  // 🧑‍💻 2026-11-24 최고관리자는 어느 운송사 소속도 아님 → "로지스웹 · 개발자"
+  const myCompany = myRole === "totalMaster" || isTMUser(currentUser) ? TM_AFFIL : (userCompany || me?.companyName || localStorage.getItem("userCompany") || "");
 
   const todayStr = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   const thisMonth = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
@@ -18158,7 +18160,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
 
       {/* 계정 정보 */}
       <KpmCard en="ACCOUNT" title="계정 정보" flush>
-        {[["회사", myCompany || "-"], ["부서 · 직책", [team, position].filter(Boolean).join(" · ") || "-"], ["권한", roleKo + (me?.isMaster ? " · 마스터" : "")], ["연락처", myPhone || "-"], ["이메일", myEmail || "-"], ["계정 ID", currentUser?.uid?.slice(-8) || "-"]].map(([l, v]) => (
+        {[[myCompany === TM_AFFIL ? "소속" : "회사", myCompany || "-"], ["부서 · 직책", [team, position].filter(Boolean).join(" · ") || "-"], ["권한", roleKo + (me?.isMaster ? " · 마스터" : "")], ["연락처", myPhone || "-"], ["이메일", myEmail || "-"], ["계정 ID", currentUser?.uid?.slice(-8) || "-"]].map(([l, v]) => (
           <KpmRow key={l} label={l} value={v} mono={l === "계정 ID" || l === "연락처"} />
         ))}
       </KpmCard>
@@ -21314,7 +21316,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         <div className="relative overflow-hidden rounded-[22px] text-white px-5 py-4 shadow-[0_14px_32px_rgba(15,26,48,0.28)]" style={{ background: KPM_HERO_BG }}>
           <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>SETTINGS · PREFERENCES</div>
           <div className="text-[21px] font-black tracking-tight mt-0.5">설정</div>
-          <div className="text-[12px] text-white/55 truncate">{[userCompany, ROLE_KO[role] || role, currentUser?.email].filter(Boolean).join(" · ")}</div>
+          <div className="text-[12px] text-white/55 truncate">{[role === "totalMaster" ? TM_AFFIL : userCompany, ROLE_KO[role] || role, currentUser?.email].filter(Boolean).join(" · ")}</div>
           <div className="mt-3 grid grid-cols-3 gap-1.5">
             {[["테마", cardVersionB ? "B형" : "A형"], ["글자", { 1: "기본", 1.1: "크게", 1.2: "아주 크게" }[fontScale] || "기본"], ["알림", alarmEnabled ? `켜짐 · ${pushOnCount}종` : "꺼짐"]].map(([l, v]) => (
               <div key={l} className="rounded-xl bg-white/[0.07] ring-1 ring-white/10 px-2.5 py-1.5">
@@ -21379,7 +21381,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         )}
 
         <KpmCard en="ACCOUNT" title="계정" flush>
-          <KpmRow label="회사" value={userCompany || "-"} />
+          <KpmRow label={role === "totalMaster" ? "소속" : "회사"} value={role === "totalMaster" ? `${TM_AFFIL} (보는 운송사: ${userCompany || "-"})` : (userCompany || "-")} />
           <KpmRow label="권한" value={ROLE_KO[role] || role || "-"} />
           <KpmRow label="2차 인증 · 로그인 보안" sub="2차 인증(PIN · 키패드) · 로그인된 기기 · 비밀번호" onClick={() => setLoginMgrOpen(true)} right={go("열기")} />
           {/* ⭐ 2026-11-02 원격지원 — */}
@@ -21700,7 +21702,8 @@ function ERPEmployeeList({ userCompany, cardVersionB, accent }) {
     if (!userCompany) { setLoading(false); return; }
     const q = query(collection(db, "users"), where("companyName", "==", userCompany)); // ⭐ 2026-11-21 사용자 문서 칸 이름은 companyName
     const unsub = onSnapshot(q, snap => {
-      setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      // 🧑‍💻 2026-11-24 최고관리자 · 기사 · 화주는 직원 목록에서 뺀다(PC 조직도와 같게)
+      setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((u) => !isTMUser(u) && !["driver", "shipper", "cafeUser"].includes(u.role) && u.approved !== false));
       setLoading(false);
     }, () => setLoading(false));
     return () => unsub();

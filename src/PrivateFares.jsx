@@ -11,6 +11,7 @@
 //  ▸ 거래처 규칙(실제 청구 자동 계산) — 직접 입력 · 공개 청구운임 + 정액 · 공개 청구운임 × 비율(%)
 //    오더마다 직접 고친 값이 있으면 그 값이 우선
 //  ▸ 화면: 매출관리 › 리포트 도구 › [비공개 청구](담당자에게만 보임 · 권한 확인은 DispatchApp usePrivateFareAccessLazy) — PC·모바일(같은 매출관리 화면)
+import { isTMUser } from "./staffFilter"; // 🧑‍💻 2026-11-24 최고관리자는 회사 직원이 아님
 import React from "react";
 import { createPortal } from "react-dom";
 import { collection, doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
@@ -46,7 +47,7 @@ function useCompanyStaff(company) {
   const [list, setList] = React.useState([]);
   React.useEffect(() => subscribeUsersLive((_l, raw) => {
     setList((raw || []).map(({ id, data }) => ({ id, ...(data || {}) }))
-      .filter((u) => String(u.companyName || "").trim() === String(company || "").trim() && !["driver", "shipper", "cafeUser"].includes(u.role) && u.approved !== false && u.employmentStatus !== "퇴사")
+      .filter((u) => String(u.companyName || "").trim() === String(company || "").trim() && !["driver", "shipper", "cafeUser"].includes(u.role) && !isTMUser(u) && u.approved !== false && u.employmentStatus !== "퇴사")
       .map((u) => ({ id: u.id, name: u.name || u.이름 || u.email || u.id, team: u.team || "", position: u.position || "" }))
       .sort((a, b) => a.name.localeCompare(b.name, "ko")));
   }), [company]);

@@ -1,6 +1,7 @@
 // ⭐ 2026-11-01 근태 요청 결재함 — 나에게 온 출근기록 수정·출근 요청을 승인/거절
 //  임원 화면(결재함)에는 출근기록부 메뉴가 없어서, 인사팀 본인 요청을 임원이 여기서 처리한다.
 //  처리할 요청이 없으면 아무것도 그리지 않는다.
+import { isTMUser } from "./staffFilter"; // 🧑‍💻 2026-11-24 최고관리자는 회사 직원이 아님
 import React, { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "./firebase";
@@ -25,7 +26,7 @@ export function useAttendanceInbox(company, me, role) {
   const [checkInReqs, setCheckInReqs] = useState([]);
   useEffect(() => {
     if (!company) return undefined;
-    const u1 = onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), (s) => setStaff(s.docs.map((d) => ({ uid: d.id, ...d.data() }))), () => {});
+    const u1 = onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), (s) => setStaff(s.docs.map((d) => ({ uid: d.id, ...d.data() })).filter((u) => !isTMUser(u))), () => {});
     const u2 = onSnapshot(query(collection(db, "attendanceChangeRequests"), where("companyName", "==", company), where("status", "==", "pending")), (s) => setChangeReqs(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setChangeReqs([]));
     const u3 = onSnapshot(query(collection(db, "attendanceRequests"), where("companyName", "==", company), where("status", "==", "pending")), (s) => setCheckInReqs(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setCheckInReqs([]));
     return () => { u1(); u2(); u3(); };

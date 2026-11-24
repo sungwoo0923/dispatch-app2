@@ -2971,7 +2971,7 @@ import { LoginManagerModal } from "./LoginManager";
 import "./pcTheme.css";
 import "./pcColorRemap.css"; // ★ PC 알록달록 금지(남색 계열)
 import { OrderTimeline, OrderTimelineModal } from "./OrderTimeline";
-import { isTMUser } from "./staffFilter";
+import { isTMUser, TM_AFFIL, TM_ORG } from "./staffFilter";
 import OrgChart from "./OrgChart";
 import { MailHeaderButton, sendInternalMail, useMailCounts } from "./InternalMail";
 import { useApprovalCounts } from "./Approval";
@@ -10040,8 +10040,10 @@ return (
                 : (userCompany || localStorage.getItem("userCompany") || "");
               return co ? (
                 <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
-                  <p className="text-[11px] font-semibold text-gray-500 mb-0.5">소속 회사</p>
-                  <p className="text-[15px] font-bold text-[#1B2B4B]">{co}</p>
+                  <p className="text-[11px] font-semibold text-gray-500 mb-0.5">{role === "totalMaster" ? "소속" : "소속 회사"}</p>
+                  {/* 🧑‍💻 2026-11-24 최고관리자는 어느 운송사 소속도 아님 — 들어가 보는 회사는 따로 */}
+                  <p className="text-[15px] font-bold text-[#1B2B4B]">{role === "totalMaster" ? TM_AFFIL : co}</p>
+                  {role === "totalMaster" && <p className="text-[11.5px] font-semibold text-gray-500 mt-0.5">지금 보는 운송사: {co}</p>}
                 </div>
               ) : null;
             })()}
@@ -57756,11 +57758,11 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
     } catch (e) { showAlert("이미지 저장 실패: " + (e?.message || e)); }
   };
   const copyContact = async () => {
-    const text = [`${co} ${displayName}${title ? ` (${title})` : ""}`, phone && `휴대폰 ${phone}`, companyTel.tel && `대표번호 ${companyTel.tel}`, companyTel.fax && `팩스 ${companyTel.fax}`, user?.email && `이메일 ${user.email}`, companyAddr && `주소 ${companyAddr}`].filter(Boolean).join("\n");
+    const text = [`${role === "totalMaster" ? TM_ORG : co} ${displayName}${title ? ` (${title})` : ""}`, phone && `휴대폰 ${phone}`, companyTel.tel && `대표번호 ${companyTel.tel}`, companyTel.fax && `팩스 ${companyTel.fax}`, user?.email && `이메일 ${user.email}`, companyAddr && `주소 ${companyAddr}`].filter(Boolean).join("\n");
     try { await navigator.clipboard.writeText(text); showAlert("연락처를 복사했습니다. 카카오톡이나 문자에 붙여 넣으세요."); } catch { showAlert("복사에 실패했습니다."); }
   };
   const saveVcard = () => {
-    const vcf = ["BEGIN:VCARD", "VERSION:3.0", `FN:${displayName}`, `N:${displayName};;;;`, co && `ORG:${co}${myInfo.team ? `;${myInfo.team}` : ""}`,
+    const vcf = ["BEGIN:VCARD", "VERSION:3.0", `FN:${displayName}`, `N:${displayName};;;;`, co && `ORG:${role === "totalMaster" ? TM_ORG : co}${myInfo.team ? `;${myInfo.team}` : ""}`,
       myInfo.position && `TITLE:${myInfo.position}`, phone && `TEL;TYPE=CELL:${phone}`, companyTel.tel && `TEL;TYPE=WORK:${companyTel.tel}`, companyTel.fax && `TEL;TYPE=FAX:${companyTel.fax}`,
       user?.email && `EMAIL:${user.email}`, companyAddr && `ADR;TYPE=WORK:;;${companyAddr};;;;`, "END:VCARD"].filter(Boolean).join("\r\n");
     const url = URL.createObjectURL(new Blob([vcf], { type: "text/vcard;charset=utf-8" }));
@@ -57844,7 +57846,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
                   ["이름", displayName || "-", <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-7 8-7s8 3 8 7" /></>],
                   ["연락처", phone || "-", <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z" />],
                   ["이메일", user?.email || "-", <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>],
-                  ["회사", co || "-", <><path d="M3 21h18M5 21V7l7-4 7 4v14" /><path d="M9 9h1M14 9h1M9 13h1M14 13h1" /></>],
+                  [role === "totalMaster" ? "소속" : "회사", role === "totalMaster" ? TM_AFFIL : (co || "-"), <><path d="M3 21h18M5 21V7l7-4 7 4v14" /><path d="M9 9h1M14 9h1M9 13h1M14 13h1" /></>],
                   ["부서 · 직책", title || "미지정 (인사관리부에서 지정)", <><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></>],
                   ["권한", roleLabel /* ⭐ 2026-11-02 점검 — 한글 권한명 */, <path d="M12 3 5 6v6c0 4.5 3 7.7 7 9 4-1.3 7-4.5 7-9V6z" />],
                 ].map(([k, v, ic]) => (

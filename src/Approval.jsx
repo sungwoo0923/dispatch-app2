@@ -15,6 +15,7 @@
 //  - 수정: 첫 결재자가 문서를 열어보기 전까지만(열람하면 잠김 → 회수 후 재기안).
 //  - 승인 후 취소: 기안자가 「결재 취소 요청」(사유) → 같은 결재선이 다시 승인하면 "결재 취소"로 바뀐다.
 //    문서는 지우지 않고 모두의 보관함에 "결재 취소" 도장으로 남는다(감사 기록). 연차 사용일수도 자동 복구.
+import { TM_AFFIL } from "./staffFilter"; // 🧑‍💻 2026-11-24
 import { defaultFundId } from "./ledgerAuto";
 import { syncExpensesWithApproval, syncExpensesPaid } from "./vehicleExpense"; // 🧾 2026-11-10 차량 비용 영수증 ↔ 지출결의 상태
 import { runDelete, runBulkTask } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
@@ -1767,7 +1768,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
       const payload = {
         company, docNo, cat, form: form.key, formLabel: form.label, title: finalTitle,
         summary: form.summary ? form.summary(pd) : "", amount: form.amount ? form.amount(pd) : 0, days: form.days ? form.days(pd) : 0,
-        data: pd, images: imgs, files: fileMeta, drafterUid: me.uid, drafter: { uid: me.uid, name: me.name, team: me.team || "", position: me.position || "" },
+        data: pd, images: imgs, files: fileMeta, drafterUid: me.uid, drafter: { uid: me.uid, name: me.name, team: me.role === "totalMaster" ? TM_AFFIL : (me.team || ""), position: me.position || "" }, // 🧑‍💻 최고관리자 소속 = 로지스웹 · 개발자
         ...(PLAN_LINK_FORMS.includes(form.key) && pd.planId ? { planId: pd.planId } : {}),
         ...(bizV ? { finIdx: bizV.finIdx } : {}),
         line: L, cc, ccUids: cc.map((c) => c.uid), participants: [...new Set([me.uid, ...L.map((s) => s.uid), ...cc.map((c) => c.uid)])],

@@ -1,4 +1,5 @@
 import { FabButton, SizeButtons, DOCK_BG } from "./FloatDock";
+import { isTMUser, TM_AFFIL } from "./staffFilter"; // 🧑‍💻 2026-11-24
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { imeFocusRef } from "./imeFocus";
 import { createPortal } from "react-dom";
@@ -492,7 +493,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       : query(collection(db, "users"), where("companyName", "==", companyName)));
     const userList = userSnap.docs
       .map(d => ({ uid: d.id || d.uid, ...d.data() }))
-      .filter(u => (u.uid || u.id) !== myUid && u.approved !== false && !excludeRoles.includes(u.role));
+      .filter(u => (u.uid || u.id) !== myUid && u.approved !== false && !excludeRoles.includes(u.role) && !isTMUser(u)); // 🧑‍💻 2026-11-24 최고관리자는 회사 직원이 아님
 
     const profileSnap = await getDocs(query(collection(db, PROFILES_COLL), where("company", "==", role === "shipper" && !crossCompany ? `(화주)${companyName}` : companyName)));
     const profileMap = {};
@@ -3232,7 +3233,7 @@ function ProfileView({ myProfile, editingProfile, editName, editStatusMsg, editP
           <div style={{ background: "#f8fafc", borderRadius: 12, overflow: "hidden", border: "1px solid #e5e7eb" }}>
             {[
               ["이메일", myProfile?.email || ""],
-              ["회사", myProfile?.company || ""],
+              [isTMUser({ email: myProfile?.email, role: (() => { try { return localStorage.getItem("role") || ""; } catch { return ""; } })() }) ? "소속" : "회사", isTMUser({ email: myProfile?.email, role: (() => { try { return localStorage.getItem("role") || ""; } catch { return ""; } })() }) ? TM_AFFIL : (myProfile?.company || "")],
               ["직책", myProfile?.position || "-"],
               ["전화번호", myProfile?.phone ? formatPhone(myProfile.phone) : "-"],
             ].map(([label, value], idx, arr) => (

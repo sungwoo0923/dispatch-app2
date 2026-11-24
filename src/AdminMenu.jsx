@@ -385,7 +385,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const visibleUsers = useMemo(() => {
     if (isTotalMaster) {
       if (!tenantNow) return users.filter((u) => u.role !== "driver");
-      return users.filter((u) => u.role !== "driver" && (u.role !== "shipper" || shipperLinkedTo(u, effectiveCompany)));
+      // 🧑‍💻 2026-11-24 운송사에 들어가 볼 때 최고관리자 본인은 그 회사 회원 목록에 넣지 않는다(어느 운송사 소속도 아님)
+      return users.filter((u) => u.role !== "driver" && u.role !== "totalMaster" && u.email !== TOTAL_MASTER_EMAIL && (u.role !== "shipper" || shipperLinkedTo(u, effectiveCompany)));
     }
     return users.filter(u =>
       u.role !== "driver" &&
