@@ -296,7 +296,7 @@ function InfoPanel({ P, update, say }) {
 }
 function NaverPanel({ P, update, say, makeCardImgs, cardUrls }) {
   const [busy, setBusy] = React.useState(""); const [naverId, setNaverId] = React.useState("");
-  React.useEffect(() => onSnapshot(doc(db, "siteConfig/mktSettings"), (d) => setNaverId(d.data()?.naverBlogId || ""), () => {}), []);
+  React.useEffect(() => onSnapshot(doc(db, "siteConfig/mktSettings"), (d) => setNaverId(String(d.data()?.naverBlogId || "").replace(/@.*$/, "")), () => {}), []);
   const tags = (P.tags || []).map((t) => "#" + t.replace(/\s/g, "")).join(" ");
   const copyHtml = async () => {
     setBusy("카드 그림을 올리고 복사하는 중…");

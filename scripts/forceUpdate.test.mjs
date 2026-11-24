@@ -1,0 +1,20 @@
+// 강제 업데이트 예약 계산 테스트 — node scripts/forceUpdate.test.mjs
+import assert from "node:assert/strict";
+import { forceApplies, forceBehind, forceLeft, fmtLeft } from "../src/forceUpdateCore.js";
+let n = 0; const ok = (c, m) => { assert.ok(c, m); n += 1; };
+const all = { active: true, fireAt: 1000, scope: "all", shippers: false, build: "2026-11-24T08-00" };
+const pick = { ...all, scope: "pick", companies: ["태진", "큐런"] };
+ok(forceApplies(all, { company: "아무회사", role: "admin" }), "전체 = 모든 운송사");
+ok(!forceApplies(all, { company: "태진", role: "totalMaster" }), "최고관리자는 제외");
+ok(!forceApplies(all, { role: "shipper", linkedCompany: "태진" }), "화주사 포함을 안 켜면 화주 제외");
+ok(forceApplies({ ...all, shippers: true }, { role: "shipper", linkedCompany: "아무" }), "화주사 포함 + 전체");
+ok(forceApplies(pick, { company: " 태진 ", role: "user" }), "고른 회사");
+ok(!forceApplies(pick, { company: "한빛", role: "user" }), "안 고른 회사");
+ok(forceApplies({ ...pick, shippers: true }, { role: "shipper", linkedCompany: "큐런" }), "고른 회사의 연동 화주");
+ok(!forceApplies({ ...pick, shippers: true }, { role: "shipper", linkedCompany: "한빛" }), "다른 회사 화주");
+ok(!forceApplies({ ...all, active: false }, { company: "태진", role: "user" }), "취소된 예약");
+ok(forceBehind(all, "2026-11-23T10-00") && !forceBehind(all, "2026-11-24T08-00") && !forceBehind(all, "2026-11-25T01-00"), "예전 화면만");
+ok(!forceBehind(all, ""), "버전 모르면 안내 안 함");
+ok(forceLeft({ fireAt: 61000 }, 1000) === 60 && forceLeft({ fireAt: 0 }, 5000) === 0, "남은 초");
+ok(fmtLeft(134) === "02:14" && fmtLeft(7) === "00:07", "표시");
+console.log(`forceUpdate OK (${n})`);
