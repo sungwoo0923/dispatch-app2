@@ -1,4 +1,6 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
+import MultiCompanySwitch, { useMultiCompany, CompanyToneDot, GuestHrNotice } from "./MultiCompanySwitch"; // 🏢 2026-11-24 여러 회사 오가기
+import { getMultiState } from "./multiCompany";
 import { useCompanyFleetGrades } from "./fleetGrades"; // 🚛 지입차 구분(지입·직영·임대 + 회사 전용 분양)
 import { useFleetDispatchWayInstall, FleetDispatchWayButton } from "./fleetDispatchWay"; // 🚛 2026-11-23 지입차 배차방식 자동(회사별)
 import { isViewerNow } from "./blind"; // 🧾 특수운임 버튼(조회전용 숨김)
@@ -4432,7 +4434,7 @@ function useRealtimeCollections(user, userCompany, role) {
     if (!user?.uid) { setMyRealName(""); setMyPhone(""); return; }
     const unsub = onSnapshot(doc(db, "users", user.uid), (snap) => {
       const d = snap.exists() ? snap.data() : {};
-      setMyRealName(d.name || ""); setMyNameCache(d.name || ""); setMyTeam(String(d.team || d.부서 || ""));
+      setMyRealName(d.name || ""); setMyNameCache(d.name || ""); setMyTeam(getMultiState().guest ? "" : String(d.team || d.부서 || "")); // 🏢 다른 회사에서는 원래 회사 부서를 쓰지 않는다
       setMyPhone(d.전화번호 || d.phone || "");
     }, () => {});
     return unsub;
@@ -8040,7 +8042,7 @@ useEffect(() => {
 
   const handleWeekendCheckIn = async (checkIn) => {
     setWeekendCheckPopup(false);
-    if (!user?.uid) return;
+    if (!user?.uid || getMultiState().guest) return; // 🏢 다른 회사 화면에서는 근태를 찍지 않는다
     const company = role === "totalMaster"
       ? (localStorage.getItem("loginCompany") || userCompany || "")
       : (userCompany || localStorage.getItem("userCompany") || "");
@@ -8085,6 +8087,8 @@ useEffect(() => {
   const [기사관리Tab, set기사관리Tab] = useState("d:전체"); // ▸ 기사관리 허브 — d:등급 / docs:driver / docs:penalty
   const hdrNewVer = useNewVersion(); // 🧭 2026-11-16 새 버전 → 상단바 회사명 칸이 [업데이트]로
   const [coSwitchOpen, setCoSwitchOpen] = React.useState(false); // 🔀 2026-11-19 운송사 전환 창
+  const multiCo = useMultiCompany(); // 🏢 2026-11-24 여러 회사 계정(오갈 회사 목록 · 지금 회사)
+  const [multiCoOpen, setMultiCoOpen] = React.useState(false);
   const [정산관리Tab, set정산관리Tab] = useState(() => { const t = settleStartTab(); return t === "마감검증" ? "거래처정산" : t; }); // 🧭 2026-11-14 정산 홈이 첫 화면(예전처럼 거래처정산부터 보려면 정산 홈 아래 체크)
   const [deskAttachId, setDeskAttachId] = useState("");
   const betaPayOn = useBetaOn(getTenant() || userCompany); // 💳 2026-11-11 정산관리 › 입금 확인(시험 기능 — 테스트운송사)
@@ -9093,17 +9097,19 @@ return (
                 {(co || myRealName || hdrNewVer) && (
                   <UserHub align="left" name={[myRealName || user?.displayName || "", myProfileDoc?.position || ""].filter(Boolean).join(" ")} mailUnread={mailCountsNav.unread || 0}
                     showSupport={role !== "totalMaster"} onSupport={openRemoteSupport}
-                    onSwitchCompany={realRole === "totalMaster" && !isPreviewMode() ? () => setCoSwitchOpen(true) : null}
+                    onSwitchCompany={realRole === "totalMaster" && !isPreviewMode() ? () => setCoSwitchOpen(true) : multiCo.list.length && !isPreviewMode() ? () => setMultiCoOpen(true) : null}
+                    switchLabel={multiCo.list.length && realRole !== "totalMaster" ? "회사 전환" : ""}
                     onMyInfo={() => { setMyInfoNameDraft(myRealName); setMyInfoPhoneDraft(myPhone); setShowMyInfo(true); }}
                     onTriggerClick={hdrNewVer ? () => hardReloadForUpdate() : null}
                     triggerClass={`ml-1 px-3 h-8 inline-flex items-center gap-2 rounded-lg whitespace-nowrap shrink-0 transition ${hdrNewVer ? "border border-[#8FB0F0]/70 bg-white/[0.08] hover:bg-white/[0.16] text-[12.5px] font-black text-white" : `bg-white/[0.07] border border-white/10 hover:bg-white/[0.14] font-bold text-white/90 ${co.length > 8 ? "text-[12px]" : "text-[13px]"}`}`}>
                     {hdrNewVer
                       ? <span data-kp="hdr-update" className="inline-flex items-center gap-2"><span className="kp-subnav-newdot w-1.5 h-1.5 rounded-full bg-[#CFE0FF]" />새 버전{hdrNewVer.version ? ` v${hdrNewVer.version}` : ""} · 눌러서 업데이트</span>
-                      : <span data-kp="hdr-company" className="inline-flex items-center gap-1.5">{co}{(myRealName || user?.displayName) && <span className="text-white/60 font-semibold">{myRealName || user?.displayName}{myProfileDoc?.position ? ` ${myProfileDoc.position}` : ""}</span>}
+                      : <span data-kp="hdr-company" className="inline-flex items-center gap-1.5"><CompanyToneDot />{co}{(myRealName || user?.displayName) && <span className="text-white/60 font-semibold">{myRealName || user?.displayName}{myProfileDoc?.position ? ` ${myProfileDoc.position}` : ""}</span>}
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ opacity: 0.6 }}><path d="M6 9l6 6 6-6" /></svg></span>}
                   </UserHub>
                 )}
                 {coSwitchOpen && <React.Suspense fallback={null}><CompanySwitcherLazy current={co} onClose={() => setCoSwitchOpen(false)} /></React.Suspense>}
+                {multiCoOpen && <MultiCompanySwitch onClose={() => setMultiCoOpen(false)} />}
                 {/* 🛰 2026-11-10 버전 표시·새 버전 안내는 왼쪽 메뉴(KpSubNav) 머리·맨 아래로 옮김 */}
                 <EditModeToggleButton className="ml-1" />
               </div>

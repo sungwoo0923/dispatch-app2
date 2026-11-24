@@ -1,4 +1,5 @@
 // ======================= functions/companyMail.js =======================
+const { effectiveUser } = require("./multiCompany"); // 🏢 2026-11-24 여러 회사 오가기 — 지금 쓰는 회사 기준
 // ✉️ 2026-11-08 운송사별 발신 메일 — 회사마다 "자기 메일 계정"으로 보낸다
 //  예전: 모든 회사 메일(거래명세서 · 미수 독촉 · 일반 메일 · 연차 촉진 안내 · 예약 메일)이 Vercel /api/send-email 하나로,
 //        한 운송사의 다음 메일 계정(코드에 비밀번호까지 적혀 있었다)으로 나갔다. → 이제 그 경로는 410(닫힘).
@@ -139,7 +140,7 @@ function makeCompanyMail({ db, FieldValue, HttpsError, getNodemailer, getKey = (
     if (!uid) throw err("unauthenticated", "로그인이 필요해요");
     const email = String(context.auth.token?.email || "").toLowerCase();
     const snap = await db.collection("users").doc(uid).get();
-    const u = snap.exists ? snap.data() || {} : {};
+    const u = snap.exists ? effectiveUser(snap.data() || {}) : {};
     const role = String(u.role || "");
     const tm = email === SUPER_EMAIL || role === "totalMaster";
     if (!tm) {

@@ -21,6 +21,7 @@
 //  ⚠ 바뀐 값은 화면이 토큰을 새로 받을 때(getIdToken(true)) 적용된다 — 화면은 users/{uid}.claimsAt 이 바뀌면 바로 새로 받는다.
 //   일부러 새로 받지 않는 사용자는 최대 1시간(토큰 수명) 예전 값이 남을 수 있다. 그래서 최고관리자 권한은 규칙이 문서로 한 번 더 확인하고,
 //   "거절" 쪽(미승인 · 허브 미승인)은 규칙이 문서를 다시 본다(승인 즉시 반영).
+const { effectiveUser } = require("./multiCompany");
 const CLAIMS_V = 1;
 const MANAGED = ["v", "co", "r", "ap", "st", "ce", "tm", "sa", "ms", "pm", "sh", "fin", "pay", "hr", "tx", "xp", "ceo", "exec", "fm", "at",
   "hv", "hk", "hs", "hsg", "hro"];
@@ -82,8 +83,11 @@ function roleInfo(role, g, ov) {
 
 // users/{uid} 문서 → 토큰 값. 규칙과 똑같이 계산할 수 없으면 null(규칙이 문서를 읽는다)
 //  ctx: { plan: companyPlans/{계약 회사} 문서 데이터|null, customRole: customRoles/{역할}|null, roleOverride: companyRoleOverrides/{회사}|null }
-function computeUserClaims(u, ctx = {}) {
-  if (!isMap(u)) return { claims: null, reason: "no-user" };
+// 🏢 2026-11-24 여러 회사를 오가는 계정(multiCompanies · activeCompany)은 지금 쓰는 회사 · 통합관리자로 계산한다(functions/multiCompany.js)
+//  보안 규칙은 토큰(co · r)으로 그 회사 데이터를 연다 — 토큰이 없을 때(문서로 판단)는 원래 회사로만 열린다(더 좁게)
+function computeUserClaims(u0, ctx = {}) {
+  if (!isMap(u0)) return { claims: null, reason: "no-user" };
+  const u = effectiveUser(u0);
   const role = getOr(u, "role", "");
   const legacyTeam = (() => { const v = getOr(u, "legacyTeam", ""); return typeof v === "string" && !ODD_LINE.test(v) ? v : ""; })(); // ⭐ 2026-11-17
   const co = getOr(u, "companyName", undefined);
@@ -168,7 +172,8 @@ function sameManaged(a, b) {
   return pick(a) === pick(b);
 }
 // users 문서에서 토큰 값에 쓰이는 칸만(바뀌었는지 볼 때)
-const USER_FIELDS = ["role", "companyName", "approved", "employmentStatus", "linkedTransportCompany", "isMaster", "subAdmin", "permissions", "team", "legacyTeam", "position"];
+const USER_FIELDS = ["role", "companyName", "approved", "employmentStatus", "linkedTransportCompany", "isMaster", "subAdmin", "permissions", "team", "legacyTeam", "position",
+  "multiCompanies", "activeCompany"]; // 🏢 2026-11-24 여러 회사 오가기
 const HUB_FIELDS = ["companyKey", "source", "companyName", "bizNo", "status", "role"];
 const proj = (d, fields) => JSON.stringify(fields.map((k) => [k, d ? (d[k] === undefined ? null : d[k]) : "∅"]));
 const changedFields = (b, a, fields) => proj(b, fields) !== proj(a, fields);
@@ -185,12 +190,13 @@ function makeClaimsService({ db, getAuth, FieldValue }) {
     const [u, m] = await Promise.all([docData("users", uid), docData("hubMembers", uid)]);
     let userClaims = null; let reason = "no-user";
     if (u) {
-      const role = typeof u.role === "string" ? u.role : "";
-      const cco = contractCoOf(u);
+      const eu = effectiveUser(u); // 🏢 지금 쓰는 회사 기준(계약 · 회사별 역할 설정)
+      const role = typeof eu.role === "string" ? eu.role : "";
+      const cco = contractCoOf(eu);
       const [plan, customRole, roleOverride] = await Promise.all([
         typeof cco === "string" && cco ? docData("companyPlans", cco) : null,
         role ? docData("customRoles", role) : null,
-        typeof u.companyName === "string" ? docData("companyRoleOverrides", u.companyName) : null,
+        typeof eu.companyName === "string" ? docData("companyRoleOverrides", eu.companyName) : null,
       ]);
       ({ claims: userClaims, reason } = computeUserClaims(u, { plan, customRole, roleOverride }));
     }

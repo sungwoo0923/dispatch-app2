@@ -530,3 +530,6 @@ table[data-kp-st] > thead > tr:last-child > th { box-shadow: inset 0 -1px 0 rgba
 .bg-amber-100, .bg-yellow-100, .bg-yellow-200 { background-color: #F3ECDB !important; }
 .border-amber-100, .border-amber-200, .border-amber-300, .border-\[\#F3D9A4\] { border-color: #E6D8B8 !important; }
 .text-amber-600, .text-amber-700, .text-amber-800, .text-yellow-700, .text-yellow-800, .text-\[\#7A4B00\] { color: #8A6A2A !important; }
+
+/* 🏢 2026-11-24 여러 회사 오가기 — 지금 쓰는 회사 색 띠(화면 맨 위 3px · 여러 회사 계정만) */
+html[data-kp-co-tone] body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 3px; background: var(--kp-co-main); z-index: 2147483000; pointer-events: none; }

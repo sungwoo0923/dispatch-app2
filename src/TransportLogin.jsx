@@ -9,6 +9,8 @@ import BigCheck from "./components/BigCheck";
 import { doc, getDoc, getFirestore, collection, getDocs, query, where, updateDoc, serverTimestamp } from "firebase/firestore";
 import SignupWelcomeCard from "./SignupWelcomeCard"; // 🎉 2026-11-22 승인 뒤 첫 로그인 — 가입 완료 카드(회사코드)
 import { readPublicCompanies } from "./publicCompanies"; // 🔎 2026-11-22 회사명 조회
+import { canMulti, multiCompaniesOf, activeCompanyOf } from "./multiCompany"; // 🏢 2026-11-24 여러 회사 오가기
+import { waitClaimsCompany } from "./MultiCompanySwitch";
 import { useNavigate, Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useMfaPrompt, mfaErrorText } from "./MfaModal";
@@ -324,7 +326,9 @@ export default function TransportLogin() {
           return;
         }
         if (isSubAdmin && !inputCompanyName) inputCompanyName = localStorage.getItem("loginCompany") || "";
-        if (!isSubAdmin && (userData.companyName || "") !== inputCompanyName) {
+        // 🏢 2026-11-24 여러 회사 계정은 오갈 수 있는 회사 이름으로도 로그인(그 회사로 바로 들어간다)
+        const multiOk = !isSubAdmin && canMulti(userData) && multiCompaniesOf(userData).includes(inputCompanyName);
+        if (!isSubAdmin && (userData.companyName || "") !== inputCompanyName && !multiOk) {
           await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("transportValidating");
           window.__kpGateInline = false;
@@ -334,7 +338,7 @@ export default function TransportLogin() {
 
         // ⭐ 2026-11-06 계약종료된 운송사 — 로그인 단계에서 바로 안내(관리센터 › 이용 계약·만료). 부관리자는 예외
         if (!isSubAdmin) {
-          const plan = await getDoc(doc(db, "companyPlans", String(userData.companyName || "(회사없음)").trim() || "(회사없음)")).catch(() => null);
+          const plan = await getDoc(doc(db, "companyPlans", String((multiOk ? inputCompanyName : userData.companyName) || "(회사없음)").trim() || "(회사없음)")).catch(() => null);
           if (plan?.exists() && plan.data()?.status === "ended") {
             await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
             sessionStorage.removeItem("transportValidating");
@@ -394,6 +398,18 @@ export default function TransportLogin() {
           }
         }
 
+        // 🏢 여러 회사 계정 — 입력한 회사가 지금 회사와 다르면 바꾸고, 서버 토큰이 바뀔 때까지 기다린다
+        if (canMulti(userData) && activeCompanyOf(userData) !== inputCompanyName) {
+          await updateDoc(doc(db, "users", uid), { activeCompany: inputCompanyName === userData.companyName ? "" : inputCompanyName }).catch(() => {});
+          const okCo = await waitClaimsCompany(credential.user, inputCompanyName);
+          if (!okCo) {
+            await signOut(auth);
+            sessionStorage.removeItem("transportValidating");
+            window.__kpGateInline = false;
+            setError("회사를 바꾸는 중 시간이 걸리고 있어요. 잠시 뒤 다시 로그인해 주세요.");
+            return;
+          }
+        }
         safeLocalSet("loginCompany", inputCompanyName);
         safeLocalSet("userCompany", inputCompanyName);
         // 가입 완료 카드를 봤다는 표시(다음부터는 카드 없이 회사코드로 로그인)

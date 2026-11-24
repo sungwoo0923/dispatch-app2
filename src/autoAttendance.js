@@ -6,6 +6,7 @@
 //    자동 퇴근 뒤 같은 날 다시 반경 안으로 오면 퇴근 기록을 지운다(마지막으로 나간 시간이 퇴근)
 //  · 반차 — 반차 = 근무 4시간: 오전반차는 출근시간 +4시간이 출근 기준, 오후반차는 출근시간 +4시간이 퇴근 기준
 //  · 연차·병가 등 하루 휴가는 출근 기록 없이 그 휴가로 표시
+import { getMultiState } from "./multiCompany";
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from "firebase/firestore";
 import { db } from "./firebase";
 import { workWindow } from "./lateRule";
@@ -47,6 +48,7 @@ export async function todayLeaveOf(uid, name, today = kstToday()) {
 // 자동 출근 시도 — 결과: { ok, reason, retryAt(분), weekend, leave }
 export async function tryAutoCheckIn({ uid, name, company, source = "auto" }) {
   if (!uid || !company) return { ok: false, reason: "no-user" };
+  if (getMultiState().guest) return { ok: false, reason: "guest-company" }; // 🏢 2026-11-24 다른 회사 화면에서는 출근을 찍지 않는다(근태는 원래 소속 회사에만)
   const today = kstToday();
   const ref = doc(db, "attendance", `${today}_${uid}`);
   const ex = await getDoc(ref).catch(() => null);
@@ -78,6 +80,7 @@ export async function tryAutoCheckIn({ uid, name, company, source = "auto" }) {
 
 // 자동 퇴근(출근지 반경 밖) — 퇴근시간 1시간 전부터만
 export async function tryAutoCheckOut({ uid }) {
+  if (getMultiState().guest) return { ok: false, reason: "guest-company" }; // 🏢 2026-11-24
   const today = kstToday();
   const ref = doc(db, "attendance", `${today}_${uid}`);
   const ex = await getDoc(ref).catch(() => null);

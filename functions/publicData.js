@@ -1,4 +1,5 @@
 // ======================= functions/publicData.js =======================
+const { effectiveUser } = require("./multiCompany"); // 🏢 2026-11-24 여러 회사 오가기 — 지금 쓰는 회사 기준
 // 🏛 2026-11-07 공공데이터포털(data.go.kr) 연동 — 국세청 사업자 상태 · 기상청 단기예보 · 기상특보
 //  규칙(번호 검증식 · 격자 변환 · 응답 정리)은 functions/publicDataCore.mjs(화면과 같은 파일)
 //  · 키: Firebase 비밀값 DATA_GO_KR_KEY 하나(공공데이터포털 "일반 인증키(Decoding)"). 세 서비스 모두 활용신청해야 한다.
@@ -47,7 +48,7 @@ async function callerOf(db, auth, { allowSignup = false } = {}) {
   if (!uid) throw new PdError("unauthenticated", "로그인이 필요해요");
   const email = auth.token?.email || "";
   const u = await db.collection("users").doc(uid).get();
-  const d = u.exists ? (u.data() || {}) : {};
+  const d = u.exists ? effectiveUser(u.data() || {}) : {};
   const isTM = email === SUPER_EMAIL || d.role === "totalMaster";
   if (isTM) return { uid, tier: "staff", co: d.companyName || "(회사없음)", isTM: true, isAdmin: true };
   if (u.exists && d.approved !== false && d.employmentStatus !== "퇴사" && d.role !== "cafeUser") {

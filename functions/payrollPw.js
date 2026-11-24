@@ -1,4 +1,5 @@
 // ======================= functions/payrollPw.js =======================
+const { effectiveUser } = require("./multiCompany"); // 🏢 2026-11-24 여러 회사 오가기 — 지금 쓰는 회사 기준
 // ⭐ 2026-11-07 급여관리 비밀번호(한 번 더 확인) — 호출형 함수 payrollPwStatus · payrollPwSet · payrollPwVerify · payrollLock
 //  · 비밀번호는 서버에만: payrollSecrets/{회사 키} = { salt, hash(scrypt), algo, updatedAt, updatedBy } (보안 규칙: 아무도 못 읽음)
 //  · 맞으면 payrollUnlocks/{uid} = { uid, companyName, expiresAt(30분) } — 보안 규칙이 급여 문서를 읽고 쓸 때 이 문서를 확인한다
@@ -80,7 +81,7 @@ function makePayrollPw({ db, FieldValue, Timestamp, HttpsError }) {
     if (!uid) throw err("unauthenticated", "로그인이 필요합니다");
     const email = String(context.auth.token?.email || "");
     const snap = await db.collection("users").doc(uid).get();
-    const u = snap.exists ? snap.data() || {} : {};
+    const u = snap.exists ? effectiveUser(snap.data() || {}) : {};
     const tm = email === SUPER_EMAIL || u.role === "totalMaster";
     const company = String((tm ? data.company || u.companyName : u.companyName) || "").trim();
     if (!company) throw err("failed-precondition", "회사 정보가 없습니다");

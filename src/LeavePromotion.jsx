@@ -6,6 +6,7 @@
 //  · 매일 아침 서버(functions leavePromotionDaily)가 자동 발송, 이 화면에서 직접 발송·재발송·날짜 지정도 가능
 //  · 모든 발송·제출은 leavePromotions/{회사}_{uid}_{회기 시작일}.log 에 시각과 함께 쌓이고(지울 수 없음 — 보안 규칙), 서면 통보서 인쇄 가능
 //  ⭐ 2026-11-06 화면 다듬기 — 노란 표시 제거(네이비 팔레트) · 글자 14px 이상
+import { useMultiCompany, GuestHrNotice } from "./MultiCompanySwitch"; // 🏢 2026-11-24
 import React from "react";
 import { useUserProfiles } from "./userProfilesLive"; // 🔒 2026-11-07 인사 프로필은 우리 회사 직원 한 건씩
 import { addDoc, arrayUnion, collection, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
@@ -261,7 +262,12 @@ function SendSheet({ company, act, byName, onClose }) {
 }
 
 // ═════════════════ 직원 본인 — 연차 사용 계획 제출 ═════════════════
-export function MyLeavePlan({ company, uid: uidIn }) {
+// 🏢 2026-11-24 다른 회사 화면에서는 안내만(내 연차는 원래 소속 회사에만)
+export function MyLeavePlan(props) {
+  const st = useMultiCompany();
+  return st.guest ? <GuestHrNotice what="연차" /> : <MyLeavePlanInner {...props} />;
+}
+function MyLeavePlanInner({ company, uid: uidIn }) {
   const uid = uidIn || auth.currentUser?.uid || "";
   const [rows, setRows] = React.useState(null);
   const [form, setForm] = React.useState({});

@@ -8,6 +8,7 @@ import { doc, onSnapshot, setDoc, deleteField } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { kpConfirm } from "./kpDialog";
 import { checkInsideOffice, HALF_LEAVES, workWindow, kstNowMin } from "./autoAttendance";
+import MultiCompanySwitch, { useMultiCompany } from "./MultiCompanySwitch"; // 🏢 2026-11-24 다른 회사로 들어가 있으면 출퇴근은 원래 회사에서
 
 export const DEFAULT_IN_RADIUS = 100;
 export const DEFAULT_OUT_RADIUS = 300;
@@ -52,7 +53,11 @@ export function useCheckoutPhase(uid, rec) {
 }
 // 화면 어디에 있든(홈이 아니어도) 퇴근 10분 전에 한 번 알림 배너 — 푸시는 보내지 않는다(매일이라 번거로움)
 //  PC·모바일 모두 BannerCenter("kp-banner")로 띄운다 · 하루 한 번(이 기기)
-export function CheckoutReminderHost({ uid, role, email }) {
+export function CheckoutReminderHost(props) {
+  const st = useMultiCompany();
+  return st.guest ? null : <CheckoutReminderHostInner {...props} />;
+}
+function CheckoutReminderHostInner({ uid, role, email }) {
   const { rec, today } = useTodayAttendance(uid);
   const { phase, endHm } = useCheckoutPhase(uid, rec);
   const isTM = role === "totalMaster" || email === "tjddnqkf@naver.com";
@@ -70,7 +75,22 @@ export function CheckoutReminderHost({ uid, role, email }) {
 }
 
 // 출근/퇴근 버튼 — variant: "pc"(상단 칩) | "mobile"(상단 작은 버튼)
-export function AttendanceQuickButton({ company, uid, name, role, email, variant = "pc", dark = false }) {
+// 🏢 2026-11-24 다른 회사 화면에서는 출퇴근을 찍지 않는다(근태는 원래 소속 회사에만) — 누르면 회사 전환 창
+export function AttendanceQuickButton(props) {
+  const st = useMultiCompany();
+  const [open, setOpen] = React.useState(false);
+  if (!st.guest) return <AttendanceQuickButtonInner {...props} />;
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} data-kp="att-guest" title={`출퇴근은 ${st.home}에만 기록돼요`}
+        className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border text-[12.5px] font-black whitespace-nowrap ${props.dark ? "border-white/20 text-white/80" : "border-[#DCE3EE] text-[#5B6B84] bg-white"}`}>
+        출퇴근 · {st.home}에서
+      </button>
+      {open && <MultiCompanySwitch onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+function AttendanceQuickButtonInner({ company, uid, name, role, email, variant = "pc", dark = false }) {
   const { rec: recLive, today } = useTodayAttendance(uid);
   // 🛠 2026-11-16 [출근하기]를 누르면 바로 [퇴근하기]로 — 예전엔 저장이 끝날 때까지 그대로라 두 번 누를 수 있었다
   //  누르는 순간 화면에 먼저 반영(opt)하고, 서버 기록이 같아지면 지운다. 잠금은 ref로(같은 순간 두 번 눌러도 한 번만)

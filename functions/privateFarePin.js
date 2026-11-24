@@ -1,4 +1,5 @@
 // ======================= functions/privateFarePin.js =======================
+const { effectiveUser } = require("./multiCompany"); // 🏢 2026-11-24 여러 회사 오가기 — 지금 쓰는 회사 기준
 // 🔐 2026-11-18 비공개 운임 비밀번호(사람별) — 호출형 함수 pfPinStatus · pfPinSet · pfPinVerify · pfLock
 //  · 누가: 최고관리자가 관리자센터에서 지정한 사람만(privateFareGrants/{uid}.on == true · 그 사람 회사와 같음)
 //  · 비밀번호: 4~8자 숫자 · 영문(대소문자 구분 없음 — 대문자로 맞춰 저장) · 서버에만 privateFarePins/{uid} = { salt, hash(scrypt) }
@@ -51,7 +52,7 @@ function makePrivateFarePin({ db, FieldValue, Timestamp, HttpsError }) {
     const uid = context?.auth?.uid;
     if (!uid) throw err("unauthenticated", "로그인이 필요해요");
     const [uSnap, gSnap, pSnap, aSnap] = await Promise.all([db.collection("users").doc(uid).get(), grantRef(uid).get(), pinRef(uid).get(), attemptRef(uid).get()]);
-    const u = uSnap.exists ? uSnap.data() || {} : {};
+    const u = uSnap.exists ? effectiveUser(uSnap.data() || {}) : {};
     const g = gSnap.exists ? gSnap.data() || {} : {};
     const company = String(u.companyName || "").trim();
     const granted = g.on === true && !!company && String(g.companyName || "").trim() === company && u.approved !== false && u.employmentStatus !== "퇴사";

@@ -15,6 +15,7 @@
 // ⭐ 2026-11-07 개편 — 경리 전용 + 급여 비밀번호(PayrollGate) · 화면 꽉 채움(넓은 화면은 직원 목록 | 입력 | 명세서 3칸) · 연봉제 ·
 //  직원 급여 설정 2칸(왼쪽 목록·필터 / 오른쪽 상세 + 근로계약서) · 요율 카드 단순화 · 새 급여명세서(payslipDoc.js) · 신고·이체 탭(PayrollReports.jsx) ·
 //  발행하면 앱 알림(hrNotices 팝업) + 사내메일(푸시) · 전월 대비 변동 표시 · 직원은 내정보 › 급여명세서(MyPayslipsSection)
+import { useMultiCompany, GuestHrNotice } from "./MultiCompanySwitch"; // 🏢 2026-11-24
 import React from "react";
 import { arrayUnion, collection, deleteField, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, writeBatch } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
@@ -1550,7 +1551,12 @@ function PayRates({ company, ro }) {
 
 // ═════════════════ 내 급여명세서(직원 본인 — 발행된 것만) ═════════════════
 // ⭐ 2026-11-07 내정보 › 급여명세서 탭(MyPayslipsSection) · 모바일 내정보도 같은 것 · 명세서는 새 디자인(payslipDoc.js)
-export function MyPayslips({ company, uid: uidIn, compact = false }) {
+// 🏢 2026-11-24 다른 회사 화면에서는 안내만(내 급여는 원래 소속 회사에만)
+export function MyPayslips(props) {
+  const st = useMultiCompany();
+  return st.guest ? <GuestHrNotice what="급여명세서" /> : <MyPayslipsInner {...props} />;
+}
+function MyPayslipsInner({ company, uid: uidIn, compact = false }) {
   const uid = uidIn || auth.currentUser?.uid || "";
   const [rows, setRows] = React.useState(null);
   const [sel, setSel] = React.useState(null);
