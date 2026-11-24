@@ -255,7 +255,7 @@ ${slides.map((s, i) => `<section class="slide ${["cover", "end"].includes(s.type
 <div id="cap"></div>
 <script>
 window.SCENE={duration:${DUR.toFixed(2)},slides:${JSON.stringify(slides.map((s) => [s.t0, s.t1, s.type, s.ch ? s.ch.no : 0, s.ch ? s.ch.title : ""]))},chN:${chapters.length}};
-window.__CAPS=${JSON.stringify(lines.map((l) => ({ t0: l.t0, t1: l.t1, text: l.say })))};
+window.__CAPS=${JSON.stringify(lines.map((l) => ({ t0: l.t0, t1: l.t1, text: l.cap || l.say })))};
 </script>
 <script src="${url.pathToFileURL(path.join(ROOT, "../video/engine.js")).href}"></script>
 <script>
