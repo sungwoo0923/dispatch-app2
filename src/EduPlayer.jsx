@@ -153,6 +153,22 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge, preview = f
     document.addEventListener("fullscreenchange", h); document.addEventListener("webkitfullscreenchange", h);
     return () => { document.removeEventListener("fullscreenchange", h); document.removeEventListener("webkitfullscreenchange", h); };
   }, []);
+  // 🔇 음소거 · 소리 크기 — 자막이 있어 음소거로 봐도 시청 인정(사용자 요청) · 고른 값은 이 기기에 기억
+  const VOL_KEY = "kpEduVol";
+  const [vol, setVol] = React.useState(() => { try { const x = JSON.parse(localStorage.getItem(VOL_KEY) || "null"); return x && typeof x.v === "number" ? x : { v: 1, m: false }; } catch { return { v: 1, m: false }; } });
+  React.useEffect(() => { const v = vRef.current; if (v) { v.volume = vol.v; v.muted = vol.m; } try { localStorage.setItem(VOL_KEY, JSON.stringify(vol)); } catch { /* 기억 못 해도 소리는 바뀐다 */ } }, [vol]);
+  const toggleMute = () => setVol((x) => ({ v: x.m && x.v === 0 ? 0.6 : x.v, m: !x.m }));
+  const setVolume = (n) => setVol({ v: n, m: n === 0 });
+  const muted = vol.m || vol.v === 0;
+  const volCtl = (dark = false) => ( // 함수로 그린다(컴포넌트로 만들면 재생 중 다시 그려질 때 막대 끌기가 끊긴다)
+    <div className="inline-flex items-center gap-1.5 shrink-0">
+      <button type="button" onClick={toggleMute} title={muted ? "소리 켜기" : "음소거(자막으로 봐도 시청 인정)"} className={`${dark ? "w-10 h-10 text-white" : "w-9 h-9 bg-white"} rounded-lg inline-flex items-center justify-center`} style={dark ? { background: "rgba(255,255,255,.14)" } : { border: `1px solid ${LINE}`, color: muted ? "#B42318" : SUB }}>
+        <EduIcon name={muted ? "mute" : "vol"} size={dark ? 18 : 16} stroke={2.1} />
+      </button>
+      <input type="range" min="0" max="1" step="0.05" value={muted ? 0 : vol.v} onChange={(e) => setVolume(Number(e.target.value))} aria-label="소리 크기"
+        className="hidden sm:block w-[72px] cursor-pointer" style={{ accentColor: dark ? "#fff" : NAVY }} />
+    </div>
+  );
   const toggleFs = () => {
     const el = wrapRef.current, v = vRef.current; if (!el) return;
     if (document.fullscreenElement || document.webkitFullscreenElement) { (document.exitFullscreen || document.webkitExitFullscreen)?.call(document); return; }
@@ -172,7 +188,7 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge, preview = f
       <div className="min-w-0">
       <div ref={wrapRef} onMouseMove={fs ? poke : undefined} onDoubleClick={toggleFs} className={`relative overflow-hidden bg-black ${fs ? "w-screen h-screen" : "rounded-2xl"}`} style={fs ? { cursor: idle && playing ? "none" : "default" } : { aspectRatio: "16 / 9" }}>
         <video ref={vRef} src={course.video} playsInline preload="metadata" className="w-full h-full block" style={{ objectFit: "contain" }}
-          onLoadedMetadata={(e) => setDur(e.currentTarget.duration || 0)} onTimeUpdate={onTime}
+          onLoadedMetadata={(e) => { setDur(e.currentTarget.duration || 0); e.currentTarget.volume = vol.v; e.currentTarget.muted = vol.m; }} onTimeUpdate={onTime}
           onPlay={() => setPlaying(true)} onPause={() => { setPlaying(false); persist(true); }} onEnded={() => { setPlaying(false); maxRef.current = dur; persist(true); }}
           onSeeking={(e) => { if (!preview && e.currentTarget.currentTime > maxRef.current + 1.5) { e.currentTarget.currentTime = maxRef.current; lastT.current = maxRef.current; setNotice("처음 보는 부분은 건너뛸 수 없어요"); setTimeout(() => setNotice(""), 2200); } }}
           onClick={toggle} controlsList="nodownload noplaybackrate" disablePictureInPicture />
@@ -194,6 +210,7 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge, preview = f
             <button type="button" onClick={back10} className="h-10 px-3 rounded-lg text-[13px] font-bold text-white inline-flex items-center gap-1 shrink-0" style={{ background: "rgba(255,255,255,.14)" }}><EduIcon name="replay" size={15} />10초</button>
             <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,.25)" }}><div className="h-full rounded-full bg-white" style={{ width: `${playedPct}%` }} /></div>
             <span className="text-[13px] font-bold text-white/85 tabular-nums shrink-0" style={EN}>{fmt(t)} / {fmt(dur)}</span>
+            {volCtl(true)}
             <button type="button" onClick={toggleFs} title="전체 화면 끝내기(Esc)" className="h-10 px-3 rounded-lg text-[13px] font-bold text-white inline-flex items-center gap-1.5 shrink-0" style={{ background: "rgba(255,255,255,.14)" }}><EduIcon name="shrink" size={16} stroke={2.2} />작게 보기</button>
           </div>
         )}
@@ -209,7 +226,8 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge, preview = f
           <div className="h-full rounded-full" style={{ width: `${playedPct}%`, background: NAVY }} />
         </div>
         <span className="text-[12px] font-bold tabular-nums shrink-0" style={{ ...EN, color: SUB }}>{fmt(t)} / {fmt(dur)}</span>
-        <button type="button" onClick={toggleFs} className="h-9 px-2.5 rounded-lg bg-white text-[12.5px] font-bold shrink-0 inline-flex items-center gap-1" style={{ border: `1px solid ${LINE}`, color: SUB }}><EduIcon name="expand" size={14} stroke={2.2} />전체 화면</button>
+        {volCtl()}
+        <button type="button" onClick={toggleFs} className="h-9 px-2.5 rounded-lg bg-white text-[12.5px] font-bold shrink-0 inline-flex items-center gap-1" style={{ border: `1px solid ${LINE}`, color: SUB }}><EduIcon name="expand" size={14} stroke={2.2} /><span className="hidden sm:inline">전체 화면</span></button>
       </div>
       </div>
 
