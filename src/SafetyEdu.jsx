@@ -165,7 +165,7 @@ export function EduCertPaper({ rec }) {
 
       <div className="mt-6 text-[14px] font-black mb-2">3. 확인 내용</div>
       <div className="border border-[#C9D1DE] px-5 py-4 text-[13.5px] leading-[1.85] font-medium">
-        위 사람은 {rec.companyName || "소속 회사"}이(가) 정한 「{rec.courseTitle || c?.title}」 교육을 이수하였음을 확인합니다(이수 방법: {how}).
+        위 사람은 「{rec.courseTitle || c?.title}」 교육을 이수하였음을 LogisWeb 전자교육 기록으로 확인합니다(이수 방법: {how}).
         이수자는 교육 내용을 이해하였으며, 업무 중 안전수칙을 성실히 지킬 것을 약속합니다.
         {c?.pledge ? <div className="mt-2 pt-2 border-t border-dashed border-[#C9D1DE] text-[12.5px]" style={{ color: "#374151" }}>서약 · {c.pledge}</div> : null}
       </div>
@@ -186,7 +186,11 @@ export function EduCertPaper({ rec }) {
         <div className="border border-[#C9D1DE]">
           <div className="px-4 py-2 text-[12.5px] font-black bg-[#F3F5F9] border-b border-[#C9D1DE]">확인 기관</div>
           <div className="px-4 py-3 flex items-center justify-between gap-3">
-            <span className="text-[14px] font-bold whitespace-nowrap">{rec.companyName}</span>
+            {/* ✍ 2026-11-24 확인 기관은 플랫폼(LogisWeb) 고정 — 회사 이름은 위 '소속' 칸에만(사용자 요청) */}
+            <span className="min-w-0">
+              <span className="block text-[14px] font-bold whitespace-nowrap">LogisWeb 전자교육 시스템</span>
+              <span className="block text-[11px] font-semibold mt-0.5 whitespace-nowrap" style={{ color: "#6B7280" }}>전자 서명 · 이수 기록 보관</span>
+            </span>
             <span className="inline-flex items-center justify-center w-[64px] h-[64px] rounded-full border-2 text-[11px] font-black leading-tight text-center" style={{ borderColor: "#A33A2E", color: "#A33A2E" }}>전자<br />확인</span>
           </div>
         </div>
