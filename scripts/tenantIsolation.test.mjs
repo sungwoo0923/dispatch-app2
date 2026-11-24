@@ -200,5 +200,24 @@ await no("화주 삼성: 메신저 프로필 회사를 운송사 이름으로", 
 await ok("화주 삼성: 메신저 프로필 회사 = (화주)삼성", setDoc(doc(shipS, "chat_profiles/shipS"), { company: "(화주)삼성" }));
 await no("가입 대기: 메신저 프로필 만들기", setDoc(doc(as("attacker"), "chat_profiles/attacker"), { company: "A운송" }));
 
+console.log("⑧ 2026-11-24 안전교육 — 이수 기록 · 설정");
+const recA = (uid, course, extra = {}) => ({ companyName: "A운송", uid, courseId: course, period: "2026", mode: "video", signImage: "data:image/png;base64,xx", ...extra });
+await ok("A 기사: 내 이수 기록 만들기", setDoc(doc(aDrv, "eduRecords/A운송__aDrv__drv_load__2026"), recA("aDrv", "drv_load")));
+await no("A 기사: 이수 기록 고치기(서명 기록은 못 고침)", updateDoc(doc(aDrv, "eduRecords/A운송__aDrv__drv_load__2026"), { mode: "pledge" }));
+await no("A 기사: 다른 기사 이름으로 이수 기록", setDoc(doc(aDrv, "eduRecords/A운송__other__drv_load__2026"), recA("other", "drv_load")));
+await no("A 기사: 허락 없이 서약서로 대체", setDoc(doc(aDrv, "eduRecords/A운송__aDrv__drv_dock__2026"), recA("aDrv", "drv_dock", { mode: "pledge" })));
+await no("A 기사: 회사 교육 설정 바꾸기(스스로 서약서 허락)", setDoc(doc(aDrv, "eduSettings/A운송"), { companyName: "A운송", driverVideo: "pledgeAll" }));
+await ok("A 관리자: 회사 교육 설정(고른 기사만 서약서)", setDoc(doc(aAdmin, "eduSettings/A운송"), { companyName: "A운송", driverVideo: "pick", pledgeUids: ["aDrv"] }));
+await ok("A 기사: 허락받은 뒤 서약서로 대체", setDoc(doc(aDrv, "eduRecords/A운송__aDrv__drv_dock__2026"), recA("aDrv", "drv_dock", { mode: "pledge" })));
+await ok("A 기사: 내 이수 기록 목록", getDocs(query(collection(aDrv, "eduRecords"), where("companyName", "==", "A운송"), where("uid", "==", "aDrv"))));
+await no("A 기사: 회사 전체 이수 기록", getDocs(query(collection(aDrv, "eduRecords"), where("companyName", "==", "A운송"))));
+await ok("A 관리자: 우리 회사 이수 현황", getDocs(query(collection(aAdmin, "eduRecords"), where("companyName", "==", "A운송"))));
+await no("B 관리자: A 회사 이수 현황", getDocs(query(collection(bAdmin, "eduRecords"), where("companyName", "==", "A운송"))));
+await no("B 관리자: A 기사 서명 한 건", getDoc(doc(bAdmin, "eduRecords/A운송__aDrv__drv_load__2026")));
+await no("B 관리자: A 회사 교육 설정 바꾸기", setDoc(doc(bAdmin, "eduSettings/A운송"), { companyName: "A운송", driverVideo: "pledgeAll" }));
+await no("화주 삼성: A 회사 이수 현황", getDocs(query(collection(shipS, "eduRecords"), where("companyName", "==", "A운송"))));
+await ok("A 기사: 보던 위치 저장", setDoc(doc(aDrv, "eduProgress/aDrv__drv_load"), { uid: "aDrv", courseId: "drv_load", maxSec: 10 }));
+await no("A 직원: 기사 보던 위치 조작", setDoc(doc(aAdmin, "eduProgress/aDrv__drv_load"), { uid: "aDrv", courseId: "drv_load", maxSec: 999 }));
+
 console.log(`\n운송사 분리 규칙 테스트 통과 (${pass}개)`);
 process.exit(0);

@@ -336,6 +336,40 @@ service cloud.firestore {
     }
     // ✍ 2026-11-10 기사앱으로 보낸 운송계약서(driverContracts) — 직원은 같은 회사 전체(발송·삭제), 기사는 본인 것만 읽고
     //  열람(read)·서명(signed)만 할 수 있다. 서명한 뒤에는 기사가 다시 고칠 수 없다.
+    // 🦺 2026-11-24 안전교육 — 이수 기록(서명)은 본인이 만들고 고칠 수 없다 · 같은 회사 사무 직원이 본다 · 다른 회사는 못 본다
+    //  서약서 대체(mode "pledge")는 회사 설정(eduSettings/{회사})이 그 기사를 허락했을 때만
+    function eduPledgeOk() {
+      let p = /databases/$(database)/documents/eduSettings/$(myCoAny());
+      let s = exists(p) ? get(p).data : {};
+      return s.get('driverVideo', 'required') == 'pledgeAll'
+        || (s.get('driverVideo', 'required') == 'pick' && request.auth.uid in s.get('pledgeUids', []));
+    }
+    match /eduRecords/{id} {
+      allow read: if isTotalMasterUser()
+        || (isApproved() && resource.data.get('uid', '') == request.auth.uid && resource.data.get('companyName', '') == myCoAny())
+        || (isOfficeStaff() && coMatch(resource.data));
+      allow create: if isApproved() && !(myRoleRaw() in ['shipper', 'cafeUser'])
+        && request.resource.data.get('uid', '') == request.auth.uid
+        && request.resource.data.get('companyName', '') == myCoAny()
+        && id == myCoAny() + '__' + request.auth.uid + '__' + request.resource.data.get('courseId', '') + '__' + request.resource.data.get('period', '')
+        && request.resource.data.get('mode', '') in ['video', 'doc', 'pledge']
+        && (request.resource.data.get('mode', '') != 'pledge' || eduPledgeOk())
+        && request.resource.data.get('signImage', '') is string && request.resource.data.get('signImage', '').size() < 300000;
+      allow update, delete: if isTotalMasterUser();
+    }
+    // 영상 보던 위치 — 본인만
+    match /eduProgress/{id} {
+      allow get: if resource == null && isSignedIn();
+      allow read: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid;
+      allow create, update: if isApproved() && request.resource.data.get('uid', '') == request.auth.uid && id.matches(request.auth.uid + '__.+');
+    }
+    // 회사 교육 설정(기사 영상 대체) — 같은 회사 직원 · 기사가 읽고, 인사 · 관리자가 바꾼다
+    match /eduSettings/{co} {
+      allow get: if resource == null && isApproved();
+      allow read: if isTotalMasterUser() || (isApproved() && co == myCoAny() && !(myRoleRaw() in ['shipper', 'cafeUser']));
+      allow create, update: if isTotalMasterUser() || (isOfficeStaff() && co == myCoAny() && request.resource.data.get('companyName', '') == co
+        && (isHrStaff() || isCompanyAdmin(myCo())));
+    }
     match /driverContracts/{id} {
       allow read: if (isOfficeStaff() && coMatch(resource.data)) || (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid);
       allow create: if isOfficeStaff() && coCreate() && request.resource.data.get('status', '') == 'sent';
@@ -1455,6 +1489,10 @@ service cloud.firestore {
       allow read, write: if isTotalMasterUser();
     }
     match /mktBlog/{docId} {
+      allow read, write: if isTotalMasterUser();
+    }
+    // 🎵 2026-11-24 영상 편집실 · 무료 음악 보관함(관리자가 올린 곡 목록)
+    match /mktMusic/{docId} {
       allow read, write: if isTotalMasterUser();
     }
     // 🔐 Gemini 키 등 서버만 읽는 비밀값 — 화면(브라우저)에서는 아무도 읽고 쓰지 못한다(서버 mktAi 가 넣고 읽음)
@@ -2893,6 +2931,7 @@ service cloud.firestore {
         'forkliftDrivers', 'forkliftPresets', 'companyPayFlags', 'brandHistory', 'hubTriggerErrors',
         // 🔒 2026-11-23 서버만 쓰는 역할별 오더 사본 · 서버 잠금 · 횟수 제한(공용 규칙으로 직원이 만들어 넣던 것)
         'driverOrders', 'shipperOrders', 'sheetLiveLock', 'apiRateLimits',
+        'eduRecords', 'eduProgress', 'eduSettings', // 🦺 2026-11-24 안전교육
         //  사번 색인 · 전자결재 · 출퇴근 · 메일 서버 비밀값(서버만) · 외부 발송 횟수(서버만)
         'pnkEmpIndex', 'pnkApprovals', 'pnkAttendance', 'pnkMailSecrets', 'pnkMailUsage', 'pnkMfaSecrets', 'pnkMfaSessions', 'pnkUi', 'pnkUiHistory', 'pnkInquiries', 'pnkSite',
         'logisPasskeys', 'logisPasskeyChal', 'passwordResetSms', // 👆 얼굴 · 지문 로그인 공개키 · 한 번 쓰는 확인값(서버만 — functions/logisPasskey.js)
@@ -2914,7 +2953,7 @@ service cloud.firestore {
         // 💰 2026-11-04 플랫폼 운영 문서 — 위에서 따로 정함(예전엔 siteConfig가 이 목록에 없어 승인된 고객사 직원도 요금·관제 집계를 읽을 수 있었다)
         'siteConfig', 'platformConfig', 'platformUsage', 'usageCounters',
         // 📣 2026-11-23 홍보(영상 편집실 · 블로그 원고) · 서버 비밀값 — 위에서 따로 정함(빠지면 승인된 직원이 회사명 없는 원고를 읽고 쓴다)
-        'mktVideos', 'mktBlog', 'platformSecrets',
+        'mktVideos', 'mktBlog', 'mktMusic', 'platformSecrets',
         // ⭐ 2026-11-05 기사 가입 처리 기록 — 위에서 따로 정함
         'driverSignupLogs',
         // ⭐ 2026-11-11 기사 합치기 기록 — 서버만 쓴다(여기에 넣어 화면에서는 읽기·쓰기 모두 막음)
