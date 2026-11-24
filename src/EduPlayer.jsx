@@ -6,6 +6,7 @@
 import React from "react";
 import { WATCH_RATIO, watchedEnough, eduPeriod, eduRecordId, eduProgressId, fmtLen, certNo } from "./safetyEdu";
 import { EduIcon, EduTile } from "./eduIcons";
+import { useBackClose } from "./mobileBack";
 import { MONO, HERO_BG } from "./OfficeBooks";
 const EN = { fontFamily: MONO, fontVariantNumeric: "tabular-nums" };
 
@@ -13,6 +14,7 @@ const NAVY = "#1B2B4B";
 const INK = "#0B1428";
 const SUB = "#6B7A93";
 const LINE = "#E3E8F0";
+const MUTE_P = "#8A97AD";
 
 // Firestore 저장(실제 화면) — 미리보기에서는 쓰지 않도록 필요할 때만 불러온다
 export const firestoreEduApi = {
@@ -96,7 +98,7 @@ function Header({ course, step, onClose, preview = false }) {
 }
 
 // 영상 보기 — 앞으로 건너뛰기 막기 + 실제로 본 시간 세기
-function VideoStep({ course, user, api, mayPledge, onNext, onPledge, preview = false }) {
+function VideoStep({ course, user, api, mayPledge, onNext, onPledge, preview = false, review = false, onCert }) {
   const vRef = React.useRef(null);
   const maxRef = React.useRef(0);       // 지금까지 도달한 가장 먼 위치(그 앞은 다시 보기 가능)
   const watchedRef = React.useRef(0);   // 실제로 본 초(건너뛴 부분 제외)
@@ -178,6 +180,9 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge, preview = f
   };
   const poke = () => { setIdle(false); clearTimeout(idleT.current); idleT.current = setTimeout(() => setIdle(true), 2500); };
   React.useEffect(() => () => clearTimeout(idleT.current), []);
+  const canResume = maxRef.current >= 3 && Math.abs(t - maxRef.current) > 3;
+  const resume = () => { const v = vRef.current; if (!v) return; v.currentTime = Math.max(0, maxRef.current - 1); lastT.current = v.currentTime; v.play().catch(() => {}); };
+  const restart = () => { const v = vRef.current; if (!v) return; v.currentTime = 0; lastT.current = 0; v.play().catch(() => {}); };
   const back10 = () => { const v = vRef.current; if (!v) return; v.currentTime = Math.max(0, v.currentTime - 10); lastT.current = v.currentTime; };
   const done = watchedEnough(watched, dur) || (dur > 0 && maxRef.current >= dur - 0.6 && watched >= dur * WATCH_RATIO);
   const pct = dur ? Math.min(100, (watched / dur) * 100) : 0;
@@ -232,7 +237,16 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge, preview = f
       </div>
 
       <div className="min-w-0">
-      {preview ? (
+      {review ? (
+        <div className="mt-4 lg:mt-0 rounded-2xl bg-white p-4" style={{ border: `1px solid ${LINE}` }}>
+          <div className="text-[13.5px] font-extrabold inline-flex items-center gap-1.5" style={{ color: INK }}><EduIcon name="cert" size={15} style={{ color: NAVY }} />이수 완료 · 다시 보기</div>
+          <div className="mt-1.5 text-[12.5px] font-semibold leading-relaxed break-keep" style={{ color: SUB }}>이미 이수한 교육이라 자유롭게 앞뒤로 넘겨 볼 수 있어요. 다시 봐도 이수 기록은 그대로예요.</div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button type="button" onClick={restart} className="h-11 rounded-xl text-[13px] font-black inline-flex items-center justify-center gap-1.5" style={{ background: "#F1F4F9", color: NAVY }}><EduIcon name="replay" size={15} />처음부터 보기</button>
+            {onCert && <button type="button" onClick={onCert} className="h-11 rounded-xl text-[13px] font-black inline-flex items-center justify-center gap-1.5" style={{ background: "#F1F4F9", color: NAVY }}><EduIcon name="cert" size={15} />이수증 보기</button>}
+          </div>
+        </div>
+      ) : preview ? (
         <div className="mt-4 lg:mt-0 rounded-2xl bg-white p-4" style={{ border: `1px solid ${LINE}` }}>
           <div className="text-[13.5px] font-extrabold inline-flex items-center gap-1.5" style={{ color: INK }}><EduIcon name="eye" size={15} style={{ color: NAVY }} />미리 보기</div>
           <div className="mt-1.5 text-[12.5px] font-semibold leading-relaxed break-keep" style={{ color: SUB }}>기사님이 받는 교육을 확인하는 화면이에요. 이수 기록은 남지 않고, 자유롭게 앞뒤로 넘겨 볼 수 있어요.</div>
@@ -246,14 +260,18 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge, preview = f
         <div className="mt-2 h-2 rounded-full overflow-hidden" style={{ background: "#EEF1F6" }}>
           <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: NAVY }} />
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          {[["lock", "건너뛰기 불가"], ["replay", "다시 보기 가능"], ["clock", "이어서 보기"]].map(([ic, l]) => (
-            <div key={l} className="rounded-xl px-2 py-2.5 flex flex-col items-center gap-1 text-center" style={{ background: "#F6F8FB" }}>
-              <EduIcon name={ic} size={16} style={{ color: NAVY }} />
-              <span className="text-[11.5px] font-bold leading-tight whitespace-nowrap" style={{ color: SUB }}>{l}</span>
-            </div>
-          ))}
+        {/* 버튼: 이어서 보기(마지막으로 본 곳으로) · 다시 보기(이수한 뒤에만) */}
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <button type="button" disabled={!canResume} onClick={resume} className="h-12 rounded-xl px-2 flex flex-col items-center justify-center leading-tight disabled:cursor-not-allowed" style={canResume ? { background: "#EEF3FB", color: NAVY } : { background: "#F6F8FB", color: "#A9B5C8" }}>
+            <span className="text-[13px] font-black inline-flex items-center gap-1"><EduIcon name="clock" size={14} />이어서 보기</span>
+            <span className="text-[11px] font-bold tabular-nums" style={EN}>{maxRef.current >= 3 ? `${fmt(maxRef.current)}부터` : "본 곳이 없어요"}</span>
+          </button>
+          <button type="button" disabled className="h-12 rounded-xl px-2 flex flex-col items-center justify-center leading-tight cursor-not-allowed" style={{ background: "#F6F8FB", color: "#A9B5C8" }} title="이수한 뒤에 처음부터 다시 볼 수 있어요">
+            <span className="text-[13px] font-black inline-flex items-center gap-1"><EduIcon name="replay" size={14} />다시 보기</span>
+            <span className="text-[11px] font-bold">이수 후 가능</span>
+          </button>
         </div>
+        <div className="mt-2.5 text-[12px] font-semibold inline-flex items-center gap-1.5 break-keep" style={{ color: MUTE_P }}><EduIcon name="lock" size={13} />처음 보는 부분은 앞으로 건너뛸 수 없어요. 뒤로 돌려 다시 듣는 건 돼요.</div>
       </div>
 
       <button type="button" disabled={!done} onClick={onNext}
@@ -267,7 +285,7 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge, preview = f
         </button>
       )}
       </>)}
-      {preview && <button type="button" onClick={onNext} className="mt-4 w-full h-[52px] rounded-2xl text-[15.5px] font-extrabold text-white" style={{ background: NAVY }}>미리 보기 닫기</button>}
+      {(preview || review) && <button type="button" onClick={onNext} className="mt-4 w-full h-[52px] rounded-2xl text-[15.5px] font-extrabold text-white" style={{ background: NAVY }}>{review ? "닫기" : "미리 보기 닫기"}</button>}
       </div>
     </div>
   );
@@ -371,7 +389,9 @@ function DoneStep({ course, mode, rec, onClose }) {
 // course · user({ uid, name, companyName, role, carNo }) · mayPledge(관리자가 서약서 대체 허락) · pledgeCourse(대체할 때 쓰는 서약서)
 const noopApi = { loadProgress: async () => null, saveProgress: async () => {}, saveRecord: async () => {} };
 // preview: 관리자 · 직원이 기사 교육을 미리 보기(기록 · 서명 없음, 자유롭게 넘겨 보기)
-export default function EduPlayer({ course, user, mayPledge = false, pledgeCourse = null, api = firestoreEduApi, onClose, onDone, initialStep, preview = false }) {
+// review: 이수한 교육 다시 보기(자유롭게 넘김 · 기록 안 바뀜 · [이수증 보기])
+export default function EduPlayer({ course, user, mayPledge = false, pledgeCourse = null, api = firestoreEduApi, onClose, onDone, initialStep, preview = false, review = false, onCert }) {
+  useBackClose(true, onClose); // 📱 휴대폰 뒤로가기 = 영상 닫고 교육 목록으로
   const [step, setStep] = React.useState(initialStep || "main"); // main | sign | done
   const [mode, setMode] = React.useState(course.kind === "doc" ? "doc" : "video");
   const [busy, setBusy] = React.useState(false);
@@ -396,9 +416,9 @@ export default function EduPlayer({ course, user, mayPledge = false, pledgeCours
   return (
     <div className="fixed inset-0 z-[10000] flex items-stretch justify-center sm:items-center" style={{ background: "rgba(11,20,40,0.5)" }}>
       <div className={`w-full sm:rounded-2xl overflow-hidden flex flex-col bg-white shadow-2xl ${step === "main" && course.kind === "video" ? "sm:h-[92vh] lg:h-auto lg:max-h-[94vh] sm:max-w-[760px] lg:max-w-[1240px]" : "sm:h-[92vh] sm:max-w-[560px] lg:max-w-[680px]"}`}>
-        <Header course={course} step={stepNo} onClose={onClose} preview={preview} />
-        {step === "main" && course.kind === "video" && <VideoStep course={course} user={user} api={preview ? noopApi : api} mayPledge={!preview && mayPledge} preview={preview} onNext={preview ? onClose : () => { setMode("video"); setStep("sign"); }} onPledge={() => { setMode("pledge"); setStep("sign"); }} />}
-        {step === "main" && course.kind === "doc" && <DocStep course={course} preview={preview} onNext={() => (preview ? onClose() : setStep("sign"))} />}
+        <Header course={course} step={stepNo} onClose={onClose} preview={preview || review} />
+        {step === "main" && course.kind === "video" && <VideoStep course={course} user={user} api={preview || review ? noopApi : api} mayPledge={!preview && !review && mayPledge} preview={preview || review} review={review} onCert={onCert} onNext={preview || review ? onClose : () => { setMode("video"); setStep("sign"); }} onPledge={() => { setMode("pledge"); setStep("sign"); }} />}
+        {step === "main" && course.kind === "doc" && <DocStep course={course} preview={preview || review} onNext={() => (preview || review ? onClose() : setStep("sign"))} />}
         {step === "sign" && <SignStep course={course} user={user} mode={mode} pledgeCourse={pledgeCourse} busy={busy} onSubmit={submit} />}
         {step === "done" && <DoneStep course={course} mode={mode} rec={doneRec} onClose={onClose} />}
         {err && <div className="shrink-0 px-4 py-2 text-[13px] font-bold text-center" style={{ background: "#FDF1F1", color: "#B42318" }}>{err}</div>}
