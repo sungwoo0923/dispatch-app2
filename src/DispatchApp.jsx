@@ -3000,7 +3000,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import FareRulesSettings from "./FareRulesSettings";
 import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
 import { SpecialFareTag, SpecialFareLine } from "./specialFareTag";
-import { FareShell, FareCard, FareRange, FareRow, FareVias, FareFilterPills, fareStats } from "./FareResultUi"; // 🎨 2026-11-24 운임조회 결과 창 새 디자인 // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
+import { FareShell, FareCard, FareRange, FareRow, FareVias, FareFilterPills, fareStats as calcFareStats } from "./FareResultUi"; // ⚠ 이 파일에 같은 이름 상태값(fareStats)이 있어 다른 이름으로 // 🎨 2026-11-24 운임조회 결과 창 새 디자인 // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import { withRoutePresets } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
 import { SpecialFareButton, ForkliftChip, ForkliftMark, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount, orderProfit, profitTotals } from "./forklift"; // 🏗 2026-11-09 지게차비용 · ⭐ 2026-11-17 수수료 한 식(orderProfit · profitTotals)
 import { useTableSort, sortRows, SortTh } from "./tableSort";
@@ -21469,7 +21469,7 @@ setConfirmChange(null);
   };
   // 🎨 2026-11-24 새 디자인(src/FareResultUi.jsx) — 운임조회 › 운임 산출과 같은 모양 · 계산은 위 그대로
   const _apply = (v) => { onChange("청구운임", String(v)); setFareModalOpen(false); };
-  const _stats = fareStats(sortedHistory);
+  const _stats = calcFareStats(sortedHistory);
   const _shown = sortedHistory.filter((r) => fare3Filter === "all" || (r._match?.label || "경로일치") === fare3Filter);
   return (
     <FareShell zClass="z-[99999]" from={form.상차지명} to={form.하차지명} stats={_stats} kpiLabel="대표 청구운임" onClose={() => setFareModalOpen(false)}
