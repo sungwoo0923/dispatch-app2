@@ -13,6 +13,7 @@ import { imeFocusRef } from "./imeFocus";
 import { saveDriverChoice } from "./DriverEditChoice";
 import { bizOf, bankForBiz, bizInfoCardBlob } from "./companyBiz";
 import { orderProfit, profitTotals } from "./forklift";
+import { FareShell, FareCard, FareRange, FareRow, FareVias, FareFilterPills, fareStats } from "./FareResultUi"; // 🎨 2026-11-24 운임조회 결과 창 새 디자인
 import { SpecialFareTag, SpecialFareLine } from "./specialFareTag"; // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 
 // ===================== 1. 거래처 주소 충돌 팝업 =====================
@@ -966,7 +967,6 @@ export function AddrFareSearchModal({ open, onClose, pickup, setPickup, drop, se
 
 // 6-3. 운임 결과 창 공용 조각
 const fareNum = (v) => Number(String(v || "0").replace(/[^\d]/g, ""));
-const NUM_FONT = { fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" };
 
 function fareScale(result) {
   const fareMin = result.min;
@@ -984,342 +984,44 @@ function fareScale(result) {
   return { fareMin, fareMax, fareAvg, getBarPct, getFareTag };
 }
 
-// [전체 · 완전일치 · 부분일치 · 톤수일치 · 경로일치] 거르기 탭
-function FareFilterTabs({ records, filter, setFilter }) {
-  const filterLabels = ["all","완전일치","부분일치","톤수일치","경로일치"];
-  const filterCounts = {};
-  (records || []).forEach(r => {
-    const l = r._match?.label || "경로일치";
-    filterCounts[l] = (filterCounts[l] || 0) + 1;
-  });
-  return (
-    <div className="flex gap-1.5 pb-3 flex-wrap">
-      {filterLabels.map(l => {
-        const cnt = l === "all" ? records.length : (filterCounts[l] || 0);
-        if (l !== "all" && cnt === 0) return null;
-        return (
-          <button key={l}
-            onClick={() => setFilter(l)}
-            className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition border ${
-              filter === l
-                ? "bg-[#1B2B4B] text-white border-[#1B2B4B]"
-                : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
-            }`}>
-            {l === "all" ? `전체 ${cnt}건` : `${l} ${cnt}`}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-// 운임 분석(평균 · 최저 · 최고)
-function FareAnalysisBox({ records }) {
-  const fares = (records || []).map(r => fareNum(r.청구운임)).filter(f => f > 0);
-  if (fares.length === 0) return null;
-  const avg = Math.round(fares.reduce((a,b)=>a+b,0) / fares.length);
-  const mn = Math.min(...fares);
-  const mx = Math.max(...fares);
-  return (
-    <div className="mb-3 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
-      <div className="text-[13px] font-bold text-gray-700 mb-2">운임 분석 ({fares.length}건)</div>
-      <div className="flex gap-4 flex-wrap">
-        <div><span className="text-[12px] text-gray-500">평균</span><div className="text-[15px] font-extrabold text-[#1B2B4B]">{avg.toLocaleString()}원</div></div>
-        <div><span className="text-[12px] text-gray-500">최저</span><div className="text-[15px] font-bold text-gray-700">{mn.toLocaleString()}원</div></div>
-        <div><span className="text-[12px] text-gray-500">최고</span><div className="text-[15px] font-bold text-gray-700">{mx.toLocaleString()}원</div></div>
-      </div>
-    </div>
-  );
-}
-
-// 과거 운송 기록 한 줄 — onApply 를 주면 오른쪽에 [적용] 버튼
-function FareRecordCard({ rec, idx, records, getBarPct, getFareTag, onApply }) {
-  const fare = fareNum(rec.청구운임);
-  const { label: fareLabel, cls: fareCls } = getFareTag(fare);
-  const isTop = idx === 0;
-  const barPct = getBarPct(fare);
-  const _allFares = (records || []).map(r => fareNum(r.청구운임)).filter(f => f > 0);
-  const _avg = _allFares.length ? Math.round(_allFares.reduce((a,b)=>a+b,0)/_allFares.length) : 0;
-  const _diff = fare - _avg;
-  const fareWithDiff = (
-    <div className="flex items-baseline gap-1">
-      <span className="text-[20px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</span>
-      {_avg && Math.abs(_diff) >= 1000 ? (
-        <span className={`text-[11px] ml-1 font-semibold ${_diff > 0 ? "text-red-500" : "text-blue-500"}`}>
-          {_diff > 0 ? `+${_diff.toLocaleString()}` : _diff.toLocaleString()}원
-        </span>
-      ) : <span className="text-[11px] text-gray-500 ml-1">평균</span>}
-    </div>
-  );
-  return (
-    <div className={`rounded-xl border overflow-hidden ${isTop ? "border-[#1B2B4B]/40" : "border-gray-150"}`}>
-      {isTop && (
-        <div className="bg-[#1B2B4B] px-4 py-1.5">
-          <span className="text-[#8FB0F0] text-[11px] font-black tracking-wide">★ 최근 유사 운송</span>
-        </div>
-      )}
-      <div className="px-4 py-3 bg-white">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[13px] font-bold text-gray-600">{rec.상차일}</span>
-          <div className="flex gap-1 flex-wrap justify-end items-center">
-            {rec._reverseRoute && (
-              <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#EEF2F8] text-[#1B2B4B] border border-[#DCE3EE]">반대노선</span>
-            )}
-            {rec.긴급 === true && (
-              <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#0F1A30] text-white">긴급</span>
-            )}
-            {rec._match?.label === "완전일치" && (
-              <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">완전일치</span>
-            )}
-            {rec._match?.label === "부분일치" && (
-              <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#2D4C82] text-white">부분일치</span>
-            )}
-            {rec._match?.label === "톤수일치" && (
-              <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#1B2B4B] text-white">톤수일치</span>
-            )}
-            {rec._match?.label === "경로일치" && (
-              <span className="px-2.5 py-1 text-[11px] font-extrabold rounded-full bg-[#8FB0F0] text-[#0F1A30]">경로일치</span>
-            )}
-            <SpecialFareTag row={rec} />
-            <span className={`px-2.5 py-1 text-[11px] font-extrabold rounded-full border ${fareCls}`}>{fareLabel}</span>
-          </div>
-        </div>
-        <div className="text-[14px] font-extrabold text-gray-900 mb-1">
-          {rec.상차지명 || "-"} → {rec.하차지명 || "-"}
-        </div>
-        {(() => {
-          const sa=v=>{if(Array.isArray(v))return v;if(typeof v==="string"&&v.trim().startsWith("["))try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];}return[];};
-          const toN=s=>typeof s==="string"?s:(s?.업체명||s?.지명||s?.주소||"");
-          const parseMainVias=(name)=>{const ms=[...String(name||"").matchAll(/(\d+)\.\s*([^\d\n.]+)/g)];return ms.length>1?ms.sort((a,b)=>+a[1]-+b[1]).slice(1).map(m=>m[2].trim()):[];};
-          const pV=[...new Set([...sa(rec.경유상차목록||[]),...sa(rec.경유지_상차||[]),...sa(rec.경유지상차||[])].map(toN).filter(Boolean))];
-          const dV=[...new Set([...sa(rec.경유하차목록||[]),...sa(rec.경유지_하차||[]),...sa(rec.경유지하차||[])].map(toN).filter(Boolean))];
-          const allPV=pV.length?pV:parseMainVias(rec.상차지명);
-          const allDV=dV.length?dV:parseMainVias(rec.하차지명);
-          if(!allPV.length&&!allDV.length)return null;
-          return(
-            <div className="flex items-center gap-1 flex-wrap mb-1">
-              <span className="px-2 py-0.5 bg-[#1B2B4B]/10 text-[#1B2B4B] border border-[#1B2B4B]/20 text-[10px] font-bold rounded-full">경유 포함</span>
-              {allPV.map((n,i)=><span key={`p${i}`} className="text-[10px] text-[#1B2B4B]/80 bg-[#1B2B4B]/5 border border-[#1B2B4B]/15 px-1.5 py-0.5 rounded font-medium">{n}(상)</span>)}
-              {allDV.map((n,i)=><span key={`d${i}`} className="text-[10px] text-[#1B2B4B]/80 bg-[#1B2B4B]/5 border border-[#1B2B4B]/15 px-1.5 py-0.5 rounded font-medium">{n}(하)</span>)}
-            </div>
-          );
-        })()}
-        <div className="text-[13px] font-semibold text-gray-600 mb-2">
-          {rec.차량종류 || "-"} / {rec.차량톤수 || "-"}
-          {rec.화물내용 && <span> · {rec.화물내용}</span>}
-        </div>
-        <SpecialFareLine row={rec} className="mb-2" />
-        <div className="relative h-1.5 bg-gray-100 rounded-full mb-3">
-          <div className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#1B2B4B] border-2 border-white shadow"
-            style={{ left: `calc(${barPct}% - 5px)` }} />
-        </div>
-        <div className="flex items-center justify-between">
-          <div className="flex flex-col gap-0.5">
-            <div className="text-[13px] font-bold text-gray-800">
-              기사: {rec.이름 || "-"}
-            </div>
-            <div className="text-[12px] text-gray-500">
-              기사운임: <span className="font-bold text-gray-700">{Number(rec.기사운임||0).toLocaleString()}원</span>
-            </div>
-          </div>
-          {onApply ? (
-            <div className="flex items-center gap-2">
-              {fareWithDiff}
-              <button
-                onClick={() => onApply(fare)}
-                className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition active:scale-95">
-                적용
-              </button>
-            </div>
-          ) : fareWithDiff}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// 6-4. 운임 조회 결과 창(선택수정 · 오더복사 패널) — 최저/평균/최고 · 기록마다 [적용]
-// result = { min, max, avg, count } · records: 정렬된 기록 · sortControl: 정렬 드롭다운
-// onApply(금액): 그 금액을 청구운임에 넣기(창 닫기 포함) · zClass: 화면마다 쓰던 z-index 그대로
-export function FareResultModal({ result, target, records, sortControl, filter, setFilter, onApply, onClose, zClass = "z-[999999]" }) {
+// 6-4. 운임 조회 결과 창(선택수정 · 오더복사 패널) · 6-5. 우클릭 [운임조회](보기 전용)
+// 🎨 2026-11-24 새 디자인(src/FareResultUi.jsx) — 네이비 머리(대표 청구운임 · 평균 기사운임 · 평균 매출총이익) → 운임 분포 → 과거 운송 기록
+// result = { min, max, avg, count } · records: 정렬된 기록 · sortControl: 정렬 드롭다운 · onApply(금액): 청구운임에 넣기(창 닫기 포함)
+function FareResultBody({ result, target, records, sortControl, filter, setFilter, onApply, onClose, zClass, isMoto = false }) {
   const { fareMin, fareMax, fareAvg, getBarPct, getFareTag } = fareScale(result);
+  const stats = fareStats(records);
+  const shown = (records || []).filter((r) => filter === "all" || (r._match?.label || "경로일치") === filter);
+  const chips = [target?.차량톤수, target?.차량종류, target?.화물내용, `${result.count}건`];
   return (
-    <div className={`fixed inset-0 bg-black/60 flex items-center justify-center ${zClass} p-4`}>
-      <div className="bg-white rounded-2xl w-[580px] max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
-
-        {/* 헤더 */}
-        <div className="bg-[#1B2B4B] px-6 py-4 flex items-start justify-between shrink-0">
-          <div>
-            <div className="text-white font-bold text-[17px] tracking-tight">운임 조회 결과</div>
-            <div className="text-white/55 text-[12px] mt-1 font-medium">
-              {target?.상차지명 || "-"} → {target?.하차지명 || "-"}
-            </div>
-          </div>
-          <button onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl flex items-center justify-center transition mt-0.5">
-            ×
-          </button>
+    <FareShell from={target?.상차지명} to={target?.하차지명} chips={chips} stats={stats} onClose={onClose} zClass={zClass}>
+      {isMoto && <div className="px-4 py-3 bg-white border border-[#E3E8F0] rounded-xl text-[12.5px] text-[#0F1A30] font-bold">오토바이/바이크 노선은 T-Map 권장 운임을 참고하시기 바랍니다.</div>}
+      <FareCard title="운임 분포" sub={`조회 ${result.count}건 · 청구운임`}>
+        <FareRange min={fareMin} max={fareMax} marker={fareAvg} markerLabel="평균" sales={stats?.sales || []} onApply={onApply}
+          quick={[{ label: "최저 운임", sub: "가장 낮은 이력", value: fareMin }, { label: "평균 운임", sub: "전체 평균", value: fareAvg, strong: true }, { label: "최고 운임", sub: "가장 높은 이력", value: fareMax }]} />
+      </FareCard>
+      <FareCard title="과거 운송 기록" sub={`${shown.length}건`} right={sortControl}>
+        <FareFilterPills records={records || []} filter={filter} setFilter={setFilter} />
+        <div className="space-y-2">
+          {shown.map((rec, idx) => {
+            const fare = fareNum(rec.청구운임);
+            return (
+              <FareRow key={idx} rec={rec} top={idx === 0} avg={stats?.saleAvg || 0} pct={getBarPct(fare)} onApply={onApply}
+                tags={[{ text: rec._match?.label || "경로일치", strong: rec._match?.label === "완전일치" }, rec._reverseRoute && { text: "반대노선" }, rec.긴급 === true && { text: "긴급", strong: true }, { text: getFareTag(fare).label }]}
+                vias={<FareVias rec={rec} />} extra={{ tag: <SpecialFareTag row={rec} size="sm" />, line: <SpecialFareLine row={rec} className="mt-1" /> }} />
+            );
+          })}
+          {!shown.length && <div className="py-8 text-center text-[13px] text-[#8A97AD]">과거 운송 기록이 없어요.</div>}
         </div>
-
-        <div className="flex-1 overflow-y-auto">
-          {/* 운임 범위 요약 */}
-          <div className="px-6 py-5 border-b border-gray-100">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                조회 운임 범위 ({result.count}건)
-              </span>
-            </div>
-            <div className="flex items-baseline gap-2 mt-1 mb-4">
-              <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMin.toLocaleString()}</span>
-              <span className="text-[18px] font-bold text-gray-400">~</span>
-              <span className="text-[30px] font-black text-[#1B2B4B] leading-none">{fareMax.toLocaleString()}</span>
-              <span className="text-[14px] font-semibold text-gray-500 mb-0.5">원</span>
-            </div>
-            <div className="relative h-2 bg-gray-100 rounded-full mb-2">
-              <div className="absolute inset-0 bg-gray-200 rounded-full" />
-              <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
-                style={{ left: `calc(${getBarPct(fareAvg)}% - 6px)` }} />
-            </div>
-            <div className="flex justify-between text-[11px] font-semibold text-gray-500">
-              <span>최저 {fareMin.toLocaleString()}원</span>
-              <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
-              <span>최고 {fareMax.toLocaleString()}원</span>
-            </div>
-
-            {/* 빠른 적용 버튼 */}
-            <div className="grid grid-cols-3 gap-2 mt-4">
-              {[
-                { label: "최저 운임", sub: "가장 저렴한 이력", value: fareMin },
-                { label: "평균 운임", sub: "전체 평균 기준",   value: fareAvg },
-                { label: "최고 운임", sub: "가장 높은 이력",   value: fareMax },
-              ].map(({ label, sub, value }) => (
-                <button key={label}
-                  onClick={() => onApply(value)}
-                  className="rounded-xl border border-gray-200 bg-gray-50 hover:bg-[#1B2B4B] hover:text-white hover:border-[#1B2B4B] px-3 py-3 text-center transition group active:scale-95">
-                  <div className="text-[10px] font-bold text-gray-500 group-hover:text-white/60 mb-1">{label}</div>
-                  <div className="text-[18px] font-extrabold text-[#1B2B4B] group-hover:text-white leading-none">{value.toLocaleString()}</div>
-                  <div className="text-[10px] text-gray-500 group-hover:text-white/50 mt-1">{sub}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 과거 운송 기록 */}
-          <div className="px-6 pt-4 pb-6">
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
-              {sortControl}
-            </div>
-            {/* 필터 탭 */}
-            <FareFilterTabs records={records} filter={filter} setFilter={setFilter} />
-            <FareAnalysisBox records={records} />
-            <div className="space-y-2">
-              {(records || []).filter(r => filter === "all" || (r._match?.label || "경로일치") === filter).map((rec, idx) => (
-                <FareRecordCard key={idx} rec={rec} idx={idx} records={records} getBarPct={getBarPct} getFareTag={getFareTag} onApply={onApply} />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* 닫기 */}
-        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
-          <button onClick={onClose}
-            className="w-full py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[14px] font-bold transition">
-            닫기
-          </button>
-        </div>
-      </div>
-    </div>
+      </FareCard>
+    </FareShell>
   );
 }
-
-// 6-5. 우클릭 [운임조회] 결과 창(보기 전용 · 새 디자인)
+export function FareResultModal({ result, target, records, sortControl, filter, setFilter, onApply, onClose, zClass = "z-[999999]" }) {
+  const [own, setOwn] = React.useState("all");
+  return <FareResultBody result={result} target={target} records={records} sortControl={sortControl} filter={filter !== undefined ? filter : own} setFilter={setFilter || setOwn} onApply={onApply} onClose={onClose} zClass={zClass} />;
+}
 // filter · setFilter 를 안 주면 창 안에서 따로 기억한다. isMoto: 오토바이 노선 안내 문구
 export function CtxFareResultModal({ result, target, records, sortControl, filter: filterProp, setFilter: setFilterProp, isMoto = false, onClose }) {
-  const [ownFilter, setOwnFilter] = React.useState("all");
-  const filter = filterProp !== undefined ? filterProp : ownFilter;
-  const setFilter = setFilterProp || setOwnFilter;
-  const { fareMin, fareMax, fareAvg, getBarPct, getFareTag } = fareScale(result);
-  return (
-    <div className="fixed inset-0 bg-[#0B1428]/70 backdrop-blur-[3px] flex items-center justify-center z-[999999] p-4">
-      <div className="bg-[#F4F6FA] rounded-[26px] w-[760px] max-w-[96vw] max-h-[90vh] flex flex-col shadow-[0_40px_100px_rgba(0,0,0,0.45)] overflow-hidden">
-        <div className="relative px-6 py-5 flex items-start justify-between shrink-0 overflow-hidden" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}><span className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
-          <div>
-            <div className="relative text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={NUM_FONT}>FARE · HISTORY</div><div className="relative text-white font-black text-[20px] tracking-tight leading-tight">운임 조회 결과</div>
-            <div className="relative text-white/65 text-[13px] mt-1 font-bold">
-              {target?.상차지명 || "-"} → {target?.하차지명 || "-"}
-            </div>
-          </div>
-          <button onClick={onClose}
-            className="relative h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 hover:bg-white/20 text-white text-[13px] font-bold flex items-center justify-center transition">
-            ×
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {isMoto && (
-            <div className="mx-6 mt-5 px-4 py-3 bg-white border border-[#DCE3EE] rounded-xl text-[12.5px] text-[#1B2B4B] font-bold">
-              오토바이/바이크 노선은 T-Map 권장 운임을 참고하시기 바랍니다.
-            </div>
-          )}
-          <div className="mx-5 mt-5 px-5 py-5 bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_8px_22px_rgba(16,24,40,0.05)]">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                조회 운임 범위 ({result.count}건)
-              </span>
-            </div>
-            <div className="flex items-baseline gap-2 mt-1 mb-4">
-              <span className="text-[32px] font-black text-[#0F1A30] leading-none tabular-nums" style={NUM_FONT}>{fareMin.toLocaleString()}</span>
-              <span className="text-[18px] font-bold text-gray-400">~</span>
-              <span className="text-[32px] font-black text-[#0F1A30] leading-none tabular-nums" style={NUM_FONT}>{fareMax.toLocaleString()}</span>
-              <span className="text-[14px] font-semibold text-gray-500 mb-0.5">원</span>
-            </div>
-            <div className="relative h-2 bg-gray-100 rounded-full mb-2">
-              <div className="absolute inset-0 bg-gray-200 rounded-full" />
-              <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
-                style={{ left: `calc(${getBarPct(fareAvg)}% - 6px)` }} />
-            </div>
-            <div className="flex justify-between text-[11px] font-semibold text-gray-500">
-              <span>최저 {fareMin.toLocaleString()}원</span>
-              <span className="text-[#1B2B4B] font-bold">평균 {fareAvg.toLocaleString()}원</span>
-              <span>최고 {fareMax.toLocaleString()}원</span>
-            </div>
-            <div className="grid grid-cols-3 gap-2 mt-4">
-              {[
-                { label: "최저 운임", sub: "가장 저렴한 이력", value: fareMin },
-                { label: "평균 운임", sub: "전체 평균 기준",   value: fareAvg },
-                { label: "최고 운임", sub: "가장 높은 이력",   value: fareMax },
-              ].map(({ label, sub, value }) => (
-                <div key={label}
-                  className="rounded-xl border border-[#E3E8F0] bg-[#F7F9FC] px-3 py-3 text-center">
-                  <div className="text-[10px] font-bold text-gray-500 mb-1">{label}</div>
-                  <div className="text-[19px] font-black text-[#0F1A30] leading-none tabular-nums" style={NUM_FONT}>{value.toLocaleString()}</div>
-                  <div className="text-[10px] text-gray-500 mt-1">{sub}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="mx-5 mt-4 mb-5 px-5 pt-4 pb-5 bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_8px_22px_rgba(16,24,40,0.05)]">
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <span className="text-[15px] font-black text-[#0F1A30]">과거 운송 기록</span>
-              {sortControl}
-            </div>
-            {/* 필터 탭 */}
-            <FareFilterTabs records={records} filter={filter} setFilter={setFilter} />
-            <FareAnalysisBox records={records} />
-            <div className="space-y-2">
-              {(records || []).filter(r => filter === "all" || (r._match?.label || "경로일치") === filter).map((rec, idx) => (
-                <FareRecordCard key={idx} rec={rec} idx={idx} records={records} getBarPct={getBarPct} getFareTag={getFareTag} />
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 shrink-0">
-          <button onClick={onClose}
-            className="w-full py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300 text-[#1B2B4B] text-[14px] font-bold transition">
-            닫기
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  const [own, setOwn] = React.useState("all");
+  return <FareResultBody result={result} target={target} records={records} sortControl={sortControl} filter={filterProp !== undefined ? filterProp : own} setFilter={setFilterProp || setOwn} isMoto={isMoto} onClose={onClose} zClass="z-[999999]" />;
 }

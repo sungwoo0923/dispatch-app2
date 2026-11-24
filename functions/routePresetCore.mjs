@@ -17,7 +17,11 @@
 //  야간 상차 = 상차시간 18:00 ~ 05:00 · 상차시간/하차시간 칸에 "야상" · 메모 꼬리표 "야상"(구글시트 입고시간 칸 "야상"을 가져온 오더)
 
 export const AUTO = "routePreset";
-export const COND = [{ key: "항상", label: "늘" }, { key: "야간", label: "야간 상차일 때만" }];
+export const COND = [{ key: "항상", label: "늘" }, { key: "야간", label: "야간 상차일 때만" }, { key: "익착", label: "익착일 때만" }, { key: "월착", label: "월착일 때만" }];
+// ⭐ 2026-11-24 도착 구분 조건(익착 · 월착) · 경유 개소당 금액 — JY 에이제이 시트 규칙(야상 · 익착 · 월착 · 경유 · 계근비)
+//  조건 "익착" = 상차 다음 날 하차(야간 상차 제외) · "월착" = 금요일 상차 → 월요일 하차(또는 메모 꼬리표 익착 · 월착)
+//  단위 "개소" = 경유지 한 곳마다 금액(경유상차목록 + 경유하차목록 수만큼 곱한다 · 경유지가 없으면 넣지 않는다)
+export const COND_LABEL = { 항상: "항상", 야간: "야간 상차일 때만", 익착: "익착일 때만", 월착: "월착일 때만" };
 // src/forkliftCore.js SPECIAL_TYPES 의 기본값과 같게(서버는 src를 못 읽는다)
 const TYPE_DEFAULT = { 지게차: { payee: "외부", mode: "기사" }, 대기료: { payee: "기사", mode: "청구" }, 수작업: { payee: "외부", mode: "청구" }, 경유: { payee: "기사", mode: "청구" }, 할증: { payee: "기사", mode: "청구" }, 통행료: { payee: "기사", mode: "청구" }, 기타: { payee: "기사", mode: "청구" } };
 export const TYPE_LABEL = { 지게차: "지게차비용", 대기료: "대기료", 수작업: "수작업·인력", 경유: "경유", 할증: "야간·휴일 할증", 통행료: "통행료·주차비", 기타: "기타" };
@@ -48,7 +52,8 @@ export const itemMode = (it) => {
 export const itemName = (it) => cell(it?.이름) || TYPE_LABEL[typeOf(it?.종류)];
 // 같은 칸(slot) — 지게차는 하나, 기타는 이름별, 나머지는 종류별
 export const slotOf = (it) => { const t = typeOf(it?.종류); return t === "지게차" ? "지게차" : t === "기타" ? `기타|${nk(it?.이름)}` : t; };
-export const condOf = (it) => (it?.조건 === "야간" ? "야간" : "항상");
+export const condOf = (it) => (COND_LABEL[it?.조건] && it.조건 !== "항상" ? it.조건 : "항상");
+export const unitOf = (it) => (typeOf(it?.종류) === "경유" && it?.단위 === "개소" ? "개소" : "건");
 
 // ── 야간 상차 ────────────────────────────────────────────
 export function loadHour(t0) {
@@ -68,10 +73,32 @@ export function isNightLoad(o) {
   return /(^|[\s·/,])야상($|[\s·/,+(])/.test(cell(o?.메모));
 }
 
+// ── 도착 구분(당착 · 야상 · 익착 · 월착) · 경유지 수 ─────────────
+const ymd = (v) => { const m = /(\d{4})\D?(\d{1,2})\D?(\d{1,2})/.exec(cell(v)); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : null; };
+export function arrivalOf(o) {
+  if (isNightLoad(o)) return "야상";
+  const memo = cell(o?.메모);
+  if (/(^|[\s·/,])월착($|[\s·/,])/.test(memo)) return "월착";
+  if (/(^|[\s·/,])익착($|[\s·/,])/.test(memo)) return "익착";
+  const a = ymd(o?.상차일), b = ymd(o?.하차일);
+  if (a == null || b == null || b <= a) return "당착";
+  const d = Math.round((b - a) / 86400000);
+  if (d === 3 && new Date(a).getUTCDay() === 5) return "월착";
+  return d === 1 ? "익착" : "당착";
+}
+const condHit = (cond, o) => (cond === "야간" ? isNightLoad(o) : cond === "익착" || cond === "월착" ? arrivalOf(o) === cond : true);
+const viaList = (v) => (Array.isArray(v) ? v.filter((x) => x && (typeof x !== "object" || cell(x.업체명) || cell(x.주소))) : []);
+export function stopCount(o) {
+  const up = viaList(o?.경유상차목록).length ? viaList(o?.경유상차목록) : viaList(o?.경유지_상차);
+  const down = viaList(o?.경유하차목록).length ? viaList(o?.경유하차목록) : viaList(o?.경유지_하차);
+  return up.length + down.length;
+}
+
 // ── 프리셋 문서 읽기 ─────────────────────────────────────
 export function cleanItem(x = {}) {
   const t = typeOf(x.종류);
   const it = { 종류: t, 이름: t === "지게차" ? "" : cell(x.이름), 금액: Math.max(0, num(x.금액)), 부담: "", 받는사람: "", 조건: condOf(x), 메모: cell(x.메모) };
+  if (unitOf(x) === "개소") it.단위 = "개소";
   it.받는사람 = itemPayee({ ...x, 종류: t }); it.부담 = itemMode({ ...x, 종류: t });
   if (t === "지게차") ["지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사"].forEach((k) => { if (cell(x[k])) it[k] = cell(x[k]); });
   return it;
@@ -122,13 +149,15 @@ export function presetsFor(order, presets = []) {
 }
 export function matchRoutePreset(order, presets = []) {
   const night = isNightLoad(order);
+  const stops = stopCount(order);
   const taken = new Set(); const items = []; const from = [];
   for (const p of presetsFor(order, presets)) {
     let used = false;
     for (const it0 of p.items || []) {
       const it = cleanItem(it0);
       if (!(it.금액 > 0) || taken.has(slotOf(it))) continue;
-      if (it.조건 === "야간" && !night) continue;
+      if (!condHit(it.조건, order)) continue;
+      if (it.단위 === "개소") { if (!stops) continue; taken.add(slotOf(it)); items.push({ ...it, 금액: it.금액 * stops, 메모: `경유 ${stops}곳 × ${it.금액.toLocaleString("ko-KR")}` }); used = true; continue; }
       taken.add(slotOf(it)); items.push(it); used = true;
     }
     if (used) from.push(p);
@@ -223,7 +252,7 @@ export function mergeItems(oldItems = [], newItems = []) {
 //  같은 항목(종류 · 이름 · 금액 · 부담 · 받는사람)이 그 노선 오더의 minShare 이상에 있으면 제안 — 조건 "항상"
 //  아니면 야간 상차 오더만 보고 minShare 이상이고, 낮 오더에는 거의 없으면(10% 이하) — 조건 "야간"
 const CANCELED = /취소/;
-function orderItems(o) {
+function orderItems(o, stops = 0) {
   const out = [];
   const F = Math.max(0, num(o?.지게차비용));
   if (F > 0) out.push(cleanItem({ 종류: "지게차", 금액: F, 부담: ["기사", "회사", "청구"].includes(o.지게차부담) ? o.지게차부담 : "기사" }));
@@ -232,13 +261,14 @@ function orderItems(o) {
     const it = cleanItem(x); it.메모 = ""; const k = `${slotOf(it)}|${it.받는사람}|${it.부담}|${it.이름}`;
     const p = m.get(k); if (p) p.금액 += it.금액; else m.set(k, it);
   });
-  return [...out, ...m.values()];
+  // 경유 금액이 경유지 수로 나누어떨어지면 개소당 금액으로 본다(경유 1곳 30,000 · 2곳 60,000 → 개소당 30,000)
+  return [...out, ...[...m.values()].map((it) => (it.종류 === "경유" && stops > 0 && it.금액 % stops === 0 ? { ...it, 금액: it.금액 / stops, 단위: "개소" } : it))];
 }
 const itemKey = (it) => `${slotOf(it)}|${it.이름}|${it.금액}|${it.부담}|${it.받는사람}`;
 const topName = (vals) => { const m = new Map(); vals.forEach((v) => { const s = cell(v); if (s) m.set(s, (m.get(s) || 0) + 1); }); return [...m.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || ""; };
 export function seedProposals(orders = [], { minCount = 3, minShare = 0.7, dayMax = 0.1, existing = [] } = {}) {
   const rows = (orders || []).filter((o) => o && nk(o.거래처명) && (nk(o.상차지명) || nk(o.하차지명)) && !CANCELED.test(cell(o.배차상태)) && !CANCELED.test(cell(o.상태)))
-    .map((o) => ({ o, night: isNightLoad(o), items: orderItems(o) }));
+    .map((o) => { const arr = arrivalOf(o); const stops = stopCount(o); return { o, night: isNightLoad(o), arr, stops, items: orderItems(o, stops) }; });
   const LEVELS = [
     { level: 1, key: (o) => (nk(o.하차지명) ? `${nk(o.거래처명)}||${nk(o.하차지명)}` : "") },
     { level: 0, key: (o) => (nk(o.상차지명) && nk(o.하차지명) ? `${nk(o.거래처명)}|${nk(o.상차지명)}|${nk(o.하차지명)}` : "") },
@@ -252,14 +282,24 @@ export function seedProposals(orders = [], { minCount = 3, minShare = 0.7, dayMa
     for (const [, g] of groups) {
       const n = g.length; if (n < minCount) continue;
       const nightN = g.filter((r) => r.night).length; const dayN = n - nightN;
+      const condN = { 야간: nightN, 익착: g.filter((r) => r.arr === "익착").length, 월착: g.filter((r) => r.arr === "월착").length };
+      const viaN = g.filter((r) => r.stops > 0).length;
+      const inCond = (cond, r) => (cond === "야간" ? r.night : r.arr === cond);
       const c = nk(g[0].o.거래처명), f = L.level === 1 ? "" : nk(g[0].o.상차지명), t = L.level === 2 ? "" : nk(g[0].o.하차지명);
       const stat = new Map();
-      g.forEach((r) => { const seen = new Set(); r.items.forEach((it) => { const k = itemKey(it); if (seen.has(k)) return; seen.add(k); const s = stat.get(k) || { it, all: 0, night: 0, rows: [] }; s.all += 1; if (r.night) s.night += 1; s.rows.push(r); stat.set(k, s); }); });
+      g.forEach((r) => { const seen = new Set(); r.items.forEach((it) => { const k = itemKey(it); if (seen.has(k)) return; seen.add(k); const s = stat.get(k) || { it, all: 0, night: 0, cnt: { 야간: 0, 익착: 0, 월착: 0 }, rows: [] }; s.all += 1; if (r.night) s.night += 1; ["야간", "익착", "월착"].forEach((c) => { if (inCond(c, r)) s.cnt[c] += 1; }); s.rows.push(r); stat.set(k, s); }); });
       const bySlot = new Map();
       for (const s of stat.values()) {
         let cond = "";
-        if (s.all / n >= minShare) cond = "항상";
-        else if (nightN >= minCount && s.night / nightN >= minShare && (s.all - s.night) <= Math.floor(dayN * dayMax)) cond = "야간";
+        // 개소당 경유 금액 = 경유지가 있는 오더 중에서 본다(경유 없는 오더에는 원래 붙지 않는다)
+        if (s.it.단위 === "개소") { if (viaN >= minCount && s.all / viaN >= minShare) cond = "항상"; }
+        else if (s.all / n >= minShare) cond = "항상";
+        else {
+          for (const c of ["야간", "익착", "월착"]) {
+            const cn = condN[c]; const other = n - cn;
+            if (cn >= minCount && s.cnt[c] / cn >= minShare && (s.all - s.cnt[c]) <= Math.floor(other * dayMax)) { cond = c; break; }
+          }
+        }
         if (!cond) continue;
         const slot = slotOf(s.it);
         const prev = bySlot.get(slot);
@@ -275,9 +315,11 @@ export function seedProposals(orders = [], { minCount = 3, minShare = 0.7, dayMa
         const item = { ...s.it, 조건: cond, 메모: "" };
         const same = (existing || []).find((e) => !e.legacy && nk(e.거래처명) === c && nk(e.상차지명) === f && nk(e.하차지명) === t);
         const hit = same && (same.items || []).find((x) => slotOf(x) === slot);
-        const status = !hit ? "new" : hit.금액 === item.금액 && hit.부담 === item.부담 && condOf(hit) === cond ? "same" : "diff";
-        out.push({ id: `${L.level}|${c}|${f}|${t}|${slot}`, level: L.level, ...p, item, count: cond === "야간" ? s.night : s.all, total: cond === "야간" ? nightN : n, routeCount: n, nightCount: nightN,
-          share: cond === "야간" ? s.night / nightN : s.all / n, status, current: hit || null });
+        const status = !hit ? "new" : hit.금액 === item.금액 && hit.부담 === item.부담 && condOf(hit) === cond && unitOf(hit) === unitOf(item) ? "same" : "diff";
+        const total = cond !== "항상" ? condN[cond] : item.단위 === "개소" ? viaN : n;
+        const count = cond !== "항상" ? s.cnt[cond] : s.all;
+        out.push({ id: `${L.level}|${c}|${f}|${t}|${slot}`, level: L.level, ...p, item, count, total, routeCount: n, nightCount: nightN, condCount: total,
+          share: total ? count / total : 0, status, current: hit || null });
       }
     }
   }

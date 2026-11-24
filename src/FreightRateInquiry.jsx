@@ -4,6 +4,7 @@ import { useListKeys } from "./useListKeys";
 import { useSubnavTarget } from "./navMenus";
 import southKorea from "@svg-maps/south-korea";
 import StandardFare from "./StandardFare";
+import FareQuote from "./FareQuote"; // ⭐ 2026-11-24 운임 산출(단가표 · 노선 규칙 · 실거래 → 청구운임 · 기사운임 · 매출총이익)
 import { db } from "./firebase";
 import { collection, onSnapshot, query, where, getDocs } from "firebase/firestore";
 // ⚡ 2026-11-23 운임 참고용 13개월 오더는 화면을 열 때 한 번만 받는다 — 예전엔 실시간 구독이라 누가 오더를 고칠 때마다 받고,
@@ -1188,63 +1189,43 @@ function NationalFareTab() {
                 {result.viaCount>0&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white/20 text-white">경유{result.viaCount}</span>}
                 <span className="text-[11px] text-white/40 font-semibold ml-auto">{result.mode==="독차"?VEHICLE_TYPES.find(v=>v.id===vehicle)?.name:""} {fromP}→{toP}</span>
               </div>
-              <div className="mb-3">
-                <div className="text-[11px] text-white/40 font-semibold mb-1">예상 운임 (VAT 별도)</div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[26px] font-black text-white tabular-nums">{fmtMoney(result.min)}</span>
-                  <span className="text-white/30 text-[18px]">~</span>
-                  <span className="text-[26px] font-black text-white tabular-nums">{fmtMoney(result.max)}</span>
+              {/* 🎨 2026-11-24 새 디자인 — 운임 산출과 같은 핵심 숫자 타일(예상 평균 · 자사 청구 · 자사 기사운임) + 조건 칸 */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                <div className="rounded-2xl bg-white text-[#0F1A30] px-4 py-3">
+                  <div className="text-[11.5px] font-bold text-[#6B7A93]">예상 평균 운임 <span className="font-medium opacity-70">시세</span></div>
+                  <div className="text-[24px] font-black tabular-nums tracking-[-0.02em] mt-0.5">{fmtMoney(result.avg)}</div>
+                  <div className="text-[11px] text-[#6B7A93] mt-0.5 tabular-nums">{fmtMoney(result.min)} ~ {fmtMoney(result.max)} · VAT 별도</div>
+                </div>
+                <div className="rounded-2xl bg-white/[0.06] border border-white/10 px-4 py-3">
+                  <div className="text-[11.5px] font-bold text-white/55">자사 청구운임 평균</div>
+                  <div className="text-[22px] font-black tabular-nums tracking-[-0.02em] mt-0.5 text-white">{refData?.charge ? fmtMoney(refData.charge.avg) : "—"}</div>
+                  <div className="text-[11px] text-white/45 mt-0.5 tabular-nums">{refData?.charge ? `${fmtMoney(refData.charge.min)} ~ ${fmtMoney(refData.charge.max)} · ${refData.count}건` : "동일 조건 실거래 없음"}</div>
+                </div>
+                <div className="rounded-2xl bg-white/[0.06] border border-white/10 px-4 py-3">
+                  <div className="text-[11.5px] font-bold text-white/55">자사 기사운임 평균</div>
+                  <div className="text-[22px] font-black tabular-nums tracking-[-0.02em] mt-0.5 text-white">{refData?.driver ? fmtMoney(refData.driver.avg) : "—"}</div>
+                  <div className="text-[11px] text-white/45 mt-0.5 tabular-nums">{refData?.driver ? `${fmtMoney(refData.driver.min)} ~ ${fmtMoney(refData.driver.max)}` : "매입"}</div>
                 </div>
               </div>
-              <div className="bg-white/8 rounded-xl p-3 mb-3">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[11px] text-white/50 font-semibold">평균 운임</span>
-                  <span className="text-[22px] font-black text-white tabular-nums">{fmtMoney(result.avg)}</span>
-                </div>
-                <div className="h-1.5 bg-white/10 rounded-full"><div className="h-full bg-gradient-to-r from-[#4B6CB7] to-[#CFE0FF] rounded-full" style={{width:"55%"}}/></div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 mb-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 px-1 py-2 border-t border-white/10">
                 {[
                   {l:"거리",v:`약 ${result.distance}km`},
                   {l:"예상시간",v:fmtTime(result.mins)},
                   ...(result.mode==="독차"?[{l:"연료비",v:`${result.fuelCost?.toLocaleString()}원`},{l:"차종",v:VEHICLE_TYPES.find(v=>v.id===vehicle)?.name}]
                     :[{l:"적재단위",v:`${result.units}개`},{l:"구간",v:result.tier}]),
-                  ...(result.manualFee>0?[{l:"수작업비",v:`${result.manualFee.toLocaleString()}원`}]:[]),
-                  ...(result.liftFee>0?[{l:"리프트",v:`${result.liftFee.toLocaleString()}원`}]:[]),
+                  ...(result.manualFee>0?[{l:"수작업비",v:`+${result.manualFee.toLocaleString()}원`}]:[]),
+                  ...(result.liftFee>0?[{l:"리프트",v:`+${result.liftFee.toLocaleString()}원`}]:[]),
                   ...(result.refrigFee>0?[{l:"냉장/냉동",v:`+${result.refrigFee.toLocaleString()}원`}]:[]),
                   ...(result.isWeather?[{l:"기상악화",v:"+15%"}]:[]),
                   ...(result.isRound?[{l:"왕복적용",v:"×1.8"}]:[]),
                   ...(result.viaCount>0?[{l:"경유지",v:`${result.viaCount}곳 (+${Number((result.viaFee/10000).toFixed(0))}만원)`}]:[]),
                 ].map(({l,v})=>(
-                  <div key={l} className="bg-white/6 rounded-xl px-3 py-2">
-                    <div className="text-[11px] text-white/35 font-semibold">{l}</div>
-                    <div className="text-[12px] font-bold text-white/85">{v}</div>
+                  <div key={l} className="min-w-0">
+                    <div className="text-[11px] text-white/40 font-semibold">{l}</div>
+                    <div className="text-[12.5px] font-bold text-white/85 truncate tabular-nums">{v}</div>
                   </div>
                 ))}
               </div>
-
-              {/* 자사 실데이터 참고 운임 */}
-              {refData&&(
-                <div className="mt-3 border-t border-white/10 pt-3">
-                  <div className="text-[11px] text-white/40 font-semibold mb-2">자사 실거래 참고 · 동일 조건 ({refData.count}건)</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {refData.charge&&(
-                      <div className="bg-white/6 rounded-xl px-3 py-2">
-                        <div className="text-[11px] text-white/35 font-semibold mb-1">청구운임</div>
-                        <div className="text-[11px] font-bold text-[#CFE0FF]">{fmtMoney(refData.charge.avg)} 평균</div>
-                        <div className="text-[11px] text-white/40">{fmtMoney(refData.charge.min)}~{fmtMoney(refData.charge.max)}</div>
-                      </div>
-                    )}
-                    {refData.driver&&(
-                      <div className="bg-white/6 rounded-xl px-3 py-2">
-                        <div className="text-[11px] text-white/35 font-semibold mb-1">기사운임</div>
-                        <div className="text-[11px] font-bold text-white">{fmtMoney(refData.driver.avg)} 평균</div>
-                        <div className="text-[11px] text-white/40">{fmtMoney(refData.driver.min)}~{fmtMoney(refData.driver.max)}</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
 
               <div className="flex gap-2 mt-3">
                 <button onClick={reset} className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/18 text-white text-[12px] font-bold transition">다시 조회</button>
@@ -1353,38 +1334,34 @@ function CompanyFareTab() {
 
 // ─── 메인 컴포넌트 — 디지털 헤더 + 탭 ───────────────────────────────────────
 const FARE_TABS=[
-  {key:"전국운임조회",en:"NATIONAL",desc:"지역·차종 기준 전국 시세 계산"},
-  {key:"자사운임표",en:"COMPANY",desc:"우리 회사 실거래 운임 히스토리"},
+  {key:"운임산출",label:"운임 산출",en:"QUOTE",desc:"거래처 · 구간 · 차종 기준 청구운임 및 지급운임 산출"},
+  {key:"전국운임조회",label:"전국 시세",en:"NATIONAL",desc:"지역 · 차종 기준 전국 시세 산출"},
+  {key:"자사운임표",label:"자사 운임표",en:"COMPANY",desc:"자사 표준 운임표 · 실거래 운임 이력"},
 ];
 // 📱 forceTab·hideHeader — 모바일 앱이 같은 화면을 탭별로 열 때(머리말·탭은 모바일 화면이 따로 그린다)
-export default function FreightRateInquiry({ forceTab = "", hideHeader = false } = {}){
-  const [tabState,setActiveTab]=useState("전국운임조회");
+export default function FreightRateInquiry({ forceTab = "", hideHeader = false, company = "" } = {}){
+  const [tabState,setActiveTab]=useState("운임산출");
   const activeTab=forceTab||tabState;
   // ⭐ 상단 메뉴 › 운임조회 세부 메뉴에서 고른 탭으로 바로 이동
-  useSubnavTarget(forceTab ? "" : "FARE LOOKUP", ["전국운임조회","자사운임표"], setActiveTab, [["전국운임조회","전국운임조회"],["자사운임표","자사운임표"]]);
-  const MONO="'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
+  useSubnavTarget(forceTab ? "" : "FARE LOOKUP", ["운임산출","전국운임조회","자사운임표"], setActiveTab, [["운임산출","운임산출"],["전국운임조회","전국운임조회"],["자사운임표","자사운임표"]]);
   return(
     <div className="w-full">
-      {!hideHeader && <div className="relative overflow-hidden rounded-[24px] mb-5 px-7 py-5 text-white shadow-[0_18px_40px_rgba(15,26,48,0.25)]"
-        style={{background:"linear-gradient(125deg,#0B1428 0%,#0F1A30 45%,#1B2B4B 80%,#2D4C82 100%)"}}>
-        <div className="absolute inset-0 opacity-[0.08]" style={{backgroundImage:"linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)",backgroundSize:"32px 32px"}}/>
-        <div className="relative flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{fontFamily:MONO, fontVariantNumeric: "tabular-nums"}}>FARE LOOKUP</div>
-            <div className="text-[26px] font-black tracking-tight leading-tight mt-0.5">운임조회</div>
-            <div className="text-[13px] text-white/55 mt-0.5">{FARE_TABS.find(t=>t.key===activeTab)?.desc}</div>
-          </div>
-          <div className="flex p-1 gap-1 rounded-[16px] bg-white/[0.07] ring-1 ring-white/10">
-            {FARE_TABS.map(t=>(
-              <button key={t.key} onClick={()=>setActiveTab(t.key)}
-                className={`h-12 px-5 rounded-[12px] text-left transition whitespace-nowrap ${activeTab===t.key?"bg-white text-[#0F1A30] shadow-[0_8px_20px_rgba(0,0,0,0.25)]":"text-white/70 hover:text-white hover:bg-white/[0.06]"}`}>
-                <div className={`text-[9.5px] font-extrabold tracking-[0.24em] ${activeTab===t.key?"text-[#4B6CB7]":"text-white/40"}`} style={{fontFamily:MONO, fontVariantNumeric: "tabular-nums"}}>{t.en}</div>
-                <div className="text-[14px] font-black leading-tight">{t.key}</div>
-              </button>
-            ))}
-          </div>
+      {/* 🎨 2026-11-24 머리말 — 운임 산출과 같은 깔끔한 모양(제목 · 설명 · 탭) */}
+      {!hideHeader && <div className="flex flex-wrap items-center gap-4 mb-5">
+        <div>
+          <div className="text-[24px] font-black tracking-tight text-[#0F1A30] leading-tight">운임조회</div>
+          <div className="text-[13px] text-[#6B7A93] mt-0.5">{FARE_TABS.find(t=>t.key===activeTab)?.desc}</div>
+        </div>
+        <div className="ml-auto flex p-1 gap-1 rounded-[14px] bg-white border border-[#E3E8F0]">
+          {FARE_TABS.map(t=>(
+            <button key={t.key} onClick={()=>setActiveTab(t.key)} data-fare-tab={t.key}
+              className={`h-10 px-4 rounded-[10px] text-[13px] font-bold whitespace-nowrap transition ${activeTab===t.key?"bg-[#0F1A30] text-white":"text-[#6B7A93] hover:text-[#0F1A30]"}`}>
+              {t.label||t.key}
+            </button>
+          ))}
         </div>
       </div>}
+      {activeTab==="운임산출"&&<FareQuote company={company}/>}
       {activeTab==="전국운임조회"&&<NationalFareTab/>}
       {activeTab==="자사운임표"&&<CompanyFareTab/>}
     </div>

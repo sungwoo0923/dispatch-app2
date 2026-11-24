@@ -23,7 +23,7 @@ import { MonthPicker } from "./kpInputs";
 import { bumpForkliftPayout } from "./ledgerAuto"; // 지급완료 → 수입·지출 장부 자동
 import { isJyCompany } from "./jyOnly"; // 🏷 JY로지스틱스 전용(특수운임 "지급 없음")
 import RouteSpecialPresets from "./RouteSpecialPresets"; // ⭐ 2026-11-18 [특수운임 적용] 팝업 › 고정노선운임 탭
-import { useRoutePresets, applyRoutePresets, planRoutePreset, itemsFromOrder, mergeItems, saveRoutePreset, routePresetIdOf, AUTO as ROUTE_AUTO, nk as routeNk } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
+import { useRoutePresets, applyRoutePresets, planRoutePreset, itemsFromOrder, mergeItems, saveRoutePreset, routePresetIdOf, AUTO as ROUTE_AUTO, nk as routeNk, stopCount as routeStops } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
 import {
   FORKLIFT_MODES, FORKLIFT_UPLOAD_COLS, fkAmount, fkMode, fkModeLabel, fkPresetKey, forkliftApply, forkliftClear,
   forkliftPayoutGroups, forkliftRowFromSheet, forkliftSummary, hasForklift,
@@ -367,7 +367,8 @@ export function specialBadgeText(o) {
 }
 // ⭐ 2026-11-17 노선별 고정 특수운임 자동 적용 — 거래처 · 상차지 · 하차지 · 상차시간이 바뀌면(0.6초 뒤) 맞는 노선 항목을 넣고 운임을 맞춘다
 //  처음 열 때(수정 · 복사 화면)는 건드리지 않고, 사람이 노선을 바꿨을 때만. 팝업에서 직접 [적용]한 오더(특수운임수동)는 건드리지 않는다
-const routeSigOf = (f) => [f?.거래처명, f?.상차지명, f?.하차지명, f?.상차시간].map(routeNk).join("|");
+// 2026-11-24 상차일 · 하차일(익착 · 월착 조건) · 경유지 수(개소당 경유)가 바뀌어도 다시 계산
+const routeSigOf = (f) => [f?.거래처명, f?.상차지명, f?.하차지명, f?.상차시간, f?.상차일, f?.하차일, routeStops(f)].map(routeNk).join("|");
 function useRouteAuto(form, setForm, asString, enabled) {
   const presets = useRoutePresets();
   const sig = routeSigOf(form);
