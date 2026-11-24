@@ -8,7 +8,8 @@ import { installNoDblSelect } from "./noDblSelect.js";
 import "./index.css";
 import { preloadTmapWhenIdle } from "./tmapLoader";
 import { trimLocalStorage } from "./safeStorage";
-import { installModalScrollLock } from "./modalScrollLock"; // 🪟 2026-11-10 팝업이 떠 있으면 스크롤은 팝업 안에서만
+import { installModalScrollLock } from "./modalScrollLock";
+import { installTableXNav } from "./tableXNav"; // ↔ 2026-11-24 넓은 표 좌우 이동(가장자리 화살표 · 아래 구역 막대 · 머리줄 휠) — PC만 // 🪟 2026-11-10 팝업이 떠 있으면 스크롤은 팝업 안에서만
 import { installBackdropGuard } from "./backdropGuard"; // 🪟 2026-11-23 팝업 바깥(어두운 배경)을 눌러도 닫히지 않게 — 프로그램 전체
 import { installDownloadWatch } from "./securityWatch"; // 🛡 2026-11-09 짧은 시간 대량 다운로드 감지(서버 securityPing)
 import { installStickyTableHeads } from "./stickyTableHead"; // 📌 2026-11-17 긴 표는 머리줄(칸 이름)이 맨 위에 고정돼 따라온다(엑셀처럼 · 모든 화면)
@@ -36,6 +37,7 @@ installSaveFeedback();
 // ⭐ 브라우저 저장공간(약 5MB)이 캐시로 꽉 차면 로그인 정보 저장이 실패해 로그인이 안 된다 — 시작할 때 미리 정리
 trimLocalStorage();
 installModalScrollLock();
+installTableXNav();
 installBackdropGuard();
 installDownloadWatch();
 installStickyTableHeads();
