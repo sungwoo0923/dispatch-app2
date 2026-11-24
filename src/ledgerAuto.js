@@ -37,7 +37,7 @@ export async function bumpDriverPayout(db, { date, amount, count = 1, company })
   const fundId = fresh ? await defaultFundId(db, co, "drvpay") : undefined;
   await setDoc(ref, {
     companyName: co, date: d, type: "지출", account: "운반비", item: "기사운임 지급(정산관리 자동)", method: "계좌이체", vendor: "기사",
-    memo: "정산관리 › 지급관리 [지급완료] 합계 — 자동 반영", evidence: "자동", auto: "drvpay",
+    memo: "정산관리 › 지급관리 [지급완료] 합계: 자동 반영", evidence: "자동", auto: "drvpay",
     amount: increment(amt), count: increment(count), updatedAt: serverTimestamp(),
     ...(fresh ? { fundId: fundId || "", receipt: "", createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" } : {}),
   }, { merge: true });
@@ -54,7 +54,7 @@ export async function bumpForkliftPayout(db, { date, amount, count = 1, company 
   const fundId = fresh ? await defaultFundId(db, co, "drvpay") : undefined;
   await setDoc(ref, {
     companyName: co, date: d, type: "지출", account: "운반비", item: "지게차비 지급(정산관리 자동)", method: "계좌이체", vendor: "지게차 기사",
-    memo: "정산관리 › 지게차 지급 [지급완료] 합계 — 자동 반영", evidence: "자동", auto: "fkpay",
+    memo: "정산관리 › 지게차 지급 [지급완료] 합계: 자동 반영", evidence: "자동", auto: "fkpay",
     amount: increment(amt), count: increment(count), updatedAt: serverTimestamp(),
     ...(fresh ? { fundId: fundId || "", receipt: "", createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" } : {}),
   }, { merge: true });
@@ -67,7 +67,7 @@ export async function addClientCollection(db, { name, amount, year, company }) {
   const fundId = await defaultFundId(db, co, "collect");
   await addDoc(collection(db, "acctLedger"), {
     companyName: co, date: kstDay(), type: "수입", account: "운송수입", item: `거래처 수금 · ${name}`, method: "계좌이체", vendor: name,
-    memo: "회계관리 › 미수금 [입금 처리] — 자동 반영", evidence: "자동", receipt: "", fundId, auto: "collect", payName: name, payYear: Number(year) || 0,
+    memo: "회계관리 › 미수금 [입금 처리]: 자동 반영", evidence: "자동", receipt: "", fundId, auto: "collect", payName: name, payYear: Number(year) || 0,
     amount: amt, createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "",
   });
 }

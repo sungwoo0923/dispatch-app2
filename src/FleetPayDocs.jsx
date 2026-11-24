@@ -129,7 +129,7 @@ function DeductionEditor({ title, sub, value = [], auto = [], gross = 0, onSave,
             );
           })}
           <button type="button" onClick={() => setList((p) => [...p, { kind: "세금", label: "세금", amount: "" }])} className="w-full h-11 rounded-xl border-2 border-dashed border-[#C9D2E0] text-[14px] font-black text-[#5B6B85] hover:bg-[#F7F9FC]">+ 공제 항목 추가</button>
-          {auto.length > 0 && <div className="text-[14px] text-[#5B6B85] pt-1">■ 자동 공제 — 공통 공제는 [공통 공제], 과태료는 과태료·사고 서류, 기사님 고정 공제는 기사관리에서 고칩니다</div>}
+          {auto.length > 0 && <div className="text-[14px] text-[#5B6B85] pt-1">■ 자동 공제: 공통 공제는 [공통 공제], 과태료는 과태료·사고 서류, 기사님 고정 공제는 기사관리에서 고칩니다</div>}
         </div>
         <div className="px-6 py-4 border-t border-[#E3E8F0] flex items-center gap-2">
           <div className="text-[14px] font-bold text-[#5B6B85]">합계 <b className="text-[20px] text-[#0B1428] tabular-nums" style={{ fontFamily: MONO }}>{won(total)}</b>원</div>
@@ -822,7 +822,7 @@ export function PenaltyCenter({ drivers = [], companyName = "", supplier = {} })
           <div className={`${card} px-5 py-3.5 mb-3 flex items-center gap-3`}>
             <span className="text-[14px] font-extrabold tracking-[0.12em] text-[#2D4C82]" style={{ fontFamily: MONO }}>SCAN</span>
             {scan.done ? (
-              <span className="text-[14px] font-bold text-[#0F1A30]">{scan.err ? `읽지 못했어요 (${scan.err})` : scan.count ? `${scan.count}개 칸을 채웠어요${scan.driver ? ` · 차량번호로 ${scan.driver} 기사님을 찾았어요` : ""} — 내용을 한 번 확인해 주세요` : "읽은 내용이 없어요. 더 밝고 반듯하게 찍어 주세요"}</span>
+              <span className="text-[14px] font-bold text-[#0F1A30]">{scan.err ? `읽지 못했어요 (${scan.err})` : scan.count ? `${scan.count}개 칸을 채웠어요${scan.driver ? ` · 차량번호로 ${scan.driver} 기사님을 찾았어요` : ""} · 내용을 한 번 확인해 주세요` : "읽은 내용이 없어요. 더 밝고 반듯하게 찍어 주세요"}</span>
             ) : (
               <>
                 <span className="text-[14px] font-bold text-[#0F1A30] whitespace-nowrap">{scan.msg}</span>

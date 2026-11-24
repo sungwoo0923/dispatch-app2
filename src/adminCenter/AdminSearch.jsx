@@ -96,7 +96,7 @@ export default function AdminSearch({ entries = [], onPick, phone = false }) {
     <div className={`relative flex items-center ${cls}`}>
       <span className="absolute left-3 pointer-events-none" style={{ color: G.gold }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg></span>
       <input ref={ref} value={q} onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => !phone && setTimeout(() => setOpen(false), 120)} onKeyDown={onKey}
-        placeholder="메뉴 검색 — 예: 견적, 가입 심사, ㄹㄱㅇ" aria-label="관리자센터 메뉴 검색" autoComplete="off" data-adm-search
+        placeholder="메뉴 검색 (예: 견적, 가입 심사, ㄱㅇㅅ)" aria-label="관리자센터 메뉴 검색" autoComplete="off" data-adm-search
         className="w-full h-10 pl-9 pr-14 rounded-xl text-[14px] font-bold outline-none transition placeholder:font-semibold"
         style={{ background: "rgba(255,255,255,.05)", border: `1px solid ${open ? "rgba(215,188,130,.55)" : G.line}`, color: G.ink, boxShadow: open ? "0 0 0 3px rgba(215,188,130,.12)" : "none" }} />
       {!phone && !q && <span className="absolute right-2.5 h-6 px-1.5 rounded-md text-[11px] font-black grid place-items-center pointer-events-none" style={{ ...NUM, color: G.goldDim, border: `1px solid ${G.line}` }}>Ctrl K</span>}

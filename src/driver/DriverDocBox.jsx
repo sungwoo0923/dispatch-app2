@@ -150,7 +150,7 @@ export default function DriverDocBox({ uid, inbox, companyName = "" }) {
                 <span style={{ display: "block", fontSize: 16.5, fontWeight: it.status === "signed" ? 700 : 900, color: "#0F1A30", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {it.title}{it.status === "sent" && <span style={{ marginLeft: 6, fontSize: 13.5, padding: "1px 6px", borderRadius: 6, background: "#1B2B4B", color: "#fff" }}>NEW</span>}
                 </span>
-                <span style={{ display: "block", fontSize: 14.5, color: "#7A89A3", marginTop: 2 }}>{it.status === "signed" ? "서명 완료" : "서명이 필요합니다 — 눌러서 서명"}</span>
+                <span style={{ display: "block", fontSize: 14.5, color: "#7A89A3", marginTop: 2 }}>{it.status === "signed" ? "서명 완료" : "서명이 필요해요. 눌러서 서명해 주세요"}</span>
               </span>
             </button>
           ))

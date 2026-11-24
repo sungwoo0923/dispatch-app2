@@ -142,14 +142,14 @@ export function reportText(rep, team) {
     `· 전사 매출 비중 ${rep.companyShare.toFixed(1)}%`,
     "",
     "■ 담당자별 실적",
-    ...rep.members.map((m) => `· ${m.name}${m.position ? ` ${m.position}` : ""} — 매출액 ${man(m.sale)} · 매출총이익 ${man(m.profit)} · ${m.cnt}건 (${pct(m.d)})`),
+    ...rep.members.map((m) => `· ${m.name}${m.position ? ` ${m.position}` : ""} · 매출액 ${man(m.sale)} · 매출총이익 ${man(m.profit)} · ${m.cnt}건 (${pct(m.d)})`),
     "",
     "■ 매출 상위 거래처",
     ...rep.clients.top.slice(0, 5).map((x, i) => `${i + 1}. ${x.n} — ${man(x.sale)} (${pct(x.d)})`),
   ];
   if (rep.risks.lossCount || rep.risks.lowCount || rep.risks.unassigned) {
     lines.push("", `■ 리스크 점검 · 역마진 ${rep.risks.lossCount}건 · 저마진(5% 미만) ${rep.risks.lowCount}건 · 미배차 ${rep.risks.unassigned}건`);
-    rep.risks.loss.forEach((x) => lines.push(`· ${x.d.slice(5)} ${x.client} ${man(x.profit)} — 손실 사유: ${x.reason || "미기재"}`));
+    rep.risks.loss.forEach((x) => lines.push(`· ${x.d.slice(5)} ${x.client} ${man(x.profit)} · 손실 사유: ${x.reason || "미기재"}`));
   }
   return lines.join("\n");
 }

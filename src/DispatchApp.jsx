@@ -3414,12 +3414,12 @@ const KP_PAGE_META = {
   정산관리: { en: "SETTLEMENT", desc: "거래처 정산과 기사 지급 관리", icon: "M3 6h18v12H3zM3 10h18M7 15h4" },
   관리센터: { en: "CONTROL CENTER", desc: "가입사 사용량·접속·청구 관제", icon: "M12 3l8 4v6c0 4-3.5 7-8 8-4.5-1-8-4-8-8V7z" },
   // 🏢 부서 모드(경리·인사) 메뉴
-  회계관리: { en: "ACCOUNTING", desc: "미수금·미지급금·부가세 — 연간 회계 장부", icon: "M4 4h16v16H4zM8 8h8M8 12h8M8 16h5" },
-  인사관리부: { en: "HUMAN RESOURCES", desc: "이력서·인사발령·근태/근속 — 직원 인사 기록", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6" },
+  회계관리: { en: "ACCOUNTING", desc: "미수금 · 미지급금 · 부가세를 담은 연간 회계 장부", icon: "M4 4h16v16H4zM8 8h8M8 12h8M8 16h5" },
+  인사관리부: { en: "HUMAN RESOURCES", desc: "이력서 · 인사발령 · 근태/근속 등 직원 인사 기록", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6" },
   출근기록부: { en: "ATTENDANCE", desc: "출퇴근·지각·휴가·외근 현황", icon: "M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z" },
   자금현황: { en: "TREASURY", desc: "통장·현금·예금·대출 잔액과 현금 흐름(조회)", icon: "M3 6h18v12H3zM3 10h18M16 15h2" },
   비공개운임: { en: "PRIVATE FARE", desc: "나만 보는 실제 청구 금액 · 차액(비밀번호로 열기)", icon: "M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4" }, // 🔐 2026-11-18
-  스케줄: { en: "EXECUTIVE SCHEDULE", desc: "임원 일정 — 등록하면 모든 직원이 볼 수 있습니다", icon: "M4 5h16v15H4zM4 9h16M8 3v4M16 3v4" },
+  스케줄: { en: "EXECUTIVE SCHEDULE", desc: "임원 일정을 등록하면 모든 직원이 볼 수 있어요", icon: "M4 5h16v15H4zM4 9h16M8 3v4M16 3v4" },
   영업관리: { en: "SALES", desc: "영업 현황 · 영업 기회 · 거래처 담당 · 인센티브", icon: "M3 17l6-6 4 4 8-8M15 7h6v6" },
   자금관리: { en: "FINANCE", desc: "자금 현황(통장·현금·대출) · 수입·지출 장부 · 고정비", icon: "M3 6h18v12H3zM3 10h18M16 15h2" },
   비품관리: { en: "ASSETS", desc: "사무 비품·소모품·IT 자산 · 입출고", icon: "M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10" },
@@ -3430,7 +3430,7 @@ const KP_PAGE_META = {
   직원관리: { en: "STAFF", desc: "직원·기사 가입 승인과 권한", icon: "M16 11a4 4 0 1 0-8 0M3 21c0-4 4-6 9-6s9 2 9 6" },
   // 👔 임원 화면
   결재함: { en: "EXECUTIVE APPROVAL", desc: "최종 결재 · 결재 대기 · 회사 전체 결재 현황", icon: "M5 21h14M7 17h10l1-5H6zM12 12V4M9 4h6" },
-  직원일정: { en: "TEAM SCHEDULE", desc: "연차·반차·외근·출장 — 직원 부재 일정 달력", icon: "M4 5h16v15H4zM4 9h16M8 3v4M16 3v4" },
+  직원일정: { en: "TEAM SCHEDULE", desc: "연차 · 반차 · 외근 · 출장 등 직원 부재 일정 달력", icon: "M4 5h16v15H4zM4 9h16M8 3v4M16 3v4" },
 };
 // ⭐ 2026-10-28 디지털 머리말 — 영문 태그·날짜·시계를 고정폭 디지털 글씨로, 아이콘 타일에 은은한 격자
 function KpPageClock() {
@@ -6043,7 +6043,7 @@ const RichStatusBadge = ({ s, urgent, cancelReq, editReq, onCancelClick, onEditC
   if (cancelReq) {
     return (
       <button type="button" onClick={onCancelClick}
-        title="화주사가 배차취소를 요청했습니다 — 클릭하여 확인"
+        title="화주사가 배차 취소를 요청했어요. 눌러서 확인해 주세요"
         className="px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap text-white"
         style={{
           background: "linear-gradient(135deg,#f87171,#b91c1c)",
@@ -6057,7 +6057,7 @@ const RichStatusBadge = ({ s, urgent, cancelReq, editReq, onCancelClick, onEditC
   if (editReq) {
     return (
       <button type="button" onClick={onEditClick}
-        title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
+        title="화주사가 수정을 요청했어요. 눌러서 승인하거나 거절해 주세요"
         className="px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap text-white"
         style={{
           background: "linear-gradient(135deg,#3b5998,#0f2151)",
@@ -7088,7 +7088,7 @@ function PalletDiagram({ item, qty, layers, palW_mm, palD_mm }) {
   return (
     <div style={{ padding: "4px 0" }}>
       <div style={{ fontSize: 10, color: "#64748b", marginBottom: 4, textAlign: "center" }}>
-        {veh.name} — {(veh.l / 100).toFixed(1)}m × {(veh.w / 100).toFixed(1)}m (위에서 본 뷰)
+        {veh.name} · {(veh.l / 100).toFixed(1)}m × {(veh.w / 100).toFixed(1)}m (위에서 본 모습)
         {rotated && <span style={{ marginLeft: 4, color: "#f59e0b" }}>↺ 회전배치</span>}
       </div>
       <div style={{ position: "relative", width: truckDispW, height: truckDispH, border: "2px solid #1B2B4B", borderRadius: 3, background: "#f1f5f9", overflow: "hidden", margin: "0 auto" }}>
@@ -7624,7 +7624,7 @@ function FloatingCalculator({ onClose }) {
                   박스 크기(cm)와 수량을 입력하면 차량별 최대 적재 개수를 계산합니다.
                 </div>
                 <div>
-                  <label style={lblSt}>박스 크기 (cm) — 가로 × 세로 × 높이</label>
+                  <label style={lblSt}>박스 크기 (cm, 가로 × 세로 × 높이)</label>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr auto 1fr", gap: 4, alignItems: "center" }}>
                     <input autoComplete="off" type="number" min="0" placeholder="가로" style={inpSt} value={boxW} onChange={e => setBoxW(e.target.value)} />
                     <span style={{ color: "#94a3b8", fontSize: 12, textAlign: "center" }}>×</span>
@@ -8667,7 +8667,7 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
     if (!n || payToastRef.current === key) return;
     if (roleView.view && roleView.view !== "acct") { payToastRef.current = ""; return; }
     payToastRef.current = key;
-    try { window.__sflowShowToast?.(`💸 지급 대기 지출결의 ${n}건 — 전자결재 › 결재함 › 지급 대기에서 처리해 주세요`, "info"); } catch { /* 무시 */ }
+    try { window.__sflowShowToast?.(`💸 지급 대기 지출결의 ${n}건이 있어요. 전자결재 › 결재함 › 지급 대기에서 처리해 주세요`, "info"); } catch { /* 무시 */ }
   }, [roleView.view, apCountsRaw.payTodo]);
   const mailCountsNav = useMailCounts();
   const alertsNav = useMobileAlerts({ uid: user?.uid, role: realRole || role, team: myProfileDoc?.team || "", company: deptCompany });
@@ -15963,7 +15963,7 @@ React.useEffect(() => {
 {(() => {
   const optOn = [form.혼적 && "혼적", form.운행유형 === "왕복" && "왕복", form.긴급 && "긴급"].filter(Boolean);
   return (
-    <ToolMenuButton testId="order-run-options" align="left" minWidth={230} menuTitle="운행 옵션 — 켜고 끌 항목을 눌러요" active={optOn.length > 0}
+    <ToolMenuButton testId="order-run-options" align="left" minWidth={230} menuTitle="운행 옵션: 켜고 끌 항목을 눌러요" active={optOn.length > 0}
       className={`${dmToggleCls(optOn.length > 0)} ${form.긴급 ? "!bg-[#0F1A30] !border-[#0F1A30]" : ""}`}
       label={<><DmDot on={optOn.length > 0} alert={!!form.긴급} />운행 옵션<span className={`font-bold ${optOn.length ? "opacity-90" : "opacity-60"}`}>· {optOn.length ? optOn.join(" · ") : "옵션 없음"}</span></>}
       items={[
@@ -16811,7 +16811,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
 
               {/* 🧰 2026-11-23 [긴급 오더] · [혼적] 체크 → [운행 옵션] 하나(단일 등록과 같은 모양) — 넣는 값은 예전 그대로 */}
               <div className="col-span-2 flex items-center gap-2">
-                <ToolMenuButton testId="multi-run-options" align="left" minWidth={230} menuTitle="운행 옵션 — 켜고 끌 항목을 눌러요"
+                <ToolMenuButton testId="multi-run-options" align="left" minWidth={230} menuTitle="운행 옵션: 켜고 끌 항목을 눌러요"
                   className={`h-9 px-3 rounded-[10px] border text-[13px] font-bold transition ${(currentMultiSlot.혼적 || currentMultiSlot.긴급) ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:border-[#2D4C82]"}`}
                   label={<>운행 옵션<span className="opacity-80">· {[currentMultiSlot.혼적 && "혼적", currentMultiSlot.긴급 && "긴급"].filter(Boolean).join(" · ") || "옵션 없음"}</span></>}
                   items={[
@@ -18639,7 +18639,7 @@ className={`
     className={`${inputCls}${formDrvLocked ? " !bg-[#F1F4F9] !text-[#1B2B4B]" : formDrvEdit.editing ? " !border-[#2D4C82] ring-2 ring-[#8FB0F0]/40" : ""}`}
     value={form.이름}
     readOnly={formDrvLocked}
-    title={formDrvLocked ? "등록된 기사 정보입니다 — 옆 [수정]을 눌러 고칠 수 있습니다" : undefined}
+    title={formDrvLocked ? "등록된 기사 정보예요. 옆 [수정]을 누르면 고칠 수 있어요" : undefined}
     placeholder="기사명 입력"
     onChange={(e) => onChange("이름", e.target.value)}
     onKeyDown={(e) => { if (formDrvEdit.editing && e.key === "Enter") { e.preventDefault(); e.stopPropagation(); formDrvEdit.finish(form); } }}
@@ -19240,11 +19240,11 @@ className={`
                 {call24MetaError && (
                   <div className="rounded-xl px-5 py-3 text-[12px] font-semibold border bg-[#F2F5FA] border-[#DCE3EE] text-[#1B2B4B]">
                     {call24MetaError.hint && <div className="mb-1 text-[12.5px] font-black text-[#0F1A30]">⚠ {call24MetaError.hint}</div>}
-                    {`주소/톤수/차종 목록을 24시콜에서 불러오지 못했습니다 — 코드: ${call24MetaError.code} / ${call24MetaError.message}`}
+                    {`주소/톤수/차종 목록을 24시콜에서 불러오지 못했어요. (코드: ${call24MetaError.code} / ${call24MetaError.message})`}
                     {call24MetaError.serverIp && (
                       <div className="mt-1 text-[11px] font-normal opacity-80">
                         서버 IP: <span className="font-bold">{call24MetaError.serverIp}</span>
-                        {" — 24시콜 마이페이지 허용 IP와 다르면 이 IP를 등록하세요"}
+                        {". 24시콜 마이페이지의 허용 IP와 다르면 이 IP를 등록해 주세요."}
                       </div>
                     )}
                   </div>
@@ -19470,7 +19470,7 @@ className={`
                           {send24Result.serverIp && /ip/i.test(send24Result.msg || "") && (
                             <div className="mt-1 text-[11px] font-normal opacity-80">
                               서버 IP: <span className="font-bold">{send24Result.serverIp}</span>
-                              {" — 이 IP를 24시콜 마이페이지 허용 IP에 등록하세요"}
+                              {". 이 IP를 24시콜 마이페이지의 허용 IP에 등록해 주세요."}
                             </div>
                           )}
                         </>
@@ -24737,7 +24737,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                     ) : r.취소요청 && r.배차상태 !== "배차취소" ? (
                       <button
                         type="button"
-                        title="화주사가 배차취소를 요청했습니다 — 클릭하여 확인"
+                        title="화주사가 배차 취소를 요청했어요. 눌러서 확인해 주세요"
                         className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap text-white"
                         style={{
                           background: "linear-gradient(135deg,#f87171,#b91c1c)",
@@ -24751,7 +24751,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                     ) : (r.수정요청 || isRecentShipperEdit(r)) ? (
                       <button
                         type="button"
-                        title={r.수정요청 ? "화주사가 수정을 요청했습니다 — 클릭하여 승인/거절" : "화주사가 오더를 직접 수정했습니다 — 클릭하여 확인"}
+                        title={r.수정요청 ? "화주사가 수정을 요청했어요. 눌러서 승인하거나 거절해 주세요" : "화주사가 오더를 직접 수정했어요. 눌러서 확인해 주세요"}
                         className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap text-white"
                         style={{
                           background: "linear-gradient(135deg,#3b5998,#0f2151)",
@@ -28128,7 +28128,7 @@ const runDailyClose = () => {
             seq,
             label,
             type: "driver",
-            msg: `기사정보 불일치 — 입력: "${rowName}" / DB: "${dbNames}"`,
+            msg: `기사정보 불일치: 입력 "${rowName}" / DB "${dbNames}"`,
           });
         }
       }
@@ -28387,7 +28387,7 @@ const handleCloseFileUpload = async (e) => {
         거래처명: "(미입력)",
         vehicle: row[plateCol], driverName: fileName,
         fieldLabel: "프로그램 등록 여부", fileValue: "24시콜 파일에 있음", programValue: "등록된 오더 없음",
-        msg: `24시콜 파일에 ${fileDate || targetDate} 차량 ${row[plateCol] || "-"}(${fileName || "기사명 미상"}) 기록이 있으나, 프로그램에는 해당 차량번호·날짜로 등록된 오더가 없습니다 — 등록 누락 의심`,
+        msg: `24시콜 파일에 ${fileDate || targetDate} 차량 ${row[plateCol] || "-"}(${fileName || "기사명 미상"}) 기록이 있으나, 프로그램에는 해당 차량번호·날짜로 등록된 오더가 없어요. 등록 누락이 의심돼요`,
       });
       continue; // 매칭 후보 자체가 없으니 아래 배차방식/지급방식/운임 비교는 스킵
     }
@@ -28477,7 +28477,7 @@ const handleCloseFileUpload = async (e) => {
               rowId: mr._id, seq, label, type: "payment", 거래처명,
               vehicle: row[plateCol], driverName: fileName,
               fieldLabel: "지급방식", fileValue: fileFeeType, programValue: programPay,
-              msg: `24시콜: 인수증(계산서) / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
+              msg: `24시콜: 인수증(계산서) / 프로그램: "${programPay}": 지급방식 불일치 (차량: ${row[plateCol]})`,
             });
           }
         } else if (fileFeeType === "선/착불" || fileFeeType === "선착불") {
@@ -28486,7 +28486,7 @@ const handleCloseFileUpload = async (e) => {
               rowId: mr._id, seq, label, type: "payment", 거래처명,
               vehicle: row[plateCol], driverName: fileName,
               fieldLabel: "지급방식", fileValue: fileFeeType, programValue: programPay,
-              msg: `24시콜: 선/착불 / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
+              msg: `24시콜: 선/착불 / 프로그램: "${programPay}": 지급방식 불일치 (차량: ${row[plateCol]})`,
             });
           }
         }
@@ -28503,7 +28503,7 @@ const handleCloseFileUpload = async (e) => {
               rowId: mr._id, seq, label, type: "fare", 거래처명,
               vehicle: row[plateCol], driverName: fileName,
               fieldLabel: "운임(기사)", fileValue: fileFare, programValue: programFare, isMoney: true,
-              msg: `[손실] 24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원 — 운임 불일치 (차량: ${row[plateCol]})`,
+              msg: `[손실] 24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원: 운임 불일치 (차량: ${row[plateCol]})`,
             });
           }
         } else {
@@ -28512,7 +28512,7 @@ const handleCloseFileUpload = async (e) => {
               rowId: mr._id, seq, label, type: "fare", 거래처명,
               vehicle: row[plateCol], driverName: fileName,
               fieldLabel: "운임(기사)", fileValue: fileFare, programValue: programFare, isMoney: true,
-              msg: `24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원 — 운임 불일치 (차량: ${row[plateCol]})`,
+              msg: `24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원: 운임 불일치 (차량: ${row[plateCol]})`,
             });
           }
         }
@@ -28557,7 +28557,7 @@ const handleCloseFileUpload = async (e) => {
         거래처명: mr.거래처명 || "(미입력)",
         vehicle: mr.차량번호, driverName: mr.이름 || "-",
         fieldLabel: "24시콜 파일 등록 여부", fileValue: "파일에 없음", programValue: `배차방식: ${mr.배차방식 || "24시"}`,
-        msg: `배차방식이 "24시"이나 24시콜 파일에 차량번호 없음 (차량: ${mr.차량번호}, 기사: ${mr.이름 || "-"}) — 배차방식 오등록 의심`,
+        msg: `배차방식이 "24시"이나 24시콜 파일에 차량번호 없음 (차량: ${mr.차량번호}, 기사: ${mr.이름 || "-"}). 배차방식 오등록이 의심돼요`,
       });
     }
   });
@@ -29691,7 +29691,7 @@ flashRow(savedId);
     오류/경고/24시콜 비교불일치 중 이 오더에 해당하는 항목을 전부 모아 보여준다. */}
 {dailyCloseIssueCtx && dailyCloseIssueCtx.length > 0 && (
   <div className="bg-gray-50 border border-gray-200 rounded-xl px-5 py-4">
-    <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">일마감 검증 — 이 오더의 문제점 ({dailyCloseIssueCtx.length}건)</div>
+    <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">일마감 검증: 이 오더의 문제점 ({dailyCloseIssueCtx.length}건)</div>
     <div className="space-y-1.5">
       {dailyCloseIssueCtx.map((it, i) => (
         <div key={i} className="text-[12px] text-gray-700 flex items-start gap-2">
@@ -32068,7 +32068,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
 
       <div className="px-4 py-2 bg-amber-50 border-b border-amber-100">
         <p className="text-[12px] text-amber-700 font-semibold">
-          차량번호 {driverSelectInfo.list?.[0]?.차량번호} — 배차할 기사를 선택하세요
+          차량번호 {driverSelectInfo.list?.[0]?.차량번호}: 배차할 기사를 골라 주세요
         </p>
       </div>
 
@@ -34372,7 +34372,7 @@ const runDailyClose = () => {
         });
         if (!exactMatch && rowName) {
           const dbNames = dbMatches.map(d => d.이름).join("/");
-          warnings.push({ rowId: row._id, seq, label, type: "driver", msg: `기사정보 불일치 — 입력: "${rowName}" / DB: "${dbNames}"` });
+          warnings.push({ rowId: row._id, seq, label, type: "driver", msg: `기사정보 불일치: 입력 "${rowName}" / DB "${dbNames}"` });
         }
       }
       const phoneDigits = String(row.전화번호 ?? "").replace(/[^\d]/g, "");
@@ -34624,7 +34624,7 @@ const computeCloseFileIssues = (raw) => {
         거래처명: "(미입력)",
         vehicle: row[plateCol], driverName: fileName,
         fieldLabel: "프로그램 등록 여부", fileValue: "24시콜 파일에 있음", programValue: "등록된 오더 없음",
-        msg: `24시콜 파일에 ${fileDate || "해당"} 차량 ${row[plateCol] || "-"}(${fileName || "기사명 미상"}) 기록이 있으나, 프로그램에는 해당 차량번호·날짜로 등록된 오더가 없습니다 — 등록 누락 의심`,
+        msg: `24시콜 파일에 ${fileDate || "해당"} 차량 ${row[plateCol] || "-"}(${fileName || "기사명 미상"}) 기록이 있으나, 프로그램에는 해당 차량번호·날짜로 등록된 오더가 없어요. 등록 누락이 의심돼요`,
       });
       continue;
     }
@@ -34685,7 +34685,7 @@ const computeCloseFileIssues = (raw) => {
               rowId: mr._id, seq, label, type: "payment", 거래처명,
               vehicle: row[plateCol], driverName: fileName,
               fieldLabel: "지급방식", fileValue: fileFeeType, programValue: programPay,
-              msg: `24시콜: 인수증(계산서) / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
+              msg: `24시콜: 인수증(계산서) / 프로그램: "${programPay}": 지급방식 불일치 (차량: ${row[plateCol]})`,
             });
           }
         } else if (fileFeeType === "선/착불" || fileFeeType === "선착불") {
@@ -34694,7 +34694,7 @@ const computeCloseFileIssues = (raw) => {
               rowId: mr._id, seq, label, type: "payment", 거래처명,
               vehicle: row[plateCol], driverName: fileName,
               fieldLabel: "지급방식", fileValue: fileFeeType, programValue: programPay,
-              msg: `24시콜: 선/착불 / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
+              msg: `24시콜: 선/착불 / 프로그램: "${programPay}": 지급방식 불일치 (차량: ${row[plateCol]})`,
             });
           }
         }
@@ -34712,7 +34712,7 @@ const computeCloseFileIssues = (raw) => {
               rowId: mr._id, seq, label, type: "fare", 거래처명,
               vehicle: row[plateCol], driverName: fileName,
               fieldLabel: "운임(기사)", fileValue: fileFare, programValue: programFare, isMoney: true,
-              msg: `[손실] 24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원 — 운임 불일치 (차량: ${row[plateCol]})`,
+              msg: `[손실] 24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원: 운임 불일치 (차량: ${row[plateCol]})`,
             });
           }
         } else {
@@ -34721,7 +34721,7 @@ const computeCloseFileIssues = (raw) => {
               rowId: mr._id, seq, label, type: "fare", 거래처명,
               vehicle: row[plateCol], driverName: fileName,
               fieldLabel: "운임(기사)", fileValue: fileFare, programValue: programFare, isMoney: true,
-              msg: `24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원 — 운임 불일치 (차량: ${row[plateCol]})`,
+              msg: `24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원: 운임 불일치 (차량: ${row[plateCol]})`,
             });
           }
         }
@@ -34763,7 +34763,7 @@ const computeCloseFileIssues = (raw) => {
         rowId: mr._id, seq, label, type: "missing", 거래처명: mr.거래처명 || "(미입력)",
         vehicle: mr.차량번호, driverName: mr.이름 || "-",
         fieldLabel: "24시콜 파일 등록 여부", fileValue: "파일에 없음", programValue: `배차방식: ${mr.배차방식 || "24시"}`,
-        msg: `배차방식이 "24시"이나 24시콜 파일에 차량번호 없음 (차량: ${mr.차량번호}, 기사: ${mr.이름 || "-"}) — 배차방식 오등록 의심`,
+        msg: `배차방식이 "24시"이나 24시콜 파일에 차량번호 없음 (차량: ${mr.차량번호}, 기사: ${mr.이름 || "-"}). 배차방식 오등록이 의심돼요`,
       });
     }
   });
@@ -36003,7 +36003,7 @@ if (mode === "driver") {
       ["상차시간 · 하차시간", "오전 9시, 오후 3시 30분 처럼 입력 (09:00 으로 써도 자동 변환)"],
       ["차량번호 · 기사명 · 전화번호", "입력하면 '배차완료', 비워두면 '배차중'으로 등록됩니다. 등록된 기사의 차량번호만 써도 기사명·전화번호가 자동으로 채워집니다."],
       ["청구운임 · 기사운임", "숫자만 입력 (수수료는 자동 계산)"],
-      ...(fareOn ? [["운임구분", `회사관리 › 운임 규칙 이름(${fareR.rules.map((x) => x.name).filter(Boolean).join(", ") || "예: 일대"}) — 기사운임을 비우면 규칙대로 자동 계산`]] : []),
+      ...(fareOn ? [["운임구분", `회사관리 › 운임 규칙 이름(${fareR.rules.map((x) => x.name).filter(Boolean).join(", ") || "예: 일대"}). 기사운임을 비우면 규칙대로 자동 계산해요`]] : []),
       ["열 이름", "첫 줄(열 이름)은 바꾸지 마세요. 기사명 대신 '이름'이라고 써도 인식합니다."],
     ]);
     guide["!cols"] = [{ wch: 26 }, { wch: 90 }];
@@ -36120,7 +36120,7 @@ if (mode === "driver") {
           if (r === false) { fail++; return false; }
         } });
         ok = upO.ok; fail += upO.fail;
-        showAlert(fail ? `✓ ${ok}건 등록 완료 · ⚠ ${fail}건 실패(하차일이 상차일보다 빠른 줄 등)` : `✓ 대용량 업로드 완료 — ${ok}건 등록되었습니다.`);
+        showAlert(fail ? `✓ ${ok}건 등록 완료 · ⚠ ${fail}건 실패(하차일이 상차일보다 빠른 줄 등)` : `✓ 대용량 업로드를 마쳤어요. ${ok}건을 등록했어요.`);
       } catch (err) {
         console.error(err);
         showAlert("✕ 업로드 중 오류가 발생했습니다.\n" + (err?.message || ""));
@@ -36358,7 +36358,7 @@ if (mode === "driver") {
     const top = scoreList.slice(0, 5)
       .map(
         (d, i) =>
-          `${i + 1}위) ${d.이름} (${d.차량번호}) — 점수 ${d.점수}`
+          `${i + 1}위) ${d.이름} (${d.차량번호}): 점수 ${d.점수}`
       )
       .join("\n");
 
@@ -37605,7 +37605,7 @@ return (
       onDoubleClick={() => { if (isViewer) return; if (frLocked) { frLockAlert(row); return; } setFixedEditId((cur) => (cur === id ? null : id)); }}
       onKeyDownCapture={fixedEditId === id ? (e) => fixedRowKey(e, id) : undefined}
       data-gstart={i > 0 && (String(pageRows[i - 1]?.배차표묶음 || "") !== String(r.배차표묶음 || "") || String(pageRows[i - 1]?.상차일 || "") !== String(r.상차일 || "")) ? "1" : undefined}
-      title={fixedEditId === id ? "수정 중 — ←→ 칸 이동 · ↑↓ 위아래 줄 · Enter 저장하고 끝내기 · Esc 끝내기" : isViewer ? undefined : frLocked ? `🔒 ${ROUTE_LOCK_MSG}${routeOwnerName(row, userNameMap) ? ` (담당: ${routeOwnerName(row, userNameMap)})` : ""}` : "두 번 누르면 이 줄을 수정할 수 있어요"}
+      title={fixedEditId === id ? "수정 중: ←→ 칸 이동 · ↑↓ 위아래 줄 · Enter 저장하고 끝내기 · Esc 끝내기" : isViewer ? undefined : frLocked ? `🔒 ${ROUTE_LOCK_MSG}${routeOwnerName(row, userNameMap) ? ` (담당: ${routeOwnerName(row, userNameMap)})` : ""}` : "두 번 누르면 이 줄을 수정할 수 있어요"}
       style={urgentRowStyle(row, {}, { tint: fixedEditId !== id && !selected.has(id) })}
       className={`kp-frs-row transition-colors ${fixedEditId === id ? "bg-[#EEF4FF] outline outline-2 -outline-offset-2 outline-[#2D4C82]" : selected.has(id) ? "bg-blue-50" : !String(row.차량번호 || "").trim() && row.배차상태 !== "배차취소" ? "bg-[#FFFAF2] hover:bg-[#FFF3E0]" : i % 2 === 0 ? "bg-white hover:bg-[#F5F8FD]" : "bg-[#FAFBFD] hover:bg-[#F5F8FD]"}`}>
       <td className="px-3 py-2 text-center border-b border-[#E9EDF4] border-r border-r-[#F1F4F9]"><input autoComplete="off" type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} /></td>
@@ -39476,7 +39476,7 @@ return (
 {dailyCloseIssueCtx && dailyCloseIssueCtx.length > 0 && (
   <div className="bg-gray-50 border border-gray-200 rounded-xl px-5 py-4">
     <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
-      <div className="text-[13px] font-bold text-[#1B2B4B]">일마감 검증 — 이 오더의 문제점 ({dailyCloseIssueCtx.length}건)</div>
+      <div className="text-[13px] font-bold text-[#1B2B4B]">일마감 검증: 이 오더의 문제점 ({dailyCloseIssueCtx.length}건)</div>
       {dailyCloseIssueCtx.some(it => it.level === "오류") && (
         <button
           type="button"
@@ -40665,7 +40665,7 @@ setCopyPlaceOptions(list);
 
             <div className="px-4 py-2 bg-amber-50 border-b border-amber-100">
               <p className="text-[12px] text-amber-700 font-semibold">
-                차량번호 {driverSelectInfo.list?.[0]?.차량번호} — 배차할 기사를 선택하세요
+                차량번호 {driverSelectInfo.list?.[0]?.차량번호}: 배차할 기사를 골라 주세요
               </p>
             </div>
 
@@ -43821,12 +43821,12 @@ function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
       if (vanished.length) {
         const sumV = vanished.reduce((a, c) => a + c.saleA, 0);
         const topV = [...vanished].sort((x, y) => y.saleA - x.saleA).slice(0, 3);
-        parts.push(`${labelA}에만 발생하고 ${labelB}에는 없었던 거래처 ${vanished.length}곳(합계 ${won(sumV)}) — 대표적으로 ${topV.map((c) => `${c.client}(${won(c.saleA)})`).join(", ")}`);
+        parts.push(`${labelA}에만 발생하고 ${labelB}에는 없었던 거래처 ${vanished.length}곳(합계 ${won(sumV)}): 대표적으로 ${topV.map((c) => `${c.client}(${won(c.saleA)})`).join(", ")}`);
       }
       if (appeared.length) {
         const sumA = appeared.reduce((a, c) => a + c.saleB, 0);
         const topA = [...appeared].sort((x, y) => y.saleB - x.saleB).slice(0, 3);
-        parts.push(`${labelB}에 새로 발생한 거래처 ${appeared.length}곳(합계 ${won(sumA)}) — 대표적으로 ${topA.map((c) => `${c.client}(${won(c.saleB)})`).join(", ")}`);
+        parts.push(`${labelB}에 새로 발생한 거래처 ${appeared.length}곳(합계 ${won(sumA)}): 대표적으로 ${topA.map((c) => `${c.client}(${won(c.saleB)})`).join(", ")}`);
       }
       headline = `**${labelA}·${labelB} 매출 차이의 상당 부분은 두 달 모두 거래하지 않은 '일시적 거래처'가 원인입니다.** ${parts.join(", ")}.`;
     }
@@ -44336,7 +44336,7 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
                       </tbody>
                     </table>
                     {(distStats.A.sampleCnt < distStats.A.totalOrderCnt || distStats.B.sampleCnt < distStats.B.totalOrderCnt) && (
-                      <p className="text-[11px] text-gray-400 leading-[1.6]">주소 정보가 없거나 위치 확인에 실패한 오더는 집계에서 제외했습니다 — {monthA} {distStats.A.sampleCnt}/{distStats.A.totalOrderCnt}건, {monthB} {distStats.B.sampleCnt}/{distStats.B.totalOrderCnt}건 반영</p>
+                      <p className="text-[11px] text-gray-400 leading-[1.6]">주소 정보가 없거나 위치 확인에 실패한 오더는 집계에서 제외했어요. ({monthA} {distStats.A.sampleCnt}/{distStats.A.totalOrderCnt}건, {monthB} {distStats.B.sampleCnt}/{distStats.B.totalOrderCnt}건 반영)</p>
                     )}
                   </div>
                 )}
@@ -44484,7 +44484,7 @@ function MonthlyPPTReportPanel({ rows = [], monthA: monthAProp, setMonthA: setMo
               value={pptComments}
               onChange={(e) => setPptComments(e.target.value)}
               rows={4}
-              placeholder={"예) ○○물류 3PL 이전 이슈로 감소했던 오더가 성수기 진입과 함께 일부 회복 중\n△△식품 9월 냉장창고 이사 계획 확정 — 9일간 800파레트, 총 45대 배차 예정"}
+              placeholder={"예) ○○물류 3PL 이전 이슈로 감소했던 오더가 성수기 진입과 함께 일부 회복 중\n△△식품 9월 냉장창고 이사 계획 확정: 9일간 800파레트, 총 45대 배차 예정"}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] resize-none"
             />
           </div>
@@ -47377,7 +47377,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-[18px] font-bold text-[#1B2B4B]"><EditableText id="unassigned.title" defaultText="미배차현황" /></h2>
-          <p className="text-[12px] text-gray-500 mt-0.5"><EditableText id="unassigned.subtitle" defaultText="배차 대기 중인 오더 목록 — 더블클릭으로 수정/복사" /></p>
+          <p className="text-[12px] text-gray-500 mt-0.5"><EditableText id="unassigned.subtitle" defaultText="배차 대기 중인 오더 목록이에요. 두 번 누르면 수정하거나 복사할 수 있어요" /></p>
         </div>
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2">
           <span className="text-[12px] text-gray-500">대기</span>
@@ -49544,7 +49544,7 @@ const handleBatchSettle = async (targetStatus) => {
     const why = await kpPrompt(`${c} ${Number(ym.slice(5))}월 최종마감을 일시해제할까요?\n배차 담당자가 오더를 고치거나 추가 · 삭제할 수 있게 돼요. 사유를 적어 주세요.`, "", { title: "최종마감 일시해제", placeholder: "예: 11/12 운임 정정", okText: "일시해제" });
     if (why == null) return;
     await desk.save(closeIdOf(r), tempUnlockPatch(r, closeMe(), String(why || "").trim()));
-    sflowToast(`${c} 일시해제 — 끝나면 [다시 잠금]을 눌러 주세요`, "success");
+    sflowToast(`${c} 잠금을 잠시 풀었어요. 끝나면 [다시 잠금]을 눌러 주세요`, "success");
   };
   const relockClose = async (c, ym) => {
     const r = closeMapOf(ym).get(c); if (!r || isViewer) return;
@@ -49696,8 +49696,8 @@ const handleBatchSettle = async (targetStatus) => {
     if (!todo.length) return;
     todo.forEach(d => autoCloseDone.current.add(`${csBizCur}|${d.client}|${d.yyyymm}`));
     (async () => {
-      for (const d of todo) { try { await setStmtStage(d.client, d.yyyymm, "마감", { note: "입금 확인 — 자동 마감", extra: { autoClosed: true } }); } catch (e) { /* 무시 */ } }
-      sflowToast(todo.length === 1 ? `${todo[0].client} ${Number(String(todo[0].yyyymm).slice(5))}월 입금 확인 — 마감했어요` : `입금 확인 ${todo.length}곳 마감했어요`, "success");
+      for (const d of todo) { try { await setStmtStage(d.client, d.yyyymm, "마감", { note: "입금 확인: 자동 마감", extra: { autoClosed: true } }); } catch (e) { /* 무시 */ } }
+      sflowToast(todo.length === 1 ? `${todo[0].client} ${Number(String(todo[0].yyyymm).slice(5))}월 입금을 확인하고 마감했어요` : `입금 확인 ${todo.length}곳 마감했어요`, "success");
     })();
   }, [billRows, desk.stmts, csBizCur, isViewer, arCompany]); // eslint-disable-line react-hooks/exhaustive-deps
   const saveStageAsk = async ({ date, note }) => {
@@ -52102,7 +52102,7 @@ const handleBatchSettle = async (targetStatus) => {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-[15px] font-black text-[#0F1A30]">{m.client}</span>
                             <span className={`text-[11.5px] font-extrabold px-2 py-0.5 rounded-full ${KIND[m.kind] || "bg-[#EEF3FB] text-[#1B2B4B]"}`}>{m.kind}</span>
-                            <span className={`text-[11px] font-bold ${m.confidence !== "금액만 일치" ? "text-[#4B6CB7]" : "text-[#0F1A30] underline"}`}>{m.confidence === "별칭" ? "배운 입금자명" : m.confidence === "이름일치" ? "입금자명 일치" : "금액만 일치 — 입금자 확인"}</span>
+                            <span className={`text-[11px] font-bold ${m.confidence !== "금액만 일치" ? "text-[#4B6CB7]" : "text-[#0F1A30] underline"}`}>{m.confidence === "별칭" ? "배운 입금자명" : m.confidence === "이름일치" ? "입금자명 일치" : "금액만 일치 (입금자 확인)"}</span>
                           </div>
                           <div className="text-[12.5px] text-[#5B6B85] mt-0.5">{m.deposit.date} · 입금자 {m.deposit.name || "-"} · <b className="text-[#0F1A30]">{m.deposit.amount.toLocaleString()}원</b></div>
                         </div>
@@ -52114,7 +52114,7 @@ const handleBatchSettle = async (targetStatus) => {
                             {a.yyyymm} · {a.amount.toLocaleString()}원 {a.full ? "→ 정산완료" : `→ 일부입금 (청구 ${a.due.toLocaleString()}원)`}
                           </span>
                         ))}
-                        {m.over > 0 && <span className="text-[12px] font-bold px-2.5 py-1 rounded-lg border border-[#0F1A30] text-[#0F1A30]">초과 {m.over.toLocaleString()}원 — 확인 필요</span>}
+                        {m.over > 0 && <span className="text-[12px] font-bold px-2.5 py-1 rounded-lg border border-[#0F1A30] text-[#0F1A30]">초과 {m.over.toLocaleString()}원 (확인 필요)</span>}
                       </div>
                     </div>
                   ))}
@@ -53540,7 +53540,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                   {payExcelPreview.matched.filter(m=>!m.isSumMatch).length > 0 && (
                     <div>
                       <div className="text-[13px] font-bold text-[#0F1A30] mb-2">
-                        1:1 매칭 ({payExcelPreview.matched.filter(m=>!m.isSumMatch).length}건) — 지급완료 처리됩니다
+                        1:1 매칭 ({payExcelPreview.matched.filter(m=>!m.isSumMatch).length}건): 지급완료로 처리돼요
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-[12px] border-collapse">
@@ -53626,7 +53626,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                   {/* 미매칭 */}
                   {payExcelPreview.unmatched.length > 0 && (
                     <div>
-                      <div className="text-[13px] font-bold text-[#0B1428] mb-2">미매칭 ({payExcelPreview.unmatched.length}건) — 처리되지 않습니다</div>
+                      <div className="text-[13px] font-bold text-[#0B1428] mb-2">미매칭 ({payExcelPreview.unmatched.length}건): 처리되지 않아요</div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-[12px] border-collapse">
                           <thead>
@@ -54536,7 +54536,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
           <div className={`bg-white rounded-2xl shadow-2xl ${isFleetGrade(editDriverModal.등급) ? "w-[640px]" : "w-[480px]"} max-w-[96vw] max-h-[92vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 flex items-center justify-between sticky top-0 z-10" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
-              <h3 className="text-white font-bold text-[15px]">기사 수정 — {editDriverModal.차량번호}{isFleetGrade(editDriverModal.등급) ? <span className="ml-2 px-2 py-0.5 rounded-md bg-white/15 text-[11.5px] font-black">{editDriverModal.등급}</span> : null}</h3>
+              <h3 className="text-white font-bold text-[15px]">기사 수정 · {editDriverModal.차량번호}{isFleetGrade(editDriverModal.등급) ? <span className="ml-2 px-2 py-0.5 rounded-md bg-white/15 text-[11.5px] font-black">{editDriverModal.등급}</span> : null}</h3>
               <div className="flex items-center gap-2">
                 {/* ⭐ 2026-11-09 차량관리로 바로 가기 — 지입차관리 › 차량 관리에서 이 차량 정보를 연다 */}
                 {String(editDriverModal.차량번호 || "").trim() && (
@@ -55596,7 +55596,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       cascadeRename = await kpConfirm(
         `거래처명을 "${oldName}" → "${newName}"(으)로 변경합니다.\n\n` +
         `과거 "${oldName}"으로 등록된 모든 오더의 거래처명도 함께 "${newName}"(으)로 바꿔야 운임조회·매출 이력이 끊기지 않고 계속 이어집니다.\n` +
-        `함께 바꾸시겠습니까?\n\n(취소를 누르면 거래처명만 바뀌고, 과거 오더들은 예전 이름 "${oldName}" 그대로 남습니다 — 새 이름은 이력 없는 신규 거래처로 보이게 됩니다)`
+        `함께 바꾸시겠습니까?\n\n(취소를 누르면 거래처명만 바뀌고, 과거 오더들은 예전 이름 "${oldName}" 그대로 남아요. 새 이름은 이력 없는 신규 거래처로 보여요.)`
       );
     }
 
@@ -56703,7 +56703,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
               <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-                  <h3 className="text-white font-bold text-[15px]"><EditableText id="clientEdit.title" defaultText="거래처 수정" /> — {editClientModal.거래처명}</h3>
+                  <h3 className="text-white font-bold text-[15px]"><EditableText id="clientEdit.title" defaultText="거래처 수정" /> · {editClientModal.거래처명}</h3>
                   <button onClick={() => setEditClientModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
                 </div>
                 <div className="px-6 py-5 grid grid-cols-2 gap-4">
@@ -57112,7 +57112,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl w-[580px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-              <h3 className="text-white font-bold text-[15px]">상하차지 수정 — {editPlaceModal.업체명}</h3>
+              <h3 className="text-white font-bold text-[15px]">상하차지 수정 · {editPlaceModal.업체명}</h3>
               <button onClick={() => setEditPlaceModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
             </div>
             <div className="px-6 py-5 grid grid-cols-2 gap-4">
@@ -59875,7 +59875,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                 )}
               </section></>),
             /* ⭐ 2026-11-03 한 회사 · 여러 사업자 — 오더마다 청구 사업자를 고른다 */
-            F("biz", "사업자 목록", "한 회사 · 여러 사업자 — 오더마다 청구 사업자 선택", null, false,
+            F("biz", "사업자 목록", "한 회사가 여러 사업자를 쓰면 오더마다 청구 사업자를 골라요", null, false,
               <BizListEditor company={companyName} canEdit={isAcctTeam || isAdmin || role === "hrManager"} />),
             /* ✉️ 2026-11-08 발신 메일 — 회사마다 자기 메일 계정으로(앱 비밀번호는 서버에만 · 암호화) */
             F("mail", "발신 메일", "명세서·청구서를 보낼 회사 메일 계정", null, false,

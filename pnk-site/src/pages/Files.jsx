@@ -29,7 +29,7 @@ export default function Files() {
 
   return (
     <div>
-      <Hero en="Library" title="자료실" desc={`회사 문서를 한곳에 — ${list.length}개 · 전체 ${size(used)}`}>
+      <Hero en="Library" title="자료실" desc={`회사 문서를 한곳에서 관리합니다. 파일 ${list.length}개 · 전체 ${size(used)}`}>
         <HeroBtn icon="upload" onClick={() => setUp(true)}>올리기</HeroBtn>
       </Hero>
       <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-4 md:gap-5">
@@ -76,7 +76,7 @@ function Upload({ me, defCat, onClose }) {
   const [drag, setDrag] = React.useState(false);
   const go = async () => {
     const big = files.find((f) => f.size >= 50 * 1048576);
-    if (big) { window.alert(`${big.name} — 50MB 이상은 올릴 수 없습니다.`); return; }
+    if (big) { window.alert(`${big.name}: 50MB 이상인 파일은 올릴 수 없습니다.`); return; }
     const b = by(me);
     try {
       for (let i = 0; i < files.length; i += 1) {

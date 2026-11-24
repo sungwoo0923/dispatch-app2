@@ -242,7 +242,7 @@ export async function guardSeat(company, { isSuper = false, by = "", byName = ""
   try { st = await seatStatus(company); } catch { return true; } // 조회 실패로 업무를 막지는 않는다
   if (st.ok) return true;
   const head = `${st.planName} 요금제 직원 계정 ${st.base}명${st.extra ? ` + 추가 ${st.extra}명` : ""} = ${st.limit}명이 모두 찼습니다. (지금 ${st.used}명)`;
-  if (isSuper) return kpConfirm(`${head}\n\n최고관리자 권한으로 초과 승인할까요?\n초과 인원은 추가 직원 계정 요금으로 청구됩니다.\n(관리센터 › 청구 › 수납 관리에서 이 회사의 '추가 계정' 수를 늘려 두면 회사가 직접 승인할 수 있습니다)`);
+  if (isSuper) return kpConfirm(`${head}\n\n최고관리자 권한으로 초과 승인할까요?\n초과 인원은 추가 직원 계정 요금으로 청구됩니다.\n(관리센터 › 매출 · 비용 › 수납 관리에서 이 회사의 '추가 계정' 수를 늘려 두면 회사가 직접 승인할 수 있습니다)`);
   const want = await kpConfirm(`${head}\n\n더 승인하려면 추가 직원 계정이 필요합니다(1명당 월 ${Number(extraSeatFee).toLocaleString()}원, VAT 별도).\n· 퇴사한 직원을 '퇴사' 처리하면 자리가 생깁니다.\n· 인원이 많이 늘었다면 상위 요금제가 더 저렴할 수 있습니다.\n\n추가 직원 계정 1명을 LogisWeb에 신청할까요?`);
   if (want) {
     try {

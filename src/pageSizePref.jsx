@@ -32,7 +32,7 @@ export function usePageSize(key, fallback = 100) {
 // 페이지 번호 옆에 붙는 작은 선택칸
 export function PageSizeSelect({ value, onChange, className = "", dark = false }) {
   return (
-    <label className={`inline-flex items-center flex-shrink-0 ${className}`} title="한 페이지에 볼 개수 — 내 계정에만 적용돼요">
+    <label className={`inline-flex items-center flex-shrink-0 ${className}`} title="한 페이지에 볼 개수: 내 계정에만 적용돼요">
       <select value={value} onChange={(e) => onChange?.(Number(e.target.value))} data-kp="page-size"
         className={`h-[26px] pl-1.5 pr-5 rounded-lg border text-[11px] font-semibold cursor-pointer outline-none appearance-none bg-no-repeat ${dark ? "bg-gray-800 border-gray-600 text-gray-200" : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50"}`}
         style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")", backgroundPosition: "right 5px center" }}>

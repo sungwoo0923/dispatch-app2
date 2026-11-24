@@ -55,7 +55,7 @@ export function SheetCompareModal({ co, onClose }) {
           <button type="button" aria-label="닫기" onClick={onClose} className="w-10 h-10 rounded-xl border border-[#DCE3EE] text-[18px]">×</button>
         </div>
         <div className="px-5 sm:px-6 py-4 border-b border-[#E3E8F0]">
-          {err && <div className="mb-3 text-[13.5px] font-bold" style={{ color: C.bad }}>비교하지 못했어요 — {err}</div>}
+          {err && <div className="mb-3 text-[13.5px] font-bold" style={{ color: C.bad }}>비교하지 못했어요. {err}</div>}
           {res && (
             <div className="flex items-center gap-4 flex-wrap">
               <div className="text-[17px] font-black" style={{ color: allSame ? C.ok : C.bad }}>{allSame ? "✓ 시트와 프로그램이 같아요" : `다른 곳 ${total.toLocaleString()}건`}</div>

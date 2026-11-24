@@ -112,13 +112,13 @@ export function ScreenFitButton({ fit }) {
   return (
     <div className="inline-flex items-center gap-1">
       <button type="button" onClick={fit.toggle} data-kp="screen-fit"
-        title={fit.on ? "화면 맞춤 켜짐 — 표가 한 화면에 꽉 차게 자동으로 배율을 맞춥니다(누르면 끄고 100%로)" : "누르면 지금 모니터 크기에 맞춰 표 전체(선택 ~ 끝 칸)가 한 화면에 보이게 자동으로 맞춥니다"}
+        title={fit.on ? "화면 맞춤 켜짐: 표가 한 화면에 꽉 차게 자동으로 배율을 맞춥니다(누르면 끄고 100%로)" : "누르면 지금 모니터 크기에 맞춰 표 전체(선택 ~ 끝 칸)가 한 화면에 보이게 자동으로 맞춥니다"}
         className={`kp-chip-btn text-[12px] transition inline-flex items-center gap-1.5 ${fit.on ? "!bg-white !text-[#0F1A30] !border-white" : ""}`}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
         {fit.on ? <span className="tabular-nums">맞춤 {fit.pct}%</span> : "화면 맞춤"}
       </button>
       <button type="button" onClick={fit.toggleBig} data-kp="screen-fit-big"
-        title={fit.xl ? "더 크게 켜짐 — 글씨를 100% 아래로 줄이지 않습니다. 칸이 많으면 표를 옆으로 넘겨 보세요(누르면 끄기)" : fit.big ? "크게 보기 켜짐 — 칸 여백을 줄이고 왼쪽 메뉴를 접어 표 글씨를 더 크게(한 번 더 누르면 '더 크게': 글씨 100% 이상 · 옆으로 넘김)" : "한 화면은 그대로, 칸 여백을 줄이고 왼쪽 메뉴를 접어 표 글씨를 더 크게 봅니다"}
+        title={fit.xl ? "더 크게 켜짐: 글씨를 100% 아래로 줄이지 않습니다. 칸이 많으면 표를 옆으로 넘겨 보세요(누르면 끄기)" : fit.big ? "크게 보기 켜짐: 칸 여백을 줄이고 왼쪽 메뉴를 접어 표 글씨를 더 크게(한 번 더 누르면 '더 크게': 글씨 100% 이상 · 옆으로 넘김)" : "한 화면은 그대로, 칸 여백을 줄이고 왼쪽 메뉴를 접어 표 글씨를 더 크게 봅니다"}
         className={`kp-chip-btn text-[12px] transition inline-flex items-center gap-1 ${fit.big ? "!bg-white !text-[#0F1A30] !border-white" : ""}`}>
         <span className="font-black text-[13px] leading-none">가</span><span className="font-black text-[10px] leading-none -ml-0.5">{fit.xl ? "++" : "+"}</span>{fit.xl ? "더 크게" : "크게 보기"}
       </button>

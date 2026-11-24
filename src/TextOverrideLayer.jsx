@@ -260,7 +260,7 @@ function OverrideListModal({ onClose, say }) {
         </div>
         <div className="px-5 py-3 border-b border-[#E9EDF4] space-y-2">
           <div className="flex flex-wrap gap-2 items-center">
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="찾기 — 원래 문구·새 문구·화면" className={`${inp} flex-1 min-w-[180px]`} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="찾기: 원래 문구·새 문구·화면" className={`${inp} flex-1 min-w-[180px]`} />
             <button type="button" onClick={doExport} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#1B2B4B]">내보내기(JSON)</button>
             <button type="button" onClick={() => fileRef.current?.click()} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#1B2B4B]">가져오기</button>
             <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => { doImport(e.target.files?.[0]); e.target.value = ""; }} />
@@ -282,7 +282,7 @@ function OverrideListModal({ onClose, say }) {
             </thead>
             <tbody>
               {shown.map((r) => <OverrideRow key={r.docId + r.kind + r.orig} r={r} run={run} />)}
-              {!shown.length && <tr><td colSpan={6} className="px-3 py-10 text-center text-[#8A97AD] font-semibold">{rows.length ? "찾는 문구가 없어요" : "아직 바꾼 문구가 없어요 — 편집 모드에서 글자를 눌러 바꿔보세요"}</td></tr>}
+              {!shown.length && <tr><td colSpan={6} className="px-3 py-10 text-center text-[#8A97AD] font-semibold">{rows.length ? "찾는 문구가 없어요" : "아직 바꾼 문구가 없어요. 편집 모드에서 글자를 눌러 바꿔보세요"}</td></tr>}
             </tbody>
           </table>
         </div>

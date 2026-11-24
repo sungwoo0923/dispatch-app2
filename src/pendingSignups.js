@@ -22,11 +22,11 @@ export function usePendingSignups(company) {
       const p = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((u) => isPendingSignup(u, company));
       if (!first) {
         p.filter((u) => !seen.has(u.id)).forEach((u) => {
-          const msg = u.role === "driver" ? `▸ 기사 가입 신청 · ${u.name || ""} ${u.carNo || ""} — 기사관리 › 기사 앱 계정 › 가입 승인에서 승인해 주세요` /* ⭐ 2026-11-05 */ : `◆ 직원 가입 신청 · ${u.name || u.email || ""} — 관리자메뉴 › 회원 관리에서 승인해 주세요`;
+          const msg = u.role === "driver" ? `▸ 기사 가입 신청 · ${u.name || ""} ${u.carNo || ""} · 기사관리 › 기사 앱 계정 › 가입 승인에서 승인해 주세요` /* ⭐ 2026-11-05 */ : `◆ 직원 가입 신청 · ${u.name || u.email || ""} · 관리자메뉴 › 회원 관리에서 승인해 주세요`;
           try { window.__sflowShowToast?.(msg, "info"); } catch { /* 무시 */ }
           try {
             if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.visibilityState !== "visible") {
-              new Notification(u.role === "driver" ? "기사 가입 신청" : "직원 가입 신청", { body: `${u.name || u.email || ""} — 승인해 주세요`, icon: "/icons/icon-192x192-notif.png" });
+              new Notification(u.role === "driver" ? "기사 가입 신청" : "직원 가입 신청", { body: `${u.name || u.email || ""} · 승인해 주세요`, icon: "/icons/icon-192x192-notif.png" });
             }
           } catch { /* 무시 */ }
         });

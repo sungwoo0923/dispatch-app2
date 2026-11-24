@@ -75,7 +75,7 @@ export default function MonthlyReport({ rows = [], isExcluded = () => false, has
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: 18, display: "grid", gap: 14, gridTemplateColumns: "repeat(auto-fit,minmax(460px,1fr))", alignContent: "start" }}>
           <div style={{ ...box, gridColumn: "1 / -1" }}>
-            {h("KEY METRICS", `핵심 지표 — ${prev.slice(5)}월 대비 ${month.slice(5)}월`)}
+            {h("KEY METRICS", `핵심 지표: ${prev.slice(5)}월 대비 ${month.slice(5)}월`)}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10 }}>
               {[["운행 건수", sa.cnt, sb.cnt, `${sb.cnt.toLocaleString()}건`], ["매출", sa.sale, sb.sale, `${won(sb.sale)}원`, 1], ["수익", sa.profit, sb.profit, `${won(sb.profit)}원`, 1], ["수익률", sa.rate, sb.rate, pct(sb.rate), 0, 1], ["건당 수익", sa.avgProfit, sb.avgProfit, `${won(sb.avgProfit)}원`, 1], ["거래처 수", clientA.size, clientB.size, `${clientB.size}곳`]].map(([k, a, b, v, money, rate], i) => (
                 <div key={k} style={{ borderRadius: 14, padding: "12px 14px", background: i === 2 ? "#0F1A30" : "#F5F8FD", color: i === 2 ? "#fff" : "#0F1A30", border: i === 2 ? "none" : "1px solid #E3E8F0" }}>
@@ -99,7 +99,7 @@ export default function MonthlyReport({ rows = [], isExcluded = () => false, has
             {h("CLIENT CHANGE", "거래처 변화")}
             <div style={{ fontSize: 13.5, fontWeight: 900, color: "#0F1A30", marginBottom: 6 }}>신규 거래처 {newClients.length}곳</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>{newClients.slice(0, 30).map((k) => <span key={k} style={{ padding: "4px 10px", borderRadius: 8, background: "#EEF3FC", border: "1px solid #C9D6EE", fontSize: 13, fontWeight: 800, color: "#1B2B4B" }}>{k}</span>)}{!newClients.length && <span style={{ color: "#9AA9C3", fontSize: 13 }}>없음</span>}</div>
-            <div style={{ fontSize: 13.5, fontWeight: 900, color: "#0F1A30", marginBottom: 6 }}>이번 달 거래가 없는 거래처 {lostClients.length}곳 <span style={{ fontWeight: 700, color: "#7A89A3", fontSize: 12.5 }}>— 연락해 볼 곳</span></div>
+            <div style={{ fontSize: 13.5, fontWeight: 900, color: "#0F1A30", marginBottom: 6 }}>이번 달 거래가 없는 거래처 {lostClients.length}곳 <span style={{ fontWeight: 700, color: "#7A89A3", fontSize: 12.5 }}>연락해 볼 곳</span></div>
             {lostClients.slice(0, 10).map((c) => <div key={c.k} style={{ display: "flex", justifyContent: "space-between", padding: "6px 2px", borderBottom: "1px dashed #E3E8F0", fontSize: 13.5 }}><b>{c.k}</b><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: "#5B6B85" }}>전월 {c.s.cnt}건 · {man(c.s.sale)}</span></div>)}
           </div>
           <div style={box}>

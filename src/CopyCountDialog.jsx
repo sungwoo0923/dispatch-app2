@@ -53,7 +53,7 @@ function CopyCountDialog({ title, sub, mobile, alimtalk, order, onDone }) {
   const allSame = (k, v) => setRows((prev) => prev.map((r) => { const n = { ...r, [k]: v }; if (k === "상차일" && n.하차일 < v) n.하차일 = v; return n; }));
   const submit = () => {
     const bad = rows.findIndex((r) => !r.상차일 || !r.하차일 || r.하차일 < r.상차일);
-    if (bad >= 0) { setErr(`${bad + 1}번째 — 하차일이 상차일보다 앞설 수 없어요.`); return; }
+    if (bad >= 0) { setErr(`${bad + 1}번째: 하차일이 상차일보다 앞설 수 없어요.`); return; }
     onDone(rows.map((r) => ({ ...r, ...(typeof alimtalk === "boolean" ? { 알림톡: talk } : {}), ...(order && ownerPicked ? { 담당자: ownerPicked } : {}) })));
   };
   React.useEffect(() => {

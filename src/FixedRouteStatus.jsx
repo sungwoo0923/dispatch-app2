@@ -304,7 +304,7 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
   };
   const has = (f) => hasField(cols, f);
   const money = (f) => (
-    <td key={f} className={td} title={f === "청구운임" && row.단가표지역 ? `단가표 ${row.단가표지역} · 파렛당 ${Number(row.파렛단가 || 0).toLocaleString()}원${row.운임수동 ? " (직접 입력 — 자동 계산 멈춤)" : ""}` : f === "청구운임" && row.운임수동 ? "직접 입력한 운임(단가표 자동 계산 멈춤) — 비우면 다시 자동" : f === "기사운임" && row.기사운임자동 ? "운송업체 수수료율로 자동 계산한 기사운임 — 직접 고치면 자동 계산이 멈춥니다(비우면 다시 자동)" : undefined} data-auto={f === "기사운임" && row.기사운임자동 ? "1" : undefined}>
+    <td key={f} className={td} title={f === "청구운임" && row.단가표지역 ? `단가표 ${row.단가표지역} · 파렛당 ${Number(row.파렛단가 || 0).toLocaleString()}원${row.운임수동 ? " (직접 입력: 자동 계산 멈춤)" : ""}` : f === "청구운임" && row.운임수동 ? "직접 입력한 운임(단가표 자동 계산 멈춤): 비우면 다시 자동" : f === "기사운임" && row.기사운임자동 ? "운송업체 수수료율로 자동 계산한 기사운임: 직접 고치면 자동 계산이 멈춥니다(비우면 다시 자동)" : undefined} data-auto={f === "기사운임" && row.기사운임자동 ? "1" : undefined}>
       <Cell value={toInt(row[f]) ? toInt(row[f]).toLocaleString() : ""} numeric disabled={disabled} onCommit={(v) => commit({ kind: "field", field: f }, v)} />
     </td>
   );
@@ -338,7 +338,7 @@ export function FixedRouteCells({ form, row, drivers = [], clients = [], onPatch
         }
         if (isCarrierCol(c)) {
           const off = carrierF.active && !carrierF.isCountable(row);
-          return <td key={c.id} className={`${td} ${bg}`} title={off ? "운송업체 설정에서 뺀 업체 — 정산·매출에 들어가지 않습니다" : "기본거래처에 있으면 목록에서 고르고, 없으면 그냥 입력"}><CarrierCell value={v} clients={carrierItems} disabled={disabled} onCommit={(x) => commit(c, x)} />{off && disabled && <span className="ml-1 inline-flex items-center h-[18px] px-1.5 rounded-md bg-[#FFF1EE] text-[#B42318] text-[10.5px] font-black align-middle">정산제외</span>}</td>;
+          return <td key={c.id} className={`${td} ${bg}`} title={off ? "운송업체 설정에서 뺀 업체: 정산·매출에 들어가지 않습니다" : "기본거래처에 있으면 목록에서 고르고, 없으면 그냥 입력"}><CarrierCell value={v} clients={carrierItems} disabled={disabled} onCommit={(x) => commit(c, x)} />{off && disabled && <span className="ml-1 inline-flex items-center h-[18px] px-1.5 rounded-md bg-[#FFF1EE] text-[#B42318] text-[10.5px] font-black align-middle">정산제외</span>}</td>;
         }
         return (
           <td key={c.id} data-frs={look || undefined} data-empty={look && !v ? "1" : undefined} className={`${td} ${bg}`} title={own === "화주" ? "업체(화주)가 시트에 입력하는 칸" : own === "운송사" ? "운송사가 입력하는 칸" : ""}>
@@ -642,7 +642,7 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
             </span>}
           </div>
           <div className="relative">
-            <BoardSuggest value={q} onChange={setQ} items={suggest} k="이름" title="운송업체" placeholder="운송업체 검색 — 일부만 쳐도 목록이 떠요"
+            <BoardSuggest value={q} onChange={setQ} items={suggest} k="이름" title="운송업체" placeholder="운송업체 검색: 일부만 쳐도 목록이 떠요"
               sub={(x) => [x.count ? `오더 ${x.count}건` : "", x.on ? "포함" : "제외"].filter(Boolean).join(" · ")}
               onPick={(x) => setQ(x.name)} className={`${inp} pl-10`} inputProps={{ "data-kp": "carrier-search" }} />
             <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#7A8AA6" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
@@ -668,7 +668,7 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
                 </div>
               </div>
               {/* 💸 2026-11-09 업체별 수수료율(%) — 켜기/끄기와 상관없이 · 비어 있는 기사운임 자동 계산 */}
-              <label className="shrink-0 flex items-center gap-1" title="수수료율(%) — 기사운임이 비어 있으면 청구운임 × (1 − 수수료율)로 자동 계산합니다. 비우면 자동 계산 안 함">
+              <label className="shrink-0 flex items-center gap-1" title="수수료율(%): 기사운임이 비어 있으면 청구운임 × (1 − 수수료율)로 자동 계산합니다. 비우면 자동 계산 안 함">
                 <span className="text-[11.5px] font-bold text-[#7A8AA6] hidden sm:inline">수수료</span>
                 <input key={`${c.name}_${c.rate ?? ""}`} defaultValue={c.rate ?? ""} disabled={busy || !canEdit} inputMode="decimal" placeholder="–" data-kp="carrier-rate"
                   onBlur={(e) => setRate(c.name, e.target.value, e.target)} onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) e.currentTarget.blur(); }}
@@ -692,8 +692,8 @@ export function RouteCarrierModal({ company, rows = [], disabled = false, onClos
                 placeholder="새 운송업체 이름" className={inp} data-kp="carrier-add" maxLength={60} />
               <button type="button" disabled={busy} onClick={add} className="shrink-0 h-11 px-5 rounded-xl bg-[#1B2B4B] hover:bg-[#2D4C82] text-white text-[14px] font-black disabled:opacity-60">{busy ? "저장 중…" : "저장"}</button>
             </div>
-          ) : <div className="text-[13px] font-semibold text-[#7A8AA6]">보기 전용입니다 — 관리자만 바꿀 수 있어요.</div>}
-          <div className={`text-[12.5px] font-bold min-h-[18px] ${msg.err ? "text-[#B42318]" : "text-[#2D4C82]"}`}>{msg.t || (setting ? `시트에 새로 생긴 업체는 자동으로 보입니다 · 숨겨도 시트 연동은 그대로 · 일반 오더는 영향 없음` : "아직 설정 전 — 지금은 모든 운송업체 오더가 보이고 정산·매출에 들어갑니다")}</div>
+          ) : <div className="text-[13px] font-semibold text-[#7A8AA6]">보기 전용입니다. 관리자만 바꿀 수 있어요.</div>}
+          <div className={`text-[12.5px] font-bold min-h-[18px] ${msg.err ? "text-[#B42318]" : "text-[#2D4C82]"}`}>{msg.t || (setting ? `시트에 새로 생긴 업체는 자동으로 보입니다 · 숨겨도 시트 연동은 그대로 · 일반 오더는 영향 없음` : "아직 설정 전: 지금은 모든 운송업체 오더가 보이고 정산·매출에 들어갑니다")}</div>
         </div>
       </div>
     </div>, document.body);
@@ -857,7 +857,7 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], carri
             {/* 오더 작업 */}
             <div className="flex items-center gap-1.5 flex-wrap" data-kp="frs-actions">
               {form && !disabled && (
-                <button type="button" onClick={() => setAddOpen(true)} title="이 양식에 오더 추가 — 시트에도 새 줄로 들어갑니다"
+                <button type="button" onClick={() => setAddOpen(true)} title="이 양식에 오더 추가: 시트에도 새 줄로 들어갑니다"
                   className="h-10 px-4 rounded-xl inline-flex items-center gap-1.5 text-[13.5px] font-black bg-white text-[#0F1A30] hover:bg-[#EEF2F8] whitespace-nowrap">＋ 오더 추가</button>
               )}
               {/* ⭐ 2026-11-03 [지운 줄 다시 가져오기] 제거 — [기간 가져오기]를 누르면 지운 줄까지 다시 가져온다 */}
@@ -866,7 +866,7 @@ export default function FixedRouteStatusHost({ company, dispatchData = [], carri
                   className="h-10 px-3.5 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-black bg-white/[0.08] border border-white/20 text-white hover:bg-white/[0.14] whitespace-nowrap">기간 가져오기</button>
               )}
               {(hasCarrierCol || carrierF.active) && (
-                <button type="button" onClick={() => setCarrierOpen(true)} data-kp="carrier-open" title="시트 운송업체 중 보일 업체 고르기 — 끄면 화면·정산·매출에서 빠짐"
+                <button type="button" onClick={() => setCarrierOpen(true)} data-kp="carrier-open" title="시트 운송업체 중 보일 업체 고르기: 끄면 화면·정산·매출에서 빠짐"
                   className="h-10 px-3.5 rounded-xl inline-flex items-center gap-1.5 text-[13px] font-black bg-white/[0.08] border border-white/20 text-white hover:bg-white/[0.14] whitespace-nowrap">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7" /><circle cx="7" cy="18" r="1.6" /><circle cx="17" cy="18" r="1.6" /></svg>
                   운송업체 설정

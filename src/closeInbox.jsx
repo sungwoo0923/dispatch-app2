@@ -58,7 +58,7 @@ export function CloseInboxBanner({ inbox, onOpen, mobile = false }) {
           </div>
         </div>
         <div className="px-4 py-3 text-[13.5px] text-[#1B2B4B]">
-          <b>{first.client}</b> {Number(String(first.ym).slice(5))}월{first.by ? ` · ${first.by}` : ""}{show.length > 1 ? ` 외 ${show.length - 1}곳` : ""} — 확인할까요?
+          <b>{first.client}</b> {Number(String(first.ym).slice(5))}월{first.by ? ` · ${first.by}` : ""}{show.length > 1 ? ` 외 ${show.length - 1}곳` : ""} · 확인할까요?
         </div>
         <div className="px-4 pb-3 flex justify-end gap-2">
           <button type="button" onClick={() => setShow(null)} className="h-9 px-4 rounded-xl border border-[#D5DDEA] bg-white text-[13px] font-bold text-[#3A4A66]">닫기</button>

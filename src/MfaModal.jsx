@@ -45,21 +45,21 @@ export function maskPhone(p) {
 export function mfaErrorText(e) {
   const code = e?.code || "";
   const map = {
-    "auth/invalid-verification-code": "인증번호가 맞지 않습니다. 다시 확인해 주세요.",
-    "auth/code-expired": "인증번호가 만료되었습니다. [다시 받기]를 눌러주세요.",
-    "auth/too-many-requests": "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
-    "auth/quota-exceeded": "오늘 보낼 수 있는 문자 수를 넘었습니다. 잠시 후 다시 시도해 주세요.",
-    "auth/invalid-phone-number": "휴대폰 번호 형식이 올바르지 않습니다.",
+    "auth/invalid-verification-code": "인증번호가 맞지 않아요. 다시 확인해 주세요.",
+    "auth/code-expired": "인증번호 시간이 지났어요. [다시 받기]를 눌러 주세요.",
+    "auth/too-many-requests": "요청이 너무 많아요. 잠시 뒤 다시 시도해 주세요.",
+    "auth/quota-exceeded": "오늘 보낼 수 있는 문자 수를 넘었어요. 잠시 뒤 다시 시도해 주세요.",
+    "auth/invalid-phone-number": "휴대폰 번호 형식이 올바르지 않아요.",
     "auth/missing-phone-number": "휴대폰 번호를 입력해 주세요.",
     "auth/operation-not-allowed": "Firebase에서 전화(문자) 인증이 아직 켜져 있지 않습니다. 콘솔 → Authentication → 로그인 방법 → 전화를 사용 설정해 주세요.",
     "auth/admin-restricted-operation": "Firebase에서 문자 인증(SMS 다중 인증)이 아직 켜져 있지 않습니다.",
     "auth/unverified-email": "이메일 인증을 먼저 완료해야 합니다.",
     "auth/requires-recent-login": "보안을 위해 비밀번호를 다시 입력해 주세요.",
-    "auth/wrong-password": "비밀번호가 올바르지 않습니다.",
-    "auth/invalid-credential": "비밀번호가 올바르지 않습니다.",
+    "auth/wrong-password": "비밀번호가 맞지 않아요.",
+    "auth/invalid-credential": "비밀번호가 맞지 않아요.",
     "auth/second-factor-already-in-use": "이미 등록된 번호입니다.",
-    "auth/maximum-second-factor-count-exceeded": "등록할 수 있는 번호 수를 넘었습니다.",
-    "auth/captcha-check-failed": "보안 확인(reCAPTCHA)에 실패했습니다. 새로고침 후 다시 시도해 주세요.",
+    "auth/maximum-second-factor-count-exceeded": "등록할 수 있는 번호 수를 넘었어요.",
+    "auth/captcha-check-failed": "보안 확인(reCAPTCHA)을 통과하지 못했어요. 새로고침한 뒤 다시 시도해 주세요.",
     "auth/invalid-app-credential": "보안 확인에 실패했습니다. Firebase 승인된 도메인에 이 주소가 있는지 확인해 주세요.",
     "auth/network-request-failed": "인터넷 연결을 확인해 주세요.",
     "mfa/cancelled": "2차 인증을 취소했습니다.",
@@ -274,7 +274,7 @@ export function MfaEnrollSection({ user: userProp }) {
               <button onClick={() => unenroll(f)} disabled={busy === "un"} className="shrink-0 px-3 py-2 rounded-xl border border-red-300 text-red-600 text-[12.5px] font-bold hover:bg-red-50 disabled:opacity-60">해제</button>
             </div>
           ))}
-          <input type="password" autoComplete="current-password" placeholder="해제할 때만 — 현재 비밀번호" value={pw} onChange={(e) => setPw(e.target.value)} className={input} />
+          <input type="password" autoComplete="current-password" placeholder="해제할 때만: 현재 비밀번호" value={pw} onChange={(e) => setPw(e.target.value)} className={input} />
         </>
       ) : !user.emailVerified ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-2.5">
@@ -514,12 +514,12 @@ export function PcVerifySection({ user: userProp, phone }) {
 
       {phone && !editing && (
         <div className="flex gap-2">
-          <input type="password" autoComplete="current-password" placeholder="해제할 때만 — 현재 비밀번호" value={pw} onChange={(e) => setPw(e.target.value)} className={input} />
+          <input type="password" autoComplete="current-password" placeholder="해제할 때만: 현재 비밀번호" value={pw} onChange={(e) => setPw(e.target.value)} className={input} />
           <button onClick={remove} disabled={busy === "rm"} className="shrink-0 px-4 rounded-xl border border-red-300 text-red-600 text-[13px] font-bold hover:bg-red-50 disabled:opacity-60">해제</button>
         </div>
       )}
       {!phone && legacy.length > 0 && (
-        <input type="password" autoComplete="current-password" placeholder="예전 방식 해제용 — 현재 비밀번호" value={pw} onChange={(e) => setPw(e.target.value)} className={input} />
+        <input type="password" autoComplete="current-password" placeholder="예전 방식 해제용: 현재 비밀번호" value={pw} onChange={(e) => setPw(e.target.value)} className={input} />
       )}
       {msg.text && <div className={`text-[13px] font-semibold leading-relaxed ${msg.type === "ok" ? "text-emerald-600" : "text-red-600"}`}>{msg.text}</div>}
       <div ref={holderRef} />

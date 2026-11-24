@@ -413,7 +413,7 @@ export const APPROVAL_FORMS = [
       { k: "attendees", label: "참석자", type: "text", required: true, ph: "홍길동 팀장, 김철수 대리 …", pick: "staffNames" },
       { k: "agenda", label: "안건", type: "textarea", rows: 3, required: true, tpl: "1. \n2. \n3. " },
       { k: "content", label: "논의 내용", type: "textarea", rows: 6, required: true, tpl: "■ 안건 1\n· \n\n■ 안건 2\n· \n\n■ 기타 의견\n· " },
-      { k: "decision", label: "결정 사항·담당·기한", type: "textarea", rows: 3, tpl: "· 결정 사항 — 담당 · 기한\n· " },
+      { k: "decision", label: "결정 사항·담당·기한", type: "textarea", rows: 3, tpl: "· 결정 사항: 담당 · 기한\n· " },
     ],
     summary: (d) => `${d.date || ""} ${d.kind || ""} · ${d.attendees || ""}` },
   { key: "training", cat: "report", label: "교육·세미나 결과 보고", title: "교 육 결 과 보 고 서", code: "RE",

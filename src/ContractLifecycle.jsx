@@ -128,7 +128,7 @@ export function ContractLifecyclePanel({ openCompany }) {
         status: "ended", endedAt: serverTimestamp(), endedAtYmd: today, endedBy: me(), endReason: "계약종료",
         contractHistory: arrayUnion({ at: Date.now(), by: me(), type: "계약종료", detail: "데이터 유지 · 접속 차단" }),
       }, { merge: true });
-      setMsg(`${cur.name} 계약을 종료했습니다 — 이 회사 사람은 지금부터 접속할 수 없습니다.`);
+      setMsg(`${cur.name} 계약을 종료했습니다. 이 회사 사람은 지금부터 접속할 수 없습니다.`);
     } catch (e) { setMsg(`실패: ${e?.code || e?.message || e}`); }
   };
   const reactivate = async () => {
@@ -233,7 +233,7 @@ export function ContractLifecyclePanel({ openCompany }) {
                       {Number(cur.p?.extraSeats) ? ` · 추가 계정 ${cur.p.extraSeats}명` : ""}{Number(cur.p?.moduleCount) > 1 ? ` · 업무 영역 ${cur.p.moduleCount}개` : ""}
                     </div>
                   )}
-                  <label className="block"><span className="text-[13.5px] font-bold text-[#3A4A66]">계약 종료일 {form.term ? <span className="font-medium text-[#7A879C]">(시작일 + 기간으로 자동 — 바꿔도 됩니다)</span> : null}</span>
+                  <label className="block"><span className="text-[13.5px] font-bold text-[#3A4A66]">계약 종료일 {form.term ? <span className="font-medium text-[#7A879C]">(시작일 + 기간으로 자동: 바꿔도 됩니다)</span> : null}</span>
                     <CustomDatePicker showIcon value={form.end} onChange={(e) => setForm({ ...form, end: e.target.value })} className={`${INPUT} mt-1`} data-contract-end /></label>
                   <div className="rounded-2xl border border-[#DCE3EE] overflow-hidden" data-contract-trial>
                     <div className="px-4 py-2.5 bg-[#F7F9FC] border-b border-[#E3E8F0] text-[13.5px] font-extrabold tracking-[0.12em] text-[#5B6B85]">무료 이용 (계약 전에 먼저 써 보는 기간)</div>
@@ -296,7 +296,7 @@ export function ContractLifecyclePanel({ openCompany }) {
               )}
               {notice && (
                 <div className="rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3.5 py-3 text-[14px] text-[#1B2B4B]" data-notice-result>
-                  {notice.loading ? "확인 중…" : notice.error ? notice.error : (notice.results || []).length === 0 ? `${notice.today} — 오늘 보낼 안내가 없습니다.` : (
+                  {notice.loading ? "확인 중…" : notice.error ? notice.error : (notice.results || []).length === 0 ? `${notice.today} · 오늘 보낼 안내가 없습니다.` : (
                     <ul className="space-y-1">{notice.results.map((x) => <li key={x.company}><b>{x.company}</b> D-{x.dLeft} ({x.threshold}일 전 안내) · {x.skipped || (x.dryRun ? `받을 사람 ${x.users}명 · 메일 ${(x.mails || []).length}곳` : `알림 ${x.users}명 · 메일 ${x.mails}곳${x.mail?.ok === false ? ` · 메일 실패(${x.mail.error})` : ""}`)}</li>)}</ul>
                   )}
                 </div>

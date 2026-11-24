@@ -50,7 +50,7 @@ t("로그인 안내: 휴대폰번호로 찾았으면 휴대폰번호로 안내",
   assert.ok(e.message.includes("휴대폰번호 010-1111-2222로 등록된"), e.message);
   const p = describeDriverLoginError({ code: "driver/name-mismatch" }, { carNo: "34바3333", name: "홍길동" });
   assert.ok(p.message.includes("차량번호 34바3333로 등록된"), p.message);
-  assert.strictEqual(describeDriverLoginError({ code: "driver/phone-not-registered" }, { phone: "01011112222" }).title, "등록된 휴대폰번호가 없습니다");
+  assert.strictEqual(describeDriverLoginError({ code: "driver/phone-not-registered" }, { phone: "01011112222" }).title, "등록된 휴대폰번호가 없어요");
   assert.strictEqual(describeDriverLoginError({ code: "driver/phone-incomplete" }, {}).title, "휴대폰번호를 끝까지 입력해 주세요");
 });
 

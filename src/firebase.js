@@ -227,7 +227,7 @@ export async function saveFcmToken(user) {
   // VITE_FCM_VAPID_KEY가 설정돼 있는지 꼭 확인해야 한다(Firebase 콘솔 → 프로젝트 설정
   // → 클라우드 메시징 → 웹 구성 → 키 쌍 생성).
   if (!vapidKey) {
-    console.error("[FCM] VITE_FCM_VAPID_KEY가 설정되지 않았습니다 — 푸시 토큰을 발급받을 수 없습니다.");
+    console.error("[FCM] VITE_FCM_VAPID_KEY가 설정되지 않았습니다. 푸시 토큰을 발급받을 수 없습니다.");
     return;
   }
   // ⭐ serviceWorkerRegistration을 안 넘기면 getToken()이 자기가 알아서
@@ -273,7 +273,7 @@ export async function diagnoseFcmToken(user) {
       ok: false,
       reason:
         "이 브라우저/환경은 Firebase 메시징을 지원하지 않는다고 판단됐습니다(isSupported()===false). " +
-        "아이폰의 경우 홈 화면에 앱을 추가해 그 아이콘으로 실행 중인지 확인해주세요 — Safari 탭에서 직접 열면 지원되지 않을 수 있습니다.",
+        "아이폰의 경우 홈 화면에 앱을 추가해 그 아이콘으로 실행 중인지 확인해주세요. Safari 탭에서 직접 열면 지원되지 않을 수 있습니다.",
     };
   }
 
@@ -287,7 +287,7 @@ export async function diagnoseFcmToken(user) {
 
   const vapidKey = import.meta.env.VITE_FCM_VAPID_KEY;
   if (!vapidKey) {
-    return { ok: false, reason: "VITE_FCM_VAPID_KEY가 설정되어 있지 않습니다(배포 환경변수 누락) — 개발자에게 알려주세요." };
+    return { ok: false, reason: "VITE_FCM_VAPID_KEY가 설정되어 있지 않습니다(배포 환경변수 누락): 개발자에게 알려주세요." };
   }
 
   let swRegistration;
@@ -297,12 +297,12 @@ export async function diagnoseFcmToken(user) {
     return { ok: false, reason: `서비스워커 준비 확인 중 오류: ${e?.message || e}` };
   }
   if (!swRegistration) {
-    return { ok: false, reason: "서비스워커가 등록돼 있지 않습니다 — 앱을 완전히 종료했다가 다시 열어주세요." };
+    return { ok: false, reason: "서비스워커가 등록돼 있지 않습니다. 앱을 완전히 종료했다가 다시 열어주세요." };
   }
 
   try {
     const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: swRegistration });
-    if (!token) return { ok: false, reason: "getToken()이 토큰 없이 빈 값을 반환했습니다(원인 불명 — iOS Safari 자체 버그일 수 있음)." };
+    if (!token) return { ok: false, reason: "getToken()이 토큰 없이 빈 값을 반환했습니다(원인 불명: iOS Safari 자체 버그일 수 있음)." };
     let list = [token];
     try { const cur = (await getDoc(doc(db, "users", user.uid))).data() || {}; list = [token, ...[cur.fcmToken, ...(Array.isArray(cur.fcmTokens) ? cur.fcmTokens : [])].filter((t) => t && t !== token)]; } catch { /* 무시 */ }
     await updateDoc(doc(db, "users", user.uid), { fcmToken: token, fcmTokenAt: Date.now(), fcmTokens: [...new Set(list)].slice(0, 5), fcmTokensOut: arrayRemove(token) });

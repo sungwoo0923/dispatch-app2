@@ -60,7 +60,7 @@ const PAGE = 15;
 // 목록 날짜·순서 — 예약 게시 글은 게시 시각 기준
 const whenOf = (n) => Math.max(toMs(n.createdAt), noticePublishAt(n));
 const Eye = ({ size = 13 }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>;
-const SchedBadge = ({ n, big }) => <span title="예약 게시 — 이 시각에 직원들에게 보이고 알림이 갑니다(지금은 작성자·관리자만 보임)" className={`shrink-0 inline-flex items-center gap-1 rounded-md bg-[#0F1A30] text-[#8FB0F0] font-black whitespace-nowrap ${big ? "px-2 py-0.5 text-[11px]" : "px-1.5 py-0.5 text-[10.5px]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{scheduleLabel(noticePublishAt(n))}</span>;
+const SchedBadge = ({ n, big }) => <span title="예약 게시: 이 시각에 직원들에게 보이고 알림이 갑니다(지금은 작성자·관리자만 보임)" className={`shrink-0 inline-flex items-center gap-1 rounded-md bg-[#0F1A30] text-[#8FB0F0] font-black whitespace-nowrap ${big ? "px-2 py-0.5 text-[11px]" : "px-1.5 py-0.5 text-[10.5px]"}`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{scheduleLabel(noticePublishAt(n))}</span>;
 const AudBadges = ({ n, big }) => { const a = noticeAudiences(n); const cls = `shrink-0 rounded border border-[#C9D6EE] text-[#2D4C82] font-black ${big ? "px-2 py-0.5 rounded-md text-[11px]" : "px-1.5 py-0.5 text-[10.5px]"}`; return <>{a.includes("shipper") && <span className={cls}>{big ? "화주사 공개" : "화주사"}</span>}{a.includes("driver") && <span className={cls}>{big ? "기사 공개" : "기사"}</span>}{!a.includes("internal") && <span className={cls}>직원 제외</span>}</>; };
 export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEdit, confirm, openId, setOpenId }) {
   const [q, setQ] = React.useState("");
@@ -133,7 +133,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
               : <span className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-black" style={{ background: "linear-gradient(135deg,#1B2B4B,#2D4C82)" }}>{String(cur.author || "?").slice(0, 1)}</span>}
             <div className="leading-tight">
               <div className="text-[14px] font-black text-[#0F1A30]">{cur.author || "-"}</div>
-              <div className="text-[12px] text-[#7A879C] tabular-nums flex items-center flex-wrap gap-x-1">{fullDate(ms)}{isNoticeScheduled(cur) ? " 게시 예정" : ""}{cur._platform ? (cur.updatedAt ? ` · 수정 ${fullDate(toMs(cur.updatedAt))}` : "") + " · LogisWeb 운영팀이 보낸 공지입니다" : ""}<span className="inline-flex items-center gap-1 font-bold text-[#5B6B85]" title="조회수 — 한 계정 1회">· <Eye size={12} /> 조회 {noticeViews(cur)}</span></div>
+              <div className="text-[12px] text-[#7A879C] tabular-nums flex items-center flex-wrap gap-x-1">{fullDate(ms)}{isNoticeScheduled(cur) ? " 게시 예정" : ""}{cur._platform ? (cur.updatedAt ? ` · 수정 ${fullDate(toMs(cur.updatedAt))}` : "") + " · LogisWeb 운영팀이 보낸 공지입니다" : ""}<span className="inline-flex items-center gap-1 font-bold text-[#5B6B85]" title="조회수: 한 계정 1회">· <Eye size={12} /> 조회 {noticeViews(cur)}</span></div>
               {cur.revisedAt && <div className="text-[12px] font-bold text-[#B54708] tabular-nums">{cur.hrOrder?.status === "cancelled" ? "취소" : "수정"} {fullDate(toMs(cur.revisedAt))}{cur.revisedBy ? ` · ${cur.revisedBy}` : ""}</div>}
             </div>
           </div>
@@ -192,7 +192,7 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
         </span>
         <span className={`hidden md:block truncate text-[14px] font-bold ${n._platform ? "text-[#8A6A16]" : "text-[#1B2B4B]"}`}>{n.author || "-"}</span>
         <span className="text-right text-[14px] font-semibold text-[#3A4A66] tabular-nums whitespace-nowrap" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{shortDate(whenOf(n))}</span>
-        <span className="hidden md:inline-flex items-center justify-center gap-1 text-[13px] font-semibold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} title="조회수 — 한 계정 1회"><Eye size={12} />{noticeViews(n)}</span>
+        <span className="hidden md:inline-flex items-center justify-center gap-1 text-[13px] font-semibold text-[#5B6B85] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} title="조회수: 한 계정 1회"><Eye size={12} />{noticeViews(n)}</span>
       </button>
     );
   };

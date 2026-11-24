@@ -334,7 +334,7 @@ export default function DriverLogin() {
           <div className="bg-white rounded-[26px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_24px_60px_rgba(15,26,48,0.10)] px-5 sm:px-10 pt-6 sm:pt-9 pb-6 sm:pb-8">
             <div className="text-[13.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]">DRIVER SIGN IN</div>
             <h1 className="mt-1 text-[23px] sm:text-[26px] font-black text-[#0F1A30] tracking-tight">기사 로그인</h1>
-            <p className="text-[14.5px] sm:text-[15.5px] text-[#7A879C] mt-1 mb-5 sm:mb-7">소속 회사 · 휴대폰번호 · 이름으로 로그인하세요</p>
+            <p className="text-[14.5px] sm:text-[15.5px] text-[#7A879C] mt-1 mb-5 sm:mb-7">소속 회사 · 휴대폰번호 · 이름으로 로그인해 주세요</p>
 
             {field("company", "소속 운송사명", (
               <div className="relative">

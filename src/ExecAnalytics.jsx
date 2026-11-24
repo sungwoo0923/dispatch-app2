@@ -572,7 +572,7 @@ function FleetTab({ rows, fleet, today, compact, W }) {
                 <b className="shrink-0 text-[13.5px] font-black" style={{ ...EX_NUM, color: EX.warn }}>{v.last ? `${dayDiff(v.last, today)}일 미가동` : "운행 기록 없음"}</b>
               </div>
             ))}
-            {idle.length > 8 && <div className="pt-2 text-[12px] font-semibold" style={{ color: EX.mute }}>외 {idle.length - 8}대 — 아래 표에서 ‘최근 운행일’ 기준으로 정렬하여 확인하실 수 있습니다.</div>}
+            {idle.length > 8 && <div className="pt-2 text-[12px] font-semibold" style={{ color: EX.mute }}>외 {idle.length - 8}대: 아래 표에서 ‘최근 운행일’ 기준으로 정렬하여 확인하실 수 있습니다.</div>}
           </div>
         </ExecPanel>
       </div>

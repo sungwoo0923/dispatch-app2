@@ -999,7 +999,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
       const sameCoOnly = role !== "shipper" && (room.members || []).every((uid) => uid === myUid || (friends || []).some((f) => f.uid === uid && !f.crossCompany));
       if (!sameCoOnly) { delete snap.청구운임; delete snap.기사운임; }
       await postMsg(room, { type: "order", text: orderSummary(snap), order: snap }, orderLast(snap));
-    } catch (e) { alert(`오더를 보내지 못했습니다 — ${e?.message || e}`); }
+    } catch (e) { alert(`오더를 보내지 못했습니다. ${e?.message || e}`); }
   };
   // 공지 고정 — 방마다 1개, 채팅창 위쪽에 계속 보인다
   const pinMessage = async (msg) => {
@@ -1007,7 +1007,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     const text = msg.type === "order" ? orderSummary(msg.order || {}) : msg.type === "image" ? "[사진]" : msg.type === "file" ? `[파일] ${msg.fileName || ""}` : String(msg.text || "");
     await updateDoc(doc(db, ROOMS_COLL, room.id), {
       pinned: { msgId: msg.id || "", text: text.slice(0, 500), senderName: msg.senderName || "", by: myProfile?.name || myEmail.split("@")[0], at: Date.now() },
-    }).catch((e) => alert(`공지 고정 실패 — ${e?.message || e}`));
+    }).catch((e) => alert(`공지 고정 실패: ${e?.message || e}`));
   };
   const unpinMessage = async () => {
     if (!activeRoom?.id) return;
@@ -1039,7 +1039,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
         if (room) await postMsg(room, copy, last);
       }
       setFwdMsg(null);
-    } catch (e) { alert(`전달하지 못했습니다 — ${e?.message || e}`); } finally { setFwdBusy(false); }
+    } catch (e) { alert(`전달하지 못했습니다. ${e?.message || e}`); } finally { setFwdBusy(false); }
   };
 
   // ── 이미지 전송 ──

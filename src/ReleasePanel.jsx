@@ -50,7 +50,7 @@ export default function ReleasePanel({ children }) {
     if (!latest?.url) return setMsg("이 배포의 주소를 알 수 없어 배포할 수 없어요(Vercel 시스템 환경변수 VERCEL_URL 확인).");
     if (!mineIsLatest && !(await kpConfirm("지금 보고 있는 화면이 최신이 아니에요.\n최신 화면을 확인하지 않고 배포할까요?\n\n[취소] → [내 화면 최신으로]를 먼저 눌러 보는 걸 권해요."))) return;
     if (!(await kpConfirm(`v${latest.version} 을 모든 가입자에게 배포할까요?\n\n· PC · 모바일 · 기사앱 · 화주 화면 모두 바뀌어요\n· 이전 버전 기록은 지워져요(되돌리기 목록에 남지 않아요)`))) return;
-    run("pub", () => publishRelease(latest, note), `v${latest.version} 배포 완료 — 가입자 화면은 새로고침하면 바뀌어요`).then(() => setNote(""));
+    run("pub", () => publishRelease(latest, note), `v${latest.version} 배포 완료: 가입자 화면은 새로고침하면 바뀌어요`).then(() => setNote(""));
   };
   const online = (live?.onlineList || []).filter((p) => p.now);
   const onPinned = locked ? online.filter((p) => p.build && p.build === rel.build).length : 0;
@@ -84,7 +84,7 @@ export default function ReleasePanel({ children }) {
         {msg && <div className="px-5 pb-4 -mt-1 text-[13.5px] font-bold text-[#1B2B4B]">{msg}</div>}
         {locked && chk && (chk.error || chk.ok === false) && (
           <div className="mx-5 mb-5 rounded-xl border border-[#F0D9A8] bg-[#FFF8EA] px-4 py-3 text-[13px] text-[#6B4A00] leading-relaxed">
-            {chk.error ? "점검 주소에 연결하지 못했어요. 배포 직후라면 잠시 뒤 다시 눌러 주세요." : <>가입자에게 배포 버전 화면을 못 가져오고 있어요(응답 {chk.status || "없음"}) — 지금은 가입자도 최신 화면을 봐요. Vercel › <b>Settings › Deployment Protection</b> 에서 <b>Protection Bypass for Automation</b> 을 켜고 한 번 더 배포해 주세요.</>}
+            {chk.error ? "점검 주소에 연결하지 못했어요. 배포 직후라면 잠시 뒤 다시 눌러 주세요." : <>가입자에게 배포 버전 화면을 못 가져오고 있어요(응답 {chk.status || "없음"}): 지금은 가입자도 최신 화면을 봐요. Vercel › <b>Settings › Deployment Protection</b> 에서 <b>Protection Bypass for Automation</b> 을 켜고 한 번 더 배포해 주세요.</>}
             <button type="button" onClick={refresh} className="ml-2 underline font-black">다시 점검</button>
           </div>
         )}
@@ -113,7 +113,7 @@ export default function ReleasePanel({ children }) {
                 </ul>
               ) : <div className="mt-2 text-[13px] text-[#9AA9C3]">고를 수 있는 새 버전이 없어요.</div>}
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <input value={addr} onChange={(e) => { setAddr(e.target.value); setProbe(null); }} placeholder="Vercel 배포 주소로 고정 — 예: dispatch-app2-abc123.vercel.app" className="h-10 flex-1 min-w-[240px] px-3 rounded-xl border border-[#DCE3EE] text-[13px] outline-none focus:border-[#1B2B4B]" />
+                <input value={addr} onChange={(e) => { setAddr(e.target.value); setProbe(null); }} placeholder="Vercel 배포 주소로 고정, 예: dispatch-app2-abc123.vercel.app" className="h-10 flex-1 min-w-[240px] px-3 rounded-xl border border-[#DCE3EE] text-[13px] outline-none focus:border-[#1B2B4B]" />
                 <button type="button" disabled={!addr.trim() || busy === "probe"} onClick={async () => { setBusy("probe"); setProbe(null); try { setProbe(await probeDeploy(addr)); } catch (e) { setProbe({ ok: false, error: e.message }); } finally { setBusy(""); } }} className="h-10 px-4 rounded-xl border border-[#C9D5EA] bg-white text-[13px] font-black text-[#1B2B4B]">{busy === "probe" ? "확인 중…" : "버전 확인"}</button>
               </div>
               {probe && (probe.ok ? (

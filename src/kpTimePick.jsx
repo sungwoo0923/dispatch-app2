@@ -43,7 +43,7 @@ export function HourMinuteSelect({ value = "", onChange, className = "", disable
   return (
     <div className="grid grid-cols-2 gap-1.5 min-w-0">
       <CustomSelect value={h} onChange={(e) => emit(e.target.value, mi)} className={className} disabled={disabled} placeholder="시">
-        {allowEmpty && <option value="">— 시</option>}
+        {allowEmpty && <option value="">시</option>}
         {HOURS.map((x) => <option key={x} value={x}>{x}시</option>)}
       </CustomSelect>
       <CustomSelect value={mi} onChange={(e) => emit(h || "09", e.target.value)} className={className} disabled={disabled} placeholder="분">

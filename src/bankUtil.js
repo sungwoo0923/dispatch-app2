@@ -76,7 +76,7 @@ export function validateAccount(bank, raw, holder) {
   if (/^(\d)\1+$/.test(d)) return { ok: false, level: "error", msg: "같은 숫자만 반복된 계좌번호입니다" };
   const b = byName(bank);
   const lens = Object.keys(b?.fmt || {}).map(Number);
-  if (lens.length && !lens.includes(d.length)) return { ok: true, level: "warn", msg: `${bank} 계좌는 보통 ${lens.sort((x, y) => x - y).join("·")}자리입니다 — 다시 확인해 주세요` };
+  if (lens.length && !lens.includes(d.length)) return { ok: true, level: "warn", msg: `${bank} 계좌는 보통 ${lens.sort((x, y) => x - y).join("·")}자리입니다. 다시 확인해 주세요` };
   if (holder !== undefined && !String(holder || "").trim()) return { ok: false, level: "error", msg: "예금주를 입력해 주세요" };
   return { ok: true, level: "ok", msg: "형식 확인됨" };
 }

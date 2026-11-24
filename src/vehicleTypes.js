@@ -366,7 +366,7 @@ function VehicleTypeDialog({ company, initial = "", onAdded, onClose }) {
       h("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8, maxHeight: 170, overflowY: "auto" } },
         vt.all.length ? vt.all.map((v) => h("span", { key: v, style: { display: "inline-flex", alignItems: "center", gap: 2, height: 30, padding: "0 2px 0 10px", borderRadius: 8, border: "1px solid #C9D5EA", background: vt.custom.includes(v) ? "#EEF3FC" : "#F7F9FC", fontSize: 13.5, fontWeight: 800, color: "#0F1A30" } },
           v, h("button", { type: "button", onClick: () => del(v), title: "목록에서 삭제", "data-vt-del": "1", style: { width: 26, height: 26, borderRadius: 6, border: "none", background: "transparent", color: "#9AA9C3", cursor: "pointer", display: "grid", placeItems: "center" } }, trashSvg())))
-          : h("span", { style: { fontSize: 13, fontWeight: 700, color: "#9AA9C3" } }, "아직 없습니다 — 위에서 추가해 보세요")),
+          : h("span", { style: { fontSize: 13, fontWeight: 700, color: "#9AA9C3" } }, "아직 없습니다. 위에서 추가해 보세요")),
       (vt.hidden || []).length ? h("div", { style: { marginTop: 10, fontSize: 12.5, fontWeight: 700, color: "#7A8AA6", display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" } },
         h("span", null, "지운 기본 항목:"),
         ...(vt.hidden || []).map((v) => h("button", { key: v, type: "button", onClick: () => restoreVehicleType(vt.company, v).catch(() => {}), title: "되살리기", style: { height: 26, padding: "0 8px", borderRadius: 7, border: "1px dashed #9FB2D3", background: "#fff", color: "#2D4C82", fontSize: 12.5, fontWeight: 800, cursor: "pointer" } }, `↺ ${v}`))) : null),
@@ -391,6 +391,6 @@ export function VehicleTypeAddButton({ company, onAdded, className = "", label =
     onMouseDown: (e) => e.preventDefault(),
     onClick: (e) => { e.preventDefault(); e.stopPropagation(); openVehicleTypeDialog({ company, initial, onAdded }); },
     className: className || "text-[11px] font-bold px-1.5 py-0.5 rounded-lg bg-white border border-[#1B2B4B] text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white transition whitespace-nowrap shrink-0",
-    title: "회사 공용 차량종류 추가 — 모든 화면 목록에 나옵니다",
+    title: "회사 공용 차량종류 추가: 모든 화면 목록에 나옵니다",
   }, label);
 }

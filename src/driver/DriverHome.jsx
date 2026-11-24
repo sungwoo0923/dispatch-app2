@@ -6,7 +6,8 @@ import { pickCompanyLoc } from "../officeLocSync"; // 📍 2026-11-09 출근지 
 import { kpConfirm } from "../kpDialog";
 import { deleteDocsAtomic } from "../DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { html2canvas } from "../lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
-import { db, auth, DEFAULT_COMPANY, FUNCTIONS_BASE } from "../firebase";
+import { db, auth, DEFAULT_COMPANY, FUNCTIONS_BASE, clearFcmToken } from "../firebase";
+import { purgeOnSignOut } from "../sessionPurge"; // 🛠 2026-11-24 로그아웃 때 기기 저장본 정리
 import { setViewOnly, setTenant } from "../fsTenant"; // 👀 2026-11-22 관리자 "기사 화면 보기" — 보기 전용(저장 막음) · 그 기사 회사로 보기
 import { readViewAs, clearViewAs } from "./DriverViewAs";
 import {
@@ -121,6 +122,7 @@ function withKpLoc(fn) {
 //  플러그인이 아직 없으면 isPluginAvailable 검사로 조용히 건너뛴다(기존 동작과 동일).
 //  (플러그인 객체는 thenable이라 Promise로 넘기지 않고 콜백 안에서만 쓴다 — 위 KpLocation 주석 참고)
 const PushNotifications = registerPlugin("PushNotifications");
+const NativeAppPlugin = registerPlugin("App"); // 📱 2026-11-24 안드로이드 뒤로가기 버튼(backButton) · 앱 내리기
 let nativePushRegisteredUid = "";
 function registerNativePush(uid) {
   if (!uid || nativePushRegisteredUid === uid) return;
@@ -168,7 +170,7 @@ async function saveCanvasImage(canvas, name, showToast) {
       await NativeShare.share({ title: name, url: res?.uri });
       return;
     }
-    showToast("앱에서는 이미지 저장을 아직 지원하지 않습니다 — 화면 캡처를 이용해주세요");
+    showToast("앱에서는 아직 이미지를 저장할 수 없어요. 화면 캡처를 이용해 주세요.");
     return;
   }
   try {
@@ -675,7 +677,7 @@ function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCop
           <div style={{ fontSize: 15.5, fontWeight: 800, color: "#0F1A30", animation: "kpRedBlink 1.4s ease-in-out infinite" }}>
             ⚠ 담당자가 오더를 수정했습니다
           </div>
-          <div style={{ fontSize: 14.5, color: "#3A4A66", marginTop: 3 }}>변경 항목: <b>{labels.join(", ")}</b> — 확인 후 재승인 또는 거절해 주세요</div>
+          <div style={{ fontSize: 14.5, color: "#3A4A66", marginTop: 3 }}>변경 항목: <b>{labels.join(", ")}</b>. 확인한 뒤 재승인하거나 거절해 주세요.</div>
           <button onClick={() => onConfirmChange?.(o)} disabled={loading}
             style={{ width: "100%", marginTop: 8, padding: "11px", borderRadius: 10, border: "none", background: "#0F1A30", color: "#fff", fontWeight: 800, fontSize: 16.5, cursor: "pointer" }}>
             바뀐 내용 보기 · 재승인/거절
@@ -846,6 +848,18 @@ function useGpsTracking(uid, driverData) {
   // 휴차일엔 위치가 필요 없으므로 멈춘다(배터리·데이터 절약). "대기로 복귀"하면 다시 시작.
   const offDuty = ["퇴근", "휴차"].includes(driverData?.status) || driverData?.mainStatus === "휴차";
   const driverLoaded = !!driverData;
+  // 📱 2026-11-24 위치 권한 막힘 → [설정 열기]에서 허용하고 돌아와도 추적이 다시 시작되지 않던 문제(앱을 껐다 켜야 했다).
+  //  시작이 실패했으면 앱이 다시 화면에 나올 때 한 번 더 시작해 본다.
+  const startFailedRef = useRef(false);
+  const [startTry, setStartTry] = useState(0);
+  useEffect(() => {
+    if (!isNative()) return undefined;
+    const onVis = () => {
+      if (document.visibilityState === "visible" && startFailedRef.current) { startFailedRef.current = false; setStartTry((t) => t + 1); }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
   useEffect(() => {
     if (!isNative() || !uid || !driverLoaded) return;
     let alive = true;
@@ -865,6 +879,7 @@ function useGpsTracking(uid, driverData) {
       } catch (e) {
         window.__kpStartErr = String(e?.message || e);
         if (alive && String(e?.message || e).includes("NOT_AUTHORIZED")) setPermissionDenied(true);
+        startFailedRef.current = true;
         return;
       }
       window.__kpStartErr = "";
@@ -880,7 +895,7 @@ function useGpsTracking(uid, driverData) {
       } catch (_) {}
     });
     return () => { alive = false; };
-  }, [uid, driverLoaded, offDuty]);
+  }, [uid, driverLoaded, offDuty, startTry]);
 
   const resetTotalDist = useCallback(() => {
     totalDistRef.current = 0;
@@ -896,6 +911,7 @@ function useGpsTracking(uid, driverData) {
     // GPS 콜백 (watchPosition + BackgroundGeolocation 공통)
     const gpsCallback = async (lat, lng, speed, accuracy) => {
       setPos({ lat, lng, speed, accuracy });
+      setPermissionDenied(false); // 📱 2026-11-24 나중에 권한을 허용하면 "위치 권한이 필요합니다" 안내를 내린다
       if (accuracy > 100) return;
       const prev = lastPosRef.current;
       let distDelta = 0;
@@ -1214,7 +1230,9 @@ export default function DriverHome() {
 
   useEffect(() => {
     return onAuthStateChanged(auth, (u) => {
-      if (!u) { window.location.href = viewAs ? "/driver-view" : "/driver-login"; return; }
+      // 🛠 2026-11-24 로그아웃 점검 — 직접 로그아웃이 아닌 경우(다른 기기에서 로그인해 끊김 · 로그인 방식 변경 등)에도
+      //  네이티브 위치 전송을 먼저 멈춘다(전송 서비스는 저장해 둔 토큰으로 돌아 로그아웃 뒤에도 앞 계정 위치를 계속 보냈다)
+      if (!u) { const to = viewAs ? "/driver-view" : "/driver-login"; if (viewAs) { window.location.href = to; return; } Promise.race([stopNativeTracking(), new Promise((r) => setTimeout(r, 800))]).finally(() => { if (!window.__kpDriverLeaving) window.location.href = to; }); return; } // 직접 로그아웃(__kpDriverLeaving)은 그 함수가 정리 후 옮긴다
       if (viewAs) { // 관리자 보기 — 고른 기사로 보고, 저장 · 푸시 등록은 하지 않는다
         setViewOnly(true);
         setTenant(viewAs.companyName || "");
@@ -1271,7 +1289,7 @@ export default function DriverHome() {
       if (!idle) return; // 다음에 앱을 열 때 다시 본다
       const carNo = String(driver.carNo ?? driver.차량번호 ?? "").trim();
       localStorage.setItem("driverLoginSaved", JSON.stringify({ remember: true, autoLogin: false, companyName: driver.companyName || sv?.companyName || "", carNo, name: driver.name || driver.이름 || sv?.name || "", phone: ph, loginId: ph }));
-      const notice = { code: "driver/relogin", tone: "wait", title: "로그인 방식이 바뀌었습니다", message: "이제 휴대폰번호로 로그인합니다. 아래 정보를 확인하고 [로그인]을 눌러 주세요.", hint: "운행 기록 · 서류 · 알림은 그대로 남아 있습니다. 차량이 바뀌어도 휴대폰번호로 계속 로그인됩니다." };
+      const notice = { code: "driver/relogin", tone: "wait", title: "로그인 방식이 바뀌었어요", message: "이제 휴대폰번호로 로그인해요. 아래 정보를 확인하고 [로그인]을 눌러 주세요.", hint: "운행 기록 · 서류 · 알림은 그대로 남아 있어요. 차량이 바뀌어도 휴대폰번호로 계속 로그인할 수 있어요." };
       // 로그아웃되는 순간 App이 먼저 로그인 화면을 그리며 안내를 꺼내 갈 수 있어, 화면을 새로 열기 직전에 다시 넣어 둔다
       const arm = () => { try { keepDriverLoginError(notice); sessionStorage.setItem("driverJustLoggedOut", "1"); } catch { /* 무시 */ } };
       // 휴대폰번호 로그인 서버가 준비돼 있을 때만 안내한다(서버가 아직 없거나 연결이 안 되면 그대로 두고 다음에 앱을 열 때 다시 본다)
@@ -1747,11 +1765,11 @@ export default function DriverHome() {
       const doneToday = driver?.isFinalCheckout && driver?.workDate === kstDateStr();
       if (notIn && !doneToday && (!accDate || accDate <= kstDateStr()) && odoOnRef.current && needOilConfirm(driverRef.current || driver)) {
         setOilAlert({ action: { label: "출근", status: "출근" } });
-        showToast("오더를 수락했습니다 — 오일 알림을 확인하면 출근 처리됩니다");
+        showToast("오더를 수락했습니다. 오일 알림을 확인하면 출근 처리됩니다.");
       } else
       if (notIn && !doneToday && (!accDate || accDate <= kstDateStr())) {
         await updateStatusRef.current?.("출근");
-        showToast(st0 === "휴차" ? "오더를 수락했습니다 — 휴차를 풀고 출근 처리했습니다" : "오더를 수락했습니다 — 출근 처리했습니다");
+        showToast(st0 === "휴차" ? "오더를 수락했습니다. 휴차를 풀고 출근 처리했습니다." : "오더를 수락하고 출근 처리했습니다.");
       } else
       showToast("오더를 수락했습니다");
     } catch (e) {
@@ -1789,7 +1807,7 @@ export default function DriverHome() {
         배차방식: "",
       });
       setOrderBanner(null);
-      showToast(rm.modified ? "수정된 오더를 거절했습니다 — 담당자에게 알렸어요" : "오더를 거절했습니다");
+      showToast(rm.modified ? "수정된 오더를 거절하고 담당자에게 알렸습니다." : "오더를 거절했습니다");
       setRejectModal(null);
       setRejectReason("");
     } catch (e) {
@@ -1878,7 +1896,7 @@ export default function DriverHome() {
         ...(isPickupVisited(o) ? {} : { 상차지도착주소: o.상차지주소 || "", 상차지도착일시: serverTimestamp(), 상차지도착근거: 근거 }),
         ...tlLog("상차완료", driver?.name, { detail: 근거 }),
       });
-      if (근거 === "기사버튼") showToast("상차완료 — 하차지로 이동해주세요");
+      if (근거 === "기사버튼") showToast("상차완료되었습니다. 하차지로 이동해 주세요.");
     } catch (e) {
       showToast("처리 중 오류가 발생했습니다");
     }
@@ -1905,7 +1923,7 @@ export default function DriverHome() {
         [`회차완료일시.${k}`]: serverTimestamp(),
         ...tlLog("회차완료", driver?.name, { detail: `${k}회차` }),
       });
-      showToast(`${k}회차 완료 — 다음 회차 상차지로 이동해주세요`);
+      showToast(`${k}회차를 마쳤습니다. 다음 회차 상차지로 이동해 주세요.`);
     } catch (e) {
       showToast("처리 중 오류가 발생했습니다");
     } finally {
@@ -2126,7 +2144,7 @@ export default function DriverHome() {
       autoCheckinDoneRef.current = true;
       wasAwayFromCheckInRef.current = true;
       updateStatus("출근")
-        .then(() => showToast("출근지 인식 — 출근 처리되었습니다"))
+        .then(() => showToast("출근지에 도착해 출근 처리되었습니다."))
         .catch(() => { autoCheckinDoneRef.current = false; wasAwayFromCheckInRef.current = false; showToast("출근 처리 중 오류"); });
     } else {
       showToast("새로고침 완료");
@@ -2146,6 +2164,8 @@ export default function DriverHome() {
     // 직접 로그아웃한 직후엔 로그인 화면에서 자동 로그인하지 않도록 표시
     try { sessionStorage.setItem("driverJustLoggedOut", "1"); } catch (_) {}
     await stopNativeTracking();
+    // 🛠 2026-11-24 이 기기 알림 연결도 끊는다(한 휴대폰을 다른 기사가 이어 쓰면 앞 기사 오더 알림이 계속 오던 문제 · 최대 1.2초만 기다림)
+    await Promise.race([clearFcmToken(auth.currentUser?.uid).catch(() => {}), new Promise((r) => setTimeout(r, 1200))]);
     if (uid) {
       try {
         await updateDoc(doc(db, "drivers", uid), { active: false, updatedAt: serverTimestamp() });
@@ -2155,6 +2175,9 @@ export default function DriverHome() {
     //  찾다가 "화면을 불러오는 중 오류"가 떴다. 로딩 점을 보인 채 새 페이지(/driver-login)로 바로 연다
     window.__kpDriverLeaving = true;
     await signOut(auth).catch(() => {});
+    // 🛠 2026-11-24 기기 저장본(앞 기사 회사 오더 사본)까지 지운 뒤 로그인 화면으로(src/sessionPurge.js)
+    await new Promise((r) => setTimeout(r, 350));
+    await purgeOnSignOut(db, "/driver-login").catch(() => {});
     window.location.replace("/driver-login");
   };
 
@@ -2242,12 +2265,50 @@ export default function DriverHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slideKey]);
 
+  // 📱 2026-11-24 안드로이드 뒤로가기 버튼 — 예전엔 아무 창이 열려 있어도 앱이 바로 닫혔다(기사앱은 화면 이동 기록이 없어 Capacitor 기본 동작 = 앱 종료).
+  //  이제 ① 열린 창(알림함 · 사진 · 상세 · 시트 등)을 먼저 닫고 ② 다른 탭이면 홈 탭으로 ③ 홈 탭이면 앱을 뒤로 보낸다(종료 대신 내리기 — 다시 열면 그대로).
+  //  꼭 답해야 하는 창(새 오더 · 변경 · 삭제 안내 · 출근 안내)은 뒤로가기로 닫지 않는다.
+  const backRef = useRef(null);
+  useEffect(() => {
+    backRef.current = () => {
+      const sel = document.querySelector(".kp-msel-ov"); // 고르기 목록(MobileSelect 바텀시트)이 열려 있으면 그것부터 닫는다
+      if (sel) { sel.click(); return; }
+      if (photoModal) { if (!photoUploading) setPhotoModal(null); return; }
+      if (dropPhotoAsk) { if (!fleetPhotoUploading) { setDropPhotoAsk(null); showToast("운송완료 처리되었습니다. 사진은 홈에서 나중에 올릴 수 있어요."); } return; }
+      if (rejectModal) { setRejectModal(null); setRejectReason(""); return; }
+      if (collisionAlert) { setCollisionAlert(null); return; }
+      if (checkinWarning !== null) { setCheckinWarning(null); return; }
+      if (emergencyModal) { setEmergencyModal(false); return; }
+      if (logDetail) { setLogDetail(null); return; }
+      if (calendarDayDetail) { setCalendarDayDetail(null); return; }
+      if (changeSheet) { setChangeSheet(null); return; }
+      if (odoSheet) { if (!odoBusy) setOdoSheet(null); return; }
+      if (oilAlert) { if (!odoBusy) setOilAlert(null); return; }
+      if (eduGate) { setEduGate(null); return; }
+      if (eduOpen) { setEduOpen(false); return; }
+      if (showNotifPanel) { setShowNotifPanel(false); return; }
+      if (vehicleSetup && uid && !(driver && needFirstOdo(driver)) && !(deletedNotices.length > 0 || popupOrder || modOrder)) { setVehicleSetup(false); return; } // 화면에 떠 있을 때만(아래 렌더 조건과 같게)
+      if (activeTab !== "home") { setActiveTab("home"); return; }
+      try { Promise.resolve(NativeAppPlugin.minimizeApp()).catch(() => NativeAppPlugin.exitApp()); } catch { /* 무시 */ }
+    };
+  });
+  useEffect(() => {
+    if (!isNative() || !window.Capacitor?.isPluginAvailable?.("App")) return undefined;
+    let handle = null;
+    let off = false;
+    // ⚠️ 플러그인 객체는 Promise로 넘기지 않는다(위 KpLocation 주석) — addListener가 돌려주는 건 리스너 핸들이라 괜찮다
+    Promise.resolve(NativeAppPlugin.addListener("backButton", () => { try { backRef.current?.(); } catch { /* 무시 */ } }))
+      .then((h) => { if (off) h?.remove?.(); else handle = h; })
+      .catch(() => {});
+    return () => { off = true; try { handle?.remove?.(); } catch { /* 무시 */ } };
+  }, []);
+
   if (!driver) {
     return (
       <div style={{ minHeight: "100vh", background: "#F2F5FA", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ textAlign: "center" }}>
           <div style={{ width: 40, height: 40, border: "3px solid #1B2B4B", borderTopColor: "transparent", borderRadius: "50%", margin: "0 auto 12px", animation: "spin 0.8s linear infinite" }} />
-          <div style={{ fontSize: 16.5, color: "#5B6B85" }}>로딩중...</div>
+          <div style={{ fontSize: 16.5, color: "#5B6B85" }}>불러오는 중이에요…</div>
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -2535,7 +2596,7 @@ export default function DriverHome() {
                 <input type="file" accept="image/*" multiple style={{ display: "none" }} disabled={fleetPhotoUploading}
                   onChange={async (e) => { const files = [...(e.target.files || [])]; e.target.value = ""; if (!files.length) return; const t = dropPhotoAsk; for (const f of files) await handleFleetPhotoFile(f, "하차완료", t.orderId, t.col); setDropPhotoAsk(null); }} />
               </label>
-              <button type="button" disabled={fleetPhotoUploading} onClick={() => { setDropPhotoAsk(null); showToast("운송완료 처리되었습니다. 사진은 홈에서 나중에 올릴 수 있어요"); }}
+              <button type="button" disabled={fleetPhotoUploading} onClick={() => { setDropPhotoAsk(null); showToast("운송완료 처리되었습니다. 사진은 홈에서 나중에 올릴 수 있어요."); }}
                 style={{ width: "100%", minHeight: 56, borderRadius: 18, border: "2px solid #C9D6EA", background: "#fff", color: "#1B2B4B", fontSize: 18, fontWeight: 900, cursor: "pointer" }}>나중에 올리기</button>
             </div>
           </div>
@@ -2650,7 +2711,7 @@ export default function DriverHome() {
           {inbox.unread > 0 && (
             <button type="button" onClick={() => { try { sessionStorage.setItem("kpDocTab", inbox.firstTab || "pay"); } catch (_) { /* 무시 */ } setActiveTab("docs"); }} style={{ width: "100%", textAlign: "left", marginBottom: 12, padding: "12px 14px", borderRadius: 20, border: "1px solid #C9D6EE", background: "#EEF3FC", color: "#0F1A30", cursor: "pointer", display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ width: 34, height: 34, borderRadius: 10, background: "#0F1A30", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900 }}>{inbox.unread}</span>
-              <span style={{ flex: 1 }}><b style={{ fontSize: 16.5 }}>{inbox.unreadCt && !inbox.unreadPay && !inbox.unreadPen ? "계약서 서명 요청이 왔습니다" : "새 서류가 도착했습니다"}</b><br /><span style={{ fontSize: 14.5, color: "#5B6B85" }}>{inbox.label || "서류함"} — 눌러서 확인</span></span>
+              <span style={{ flex: 1 }}><b style={{ fontSize: 16.5 }}>{inbox.unreadCt && !inbox.unreadPay && !inbox.unreadPen ? "계약서 서명 요청이 왔습니다" : "새 서류가 도착했습니다"}</b><br /><span style={{ fontSize: 14.5, color: "#5B6B85" }}>{inbox.label || "서류함"} · 눌러서 확인하세요</span></span>
               <span style={{ fontWeight: 900, color: "#2D4C82" }}>›</span>
             </button>
           )}
@@ -2917,7 +2978,7 @@ export default function DriverHome() {
               );
               return (
                 <div style={{ background: "#1B2B4B", borderRadius: 20, padding: "14px 16px", marginBottom: 14, boxShadow: "0 4px 16px rgba(27,43,75,0.18)" }}>
-                  <div style={{ fontSize: 14.5, fontWeight: 800, color: "rgba(255,255,255,0.8)", marginBottom: 10 }}>방금 운송완료한 오더 — 하차 사진을 올려주세요</div>
+                  <div style={{ fontSize: 14.5, fontWeight: 800, color: "rgba(255,255,255,0.8)", marginBottom: 10 }}>방금 운송완료한 오더예요. 하차 사진을 올려 주세요.</div>
                   <div style={{ display: "flex", gap: 10 }}>
                     {tile("하차완료", droppedToday, canUploadDrop, dropTargetId, dropTargetCol, "하차완료")}
                   </div>
@@ -3661,7 +3722,7 @@ export default function DriverHome() {
               <div ref={logbookRef} style={{ background: "#fff", borderRadius: 22, padding: "18px", boxShadow: "0 1px 2px rgba(15,26,48,.04), 0 10px 28px rgba(15,26,48,.06)", border: "1px solid #E6EBF3", marginBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 800, color: "#3A4A66", display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-                    <span style={{ width: 6, height: 6, background: "#2D4C82", transform: "rotate(45deg)", flexShrink: 0 }} /><span style={{ fontSize: 12.5, fontWeight: 800, color: "#9AA9C3", letterSpacing: "0.22em", fontFamily: DRV_MONO }}>LOGBOOK</span>운행일지 — 운송완료 {doneCount}건{completedOrders.length > doneCount ? ` · 취소 ${completedOrders.length - doneCount}건` : ""} · 기사운임 합계 {fareSum.toLocaleString()}원
+                    <span style={{ width: 6, height: 6, background: "#2D4C82", transform: "rotate(45deg)", flexShrink: 0 }} /><span style={{ fontSize: 12.5, fontWeight: 800, color: "#9AA9C3", letterSpacing: "0.22em", fontFamily: DRV_MONO }}>LOGBOOK</span>운행일지 · 운송완료 {doneCount}건{completedOrders.length > doneCount ? ` · 취소 ${completedOrders.length - doneCount}건` : ""} · 기사운임 합계 {fareSum.toLocaleString()}원
                   </div>
                   <button onClick={saveAsImage} disabled={logbookSaving || !completedOrders.length}
                     style={{ whiteSpace: "nowrap", flexShrink: 0,  fontSize: 13.5, fontWeight: 700, color: "#1B2B4B", background: "#eef1f6", border: "none", borderRadius: 8, padding: "5px 10px", cursor: completedOrders.length ? "pointer" : "not-allowed" }}>
@@ -4026,7 +4087,8 @@ export default function DriverHome() {
               background: activeTab === key ? "linear-gradient(135deg,#0F1D3A,#2D4C82)" : "transparent",
               boxShadow: activeTab === key ? "0 8px 18px rgba(27,43,75,0.32), inset 0 1px 0 rgba(255,255,255,.18)" : "none",
             }}>{icon}</span>
-            <span style={{ fontSize: 14.5, letterSpacing: "-0.2px" }}>{label}</span>
+            {/* 📱 2026-11-24 360px 폭(탭 6개 = 칸 55px)에서 "운행기록"이 칸 밖으로 넘쳤다 — 좁은 화면에서는 글씨를 조금 줄인다 */}
+            <span style={{ fontSize: "min(14.5px, 3.7vw)", letterSpacing: "-0.2px", whiteSpace: "nowrap" }}>{label}</span>
             {/* ⭐ 2026-11-05 카카오톡처럼 빨간 숫자 배지(#FF3B30 + 흰 숫자) */}
             <RedBadge n={badge} style={{ position: "absolute", top: 0, right: "calc(50% - 32px)" }} />
           </button>

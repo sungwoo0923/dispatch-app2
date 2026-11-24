@@ -1338,7 +1338,7 @@ export default function CompanyApplications() {
             onClick={(e) => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
               <div>
-                <h3 className="text-white font-bold text-[15px]"><EditableText id="companyApp.codeNotice.title" defaultText="승인 완료 — 코드 발급" /></h3>
+                <h3 className="text-white font-bold text-[15px]"><EditableText id="companyApp.codeNotice.title" defaultText="승인 완료: 코드 발급" /></h3>
                 <p className="text-white/60 text-[12px] mt-0.5">{codeNotice.companyName} ({codeNotice.appType})</p>
               </div>
               <button onClick={() => setCodeNotice(null)} className="text-white/60 hover:text-white text-lg">✕</button>

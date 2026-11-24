@@ -148,7 +148,7 @@ function AttendanceQuickButtonInner({ company, uid, name, role, email, variant =
   const undo = run(async () => {
     if (!(await kpConfirm(`${hm(rec?.checkOutTime)} 퇴근을 취소하고 다시 출근 상태로 돌릴까요?`))) return;
     await setDoc(ref, { checkOutTime: deleteField(), checkOutSource: deleteField(), checkOutUndoneAt: new Date().toISOString() }, { merge: true });
-    toast("퇴근을 취소했습니다 — 다시 출근 상태입니다");
+    toast("퇴근을 취소했습니다. 다시 출근 상태입니다");
   });
 
   if (variant === "deck") {
@@ -210,7 +210,7 @@ function AttendanceQuickButtonInner({ company, uid, name, role, email, variant =
   return (
     <button type="button" disabled={busy} onClick={working ? checkOut : checkIn}
       className={`kp-chip-btn text-[12px] transition disabled:opacity-50 ${working ? (blink ? "kp-blink" : "") : "!bg-[#8FB0F0] !text-[#0B1428]"}`}
-      title={working ? `출근 ${hm(rec?.checkInTime)} — 누르면 퇴근 처리` : "누르면 출근 처리"}>
+      title={working ? `출근 ${hm(rec?.checkInTime)} · 누르면 퇴근 처리` : "누르면 출근 처리"}>
       {working ? `퇴근하기 · ${hm(rec?.checkInTime)} 출근` : busy ? "확인 중…" : "출근하기"}
     </button>
   );

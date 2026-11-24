@@ -95,7 +95,7 @@ function PinGate({ onVerified }) {
         {mode === "verify" && (
           <button onClick={() => { localStorage.removeItem(PIN_KEY); setMode("setup1"); setEntered(""); setError(""); setFirstPin(""); }}
             className="w-full mt-5 text-center text-[12px] text-gray-300 hover:text-gray-500 transition">
-            비밀번호를 잊으셨나요? — 재설정
+            비밀번호를 잊으셨나요? 재설정
           </button>
         )}
       </div>

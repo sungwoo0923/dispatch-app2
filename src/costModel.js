@@ -18,7 +18,7 @@ export const VERCEL_PLANS = [
 
 export const COST_DEFAULT = {
   asOf: "2026-11-04",
-  source: "Firebase/Google Cloud 공개 요금표(Blaze), Vercel·Apple·Google Play·Anthropic 공개 가격, 국내 문자·전자세금계산서 ASP 공시 단가(추정) — 실제 청구서로 꼭 확인",
+  source: "Firebase/Google Cloud 공개 요금표(Blaze), Vercel·Apple·Google Play·Anthropic 공개 가격, 국내 문자·전자세금계산서 ASP 공시 단가(추정): 실제 청구서로 꼭 확인",
   fx: 1400,            // 원/달러
   usdTaxPct: 10,       // 해외 결제 부가세·카드 해외 수수료 가산(%) — 구글·애플·Vercel 청구에 붙는 몫
   // Firestore (Blaze) — 무료 제공량은 "하루" 단위

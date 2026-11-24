@@ -315,7 +315,7 @@ export function BizSelect({ biz, value, onChange, className = "", auto = "", inl
         onClick={() => { if (!open) { setOpen(true); setActive(idxOfCur); } }}
         onBlur={() => { setOpen(false); setQ(""); }}
         onChange={(e) => { const t = e.target.value; const base = cur || ""; setQ(!open && base && t.startsWith(base) ? t.slice(base.length) : t); setOpen(true); setActive(0); }}
-        onKeyDown={onKeyDown} title={auto ? `자동: ${BIZ_SRC_LABEL[auto] || "자동으로 맞춰졌어요"} (바꿀 수 있어요)` : "청구 사업자 — 글자를 쳐서 찾고 ↑↓ Enter"}
+        onKeyDown={onKeyDown} title={auto ? `자동: ${BIZ_SRC_LABEL[auto] || "자동으로 맞춰졌어요"} (바꿀 수 있어요)` : "청구 사업자: 글자를 쳐서 찾고 ↑↓ Enter"}
         className={`${className} cursor-pointer !pr-[68px]`} />
       <span className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
         {auto && !open && <span className="px-1.5 h-[18px] inline-flex items-center rounded-md bg-[#EEF3FC] border border-[#D5E0F5] text-[10px] font-extrabold text-[#2D4C82]">자동</span>}
@@ -338,7 +338,7 @@ export function BizListEditor({ company, canEdit }) {
       await setDoc(doc(db, "companySettings", company), { companyName: company, bizList: list, bizListAt: serverTimestamp() }, { merge: true });
       setLocal(company, list); setEdit(null);
     } catch (e) {
-      window.alert(/permission|insufficient/i.test(String(e?.message || e)) ? "저장 권한이 없습니다. (관리자·경리·인사·마스터만 저장할 수 있어요 — PC에서 firebase deploy --only firestore:rules 를 했는지도 확인해 주세요)" : `저장하지 못했습니다: ${e?.message || e}`);
+      window.alert(/permission|insufficient/i.test(String(e?.message || e)) ? "저장 권한이 없습니다. (관리자·경리·인사·마스터만 저장할 수 있어요. PC에서 firebase deploy --only firestore:rules 를 했는지도 확인해 주세요)" : `저장하지 못했습니다: ${e?.message || e}`);
     } finally { setBusy(false); }
   };
   const submit = async () => {
@@ -396,7 +396,7 @@ export function BizListEditor({ company, canEdit }) {
             </span>}
           </div>
         ))}
-        {!biz.extra.length && <div className="text-[12.5px] text-[#9AA9C3] px-1">추가 사업자가 없습니다 — 지금은 모든 오더가 {company}(으)로 청구됩니다.</div>}
+        {!biz.extra.length && <div className="text-[12.5px] text-[#9AA9C3] px-1">추가 사업자가 없습니다. 지금은 모든 오더가 {company}(으)로 청구됩니다.</div>}
       </div>
       {edit && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#0F1A30]/45 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) setEdit(null); }}>

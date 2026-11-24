@@ -179,7 +179,7 @@ function shapeOf(ref) {
   } catch { return col; }
 }
 const needsIndex = (e) => e && (e.code === "failed-precondition" || /index/i.test(String(e.message || "")));
-const warnIndex = (e, ref) => { if (ref) noIndex.add(shapeOf(ref)); try { console.error("[운송사 분리] 색인이 아직 없어 회사 조건 없이 조회합니다 —", e?.message || e); } catch { /* 무시 */ } };
+const warnIndex = (e, ref) => { if (ref) noIndex.add(shapeOf(ref)); try { console.error("[운송사 분리] 색인이 아직 없어 회사 조건 없이 조회합니다:", e?.message || e); } catch { /* 무시 */ } };
 
 // 👀 승인 전 둘러보기 모드 — 서버에 아무것도 묻지 않고(읽기 = 빈 결과, 쓰기 = 막음) 화면만 보여준다
 let preview = false;

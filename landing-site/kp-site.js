@@ -139,7 +139,7 @@
     $$("[data-extra]").forEach(function (f) { var l = f.parentElement && $("label", f.parentElement); if (l) f.setAttribute("data-extra", l.textContent.trim()); });
   }
   function styleText(st) {
-    var out = [], mob = [];
+    var out = [], mob = [], tab = [];
     var els = st.els || {};
     Object.keys(els).forEach(function (k) {
       var e = els[k], sel = '[data-k="' + k + '"]';
@@ -147,14 +147,24 @@
       if (e.hidden) decl.push("display:none!important");
       if (e.style) Object.keys(e.style).forEach(function (p) { if (e.style[p] !== "" && e.style[p] != null) decl.push(cssProp(p) + ":" + e.style[p] + "!important"); });
       if (decl.length) out.push(sel + "{" + decl.join(";") + "}");
-      if (e.styleM) { var dm = []; Object.keys(e.styleM).forEach(function (p) { if (e.styleM[p] !== "" && e.styleM[p] != null) dm.push(cssProp(p) + ":" + e.styleM[p] + "!important"); }); if (dm.length) mob.push(sel + "{" + dm.join(";") + "}"); }
+      var dm = [], sm = e.styleM || {};
+      // 📱 2026-11-24 "모든 화면"에서 PC 기준으로 정한 너비(예: 1138px)·이동(translate)이 휴대폰에서 글을 화면 밖으로 밀어내던 문제
+      //  → 모바일 값을 따로 정하지 않았으면 태블릿 · 휴대폰(1100px 이하)에서는 화면 너비를 넘지 않게 하고, 옆으로 옮긴 것은 되돌린다
+      var sd = e.style || {};
+      var dt = [];
+      if ((sd.width || sd.maxWidth || sd.minWidth) && !sm.maxWidth) dt.push("max-width:100%!important");
+      if (sd.minWidth && !sm.minWidth) dt.push("min-width:0!important");
+      if (sd.translate && !/^0(px)? 0(px)?$/.test(String(sd.translate).trim()) && !sm.translate) dt.push("translate:none!important");
+      if (dt.length) tab.push(sel + "{" + dt.join(";") + "}");
+      Object.keys(sm).forEach(function (p) { if (sm[p] !== "" && sm[p] != null) dm.push(cssProp(p) + ":" + sm[p] + "!important"); });
+      if (dm.length) mob.push(sel + "{" + dm.join(";") + "}");
     });
     var p = st.page || {};
     var vars = p.vars || {};
     var vk = Object.keys(vars).filter(function (k) { return /^--[a-z0-9-]+$/i.test(k) && vars[k]; });
     var head = vk.length ? ":root{" + vk.map(function (k) { return k + ":" + vars[k]; }).join(";") + "}" : "";
     if (p.font) head += "body{font-family:" + p.font + ",\"Pretendard\",\"Noto Sans KR\",system-ui,sans-serif!important}";
-    return head + out.join("\n") + (mob.length ? "\n@media (max-width:" + MOBILE_MAX + "px){" + mob.join("\n") + "}" : "") + "\n" + String(p.css || "").replace(/<\/?style/gi, "");
+    return head + out.join("\n") + (tab.length ? "\n@media (max-width:1100px){" + tab.join("\n") + "}" : "") + (mob.length ? "\n@media (max-width:" + MOBILE_MAX + "px){" + mob.join("\n") + "}" : "") + "\n" + String(p.css || "").replace(/<\/?style/gi, "");
   }
   function applyPage(st) {
     var p = st.page || {};

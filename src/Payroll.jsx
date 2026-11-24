@@ -459,7 +459,7 @@ function usePayrollMonth(company, ym, ro) {
     }, "지급 완료 기록 실패");
     // 🔗 수입·지출 장부 연동(ledgerAuto) — 실지급액 합계 1줄(원천세·4대보험은 신고·납부 때 따로)
     if (ok && settings?.ledgerOn !== false) {
-      await upsertAutoEntry(db, `payroll_${ym}`, { company, date: d.trim(), account: "급여·상여", item: `${ymLabel(ym)} 직원 급여 지급 · ${slips.length}명`, amount: totals.net, vendor: "직원 급여", memo: `급여 계산 자동 — 지급 총액 ${wonFmt(totals.gross)}원 · 공제 ${wonFmt(totals.deduct)}원(원천세·4대보험은 따로 납부)`, auto: "payroll" }).catch((e) => console.warn("장부 기록 실패", e));
+      await upsertAutoEntry(db, `payroll_${ym}`, { company, date: d.trim(), account: "급여·상여", item: `${ymLabel(ym)} 직원 급여 지급 · ${slips.length}명`, amount: totals.net, vendor: "직원 급여", memo: `급여 계산 자동: 지급 총액 ${wonFmt(totals.gross)}원 · 공제 ${wonFmt(totals.deduct)}원(원천세·4대보험은 따로 납부)`, auto: "payroll" }).catch((e) => console.warn("장부 기록 실패", e));
     }
   };
   const unpay = async () => {
@@ -574,7 +574,7 @@ function PayrollRun({ pm, company, ym, ro, fit, selId, setSelId, gate }) {
         전체 선택{checked.size > 0 && <span className="text-[#2D4C82]">· {checked.size}명</span>}
         <span className="ml-auto font-bold text-[#7A879C]">실지급</span>
       </label>
-      <div ref={listRef} tabIndex={0} className={`divide-y divide-[#EEF1F6] overflow-y-auto overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#8FB0F0] ${fit ? "flex-1 min-h-0" : "max-h-[60vh]"}`} data-testid="pay-emp-list" aria-label="직원 목록 — ↑ ↓ 로 옮기고 Enter 로 입력">
+      <div ref={listRef} tabIndex={0} className={`divide-y divide-[#EEF1F6] overflow-y-auto overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#8FB0F0] ${fit ? "flex-1 min-h-0" : "max-h-[60vh]"}`} data-testid="pay-emp-list" aria-label="직원 목록: ↑ ↓ 로 옮기고 Enter 로 입력">
         {loading ? <div className="py-10 text-center text-[14px] font-bold text-[#7A879C]">불러오는 중…</div> : !shown.length ? <div className="py-10 text-center text-[14px] font-bold text-[#7A879C]">조건에 맞는 직원이 없어요</div> : shown.map((r) => {
           const on = cur?.u.id === r.u.id; const rs = rowStatus(r); const s = ROW_ST[rs];
           return (
@@ -787,16 +787,16 @@ function Workspace({ company, ym, row, ro: roIn, busy, fit, w3, ledger2, pane, s
 
   // ── 점검 메시지 ──
   const checks = [];
-  (result?.warnings || []).filter((w) => /최저/.test(w)).forEach((w) => checks.push(["error", `최저임금 미달 — ${w}`]));
+  (result?.warnings || []).filter((w) => /최저/.test(w)).forEach((w) => checks.push(["error", `최저임금 미달: ${w}`]));
   if (!locked && !empReady(emp)) checks.push(["error", needMsg(payType)]);
-  Object.entries(NONTAX_KINDS).forEach(([k, rk]) => { const amt = k === "식대" ? toNum(emp.meal) : toNum(emp.car); const cap = toNum(rates[rk]); if (cap && amt > cap) checks.push(["info", `비과세 한도 초과 — ${k} ${wonFmt(amt)}원 중 월 한도 ${wonFmt(cap)}원 초과분 ${wonFmt(amt - cap)}원은 과세로 계산됩니다`]); });
+  Object.entries(NONTAX_KINDS).forEach(([k, rk]) => { const amt = k === "식대" ? toNum(emp.meal) : toNum(emp.car); const cap = toNum(rates[rk]); if (cap && amt > cap) checks.push(["info", `비과세 한도 초과: ${k} ${wonFmt(amt)}원 중 월 한도 ${wonFmt(cap)}원 초과분 ${wonFmt(amt - cap)}원은 과세로 계산됩니다`]); });
   const care = s.payRows.filter((r) => r.kind === "출산·보육수당" && r.taxable === false).reduce((x, r) => x + toNum(r.amount), 0);
-  if (care > 200000) checks.push(["info", `비과세 한도 초과 — 출산·보육수당 비과세는 월 20만원까지입니다(${wonFmt(care - 200000)}원 초과). 초과분은 "과세"로 나눠 입력해 주세요`]);
+  if (care > 200000) checks.push(["info", `비과세 한도 초과: 출산·보육수당 비과세는 월 20만원까지입니다(${wonFmt(care - 200000)}원 초과). 초과분은 "과세"로 나눠 입력해 주세요`]);
   const otherNt = s.payRows.filter((r) => r.taxable === false && !["식대", "자가운전보조금", "출산·보육수당"].includes(r.kind)).map((r) => rowLabel(r, "기타"));
-  if (otherNt.length) checks.push(["info", `비과세로 표시된 항목(${uniq(otherNt).join(", ")}) — 소득세법상 비과세 요건에 맞는지 확인해 주세요`]);
-  if (!(u.birthDate || emp.birthDate)) checks.push(["info", "생년월일이 없습니다 — 급여명세서 필수 기재사항(근로기준법 시행령 27조의2)입니다. 위 기본 정보에서 입력하세요"]);
-  if (a.missing) checks.push(["info", `출근기록 퇴근 누락 ${a.missing}일 — 정상 8시간으로 계산했습니다. 필요하면 시간을 고쳐 주세요`]);
-  if (!acctKey(curAcct)) checks.push(["info", "지급 계좌가 없습니다 — 계좌를 고르거나 직접 입력하면 명세서에 표시됩니다"]);
+  if (otherNt.length) checks.push(["info", `비과세로 표시된 항목(${uniq(otherNt).join(", ")}): 소득세법상 비과세 요건에 맞는지 확인해 주세요`]);
+  if (!(u.birthDate || emp.birthDate)) checks.push(["info", "생년월일이 없습니다. 급여명세서 필수 기재사항(근로기준법 시행령 27조의2)입니다. 위 기본 정보에서 입력하세요"]);
+  if (a.missing) checks.push(["info", `출근기록 퇴근 누락 ${a.missing}일: 정상 8시간으로 계산했습니다. 필요하면 시간을 고쳐 주세요`]);
+  if (!acctKey(curAcct)) checks.push(["info", "지급 계좌가 없습니다. 계좌를 고르거나 직접 입력하면 명세서에 표시됩니다"]);
   if (emp.employmentType === "일용직" && payType !== "daily") checks.push(["info", "일용직은 급여형태를 \"일급\"으로 두면 일용근로소득 원천세(2.7%)로 계산합니다"]);
   if ((result?.warnings || []).some((w) => /간이세액/.test(w))) checks.push(["info", TAX_NOTE]);
 
@@ -1005,7 +1005,7 @@ function Workspace({ company, ym, row, ro: roIn, busy, fit, w3, ledger2, pane, s
       {result ? <div className={`kp-payslip-pane rounded-2xl bg-white p-3 shadow-[0_6px_18px_rgba(15,26,48,0.08)] ${w3 ? "kp-pay-narrow" : ""}`}><style>{NARROW_SLIP_CSS}</style><PayslipView slip={slipPreview} company={company} /></div>
         : <div className="py-16 text-center text-[15px] font-bold text-[#5B6B85]">기본급(또는 시급 · 일급)을 넣으면 명세서가 나타나요</div>}
       {result && result.taxMode === "auto" && <Note>소득세는 {TAX_NOTE}입니다.</Note>}
-      {locked && <Note>{row.slip?.status === "paid" ? `지급 완료(${row.slip?.paidDate || "-"}) — 고칠 수 없어요` : "확정(잠금)된 명세서예요 — 고치려면 [확정 해제]"}</Note>}
+      {locked && <Note>{row.slip?.status === "paid" ? `지급 완료(${row.slip?.paidDate || "-"}): 고칠 수 없어요` : "확정(잠금)된 명세서예요. 고치려면 [확정 해제]"}</Note>}
     </div>
   );
 
@@ -1676,7 +1676,7 @@ function MySignBar({ slip, uid }) {
       {open && (
         <div className="rounded-2xl bg-white border border-[#DCE3EE] p-3 space-y-3">
           <Seg value={mode} onChange={(v) => { setMode(v); setErr(""); }} options={[["draw", "손글씨 서명"], ["check", "그림 없이 확인"]]} testid="my-sign-mode" />
-          {mode === "draw" ? <SignPad onChange={setImg} /> : <div className="rounded-xl bg-[#F5F8FD] px-3.5 py-3 text-[14px] font-bold text-[#1B2B4B]">"{ymLabel(slip.ym)} 급여명세서를 확인했어요" — 이름만 적으면 돼요</div>}
+          {mode === "draw" ? <SignPad onChange={setImg} /> : <div className="rounded-xl bg-[#F5F8FD] px-3.5 py-3 text-[14px] font-bold text-[#1B2B4B]">"{ymLabel(slip.ym)} 급여명세서를 확인했어요": 이름만 적으면 돼요</div>}
           <div><Label hint="본인 이름">이름</Label><input value={name} onChange={(e) => setName(e.target.value)} maxLength={30} className={inp} data-testid="my-sign-name" /></div>
           {err && <Note kind="error">{err}</Note>}
           <div className="flex items-center gap-2 justify-end">

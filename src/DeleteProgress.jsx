@@ -134,7 +134,7 @@ export async function runDelete({ count = 1, label = "", task, minMs = 450, mode
     if (r === SLOW) return work; // 결과는 끝날 때 돌려준다
     return r;
   } catch (e) {
-    setState({ phase: "error", count: n, done: 0, label, mode, verb, unitWord, message: e?.message ? `${mode === "bulk" ? (verb || "저장") : mode === "upload" ? "등록" : "삭제"}하지 못했어요 — ${e.message}` : "" });
+    setState({ phase: "error", count: n, done: 0, label, mode, verb, unitWord, message: e?.message ? `${mode === "bulk" ? (verb || "저장") : mode === "upload" ? "등록" : "삭제"}하지 못했어요. ${e.message}` : "" });
     closeTimer = setTimeout(() => { setState(null); closeTimer = null; }, 1800);
     depth -= 1;
     throw e;
@@ -167,7 +167,7 @@ export async function commitDeletes(db, items, { onProgress } = {}) {
       catch (e2) { failed.push(e2); }
     }
   })));
-  if (failed.length) { const err = new Error(`${failed.length}건은 권한이 없어 지우지 못했어요(${failed[0]?.message || failed[0]}). 다른 회사로 저장된 오더일 수 있어요 — 관리자에게 알려 주세요.`); err.code = failed[0]?.code; throw err; }
+  if (failed.length) { const err = new Error(`${failed.length}건은 권한이 없어 지우지 못했어요(${failed[0]?.message || failed[0]}). 다른 회사로 저장된 오더일 수 있어요. 관리자에게 알려 주세요.`); err.code = failed[0]?.code; throw err; }
   return list.length;
 }
 

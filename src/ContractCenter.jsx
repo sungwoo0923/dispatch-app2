@@ -469,7 +469,7 @@ export function ContractBuilder({ initial, fromQuoteDoc, onDone }) {
                 <label className={`flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 ${matched ? "border-[#1B2B4B] bg-white" : "border-[#E3E8F0] bg-[#F7F9FC]"}`}>
                   <input type="checkbox" checked={applyPlan && matched} disabled={!matched} onChange={(e) => setApplyPlan(e.target.checked)} className="mt-0.5 w-[18px] h-[18px] accent-[#1B2B4B]" />
                   <span className="text-[13px] leading-relaxed text-[#3A4A66]"><b className="text-[#0F1A30]">저장할 때 이용 계약·만료에 반영</b><br />
-                    {matched ? `${vars.고객사}의 요금제 · 계약 기간 · 서비스 기간 · 추가 계정(${calc.extraSeats}명)이 관리센터 › 이용 계약·만료와 실제 사용 범위에 바로 적용됩니다.` : "고객사 상호가 등록된 운송사 이름과 같을 때만 반영됩니다(위에서 운송사를 고르세요)."}</span>
+                    {matched ? `${vars.고객사}의 요금제 · 계약 기간 · 서비스 기간 · 추가 계정(${calc.extraSeats}명)이 관리센터 › 영업 · 계약 › 이용 기간 · 만료와 실제 사용 범위에 바로 적용됩니다.` : "고객사 상호가 등록된 운송사 이름과 같을 때만 반영됩니다(위에서 운송사를 고르세요)."}</span>
                 </label>
               </div>
             );

@@ -67,7 +67,7 @@ export default function TrashPanel({ company = "" }) {
         setPurgeProg({ done: Math.min(list.length, i + chunk.length), total: list.length });
       }
       setDone(null);
-    } catch (e) { setErr(`완전삭제 중 오류 — ${gone.size}건까지 지웠습니다: ${e.message}`); }
+    } catch (e) { setErr(`완전삭제 중 오류: ${gone.size}건까지 지웠습니다: ${e.message}`); }
     setData((p) => p && { ...p, items: p.items.filter((x) => !gone.has(keyOf(x))) });
     setSel(new Set());
     setTimeout(() => setPurgeProg(null), 600);
@@ -91,7 +91,7 @@ export default function TrashPanel({ company = "" }) {
         </div>
 
         {err && <div className="text-[13px] font-bold text-[#0F1A30]">⚠ {err}</div>}
-        {done != null && <div className="px-4 py-3 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] text-[13.5px] font-bold text-[#0F1A30]">{done}건 되살림 완료 — 배차현황에서 바로 보입니다.</div>}
+        {done != null && <div className="px-4 py-3 rounded-2xl bg-[#F5F8FD] border border-[#EDF1F7] text-[13.5px] font-bold text-[#0F1A30]">{done}건 되살림 완료: 배차현황에서 바로 보입니다.</div>}
         {data?.pitrOff && (
           <div className="px-4 py-3 rounded-2xl border border-[#E3E8F0] text-[12.5px] text-[#5B6B85]">
             휴지통이 생기기 전에 지운 오더 {data.missing || ""}건은 내용을 읽지 못했습니다(Firebase 콘솔의 "특정 시점 복구"가 꺼져 있음).

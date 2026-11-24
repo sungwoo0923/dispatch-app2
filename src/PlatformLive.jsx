@@ -518,7 +518,7 @@ export function DupeWarning({ compact = false }) {
     <div className="rounded-[16px] border-[1.5px] border-[#1B2B4B] bg-[#F4F7FC] px-4 py-3">
       <button type="button" onClick={() => setOpen((v) => !v)} className="w-full flex items-center gap-2 text-left">
         <span className="w-6 h-6 rounded-md bg-[#0F1A30] text-white text-[13px] font-black flex items-center justify-center shrink-0">!</span>
-        <span className="flex-1 min-w-0 text-[14px] font-black text-[#0F1A30]" style={{ whiteSpace: "normal" }}>비슷한 회사명 {live.dupes.length}건 — 공백·(주)·주식회사 차이로 직원·오더 숫자가 나뉘어 집계됩니다</span>
+        <span className="flex-1 min-w-0 text-[14px] font-black text-[#0F1A30]" style={{ whiteSpace: "normal" }}>비슷한 회사명 {live.dupes.length}건: 공백·(주)·주식회사 차이로 직원·오더 숫자가 나뉘어 집계됩니다</span>
         <span className="text-[12.5px] font-bold text-[#5B6B85] whitespace-nowrap">{open ? "접기" : "보기"}</span>
       </button>
       {open && (
@@ -584,7 +584,7 @@ export function HealthCard({ c, today, onOpen }) {
       </div>
       <div className="flex flex-wrap gap-1.5">
         {inactive && (c.staff > 0 || c.m.cnt > 0) && <Pill tone="dark">{inactiveDays == null ? "접속 기록 없음" : `${inactiveDays}일째 미접속`}</Pill>}
-        {c.oldVer > 0 && <Pill tone="line" title="24시간 안에 접속한 직원 중 최신 화면이 아닌 사람 — 새로고침하면 바뀌어요">이전 버전 {c.oldVer}명</Pill>}
+        {c.oldVer > 0 && <Pill tone="line" title="24시간 안에 접속한 직원 중 최신 화면이 아닌 사람: 새로고침하면 바뀌어요">이전 버전 {c.oldVer}명</Pill>}
         {c.pending > 0 && <Pill tone="line">직원 승인 대기 {c.pending}</Pill>}
         {c.planReqs?.length > 0 && <Pill tone="line">요금제 변경 요청</Pill>}
         <Pill tone="soft">{planId ? (PLAN_NAMES[planId] || planId) : "요금제 미지정"}</Pill>

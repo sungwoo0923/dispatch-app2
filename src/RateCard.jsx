@@ -384,7 +384,7 @@ const [detailModal, setDetailModal] = useState(null);
         if (!found.length) { alert("단가표로 읽을 수 있는 시트가 없습니다.\n(톤수 이름이 적힌 머리줄과 하차지 · 금액이 있어야 합니다)"); return; }
         const norm = (v) => String(v || "").replace(/\s+/g, "").toLowerCase();
         const exist = (n) => multiSheets.find((x) => norm(x.baseName) === norm(n));
-        const msg = found.map((f) => `· ${f.name} — 하차지 ${f.mx.rows.length}곳${f.mx.hasBuy ? " · 매입 단가 포함" : ""}${exist(f.name) ? " (이미 있음 → 내용 교체)" : ""}`).join("\n");
+        const msg = found.map((f) => `· ${f.name} · 하차지 ${f.mx.rows.length}곳${f.mx.hasBuy ? " · 매입 단가 포함" : ""}${exist(f.name) ? " (이미 있음 → 내용 교체)" : ""}`).join("\n");
         if (!await kpConfirm(`단가표 ${found.length}개를 등록할까요?\n\n${msg}`)) return;
         setMultiSaving(true);
         for (const f of found) {

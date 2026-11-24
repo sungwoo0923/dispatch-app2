@@ -182,7 +182,7 @@ function Summary({ driverId, by, vehicle, care, sum, odo, logs, busy, run, setTa
       <Head code="ALERTS" title="챙겨야 할 것" right={<button type="button" onClick={() => setTab("items")} style={{ border: "none", background: "none", color: "#4B6CB7", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>정비 전체 ›</button>} />
       <div style={{ ...box, padding: 6 }}>
         {sum.alerts.length === 0
-          ? <div style={{ padding: "16px 8px", textAlign: "center", fontSize: 13.5, color: "#9AA9C3" }}>{sum.missing ? `정비 기록이 ${sum.missing}건 비어 있습니다 — 정비·만기 탭에서 채워주세요` : "모두 정상입니다 ✓"}</div>
+          ? <div style={{ padding: "16px 8px", textAlign: "center", fontSize: 13.5, color: "#9AA9C3" }}>{sum.missing ? `정비 기록이 ${sum.missing}건 비어 있습니다. 정비·만기 탭에서 채워주세요` : "모두 정상입니다 ✓"}</div>
           : sum.alerts.slice(0, 6).map((a) => (
             <div key={a.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 8px" }}>
               <Badge level={a.level} />
@@ -210,7 +210,7 @@ function Summary({ driverId, by, vehicle, care, sum, odo, logs, busy, run, setTa
             <Head code="RECENT" title="최근 기록" right={<button type="button" onClick={() => setTab("logs")} style={{ border: "none", background: "none", color: "#4B6CB7", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>기록 전체 ›</button>} />
             <div style={{ ...box, padding: 6 }} data-kp="care-recent">
               {recent.length === 0
-                ? <div style={{ padding: "14px 8px", textAlign: "center", fontSize: 13.5, color: "#9AA9C3" }}>아직 기록이 없어요 — 기록 탭에서 주유 · 수리 · 사고를 남겨 주세요</div>
+                ? <div style={{ padding: "14px 8px", textAlign: "center", fontSize: 13.5, color: "#9AA9C3" }}>아직 기록이 없어요. 기록 탭에서 주유 · 수리 · 사고를 남겨 주세요</div>
                 : recent.map((l, i) => (
                   <div key={`${l.at}_${i}`} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", borderTop: i ? "1px solid #EEF1F6" : "none" }}>
                     <span style={{ width: 44, flexShrink: 0, textAlign: "center", padding: "2px 0", borderRadius: 6, background: l.kind === "정비" ? INK : "#EEF2F8", color: l.kind === "정비" ? "#fff" : NAVY, fontSize: 12, fontWeight: 800 }}>{l.kind}</span>
@@ -381,7 +381,7 @@ function Spec({ driverId, by, vehicle, busy, run, large }) {
         {F({ k: "리프트", label: "리프트·특장", list: ["없음", "파워게이트(리프트)", "윙 개폐", "크레인", "기타"] })}
         {F({ k: "차대번호", label: "차대번호(VIN)" })}
       </div>
-      {s && <div style={{ fontSize: 12.5, color: "#7A879C", marginTop: 6, lineHeight: 1.6 }}>{v.톤} 표준 — 적재함 {s.l}×{s.w}{s.h ? `×${s.h}` : ""}cm · 최대 {s.maxKg.toLocaleString()}kg · {s.axle} · 대표 차종 {s.models.join(", ")}</div>}
+      {s && <div style={{ fontSize: 12.5, color: "#7A879C", marginTop: 6, lineHeight: 1.6 }}>{v.톤} 표준: 적재함 {s.l}×{s.w}{s.h ? `×${s.h}` : ""}cm · 최대 {s.maxKg.toLocaleString()}kg · {s.axle} · 대표 차종 {s.models.join(", ")}</div>}
       <button type="button" disabled={busy} onClick={async () => { if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; run(() => save(driverId, by, { vehicle: v, ...(v.톤 ? { 차량톤수: v.톤 } : {}), ...(v.적재함 ? { 차량종류: v.적재함 } : {}) }, { kind: "제원", date: today(), memo: [v.톤, v.적재함, v.모델].filter(Boolean).join(" ") })); }} style={{ ...btn(), width: "100%", marginTop: 10 }}>{busy ? "저장 중…" : "제원 저장"}</button>
     </>
   );

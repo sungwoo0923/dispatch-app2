@@ -261,7 +261,7 @@ export default function FleetOrderPanel({ order, onClose, onCopy, companyName = 
             </div>
           </div>
 
-          {shipper && <div className="rounded-xl border border-[#C9D6EE] bg-[#EEF3FC] px-4 py-2.5 text-[13px] font-bold text-[#1B2B4B]">화주사에서 등록한 오더입니다 — 화주사 화면에도 같은 오더가 있으니 고친 내용을 화주사에 알려 주세요.</div>}
+          {shipper && <div className="rounded-xl border border-[#C9D6EE] bg-[#EEF3FC] px-4 py-2.5 text-[13px] font-bold text-[#1B2B4B]">화주사에서 등록한 오더입니다. 화주사 화면에도 같은 오더가 있으니 고친 내용을 화주사에 알려 주세요.</div>}
 
           {/* 거래처 정보 */}
           <section className="bg-white rounded-xl border border-[#E3E8F0] overflow-hidden">

@@ -37,6 +37,14 @@ function settleLine(o, myUid) {
   return { iPosted, kind, fare, fee, recv, pay };
 }
 
+// ⭐ 2026-11-24 "보내면 돼요 · 받으면 돼요" 안내는 직접 정산(계좌이체 · 계산서) 차액만 — 인수증(허브 잔액 자동) · 선불/착불 수수료(잔액 자동)까지
+//  합친 차액을 "보내라"고 안내해 이미 자동으로 오간 돈을 한 번 더 보내게 만들던 것
+function settleGuide(g) {
+  if (g.direct > 0) return `직접 정산할 돈이 ${wonFull(g.direct)} 남아 있어요. ${g.party}에서 받으면 돼요.`;
+  if (g.direct < 0) return `직접 정산할 돈이 ${wonFull(-g.direct)} 남아 있어요. ${g.party}에 보내면 돼요.`;
+  return "직접 주고받을 돈은 없어요. 허브 잔액에서 자동으로 정산돼요.";
+}
+
 function csvCell(v) { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }
 function download(name, rows) {
   const blob = new Blob(["﻿" + rows.map((r) => r.map(csvCell).join(",")).join("\n")], { type: "text/csv;charset=utf-8" });
@@ -101,17 +109,17 @@ export default function HubSettle({ me, posts = [], jobs = [], openOrder, toast 
     const head = ["상대 운송사", "날짜", "화물번호", "구간", "차량", "결제", "정산 방법", "운임", "수수료", "받을 돈", "줄 돈", "단계"];
     const rows = lines.map((l) => [l.party, l.o.상차일, l.o.id, routeText(l.o), `${l.o.차량톤수 || ""} ${l.o.차량종류 || ""}`.trim(), l.o.지급방식 || "", KIND[l.kind], l.fare, l.fee, l.recv, l.pay, STAGE_LABEL[stageOf(l.o)]]);
     download(`허브정산_${ym}.csv`, [head, ...rows, [], ["합계", "", "", "", "", "", "", "", "", tot.recv, tot.pay, ""]]);
-    toast?.("정산 내역을 받았어요");
+    toast?.("정산 내역 파일을 내려받았어요");
   };
   const copyStatement = async (g) => {
     const text = [
       `[로지스웹 허브 정산서] ${monthLabel(ym)}`,
       `${me.companyName || me.name} ↔ ${g.party}`,
       ...g.rows.map((l) => `· ${dayOf(l.o)} ${routeText(l.o)} ${l.o.차량톤수 || ""} ${wonFull(l.recv || -l.pay)} (${KIND[l.kind]})`),
-      `받을 돈 ${wonFull(g.recv)} / 줄 돈 ${wonFull(g.pay)}`,
-      g.net === 0 ? "차액 없음" : g.net > 0 ? `→ ${g.party}에서 ${wonFull(g.net)} 받으면 돼요` : `→ ${g.party}에 ${wonFull(-g.net)} 보내면 돼요`,
+      `받을 돈 ${wonFull(g.recv)} / 줄 돈 ${wonFull(g.pay)} / 차액 ${g.net >= 0 ? "+" : "−"}${wonFull(Math.abs(g.net))}`,
+      settleGuide(g),
     ].join("\n");
-    try { await navigator.clipboard.writeText(text); toast?.("정산서를 복사했어요. 카톡·문자에 붙여 넣으면 돼요"); }
+    try { await navigator.clipboard.writeText(text); toast?.("정산서를 복사했어요. 카카오톡이나 문자에 붙여 넣으면 돼요"); }
     catch { toast?.("복사하지 못했어요"); }
   };
 
@@ -174,14 +182,14 @@ export default function HubSettle({ me, posts = [], jobs = [], openOrder, toast 
                       {g.rows.map((l) => (
                         <button key={l.o.id} type="button" onClick={() => openOrder?.(l.o)} className="w-full text-left px-3.5 py-2.5 flex items-center gap-3 hover:bg-[#F5F8FD]">
                           <span className="w-12 shrink-0 text-[13.5px] font-bold text-[#5F6E87]" style={NUMS}>{dayOf(l.o)}</span>
-                          <span className="min-w-0 flex-1"><span className="block text-[15px] font-bold text-[#0F1A30] truncate">{routeText(l.o)}</span><span className="block text-[13px] text-[#66758E] truncate">{l.iPosted ? "내가 올림" : "내가 받음"} · {l.o.차량톤수} {l.o.차량종류} · {l.o.지급방식 || "-"}{l.done ? "" : " · 운송중"}</span></span>
-                          <Badge tone={l.kind === "direct" ? "navy" : "line"}>{KIND[l.kind]}</Badge>
-                          <span className={`w-[104px] shrink-0 text-right text-[15.5px] font-extrabold ${l.recv ? "text-[#1B2B4B]" : "text-[#55657F]"}`} style={NUMS}>{l.recv ? "+" : "−"}{wonFull(l.recv || l.pay)}</span>
+                          <span className="min-w-0 flex-1"><span className="block text-[15px] font-bold text-[#0F1A30] truncate">{routeText(l.o)}</span><span className="block text-[13px] text-[#66758E] truncate">{l.iPosted ? "내가 올림" : "내가 받음"} · {l.o.차량톤수} {l.o.차량종류} · {l.o.지급방식 || "-"}<span className="sm:hidden"> · {KIND[l.kind]}</span>{l.done ? "" : " · 운송중"}</span></span>
+                          <Badge tone={l.kind === "direct" ? "navy" : "line"} className="hidden sm:inline-flex">{KIND[l.kind]}</Badge>
+                          <span className={`w-[96px] sm:w-[104px] shrink-0 text-right text-[15.5px] font-extrabold ${l.recv ? "text-[#1B2B4B]" : "text-[#55657F]"}`} style={NUMS}>{l.recv ? "+" : l.pay ? "−" : ""}{wonFull(l.recv || l.pay)}</span>
                         </button>
                       ))}
                     </div>
                     <div className="mt-3 flex items-center gap-2 flex-wrap">
-                      <span className="text-[14.5px] font-bold text-[#1B2B4B] flex-1 min-w-[200px]">{g.net === 0 ? "차액이 없어요" : g.net > 0 ? `${g.party}에서 ${wonFull(g.net)} 받으면 돼요` : `${g.party}에 ${wonFull(-g.net)} 보내면 돼요`}</span>
+                      <span className="text-[14.5px] font-bold text-[#1B2B4B] flex-1 min-w-[200px]" data-testid="settle-guide">{settleGuide(g)}</span>
                       <Btn kind="soft" size="md" onClick={() => copyStatement(g)} data-testid="settle-copy"><HI name="memo" size={16} />정산서 복사</Btn>
                     </div>
                   </div>

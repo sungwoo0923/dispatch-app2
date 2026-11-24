@@ -158,12 +158,12 @@ export default function FareRulesSettings({ company, canEdit = true, myName = ""
           <div className="flex items-center gap-3 rounded-2xl bg-white/5 border border-white/10 px-4 py-3">
             <div>
               <div className="text-[15px] font-extrabold">운임 규칙 사용</div>
-              <div className="text-[13px] text-[#B9C7E3]">{fr.enabled ? "오더 화면에 운임구분 표시 중" : "꺼짐 — 오더 화면은 예전 그대로"}</div>
+              <div className="text-[13px] text-[#B9C7E3]">{fr.enabled ? "오더 화면에 운임구분 표시 중" : "꺼짐: 오더 화면은 예전 그대로"}</div>
             </div>
             <Toggle big on={fr.enabled} onChange={onMaster} disabled={!canEdit || busy || !fr.loaded} label="운임 규칙 사용" />
           </div>
         </div>
-        {!canEdit && <div className="relative mt-3 text-[14px] font-bold text-amber-200">조회전용 권한 — 보기만 할 수 있습니다.</div>}
+        {!canEdit && <div className="relative mt-3 text-[14px] font-bold text-amber-200">조회전용 권한: 보기만 할 수 있습니다.</div>}
         <div className="relative mt-3 flex items-center gap-2 text-[14px] font-semibold text-[#B9C7E3] min-h-[20px]" aria-live="polite">
           {!fr.loaded ? <span>불러오는 중…</span> : busy ? <span className="inline-flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-[#8FB0F0] animate-pulse" />저장 중…</span>
             : saved ? <span className="inline-flex items-center gap-1.5 text-[#CFE0FF]"><span className="w-1.5 h-1.5 rounded-full bg-emerald-300" />{saved}</span>

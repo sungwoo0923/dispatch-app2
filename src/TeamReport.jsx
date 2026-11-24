@@ -299,7 +299,7 @@ export default function TeamReport({ company, me }) {
             </Card>
           </div>
 
-          <Card title="리스크 점검" sub="역마진 · 저마진(이익률 5% 미만) · 미배차 오더 — 손실 사유는 배차현황에서 손실 금액을 눌러 적거나 메모에 적은 내용이에요">
+          <Card title="리스크 점검" sub="역마진 · 저마진(이익률 5% 미만) · 미배차 오더: 손실 사유는 배차현황에서 손실 금액을 눌러 적거나 메모에 적은 내용이에요">
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: rep.risks.loss.length ? 14 : 0 }}>
               {[["역마진 오더", rep.risks.lossCount], ["저마진 오더 (5% 미만)", rep.risks.lowCount], ["미배차 오더", rep.risks.unassigned]].map(([l, v]) => <div key={l} style={{ background: C.page, borderRadius: 14, padding: "12px 16px" }}><div style={{ fontSize: 14, fontWeight: 700, color: C.t2 }}>{l}</div><div className="tr-num" style={{ fontSize: 24, color: v ? C.t1 : C.t3 }}>{v}<span style={{ fontSize: 14, color: C.t2 }}>건</span></div></div>)}
             </div>

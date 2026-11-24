@@ -255,7 +255,7 @@ export async function requestDispatch(order, member) {
   if (order.posterUid === member.uid) throw new Error("내가 올린 오더는 신청할 수 없어요.");
   await runTransaction(db, async (tx) => {
     const s = await tx.get(oref(order.id));
-    if (!s.exists()) throw new Error("삭제된 오더이에요.");
+    if (!s.exists()) throw new Error("삭제된 오더예요.");
     const d = s.data();
     if (d.status !== "open") throw new Error("이미 다른 차량이 배차됐어요.");
     if ((d.cancelCount || 0) >= 5) throw new Error("취소가 반복된 오더라 더 이상 신청할 수 없어요. 등록자에게 전화해 주세요.");
@@ -333,7 +333,8 @@ export async function issueInvoice(order, { no, date, amount, bizNo = "", file =
 // 회차 — 등록자가 금액을 정해 요청 → 차주가 수락해야 확정(양쪽 합의). 수락하면 운송이 끝나고 회차비만 정산
 export async function proposeReturn(order, me, amount, reason = "") {
   const n = Math.round(Number(String(amount).replace(/[^\d]/g, "")) || 0);
-  if (n > (Number(order.운임) || 0)) throw new Error("회차비는 운임보다 클 수 없어요");
+  if (n <= 0) throw new Error("회차비를 입력해 주세요.");
+  if (n > (Number(order.운임) || 0)) throw new Error("회차비는 운임보다 클 수 없어요.");
   await updateDoc(oref(order.id), { 회차: { amount: n, reason: String(reason || "").slice(0, 100), status: "proposed", at: serverTimestamp(), by: me.uid }, updatedAt: serverTimestamp() });
 }
 export async function answerReturn(order, accept) {
@@ -413,10 +414,14 @@ export function subscribeWallet(uid, cb) {
   return onSnapshot(doc(db, "hubWallets", uid), (s) => cb({ ...WALLET_ZERO, ...(s.exists() ? s.data() : {}), uid }), () => cb({ ...WALLET_ZERO, uid }));
 }
 export function subscribeLedger(uid, cb, n = 100) {
-  return onSnapshot(query(collection(db, "hubLedger"), where("uid", "==", uid), orderBy("at", "desc"), limit(n)), (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => {
+  // ⭐ 2026-11-24 색인이 없어 정렬 없는 구독으로 바꿀 때, 그 구독도 화면을 닫으면 같이 끊는다(예전엔 계속 남아 마이페이지를 열 때마다 쌓였다)
+  let fallbackOff = null, closed = false;
+  const off = onSnapshot(query(collection(db, "hubLedger"), where("uid", "==", uid), orderBy("at", "desc"), limit(n)), (s) => cb(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => {
     // 색인 배포 전 — 정렬 없이 받아 화면에서 정렬
-    onSnapshot(query(collection(db, "hubLedger"), where("uid", "==", uid), limit(300)), (s2) => cb(s2.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.at) - tsMs(a.at)).slice(0, n)), () => cb([]));
+    if (closed || fallbackOff) return;
+    fallbackOff = onSnapshot(query(collection(db, "hubLedger"), where("uid", "==", uid), limit(300)), (s2) => cb(s2.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => tsMs(b.at) - tsMs(a.at)).slice(0, n)), () => cb([]));
   });
+  return () => { closed = true; off(); fallbackOff?.(); };
 }
 const byNew = (k) => (a, b) => tsMs(b[k]) - tsMs(a[k]);
 export function subscribeMyCharges(uid, cb) {
@@ -439,8 +444,8 @@ export const cancelCharge = (id) => updateDoc(doc(db, "hubCharges", id), { statu
 // 출금(사용 가능 예치금 → 등록한 실계좌)
 export async function requestWithdraw(me, amount) {
   const n = Math.round(Number(String(amount).replace(/[^\d]/g, "")) || 0);
-  if (n < 10000) throw new Error("1만원부터 출금할 수 있어요");
-  if (!me.bank?.number) throw new Error("출금 계좌를 먼저 등록해 주세요");
+  if (n < 10000) throw new Error("1만원부터 출금할 수 있어요.");
+  if (!me.bank?.number) throw new Error("출금 계좌를 먼저 등록해 주세요.");
   await addDoc(collection(db, "hubWithdrawals"), { uid: me.uid, name: me.name || "", amount: n, bank: me.bank, status: "requested", createdAt: serverTimestamp() });
 }
 export function subscribeMyWithdrawals(uid, cb) {
@@ -477,7 +482,7 @@ export async function enableHubPush(member) {
   const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission().catch(() => "default");
   if (perm !== "granted") throw new Error("알림 권한이 꺼져 있어요. 브라우저, 기기 설정에서 허용해 주세요.");
   const vapidKey = import.meta.env.VITE_FCM_VAPID_KEY;
-  if (!vapidKey) throw new Error("푸시 키(VITE_FCM_VAPID_KEY)가 설정되지 않았어요, 관리자에게 알려 주세요.");
+  if (!vapidKey) throw new Error("푸시 키(VITE_FCM_VAPID_KEY)가 설정되지 않았어요. 관리자에게 알려 주세요.");
   const reg = await navigator.serviceWorker.register("/hub-sw.js");
   await navigator.serviceWorker.ready;
   const token = await getToken(getMessaging(getApp()), { vapidKey, serviceWorkerRegistration: reg });

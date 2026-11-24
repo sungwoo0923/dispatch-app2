@@ -236,7 +236,7 @@ function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allo
           {o.none ? noneLabel : (labelOf ? labelOf(o.v) : o.v)}
         </span>
         {o.legacy ? <span title="목록에 없는 값이에요(예전에 저장됐거나 목록에서 지워진 이름). 이 오더에만 남아 있어요" style={{ fontSize: 12, fontWeight: 800, color: "#B54708", whiteSpace: "nowrap" }}>직접 입력값</span> : null}
-        {allowAdd && o.legacy ? <button type="button" disabled={busy} data-opt-adopt="1" title="이 값을 목록에 넣어요 — 그다음부터 이름 바꾸기 · 삭제가 돼요"
+        {allowAdd && o.legacy ? <button type="button" disabled={busy} data-opt-adopt="1" title="이 값을 목록에 넣어요. 그다음부터 이름 바꾸기 · 삭제가 돼요"
           onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); doAdopt(o.v); }}
           style={{ height: 24, padding: "0 8px", borderRadius: 7, border: "1px solid #F3C99B", background: "#FFF7ED", color: "#B54708", fontSize: 11.5, fontWeight: 900, whiteSpace: "nowrap", cursor: "pointer" }}>목록에 추가</button> : null}
         {canPin && !o.none && !o.legacy ? (() => { const on = pinSet.has(o.v); return (

@@ -316,7 +316,7 @@ export function RoadviewButton({ addr, name = "", variant = "form", className = 
   if (variant === "icon") {
     return (
       <>
-        <button type="button" tabIndex={-1} disabled={!has} onClick={onClick} title={has ? "로드뷰 — 이 주소의 거리 사진을 봐요" : title} aria-label="로드뷰"
+        <button type="button" tabIndex={-1} disabled={!has} onClick={onClick} title={has ? "로드뷰: 이 주소의 거리 사진을 봐요" : title} aria-label="로드뷰"
           className={`shrink-0 inline-flex items-center justify-center text-[#1B2B4B] hover:opacity-70 transition disabled:opacity-30 disabled:cursor-not-allowed ${className}`}>
           <CamIcon size={18} />
         </button>

@@ -69,12 +69,26 @@ export function alertMatches(o, a, me) {
 // 보드 지역 키 — 시·도만이면 "경기", 시·군·구까지면 "경기 화성시"
 const keyOf = (r, level = "sgg") => (r?.sido ? (level === "sido" || !r.sigungu ? r.sido : `${r.sido} ${r.sigungu}`) : "");
 
-function Loading() {
+// ⭐ 2026-11-24 확인(관리자 · 등록 휴대폰)이 오래 걸리면 갇히지 않게 — 12초 뒤 [다시 시도] · [로그아웃]을 보여 준다
+function Loading({ onLogout }) {
+  const [slow, setSlow] = useState(false);
+  const canLeave = !!onLogout;
+  useEffect(() => { if (!canLeave) return undefined; const t = setTimeout(() => setSlow(true), 12000); return () => clearTimeout(t); }, [canLeave]);
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-6" style={NAVY_BG}>
+    <div className="min-h-screen flex flex-col items-center justify-center gap-6 px-6 text-center" style={NAVY_BG} data-testid="hub-loading">
       <style>{HUB_CSS}</style>
       <HubMark size={48} />
       <div className="flex gap-2">{[0, 1, 2].map((i) => <div key={i} className="w-2 h-2 rounded-full bg-[#8FB0F0] animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />)}</div>
+      {slow && (
+        <div className="max-w-[320px] text-white" data-testid="loading-slow">
+          <div className="text-[15.5px] font-bold">확인이 늦어지고 있어요</div>
+          <div className="text-[14px] text-white/65 mt-1 leading-relaxed">인터넷 연결을 확인한 뒤 다시 시도해 주세요.</div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => window.location.reload()} className="h-11 rounded-2xl bg-[#8FB0F0] text-[#0B1428] text-[15px] font-extrabold">다시 시도</button>
+            <button type="button" onClick={onLogout} className="h-11 rounded-2xl bg-white/10 text-[15px] font-bold">로그아웃</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -320,7 +334,8 @@ export default function HubApp() {
   const onTouchMove = (e) => { if (touch.current == null) return; const d = e.touches[0].clientY - touch.current; setPull(d > 0 ? Math.min(110, d * 0.55) : 0); };
   const onTouchEnd = () => { if (pull > 64 && !refreshing) doRefresh(); else setPull(0); touch.current = null; };
 
-  const favorites = me?.prefs?.favorites || [];
+  const favRaw = me?.prefs?.favorites;
+  const favorites = useMemo(() => favRaw || [], [favRaw]);
   const favSet = useMemo(() => new Set(favorites.map((x) => x.uid)), [favorites]);
   const activeJob = jobs.find((j) => ACTIVE.includes(j.status));
   const liveShare = useHubLocationShare(approved ? me : null, jobs);
@@ -366,14 +381,20 @@ export default function HubApp() {
 
   if (authUser === undefined || me === undefined) return <Loading />;
   if (authUser === null) return <Navigate to="/login" replace />;
-  const logout = async () => { await signOut(auth); nav("/login", { replace: true }); };
-  if (!adminChecked) return <Loading />; // 관리자인지 알기 전엔 차주 제한 · 가입 화면으로 보내지 않는다
+  // 🛠 2026-11-24 로그아웃하면 이 기기 알림 연결도 끊는다(한 기기를 다른 회원이 이어 쓰면 앞 회원 알림이 계속 오던 문제 · 최대 1.2초만 기다림)
+  const logout = async () => {
+    const m = meRef.current;
+    if (m?.uid && pushEnabledHere(m)) await Promise.race([disableHubPush(m).catch(() => {}), new Promise((r) => setTimeout(r, 1200))]);
+    await signOut(auth).catch(() => {});
+    nav("/login", { replace: true });
+  };
+  if (!adminChecked) return <Loading onLogout={logout} />; // 관리자인지 알기 전엔 차주 제한 · 가입 화면으로 보내지 않는다
   // ⭐ 2026-11-22 최고관리자 · 부관리자 — 허브 회원 기록이 없거나 차주 · 승인 전 기록이면 관리자 화면으로(차주 휴대폰 제한 · 승인 대기 화면 없이)
   if (isAdmin && (me === null || me.role === "driver" || me.status !== "approved")) return <AdminOnly admin={{ uid: authUser.uid, email: authUser.email }} cfg={cfg} logout={logout} />;
   if (me === null) return <Navigate to="/signup" replace />;
   // 차주 화면은 휴대폰에서만(화주 · 운송사는 PC도)
   if (me.role === "driver" && !isMobileDevice()) return <DriverPcBlock onLogout={logout} />;
-  if (devCheck && devOk !== true) return <Loading />;
+  if (devCheck && devOk !== true) return <Loading onLogout={logout} />;
   if (!approved) return <Gate m={me} logout={logout} />;
 
   const poster = canPost(me);
@@ -534,7 +555,10 @@ export default function HubApp() {
             </Card>
           )}
           {filtered.length === 0
-            ? <Empty icon="board" title={board.length ? "조건에 맞는 오더가 없어요" : takerish ? "이 지역에 모집중인 오더가 없어요" : "모집중인 오더가 없어요"} desc={takerish ? "오더 설정에서 상차 지역을 더해 보세요" : "새 오더가 올라오면 바로 보여요"} action={takerish ? <Btn kind="ghost" onClick={() => setBoardSet(true)}>오더 설정</Btn> : activeN ? <Btn kind="ghost" onClick={() => setF({ ...DEFAULT_F })}>필터 초기화</Btn> : null} />
+            ? (board.length && (activeN || String(f.q || "").trim())
+              // ⭐ 2026-11-24 오더는 있는데 필터 · 검색에 걸려 안 보일 때는 [오더 설정]이 아니라 [조건 초기화]를 먼저
+              ? <Empty icon="board" title="조건에 맞는 오더가 없어요" desc={`모집중인 오더 ${board.length}건이 필터나 검색어에 가려져 있어요.`} action={<Btn kind="ghost" onClick={() => setF({ ...DEFAULT_F, sort: f.sort })} data-testid="btn-filter-reset">조건 초기화</Btn>} />
+              : <Empty icon="board" title={takerish ? "이 지역에 모집중인 오더가 없어요" : "모집중인 오더가 없어요"} desc={takerish ? "오더 설정에서 상차 지역을 더해 보세요." : "새 오더가 올라오면 바로 보여요."} action={takerish ? <Btn kind="ghost" onClick={() => setBoardSet(true)}>오더 설정</Btn> : null} />)
             : <div className="grid xl:grid-cols-2 gap-3.5" data-testid="board-list">{filtered.map(({ o, near }) => <HubOrderCard key={o.id} o={o} onOpen={() => openOrder(o)} mine={o.posterUid === me.uid} fav={favSet.has(o.posterUid)} fresh={fresh.has(o.id)} extraKm={f.sort === "near" ? near : 0} />)}</div>}
         </div>
       </div>
@@ -587,6 +611,8 @@ export default function HubApp() {
   );
   else if (tab === "admin" && isAdmin) body = <HubAdmin admin={{ uid: me.uid, email: authUser.email }} me={me} cfg={cfg} toast={toast} />;
   else body = BoardView;
+  // ⭐ 2026-11-24 저장된 탭이 지금 계정에 없으면(역할 변경 · 관리자 해제) 제목 · 선택 표시도 오더 탭으로 맞춘다
+  const shownTab = body === BoardView ? "board" : tab;
 
   const editOrder = async (o) => { const detail = await fetchPrivate(o.id, "detail"); setForm({ editing: { id: o.id, pub: o, detail } }); };
   const Balance = ({ dark }) => (
@@ -603,10 +629,10 @@ export default function HubApp() {
         {poster && <div className="px-4"><Btn kind="accent" size="lg" className="w-full" onClick={() => setForm({})} data-testid="btn-post"><HI name="plus" size={19} />화물등록</Btn></div>}
         <nav className="mt-4 px-3 space-y-1 flex-1">
           {TABS.map(([k, l, ic, n]) => (
-            <button key={k} type="button" onClick={() => go(k)} data-testid={`nav-${k}`} aria-current={tab === k ? "page" : undefined}
-              className={`w-full h-12 px-3.5 rounded-2xl flex items-center gap-3 text-[16px] font-bold transition ${tab === k ? "bg-white text-[#0F1A30]" : "text-white/75 hover:bg-white/[0.08] hover:text-white"}`}>
-              <HI name={ic} size={19} className={tab === k ? "text-[#2D4C82]" : "text-[#8FB0F0]"} />{l}
-              {n > 0 && <span className={`ml-auto min-w-[24px] h-6 px-2 rounded-full text-[13px] font-extrabold inline-flex items-center justify-center ${tab === k ? "bg-[#0F1A30] text-white" : "bg-[#8FB0F0] text-[#0B1428]"}`}>{n}</span>}
+            <button key={k} type="button" onClick={() => go(k)} data-testid={`nav-${k}`} aria-current={shownTab === k ? "page" : undefined}
+              className={`w-full h-12 px-3.5 rounded-2xl flex items-center gap-3 text-[16px] font-bold transition ${shownTab === k ? "bg-white text-[#0F1A30]" : "text-white/75 hover:bg-white/[0.08] hover:text-white"}`}>
+              <HI name={ic} size={19} className={shownTab === k ? "text-[#2D4C82]" : "text-[#8FB0F0]"} />{l}
+              {n > 0 && <span className={`ml-auto min-w-[24px] h-6 px-2 rounded-full text-[13px] font-extrabold inline-flex items-center justify-center ${shownTab === k ? "bg-[#0F1A30] text-white" : "bg-[#8FB0F0] text-[#0B1428]"}`}>{n}</span>}
             </button>
           ))}
         </nav>
@@ -621,13 +647,13 @@ export default function HubApp() {
         <div className="lg:hidden text-white px-4 pt-[env(safe-area-inset-top)]" style={NAVY_BG}>
           <div className="h-[60px] flex items-center gap-2">
             <img src="/brand/hub-mark.svg" alt="" className="w-9 h-9 rounded-[10px]" />
-            <div className="min-w-0 flex-1"><div className="text-[18px] font-extrabold leading-tight truncate">{titles[tab]}</div><div className="text-[13px] font-semibold text-white/55 truncate">{ROLES[me.role]?.label} {me.name}</div></div>
+            <div className="min-w-0 flex-1"><div className="text-[18px] font-extrabold leading-tight truncate">{titles[shownTab]}</div><div className="text-[13px] font-semibold text-white/55 truncate">{ROLES[me.role]?.label} {me.name}</div></div>
             <Balance dark />
             <button type="button" onClick={() => go("notices")} aria-label="알림" data-testid="btn-bell-m" className={`relative w-11 h-11 rounded-2xl inline-flex items-center justify-center shrink-0 ${tab === "notices" ? "bg-[#8FB0F0] text-[#0B1428]" : "bg-white/10"}`}><HI name="bell" size={19} />{unread > 0 && <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-[#8FB0F0] text-[#0B1428] text-[13px] font-extrabold inline-flex items-center justify-center" data-testid="bell-count">{unread}</span>}</button>
           </div>
         </div>
         <div className="hidden lg:flex h-[72px] items-center gap-3 px-8">
-          <div className="min-w-0"><div className="text-[24px] font-extrabold text-[#0F1A30] tracking-[-0.02em]">{titles[tab]}</div></div>
+          <div className="min-w-0"><div className="text-[24px] font-extrabold text-[#0F1A30] tracking-[-0.02em]">{titles[shownTab]}</div></div>
           <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-white ring-1 ring-inset ring-[#E2E7EF] text-[13.5px] font-bold text-[#1B2B4B]"><span className="w-2 h-2 rounded-full bg-[#2D4C82] animate-pulse" />실시간 {new Date(lastSync).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
           <div className="ml-auto flex items-center gap-2">
             <Balance />
@@ -643,14 +669,14 @@ export default function HubApp() {
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#E2E7EF] pb-[env(safe-area-inset-bottom)]">
         <div className="grid" style={{ gridTemplateColumns: `repeat(${MTABS.length}, minmax(0,1fr))` }}>
           {MTABS.map(([k, l, ic, n]) => (
-            <button key={k} type="button" onClick={() => go(k)} data-testid={`tab-${k}`} aria-current={tab === k ? "page" : undefined} className={`relative h-[64px] flex flex-col items-center justify-center gap-1 text-[13px] font-bold ${tab === k ? "text-[#0F1A30]" : "text-[#5F6E87]"}`}>
-              <span className={`w-12 h-8 rounded-full inline-flex items-center justify-center transition ${tab === k ? "bg-[#0F1A30] text-[#8FB0F0]" : ""}`}><HI name={ic} size={20} /></span>{l}
+            <button key={k} type="button" onClick={() => go(k)} data-testid={`tab-${k}`} aria-current={shownTab === k ? "page" : undefined} className={`relative h-[64px] flex flex-col items-center justify-center gap-1 text-[13px] font-bold ${shownTab === k ? "text-[#0F1A30]" : "text-[#5F6E87]"}`}>
+              <span className={`w-12 h-8 rounded-full inline-flex items-center justify-center transition ${shownTab === k ? "bg-[#0F1A30] text-[#8FB0F0]" : ""}`}><HI name={ic} size={20} /></span>{l}
               {n > 0 && <span className="absolute top-1.5 left-1/2 ml-2 min-w-[18px] h-[18px] px-1 rounded-full bg-[#2D4C82] text-white text-[13px] font-extrabold inline-flex items-center justify-center">{n}</span>}
             </button>
           ))}
         </div>
       </nav>
-      {poster && ["board", "posts"].includes(tab) && (
+      {poster && ["board", "posts"].includes(shownTab) && (
         <button type="button" onClick={() => setForm({})} data-testid="fab-post" className="lg:hidden fixed right-4 bottom-[calc(80px+env(safe-area-inset-bottom))] z-40 h-14 pl-4 pr-5 rounded-full text-white text-[16px] font-extrabold inline-flex items-center gap-2 shadow-[0_16px_36px_rgba(11,20,40,.4)]" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}>
           <HI name="plus" size={22} />화물등록
         </button>

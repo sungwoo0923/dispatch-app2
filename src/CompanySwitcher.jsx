@@ -67,7 +67,7 @@ export default function CompanySwitcher({ current = "", onClose }) {
           {err && <div className="mx-4 my-2 rounded-xl bg-[#FEF3F2] border border-[#FECDCA] px-3 py-2 text-[13px] font-bold text-[#B42318]">{err}</div>}
           {!kw && recent.length > 0 && <><div className="px-4 pt-1 pb-1 text-[11.5px] font-extrabold tracking-[0.12em] text-[#4B6CB7]">최근</div>{recent.map((c) => <Row key={`r-${c}`} c={c} tag="최근" />)}<div className="mx-4 my-1 border-t border-[#EEF2F8]" /></>}
           {shown.map((c) => <Row key={c} c={c} />)}
-          {typed && <button type="button" onClick={() => go(typed)} className="w-full px-4 py-3 text-left text-[14px] font-bold text-[#2D4C82] hover:bg-[#F4F6FA]">「{typed}」(으)로 들어가기 — 목록에 없는 회사</button>}
+          {typed && <button type="button" onClick={() => go(typed)} className="w-full px-4 py-3 text-left text-[14px] font-bold text-[#2D4C82] hover:bg-[#F4F6FA]">「{typed}」(으)로 들어가기: 목록에 없는 회사</button>}
           {list && !shown.length && !typed && <div className="py-10 text-center text-[14px] text-[#9AA9C3]">찾는 운송사가 없어요</div>}
         </div>
         <div className="px-4 py-3 border-t border-[#EEF2F8] shrink-0 flex justify-end">

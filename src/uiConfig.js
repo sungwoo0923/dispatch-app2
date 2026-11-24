@@ -809,7 +809,7 @@ function maybeLive() {
   const key = auth.currentUser ? auth.currentUser.uid : "public";
   if (fetchedFor === key) return;
   fetchedFor = key;
-  getDoc(ref()).then((snap) => { const d = snap.exists() ? snap.data() : null; setPub(d, { by: d?.by || "", at: toMs(d?.updatedAt) }); }).catch((e) => { fetchedFor = null; console.warn("[화면 편집] 불러오기 실패 — 저장해둔 값으로 보여줍니다", e?.message || e); });
+  getDoc(ref()).then((snap) => { const d = snap.exists() ? snap.data() : null; setPub(d, { by: d?.by || "", at: toMs(d?.updatedAt) }); }).catch((e) => { fetchedFor = null; console.warn("[화면 편집] 불러오기 실패: 저장해둔 값으로 보여줍니다", e?.message || e); });
 }
 
 // 저장(게시) — 검사한 값만 · 저장 전 값을 기록에 남긴다

@@ -405,7 +405,7 @@ function Composer({ company, myName, staff, uid, init, onClose, onDone }) {
       <div className="flex-1 overflow-y-auto p-5 space-y-3">
         <div className="bg-white rounded-2xl border border-[#E3E8F0]">
           {self ? (
-            <div className="px-4 py-3 text-[13px] font-bold text-[#3A4A66] border-b border-[#EEF1F6]">받는 사람 <span className="ml-3 text-[#0F1A30]">나 ({myName})</span> <span className="ml-2 text-[12px] text-[#9AA9C3]">— 메모·할 일을 나에게 보관합니다</span></div>
+            <div className="px-4 py-3 text-[13px] font-bold text-[#3A4A66] border-b border-[#EEF1F6]">받는 사람 <span className="ml-3 text-[#0F1A30]">나 ({myName})</span> <span className="ml-2 text-[12px] text-[#9AA9C3]">메모·할 일을 나에게 보관합니다</span></div>
           ) : (
             <>
               <RecipientField label="받는 사람" staff={staff} selected={to} setSelected={setTo} excludeUid={uid} autoFocus={!init.to?.length} />

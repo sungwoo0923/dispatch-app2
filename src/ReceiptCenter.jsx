@@ -147,7 +147,7 @@ export default function ReceiptCenter({ dispatchData = [], isViewer = false, toa
               </tbody>
             </table>
           </div>
-          {rows.length > 600 && <div className="px-3 py-2 text-[12px] text-[#7A89A3] border-t border-[#EEF1F6]">앞 600건만 보여 줍니다 — 기간을 줄여 주세요</div>}
+          {rows.length > 600 && <div className="px-3 py-2 text-[12px] text-[#7A89A3] border-t border-[#EEF1F6]">앞 600건만 보여 줍니다. 기간을 줄여 주세요</div>}
         </div>
         <div className="xl:sticky xl:top-3">
           {selRow ? <ReceiptPanel key={idOf(selRow)} row={selRow} isViewer={isViewer} toast={toast} onZip={() => zipOrders([selRow])} />

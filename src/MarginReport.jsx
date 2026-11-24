@@ -108,14 +108,14 @@ function reportText(R, monthKey, prevKey) {
   L.push(`- ${a} 매익률 ${P.rate}%를 유지했다면 ${b} 이익은 ${won(R.expected)}이어야 하나, 실제는 ${won(C.profit)} → ${won(R.shortfall)} 덜 남음`);
   if (T.dSale > 0) L.push(`- 늘어난 매출 ${won(T.dSale)}에서 늘어난 이익은 ${won(T.dProfit)} (늘어난 매출의 이익률 ${pct(T.dProfit, T.dSale)}%)`);
   L.push("");
-  L.push(`[오더 구분별 원인 — 덜 남은 이익 순]`);
+  L.push(`[오더 구분별 원인: 덜 남은 이익 순]`);
   [...R.segments].filter((s) => s.gap > 0).sort((x, y) => y.gap - x.gap).forEach((s) => {
     L.push(`- ${s.seg}: ${a} ${s.prev.cnt}건 매출 ${won(s.prev.sale)} 이익 ${won(s.prev.profit)} → ${b} ${s.cur.cnt}건 매출 ${won(s.cur.sale)} 이익 ${won(s.cur.profit)} ⇒ ${won(s.gap)} 덜 남음`);
   });
   const top = [...R.clients].filter((c) => c.gap > 0).sort((x, y) => y.gap - x.gap).slice(0, 7);
   if (top.length) {
     L.push("");
-    L.push(`[거래처별 원인 — 덜 남은 이익 상위]`);
+    L.push(`[거래처별 원인: 덜 남은 이익 상위]`);
     top.forEach((c) => L.push(`- ${c.name}: 매출 ${man(c.prev.sale)} → ${man(c.cur.sale)}, 이익 ${won(c.prev.profit)} → ${won(c.cur.profit)}, 매익률 ${c.prev.cnt ? `${c.prev.rate}%` : "거래 없음"} → ${c.cur.cnt ? `${c.cur.rate}%` : "거래 없음"} ⇒ ${won(c.gap)} 덜 남음`));
   }
   return L;
@@ -127,7 +127,7 @@ export function exportMarginReportXlsx(R, monthKey, prevKey, pureOnly) {
   const { C, P, T } = R;
   // 1) 요약
   const sum = [
-    [`매익률 원인 분석 — ${a} vs ${b} (${pureOnly ? "순수 운송 매출 기준" : "전체 매출 기준"}, 배차완료 오더)`],
+    [`매익률 원인 분석: ${a} vs ${b} (${pureOnly ? "순수 운송 매출 기준" : "전체 매출 기준"}, 배차완료 오더)`],
     [],
     ["구분", a, b, "증감", "증감률(%)"],
     ["건수", P.cnt, C.cnt, C.cnt - P.cnt, P.cnt ? pct(C.cnt - P.cnt, P.cnt) : ""],
@@ -289,7 +289,7 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
         <style>{`@media (max-width: 1599px) { .mr-client-table { font-size: 12.5px; } .mr-client-table th, .mr-client-table td { padding-left: 5px; padding-right: 5px; } .mr-client-table td:first-child { max-width: 150px; } }`}</style>
         <div className="bg-[#1B2B4B] text-white px-7 py-4 rounded-t-2xl flex items-center justify-between sticky top-0 z-10">
           <div>
-            <div className="text-[19px] font-black">매익률 원인 보고서 — {A} vs {B}</div>
+            <div className="text-[19px] font-black">매익률 원인 보고서: {A} vs {B}</div>
             <div className="text-[13px] text-white/75 mt-0.5">매출은 늘었는데 이익은 왜 그대로인가 · 거래처별 금액 · 손실 건 · 수수료 0% 건 · 미배차 페널티 · 기타</div>
           </div>
           <button onClick={onClose} className="text-white/80 hover:text-white text-[28px] leading-none px-2">×</button>
@@ -484,7 +484,7 @@ export default function MarginReportModal({ rows, initialMonth, isExcluded, hasE
             )}
           </div>
 
-          <p className="text-[13px] text-gray-600">※ 매출관리와 같은 기준(배차완료 오더 + 고정거래처)입니다. 미배차 페널티는 오더 메모·적요·전달사항에 "페널티/패널티/미배차"가 적힌 오더로 찾습니다 — 페널티 오더는 메모에 그렇게 적어두면 보고서에 잡힙니다.</p>
+          <p className="text-[13px] text-gray-600">※ 매출관리와 같은 기준(배차완료 오더 + 고정거래처)입니다. 미배차 페널티는 오더 메모·적요·전달사항에 "페널티/패널티/미배차"가 적힌 오더로 찾습니다. 페널티 오더는 메모에 그렇게 적어두면 보고서에 잡힙니다.</p>
         </div>
       </div>
     </div>

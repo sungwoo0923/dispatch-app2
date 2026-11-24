@@ -145,14 +145,14 @@ export function WorkManualModal({ menu, section = "", onClose }) {
           <section key={s.id} id={`wm-${s.id}`} className="bg-white rounded-3xl border border-[#E3E8F0] p-5 sm:p-8 scroll-mt-4" data-manual-section={s.id}>
             <div className="flex items-center gap-2.5">
               <span className="w-9 h-9 rounded-full bg-[#0F1A30] text-white text-[16px] font-black grid place-items-center tabular-nums shrink-0">{k + 1}</span>
-              <h3 className="text-[23px] sm:text-[26px] font-black text-[#0F1A30] leading-snug">{s.title}</h3>
+              <h3 className="text-[23px] sm:text-[26px] font-black text-[#0F1A30] leading-snug">{String(s.title).split(" — ")[0]}{String(s.title).includes(" — ") && <span className="block mt-0.5 text-[16px] sm:text-[17px] font-bold text-[#5B6B85]">{String(s.title).split(" — ").slice(1).join(", ")}</span>}</h3>
             </div>
             {!M.generated && <div className="mt-2 text-[15px] font-bold text-[#5B6B85]">왼쪽 메뉴 › <b className="text-[#1B2B4B]">{menu} › {s.tab}</b></div>}
             <p className="mt-3 text-[17.5px] sm:text-[19px] leading-[1.8] text-[#1F2D47]" style={{ textWrap: "pretty" }}>{s.what}</p>
 
             {s.demo && hasHelpDemo(s.demo) && (
               <div className="mt-4">
-                <div className="mb-2 text-[16px] font-black text-[#0F1A30]">▶ 영상처럼 따라 보기 <span className="font-bold text-[#5B6B85]">— 자동으로 넘어가요. 마우스를 올리면 잠깐 멈춰요</span></div>
+                <div className="mb-2 text-[16px] font-black text-[#0F1A30]">▶ 영상처럼 따라 보기 <span className="font-bold text-[#5B6B85]">(자동으로 넘어가요. 마우스를 올리면 잠깐 멈춰요.)</span></div>
                 <HelpDemo id={s.demo} />
               </div>
             )}
@@ -211,7 +211,7 @@ export function AcctGlossaryModal({ onClose }) {
     <Shell title="회계용어" sub={`경리 업무에서 자주 나오는 말 ${glossaryCount()}개를 쉬운 말로 풀었어요`} onClose={onClose}>
       <div className="max-w-[1100px] mx-auto px-4 sm:px-10 py-6" data-glossary>
         <div className="sticky top-0 z-[1] -mx-4 sm:-mx-10 px-4 sm:px-10 pt-1 pb-3 bg-[#F4F6FA]">
-          <input value={q} onChange={(e) => setQ(e.target.value)} autoFocus placeholder="궁금한 말을 적어 보세요 — 예: 공급가액, 미수금, 원천징수"
+          <input value={q} onChange={(e) => setQ(e.target.value)} autoFocus placeholder="궁금한 말을 적어 보세요 (예: 공급가액, 미수금, 원천징수)"
             className="w-full h-12 px-4 rounded-2xl border border-[#DCE3EE] bg-white text-[16px] font-semibold text-[#0F1A30] outline-none focus:border-[#1B2B4B]" />
           <div className="mt-2.5 flex gap-1.5 overflow-x-auto pb-0.5">
             {["전체", ...GLOSSARY.map((g) => g.cat)].map((c) => <button key={c} type="button" onClick={() => setCat(c)} className={`shrink-0 h-9 px-3.5 rounded-full text-[13.5px] font-black ${cat === c ? "bg-[#0F1A30] text-white" : "bg-white text-[#3A4A66] border border-[#DCE3EE]"}`}>{c}</button>)}

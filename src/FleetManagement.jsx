@@ -353,7 +353,7 @@ function FleetPinGate({ onVerified }) {
   };
 
   const heading = mode === "verify" ? "보안 인증" : mode === "setup1" ? "비밀번호 설정" : "비밀번호 확인";
-  const sub = mode === "verify" ? "지입차 관제 시스템 — 6자리 비밀번호" :
+  const sub = mode === "verify" ? "지입차 관제 시스템: 6자리 비밀번호" :
     mode === "setup1" ? "사용할 6자리 비밀번호를 입력하세요" : "비밀번호를 한 번 더 입력하여 확인하세요";
 
   return (
@@ -385,7 +385,7 @@ function FleetPinGate({ onVerified }) {
         {mode === "verify" && (
           <button onClick={() => { localStorage.removeItem(FLEET_PIN_KEY); setMode("setup1"); setEntered(""); setError(""); setFirstPin(""); }}
             style={{ width: "100%", marginTop: 16, textAlign: "center", fontSize: 14, color: "#5B6B85", background: "none", border: "none", cursor: "pointer" }}>
-            비밀번호를 잊으셨나요? — 재설정
+            비밀번호를 잊으셨나요? 재설정
           </button>
         )}
       </div>
@@ -1413,7 +1413,7 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {/* 요약 */}
-      <FaHero code="FLEET · DRIVER REGISTRY" title="기사 등록 관리" sub="기사앱에 가입·승인된 지입·직영·임대 기사님 — 담당자 지정 · 앱 접속 상태"
+      <FaHero code="FLEET · DRIVER REGISTRY" title="기사 등록 관리" sub="기사앱에 가입·승인된 지입·직영·임대 기사님: 담당자 지정 · 앱 접속 상태"
         icon={<><circle cx="10" cy="8" r="4" /><path d="M3 20c0-4 3-7 7-7M17 14v6M14 17h6" /></>}>
         {stat("내 차량", mine.length, "대", true)}
         {stat("전체 등록 기사", approved.length, "명")}
@@ -2975,7 +2975,7 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
 
       {hasConflict && (
         <div style={{ padding: "9px 16px", background: "#fffbeb", borderBottom: "1px solid #fde68a", fontSize: 14, fontWeight: 700, color: "#92400e" }}>
-          근무 불가 요일({weekdayKoOf(selectedDate)})에 배차가 등록되어 있습니다 — 일정을 확인해주세요.
+          근무 불가 요일({weekdayKoOf(selectedDate)})에 배차가 등록되어 있습니다. 일정을 확인해주세요.
         </div>
       )}
 
@@ -4162,7 +4162,7 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
         </div>
       ) : visibleRows.length === 0 ? (
         <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 60, textAlign: "center", color: "#5B6B85", fontSize: 16 }}>
-          미배차 차량이 없습니다 — 전원 배차 완료.
+          미배차 차량이 없습니다. 전원 배차 완료.
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

@@ -10,7 +10,7 @@ export const SERIES = ["#D7BC82", "#8FB0F0", "#B89A5E", "#6E95E8", "#F3E3BC", "#
 // ─── 30일 읽기 · 쓰기(실측) ───
 export function TrafficChart({ days = [], free, height = 230, showWrites = true }) {
   const id = React.useId().replace(/:/g, "");
-  if (!days.length) return <div className="h-[180px] flex items-center justify-center text-[13px] font-bold" style={{ color: G.dim }}>구글 클라우드 사용량이 아직 쌓이지 않았어요 — 1시간마다 모여요</div>;
+  if (!days.length) return <div className="h-[180px] flex items-center justify-center text-[13px] font-bold" style={{ color: G.dim }}>구글 클라우드 사용량이 아직 쌓이지 않았어요. 1시간마다 모여요.</div>;
   return (
     <div style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
@@ -124,7 +124,7 @@ export function WalletStrip({ c, ai }) {
 // ─── 운송사별 사용량(계약 금액 없이) — 한 줄에 직원 · 오더 · 저장 · 서버 읽기 ───
 export function CarrierUsageRows({ carriers = [], max = 8, onOpen, compactMode = false }) {
   const maxCost = Math.max(1, ...carriers.map((c) => c.costTotal));
-  if (!carriers.length) return <div className="py-10 text-center text-[13px] font-bold" style={{ color: G.dim }}>집계된 운송사가 없어요 — 운송사 관제에서 [지금 갱신]을 눌러 주세요</div>;
+  if (!carriers.length) return <div className="py-10 text-center text-[13px] font-bold" style={{ color: G.dim }}>집계된 운송사가 없어요. 운송사 관제에서 [지금 갱신]을 눌러 주세요.</div>;
   return (
     <div className="divide-y" style={{ borderColor: G.line }}>
       {carriers.slice(0, max).map((c, i) => (

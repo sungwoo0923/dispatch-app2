@@ -246,7 +246,7 @@ function Pipeline({ B, who, company, isViewer }) {
   const set = (k) => (v) => setEdit((p) => ({ ...p, [k]: v?.target ? v.target.value : v }));
   return (
     <div className="space-y-4">
-      <BookHero en="SALES · PIPELINE" title="영업 기회" desc="새 화주를 발굴부터 수주까지 단계별로 관리합니다 — 다음 연락일을 넣어 두면 대시보드가 챙겨 줍니다"
+      <BookHero en="SALES · PIPELINE" title="영업 기회" desc="새 화주를 발굴부터 수주까지 단계별로 관리합니다. 다음 연락일을 넣어 두면 대시보드가 챙겨 줍니다"
         right={!isViewer && <button type="button" onClick={() => setEdit(blankLead(who))} className="h-9 px-3.5 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black whitespace-nowrap">+ 영업 기회 등록</button>}
         kpis={[["진행 중", `${P.open}곳`, `오늘 연락 ${P.today} · 지난 일정 ${P.overdue}`], ["예상 월 매출 합계", `${short(P.amount)}원`, "진행 중인 기회 전체"], ["가중 예상 매출", `${short(P.weighted)}원`, "월 매출 × 수주 확률"], ["수주율", `${P.winRate}%`, `이번 달 수주 ${P.wonMonth}곳`]]} />
       <div className="flex items-center gap-2 flex-wrap">
@@ -302,7 +302,7 @@ function Pipeline({ B, who, company, isViewer }) {
             </div>
             {toInt(edit.monthlyRevenue) > 0 && (() => { const g = gainOf(edit); return (
               <div className="rounded-2xl bg-[#0F1A30] text-white px-4 py-3">
-                {g.blocked ? <div className="text-[13px] font-black text-[#F7D48A]">마진율이 최저 기준({B.policy.minMargin}%)보다 낮아 인센티브 대상이 아닙니다 — 단가를 다시 협의해 보세요</div>
+                {g.blocked ? <div className="text-[13px] font-black text-[#F7D48A]">마진율이 최저 기준({B.policy.minMargin}%)보다 낮아 인센티브 대상이 아닙니다. 단가를 다시 협의해 보세요</div>
                   : <><div className="text-[11.5px] font-bold text-white/55">수주하면 {edit.ownerName || "담당자"}님 인센티브</div><div className="text-[20px] font-black tabular-nums" style={num}>매달 +{won(g.gain)}원 <span className="text-[12px] font-bold text-white/55">· 1년 약 {short(g.year)}원</span></div></>}
               </div>
             ); })()}
@@ -392,7 +392,7 @@ function Accounts({ B, who, company, isViewer, onGo }) {
                 ))}
               </tbody>
             </table>
-            {rows.length > 300 && <div className="py-3 text-center text-[12.5px] font-bold text-[#9AA9C3]">위 300곳만 보입니다 — 검색으로 좁혀 주세요</div>}
+            {rows.length > 300 && <div className="py-3 text-center text-[12.5px] font-bold text-[#9AA9C3]">위 300곳만 보입니다. 검색으로 좁혀 주세요</div>}
           </div>
         )}
       </BookCard>
@@ -406,8 +406,8 @@ function Accounts({ B, who, company, isViewer, onGo }) {
             ))}
           </div>
           <div className="flex items-center gap-1.5 flex-wrap"><St h={edit} />{edit.last && <span className="text-[12.5px] font-bold text-[#5B6B85]">마지막 오더 {edit.last}{edit.idle > 0 ? ` · ${edit.idle}일 전` : ""}</span>}</div>
-          {edit.state === "sleep" && <div className="rounded-2xl border border-[#E8D9B0] bg-[#FBF5E4] px-4 py-3 text-[13px] font-bold text-[#6B5320]">30일 넘게 오더가 없습니다 — 영업 활동에 안부 연락을 남기고 물량 계획을 확인해 보세요.</div>}
-          {edit.state === "drop" && <div className="rounded-2xl border border-[#E8D9B0] bg-[#FBF5E4] px-4 py-3 text-[13px] font-bold text-[#6B5320]">최근 30일 매출이 그 전 30일보다 {Math.abs(edit.change).toFixed(0)}% 줄었습니다 — 다른 운송사로 넘어가는지 확인이 필요합니다.</div>}
+          {edit.state === "sleep" && <div className="rounded-2xl border border-[#E8D9B0] bg-[#FBF5E4] px-4 py-3 text-[13px] font-bold text-[#6B5320]">30일 넘게 오더가 없습니다. 영업 활동에 안부 연락을 남기고 물량 계획을 확인해 보세요.</div>}
+          {edit.state === "drop" && <div className="rounded-2xl border border-[#E8D9B0] bg-[#FBF5E4] px-4 py-3 text-[13px] font-bold text-[#6B5320]">최근 30일 매출이 그 전 30일보다 {Math.abs(edit.change).toFixed(0)}% 줄었습니다. 다른 운송사로 넘어가는지 확인이 필요합니다.</div>}
           <fieldset disabled={!canAssign} className="space-y-3 min-w-0">
             <div><Label>영업 담당자</Label><CustomSelect value={edit.uid} onChange={(e) => setEdit((p) => ({ ...p, uid: e.target.value }))} className={inp}><option value="">담당 없음</option>{[...(edit.uid && !B.staff.some((s) => s.uid === edit.uid) ? [{ uid: edit.uid, name: edit.rep }] : []), ...B.staff].map((s) => <option key={s.uid} value={s.uid}>{s.name}{s.team ? ` · ${s.team}` : ""}</option>)}</CustomSelect></div>
             <div><Label>수주일(이 날부터의 오더가 실적)</Label><CustomDatePicker value={edit.since} onChange={(e) => setEdit((p) => ({ ...p, since: e.target.value }))} className={inp} showIcon /></div>
@@ -548,7 +548,7 @@ function Incentive({ B, who, company, isViewer }) {
   const run = async (fn) => { setBusy(true); try { await fn(); } catch (e) { kpAlert(`처리하지 못했습니다.\n${e?.message || e}`); } finally { setBusy(false); } };
   const confirmMine = async () => {
     const amount = p.collectOnly ? cur.confirmed : cur.total;
-    if (!(await kpConfirm(`${repName}님 ${Number(ym.slice(5))}월 인센티브를 확정할까요?\n\n지급 확정 ${won(amount)}원${p.collectOnly && cur.held > 0 ? `\n보류 ${won(cur.held)}원(미수 — 수금된 뒤 다시 확정하면 더해집니다)` : ""}`, { title: "인센티브 확정", okText: "확정" }))) return;
+    if (!(await kpConfirm(`${repName}님 ${Number(ym.slice(5))}월 인센티브를 확정할까요?\n\n지급 확정 ${won(amount)}원${p.collectOnly && cur.held > 0 ? `\n보류 ${won(cur.held)}원(미수: 수금된 뒤 다시 확정하면 더해집니다)` : ""}`, { title: "인센티브 확정", okText: "확정" }))) return;
     run(() => confirmOne(cur, repName));
   };
   const confirmAll = async () => {
@@ -572,9 +572,9 @@ function Incentive({ B, who, company, isViewer }) {
   const tierSum = tierAmount(p, cur.base);
   return (
     <div className="space-y-4">
-      <BookHero en="SALES · INCENTIVE" title="인센티브" desc={`${baseLabel(p)} 기준${p.useTiers ? " · 구간 누진" : ` · ${p.rate}%`}${p.collectOnly ? " · 수금 완료분만 확정" : ""} — 계산 과정을 거래처별로 모두 보여 줍니다`}
+      <BookHero en="SALES · INCENTIVE" title="인센티브" desc={`${baseLabel(p)} 기준${p.useTiers ? " · 구간 누진" : ` · ${p.rate}%`}${p.collectOnly ? " · 수금 완료분만 확정" : ""} · 계산 과정을 거래처별로 모두 보여 줍니다`}
         right={<div className="flex items-center gap-2 flex-wrap justify-end">{who.canManage && <RepPick B={B} value={rep} onChange={setRep} all={false} />}<MonthNav ym={ym} setYm={setYm} /></div>}
-        kpis={[["예상 인센티브", `${won(cur.total)}원`, `${baseLabel(p)} ${short(cur.base)}원 × ${cur.effRate.toFixed(1)}%`], ["지급 확정", `${won(p.collectOnly ? cur.confirmed : cur.total)}원`, p.collectOnly ? "수금(정산완료)된 거래처분" : "전액"], ["보류", `${won(p.collectOnly ? cur.held : 0)}원`, "미수 — 수금되면 확정"], ["처리 상태", mineSaved ? mineSaved.status : "미확정", mineSaved ? `확정액 ${won(mineSaved.amount)}원` : `지급일 다음 달 ${p.payDay}일`]]} />
+        kpis={[["예상 인센티브", `${won(cur.total)}원`, `${baseLabel(p)} ${short(cur.base)}원 × ${cur.effRate.toFixed(1)}%`], ["지급 확정", `${won(p.collectOnly ? cur.confirmed : cur.total)}원`, p.collectOnly ? "수금(정산완료)된 거래처분" : "전액"], ["보류", `${won(p.collectOnly ? cur.held : 0)}원`, "미수: 수금되면 확정"], ["처리 상태", mineSaved ? mineSaved.status : "미확정", mineSaved ? `확정액 ${won(mineSaved.amount)}원` : `지급일 다음 달 ${p.payDay}일`]]} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4">
         <BookCard flush en="STATEMENT" title={`${repName} · ${Number(ym.slice(5))}월 인센티브 내역`} right={<div className="flex gap-2 pr-4"><button type="button" data-ro-allow className={btnLine} onClick={csv}>엑셀(CSV)</button>{canAct && <button type="button" disabled={busy || !cur.total || mineSaved?.status === "지급완료"} className={btnDark} onClick={confirmMine}>{mineSaved ? "다시 확정" : "확정"}</button>}{canAct && mineSaved?.status === "확정" && <button type="button" disabled={busy} className={btnLine} onClick={() => markPaid(uid, repName)}>지급 완료</button>}</div>}>
@@ -607,11 +607,11 @@ function Incentive({ B, who, company, isViewer }) {
         </BookCard>
         <BookCard en="HOW IT IS CALCULATED" title="계산 과정">
           <ol className="space-y-2.5 text-[13px] font-semibold text-[#3A4A66] leading-relaxed">
-            <li><b className="text-[#0F1A30]">① 기준금액</b> — 내 거래처의 수주일 이후 배차완료 오더 {baseLabel(p)} 합계 <b className="tabular-nums text-[#0F1A30]" style={num}>{won(cur.base)}원</b>{p.minMargin > 0 && <> (마진율 {p.minMargin}% 미만 오더 제외{cur.excluded.n ? ` · ${cur.excluded.n}건` : ""})</>}</li>
+            <li><b className="text-[#0F1A30]">① 기준금액</b> · 내 거래처의 수주일 이후 배차완료 오더 {baseLabel(p)} 합계 <b className="tabular-nums text-[#0F1A30]" style={num}>{won(cur.base)}원</b>{p.minMargin > 0 && <> (마진율 {p.minMargin}% 미만 오더 제외{cur.excluded.n ? ` · ${cur.excluded.n}건` : ""})</>}</li>
             <li><b className="text-[#0F1A30]">② 요율</b> — {p.useTiers ? <>구간 누진 {p.tiers.map((t) => `${short(t.from)}원~ ${t.rate}%`).join(" / ")} → <b className="tabular-nums text-[#0F1A30]" style={num}>{won(tierSum)}원</b> (평균 {cur.effRate.toFixed(2)}%)</> : <>단일 요율 {p.rate}% → <b className="tabular-nums text-[#0F1A30]" style={num}>{won(tierSum)}원</b></>}</li>
-            {p.newBonus > 0 && <li><b className="text-[#0F1A30]">③ 신규 가산</b> — 수주 후 {p.newMonths}개월 안의 거래처는 +{p.newBonus}%p ({cur.newClients}곳)</li>}
-            {p.matureMonths > 0 && <li><b className="text-[#0F1A30]">④ 장기 거래처</b> — 수주 {p.matureMonths}개월 뒤부터 요율의 {p.matureFactor}%</li>}
-            {p.accelOn && <li><b className="text-[#0F1A30]">⑤ 목표 가속</b> — 매출 목표 {p.accelOver}% 이상 달성 시 ×{(p.accelFactor / 100).toFixed(2)} {cur.target > 0 ? <>(지금 {cur.achieve.toFixed(0)}% → {cur.accel > 1 ? "적용" : "미적용"})</> : "(목표 미설정)"}</li>}
+            {p.newBonus > 0 && <li><b className="text-[#0F1A30]">③ 신규 가산</b> · 수주 후 {p.newMonths}개월 안의 거래처는 +{p.newBonus}%p ({cur.newClients}곳)</li>}
+            {p.matureMonths > 0 && <li><b className="text-[#0F1A30]">④ 장기 거래처</b> · 수주 {p.matureMonths}개월 뒤부터 요율의 {p.matureFactor}%</li>}
+            {p.accelOn && <li><b className="text-[#0F1A30]">⑤ 목표 가속</b> · 매출 목표 {p.accelOver}% 이상 달성 시 ×{(p.accelFactor / 100).toFixed(2)} {cur.target > 0 ? <>(지금 {cur.achieve.toFixed(0)}% → {cur.accel > 1 ? "적용" : "미적용"})</> : "(목표 미설정)"}</li>}
             {p.cap > 0 && <li><b className="text-[#0F1A30]">⑥ 월 상한</b> — {won(p.cap)}원{cur.capped ? " (상한 적용됨)" : ""}</li>}
             <li><b className="text-[#0F1A30]">⑦ 지급</b> — {p.collectOnly ? "거래처정산에서 그 달이 「정산완료」된 거래처분만 확정, 나머지는 보류" : "전액 확정"} · 다음 달 {p.payDay}일</li>
           </ol>
@@ -659,7 +659,7 @@ function Ranking({ B, who }) {
   if (!who.canManage && !B.policy.showRanking) return <BookCard><Empty>팀 순위는 영업 관리자만 볼 수 있습니다.</Empty></BookCard>;
   return (
     <div className="space-y-4">
-      <BookHero en="SALES · RANKING" title="팀 순위" desc="이번 달 영업 담당자별 실적 — 매출 · 매출이익 · 목표 달성 · 신규 수주 · 활동" right={<MonthNav ym={ym} setYm={setYm} />}
+      <BookHero en="SALES · RANKING" title="팀 순위" desc="이번 달 영업 담당자별 실적: 매출 · 매출이익 · 목표 달성 · 신규 수주 · 활동" right={<MonthNav ym={ym} setYm={setYm} />}
         kpis={[["영업팀 매출", `${short(team.reduce((s, t) => s + t.sale, 0))}원`, `${team.length}명`], ["영업팀 매출이익", `${short(team.reduce((s, t) => s + t.profit, 0))}원`, "청구운임 − 기사운임"], ["신규 수주", `${list.reduce((s, t) => s + t.won, 0)}곳`, "이 달 수주 처리"], ["영업 활동", `${list.reduce((s, t) => s + t.acts, 0)}건`, "방문 · 전화 · 견적 · 미팅"]]} />
       <BookCard en="LEADERBOARD" title="순위" right={<div className="flex gap-1.5 overflow-x-auto no-scrollbar">{KEYS.map(([k, l]) => <Chip key={k} on={by === k} onClick={() => setBy(k)}>{l}</Chip>)}</div>}>
         {!list.length ? <Empty>영업 담당자가 없습니다</Empty> : (
@@ -708,7 +708,7 @@ function Policy({ B, who, company, isViewer }) {
   const Toggle = ({ on, onClick, children }) => <button type="button" disabled={!canEdit} onClick={onClick} className={`h-11 px-3.5 rounded-xl border text-[13.5px] font-black text-left flex items-center gap-2.5 w-full ${on ? "border-[#0F1A30] bg-[#0F1A30] text-white" : "border-[#DCE3EE] bg-white text-[#5B6B85]"}`}><span className={`w-4 h-4 rounded-full border-2 shrink-0 ${on ? "border-white bg-white" : "border-[#C3CDDC]"}`} />{children}</button>;
   return (
     <div className="space-y-4">
-      <BookHero en="SALES · PLAN" title="목표 · 인센티브 규정" desc={canEdit ? "영업 담당자별 월 매출 목표와 회사 인센티브 규정을 정합니다 — 저장하면 모든 화면 계산에 바로 반영됩니다" : "우리 회사 인센티브 규정과 내 목표입니다(영업 관리자가 정합니다)"}
+      <BookHero en="SALES · PLAN" title="목표 · 인센티브 규정" desc={canEdit ? "영업 담당자별 월 매출 목표와 회사 인센티브 규정을 정합니다. 저장하면 모든 화면 계산에 바로 반영됩니다" : "우리 회사 인센티브 규정과 내 목표입니다(영업 관리자가 정합니다)"}
         right={canEdit && <div className="flex gap-2"><button type="button" className="h-9 px-3.5 rounded-xl bg-white/10 border border-white/15 text-[13.5px] font-black" onClick={reset}>기본값</button><button type="button" disabled={busy || !dirty} className="h-9 px-4 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black disabled:opacity-50" onClick={save}>{busy ? "저장 중…" : dirty ? "저장" : "저장됨"}</button></div>}
         kpis={[["기준", baseLabel(np), np.base === "profit" ? "청구운임 − 기사운임" : "청구운임"], ["요율", np.useTiers ? `${np.tiers[0].rate}~${np.tiers[np.tiers.length - 1].rate}%` : `${np.rate}%`, np.useTiers ? `구간 누진 ${np.tiers.length}단계` : "단일 요율"], ["신규 거래처", np.newBonus > 0 ? `+${np.newBonus}%p` : "없음", `수주 후 ${np.newMonths}개월`], ["지급", np.collectOnly ? "수금 후 확정" : "전액 확정", `다음 달 ${np.payDay}일`]]} />
       {!B.plan.saved && <div className="rounded-2xl border border-[#E8D9B0] bg-[#FBF5E4] px-4 py-3 text-[13px] font-bold text-[#6B5320]">아직 저장한 규정이 없어 기본값으로 계산하고 있습니다. {canEdit ? "회사 규정에 맞게 고친 뒤 저장해 주세요." : "영업 관리자가 규정을 저장하면 바뀝니다."}</div>}
@@ -731,7 +731,7 @@ function Policy({ B, who, company, isViewer }) {
                     </div>
                   ))}
                   <button type="button" onClick={() => { setP((o) => ({ ...o, tiers: [...o.tiers, { from: (toInt(o.tiers[o.tiers.length - 1]?.from) || 0) + 5000000, rate: (Number(o.tiers[o.tiers.length - 1]?.rate) || 0) + 2 }] })); setDirty(true); }} className="h-10 w-full rounded-xl border border-dashed border-[#C3CDDC] text-[13px] font-black text-[#5B6B85]">+ 구간 추가</button>
-                  <div className="text-[12px] font-bold text-[#7A879C]">구간에 걸친 금액만 그 구간 요율로 계산합니다(세금 누진과 같은 방식 — 구간을 넘었다고 전체가 손해 보지 않음).</div>
+                  <div className="text-[12px] font-bold text-[#7A879C]">구간에 걸친 금액만 그 구간 요율로 계산합니다(세금 누진과 같은 방식: 구간을 넘었다고 전체가 손해 보지 않음).</div>
                 </div>
               ) : <div className="mt-2 max-w-[160px]"><NumInput value={p.rate} onChange={(v) => up("rate", v)} suffix="%" /></div>}
             </div>
@@ -744,7 +744,7 @@ function Policy({ B, who, company, isViewer }) {
               <div><Label>1인 월 상한(0 = 없음)</Label><MoneyInput value={p.cap} onChange={(v) => up("cap", v)} /></div>
             </div>
             <div className="space-y-2">
-              <Toggle on={!!p.collectOnly} onClick={() => up("collectOnly", !p.collectOnly)}>수금(정산완료)된 거래처분만 지급 확정 — 미수는 보류</Toggle>
+              <Toggle on={!!p.collectOnly} onClick={() => up("collectOnly", !p.collectOnly)}>수금(정산완료)된 거래처분만 지급 확정: 미수는 보류</Toggle>
               <Toggle on={!!p.accelOn} onClick={() => up("accelOn", !p.accelOn)}>목표를 넘기면 인센티브 가속</Toggle>
               {p.accelOn && <div className="grid grid-cols-2 gap-2.5"><div><Label>목표 달성률 이상</Label><NumInput value={p.accelOver} onChange={(v) => up("accelOver", v)} suffix="%" /></div><div><Label>인센티브 배율</Label><NumInput value={p.accelFactor} onChange={(v) => up("accelFactor", v)} suffix="%" /></div></div>}
               <Toggle on={!!p.showRanking} onClick={() => up("showRanking", !p.showRanking)}>영업 담당자끼리 팀 순위 공개</Toggle>

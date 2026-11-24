@@ -101,7 +101,7 @@ export default function Attendance() {
             <div className="mt-4 flex gap-1.5">
               {PLACES.map((p) => <button key={p.key} type="button" disabled={!!rec} onClick={() => setPlace(p.key)} className={cx("flex-1 h-9 rounded-xl text-[12.5px] font-black", (rec ? rec.place : place) === p.key ? "bg-white text-navy" : "bg-white/10 text-white/80", rec && "opacity-80")}>{p.label}</button>)}
             </div>
-            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={rec ? "퇴근 메모(선택)" : "출근 메모(선택) — 예: 고객사 방문 후 출근"} className="mt-2 w-full h-10 px-3 rounded-xl bg-white/10 text-white placeholder-white/50 text-[13.5px] outline-none focus:bg-white/15" />
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={rec ? "퇴근 메모(선택)" : "출근 메모(선택) 예: 고객사 방문 후 출근"} className="mt-2 w-full h-10 px-3 rounded-xl bg-white/10 text-white placeholder-white/50 text-[13.5px] outline-none focus:bg-white/15" />
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button type="button" disabled={busy || !!rec} onClick={checkIn} className="h-14 rounded-2xl bg-white text-navy text-[17px] font-black disabled:opacity-40 shadow-lg">출근</button>
               <button type="button" disabled={busy || !rec} onClick={checkOut} className="h-14 rounded-2xl bg-[#9F8563] text-white text-[17px] font-black disabled:opacity-40 shadow-lg ring-1 ring-white/20">{rec?.outAt ? "퇴근 다시" : "퇴근"}</button>

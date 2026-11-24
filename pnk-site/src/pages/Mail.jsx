@@ -63,7 +63,7 @@ export default function Mail() {
 
   return (
     <div>
-      <Hero en="Mail" title="사내메일" desc={<span className="tnum">{myAddr || "메일 주소 없음 — 관리자에게 요청"}</span>}>
+      <Hero en="Mail" title="사내메일" desc={<span className="tnum">{myAddr || "메일 주소가 없습니다. 관리자에게 요청해 주세요."}</span>}>
         <Chip tone={external ? "green" : "gray"}>{external ? "외부 메일 연결됨" : "사내 전용"}</Chip>
         <HeroBtn icon="pen" onClick={() => setWrite({})}>메일 쓰기</HeroBtn>
       </Hero>
@@ -124,10 +124,10 @@ export default function Mail() {
             </div>
             {cur.fromUid === uid && cur.extStatus && (
               <div className={cx("mx-5 md:mx-7 mt-4 rounded-xl px-4 py-2.5 text-[13px] font-bold", cur.extStatus === "sent" ? "bg-emerald-50 text-emerald-700" : cur.extStatus === "failed" ? "bg-rose-50 text-rose-700" : "bg-navy-50 text-navy")}>
-                외부 발송 {cur.extStatus === "sent" ? "완료" : cur.extStatus === "failed" ? `실패 — ${cur.extError || ""}` : "중…"} · {(cur.extTo || []).concat(cur.extCc || []).join(", ")}
+                외부 발송 {cur.extStatus === "sent" ? "완료" : cur.extStatus === "failed" ? `실패(${cur.extError || "원인 미상"})` : "중…"} · {(cur.extTo || []).concat(cur.extCc || []).join(", ")}
               </div>
             )}
-            {cur.direction === "in" && <div className="mx-5 md:mx-7 mt-4 rounded-xl px-4 py-2 text-[12.5px] font-bold bg-amber-50 text-amber-800">외부에서 온 메일입니다 — 모르는 사람이 보낸 링크 · 첨부는 조심해 주세요.</div>}
+            {cur.direction === "in" && <div className="mx-5 md:mx-7 mt-4 rounded-xl px-4 py-2 text-[12.5px] font-bold bg-amber-50 text-amber-800">외부에서 온 메일입니다. 모르는 발신자가 보낸 링크나 첨부 파일은 열기 전에 꼭 확인해 주세요.</div>}
             {html && cur.html ? (
               <iframe title="원문" sandbox="" srcDoc={cur.html} className="mx-5 md:mx-7 my-5 w-[calc(100%-2.5rem)] md:w-[calc(100%-3.5rem)] h-[60vh] rounded-xl border border-line bg-white" />
             ) : (
@@ -179,9 +179,9 @@ function Compose({ me, members, init, onClose, onSent, external }) {
     const m = book.find((x) => mailAddr(x) === low || x.name === s || x.mailId === low);
     let rcp = m ? asR(m) : null;
     if (!rcp) {
-      if (!EMAIL.test(low)) { window.alert(`${s} — 구성원 이름 · 아이디나 메일 주소를 넣어 주세요.`); return; }
-      if (low.endsWith(`@${MAIL_DOMAIN}`)) { window.alert(`${low} — 없는 사내 주소입니다.`); return; }
-      if (!external) { window.alert(`${low} — 외부 메일(네이버 · 구글 등)은 아직 연결 전입니다.\n회사 정보 › 메일 서버에서 연결하면 보낼 수 있습니다.`); return; }
+      if (!EMAIL.test(low)) { window.alert(`${s}: 구성원 이름, 아이디 또는 메일 주소를 입력해 주세요.`); return; }
+      if (low.endsWith(`@${MAIL_DOMAIN}`)) { window.alert(`${low}: 존재하지 않는 사내 주소입니다.`); return; }
+      if (!external) { window.alert(`${low}: 외부 메일(네이버, 구글 등) 발송은 아직 연결되지 않았습니다.\n회사 정보 › 메일 서버에서 연결하면 보낼 수 있습니다.`); return; }
       rcp = { name: "", addr: low };
     }
     const setL = field === "cc" ? setCc : setTo;

@@ -8,18 +8,20 @@
 //     실제 결제가 있는 달은 그 예상 줄(Claude 구독 · Vercel · 서버비 · AI 사용량 등)을 0원으로 바꾸고 결제 금액을 더한다(이중 계산 없음)
 //  ⚠ 분 단위 읽기/쓰기, Vercel · 지도 API 호출 수, 각 업체 실제 청구서는 어디에도 기록되지 않는다 → 화면에 "추정"으로 표시.
 import React from "react";
-import { collection, doc, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { collection, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { db } from "../firebase";
 import { useCostData } from "../CostPanel";
 import { usePlatformLive } from "../PlatformLive";
-import { variableCosts, ledgerMonth, applyLedger, mergeCost } from "../costModel";
+import { variableCosts, ledgerMonth, mergeCost } from "../costModel";
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const tsMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : typeof v === "number" ? v : 0);
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 
-// Claude 단가(USD / 100만 토큰) — 화면 표시용 어림값(AiTeamPanel 과 같은 값)
-export const AI_PRICE = { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 };
+// Claude 단가(USD / 100만 토큰) — 화면 표시용 어림값(AiTeamPanel 의 PRICE 와 같은 값)
+//  🛠 2026-11-24 서버가 모두 Sonnet(오더 인식은 Haiku)으로 바뀐 뒤에도 예전 단가(4/20)가 남아 있어,
+//  관제 대시보드 · 운영 비용의 AI 사용액이 AI 본부 화면보다 2배로 나왔다 → AI 본부와 같은 값으로 맞춤
+export const AI_PRICE = { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 };
 export const aiUsd = (u) => (u ? (num(u.input) * AI_PRICE.input + num(u.output) * AI_PRICE.output + num(u.cacheRead) * AI_PRICE.cacheRead + num(u.cacheWrite) * AI_PRICE.cacheWrite) / 1e6 : 0);
 
 export const isAdminDemo = () => { try { return !!window.__kpAdminDemo; } catch { return false; } };

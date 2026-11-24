@@ -673,7 +673,7 @@ export default function UploadPage() {
 
             <div className="kpu-dock">
               <button className="kpu-btn" style={{ width: "100%", height: 54, fontSize: 16 }} disabled={!allChecked} onClick={() => allChecked && setUploadStep(2)}>
-                {allChecked ? "다음 단계 — 사진 촬영" : `확인사항을 체크해주세요 (${checks.filter(Boolean).length}/${checks.length})`}
+                {allChecked ? "다음 단계: 사진 촬영" : `확인사항을 체크해주세요 (${checks.filter(Boolean).length}/${checks.length})`}
               </button>
             </div>
           </>

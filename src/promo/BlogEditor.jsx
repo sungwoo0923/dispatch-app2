@@ -115,7 +115,7 @@ function AiDraftModal({ v, set, onDone }) {
   };
   return <Modal title="✨ AI 블로그 초안" onClose={() => set(null)}>
     <Field label="주제" hint="예: 인수증 사진, 카톡으로 다시 보내지 마세요"><Text value={v.topic} onChange={(x) => set({ ...v, topic: x })} /></Field>
-    <Field label="검색 키워드(쉼표로)" hint="네이버에서 사람들이 칠 말 — 예: 인수증 관리, 화물 인수증"><Text value={v.keywords} onChange={(x) => set({ ...v, keywords: x })} /></Field>
+    <Field label="검색 키워드(쉼표로)" hint="네이버에서 사람들이 검색할 말을 넣어요. 예: 인수증 관리, 화물 인수증"><Text value={v.keywords} onChange={(x) => set({ ...v, keywords: x })} /></Field>
     <Field label="관점 · 꼭 넣을 내용(선택)"><Text rows={3} value={v.angle} onChange={(x) => set({ ...v, angle: x })} /></Field>
     <Field label="추천 사진"><select value={v.img || ""} onChange={(e) => set({ ...v, img: e.target.value })} className="w-full h-9 rounded-lg px-2 text-[13px]" style={inp}><option value="">AI가 고르기</option>{LIBRARY.filter(([k]) => !isVideoSrc(k)).map(([k, n]) => <option key={k} value={k}>{n}</option>)}</select></Field>
     {err && <div className="text-[12.5px] mb-2" style={{ color: G.bad }}>{err}</div>}
@@ -267,7 +267,7 @@ function CardsPanel({ P, update, cardUrls }) {
     {(c.kind === "cover" || c.kind === "shot") && <>
       <Field label="화면 사진"><div className="grid grid-cols-4 gap-1 max-h-[180px] overflow-auto">{LIBRARY.filter(([x]) => !isVideoSrc(x)).map(([x, n]) => <button key={x} type="button" onClick={() => setC({ img: x })} className="rounded-md overflow-hidden" style={{ border: `2px solid ${c.img === x ? G.gold : "transparent"}` }} title={n}><img src={libUrl(x)} alt="" className="w-full h-12 object-cover" loading="lazy" /></button>)}</div></Field>
       <Field label="창 위 글자"><Text value={c.label} onChange={(v) => setC({ label: v })} /></Field>
-      <Field label="사진에서 보여 줄 곳" hint="가로 % 세로 % — 예: 60% 30%"><Text value={c.crop} onChange={(v) => setC({ crop: v })} /></Field></>}
+      <Field label="사진에서 보여 줄 곳" hint="가로 %, 세로 % 순서로 넣어요. 예: 60% 30%"><Text value={c.crop} onChange={(v) => setC({ crop: v })} /></Field></>}
     {c.kind === "points" && <Field label="항목(한 줄에 하나 · 제목 | 설명)"><textarea rows={5} value={(c.points || []).map((p) => p.filter(Boolean).join(" | ")).join("\n")} onChange={(e) => setC({ points: e.target.value.split("\n").map((l) => l.split("|").map((x) => x.trim())) })} className="w-full rounded-lg px-3 py-2 text-[13px]" style={inp} /></Field>}
     {c.kind === "vs" && <div className="grid grid-cols-2 gap-2"><Field label="왼쪽(불편)"><textarea rows={5} value={(c.a || []).join("\n")} onChange={(e) => setC({ a: e.target.value.split("\n") })} className="w-full rounded-lg px-2 py-2 text-[12.5px]" style={inp} /></Field><Field label="오른쪽(로지스웹)"><textarea rows={5} value={(c.b || []).join("\n")} onChange={(e) => setC({ b: e.target.value.split("\n") })} className="w-full rounded-lg px-2 py-2 text-[12.5px]" style={inp} /></Field></div>}
     <div className="flex flex-wrap gap-1.5">{cardUrls[k + 1] && <a href={cardUrls[k + 1]} download={`card-${k + 1}.jpg`} className="h-8 px-3 text-[12px] rounded-xl font-black flex items-center" style={GOLD_BTN}>⬇ 이 카드 JPG</a>}
@@ -291,7 +291,7 @@ function InfoPanel({ P, update, say }) {
       {titles.map((x) => <button key={x} type="button" onClick={() => update({ title: x })} className="block w-full text-left text-[12.5px] mt-1.5 rounded-lg px-2.5 py-1.5" style={{ border: `1px solid ${G.line2}`, color: G.ink }}>{x} <span style={{ color: G.dim }}>({x.length}자 · 누르면 바꿈)</span></button>)}</div>
     <Field label="한 줄 요약" hint="홈페이지 목록 · 검색 결과 설명에 나와요"><Text rows={2} value={P.summary} onChange={(v) => update({ summary: v })} /></Field>
     <Field label="태그(쉼표로)"><Text value={(P.tags || []).join(", ")} onChange={(v) => update({ tags: v.split(",").map((x) => x.trim()).filter(Boolean) })} /></Field>
-    <Field label="홈페이지 주소(영문)" hint={`logisweb.co.kr/blog/${P.slug || "주소"}/ — 발행한 뒤에는 바꾸지 않는 게 좋아요`}><div className="flex gap-1.5"><Text value={P.slug} onChange={(v) => update({ slug: slugify(v) })} /><Btn small onClick={() => update({ slug: slugify(P.keywords.split(",")[0]) || `post-${P.date}` })}>자동</Btn></div></Field>
+    <Field label="홈페이지 주소(영문)" hint={`logisweb.co.kr/blog/${P.slug || "주소"}/ · 발행한 뒤에는 바꾸지 않는 게 좋아요.`}><div className="flex gap-1.5"><Text value={P.slug} onChange={(v) => update({ slug: slugify(v) })} /><Btn small onClick={() => update({ slug: slugify(P.keywords.split(",")[0]) || `post-${P.date}` })}>자동</Btn></div></Field>
   </div>;
 }
 function NaverPanel({ P, update, say, makeCardImgs, cardUrls }) {

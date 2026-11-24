@@ -79,7 +79,7 @@ export default function HubSignup() {
     } else if (s === 1 && !loggedIn) {
       if (!/^\S+@\S+\.\S+$/.test(f.email.trim())) return "이메일을 정확히 입력해 주세요.";
       if (f.pw.length < 8) return "비밀번호는 8자 이상으로 정해 주세요.";
-      if (f.pw !== f.pw2) return "비밀번호가 서로 다릅니다.";
+      if (f.pw !== f.pw2) return "비밀번호가 서로 달라요.";
     }
     if (s === 2) {
       if (!f.name.trim()) return role === "driver" ? "이름을 입력해 주세요." : "담당자 이름을 입력해 주세요.";
@@ -93,12 +93,12 @@ export default function HubSignup() {
         if (!f.homeSido) return "거주(차고지) 지역을 골라 주세요.";
       }
       // ⭐ 2026-11-07 오더를 받는 회원(차주 · 운송사)은 운송료 받을 본인 실계좌가 꼭 있어야 한다(배차신청 규칙도 같은 기준)
-      if (role !== "shipper" && (!f.bank || f.bankNo.replace(/[^\d]/g, "").length < 6)) return "운송료 받을 계좌를 넣어 주세요";
+      if (role !== "shipper" && (!f.bank || f.bankNo.replace(/[^\d]/g, "").length < 6)) return "운송료를 받을 계좌를 넣어 주세요.";
     }
     if (s === 3) {
       const miss = docs.required.filter((k) => !files[k]);
       if (miss.length) return `필수 서류를 올려 주세요: ${miss.map((k) => DOC_TYPES[k]).join(", ")}`;
-      if (needPhoto && !files.photo) return "프로필 사진을 올려 주세요(배차된 화주에게 보이에요).";
+      if (needPhoto && !files.photo) return "프로필 사진을 올려 주세요(배차가 확정되면 등록자에게 보여요).";
     }
     if (s === 4 && !(agree.terms && agree.privacy && agree.docs)) return "모든 항목에 동의해 주세요.";
     return "";
@@ -201,7 +201,7 @@ export default function HubSignup() {
       footer={<Link to={`/login?role=${role}`} className="text-[15px] font-semibold text-[#55657F] hover:text-[#0F1A30]">이미 계정이 있나요? <b className="text-[#1B2B4B]">로그인</b></Link>}>
       {Steps}
       {existing?.status === "rejected" && existing.rejectReason && (
-        <div className="mb-4 rounded-2xl bg-[#0F1A30] text-white px-4 py-3.5 text-[15px]"><b className="text-[#8FB0F0]">거절 사유</b>, {existing.rejectReason}</div>
+        <div className="mb-4 rounded-2xl bg-[#0F1A30] text-white px-4 py-3.5 text-[15px]"><b className="text-[#8FB0F0]">거절 사유</b> {existing.rejectReason}</div>
       )}
 
       {step === 0 && (

@@ -35,10 +35,10 @@ export const AI_TEAMS = [
 ];
 const TEAM_BY_KEY = Object.fromEntries(AI_TEAMS.map((t) => [t.key, t]));
 // 🧹 2026-11-18 메뉴는 "AI 본부" 하나 — 팀은 화면 안 명단에서 고른다(예전 ai:<team> 주소는 그대로 동작)
-export const AI_TEAM_TABS = [{ key: "ai:hub", label: "AI 본부", en: "AI HQ", icon: "spark", also: [...AI_TEAMS.map((t) => `ai:${t.key}`), "ai:video"] }];
-// 🎬 2026-11-18 홍보팀 영상 작업실(숏츠 · 교육영상 기획 + 배경음악 큐시트 + 자막 SRT) — 명단에서 홍보팀 바로 아래
-const VideoStudio = React.lazy(() => import("./VideoStudio"));
-const VIDEO_ITEM = { key: "video", name: "영상 작업실", en: "VIDEO STUDIO", icon: "star", code: "VID", sub: "홍보팀 · 숏츠 · 교육영상" };
+export const AI_TEAM_TABS = [{ key: "ai:hub", label: "AI 본부", en: "AI HQ", icon: "spark", also: AI_TEAMS.map((t) => `ai:${t.key}`) }];
+// 🎬 2026-11-18 홍보팀 영상 작업실 — 🧭 2026-11-24 메뉴 정리: 화면은 관리자센터 › 홍보 › 홍보 영상 › [영상 작업실] 탭 한 곳에만 둔다.
+//  명단의 이 줄은 그 탭으로 가는 바로가기(ai:video 주소는 PlatformCenter 가 홍보 메뉴로 연다)
+const VIDEO_ITEM = { key: "video", name: "영상 작업실", en: "VIDEO STUDIO", icon: "star", code: "VID", sub: "홍보 › 홍보 영상에서 열려요" };
 
 // Claude Sonnet 5.5 단가(USD / 100만 토큰) — 화면 표시용 어림값
 const PRICE = { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 };
@@ -199,7 +199,7 @@ export function AiHq({ tab, go }) {
         </div>
       </aside>
       <div className="min-w-0">
-        {cur === "hub" ? <AiTeamHub go={go} logs={logs} stats={stats} /> : cur === "video" ? <React.Suspense fallback={<div className="py-20 text-center text-[13px]" style={{ color: G.dim }}>불러오는 중…</div>}><VideoStudio /></React.Suspense> : <AiTeamChat teamKey={cur} logs={logs} />}
+        {cur === "hub" ? <AiTeamHub go={go} logs={logs} stats={stats} /> : <AiTeamChat teamKey={cur} logs={logs} />}
       </div>
     </div>
   );

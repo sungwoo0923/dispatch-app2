@@ -349,7 +349,7 @@ function HistoryViewerModal({ history = [], onClose }) {
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50" />
-      <div className="relative bg-white rounded-t-3xl max-h-[75vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div className="relative bg-white rounded-t-3xl max-h-[75vh] flex flex-col" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }} onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-center pt-3 pb-1 shrink-0">
           <div className="w-10 h-1 rounded-full bg-gray-300" />
         </div>
@@ -683,7 +683,7 @@ export default function ShipperMobileApp() {
   }), [orders]);
 
   const logout = async () => {
-    if (!(await kpConfirm("로그아웃 하시겠습니까?"))) return;
+    if (!(await kpConfirm("로그아웃할까요?"))) return;
     await signOut(auth);
     window.location.replace("/shipper-login");
   };
@@ -728,7 +728,7 @@ export default function ShipperMobileApp() {
       )}
 
       {/* 배차완료/재배차/수정 등 실시간 알림 — PC 화주사 프로그램과 동일한 카드형 토스트 스타일 */}
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[9998] space-y-2 px-3" style={{ width: "min(480px, 94vw)" }}>
+      <div className="fixed left-1/2 -translate-x-1/2 z-[9998] space-y-2 px-3" style={{ width: "min(480px, 94vw)", top: "calc(12px + env(safe-area-inset-top, 0px))" }}>
         <style>{`
           @keyframes shipperMNotifSlideDown { 0% { opacity:0; transform:translateY(-100%); } 100% { opacity:1; transform:translateY(0); } }
           .shipper-m-notif-enter { animation: shipperMNotifSlideDown 0.3s ease-out forwards; }
@@ -777,7 +777,7 @@ export default function ShipperMobileApp() {
       {showMenu && (
         <div className="fixed inset-0 z-40">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowMenu(false)} />
-          <div className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-xl flex flex-col">
+          <div className="absolute left-0 top-0 bottom-0 w-64 bg-white shadow-xl flex flex-col" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
             <div className="relative overflow-hidden px-5 py-5" style={{ background: "radial-gradient(120% 90% at 20% 0%, #22396A 0%, #0F1A30 60%, #0B1428 100%)" }}>
               <span className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "16px 16px" }} />
               <div className="relative text-[9.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}><LogisTag height={7.5} text="SHIPPER" /></div>
@@ -798,7 +798,7 @@ export default function ShipperMobileApp() {
               <MMenuItem label="마이페이지" active={page === "mypage"} onClick={() => navTo("mypage")} />
               <MMenuItem label="설정" active={page === "settings"} onClick={() => navTo("settings")} />
             </div>
-            <div className="border-t px-4 py-3">
+            <div className="border-t px-4 pt-3" style={{ paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))" }}>
               <div className="text-xs text-gray-400 mb-0.5">{userData.companyName}</div>
               <div className="text-sm text-gray-600 mb-3">{user.email}</div>
               <button onClick={logout} className="w-full h-10 bg-[#0F1A30] text-white rounded-[11px] text-sm font-extrabold">
@@ -810,7 +810,8 @@ export default function ShipperMobileApp() {
       )}
 
       {/* 헤더 */}
-      <div className="relative overflow-hidden flex items-center justify-between px-4 h-[58px] sticky top-0 z-30 shadow-[0_6px_18px_rgba(11,20,40,0.25)]" style={{ background: "linear-gradient(135deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
+      {/* 📱 2026-11-24 노치(상태표시줄) 영역만큼 머리줄을 아래로 — 홈 화면 앱 · 전체화면에서 메뉴 버튼이 시계 밑에 가려졌다 */}
+      <div className="relative overflow-hidden flex items-center justify-between px-4 sticky top-0 z-30 shadow-[0_6px_18px_rgba(11,20,40,0.25)]" style={{ background: "linear-gradient(135deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)", height: "calc(58px + env(safe-area-inset-top, 0px))", paddingTop: "env(safe-area-inset-top, 0px)" }}>
         <span className="absolute inset-0 opacity-[0.07] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "16px 16px" }} />
         <button onClick={() => setShowMenu(true)} className="relative w-9 h-9 rounded-[11px] bg-white/10 ring-1 ring-white/15 flex items-center justify-center text-white" aria-label="메뉴">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h10" /></svg>
@@ -820,12 +821,12 @@ export default function ShipperMobileApp() {
           <div className="text-[9px] font-extrabold tracking-[0.3em] text-[#8FB0F0] mt-1" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>SHIPPER</div>
         </div>
         <div className="relative flex items-center gap-3">
-          <button onClick={() => setShowMessenger(true)} className="relative text-white/90">
+          <button onClick={() => setShowMessenger(true)} aria-label="메신저" className="relative text-white/90 w-9 h-9 -mx-1.5 flex items-center justify-center">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
             {messengerUnread > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[15px] h-[15px] bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5">
+              <span className="absolute top-0.5 right-0.5 min-w-[15px] h-[15px] bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5">
                 {messengerUnread > 99 ? "99+" : messengerUnread}
               </span>
             )}
@@ -837,7 +838,7 @@ export default function ShipperMobileApp() {
       </div>
 
       {/* 사내 메신저 */}
-      <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 99990, background: "#fff", display: "flex", flexDirection: "column", overflow: "hidden", visibility: showMessenger ? "visible" : "hidden", pointerEvents: showMessenger ? "auto" : "none" }}>
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 99990, background: "#fff", display: "flex", flexDirection: "column", overflow: "hidden", visibility: showMessenger ? "visible" : "hidden", pointerEvents: showMessenger ? "auto" : "none", paddingTop: "env(safe-area-inset-top, 0px)" }}>
         <InternalMessenger
           user={user}
           userCompany={userData.companyName}
@@ -1022,8 +1023,11 @@ function ShipperHomeM({ kpi, orders, onSelect, onGoOrder, onEdit, user }) {
           <span className="ml-auto text-[12px] font-extrabold text-[#5B6B85]" style={{ fontFamily: M_MONO, fontVariantNumeric: "tabular-nums" }}>{viewOrders.length}건</span>
         </div>
         {viewOrders.length === 0 ? (
-          <div className="text-center text-gray-400 text-sm py-6 bg-white rounded-xl border">
-            해당 날짜의 운송이 없습니다.
+          // 📱 2026-11-24 빈 화면에서 바로 배차요청으로 갈 수 있게
+          <div className="text-center py-7 px-4 bg-white rounded-2xl border border-[#E3E8F0]">
+            <div className="text-[14px] font-bold text-[#3A4A66]">이 날짜에는 운송이 없어요</div>
+            <div className="text-[12.5px] text-[#7A89A3] mt-1">새로 보낼 화물이 있으면 배차를 요청해 주세요.</div>
+            <button type="button" onClick={onGoOrder} className="mt-3 h-10 px-5 rounded-[11px] text-[13px] font-extrabold text-white" style={{ background: NAVY }}>배차요청하기</button>
           </div>
         ) : (
           <div className="space-y-2">
@@ -1521,10 +1525,10 @@ function ShipperOrderM({ user, userData, orders = [], showToast, onDone, onBack,
       {/* 오더 복사 모달 */}
       {copyOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-end">
-          <div className="w-full bg-white rounded-t-2xl max-h-[85vh] flex flex-col">
+          <div className="w-full bg-white rounded-t-2xl max-h-[85vh] flex flex-col" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
             <div className="px-4 py-3 border-b flex items-center justify-between" style={{ background: NAVY }}>
               <div className="text-white font-bold">오더 복사</div>
-              <button onClick={() => { setCopyOpen(false); setCopyResults(null); setCopySearch(""); }} className="text-white text-xl">×</button>
+              <button onClick={() => { setCopyOpen(false); setCopyResults(null); setCopySearch(""); }} aria-label="닫기" className="text-white text-xl w-9 h-9 -mr-2 flex items-center justify-center">×</button>
             </div>
             <div className="px-3 py-2 border-b space-y-2">
               <div className="flex gap-2">
@@ -2004,10 +2008,10 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
 
       {/* 사진 전체보기 */}
       {viewImg && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col">
+        <div className="fixed inset-0 z-50 bg-black/90 flex flex-col" style={{ paddingTop: "env(safe-area-inset-top, 0px)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
           <div className="flex justify-between items-center px-4 py-3">
             <div className="text-white text-sm truncate flex-1">{viewImg.name || "첨부파일"}</div>
-            <button onClick={() => setViewImg(null)} className="text-white text-2xl ml-3">×</button>
+            <button onClick={() => setViewImg(null)} aria-label="닫기" className="text-white text-2xl ml-3 w-10 h-10 -mr-2 flex items-center justify-center">×</button>
           </div>
           <div className="flex-1 flex items-center justify-center p-4">
             <img src={viewImg.base64 || viewImg.url} alt={viewImg.name} className="max-w-full max-h-full object-contain rounded" />
@@ -2921,7 +2925,7 @@ function OrderCardActionSheet({ order, onEdit, onDelete, onSwapDriver, onClose }
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col justify-end" onClick={(e) => { e.stopPropagation(); onClose(); }}>
       <div className="absolute inset-0 bg-black/50" />
-      <div className="relative bg-white rounded-t-3xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="relative bg-white rounded-t-3xl overflow-hidden" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }} onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-center pt-3 pb-1">
           <div className="w-10 h-1 rounded-full bg-gray-300" />
         </div>

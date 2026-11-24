@@ -24,11 +24,11 @@ export default function ChangePassword() {
       await reauthenticateWithCredential(user, cred);
       await updatePassword(user, newPw);
 
-      alert("비밀번호가 변경되었습니다.");
+      alert("비밀번호를 변경했어요.");
       navigate(-1);
     } catch (err) {
       if (err.code === "auth/wrong-password" || err.code === "auth/invalid-credential") {
-        setError("현재 비밀번호가 올바르지 않습니다.");
+        setError("현재 비밀번호가 맞지 않아요.");
       } else if (err.code === "auth/requires-recent-login") {
         setError("보안을 위해 다시 로그인 후 변경해 주세요.");
         setTimeout(() => navigate("/login"), 1500);

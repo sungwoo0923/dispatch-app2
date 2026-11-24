@@ -76,10 +76,10 @@ export default function ShipperLogin() {
 
     // totalMaster: only need email + password
     if (!isTotalMasterAttempt) {
-      if (!companyCode.trim()) return setError("회사코드를 입력해주세요.");
-      if (!companyName.trim()) return setError("회사명을 입력해주세요.");
+      if (!companyCode.trim()) return setError("회사코드를 입력해 주세요.");
+      if (!companyName.trim()) return setError("회사명을 입력해 주세요.");
     }
-    if (!email.trim() || !password.trim()) return setError("이메일과 비밀번호를 입력해주세요.");
+    if (!email.trim() || !password.trim()) return setError("이메일과 비밀번호를 입력해 주세요.");
 
     sessionStorage.setItem("shipperValidating", "true");
 
@@ -98,9 +98,9 @@ export default function ShipperLogin() {
       const userSnap = await getDoc(doc(db, "users", uid));
 
       if (!userSnap.exists()) {
+        await signOut(auth); // 🛠 2026-11-24 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 새로 고쳐 안내가 사라졌다
         sessionStorage.removeItem("shipperValidating");
-        await signOut(auth);
-        setError("등록된 계정 정보가 없습니다");
+        setError("등록된 계정 정보가 없어요. 가입한 이메일인지 확인해 주세요.");
         return;
       }
 
@@ -110,23 +110,23 @@ export default function ShipperLogin() {
       // totalMaster: bypass all validation
       if (!isTotalMaster) {
         if (userData.role !== "shipper") {
+          await signOut(auth); // 🛠 2026-11-24 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("shipperValidating");
-          await signOut(auth);
-          setError("화주 계정이 아닙니다");
+          setError("화주사 계정이 아니에요. 운송사 직원은 운송사 로그인에서 로그인해 주세요.");
           return;
         }
 
         if ((userData.companyName || "") !== companyName.trim()) {
+          await signOut(auth); // 🛠 2026-11-24 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("shipperValidating");
-          await signOut(auth);
-          setError("회사명이 일치하지 않습니다");
+          setError("회사명이 맞지 않아요. 가입한 회사명을 정확히 입력해 주세요.");
           return;
         }
 
         if ((userData.companyCode || "") !== companyCode.trim()) {
+          await signOut(auth); // 🛠 2026-11-24 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("shipperValidating");
-          await signOut(auth);
-          setError("회사코드가 일치하지 않습니다");
+          setError("회사코드가 맞지 않아요. 승인 안내 이메일을 확인해 주세요.");
           return;
         }
       }
@@ -158,28 +158,28 @@ export default function ShipperLogin() {
       setShowPopup(true);
       setCountdown(3);
     } catch (err) {
-      sessionStorage.removeItem("shipperValidating");
       const code = err.code;
-      // 비밀번호는 통과했는데 그 뒤 확인 단계에서 실패한 경우 — 반쯤 로그인된 상태로 남지 않게
-      if (!String(code || "").startsWith("auth/")) signOut(auth).catch(() => {});
+      // 비밀번호는 통과했는데 그 뒤 확인 단계에서 실패한 경우 — 반쯤 로그인된 상태로 남지 않게(로그아웃을 먼저 하고 "확인 중" 표시를 지운다)
+      if (!String(code || "").startsWith("auth/") && auth.currentUser) await signOut(auth).catch(() => {});
+      sessionStorage.removeItem("shipperValidating");
       if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
-        setError("비밀번호가 일치하지 않습니다");
+        setError("이메일 또는 비밀번호가 맞지 않아요. 다시 확인해 주세요.");
       } else if (code === "auth/user-not-found") {
-        setError("등록된 이메일이 없습니다");
+        setError("가입된 이메일이 아니에요. 이메일을 다시 확인해 주세요.");
       } else if (code === "auth/too-many-requests") {
-        setError("로그인 시도가 너무 많아 잠시 잠겼습니다. 몇 분 뒤 다시 시도하거나 '비밀번호 찾기'로 재설정해주세요.");
+        setError("로그인 시도가 너무 많아 잠시 잠겼어요. 몇 분 뒤 다시 시도하거나 [비밀번호 찾기]로 새로 정해 주세요.");
       } else if (code === "auth/network-request-failed") {
-        setError("인터넷 연결이 불안정해 로그인하지 못했습니다. 잠시 후 다시 시도해주세요.");
+        setError("인터넷 연결이 불안정해 로그인하지 못했어요. 잠시 뒤 다시 시도해 주세요.");
       } else if (code === "auth/user-disabled") {
-        setError("사용이 중지된 계정입니다. 관리자에게 문의하세요.");
+        setError("사용이 중지된 계정이에요. 관리자에게 문의해 주세요.");
       } else if (code === "auth/invalid-email") {
-        setError("이메일 형식이 올바르지 않습니다.");
+        setError("이메일 형식이 올바르지 않아요.");
       } else if (code === "permission-denied") {
-        setError("계정 정보를 읽을 권한이 없습니다. 관리자에게 문의하세요. (permission-denied)");
+        setError("계정 정보를 읽을 권한이 없어요. 관리자에게 문의해 주세요. (permission-denied)");
       } else {
         // ⭐ 원인 파악용으로 오류 코드를 같이 보여준다(운송사 로그인과 동일)
         console.error("[화주 로그인 실패]", err);
-        setError(`로그인에 실패했습니다. (${code || err?.message || "unknown"})`);
+        setError(`로그인하지 못했어요. 입력한 정보를 확인해 주세요. (${code || err?.message || "unknown"})`);
       }
     } finally {
       setLoading(false);
@@ -187,13 +187,13 @@ export default function ShipperLogin() {
   };
 
   const resetPw = async () => {
-    if (!email.trim()) return setError("이메일을 먼저 입력해주세요.");
+    if (!email.trim()) return setError("이메일을 먼저 입력해 주세요.");
     try {
       await sendPasswordResetEmail(auth, email.trim());
-      setMsg("재설정 링크를 이메일로 발송했습니다.");
+      setMsg("비밀번호 재설정 링크를 이메일로 보냈어요.");
       setError(null);
     } catch {
-      setError("해당 이메일을 찾을 수 없습니다.");
+      setError("가입된 이메일을 찾지 못했어요.");
     }
   };
 

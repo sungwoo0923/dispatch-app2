@@ -62,7 +62,7 @@ export function ReportErrorButton({ error, section, dark = true }) {
         style={{ height: dark ? 44 : 36, padding: dark ? "0 22px" : "0 14px", borderRadius: 10, border: "1px solid #DCE3EE", background: "#fff", color: "#1B2B4B", fontSize: dark ? 14 : 13, fontWeight: 700, cursor: "pointer", opacity: st.s === "sending" ? 0.6 : 1 }}>
         {st.s === "sending" ? "보내는 중…" : "오류 보내기"}
       </button>
-      {st.s === "fail" && <span style={{ fontSize: 11.5, color: "#B4342A" }}>보내지 못했어요 — {st.msg}</span>}
+      {st.s === "fail" && <span style={{ fontSize: 11.5, color: "#B4342A" }}>보내지 못했어요. {st.msg}</span>}
     </span>
   );
 }

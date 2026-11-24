@@ -76,7 +76,7 @@ export async function applyOwnerToOrders(orders, me, { onProgress } = {}) {
       done += chunk.length;
     } catch (e) {
       // 묶음 중 한 건이라도(그사이 지워진 오더 등) 안 되면 묶음 전체가 실패한다 → 한 건씩 다시
-      console.warn("배차담당자 묶음 저장 실패 — 한 건씩 다시", e?.message || e);
+      console.warn("배차담당자 묶음 저장 실패: 한 건씩 다시", e?.message || e);
       for (const o of chunk) {
         const p = payloadOf(o);
         try { if (p) await updateDoc(doc(db, o.__col || "orders", o._id), p); done += 1; } catch { failed += 1; }

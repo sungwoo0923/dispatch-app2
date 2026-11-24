@@ -528,7 +528,7 @@ export function CashBook({ company, isViewer = false }) {
           </div>
           <div><Label>통장 · 카드 · 현금 <span className="block md:inline font-semibold text-[#9AA9C3]">(고르면 자금 현황 잔액이 그만큼 {edit.type === "지출" ? "줄어듭니다" : "늘어납니다"})</span></Label>
             {fundOpts.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-[#C9D2E0] bg-white px-3 py-3 text-[12.5px] font-bold text-[#7A879C]">등록된 통장·카드가 없습니다 — 자금관리 › 자금 현황에서 먼저 등록해 주세요</div>
+              <div className="rounded-xl border border-dashed border-[#C9D2E0] bg-white px-3 py-3 text-[12.5px] font-bold text-[#7A879C]">등록된 통장·카드가 없습니다. 자금관리 › 자금 현황에서 먼저 등록해 주세요</div>
             ) : (
               <CustomSelect value={edit.fundId || ""} onChange={(e) => { const id = e.target.value; const f = F.byId[id]; setEdit((p) => ({ ...p, fundId: id, method: !f ? p.method : f.kind === "현금" ? "현금" : isCard(f) ? (f.kind === "법인카드" ? "법인카드" : "개인카드(정산)") : (["법인카드", "개인카드(정산)", "현금"].includes(p.method) ? "계좌이체" : p.method) })); }} className={inp}>
                 <option value="">지정 안 함 (잔액에 반영하지 않음)</option>
@@ -840,7 +840,7 @@ export function AssetManager({ company, isViewer = false }) {
       else id = (await addDoc(collection(db, "officeAssets"), { ...data, toLedger, history: [{ at: Date.now(), kind: "등록", n: data.qty, by: auth.currentUser?.email || "" }], createdAt: serverTimestamp() })).id;
       // 🔗 2026-11-01 구입가 → 수입·지출 장부 "비품 구입" 지출(자금 잔액 반영). 끄면 장부에서 빠진다
       const cost = data.category === "소모품" ? data.price : data.price * Math.max(1, data.qty);
-      await upsertAutoEntry(db, id, { company, date: data.purchaseDate, account: data.category === "소모품" ? "소모품비" : "비품구입", item: `비품 구입 · ${data.name}`, amount: toLedger ? cost : 0, vendor: data.vendor, memo: "비품·자산 등록 — 자동 반영", auto: "asset" }).catch(() => {});
+      await upsertAutoEntry(db, id, { company, date: data.purchaseDate, account: data.category === "소모품" ? "소모품비" : "비품구입", item: `비품 구입 · ${data.name}`, amount: toLedger ? cost : 0, vendor: data.vendor, memo: "비품·자산 등록: 자동 반영", auto: "asset" }).catch(() => {});
       setEdit((p) => ({ ...p, id, history: p.history || [{ at: Date.now(), kind: "등록", n: data.qty }] })); // ⭐ 2026-11-17 저장 뒤에도 그 비품을 계속 보여 준다
       return true;
     } catch (err) { alert(`저장 실패: ${err.message}`); return false; } finally { setBusy(false); }

@@ -436,7 +436,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
     unassigned.length > 0 && { tone: "bad", t: `오늘 미배차 ${unassigned.length}건`, s: `오늘 오더 ${todayRows.length}건 중 · 아직 배차가 확정되지 않았습니다`, go: null },
     late.length > 0 && { tone: "bad", t: `결재 지연 ${late.length}건`, s: "상신 후 48시간을 초과하여 진행 중입니다", go: "결재함" },
     ar && ar.over30 > 0 && { tone: "warn", t: `30일 초과 미수금 ${fmtEokMan(ar.over30)}`, s: `미수 거래처 ${ar.clients}곳 · 선입선출(오래된 청구부터 수금 반영) 기준`, go: "경영분석" },
-    topShare >= 30 && { tone: "warn", t: `거래처 매출 집중도 ${topShare.toFixed(0)}%`, s: `${topClients[0]?.[0]} — 이번 달 매출 비중`, go: "매출관리" },
+    topShare >= 30 && { tone: "warn", t: `거래처 매출 집중도 ${topShare.toFixed(0)}%`, s: `${topClients[0]?.[0]} · 이번 달 매출 비중`, go: "매출관리" },
     prevAvail && pSale > 0 && mSale > 0 && mMargin < pMargin - 2 && { tone: "warn", t: `매출총이익률 ${(pMargin - mMargin).toFixed(1)}%p 하락`, s: `전월 동기 ${pMargin.toFixed(1)}% → 이번 달 ${mMargin.toFixed(1)}%`, go: "인사이트" },
     docIssue > 0 && { tone: "warn", t: `기사 서류 미비 ${docIssue}명`, s: "미제출 · 반려 · 만료 서류가 있습니다", go: null },
     expMonth > 0 && { tone: "info", t: `이번 달 승인 지출 ${fmtEokMan(expMonth)}`, s: "전자결재 비용 · 지출 결의 승인 합계", go: "결재함" },
@@ -493,7 +493,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
             side={<Ring value={(dayNo / dim) * 100} size={52} stroke={4.5} label={`${dayNo}/${dim}`} sub="일" />} title="이번 달 경과일 비율 · 현 추세 기준(일평균 매출 × 이번 달 일수)" />
           {isCeo && (F.has
             ? <BTile en="TREASURY" label="보유 자금" money={F.cash} onClick={() => onGo?.("자금현황")} foot={F.runway != null ? `운영 가능 기간 ${F.runway.toFixed(1)}개월` : "자금현황 ›"}
-              delta={undefined} title="예금 · 현금 잔액(경리 입력 기준) — 선택하면 자금현황으로 이동합니다" />
+              delta={undefined} title="예금 · 현금 잔액(경리 입력 기준): 선택하면 자금현황으로 이동합니다" />
             : <BTile en="TREASURY" label="보유 자금" muted value={F.ready ? "자금관리 입력 전" : "불러오는 중…"} foot="경리 담당자가 예금 잔액을 입력하면 표시됩니다" onClick={() => onGo?.("자금현황")} />)}
           {ar ? <BTile en="RECEIVABLES" label="미수금" money={ar.total} foot={ar.over30 > 0 ? <span style={{ color: EX.warn }}>30일 초과 {fmtMoney(ar.over30)}</span> : `${ar.clients}곳 · 부가세 포함`} onClick={() => onGo?.("경영분석")} title="올해 배차완료 + 고정거래처 청구액(부가세 포함) − 수금액" />
             : <BTile en="RECEIVABLES" label="미수금" muted value="집계 중…" foot="올해 청구 · 수금 내역을 불러오고 있습니다" />}
@@ -676,7 +676,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
           <button type="button" onClick={() => setAutoApproveDaily(company, !autoDaily, personName(me) || "")} aria-pressed={autoDaily}
             className="w-full mb-3 rounded-2xl px-3.5 py-2.5 flex items-center gap-3 text-left transition"
             style={{ background: autoDaily ? "rgba(215,188,130,.10)" : "rgba(255,255,255,.035)", border: `1px solid ${autoDaily ? EX.lineHi : EX.line}` }}>
-            <span className="min-w-0 flex-1"><span className="block text-[14px] font-black" style={{ color: EX.text }}>일일 업무일지 자동 승인</span><span className="block text-[12.5px] font-medium" style={{ color: EX.mute }}>{autoDaily ? "켜짐 — 상신 즉시 자동 승인됩니다" : "꺼짐 — 임원이 직접 검토 후 승인합니다"}</span></span>
+            <span className="min-w-0 flex-1"><span className="block text-[14px] font-black" style={{ color: EX.text }}>일일 업무일지 자동 승인</span><span className="block text-[12.5px] font-medium" style={{ color: EX.mute }}>{autoDaily ? "켜짐: 상신 즉시 자동 승인됩니다" : "꺼짐: 임원이 직접 검토 후 승인합니다"}</span></span>
             <span className="relative w-[52px] h-[30px] rounded-full shrink-0 transition" style={{ background: autoDaily ? GOLD_GRAD : "rgba(255,255,255,.15)" }}>
               <span className={`absolute top-[3px] w-6 h-6 rounded-full bg-white shadow transition-all ${autoDaily ? "left-[25px]" : "left-[3px]"}`} />
             </span>
@@ -861,7 +861,7 @@ function TeamScheduleCompany({ company, modeSwitch }) {
   return (
     <div className="space-y-3">
       {X ? (
-        <ExecBand en="TEAM · SCHEDULE" title="직원 일정" sub="전자결재 연차 · 반차 · 외근 · 출장 · 병가 · 경조사 기준 — 결재 완료는 확정, 결재 진행 중은 점선으로 표시합니다" right={<>{modeSwitch}{monthNav}</>}>
+        <ExecBand en="TEAM · SCHEDULE" title="직원 일정" sub="전자결재 연차 · 반차 · 외근 · 출장 · 병가 · 경조사 기준: 결재 완료는 확정, 결재 진행 중은 점선으로 표시합니다" right={<>{modeSwitch}{monthNav}</>}>
           <BandStats items={stats.map(([l, v, u]) => ({ label: l, node: <Num value={v} unit={u} size={24} /> }))} />
         </ExecBand>
       ) : (
@@ -871,7 +871,7 @@ function TeamScheduleCompany({ company, modeSwitch }) {
           <div>
             <div className="text-[10.5px] font-extrabold tracking-[0.3em]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: GOLD }}>TEAM · SCHEDULE</div>
             <div className="text-[20px] md:text-[24px] font-black mt-0.5">직원 일정</div>
-            <div className="text-[12.5px] text-white/55">전자결재 연차·반차·외근·출장·병가·경조사 — 결재 완료는 확정, 진행 중은 점선</div>
+            <div className="text-[12.5px] text-white/55">전자결재 연차·반차·외근·출장·병가·경조사: 결재 완료는 확정, 진행 중은 점선</div>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
             {modeSwitch}

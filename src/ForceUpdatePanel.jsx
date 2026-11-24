@@ -88,7 +88,7 @@ export default function ForceUpdatePanel() {
     const t = setTimeout(() => { // 5초 더 지켜보고(늦게 들어온 화면) 끝낸다
       endedRef.current = cfg.id;
       setDoc(doc(db, ...FORCE_DOC), { active: false, doneAt: Date.now(), history: history.map((h) => (h.id === cfg.id ? { ...h, done: true, donePct: prog.pct, doneN: prog.total } : h)) }, { merge: true }).catch(() => { endedRef.current = ""; });
-      setMsg(`적용 완료 — 접속 중 ${prog.total}명 모두 v${cfg.version}`);
+      setMsg(`적용 완료: 접속 중 ${prog.total}명 모두 v${cfg.version}`);
     }, 5000);
     return () => clearTimeout(t);
   }, [finished, cfg?.id]); // eslint-disable-line react-hooks/exhaustive-deps

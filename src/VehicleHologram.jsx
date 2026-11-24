@@ -436,7 +436,7 @@ export default function VehicleHologram({ v, linkRaw, canEdit, onClose, onSave, 
             <div style={{ marginTop: 12, fontSize: 13.5, color: H.sub, lineHeight: 1.6 }}>
               {CLASS_LABEL[cls]} 정비 기준 · 타이어 교체 주기 {tireItem.km ? `${tireItem.km.toLocaleString()}km` : ""}{tireItem.km && tireItem.months ? " / " : ""}{tireItem.months ? `${tireItem.months}개월` : ""} 중 먼저 오는 쪽
               {tireNone > 0 && <><br />타이어 {tireNone}개는 교체 기록이 없습니다</>}
-              {!care.odometer && <><br />주행거리가 없어 교체일(개월) 기준으로만 판단합니다 — 점검·소모품에서 주행거리를 넣으면 km 기준도 함께 봅니다</>}
+              {!care.odometer && <><br />주행거리가 없어 교체일(개월) 기준으로만 판단합니다. 점검·소모품에서 주행거리를 넣으면 km 기준도 함께 봅니다</>}
             </div>
           </div>
 
@@ -467,7 +467,7 @@ export default function VehicleHologram({ v, linkRaw, canEdit, onClose, onSave, 
               </div>
               {canEdit && (
                 <div style={{ marginTop: 12, padding: 12, borderRadius: 12, border: `1px dashed ${selected.size ? H.cyan : H.line}`, opacity: selected.size ? 1 : 0.6 }}>
-                  <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 8 }}>{selected.size ? `선택한 타이어 ${selected.size}개 교체 기록 — ${selList.map((p) => p.label).join(", ")}` : "위에서 교체한 타이어를 먼저 고르세요"}</div>
+                  <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 8 }}>{selected.size ? `선택한 타이어 ${selected.size}개 교체 기록: ${selList.map((p) => p.label).join(", ")}` : "위에서 교체한 타이어를 먼저 고르세요"}</div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px,1fr))", gap: 8 }}>
                     <label style={{ fontSize: 13, fontWeight: 800, color: H.sub }}>교체일<div className="vh-date" style={{ marginTop: 3 }}>{DateField ? <DateField value={tf.date} onChange={(x) => setTf({ ...tf, date: x })} /> : <input type="date" value={tf.date} onChange={(e) => setTf({ ...tf, date: e.target.value })} style={inpH} />}</div></label>
                     <label style={{ fontSize: 13, fontWeight: 800, color: H.sub }}>교체 시 주행거리(km)<input inputMode="numeric" value={tf.km ? Number(String(tf.km).replace(/[^\d]/g, "") || 0).toLocaleString() : ""} onChange={(e) => setTf({ ...tf, km: e.target.value.replace(/[^\d]/g, "") })} style={{ ...inpH, marginTop: 3 }} placeholder="예) 152,000" /></label>

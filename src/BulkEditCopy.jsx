@@ -523,7 +523,7 @@ function EditTab({ rows, opts, lists, drivers, patchDispatch, upsertDriver, onCl
                 <Section key={side} en={side === "상차지" ? "PICKUP" : "DROP"} title={side}
                   right={(view[`${side}명`].changed || view[`${side}주소`].changed) && <button type="button" onClick={revert(`${side}명`, `${side}Id`, `${side}주소`, `${side}담당자`, `${side}담당자번호`)} className="text-[11.5px] font-bold text-[#7A89A3] hover:text-[#0F1A30] whitespace-nowrap">↺ {side} 전체 되돌리기</button>}>
                   <Cell {...cellProps(`${side}명`, `${side}명`)} span={2}>
-                    <Combo value={view[`${side}명`].v} placeholder={view[`${side}명`].mixed ? "여러 값 · 그대로 둠" : `${side} 검색 — 고르면 주소 · 담당자까지`} onChange={set(`${side}명`)} onPick={pickPlace(side)} search={searchPlaces} render={renderPlace} />
+                    <Combo value={view[`${side}명`].v} placeholder={view[`${side}명`].mixed ? "여러 값 · 그대로 둠" : `${side} 검색: 고르면 주소 · 담당자까지`} onChange={set(`${side}명`)} onPick={pickPlace(side)} search={searchPlaces} render={renderPlace} />
                   </Cell>
                   <Cell {...cellProps(`${side}주소`, "주소")} span={2}>
                     <input className={inp} value={view[`${side}주소`].v} placeholder={view[`${side}주소`].mixed ? "여러 값 · 그대로 둠" : "주소"} onChange={(e) => set(`${side}주소`)(e.target.value)} autoComplete="off" />
@@ -554,7 +554,7 @@ function EditTab({ rows, opts, lists, drivers, patchDispatch, upsertDriver, onCl
                       }} />
                     {smartList.length > 0 && (
                       <div data-bec-menu className="absolute z-20 left-0 right-0 mt-1 rounded-xl border-2 border-[#1B2B4B] bg-white shadow-2xl overflow-hidden">
-                        <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-bold">등록된 기사 {smartList.length}명 — 눌러서 넣기</div>
+                        <div className="px-3 py-1.5 bg-[#1B2B4B] text-white text-[11px] font-bold">등록된 기사 {smartList.length}명: 눌러서 넣기</div>
                         {smartList.map((d, i) => (
                           <div key={d.id || `${d.차량번호}${i}`} onMouseEnter={() => setSmartAct(i)} onMouseDown={(e) => { e.preventDefault(); applySmart(d); }}
                             className={`px-3 py-2 cursor-pointer flex items-center gap-2 border-b border-[#EEF2F8] last:border-0 ${i === smartAct ? "bg-[#EEF3FC]" : "hover:bg-[#F7F9FC]"}`}>
@@ -579,7 +579,7 @@ function EditTab({ rows, opts, lists, drivers, patchDispatch, upsertDriver, onCl
                 </Cell>
                 <div className="min-w-0 self-end pb-2 text-[11.5px] font-bold leading-snug">
                   {black ? <span className="text-[#9A1F15]">⚠ 블랙 기사예요. 한 번 더 확인해 주세요.</span>
-                    : isNewDriver ? <span className="text-[#2D6BE0]">NEW 기사관리에 없는 기사 — 저장하면 자동 등록돼요</span>
+                    : isNewDriver ? <span className="text-[#2D6BE0]">NEW 기사관리에 없는 기사: 저장하면 자동 등록돼요</span>
                       : curDriver ? <span className="text-[#5B6B85]">기사관리 등록 기사</span> : null}
                 </div>
               </Section>

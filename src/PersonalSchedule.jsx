@@ -316,7 +316,7 @@ export function PersonalTodayHost({ uid, mobile = false }) {
     try { localStorage.setItem(key, JSON.stringify([...seen, ...fresh.map((e) => e.id)])); } catch { /* 무시 */ }
     const line = (e) => `${e.allDay || !e.start ? "종일" : hmLabel(e.start)} · ${e.title}`;
     const text = fresh.length === 1 ? line(fresh[0]) : `${line(fresh[0])} 외 ${fresh.length - 1}건`;
-    if (mobile) window.dispatchEvent(new CustomEvent("kp-top-banner", { detail: { text: `📅 오늘 일정 — ${text}` } }));
+    if (mobile) window.dispatchEvent(new CustomEvent("kp-top-banner", { detail: { text: `📅 오늘 일정: ${text}` } }));
     else window.dispatchEvent(new CustomEvent("kp-banner", { detail: { id: `ps-${today}-${fresh[0].id}`, kind: "schedule", label: "오늘 개인 일정", title: text, body: fresh.length > 1 ? fresh.slice(1, 4).map(line).join("\n") : (fresh[0].place || fresh[0].memo || ""), duration: 15000 } }));
   }, [uid, list, mobile]);
   return null;

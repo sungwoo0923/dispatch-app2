@@ -240,7 +240,7 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
       }));
     } catch (e) {
       await setDoc(doc(db, "importBatches", batchId), { status: "error", error: String(e?.message || e) }, { merge: true }).catch(() => {});
-      setErr(`저장 실패: ${e?.message || e} — 일부만 저장됐다면 가져오기 기록에서 [가져오기 취소]로 지울 수 있습니다.`);
+      setErr(`저장 실패: ${e?.message || e} · 일부만 저장됐다면 가져오기 기록에서 [가져오기 취소]로 지울 수 있습니다.`);
     } finally { setBusy(""); }
   };
 
@@ -295,7 +295,7 @@ export default function SheetPlaceDriverImport({ companies = [], url: initUrl = 
           {ocr && (
             <div className="mb-3">
               <div className="h-2.5 rounded-full bg-gray-100 overflow-hidden"><div className="h-full bg-[#1B2B4B] transition-all" style={{ width: `${Math.round((ocr.done / Math.max(1, ocr.total)) * 100)}%` }} /></div>
-              <div className="mt-1.5 text-[13px] text-gray-600">{ocr.done} / {ocr.total}장 · 찾은 줄 {ocr.found}{ocr.finished ? " — 완료" : ""}</div>
+              <div className="mt-1.5 text-[13px] text-gray-600">{ocr.done} / {ocr.total}장 · 찾은 줄 {ocr.found}{ocr.finished ? " · 완료" : ""}</div>
               {ocr.error && <div className="mt-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-semibold text-red-700">{ocr.error}</div>}
             </div>
           )}

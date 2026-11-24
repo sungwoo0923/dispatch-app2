@@ -118,7 +118,7 @@ export default function RouteSpecialPresets({ canEdit = true, canAdmin = false, 
       )}
       {!seed && old.length > 0 && (
         <div>
-          <button type="button" onClick={() => setShowOld((v) => !v)} className="text-[13px] font-bold text-[#2D4C82]">{showOld ? "▾" : "▸"} 예전 "상차지 기억"(지게차 [불러오기]용) {old.length}개 — 자동으로 넣지는 않아요</button>
+          <button type="button" onClick={() => setShowOld((v) => !v)} className="text-[13px] font-bold text-[#2D4C82]">{showOld ? "▾" : "▸"} 예전 "상차지 기억"(지게차 [불러오기]용) {old.length}개: 자동으로 넣지는 않아요</button>
           {showOld && (
             <ul className="mt-2 divide-y divide-[#EEF2F8] rounded-xl border border-[#EEF1F6]">
               {old.map((p) => (

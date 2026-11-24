@@ -122,7 +122,7 @@ function MonthSideBySide({ res, a, b, compact }) {
       const pa = A.pay[k] || { cnt: 0, sale: 0, driver: 0 }, pb = B.pay[k] || { cnt: 0, sale: 0, driver: 0 };
       return [k, pa, pb, "pay"];
     }) },
-    { title: "수익률 구간별 (매출 · 건수) — 마진 낮은 오더가 늘었는지 확인", rows: MARGIN_BANDS.map((bd) => [bd.label, A.bands[bd.key], B.bands[bd.key], "pay", bd.key === "15" || bd.key === "10"]) },
+    { title: "수익률 구간별 (매출 · 건수): 마진 낮은 오더가 늘었는지 확인", rows: MARGIN_BANDS.map((bd) => [bd.label, A.bands[bd.key], B.bands[bd.key], "pay", bd.key === "15" || bd.key === "10"]) },
     { title: "손실", rows: [
       ["총 손실금액 (역마진)", A.lossAmt, B.lossAmt, "money", false, `${A.lossCnt}건`, `${B.lossCnt}건`],
       ["└ 청구운임 미입력 운반비", A.noSaleDriver, B.noSaleDriver, "money", false, `${A.noSaleCnt}건`, `${B.noSaleCnt}건`],

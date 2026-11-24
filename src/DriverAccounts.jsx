@@ -109,7 +109,7 @@ export default function DriverAccounts({ company, isViewer = false, tab = "pendi
   const fullDocs = approved.filter((u) => docRate(u) >= 1).length;
   return (
     <div className="space-y-4">
-      <BookHero en="DRIVERS · APP ACCOUNTS" title={tab === "pending" ? "기사 가입 승인" : "승인된 기사"} desc="기사앱으로 가입한 기사님 — 차량·연락처·제출 서류를 보고 승인합니다"
+      <BookHero en="DRIVERS · APP ACCOUNTS" title={tab === "pending" ? "기사 가입 승인" : "승인된 기사"} desc="기사앱으로 가입한 기사님: 차량·연락처·제출 서류를 보고 승인합니다"
         kpis={[["가입 대기", `${pending.length}명`], ["승인된 기사", `${approved.length}명`], ["필수 서류 완비", `${fullDocs}명`, `${approved.length ? Math.round((fullDocs / approved.length) * 100) : 0}%`], ["이번 달 가입", `${drivers.filter((u) => tsDay(u.createdAt).startsWith(new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7))).length}명`]]} />
       <div className="flex flex-wrap items-center gap-2">
         <div data-ro-allow className="inline-flex p-1 rounded-xl bg-white border border-[#E3E8F0]">{/* 탭 이동은 조회전용도 가능(readOnlyGuard) */}
@@ -186,7 +186,7 @@ export default function DriverAccounts({ company, isViewer = false, tab = "pendi
                     <div key={k} className="min-w-0 rounded-xl bg-white/[0.06] border border-white/10 px-3 py-2"><div className="text-[12px] font-bold text-white/50">{k}</div><div className="text-[15.5px] font-black truncate" style={k === "연락처" || k === "가입일" ? { fontFamily: MONO, fontVariantNumeric: "tabular-nums" } : undefined}>{v}</div></div>
                   ))}
                 </div>
-                {cands.some((c) => c.samePlate) && <div className="rounded-xl bg-[#8FB0F0]/15 border border-[#8FB0F0]/40 px-3 py-2 text-[13px] font-black text-[#CFE0FF]">🔗 기사관리에 같은 기사 정보가 있어요 — 승인하면 연동됩니다</div>}
+                {cands.some((c) => c.samePlate) && <div className="rounded-xl bg-[#8FB0F0]/15 border border-[#8FB0F0]/40 px-3 py-2 text-[13px] font-black text-[#CFE0FF]">🔗 기사관리에 같은 기사 정보가 있어요. 승인하면 연동됩니다</div>}
                 {u.요청사항 && <div className="rounded-xl bg-white/[0.06] border border-white/10 px-3 py-2 text-[13.5px] text-white/80 line-clamp-2">요청: {u.요청사항}</div>}
                 <div className="flex items-center gap-1.5 flex-wrap text-[12.5px] font-black">
                   {p.missing ? <span className="px-2 py-1 rounded-lg bg-white/10 text-white/80">서류 미제출 {p.missing}</span> : null}

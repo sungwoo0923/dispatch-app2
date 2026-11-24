@@ -69,7 +69,7 @@ export function attachTmapTraffic(map, elOrId) {
     lwBtn.title = lw ? "장기 공사 숨기기" : "몇 달째 이어지는 부분통제 공사도 보기";
     lwBtn.textContent = `🚧 장기 공사 ${lw ? "숨기기" : "보기"}`;
     btn.className = `kp-trf-btn l ${on ? "on" : ""}`;
-    btn.title = on ? `교통정보 끄기${note ? ` — ${note}` : ""}` : "교통정보 켜기 — 사고 · 공사 · 통제를 지도에 보여 줘요";
+    btn.title = on ? `교통정보 끄기${note ? ` — ${note}` : ""}` : "교통정보 켜기: 사고 · 공사 · 통제를 지도에 보여 줘요";
     btn.innerHTML = `<span class="dot" style="background:${on ? (note ? "#F59E0B" : "#EF4444") : "#94A3B8"}"></span>교통정보 ${on ? (note ? (st.status === "no-key" ? "연결 전" : "…") : count) : "꺼짐"}`;
   };
   const render = () => {

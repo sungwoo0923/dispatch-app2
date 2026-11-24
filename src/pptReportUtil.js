@@ -183,7 +183,7 @@ export async function generateMonthlyReportPPT({
         x: 0.7, y: 3.35, w: 11.93, h: 3.4, rectRadius: 0.08,
         fill: { color: t.secondary }, line: { type: "none" },
       });
-      slide.addText("AI 분석 코멘트 — 매출 및 수익성", {
+      slide.addText("AI 분석 코멘트: 매출 및 수익성", {
         x: 1.0, y: 3.6, w: 11.3, h: 0.4,
         fontFace: FONT, fontSize: 13, color: t.primary, bold: true, margin: 0,
       });

@@ -135,14 +135,14 @@ export function RecurringManagerModal({ form, onClose }) {
         withDriver: withDriver && hasDriver, dropOffset, order: orderSnapshot({ ...form, companyName: company }), companyName: company,
         createdBy: auth.currentUser?.email || "", createdAt: serverTimestamp(),
       });
-      setMsg(`등록했습니다 — ${daysLabel(days)} ${when === "same" ? "당일" : "전날"} ${hour}시에 자동으로 만들어집니다`);
+      setMsg(`등록했습니다. ${daysLabel(days)} ${when === "same" ? "당일" : "전날"} ${hour}시에 자동으로 만들어집니다`);
     } catch (e) { setMsg(`⚠ ${e.message}`); } finally { setBusy(""); }
   };
   const run = async () => {
     setBusy("run"); setMsg("");
     try {
       const d = await callFn("automation", { action: "recurringRun", date: runDate, company });
-      setMsg(d.created ? `${runDate} 오더 ${d.created}건을 만들었습니다 — ${d.names.join(", ")}` : `${runDate}에 새로 만들 정기오더가 없습니다(요일이 아니거나 이미 만듦)`);
+      setMsg(d.created ? `${runDate} 오더 ${d.created}건을 만들었습니다. ${d.names.join(", ")}` : `${runDate}에 새로 만들 정기오더가 없습니다(요일이 아니거나 이미 만듦)`);
     } catch (e) { setMsg(`⚠ ${e.message}`); } finally { setBusy(""); }
   };
 
@@ -162,7 +162,7 @@ export function RecurringManagerModal({ form, onClose }) {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <label className={`inline-flex items-center gap-2 text-[13px] font-bold ${hasDriver ? "text-[#0F1A30]" : "text-[#B4BFD0]"}`}>
                 <input type="checkbox" checked={withDriver && hasDriver} disabled={!hasDriver} onChange={(e) => setWithDriver(e.target.checked)} />
-                고정 기사도 같이{hasDriver ? ` (${form.차량번호} ${form.이름 || ""})` : " — 입력된 기사 없음"}
+                고정 기사도 같이{hasDriver ? ` (${form.차량번호} ${form.이름 || ""})` : " · 입력된 기사 없음"}
               </label>
               <button onClick={add} disabled={!!busy} className="h-10 px-6 rounded-xl bg-[#0F1A30] text-white text-[14px] font-black disabled:opacity-50">
                 {busy === "add" ? "등록 중…" : "정기오더 등록"}
@@ -297,7 +297,7 @@ export function CloseReportModal({ result, onClose }) {
               </div>
             ))}
           </Box>
-          <textarea value={memo} onChange={(e) => setMemo(e.target.value)} rows={3} placeholder="전달 메모(선택) — 예: 내일 김포 2건 기사 미정, 오전 중 확정 예정"
+          <textarea value={memo} onChange={(e) => setMemo(e.target.value)} rows={3} placeholder="전달 메모(선택), 예: 내일 김포 2건 기사 미정, 오전 중 확정 예정"
             className="w-full px-4 py-3 rounded-2xl border border-[#DCE3EE] bg-white text-[13.5px] text-[#0F1A30] outline-none focus:border-[#4B6CB7] resize-none" />
           {err && <div className="text-[13px] font-bold text-[#0F1A30]">⚠ {err}</div>}
           <button onClick={send} disabled={!!busy || !to.size} className="w-full h-12 rounded-2xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-40 shadow-[0_8px_18px_rgba(15,26,48,0.22)]">

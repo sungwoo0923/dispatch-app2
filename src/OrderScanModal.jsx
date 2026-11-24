@@ -449,10 +449,10 @@ export default function OrderScanModal({ onClose, onApply, places: placesRaw = [
     [["거래처명", clients, "거래처"], ["상차지명", places, "상차지"], ["하차지명", places, "하차지"]].forEach(([k, list, label]) => {
       const n = String(vals[k] || "").trim();
       if (issues.some((x) => String(x.msg || "").includes("등록되지 않은") && String(x.field || "").startsWith(label))) return; // 이미 같은 안내가 있다
-      if (n && (list || []).length && isNewPlace(n, list)) issues.push({ field: `_new_${k}`, level: "warn", msg: `「${n}」은(는) 등록되지 않은 ${label}예요(신규) — 이름 · 주소를 확인해 주세요` });
+      if (n && (list || []).length && isNewPlace(n, list)) issues.push({ field: `_new_${k}`, level: "warn", msg: `「${n}」은(는) 등록되지 않은 ${label}예요(신규): 이름 · 주소를 확인해 주세요` });
     });
     const vias = String(viaByBlock.current[bi] || "").split(/[,，、/]/).map((x) => x.trim()).filter(Boolean);
-    if (vias.length) issues.push({ field: "_via", level: "info", msg: `경유 하차 ${vias.length}곳: ${vias.join(" → ")} — 적용하면 경유 하차로 들어가요` });
+    if (vias.length) issues.push({ field: "_via", level: "info", msg: `경유 하차 ${vias.length}곳: ${vias.join(" → ")} · 적용하면 경유 하차로 들어가요` });
   }
   const issueOf = (k) => issues.find((x) => x.field === k && x.level !== "info");
   // 노란 칸 — AI · 규칙 인식이 서로 다르거나 자신 없는 칸(사용자가 고치면 사라진다)

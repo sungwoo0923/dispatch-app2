@@ -58,7 +58,7 @@ function FundFields({ f, set, funds = [], selfId }) {
             </CustomSelect>
           </div>
           <div><Lbl>{card ? "카드번호" : "계좌번호"}</Lbl>
-            <input inputMode="numeric" value={card ? formatCardNo(f.number) : formatAccount(f.bank, f.number)} onChange={(e) => set({ number: onlyDigits(e.target.value) })} className={`${inp} tabular-nums tracking-wide`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} placeholder={card ? "0000-0000-0000-0000" : f.bank ? "숫자만 — 하이픈 자동" : "은행을 먼저 고르세요"} />
+            <input inputMode="numeric" value={card ? formatCardNo(f.number) : formatAccount(f.bank, f.number)} onChange={(e) => set({ number: onlyDigits(e.target.value) })} className={`${inp} tabular-nums tracking-wide`} style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} placeholder={card ? "0000-0000-0000-0000" : f.bank ? "숫자만: 하이픈 자동" : "은행을 먼저 고르세요"} />
           </div>
           <div className="col-span-2"><Lbl>{card ? "사용자(명의)" : "예금주"}</Lbl><input value={f.holder || ""} onChange={(e) => set({ holder: e.target.value })} className={inp} placeholder={card ? "예: 홍길동 / (주)회사명" : "예: (주)회사명"} /></div>
         </>
@@ -73,7 +73,7 @@ function FundFields({ f, set, funds = [], selfId }) {
       {card && f.payType === "체크" && (
         <div className="col-span-2"><Lbl>연결 통장 <span className="font-semibold text-[#9AA9C3]">(이 카드로 쓰면 이 통장 잔액에서 빠집니다)</span></Lbl>
           <CustomSelect value={f.linkFundId || ""} onChange={(e) => set({ linkFundId: e.target.value })} className={inp}>
-            <option value="">연결 안 함 — 카드 자체 잔액으로 관리</option>
+            <option value="">연결 안 함: 카드 자체 잔액으로 관리</option>
             {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}{a.bank ? ` · ${a.bank}` : ""}{last4(a) ? ` ${last4(a)}` : ""}</option>)}
           </CustomSelect>
         </div>
@@ -209,7 +209,7 @@ function FundsBoardOffice({ company, canEdit = true }) {
   if (funds === null) return <BookSkeleton rows={5} />; // ⭐ 2026-11-06 뼈대 화면
   return (
     <div className="space-y-4">
-      <BookHero en="FINANCE · TREASURY" title="자금 현황" desc="통장·카드·현금·예금·대출 잔액과 현금 흐름 — 장부에서 통장·카드를 고르면 자동으로 늘고 줄어듭니다"
+      <BookHero en="FINANCE · TREASURY" title="자금 현황" desc="통장·카드·현금·예금·대출 잔액과 현금 흐름: 장부에서 통장·카드를 고르면 자동으로 늘고 줄어듭니다"
         right={<div className="flex items-center gap-2 flex-wrap"><ManualButton menu="자금관리" section="funds" dark />{canEdit && funds.length > 0 && <button type="button" onClick={() => setAcc({})} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black whitespace-nowrap">+ 통장·카드 등록</button>}</div>}
         kpis={[
           ["보유 자금", `${won(S.cash)}원`, `${assetList.length}개 계좌·현금`],

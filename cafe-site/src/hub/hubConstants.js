@@ -66,7 +66,7 @@ export const PAY_HINT = {
 };
 export const LEDGER_LABEL = {
   charge: "충전", hold: "배차 확정", release: "환불", return_refund: "회차 환불", deduct: "운임 정산", fee_income: "수수료 입금", payout_scheduled: "운송료 지급 예정",
-  payout_done: "운송료 지급", fee_paid: "수수료 납부", fee_owed: "미정산 발생", debt_paid: "미정산 상환", adjust: "관리자 조정", platform_fee: "플랫폼 수수료",
+  payout_done: "운송료 지급", payout_cancel: "지급 취소", fee_paid: "수수료 납부", fee_owed: "미정산 발생", debt_paid: "미정산 상환", adjust: "관리자 조정", platform_fee: "플랫폼 수수료",
   withdraw_req: "출금 신청", withdraw_done: "출금 완료", withdraw_cancel: "출금 취소",
 };
 export const SETTLE_LABEL = {

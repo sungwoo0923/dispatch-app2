@@ -103,7 +103,7 @@ export default function FreightFarePage({ mode, jobs, places = [], onOpen }) {
                   <div className="py-8 text-center">
                     <div className="text-[11px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO }}>RATE ENGINE · READY</div>
                     <div className="text-[17px] font-black mt-2">왼쪽에 구간 조건을 넣으면 지난 운임을 찾아요</div>
-                    <div className="text-[13px] text-white/60 mt-1">{mode === "container" ? "작업지(도어)만 넣어도 돼요 — 픽업지 · 규격까지 같으면 '같은 구간'" : mode === "sea" ? "선적항 · 도착항을 넣어 주세요 — 형태가 같으면 '같은 구간'" : "출발 · 도착 공항을 넣어 주세요 — kg당 단가도 계산해요"}</div>
+                    <div className="text-[13px] text-white/60 mt-1">{mode === "container" ? "작업지(도어)만 넣어도 돼요. 픽업지 · 규격까지 같으면 '같은 구간'" : mode === "sea" ? "선적항 · 도착항을 넣어 주세요. 형태가 같으면 '같은 구간'" : "출발 · 도착 공항을 넣어 주세요. kg당 단가도 계산해요"}</div>
                   </div>
                 ) : (
                   <>

@@ -132,7 +132,7 @@ export default function HubLogin() {
             <input className={inputCls} type="tel" inputMode="numeric" autoComplete="tel" placeholder="010-0000-0000" value={f.phone} onChange={(e) => setF((p) => ({ ...p, phone: fmtPhone(e.target.value) }))} data-testid="login-phone" />
           </Field>
         </>}
-        {admin && <div className="rounded-2xl bg-[#0F1A30] text-white px-4 py-3 text-[15px] font-bold flex items-center gap-2" data-testid="admin-mode"><HI name="shield" size={18} className="text-[#8FB0F0]" />관리자 로그인 — 이메일 · 비밀번호만 넣어요</div>}
+        {admin && <div className="rounded-2xl bg-[#0F1A30] text-white px-4 py-3 text-[15px] font-bold flex items-center gap-2" data-testid="admin-mode"><HI name="shield" size={18} className="text-[#8FB0F0]" />관리자 로그인이에요. 이메일과 비밀번호만 넣어 주세요.</div>}
         {!lw && !plateLogin && <>
           <Field label="이메일"><input className={inputCls} type="email" autoComplete="username" placeholder="name@company.com" value={f.email} onChange={set("email")} data-testid="login-email" /></Field>
           <Field label="비밀번호">
@@ -164,7 +164,7 @@ export default function HubLogin() {
           <Field label="회사명"><CompanySearch value={f.companyName} onChange={(v) => setF((p) => ({ ...p, companyName: v }))} /></Field>
           <Field label="이메일"><input className={inputCls} type="email" autoComplete="username" placeholder="로지스웹 로그인 이메일" value={f.email} onChange={set("email")} data-testid="login-email" /></Field>
           <Field label="비밀번호"><input className={inputCls} type="password" autoComplete="current-password" placeholder="로지스웹 비밀번호" value={f.password} onChange={set("password")} data-testid="login-password" /></Field>
-          <div className="text-[13.5px] text-[#5F6E87]">최고관리자는 이메일 · 비밀번호만 넣으면 돼요.</div>
+          <div className="text-[13.5px] text-[#5F6E87]">최고관리자는 이메일과 비밀번호만 넣으면 돼요.</div>
         </>}
 
         {err && <div role="alert" data-testid="login-error" className="rounded-2xl bg-[#F5F8FD] ring-1 ring-inset ring-[#C7D3E8] px-4 py-3 text-[15px] font-bold text-[#0F1A30] flex gap-2"><HI name="alert" size={18} className="shrink-0 mt-0.5 text-[#2D4C82]" />{err}</div>}

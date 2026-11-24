@@ -307,7 +307,7 @@ export function FareTypeSelect({ value, onChange, pct, rules = [], className = "
       onMouseDown: (e) => e.stopPropagation(),
       onKeyDown: onKey,
       className: `${base} focus:outline-none focus:ring-4 focus:ring-[#4B6CB7]/15 disabled:opacity-50 disabled:cursor-not-allowed ${className}`,
-      title: cur ? `운임구분: ${cur.name} (${cur.type === "fixed" ? `수수료 고정 ${fmtRuleVal(cur)}` : `수수료 ${fmtRuleVal(cur)}`}) — 눌러서 바꾸기` : "운임구분 — 회사관리 › 운임 규칙에서 정한 계산으로 기사운임·수수료를 자동으로 채웁니다",
+      title: cur ? `운임구분: ${cur.name} (${cur.type === "fixed" ? `수수료 고정 ${fmtRuleVal(cur)}` : `수수료 ${fmtRuleVal(cur)}`}): 눌러서 바꾸기` : "운임구분: 회사관리 › 운임 규칙에서 정한 계산으로 기사운임·수수료를 자동으로 채웁니다",
     }, label, chev),
     open && pos ? createPortal(h("div", {
       ref: menu, role: "listbox", "data-fare-menu": "1",
@@ -420,7 +420,7 @@ export function FarePctInput({ form, rules, onChange, className = "", compact = 
   const shown = raw === undefined || raw === null ? String(toNum(base.value)) : String(raw);
   const diff = farePctOf(form) !== null && farePctOf(form) !== toNum(base.value);
   return h("span", { className: `relative inline-flex items-center shrink-0 ${className}`, "data-fare-pct": "1",
-    title: `이 오더의 수수료${fixed ? "(원)" : "율(%)"} — 운임구분 기본 ${fmtRuleVal(base)}. 바꾸면 기사운임·수수료가 다시 계산됩니다` },
+    title: `이 오더의 수수료${fixed ? "(원)" : "율(%)"} · 운임구분 기본 ${fmtRuleVal(base)}. 바꾸면 기사운임·수수료가 다시 계산됩니다` },
     h("input", {
       type: "text", inputMode: "decimal", autoComplete: "off", disabled,
       "aria-label": "이 오더 수수료율",

@@ -46,7 +46,7 @@ export default function HubPlaces({ me, toast }) {
         <Btn onClick={() => setEd({})} data-testid="pl-add"><HI name="plus" size={17} />추가</Btn>
       </div>
       <div className="text-[13.5px] text-[#5F6E87] px-1">화물을 등록하면 상차지와 하차지가 여기 저장돼요. {rows ? `${rows.length}곳` : ""}</div>
-      {rows && shown.length === 0 ? <Empty icon="pin" title={q ? "찾는 곳이 없어요" : "저장한 곳이 없어요"} /> : (
+      {rows === null ? <div className="py-12 text-center text-[15px] text-[#5F6E87]" data-testid="places-loading">불러오고 있어요</div> : shown.length === 0 ? <Empty icon="pin" title={q ? "찾는 곳이 없어요" : "저장한 곳이 없어요"} /> : (
         <div className="grid lg:grid-cols-2 gap-2.5" data-testid="places-list">
           {shown.map((p) => (
             <Card key={p.id} className="p-4 flex items-start gap-3" data-testid="place-row">

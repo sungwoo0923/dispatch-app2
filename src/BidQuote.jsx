@@ -466,7 +466,7 @@ export default function BidQuote({ dispatchData = [], userCompany = "", clients 
                 {book && (
                   <div className="mt-4">
                     <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                      <div className="text-[13px] font-black text-[#0F1A30]">{book.name} — 단가표 {book.tables.length}개를 찾았어요</div>
+                      <div className="text-[13px] font-black text-[#0F1A30]">{book.name} · 단가표 {book.tables.length}개를 찾았어요</div>
                       {book.tables.length > 1 && <button onClick={makeAllTables} className={btn}>표마다 따로 만들기</button>}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[300px] overflow-y-auto">

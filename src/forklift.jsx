@@ -127,7 +127,7 @@ export function ForkliftDriverManager({ isViewer = false }) {
         <div className="mr-auto">
           <div className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>FORKLIFT DRIVERS</div>
           <div className="text-[16px] font-black text-[#0F1A30]">지게차 기사 <span className="text-[13px] text-[#7A89A3] font-bold">{list.length}명</span></div>
-          <div className="text-[12px] text-[#7A89A3]">오더의 지게차비용을 받는 기사 — 오더등록 [+ 지게차]에서 고르고, 정산관리 › 지게차 지급에서 지급합니다</div>
+          <div className="text-[12px] text-[#7A89A3]">오더의 지게차비용을 받는 기사: 오더등록 [+ 지게차]에서 고르고, 정산관리 › 지게차 지급에서 지급합니다</div>
         </div>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름·전화·회사 검색" className="h-9 w-52 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold" />
         {!isViewer && <button type="button" onClick={() => setChooser(true)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B] hover:border-[#4B6CB7]">대용량 업로드</button>}
@@ -137,7 +137,7 @@ export function ForkliftDriverManager({ isViewer = false }) {
         <table className="w-full text-[13.5px]" style={{ minWidth: 900 }}>
           <thead><tr className="bg-[#1B2B4B] text-white">{["이름", "전화번호", "지게차회사", "은행", "계좌번호", "예금주", "메모", "사용", ""].map((h) => <th key={h} className={th}>{h}</th>)}</tr></thead>
           <tbody>
-            {rows.length === 0 && <tr><td colSpan={9} className="py-14 text-center text-[#9AA9C3]">{list.length ? "검색 결과가 없습니다" : "등록된 지게차 기사가 없습니다 — [+ 지게차 기사] 또는 [대용량 업로드]로 등록하세요"}</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={9} className="py-14 text-center text-[#9AA9C3]">{list.length ? "검색 결과가 없습니다" : "등록된 지게차 기사가 없습니다. [+ 지게차 기사] 또는 [대용량 업로드]로 등록하세요"}</td></tr>}
             {rows.map((d) => (
               <tr key={d.id} className="border-t border-[#EEF1F6] hover:bg-[#F7F9FC]">
                 <td className={`${td} font-black text-[#0F1A30]`}>{d.이름}</td>
@@ -577,7 +577,7 @@ function SpecialFareModal({ form, asString, mobile, onClose, onApply }) {
             {diffRow("수익", orderProfit(base), orderProfit(after))}
           </div>
           {paidOut(after) > 0 && <div className="text-[11.5px] font-bold text-[#7A89A3] mb-2">회사가 따로 지급 {c(paidOut(after))}원{hasForklift(after) ? ` (지게차 ${c(fkAmount(after))}${after.지게차기사명 ? ` · ${after.지게차기사명}` : ""})` : ""}</div>}
-          {autoCount > 0 && <div className="text-[11.5px] font-bold text-[#2D4C82] mb-2" data-sf-auto="1">고정노선운임으로 자동으로 들어간 항목 {autoCount}개 — [적용]하면 이 오더는 직접 정한 값으로 바뀌어요(노선을 바꿔도 그대로)</div>}
+          {autoCount > 0 && <div className="text-[11.5px] font-bold text-[#2D4C82] mb-2" data-sf-auto="1">고정노선운임으로 자동으로 들어간 항목 {autoCount}개: [적용]하면 이 오더는 직접 정한 값으로 바뀌어요(노선을 바꿔도 그대로)</div>}
           {canRoute && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2.5 text-[12.5px] font-bold text-[#1B2B4B]" data-sf-route="1">
               <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={saveRoute} onChange={(e) => setSaveRoute(e.target.checked)} data-sf-route-save="1" />고정노선운임으로 등록 <span className="text-[#7A89A3] font-semibold">({form.거래처명} · {routeWithFrom || !form.하차지명 ? `${form.상차지명 || ""} → ` : ""}{form.하차지명 || "모든 하차지"})</span></label>

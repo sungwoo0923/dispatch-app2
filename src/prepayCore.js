@@ -184,7 +184,7 @@ export function matchPrepay(items, pool, opts = {}) {
     const done = doneByApproval.get(normApproval(r.approvalNo));
     if (r.approvalNo && done?.length) { r.status = "done"; r.orders = done; r.sum = sumOf(done); r.reason = "이미 반영된 계산서"; return; }
     if (!r.plateKey) { r.status = "none"; r.reason = "차량번호 없음"; return; }
-    if (fleet.has(r.plateKey)) { r.status = "fleet"; r.reason = "소속 차량 — 지입정산관리에서 지급"; }
+    if (fleet.has(r.plateKey)) { r.status = "fleet"; r.reason = "소속 차량: 지입정산관리에서 지급"; }
   });
   const open = () => res.filter((r) => r.status === "none" && r.plateKey && byPlate.has(r.plateKey));
   // 1) 같은 날 오더(계산서 날짜 = 상차일)
@@ -217,9 +217,9 @@ export function matchPrepay(items, pool, opts = {}) {
     const same = r.invoiceDate ? cands.filter((o) => String(o.상차일 || "").slice(0, 10) === r.invoiceDate) : [];
     const pick = same.length ? same : cands;
     take(r, pick, same.length ? "같은 날 오더(금액 다름)" : `기간 안 ${pick.length}건(금액 다름)`, "check");
-    r.reason = `금액이 달라요 — 파일 ${r.amount.toLocaleString()}원 · 오더 기사운임 ${r.sum.toLocaleString()}원(부가세 포함 ${Math.round(r.sum * 1.1).toLocaleString()}원)`;
+    r.reason = `금액이 달라요. 파일 ${r.amount.toLocaleString()}원 · 오더 기사운임 ${r.sum.toLocaleString()}원(부가세 포함 ${Math.round(r.sum * 1.1).toLocaleString()}원)`;
   });
-  res.forEach((r) => { if (r.status === "none" && !r.reason) r.reason = fleet.has(r.plateKey) ? "소속 차량 — 지입정산관리에서 지급" : "이 차량의 미지급 용차 오더 없음"; });
+  res.forEach((r) => { if (r.status === "none" && !r.reason) r.reason = fleet.has(r.plateKey) ? "소속 차량: 지입정산관리에서 지급" : "이 차량의 미지급 용차 오더 없음"; });
   return res;
 }
 

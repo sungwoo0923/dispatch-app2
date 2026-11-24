@@ -67,10 +67,10 @@ function PasswordChange({ otherIds }) {
   const submit = async () => {
     if (!cur || !pw1 || !pw2) return setMsg({ type: "err", text: "모든 칸을 입력해 주세요." });
     if (pw1.length < 6) return setMsg({ type: "err", text: "새 비밀번호는 6자 이상이어야 합니다." });
-    if (pw1 !== pw2) return setMsg({ type: "err", text: "새 비밀번호 확인이 일치하지 않습니다." });
+    if (pw1 !== pw2) return setMsg({ type: "err", text: "새 비밀번호 확인이 맞지 않아요." });
     if (pw1 === cur) return setMsg({ type: "err", text: "현재 비밀번호와 다른 비밀번호를 입력해 주세요." });
     const user = auth.currentUser;
-    if (!user?.email) return setMsg({ type: "err", text: "로그인 정보를 확인할 수 없습니다. 다시 로그인해 주세요." });
+    if (!user?.email) return setMsg({ type: "err", text: "로그인 정보를 확인하지 못했어요. 다시 로그인해 주세요." });
     setBusy(true); setMsg({ type: "", text: "" });
     try {
       try {
@@ -83,14 +83,14 @@ function PasswordChange({ otherIds }) {
       await updatePassword(user, pw1);
       if (logoutOthers && otherIds.length) await endSessions(otherIds, "password", getDeviceLabel()).catch(() => {});
       setCur(""); setPw1(""); setPw2("");
-      setMsg({ type: "ok", text: `비밀번호가 변경되었습니다.${logoutOthers && otherIds.length ? ` 다른 기기 ${otherIds.length}대는 로그아웃되었습니다.` : ""}` });
+      setMsg({ type: "ok", text: `비밀번호를 변경했어요.${logoutOthers && otherIds.length ? ` 다른 기기 ${otherIds.length}대는 로그아웃했어요.` : ""}` });
     } catch (e) {
       const code = e?.code || "";
       setMsg({
         type: "err",
-        text: code === "auth/wrong-password" || code === "auth/invalid-credential" ? "현재 비밀번호가 올바르지 않습니다."
-          : code === "auth/too-many-requests" ? "시도가 너무 많습니다. 잠시 후 다시 해주세요."
-            : code === "auth/weak-password" ? "비밀번호가 너무 쉽습니다. 6자 이상으로 다시 입력해 주세요."
+        text: code === "auth/wrong-password" || code === "auth/invalid-credential" ? "현재 비밀번호가 맞지 않아요."
+          : code === "auth/too-many-requests" ? "시도가 너무 많아요. 잠시 뒤 다시 해 주세요."
+            : code === "auth/weak-password" ? "비밀번호가 너무 쉬워요. 6자 이상으로 다시 입력해 주세요."
               : code.startsWith("mfa/") || code.includes("verification") || code === "auth/code-expired" ? mfaErrorText(e)
                 : `변경 실패: ${e?.message || e}`,
       });
@@ -145,7 +145,7 @@ export default function LoginManager({ user }) {
       <SecurityPanel user={user} isAdmin={isMaster} Section={Section} />
       <Section
         title="로그인된 기기"
-        desc="한 계정은 PC 1대 + 모바일 1대까지 동시에 로그인할 수 있습니다. 같은 종류 기기로 새로 로그인하면 기존 기기는 끊깁니다."
+        desc="한 계정은 PC 1대와 모바일 1대까지 함께 로그인할 수 있어요. 같은 종류 기기로 새로 로그인하면 기존 기기는 끊겨요."
         right={others.length > 0 && (
           <button onClick={() => kick(others.map((s) => s.id))} disabled={busyId === "all"} className="shrink-0 px-3 py-2 rounded-xl border border-red-300 text-red-600 text-[12.5px] font-bold hover:bg-red-50 disabled:opacity-60">
             다른 기기 모두 로그아웃
@@ -155,7 +155,7 @@ export default function LoginManager({ user }) {
         {list === null ? (
           <div className="text-[13px] text-gray-500 py-4 text-center">불러오는 중…</div>
         ) : active.length === 0 ? (
-          <div className="text-[13px] text-gray-500 py-4 text-center">로그인 기록이 아직 없습니다. 다시 로그인하면 표시됩니다.</div>
+          <div className="text-[13px] text-gray-500 py-4 text-center">로그인 기록이 아직 없어요. 다시 로그인하면 보여요.</div>
         ) : (
           <div className="space-y-2">
             {active.map((s) => {
@@ -184,13 +184,13 @@ export default function LoginManager({ user }) {
       </Section>
 
       {isMaster && (
-        <Section title="2차 비밀번호" desc="최고관리자 · 부관리자 — 로그인할 때 비밀번호 다음에 넣는 2차 비밀번호(8자 이상)를 바꿉니다. PnK 인트라넷과 같은 2차 비밀번호를 씁니다.">
+        <Section title="2차 비밀번호" desc="최고관리자 · 부관리자: 로그인할 때 비밀번호 다음에 넣는 2차 비밀번호(8자 이상)를 바꿉니다. PnK 인트라넷과 같은 2차 비밀번호를 씁니다.">
           <AdminCodeChange />
         </Section>
       )}
 
       {isMaster && (
-        <Section title="새 기기 문자 인증 (휴대폰)" desc="최고관리자 · 부관리자 — 처음 로그인하는 기기(PC · 휴대폰)에서만 2차 비밀번호 다음에 이 번호로 인증번호 6자리를 한 번 확인합니다. 한 번 확인한 기기는 다시 묻지 않습니다.">
+        <Section title="새 기기 문자 인증 (휴대폰)" desc="최고관리자 · 부관리자: 처음 로그인하는 기기(PC · 휴대폰)에서만 2차 비밀번호 다음에 이 번호로 인증번호 6자리를 한 번 확인합니다. 한 번 확인한 기기는 다시 묻지 않습니다.">
           <PcVerifySection user={user} phone={pcPhone} />
         </Section>
       )}
@@ -199,7 +199,7 @@ export default function LoginManager({ user }) {
         <PasswordChange otherIds={others.map((s) => s.id)} />
       </Section>
 
-      <Section title="최근 로그인 기록" desc="최근 7일 안에 끝난 로그인 10건(7일 지나면 자동 삭제) — 모르는 기기가 있으면 비밀번호를 바꿔주세요.">
+      <Section title="최근 로그인 기록" desc="최근 7일 안에 끝난 로그인 10건(7일 지나면 자동 삭제): 모르는 기기가 있으면 비밀번호를 바꿔주세요.">
         {history.length === 0 ? (
           <div className="text-[13px] text-gray-500 py-3 text-center">기록이 없습니다.</div>
         ) : (
@@ -286,7 +286,7 @@ export function AdminSessionsPanel({ isTotalMaster, company, roleLabels = {} }) 
       {list === null ? (
         <div className="text-[13px] text-gray-500 text-center py-16">불러오는 중…</div>
       ) : rows.length === 0 ? (
-        <div className="text-[13px] text-gray-500 text-center py-16">로그인 중인 기기가 없습니다.</div>
+        <div className="text-[13px] text-gray-500 text-center py-16">로그인 중인 기기가 없어요.</div>
       ) : (
         <table className="w-full text-[13px]">
           <thead>
@@ -306,7 +306,7 @@ export function AdminSessionsPanel({ isTotalMaster, company, roleLabels = {} }) 
                 <td className="px-2 py-2.5 text-center text-gray-500 whitespace-nowrap">{timeAgo(sessionLastMs(s))}</td>
                 <td className="px-2 py-2.5 text-center">
                   {s.id === myId ? <span className="text-[11.5px] font-bold text-[#1B2B4B]">이 기기</span> : isMasterSession(s) && !isTotalMaster ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#EEF3FB] text-[#1B2B4B] text-[12px] font-bold" title="최고관리자의 로그인은 끊을 수 없습니다">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#EEF3FB] text-[#1B2B4B] text-[12px] font-bold" title="최고관리자의 로그인은 끊을 수 없어요">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
                       최고관리자
                     </span>

@@ -155,7 +155,7 @@ function LivePinInner({ order, entry, className }) {
   return (
     <>
       <span className="kp-live-anchor"><button type="button" className={`kp-live-pin ${className}`} data-kp-live={st}
-        title={`${st === "live" ? "LIVE" : st === "recent" ? "GPS" : "LAST"} · ${entry.grade} · ${entry.name || entry.plate} — 눌러서 실시간 위치 보기 (마지막 수신 ${liveAgeText(entry.updatedMs, now)}${entry.speed ? ` · ${entry.speed}km/h` : ""})`}
+        title={`${st === "live" ? "LIVE" : st === "recent" ? "GPS" : "LAST"} · ${entry.grade} · ${entry.name || entry.plate} · 눌러서 실시간 위치 보기 (마지막 수신 ${liveAgeText(entry.updatedMs, now)}${entry.speed ? ` · ${entry.speed}km/h` : ""})`}
         aria-label="실시간 위치 보기"
         onClick={(e) => { stop(e); setOpen(true); }} onDoubleClick={stop} onMouseDown={stop} onPointerDown={stop} onTouchStart={stop} onContextMenu={stop}>
         <span className={`kp-live-dot ${st === "live" ? "on" : ""}`} style={{ background: LIVE_COLORS[st] }} />
@@ -175,7 +175,7 @@ function LiveChipInner({ order, entry, mobile, className, compact = false }) {
   return (
     <>
       <button type="button" className={`kp-live-chip ${compact ? "c" : mobile ? "m" : ""} ${className}`}
-        title={`${entry.grade} · ${entry.name || entry.plate} — 실시간 위치 보기 (마지막 수신 ${liveAgeText(entry.updatedMs, now)}${entry.speed ? ` · ${entry.speed}km/h` : ""})`}
+        title={`${entry.grade} · ${entry.name || entry.plate} · 실시간 위치 보기 (마지막 수신 ${liveAgeText(entry.updatedMs, now)}${entry.speed ? ` · ${entry.speed}km/h` : ""})`}
         onClick={(e) => { stop(e); setOpen(true); }} onDoubleClick={stop} onMouseDown={stop} onPointerDown={stop} onTouchStart={stop} onContextMenu={stop}
         data-kp-live={st}>
         <span className={`kp-live-dot ${st === "live" ? "on" : ""}`} style={{ background: LIVE_COLORS[st] }} />
@@ -245,7 +245,7 @@ export function FleetLiveButton({ rows, mobile, dark = false, size = "sm", class
     <>
       <button type="button" onClick={() => setOpen(true)} className={`kp-live-btn ${h} ${className}`}
         style={dark ? { background: "rgba(255,255,255,.06)", borderColor: "rgba(255,255,255,.16)" } : undefined}
-        title="운송 관제센터 — 배차완료 지입·직영·임대 차량의 실시간 위치 · 정상/지연/문제 상태 · 가는 길 사고·공사를 한 화면에서">
+        title="운송 관제센터: 배차완료 지입·직영·임대 차량의 실시간 위치 · 정상/지연/문제 상태 · 가는 길 사고·공사를 한 화면에서">
         <span className={`kp-live-dot ${liveN ? "on" : ""}`} style={{ background: liveN ? LIVE_COLORS.live : LIVE_COLORS.stale }} />
         관제센터{/* 🛰️ 2026-11-22 "실시간 관제" → 운송 관제센터 */}
         <span className="n">{groups.length}</span>

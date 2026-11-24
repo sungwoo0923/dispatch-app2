@@ -288,7 +288,15 @@ export default function App() {
   //  kickedReason: 이 기기가 다른 곳에서 끊김 → 로그아웃 후 안내창
   const [sessionConflict, setSessionConflict] = useState(null);
   const [sessionBusy, setSessionBusy] = useState(false);
-  const [kickedReason, setKickedReason] = useState(null);
+  // 🛠 2026-11-24 끊긴 이유를 탭 저장소에도 둔다 — 로그아웃하면 기기 정리 후 새로 고쳐서(sessionPurge) 안내창이 뜨기도 전에 사라졌다(2분 동안 유지)
+  const [kickedReason, setKickedReasonState] = useState(() => {
+    try { const j = JSON.parse(sessionStorage.getItem("kpKickedReason") || "null"); if (j && j.reason && Date.now() - j.at < 120000) return j.reason; } catch { /* 무시 */ }
+    return null;
+  });
+  const setKickedReason = (r) => {
+    try { if (r) sessionStorage.setItem("kpKickedReason", JSON.stringify({ reason: r, at: Date.now() })); else sessionStorage.removeItem("kpKickedReason"); } catch { /* 무시 */ }
+    setKickedReasonState(r || null);
+  };
   const sessionGateRef = useRef({ uid: null, stop: null });
   // ⭐ 2026-11-06 모바일 미리보기 iframe은 로그인 세션을 따로 기록·감시하지 않는다(부모 창 세션을 끝내거나 중복 로그인으로 보지 않게)
   useEffect(() => { if (!IS_MOBILE_PREVIEW) installEndOnSignOut(); }, []);
@@ -361,7 +369,7 @@ export default function App() {
       setSessionConflict(null);
       startSessionWatch(id, sessionConflict.info);
     } catch (e) {
-      alert(`기존 로그인을 끊지 못했습니다: ${e?.message || e}`);
+      alert(`기존 로그인을 끊지 못했어요. 잠시 뒤 다시 시도해 주세요. (${e?.message || e})`);
     } finally {
       setSessionBusy(false);
     }
@@ -859,7 +867,7 @@ export default function App() {
           if (data.employmentStatus === "퇴사" && !isMasterEmail) {
             // ⭐ 2026-11-05 기사 로그인 화면이 확인 중이면 그 화면이 "퇴사 처리된 계정" 안내를 직접 띄운다(여기서 alert·로그아웃하면 안내가 사라짐)
             if (isDriverBusy() && data.role === "driver") { setRole(null); setApproved(false); setRoleFor(u.uid); setLoading(false); return; }
-            alert("퇴사 처리된 계정입니다. 관리자에게 문의해주세요.");
+            alert("퇴사 처리된 계정이에요. 관리자에게 문의해 주세요.");
             signOut(auth);
             setUser(null);
             setRole(null);
@@ -1057,8 +1065,8 @@ export default function App() {
         <div className="fixed inset-0 z-[2147483647] bg-black/55 flex items-center justify-center p-5">
           <div className="w-full max-w-[400px] bg-white rounded-2xl shadow-2xl overflow-hidden">
             <div className="bg-[#1B2B4B] px-6 py-4 text-white">
-              <div className="text-[17px] font-black">이미 로그인된 {KIND_LABEL[sessionConflict.kind]}가 있습니다</div>
-              <div className="text-[12.5px] text-white/70 mt-0.5">한 계정은 PC 1대 + 모바일 1대까지 동시에 쓸 수 있습니다</div>
+              <div className="text-[17px] font-black">다른 {KIND_LABEL[sessionConflict.kind]}에서 이미 로그인돼 있어요</div>
+              <div className="text-[12.5px] text-white/70 mt-0.5">한 계정은 PC 1대와 모바일 1대까지 함께 쓸 수 있어요</div>
             </div>
             <div className="px-6 py-5 space-y-2">
               {sessionConflict.conflicts.map((c) => (
@@ -1067,7 +1075,7 @@ export default function App() {
                   <div className="text-[12.5px] text-gray-500 mt-0.5">마지막 활동 {timeAgo(sessionLastMs(c))}</div>
                 </div>
               ))}
-              <p className="text-[13px] text-gray-600 pt-1">기존 로그인을 끊고 이 {KIND_LABEL[sessionConflict.kind]}에서 로그인할까요? 기존 기기는 바로 로그아웃됩니다.</p>
+              <p className="text-[13px] text-gray-600 pt-1">기존 로그인을 끊고 이 {KIND_LABEL[sessionConflict.kind]}에서 로그인할까요? 기존 기기는 바로 로그아웃돼요.</p>
             </div>
             <div className="grid grid-cols-2 gap-2 px-6 pb-6">
               <button onClick={cancelSessionConflict} disabled={sessionBusy} className="py-3 rounded-xl border border-gray-300 text-[14px] font-bold text-gray-700 hover:bg-gray-50">취소</button>
@@ -1118,12 +1126,12 @@ export default function App() {
       {kickedReason && (
         <div className="fixed inset-0 z-[100000] bg-black/55 flex items-center justify-center p-5">
           <div className="w-full max-w-[380px] bg-white rounded-2xl shadow-2xl p-6 text-center">
-            <div className="text-[17px] font-black text-[#1B2B4B]">로그아웃되었습니다</div>
+            <div className="text-[17px] font-black text-[#1B2B4B]">로그아웃됐어요</div>
             <p className="text-[13.5px] text-gray-600 mt-2 leading-relaxed">
-              {kickedReason === "duplicate" ? "같은 계정으로 다른 기기에서 로그인해서 이 기기의 로그인이 끊겼습니다."
-                : kickedReason === "password" ? "비밀번호가 변경되어 이 기기의 로그인이 끊겼습니다."
-                  : kickedReason === "admin" ? "관리자가 이 기기의 로그인을 끊었습니다."
-                    : `이 기기의 로그인이 끊겼습니다. (${END_REASON_LABEL[kickedReason] || "연결 끊기"})`}
+              {kickedReason === "duplicate" ? "같은 계정으로 다른 기기에서 로그인해서 이 기기는 로그아웃했어요."
+                : kickedReason === "password" ? "비밀번호가 바뀌어서 이 기기는 로그아웃했어요. 새 비밀번호로 다시 로그인해 주세요."
+                  : kickedReason === "admin" ? "관리자가 이 기기의 로그인을 끊었어요."
+                    : `이 기기의 로그인이 끊겼어요. (${END_REASON_LABEL[kickedReason] || "연결 끊기"})`}
             </p>
             <button onClick={() => setKickedReason(null)} className="mt-5 w-full py-3 rounded-xl bg-[#1B2B4B] text-white text-[14px] font-bold">확인</button>
           </div>

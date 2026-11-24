@@ -366,7 +366,7 @@ function taxEvents(today) {
     const mm = ((m - 1 + i) % 12) + 1; const yy = y + Math.floor((m - 1 + i) / 12); const ym = `${yy}-${p(mm)}`;
     ev.push({ d: `${ym}-10`, t: "원천세 신고·납부", s: "전월 급여·사업소득 원천징수분" });
     ev.push({ d: `${ym}-10`, t: "4대보험료 납부", s: "국민연금·건강·고용·산재" });
-    ev.push({ d: `${ym}-10`, t: "월합계 세금계산서 발행 마감", s: "전월 거래분 — 거래처 정산" });
+    ev.push({ d: `${ym}-10`, t: "월합계 세금계산서 발행 마감", s: "전월 거래분: 거래처 정산" });
     if (mm === 1 || mm === 7) ev.push({ d: `${ym}-25`, t: "부가가치세 확정신고·납부", s: mm === 1 ? "전년 2기(7~12월)" : "1기(1~6월)", big: true });
     if (mm === 4 || mm === 10) ev.push({ d: `${ym}-25`, t: "부가가치세 예정신고·납부", s: "법인 예정신고 / 개인 예정고지", big: true });
     if (mm === 3) { ev.push({ d: `${ym}-10`, t: "연말정산 지급명세서 제출", s: "2월분 원천세 신고와 함께" }); ev.push({ d: `${ym}-31`, t: "법인세 신고·납부", s: "12월 결산 법인", big: true }); }
@@ -830,7 +830,7 @@ function HrDashboard({ company, onGo, me, att }) {
               </div>
             ))}
           </div>
-          {tenure[4][1] > 0 && <div style={{ marginTop: 10, fontSize: 13.5, color: C.dim, fontWeight: 600 }}>입사일 미등록 {tenure[4][1]}명 — 인사관리부에서 입사일을 넣어 주세요</div>}
+          {tenure[4][1] > 0 && <div style={{ marginTop: 10, fontSize: 13.5, color: C.dim, fontWeight: 600 }}>입사일 미등록 {tenure[4][1]}명: 인사관리부에서 입사일을 넣어 주세요</div>}
         </DPanel>
       </div>
     </Deck>

@@ -20,7 +20,7 @@ export function setupAppCheck({ app, sdk, siteKey, debug, functionsBase, disable
   try {
     appCheck = sdk.initializeAppCheck(app, { provider: new sdk.ReCaptchaEnterpriseProvider(siteKey), isTokenAutoRefreshEnabled: true });
   } catch (e) {
-    console.warn("[AppCheck] 초기화 실패 — App Check 없이 계속합니다:", e?.message || e);
+    console.warn("[AppCheck] 초기화 실패: App Check 없이 계속합니다:", e?.message || e);
     return null;
   }
   if (functionsBase) installFunctionsHeader(appCheck, sdk.getToken, functionsBase);

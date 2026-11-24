@@ -227,7 +227,7 @@ export function OilAlertSheet({ driver, actionLabel = "출근", busy = false, on
       <div style={{ padding: "20px" }}>
         <div style={{ borderRadius: 20, border: `2px solid ${over ? "#D92D20" : "#F5A524"}`, background: over ? "#FEF3F2" : "#FFF8EB", padding: "16px 18px" }}>
           <div style={{ fontSize: 18, fontWeight: 900, color: over ? "#B42318" : "#B54708" }}>
-            {over ? `교환 후 ${km(o.used)} 운행 — 바로 교환해주세요` : `교환 후 ${km(o.used)} 운행했습니다`}
+            {over ? `교환 후 ${km(o.used)} 운행했습니다. 바로 교환해 주세요.` : `교환 후 ${km(o.used)} 운행했습니다`}
           </div>
           <Row k="마지막 교환" v={`${o.lastDate || "-"} · ${km(o.lastKm)}`} />
           <Row k="다음 교환" v={km(o.nextKm)} strong />
@@ -346,7 +346,7 @@ export function OilTireCard({ driver, onRecord }) {
               <span style={{ color: o.level >= 1 ? oilColor : "#fff" }}>{o.left == null ? "" : o.left < 0 ? `${km(-o.left)} 초과` : `${km(o.left)} 남음`}</span>
             </div>
             <div style={{ fontSize: 15, color: "rgba(255,255,255,.7)", marginTop: 6 }}>마지막 교환 · {o.lastDate || "-"} · {km(o.lastKm)}</div>
-            {o.level >= 1 && <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 14, background: o.level === 2 ? "rgba(240,68,56,.18)" : "rgba(245,165,36,.18)", border: `1px solid ${oilColor}`, fontSize: 16.5, fontWeight: 900, color: "#fff" }}>⚠ {o.level === 2 ? "오일 교환 시기가 지났습니다" : "4만km 넘음 — 오일 교환을 준비하세요"}</div>}
+            {o.level >= 1 && <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 14, background: o.level === 2 ? "rgba(240,68,56,.18)" : "rgba(245,165,36,.18)", border: `1px solid ${oilColor}`, fontSize: 16.5, fontWeight: 900, color: "#fff" }}>⚠ {o.level === 2 ? "오일 교환 시기가 지났습니다" : "4만km를 넘었습니다. 오일 교환을 준비해 주세요."}</div>}
           </>
         ) : (
           <div style={{ fontSize: 16.5, color: "rgba(255,255,255,.8)", marginTop: 8 }}>아직 교환 기록이 없습니다 · 아래 버튼으로 기록해주세요</div>

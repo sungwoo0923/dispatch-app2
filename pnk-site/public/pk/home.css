@@ -235,3 +235,17 @@ footer { background: #fff; border-top: 1px solid var(--line); }
 .shot { overflow: hidden; }
 .shot img { width: 100%; height: auto; }
 .dark-sec h2, .dark-sec h3, .dark-sec h4 { color: #fff; }
+
+/* 2026-11-24 보완 — 메뉴 현재 위치 · 키보드 초점 · 휴대폰 메뉴 열림 중 스크롤 잠금 · 좁은 화면 숫자 줄 */
+#nav a.on::after { transform: scaleX(1); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+html.kp-menu-open { overflow: hidden; }
+@media (max-width: 520px) {
+  .facts { grid-template-columns: 1fr; }
+  .facts div { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 16px 0 14px; border-top: 1px solid var(--line); }
+  .facts div:first-child { border-top-color: var(--ink); }
+  .facts span { margin-top: 0; text-align: right; }
+}
+/* 휴대폰 메뉴 — 위 줄 높이(72px)에 딱 붙게(아래 1023px 규칙이 덮어써 12px 틈이 생기던 문제) · 주소창 높이 변화에도 맞게 */
+@media (max-width: 1023px) { #hdr.open #nav { height: calc(100dvh - 84px); overflow-y: auto; } }
+@media (max-width: 600px) { #hdr.open #nav { top: 72px; height: calc(100dvh - 72px); } }

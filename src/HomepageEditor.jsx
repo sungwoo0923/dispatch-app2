@@ -312,11 +312,11 @@ export default function HomepageEditor() {
         <div className="p-5 text-[13px] leading-relaxed text-[#5B6B85] space-y-3">
           <div className="text-[14px] font-black text-[#0F1A30]">홈페이지에서 고칠 곳을 누르세요</div>
           <ul className="space-y-1.5 list-disc pl-4">
-            <li><b>한 번 누르기</b> — 고르기 (속성이 여기에 나옵니다)</li>
-            <li><b>두 번 누르기</b> — 글자 바로 고치기</li>
-            <li><b>고른 요소 끌기</b> — 위치 옮기기 (Shift: 10px씩)</li>
-            <li><b>오른쪽·아래 손잡이</b> — 크기 조절</li>
-            <li><b>사진 위에 파일 끌어 놓기</b> — 사진 교체</li>
+            <li><b>한 번 누르기</b> · 고르기 (속성이 여기에 나옵니다)</li>
+            <li><b>두 번 누르기</b> · 글자 바로 고치기</li>
+            <li><b>고른 요소 끌기</b> · 위치 옮기기 (Shift: 10px씩)</li>
+            <li><b>오른쪽·아래 손잡이</b> · 크기 조절</li>
+            <li><b>사진 위에 파일 끌어 놓기</b> · 사진 교체</li>
             <li><b>Delete</b> 숨기기 · <b>Ctrl+D</b> 복제 · <b>방향키</b> 1px 이동 · <b>Esc</b> 상위 요소</li>
             <li><b>Ctrl+Z / Ctrl+Y</b> 실행취소 · 다시실행</li>
           </ul>
