@@ -17,7 +17,7 @@ for (const m of ["gemini-3.1-pro-preview", "gemini-3.8-flash", "gemini-2.5-pro"]
   if (!r.ok) { console.error(m, r.status, (await r.text()).slice(0, 150)); continue; }
   const j = await r.json(); out = j.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join(""); console.error("model", m); break;
 }
-const res = JSON.parse(out);
+let res = JSON.parse(out); if (Array.isArray(res)) res = res[0] || {};
 fs.writeFileSync(path.join(ROOT, ".cache", `${id}-check.json`), JSON.stringify(res, null, 2));
 console.log(`${id} · 목소리 일정: ${res.voiceConsistent} · ${res.overall}`);
 console.log(`빠진 문장 ${res.missing?.length || 0}`); (res.missing || []).forEach((x) => console.log("  - " + x));
