@@ -35,7 +35,7 @@ export const IMAGES = {
   d_danger: "Busy loading dock area with a forklift, pedestrians and a reversing truck in the same space, subtle red hazard zones on the floor.",
   d_enter: "A truck slowly entering a logistics yard following floor arrows and a speed limit sign without text, a site guide with a light baton signaling.",
   d_ppe: "Safety gear flat lay: white safety helmet, reflective vest, safety shoes, work gloves, arranged neatly.",
-  d_reverse: "A truck reversing toward a dock door with a spotter standing safely to the side giving hand signals, rear camera view inset.",
+  d_reverse: "A box truck reversing toward a modern concrete-and-steel logistics warehouse dock door, a spotter in a reflective vest standing safely to the side giving hand signals. Modern industrial architecture only, flat roofs, no traditional or Asian roofs, no booths.",
   d_blind: "Top-down view of a truck showing its blind spots highlighted as soft red zones behind and beside the vehicle.",
   d_secure: "Close-up of a wheel chock placed under the rear wheel of a truck at a loading dock, parking brake engaged, keys removed from the ignition shown inset.",
   d_forklift: "A forklift carrying a pallet with a highlighted circular working radius on the floor, a pedestrian waiting safely outside the line.",
@@ -48,7 +48,7 @@ export const IMAGES = {
   d_jump: "A driver jumping down from a truck cargo bed, wrong example, risk of ankle injury.",
   d_lift: "A worker lifting a box correctly by bending the knees with a straight back, and a second ghosted figure bending at the waist as the wrong way.",
   d_wet: "A rainy loading dock with puddles and a slippery ramp, worker walking carefully with anti-slip shoes.",
-  d_leave: "A driver doing a final walk-around at the dock, removing the wheel chock, closing the rear doors before departure.",
+  d_leave: "A driver at a modern steel logistics warehouse loading dock removing a wheel chock from the rear wheel of a box truck before departure, rear doors closed. Modern industrial architecture only, flat roofs, no traditional or Asian roofs.",
   d_report: "A dock supervisor and a driver talking, the supervisor writing on a tablet, near-miss report mood, calm.",
   d_end: "A clean and orderly loading dock at dusk with trucks lined up and workers in vests giving a thumbs up.",
   // ── 직원(사무실) 산업안전보건
