@@ -94,6 +94,24 @@ export const IMAGES = {
   b_report: "An employee writing a report on a laptop with a closed door meeting room and an HR manager waiting supportively, confidential mood.",
   b_care: "A small team checking in on a colleague with coffee, supportive and caring office culture.",
   b_end: "A bright modern logistics office at the end of the day, colleagues saying goodbye with smiles, optimistic mood.",
+  // ── 장애인 인식개선 · 개인정보 보호
+  a_cover: "An inclusive modern Korean logistics office where a colleague using a wheelchair works at an accessible desk alongside teammates, warm respectful atmosphere, hero shot.",
+  a_types: "A row of diverse office workers including a person using a wheelchair, a person with a white cane, a person wearing a hearing aid, and others with no visible disability, all smiling, clean isometric style.",
+  a_ask: "An office worker kindly asking a colleague in a wheelchair whether they would like help, before touching anything, the wheelchair user responding with a smile.",
+  a_guide: "An office worker guiding a visually impaired colleague by letting the colleague hold their elbow, walking half a step ahead in a corridor.",
+  a_talk: "An office worker talking face to face with a deaf colleague, speaking clearly with visible lips and using a notepad and a tablet to write messages.",
+  a_space: "An accessible office with a ramp, wide corridors, an accessible restroom sign shape without text, and a height-adjustable desk.",
+  a_wrong: "An office worker grabbing and pushing someone's wheelchair without asking, the wheelchair user looking surprised, subtle red tint.",
+  a_team: "A diverse team including colleagues with disabilities celebrating a successful project together in a meeting room.",
+  p_cover: "A logistics office worker locking a laptop screen and putting documents into a locked cabinet, with a subtle shield motif, hero shot.",
+  p_data: "Flat isometric icons arranged neatly: an ID card, a smartphone, a truck license plate, a bank card and a house, connected to a central shield, no text.",
+  p_chat: "A smartphone showing a group chat with blurred unreadable messages containing photos of ID cards and documents, subtle red tint, wrong example.",
+  p_lock: "An office desk with a locked screen on the monitor, a strong padlock icon floating above, sticky note absent, clean desk.",
+  p_print: "An office worker shredding printed documents in a paper shredder next to a printer, careful handling of papers.",
+  p_mail: "An office worker double-checking the recipient on an email before sending, a confirmation pop-up shape on the screen without text.",
+  p_usb: "A USB stick and an external hard drive locked in a drawer, next to a laptop with an encryption padlock symbol, no text.",
+  p_leak: "An office worker urgently reporting to a manager after noticing a misdirected email, the manager calmly taking notes, serious but calm mood.",
+  p_end: "A clean, secure logistics office at dusk with locked cabinets and screens turned off, calm mood.",
 };
 
 export const COURSES = {
@@ -611,6 +629,129 @@ export const COURSES = {
       ] },
       { type: "end", img: "b_end", lines: [
         { say: "존중하는 말 한마디가 좋은 일터를 만듭니다." },
+        { say: "끝까지 시청해 주셔서 감사합니다. 이어서 이수 서명을 해 주세요." },
+      ] },
+    ],
+  },
+  staff_disab: {
+    title: "장애인 인식개선",
+    code: "EDU-S04",
+    slides: [
+      { type: "cover", img: "a_cover", sub: "편견 없이 함께 일하는 일터를 위한 법정 의무교육", lines: [
+        { say: "장애인 인식개선 교육을 시작하겠습니다." },
+        { say: "장애는 그 사람의 일부일 뿐, 그 사람 전부가 아닙니다." },
+        { say: "오늘은 장애에 대한 바른 이해와, 함께 일할 때의 예절을 알아보겠습니다." },
+      ] },
+      { type: "law", head: "회사가 해마다 하는 교육", img: "a_team", quote: "사업주는 장애인에 대한 직장 내 편견을 제거함으로써 장애인 근로자의 안정적인 근무여건을 조성하고 장애인 근로자 채용이 확대될 수 있도록 장애인 인식개선 교육을 실시하여야 한다.", src: "장애인고용촉진법 제5조의2", lines: [
+        { say: "장애인고용촉진법은 회사가 장애인 인식개선 교육을 하도록 정하고 있습니다." },
+        { say: "직장 안의 편견을 없애고, 누구나 안정적으로 일할 수 있게 하려는 것입니다." },
+      ] },
+      { type: "chapter", no: 1, title: "장애 바로 알기", sub: "장애는 다양해요", img: "a_types", lines: [
+        { say: "먼저 장애를 바르게 이해해 보겠습니다." },
+      ] },
+      { type: "points", head: "보이지 않는 장애도 있어요", img: "a_types", lines: [
+        { say: "장애는 크게 신체적 장애와 정신적 장애로 나뉩니다.", pt: "신체적 장애 · 정신적 장애" },
+        { say: "장애인의 대부분은 태어날 때가 아니라 살면서 사고나 질병으로 장애를 갖게 됩니다.", pt: "대부분 사고 · 질병으로 생겨요" },
+        { say: "청각이나 내부 기관 장애처럼 겉으로 보이지 않는 장애도 많습니다.", pt: "보이지 않는 장애도 많아요" },
+      ] },
+      { type: "points", head: "바른 말 쓰기", img: "a_team", lines: [
+        { say: "장애인을 부를 때는 장애인, 장애가 없는 사람은 비장애인이라고 합니다.", pt: "장애인 · 비장애인" },
+        { say: "정상인, 불구 같은 말은 차별적인 표현이니 쓰지 않습니다.", pt: "정상인 · 불구 → 쓰지 않기" },
+      ] },
+      { type: "chapter", no: 2, title: "함께 일하는 예절", sub: "먼저 묻고, 존중하기", img: "a_ask", lines: [
+        { say: "장애가 있는 동료와 함께 일할 때의 예절입니다." },
+      ] },
+      { type: "dodont", head: "도움은 먼저 물어보고", good: { img: "a_ask", label: "도와드릴까요? 먼저 묻기" }, bad: { img: "a_wrong", label: "묻지 않고 휠체어 밀기" }, lines: [
+        { say: "도움이 필요해 보여도 먼저 도와드릴까요 하고 물어봅니다." },
+        { say: "휠체어나 지팡이 같은 보조기기는 그 사람 몸의 일부처럼 존중하고 함부로 만지지 않습니다." },
+      ] },
+      { type: "points", head: "시각장애가 있는 동료와", img: "a_guide", lines: [
+        { say: "길을 안내할 때는 내 팔꿈치를 잡게 하고 반 걸음 앞에서 걷습니다.", pt: "팔꿈치 잡게 하고 반 걸음 앞" },
+        { say: "여기, 저기 대신 오른쪽으로 세 걸음처럼 구체적으로 말합니다.", pt: "방향 · 거리를 구체적으로" },
+      ] },
+      { type: "points", head: "청각장애가 있는 동료와", img: "a_talk", lines: [
+        { say: "얼굴을 마주 보고 입 모양이 보이게 천천히 말합니다.", pt: "마주 보고 천천히 말하기" },
+        { say: "필요하면 글로 쓰거나 메신저를 함께 씁니다.", pt: "글 · 메신저 함께 쓰기" },
+      ] },
+      { type: "chapter", no: 3, title: "차별 없는 일터", sub: "정당한 편의와 평등", img: "a_space", lines: [
+        { say: "마지막으로 차별 없는 일터를 만드는 방법입니다." },
+      ] },
+      { type: "points", head: "정당한 편의 제공", img: "a_space", lines: [
+        { say: "경사로, 높이 조절 책상처럼 일하는 데 필요한 편의를 함께 마련합니다.", pt: "경사로 · 높이 조절 책상" },
+        { say: "채용과 승진, 업무 배치에서 장애를 이유로 차별하지 않습니다.", pt: "채용 · 승진 · 배치 차별 금지" },
+        { say: "장애인차별금지법은 장애를 이유로 한 차별을 금지하고 있습니다.", pt: "장애인차별금지법" },
+      ] },
+      { type: "check", head: "오늘의 체크리스트", items: ["장애는 다양하고 보이지 않을 수도", "장애인 · 비장애인 바른 말", "도움은 먼저 묻기", "보조기기 함부로 만지지 않기", "구체적으로 · 마주 보고 말하기", "채용 · 승진 · 배치 차별 금지"], lines: [
+        { say: "오늘 배운 내용을 정리하겠습니다." },
+        { say: "바른 말을 쓰고, 도움은 먼저 묻고, 보조기기는 존중합니다." },
+        { say: "장애를 이유로 차별하지 않는 일터를 함께 만듭니다." },
+      ] },
+      { type: "end", img: "a_team", lines: [
+        { say: "다름을 존중하는 일터가 모두에게 좋은 일터입니다." },
+        { say: "끝까지 시청해 주셔서 감사합니다. 이어서 이수 서명을 해 주세요." },
+      ] },
+    ],
+  },
+  staff_privacy: {
+    title: "개인정보 보호",
+    code: "EDU-S05",
+    slides: [
+      { type: "cover", img: "p_cover", sub: "기사 · 화주 정보를 안전하게 다루는 법", lines: [
+        { say: "개인정보 보호교육을 시작하겠습니다." },
+        { say: "물류 회사는 기사님과 화주, 받는 분의 개인정보를 매일 다룹니다." },
+        { say: "오늘은 개인정보를 안전하게 다루는 방법을 알아보겠습니다." },
+      ] },
+      { type: "law", head: "정기적으로 받는 교육", img: "p_lock", quote: "개인정보처리자는 개인정보의 적정한 취급을 보장하기 위하여 개인정보취급자에게 정기적으로 필요한 교육을 실시하여야 한다.", src: "개인정보 보호법 제28조", lines: [
+        { say: "개인정보 보호법은 개인정보를 다루는 직원에게 정기적으로 교육을 하도록 정하고 있습니다." },
+      ] },
+      { type: "chapter", no: 1, title: "우리가 다루는 개인정보", sub: "생각보다 많아요", img: "p_data", lines: [
+        { say: "먼저 우리가 다루는 개인정보가 무엇인지 보겠습니다." },
+      ] },
+      { type: "steps", head: "물류 회사의 개인정보", steps: [["user", "기사님", "이름 · 전화 · 차량번호"], ["lock", "계좌 · 신분증", "정산 · 서류"], ["phone", "화주 담당자", "이름 · 연락처"], ["flag", "받는 분", "주소 · 연락처"]], lines: [
+        { say: "기사님의 이름과 전화번호, 차량번호는 개인정보입니다." },
+        { say: "정산 계좌와 신분증, 사업자 서류는 특히 조심해서 다룹니다." },
+        { say: "화주 담당자의 이름과 연락처도 개인정보입니다." },
+        { say: "배송 받는 분의 주소와 연락처도 마찬가지입니다." },
+      ] },
+      { type: "chapter", no: 2, title: "다루는 원칙", sub: "필요한 만큼, 정한 목적에만", img: "p_lock", lines: [
+        { say: "개인정보를 다루는 기본 원칙입니다." },
+      ] },
+      { type: "points", head: "필요한 만큼만, 목적에만", img: "p_data", lines: [
+        { say: "업무에 꼭 필요한 정보만 받고, 정한 목적에만 씁니다.", pt: "필요한 만큼만 · 정한 목적에만" },
+        { say: "주민등록번호는 법에 근거가 있을 때만 다룰 수 있습니다.", pt: "주민번호는 법 근거 있을 때만" },
+        { say: "다른 회사에 넘길 때는 정보 주인의 동의나 법적 근거가 있어야 합니다.", pt: "다른 회사 제공은 동의 · 근거" },
+      ] },
+      { type: "dodont", head: "단체 대화방 조심", good: { img: "p_lock", label: "필요한 사람에게만 · 프로그램 안에서" }, bad: { img: "p_chat", label: "단톡방에 신분증 · 계좌 사진" }, lines: [
+        { say: "기사님 신분증이나 계좌 사진을 단체 대화방에 올리지 않습니다." },
+        { say: "필요한 사람에게만, 회사 프로그램 안에서 주고받습니다." },
+      ] },
+      { type: "chapter", no: 3, title: "안전하게 보관하기", sub: "화면 · 출력물 · 파일", img: "p_print", lines: [
+        { say: "개인정보를 안전하게 보관하는 방법입니다." },
+      ] },
+      { type: "points", head: "화면과 계정", img: "p_lock", lines: [
+        { say: "자리를 비울 때는 화면을 잠급니다.", pt: "자리 비우면 화면 잠금" },
+        { say: "비밀번호는 다른 사람과 나누지 않고, 메모지에 붙여 두지 않습니다.", pt: "비밀번호 공유 · 메모 금지" },
+      ] },
+      { type: "points", head: "출력물 · 파일", img: "p_print", lines: [
+        { say: "개인정보가 담긴 출력물은 다 쓰면 파쇄합니다.", pt: "출력물은 파쇄" },
+        { say: "메일을 보내기 전에 받는 사람과 첨부 파일을 한 번 더 확인합니다.", pt: "보내기 전 받는 사람 · 첨부 확인" },
+        { say: "개인 저장장치에 회사 개인정보를 옮겨 두지 않습니다.", pt: "개인 저장장치에 옮기지 않기" },
+      ] },
+      { type: "chapter", no: 4, title: "유출되었다면", sub: "숨기지 말고 바로", img: "p_leak", lines: [
+        { say: "개인정보가 새어 나갔다면 이렇게 합니다." },
+      ] },
+      { type: "steps", head: "유출 대응", steps: [["alert", "바로 보고", "알게 된 즉시"], ["lock", "추가 피해 막기", "삭제 요청 · 차단"], ["user", "회사 조치", "통지 · 신고"]], lines: [
+        { say: "잘못 보냈거나 유출을 알게 되면 숨기지 말고 즉시 회사에 보고합니다." },
+        { say: "잘못 받은 사람에게 삭제를 요청하는 등 추가 피해를 막습니다." },
+        { say: "회사는 법에 따라 정보 주인에게 알리고 필요한 신고를 합니다." },
+      ] },
+      { type: "check", head: "오늘의 체크리스트", items: ["필요한 만큼 · 정한 목적에만", "주민번호는 법 근거 있을 때만", "단톡방에 신분증 · 계좌 금지", "자리 비우면 화면 잠금", "출력물 파쇄 · 메일 다시 확인", "유출되면 즉시 보고"], lines: [
+        { say: "오늘 배운 내용을 정리하겠습니다." },
+        { say: "필요한 만큼만 정한 목적에 쓰고, 단체 대화방에 개인정보를 올리지 않습니다." },
+        { say: "화면을 잠그고 출력물은 파쇄하며, 유출되면 즉시 보고합니다." },
+      ] },
+      { type: "end", img: "p_end", lines: [
+        { say: "기사님과 고객의 정보를 지키는 것이 회사의 신뢰를 지키는 일입니다." },
         { say: "끝까지 시청해 주셔서 감사합니다. 이어서 이수 서명을 해 주세요." },
       ] },
     ],
