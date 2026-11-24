@@ -8399,6 +8399,7 @@ function MobileSideMenu({
             일반 스크롤바로 오르내리게 통합했다. */}
         <div ref={menuScrollRef} onScroll={(e) => { SIDE_MENU_SCROLL = e.currentTarget.scrollTop; }} className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-1" style={{ WebkitOverflowScrolling: "touch", paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)" }}>
           <MultiCompanyCard />{/* 🏢 2026-11-24 여러 회사 계정 — 지금 회사 + [회사 전환] */}
+          <MenuNavProvider dark={dark}>{/* 🧭 2026-11-24 메뉴 찾기 · 자주 쓰는 메뉴 · 큰 묶음 하나만 펼치기 */}
           {/* ⭐ 2026-10-31 — PC 메뉴와 같은 구성·권한 규칙(DispatchApp menuState)으로 정리.
               실무자: 매출관리 숨김 / 경리·회계: 오더등록·단가표 숨김 / 관리자 전용 메뉴: 관리자·마스터·조회전용 /
               최고관리자 전용(관리센터·구글시트·블라인드·회사코드조회)은 최고관리자만.
@@ -8483,8 +8484,9 @@ function MobileSideMenu({
               {((staffSignupOk && !acctOnly) || ok("기사관리")) && <MenuItem label="기사 제출 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />}{/* ⭐ 2026-11-10 PC처럼 기사관리를 보면 기사 서류도 본다 */}
             </MenuSection>
           )}
-          {/* ⭐ 2026-11-14 PC와 같은 묶음 · 같은 이름 · 같은 순서 — 배차 / 운임 / 기사 · 거래처 / 매출 · 정산 (PC 왼쪽 ≡ 메뉴)
-              배차만 펴 두고 나머지는 접어 둔다(누르면 펴지고 이 휴대폰에 기억). 접힌 묶음은 알림 숫자 합을 제목 옆에 보여 준다. */}
+          {/* 🧭 2026-11-24 메뉴 정리(사용자 승인 A안) — 큰 묶음 6개를 접어 두고 하나만 펼친다(MenuNavCtx 아코디언)
+              배차 / 운임 / 기사 · 지입 / 거래처 · 매출 · 정산 / 사내업무 / 회사관리 — 묶음 이름 옆에 안에 든 메뉴를 작게 보여 준다.
+              맨 위 [메뉴 찾기] · [자주 쓰는 메뉴]는 MenuNavTop(아래 메뉴를 다 읽어 와서 쓴다) */}
           {!deptMode && (<>
           <MenuSection title="배차" en="DISPATCH" dark={dark} fold openDefault badge={(alertCounts?.drvOrders || 0) + (listUnseenCount || 0) + (unassignedCount || 0) + (fixedUnassignedCount || 0)}>
             {role !== "test" && ok("배차관리") && <MenuItem label="오더등록" icon="truck" onClick={onGoCreate} dark={dark} />}
@@ -8493,43 +8495,51 @@ function MobileSideMenu({
             {ok("배차현황") && <MenuItem label="고정노선현황" icon="route" onClick={() => onGo?.("fixedroute")} badge={fixedUnassignedCount > 0 ? fixedUnassignedCount : null} dark={dark} />}
             {ok("배차현황") && role !== "viewer" && <MenuItem label="월 마감" icon="check" onClick={() => onGo?.("monthclose")} dark={dark} />}
           </MenuSection>
-          {(ok("단가표") || ok("운임조회")) && (
+          {(ok("단가표") || ok("운임조회") || (fareMenu.feature && role !== "driver" && role !== "shipper")) && (
           <MenuSection title="운임" en="FARE" dark={dark} fold>
             {role !== "test" && ok("단가표") && <MenuItem label="단가표" icon="money" onClick={onGoRateCard} dark={dark} />}
             {ok("운임조회") && <MenuItem label="운임조회" icon="globe" onClick={onGoNationalFare} dark={dark} />}
+            {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}
           </MenuSection>
           )}
-          {/* ⭐ 2026-11-14 PC 상단 메뉴와 같은 묶음 — 기사관리 / 거래처 / 매출 / 정산 / 지입차관리를 따로(항목이 하나면 묶음 제목 없이 바로) */}
-          {PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리") && (
-          <MenuSection title="기사관리" en="DRIVERS" dark={dark} fold badge={(staffSignupOk ? (alertCounts?.signupDriver || 0) : 0) + (alertCounts?.drvDocs || 0)}>
-            <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} badge={staffSignupOk ? (alertCounts?.signupDriver || null) : null} dark={dark} />
-            <MenuItem label="기사 제출 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />
+          {((PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리")) || ok("지입차관리")) && (
+          <MenuSection title="기사 · 지입" en="DRIVERS · FLEET" dark={dark} fold badge={(PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리") ? (staffSignupOk ? (alertCounts?.signupDriver || 0) : 0) + (alertCounts?.drvDocs || 0) : 0) + (ok("지입차관리") ? (alertCounts?.drvSos || 0) : 0)}>
+            {PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리") && <MenuItem label="기사관리" icon="user" onClick={() => onGo?.("drivers")} badge={staffSignupOk ? (alertCounts?.signupDriver || null) : null} dark={dark} />}
+            {PC_DRIVER_MENU_ROLES.has(role) && ok("기사관리") && <MenuItem label="기사 제출 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />}
+            {ok("지입차관리") && <MenuItem label="지입차관리" icon="truck" onClick={onGoFleet} badge={alertCounts?.drvSos || null} dark={dark} />}
           </MenuSection>
           )}
-          {PC_CLIENT_MENU_ROLES.has(role) && ok("거래처관리") && <MenuSolo dark={dark}><MenuItem label="거래처관리" icon="building" onClick={() => onGo?.("clients")} dark={dark} /></MenuSolo>}
-          {canRevenue && ok("매출관리") && ((role === "admin" || role === "totalMaster") && ok("인사이트") && planIncludes(planIdM, "insight") ? (
-          <MenuSection title="매출" en="REVENUE" dark={dark} fold>
-            <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />
-            <MenuItem label="인사이트" icon="trend" onClick={onGoIntel} dark={dark} />
+          {((PC_CLIENT_MENU_ROLES.has(role) && ok("거래처관리")) || (canRevenue && ok("매출관리")) || ((canRevenue || /^role_/.test(String(role || ""))) && ok("정산관리"))) && (
+          <MenuSection title="거래처 · 매출 · 정산" en="CLIENTS · REVENUE" dark={dark} fold badge={(canRevenue || /^role_/.test(String(role || ""))) && ok("정산관리") ? (closeN || 0) : 0}>
+            {PC_CLIENT_MENU_ROLES.has(role) && ok("거래처관리") && <MenuItem label="거래처관리" icon="building" onClick={() => onGo?.("clients")} dark={dark} />}
+            {canRevenue && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
+            {canRevenue && ok("매출관리") && (role === "admin" || role === "totalMaster") && ok("인사이트") && planIncludes(planIdM, "insight") && <MenuItem label="인사이트" icon="trend" onClick={onGoIntel} dark={dark} />}
+            {(canRevenue || /^role_/.test(String(role || ""))) && ok("정산관리") && <MenuItem label="정산관리" icon="receipt" badge={closeN || undefined} onClick={() => onGo?.("dept:settle")} dark={dark} />}
           </MenuSection>
-          ) : <MenuSolo dark={dark}><MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} /></MenuSolo>)}
-          {(canRevenue || /^role_/.test(String(role || ""))) && ok("정산관리") && <MenuSolo dark={dark}><MenuItem label="정산관리" icon="receipt" badge={closeN || undefined} onClick={() => onGo?.("dept:settle")} dark={dark} /></MenuSolo>}
-          {ok("지입차관리") && <MenuSolo dark={dark}><MenuItem label="지입차관리" icon="truck" onClick={onGoFleet} badge={alertCounts?.drvSos || null} dark={dark} /></MenuSolo>}
+          )}
+          {/* 사내업무 = 공지 · 게시판 · 일정 · 결재 + 규정 · 교육 + 부서 업무(PC HOME 왼쪽 메뉴 · 부서 업무) */}
+          <MenuSection title="사내업무" en="OFFICE" dark={dark} fold badge={(alertCounts?.notice || 0) + (alertCounts?.approval || 0) + (alertCounts?.payTodo || 0) + (alertCounts?.mineNew || 0) + (alertCounts?.handover || 0)}>
+            <MenuItem label="공지사항" icon="bell" onClick={onGoNotice} badge={alertCounts?.notice || null} dark={dark} />
+            <MenuItem label="사내 게시판" icon="chat" onClick={() => onGo?.("dept:board")} dark={dark} />
+            <MenuItem label="임원 일정" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />
+            <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />
+            {ok("전자결재") && <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.mineNew || 0) + (alertCounts?.handover || 0) + (alertCounts?.payTodo || 0) || null} dark={dark} />}
+            <MenuItem label="사내 규정" icon="list" onClick={() => onGo?.("dept:rules")} dark={dark} />
+            <MenuItem label="안전교육" icon="shield" newKey="home:edu" onClick={() => onGo?.("dept:safety")} dark={dark} />
+            {payM.canView && <MenuItem label="급여 계산" icon="money" onClick={() => onGo?.("dept:payroll")} dark={dark} />}
+            {payM.leaveViewer && <MenuItem label="연차 관리" icon="flag" onClick={() => onGo?.("dept:leavepromo")} dark={dark} />}
+            {deptOk("영업관리") && <MenuItem label="영업관리" icon="trend" onClick={() => onGo?.("dept:sales")} dark={dark} />}
+            {deptOk("인사관리부") && <MenuItem label="인사관리부" icon="idcard" onClick={() => onGo?.("dept:hr")} dark={dark} />}
+            {deptOk("회계관리") && <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />}
+            {deptOk("자금관리") && <MenuItem label="자금관리" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />}
+            {deptOk("비품관리") && <MenuItem label="비품·자산" icon="list" onClick={() => onGo?.("dept:assets")} dark={dark} />}
+            {deptOk("증명서발급") && <MenuItem label="증명서 발급" icon="stamp" onClick={() => onGo?.("dept:cert")} dark={dark} />}
+          </MenuSection>
           </>)}
-          {!deptMode && (["영업관리", "인사관리부", "회계관리", "자금관리", "비품관리", "증명서발급"].some(deptOk) || payM.canView || payM.leaveViewer) && (
-            <MenuSection title="부서 업무" en="DEPARTMENT" dark={dark} fold>
-              {payM.canView && <MenuItem label="급여 계산" icon="money" onClick={() => onGo?.("dept:payroll")} dark={dark} />}{/* ⭐ 2026-11-07 경리·회계 부서만 */}
-              {payM.leaveViewer && <MenuItem label="연차 관리" icon="flag" onClick={() => onGo?.("dept:leavepromo")} dark={dark} />}
-              {deptOk("영업관리") && <MenuItem label="영업관리" icon="trend" onClick={() => onGo?.("dept:sales")} dark={dark} />}{/* 💼 2026-11-10 */}
-              {deptOk("인사관리부") && <MenuItem label="인사관리부" icon="idcard" onClick={() => onGo?.("dept:hr")} dark={dark} />}
-              {deptOk("회계관리") && <MenuItem label="회계관리" icon="money" onClick={() => onGo?.("dept:acct")} dark={dark} />}
-              {deptOk("자금관리") && <MenuItem label="자금관리" icon="wallet" onClick={() => onGo?.("dept:cashbook")} dark={dark} />}
-              {deptOk("비품관리") && <MenuItem label="비품·자산" icon="list" onClick={() => onGo?.("dept:assets")} dark={dark} />}
-              {deptOk("증명서발급") && <MenuItem label="증명서 발급" icon="stamp" onClick={() => onGo?.("dept:cert")} dark={dark} />}
-            </MenuSection>
-          )}
+          {/* 부서 화면(경리 · 인사 · 영업 · 경영 · 사내업무)은 예전처럼 — 사내 업무 · 규정 · 교육을 펼쳐 둔다 */}
+          {!!deptMode && (<>
           {/* ⭐ 2026-11-14 PC HOME 왼쪽 메뉴와 같은 순서 — 공지 → 게시판 → 임원 일정 → 직원 일정 → 사내 규정 → 전자결재 */}
-          <MenuSection title="사내 업무" en="HOME" dark={dark} fold={!deptMode} alwaysOpen={!!deptMode} openDefault badge={(alertCounts?.notice || 0) + (alertCounts?.approval || 0) + (alertCounts?.payTodo || 0) + (alertCounts?.mineNew || 0) + (alertCounts?.handover || 0)}>
+          <MenuSection title="사내 업무" en="HOME" dark={dark} alwaysOpen>
             <MenuItem label="공지사항" icon="bell" onClick={onGoNotice} badge={alertCounts?.notice || null} dark={dark} />
             <MenuItem label="사내 게시판" icon="chat" onClick={() => onGo?.("dept:board")} dark={dark} />
             {deptMode !== "exec" && <MenuItem label="임원 일정" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />}
@@ -8537,13 +8547,14 @@ function MobileSideMenu({
             {ok("전자결재") && <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.mineNew || 0) + (alertCounts?.handover || 0) + (alertCounts?.payTodo || 0) || null} dark={dark} />}
           </MenuSection>
           {/* ✨ 2026-11-24 규정 · 교육 — PC HOME 왼쪽 메뉴와 같게(사내 규정 · 안전교육) */}
-          <MenuSection title="규정 · 교육" en="RULES · TRAINING" dark={dark} fold={!deptMode} alwaysOpen={!!deptMode} openDefault>
+          <MenuSection title="규정 · 교육" en="RULES · TRAINING" dark={dark} alwaysOpen>
             <MenuItem label="사내 규정" icon="list" onClick={() => onGo?.("dept:rules")} dark={dark} />
             <MenuItem label="안전교육" icon="shield" newKey="home:edu" onClick={() => onGo?.("dept:safety")} dark={dark} />
           </MenuSection>
+          </>)}
           {/* ⭐ 2026-11-14 관리 = PC 회사관리(운임 규칙 · 내정보 · 내 이력서 · 출근기록부) + 관리자메뉴(회원 관리 · 권한 관리) */}
           <MenuSection title="회사관리" en="COMPANY" dark={dark} fold badge={canAdminMenu && !deptMode ? (alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) : 0}>
-            {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}
+            {!!deptMode && fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}{/* 운송 화면은 [운임] 묶음에 */}
             {/* ⭐ 2026-11-18 노선 특수운임 메뉴는 뺐다 → 오더 등록의 [특수운임 적용] › 고정노선운임 탭 */}
             <MenuItem label="내정보" icon="idcard" onClick={onGoMyInfo} dark={dark} />
             <MenuItem label="내 이력서" icon="file" onClick={() => onGo?.("dept:myresume")} dark={dark} />
@@ -8561,6 +8572,7 @@ function MobileSideMenu({
             </MenuSection>
           )}
 
+          </MenuNavProvider>
           {dark ? (
             <KpmDrawerControls alarmEnabled={alarmEnabled} toggleAlarm={toggleAlarm} uiScale={uiScale} setUiScale={setUiScale} cardVersionB={cardVersionB} onToggleCardVersion={onToggleCardVersion} />
           ) : (<>
@@ -8794,28 +8806,51 @@ const MENU_SECTION_OPEN = {}; // ⭐ 2026-11-04 펼친 메뉴 묶음 기억(메�
 // ⭐ 2026-11-14 fold — PC 왼쪽 ≡ 메뉴와 같은 묶음(배차 · 운임 · 기사·거래처 · 매출·정산 · 관리). 접어 둘 수 있고 이 휴대폰에 기억한다.
 //   접혀 있을 때는 묶음 안의 알림 숫자 합(badge)을 제목 옆에 보여 준다.
 // 묶음 없이 혼자 있는 메뉴(거래처관리 · 정산관리 · 지입차관리) — 묶음 카드와 같은 모양, 제목 줄 없음
-function MenuSolo({ children, dark }) {
-  return dark ? <div className="px-3 pt-2.5"><div className="rounded-2xl bg-white/[0.035] ring-1 ring-white/[0.07] p-1 flex flex-col gap-0.5">{children}</div></div> : <div className="mt-1">{children}</div>;
-}
 const readMenuFold = () => { try { return JSON.parse(localStorage.getItem("kpmMenuFold") || "{}") || {}; } catch { return {}; } };
+// 🧭 2026-11-24 메뉴 정리(A안) — 메뉴 찾기 · 자주 쓰는 메뉴 · 큰 묶음 하나만 펼치기
+//  MenuNavCtx: { q(찾는 말), openKey(펼친 묶음 · undefined 면 openDefault), setOpenKey, reg(지금 보이는 메뉴 모음), gen }
+const MenuNavCtx = React.createContext(null);
+const menuNorm = (v) => String(v || "").replace(/\s+/g, "").toLowerCase();
+function menuLabelsOf(children, out = []) {
+  React.Children.forEach(children, (c) => {
+    if (!React.isValidElement(c)) return;
+    if (typeof c.props?.label === "string") { const ui = uiMenuItem("m", c.props.label, c.props.label); if (!ui.hidden) out.push({ k: c.props.label, l: ui.label }); }
+    else if (c.props?.children) menuLabelsOf(c.props.children, out);
+  });
+  return out;
+}
 function MenuSection({ title, en, children, dark, alwaysOpen = false, fold = false, openDefault = false, badge = 0 }) {
-  const [open, setOpen0] = useState(() => { if (!fold) return !!MENU_SECTION_OPEN[title]; const m = readMenuFold(); return m[title] === undefined ? openDefault : !!m[title]; });
-  const setOpen = (v) => setOpen0((p) => { const n = typeof v === "function" ? v(p) : v; MENU_SECTION_OPEN[title] = n; if (fold) { try { const m = readMenuFold(); m[title] = n; localStorage.setItem("kpmMenuFold", JSON.stringify(m)); } catch { /* 무시 */ } } return n; });
+  const nav = React.useContext(MenuNavCtx);
+  const [open0, setOpen0] = useState(() => { if (!fold) return !!MENU_SECTION_OPEN[title]; const m = readMenuFold(); return m[title] === undefined ? openDefault : !!m[title]; });
+  const setOpen1 = (v) => setOpen0((p) => { const n = typeof v === "function" ? v(p) : v; MENU_SECTION_OPEN[title] = n; if (fold) { try { const m = readMenuFold(); m[title] = n; localStorage.setItem("kpmMenuFold", JSON.stringify(m)); } catch { /* 무시 */ } } return n; });
+  const q = nav ? menuNorm(nav.q) : "";
+  const items = menuLabelsOf(children);
+  if (q && !items.some((x) => menuNorm(x.k).includes(q) || menuNorm(x.l).includes(q))) return null; // 찾는 말이 없는 묶음은 숨김
+  if (nav && !items.length) return null;
+  const acc = !!nav && fold; // 큰 묶음은 하나만 펼친다
+  let open = acc ? (nav.openKey === undefined ? openDefault : nav.openKey === title) : open0;
+  if (q) open = true;
+  const setOpen = acc ? () => nav.setOpenKey(open ? null : title) : setOpen1;
+  const summary = acc && !open ? items.map((x) => x.l).join(" · ") : "";
+  // 접힌 묶음도 안의 메뉴는 그려 둔다(자주 쓰는 메뉴 · 찾기가 읽어 간다) — 화면에만 숨김
+  const body = (cls) => (acc ? <div className={cls} style={open ? undefined : { display: "none" }}>{children}</div> : ((!fold || open) && <div className={cls}>{children}</div>));
   if (dark) {
     // B형 — 영문 코드 + 한글 제목 + 가는 선, 항목은 카드처럼 묶어서
     const head = (<>
-      <span className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>{en || title}</span>
-      <span className={`text-[11px] font-bold ${fold ? "text-white/70" : "text-white/40"}`}>{title}</span>
-      <span className="flex-1 h-px bg-gradient-to-r from-white/15 to-transparent" />
-      {fold && !open && badge > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#E5484D] text-white text-[10px] font-black flex items-center justify-center" style={{ fontVariantNumeric: "tabular-nums" }}>{badge > 99 ? "99+" : badge}</span>}
-      {fold && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8FB0F0" strokeWidth="3" strokeLinecap="round" style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .15s" }}><path d="M6 9l6 6 6-6" /></svg>}
+      <span className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0] shrink-0" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>{en || title}</span>
+      <span className={`text-[11px] font-bold shrink-0 ${fold ? "text-white/70" : "text-white/40"}`}>{title}</span>
+      {summary
+        ? <span className="flex-1 min-w-0 truncate text-[11px] font-semibold text-white/35">{summary}</span>
+        : <span className="flex-1 h-px bg-gradient-to-r from-white/15 to-transparent" />}
+      {fold && !open && badge > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#E5484D] text-white text-[10px] font-black flex items-center justify-center shrink-0" style={{ fontVariantNumeric: "tabular-nums" }}>{badge > 99 ? "99+" : badge}</span>}
+      {fold && <svg className="shrink-0" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8FB0F0" strokeWidth="3" strokeLinecap="round" style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .15s" }}><path d="M6 9l6 6 6-6" /></svg>}
     </>);
     return (
-      <div className="px-3 pt-3.5">
+      <div className={acc ? "px-3 pt-2" : "px-3 pt-3.5"}>
         {fold
-          ? <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="w-full px-2 pb-2 flex items-center gap-2 text-left">{head}</button>
+          ? <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className={`w-full flex items-center gap-2 text-left ${acc ? `px-3 h-12 rounded-2xl ${open ? "" : "bg-white/[0.035] ring-1 ring-white/[0.07]"}` : "px-2 pb-2"}`}>{head}</button>
           : <div className="px-2 pb-2 flex items-center gap-2">{head}</div>}
-        {(!fold || open) && <div className="rounded-2xl bg-white/[0.035] ring-1 ring-white/[0.07] p-1 flex flex-col gap-0.5">{children}</div>}
+        {body(`rounded-2xl bg-white/[0.035] ring-1 ring-white/[0.07] p-1 flex flex-col gap-0.5 ${acc ? "mt-1" : ""}`)}
       </div>
     );
   }
@@ -8834,16 +8869,101 @@ function MenuSection({ title, en, children, dark, alwaysOpen = false, fold = fal
     <div className="mt-1 mb-1">
       <button
         type="button"
+        aria-expanded={open}
         onClick={() => setOpen(v => !v)}
-        className={`w-full flex items-center justify-between px-5 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-widest ${dark ? "text-[#8FB0F0]/70" : "text-[#4B6CB7]"}`}
+        className={`w-full flex items-center justify-between gap-2 px-5 pt-4 pb-1.5 text-[11px] font-bold uppercase tracking-widest ${dark ? "text-[#8FB0F0]/70" : "text-[#4B6CB7]"}`}
       >
-        <span className="flex items-center gap-2">{title}{fold && !open && badge > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#E5484D] text-white text-[10px] font-black inline-flex items-center justify-center">{badge > 99 ? "99+" : badge}</span>}</span>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
+        <span className="flex items-center gap-2 min-w-0">{title}{summary && <span className="truncate normal-case tracking-normal text-[11.5px] font-semibold text-[#8A97AD]">{summary}</span>}{fold && !open && badge > 0 && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#E5484D] text-white text-[10px] font-black inline-flex items-center justify-center shrink-0">{badge > 99 ? "99+" : badge}</span>}</span>
+        <svg className="shrink-0" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
           style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform .15s" }}>
           <path d="M6 9l6 6 6-6" />
         </svg>
       </button>
-      {open && <div className="flex flex-col">{children}</div>}
+      {body("flex flex-col")}
+    </div>
+  );
+}
+
+// 메뉴 위 — [메뉴 찾기] + [자주 쓰는 메뉴](사람마다 · 이 휴대폰에 기억). 아래 메뉴들이 그려지며 남긴 목록(reg)을 쓴다
+const FAV_DEFAULT = ["오더등록", "배차현황", "미배차현황", "기사관리"];
+const FAV_MAX = 8;
+function MenuNavProvider({ dark, children }) {
+  const [q, setQ] = useState("");
+  const [openKey, setOpenKey0] = useState(() => { try { const v = localStorage.getItem("kpmMenuAcc"); return v === null ? undefined : (v || null); } catch { return undefined; } });
+  const setOpenKey = (k) => { setOpenKey0(k); try { localStorage.setItem("kpmMenuAcc", k || ""); } catch { /* 무시 */ } };
+  const reg = React.useRef(new Map());
+  const genRef = React.useRef(0);
+  genRef.current += 1;
+  const value = { q, setQ, openKey, setOpenKey, reg, gen: genRef.current };
+  return (
+    <MenuNavCtx.Provider value={value}>
+      <div className="flex flex-col">
+        {children}
+        <MenuNavTop dark={dark} />
+      </div>
+    </MenuNavCtx.Provider>
+  );
+}
+function MenuNavTop({ dark }) {
+  const nav = React.useContext(MenuNavCtx);
+  const uid = auth.currentUser?.uid || "me";
+  const key = `kpmFav:${uid}`;
+  const [fav, setFav0] = useState(() => { try { const v = JSON.parse(localStorage.getItem(key) || "null"); return Array.isArray(v) ? v : null; } catch { return null; } });
+  const setFav = (v) => { setFav0(v); try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* 무시 */ } };
+  const [edit, setEdit] = useState(false);
+  const all = [...nav.reg.current.values()].filter((x) => x.gen === nav.gen);
+  const byKey = new Map(all.map((x) => [x.key, x]));
+  let tiles = (fav || FAV_DEFAULT).map((k) => byKey.get(k)).filter(Boolean);
+  if (!fav && tiles.length < 4) for (const x of all) { if (tiles.length >= 4) break; if (!tiles.includes(x)) tiles.push(x); }
+  const cur = tiles.map((x) => x.key);
+  const toggle = (k) => setFav(cur.includes(k) ? cur.filter((x) => x !== k) : cur.length >= FAV_MAX ? cur : [...cur, k]);
+  const searching = !!menuNorm(nav.q);
+  const box = dark ? "bg-white/[0.06] ring-1 ring-white/[0.09]" : "bg-[#F5F8FD] border border-[#E3E8F0]";
+  const sub = dark ? "text-white/45" : "text-[#7A879C]";
+  return (
+    <div style={{ order: -1 }} className="px-3 pt-2.5" data-kp-menu-top>
+      <label className={`flex items-center gap-2 h-11 px-3 rounded-2xl ${box}`}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={dark ? "#8FB0F0" : "#4B6CB7"} strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" /></svg>
+        <input value={nav.q} onChange={(e) => nav.setQ(e.target.value)} placeholder="메뉴 찾기 (예: 정산, 급여)" enterKeyHint="search"
+          className={`flex-1 min-w-0 bg-transparent outline-none text-[15px] font-semibold ${dark ? "text-white placeholder:text-white/35" : "text-[#0F1A30] placeholder:text-[#9AA4B5]"}`} style={{ fontSize: 16 }} />
+        {nav.q && <button type="button" onClick={() => nav.setQ("")} className={`w-7 h-7 rounded-full grid place-items-center ${dark ? "bg-white/10 text-white/70" : "bg-[#E3E8F0] text-[#3A4A66]"}`} aria-label="지우기">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg></button>}
+      </label>
+      {searching ? (
+        !all.length && <div className={`px-2 py-6 text-center text-[13.5px] font-bold ${sub}`}>찾는 메뉴가 없어요</div>
+      ) : (
+        <>
+          <div className="flex items-center gap-2 px-2 pt-3 pb-2">
+            {dark && <span className="text-[9.5px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO }}>FAVORITES</span>}
+            <span className={`text-[11px] font-bold ${dark ? "text-white/70" : "text-[#4B6CB7]"}`}>자주 쓰는 메뉴</span>
+            <span className={`flex-1 h-px ${dark ? "bg-gradient-to-r from-white/15 to-transparent" : "bg-[#EEF1F6]"}`} />
+            <button type="button" onClick={() => setEdit((v) => !v)} className={`text-[12px] font-black ${dark ? "text-[#8FB0F0]" : "text-[#2D4C82]"}`}>{edit ? "완료" : "편집"}</button>
+          </div>
+          {edit ? (
+            <div className={`rounded-2xl p-2 ${box}`}>
+              <div className={`px-1 pb-2 text-[12px] font-semibold ${sub}`}>별을 눌러 넣거나 빼요(최대 {FAV_MAX}개) · 이 휴대폰에 기억해요</div>
+              <div className="flex flex-wrap gap-1.5">
+                {all.map((x) => { const on = cur.includes(x.key); return (
+                  <button key={x.key} type="button" onClick={() => toggle(x.key)} aria-pressed={on}
+                    className={`h-9 px-3 rounded-xl text-[13px] font-bold inline-flex items-center gap-1.5 ${on ? (dark ? "bg-[#2D4C82] text-white" : "bg-[#1B2B4B] text-white") : (dark ? "bg-white/[0.05] text-white/75" : "bg-white border border-[#DCE3EE] text-[#3A4A66]")}`}>
+                    <span style={{ color: on ? "#F6C76A" : undefined }}>{on ? "★" : "☆"}</span>{x.label}
+                  </button>); })}
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-4 gap-2">
+              {tiles.map((x) => (
+                <button key={x.key} type="button" onClick={x.onClick} className={`relative h-[74px] rounded-2xl flex flex-col items-center justify-center gap-1.5 active:scale-[.97] transition ${box}`}>
+                  <span className={`w-8 h-8 rounded-[10px] grid place-items-center ${dark ? "bg-gradient-to-br from-[#2D4C82]/70 to-[#16264A] ring-1 ring-white/10 text-[#CFE0FF]" : "bg-[#EAF0FB] text-[#1B2B4B]"}`}><ShellIcon name={x.icon || "dashboard"} size={15} /></span>
+                  <span className={`text-[11.5px] font-bold leading-tight px-1 truncate max-w-full ${dark ? "text-white/90" : "text-[#0F1A30]"}`}>{x.label}</span>
+                  {typeof x.badge === "number" && x.badge > 0 && <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-black grid place-items-center tabular-nums">{x.badge > 99 ? "99+" : x.badge}</span>}
+                </button>
+              ))}
+              {!tiles.length && <button type="button" onClick={() => setEdit(true)} className={`col-span-4 h-[60px] rounded-2xl text-[13px] font-bold ${box} ${sub}`}>＋ 자주 쓰는 메뉴 고르기</button>}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -8853,11 +8973,19 @@ function MenuItem({ onClick: onClick1, newKey, ...rest }) {
   // ⭐ 2026-11-07 화면 편집 — 최고관리자가 정한 이름·순서·숨기기(이 줄이 보일 권한이 있을 때만 그려지므로 권한은 그대로)
   useUiConfigVersion();
   const { isNew } = useNewSeen(); // ✨ 2026-11-24 새 메뉴 NEW(눌러 열면 사라짐)
+  const nav = React.useContext(MenuNavCtx);
   const ui = uiMenuItem("m", rest.label, rest.label);
   if (ui.hidden) return null;
   const fresh = isNew(newKey);
   if (fresh && !rest.badge) rest = { ...rest, badge: "NEW" };
   const onClick = onClick1 && newKey ? () => { markNewSeen(newKey); onClick1(); } : onClick1;
+  // 🧭 2026-11-24 메뉴 찾기 — 찾는 말이 이름에 없으면 숨김 · 보이는 메뉴는 [자주 쓰는 메뉴]가 쓰도록 남긴다
+  if (nav) {
+    const q = menuNorm(nav.q);
+    if (q && !menuNorm(rest.label).includes(q) && !menuNorm(ui.label).includes(q)) return null;
+    const go = onClick ? () => { nav.setQ(""); confirmLeave().then((ok) => { if (ok) onClick(); }); } : null;
+    if (go) nav.reg.current.set(rest.label, { key: rest.label, label: ui.label, icon: rest.icon, badge: rest.badge, onClick: go, gen: nav.gen });
+  }
   return <MenuItemBase {...rest} label={ui.label} uiKey={rest.label} uiStyle={ui.order !== undefined || ui.dim ? { order: ui.order, opacity: ui.dim ? 0.45 : undefined } : undefined} onClick={onClick ? () => { confirmLeave().then((ok) => { if (ok) onClick(); }); } : onClick} />;
 }
 function MenuItemBase({ label, onClick: onClick0, badge, dark, icon, uiKey, uiStyle }) {
