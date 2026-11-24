@@ -727,6 +727,36 @@ export default function App() {
     return () => clearTimeout(t);
   }, [loading]);
 
+  // 🛠 2026-11-24 로그인 화면을 켜 둔 사이 새 버전이 올라가면 — 로그인하자마자 예전 화면 조각 파일을 못 찾아(lazyRetry)
+  //  "들어갔다가 바로 또 로딩창"이 떴다. 로그인 전 화면에서 1분마다 · 탭을 다시 볼 때 버전을 확인해, 예전 화면이면
+  //  아무것도 입력하지 않고 있을 때 조용히 새로 고친다(로그인 뒤가 아니라 로그인 전에 한 번).
+  useEffect(() => {
+    if (user || IS_MOBILE_PREVIEW || !CUR_BUILD) return undefined;
+    let lastInput = 0; let stop = false;
+    const onInput = () => { lastInput = Date.now(); };
+    const idle = () => {
+      if (Date.now() - lastInput < 20000) return false;
+      const a = document.activeElement;
+      if (a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.value) return false;
+      try { if (sessionStorage.getItem("transportValidating") === "true" || sessionStorage.getItem("shipperValidating") === "true" || window.__kpGateInline) return false; } catch { /* 무시 */ }
+      return true;
+    };
+    const check = () => {
+      if (stop || document.visibilityState !== "visible" || !idle()) return;
+      targetVersion().then((v) => {
+        if (stop || !v?.build || v.build <= CUR_BUILD || auth.currentUser || !idle()) return;
+        try { const k = `kpLoginFresh:${v.build}`; if (sessionStorage.getItem(k)) return; sessionStorage.setItem(k, "1"); } catch { return; }
+        window.location.reload();
+      }).catch(() => {});
+    };
+    const t = setInterval(check, 60000);
+    const vis = () => { if (document.visibilityState === "visible") setTimeout(check, 500); };
+    document.addEventListener("visibilitychange", vis);
+    window.addEventListener("keydown", onInput, true); window.addEventListener("input", onInput, true);
+    const t0 = setTimeout(check, 4000);
+    return () => { stop = true; clearInterval(t); clearTimeout(t0); document.removeEventListener("visibilitychange", vis); window.removeEventListener("keydown", onInput, true); window.removeEventListener("input", onInput, true); };
+  }, [user]);
+
   // 업데이트 이벤트 - UpdateBanner.jsx가 처리하므로 App에서는 제거
 
   // 최고관리자용 접속이력(sessionLogs) 기록 — 로그인/로그아웃 시점을 남긴다.
@@ -789,14 +819,17 @@ export default function App() {
         //  실제 로그아웃(로그인 확인 중 잠깐 나갔다 들어오는 경우 제외)이면 기기에 남은 회사 데이터·저장본을 지우고 새로 고친다
         let validating = false;
         try { validating = sessionStorage.getItem("transportValidating") === "true" || sessionStorage.getItem("shipperValidating") === "true"; } catch { /* 무시 */ }
-        if (wasSignedIn && !IS_MOBILE_PREVIEW && !isDriverBusy() && !validating && !isPreviewMode()) {
+        const willPurge = wasSignedIn && !IS_MOBILE_PREVIEW && !isDriverBusy() && !validating && !isPreviewMode();
+        if (willPurge) {
           setTimeout(() => { purgeOnSignOut(db).catch(() => {}); }, 400); // 로그아웃 기록(sessionLogs)을 먼저 보낸다
         }
         setUser(null);
         setRole(null);
         setApproved(false);
         setContractCo("");
-        setLoading(false);
+        // 🛠 2026-11-24 로그아웃 → 기기 정리 후 새로 고침 — 그 사이 로그인 화면을 잠깐 그렸다가 다시 로딩 화면이 떠 "로딩이 두 번"으로 보였다
+        //  → 새로 고칠 때까지 로딩 화면을 그대로 둔다(새로 고침이 늦어도 8초 뒤엔 위 안전장치가 로그인 화면을 연다)
+        setLoading(willPurge);
         return;
       }
       setUser(u);
