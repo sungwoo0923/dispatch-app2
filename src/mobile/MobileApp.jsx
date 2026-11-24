@@ -8250,6 +8250,7 @@ function MobileSideMenu({
   deptOk: deptOkRaw = () => false,
   staffSignupOk = true, // ⭐ 2026-11-08 QA — 경리사무원·인사사무원은 PC처럼 가입 승인·기사 서류 메뉴 없음
 }) {
+  const fareMenu = useFareRules(); // ⭐ 2026-11-02 운임규칙 — 최고관리자가 켜 준 회사만 메뉴 표시
   // ⭐ 2026-11-04 메뉴를 닫았다 다시 열어도(내정보 등 들어갔다 와도) 보던 위치 그대로 — 맨 위로 튀지 않게
   const menuScrollRef = useRef(null);
   React.useLayoutEffect(() => {
@@ -8543,7 +8544,7 @@ function MobileSideMenu({
           </MenuSection>
           {/* ⭐ 2026-11-14 관리 = PC 회사관리(운임 규칙 · 내정보 · 내 이력서 · 출근기록부) + 관리자메뉴(회원 관리 · 권한 관리) */}
           <MenuSection title="회사관리" en="COMPANY" dark={dark} fold badge={canAdminMenu && !deptMode ? (alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) : 0}>
-            {/* 🧹 2026-11-24 운임 규칙 메뉴 뺌(PC와 같게) — 오더 입력 · 수정 창의 운임구분 드롭다운에서 추가 · 고치기 · 삭제 */}
+            {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}
             {/* ⭐ 2026-11-18 노선 특수운임 메뉴는 뺐다 → 오더 등록의 [특수운임 적용] › 고정노선운임 탭 */}
             <MenuItem label="내정보" icon="idcard" onClick={onGoMyInfo} dark={dark} />
             <MenuItem label="내 이력서" icon="file" onClick={() => onGo?.("dept:myresume")} dark={dark} />

@@ -239,7 +239,7 @@ export function FareTypeSelect({ value, onChange, pct, rules = [], className = "
   };
   const submitForm = () => (editRule ? submitEdit() : submitAdd());
   const delRule = async (o) => {
-    if (!(await kpConfirm(`운임구분 '${o.name}'을(를) 삭제할까요?\n회사 전체 운임구분 목록에서도 빠집니다(회사 공용). 이미 저장된 오더 값은 그대로예요.`))) return;
+    if (!(await kpConfirm(`운임구분 '${o.name}'을(를) 삭제할까요?\n회사관리 › 운임 규칙에서도 빠집니다(회사 공용). 이미 저장된 오더 값은 그대로예요.`))) return;
     try { await removeFareRuleQuick(company, o); if (String(value || "") === String(o.name)) onChange?.(""); }
     catch (e) { setAdding(true); setAddErr(e?.code === "permission-denied" ? "삭제 권한이 없습니다" : (e?.message || "삭제하지 못했습니다")); }
   };
@@ -307,7 +307,7 @@ export function FareTypeSelect({ value, onChange, pct, rules = [], className = "
       onMouseDown: (e) => e.stopPropagation(),
       onKeyDown: onKey,
       className: `${base} focus:outline-none focus:ring-4 focus:ring-[#4B6CB7]/15 disabled:opacity-50 disabled:cursor-not-allowed ${className}`,
-      title: cur ? `운임구분: ${cur.name} (${cur.type === "fixed" ? `수수료 고정 ${fmtRuleVal(cur)}` : `수수료 ${fmtRuleVal(cur)}`}) — 눌러서 바꾸기` : "운임구분 — 고른 구분의 계산으로 기사운임·수수료를 자동으로 채웁니다(목록에서 추가 · 고치기 · 삭제)",
+      title: cur ? `운임구분: ${cur.name} (${cur.type === "fixed" ? `수수료 고정 ${fmtRuleVal(cur)}` : `수수료 ${fmtRuleVal(cur)}`}) — 눌러서 바꾸기` : "운임구분 — 회사관리 › 운임 규칙에서 정한 계산으로 기사운임·수수료를 자동으로 채웁니다",
     }, label, chev),
     open && pos ? createPortal(h("div", {
       ref: menu, role: "listbox", "data-fare-menu": "1",
@@ -356,7 +356,7 @@ export function FareTypeSelect({ value, onChange, pct, rules = [], className = "
               className: "shrink-0 w-7 h-7 rounded-lg grid place-items-center text-[#9AA9C3] hover:text-[#B42318] hover:bg-[#FFF1EE] transition",
             }, h("svg", { width: 15, height: 15, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true }, h("path", { d: "M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" }))) : null));
       })),
-    list.length === 0 && !canAdd ? h("div", { className: "px-4 py-3 text-[13px] font-bold text-[#8E9BB2] border-t border-[#EEF2F7]" }, "관리자가 운임구분을 먼저 추가해 주세요") : null,
+    list.length === 0 && !canAdd ? h("div", { className: "px-4 py-3 text-[13px] font-bold text-[#8E9BB2] border-t border-[#EEF2F7]" }, "회사관리 › 운임 규칙에서 규칙을 먼저 만들어 주세요") : null,
     canAdd ? h("div", { className: "border-t border-[#EEF2F7] bg-[#F7F9FC] px-2 py-2", "data-fare-add": "1" },
       !adding
         ? h("button", {
@@ -457,7 +457,7 @@ export function FareTypeBreakdown({ rows = [], title = "운임구분별 합계",
   return h("div", { className: `rounded-2xl border border-[#E3E8F0] bg-white p-4 ${className}`, "data-fare-breakdown": "1" },
     h("div", { className: "flex items-center justify-between mb-2" },
       h("div", { className: "text-[15px] font-extrabold text-[#1B2B4B]" }, title),
-      h("div", { className: "text-[12.5px] font-semibold text-[#6B7A99]" }, "운임구분 기준")),
+      h("div", { className: "text-[12.5px] font-semibold text-[#6B7A99]" }, "회사관리 › 운임 규칙 기준")),
     h("div", { className: "overflow-x-auto" },
       h("table", { className: "w-full text-[14px]" },
         h("thead", null, h("tr", { className: "text-[#6B7A99] text-[13px]" },
