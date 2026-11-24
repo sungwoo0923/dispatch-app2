@@ -114,24 +114,29 @@ export function ForceBanner({ message = "", left, total, folded = false, onFold,
           <span className="w-[7px] h-[7px] rounded-full bg-[#D7BC82]" />업데이트까지 <span className="tabular-nums text-[#F3E3BC]">{fmtLeft(left)}</span>
         </button>
       ) : (
-        <div className={`kp-fu ${hot ? "hot" : ""} flex items-center gap-3 sm:gap-3.5 rounded-[18px] pl-3 sm:pl-4 pr-2 py-2.5 max-w-[calc(100vw-24px)]`} role="status" aria-live="polite" data-kp="force-update">
-          <Ring pct={pct} />
-          <div className="min-w-0">
-            <div className="text-[14px] sm:text-[14.5px] font-black tracking-[-0.01em] truncate">
-              <span className="hidden sm:inline text-[10.5px] font-black tracking-[0.18em] text-[#D7BC82] mr-2">SYSTEM UPDATE</span>
-              {hot ? "최신 버전을 곧 적용합니다" : "시스템 업데이트 예정"}
+        <div className={`kp-fu ${hot ? "hot" : ""} rounded-[18px] pl-3 sm:pl-4 pr-2 py-2.5 w-[calc(100vw-24px)] sm:w-auto max-w-[calc(100vw-24px)]`} role="status" aria-live="polite" data-kp="force-update">
+          <div className="flex items-center gap-3 sm:gap-3.5">
+            <Ring pct={pct} />
+            <div className="min-w-0 flex-1">
+              <div className="text-[14px] sm:text-[14.5px] font-black tracking-[-0.01em] truncate">
+                <span className="hidden sm:inline text-[10.5px] font-black tracking-[0.18em] text-[#D7BC82] mr-2">SYSTEM UPDATE</span>
+                {hot ? "최신 버전을 곧 적용합니다" : "시스템 업데이트 예정"}
+              </div>
+              {/* 📱 2026-11-24 휴대폰은 문구를 여러 줄로(최대 세 줄 · 기본 문구가 다 보이게) · PC 는 한 줄 */}
+              <div className="text-[11.5px] sm:text-[12px] text-[rgba(226,232,245,.72)] font-semibold mt-0.5 whitespace-normal break-keep leading-[1.45] line-clamp-3 sm:line-clamp-1 sm:max-w-[520px]">
+                {hot ? "화면이 잠시 후 새로 고쳐집니다" : (message || DEFAULT_FORCE_MSG)}
+              </div>
             </div>
-            <div className="text-[11.5px] sm:text-[12px] text-[rgba(226,232,245,.72)] font-semibold mt-0.5 truncate max-w-[52vw] sm:max-w-[520px]">
-              {hot ? "화면이 잠시 후 새로 고쳐집니다" : (message || DEFAULT_FORCE_MSG)}
+            <div className="text-right ml-1 shrink-0">
+              <div className="text-[22px] sm:text-[26px] font-black tabular-nums text-[#F3E3BC] leading-none tracking-[0.02em]">{fmtLeft(left)}</div>
+              <div className="text-[10px] font-extrabold text-[rgba(226,232,245,.55)] tracking-[0.08em] mt-0.5">후 자동 적용</div>
             </div>
+            <button type="button" onClick={onApply} className="hidden sm:grid h-8 px-3 rounded-[10px] border border-[rgba(215,188,130,.45)] text-[#F3E3BC] text-[12px] font-black place-items-center hover:bg-white/5">지금 적용</button>
+            {!hot && <button type="button" onClick={onFold} className="w-7 h-7 shrink-0 rounded-lg grid place-items-center text-[rgba(226,232,245,.6)] hover:bg-white/10" title="접어 두기" aria-label="접어 두기">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M5 12h14" /></svg></button>}
           </div>
-          <div className="text-right ml-1">
-            <div className="text-[22px] sm:text-[26px] font-black tabular-nums text-[#F3E3BC] leading-none tracking-[0.02em]">{fmtLeft(left)}</div>
-            <div className="text-[10px] font-extrabold text-[rgba(226,232,245,.55)] tracking-[0.08em] mt-0.5">후 자동 적용</div>
-          </div>
-          <button type="button" onClick={onApply} className="hidden sm:grid h-8 px-3 rounded-[10px] border border-[rgba(215,188,130,.45)] text-[#F3E3BC] text-[12px] font-black place-items-center hover:bg-white/5">지금 적용</button>
-          {!hot && <button type="button" onClick={onFold} className="w-7 h-7 rounded-lg grid place-items-center text-[rgba(226,232,245,.6)] hover:bg-white/10" title="접어 두기" aria-label="접어 두기">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M5 12h14" /></svg></button>}
+          {/* 📱 휴대폰 — [지금 적용] 은 아래 한 줄 넓게(손가락으로 누르기 쉽게) */}
+          <button type="button" onClick={onApply} className="sm:hidden mt-2 w-full h-9 rounded-[11px] border border-[rgba(215,188,130,.5)] bg-[rgba(215,188,130,.10)] text-[#F3E3BC] text-[13px] font-black active:bg-[rgba(215,188,130,.22)]">지금 적용</button>
         </div>
       )}
     </>
