@@ -18,17 +18,27 @@
 <meta property="og:description" content="오더 접수 · 배차 · 실시간 관제 · 정산 · 전자결재를 하나의 운송관리 플랫폼으로" />
 <meta property="og:url" content="https://www.logisweb.co.kr/" />
 <meta property="og:image" content="https://www.logisweb.co.kr/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="로지스웹 LogisWeb, 배차부터 정산까지 운송사 업무를 한 화면에서" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="로지스웹 LogisWeb | 운송사 통합 운송관리시스템(TMS)" />
+<meta name="twitter:description" content="오더 접수 · 배차 · 실시간 관제 · 정산 · 전자결재를 하나의 운송관리 플랫폼으로" />
+<meta name="twitter:image" content="https://www.logisweb.co.kr/og-image.png" />
 <meta property="og:locale" content="ko_KR" />
 <link rel="icon" type="image/png" href="/icons/sflow-icon.png" />
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+<!-- ⚡ 2026-11-24 글꼴: 굵기마다 한글 전체 파일(약 750KB씩)을 받던 것을, 화면에 쓰인 글자 조각만 받는 버전(버전 고정)으로 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard-dynamic-subset.css" />
 <link rel="stylesheet" href="home.css" />
 <!-- 🔎 2026-11-14 검색 노출 — 예전엔 body 를 처음부터 투명(opacity:0)으로 두어, 스크립트를 실행하지 않는 검색 로봇(네이버 Yeti 등)에게는 글이 숨겨진 페이지로 보였다.
      이제 스크립트가 도는 브라우저에서만 잠깐(편집본 적용 전) 숨기고, 로봇 · 스크립트 꺼진 화면에서는 처음부터 보인다 -->
 <style>html.kp-pre body{opacity:0}</style>
 <script>document.documentElement.classList.add("kp-pre");setTimeout(function(){document.documentElement.classList.remove("kp-pre")},2500)</script>
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"LogisWeb","alternateName":["로지스웹","logisweb"],"applicationCategory":"BusinessApplication","operatingSystem":"Web, Windows, macOS, Android, iOS","description":"화물 운송사를 위한 배차관리·실시간 관제·정산 ERP·전자결재 프로그램","url":"https://www.logisweb.co.kr/","inLanguage":"ko-KR","offers":{"@type":"Offer","price":"0","priceCurrency":"KRW","description":"무료 체험"}}
+{"@context": "https://schema.org", "@graph": [{"@type": "Organization", "@id": "https://www.logisweb.co.kr/#org", "name": "LogisWeb", "alternateName": "로지스웹", "url": "https://www.logisweb.co.kr/", "logo": "https://www.logisweb.co.kr/brand/logisweb-mark.png"}, {"@type": "WebSite", "@id": "https://www.logisweb.co.kr/#website", "name": "로지스웹 LogisWeb", "url": "https://www.logisweb.co.kr/", "inLanguage": "ko-KR", "publisher": {"@id": "https://www.logisweb.co.kr/#org"}}, {"@type": "SoftwareApplication", "name": "LogisWeb", "alternateName": ["로지스웹", "logisweb"], "applicationCategory": "BusinessApplication", "operatingSystem": "Web, Windows, macOS, Android, iOS", "description": "화물 운송사를 위한 통합 운송관리시스템(TMS). 오더 스캔, 실시간 배차현황, GPS 차량 관제, 정산 · 회계, 전자결재, 기사앱을 하나의 데이터로 운영합니다.", "url": "https://www.logisweb.co.kr/", "image": "https://www.logisweb.co.kr/og-image.png", "inLanguage": "ko-KR", "publisher": {"@id": "https://www.logisweb.co.kr/#org"}}, {"@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "기존에 쓰던 엑셀 자료를 그대로 옮길 수 있나요?", "acceptedAnswer": {"@type": "Answer", "text": "네. 거래처 · 상하차지 · 기사 목록을 엑셀이나 구글시트에서 가져올 수 있으며, 도입 시 데이터 이관을 지원합니다."}}, {"@type": "Question", "name": "기사님이 꼭 앱을 설치해야 하나요?", "acceptedAnswer": {"@type": "Answer", "text": "아니요. 인수증 · 서류는 문자 링크로 로그인 없이 제출할 수 있습니다. 실시간 관제 기능을 사용할 때만 기사앱이 필요합니다."}}, {"@type": "Question", "name": "PC 프로그램은 어떻게 설치하나요?", "acceptedAnswer": {"@type": "Answer", "text": "크롬 또는 엣지로 접속한 뒤 주소창의 설치 버튼을 누르면 바탕화면 앱으로 설치됩니다. 업데이트는 자동으로 적용됩니다."}}, {"@type": "Question", "name": "다른 운송사가 우리 데이터를 볼 수 있나요?", "acceptedAnswer": {"@type": "Answer", "text": "볼 수 없습니다. 운송사별로 데이터가 격리 저장되며, 직원별 메뉴 권한도 세부적으로 설정할 수 있습니다."}}, {"@type": "Question", "name": "세금계산서 발행도 되나요?", "acceptedAnswer": {"@type": "Answer", "text": "현재 거래명세서 발행 · 메일 발송 · 예상 부가세 집계를 지원하며, 홈택스 연동은 준비 중입니다."}}]}]}
 </script>
 </head>
 <body>
