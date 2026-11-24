@@ -8,6 +8,7 @@
 // "Functions codebase could not be analyzed successfully" 오류의 원인이었음).
 // 이 파일 전체가 v1 스타일로 작성돼 있으므로 v1 서브패스에서 명시적으로 가져온다.
 const functions = require("firebase-functions/v1");
+const { effectiveUser } = require("./multiCompany"); // 🏢 2026-11-24 여러 회사 오가기 — 지금 쓰는 회사 기준
 const SRV_FLEET_GRADES = ["지입", "직영", "임대", "분양"]; // 🚛 2026-11-20 기사앱 오더 수락/거절 대상 등급(src/fleetGradesCore.js FLEET_GRADES와 같게)
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
@@ -4929,7 +4930,7 @@ async function requireAdminRole(req, body) {
   if (!token) throw Object.assign(new Error("로그인이 필요합니다."), { status: 401 });
   const decoded = await getAuth().verifyIdToken(token);
   const u = await db.collection("users").doc(decoded.uid).get();
-  const ud = u.exists ? u.data() : {};
+  const ud = u.exists ? effectiveUser(u.data()) : {};
   const isTM = decoded.email === "tjddnqkf@naver.com" || ud.role === "totalMaster";
   // 🔒 2026-11-07 승인 전·퇴사 계정은 거절(예전엔 가입만 하고 승인 안 된 "관리자" 계정도 다른 회사 이름으로 관리자 기능을 부를 수 있었다)
   if (!isTM && (!u.exists || ud.approved === false || ud.employmentStatus === "퇴사")) throw Object.assign(new Error("사용 권한이 없습니다."), { status: 403 });
@@ -4945,7 +4946,7 @@ async function requireStaff(req, body) {
   if (!token) throw Object.assign(new Error("로그인이 필요합니다."), { status: 401 });
   const decoded = await getAuth().verifyIdToken(token);
   const u = await db.collection("users").doc(decoded.uid).get();
-  const ud = u.exists ? u.data() : {};
+  const ud = u.exists ? effectiveUser(u.data()) : {};
   const isTM = decoded.email === "tjddnqkf@naver.com" || ud.role === "totalMaster";
   if (!isTM && (ud.approved === false || ["driver", "shipper", "cafeUser"].includes(ud.role) || !u.exists || ud.employmentStatus === "퇴사")) throw Object.assign(new Error("사용 권한이 없습니다."), { status: 403 }); // 🔒 2026-11-07 퇴사·배차마당 계정 제외
   const company = isTM ? String(body?.company || ud.companyName || "(회사없음)") : String(ud.companyName || "(회사없음)");

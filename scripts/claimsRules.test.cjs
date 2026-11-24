@@ -37,6 +37,8 @@ const USERS = {
   shipS: { companyName: "에스상사", approved: true, role: "shipper", linkedTransportCompany: { companyName: A } },
   master: { companyName: A, approved: true, role: "totalMaster" },
   sub: { companyName: A, approved: true, role: "totalMaster", subAdmin: true },
+  // 🏢 2026-11-24 여러 회사 오가기 — 원래 회사 A(마스터 · 대표) · 오갈 회사 B · 지금 B
+  ceoAB: { companyName: A, approved: true, role: "admin", isMaster: true, position: "대표", team: "경리팀", multiCompanies: [B], activeCompany: B },
 };
 const HUBS = {
   hubX: { uid: "hubX", source: "signup", status: "approved", role: "shipper", bizNo: "123-45-67890", name: "허브화주" },
@@ -165,6 +167,30 @@ function docReadEvals(report, rulesText, byLine, tot = { all: 0 }) {
   await setUser("finA", USERS.finA);
   await t("토큰: 배차팀 → 급여 설정 거절", () => assertFails(getDoc(doc(withClaims("userA"), `payrollSettings/${A}`))));
   await t("토큰: 다른 회사 경리팀 토큰 → 우리 회사 급여 설정 거절", () => assertFails(getDoc(doc(withClaims("userB", { team: "경리팀" }), `payrollSettings/${A}`))));
+
+  // ── 🏢 여러 회사 오가기(multiCompanies · activeCompany) ──
+  await t("여러 회사: 토큰 = 지금 회사 B · 통합관리자 · 마스터/부서 권한은 넘어가지 않음", async () => {
+    const c = claimsOf("ceoAB");
+    if (c.co !== B || c.r !== "allMgr" || c.ms || c.fin || !c.ceo) throw new Error(JSON.stringify(c));
+    const h = claimsOf("ceoAB", { activeCompany: A });
+    if (h.co !== A || h.r !== "admin" || !h.ms) throw new Error(JSON.stringify(h));
+    const bad = claimsOf("ceoAB", { activeCompany: C });
+    if (bad.co !== A) throw new Error("목록 밖 회사는 원래 회사로");
+    const drv = claimsOf("ceoAB", { role: "driver", isMaster: false });
+    if (drv.co !== A) throw new Error("기사는 오가기 없음");
+  });
+  await t("여러 회사: B 오더 읽기 허용", () => assertSucceeds(ordersOf(withClaims("ceoAB"), B)));
+  await t("여러 회사: B로 들어가 있으면 A 오더는 거절(한 번에 한 회사)", () => assertFails(ordersOf(withClaims("ceoAB"), A)));
+  await t("여러 회사: 목록에 없는 C 오더 거절", () => assertFails(ordersOf(withClaims("ceoAB"), C)));
+  await t("여러 회사: 본인이 지금 회사를 A로 되돌리기 허용", () => assertSucceeds(updateDoc(doc(withClaims("ceoAB"), "users/ceoAB"), { activeCompany: A })));
+  await t("여러 회사: 본인이 지금 회사를 B로 허용", () => assertSucceeds(updateDoc(doc(withClaims("ceoAB"), "users/ceoAB"), { activeCompany: B })));
+  await t("여러 회사: 본인이 목록 밖 C로 바꾸기 거절", () => assertFails(updateDoc(doc(withClaims("ceoAB"), "users/ceoAB"), { activeCompany: C })));
+  await t("여러 회사: 본인이 오갈 회사 목록 늘리기 거절", () => assertFails(updateDoc(doc(withClaims("ceoAB"), "users/ceoAB"), { multiCompanies: [B, C] })));
+  await t("여러 회사: 목록 없는 직원이 activeCompany 적기 거절", () => assertFails(updateDoc(doc(withClaims("userA"), "users/userA"), { activeCompany: B })));
+  await t("여러 회사: 회사 관리자가 직원에게 오갈 회사 주기 거절", () => assertFails(updateDoc(doc(withClaims("adminA"), "users/userA"), { multiCompanies: [B] })));
+  await t("여러 회사: 최고관리자는 오갈 회사 주기 허용", () => assertSucceeds(updateDoc(doc(withClaims("master"), "users/userA2"), { multiCompanies: [B] })));
+  await setUser("ceoAB", USERS.ceoAB);
+  await setUser("userA2", USERS.userA2);
 
   // ── ③ 꾸민 토큰 ──
   await t("꾸민 토큰 tm:true(문서는 일반 직원) → 최고관리자 전용 거절", () => assertFails(getDoc(doc(withClaims("userA", {}, { tm: true, r: "totalMaster" }), "landingInquiries/q1"))));

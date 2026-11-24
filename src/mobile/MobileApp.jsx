@@ -1,4 +1,5 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
+import { MultiCompanyCard } from "../MultiCompanySwitch"; // 🏢 2026-11-24 여러 회사 오가기
 import { useNewSeen, markNewSeen } from "../newFeatures"; // ✨ 2026-11-24 새 메뉴 NEW 표시
 import NewMark from "../NewMark";
 import { RoadviewButton } from "../roadview"; // 📷 2026-11-20 상·하차지 로드뷰
@@ -8384,6 +8385,7 @@ function MobileSideMenu({
             스크롤되던 걸 없애고, 드로어 전체(메뉴~로그아웃~버전)가 하나로 이어져
             일반 스크롤바로 오르내리게 통합했다. */}
         <div ref={menuScrollRef} onScroll={(e) => { SIDE_MENU_SCROLL = e.currentTarget.scrollTop; }} className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-1" style={{ WebkitOverflowScrolling: "touch", paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)" }}>
+          <MultiCompanyCard />{/* 🏢 2026-11-24 여러 회사 계정 — 지금 회사 + [회사 전환] */}
           {/* ⭐ 2026-10-31 — PC 메뉴와 같은 구성·권한 규칙(DispatchApp menuState)으로 정리.
               실무자: 매출관리 숨김 / 경리·회계: 오더등록·단가표 숨김 / 관리자 전용 메뉴: 관리자·마스터·조회전용 /
               최고관리자 전용(관리센터·구글시트·블라인드·회사코드조회)은 최고관리자만.

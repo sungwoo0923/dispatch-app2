@@ -1,4 +1,5 @@
 // ======================= functions/hubSync.js =======================
+const { effectiveUser } = require("./multiCompany"); // 🏢 2026-11-24 여러 회사 오가기 — 지금 쓰는 회사 기준
 // ⭐ 2026-11-06 로지스웹 허브 → 로지스웹 배차 프로그램 연동(서버 전용)
 // ⭐ 2026-11-07 (3차) 연결 방식 정리
 //  ① 배차 프로그램 [저장 + 허브 등록] → hubPostRequests/{id} → 서버(handlePostRequest)가 허브 오더를 만들고
@@ -181,7 +182,7 @@ async function handlePostRequest(db, FieldValue, reqId, r) {
   if (!r || r.status !== "requested") return null;
   const [us, os] = await Promise.all([db.collection("users").doc(r.uid).get(), db.collection("orders").doc(String(r.lwOrderId || "_")).get()]);
   if (!us.exists) return fail("로지스웹 계정이 없어요");
-  const u = us.data();
+  const u = effectiveUser(us.data());
   if (u.approved === false || ["driver", "shipper", "cafeUser"].includes(u.role)) return fail("등록할 수 없는 계정이에요");
   if (!os.exists) return fail("원래 오더가 없어요");
   const lw = os.data();

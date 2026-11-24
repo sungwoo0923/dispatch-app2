@@ -1659,6 +1659,17 @@ service cloud.firestore {
           && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['team', 'position'])
             || resource.data.get('role', '') in ['shipper', 'cafeUser'] || isHrStaff() || isCompanyAdmin(myCo())));
     }
+    // 🏢 2026-11-24 여러 회사 오가기(태진 · 큐런 대표 등) — 오갈 회사 목록(multiCompanies)은 최고관리자만 정한다
+    //  지금 쓰는 회사(activeCompany)는 본인(또는 최고관리자)만, 빈 칸 · 원래 회사 · 목록 안의 회사로만 — 실제로 여는 것은 서버가 만든 토큰(co)
+    function multiCoWriteOk(userId) {
+      let after = request.resource.data;
+      let aff = resource == null ? after.keys() : after.diff(resource.data).affectedKeys();
+      return !aff.hasAny(['multiCompanies', 'activeCompany']) || isTotalMasterUser() || (
+        !aff.hasAny(['multiCompanies']) && request.auth.uid == userId
+        && after.get('activeCompany', '') is string
+        && (after.get('activeCompany', '') in ['', after.get('companyName', '')]
+          || (after.get('multiCompanies', []) is list && after.get('activeCompany', '') in after.get('multiCompanies', []))));
+    }
     match /users/{userId} {
       allow get: if (isSignedIn() && request.auth.uid == userId) || userVisible(resource.data);
       allow list: if userVisible(resource.data);
@@ -1666,7 +1677,7 @@ service cloud.firestore {
         isTotalMasterUser() ||
         (request.auth.uid != userId && otherUserWriteOk()) ||
         (selfUserWriteOk(userId) && selfKeepOk())
-      ) && (hireDateSame() || isHrStaff()) && roleEscalationOk();
+      ) && (hireDateSame() || isHrStaff()) && roleEscalationOk() && multiCoWriteOk(userId);
       allow delete: if isTotalMasterUser() || (resource != null && request.auth.uid != userId && userInMyScope(resource.data)
         && (resource.data.get('role', '') == 'driver' || userManager()));
     }
