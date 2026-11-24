@@ -112,11 +112,12 @@ function Loading() {
 // ── 운임조회 — PC "운임조회"(전국운임조회 · 자사운임표)와 같은 화면 ──
 // ⭐ 2026-11-04 입력 끊김 — 바깥(모바일 앱)은 오더가 바뀔 때마다 다시 그려지는데, 이 화면은 그 값들을 쓰지 않는다.
 //   memo로 감싸 상/하차지를 치는 동안 운임조회 화면 전체가 덩달아 다시 그려지지 않게 한다.
-const FareView = React.memo(function FareView({ initialTab = "전국운임조회" }) {
+const FareView = React.memo(function FareView({ initialTab = "운임산출" }) {
   const [tab, setTab] = React.useState(initialTab);
   return (
     <KpSubNav code="FARE LOOKUP" title="운임조회" icon="globe" active={tab} onSelect={setTab}
       groups={[{ label: "운임조회", items: [
+        { key: "운임산출", label: "운임 산출", en: "QUOTE", icon: "money" },
         { key: "전국운임조회", label: "전국운임조회", en: "NATIONAL", icon: "globe" },
         { key: "자사운임표", label: "자사운임표", en: "COMPANY", icon: "money" },
       ] }]}>

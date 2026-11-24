@@ -11,6 +11,7 @@ import { saveDriverChoice } from "../DriverEditChoice";
 import { orderProfit } from "../forklift";
 import { SpecialFareTag, SpecialFareLine } from "../specialFareTag"; // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import MobileSelect from "./MobileSelect";
+import { FareShell, FareCard, FareRange, FareTag, fareStats } from "../FareResultUi"; // 🎨 2026-11-24 운임조회 결과 새 디자인
 
 // ────────────────────────────────────────────────────────────────
 // 1) 업로드 요청 문자
@@ -324,309 +325,125 @@ export function FareHistorySheet({
   const hasClientMatch = matches.some(r => r.isClientMatch);
   const pA = extractFareArea(q.pickupAddr || "");
   const dA = extractFareArea(q.dropAddr || "");
+  // 🎨 2026-11-24 새 디자인(src/FareResultUi.jsx) — PC 운임조회 결과 창 · 운임 산출과 같은 모양(계산은 그대로)
+  const hasCargoInput = relaxEmptyInputs ? !!(q.cargo || "").trim() : true;
+  const hasTonInput = relaxEmptyInputs ? !!(q.ton || "").trim() : true;
+  const getLabel = (r) => {
+    const ce = r.tags.includes("화물일치");
+    const cp = r.tags.includes("화물유사");
+    const te = r.tags.includes("톤수일치");
+    const re = r.tags.includes("지명일치") || r.tags.includes("거래처일치");
+    if ((!hasCargoInput || ce) && (!hasTonInput || te) && re) return "완전일치";
+    if (ce || cp) return "부분일치";
+    if (te) return "톤수일치";
+    return "노선일치";
+  };
+  const validMatches = matches.filter(r => r.claim > 0);
+  const counts = { "완전일치": 0, "부분일치": 0, "톤수일치": 0, "노선일치": 0 };
+  validMatches.forEach(r => { const l = getLabel(r); counts[l] = (counts[l] || 0) + 1; });
+  const visibleMatches = sortFareHistoryMobile(filter === "all" ? validMatches : validMatches.filter(r => getLabel(r) === filter), sortMode, "dateStr", "claim");
+  const claims = visibleMatches.map(r => r.claim).filter(v => v > 0);
+  const fareMin = claims.length ? Math.min(...claims) : 0;
+  const fareMax = claims.length ? Math.max(...claims) : 0;
+  const fareRange = fareMax - fareMin || 1;
+  const getBarPct = (f) => fareRange > 0 ? Math.min(100, Math.max(0, ((f - fareMin) / fareRange) * 100)) : 50;
+  const tabs = ["all", "완전일치", "부분일치", "톤수일치", "노선일치"];
+  // ⭐ PC 운임조회와 동일 — 대표 운임(최빈값) · 지금 톤수 이하 이력만으로 범위
+  const extractTon = (s = "") => { const m = String(s).replace(/\s+/g, "").match(/(\d+(?:\.\d+)?)/); return m ? Number(m[1]) : null; };
+  const rangeTonInput = extractTon(q.ton || "");
+  const rangeFares = validMatches.map(r => ({ fare: r.claim, ton: extractTon(r.order?.차량톤수 || r.order?.톤수 || "") }))
+    .filter(x => rangeTonInput == null ? true : (x.ton != null && x.ton <= rangeTonInput));
+  const rangeCount = rangeFares.length;
+  const rangeMin = rangeCount ? Math.min(...rangeFares.map(x => x.fare)) : null;
+  const rangeMax = rangeCount ? Math.max(...rangeFares.map(x => x.fare)) : null;
+  let rangeModeFare = null, rangeModeCount = 0;
+  if (rangeCount) { const freq = new Map(); rangeFares.forEach(x => freq.set(x.fare, (freq.get(x.fare) || 0) + 1)); freq.forEach((cnt, fare) => { if (cnt > rangeModeCount) { rangeModeCount = cnt; rangeModeFare = fare; } }); }
+  const tier0Rows = validMatches.filter(r => getLabel(r) === "완전일치");
+  let modeFare = null, modeCount = 0;
+  if (tier0Rows.length) { const freq = new Map(); tier0Rows.forEach(r => freq.set(r.claim, (freq.get(r.claim) || 0) + 1)); freq.forEach((cnt, fare) => { if (cnt > modeCount) { modeCount = cnt; modeFare = fare; } }); }
+  const modeSharePct = tier0Rows.length > 0 ? Math.round((modeCount / tier0Rows.length) * 100) : 0;
+  const isOutlierRow = (r) => { if (getLabel(r) !== "완전일치" || !modeFare) return false; const freq = tier0Rows.filter(t => t.claim === r.claim).length; return freq === 1 && Math.abs(r.claim - modeFare) / modeFare >= 0.05; };
+  const stats = fareStats(validMatches.map((r) => ({ 청구운임: r.claim, 기사운임: r.drv, 수수료: r.claim - (r.drv || 0) })));
+  const avg = stats?.saleAvg || 0;
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col" style={{ background: "rgba(15,25,50,0.97)" }}>
-      <div className="flex-1 min-h-[56px]" onClick={onClose} />
-      <div className="relative bg-white rounded-t-3xl flex flex-col" style={{ maxHeight: "calc(100dvh - 56px)" }} onClick={e => e.stopPropagation()}>
-        {/* 핸들바 */}
-        <div className="flex justify-center pt-3 pb-0 shrink-0">
-          <div className="w-10 h-1 rounded-full bg-gray-300" />
-        </div>
-        {/* 헤더 */}
-        <div className="bg-[#1B2B4B] px-5 py-4 shrink-0 rounded-t-none">
-          <div className="flex items-start justify-between">
+    <FareShell mobile zClass="z-[9999]" from={pA || "-"} to={dA || "-"} stats={stats} onClose={onClose}
+      chips={[q.carType, showCargoTonInHeader && q.cargo, showCargoTonInHeader && q.ton, q.client && hasClientMatch ? q.client : ""]}>
+      {historyLoading > 0 && matches.length === 0 && <div className="px-3 py-2 rounded-xl bg-white border border-[#E3E8F0] text-[#0F1A30] text-[12px] font-bold flex items-center gap-2"><span className="w-3 h-3 border-2 border-[#0F1A30]/30 border-t-[#0F1A30] rounded-full animate-spin" />운임 이력을 불러오는 중…</div>}
+      {validMatches.length === 0 ? (
+        <div className="py-16 text-center text-[13px] text-[#8A97AD]">유사한 과거 이력이 없어요</div>
+      ) : (<>
+        {q.client && !hasClientMatch && <div className="px-3 py-2 bg-white border border-[#E3E8F0] rounded-xl text-[11.5px] text-[#5B6B85] font-semibold">{q.client} 이력 없음 · 같은 노선 다른 거래처 이력이에요</div>}
+        <FareCard title="운임 분포" sub={`${rangeCount}건${rangeTonInput != null ? ` · ${q.ton || rangeTonInput + "톤"} 이하` : ""}`}>
+          {rangeCount === 0 ? <div className="py-4 text-center text-[12px] text-[#8A97AD]">입력한 톤수 이하의 과거 이력이 없어요.</div> : (
+            <FareRange min={rangeMin} max={rangeMax} marker={rangeModeFare} markerLabel="대표" sales={rangeFares.map((x) => x.fare)} onApply={(v) => onApply(v, null, "quick")}
+              quick={[{ label: "최저 운임", sub: "가장 낮은 이력", value: rangeMin }, { label: "대표 운임", sub: `최다 청구(${rangeModeCount}건)`, value: rangeModeFare, strong: true }, { label: "최고 운임", sub: "가장 높은 이력", value: rangeMax }]} />
+          )}
+        </FareCard>
+        {modeFare != null && (
+          <div className="bg-white border border-[#0F1A30] rounded-[20px] px-4 py-3 flex items-center justify-between gap-3">
             <div>
-              <div className="text-white font-bold text-[16px]">운임 조회 결과</div>
-              <div className="text-white/60 text-[11px] mt-0.5 flex flex-wrap gap-1 items-center">
-                {pA && <span>{pA}</span>}
-                {pA && dA && <span className="text-white/30">→</span>}
-                {dA && <span>{dA}</span>}
-                {q.carType && <><span className="text-white/30">·</span><span>{q.carType}</span></>}
-                {showCargoTonInHeader && q.cargo && <><span className="text-white/30">·</span><span>{q.cargo}</span></>}
-                {showCargoTonInHeader && q.ton && <><span className="text-white/30">·</span><span>{q.ton}</span></>}
-                {q.client && hasClientMatch && <><span className="text-white/30">·</span><span className="text-white/90 font-bold">{q.client}</span></>}
-              </div>
+              <div className="text-[11px] font-bold text-[#6B7A93]">이 조건의 평소 운임(최빈값)</div>
+              <div className="text-[18px] font-black text-[#0F1A30] tabular-nums mt-0.5">{modeFare.toLocaleString()}원</div>
+              <div className="text-[10.5px] text-[#6B7A93] mt-0.5">동일 조건 {tier0Rows.length}건 중 {modeCount}건({modeSharePct}%)</div>
             </div>
-            <button onClick={onClose}
-              className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white text-lg shrink-0">×</button>
+            <button type="button" onClick={() => onApply(modeFare, null, "quick")} className="shrink-0 h-9 px-3.5 text-[12px] font-extrabold text-white bg-[#0F1A30] rounded-xl">적용</button>
           </div>
-        </div>
-        {/* 콘텐츠 */}
-        <div className="flex-1 overflow-y-auto overscroll-contain" data-fare-scroll>
-          {historyLoading > 0 && matches.length === 0 && <div className="mx-3 mt-3 px-3 py-2 rounded-lg bg-[#EEF2F8] text-[#1B2B4B] text-[12px] font-bold flex items-center gap-2"><span className="w-3 h-3 border-2 border-[#1B2B4B]/30 border-t-[#1B2B4B] rounded-full animate-spin" />운임 이력을 불러오는 중…</div>}
-          {(() => {
-            const hasCargoInput = relaxEmptyInputs ? !!(q.cargo || "").trim() : true;
-            const hasTonInput = relaxEmptyInputs ? !!(q.ton || "").trim() : true;
-            const getLabel = (r) => {
-              const ce = r.tags.includes("화물일치");
-              const cp = r.tags.includes("화물유사");
-              const te = r.tags.includes("톤수일치");
-              const re = r.tags.includes("지명일치") || r.tags.includes("거래처일치");
-              if ((!hasCargoInput || ce) && (!hasTonInput || te) && re) return "완전일치";
-              if (ce || cp) return "부분일치";
-              if (te) return "톤수일치";
-              return "노선일치";
-            };
-            const validMatches = matches.filter(r => r.claim > 0);
-            const counts = { "완전일치": 0, "부분일치": 0, "톤수일치": 0, "노선일치": 0 };
-            validMatches.forEach(r => { const l = getLabel(r); counts[l] = (counts[l] || 0) + 1; });
-            const visibleMatches = sortFareHistoryMobile(
-              filter === "all"
-                ? validMatches
-                : validMatches.filter(r => getLabel(r) === filter),
-              sortMode, "dateStr", "claim"
-            );
-            const claims = visibleMatches.map(r => r.claim).filter(v => v > 0);
-            const fareMin = claims.length ? Math.min(...claims) : 0;
-            const fareMax = claims.length ? Math.max(...claims) : 0;
-            const fareRange = fareMax - fareMin || 1;
-            const getBarPct = (f) => fareRange > 0 ? Math.min(100, Math.max(0, ((f - fareMin) / fareRange) * 100)) : 50;
-            const tabs = ["all", "완전일치", "부분일치", "톤수일치", "노선일치"];
-
-            // ⭐ PC 운임조회와 동일한 로직 — 평균 대신 "대표 운임(최빈값)"을 쓰고,
-            // 지금 이 오더(입력한) 톤수 이하 이력만으로 범위를 좁힌다.
-            const extractTon = (s = "") => { const m = String(s).replace(/\s+/g, "").match(/(\d+(?:\.\d+)?)/); return m ? Number(m[1]) : null; };
-            const rangeTonInput = extractTon(q.ton || "");
-            const rangeFares = validMatches
-              .map(r => ({ fare: r.claim, ton: extractTon(r.order?.차량톤수 || r.order?.톤수 || "") }))
-              .filter(x => rangeTonInput == null ? true : (x.ton != null && x.ton <= rangeTonInput));
-            const rangeCount = rangeFares.length;
-            const rangeMin = rangeCount ? Math.min(...rangeFares.map(x => x.fare)) : null;
-            const rangeMax = rangeCount ? Math.max(...rangeFares.map(x => x.fare)) : null;
-            let rangeModeFare = null, rangeModeCount = 0;
-            if (rangeCount) {
-              const freq = new Map();
-              rangeFares.forEach(x => freq.set(x.fare, (freq.get(x.fare) || 0) + 1));
-              freq.forEach((cnt, fare) => { if (cnt > rangeModeCount) { rangeModeCount = cnt; rangeModeFare = fare; } });
-            }
-            const getRangeBarPct = (fare) => {
-              if (rangeMin == null || rangeMax == null) return 50;
-              const range = rangeMax - rangeMin || 1;
-              return Math.min(100, Math.max(0, ((fare - rangeMin) / range) * 100));
-            };
-            // 동일 조건(완전일치)의 평소 운임(최빈값) — 이례적 청구 판별용
-            const tier0Rows = validMatches.filter(r => getLabel(r) === "완전일치");
-            let modeFare = null, modeCount = 0;
-            if (tier0Rows.length) {
-              const freq = new Map();
-              tier0Rows.forEach(r => freq.set(r.claim, (freq.get(r.claim) || 0) + 1));
-              freq.forEach((cnt, fare) => { if (cnt > modeCount) { modeCount = cnt; modeFare = fare; } });
-            }
-            const modeSharePct = tier0Rows.length > 0 ? Math.round((modeCount / tier0Rows.length) * 100) : 0;
-            const isOutlierRow = (r) => {
-              if (getLabel(r) !== "완전일치" || !modeFare) return false;
-              const freq = tier0Rows.filter(t => t.claim === r.claim).length;
-              return freq === 1 && Math.abs(r.claim - modeFare) / modeFare >= 0.05;
-            };
-
-            if (validMatches.length === 0) return (
-              <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                </svg>
-                <div className="text-sm">유사한 과거 이력이 없습니다</div>
-              </div>
-            );
-
-            return (
-              <>
-                {q.client && !hasClientMatch && (
-                  <div className="mx-4 mt-3 mb-0 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl flex items-center gap-2">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                    <span className="text-[11px] text-gray-600 font-semibold">{q.client} 이력 없음 · 동일 노선 다른 거래처 이력</span>
-                  </div>
-                )}
-
-                {/* 운임 범위 요약 — 톤수 이하 이력만 */}
-                {claims.length > 0 && (
-                  <div className="px-5 py-4 border-b border-gray-100">
-                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-                      조회 운임 범위 ({rangeCount}건{rangeTonInput != null ? ` · ${q.ton || rangeTonInput + "톤"} 이하` : ""})
+        )}
+        <FareCard title="과거 운송 기록" sub={`${visibleMatches.length}건`} right={<FareSortDropdownMobile value={sortMode} onChange={setSortMode} />}>
+          <MobileSelect compact title="필터" value={filter} onChange={e => setFilter(e.target.value)}
+            className="mb-3 text-[12px] font-bold text-[#0F1A30] border border-[#E3E8F0] rounded-lg px-2.5 py-1.5 outline-none bg-white">
+            {tabs.map(t => { const cnt = t === "all" ? validMatches.length : (counts[t] || 0); if (t !== "all" && cnt === 0) return null; return <option key={t} value={t}>{t === "all" ? `전체 ${cnt}건` : `${t} ${cnt}건`}</option>; })}
+          </MobileSelect>
+          <div className="space-y-2">
+            {visibleMatches.map((r, i) => {
+              const o = r.order; const tagLabel = getLabel(r); const fare = r.claim; const barPct = getBarPct(fare);
+              const fareLevel = barPct <= 33 ? "저렴" : barPct <= 66 ? "보통" : "높음";
+              const isModeRow = tagLabel === "완전일치" && modeFare != null && fare === modeFare && modeCount > 1;
+              const diff = avg ? fare - avg : 0;
+              return (
+                <div key={i} onClick={() => onOpenDetail(o)} className={`rounded-2xl border bg-white overflow-hidden active:scale-[0.99] transition ${i === 0 ? "border-[#0F1A30]" : "border-[#E3E8F0]"}`}>
+                  <div className="px-3.5 pt-3 pb-2.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11.5px] font-bold text-[#6B7A93] tabular-nums">{o.상차일 || ""}</span>
+                      {i === 0 && <FareTag strong>최근 유사 운송</FareTag>}
+                      <FareTag strong={tagLabel === "완전일치"}>{tagLabel}</FareTag>
+                      <FareTag>{fareLevel}</FareTag>
+                      {isModeRow && <FareTag strong>가장 흔한 운임</FareTag>}
+                      {isOutlierRow(r) && <FareTag warn>이례적 청구(반복없음)</FareTag>}
+                      {o.긴급 === true && <FareTag warn>긴급</FareTag>}
+                      <SpecialFareTag row={o} size="sm" />
                     </div>
-                    {rangeCount === 0 ? (
-                      <div className="py-4 text-center text-[12px] font-semibold text-gray-400">입력한 톤수 이하의 과거 이력이 없습니다.</div>
-                    ) : (
-                    <>
-                    <div className="flex items-baseline gap-2 mb-3">
-                      <span className="text-[26px] font-black text-[#1B2B4B] leading-none">{rangeMin.toLocaleString()}</span>
-                      <span className="text-[16px] font-bold text-gray-300">~</span>
-                      <span className="text-[26px] font-black text-[#1B2B4B] leading-none">{rangeMax.toLocaleString()}</span>
-                      <span className="text-[13px] font-semibold text-gray-400 mb-0.5">원</span>
-                    </div>
-                    <div className="relative h-2 bg-gray-100 rounded-full mb-1.5">
-                      <div className="absolute inset-0 bg-gray-200 rounded-full" />
-                      <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#1B2B4B] border-2 border-white shadow-md z-10"
-                        style={{ left: `calc(${getRangeBarPct(rangeModeFare)}% - 6px)` }} />
-                    </div>
-                    <div className="flex justify-between text-[10px] font-semibold text-gray-400">
-                      <span>최저 {rangeMin.toLocaleString()}원</span>
-                      <span className="text-[#1B2B4B] font-bold">대표 {rangeModeFare.toLocaleString()}원</span>
-                      <span>최고 {rangeMax.toLocaleString()}원</span>
-                    </div>
-                    {/* 빠른 적용 버튼 */}
-                    <div className="grid grid-cols-3 gap-2 mt-3">
-                      {[
-                        { label: "최저 운임", sub: "가장 저렴한 이력", value: rangeMin },
-                        { label: "대표 운임", sub: `최다 청구(${rangeModeCount}건)`, value: rangeModeFare },
-                        { label: "최고 운임", sub: "가장 높은 이력", value: rangeMax },
-                      ].map(({ label, sub, value }) => (
-                        <button key={label}
-                          onClick={() => onApply(value, null, "quick")}
-                          className="rounded-xl border border-gray-200 bg-gray-50 py-2.5 text-center active:scale-95 transition">
-                          <div className="text-[11px] font-bold text-gray-500 mb-1">{label}</div>
-                          <div className="text-[15px] font-extrabold text-[#1B2B4B]">{value.toLocaleString()}</div>
-                          <div className="text-[10.5px] text-gray-400 mt-0.5 leading-tight">{sub}</div>
-                        </button>
-                      ))}
-                    </div>
-                    </>
-                    )}
-                  </div>
-                )}
-
-                {/* 과거 기록 목록 */}
-                <div className="px-4 py-3 space-y-2.5">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-[13px] font-extrabold text-[#1B2B4B]">과거 운송 기록</span>
-                    <FareSortDropdownMobile value={sortMode} onChange={setSortMode} />
-                  </div>
-
-                  {/* 대표운임(최빈값) — 지금과 같은 조건에서 가장 자주 청구된 "평소 가격" */}
-                  {modeFare != null && (
-                    <div className="mb-1 px-4 py-3 bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-xl flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-[10px] font-bold text-[#1B2B4B]">이 조건의 평소 운임(최빈값)</div>
-                        <div className="text-[16px] font-black text-[#1B2B4B] mt-0.5">{modeFare.toLocaleString()}원</div>
-                        <div className="text-[10px] text-gray-500 mt-0.5">동일 조건 {tier0Rows.length}건 중 {modeCount}건({modeSharePct}%)이 이 가격</div>
-                      </div>
-                      <button onClick={() => onApply(modeFare, null, "quick")}
-                        className="shrink-0 px-2.5 py-2 text-[11px] font-bold text-white bg-[#1B2B4B] rounded-lg active:opacity-80">
-                        적용
-                      </button>
-                    </div>
-                  )}
-
-                  {/* 필터 — 버튼 여러 개 대신 드롭다운 하나 */}
-                  <MobileSelect compact title="필터" value={filter} onChange={e => setFilter(e.target.value)}
-                    className="text-[12px] font-bold text-[#1B2B4B] border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none bg-white">
-                    {tabs.map(t => {
-                      const cnt = t === "all" ? validMatches.length : (counts[t] || 0);
-                      if (t !== "all" && cnt === 0) return null;
-                      return <option key={t} value={t}>{t === "all" ? `전체 ${cnt}건` : `${t} ${cnt}건`}</option>;
-                    })}
-                  </MobileSelect>
-
-                  {visibleMatches.map((r, i) => {
-                    const o = r.order;
-                    const tagLabel = getLabel(r);
-                    const tagCls = tagLabel === "완전일치" ? "border-[#1B2B4B] text-[#1B2B4B]" : "border-gray-300 text-gray-500";
-                    const fare = r.claim;
-                    const barPct = getBarPct(fare);
-                    const fareLevel = barPct <= 33 ? "저렴" : barPct <= 66 ? "보통" : "높음";
-                    const isTop = i === 0;
-                    const outlier = isOutlierRow(r);
-                    const isModeRow = tagLabel === "완전일치" && modeFare != null && fare === modeFare && modeCount > 1;
-                    return (
-                      <div key={i} onClick={() => onOpenDetail(o)} className={`bg-white border rounded-2xl overflow-hidden shadow-sm cursor-pointer active:scale-[0.99] transition ${isTop ? "border-[#1B2B4B]/30" : "border-gray-200"}`}>
-                        {isTop && (
-                          <div className="bg-[#1B2B4B] px-4 py-1 flex items-center gap-1">
-                            <span className="text-white text-[10px] font-bold">최근 유사 운송</span>
-                          </div>
-                        )}
-                        <div className="px-4 pt-3 pb-0">
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${tagCls}`}>{tagLabel}</span>
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-gray-300 text-gray-500">{fareLevel}</span>
-                                {isModeRow && (
-                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-[#1B2B4B] text-[#1B2B4B]">가장 흔한 운임</span>
-                                )}
-                                {outlier && (
-                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-orange-300 text-orange-700">이례적 청구(반복없음)</span>
-                                )}
-                                {o.긴급 === true && (
-                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-orange-300 text-orange-700">긴급</span>
-                                )}
-                                <SpecialFareTag row={o} size="sm" />
-                                <span className="text-[11px] text-gray-400">{o.상차일 || ""}</span>
-                              </div>
-                              <div className="text-[13px] font-bold text-gray-900 truncate">
-                                {o.상차지명 || "-"} → {o.하차지명 || "-"}
-                              </div>
-                              {(o.상차지주소 || o.하차지주소) && (
-                                <div className="text-[11px] text-gray-400 mt-0.5">
-                                  {fmtAddr(o.상차지주소)} → {fmtAddr(o.하차지주소)}
-                                </div>
-                              )}
-                              {o.거래처명 && <div className="text-[11px] text-gray-500 mt-0.5">{o.거래처명}</div>}
-                              <SpecialFareLine row={o} className="mt-1" />
-                              <div className="flex items-center gap-3 mt-1.5 overflow-x-auto whitespace-nowrap">
-                                {o.화물내용 && (
-                                  <span className="text-[13px] font-bold text-gray-900 inline-flex items-center gap-1 shrink-0">
-                                    <Package className="w-3.5 h-3.5 text-gray-400 shrink-0" /> {o.화물내용}
-                                  </span>
-                                )}
-                                {(o.톤수 || o.차량톤수) && (
-                                  <span className="text-[13px] font-bold text-gray-900 inline-flex items-center gap-1 shrink-0">
-                                    <Scale className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {o.톤수 || o.차량톤수}
-                                  </span>
-                                )}
-                                {(o.차종 || o.차량종류) && (
-                                  <span className="text-[13px] font-bold text-gray-900 inline-flex items-center gap-1 shrink-0">
-                                    <VehicleIcon type={o.차종 || o.차량종류} className="w-3.5 h-3.5 text-gray-500 shrink-0" /> {o.차종 || o.차량종류}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <div className="text-[11px] text-gray-400">청구</div>
-                              <div className="text-[17px] font-extrabold text-[#1B2B4B]">{fare.toLocaleString()}원</div>
-                              <div className="text-[11px] text-gray-400 mt-0.5">기사 {r.drv.toLocaleString()}원</div>
-                            </div>
-                          </div>
-                          {/* 운임 위치 바 */}
-                          {claims.length > 1 && (
-                            <div className="relative h-1.5 bg-gray-100 rounded-full mb-2.5">
-                              <div className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#1B2B4B] border-2 border-white shadow"
-                                style={{ left: `calc(${barPct}% - 5px)` }} />
-                            </div>
-                          )}
-                          {/* 기사 */}
-                          {(o.이름 || o.기사명) && (
-                            <div className="text-[11px] text-gray-400 mb-2">
-                              기사 <span className="text-gray-700 font-semibold">{o.이름 || o.기사명}</span>
-                            </div>
-                          )}
+                    <div className="flex items-end justify-between gap-2 mt-1.5">
+                      <div className="min-w-0">
+                        <div className="text-[13.5px] font-extrabold text-[#0F1A30] truncate">{o.상차지명 || "-"} → {o.하차지명 || "-"}</div>
+                        {(o.상차지주소 || o.하차지주소) && <div className="text-[11px] text-[#8A97AD] mt-0.5 truncate">{fmtAddr(o.상차지주소)} → {fmtAddr(o.하차지주소)}</div>}
+                        <div className="text-[11.5px] text-[#6B7A93] mt-0.5 truncate flex items-center gap-2">
+                          {o.화물내용 && <span className="inline-flex items-center gap-1"><Package className="w-3 h-3" />{o.화물내용}</span>}
+                          {(o.톤수 || o.차량톤수) && <span className="inline-flex items-center gap-1"><Scale className="w-3 h-3" />{o.톤수 || o.차량톤수}</span>}
+                          {(o.차종 || o.차량종류) && <span className="inline-flex items-center gap-1"><VehicleIcon type={o.차종 || o.차량종류} className="w-3 h-3" />{o.차종 || o.차량종류}</span>}
                         </div>
-                        <div className="flex border-t border-gray-100 mt-0">
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); onApply(r.claim, null, "row"); }}
-                            className="flex-1 py-2.5 bg-[#1B2B4B] text-white text-[12px] font-bold text-center active:opacity-80"
-                          >
-                            청구운임 적용 ({r.claim.toLocaleString()})
-                          </button>
-                          {r.drv > 0 && (
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); onApply(r.claim, r.drv, "row"); }}
-                              className="flex-1 py-2.5 bg-[#2d4a7a] text-white text-[12px] font-bold text-center active:opacity-80 border-l border-white/20"
-                            >
-                              기사포함 ({r.drv.toLocaleString()})
-                            </button>
-                          )}
-                        </div>
+                        {(o.거래처명 || o.이름 || o.기사명) && <div className="text-[11px] text-[#8A97AD] mt-0.5 truncate">{[o.거래처명, o.이름 || o.기사명].filter(Boolean).join(" · ")}</div>}
+                        <SpecialFareLine row={o} className="mt-1" />
                       </div>
-                    );
-                  })}
+                      <div className="shrink-0 text-right">
+                        <div className="text-[17px] font-black text-[#0F1A30] tabular-nums leading-none">{fare.toLocaleString()}<span className="text-[11px] font-bold text-[#6B7A93] ml-0.5">원</span></div>
+                        <div className="text-[11px] text-[#6B7A93] tabular-nums mt-1">기사 {r.drv ? r.drv.toLocaleString() : "-"}</div>
+                        {avg > 0 && <div className="text-[10.5px] text-[#8A97AD] tabular-nums">{Math.abs(diff) < 1000 ? "평균" : `평균 ${diff > 0 ? "+" : "−"}${Math.abs(diff).toLocaleString()}`}</div>}
+                      </div>
+                    </div>
+                    {claims.length > 1 && <div className="relative h-1 rounded bg-[#EEF2F7] mt-2.5"><span className="absolute -top-[3px] w-[2px] h-2.5 bg-[#2D4C82]" style={{ left: `${barPct}%` }} /></div>}
+                  </div>
+                  <div className="flex border-t border-[#EEF1F6]">
+                    <button type="button" onClick={(e) => { e.stopPropagation(); onApply(r.claim, null, "row"); }} className="flex-1 h-10 bg-[#0F1A30] text-white text-[12px] font-bold active:opacity-80">청구운임 적용 ({r.claim.toLocaleString()})</button>
+                    {r.drv > 0 && <button type="button" onClick={(e) => { e.stopPropagation(); onApply(r.claim, r.drv, "row"); }} className="flex-1 h-10 bg-white text-[#0F1A30] text-[12px] font-bold border-l border-[#EEF1F6] active:bg-[#F3F5F9]">기사 포함 ({r.drv.toLocaleString()})</button>}
+                  </div>
                 </div>
-              </>
-            );
-          })()}
-        </div>
-      </div>
-    </div>
+              );
+            })}
+          </div>
+        </FareCard>
+      </>)}
+    </FareShell>
   );
 }
 

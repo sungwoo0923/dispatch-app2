@@ -17,7 +17,7 @@ import { SPECIAL_TYPES } from "./forkliftCore";
 import { isJyCompany } from "./jyOnly";
 import {
   useRoutePresets, saveRoutePreset, deleteRoutePreset, routePresetIdOf, loadSeedOrders,
-  seedProposals, proposalsToPresets, presetError, cleanItem, slotOf, nk, routeLabel, LEVEL_LABEL, levelOf, TYPE_LABEL,
+  seedProposals, proposalsToPresets, presetError, cleanItem, slotOf, nk, routeLabel, LEVEL_LABEL, levelOf, TYPE_LABEL, COND_LABEL,
 } from "./routePreset";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
@@ -27,7 +27,9 @@ const MODE_LABEL = { 기사: "기사운임에서 차감", 회사: "회사 부담
 const PAYEE_LABEL = { 기사: "배차 기사에게", 외부: "회사가 따로 지급", 없음: "지급 없음(청구만)" };
 const typeName = (it) => (it.종류 === "지게차" ? "지게차비용" : it.이름 ? `${it.이름}${it.종류 !== "기타" ? ` (${TYPE_LABEL[it.종류] || it.종류})` : ""}` : TYPE_LABEL[it.종류] || it.종류);
 const modeText = (it) => `${MODE_LABEL[it.부담] || it.부담}${it.종류 !== "지게차" && it.받는사람 !== "기사" ? ` · ${PAYEE_LABEL[it.받는사람]}` : ""}`;
-const condText = (it) => (it.조건 === "야간" ? "야간 상차일 때만" : "항상");
+// ⭐ 2026-11-24 조건 — 항상 · 야간 상차 · 익착 · 월착(익착 · 월착은 JY 전용 화면에서 고를 수 있다) · 경유 개소당
+const condText = (it) => COND_LABEL[it.조건] || "항상";
+const amtText = (it) => `${won(it.금액)}${it.단위 === "개소" ? " /개소" : ""}`;
 
 export default function RouteSpecialPresets({ canEdit = true, canAdmin = false, mobile = false }) {
   const list = useRoutePresets();
@@ -93,9 +95,9 @@ export default function RouteSpecialPresets({ canEdit = true, canAdmin = false, 
                   {first && <td rowSpan={span} className={`${td} align-top`}>{p.상차지명 || <span className="text-[#9AA9C3]">모든 상차지</span>}</td>}
                   {first && <td rowSpan={span} className={`${td} align-top font-bold`}>{p.하차지명 || <span className="text-[#9AA9C3] font-semibold">모든 하차지</span>}</td>}
                   <td className={td}>{typeName(it)}</td>
-                  <td className={`${td} text-right tabular-nums font-black`} style={{ fontFamily: MONO }}>{won(it.금액)}</td>
+                  <td className={`${td} text-right tabular-nums font-black`} style={{ fontFamily: MONO }}>{amtText(it)}</td>
                   <td className={`${td} text-[12.5px]`}>{modeText(it)}</td>
-                  <td className={td}>{it.조건 === "야간" ? <span className="text-[12.5px] font-black text-[#B54708]">야간 상차일 때만</span> : <span className="text-[#5B6B85]">항상</span>}</td>
+                  <td className={td}>{it.조건 && it.조건 !== "항상" ? <span className="text-[12.5px] font-black text-[#1B2B4B]">{condText(it)}</span> : <span className="text-[#5B6B85]">항상</span>}</td>
                   {first && <td rowSpan={span} className={`${td} text-center align-top`}><button type="button" disabled={!canEdit} onClick={() => toggleUse(p)} className={`h-7 px-2.5 rounded-lg border text-[12px] font-black ${p.사용 === false ? "border-[#DCE3EE] text-[#7A89A3]" : "border-[#2D4C82] text-[#2D4C82]"}`}>{p.사용 === false ? "사용 안 함" : "사용"}</button></td>}
                   <td className={`${td} text-center`}>{canEdit && <span className="inline-flex gap-1">
                     {first && <button type="button" onClick={() => setEdit({ ...p })} className="h-8 px-2.5 rounded-lg border border-[#DCE3EE] text-[12px] font-black">수정</button>}
@@ -109,8 +111,9 @@ export default function RouteSpecialPresets({ canEdit = true, canAdmin = false, 
       )}
       {!seed && (
         <div className="text-[12.5px] text-[#6B7A99] leading-relaxed break-keep">
-          · 노선을 바꾸면(거래처 · 상차지 · 하차지 · 상차시간) 자동으로 넣은 항목은 다시 계산해요. 이 팝업의 [특수운임] 탭에서 직접 [적용]한 오더는 그대로 둬요.<br />
-          · 야간 상차 = 상차시간 18:00 ~ 05:00, 또는 구글시트 입고시간이 "야상"인 오더예요.
+          · 노선을 바꾸면(거래처 · 상차지 · 하차지 · 상차시간 · 상차일 · 하차일 · 경유지) 자동으로 넣은 항목은 다시 계산해요. 이 팝업의 [특수운임] 탭에서 직접 [적용]한 오더는 그대로 둬요.<br />
+          · 야간 상차 = 상차시간 18:00 ~ 05:00, 또는 구글시트 입고시간이 "야상"인 오더예요.<br />
+          · 익착 = 상차 다음 날 하차 · 월착 = 금요일 상차 → 월요일 하차예요. 경유를 "개소당"으로 넣으면 경유지 수만큼 곱해요.
         </div>
       )}
       {!seed && old.length > 0 && (
@@ -172,7 +175,7 @@ function PresetEditor({ value, list, onClose }) {
                     {SPECIAL_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
                   </select></div>
                 <div><div className={lbl}>이름</div><input className={inp} disabled={it.종류 === "지게차"} value={it.이름 || ""} onChange={(e) => setItem(i, { 이름: e.target.value })} placeholder={it.종류 === "할증" ? "야상" : ""} /></div>
-                <div><div className={lbl}>금액(원)</div><input className={`${inp} text-right tabular-nums`} inputMode="numeric" value={Number(it.금액) ? won(it.금액) : ""} onChange={(e) => setItem(i, { 금액: e.target.value.replace(/[^\d]/g, "") })} data-route-amount={i} /></div>
+                <div><div className={lbl}>금액(원){it.종류 === "경유" ? <label className="ml-1.5 inline-flex items-center gap-1 font-bold text-[#1B2B4B]"><input type="checkbox" checked={it.단위 === "개소"} onChange={(e) => setItem(i, { 단위: e.target.checked ? "개소" : "" })} data-route-unit={i} />개소당</label> : null}</div><input className={`${inp} text-right tabular-nums`} inputMode="numeric" value={Number(it.금액) ? won(it.금액) : ""} onChange={(e) => setItem(i, { 금액: e.target.value.replace(/[^\d]/g, "") })} data-route-amount={i} /></div>
                 {it.종류 !== "지게차" && <div><div className={lbl}>받는 사람</div>
                   <select className={sel} value={it.받는사람 || "기사"} onChange={(e) => setItem(i, { 받는사람: e.target.value, ...(e.target.value === "없음" ? { 부담: "청구" } : {}) })}>
                     {["기사", "외부", ...(jy || it.받는사람 === "없음" ? ["없음"] : [])].map((k) => <option key={k} value={k}>{PAYEE_LABEL[k]}</option>)}
@@ -184,6 +187,7 @@ function PresetEditor({ value, list, onClose }) {
                 <div className="flex items-end gap-1"><div className="flex-1"><div className={lbl}>조건</div>
                   <select className={sel} value={it.조건 || "항상"} onChange={(e) => setItem(i, { 조건: e.target.value })} data-route-cond={i}>
                     <option value="항상">항상</option><option value="야간">야간 상차일 때만</option>
+                    {(jy || ["익착", "월착"].includes(it.조건)) && <><option value="익착">익착일 때만</option><option value="월착">월착일 때만</option></>}
                   </select></div>
                   <button type="button" onClick={() => setF((p) => ({ ...p, items: p.items.filter((_, k) => k !== i) }))} className="h-10 w-9 rounded-lg text-[#B4342A] hover:bg-[#FDECEC]" title="이 항목 빼기">✕</button>
                 </div>
@@ -267,10 +271,10 @@ function SeedPanel({ existing, mobile, onClose }) {
                   <td className="px-3 py-1.5 whitespace-nowrap">{p.상차지명 || <span className="text-[#9AA9C3]">모든 상차지</span>}</td>
                   <td className="px-3 py-1.5 whitespace-nowrap font-bold">{p.하차지명 || <span className="text-[#9AA9C3] font-semibold">모든 하차지</span>}</td>
                   <td className="px-3 py-1.5 whitespace-nowrap">{typeName(p.item)}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums font-black">{won(p.item.금액)}{p.status === "diff" && p.current ? <div className="text-[11px] font-bold text-[#B54708]">등록값 {won(p.current.금액)}</div> : null}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums font-black">{amtText(p.item)}{p.status === "diff" && p.current ? <div className="text-[11px] font-bold text-[#B54708]">등록값 {won(p.current.금액)}</div> : null}</td>
                   <td className="px-3 py-1.5 text-[12px]">{modeText(p.item)}</td>
                   <td className="px-3 py-1.5 whitespace-nowrap">{condText(p.item)}</td>
-                  <td className="px-3 py-1.5 whitespace-nowrap tabular-nums text-[12px]"><b>{p.count}</b>/{p.total}건 · <b>{Math.round(p.share * 100)}%</b>{p.item.조건 === "야간" ? ` (야간 ${p.nightCount}건 중)` : ""}</td>
+                  <td className="px-3 py-1.5 whitespace-nowrap tabular-nums text-[12px]"><b>{p.count}</b>/{p.total}건 · <b>{Math.round(p.share * 100)}%</b>{p.item.조건 && p.item.조건 !== "항상" ? ` (${p.item.조건 === "야간" ? "야간 상차" : p.item.조건} ${p.total}건 중)` : p.item.단위 === "개소" ? ` (경유 있는 ${p.total}건 중)` : ""}</td>
                   <td className={`px-3 py-1.5 whitespace-nowrap text-[12px] font-black ${STATUS[p.status][1]}`}>{STATUS[p.status][0]}</td>
                 </tr>
               ))}

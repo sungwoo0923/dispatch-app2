@@ -5,6 +5,7 @@
 //  ③ 자막: 장면 시간에 맞춘 SRT 파일 내려받기(캡컷 · 프리미어 · 유튜브에 그대로)
 //  서버: functions/aiVideo.js(aiVideoPlan) · 파일 계산: src/videoStudio.js
 //  만든 기획안은 이 브라우저에 최근 10개까지 기억한다(다시 열기)
+//  📣 2026-11-24 [홍보 숏츠] 탭(처음 열면 이 탭) — 숏츠 3편 · 예고편 완성본 보기 · 내려받기 · 영상 편집실 / 블로그 원고로 가기
 //  🎬 2026-11-18 [교육 영상 고치기] 탭 — 도움말 센터 교육 영상(1~14편)의 강조 상자 · 카메라 · 화면 바뀌는 시각 · 자막 · 효과를 직접 고친다(src/VideoFixer.jsx)
 import React from "react";
 import { auth, FUNCTIONS_BASE } from "./firebase";
@@ -260,16 +261,58 @@ function PlanStudio() {
 }
 
 // 영상 작업실 맨 위 — [새 영상 기획] · [교육 영상 고치기]
-const MODES = [["plan", "새 영상 기획", "대본 · 음악 큐시트 · 자막"], ["fix", "교육 영상 고치기", "도움말 센터 1~14편"]];
+// 📣 2026-11-24 [홍보 숏츠] — 11/23 만든 숏츠 3편 · 예고편 완성본(public/videos/promo · 원본 marketing/video/out)을 여기서 바로 보고 내려받는다
+//  고치기 · 새로 만들기 · 유튜브 올리기는 관리자센터 › 홍보 › 영상 편집실, 블로그는 홍보 › 블로그 원고(사용자: "영상 작업실에 있어야 하는데 없다")
+const PROMO = [
+  { key: "shorts-1", kind: "숏츠 ①", name: "카톡 오더 붙여넣기", len: "25초", tall: true, title: "카톡 오더, 아직도 손으로 옮겨 적으세요? 붙여넣기 한 번이면 끝 #배차프로그램 #Shorts" },
+  { key: "shorts-2", kind: "숏츠 ②", name: "실시간 관제", len: "21초", tall: true, title: "\"기사님 지금 어디세요?\" 이 전화 하루 몇 번 하세요? #지입차관리 #Shorts" },
+  { key: "shorts-3", kind: "숏츠 ③", name: "월말 정산", len: "21초", tall: true, title: "월말 정산, 엑셀 10개 띄우는 운송사 필독 #운송사정산 #Shorts" },
+  { key: "trailer", kind: "예고편", name: "로지스웹 소개", len: "68초", tall: false, title: "배차부터 정산까지, 운송사 업무를 한 화면에서 | 로지스웹 LogisWeb 소개" },
+];
+const goAdmin = (tab) => window.dispatchEvent(new CustomEvent("kp-admin-go", { detail: tab }));
+function PromoReel() {
+  const [copied, setCopied] = React.useState("");
+  const copy = (k, t) => { navigator.clipboard?.writeText(t).then(() => { setCopied(k); setTimeout(() => setCopied(""), 1500); }).catch(() => {}); };
+  return (
+    <AdmPanel>
+      <div className="flex flex-wrap items-center gap-2 mb-1">
+        <div className="text-[16px] font-black" style={{ color: G.ink }}>홍보 숏츠 · 예고편 완성본</div>
+        <span className="text-[12px] font-bold" style={{ color: G.dim }}>2026-11-23 제작 · 4편</span>
+        <div className="ml-auto flex gap-1.5">
+          <button type="button" onClick={() => goAdmin("mkt:video")} className="h-9 px-3.5 rounded-xl text-[13px] font-black" style={GOLD_BTN}>🎬 영상 편집실에서 고치기</button>
+          <button type="button" onClick={() => goAdmin("mkt:blog")} className="h-9 px-3.5 rounded-xl text-[13px] font-black" style={{ border: `1px solid ${G.line}`, color: G.ink }}>블로그 원고</button>
+        </div>
+      </div>
+      <div className="text-[12.5px] mb-4 leading-relaxed" style={{ color: G.sub }}>바로 보고 내려받아 유튜브 Shorts · 인스타 릴스 · 틱톡에 올리면 돼요. 장면 글 · 목소리 · 음악을 고치거나 새 영상을 만들 땐 [영상 편집실]에서 [기본 영상 4편 불러오기]를 누르세요(넓은 화면에서만 열려요).</div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {PROMO.map((v) => (
+          <div key={v.key} className="rounded-2xl overflow-hidden flex flex-col" style={{ border: `1px solid ${G.line}`, background: "rgba(255,255,255,.03)" }} data-promo-video={v.key}>
+            <video controls preload="none" playsInline poster={`/videos/promo/thumb-${v.key}.jpg`} src={`/videos/promo/${v.key}.mp4`} className={`w-full bg-black ${v.tall ? "aspect-[9/16]" : "aspect-video"} object-contain`} />
+            <div className="p-3 flex-1 flex flex-col">
+              <div className="text-[11.5px] font-bold" style={{ color: G.dim }}>{v.kind} · {v.len}</div>
+              <div className="text-[14px] font-black mt-0.5" style={{ color: G.ink }}>{v.name}</div>
+              <div className="text-[11.5px] mt-1 line-clamp-2" style={{ color: G.sub }}>{v.title}</div>
+              <div className="flex gap-1.5 mt-auto pt-2.5">
+                <a href={`/videos/promo/${v.key}.mp4`} download={`logisweb-${v.key}.mp4`} className="flex-1 h-8 rounded-lg text-[12px] font-black flex items-center justify-center" style={GOLD_BTN}>내려받기</a>
+                <button type="button" onClick={() => copy(v.key, v.title)} className="flex-1 h-8 rounded-lg text-[12px] font-black" style={{ border: `1px solid ${G.line}`, color: G.ink }}>{copied === v.key ? "복사됨" : "제목 복사"}</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </AdmPanel>
+  );
+}
+const MODES = [["promo", "홍보 숏츠", "완성본 4편 · 편집실"], ["plan", "새 영상 기획", "대본 · 음악 큐시트 · 자막"], ["fix", "교육 영상 고치기", "도움말 센터 1~14편"]];
 export default function VideoStudio() {
-  const [mode, setMode] = React.useState(() => { try { return localStorage.getItem("kpVideoStudioMode") === "fix" ? "fix" : "plan"; } catch { return "plan"; } });
+  const [mode, setMode] = React.useState(() => { try { const m = localStorage.getItem("kpVideoStudioMode"); return m === "fix" || m === "plan" ? m : "promo"; } catch { return "promo"; } });
   const pick = (m) => { setMode(m); try { localStorage.setItem("kpVideoStudioMode", m); } catch { /* 무시 */ } };
   return (
     <div className="space-y-3 min-w-0">
-      <div className="grid grid-cols-2 sm:flex gap-1.5">
+      <div className="grid grid-cols-3 sm:flex gap-1.5">
         {MODES.map(([k, l, sub]) => <Chip key={k} on={mode === k} onClick={() => pick(k)} sub={sub}>{l}</Chip>)}
       </div>
-      {mode === "fix"
+      {mode === "promo" ? <PromoReel /> : mode === "fix"
         ? <React.Suspense fallback={<div className="py-20 text-center text-[13px]" style={{ color: G.dim }}>불러오는 중…</div>}><VideoFixer /></React.Suspense>
         : <PlanStudio />}
     </div>

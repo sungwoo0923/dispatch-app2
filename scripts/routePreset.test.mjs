@@ -2,7 +2,7 @@
 //  functions/routePresetCore.mjs(찾기 · 자동 적용 계획 · 기존 자료 분석) + src/routePresetApply.js(오더에 적용 — forkliftCore 규칙)
 import assert from "node:assert/strict";
 import {
-  AUTO, isNightLoad, parsePresetDoc, presetDocData, presetError, matchRoutePreset, planRoutePreset, applyPlanToRec, seedProposals, proposalsToPresets, itemsFromOrder, presetDocId,
+  AUTO, isNightLoad, arrivalOf, stopCount, parsePresetDoc, presetDocData, presetError, matchRoutePreset, planRoutePreset, applyPlanToRec, seedProposals, proposalsToPresets, itemsFromOrder, presetDocId,
 } from "../functions/routePresetCore.mjs";
 import { applyRoutePresets } from "../src/routePresetApply.js";
 import { orderProfit, specialApplyAll } from "../src/forkliftCore.js";
@@ -121,6 +121,34 @@ ok(isNightLoad({ 상차시간: "오후 8시" }) && isNightLoad({ 메모: "야상
   // 저장한 프리셋으로 다시 적용 — 밤 여주 오더는 지게차 + 야상, 낮은 지게차만
   const nightOrder = applyRoutePresets(mk("에브리데이 여주", 0, { 상차시간: "19:30" }), saved);
   eq([nightOrder.지게차비용, nightOrder.특수운임.map((x) => x.이름), nightOrder.청구운임], ["50000", ["야상"], "370000"], "저장한 프리셋 적용(밤)");
+}
+
+// ── 2026-11-24 도착 구분(익착 · 월착) · 경유 개소당 — JY 에이제이 시트 규칙 ──
+{
+  eq(["2026-11-20", "2026-11-21", "2026-11-23", ""].map((d) => arrivalOf({ 상차일: "2026-11-20", 하차일: d || "2026-11-20" })), ["당착", "익착", "월착", "당착"], "당착 · 익착 · 월착(금→월)");
+  eq([arrivalOf({ 상차일: "2026-11-20", 하차일: "2026-11-21", 상차시간: "20:00" }), arrivalOf({ 메모: "월착" }), arrivalOf({ 메모: "대행료 · 익착" })], ["야상", "월착", "익착"], "야간 상차가 먼저 · 메모 꼬리표");
+  eq(stopCount({ 경유하차목록: [{ 업체명: "고양유통" }, { 업체명: "창동" }], 경유지_상차: [{ 업체명: "신암" }] }), 3, "경유지 수");
+  const ps = [P({ 거래처명: "에이제이", 상차지명: "에이제이", items: [
+    { 종류: "할증", 이름: "월착", 금액: 30000, 받는사람: "없음", 부담: "청구", 조건: "월착" },
+    { 종류: "경유", 금액: 20000, 단위: "개소", 받는사람: "기사", 부담: "청구" },
+    { 종류: "기타", 이름: "계근비", 금액: 8000, 받는사람: "기사", 부담: "청구" },
+  ] }, "j")];
+  const base = { 거래처명: "에이제이", 상차지명: "에이제이", 하차지명: "네이코", 상차일: "2026-11-20" };
+  eq(matchRoutePreset({ ...base, 하차일: "2026-11-20" }, ps).items.map((x) => [x.이름 || x.종류, x.금액]), [["계근비", 8000]], "당착 · 경유 없음 → 계근비만");
+  eq(matchRoutePreset({ ...base, 하차일: "2026-11-23", 경유하차목록: [{ 업체명: "a" }, { 업체명: "b" }] }, ps).items.map((x) => [x.이름 || x.종류, x.금액]), [["월착", 30000], ["경유", 40000], ["계근비", 8000]], "월착 +30,000 · 경유 2곳 × 20,000");
+  ok(cleanItemKeepsUnit(), "개소 단위 저장");
+  function cleanItemKeepsUnit() { return parsePresetDoc(presetDocData({ 거래처명: "a", 하차지명: "b", items: [{ 종류: "경유", 금액: 1, 단위: "개소" }] })).items[0].단위 === "개소"; }
+  // 지난 오더 분석: 월착 줄에만 붙는 월착 할증 · 경유 1곳 20,000 / 2곳 40,000 → 개소당 20,000
+  const mkO = (d, extra = {}) => ({ 거래처명: "에이제이", 상차지명: "에이제이", 하차지명: `곳${d}`, 상차일: "2026-11-20", 하차일: "2026-11-20", ...extra });
+  const hist = [
+    ...[1, 2, 3, 4].map((i) => mkO(i, { 하차일: "2026-11-23", 특수운임: [{ 종류: "할증", 이름: "월착", 금액: 30000, 받는사람: "없음", 부담: "청구" }] })),
+    ...[5, 6, 7, 8, 9, 10, 11, 12].map((i) => mkO(i)),
+    mkO(13, { 경유하차목록: [{ 업체명: "x" }], 특수운임: [{ 종류: "경유", 금액: 20000, 받는사람: "기사", 부담: "청구" }] }),
+    mkO(14, { 경유하차목록: [{ 업체명: "x" }, { 업체명: "y" }], 특수운임: [{ 종류: "경유", 금액: 40000, 받는사람: "기사", 부담: "청구" }] }),
+    mkO(15, { 경유하차목록: [{ 업체명: "x" }], 특수운임: [{ 종류: "경유", 금액: 20000, 받는사람: "기사", 부담: "청구" }] }),
+  ];
+  const sp = seedProposals(hist).filter((p) => p.level === 2);
+  eq(sp.map((p) => [p.item.이름 || p.item.종류, p.item.금액, p.item.조건, p.item.단위 || "건", p.count, p.total]).sort(), [["경유", 20000, "항상", "개소", 3, 3], ["월착", 30000, "월착", "건", 4, 4]], "분석: 월착 조건 · 경유 개소당");
 }
 
 console.log(`routePreset OK (${n})`);
