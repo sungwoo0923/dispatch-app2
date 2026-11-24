@@ -1,4 +1,6 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
+import { isTMUser, TM_AFFIL } from "../staffFilter"; // 🧑‍💻 2026-11-24 최고관리자 소속 = 로지스웹 · 개발자
+import { installKeyboardLift } from "./keyboardLift"; // ⌨️ 2026-11-24 자판 위로 입력칸 올리기
 import { MultiCompanyCard } from "../MultiCompanySwitch"; // 🏢 2026-11-24 여러 회사 오가기
 import { useNewSeen, markNewSeen } from "../newFeatures"; // ✨ 2026-11-24 새 메뉴 NEW 표시
 import NewMark from "../NewMark";
@@ -2121,6 +2123,7 @@ export default function MobileApp({ role: realRole, user, userCompany = "", forc
   const roleView = useRoleView(realRole);
   const role = roleView.role;
   useCompanyDropdownSync(realRole, userCompany); // ⭐ PC 편집모드에서 바꾼 회사별 배차방식 옵션을 모바일에도
+  React.useEffect(() => installKeyboardLift(), []); // ⌨️ 2026-11-24 자판이 입력칸 · 드롭다운을 가리지 않게(src/mobile/keyboardLift.js)
   // ⭐ LTE 속도 — 앱을 켜면 오더·기사·거래처·공지·일정 등 10여 개 구독이 한꺼번에 전파를 나눠 써서,
   // 약한 LTE에선 정작 오더가 늦게 들어왔다. 오더가 서버와 맞춰진 뒤에 나머지(기사·거래처·공지 등)를 시작한다.
   const [secondaryReady, setSecondaryReady] = useState(false);
@@ -3872,7 +3875,7 @@ useEffect(() => {
     if (!readyStage3) return undefined; // ★ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
     // ⭐ PC(DispatchApp.jsx)는 drivers 구독에 companyName 필터가 있는데, 모바일은 이
     // 필터가 통째로 빠져있어 다른 회사의 기사 목록까지 그대로 받아오고 있었다 —
-    // PC와 동일한 기준(companyName 없는 옛 문서는 "돌캐"로 취급)으로 맞춘다.
+    // PC와 동일한 기준(companyName 없는 옛 문서 기준)으로 맞춘다.
     const co = userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
     // ⚡ 2026-11-23 위치 · 속도만 바뀐 변경은 15초에 한 번만 화면에 반영(운행 중 기사 위치가 올 때마다 앱 전체를 다시 그리던 것)
     const live = { sig: "", at: 0, timer: 0, list: [] };
@@ -3933,6 +3936,10 @@ useEffect(() => {
         오더메모: data.오더메모 || "",
         팝업표시: data.팝업표시 !== undefined ? data.팝업표시 : true,
         ...(typeof data.순수매출제외 === "boolean" ? { 순수매출제외: data.순수매출제외 } : {}),
+        // 🔗 2026-11-24 PC와 같은 칸 이름 — 거래처관리 › 상하차지 목록(PC 화면을 그대로 씀)이 업체명을 읽어 휴대폰에서 이름이 "-"로 보였고,
+        //  아래 칸이 빠져 휴대폰에서 상하차지를 고치면 기사 전달 주의사항 · 점심시간이 지워졌다
+        업체명: data.업체명 || name,
+        ...Object.fromEntries(["기사전달주의사항", "점심시작시간", "점심종료시간", "등급변경일", "매출순위제외", "companyName"].filter((k) => data[k] !== undefined).map((k) => [k, data[k]])),
       };
     });
 
@@ -4899,9 +4906,9 @@ const groupedByDate = useMemo(() => {
       ...(!form._editId ? { 알림톡: false } : {}),
 
       // ⭐ PC(addDispatch)는 항상 companyName을 명시적으로 써넣는데 모바일 등록은
-      // 이 필드 자체가 아예 빠져있었다 — 화면 표시는 (companyName || "돌캐") 방식의
+      // 이 필드 자체가 아예 빠져있었다 — 화면 표시는 (companyName || 기본 회사) 방식의
       // 폴백이 곳곳에 있어 정상으로 보였지만, 구글시트 백필처럼 Firestore
-      // where("companyName","==","돌캐")로 정확히 매칭하는 서버 쪽 조회에서는
+      // where("companyName","==", 회사명)으로 정확히 매칭하는 서버 쪽 조회에서는
       // 이 필드가 없는 문서 자체가 통째로 걸러져 모바일로 등록한 오더가 전부
       // 빠지는 원인이었다.
       companyName: userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || DEFAULT_COMPANY,
@@ -7532,7 +7539,7 @@ function SalesPinGate({ onVerified }) {
 
 // ⭐ PC(DispatchApp)의 isNetRevenueExcludedClient와 동일 로직 — 거래처관리에서
 // "순수매출제외"로 체크한 거래처를 매출 통계에서 뺀다. 아직 체크박스를 저장한 적
-// 없는 기존 데이터(주로 돌캐의 "후레쉬물류")는 예전 하드코딩 이름으로 폴백한다.
+// 없는 기존 데이터(주로 예전 운송사의 "후레쉬물류")는 예전 하드코딩 이름으로 폴백한다.
 const LEGACY_NET_REVENUE_EXCLUDED_NAMES_MOBILE = ["후레쉬물류", "채석강"];
 function isNetRevenueExcludedClientMobile(name, clientsList, placesList) {
   const n = String(name || "").trim();
@@ -10861,10 +10868,10 @@ function MobileOrderInfoModal({ order: row, onClose }) {
 function LongPressContextMenu({ order, cardVersionB, onClose, onEdit, onCopyDriver, onCopyOrder, onDelete, onUploadLink, onOrderInfo }) {
   const mountTimeRef = useRef(Date.now());
   const menuItems = [
-    { // 🧹 2026-11-14 빠른 수정(일부 수정)은 뺐다 — onEdit 이 없으면 메뉴에서 숨긴다
+    { // ✏️ 2026-11-24 길게 누르기 '일부 수정' 다시 켬(사용자 요청) — 스마트검색 · 청구/기사운임 · 수수료 자동 · 배차방식 · 지급방식
       label: "일부 수정",
       desc: "운임·기사·배차방식 빠른 수정",
-      action: null,
+      action: onEdit,
       svg: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
     },
     {
@@ -11152,7 +11159,9 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
       }
       // 🚚 2026-11-07 지급방식 "취소" → 배차취소(PC와 같음) · 이력 · 고정노선 시트
       applyPayTypeRuleMobile(order, patch);
-      { const h = payTypeHistoryMobile(order, patch, auth.currentUser?.email); if (h.length) patch.history = arrayUnion(...h); }
+      // ✏️ 2026-11-24 운임 · 기사 · 배차방식 바꾼 것도 수정 이력에(전체 수정과 같은 칸) · 마지막으로 고친 사람
+      { const h = buildHistoryEntries(order, patch, auth.currentUser?.email); if (h.length) patch.history = arrayUnion(...h); }
+      patch.최종수정자 = auth.currentUser?.email || "";
       if (order?.배차표Id) requestRouteSheetPush(order.배차표Id, 2500, order.상차일);
       // ⭐ 속도개선(2026-10-28) — 예전엔 서버가 "저장됐다"고 답할 때까지(await) 기다려서, LTE가 약하면
       //   "저장 중…"이 몇 초씩 걸렸다. Firestore는 폰 화면에 먼저 바로 반영하고 서버 전송은 뒤에서
@@ -12236,14 +12245,14 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
               <CompanyOptionPicker optKey="지급방식" placeholder="선택없음" noneLabel="선택없음" style={{ minHeight: 40 }} className={inp} value={f.지급방식} onChange={(__v) => (set("지급방식"))({ target: { value: __v } })} />
             </QuickField>
             <QuickField label="톤수">
-              {unitBox(f.톤수값, setVal("톤수값"), f.톤수타입, setVal("톤수타입"), ["톤", "kg"], 62, "예: 1")}
+              {unitBox(f.톤수값, setVal("톤수값"), f.톤수타입, setVal("톤수타입"), dropdownList("톤수타입", [], f.톤수타입), 62, "예: 1")}
             </QuickField>
             <QuickField label="차량종류">
               {/* 🚚 2026-11-02 회사 공용 차량종류(＋ 추가) */}
               <VehicleTypePicker className={inp} value={f.차량종류} base={QUICK_EDIT_CAR} placeholder="차량종류 선택" noneLabel="선택 안 함" onChange={(v) => set("차량종류")({ target: { value: v } })} />
             </QuickField>
             <QuickField label="화물내용" span={2}>
-              {unitBox(f.화물수량, setVal("화물수량"), f.화물타입, setVal("화물타입"), ["파레트", "박스", "통", "롤"], 76, "예: 3")}
+              {unitBox(f.화물수량, setVal("화물수량"), f.화물타입, setVal("화물타입"), dropdownList("화물타입", [], f.화물타입), 76, "예: 3")}
             </QuickField>
             <QuickField label="청구운임"><input inputMode="numeric" className={inp} value={f.청구운임} onChange={setMoney("청구운임")} /></QuickField>
             <QuickField label="기사운임"><input inputMode="numeric" className={inp} value={f.기사운임} onChange={setMoney("기사운임")} /></QuickField>
@@ -14728,7 +14737,6 @@ const orderCopyList = useMemo(() => {
     return "";
   });
  // 화물내용 분리 state
-  const CARGO_TYPES = ["파레트","박스","통"];
 
   const detectCargoType = (raw = "") => {
     const s = raw.toLowerCase().replace(/\s+/g, "");
@@ -15274,7 +15282,7 @@ const pickDrop = (c) => {
           onClearWorkDates={() => update("근무일자목록", [])}
           displayOverride={isMultiWorkForm && formWorkDates.length > 1 ? `${form.상차일 || ""} 외 ${formWorkDates.length - 1}일` : undefined}
         />
-        <DateQuick onPick={(d) => update("상차일", d)} mon="월상" />
+        <DateQuick value={form.상차일} onPick={(d) => update("상차일", d)} mon="월상" />
         <MobileSelect
           className="flex-1 min-w-[90px] border rounded px-1 py-1 text-sm"
           value={form.상차시간}
@@ -15316,7 +15324,7 @@ const pickDrop = (c) => {
           value={form.하차일}
           onChange={(e) => update("하차일", e.target.value)}
         />
-        <DateQuick onPick={(d) => update("하차일", d)} mon="월착" />
+        <DateQuick value={form.하차일} onPick={(d) => update("하차일", d)} mon="월착" />
         <MobileSelect
           className="flex-1 min-w-[90px] border rounded px-1 py-1 text-sm"
           value={form.하차시간}
@@ -15845,10 +15853,8 @@ const pickDrop = (c) => {
                     }}
                   >
                     <option value="">없음</option>
-                    <option value="파레트">파레트</option>
-                    <option value="박스">박스</option>
-                    <option value="통">통</option>
-                    <option value="롤">롤</option>
+                    {/* 🔗 2026-11-24 PC 회사 설정(편집모드 화물타입)과 같은 목록 */}
+                    {dropdownList("화물타입", [], 화물타입).map((t) => <option key={t} value={t}>{t}</option>)}
                   </MobileSelect>
                   <IconChevronDown className="w-3 h-3 absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none text-white" />
                 </div>
@@ -15858,8 +15864,9 @@ const pickDrop = (c) => {
         />
         {/* 화물내용 추가 팝업 — 화면이 좁은 기종에서 단위 드롭다운이 잘려 보이지
             않도록 팝업 폭을 뷰포트 비율(vw) 기반으로 반응형으로 잡는다. */}
+        {/* ⌨️ 2026-11-24 화물내용 추가 창은 화면 위쪽에(가운데면 자판에 가렸다) */}
         {mCargoAddPopup && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999] px-5"
+          <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-[99999] px-5 pt-[max(56px,10vh)]" data-no-kblift
             onClick={() => setMCargoAddPopup(false)}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[320px] overflow-hidden border" onClick={e => e.stopPropagation()}>
               <div className="bg-[#1B2B4B] px-5 py-3">
@@ -15876,10 +15883,7 @@ const pickDrop = (c) => {
                     <MobileSelect className={`appearance-none w-full border-0 rounded-lg px-2 pr-5 py-2 text-[12px] font-bold text-white outline-none ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"}`}
                       value={mCargoAddType} onChange={e => setMCargoAddType(e.target.value)} noArrow>
                       <option value="">없음</option>
-                      <option value="파레트">파레트</option>
-                      <option value="박스">박스</option>
-                      <option value="통">통</option>
-                      <option value="롤">롤</option>
+                      {dropdownList("화물타입", [], mCargoAddType).map((t) => <option key={t} value={t}>{t}</option>)}
                     </MobileSelect>
                     <IconChevronDown className="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-white" />
                   </div>
@@ -16978,9 +16982,7 @@ const pickDrop = (c) => {
                 onChange={e => setStopList(prev => prev.map((s, i) => i === idx ? { ...s, 화물타입: e.target.value } : s))}
               >
                 <option value="">없음</option>
-                <option value="파레트">파레트</option>
-                <option value="박스">박스</option>
-                <option value="통">통</option>
+                {dropdownList("화물타입", [], stop.화물타입).map((t) => <option key={t} value={t}>{t}</option>)}
               </MobileSelect>
             </div>
             {/* 톤수 */}
@@ -17916,13 +17918,19 @@ const NORMAL_NOTICE = `★★★필독★★★ 미공유 시 운임 지급이 �
 const RgFormRow = ({ label, children }) => <RowLabelInput label={label} input={children} />; // 담당노선구분 칸 틀(밖에 둬야 입력 중 다시 그려지지 않는다)
 // 🧭 2026-11-14 PC 오더등록과 같은 날짜 빠른 버튼 — 당일 · 내일 · 다음 월요일(월상 / 월착)
 const ymdLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-function DateQuick({ onPick, mon = "월상" }) {
-  const pick = (k) => { const d = new Date(); if (k === 1) d.setDate(d.getDate() + 1); if (k === 2) { const day = d.getDay(); d.setDate(d.getDate() + (day === 0 ? 1 : 8 - day)); } onPick(ymdLocal(d)); };
+function DateQuick({ value = "", onPick, mon = "월상" }) {
+  // 🎨 2026-11-24 고른 날짜와 같은 버튼은 남색으로(이전 · 이후 버튼과 같은 모양) — 예전엔 누르는 순간만 색이 바뀌었다
+  const dateOf = (k) => { const d = new Date(); if (k === 1) d.setDate(d.getDate() + 1); if (k === 2) { const day = d.getDay(); d.setDate(d.getDate() + (day === 0 ? 1 : 8 - day)); } return ymdLocal(d); };
+  const cur = String(value || "").slice(0, 10);
   return (
     <div className="flex gap-1 w-full">
-      {[["당일", 0], ["내일", 1], [mon, 2]].map(([l, k]) => (
-        <button key={l} type="button" onClick={() => pick(k)} className="flex-1 h-8 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-black text-[#1B2B4B] active:bg-[#EEF3FB]">{l}</button>
-      ))}
+      {[["당일", 0], ["내일", 1], [mon, 2]].map(([l, k]) => {
+        const on = !!cur && cur === dateOf(k);
+        return (
+          <button key={l} type="button" aria-pressed={on} onClick={() => onPick(dateOf(k))}
+            className={`flex-1 h-8 rounded-lg border text-[12px] font-black transition-colors ${on ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#1B2B4B] border-[#DCE3EE] active:bg-[#EEF3FB]"}`}>{l}</button>
+        );
+      })}
     </div>
   );
 }
@@ -18016,7 +18024,8 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
   const myEmail = currentUser?.email || "";
   const myRole = me?.role || me?.직책 || "";
   const myPhone = me?.phone || me?.전화번호 || "";
-  const myCompany = userCompany || me?.companyName || localStorage.getItem("userCompany") || "";
+  // 🧑‍💻 2026-11-24 최고관리자는 어느 운송사 소속도 아님 → "로지스웹 · 개발자"
+  const myCompany = myRole === "totalMaster" || isTMUser(currentUser) ? TM_AFFIL : (userCompany || me?.companyName || localStorage.getItem("userCompany") || "");
 
   const todayStr = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
   const thisMonth = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
@@ -18151,7 +18160,7 @@ function MobileMyInfo({ currentUser, mobileUsers, loginTime, orders = [], userCo
 
       {/* 계정 정보 */}
       <KpmCard en="ACCOUNT" title="계정 정보" flush>
-        {[["회사", myCompany || "-"], ["부서 · 직책", [team, position].filter(Boolean).join(" · ") || "-"], ["권한", roleKo + (me?.isMaster ? " · 마스터" : "")], ["연락처", myPhone || "-"], ["이메일", myEmail || "-"], ["계정 ID", currentUser?.uid?.slice(-8) || "-"]].map(([l, v]) => (
+        {[[myCompany === TM_AFFIL ? "소속" : "회사", myCompany || "-"], ["부서 · 직책", [team, position].filter(Boolean).join(" · ") || "-"], ["권한", roleKo + (me?.isMaster ? " · 마스터" : "")], ["연락처", myPhone || "-"], ["이메일", myEmail || "-"], ["계정 ID", currentUser?.uid?.slice(-8) || "-"]].map(([l, v]) => (
           <KpmRow key={l} label={l} value={v} mono={l === "계정 ID" || l === "연락처"} />
         ))}
       </KpmCard>
@@ -21307,7 +21316,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         <div className="relative overflow-hidden rounded-[22px] text-white px-5 py-4 shadow-[0_14px_32px_rgba(15,26,48,0.28)]" style={{ background: KPM_HERO_BG }}>
           <div className="text-[10px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: KPM_MONO, fontVariantNumeric: "tabular-nums" }}>SETTINGS · PREFERENCES</div>
           <div className="text-[21px] font-black tracking-tight mt-0.5">설정</div>
-          <div className="text-[12px] text-white/55 truncate">{[userCompany, ROLE_KO[role] || role, currentUser?.email].filter(Boolean).join(" · ")}</div>
+          <div className="text-[12px] text-white/55 truncate">{[role === "totalMaster" ? TM_AFFIL : userCompany, ROLE_KO[role] || role, currentUser?.email].filter(Boolean).join(" · ")}</div>
           <div className="mt-3 grid grid-cols-3 gap-1.5">
             {[["테마", cardVersionB ? "B형" : "A형"], ["글자", { 1: "기본", 1.1: "크게", 1.2: "아주 크게" }[fontScale] || "기본"], ["알림", alarmEnabled ? `켜짐 · ${pushOnCount}종` : "꺼짐"]].map(([l, v]) => (
               <div key={l} className="rounded-xl bg-white/[0.07] ring-1 ring-white/10 px-2.5 py-1.5">
@@ -21372,7 +21381,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         )}
 
         <KpmCard en="ACCOUNT" title="계정" flush>
-          <KpmRow label="회사" value={userCompany || "-"} />
+          <KpmRow label={role === "totalMaster" ? "소속" : "회사"} value={role === "totalMaster" ? `${TM_AFFIL} (보는 운송사: ${userCompany || "-"})` : (userCompany || "-")} />
           <KpmRow label="권한" value={ROLE_KO[role] || role || "-"} />
           <KpmRow label="2차 인증 · 로그인 보안" sub="2차 인증(PIN · 키패드) · 로그인된 기기 · 비밀번호" onClick={() => setLoginMgrOpen(true)} right={go("열기")} />
           {/* ⭐ 2026-11-02 원격지원 — */}
@@ -21693,7 +21702,8 @@ function ERPEmployeeList({ userCompany, cardVersionB, accent }) {
     if (!userCompany) { setLoading(false); return; }
     const q = query(collection(db, "users"), where("companyName", "==", userCompany)); // ⭐ 2026-11-21 사용자 문서 칸 이름은 companyName
     const unsub = onSnapshot(q, snap => {
-      setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      // 🧑‍💻 2026-11-24 최고관리자 · 기사 · 화주는 직원 목록에서 뺀다(PC 조직도와 같게)
+      setEmployees(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((u) => !isTMUser(u) && !["driver", "shipper", "cafeUser"].includes(u.role) && u.approved !== false));
       setLoading(false);
     }, () => setLoading(false));
     return () => unsub();

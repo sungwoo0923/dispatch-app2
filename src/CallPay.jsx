@@ -156,17 +156,20 @@ export function DispatchWayPicker({ value = "", dir = "", onPick, className = ""
   React.useEffect(() => { setPend(cur); }, [cur, value]);
   React.useEffect(() => {
     if (!ask) return undefined;
-    const off = (e) => { if (!e.target.closest?.("[data-way-ask]")) setAsk(null); };
+    // 📱 2026-11-24 칸(배차방식 버튼)을 다시 누르면 닫히게 — 예전엔 누름에서 닫혔다가 바로 click 으로 다시 열렸다 · 손가락(touchstart)도
+    const off = (e) => { if (e.target.closest?.("[data-way-ask]") || wrap.current?.contains(e.target)) return; setAsk(null); };
     const esc = (e) => { if (e.key === "Escape") setAsk(null); };
-    const t = setTimeout(() => { window.addEventListener("mousedown", off, true); window.addEventListener("keydown", esc, true); }, 0);
-    return () => { clearTimeout(t); window.removeEventListener("mousedown", off, true); window.removeEventListener("keydown", esc, true); };
+    const t = setTimeout(() => { window.addEventListener("mousedown", off, true); window.addEventListener("touchstart", off, true); window.addEventListener("keydown", esc, true); }, 0);
+    return () => { clearTimeout(t); window.removeEventListener("mousedown", off, true); window.removeEventListener("touchstart", off, true); window.removeEventListener("keydown", esc, true); };
   }, [ask]);
   const v = value === "선택없음" ? "" : (value || "");
   if (!beta) return <CompanyOptionPicker optKey="배차방식" placeholder={placeholder} noneLabel={noneLabel} className={wrapClassName ? `${wrapClassName} ${className.replace(/\bw-full\b/, "")}` : className} style={style} value={v} disabled={disabled} role={role} userCompany={userCompany} scope={scope} onChange={(x) => onPick?.({ 배차방식: x })} />;
   const openAsk = (e) => {
     if (disabled) return;
     if (armed.current) { armed.current = false; return; } // IN/OUT을 고른 직후 — 목록이 열리게 둔다
+    if (e.target.closest?.("button[data-opt-picker]")?.getAttribute("aria-expanded") === "true") return; // 목록이 열려 있으면 그 버튼이 닫는다
     e.preventDefault(); e.stopPropagation();
+    if (ask) { setAsk(null); return; } // IN/OUT 창이 열려 있으면 다시 누를 때 닫기
     const r = wrap.current?.getBoundingClientRect(); if (!r) return;
     const w = Math.max(r.width, 250); const up = window.innerHeight - r.bottom < 150;
     setAsk({ left: Math.max(8, Math.min(r.left, window.innerWidth - w - 8)), width: w, ...(up ? { bottom: window.innerHeight - r.top + 6 } : { top: r.bottom + 6 }) });
@@ -182,7 +185,10 @@ export function DispatchWayPicker({ value = "", dir = "", onPick, className = ""
         onChange={(x) => onPick?.({ 배차방식: x, 콜구분: x ? pend : "", 콜플랫폼: x && pend === "OUT" ? x : "" })} />
       {ask && createPortal(
         <div data-way-ask style={{ position: "fixed", zIndex: 2147483000, left: ask.left, width: ask.width, top: ask.top, bottom: ask.bottom, background: "#fff", borderRadius: 14, border: "1px solid #DCE3EE", boxShadow: "0 18px 40px rgba(15,26,48,.22)", padding: 10 }}>
-          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.22em", color: "#7A8AA8", margin: "2px 4px 8px" }}>DISPATCH · 먼저 IN / OUT을 고르세요</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, margin: "2px 4px 8px" }}>
+            <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.22em", color: "#7A8AA8" }}>DISPATCH · 먼저 IN / OUT을 고르세요</span>
+            <button type="button" onClick={() => setAsk(null)} style={{ flexShrink: 0, height: 28, padding: "0 10px", borderRadius: 8, border: "1px solid #DCE3EE", background: "#fff", color: "#3A4A66", fontSize: 12.5, fontWeight: 900, cursor: "pointer" }}>닫기</button>
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {[["IN", "우리가 등록한 오더"], ["OUT", "외부 콜을 잡은 오더"]].map(([d, sub]) => (
               <button key={d} type="button" data-way={d} autoFocus={d === cur} onClick={() => choose(d)}

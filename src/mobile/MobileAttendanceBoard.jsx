@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { isTMUser } from "../staffFilter"; // 🧑‍💻 2026-11-24 최고관리자는 회사 직원이 아님
 import { isLateAt } from "../lateRule"; // ⏰ 2026-11-07 지각 기준 공용(출근시간 없으면 09:00)
 import { mirrorOfficeToFleet } from "../officeLocSync"; // 📍 2026-11-09 출근지 한 곳 관리
 import { collection, doc, onSnapshot, query, setDoc, where } from "firebase/firestore";
@@ -107,7 +108,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
   const customRoles = useCustomRoles(company);
   useEffect(() => {
     if (!company) return undefined;
-    return onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), snap => setStaff(snap.docs.map(d => ({ uid: d.id, ...d.data() }))), () => {});
+    return onSnapshot(query(collection(db, "users"), where("companyName", "==", company)), snap => setStaff(snap.docs.map(d => ({ uid: d.id, ...d.data() })).filter((u) => !isTMUser(u))), () => {});
   }, [company]);
   const meProfile = useMemo(() => ({ ...(myUserDoc || {}), uid, name: myName, role }), [myUserDoc, uid, myName, role]);
   const isHrStaff = role === "totalMaster" || isHrStaffUser(myUserDoc || {}, role);

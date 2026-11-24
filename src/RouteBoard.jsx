@@ -546,10 +546,10 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
             : sheet.err && <div className="mt-2 text-[13px] font-semibold text-red-600">{sheet.err}</div>}
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <span className="text-[13px] font-black text-[#3A4A66]">시트 프로필로 칸 만들기</span>
-            {sheetProfiles.filter((p) => p.engine !== "legacy-dolcae").length > 0 && (
+            {sheetProfiles.filter((p) => !p.engine).length > 0 && (
               <CustomSelect value="" onChange={(e) => colsFromProfile(sheetProfiles.find((p) => p.id === e.target.value))} className={`${inp} w-[220px] h-9`}>
                 <option value="">연결된 시트 고르기</option>
-                {sheetProfiles.filter((p) => p.engine !== "legacy-dolcae").map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {sheetProfiles.filter((p) => !p.engine).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </CustomSelect>
             )}
             <button type="button" onClick={() => setWiz(true)} className={`${btn} h-9 border border-[#DCE3EE] text-[#2D4C82]`}>구글시트 연결 마법사</button>
@@ -1034,7 +1034,7 @@ export default function RouteBoard({ companyName = "" }) {
   };
   React.useEffect(() => { if (!msg) return undefined; const t = setTimeout(() => setMsg(""), 4000); return () => clearTimeout(t); }, [msg]);
 
-  // ⭐ 2026-11-03 최고관리자 — 다른 회사로 저장된 양식(예: 태진 시트가 돌캐로)과 그 양식으로 만든 오더를 다른 회사로 옮긴다
+  // ⭐ 2026-11-03 최고관리자 — 다른 회사로 저장된 양식(예: 다른 회사로 잘못 저장된 시트)과 그 양식으로 만든 오더를 다른 회사로 옮긴다
   const isMasterUser = () => { try { return localStorage.getItem("role") === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com"; } catch { return false; } };
   const moveForm = async () => {
     const target = String(window.prompt(`'${form.name}' 양식과 그 오더를 옮길 회사 이름을 정확히 입력하세요.\n(지금 회사: ${form.companyName || co})`, "") || "").trim();

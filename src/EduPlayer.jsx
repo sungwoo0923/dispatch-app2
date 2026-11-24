@@ -346,7 +346,7 @@ function SignStep({ course, user, mode, pledgeCourse, busy, onSubmit }) {
         <div className="text-[14.5px] leading-relaxed font-semibold" style={{ color: INK }}>{text}</div>
         <div className="mt-4 grid grid-cols-[72px_1fr] gap-y-1.5 text-[13px]">
           <span className="font-bold" style={{ color: SUB }}>이름</span><span className="font-extrabold" style={{ color: INK }}>{user.name || "-"}</span>
-          <span className="font-bold" style={{ color: SUB }}>소속</span><span className="font-semibold" style={{ color: INK }}>{user.companyName || "-"}{user.role === "driver" && user.carNo ? ` · ${user.carNo}` : ""}</span>
+          <span className="font-bold" style={{ color: SUB }}>소속</span><span className="font-semibold" style={{ color: INK }}>{user.role === "totalMaster" ? "로지스웹 · 개발자" : user.companyName || "-"}{user.role === "driver" && user.carNo ? ` · ${user.carNo}` : ""}</span>
           <span className="font-bold" style={{ color: SUB }}>날짜</span><span className="font-semibold" style={{ color: INK }}>{ds}</span>
         </div>
       </div>

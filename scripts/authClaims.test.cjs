@@ -59,7 +59,7 @@ const cu = (u, ctx) => AC.computeUserClaims(u, ctx);
     assert.deepEqual(AC.roleInfo("legalMgr", { menus: { 자금관리: "read" } }, null), { exec: false, fm: "read" }); // 법무는 자금 메뉴 설정을 따른다
   });
   await t("규칙과 똑같이 계산할 수 없는 문서 → 토큰 없음(규칙이 문서를 읽는다)", () => {
-    assert.equal(cu({ role: "user" }).claims, null);                       // 회사명 없음('돌캐' 기본)
+    assert.equal(cu({ role: "user" }).claims, null);                       // 회사명 없음('예전운송' 기본)
     assert.equal(cu({ companyName: 3, role: "user" }).claims, null);
     assert.equal(cu({ companyName: "a", role: 1 }).claims, null);
     assert.equal(cu({ companyName: "a", role: "user", team: ["x"] }).claims, null);

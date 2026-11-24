@@ -2447,11 +2447,11 @@ const EDIT_REQUEST_FIELD_LABELS = {
   전달사항: "전달사항", 요청차량: "요청차량", 추가정보: "추가정보",
 };
 // ⭐ 매출관리(손익보고서/YearlySummaryChart)에서 "총 운송료"와 별도로 "순수 운송료"를
-// 구분해서 보여주는 기능 — 원래는 돌캐 전용으로 "후레쉬물류"/"채석강" 거래처명을
+// 구분해서 보여주는 기능 — 원래는 예전 운송사 전용으로 "후레쉬물류"/"채석강" 거래처명을
 // 코드에 직접 박아 판별했는데, 이 프로그램은 여러 운송사가 함께 쓰기 때문에 회사마다
 // 그 대상 거래처가 다를 수 있다. 그래서 거래처관리에서 거래처별로 체크하는
 // "순수매출제외" 플래그로 판별하도록 일반화한다. 아직 한 번도 체크박스를 저장한
-// 적 없는 기존 데이터(주로 돌캐)는 예전 하드코딩 이름으로 폴백해서 동작이
+// 적 없는 기존 데이터(주로 예전 운송사)는 예전 하드코딩 이름으로 폴백해서 동작이
 // 그대로 유지되게 한다 — 거래처관리에서 체크박스를 명시적으로 켜거나 끄는 순간
 // 그 거래처는 폴백 대신 저장된 값을 따른다.
 const LEGACY_NET_REVENUE_EXCLUDED_NAMES = ["후레쉬물류", "채석강"];
@@ -2971,7 +2971,7 @@ import { LoginManagerModal } from "./LoginManager";
 import "./pcTheme.css";
 import "./pcColorRemap.css"; // ★ PC 알록달록 금지(남색 계열)
 import { OrderTimeline, OrderTimelineModal } from "./OrderTimeline";
-import { isTMUser } from "./staffFilter";
+import { isTMUser, TM_AFFIL, TM_ORG } from "./staffFilter";
 import OrgChart from "./OrgChart";
 import { MailHeaderButton, sendInternalMail, useMailCounts } from "./InternalMail";
 import { useApprovalCounts } from "./Approval";
@@ -8236,7 +8236,7 @@ useEffect(() => {
       return data.filter(o => (o?.companyName || DEFAULT_COMPANY) === viewCompany);
     }
 
-    // 회사명 기준 필터 (없으면 "돌캐"로 간주)
+    // 회사명 기준 필터
     const myCompany = userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
     const byCompany = data.filter(o => {
       const docCompany = o?.companyName || DEFAULT_COMPANY;
@@ -10040,8 +10040,10 @@ return (
                 : (userCompany || localStorage.getItem("userCompany") || "");
               return co ? (
                 <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
-                  <p className="text-[11px] font-semibold text-gray-500 mb-0.5">소속 회사</p>
-                  <p className="text-[15px] font-bold text-[#1B2B4B]">{co}</p>
+                  <p className="text-[11px] font-semibold text-gray-500 mb-0.5">{role === "totalMaster" ? "소속" : "소속 회사"}</p>
+                  {/* 🧑‍💻 2026-11-24 최고관리자는 어느 운송사 소속도 아님 — 들어가 보는 회사는 따로 */}
+                  <p className="text-[15px] font-bold text-[#1B2B4B]">{role === "totalMaster" ? TM_AFFIL : co}</p>
+                  {role === "totalMaster" && <p className="text-[11.5px] font-semibold text-gray-500 mt-0.5">지금 보는 운송사: {co}</p>}
                 </div>
               ) : null;
             })()}
@@ -25051,7 +25053,7 @@ function summarizeDayPattern(records) {
 }
 
 // 보고서/출력물에 찍히는 "우리 회사" 정보와 "출력한 담당자" 정보 — 예전엔 각 보고서
-// 템플릿마다 (주)돌캐/RUN25/특정 계정 이름이 문자열로 고정 박혀있어 다른 운송사가
+// 템플릿마다 특정 회사/RUN25/특정 계정 이름이 문자열로 고정 박혀있어 다른 운송사가
 // 로그인해도 항상 그 정보로 인쇄됐다. 어느 컴포넌트에서 호출하든 안전하도록(외부
 // 클로저에 기대지 않도록) db/auth 전역 import만 사용하는 순수 함수로 분리한다.
 async function fetchCompanyPrintInfo(companyName) {
@@ -48127,8 +48129,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     setEnd(`${THIS_YEAR}-12-31`);
   };
 
-  // ★ 거래명세서/이메일 발신정보에 찍히는 "우리 회사" 정보 — 예전엔 (주)돌캐로 고정돼
-  // 있어서 어느 운송사가 로그인해도 항상 돌캐 정보로 인쇄/발송됐다. 로그인한 회사의
+  // ★ 거래명세서/이메일 발신정보에 찍히는 "우리 회사" 정보 — 예전엔 한 회사 정보로 고정돼
+  // 있어서 어느 운송사가 로그인해도 항상 그 회사 정보로 인쇄/발송됐다. 로그인한 회사의
   // transportApplications(회사관리에서 등록한 사업자정보) 문서를 실시간으로 읽어와
   // 회사마다 자기 정보로 찍히게 한다.
   const [companyInfoDoc, setCompanyInfoDoc] = React.useState(null);
@@ -55512,7 +55514,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
   // 상/하차지명을 다시 선택(드롭다운 재선택)해야만 새 정보가 채워지는 불편이
   // 있었다. 아래에서 이름이 일치하는 모든 오더(orders/dispatch 두 컬렉션 모두)를
   // 찾아 바뀐 필드만 조용히(이력/updatedAt 건드리지 않고) 함께 갱신한다.
-  // companyName 필드가 없는 옛 문서는 "돌캐"로 취급하는 게 이 코드베이스 전반의
+  // companyName 필드가 없는 옛 문서는 기본 회사로 취급하는 게 이 코드베이스 전반의
   // 관례라, Firestore where절만으로는 그 폴백을 표현할 수 없어 매칭 이름으로 일단
   // 가져온 뒤 companyName은 클라이언트에서 다시 한 번 걸러 다른 회사 데이터를
   // 실수로 건드리지 않게 한다.
@@ -57756,11 +57758,11 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
     } catch (e) { showAlert("이미지 저장 실패: " + (e?.message || e)); }
   };
   const copyContact = async () => {
-    const text = [`${co} ${displayName}${title ? ` (${title})` : ""}`, phone && `휴대폰 ${phone}`, companyTel.tel && `대표번호 ${companyTel.tel}`, companyTel.fax && `팩스 ${companyTel.fax}`, user?.email && `이메일 ${user.email}`, companyAddr && `주소 ${companyAddr}`].filter(Boolean).join("\n");
+    const text = [`${role === "totalMaster" ? TM_ORG : co} ${displayName}${title ? ` (${title})` : ""}`, phone && `휴대폰 ${phone}`, companyTel.tel && `대표번호 ${companyTel.tel}`, companyTel.fax && `팩스 ${companyTel.fax}`, user?.email && `이메일 ${user.email}`, companyAddr && `주소 ${companyAddr}`].filter(Boolean).join("\n");
     try { await navigator.clipboard.writeText(text); showAlert("연락처를 복사했습니다. 카카오톡이나 문자에 붙여 넣으세요."); } catch { showAlert("복사에 실패했습니다."); }
   };
   const saveVcard = () => {
-    const vcf = ["BEGIN:VCARD", "VERSION:3.0", `FN:${displayName}`, `N:${displayName};;;;`, co && `ORG:${co}${myInfo.team ? `;${myInfo.team}` : ""}`,
+    const vcf = ["BEGIN:VCARD", "VERSION:3.0", `FN:${displayName}`, `N:${displayName};;;;`, co && `ORG:${role === "totalMaster" ? TM_ORG : co}${myInfo.team ? `;${myInfo.team}` : ""}`,
       myInfo.position && `TITLE:${myInfo.position}`, phone && `TEL;TYPE=CELL:${phone}`, companyTel.tel && `TEL;TYPE=WORK:${companyTel.tel}`, companyTel.fax && `TEL;TYPE=FAX:${companyTel.fax}`,
       user?.email && `EMAIL:${user.email}`, companyAddr && `ADR;TYPE=WORK:;;${companyAddr};;;;`, "END:VCARD"].filter(Boolean).join("\r\n");
     const url = URL.createObjectURL(new Blob([vcf], { type: "text/vcard;charset=utf-8" }));
@@ -57844,7 +57846,7 @@ function MyProfilePage({ user, todayStats, myStats, cardImage, setCardImage, car
                   ["이름", displayName || "-", <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-7 8-7s8 3 8 7" /></>],
                   ["연락처", phone || "-", <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z" />],
                   ["이메일", user?.email || "-", <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>],
-                  ["회사", co || "-", <><path d="M3 21h18M5 21V7l7-4 7 4v14" /><path d="M9 9h1M14 9h1M9 13h1M14 13h1" /></>],
+                  [role === "totalMaster" ? "소속" : "회사", role === "totalMaster" ? TM_AFFIL : (co || "-"), <><path d="M3 21h18M5 21V7l7-4 7 4v14" /><path d="M9 9h1M14 9h1M9 13h1M14 13h1" /></>],
                   ["부서 · 직책", title || "미지정 (인사관리부에서 지정)", <><rect x="3" y="7" width="18" height="13" rx="2" /><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></>],
                   ["권한", roleLabel /* ⭐ 2026-11-02 점검 — 한글 권한명 */, <path d="M12 3 5 6v6c0 4.5 3 7.7 7 9 4-1.3 7-4.5 7-9V6z" />],
                 ].map(([k, v, ic]) => (

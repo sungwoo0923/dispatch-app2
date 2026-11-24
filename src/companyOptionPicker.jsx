@@ -59,7 +59,8 @@ export const CompanyOptionPicker = React.forwardRef(function CompanyOptionPicker
   const meta = OPTION_META[optKey] || { title: optKey, tag: "OPTION" };
   const ttl = title || meta.title;
   const shown = isNone ? (noneValue && noneValue !== "" ? (noneLabel || placeholder) : placeholder) : (labelOf ? labelOf(raw) : raw);
-  const close = (refocus = true) => { setOpen(false); if (refocus) setTimeout(() => btn.current?.focus(), 0); };
+  const closedAt = React.useRef(0); // 📱 2026-11-24 밀림 · 누름으로 닫힌 바로 뒤 click 이 목록을 다시 여는 것 막기
+  const close = (refocus = true) => { closedAt.current = Date.now(); setOpen(false); if (refocus) setTimeout(() => btn.current?.focus(), 0); };
   return (
     <>
       <button
@@ -67,7 +68,7 @@ export const CompanyOptionPicker = React.forwardRef(function CompanyOptionPicker
         id={id} ref={btn} type="button" disabled={disabled}
         data-opt-picker={optKey} data-value={raw}
         aria-haspopup="listbox" aria-expanded={open}
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (!disabled) setOpen((o) => !o); }}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (disabled) return; if (!open && Date.now() - closedAt.current < 400) return; setOpen((o) => !o); }}
         onKeyDown={(e) => { if (!open && (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ")) { e.preventDefault(); e.stopPropagation(); setOpen(true); } }}
         className={`${className} text-left disabled:cursor-not-allowed`}
         style={{ display: "flex", alignItems: "center", justifyContent: compact ? "center" : "space-between", gap: compact ? 3 : 6, minWidth: 0, ...(style || {}) }}
@@ -156,7 +157,9 @@ function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allo
 
   React.useEffect(() => { if (act >= opts.length) setAct(Math.max(0, opts.length - 1)); }, [opts.length]); // eslint-disable-line react-hooks/exhaustive-deps
   React.useEffect(() => {
-    const down = (e) => { if (anchor.current?.contains(e.target) || menu.current?.contains(e.target)) return; onClose(false); };
+    // 📱 2026-11-24 바닥 시트의 어두운 뒤판은 여기서 닫지 않는다 — 누름(touchstart)에서 닫으면 뒤이은 click 이 아래 칸 버튼에 떨어져 목록이 다시 열렸다
+    //  (그래서 "무조건 골라야 닫힘"). 뒤판은 아래 onClick 으로 닫고 그 click 을 먹는다
+    const down = (e) => { if (anchor.current?.contains(e.target) || menu.current?.contains(e.target) || e.target?.closest?.("[data-opt-sheet]")) return; onClose(false); };
     const re = (e) => { if (menu.current?.contains(e.target)) return; if (!sheet) onClose(false); };
     const rs = () => { if (!sheet) onClose(false); };
     document.addEventListener("mousedown", down, true);
@@ -269,7 +272,7 @@ function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allo
             <span style={{ fontSize: pos.sheet ? 16 : 14, fontWeight: 900, color: "#0F1A30" }}>{ttl}</span>
             <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.1em", color: "#4B6CB7" }}>{meta.tag}</span>
           </span>
-          {pos.sheet
+          {(pos.sheet || touch) /* 📱 2026-11-24 손가락 화면은 떠 있는 목록에도 [닫기] */
             ? <button type="button" onClick={() => onClose(false)} style={{ height: 32, padding: "0 12px", borderRadius: 9, border: "1px solid #DCE3EE", background: "#fff", color: "#3A4A66", fontSize: 13.5, fontWeight: 900 }}>닫기</button>
             : <span style={{ fontSize: 12, fontWeight: 700, color: "#8E9BB2", whiteSpace: "nowrap" }}>↑↓ · Enter</span>}
         </div>
@@ -312,7 +315,7 @@ function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allo
   );
   return createPortal(
     pos.sheet ? (
-      <div data-opt-sheet="1" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(false); }}
+      <div data-opt-sheet="1" onClick={(e) => { if (e.target === e.currentTarget) { e.preventDefault(); e.stopPropagation(); onClose(false); } }}
         style={{ position: "fixed", inset: 0, zIndex: 2147482999, background: "rgba(8,14,30,.45)" }}>{body}</div>
     ) : body,
     document.body,

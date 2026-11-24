@@ -5,6 +5,7 @@
 //  · 순서: 팀 · 기간 고르기 → 그래프 보고서가 바로 만들어짐 → 작성자 의견(칸마다 넣고 빼기) → 인쇄 · PDF · PPT · 전자결재로 올리기
 //  · 숫자: src/teamReportCore.js(매출관리 · 일일 경영 보고와 같은 오더 기준) · PPT: src/teamReportPpt.js
 //  · 1단계: 매출이 나는 팀(운송 · 운영 · 영업). 경리 · 인사 · 개발 · 법무 보고서는 다음 단계
+import { isTMUser } from "./staffFilter"; // 🧑‍💻 2026-11-24 최고관리자는 회사 직원이 아님
 import React from "react";
 import { db } from "./firebase";
 import { collection, getDocs, query, where, doc } from "firebase/firestore";
@@ -135,7 +136,7 @@ export default function TeamReport({ company, me }) {
   const people = useCompanyPeople(company);
   const nameMap = useUserNameMap();
   const teams = React.useMemo(() => {
-    const have = [...new Set((people || []).map((u) => String(u.team || "")).filter(Boolean))];
+    const have = [...new Set((people || []).filter((u) => !isTMUser(u)).map((u) => String(u.team || "")).filter(Boolean))];
     const list = [...TEAM_OPTIONS.filter((t) => have.includes(t)), ...have.filter((t) => !TEAM_OPTIONS.includes(t))].filter((t) => t !== "임원");
     return anyTeam ? list : list.filter((t) => t === myTeam);
   }, [people, anyTeam, myTeam]);

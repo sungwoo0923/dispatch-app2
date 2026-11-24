@@ -44,7 +44,7 @@ const NOW = Date.now();
   await db.doc("orders/sA").set({ companyName: "에이운송", source: "transport_transmit", shipperCompany: "에스상사", attachCount: 0 });
   await db.doc("orders/oOld").set({ companyName: "에이운송", 상차일: "2026-11-08", 업로드토큰: "tokOld", 업로드토큰발급: NOW - 31 * 864e5 });
   await db.doc("orders/oLegacy").set({ companyName: "에이운송", 상차일: "2026-11-08", 업로드토큰: "tokLeg" });
-  await db.doc("dispatch/dNoTok").set({ companyName: "돌캐", 상차일: "2026-11-08", 차량번호: "99하9999", 이름: "김기사" });
+  await db.doc("dispatch/dNoTok").set({ companyName: "예전운송", 상차일: "2026-11-08", 차량번호: "99하9999", 이름: "김기사" });
   await db.doc("orders/oB").set({ companyName: "비운송", 상차일: "2026-11-08", 차량번호: "12가3456", 이름: "홍길동", 업로드토큰: "tokB", 업로드토큰발급: NOW });
   await db.doc("companySettings/에이운송").set({ 결제일규칙: { type: "monthEnd" } });
 
@@ -130,7 +130,7 @@ const NOW = Date.now();
     assert.strictEqual(x._id, "oA"); assert.strictEqual(x.업로드토큰, undefined); assert.ok(x.grant.startsWith("g1."));
     grant = x.grant;
   });
-  await t("driverSearch: co 없으면 기본 회사(돌캐)로만 — 다른 회사 오더 안 나옴", async () => {
+  await t("driverSearch: co 없으면 기본 회사(예전운송)로만 — 다른 회사 오더 안 나옴", async () => {
     const r = await call(UA.driverSearch, { method: "GET", query: { date: "2026-11-08", vehicle: "12가3456", name: "홍길동" } });
     assert.strictEqual(r.body.results.length, 0);
     const r2 = await call(UA.driverSearch, { method: "GET", query: { date: "2026-11-08", vehicle: "99하9999", name: "김기사" } });

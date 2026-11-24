@@ -153,8 +153,8 @@ export function EduCertPaper({ rec }) {
 
       <div className="mt-8 text-[14px] font-black mb-2">1. 이수자</div>
       <table className="w-full border-collapse table-fixed"><tbody>
-        <DocRow k="성명" v={rec.name || "-"} k2={rec.carNo ? "차량번호" : "구분"} v2={rec.carNo || (rec.role === "driver" ? "기사" : rec.role === "totalMaster" ? "최고관리자" : "직원")} />
-        <DocRow k="소속" v={rec.role === "totalMaster" ? "LogisWeb (최고관리자)" : rec.companyName || "-"} />
+        <DocRow k="성명" v={rec.name || "-"} k2={rec.carNo ? "차량번호" : "구분"} v2={rec.carNo || (rec.role === "driver" ? "기사" : rec.role === "totalMaster" ? "개발자" : "직원")} />
+        <DocRow k="소속" v={rec.role === "totalMaster" ? "로지스웹" : rec.companyName || "-"} />
       </tbody></table>
 
       <div className="mt-6 text-[14px] font-black mb-2">2. 교육 내용</div>
@@ -437,7 +437,39 @@ export function EduCatalog({ mine, driverCourses = [], records = {}, wide = fals
 }
 
 // wide: PC 넓은 화면 · showDriver: 직원 화면에 기사 교육도 함께(미리 보기)
-export function SafetyEduMine({ user, audience, title = "안전교육", wide = false, showDriver = false }) {
+// 👥 2026-11-24 이수 현황판을 같이 볼 수 있는 사람 — 인사관리자 · 통합인사관리자 · 통합관리자 · 최고관리자 · 인사 부서(보기 전용 계정 제외)
+//  (사용자 요청: "인사관리자도 이수를 받아야 하지만 이수현황판도 보여야") — 이 사람들은 [내 교육 | 이수 현황판] 두 칸으로 본다
+export const eduBoardRole = (role, team = "") => ["hrManager", "hrAcct", "allMgr", "totalMaster"].includes(role) || (/인사/.test(String(team || "")) && role !== "viewer");
+
+// board = { company, canManage } — 주면 위에 [내 교육 | 이수 현황판] 바꾸기가 생긴다
+export function SafetyEduMine({ user, audience, title = "안전교육", wide = false, showDriver = false, board = null }) {
+  const [pane, setPane] = React.useState(() => { try { return (board && sessionStorage.getItem("kpEduPane")) || "mine"; } catch { return "mine"; } });
+  const pick = (k) => { setPane(k); try { sessionStorage.setItem("kpEduPane", k); } catch { /* 무시 */ } };
+  if (board && pane === "board") {
+    return (
+      <div>
+        {title && <div className="text-[20px] font-black mb-3" style={{ color: INK }}>{title}</div>}
+        <EduPaneSwitch pane={pane} onPick={pick} />
+        <SafetyEduAdmin company={board.company} canManage={board.canManage} />
+      </div>
+    );
+  }
+  return <SafetyEduMineBody user={user} audience={audience} title={title} wide={wide} showDriver={showDriver} switcher={board ? <EduPaneSwitch pane={pane} onPick={pick} /> : null} />;
+}
+export function EduPaneSwitch({ pane, onPick }) {
+  return (
+    <div className="mb-3 inline-flex w-full sm:w-auto p-1 rounded-2xl bg-[#EEF1F6]" role="tablist">
+      {[["mine", "user", "내 교육"], ["board", "users", "이수 현황판"]].map(([k, ic, l]) => (
+        <button key={k} type="button" role="tab" aria-selected={pane === k} onClick={() => onPick(k)}
+          className="flex-1 sm:flex-none h-10 px-4 rounded-xl text-[14px] font-black inline-flex items-center justify-center gap-1.5 whitespace-nowrap transition"
+          style={pane === k ? { background: "#fff", color: INK, boxShadow: "0 1px 3px rgba(16,24,40,.12)" } : { color: SUB }}>
+          <EduIcon name={ic} size={16} />{l}
+        </button>
+      ))}
+    </div>
+  );
+}
+function SafetyEduMineBody({ user, audience, title, wide, showDriver, switcher }) {
   const aud = audience || (user?.role === "driver" ? "driver" : "staff");
   const courses = coursesFor(aud);
   const [records, setRecords] = React.useState({});
@@ -465,10 +497,11 @@ export function SafetyEduMine({ user, audience, title = "안전교육", wide = f
   }, [user?.uid, co]);
   const mayPledge = aud === "driver" && driverMayPledge(settings, user?.uid);
   const pledgeCourse = courses.find((c) => c.kind === "doc") || null;
-  const showCert = (r) => setCert(user?.role === "totalMaster" ? { ...r, role: "totalMaster" } : r); // 최고관리자 이수증 소속 = LogisWeb
+  const showCert = (r) => setCert(user?.role === "totalMaster" ? { ...r, role: "totalMaster" } : r); // 최고관리자 이수증 소속 = 로지스웹 · 구분 = 개발자(어느 운송사 소속도 아님)
   return (
     <div>
       {title && <div className="text-[20px] font-black mb-3" style={{ color: INK }}>{title}</div>}
+      {switcher}
       <EduCatalog mine={courses} driverCourses={showDriver && aud === "staff" ? coursesFor("driver") : []} records={records} wide={wide} mayPledge={mayPledge} onOpen={setOpen} onCert={showCert} onPeek={setPeek} onReview={setReview} />
       {open && <EduPlayer course={open} user={{ ...user, companyName: co }} mayPledge={mayPledge && open.kind === "video"} pledgeCourse={pledgeCourse} onClose={() => setOpen(null)} onDone={(rec) => setRecords((m) => ({ ...m, [rec.courseId]: { ...rec, signedAt: { seconds: Math.floor(Date.now() / 1000) } } }))} />}
       {peek && <EduPlayer course={peek} user={{ ...user, companyName: co }} preview onClose={() => setPeek(null)} />}
@@ -691,9 +724,9 @@ export function EduAdminBoard({ people, records, settings = {}, canManage, onSav
 
       {/* 필터 — 드롭다운 */}
       <div className={`${CARD} p-3 flex flex-wrap items-center gap-2`}>
-        <div className="md:hidden w-[120px]"><CustomSelect value={aud} onChange={(e) => { setAud(e.target.value); setCourseF("all"); setTeamF("all"); }} className={SEL}><option value="driver">기사</option><option value="staff">직원</option></CustomSelect></div>
-        <div className="w-[200px]"><CustomSelect value={courseF} onChange={(e) => setCourseF(e.target.value)} className={SEL}><option value="all">교육 · 전체</option>{allCourses.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}</CustomSelect></div>
-        <div className="w-[150px]"><CustomSelect value={statF} onChange={(e) => setStatF(e.target.value)} className={SEL}><option value="all">상태 · 전체</option><option value="todo">미이수</option><option value="done">모두 이수</option><option value="pledge">서약서 대체</option></CustomSelect></div>
+        <div className="md:hidden w-full"><CustomSelect value={aud} onChange={(e) => { setAud(e.target.value); setCourseF("all"); setTeamF("all"); }} className={SEL}><option value="driver">기사</option><option value="staff">직원</option></CustomSelect></div>
+        <div className="w-[calc(50%-4px)] md:w-[200px]"><CustomSelect value={courseF} onChange={(e) => setCourseF(e.target.value)} className={SEL}><option value="all">교육 · 전체</option>{allCourses.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}</CustomSelect></div>
+        <div className="w-[calc(50%-4px)] md:w-[150px]"><CustomSelect value={statF} onChange={(e) => setStatF(e.target.value)} className={SEL}><option value="all">상태 · 전체</option><option value="todo">미이수</option><option value="done">모두 이수</option><option value="pledge">서약서 대체</option></CustomSelect></div>
         {aud === "staff" && teams.length > 0 && <div className="w-[150px]"><CustomSelect value={teamF} onChange={(e) => setTeamF(e.target.value)} className={SEL}><option value="all">부서 · 전체</option>{teams.map((t) => <option key={t} value={t}>{t}</option>)}</CustomSelect></div>}
         <label className="relative flex-1 min-w-[160px]">
           <EduIcon name="search" size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: MUTE }} />
@@ -709,8 +742,47 @@ export function EduAdminBoard({ people, records, settings = {}, canManage, onSav
         </button>
       </div>
 
-      {/* 매트릭스 */}
-      <div className={`${CARD} overflow-x-auto`}>
+      {/* 📱 2026-11-24 휴대폰 — 넓은 표 대신 사람마다 카드(교육 칸을 누르면 디지털 이수증) */}
+      <div className="md:hidden space-y-2">
+        <div className="px-1 text-[12px] font-extrabold tracking-[0.08em] text-[#4B6CB7]" style={EN}>{aud === "driver" ? "DRIVER" : "STAFF"} · {rows.length}</div>
+        {rows.map(({ p, recs, doneN }) => {
+          const last = recs.filter(Boolean).map((x) => tsDate(x.signedAt)).filter(Boolean).sort((a, b) => b - a)[0];
+          const full = doneN === courses.length;
+          return (
+            <div key={p.uid} className={`${CARD} px-3.5 py-3`}>
+              <div className="flex items-center gap-2.5">
+                <span className="w-9 h-9 rounded-full flex items-center justify-center text-[14px] font-black shrink-0" style={full ? { background: NAVY, color: "#fff" } : { background: "#EEF1F6", color: NAVY }}>{String(p.name || "?").slice(0, 1)}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-black text-[15px] truncate">{p.name}</span>
+                    {aud === "driver" && driverMayPledge(settings, p.uid) && <span className="px-1.5 h-5 inline-flex items-center rounded text-[10.5px] font-black shrink-0" style={{ background: "#EEF1F6", color: NAVY }}>서약서 대체</span>}
+                  </div>
+                  <div className="text-[12px] font-semibold truncate" style={{ ...EN, color: MUTE }}>{(aud === "driver" ? p.carNo : p.team) || "—"}{last ? ` · 마지막 ${ymd(last)}` : ""}</div>
+                </div>
+                <span className="text-[14px] font-black tabular-nums shrink-0" style={{ ...EN, color: full ? NAVY : MUTE }}>{doneN}/{courses.length}</span>
+              </div>
+              <div className="mt-2 h-1.5 rounded-full overflow-hidden" style={{ background: "#EEF1F6" }}><div className="h-full rounded-full" style={{ width: `${courses.length ? (doneN / courses.length) * 100 : 0}%`, background: "linear-gradient(90deg,#1B2B4B,#2D4C82)" }} /></div>
+              <div className="mt-2.5 grid grid-cols-2 gap-1.5">
+                {courses.map((c, i) => {
+                  const r = recs[i];
+                  return (
+                    <button key={c.id} type="button" disabled={!r} onClick={() => r && onViewSign?.(r)}
+                      className="min-w-0 h-9 px-2 rounded-xl flex items-center gap-1.5 text-left disabled:cursor-default"
+                      style={r ? { background: r.mode === "pledge" ? "#DCE3EE" : "#EEF2F9", color: NAVY } : { border: "1.5px dashed #C9D1DE", color: MUTE }}>
+                      <span className="w-4 h-4 rounded-[5px] inline-flex items-center justify-center shrink-0" style={r ? { background: NAVY, color: "#fff" } : { border: "1.5px solid #C9D1DE" }}>{r && <EduIcon name="check" size={10} stroke={3.4} />}</span>
+                      <span className="text-[12px] font-black truncate">{c.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        {!rows.length && <div className={`${CARD} px-4 py-10 text-center text-[13px] font-bold`} style={{ color: MUTE }}>조건에 맞는 {aud === "driver" ? "기사" : "직원"}가 없어요</div>}
+      </div>
+
+      {/* 매트릭스(PC) */}
+      <div className={`${CARD} overflow-x-auto hidden md:block`}>
         <table className="w-full min-w-[720px] border-collapse">
           <thead>
             <tr style={{ background: "#F6F8FB" }}>

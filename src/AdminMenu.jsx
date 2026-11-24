@@ -163,7 +163,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
     const list = byTeam(assignableRoles(), x?.team);
     return list.includes(s0) ? s0 : (list[0] || s0);
   };
-  // ⭐ 2026-11-02 회사 분리 — 최고관리자는 본인 문서의 회사(예: 돌캐)가 아니라 "지금 들어가 있는 회사"(로그인 회사)를 기준으로.
+  // ⭐ 2026-11-02 회사 분리 — 최고관리자는 본인 문서의 회사(예: 예전 운송사)가 아니라 "지금 들어가 있는 회사"(로그인 회사)를 기준으로.
   //  예전엔 최고관리자가 태진에 들어가도 연동 화주사·화주사 전송·인사 설정이 본인 문서 회사로 잡혔다.
   const effectiveCompany = isTotalMaster
     ? (String(parentCompany || localStorage.getItem("loginCompany") || myCompany || DEFAULT_COMPANY).trim() || DEFAULT_COMPANY)
@@ -357,7 +357,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   };
 
   // ⭐ 2026-11-02 회사 분리 — 화주 계정은 fsTenant가 "여러 운송사와 연동되는 거래 상대"라 회사 거르기 없이 다 넘겨준다.
-  //  그래서 최고관리자가 태진에 들어가면 돌캐에 연동된 화주 계정(신선대표계정·크레팜대표계정 등)까지 회원관리에 보였다.
+  //  그래서 최고관리자가 태진에 들어가면 예전 운송사에 연동된 화주 계정(신선대표계정·크레팜대표계정 등)까지 회원관리에 보였다.
   //  화주 계정은 "지금 회사에 연동된 것"만 남긴다 — users.linkedTransportCompany 또는 화주 가입신청(companyApplications)의 연동 운송사.
   //  연동 정보가 하나도 없는 예전 화주 계정은 기본 회사(DEFAULT_COMPANY) 것으로 본다(fsTenant의 예전 문서 규칙과 같음).
   const shipperLinkCompanies = useMemo(() => {
@@ -385,7 +385,8 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
   const visibleUsers = useMemo(() => {
     if (isTotalMaster) {
       if (!tenantNow) return users.filter((u) => u.role !== "driver");
-      return users.filter((u) => u.role !== "driver" && (u.role !== "shipper" || shipperLinkedTo(u, effectiveCompany)));
+      // 🧑‍💻 2026-11-24 운송사에 들어가 볼 때 최고관리자 본인은 그 회사 회원 목록에 넣지 않는다(어느 운송사 소속도 아님)
+      return users.filter((u) => u.role !== "driver" && u.role !== "totalMaster" && u.email !== TOTAL_MASTER_EMAIL && (u.role !== "shipper" || shipperLinkedTo(u, effectiveCompany)));
     }
     return users.filter(u =>
       u.role !== "driver" &&

@@ -13,15 +13,19 @@ const file = path.join(root, "public", "updates.json");
 const MAX = 600;
 const SKIP = /^(chore[:(]|merge\b|wip\b|작업 중 백업|revert\b)/i;
 
+// 🧹 2026-11-24 예전에 잠깐 거래한 운송사 이름은 기록에 남기지 않는다(사용자 요청) — 커밋 제목에 있으면 "예전 운송사"로
+const OLD_CO = new RegExp("\\uB3CC\\uCE90", "g");
+const clean = (t) => String(t || "").trim().replace(OLD_CO, "예전 운송사");
+
 let old = [];
-try { old = JSON.parse(fs.readFileSync(file, "utf8")).items || []; } catch { /* 처음 */ }
+try { old = (JSON.parse(fs.readFileSync(file, "utf8")).items || []).map((x) => ({ ...x, s: clean(x.s) })); } catch { /* 처음 */ }
 
 let fresh = [];
 try {
   const out = execSync("git log -n 400 --no-merges --pretty=format:%H%x1f%cI%x1f%s%x1e", { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 32 * 1024 * 1024 });
   fresh = out.split("\x1e").map((r) => r.trim()).filter(Boolean).map((r) => {
     const [h, at, s] = r.split("\x1f");
-    return { h: (h || "").slice(0, 12), at: at || "", s: (s || "").trim() };
+    return { h: (h || "").slice(0, 12), at: at || "", s: clean(s) };
   }).filter((x) => x.h && x.at && x.s && !SKIP.test(x.s));
 } catch { /* git 없음 — 있는 파일 그대로 */ }
 

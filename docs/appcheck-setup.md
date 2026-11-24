@@ -74,12 +74,12 @@ firebase deploy --only functions
 | 종류 | 함수 | 이유 |
 |---|---|---|
 | 외부 웹훅 | `hubVaDeposit` | 은행/PG가 부름(앱 아님) |
-| 키로 여는 관리 도구 | `backfillGsheetMonth` · `backfillGsheetClients` · `setupGsheetDailyLedger` · `backfillGsheetFareHistory` · `applyGsheetGuides` · `checkGsheetMonth` | 주소창에서 `?key=`로 직접 엶 |
+| 키로 여는 관리 도구 | (없음 — 예전 구글시트 백필 · 점검 도구는 2026-11-24 지움) | - |
 | 서버 대리 호출 | `fuel` | Vercel `/api/fuel`이 부름 |
 | 화면에서 안 씀 | `lookupCompanyCode` | 쓰지 않는 함수(헤더만 허용) |
 | 예약 실행 | `remindDriverCheckin` · `hourlyJobs` · `dailyReportPush` · `weatherRefresh` · `hubPayoutDaily` 등 `pubsub.schedule` 전부 | 사람 요청이 아님 |
 | Firestore 트리거 | `notify*` · `hub*OnWrite/OnCreate` · `archiveDeletedOrder` · `dedupeFcmToken` 등 `firestore.document` 전부 | 사람 요청이 아님 |
 
-확인하는 함수: 화면이 부르는 onRequest 전부(`sendPushNotification` · `tenantMigrate` · `driverSearch` · `checkEmail` · `freeDeletedEmail` · `linkDriverSignup` · `findCompany` · `companyReset` · `companyResetJob` · `companyResetPurge` · `contractNoticeRun` · `restoreDeleted` · `pushDiag` · `automation` · `gsheetMine` · `sheetOcr` · `routeBoardSheet` · `sheetConnect` · `sheetImport` · `platformStats` · `platformUsageNow` · `aiTeamChat`)
+확인하는 함수: 화면이 부르는 onRequest 전부(`sendPushNotification` · `tenantMigrate` · `driverSearch` · `checkEmail` · `freeDeletedEmail` · `linkDriverSignup` · `findCompany` · `companyReset` · `companyResetJob` · `companyResetPurge` · `contractNoticeRun` · `restoreDeleted` · `pushDiag` · `automation` · `sheetOcr` · `routeBoardSheet` · `sheetConnect` · `sheetImport` · `platformStats` · `platformUsageNow` · `aiTeamChat`)
 + 호출형 전부(`orderScanOcr` · `orderScanExtract` · `aiAssistantChat` · `payroll*` · `bizStatusCheck` · `weatherFor` · `integrationStatus` · `popbillAdmin` · `hubBindDevice` · `hubAdminResetDevice` · `hubAdminSetDriverLogin` · `refreshMyClaims` · `backfillClaims`).
 코드: `functions/appCheck.js`(서버) · `src/appCheckClient.js`(화면) · 테스트 `node scripts/appCheck.test.cjs`

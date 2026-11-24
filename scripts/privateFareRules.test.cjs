@@ -26,7 +26,7 @@ async function t(name, fn) {
     await setDoc(doc(db, "users/master"), { companyName: "큐런", approved: true, role: "admin", isMaster: true });
     await setDoc(doc(db, "users/staff"), { companyName: "큐런", approved: true, role: "user" });
     await setDoc(doc(db, "users/other"), { companyName: "비운송", approved: true, role: "admin", isMaster: true });
-    await setDoc(doc(db, "users/tm"), { companyName: "돌캐", approved: true, role: "totalMaster" });
+    await setDoc(doc(db, "users/tm"), { companyName: "예전운송", approved: true, role: "totalMaster" });
     await setDoc(doc(db, "systemConfig/tenancy"), { serverFilter: true });
   });
   const as = (uid) => env.authenticatedContext(uid).firestore();

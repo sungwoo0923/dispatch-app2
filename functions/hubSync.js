@@ -19,7 +19,7 @@ const { effectiveUser } = require("./multiCompany"); // 🏢 2026-11-24 여러 �
 
 const MARKET_NAME = "로지스웹 허브";
 const LW_DISPATCH = "로지스허브"; // 배차방식 목록에 추가한 값(src/companyDropdownOptions.jsx)
-const DEFAULT_COMPANY = "(회사없음)"; // ⭐ 2026-11-21 기본 회사 없음(돌캐 초기화)
+const DEFAULT_COMPANY = "(회사없음)"; // ⭐ 2026-11-21 기본 회사 없음
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const lwId = (id) => `hub_${id}`;
 const num = (v) => Math.round(Number(String(v ?? "").replace(/[^\d.-]/g, "")) || 0);

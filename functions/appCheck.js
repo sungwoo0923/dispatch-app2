@@ -7,7 +7,7 @@
 //  로그 찾기(Cloud Logging): "[AppCheck]" 로 검색 → endpoint=함수이름 · reason=missing|invalid
 //  onRequest: 화면이 보내는 X-Firebase-AppCheck 헤더를 확인(src/firebase.js · cafe-site/src/firebase.js 가 자동으로 붙인다)
 //  onCall: 아래 appCheckCallOpts() 를 runWith 에 넣는다(모드는 배포할 때 정해진다 → 모드를 바꾸면 함수 재배포)
-//  제외(일부러 확인 안 함): 외부 웹훅(hubVaDeposit) · 키로 여는 관리 도구(backfillGsheet* 등) · 예약 실행 · Firestore 트리거
+//  제외(일부러 확인 안 함): 외부 웹훅(hubVaDeposit) · 예약 실행 · Firestore 트리거
 //   → 목록은 docs/appcheck-setup.md
 const MODES = ["off", "monitor", "enforce"];
 const HEADER = "x-firebase-appcheck";

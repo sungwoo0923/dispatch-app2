@@ -3,13 +3,14 @@
 //  · staffOptionsOf(list): 직원 명부(usersLive 목록) → [{ key, name, email }] (기사·화주·퇴사·승인대기 제외)
 //  · ownerOfOrder(order): 원본 오더에 찍힌 담당자 { name, email }
 //  · applyOwner(payload, owner): 복사본에 고른 담당자를 담당자 필드들에 똑같이 넣는다
+import { isTMUser } from "./staffFilter"; // 🧑‍💻 2026-11-24 최고관리자는 배차담당자 후보가 아님
 const NOT_STAFF = new Set(["driver", "shipper", "cafeUser"]);
 
 export function staffOptionsOf(list = []) {
   const seen = new Set();
   const out = [];
   (list || []).forEach((u) => {
-    if (!u || NOT_STAFF.has(u.role) || u.approved === false || u.employmentStatus === "퇴사" || u.noAccount) return;
+    if (!u || NOT_STAFF.has(u.role) || isTMUser(u) || u.approved === false || u.employmentStatus === "퇴사" || u.noAccount) return;
     const name = String(u.name || "").trim();
     if (!name) return;
     const email = String(u.email || "").trim().toLowerCase();

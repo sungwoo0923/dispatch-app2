@@ -7,6 +7,7 @@
 //  · 언제든 [내 정보 › 로그인 · 보안](PC) · [설정 › 계정 › 로그인 · 보안](모바일)에서 켜고 끄고 바꾼다(SecurityPanel)
 //  · 서버: functions/pnkMfa.js(일반 계정 부분) — 비밀번호는 서버에만(해시)
 //  ✂ 2026-11-14 얼굴(Face ID) · 지문 로그인은 사용자 요청으로 전부 뺐다(로그인 화면 · 설정 · 로그인 뒤 권유 · 관리자 바로 로그인)
+import { isTMUser } from "./staffFilter"; // 🧑‍💻 2026-11-24
 import React from "react";
 import { createPortal } from "react-dom";
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
@@ -308,7 +309,7 @@ export function MfaResetPanel({ isTotalMaster = false, company = "" }) {
   const [msg, setMsg] = React.useState("");
   React.useEffect(() => {
     const q = isTotalMaster ? query(collection(db, "users"), where("mfaOpt", "==", true)) : query(collection(db, "users"), where("companyName", "==", company), where("mfaOpt", "==", true));
-    return onSnapshot(q, (sn) => setList(sn.docs.map((d) => ({ uid: d.id, ...d.data() }))), () => setList([]));
+    return onSnapshot(q, (sn) => setList(sn.docs.map((d) => ({ uid: d.id, ...d.data() })).filter((u) => isTotalMaster || !isTMUser(u))), () => setList([])); // 🧑‍💻 회사 목록에 최고관리자 빼기
   }, [isTotalMaster, company]);
   const reset = async (u) => {
     if (!window.confirm(`${u.name || u.email} 님의 2차 인증을 초기화할까요?\n다음 로그인부터 비밀번호만으로 들어오고, 본인이 다시 켤 수 있습니다.`)) return;

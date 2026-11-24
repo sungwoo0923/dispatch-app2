@@ -6295,7 +6295,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
     const uid = auth.currentUser?.uid;
     if (!uid) return;
     getDoc(doc(db, "users", uid)).then(snap => {
-      // ⭐ 2026-11-03 최고관리자는 "지금 보고 있는 회사"(getTenant) — 예전엔 본인 소속(돌캐)이라 태진 화면에서 만든 고정노선·배차표가 돌캐로 저장됐다
+      // ⭐ 2026-11-03 최고관리자는 "지금 보고 있는 회사"(getTenant) — 예전엔 본인 소속(예전 운송사)이라 태진 화면에서 만든 고정노선·배차표가 예전 운송사로 저장됐다
       const d = snap.exists() ? snap.data() : {};
       const isTM = d.role === "totalMaster" || auth.currentUser?.email === "tjddnqkf@naver.com";
       setMyCompanyName((isTM ? getTenant() : "") || d.companyName || getTenant() || null);

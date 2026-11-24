@@ -7,7 +7,7 @@
 "use strict";
 const crypto = require("crypto");
 
-const DEFAULT_CO = "(회사없음)"; // ⭐ 2026-11-21 기본 회사 없음(돌캐 초기화)
+const DEFAULT_CO = "(회사없음)"; // ⭐ 2026-11-21 기본 회사 없음
 // 업로드 링크(오더 토큰) 유효기간 — 운송사 화면은 만료 2일 전부터 링크를 복사하면 새 토큰을 발급한다(src/uploadTokenClient.js)
 const UPLOAD_TOKEN_TTL_MS = 30 * 24 * 3600e3;
 // 예전 형식 링크(발급 시각 없는 토큰 · 토큰 없이 오더 id만 있는 링크)를 받아 주는 마지막 날(한국 시간 기준 끝)

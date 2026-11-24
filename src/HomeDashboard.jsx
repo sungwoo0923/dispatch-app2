@@ -20,7 +20,7 @@ import {
   serverTimestamp, doc, deleteDoc, updateDoc, where, setDoc, getDoc, arrayUnion, getDocs,
 } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
-import { SafetyEduMine, useEduPending } from "./SafetyEdu"; // 🦺 2026-11-24 안전교육(내 교육)
+import { SafetyEduMine, useEduPending, eduBoardRole } from "./SafetyEdu"; // 🦺 2026-11-24 안전교육(내 교육)
 import { EditableText } from "./EditMode";
 import { pcLiveWindowStart, pcPrevDay } from "./orderHistory";
 import { pcBootStore, markBootBase } from "./bootProgress";
@@ -1024,7 +1024,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       {String(boardTab).startsWith("board:") && <BoardPage company={getViewCompany()} me={meHome} board={boardTab.slice(6)} />}
       {boardTab === "teamsched" && <TeamSchedule company={getViewCompany()} />}
       {boardTab === "execsched" && <ExecScheduleBoard company={getViewCompany()} me={meHome} canWrite={canWriteExecSchedule({ dept, role, team: meHome.team })} />}
-      {boardTab === "safety" && <div className="max-w-[1280px]"><SafetyEduMine user={eduUser} audience="staff" wide showDriver /></div>}
+      {boardTab === "safety" && <div className="max-w-[1280px]"><SafetyEduMine user={eduUser} audience="staff" wide showDriver board={eduBoardRole(role, meHome.team) ? { company: getViewCompany(), canManage: role !== "viewer" } : null} /></div>}
       {boardTab === "rules" && <CompanyRules company={getViewCompany()} canEdit={role === "hrManager" || role === "totalMaster"} />}
 
       {/* ===== 사내 게시판(왼쪽 사이드바에서 고름) — 2026-10-28 디지털 리디자인 ===== */}

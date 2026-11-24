@@ -27,7 +27,7 @@ const url = (id) => `https://docs.google.com/spreadsheets/d/${id}/edit`;
     "sheetProfiles/pB": { companyName: "비운송", spreadsheetId: "SHEET_B" },
     "sheetRegistry/SHEET_OK2": { companyName: "에이운송", companies: ["비운송"] },
   });
-  const g = makeSheetGuard({ db, FieldValue: { serverTimestamp: () => 0 }, parseSpreadsheetId: parse, fixedOwners: { SHEET_LEGACY: "돌캐" } });
+  const g = makeSheetGuard({ db, FieldValue: { serverTimestamp: () => 0 }, parseSpreadsheetId: parse, fixedOwners: { SHEET_LEGACY: "예전운송" } });
   const denied = async (p) => { await assert.rejects(p, (e) => e.status === 403); };
   let n = 0;
   const ok = (name) => { n += 1; console.log(`  ✓ ${name}`); };
@@ -41,8 +41,8 @@ const url = (id) => `https://docs.google.com/spreadsheets/d/${id}/edit`;
   await denied(g.assertSheetOwner("SHEET_SHARED", "에이운송")); ok("두 회사 양식이 같은 시트(주인 기록 없음) — 둘 다 거절");
   await denied(g.assertSheetOwner("SHEET_SHARED", "비운송")); ok("  · 반대쪽도 거절");
   await g.assertSheetOwner("SHEET_OK2", "비운송"); ok("최고관리자가 함께 쓰기 허용(companies)한 회사 — 허용");
-  await denied(g.assertSheetOwner("SHEET_LEGACY", "에이운송")); ok("돌캐 기존 배차현황 시트 — 다른 회사 거절");
-  await g.assertSheetOwner("SHEET_LEGACY", "돌캐"); ok("돌캐 기존 시트 — 돌캐 허용");
+  await denied(g.assertSheetOwner("SHEET_LEGACY", "에이운송")); ok("예전운송 기존 배차현황 시트 — 다른 회사 거절");
+  await g.assertSheetOwner("SHEET_LEGACY", "예전운송"); ok("예전운송 기존 시트 — 예전운송 허용");
   await g.assertSheetOwner("SHEET_B", "", { isTM: true }); ok("최고관리자 — 확인만 하고 통과");
   await denied(g.assertSheetOwner("SHEET_X", "")); ok("회사 없는 호출 — 거절");
   await g.assertSheetUrlOwner(url("SHEET_A"), "에이운송"); ok("시트 주소로 확인");

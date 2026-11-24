@@ -32,14 +32,14 @@ const PRE_A = `${A}__12가3456`;
     await setDoc(doc(db, "users/drvA"), { companyName: A, approved: true, role: "driver", carNo: "34나5678" });
     await setDoc(doc(db, "users/drvA2"), { companyName: A, approved: true, role: "driver", carNo: "56다7890" });
     await setDoc(doc(db, "users/userB"), { companyName: B, approved: true, role: "admin" });
-    await setDoc(doc(db, "users/userD"), { companyName: "돌캐", approved: true, role: "user" });
+    await setDoc(doc(db, "users/userD"), { companyName: "예전운송", approved: true, role: "user" });
     await setDoc(doc(db, "users/hub1"), { companyName: "", approved: true, role: "cafeUser" });
     await setDoc(doc(db, "users/shipS"), { companyName: "에스상사", approved: true, role: "shipper", linkedTransportCompany: { companyName: A } });
     await setDoc(doc(db, "users/shipT"), { companyName: "티상사", approved: true, role: "shipper", linkedTransportCompany: { companyName: B } });
     await setDoc(doc(db, "users/master"), { companyName: A, approved: true, role: "totalMaster" });
     // 기사 마스터
     await setDoc(doc(db, `drivers/${PRE_A}`), { companyName: A, 이름: "홍길동", 전화번호: "010-1111-2222", 차량번호: "12가3456" });
-    await setDoc(doc(db, "drivers/12가9999"), { 이름: "옛기사", 전화번호: "010-3333-4444", 차량번호: "12가9999" }); // 회사명 없는 예전(돌캐) 문서
+    await setDoc(doc(db, "drivers/12가9999"), { 이름: "옛기사", 전화번호: "010-3333-4444", 차량번호: "12가9999" }); // 회사명 없는 예전(예전운송) 문서
     await setDoc(doc(db, "drivers/drvA"), { uid: "drvA", companyName: A, 이름: "에이기사", 차량번호: "34나5678" });
     await setDoc(doc(db, "drivers/linkedX"), { uid: "drvA2", companyName: A, 이름: "에이기사2", 차량번호: "56다7890" });
     // 오더·첨부

@@ -225,7 +225,7 @@ if (process.argv[2] === "child") {
   assert.equal(await count(db.collection("orders").where("companyName", "==", CO3)), 0);
   console.log(`  ✓ 멈춘 실행 감지(진행 없음 ${process.env.KP_RESET_STUCK_MS}ms → 임대 ${process.env.KP_RESET_LEASE_MS}ms 만료) → ${took}초 만에 다른 실행이 이어받아 완료 · 옛 실행은 펜싱으로 아무것도 못 씀`);
 
-  // ═════ ⑤ 예전 코드가 남긴 "처리 중" 보관함 4개(돌캐 상황) → 정리 · 이어하기 ═════
+  // ═════ ⑤ 예전 코드가 남긴 "처리 중" 보관함 4개(예전운송 상황) → 정리 · 이어하기 ═════
   await wipe();
   const CO4 = "사아운송";
   await seed("orders", CO4, 900);

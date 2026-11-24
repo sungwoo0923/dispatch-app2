@@ -13,7 +13,7 @@
 //  📗 엑셀 파일(드라이브에 올린 .xlsx)은 functions/officeSheet.js가 읽기를 흉내 낸다(tabs · sample · read 그대로) · 보내기(쓰기)는 code "office-file"
 //  ⚠️ 서버는 시트 프로필의 칸 설정을 믿지 않고, 쓰기 직전에 그 칸의 지금 수식을 다시 읽어 수식이 든 칸은 건너뛴다.
 
-const { isProfileOwnOrder } = require("./gsheetLegacy");
+const { isProfileOwnOrder } = require("./sheetScope");
 
 let _core = null;
 const core = async () => _core || (_core = await import("./sheetProfileCore.mjs"));
@@ -120,7 +120,7 @@ function makeSheetConnect(deps) {
     if (!ps.exists) throw Object.assign(new Error("시트 연결을 찾을 수 없어요."), { status: 404 });
     const profile = { id: ps.id, ...ps.data() };
     if (!me.isTM && profile.companyName !== me.company) throw Object.assign(new Error("다른 회사 시트예요."), { status: 403 });
-    if (profile.engine === "legacy-dolcae") throw Object.assign(new Error("기존 연동 시트는 [구글시트 전송] 화면에서 보내 주세요."), { status: 400 });
+    if (profile.engine) throw Object.assign(new Error("더 이상 쓰지 않는 예전 연동이에요. 시트를 새로 연결해 주세요."), { status: 400 });
     const sid = profile.spreadsheetId || parseSpreadsheetId(profile.sheetUrl);
     const okD = (x) => /^\d{4}-\d{2}-\d{2}$/.test(String(x || ""));
     if (!okD(body.from) || !okD(body.to) || body.to < body.from) throw Object.assign(new Error("기간을 확인해 주세요."), { status: 400 });

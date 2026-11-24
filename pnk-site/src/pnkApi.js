@@ -317,7 +317,7 @@ export async function loadPlatform(force = false) {
   users.forEach((u) => {
     if (u.role === "totalMaster" || u.email === TM_EMAIL || u.role === "cafeUser") return;
     if (u.role === "shipper") { shipperUsers += 1; return; }
-    const c = rec(normCo(u.companyName) || "돌캐");
+    const c = rec(normCo(u.companyName) || "(회사없음)");
     const at = tsMs(u.createdAt);
     c.lastSignup = Math.max(c.lastSignup, at);
     c.firstAt = c.firstAt ? Math.min(c.firstAt, at || c.firstAt) : at;

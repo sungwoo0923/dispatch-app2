@@ -7,6 +7,7 @@
 //  · 회사 설정: dailyReportCompany/{회사} = { companyName, recipients: { uid: false }, updatedAt, updatedBy }
 //    false = 받지 않음(팝업·푸시·메일 안 감 · 메뉴는 그대로). 받는 사람 목록 = 임원 화면 역할 직원(useRoleOptions().execKeys)
 //  · 서버(functions › dailyReportPush)가 30분마다 받는 시간이 된 사람에게 푸시(·메일)를 보낸다
+import { isTMUser } from "./staffFilter"; // 🧑‍💻 2026-11-24 최고관리자는 회사 직원이 아님
 import React from "react";
 import { doc, onSnapshot, setDoc, collection, query, where } from "firebase/firestore";
 import { db, auth } from "./firebase";
@@ -78,7 +79,7 @@ export function useCompanyPeople(company) {
   const [rows, setRows] = React.useState(null);
   React.useEffect(() => {
     if (!co) return undefined;
-    return onSnapshot(query(collection(db, "users"), where("companyName", "==", co)), (s) => setRows(s.docs.map((x) => ({ uid: x.id, ...x.data() }))), () => setRows([]));
+    return onSnapshot(query(collection(db, "users"), where("companyName", "==", co)), (s) => setRows(s.docs.map((x) => ({ uid: x.id, ...x.data() })).filter((u) => !isTMUser(u))), () => setRows([]));
   }, [co]);
   return rows;
 }

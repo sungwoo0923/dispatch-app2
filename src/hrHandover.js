@@ -3,6 +3,7 @@
 //  회사 첫 가입자(마스터)는 인사 담당자가 없을 때만 임시로 인사 업무(인사관리부·인사발령·부서/직책·퇴사)를 한다.
 //  인사관리자(hrManager)·경리+인사(hrAcct)·인사 부서 직원이 한 명이라도 생기면 인사권은 자동으로 그쪽으로 넘어가고,
 //  그 사람이 모두 퇴사하면 다시 마스터에게 돌아온다. 마스터의 승인·권한 지정은 그대로 유지(인사관리자를 지정해야 하므로).
+import { isTMUser } from "./staffFilter"; // 🧑‍💻 2026-11-24 최고관리자는 회사 직원이 아님
 import React from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db, DEFAULT_COMPANY } from "./firebase";
@@ -34,7 +35,7 @@ export function useCompanyStaff(company) {
   React.useEffect(() => {
     if (!company) { setUsers([]); return undefined; }
     return onSnapshot(query(collection(db, "users"), where("companyName", "==", company)),
-      (s) => setUsers(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((u) => (u.companyName || DEFAULT_COMPANY) === company)),
+      (s) => setUsers(s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((u) => (u.companyName || DEFAULT_COMPANY) === company && !isTMUser(u))),
       () => setUsers([]));
   }, [company]);
   return users;

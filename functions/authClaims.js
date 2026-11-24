@@ -92,7 +92,7 @@ function computeUserClaims(u0, ctx = {}) {
   const legacyTeam = (() => { const v = getOr(u, "legacyTeam", ""); return typeof v === "string" && !ODD_LINE.test(v) ? v : ""; })(); // ⭐ 2026-11-17
   const co = getOr(u, "companyName", undefined);
   if (typeof role !== "string") return { claims: null, reason: "role" };
-  if (typeof co !== "string") return { claims: null, reason: "companyName" }; // 회사명 없는 옛 문서('돌캐' 기본값)는 문서로
+  if (typeof co !== "string") return { claims: null, reason: "companyName" }; // 회사명 없는 옛 문서는 문서로
   const team = getOr(u, "team", "");
   const pos = getOr(u, "position", "");
   if (typeof team !== "string" || ODD_LINE.test(team)) return { claims: null, reason: "team" };
