@@ -16,12 +16,13 @@ const RATE = 24000, VOICE = arg("voice", "Kore"), W = 1920, H = 1080;
 const IMG = (n) => url.pathToFileURL(path.join(ROOT, "images", `${n}.jpg`)).href;
 
 // ── 1. 나레이션
+const TTS_MODELS = ["gemini-3.8-flash-tts", "gemini-2.5-pro-preview-tts", "gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts"];
 async function tts(text) {
   const h = crypto.createHash("sha1").update(VOICE + "|" + text).digest("hex").slice(0, 16);
   const f = path.join(CACHE, `${h}.pcm`);
   if (fs.existsSync(f)) return fs.readFileSync(f);
   const body = JSON.stringify({ contents: [{ parts: [{ text }] }], generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE } } } } });
-  for (const m of ["gemini-3.8-flash-tts", "gemini-3.1-flash-tts-preview", "gemini-3.8-flash-tts"]) {
+  for (const m of TTS_MODELS) { // 모델마다 하루 100번 한도 — 다 쓰면 다음 모델(목소리는 같은 Kore)
     for (let a = 0; a < 6; a++) {
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, { method: "POST", headers: { "Content-Type": "application/json" }, body });
       if (r.ok) {
@@ -34,6 +35,7 @@ async function tts(text) {
         fs.writeFileSync(f, pcm); return pcm;
       }
       const t = await r.text(); console.error(`\n${m} ${r.status} ${t.slice(0, 80)}`);
+      if (r.status === 429 && /per day|PerDay/i.test(t)) { console.error(`(${m} 오늘 한도 끝 → 다음 모델)`); TTS_MODELS.splice(TTS_MODELS.indexOf(m), 1); return tts(text); }
       if (r.status === 429 || r.status >= 500) await new Promise((z) => setTimeout(z, 20000 * (a + 1))); else break; // 분당 한도 — 천천히 다시
     }
   }
