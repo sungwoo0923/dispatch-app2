@@ -931,7 +931,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const canSetNoticePolicy = role === "totalMaster" || meHome.isMaster;
   // ✍ 공지·인수인계 글쓰기는 팝업 대신 넓은 작성 화면(HomeWriters.jsx)
   const { planId } = usePlan();
-  const eduUser = { uid: user?.uid, name: meHome.name, companyName: getViewCompany(), role: "staff" };
+  const eduUser = { uid: user?.uid, name: meHome.name, companyName: getViewCompany(), role: role === "totalMaster" ? "totalMaster" : "staff" }; // 최고관리자는 소속 LogisWeb
   const eduPendingN = useEduPending(eduUser);
   const writerActive = (boardTab === "공지사항" && noticeOpen) || (boardTab === "인수인계" && (handoverOpen || handoverEditMode));
   return (

@@ -6,6 +6,7 @@
 //  보이는 것: 우리 회사 기록만(규칙: eduRecords 는 본인 · 같은 회사 사무 직원만 읽는다)
 import React from "react";
 import EduPlayer from "./EduPlayer";
+import { useBackClose } from "./mobileBack";
 import { EduIcon, EduTile } from "./eduIcons";
 import { CustomSelect } from "./CustomSelect";
 import { MONO, HERO_BG, Sheet } from "./OfficeBooks";
@@ -152,8 +153,8 @@ export function EduCertPaper({ rec }) {
 
       <div className="mt-8 text-[14px] font-black mb-2">1. 이수자</div>
       <table className="w-full border-collapse table-fixed"><tbody>
-        <DocRow k="성명" v={rec.name || "-"} k2={rec.carNo ? "차량번호" : "구분"} v2={rec.carNo || (rec.role === "driver" ? "기사" : "직원")} />
-        <DocRow k="소속" v={rec.companyName || "-"} />
+        <DocRow k="성명" v={rec.name || "-"} k2={rec.carNo ? "차량번호" : "구분"} v2={rec.carNo || (rec.role === "driver" ? "기사" : rec.role === "totalMaster" ? "최고관리자" : "직원")} />
+        <DocRow k="소속" v={rec.role === "totalMaster" ? "LogisWeb (최고관리자)" : rec.companyName || "-"} />
       </tbody></table>
 
       <div className="mt-6 text-[14px] font-black mb-2">2. 교육 내용</div>
@@ -165,7 +166,7 @@ export function EduCertPaper({ rec }) {
 
       <div className="mt-6 text-[14px] font-black mb-2">3. 확인 내용</div>
       <div className="border border-[#C9D1DE] px-5 py-4 text-[13.5px] leading-[1.85] font-medium">
-        위 사람은 {rec.companyName || "소속 회사"}이(가) 정한 「{rec.courseTitle || c?.title}」 교육을 이수하였음을 확인합니다(이수 방법: {how}).
+        위 사람은 「{rec.courseTitle || c?.title}」 교육을 이수하였음을 LogisWeb 전자교육 기록으로 확인합니다(이수 방법: {how}).
         이수자는 교육 내용을 이해하였으며, 업무 중 안전수칙을 성실히 지킬 것을 약속합니다.
         {c?.pledge ? <div className="mt-2 pt-2 border-t border-dashed border-[#C9D1DE] text-[12.5px]" style={{ color: "#374151" }}>서약 · {c.pledge}</div> : null}
       </div>
@@ -186,7 +187,11 @@ export function EduCertPaper({ rec }) {
         <div className="border border-[#C9D1DE]">
           <div className="px-4 py-2 text-[12.5px] font-black bg-[#F3F5F9] border-b border-[#C9D1DE]">확인 기관</div>
           <div className="px-4 py-3 flex items-center justify-between gap-3">
-            <span className="text-[14px] font-bold whitespace-nowrap">{rec.companyName}</span>
+            {/* ✍ 2026-11-24 확인 기관은 플랫폼(LogisWeb) 고정 — 회사 이름은 위 '소속' 칸에만(사용자 요청) */}
+            <span className="min-w-0">
+              <span className="block text-[14px] font-bold whitespace-nowrap">LogisWeb 전자교육 시스템</span>
+              <span className="block text-[11px] font-semibold mt-0.5 whitespace-nowrap" style={{ color: "#6B7280" }}>전자 서명 · 이수 기록 보관</span>
+            </span>
             <span className="inline-flex items-center justify-center w-[64px] h-[64px] rounded-full border-2 text-[11px] font-black leading-tight text-center" style={{ borderColor: "#A33A2E", color: "#A33A2E" }}>전자<br />확인</span>
           </div>
         </div>
@@ -207,6 +212,7 @@ export function EduCertPaper({ rec }) {
   );
 }
 export function EduCertificate({ rec, onClose }) {
+  useBackClose(true, onClose); // 📱 휴대폰 뒤로가기 = 이수증 닫기
   const wrap = React.useRef(null); const paper = React.useRef(null);
   const [scale, setScale] = React.useState(0.6); const [saving, setSaving] = React.useState(false);
   React.useEffect(() => { const fit = () => { const w = wrap.current?.clientWidth || 400; setScale(Math.min(1, (w - 24) / 794)); }; fit(); window.addEventListener("resize", fit); return () => window.removeEventListener("resize", fit); }, []);
@@ -270,11 +276,20 @@ function Thumb({ c, rec, preview, big = false, compact = false }) {
   );
 }
 
-function actionLabel(c, rec, preview) { return preview ? "미리 보기" : rec ? "이수증" : c.kind === "video" ? "시청하기" : "서명하기"; }
-
-function EduCard({ c, rec, preview, onClick }) {
+function actionLabel(c, rec, preview) { return preview ? "미리 보기" : rec ? "다시 보기" : c.kind === "video" ? "시청하기" : "서명하기"; }
+// 이수한 교육: 카드를 누르면 다시 보기, [이수증]은 따로(카드 안 버튼이라 div 로 감싼다)
+const tap = (fn) => ({ role: "button", tabIndex: 0, onClick: fn, onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fn(); } } });
+function CertBtn({ onCert, big = false }) {
   return (
-    <button type="button" onClick={onClick} className="group text-left rounded-[18px] bg-white overflow-hidden border border-[#E3E8F0] hover:border-[#C3CEDF] hover:shadow-[0_14px_32px_rgba(16,24,40,0.09)] transition flex flex-col">
+    <button type="button" onClick={(e) => { e.stopPropagation(); onCert(); }} className={`shrink-0 inline-flex items-center gap-1 rounded-lg font-black ${big ? "h-9 px-3 text-[12.5px]" : "h-7 px-2 text-[11.5px]"}`} style={{ background: "#F1F4F9", color: NAVY }}>
+      <EduIcon name="cert" size={big ? 14 : 12} />이수증
+    </button>
+  );
+}
+
+function EduCard({ c, rec, preview, onClick, onCert }) {
+  return (
+    <div {...tap(onClick)} className="group cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#2D4C82] text-left rounded-[18px] bg-white overflow-hidden border border-[#E3E8F0] hover:border-[#C3CEDF] hover:shadow-[0_14px_32px_rgba(16,24,40,0.09)] transition flex flex-col">
       <Thumb c={c} rec={rec} preview={preview} />
       <div className="px-4 pt-3.5 pb-3 flex-1 flex flex-col">
         <div className="text-[15.5px] font-black leading-snug break-keep" style={{ color: INK }}>{c.title}</div>
@@ -282,17 +297,20 @@ function EduCard({ c, rec, preview, onClick }) {
         <div className="mt-auto pt-3">
           <div className="pt-3 flex items-center justify-between gap-2 text-[12px] font-bold" style={{ borderTop: `1px solid ${LINE}`, color: MUTE }}>
             <span className="inline-flex items-center gap-1 min-w-0 truncate"><EduIcon name={rec ? "cert" : "calendar"} size={13} />{rec ? `${ymd(rec.signedAt)} 이수` : preview ? "기사앱에서 이수" : c.cycle === "yearly" ? "해마다 · 12월 31일까지" : "한 번"}</span>
-            <span className="shrink-0 font-black inline-flex items-center gap-0.5" style={{ color: NAVY }}>{actionLabel(c, rec, preview)}<EduIcon name="chevron" size={13} stroke={2.4} /></span>
+            <span className="shrink-0 inline-flex items-center gap-1.5">
+              {rec && onCert && <CertBtn onCert={onCert} />}
+              <span className="font-black inline-flex items-center gap-0.5" style={{ color: NAVY }}>{actionLabel(c, rec, preview)}<EduIcon name="chevron" size={13} stroke={2.4} /></span>
+            </span>
           </div>
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 
-function EduRow({ c, rec, preview, onClick, first }) {
+function EduRow({ c, rec, preview, onClick, onCert, first }) {
   return (
-    <button type="button" onClick={onClick} className="group w-full text-left px-4 py-3 flex items-center gap-4 hover:bg-[#FAFBFD]" style={first ? null : { borderTop: `1px solid ${LINE}` }}>
+    <div {...tap(onClick)} className="group cursor-pointer outline-none w-full text-left px-4 py-3 flex items-center gap-4 hover:bg-[#FAFBFD]" style={first ? null : { borderTop: `1px solid ${LINE}` }}>
       <div className="w-[132px] sm:w-[168px] shrink-0 rounded-xl overflow-hidden"><Thumb c={c} rec={rec} preview={preview} compact /></div>
       <div className="flex-1 min-w-0">
         <div className="text-[10.5px] font-extrabold tracking-[0.08em] text-[#4B6CB7]" style={EN}>{c.code} · {c.kind === "video" ? "VIDEO" : "E-DOCUMENT"}</div>
@@ -300,8 +318,9 @@ function EduRow({ c, rec, preview, onClick, first }) {
         <div className="text-[12.5px] font-semibold truncate mt-0.5" style={{ color: MUTE }}>{c.summary}</div>
         <div className="text-[12px] font-bold mt-1 inline-flex items-center gap-1" style={{ color: MUTE }}><EduIcon name={rec ? "cert" : "calendar"} size={12} />{rec ? `${ymd(rec.signedAt)} 이수` : preview ? "기사앱에서 이수" : "해마다 · 12월 31일까지"}</div>
       </div>
+      {rec && onCert && <CertBtn onCert={onCert} big />}
       <span className="hidden sm:inline-flex items-center gap-1 h-9 px-3.5 rounded-lg text-[12.5px] font-black shrink-0" style={rec || preview ? { background: "#F1F4F9", color: NAVY } : { background: NAVY, color: "#fff" }}>{actionLabel(c, rec, preview)}<EduIcon name="chevron" size={13} stroke={2.4} /></span>
-    </button>
+    </div>
   );
 }
 
@@ -355,7 +374,7 @@ function EduSummary({ mine, records, wide, mayPledge, onNext, now = new Date() }
   );
 }
 
-export function EduCatalog({ mine, driverCourses = [], records = {}, wide = false, mayPledge = false, onOpen, onCert, onPeek, now }) {
+export function EduCatalog({ mine, driverCourses = [], records = {}, wide = false, mayPledge = false, onOpen, onCert, onPeek, onReview, now }) {
   const [aud, setAud] = React.useState("all"); // all | mine | driver
   const [st, setSt] = React.useState("all");   // all | todo | done
   const [q, setQ] = React.useState("");
@@ -364,9 +383,9 @@ export function EduCatalog({ mine, driverCourses = [], records = {}, wide = fals
   const items = [...mine.map((c) => ({ c, preview: false })), ...driverCourses.map((c) => ({ c, preview: true }))];
   const kw = q.trim().toLowerCase();
   const shown = items.filter(({ c, preview }) => (aud === "all" || (aud === "driver") === preview)
-    && (st === "all" || preview || (st === "done") === !!records[c.id])
+    && (st === "all" ? true : !preview && (st === "done") === !!records[c.id]) // 기사 교육은 직원의 이수 대상이 아니라 이수 · 미이수에 넣지 않는다
     && (!kw || `${c.title} ${c.summary} ${c.code}`.toLowerCase().includes(kw)));
-  const click = ({ c, preview }) => (preview ? onPeek(c) : records[c.id] ? onCert(records[c.id]) : onOpen(c));
+  const click = ({ c, preview }) => (preview ? onPeek(c) : records[c.id] ? (onReview ? onReview(c) : onCert(records[c.id])) : onOpen(c));
   const chip = (on) => (on ? { background: NAVY, color: "#fff", borderColor: NAVY } : { background: "#fff", color: SUB, borderColor: "#DCE3EE" });
   return (
     <div>
@@ -406,11 +425,11 @@ export function EduCatalog({ mine, driverCourses = [], records = {}, wide = fals
         <div className="mt-4 rounded-[18px] bg-white border border-[#E3E8F0] py-14 text-center text-[13.5px] font-bold" style={{ color: MUTE }}>조건에 맞는 교육이 없어요</div>
       ) : view === "card" ? (
         <div className={`mt-4 grid gap-4 ${wide ? "grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" : "grid-cols-1 sm:grid-cols-2"}`}>
-          {shown.map((it) => <EduCard key={it.c.id} c={it.c} rec={it.preview ? null : records[it.c.id]} preview={it.preview} onClick={() => click(it)} />)}
+          {shown.map((it) => <EduCard key={it.c.id} c={it.c} rec={it.preview ? null : records[it.c.id]} preview={it.preview} onClick={() => click(it)} onCert={!it.preview && records[it.c.id] ? () => onCert(records[it.c.id]) : null} />)}
         </div>
       ) : (
         <div className="mt-4 rounded-[18px] bg-white border border-[#E3E8F0] overflow-hidden">
-          {shown.map((it, i) => <EduRow key={it.c.id} c={it.c} rec={it.preview ? null : records[it.c.id]} preview={it.preview} first={!i} onClick={() => click(it)} />)}
+          {shown.map((it, i) => <EduRow key={it.c.id} c={it.c} rec={it.preview ? null : records[it.c.id]} preview={it.preview} first={!i} onClick={() => click(it)} onCert={!it.preview && records[it.c.id] ? () => onCert(records[it.c.id]) : null} />)}
         </div>
       )}
     </div>
@@ -426,7 +445,8 @@ export function SafetyEduMine({ user, audience, title = "안전교육", wide = f
   const [open, setOpen] = React.useState(null);
   const [cert, setCert] = React.useState(null);
   const [peek, setPeek] = React.useState(null);
-  const co = String(user?.companyName || "").trim();
+  const [review, setReview] = React.useState(null); // 이수한 교육 다시 보기
+  const co = useEduCo(user) || "";
   React.useEffect(() => {
     if (!user?.uid || !co) return undefined;
     let unsub = () => {}; let alive = true;
@@ -445,21 +465,44 @@ export function SafetyEduMine({ user, audience, title = "안전교육", wide = f
   }, [user?.uid, co]);
   const mayPledge = aud === "driver" && driverMayPledge(settings, user?.uid);
   const pledgeCourse = courses.find((c) => c.kind === "doc") || null;
+  const showCert = (r) => setCert(user?.role === "totalMaster" ? { ...r, role: "totalMaster" } : r); // 최고관리자 이수증 소속 = LogisWeb
   return (
     <div>
       {title && <div className="text-[20px] font-black mb-3" style={{ color: INK }}>{title}</div>}
-      <EduCatalog mine={courses} driverCourses={showDriver && aud === "staff" ? coursesFor("driver") : []} records={records} wide={wide} mayPledge={mayPledge} onOpen={setOpen} onCert={setCert} onPeek={setPeek} />
+      <EduCatalog mine={courses} driverCourses={showDriver && aud === "staff" ? coursesFor("driver") : []} records={records} wide={wide} mayPledge={mayPledge} onOpen={setOpen} onCert={showCert} onPeek={setPeek} onReview={setReview} />
       {open && <EduPlayer course={open} user={{ ...user, companyName: co }} mayPledge={mayPledge && open.kind === "video"} pledgeCourse={pledgeCourse} onClose={() => setOpen(null)} onDone={(rec) => setRecords((m) => ({ ...m, [rec.courseId]: { ...rec, signedAt: { seconds: Math.floor(Date.now() / 1000) } } }))} />}
       {peek && <EduPlayer course={peek} user={{ ...user, companyName: co }} preview onClose={() => setPeek(null)} />}
+      {review && <EduPlayer course={review} user={{ ...user, companyName: co }} review onCert={records[review.id] ? () => showCert(records[review.id]) : undefined} onClose={() => setReview(null)} />}
       {cert && <EduCertificate rec={cert} onClose={() => setCert(null)} />}
     </div>
   );
 }
 
 // 미이수 수(기사앱 홈 카드 · 출근 안내 · HOME 배지)
+// 🔗 2026-11-24 PC · 모바일 이수 기록 연동 — 화면마다 넘겨주는 회사 이름(보고 있는 회사 · 로그인 회사)이 달라
+//  PC 에서 이수한 기록이 모바일에서 안 보였다 → 기록의 기준은 늘 "내 계정 문서의 회사"(보안 규칙 myCoAny 와 같은 값)
+export function useEduCo(user) {
+  const fallback = String(user?.companyName || "").trim();
+  const [co, setCo] = React.useState(null);
+  React.useEffect(() => {
+    if (!user?.uid) return undefined;
+    let alive = true;
+    (async () => {
+      try {
+        const [{ doc, getDoc }, { db }] = await Promise.all([import("./fsTenant"), import("./firebase")]);
+        const snap = await getDoc(doc(db, "users", user.uid));
+        const c = String(snap.exists() ? snap.data()?.companyName || "" : "").trim();
+        if (alive) setCo(c || "(계정회사없음)");
+      } catch { if (alive) setCo(fallback); }
+    })();
+    return () => { alive = false; };
+  }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
+  return co; // null = 아직 확인 중
+}
+
 export function useEduPending(user) {
   const [n, setN] = React.useState(0);
-  const co = String(user?.companyName || "").trim();
+  const co = useEduCo(user) || "";
   React.useEffect(() => {
     if (!user?.uid || !co) return undefined;
     let unsub = () => {}; let alive = true;
@@ -798,7 +841,7 @@ export function SafetyEduAdmin({ company, canManage }) {
       if (!alive) return;
       unsubs.push(onSnapshot(query(collection(db, "users"), where("companyName", "==", co)), (s) => {
         setPeople(s.docs.map((d) => ({ uid: d.id, ...d.data() }))
-          .filter((u) => u.approved !== false && u.role !== "shipper" && u.role !== "cafeUser" && u.employmentStatus !== "퇴사" && !u.resignedAt)
+          .filter((u) => u.approved !== false && u.role !== "shipper" && u.role !== "cafeUser" && u.role !== "totalMaster" && u.employmentStatus !== "퇴사" && !u.resignedAt)
           .map((u) => ({ uid: u.uid || u.id, name: u.name || u.이름 || u.email || "-", role: u.role, team: u.team || "", carNo: u.carNo || u.차량번호 || "" })));
       }, () => {}));
       unsubs.push(onSnapshot(query(collection(db, "eduRecords"), where("companyName", "==", co)), (s) => setRecords(s.docs.map((d) => d.data())), () => {}));

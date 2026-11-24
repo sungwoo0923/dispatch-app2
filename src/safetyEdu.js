@@ -71,8 +71,8 @@ export const EDU_COURSES = [
     icon: "talk",
     code: "EDU-S02",
     title: "직장 내 성희롱 예방",
-    summary: "성희롱의 뜻 · 유형 · 고객 성희롱 · 신고와 회사 조치",
-    minutes: 5,
+    summary: "법이 정한 뜻 · 판단 기준 · 유형 · 2차 피해 · 회사의 조치 의무",
+    minutes: 6,
     video: "/edu/staff_sh.mp4",
     cycle: "yearly",
     pledge: "직장 내 성희롱 예방교육 영상을 끝까지 시청했으며, 동료와 고객을 존중하고 성희롱을 하지 않으며, 피해나 목격 시 회사에 알리겠습니다.",
@@ -99,7 +99,6 @@ export const EDU_COURSES = [
     title: "장애인 인식개선",
     summary: "장애 바로 알기 · 바른 말 · 함께 일하는 예절 · 차별 금지",
     minutes: 4,
-    hold: true, // 영상 목소리 맞추는 중 — 다 되면 이 줄을 지운다
     video: "/edu/staff_disab.mp4",
     cycle: "yearly",
     pledge: "장애인 인식개선 교육 영상을 끝까지 시청했으며, 장애가 있는 동료를 존중하고 장애를 이유로 차별하지 않겠습니다.",
@@ -167,7 +166,7 @@ export function eduStatusOf(record) {
 }
 
 // 영상 길이(초) — 목록에 "3:22"처럼 보인다(marketing/edu/build.mjs 로 만든 실제 길이)
-export const VIDEO_SEC = { drv_load: 438, drv_dock: 316, staff_safety: 282, staff_bully: 220, staff_privacy: 169, staff_sh: 251 };
+export const VIDEO_SEC = { drv_load: 438, drv_dock: 316, staff_safety: 282, staff_bully: 220, staff_privacy: 169, staff_sh: 345, staff_disab: 176 };
 export const fmtLen = (c) => (c.kind === "video" && VIDEO_SEC[c.id] ? `${Math.floor(VIDEO_SEC[c.id] / 60)}:${String(VIDEO_SEC[c.id] % 60).padStart(2, "0")}` : `${c.minutes}분`);
 
 // 🔏 디지털 이수증 — 이수 기록 문서 이름으로 이수증 번호, 기록 내용으로 확인 코드를 만든다(같은 기록이면 언제 봐도 같은 값)

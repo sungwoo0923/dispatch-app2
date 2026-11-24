@@ -282,13 +282,15 @@ if (arg("still")) {
   const f = path.join(CACHE, `${id}-at${at}.png`); await page.screenshot({ path: f }); console.log(f, `영상 길이 ${DUR.toFixed(1)}초`); await browser.close(); process.exit(0);
 }
 const total = Math.ceil(DUR * RATE); const audio = Buffer.alloc(total * 2);
+// 줄 앞뒤 8ms 부드럽게(이어 붙인 곳에서 '틱' 소리가 나지 않게)
+for (const l of lines) { const n = l.pcm.length >> 1, F = Math.min(192, n >> 1); for (let i = 0; i < F; i++) { const g = i / F; l.pcm.writeInt16LE(Math.round(l.pcm.readInt16LE(i * 2) * g), i * 2); const j = n - 1 - i; l.pcm.writeInt16LE(Math.round(l.pcm.readInt16LE(j * 2) * g), j * 2); } }
 for (const l of lines) l.pcm.copy(audio, Math.round(l.t0 * RATE) * 2, 0, Math.min(l.pcm.length, (total - Math.round(l.t0 * RATE)) * 2));
 const wav = path.join(CACHE, `${id}.pcm`); fs.writeFileSync(wav, audio);
 // 🎵 효과음 시각표 + 배경음악(sound.py) — 나레이션이 나올 때는 배경음악이 저절로 작아진다(사이드체인)
 const events = [];
 for (const s of slides) {
   if (s.type === "cover" || s.type === "end") events.push({ t: s.t0 + 0.15, k: "swell" });
-  if (s.type === "chapter") events.push({ t: Math.max(0, s.t0 - 0.25), k: "whoosh" });
+  // 🔇 2026-11-24 장 넘김 '쉭' 소리(잡음 기반)는 '지직'처럼 들려 뺐다(사용자 요청)
   if (s.type === "points") s.ls.filter((l) => l.pt).forEach((l) => events.push({ t: l.t0, k: "pop" }));
   if (s.type === "steps") s.steps.forEach((_, j) => events.push({ t: s.ls[j]?.t0 ?? s.t0 + 0.5 + j * 0.3, k: "pop" }));
   if (s.type === "dodont") { events.push({ t: s.t0 + 0.25, k: "pop" }); events.push({ t: (s.ls[1]?.t0 ?? s.t0 + 1.2) - 0.2, k: "pop" }); }

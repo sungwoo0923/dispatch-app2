@@ -18,8 +18,12 @@ export function applyFareRule(rule, 청구운임) {
 // ⭐ 2026-11-17 특수운임 기사 차감 — 지게차(기사 부담)·외부 특수운임(기사 부담)으로 기사운임에서 빼 둔 금액(음수 = 대기료 등 더해 준 금액)
 //  규칙이 계산한 기사운임에서 이만큼 빠져 있는 게 "규칙대로"다(빼 둔 걸 직접 고친 걸로 보면 안 된다)
 export const fareDeductOf = (form) => toNum(form?.지게차기사차감) + toNum(form?.특수기사차감);
-// 규칙대로라면 지금 보여야 할 기사운임 = 규칙 기사운임 − 특수운임 기사 차감
-export const ruleDriverFare = (rule, form) => applyFareRule(rule, form?.청구운임).기사운임 - fareDeductOf(form);
+// ⭐ 2026-11-24 거래처에 추가 청구한 지게차 · 특수운임(청구운임에 더해 둔 금액) — 운임구분 %는 이 금액을 뺀 "기본 청구운임"에만 건다
+//  (예전엔 청구운임 982,944 = 기본 802,944 + 지게차 180,000 전체에 9%를 걸어 기사운임이 180,000의 91%만큼 많아지고 수수료가 −91,535 로 나왔다)
+export const fareAddOf = (form) => toNum(form?.지게차청구추가) + toNum(form?.특수청구추가);
+export const fareBaseSale = (form) => toNum(form?.청구운임) - fareAddOf(form);
+// 규칙대로라면 지금 보여야 할 기사운임 = 규칙 기사운임(기본 청구운임 기준) − 특수운임 기사 차감
+export const ruleDriverFare = (rule, form) => applyFareRule(rule, fareBaseSale(form)).기사운임 - fareDeductOf(form);
 
 export const findFareRule = (rules, name) => {
   const n = String(name || "").trim();
@@ -83,7 +87,8 @@ export function fareFormChange(form, key, value, rules, { asString = true, withF
     if (key === "__reapply" || key === "운임구분수수료율") next.운임수동 = false;
     if (key === "운임구분" && !rule) next.운임수동 = false;
     if (rule && String(next.청구운임 ?? "").replace(/[^\d-]/g, "") !== "") {
-      const r = applyFareRule(rule, next.청구운임);
+      const r = applyFareRule(rule, toNum(next.청구운임) - fareAddOf(form)); // ⭐ 2026-11-24 추가 청구한 특수운임은 빼고 %
+
       next.기사운임 = out(r.기사운임);
     }
   }
