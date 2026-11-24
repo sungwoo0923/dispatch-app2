@@ -10,7 +10,7 @@ import { ref as sref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../firebase";
 import { G, NUM, GOLD_BTN, AdmPanel, AdmEmpty } from "../adminCenter/admUi";
 import { kpConfirm } from "../kpDialog";
-import { VOICES, STYLES, MUSIC, LAYOUTS, TRANSITIONS, THEMES, FRAMES, LIBRARY, libUrl, isVideoSrc, newScene, newProject, timeline, fmtTime, voiceKey, voiceStale, mktCall, wavB64ToBlob, SEED_PROJECTS, uid } from "./promoKit";
+import { VOICES, STYLES, MUSIC, BGM_LIBRARY, LAYOUTS, TRANSITIONS, THEMES, FRAMES, LIBRARY, libUrl, isVideoSrc, newScene, newProject, timeline, fmtTime, voiceKey, voiceStale, mktCall, wavB64ToBlob, SEED_PROJECTS, uid } from "./promoKit";
 import { PromoPlayer, loadPromoFont, pickRecordType } from "./promoPlayer";
 import { uploadToYoutube } from "./youtubeUpload";
 import { toSrt, downloadText } from "../videoStudio";
@@ -99,6 +99,7 @@ function Tips() {
     <li>영상을 열고 왼쪽에서 장면을 고르면 → 오른쪽 [장면] 탭에서 글 · 화면 · 나레이션을 고쳐요. 미리보기가 바로 바뀌어요.</li>
     <li>나레이션 글을 고치면 장면에 "음성 다시 만들기"가 떠요 → [음성 만들기]를 누르면 고른 목소리로 다시 읽어 줘요(Gemini 키 필요 · 홍보 설정).</li>
     <li>[음악] 탭에서 분위기 · 빠르기 · 볼륨을 바꾸고 ▶ 재생으로 들어 봐요. 말할 때는 음악이 저절로 작아져요.</li>
+    <li>[음악] 탭 › [무료 음악 보관함]을 누르면 기본 곡 4곡(저작권 걱정 없음)과 올려 둔 곡이 보여요. ▶ 로 미리 듣고 [쓰기]를 누르면 그 곡으로 바뀌어요. [＋ 보관함에 음악 올리기]로 올린 곡은 다른 영상에서도 골라 쓸 수 있어요.</li>
     <li>다 됐으면 [내보내기 · 유튜브] → [영상 만들기]. 영상 길이만큼 걸리고, 그동안 이 창을 띄워 두면 돼요.</li>
     <li>만든 영상은 내려받거나, 보관함에 저장하거나, 유튜브에 바로 올릴 수 있어요.</li>
   </ol></AdmPanel>;
@@ -398,17 +399,48 @@ function VoicePanel({ P, update, makeVoices, vbusy, say }) {
   </div>;
 }
 
+// ───── 무료 음악 보관함(기본 곡 + 관리자가 올린 곡) ─────
+let libAudio = null;
+function MusicLibrary({ m, setM, say }) {
+  const [mine, setMine] = React.useState([]); const [playing, setPlaying] = React.useState(""); const [up, setUp] = React.useState("");
+  React.useEffect(() => onSnapshot(query(collection(db, "mktMusic"), orderBy("at", "desc")), (s) => setMine(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => {}), []);
+  React.useEffect(() => () => { libAudio?.pause(); }, []);
+  const play = (t) => { if (playing === t.url) { libAudio?.pause(); setPlaying(""); return; } libAudio?.pause(); libAudio = new Audio(t.url); libAudio.volume = 0.8; libAudio.play().catch(() => {}); libAudio.onended = () => setPlaying(""); setPlaying(t.url); };
+  const use = (t) => { setM({ preset: "custom", url: t.url, name: t.name, lib: t.key || t.id }); say(`배경음악을 [${t.name}]으로 바꿨어요.`); };
+  const addMine = async (f) => {
+    if (!f) return; if (!/^audio\//.test(f.type)) { say("mp3 · wav 같은 소리 파일만 올릴 수 있어요."); return; }
+    setUp("올리는 중…");
+    try { const url = await upload(`marketing/music/library/${Date.now()}-${f.name.replace(/[^\w.가-힣-]/g, "_")}`, f, f.type); await addDoc(collection(db, "mktMusic"), { name: f.name.replace(/\.[^.]+$/, ""), url, use: "직접 올린 곡", at: serverTimestamp() }); say("보관함에 추가했어요. 다른 영상에서도 고를 수 있어요."); }
+    catch (e) { say(e.message); } finally { setUp(""); }
+  };
+  const del = async (t) => { if (!(await kpConfirm(`[${t.name}]을 보관함에서 뺄까요?`, { okText: "빼기" }))) return; await deleteDoc(doc(db, "mktMusic", t.id)); if (m.lib === t.id) setM({ preset: "calm", lib: null }); };
+  const Row = ({ t, mineRow }) => { const on = m.lib === (t.key || t.id); return (
+    <div className="flex items-center gap-2 px-2.5 py-2 rounded-xl" style={{ border: `1px solid ${on ? G.gold : G.line2}`, background: on ? "rgba(215,188,130,.08)" : "transparent" }}>
+      <button type="button" onClick={() => play(t)} className="w-8 h-8 rounded-full shrink-0 text-[12px] font-black" style={{ border: `1px solid ${G.line}`, color: G.ink }}>{playing === t.url ? "■" : "▶"}</button>
+      <div className="min-w-0 flex-1"><div className="text-[12.5px] font-black truncate" style={{ color: G.ink }}>{t.name}</div><div className="text-[11px] truncate" style={{ color: G.dim }}>{t.use}{t.bpm ? ` · ${t.bpm} BPM` : ""}</div></div>
+      {on ? <span className="text-[11.5px] font-black shrink-0" style={{ color: G.gold }}>사용 중</span> : <Btn small onClick={() => use(t)}>쓰기</Btn>}
+      {mineRow && <button type="button" onClick={() => del(t)} className="text-[11px] shrink-0" style={{ color: G.dim }}>빼기</button>}
+    </div>); };
+  return <div className="rounded-xl p-2.5 mb-3" style={{ border: `1px solid ${G.line2}` }}>
+    <div className="text-[12px] font-black mb-2" style={{ color: G.sub }}>무료 음악 보관함 · ▶ 로 미리 듣고 [쓰기]</div>
+    <div className="grid gap-1.5">{BGM_LIBRARY.map((t) => <Row key={t.key} t={t} />)}{mine.map((t) => <Row key={t.id} t={t} mineRow />)}</div>
+    <label className="mt-2 inline-flex h-8 px-3 text-[12px] rounded-xl font-black items-center cursor-pointer" style={{ border: `1px solid ${G.line}`, color: G.ink }}>{up || "＋ 보관함에 음악 올리기"}<input type="file" accept="audio/*" className="hidden" onChange={(e) => addMine(e.target.files?.[0])} /></label>
+    <div className="text-[11px] mt-2 leading-relaxed" style={{ color: G.dim }}>기본 곡은 이 프로그램이 직접 만든 곡이라 저작권 걱정이 없어요. 유튜브 오디오 보관함 · Pixabay Music 같은 무료 음원을 받아 올리면 모든 영상에서 같이 써요(사용 조건은 각 사이트 안내를 따라 주세요).</div>
+  </div>;
+}
+
 // ───── 음악 탭 ─────
 function MusicPanel({ P, update, player, say, projectId }) {
-  const m = P.music || {}; const [up, setUp] = React.useState("");
+  const m = P.music || {}; const [up, setUp] = React.useState(""); const [libOpen, setLibOpen] = React.useState(false);
   const setM = (patch) => update((c) => ({ ...c, music: { ...c.music, ...patch } }));
   const uploadMusic = async (f) => {
     if (!f) return; if (!/^audio\//.test(f.type)) { say("mp3 · wav 같은 소리 파일만 올릴 수 있어요."); return; }
     setUp("올리는 중…"); try { const url = await upload(`marketing/music/${projectId}-${Date.now()}-${f.name.replace(/[^\w.가-힣-]/g, "_")}`, f, f.type); setM({ preset: "custom", url, name: f.name }); say("음악을 올렸어요."); } catch (e) { say(e.message); } finally { setUp(""); }
   };
   return <div>
-    <Field label="분위기"><Pick value={m.preset || "upbeat"} onChange={(v) => { const d = MUSIC.find(([k]) => k === v); setM({ preset: v, ...(d?.[3] ? { bpm: d[3] } : {}) }); }} items={MUSIC.map(([k, n, sub]) => [k, n, sub])} cols={2} /></Field>
-    {m.preset === "custom" && <div className="rounded-xl p-2.5 mb-3" style={{ border: `1px solid ${G.line2}` }}>
+    <Field label="분위기"><Pick value={m.lib ? "library" : (m.preset || "upbeat")} onChange={(v) => { if (v === "library") { setLibOpen(true); return; } setLibOpen(false); const d = MUSIC.find(([k]) => k === v); setM({ preset: v, lib: null, ...(d?.[3] ? { bpm: d[3] } : {}) }); }} items={MUSIC.map(([k, n, sub]) => [k, n, sub])} cols={2} /></Field>
+    {(libOpen || m.lib) && <MusicLibrary m={m} setM={setM} say={say} />}
+    {m.preset === "custom" && !m.lib && <div className="rounded-xl p-2.5 mb-3" style={{ border: `1px solid ${G.line2}` }}>
       <div className="text-[12px] mb-2" style={{ color: G.sub }}>{m.name ? `지금 음악: ${m.name}` : "음악 파일을 올려 주세요."} 유튜브 오디오 보관함처럼 저작권 걱정 없는 음악을 쓰세요.</div>
       <label className="inline-flex h-8 px-3 text-[12px] rounded-xl font-black items-center cursor-pointer" style={{ border: `1px solid ${G.line}`, color: G.ink }}>{up || "🎵 음악 파일 올리기"}<input type="file" accept="audio/*" className="hidden" onChange={(e) => uploadMusic(e.target.files?.[0])} /></label></div>}
     {!["none", "custom"].includes(m.preset) && <>

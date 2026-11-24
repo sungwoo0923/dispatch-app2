@@ -1,0 +1,82 @@
+[
+ {
+  "key": "calm_piano",
+  "name": "잔잔한 피아노",
+  "use": "교육 · 설명",
+  "bpm": 72,
+  "sec": 106.7,
+  "url": "/promo/bgm/calm_piano.mp3"
+ },
+ {
+  "key": "warm_acoustic",
+  "name": "따뜻한 어쿠스틱",
+  "use": "회사 소개 · 일상",
+  "bpm": 92,
+  "sec": 83.5,
+  "url": "/promo/bgm/warm_acoustic.mp3"
+ },
+ {
+  "key": "corporate",
+  "name": "기업 홍보",
+  "use": "신뢰감 · 발표",
+  "bpm": 100,
+  "sec": 76.8,
+  "url": "/promo/bgm/corporate.mp3"
+ },
+ {
+  "key": "bright_pop",
+  "name": "산뜻한 어쿠스틱 팝",
+  "use": "숏츠 · 기능 소개",
+  "bpm": 112,
+  "sec": 68.6,
+  "url": "/promo/bgm/bright_pop.mp3"
+ },
+ {
+  "key": "tech",
+  "name": "모던 비즈니스",
+  "use": "서비스 소개 · 화면 설명",
+  "bpm": 108,
+  "sec": 71.1,
+  "url": "/promo/bgm/tech.mp3"
+ },
+ {
+  "key": "lofi",
+  "name": "편안한 로파이",
+  "use": "브이로그 · 일상",
+  "bpm": 84,
+  "sec": 68.6,
+  "url": "/promo/bgm/lofi.mp3"
+ },
+ {
+  "key": "cinematic",
+  "name": "감동 시네마틱",
+  "use": "회사 소개 · 마무리",
+  "bpm": 66,
+  "sec": 72.7,
+  "url": "/promo/bgm/cinematic.mp3"
+ },
+ {
+  "key": "hopeful",
+  "name": "희망찬",
+  "use": "성장 · 비전",
+  "bpm": 96,
+  "sec": 80.0,
+  "url": "/promo/bgm/hopeful.mp3"
+ },
+ {
+  "key": "news_pulse",
+  "name": "정보 · 공지",
+  "use": "공지 · 업데이트",
+  "bpm": 104,
+  "sec": 73.8,
+  "url": "/promo/bgm/news_pulse.mp3"
+ },
+ {
+  "key": "ambient",
+  "name": "산뜻한 일상",
+  "use": "현장 · 기사님 이야기",
+  "bpm": 100,
+  "sec": 76.8,
+  "url": "/promo/bgm/ambient.mp3"
+ }
+]

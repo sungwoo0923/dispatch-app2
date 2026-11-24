@@ -50,6 +50,8 @@ import MobileSelect from "../mobile/MobileSelect"; // ⭐ 2026-11-02 기본 sele
 import { LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 // ⭐ 2026-11-05 출근 안내·새 오더 승인/거절·삭제 오더 안내 팝업, 빨간 숫자 배지, 알림 켜기 안내, 긴급 연락처(차량 담당자)
 import DriverUpdateBanner from "./DriverUpdateBanner"; // ⭐ 2026-11-05 웹·APK 업데이트 안내
+import { SafetyEduMine, useEduPending } from "../SafetyEdu"; // 🦺 2026-11-24 안전교육
+import { EduIcon, EduTile } from "../eduIcons";
 import { CheckinPrompt, shouldPromptCheckin, WorkStartSetting, NewOrderPopup, ModifiedOrderPopup, DeletedOrdersPopup, PushSetupCard, RedBadge, useEmergencyContact, KP_RED, UrgentMemo } from "./DriverPopups";
 import CustomDatePicker from "../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 import "./driverTheme.css"; // ⭐ 2026-11-08 기사앱 리디자인 공통 테마
@@ -1106,6 +1108,11 @@ export default function DriverHome() {
   const [driver, setDriver] = useState(null);
   const [activeTab, setActiveTab] = useState("home");
   const inbox = useDriverInbox(uid); // ▤ 지급명세서·과태료 서류
+  // 🦺 2026-11-24 안전교육 — 안 받은 교육 수(홈 카드 · 출근 때 하루 한 번 안내) · 관리자 보기(viewAs)에서는 안내 안 함
+  const eduUser = { uid, name: driver?.name || driver?.이름 || "", companyName: driver?.companyName || "", role: "driver", carNo: driver?.carNo || driver?.차량번호 || "" };
+  const eduPending = useEduPending(viewAs ? null : eduUser);
+  const [eduOpen, setEduOpen] = useState(false);
+  const [eduGate, setEduGate] = useState(null); // { action }
   const myReqDocs = useDriverDocs(uid); // ▤ 회사에 낼 필수 서류(미제출·반려는 서류함 숫자에 더한다)
   const docNeed = (() => { const p = docProblems(myReqDocs); return p.missing + p.bad; })();
   // ⭐ 2026-11-08 사장님 요청 — 서류함에 한 번 들어가 확인했으면 홈의 "회사에 낼 서류가 있어요" 카드는 숨긴다
@@ -1669,6 +1676,12 @@ export default function DriverHome() {
         }
       }
     }
+    // 🦺 2026-11-24 안 받은 안전교육이 있으면 출근 전에 하루 한 번 안내(받기 / 나중에 하고 출근)
+    if (action.status === "출근" && !opts.eduOk && eduPending > 0) {
+      const k = `kpEduGate_${uid}_${new Date().toISOString().slice(0, 10)}`;
+      let seen = false; try { seen = localStorage.getItem(k) === "1"; localStorage.setItem(k, "1"); } catch (_) { /* 무시 */ }
+      if (!seen) { setEduGate({ action }); return; }
+    }
     // ⭐ 2026-11-08 업체 요청 — 오일 4만km 넘으면 알림 [확인]을 눌러야 출근·퇴근, 퇴근은 키로수를 입력해야 처리
     if (odoOnRef.current) {
       const isInOut = ["출근", "퇴근", "최종퇴근"].includes(action.status);
@@ -1681,7 +1694,7 @@ export default function DriverHome() {
       return;
     }
     updateStatus(action.status);
-  }, [driver, companyDefaultLoc, pos, updateStatus]);
+  }, [driver, companyDefaultLoc, pos, updateStatus, eduPending, uid]);
   // 오일 알림 [확인] → 확인 기록 남기고 원래 누른 버튼 진행
   const confirmOilAlert = useCallback(async () => {
     const a = oilAlert?.action; if (!a) return;
@@ -2468,6 +2481,27 @@ export default function DriverHome() {
         </div>
       )}
 
+      {/* 🦺 2026-11-24 출근 전 안전교육 안내 */}
+      {eduGate && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 10050, background: "rgba(11,20,40,.5)", display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => setEduGate(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 520, background: "#fff", borderRadius: "24px 24px 0 0", padding: "22px 18px calc(18px + env(safe-area-inset-bottom))" }}>
+            <EduTile name="shield" size={48} />
+            <div style={{ fontSize: 20, fontWeight: 900, color: "#0B1428", marginTop: 10 }}>아직 안 받은 안전교육이 {eduPending}개 있어요</div>
+            <div style={{ fontSize: 15, color: "#6B7A93", marginTop: 6, lineHeight: 1.5 }}>회사가 정한 안전교육이에요. 지금 받거나, 출근한 뒤 홈 화면에서 받아도 돼요.</div>
+            <button type="button" onClick={() => { setEduGate(null); setEduOpen(true); }} style={{ marginTop: 18, width: "100%", height: 54, borderRadius: 16, border: "none", background: "#1B2B4B", color: "#fff", fontSize: 17, fontWeight: 900 }}>지금 교육 받기</button>
+            <button type="button" onClick={() => { const a = eduGate.action; setEduGate(null); handleActionButton(a, { eduOk: true }); }} style={{ marginTop: 8, width: "100%", height: 50, borderRadius: 16, border: "1px solid #E3E8F0", background: "#fff", color: "#1B2B4B", fontSize: 16, fontWeight: 800 }}>나중에 하고 출근하기</button>
+          </div>
+        </div>
+      )}
+      {eduOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 10040, background: "#F6F8FB", display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "calc(12px + env(safe-area-inset-top)) 12px 12px", background: "#fff", borderBottom: "1px solid #E3E8F0" }}>
+            <button type="button" onClick={() => setEduOpen(false)} aria-label="뒤로" style={{ width: 40, height: 40, borderRadius: 12, border: "none", background: "#F1F4F8", fontSize: 20, fontWeight: 900, color: "#1B2B4B" }}>‹</button>
+            <div style={{ fontSize: 19, fontWeight: 900, color: "#0B1428" }}>안전교육</div>
+          </div>
+          <div style={{ flex: 1, overflowY: "auto", padding: 16 }}><SafetyEduMine user={eduUser} audience="driver" title="" /></div>
+        </div>
+      )}
       {/* ⭐ 2026-11-08 업체 요청 — 오일 알림 / 퇴근 키로수 / 오일·타이어 교환 기록 */}
       {odoOn && oilAlert && (
         <OilAlertSheet driver={driver} busy={odoBusy} actionLabel={oilAlert.action?.status === "출근" ? "출근" : "퇴근"}
@@ -2621,6 +2655,18 @@ export default function DriverHome() {
             </button>
           )}
 
+          {/* 🦺 2026-11-24 안전교육 — 안 받은 교육이 있으면 카드, 다 받았으면 작은 줄 */}
+          <button type="button" onClick={() => setEduOpen(true)} style={eduPending > 0
+            ? { width: "100%", textAlign: "left", marginBottom: 12, padding: "12px 14px", borderRadius: 20, border: "1px solid #1B2B4B", background: "#fff", display: "flex", alignItems: "center", gap: 10 }
+            : { width: "100%", textAlign: "left", marginBottom: 12, padding: "10px 14px", borderRadius: 16, border: "1px solid #E3E8F0", background: "#fff", display: "flex", alignItems: "center", gap: 10 }}>
+            <EduTile name="shield" size={38} done={!(eduPending > 0)} />
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.1em", color: "#4B6CB7" }}>SAFETY TRAINING</span>
+              <b style={{ fontSize: 16.5, color: "#0F1A30" }}>{eduPending > 0 ? `안전교육 ${eduPending}개를 받아 주세요` : "안전교육"}</b><br />
+              <span style={{ fontSize: 14.5, color: "#5B6B85" }}>{eduPending > 0 ? "영상을 끝까지 보고 전자 서명하면 끝나요" : "올해 교육 이수 완료 · 이수증 보기"}</span>
+            </span>
+            <EduIcon name="chevron" size={18} stroke={2.4} style={{ color: "#1B2B4B" }} />
+          </button>
           {/* ⭐ 2026-11-03 회사 공지사항 — 공개 대상에 "기사"가 들어간 공지(최신순) */}
           <DriverNotices companyName={driver?.companyName || ""} uid={uid} />
           <PhotoDueCard uid={uid} driver={driver} onOpen={() => setActiveTab("vehicle")} />{/* 🧾 2026-11-10 정기 차량 사진 마감 임박 */}

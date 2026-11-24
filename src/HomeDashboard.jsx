@@ -20,6 +20,7 @@ import {
   serverTimestamp, doc, deleteDoc, updateDoc, where, setDoc, getDoc, arrayUnion, getDocs,
 } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
+import { SafetyEduMine, useEduPending } from "./SafetyEdu"; // 🦺 2026-11-24 안전교육(내 교육)
 import { EditableText } from "./EditMode";
 import { pcLiveWindowStart, pcPrevDay } from "./orderHistory";
 import { pcBootStore, markBootBase } from "./bootProgress";
@@ -930,6 +931,8 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const canSetNoticePolicy = role === "totalMaster" || meHome.isMaster;
   // ✍ 공지·인수인계 글쓰기는 팝업 대신 넓은 작성 화면(HomeWriters.jsx)
   const { planId } = usePlan();
+  const eduUser = { uid: user?.uid, name: meHome.name, companyName: getViewCompany(), role: "staff" };
+  const eduPendingN = useEduPending(eduUser);
   const writerActive = (boardTab === "공지사항" && noticeOpen) || (boardTab === "인수인계" && (handoverOpen || handoverEditMode));
   return (
     <KpSubNav noBleed code="HOME" title="홈" icon="dashboard" active={boardTab}
@@ -944,6 +947,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
           // ⭐ 2026-11-01 직원 일정(연차·외근 등 부재 달력)은 상단 메뉴에서 빼고 여기로
           { key: "teamsched", label: "직원 일정", en: "TEAM SCHEDULE", icon: "clock" },
           { key: "rules", label: "사내 규정", en: "RULES", icon: "list" },
+          { key: "safety", label: "안전교육", en: "SAFETY", icon: "shield", badge: eduPendingN, badgeTitle: "아직 안 받은 교육" }, // 🦺 2026-11-24
         ] },
         { label: "전자결재", items: approvalNavItems("ap:", { // ⭐ 2026-11-10 메뉴 통일(menuTree) — 상단 전자결재·모바일과 같은 목록
           inbox: { badge: apCounts.todo, badgeTitle: "내 결재 차례" },
@@ -1017,6 +1021,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
       {String(boardTab).startsWith("board:") && <BoardPage company={getViewCompany()} me={meHome} board={boardTab.slice(6)} />}
       {boardTab === "teamsched" && <TeamSchedule company={getViewCompany()} />}
       {boardTab === "execsched" && <ExecScheduleBoard company={getViewCompany()} me={meHome} canWrite={canWriteExecSchedule({ dept, role, team: meHome.team })} />}
+      {boardTab === "safety" && <div className="max-w-[640px]"><SafetyEduMine user={eduUser} audience="staff" /></div>}
       {boardTab === "rules" && <CompanyRules company={getViewCompany()} canEdit={role === "hrManager" || role === "totalMaster"} />}
 
       {/* ===== 사내 게시판(왼쪽 사이드바에서 고름) — 2026-10-28 디지털 리디자인 ===== */}

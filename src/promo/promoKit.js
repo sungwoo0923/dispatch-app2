@@ -23,7 +23,15 @@ export const STYLES = [
 ];
 export const MUSIC = [
   ["upbeat", "밝은 팝", "숏츠 · 기능 소개", 112], ["corporate", "기업 홍보", "회사 소개 · 신뢰감", 100], ["tech", "테크 하우스", "빠른 화면 전환", 124],
-  ["cinematic", "시네마틱", "예고편 · 감성", 92], ["calm", "잔잔한", "설명 · 교육", 80], ["none", "음악 없음", "목소리만", 0], ["custom", "직접 올린 음악", "mp3 · wav", 0],
+  ["cinematic", "시네마틱", "예고편 · 감성", 92], ["calm", "잔잔한", "설명 · 교육", 80], ["library", "무료 음악 보관함", "곡 고르기 · 미리 듣기", 0], ["none", "음악 없음", "목소리만", 0], ["custom", "직접 올린 음악", "mp3 · wav", 0],
+];
+// 🎵 2026-11-24 무료 음악 보관함 — 이 프로그램이 직접 합성한 곡(저작권 걱정 없음 · 마디 단위라 반복해도 자연스럽다) · marketing/bgm/make-library.py
+//  관리자가 올린 곡(유튜브 오디오 보관함 · Pixabay Music 등 무료 음원)은 mktMusic 에 쌓여 함께 보인다
+export const BGM_LIBRARY = [
+  { key: "calm_piano", name: "잔잔한 피아노", use: "교육 · 설명", bpm: 72, url: "/promo/bgm/calm_piano.mp3" },
+  { key: "warm_acoustic", name: "따뜻한 어쿠스틱", use: "회사 소개 · 일상", bpm: 92, url: "/promo/bgm/warm_acoustic.mp3" },
+  { key: "corporate", name: "기업 홍보", use: "신뢰감 · 발표", bpm: 100, url: "/promo/bgm/corporate.mp3" },
+  { key: "tech", name: "모던 비즈니스", use: "서비스 소개 · 화면 설명", bpm: 108, url: "/promo/bgm/tech.mp3" },
 ];
 export const LAYOUTS = [
   ["title", "큰 글자", "질문 · 한 줄 메시지"], ["bubbles", "말풍선 · 목록", "카톡 오더 · 부재중 전화 · 엑셀 창"], ["count", "숫자 강조", "50건 · 2시간 · 21:04"],

@@ -25,6 +25,7 @@ import { usePayrollAccess } from "./payrollAccess"; // ⭐ 2026-11-06 연차 사
 // ⭐ 2026-11-07 급여 대장은 인사관리부에서 뺐다 — 급여는 돈을 내보내는 경리 업무(회계관리 › 급여 계산 · 비밀번호 잠금)라
 //  인사는 근태·연차까지만 본다. 연차 사용 촉진은 연차 관리 안의 탭(LeaveArea)으로 합쳤다
 import LeaveArea from "./LeaveArea";
+import { SafetyEduAdmin } from "./SafetyEdu"; // 🦺 2026-11-24 안전교육 이수 현황 · 기사 영상 대체 설정
 import { HrFleetPanel, HR_FLEET_KINDS } from "./HrFleet"; // 🚛 2026-11-15 지입관리(전체 · 지입 · 직영 · 임대)
 import { kpConfirm } from "./kpDialog";
 
@@ -668,6 +669,7 @@ export default function HrHub({ company, canManage, renderRecord, renderAttendan
         { label: "근태", items: [
           { key: "attendance", label: "출근기록부", en: "ATTENDANCE", icon: "clock" },
           { key: "leave", label: "연차 관리", en: "ANNUAL LEAVE", icon: "flag" }, // ⭐ 2026-11-07 연차 현황 + 연차 사용 촉진(근로기준법 61조) 탭
+          { key: "safety", label: "안전교육", en: "SAFETY", icon: "shield" }, // 🦺 2026-11-24 기사 · 직원 안전교육 이수 현황
         ] },
         { label: "설정 · 규정", items: [
           { key: "settings", label: "직책·부서 설정", en: "SETTINGS", icon: "key" },
@@ -682,6 +684,7 @@ export default function HrHub({ company, canManage, renderRecord, renderAttendan
       {(tab === "edit" || tab === "resign") && <StaffInfoBoard company={company} canManage={canManage} />}
       {tab === "leave" && <LeaveArea company={company} canManage={canManage} promoManage={canManage || payAcc.leaveManager} showPromo={canManage || payAcc.leaveViewer} />}
       {tab === "attendance" && renderAttendance?.()}
+      {tab === "safety" && <div className="p-4 sm:p-6"><SafetyEduAdmin company={company} canManage={canManage} /></div>}
       {tab === "settings" && <HrSettingsPanel company={company} canManage={canManage} />}
       {tab === "rules" && <CompanyRules company={company} canEdit={canManage} />}
       {tab === "obit" && <ObituaryWriter company={company} me={me} onCancel={() => setTab("record")} onSaved={() => { alert("공지사항에 부고를 올렸습니다."); setTab("record"); }} />}
