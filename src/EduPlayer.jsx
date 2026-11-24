@@ -143,6 +143,25 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge, preview = f
     lastT.current = cur; setT(cur); persist(false);
   };
   const toggle = () => { const v = vRef.current; if (!v) return; if (v.paused) v.play().catch(() => {}); else v.pause(); };
+  // ⛶ 전체 화면 — 모니터 전체로(영상 + 아래 조작 막대 함께) · 아이폰은 기본 전체 화면 플레이어
+  const wrapRef = React.useRef(null);
+  const [fs, setFs] = React.useState(false);
+  const [idle, setIdle] = React.useState(false);
+  const idleT = React.useRef(0);
+  React.useEffect(() => {
+    const h = () => setFs(!!(document.fullscreenElement || document.webkitFullscreenElement));
+    document.addEventListener("fullscreenchange", h); document.addEventListener("webkitfullscreenchange", h);
+    return () => { document.removeEventListener("fullscreenchange", h); document.removeEventListener("webkitfullscreenchange", h); };
+  }, []);
+  const toggleFs = () => {
+    const el = wrapRef.current, v = vRef.current; if (!el) return;
+    if (document.fullscreenElement || document.webkitFullscreenElement) { (document.exitFullscreen || document.webkitExitFullscreen)?.call(document); return; }
+    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    else if (v?.webkitEnterFullscreen) v.webkitEnterFullscreen(); // 아이폰
+  };
+  const poke = () => { setIdle(false); clearTimeout(idleT.current); idleT.current = setTimeout(() => setIdle(true), 2500); };
+  React.useEffect(() => () => clearTimeout(idleT.current), []);
   const back10 = () => { const v = vRef.current; if (!v) return; v.currentTime = Math.max(0, v.currentTime - 10); lastT.current = v.currentTime; };
   const done = watchedEnough(watched, dur) || (dur > 0 && maxRef.current >= dur - 0.6 && watched >= dur * WATCH_RATIO);
   const pct = dur ? Math.min(100, (watched / dur) * 100) : 0;
@@ -151,7 +170,7 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge, preview = f
   return (
     <div className="flex-1 overflow-y-auto px-4 py-4 lg:px-6 lg:py-5 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-5 lg:items-start" style={{ background: "#F6F8FB" }}>
       <div className="min-w-0">
-      <div className="relative rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: "16 / 9" }}>
+      <div ref={wrapRef} onMouseMove={fs ? poke : undefined} onDoubleClick={toggleFs} className={`relative overflow-hidden bg-black ${fs ? "w-screen h-screen" : "rounded-2xl"}`} style={fs ? { cursor: idle && playing ? "none" : "default" } : { aspectRatio: "16 / 9" }}>
         <video ref={vRef} src={course.video} playsInline preload="metadata" className="w-full h-full block" style={{ objectFit: "contain" }}
           onLoadedMetadata={(e) => setDur(e.currentTarget.duration || 0)} onTimeUpdate={onTime}
           onPlay={() => setPlaying(true)} onPause={() => { setPlaying(false); persist(true); }} onEnded={() => { setPlaying(false); maxRef.current = dur; persist(true); }}
@@ -164,7 +183,21 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge, preview = f
             </span>
           </button>
         )}
-        {notice && <div className="absolute left-1/2 -translate-x-1/2 bottom-3 px-3 py-1.5 rounded-full text-[12.5px] font-bold text-white" style={{ background: "rgba(11,20,40,0.85)" }}>{notice}</div>}
+        {!fs && (
+          <button type="button" onClick={toggleFs} title="전체 화면(두 번 눌러도 돼요)" className="absolute right-3 bottom-3 w-9 h-9 rounded-lg flex items-center justify-center text-white" style={{ background: "rgba(11,20,40,.55)" }}>
+            <EduIcon name="expand" size={17} stroke={2.2} />
+          </button>
+        )}
+        {fs && (
+          <div className="absolute inset-x-0 bottom-0 px-6 pb-4 pt-10 flex items-center gap-3 transition-opacity duration-300" style={{ background: "linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.65))", opacity: idle && playing ? 0 : 1 }}>
+            <button type="button" onClick={toggle} className="w-11 h-11 rounded-full bg-white flex items-center justify-center shrink-0"><EduIcon name={playing ? "pause" : "play"} size={18} style={{ color: NAVY, marginLeft: playing ? 0 : 2 }} /></button>
+            <button type="button" onClick={back10} className="h-10 px-3 rounded-lg text-[13px] font-bold text-white inline-flex items-center gap-1 shrink-0" style={{ background: "rgba(255,255,255,.14)" }}><EduIcon name="replay" size={15} />10초</button>
+            <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,.25)" }}><div className="h-full rounded-full bg-white" style={{ width: `${playedPct}%` }} /></div>
+            <span className="text-[13px] font-bold text-white/85 tabular-nums shrink-0" style={EN}>{fmt(t)} / {fmt(dur)}</span>
+            <button type="button" onClick={toggleFs} title="전체 화면 끝내기(Esc)" className="h-10 px-3 rounded-lg text-[13px] font-bold text-white inline-flex items-center gap-1.5 shrink-0" style={{ background: "rgba(255,255,255,.14)" }}><EduIcon name="shrink" size={16} stroke={2.2} />작게 보기</button>
+          </div>
+        )}
+        {notice && <div className={`absolute left-1/2 -translate-x-1/2 ${fs ? "top-6" : "bottom-3"} px-3 py-1.5 rounded-full text-[12.5px] font-bold text-white`} style={{ background: "rgba(11,20,40,0.85)" }}>{notice}</div>}
       </div>
       {/* 재생 막대 — 누르거나 끌어서 옮길 수 없다 */}
       <div className="mt-3 flex items-center gap-2.5">
@@ -176,6 +209,7 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge, preview = f
           <div className="h-full rounded-full" style={{ width: `${playedPct}%`, background: NAVY }} />
         </div>
         <span className="text-[12px] font-bold tabular-nums shrink-0" style={{ ...EN, color: SUB }}>{fmt(t)} / {fmt(dur)}</span>
+        <button type="button" onClick={toggleFs} className="h-9 px-2.5 rounded-lg bg-white text-[12.5px] font-bold shrink-0 inline-flex items-center gap-1" style={{ border: `1px solid ${LINE}`, color: SUB }}><EduIcon name="expand" size={14} stroke={2.2} />전체 화면</button>
       </div>
       </div>
 
