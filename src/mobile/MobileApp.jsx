@@ -8831,7 +8831,7 @@ function MenuSection({ title, en, children, dark, alwaysOpen = false, fold = fal
   let open = acc ? (nav.openKey === undefined ? openDefault : nav.openKey === title) : open0;
   if (q) open = true;
   const setOpen = acc ? () => nav.setOpenKey(open ? null : title) : setOpen1;
-  const summary = acc && !open ? items.map((x) => x.l).join(" · ") : "";
+  const summary = ""; // 🧭 2026-11-24 접힌 묶음은 이름만(사용자 요청 — 안에 든 메뉴 이름은 보이지 않게)
   // 접힌 묶음도 안의 메뉴는 그려 둔다(자주 쓰는 메뉴 · 찾기가 읽어 간다) — 화면에만 숨김
   const body = (cls) => (acc ? <div className={cls} style={open ? undefined : { display: "none" }}>{children}</div> : ((!fold || open) && <div className={cls}>{children}</div>));
   if (dark) {
