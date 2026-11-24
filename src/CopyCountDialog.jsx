@@ -2,6 +2,7 @@
 // ⭐ 2026-11-06 오더 복사/수정 패널 [복사 등록] — "몇 건 복사할까요?" 창 (PC·모바일 공용)
 //   · 건수 1~30 · 건마다 상차일/하차일(달력) — 처음엔 모두 오늘 · 건별로 바꿀 수 있다
 //   · askCopyDates() 를 부르면 창이 뜨고, [복사]를 누르면 [{상차일, 하차일}, …] / 닫으면 null
+//   · 🛠 2026-11-24 dates({상차일, 하차일})를 넘기면 그 날짜로 시작 — 패널에서 날짜를 바꾸고 [복사 등록]을 눌러도 오늘로 되돌아가던 문제
 import React from "react";
 import { createRoot } from "react-dom/client";
 import CustomDatePicker from "./CustomDatePicker";
@@ -12,8 +13,14 @@ import { staffOptionsOf, ownerOfOrder, matchOwner } from "./orderOwner";
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const MAX = 30;
 
-function CopyCountDialog({ title, sub, mobile, alimtalk, order, onDone }) {
+function CopyCountDialog({ title, sub, mobile, alimtalk, order, dates, onDone }) {
   const today = kstToday();
+  // 처음 날짜 — 넘겨받은 날짜가 있으면 그 날짜(하차일이 비었거나 상차일보다 앞이면 상차일과 같게), 없으면 오늘
+  const init = React.useMemo(() => {
+    const ok = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
+    if (!dates || !ok(dates.상차일)) return { 상차일: today, 하차일: today };
+    return { 상차일: dates.상차일, 하차일: ok(dates.하차일) && dates.하차일 >= dates.상차일 ? dates.하차일 : dates.상차일 };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // 👤 2026-11-09 배차담당자 — order(원본)를 넘기면 칸이 보인다 · 처음엔 원본 담당자 · 직원 목록에서 바꿀 수 있다
   const [staff, setStaff] = React.useState([]);
   const [ownerKey, setOwnerKey] = React.useState("");
@@ -36,12 +43,12 @@ function CopyCountDialog({ title, sub, mobile, alimtalk, order, onDone }) {
   // 💬 2026-11-08 알림톡 보내기(복사본 전체) — 처음 값은 회사 기본값(alimtalk), 안 넘기면 칸을 숨긴다
   const [talk, setTalk] = React.useState(alimtalk === true);
   const [count, setCount] = React.useState(1);
-  const [rows, setRows] = React.useState(() => [{ 상차일: today, 하차일: today }]);
+  const [rows, setRows] = React.useState(() => [{ ...init }]);
   const [err, setErr] = React.useState("");
   const setN = (n) => {
     const v = Math.max(1, Math.min(MAX, parseInt(n, 10) || 1));
     setCount(v);
-    setRows((prev) => Array.from({ length: v }, (_, i) => prev[i] || { 상차일: today, 하차일: today }));
+    setRows((prev) => Array.from({ length: v }, (_, i) => prev[i] || { ...init }));
     setErr("");
   };
   const setRow = (i, k, v) => setRows((prev) => prev.map((r, j) => {
