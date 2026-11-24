@@ -332,6 +332,93 @@ function fareCertPhone(raw = "") {
   return raw || "-";
 }
 
+// 🧾 2026-11-24 운임명세서 본문 — 여러 건의 운임을 건별로 자동 계산하고(기본 운임 · 지게차 · 특수운임 · 최종) 맨 아래에 총합계를 낸다
+function FareStatementBody({ rows, issuerName, showSale, MONO }) {
+  const list = rows.map((o) => ({ o, fb: fareBreakdown(o) }));
+  const drivers = [...new Set(rows.map((o) => [o.이름, o.차량번호].filter(Boolean).join(" · ")).filter(Boolean))];
+  const won = (n) => Math.round(n).toLocaleString();
+  const sum = (f) => list.reduce((a, x) => a + f(x), 0);
+  const T = { baseDrv: sum((x) => x.fb.baseDrv), baseSale: sum((x) => x.fb.baseSale), drv: sum((x) => x.fb.drv), sale: sum((x) => x.fb.sale), paid: sum((x) => x.fb.paid), profit: sum((x) => x.fb.profit) };
+  const vat = Math.round(T.drv * 0.1);
+  // 항목별 합계(지게차 · 주유비 · 대기료 …) — 이름이 같으면 한 줄로
+  const byItem = new Map();
+  list.forEach(({ fb }) => fb.lines.forEach((l) => { const k = l.name; const c = byItem.get(k) || { name: k, cnt: 0, amount: 0, drv: 0, sale: 0 }; c.cnt += 1; c.amount += l.amount; c.drv += l.drv; c.sale += l.sale; byItem.set(k, c); }));
+  const items = [...byItem.values()];
+  const fareTypes = [...new Set(list.map((x) => x.fb.fareType).filter(Boolean))];
+  const th = { fontSize: 10.5, fontWeight: 800, color: "#5B6B85", padding: "7px 8px", background: "#F5F7FB", borderBottom: "1px solid #E3E8F0", textAlign: "left", whiteSpace: "nowrap" };
+  const td = { fontSize: 11.5, fontWeight: 700, color: "#0F1A30", padding: "7px 8px", borderBottom: "1px solid #EEF1F6", verticalAlign: "top" };
+  const num = { ...td, textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
+  const sec = (en, title) => (
+    <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "18px 0 8px" }}>
+      <span style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: "0.22em", color: "#4B6CB7" }}>{en}</span>
+      <span style={{ fontSize: 14, fontWeight: 900, color: "#0F1A30" }}>{title}</span>
+    </div>
+  );
+  const sign = (n) => (n ? <span style={{ color: n > 0 ? "#2D4C82" : "#B4342A" }}>{n > 0 ? "+" : "−"}{won(Math.abs(n))}</span> : <span style={{ color: "#B7C2D3" }}>·</span>);
+  const first = rows[0]?.상차일 || "", last = rows[rows.length - 1]?.상차일 || "";
+  return (
+    <>
+      <div style={{ fontSize: 13.5, fontWeight: 600, color: "#3A4A66", lineHeight: 1.75, background: "#F5F7FB", border: "1px solid #E3E8F0", borderRadius: 10, padding: "12px 16px" }}>
+        본 명세서는 <b style={{ color: "#0F1A30" }}>{issuerName || "운송사"}</b>가 {first === last ? first : `${first} ~ ${last}`} 기간에 배차한 운송 <b style={{ color: "#0F1A30" }}>{rows.length}건</b>의 운임을
+        {drivers.length === 1 ? <> 기사 <b style={{ color: "#0F1A30" }}>{drivers[0]}</b> 기준으로</> : null} 건별로 계산하고 합계를 정리한 것입니다.
+      </div>
+
+      {sec("SUMMARY", "합계")}
+      <div style={{ display: "grid", gridTemplateColumns: showSale ? "repeat(4, 1fr)" : "repeat(3, 1fr)", gap: 10 }}>
+        {[["운송 건수", `${rows.length}건`], ["기사운임 합계 (공급가)", `${won(T.drv)}원`], ["부가세 (10%)", `${won(vat)}원`], ...(showSale ? [["청구운임 합계", `${won(T.sale)}원`]] : [])].map(([l, v]) => (
+          <div key={l} style={{ border: "1px solid #E3E8F0", borderRadius: 10, padding: "11px 13px" }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#7A89A3" }}>{l}</div>
+            <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 17, fontWeight: 900, color: "#0F1A30", marginTop: 3 }}>{v}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 10, background: "#0F1A30", color: "#fff", borderRadius: 10, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: "#8FB0F0" }}>기사 지급 합계 (VAT 포함)</span>
+        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 22, fontWeight: 900 }}>{won(T.drv + vat)}원</span>
+      </div>
+
+      {sec("DETAIL", "건별 운임")}
+      <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #E3E8F0" }}>
+        <thead><tr>
+          <th style={th}>No</th><th style={th}>상차일</th><th style={th}>구간 · 차량</th><th style={th}>운임구분</th><th style={{ ...th, textAlign: "right" }}>기본 기사운임</th><th style={th}>특수운임</th><th style={{ ...th, textAlign: "right" }}>기사운임</th>
+          {showSale && <th style={{ ...th, textAlign: "right" }}>청구운임</th>}{showSale && <th style={{ ...th, textAlign: "right" }}>수수료</th>}
+        </tr></thead>
+        <tbody>
+          {list.map(({ o, fb }, i) => (
+            <tr key={o._id || o.id || i}>
+              <td style={{ ...num, textAlign: "left", color: "#7A89A3" }}>{i + 1}</td>
+              <td style={{ ...num, textAlign: "left" }}>{String(o.상차일 || "").slice(5) || "-"}</td>
+              <td style={td}>{o.상차지명 || "-"} → {o.하차지명 || "-"}{drivers.length > 1 && <div style={{ fontSize: 10.5, color: "#7A89A3", fontWeight: 600 }}>{[o.이름, o.차량번호].filter(Boolean).join(" · ")}</div>}</td>
+              <td style={{ ...td, color: "#2D4C82" }}>{fb.fareType || "-"}</td>
+              <td style={num}>{won(fb.baseDrv)}</td>
+              <td style={{ ...td, fontWeight: 600 }}>{fb.lines.length ? fb.lines.map((l) => <div key={l.key} style={{ whiteSpace: "nowrap" }}>{l.name} <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{sign(l.drv)}</span>{showSale && l.sale ? <span style={{ color: "#7A89A3" }}> (청구 {sign(l.sale)})</span> : null}</div>) : <span style={{ color: "#B7C2D3" }}>없음</span>}</td>
+              <td style={{ ...num, fontWeight: 900 }}>{won(fb.drv)}</td>
+              {showSale && <td style={num}>{won(fb.sale)}</td>}{showSale && <td style={{ ...num, color: fb.profit < 0 ? "#B4342A" : "#0F1A30" }}>{won(fb.profit)}</td>}
+            </tr>
+          ))}
+          <tr>
+            <td colSpan={4} style={{ ...td, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>합계 {rows.length}건</td>
+            <td style={{ ...num, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>{won(T.baseDrv)}</td>
+            <td style={{ ...td, background: "#F5F7FB", borderBottom: "none" }} />
+            <td style={{ ...num, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>{won(T.drv)}</td>
+            {showSale && <td style={{ ...num, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>{won(T.sale)}</td>}{showSale && <td style={{ ...num, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>{won(T.profit)}</td>}
+          </tr>
+        </tbody>
+      </table>
+
+      {sec("BREAKDOWN", "운임 구성 합계")}
+      <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #E3E8F0" }}>
+        <thead><tr><th style={th}>항목</th><th style={{ ...th, textAlign: "right" }}>건수</th><th style={{ ...th, textAlign: "right" }}>금액 합계</th><th style={{ ...th, textAlign: "right" }}>기사운임 영향</th>{showSale && <th style={{ ...th, textAlign: "right" }}>청구운임 영향</th>}</tr></thead>
+        <tbody>
+          <tr><td style={td}>기본 운임{fareTypes.length ? <span style={{ color: "#7A89A3", fontWeight: 600 }}> (운임구분 {fareTypes.join(" · ")})</span> : null}</td><td style={num}>{rows.length}</td><td style={num}>{won(T.baseDrv)}</td><td style={num}>{won(T.baseDrv)}</td>{showSale && <td style={num}>{won(T.baseSale)}</td>}</tr>
+          {items.map((c) => <tr key={c.name}><td style={td}>{c.name}</td><td style={num}>{c.cnt}</td><td style={num}>{won(c.amount)}</td><td style={num}>{sign(c.drv)}</td>{showSale && <td style={num}>{sign(c.sale)}</td>}</tr>)}
+          <tr><td style={{ ...td, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>최종</td><td style={{ ...num, background: "#F5F7FB", borderBottom: "none" }} /><td style={{ ...num, background: "#F5F7FB", borderBottom: "none", color: "#5B6B85", fontWeight: 600 }}>{T.paid ? `회사 별도 지급 ${won(T.paid)}` : ""}</td><td style={{ ...num, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>{won(T.drv)}</td>{showSale && <td style={{ ...num, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>{won(T.sale)}</td>}</tr>
+        </tbody>
+      </table>
+      {showSale && <div style={{ textAlign: "right", fontSize: 12, fontWeight: 800, color: "#3A4A66", marginTop: 6 }}>수수료 합계(청구운임 − 기사운임 − 회사 별도 지급) <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: T.profit < 0 ? "#B4342A" : "#0F1A30" }}>{won(T.profit)}원</b></div>}
+    </>
+  );
+}
 const FARE_CERT_SALE_KEY = "kpFareCertShowSale"; // 🧾 2026-11-24 운임정보에서 청구운임 보이기(기본) · 숨기기 — 이 PC에 기억
 function FareCertModal({ row, companyName, onClose }) {
   const [zoom, setZoom] = React.useState(1);
@@ -340,8 +427,12 @@ function FareCertModal({ row, companyName, onClose }) {
   const captureRef = React.useRef(null);
   // ⭐ 2026-11-03 여러 사업자 — 오더의 청구 사업자가 추가 사업자면 그 사업자 이름·정보로 발급
   const fcBiz = useCompanyBiz(getTenant() || companyName);
-  if (!row) return null;
-  const r = row;
+  if (!row || (Array.isArray(row) && !row.length)) return null;
+  // 🧾 2026-11-24 여러 건을 고르고 [운임정보]를 누르면 운임 명세서(건별 자동 계산 + 총합계)로 보여 준다(사용자 요청)
+  const certRows = (Array.isArray(row) ? row : [row]).slice().sort((a, b) => String(a.상차일 || "").localeCompare(String(b.상차일 || "")) || String(a.상차시간 || "").localeCompare(String(b.상차시간 || "")));
+  const multi = certRows.length > 1;
+  const r = certRows[0];
+  const docTitle = multi ? "운임명세서" : "운임확인서";
   const issuerBiz = fcBiz.multi ? fcBiz.find(bizOf(r, fcBiz.defaultName)) : null;
   const issuerName = issuerBiz?.name || companyName;
 
@@ -358,7 +449,7 @@ function FareCertModal({ row, companyName, onClose }) {
     const canvas = await captureCanvas();
     if (!canvas) return;
     const link = document.createElement("a");
-    link.download = `운임확인서_${r.차량번호 || ""}_${r.상차일 || ""}.png`;
+    link.download = `${docTitle}_${r.차량번호 || ""}_${r.상차일 || ""}${multi ? `_외${certRows.length - 1}건` : ""}.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
   };
@@ -369,8 +460,12 @@ function FareCertModal({ row, companyName, onClose }) {
     const pdf = new (await loadJsPDF())("p", "mm", "a4");
     const pdfWidth = 210;
     const imgHeight = (canvas.height * pdfWidth) / canvas.width;
-    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, Math.min(imgHeight, 297));
-    pdf.save(`운임확인서_${r.차량번호 || ""}_${r.상차일 || ""}.pdf`);
+    // 🧾 명세서가 A4 한 장보다 길면 여러 장으로 나눠 담는다
+    for (let y = 0, page = 0; y < imgHeight; y += 297, page += 1) {
+      if (page) pdf.addPage();
+      pdf.addImage(imgData, "PNG", 0, -y, pdfWidth, imgHeight);
+    }
+    pdf.save(`${docTitle}_${r.차량번호 || ""}_${r.상차일 || ""}${multi ? `_외${certRows.length - 1}건` : ""}.pdf`);
   };
   const handlePrint = async () => {
     const canvas = await captureCanvas();
@@ -378,7 +473,7 @@ function FareCertModal({ row, companyName, onClose }) {
     const imgData = canvas.toDataURL("image/png");
     const w = window.open("", "_blank");
     if (!w) return;
-    w.document.write(`<!doctype html><html><head><title>운임확인서</title><style>
+    w.document.write(`<!doctype html><html><head><title>${docTitle}</title><style>
       @page { size: A4; margin: 10mm; }
       body { margin:0; display:flex; justify-content:center; background:#fff; }
       img { width:100%; max-width:190mm; }
@@ -413,7 +508,7 @@ function FareCertModal({ row, companyName, onClose }) {
           <span className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
           <div className="relative">
             <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>FARE · CERTIFICATE</div>
-            <h3 className="text-[19px] font-black leading-tight"><EditableText id="popup.title.운임정보 미리보기" defaultText="운임확인서" /></h3>
+            <h3 className="text-[19px] font-black leading-tight">{multi ? `운임명세서 · ${certRows.length}건` : <EditableText id="popup.title.운임정보 미리보기" defaultText="운임확인서" />}</h3>
           </div>
           <div className="relative flex items-center gap-1.5">
             <button type="button" onClick={toggleSale} aria-pressed={showSale} title="운임확인서에 청구운임 · 수수료를 함께 보여 줄지 정해요. 이 PC에 기억돼요." className={`h-9 px-3 rounded-xl border text-[12.5px] font-bold ${showSale ? "bg-white text-[#0F1A30] border-white" : "bg-white/10 border-white/20 hover:bg-white/20"}`}>{showSale ? "청구운임 표시 중" : "청구운임 숨김"}</button>
@@ -434,7 +529,7 @@ function FareCertModal({ row, companyName, onClose }) {
               <div style={{ background: "#0F1A30", color: "#fff", padding: "22px 34px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
                 <div>
                   <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10, fontWeight: 800, letterSpacing: "0.3em", color: "#8FB0F0" }}>FARE CERTIFICATE</div>
-                  <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: "0.32em", marginTop: 4 }}>운임확인서</div>
+                  <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: "0.32em", marginTop: 4 }}>{docTitle}</div>
                   {issuerBiz && <div style={{ fontSize: 13, fontWeight: 800, color: "rgba(255,255,255,0.78)", marginTop: 4, letterSpacing: "0.04em" }}>{issuerBiz.name}{issuerBiz.bizNo ? <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontWeight: 700, color: "#8FB0F0", marginLeft: 8 }}>{issuerBiz.bizNo}</span> : null}</div>}
                 </div>
                 <div style={{ textAlign: "right", fontSize: 11.5, color: "rgba(255,255,255,0.7)", lineHeight: 1.7 }}>
@@ -445,6 +540,7 @@ function FareCertModal({ row, companyName, onClose }) {
               <div style={{ height: 4, background: "linear-gradient(90deg,#2D4C82,#8FB0F0)" }} />
 
               <div style={{ padding: "22px 34px 30px" }}>
+                {multi ? <FareStatementBody rows={certRows} issuerName={issuerName} showSale={showSale} MONO={MONO} /> : (<>
                 <div style={{ fontSize: 13.5, fontWeight: 600, color: "#3A4A66", lineHeight: 1.75, background: "#F5F7FB", border: "1px solid #E3E8F0", borderRadius: 10, padding: "12px 16px" }}>
                   본 확인서는 <b style={{ color: "#0F1A30" }}>{issuerName || "운송사"}</b>가 아래 운송 건을 기사 <b style={{ color: "#0F1A30" }}>{r.이름 || "-"}</b>({r.차량번호 || "-"})에게 배차하였고,
                   해당 기사님이 운송을 {done ? "완료하였음" : "수행함"}을 확인하며, 아래 기사운임을 지급함을 증명합니다.
@@ -518,11 +614,12 @@ function FareCertModal({ row, companyName, onClose }) {
                   {cell("운송상태", done ? "운송완료" : (r.배차상태 || "배차완료"))}
                 </div>
 
+                </>)}
                 {/* 발급처 · 확인 */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 26, paddingTop: 18, borderTop: "1px dashed #CBD5E3" }}>
                   <div style={{ fontSize: 11.5, color: "#8A97AD", lineHeight: 1.7 }}>
                     본 문서는 LogisWeb 배차관리 프로그램에 등록된 배차 정보를 근거로 자동 발급되었습니다.<br />
-                    문서번호로 원본 오더를 확인할 수 있습니다.
+                    {multi ? "건별 운임은 오더에 저장된 운임과 특수운임으로 자동 계산했습니다." : "문서번호로 원본 오더를 확인할 수 있습니다."}
                   </div>
                   <div style={{ textAlign: "right", minWidth: 220 }}>
                     <div style={{ fontSize: 11, fontWeight: 800, color: "#7A89A3", letterSpacing: "0.1em" }}>발급처</div>
@@ -544,7 +641,7 @@ function FareCertModal({ row, companyName, onClose }) {
 
         {/* 하단 액션 */}
         <div className="flex items-center justify-between gap-2 px-6 py-3.5 border-t border-[#E3E8F0] bg-white shrink-0">
-          <span className="text-[12px] font-bold text-[#8A97AD]">A4 한 장으로 저장 · 인쇄됩니다</span>
+          <span className="text-[12px] font-bold text-[#8A97AD]">{multi ? "PDF는 길이에 맞춰 여러 장으로 나눠 저장돼요" : "A4 한 장으로 저장 · 인쇄됩니다"}</span>
           <div className="flex items-center gap-2">
             <button type="button" onClick={saveImage} className="h-10 px-4 rounded-xl border border-[#DCE3EE] text-[#1B2B4B] text-[13px] font-black hover:border-[#2D4C82] transition"><EditableText id="misc.btn.294.이미지저장" defaultText="이미지저장" /></button>
             <button type="button" onClick={savePdf} className="h-10 px-4 rounded-xl border border-[#DCE3EE] text-[#1B2B4B] text-[13px] font-black hover:border-[#2D4C82] transition">PDF저장</button>
@@ -32598,7 +32695,10 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           <button
             className="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold text-[#2A3852] hover:bg-[#0F1A30] hover:text-white flex items-center gap-2.5 transition-colors"
             onClick={() => {
-              setFareCertRow(contextMenu.row);
+              // 🧾 여러 건을 골라 두고 그중 하나에서 누르면 고른 건 전부를 운임명세서로
+              const r = contextMenu.row;
+              const picked = selected.length > 1 && selected.includes(r._id) ? rows.filter((x) => selected.includes(x._id)) : null;
+              setFareCertRow(picked && picked.length > 1 ? picked : r);
               setContextMenu(null);
             }}
           >
@@ -41666,7 +41766,10 @@ setCopyPlaceOptions(list);
           {/* 운임정보 — 기사 운임 증빙서(운임확인서) 미리보기 */}
           <button className="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold text-[#2A3852] hover:bg-[#0F1A30] hover:text-white flex items-center gap-2.5 transition-colors"
             onClick={() => {
-              setFareCertRow(contextMenuDS.row);
+              // 🧾 여러 건을 골라 두고 그중 하나에서 누르면 고른 건 전부를 운임명세서로
+              const r = contextMenuDS.row;
+              const picked = selected.size > 1 && selected.has(getId(r)) ? filtered.filter((x) => selected.has(getId(x))) : null;
+              setFareCertRow(picked && picked.length > 1 ? picked : r);
               setContextMenuDS(null);
             }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg>
