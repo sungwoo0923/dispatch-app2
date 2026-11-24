@@ -99,6 +99,7 @@ export const EDU_COURSES = [
     title: "장애인 인식개선",
     summary: "장애 바로 알기 · 바른 말 · 함께 일하는 예절 · 차별 금지",
     minutes: 4,
+    hold: true, // 영상 목소리 맞추는 중 — 다 되면 이 줄을 지운다
     video: "/edu/staff_disab.mp4",
     cycle: "yearly",
     pledge: "장애인 인식개선 교육 영상을 끝까지 시청했으며, 장애가 있는 동료를 존중하고 장애를 이유로 차별하지 않겠습니다.",
@@ -136,7 +137,7 @@ export const EDU_COURSES = [
 ];
 
 export const courseById = (id) => EDU_COURSES.find((c) => c.id === id) || null;
-export const coursesFor = (audience) => EDU_COURSES.filter((c) => c.audience === audience);
+export const coursesFor = (audience) => EDU_COURSES.filter((c) => c.audience === audience && !c.hold);
 
 // 이수 기간 — 해마다 다시 받는 교육은 연도, 한 번만은 "once"
 export const eduPeriod = (course, now = new Date()) => (course?.cycle === "yearly" ? String(now.getFullYear()) : "once");
