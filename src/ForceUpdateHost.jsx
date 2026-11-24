@@ -80,25 +80,37 @@ export default function ForceUpdateHost({ company = "", role = "", linkedCompany
   React.useEffect(() => { if (on && left <= 0) apply(); }, [on, left, apply]);
   React.useEffect(() => { if (on && left <= 30 && folded) setFolded(false); }, [on, left, folded]);
 
-  if (done && !on) {
-    return createPortal(
-      <div className="fixed left-1/2 -translate-x-1/2 z-[2147483100] flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-white border border-[#E3E8F0] shadow-[0_10px_26px_rgba(15,26,48,.14)] text-[13.5px] font-black text-[#0F1A30] whitespace-nowrap"
-        style={{ top: "calc(env(safe-area-inset-top,0px) + 64px)" }} data-kp="force-done">
-        <span className="w-[22px] h-[22px] rounded-full bg-[#0F7B5F] text-white grid place-items-center text-[12px]">✓</span>
-        최신 버전{done && done !== "최신" ? ` v${done}` : ""}이 적용되었습니다
-      </div>, document.body);
-  }
+  if (done && !on) return createPortal(<ForceDoneToast version={done} />, document.body);
   if (!on || left <= 0) return <ForceFlag on={false} />;
   const total = Math.max(1, Math.round((Number(cfg.fireAt) - Number(cfg.createdAt || cfg.fireAt - 60000)) / 1000));
-  const pct = Math.min(1, Math.max(0, left / total));
-  const hot = left <= 10;
   const fold = () => { setFolded(true); try { sessionStorage.setItem(`kpForceFold:${cfg.id}`, "1"); } catch { /* 무시 */ } };
   return createPortal(
     <>
       <ForceFlag on />
+      <ForceBanner message={cfg.message} left={left} total={total} folded={folded} onFold={fold} onUnfold={() => setFolded(false)} onApply={apply} />
+    </>, document.body);
+}
+
+// 새로 고친 뒤 3초 — "최신 버전이 적용되었습니다"
+export function ForceDoneToast({ version = "" }) {
+  return (
+    <div className="fixed left-1/2 -translate-x-1/2 z-[2147483100] flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-white border border-[#E3E8F0] shadow-[0_10px_26px_rgba(15,26,48,.14)] text-[13.5px] font-black text-[#0F1A30] whitespace-nowrap"
+      style={{ top: "calc(env(safe-area-inset-top,0px) + 64px)" }} data-kp="force-done">
+      <span className="w-[22px] h-[22px] rounded-full bg-[#0F7B5F] text-white grid place-items-center text-[12px]">✓</span>
+      최신 버전{version && version !== "최신" ? ` v${version}` : ""}이 적용되었습니다
+    </div>
+  );
+}
+
+// 위 가운데 안내(그림만) — 남은 시간 · 접기 · 지금 적용
+export function ForceBanner({ message = "", left, total, folded = false, onFold, onUnfold, onApply }) {
+  const pct = Math.min(1, Math.max(0, left / Math.max(1, total)));
+  const hot = left <= 10;
+  return (
+    <>
       <style>{CSS}</style>
       {folded ? (
-        <button type="button" onClick={() => setFolded(false)} className="kp-fu flex items-center gap-2 h-9 px-4 rounded-full text-[13px] font-black" data-kp="force-mini" title="업데이트 안내 펼치기">
+        <button type="button" onClick={onUnfold} className="kp-fu flex items-center gap-2 h-9 px-4 rounded-full text-[13px] font-black" data-kp="force-mini" title="업데이트 안내 펼치기">
           <span className="w-[7px] h-[7px] rounded-full bg-[#D7BC82]" />업데이트까지 <span className="tabular-nums text-[#F3E3BC]">{fmtLeft(left)}</span>
         </button>
       ) : (
@@ -110,17 +122,18 @@ export default function ForceUpdateHost({ company = "", role = "", linkedCompany
               {hot ? "최신 버전을 곧 적용합니다" : "시스템 업데이트 예정"}
             </div>
             <div className="text-[11.5px] sm:text-[12px] text-[rgba(226,232,245,.72)] font-semibold mt-0.5 truncate max-w-[52vw] sm:max-w-[520px]">
-              {hot ? "화면이 잠시 후 새로 고쳐집니다" : (cfg.message || DEFAULT_FORCE_MSG)}
+              {hot ? "화면이 잠시 후 새로 고쳐집니다" : (message || DEFAULT_FORCE_MSG)}
             </div>
           </div>
           <div className="text-right ml-1">
             <div className="text-[22px] sm:text-[26px] font-black tabular-nums text-[#F3E3BC] leading-none tracking-[0.02em]">{fmtLeft(left)}</div>
             <div className="text-[10px] font-extrabold text-[rgba(226,232,245,.55)] tracking-[0.08em] mt-0.5">후 자동 적용</div>
           </div>
-          <button type="button" onClick={apply} className="hidden sm:grid h-8 px-3 rounded-[10px] border border-[rgba(215,188,130,.45)] text-[#F3E3BC] text-[12px] font-black place-items-center hover:bg-white/5">지금 적용</button>
-          {!hot && <button type="button" onClick={fold} className="w-7 h-7 rounded-lg grid place-items-center text-[rgba(226,232,245,.6)] hover:bg-white/10" title="접어 두기" aria-label="접어 두기">
+          <button type="button" onClick={onApply} className="hidden sm:grid h-8 px-3 rounded-[10px] border border-[rgba(215,188,130,.45)] text-[#F3E3BC] text-[12px] font-black place-items-center hover:bg-white/5">지금 적용</button>
+          {!hot && <button type="button" onClick={onFold} className="w-7 h-7 rounded-lg grid place-items-center text-[rgba(226,232,245,.6)] hover:bg-white/10" title="접어 두기" aria-label="접어 두기">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M5 12h14" /></svg></button>}
         </div>
       )}
-    </>, document.body);
+    </>
+  );
 }
