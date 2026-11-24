@@ -26828,14 +26828,15 @@ React.useEffect(() => {
   // 🔥 수정모드 + 수정중 데이터 복원
   // ----------------------------
   React.useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("realtimeEdit") || "{}");
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem("realtimeEdit") || "{}") || {}; } catch { saved = {}; } // 🛡 2026-11-24 저장값이 깨져 있어도 화면이 멈추지 않게
 
     // ⚠️ selectedEditMode(구 "선택수정" 인라인 편집 모드)는 더 이상 UI에서 켤 방법이
     // 없다(해당 버튼/저장 로직이 이미 제거됨) — 그런데도 예전 버전에서 localStorage에
     // true로 저장된 값이 남아있으면 새로고침할 때마다 계속 복원되어, 그 안에 들어있던
     // 행(들)만 영구히 "수정 모드" 셀(예: 하차지주소가 더보기 없이 원문 그대로 보이는
     // input)로 렌더링되는 버그가 있었다 — 이 값은 아예 복원하지 않는다.
-    if (saved.selected) setSelected(saved.selected);
+    if (Array.isArray(saved.selected)) setSelected(saved.selected);
     if (saved.edited) setEdited(saved.edited);
   }, []);
   // ----------------------------

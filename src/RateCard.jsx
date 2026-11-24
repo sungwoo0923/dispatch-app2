@@ -308,7 +308,7 @@ export default function RateCard({ dispatchData = [], userCompany = "", clients 
   const [searched, setSearched] = useState(false);
 const [detailModal, setDetailModal] = useState(null);
   const [viewMode, setViewMode] = useState("톤수별"); // 톤수별 | 파렛수별
-  const [printHistory, setPrintHistory] = useState(() => JSON.parse(localStorage.getItem("rateCardHistory") || "[]"));
+  const [printHistory, setPrintHistory] = useState(() => { try { const v = JSON.parse(localStorage.getItem("rateCardHistory") || "[]"); return Array.isArray(v) ? v : []; } catch { return []; } }); // 🛡 2026-11-24 깨진 저장값이면 빈 목록
   const [historyModal, setHistoryModal] = useState(false);
   const [historySelected, setHistorySelected] = useState(new Set());
   const [historyDetailModal, setHistoryDetailModal] = useState(null); // history entry to show
