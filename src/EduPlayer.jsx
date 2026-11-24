@@ -61,7 +61,7 @@ export function EduSignPad({ onChange, height = 150 }) {
 
 const fmt = (s) => { s = Math.max(0, Math.floor(s || 0)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
-function Header({ course, step, onClose }) {
+function Header({ course, step, onClose, preview = false }) {
   const steps = course.kind === "video" ? ["영상 보기", "이수 서명"] : ["읽기", "서명"];
   return (<>
     <div className="shrink-0 text-white" style={{ background: HERO_BG }}>
@@ -76,7 +76,7 @@ function Header({ course, step, onClose }) {
         </button>
       </div>
     </div>
-    <div className="shrink-0 px-4 py-2.5 bg-white" style={{ borderBottom: `1px solid ${LINE}` }}>
+    {!preview && <div className="shrink-0 px-4 py-2.5 bg-white" style={{ borderBottom: `1px solid ${LINE}` }}>
       <div className="flex items-center gap-2">
         {steps.map((s, i) => (
           <React.Fragment key={s}>
@@ -91,12 +91,12 @@ function Header({ course, step, onClose }) {
           </React.Fragment>
         ))}
       </div>
-    </div>
+    </div>}
   </>);
 }
 
 // 영상 보기 — 앞으로 건너뛰기 막기 + 실제로 본 시간 세기
-function VideoStep({ course, user, api, mayPledge, onNext, onPledge }) {
+function VideoStep({ course, user, api, mayPledge, onNext, onPledge, preview = false }) {
   const vRef = React.useRef(null);
   const maxRef = React.useRef(0);       // 지금까지 도달한 가장 먼 위치(그 앞은 다시 보기 가능)
   const watchedRef = React.useRef(0);   // 실제로 본 초(건너뛴 부분 제외)
@@ -134,7 +134,7 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge }) {
   const onTime = () => {
     const v = vRef.current; if (!v) return;
     const cur = v.currentTime;
-    if (cur > maxRef.current + 1.5) { // 앞으로 건너뛰기 → 되돌림
+    if (!preview && cur > maxRef.current + 1.5) { // 앞으로 건너뛰기 → 되돌림(미리 보기는 자유롭게)
       v.currentTime = maxRef.current; lastT.current = maxRef.current; setNotice("처음 보는 부분은 건너뛸 수 없어요"); setTimeout(() => setNotice(""), 2200); return;
     }
     const step = cur - lastT.current;
@@ -149,12 +149,13 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge }) {
   const playedPct = dur ? Math.min(100, (t / dur) * 100) : 0;
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-4" style={{ background: "#F6F8FB" }}>
+    <div className="flex-1 overflow-y-auto px-4 py-4 lg:px-6 lg:py-5 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-5 lg:items-start" style={{ background: "#F6F8FB" }}>
+      <div className="min-w-0">
       <div className="relative rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: "16 / 9" }}>
         <video ref={vRef} src={course.video} playsInline preload="metadata" className="w-full h-full block" style={{ objectFit: "contain" }}
           onLoadedMetadata={(e) => setDur(e.currentTarget.duration || 0)} onTimeUpdate={onTime}
           onPlay={() => setPlaying(true)} onPause={() => { setPlaying(false); persist(true); }} onEnded={() => { setPlaying(false); maxRef.current = dur; persist(true); }}
-          onSeeking={(e) => { if (e.currentTarget.currentTime > maxRef.current + 1.5) { e.currentTarget.currentTime = maxRef.current; lastT.current = maxRef.current; setNotice("처음 보는 부분은 건너뛸 수 없어요"); setTimeout(() => setNotice(""), 2200); } }}
+          onSeeking={(e) => { if (!preview && e.currentTarget.currentTime > maxRef.current + 1.5) { e.currentTarget.currentTime = maxRef.current; lastT.current = maxRef.current; setNotice("처음 보는 부분은 건너뛸 수 없어요"); setTimeout(() => setNotice(""), 2200); } }}
           onClick={toggle} controlsList="nodownload noplaybackrate" disablePictureInPicture />
         {!playing && (
           <button type="button" onClick={toggle} className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(11,20,40,0.35)" }}>
@@ -176,8 +177,16 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge }) {
         </div>
         <span className="text-[12px] font-bold tabular-nums shrink-0" style={{ ...EN, color: SUB }}>{fmt(t)} / {fmt(dur)}</span>
       </div>
+      </div>
 
-      <div className="mt-4 rounded-2xl bg-white p-4" style={{ border: `1px solid ${LINE}` }}>
+      <div className="min-w-0">
+      {preview ? (
+        <div className="mt-4 lg:mt-0 rounded-2xl bg-white p-4" style={{ border: `1px solid ${LINE}` }}>
+          <div className="text-[13.5px] font-extrabold inline-flex items-center gap-1.5" style={{ color: INK }}><EduIcon name="eye" size={15} style={{ color: NAVY }} />미리 보기</div>
+          <div className="mt-1.5 text-[12.5px] font-semibold leading-relaxed break-keep" style={{ color: SUB }}>기사님이 받는 교육을 확인하는 화면이에요. 이수 기록은 남지 않고, 자유롭게 앞뒤로 넘겨 볼 수 있어요.</div>
+        </div>
+      ) : (<>
+      <div className="mt-4 lg:mt-0 rounded-2xl bg-white p-4" style={{ border: `1px solid ${LINE}` }}>
         <div className="flex items-center justify-between">
           <span className="text-[13.5px] font-extrabold inline-flex items-center gap-1.5" style={{ color: INK }}><EduIcon name="eye" size={15} style={{ color: NAVY }} />시청 진행</span>
           <span className="text-[14px] font-black tabular-nums" style={{ ...EN, color: done ? NAVY : SUB }}>{Math.floor(pct)}%</span>
@@ -189,7 +198,7 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge }) {
           {[["lock", "건너뛰기 불가"], ["replay", "다시 보기 가능"], ["clock", "이어서 보기"]].map(([ic, l]) => (
             <div key={l} className="rounded-xl px-2 py-2.5 flex flex-col items-center gap-1 text-center" style={{ background: "#F6F8FB" }}>
               <EduIcon name={ic} size={16} style={{ color: NAVY }} />
-              <span className="text-[11.5px] font-bold leading-tight" style={{ color: SUB }}>{l}</span>
+              <span className="text-[11.5px] font-bold leading-tight whitespace-nowrap" style={{ color: SUB }}>{l}</span>
             </div>
           ))}
         </div>
@@ -205,12 +214,15 @@ function VideoStep({ course, user, api, mayPledge, onNext, onPledge }) {
           영상 대신 서약서로 이수하기
         </button>
       )}
+      </>)}
+      {preview && <button type="button" onClick={onNext} className="mt-4 w-full h-[52px] rounded-2xl text-[15.5px] font-extrabold text-white" style={{ background: NAVY }}>미리 보기 닫기</button>}
+      </div>
     </div>
   );
 }
 
 // 서약서 읽기 — 맨 아래까지 내려야 서명 버튼이 켜진다
-function DocStep({ course, onNext }) {
+function DocStep({ course, onNext, preview = false }) {
   const ref = React.useRef(null);
   const [end, setEnd] = React.useState(false);
   const check = () => { const el = ref.current; if (el && el.scrollTop + el.clientHeight >= el.scrollHeight - 24) setEnd(true); };
@@ -238,8 +250,8 @@ function DocStep({ course, onNext }) {
         </div>
       </div>
       <div className="shrink-0 px-4 py-3 bg-white" style={{ borderTop: `1px solid ${LINE}` }}>
-        <button type="button" disabled={!end} onClick={onNext} className="w-full h-[52px] rounded-2xl text-[15.5px] font-extrabold text-white" style={{ background: end ? NAVY : "#C9D1DE" }}>
-          {end ? "서명하기" : "끝까지 읽으면 서명할 수 있어요 ↓"}
+        <button type="button" disabled={!end && !preview} onClick={onNext} className="w-full h-[52px] rounded-2xl text-[15.5px] font-extrabold text-white" style={{ background: end || preview ? NAVY : "#C9D1DE" }}>
+          {preview ? "미리 보기 닫기" : end ? "서명하기" : "끝까지 읽으면 서명할 수 있어요 ↓"}
         </button>
       </div>
     </>
@@ -305,7 +317,9 @@ function DoneStep({ course, mode, rec, onClose }) {
 }
 
 // course · user({ uid, name, companyName, role, carNo }) · mayPledge(관리자가 서약서 대체 허락) · pledgeCourse(대체할 때 쓰는 서약서)
-export default function EduPlayer({ course, user, mayPledge = false, pledgeCourse = null, api = firestoreEduApi, onClose, onDone, initialStep }) {
+const noopApi = { loadProgress: async () => null, saveProgress: async () => {}, saveRecord: async () => {} };
+// preview: 관리자 · 직원이 기사 교육을 미리 보기(기록 · 서명 없음, 자유롭게 넘겨 보기)
+export default function EduPlayer({ course, user, mayPledge = false, pledgeCourse = null, api = firestoreEduApi, onClose, onDone, initialStep, preview = false }) {
   const [step, setStep] = React.useState(initialStep || "main"); // main | sign | done
   const [mode, setMode] = React.useState(course.kind === "doc" ? "doc" : "video");
   const [busy, setBusy] = React.useState(false);
@@ -329,10 +343,10 @@ export default function EduPlayer({ course, user, mayPledge = false, pledgeCours
   const stepNo = step === "main" ? 0 : step === "sign" ? 1 : 2;
   return (
     <div className="fixed inset-0 z-[10000] flex items-stretch justify-center sm:items-center" style={{ background: "rgba(11,20,40,0.5)" }}>
-      <div className="w-full sm:max-w-[520px] sm:h-[92vh] sm:rounded-2xl overflow-hidden flex flex-col bg-white shadow-2xl">
-        <Header course={course} step={stepNo} onClose={onClose} />
-        {step === "main" && course.kind === "video" && <VideoStep course={course} user={user} api={api} mayPledge={mayPledge} onNext={() => { setMode("video"); setStep("sign"); }} onPledge={() => { setMode("pledge"); setStep("sign"); }} />}
-        {step === "main" && course.kind === "doc" && <DocStep course={course} onNext={() => setStep("sign")} />}
+      <div className={`w-full sm:rounded-2xl overflow-hidden flex flex-col bg-white shadow-2xl ${step === "main" && course.kind === "video" ? "sm:h-[92vh] lg:h-auto lg:max-h-[94vh] sm:max-w-[760px] lg:max-w-[1240px]" : "sm:h-[92vh] sm:max-w-[560px] lg:max-w-[680px]"}`}>
+        <Header course={course} step={stepNo} onClose={onClose} preview={preview} />
+        {step === "main" && course.kind === "video" && <VideoStep course={course} user={user} api={preview ? noopApi : api} mayPledge={!preview && mayPledge} preview={preview} onNext={preview ? onClose : () => { setMode("video"); setStep("sign"); }} onPledge={() => { setMode("pledge"); setStep("sign"); }} />}
+        {step === "main" && course.kind === "doc" && <DocStep course={course} preview={preview} onNext={() => (preview ? onClose() : setStep("sign"))} />}
         {step === "sign" && <SignStep course={course} user={user} mode={mode} pledgeCourse={pledgeCourse} busy={busy} onSubmit={submit} />}
         {step === "done" && <DoneStep course={course} mode={mode} rec={doneRec} onClose={onClose} />}
         {err && <div className="shrink-0 px-4 py-2 text-[13px] font-bold text-center" style={{ background: "#FDF1F1", color: "#B42318" }}>{err}</div>}

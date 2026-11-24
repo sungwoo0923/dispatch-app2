@@ -48,19 +48,37 @@ function Ring({ pct, size = 64, stroke = 7, dark = true }) {
 }
 
 // 교육 목록 — 위 요약(고리) + 교육 카드
-export function EduCourseList({ courses, records = {}, onOpen, onCert, mayPledge = false, year = new Date().getFullYear() }) {
+// wide: PC 넓은 화면(요약 한 줄 + 교육 카드 여러 칸) · preview: 기사 교육 미리 보기(이수 표시 없이 [미리 보기])
+export function EduCourseList({ courses, records = {}, onOpen, onCert, mayPledge = false, year = new Date().getFullYear(), wide = false, preview = false }) {
   const done = courses.filter((c) => records[c.id]).length;
   const pct = courses.length ? (done / courses.length) * 100 : 0;
   const left = courses.length - done;
+  if (preview) return (
+    <div className={wide ? "grid grid-cols-2 xl:grid-cols-3 gap-3" : "rounded-[20px] bg-white border border-[#E3E8F0] overflow-hidden"}>
+      {courses.map((c, i) => (
+        <button key={c.id} type="button" onClick={() => onOpen(c)} className={wide ? "text-left rounded-[18px] bg-white border border-[#E3E8F0] p-5 hover:border-[#B9C6DC] hover:shadow-[0_10px_24px_rgba(16,24,40,0.07)] transition flex flex-col" : "w-full text-left px-4 py-3.5 flex items-center gap-3 active:bg-[#F6F8FB]"} style={!wide && i ? { borderTop: `1px solid ${LINE}` } : null}>
+          <div className={wide ? "flex items-center gap-3" : "contents"}>
+            <EduTile name={c.icon} />
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] font-extrabold tracking-[0.08em] text-[#4B6CB7]" style={EN}>{c.code} · {c.kind === "video" ? "VIDEO" : "E-DOCUMENT"}</div>
+              <div className={`${wide ? "text-[16px]" : "text-[14.5px]"} font-black truncate`} style={{ color: INK }}>{c.title}</div>
+              <div className="text-[12px] font-semibold mt-0.5 truncate" style={{ color: MUTE }}>{fmtLen(c)} · {c.summary}</div>
+            </div>
+          </div>
+          <span className={`inline-flex items-center justify-center gap-1 h-9 px-3 rounded-lg text-[12.5px] font-black shrink-0 ${wide ? "mt-4 w-full" : ""}`} style={{ background: "#F1F4F9", color: NAVY }}><EduIcon name="eye" size={14} />미리 보기</span>
+        </button>
+      ))}
+    </div>
+  );
   return (
-    <div>
+    <div className={wide ? "grid grid-cols-[340px_minmax(0,1fr)] gap-5 items-start" : ""}>
       <div className="relative overflow-hidden rounded-[22px] px-5 py-4 text-white shadow-[0_14px_32px_rgba(15,26,48,0.25)]" style={{ background: HERO_BG }}>
         <div className="flex items-center gap-4">
           <Ring pct={pct} />
           <div className="min-w-0 flex-1">
             <div className="text-[11px] font-extrabold tracking-[0.1em] text-[#8FB0F0]" style={EN}>SAFETY TRAINING · {year}</div>
             <div className="text-[18px] font-black mt-0.5">{left ? `남은 교육 ${left}개` : "올해 교육 이수 완료"}</div>
-            <div className="text-[12.5px] text-white/60 mt-0.5">{left ? (mayPledge ? "영상 교육은 서약서 서명으로 대신할 수 있어요" : "영상을 끝까지 보고 전자 서명하면 이수돼요") : "이수증은 교육을 누르면 볼 수 있어요"}</div>
+            <div className="text-[12.5px] text-white/60 mt-0.5 break-keep">{left ? (mayPledge ? "영상 교육은 서약서 서명으로 대신할 수 있어요" : "영상을 끝까지 보고 전자 서명하면 이수돼요") : "이수증은 교육을 누르면 볼 수 있어요"}</div>
           </div>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2">
@@ -72,15 +90,16 @@ export function EduCourseList({ courses, records = {}, onOpen, onCert, mayPledge
           ))}
         </div>
       </div>
-      <div className="mt-3 rounded-[20px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_24px_rgba(16,24,40,0.05)] overflow-hidden">
+      <div className={`${wide ? "" : "mt-3 "}rounded-[20px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_24px_rgba(16,24,40,0.05)] overflow-hidden`}>
         {courses.map((c, i) => {
           const rec = records[c.id];
           return (
-            <button key={c.id} type="button" onClick={() => (rec ? onCert?.(rec) : onOpen(c))} className="w-full text-left px-4 py-3.5 flex items-center gap-3 active:bg-[#F6F8FB] hover:bg-[#FAFBFD]" style={i ? { borderTop: `1px solid ${LINE}` } : null}>
+            <button key={c.id} type="button" onClick={() => (rec ? onCert?.(rec) : onOpen(c))} className={`w-full text-left ${wide ? "px-5 py-4" : "px-4 py-3.5"} flex items-center gap-3 active:bg-[#F6F8FB] hover:bg-[#FAFBFD]`} style={i ? { borderTop: `1px solid ${LINE}` } : null}>
               <EduTile name={c.icon} done={!!rec} />
               <div className="flex-1 min-w-0">
                 <div className="text-[10px] font-extrabold tracking-[0.08em] text-[#4B6CB7]" style={EN}>{c.code} · {c.kind === "video" ? "VIDEO" : "E-DOCUMENT"}</div>
-                <div className="text-[14.5px] font-black truncate" style={{ color: INK }}>{c.title}</div>
+                <div className={`${wide ? "text-[16px]" : "text-[14.5px]"} font-black truncate`} style={{ color: INK }}>{c.title}</div>
+                {wide && <div className="text-[12.5px] font-semibold truncate mt-0.5" style={{ color: MUTE }}>{c.summary}</div>}
                 <div className="flex items-center gap-1.5 mt-0.5 text-[12px] font-semibold" style={{ color: MUTE }}>
                   <EduIcon name={c.kind === "video" ? "play" : "pledge"} size={11} />
                   <span style={EN}>{fmtLen(c)}</span><span>·</span><span>{rec ? `${ymd(rec.signedAt)} 이수` : c.cycle === "yearly" ? "해마다" : "한 번"}</span>
@@ -222,13 +241,16 @@ export function EduCertificate({ rec, onClose }) {
 }
 
 // 내 교육 — user: { uid, name, companyName, role, carNo }
-export function SafetyEduMine({ user, audience, title = "안전교육" }) {
+// wide: PC 넓은 화면 · showDriver: 직원 화면에 [기사 교육] 칸(기사님이 받는 교육 미리 보기)
+export function SafetyEduMine({ user, audience, title = "안전교육", wide = false, showDriver = false }) {
   const aud = audience || (user?.role === "driver" ? "driver" : "staff");
   const courses = coursesFor(aud);
   const [records, setRecords] = React.useState({});
   const [settings, setSettings] = React.useState(null);
   const [open, setOpen] = React.useState(null);
   const [cert, setCert] = React.useState(null);
+  const [tab, setTab] = React.useState("mine"); // mine | driver
+  const [peek, setPeek] = React.useState(null);
   const co = String(user?.companyName || "").trim();
   React.useEffect(() => {
     if (!user?.uid || !co) return undefined;
@@ -250,8 +272,28 @@ export function SafetyEduMine({ user, audience, title = "안전교육" }) {
   const pledgeCourse = courses.find((c) => c.kind === "doc") || null;
   return (
     <div>
-      {title && <div className="text-[18px] font-black mb-3" style={{ color: INK }}>{title}</div>}
-      <EduCourseList courses={courses} records={records} onOpen={setOpen} onCert={setCert} mayPledge={mayPledge} />
+      {(title || (showDriver && aud === "staff")) && (
+        <div className="flex items-center gap-3 mb-3 flex-wrap">
+          {title && <div className="text-[18px] font-black" style={{ color: INK }}>{title}</div>}
+          {showDriver && aud === "staff" && (
+            <div className="inline-flex p-1 rounded-xl ml-auto" style={{ background: "#EEF1F6" }}>
+              {[["mine", "내 교육"], ["driver", "기사 교육"]].map(([k, l]) => (
+                <button key={k} type="button" onClick={() => setTab(k)} className="h-8 px-3.5 rounded-lg text-[13px] font-black" style={tab === k ? { background: "#fff", color: NAVY, boxShadow: "0 1px 3px rgba(16,24,40,0.12)" } : { color: MUTE }}>{l}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {tab === "driver" && showDriver && aud === "staff" ? (<>
+        <div className="mb-3 rounded-2xl px-4 py-3 flex items-start gap-2.5 text-[12.5px] font-semibold leading-relaxed" style={{ background: "#F1F4F9", color: MUTE }}>
+          <EduIcon name="truck" size={16} style={{ color: NAVY, marginTop: 1, flexShrink: 0 }} />
+          <span className="break-keep">기사님은 <b style={{ color: INK }}>기사앱 홈 › 안전교육</b>에서 영상을 보고 서명해요. 여기서는 내용만 미리 볼 수 있어요(기록 안 남음). 누가 이수했는지는 <b style={{ color: INK }}>인사관리부 › 근태 › 안전교육</b>에서 [기사]를 고르면 보여요.</span>
+        </div>
+        <EduCourseList courses={coursesFor("driver")} onOpen={setPeek} wide={wide} preview />
+      </>) : (
+        <EduCourseList courses={courses} records={records} onOpen={setOpen} onCert={setCert} mayPledge={mayPledge} wide={wide} />
+      )}
+      {peek && <EduPlayer course={peek} user={{ ...user, companyName: co }} preview onClose={() => setPeek(null)} />}
       {open && <EduPlayer course={open} user={{ ...user, companyName: co }} mayPledge={mayPledge && open.kind === "video"} pledgeCourse={pledgeCourse} onClose={() => setOpen(null)} onDone={(rec) => setRecords((m) => ({ ...m, [rec.courseId]: { ...rec, signedAt: { seconds: Math.floor(Date.now() / 1000) } } }))} />}
       {cert && <EduCertificate rec={cert} onClose={() => setCert(null)} />}
     </div>
