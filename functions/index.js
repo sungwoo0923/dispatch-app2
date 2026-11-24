@@ -4150,6 +4150,37 @@ exports.linkedStaffList = functions.https.onRequest(async (req, res) => {
   } catch (e) { console.error("linkedStaffList 실패:", e); res.status(500).json({ error: "FAILED" }); }
 });
 
+// 🏢 2026-11-24 여러 회사 계정 — 내가 오갈 수 있는 회사들의 회사코드(로그인 화면 [회사코드 찾기] · 로그인 때 코드 확인)
+//  보안 규칙상 다른 회사 가입 신청서(코드)는 직접 못 읽어서 서버가 대신 찾는다. 최고관리자가 정해 준 회사(multiCompanies)만 돌려준다
+const { multiCompaniesOf: mcList, canMulti: mcCan } = require("./multiCompany");
+async function companyCodeOf(co) {
+  const us = await db.collection("users").where("companyName", "==", co).select("companyCode").get().catch(() => ({ docs: [] })); // 색인 없이(같은 회사 직원만 · 코드 칸만)
+  const c1 = us.docs.map((d) => d.data()?.companyCode).find((c) => typeof c === "string" && c.trim());
+  if (c1) return String(c1);
+  const apps = await db.collection("transportApplications").where("companyName", "==", co).get().catch(() => ({ docs: [] }));
+  const hit = apps.docs.map((d) => d.data() || {}).find((a) => (a.status === "approved" || a.status === "승인") && a.companyCode);
+  return String(hit?.companyCode || "");
+}
+exports.myCompanyCodes = functions.https.onRequest(async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.set("Access-Control-Allow-Headers", APPCHECK_CORS);
+  if (req.method === "OPTIONS") { res.status(204).send(""); return; }
+  if (!(await appCheckGate(req, res, "myCompanyCodes"))) return;
+  try {
+    const m = String(req.headers.authorization || "").match(/^Bearer (.+)$/);
+    const tok = m ? await getAuth().verifyIdToken(m[1]).catch(() => null) : null;
+    if (!tok) { res.status(401).json({ error: "NO_TOKEN" }); return; }
+    const me = (await db.collection("users").doc(tok.uid).get()).data() || {};
+    const home = String(me.companyName || "").trim();
+    if (!home || !mcCan(me)) { res.status(200).json({ companies: [] }); return; }
+    const list = [home, ...mcList(me)];
+    const codes = await Promise.all(list.map((co, i) => (i === 0 && me.companyCode ? String(me.companyCode) : companyCodeOf(co))));
+    res.set("Cache-Control", "no-store");
+    res.status(200).json({ companies: list.map((co, i) => ({ companyName: co, companyCode: codes[i] || "", home: i === 0 })) });
+  } catch (e) { console.error("myCompanyCodes 실패:", e); res.status(500).json({ error: "FAILED" }); }
+});
+
 // 🔒 2026-11-23 연동 운송사(화주) · 소속 운송사(기사) 연락처 — 가입 신청서(직인 이미지 · 회사 코드 · 신청인 정보)를 통째로 읽던 것 대신
 //  공유해도 되는 칸만: 회사명 · 대표자 · 사업자번호 · 주소 · 대표 전화 · 이메일(화주만 — 정산서 받을 주소) · 회사 코드(화주만 — 오더 전송용)
 exports.linkedCompanyInfo = functions.https.onRequest(async (req, res) => {
