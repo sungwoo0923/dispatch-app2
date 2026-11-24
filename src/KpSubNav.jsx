@@ -11,6 +11,8 @@ import { ShellIcon } from "./AdminShell";
 import { confirmLeave } from "./leaveGuard";
 import { useSubnavTarget } from "./navMenus";
 import { usePref, setPref } from "./ColumnLayout"; // 📂 2026-11-12 메뉴 묶음 접기(계정별 기억)
+import NewMark from "./NewMark";
+import { useNewSeen, markNewSeen } from "./newFeatures"; // ✨ 2026-11-24 새 메뉴 NEW 표시(item.newKey · 열어 보면 사라짐)
 /* global __APP_VERSION__ */
 const APP_VER = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
 // ⭐ 2026-11-03 red: true인 항목(사내메일 등)은 카톡처럼 진한 빨강 바탕 + 흰 숫자(테마가 rose를 남색으로 바꿔도 그대로)
@@ -64,6 +66,8 @@ function PhoneSubNav({ code, title, icon, groups, actions, active, onSelect, chi
     if (el) el.scrollIntoView({ inline: "center", block: "nearest" });
   }, [active]);
   const hasBadge = (b) => (typeof b === "string" ? !!b : b > 0);
+  const { isNew } = useNewSeen();
+  React.useEffect(() => { if (cur?.newKey) markNewSeen(cur.newKey); }, [cur?.newKey]);
   return (
     <div className="bg-[#F4F6FA] min-h-full">
       <div className="relative text-white shadow-[0_8px_20px_rgba(15,26,48,0.18)]" style={{ background: "linear-gradient(120deg, #0B1428 0%, #1B2B4B 60%, #2D4C82 100%)" }}>
@@ -82,6 +86,7 @@ function PhoneSubNav({ code, title, icon, groups, actions, active, onSelect, chi
                 className={`relative shrink-0 h-8 px-3 rounded-full text-[12.5px] font-black whitespace-nowrap flex items-center gap-1.5 transition ${on ? "bg-white text-[#0F1A30] shadow-[0_4px_12px_rgba(0,0,0,0.25)]" : "bg-white/[0.08] text-white/75 ring-1 ring-white/10"}`}>
                 <ShellIcon name={it.icon} size={13} className={on ? "text-[#2D4C82]" : "text-[#8FB0F0]"} />
                 {it.label}
+                {isNew(it.newKey) && <NewMark on={on} />}
                 {hasBadge(it.badge) && <span style={redStyle(it)} className={`min-w-[16px] h-4 px-1 rounded-full text-[10px] font-extrabold flex items-center justify-center ${on ? "bg-[#1B2B4B] text-white" : it.soft ? "bg-white/20 text-white" : "bg-[#FF3B30] text-white"}`}>{typeof it.badge === "number" && it.badge > 99 ? "99+" : it.badge}</span>}
               </button>
             );
@@ -143,6 +148,9 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
   const toggleGroup = (g) => { const k = gKey(g); const next = { ...navFold }; if (next[k]) delete next[k]; else next[k] = true; setPref("navFold", next); };
 
   const hasBadge = (b) => (typeof b === "string" ? !!b : b > 0);
+  const { isNew } = useNewSeen();
+  const activeNewKey = gs.flatMap((g) => g.items.flatMap((it) => [it, ...(kidsOf(it) || [])])).find((x) => x.key === active)?.newKey;
+  React.useEffect(() => { if (activeNewKey) markNewSeen(activeNewKey); }, [activeNewKey]); // 열어 보면 NEW 사라짐
   const badgeTxt = (b) => (typeof b === "number" && b > 99 ? "99+" : b);
   const Btn = ({ it, on, onClick, sub = false, caret = null, inside = false }) => (
     <button
@@ -157,12 +165,15 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
       <span className={`relative rounded-lg flex items-center justify-center shrink-0 ${sub ? "w-6 h-6" : "w-8 h-8"} ${on ? "bg-[#EEF3FB]" : "bg-white/[0.06]"}`}>
         <ShellIcon name={it.icon} size={sub ? 14 : 17} className={on ? "text-[#1B2B4B]" : "text-blue-200/85"} />
         {collapsed && hasBadge(it.badge) && <span style={redStyle(it)} className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#FF3B30]" />}
+        {isNew(it.newKey) && !on && <NewMark dot />}
       </span>
       {!collapsed && (
         <>
           <span className="flex-1 min-w-0 text-left">
             <span className="block truncate">{it.label}</span>
-            {it.en && <span className="block truncate" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 9.5, fontWeight: 800, letterSpacing: "0.18em", opacity: on ? 0.75 : 0.72 }}>{it.en}</span>}
+            {isNew(it.newKey) ? (
+              <span className="flex items-center gap-1.5 min-w-0 mt-[1px]"><NewMark on={on} xs />{it.en && <span className="truncate" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 9.5, fontWeight: 800, letterSpacing: "0.18em", opacity: on ? 0.75 : 0.72 }}>{it.en}</span>}</span>
+            ) : it.en && <span className="block truncate" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 9.5, fontWeight: 800, letterSpacing: "0.18em", opacity: on ? 0.75 : 0.72 }}>{it.en}</span>}
           </span>
           {hasBadge(it.badge) && (
             <span title={it.badgeTitle} style={redStyle(it)} className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-extrabold flex items-center justify-center tabular-nums ${typeof it.badge === "string" ? "tracking-wider " : ""}${on ? "bg-[#1B2B4B] text-white" : it.soft ? "bg-white/15 text-white" : "bg-[#FF3B30] text-white"}`}>{badgeTxt(it.badge)}</span>
@@ -205,6 +216,7 @@ export default function KpSubNav({ code = "MENU", title, icon = "dashboard", ite
                   <button type="button" data-kp="subnav-group" aria-expanded={!shut} onClick={() => toggleGroup(g)} title={shut ? "펴기" : "접기"}
                     className={`w-full px-3 mb-1.5 h-6 rounded-lg flex items-center gap-1.5 text-[11px] font-bold hover:bg-white/[0.07] transition ${hot ? "text-white" : "text-blue-200/75"}`}>
                     <span className="flex-1 min-w-0 text-left truncate">{g.label}</span>
+                    {all.some((x) => isNew(x.newKey)) && <NewMark xs />}
                     {shut && (num > 0 || hasN) && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#FF3B30] text-white text-[10px] font-black flex items-center justify-center tabular-nums">{num > 0 ? (num > 99 ? "99+" : num) : "N"}</span>}
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-70" style={{ transform: shut ? "none" : "rotate(180deg)", transition: "transform .2s" }}><path d="M6 9l6 6 6-6" /></svg>
                   </button>);

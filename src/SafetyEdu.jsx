@@ -9,7 +9,7 @@ import EduPlayer from "./EduPlayer";
 import { EduIcon, EduTile } from "./eduIcons";
 import { CustomSelect } from "./CustomSelect";
 import { MONO, HERO_BG, Sheet } from "./OfficeBooks";
-import { coursesFor, courseById, eduPeriod, eduRecordId, eduStatusOf, driverMayPledge, fmtLen, certNo, verifyCode } from "./safetyEdu";
+import { coursesFor, courseById, eduPeriod, eduRecordId, eduStatusOf, driverMayPledge, fmtLen, certNo, verifyCode, VIDEO_SEC } from "./safetyEdu";
 
 const NAVY = "#1B2B4B";
 const INK = "#0F1A30";
@@ -48,19 +48,37 @@ function Ring({ pct, size = 64, stroke = 7, dark = true }) {
 }
 
 // 교육 목록 — 위 요약(고리) + 교육 카드
-export function EduCourseList({ courses, records = {}, onOpen, onCert, mayPledge = false, year = new Date().getFullYear() }) {
+// wide: PC 넓은 화면(요약 한 줄 + 교육 카드 여러 칸) · preview: 기사 교육 미리 보기(이수 표시 없이 [미리 보기])
+export function EduCourseList({ courses, records = {}, onOpen, onCert, mayPledge = false, year = new Date().getFullYear(), wide = false, preview = false }) {
   const done = courses.filter((c) => records[c.id]).length;
   const pct = courses.length ? (done / courses.length) * 100 : 0;
   const left = courses.length - done;
+  if (preview) return (
+    <div className={wide ? "grid grid-cols-2 xl:grid-cols-3 gap-3" : "rounded-[20px] bg-white border border-[#E3E8F0] overflow-hidden"}>
+      {courses.map((c, i) => (
+        <button key={c.id} type="button" onClick={() => onOpen(c)} className={wide ? "text-left rounded-[18px] bg-white border border-[#E3E8F0] p-5 hover:border-[#B9C6DC] hover:shadow-[0_10px_24px_rgba(16,24,40,0.07)] transition flex flex-col" : "w-full text-left px-4 py-3.5 flex items-center gap-3 active:bg-[#F6F8FB]"} style={!wide && i ? { borderTop: `1px solid ${LINE}` } : null}>
+          <div className={wide ? "flex items-center gap-3" : "contents"}>
+            <EduTile name={c.icon} />
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] font-extrabold tracking-[0.08em] text-[#4B6CB7]" style={EN}>{c.code} · {c.kind === "video" ? "VIDEO" : "E-DOCUMENT"}</div>
+              <div className={`${wide ? "text-[16px]" : "text-[14.5px]"} font-black truncate`} style={{ color: INK }}>{c.title}</div>
+              <div className="text-[12px] font-semibold mt-0.5 truncate" style={{ color: MUTE }}>{fmtLen(c)} · {c.summary}</div>
+            </div>
+          </div>
+          <span className={`inline-flex items-center justify-center gap-1 h-9 px-3 rounded-lg text-[12.5px] font-black shrink-0 ${wide ? "mt-4 w-full" : ""}`} style={{ background: "#F1F4F9", color: NAVY }}><EduIcon name="eye" size={14} />미리 보기</span>
+        </button>
+      ))}
+    </div>
+  );
   return (
-    <div>
+    <div className={wide ? "grid grid-cols-[340px_minmax(0,1fr)] gap-5 items-start" : ""}>
       <div className="relative overflow-hidden rounded-[22px] px-5 py-4 text-white shadow-[0_14px_32px_rgba(15,26,48,0.25)]" style={{ background: HERO_BG }}>
         <div className="flex items-center gap-4">
           <Ring pct={pct} />
           <div className="min-w-0 flex-1">
             <div className="text-[11px] font-extrabold tracking-[0.1em] text-[#8FB0F0]" style={EN}>SAFETY TRAINING · {year}</div>
             <div className="text-[18px] font-black mt-0.5">{left ? `남은 교육 ${left}개` : "올해 교육 이수 완료"}</div>
-            <div className="text-[12.5px] text-white/60 mt-0.5">{left ? (mayPledge ? "영상 교육은 서약서 서명으로 대신할 수 있어요" : "영상을 끝까지 보고 전자 서명하면 이수돼요") : "이수증은 교육을 누르면 볼 수 있어요"}</div>
+            <div className="text-[12.5px] text-white/60 mt-0.5 break-keep">{left ? (mayPledge ? "영상 교육은 서약서 서명으로 대신할 수 있어요" : "영상을 끝까지 보고 전자 서명하면 이수돼요") : "이수증은 교육을 누르면 볼 수 있어요"}</div>
           </div>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2">
@@ -72,15 +90,16 @@ export function EduCourseList({ courses, records = {}, onOpen, onCert, mayPledge
           ))}
         </div>
       </div>
-      <div className="mt-3 rounded-[20px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_24px_rgba(16,24,40,0.05)] overflow-hidden">
+      <div className={`${wide ? "" : "mt-3 "}rounded-[20px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_24px_rgba(16,24,40,0.05)] overflow-hidden`}>
         {courses.map((c, i) => {
           const rec = records[c.id];
           return (
-            <button key={c.id} type="button" onClick={() => (rec ? onCert?.(rec) : onOpen(c))} className="w-full text-left px-4 py-3.5 flex items-center gap-3 active:bg-[#F6F8FB] hover:bg-[#FAFBFD]" style={i ? { borderTop: `1px solid ${LINE}` } : null}>
+            <button key={c.id} type="button" onClick={() => (rec ? onCert?.(rec) : onOpen(c))} className={`w-full text-left ${wide ? "px-5 py-4" : "px-4 py-3.5"} flex items-center gap-3 active:bg-[#F6F8FB] hover:bg-[#FAFBFD]`} style={i ? { borderTop: `1px solid ${LINE}` } : null}>
               <EduTile name={c.icon} done={!!rec} />
               <div className="flex-1 min-w-0">
                 <div className="text-[10px] font-extrabold tracking-[0.08em] text-[#4B6CB7]" style={EN}>{c.code} · {c.kind === "video" ? "VIDEO" : "E-DOCUMENT"}</div>
-                <div className="text-[14.5px] font-black truncate" style={{ color: INK }}>{c.title}</div>
+                <div className={`${wide ? "text-[16px]" : "text-[14.5px]"} font-black truncate`} style={{ color: INK }}>{c.title}</div>
+                {wide && <div className="text-[12.5px] font-semibold truncate mt-0.5" style={{ color: MUTE }}>{c.summary}</div>}
                 <div className="flex items-center gap-1.5 mt-0.5 text-[12px] font-semibold" style={{ color: MUTE }}>
                   <EduIcon name={c.kind === "video" ? "play" : "pledge"} size={11} />
                   <span style={EN}>{fmtLen(c)}</span><span>·</span><span>{rec ? `${ymd(rec.signedAt)} 이수` : c.cycle === "yearly" ? "해마다" : "한 번"}</span>
@@ -222,13 +241,191 @@ export function EduCertificate({ rec, onClose }) {
 }
 
 // 내 교육 — user: { uid, name, companyName, role, carNo }
-export function SafetyEduMine({ user, audience, title = "안전교육" }) {
+// 📚 교육 카탈로그 — 썸네일 카드형(기본) · 목록형 · 대상(직원 · 기사) · 상태 · 검색
+//  items: [{ course, preview }] — preview 는 기사 교육 미리 보기(직원 화면, 기록 없음)
+export const eduThumb = (c) => `/edu/thumbs/${c.id}.jpg`;
+const secOf = (c) => (c.kind === "video" && VIDEO_SEC[c.id] ? VIDEO_SEC[c.id] : (c.minutes || 2) * 60);
+const fmtMin = (sec) => { const m = Math.round(sec / 60); return m >= 60 ? `${Math.floor(m / 60)}시간 ${m % 60}분` : `${m}분`; };
+const VIEW_KEY = "kpEduView";
+
+function Thumb({ c, rec, preview, big = false, compact = false }) {
+  return (
+    <div className="relative overflow-hidden bg-[#EEF1F6]" style={{ aspectRatio: "16 / 9" }}>
+      <img src={eduThumb(c)} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.04]" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+      <div className="absolute inset-0" style={{ background: "linear-gradient(180deg,rgba(11,20,40,0) 45%,rgba(11,20,40,.55) 100%)" }} />
+      {!compact && <span className="absolute left-3 top-3 h-6 px-2 rounded-md inline-flex items-center gap-1 text-[10.5px] font-extrabold tracking-[0.06em] text-white" style={{ ...EN, background: "rgba(15,26,48,.78)" }}>
+        <EduIcon name={c.icon} size={12} />{c.code}
+      </span>}
+      <span className={`absolute ${compact ? "left-2 top-2" : "right-3 top-3"} h-6 px-2 rounded-md inline-flex items-center gap-1 text-[11px] font-black`}
+        style={preview ? { background: "rgba(255,255,255,.92)", color: NAVY } : rec ? { background: NAVY, color: "#fff" } : { background: "rgba(255,255,255,.92)", color: "#B42318" }}>
+        {preview ? <><EduIcon name="truck" size={12} />기사 교육</> : rec ? <><EduIcon name="check" size={12} stroke={3} />이수</> : "미이수"}
+      </span>
+      <span className={`absolute ${compact ? "left-2 bottom-2" : "left-3 bottom-3"} h-6 px-2 rounded-md inline-flex items-center gap-1 text-[11.5px] font-bold text-white`} style={{ ...EN, background: "rgba(11,20,40,.6)" }}>
+        <EduIcon name={c.kind === "video" ? "play" : "pledge"} size={11} />{c.kind === "video" ? fmtLen(c) : `문서 · ${c.minutes}분`}
+      </span>
+      <span className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 ${big ? "w-16 h-16" : "w-12 h-12"} rounded-full bg-white/95 flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-opacity`}>
+        <EduIcon name={preview ? "eye" : c.kind === "video" ? "play" : "pledge"} size={big ? 24 : 19} style={{ color: NAVY, marginLeft: c.kind === "video" && !preview ? 3 : 0 }} />
+      </span>
+    </div>
+  );
+}
+
+function actionLabel(c, rec, preview) { return preview ? "미리 보기" : rec ? "이수증" : c.kind === "video" ? "시청하기" : "서명하기"; }
+
+function EduCard({ c, rec, preview, onClick }) {
+  return (
+    <button type="button" onClick={onClick} className="group text-left rounded-[18px] bg-white overflow-hidden border border-[#E3E8F0] hover:border-[#C3CEDF] hover:shadow-[0_14px_32px_rgba(16,24,40,0.09)] transition flex flex-col">
+      <Thumb c={c} rec={rec} preview={preview} />
+      <div className="px-4 pt-3.5 pb-3 flex-1 flex flex-col">
+        <div className="text-[15.5px] font-black leading-snug break-keep" style={{ color: INK }}>{c.title}</div>
+        <div className="text-[12.5px] font-semibold mt-1 leading-snug break-keep line-clamp-2" style={{ color: MUTE }}>{c.summary}</div>
+        <div className="mt-auto pt-3">
+          <div className="pt-3 flex items-center justify-between gap-2 text-[12px] font-bold" style={{ borderTop: `1px solid ${LINE}`, color: MUTE }}>
+            <span className="inline-flex items-center gap-1 min-w-0 truncate"><EduIcon name={rec ? "cert" : "calendar"} size={13} />{rec ? `${ymd(rec.signedAt)} 이수` : preview ? "기사앱에서 이수" : c.cycle === "yearly" ? "해마다 · 12월 31일까지" : "한 번"}</span>
+            <span className="shrink-0 font-black inline-flex items-center gap-0.5" style={{ color: NAVY }}>{actionLabel(c, rec, preview)}<EduIcon name="chevron" size={13} stroke={2.4} /></span>
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function EduRow({ c, rec, preview, onClick, first }) {
+  return (
+    <button type="button" onClick={onClick} className="group w-full text-left px-4 py-3 flex items-center gap-4 hover:bg-[#FAFBFD]" style={first ? null : { borderTop: `1px solid ${LINE}` }}>
+      <div className="w-[132px] sm:w-[168px] shrink-0 rounded-xl overflow-hidden"><Thumb c={c} rec={rec} preview={preview} compact /></div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[10.5px] font-extrabold tracking-[0.08em] text-[#4B6CB7]" style={EN}>{c.code} · {c.kind === "video" ? "VIDEO" : "E-DOCUMENT"}</div>
+        <div className="text-[15px] font-black truncate" style={{ color: INK }}>{c.title}</div>
+        <div className="text-[12.5px] font-semibold truncate mt-0.5" style={{ color: MUTE }}>{c.summary}</div>
+        <div className="text-[12px] font-bold mt-1 inline-flex items-center gap-1" style={{ color: MUTE }}><EduIcon name={rec ? "cert" : "calendar"} size={12} />{rec ? `${ymd(rec.signedAt)} 이수` : preview ? "기사앱에서 이수" : "해마다 · 12월 31일까지"}</div>
+      </div>
+      <span className="hidden sm:inline-flex items-center gap-1 h-9 px-3.5 rounded-lg text-[12.5px] font-black shrink-0" style={rec || preview ? { background: "#F1F4F9", color: NAVY } : { background: NAVY, color: "#fff" }}>{actionLabel(c, rec, preview)}<EduIcon name="chevron" size={13} stroke={2.4} /></span>
+    </button>
+  );
+}
+
+// 위 요약 — 이수율 · 남은 교육 · 남은 학습 시간 · 마감 D-day · 이수증 · 다음 교육
+function EduSummary({ mine, records, wide, mayPledge, onNext, now = new Date() }) {
+  const done = mine.filter((c) => records[c.id]).length;
+  const left = mine.length - done;
+  const pct = mine.length ? (done / mine.length) * 100 : 0;
+  const leftSec = mine.filter((c) => !records[c.id]).reduce((a, c) => a + secOf(c), 0);
+  const end = new Date(now.getFullYear(), 11, 31);
+  const dday = Math.max(0, Math.ceil((end - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000));
+  const next = mine.find((c) => !records[c.id]);
+  const tiles = [["대상 교육", `${mine.length}개`], ["이수 완료", `${done}개`], ["남은 시간", left ? `약 ${fmtMin(leftSec)}` : "0분"], ["마감", `D-${dday}`, "12월 31일"]];
+  return (
+    <div className="relative overflow-hidden rounded-[22px] text-white shadow-[0_14px_32px_rgba(15,26,48,0.25)]" style={{ background: HERO_BG }}>
+      <div className={wide ? "grid grid-cols-[minmax(0,1.15fr)_minmax(0,1.5fr)_minmax(0,1fr)] gap-6 p-6 items-center" : "p-5"}>
+        <div className="flex items-center gap-4 min-w-0">
+          <Ring pct={pct} size={wide ? 92 : 68} stroke={wide ? 9 : 7} />
+          <div className="min-w-0">
+            <div className="text-[11px] font-extrabold tracking-[0.1em] text-[#8FB0F0]" style={EN}>SAFETY TRAINING · {now.getFullYear()}</div>
+            <div className={`${wide ? "text-[24px]" : "text-[19px]"} font-black mt-0.5`}>{left ? `남은 교육 ${left}개` : "올해 교육 이수 완료"}</div>
+            <div className="text-[12.5px] text-white/60 mt-1 break-keep leading-relaxed">{left ? (mayPledge ? "영상 교육은 서약서 서명으로 대신할 수 있어요" : "영상을 끝까지 보고 전자 서명하면 이수돼요") : "이수한 교육을 누르면 이수증을 볼 수 있어요"}</div>
+          </div>
+        </div>
+        <div className={`grid grid-cols-2 ${wide ? "lg:grid-cols-4" : "mt-4"} gap-2`}>
+          {tiles.map(([k, v, sub]) => (
+            <div key={k} className="rounded-xl bg-white/[0.07] border border-white/10 px-3.5 py-3 min-w-0">
+              <div className="text-[11.5px] font-bold text-white/55 whitespace-nowrap">{k}</div>
+              <div className={`${wide ? "text-[19px]" : "text-[16px]"} font-black whitespace-nowrap mt-0.5`} style={EN}>{v}</div>
+              {sub && <div className="text-[11px] font-semibold text-white/45 whitespace-nowrap">{sub}</div>}
+            </div>
+          ))}
+        </div>
+        {next ? (
+          <button type="button" onClick={() => onNext(next)} className={`group text-left rounded-2xl bg-white/[0.08] border border-white/12 p-2.5 flex items-center gap-3 hover:bg-white/[0.12] transition ${wide ? "" : "mt-3 w-full"}`}>
+            <div className="w-[104px] shrink-0 rounded-lg overflow-hidden" style={{ aspectRatio: "16 / 9" }}><img src={eduThumb(next)} alt="" className="w-full h-full object-cover" /></div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] font-bold text-[#8FB0F0]">다음 교육</div>
+              <div className="text-[14px] font-black truncate">{next.title}</div>
+              <div className="text-[12px] font-bold text-white/60 inline-flex items-center gap-1">{next.kind === "video" ? "시청하기" : "서명하기"} · <span style={EN}>{fmtLen(next)}</span><EduIcon name="chevron" size={12} stroke={2.4} /></div>
+            </div>
+          </button>
+        ) : (
+          <div className={`rounded-2xl bg-white/[0.08] border border-white/12 p-4 flex items-center gap-3 ${wide ? "" : "mt-3"}`}>
+            <EduIcon name="cert" size={26} style={{ color: "#8FB0F0" }} />
+            <div className="text-[13px] font-bold text-white/80 break-keep">올해 받을 교육을 모두 마쳤어요. 이수증 {done}장이 보관돼 있어요.</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function EduCatalog({ mine, driverCourses = [], records = {}, wide = false, mayPledge = false, onOpen, onCert, onPeek, now }) {
+  const [aud, setAud] = React.useState("all"); // all | mine | driver
+  const [st, setSt] = React.useState("all");   // all | todo | done
+  const [q, setQ] = React.useState("");
+  const [view, setView] = React.useState(() => { try { return localStorage.getItem(VIEW_KEY) || "card"; } catch { return "card"; } });
+  const setV = (v) => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* 저장 못 해도 화면은 바뀐다 */ } };
+  const items = [...mine.map((c) => ({ c, preview: false })), ...driverCourses.map((c) => ({ c, preview: true }))];
+  const kw = q.trim().toLowerCase();
+  const shown = items.filter(({ c, preview }) => (aud === "all" || (aud === "driver") === preview)
+    && (st === "all" || preview || (st === "done") === !!records[c.id])
+    && (!kw || `${c.title} ${c.summary} ${c.code}`.toLowerCase().includes(kw)));
+  const click = ({ c, preview }) => (preview ? onPeek(c) : records[c.id] ? onCert(records[c.id]) : onOpen(c));
+  const chip = (on) => (on ? { background: NAVY, color: "#fff", borderColor: NAVY } : { background: "#fff", color: SUB, borderColor: "#DCE3EE" });
+  return (
+    <div>
+      <EduSummary mine={mine} records={records} wide={wide} mayPledge={mayPledge} onNext={onOpen} now={now} />
+      <div className="mt-5 flex items-center gap-2 flex-wrap">
+        {driverCourses.length > 0 && [["all", "전체", items.length], ["mine", "직원 교육", mine.length], ["driver", "기사 교육", driverCourses.length]].map(([k, l, n]) => (
+          <button key={k} type="button" onClick={() => setAud(k)} className="h-9 px-3.5 rounded-full border text-[13px] font-black inline-flex items-center gap-1.5" style={chip(aud === k)}>{l}<span className="text-[11.5px] opacity-70" style={EN}>{n}</span></button>
+        ))}
+        {aud !== "driver" && (
+          <div className="inline-flex p-1 rounded-xl" style={{ background: "#EEF1F6" }}>
+            {[["all", "모든 상태"], ["todo", "미이수"], ["done", "이수"]].map(([k, l]) => (
+              <button key={k} type="button" onClick={() => setSt(k)} className="h-7 px-3 rounded-lg text-[12.5px] font-black" style={st === k ? { background: "#fff", color: NAVY, boxShadow: "0 1px 3px rgba(16,24,40,0.12)" } : { color: MUTE }}>{l}</button>
+            ))}
+          </div>
+        )}
+        <div className={`flex items-center gap-2 ${wide ? "ml-auto" : "w-full"}`}>
+          <label className={`h-10 rounded-xl bg-white border border-[#DCE3EE] flex items-center gap-2 px-3 ${wide ? "w-[280px]" : "flex-1"}`}>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="교육 이름으로 찾기" className="flex-1 min-w-0 bg-transparent outline-none text-[13.5px] font-semibold" style={{ color: INK }} />
+            <EduIcon name="search" size={16} style={{ color: MUTE }} />
+          </label>
+          <div className="inline-flex p-1 rounded-xl bg-white border border-[#DCE3EE] shrink-0">
+            {[["card", "grid", "카드형"], ["list", "list", "목록형"]].map(([k, ic, l]) => (
+              <button key={k} type="button" title={l} onClick={() => setV(k)} className="h-8 px-2.5 rounded-lg inline-flex items-center gap-1 text-[12.5px] font-black" style={view === k ? { background: NAVY, color: "#fff" } : { color: MUTE }}>
+                <EduIcon name={ic} size={15} />{wide && l}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      {aud === "driver" && (
+        <div className="mt-3 rounded-2xl px-4 py-3 flex items-start gap-2.5 text-[12.5px] font-semibold leading-relaxed" style={{ background: "#F1F4F9", color: MUTE }}>
+          <EduIcon name="truck" size={16} style={{ color: NAVY, marginTop: 1, flexShrink: 0 }} />
+          <span className="break-keep">기사님은 <b style={{ color: INK }}>기사앱 홈 › 안전교육</b>에서 보고 서명해요. 여기서는 내용만 미리 볼 수 있어요(기록 안 남음). 누가 이수했는지는 <b style={{ color: INK }}>인사관리부 › 근태 › 안전교육</b>에서 [기사]를 고르면 보여요.</span>
+        </div>
+      )}
+      {!shown.length ? (
+        <div className="mt-4 rounded-[18px] bg-white border border-[#E3E8F0] py-14 text-center text-[13.5px] font-bold" style={{ color: MUTE }}>조건에 맞는 교육이 없어요</div>
+      ) : view === "card" ? (
+        <div className={`mt-4 grid gap-4 ${wide ? "grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" : "grid-cols-1 sm:grid-cols-2"}`}>
+          {shown.map((it) => <EduCard key={it.c.id} c={it.c} rec={it.preview ? null : records[it.c.id]} preview={it.preview} onClick={() => click(it)} />)}
+        </div>
+      ) : (
+        <div className="mt-4 rounded-[18px] bg-white border border-[#E3E8F0] overflow-hidden">
+          {shown.map((it, i) => <EduRow key={it.c.id} c={it.c} rec={it.preview ? null : records[it.c.id]} preview={it.preview} first={!i} onClick={() => click(it)} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// wide: PC 넓은 화면 · showDriver: 직원 화면에 기사 교육도 함께(미리 보기)
+export function SafetyEduMine({ user, audience, title = "안전교육", wide = false, showDriver = false }) {
   const aud = audience || (user?.role === "driver" ? "driver" : "staff");
   const courses = coursesFor(aud);
   const [records, setRecords] = React.useState({});
   const [settings, setSettings] = React.useState(null);
   const [open, setOpen] = React.useState(null);
   const [cert, setCert] = React.useState(null);
+  const [peek, setPeek] = React.useState(null);
   const co = String(user?.companyName || "").trim();
   React.useEffect(() => {
     if (!user?.uid || !co) return undefined;
@@ -250,9 +447,10 @@ export function SafetyEduMine({ user, audience, title = "안전교육" }) {
   const pledgeCourse = courses.find((c) => c.kind === "doc") || null;
   return (
     <div>
-      {title && <div className="text-[18px] font-black mb-3" style={{ color: INK }}>{title}</div>}
-      <EduCourseList courses={courses} records={records} onOpen={setOpen} onCert={setCert} mayPledge={mayPledge} />
+      {title && <div className="text-[20px] font-black mb-3" style={{ color: INK }}>{title}</div>}
+      <EduCatalog mine={courses} driverCourses={showDriver && aud === "staff" ? coursesFor("driver") : []} records={records} wide={wide} mayPledge={mayPledge} onOpen={setOpen} onCert={setCert} onPeek={setPeek} />
       {open && <EduPlayer course={open} user={{ ...user, companyName: co }} mayPledge={mayPledge && open.kind === "video"} pledgeCourse={pledgeCourse} onClose={() => setOpen(null)} onDone={(rec) => setRecords((m) => ({ ...m, [rec.courseId]: { ...rec, signedAt: { seconds: Math.floor(Date.now() / 1000) } } }))} />}
+      {peek && <EduPlayer course={peek} user={{ ...user, companyName: co }} preview onClose={() => setPeek(null)} />}
       {cert && <EduCertificate rec={cert} onClose={() => setCert(null)} />}
     </div>
   );
