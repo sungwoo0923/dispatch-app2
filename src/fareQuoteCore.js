@@ -59,15 +59,26 @@ export function rateTons(sheets = []) {
 const CANCEL = /취소/;
 const tonOf = (o) => tonKey(o?.차량톤수) || (/^\d+(\.\d+)?\s*톤/.test(String(o?.차량종류 || "").trim()) ? tonKey(o.차량종류) : "");
 const mode = (arr) => { const m = new Map(); arr.forEach((v) => m.set(v, (m.get(v) || 0) + 1)); return [...m.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0] || 0; };
+// 🔧 2026-11-24 이름은 넉넉하게 맞춘다(오더등록 [운임조회]처럼) — 띄어쓰기 · 기호 무시 + 한쪽이 다른 쪽을 포함(2글자 이상)
+//  상차지를 비우면 거래처(또는 거래처 = 상차지인 기록)로 찾는다 · 같은 톤급 기록이 없으면 톤급을 풀고 찾는다(tonRelaxed)
+const nameHit = (a, b) => { const x = nk(a), y = nk(b); if (!x || !y) return false; return x === y || (Math.min(x.length, y.length) >= 2 && (x.includes(y) || y.includes(x))); };
+const tonNum = (v) => { const m = /(\d+(?:\.\d+)?)/.exec(String(v || "")); return m ? Number(m[1]) : null; };
 export function historyStats(orders = [], q = {}, { today = "" } = {}) {
-  const f = nk(q.상차지명), t = nk(q.하차지명), ton = tonKey(q.톤수), c = nk(q.거래처명);
-  if (!f || !t) return null;
-  const rows = (orders || []).filter((o) => o && nk(o.상차지명) === f && nk(o.하차지명) === t && (!ton || tonOf(o) === ton)
+  const t = nk(q.하차지명), c = nk(q.거래처명), f = nk(q.상차지명);
+  if (!t || (!f && !c)) return null;
+  const tq = tonNum(q.톤수);
+  const base = (orders || []).filter((o) => o && nameHit(o.하차지명, q.하차지명)
+    && (f ? nameHit(o.상차지명, q.상차지명) : (nameHit(o.거래처명, q.거래처명) || nameHit(o.상차지명, q.거래처명)))
     && !CANCEL.test(String(o.배차상태 || "")) && !CANCEL.test(String(o.상태 || "")) && num(o.청구운임) > 0
     && (!today || String(o.상차일 || "").slice(0, 10) < today));
-  // 같은 거래처 기록이 있으면 그것만
+  const sameTon = tq == null ? base : base.filter((o) => { const n = tonNum(o.차량톤수) ?? tonNum(o.차량종류); return n != null && Math.abs(n - tq) < 0.01; });
+  const tonRelaxed = tq != null && !sameTon.length && base.length > 0;
+  const rows = tonRelaxed ? base : sameTon;
+  // 같은 거래처 기록이 있으면 그것만 · 이름이 똑같은 기록이 있으면 그것 먼저
   const mine = c ? rows.filter((o) => nk(o.거래처명) === c) : [];
-  const list = (mine.length ? mine : rows).sort((a, b) => String(b.상차일 || "").localeCompare(String(a.상차일 || "")));
+  const pool = mine.length ? mine : rows;
+  const exact = pool.filter((o) => nk(o.하차지명) === t && (!f || nk(o.상차지명) === f));
+  const list = (exact.length ? exact : pool).sort((a, b) => String(b.상차일 || "").localeCompare(String(a.상차일 || "")));
   if (!list.length) return { count: 0, recent: [] };
   // 부대비용을 뺀 기본 운임(특수운임으로 더해진 금액 · 지게차 청구분을 되돌린다)
   const baseSale = (o) => num(o.청구운임) - num(o.특수청구추가) - num(o.지게차청구추가);
@@ -84,7 +95,7 @@ export function historyStats(orders = [], q = {}, { today = "" } = {}) {
   }
   const sd = sb && buys.length > 1 ? Math.sqrt(buys.reduce((s, v) => s + (v - sb.avg) ** 2, 0) / buys.length) : 0;
   return {
-    count: list.length, sameClient: mine.length > 0, sale: stat(sales), buy: sb, bins, spread: sb && sb.avg ? Math.round((sd / sb.avg) * 100) : 0,
+    count: list.length, sameClient: mine.length > 0, tonRelaxed, fuzzy: !exact.length, sale: stat(sales), buy: sb, bins, spread: sb && sb.avg ? Math.round((sd / sb.avg) * 100) : 0,
     recent: list.slice(0, 3).map((o) => ({ date: String(o.상차일 || "").slice(5, 10).replace("-", "/"), way: String(o.배차방식 || "").trim(), car: String(o.차량번호 || "").trim(), sale: num(o.청구운임), buy: num(o.기사운임) })),
   };
 }
@@ -113,7 +124,7 @@ export function quoteFare({ q = {}, sheets = [], presets = [], hist = null, toda
   else if (hist?.sale) base = { sale: hist.sale.mode, buy: hist.buy?.mode || 0, src: "history", label: `자사 실거래 ${hist.count}건 최빈값`, buySrc: hist.buy ? "history" : "none" };
   const stops = Math.max(0, Math.min(9, Number(q.경유) || 0));
   const order = {
-    거래처명: q.거래처명 || "", 상차지명: q.상차지명 || "", 하차지명: q.하차지명 || "", ...arrivalDates(q.도착, today),
+    거래처명: q.거래처명 || "", 상차지명: q.상차지명 || q.거래처명 || "", 하차지명: q.하차지명 || "", ...arrivalDates(q.도착, today), // 상차지를 비우면 거래처 = 상차지
     경유하차목록: Array.from({ length: stops }, (_, i) => ({ 업체명: `경유${i + 1}` })), 청구운임: String(base.sale), 기사운임: String(base.buy),
   };
   const plan = planRoutePreset(order, presets);
