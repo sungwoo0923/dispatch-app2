@@ -27,8 +27,8 @@ export function SpecialFareTag({ row, size = "md", className = "" }) {
     <span
       data-testid="special-fare-tag"
       title={`특수운임이 붙어 저장된 운임이에요\n${specialLines(row).join("\n")}`}
-      className={`inline-flex items-center gap-1 ${sm ? "h-[18px] px-1.5 text-[10px]" : "h-[22px] px-2 text-[11px]"} rounded-md bg-[#1B2B4B] text-[#E9C46A] font-black whitespace-nowrap tabular-nums align-middle ${className}`}>
-      <span className={`${sm ? "w-1 h-1" : "w-1.5 h-1.5"} rounded-full bg-[#E9C46A] shrink-0`} />
+      className={`inline-flex items-center gap-1 ${sm ? "h-[18px] px-1.5 text-[10px]" : "h-[22px] px-2 text-[11px]"} rounded-md bg-[#0F1A30] text-[#D7BC82] font-black whitespace-nowrap tabular-nums align-middle ${className}`}>
+      <span className={`${sm ? "w-1 h-1" : "w-1.5 h-1.5"} rounded-full bg-[#D7BC82] shrink-0`} />
       특수운임<span className="text-[#F3E3BC]/90 font-extrabold">{tagText(row)}</span>
     </span>
   );
@@ -37,8 +37,8 @@ export function SpecialFareTag({ row, size = "md", className = "" }) {
 export function SpecialFareLine({ row, className = "" }) {
   if (!row || !hasSpecial(row)) return null;
   return (
-    <div className={`flex items-start gap-1.5 text-[11.5px] leading-snug rounded-md px-2 py-1 bg-[#FFF8EC] border border-[#F3D9A4] text-[#7A4B00] ${className}`} title={specialLines(row).join("\n")}>
-      <span className="font-black shrink-0">특수운임</span>
+    <div className={`flex items-start gap-1.5 text-[11.5px] leading-snug rounded-md px-2 py-1 bg-[#0F1A30] border border-[#0F1A30] text-[#F3E3BC] ${className}`} title={specialLines(row).join("\n")}>
+      <span className="font-black shrink-0 text-[#D7BC82]">특수운임</span>
       <span className="font-semibold min-w-0 break-keep">{specialLines(row).join(" · ")}</span>
     </div>
   );

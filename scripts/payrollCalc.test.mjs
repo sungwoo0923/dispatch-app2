@@ -240,4 +240,25 @@ t("올해 누계 — 사람별 합계, 다른 해는 빼고", () => {
   assert.equal(y.length, 1); assert.equal(y[0].months, 2); assert.equal(y[0].gross, 200); assert.equal(y[0].tax, 10); assert.equal(y[0].ins, 3);
 });
 
+t("4대보험 직접 정하기 — 이번 달 금액 > 직원 고정 금액 > 직원 요율 > 회사 요율(2026-11-24 업체 요청)", () => {
+  const emp = { payType: "monthly", baseMonthly: 3000000 };
+  const D = (r, k) => r.deductions.find((d) => d.key === k);
+  const base = calcPayslip(emp, {}, presetFor(2026));
+  assert.equal(D(base, "np").amount, 142500); assert.equal(base.insModes.np, "auto");
+  // 직원 요율 %: 국민연금 4.5% · 건강보험 3.5% · 장기요양 12.95% · 고용보험 0.8%
+  const r1 = calcPayslip({ ...emp, npRate: 4.5, hiRate: 3.5, ltcRate: 12.95, eiRate: 0.8 }, {}, presetFor(2026));
+  assert.equal(D(r1, "np").amount, 135000); assert.equal(D(r1, "hi").amount, 105000); assert.equal(D(r1, "ltc").amount, 13590); assert.equal(D(r1, "ei").amount, 24000);
+  assert.equal(r1.insModes.hi, "rate"); assert.ok(/직원별 요율/.test(D(r1, "hi").calc));
+  // 직원 고정 금액(공단 고지 금액)이 요율보다 먼저
+  const r2 = calcPayslip({ ...emp, npRate: 4.5, npFixed: 150000, hiFixed: "120000" }, {}, presetFor(2026));
+  assert.equal(D(r2, "np").amount, 150000); assert.equal(D(r2, "hi").amount, 120000); assert.equal(r2.insModes.np, "fixed");
+  assert.equal(D(r2, "ltc").amount, Math.floor(120000 * 13.14 / 100 / 10) * 10, "장기요양은 고정한 건강보험료 기준");
+  // 이번 달 직접 입력이 가장 먼저 · 0 도 입력값
+  const r3 = calcPayslip({ ...emp, npFixed: 150000 }, { npOverride: "160000", eiOverride: 0 }, presetFor(2026));
+  assert.equal(D(r3, "np").amount, 160000); assert.equal(D(r3, "ei").amount, 0); assert.equal(r3.insModes.ei, "manual");
+  // 적용 제외가 가장 먼저 · 회사 부담은 회사 요율 그대로
+  const r4 = calcPayslip({ ...emp, npExempt: true, npFixed: 150000 }, { npOverride: 1 }, presetFor(2026));
+  assert.equal(D(r4, "np").amount, 0); assert.equal(r1.employer.np, base.employer.np);
+});
+
 console.log(`\n급여 계산 테스트 ${n}개 통과`);

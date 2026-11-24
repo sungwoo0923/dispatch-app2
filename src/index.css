@@ -523,3 +523,10 @@ table[data-kp-st] > thead > tr:last-child > th { box-shadow: inset 0 -1px 0 rgba
   [data-kp-st-wrap] { max-height: none !important; overflow: visible !important; }
   table[data-kp-st] > thead { position: static !important; }
 }
+
+/* 🎨 2026-11-24 노란 바탕 없애기(사용자 요청: "노란 바탕은 없애고 관리자센터처럼 황금색") — 프로그램 전체의 연노랑 · 주황 계열을
+   관리자센터 황금색(#D7BC82 · #F3E3BC) 톤으로 바꾼다. 화면 코드는 그대로 두고 여기서 한 번에(새로 쓰는 화면도 같이 바뀜) */
+.bg-amber-50, .bg-yellow-50, .bg-\[\#FFF8EC\], .bg-\[\#FFFAEB\], .bg-\[\#FFFBEB\], .bg-\[\#FFF3D6\] { background-color: #FAF7F0 !important; }
+.bg-amber-100, .bg-yellow-100, .bg-yellow-200 { background-color: #F3ECDB !important; }
+.border-amber-100, .border-amber-200, .border-amber-300, .border-\[\#F3D9A4\] { border-color: #E6D8B8 !important; }
+.text-amber-600, .text-amber-700, .text-amber-800, .text-yellow-700, .text-yellow-800, .text-\[\#7A4B00\] { color: #8A6A2A !important; }
