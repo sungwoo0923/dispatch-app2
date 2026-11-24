@@ -1,18 +1,20 @@
 // ======================= src/brand.jsx =======================
 // 🔷 LogisWeb 브랜드 공용 부품 — 프로그램(PC·모바일)·첫 화면·관리자센터 어디서든 이것만 쓴다
 //  🔷 2026-11-15 로고 색 2차 — 바탕에 맞춰 두 벌(그림은 tools/brand/make-logo-assets.py 가 만든다)
-//    어두운 바탕(기본) : 마크 /brand/logisweb-mark.png · 글자 /brand/logisweb-wordmark.png (LOGIS 흰색 · WEB #7A93C4) — 투명 바탕
-//    밝은 바탕(light)  : 마크 /brand/logisweb-mark-onlight.png · 글자 /brand/logisweb-wordmark-onlight.png (LOGIS #14213D · WEB #3A5590)
+//    어두운 바탕(기본) : 마크 /brand/logisweb-mark.png(새 LW 로고를 밝게) · 글자 /brand/logisweb-wordmark.png (LOGIS 흰색 · WEB #7A93C4) — 투명 바탕
+//    밝은 바탕(light)  : 마크 /brand/logisweb-mark-onlight.png(원본 색) · 글자 /brand/logisweb-wordmark-onlight.png (LOGIS #14213D · WEB #3A5590)
 //    → 밝은 화면에서 남색 칩을 따로 깔지 않는다. 예전 chip 옵션은 "밝은 바탕용 로고"로 바꿔 보여 준다.
 //  · BRAND: 이름 글자(문장 속에 쓰는 이름)
 //  · <LogisMark size light> : LW 마크(투명 바탕)
 //  · <LogisWordmark height tag light> : 글자 로고 LOGISWEB
+//  🔷 2026-11-24 새 LW 로고(사용자 디자인) — 가로로 긴 그림(약 2.13:1). size 는 예전 네모 마크 한 변 그대로 받고,
+//    실제 칸은 높이 size×0.64 · 가로는 그림 비율대로(markBox). 밝은 바탕 = 원본 색 · 어두운 바탕 = 같은 모양을 밝게
 //  🎨 2026-11-15 브랜드 디자인(관리자센터) — 설정이 있으면 그 색 · 모양으로 SVG 를 그린다(src/brandConfig.js · brandRender.js)
 //    spot="topnav" 처럼 자리 이름을 주면 그 자리 바탕(관리자가 바꾼 바탕 포함)에 맞춰 어두운/밝은 로고를 고른다
 import React from "react";
 import { WORD } from "./brandAssets";
 import { useBrand } from "./brandConfig";
-import { markSvg, wordSvg, wordRatio, spotTone, resolve } from "./brandRender";
+import { markSvg, wordSvg, wordRatio, spotTone, resolve, markBox, DEFAULT_MARK } from "./brandRender";
 
 export const BRAND = "LogisWeb";
 export const BRAND_UPPER = "LOGISWEB";
@@ -38,11 +40,12 @@ export function LogisMark({ size = 40, light = false, spot = null, className = "
   const r = useBrand();
   const tone = toneOf(r, spot, light);
   const html = React.useMemo(() => (r ? markSvg(r, tone, size) : ""), [r, tone, size]);
-  if (r) return <span role="img" aria-label={title} className={className} style={{ display: "block", flexShrink: 0, width: size, height: size, lineHeight: 0, ...style }} dangerouslySetInnerHTML={{ __html: html }} />;
+  const box = markBox(r ? r.mark : DEFAULT_MARK, size);
+  if (r) return <span role="img" aria-label={title} className={className} style={{ display: "block", flexShrink: 0, width: box.w, height: box.h, lineHeight: 0, ...style }} dangerouslySetInnerHTML={{ __html: html }} />;
   light = tone === "light";
   return (
-    <img src={light ? MARK_LIGHT_SRC : MARK_SRC} width={size} height={size} alt={title} draggable={false} className={className}
-      style={{ display: "block", flexShrink: 0, width: size, height: size, objectFit: "contain", ...style }} />
+    <img src={light ? MARK_LIGHT_SRC : MARK_SRC} width={box.w} height={box.h} alt={title} draggable={false} className={className}
+      style={{ display: "block", flexShrink: 0, width: box.w, height: box.h, objectFit: "contain", ...style }} />
   );
 }
 

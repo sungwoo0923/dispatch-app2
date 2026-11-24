@@ -37,7 +37,7 @@ export function CardView({ c = {} }) {
           <div style={{ height: cover ? 360 : 560, backgroundImage: `url("${imgOf(c.img)}")`, backgroundSize: c.zoom && c.zoom > 1 ? `${Math.round(c.zoom * 100)}% auto` : "cover", backgroundPosition: c.crop || "50% 0%", backgroundRepeat: "no-repeat", backgroundColor: "#fff" }} />
         </div>)}
       <div style={{ position: "absolute", left: 80, right: 80, bottom: 60, display: "flex", alignItems: "center", gap: 18, fontSize: 32, color: "#D3DFF5" }}>
-        <img src="/brand/logisweb-mark.svg" alt="" style={{ width: 64, height: 64 }} />
+        <img src="/brand/logisweb-mark.svg" alt="" style={{ width: 87, height: 41 }} />
         <span style={{ fontSize: 44, fontWeight: 900, color: "#fff", letterSpacing: "-0.04em" }}>Logis<span style={{ color: "#4F8BFF" }}>Web</span></span>
         <span>운송사 통합 TMS</span><span style={{ marginLeft: "auto", fontWeight: 700 }}>logisweb.co.kr</span>
       </div>

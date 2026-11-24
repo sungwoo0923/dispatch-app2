@@ -9,6 +9,7 @@ import { getBrandConfig, useBrand, saveBrand, resetBrand, listBrandHistory, MAX_
 import {
   TONES, SPOTS, DEFAULT_TILE, sanitizeConfig, resolve, markSvg, wordSvg, iconSvg, spotBg, spotTone, toneBg,
   autoFitStyles, importFile, svgToPng, isHex, assetBytes,
+  markBox,
 } from "./brandRender";
 
 const MONO = "'JetBrains Mono','SF Mono',ui-monospace,Menlo,monospace";
@@ -189,8 +190,8 @@ export default function BrandStudio() {
     finally { setBusy(""); }
   };
   const openHist = async () => { setHist([]); try { setHist(await listBrandHistory()); } catch (e) { setHist(null); kpAlert("기록을 불러오지 못했어요: " + (e?.message || e)); } };
-  const download = async (name, svg, px) => {
-    try { const url = await svgToPng(svg, px); const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+  const download = async (name, svg, px, ph = px) => {
+    try { const url = await svgToPng(svg, Math.round(px), Math.round(ph)); const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
     catch { kpAlert("그림 파일을 만들지 못했어요."); }
   };
 
@@ -204,7 +205,7 @@ export default function BrandStudio() {
   const rFocus = { ...r, st: { mark: { ...r.st.mark, [tone]: focusStyles("mark") }, word: { ...r.st.word, [tone]: focusStyles("word") } } };
   const stageBg = tone === "icon" ? null : tone === "light" ? "#F2F4F8" : "linear-gradient(120deg,#0F1A30 0%,#16243F 45%,#1F3560 100%)";
 
-  const partLabel = (p) => ({ path: "도형", line: "선", dot: "점", svg: "도형 묶음", mask: "그림" }[p.type] || "");
+  const partLabel = (p) => ({ art: "완성 그림 · 색 고정", path: "도형", line: "선", dot: "점", svg: "도형 묶음", mask: "그림" }[p.type] || "");
 
   return (
     <div className="flex flex-col gap-4 pb-24">
@@ -260,12 +261,19 @@ export default function BrandStudio() {
                 return (
                   <div key={p.id} className={`rounded-xl border ${isOpen ? "border-[#2D4C82]" : "border-[#E3E8F0]"} overflow-hidden`} onMouseEnter={() => setHover(p.id)} onMouseLeave={() => setHover(null)}>
                     <button type="button" onClick={() => setOpen(isOpen ? null : p.id)} className="w-full flex items-center gap-2.5 px-3 h-12 text-left hover:bg-[#F7F9FC]">
-                      <span className="w-6 h-6 rounded-md border border-black/10 shrink-0" style={{ background: isHex(s.c2) ? `linear-gradient(135deg,${s.c1},${s.c2})` : s.c1 || "#ccc" }} />
+                      <span className="w-6 h-6 rounded-md border border-black/10 shrink-0" style={{ background: p.type === "art" ? (s.pal === "dark" ? "linear-gradient(135deg,#FFFFFF,#5F7DBE)" : "linear-gradient(135deg,#6A88C4,#0A1A3C)") : isHex(s.c2) ? `linear-gradient(135deg,${s.c1},${s.c2})` : s.c1 || "#ccc" }} />
                       <span className={`text-[14px] font-black ${s.hide ? "text-[#AAB4C5] line-through" : "text-[#0F1A30]"}`}>{p.name}</span>
                       <span className="text-[11.5px] text-[#94A3B8]">{partLabel(p)}</span>
                       <span className="ml-auto text-[#94A3B8] text-[12px]">{isOpen ? "접기" : "고치기"}</span>
                     </button>
-                    {isOpen && (
+                    {isOpen && p.type === "art" && (
+                      <div className="px-3 pb-3 pt-1 flex flex-col gap-2.5 border-t border-[#EEF1F6]">
+                        <p className="text-[12.5px] text-[#5B6B85] leading-relaxed">새 LW 로고는 정해진 색 그대로 써요. 밝은 바탕엔 원래 색, 어두운 바탕 · 앱 아이콘엔 같은 모양을 밝게 바꾼 로고가 나와요. 다른 그림으로 바꾸려면 1번에서 그림을 올리면 돼요.</p>
+                        <label className="flex items-center gap-2 text-[13px] font-bold text-[#0F1A30]"><input type="checkbox" checked={!s.hide} onChange={(e) => setPart(p.id, "hide", !e.target.checked)} className="w-4 h-4 accent-[#2D4C82]" />이 부분 보이기</label>
+                        <Slider label="투명도" value={s.op ?? 1} min={0.1} max={1} step={0.05} onChange={(v) => setPart(p.id, "op", v >= 1 ? null : v)} />
+                      </div>
+                    )}
+                    {isOpen && p.type !== "art" && (
                       <div className="px-3 pb-3 pt-1 flex flex-col gap-2.5 border-t border-[#EEF1F6]">
                         <label className="flex items-center gap-2 text-[13px] font-bold text-[#0F1A30]"><input type="checkbox" checked={!s.hide} onChange={(e) => setPart(p.id, "hide", !e.target.checked)} className="w-4 h-4 accent-[#2D4C82]" />이 부분 보이기</label>
                         <ColorField label={p.type === "line" ? "선 색" : "색"} value={s.c1} onChange={(v) => setPart(p.id, "c1", v)} />
@@ -358,8 +366,8 @@ export default function BrandStudio() {
               <div className="ml-auto flex flex-wrap gap-2">
                 <button type="button" className={btnGhost} onClick={() => download("logisweb-icon-512.png", iconSvg(r, 512), 512)}>아이콘 512</button>
                 <button type="button" className={btnGhost} onClick={() => download("logisweb-icon-maskable-512.png", iconSvg(r, 512, { scale: 0.74 }), 512)}>안드로이드용 512</button>
-                <button type="button" className={btnGhost} onClick={() => download("logisweb-mark-dark.png", markSvg(r, "dark", 1024), 1024)}>마크(어두운 바탕용)</button>
-                <button type="button" className={btnGhost} onClick={() => download("logisweb-mark-light.png", markSvg(r, "light", 1024), 1024)}>마크(밝은 바탕용)</button>
+                <button type="button" className={btnGhost} onClick={() => { const b = markBox(r.mark, 1024); download("logisweb-mark-dark.png", markSvg(r, "dark", 1024), b.w, b.h); }}>마크(어두운 바탕용)</button>
+                <button type="button" className={btnGhost} onClick={() => { const b = markBox(r.mark, 1024); download("logisweb-mark-light.png", markSvg(r, "light", 1024), b.w, b.h); }}>마크(밝은 바탕용)</button>
               </div>
             </div>
           </section>
