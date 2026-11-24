@@ -253,8 +253,12 @@ export function FareTypeSelect({ value, onChange, pct, rules = [], className = "
     left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
     setPos({ left, top: up ? r.top - mh - 6 : r.bottom + 6, width: w, up });
   }, [opts.length, align, canAdd, adding]);
+  // 📱 2026-11-24 휴대폰 — 손가락 누름 · 화면 밀림(scroll)으로 닫힌 바로 뒤 click 이 목록을 다시 여는 것을 막는다("다시 눌러도 안 닫힘")
+  const closedAt = React.useRef(0);
+  const shut = () => { closedAt.current = Date.now(); setOpen(false); };
   const openIt = () => {
     if (disabled) return;
+    if (Date.now() - closedAt.current < 400) return;
     place();
     setAct(Math.max(0, opts.findIndex((o) => String(o.name) === String(value || ""))));
     setAdding(false); setAddErr(""); setEditRule(null);
@@ -263,13 +267,14 @@ export function FareTypeSelect({ value, onChange, pct, rules = [], className = "
   const pick = (o) => { setOpen(false); onChange?.(o.none ? "" : o.name); setTimeout(() => btn.current?.focus(), 0); };
   React.useEffect(() => {
     if (!open) return undefined;
-    const down = (e) => { if (btn.current?.contains(e.target) || menu.current?.contains(e.target)) return; setOpen(false); };
+    const down = (e) => { if (btn.current?.contains(e.target) || menu.current?.contains(e.target)) return; shut(); };
     // 새 운임구분 입력 중(모바일 키보드가 올라오며 화면이 줄거나 스크롤됨)엔 닫지 않고 자리만 다시 잡는다
-    const re = (e) => { if (menu.current?.contains(e.target)) return; if (menu.current?.contains(document.activeElement)) { place(); return; } setOpen(false); };
+    const re = (e) => { if (menu.current?.contains(e.target)) return; if (menu.current?.contains(document.activeElement)) { place(); return; } shut(); };
     document.addEventListener("mousedown", down, true);
+    document.addEventListener("touchstart", down, true);
     window.addEventListener("scroll", re, true);
     window.addEventListener("resize", re);
-    return () => { document.removeEventListener("mousedown", down, true); window.removeEventListener("scroll", re, true); window.removeEventListener("resize", re); };
+    return () => { document.removeEventListener("mousedown", down, true); document.removeEventListener("touchstart", down, true); window.removeEventListener("scroll", re, true); window.removeEventListener("resize", re); };
   }, [open, place]);
   const onKey = (e) => {
     if (!open) { if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); openIt(); } return; }
@@ -314,7 +319,9 @@ export function FareTypeSelect({ value, onChange, pct, rules = [], className = "
       h("span", { className: "inline-flex items-baseline gap-1.5 whitespace-nowrap" },
         h("span", { className: "text-[14px] font-black text-[#0F1A30]" }, "운임구분"),
         h("span", { className: "text-[10.5px] font-extrabold tracking-[0.12em] text-[#4B6CB7]" }, "FARE TYPE")),
-      h("span", { className: "text-[12px] font-bold text-[#8E9BB2]" }, "↑↓ · Enter")),
+      (() => { try { return window.matchMedia("(pointer: coarse)").matches; } catch { return false; } })() // 📱 손가락 화면은 [닫기]
+        ? h("button", { type: "button", onClick: () => { setOpen(false); }, className: "h-8 px-3 rounded-[9px] border border-[#DCE3EE] bg-white text-[13.5px] font-black text-[#3A4A66]" }, "닫기")
+        : h("span", { className: "text-[12px] font-bold text-[#8E9BB2]" }, "↑↓ · Enter")),
     h("div", { className: "max-h-[272px] overflow-y-auto py-1" },
       ...opts.map((o, i) => {
         const sel = String(o.name) === String(value || "");

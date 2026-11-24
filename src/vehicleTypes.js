@@ -139,6 +139,7 @@ const chev = (open) => h("svg", { width: 10, height: 10, viewBox: "0 0 24 24", f
 
 // 🚚 차량종류 선택 — 버튼(원래 칸 모양 그대로 className/style) + 떠 있는 목록(검색 · ↑↓ Enter · ＋ 차량종류 추가)
 //  onChange(값) — 값은 글자. 빈 글자 = 선택 안 함
+const isCoarse = () => { try { return window.matchMedia("(pointer: coarse)").matches; } catch { return false; } };
 export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company, className = "", style, disabled = false, placeholder = "선택", noneLabel, allowAdd = true, id, align = "left", buttonProps = {}, onTon, ton = "" }) {
   // 🏷 onTon(톤수) · ton(지금 톤수): JY로지스틱스에서 [톤수] 쪽을 고르면 차량종류가 아니라 톤수 칸에 저장한다(이 둘을 넘긴 화면에서만 톤수 고르기가 보인다)
   const vt = useVehicleTypes(company, base);
@@ -176,8 +177,10 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
     left = Math.max(8, Math.min(left, window.innerWidth - w - 8));
     setPos(up ? { left, bottom: window.innerHeight - r.top + 6, width: w, maxH: above } : { left, top: r.bottom + 6, width: w, maxH: below });
   }, [align]);
+  const closedAt = React.useRef(0); // 📱 2026-11-24 밀림 · 누름으로 닫힌 바로 뒤 click 이 다시 여는 것 막기
   const openIt = () => {
     if (disabled) return;
+    if (Date.now() - closedAt.current < 400) return;
     place(); setQ(""); setAdding(false); setErr("");
     if (jy) setMode(!cur ? "ton" : "type"); // 차량종류가 비어 있으면 톤수 쪽부터
     const i = Math.max(0, [{ v: "" }, ...(cur && !list.includes(cur) ? [{ v: cur }] : []), ...list.map((v) => ({ v }))].findIndex((o) => o.v === cur));
@@ -204,8 +207,8 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
   React.useEffect(() => { if (act >= opts.length) setAct(Math.max(0, opts.length - 1)); }, [opts.length]); // eslint-disable-line react-hooks/exhaustive-deps
   React.useEffect(() => {
     if (!open) return undefined;
-    const down = (e) => { if (btn.current?.contains(e.target) || menu.current?.contains(e.target)) return; close(false); };
-    const re = (e) => { if (menu.current?.contains(e.target)) return; close(false); };
+    const down = (e) => { if (btn.current?.contains(e.target) || menu.current?.contains(e.target)) return; closedAt.current = Date.now(); close(false); };
+    const re = (e) => { if (menu.current?.contains(e.target)) return; closedAt.current = Date.now(); close(false); };
     document.addEventListener("mousedown", down, true);
     document.addEventListener("touchstart", down, true);
     window.addEventListener("scroll", re, true);
@@ -287,7 +290,10 @@ export function VehicleTypePicker({ value, onChange, base = VT_DEFAULTS, company
       h("span", { style: { display: "inline-flex", alignItems: "baseline", gap: 6, whiteSpace: "nowrap" } },
         h("span", { style: { fontSize: 14, fontWeight: 900, color: "#0F1A30" } }, "차량종류"),
         h("span", { style: { fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10.5, fontWeight: 800, letterSpacing: "0.1em", color: "#4B6CB7" } }, "VEHICLE TYPE")),
-      h("span", { style: { fontSize: 12, fontWeight: 700, color: "#8E9BB2", whiteSpace: "nowrap" } }, "↑↓ · Enter")),
+      // 📱 2026-11-24 손가락 화면은 [닫기](예전엔 닫는 방법이 안 보였다) · 마우스는 키보드 안내
+      isCoarse()
+        ? h("button", { type: "button", onClick: () => close(false), style: { height: 32, padding: "0 12px", borderRadius: 9, border: "1px solid #DCE3EE", background: "#fff", color: "#3A4A66", fontSize: 13.5, fontWeight: 900, cursor: "pointer" } }, "닫기")
+        : h("span", { style: { fontSize: 12, fontWeight: 700, color: "#8E9BB2", whiteSpace: "nowrap" } }, "↑↓ · Enter")),
     h("input", {
       ref: searchRef, value: q, placeholder: "찾기 (예: 냉동)", autoComplete: "off",
       onChange: (e) => { setQ(e.target.value); setAct(0); }, onKeyDown: onSearchKey,

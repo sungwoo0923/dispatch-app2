@@ -465,3 +465,6 @@ body:has(.kp-m input:focus, .kp-m textarea:focus) .kp-m-toast { display: none; }
 }
 .kp-m-form .kp-m-form-card [class~="border-0"][class~="border-b-2"][class~="border-red-500"] { border-color: #D92D20 !important; }
 .kp-m-form .kp-m-form-card .space-y-1 > :not([hidden]) ~ :not([hidden]) { margin-top: 8px; }
+
+/* ⌨️ 2026-11-24 자판이 올라와 있으면 입력 화면 아래에 자판 높이만큼 여백 — 맨 아래 칸도 위로 올려 드롭다운이 보이게(src/mobile/keyboardLift.js) */
+.kp-m-form { padding-bottom: calc(var(--kp-kb, 0px) + 0.75rem) !important; }
