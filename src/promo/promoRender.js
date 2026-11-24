@@ -183,7 +183,7 @@ function drawScene(ctx, P, s, lt, sd, A, W, H) {
   if (L === "logo") {
     glow(ctx, cx, H * 0.44, 700 * u, ac, 0.45);
     const p = ap(lt, 0.05, 0.7); const ls = 300 * u;
-    if (A.logo) { ctx.save(); ctx.globalAlpha = p; ctx.translate(cx, H * 0.4); const sc = 1.25 - 0.25 * p + lt * 0.02; ctx.scale(sc, sc); ctx.drawImage(A.logo, -ls / 2, -ls / 2, ls, ls); ctx.restore(); }
+    if (A.logo) { ctx.save(); ctx.globalAlpha = p; ctx.translate(cx, H * 0.4); const sc = 1.25 - 0.25 * p + lt * 0.02; ctx.scale(sc, sc); drawLogo(ctx, A.logo, 0, 0, ls); ctx.restore(); }
     const q = ap(lt, 0.45, 0.6); wordmark(ctx, cx, H * 0.4 + ls * 0.55 + (1 - q) * 40 * u, 150 * u, th, ac, q);
     if (s.sub) { const r = ap(lt, 0.8); rich(ctx, s.sub, cx, H * 0.4 + ls * 0.55 + 190 * u, { size: 42 * u, weight: 600, maxW: W * 0.8, color: th.sub, hl: ac, alpha: r }); }
     return;
@@ -195,7 +195,7 @@ function drawScene(ctx, P, s, lt, sd, A, W, H) {
     glow(ctx, cx, y + ht + ls, 640 * u, ac, 0.4);
     if (s.title) { const p = ap(lt, 0.05); rich(ctx, s.title, cx, y + (1 - p) * 40 * u, { size: titleSize * 0.74, maxW, color: th.ink, hl: ac, alpha: p, weight: 900 }); y += ht; }
     const p1 = ap(lt, s.title ? 0.35 : 0.05, 0.5);
-    if (A.logo) { ctx.save(); ctx.globalAlpha = p1; ctx.translate(cx, y + ls / 2); const sc = 0.6 + 0.4 * p1 + Math.sin(p1 * Math.PI) * 0.1; ctx.scale(sc, sc); ctx.drawImage(A.logo, -ls / 2, -ls / 2, ls, ls); ctx.restore(); }
+    if (A.logo) { ctx.save(); ctx.globalAlpha = p1; ctx.translate(cx, y + ls / 2); const sc = 0.6 + 0.4 * p1 + Math.sin(p1 * Math.PI) * 0.1; ctx.scale(sc, sc); drawLogo(ctx, A.logo, 0, 0, ls); ctx.restore(); }
     y += ls + 10 * u; const p2 = ap(lt, (s.title ? 0.35 : 0.05) + 0.2); y += wordmark(ctx, cx, y + (1 - p2) * 30 * u, (wide ? 120 : 125) * u, th, ac, p2);
     if (s.sub) { const p3 = ap(lt, 0.7); rich(ctx, s.sub, cx, y + 6 * u, { size: (wide ? 36 : 44) * u, weight: 600, maxW, color: th.sub, hl: ac, alpha: p3 }); }
     y += 80 * u;
@@ -351,6 +351,12 @@ function drawCaption(ctx, P, s, sc, t, W, H) {
   ctx.restore();
 }
 
+// 🔷 2026-11-24 새 LW 로고는 가로로 긴 그림 — 네모 칸(ls)에 비율 그대로(가로 1.3배까지) 가운데 맞춰 그린다
+function drawLogo(ctx, img, cx, cy, ls) {
+  const r = (img.naturalWidth || img.width || 1) / (img.naturalHeight || img.height || 1);
+  const w = r >= 1 ? Math.min(ls * 1.3, ls * 0.64 * r) : ls * r, h = w / r;
+  ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
+}
 export function renderFrame(ctx, P, tl, t, A) {
   const W = ctx.canvas.width, H = ctx.canvas.height; const u = Math.min(W, H) / 1080;
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.textAlign = "left";
@@ -368,7 +374,7 @@ export function renderFrame(ctx, P, tl, t, A) {
     drawCaption(ctx, P, s, sc, t, W, H);
     if (tr === "flash" && lt < 0.4) { ctx.fillStyle = `rgba(255,255,255,${(1 - lt / 0.4) * 0.95})`; ctx.fillRect(0, 0, W, H); }
   }
-  if (P.watermark && A.logo) { ctx.globalAlpha = 0.85; const s = 54 * u; ctx.drawImage(A.logo, 40 * u, 40 * u, s, s); wordmark(ctx, 40 * u + s + 12 * u + 80 * u, 46 * u, 36 * u, THEME[P.theme] || THEME.navy, P.accent || "#4F8BFF", 0.85); ctx.globalAlpha = 1; }
+  if (P.watermark && A.logo) { ctx.globalAlpha = 0.85; const s = 54 * u; drawLogo(ctx, A.logo, 40 * u + s / 2, 40 * u + s / 2, s); wordmark(ctx, 40 * u + s + 12 * u + 80 * u, 46 * u, 36 * u, THEME[P.theme] || THEME.navy, P.accent || "#4F8BFF", 0.85); ctx.globalAlpha = 1; }
   // 화면 위 · 아래 안전 영역 표시(편집할 때만)
   if (A.guides && W < H) { ctx.setLineDash([12, 10]); ctx.strokeStyle = "rgba(255,200,0,.5)"; ctx.lineWidth = 3; ctx.strokeRect(40 * u, 160 * u, W - 80 * u - 120 * u, H - 160 * u - 420 * u); ctx.setLineDash([]); }
   ctx.restore();

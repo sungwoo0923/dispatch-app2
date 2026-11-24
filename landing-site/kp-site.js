@@ -173,7 +173,7 @@
       $$("a.brand").forEach(function (a) {
         if ($(".lw-word", a)) return;
         var k = a.getAttribute("data-k") || "b";
-        a.innerHTML = '<img data-k="' + k + '.m" class="lw-mark" src="brand/logisweb-mark.svg" width="38" height="38" alt="" />'
+        a.innerHTML = '<img data-k="' + k + '.m" class="lw-mark" src="brand/logisweb-mark.svg" width="52" height="24" alt="" />'
           + '<span data-k="' + k + '.t" class="lw-txt"><img data-k="' + k + '.w" class="lw-word" src="brand/logisweb-wordmark.svg" width="125" height="14" alt="LogisWeb" /><small data-k="' + k + '.s">DISPATCH</small></span>';
       });
       var tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null), n, list = [];

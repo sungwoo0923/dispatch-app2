@@ -1,7 +1,8 @@
 // ======================= src/brandRender.js =======================
 // 🎨 2026-11-15 브랜드 디자인(관리자센터 › 운영 › 브랜드 디자인) — 로고 그리기 엔진(React 없음 · 순수 함수)
 //  로고 = "그림 한 장(asset)" 두 개: 마크(LW) · 글자(LOGISWEB). 그림은 "부분(part)" 여러 개로 나뉜다.
-//    part.type  path  : 벡터 도형(d)                 — 기본 마크의 L · W
+//    part.type  art   : 완성된 벡터 그림(색 고정)     — 기본 마크(2026-11-24 새 LW 로고 · src/brandMarkArt.js) · style.pal = light(원본 색) | dark(밝게)
+//               path  : 벡터 도형(d)                 — 예전 기본 마크의 L · W
 //               line  : 선(points)                   — 기본 마크의 금색 노선
 //               dot   : 점(cx, cy, r)                — 노선 끝 점
 //               svg   : 올린 SVG 의 도형 묶음(items)  — 같은 색끼리 한 부분
@@ -10,20 +11,17 @@
 //  부분 꾸미기(style): c1 · c2(그러데이션) · ang(방향) · st/sw(테두리 색/두께) · grow(굵기 ±) · op(투명도) · hide · glow · fade
 //  ⚠️ 저장된 설정은 모두가 보는 화면에 그대로 그려지므로 sanitizeConfig 로 숫자 · 색 · 경로 글자만 남긴다(HTML/스크립트 차단)
 
+import { MARK_ART, MARK_VB } from "./brandMarkArt";
+
 export const TONES = [["dark", "어두운 바탕"], ["light", "밝은 바탕"], ["icon", "앱 아이콘"]];
 export const CONFIG_VERSION = 1;
 
-// ── 기본 로고(2026-11-15 2차 색) ──
-const L_PATH = "M216 270 L367 186 L367 797 L552 902 L552 1076 L216 884 Z";
-const W_PATH = "M552 440 L709 350 L709 988 L789 1030 L789 302 L945 212 L945 1025 L1024 983 L1024 168 L1182 77 L1182 1078 L867 1258 L552 1076 Z";
+// ── 기본 로고 ──
+//  🔷 2026-11-24 새 LW 로고(사용자 디자인) — 완성된 벡터 그림 한 장(art). 밝은 바탕 = 원본 색 · 어두운 바탕 · 앱 아이콘 = 같은 모양 · 명암을 밝게
+//    그림은 tools/brand/make-logo-assets.py 가 src/brandMarkArt.js 로 만든다. 가로로 긴 그림(약 2.13 : 1)
 export const DEFAULT_MARK = {
-  w: 1440, h: 1440,
-  parts: [
-    { id: "line", name: "금색 노선", type: "line", points: "190,982 867,1358 1240,1145" },
-    { id: "dot", name: "노선 끝 점", type: "dot", cx: 1240, cy: 1145, r: 17 },
-    { id: "L", name: "L 글자", type: "path", d: L_PATH },
-    { id: "W", name: "W 글자", type: "path", d: W_PATH },
-  ],
+  x: MARK_VB[0], y: MARK_VB[1], w: MARK_VB[2], h: MARK_VB[3],
+  parts: [{ id: "lw", name: "LW 로고", type: "art" }],
 };
 export const WORD_IMG = "/brand/logisweb-wordmark.png"; // 1544×174 · LOGIS | WEB 경계 896
 export const DEFAULT_WORD = {
@@ -36,9 +34,9 @@ export const DEFAULT_WORD = {
 // sw · grow 단위 = 그림 짧은 변의 1/1000 (마크 1440 → 1 = 1.44칸)
 export const DEFAULT_STYLES = {
   mark: {
-    dark: { line: { c1: "#F6C76A", sw: 6, fade: true }, dot: { c1: "#F6C76A", glow: true }, L: { c1: "#FFFFFF", c2: "#CBD6EB", ang: 45 }, W: { c1: "#3E5C9C", c2: "#2A4378", ang: 60, st: "#7F98C8", sw: 5 } },
-    light: { line: { c1: "#D0951F", sw: 6, fade: true }, dot: { c1: "#D0951F", glow: true }, L: { c1: "#22396A", c2: "#14213D", ang: 45 }, W: { c1: "#4C6BAE", c2: "#33508C", ang: 60, st: "#253F6E", sw: 5 } },
-    icon: { line: { c1: "#FFD27A", sw: 6, fade: true }, dot: { c1: "#FFD27A", glow: true }, L: { c1: "#FFFFFF", c2: "#D4DDEE", ang: 45 }, W: { c1: "#4E6FB4", c2: "#34528F", ang: 60, st: "#9DB2DA", sw: 5 } },
+    dark: { lw: { pal: "dark" } },
+    light: { lw: { pal: "light" } },
+    icon: { lw: { pal: "dark" } },
   },
   word: {
     dark: { logis: { c1: "#FFFFFF" }, web: { c1: "#7A93C4" } },
@@ -228,6 +226,12 @@ const angXY = (deg) => { const r = (deg * Math.PI) / 180; const c = Math.cos(r) 
 const attrs = (o) => Object.entries(o).map(([k, v]) => `${k}="${v}"`).join(" ");
 function partSvg(asset, p, s, idp, defs) {
   if (!s || s.hide) return "";
+  if (p.type === "art") { // 완성된 그림 — 색은 그림 그대로(pal 로 원본 · 밝게만 고른다)
+    const id = `${idp}${p.id}_`;
+    const g = (MARK_ART[s.pal] || MARK_ART.light).split('id="__').join(`id="${id}`).split("url(#__").join(`url(#${id}`);
+    const op = s.op ?? 1;
+    return op < 1 ? `<g opacity="${op}">${g}</g>` : g;
+  }
   s = { ...s, c2: isHex(s.c2) ? s.c2 : undefined, st: isHex(s.st) ? s.st : undefined };
   const u = Math.min(asset.w, asset.h) / 1000;
   const id = `${idp}${p.id}`;
@@ -281,10 +285,19 @@ export function assetInner(asset, toneStyles, idp) {
   return `<defs>${defs.join("")}</defs>${body}`;
 }
 const vbOf = (a) => `${a.x || 0} ${a.y || 0} ${a.w} ${a.h}`;
+// 마크 칸 크기 — size = 예전 네모 마크 한 변. 가로로 긴 그림(새 LW 로고)은 높이 0.64배 · 가로는 그림 비율대로
+export const WIDE_H = 0.64;
+export function markBox(a, size) {
+  const ratio = a.w / a.h;
+  if (ratio < 1.4) return { w: size, h: size };
+  const h = Math.round(size * WIDE_H * 10) / 10;
+  return { w: Math.round(h * ratio * 10) / 10, h };
+}
 // 투명 바탕 마크 · 글자
 export function markSvg(r, tone, px) {
   const idp = `b${++seq}`;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vbOf(r.mark)}" width="${px}" height="${px}" preserveAspectRatio="xMidYMid meet" style="display:block;overflow:visible">${assetInner(r.mark, r.st.mark[tone], idp)}</svg>`;
+  const b = markBox(r.mark, px);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vbOf(r.mark)}" width="${b.w}" height="${b.h}" preserveAspectRatio="xMidYMid meet" style="display:block;overflow:visible">${assetInner(r.mark, r.st.mark[tone], idp)}</svg>`;
 }
 export const wordRatio = (r) => r.word.w / r.word.h;
 export function wordSvg(r, tone, h) {
@@ -295,9 +308,10 @@ export function wordSvg(r, tone, h) {
 export function iconSvg(r, px, { round = 0, scale = 1, word = false } = {}) {
   const idp = `b${++seq}`;
   const t = r.tile; const S = 1000; const rx = round * S;
-  const m = r.mark; const k = (S * 0.92 * (t.scale || 1) * scale) / Math.max(m.w, m.h) * (word ? 0.78 : 1);
+  const m = r.mark; const wide = m.w / m.h >= 1.4; // 새 LW 로고는 가로로 길어 타일 가로의 76% 로
+  const k = (S * (wide ? 0.76 : 0.92) * (t.scale || 1) * scale) / Math.max(m.w, m.h) * (word ? (wide ? 0.92 : 0.78) : 1);
   const mw = m.w * k, mh = m.h * k;
-  const mx = (S - mw) / 2, my = word ? S * 0.07 : (S - mh) / 2;
+  const mx = (S - mw) / 2, my = word ? (wide ? S * 0.26 : S * 0.07) : (S - mh) / 2;
   let wordPart = "";
   if (word) {
     const ww = S * 0.66 * scale, wh = ww / wordRatio(r);

@@ -1,7 +1,7 @@
 :root{--ink:#0F1A30;--accent:#2D5BD8;--muted:#5b6b88;--line:#e3e9f4}
 *{box-sizing:border-box}body{margin:0;font-family:Pretendard,system-ui,sans-serif;color:#1d2433;background:#fff;word-break:keep-all;letter-spacing:-.01em}
 header{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:#0F1A30}
-.logo{display:flex;align-items:center;gap:8px;color:#fff;font-weight:900;font-size:22px;text-decoration:none}.logo img{width:30px;height:30px}.logo span{color:#4F8BFF}
+.logo{display:flex;align-items:center;gap:8px;color:#fff;font-weight:900;font-size:22px;text-decoration:none}.logo img{width:41px;height:19px}.logo span{color:#4F8BFF}
 nav{display:flex;gap:14px;align-items:center}nav a{color:#D3DFF5;text-decoration:none;font-weight:600}
 .btn{background:linear-gradient(135deg,#2D5BD8,#4F8BFF);color:#fff!important;padding:9px 18px;border-radius:999px;font-weight:800;text-decoration:none;display:inline-block}
 main{max-width:760px;margin:0 auto;padding:34px 16px 60px}

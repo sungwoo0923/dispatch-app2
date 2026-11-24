@@ -114,13 +114,13 @@
     <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
 
 
-    <!-- ⭐ 첫 화면(앱 파일을 받기 전) — 흰 화면 대신 네이비 + LogisWeb 로고(/brand/*.svg). React가 켜지면 같은 모양(App.jsx KpSplash)으로 이어진다 -->
+    <!-- ⭐ 첫 화면(앱 파일을 받기 전) — 흰 화면 대신 네이비 + LogisWeb 로고(/brand/*.svg · 2026-11-24 새 LW 로고 — 가로로 긴 그림 125×59). React가 켜지면 같은 모양(App.jsx KpSplash)으로 이어진다 -->
     <meta name="theme-color" content="#0F1A30" />
     <style>
       #kp-boot { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden;
         background: radial-gradient(90% 60% at 50% 0%, #22396A 0%, #0F1A30 55%, #060D1C 100%); -webkit-user-select: none; user-select: none; }
       #kp-boot .glow { position: absolute; left: 50%; top: 50%; width: 360px; height: 360px; transform: translate(-50%,-58%); border-radius: 50%; background: radial-gradient(circle, rgba(110,149,232,0.22), transparent 65%); }
-      #kp-boot .mk { position: relative; display: block; width: 92px; height: 92px; filter: drop-shadow(0 14px 30px rgba(0,0,0,0.45)); animation: kpbIn .45s cubic-bezier(.2,.9,.3,1.1) both; }
+      #kp-boot .mk { position: relative; display: block; width: 125px; height: 59px; filter: drop-shadow(0 14px 30px rgba(0,0,0,0.45)); animation: kpbIn .45s cubic-bezier(.2,.9,.3,1.1) both; }
       #kp-boot .wm { position: relative; display: block; margin-top: 24px; width: 210px; height: auto; }
       #kp-boot .bar { position: relative; margin-top: 28px; width: 120px; height: 2px; border-radius: 2px; background: rgba(255,255,255,.08); overflow: hidden; }
       #kp-boot .bar i { display: block; width: 40%; height: 100%; background: linear-gradient(90deg, transparent, #CFE0FF, transparent); animation: kpbBar 1.1s ease-in-out infinite; }
@@ -135,7 +135,7 @@
 
     <div id="root"><div id="kp-boot" data-kp-spot="splash">
       <div class="glow"></div>
-      <img class="mk" src="/brand/logisweb-mark.svg" width="92" height="92" alt="LogisWeb" />
+      <img class="mk" src="/brand/logisweb-mark.svg" width="125" height="59" alt="LogisWeb" />
       <img class="wm" src="/brand/logisweb-wordmark-tag.svg" width="210" height="41" alt="LogisWeb — LOGISTICS DISPATCH NETWORK" />
       <div class="bar"><i></i></div>
       <div class="t3" id="kp-boot-msg"></div>
