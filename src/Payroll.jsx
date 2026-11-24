@@ -31,7 +31,7 @@ import { useHrOptions, EMPLOYMENT_STATUS_OPTIONS } from "./hrConstants";
 import { sendInternalMail } from "./InternalMail";
 import CustomDatePicker from "./CustomDatePicker";
 import PayrollGate, { GateTimer, prefetchPayrollStatus, warmPayrollVerify } from "./PayrollGate";
-import { payslipHtml, PAYSLIP_CSS, printPayslips, TAX_NOTE } from "./payslipDoc";
+import { payslipHtml, PAYSLIP_CSS, printPayslips, TAX_NOTE, defaultSlipGuide, cleanSlipGuide, SLIP_GUIDE_MAX } from "./payslipDoc";
 import { COPY_GROUPS, COPY_DEFAULT, copyPatch, diffEmp, filterTargets, upsertTemplate, removeTemplate } from "./payrollCopy";
 import { isSigned, canSign, stampDate, signTimeText, signError, signPatch, clearSignPatch } from "./payslipSign";
 import { kstDay, kstYm, shiftYm, lastDayOf, safeId, slipId, runId, empId, toNum, ymLabel, blank, uniq, inp, numInp, NUMS, sec, Label, Note, H, Sel, Money, Seg, enterNext, useMedia, useCol, useDocData } from "./payrollUi";
@@ -375,7 +375,10 @@ function usePayrollMonth(company, ym, ro) {
     companyName: company, ym, uid: r.u.id, name: personName(r.u) || r.u.name || "", team: r.u.team || "", position: r.u.position || "",
     birthDate: r.u.birthDate || r.emp?.birthDate || "", hireDate: r.u.hireDate || "", phone: r.u.phone || "", payType: r.emp?.payType || "monthly", employmentType: r.emp?.employmentType || "",
     payDate: r.input?.payDate || run?.payDate || payDateDefault(), payAccount: r.input?.payAccount || r.emp?.payAccount || null,
-    input: r.input || {}, att: r.att || {}, result: r.result, rates: r.rates || curRates, updatedAt: serverTimestamp(), updatedBy: byName, ...extra,
+    input: r.input || {}, att: r.att || {}, result: r.result, rates: r.rates || curRates,
+    // ⭐ 2026-11-24 명세서 안내사항(경리 · 회계가 요율 · 설정에서 고친 문구) — 직원은 설정 문서를 못 읽어 명세서에 같이 남긴다 · 없으면 기본 문구
+    ...(cleanSlipGuide(settings?.slipGuide).length ? { guide: cleanSlipGuide(settings.slipGuide) } : {}),
+    updatedAt: serverTimestamp(), updatedBy: byName, ...extra,
   });
   const runPatch = (after, extra = {}) => ({ companyName: company, ym, totals: totalsOf(after), rates: curRates, payDate: run?.payDate || payDateDefault(), updatedAt: serverTimestamp(), updatedBy: byName, ...extra });
   // 이번 작업 뒤의 행 목록(확정·발행 여부를 덮어써서 달 전체 상태 판단)
@@ -1419,7 +1422,8 @@ function PayRates({ company, ro }) {
     if (settings !== undefined) {
       setF(ratesFor(settings || {}, year));
       setOpt({ small: !!settings?.small, payDay: settings?.payDay ?? 10, payNextMonth: settings?.payNextMonth !== false, ledgerOn: settings?.ledgerOn !== false,
-        customPayItems: (settings?.customPayItems || []).map((x) => (typeof x === "string" ? { label: x, taxable: true } : x)), customDeductItems: (settings?.customDeductItems || []).map((x) => (typeof x === "string" ? x : x?.label)).filter(Boolean) });
+        customPayItems: (settings?.customPayItems || []).map((x) => (typeof x === "string" ? { label: x, taxable: true } : x)), customDeductItems: (settings?.customDeductItems || []).map((x) => (typeof x === "string" ? x : x?.label)).filter(Boolean),
+        slipGuide: (cleanSlipGuide(settings?.slipGuide).length ? cleanSlipGuide(settings.slipGuide) : defaultSlipGuide(true)).join("\n") });
     }
   }, [settings, year]);
   if (!f || !opt) return <div className="py-16 text-center text-[15px] font-bold text-[#7A879C]">불러오는 중…</div>;
@@ -1431,6 +1435,8 @@ function PayRates({ company, ro }) {
         companyName: company, years: { [year]: { ...vals, small: !!opt.small } }, small: !!opt.small, payDay: toNum(opt.payDay) || 10, payNextMonth: !!opt.payNextMonth, ledgerOn: !!opt.ledgerOn,
         customPayItems: opt.customPayItems.filter((x) => String(x.label || "").trim()).map((x) => ({ label: x.label.trim(), taxable: x.taxable !== false })),
         customDeductItems: uniq(opt.customDeductItems.map((x) => String(x || "").trim())),
+        // 기본 문구와 같으면 비워 둔다(나중에 기본 문구가 바뀌면 따라가게)
+        slipGuide: cleanSlipGuide(opt.slipGuide).join("\n") === defaultSlipGuide(true).join("\n") ? [] : cleanSlipGuide(opt.slipGuide),
         updatedAt: serverTimestamp(), updatedBy: auth.currentUser?.email || "",
       }, { merge: true });
       setSaved("저장했어요");
@@ -1517,6 +1523,20 @@ function PayRates({ company, ro }) {
             </div>
           </div>
         </BookCard>
+        {/* ⭐ 2026-11-24 명세서 안내사항 — 경리 · 회계가 고친다(직원 명세서 맨 아래 '안내사항'). 한 줄 = 한 항목 */}
+        <div className="xl:col-span-2">
+          <BookCard en="PAYSLIP NOTICE" title="명세서 안내사항">
+            <div className="text-[14px] font-bold text-[#5B6B85] mb-2 leading-relaxed">직원 급여명세서 맨 아래 ‘안내사항’에 나오는 글이에요. <b className="text-[#0F1A30]">한 줄이 한 항목</b>이에요(최대 {SLIP_GUIDE_MAX}줄). 저장한 뒤 새로 저장 · 확정하는 명세서부터 바뀌고, 이미 발행한 명세서는 발행할 때 문구 그대로예요.</div>
+            <textarea disabled={ro} value={opt.slipGuide} onChange={(e) => setOpt((o) => ({ ...o, slipGuide: e.target.value }))} rows={8}
+              className="w-full px-3 py-2.5 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] leading-relaxed outline-none focus:border-[#2D4C82] focus:ring-2 focus:ring-[#8FB0F0]/40 disabled:bg-[#F5F7FB]" data-testid="slip-guide" aria-label="명세서 안내사항" />
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
+              <span className="text-[13.5px] font-bold text-[#7A879C]">{cleanSlipGuide(opt.slipGuide).length}줄{cleanSlipGuide(opt.slipGuide).join("\n") === defaultSlipGuide(true).join("\n") ? " · 기본 문구" : " · 회사에서 고친 문구"}</span>
+              <span className="flex-1" />
+              {!ro && <button type="button" onClick={() => setOpt((o) => ({ ...o, slipGuide: defaultSlipGuide(true).join("\n") }))} className="h-10 px-3.5 rounded-xl border border-[#1B2B4B] bg-white text-[14px] font-black text-[#1B2B4B]" data-testid="slip-guide-reset">기본 문구로</button>}
+            </div>
+            <div className="mt-2 text-[13px] font-bold text-[#7A879C]">근로기준법 제48조 제2항(임금명세서 교부) 문구는 지우지 않는 것을 권해요. 맨 아래 [요율 · 설정 저장]을 눌러야 저장돼요.</div>
+          </BookCard>
+        </div>
       </div>
       {!ro && (
         <div className="sticky bottom-2 z-10 flex items-center gap-3">

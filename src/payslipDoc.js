@@ -16,6 +16,21 @@ export const TAX_NOTE = "간이세액 근사치 · 확정은 세무사/간이세
 export const acctLine = (a) => (a && a.bank && a.acct ? `${a.bank} ${formatAccount(a.bank, a.acct)}${a.holder ? ` (${a.holder})` : ""}` : "");
 const SHOW_ZERO = ["np", "hi", "ltc", "ei", "tax", "local"];
 
+// 기본 안내사항(회사가 따로 정하지 않았을 때) — autoTax: 간이세액 자동 계산인 명세서
+export function defaultSlipGuide(autoTax = true) {
+  return [
+    "이 명세서는 근로기준법 제48조 제2항과 같은 법 시행령 제27조의2에 따라 임금의 구성항목 · 계산방법 · 공제 내역을 적어 드리는 문서예요.",
+    autoTax ? "소득세는 국세청 간이세액표 기준으로 미리 떼는 금액(원천징수)이에요. 1년치 실제 세금은 다음 해 연말정산에서 확정되고, 더 낸 세금은 돌려받아요." : "소득세는 미리 떼는 금액(원천징수)이며, 실제 세금은 연말정산 · 종합소득세 신고에서 확정돼요.",
+    "4대보험료는 각 공단(국민연금 · 건강보험 · 근로복지)의 기준에 따라 계산되며, 공단 고지 금액과 차이가 나면 다음 달 급여에서 정산될 수 있어요.",
+    "임금은 근로기준법 제43조에 따라 매월 1회 이상 정해진 날짜에 통화로 직접 지급돼요. 임금 청구권은 제49조에 따라 3년간 행사할 수 있어요.",
+    "명세서 내용이 실제와 다르거나 궁금한 점이 있으면 지급일로부터 7일 안에 인사 · 경리 담당자에게 알려 주세요.",
+    "급여 정보는 개인정보예요. 본인 외 다른 사람에게 보여 주거나 공유하지 마세요.",
+  ];
+}
+export const SLIP_GUIDE_MAX = 12; // 줄 수
+export const SLIP_GUIDE_LEN = 300; // 한 줄 글자 수
+export const cleanSlipGuide = (lines) => (Array.isArray(lines) ? lines : String(lines || "").split("\n")).map((x) => String(x || "").trim().slice(0, SLIP_GUIDE_LEN)).filter(Boolean).slice(0, SLIP_GUIDE_MAX);
+
 export function payslipHtml(slip, company, { notesOpen = false } = {}) {
   const s = slip || {};
   const r = s.result || {};
@@ -44,14 +59,8 @@ export function payslipHtml(slip, company, { notesOpen = false } = {}) {
   const signRow = signed ? `<section class="sg"><span class="k">수령 확인</span><span class="n">${esc(s.signName || s.name || "")}</span><span class="t">${esc(signTimeText(s))}</span>${img ? `<img src="${img}" alt="서명" />` : `<em>확인했어요(서명 그림 없음)</em>`}</section>` : "";
   // 🎨 2026-11-24 한 장(카드 하나) 디자인 — 사용자 요청: 칸칸이 나뉘지 않게 · 줄바꿈 없이 · 안내사항 · 관련 조항
   const autoTax = r.taxMode === "auto" && !["freelance", "daily"].includes(r.taxBasis);
-  const guide = [
-    "이 명세서는 근로기준법 제48조 제2항과 같은 법 시행령 제27조의2에 따라 임금의 구성항목 · 계산방법 · 공제 내역을 적어 드리는 문서예요.",
-    autoTax ? "소득세는 국세청 간이세액표 기준으로 미리 떼는 금액(원천징수)이에요. 1년치 실제 세금은 다음 해 연말정산에서 확정되고, 더 낸 세금은 돌려받아요." : "소득세는 미리 떼는 금액(원천징수)이며, 실제 세금은 연말정산 · 종합소득세 신고에서 확정돼요.",
-    "4대보험료는 각 공단(국민연금 · 건강보험 · 근로복지)의 기준에 따라 계산되며, 공단 고지 금액과 차이가 나면 다음 달 급여에서 정산될 수 있어요.",
-    "임금은 근로기준법 제43조에 따라 매월 1회 이상 정해진 날짜에 통화로 직접 지급돼요. 임금 청구권은 제49조에 따라 3년간 행사할 수 있어요.",
-    "명세서 내용이 실제와 다르거나 궁금한 점이 있으면 지급일로부터 7일 안에 인사 · 경리 담당자에게 알려 주세요.",
-    "급여 정보는 개인정보예요. 본인 외 다른 사람에게 보여 주거나 공유하지 마세요.",
-  ];
+  // ⭐ 2026-11-24 안내사항은 경리 · 회계가 고친다(급여 계산 › 요율 · 설정 › 명세서 안내사항 → 저장할 때 명세서마다 guide 로 같이 남는다) · 없으면 기본 문구
+  const guide = Array.isArray(s.guide) && s.guide.filter((x) => String(x || "").trim()).length ? s.guide.filter((x) => String(x || "").trim()) : defaultSlipGuide(autoTax);
   const line = (l, a, tag = "") => `<tr><th>${esc(l)}${tag ? `<i>${esc(tag)}</i>` : ""}</th><td>${wonFmt(a)}</td></tr>`;
   return `<article class="ps${signed ? " ps-signed" : ""}">
 <header class="hd">
