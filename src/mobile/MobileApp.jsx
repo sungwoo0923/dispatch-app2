@@ -8250,7 +8250,6 @@ function MobileSideMenu({
   deptOk: deptOkRaw = () => false,
   staffSignupOk = true, // ⭐ 2026-11-08 QA — 경리사무원·인사사무원은 PC처럼 가입 승인·기사 서류 메뉴 없음
 }) {
-  const fareMenu = useFareRules(); // ⭐ 2026-11-02 운임규칙 — 최고관리자가 켜 준 회사만 메뉴 표시
   // ⭐ 2026-11-04 메뉴를 닫았다 다시 열어도(내정보 등 들어갔다 와도) 보던 위치 그대로 — 맨 위로 튀지 않게
   const menuScrollRef = useRef(null);
   React.useLayoutEffect(() => {
@@ -8506,15 +8505,16 @@ function MobileSideMenu({
             <MenuItem label="기사 제출 서류" icon="file" onClick={() => onGo?.("dept:driverdocs")} badge={alertCounts?.drvDocs || null} dark={dark} />
           </MenuSection>
           )}
-          {PC_CLIENT_MENU_ROLES.has(role) && ok("거래처관리") && <MenuSolo dark={dark}><MenuItem label="거래처관리" icon="building" onClick={() => onGo?.("clients")} dark={dark} /></MenuSolo>}
+          {/* 🧭 2026-11-24 PC 왼쪽 메뉴와 같은 묶음 제목(거래처 · 매출 · 정산 · 지입차관리) — 제목 없이 붙어 있어 기사관리 안의 메뉴처럼 보였다 */}
+          {PC_CLIENT_MENU_ROLES.has(role) && ok("거래처관리") && <MenuSection title="거래처" en="CLIENTS" dark={dark} alwaysOpen><MenuItem label="거래처관리" icon="building" onClick={() => onGo?.("clients")} dark={dark} /></MenuSection>}
           {canRevenue && ok("매출관리") && ((role === "admin" || role === "totalMaster") && ok("인사이트") && planIncludes(planIdM, "insight") ? (
           <MenuSection title="매출" en="REVENUE" dark={dark} fold>
             <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />
             <MenuItem label="인사이트" icon="trend" onClick={onGoIntel} dark={dark} />
           </MenuSection>
-          ) : <MenuSolo dark={dark}><MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} /></MenuSolo>)}
-          {(canRevenue || /^role_/.test(String(role || ""))) && ok("정산관리") && <MenuSolo dark={dark}><MenuItem label="정산관리" icon="receipt" badge={closeN || undefined} onClick={() => onGo?.("dept:settle")} dark={dark} /></MenuSolo>}
-          {ok("지입차관리") && <MenuSolo dark={dark}><MenuItem label="지입차관리" icon="truck" onClick={onGoFleet} badge={alertCounts?.drvSos || null} dark={dark} /></MenuSolo>}
+          ) : <MenuSection title="매출" en="REVENUE" dark={dark} alwaysOpen><MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} /></MenuSection>)}
+          {(canRevenue || /^role_/.test(String(role || ""))) && ok("정산관리") && <MenuSection title="정산" en="SETTLEMENT" dark={dark} alwaysOpen><MenuItem label="정산관리" icon="receipt" badge={closeN || undefined} onClick={() => onGo?.("dept:settle")} dark={dark} /></MenuSection>}
+          {ok("지입차관리") && <MenuSection title="지입차관리" en="FLEET" dark={dark} alwaysOpen><MenuItem label="지입차관리" icon="truck" onClick={onGoFleet} badge={alertCounts?.drvSos || null} dark={dark} /></MenuSection>}
           </>)}
           {!deptMode && (["영업관리", "인사관리부", "회계관리", "자금관리", "비품관리", "증명서발급"].some(deptOk) || payM.canView || payM.leaveViewer) && (
             <MenuSection title="부서 업무" en="DEPARTMENT" dark={dark} fold>
@@ -8543,7 +8543,7 @@ function MobileSideMenu({
           </MenuSection>
           {/* ⭐ 2026-11-14 관리 = PC 회사관리(운임 규칙 · 내정보 · 내 이력서 · 출근기록부) + 관리자메뉴(회원 관리 · 권한 관리) */}
           <MenuSection title="회사관리" en="COMPANY" dark={dark} fold badge={canAdminMenu && !deptMode ? (alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) : 0}>
-            {fareMenu.feature && role !== "driver" && role !== "shipper" && <MenuItem label="운임 규칙" icon="money" onClick={() => onGo?.("dept:farerules")} dark={dark} />}
+            {/* 🧹 2026-11-24 운임 규칙 메뉴 뺌(PC와 같게) — 오더 입력 · 수정 창의 운임구분 드롭다운에서 추가 · 고치기 · 삭제 */}
             {/* ⭐ 2026-11-18 노선 특수운임 메뉴는 뺐다 → 오더 등록의 [특수운임 적용] › 고정노선운임 탭 */}
             <MenuItem label="내정보" icon="idcard" onClick={onGoMyInfo} dark={dark} />
             <MenuItem label="내 이력서" icon="file" onClick={() => onGo?.("dept:myresume")} dark={dark} />
@@ -8794,9 +8794,6 @@ const MENU_SECTION_OPEN = {}; // ⭐ 2026-11-04 펼친 메뉴 묶음 기억(메�
 // ⭐ 2026-11-14 fold — PC 왼쪽 ≡ 메뉴와 같은 묶음(배차 · 운임 · 기사·거래처 · 매출·정산 · 관리). 접어 둘 수 있고 이 휴대폰에 기억한다.
 //   접혀 있을 때는 묶음 안의 알림 숫자 합(badge)을 제목 옆에 보여 준다.
 // 묶음 없이 혼자 있는 메뉴(거래처관리 · 정산관리 · 지입차관리) — 묶음 카드와 같은 모양, 제목 줄 없음
-function MenuSolo({ children, dark }) {
-  return dark ? <div className="px-3 pt-2.5"><div className="rounded-2xl bg-white/[0.035] ring-1 ring-white/[0.07] p-1 flex flex-col gap-0.5">{children}</div></div> : <div className="mt-1">{children}</div>;
-}
 const readMenuFold = () => { try { return JSON.parse(localStorage.getItem("kpmMenuFold") || "{}") || {}; } catch { return {}; } };
 function MenuSection({ title, en, children, dark, alwaysOpen = false, fold = false, openDefault = false, badge = 0 }) {
   const [open, setOpen0] = useState(() => { if (!fold) return !!MENU_SECTION_OPEN[title]; const m = readMenuFold(); return m[title] === undefined ? openDefault : !!m[title]; });
