@@ -72,9 +72,12 @@ bed /= max(1e-9, np.abs(bed).max()); bed *= 0.55
 
 # ── 효과음
 def pop():
-    n = int(0.14 * SR); tt = np.arange(n) / SR
-    f = 1250 * np.exp(-tt * 9) + 620
-    return np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-tt * 34) * 0.5
+    # 부드러운 '톡'(나무 두드리는 느낌 — 높은 삐 소리가 나지 않게 낮은 음 + 짧은 잡음)
+    n = int(0.09 * SR); tt = np.arange(n) / SR
+    body = np.sin(2 * np.pi * (240 + 120 * np.exp(-tt * 60)) * tt) * np.exp(-tt * 55)
+    click = rng.standard_normal(n) * np.exp(-tt * 400) * 0.25
+    X = np.fft.rfft(click); f = np.fft.rfftfreq(n, 1 / SR); X *= 1 / np.sqrt(1 + (f / 2500) ** 4); click = np.fft.irfft(X, n=n)
+    return (body + click) * 0.5
 
 
 def tick():
@@ -107,7 +110,7 @@ def norm(x, peak):
     return x / max(1e-9, np.abs(x).max()) * peak
 
 
-SFX = {"pop": norm(pop(), 0.42), "tick": norm(tick(), 0.32), "whoosh": norm(whoosh(), 0.38), "swell": norm(swell(), 0.42)}
+SFX = {"pop": norm(pop(), 0.30), "tick": norm(tick(), 0.22), "whoosh": norm(whoosh(), 0.30), "swell": norm(swell(), 0.38)}
 sfx = np.zeros((N, 2))
 for e2 in ev["events"]:
     sig = SFX.get(e2["k"]);

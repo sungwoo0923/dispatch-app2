@@ -303,7 +303,7 @@ const out = arg("out") || path.join(outDir, `${id}.mp4`); // --out 로 시험본
 const fps = +arg("fps", 24);
 const ff = spawn("ffmpeg", ["-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(fps), "-c:v", "mjpeg", "-i", "-",
   "-f", "s16le", "-ar", String(RATE), "-ac", "1", "-i", wav, "-i", bedW, "-i", sfxW,
-  "-filter_complex", "[1:a]aresample=48000,aformat=channel_layouts=stereo,asplit=2[v][sc];[2:a]volume=0.28[b];[b][sc]sidechaincompress=threshold=0.02:ratio=10:attack=15:release=450[bd];[3:a]volume=0.55[fx];[v][bd][fx]amix=inputs=3:normalize=0:duration=first,alimiter=limit=0.95[a]",
+  "-filter_complex", "[1:a]aresample=48000,aformat=channel_layouts=stereo,asplit=2[v][sc];[2:a]volume=0.28[b];[b][sc]sidechaincompress=threshold=0.02:ratio=10:attack=15:release=450[bd];[3:a]volume=0.45[fx];[v][bd][fx]amix=inputs=3:normalize=0:duration=first,alimiter=limit=0.95[a]",
   "-map", "0:v", "-map", "[a]",
   "-c:v", "libx264", "-preset", "slow", "-crf", "25", "-tune", "animation", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
   "-c:a", "aac", "-b:a", "128k", "-shortest", out], { stdio: ["pipe", "inherit", "inherit"] });
