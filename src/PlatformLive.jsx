@@ -140,7 +140,7 @@ export function PlatformLiveProvider({ children, demo = null }) { // 🛰 2026-1
       t.lastSeen = Math.max(t.lastSeen, p.lastSeen);
       if (p.day) t.online24h += 1;
       if (p.now) t.onlineNow += 1;
-      if (p.day && !p.isShipper && verState(p, target) !== "ok" && verState(p, target) !== "") t.oldVer = (t.oldVer || 0) + 1;
+      if (p.day && !p.isShipper && ["old", "unknown"].includes(verState(p, target))) t.oldVer = (t.oldVer || 0) + 1; // 지금 열려 있는 예전 화면만
       if (!p.isShipper) {
         if (now - p.pc < DAY_MS) t.onlinePc += 1;
         if (now - p.mobile < DAY_MS) t.onlineMobile += 1;
@@ -227,8 +227,12 @@ export function PlatformLiveProvider({ children, demo = null }) { // 🛰 2026-1
 // 🆙 2026-11-23 화면 버전 상태 — "ok"(따라갈 버전 이상) · "old"(이전 버전) · "unknown"(버전을 안 적는 예전 화면) · ""(비교할 기준 없음)
 export function verState(p, target) {
   if (!target?.build || !p?.lastSeen) return "";
+  if (p.build && p.build >= target.build) return "ok";
+  // 🛠 2026-11-24 지금 접속해 있지 않은 사람은 "마지막으로 본 화면" 버전일 뿐 — 다시 열면 배포한 버전으로 열린다(배포 잠금 · 시작 스크립트)
+  //  예전엔 꺼 둔 사람까지 "이전 버전"으로 보여 강제 업데이트가 안 된 것처럼 보였다
+  if (p.now === false) return "next";
   if (!p.build) return "unknown";
-  return p.build >= target.build ? "ok" : "old";
+  return "old";
 }
 
 // ─── 캐시(집계 문서) + 실시간 합치기 ───
@@ -594,10 +598,12 @@ export function HealthCard({ c, today, onOpen }) {
 export function VerChip({ p, target }) {
   const st = verState(p, target);
   if (!st) return null;
-  const txt = st === "ok" ? `v${p.ver} 최신` : st === "old" ? `이전 버전 v${p.ver || "?"}` : "이전 버전";
-  const tip = st === "ok" ? "가입자 화면 버전과 같아요" : `지금 배포된 화면은 v${target.version || "?"} 예요. 이 직원이 새로고침(F5)하면 바뀌어요.${st === "unknown" ? " (버전을 기록하기 전 예전 화면)" : ""}`;
+  const txt = st === "ok" ? `v${p.ver} 최신` : st === "next" ? "다시 열면 최신" : st === "old" ? `열린 화면 이전 버전 v${p.ver || "?"}` : "열린 화면 이전 버전";
+  const tip = st === "ok" ? "가입자 화면 버전과 같아요"
+    : st === "next" ? `지금 접속해 있지 않아요(마지막 화면 v${p.ver || "?"}). 다음에 열면 v${target.version || "?"} 로 열려요.`
+      : `지금 열려 있는 화면이 예전 버전이에요(배포 v${target.version || "?"}). 새로고침(F5)하거나 강제 업데이트 예약으로 바꿀 수 있어요.${st === "unknown" ? " (버전을 기록하기 전 예전 화면)" : ""}`;
   return (
-    <span title={tip} className={`inline-flex items-center h-6 px-2 rounded-md text-[11.5px] font-black whitespace-nowrap tabular-nums ${st === "ok" ? "bg-[#EEF3FC] text-[#2D4C82]" : "bg-[#FFF6E5] text-[#9A5B00] border border-[#F3D9A4]"}`}>{txt}</span>
+    <span title={tip} className={`inline-flex items-center h-6 px-2 rounded-md text-[11.5px] font-black whitespace-nowrap tabular-nums ${st === "ok" ? "bg-[#EEF3FC] text-[#2D4C82]" : st === "next" ? "bg-[#F1F4F9] text-[#7A879C]" : "bg-[#FFF6E5] text-[#9A5B00] border border-[#F3D9A4]"}`}>{txt}</span>
   );
 }
 

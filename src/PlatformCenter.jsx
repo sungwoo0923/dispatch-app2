@@ -1472,6 +1472,10 @@ const PC_SHELL_CSS = `
 //  🛰 2026-11-18 리디자인 — 어두운 골드. 위: 로고 · 지금 접속 · 배차앱 · 로그아웃 / 묶음(가로) / 메뉴(가로) · 본문 위 작은 탭
 const PM_MOBILE_CSS = `
 .kp-pm { -webkit-text-size-adjust: 100%; }
+/* 🛠 2026-11-24 모바일 스크롤이 가끔 안 먹던 것 — iOS 는 background-attachment: fixed 와 화면 전체 고정 격자를 스크롤마다 다시 그려
+   손가락 스크롤이 멈칫하거나 씹혔다. 휴대폰에서는 배경을 같이 스크롤시키고 격자는 뺀다(PC는 그대로) */
+.kp-pm.kp-adm { background-attachment: scroll; }
+.kp-pm .adm-grid { display: none; }
 .kp-pm .kp-pm-scroll { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .kp-pm .kp-pm-scroll::-webkit-scrollbar { display: none; }
 .kp-pm main table { white-space: nowrap; }

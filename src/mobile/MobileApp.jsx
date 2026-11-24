@@ -24,7 +24,7 @@ import { audienceAllows, activeViewOf, setDispatchAlertsOn } from "../notifyAudi
 import { isExecTeam } from "../teamNames";
 import { usePrivateFareGrant } from "../privateFareGrant"; // 🔐 2026-11-18 비공개 운임 // ⭐ 2026-11-17 임원 부서 통合관리자 → 경영 브리핑부터
 import { usePayTodo } from "../approvalPay"; // 💸 2026-11-15 지급 대기 지출결의 → 전자결재 숫자(PC와 같게)
-import { useRouteGroupFilter, RouteGroupDropdown, SheetLiveChip, RouteGroupField } from "../routeGroups";
+import { useRouteGroupFilter, RouteGroupDropdown, SheetLiveChip, RouteGroupField, routeGroupOf, RG_NONE } from "../routeGroups";
 import OrderStaffFields from "../OrderStaffFields"; // 🧭 2026-11-14 PC와 같게 — 수정할 때 [담당자 변경](배차담당자 · 차량배정자)
 import { RecurringManagerModal } from "../AutomationPanels"; // 🧭 2026-11-14 PC와 같게 — 정기오더
 import { allowedModules } from "../freight/freightCore";
@@ -2948,6 +2948,12 @@ const quickRange = (days) => {
   }, [orders, canceledOrders, extraSplit, extraMap.size]);
   // 🗂 2026-11-13 담당노선구분(켠 운송사만) — 고른 묶음만(목록 · 미배차 · 매출 등 아래 allOrders 를 쓰는 화면이 모두 따른다 · src/routeGroups.jsx)
   const rgM = useRouteGroupFilter({ enabled: useCompanyFeatures(userCompany).routeGroups === true, uid: user?.uid, profile: myProfM, company: userCompany }); // ⭐ 2026-11-17 company — 담당노선 주인(배차담당자 자동 지정)
+  // 🗂 2026-11-24 새 오더 담당노선구분 — 위에서 노선 탭 하나만 골라 보고 있으면 그 탭으로(예: [에이제이] 탭에서 등록하면 에이제이)
+  const rgNewDefault = (() => {
+    if (!rgM.enabled) return "";
+    const one = Array.isArray(rgM.sel) ? rgM.sel : rgM.sel === "mine" ? rgM.mine : [];
+    return one.length === 1 && one[0] !== RG_NONE ? one[0] : "";
+  })();
   // ⭐ 2026-11-22 휴대폰 화면 이름 → PC 화면 이름(배차현황 · 실시간배차현황) — 예전엔 "list"를 그대로 넘겨 탭을 골라도 걸러지지 않았다
   useEffect(() => { rgM.setScreen(page === "sales" ? "매출관리" : page === "dept" ? "정산관리" : page === "list" ? "배차현황" : page === "unassigned" ? "실시간배차현황" : page); }, [page, rgM.setScreen]); // eslint-disable-line react-hooks/exhaustive-deps -- 🗂 매출관리 · 정산(경리 · 임원 화면)은 들어갈 때마다 [전체]부터
   const allOrdersPreRG = allOrdersCombined.orders;
@@ -5206,7 +5212,7 @@ const handleOrderDuplicate0 = (order, plan = null) => {
   });
 
   setForm({
-    거래처명: order.거래처명 || "",
+    거래처명: order.거래처명 || "", 담당노선구분: routeGroupOf(order), /* 🗂 2026-11-24 노선구분(시트 탭) 그대로 */
 
     상차일: today,
     상차시간: order.상차시간 || "",
@@ -5289,7 +5295,7 @@ const handleOrderDuplicateWithDriver0 = (order, plan = null) => {
   });
 
   setForm({
-    거래처명: order.거래처명 || "",
+    거래처명: order.거래처명 || "", 담당노선구분: routeGroupOf(order), /* 🗂 2026-11-24 노선구분(시트 탭) 그대로 */
     상차일: today,
     상차시간: order.상차시간 || "",
     상차시간기준: order.상차시간기준 || null,
@@ -6262,7 +6268,7 @@ const title =
           }}
           onGoCreate={() => {
   setForm({
-    거래처명: "",
+    거래처명: "", 담당노선구분: rgNewDefault, /* 🗂 2026-11-24 보고 있던 노선 탭 */
     상차일: "",
     상차시간: "",
     하차일: "",
@@ -7405,7 +7411,7 @@ setOpenMemo={setOpenMemo}
             if (fabMergeOn && !fabGoRef.current) { setFabMenu((v) => !v); return; }
             fabGoRef.current = false; setFabMenu(false);
             setForm({
-              거래처명: "",
+              거래처명: "", 담당노선구분: rgNewDefault, /* 🗂 2026-11-24 보고 있던 노선 탭 */
               상차일: todayKST(),
               상차시간: "",
               하차일: todayKST(),
@@ -12571,7 +12577,7 @@ function MobileOrderDetail({
     setPrevPage("detail");
     setPage("form");
     setForm({
-      거래처명: order.거래처명 || "",
+      거래처명: order.거래처명 || "", 담당노선구분: routeGroupOf(order), /* 🗂 2026-11-24 노선구분(시트 탭) 그대로 */
       상차일: order.상차일 || "",
       상차시간: order.상차시간 || "",
       상차시간기준: order.상차시간기준 || null,
@@ -13054,7 +13060,7 @@ const handleAssignClick = async () => {
     setPrevPage("detail");
     setPage("form");
     setForm({
-      거래처명: order.거래처명 || "", 상차일: order.상차일 || "", 상차시간: order.상차시간 || "",
+      거래처명: order.거래처명 || "", 담당노선구분: routeGroupOf(order), /* 🗂 2026-11-24 노선구분(시트 탭) 그대로 */ 상차일: order.상차일 || "", 상차시간: order.상차시간 || "",
       상차시간기준: order.상차시간기준 || null, 하차일: order.하차일 || "", 하차시간: order.하차시간 || "",
       하차시간기준: order.하차시간기준 || null, 상차지명: order.상차지명 || "", 상차지주소: order.상차지주소 || "",
       상차지담당자: order.상차지담당자 || "", 상차지담당자번호: order.상차지담당자번호 || "",
