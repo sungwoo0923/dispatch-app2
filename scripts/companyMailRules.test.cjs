@@ -29,7 +29,7 @@ async function t(name, fn) {
     await setDoc(doc(db, "users/shipperA"), { companyName: "화주사", approved: true, role: "shipper", linkedTransportCompany: { companyName: "에이운송" } });
     await setDoc(doc(db, "users/pendingA"), { companyName: "에이운송", approved: false, role: "user" });
     await setDoc(doc(db, "users/adminB"), { companyName: "비운송", approved: true, role: "admin" });
-    await setDoc(doc(db, "users/tm"), { companyName: "돌캐", approved: true, role: "totalMaster" });
+    await setDoc(doc(db, "users/tm"), { companyName: "예전운송", approved: true, role: "totalMaster" });
     await setDoc(doc(db, "companyMailSettings/에이운송"), { companyName: "에이운송", fromEmail: "a@daum.net", host: "smtp.daum.net", port: 465, hasPassword: true });
     await setDoc(doc(db, "companyMailSettings/비운송"), { companyName: "비운송", fromEmail: "b@naver.com", host: "smtp.naver.com", port: 465, hasPassword: true });
     await setDoc(doc(db, "companyMailSecrets/에이운송"), { companyName: "에이운송", iv: "x", tag: "y", ct: "z" });

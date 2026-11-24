@@ -1,5 +1,5 @@
 // ======================= functions/resetJob.js =======================
-// ⭐ 2026-11-07 운송사 초기화 엔진 — "돌캐 초기화가 보관함 복사 57%(31,831 / 37,248)에서 멈춤" 다시 고침
+// ⭐ 2026-11-07 운송사 초기화 엔진 — "초기화가 보관함 복사 57%(31,831 / 37,248)에서 멈춤" 다시 고침
 //  index.js의 companyResetHandler가 이 모듈을 db·Storage·Auth를 넣어 만든다(테스트는 에뮬레이터 + 가짜 Storage).
 //
 //  멈춤 원인(운영 서버는 e217be45 이전 코드가 돌고 있었다 — "보관함에 복사 중 31,831 / 37,248"은 그 코드의 문구):
@@ -25,8 +25,8 @@ const RESET_UID_FIELDS = ["uid", "userId", "ownerUid", "createdByUid", "writerUi
 const RESET_SKIP_COLLECTIONS = new Set(["adminSecrets", "resetLogs", "resetBackups", "resetJobs", "resetLocks"]);
 const RESET_ORDER_COLLECTIONS = new Set(["orders", "dispatch"]);
 const RESET_KEEP_DAYS = 7;
-// 회사명이 비어 있는 예전 데이터는 프로그램이 "돌캐" 것으로 본다(화면의 companyName || "돌캐" 규칙)
-const RESET_LEGACY_COMPANY = "(회사없음)"; // ⭐ 2026-11-21 기본 회사 없음(돌캐 초기화)
+// 회사명이 비어 있는 예전 데이터는 어느 회사 것도 아니다("(회사없음)")
+const RESET_LEGACY_COMPANY = "(회사없음)"; // ⭐ 2026-11-21 기본 회사 없음
 const RESET_LEGACY_COLLECTIONS = [
   "dispatch", "orders", "fixedClients", "clients", "places", "drivers", "schedules", "notices", "handovers",
   "multiRateSheets", "deletedOrders", "scheduledEmails", "emailLogs", "acctPayments", "attendance",

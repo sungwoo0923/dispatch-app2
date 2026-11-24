@@ -1707,7 +1707,7 @@ service cloud.firestore {
     // ⭐ 2026-11-08 보안 — 한 건 읽기는 ① 기사 본인(문서 이름이 내 uid이거나 uid 칸이 나) ② 같은 회사 사무 직원(기사·화주 제외)
     //  ③ 최고관리자만. 예전엔 기사앱 로그인/가입이 선등록 문서(drivers/{차량번호})를 화면에서 읽느라 "로그인한 누구나"였다
     //  (허브 가입 계정 등 아무 계정으로 차량번호만 넣으면 다른 회사 기사 이름·전화번호·차량 정보가 보였다).
-    //  이제 그 확인은 서버 함수(driverLoginLink · linkDriverSignup)가 한다. 회사명 없는 예전 문서는 기본 회사(돌캐) 것으로 본다.
+    //  이제 그 확인은 서버 함수(driverLoginLink · linkDriverSignup)가 한다. 회사명 없는 예전 문서는 어느 회사 것도 아니다("(회사없음)").
     function driverDocSelf(driverId) {
       return isSignedIn() && (request.auth.uid == driverId || resource.data.get('uid', '') == request.auth.uid);
     }

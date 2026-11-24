@@ -3872,7 +3872,7 @@ useEffect(() => {
     if (!readyStage3) return undefined; // ★ LTE 속도 — 오더를 먼저 받은 뒤에 시작(아래 secondaryReady 참고)
     // ⭐ PC(DispatchApp.jsx)는 drivers 구독에 companyName 필터가 있는데, 모바일은 이
     // 필터가 통째로 빠져있어 다른 회사의 기사 목록까지 그대로 받아오고 있었다 —
-    // PC와 동일한 기준(companyName 없는 옛 문서는 "돌캐"로 취급)으로 맞춘다.
+    // PC와 동일한 기준(companyName 없는 옛 문서 기준)으로 맞춘다.
     const co = userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY;
     // ⚡ 2026-11-23 위치 · 속도만 바뀐 변경은 15초에 한 번만 화면에 반영(운행 중 기사 위치가 올 때마다 앱 전체를 다시 그리던 것)
     const live = { sig: "", at: 0, timer: 0, list: [] };
@@ -4899,9 +4899,9 @@ const groupedByDate = useMemo(() => {
       ...(!form._editId ? { 알림톡: false } : {}),
 
       // ⭐ PC(addDispatch)는 항상 companyName을 명시적으로 써넣는데 모바일 등록은
-      // 이 필드 자체가 아예 빠져있었다 — 화면 표시는 (companyName || "돌캐") 방식의
+      // 이 필드 자체가 아예 빠져있었다 — 화면 표시는 (companyName || 기본 회사) 방식의
       // 폴백이 곳곳에 있어 정상으로 보였지만, 구글시트 백필처럼 Firestore
-      // where("companyName","==","돌캐")로 정확히 매칭하는 서버 쪽 조회에서는
+      // where("companyName","==", 회사명)으로 정확히 매칭하는 서버 쪽 조회에서는
       // 이 필드가 없는 문서 자체가 통째로 걸러져 모바일로 등록한 오더가 전부
       // 빠지는 원인이었다.
       companyName: userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || DEFAULT_COMPANY,
@@ -7532,7 +7532,7 @@ function SalesPinGate({ onVerified }) {
 
 // ⭐ PC(DispatchApp)의 isNetRevenueExcludedClient와 동일 로직 — 거래처관리에서
 // "순수매출제외"로 체크한 거래처를 매출 통계에서 뺀다. 아직 체크박스를 저장한 적
-// 없는 기존 데이터(주로 돌캐의 "후레쉬물류")는 예전 하드코딩 이름으로 폴백한다.
+// 없는 기존 데이터(주로 예전 운송사의 "후레쉬물류")는 예전 하드코딩 이름으로 폴백한다.
 const LEGACY_NET_REVENUE_EXCLUDED_NAMES_MOBILE = ["후레쉬물류", "채석강"];
 function isNetRevenueExcludedClientMobile(name, clientsList, placesList) {
   const n = String(name || "").trim();

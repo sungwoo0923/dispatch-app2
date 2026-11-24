@@ -21,8 +21,8 @@ import { installSaveFeedback } from "./saveFeedback"; // ✅ 2026-11-20 [저장]
 installSaveFeedback();
 
 // ⭐ 2026-11-03 최고관리자 — 탭마다 다른 운송사를 열 수 있게 "지금 회사"(loginCompany·userCompany)를 탭별로 기억한다.
-//  예전엔 브라우저 전체에 하나라, 오른쪽 탭에서 돌캐로 들어가면 왼쪽 태진 탭도 몰래 돌캐로 바뀌어
-//  태진에서 만든 고정노선 오더가 돌캐 회사로 저장됐다. 새 탭은 마지막으로 들어간 회사로 시작한다.
+//  예전엔 브라우저 전체에 하나라, 오른쪽 탭에서 예전 운송사로 들어가면 왼쪽 태진 탭도 몰래 예전 운송사로 바뀌어
+//  태진에서 만든 고정노선 오더가 예전 운송사 회사로 저장됐다. 새 탭은 마지막으로 들어간 회사로 시작한다.
 (function perTabCompany() {
   try {
     const KEYS = new Set(["loginCompany", "userCompany"]);

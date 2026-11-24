@@ -72,7 +72,7 @@ export default async function handler(req, res) {
 
   const myDoc = await readUser(me.uid, idToken).catch(() => null);
   const isTotalMaster = me.email === SUPER_EMAIL || myDoc?.role === "totalMaster";
-  const myCo = String(myDoc?.companyName || "돌캐").trim();
+  const myCo = String(myDoc?.companyName || "(회사없음)").trim();
   const staffOk = myDoc && myDoc.approved !== false && myDoc.employmentStatus !== "퇴사"
     && !["driver", "shipper", "cafeUser", "viewer"].includes(myDoc.role || "");
   if (!isTotalMaster && !staffOk) return res.status(403).json({ error: "FORBIDDEN" });
@@ -86,7 +86,7 @@ export default async function handler(req, res) {
     for (const uid of list) {
       const u = await readUser(uid, idToken).catch(() => null);
       if (!u) continue; // 규칙상 못 읽는 사람(다른 회사) — 건너뜀
-      if (!isTotalMaster && String(u.companyName || "돌캐").trim() !== myCo) continue;
+      if (!isTotalMaster && String(u.companyName || "(회사없음)").trim() !== myCo) continue;
       targets.push(...tokensOf(u));
     }
   }

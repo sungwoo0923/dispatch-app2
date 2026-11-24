@@ -1,11 +1,11 @@
-// 🔗 2026-11-07 구글시트 연동(시트 프로필) 단위 테스트 — 머리줄 찾기 · 동의어 · 값 살펴보기 · 값 바꾸기 · 중복 확인 · 보내기 보호 · 돌캐(기존) 설정
+// 🔗 2026-11-07 구글시트 연동(시트 프로필) 단위 테스트 — 머리줄 찾기 · 동의어 · 값 살펴보기 · 값 바꾸기 · 중복 확인 · 보내기 보호 · 회사 오더만 보내기
 //  실행: node scripts/sheetProfile.test.mjs  (인터넷 · 에뮬레이터 필요 없음)
 import { createRequire } from "module";
 import * as C from "../functions/sheetProfileCore.mjs";
 import { FIXTURE_TABS, FIXTURE_HEADER, LEGACY_SAMPLE_ROWS, fixtureFormulas } from "../src/devSheetFixture.js";
 
 const require = createRequire(import.meta.url);
-const L = require("../functions/gsheetLegacy.js");
+const L = require("../functions/sheetScope.js");
 
 let pass = 0, fail = 0;
 const eq = (name, got, want) => { const ok = JSON.stringify(got) === JSON.stringify(want); ok ? pass++ : fail++; console.log(`${ok ? "PASS" : "FAIL"} ${name}${ok ? "" : ` :: got ${JSON.stringify(got)} want ${JSON.stringify(want)}`}`); };
@@ -30,7 +30,7 @@ const h2 = C.detectHeader(two);
 eq("두 줄 머리줄 감지", [h2.headerRow, h2.depth, h2.dataStart], [2, 2, 4]);
 const m2 = C.autoMapColumns(h2.headers, two.slice(h2.dataStart));
 eq("두 줄 머리줄 칸 맞추기", m2.map((c) => c.field), ["상차일", "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소", "이름", "차량번호", "청구운임", "기사운임"]);
-// 태진(돌캐) 지금 모양: 1행 머리줄
+// 예전 운송사 배차현황 시트 모양: 1행 머리줄
 const hl = C.detectHeader(LEGACY_SAMPLE_ROWS);
 eq("기존 시트 1행 머리줄", [hl.headerRow, hl.depth, hl.dataStart], [0, 1, 1]);
 
@@ -189,24 +189,8 @@ eq("프로그램만 바뀜", C.syncDecision({ sheetHash: "a", link: { hash: "a",
 eq("둘 다 바뀜, 시트가 나중", C.syncDecision({ sheetHash: "b", link: { hash: "a", at: 100 }, programEditedAt: 50000, sheetModifiedAt: 90000 }), "conflict-sheet");
 eq("둘 다 바뀜, 프로그램이 나중", C.syncDecision({ sheetHash: "b", link: { hash: "a", at: 100 }, programEditedAt: 90000, sheetModifiedAt: 50000 }), "conflict-program");
 
-// ── 8) 돌캐(기존 고정 설정) — 같은 동작 ──
-const lp = C.legacyDolcaeProfile();
-const legacyMap = L.legacyColumnIndexMap(LEGACY_SAMPLE_ROWS[0]);
-// 예전 이름 → 프로그램 칸 이름
-const LEG2FIELD = { 상차지: "상차지명", 하차지: "하차지명", 화물정보: "화물내용", 기사명: "이름", 프로그램: "배차방식" };
-const fromProfile = {};
-lp.columns.forEach((c) => { if (c.field) fromProfile[c.field] = c.idx; });
-const mismatch = Object.entries(legacyMap).filter(([k, i]) => k !== "혼적" && fromProfile[LEG2FIELD[k] || k] !== i);
-eq("기존 칸 찾기 = 프로필 칸(혼적 제외)", mismatch, []);
-eq("기존 수식 칸은 계산열", lp.columns.filter((c) => c.mode === "calc").map((c) => c.header), ["순번", "이름", "전화번호", "배차상태", "수수료"]);
-eq("오더ID 칸", lp.columns.find((c) => c.mode === "id").header, "오더ID");
-eq("기존 시트 새 동의어 사전으로도 같은 칸", C.autoMapColumns(LEGACY_SAMPLE_ROWS[0], LEGACY_SAMPLE_ROWS.slice(1)).filter((c) => c.field).map((c) => [c.header, c.field]).filter(([hd, f]) => fromProfile[f] !== LEGACY_SAMPLE_ROWS[0].indexOf(hd)), []);
-eq("돌캐 월 탭 이름", C.tabForDate(lp, "2026-11-07", ["26년10월", "26년11월"]), { tab: "26년11월", exists: true });
-// isGsheetDolcaeOrder(돌캐 필터) — ⭐ 2026-11-21 회사명 빈 오더는 돌캐로 보지 않는다(기본 회사 없음)
-const oldDolcae = (d) => { if (!d) return false; if ((d.companyName || "") !== "돌캐") return false; if (d.배차표Id || d._autoSheet || d.고정노선Id || d.등록기기 === "배차표") return false; return true; };
-const cases = [null, {}, { companyName: "돌캐" }, { companyName: "태진" }, { companyName: "돌캐", 배차표Id: "b1" }, { companyName: "돌캐", _autoSheet: true }, { companyName: "돌캐", 고정노선Id: "f" }, { 등록기기: "배차표" }, { companyName: "돌캐", 등록기기: "PC" }];
-eq("돌캐 필터(회사명 빈 오더 제외)", cases.map(L.isGsheetDolcaeOrder), cases.map(oldDolcae));
-eq("일반화: 테스트운송 프로필은 테스트운송 오더만", [{ companyName: "테스트운송" }, { companyName: "돌캐" }, { companyName: "테스트운송", 배차표Id: "x" }].map((d) => L.isProfileOwnOrder({ companyName: "테스트운송" }, d)), [true, false, false]);
+// ── 8) 이 회사 오더만 보내기(isProfileOwnOrder) ──
+eq("테스트운송 프로필은 테스트운송 오더만", [{ companyName: "테스트운송" }, { companyName: "에이운송" }, { companyName: "테스트운송", 배차표Id: "x" }, {}].map((d) => L.isProfileOwnOrder({ companyName: "테스트운송", defaultCompany: "", includeFixed: false }, d)), [true, false, false, false]);
 
 // ── 9) 배차표 양식 만들기 ──
 const board = C.profileToBoardColumns(profile, (() => { let i = 0; return () => `c${i++}`; })());

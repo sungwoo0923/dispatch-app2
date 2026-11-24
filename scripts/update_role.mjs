@@ -28,9 +28,9 @@ for (const docSnap of snap.docs) {
   console.log("Found user:", docSnap.id, "current role:", data.role, "companyName:", data.companyName);
   await updateDoc(doc(db, "users", docSnap.id), {
     role: "totalMaster",
-    companyName: data.companyName || "돌캐",
+    companyName: data.companyName || "(회사없음)",
   });
-  console.log("Updated to totalMaster, companyName:", data.companyName || "돌캐");
+  console.log("Updated to totalMaster, companyName:", data.companyName || "(회사없음)");
 }
 
 process.exit(0);

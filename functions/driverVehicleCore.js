@@ -5,7 +5,7 @@
 "use strict";
 
 const DOMAIN = "driver.run25.kr";
-const DEFAULT_CO = "(회사없음)"; // ⭐ 2026-11-21 기본 회사 없음(돌캐 초기화)
+const DEFAULT_CO = "(회사없음)"; // ⭐ 2026-11-21 기본 회사 없음
 const HISTORY_MAX = 60;
 
 const plateOf = (v) => String(v || "").replace(/\s+/g, "");

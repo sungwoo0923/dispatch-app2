@@ -786,27 +786,6 @@ export function profileToBoardColumns(profile, rid = () => Math.random().toStrin
   return cols.filter((c) => { const k = norm(c.label); if (labels.has(k)) return false; labels.add(k); return true; });
 }
 
-// ── 돌캐 배차현황 시트(예전 고정 설정) → 프로필 ────────────
-//  functions/gsheetLegacy.js의 칸 이름 · 순서와 같다. 가져오기·보내기는 예전 서버 함수(gsheetMine)가 그대로 맡는다.
-export const LEGACY_DOLCAE_HEADER = ["순번", "등록일", "상차일", "상차시간", "하차일", "하차시간", "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소", "화물내용", "차량종류", "차량톤수", "혼적", "차량번호", "이름", "전화번호", "배차상태", "청구운임", "기사운임", "수수료", "지급방식", "배차방식", "메모", "오더ID"];
-const LEGACY_CALC = new Set(["순번", "이름", "전화번호", "배차상태", "수수료", "매익율"]); // 예전 연동이 수식으로 채우는 칸
-export function legacyDolcaeProfile() {
-  const columns = LEGACY_DOLCAE_HEADER.map((h, idx) => {
-    const top = headerCandidates(h)[0];
-    const field = h === "혼적" ? "" : h === "오더ID" ? "오더ID" : top?.field || "";
-    const mode = h === "오더ID" ? "id" : LEGACY_CALC.has(field || h) ? "calc" : field ? "data" : "readonly";
-    return { idx, header: h, field, mode, confidence: 1, source: "legacy" };
-  });
-  return {
-    id: "legacy_dolcae", engine: "legacy-dolcae", name: "돌캐 배차현황(기존 연동)", companyName: "돌캐",
-    spreadsheetId: "1Md09eYeoXVvXm155kCVE_jz1aZ1aedsmsvOQuPoiMxU",
-    sheetUrl: "https://docs.google.com/spreadsheets/d/1Md09eYeoXVvXm155kCVE_jz1aZ1aedsmsvOQuPoiMxU/edit",
-    tabMode: "monthly", tabPattern: { kind: "yy년m월", sample: "26년11월" }, tabs: [],
-    headerRow: 0, headerDepth: 1, dataStart: 1, columns, valueMaps: {},
-    dedupe: { cols: [25], label: "오더ID" }, scope: { companyName: "돌캐", includeFixed: false },
-  };
-}
-
 // ── 새 프로필 만들기(마법사 결과 정리) ─────────────────────
 export function buildProfile({ companyName, name, sheetUrl, spreadsheetId, tabMode, tabs, tabPattern, header, columns, valueMaps, dedupe, writeTab }) {
   return {

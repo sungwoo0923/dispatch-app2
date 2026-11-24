@@ -13,7 +13,7 @@ import { isPreviewMode } from "./fsTenant";
 export const MAIL_NOT_CONFIGURED = "MAIL_NOT_CONFIGURED";
 export const MAIL_SETUP_MSG = "회사정보 › 메일 설정에서 발신 메일을 먼저 등록해 주세요";
 // 예전 공용 발송 계정(한 운송사의 다음 메일)의 주인 회사 — 등록 안내 띠를 먼저 보여 준다
-export const LEGACY_MAIL_COMPANIES = []; // ⭐ 2026-11-21 돌캐 초기화
+export const LEGACY_MAIL_COMPANIES = []; // ⭐ 2026-11-21 예전 회사 없음
 export const MAIL_ADMIN_ROLES = ["admin", "test", "hrAcct", "allMgr", "totalMaster"];
 export const canEditMail = (role, isMaster) => MAIL_ADMIN_ROLES.includes(String(role || "")) || isMaster === true;
 

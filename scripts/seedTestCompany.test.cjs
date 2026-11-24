@@ -3,7 +3,7 @@
 //  에뮬레이터 검사(FIRESTORE_EMULATOR_HOST가 있을 때):
 //   java -jar ~/.cache/firebase/emulators/cloud-firestore-emulator-*.jar --host 127.0.0.1 --port 9680 &
 //   FIRESTORE_EMULATOR_HOST=127.0.0.1:9680 NODE_PATH=functions/node_modules node scripts/seedTestCompany.test.cjs
-//  ① 다른 회사 이름(돌캐 · 공백 붙은 이름)은 최고관리자라도 거절 · 최고관리자 아닌 사람 거절
+//  ① 다른 회사 이름(예전운송 · 공백 붙은 이름)은 최고관리자라도 거절 · 최고관리자 아닌 사람 거절
 //  ② seed → 끊어서(짧은 시간) 이어가며 끝까지 · 두 번 해도 수가 같다(중복 없음)
 //  ③ 실제 직원: 비어 있는 인사 칸만 채움(역할 · 승인 그대로) · 실제 출근기록은 덮어쓰지 않음
 //  ④ reset · clear: 표시 없는 실제 문서 · 다른 회사 문서 · 표시가 다른 문서는 그대로, 채운 인사 칸은 되돌림
@@ -19,15 +19,15 @@ const ok = (name) => { pass += 1; console.log(`  ✓ ${name}`); };
 async function pure() {
   const core = await import(path.join(__dirname, "../functions/seedTestData.mjs"));
   assert.equal(checkTargetCompany(CO, core.SEED_ALLOWED_COMPANIES), CO);
-  for (const bad of ["돌캐", "테스트운송사 ", " 테스트운송사", "테스트운송", "", null, undefined, "TP-JK4PBN"]) {
+  for (const bad of ["예전운송", "테스트운송사 ", " 테스트운송사", "테스트운송", "", null, undefined, "TP-JK4PBN"]) {
     assert.throws(() => checkTargetCompany(bad, core.SEED_ALLOWED_COMPANIES), /가짜 데이터는|회사를/);
   }
-  assert.throws(() => core.buildSeedData({ company: "돌캐" }), /테스트운송사에만/);
+  assert.throws(() => core.buildSeedData({ company: "예전운송" }), /테스트운송사에만/);
   ok("대상 회사 허용 목록 밖은 거절(이름 앞뒤 공백 포함)");
 
   assert.equal(core.isSeedDoc({ _seed: "test-v1", companyName: CO }, CO), true);
-  assert.equal(core.isSeedDoc({ _seed: "test-v1", companyName: "돌캐" }, "돌캐"), false, "허용 목록 밖 회사는 표시가 있어도 아님");
-  assert.equal(core.isSeedDoc({ _seed: "test-v1", companyName: "돌캐" }, CO), false);
+  assert.equal(core.isSeedDoc({ _seed: "test-v1", companyName: "예전운송" }, "예전운송"), false, "허용 목록 밖 회사는 표시가 있어도 아님");
+  assert.equal(core.isSeedDoc({ _seed: "test-v1", companyName: "예전운송" }, CO), false);
   assert.equal(core.isSeedDoc({ _seed: "test-v2", companyName: CO }, CO), false);
   assert.equal(core.isSeedDoc({ _seed: true, companyName: CO }, CO), false);
   assert.equal(core.isSeedDoc({ companyName: CO }, CO), false);
@@ -67,7 +67,7 @@ async function emulator(core) {
   await db.collection("users").doc("realDriver").set({ role: "driver", approved: true, companyName: CO, name: "실제기사" });
   // 지우면 안 되는 문서
   await db.collection("orders").doc("real_1").set({ companyName: CO, 거래처명: "진짜 거래처", 상차일: "2026-11-08" });
-  await db.collection("orders").doc("other_1").set({ companyName: "돌캐", _seed: "test-v1", 거래처명: "다른 회사" });
+  await db.collection("orders").doc("other_1").set({ companyName: "예전운송", _seed: "test-v1", 거래처명: "다른 회사" });
   await db.collection("orders").doc("v2_1").set({ companyName: CO, _seed: "test-v2" });
   await db.collection("clients").doc("seed_cl_99").set({ companyName: CO, 거래처명: "표시 없는 seed 번호" });
   const realAtt = (() => { const d = new Date(Date.now() + 9 * 3600e3 - 3 * 86400e3); while ([0, 6].includes(d.getUTCDay())) d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); })();
@@ -77,11 +77,11 @@ async function emulator(core) {
   const S = makeSeedTestCompany({ db, FieldValue, Timestamp, budgetMs: 150, setBulkMode: async (c, on) => bulk.push([c, on]), log: { log() {} } });
   const TM = { uid: "tm", token: { email: "tm@x.com" } };
 
-  await assert.rejects(S.handle({ action: "seed", company: "돌캐" }, TM), /테스트운송사/);
+  await assert.rejects(S.handle({ action: "seed", company: "예전운송" }, TM), /테스트운송사/);
   await assert.rejects(S.handle({ action: "reset", company: "테스트운송사 " }, TM), /테스트운송사/);
   await assert.rejects(S.handle({ action: "seed", company: CO }, { uid: "realAdmin", token: { email: "boss@tp.com" } }), /최고관리자/);
   await assert.rejects(S.handle({ action: "seed", company: CO }, null), /로그인/);
-  assert.equal((await db.collection("orders").where("companyName", "==", "돌캐").get()).size, 1);
+  assert.equal((await db.collection("orders").where("companyName", "==", "예전운송").get()).size, 1);
   ok("에뮬레이터: 다른 회사 · 권한 없는 사람 거절(아무것도 안 씀)");
 
   const loop = async (action) => {

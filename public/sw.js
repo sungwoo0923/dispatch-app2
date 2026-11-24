@@ -148,7 +148,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
   // ⭐ 우리 앱(같은 origin) 요청만 다룬다 — Cloud Functions 호출(예: 관리자메뉴
-  // "구글시트 백필" 버튼이 부르는 backfillGsheetMonth 등)처럼 다른 도메인으로
+  // 버튼이 부르는 서버 함수 등)처럼 다른 도메인으로
   // 나가는 요청까지 여기서 가로채고 있었다. 그 요청이 (일시적 네트워크 문제/
   // CORS/콜드스타트 등) 어떤 이유로든 실패하면 아래 catch가 진짜 에러 대신
   // "Offline"이라는 캐시-폴백 문구를 대신 돌려줘서, 실제로는 서버 응답과 무관한

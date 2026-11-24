@@ -153,8 +153,8 @@ export function EduCertPaper({ rec }) {
 
       <div className="mt-8 text-[14px] font-black mb-2">1. 이수자</div>
       <table className="w-full border-collapse table-fixed"><tbody>
-        <DocRow k="성명" v={rec.name || "-"} k2={rec.carNo ? "차량번호" : "구분"} v2={rec.carNo || (rec.role === "driver" ? "기사" : rec.role === "totalMaster" ? "최고관리자" : "직원")} />
-        <DocRow k="소속" v={rec.role === "totalMaster" ? "LogisWeb (최고관리자)" : rec.companyName || "-"} />
+        <DocRow k="성명" v={rec.name || "-"} k2={rec.carNo ? "차량번호" : "구분"} v2={rec.carNo || (rec.role === "driver" ? "기사" : rec.role === "totalMaster" ? "개발자" : "직원")} />
+        <DocRow k="소속" v={rec.role === "totalMaster" ? "로지스웹" : rec.companyName || "-"} />
       </tbody></table>
 
       <div className="mt-6 text-[14px] font-black mb-2">2. 교육 내용</div>
@@ -465,7 +465,7 @@ export function SafetyEduMine({ user, audience, title = "안전교육", wide = f
   }, [user?.uid, co]);
   const mayPledge = aud === "driver" && driverMayPledge(settings, user?.uid);
   const pledgeCourse = courses.find((c) => c.kind === "doc") || null;
-  const showCert = (r) => setCert(user?.role === "totalMaster" ? { ...r, role: "totalMaster" } : r); // 최고관리자 이수증 소속 = LogisWeb
+  const showCert = (r) => setCert(user?.role === "totalMaster" ? { ...r, role: "totalMaster" } : r); // 최고관리자 이수증 소속 = 로지스웹 · 구분 = 개발자(어느 운송사 소속도 아님)
   return (
     <div>
       {title && <div className="text-[20px] font-black mb-3" style={{ color: INK }}>{title}</div>}

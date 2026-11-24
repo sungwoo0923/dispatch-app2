@@ -22,7 +22,7 @@ async function seed(path, data) {
 }
 await seed("users/emp", { role: "user", companyName: "테스트운송", approved: true, name: "직원" });
 await seed("users/emp2", { role: "user", companyName: "테스트운송", approved: true, name: "다른 직원" });
-await seed("users/master", { role: "totalMaster", companyName: "돌캐", approved: true, name: "최고관리자" });
+await seed("users/master", { role: "totalMaster", companyName: "예전운송", approved: true, name: "최고관리자" });
 
 let n = 0;
 function as(uid) {

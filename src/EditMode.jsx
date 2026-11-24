@@ -37,13 +37,13 @@ function resolveCompanyKey(role, userCompany) {
     : (userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY);
 }
 
-// ⭐ 라벨 저장 문서 위치 — "돌캐"는 이 기능이 처음 나온 이후 실제로 편집해온
+// ⭐ 라벨 저장 문서 위치 — "예전 운송사"는 이 기능이 처음 나온 이후 실제로 편집해온
 // 기존 전역 문서(siteConfig/labels)를 그대로 재사용한다(별도 마이그레이션 없이
-// "돌캐 전용 문서"로 재해석). 그 외 회사는 companySettings/{회사명} 문서의
+// "예전 운송사 전용 문서"로 재해석). 그 외 회사는 companySettings/{회사명} 문서의
 // labels 필드에 독립 저장 — 이 문서는 이미 회사별 설정(결제일규칙, 매출목표 등)을
 // 담는 용도로 쓰이고 있어 같은 관행을 따른 것. 그래서 두 경우 데이터 모양이
-// 다르다: 돌캐 문서는 { [라벨키]: 값 } 그 자체, 나머지는 { labels: { [라벨키]: 값 } }.
-const LEGACY_LABELS_COMPANY = "(회사없음)"; // ⭐ 2026-11-21 돌캐 초기화 — 예전 문구 저장 형식을 쓰는 회사 없음
+// 다르다: 예전 운송사 문서는 { [라벨키]: 값 } 그 자체, 나머지는 { labels: { [라벨키]: 값 } }.
+const LEGACY_LABELS_COMPANY = "(회사없음)"; // ⭐ 2026-11-21 예전 문구 저장 형식을 쓰는 회사 없음
 function labelsDocRef(companyKey) {
   return companyKey === LEGACY_LABELS_COMPANY
     ? doc(db, "siteConfig", "labels")

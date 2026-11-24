@@ -1,18 +1,17 @@
 // ======================= src/SheetConnectHub.jsx =======================
 // 🔗 2026-11-07 관리자메뉴 › 구글시트 연동 — 연결된 시트 목록 · 상태 · 마지막 동기화 · 오류 · [가져오기][보내기][매핑 수정]
-//  예전 메뉴(구글시트 가져오기 · 구글시트 전송)를 한곳에 모았다. 돌캐 배차현황(기존 고정 연동)은 "기존 연동" 카드로 보이고 예전 서버 함수를 그대로 쓴다.
+//  예전 메뉴(구글시트 가져오기 · 구글시트 전송)를 한곳에 모았다. 예전 한 운송사 전용 고정 연동(engine 값이 있는 프로필)은 2026-11-24 지움 — 목록에서도 숨긴다.
 //  가져오기: 시트 읽기 → 미리보기(신규/변경/중복/오류 + 이유, 저장 안 함) → 가져오기(오더 저장 · importBatchId로 되돌리기 가능)
 //  보내기: 서버가 연결한 칸만 써 준다(수식 칸 · 연결 안 한 칸은 안 씀). 프로그램과 시트가 둘 다 바뀐 줄은 마지막에 고친 쪽 값으로.
 import React from "react";
 import { auth, db } from "./firebase";
-import { collection, doc, getDoc, getDocs, query, where, writeBatch, setDoc, addDoc, serverTimestamp } from "firebase/firestore";
-import { applyMerges, buildImportPreview, previewToCsv, tabsToRead, importedFields, fieldsHash, legacyDolcaeProfile, profileToBoardColumns } from "../functions/sheetProfileCore.mjs";
+import { collection, doc, getDocs, query, where, writeBatch, setDoc, addDoc, serverTimestamp } from "firebase/firestore";
+import { applyMerges, buildImportPreview, previewToCsv, tabsToRead, importedFields, fieldsHash, profileToBoardColumns } from "../functions/sheetProfileCore.mjs";
 import { sheetConnectApi, useSheetProfiles, patchSheetProfile, removeSheetProfile, sheetDemo, isOfficeFileError } from "./sheetConnectApi";
 import { profileToBoardForm } from "../functions/routeBoardMonth.mjs"; // 📅 날짜 칸 · 월별 탭 배차표
 import OfficeSheetCard from "./OfficeSheetCard"; // 📗 엑셀(xlsx) 파일 안내
 import SheetConnectWizard from "./SheetConnectWizard";
 import SheetImportPanel from "./SheetImportPanel";
-import GsheetMinePanel from "./GsheetMinePanel";
 import { SheetLiveCard, SheetPushCard, fetchSheetLive } from "./CarrierMigratePanel";
 import { SheetCompareButton } from "./SheetCompare"; // 🔍 2026-11-16 프로그램 비교 // 🔗 2026-11-16 실시간 반영 연결(JY 등)도 연결된 시트로 보이게
 import CustomDatePicker from "./CustomDatePicker";
@@ -229,19 +228,7 @@ export default function SheetConnectHub({ company, isTotalMaster, withLive = fal
   const hasLive = !!(live && (live.url || live.enabled));
   const [wizard, setWizard] = React.useState(null); // { initial } | null
   const [run, setRun] = React.useState(null); // { kind, profile }
-  const [legacyOpen, setLegacyOpen] = React.useState("");
   const [moveOpen, setMoveOpen] = React.useState(false);
-
-  // ⭐ 돌캐 배차현황(기존 고정 연동) → 시트 프로필로 자동 등록(보기 · 상태용 · 실제 전송은 예전 서버 함수)
-  React.useEffect(() => {
-    if (!isTotalMaster || company !== "돌캐" || sheetDemo() || !list) return;
-    if (list.some((p) => p.id === "legacy_dolcae")) return;
-    (async () => {
-      const ref = doc(db, "sheetProfiles", "legacy_dolcae");
-      const s = await getDoc(ref).catch(() => null);
-      if (s && !s.exists()) await setDoc(ref, { ...legacyDolcaeProfile(), createdAt: serverTimestamp(), createdBy: "자동 이전" }).catch(() => {});
-    })();
-  }, [isTotalMaster, company, list]);
 
   const del = async (p) => {
     if (!(await kpConfirm(`'${p.name}' 연결을 지울까요? 시트와 오더는 그대로 남아요.`))) return;
@@ -263,7 +250,7 @@ export default function SheetConnectHub({ company, isTotalMaster, withLive = fal
     if (p.lastImportAt || p.lastExportAt) return { t: "연결됨", c: "bg-[#E8F7EF] text-[#0F7A43]" };
     return { t: "준비됨", c: "bg-[#EEF3FF] text-[#2D4C82]" };
   };
-  const profiles = list || [];
+  const profiles = (list || []).filter((p) => !p.engine); // 예전 고정 연동(지움)은 숨김
 
   return (
     <div className="space-y-5" data-testid="sheet-hub">
@@ -296,12 +283,12 @@ export default function SheetConnectHub({ company, isTotalMaster, withLive = fal
               <thead className="bg-[#F7F9FC] text-[#5B6B85] text-[13px] whitespace-nowrap"><tr><th className="px-4 py-3 text-left">시트</th><th className="px-3 text-left">탭</th><th className="px-3 text-left">상태</th><th className="px-3 text-left">마지막 가져오기</th><th className="px-3 text-left">마지막 보내기</th><th className="px-3 text-right"></th></tr></thead>
               <tbody>
                 {profiles.map((p) => {
-                  const st = status(p); const legacy = p.engine === "legacy-dolcae";
+                  const st = status(p);
                   return (
                     <React.Fragment key={p.id}>
                       <tr className="border-t border-[#EEF1F6] align-top">
                         <td className="px-4 py-3">
-                          <div className="font-black text-[#0F1A30] flex items-center gap-2">{p.name}{legacy && <span className="px-2 py-0.5 rounded-md bg-[#FFF6E5] text-[#A35F00] text-[12px] font-black">기존 연동</span>}</div>
+                          <div className="font-black text-[#0F1A30] flex items-center gap-2">{p.name}</div>
                           <a href={p.sheetUrl} target="_blank" rel="noreferrer" className="text-[12.5px] text-[#4B6CB7] font-semibold break-all">시트 열기</a>
                           <span className="text-[12.5px] text-[#9AA4B5] ml-2">칸 {p.columns?.filter((c) => c.mode === "data").length || 0}개 연결 · 계산열 {p.columns?.filter((c) => c.mode === "calc").length || 0}개 보호</span>
                         </td>
@@ -311,12 +298,6 @@ export default function SheetConnectHub({ company, isTotalMaster, withLive = fal
                         <td className="px-3 py-3 text-[13px] text-[#3A4A66] whitespace-nowrap">{fmt(p.lastExportAt)}{p.lastExport && <div className="text-[12.5px] text-[#7A8AA6]">고침 {p.lastExport.written} · 새 줄 {p.lastExport.appended}</div>}</td>
                         <td className="px-3 py-3">
                           <div className="flex justify-end gap-1.5">
-                            {legacy ? (isTotalMaster ? (
-                              <>
-                                <button onClick={() => setLegacyOpen(legacyOpen === "send" ? "" : "send")} className={`${btn} h-9 border border-[#DCE3EE] text-[#2D4C82]`}>보내기</button>
-                                <button onClick={() => setLegacyOpen(legacyOpen === "import" ? "" : "import")} className={`${btn} h-9 border border-[#DCE3EE] text-[#2D4C82]`}>가져오기</button>
-                              </>
-                            ) : <span className="text-[12.5px] text-[#9AA4B5]">최고관리자가 관리해요</span>) : (
                               <>
                                 <button onClick={() => setRun({ kind: "import", profile: p })} className={`${btn} h-9 bg-[#0F1A30] text-white`}>가져오기</button>
                                 <button onClick={() => setRun({ kind: "export", profile: p })} className={`${btn} h-9 border border-[#DCE3EE] text-[#2D4C82]`}>보내기</button>
@@ -324,13 +305,9 @@ export default function SheetConnectHub({ company, isTotalMaster, withLive = fal
                                 <button onClick={() => setBoard({ profile: p, ...profileToBoardForm(p, profileToBoardColumns(p)) })} className={`${btn} h-9 border border-[#DCE3EE] text-[#3A4A66]`}>배차표 양식</button>
                                 <button onClick={() => del(p)} className={`${btn} h-9 text-[#C2352B]`}>삭제</button>
                               </>
-                            )}
                           </div>
                         </td>
                       </tr>
-                      {legacy && isTotalMaster && legacyOpen && (
-                        <tr><td colSpan={6} className="px-4 pb-4">{legacyOpen === "send" ? <GsheetMinePanel /> : <SheetImportPanel />}</td></tr>
-                      )}
                     </React.Fragment>
                   );
                 })}

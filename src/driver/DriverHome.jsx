@@ -1474,7 +1474,7 @@ export default function DriverHome() {
 
   // 연락처 탭 "회사 연락처" — 회사마다 다른 배차팀 번호를 보여주기 위해, 로그인한
   // 기사님이 소속된 회사의 transportApplications(가입 시 등록한 사업자정보)에서
-  // 전화번호를 읽어온다(예전엔 "돌캐" 번호가 모든 회사 기사에게 고정 표시됐었음).
+  // 전화번호를 읽어온다(예전엔 한 회사 번호가 모든 회사 기사에게 고정 표시됐었음).
   useEffect(() => {
     const co = driver?.companyName;
     if (!co) { setCompanyContact(null); return; }
