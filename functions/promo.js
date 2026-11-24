@@ -174,6 +174,22 @@ function wavFromPcm(pcm, rate = 24000) {
   h.write("data", 36); h.writeUInt32LE(pcm.length, 40);
   return Buffer.concat([h, pcm]);
 }
+// 🔇 2026-11-24 Gemini 음성 = WAV(머리말 + data + C2PA 'AI 생성' 표시 상자) — 소리(data)만 꺼낸다.
+//  예전엔 머리말 44바이트만 떼고 나머지를 소리로 읽어, 문장 끝마다 C2PA 상자(약 7.6KB)가 0.17초짜리 큰 '지직' 잡음으로 들어갔다.
+function pcmOnly(buf) {
+  let pcm = buf;
+  if (buf.length > 12 && buf.subarray(0, 4).toString() === "RIFF") {
+    pcm = buf.subarray(44);
+    for (let o = 12; o + 8 <= buf.length;) {
+      const id = buf.subarray(o, o + 4).toString(), sz = buf.readUInt32LE(o + 4);
+      if (id === "data") { pcm = buf.subarray(o + 8, Math.min(buf.length, o + 8 + sz)); break; }
+      o += 8 + sz + (sz & 1);
+    }
+  }
+  const i = pcm.indexOf("C2PA");
+  if (i > 0 && pcm.subarray(i + 12, i + 16).toString() === "jumb") pcm = pcm.subarray(0, i - (i % 2));
+  return pcm;
+}
 // 앞뒤 조용한 부분 잘라 내기(말 시작이 장면 시작에 딱 맞게)
 function trimSilence(pcm) {
   const n = pcm.length >> 1; const th = 700; let a = 0, b = n - 1;
@@ -200,7 +216,7 @@ async function runTts({ db, text, voice, style }) {
         const j = await r.json();
         const d = j?.candidates?.[0]?.content?.parts?.find((p) => p.inlineData)?.inlineData?.data;
         if (!d) { last = "음성이 비어 있어요"; break; }
-        const pcm = trimSilence(Buffer.from(d, "base64"));
+        const pcm = trimSilence(pcmOnly(Buffer.from(d, "base64")));
         return { wav: wavFromPcm(pcm).toString("base64"), dur: Math.round((pcm.length / 2 / 24000) * 100) / 100, model: m, voice: v };
       }
       last = `${r.status} ${(await r.text()).slice(0, 200)}`;
