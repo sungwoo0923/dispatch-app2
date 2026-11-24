@@ -1,4 +1,6 @@
 // ======================= src/mobile/MobileApp.jsx (PART 1/3) =======================
+import { useNewSeen, markNewSeen } from "../newFeatures"; // ✨ 2026-11-24 새 메뉴 NEW 표시
+import NewMark from "../NewMark";
 import { RoadviewButton } from "../roadview"; // 📷 2026-11-20 상·하차지 로드뷰
 import { isFleetGrade } from "../fleetGradesCore"; // 🚛 2026-11-20 사용자 요청 — 지입 · 직영 · 임대 · 분양(isFleetGrade) 모두 기사앱 오더 수락/거절 · 같은 기사앱 화면(예전엔 지입만)
 import { useFleetDispatchWayInstall } from "../fleetDispatchWay"; // 🚛 2026-11-23 지입차로 배차하면 배차방식 자동(회사별)
@@ -8517,9 +8519,12 @@ function MobileSideMenu({
             <MenuItem label="사내 게시판" icon="chat" onClick={() => onGo?.("dept:board")} dark={dark} />
             {deptMode !== "exec" && <MenuItem label="임원 일정" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />}
             <MenuItem label="직원 일정" icon="clock" onClick={() => onGo?.("dept:schedule")} dark={dark} />
-            <MenuItem label="사내 규정" icon="list" onClick={() => onGo?.("dept:rules")} dark={dark} />
-            <MenuItem label="안전교육" icon="shield" onClick={() => onGo?.("dept:safety")} dark={dark} />
             {ok("전자결재") && <MenuItem label="전자결재" icon="stamp" onClick={() => onGo?.("approval")} badge={(alertCounts?.approval || 0) + (alertCounts?.mineNew || 0) + (alertCounts?.handover || 0) + (alertCounts?.payTodo || 0) || null} dark={dark} />}
+          </MenuSection>
+          {/* ✨ 2026-11-24 규정 · 교육 — PC HOME 왼쪽 메뉴와 같게(사내 규정 · 안전교육) */}
+          <MenuSection title="규정 · 교육" en="RULES · TRAINING" dark={dark} fold={!deptMode} alwaysOpen={!!deptMode} openDefault>
+            <MenuItem label="사내 규정" icon="list" onClick={() => onGo?.("dept:rules")} dark={dark} />
+            <MenuItem label="안전교육" icon="shield" newKey="home:edu" onClick={() => onGo?.("dept:safety")} dark={dark} />
           </MenuSection>
           {/* ⭐ 2026-11-14 관리 = PC 회사관리(운임 규칙 · 내정보 · 내 이력서 · 출근기록부) + 관리자메뉴(회원 관리 · 권한 관리) */}
           <MenuSection title="회사관리" en="COMPANY" dark={dark} fold badge={canAdminMenu && !deptMode ? (alertCounts?.signupStaff || 0) + (alertCounts?.signupDriver || 0) : 0}>
@@ -8829,11 +8834,15 @@ function MenuSection({ title, en, children, dark, alwaysOpen = false, fold = fal
 }
 
 // ✋ 작성 중인 문서가 있으면 이동 전에 저장할지 묻는다
-function MenuItem({ onClick, ...rest }) {
+function MenuItem({ onClick: onClick1, newKey, ...rest }) {
   // ⭐ 2026-11-07 화면 편집 — 최고관리자가 정한 이름·순서·숨기기(이 줄이 보일 권한이 있을 때만 그려지므로 권한은 그대로)
   useUiConfigVersion();
+  const { isNew } = useNewSeen(); // ✨ 2026-11-24 새 메뉴 NEW(눌러 열면 사라짐)
   const ui = uiMenuItem("m", rest.label, rest.label);
   if (ui.hidden) return null;
+  const fresh = isNew(newKey);
+  if (fresh && !rest.badge) rest = { ...rest, badge: "NEW" };
+  const onClick = onClick1 && newKey ? () => { markNewSeen(newKey); onClick1(); } : onClick1;
   return <MenuItemBase {...rest} label={ui.label} uiKey={rest.label} uiStyle={ui.order !== undefined || ui.dim ? { order: ui.order, opacity: ui.dim ? 0.45 : undefined } : undefined} onClick={onClick ? () => { confirmLeave().then((ok) => { if (ok) onClick(); }); } : onClick} />;
 }
 function MenuItemBase({ label, onClick: onClick0, badge, dark, icon, uiKey, uiStyle }) {
@@ -8862,7 +8871,7 @@ function MenuItemBase({ label, onClick: onClick0, badge, dark, icon, uiKey, uiSt
         {badge ? (
           typeof badge === "number"
             ? <span style={RED_PILL} className="min-w-[22px] h-[22px] px-1.5 rounded-full bg-rose-500 text-white text-[11.5px] font-black grid place-items-center tabular-nums shadow-[0_0_0_3px_rgba(229,51,42,0.22)]">{badge > 99 ? "99+" : badge}</span>
-            : <span className="h-[20px] px-2 rounded-full bg-[#8FB0F0]/20 text-[#CFE0FF] text-[10px] font-black grid place-items-center tracking-wider">{badge}</span>
+            : badge === "NEW" ? <NewMark /> : <span className="h-[20px] px-2 rounded-full bg-[#8FB0F0]/20 text-[#CFE0FF] text-[10px] font-black grid place-items-center tracking-wider">{badge}</span>
         ) : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(207,224,255,0.35)" strokeWidth="2.4" strokeLinecap="round"><path d="M9 6l6 6-6 6" /></svg>}
       </button>
     );
@@ -8880,7 +8889,7 @@ function MenuItemBase({ label, onClick: onClick0, badge, dark, icon, uiKey, uiSt
           // 숫자(처리할 건수)는 눈에 띄게 빨간 원, "NEW" 같은 글자는 기존 표시
           typeof badge === "number"
             ? <span style={RED_PILL} className="min-w-[20px] h-5 px-1.5 rounded-full bg-rose-500 text-white text-[11px] font-black grid place-items-center tabular-nums">{badge > 99 ? "99+" : badge}</span>
-            : <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-full leading-none ${dark ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>{badge}</span>
+            : badge === "NEW" ? <NewMark light={!dark} /> : <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-full leading-none ${dark ? "bg-white text-[#1B2B4B]" : "bg-[#1B2B4B] text-white"}`}>{badge}</span>
         ) : null}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={dark ? "rgba(255,255,255,0.35)" : "#9AA9C3"} strokeWidth="2.2" strokeLinecap="round">
           <path d="M9 6l6 6-6 6" />

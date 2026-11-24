@@ -946,8 +946,11 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
           { key: "execsched", label: "임원 일정", en: "EXECUTIVE", icon: "pin" },
           // ⭐ 2026-11-01 직원 일정(연차·외근 등 부재 달력)은 상단 메뉴에서 빼고 여기로
           { key: "teamsched", label: "직원 일정", en: "TEAM SCHEDULE", icon: "clock" },
+        ] },
+        // ✨ 2026-11-24 규정 · 교육 — 사내 게시판에서 분리(사내 규정 · 안전교육)
+        { label: "규정 · 교육", items: [
           { key: "rules", label: "사내 규정", en: "RULES", icon: "list" },
-          { key: "safety", label: "안전교육", en: "SAFETY", icon: "shield", badge: eduPendingN, badgeTitle: "아직 안 받은 교육" }, // 🦺 2026-11-24
+          { key: "safety", label: "안전교육", en: "SAFETY TRAINING", icon: "shield", badge: eduPendingN, badgeTitle: "아직 안 받은 교육", newKey: "home:edu" }, // 🦺 2026-11-24
         ] },
         { label: "전자결재", items: approvalNavItems("ap:", { // ⭐ 2026-11-10 메뉴 통일(menuTree) — 상단 전자결재·모바일과 같은 목록
           inbox: { badge: apCounts.todo, badgeTitle: "내 결재 차례" },

@@ -669,7 +669,7 @@ export default function HrHub({ company, canManage, renderRecord, renderAttendan
         { label: "근태", items: [
           { key: "attendance", label: "출근기록부", en: "ATTENDANCE", icon: "clock" },
           { key: "leave", label: "연차 관리", en: "ANNUAL LEAVE", icon: "flag" }, // ⭐ 2026-11-07 연차 현황 + 연차 사용 촉진(근로기준법 61조) 탭
-          { key: "safety", label: "안전교육", en: "SAFETY", icon: "shield" }, // 🦺 2026-11-24 기사 · 직원 안전교육 이수 현황
+          { key: "safety", label: "안전교육", en: "SAFETY", icon: "shield", newKey: "hr:edu" }, // 🦺 2026-11-24 기사 · 직원 안전교육 이수 현황
         ] },
         { label: "설정 · 규정", items: [
           { key: "settings", label: "직책·부서 설정", en: "SETTINGS", icon: "key" },
