@@ -4,7 +4,7 @@
 //  node marketing/edu/build.mjs drv_load --sheet x  → 장면마다 한 장(.cache/drv_load-sNN.png)
 //  나레이션: Gemini TTS(목소리 Kore, .cache 에 줄마다 저장) · 화면: 표지 · 장 표지 · 그림+요점 · 바른 예/잘못된 예 · 순서 · 법 · 체크리스트 · 마무리
 import { createRequire } from "node:module";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import fs from "node:fs"; import path from "node:path"; import url from "node:url"; import crypto from "node:crypto";
 import { COURSES } from "./scripts.mjs";
 const { chromium } = createRequire(import.meta.url)("playwright");
@@ -112,14 +112,15 @@ function slideHtml(s, i) {
     <div class="chl" data-in="${f2(s.t0)}" data-a="right" data-dist="40" data-d="0.5">
       <div class="chno">CHAPTER ${String(s.no).padStart(2, "0")}<span>/ ${String(chapters.length).padStart(2, "0")}</span></div>
       <div class="chbig">${String(s.no).padStart(2, "0")}</div>
+      <div class="sweep" data-in="${f2(s.t0 + 0.35)}" data-out="${f2(s.t0 + 1.9)}" data-a="none" data-pan="-420,0,980,0" data-pt="1.4"></div>
       <div class="chtitle">${esc(s.title)}</div><div class="chsub">${esc(s.sub)}</div>
     </div>
-    <div class="chr"><div class="fill" ${kb(s)}><img src="${IMG(s.img)}"></div></div>`;
+    <div class="chr"><div class="fill" ${kb(s)} data-pan="0,0,-40,0"><img src="${IMG(s.img)}"></div></div>`;
   const nav = s.ch ? `<div class="cnav" data-in="${f2(s.t0 + 0.3)}" data-a="up" data-dist="14"><div class="h"><span>CHAPTER ${String(s.ch.no).padStart(2, "0")} / ${String(chapters.length).padStart(2, "0")}</span><b>${esc(s.ch.title)}</b></div><div class="dots">${chapters.map((c) => `<i class="${c.no === s.ch.no ? "on" : c.no < s.ch.no ? "done" : ""}"></i>`).join("")}</div></div>` : "";
   if (s.type === "points") return nav + `
     <div class="pimg" data-in="${f2(s.t0 + 0.05)}" data-a="up" data-dist="24"><div class="fill" ${kb(s)}><img src="${IMG(s.img)}"></div></div>
     <div class="phead" data-in="${f2(s.t0 + 0.1)}" data-a="up" data-dist="16">${esc(s.head)}</div>
-    <div class="plist">${pts.map((l, j) => `<div class="pt" data-in="${f2(l.t0)}" data-a="left" data-dist="18" data-d="0.45"><i>${String(j + 1).padStart(2, "0")}</i><span>${esc(l.pt)}</span></div>`).join("")}</div>`;
+    <div class="plist">${pts.map((l, j) => `<div class="pt" data-on="${f2(l.t0)},${f2(l.t1 + 0.45)}" data-in="${f2(l.t0)}" data-a="left" data-dist="18" data-d="0.45"><i>${String(j + 1).padStart(2, "0")}</i><span>${esc(l.pt)}</span></div>`).join("")}</div>`;
   if (s.type === "dodont") return `
     <div class="dhead" data-in="${f2(s.t0 + 0.05)}" data-a="up" data-dist="16">${esc(s.head)}</div>
     ${[["good", s.good, s.t0 + 0.25], ["bad", s.bad, (s.ls[1]?.t0 ?? s.t0 + 1.2) - 0.2]].map(([k2, d, tin]) => `
@@ -130,7 +131,7 @@ function slideHtml(s, i) {
   if (s.type === "steps") return `
     <div class="dhead" data-in="${f2(s.t0 + 0.05)}" data-a="up" data-dist="16">${esc(s.head)}</div>
     <div class="steps n${s.steps.length}">${s.steps.map(([icn, lab, sub], j) => `
-      <div class="st" data-in="${f2(s.ls[j]?.t0 ?? s.t0 + 0.5 + j * 0.3)}" data-a="up" data-dist="30" data-d="0.45">
+      <div class="st" data-on="${s.ls[j] ? `${f2(s.ls[j].t0)},${f2(s.ls[j].t1 + 0.45)}` : "0,0"}" data-in="${f2(s.ls[j]?.t0 ?? s.t0 + 0.5 + j * 0.3)}" data-a="up" data-dist="30" data-d="0.45">
         <div class="stno">${String(j + 1).padStart(2, "0")}</div><div class="stic">${ic(icn, 64, 1.7)}</div>
         <div class="stl">${esc(lab)}</div><div class="sts">${esc(sub)}</div>
       </div>`).join("")}</div>`;
@@ -144,7 +145,7 @@ function slideHtml(s, i) {
     <div class="ckimg"><div class="fill" ${kb(s)}><img src="${IMG(C.slides[0].img)}"></div></div>
     <div class="ckbox" data-in="${f2(s.t0 + 0.05)}" data-a="up" data-dist="24">
       <div class="ckh">${ic("check", 34, 2.6)}<span>${esc(s.head)}</span></div>
-      ${s.items.map((it, j) => { const li = s.ls[1 + Math.min(L - 1, Math.floor((j * L) / n))] || s.ls[0]; return `<div class="ck" data-in="${f2(li.t0 + 0.15 * (j % 3))}" data-a="left" data-dist="16"><span class="cb">${ic("check", 26, 3.2)}</span><span>${esc(it)}</span></div>`; }).join("")}
+      ${s.items.map((it, j) => { const li = s.ls[1 + Math.min(L - 1, Math.floor((j * L) / n))] || s.ls[0]; return `<div class="ck" data-in="${f2(li.t0 + 0.15 * (j % 3))}" data-a="left" data-dist="16"><span class="cb" data-in="${f2(li.t0 + 0.15 * (j % 3) + 0.12)}" data-a="pop" data-d="0.35">${ic("check", 26, 3.2)}</span><span>${esc(it)}</span></div>`; }).join("")}
     </div>`;
   }
   if (s.type === "end") return `
@@ -238,6 +239,14 @@ img{display:block;width:100%;height:100%;object-fit:cover}
 .cnav .dots{display:flex;gap:8px;margin-top:16px}
 .cnav .dots i{flex:1;height:10px;border-radius:6px;background:#E3E8F0}
 .cnav .dots i.done{background:#8A97AD}.cnav .dots i.on{background:linear-gradient(90deg,#1B2B4B,#2D4C82)}
+.chl{overflow:hidden}
+.sweep{position:absolute;top:0;bottom:0;left:0;width:260px;background:linear-gradient(100deg,rgba(143,176,240,0) 0%,rgba(143,176,240,.28) 50%,rgba(143,176,240,0) 100%);transform:skewX(-14deg);pointer-events:none}
+.pt,.st{transition:none;border-width:2px}
+.pt.on{border-color:#1B2B4B;box-shadow:0 22px 44px -20px rgba(15,26,48,.55);background:linear-gradient(90deg,#F1F5FC,#fff 40%)}
+.pt.on i{box-shadow:0 0 0 6px rgba(45,76,130,.18)}
+.pt.on span{color:#0B1428}
+.st.on{border-color:#1B2B4B;box-shadow:0 30px 60px -28px rgba(15,26,48,.6)}
+.st.on .stic{box-shadow:0 0 0 10px rgba(45,76,130,.14),0 18px 30px -16px rgba(11,20,40,.7)}
 #cap{position:absolute;left:0;right:0;margin:0 auto;width:fit-content;max-width:1760px;bottom:40px;padding:16px 36px;border-radius:18px;background:rgba(11,20,40,.9);color:#fff;font-size:38px;font-weight:700;line-height:1.4;text-align:center;z-index:9;box-shadow:0 16px 40px -16px rgba(0,0,0,.5)}
 </style></head><body>
 ${slides.map((s, i) => `<section class="slide ${["cover", "end"].includes(s.type) ? "full" : ""}" data-in="${f2(s.t0)}" data-out="${f2(s.t1 - 0.02)}" data-a="fade" data-d="0.4">${slideHtml(s, i)}</section>`).join("\n")}
@@ -250,7 +259,8 @@ window.__CAPS=${JSON.stringify(lines.map((l) => ({ t0: l.t0, t1: l.t1, text: l.s
 </script>
 <script src="${url.pathToFileURL(path.join(ROOT, "../video/engine.js")).href}"></script>
 <script>
-const _seek=window.__seek;window.__seek=async(t)=>{await _seek(t);const S=window.SCENE.slides;const i=Math.max(0,S.findIndex(([a,b])=>t>=a&&t<b));const s=S[i];
+const _seek=window.__seek;const ONS=()=>window.__ons||(window.__ons=[...document.querySelectorAll("[data-on]")].map(el=>{const[a,b]=el.dataset.on.split(",").map(Number);return{el,a,b};}));
+window.__seek=async(t)=>{await _seek(t);ONS().forEach(({el,a,b})=>el.classList.toggle("on",t>=a&&t<b));const S=window.SCENE.slides;const i=Math.max(0,S.findIndex(([a,b])=>t>=a&&t<b));const s=S[i];
 const full=s&&(s[2]==="cover"||s[2]==="end");document.getElementById("top").style.opacity=full?0:1;document.getElementById("bar").style.opacity=full?0:1;
 document.getElementById("chn").textContent=s&&s[3]?"CH "+String(s[3]).padStart(2,"0")+" / "+String(window.SCENE.chN).padStart(2,"0"):"";document.getElementById("cht").textContent=s?s[4]:"";
 document.getElementById("pg").textContent=String(i+1).padStart(2,"0")+" / "+String(S.length).padStart(2,"0");document.getElementById("bar").style.width=(Math.min(1,t/window.SCENE.duration)*100)+"%";};
@@ -274,14 +284,30 @@ if (arg("still")) {
 const total = Math.ceil(DUR * RATE); const audio = Buffer.alloc(total * 2);
 for (const l of lines) l.pcm.copy(audio, Math.round(l.t0 * RATE) * 2, 0, Math.min(l.pcm.length, (total - Math.round(l.t0 * RATE)) * 2));
 const wav = path.join(CACHE, `${id}.pcm`); fs.writeFileSync(wav, audio);
+// 🎵 효과음 시각표 + 배경음악(sound.py) — 나레이션이 나올 때는 배경음악이 저절로 작아진다(사이드체인)
+const events = [];
+for (const s of slides) {
+  if (s.type === "cover" || s.type === "end") events.push({ t: s.t0 + 0.15, k: "swell" });
+  if (s.type === "chapter") events.push({ t: Math.max(0, s.t0 - 0.25), k: "whoosh" });
+  if (s.type === "points") s.ls.filter((l) => l.pt).forEach((l) => events.push({ t: l.t0, k: "pop" }));
+  if (s.type === "steps") s.steps.forEach((_, j) => events.push({ t: s.ls[j]?.t0 ?? s.t0 + 0.5 + j * 0.3, k: "pop" }));
+  if (s.type === "dodont") { events.push({ t: s.t0 + 0.25, k: "pop" }); events.push({ t: (s.ls[1]?.t0 ?? s.t0 + 1.2) - 0.2, k: "pop" }); }
+  if (s.type === "law") events.push({ t: s.t0 + 0.5, k: "pop" });
+  if (s.type === "check") { const n = s.items.length, L = s.ls.length - 1; s.items.forEach((_, j) => { const li = s.ls[1 + Math.min(L - 1, Math.floor((j * L) / n))] || s.ls[0]; events.push({ t: li.t0 + 0.15 * (j % 3) + 0.12, k: "tick" }); }); }
+}
+const evf = path.join(CACHE, `${id}-events.json`); fs.writeFileSync(evf, JSON.stringify({ duration: DUR, events }));
+const bedW = path.join(CACHE, `${id}-bed.wav`), sfxW = path.join(CACHE, `${id}-sfx.wav`);
+execFileSync("python3", [path.join(ROOT, "sound.py"), evf, bedW, sfxW], { stdio: "inherit" });
 const outDir = path.join(ROOT, "../../public/edu"); fs.mkdirSync(outDir, { recursive: true });
-const out = path.join(outDir, `${id}.mp4`); // 아이폰 · 안드로이드 · PC 모두 재생되는 H.264 + AAC
+const out = arg("out") || path.join(outDir, `${id}.mp4`); // --out 로 시험본을 따로 // 아이폰 · 안드로이드 · PC 모두 재생되는 H.264 + AAC
 const fps = +arg("fps", 24);
 const ff = spawn("ffmpeg", ["-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(fps), "-c:v", "mjpeg", "-i", "-",
-  "-f", "s16le", "-ar", String(RATE), "-ac", "1", "-i", wav,
+  "-f", "s16le", "-ar", String(RATE), "-ac", "1", "-i", wav, "-i", bedW, "-i", sfxW,
+  "-filter_complex", "[1:a]aresample=48000,aformat=channel_layouts=stereo,asplit=2[v][sc];[2:a]volume=0.28[b];[b][sc]sidechaincompress=threshold=0.02:ratio=10:attack=15:release=450[bd];[3:a]volume=0.55[fx];[v][bd][fx]amix=inputs=3:normalize=0:duration=first,alimiter=limit=0.95[a]",
+  "-map", "0:v", "-map", "[a]",
   "-c:v", "libx264", "-preset", "slow", "-crf", "25", "-tune", "animation", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-  "-c:a", "aac", "-b:a", "96k", "-shortest", out], { stdio: ["pipe", "inherit", "inherit"] });
-const n = Math.round(DUR * fps); const T = Date.now();
+  "-c:a", "aac", "-b:a", "128k", "-shortest", out], { stdio: ["pipe", "inherit", "inherit"] });
+const n = Math.round(Math.min(DUR, +arg("to", DUR)) * fps); const T = Date.now(); // --to 초: 앞부분만 시험 const T = Date.now();
 for (let i = 0; i < n; i++) {
   await page.evaluate((x) => window.__seek(x), i / fps);
   const buf = await page.screenshot({ type: "jpeg", quality: 92 });
