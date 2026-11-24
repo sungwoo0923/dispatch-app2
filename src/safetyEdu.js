@@ -166,7 +166,7 @@ export function eduStatusOf(record) {
 }
 
 // 영상 길이(초) — 목록에 "3:22"처럼 보인다(marketing/edu/build.mjs 로 만든 실제 길이)
-export const VIDEO_SEC = { drv_load: 436, drv_dock: 316, staff_safety: 282 };
+export const VIDEO_SEC = { drv_load: 438, drv_dock: 316, staff_safety: 282 };
 export const fmtLen = (c) => (c.kind === "video" && VIDEO_SEC[c.id] ? `${Math.floor(VIDEO_SEC[c.id] / 60)}:${String(VIDEO_SEC[c.id] % 60).padStart(2, "0")}` : `${c.minutes}분`);
 
 // 🔏 디지털 이수증 — 이수 기록 문서 이름으로 이수증 번호, 기록 내용으로 확인 코드를 만든다(같은 기록이면 언제 봐도 같은 값)
