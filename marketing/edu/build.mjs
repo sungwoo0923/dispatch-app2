@@ -300,7 +300,7 @@ if (arg("still")) {
 }
 const total = Math.ceil(DUR * RATE); const audio = Buffer.alloc(total * 2);
 // 줄 앞뒤 8ms 부드럽게(이어 붙인 곳에서 '틱' 소리가 나지 않게)
-for (const l of lines) { const n = l.pcm.length >> 1, F = Math.min(192, n >> 1); for (let i = 0; i < F; i++) { const g = i / F; l.pcm.writeInt16LE(Math.round(l.pcm.readInt16LE(i * 2) * g), i * 2); const j = n - 1 - i; l.pcm.writeInt16LE(Math.round(l.pcm.readInt16LE(j * 2) * g), j * 2); } }
+for (const l of lines) { const n = l.pcm.length >> 1, F = Math.min(480, n >> 2); for (let i = 0; i < F; i++) { const g = i / F; l.pcm.writeInt16LE(Math.round(l.pcm.readInt16LE(i * 2) * g), i * 2); const j = n - 1 - i; l.pcm.writeInt16LE(Math.round(l.pcm.readInt16LE(j * 2) * g), j * 2); } }
 for (const l of lines) l.pcm.copy(audio, Math.round(l.t0 * RATE) * 2, 0, Math.min(l.pcm.length, (total - Math.round(l.t0 * RATE)) * 2));
 const wav = path.join(CACHE, `${id}.pcm`); fs.writeFileSync(wav, audio);
 // 🎵 효과음 시각표 + 배경음악(sound.py) — 나레이션이 나올 때는 배경음악이 저절로 작아진다(사이드체인)
@@ -322,7 +322,7 @@ const out = arg("out") || path.join(outDir, `${id}.mp4`); // --out 로 시험본
 const fps = +arg("fps", 24);
 const ff = spawn("ffmpeg", ["-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(fps), "-c:v", "mjpeg", "-i", "-",
   "-f", "s16le", "-ar", String(RATE), "-ac", "1", "-i", wav, "-i", bedW, "-i", sfxW,
-  "-filter_complex", "[1:a]aresample=48000,aformat=channel_layouts=stereo,asplit=2[v][sc];[2:a]volume=0.28[b];[b][sc]sidechaincompress=threshold=0.02:ratio=10:attack=15:release=450[bd];[3:a]volume=0.45[fx];[v][bd][fx]amix=inputs=3:normalize=0:duration=first,alimiter=limit=0.95[a]",
+  "-filter_complex", "[1:a]aresample=48000,aformat=channel_layouts=stereo[v];[2:a]volume=0.2[b];[v][b]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.95[a]" /* 🔇 2026-11-24 효과음 없음 · 배경음악은 일정한 크기로 끊김 없이(사용자 요청 — 줄어들었다 커지는 것도 끊기는 느낌) */,
   "-map", "0:v", "-map", "[a]",
   "-c:v", "libx264", "-preset", "slow", "-crf", "25", "-tune", "animation", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
   "-c:a", "aac", "-b:a", "128k", "-shortest", out], { stdio: ["pipe", "inherit", "inherit"] });
