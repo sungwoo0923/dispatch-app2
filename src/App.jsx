@@ -92,6 +92,7 @@ import NoAccess from "./NoAccess";
 import { securityLoginPing } from "./securityWatch"; // 🛡 2026-11-09 이상 접속 알림
 import { effectiveUser, multiStateOf, setMultiState } from "./multiCompany"; // 🏢 2026-11-24 여러 회사 오가기
 import { CompanySwitchedToast } from "./MultiCompanySwitch";
+import ForceUpdateHost from "./ForceUpdateHost"; // ⏱ 2026-11-24 강제 업데이트 예약 — 화면 위 가운데 안내 + 남은 시간
 const UploadPage = lazyRetry(() => import("./UploadPage"));
 const DriverSearchPage = lazyRetry(() => import("./DriverSearchPage"));
 const ShortLinkRedirect = lazyRetry(() => import("./ShortLinkRedirect"));
@@ -1085,6 +1086,7 @@ export default function App() {
 
       {user && <React.Suspense fallback={null}><ManualHost /></React.Suspense>}
       {user && <CompanySwitchedToast />}
+      {user && !IS_MOBILE_PREVIEW && !isPreviewMode() && <ForceUpdateHost company={userCompany} role={role || ""} linkedCompany={contractCo} />}
       {/* 🔐 2026-11-14 일반 계정 2차 인증(켠 계정만) — 로그인 화면 밖에서 들어온 경우(자동 로그인 · 다른 로그인 화면) */}
       {needUserMfa && !sessionConflict && !(window.__kpGateInline && window.location.pathname === "/transport-login") && (userAuthAt === null
         ? <div className="fixed inset-0 z-[100002]" style={{ background: "linear-gradient(135deg, #061832 0%, #0B2554 50%, #0D2B66 100%)" }} />

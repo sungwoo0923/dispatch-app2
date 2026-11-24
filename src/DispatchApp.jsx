@@ -6592,6 +6592,8 @@ function sflowToast(message, type, meta) {
 }
 function ToastProvider({ children }) {
   const [toasts, setToasts] = React.useState([]);
+  const toastHoverRef = React.useRef(false); // 🎨 2026-11-24 라이브 알림에 마우스를 올려 둔 동안 true
+  const [liveOpen, setLiveOpen] = React.useState(false); // 알림이 3종류 넘게 몰렸을 때 펼치기
 
   const showToast = (message, type = "success", meta = null) => {
     const id = crypto.randomUUID();
@@ -6610,9 +6612,19 @@ function ToastProvider({ children }) {
 
     // 화주사 수정요청/기사취소요청은 승인이 필요한 중요 건이라 놓치지 않도록 더 오래 유지한다.
     const duration = (type === "editRequest" || type === "cancelRequest") ? 8000 : 4000;
-    setTimeout(() => {
+    // 🎨 2026-11-24 라이브 알림 — 마우스를 올려 두면 사라지지 않고 기다린다
+    const drop = () => {
+      if (toastHoverRef.current && type !== "editRequest" && type !== "cancelRequest") { setTimeout(drop, 600); return; }
       setToasts((prev) => prev.filter(t => t.id !== id));
-    }, duration);
+    };
+    setTimeout(drop, duration);
+    // 새로 바뀐 오더 줄은 2초 동안 은은하게 표시
+    if (meta?.orderId) setTimeout(() => {
+      const el = document.getElementById(`row-${meta.orderId}`);
+      if (!el) return;
+      el.classList.remove("kp-row-new"); void el.offsetWidth; el.classList.add("kp-row-new");
+      setTimeout(() => el.classList.remove("kp-row-new"), 2300);
+    }, 80);
   };
 
   const removeToast = (id) => {
@@ -6690,26 +6702,25 @@ function ToastProvider({ children }) {
         }
       `}</style>
 
-      {/* ⭐ 2026-10-27 — 알림을 화면 가운데 위에 큰 카드로 여러 장 쌓던 것을 오른쪽 위 작은 카드로.
-            같은 종류(예: 오더 등록 6건)는 한 장으로 묶어 "6건"과 짧은 목록만 보여준다(표를 가리지 않게) */}
+      {/* 🎨 2026-11-24 라이브 알림(사용자 요청) — 오른쪽 위 남색 카드 → 화면 위 가운데(헤더 바로 아래) 알약
+            · 한 건: 내용 한 줄 + [보기] · 여러 건: 내역 없이 "오더 12건이 등록되었습니다"처럼 숫자만 크게(숫자가 올라가고 빛이 한 번 스침)
+            · 종류마다 색: 배차 완료 에메랄드 · 등록 블루 · 수정 골드 · 취소/오류 붉은색 — 왼쪽 띠와 아이콘에만
+            · 마우스를 올리면 기다림 · 3종류 넘게 몰리면 "알림 N개"로 접힘 · 강제 업데이트 안내가 떠 있으면 그 아래로 */}
       {(() => {
-        // 🎨 2026-11-19 디자인 변경(사용자 요청) — 예전 흰 카드 → 프로그램 알림과 같은 남색 카드
-        //  (driverEvents.jsx 기사 수락 · 긴급 알림과 같은 모양: 왼쪽 색 띠 · 아이콘 칸 · 한글/영문 라벨 · 시각 · [닫기]/[보기] · 아래 진행 막대)
-        //  색은 프로그램 남색 · 하늘색 계열만(취소 · 오류만 붉은색) — 알록달록하지 않게
         const UI = {
-          dispatch: { label: "배차 완료", en: "DISPATCHED", c: "#8FB0F0", bg: "rgba(143,176,240,.16)" },
-          orderRegistered: { label: "오더 등록", en: "NEW ORDER", c: "#CFE0FF", bg: "rgba(207,224,255,.12)" },
-          order: { label: "신규 오더(화주사)", en: "SHIPPER ORDER", c: "#8FB0F0", bg: "rgba(143,176,240,.16)" },
-          shipperEdit: { label: "화주사 수정", en: "EDITED", c: "#CFE0FF", bg: "rgba(207,224,255,.12)" },
-          cancel: { label: "오더 취소", en: "CANCELLED", c: "#FF8A80", bg: "rgba(255,107,97,.14)" },
-          error: { label: "확인 필요", en: "ERROR", c: "#FF8A80", bg: "rgba(255,107,97,.14)" },
-          other: { label: "알림", en: "NOTICE", c: "#CFE0FF", bg: "rgba(207,224,255,.12)" },
+          dispatch: { label: "배차 완료", en: "DISPATCHED", c: "#2FBF8F", hi: "#7FE0B9", many: (n) => `${n}건 배차가 완료되었습니다` },
+          orderRegistered: { label: "오더 등록", en: "REGISTERED", c: "#8FB0F0", hi: "#CFE0FF", many: (n) => `오더 ${n}건이 등록되었습니다` },
+          order: { label: "화주사 신규 오더", en: "SHIPPER ORDER", c: "#8FB0F0", hi: "#CFE0FF", many: (n) => `화주사 신규 오더 ${n}건이 들어왔습니다` },
+          shipperEdit: { label: "화주사 수정", en: "EDITED", c: "#D7BC82", hi: "#F3E3BC", many: (n) => `화주사 수정 ${n}건이 반영되었습니다` },
+          cancel: { label: "오더 취소", en: "CANCELLED", c: "#E0707A", hi: "#FFB3B8", many: (n) => `오더 ${n}건이 취소되었습니다` },
+          error: { label: "확인 필요", en: "CHECK", c: "#E0707A", hi: "#FFB3B8", many: (n) => `확인이 필요한 항목 ${n}건` },
+          other: { label: "알림", en: "NOTICE", c: "#8FB0F0", hi: "#CFE0FF", many: (n) => `새 알림 ${n}건` },
         };
         const ICON = {
-          dispatch: <><rect x="1" y="7" width="14" height="11" rx="1.5"/><path d="M15 11h4l3 3.5V18h-7z"/><circle cx="6.5" cy="19.5" r="1.8"/><circle cx="17" cy="19.5" r="1.8"/></>,
-          order: <><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M3 7l9 5 9-5"/><path d="M12 12v9"/></>,
+          dispatch: <path d="M5 12.5l4.2 4.2L19 7" />,
+          order: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
           shipperEdit: <><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></>,
-          cancel: <><circle cx="12" cy="12" r="9"/><line x1="7" y1="7" x2="17" y2="17"/></>,
+          cancel: <><path d="M7 7l10 10" /><path d="M17 7L7 17" /></>,
           other: <><path d="M12 3a5 5 0 0 0-5 5v3.5L5 15h14l-2-3.5V8a5 5 0 0 0-5-5z"/><path d="M10 18a2 2 0 0 0 4 0"/></>,
         };
         const hm = (ms) => new Date(ms || Date.now()).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
@@ -6717,54 +6728,56 @@ function ToastProvider({ children }) {
         const list = toasts.filter(t => t.type !== "editRequest" && t.type !== "cancelRequest");
         const groups = [];
         list.forEach((t) => { const g = groups.find((x) => x.type === t.type); if (g) g.items.push(t); else groups.push({ type: t.type, items: [t] }); });
+        if (!groups.length) return null;
+        const shown = liveOpen ? groups : groups.slice(-2);
+        const hidden = groups.length - shown.length;
         return (
-          <div className="fixed top-[72px] right-5 z-[99999] space-y-2 pointer-events-none" style={{ width: "min(340px, 92vw)" }} data-kp="sflow-toasts">
-            <style>{`@keyframes kpSfBar{from{transform:scaleX(1)}to{transform:scaleX(0)}}`}</style>
-            {groups.map((g) => {
+          <div className="kp-live fixed left-1/2 -translate-x-1/2 z-[99999] flex flex-col items-center gap-2 pointer-events-none" style={{ width: "min(560px, 94vw)" }} data-kp="sflow-toasts"
+            onMouseEnter={() => { toastHoverRef.current = true; }} onMouseLeave={() => { toastHoverRef.current = false; setLiveOpen(false); }}>
+            <style>{`
+              .kp-live{top:72px;transition:top .3s ease}
+              html[data-kp-force] .kp-live{top:136px}
+              @keyframes kpLiveIn{from{opacity:0;transform:translateY(-10px) scale(.97)}to{opacity:1;transform:none}}
+              @keyframes kpLiveSweep{from{transform:translateX(-160%) skewX(-18deg)}to{transform:translateX(560%) skewX(-18deg)}}
+              @keyframes kpLiveBar{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+              @keyframes kpLiveNum{0%{transform:translateY(6px);opacity:.2}100%{transform:none;opacity:1}}
+              .kp-live-pill{animation:kpLiveIn .38s cubic-bezier(.2,.8,.2,1) both}
+              .kp-live-pill:after{content:"";position:absolute;top:0;bottom:0;width:90px;left:0;background:linear-gradient(100deg,transparent,rgba(255,255,255,.12),transparent);animation:kpLiveSweep 1.1s ease-out .25s 1 both;pointer-events:none}
+              .kp-live:hover .kp-live-bar{animation-play-state:paused}
+              @keyframes kpRowNew{0%{background:rgba(47,191,143,.16)}100%{background:transparent}}
+              tr.kp-row-new>td,.kp-row-new{animation:kpRowNew 2.2s ease-out 1}
+              @media (prefers-reduced-motion:reduce){.kp-live-pill,.kp-live-pill:after{animation:none}}
+            `}</style>
+            {shown.map((g) => {
               const latest = g.items[g.items.length - 1];
-              const many = g.items.length > 1;
+              const n = g.items.length;
+              const many = n > 1;
               const ui = UI[g.type] || UI.other;
               const icoKey = g.type === "orderRegistered" ? "order" : g.type === "error" ? "cancel" : g.type;
-              const shipperBtn = latest.meta?.orderId && (latest.meta?.source === "shipper" || latest.meta?.source === "shipper_mobile") && !many;
               const close = (e) => { e.stopPropagation(); g.items.forEach((t) => removeToast(t.id)); };
               return (
                 <div key={g.type} role="status" aria-live="polite" onMouseDown={keep} data-kp-sftoast={g.type}
-                  className="kp-sf-toast toast-enter pointer-events-auto relative overflow-hidden rounded-2xl text-white border border-[rgba(143,176,240,0.28)] shadow-[0_18px_44px_rgba(5,10,25,0.42)]"
-                  style={{ background: "linear-gradient(150deg,#0F1A30 0%,#1B2B4B 100%)" }}>
-                  <div className="absolute inset-y-0 left-0 w-1" style={{ background: ui.c }} />
-                  <div className="flex items-start gap-3 pl-[18px] pr-3.5 pt-3 pb-3.5">
-                    <div className="w-9 h-9 rounded-[11px] grid place-items-center shrink-0" style={{ background: ui.bg }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ui.c} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">{ICON[icoKey] || ICON.other}</svg>
+                  className="kp-live-pill pointer-events-auto relative overflow-hidden rounded-[22px] text-white max-w-full flex items-center gap-3 pl-3 pr-2 py-2.5 border border-white/[0.07] shadow-[0_18px_44px_rgba(11,20,40,.38)]"
+                  style={{ background: "linear-gradient(120deg,rgba(11,20,40,.97),rgba(23,36,64,.97))", backdropFilter: "blur(6px)" }}>
+                  <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: ui.c }} />
+                  <span className="w-10 h-10 rounded-[14px] grid place-items-center shrink-0" style={{ background: `${ui.c}29` }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ui.hi} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">{ICON[icoKey] || ICON.other}</svg>
+                  </span>
+                  {many && <span key={n} className="text-[30px] font-black tabular-nums leading-none shrink-0" style={{ color: ui.hi, animation: "kpLiveNum .35s ease-out both" }}>{n}<span className="text-[14px] ml-0.5">건</span></span>}
+                  <div className="min-w-0 flex-1 cursor-pointer" onClick={() => !many && handleToastClick(latest)}>
+                    <div className="flex items-center gap-1.5 text-[10.5px] font-black tracking-[0.16em]" style={{ color: ui.c }}>
+                      <span>{ui.en}</span><span className="tracking-normal">· {ui.label}</span><span className="ml-1 tracking-normal font-bold text-white/40 tabular-nums">{hm(latest.createdAt)}</span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[11px] font-extrabold" style={{ color: ui.c }}>{ui.label}</span>
-                        <span className="text-[10px] font-bold tracking-[0.16em] text-[rgba(143,176,240,0.6)]">{ui.en}</span>
-                        {many && <span className="h-[18px] px-1.5 rounded-full bg-white/15 text-white text-[10.5px] font-extrabold inline-flex items-center tabular-nums">{g.items.length}건</span>}
-                        <span className="ml-auto text-[11px] font-bold text-white/50 tabular-nums">{hm(latest.createdAt)}</span>
-                      </div>
-                      {!many && <div className="mt-[3px] text-[14px] font-extrabold leading-snug break-keep cursor-pointer" onClick={() => handleToastClick(latest)} title={latest.message}>
-                        <span className="block truncate">{latest.message}</span>
-                      </div>}
-                      {many && (
-                        <div className="mt-1.5 space-y-0.5">
-                          {g.items.slice(-4).reverse().map((t) => (
-                            <button key={t.id} type="button" tabIndex={-1} onMouseDown={keep} onClick={() => handleToastClick(t)}
-                              className="w-full text-left text-[12.5px] font-semibold text-[rgba(226,234,248,0.78)] truncate px-2 py-1 rounded-lg hover:bg-white/[0.07]">{t.message}</button>
-                          ))}
-                          {g.items.length > 4 && <div className="px-2 text-[11px] font-bold text-white/45">외 {g.items.length - 4}건</div>}
-                        </div>
-                      )}
-                      <div className="mt-2.5 flex gap-1.5 justify-end">
-                        <button type="button" tabIndex={-1} onMouseDown={keep} onClick={close} className="h-[30px] px-3 rounded-[9px] text-[12.5px] font-extrabold bg-white/[0.07] text-white/75 border border-white/[0.12]">닫기</button>
-                        {latest.meta?.orderId && <button type="button" tabIndex={-1} onMouseDown={keep} onClick={(e) => { e.stopPropagation(); handleToastClick(latest); }} className="h-[30px] px-3 rounded-[9px] text-[12.5px] font-extrabold bg-white text-[#0F1A30]">{shipperBtn ? "배차확인" : "보기"}</button>}
-                      </div>
-                    </div>
+                    <div className="text-[14.5px] font-black truncate mt-0.5" title={many ? "" : latest.message}>{many ? ui.many(n) : latest.message}</div>
                   </div>
-                  <div className="kp-sf-bar absolute left-0 bottom-0 h-[3px] w-full origin-left opacity-70" style={{ background: "#8FB0F0", animation: "kpSfBar 4000ms linear forwards" }} key={latest.id} />
+                  {!many && latest.meta?.orderId && <button type="button" tabIndex={-1} onMouseDown={keep} onClick={(e) => { e.stopPropagation(); handleToastClick(latest); }} className="h-[34px] px-3.5 rounded-xl text-[12.5px] font-black bg-white/10 border border-white/[0.14] shrink-0 hover:bg-white/[0.16]">보기</button>}
+                  <button type="button" tabIndex={-1} onMouseDown={keep} onClick={close} className="w-7 h-7 rounded-lg grid place-items-center text-white/45 hover:text-white/80 hover:bg-white/10 shrink-0" aria-label="닫기">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+                  <span className="kp-live-bar absolute left-0 bottom-0 h-[2px] w-full origin-left opacity-80" style={{ background: ui.c, animation: "kpLiveBar 4000ms linear forwards" }} key={latest.id} />
                 </div>
               );
             })}
+            {hidden > 0 && <button type="button" onMouseDown={keep} onClick={() => setLiveOpen(true)} className="pointer-events-auto h-8 px-3.5 rounded-full text-[12px] font-black text-[#F3E3BC] border border-[rgba(215,188,130,.4)] shadow-[0_8px_20px_rgba(11,20,40,.3)]" style={{ background: "linear-gradient(120deg,#0B1428,#172440)" }}>알림 {hidden}개 더 · 펼치기</button>}
           </div>
         );
       })()}
