@@ -13,7 +13,7 @@ import { menuName } from "./execMenus";
 import { MENU_TOURS } from "./onboardingTour";
 import { manualFor, manualName } from "./WorkManual"; // 📘 2026-11-15 모든 메뉴 매뉴얼
 import { HELP_DETAIL, HELP_COMMON, helpTextOf } from "./helpContent"; // 📖 메뉴별 자세한 사용법
-import { HELP_VIDEOS, videoSrc, videoPoster, videosForMenu } from "./helpVideos"; // 🎬 2026-11-17 영상으로 배우기
+import { HELP_VIDEOS, videoSrc, videoPoster, videosForMenu, videoChanges, videoRecorded } from "./helpVideos"; // 🎬 2026-11-17 영상으로 배우기
 import { HelpDemo, hasHelpDemo } from "./HelpDemos"; // 🎬 2026-11-13 움직이는 예시 화면
 // 🎬 2026-11-18 영상 작업실에서 고친 편은 실제 영상과 똑같은 실시간 재생기로(실패하면 원래 mp4)
 const HelpVideoSmart = React.lazy(() => import("./EditedVideoPlayer").then((m) => ({ default: m.HelpVideoSmart })));
@@ -216,6 +216,7 @@ function VideoCard({ v, onPlay, small }) {
         <img src={videoPoster(v)} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
         <span className="absolute inset-0 grid place-items-center"><span className="w-14 h-14 rounded-full bg-white/90 grid place-items-center shadow-lg group-hover:scale-105 transition"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="#0F1A30" /></svg></span></span>
         <span className="absolute left-2.5 top-2.5 h-6 px-2 rounded-md bg-[#3D7BFF] text-white text-[11.5px] font-black grid place-items-center tabular-nums">EP{String(v.no).padStart(2, "0")}</span>
+        {!!videoChanges(v).length && <span data-help-video-changed className="absolute right-2.5 top-2.5 h-6 px-2 rounded-md bg-[#F5B301] text-[#3A2A00] text-[11.5px] font-black grid place-items-center">바뀐 점 {videoChanges(v).length}</span>}
         {v.len && <span className="absolute right-2.5 bottom-2.5 h-6 px-2 rounded-md bg-black/70 text-white text-[11.5px] font-black grid place-items-center tabular-nums">{v.len}</span>}
       </div>
       <div className={small ? "px-3.5 py-2.5" : "px-4 py-3"}>
@@ -229,7 +230,7 @@ function VideoPlayer({ v, onClose, onPick }) {
   React.useEffect(() => { const k = (e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }; window.addEventListener("keydown", k, true); return () => window.removeEventListener("keydown", k, true); }, [onClose]);
   const i = HELP_VIDEOS.findIndex((x) => x.id === v.id); const next = HELP_VIDEOS[i + 1];
   return (
-    <div data-help-player className="absolute inset-0 z-20 bg-[#060C1A]/90 flex flex-col items-center justify-center p-4 sm:p-8" onClick={onClose}>
+    <div data-help-player className="absolute inset-0 z-20 bg-[#060C1A]/90 flex flex-col items-center justify-center p-4 sm:p-8 overflow-auto" onClick={onClose}>
       <div className="w-full max-w-[1180px]" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 mb-3 text-white">
           <span className="h-7 px-2.5 rounded-md bg-[#3D7BFF] text-[12.5px] font-black grid place-items-center tabular-nums">EP{String(v.no).padStart(2, "0")}</span>
@@ -240,7 +241,26 @@ function VideoPlayer({ v, onClose, onPick }) {
         <React.Suspense fallback={<div className="w-full aspect-video max-h-[78vh] rounded-xl bg-black" />}>
           <HelpVideoSmart key={v.id} v={v} fallback={<video key={v.id} src={videoSrc(v)} poster={videoPoster(v)} controls autoPlay playsInline className="w-full max-h-[78vh] rounded-xl bg-black" />} />
         </React.Suspense>
+        <VideoChanges v={v} />
       </div>
+    </div>);
+}
+// 🆕 2026-11-25 영상 만든 뒤 바뀐 점 — 영상은 촬영한 날 화면이라, 그 뒤 달라진 곳을 재생 화면 아래에 알려 준다
+const mdKo = (d) => { const [, m, dd] = String(d).split("-"); return `${Number(m)}월 ${Number(dd)}일`; };
+function VideoChanges({ v }) {
+  const list = videoChanges(v);
+  const [open, setOpen] = React.useState(true);
+  if (!list.length) return null;
+  return (
+    <div data-help-video-changes className="mt-3 rounded-xl bg-white/95 text-[#0F1A30] overflow-hidden">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="w-full flex items-center gap-2 px-4 h-11 text-left">
+        <span className="h-6 px-2 rounded-md bg-[#F5B301] text-[#3A2A00] text-[11.5px] font-black grid place-items-center">바뀐 점 {list.length}</span>
+        <span className="text-[13.5px] font-black">이 영상은 {mdKo(videoRecorded(v))} 화면이에요. 그 뒤로 이렇게 바뀌었어요</span>
+        <span className="ml-auto text-[12px] font-black text-[#7A89A3]">{open ? "접기" : "펼치기"}</span>
+      </button>
+      {open && <ul className="px-4 pb-3 max-h-[22vh] overflow-auto space-y-1">
+        {list.map((x, i) => <li key={i} className="flex gap-3 text-[13px] leading-relaxed"><span className="shrink-0 w-[52px] text-[#8FA0BD] font-bold tabular-nums">{mdKo(x.d)}</span><span className="text-[#2A3852]">{x.t}</span></li>)}
+      </ul>}
     </div>);
 }
 

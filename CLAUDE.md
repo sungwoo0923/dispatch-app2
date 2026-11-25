@@ -22,3 +22,13 @@
 4. `node scripts/guideLibrary.test.mjs` 통과 확인(이미지 · 작은 그림이 다 있는지, 목록에 없는 이미지가 없는지 검사)
 
 보는 곳: 관리자센터 › 운영 › 사용법 보관함(`src/adminCenter/GuideLibrary.jsx`). 새 분류가 필요하면 `GUIDE_CATS` 에 추가한다.
+
+## 교육 영상 '바뀐 점' 최신 유지 (2026-11-25 사용자 요청, 항상 지킬 것)
+교육 영상(`public/videos/epXX.mp4`)은 찍은 날 화면 그대로다. 영상에 나오는 화면 · 버튼 · 순서를 바꾸면 **같은 커밋에서**
+
+1. `src/helpVideos.js` 의 `VIDEO_SINCE[epXX]` 맨 위에 `{ d: 날짜, t: "무엇이 어떻게 달라졌는지 한 줄" }` 추가(어느 편인지는 각 편 `menus` 로 찾는다)
+2. 영상을 새로 만들었으면 그 편 `recorded` 를 새 날짜로 하고 그 편 `VIDEO_SINCE` 목록을 비운다
+3. 영상 메뉴에 새 메뉴를 넣으면 `src/helpContent.js` 의 `HELP_DETAIL` 에도 그 메뉴 설명을 만든다
+4. `node scripts/helpVideos.test.mjs` 통과 확인(날짜 · 순서 · 길이 · 영상 메뉴에 도움말이 있는지 검사)
+
+보는 곳: 도움말 센터 › 영상으로 배우기 — 카드에 노란 [바뀐 점 N], 재생 화면 아래에 날짜별 목록.
