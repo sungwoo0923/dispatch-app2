@@ -245,7 +245,7 @@ const CustomDatePicker = React.forwardRef(function CustomDatePicker(
           // 달력 안을 눌러도 트리거 버튼의 포커스를 유지(연/월 선택칸은 직접 포커스가 필요하므로 제외)
           onMouseDown={(e) => { if (e.target.tagName !== "SELECT" && e.target.tagName !== "OPTION") e.preventDefault(); }}
           style={{ position: "fixed", left: menuRect.left, top: menuRect.top, bottom: menuRect.bottom }}
-          className="z-[999999] bg-white border border-gray-200 rounded-xl shadow-2xl p-3 w-[320px] max-w-[94vw]"
+          className="z-[2147483100] bg-white border border-gray-200 rounded-xl shadow-2xl p-3 w-[320px] max-w-[94vw]" // 🛠 2026-11-25 정기오더 창(z 1000000) 등 창 뒤로 뜨던 것 — 고르기 칸(CustomSelect)과 같은 높이로
         >
           <div className="flex items-center justify-between mb-2 gap-1">
             <button type="button" onClick={() => goMonth(-1)}
