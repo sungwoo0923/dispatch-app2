@@ -1,6 +1,7 @@
 // ======================= FleetManagement.jsx =======================
 import { makeTruckIcon, truckColor, headingFor, pathHeading } from "./fleetTruck";
-import FleetControlDeck from "./FleetControlDeck"; // 🛰 2026-11-25 관제현황 = 관제실 다크 // 🚚 2026-11-25 관제실 다크 · 위에서 본 트럭
+import FleetControlDeck from "./FleetControlDeck"; // 🛰 2026-11-25 관제현황 = 관제실 다크
+import { FLEET_DARK_CSS } from "./fleetDarkTheme"; // 🛰 2026-11-25 지입차관리 전체 다크(scripts/genFleetDark.mjs) // 🚚 2026-11-25 관제실 다크 · 위에서 본 트럭
 import { buildDriverCopyText } from "./driverCopyText"; // 📋 2026-11-18 기사복사 문구 — PC · 모바일 같은 글
 import { useCopyTemplates } from "./copyTemplates";
 import { isFleetGrade } from "./fleetGradesCore"; // 🚛 지입차 구분(지입·직영·임대·분양) 한 곳
@@ -6930,11 +6931,13 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
 
 
   // ─── 렌더 ────────────────────────────────────────────────────────────────
+  const darkDeck = !hideChrome && !forceTab; // 🛰 2026-11-25 지입차관리 메뉴 전체 = 관제실 다크(다른 메뉴에 끼워 쓸 때는 원래 밝은 화면)
   return (
-    <div style={{
+    <div className={darkDeck ? "fm-dark" : undefined} style={{
       display: "flex", flexDirection: "column", gap: 16, padding: "4px 0",
       fontFamily: "'Pretendard','Noto Sans KR','Apple SD Gothic Neo',sans-serif",
     }}>
+      {darkDeck && <style>{FLEET_DARK_CSS}</style>}
 
       {!hideChrome && (<>
       {/* ═══ 헤더 — 관제센터 스타일(네이비 그리드 + 디지털 시계) ═══ */}
