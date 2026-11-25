@@ -21,6 +21,15 @@ export const HELP_VIDEOS = [
   { id: "ep14", no: 14, title: "대표 · 임원 화면", desc: "아침 요약 팝업 · 경영 브리핑 · 일일 경영 보고 · 경영 분석 7개 탭 · 결재 대기 · 직원 정보 · 자금현황 · 영업관리", menus: ["HOME", "일일경영보고", "경영분석", "결재대기", "직원정보", "자금현황", "영업관리", "스케줄"], who: "대표 · 임원" },
 ];
 
+// 🆕 2026-11-25 영상 만든 뒤 바뀐 점 — 영상은 촬영한 날(recorded) 화면 그대로라, 그 뒤에 바뀐 화면 · 버튼을 한 줄씩 적어 둔다
+//  영상 카드에 [바뀐 점 N] 표시 · 재생 화면 아래에 목록으로 나온다(영상을 새로 만들면 recorded 를 바꾸고 그 편 목록을 비운다)
+//  { d: "YYYY-MM-DD", t: "짧은 한 줄(토스 말투)" } — 최신이 위로. 화면이 또 바뀌면 그 편 맨 위에 한 줄 더한다(CLAUDE.md)
+export const VIDEO_RECORDED = "2026-11-17";
+export const VIDEO_SINCE = {
+};
+
+export const videoRecorded = (v) => v.recorded || VIDEO_RECORDED;
+export const videoChanges = (v) => VIDEO_SINCE[v.id] || [];
 export const videoSrc = (v) => `/videos/${v.id}.mp4`;
 export const videoPoster = (v) => `/videos/${v.id}.jpg`;
 export const videosForMenu = (menu) => HELP_VIDEOS.filter((v) => v.menus.includes(menu));
