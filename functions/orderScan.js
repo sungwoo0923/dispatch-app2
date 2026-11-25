@@ -11,7 +11,7 @@ const Anthropic = AnthropicMod.default || AnthropicMod;
 
 const MODEL = "claude-haiku-5-5"; // 빠르고 싼 칸 정리용(요청: 최신 Haiku)
 const SUPER_EMAIL = "tjddnqkf@naver.com";
-const LIMITS = { ocr: 200, extract: 400 }; // 사람마다 하루(한국 날짜)
+const LIMITS = { ocr: 200, extract: 400, voice: 600 }; // voice: 📞 AI 상담원 음성 오더 한 마디(functions/voiceOrder.js) // 사람마다 하루(한국 날짜)
 const MAX_IMAGE_B64 = 4 * 1024 * 1024; // 화면이 2000px JPEG로 줄여 보낸다(보통 0.3~1MB)
 const MAX_TEXT = 6000;
 
