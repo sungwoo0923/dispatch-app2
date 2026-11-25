@@ -115,7 +115,9 @@ import "./mobileTheme.css";
 import { OrderTimeline } from "../OrderTimeline"; // ★ 모바일 A/B 디자인 + 알록달록 금지(남색 계열)
 import KpBootScreen from "../KpBootScreen";
 import { isMeaningfulChange } from "../bootProgress";
-import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift, Mic, Sparkles, Download, RotateCcw, Building2, ArrowUpDown, StickyNote, MessageSquare, History } from "lucide-react";
+import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift, Mic, Sparkles, Download, RotateCcw, Building2, ArrowUpDown, StickyNote, MessageSquare, History, PhoneCall } from "lucide-react";
+import VoiceAgentCall from "./VoiceAgentCall"; // 📞 2026-11-25 AI 상담원 음성 오더(통화하듯 말로 등록)
+import { normTon, normVehicle, normPay } from "../orderScanAi"; // 📞 AI 상담원 값 정리
 // ⚡ 2026-11-24 LTE 속도 — 인사이트 화면 차트(recharts)는 그 화면을 열 때 받는다(src/mobile/MobileInsightCharts.jsx)
 const MInsightTrend = lazyView(() => import("./MobileInsightCharts").then((m) => ({ default: m.TrendLineChart })), null);
 const MInsightDayBar = lazyView(() => import("./MobileInsightCharts").then((m) => ({ default: m.DayBarChart })), null);
@@ -15038,6 +15040,30 @@ const pickDrop = (c) => {
   });
 };
 
+  // ===== 📞 2026-11-25 AI 상담원 음성 오더 — 통화하듯 말하면 AI가 칸을 채우고, "네"라고 하면 원래 저장(onSave) =====
+  const [agentCall, setAgentCall] = useState(false);
+  const applyAgentPatch = (patch = {}) => {
+    const loose = (x) => normalizeCompany(x || "");
+    Object.entries(patch).forEach(([k, raw]) => {
+      const v = String(raw ?? "").trim();
+      if (!v) return;
+      if (k === "청구운임" || k === "기사운임") { const n = Number(v.replace(/[^\d]/g, "")); if (n) updateMoney(k, n); return; }
+      if (k === "상차지명" || k === "하차지명") {
+        const hit = (clients || []).find((c) => loose(c.거래처명) && loose(c.거래처명) === loose(v)); // 등록 업체면 주소 · 담당자까지
+        if (hit) (k === "상차지명" ? pickPickup : pickDrop)(hit); else update(k, v);
+        return;
+      }
+      if (k === "거래처명") { update("거래처명", v); return; }
+      if (k === "톤수") { update("톤수", normTon(v) || v); return; }
+      if (k === "차종") { update("차종", normVehicle(v) || v); return; }
+      if (k === "지급방식") { update("지급방식", normPay(v) || v); return; }
+      if (k === "긴급") { update("긴급", /긴급|급|예|true/.test(v)); return; }
+      if (k === "혼적여부") { update("혼적여부", v.includes("혼적") ? "혼적" : v.includes("독차") ? "독차" : v); return; }
+      if (k === "적요") { setForm((p) => (String(p.적요 || "").includes(v) ? p : { ...p, 적요: [p.적요, v].filter(Boolean).join("\n") })); return; }
+      update(k, v);
+    });
+  };
+
   // ===== 음성 오더 등록 =====
   const [voiceSheet, setVoiceSheet] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
@@ -15334,6 +15360,10 @@ const pickDrop = (c) => {
           충분한 여백을 둔다. */}
       <div className="flex items-stretch gap-1.5">
         {[
+          !isLockedShipperEdit && !form._editId && (window.SpeechRecognition || window.webkitSpeechRecognition) && {
+            key: "agent", Icon: PhoneCall, label: "AI 상담원",
+            onClick: () => setAgentCall(true),
+          },
           !isLockedShipperEdit && (window.SpeechRecognition || window.webkitSpeechRecognition) && {
             key: "voice", Icon: Mic, label: "음성등록",
             onClick: () => { setVoiceSheet(true); setVoiceTranscript(""); setVoiceParsed(null); },
@@ -16874,6 +16904,7 @@ const pickDrop = (c) => {
   </div>
 )}
 
+{agentCall && <VoiceAgentCall form={form} places={clients || []} clients={basicClients || []} onPatch={applyAgentPatch} onSave={onSave} onClose={() => setAgentCall(false)} />}
 {/* ===== 음성 오더 입력 바텀시트 ===== */}
 {voiceSheet && (
   <div className="fixed inset-0 z-[9999] flex flex-col justify-end">

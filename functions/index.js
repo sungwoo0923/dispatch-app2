@@ -4829,6 +4829,19 @@ exports.orderScanExtract = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], t
   } catch (e) { throw scanHttpsError(e); }
 });
 
+// 📞 2026-11-25 AI 상담원 음성 오더 — 설명은 functions/voiceOrder.js 맨 위(휴대폰 오더등록 [AI 상담원])
+//  한 마디마다 Claude(Haiku)가 짧은 대답 · 채울 칸 · 다음 할 일만 돌려준다(저장은 화면이 원래 저장 함수로)
+const _voiceOrder = require("./voiceOrder");
+exports.voiceOrderTurn = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 60, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
+  try {
+    return await _voiceOrder.runVoiceTurn({
+      db, auth: context.auth, data,
+      makeAnthropic: () => (process.env.ANTHROPIC_API_KEY ? new (_orderScan.Anthropic)({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25000, maxRetries: 1 }) : null),
+      bumpUsage: (u) => bumpScanUsage({ voiceAiCalls: 1, voiceAiInTok: u.input, voiceAiOutTok: u.output, voiceAiCacheReadTok: u.cacheRead, voiceAiCacheWriteTok: u.cacheWrite }),
+    });
+  } catch (e) { throw scanHttpsError(e); }
+});
+
 // 🤖 2026-11-07 배차 AI 비서 — 설명은 functions/aiAssistant.js 맨 위
 //  호출형(callable) · 배차 프로그램 직원(승인·재직)만 · 회사 범위·메뉴 권한은 도구마다 서버가 확인
 //  서버는 아무것도 저장하지 않고 "제안"만 돌려준다(화면이 확인 카드 → [적용] → 원래 저장 함수로 저장)
