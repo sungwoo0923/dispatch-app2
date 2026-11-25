@@ -1,4 +1,6 @@
 // ======================= FleetManagement.jsx =======================
+import { makeTruckIcon, truckColor, headingFor, pathHeading } from "./fleetTruck";
+import FleetControlDeck from "./FleetControlDeck"; // 🛰 2026-11-25 관제현황 = 관제실 다크 // 🚚 2026-11-25 관제실 다크 · 위에서 본 트럭
 import { buildDriverCopyText } from "./driverCopyText"; // 📋 2026-11-18 기사복사 문구 — PC · 모바일 같은 글
 import { useCopyTemplates } from "./copyTemplates";
 import { isFleetGrade } from "./fleetGradesCore"; // 🚛 지입차 구분(지입·직영·임대·분양) 한 곳
@@ -826,15 +828,17 @@ function FitAll({ count, drivers }) {
   return null;
 }
 
-function FleetMap({ drivers, center, onSelect, selectedPath = [], fitAllCount = 0, selectedDriver = null }) {
+// 🚚 2026-11-25 관제실 다크 — 어두운 지도 + 위에서 본 트럭(운전석 색 = 통합 상태 · 머리 = 달리는 방향)
+function FleetMap({ drivers, center, onSelect, selectedPath = [], fitAllCount = 0, selectedDriver = null, phaseById = null, alertIds = null }) {
   const defaultCenter = center || { lat: 37.5665, lng: 126.9780 };
+  const selHint = React.useMemo(() => pathHeading(selectedPath), [selectedPath]);
 
   return (
-    <MapContainer center={[defaultCenter.lat, defaultCenter.lng]} zoom={12} scrollWheelZoom style={{ height: "100%", width: "100%", minHeight: 480, position: "relative" }}>
+    <MapContainer className="lw-dark-map" center={[defaultCenter.lat, defaultCenter.lng]} zoom={12} scrollWheelZoom style={{ height: "100%", width: "100%", minHeight: 360, position: "relative", background: "#08111F" }}>
       <MapRecenter center={center} />
       <FitAll count={fitAllCount} drivers={drivers} />
       {selectedPath.length >= 2 && <FitPath points={selectedPath} resetKey={selectedDriver?.id} />}
-      <TileLayer className="fc-map-tiles" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+      <TileLayer className="lw-dark-tiles" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
       <TrafficOverlay />{/* 🚦 2026-11-22 사고 · 공사 · 통제 */}
 
       {/* ⭐ 이동 동선 — 예전엔 GPS 점을 하나하나 원으로 찍어 다닥다닥 보였다. 도로에 맞춘
@@ -852,10 +856,22 @@ function FleetMap({ drivers, center, onSelect, selectedPath = [], fitAllCount = 
           <Marker
             key={d.id}
             position={[d.location.lat, d.location.lng]}
-            icon={getIcon(d.상태, d.active, d.이름)}
+            icon={(() => {
+              const sel = selectedDriver?.id === d.id;
+              const ph = phaseById?.get(d.id) || "배차대기";
+              const spd = Number(d.speed) || 0;
+              const tail = String(d.차량번호 || "").replace(/\s/g, "").slice(-4);
+              return makeTruckIcon({
+                color: truckColor(ph),
+                heading: headingFor(d.id, d.location, sel ? selHint : null),
+                label: sel ? `${d.이름 || ""} · ${spd > 3 ? `${spd}km/h` : ph}` : (tail || d.이름 || ""),
+                selected: sel, alert: !!alertIds?.has(d.id), offline: !d.active,
+              });
+            })()}
+            zIndexOffset={selectedDriver?.id === d.id ? 1000 : 0}
             eventHandlers={{ click: () => onSelect?.(d) }}
           >
-            <Popup offset={[0, -12]}>
+            <Popup offset={[0, -24]}>
               <div style={{ fontSize: 15, lineHeight: 1.8, minWidth: 155, fontFamily: "'Noto Sans KR',sans-serif" }}>
                 <div style={{ fontWeight: 800, color: NAVY, marginBottom: 4, fontSize: 16 }}>
                   {d.이름 || "-"}
@@ -7054,201 +7070,53 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
       )}
 
       {/* ═══ 관제현황 ═══ */}
+      {/* 🛰 2026-11-25 관제실 다크로 리디자인(src/FleetControlDeck.jsx) — 큰 지도 · 위에서 본 트럭 · 왼쪽 차량 · 오른쪽 확인할 일 + 활동 기록.
+          예전 요약 4칸 · 출발지/충돌 큰 상자 · 표 · 아래 활동 피드는 이 한 화면으로 합쳤다(동선 날짜는 고른 차량 카드 안으로) */}
       {mainTab === "tracking" && (
-        <div className="fc-deck">
-          <div className="fc-deck-scan" />
-          {/* 🛰 2026-11-09 관제 덱 머리줄 */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span className="fc-hud-pulse" style={{ width: 9, height: 9, borderRadius: 99, background: HUD.teal }} />
-            <span style={{ fontFamily: FC_MONO, fontSize: 12, fontWeight: 800, letterSpacing: "0.28em", color: HUD.cyan }}>FLEET CONTROL · LIVE</span>
-            <span style={{ fontSize: 17, fontWeight: 900, color: HUD.text }}>지입차 관제현황</span>
-            <span style={{ marginLeft: "auto", fontFamily: FC_MONO, fontSize: 12.5, fontWeight: 700, color: HUD.sub, letterSpacing: ".08em" }}>GPS {filteredRows.filter(d => d.location).length} / {drivers.length} UNITS</span>
-          </div>
-          {/* KPI */}
-          <div className="fc-deck-kpis" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
-            <HudKpi label="총 등록" value={kpi.total} sub="전체 기사" code="TOTAL" icon={KPI_ICONS.truck} tone="cyan" />
-            <HudKpi label="현재 접속중" value={kpi.connected} sub="앱 활성" code="ONLINE" tone="teal" total={kpi.total} icon={<><path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0" /><circle cx="12" cy="19.5" r="1" /></>} />
-            <HudKpi label="운송중" value={kpi.driving} sub="현재 주행" code="DRIVING" icon={KPI_ICONS.route} tone="amber" total={kpi.total} />
-            <HudKpi label="근무중" value={kpi.onDuty} sub="출근~복귀" code="ON DUTY" icon={KPI_ICONS.user} tone="cyan" total={kpi.total} />
-          </div>
-
-          {/* 출발지 변경 요청 */}
-          {locChangeRequests.length > 0 && (
-            <div style={{ background: "#fff", border: "1px solid #d1d5db", borderLeft: "3px solid #374151", borderRadius: 8, overflow: "hidden" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", background: "#f8f9fb", borderBottom: "1px solid #e5e7eb" }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>출발지 변경 요청 {locChangeRequests.length}건</span>
-                <span style={{ fontSize: 14, color: "#5B6B85" }}>기사님이 출발지 변경을 요청했습니다</span>
-              </div>
-              {locChangeRequests.map((req) => (
-                <div key={req.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 14px", borderBottom: "1px solid #f3f4f6", flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>{req.driverName || "-"}</span>
-                  <span style={{ fontSize: 15, fontWeight: 600, color: "#374151", background: "#f3f4f6", padding: "2px 8px", borderRadius: 5, fontFamily: "monospace" }}>{req.carNo || "-"}</span>
-                  {req.currentLocation?.name && (
-                    <span style={{ fontSize: 14, color: "#5B6B85" }}>현재: {req.currentLocation.name}</span>
-                  )}
-                  <span style={{ fontSize: 14, color: "#5B6B85", marginLeft: "auto" }}>{timeAgo(req.requestedAt)}</span>
-                  <button
-                    onClick={() => {
-                      const drv = drivers.find(d => d.id === req.uid);
-                      if (drv) {
-                        setCheckInLocModal({ driverId: req.uid, driverName: req.driverName || drv.이름, initialLoc: drv.checkInLocation || null });
-                      }
-                    }}
-                    style={{ padding: "3px 11px", borderRadius: 6, border: "1px solid #d1d5db", background: "white", color: "#374151", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
-                  >
-                    출발지 설정
-                  </button>
-                  <button
-                    onClick={async () => { try { await updateDoc(doc(db, "location_change_requests", req.id), { status: "dismissed" }); } catch (_) {} }}
-                    style={{ padding: "3px 11px", borderRadius: 6, border: "1px solid #e5e7eb", background: "white", color: "#5B6B85", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
-                  >
-                    닫기
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* 충돌 감지 알림 */}
-          {collisionAlerts.length > 0 && (
-            <div style={{ background: "#fff", border: "1px solid #d1d5db", borderLeft: "3px solid #1B2B4B", borderRadius: 8, overflow: "hidden" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", background: "#f8f9fb", borderBottom: "1px solid #e5e7eb" }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#1B2B4B", flexShrink: 0, animation: "fmBlink 1s ease-in-out infinite" }} />
-                <span style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>충돌 감지 알림 {collisionAlerts.length}건</span>
-                <span style={{ fontSize: 14, color: "#5B6B85" }}>기기에서 강한 충격이 감지되었습니다</span>
-              </div>
-              {collisionAlerts.map((alert) => (
-                <div key={alert.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 14px", borderBottom: "1px solid #f3f4f6", flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>{alert.driverName || "-"}</span>
-                  <span style={{ fontSize: 15, fontWeight: 600, color: "#374151", background: "#f3f4f6", padding: "2px 8px", borderRadius: 5, fontFamily: "monospace" }}>{alert.carNo || "-"}</span>
-                  <span style={{ fontSize: 15, color: "#5B6B85" }}>충격 {alert.magnitude} m/s²</span>
-                  {alert.location?.lat && (
-                    <span style={{ fontSize: 14, color: "#5B6B85" }}>{alert.location.lat.toFixed(4)}, {alert.location.lng.toFixed(4)}</span>
-                  )}
-                  <span style={{ fontSize: 14, color: "#5B6B85", marginLeft: "auto" }}>{timeAgo(alert.timestamp)}</span>
-                  <button
-                    onClick={async () => { try { await updateDoc(doc(db, "collision_alerts", alert.id), { resolved: true }); } catch (_) {} }}
-                    style={{ padding: "3px 11px", borderRadius: 6, border: "1px solid #d1d5db", background: "white", color: "#374151", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
-                  >
-                    확인 완료
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* 검색 + 필터 + 동선 날짜 — 하나의 관제 툴바 */}
-          <div style={{ background: "#fff", border: `1px solid ${HUD.line}`, borderRadius: 14, padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ position: "relative", flex: "1 1 240px", minWidth: 180 }}>
-              <svg width="15" height="15" fill="none" stroke="#94A3B8" strokeWidth="2.2" viewBox="0 0 24 24" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
-                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" strokeLinecap="round" />
-              </svg>
-              <input
-                type="text"
-                placeholder="기사명 / 차량번호 검색  예) 88어8888"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="fc-hud-input"
-                style={{ width: "100%", height: 38, paddingLeft: 36, paddingRight: 10, border: "1px solid #DCE3EF", borderRadius: 10, fontSize: 15, color: "#111827", outline: "none", background: "#F7F9FC", boxSizing: "border-box" }}
-              />
-            </div>
-            <div style={{ display: "flex", gap: 3, flexWrap: "wrap", background: "#F4F6FA", border: `1px solid ${HUD.line}`, borderRadius: 10, padding: 3 }}>
-              {FLEET_PHASE_FILTERS.map(opt => {
-                const active = statusFilter === opt;
-                return (
-                  <button
-                    key={opt}
-                    onClick={() => setStatusFilter(opt)}
-                    style={{
-                      height: 30, padding: "0 11px", borderRadius: 8, border: "none",
-                      background: active ? "#1B2B4B" : "transparent",
-                      boxShadow: "none",
-                      color: active ? "#fff" : HUD.sub,
-                      fontSize: 14, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap",
-                      display: "inline-flex", alignItems: "center", gap: 5,
-                    }}
-                  >
-                    {opt !== "전체" && (
-                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: active ? "rgba(255,255,255,.8)" : (FLEET_PHASE_COLORS[opt] || "#9ca3af"), display: "inline-block" }} />
-                    )}
-                    {opt}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="fc-hud-date" style={{ display: "flex", alignItems: "center", gap: 6, paddingLeft: 10, borderLeft: `1px solid ${HUD.line}` }}>
-              <span style={{ fontFamily: FC_MONO, fontSize: 12, fontWeight: 800, letterSpacing: "0.18em", color: HUD.cyan, whiteSpace: "nowrap" }}>TRACK</span>
-              <span style={{ fontSize: 13.5, fontWeight: 700, color: HUD.sub, whiteSpace: "nowrap" }}>동선 날짜</span>
-              <CustomDatePicker
-                value={selectedTrackDate}
-                onChange={e => { const v = e.target.value; if (v && v <= todayDate) setSelectedTrackDate(v); }}
-                className="h-[34px] min-w-[132px] px-2 border border-[#DCE3EF] rounded-lg text-[14px] font-bold text-[#1B2B4B] bg-white tabular-nums whitespace-nowrap"
-                showIcon
-              />
-              {selectedTrackDate !== yesterdayDate && (
-                <button
-                  onClick={() => setSelectedTrackDate(yesterdayDate)}
-                  style={{ height: 34, padding: "0 11px", border: `1px solid ${HUD.line}`, borderRadius: 8, background: "#fff", color: HUD.text, fontSize: 14, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}
-                >
-                  어제
-                </button>
-              )}
-              {selectedTrackDate !== todayDate && (
-                <button
-                  onClick={() => setSelectedTrackDate(todayDate)}
-                  style={{ height: 34, padding: "0 11px", border: `1px solid #1B2B4B`, borderRadius: 8, background: "#1B2B4B", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}
-                >
-                  오늘
-                </button>
-              )}
-            </div>
-            <span style={{ marginLeft: "auto", whiteSpace: "nowrap", fontSize: 14, fontWeight: 700, color: HUD.sub }}>
-              <b style={{ fontFamily: FC_MONO, fontSize: 17, color: HUD.cyan }}>{filteredRows.length}</b> / {drivers.length}명
-            </span>
-          </div>
-
-          {/* 테이블 + 지도 */}
-          <div className="fc-deck-split" style={{ display: "flex", gap: 12, alignItems: "stretch", minHeight: 520 }}>
-            <div style={{ flex: "0 0 42%", background: "#fff", border: `1px solid ${HUD.line}`, borderRadius: 14, overflow: "hidden", display: "flex", flexDirection: "column", minWidth: 0, boxShadow: "0 1px 2px rgba(15,26,48,.04)" }}>
-              <FcPanelHead dark code="UNITS" title="기사 목록" right={<span style={{ fontFamily: FC_MONO, fontSize: 14, color: HUD.cyan, fontWeight: 800 }}>{filteredRows.length}<span style={{ fontFamily: "inherit", fontSize: 14, color: "#5B6B85", fontWeight: 600 }}> 명</span></span>} />
-              <div className="fc-hud-scroll" style={{ flex: 1, overflowY: "auto", overflowX: "auto" }}>
-                <DriverTable phaseById={phaseById} rows={filteredRows} selectedId={selected?.id} onSelect={handleSelect} onFocusMap={handleFocusMap} onContextMenu={handleContextMenu} todayPhotos={todayDriverPhotos} onViewPhotos={setPhotoViewerPhotos} />
-              </div>
-            </div>
-
-            <div style={{ flex: "1 1 58%", border: `1px solid ${HUD.line}`, borderRadius: 14, overflow: "hidden", minWidth: 0, minHeight: 520, position: "relative", isolation: "isolate", display: "flex", flexDirection: "column", boxShadow: "0 10px 26px rgba(15,26,48,.18)", background: "#0F1A30" }}>
-              <FcPanelHead dark code="LIVE MAP" title="실시간 위치" right={<span style={{ fontFamily: FC_MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.12em", color: "#CFE0FF" }}>GPS · {filteredRows.filter(d => d.location).length} UNITS</span>} />
-              <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
-              <div style={{ position: "absolute", top: 12, left: 52, zIndex: 1000, display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ background: "rgba(15,26,48,0.88)", border: "1px solid rgba(143,176,240,.35)", borderRadius: 9, padding: "6px 13px", fontSize: 14, fontWeight: 700, color: "#fff", backdropFilter: "blur(4px)", boxShadow: "0 4px 12px rgba(0,0,0,.18)", display: "flex", alignItems: "center", gap: 7 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#CFE0FF", boxShadow: "0 0 6px #8FB0F0", display: "inline-block", animation: "fmLivePulse 2s infinite" }} />
-                  1분 주기 갱신
-                  <span style={{ fontFamily: FC_MONO, color: "#CFE0FF", fontWeight: 800 }}>{filteredRows.filter(d => d.location).length}대</span>
-                </div>
-                <button
-                  onClick={handleMapRefresh}
-                  title="지도 위치 즉시 새로고침"
-                  style={{ background: "rgba(255,255,255,0.95)", border: "1px solid #DCE3EF", borderRadius: 9, padding: "6px 11px", fontSize: 14, fontWeight: 700, color: NAVY, backdropFilter: "blur(4px)", boxShadow: "0 4px 12px rgba(0,0,0,.12)", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}
-                >
-                  <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  새로고침
-                </button>
-                <button
-                  onClick={() => setFitAllCount(c => c + 1)}
-                  title="전체 기사 위치 맞추기"
-                  style={{ background: "rgba(255,255,255,0.95)", border: "1px solid #DCE3EF", borderRadius: 9, padding: "6px 11px", fontSize: 14, fontWeight: 700, color: NAVY, backdropFilter: "blur(4px)", boxShadow: "0 4px 12px rgba(0,0,0,.12)", cursor: "pointer" }}
-                >
-                  전체 보기
-                </button>
-              </div>
-              <FleetMap drivers={filteredRows} center={mapCenter} onSelect={handleSelect} selectedPath={selectedPath} roadPath={roadPath} fitAllCount={fitAllCount} selectedDriver={selected} />
-              </div>
-            </div>
-          </div>
+        <>
+          <FleetControlDeck
+            drivers={drivers}
+            phaseById={phaseById}
+            searchQuery={searchQuery}
+            onSearch={setSearchQuery}
+            selected={selected}
+            onSelect={handleSelect}
+            onContextMenu={handleContextMenu}
+            locChangeRequests={locChangeRequests}
+            collisionAlerts={collisionAlerts}
+            onLocRequest={(req) => {
+              const drv = drivers.find(d => d.id === req.uid);
+              if (drv) setCheckInLocModal({ driverId: req.uid, driverName: req.driverName || drv.이름, initialLoc: drv.checkInLocation || null });
+            }}
+            onLocDismiss={async (req) => { try { await updateDoc(doc(db, "location_change_requests", req.id), { status: "dismissed" }); } catch (_) {} }}
+            onCollisionResolve={async (a) => { try { await updateDoc(doc(db, "collision_alerts", a.id), { resolved: true }); } catch (_) {} }}
+            logs={filteredActivityLogs}
+            driversMap={driversMap}
+            onDeleteFeed={handleDeleteFeedLogs}
+            todayPhotoIds={new Set((todayDriverPhotos || []).map(p => p.uid))}
+            renderMap={(rows, alertIds) => (
+              <FleetMap drivers={rows} center={mapCenter} onSelect={handleSelect} selectedPath={selectedPath} roadPath={roadPath} fitAllCount={fitAllCount} selectedDriver={selected} phaseById={phaseById} alertIds={alertIds} />
+            )}
+            trackDate={
+              <>
+                <CustomDatePicker
+                  value={selectedTrackDate}
+                  onChange={e => { const v = e.target.value; if (v && v <= todayDate) setSelectedTrackDate(v); }}
+                  className="h-[32px] min-w-[128px] px-2 border border-[#22345A] rounded-lg text-[13px] font-bold text-[#E6EDF8] bg-[#0E1A30] tabular-nums whitespace-nowrap"
+                  showIcon
+                />
+                {selectedTrackDate !== yesterdayDate && <button type="button" className="lwd-btn" style={{ height: 32 }} onClick={() => setSelectedTrackDate(yesterdayDate)}>어제</button>}
+                {selectedTrackDate !== todayDate && <button type="button" className="lwd-btn" style={{ height: 32 }} onClick={() => setSelectedTrackDate(todayDate)}>오늘</button>}
+              </>
+            }
+            onMapRefresh={handleMapRefresh}
+            onFitAll={() => setFitAllCount(c => c + 1)}
+            onOpenDetail={() => { try { document.querySelector('[data-kp="fleet-detail"]')?.scrollIntoView({ behavior: "smooth", block: "start" }); } catch { /* 무시 */ } }}
+          />
 
           {/* 선택 기사 상세 */}
           {selected && (
-            <DriverDetailPanel
+            <div data-kp="fleet-detail" style={{ scrollMarginTop: 12 }}><DriverDetailPanel
               data={selected}
               logs={sessionForDate.logs.length > 0 ? [...sessionForDate.logs].reverse() : selectedDriverLogs}
               onClose={() => { setSelected(null); setSelectedDriverLogs([]); setGpsTracks([]); setRoadPath([]); }}
@@ -7264,36 +7132,10 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
               sessionIsActive={sessionForDate.isActive}
               sessionGpsDist={sessionGpsDist}
               onFocusMap={handleFocusMap}
-            />
+            /></div>
           )}
 
-          {/* 실시간 활동 피드 */}
-          <div style={{ background: "#fff", border: "1px solid #E3E8F0", borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 2px rgba(16,24,40,.04), 0 8px 20px rgba(16,24,40,.05)" }}>
-            <div style={{ padding: "13px 20px", borderBottom: "1px solid #E8EDF4", background: "#F7F9FC", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                <span style={{ width: 9, height: 9, borderRadius: "50%", background: NAVY, boxShadow: "0 0 0 3px rgba(27,43,75,.15)", display: "inline-block", animation: "fmLivePulse 2s infinite" }} />
-                <span style={{ fontFamily: FC_MONO, fontSize: 12.5, fontWeight: 800, letterSpacing: "0.12em", color: "#5B6B85" }}>EVENT FEED</span>
-                <span style={{ fontSize: 17, fontWeight: 800, color: NAVY }}>실시간 활동 피드</span>
-                <span style={{ fontSize: 15, color: "#5B6B85" }}>기사님이 버튼을 누를 때마다 즉시 기록</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 15, color: "#5B6B85", fontWeight: 600 }}>최근 {filteredActivityLogs.length}건</span>
-                {filteredActivityLogs.length > 0 && (
-                  <button
-                    onClick={handleDeleteFeedLogs}
-                    title="피드 전체 삭제"
-                    style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #fca5a5", borderRadius: 7, background: "white", cursor: "pointer", color: "#ef4444", padding: 0 }}
-                  >
-                    <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2" strokeLinecap="round"/></svg>
-                  </button>
-                )}
-              </div>
-            </div>
-            <div style={{ maxHeight: 420, overflowY: "auto" }}>
-              <ActivityFeed logs={filteredActivityLogs} driversMap={driversMap} onDeleteAll={handleDeleteFeedLogs} />
-            </div>
-          </div>
-        </div>
+        </>
       )}
 
       {/* ═══ 노선관리 ═══ */}
