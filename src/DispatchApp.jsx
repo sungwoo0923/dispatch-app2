@@ -4,6 +4,7 @@ import { getMultiState } from "./multiCompany";
 import { useCompanyFleetGrades } from "./fleetGrades"; // 🚛 지입차 구분(지입·직영·임대 + 회사 전용 분양)
 import { useFleetDispatchWayInstall, FleetDispatchWayButton } from "./fleetDispatchWay"; // 🚛 2026-11-23 지입차 배차방식 자동(회사별)
 import { isViewerNow } from "./blind"; // 🧾 특수운임 버튼(조회전용 숨김)
+import { fareBaseSale, effectiveFareRule as fareEffRule, farePctOf as farePctOfO, applyFareRule as fareApply, ruleDriverFare as fareRuleDrv, toNum as fareToNum } from "./fareRulesCore.js"; // 🧾 2026-11-25 운임명세서 운임구분 %
 import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon, usePlan } from "./plans";
 import { kpConfirm, kpPrompt } from "./kpDialog";
 import { editLossReason, lossReasonOf } from "./lossReason"; // 📑 2026-11-15 손실 오더 손실 사유
@@ -334,11 +335,34 @@ function fareCertPhone(raw = "") {
   return raw || "-";
 }
 
+// 🧾 2026-11-25 운임명세서 운임구분 % — 오더에 넣은 운임구분(월대 10% 등)이 어떻게 계산됐는지
+//  st: "rule"(규칙대로 · fee = 기본 청구운임 × %) · "manual"(기사운임을 직접 고침) · "nosale"(청구운임이 0원이라 %를 못 거는 오더) · "norule"(규칙을 찾지 못함)
+//  규칙은 청구운임 → 기사운임 방향이다. 청구운임이 없으면 명세서가 임의로 숫자를 만들지 않고 알려만 준다
+function fareTypeInfo(o, rules) {
+  const name = String(o?.운임구분 || "").trim();
+  if (!name) return null;
+  let rule = fareEffRule(o, rules);
+  if (!rule) { const p = farePctOfO(o); if (p === null) return { name, label: name, st: "norule", fee: 0 }; rule = { name, type: "percent", value: p }; }
+  const v = fareToNum(rule.value);
+  const label = rule.type === "fixed" ? `${name} ${Math.round(v).toLocaleString()}원` : `${name} ${v}%`;
+  const base = fareBaseSale(o);
+  if (!(base > 0)) return { name, label, st: "nosale", fee: 0 };
+  const fee = fareApply(rule, base).수수료;
+  const manual = !!o?.운임수동 || fareToNum(o?.기사운임) !== fareRuleDrv(rule, o);
+  return { name, label, st: manual ? "manual" : "rule", fee };
+}
+
 // 🧾 2026-11-24 운임명세서 본문 — 여러 건의 운임을 건별로 자동 계산하고(기본 운임 · 지게차 · 특수운임 · 최종) 맨 아래에 총합계를 낸다
 function FareStatementBody({ rows, issuerName, show, MONO }) {
+  const fareRS = useFareRules(); // 🧾 2026-11-25 운임구분 % 표시용
   // 🛠 2026-11-25 다시 짬(사용자 요청) — 차량번호 · 기사명 칸 따로 · 줄바꿈 없이 한 줄(칸이 모자라면 문서가 넓어지고 창이 맞춰 커진다)
   //  · 금액 칸(기본운임 · 기사운임 · 청구운임 · 수수료)은 [금액 표시 설정]에서 켜고 끈다 · 수수료는 +파랑 / −빨강
-  const list = rows.map((o) => ({ o, fb: fareBreakdown(o) }));
+  const list = rows.map((o) => ({ o, fb: fareBreakdown(o), ft: fareTypeInfo(o, fareRS.rules) }));
+  // 운임구분 % — 규칙대로 계산된 오더만 묶어서 "회사 몫"을 보여 주고, 계산할 수 없는 오더는 화면에만 알린다(PDF · 이미지에는 안 들어감)
+  const ftGroups = new Map();
+  list.forEach(({ ft }) => { if (ft?.st !== "rule") return; const g = ftGroups.get(ft.label) || { label: ft.label, cnt: 0, fee: 0 }; g.cnt += 1; g.fee += ft.fee; ftGroups.set(ft.label, g); });
+  const ftNo = (st) => list.map((x, i) => (x.ft?.st === st ? i + 1 : 0)).filter(Boolean);
+  const noSaleNo = ftNo("nosale"), manualNo = ftNo("manual");
   const drivers = [...new Set(rows.map((o) => [o.이름, o.차량번호].filter(Boolean).join(" · ")).filter(Boolean))];
   const won = (n) => Math.round(n).toLocaleString();
   const sum = (f) => list.reduce((a, x) => a + f(x), 0);
@@ -401,7 +425,7 @@ function FareStatementBody({ rows, issuerName, show, MONO }) {
           {show.drv && <th style={thR}>기사운임</th>}{show.sale && <th style={thR}>청구운임</th>}{show.fee && <th style={thR}>수수료</th>}
         </tr></thead>
         <tbody>
-          {list.map(({ o, fb }, i) => (
+          {list.map(({ o, fb, ft }, i) => (
             <tr key={o._id || o.id || i}>
               <td style={{ ...num, textAlign: "center", color: "#7A89A3" }}>{i + 1}</td>
               <td style={{ ...num, textAlign: "left" }}>{String(o.상차일 || "").slice(5) || "-"}</td>
@@ -409,7 +433,7 @@ function FareStatementBody({ rows, issuerName, show, MONO }) {
               <td style={td}>{o.하차지명 || "-"}</td>
               <td style={{ ...td, fontFamily: MONO }}>{o.차량번호 || "-"}</td>
               <td style={td}>{o.이름 || "-"}</td>
-              <td style={{ ...td, color: "#2D4C82" }}>{fb.fareType || "-"}</td>
+              <td style={{ ...td, color: "#2D4C82" }}>{ft ? ft.label : (fb.fareType || "-")}{ft?.st === "nosale" ? <span style={{ color: "#B4342A", fontWeight: 600, fontSize: 11 }}> · 청구운임 없음</span> : ft?.st === "manual" ? <span style={{ color: "#7A89A3", fontWeight: 600, fontSize: 11 }}> · 직접 입력</span> : null}</td>
               {show.base && <td style={num}>{won(fb.baseDrv)}</td>}
               <td style={{ ...td, fontWeight: 600 }}>{fb.lines.length ? fb.lines.map((l, k) => <span key={l.key}>{k ? <span style={{ color: "#C3CDDD" }}> · </span> : null}{l.name} <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{show.drv ? sign(l.drv) : won(l.amount)}</span>{show.sale && l.sale ? <span style={{ color: "#7A89A3" }}> (청구 {sign(l.sale)})</span> : null}</span>) : <span style={{ color: "#B7C2D3" }}>없음</span>}</td>
               {show.drv && <td style={{ ...num, fontWeight: 900 }}>{won(fb.drv)}</td>}
@@ -428,11 +452,20 @@ function FareStatementBody({ rows, issuerName, show, MONO }) {
         </tbody>
       </table>
 
+      {(noSaleNo.length > 0 || manualNo.length > 0) && (
+        <div data-html2canvas-ignore="true" style={{ marginTop: 10, fontSize: 12.5, fontWeight: 600, color: "#7A3A12", background: "#FFF7ED", border: "1px solid #F5D6B8", borderRadius: 10, padding: "10px 14px", lineHeight: 1.7 }}>
+          <div style={{ fontWeight: 900, color: "#B4342A" }}>확인해 주세요 <span style={{ fontWeight: 600, color: "#9A6B4A" }}>(이 안내는 화면에만 보이고 PDF · 이미지에는 안 들어가요)</span></div>
+          {noSaleNo.length > 0 && <div>· No {noSaleNo.join(", ")} — 운임구분은 있지만 <b>청구운임이 0원</b>이라 %를 계산할 수 없어요. 그래서 수수료가 마이너스로 나와요. 오더에 청구운임을 넣으면 기사운임이 %대로 다시 계산돼요.</div>}
+          {manualNo.length > 0 && <div>· No {manualNo.join(", ")} — 기사운임을 <b>직접 고친</b> 오더예요. % 대신 입력한 금액 그대로 계산했어요. %대로 바꾸려면 오더 수정에서 [↺ 규칙대로]를 누르면 돼요.</div>}
+        </div>
+      )}
+
       {sec("BREAKDOWN", "운임 구성 합계")}
       <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #E3E8F0" }}>
         <thead><tr><th style={th}>항목</th><th style={thR}>건수</th><th style={thR}>금액 합계</th>{show.drv && <th style={thR}>기사운임 영향</th>}{show.sale && <th style={thR}>청구운임 영향</th>}</tr></thead>
         <tbody>
           {show.base && <tr><td style={td}>기본운임{fareTypes.length ? <span style={{ color: "#7A89A3", fontWeight: 600 }}> (운임구분 {fareTypes.join(" · ")})</span> : null}</td><td style={num}>{rows.length}</td><td style={num}>{won(T.baseDrv)}</td>{show.drv && <td style={num}>{won(T.baseDrv)}</td>}{show.sale && <td style={num}>{won(T.baseSale)}</td>}</tr>}
+          {[...ftGroups.values()].map((g) => <tr key={`ft-${g.label}`}><td style={td}>운임구분 수수료 <span style={{ color: "#2D4C82" }}>({g.label})</span><span style={{ color: "#7A89A3", fontWeight: 600 }}> · 기본 청구운임에서 뺀 회사 몫(기본운임에 이미 반영)</span></td><td style={num}>{g.cnt}</td><td style={num}>{won(g.fee)}</td>{show.drv && <td style={num}><span style={{ color: "#B7C2D3" }}>·</span></td>}{show.sale && <td style={num}><span style={{ color: "#B7C2D3" }}>·</span></td>}</tr>)}
           {items.map((c) => <tr key={c.name}><td style={td}>{c.name}</td><td style={num}>{c.cnt}</td><td style={num}>{won(c.amount)}</td>{show.drv && <td style={num}>{sign(c.drv)}</td>}{show.sale && <td style={num}>{sign(c.sale)}</td>}</tr>)}
           {!items.length && !show.base && <tr><td colSpan={5} style={{ ...td, color: "#9AA9C3" }}>특수운임이 없어요.</td></tr>}
           <tr><td style={{ ...td, ...foot }}>최종</td><td style={{ ...num, ...foot }} /><td style={{ ...num, ...foot, color: "#5B6B85", fontWeight: 700 }}>{T.paid ? `회사 별도 지급 ${won(T.paid)}` : ""}</td>{show.drv && <td style={{ ...num, ...foot }}>{won(T.drv)}</td>}{show.sale && <td style={{ ...num, ...foot }}>{won(T.sale)}</td>}</tr>
@@ -511,6 +544,7 @@ function FareCertModal({ row, companyName, onClose }) {
   }, [row]);
   // ⭐ 2026-11-03 여러 사업자 — 오더의 청구 사업자가 추가 사업자면 그 사업자 이름·정보로 발급
   const fcBiz = useCompanyBiz(getTenant() || companyName);
+  const fareRCert = useFareRules(getTenant() || companyName); // 🧾 2026-11-25 운임구분 % 표시
   if (!row || (Array.isArray(row) && !row.length)) return null;
   // 🧾 2026-11-24 여러 건을 고르고 [운임정보]를 누르면 운임 명세서(건별 자동 계산 + 총합계)로 보여 준다(사용자 요청)
   const certRows = (Array.isArray(row) ? row : [row]).slice().sort((a, b) => String(a.상차일 || "").localeCompare(String(b.상차일 || "")) || String(a.상차시간 || "").localeCompare(String(b.상차시간 || "")));
@@ -522,6 +556,7 @@ function FareCertModal({ row, companyName, onClose }) {
 
   const 기사운임 = Number(String(r.기사운임 || "0").replace(/[^\d-]/g, "")) || 0;
   const fb = fareBreakdown(r); // 🧾 2026-11-24 운임 내역(기본 운임 → 지게차 · 특수운임 → 최종)
+  const ftC = fareTypeInfo(r, fareRCert.rules); // 🧾 2026-11-25 운임구분 %(월대 10% 등)
   const issuedAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false });
   const docNo = `${(r.상차일 || "").replace(/-/g, "")}-${String(r._id || r.id || "").slice(-6).toUpperCase() || "000000"}`;
 
@@ -613,7 +648,7 @@ function FareCertModal({ row, companyName, onClose }) {
         <div ref={bodyRef} className="flex-1 overflow-auto p-6">
           <div style={docSize.w ? { width: docSize.w * zoom, height: docSize.h * zoom, margin: "0 auto" } : undefined}>
           <div style={{ transform: `scale(${zoom})`, transformOrigin: docSize.w ? "top left" : "top center", transition: "transform .15s", width: docSize.w || undefined }}>
-            <div ref={captureRef} className="mx-auto" style={{ ...(multi ? { width: "max-content", minWidth: 900 } : { width: "max-content", minWidth: 900 }), background: "#fff", fontFamily: "'Pretendard','Noto Sans KR',sans-serif", boxShadow: "0 10px 30px rgba(15,26,48,0.12)" }}>
+            <div ref={captureRef} className="mx-auto kp-fare-doc" style={{ ...(multi ? { width: "max-content", minWidth: 900 } : { width: "max-content", minWidth: 900 }), background: "#fff", fontFamily: "'Pretendard','Noto Sans KR',sans-serif", boxShadow: "0 10px 30px rgba(15,26,48,0.12)" }}>
               {/* 문서 머리 */}
               <div style={{ background: "#0F1A30", color: "#fff", padding: "22px 34px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
                 <div>
@@ -681,7 +716,7 @@ function FareCertModal({ row, companyName, onClose }) {
                     <div style={{ marginTop: 12 }}>
                       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
                         <span style={{ fontSize: 14.5, fontWeight: 900, color: "#0F1A30" }}>운임 내역</span>
-                        {fb.fareType && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#2D4C82", background: "#EEF3FC", borderRadius: 6, padding: "2px 8px" }}>운임구분 {fb.fareType}</span>}
+                        {fb.fareType && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#2D4C82", background: "#EEF3FC", borderRadius: 6, padding: "2px 8px" }}>운임구분 {ftC ? ftC.label : fb.fareType}{ftC?.st === "rule" && ftC.fee ? ` · 회사 몫 ${Math.round(ftC.fee).toLocaleString()}원` : ""}</span>}
                       </div>
                       <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #E3E8F0" }}>
                         <thead><tr>

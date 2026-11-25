@@ -736,7 +736,9 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
                   // 누적돼 보였다. 오늘 이전에 출근한 기록이면 오늘 0시부터만 세고 "퇴근 미처리" 표시.
                   const dayStart = kstTodayStartMs();
                   const carried = !isOut && start.getTime() < dayStart;
-                  const ms = isOut && d.근무시간
+                  // 🛠 2026-11-25 퇴근했는데 근무시간이 비어 있으면 "오늘 0시부터 지금까지"(모든 기사가 똑같이 17시간 33분)로 보였다 → "–"
+                  if (isOut && !d.근무시간) return <span style={{ fontSize: 14, color: "#7A89A3" }}>–</span>;
+                  const ms = isOut
                     ? d.근무시간 * 60 * 1000
                     : Date.now() - Math.max(start.getTime(), dayStart);
                   const h = Math.floor(ms / 3600000);
@@ -744,6 +746,7 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
                   return (
                     <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", lineHeight: 1.2 }}>
                       <span style={{ fontSize: 14, color: "#374151", fontVariantNumeric: "tabular-nums" }}>{h > 0 ? `${h}시간 ` : ""}{m}분</span>
+                      {carried && <span style={{ fontSize: 11, fontWeight: 700, color: "#B4342A" }}>퇴근 미처리</span>}
                     </span>
                   );
                 })()}
@@ -751,7 +754,10 @@ function DriverTable({ rows, selectedId, onSelect, onFocusMap, onContextMenu, to
 
               {/* 이동거리 */}
               <td style={{ padding: "8px 10px", color: "#374151", whiteSpace: "nowrap", fontSize: 13.5, fontVariantNumeric: "tabular-nums" }}>
-                {(d.총거리 || 0).toFixed(1)} km
+                {/* 🛠 2026-11-25 오늘 출근한 기사만 — 퇴근 처리 없이 며칠 지난 기사는 거리가 계속 쌓여 4,680km처럼 보였다 */}
+                {d.raw?.workDate && d.raw.workDate !== new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)
+                  ? <span style={{ color: "#7A89A3" }}>–</span>
+                  : `${(d.총거리 || 0).toFixed(1)} km`}
               </td>
 
               {/* 업데이트 */}
@@ -1031,7 +1037,8 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, comp
       {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginBottom: 22 }}>
         {[
-          { label: "이동거리", val: sessionGpsDist != null && sessionGpsDist > 0 ? `${sessionGpsDist.toFixed(2)} km` : `${(data.총거리 || 0).toFixed(2)} km` },
+          // 🛠 2026-11-25 GPS 기록이 없을 때 총거리로 대신 보이는 건 오늘 출근한 기사만(예전엔 퇴근 처리 없이 며칠 쌓인 4,680km가 보였다)
+          { label: "이동거리", val: sessionGpsDist > 0 ? `${sessionGpsDist.toFixed(2)} km` : (!data.raw?.workDate || data.raw.workDate === new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)) ? `${(data.총거리 || 0).toFixed(2)} km` : "0.00 km" },
           { label: "근무시간", val: sessionWorkMs != null && sessionWorkMs > 0 ? formatMs(sessionWorkMs) : (sessionIsActive ? formatMs(Date.now() - (resolveTs(data.workStartAt)?.getTime()||Date.now())) : formatMinutes(data.근무시간)) },
           { label: "접속상태", val: data.active ? "접속중" : "미접속", color: data.active ? "#10b981" : "#5B6B85" },
           // 🚚 2026-11-09 누적 키로수 — 처음 넣은 계기판 값 + 출근~퇴근 이동거리(운행 중이면 오늘 이동 포함). 고치기는 차량관리에서(기사는 못 고침)
@@ -1115,11 +1122,11 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, comp
           </div>
           <div style={{ maxHeight: 250, overflowY: "auto" }}>
             {logs.map((log, i) => {
-              const nextLog = logs[i + 1];
+              // 🛠 2026-11-25 최신 기록이 위 — 이 상태가 머문 시간 = 바로 위(더 나중) 기록 시각 − 이 기록 시각
+              //  (예전엔 아래(더 예전) 기록과의 차이를 써서 한 줄씩 밀려 보였다: 출근 구간 시간이 퇴근 줄에)
               const logTs = resolveTs(log.timestamp);
-              const nextTs = resolveTs(nextLog?.timestamp);
-              const duration = logTs && nextTs ? logTs.getTime() - nextTs.getTime()
-                : i === 0 && logTs ? Date.now() - logTs.getTime() : null;
+              const laterTs = i > 0 ? resolveTs(logs[i - 1]?.timestamp) : null;
+              const duration = !logTs ? null : i === 0 ? Date.now() - logTs.getTime() : laterTs ? laterTs.getTime() - logTs.getTime() : null;
               const color = STATUS_COLORS[log.status] || "#9ca3af";
               return (
                 <div
@@ -6457,7 +6464,10 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
       (snap) => {
         const reqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         reqs.sort((a, b) => (resolveTs(b.requestedAt)?.getTime() || 0) - (resolveTs(a.requestedAt)?.getTime() || 0));
-        setLocChangeRequests(reqs);
+        // 🛠 2026-11-25 같은 기사가 여러 번 누른 요청은 최신 한 줄로(닫기는 같은 기사 요청을 모두 닫는다)
+        const byUid = new Map();
+        reqs.forEach((r) => { const k = r.uid || r.id; const cur = byUid.get(k); if (cur) cur._ids.push(r.id); else byUid.set(k, { ...r, _ids: [r.id] }); });
+        setLocChangeRequests([...byUid.values()]);
       },
       () => {}
     );
@@ -6537,7 +6547,8 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
           // ⭐ 버그수정 — 기사앱(APK 네이티브 위치 서비스)은 active 필드를 따로 켜지 않아,
           // 위치가 계속 들어오는데도 "미접속/비활성"으로 보였다. 최근 10분 안에 위치나
           // 생존신호(heartbeatAt)가 들어왔으면 접속중으로 본다.
-          active: raw.active === true || isRecentlySeen(raw.updatedAt, raw.heartbeatAt),
+          // 🛠 2026-11-25 active 값만 믿지 않는다 — 기사앱이 퇴근 뒤에도 true 로 남겨, 4일 전 기사도 "활성 · 접속중"으로 보였다
+          active: isRecentlySeen(raw.updatedAt, raw.heartbeatAt),
           speed: raw.speed || 0,
           workStartAt: raw.workStartAt || null,
           checkInLocation: raw.checkInLocation || null,
@@ -7099,7 +7110,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
                     출발지 설정
                   </button>
                   <button
-                    onClick={async () => { try { await updateDoc(doc(db, "location_change_requests", req.id), { status: "dismissed" }); } catch (_) {} }}
+                    onClick={async () => { for (const rid of (req._ids || [req.id])) { try { await updateDoc(doc(db, "location_change_requests", rid), { status: "dismissed" }); } catch (_) {} } }}
                     style={{ padding: "3px 11px", borderRadius: 6, border: "1px solid #e5e7eb", background: "white", color: "#5B6B85", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
                   >
                     닫기
