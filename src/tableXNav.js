@@ -60,7 +60,7 @@ export function installTableXNav() {
   let flow = 0; let flowRaf = 0; let dragging = null;
   const cache = new WeakMap();
 
-  // 잠깐 숨기기 — [×] 누르면 1시간 동안 화살표 · 막대 모두 숨김(이 브라우저)
+  // 잠깐 숨기기 — [×] 누르면 1시간 동안 아래 구역 막대만 숨김(이 브라우저). 🛠 2026-11-25 좌우 화살표는 그대로 뜬다(사용자 요청)
   let hideUntil = 0; try { hideUntil = Number(localStorage.getItem("kpXnavHide") || 0); } catch { /* 무시 */ }
   // 화면 아래 가운데에 다른 막대(선택 모드 · 알림 등)가 떠 있으면 구역 막대를 띄우지 않는다(두 줄로 겹쳐 보이지 않게)
   let busyAt = 0; let busy = false;
@@ -126,7 +126,7 @@ export function installTableXNav() {
   };
 
   const place = () => {
-    if (!box || !box.isConnected || !isWide(box) || typing() || Date.now() > hoverUntil || Date.now() < hideUntil) { hideAll(); return; }
+    if (!box || !box.isConnected || !isWide(box) || typing() || Date.now() > hoverUntil) { hideAll(); return; }
     const r = box.getBoundingClientRect();
     const vh = window.innerHeight; const vw = window.innerWidth;
     const top = Math.max(r.top, 0); const bottom = Math.min(r.bottom, vh);
@@ -149,7 +149,7 @@ export function installTableXNav() {
       if (hidden.length) { const w = more.offsetWidth; Object.assign(more.style, { left: `${right - 60 - w}px`, top: `${midY - 12}px` }); }
     } else show(more, false);
     // ② 아래 구역 막대 — 표의 진짜 가로 막대(상자 아래 끝)가 화면 밖일 때만
-    const barOn = r.bottom > vh + 4 && r.top < vh - 140 && !bottomBusy();
+    const barOn = r.bottom > vh + 4 && r.top < vh - 140 && !bottomBusy() && Date.now() >= hideUntil;
     if (barOn) {
       const key = `${box.scrollWidth}|${box.clientWidth}|${headCells(box).length}`;
       if (key !== segKey || !track.childElementCount) {
