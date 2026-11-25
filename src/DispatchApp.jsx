@@ -8998,7 +8998,16 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   const aiCanWrite = role !== "viewer" && !(customRole && getMenuAccess(customRoles, role, "배차관리") !== "write");
   const aiOrderApi = {
     canWrite: aiCanWrite,
-    update: (id, patch, row) => (aiCanWrite ? patchDispatch(id, patch, row) : _viewerBlock()),
+    // 🛠 2026-11-25 AI 비서로 지급방식을 바꾸면 배차상태도 화면 확인 창과 같은 규칙(payTypeStatusPatch)으로 — "지급방식 취소 + 배차완료" 오더가 생기지 않게
+    update: (id, patch, row) => {
+      if (!aiCanWrite) return _viewerBlock();
+      const p = { ...patch };
+      if ("지급방식" in p && !("배차상태" in p)) {
+        const prev = row || (dispatchData || []).find((r) => r._id === id) || {};
+        Object.assign(p, payTypeStatusPatch(prev, p.지급방식, p));
+      }
+      return patchDispatch(id, p, row);
+    },
     remove: (ids) => (aiCanWrite ? removeDispatch(ids) : _viewerBlock()),
     create: async (recIn) => {
       if (!aiCanWrite) { _viewerBlock(); return false; }

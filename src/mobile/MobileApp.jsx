@@ -5793,6 +5793,8 @@ const title =
           } else if (!patch.배차상태) patch.배차상태 = "배차완료";
         }
       }
+      // 🛠 2026-11-25 지급방식을 바꾸면 배차상태도 PC 확인 창과 같은 규칙으로(payTypeStatusPatch)
+      if ("지급방식" in patch && !("배차상태" in patch)) Object.assign(patch, payTypeStatusPatch(order, patch.지급방식, patch));
       // 🛠 2026-11-25 AI 비서로 청구 · 기사운임을 고치면 저장된 수수료도 같은 규칙으로(PC는 patchDispatch가 맞춘다 · nextFee)
       if (("청구운임" in patch || "기사운임" in patch) && !("수수료" in patch)) patch.수수료 = nextFee(order, { ...order, ...patch });
       await updateDoc(doc(db, col, id), patch);
