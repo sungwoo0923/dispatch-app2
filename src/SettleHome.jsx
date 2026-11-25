@@ -13,7 +13,7 @@ import { useArDesk, stageLabel, sdCard, sdBtn, sdBtnPri, sdInp, Ico, IC, viewSta
 import { MarginPct, profitColor } from "./marginPct"; // ⭐ 2026-11-17 매출이익 옆 매출 대비 % · 매출이익 색(플러스 빨강 · 마이너스 파랑)
 import BillingBoard from "./BillingBoard"; // 🧾 2026-11-17 청구 현황판(미청구 · 청구완료 · 입금완료)
 import { closeBoard } from "./closeFlow"; // ✅ 2026-11-16 2단계 마감 숫자
-import { n, won, short, kstYm, monthOf, stageFinder, summarizeSettle, clientLedger, fleetPlateSet } from "./settleCore";
+import { n, won, short, kstYm, monthOf, stageFinder, summarizeSettle, clientLedger, fleetPlateSet, stmtDocFinder, stmtRowsNow, stmtDrift, stmtDriftText, stmtDriftHint } from "./settleCore";
 import { isFleetGrade } from "./fleetGradesCore"; // 🔗 2026-11-25 기사 지급 = 용차지급관리와 같은 오더(지입차 제외)
 export { summarizeSettle, clientLedger } from "./settleCore";
 
@@ -71,6 +71,14 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
   const [ym, setYm] = React.useState(() => kstYm(0));
   const fleetPlates = React.useMemo(() => (Array.isArray(drivers) ? fleetPlateSet(drivers, isFleetGrade) : null), [drivers]);
   const S = React.useMemo(() => summarizeSettle(orders, ym, stageOf, undefined, { fleetPlates }), [orders, ym, stageOf, fleetPlates]);
+  // ⚠ 2026-11-25 명세서 작성 뒤 금액이 바뀐 거래처(명세서에 남긴 공급가 ↔ 지금 오더 합계)
+  const stmtOf = React.useMemo(() => stmtDocFinder(desk?.stmts), [desk?.stmts]);
+  const prepaidDefault = desk?.config?.stmtIncludePrepaid === true;
+  const driftOf = React.useMemo(() => {
+    const byC = new Map(); (orders || []).forEach((o) => { if (monthOf(o) !== ym) return; const c = String(o?.거래처명 || "").trim(); if (!byC.has(c)) byC.set(c, []); byC.get(c).push(o); });
+    const m = new Map(); byC.forEach((list, c) => { const doc = stmtOf(c, ym); const dr = doc ? stmtDrift(doc, stmtRowsNow(list, c, ym, doc, prepaidDefault)) : null; if (dr) m.set(c, dr); });
+    return m;
+  }, [orders, ym, stmtOf, prepaidDefault]);
   const closeOf = React.useCallback((c, m) => desk?.closes?.get(`${c}|${m}`) || null, [desk?.closes]);
   const board = React.useMemo(() => closeBoard(orders, ym, { closeOf }), [orders, ym, closeOf]);
   const boardMap = React.useMemo(() => new Map(board.map((r) => [r.client, r])), [board]);
@@ -120,7 +128,7 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
         <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setViewSave(k)} className={`h-9 px-4 rounded-lg text-[14px] font-black transition ${view === k ? "bg-[#0F1A30] text-white" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>{l}</button>))}
     </div>);
   if (view === "board") return (
-    <div className="space-y-3">{viewSw}<BillingBoard orders={orders} stageOf={stageOf} months={months} onGo={go} depositOn={depositOn} /></div>);
+    <div className="space-y-3">{viewSw}<BillingBoard orders={orders} stageOf={stageOf} months={months} onGo={go} depositOn={depositOn} stmtOf={stmtOf} prepaidDefault={prepaidDefault} /></div>);
 
   return (
     <div className="space-y-3 text-[#0F1A30]" data-kp="settle-home">
@@ -175,7 +183,8 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
               <tbody>{shown.map((r, i) => (
                 <tr key={r.client} onDoubleClick={() => openStmt(r.client)} className="border-t border-[#EEF2F8] hover:bg-[#F8FAFD]">
                   <td className="px-3 py-2.5 text-center text-[12.5px] text-[#9AA9C3]" style={NUMS}>{i + 1}</td>
-                  <td className="px-3 py-2.5 text-[14.5px] font-black max-w-[240px] truncate">{r.client}</td>
+                  <td className="px-3 py-2.5 text-[14.5px] font-black max-w-[240px]"><div className="truncate">{r.client}</div>
+                    {driftOf.get(r.client) && <button type="button" data-kp="stmt-drift" onClick={() => openStmt(r.client)} title={stmtDriftHint(driftOf.get(r.client))} className="mt-1 block max-w-full truncate text-left px-1.5 py-0.5 rounded-md text-[11.5px] font-black" style={{ color: G.bad, background: "#FEF3F2", border: "1px solid #FECDCA", ...NUMS }}>⚠ {stmtDriftText(driftOf.get(r.client))} · 다시 확인</button>}</td>
                   <td className="px-3 py-2.5 text-right text-[14px] text-[#3A4A66]" style={NUMS}>{r.count.toLocaleString()}</td>
                   <td className="px-3 py-2.5 text-right text-[14.5px] font-black whitespace-nowrap" style={NUMS}>{won(r.sale)}</td>
                   <td className="px-3 py-2"><div className="max-w-[420px] mx-auto"><FlowTrack compact steps={[

@@ -1,11 +1,13 @@
 // ======================= src/execAnalyticsCore.js =======================
 // 📈 2026-11-08 임원 화면 · 경영 분석(손익 · 거래처 · 기사·차량 · 단가 · 현금흐름 · 영업) — 계산만 하는 순수 함수
-//  · 매출·수익 기준은 일일 경영 보고(dailyReportCore)와 같다: 취소·운송사 전송 제외 오더, 청구운임 = 매출, 기사운임 = 매입, 상차일 기준
+//  · 매출·수익 기준은 매출관리 · 일일 경영 보고(dailyReportCore)와 같다: 📏 2026-11-25 배차완료 오더(functions/salesRule.mjs isSalesOrder —
+//    배차중 · 미배차 · 취소 · 운송사 전송 제외), 청구운임 = 매출, 기사운임 + 회사 지급분 = 매입, 상차일 기준
 //  · 매입 구분: 소속 차량(drivers 등급 지입·직영·임대)의 차량번호면 "기사 운임", 아니면 "용차"
 //  · 판관비: 수입·지출 장부(acctLedger) 지출 중 운송 원가(기사운송료·운반비·용차 등 — 오더 기사운임과 겹침)를 뺀 계정
 //    장부가 없는 달은 고정비(acctRecurring 지출)로 대신 채우고 "추정"으로 표시
 //  · 미수: 올해 배차완료 + 고정거래처 청구액(부가세 포함) − 수금 기록(acctPayments) · 오래된 청구부터 수금된 것으로 본다(src/arAging.js 공용)
 import { receivablesOf } from "./arAging"; // ⭐ 2026-11-07 미수금 공용 계산
+import { isSalesOrder } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료)
 import { orderProfit, paidOut } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
 import { addDay, dayDiff, rangeDays, isBizDay, toWon, dateOf, isCancelledOrder, isDone, normPlate, prevYm } from "./dailyReportCore";
 
@@ -61,6 +63,7 @@ export function plMonthly({ rows, fleet, ledger, recurring, months }) {
   const set = new Set(months);
   const out = Object.fromEntries(months.map((m) => [m, { m, sale: 0, own: 0, hire: 0, paid: 0, cnt: 0, sga: {}, sgaTotal: 0, est: false }]));
   rows.forEach((r) => {
+    if (!isSalesOrder(r)) return; // 📏 2026-11-25 배차완료만
     const m = ymOf(dateOf(r)); if (!set.has(m)) return;
     const e = out[m]; const pay = toWon(r.기사운임);
     e.sale += toWon(r.청구운임); e.cnt += 1;
@@ -104,7 +107,7 @@ export function receivables(rows, arPay, today, fixedRows = []) {
 // 거래처별 평균 입금 기간(DSO) — 미수 ÷ 최근 90일 일평균 매출 · 15~120일로 자른다
 export function dsoOf(rows, rec, today) {
   const from = addDay(today, -90); const s = {};
-  rows.forEach((r) => { const d = dateOf(r); if (d < from || d > today) return; const c = clientOf(r); s[c] = (s[c] || 0) + toWon(r.청구운임); });
+  rows.forEach((r) => { if (!isSalesOrder(r)) return; const d = dateOf(r); if (d < from || d > today) return; const c = clientOf(r); s[c] = (s[c] || 0) + toWon(r.청구운임); });
   const out = {};
   Object.keys({ ...s, ...rec }).forEach((c) => { const daily = (s[c] || 0) / 90; const o = rec[c]?.outstanding || 0; out[c] = daily > 0 ? Math.max(15, Math.min(120, o / daily)) : 60; });
   return out;
@@ -114,7 +117,7 @@ export function dsoOf(rows, rec, today) {
 export function clientTable(rows, from, to, prevFrom, prevTo, rec = {}) {
   const m = {};
   const add = (key, r) => { const c = clientOf(r); const e = m[c] || (m[c] = { n: c, sale: 0, profit: 0, cnt: 0, pSale: 0, pProfit: 0, pCnt: 0, routes: {}, last: "" }); const s = toWon(r.청구운임), p = orderProfit(r); if (key === "c") { e.sale += s; e.profit += p; e.cnt += 1; const rt = routeOf(r); const x = e.routes[rt] || (e.routes[rt] = { rt, sale: 0, profit: 0, cnt: 0 }); x.sale += s; x.profit += p; x.cnt += 1; } else { e.pSale += s; e.pProfit += p; e.pCnt += 1; } if (dateOf(r) > e.last) e.last = dateOf(r); };
-  rows.forEach((r) => { const d = dateOf(r); if (d >= from && d <= to) add("c", r); else if (d >= prevFrom && d <= prevTo) add("p", r); });
+  rows.forEach((r) => { if (!isSalesOrder(r)) return; const d = dateOf(r); if (d >= from && d <= to) add("c", r); else if (d >= prevFrom && d <= prevTo) add("p", r); });
   return Object.values(m).filter((e) => e.cnt > 0).map((e) => {
     const ar = rec[e.n] || { outstanding: 0, avgAge: 0, over30: 0 };
     const margin = e.sale ? (e.profit / e.sale) * 100 : 0;
@@ -132,6 +135,7 @@ export function vehicleTable(rows, fleet, from, to) {
   fleet.forEach((v, p) => m.set(p, { ...v, key: p, sale: 0, pay: 0, paid: 0, cnt: 0, days: new Set(), last: "" }));
   const lastRun = {};
   rows.forEach((r) => {
+    if (!isSalesOrder(r)) return; // 📏 2026-11-25 배차완료만(운행 · 매출 · 수익)
     const p = normPlate(r.차량번호); if (!p || !m.has(p)) return;
     const d = dateOf(r); if (!lastRun[p] || d > lastRun[p]) lastRun[p] = d;
     if (d < from || d > to) return;
@@ -146,6 +150,7 @@ export function priceWatch(rows, cur, prev) {
   const r0 = {}; const c0 = {};
   const put = (m, k, key, r, extra) => { const e = m[k] || (m[k] = { k, ...extra, c: [0, 0, 0], p: [0, 0, 0] }); const s = toWon(r.청구운임); const a = e[key]; a[0] += s; a[1] += orderProfit(r); a[2] += 1; };
   rows.forEach((r) => {
+    if (!isSalesOrder(r)) return; // 📏 2026-11-25 배차완료만
     const d = dateOf(r); const key = d >= cur[0] && d <= cur[1] ? "c" : d >= prev[0] && d <= prev[1] ? "p" : null; if (!key) return;
     const rt = routeOf(r); const ton = tonOf(r);
     put(r0, `${rt}|${ton}`, key, r, { rt, ton });
@@ -200,6 +205,7 @@ export function cashForecast({ today, cash, rec, dso, recurring, cardDue, cardDa
 export function salesTrend(rows, today, months) {
   const first = {}; const last = {}; const byM = {}; const cntAll = {};
   rows.forEach((r) => {
+    if (!isSalesOrder(r)) return; // 📏 2026-11-25 배차완료만
     const c = clientOf(r); if (c === "미지정") return; const d = dateOf(r); const m = ymOf(d);
     if (!first[c] || d < first[c]) first[c] = d; if (!last[c] || d > last[c]) last[c] = d;
     const e = byM[c] || (byM[c] = {}); e[m] = (e[m] || 0) + toWon(r.청구운임); cntAll[c] = (cntAll[c] || 0) + 1;

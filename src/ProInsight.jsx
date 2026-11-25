@@ -12,6 +12,7 @@ import { orderProfit, orderCost, paidOut, fkNum } from "./forkliftCore"; // ⭐ 
 import { profitStyle, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 마진율 색(플러스 빨강 · 마이너스 파랑)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
+import { isSalesOrder } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙
 const n = (v) => fkNum(v); // 🛠 2026-11-25 수익(orderProfit)과 같은 금액 읽기(소수점 반올림)
 const won = (v) => `${Math.round(v || 0).toLocaleString()}`;
 const pct = (a, b) => (b ? (a / b) * 100 : 0);
@@ -20,7 +21,8 @@ const ymKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const isCanceled = (r) => /취소/.test(String(r.배차상태 || "")) || /취소/.test(String(r.지급방식 || ""));
 // ⭐ 2026-11-05 PC·모바일 일치 — 인사이트 매출에 넣는 오더 기준(모바일 경영인텔리전스도 이 함수를 쓴다)
-export const isInsightRow = (r) => !!r && !!r.상차일 && !isCanceled(r) && n(r.청구운임) > 0;
+//  📏 2026-11-25 매출관리와 같은 기준 — 배차완료 오더만(functions/salesRule.mjs isSalesOrder · 배차중 · 미배차 · 취소 · 화주사 사본 제외)
+export const isInsightRow = (r) => isSalesOrder(r) && !!r.상차일 && !isCanceled(r) && n(r.청구운임) > 0;
 
 const PERIODS = [
   { key: "this", label: "이번 달" },

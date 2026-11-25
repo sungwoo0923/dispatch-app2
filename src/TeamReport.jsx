@@ -11,6 +11,8 @@ import { db } from "./firebase";
 import { collection, getDocs, query, where, doc } from "firebase/firestore";
 import CustomSelect from "./CustomSelect";
 import { useCompanyPeople } from "./dailyReport";
+import { useRouteCarrierFilter } from "./routeCarriers"; // 📏 2026-11-25 끈 운송업체 고정노선 오더는 매출에서 뺀다(다른 보고서와 같게)
+import { hideBlind } from "./blind"; // 📏 2026-11-25 블라인드 오더는 최고관리자 외에는 안 보이게(다른 화면과 같게)
 import { useUserNameMap, orderStaffNameRaw, ORDER_MGR_FIXED } from "./detailGetters";
 import { useMyProfile } from "./userNames";
 import { isExecProfile, TEAM_OPTIONS } from "./hrConstants";
@@ -159,7 +161,10 @@ export default function TeamReport({ company, me }) {
   }, [canMake, company, period.prevFrom, period.to]);
   const staffOf = React.useCallback((r) => { const n = orderStaffNameRaw(r, nameMap); return (n && n !== ORDER_MGR_FIXED ? n : "") || String(r?.배차확정자 || "").trim() || n || ""; }, [nameMap]);
   const members = React.useMemo(() => teamMembers(people, team), [people, team]);
-  const rep = React.useMemo(() => (rows && team && teamKind(team) === "sales" ? buildTeamReport({ rows, members, period, staffOf }) : null), [rows, members, period, staffOf, team]);
+  // 📏 2026-11-25 다른 보고서와 같은 입구 거름 — 끈 운송업체 고정노선 오더 · 블라인드 오더 제외(배차완료 기준은 buildTeamReport 가 salesRule 로)
+  const carrierF = useRouteCarrierFilter(company);
+  const repRows = React.useMemo(() => (rows ? hideBlind(rows).filter((r) => carrierF.isCountable(r)) : null), [rows, carrierF]);
+  const rep = React.useMemo(() => (repRows && carrierF.ready && team && teamKind(team) === "sales" ? buildTeamReport({ rows: repRows, members, period, staffOf }) : null), [repRows, carrierF.ready, members, period, staffOf, team]);
   // 작성자 의견 — 칸마다 넣고 빼기(처음엔 요약 · 잘된 점 · 문제점 · 다음 계획)
   const [onSecs, setOnSecs] = React.useState(["summary", "good", "issue", "plan"]);
   const [ops, setOps] = React.useState(() => Object.fromEntries(OPINION_SECTIONS.map(([k, , t]) => [k, t])));

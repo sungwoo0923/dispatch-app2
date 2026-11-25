@@ -43,6 +43,24 @@ export async function bumpDriverPayout(db, { date, amount, count = 1, company })
   }, { merge: true });
 }
 
+// 💸 2026-11-25 지급 후 운임 변경 — 오더별 조정 한 줄(누적 조정액, 0이면 지움 · 여러 번 눌러도 같은 값)
+//  + 추가 지급 · − 환수(지출을 줄이는 음수 금액)
+export async function setDriverPayAdjust(db, { orderId, amount, date, company, who = "" }) {
+  const amt = toInt(amount);
+  return upsertAutoEntry(db, orderId, {
+    company, date, type: "지출", account: "운반비", amount: amt, vendor: who || "기사", auto: "drvpayadj", purpose: "drvpay",
+    item: amt >= 0 ? `기사운임 추가 지급(정산관리)${who ? ` · ${who}` : ""}` : `기사운임 환수(정산관리)${who ? ` · ${who}` : ""}`,
+    memo: "용차지급관리 › 지급 후 운임 변경 [추가 지급]/[환수 처리]: 오더 한 건의 누적 차액",
+  });
+}
+// 💸 2026-11-25 지입차 일괄 지급명세서 [지급 완료] — 기사님 × 달 한 줄(실지급액 · 0이면 지움)
+export async function setFleetStatementPayout(db, { stmtId, amount, date, company, who = "", memo = "" }) {
+  return upsertAutoEntry(db, stmtId, {
+    company, date, type: "지출", account: "운반비", amount, vendor: who || "지입 기사", auto: "fleetpay", purpose: "drvpay",
+    item: `지입 기사 지급(지급명세서)${who ? ` · ${who}` : ""}`, memo: memo || "지입차관리 › 일괄 지급명세서 [지급 완료]: 자동 반영",
+  });
+}
+
 // 🏗 2026-11-09 지게차 기사 지급(지급일별 합계) — 정산관리 › 지게차 지급 [지급완료]/[지급 취소]
 export async function bumpForkliftPayout(db, { date, amount, count = 1, company }) {
   const co = coOf(company); const d = String(date || kstDay()).slice(0, 10); const amt = toInt(amount);

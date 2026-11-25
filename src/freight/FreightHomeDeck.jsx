@@ -79,6 +79,8 @@ function FreightTodo({ jobs, onGo }) {
   );
 }
 
+// 📏 2026-11-25 내륙 홈은 매출 · 수익을 배차완료만 세지만(salesRule), 화물(컨테이너 · 해상 · 항공) 홈은 예전처럼 진행 중 건도 넣는다
+const FREIGHT_MONEY = () => true;
 export default function FreightHomeDeck({ biz, onMenu, users = [], myName = "", isMaster = false, att = null }) {
   const { jobs: all, loaded } = useFreightJobs();
   const jobs = React.useMemo(() => all.filter((j) => j.mode === biz), [all, biz]);
@@ -87,7 +89,7 @@ export default function FreightHomeDeck({ biz, onMenu, users = [], myName = "", 
   // 지난 기간 캐시 없이 모든 건을 실시간으로 센다(구간 수가 많지 않다)
   const past = React.useMemo(() => (loaded ? { days: {}, staff: {}, clients: {}, month: thisMonth } : null), [loaded, thisMonth]);
   return (
-    <HomeDeck dispatchData={rows} pastCache={past} liveStart="0000-00-00" users={users} myName={myName} isMaster={isMaster} att={att}
+    <HomeDeck dispatchData={rows} pastCache={past} liveStart="0000-00-00" users={users} myName={myName} isMaster={isMaster} att={att} isMoney={FREIGHT_MONEY}
       labels={{ ...COMMON, ...(LABELS[biz] || {}) }}
       todo={<FreightTodo jobs={jobs} onGo={(p) => onMenu?.(bizMenuKey(biz, p))} />} />
   );

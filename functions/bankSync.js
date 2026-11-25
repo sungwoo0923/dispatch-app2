@@ -7,6 +7,8 @@
 //    다 채운 달은 그 달 오더 정산상태.{월} = "정산완료"(되돌리기 위해 예전 값을 거래 문서에 남긴다)
 //  · callable action: status · syncNow · confirm(거래처 확정 · 다른 거래처) · ignore · undo(자동 반영 되돌리기)
 //  · 확정하면 입금자명 → 거래처 별칭을 회사마다 배운다(bankAliases/{회사}.map)
+//  · 🔗 2026-11-25 자금관리 수입 장부는 arPayments 트리거(functions/index.js arPaymentLedger)가 한 줄씩 — 되돌리면(기록 삭제) 그 줄도 빠진다
+//    확정(confirm)은 상태 확인 → "처리 중" 표시를 한 트랜잭션으로 · 입금 기록 id 고정(bank_{거래}_{월}) → 두 번 눌러도 한 번만
 //  · 팝빌이 꺼져 있으면 팝빌을 부르지 않고 상태만 "off"로 남긴다
 const err = (code, msg) => Object.assign(new Error(msg), { code });
 const KST = 9 * 3600e3;
@@ -49,11 +51,12 @@ function makeBankSync({ db, FieldValue, getPopbill, callerOf, now = () => Date.n
   async function apply(co, txn, plan, by, auto) {
     const paymentIds = []; const applied = [];
     for (const a of plan.alloc) {
-      const ref = db.collection("arPayments").doc();
+      // 🔁 2026-11-25 입금 기록 id 고정(은행 거래 × 청구월) — 같은 거래를 두 번 반영해도 기록 · 장부(auto_ar_…)는 한 건
+      const ref = db.collection("arPayments").doc(`bank_${String(txn.id || "").replace(/[/\s]/g, "_").slice(0, 300)}_${a.yyyymm}`);
       await ref.set({
         company: co, client: plan.client, yyyymm: a.yyyymm, amount: a.amount, full: !!a.full,
         depositName: txn.name || "", depositDate: txn.date || "", at: FieldValue.serverTimestamp(), by,
-        auto: !!auto, source: "bank", bankTxnId: txn.id,
+        auto: !!auto, source: "bank", bankTxnId: txn.id, depositKey: `bank_${txn.id}`, // 🔗 입금 한 번 = 자금 장부 한 줄(arPaymentLedger)
       });
       paymentIds.push(ref.id);
       if (!a.full) continue;
@@ -205,14 +208,30 @@ function makeBankSync({ db, FieldValue, getPopbill, callerOf, now = () => Date.n
       return { id: t.id, status: "review" };
     }
     if (act === "confirm") {
-      if (!["review", "new", "ignored"].includes(t.status)) throw err("failed-precondition", "이미 처리한 입금이에요");
+      if (!["review", "new", "ignored", "applying"].includes(t.status)) throw err("failed-precondition", "이미 처리한 입금이에요");
       const client = String(data?.client || t.match?.client || t.suggestions?.[0]?.client || "").trim();
       if (!client) throw err("invalid-argument", "거래처를 골라 주세요");
-      const months = await monthsOf(co);
-      const p = C.planForClient(months, client, Number(t.amount) || 0);
-      if (!p.alloc.length) throw err("failed-precondition", `${client}에 남은 미수금이 없어요`);
-      const r = await apply(co, t, { client, alloc: p.alloc }, auth.token?.email || auth.uid, false);
-      await db.collection("bankTxns").doc(t.id).set({ status: "confirmed", match: slimPlan(client, p, "확인"), ...r, decidedAt: now(), decidedBy: auth.uid }, { merge: true });
+      // 🔒 2026-11-25 두 번 눌러도 한 번만 — 상태 확인과 "처리 중" 표시를 한 트랜잭션으로(두 사람이 같이 눌러도 한 사람만 통과)
+      const tRef = db.collection("bankTxns").doc(t.id);
+      const prevStatus = await db.runTransaction(async (tx) => {
+        const cur = await tx.get(tRef);
+        const st = cur.exists ? cur.data()?.status : "";
+        const stale = st === "applying" && now() - (Number(cur.data()?.applyingAt) || 0) > 5 * 60e3; // 처리 중에 서버가 멈춘 경우(5분 뒤 다시 가능)
+        if (!stale && !["review", "new", "ignored"].includes(st)) throw err("failed-precondition", "이미 처리한 입금이에요");
+        tx.update(tRef, { status: "applying", applyingAt: now(), applyingBy: auth.uid });
+        return stale ? "review" : st;
+      });
+      let p, r;
+      try {
+        const months = await monthsOf(co);
+        p = C.planForClient(months, client, Number(t.amount) || 0);
+        if (!p.alloc.length) throw err("failed-precondition", `${client}에 남은 미수금이 없어요`);
+        r = await apply(co, t, { client, alloc: p.alloc }, auth.token?.email || auth.uid, false);
+      } catch (e) {
+        await tRef.set({ status: prevStatus }, { merge: true }).catch(() => null); // 실패하면 예전 상태로(다시 누를 수 있게)
+        throw e;
+      }
+      await tRef.set({ status: "confirmed", match: slimPlan(client, p, "확인"), ...r, decidedAt: now(), decidedBy: auth.uid }, { merge: true });
       const al = C.aliasFor(t.name, client);
       if (al) await aliasRef(co).set({ companyName: co, map: { [al.key]: client }, updatedAt: now() }, { merge: true });
       return { id: t.id, status: "confirmed", client, kind: p.kind, learned: !!al };

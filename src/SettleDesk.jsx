@@ -322,7 +322,7 @@ export function StatementClientRail({ month, setMonth, groups = [], sel, onSel, 
                 <span className={`text-[12px] font-black px-1.5 h-5 rounded-md inline-flex items-center whitespace-nowrap ${on ? "bg-white/15 text-white" : stageIdx(g.stage) === 0 ? "border border-dashed border-[#B8C4D8] text-[#5B6B85]" : stageIdx(g.stage) === 6 ? "bg-[#0F1A30] text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>{stageLabel(g.stage)}</span>
               </div>
               <div className={`mt-0.5 flex items-center justify-between gap-2 text-[12.5px] font-bold ${on ? "text-white/70" : "text-[#5B6B85]"}`} style={NUM}>
-                <span className="whitespace-nowrap truncate min-w-0">{(g.count || 0).toLocaleString()}건{closeTag(g.close).t ? <span className="ml-1 font-black" style={{ color: on ? "#fff" : closeTag(g.close).c }}>· {closeTag(g.close).t}</span> : null}{g.settled ? <span className={`ml-1 ${on ? "text-white" : "text-[#1E6B4A]"}`} title="미수금관리에서 입금 확인(정산완료)">· 입금</span> : null}{pick && can && !g.email ? <span className="ml-1 text-[#A6400E]">· 메일 없음</span> : null}{g.subN > 1 ? <span className={`ml-1 ${on ? "text-white" : "text-[#2D4C82]"}`} title={`담당노선구분 ${g.subN}개: 구분별 명세서 ${g.subDone || 0}개 작성`}>· 구분 {g.subDone || 0}/{g.subN}</span> : null}</span><span className={`whitespace-nowrap ${on ? "text-white font-black" : "text-[#0F1A30] font-black"}`}>{(g.total || 0).toLocaleString()}원</span>
+                <span className="whitespace-nowrap truncate min-w-0">{g.drift ? <span className={`mr-1 font-black ${on ? "text-white" : "text-[#B42318]"}`} title={`명세서 작성 뒤 금액이 바뀌었어요: 작성 ${won(g.drift.was)} → 지금 ${won(g.drift.now)}`}>⚠ 금액 바뀜 ·</span> : null}{(g.count || 0).toLocaleString()}건{closeTag(g.close).t ? <span className="ml-1 font-black" style={{ color: on ? "#fff" : closeTag(g.close).c }}>· {closeTag(g.close).t}</span> : null}{g.settled ? <span className={`ml-1 ${on ? "text-white" : "text-[#1E6B4A]"}`} title="미수금관리에서 입금 확인(정산완료)">· 입금</span> : null}{pick && can && !g.email ? <span className="ml-1 text-[#A6400E]">· 메일 없음</span> : null}{g.subN > 1 ? <span className={`ml-1 ${on ? "text-white" : "text-[#2D4C82]"}`} title={`담당노선구분 ${g.subN}개: 구분별 명세서 ${g.subDone || 0}개 작성`}>· 구분 {g.subDone || 0}/{g.subN}</span> : null}</span><span className={`whitespace-nowrap ${on ? "text-white font-black" : "text-[#0F1A30] font-black"}`}>{(g.total || 0).toLocaleString()}원</span>
               </div>
             </button>
           );
@@ -330,6 +330,13 @@ export function StatementClientRail({ month, setMonth, groups = [], sel, onSel, 
       </div>
     </div>
   );
+}
+
+// ⚠ 2026-11-25 명세서 작성 뒤 금액이 바뀌었을 때 배지(문구는 settleCore.stmtDriftText 와 같게)
+export function DriftBadge({ d, className = "" }) {
+  if (!d) return null;
+  const text = d.was === d.now ? `명세서 작성 뒤 건수가 바뀌었어요: 작성 ${d.countWas}건 → 지금 ${d.countNow}건` : `명세서 작성 뒤 금액이 바뀌었어요: 작성 ${won(d.was)} → 지금 ${won(d.now)}`;
+  return <span data-kp="stmt-drift" title={d.issued ? "세금계산서를 이미 발행했어요. 명세서를 다시 확인하고 필요하면 수정 계산서를 발행해 주세요." : "명세서를 열어 다시 확인하고 [명세서 작성]을 한 번 더 누르면 지금 금액으로 맞춰져요."} className={`mt-1 inline-flex max-w-full px-1.5 py-0.5 rounded-md text-[11.5px] font-black truncate ${className}`} style={{ color: "#B42318", background: "#FEF3F2", border: "1px solid #FECDCA", ...NUM }}>⚠ {text}</span>;
 }
 
 export function StatementBoard({ month, setMonth, recentMonths = [], groups, onOpen, onAdvance, onBulk, onManual, bizLabel, tools = null }) {
@@ -478,6 +485,7 @@ export function StatementBoard({ month, setMonth, recentMonths = [], groups, onO
                         <button type="button" onClick={() => onOpen(g)} className="block max-w-full text-left">
                           <span className="block truncate text-[15px] font-black text-[#0F1A30] hover:underline underline-offset-2">{g.client}</span>
                           <span className="block truncate text-[13px] text-[#9AA9C3]">{g.email || "이메일 없음"}{g.settled ? " · 입금 완료" : ""}{g.lastAt ? ` · ${fmtDay(g.lastAt)} 기록` : ""}</span>
+                          {g.drift && <DriftBadge d={g.drift} />}
                         </button>
                       </td>
                       <td className="px-2 py-3 text-right text-[14px] text-[#3A4A66]" style={NUM}>{g.count}건{g.prepaidOut > 0 && <div className="text-[11.5px] font-bold text-[#9AA9C3] whitespace-nowrap" title="선불·착불은 명세서에서 뺐어요(미수금에는 들어가요)">선불·착불 {g.prepaidOut}건 제외</div>}</td>

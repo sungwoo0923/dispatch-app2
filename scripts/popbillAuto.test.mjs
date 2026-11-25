@@ -48,7 +48,8 @@ function fakeDb() {
       return { docs: docs.slice(0, lim) };
     },
   });
-  return { store, collection: (col) => ({ doc: (id) => ref(col, id || `auto${++auto}`), ...query(col) }) };
+  const tx = { get: (r) => r.get(), update: (r, v) => r.update(v), set: (r, v, o) => r.set(v, o) };
+  return { store, runTransaction: async (fn) => fn(tx), collection: (col) => ({ doc: (id) => ref(col, id || `auto${++auto}`), ...query(col) }) };
 }
 const AUTH = (uid, email = "") => ({ uid, token: { email } });
 function seedUsers(db) {

@@ -5,15 +5,12 @@
 //  · receivablesOf({ orders, fixedRows, paid, today }): 올해 배차완료 + 고정거래처 · 청구액 부가세 포함(거래처정산과 같은 식) − 수금 기록
 export { agingOf, openInvoices, receivablesOf, arInvoicesByClient, vatIncluded, isArOrder, arClientOf, fixedArRows, paidAmountOf, vatEstimate, isTaxInvoiceSale, isInvoiceDriver, invoiceDriverPlates, AR_VAT_RATE, PREPAID_PAYS, isPrepaidPay, stmtIncludePrepaidOf, statementRowsOf } from "../functions/arCore.mjs";
 
-// ⭐ 2026-11-18 수금 기록 + 정산관리 [입금완료] 오더(부가세 포함)를 같이 본 거래처별 수금액 — 둘 중 큰 쪽(같은 돈을 두 번 세지 않게)
-//  회계 장부 · 회계 개요가 같은 값을 쓴다(지급 쪽이 지급등록액과 [지급완료] 중 큰 쪽을 쓰는 것과 같은 방식)
-// 🔗 2026-11-25 정산관리 쪽 받은 돈 = 입금 확인 [입금완료] + 거래처정산 › 미수금관리 입금 기록(arPayments) · [정산완료] 달(settlePaidByClient)
-//  arPayments 를 안 주면 오더에 남은 정산완료 · 입금완료만 본다
-import { settlePaidByClient as _spc, paidAmountOf as _pa } from "../functions/arCore.mjs";
-export { settlePaidByClient } from "../functions/arCore.mjs";
-export function paidWithSettled(orders, paid = {}, arPayments = [], year = "") {
-  const st = _spc({ orders, arPayments, year });
-  const out = { ...(paid || {}) };
-  Object.entries(st).forEach(([c, v]) => { const p = _pa(out[c]); out[c] = Math.max(p, v.paid); });
-  return out;
+// 🔗 2026-11-25 받은 돈은 한 곳(정본 = arPayments 입금 기록 — 회계 [입금 처리] · 미수금관리 · 은행 자동 매칭 모두)
+//  + 오더에 남은 [정산완료] 달 · 입금 확인 [입금완료] · 예전 회계 [입금 처리] 합계 중 arPayments 와 안 이어진 몫(한 번만 — functions/arCore.mjs arPaidByClient)
+//  예전 "둘 중 큰 쪽" 식은 없앴다(새 회계 입금이 정산관리 기록에 묻혀 안 보이던 문제)
+export { settlePaidByClient, arPaidByClient, legacyAcctArOf, AR_LEGACY_CUTOFF, arPayDateOf, monthOf, loadYmOf, isSettledIn, settledDateIn } from "../functions/arCore.mjs";
+import { arPaidByClient as _apc } from "../functions/arCore.mjs";
+// acct: loadAcctPayments 결과({ ar, log }) · arPayments: 입금 기록 목록
+export function paidWithSettled(orders, acct = {}, arPayments = [], year = "") {
+  return _apc({ orders, arPayments, acct: acct && (acct.ar || acct.log) ? acct : { ar: acct || {} }, year });
 }

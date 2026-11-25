@@ -11,7 +11,8 @@
 const DRIVER_DROP = /청구|수수료|이익|수익|마진|매출|매입|원가|공급가|부가세|계산서|입금|미수|미지급|외부지급|운임보정|운임수동|운임구분|할증|산재|보험료|세금|사업자|거래처단가|업로드토큰|uploadToken|^_gsheet|^_sheet|기사운임합|화주|shipper(?!Company)|totalPrice|billing|invoice|profit|margin|fee$/i;
 const DRIVER_DROP_EXACT = new Set(["운임", "정산상태", "정산일", "정산완료", "정산관리", "단가", "금액", "합계", "총액"]);
 // 화주에게 보내지 않는 칸
-const SHIPPER_DROP = /기사운임|기사단가|기사지급|기사정산|^지급(상태|완료|일)$|미지급|외부지급|수수료|이익|수익|마진|원가|매입|운임보정|운임수동|구간운임|정산계좌|업로드토큰|uploadToken|^_gsheet|^_sheet|기사타임라인|기사확인값|기사거절사유|배차확정자|createdByUid|등록자|^작성자$|내부메모|^메모$|담당자Uid|routeOwner|fee$|profit|margin/i;
+// 🛠 2026-11-25 화주에게는 회사 내부 운임 구성(지게차 · 특수운임 · 산재 · 지급 처리 칸)도 보내지 않는다 — 청구운임 합계만 보면 된다(지급방식은 남김)
+const SHIPPER_DROP = /^특수운임$|^특수(기사차감|청구추가)$|^지게차|산재|보험료|^지급(?!방식)|기사운임|기사단가|기사지급|기사정산|^지급(상태|완료|일)$|미지급|외부지급|수수료|이익|수익|마진|원가|매입|운임보정|운임수동|구간운임|정산계좌|업로드토큰|uploadToken|^_gsheet|^_sheet|기사타임라인|기사확인값|기사거절사유|배차확정자|createdByUid|등록자|^작성자$|내부메모|^메모$|담당자Uid|routeOwner|fee$|profit|margin/i;
 const SHIPPER_DROP_EXACT = new Set(["기사", "지급", "지급액"]);
 
 function clean(v, dropRe, dropExact, depth = 0) {
@@ -21,6 +22,11 @@ function clean(v, dropRe, dropExact, depth = 0) {
   if (typeof v === "object") {
     // Firestore 시각(Timestamp) · 위치(GeoPoint) 등 그대로 두는 값
     if (typeof v.toMillis === "function" || typeof v.latitude === "number" || v.constructor?.name === "FieldValue") return v;
+    // 🛠 2026-11-25 수정 이력 줄({ field: "기사운임", before, after } 같은 것)은 칸 이름이 값에 들어 있어 이름 걸러내기로는 안 빠졌다 — 가리키는 칸이 숨길 칸이면 줄째 뺀다
+    for (const fk of ["field", "key", "칸", "항목", "필드"]) {
+      const fv = v[fk];
+      if (typeof fv === "string" && fv && (dropRe.test(fv) || dropExact.has(fv))) return undefined;
+    }
     const out = {};
     for (const k of Object.keys(v)) {
       if (dropRe.test(k) || dropExact.has(k)) continue;

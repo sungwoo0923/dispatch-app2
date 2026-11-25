@@ -7,6 +7,7 @@
 //  인쇄/PDF는 브라우저 인쇄로 그대로.
 import React, { useMemo, useState } from "react";
 import { statsOf, toWon } from "./monthCompare";
+import { isSalesOrder } from "./salesRule";
 import { orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
 import { useLoadOrderRange, monthEnd, monthStartAgo } from "./orderHistory";
 import { CustomSelect } from "./CustomSelect";
@@ -19,7 +20,7 @@ const won = (n) => `${Math.round(n || 0).toLocaleString("ko-KR")}`;
 const man = (v) => { const a = Math.abs(v); return a >= 1e4 ? `${v < 0 ? "−" : ""}${Math.round(a / 1e4).toLocaleString()}만` : `${Math.round(v).toLocaleString()}`; };
 const pct = (v) => `${(v * 100).toFixed(1)}%`;
 const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
-const DONE = (r) => !["배차취소", "취소", "오더취소", "취소됨"].includes(r.배차상태 || r.상태 || "");
+const DONE = isSalesOrder; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료 + 고정거래처) — 매출관리 · 홈 · 보고서와 같은 함수
 
 function Delta({ a, b, money, rate }) {
   const d = b - a;

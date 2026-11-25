@@ -4,6 +4,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import { toWon, creatorOf, useStaffNames } from "./monthCompare";
 import { useLoadOrderRange, monthEnd, monthStartAgo } from "./orderHistory";
 import { CustomSelect } from "./CustomSelect";
+import { isSalesOrder } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙
 import { orderCost } from "./forkliftCore"; // ⭐ 2026-11-17 운반비 = 기사운임 + 회사가 따로 지급(지게차·외부 특수운임) → 매출 − 운반비 = 수익(배차표 수수료와 같은 식)
 import { profitColor, profitRateColor, MARGIN_BLUE } from "./marginPct"; // ⭐ 2026-11-17 수익 · 수익률 색(플러스 빨강 · 마이너스 파랑)
 
@@ -45,8 +46,9 @@ export default function StaffPerformance({ rows = [], isExcluded = () => false, 
   const prev = shiftMonth(month, -1);
   const inScope = (r) => (scope === "all" ? true : !isExcluded(r.거래처명));
   const namesVer = useStaffNames(); // 계정 이메일 → 직원 이름
-  const cur = useMemo(() => aggregate(rows.filter((r) => String(r.상차일 || "").startsWith(month) && inScope(r))), [rows, month, scope, namesVer]); // eslint-disable-line react-hooks/exhaustive-deps
-  const before = useMemo(() => aggregate(rows.filter((r) => String(r.상차일 || "").startsWith(prev) && inScope(r))), [rows, prev, scope, namesVer]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 📏 2026-11-25 배차완료 오더 + 고정거래처만(isSalesOrder — 매출관리 · 홈 · 보고서와 같은 함수)
+  const cur = useMemo(() => aggregate(rows.filter((r) => isSalesOrder(r) && String(r.상차일 || "").startsWith(month) && inScope(r))), [rows, month, scope, namesVer]); // eslint-disable-line react-hooks/exhaustive-deps
+  const before = useMemo(() => aggregate(rows.filter((r) => isSalesOrder(r) && String(r.상차일 || "").startsWith(prev) && inScope(r))), [rows, prev, scope, namesVer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const list = [...cur.values()].map((g) => {
     const p = before.get(g.key);

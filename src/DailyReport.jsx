@@ -22,6 +22,7 @@ import { OrdersWeatherStrip } from "./publicDataMain"; // 🌦 2026-11-07 운행
 import { useOrderHistory } from "./orderHistory";
 import { useCompanyBiz, bizOf } from "./companyBiz";
 import { useCompanyRows } from "./companyColStore";
+import { fixedSalesRows } from "./salesRule"; // 📏 2026-11-25 고정거래처 매출도 보고서 매출에(매출관리와 같은 기준)
 import { loadAcctPayments } from "./acctPayments";
 import { isLateAt } from "./lateRule";
 import { receivablesOf } from "./arAging"; // ⭐ 2026-11-07 미수금 공용 계산(부가세 포함 · 고정거래처 포함)
@@ -172,8 +173,11 @@ export function useBriefingCore({ company, dispatchData, prefs, bizSel = "", loa
   const rows = React.useMemo(() => (!bizSel || !biz.multi ? rowsAll : rowsAll.filter((r) => bizOf(r, biz.defaultName) === bizSel)), [rowsAll, bizSel, biz]);
   const cs = useDocData("companySettings", demo ? "" : company);
   const yearly = demo ? demo.yearlyTarget : Number(cs?.매출목표?.순수매출목표) || 0;
-  const report = React.useMemo(() => buildReport({ rows, basis, monthlyTarget: yearly > 0 ? yearly / 12 : 0 }), [rows, basis, yearly]);
-  const weekly = React.useMemo(() => (basis.weekly ? weeklySummary(rows, today) : null), [rows, basis.weekly, today]);
+  // 📏 2026-11-25 매출 · 수익 = 배차완료 오더 + 고정거래처(매출관리와 같다) — 청구 사업자를 고르면 고정거래처(사업자 칸 없음)는 뺀다
+  const fixedLive = useCompanyRows("fixedClients", demo ? "" : company);
+  const moneyRows = React.useMemo(() => (bizSel && biz.multi ? rows : [...rows, ...fixedSalesRows(fixedLive)]), [rows, fixedLive, bizSel, biz.multi]);
+  const report = React.useMemo(() => buildReport({ rows: moneyRows, basis, monthlyTarget: yearly > 0 ? yearly / 12 : 0 }), [moneyRows, basis, yearly]);
+  const weekly = React.useMemo(() => (basis.weekly ? weeklySummary(moneyRows, today) : null), [moneyRows, basis.weekly, today]);
   return { demo, today, basis, rows, rowsAll, report, weekly, biz };
 }
 
@@ -822,7 +826,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
           ? row("ops", "minmax(0,1.4fr) minmax(0,1fr)", opsCard, <div style={{ display: "grid", gap: g, alignContent: "start", minWidth: 0, height: "100%" }}>{hrCard}{movesCard}</div>)
           : <>{block("ops1", opsCard)}{block("hr1", hrCard)}{block("mv1", movesCard)}</>}
         <div data-pdf-block style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, paddingTop: 6, fontSize: 12, fontWeight: 500, color: T.faint, lineHeight: 1.6 }}>
-          <span>{dotDate(today)} {kstHm()} 집계 · 배차·정산·인사 데이터 자동 집계 · 매출 = 취소 · 운송사 전송 제외 전체 오더 기준(배차중 포함, 매출관리 화면은 배차완료 기준){bizSel ? ` · 청구 사업자 ${bizSel}` : ""}</span><span style={{ letterSpacing: "0.04em" }}>LogisWeb 자동 생성 보고서</span>
+          <span>{dotDate(today)} {kstHm()} 집계 · 배차·정산·인사 데이터 자동 집계 · 매출 = 배차완료 오더 + 고정거래처 기준(매출관리와 같음 · 오더 건수는 취소 뺀 전체){bizSel ? ` · 청구 사업자 ${bizSel}` : ""}</span><span style={{ letterSpacing: "0.04em" }}>LogisWeb 자동 생성 보고서</span>
         </div>
       </div>
     );

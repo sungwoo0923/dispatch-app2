@@ -30,6 +30,8 @@ import { savePng as savePngA4, savePdf as savePdfA4, printA4 } from "./a4Export"
 import { fmtPhone } from "./formatInput";
 import { makeTripOwner, platePeriods } from "./driverVehicleHistory"; // ⭐ 2026-11-11 차량이 바뀐 기사도 한 명으로 정산
 import useNarrow from "./useNarrow"; // ⭐ 2026-11-06 휴대폰 폭 카드 목록
+import { statementPayPatch, statementUnpayPatch, isPaidOrder } from "./payCore"; // 💸 2026-11-25 [지급 완료] → 오더도 지급완료
+import { setFleetStatementPayout } from "./ledgerAuto";
 
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const CANCELED = ["배차취소", "취소", "오더취소", "취소됨"];
@@ -179,7 +181,7 @@ function useStatements({ drivers, dispatchData, co, ym, vatMode, includeEmpty = 
       const day = r.상차일 || ""; if (day < from || day > to) return false;
       return toInt(r.기사운임) > 0;
     }).sort((a, b) => String(a.상차일).localeCompare(String(b.상차일)))
-      .map((r) => ({ date: r.상차일 || "", client: r.거래처명 || "", from: r.상차지명 || "", to: r.하차지명 || "", via: viaNames(r), cargo: r.화물내용 || "", ton: r.차량톤수 || r.톤수 || "", fare: toInt(r.기사운임), route: r.고정노선명 || "" }));
+      .map((r) => ({ id: r._id || r.id || "", col: r.__col || "", date: r.상차일 || "", client: r.거래처명 || "", from: r.상차지명 || "", to: r.하차지명 || "", via: viaNames(r), cargo: r.화물내용 || "", ton: r.차량톤수 || r.톤수 || "", fare: toInt(r.기사운임), route: r.고정노선명 || "" }));
     const gross = trips.reduce((s, t) => s + t.fare, 0);
     const vat = vatMode === "biz" && d.사업자번호 ? Math.round(gross * 0.1) : 0;
     // 기사 부담(공제) 과태료 — 이의 신청·취소는 빼고, 다른 달에 이미 정산된 건도 뺀다
@@ -200,7 +202,11 @@ function useStatements({ drivers, dispatchData, co, ym, vatMode, includeEmpty = 
     };
   }).filter((r) => includeEmpty || r.trips.length || r.deductTotal), [drivers, tripOwner, dispatchData, from, to, ym, vatMode, penalties, edits, JSON.stringify(defDeds), co, includeEmpty]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const send = async (list) => {
+  const send = async (list0) => {
+    // 💸 2026-11-25 지급 완료한 명세서는 다시 보내지 않는다(다시 보내면 지급 기록이 지워져서) — [지급 취소] 뒤에 다시 보내 주세요
+    const paidN = list0.filter((r) => sent[r.key]?.지급상태 === "지급완료").length;
+    const list = list0.filter((r) => sent[r.key]?.지급상태 !== "지급완료");
+    if (paidN && !list.length) { kpAlert(`지급 완료한 명세서는 다시 보낼 수 없어요.\n내용을 고치려면 먼저 [지급 취소]를 눌러 주세요.`); return false; }
     if (!list.length) { kpAlert("보낼 기사님을 선택해 주세요."); return false; }
     const noApp = list.filter((r) => !r.d.appUid).length;
     const penCnt = list.reduce((s, r) => s + r.penIds.length, 0);
@@ -216,14 +222,72 @@ function useStatements({ drivers, dispatchData, co, ym, vatMode, includeEmpty = 
         ops.slice(i, i + 400).forEach(([ref, data, merge]) => (merge ? b.set(ref, data, { merge: true }) : b.set(ref, data)));
         await b.commit();
       }
-      kpAlert(`${list.length}명에게 발송했습니다.`);
+      kpAlert(`${list.length}명에게 발송했습니다.${paidN ? `\n지급 완료한 ${paidN}명은 빼고 보냈어요.` : ""}`);
       return true;
     } catch (e) { kpAlert(`발송 실패: ${e?.message || e}`); return false; }
   };
+  // 💸 2026-11-25 [지급 완료] — 명세서에 들어간 오더를 지급완료로(지급일 · 지급액 · 지급명세서ID) + 장부에 기사님 × 달 한 줄(실지급액)
+  //  · 오더별 "기사운임 지급" 줄은 만들지 않는다(같은 돈을 두 번 적지 않게) · 다른 곳에서 이미 지급완료한 오더는 그대로 둔다
+  //  · 아직 안 보낸 명세서는 같이 발송된다 · [지급 취소]는 이 명세서로 지급한 오더만 되돌린다
+  const orderById = React.useMemo(() => { const m = new Map(); (dispatchData || []).forEach((o) => { const id = o._id || o.id; if (id) m.set(id, o); }); return m; }, [dispatchData]);
+  const commitOps = async (ops) => {
+    for (let i = 0; i < ops.length; i += 400) {
+      const b = writeBatch(db);
+      ops.slice(i, i + 400).forEach(([ref, data, merge]) => (merge ? b.set(ref, data, { merge: true }) : b.update(ref, data)));
+      await b.commit();
+    }
+  };
+  const markPaid = async (list0, date) => {
+    const list = list0.filter((r) => sent[r.key]?.지급상태 !== "지급완료" && r.trips.length);
+    if (!list.length) { kpAlert("지급 완료할 기사님을 선택해 주세요.\n이미 지급 완료한 명세서는 빼요."); return false; }
+    const day = String(date || kstToday()).slice(0, 10); const today = kstToday();
+    const plan = list.map((r) => {
+      const stmtId = `${r.key}_${ym}`;
+      const orders = r.trips.filter((t) => t.id).map((t) => ({ t, o: orderById.get(t.id) }));
+      const mine = orders.filter(({ o }) => !o || !isPaidOrder(o) || o.지급명세서ID === stmtId);
+      return { r, stmtId, mine, other: orders.length - mine.length };
+    });
+    const nOrders = plan.reduce((s, p) => s + p.mine.length, 0); const nOther = plan.reduce((s, p) => s + p.other, 0);
+    const net = list.reduce((s, r) => s + Math.max(0, r.net), 0); const unsent = list.filter((r) => !sent[r.key]).length;
+    if (!await kpConfirm(`${ym} 지급명세서 ${list.length}명을 지급 완료할까요?\n지급일 ${day} · 실지급 ${won(net)}원 · 오더 ${nOrders}건\n오더는 지급완료로 바뀌어 청구 현황판 · 회계 미지급에서 빠져요.\n장부에는 기사님별로 실지급액 한 줄씩 들어가요.${unsent ? `\n아직 안 보낸 ${unsent}명은 명세서도 같이 발송돼요.` : ""}${nOther ? `\n다른 곳에서 이미 지급완료한 오더 ${nOther}건은 그대로 둬요.` : ""}`, { title: "지급 완료", okText: "지급 완료" })) return false;
+    try {
+      const ops = [];
+      plan.forEach(({ r, stmtId, mine }) => {
+        const paidInfo = { 지급상태: "지급완료", 지급일: day, 지급액: Math.max(0, r.net), 지급오더: mine.map(({ t }) => ({ id: t.id, col: t.col || "", fare: t.fare })), 지급처리자: me(), 지급처리시각: serverTimestamp() };
+        ops.push([doc(db, "driverStatements", stmtId), sent[r.key] ? paidInfo : { ...r.st, status: "sent", sentAt: serverTimestamp(), sentBy: me(), readAt: null, confirmedAt: null, ...paidInfo }, true]);
+        mine.forEach(({ t, o }) => ops.push([doc(db, (o && o.__col) || t.col || "dispatch", t.id), { ...statementPayPatch(o || { 기사운임: t.fare }, { stmtId, date: day, today }), updatedAt: serverTimestamp() }, false]));
+      });
+      await commitOps(ops);
+      await Promise.all(plan.map(({ r, stmtId }) => setFleetStatementPayout(db, { stmtId, amount: Math.max(0, r.net), date: day, company: co, who: r.d.이름 || "",
+        memo: `지입차관리 › 일괄 지급명세서 [지급 완료] · ${ym} · 운임 ${won(r.gross)} + 부가세 ${won(r.vat)} − 공제 ${won(r.deductTotal)}` }).catch(() => {})));
+      kpAlert(`${list.length}명을 지급 완료했어요.\n오더 ${nOrders}건이 지급완료로 바뀌었어요.`);
+      return true;
+    } catch (e) { kpAlert(`지급 완료 실패: ${e?.message || e}`); return false; }
+  };
+  const unmarkPaid = async (r) => {
+    const st = sent[r.key]; if (!st || st.지급상태 !== "지급완료") return false;
+    const stmtId = st.id || `${r.key}_${ym}`;
+    const items = Array.isArray(st.지급오더) ? st.지급오더 : [];
+    if (!await kpConfirm(`${r.d.이름} 기사님 ${ym} 지급 완료를 취소할까요?\n이 명세서로 지급완료한 오더 ${items.length}건이 미지급으로 돌아가고, 장부의 지급 줄(${won(st.지급액)}원)도 빠져요.`, { title: "지급 취소", okText: "지급 취소", danger: true })) return false;
+    try {
+      const ops = []; let missing = 0;
+      items.forEach((it) => {
+        const o = orderById.get(it.id);
+        if (!o) { missing += 1; return; } // 지워졌거나 화면에 없는 오더는 건너뛴다(없는 문서를 고치면 전체가 실패)
+        const p = statementUnpayPatch(o, stmtId);
+        if (p) ops.push([doc(db, o.__col || it.col || "dispatch", it.id), { ...p, updatedAt: serverTimestamp() }, false]);
+      });
+      ops.push([doc(db, "driverStatements", stmtId), { 지급상태: null, 지급일: null, 지급액: null, 지급오더: null, 지급처리자: me(), 지급처리시각: serverTimestamp() }, true]);
+      await commitOps(ops);
+      await setFleetStatementPayout(db, { stmtId, amount: 0, company: co }).catch(() => {});
+      kpAlert(`지급 완료를 취소했어요.${missing ? `\n찾지 못한 오더 ${missing}건(지워진 오더 등)은 그대로예요.` : ""}`);
+      return true;
+    } catch (e) { kpAlert(`지급 취소 실패: ${e?.message || e}`); return false; }
+  };
   const saveCommon = (list) => setDoc(doc(db, "companySettings", co), { statementDeductions: list }, { merge: true });
-  return { rows, sent, defDeds, edits, saveEdits, send, saveCommon, from, to };
+  return { rows, sent, defDeds, edits, saveEdits, send, saveCommon, from, to, markPaid, unmarkPaid };
 }
-const StatusChip = ({ s }) => (!s ? <Chip soft>미발송</Chip> : <Chip dark={s.status === "confirmed"}>{s.status === "confirmed" ? "확인 완료" : s.status === "read" || s.readAt ? "읽음" : "발송됨"}</Chip>);
+const StatusChip = ({ s }) => (!s ? <Chip soft>미발송</Chip> : <span className="inline-flex items-center gap-1"><Chip dark={s.status === "confirmed"}>{s.status === "confirmed" ? "확인 완료" : s.status === "read" || s.readAt ? "읽음" : "발송됨"}</Chip>{s.지급상태 === "지급완료" && <Chip dark>지급 완료 {String(s.지급일 || "").slice(5).replace("-", ".")}</Chip>}</span>);
 const VatToggle = ({ value, onChange }) => (
   <div className="inline-flex p-1 rounded-xl bg-[#EEF2F8] gap-1">
     {[["biz", "사업자 기사님 부가세 10%"], ["none", "부가세 없음"]].map(([k, l]) => <button key={k} type="button" onClick={() => onChange(k)} className={`h-9 px-3.5 rounded-lg text-[14px] font-black whitespace-nowrap ${value === k ? "bg-white text-[#0F1A30] shadow" : "text-[#5B6B85]"}`}>{l}</button>)}
@@ -235,7 +299,8 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
   const co = String(companyName || "").trim();
   const [ym, setYm] = React.useState(kstYm());
   const [vatMode, setVatMode] = React.useState("biz");
-  const { rows, sent, defDeds, edits, saveEdits, send, saveCommon } = useStatements({ drivers, dispatchData, co, ym, vatMode });
+  const { rows, sent, defDeds, edits, saveEdits, send, saveCommon, markPaid, unmarkPaid } = useStatements({ drivers, dispatchData, co, ym, vatMode });
+  const [payDate, setPayDate] = React.useState(kstToday()); // 💸 2026-11-25 [지급 완료] 지급일
   const [dedEdit, setDedEdit] = React.useState(null);
   const [sel, setSel] = React.useState(new Set());
   const [preview, setPreview] = React.useState(null);
@@ -248,6 +313,11 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
   const allOn = shown.length > 0 && shown.every((r) => sel.has(r.key));
   const toggle = (k) => setSel((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
   const sendSelected = async (keys) => { setBusy(true); const ok = await send(rows.filter((r) => keys.has(r.key))); if (ok) setSel(new Set()); setBusy(false); };
+  const paySelected = async (keys) => { setBusy(true); const ok = await markPaid(rows.filter((r) => keys.has(r.key)), payDate); if (ok) setSel(new Set()); setBusy(false); };
+  const isPaidRow = (r) => sent[r.key]?.지급상태 === "지급완료";
+  const payBtn = (r, cls) => (isPaidRow(r)
+    ? <button type="button" disabled={busy} onClick={async () => { setBusy(true); await unmarkPaid(r); setBusy(false); }} className={`${cls} border border-[#DCE3EE] bg-white text-[#5B6B85]`} title="이 명세서로 지급완료한 오더를 미지급으로 되돌려요">지급 취소</button>
+    : <button type="button" disabled={busy || !r.trips.length} onClick={() => paySelected(new Set([r.key]))} className={`${cls} border border-[#1B2B4B] bg-white text-[#1B2B4B]`} title="오더를 지급완료로 바꾸고 장부에 실지급액을 남겨요">지급 완료</button>);
 
   const bankExcel = () => {
     const list = rows.filter((r) => (sel.size ? sel.has(r.key) : true) && r.net > 0);
@@ -312,7 +382,10 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
           <button type="button" onClick={() => setPreview(0)} disabled={!shown.length} className={btnL}>미리보기</button>
           <button type="button" onClick={summaryExcel} className={btnL} title="지급 요약·운행 내역·공제 내역 3개 시트">⇩ 엑셀 다운로드{sel.size ? `(선택 ${sel.size}명)` : ""}</button>
           <button type="button" onClick={bankExcel} className={btnL} title="인터넷뱅킹 다건이체 업로드용">대량이체 엑셀{sel.size ? "(선택)" : ""}</button>
-          <button type="button" onClick={() => sendSelected(sel)} disabled={busy || !sel.size} className={btnL}>{busy ? "발송 중…" : `선택 발송${sel.size ? ` ${sel.size}명` : ""}`}</button>
+          <button type="button" onClick={() => sendSelected(sel)} disabled={busy || !sel.size} className={btnL}>{busy ? "처리 중…" : `선택 발송${sel.size ? ` ${sel.size}명` : ""}`}</button>
+          {/* 💸 2026-11-25 이체한 뒤 [선택 지급 완료] — 오더가 지급완료로 바뀌어 청구 현황판 · 회계 미지급에서 빠져요 */}
+          <span className="inline-flex items-center gap-1.5"><span className="text-[14px] font-bold text-[#5B6B85] whitespace-nowrap">지급일</span><CustomDatePicker value={payDate} onChange={(e) => setPayDate(e.target.value)} className={`${inp} w-[150px]`} /></span>
+          <button type="button" onClick={() => paySelected(sel)} disabled={busy || !sel.size} className={btnL} title="선택한 기사님 명세서를 지급 완료로">선택 지급 완료{sel.size ? ` ${sel.size}명` : ""}</button>
           <button type="button" onClick={() => sendSelected(new Set(shown.filter((r) => !sent[r.key]).map((r) => r.key)))} disabled={busy || !shown.some((r) => !sent[r.key])} className={btnD} title="아직 안 보낸 기사님 전원에게 한 번에 발송">
             ⇪ 미발송 전체 일괄 발송 {shown.filter((r) => !sent[r.key]).length}명
           </button>
@@ -341,7 +414,8 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
               <div className="mt-2 flex gap-1.5 flex-wrap">
                 <button type="button" onClick={() => setDedEdit({ key: r.key, title: `${r.d.이름} 기사님 공제`, sub: "자동 공제(■)와 이번 달 추가 공제를 함께 봅니다", value: r.extra, auto: r.auto, gross: r.gross })} className="h-10 px-3 rounded-lg border border-[#DCE3EE] text-[14px] font-black text-[#1B2B4B]">공제 {r.deductions.length}건</button>
                 <button type="button" onClick={() => setPreview(i)} className="h-10 px-3 rounded-lg border border-[#DCE3EE] text-[14px] font-black text-[#1B2B4B]">보기</button>
-                <button type="button" onClick={() => sendSelected(new Set([r.key]))} className="ml-auto h-10 px-4 rounded-lg bg-[#1B2B4B] text-white text-[14px] font-black">발송</button>
+                <span className="ml-auto" />{payBtn(r, "h-10 px-3 rounded-lg text-[14px] font-black")}
+                <button type="button" onClick={() => sendSelected(new Set([r.key]))} disabled={isPaidRow(r)} className="h-10 px-4 rounded-lg bg-[#1B2B4B] text-white text-[14px] font-black disabled:opacity-40">발송</button>
               </div>
             </div>
           ))}
@@ -383,7 +457,8 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
                 <td className={TD}><StatusChip s={sent[r.key]} /></td>
                 <td className={TD}>
                   <button type="button" onClick={() => setPreview(i)} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[14px] font-black text-[#1B2B4B]">보기</button>
-                  <button type="button" onClick={() => sendSelected(new Set([r.key]))} className="ml-1.5 h-9 px-3.5 rounded-lg bg-[#1B2B4B] text-white text-[14px] font-black">발송</button>
+                  <button type="button" onClick={() => sendSelected(new Set([r.key]))} disabled={isPaidRow(r)} className="ml-1.5 h-9 px-3.5 rounded-lg bg-[#1B2B4B] text-white text-[14px] font-black disabled:opacity-40">발송</button>
+                  <span className="ml-1.5 inline-block">{payBtn(r, "h-9 px-3 rounded-lg text-[14px] font-black disabled:opacity-40")}</span>
                 </td>
               </tr>
             ))}
@@ -437,7 +512,7 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
   const co = String(companyName || "").trim();
   const [ym, setYm] = React.useState(kstYm());
   const [vatMode, setVatMode] = React.useState("biz");
-  const { rows, sent, edits, saveEdits, send } = useStatements({ drivers, dispatchData, co, ym, vatMode, includeEmpty: true });
+  const { rows, sent, edits, saveEdits, send, markPaid, unmarkPaid } = useStatements({ drivers, dispatchData, co, ym, vatMode, includeEmpty: true });
   const [selKey, setSelKey] = React.useState("");
   const [q, setQ] = React.useState("");
   const [tq, setTq] = React.useState("");
@@ -534,7 +609,11 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
                   <button type="button" onClick={() => setPreview(true)} className={btnL}>미리보기</button>
                   <button type="button" onClick={excel} className={btnL}>⇩ 엑셀 다운로드</button>
                   <button type="button" onClick={() => setPreview("img")} className={btnL}>이미지·PDF 저장</button>
-                  <button type="button" onClick={doSend} disabled={busy} className={btnD}>{busy ? "발송 중…" : "기사앱으로 발송"}</button>
+                  <button type="button" onClick={doSend} disabled={busy || sent[cur.key]?.지급상태 === "지급완료"} className={btnD}>{busy ? "처리 중…" : "기사앱으로 발송"}</button>
+                  {/* 💸 2026-11-25 이체한 뒤 [지급 완료](오늘 지급일) · 되돌리기는 [지급 취소] */}
+                  {sent[cur.key]?.지급상태 === "지급완료"
+                    ? <button type="button" disabled={busy} onClick={async () => { setBusy(true); await unmarkPaid(cur); setBusy(false); }} className={btnL}>지급 취소</button>
+                    : <button type="button" disabled={busy || !cur.trips.length} onClick={async () => { setBusy(true); await markPaid([cur], kstToday()); setBusy(false); }} className={btnL}>지급 완료</button>}
                 </div>
               </div>
             </div>

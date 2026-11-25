@@ -9,6 +9,7 @@ import { MonthPicker } from "./kpInputs"; // 📅 2026-11-07 월 선택은 프�
 import React from "react";
 import { profitStyle, profitRateColor, MARGIN_RED, MARGIN_BLUE } from "./marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
 import * as XLSX from "xlsx";
+import { isSalesOrder } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙
 import { orderProfit, paidOut, fkNum } from "./forkliftCore"; // ⭐ 2026-11-17 이익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
 import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 
@@ -62,7 +63,7 @@ const compare = (a, b, baseRate) => ({
 });
 
 export function buildMarginReport(rows, monthKey, prevKey, { pureOnly, isExcluded }) {
-  const base = rows.filter((r) => !pureOnly || !isExcluded?.(r.거래처명));
+  const base = rows.filter((r) => isSalesOrder(r) && (!pureOnly || !isExcluded?.(r.거래처명))); // 📏 2026-11-25 배차완료 + 고정거래처(salesRule)
   const cur = base.filter((r) => String(r.상차일 || "").startsWith(monthKey));
   const prev = base.filter((r) => String(r.상차일 || "").startsWith(prevKey));
   const P = summarize(prev);

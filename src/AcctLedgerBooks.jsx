@@ -7,9 +7,10 @@
 //  ⚠ 숫자 계산은 receivablesOf · invoiceDriverPlates · isTaxInvoiceSale(arAging.js) — 회계 개요 · 거래처정산과 같은 식
 import React from "react";
 import { db } from "./firebase";
-import { loadAcctPayments, saveAcctPayments, useArPayments } from "./acctPayments";
-import { addClientCollection, removeClientCollections } from "./ledgerAuto";
-import { receivablesOf, invoiceDriverPlates, isTaxInvoiceSale, isArOrder, arClientOf, vatIncluded, settlePaidByClient } from "./arAging";
+import { loadAcctPayments, saveAcctPayments, useArPayments, recordAcctDeposit, removeAcctDeposits } from "./acctPayments";
+import { removeClientCollections } from "./ledgerAuto";
+import { paidTotalOf } from "./payCore"; // 💸 2026-11-25 지급완료 오더는 실제 지급한 금액(지급액)으로
+import { receivablesOf, invoiceDriverPlates, isTaxInvoiceSale, isArOrder, arClientOf, vatIncluded, settlePaidByClient, arPaidByClient, monthOf } from "./arAging";
 import { createPortal } from "react-dom";
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { EditableText } from "./EditMode";
@@ -18,7 +19,7 @@ import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 �
 // ⭐ 2026-11-18 회계 장부 정리(사용자 요청)
 //  · 문구를 회계 용어로(받을 돈 · 줄 돈 → 외상매출금 · 미지급금 등)
 //  · 줄을 누르면 상세 내역(거래처 원장 · 기사별 지급 내역 · 월별 매출처/매입처 명세)이 열린다
-//  · 미수금: 정산관리에서 [입금완료] 처리한 오더도 수금액으로 본다(지급 현황이 지급관리 [지급완료]를 보던 것과 같은 방식 — 큰 쪽)
+//  · 미수금: 정산관리에서 [입금완료] 처리한 오더도 수금액으로 본다(🔗 2026-11-25부터 입금 기록 한 곳 — arCore.arPaidByClient, 큰 쪽 식 없앰)
 //  · 입금 · 지급 처리 기록(log)을 남겨 상세 내역에서 언제 얼마 처리했는지 보이게
 //  · 부호 색: 플러스 빨강 · 마이너스 파랑(예전 납부세액 마이너스는 초록이었다)
 
@@ -130,7 +131,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
       ...(dispatchData || []).filter((r) => r.배차상태 === "배차완료"),
       ...(fixedRows || []).map((r) => ({ ...r, 상차일: r.날짜, 배차상태: "배차완료" })),
     ];
-    return all.filter((r) => (r.상차일 || "").slice(0, 4) === String(year));
+    return all.filter((r) => monthOf(r).slice(0, 4) === String(year)); // 🗓 2026-11-25 청구월(마감월) 기준 — 12/31 상차 · 1월 마감은 다음 해
   }, [dispatchData, fixedRows, year]);
 
   // 청구액 = 부가세 포함(거래처정산 미수금과 같은 식) · 연체 구분 = 아직 못 받은 청구 중 가장 오래된 것의 경과일
@@ -139,13 +140,13 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
   const arPays = useArPayments();
   const arSettleBook = React.useMemo(() => settlePaidByClient({ orders: yearOrders, arPayments: arPays, year: String(year) }), [yearOrders, arPays, year]);
   const arSettled = React.useMemo(() => Object.fromEntries(Object.entries(arSettleBook).map(([c, v]) => [c, v.paid])), [arSettleBook]);
+  // 🔗 2026-11-25 받은 돈 = 정본 입금 기록(arPayments — 회계 [입금 처리]도 여기) + 정산완료 · 입금완료 + 예전 회계 합계 중 안 겹친 몫(한 번만 · "큰 쪽" 식 없앰)
+  const arPaid = React.useMemo(() => arPaidByClient({ orders: yearOrders, arPayments: arPays, acct: { ar: arPayments, log: payLog }, year: String(year) }), [yearOrders, arPays, arPayments, payLog, year]);
   const arByClient = React.useMemo(() => {
     const todayK = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
-    const paidMap = { ...arPayments };
-    Object.entries(arSettled).forEach(([c, v]) => { paidMap[c] = Math.max(Number(arPayments[c]) || 0, v); });
-    return receivablesOf({ orders: yearOrders, paid: paidMap, today: todayK, year: String(year) })
-      .map((x) => ({ client: x.client, invoiced: x.billed, paid: x.paid, manual: Number(arPayments[x.client]) || 0, settled: arSettled[x.client] || 0, outstanding: x.outstanding, ageDays: x.oldest }));
-  }, [yearOrders, arPayments, arSettled, year]);
+    return receivablesOf({ orders: yearOrders, paid: arPaid, today: todayK, year: String(year) })
+      .map((x) => ({ client: x.client, invoiced: x.billed, paid: x.paid, manual: Number(arPayments[x.client]) || 0, settled: arSettled[x.client] || 0, legacy: Math.max(0, (arPaid[x.client] || 0) - (arSettled[x.client] || 0)), outstanding: x.outstanding, ageDays: x.oldest }));
+  }, [yearOrders, arPayments, arSettled, arPaid, year]);
 
   const apByDriver = React.useMemo(() => {
     const map = {};
@@ -153,7 +154,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
       const d = r.이름 || "미지정";
       if (!map[d]) map[d] = { total: 0, carNo: r.차량번호 || "", settled: 0 };
       map[d].total += toInt(r.기사운임);
-      if ((r.지급상태 || "") === "지급완료") map[d].settled += toInt(r.기사운임); // 정산관리 › 지급관리 [지급완료]도 지급액으로
+      if ((r.지급상태 || "") === "지급완료") map[d].settled += paidTotalOf(r); // 정산관리 › 지급관리 [지급완료]도 지급액으로(💸 2026-11-25 실제 지급한 금액 · 예전 오더는 기사운임)
     });
     return Object.entries(map).map(([d, v]) => {
       const paid = Math.max(apPayments[d] || 0, v.settled);
@@ -166,7 +167,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
     MONTHS.forEach((mo) => { m[mo] = { sales: 0, costs: 0 }; });
     const invPlates = invoiceDriverPlates(drivers); // 매출 = 계산서 오더 · 매입 = 세금계산서 발행 기사 운임
     yearOrders.forEach((r) => {
-      const mo = (r.상차일 || "").slice(5, 7);
+      const mo = monthOf(r).slice(5, 7); // 🗓 청구월(마감월) 기준
       if (!m[mo]) return;
       if (isTaxInvoiceSale(r)) m[mo].sales += toInt(r.청구운임);
       if (invPlates.has(String(r.차량번호 || "").replace(/\s+/g, "").toUpperCase())) m[mo].costs += toInt(r.기사운임);
@@ -205,13 +206,15 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
     if (!a) return;
     setSaving(true);
     try {
+      // 🔗 2026-11-25 거래처 수금 → 정본 입금 기록(arPayments, source "acct")에 먼저 — 자금관리 수입 장부는 서버가 한 줄(auto_ar_…) 붙인다
+      //  acctPayments 합계는 예전 보고서 · AI 비서가 읽는 사본(paymentIds 로 이어 둬서 미수금 계산에서는 세지 않는다)
+      const paymentIds = type === "ar" ? await recordAcctDeposit({ client: name, amount: a, orders: yearOrders, pays: arPays, year }) : [];
       const newAr = type === "ar" ? { ...arPayments, [name]: (arPayments[name] || 0) + a } : arPayments;
       const newAp = type === "ap" ? { ...apPayments, [name]: (apPayments[name] || 0) + a } : apPayments;
-      await saveAcctPayments(db, year, "", newAr, newAp, { type, name, amount: a });
-      // 거래처 수금 → 수입·지출 장부(수입)·자금 잔액 자동 반영. 기사 지급은 정산관리 › 지급관리 [지급완료]가 장부에 반영(이중 기록 방지)
-      if (type === "ar") addClientCollection(db, { name, amount: a, year }).catch(() => {});
+      await saveAcctPayments(db, year, "", newAr, newAp, { type, name, amount: a, paymentIds });
+      // 기사 지급은 정산관리 › 지급관리 [지급완료]가 장부에 반영(이중 기록 방지)
       setArPayments(newAr); setApPayments(newAp);
-      setPayLog((l) => [...l, { type, name, amount: a, at: Date.now() }]);
+      setPayLog((l) => [...l, { type, name, amount: a, at: Date.now(), ...(paymentIds.length ? { paymentIds } : {}) }]);
     } catch (e) { console.error(e); alert(`저장 실패: ${e?.message || e}`); } finally { setSaving(false); }
   };
   const resetPayment = async (type, name) => {
@@ -223,7 +226,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
       const newAp = type === "ap" ? { ...apPayments, [name]: 0 } : apPayments;
       await saveAcctPayments(db, year, "", newAr, newAp, { type, name, amount: 0, reset: true });
       setPayLog((l) => [...l, { type, name, amount: 0, reset: true, at: Date.now() }]);
-      if (type === "ar") removeClientCollections(db, { name, year }).catch(() => {});
+      if (type === "ar") { await removeAcctDeposits({ client: name, year }).catch(() => 0); removeClientCollections(db, { name, year }).catch(() => {}); } // 회계 입금 기록 + 예전 자동 수금 줄
       setArPayments(newAr); setApPayments(newAp);
     } catch (e) { console.error(e); alert(`초기화 실패: ${e?.message || e}`); } finally { setSaving(false); }
   };
@@ -406,7 +409,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
               <td style={{ ...td, ...vl, ...totalCell }} colSpan={2} />
             </tr></tfoot>}
           </LedgerTable>
-          <Foot>* 청구액은 배차완료 오더의 청구운임(부가세 포함) 합계예요. 수금액은 회계 장부 [입금 처리] 금액과 정산관리에서 받은 돈(입금 확인 [입금완료] · 거래처정산 미수금관리 입금 · 정산완료) 중 큰 쪽이에요. [입금 처리]는 자금관리 수입·지출 장부와 자금 잔액에도 반영돼요. 누계 잔액은 위에서부터 미수금을 더한 값이에요.</Foot>
+          <Foot>* 청구액은 배차완료 오더의 청구운임(부가세 포함) 합계예요. 수금액은 입금 기록(회계 [입금 처리] · 미수금관리 · 은행 자동 매칭 · 입금 확인 · 정산완료)을 한 번씩 더한 값이에요. 청구월은 마감월 기준이에요. 어느 곳에서 넣은 입금이든 자금관리 수입·지출 장부에 한 줄씩 들어가요. 누계 잔액은 위에서부터 미수금을 더한 값이에요.</Foot>
         </div>
       )}
 
@@ -628,10 +631,13 @@ function LedgerDetail({ detail, year, yearOrders, drivers, arByClient, arSettleB
   if (detail.type === "ar") {
     const r = arByClient.find((x) => x.client === detail.key) || { client: detail.key, invoiced: 0, paid: 0, manual: 0, settled: 0, outstanding: 0 };
     const orders = yearOrders.filter((o) => isArOrder(o) && arClientOf(o) === detail.key).sort((a, b) => String(a.상차일 || "").localeCompare(String(b.상차일 || "")));
-    const logs = logSince(payLog, "ar", detail.key);
+    // 🔗 2026-11-25 새 회계 [입금 처리]는 입금 기록(arPayments)에 들어가 아래 청구월 줄에 같이 보인다 — 여기 log 는 예전(이어지지 않은) 것만
+    const allLogs = logSince(payLog, "ar", detail.key);
+    const linkedSum = allLogs.filter((x) => Array.isArray(x.paymentIds) && x.paymentIds.length).reduce((s, x) => s + Number(x.amount || 0), 0);
+    const logs = allLogs.filter((x) => !(Array.isArray(x.paymentIds) && x.paymentIds.length));
     const logSum = logs.reduce((s, x) => s + Number(x.amount || 0), 0);
-    const legacy = Math.max(0, (r.manual || 0) - logSum);
-    const settleLines = (arSettleBook?.[detail.key]?.lines) || []; // 🔗 2026-11-25 정산관리 쪽(입금 확인 · 미수금관리) 받은 돈 — 청구월마다 한 줄
+    const legacy = Math.max(0, (r.manual || 0) - linkedSum - logSum);
+    const settleLines = (arSettleBook?.[detail.key]?.lines) || []; // 🔗 2026-11-25 입금 기록(회계 · 미수금관리 · 은행) · 입금 확인 · 정산완료 — 청구월마다 한 줄
     title = r.client; code = "108 외상매출금 · 거래처 원장";
     summary = [["청구액", r.invoiced, INK], ["수금액", r.paid, "#1F6F4A"], ["미수금", r.outstanding, r.outstanding > 0 ? NEG : INK]];
     tabs = [["list", `청구 내역 ${orders.length}건`], ["pay", "수금 내역"]];
@@ -672,9 +678,9 @@ function LedgerDetail({ detail, year, yearOrders, drivers, arByClient, arSettleB
       );
     } else {
       const rows = [
-        ...logs.map((x) => ({ d: atDay(x.at), kind: "회계 장부 입금 처리", amt: Number(x.amount) || 0, src: "manual" })),
-        ...(legacy > 0 ? [{ d: "", kind: "이전 입금 처리 누계(일자 기록 없음)", amt: legacy, src: "manual" }] : []),
-        ...settleLines.map((x) => ({ d: String(x.d || "").slice(0, 10), kind: `정산관리 입금 · ${Number(x.ym.slice(0, 4))}년 ${Number(x.ym.slice(5))}월분${x.full ? " 다 받음" : " 일부"}`, amt: x.amt, src: "settle" })),
+        ...logs.map((x) => ({ d: atDay(x.at), kind: "예전 회계 장부 입금 처리", amt: Number(x.amount) || 0, src: "manual" })),
+        ...(legacy > 0 ? [{ d: "", kind: "예전 입금 처리 누계(일자 기록 없음)", amt: legacy, src: "manual" }] : []),
+        ...settleLines.map((x) => ({ d: String(x.d || "").slice(0, 10), kind: `입금 · ${Number(x.ym.slice(0, 4))}년 ${Number(x.ym.slice(5))}월분${x.full ? " 다 받음" : " 일부"}`, amt: x.amt, src: "settle" })),
       ].sort((a, b) => String(a.d).localeCompare(String(b.d)));
       body = (
         <div className="space-y-2">
@@ -690,7 +696,7 @@ function LedgerDetail({ detail, year, yearOrders, drivers, arByClient, arSettleB
               ))}
             </tbody>
           </LedgerTable>
-          <Foot>* 수금액 {won(r.paid)}원 = 회계 장부 입금 처리 {won(r.manual)}원과 정산관리에서 받은 돈 {won(r.settled)}원(입금 확인 [입금완료] · 거래처정산 미수금관리 입금 · 정산완료) 중 큰 쪽이에요.</Foot>
+          <Foot>* 수금액 {won(r.paid)}원 = 입금 기록 {won(r.settled)}원(회계 [입금 처리] · 미수금관리 · 은행 자동 매칭 · 입금 확인 · 정산완료){r.legacy > 0 ? ` + 예전 회계 입금 중 겹치지 않은 몫 ${won(r.legacy)}원` : ""}이에요. 같은 돈은 한 번만 세요.</Foot>
         </div>
       );
     }
@@ -733,7 +739,7 @@ function LedgerDetail({ detail, year, yearOrders, drivers, arByClient, arSettleB
       );
     } else {
       const byDay = {};
-      orders.filter((o) => o.지급상태 === "지급완료").forEach((o) => { const d = String(o.지급일 || "").slice(0, 10); byDay[d] = byDay[d] || { n: 0, a: 0 }; byDay[d].n += 1; byDay[d].a += toInt(o.기사운임); });
+      orders.filter((o) => o.지급상태 === "지급완료").forEach((o) => { const d = String(o.지급일 || "").slice(0, 10); byDay[d] = byDay[d] || { n: 0, a: 0 }; byDay[d].n += 1; byDay[d].a += paidTotalOf(o); });
       const rows = [
         ...logs.map((x) => ({ d: atDay(x.at), kind: "회계 장부 지급 처리", amt: Number(x.amount) || 0, src: "manual" })),
         ...(legacy > 0 ? [{ d: "", kind: "이전 지급 처리 누계(일자 기록 없음)", amt: legacy, src: "manual" }] : []),
@@ -760,7 +766,7 @@ function LedgerDetail({ detail, year, yearOrders, drivers, arByClient, arSettleB
   } else {
     const mo = detail.key;
     const invPlates = invoiceDriverPlates(drivers);
-    const inMonth = yearOrders.filter((o) => String(o.상차일 || "").slice(5, 7) === mo);
+    const inMonth = yearOrders.filter((o) => monthOf(o).slice(5, 7) === mo); // 🗓 청구월(마감월) 기준
     const salesBy = {}; const buyBy = {};
     inMonth.forEach((o) => {
       if (isTaxInvoiceSale(o)) { const k = String(o.거래처명 || "미분류").trim() || "미분류"; salesBy[k] = salesBy[k] || { n: 0, s: 0 }; salesBy[k].n += 1; salesBy[k].s += toInt(o.청구운임); }

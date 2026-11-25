@@ -11,6 +11,7 @@ import { useCompanyStaff } from "./InternalMail";
 import { useCompanyRows } from "./companyColStore";
 import { isPreviewMode } from "./fsTenant";
 import { useRouteCarrierFilter } from "./routeCarriers";
+import { isSalesOrder } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료) — 매출관리 · 홈 · 보고서 · AI 비서와 같은 함수
 import { normPolicy, ymOf, kstDay, orderDate, calcIncentive, clientHealth, canManageSales, isSalesUser, pipelineSummary } from "./salesCore";
 
 // 회사 데이터 컬렉션(거래처·고정거래처) — 회사명이 없는 예전 문서도 있어 조건 없이 구독하고 회사 거르기는 fsTenant가 한다
@@ -46,7 +47,7 @@ export function useSalesOrders(company, liveRows = []) {
       snaps.forEach((sn) => sn.docs.forEach((d) => {
         if (seen.has(d.id)) return; seen.add(d.id);
         const r = d.data() || {};
-        if ((r.companyName || DEFAULT_COMPANY) === co && r.배차상태 === "배차완료" && r.source !== "transport_transmit" && carrierF.isCountable(r)) rows.push(slim(d.id, r));
+        if ((r.companyName || DEFAULT_COMPANY) === co && isSalesOrder(r) && carrierF.isCountable(r)) rows.push(slim(d.id, r)); // 📏 2026-11-25 매출 한 규칙(배차완료)
       }));
       const next = { at: Date.now(), rows };
       cache.set(co, next); setState(next);
@@ -57,7 +58,7 @@ export function useSalesOrders(company, liveRows = []) {
     if (!state) return null;
     const seen = new Set(state.rows.map((r) => r._id));
     // 불러온 뒤에 배차완료된 오늘 오더(실시간) — 같은 오더는 한 번만
-    const live = (liveRows || []).filter((r) => (r._id || r.id) && !seen.has(r._id || r.id) && r.배차상태 === "배차완료" && r.source !== "transport_transmit" && carrierF.isCountable(r)).map((r) => slim(r._id || r.id, r));
+    const live = (liveRows || []).filter((r) => (r._id || r.id) && !seen.has(r._id || r.id) && isSalesOrder(r) && carrierF.isCountable(r)).map((r) => slim(r._id || r.id, r));
     const fixed = (fixedRows || []).filter((r) => (r.companyName || DEFAULT_COMPANY) === co).map((r, i) => slim(`fx-${r.id || i}`, { ...r, 상차일: r.날짜 || r.상차일 }, true));
     return [...state.rows, ...live, ...fixed];
   }, [state, liveRows, fixedRows, carrierF]);

@@ -14,6 +14,7 @@ import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — �
 import { useEffect, useState } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db, auth } from "./firebase";
+import { isSalesOrder } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료 + 고정거래처) — 매출관리와 같은 함수
 import { orderProfit, orderCost, paidOut, fkNum } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
 
 export const toWon = (v) => fkNum(v); // 🛠 2026-11-25 수익(orderProfit)과 같은 금액 읽기(소수점 반올림)
@@ -103,8 +104,8 @@ function anomalyOf(r) {
 
 export function analyzeMonths({ rows = [], monthA, monthB, scope = "pure", isExcluded = () => false }) {
   const inScope = (r) => scope === "all" ? true : scope === "excluded" ? isExcluded(r.거래처명) : !isExcluded(r.거래처명);
-  const listA = rows.filter((r) => String(r.상차일 || "").startsWith(monthA) && inScope(r));
-  const listB = rows.filter((r) => String(r.상차일 || "").startsWith(monthB) && inScope(r));
+  const listA = rows.filter((r) => isSalesOrder(r) && String(r.상차일 || "").startsWith(monthA) && inScope(r)); // 📏 2026-11-25 배차완료만
+  const listB = rows.filter((r) => isSalesOrder(r) && String(r.상차일 || "").startsWith(monthB) && inScope(r));
   const A = statsOf(listA), B = statsOf(listB);
 
   const volume = (B.cnt - A.cnt) * A.avgProfit;

@@ -4,7 +4,7 @@
 //  · 🎨 2026-11-17 리디자인 2 — 남색 관제판(헤더 · 회수율 링 · 단계 막대) + 3열 레인(단계별 표). 숫자는 기본 글씨체(tabular-nums)
 //  · 줄을 누르면 그 일을 하는 화면(거래명세서 · 입금 확인 · 용차지급관리)으로 간다. 계산은 settleCore.billingBoard(scripts/billingBoard.test.mjs)
 import React from "react";
-import { billingBoard, won, short, kstYm } from "./settleCore";
+import { billingBoard, won, short, kstYm, monthOf as monthOfRow, stmtRowsNow, stmtDrift, stmtDriftText, stmtDriftHint } from "./settleCore"; // ⚠ 2026-11-25 명세서 작성 뒤 금액 변경 배지
 import { routeGroupOf, rgLabel, RG_NONE } from "./routeGroups";
 
 const NUMS = { fontVariantNumeric: "tabular-nums" };
@@ -36,7 +36,7 @@ function Ring({ pct = 0, size = 92 }) {
     </svg>);
 }
 
-export default function BillingBoard({ orders = [], stageOf, months = [], onGo, depositOn = false }) {
+export default function BillingBoard({ orders = [], stageOf, months = [], onGo, depositOn = false, stmtOf = null, prepaidDefault = false }) {
   const [mode, setMode] = React.useState("ar");
   const [from, setFrom] = React.useState(() => kstYm(-2));
   const [to, setTo] = React.useState(() => kstYm(0));
@@ -46,6 +46,13 @@ export default function BillingBoard({ orders = [], stageOf, months = [], onGo, 
   const today = kstToday();
   const M = MODES[mode];
   const B = React.useMemo(() => billingBoard(orders, { from, to, mode, stageOf }), [orders, from, to, mode, stageOf]);
+  // ⚠ 2026-11-25 화주사 줄마다 명세서(작성 이후) 공급가와 지금 오더 합계 비교 — 그 거래처 · 그 달 오더만(OUT 콜 포함, 명세서와 같은 식)
+  const driftMap = React.useMemo(() => {
+    const m = new Map(); if (mode === "ap" || !stmtOf) return m;
+    const byKey = new Map(); (orders || []).forEach((o) => { const k = `${String(o?.거래처명 || "").trim()}|${monthOfRow(o)}`; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(o); });
+    B.items.forEach((x) => { if (x.kind !== "client") return; const doc = stmtOf(x.client, x.ym); if (!doc) return; const dr = stmtDrift(doc, stmtRowsNow(byKey.get(`${x.client}|${x.ym}`) || [], x.client, x.ym, doc, prepaidDefault)); if (dr) m.set(x.key, dr); });
+    return m;
+  }, [B.items, orders, stmtOf, prepaidDefault, mode]);
   const rgOf = (x) => (x.kind === "client" ? [...new Set(x.orders.map((o) => routeGroupOf(o) || RG_NONE))] : [routeGroupOf(x.order) || RG_NONE]);
   const groups = React.useMemo(() => { const s = new Set(); B.items.forEach((x) => rgOf(x).forEach((g) => s.add(g))); return [...s]; }, [B.items]); // eslint-disable-line react-hooks/exhaustive-deps
   const nq = q.replace(/\s/g, "").toLowerCase();
@@ -186,6 +193,10 @@ export default function BillingBoard({ orders = [], stageOf, months = [], onGo, 
                           {x.kind !== "client" && <span className="truncate">{[x.order?.상차지명, x.order?.하차지명].filter(Boolean).join(" → ") || x.sub || ""}</span>}
                           {x.note && <span className="truncate" style={{ color: T.ink }}>· {x.note}</span>}
                         </span>
+                        {(() => { // ⚠ 2026-11-25 명세서 작성 뒤 금액이 바뀌었으면 배지(누르면 명세서가 열려요)
+                          const dr = x.kind === "client" ? driftMap.get(x.key) : null;
+                          return dr ? <span data-kp="stmt-drift" title={stmtDriftHint(dr)} className="mt-1 inline-flex max-w-full px-1.5 py-0.5 rounded-md text-[11px] font-black truncate" style={{ color: "#B42318", background: "#FEF3F2", border: "1px solid #FECDCA", ...NUMS }}>⚠ {stmtDriftText(dr)}</span> : null;
+                        })()}
                       </span>
                       <span className="text-right">
                         <span className="block text-[14px] font-black whitespace-nowrap" style={NUMS}>{won(x.amount)}</span>

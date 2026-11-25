@@ -6,6 +6,7 @@
 //  · AI 서버를 못 쓸 때(키 없음 · 오류 · 횟수 초과) 화면에 있는 데이터로 답하는 예전 규칙 답변 + 간단한 수정 알아듣기
 //  · 짧은 마크다운(굵게 · 목록 · 표) 나누기, 대화 기록 저장
 import { normTime, normTon, normVehicle, normAmount, normPay, normPhone, normDate, kstToday, ymdOf } from "./orderScanAi.js";
+import { isSalesOrder } from "./salesRule.js"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료) — 서버 AI 비서 · 매출관리와 같은 함수
 import { orderProfit, profitTotals } from "./forkliftCore.js"; // ⭐ 2026-11-17 수수료 = 청구 − 기사 − 회사가 따로 지급(functions/profitCore.mjs)
 
 export const MONEY = ["청구운임", "기사운임", "수수료"];
@@ -293,6 +294,7 @@ export function localAnswer(text, { dispatches = [], clients = [], today = today
   const live = dispatches.filter((d) => !cancelled(d) && d?.source !== "transport_transmit"); // 🛠 2026-11-25 화주사 전송 사본은 매출에서 빼기(홈 · 일일 보고 · 서버 AI 와 같게)
   const day = live.filter((d) => dateOfRow(d) === today);
   const month = live.filter((d) => dateOfRow(d).startsWith(ym));
+  const sales = (l) => l.filter(isSalesOrder); // 📏 2026-11-25 돈(매출 · 기사운임 · 수익)은 배차완료만 · 건수(오더 · 미배차)는 전체
   const sum = (l, k) => l.reduce((s, d) => s + num(d[k]), 0);
   const line = (d) => `· ${dateOfRow(d)} ${d.상차시간 || ""} ${d.거래처명 || "-"} | ${d.상차지명 || "-"} → ${d.하차지명 || "-"}${d.차량번호 ? ` | ${d.차량번호}` : " | 미배차"}`;
   if (/미배차/.test(t)) {
@@ -301,10 +303,11 @@ export function localAnswer(text, { dispatches = [], clients = [], today = today
   }
   if (/(오늘|금일).*(배차|오더|현황|몇)|^오늘$/.test(t)) {
     if (!day.length) return `오늘(${today}) 등록된 오더가 없어요.`;
-    return `**오늘 배차 현황** ${today}\n· 오더 ${day.length}건 (미배차 ${day.filter(isUnassigned).length}건)\n· 청구운임 ${won(sum(day, "청구운임"))}\n· 기사운임 ${won(sum(day, "기사운임"))}${profitTotals(day).paid ? `\n· 지게차 등 회사 지급 ${won(profitTotals(day).paid)}` : ""}\n· 수익 ${won(profitTotals(day).fee)}`; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사 지급분
+    const ds = sales(day); const DT = profitTotals(ds);
+    return `**오늘 배차 현황** ${today}\n· 오더 ${day.length}건 (미배차 ${day.filter(isUnassigned).length}건 · 배차완료 ${ds.length}건)\n· 청구운임 ${won(DT.sale)}\n· 기사운임 ${won(DT.drv)}${DT.paid ? `\n· 지게차 등 회사 지급 ${won(DT.paid)}` : ""}\n· 수익 ${won(DT.fee)}\n(금액은 배차완료 기준 · 매출관리와 같아요)`; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사 지급분
   }
   if (/거래처.*(순위|랭킹|top|많은)/i.test(t)) {
-    const m = {}; month.forEach((d) => { const n = d.거래처명 || "미지정"; m[n] = m[n] || { c: 0, s: 0 }; m[n].c += 1; m[n].s += num(d.청구운임); });
+    const m = {}; sales(month).forEach((d) => { const n = d.거래처명 || "미지정"; m[n] = m[n] || { c: 0, s: 0 }; m[n].c += 1; m[n].s += num(d.청구운임); });
     const top = Object.entries(m).sort((a, b) => b[1].s - a[1].s).slice(0, 5);
     return top.length ? `**이번 달 거래처 매출 순위**\n${top.map(([n, v], i) => `${i + 1}. ${n} ${v.c}건 · ${won(v.s)}`).join("\n")}` : "이번 달 오더가 없어요.";
   }
@@ -313,8 +316,9 @@ export function localAnswer(text, { dispatches = [], clients = [], today = today
     return `**이번 달 차종별 운행**\n${Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([n, c]) => `· ${n} ${c}건`).join("\n") || "데이터 없음"}`;
   }
   if (/(이번달|이달|월).*(매출|수익|운임)|^매출/.test(t)) {
-    const s = sum(month, "청구운임"); const c = sum(month, "기사운임"); const T = profitTotals(month); // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사 지급분(지게차·외부 특수운임)
-    return `**${ym} 매출**\n· 운행 ${month.length}건\n· 청구운임 ${won(s)}\n· 기사운임 ${won(c)}${T.paid ? `\n· 지게차 등 회사 지급 ${won(T.paid)}` : ""}\n· 수익 ${won(s - c - T.paid)}${s ? ` (${(((s - c - T.paid) / s) * 100).toFixed(1)}%)` : ""}`;
+    const ms = sales(month); // 📏 2026-11-25 배차완료만
+    const s = sum(ms, "청구운임"); const c = sum(ms, "기사운임"); const T = profitTotals(ms); // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사 지급분(지게차·외부 특수운임)
+    return `**${ym} 매출**(배차완료 기준)\n· 운행 ${ms.length}건\n· 청구운임 ${won(s)}\n· 기사운임 ${won(c)}${T.paid ? `\n· 지게차 등 회사 지급 ${won(T.paid)}` : ""}\n· 수익 ${won(s - c - T.paid)}${s ? ` (${(((s - c - T.paid) / s) * 100).toFixed(1)}%)` : ""}`;
   }
   if (/최근/.test(t)) {
     const l = [...live].sort((a, b) => dateOfRow(b).localeCompare(dateOfRow(a))).slice(0, 5);
