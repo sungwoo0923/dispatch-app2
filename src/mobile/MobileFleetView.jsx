@@ -881,11 +881,13 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
   // ⭐ 사용자 요청 — 관리자가 모바일에서도 지입차별 오늘/누적 매출을 볼 수 있어야
   // 한다. ordersFor는 오늘 오더만 매칭하므로, 날짜 제한 없이 전체 이력에서
   // 직접 청구운임을 합산한다.
-  const toWon = useCallback((v) => Number(String(v || "0").replace(/[^\d]/g, "")) || 0, []);
+  // 🛠 2026-11-25 PC 지입차 상세(FleetManagement)와 같게 — 금액 읽기 = fkNum(마이너스 · 소수점) · 취소 · 화주사 전송 사본 제외
+  const toWon = useCallback((v) => { if (v == null || v === "") return 0; if (typeof v === "number") return Number.isFinite(v) ? Math.round(v) : 0; const n = Number(String(v).replace(/[^\d.-]/g, "")); return Number.isFinite(n) ? Math.round(n) : 0; }, []);
   const revenueFor = useCallback((d) => {
     const plate = (d.차량번호 || "").trim();
     const name = (d.이름 || "").trim();
     const all = (dispatchData || []).filter(r => {
+      if (r?.배차상태 === "배차취소" || ["취소", "배차취소", "오더취소", "취소됨"].includes(r?.상태) || r?.source === "transport_transmit") return false;
       const rPlate = (r.차량번호 || "").trim();
       const rName = (r.이름 || "").trim();
       return (!!plate && rPlate === plate) || (!!name && rName === name);

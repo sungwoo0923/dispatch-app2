@@ -88,6 +88,7 @@ import ViewSwitcher from "./ViewSwitcher"; // 🔀 2026-11-10 화면 전환 버�
 const SalesHub = React.lazy(() => import("./SalesHub")); // 💼 2026-11-10 영업관리(처음 열 때 받는다)
 import { ExecApprovals, TeamSchedule, ApprovalWorkspace, ExecScheduleBoard } from "./ExecSuite";
 import { useMyProfile, myNameNow, setMyNameCache } from "./userNames";
+import { nextFee } from "./forkliftCore"; // 🛠 2026-11-25 모바일 정산 저장도 PC와 같은 수수료 규칙
 import { sendCompanyMail, isMailSetupNeeded } from "./companyMail"; // ✉️ 2026-11-08 운송사별 발신 메일(예전 /api/send-email 대신)
 import { CompanyMailSettingsCard, MailSenderLine, MailSetupHost } from "./CompanyMailSettings";
 import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
@@ -60278,13 +60279,40 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
   // ⭐ 2026-11-05 PC·모바일 일치 — PC 정산관리와 같은 3개 탭(거래처정산·용차지급관리·지입정산관리) · 첫 화면도 PC처럼 거래처정산
   const [tab, setTab] = React.useState(() => { const t = settleStartTab(); return t === "홈" ? "홈" : "거래처정산"; }); // 🧭 2026-11-16 PC와 같게 정산 홈부터
   // 지급 상태·지급일 같은 정산 칸만 고치는 간단 저장(배차 검사 없이) — 오더가 있는 컬렉션 그대로
+  // 🛠 2026-11-25 PC patchDispatch 와 같은 돈 규칙 — ① 최종마감 잠금(정산 기록 __system 은 그대로 · 경리 권한은 통과)
+  //  ② 청구운임 · 기사운임을 고치면 수수료도 같이(nextFee — 직접 넣은 수수료는 그대로) ③ 화주사 전송 사본에 청구운임 등 같이
+  const mDesk = useArDesk((getTenant() || companyName || DEFAULT_COMPANY || "").trim());
+  const mProf = useMyProfile(auth.currentUser?.uid);
+  const mBypass = role === "totalMaster" || ["hrAcct", "allMgr", "acct", "accounting"].includes(role) || /경리|회계|정산/.test(String(mProf?.team || mProf?.부서 || ""));
   const patchDispatch = React.useCallback(async (_id, patch, knownPrev) => {
     if (!_id) return;
     const row = knownPrev || dispatchData.find((d) => d._id === _id || d.id === _id);
+    if (patch && !patch.__system && !mBypass) {
+      const lockOf = (o) => { const c = String(o?.거래처명 || "").trim(); if (!c) return null; const ym = String(o?.마감월 || "").slice(0, 7) || String(o?.상차일 || "").slice(0, 7); return isFinalLocked(mDesk.closes?.get(`${c}|${ym}`)) ? { client: c, ym } : null; };
+      const fl = lockOf(row) || (row ? lockOf({ ...row, ...patch }) : null);
+      if (fl) { window.alert(`${fl.client} ${Number(fl.ym.slice(5))}월은 최종마감 이후 수정이 불가합니다.\n필요 시 경리팀에 해제요청 해주세요.`); return false; }
+    }
     // ⭐ 2026-11-12 점검 — __system · __col 같은 화면용 표시는 문서에 쓰지 않는다(예전엔 그대로 저장됐다)
     const clean = {}; Object.entries(patch || {}).forEach(([k, v]) => { if (!k.startsWith("__")) clean[k] = v; });
-    await updateDoc(doc(db, patch?.__col || row?.__col || "dispatch", _id), { ...clean, updatedAt: serverTimestamp() });
-  }, [dispatchData]);
+    if (("청구운임" in clean || "기사운임" in clean) && !("수수료" in clean)) clean.수수료 = String(nextFee(row || null, { ...(row || {}), ...clean }));
+    const col = patch?.__col || row?.__col || "dispatch";
+    await updateDoc(doc(db, col, _id), { ...clean, updatedAt: serverTimestamp() });
+    const MIRROR = ["청구운임", "지급방식", "차량번호", "이름", "전화번호", "상차일", "하차일", "화물내용"];
+    const mp = {}; MIRROR.forEach((k) => { if (k in clean) mp[k] = clean[k]; });
+    if (Object.keys(mp).length && row?.source !== "transport_transmit") {
+      (async () => {
+        let mid = row?._transmittedOrderId || "";
+        if (!mid) { const sn = await getDocs(query(collection(db, "orders"), where("originCol", "==", col), where("originId", "==", _id), limit(1))); mid = sn.empty ? "" : sn.docs[0].id; }
+        if (mid) await updateDoc(doc(db, "orders", mid), { ...mp, updatedAt: Date.now() });
+      })().catch((e) => console.error("화주사 전송사본 동기화 오류:", e));
+    }
+  }, [dispatchData, mBypass, mDesk.closes]);
+  // 🔗 2026-11-25 정산 홈 기사 지급 = 용차지급관리와 같은 오더(지입차 제외) — 우리 회사 기사 목록
+  const [mDrivers, setMDrivers] = React.useState(null);
+  React.useEffect(() => {
+    const co = String(companyName || "").trim() || DEFAULT_COMPANY;
+    return onSnapshot(query(collection(db, "drivers"), where("companyName", "==", co)), (snap) => setMDrivers(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setMDrivers([]));
+  }, [companyName]);
   const betaPayOnM = useBetaOn(getTenant() || companyName); // 💳 입금 확인 탭(PC와 같은 조건)
   const [deskAttachId, setDeskAttachId] = React.useState("");
   // 거래처정산 › 거래처 정보(계좌·담당자 등) 저장 — PC upsertClient와 같은 문서(회사별 문서 이름)
@@ -60306,14 +60334,14 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
     <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={tab} onSelect={setTab}
       items={[{ key: "홈", label: "정산 홈", en: "OVERVIEW", icon: "dashboard" }, { key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt", badge: closeNM || undefined }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOnM ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
       {tab === "홈"
-        ? <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}><SettleHome orders={dispatchData} company={companyName || DEFAULT_COMPANY} depositOn={betaPayOnM} onGo={(k, d) => { setTab(k === "마감검증" ? "거래처정산" : k); if (d) setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: d })), 80); }} /></React.Suspense>
+        ? <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}><SettleHome orders={dispatchData} drivers={mDrivers} company={companyName || DEFAULT_COMPANY} depositOn={betaPayOnM} onGo={(k, d) => { setTab(k === "마감검증" ? "거래처정산" : k); if (d) setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: d })), 80); }} /></React.Suspense>
         : tab === "거래처정산"
         ? <ClientSettlement dispatchData={dispatchData} setDispatchData={() => {}} userCompany={companyName} clients={clients}
             setClients={(next) => (next || []).forEach(upsertClient)} upsertClient={upsertClient} showAlert={(m) => window.alert(m)}
             patchDispatch={isViewer ? async () => {} : patchDispatch} cardImage={cardImage} setCardImage={setCardImage}
             cardImageUploading={cardImageUploading} setCardImageUploading={setCardImageUploading} isViewer={isViewer} />
         : tab === "지급관리"
-        ? <PaymentManagement mobile dispatchData={dispatchData} patchDispatch={isViewer ? async () => {} : patchDispatch} companyName={companyName} canEditPayDay={role === "admin" || role === "totalMaster"} />
+        ? <PaymentManagement mobile dispatchData={dispatchData} drivers={mDrivers} patchDispatch={isViewer ? async () => {} : patchDispatch} companyName={companyName} canEditPayDay={role === "admin" || role === "totalMaster"} />
         : tab === "지게차지급"
         ? <ForkliftPayouts orders={dispatchData} patchDispatch={isViewer ? async () => {} : patchDispatch} isViewer={isViewer} />
         : tab === "입금확인" && betaPayOnM
