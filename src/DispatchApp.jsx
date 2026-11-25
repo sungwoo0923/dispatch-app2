@@ -345,8 +345,8 @@ function FareStatementBody({ rows, issuerName, showSale, MONO }) {
   list.forEach(({ fb }) => fb.lines.forEach((l) => { const k = l.name; const c = byItem.get(k) || { name: k, cnt: 0, amount: 0, drv: 0, sale: 0 }; c.cnt += 1; c.amount += l.amount; c.drv += l.drv; c.sale += l.sale; byItem.set(k, c); }));
   const items = [...byItem.values()];
   const fareTypes = [...new Set(list.map((x) => x.fb.fareType).filter(Boolean))];
-  const th = { fontSize: 10.5, fontWeight: 800, color: "#5B6B85", padding: "7px 8px", background: "#F5F7FB", borderBottom: "1px solid #E3E8F0", textAlign: "left", whiteSpace: "nowrap" };
-  const td = { fontSize: 11.5, fontWeight: 700, color: "#0F1A30", padding: "7px 8px", borderBottom: "1px solid #EEF1F6", verticalAlign: "top" };
+  const th = { fontSize: 10.5, fontWeight: 800, color: "#5B6B85", padding: "7px 6px", background: "#F5F7FB", borderBottom: "1px solid #E3E8F0", textAlign: "left", wordBreak: "keep-all" };
+  const td = { fontSize: 11.5, fontWeight: 700, color: "#0F1A30", padding: "7px 6px", borderBottom: "1px solid #EEF1F6", verticalAlign: "top" };
   const num = { ...td, textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
   const sec = (en, title) => (
     <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "18px 0 8px" }}>
@@ -378,9 +378,14 @@ function FareStatementBody({ rows, issuerName, showSale, MONO }) {
       </div>
 
       {sec("DETAIL", "건별 운임")}
-      <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #E3E8F0" }}>
+      {/* 🛠 2026-11-25 긴 상 · 하차지 이름 때문에 표가 문서 밖으로 넘쳤다 — 칸 너비를 고정하고 글은 칸 안에서 줄바꿈 */}
+      <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #E3E8F0", tableLayout: "fixed" }}>
+        <colgroup>
+          <col style={{ width: 26 }} /><col style={{ width: 42 }} /><col /><col style={{ width: 50 }} /><col style={{ width: 70 }} /><col style={{ width: showSale ? 104 : 140 }} /><col style={{ width: 70 }} />
+          {showSale && <col style={{ width: 66 }} />}{showSale && <col style={{ width: 68 }} />}
+        </colgroup>
         <thead><tr>
-          <th style={th}>No</th><th style={th}>상차일</th><th style={th}>구간 · 차량</th><th style={th}>운임구분</th><th style={{ ...th, textAlign: "right" }}>기본 기사운임</th><th style={th}>특수운임</th><th style={{ ...th, textAlign: "right" }}>기사운임</th>
+          <th style={th}>No</th><th style={th}>상차일</th><th style={th}>구간 · 차량</th><th style={th}>운임구분</th><th style={{ ...th, textAlign: "right" }}>기본운임</th><th style={th}>특수운임</th><th style={{ ...th, textAlign: "right" }}>기사운임</th>
           {showSale && <th style={{ ...th, textAlign: "right" }}>청구운임</th>}{showSale && <th style={{ ...th, textAlign: "right" }}>수수료</th>}
         </tr></thead>
         <tbody>
@@ -388,10 +393,10 @@ function FareStatementBody({ rows, issuerName, showSale, MONO }) {
             <tr key={o._id || o.id || i}>
               <td style={{ ...num, textAlign: "left", color: "#7A89A3" }}>{i + 1}</td>
               <td style={{ ...num, textAlign: "left" }}>{String(o.상차일 || "").slice(5) || "-"}</td>
-              <td style={td}>{o.상차지명 || "-"} → {o.하차지명 || "-"}{drivers.length > 1 && <div style={{ fontSize: 10.5, color: "#7A89A3", fontWeight: 600 }}>{[o.이름, o.차량번호].filter(Boolean).join(" · ")}</div>}</td>
-              <td style={{ ...td, color: "#2D4C82" }}>{fb.fareType || "-"}</td>
+              <td style={{ ...td, wordBreak: "break-all" }}>{o.상차지명 || "-"} → {o.하차지명 || "-"}{drivers.length > 1 && <div style={{ fontSize: 10.5, color: "#7A89A3", fontWeight: 600 }}>{[o.이름, o.차량번호].filter(Boolean).join(" · ")}</div>}</td>
+              <td style={{ ...td, color: "#2D4C82", wordBreak: "break-all" }}>{fb.fareType || "-"}</td>
               <td style={num}>{won(fb.baseDrv)}</td>
-              <td style={{ ...td, fontWeight: 600 }}>{fb.lines.length ? fb.lines.map((l) => <div key={l.key} style={{ whiteSpace: "nowrap" }}>{l.name} <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{sign(l.drv)}</span>{showSale && l.sale ? <span style={{ color: "#7A89A3" }}> (청구 {sign(l.sale)})</span> : null}</div>) : <span style={{ color: "#B7C2D3" }}>없음</span>}</td>
+              <td style={{ ...td, fontWeight: 600 }}>{fb.lines.length ? fb.lines.map((l) => <div key={l.key} style={{ wordBreak: "keep-all", overflowWrap: "anywhere" }}>{l.name} <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{sign(l.drv)}</span>{showSale && l.sale ? <span style={{ color: "#7A89A3" }}> (청구 {sign(l.sale)})</span> : null}</div>) : <span style={{ color: "#B7C2D3" }}>없음</span>}</td>
               <td style={{ ...num, fontWeight: 900 }}>{won(fb.drv)}</td>
               {showSale && <td style={num}>{won(fb.sale)}</td>}{showSale && <td style={{ ...num, color: fb.profit < 0 ? "#B4342A" : "#0F1A30" }}>{won(fb.profit)}</td>}
             </tr>
