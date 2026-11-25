@@ -844,7 +844,7 @@ function FleetMap({ drivers, center, onSelect, selectedPath = [], fitAllCount = 
       <MapRecenter center={center} />
       <FitAll count={fitAllCount} drivers={drivers} />
       {selectedPath.length >= 2 && <FitPath points={selectedPath} resetKey={selectedDriver?.id} />}
-      <TileLayer className={light ? "lw-light-tiles" : "lw-dark-tiles"} tileSize={512} zoomOffset={-1} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+      <TileLayer key={light ? "tl-light" : "tl-dark"} className={light ? "lw-light-tiles" : "lw-dark-tiles"} tileSize={512} zoomOffset={-1} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
       <TrafficOverlay />{/* 🚦 2026-11-22 사고 · 공사 · 통제 */}
 
       {/* ⭐ 이동 동선 — 예전엔 GPS 점을 하나하나 원으로 찍어 다닥다닥 보였다. 도로에 맞춘
