@@ -16,10 +16,12 @@ const CHECK = { 대기: ["확인대기", "#FBBF24"], 수락: ["수락", "#60A5FA
 const CSS = `
 .rbv{container-type:inline-size;font-family:'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕',sans-serif;color:${C.text};font-variant-numeric:tabular-nums}
 .rbv-grid{display:grid;grid-template-columns:260px 104px minmax(0,1fr) 128px 120px 220px 118px;align-items:stretch}
-.rbv-head{position:sticky;top:0;z-index:5;background:#0E1A30;border:1px solid ${C.line2};border-radius:12px;margin-bottom:8px}
+.rbv-head{position:sticky;top:0;z-index:5;background:#101E38;border:1px solid ${C.line2};border-radius:12px;margin-bottom:8px;box-shadow:0 6px 14px rgba(3,8,18,.55)}
 .rbv-head>div{padding:10px 12px;font-size:13.5px;font-weight:900;color:#9FB3D6;white-space:nowrap}
 .rbv-row{background:${C.panel};border:1px solid ${C.line};border-radius:14px;overflow:hidden}
 .rbv-row.idle{border-color:#3A3220}
+.rbv-row.alt{background:#0D182C}
+.rbv-row:hover{border-color:#2B4F8C}
 .rbv-row.open{border-color:#38BDF8;box-shadow:0 0 0 3px rgba(56,189,248,.12)}
 .rbv-cell{padding:12px;border-left:1px solid #13213D;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:4px}
 .rbv-cell:first-child{border-left:0}
@@ -28,10 +30,12 @@ const CSS = `
 .rbv-btn.pri{background:#2563EB;border-color:#2563EB;color:#fff}
 .rbv-group{display:flex;align-items:center;gap:10px;margin:18px 2px 8px;font-size:16px;font-weight:900}
 .rbv-group:first-child{margin-top:4px}
-.rbv-line{display:grid;grid-template-columns:76px 86px minmax(0,1fr) auto;gap:10px;align-items:baseline;padding:6px 0;border-top:1px solid #13213D}
-.rbv-line:first-child{border-top:0}
+.rbv-lines{display:flex;flex-direction:column;gap:6px;max-width:1040px}
+.rbv-line{display:grid;grid-template-columns:26px 84px 62px minmax(0,1fr) 128px;gap:10px;align-items:center;padding:8px 12px;border-radius:10px;background:#0E1A30;border:1px solid #1A2742}
+.rbv-no{width:22px;height:22px;border-radius:7px;background:#22345A;color:#E6EDF8;font-size:12.5px;font-weight:900;display:grid;place-items:center}
+.rbv-fare{justify-self:end;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
 @container (max-width:1180px){.rbv-grid{grid-template-columns:230px 96px minmax(0,1fr) 118px 112px 116px}.rbv-loc{display:none !important}}
-@container (max-width:860px){.rbv-grid{grid-template-columns:1fr}.rbv-head{display:none}.rbv-cell{border-left:0;border-top:1px solid #13213D}.rbv-cell:first-child{border-top:0}.rbv-line{grid-template-columns:70px 1fr}.rbv-loc{display:flex !important}}
+@container (max-width:860px){.rbv-grid{grid-template-columns:1fr}.rbv-head{display:none}.rbv-cell{border-left:0;border-top:1px solid #13213D}.rbv-cell:first-child{border-top:0}.rbv-line{grid-template-columns:26px 70px 1fr}.rbv-line>:nth-child(4){grid-column:2/-1}.rbv-fare{grid-column:2/-1;justify-self:start}.rbv-loc{display:flex !important}}
 .rbt-wrap{border:1px solid ${C.line};border-radius:16px;background:${C.panel};overflow:auto}
 .rbt-row{display:flex;min-height:72px;border-bottom:1px solid #13213D}
 .rbt-name{width:240px;flex-shrink:0;padding:10px 14px;border-right:1px solid ${C.line};display:flex;flex-direction:column;justify-content:center;gap:3px;position:sticky;left:0;background:${C.panel};z-index:2}
@@ -47,9 +51,6 @@ export function RouteRowsView({ groups = [], todayStr, dayLabel = "", statusOf, 
   return (
     <div className="rbv">
       <style>{CSS}</style>
-      <div className="rbv-grid rbv-head" role="row">
-        <div>기사 · 차량</div><div>배차상태</div><div>{isSingleDay ? "그날 노선 · 상태 · 상차 · 상차지 → 하차지 · 거래처 · 기사운임" : "기간 노선"}</div><div>이번 달 정산</div><div>담당자</div><div className="rbv-loc">현위치 · 최종위치</div><div>보기</div>
-      </div>
       {groups.map((g) => (
         <div key={g.key}>
           {groups.length > 1 && (
@@ -59,8 +60,12 @@ export function RouteRowsView({ groups = [], todayStr, dayLabel = "", statusOf, 
               <span style={{ fontSize: 13.5, fontWeight: 800, color: C.sub }}>{g.rows.length}대 · 운행 {g.rows.filter((r) => statusOf(r).label === "운송중").length}</span>
             </div>
           )}
+          {/* 🛠 2026-11-26 칸 이름 줄을 묶음마다 다시 — 내려도 무슨 칸인지 보이게(묶음 안에서는 위에 붙어 따라온다) */}
+          <div className="rbv-grid rbv-head" role="row">
+            <div>기사 · 차량</div><div>배차상태</div><div>{isSingleDay ? "오더 · 상태 · 상차 시각 · 상차지 → 하차지 · 거래처 · 기사운임" : "기간 오더"}</div><div>이번 달 정산</div><div>담당자</div><div className="rbv-loc">현위치 · 최종위치</div><div>보기</div>
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {g.rows.map((row) => {
+            {g.rows.map((row, ri) => {
               idx += 1;
               const { driver: d, orders, live, monthlyFareSum } = row;
               const st = statusOf(row);
@@ -68,7 +73,7 @@ export function RouteRowsView({ groups = [], todayStr, dayLabel = "", statusOf, 
               const isOpen = open.has(d.id);
               return (
                 <div key={d.id} data-route-row={d.id}>
-                  <div className={`rbv-row rbv-grid${orders.length ? "" : " idle"}${isOpen ? " open" : ""}`}>
+                  <div className={`rbv-row rbv-grid${orders.length ? "" : " idle"}${isOpen ? " open" : ""}${ri % 2 ? " alt" : ""}`}>
                     <div className="rbv-cell">
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ fontSize: 12.5, fontWeight: 900, color: "#fff", background: "#2B3F66", borderRadius: 6, padding: "1px 7px" }}>{String(idx).padStart(2, "0")}</span>
@@ -84,25 +89,26 @@ export function RouteRowsView({ groups = [], todayStr, dayLabel = "", statusOf, 
                     </div>
                     <div className="rbv-cell" style={{ justifyContent: orders.length ? "flex-start" : "center" }}>
                       {orders.length === 0 && <span style={{ alignSelf: "flex-start", fontSize: 15, fontWeight: 900, color: "#FCD34D", padding: "4px 12px", borderRadius: 8, background: "rgba(251,191,36,.1)" }}>{isSingleDay ? `${dayLabel || "이날"} 배차 없음` : "기간 배차 없음"}</span>}
-                      {orders.map((o, i) => {
+                      {orders.length > 0 && <div className="rbv-lines">{orders.map((o, i) => {
                         const m = orderMeta(o, orders);
                         const ck = CHECK[o.기사확인상태];
                         const done = o.기사확인상태 === "완료";
                         return (
-                          <div key={o._id || i} className="rbv-line" style={{ opacity: done ? 0.62 : 1 }} title={`${o.상차일 || ""} ${o.상차시간 || ""} ${o.상차지명 || ""} → ${o.하차일 || ""} ${o.하차시간 || ""} ${o.하차지명 || ""}`}>
+                          <div key={o._id || i} className="rbv-line" style={{ opacity: done ? 0.7 : 1 }} title={`${o.상차일 || ""} ${o.상차시간 || ""} ${o.상차지명 || ""} → ${o.하차일 || ""} ${o.하차시간 || ""} ${o.하차지명 || ""}`}>
+                            <span className="rbv-no">{i + 1}</span>
                             <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 900, color: m.color || "#CFE0FF" }}><span style={{ width: 8, height: 8, borderRadius: 99, background: m.dot, flexShrink: 0 }} />{m.label}</span>
                             <span style={{ fontSize: 14.5, fontWeight: 800, color: "#CFE0FF" }}>{isSingleDay ? (o.상차시간 || "즉시") : `${String(o.상차일 || "").slice(5)} ${o.상차시간 || ""}`}</span>
                             <span style={{ fontSize: 15.5, fontWeight: 900, lineHeight: 1.45, wordBreak: "keep-all", overflowWrap: "anywhere" }}>
                               {o.상차지명 || "-"} <span style={{ color: "#5D7AB0" }}>→</span> {o.하차지명 || "-"}
                               <span style={{ fontSize: 13.5, fontWeight: 700, color: C.sub }}> · {o.거래처명 || "-"}{o.하차시간 ? ` · 하차 ${o.하차일 && o.하차일 !== o.상차일 ? `${String(o.하차일).slice(5)} ` : ""}${o.하차시간}` : ""}</span>
                             </span>
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+                            <span className="rbv-fare">
                               {ck && <span style={{ fontSize: 12.5, fontWeight: 900, color: ck[1], border: `1px solid ${ck[1]}55`, borderRadius: 6, padding: "1px 7px" }}>{ck[0]}</span>}
                               <b style={{ fontSize: 15, fontWeight: 900 }}>{won(o.기사운임)}</b>
                             </span>
                           </div>
                         );
-                      })}
+                      })}</div>}
                     </div>
                     <div className="rbv-cell"><b style={{ fontSize: 16, fontWeight: 900 }}>{(Number(monthlyFareSum) || 0).toLocaleString("ko-KR")}원</b></div>
                     <div className="rbv-cell"><span style={{ fontSize: 14, fontWeight: 800, color: d.담당자?.name ? C.text : "#FCD34D" }}>{d.담당자?.name || "미지정"}</span></div>
