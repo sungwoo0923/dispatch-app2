@@ -237,6 +237,8 @@ async function runVoiceTurn({ db, makeAnthropic, bumpUsage, auth, data, now = Da
       : e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError ? "failed-precondition"
         : e instanceof Anthropic.BadRequestError ? "invalid-argument" : "unavailable";
     const why = String(e?.error?.error?.message || e?.message || "").replace(/\s+/g, " ").slice(0, 120);
+    // 🔑 2026-11-26 401 = 서버에 넣어 둔 Claude API 키가 틀렸거나 지워졌다(오더 스캔 · AI 비서도 같이 막힌다) — 할 일을 바로 알려 준다
+    if (e?.status === 401) throw new ScanError("failed-precondition", "AI 키가 맞지 않아요(만료 · 삭제된 키). 관리자가 Claude API 키를 새로 등록해야 해요 (401)");
     throw new ScanError(code, `AI 상담원이 대답하지 못했어요 (${e?.status || "오류"}${why ? ` · ${why}` : ""})`);
   }
   const u = res?.usage || {};
