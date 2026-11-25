@@ -62,6 +62,26 @@ export function expandRotation(rec) {
   return Array.from({ length: n }, (_, i) => ({ ...base, 회전수: 1, 회전묶음ID: gid, 회차: i + 1, 회차총수: n, 메모: withRotationMemo(base.메모, n, i + 1) }));
 }
 
+// 📥 2026-11-25 대용량 업로드 "회전" 열 — 엑셀 한 줄(같은 날 · 같은 노선 N회전)을 오더로 펼친다
+//  · 회전 칸: 3, "3회", "3회전" 모두 인식(비었거나 1이면 보통 오더) · 최대 ROTATION_MAX
+//  · 회전방식 칸: 비우면 "나누기"(그 날짜에 N건 · 1/N회차 … 표시) · "묶기"라고 쓰면 오더 1건(N회전 표시)
+//  · 운임 칸은 언제나 "1회 단가" — 나누기는 건마다 그대로, 묶기는 회전 수만큼 곱한 합계로 들어간다
+export function bulkRotationOf(row = {}) {
+  const raw = row["회전"] ?? row["회전수"] ?? row["회전 수"] ?? "";
+  const n = Math.floor(Number(String(raw).replace(/[^\d.]/g, "")) || 0);
+  const bundle = /묶/.test(String(row["회전방식"] ?? row["회전 방식"] ?? ""));
+  return { n: n > 1 ? Math.min(ROTATION_MAX, n) : 1, bundle, over: n > ROTATION_MAX };
+}
+export function expandBulkRotation(rec, { n = 1, bundle = false } = {}) {
+  const num = (v) => Number(v) || 0;
+  if (!(n > 1)) return [{ ...rec, 운행유형: "편도", 회전수: 1 }];
+  if (bundle) {
+    const [one] = expandRotation({ ...rec, 운행유형: "왕복", 회전수: n, 회전방식: "묶기" });
+    return [{ ...one, 청구운임: num(rec.청구운임) * n, 기사운임: num(rec.기사운임) * n, 수수료: num(rec.수수료) * n }];
+  }
+  return expandRotation({ ...rec, 운행유형: "왕복", 회전수: n, 회전방식: "분리" });
+}
+
 // 등록폼용 선택기 — [−] 3 [+] 회전  (● 한 오더로 묶기 ○ N건으로 나누기)
 export function RotationPicker({ count = 1, mode = "묶기", onChange, accent = "#1B2B4B", size = "md", allowSplit = true }) {
   const n = Math.max(1, Math.min(ROTATION_MAX, Number(count) || 1));

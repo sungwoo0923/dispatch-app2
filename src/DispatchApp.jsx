@@ -169,7 +169,7 @@ import { IdleFleetButton } from "./fleetRecommend";
 import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "./liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
 import { subscribeOrderSync, deleteOrderWithLog, logOrderDeletion, OrderHistoryContext, useOrderHistory, useLoadOrderRange, useLoadFullOrderHistory, pcLiveWindowStart, pcPrevDay, kstToday as histToday, monthStartAgo, monthEnd, monthStart, historyStartDate } from "./orderHistory";
 const StaffPerformance = lazyView(() => import("./StaffPerformance"));
-import { RotationPicker, RotationBadge, expandRotation, rotationNotice, withRotationMemo } from "./rotation";
+import { RotationPicker, RotationBadge, expandRotation, rotationNotice, withRotationMemo, bulkRotationOf, expandBulkRotation, ROTATION_MAX } from "./rotation";
 import { generateMonthlyReportPPT, PPT_TEMPLATES } from "./pptReportUtil";
 
 // ⭐ html2canvas로 캡처한 캔버스를 A4 PDF로 저장할 때 공용으로 쓰는 다중 페이지
@@ -36287,25 +36287,30 @@ if (mode === "driver") {
 
   // 대용량 업로드 엑셀 양식(첫 줄 = 열 이름, 둘째 줄 = 예시)
   const [bulkChooserOpen, setBulkChooserOpen] = useState(false);
-  const BULK_COLS0 = ["상차일", "상차시간", "하차일", "하차시간", "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소", "화물내용", "차량종류", "차량톤수", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "지급방식", "배차방식", "메모"];
+  const BULK_COLS0 = ["상차일", "상차시간", "하차일", "하차시간", "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소", "화물내용", "차량종류", "차량톤수", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "지급방식", "배차방식", "메모", "회전", "회전방식"]; // 📥 2026-11-25 회전 · 회전방식(같은 날 같은 노선 N회 — 비우면 보통 오더)
   // ⭐ 2026-11-02 운임규칙 — 규칙 사용 회사는 양식에 "운임구분" 열(비우면 예전처럼)
   const BULK_COLS = fareOn ? [...BULK_COLS0, "운임구분"] : BULK_COLS0;
   const downloadBulkTemplate = () => {
     const today = new Date(); const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const t1 = new Date(today.getTime() + 86400000);
     const samples = [
-      [ymd(t1), "오전 9시", ymd(t1), "오후 3시 30분", "동원F&B", "동원F&B 이천센터", "경기 이천시 마장면 100", "CJ 대구센터", "대구 달서구 성서로 10", "16파레트", "윙바디", "11톤", "경기12가3456", "김기사", "010-1234-5678", 450000, 400000, "계산서", "24시", ""],
-      [ymd(t1), "오후 2시", ymd(t1), "오후 6시", "오뚜기", "오뚜기 평택공장", "경기 평택시 포승읍 1", "이마트 광주센터", "광주 광산구 하남산단 5", "8파레트", "카고", "5톤", "", "", "", 320000, 280000, "착불", "직접배차", ""],
+      [ymd(t1), "오전 9시", ymd(t1), "오후 3시 30분", "동원F&B", "동원F&B 이천센터", "경기 이천시 마장면 100", "CJ 대구센터", "대구 달서구 성서로 10", "16파레트", "윙바디", "11톤", "경기12가3456", "김기사", "010-1234-5678", 450000, 400000, "계산서", "24시", "", "", ""],
+      [ymd(t1), "오후 2시", ymd(t1), "오후 6시", "오뚜기", "오뚜기 평택공장", "경기 평택시 포승읍 1", "이마트 광주센터", "광주 광산구 하남산단 5", "8파레트", "카고", "5톤", "", "", "", 320000, 280000, "착불", "직접배차", "", "", ""],
+      [ymd(t1), "", ymd(t1), "", "아이플로우", "안성", "", "화성", "", "", "", "", "", "", "", 160000, 0, "계산서", "", "", 3, ""], // 회전 3 → 이 날짜에 오더 3건(1/3 · 2/3 · 3/3회차)
     ];
     const ws = XLSX.utils.aoa_to_sheet([BULK_COLS, ...(fareOn ? samples.map((x) => [...x, ""]) : samples)]);
     ws["!cols"] = BULK_COLS.map((c) => ({ wch: c === "메모" ? 40 : c.includes("주소") ? 26 : Math.max(11, c.length * 2 + 4) }));
     const guide = XLSX.utils.aoa_to_sheet([
       ["항목", "작성 방법"],
-      ["예시 2줄", "예시 줄은 지우고 실제 오더를 한 줄에 하나씩 입력하세요."],
+      ["예시 3줄", "예시 줄은 지우고 실제 오더를 한 줄에 하나씩 입력하세요."],
       ["상차일 · 하차일", "2026-11-03 처럼 입력 (엑셀 날짜 형식도 가능)"],
       ["상차시간 · 하차시간", "오전 9시, 오후 3시 30분 처럼 입력 (09:00 으로 써도 자동 변환)"],
       ["차량번호 · 기사명 · 전화번호", "입력하면 '배차완료', 비워두면 '배차중'으로 등록됩니다. 등록된 기사의 차량번호만 써도 기사명·전화번호가 자동으로 채워집니다."],
       ["청구운임 · 기사운임", "숫자만 입력 (수수료는 자동 계산)"],
+      ["회전", `같은 날 같은 노선을 여러 번 돌면 횟수를 숫자로(예: 3). 그 날짜에 오더가 3건 등록되고 1/3 · 2/3 · 3/3회차로 표시돼요. 비우면 보통 오더(1건)예요. 최대 ${ROTATION_MAX}`],
+      ["회전방식", "비우면 '나누기'(회전 수만큼 오더가 생김). '묶기'라고 쓰면 오더 1건에 '3회전'으로 표시돼요"],
+      ["회전 오더의 운임", "청구운임 · 기사운임은 1회 단가를 적어요. 나누기는 건마다 그 금액, 묶기는 회전 수를 곱한 합계로 들어가요"],
+      ["하차일", "비우면 상차일과 같은 날로 들어가요"],
       ...(fareOn ? [["운임구분", `회사관리 › 운임 규칙 이름(${fareR.rules.map((x) => x.name).filter(Boolean).join(", ") || "예: 일대"}). 기사운임을 비우면 규칙대로 자동 계산해요`]] : []),
       ["열 이름", "첫 줄(열 이름)은 바꾸지 마세요. 기사명 대신 '이름'이라고 써도 인식합니다."],
     ]);
@@ -36336,13 +36341,13 @@ if (mode === "driver") {
       const ws = workbook.Sheets[sheetName];
       const json = XLSX.utils.sheet_to_json(ws, { defval: "" });
 
-      const mapped = json.filter((row) => ["상차일", "상차지명", "하차지명", "거래처명"].some((k) => String(row[k] || "").trim())).map((row) => {
+      let mapped = json.filter((row) => ["상차일", "상차지명", "하차지명", "거래처명"].some((k) => String(row[k] || "").trim())).map((row) => {
         const mappedRow = {
           _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
           등록일: excelDateToISO(row["상차일"]) || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10),
           상차일: excelDateToISO(row["상차일"]),
           상차시간: bulkTime(row["상차시간"]),
-          하차일: excelDateToISO(row["하차일"]),
+          하차일: excelDateToISO(row["하차일"]) || excelDateToISO(row["상차일"]), // 📥 2026-11-25 하차일을 비우면 상차일과 같은 날
           하차시간: bulkTime(row["하차시간"]),
           거래처명: row["거래처명"] || "",
           상차지명: row["상차지명"] || "",
@@ -36391,9 +36396,14 @@ if (mode === "driver") {
         }
         // 차량번호 + (기사명 또는 전화번호)가 있으면 배차완료, 없으면 배차중
         mappedRow.배차상태 = dispatchStatusOf({ 지급방식: mappedRow.지급방식, 차량번호: cleanCar }); // 🚚 2026-11-07 차량번호만 있어도 배차완료
+        mappedRow._rot = bulkRotationOf(row); // 📥 2026-11-25 회전 · 회전방식 열
 
         return mappedRow;
       });
+      // 📥 2026-11-25 회전 열 — 한 줄을 회전 수만큼 오더로 펼친다(나누기: N건 · 묶기: 1건에 합계 운임). 줄 수(lines)와 등록 건수(mapped)가 달라진다
+      const lines = mapped;
+      const rotLines = lines.filter((m) => m._rot.n > 1);
+      mapped = lines.flatMap(({ _rot, ...m }) => expandBulkRotation(m, _rot).map((x, i) => (i ? { ...x, _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}` } : x)));
 
       if (!mapped.length) {
         showAlert("✕ 엑셀 데이터가 없습니다.");
@@ -36402,7 +36412,11 @@ if (mode === "driver") {
 
       const _dates = mapped.map((m) => m.상차일).filter(Boolean).sort();
       const _matched = mapped.filter((m) => m.배차상태 === "배차완료").length;
-      if (!(await kpConfirm(`${mapped.length}건을 업로드하시겠습니까?\n\n· 상차일: ${_dates.length ? `${_dates[0]} ~ ${_dates[_dates.length - 1]}` : "없음(오늘 날짜로 등록)"}\n· 배차완료 ${_matched}건 / 배차중 ${mapped.length - _matched}건\n· 청구운임 합계: ${mapped.reduce((a, m) => a + (m.청구운임 || 0), 0).toLocaleString()}원`))) return;
+      const _rotMsg = rotLines.length ? (() => {
+        const sp = rotLines.filter((m) => !m._rot.bundle), bd = rotLines.filter((m) => m._rot.bundle);
+        return `\n· 회전 운행 ${rotLines.length}줄${sp.length ? ` — 나누기 ${sp.length}줄 → ${sp.reduce((a, m) => a + m._rot.n, 0)}건` : ""}${bd.length ? ` · 묶기 ${bd.length}줄 → ${bd.length}건(운임은 회전 수만큼 곱함)` : ""}${rotLines.some((m) => m._rot.over) ? `\n· 회전이 ${ROTATION_MAX}을 넘는 줄은 ${ROTATION_MAX}회전으로 등록돼요` : ""}`;
+      })() : "";
+      if (!(await kpConfirm(`${lines.length === mapped.length ? `${mapped.length}건` : `엑셀 ${lines.length}줄 → 오더 ${mapped.length}건`}을 업로드하시겠습니까?\n\n· 상차일: ${_dates.length ? `${_dates[0]} ~ ${_dates[_dates.length - 1]}` : "없음(오늘 날짜로 등록)"}\n· 배차완료 ${_matched}건 / 배차중 ${mapped.length - _matched}건\n· 청구운임 합계: ${mapped.reduce((a, m) => a + (m.청구운임 || 0), 0).toLocaleString()}원${_rotMsg}`))) return;
 
       try {
         // ⭐ 새 오더는 addDispatch로 "생성"해야 한다 — 예전엔 patchDispatch(기존 문서 수정)를 써서
@@ -36414,7 +36428,7 @@ if (mode === "driver") {
           const r = await addDispatch({
             ...rec,
             차량톤수: toTonUnit(rec.차량톤수),
-            운행유형: "편도", 회전수: 1, 메모중요도: "일반", 긴급: false,
+            운행유형: rec.운행유형 === "왕복" ? "왕복" : "편도", 회전수: Number(rec.회전수) > 1 ? Number(rec.회전수) : 1, 메모중요도: "일반", 긴급: false, // 📥 2026-11-25 회전 열(회차 · 회차총수 · 회전묶음ID는 rec 에 들어 있다)
             업체전달상태: "미전달", 업체전달일시: null, 업체전달방법: null,
             등록기기: "PC(대용량)",
             // 대량 등록 중 휴차 확인 팝업이 건마다 뜨지 않게 미리 확인 처리
@@ -37817,6 +37831,8 @@ return (
           {bulkChooserOpen && (
             <BulkUploadChooser
               onClose={() => setBulkChooserOpen(false)}
+              templateTips={['시간은 "오전 9시", "오후 3시 30분"', "차량번호·기사명·전화번호 입력 시 배차완료", "같은 날 여러 번 도는 노선은 '회전' 칸에 횟수"]}
+              uploadTips={["빈 줄은 자동으로 건너뜀", "수수료(청구-기사운임) 자동 계산", "회전 3 → 그 날짜에 오더 3건(1/3 ~ 3/3회차)"]}
               onTemplate={() => { downloadBulkTemplate(); }}
               onFile={(e) => { setBulkChooserOpen(false); handleBulkFile(e); e.target.value = ""; }}
             />
