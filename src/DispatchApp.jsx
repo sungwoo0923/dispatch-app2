@@ -169,7 +169,7 @@ import { IdleFleetButton } from "./fleetRecommend";
 import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "./liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
 import { subscribeOrderSync, deleteOrderWithLog, logOrderDeletion, OrderHistoryContext, useOrderHistory, useLoadOrderRange, useLoadFullOrderHistory, pcLiveWindowStart, pcPrevDay, kstToday as histToday, monthStartAgo, monthEnd, monthStart, historyStartDate } from "./orderHistory";
 const StaffPerformance = lazyView(() => import("./StaffPerformance"));
-import { RotationPicker, RotationBadge, expandRotation, rotationNotice, withRotationMemo } from "./rotation";
+import { RotationPicker, RotationBadge, expandRotation, rotationNotice, withRotationMemo, bulkRotationOf, expandBulkRotation, ROTATION_MAX } from "./rotation";
 import { generateMonthlyReportPPT, PPT_TEMPLATES } from "./pptReportUtil";
 
 // ⭐ html2canvas로 캡처한 캔버스를 A4 PDF로 저장할 때 공용으로 쓰는 다중 페이지
@@ -6874,6 +6874,33 @@ function ToastProvider({ children }) {
   const [toasts, setToasts] = React.useState([]);
   const toastHoverRef = React.useRef(false); // 🎨 2026-11-24 라이브 알림에 마우스를 올려 둔 동안 true
   const [liveOpen, setLiveOpen] = React.useState(false); // 알림이 3종류 넘게 몰렸을 때 펼치기
+  const dropTimersRef = React.useRef(new Set()); // 사라지는 타이머를 건 알림
+
+  // 알림이 사라질 때 — 먼저 흐려지고(leaving · 0.32초) 그다음 목록에서 뺀다
+  const startDrop = (id, type) => {
+    if (dropTimersRef.current.has(id)) return; // 같은 알림에 타이머를 두 번 걸지 않는다(React 가 상태 함수를 두 번 부르는 경우)
+    dropTimersRef.current.add(id);
+    // 화주사 수정요청/기사취소요청은 승인이 필요한 중요 건이라 놓치지 않도록 더 오래 유지한다.
+    const corner = type === "editRequest" || type === "cancelRequest";
+    // 🎨 2026-11-24 라이브 알림 — 마우스를 올려 두면 사라지지 않고 기다린다
+    const drop = () => {
+      if (toastHoverRef.current && !corner) { setTimeout(drop, 600); return; }
+      if (corner) { dropTimersRef.current.delete(id); setToasts((prev) => prev.filter(t => t.id !== id)); return; }
+      setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, leaving: true } : t)));
+      setTimeout(() => { dropTimersRef.current.delete(id); setToasts((prev) => prev.filter(t => t.id !== id)); }, 320);
+    };
+    setTimeout(drop, corner ? 8000 : 4000);
+  };
+  // 기다리던 알림 차례 — 배차 완료 알림이 다 사라졌으면(그리고 기다릴 시간이 지났으면) 흐린 상태에서 나타나게 한다
+  React.useEffect(() => {
+    const pend = toasts.filter((t) => t.pending);
+    if (!pend.length || toasts.some((t) => t.type === "dispatch")) return undefined;
+    const tm = setTimeout(() => {
+      pend.forEach((t) => startDrop(t.id, t.type));
+      setToasts((prev) => prev.map((t) => (t.pending ? { ...t, pending: false, fadeIn: true, createdAt: Date.now() } : t)));
+    }, Math.max(0, ...pend.map((t) => (t.holdUntil || 0) - Date.now())));
+    return () => clearTimeout(tm);
+  }, [toasts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const showToast = (message, type = "success", meta = null) => {
     const id = crypto.randomUUID();
@@ -6887,17 +6914,15 @@ function ToastProvider({ children }) {
         (meta?.orderId ? t.meta?.orderId === meta.orderId : true)
       );
       if (isDuplicate) return prev;
+      // 🎬 2026-11-25 배차하고 [수정 저장]하면 알림 두 개가 한꺼번에 뜨던 것 → 차례로(사용자 요청)
+      //  "배차 완료"가 먼저 뜨고 흐려지며 사라진 뒤, 같은 자리에 "오더 수정 완료"가 흐린 상태에서 진하게 나타난다.
+      //  · 배차 완료 알림이 떠 있는 동안 들어온 완료 알림(success)은 기다린다(pending)
+      //  · meta.afterDispatch(방금 저장으로 배차가 된 경우) — 배차 완료 알림이 조금 늦게 와도 그 뒤에 서도록 잠깐(1.5초까지) 기다린다
+      const wait = type === "success" && (meta?.afterDispatch || prev.some((t) => t.type === "dispatch"));
+      if (wait) return [...prev, { id, message, type, meta, createdAt: Date.now(), pending: true, holdUntil: Date.now() + (meta?.afterDispatch ? 1500 : 0) }];
+      startDrop(id, type);
       return [...prev, { id, message, type, meta, createdAt: Date.now() }];
     });
-
-    // 화주사 수정요청/기사취소요청은 승인이 필요한 중요 건이라 놓치지 않도록 더 오래 유지한다.
-    const duration = (type === "editRequest" || type === "cancelRequest") ? 8000 : 4000;
-    // 🎨 2026-11-24 라이브 알림 — 마우스를 올려 두면 사라지지 않고 기다린다
-    const drop = () => {
-      if (toastHoverRef.current && type !== "editRequest" && type !== "cancelRequest") { setTimeout(drop, 600); return; }
-      setToasts((prev) => prev.filter(t => t.id !== id));
-    };
-    setTimeout(drop, duration);
     // 새로 바뀐 오더 줄은 2초 동안 은은하게 표시
     if (meta?.orderId) setTimeout(() => {
       const el = document.getElementById(`row-${meta.orderId}`);
@@ -7005,7 +7030,7 @@ function ToastProvider({ children }) {
         };
         const hm = (ms) => new Date(ms || Date.now()).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
         const keep = (e) => e.preventDefault(); // 눌러도 입력칸 포커스를 빼앗지 않는다
-        const list = toasts.filter(t => t.type !== "editRequest" && t.type !== "cancelRequest");
+        const list = toasts.filter(t => t.type !== "editRequest" && t.type !== "cancelRequest" && !t.pending); // 차례를 기다리는 알림은 아직 안 보인다
         const groups = [];
         list.forEach((t) => { const g = groups.find((x) => x.type === t.type); if (g) g.items.push(t); else groups.push({ type: t.type, items: [t] }); });
         if (!groups.length) return null;
@@ -7022,6 +7047,10 @@ function ToastProvider({ children }) {
               @keyframes kpLiveBar{from{transform:scaleX(1)}to{transform:scaleX(0)}}
               @keyframes kpLiveNum{0%{transform:translateY(6px);opacity:.2}100%{transform:none;opacity:1}}
               .kp-live-pill{animation:kpLiveIn .38s cubic-bezier(.2,.8,.2,1) both}
+              @keyframes kpLiveFade{from{opacity:0}to{opacity:1}}
+              @keyframes kpLiveOut{from{opacity:1}to{opacity:0}}
+              .kp-live-pill.kp-live-fade{animation:kpLiveFade .5s ease-out both}
+              .kp-live-pill.kp-live-out{animation:kpLiveOut .32s ease-in both;pointer-events:none}
               .kp-live-pill:after{content:"";position:absolute;top:0;bottom:0;width:90px;left:0;background:linear-gradient(100deg,transparent,rgba(255,255,255,.12),transparent);animation:kpLiveSweep 1.1s ease-out .25s 1 both;pointer-events:none}
               .kp-live:hover .kp-live-bar{animation-play-state:paused}
               @keyframes kpRowNew{0%{background:rgba(47,191,143,.16)}100%{background:transparent}}
@@ -7037,7 +7066,7 @@ function ToastProvider({ children }) {
               const close = (e) => { e.stopPropagation(); g.items.forEach((t) => removeToast(t.id)); };
               return (
                 <div key={g.type} role="status" aria-live="polite" onMouseDown={keep} data-kp-sftoast={g.type}
-                  className="kp-live-pill pointer-events-auto relative overflow-hidden rounded-[22px] text-white max-w-full flex items-center gap-3 pl-3 pr-2 py-2.5 border border-white/[0.07] shadow-[0_18px_44px_rgba(11,20,40,.38)]"
+                  className={`kp-live-pill ${g.items.every((t) => t.leaving) ? "kp-live-out" : n === 1 && latest.fadeIn ? "kp-live-fade" : ""} pointer-events-auto relative overflow-hidden rounded-[22px] text-white max-w-full flex items-center gap-3 pl-3 pr-2 py-2.5 border border-white/[0.07] shadow-[0_18px_44px_rgba(11,20,40,.38)]`}
                   style={{ background: "linear-gradient(120deg,rgba(11,20,40,.97),rgba(23,36,64,.97))", backdropFilter: "blur(6px)" }}>
                   <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: ui.c }} />
                   <span className="w-10 h-10 rounded-[14px] grid place-items-center shrink-0" style={{ background: `${ui.c}29` }}>
@@ -29901,7 +29930,11 @@ const head = isDark
     delete payload.톤수타입;
 
 const savedId = copyTarget._id;
-    sflowToast("오더 수정 완료", "success"); // ★ 확인 버튼을 눌러야 닫히던 창 → 오른쪽 위 알림(바로 다음 작업 가능)
+    { // 🎬 2026-11-25 이번 저장으로 배차가 됐으면(차량번호가 새로 들어감) "배차 완료" 알림 뒤에 이어서 뜨게 한다
+      const _o = (rows || []).find((r) => r._id === copyTarget._id) || (dispatchData || []).find((r) => r._id === copyTarget._id);
+      const _np = normalizePlate(copyTarget.차량번호 || "");
+      sflowToast("오더 수정 완료", "success", _np && _np !== normalizePlate(_o?.차량번호 || "") ? { afterDispatch: true } : null);
+    }
     setCopyPanelOpen(false);
     // ⭐ 일마감 검증에서 열었던 수정이면, 방금 고친 내용이 반영되도록 검증을
     // 자동으로 다시 계산한다(오류/경고 + 24시콜 비교결과 모두).
@@ -36287,25 +36320,30 @@ if (mode === "driver") {
 
   // 대용량 업로드 엑셀 양식(첫 줄 = 열 이름, 둘째 줄 = 예시)
   const [bulkChooserOpen, setBulkChooserOpen] = useState(false);
-  const BULK_COLS0 = ["상차일", "상차시간", "하차일", "하차시간", "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소", "화물내용", "차량종류", "차량톤수", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "지급방식", "배차방식", "메모"];
+  const BULK_COLS0 = ["상차일", "상차시간", "하차일", "하차시간", "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소", "화물내용", "차량종류", "차량톤수", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "지급방식", "배차방식", "메모", "회전", "회전방식"]; // 📥 2026-11-25 회전 · 회전방식(같은 날 같은 노선 N회 — 비우면 보통 오더)
   // ⭐ 2026-11-02 운임규칙 — 규칙 사용 회사는 양식에 "운임구분" 열(비우면 예전처럼)
   const BULK_COLS = fareOn ? [...BULK_COLS0, "운임구분"] : BULK_COLS0;
   const downloadBulkTemplate = () => {
     const today = new Date(); const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const t1 = new Date(today.getTime() + 86400000);
     const samples = [
-      [ymd(t1), "오전 9시", ymd(t1), "오후 3시 30분", "동원F&B", "동원F&B 이천센터", "경기 이천시 마장면 100", "CJ 대구센터", "대구 달서구 성서로 10", "16파레트", "윙바디", "11톤", "경기12가3456", "김기사", "010-1234-5678", 450000, 400000, "계산서", "24시", ""],
-      [ymd(t1), "오후 2시", ymd(t1), "오후 6시", "오뚜기", "오뚜기 평택공장", "경기 평택시 포승읍 1", "이마트 광주센터", "광주 광산구 하남산단 5", "8파레트", "카고", "5톤", "", "", "", 320000, 280000, "착불", "직접배차", ""],
+      [ymd(t1), "오전 9시", ymd(t1), "오후 3시 30분", "동원F&B", "동원F&B 이천센터", "경기 이천시 마장면 100", "CJ 대구센터", "대구 달서구 성서로 10", "16파레트", "윙바디", "11톤", "경기12가3456", "김기사", "010-1234-5678", 450000, 400000, "계산서", "24시", "", "", ""],
+      [ymd(t1), "오후 2시", ymd(t1), "오후 6시", "오뚜기", "오뚜기 평택공장", "경기 평택시 포승읍 1", "이마트 광주센터", "광주 광산구 하남산단 5", "8파레트", "카고", "5톤", "", "", "", 320000, 280000, "착불", "직접배차", "", "", ""],
+      [ymd(t1), "", ymd(t1), "", "아이플로우", "안성", "", "화성", "", "", "", "", "", "", "", 160000, 0, "계산서", "", "", 3, ""], // 회전 3 → 이 날짜에 오더 3건(1/3 · 2/3 · 3/3회차)
     ];
     const ws = XLSX.utils.aoa_to_sheet([BULK_COLS, ...(fareOn ? samples.map((x) => [...x, ""]) : samples)]);
     ws["!cols"] = BULK_COLS.map((c) => ({ wch: c === "메모" ? 40 : c.includes("주소") ? 26 : Math.max(11, c.length * 2 + 4) }));
     const guide = XLSX.utils.aoa_to_sheet([
       ["항목", "작성 방법"],
-      ["예시 2줄", "예시 줄은 지우고 실제 오더를 한 줄에 하나씩 입력하세요."],
+      ["예시 3줄", "예시 줄은 지우고 실제 오더를 한 줄에 하나씩 입력하세요."],
       ["상차일 · 하차일", "2026-11-03 처럼 입력 (엑셀 날짜 형식도 가능)"],
       ["상차시간 · 하차시간", "오전 9시, 오후 3시 30분 처럼 입력 (09:00 으로 써도 자동 변환)"],
       ["차량번호 · 기사명 · 전화번호", "입력하면 '배차완료', 비워두면 '배차중'으로 등록됩니다. 등록된 기사의 차량번호만 써도 기사명·전화번호가 자동으로 채워집니다."],
       ["청구운임 · 기사운임", "숫자만 입력 (수수료는 자동 계산)"],
+      ["회전", `같은 날 같은 노선을 여러 번 돌면 횟수를 숫자로(예: 3). 그 날짜에 오더가 3건 등록되고 1/3 · 2/3 · 3/3회차로 표시돼요. 비우면 보통 오더(1건)예요. 최대 ${ROTATION_MAX}`],
+      ["회전방식", "비우면 '나누기'(회전 수만큼 오더가 생김). '묶기'라고 쓰면 오더 1건에 '3회전'으로 표시돼요"],
+      ["회전 오더의 운임", "청구운임 · 기사운임은 1회 단가를 적어요. 나누기는 건마다 그 금액, 묶기는 회전 수를 곱한 합계로 들어가요"],
+      ["하차일", "비우면 상차일과 같은 날로 들어가요"],
       ...(fareOn ? [["운임구분", `회사관리 › 운임 규칙 이름(${fareR.rules.map((x) => x.name).filter(Boolean).join(", ") || "예: 일대"}). 기사운임을 비우면 규칙대로 자동 계산해요`]] : []),
       ["열 이름", "첫 줄(열 이름)은 바꾸지 마세요. 기사명 대신 '이름'이라고 써도 인식합니다."],
     ]);
@@ -36336,13 +36374,13 @@ if (mode === "driver") {
       const ws = workbook.Sheets[sheetName];
       const json = XLSX.utils.sheet_to_json(ws, { defval: "" });
 
-      const mapped = json.filter((row) => ["상차일", "상차지명", "하차지명", "거래처명"].some((k) => String(row[k] || "").trim())).map((row) => {
+      let mapped = json.filter((row) => ["상차일", "상차지명", "하차지명", "거래처명"].some((k) => String(row[k] || "").trim())).map((row) => {
         const mappedRow = {
           _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`,
           등록일: excelDateToISO(row["상차일"]) || new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10),
           상차일: excelDateToISO(row["상차일"]),
           상차시간: bulkTime(row["상차시간"]),
-          하차일: excelDateToISO(row["하차일"]),
+          하차일: excelDateToISO(row["하차일"]) || excelDateToISO(row["상차일"]), // 📥 2026-11-25 하차일을 비우면 상차일과 같은 날
           하차시간: bulkTime(row["하차시간"]),
           거래처명: row["거래처명"] || "",
           상차지명: row["상차지명"] || "",
@@ -36391,9 +36429,14 @@ if (mode === "driver") {
         }
         // 차량번호 + (기사명 또는 전화번호)가 있으면 배차완료, 없으면 배차중
         mappedRow.배차상태 = dispatchStatusOf({ 지급방식: mappedRow.지급방식, 차량번호: cleanCar }); // 🚚 2026-11-07 차량번호만 있어도 배차완료
+        mappedRow._rot = bulkRotationOf(row); // 📥 2026-11-25 회전 · 회전방식 열
 
         return mappedRow;
       });
+      // 📥 2026-11-25 회전 열 — 한 줄을 회전 수만큼 오더로 펼친다(나누기: N건 · 묶기: 1건에 합계 운임). 줄 수(lines)와 등록 건수(mapped)가 달라진다
+      const lines = mapped;
+      const rotLines = lines.filter((m) => m._rot.n > 1);
+      mapped = lines.flatMap(({ _rot, ...m }) => expandBulkRotation(m, _rot).map((x, i) => (i ? { ...x, _id: crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}` } : x)));
 
       if (!mapped.length) {
         showAlert("✕ 엑셀 데이터가 없습니다.");
@@ -36402,7 +36445,11 @@ if (mode === "driver") {
 
       const _dates = mapped.map((m) => m.상차일).filter(Boolean).sort();
       const _matched = mapped.filter((m) => m.배차상태 === "배차완료").length;
-      if (!(await kpConfirm(`${mapped.length}건을 업로드하시겠습니까?\n\n· 상차일: ${_dates.length ? `${_dates[0]} ~ ${_dates[_dates.length - 1]}` : "없음(오늘 날짜로 등록)"}\n· 배차완료 ${_matched}건 / 배차중 ${mapped.length - _matched}건\n· 청구운임 합계: ${mapped.reduce((a, m) => a + (m.청구운임 || 0), 0).toLocaleString()}원`))) return;
+      const _rotMsg = rotLines.length ? (() => {
+        const sp = rotLines.filter((m) => !m._rot.bundle), bd = rotLines.filter((m) => m._rot.bundle);
+        return `\n· 회전 운행 ${rotLines.length}줄${sp.length ? ` — 나누기 ${sp.length}줄 → ${sp.reduce((a, m) => a + m._rot.n, 0)}건` : ""}${bd.length ? ` · 묶기 ${bd.length}줄 → ${bd.length}건(운임은 회전 수만큼 곱함)` : ""}${rotLines.some((m) => m._rot.over) ? `\n· 회전이 ${ROTATION_MAX}을 넘는 줄은 ${ROTATION_MAX}회전으로 등록돼요` : ""}`;
+      })() : "";
+      if (!(await kpConfirm(`${lines.length === mapped.length ? `${mapped.length}건` : `엑셀 ${lines.length}줄 → 오더 ${mapped.length}건`}을 업로드하시겠습니까?\n\n· 상차일: ${_dates.length ? `${_dates[0]} ~ ${_dates[_dates.length - 1]}` : "없음(오늘 날짜로 등록)"}\n· 배차완료 ${_matched}건 / 배차중 ${mapped.length - _matched}건\n· 청구운임 합계: ${mapped.reduce((a, m) => a + (m.청구운임 || 0), 0).toLocaleString()}원${_rotMsg}`))) return;
 
       try {
         // ⭐ 새 오더는 addDispatch로 "생성"해야 한다 — 예전엔 patchDispatch(기존 문서 수정)를 써서
@@ -36414,7 +36461,7 @@ if (mode === "driver") {
           const r = await addDispatch({
             ...rec,
             차량톤수: toTonUnit(rec.차량톤수),
-            운행유형: "편도", 회전수: 1, 메모중요도: "일반", 긴급: false,
+            운행유형: rec.운행유형 === "왕복" ? "왕복" : "편도", 회전수: Number(rec.회전수) > 1 ? Number(rec.회전수) : 1, 메모중요도: "일반", 긴급: false, // 📥 2026-11-25 회전 열(회차 · 회차총수 · 회전묶음ID는 rec 에 들어 있다)
             업체전달상태: "미전달", 업체전달일시: null, 업체전달방법: null,
             등록기기: "PC(대용량)",
             // 대량 등록 중 휴차 확인 팝업이 건마다 뜨지 않게 미리 확인 처리
@@ -37817,6 +37864,8 @@ return (
           {bulkChooserOpen && (
             <BulkUploadChooser
               onClose={() => setBulkChooserOpen(false)}
+              templateTips={['시간은 "오전 9시", "오후 3시 30분"', "차량번호·기사명·전화번호 입력 시 배차완료", "같은 날 여러 번 도는 노선은 '회전' 칸에 횟수"]}
+              uploadTips={["빈 줄은 자동으로 건너뜀", "수수료(청구-기사운임) 자동 계산", "회전 3 → 그 날짜에 오더 3건(1/3 ~ 3/3회차)"]}
               onTemplate={() => { downloadBulkTemplate(); }}
               onFile={(e) => { setBulkChooserOpen(false); handleBulkFile(e); e.target.value = ""; }}
             />
@@ -39689,7 +39738,11 @@ return (
 
 // ✅ UI 먼저
     setCopyPanelOpen(false);
-    sflowToast("오더 수정 완료", "success"); // ★ 확인 버튼 없이 바로 다음 작업
+    { // 🎬 2026-11-25 이번 저장으로 배차가 됐으면 "배차 완료" 알림 뒤에 이어서 뜨게 한다
+      const _o = (dispatchData || []).find((r) => getId(r) === id);
+      const _np = normalizePlate(copyTarget.차량번호 || "");
+      sflowToast("오더 수정 완료", "success", _np && _np !== normalizePlate(_o?.차량번호 || "") ? { afterDispatch: true } : null);
+    }
     setEdited(prev => { const next = { ...prev }; delete next[id]; return next; });
     // ⭐ 일마감 검증에서 열었던 수정이면, 방금 고친 내용이 반영되도록 검증을
     // 자동으로 다시 계산한다(오류/경고 + 24시콜 비교결과 모두).

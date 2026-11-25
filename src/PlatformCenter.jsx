@@ -30,6 +30,7 @@ import CompanyResetPanel from "./CompanyResetPanel";
 const SecurityEventsPanel = React.lazy(() => import("./SecurityEventsPanel")); // 🛡 2026-11-09 보안 알림
 const ErrorReportsPanel = React.lazy(() => import("./ErrorReportsPanel")); // 🧯 2026-11-10 오류 신고([오류 보내기])
 const TestSeedPanel = React.lazy(() => import("./TestSeedPanel"));
+const GuideLibraryLazy = React.lazy(() => import("./adminCenter/GuideLibrary")); // 📚 2026-11-25 사용법 보관함
 const BrandStudioLazy = React.lazy(() => import("./BrandStudio")); // 🎨 2026-11-15 브랜드 디자인
 const MobilePreviewPanelLazy = React.lazy(() => import("./MobilePreviewFrame").then((m) => ({ default: m.MobilePreviewPanel }))); // 📱 2026-11-14 관리센터 › 운영 › 모바일 화면
 import ReleasePanel from "./ReleasePanel"; // 🚦 업데이트 배포 잠금
@@ -141,6 +142,7 @@ const SECTIONS = [
     it("notices", "공지 · 알림 문구", "BROADCAST", "bell"),
     it("brand", "브랜드 · 화면", "BRAND", "star"),
     it("integrations", "연동 설정", "INTEGRATIONS", "link"),
+    it("guides", "사용법 보관함", "GUIDE LIBRARY", "file"), // 📚 2026-11-25 업체에 보내는 사용법 이미지 모음
     it("mobilePreview", "점검 도구", "DEV TOOLS", "phone"),
   ] },
   { key: "security", label: "계정 · 보안", en: "ACCOUNTS & SECURITY", icon: "shield", items: [
@@ -1371,6 +1373,7 @@ function PlatformCenterInner({ user }) {
     {/* 🧹 2026-11-14 '화주사 강제 업데이트' — 2026-11-15 고급 설정 안으로 */}
     <div><div className="text-[14px] font-black mb-2" style={{ color: G.ink }}>화주사 화면 강제 업데이트</div><ShipperForceUpdatePanel currentVersion={typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : ""} /></div></ReleasePanel>
     <div className="mt-4"><React.Suspense fallback={null}><ForceUpdatePanelLazy /></React.Suspense></div></>;
+  else if (tab === "guides") body = <React.Suspense fallback={<AdmEmpty />}><GuideLibraryLazy /></React.Suspense>;
   else if (tab === "privateFare") body = <><Hero en="ACCESS · PRIVATE FARE" title="비공개 운임" desc="운송사와 사람을 골라 비공개 운임을 켜요. 켜진 사람의 임원 화면에 메뉴가 생기고, 비밀번호로 들어가요. 그 사람이 정한 금액은 최고관리자도 볼 수 없어요." /><React.Suspense fallback={<AdmEmpty />}><PrivateFareAdminLazy /></React.Suspense></>;
   else if (tab === "multiCo") body = <><Hero en="ACCESS · MULTI COMPANY" title="여러 회사 계정" desc="한 사람이 정해진 회사끼리 로그아웃 없이 오가며 쓰게 해요. 다른 회사에서는 통합관리자, 근태 · 급여 · 연차는 원래 소속 회사에만 남아요." /><React.Suspense fallback={null}><MultiCompanyPanelLazy /></React.Suspense></>;
   else if (tab === "subAdmin") body = <><Hero en="ACCESS · SUB ADMIN" title="부관리자" desc="최고관리자와 같은 권한을 가진 부관리자(1명)를 보고 지정 · 해제해요." /><SubAdminPanel /></>;
