@@ -70,6 +70,7 @@ export default function TransportLogin() {
   const [gate, setGate] = useState(null); // { user, authTime, sub }
   const gateRef = React.useRef(null);
   gateRef.current = gate;
+  const loginBusyRef = React.useRef(false);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
   useEffect(() => { warmAdminGate(); }, []); // ⚡ 2026-11-13 최고관리자 보안 확인(2차 비밀번호 · 문자)을 미리 준비
@@ -263,7 +264,10 @@ export default function TransportLogin() {
     // 🛠 2026-11-14 회사코드는 로그인 뒤 계정 확인에서 따진다 — 최고관리자 · 부관리자는 코드 없이(아무 운송사로나 들어간다),
     //  일반 계정은 "회사코드를 입력해주세요"로 막힌다(예전엔 최고관리자도 새 PC에서 코드부터 찾아야 했다)
     // ⭐ 2026-11-22 회사명은 로그인 뒤 확인 — 최고관리자 · 부관리자는 회사명 · 회사코드 없이 들어간다
-    if (!email.trim() || !pw.trim()) return setError("이메일과 비밀번호를 입력해주세요.");
+    if (!email.trim() || !pw.trim()) return setError("이메일과 비밀번호를 입력해 주세요.");
+    if (loginBusyRef.current) return; // 🛠 2026-11-24 Enter · 버튼을 빠르게 두 번 눌러 로그인이 두 번 돌지 않게
+    loginBusyRef.current = true;
+    let signedInHere = false; // 비밀번호는 맞았는데 그 뒤 확인(계정 문서 읽기 등)이 실패했는지
 
     try {
       setLoading(true);
@@ -290,6 +294,7 @@ export default function TransportLogin() {
         }
         credential = await signInMfa(auth);
       }
+      signedInHere = true;
       const uid = credential.user.uid;
       const inputEmail = email.trim().toLowerCase();
       let inputCompanyName = companyName.trim();
@@ -304,7 +309,7 @@ export default function TransportLogin() {
           await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("transportValidating");
           window.__kpGateInline = false;
-          setError("등록된 계정 정보가 없습니다.");
+          setError("등록된 계정 정보가 없어요. 가입한 이메일인지 확인해 주세요.");
           return;
         }
 
@@ -317,7 +322,7 @@ export default function TransportLogin() {
           await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("transportValidating");
           window.__kpGateInline = false;
-          setError(`운송사 계정이 아닙니다. ${OTHER_LOGIN[userData.role]} 화면에서 로그인해주세요.`);
+          setError(`운송사 계정이 아니에요. ${OTHER_LOGIN[userData.role]} 화면에서 로그인해 주세요.`);
           return;
         }
 
@@ -329,7 +334,7 @@ export default function TransportLogin() {
           await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("transportValidating");
           window.__kpGateInline = false;
-          setError("회사명을 입력해주세요. [조회]를 누르면 찾을 수 있어요.");
+          setError("회사명을 입력해 주세요. [조회]를 누르면 찾을 수 있어요.");
           return;
         }
         if (isSubAdmin && !inputCompanyName) inputCompanyName = localStorage.getItem("loginCompany") || "";
@@ -339,7 +344,7 @@ export default function TransportLogin() {
           await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("transportValidating");
           window.__kpGateInline = false;
-          setError("회사명이 일치하지 않습니다. 가입한 회사명을 정확히 입력해주세요.");
+          setError("회사명이 맞지 않아요. 가입한 회사명을 정확히 입력해 주세요.");
           return;
         }
 
@@ -350,7 +355,7 @@ export default function TransportLogin() {
             await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
             sessionStorage.removeItem("transportValidating");
             window.__kpGateInline = false;
-            setError("계약이 종료되었습니다. 관리자에게 문의해 주세요.");
+            setError("이용 계약이 끝난 회사예요. 관리자에게 문의해 주세요.");
             return;
           }
         }
@@ -359,7 +364,7 @@ export default function TransportLogin() {
           await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("transportValidating");
           window.__kpGateInline = false;
-          setError("영구 정지된 계정입니다. 관리자에게 문의하세요.");
+          setError("영구 정지된 계정이에요. 관리자에게 문의해 주세요.");
           return;
         }
 
@@ -367,7 +372,7 @@ export default function TransportLogin() {
           await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("transportValidating");
           window.__kpGateInline = false;
-          setError("사용 정지된 계정입니다. 관리자에게 문의하세요.");
+          setError("사용 정지된 계정이에요. 관리자에게 문의해 주세요.");
           return;
         }
 
@@ -376,7 +381,7 @@ export default function TransportLogin() {
           sessionStorage.removeItem("transportValidating");
           window.__kpGateInline = false;
           setPreviewInfo({ co: userData.companyName || "", plan: userData.requestedPlan || "" });
-          setError("관리자 승인 대기 중입니다. 승인 후 로그인이 가능합니다.");
+          setError("관리자 승인을 기다리고 있어요. 승인되면 로그인할 수 있어요.");
           return;
         }
 
@@ -402,14 +407,14 @@ export default function TransportLogin() {
             await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
             sessionStorage.removeItem("transportValidating");
             window.__kpGateInline = false;
-            setError("회사코드를 입력해주세요. 코드는 가입 승인 시 이메일로 안내받으셨습니다.");
+            setError("회사코드를 입력해 주세요. 코드는 가입 승인 때 받은 이메일에 있어요.");
             return;
           }
           if (!okCodes.includes(inputCompanyCode)) {
             await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
             sessionStorage.removeItem("transportValidating");
             window.__kpGateInline = false;
-            setError("회사코드가 일치하지 않습니다. 승인 안내 이메일을 확인해주세요.");
+            setError("회사코드가 맞지 않아요. 승인 안내 이메일을 확인해 주세요.");
             return;
           }
         }
@@ -470,42 +475,46 @@ export default function TransportLogin() {
       // Validation done — switch from validation semaphore to popup semaphore
       finishLogin();
     } catch (err) {
+      // 🛠 2026-11-24 확인 도중 실패(통신 끊김 · 권한 오류)면 로그인도 되돌린다 — 예전엔 로그인된 채 남아 회사명 · 회사코드 확인 없이 앱이 열렸다
+      //  (로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 새로 고쳐 안내가 사라진다)
+      if (signedInHere && auth.currentUser) await signOut(auth).catch(() => {});
       window.__kpGateInline = false;
       sessionStorage.removeItem("transportValidating");
       const code = err.code;
       if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
-        setError("비밀번호가 일치하지 않습니다.");
+        setError("이메일 또는 비밀번호가 맞지 않아요. 다시 확인해 주세요.");
       } else if (code === "mfa/cancelled" || code === "auth/invalid-verification-code" || code === "auth/code-expired" || code === "auth/operation-not-allowed") {
         setError(mfaErrorText(err));
       } else if (code === "auth/user-not-found") {
-        setError("등록된 이메일이 없습니다.");
+        setError("가입된 이메일이 아니에요. 이메일을 다시 확인해 주세요.");
       } else if (code === "auth/too-many-requests") {
-        setError("로그인 시도가 너무 많아 잠시 잠겼습니다. 몇 분 뒤 다시 시도하거나 '비밀번호 찾기'로 재설정해주세요.");
+        setError("로그인 시도가 너무 많아 잠시 잠겼어요. 몇 분 뒤 다시 시도하거나 [비밀번호 찾기]로 새로 정해 주세요.");
       } else if (code === "auth/network-request-failed") {
-        setError("인터넷 연결이 불안정해 로그인하지 못했습니다. 잠시 후 다시 시도해주세요.");
+        setError("인터넷 연결이 불안정해 로그인하지 못했어요. 잠시 뒤 다시 시도해 주세요.");
       } else if (code === "auth/user-disabled") {
-        setError("사용이 중지된 계정입니다. 관리자에게 문의하세요.");
+        setError("사용이 중지된 계정이에요. 관리자에게 문의해 주세요.");
       } else if (code === "auth/invalid-email") {
-        setError("이메일 형식이 올바르지 않습니다.");
+        setError("이메일 형식이 올바르지 않아요.");
       } else {
         // 원인 파악용으로 오류 코드를 같이 보여준다
         console.error("[로그인 실패]", err);
-        setError(`로그인에 실패했습니다. 입력 정보를 확인해주세요. (${code || err?.message || "unknown"})`);
+        setError(`로그인하지 못했어요. 입력한 정보를 확인해 주세요. (${code || err?.message || "unknown"})`);
       }
     } finally {
+      loginBusyRef.current = false;
       setLoading(false);
     }
   };
 
   // 이메일 재설정 링크(휴대폰 번호가 바뀐 사람용 — 문자 인증 창 아래 작은 글씨)
   const resetPw = async (em = email) => {
-    if (!String(em || "").trim()) return setError("이메일을 먼저 입력해주세요.");
+    if (!String(em || "").trim()) return setError("이메일을 먼저 입력해 주세요.");
     try {
       await sendPasswordResetEmail(auth, String(em).trim());
-      setMsg("재설정 링크를 이메일로 발송했습니다.");
+      setMsg("비밀번호 재설정 링크를 이메일로 보냈어요.");
       setError(null);
     } catch {
-      setError("해당 이메일을 찾을 수 없습니다.");
+      setError("가입된 이메일을 찾지 못했어요.");
     }
   };
 
@@ -597,7 +606,7 @@ export default function TransportLogin() {
           <div className="bg-white rounded-[26px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_24px_60px_rgba(15,26,48,0.10)] px-5 sm:px-10 pt-6 sm:pt-9 pb-6 sm:pb-8">
             <div className="text-[11.5px] font-extrabold tracking-[0.28em] text-[#4B6CB7]">TRANSPORT SIGN IN</div>
             <h1 className="mt-1 text-[22px] sm:text-[26px] font-black text-[#0F1A30] tracking-tight">운송사 로그인</h1>
-            <p className="text-[12.5px] sm:text-[13.5px] text-[#7A879C] mt-1 mb-5 sm:mb-7">{gate ? (gate.general ? "2차 인증을 켠 계정입니다 — 한 번 더 확인합니다" : `${gate.sub ? "부관리자" : "최고관리자"} 계정 — 2차 비밀번호를 넣어 주세요`) : "승인 메일로 받은 회사코드로 로그인하세요"}</p>
+            <p className="text-[12.5px] sm:text-[13.5px] text-[#7A879C] mt-1 mb-5 sm:mb-7">{gate ? (gate.general ? "2차 인증을 켠 계정입니다. 한 번 더 확인합니다" : `${gate.sub ? "부관리자" : "최고관리자"} 계정: 2차 비밀번호를 넣어 주세요`) : "승인 메일로 받은 회사코드로 로그인하세요"}</p>
 
             {gate ? (
               <div data-login-gate>

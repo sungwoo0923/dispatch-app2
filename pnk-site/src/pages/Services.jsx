@@ -26,7 +26,7 @@ export default function Services() {
 
   return (
     <div>
-      <Hero en="Service status" title="서비스 현황" desc={issues.length ? `확인이 필요한 서비스 ${issues.length}개 — ${issues.map((s) => s.label).join(", ")}` : "모든 서비스가 정상입니다."}>
+      <Hero en="Service status" title="서비스 현황" desc={issues.length ? `확인이 필요한 서비스가 ${issues.length}개 있습니다: ${issues.map((s) => s.label).join(", ")}` : "모든 서비스가 정상입니다."}>
         <HeroBtn icon="plus" onClick={() => setRelEdit({})}>업데이트 기록</HeroBtn>
       </Hero>
 

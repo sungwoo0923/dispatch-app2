@@ -198,7 +198,7 @@ export function RemoteSupportHost({ user, profile, company = "", mobile = false 
   // ⭐ 2026-11-05 원격 지원 걸기 — preStream: [수락] 클릭 순간에 미리 받아 둔 화면(브라우저는 클릭 직후에만 공유 창을 연다)
   const startShare = async (req, preStream = null) => {
     setErr("");
-    if (!preStream && !canShareScreen()) { setErr(isPhoneUA() ? "휴대폰 브라우저는 화면 공유를 지원하지 않습니다 — PC에서 화면 공유가 가능합니다. 관리자가 전화하거나 원격 프로그램 방식으로 바꿔 드립니다." : "이 브라우저는 화면 공유를 지원하지 않습니다(크롬·엣지 최신 버전 권장)."); return; }
+    if (!preStream && !canShareScreen()) { setErr(isPhoneUA() ? "휴대폰 브라우저는 화면 공유를 지원하지 않습니다. PC에서 화면 공유가 가능합니다. 관리자가 전화하거나 원격 프로그램 방식으로 바꿔 드립니다." : "이 브라우저는 화면 공유를 지원하지 않습니다(크롬·엣지 최신 버전 권장)."); return; }
     if (shareRef.current.pc) { preStream?.getTracks().forEach((t) => t.stop()); return; }
     setShareState("starting");
     let stream = preStream;
@@ -206,7 +206,7 @@ export function RemoteSupportHost({ user, profile, company = "", mobile = false 
     catch (e) {
       setShareState("");
       setErr(e?.name === "NotAllowedError" ? "화면 공유가 취소되었습니다."
-        : (e?.name === "NotSupportedError" || isPhoneUA()) ? "이 기기에서는 화면 공유를 지원하지 않습니다 — PC에서 화면 공유가 가능합니다. 관리자가 전화하거나 원격 프로그램 방식으로 바꿔 드립니다."
+        : (e?.name === "NotSupportedError" || isPhoneUA()) ? "이 기기에서는 화면 공유를 지원하지 않습니다. PC에서 화면 공유가 가능합니다. 관리자가 전화하거나 원격 프로그램 방식으로 바꿔 드립니다."
         : `화면 공유를 시작하지 못했습니다 (${e?.name || e?.message || "오류"})`);
       return;
     }
@@ -224,7 +224,7 @@ export function RemoteSupportHost({ user, profile, company = "", mobile = false 
       dc.onopen = () => sendToAdmin({ t: "vp", ...viewportInfo() });
       const early = []; let ready = false;
       pc.onicecandidate = (e) => { if (!e.candidate) return; const c = e.candidate.toJSON(); if (ready) addDoc(collection(sref, "callerCandidates"), c).catch(() => {}); else early.push(c); };
-      pc.onconnectionstatechange = () => { if (pc.connectionState === "connected") setShareState("connected"); if (pc.connectionState === "failed") setErr("연결이 끊겼습니다 — 회사 네트워크에 따라 화면 공유가 막힐 수 있습니다. 원격 프로그램으로 진행해 주세요."); };
+      pc.onconnectionstatechange = () => { if (pc.connectionState === "connected") setShareState("connected"); if (pc.connectionState === "failed") setErr("연결이 끊겼습니다. 회사 네트워크에 따라 화면 공유가 막힐 수 있습니다. 원격 프로그램으로 진행해 주세요."); };
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       const { surface, self } = describeSurface(track);
@@ -262,7 +262,7 @@ export function RemoteSupportHost({ user, profile, company = "", mobile = false 
     let stream = null;
     if (mode === "screen" && canShareScreen() && !isPhoneUA()) {
       try { stream = await getShareStream(); }
-      catch (e) { setInviteBusy(false); setErr(e?.name === "NotAllowedError" ? "화면 공유 창을 닫으셨습니다 — 다시 [수락]을 누르면 공유할 화면을 고를 수 있습니다." : `화면 공유를 시작하지 못했습니다 (${e?.name || e?.message || "오류"})`); return; }
+      catch (e) { setInviteBusy(false); setErr(e?.name === "NotAllowedError" ? "화면 공유 창을 닫으셨습니다. 다시 [수락]을 누르면 공유할 화면을 고를 수 있습니다." : `화면 공유를 시작하지 못했습니다 (${e?.name || e?.message || "오류"})`); return; }
     }
     try {
       await updateDoc(doc(db, "supportRequests", invite.id), { status: "approved", respondedAt: serverTimestamp(), updatedAt: serverTimestamp() });
@@ -417,7 +417,7 @@ export function RemoteSupportHost({ user, profile, company = "", mobile = false 
               <button type="button" onClick={() => setOpen(true)} className="flex-1 min-w-0 text-left">
                 <div className="text-[11.5px] font-extrabold tracking-[0.2em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>REMOTE SUPPORT</div>
                 <div className="text-[15px] font-black truncate">
-                  {sharingNow ? (ctrlLive ? "관리자가 화면을 제어하고 있어요" : shareState === "connected" ? "화면 공유 중 · 관리자가 보고 있습니다" : "화면 공유 대기 · 관리자 연결 중") : dockReq.status === "pending" ? "원격 지원 요청 · 승인 대기 중" : dockReq.status === "approved" ? "승인됨 — 눌러서 시작하기" : dockReq.status === "in_session" ? "원격 지원 진행 중" : "요청이 거절되었습니다"}
+                  {sharingNow ? (ctrlLive ? "관리자가 화면을 제어하고 있어요" : shareState === "connected" ? "화면 공유 중 · 관리자가 보고 있습니다" : "화면 공유 대기 · 관리자 연결 중") : dockReq.status === "pending" ? "원격 지원 요청 · 승인 대기 중" : dockReq.status === "approved" ? "승인됨: 눌러서 시작하기" : dockReq.status === "in_session" ? "원격 지원 진행 중" : "요청이 거절되었습니다"}
                 </div>
               </button>
               {sharingNow ? (
@@ -505,7 +505,7 @@ function InviteConsent({ req, busy, err, mobile, onAccept, onDecline }) {
                 ? <>[수락]을 누르면 공유할 화면을 고르는 창이 뜹니다. <b className="text-[#0F1A30]">이 탭</b>(LogisWeb)을 고르면 됩니다. 관리자가 화면 제어를 요청해도 <b className="text-[#0F1A30]">[제어 허용]</b>을 눌러야만 대신 눌러 드릴 수 있고, 언제든 [공유 종료]로 끝낼 수 있습니다.</>
                 : <>[수락]을 누르면 원격 프로그램(AnyDesk 등) 안내가 열립니다. 원격 번호를 보내 주시면 관리자가 접속합니다.</>}
             </div>
-            {mode === "screen" && phone && <div className="text-[13px] text-[#5B6B85]">휴대폰에서는 화면 공유가 어려울 수 있습니다 — PC에서 화면 공유가 가능합니다.</div>}
+            {mode === "screen" && phone && <div className="text-[13px] text-[#5B6B85]">휴대폰에서는 화면 공유가 어려울 수 있습니다. PC에서 화면 공유가 가능합니다.</div>}
           </div>
           <div className="grid grid-cols-[1fr_1.6fr] gap-2">
             <button type="button" onClick={onDecline} disabled={busy} data-testid="support-invite-decline" className="h-12 rounded-xl border-[1.5px] border-[#C3CEDF] bg-white text-[#3A4A66] text-[15.5px] font-black disabled:opacity-60">거절</button>
@@ -603,7 +603,7 @@ function RequesterModal({ uid, user, profile, company, mobile, active, latest, h
                       </button>
                     ))}
                   </div>
-                  {method === "screen" && (mobile || isPhoneUA()) && <div className="text-[13px] text-[#5B6B85] mt-2">휴대폰에서는 화면 공유가 어려울 수 있습니다 — PC에서 화면 공유가 가능합니다.</div>}
+                  {method === "screen" && (mobile || isPhoneUA()) && <div className="text-[13px] text-[#5B6B85] mt-2">휴대폰에서는 화면 공유가 어려울 수 있습니다. PC에서 화면 공유가 가능합니다.</div>}
                 </div>
                 <button type="button" onClick={submit} disabled={busy} data-testid="support-submit"
                   className="w-full h-12 rounded-xl text-white text-[16px] font-black disabled:opacity-60" style={{ background: "linear-gradient(90deg,#0F1A30,#2D4C82)" }}>{busy ? "보내는 중…" : "원격 지원 요청 보내기"}</button>
@@ -628,7 +628,7 @@ function RequesterModal({ uid, user, profile, company, mobile, active, latest, h
               {/* 세션 A — 화면 공유 */}
               {["approved", "in_session"].includes(active.status) && mode === "screen" && (
                 <div className="rounded-2xl p-4 text-white space-y-3" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 65%,#2D4C82)" }}>
-                  <div className="text-[16px] font-black">{sharing ? (shareState === "connected" ? "화면 공유 중 — 관리자가 보고 있습니다" : "관리자 연결을 기다리는 중…") : "승인되었습니다 — 화면을 공유해 주세요"}</div>
+                  <div className="text-[16px] font-black">{sharing ? (shareState === "connected" ? "화면 공유 중: 관리자가 보고 있습니다" : "관리자 연결을 기다리는 중…") : "승인되었습니다. 화면을 공유해 주세요"}</div>
                   <div className="text-[13.5px] text-white/70 leading-relaxed">공유 창에서 <b className="text-white">이 탭</b>(LogisWeb)을 골라 주세요. 관리자가 화면 제어를 요청하면 [제어 허용]을 눌러야만 대신 눌러 드릴 수 있어요.</div>
                   {!sharing ? (
                     <button type="button" onClick={() => startShare(active)} disabled={shareState === "starting"} data-testid="support-share-start"
@@ -655,7 +655,7 @@ function RequesterModal({ uid, user, profile, company, mobile, active, latest, h
                     <button type="button" onClick={sendNo} disabled={!remoteNo.trim() || remoteNo.trim() === (active.anydeskId || "")} data-testid="support-remote-send"
                       className="shrink-0 h-12 px-4 rounded-xl bg-[#1B2B4B] text-white text-[15px] font-black whitespace-nowrap disabled:opacity-50">{active.anydeskId && remoteNo.trim() === active.anydeskId ? "보냄 ✓" : "번호 보내기"}</button>
                   </div>
-                  {active.anydeskId && <div className="text-[13.5px] text-[#2D4C82] font-bold">관리자에게 번호를 보냈습니다 — 접속 요청 창이 뜨면 [수락]을 눌러 주세요.</div>}
+                  {active.anydeskId && <div className="text-[13.5px] text-[#2D4C82] font-bold">관리자에게 번호를 보냈습니다. 접속 요청 창이 뜨면 [수락]을 눌러 주세요.</div>}
                 </div>
               )}
               {active.sessionId && <SupportChat sessionId={active.sessionId} me="requester" myName={active.name} height={170} />}
@@ -822,7 +822,7 @@ function MasterViewer({ sessionId, onEnd }) {
             <div className="text-center text-white/80">
               <div className={`mx-auto w-12 h-12 rounded-full border-[3px] border-white/20 ${state === "connecting" ? "border-t-[#8FB0F0] animate-spin" : ""}`} />
               <div className="text-[15px] font-black mt-3">{stLabel}</div>
-              {state === "failed" && <div className="text-[13px] text-white/55 mt-1 px-6">회사망(NAT·방화벽)에 막혔을 수 있습니다 — 원격 프로그램으로 진행해 주세요.</div>}
+              {state === "failed" && <div className="text-[13px] text-white/55 mt-1 px-6">회사망(NAT·방화벽)에 막혔을 수 있습니다. 원격 프로그램으로 진행해 주세요.</div>}
             </div>
           </div>
         )}
@@ -958,7 +958,7 @@ function InviteBox({ me, busyUids, onSent }) {
             </div>
             <textarea value={msg} onChange={(e) => setMsg(e.target.value)} rows={2} placeholder="직원에게 보일 말 (예: 정산 화면 설정을 같이 봐 드릴게요)" data-testid="support-invite-text"
               className="w-full px-3 py-2.5 rounded-xl border border-[#DCE3EE] bg-[#FAFBFD] text-[14.5px] outline-none focus:border-[#2D4C82] resize-none" />
-            {!target.now && <div className="text-[12.5px] text-[#5B6B85]">지금 접속 중이 아닙니다 — 다음에 프로그램을 열면 동의 창이 뜹니다.</div>}
+            {!target.now && <div className="text-[12.5px] text-[#5B6B85]">지금 접속 중이 아닙니다. 다음에 프로그램을 열면 동의 창이 뜹니다.</div>}
           </>
         )}
         {err && <div className="text-[13.5px] font-bold text-[#1B2B4B]" data-testid="support-invite-box-err">{err}</div>}
@@ -1092,7 +1092,7 @@ export function RemoteSupportAdminPanel({ me }) {
                           <span className="text-[26px] font-black text-[#0F1A30] tracking-wider" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }} data-testid="support-anydesk">{sel.anydeskId}</span>
                           <button type="button" onClick={() => copy(sel.anydeskId)} className="h-9 px-3.5 rounded-lg bg-[#1B2B4B] text-white text-[13.5px] font-black">{copied ? "복사됨 ✓" : "복사"}</button>
                         </div>
-                      ) : <div className="text-[14.5px] text-[#7A879C] mt-1">아직 번호를 보내지 않았습니다 — 직원 화면에 설치 안내가 떠 있습니다.</div>}
+                      ) : <div className="text-[14.5px] text-[#7A879C] mt-1">아직 번호를 보내지 않았습니다. 직원 화면에 설치 안내가 떠 있습니다.</div>}
                     </div>
                   )}
                   {mode === "screen" && (sel.status === "in_session" && sel.sessionId

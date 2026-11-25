@@ -5,6 +5,7 @@
 //   · 새로 추가: 오늘 할 일, 도입 문의, 계약(전자서명), 수납 관리, 플랫폼 공지, 접속 이력, 로그인 관리
 //  최고관리자가 로그인하면 /choose 에서 "배차 프로그램 / 관리자 관리센터" 중 고른다.
 //  🛰 2026-11-18 전면 리디자인 — 어두운 디지털 + 샴페인 골드(대표/임원 화면과 같은 결) · 메뉴 정리(아래 SECTIONS 주석)
+/* global __APP_VERSION__ */
 import Pager, { pageCount, pageSlice } from "./Pager";
 import { markUpdatesNoticed } from "./UpdateDigest"; // 📝 2026-11-09 업데이트 보관함(AI 작성함)
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
@@ -45,6 +46,7 @@ const HomepageEditor = React.lazy(() => import("./HomepageEditor")); // ⭐ 2026
 const PromoVideo = React.lazy(() => import("./promo/PromoHub").then((m) => ({ default: m.PromoVideo })));
 const PromoBlog = React.lazy(() => import("./promo/PromoHub").then((m) => ({ default: m.PromoBlog })));
 const PromoSettings = React.lazy(() => import("./promo/PromoSettings"));
+const VideoStudioLazy = React.lazy(() => import("./VideoStudio")); // 🎬 영상 작업실(기획 · 완성본 · 교육 영상) — 홍보 › 홍보 영상의 두 번째 탭
 const HubMembersAdmin = React.lazy(() => import("./HubMembersAdmin")); // ⭐ 2026-11-06 허브 회원 승인
 const CostPanel = React.lazy(() => import("./CostPanel"));
 const IntegrationSettings = React.lazy(() => import("./IntegrationSettings")); // 🔌 2026-11-07 연동 설정 // 💰 2026-11-04 비용 · 손익(최고관리자 전용)
@@ -71,31 +73,35 @@ const pad = (n) => String(n).padStart(2, "0");
 const ymd = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 // ─── 메뉴 구성 ───
-// 🛰 2026-11-18 관리자센터 전면 재구성(사용자 요청) — 9묶음 41메뉴 → 8묶음 24메뉴.
-//  같은 일을 하는 메뉴는 한 메뉴 안의 작은 탭(SUBTABS)으로 합쳤다. 예전 메뉴 주소(tab 키)는 모두 그대로 열린다.
-//   · 관제: 관제 대시보드(새로 · 플랫폼 개요를 "고객사 실적" 탭으로) · 오늘 할 일 · 실시간 트래픽(실시간 접속 + 서버 트래픽) · 원격 지원
-//   · AI 본부: AI 팀 개요 + 팀 6개 메뉴 → 메뉴 하나(화면 안 명단에서 팀 고르기)
-//   · 고객사: 가입신청관리 + 허브 회원 승인 → 가입 심사
-//   · 사용량 · 비용(새 묶음): 운송사 사용량(새 시각화 + 사용량·한도 + 문자·알림톡) · 운영 비용(내 주머니 + 비용·손익)
-//   · 영업 · 계약: 영업 + 계약 묶음 합침 · 견적서 작성 + 견적 이력 → 견적 · 계약 현황 + 작성 + 양식 → 계약
-//   · 청구 · 수납: 요금제 · 요금·청구 · 수납 관리
-//   · 운영: 플랫폼 공지 + 알림 문구 → 공지 · 알림 문구 · 브랜드 디자인 + 홈페이지 + 로그인 화면 꾸미기 → 브랜드 · 화면
-//   · 보안 · 데이터: 보안 + 데이터 묶음 합침 · 로그인 관리 + 접속 이력 → 로그인 · 접속 · 보안 알림 + 오류 신고 → 보안 · 오류 알림 · 운송사 분리 + 초기화 → 운송사 분리 · 초기화
+// 🧭 2026-11-24 관리자센터 메뉴 정리(사용자 요청: "메뉴가 너무 많고 겹친다") — 9묶음 33메뉴 → 7묶음 29메뉴.
+//  같은 일을 하는 화면은 한 메뉴 안의 작은 탭(SUBTABS)으로 합쳤다. 예전 메뉴 주소(tab 키)는 모두 그대로 열린다
+//  (이 기기에 기억된 마지막 화면 · 메뉴 검색 · kp-admin-go 이동 모두).
+//   · 관제: 관제 대시보드 · 오늘 할 일 · 실시간 트래픽 · 원격 지원 · AI 본부(혼자 한 묶음이던 것을 관제로)
+//   · 고객사: 운송사 관제 · 화주사 관제 · 가입 심사 · 운송사 분리 · 초기화(보안 · 데이터에서 옮김 — 운송사 데이터 관리)
+//   · 영업 · 계약: 도입 문의 · 견적 · 계약 · 이용 기간 · 만료
+//   · 매출 · 비용: 청구 · 수납 + 사용량 · 비용 합침 — 요금제 · 요금 · 청구 · 수납 관리 · 운송사 사용량 · 운영 비용
+//   · 홍보: 홍보 영상(영상 편집실 + AI 본부에 따로 있던 영상 작업실을 한 메뉴의 두 탭으로) · 블로그 원고 · 홍보 설정
+//   · 운영: 업데이트 배포 · 공지 · 알림 문구 · 브랜드 · 화면 · 연동 설정(API 연동 + 구글시트 연동) · 점검 도구(모바일 화면 + 테스트 데이터)
+//   · 계정 · 보안: 로그인 · 접속 · 보안 · 오류 알림 · 권한 · 계정(부관리자 + 여러 회사 계정 + 비공개 운임)
 const SUBTABS = {
   command: [["command", "운영 관제"], ["overview", "고객사 실적"]],
   applications: [["applications", "운송사 · 화주사"], ["hubMembers", "허브 회원"]],
-  usage: [["usage", "한눈에 보기"], ["usage:limits", "한도 · 초과 요금표"], ["msgUsage", "문자 · 알림톡"]],
-  cost: [["cost", "내 주머니"], ["cost:pnl", "손익 · 원가 상세"]],
+  tenancy: [["tenancy", "운송사 분리"], ["companyReset", "운송사 초기화"]],
   "sales:quote": [["sales:quote", "견적서 작성"], ["sales:history", "견적 이력"]],
   "contract:list": [["contract:list", "계약 현황"], ["contract:new", "계약서 작성"], ["contract:templates", "계약서 양식"]],
+  usage: [["usage", "한눈에 보기"], ["usage:limits", "한도 · 초과 요금표"], ["msgUsage", "문자 · 알림톡"]],
+  cost: [["cost", "내 주머니"], ["cost:pnl", "손익 · 원가 상세"]],
+  "mkt:video": [["mkt:video", "영상 편집실"], ["ai:video", "영상 기획"]],
   notices: [["notices", "플랫폼 공지"], ["notifTemplate", "알림 문구"]],
   brand: [["brand", "브랜드 디자인"], ["homepage", "홈페이지"], ["landingEdit", "로그인 화면"]],
+  integrations: [["integrations", "API 연동"], ["sheetImport", "구글시트 연동"]],
+  mobilePreview: [["mobilePreview", "모바일 화면"], ["testSeed", "테스트 데이터"]],
   sessions: [["sessions", "로그인 관리"], ["sessionLogs", "접속 이력"]],
   securityEvents: [["securityEvents", "보안 알림"], ["errorReports", "오류 신고"]],
-  tenancy: [["tenancy", "운송사 분리"], ["companyReset", "운송사 초기화"]],
+  subAdmin: [["subAdmin", "부관리자"], ["multiCo", "여러 회사 계정"], ["privateFare", "비공개 운임"]],
 };
 // 휴대폰에서는 쓸 수 없어 숨기는 화면(넓은 화면 편집기 · 휴대폰 미리보기)
-const PHONE_HIDE = new Set(["homepage", "brand", "mobilePreview", "mkt:video"]); // 📣 영상 편집실은 넓은 화면에서만
+const PHONE_HIDE = new Set(["homepage", "brand", "mobilePreview", "mkt:video"]); // 📣 영상 편집실은 넓은 화면에서만(휴대폰은 영상 작업실 탭으로)
 const it = (key, label, en, icon, extra = {}) => ({ key, label, en, icon, also: (SUBTABS[key] || []).map(([k]) => k).filter((k) => k !== key), ...extra });
 const SECTIONS = [
   { key: "command", label: "관제", en: "COMMAND", icon: "pulse", items: [
@@ -103,16 +109,13 @@ const SECTIONS = [
     it("todo", "오늘 할 일", "TODAY", "check"),
     it("live", "실시간 트래픽", "LIVE TRAFFIC", "users"),
     it("support", "원격 지원", "SUPPORT", "phone"),
+    ...AI_TEAM_TABS, // 🤖 2026-11-06 팀별 Claude 에이전트 · 2026-11-24 관제 묶음으로
   ] },
-  { key: "aiteam", label: "AI 본부", en: "AI HQ", icon: "spark", items: AI_TEAM_TABS }, // 🤖 2026-11-06 팀별 Claude 에이전트
   { key: "clients", label: "고객사", en: "CLIENTS", icon: "building", items: [
     it("companies", "운송사 관제", "CARRIERS", "building"),
     it("shippers", "화주사 관제", "SHIPPERS", "link"),
     it("applications", "가입 심사", "APPROVALS", "inbox"),
-  ] },
-  { key: "usagecost", label: "사용량 · 비용", en: "USAGE & COST", icon: "server", items: [
-    it("usage", "운송사 사용량", "USAGE", "chart"),
-    it("cost", "운영 비용", "OUT OF POCKET", "wallet"),
+    it("tenancy", "운송사 분리 · 초기화", "ISOLATION", "shield"),
   ] },
   { key: "sales", label: "영업 · 계약", en: "SALES & CONTRACTS", icon: "trend", items: [
     it("inquiries", "도입 문의", "LEADS", "mail"),
@@ -120,33 +123,30 @@ const SECTIONS = [
     it("contract:list", "계약", "CONTRACTS", "pen"),
     it("contract:life", "이용 기간 · 만료", "LIFECYCLE", "hourglass"),
   ] },
-  // 📣 2026-11-23 홍보(사용자 요청) — 관리자센터에서 영상 · 블로그 글을 고치고 미리 보고 만들고 올린다
-  { key: "promo", label: "홍보", en: "MARKETING", icon: "send", items: [
-    it("mkt:video", "영상 편집실", "VIDEO EDITOR", "star"),
-    it("mkt:blog", "블로그 원고", "BLOG", "pen"),
-    it("mkt:settings", "홍보 설정", "PROMO SETTINGS", "key"),
-  ] },
-  { key: "billing", label: "청구 · 수납", en: "BILLING", icon: "money", items: [
+  { key: "money", label: "매출 · 비용", en: "REVENUE & COST", icon: "money", items: [
     it("sales:plans", "요금제", "PRICING", "sheet"),
     it("billing", "요금 · 청구", "BILLING", "receipt"),
     it("payments", "수납 관리", "COLLECTION", "money"),
+    it("usage", "운송사 사용량", "USAGE", "chart"),
+    it("cost", "운영 비용", "OUT OF POCKET", "wallet"),
+  ] },
+  // 📣 2026-11-23 홍보(사용자 요청) — 관리자센터에서 영상 · 블로그 글을 고치고 미리 보고 만들고 올린다
+  { key: "promo", label: "홍보", en: "MARKETING", icon: "send", items: [
+    it("mkt:video", "홍보 영상", "VIDEO", "star"),
+    it("mkt:blog", "블로그 원고", "BLOG", "pen"),
+    it("mkt:settings", "홍보 설정", "PROMO SETTINGS", "key"),
   ] },
   { key: "ops", label: "운영", en: "OPERATIONS", icon: "cpu", items: [
     it("release", "업데이트 배포", "RELEASE", "key"),
     it("notices", "공지 · 알림 문구", "BROADCAST", "bell"),
-    it("integrations", "연동 설정", "INTEGRATIONS", "link"),
     it("brand", "브랜드 · 화면", "BRAND", "star"),
-    it("mobilePreview", "모바일 화면", "MOBILE", "phone"),
+    it("integrations", "연동 설정", "INTEGRATIONS", "link"),
+    it("mobilePreview", "점검 도구", "DEV TOOLS", "phone"),
   ] },
-  { key: "security", label: "보안 · 데이터", en: "SECURITY & DATA", icon: "shield", items: [
+  { key: "security", label: "계정 · 보안", en: "ACCOUNTS & SECURITY", icon: "shield", items: [
     it("sessions", "로그인 · 접속", "SESSIONS", "key"),
     it("securityEvents", "보안 · 오류 알림", "THREATS", "alert"),
-    it("subAdmin", "부관리자", "SUB ADMIN", "user"),
-    it("multiCo", "여러 회사 계정", "MULTI COMPANY", "user"), // 🏢 2026-11-24 한 사람이 정해진 회사끼리 오가기(태진 · 큐런 대표 등)
-    it("privateFare", "비공개 운임", "PRIVATE FARE", "eye"), // 🔐 2026-11-18 운송사 · 사람별 비공개 운임 지정
-    it("sheetImport", "구글시트 연동", "SHEETS", "sheet"),
-    it("tenancy", "운송사 분리 · 초기화", "ISOLATION", "shield"),
-    it("testSeed", "테스트 데이터", "TEST DATA", "list"),
+    it("subAdmin", "권한 · 계정", "ACCESS", "user"), // 부관리자 · 🏢 여러 회사 계정(2026-11-24) · 🔐 비공개 운임(2026-11-18)
   ] },
 ];
 // 예전 메뉴 이름(이 기기에 기억된 마지막 화면) → 지금 자리
@@ -257,19 +257,19 @@ function TodayPanel({ go, openCompany }) {
   const tasks = [
     // ⭐ 2026-11-02 원격지원 — 직원의 원격 지원 요청(승인 대기)을 맨 위에
     ...(live?.pending.support || []).map((r) => ({ code: "HELP", text: `${normCo(r.companyName) || "운송사"} ${r.name || ""} 원격 지원 요청`, sub: `${r.method === "remote" ? "원격 프로그램" : "화면 공유"} · ${String(r.message || "").slice(0, 40)}`, to: "support", lv: 3 })),
-    ...(secEvents || []).filter((e) => !e.ack && (e.level === "high" || e.level === "medium")).slice(0, 5).map((e) => ({ code: "SEC", text: `보안 알림 — ${e.company || "-"} ${e.name || e.email || ""} · ${({ new_device: "새 기기 로그인", foreign_ip: "해외 IP 접속", night_login: "새벽 접속", bulk_download: "대량 다운로드" })[e.type] || e.type}`, sub: e.detail || "", to: "securityEvents", lv: e.level === "high" ? 1 : 2 })),
-    ...(errReports || []).filter((r) => r.status !== "done").slice(0, 5).map((r) => ({ code: "ERR", text: `오류 신고 ${String(r.id).slice(0, 6).toUpperCase()} — ${r.companyName || "-"} ${r.name || r.email || ""} · ${r.section || ""}`, sub: String(r.message || "").slice(0, 60), to: "errorReports", lv: 2 })),
+    ...(secEvents || []).filter((e) => !e.ack && (e.level === "high" || e.level === "medium")).slice(0, 5).map((e) => ({ code: "SEC", text: `보안 알림: ${e.company || "-"} ${e.name || e.email || ""} · ${({ new_device: "새 기기 로그인", foreign_ip: "해외 IP 접속", night_login: "새벽 접속", bulk_download: "대량 다운로드" })[e.type] || e.type}`, sub: e.detail || "", to: "securityEvents", lv: e.level === "high" ? 1 : 2 })),
+    ...(errReports || []).filter((r) => r.status !== "done").slice(0, 5).map((r) => ({ code: "ERR", text: `오류 신고 ${String(r.id).slice(0, 6).toUpperCase()}: ${r.companyName || "-"} ${r.name || r.email || ""} · ${r.section || ""}`, sub: String(r.message || "").slice(0, 60), to: "errorReports", lv: 2 })),
     ...(planReqs || []).filter((r) => r.status === "요청").map((r) => ({ code: "PLAN", text: `${r.company} 요금제 변경 요청 → ${r.toName || r.to}`, sub: `${r.byName || r.by || ""} · 청구 › 수납 관리에서 요금제 지정`, to: "payments", lv: 2 })),
-    ...(invoices || []).filter((v) => v.payNotice && v.status !== "입금완료").map((v) => ({ code: "PAID?", text: `${v.company} 입금 알림 — ${Number(v.amount || 0).toLocaleString()}원 (${v.month})`, sub: `${v.payNotice.name || ""} ${v.payNotice.date || ""} · 통장 확인 후 입금완료 처리`, to: "payments", lv: 2 })),
-    ...(inquiries || []).filter((q) => !q.status || q.status === "신규").map((q) => ({ code: "LEAD", text: `${q.companyName || "업체"} 도입 문의 — 아직 연락 전`, sub: q.phone || "", to: "inquiries", lv: 2 })),
+    ...(invoices || []).filter((v) => v.payNotice && v.status !== "입금완료").map((v) => ({ code: "PAID?", text: `${v.company} 입금 알림 ${Number(v.amount || 0).toLocaleString()}원 (${v.month})`, sub: `${v.payNotice.name || ""} ${v.payNotice.date || ""} · 통장을 확인하고 입금완료로 처리하세요`, to: "payments", lv: 2 })),
+    ...(inquiries || []).filter((q) => !q.status || q.status === "신규").map((q) => ({ code: "LEAD", text: `${q.companyName || "업체"} 도입 문의 · 아직 연락 전이에요`, sub: q.phone || "", to: "inquiries", lv: 2 })),
     ...apps.filter((a) => a.status === "pending").map((a) => ({ code: "APPLY", text: `${a.companyName || a.name || "화주사"} 가입 승인 대기`, sub: "", to: "applications", lv: 2 })),
     ...(live?.pending.transport || []).map((a) => ({ code: "APPLY", text: `${normCo(a.companyName) || "운송사"} ${a.type && a.type !== "신규" ? `${a.type} ` : ""}운송사 가입 승인 대기`, sub: `${a.name || a.representative || ""} ${a.phone || ""}`.trim(), to: "applications", lv: 2 })),
-    ...(live?.dupes.length ? [{ code: "NAME", text: `비슷한 회사명 ${live.dupes.length}건 — 숫자가 나뉘어 집계됨`, sub: live.dupes.slice(0, 3).map((d) => d.names.map((x) => `"${x.raw}"`).join(" / ")).join(" · "), to: "companies", lv: 1 }] : []),
-    ...(live?.pending.staffByCo || []).map((c) => ({ code: "STAFF", text: `${c.name} 직원 승인 대기 ${c.n}명`, sub: "그 운송사 관리자가 승인 — 오래 걸리면 안내", to: "companies", lv: 0 })),
+    ...(live?.dupes.length ? [{ code: "NAME", text: `비슷한 회사명 ${live.dupes.length}건(숫자가 나뉘어 집계돼요)`, sub: live.dupes.slice(0, 3).map((d) => d.names.map((x) => `"${x.raw}"`).join(" / ")).join(" · "), to: "companies", lv: 1 }] : []),
+    ...(live?.pending.staffByCo || []).map((c) => ({ code: "STAFF", text: `${c.name} 직원 승인 대기 ${c.n}명`, sub: "그 운송사 관리자가 승인해요. 오래 걸리면 연락해 주세요.", to: "companies", lv: 0 })),
     ...(contracts || []).filter((c) => c.status === "발송").map((c) => ({ code: "SIGN", text: `${c.vars?.고객사 || c.title || "계약"} 계약서 서명 대기 ${c.viewedAt ? "(열람함)" : "(미열람)"}`, sub: c.no, to: "contract:list", lv: 1 })),
-    ...(contracts || []).filter((c) => c.status === "서명완료" && c.vars?.종료일 >= today && c.vars?.종료일 <= soonLimit).map((c) => ({ code: "RENEW", text: `${c.vars?.고객사} 계약 만료 임박 — ${c.vars?.종료일}`, sub: "재계약·갱신 안내", to: "contract:list", lv: 1 })),
-    ...(quotes || []).filter((q) => ["발송", "협의 중"].includes(q.status) && Date.now() - msOf(q.createdAt) > 7 * 86400000).map((q) => ({ code: "FOLLOW", text: `${q.customer} 견적 발송 후 7일 경과 — 후속 연락`, sub: q.no, to: "sales:history", lv: 0 })),
-    ...(contracts || []).filter((c) => c.status === "작성").map((c) => ({ code: "DRAFT", text: `${c.vars?.고객사} 계약서 작성 중 — 서명 요청 전`, sub: c.no, to: "contract:list", lv: 0 })),
+    ...(contracts || []).filter((c) => c.status === "서명완료" && c.vars?.종료일 >= today && c.vars?.종료일 <= soonLimit).map((c) => ({ code: "RENEW", text: `${c.vars?.고객사} 계약 만료 임박(${c.vars?.종료일})`, sub: "재계약 · 갱신을 안내하세요", to: "contract:list", lv: 1 })),
+    ...(quotes || []).filter((q) => ["발송", "협의 중"].includes(q.status) && Date.now() - msOf(q.createdAt) > 7 * 86400000).map((q) => ({ code: "FOLLOW", text: `${q.customer} 견적 발송 후 7일 지남 · 후속 연락이 필요해요`, sub: q.no, to: "sales:history", lv: 0 })),
+    ...(contracts || []).filter((c) => c.status === "작성").map((c) => ({ code: "DRAFT", text: `${c.vars?.고객사} 계약서 작성 중 · 아직 서명 요청 전이에요`, sub: c.no, to: "contract:list", lv: 0 })),
   ].sort((a, b) => b.lv - a.lv);
   const kpi = [
     ["진행 중 견적", (quotes || []).filter((q) => ["작성", "발송", "협의 중"].includes(q.status)).length, "건"],
@@ -290,12 +290,12 @@ function TodayPanel({ go, openCompany }) {
         ))}
       </div>
       {helpList.length > 0 && (
-        <Card code="HELP" title={`도움 필요 ${helpList.length}곳 — 가입 7일 안인데 아직 쓰기 시작을 못 한 운송사`} bodyClass="p-2">
+        <Card code="HELP" title={`도움 필요 ${helpList.length}곳 · 가입 7일이 안 됐는데 아직 쓰기 시작하지 못한 운송사`} bodyClass="p-2">
           {helpList.map(({ c, h }) => (
             <div key={c.name} className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-[#F5F8FD] flex-wrap">
               <span className="w-16 shrink-0 text-center py-1 rounded-md text-[10.5px] font-extrabold tracking-[0.12em] bg-[#B42318] text-white" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>HELP</span>
               <span className="flex-1 min-w-[220px]">
-                <span className="block text-[14.5px] font-black text-[#0F1A30] truncate">{c.name} 가입 {h.day}일째 · {h.reasons.join(" · ")} — 먼저 연락해 보세요</span>
+                <span className="block text-[14.5px] font-black text-[#0F1A30] truncate">{c.name} 가입 {h.day}일째 · {h.reasons.join(" · ")}. 먼저 연락해 보세요.</span>
                 <span className="block text-[12px] text-[#7A89A3]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>대표 {c.rep || "-"} · {c.phone || "연락처 없음"} · 직원 {h.staff} · 기사 {h.drivers} · 오더 {h.orders}</span>
               </span>
               {c.phone && <a href={`tel:${String(c.phone).replace(/[^\d]/g, "")}`} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black inline-flex items-center">📞 전화</a>}
@@ -435,7 +435,7 @@ function UsagePanel() {
       const r = await fetch(`${FUNCTIONS_BASE}/platformStats`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: "{}" });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || r.status);
-      setMsg(j.skipped ? `방금 갱신했습니다 — ${Math.ceil((j.nextInSec || 0) / 60)}분 뒤 다시 누를 수 있어요` : "새로 집계했습니다");
+      setMsg(j.skipped ? `방금 갱신했어요. ${Math.ceil((j.nextInSec || 0) / 60)}분 뒤에 다시 누를 수 있어요.` : "새로 집계했습니다");
     } catch (e) { setMsg(`갱신 실패: ${e.message || e}`); } finally { setBusy(false); }
   };
   if (!stats || !sales) return <div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>;
@@ -475,7 +475,7 @@ function UsagePanel() {
         ))}
       </div>
       <Card code="USAGE" title={`${Number(today.slice(5, 7))}월 사용량 · 초과 요금`} right={<span className="text-[12px] font-bold text-[#7A879C]">집계 {upd}{stAt ? ` · 저장 용량 ${new Date(stAt).toLocaleDateString("ko-KR")} 기준` : ""}</span>} bodyClass="p-0">
-        {rows.length === 0 ? <div className="py-14 text-center text-[#9AA9C3]">집계된 운송사가 없습니다 — [지금 갱신]을 눌러 주세요.</div> : (
+        {rows.length === 0 ? <div className="py-14 text-center text-[#9AA9C3]">집계된 운송사가 없습니다. [지금 갱신]을 눌러 주세요.</div> : (
           <div className="overflow-x-auto"><table className="w-full text-[13.5px]" style={{ minWidth: 1180 }}>
             <thead><tr className="bg-[#1B2B4B] text-white">{["운송사", "요금제", "직원 계정", "이달 오더 (월말 예상)", "지입차", "저장 용량", "초과 요금", "이달 예상 청구"].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold whitespace-nowrap">{h}</th>)}</tr></thead>
             <tbody>{rows.map(({ c, p, u, projected, storageGB, total }) => (
@@ -556,7 +556,7 @@ function PaymentsPanel() {
   };
   return (
     <div className="space-y-4">
-      <Hero en="BILLING · COLLECTION" title="수납 관리" desc="가입사별 이달 청구액을 확정하고 청구·입금 상태를 기록합니다. (금액은 요금·청구 기준 예상액 — 칸에서 바로 고칠 수 있습니다)"
+      <Hero en="BILLING · COLLECTION" title="수납 관리" desc="가입사별 이달 청구액을 확정하고 청구·입금 상태를 기록합니다. 금액은 요금 · 청구 기준 예상액이며, 칸에서 바로 고칠 수 있습니다."
         right={<MonthPicker dark quick={false} value={month} onChange={(v) => setMonth(v)} />} />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {PAY_STATUS.map((st, i) => (
@@ -567,7 +567,7 @@ function PaymentsPanel() {
         ))}
       </div>
       <Card code="LEDGER" title={`${Number(month.slice(5))}월 수납 원장`} bodyClass="p-0">
-        {companies.length === 0 ? <div className="py-14 text-center text-[#9AA9C3]">집계된 가입사가 없습니다 — 대시보드 › 플랫폼 개요에서 '지금 갱신'을 눌러 주세요.</div> : (
+        {companies.length === 0 ? <div className="py-14 text-center text-[#9AA9C3]">집계된 가입사가 없습니다. 관제 › 관제 대시보드 › [고객사 실적]에서 '지금 갱신'을 눌러 주세요.</div> : (
           <div className="overflow-x-auto"><table className="w-full text-[14px]" style={{ minWidth: 1040 }}>
             <thead><tr className="bg-[#1B2B4B] text-white">{["운송사", "요금제", "청구액(VAT 별도)", "상태", "입금일", "메모"].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold">{h}</th>)}</tr></thead>
             <tbody>{companies.map((c) => { const r = rows[key(c)] || {}; return (
@@ -622,7 +622,7 @@ function AddonModal({ company, month, sales, planId, items: initial, bill, onClo
       <div className="w-full max-w-[860px] max-h-[92vh] flex flex-col rounded-[22px] bg-[#F4F6FA] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.5)]">
         <div className="px-6 py-4 text-white flex justify-between items-start gap-3" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <div><div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>INVOICE · ADD-ONS · {month}</div>
-            <div className="text-[19px] font-black mt-0.5">{company.name} — 이달 청구서 추가 항목</div>
+            <div className="text-[19px] font-black mt-0.5">{company.name} · 이달 청구서 추가 항목</div>
             <div className="text-[12.5px] text-white/60">단가는 영업 › 요금제 관리 값(VAT 별도). 수량·단가를 고치면 금액이 바뀝니다.</div></div>
           <button type="button" onClick={onClose} className="h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold">닫기 ✕</button>
         </div>
@@ -752,7 +752,7 @@ async function pushDiagApi(body) {
   if (!r.ok) throw new Error(d.error || `요청 실패 (${r.status})`);
   return d;
 }
-const PUSH_ERR_KO = { "messaging/registration-token-not-registered": "기기 토큰 만료(앱 재설치·알림 차단·오래 안 씀) — 그 폰에서 앱을 다시 열고 알림 허용", "messaging/invalid-registration-token": "잘못된 기기 토큰", "messaging/mismatched-credential": "다른 프로젝트 토큰", "messaging/third-party-auth-error": "아이폰/웹 인증 설정 오류" };
+const PUSH_ERR_KO = { "messaging/registration-token-not-registered": "기기 토큰이 만료됐어요(앱 재설치 · 알림 차단 · 오래 쓰지 않음). 그 휴대폰에서 앱을 다시 열고 알림을 허용해 주세요.", "messaging/invalid-registration-token": "잘못된 기기 토큰", "messaging/mismatched-credential": "다른 프로젝트 토큰", "messaging/third-party-auth-error": "아이폰/웹 인증 설정 오류" };
 function PushDiagModal({ notice, onClose }) {
   const [rows, setRows] = React.useState(null);
   const [err, setErr] = React.useState("");
@@ -772,7 +772,7 @@ function PushDiagModal({ notice, onClose }) {
           <button type="button" onClick={onClose} className="h-9 px-4 rounded-lg border border-[#DCE3EE] text-[13.5px] font-bold text-[#3A4A66]">닫기</button>
         </div>
         <div className="px-5 py-3 text-[13px] text-[#5B6B85] bg-[#F7F9FC] border-b border-[#EEF1F6]">
-          ○ 받음 {rows ? okN : "-"}명 · ✕ 못 받음 {rows ? rows.length - okN : "-"}명 — [테스트]를 누르면 그 사람의 등록된 기기 전부로 테스트 알림을 보내고 기기별 결과를 보여줍니다.
+          ○ 받음 {rows ? okN : "-"}명 · ✕ 못 받음 {rows ? rows.length - okN : "-"}명. [테스트]를 누르면 그 사람이 등록한 모든 기기로 테스트 알림을 보내고 기기별 결과를 보여줍니다.
         </div>
         {err && <div className="m-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13.5px] font-semibold text-red-700">{err}</div>}
         {!rows && !err && <div className="py-12 text-center text-[#9AA9C3]">확인 중…</div>}
@@ -789,7 +789,7 @@ function PushDiagModal({ notice, onClose }) {
                 {t?.result && (
                   <div className="mt-2 ml-9 rounded-lg bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2 text-[12.5px] text-[#3A4A66] space-y-0.5">
                     {t.result.error ? <div className="text-[#D92D20] font-bold">{t.result.error}</div> : (t.result.results || []).map((x) => (
-                      <div key={x.device}>기기 {x.device} (…{x.tail}): {x.ok ? <b className="text-[#067647]">성공 — 폰에 알림이 떴는지 확인</b> : <b className="text-[#D92D20]">실패 · {PUSH_ERR_KO[x.code] || x.code} {x.msg && !PUSH_ERR_KO[x.code] ? `(${x.msg})` : ""}</b>}</div>
+                      <div key={x.device}>기기 {x.device} (…{x.tail}): {x.ok ? <b className="text-[#067647]">성공. 휴대폰에 알림이 떴는지 확인해 주세요.</b> : <b className="text-[#D92D20]">실패 · {PUSH_ERR_KO[x.code] || x.code} {x.msg && !PUSH_ERR_KO[x.code] ? `(${x.msg})` : ""}</b>}</div>
                     ))}
                     {t.result.note && <div>{t.result.note}</div>}
                   </div>
@@ -912,7 +912,7 @@ function NoticesPanel() {
         <div><Label>제목</Label>
           <input value={f.title} onChange={(e) => set({ title: e.target.value })} placeholder="예: 11/9(일) 02:00~04:00 정기 점검 안내" className={`${inp} h-12 text-[16px] font-bold`} /></div>
         <div><Label>내용</Label>
-          <RichTextEditor value={f.bodyHtml} onChange={(h) => set({ bodyHtml: h })} placeholder="공지할 내용을 입력하세요 — 위 단추로 굵게·크기·색·형광펜·정렬·목록" minHeight={300} /></div>
+          <RichTextEditor value={f.bodyHtml} onChange={(h) => set({ bodyHtml: h })} placeholder="공지할 내용을 입력하세요. 위 단추로 굵게 · 크기 · 색 · 형광펜 · 정렬 · 목록을 꾸밀 수 있어요." minHeight={300} /></div>
         <div className="flex items-end justify-between gap-4 flex-wrap">
           <div><Label hint="(1장)">이미지</Label>
             {f.image ? (
@@ -942,7 +942,7 @@ function NoticesPanel() {
       <Card code="POSTED" title={`게시한 공지 ${(list || []).length}건`} bodyClass="p-0">
         <div className="px-4 sm:px-5 py-3 border-b border-[#EEF1F6]"><div className="inline-flex items-center gap-1 p-1 rounded-xl bg-[#EEF2F8]">{[["all", "전체", (list || []).length], ["live", "게시 중", liveN], ["off", "내림·종료", (list || []).length - liveN]].map(([k, l, n]) => (
           <button key={k} type="button" onClick={() => setFilter(k)} className={`h-9 px-3.5 rounded-lg text-[13.5px] font-black whitespace-nowrap ${filter === k ? "bg-[#1B2B4B] text-white" : "text-[#5B6B85]"}`}>{l} <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{n}</span></button>))}</div></div>
-        {!list ? <div className="py-14 text-center text-[#9AA9C3]">불러오는 중…</div> : rows.length === 0 ? <div className="py-16 text-center text-[15px] text-[#9AA9C3]">게시한 공지가 없습니다 — 오른쪽 위 '새 공지 작성'</div> : (
+        {!list ? <div className="py-14 text-center text-[#9AA9C3]">불러오는 중…</div> : rows.length === 0 ? <div className="py-16 text-center text-[15px] text-[#9AA9C3]">게시한 공지가 없습니다. 오른쪽 위 [새 공지 작성]을 눌러 주세요.</div> : (
           <div className="divide-y divide-[#EEF1F6]">
             {rows.map((n) => {
               const expired = n.endDate && n.endDate < today;
@@ -963,7 +963,7 @@ function NoticesPanel() {
                       <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{msOf(n.createdAt) ? ymd(new Date(msOf(n.createdAt))) : ""}{n.endDate ? ` ~ ${n.endDate}` : ""}</span>
                       {n.banner === false && <span>배너 없음</span>}
                       {/* ⭐ 2026-11-03 조회수 — 회사 공지사항에서 글을 연 계정 수(한 계정 1회, viewedBy) */}
-                      <span className="inline-flex items-center gap-1 font-bold text-[#3A4A66] tabular-nums" title="조회수 — 한 계정 1회" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
+                      <span className="inline-flex items-center gap-1 font-bold text-[#3A4A66] tabular-nums" title="조회수(한 계정당 1회)" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>조회 {(n.viewedBy || []).length}
                       </span>
                       {on && (n.publishAt || 0) > Date.now()
@@ -1096,7 +1096,7 @@ function TenancyPanel() {
         setProg((p) => ({ ...p, [col]: { scanned, updated, state: "완료" } }));
       }
       await setDoc(doc(db, "systemConfig", "tenancy"), { backfilledAt: serverTimestamp() }, { merge: true });
-      setMsg("예전 데이터 정리 완료 — 이제 '서버 분리 켜기'를 누르세요.");
+      setMsg("예전 데이터를 정리했어요. 이제 [서버 분리 켜기]를 누르세요.");
     } catch (e) { setMsg(`실패: ${e.message || e}`); } finally { setBusy(false); }
   };
   const toggle = async (on) => {
@@ -1119,7 +1119,7 @@ function TenancyPanel() {
             운송사 칸이 생기기 전 문서(회사명 빈칸)에 운송사를 적습니다. 화주사가 보낸 오더는 받은 운송사로, 나머지는 <b>(회사없음)</b>으로 표시돼 어느 운송사에도 보이지 않습니다. 기본 회사는 없으니(2026-11-21) 필요 없으면 아래에서 지우면 됩니다.
             <button type="button" disabled={busy} onClick={run} className="mt-3 w-full h-10 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-50">{busy ? "정리 중…" : cfg?.backfilledAt ? "다시 실행" : "실행"}</button>
           </>)}
-          {step(2, "서버 분리 — 늘 켜짐", true, <>
+          {step(2, "서버 분리(늘 켜짐)", true, <>
             {/* 🔒 2026-11-23 서버 규칙이 스위치와 상관없이 늘 운송사를 나눈다(끌 수 없음) — 사용자 요청: 운송사끼리 어떤 정보도 절대 노출되면 안 된다 */}
             서버 규칙이 늘 운송사를 나눠요. 다른 운송사의 오더 · 기사 · 거래처 · 직원 · 결재는 서버에서부터 거부돼요. 끌 수 없어요.
           </>)}
@@ -1175,7 +1175,7 @@ function ClaimsBackfill() {
       }
       setProg({ ...acc, phase: "done" });
       await setDoc(doc(db, "systemConfig", "claims"), { backfilledAt: serverTimestamp(), ...acc }, { merge: true });
-      setMsg(`완료 — ${acc.processed.toLocaleString()}명 확인 · ${acc.changed.toLocaleString()}명 토큰 갱신${acc.errors ? ` · 실패 ${acc.errors}명(다시 실행해 주세요)` : ""}`);
+      setMsg(`완료했어요. ${acc.processed.toLocaleString()}명 확인 · ${acc.changed.toLocaleString()}명 토큰 갱신${acc.errors ? ` · 실패 ${acc.errors}명(다시 실행해 주세요)` : ""}`);
     } catch (e) { setMsg(`실패: ${e.message || e}`); } finally { setBusy(false); }
   };
   const when = cfg?.backfilledAt?.toDate ? cfg.backfilledAt.toDate().toLocaleString("ko-KR") : "";
@@ -1330,7 +1330,8 @@ function PlatformCenterInner({ user }) {
   } else if (tab === "command") body = <CommandDeck go={setTab} openCompany={openCompany} />;
   else if (tab === "todo") body = <TodayPanel go={setTab} openCompany={openCompany} />;
   else if (tab === "live") body = <TrafficView openCompany={openCompany} />;
-  else if (tab.startsWith("ai:")) body = <AiHq tab={tab} go={setTab} />; // 🤖 2026-11-18 AI 본부(명단 + 개요 · 팀 대화)
+  else if (tab === "ai:video") body = <><Hero en="MARKETING · VIDEO PLANNING" title="영상 기획" desc="완성된 홍보 숏츠를 보고 내려받거나, AI와 새 영상 기획안(장면 대본 · 배경음악 큐시트 · 자막)을 만들어요. 도움말 센터 교육 영상도 여기서 고쳐요." /><React.Suspense fallback={<AdmEmpty>작업실을 여는 중이에요…</AdmEmpty>}><VideoStudioLazy /></React.Suspense></>; // 🧭 2026-11-24 AI 본부 › 영상 작업실 → 홍보 › 홍보 영상 탭
+  else if (tab.startsWith("ai:")) body =<AiHq tab={tab} go={setTab} />; // 🤖 2026-11-18 AI 본부(명단 + 개요 · 팀 대화)
   // ⭐ 2026-11-02 원격지원 — 요청 목록 · 승인/거절/완료 · 화면 보기 · 원격 번호
   else if (tab === "support") body = <><Hero en="COMMAND · SUPPORT" title="원격 지원" desc="직원이 보낸 원격 지원 요청을 승인하거나, [원격 지원 걸기]로 직원에게 먼저 요청해요(직원이 수락해야 시작). 직원 화면을 실시간으로 보고 제어하거나(직원이 허용할 때만) 원격 프로그램 번호를 받아요." right={<Clock />} /><RemoteSupportAdminPanel me={user} /></>;
   else if (tab === "inquiries") body = <InquiriesPanel toQuote={(q) => { try { sessionStorage.setItem("kpQuoteSeed", JSON.stringify({ customer: q.companyName || "", contact: q.name || "", phone: q.phone || "" })); } catch { /* 무시 */ } setTab("sales:quote"); }} />;
@@ -1352,27 +1353,27 @@ function PlatformCenterInner({ user }) {
   else if (tab === "homepage") body = phone
     ? <><Hero en="OPERATIONS · HOMEPAGE" title="홈페이지" desc="" /><AdmPanel><div className="text-[14px] leading-relaxed" style={{ color: G.sub }}>홈페이지 편집은 PC 화면에서 해 주세요. 사진 · 글자 위치를 끌어서 옮기는 편집이라 넓은 화면이 필요해요.<br /><a className="font-black" style={{ color: G.goldHi }} href="https://www.logisweb.co.kr/" target="_blank" rel="noopener noreferrer">지금 홈페이지 보기 ↗</a></div></AdmPanel></>
     : <React.Suspense fallback={<AdmEmpty>편집기를 여는 중이에요…</AdmEmpty>}><HomepageEditor /></React.Suspense>;
-  else if (tab === "integrations") body = <><Hero en="OPERATIONS · INTEGRATIONS" title="연동 설정" desc="국세청 · 기상청 · 팝빌 연동 상태를 보고 시험해요. 키는 Firebase 비밀값에만 두고 화면에는 보이지 않아요." /><React.Suspense fallback={<AdmEmpty />}><IntegrationSettings /></React.Suspense></>;
+  else if (tab === "integrations") body = <><Hero en="OPERATIONS · INTEGRATIONS" title="API 연동" desc="국세청 · 기상청 · 팝빌 연동 상태를 보고 시험해요. 키는 Firebase 비밀값에만 두고 화면에는 보이지 않아요." /><React.Suspense fallback={<AdmEmpty />}><IntegrationSettings /></React.Suspense></>;
   else if (tab === "landingEdit") body = <><Hero en="OPERATIONS · LOGIN SCREEN" title="로그인 화면 꾸미기" desc="계정을 고르는 첫 화면(트럭이 지나가는 화면)의 배경 사진 · 영상 · 글꼴 · 아래 문구를 바꿔요." /><LandingPageEditPanel /></>;
   else if (tab === "brand") body = <><Hero en="OPERATIONS · BRAND" title="브랜드 디자인" desc="로고를 올리고 부분마다 색 · 굵기를 고쳐요. 로고가 들어가는 자리마다 바탕도 바꿔 보며 미리 볼 수 있어요." /><React.Suspense fallback={null}><BrandStudioLazy /></React.Suspense></>;
-  else if (tab === "mobilePreview") body = <><Hero en="OPERATIONS · MOBILE" title="모바일 화면" desc="지금 로그인한 계정의 모바일 화면을 휴대폰 크기 그대로, 크게 확인해요." /><React.Suspense fallback={null}><MobilePreviewPanelLazy /></React.Suspense></>;
+  else if (tab === "mobilePreview") body = <><Hero en="DEV TOOLS · MOBILE" title="모바일 화면" desc="지금 로그인한 계정의 모바일 화면을 휴대폰 크기 그대로, 크게 확인해요." /><React.Suspense fallback={null}><MobilePreviewPanelLazy /></React.Suspense></>;
   else if (tab === "sessions") body = <><Hero en="SECURITY · SESSIONS" title="로그인 관리" desc="지금 로그인 중인 모든 기기를 보고, 필요하면 강제로 내보내요." /><AdminSessionsPanel isTotalMaster company="" /></>;
   else if (tab === "sessionLogs") body = <SessionLogsPanel />;
   else if (tab === "errorReports") body = <React.Suspense fallback={<AdmEmpty />}><ErrorReportsPanel /></React.Suspense>;
   else if (tab === "securityEvents") body = <React.Suspense fallback={<AdmEmpty />}><SecurityEventsPanel /></React.Suspense>;
   else if (tab === "tenancy") body = <TenancyPanel />;
-  else if (tab === "sheetImport") body = <><Hero en="DATA · SHEETS" title="구글시트 연동" desc="운송사를 고르면 연결된 시트를 보고 가져오기 · 보내기 · 칸 맞추기를 해요. 처음 세팅할 때 쓰던 배차일지를 옮기는 것도 여기서 해요." /><SheetHubForCompany /></>;
+  else if (tab === "sheetImport") body = <><Hero en="OPERATIONS · SHEETS" title="구글시트 연동" desc="운송사를 고르면 연결된 시트를 보고 가져오기 · 보내기 · 칸 맞추기를 해요. 처음 세팅할 때 쓰던 배차일지를 옮기는 것도 여기서 해요." /><SheetHubForCompany /></>;
   // ⭐ 2026-11-06 운송사 초기화는 이제 관리센터에서만(배차 프로그램 관리자메뉴에서 뺐다) — 계약종료 + 초기화는 영업 · 계약 › 이용 기간 · 만료
-  else if (tab === "companyReset") body = <><Hero en="DATA · RESET" title="운송사 초기화" desc="운송사 데이터를 모두 지워요 — 7일 동안 보관함에서 되살릴 수 있어요. 계약을 끝내며 지우려면 영업 · 계약 › 이용 기간 · 만료를 쓰세요." right={<AdmBtn onClick={() => setTab("contract:life")}>이용 기간 · 만료 ›</AdmBtn>} /><CompanyResetPanel /></>;
-  else if (tab === "testSeed") body = <><Hero en="DATA · TEST DATA" title="테스트 데이터" desc="테스트운송사에 가짜 데이터를 채우거나 다시 채워요. 다른 운송사에는 넣을 수 없어요." /><React.Suspense fallback={<AdmEmpty />}><TestSeedPanel /></React.Suspense></>;
+  else if (tab === "companyReset") body = <><Hero en="CLIENTS · RESET" title="운송사 초기화" desc="운송사 데이터를 모두 지워요. 지운 뒤 7일 동안은 보관함에서 되살릴 수 있어요. 계약을 끝내면서 지우려면 영업 · 계약 › 이용 기간 · 만료를 쓰세요." right={<AdmBtn onClick={() => setTab("contract:life")}>이용 기간 · 만료 ›</AdmBtn>} /><CompanyResetPanel /></>;
+  else if (tab === "testSeed") body = <><Hero en="DEV TOOLS · TEST DATA" title="테스트 데이터" desc="테스트운송사에 가짜 데이터를 채우거나 다시 채워요. 다른 운송사에는 넣을 수 없어요." /><React.Suspense fallback={<AdmEmpty />}><TestSeedPanel /></React.Suspense></>;
   else if (tab === "contract:life") body = <><Hero en="CONTRACTS · LIFECYCLE" title="이용 기간 · 만료" desc="운송사별 계약 기간을 정하고, 만료 30 · 7 · 1일 전 안내를 보내요. 계약종료하면 데이터는 남기고 그 회사 사람은 접속할 수 없어요." right={<Clock />} /><ContractLifecyclePanel openCompany={openCompany} /></>;
   else if (tab === "release") body = <><Hero en="OPERATIONS · RELEASE" title="업데이트 배포" desc="새 화면을 올려도 여기서 배포해야 가입자 화면이 바뀌어요. 최고관리자 · 부관리자는 항상 최신 화면을 먼저 봐요." /><ReleasePanel>
     {/* 🧹 2026-11-14 '화주사 강제 업데이트' — 2026-11-15 고급 설정 안으로 */}
     <div><div className="text-[14px] font-black mb-2" style={{ color: G.ink }}>화주사 화면 강제 업데이트</div><ShipperForceUpdatePanel currentVersion={typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : ""} /></div></ReleasePanel>
     <div className="mt-4"><React.Suspense fallback={null}><ForceUpdatePanelLazy /></React.Suspense></div></>;
-  else if (tab === "privateFare") body = <><Hero en="SECURITY · PRIVATE FARE" title="비공개 운임" desc="운송사와 사람을 골라 비공개 운임을 켜요. 켜진 사람의 임원 화면에 메뉴가 생기고, 비밀번호로 들어가요. 그 사람이 정한 금액은 최고관리자도 볼 수 없어요." /><React.Suspense fallback={<AdmEmpty />}><PrivateFareAdminLazy /></React.Suspense></>;
-  else if (tab === "multiCo") body = <><Hero en="SECURITY · MULTI COMPANY" title="여러 회사 계정" desc="한 사람이 정해진 회사끼리 로그아웃 없이 오가며 쓰게 해요. 다른 회사에서는 통합관리자, 근태 · 급여 · 연차는 원래 소속 회사에만 남아요." /><React.Suspense fallback={null}><MultiCompanyPanelLazy /></React.Suspense></>;
-  else if (tab === "subAdmin") body = <><Hero en="SECURITY · SUB ADMIN" title="부관리자" desc="최고관리자와 같은 권한을 가진 부관리자(1명)를 보고 지정 · 해제해요." /><SubAdminPanel /></>;
+  else if (tab === "privateFare") body = <><Hero en="ACCESS · PRIVATE FARE" title="비공개 운임" desc="운송사와 사람을 골라 비공개 운임을 켜요. 켜진 사람의 임원 화면에 메뉴가 생기고, 비밀번호로 들어가요. 그 사람이 정한 금액은 최고관리자도 볼 수 없어요." /><React.Suspense fallback={<AdmEmpty />}><PrivateFareAdminLazy /></React.Suspense></>;
+  else if (tab === "multiCo") body = <><Hero en="ACCESS · MULTI COMPANY" title="여러 회사 계정" desc="한 사람이 정해진 회사끼리 로그아웃 없이 오가며 쓰게 해요. 다른 회사에서는 통합관리자, 근태 · 급여 · 연차는 원래 소속 회사에만 남아요." /><React.Suspense fallback={null}><MultiCompanyPanelLazy /></React.Suspense></>;
+  else if (tab === "subAdmin") body = <><Hero en="ACCESS · SUB ADMIN" title="부관리자" desc="최고관리자와 같은 권한을 가진 부관리자(1명)를 보고 지정 · 해제해요." /><SubAdminPanel /></>;
 
   // 🔎 상단 메뉴 검색 — 메뉴 · 화면 안 작은 탭까지(휴대폰에서 못 쓰는 화면은 뺌)
   const searchEntries = adminSearchEntries(sectionsView, SUBTABS).filter((e) => !(phone && PHONE_HIDE.has(e.tab)));

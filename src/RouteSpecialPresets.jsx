@@ -24,7 +24,7 @@ const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothi
 const won = (n) => Math.round(Number(n) || 0).toLocaleString("ko-KR");
 const inp = "h-10 w-full px-3 rounded-xl border border-[#DCE3EE] bg-white text-[14px] font-semibold text-[#0F1A30] outline-none focus:border-[#2D4C82]";
 const MODE_LABEL = { 기사: "기사운임에서 차감", 회사: "회사 부담", 청구: "거래처에 추가 청구" };
-const PAYEE_LABEL = { 기사: "배차 기사에게", 외부: "회사가 따로 지급", 없음: "지급 없음(청구만)" };
+const PAYEE_LABEL = { 기사: "배차 기사에게", 외부: "회사가 따로 지급", 없음: "지급 없음" };
 const typeName = (it) => (it.종류 === "지게차" ? "지게차비용" : it.이름 ? `${it.이름}${it.종류 !== "기타" ? ` (${TYPE_LABEL[it.종류] || it.종류})` : ""}` : TYPE_LABEL[it.종류] || it.종류);
 const modeText = (it) => `${MODE_LABEL[it.부담] || it.부담}${it.종류 !== "지게차" && it.받는사람 !== "기사" ? ` · ${PAYEE_LABEL[it.받는사람]}` : ""}`;
 // ⭐ 2026-11-24 조건 — 항상 · 야간 상차 · 익착 · 월착(익착 · 월착은 JY 전용 화면에서 고를 수 있다) · 경유 개소당
@@ -118,7 +118,7 @@ export default function RouteSpecialPresets({ canEdit = true, canAdmin = false, 
       )}
       {!seed && old.length > 0 && (
         <div>
-          <button type="button" onClick={() => setShowOld((v) => !v)} className="text-[13px] font-bold text-[#2D4C82]">{showOld ? "▾" : "▸"} 예전 "상차지 기억"(지게차 [불러오기]용) {old.length}개 — 자동으로 넣지는 않아요</button>
+          <button type="button" onClick={() => setShowOld((v) => !v)} className="text-[13px] font-bold text-[#2D4C82]">{showOld ? "▾" : "▸"} 예전 "상차지 기억"(지게차 [불러오기]용) {old.length}개: 자동으로 넣지는 않아요</button>
           {showOld && (
             <ul className="mt-2 divide-y divide-[#EEF2F8] rounded-xl border border-[#EEF1F6]">
               {old.map((p) => (
@@ -178,11 +178,11 @@ function PresetEditor({ value, list, onClose }) {
                 <div><div className={lbl}>금액(원){it.종류 === "경유" ? <label className="ml-1.5 inline-flex items-center gap-1 font-bold text-[#1B2B4B]"><input type="checkbox" checked={it.단위 === "개소"} onChange={(e) => setItem(i, { 단위: e.target.checked ? "개소" : "" })} data-route-unit={i} />개소당</label> : null}</div><input className={`${inp} text-right tabular-nums`} inputMode="numeric" value={Number(it.금액) ? won(it.금액) : ""} onChange={(e) => setItem(i, { 금액: e.target.value.replace(/[^\d]/g, "") })} data-route-amount={i} /></div>
                 {it.종류 !== "지게차" && <div><div className={lbl}>받는 사람</div>
                   <select className={sel} value={it.받는사람 || "기사"} onChange={(e) => setItem(i, { 받는사람: e.target.value, ...(e.target.value === "없음" ? { 부담: "청구" } : {}) })}>
-                    {["기사", "외부", ...(jy || it.받는사람 === "없음" ? ["없음"] : [])].map((k) => <option key={k} value={k}>{PAYEE_LABEL[k]}</option>)}
+                    {["기사", "외부", ...(jy || it.받는사람 === "없음" || it.종류 === "기타" ? ["없음"] : [])].map((k) => <option key={k} value={k}>{PAYEE_LABEL[k]}</option>)}
                   </select></div>}
                 <div className={it.종류 === "지게차" ? "col-span-1 sm:col-span-2" : ""}><div className={lbl}>부담</div>
                   <select className={sel} value={it.부담 || "청구"} onChange={(e) => setItem(i, { 부담: e.target.value })}>
-                    {(it.종류 === "지게차" || it.받는사람 === "외부" ? ["기사", "회사", "청구"] : it.받는사람 === "없음" ? ["청구"] : ["회사", "청구"]).map((k) => <option key={k} value={k}>{MODE_LABEL[k]}</option>)}
+                    {(it.종류 === "지게차" || it.받는사람 === "외부" ? ["기사", "회사", "청구"] : it.받는사람 === "없음" ? ["청구", "기사"] : ["회사", "청구"]).map((k) => <option key={k} value={k}>{MODE_LABEL[k]}</option>)}
                   </select></div>
                 <div className="flex items-end gap-1"><div className="flex-1"><div className={lbl}>조건</div>
                   <select className={sel} value={it.조건 || "항상"} onChange={(e) => setItem(i, { 조건: e.target.value })} data-route-cond={i}>

@@ -332,17 +332,112 @@ function fareCertPhone(raw = "") {
   return raw || "-";
 }
 
+// 🧾 2026-11-24 운임명세서 본문 — 여러 건의 운임을 건별로 자동 계산하고(기본 운임 · 지게차 · 특수운임 · 최종) 맨 아래에 총합계를 낸다
+function FareStatementBody({ rows, issuerName, showSale, MONO }) {
+  const list = rows.map((o) => ({ o, fb: fareBreakdown(o) }));
+  const drivers = [...new Set(rows.map((o) => [o.이름, o.차량번호].filter(Boolean).join(" · ")).filter(Boolean))];
+  const won = (n) => Math.round(n).toLocaleString();
+  const sum = (f) => list.reduce((a, x) => a + f(x), 0);
+  const T = { baseDrv: sum((x) => x.fb.baseDrv), baseSale: sum((x) => x.fb.baseSale), drv: sum((x) => x.fb.drv), sale: sum((x) => x.fb.sale), paid: sum((x) => x.fb.paid), profit: sum((x) => x.fb.profit) };
+  const vat = Math.round(T.drv * 0.1);
+  // 항목별 합계(지게차 · 주유비 · 대기료 …) — 이름이 같으면 한 줄로
+  const byItem = new Map();
+  list.forEach(({ fb }) => fb.lines.forEach((l) => { const k = l.name; const c = byItem.get(k) || { name: k, cnt: 0, amount: 0, drv: 0, sale: 0 }; c.cnt += 1; c.amount += l.amount; c.drv += l.drv; c.sale += l.sale; byItem.set(k, c); }));
+  const items = [...byItem.values()];
+  const fareTypes = [...new Set(list.map((x) => x.fb.fareType).filter(Boolean))];
+  const th = { fontSize: 10.5, fontWeight: 800, color: "#5B6B85", padding: "7px 8px", background: "#F5F7FB", borderBottom: "1px solid #E3E8F0", textAlign: "left", whiteSpace: "nowrap" };
+  const td = { fontSize: 11.5, fontWeight: 700, color: "#0F1A30", padding: "7px 8px", borderBottom: "1px solid #EEF1F6", verticalAlign: "top" };
+  const num = { ...td, textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
+  const sec = (en, title) => (
+    <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "18px 0 8px" }}>
+      <span style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: "0.22em", color: "#4B6CB7" }}>{en}</span>
+      <span style={{ fontSize: 14, fontWeight: 900, color: "#0F1A30" }}>{title}</span>
+    </div>
+  );
+  const sign = (n) => (n ? <span style={{ color: n > 0 ? "#2D4C82" : "#B4342A" }}>{n > 0 ? "+" : "−"}{won(Math.abs(n))}</span> : <span style={{ color: "#B7C2D3" }}>·</span>);
+  const first = rows[0]?.상차일 || "", last = rows[rows.length - 1]?.상차일 || "";
+  return (
+    <>
+      <div style={{ fontSize: 13.5, fontWeight: 600, color: "#3A4A66", lineHeight: 1.75, background: "#F5F7FB", border: "1px solid #E3E8F0", borderRadius: 10, padding: "12px 16px" }}>
+        본 명세서는 <b style={{ color: "#0F1A30" }}>{issuerName || "운송사"}</b>가 {first === last ? first : `${first} ~ ${last}`} 기간에 배차한 운송 <b style={{ color: "#0F1A30" }}>{rows.length}건</b>의 운임을
+        {drivers.length === 1 ? <> 기사 <b style={{ color: "#0F1A30" }}>{drivers[0]}</b> 기준으로</> : null} 건별로 계산하고 합계를 정리한 것입니다.
+      </div>
+
+      {sec("SUMMARY", "합계")}
+      <div style={{ display: "grid", gridTemplateColumns: showSale ? "repeat(4, 1fr)" : "repeat(3, 1fr)", gap: 10 }}>
+        {[["운송 건수", `${rows.length}건`], ["기사운임 합계 (공급가)", `${won(T.drv)}원`], ["부가세 (10%)", `${won(vat)}원`], ...(showSale ? [["청구운임 합계", `${won(T.sale)}원`]] : [])].map(([l, v]) => (
+          <div key={l} style={{ border: "1px solid #E3E8F0", borderRadius: 10, padding: "11px 13px" }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: "#7A89A3" }}>{l}</div>
+            <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 17, fontWeight: 900, color: "#0F1A30", marginTop: 3 }}>{v}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 10, background: "#0F1A30", color: "#fff", borderRadius: 10, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: "#8FB0F0" }}>기사 지급 합계 (VAT 포함)</span>
+        <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 22, fontWeight: 900 }}>{won(T.drv + vat)}원</span>
+      </div>
+
+      {sec("DETAIL", "건별 운임")}
+      <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #E3E8F0" }}>
+        <thead><tr>
+          <th style={th}>No</th><th style={th}>상차일</th><th style={th}>구간 · 차량</th><th style={th}>운임구분</th><th style={{ ...th, textAlign: "right" }}>기본 기사운임</th><th style={th}>특수운임</th><th style={{ ...th, textAlign: "right" }}>기사운임</th>
+          {showSale && <th style={{ ...th, textAlign: "right" }}>청구운임</th>}{showSale && <th style={{ ...th, textAlign: "right" }}>수수료</th>}
+        </tr></thead>
+        <tbody>
+          {list.map(({ o, fb }, i) => (
+            <tr key={o._id || o.id || i}>
+              <td style={{ ...num, textAlign: "left", color: "#7A89A3" }}>{i + 1}</td>
+              <td style={{ ...num, textAlign: "left" }}>{String(o.상차일 || "").slice(5) || "-"}</td>
+              <td style={td}>{o.상차지명 || "-"} → {o.하차지명 || "-"}{drivers.length > 1 && <div style={{ fontSize: 10.5, color: "#7A89A3", fontWeight: 600 }}>{[o.이름, o.차량번호].filter(Boolean).join(" · ")}</div>}</td>
+              <td style={{ ...td, color: "#2D4C82" }}>{fb.fareType || "-"}</td>
+              <td style={num}>{won(fb.baseDrv)}</td>
+              <td style={{ ...td, fontWeight: 600 }}>{fb.lines.length ? fb.lines.map((l) => <div key={l.key} style={{ whiteSpace: "nowrap" }}>{l.name} <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{sign(l.drv)}</span>{showSale && l.sale ? <span style={{ color: "#7A89A3" }}> (청구 {sign(l.sale)})</span> : null}</div>) : <span style={{ color: "#B7C2D3" }}>없음</span>}</td>
+              <td style={{ ...num, fontWeight: 900 }}>{won(fb.drv)}</td>
+              {showSale && <td style={num}>{won(fb.sale)}</td>}{showSale && <td style={{ ...num, color: fb.profit < 0 ? "#B4342A" : "#0F1A30" }}>{won(fb.profit)}</td>}
+            </tr>
+          ))}
+          <tr>
+            <td colSpan={4} style={{ ...td, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>합계 {rows.length}건</td>
+            <td style={{ ...num, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>{won(T.baseDrv)}</td>
+            <td style={{ ...td, background: "#F5F7FB", borderBottom: "none" }} />
+            <td style={{ ...num, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>{won(T.drv)}</td>
+            {showSale && <td style={{ ...num, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>{won(T.sale)}</td>}{showSale && <td style={{ ...num, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>{won(T.profit)}</td>}
+          </tr>
+        </tbody>
+      </table>
+
+      {sec("BREAKDOWN", "운임 구성 합계")}
+      <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #E3E8F0" }}>
+        <thead><tr><th style={th}>항목</th><th style={{ ...th, textAlign: "right" }}>건수</th><th style={{ ...th, textAlign: "right" }}>금액 합계</th><th style={{ ...th, textAlign: "right" }}>기사운임 영향</th>{showSale && <th style={{ ...th, textAlign: "right" }}>청구운임 영향</th>}</tr></thead>
+        <tbody>
+          <tr><td style={td}>기본 운임{fareTypes.length ? <span style={{ color: "#7A89A3", fontWeight: 600 }}> (운임구분 {fareTypes.join(" · ")})</span> : null}</td><td style={num}>{rows.length}</td><td style={num}>{won(T.baseDrv)}</td><td style={num}>{won(T.baseDrv)}</td>{showSale && <td style={num}>{won(T.baseSale)}</td>}</tr>
+          {items.map((c) => <tr key={c.name}><td style={td}>{c.name}</td><td style={num}>{c.cnt}</td><td style={num}>{won(c.amount)}</td><td style={num}>{sign(c.drv)}</td>{showSale && <td style={num}>{sign(c.sale)}</td>}</tr>)}
+          <tr><td style={{ ...td, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>최종</td><td style={{ ...num, background: "#F5F7FB", borderBottom: "none" }} /><td style={{ ...num, background: "#F5F7FB", borderBottom: "none", color: "#5B6B85", fontWeight: 600 }}>{T.paid ? `회사 별도 지급 ${won(T.paid)}` : ""}</td><td style={{ ...num, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>{won(T.drv)}</td>{showSale && <td style={{ ...num, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>{won(T.sale)}</td>}</tr>
+        </tbody>
+      </table>
+      {showSale && <div style={{ textAlign: "right", fontSize: 12, fontWeight: 800, color: "#3A4A66", marginTop: 6 }}>수수료 합계(청구운임 − 기사운임 − 회사 별도 지급) <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: T.profit < 0 ? "#B4342A" : "#0F1A30" }}>{won(T.profit)}원</b></div>}
+    </>
+  );
+}
+const FARE_CERT_SALE_KEY = "kpFareCertShowSale"; // 🧾 2026-11-24 운임정보에서 청구운임 보이기(기본) · 숨기기 — 이 PC에 기억
 function FareCertModal({ row, companyName, onClose }) {
   const [zoom, setZoom] = React.useState(1);
+  const [showSale, setShowSale] = React.useState(() => { try { return localStorage.getItem(FARE_CERT_SALE_KEY) !== "0"; } catch { return true; } });
+  const toggleSale = () => setShowSale((v) => { try { localStorage.setItem(FARE_CERT_SALE_KEY, v ? "0" : "1"); } catch { /* 무시 */ } return !v; });
   const captureRef = React.useRef(null);
   // ⭐ 2026-11-03 여러 사업자 — 오더의 청구 사업자가 추가 사업자면 그 사업자 이름·정보로 발급
   const fcBiz = useCompanyBiz(getTenant() || companyName);
-  if (!row) return null;
-  const r = row;
+  if (!row || (Array.isArray(row) && !row.length)) return null;
+  // 🧾 2026-11-24 여러 건을 고르고 [운임정보]를 누르면 운임 명세서(건별 자동 계산 + 총합계)로 보여 준다(사용자 요청)
+  const certRows = (Array.isArray(row) ? row : [row]).slice().sort((a, b) => String(a.상차일 || "").localeCompare(String(b.상차일 || "")) || String(a.상차시간 || "").localeCompare(String(b.상차시간 || "")));
+  const multi = certRows.length > 1;
+  const r = certRows[0];
+  const docTitle = multi ? "운임명세서" : "운임확인서";
   const issuerBiz = fcBiz.multi ? fcBiz.find(bizOf(r, fcBiz.defaultName)) : null;
   const issuerName = issuerBiz?.name || companyName;
 
   const 기사운임 = Number(String(r.기사운임 || "0").replace(/[^\d-]/g, "")) || 0;
+  const fb = fareBreakdown(r); // 🧾 2026-11-24 운임 내역(기본 운임 → 지게차 · 특수운임 → 최종)
   const issuedAt = new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul", hour12: false });
   const docNo = `${(r.상차일 || "").replace(/-/g, "")}-${String(r._id || r.id || "").slice(-6).toUpperCase() || "000000"}`;
 
@@ -354,7 +449,7 @@ function FareCertModal({ row, companyName, onClose }) {
     const canvas = await captureCanvas();
     if (!canvas) return;
     const link = document.createElement("a");
-    link.download = `운임확인서_${r.차량번호 || ""}_${r.상차일 || ""}.png`;
+    link.download = `${docTitle}_${r.차량번호 || ""}_${r.상차일 || ""}${multi ? `_외${certRows.length - 1}건` : ""}.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
   };
@@ -365,8 +460,12 @@ function FareCertModal({ row, companyName, onClose }) {
     const pdf = new (await loadJsPDF())("p", "mm", "a4");
     const pdfWidth = 210;
     const imgHeight = (canvas.height * pdfWidth) / canvas.width;
-    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, Math.min(imgHeight, 297));
-    pdf.save(`운임확인서_${r.차량번호 || ""}_${r.상차일 || ""}.pdf`);
+    // 🧾 명세서가 A4 한 장보다 길면 여러 장으로 나눠 담는다
+    for (let y = 0, page = 0; y < imgHeight; y += 297, page += 1) {
+      if (page) pdf.addPage();
+      pdf.addImage(imgData, "PNG", 0, -y, pdfWidth, imgHeight);
+    }
+    pdf.save(`${docTitle}_${r.차량번호 || ""}_${r.상차일 || ""}${multi ? `_외${certRows.length - 1}건` : ""}.pdf`);
   };
   const handlePrint = async () => {
     const canvas = await captureCanvas();
@@ -374,7 +473,7 @@ function FareCertModal({ row, companyName, onClose }) {
     const imgData = canvas.toDataURL("image/png");
     const w = window.open("", "_blank");
     if (!w) return;
-    w.document.write(`<!doctype html><html><head><title>운임확인서</title><style>
+    w.document.write(`<!doctype html><html><head><title>${docTitle}</title><style>
       @page { size: A4; margin: 10mm; }
       body { margin:0; display:flex; justify-content:center; background:#fff; }
       img { width:100%; max-width:190mm; }
@@ -409,9 +508,10 @@ function FareCertModal({ row, companyName, onClose }) {
           <span className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
           <div className="relative">
             <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>FARE · CERTIFICATE</div>
-            <h3 className="text-[19px] font-black leading-tight"><EditableText id="popup.title.운임정보 미리보기" defaultText="운임확인서" /></h3>
+            <h3 className="text-[19px] font-black leading-tight">{multi ? `운임명세서 · ${certRows.length}건` : <EditableText id="popup.title.운임정보 미리보기" defaultText="운임확인서" />}</h3>
           </div>
           <div className="relative flex items-center gap-1.5">
+            <button type="button" onClick={toggleSale} aria-pressed={showSale} title="운임확인서에 청구운임 · 수수료를 함께 보여 줄지 정해요. 이 PC에 기억돼요." className={`h-9 px-3 rounded-xl border text-[12.5px] font-bold ${showSale ? "bg-white text-[#0F1A30] border-white" : "bg-white/10 border-white/20 hover:bg-white/20"}`}>{showSale ? "청구운임 표시 중" : "청구운임 숨김"}</button>
             <div className="flex items-center rounded-xl bg-white/10 border border-white/15 h-9">
               <button type="button" onClick={() => setZoom((z) => Math.max(0.6, +(z - 0.1).toFixed(2)))} className="w-9 h-9 text-[16px] font-bold hover:bg-white/10 rounded-l-xl">−</button>
               <span className="text-[12px] w-12 text-center tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{Math.round(zoom * 100)}%</span>
@@ -429,7 +529,7 @@ function FareCertModal({ row, companyName, onClose }) {
               <div style={{ background: "#0F1A30", color: "#fff", padding: "22px 34px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
                 <div>
                   <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 10, fontWeight: 800, letterSpacing: "0.3em", color: "#8FB0F0" }}>FARE CERTIFICATE</div>
-                  <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: "0.32em", marginTop: 4 }}>운임확인서</div>
+                  <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: "0.32em", marginTop: 4 }}>{docTitle}</div>
                   {issuerBiz && <div style={{ fontSize: 13, fontWeight: 800, color: "rgba(255,255,255,0.78)", marginTop: 4, letterSpacing: "0.04em" }}>{issuerBiz.name}{issuerBiz.bizNo ? <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontWeight: 700, color: "#8FB0F0", marginLeft: 8 }}>{issuerBiz.bizNo}</span> : null}</div>}
                 </div>
                 <div style={{ textAlign: "right", fontSize: 11.5, color: "rgba(255,255,255,0.7)", lineHeight: 1.7 }}>
@@ -440,6 +540,7 @@ function FareCertModal({ row, companyName, onClose }) {
               <div style={{ height: 4, background: "linear-gradient(90deg,#2D4C82,#8FB0F0)" }} />
 
               <div style={{ padding: "22px 34px 30px" }}>
+                {multi ? <FareStatementBody rows={certRows} issuerName={issuerName} showSale={showSale} MONO={MONO} /> : (<>
                 <div style={{ fontSize: 13.5, fontWeight: 600, color: "#3A4A66", lineHeight: 1.75, background: "#F5F7FB", border: "1px solid #E3E8F0", borderRadius: 10, padding: "12px 16px" }}>
                   본 확인서는 <b style={{ color: "#0F1A30" }}>{issuerName || "운송사"}</b>가 아래 운송 건을 기사 <b style={{ color: "#0F1A30" }}>{r.이름 || "-"}</b>({r.차량번호 || "-"})에게 배차하였고,
                   해당 기사님이 운송을 {done ? "완료하였음" : "수행함"}을 확인하며, 아래 기사운임을 지급함을 증명합니다.
@@ -477,16 +578,48 @@ function FareCertModal({ row, companyName, onClose }) {
                     <div style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 22, fontWeight: 900, marginTop: 2 }}>{(기사운임 + vat).toLocaleString()}원</div>
                   </div>
                 </div>
+                {/* 🧾 2026-11-24 운임 내역 — 운임구분 · 기본 운임 · 지게차 · 특수운임 항목 · 최종 운임(청구운임은 숨길 수 있다) */}
+                {(() => {
+                  const won = (n) => `${Math.round(n).toLocaleString()}원`;
+                  const delta = (n) => (n ? <span style={{ color: n > 0 ? "#2D4C82" : "#B4342A" }}>{n > 0 ? "+" : "−"}{Math.abs(Math.round(n)).toLocaleString()}</span> : <span style={{ color: "#B7C2D3" }}>·</span>);
+                  const th = { fontSize: 11, fontWeight: 800, color: "#5B6B85", padding: "8px 10px", background: "#F5F7FB", borderBottom: "1px solid #E3E8F0", textAlign: "left" };
+                  const td = { fontSize: 12.5, fontWeight: 700, color: "#0F1A30", padding: "8px 10px", borderBottom: "1px solid #EEF1F6", verticalAlign: "top" };
+                  const num = { ...td, textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
+                  const total = { ...num, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" };
+                  return (
+                    <div style={{ marginTop: 12 }}>
+                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 900, color: "#0F1A30" }}>운임 내역</span>
+                        {fb.fareType && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#2D4C82", background: "#EEF3FC", borderRadius: 6, padding: "2px 8px" }}>운임구분 {fb.fareType}</span>}
+                      </div>
+                      <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #E3E8F0" }}>
+                        <thead><tr>
+                          <th style={th}>항목</th><th style={{ ...th, textAlign: "right" }}>금액</th><th style={th}>처리</th>
+                          <th style={{ ...th, textAlign: "right" }}>기사운임</th>{showSale && <th style={{ ...th, textAlign: "right" }}>청구운임</th>}
+                        </tr></thead>
+                        <tbody>
+                          <tr><td style={td}>기본 운임</td><td style={num}>{won(fb.baseDrv)}</td><td style={{ ...td, color: "#7A89A3" }}>특수운임을 넣기 전 운임</td><td style={num}>{won(fb.baseDrv)}</td>{showSale && <td style={num}>{won(fb.baseSale)}</td>}</tr>
+                          {fb.lines.map((l) => (
+                            <tr key={l.key}><td style={td}>{l.name}</td><td style={num}>{won(l.amount)}</td><td style={{ ...td, fontWeight: 600, color: "#5B6B85" }}>{l.how}</td><td style={num}>{delta(l.drv)}</td>{showSale && <td style={num}>{delta(l.sale)}</td>}</tr>
+                          ))}
+                          <tr><td style={{ ...td, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>최종 운임</td><td style={total} /><td style={{ ...td, background: "#F5F7FB", borderBottom: "none", color: "#5B6B85", fontWeight: 600 }}>{fb.paid ? `회사 별도 지급 ${won(fb.paid)}` : ""}</td><td style={total}>{won(fb.drv)}</td>{showSale && <td style={total}>{won(fb.sale)}</td>}</tr>
+                        </tbody>
+                      </table>
+                      {showSale && <div style={{ textAlign: "right", fontSize: 12, fontWeight: 800, color: "#3A4A66", marginTop: 6 }}>수수료(청구운임 − 기사운임 − 회사 별도 지급) <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: fb.profit < 0 ? "#B4342A" : "#0F1A30" }}>{won(fb.profit)}</b></div>}
+                    </div>
+                  );
+                })()}
                 <div style={{ border: "1px solid #E3E8F0", borderBottom: "none", display: "grid", gridTemplateColumns: "1fr 1fr", marginTop: 10 }}>
                   {cell("지급방식", r.지급방식)}
                   {cell("운송상태", done ? "운송완료" : (r.배차상태 || "배차완료"))}
                 </div>
 
+                </>)}
                 {/* 발급처 · 확인 */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 26, paddingTop: 18, borderTop: "1px dashed #CBD5E3" }}>
                   <div style={{ fontSize: 11.5, color: "#8A97AD", lineHeight: 1.7 }}>
                     본 문서는 LogisWeb 배차관리 프로그램에 등록된 배차 정보를 근거로 자동 발급되었습니다.<br />
-                    문서번호로 원본 오더를 확인할 수 있습니다.
+                    {multi ? "건별 운임은 오더에 저장된 운임과 특수운임으로 자동 계산했습니다." : "문서번호로 원본 오더를 확인할 수 있습니다."}
                   </div>
                   <div style={{ textAlign: "right", minWidth: 220 }}>
                     <div style={{ fontSize: 11, fontWeight: 800, color: "#7A89A3", letterSpacing: "0.1em" }}>발급처</div>
@@ -508,7 +641,7 @@ function FareCertModal({ row, companyName, onClose }) {
 
         {/* 하단 액션 */}
         <div className="flex items-center justify-between gap-2 px-6 py-3.5 border-t border-[#E3E8F0] bg-white shrink-0">
-          <span className="text-[12px] font-bold text-[#8A97AD]">A4 한 장으로 저장 · 인쇄됩니다</span>
+          <span className="text-[12px] font-bold text-[#8A97AD]">{multi ? "PDF는 길이에 맞춰 여러 장으로 나눠 저장돼요" : "A4 한 장으로 저장 · 인쇄됩니다"}</span>
           <div className="flex items-center gap-2">
             <button type="button" onClick={saveImage} className="h-10 px-4 rounded-xl border border-[#DCE3EE] text-[#1B2B4B] text-[13px] font-black hover:border-[#2D4C82] transition"><EditableText id="misc.btn.294.이미지저장" defaultText="이미지저장" /></button>
             <button type="button" onClick={savePdf} className="h-10 px-4 rounded-xl border border-[#DCE3EE] text-[#1B2B4B] text-[13px] font-black hover:border-[#2D4C82] transition">PDF저장</button>
@@ -3030,6 +3163,7 @@ import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChang
 import { SpecialFareTag, SpecialFareLine } from "./specialFareTag";
 import { FareShell, FareCard, FareRange, FareRow, FareVias, FareFilterPills, fareStats as calcFareStats } from "./FareResultUi"; // ⚠ 이 파일에 같은 이름 상태값(fareStats)이 있어 다른 이름으로 // 🎨 2026-11-24 운임조회 결과 창 새 디자인 // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import { withRoutePresets } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
+import { fareBreakdown } from "./forkliftCore"; // 🧾 2026-11-24 운임정보 운임 내역
 import { SpecialFareButton, ForkliftChip, ForkliftMark, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount, orderProfit, profitTotals } from "./forklift"; // 🏗 2026-11-09 지게차비용 · ⭐ 2026-11-17 수수료 한 식(orderProfit · profitTotals)
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
@@ -3440,12 +3574,12 @@ const KP_PAGE_META = {
   정산관리: { en: "SETTLEMENT", desc: "거래처 정산과 기사 지급 관리", icon: "M3 6h18v12H3zM3 10h18M7 15h4" },
   관리센터: { en: "CONTROL CENTER", desc: "가입사 사용량·접속·청구 관제", icon: "M12 3l8 4v6c0 4-3.5 7-8 8-4.5-1-8-4-8-8V7z" },
   // 🏢 부서 모드(경리·인사) 메뉴
-  회계관리: { en: "ACCOUNTING", desc: "미수금·미지급금·부가세 — 연간 회계 장부", icon: "M4 4h16v16H4zM8 8h8M8 12h8M8 16h5" },
-  인사관리부: { en: "HUMAN RESOURCES", desc: "이력서·인사발령·근태/근속 — 직원 인사 기록", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6" },
+  회계관리: { en: "ACCOUNTING", desc: "미수금 · 미지급금 · 부가세를 담은 연간 회계 장부", icon: "M4 4h16v16H4zM8 8h8M8 12h8M8 16h5" },
+  인사관리부: { en: "HUMAN RESOURCES", desc: "이력서 · 인사발령 · 근태/근속 등 직원 인사 기록", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 4-6 8-6s8 2 8 6" },
   출근기록부: { en: "ATTENDANCE", desc: "출퇴근·지각·휴가·외근 현황", icon: "M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z" },
   자금현황: { en: "TREASURY", desc: "통장·현금·예금·대출 잔액과 현금 흐름(조회)", icon: "M3 6h18v12H3zM3 10h18M16 15h2" },
   비공개운임: { en: "PRIVATE FARE", desc: "나만 보는 실제 청구 금액 · 차액(비밀번호로 열기)", icon: "M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4" }, // 🔐 2026-11-18
-  스케줄: { en: "EXECUTIVE SCHEDULE", desc: "임원 일정 — 등록하면 모든 직원이 볼 수 있습니다", icon: "M4 5h16v15H4zM4 9h16M8 3v4M16 3v4" },
+  스케줄: { en: "EXECUTIVE SCHEDULE", desc: "임원 일정을 등록하면 모든 직원이 볼 수 있어요", icon: "M4 5h16v15H4zM4 9h16M8 3v4M16 3v4" },
   영업관리: { en: "SALES", desc: "영업 현황 · 영업 기회 · 거래처 담당 · 인센티브", icon: "M3 17l6-6 4 4 8-8M15 7h6v6" },
   자금관리: { en: "FINANCE", desc: "자금 현황(통장·현금·대출) · 수입·지출 장부 · 고정비", icon: "M3 6h18v12H3zM3 10h18M16 15h2" },
   비품관리: { en: "ASSETS", desc: "사무 비품·소모품·IT 자산 · 입출고", icon: "M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10" },
@@ -3456,7 +3590,7 @@ const KP_PAGE_META = {
   직원관리: { en: "STAFF", desc: "직원·기사 가입 승인과 권한", icon: "M16 11a4 4 0 1 0-8 0M3 21c0-4 4-6 9-6s9 2 9 6" },
   // 👔 임원 화면
   결재함: { en: "EXECUTIVE APPROVAL", desc: "최종 결재 · 결재 대기 · 회사 전체 결재 현황", icon: "M5 21h14M7 17h10l1-5H6zM12 12V4M9 4h6" },
-  직원일정: { en: "TEAM SCHEDULE", desc: "연차·반차·외근·출장 — 직원 부재 일정 달력", icon: "M4 5h16v15H4zM4 9h16M8 3v4M16 3v4" },
+  직원일정: { en: "TEAM SCHEDULE", desc: "연차 · 반차 · 외근 · 출장 등 직원 부재 일정 달력", icon: "M4 5h16v15H4zM4 9h16M8 3v4M16 3v4" },
 };
 // ⭐ 2026-10-28 디지털 머리말 — 영문 태그·날짜·시계를 고정폭 디지털 글씨로, 아이콘 타일에 은은한 격자
 function KpPageClock() {
@@ -6069,7 +6203,7 @@ const RichStatusBadge = ({ s, urgent, cancelReq, editReq, onCancelClick, onEditC
   if (cancelReq) {
     return (
       <button type="button" onClick={onCancelClick}
-        title="화주사가 배차취소를 요청했습니다 — 클릭하여 확인"
+        title="화주사가 배차 취소를 요청했어요. 눌러서 확인해 주세요"
         className="px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap text-white"
         style={{
           background: "linear-gradient(135deg,#f87171,#b91c1c)",
@@ -6083,7 +6217,7 @@ const RichStatusBadge = ({ s, urgent, cancelReq, editReq, onCancelClick, onEditC
   if (editReq) {
     return (
       <button type="button" onClick={onEditClick}
-        title="화주사가 수정을 요청했습니다 — 클릭하여 승인/거절"
+        title="화주사가 수정을 요청했어요. 눌러서 승인하거나 거절해 주세요"
         className="px-3 py-1 rounded-lg text-[13px] font-bold whitespace-nowrap text-white"
         style={{
           background: "linear-gradient(135deg,#3b5998,#0f2151)",
@@ -7114,7 +7248,7 @@ function PalletDiagram({ item, qty, layers, palW_mm, palD_mm }) {
   return (
     <div style={{ padding: "4px 0" }}>
       <div style={{ fontSize: 10, color: "#64748b", marginBottom: 4, textAlign: "center" }}>
-        {veh.name} — {(veh.l / 100).toFixed(1)}m × {(veh.w / 100).toFixed(1)}m (위에서 본 뷰)
+        {veh.name} · {(veh.l / 100).toFixed(1)}m × {(veh.w / 100).toFixed(1)}m (위에서 본 모습)
         {rotated && <span style={{ marginLeft: 4, color: "#f59e0b" }}>↺ 회전배치</span>}
       </div>
       <div style={{ position: "relative", width: truckDispW, height: truckDispH, border: "2px solid #1B2B4B", borderRadius: 3, background: "#f1f5f9", overflow: "hidden", margin: "0 auto" }}>
@@ -7650,7 +7784,7 @@ function FloatingCalculator({ onClose }) {
                   박스 크기(cm)와 수량을 입력하면 차량별 최대 적재 개수를 계산합니다.
                 </div>
                 <div>
-                  <label style={lblSt}>박스 크기 (cm) — 가로 × 세로 × 높이</label>
+                  <label style={lblSt}>박스 크기 (cm, 가로 × 세로 × 높이)</label>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr auto 1fr", gap: 4, alignItems: "center" }}>
                     <input autoComplete="off" type="number" min="0" placeholder="가로" style={inpSt} value={boxW} onChange={e => setBoxW(e.target.value)} />
                     <span style={{ color: "#94a3b8", fontSize: 12, textAlign: "center" }}>×</span>
@@ -8693,7 +8827,7 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
     if (!n || payToastRef.current === key) return;
     if (roleView.view && roleView.view !== "acct") { payToastRef.current = ""; return; }
     payToastRef.current = key;
-    try { window.__sflowShowToast?.(`💸 지급 대기 지출결의 ${n}건 — 전자결재 › 결재함 › 지급 대기에서 처리해 주세요`, "info"); } catch { /* 무시 */ }
+    try { window.__sflowShowToast?.(`💸 지급 대기 지출결의 ${n}건이 있어요. 전자결재 › 결재함 › 지급 대기에서 처리해 주세요`, "info"); } catch { /* 무시 */ }
   }, [roleView.view, apCountsRaw.payTodo]);
   const mailCountsNav = useMailCounts();
   const alertsNav = useMobileAlerts({ uid: user?.uid, role: realRole || role, team: myProfileDoc?.team || "", company: deptCompany });
@@ -14571,7 +14705,7 @@ const rec = {
   // ★ auth 사용자 객체는 displayName을 설정한 적이 없어 항상 비어있어서(회원가입 어디서도
   // updateProfile을 호출하지 않음), 예전엔 항상 이메일이 담당자명으로 찍혔다.
   // users/{uid}.name(실명, myRealName)을 우선 사용한다.
-  createdByName: (typeof myRealName !== "undefined" && myRealName) || myNameNow(auth.currentUser?.displayName || auth.currentUser?.email) || null,
+  createdByName: myNameNow(auth.currentUser?.displayName || auth.currentUser?.email) || null,
   companyName: userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY,
 
   // 🔥 여기 안으로 넣어
@@ -15989,7 +16123,7 @@ React.useEffect(() => {
 {(() => {
   const optOn = [form.혼적 && "혼적", form.운행유형 === "왕복" && "왕복", form.긴급 && "긴급"].filter(Boolean);
   return (
-    <ToolMenuButton testId="order-run-options" align="left" minWidth={230} menuTitle="운행 옵션 — 켜고 끌 항목을 눌러요" active={optOn.length > 0}
+    <ToolMenuButton testId="order-run-options" align="left" minWidth={230} menuTitle="운행 옵션: 켜고 끌 항목을 눌러요" active={optOn.length > 0}
       className={`${dmToggleCls(optOn.length > 0)} ${form.긴급 ? "!bg-[#0F1A30] !border-[#0F1A30]" : ""}`}
       label={<><DmDot on={optOn.length > 0} alert={!!form.긴급} />운행 옵션<span className={`font-bold ${optOn.length ? "opacity-90" : "opacity-60"}`}>· {optOn.length ? optOn.join(" · ") : "옵션 없음"}</span></>}
       items={[
@@ -16837,7 +16971,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
 
               {/* 🧰 2026-11-23 [긴급 오더] · [혼적] 체크 → [운행 옵션] 하나(단일 등록과 같은 모양) — 넣는 값은 예전 그대로 */}
               <div className="col-span-2 flex items-center gap-2">
-                <ToolMenuButton testId="multi-run-options" align="left" minWidth={230} menuTitle="운행 옵션 — 켜고 끌 항목을 눌러요"
+                <ToolMenuButton testId="multi-run-options" align="left" minWidth={230} menuTitle="운행 옵션: 켜고 끌 항목을 눌러요"
                   className={`h-9 px-3 rounded-[10px] border text-[13px] font-bold transition ${(currentMultiSlot.혼적 || currentMultiSlot.긴급) ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-[#3A4A66] border-[#DCE3EE] hover:border-[#2D4C82]"}`}
                   label={<>운행 옵션<span className="opacity-80">· {[currentMultiSlot.혼적 && "혼적", currentMultiSlot.긴급 && "긴급"].filter(Boolean).join(" · ") || "옵션 없음"}</span></>}
                   items={[
@@ -18665,7 +18799,7 @@ className={`
     className={`${inputCls}${formDrvLocked ? " !bg-[#F1F4F9] !text-[#1B2B4B]" : formDrvEdit.editing ? " !border-[#2D4C82] ring-2 ring-[#8FB0F0]/40" : ""}`}
     value={form.이름}
     readOnly={formDrvLocked}
-    title={formDrvLocked ? "등록된 기사 정보입니다 — 옆 [수정]을 눌러 고칠 수 있습니다" : undefined}
+    title={formDrvLocked ? "등록된 기사 정보예요. 옆 [수정]을 누르면 고칠 수 있어요" : undefined}
     placeholder="기사명 입력"
     onChange={(e) => onChange("이름", e.target.value)}
     onKeyDown={(e) => { if (formDrvEdit.editing && e.key === "Enter") { e.preventDefault(); e.stopPropagation(); formDrvEdit.finish(form); } }}
@@ -19266,11 +19400,11 @@ className={`
                 {call24MetaError && (
                   <div className="rounded-xl px-5 py-3 text-[12px] font-semibold border bg-[#F2F5FA] border-[#DCE3EE] text-[#1B2B4B]">
                     {call24MetaError.hint && <div className="mb-1 text-[12.5px] font-black text-[#0F1A30]">⚠ {call24MetaError.hint}</div>}
-                    {`주소/톤수/차종 목록을 24시콜에서 불러오지 못했습니다 — 코드: ${call24MetaError.code} / ${call24MetaError.message}`}
+                    {`주소/톤수/차종 목록을 24시콜에서 불러오지 못했어요. (코드: ${call24MetaError.code} / ${call24MetaError.message})`}
                     {call24MetaError.serverIp && (
                       <div className="mt-1 text-[11px] font-normal opacity-80">
                         서버 IP: <span className="font-bold">{call24MetaError.serverIp}</span>
-                        {" — 24시콜 마이페이지 허용 IP와 다르면 이 IP를 등록하세요"}
+                        {". 24시콜 마이페이지의 허용 IP와 다르면 이 IP를 등록해 주세요."}
                       </div>
                     )}
                   </div>
@@ -19496,7 +19630,7 @@ className={`
                           {send24Result.serverIp && /ip/i.test(send24Result.msg || "") && (
                             <div className="mt-1 text-[11px] font-normal opacity-80">
                               서버 IP: <span className="font-bold">{send24Result.serverIp}</span>
-                              {" — 이 IP를 24시콜 마이페이지 허용 IP에 등록하세요"}
+                              {". 이 IP를 24시콜 마이페이지의 허용 IP에 등록해 주세요."}
                             </div>
                           )}
                         </>
@@ -24763,7 +24897,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                     ) : r.취소요청 && r.배차상태 !== "배차취소" ? (
                       <button
                         type="button"
-                        title="화주사가 배차취소를 요청했습니다 — 클릭하여 확인"
+                        title="화주사가 배차 취소를 요청했어요. 눌러서 확인해 주세요"
                         className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap text-white"
                         style={{
                           background: "linear-gradient(135deg,#f87171,#b91c1c)",
@@ -24777,7 +24911,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
                     ) : (r.수정요청 || isRecentShipperEdit(r)) ? (
                       <button
                         type="button"
-                        title={r.수정요청 ? "화주사가 수정을 요청했습니다 — 클릭하여 승인/거절" : "화주사가 오더를 직접 수정했습니다 — 클릭하여 확인"}
+                        title={r.수정요청 ? "화주사가 수정을 요청했어요. 눌러서 승인하거나 거절해 주세요" : "화주사가 오더를 직접 수정했어요. 눌러서 확인해 주세요"}
                         className="px-2 py-0.5 rounded-lg text-[11px] font-bold whitespace-nowrap text-white"
                         style={{
                           background: "linear-gradient(135deg,#3b5998,#0f2151)",
@@ -26854,14 +26988,15 @@ React.useEffect(() => {
   // 🔥 수정모드 + 수정중 데이터 복원
   // ----------------------------
   React.useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("realtimeEdit") || "{}");
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem("realtimeEdit") || "{}") || {}; } catch { saved = {}; } // 🛡 2026-11-24 저장값이 깨져 있어도 화면이 멈추지 않게
 
     // ⚠️ selectedEditMode(구 "선택수정" 인라인 편집 모드)는 더 이상 UI에서 켤 방법이
     // 없다(해당 버튼/저장 로직이 이미 제거됨) — 그런데도 예전 버전에서 localStorage에
     // true로 저장된 값이 남아있으면 새로고침할 때마다 계속 복원되어, 그 안에 들어있던
     // 행(들)만 영구히 "수정 모드" 셀(예: 하차지주소가 더보기 없이 원문 그대로 보이는
     // input)로 렌더링되는 버그가 있었다 — 이 값은 아예 복원하지 않는다.
-    if (saved.selected) setSelected(saved.selected);
+    if (Array.isArray(saved.selected)) setSelected(saved.selected);
     if (saved.edited) setEdited(saved.edited);
   }, []);
   // ----------------------------
@@ -28162,7 +28297,7 @@ const runDailyClose = () => {
             seq,
             label,
             type: "driver",
-            msg: `기사정보 불일치 — 입력: "${rowName}" / DB: "${dbNames}"`,
+            msg: `기사정보 불일치: 입력 "${rowName}" / DB "${dbNames}"`,
           });
         }
       }
@@ -28421,7 +28556,7 @@ const handleCloseFileUpload = async (e) => {
         거래처명: "(미입력)",
         vehicle: row[plateCol], driverName: fileName,
         fieldLabel: "프로그램 등록 여부", fileValue: "24시콜 파일에 있음", programValue: "등록된 오더 없음",
-        msg: `24시콜 파일에 ${fileDate || targetDate} 차량 ${row[plateCol] || "-"}(${fileName || "기사명 미상"}) 기록이 있으나, 프로그램에는 해당 차량번호·날짜로 등록된 오더가 없습니다 — 등록 누락 의심`,
+        msg: `24시콜 파일에 ${fileDate || targetDate} 차량 ${row[plateCol] || "-"}(${fileName || "기사명 미상"}) 기록이 있으나, 프로그램에는 해당 차량번호·날짜로 등록된 오더가 없어요. 등록 누락이 의심돼요`,
       });
       continue; // 매칭 후보 자체가 없으니 아래 배차방식/지급방식/운임 비교는 스킵
     }
@@ -28511,7 +28646,7 @@ const handleCloseFileUpload = async (e) => {
               rowId: mr._id, seq, label, type: "payment", 거래처명,
               vehicle: row[plateCol], driverName: fileName,
               fieldLabel: "지급방식", fileValue: fileFeeType, programValue: programPay,
-              msg: `24시콜: 인수증(계산서) / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
+              msg: `24시콜: 인수증(계산서) / 프로그램: "${programPay}": 지급방식 불일치 (차량: ${row[plateCol]})`,
             });
           }
         } else if (fileFeeType === "선/착불" || fileFeeType === "선착불") {
@@ -28520,7 +28655,7 @@ const handleCloseFileUpload = async (e) => {
               rowId: mr._id, seq, label, type: "payment", 거래처명,
               vehicle: row[plateCol], driverName: fileName,
               fieldLabel: "지급방식", fileValue: fileFeeType, programValue: programPay,
-              msg: `24시콜: 선/착불 / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
+              msg: `24시콜: 선/착불 / 프로그램: "${programPay}": 지급방식 불일치 (차량: ${row[plateCol]})`,
             });
           }
         }
@@ -28537,7 +28672,7 @@ const handleCloseFileUpload = async (e) => {
               rowId: mr._id, seq, label, type: "fare", 거래처명,
               vehicle: row[plateCol], driverName: fileName,
               fieldLabel: "운임(기사)", fileValue: fileFare, programValue: programFare, isMoney: true,
-              msg: `[손실] 24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원 — 운임 불일치 (차량: ${row[plateCol]})`,
+              msg: `[손실] 24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원: 운임 불일치 (차량: ${row[plateCol]})`,
             });
           }
         } else {
@@ -28546,7 +28681,7 @@ const handleCloseFileUpload = async (e) => {
               rowId: mr._id, seq, label, type: "fare", 거래처명,
               vehicle: row[plateCol], driverName: fileName,
               fieldLabel: "운임(기사)", fileValue: fileFare, programValue: programFare, isMoney: true,
-              msg: `24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원 — 운임 불일치 (차량: ${row[plateCol]})`,
+              msg: `24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원: 운임 불일치 (차량: ${row[plateCol]})`,
             });
           }
         }
@@ -28591,7 +28726,7 @@ const handleCloseFileUpload = async (e) => {
         거래처명: mr.거래처명 || "(미입력)",
         vehicle: mr.차량번호, driverName: mr.이름 || "-",
         fieldLabel: "24시콜 파일 등록 여부", fileValue: "파일에 없음", programValue: `배차방식: ${mr.배차방식 || "24시"}`,
-        msg: `배차방식이 "24시"이나 24시콜 파일에 차량번호 없음 (차량: ${mr.차량번호}, 기사: ${mr.이름 || "-"}) — 배차방식 오등록 의심`,
+        msg: `배차방식이 "24시"이나 24시콜 파일에 차량번호 없음 (차량: ${mr.차량번호}, 기사: ${mr.이름 || "-"}). 배차방식 오등록이 의심돼요`,
       });
     }
   });
@@ -29734,7 +29869,7 @@ flashRow(savedId);
     오류/경고/24시콜 비교불일치 중 이 오더에 해당하는 항목을 전부 모아 보여준다. */}
 {dailyCloseIssueCtx && dailyCloseIssueCtx.length > 0 && (
   <div className="bg-gray-50 border border-gray-200 rounded-xl px-5 py-4">
-    <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">일마감 검증 — 이 오더의 문제점 ({dailyCloseIssueCtx.length}건)</div>
+    <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">일마감 검증: 이 오더의 문제점 ({dailyCloseIssueCtx.length}건)</div>
     <div className="space-y-1.5">
       {dailyCloseIssueCtx.map((it, i) => (
         <div key={i} className="text-[12px] text-gray-700 flex items-start gap-2">
@@ -32111,7 +32246,7 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
 
       <div className="px-4 py-2 bg-amber-50 border-b border-amber-100">
         <p className="text-[12px] text-amber-700 font-semibold">
-          차량번호 {driverSelectInfo.list?.[0]?.차량번호} — 배차할 기사를 선택하세요
+          차량번호 {driverSelectInfo.list?.[0]?.차량번호}: 배차할 기사를 골라 주세요
         </p>
       </div>
 
@@ -32560,7 +32695,10 @@ if (editTarget.하차지명) savePlaceSmart(editTarget.하차지명, editTarget.
           <button
             className="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold text-[#2A3852] hover:bg-[#0F1A30] hover:text-white flex items-center gap-2.5 transition-colors"
             onClick={() => {
-              setFareCertRow(contextMenu.row);
+              // 🧾 여러 건을 골라 두고 그중 하나에서 누르면 고른 건 전부를 운임명세서로
+              const r = contextMenu.row;
+              const picked = selected.length > 1 && selected.includes(r._id) ? rows.filter((x) => selected.includes(x._id)) : null;
+              setFareCertRow(picked && picked.length > 1 ? picked : r);
               setContextMenu(null);
             }}
           >
@@ -34415,7 +34553,7 @@ const runDailyClose = () => {
         });
         if (!exactMatch && rowName) {
           const dbNames = dbMatches.map(d => d.이름).join("/");
-          warnings.push({ rowId: row._id, seq, label, type: "driver", msg: `기사정보 불일치 — 입력: "${rowName}" / DB: "${dbNames}"` });
+          warnings.push({ rowId: row._id, seq, label, type: "driver", msg: `기사정보 불일치: 입력 "${rowName}" / DB "${dbNames}"` });
         }
       }
       const phoneDigits = String(row.전화번호 ?? "").replace(/[^\d]/g, "");
@@ -34667,7 +34805,7 @@ const computeCloseFileIssues = (raw) => {
         거래처명: "(미입력)",
         vehicle: row[plateCol], driverName: fileName,
         fieldLabel: "프로그램 등록 여부", fileValue: "24시콜 파일에 있음", programValue: "등록된 오더 없음",
-        msg: `24시콜 파일에 ${fileDate || "해당"} 차량 ${row[plateCol] || "-"}(${fileName || "기사명 미상"}) 기록이 있으나, 프로그램에는 해당 차량번호·날짜로 등록된 오더가 없습니다 — 등록 누락 의심`,
+        msg: `24시콜 파일에 ${fileDate || "해당"} 차량 ${row[plateCol] || "-"}(${fileName || "기사명 미상"}) 기록이 있으나, 프로그램에는 해당 차량번호·날짜로 등록된 오더가 없어요. 등록 누락이 의심돼요`,
       });
       continue;
     }
@@ -34728,7 +34866,7 @@ const computeCloseFileIssues = (raw) => {
               rowId: mr._id, seq, label, type: "payment", 거래처명,
               vehicle: row[plateCol], driverName: fileName,
               fieldLabel: "지급방식", fileValue: fileFeeType, programValue: programPay,
-              msg: `24시콜: 인수증(계산서) / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
+              msg: `24시콜: 인수증(계산서) / 프로그램: "${programPay}": 지급방식 불일치 (차량: ${row[plateCol]})`,
             });
           }
         } else if (fileFeeType === "선/착불" || fileFeeType === "선착불") {
@@ -34737,7 +34875,7 @@ const computeCloseFileIssues = (raw) => {
               rowId: mr._id, seq, label, type: "payment", 거래처명,
               vehicle: row[plateCol], driverName: fileName,
               fieldLabel: "지급방식", fileValue: fileFeeType, programValue: programPay,
-              msg: `24시콜: 선/착불 / 프로그램: "${programPay}" — 지급방식 불일치 (차량: ${row[plateCol]})`,
+              msg: `24시콜: 선/착불 / 프로그램: "${programPay}": 지급방식 불일치 (차량: ${row[plateCol]})`,
             });
           }
         }
@@ -34755,7 +34893,7 @@ const computeCloseFileIssues = (raw) => {
               rowId: mr._id, seq, label, type: "fare", 거래처명,
               vehicle: row[plateCol], driverName: fileName,
               fieldLabel: "운임(기사)", fileValue: fileFare, programValue: programFare, isMoney: true,
-              msg: `[손실] 24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원 — 운임 불일치 (차량: ${row[plateCol]})`,
+              msg: `[손실] 24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원: 운임 불일치 (차량: ${row[plateCol]})`,
             });
           }
         } else {
@@ -34764,7 +34902,7 @@ const computeCloseFileIssues = (raw) => {
               rowId: mr._id, seq, label, type: "fare", 거래처명,
               vehicle: row[plateCol], driverName: fileName,
               fieldLabel: "운임(기사)", fileValue: fileFare, programValue: programFare, isMoney: true,
-              msg: `24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원 — 운임 불일치 (차량: ${row[plateCol]})`,
+              msg: `24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원: 운임 불일치 (차량: ${row[plateCol]})`,
             });
           }
         }
@@ -34806,7 +34944,7 @@ const computeCloseFileIssues = (raw) => {
         rowId: mr._id, seq, label, type: "missing", 거래처명: mr.거래처명 || "(미입력)",
         vehicle: mr.차량번호, driverName: mr.이름 || "-",
         fieldLabel: "24시콜 파일 등록 여부", fileValue: "파일에 없음", programValue: `배차방식: ${mr.배차방식 || "24시"}`,
-        msg: `배차방식이 "24시"이나 24시콜 파일에 차량번호 없음 (차량: ${mr.차량번호}, 기사: ${mr.이름 || "-"}) — 배차방식 오등록 의심`,
+        msg: `배차방식이 "24시"이나 24시콜 파일에 차량번호 없음 (차량: ${mr.차량번호}, 기사: ${mr.이름 || "-"}). 배차방식 오등록이 의심돼요`,
       });
     }
   });
@@ -36046,7 +36184,7 @@ if (mode === "driver") {
       ["상차시간 · 하차시간", "오전 9시, 오후 3시 30분 처럼 입력 (09:00 으로 써도 자동 변환)"],
       ["차량번호 · 기사명 · 전화번호", "입력하면 '배차완료', 비워두면 '배차중'으로 등록됩니다. 등록된 기사의 차량번호만 써도 기사명·전화번호가 자동으로 채워집니다."],
       ["청구운임 · 기사운임", "숫자만 입력 (수수료는 자동 계산)"],
-      ...(fareOn ? [["운임구분", `회사관리 › 운임 규칙 이름(${fareR.rules.map((x) => x.name).filter(Boolean).join(", ") || "예: 일대"}) — 기사운임을 비우면 규칙대로 자동 계산`]] : []),
+      ...(fareOn ? [["운임구분", `회사관리 › 운임 규칙 이름(${fareR.rules.map((x) => x.name).filter(Boolean).join(", ") || "예: 일대"}). 기사운임을 비우면 규칙대로 자동 계산해요`]] : []),
       ["열 이름", "첫 줄(열 이름)은 바꾸지 마세요. 기사명 대신 '이름'이라고 써도 인식합니다."],
     ]);
     guide["!cols"] = [{ wch: 26 }, { wch: 90 }];
@@ -36163,7 +36301,7 @@ if (mode === "driver") {
           if (r === false) { fail++; return false; }
         } });
         ok = upO.ok; fail += upO.fail;
-        showAlert(fail ? `✓ ${ok}건 등록 완료 · ⚠ ${fail}건 실패(하차일이 상차일보다 빠른 줄 등)` : `✓ 대용량 업로드 완료 — ${ok}건 등록되었습니다.`);
+        showAlert(fail ? `✓ ${ok}건 등록 완료 · ⚠ ${fail}건 실패(하차일이 상차일보다 빠른 줄 등)` : `✓ 대용량 업로드를 마쳤어요. ${ok}건을 등록했어요.`);
       } catch (err) {
         console.error(err);
         showAlert("✕ 업로드 중 오류가 발생했습니다.\n" + (err?.message || ""));
@@ -36402,7 +36540,7 @@ if (mode === "driver") {
     const top = scoreList.slice(0, 5)
       .map(
         (d, i) =>
-          `${i + 1}위) ${d.이름} (${d.차량번호}) — 점수 ${d.점수}`
+          `${i + 1}위) ${d.이름} (${d.차량번호}): 점수 ${d.점수}`
       )
       .join("\n");
 
@@ -37649,7 +37787,7 @@ return (
       onDoubleClick={() => { if (isViewer) return; if (frLocked) { frLockAlert(row); return; } setFixedEditId((cur) => (cur === id ? null : id)); }}
       onKeyDownCapture={fixedEditId === id ? (e) => fixedRowKey(e, id) : undefined}
       data-gstart={i > 0 && (String(pageRows[i - 1]?.배차표묶음 || "") !== String(r.배차표묶음 || "") || String(pageRows[i - 1]?.상차일 || "") !== String(r.상차일 || "")) ? "1" : undefined}
-      title={fixedEditId === id ? "수정 중 — ←→ 칸 이동 · ↑↓ 위아래 줄 · Enter 저장하고 끝내기 · Esc 끝내기" : isViewer ? undefined : frLocked ? `🔒 ${ROUTE_LOCK_MSG}${routeOwnerName(row, userNameMap) ? ` (담당: ${routeOwnerName(row, userNameMap)})` : ""}` : "두 번 누르면 이 줄을 수정할 수 있어요"}
+      title={fixedEditId === id ? "수정 중: ←→ 칸 이동 · ↑↓ 위아래 줄 · Enter 저장하고 끝내기 · Esc 끝내기" : isViewer ? undefined : frLocked ? `🔒 ${ROUTE_LOCK_MSG}${routeOwnerName(row, userNameMap) ? ` (담당: ${routeOwnerName(row, userNameMap)})` : ""}` : "두 번 누르면 이 줄을 수정할 수 있어요"}
       style={urgentRowStyle(row, {}, { tint: fixedEditId !== id && !selected.has(id) })}
       className={`kp-frs-row transition-colors ${fixedEditId === id ? "bg-[#EEF4FF] outline outline-2 -outline-offset-2 outline-[#2D4C82]" : selected.has(id) ? "bg-blue-50" : !String(row.차량번호 || "").trim() && row.배차상태 !== "배차취소" ? "bg-[#FFFAF2] hover:bg-[#FFF3E0]" : i % 2 === 0 ? "bg-white hover:bg-[#F5F8FD]" : "bg-[#FAFBFD] hover:bg-[#F5F8FD]"}`}>
       <td className="px-3 py-2 text-center border-b border-[#E9EDF4] border-r border-r-[#F1F4F9]"><input autoComplete="off" type="checkbox" checked={selected.has(id)} onChange={() => toggleOne(id)} /></td>
@@ -39520,7 +39658,7 @@ return (
 {dailyCloseIssueCtx && dailyCloseIssueCtx.length > 0 && (
   <div className="bg-gray-50 border border-gray-200 rounded-xl px-5 py-4">
     <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
-      <div className="text-[13px] font-bold text-[#1B2B4B]">일마감 검증 — 이 오더의 문제점 ({dailyCloseIssueCtx.length}건)</div>
+      <div className="text-[13px] font-bold text-[#1B2B4B]">일마감 검증: 이 오더의 문제점 ({dailyCloseIssueCtx.length}건)</div>
       {dailyCloseIssueCtx.some(it => it.level === "오류") && (
         <button
           type="button"
@@ -40709,7 +40847,7 @@ setCopyPlaceOptions(list);
 
             <div className="px-4 py-2 bg-amber-50 border-b border-amber-100">
               <p className="text-[12px] text-amber-700 font-semibold">
-                차량번호 {driverSelectInfo.list?.[0]?.차량번호} — 배차할 기사를 선택하세요
+                차량번호 {driverSelectInfo.list?.[0]?.차량번호}: 배차할 기사를 골라 주세요
               </p>
             </div>
 
@@ -41628,7 +41766,10 @@ setCopyPlaceOptions(list);
           {/* 운임정보 — 기사 운임 증빙서(운임확인서) 미리보기 */}
           <button className="w-full text-left px-3 py-2 rounded-lg text-[13px] font-semibold text-[#2A3852] hover:bg-[#0F1A30] hover:text-white flex items-center gap-2.5 transition-colors"
             onClick={() => {
-              setFareCertRow(contextMenuDS.row);
+              // 🧾 여러 건을 골라 두고 그중 하나에서 누르면 고른 건 전부를 운임명세서로
+              const r = contextMenuDS.row;
+              const picked = selected.size > 1 && selected.has(getId(r)) ? filtered.filter((x) => selected.has(getId(x))) : null;
+              setFareCertRow(picked && picked.length > 1 ? picked : r);
               setContextMenuDS(null);
             }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg>
@@ -43865,12 +44006,12 @@ function buildMonthCompareInsight(rowsA, rowsB, labelA, labelB) {
       if (vanished.length) {
         const sumV = vanished.reduce((a, c) => a + c.saleA, 0);
         const topV = [...vanished].sort((x, y) => y.saleA - x.saleA).slice(0, 3);
-        parts.push(`${labelA}에만 발생하고 ${labelB}에는 없었던 거래처 ${vanished.length}곳(합계 ${won(sumV)}) — 대표적으로 ${topV.map((c) => `${c.client}(${won(c.saleA)})`).join(", ")}`);
+        parts.push(`${labelA}에만 발생하고 ${labelB}에는 없었던 거래처 ${vanished.length}곳(합계 ${won(sumV)}): 대표적으로 ${topV.map((c) => `${c.client}(${won(c.saleA)})`).join(", ")}`);
       }
       if (appeared.length) {
         const sumA = appeared.reduce((a, c) => a + c.saleB, 0);
         const topA = [...appeared].sort((x, y) => y.saleB - x.saleB).slice(0, 3);
-        parts.push(`${labelB}에 새로 발생한 거래처 ${appeared.length}곳(합계 ${won(sumA)}) — 대표적으로 ${topA.map((c) => `${c.client}(${won(c.saleB)})`).join(", ")}`);
+        parts.push(`${labelB}에 새로 발생한 거래처 ${appeared.length}곳(합계 ${won(sumA)}): 대표적으로 ${topA.map((c) => `${c.client}(${won(c.saleB)})`).join(", ")}`);
       }
       headline = `**${labelA}·${labelB} 매출 차이의 상당 부분은 두 달 모두 거래하지 않은 '일시적 거래처'가 원인입니다.** ${parts.join(", ")}.`;
     }
@@ -44380,7 +44521,7 @@ function MonthCompareInsight({ rows = [], monthA: monthAProp, setMonthA: setMont
                       </tbody>
                     </table>
                     {(distStats.A.sampleCnt < distStats.A.totalOrderCnt || distStats.B.sampleCnt < distStats.B.totalOrderCnt) && (
-                      <p className="text-[11px] text-gray-400 leading-[1.6]">주소 정보가 없거나 위치 확인에 실패한 오더는 집계에서 제외했습니다 — {monthA} {distStats.A.sampleCnt}/{distStats.A.totalOrderCnt}건, {monthB} {distStats.B.sampleCnt}/{distStats.B.totalOrderCnt}건 반영</p>
+                      <p className="text-[11px] text-gray-400 leading-[1.6]">주소 정보가 없거나 위치 확인에 실패한 오더는 집계에서 제외했어요. ({monthA} {distStats.A.sampleCnt}/{distStats.A.totalOrderCnt}건, {monthB} {distStats.B.sampleCnt}/{distStats.B.totalOrderCnt}건 반영)</p>
                     )}
                   </div>
                 )}
@@ -44528,7 +44669,7 @@ function MonthlyPPTReportPanel({ rows = [], monthA: monthAProp, setMonthA: setMo
               value={pptComments}
               onChange={(e) => setPptComments(e.target.value)}
               rows={4}
-              placeholder={"예) ○○물류 3PL 이전 이슈로 감소했던 오더가 성수기 진입과 함께 일부 회복 중\n△△식품 9월 냉장창고 이사 계획 확정 — 9일간 800파레트, 총 45대 배차 예정"}
+              placeholder={"예) ○○물류 3PL 이전 이슈로 감소했던 오더가 성수기 진입과 함께 일부 회복 중\n△△식품 9월 냉장창고 이사 계획 확정: 9일간 800파레트, 총 45대 배차 예정"}
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-[#1B2B4B] resize-none"
             />
           </div>
@@ -47427,7 +47568,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-[18px] font-bold text-[#1B2B4B]"><EditableText id="unassigned.title" defaultText="미배차현황" /></h2>
-          <p className="text-[12px] text-gray-500 mt-0.5"><EditableText id="unassigned.subtitle" defaultText="배차 대기 중인 오더 목록 — 더블클릭으로 수정/복사" /></p>
+          <p className="text-[12px] text-gray-500 mt-0.5"><EditableText id="unassigned.subtitle" defaultText="배차 대기 중인 오더 목록이에요. 두 번 누르면 수정하거나 복사할 수 있어요" /></p>
         </div>
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2">
           <span className="text-[12px] text-gray-500">대기</span>
@@ -49594,7 +49735,7 @@ const handleBatchSettle = async (targetStatus) => {
     const why = await kpPrompt(`${c} ${Number(ym.slice(5))}월 최종마감을 일시해제할까요?\n배차 담당자가 오더를 고치거나 추가 · 삭제할 수 있게 돼요. 사유를 적어 주세요.`, "", { title: "최종마감 일시해제", placeholder: "예: 11/12 운임 정정", okText: "일시해제" });
     if (why == null) return;
     await desk.save(closeIdOf(r), tempUnlockPatch(r, closeMe(), String(why || "").trim()));
-    sflowToast(`${c} 일시해제 — 끝나면 [다시 잠금]을 눌러 주세요`, "success");
+    sflowToast(`${c} 잠금을 잠시 풀었어요. 끝나면 [다시 잠금]을 눌러 주세요`, "success");
   };
   const relockClose = async (c, ym) => {
     const r = closeMapOf(ym).get(c); if (!r || isViewer) return;
@@ -49746,8 +49887,8 @@ const handleBatchSettle = async (targetStatus) => {
     if (!todo.length) return;
     todo.forEach(d => autoCloseDone.current.add(`${csBizCur}|${d.client}|${d.yyyymm}`));
     (async () => {
-      for (const d of todo) { try { await setStmtStage(d.client, d.yyyymm, "마감", { note: "입금 확인 — 자동 마감", extra: { autoClosed: true } }); } catch (e) { /* 무시 */ } }
-      sflowToast(todo.length === 1 ? `${todo[0].client} ${Number(String(todo[0].yyyymm).slice(5))}월 입금 확인 — 마감했어요` : `입금 확인 ${todo.length}곳 마감했어요`, "success");
+      for (const d of todo) { try { await setStmtStage(d.client, d.yyyymm, "마감", { note: "입금 확인: 자동 마감", extra: { autoClosed: true } }); } catch (e) { /* 무시 */ } }
+      sflowToast(todo.length === 1 ? `${todo[0].client} ${Number(String(todo[0].yyyymm).slice(5))}월 입금을 확인하고 마감했어요` : `입금 확인 ${todo.length}곳 마감했어요`, "success");
     })();
   }, [billRows, desk.stmts, csBizCur, isViewer, arCompany]); // eslint-disable-line react-hooks/exhaustive-deps
   const saveStageAsk = async ({ date, note }) => {
@@ -52152,7 +52293,7 @@ const handleBatchSettle = async (targetStatus) => {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-[15px] font-black text-[#0F1A30]">{m.client}</span>
                             <span className={`text-[11.5px] font-extrabold px-2 py-0.5 rounded-full ${KIND[m.kind] || "bg-[#EEF3FB] text-[#1B2B4B]"}`}>{m.kind}</span>
-                            <span className={`text-[11px] font-bold ${m.confidence !== "금액만 일치" ? "text-[#4B6CB7]" : "text-[#0F1A30] underline"}`}>{m.confidence === "별칭" ? "배운 입금자명" : m.confidence === "이름일치" ? "입금자명 일치" : "금액만 일치 — 입금자 확인"}</span>
+                            <span className={`text-[11px] font-bold ${m.confidence !== "금액만 일치" ? "text-[#4B6CB7]" : "text-[#0F1A30] underline"}`}>{m.confidence === "별칭" ? "배운 입금자명" : m.confidence === "이름일치" ? "입금자명 일치" : "금액만 일치 (입금자 확인)"}</span>
                           </div>
                           <div className="text-[12.5px] text-[#5B6B85] mt-0.5">{m.deposit.date} · 입금자 {m.deposit.name || "-"} · <b className="text-[#0F1A30]">{m.deposit.amount.toLocaleString()}원</b></div>
                         </div>
@@ -52164,7 +52305,7 @@ const handleBatchSettle = async (targetStatus) => {
                             {a.yyyymm} · {a.amount.toLocaleString()}원 {a.full ? "→ 정산완료" : `→ 일부입금 (청구 ${a.due.toLocaleString()}원)`}
                           </span>
                         ))}
-                        {m.over > 0 && <span className="text-[12px] font-bold px-2.5 py-1 rounded-lg border border-[#0F1A30] text-[#0F1A30]">초과 {m.over.toLocaleString()}원 — 확인 필요</span>}
+                        {m.over > 0 && <span className="text-[12px] font-bold px-2.5 py-1 rounded-lg border border-[#0F1A30] text-[#0F1A30]">초과 {m.over.toLocaleString()}원 (확인 필요)</span>}
                       </div>
                     </div>
                   ))}
@@ -53590,7 +53731,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                   {payExcelPreview.matched.filter(m=>!m.isSumMatch).length > 0 && (
                     <div>
                       <div className="text-[13px] font-bold text-[#0F1A30] mb-2">
-                        1:1 매칭 ({payExcelPreview.matched.filter(m=>!m.isSumMatch).length}건) — 지급완료 처리됩니다
+                        1:1 매칭 ({payExcelPreview.matched.filter(m=>!m.isSumMatch).length}건): 지급완료로 처리돼요
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-[12px] border-collapse">
@@ -53676,7 +53817,7 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                   {/* 미매칭 */}
                   {payExcelPreview.unmatched.length > 0 && (
                     <div>
-                      <div className="text-[13px] font-bold text-[#0B1428] mb-2">미매칭 ({payExcelPreview.unmatched.length}건) — 처리되지 않습니다</div>
+                      <div className="text-[13px] font-bold text-[#0B1428] mb-2">미매칭 ({payExcelPreview.unmatched.length}건): 처리되지 않아요</div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-[12px] border-collapse">
                           <thead>
@@ -54586,7 +54727,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
           <div className={`bg-white rounded-2xl shadow-2xl ${isFleetGrade(editDriverModal.등급) ? "w-[640px]" : "w-[480px]"} max-w-[96vw] max-h-[92vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 flex items-center justify-between sticky top-0 z-10" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 70%,#2D4C82)" }}>
-              <h3 className="text-white font-bold text-[15px]">기사 수정 — {editDriverModal.차량번호}{isFleetGrade(editDriverModal.등급) ? <span className="ml-2 px-2 py-0.5 rounded-md bg-white/15 text-[11.5px] font-black">{editDriverModal.등급}</span> : null}</h3>
+              <h3 className="text-white font-bold text-[15px]">기사 수정 · {editDriverModal.차량번호}{isFleetGrade(editDriverModal.등급) ? <span className="ml-2 px-2 py-0.5 rounded-md bg-white/15 text-[11.5px] font-black">{editDriverModal.등급}</span> : null}</h3>
               <div className="flex items-center gap-2">
                 {/* ⭐ 2026-11-09 차량관리로 바로 가기 — 지입차관리 › 차량 관리에서 이 차량 정보를 연다 */}
                 {String(editDriverModal.차량번호 || "").trim() && (
@@ -55646,7 +55787,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       cascadeRename = await kpConfirm(
         `거래처명을 "${oldName}" → "${newName}"(으)로 변경합니다.\n\n` +
         `과거 "${oldName}"으로 등록된 모든 오더의 거래처명도 함께 "${newName}"(으)로 바꿔야 운임조회·매출 이력이 끊기지 않고 계속 이어집니다.\n` +
-        `함께 바꾸시겠습니까?\n\n(취소를 누르면 거래처명만 바뀌고, 과거 오더들은 예전 이름 "${oldName}" 그대로 남습니다 — 새 이름은 이력 없는 신규 거래처로 보이게 됩니다)`
+        `함께 바꾸시겠습니까?\n\n(취소를 누르면 거래처명만 바뀌고, 과거 오더들은 예전 이름 "${oldName}" 그대로 남아요. 새 이름은 이력 없는 신규 거래처로 보여요.)`
       );
     }
 
@@ -56753,7 +56894,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
             <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
               <div className="bg-white rounded-2xl shadow-2xl w-[700px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-                  <h3 className="text-white font-bold text-[15px]"><EditableText id="clientEdit.title" defaultText="거래처 수정" /> — {editClientModal.거래처명}</h3>
+                  <h3 className="text-white font-bold text-[15px]"><EditableText id="clientEdit.title" defaultText="거래처 수정" /> · {editClientModal.거래처명}</h3>
                   <button onClick={() => setEditClientModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
                 </div>
                 <div className="px-6 py-5 grid grid-cols-2 gap-4">
@@ -57162,7 +57303,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-2xl w-[580px] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-              <h3 className="text-white font-bold text-[15px]">상하차지 수정 — {editPlaceModal.업체명}</h3>
+              <h3 className="text-white font-bold text-[15px]">상하차지 수정 · {editPlaceModal.업체명}</h3>
               <button onClick={() => setEditPlaceModal(null)} className="text-white/60 hover:text-white text-xl">✕</button>
             </div>
             <div className="px-6 py-5 grid grid-cols-2 gap-4">
@@ -59925,7 +60066,7 @@ function CompanyProfile({ userCompany = "", role = "", userId = "" }) {
                 )}
               </section></>),
             /* ⭐ 2026-11-03 한 회사 · 여러 사업자 — 오더마다 청구 사업자를 고른다 */
-            F("biz", "사업자 목록", "한 회사 · 여러 사업자 — 오더마다 청구 사업자 선택", null, false,
+            F("biz", "사업자 목록", "한 회사가 여러 사업자를 쓰면 오더마다 청구 사업자를 골라요", null, false,
               <BizListEditor company={companyName} canEdit={isAcctTeam || isAdmin || role === "hrManager"} />),
             /* ✉️ 2026-11-08 발신 메일 — 회사마다 자기 메일 계정으로(앱 비밀번호는 서버에만 · 암호화) */
             F("mail", "발신 메일", "명세서·청구서를 보낼 회사 메일 계정", null, false,

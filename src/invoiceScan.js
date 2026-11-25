@@ -193,5 +193,5 @@ export function checkAmount(scan, expect) {
   if (near(scan.total, e)) return { ok: true, level: "vat", text: "합계금액이 운임과 같아요(운임에 부가세가 들어 있는 오더)", diff: 0 };
   if (near(scan.total, Math.round(e * 1.1))) return { ok: true, level: "ok", text: "합계금액이 운임 + 부가세 10%와 같아요", diff: 0 };
   const d = (scan.supply || scan.total) - e;
-  return { ok: false, level: "warn", text: `운임과 ${Math.abs(d).toLocaleString("ko-KR")}원 ${d > 0 ? "많아요" : "적어요"} — 확인해 주세요`, diff: d };
+  return { ok: false, level: "warn", text: `운임과 ${Math.abs(d).toLocaleString("ko-KR")}원 ${d > 0 ? "많아요" : "적어요"} · 확인해 주세요`, diff: d };
 }

@@ -85,14 +85,14 @@ function SettingsForm({ company, settings, clientNames, onDone, first = false })
       else await updateDoc(ref, data);
       onDone?.(data);
     } catch (e) {
-      setMsg(String(e?.code || "").includes("permission") ? "권한이 없어요 — 처음 켜기는 회사 마스터·관리자, 그 뒤로는 담당자만 할 수 있어요" : `저장하지 못했어요 (${e?.code || e?.message || "오류"})`);
+      setMsg(String(e?.code || "").includes("permission") ? "권한이 없어요. 처음 켜기는 회사 마스터·관리자, 그 뒤로는 담당자만 할 수 있어요" : `저장하지 못했어요 (${e?.code || e?.message || "오류"})`);
     } finally { setBusy(false); }
   };
   const freeClients = clientNames.filter((n) => !rules.some((r) => r.name === n));
   return (
     <div className="space-y-5">
       <section>
-        <div className="text-[14px] font-black text-[#0F1A30]">볼 사람 <span className="text-[12.5px] font-bold text-[#7A879C]">— 여기 넣은 사람만 실제 청구 금액을 봅니다(마스터·관리자도 넣지 않으면 못 봄)</span></div>
+        <div className="text-[14px] font-black text-[#0F1A30]">볼 사람 <span className="text-[12.5px] font-bold text-[#7A879C]">여기 넣은 사람만 실제 청구 금액을 봅니다(마스터·관리자도 넣지 않으면 못 봄)</span></div>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {viewers.map((id) => (
             <span key={id} className="h-8 pl-3 pr-1 rounded-full bg-[#0F1A30] text-white text-[13px] font-bold inline-flex items-center gap-1">{nameOf(id)}{id === me ? " (나)" : ""}
@@ -106,7 +106,7 @@ function SettingsForm({ company, settings, clientNames, onDone, first = false })
         </div>
       </section>
       <section>
-        <div className="text-[14px] font-black text-[#0F1A30]">비공개 청구 거래처 <span className="text-[12.5px] font-bold text-[#7A879C]">— 실제 청구를 자동으로 계산할 규칙(오더마다 직접 고칠 수 있음)</span></div>
+        <div className="text-[14px] font-black text-[#0F1A30]">비공개 청구 거래처 <span className="text-[12.5px] font-bold text-[#7A879C]">실제 청구를 자동으로 계산할 규칙(오더마다 직접 고칠 수 있음)</span></div>
         <div className="mt-2 space-y-2">
           {rules.map((r, i) => (
             <div key={`${r.name}-${i}`} className="flex flex-wrap items-center gap-2 rounded-xl border border-[#E3E8F0] bg-white px-3 py-2">

@@ -42,21 +42,21 @@ const suggestFor = (x, execKeys = [], ro = null) => {
   return !ro || ro.fits(s0, x?.team) ? s0 : ro.firstFor(x?.team);
 };
 const ROLE_DESC = {
-  admin: "운송 업무 전체 — 배차·운임·매출·기사·거래처 관리 + 관리자메뉴(직원 승인 등)",
-  hrManager: "인사관리부 화면 — 인사 기록·발령·근태·입퇴사·직원 승인",
-  test: "경리 화면 — 정산·회계·자금·비품·퇴직 정산",
-  hrAcct: "경리 + 인사 — 상단 [화면 전환]으로 경리 화면 ↔ 인사 화면 전환",
-  allMgr: "운송 + 영업 + 경리 + 인사 — 상단 [화면 전환]으로 운송 · 영업 · 경리 · 인사 화면 전환. 부서가 임원이면 로그인할 때 경영 브리핑부터",
-  salesMgr: "영업관리자 — 영업 화면(영업관리·거래처·단가표·매출, 인센티브 규정·거래처 담당 지정)",
-  salesStaff: "영업사무원 — 영업 화면(본인 실적·인센티브·영업 기회, 권한 관리에서 조정)",
-  acctStaff: "경리사무원 — 경리 화면(자금·매출 제외, 권한 관리에서 조정)",
-  hrStaff: "인사사무원 — 인사 화면(기사 승인 제외, 권한 관리에서 조정)",
-  legalMgr: "법무관리자 — 전자결재·계약서·회사관리 + 거래처 조회(권한 관리에서 조정)",
-  legalStaff: "법무사무원 — 전자결재·계약서·회사관리(권한 관리에서 조정)",
-  devMgr: "개발관리자 — 전자결재·회사관리 + 운송 업무 조회(권한 관리에서 조정)",
-  devStaff: "개발사무원 — 전자결재·회사관리 + 배차현황 조회(권한 관리에서 조정)",
-  user: "실무자 — 배차·기사·거래처 업무(매출·정산 제외)",
-  viewer: "조회전용 — 보기만, 수정 불가",
+  admin: "운송 업무 전체: 배차·운임·매출·기사·거래처 관리 + 관리자메뉴(직원 승인 등)",
+  hrManager: "인사관리부 화면: 인사 기록·발령·근태·입퇴사·직원 승인",
+  test: "경리 화면: 정산·회계·자금·비품·퇴직 정산",
+  hrAcct: "경리 + 인사: 상단 [화면 전환]으로 경리 화면 ↔ 인사 화면 전환",
+  allMgr: "운송 + 영업 + 경리 + 인사: 상단 [화면 전환]으로 운송 · 영업 · 경리 · 인사 화면 전환. 부서가 임원이면 로그인할 때 경영 브리핑부터",
+  salesMgr: "영업관리자: 영업 화면(영업관리·거래처·단가표·매출, 인센티브 규정·거래처 담당 지정)",
+  salesStaff: "영업사무원: 영업 화면(본인 실적·인센티브·영업 기회, 권한 관리에서 조정)",
+  acctStaff: "경리사무원: 경리 화면(자금·매출 제외, 권한 관리에서 조정)",
+  hrStaff: "인사사무원: 인사 화면(기사 승인 제외, 권한 관리에서 조정)",
+  legalMgr: "법무관리자: 전자결재·계약서·회사관리 + 거래처 조회(권한 관리에서 조정)",
+  legalStaff: "법무사무원: 전자결재·계약서·회사관리(권한 관리에서 조정)",
+  devMgr: "개발관리자: 전자결재·회사관리 + 운송 업무 조회(권한 관리에서 조정)",
+  devStaff: "개발사무원: 전자결재·회사관리 + 배차현황 조회(권한 관리에서 조정)",
+  user: "실무자: 배차·기사·거래처 업무(매출·정산 제외)",
+  viewer: "조회전용: 보기만, 수정 불가",
 };
 
 function useStaff(company) {
@@ -96,7 +96,7 @@ export function StaffRegister({ company, onDone }) {
   };
   return (
     <div className="space-y-4">
-      <BookHero en="HR · REGISTER" title="직원 등록" desc="프로그램 계정이 없어도 인사 기록을 만들 수 있습니다 — 등록 후 인사관리 › 이력서를 채우세요" />
+      <BookHero en="HR · REGISTER" title="직원 등록" desc="프로그램 계정이 없어도 인사 기록을 만들 수 있습니다. 등록 후 인사관리 › 이력서를 채우세요" />
       {done && <div className="rounded-2xl bg-[#ECFDF3] border border-[#ABEFC6] px-4 py-3 flex items-center gap-3"><b className="text-[14px] text-[#067647]">✓ {done.name}님을 등록했습니다</b><button type="button" onClick={() => onDone?.(done.id)} className="ml-auto h-9 px-4 rounded-xl bg-[#0F1A30] text-white text-[13px] font-black">이력서 작성하러 가기 ›</button></div>}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-4">
         <BookCard en="PERSONAL" title="인적 사항">
@@ -425,7 +425,7 @@ export function StaffInfoBoard({ company, canManage }) {
                   <div className="grid grid-cols-2 gap-4">
                     <Field label="부서"><CustomSelect value={f.team} onChange={(e) => { const team = e.target.value; const position = hr.positionsFor(team).includes(f.position) ? f.position : ""; setF({ ...f, team, position, role: sel.isMaster ? f.role : suggestFor({ team, position }, ro.execKeys, ro) }); }} className={fi}><option value="">미배정</option>{hr.teams.map((t) => <option key={t}>{t}</option>)}</CustomSelect></Field>
                     <Field label="직책"><CustomSelect value={f.position} onChange={(e) => setF({ ...f, position: e.target.value, role: sel.isMaster ? f.role : suggestFor({ team: f.team, position: e.target.value }, ro.execKeys, ro) })} className={fi}><option value="">미설정</option>{[...new Set([...hr.positionsFor(f.team), f.position].filter(Boolean))].map((p) => <option key={p}>{p}</option>)}</CustomSelect></Field>
-                    <Field label="권한" hint={sel.isMaster ? "마스터 계정은 권한을 바꿀 수 없습니다" : ROLE_DESC[f.role] || (ro.execKeys.includes(f.role) ? "경영 브리핑 — 권한 관리에서 만든 임원 역할" : "권한 관리에서 만든 역할 — 메뉴는 그 설정을 따릅니다")}><CustomSelect value={f.role} disabled={sel.isMaster} onChange={(e) => setF({ ...f, role: e.target.value })} className={fi}>{ro.forTeam(f.team, f.role).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</CustomSelect></Field>
+                    <Field label="권한" hint={sel.isMaster ? "마스터 계정은 권한을 바꿀 수 없습니다" : ROLE_DESC[f.role] || (ro.execKeys.includes(f.role) ? "경영 브리핑: 권한 관리에서 만든 임원 역할" : "권한 관리에서 만든 역할: 메뉴는 그 설정을 따릅니다")}><CustomSelect value={f.role} disabled={sel.isMaster} onChange={(e) => setF({ ...f, role: e.target.value })} className={fi}>{ro.forTeam(f.team, f.role).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</CustomSelect></Field>
                     {/* ⭐ 2026-11-17 업무 범위 — 경리 권한이면 "경리업무만"(배차 메뉴 · 배차 알림 없음)을 고를 수 있어요 */}
                     {(() => { const opts = scopeOptionsFor(f.role, sel.isMaster === true); const cur = effectiveScope(f.role, f.workScope, sel.isMaster === true); return (
                       <Field label="업무 범위" hint={`${(opts.find(([k]) => k === cur) || opts[0])[2]}${opts.length < 2 ? " · 권한에 따라 정해져요" : ""}`}><CustomSelect value={cur} disabled={opts.length < 2} onChange={(e) => setF({ ...f, workScope: e.target.value })} className={fi}>{opts.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</CustomSelect></Field>
@@ -438,12 +438,12 @@ export function StaffInfoBoard({ company, canManage }) {
                     <Field label="출근 시간" hint="이 시간 3시간 전부터 자동 출근 · 지각 기준"><CustomSelect value={f.workStartTime} onChange={(e) => setF({ ...f, workStartTime: e.target.value })} className={`${fi} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</CustomSelect></Field>
                     <Field label="퇴근 시간" hint="이 시간 1시간 전부터 자동 퇴근(출근지 반경 밖)"><CustomSelect value={f.workEndTime} onChange={(e) => setF({ ...f, workEndTime: e.target.value })} className={`${fi} tabular-nums`}>{WORK_TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}</CustomSelect></Field>
                   </div>
-                  <div className="text-[12px] text-[#7A879C] mt-2">반차는 이 시간 기준으로 계산돼요 — 오전반차 출근 {(() => { const [h, m] = String(f.workStartTime || "09:00").split(":").map(Number); return `${String(Math.min(23, h + 4)).padStart(2, "0")}:${String(m).padStart(2, "0")}`; })()} · 오후반차 퇴근 같은 시각.</div>
+                  <div className="text-[12px] text-[#7A879C] mt-2">반차는 이 시간 기준으로 계산돼요. 오전반차 출근 {(() => { const [h, m] = String(f.workStartTime || "09:00").split(":").map(Number); return `${String(Math.min(23, h + 4)).padStart(2, "0")}:${String(m).padStart(2, "0")}`; })()} · 오후반차 퇴근 같은 시각.</div>
                   {canManage && <div className="mt-3 flex justify-end"><button type="button" disabled={busy} onClick={saveInfo} className="h-10 px-5 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-50 whitespace-nowrap">{busy ? "저장 중…" : "출퇴근 시간 저장"}</button></div>}
                 </Section>
                 <Section no="04" en="Tenure" title="입사 · 근속" right={<span className={`inline-flex items-center gap-1 h-6 px-2 rounded-md text-[11.5px] font-bold ${canHire ? "bg-[#EEF3FC] text-[#2D4C82]" : "bg-[#F2F4F8] text-[#7A879C]"}`}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="10" rx="2" />{canHire ? <path d="M8 11V7a4 4 0 017.5-2" /> : <path d="M8 11V7a4 4 0 018 0v4" />}</svg>{canHire ? "인사팀 수정 가능" : "인사팀 전용"}</span>}>
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="입사일" hint={f.hireDate ? "연차 · 퇴직금 계산 기준일" : "연차·퇴직금 계산 기준일 — 아직 등록되지 않았습니다"}><CustomDatePicker value={f.hireDate} disabled={!canHire} onChange={(e) => { const v = e.target.value; if (v && v > kstDay()) return; setF({ ...f, hireDate: v }); }} className={`${fi} tabular-nums`} showIcon /></Field>
+                    <Field label="입사일" hint={f.hireDate ? "연차 · 퇴직금 계산 기준일" : "연차·퇴직금 계산 기준일: 아직 등록되지 않았습니다"}><CustomDatePicker value={f.hireDate} disabled={!canHire} onChange={(e) => { const v = e.target.value; if (v && v > kstDay()) return; setF({ ...f, hireDate: v }); }} className={`${fi} tabular-nums`} showIcon /></Field>
                     <Field label="근속" hint={canHire ? "입사일은 이 화면에서만 바꿀 수 있습니다" : "입사일은 인사팀만 바꿀 수 있습니다"}>
                       <div className="h-12 px-3.5 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] flex items-baseline gap-2 pt-3"><span className="text-[17px] font-black text-[#0F1A30] tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{f.hireDate ? tenureOf(f.hireDate) || "1개월 미만" : "—"}</span>{f.hireDate && f.hireDate !== origHire && <span className="text-[11.5px] font-bold text-[#2D4C82]">변경됨</span>}</div>
                     </Field>
@@ -465,7 +465,7 @@ export function StaffInfoBoard({ company, canManage }) {
                       </div>
                       {f.leaveFrom && f.leaveTo && <div className="flex items-baseline gap-2 text-[#1B2B4B]"><span className="text-[20px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{Math.max(0, Math.round((new Date(f.leaveTo) - new Date(f.leaveFrom)) / 864e5) + 1)}</span><span className="text-[13px] font-bold">일</span><span className="text-[13px] text-[#7A879C]">· 약 {(Math.max(0, (new Date(f.leaveTo) - new Date(f.leaveFrom)) / 864e5 + 1) / 30.44).toFixed(1)}개월</span></div>}
                       <input value={f.leaveMemo} onChange={(e) => setF({ ...f, leaveMemo: e.target.value })} className={fi} placeholder={f.employmentStatus === "육아휴직" ? "자녀 이름·생년월일, 전자결재 문서번호 등" : "사유·메모"} />
-                      {f.employmentStatus === "육아휴직" && <div className="rounded-lg bg-white border border-[#E3E8F0] px-3.5 py-3 text-[12.5px] text-[#5B6B85] leading-relaxed">만 8세 이하(초2 이하) 자녀 · 최대 1년(부모 모두 3개월 이상 쓰면 1년 6개월) · 휴직 30일 전 신청 · 휴직 기간도 근속·연차 산정에 포함 · 복귀 시 같은 업무(같은 수준 임금) — 급여는 고용센터에서 지급(회사는 확인서 제출)</div>}
+                      {f.employmentStatus === "육아휴직" && <div className="rounded-lg bg-white border border-[#E3E8F0] px-3.5 py-3 text-[12.5px] text-[#5B6B85] leading-relaxed">만 8세 이하(초2 이하) 자녀 · 최대 1년(부모 모두 3개월 이상 쓰면 1년 6개월) · 휴직 30일 전 신청 · 휴직 기간도 근속·연차 산정에 포함 · 복귀 시 같은 업무(같은 수준 임금): 급여는 고용센터에서 지급(회사는 확인서 제출)</div>}
                       {f.employmentStatus === "출산휴가" && <div className="rounded-lg bg-white border border-[#E3E8F0] px-3.5 py-3 text-[12.5px] text-[#5B6B85] leading-relaxed">출산 전후 90일(다태아 120일) · 출산 후 45일(다태아 60일) 이상 · 최초 60일(다태아 75일) 유급</div>}
                     </div>
                   )}
@@ -481,7 +481,7 @@ export function StaffInfoBoard({ company, canManage }) {
                 </Section>
                 <Section no="02" en="Schedule" title="일정">
                   <div className="grid grid-cols-2 gap-4">
-                    <Field label="퇴직일(마지막 근무일)" hint={r.date > kstDay() ? "미래 날짜 — [예정 등록] 후 그날 확정" : "오늘 이전 — 바로 퇴사 확정"}><CustomDatePicker value={r.date} onChange={(e) => setR({ ...r, date: e.target.value })} className={`${fi} tabular-nums`} showIcon /></Field>
+                    <Field label="퇴직일(마지막 근무일)" hint={r.date > kstDay() ? "미래 날짜: [예정 등록] 후 그날 확정" : "오늘 이전: 바로 퇴사 확정"}><CustomDatePicker value={r.date} onChange={(e) => setR({ ...r, date: e.target.value })} className={`${fi} tabular-nums`} showIcon /></Field>
                     <Field label="통보일"><CustomDatePicker value={r.noticeDate} onChange={(e) => setR({ ...r, noticeDate: e.target.value })} className={`${fi} tabular-nums`} showIcon /></Field>
                   </div>
                 </Section>
@@ -524,7 +524,7 @@ export function HrSettingsPanel({ company, canManage }) {
   const Pill = ({ v, onX, base }) => <span className="inline-flex items-center gap-1.5 h-9 pl-3.5 pr-1.5 rounded-full bg-white border border-[#DCE3EE] text-[13.5px] font-black text-[#0F1A30]">{v}{base && <span className="text-[10px] font-bold text-[#9AA9C3]">기본</span>}{canManage && onX && <button type="button" onClick={onX} className="w-6 h-6 rounded-full hover:bg-[#FEF3F2] text-[#9AA9C3] hover:text-[#B42318]">✕</button>}</span>;
   return (
     <div className="space-y-4">
-      <BookHero en="HR · SETTINGS" title="직책 · 부서 · 권한 설정" desc="기본 부서·직책은 그대로 두고, 우리 회사에 필요한 부서·직책을 추가합니다(추가한 것만 뺄 수 있음) — 인사관리자·마스터만 바꿀 수 있습니다" />
+      <BookHero en="HR · SETTINGS" title="직책 · 부서 · 권한 설정" desc="기본 부서·직책은 그대로 두고, 우리 회사에 필요한 부서·직책을 추가합니다(추가한 것만 뺄 수 있음): 인사관리자·마스터만 바꿀 수 있습니다" />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <BookCard en="DEPARTMENTS" title={`부서 ${hr.teams.length}개`}>
           <div className="flex flex-wrap gap-1.5">{hr.teams.map((v) => <Pill key={v} v={v} base={TEAM_OPTIONS.includes(v)} onX={TEAM_OPTIONS.includes(v) ? null : () => removeTeam(v)} />)}</div>
@@ -541,7 +541,7 @@ export function HrSettingsPanel({ company, canManage }) {
       </div>
       <BookCard en="ROLES" title="권한(프로그램 사용 범위)">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {ro.options.map(([r, l]) => <div key={r} className="rounded-xl border border-[#E3E8F0] px-3.5 py-2.5"><div className="text-[14px] font-black text-[#0F1A30]">{l}{!ROLE_DESC[r] && <span className="ml-1.5 text-[10.5px] font-black px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#2D4C82]">직접 만든 역할</span>}</div><div className="text-[12px] text-[#7A879C]">{ROLE_DESC[r] || (ro.execKeys.includes(r) ? "경영 브리핑 — 메뉴 범위는 권한 관리 설정" : "메뉴 범위는 권한 관리 설정을 따릅니다")}</div></div>)}
+          {ro.options.map(([r, l]) => <div key={r} className="rounded-xl border border-[#E3E8F0] px-3.5 py-2.5"><div className="text-[14px] font-black text-[#0F1A30]">{l}{!ROLE_DESC[r] && <span className="ml-1.5 text-[10.5px] font-black px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#2D4C82]">직접 만든 역할</span>}</div><div className="text-[12px] text-[#7A879C]">{ROLE_DESC[r] || (ro.execKeys.includes(r) ? "경영 브리핑: 메뉴 범위는 권한 관리 설정" : "메뉴 범위는 권한 관리 설정을 따릅니다")}</div></div>)}
         </div>
         <div className="mt-3 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3.5 py-2.5 text-[12.5px] text-[#5B6B85] leading-relaxed">
           역할 추가·이름 변경·메뉴 범위 수정은 <b className="text-[#0F1A30]">최고관리자 › 관리자메뉴 › 권한 관리</b>에서 합니다. 여기서 만든 역할은 직원 정보·인사발령·직원관리의 권한 목록에 바로 나타납니다. 부서·직책을 고르면 권한이 자동 추천됩니다(임원 → 임원관리자 · 통합관리자, 경영지원팀 → 경리 · 인사 역할, 물류운송팀 → 운송관리자 · 운송사무원, 영업팀 → 영업관리자 · 영업사무원).
@@ -577,7 +577,7 @@ export function CompanyRules({ company, canEdit = false }) {
   const cur = open ? [...(rows || []), ...tpls].find((r) => r.id === open) : null;
   return (
     <div className="space-y-4">
-      <BookHero en="COMPANY · RULES" title="사내 규정" desc="취업규칙·인사·복무·급여·휴가·출장·차량 안전·보안 규정 — 모든 직원이 볼 수 있습니다"
+      <BookHero en="COMPANY · RULES" title="사내 규정" desc="취업규칙·인사·복무·급여·휴가·출장·차량 안전·보안 규정: 모든 직원이 볼 수 있습니다"
         right={canEdit && <button type="button" onClick={() => setEdit({ title: "", category: "취업규칙", body: "", effectiveDate: kstDay() })} className="h-10 px-4 rounded-xl bg-white text-[#0F1A30] text-[13.5px] font-black whitespace-nowrap">+ 규정 등록</button>}
         kpis={[["우리 회사 규정", `${(rows || []).length}건`], ["표준안(미등록)", `${tpls.length}건`, "법령 기반 기본안"], ["취업규칙", (rows || []).some((r) => r.category === "취업규칙") ? "등록됨" : "표준안", "10인 이상 신고 의무"]]} />
       {canEdit && tpls.length > 0 && (
@@ -595,7 +595,7 @@ export function CompanyRules({ company, canEdit = false }) {
       }}>{c}</Chip>)}</div>
       {cur ? (
         <BookCard en={cur.category} title={cur.title} right={<div className="flex gap-1.5"><button type="button" onClick={() => setOpen(null)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B]">← 목록</button>{canEdit && <button type="button" onClick={() => setEdit(cur.tpl ? { title: cur.title, category: cur.category, body: cur.body, effectiveDate: kstDay() } : { ...cur })} className="h-9 px-3 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black">{cur.tpl ? "고쳐서 우리 회사 규정으로 등록" : "수정"}</button>}</div>}>
-          {cur.tpl ? <div className="mb-3 rounded-xl bg-[#FFFBF2] border border-[#FEDF89] px-3.5 py-2.5 text-[12.5px] text-[#93370D] font-bold">표준안입니다 — 회사가 아직 등록하지 않아 법령 기반 기본안을 보여 드립니다. 시행 전 회사 사정(금액·기간 등)에 맞게 고쳐 주세요.</div>
+          {cur.tpl ? <div className="mb-3 rounded-xl bg-[#FFFBF2] border border-[#FEDF89] px-3.5 py-2.5 text-[12.5px] text-[#93370D] font-bold">표준안입니다. 회사가 아직 등록하지 않아 법령 기반 기본안을 보여 드립니다. 시행 전 회사 사정(금액·기간 등)에 맞게 고쳐 주세요.</div>
             : <div className="text-[12px] text-[#7A879C] mb-3" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>v{cur.version || 1} · 시행 {cur.effectiveDate || "-"}</div>}
           <div className="rounded-2xl bg-[#FBFCFE] border border-[#E3E8F0] px-5 md:px-8 py-6 text-[15px] leading-[1.95] text-[#1F2A44] whitespace-pre-wrap">{cur.body}</div>
         </BookCard>

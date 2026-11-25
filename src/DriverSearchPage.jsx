@@ -157,7 +157,7 @@ export default function DriverSearchPage() {
         </div>
         <div>
           <div style={{ marginBottom: 5 }}><LogisWordmark height={13} /></div>
-          <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>서류 업로드 — 오더 검색</div>
+          <div style={{ color: "rgba(255,255,255,0.5)", fontSize: 11 }}>서류 업로드: 오더 검색</div>
         </div>
       </div>
 

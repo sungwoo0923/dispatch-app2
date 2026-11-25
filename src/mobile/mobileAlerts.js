@@ -41,7 +41,7 @@ export function useMobileAlerts({ uid, role, team = "", company = "", onAlert })
       set("approval", todo.length);
       set("mineNew", all.filter((d) => mineUnread(d, uid)).length);
       const byKey = new Map(todo.map((d) => [`${d.id}_${d.step}_${d.cancel?.step ?? ""}`, d]));
-      w([...byKey.keys()], (k) => { const d = byKey.get(k); return `✎ 결재 요청 · ${d.drafter?.name || ""} — ${d.title || d.formLabel || "결재 문서"}`; });
+      w([...byKey.keys()], (k) => { const d = byKey.get(k); return `✎ 결재 요청 · ${d.drafter?.name || ""} · ${d.title || d.formLabel || "결재 문서"}`; });
     }, () => { set("approval", 0); set("mineNew", 0); });
   }, [uid]); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -381,7 +381,7 @@ function WorkSheet({ label, children }) {
     <div>
       <div className="mb-2.5 flex items-center gap-2 text-[12.5px] font-semibold" style={{ color: EX.mute }}>
         <span className="w-1.5 h-1.5 rounded-full" style={{ background: EX.gold }} />
-        {label} — 영업팀과 동일한 업무 화면으로, 확정 · 배정 · 기록을 이 화면에서 바로 처리할 수 있습니다.
+        {label} · 영업팀과 동일한 업무 화면으로, 확정 · 배정 · 기록을 이 화면에서 바로 처리할 수 있습니다.
       </div>
       <div className="rounded-[22px] p-3 md:p-5 text-[#0F1A30]" style={{ background: "linear-gradient(180deg,#F5F7FB,#EEF2F8)", border: `1px solid ${EX.lineHi}`, boxShadow: "0 24px 48px rgba(0,0,0,.28)" }}>
         {children}

@@ -54,7 +54,7 @@ const NewTag = () => <span className="inline-flex items-center h-5 px-1.5 rounde
 // ⭐ 2026-11-05 노선 운행 ON/OFF 스위치(목록·등록폼) — OFF면 앞으로 배차를 만들지 않는다(이미 만든 배차는 그대로)
 export function OnOffSwitch({ on, onChange, dark = false, disabled = false, title }) {
   return (
-    <button type="button" role="switch" aria-checked={!!on} disabled={disabled} title={title || (on ? "운행 중 — 누르면 OFF(앞으로 배차를 만들지 않음)" : "운행 OFF — 누르면 ON(배차를 다시 만듦)")}
+    <button type="button" role="switch" aria-checked={!!on} disabled={disabled} title={title || (on ? "운행 중: 누르면 OFF(앞으로 배차를 만들지 않음)" : "운행 OFF: 누르면 ON(배차를 다시 만듦)")}
       onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChange?.(!on); }} onDoubleClick={(e) => e.stopPropagation()}
       className={`relative shrink-0 inline-flex items-center h-7 w-[60px] rounded-full transition-colors disabled:opacity-50 ${on ? (dark ? "bg-[#8FB0F0]" : "bg-[#0F1A30]") : (dark ? "bg-white/20" : "bg-[#CBD5E3]")}`}>
       <span className={`absolute text-[11.5px] font-black tracking-normal ${on ? `left-2 ${dark ? "text-[#0B1428]" : "text-white"}` : "right-2 text-white"}`} style={{ fontFamily: MONO }}>{on ? "ON" : "OFF"}</span>
@@ -1128,14 +1128,14 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
       if (!next) {
         const today = kst();
         const fut = (dispatchData || []).filter((o) => o.고정노선Id === r.id && String(o.상차일 || "") >= today).length;
-        if (!(await kpConfirm(`"${r.name}" 노선의 운행을 끌까요(OFF)?\n앞으로 새 배차를 만들지 않습니다.${fut ? `\n이미 만들어 둔 오늘 이후 배차 ${fut}건은 그대로 남습니다 — 필요하면 배차현황에서 지우세요.` : ""}`, { title: "운행 OFF", okText: "OFF" }))) return;
+        if (!(await kpConfirm(`"${r.name}" 노선의 운행을 끌까요(OFF)?\n앞으로 새 배차를 만들지 않습니다.${fut ? `\n이미 만들어 둔 오늘 이후 배차 ${fut}건은 그대로 남습니다. 필요하면 배차현황에서 지우세요.` : ""}`, { title: "운행 OFF", okText: "OFF" }))) return;
         await updateDoc(doc(db, "fixedRoutes", r.id), { active: false, ...by });
-        flash(`"${r.name}" 운행 OFF — 앞으로 배차를 만들지 않습니다`);
+        flash(`"${r.name}" 운행 OFF: 앞으로 배차를 만들지 않습니다`);
       } else {
         if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // ✅ 2026-11-23 운행 ON도 한 번 묻기(OFF는 위에서 묻는다)
         await updateDoc(doc(db, "fixedRoutes", r.id), { active: true, ...by });
         const n = r.autoDispatch ? await runGen([{ ...r, active: true }], { full: true }) : 0;
-        flash(`"${r.name}" 운행 ON${n ? ` — 배차 ${n}건을 만들었습니다` : ""}`);
+        flash(`"${r.name}" 운행 ON${n ? ` · 배차 ${n}건을 만들었습니다` : ""}`);
       }
     } catch (e) { kpAlert(`바꾸지 못했습니다: ${e?.message || e}`); }
   };
@@ -1604,13 +1604,13 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
                       <div>· 상차 {first.name || "-"} → 하차 {last.name || "-"}{mid.length ? ` · 경유·거점 ${mid.length}곳` : ""}</div>
                       {t.seg.length ? (() => { const gs = routePayGroups(R); return (
                         <>
-                          <div>· <b className="text-[#0F1A30]">정류지별 운임 {t.seg.length}곳</b> — 청구·기사운임·수수료는 합계로, 정류지별 금액·지급방식은 오더의 정류지운임·경유지·기사앱에 따로 들어갑니다</div>
+                          <div>· <b className="text-[#0F1A30]">정류지별 운임 {t.seg.length}곳</b> · 청구·기사운임·수수료는 합계로, 정류지별 금액·지급방식은 오더의 정류지운임·경유지·기사앱에 따로 들어갑니다</div>
                           {gs.length > 1
                             ? <div>· 거래처·지급방식이 달라 <b className="text-[#0F1A30]">하루 {gs.length}건</b>으로 나눠 만듭니다: {gs.map((G) => `${G.payer || "-"} ${G.pay} 청구 ${won(G.client)}·기사 ${won(G.driver)}`).join(" / ")} (같은 차량·같은 운행)</div>
                             : <div>· 거래처 <b className="text-[#0F1A30]">{gs[0].payer || "-"}</b> · 지급방식 <b className="text-[#0F1A30]">{gs[0].pay}</b></div>}
                         </>
                       ); })() : <div>· 단일 운임 · 지급방식 <b className="text-[#0F1A30]">{form.payMethod || "계산서"}</b></div>}
-                      <div>· {form.active === false ? "운행 OFF — 저장해도 새 배차를 만들지 않습니다" : form.autoDispatch !== false ? `정해진 요일마다 배차가 자동으로 생깁니다 — 지금은 이번 달 말일(최소 7일 앞)까지, 다음 달은 새 달에 이어서${form.endDate ? ` · ${form.endDate}에 끝` : " · 종료일 없음(매달 이어서)"}` : "자동 등록 꺼짐 — [배차 미리 만들기]로 만들 수 있습니다"}{(form.skipDates || []).length ? ` · 쉬는 날 ${form.skipDates.length}일 제외` : ""}</div>
+                      <div>· {form.active === false ? "운행 OFF: 저장해도 새 배차를 만들지 않습니다" : form.autoDispatch !== false ? `정해진 요일마다 배차가 자동으로 생깁니다. 지금은 이번 달 말일(최소 7일 앞)까지, 다음 달은 새 달에 이어서${form.endDate ? ` · ${form.endDate}에 끝` : " · 종료일 없음(매달 이어서)"}` : "자동 등록 꺼짐: [배차 미리 만들기]로 만들 수 있습니다"}{(form.skipDates || []).length ? ` · 쉬는 날 ${form.skipDates.length}일 제외` : ""}</div>
                     </div>
                   </div>
                   <div className="h-[320px] lg:h-auto min-h-[300px] bg-white rounded-2xl border border-[#E3E8F0] overflow-hidden flex flex-col">

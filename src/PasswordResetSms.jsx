@@ -12,12 +12,12 @@ import { fmtPhone } from "./formatInput";
 const call = fetchCaller(FUNCTIONS_BASE, () => null);
 const smsErr = (e) => {
   const c = String(e?.code || "");
-  if (c === "auth/invalid-verification-code") return "인증번호가 맞지 않습니다.";
-  if (c === "auth/code-expired") return "인증번호 시간이 지났습니다. 다시 받아 주세요.";
-  if (c === "auth/too-many-requests") return "문자를 너무 많이 요청했습니다. 잠시 뒤 다시 해 주세요.";
+  if (c === "auth/invalid-verification-code") return "인증번호가 맞지 않아요.";
+  if (c === "auth/code-expired") return "인증번호 시간이 지났어요. 다시 받아 주세요.";
+  if (c === "auth/too-many-requests") return "문자를 너무 많이 요청했어요. 잠시 뒤 다시 해 주세요.";
   if (c === "auth/invalid-phone-number") return "휴대폰 번호를 확인해 주세요.";
   if (/load failed|failed to fetch|networkerror|요청 실패\((404|5\d\d)\)/i.test(String(e?.message || ""))) return "서버에 연결하지 못했어요. 비밀번호 찾기 서버가 아직 준비되지 않았거나 인터넷이 불안정해요. 잠시 뒤 다시 해 주세요.";
-  return e?.message || "처리하지 못했습니다.";
+  return e?.message || "처리하지 못했어요.";
 };
 
 export default function PasswordResetSms({ initialEmail = "", onClose, onDone, onEmailLink }) {
@@ -73,13 +73,13 @@ export default function PasswordResetSms({ initialEmail = "", onClose, onDone, o
             <button type="button" disabled={busy} onClick={sendCode} className="w-full text-[13px] font-bold text-[#7A879C] hover:text-[#1B2B4B] py-1">인증번호 다시 받기</button>
           </>)}
           {step === "pw" && (<>
-            <div className="text-[13.5px] text-[#3A4A66]">문자 인증을 마쳤습니다. 새 비밀번호를 정해 주세요.</div>
+            <div className="text-[13.5px] text-[#3A4A66]">문자 인증을 마쳤어요. 새 비밀번호를 정해 주세요.</div>
             <input value={pw1} onChange={(e) => setPw1(e.target.value)} type="password" autoComplete="new-password" placeholder="새 비밀번호 (6자 이상)" className={input} autoFocus />
             <input value={pw2} onChange={(e) => setPw2(e.target.value)} type="password" autoComplete="new-password" placeholder="새 비밀번호 확인" onKeyDown={(e) => e.key === "Enter" && change()} className={input} />
             <button type="button" disabled={!pw1 || !pw2 || busy} onClick={change} className={primary}>{busy ? "바꾸는 중…" : "변경"}</button>
           </>)}
           {step === "done" && (<>
-            <div className="rounded-2xl bg-emerald-50 border border-emerald-200 px-4 py-4 text-[14px] text-emerald-800 leading-relaxed"><b>비밀번호를 바꿨습니다.</b><br />예전 비밀번호는 더 이상 쓸 수 없고, 다른 기기의 로그인도 끊었습니다. 새 비밀번호로 로그인해 주세요.</div>
+            <div className="rounded-2xl bg-emerald-50 border border-emerald-200 px-4 py-4 text-[14px] text-emerald-800 leading-relaxed"><b>비밀번호를 바꿨어요.</b><br />예전 비밀번호는 이제 쓸 수 없고, 다른 기기의 로그인도 끊었어요. 새 비밀번호로 로그인해 주세요.</div>
             <button type="button" onClick={() => onDone?.(email.trim())} className={primary}>로그인하러 가기</button>
           </>)}
           {msg && <div className="text-[13px] font-semibold text-red-600 bg-red-50 rounded-xl px-3 py-2 leading-relaxed">{msg}</div>}

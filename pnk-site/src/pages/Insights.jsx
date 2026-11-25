@@ -51,17 +51,17 @@ export default function Insights() {
   const last = fm[fm.length - 1], prev = fm[fm.length - 2];
   if (last && prev && (last.매출 || prev.매출)) {
     const dm = (last.margin ?? 0) - (prev.margin ?? 0);
-    notes.push({ tone: last.이익 >= prev.이익 ? "up" : "down", t: `${last.label} 순이익 ${compactWon(last.이익)}원 — 전월보다 ${last.이익 >= prev.이익 ? "늘었어요" : "줄었어요"} (이익률 ${dm >= 0 ? "+" : ""}${dm}%p)` });
+    notes.push({ tone: last.이익 >= prev.이익 ? "up" : "down", t: `${last.label} 순이익 ${compactWon(last.이익)}원으로 전월보다 ${last.이익 >= prev.이익 ? "늘었어요" : "줄었어요"} (이익률 ${dm >= 0 ? "+" : ""}${dm}%p)` });
   }
-  if (mix[0]) notes.push({ tone: "info", t: `비용 1위는 ${mix[0].name} — 기간 비용의 ${exp ? Math.round((mix[0].value / exp) * 100) : 0}%` });
+  if (mix[0]) notes.push({ tone: "info", t: `비용 1위 항목은 ${mix[0].name}(기간 비용의 ${exp ? Math.round((mix[0].value / exp) * 100) : 0}%)` });
   const byDow = ["월", "화", "수", "목", "금"].map((dw) => { const rows = attR.filter((r) => ["일", "월", "화", "수", "목", "금", "토"][new Date(`${r.date}T12:00:00Z`).getUTCDay()] === dw); return { dw, rate: rows.length ? rows.filter((r) => r.late).length / rows.length : 0, n: rows.length }; });
   const worstDow = [...byDow].sort((a, b) => b.rate - a.rate)[0];
   if (worstDow && worstDow.rate > 0) notes.push({ tone: "warn", t: `지각이 가장 많은 요일은 ${worstDow.dw}요일 (${Math.round(worstDow.rate * 100)}%)` });
   const fA = flow.slice(-4), fB = flow.slice(-8, -4);
   const rA = sumBy(fA, "등록") ? sumBy(fA, "완료") / sumBy(fA, "등록") : null, rB = sumBy(fB, "등록") ? sumBy(fB, "완료") / sumBy(fB, "등록") : null;
-  if (rA != null && rB != null) notes.push({ tone: rA >= rB ? "up" : "down", t: `최근 4주 업무 완료율 ${Math.round(rA * 100)}% — 그 전 4주(${Math.round(rB * 100)}%)보다 ${rA >= rB ? "높아요" : "낮아요"}` });
+  if (rA != null && rB != null) notes.push({ tone: rA >= rB ? "up" : "down", t: `최근 4주 업무 완료율 ${Math.round(rA * 100)}%로 그 전 4주(${Math.round(rB * 100)}%)보다 ${rA >= rB ? "높아요" : "낮아요"}` });
   const overdueAll = (tasks || []).filter((t) => t.status !== "done" && t.due && t.due < ymd()).length;
-  if (overdueAll) notes.push({ tone: "warn", t: `기한이 지난 업무 ${overdueAll}건 — 담당자별 표에서 확인하세요` });
+  if (overdueAll) notes.push({ tone: "warn", t: `기한이 지난 업무가 ${overdueAll}건 있어요. 담당자별 표에서 확인해 보세요.` });
   if (pipe.openN) notes.push({ tone: "info", t: `진행 중 영업 ${pipe.openN}곳 · 가중 예상 월 ${compactWon(pipe.weighted)}원` });
 
   return (

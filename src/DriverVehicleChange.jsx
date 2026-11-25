@@ -75,7 +75,7 @@ export default function DriverVehicleChangeModal({ driver, onClose, onDone }) {
     <div className="fixed inset-0 z-[100001] flex items-center justify-center bg-black/45 p-3" data-testid="vehicle-change-modal">
       <div className="bg-white rounded-2xl shadow-2xl w-[460px] max-w-full max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-4 flex items-center justify-between" style={{ background: GRAD }}>
-          <h3 className="text-white font-bold text-[15px]">차량 변경 — {driver?.이름 || driver?.name || ""}</h3>
+          <h3 className="text-white font-bold text-[15px]">차량 변경: {driver?.이름 || driver?.name || ""}</h3>
           <button type="button" onClick={onClose} className="text-white/60 hover:text-white text-xl">✕</button>
         </div>
         <div className="px-6 py-5 space-y-4">
@@ -107,11 +107,11 @@ export default function DriverVehicleChangeModal({ driver, onClose, onDone }) {
               <div className="mt-3 grid gap-2">
                 {holder.canSwap && cur && (
                   <button type="button" disabled={busy} onClick={() => submit("swap")} className="h-10 rounded-lg text-white text-[13.5px] font-bold disabled:opacity-60" style={{ background: GRAD }}>
-                    맞교환 — {holder.name || "그 기사"}님은 {cur}(으)로
+                    맞교환: {holder.name || "그 기사"}님은 {cur}(으)로
                   </button>
                 )}
                 <button type="button" disabled={busy} onClick={() => submit("unassign")} className="h-10 rounded-lg border border-[#1B2B4B] text-[#1B2B4B] text-[13.5px] font-bold hover:bg-[#EEF3FC] disabled:opacity-60">
-                  차량미배정 — {holder.name || "그 기사"}님은 차량 없이 두기 (나중에 따로 배정)
+                  차량미배정: {holder.name || "그 기사"}님은 차량 없이 두기 (나중에 따로 배정)
                 </button>
               </div>
             </div>
@@ -237,7 +237,7 @@ export function DriverMergeModal({ driver, drivers = [], onClose, onDone }) {
             </div>
           </div>
           <div>
-            <label className="block text-[12px] font-semibold text-gray-500 mb-1">기준일 — 이 날 전날까지의 {oldPlate || "합칠 줄"} 운행분을 이 기사 것으로 정산</label>
+            <label className="block text-[12px] font-semibold text-gray-500 mb-1">기준일: 이 날 전날까지의 {oldPlate || "합칠 줄"} 운행분을 이 기사 것으로 정산</label>
             <CustomDatePicker value={date} onChange={(e) => setDate(e.target.value)} className={inp} showIcon />
           </div>
           {old && (

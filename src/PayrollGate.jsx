@@ -272,7 +272,7 @@ export default function PayrollGate({ company, canAdmin = false, children, scope
   const isPayAdmin = !!(st?.admin || canAdmin);
   if (!open && resetting) {
     return (
-      <GateCard title="관리 비밀번호 재설정" desc="비밀번호를 잊었을 때 — 경리 관리자만 할 수 있어요">
+      <GateCard title="관리 비밀번호 재설정" desc="비밀번호를 잊었을 때: 경리 관리자만 할 수 있어요">
         <ResetForm company={company} onCancel={() => setResetting(false)} onDone={() => { setResetting(false); setMsg(""); setSt((s) => ({ ...s, hasPassword: true, usingDefault: false })); stPending.clear(); openSession(company); }} />
       </GateCard>
     );

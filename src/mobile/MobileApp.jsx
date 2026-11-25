@@ -155,6 +155,7 @@ import { writeOrderDeletedNotice } from "../driverDeleteNotice"; // ⭐ 2026-11-
 import { updateDoc, setDoc } from "../orderWrite";
 import { useCloseInbox, CloseInboxBanner, useFinalLockGuard, useCloseInboxCount } from "../closeInbox"; // 📥 배차마감 도착 · 🔒 최종마감 // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { db, auth, FUNCTIONS_BASE, DEFAULT_COMPANY, clearFcmToken, IS_MOBILE_PREVIEW } from "../firebase";
+import { purgeOnSignOut } from "../sessionPurge"; // 🛠 2026-11-24 로그아웃 때 기기 저장본 정리
 import { signOut } from "firebase/auth";
 import { version as APP_VERSION } from "../../package.json";
 import { useNewVersion, openUpdatePopup } from "../VersionCheck";
@@ -4277,6 +4278,9 @@ const [detailFrom, setDetailFrom] = useState(null);
     }
     clearLocalStorageKeepLogin();
     sessionStorage.clear();
+    // 🛠 2026-11-24 기기 저장본(앞 계정 회사 오더 사본)까지 지운 뒤 로그인 화면으로 — 바로 옮기면 정리가 돌기 전에 페이지가 바뀌었다(src/sessionPurge.js)
+    await new Promise((r) => setTimeout(r, 350));
+    if (!IS_MOBILE_PREVIEW) await purgeOnSignOut(db, "/login").catch(() => {});
     window.location.replace("/login");
   };
   // 🔥 미배차 차량 분류 필터 (전체 | 냉장/냉동 | 일반)
@@ -6023,7 +6027,7 @@ const title =
               <div style={{ fontSize: 11, fontWeight: 700, color: "#1B2B4B", padding: "6px 0 4px", letterSpacing: "0.05em", textTransform: "uppercase" }}>일정 {unreadSchedules.length}건</div>
               {unreadSchedules.slice(0, 3).map(s => (
                 <button key={s.id} onClick={() => { setPage("schedule"); setShowUnreadPopup(false); }} style={{ width: "100%", textAlign: "left", padding: "8px 10px", borderRadius: 8, background: "#F5F7FA", border: "none", marginBottom: 4, cursor: "pointer" }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#1B2B4B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.authorName || ""} {s.type || "일정"} — {s.start || ""}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#1B2B4B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.authorName || ""} {s.type || "일정"} · {s.start || ""}</div>
                 </button>
               ))}
             </div>
@@ -6070,7 +6074,7 @@ const title =
               <div style={{ fontSize: 11, fontWeight: 700, color: "#374151", padding: "6px 0 4px" }}>일정</div>
               {unreadSchedules.slice(0, 3).map(s => (
                 <button key={s.id} onClick={() => { setPage("schedule"); setShowUnreadPopup(false); }} style={{ width: "100%", textAlign: "left", padding: "9px 12px", borderRadius: 10, background: "#F8F8F8", border: "1px solid #eee", marginBottom: 5, cursor: "pointer" }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.authorName || ""} {s.type || "일정"} — {s.start || ""}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.authorName || ""} {s.type || "일정"} · {s.start || ""}</div>
                 </button>
               ))}
             </div>
@@ -6571,7 +6575,7 @@ onGoAttendance={() => {
               <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>
                 현재 상태: <span style={{ fontWeight: 700, color: approvers[myApproverIdx].status === "approved" ? "#1B2B4B" : approvers[myApproverIdx].status === "rejected" ? "#DC2626" : "#6B7280" }}>
                   {approvers[myApproverIdx].status === "approved" ? "승인" : approvers[myApproverIdx].status === "rejected" ? "반려" : "보류"}
-                </span> — 변경 가능
+                </span> (다시 바꿀 수 있어요)
               </div>
             )}
             <div className="flex gap-2">
@@ -8352,7 +8356,7 @@ function MobileSideMenu({
   };
 
   const logout = async () => {
-    if (!(await kpConfirm("로그아웃하시겠습니까?"))) return;
+    if (!(await kpConfirm("로그아웃할까요?"))) return;
     // ⭐ 2026-11-02 로그아웃 지연 방지 — 알림 해제는 최대 1.2초만 기다린다(통신이 느려도 바로 로그아웃)
     await Promise.race([clearFcmToken(auth.currentUser?.uid).catch(() => {}), new Promise((r) => setTimeout(r, 1200))]);
     try {
@@ -8362,6 +8366,9 @@ function MobileSideMenu({
     }
     clearLocalStorageKeepLogin();
     sessionStorage.clear();
+    // 🛠 2026-11-24 기기 저장본(앞 계정 회사 오더 사본)까지 지운 뒤 로그인 화면으로 — 바로 옮기면 정리가 돌기 전에 페이지가 바뀌었다(src/sessionPurge.js)
+    await new Promise((r) => setTimeout(r, 350));
+    if (!IS_MOBILE_PREVIEW) await purgeOnSignOut(db, "/login").catch(() => {});
     window.location.replace("/login");
   };
 
@@ -11315,7 +11322,7 @@ function QuickEditModal({ order, drivers, cardVersionB, onClose, onSuccess, disp
       //   "저장 중…"이 몇 초씩 걸렸다. Firestore는 폰 화면에 먼저 바로 반영하고 서버 전송은 뒤에서
       //   알아서 끝내므로, 기다리지 않고 바로 닫는다. 서버 저장이 실패하면 그때 알림으로 알려준다.
       updateDoc(doc(db, col, id), patch).catch((err) => {
-        if (typeof showToast === "function") showToast(`저장 실패 — 다시 시도해주세요 (${err?.message || err})`);
+        if (typeof showToast === "function") showToast(`저장하지 못했습니다. 다시 시도해 주세요. (${err?.message || err})`);
         else alert("저장 실패: " + (err?.message || err));
       });
       syncShipperMirrorMobile(order, patch).catch(() => {});
@@ -13419,7 +13426,7 @@ const handleAssignClick = async () => {
           onClick={() => isDelivered ? setConfirmUndoDeliver(true) : setConfirmDeliver(true)}
           style={{ touchAction: "manipulation" }}
           aria-pressed={isDelivered}
-          title={isDelivered ? "전달 완료 — 누르면 미전달로 되돌려요" : "아직 전달하지 않음 — 누르면 전달완료로 바꿔요"}
+          title={isDelivered ? "전달했어요. 누르면 미전달로 되돌려요" : "아직 전달하지 않았어요. 누르면 전달완료로 바꿔요"}
           className="flex items-center gap-1.5 -my-1 py-1 pl-2"
         >
           <span className={`text-[12px] font-bold ${isDelivered ? "text-[#0F1A30]" : "text-[#7A879C]"}`}>업체전달</span>
@@ -16098,7 +16105,7 @@ const pickDrop = (c) => {
               {(() => {
                 const optOn = [form.혼적여부 === "혼적" && "혼적", form.운행유형 === "왕복" && "왕복", form.긴급 && "긴급"].filter(Boolean);
                 return (
-                  <ToolMenuButton testId="m-run-options" align="left" minWidth={240} menuTitle="운행 옵션 — 켜고 끌 항목을 눌러요"
+                  <ToolMenuButton testId="m-run-options" align="left" minWidth={240} menuTitle="운행 옵션 (켜고 끌 항목을 눌러요)"
                     className={`shrink-0 whitespace-nowrap px-2.5 py-1.5 text-[13px] font-bold rounded-lg border transition-all ${form.긴급 ? "bg-red-600 text-white border-red-600" : optOn.length ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "bg-white text-gray-600 border-gray-300"}`}
                     label={<>{optOn.length ? optOn.join(" · ") : "옵션 없음"}</>}
                     items={[
@@ -17428,7 +17435,7 @@ const pickDrop = (c) => {
       {/* 목록 */}
       <div className="overflow-y-auto flex-1 px-4 py-2 space-y-2">
         {orderCopyHistLoading && (
-          <div className="text-[12px] text-[#5B6B85] text-center py-1">이전 오더를 불러오는 중이에요 — 불러오는 대로 목록에 추가돼요</div>
+          <div className="text-[12px] text-[#5B6B85] text-center py-1">이전 오더를 불러오고 있어요. 불러오는 대로 목록에 추가돼요.</div>
         )}
         {orderCopyList
           .map(o => (
@@ -17574,7 +17581,7 @@ const pickDrop = (c) => {
               if (uniq.length > 1) items.push({ type, place: pl, contacts: uniq });
             });
             if (items.length) setTimeout(() => openContactPopup(items), 80);
-            else showToast?.("스캔한 오더가 입력되었습니다 — 확인 후 등록하세요");
+            else showToast?.("스캔한 오더를 입력했습니다. 확인한 뒤 등록해 주세요.");
           }}
         />
       )}
@@ -21387,7 +21394,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     W("사내메일", "사내메일", "새 메일이 오면"),
     W("메신저", "메신저", "대화방에 새 메시지가 오면"),
     W("인수인계", "인수인계", "나에게 인수인계가 오면"), // ⭐ 2026-11-03 서버 notifyHandover
-    W("인사발령", "인사발령", "회사에 인사발령(승진·부서 이동 등)이 나면 — 전 직원"),
+    W("인사발령", "인사발령", "회사에 인사발령(승진·부서 이동 등)이 나면(전 직원)"),
     W("생일", "생일 알림", "동료 생일 3일 전 아침에 미리 알려 드려요"),
   ];
   const teamKey = role === "hrAcct" ? "hr" : (deptMode || "dispatch");
@@ -21493,7 +21500,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
           <KpmRow label="앱 안 알림(소리·배너)" sub="앱을 켜 둔 동안의 소리·배너 · 휴대폰 푸시는 '알림 종류별 설정'에서" right={<KpmToggle value={alarmEnabled} onChange={toggleAlarm} />} />
           {/* ⭐ 2026-11-02 점검 — 아이폰 PWA는 탭해야만 알림 권한 요청 가능 → 모든 직원이 누를 수 있는 연결 버튼 */}
           {/* ⭐ 2026-11-02 화면 점검 — 영어 그대로("권한: denied") 보이던 권한 상태를 한글로 */}
-          <KpmRow label="이 기기 알림 받기" sub={typeof Notification !== "undefined" ? `권한: ${({ granted: "허용됨", denied: "차단됨 — 기기 설정에서 허용해 주세요", default: "아직 묻지 않음" })[Notification.permission] || Notification.permission}` : "미지원"}
+          <KpmRow label="이 기기 알림 받기" sub={typeof Notification !== "undefined" ? `권한: ${({ granted: "허용됨", denied: "차단됨(기기 설정에서 허용해 주세요)", default: "아직 묻지 않음" })[Notification.permission] || Notification.permission}` : "미지원"}
             onClick={async () => {
               if (typeof Notification === "undefined") { alert("이 기기는 알림을 지원하지 않습니다."); return; }
               // 탭 직후 바로 권한 요청(아이폰은 await 뒤로 미루면 사용자 탭으로 인정 안 될 수 있음)
@@ -21655,7 +21662,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setShowLogoutConfirm(false)}>
           <div className="w-full bg-white rounded-t-3xl p-6" onClick={e => e.stopPropagation()}>
             <div className="text-[16px] font-bold text-gray-900 mb-1">로그아웃</div>
-            <div className="text-[13px] text-gray-500 mb-5">로그아웃하시겠습니까?</div>
+            <div className="text-[13px] text-gray-500 mb-5">로그아웃할까요?</div>
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => setShowLogoutConfirm(false)} className="py-3 rounded-xl bg-gray-100 text-gray-700 text-sm font-bold">취소</button>
               <button onClick={onLogout} className="py-3 rounded-xl bg-[#0F1A30] text-white text-sm font-bold">로그아웃</button>

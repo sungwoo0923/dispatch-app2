@@ -225,19 +225,28 @@ export function RouteLine({ from, to, fromSub, toSub, km, dark = false, big = fa
 }
 
 // 시트 — 휴대폰: 아래에서 올라오는 전체 화면 / PC: 오른쪽 서랍
+// ⭐ 2026-11-24 · 화면이 다시 그려질 때마다(onClose가 새 함수) 스크롤 잠금을 풀었다 다시 걸던 것 — 서랍 위에 서랍(오더복사 · 등록 설정)이
+//   열린 채 아래 서랍이 다시 그려지면 잠금이 풀려 뒤 화면이 같이 스크롤됐다. 열린 서랍 수로 잠그고, 닫기 함수는 ref로 본다.
+//  · 노치 휴대폰(홈 화면 앱): 머리 높이 64px 안에 안전 영역까지 넣어 제목이 눌리던 것 — 안전 영역만큼 높이를 더한다
+let drawerLocks = 0, drawerPrevOverflow = "";
 export function Drawer({ onClose, children, width = 560, title, sub, closeOnBackdrop = true, testid }) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e) => { if (e.key === "Escape" && closeOnBackdrop) onClose?.(); };
+    if (drawerLocks++ === 0) { drawerPrevOverflow = document.body.style.overflow; document.body.style.overflow = "hidden"; }
+    return () => { if (--drawerLocks === 0) document.body.style.overflow = drawerPrevOverflow; };
+  }, []);
+  useEffect(() => {
+    if (!closeOnBackdrop) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") closeRef.current?.(); };
     window.addEventListener("keydown", onKey);
-    return () => { document.body.style.overflow = prev; window.removeEventListener("keydown", onKey); };
-  }, [onClose, closeOnBackdrop]);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [closeOnBackdrop]);
   return (
     <div className="fixed inset-0 z-[900] flex justify-end bg-[#0B1428]/55 backdrop-blur-[2px] hub-fade" onClick={closeOnBackdrop ? onClose : undefined}>
       <div data-testid={testid} className="hub-drawer w-full h-full bg-[#EEF1F6] flex flex-col shadow-[-30px_0_80px_rgba(11,20,40,.35)]" style={{ maxWidth: width }} onClick={(e) => e.stopPropagation()}>
         {title !== undefined && (
-          <div className="shrink-0 flex items-center gap-2 px-3 lg:px-5 h-16 bg-white border-b border-[#E2E7EF]" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+          <div className="shrink-0 flex items-center gap-2 px-3 lg:px-5 bg-white border-b border-[#E2E7EF]" style={{ paddingTop: "env(safe-area-inset-top)", height: "calc(64px + env(safe-area-inset-top))" }}>
             <button type="button" onClick={onClose} aria-label="닫기" className="w-12 h-12 -ml-1 rounded-2xl inline-flex items-center justify-center text-[#0F1A30] hover:bg-[#F2F5FA]"><HI name="back" size={22} /></button>
             <div className="min-w-0 flex-1">
               <div className="text-[18px] font-extrabold text-[#0F1A30] truncate">{title}</div>

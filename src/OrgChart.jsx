@@ -163,7 +163,7 @@ export default function OrgChart({ userCompany }) {
               <ul>
                 <li>
                   {ceos.length ? <div className="flex gap-3">{ceos.map((m) => <Person key={m.uid} m={m} gold />)}</div>
-                    : <div className="rounded-2xl px-6 py-3 text-white text-[17px] font-black" style={{ background: "linear-gradient(120deg,#060C1A,#13213F 60%,#2D4C82)" }}>{userCompany || "대표이사"}<div className="text-[11.5px] font-bold text-[#D7BC82]">대표이사 미지정 — 부서 「임원」·직책 「대표」로 지정</div></div>}
+                    : <div className="rounded-2xl px-6 py-3 text-white text-[17px] font-black" style={{ background: "linear-gradient(120deg,#060C1A,#13213F 60%,#2D4C82)" }}>{userCompany || "대표이사"}<div className="text-[11.5px] font-bold text-[#D7BC82]">대표이사 미지정: 부서 「임원」·직책 「대표」로 지정</div></div>}
                   <ul>
                     <li>
                       {execs.length ? (

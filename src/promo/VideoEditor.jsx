@@ -12,7 +12,7 @@ import { G, NUM, GOLD_BTN, AdmPanel, AdmEmpty } from "../adminCenter/admUi";
 import { kpConfirm } from "../kpDialog";
 import { VOICES, STYLES, MUSIC, BGM_LIBRARY, LAYOUTS, TRANSITIONS, THEMES, FRAMES, LIBRARY, libUrl, isVideoSrc, newScene, newProject, timeline, fmtTime, voiceKey, voiceStale, mktCall, wavB64ToBlob, SEED_PROJECTS, uid } from "./promoKit";
 import { PromoPlayer, loadPromoFont, pickRecordType } from "./promoPlayer";
-import { uploadToYoutube } from "./youtubeUpload";
+import { uploadToYoutube, ytErrorText } from "./youtubeUpload";
 import { toSrt, downloadText } from "../videoStudio";
 
 const inp = { background: "rgba(255,255,255,.04)", border: `1px solid ${G.line2}`, color: G.ink };
@@ -160,7 +160,7 @@ function Editor({ id, onBack }) {
   const settings = useSettings();
   const canvasRef = React.useRef(null); const player = React.useRef(null);
   const hist = React.useRef({ past: [], future: [] }); const saveTimer = React.useRef(0); const lastPush = React.useRef(0);
-  const say = (m) => { setToast(m); clearTimeout(say.t); say.t = setTimeout(() => setToast(""), 3200); };
+  const say = (m) => { setToast(m); clearTimeout(say.t); say.t = setTimeout(() => setToast(""), Math.max(3200, String(m || "").length * 80)); }; // 긴 안내(유튜브 오류 등)는 읽을 시간만큼 더 띄운다
 
   React.useEffect(() => { getDoc(doc(db, "mktVideos", id)).then((d) => { if (!d.exists()) { onBack(); return; } const x = d.data(); setP({ ...newProject(x.format), ...x }); }); }, [id, onBack]);
   React.useEffect(() => {
@@ -353,7 +353,7 @@ function ScenePanel({ P, s, sc, setScene, setMedia, makeVoice, say, projectId })
       {isVideoSrc(libUrl(m.src)) && <><Range label="영상 몇 초부터" value={m.from || 0} min={0} max={60} step={0.1} onChange={(v) => setMedia({ from: v })} fmt={(v) => `${v.toFixed(1)}초`} />
         <Range label="영상 속도" value={m.rate || 1} min={0.5} max={4} step={0.1} onChange={(v) => setMedia({ rate: v })} fmt={(v) => `${v.toFixed(1)}배`} /></>}
       <Range label="확대(시작)" value={m.zoom || 1} min={1} max={3} step={0.05} onChange={(v) => setMedia({ zoom: v })} fmt={(v) => `${v.toFixed(2)}배`} />
-      <Range label="확대(끝) — 서서히 다가가기" value={m.zoomTo ?? m.zoom ?? 1} min={1} max={3} step={0.05} onChange={(v) => setMedia({ zoomTo: v })} fmt={(v) => `${v.toFixed(2)}배`} />
+      <Range label="확대(끝) · 서서히 다가가기" value={m.zoomTo ?? m.zoom ?? 1} min={1} max={3} step={0.05} onChange={(v) => setMedia({ zoomTo: v })} fmt={(v) => `${v.toFixed(2)}배`} />
       <Range label="보여 줄 곳 ←→" value={m.fx ?? 0.5} min={0} max={1} step={0.01} onChange={(v) => setMedia({ fx: v })} fmt={(v) => `${Math.round(v * 100)}%`} />
       <Range label="보여 줄 곳 ↑↓" value={m.fy ?? 0.3} min={0} max={1} step={0.01} onChange={(v) => setMedia({ fy: v })} fmt={(v) => `${Math.round(v * 100)}%`} />
     </div>}
@@ -495,14 +495,14 @@ function OutPanel({ P, update, player, settings, exp, setExp, say, projectId, st
     catch (e) { say(e.message); } finally { setExp((e) => ({ ...e, saving: false })); }
   };
   const toYoutube = async () => {
-    if (!settings.youtubeClientId) { say("홍보 설정에서 구글 OAuth 클라이언트 ID를 먼저 넣어 주세요."); return; }
+    if (!settings.youtubeClientId) { say("홍보 › 홍보 설정 › 유튜브 바로 올리기에서 구글 OAuth 클라이언트 ID를 먼저 넣어 주세요."); return; }
     setExp((e) => ({ ...e, up: 0 }));
     try {
       let thumb = null; if (P.thumb) thumb = await fetch(P.thumb).then((r) => r.blob()).catch(() => null);
       const r = await uploadToYoutube({ clientId: settings.youtubeClientId, blob: exp.blob, meta: { title: yt.title || P.title, description: yt.description, tags: String(yt.tags || "").split(",").map((x) => x.trim()).filter(Boolean), privacy: yt.privacy || "private", shorts: P.format !== "wide" }, thumbnail: thumb, onProgress: (p) => setExp((e) => ({ ...e, up: p })) });
       update((x) => ({ ...x, status: "uploaded", youtube: { ...x.youtube, uploads: [{ id: r.id, url: r.url, at: Date.now(), privacy: r.privacy }, ...(x.youtube?.uploads || [])] } }), { noHist: true });
       setExp((e) => ({ ...e, up: null, yt: r })); say("유튜브에 올렸어요!");
-    } catch (e) { setExp((x) => ({ ...x, up: null })); say(e.message); }
+    } catch (e) { setExp((x) => ({ ...x, up: null })); say(ytErrorText(e)); } // 🛠 2026-11-24 구글 오류 코드 → 고칠 곳 안내
   };
   const aiMeta = async () => { setAiBusy(true); try { const r = await mktCall("ytMeta", { title: P.title, format: P.format, text: P.scenes.map((s) => s.narration).filter(Boolean).join("\n") }); setY({ title: r.out.title, description: r.out.description, tags: (r.out.tags || []).join(", ") }); } catch (e) { say(e.message); } finally { setAiBusy(false); } };
   const srt = () => { const tl = timeline(P); const plan = { scenes: P.scenes.map((s, i) => ({ start: tl.scenes[i].voiceDur ? tl.scenes[i].voiceAt : tl.scenes[i].start, end: tl.scenes[i].voiceDur ? tl.scenes[i].voiceAt + tl.scenes[i].voiceDur + 0.15 : tl.scenes[i].start + tl.scenes[i].dur, subtitles: [(s.caption || s.narration || "").trim()].filter(Boolean) })) }; downloadText(`${P.title}.srt`, toSrt(plan.scenes), "application/x-subrip"); };
@@ -513,7 +513,7 @@ function OutPanel({ P, update, player, settings, exp, setExp, say, projectId, st
         <div className="text-[12px] mb-2 leading-relaxed" style={{ color: G.sub }}>영상 길이({Math.round(timeline(P).total)}초)만큼 실제로 재생하며 녹화해요. 그동안 <b>이 탭을 띄워 두세요</b>(다른 탭으로 가면 끊길 수 있어요). 파일 형식: {type.startsWith("video/mp4") ? "MP4" : "WebM(유튜브에 그대로 올라가요)"}</div>
         {(!exp || exp.step === "ready" || exp.step === "error") && <Btn gold onClick={make}>🎬 영상 만들기 시작</Btn>}
         {exp?.step === "error" && <div className="text-[12.5px] mt-2" style={{ color: G.bad }}>{exp.msg}</div>}
-        {exp?.step === "rec" && <div><div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,.08)" }}><div className="h-full" style={{ width: `${Math.round((exp.p || 0) * 100)}%`, background: G.gold }} /></div><div className="text-[12px] mt-1" style={{ color: G.sub }}>녹화 중 {Math.round((exp.p || 0) * 100)}% — 창을 닫거나 다른 탭으로 가지 마세요</div></div>}
+        {exp?.step === "rec" && <div><div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,.08)" }}><div className="h-full" style={{ width: `${Math.round((exp.p || 0) * 100)}%`, background: G.gold }} /></div><div className="text-[12px] mt-1" style={{ color: G.sub }}>녹화 중 {Math.round((exp.p || 0) * 100)}%. 끝날 때까지 창을 닫거나 다른 탭으로 옮기지 마세요.</div></div>}
         {exp?.step === "done" && <div className="space-y-2">
           <video src={exp.url} controls className="w-full rounded-lg bg-black" style={{ maxHeight: 360 }} />
           <div className="text-[11.5px]" style={{ color: G.dim }}>{(exp.blob.size / 1048576).toFixed(1)}MB · {exp.ext.toUpperCase()}</div>
@@ -533,8 +533,8 @@ function OutPanel({ P, update, player, settings, exp, setExp, say, projectId, st
     <AdmSection title="3. 유튜브에 올리기">
       {exp?.step !== "done" ? <div className="text-[12.5px]" style={{ color: G.sub }}>먼저 위에서 [영상 만들기]를 해 주세요.</div> : <>
         {exp.up != null ? <div><div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,.08)" }}><div className="h-full" style={{ width: `${Math.round(exp.up * 100)}%`, background: "#FF0033" }} /></div><div className="text-[12px] mt-1" style={{ color: G.sub }}>유튜브로 보내는 중 {Math.round(exp.up * 100)}%</div></div>
-          : <div className="flex flex-wrap gap-1.5"><Btn gold onClick={toYoutube} disabled={!settings.youtubeClientId}>▶ 유튜브에 바로 올리기</Btn><a href="https://studio.youtube.com/channel/UC/videos/upload?d=ud" target="_blank" rel="noreferrer" className="h-9 px-3.5 text-[13px] rounded-xl font-black flex items-center" style={{ border: `1px solid ${G.line}`, color: G.ink }}>유튜브 스튜디오 열기</a></div>}
-        {!settings.youtubeClientId && <div className="text-[11.5px] mt-2" style={{ color: G.warn }}>바로 올리기는 홍보 설정에서 구글 OAuth 클라이언트 ID를 넣으면 켜져요. 그 전에는 [내려받기] → 유튜브 스튜디오에서 올리면 돼요.</div>}
+          : <div className="flex flex-wrap gap-1.5"><Btn gold onClick={toYoutube} disabled={!settings.youtubeClientId}>▶ 유튜브에 바로 올리기</Btn><a href="https://www.youtube.com/upload" target="_blank" rel="noreferrer" className="h-9 px-3.5 text-[13px] rounded-xl font-black flex items-center" style={{ border: `1px solid ${G.line}`, color: G.ink }}>유튜브 스튜디오 열기</a></div>}
+        {!settings.youtubeClientId && <div className="text-[11.5px] mt-2" style={{ color: G.warn }}>바로 올리기는 홍보 › 홍보 설정 › 유튜브 바로 올리기를 마치면 켜져요. 그 전에는 [내려받기]한 뒤 유튜브 스튜디오에서 올리면 돼요.</div>}
         {exp.yt && <div className="text-[12.5px] mt-2" style={{ color: G.ok }}>올라갔어요 → <a href={exp.yt.url} target="_blank" rel="noreferrer" className="underline">{exp.yt.url}</a>{exp.yt.thumbOk === false && P.thumb ? " (썸네일은 채널 인증 후 직접 바꿔 주세요)" : ""}</div>}
         <div className="text-[11px] mt-2 leading-relaxed" style={{ color: G.dim }}>구글 심사를 받기 전에는 유튜브가 API로 올린 영상을 "비공개"로 묶어 둘 수 있어요. 공개가 안 되면 유튜브 스튜디오에서 직접 올려 주세요.</div>
       </>}

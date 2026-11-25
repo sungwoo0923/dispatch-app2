@@ -176,7 +176,7 @@ export function MfaAskModal({ user, mode = "ask", onClose }) {
               onDone={(_r, kind) => setDone(kind)} />
           ) : (
             <div className="space-y-2.5">
-              {[["pin", "숫자 8자리 PIN", "은행 앱처럼 숫자판으로 빠르게"], ["keypad", "화면 키패드", "영문 · 숫자 8자 이상 — 더 안전하게"]].map(([k, t, s]) => (
+              {[["pin", "숫자 8자리 PIN", "은행 앱처럼 숫자판으로 빠르게"], ["keypad", "화면 키패드", "영문 · 숫자 8자 이상: 더 안전하게"]].map(([k, t, s]) => (
                 <div key={k} className="flex items-center gap-3 rounded-2xl border border-[#E3E8F0] px-4 py-3">
                   <span className="w-9 h-9 rounded-xl bg-[#EEF3FB] text-[#1B2B4B] grid place-items-center text-[13px] font-black shrink-0">{k === "pin" ? "123" : "Aa"}</span>
                   <div className="min-w-0"><div className="text-[14px] font-black text-[#0F1A30]">{t}</div><div className="text-[12px] text-[#7A879C]">{s}</div></div>

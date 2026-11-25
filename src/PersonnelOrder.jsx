@@ -190,7 +190,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf, revise
 
       setBusy("전 직원 사내메일 보내는 중…");
       const to = (staff || []).filter((u) => u.uid !== myUid);
-      if (to.length) await sendInternalMail({ company, to, subject: revising ? `[인사발령 정정] ${baseTitle} · ${who} — 이전 공문은 무효입니다` : `[인사발령] ${title} · ${who}${multi ? "" : ` ${first.type}`}`, body: revising ? `앞서 안내한 인사발령 공문을 아래와 같이 정정합니다. 이전 공문은 무효입니다.\n\n${text}` : text, images: [image], kind: "hr", fromName: myName, noticeKey });
+      if (to.length) await sendInternalMail({ company, to, subject: revising ? `[인사발령 정정] ${baseTitle} · ${who} · 이전 공문은 무효입니다` : `[인사발령] ${title} · ${who}${multi ? "" : ` ${first.type}`}`, body: revising ? `앞서 안내한 인사발령 공문을 아래와 같이 정정합니다. 이전 공문은 무효입니다.\n\n${text}` : text, images: [image], kind: "hr", fromName: myName, noticeKey });
       setDone({ to: to.length, title, revised: !!revising, n: oRows.length });
       setRevising(null);
       if (reviseNotice) setTimeout(() => onDone?.(), 900);
@@ -320,7 +320,7 @@ export default function PersonnelOrder({ company, target, myName, isSelf, revise
             {busy || `${revising ? "정정 공문 발송" : "발령 공문 발송"}${multi ? ` · ${rows.length}명` : ""}`}
           </button>
         )}
-        <div className="text-[12px] text-[#9AA9C3] leading-relaxed px-1">공문 글자는 오른쪽 미리보기에서 눌러서 바로 고칠 수 있습니다. 발송하면 대상자 모두의 회원 정보가 바뀌고, 공지사항·전 직원 사내메일·푸시가 함께 나갑니다.{!reviseNotice && <><br />잘못 올린 공문의 정정·취소는 <b className="text-[#5B6B85]">인사발령 이력</b>에서 합니다(공문 한 장 단위 — 대상자 모두 함께).</>}</div>
+        <div className="text-[12px] text-[#9AA9C3] leading-relaxed px-1">공문 글자는 오른쪽 미리보기에서 눌러서 바로 고칠 수 있습니다. 발송하면 대상자 모두의 회원 정보가 바뀌고, 공지사항·전 직원 사내메일·푸시가 함께 나갑니다.{!reviseNotice && <><br />잘못 올린 공문의 정정·취소는 <b className="text-[#5B6B85]">인사발령 이력</b>에서 합니다(공문 한 장 단위: 대상자 모두 함께).</>}</div>
       </div>
 
       {/* 오른쪽 — 공문 미리보기(A4 비율) */}
@@ -451,7 +451,7 @@ export function OrderNoticeHistory({ company, target, myName, isSelf, canManage 
         hrOrder: { ...o, status: "cancelled", cancelReason: reason || "" }, cancelledAt: serverTimestamp(), revisedAt: serverTimestamp(), revisedBy: myName || "", readBy: [], editVer: increment(1),
       });
       const to = (staff || []).filter((u) => u.uid !== myUid);
-      if (to.length) await sendInternalMail({ company, to, subject: `[인사발령 취소] ${t} · ${who}`, body: `앞서 안내한 「${t}」 인사발령을 취소합니다.${reason ? `\n사유: ${reason}` : ""}\n발령 전 소속으로 유지됩니다 — ${keep}`, kind: "hr", fromName: myName, noticeKey: `notice_${n.id}_v${(n.editVer || 0) + 1}` });
+      if (to.length) await sendInternalMail({ company, to, subject: `[인사발령 취소] ${t} · ${who}`, body: `앞서 안내한 「${t}」 인사발령을 취소합니다.${reason ? `\n사유: ${reason}` : ""}\n발령 전 소속으로 유지됩니다. ${keep}`, kind: "hr", fromName: myName, noticeKey: `notice_${n.id}_v${(n.editVer || 0) + 1}` });
       alert("발령을 취소했습니다. 공지사항은 [취소]로 바뀌었습니다.");
     } catch (e) { alert(`취소 실패: ${e.message || e}`); } finally { setBusy(""); }
   };

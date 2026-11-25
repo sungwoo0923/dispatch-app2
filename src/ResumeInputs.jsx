@@ -42,7 +42,7 @@ export function PeriodPicker({ value, onChange, ongoingLabel = "재직중", clas
       <label className="inline-flex items-center gap-1.5 h-11 px-2.5 rounded-xl border border-[#E3E8F0] text-[13px] font-bold text-[#3A4A66] cursor-pointer select-none whitespace-nowrap">
         <input type="checkbox" checked={p.ongoing} onChange={(e) => set({ ongoing: e.target.checked, end: e.target.checked ? "" : p.end })} className="w-4 h-4 accent-[#1B2B4B]" />{ongoingLabel}
       </label>
-      {legacy && <span className="w-full text-[11.5px] font-bold text-[#B54708]">기존 입력: “{p.raw}” — 달력에서 다시 골라 주세요</span>}
+      {legacy && <span className="w-full text-[11.5px] font-bold text-[#B54708]">기존 입력: “{p.raw}”: 달력에서 다시 골라 주세요</span>}
     </div>
   );
 }

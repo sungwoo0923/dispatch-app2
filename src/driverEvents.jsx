@@ -530,7 +530,7 @@ export function DriverEventBell({ enabled, onToggleEnabled, onView, isAdmin = fa
   return (
     <>
       <button ref={btn} type="button" onClick={toggle} className={className} data-kp-bell="1"
-        title={total ? `기사 알림 ${total}건 — 눌러서 보기` : enabled ? "기사 알림 · 알림 켜짐" : "기사 알림 · 알림 꺼짐"} aria-label="기사 알림">
+        title={total ? `기사 알림 ${total}건: 눌러서 보기` : enabled ? "기사 알림 · 알림 켜짐" : "기사 알림 · 알림 꺼짐"} aria-label="기사 알림">
         {enabled ? (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
         ) : (
@@ -575,7 +575,7 @@ export function DriverEventBell({ enabled, onToggleEnabled, onView, isAdmin = fa
               {[
                 ["알림 켜기(토스트·소리)", enabled, () => onToggleEnabled?.(!enabled)],
                 ["알림음", prefs.sound, () => setDriverEventPrefs({ sound: !prefs.sound })],
-                ...(isAdmin ? [["관리자 — 모든 담당자 오더의 수락/거절 받기", prefs.adminAll, () => setDriverEventPrefs({ adminAll: !prefs.adminAll })]] : []),
+                ...(isAdmin ? [["관리자: 모든 담당자 오더의 수락/거절 받기", prefs.adminAll, () => setDriverEventPrefs({ adminAll: !prefs.adminAll })]] : []),
               ].map(([l, on, fn]) => (
                 <label key={l} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, fontWeight: 700, color: "#334155", cursor: "pointer" }}>
                   <span onClick={fn} role="switch" aria-checked={!!on} style={{ width: 34, height: 20, borderRadius: 999, background: on ? "#1B2B4B" : "#CBD5E1", position: "relative", transition: "background .15s", flexShrink: 0 }}>

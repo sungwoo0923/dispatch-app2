@@ -176,8 +176,8 @@ export const RETIRE_STEPS = [
   { key: "severance", label: "퇴직금 지급", desc: "1일 평균임금 × 30일 × 재직일수/365 · 1년 이상 근무", due: (d) => addDays(d, 14), money: "severance" },
   { key: "leavePay", label: "미사용 연차수당 지급", desc: "1일 통상임금 × 미사용 연차일수", due: (d) => addDays(d, 14), money: "leavePay" },
   { key: "finalWage", label: "마지막 달 급여 정산", desc: "퇴직일까지 일할 계산", due: (d) => addDays(d, 14) },
-  { key: "insurance", label: "4대보험 상실 신고", desc: "국민연금·건강·고용·산재 — 건강보험료 퇴직 정산 포함", due: (d) => next15(d) },
-  { key: "jobCert", label: "이직확인서 제출(실업급여)", desc: "고용센터 · 근로자 요청 시 10일 이내 — 실업급여 신청에 필요", due: (d) => addDays(d, 10) },
+  { key: "insurance", label: "4대보험 상실 신고", desc: "국민연금·건강·고용·산재: 건강보험료 퇴직 정산 포함", due: (d) => next15(d) },
+  { key: "jobCert", label: "이직확인서 제출(실업급여)", desc: "고용센터 · 근로자 요청 시 10일 이내: 실업급여 신청에 필요", due: (d) => addDays(d, 10) },
   { key: "tax", label: "퇴직소득세 원천징수·신고", desc: "지급한 달의 다음 달 10일 원천세 신고", due: (d) => next10(d) },
   { key: "receipt", label: "원천징수영수증 교부", desc: "근로소득·퇴직소득(중도 퇴사자 연말정산)", due: (d) => next10(d) },
   { key: "pension", label: "퇴직연금 처리(DB·DC 가입 시)", desc: "퇴직연금 사업자에 지급 요청 · IRP 계좌 이전" },
@@ -225,7 +225,7 @@ export function RetireDesk({ company, isViewer = false }) {
   const pendingSev = (cases || []).filter((c) => !c.steps?.severance?.done && toInt(c.severance) > 0).reduce((a, c) => a + toInt(c.severance), 0);
   return (
     <div className="space-y-4">
-      <BookHero en="ACCOUNTING · RETIREMENT" title="퇴직 정산" desc="퇴직금 · 미사용 연차수당 · 4대보험 상실 · 이직확인서(실업급여) · 퇴직소득세 — 법정 기한까지"
+      <BookHero en="ACCOUNTING · RETIREMENT" title="퇴직 정산" desc="퇴직금 · 미사용 연차수당 · 4대보험 상실 · 이직확인서(실업급여) · 퇴직소득세: 법정 기한까지"
         kpis={[["정산 대상", `${all}명`, "퇴사·사직서 승인 기준"], ["진행 중", `${targets.filter((u) => { const c = byId[u.id]; return !(c?.closed || RETIRE_STEPS.every((s) => c?.steps?.[s.key]?.done)); }).length}명`, ""], ["기한 지난 항목", `${rows.reduce((a, r) => a + r.late, 0)}건`, "퇴직금 14일 · 상실 다음 달 15일"], ["지급 예정 퇴직금", `${short(pendingSev)}원`, "계산값 기준"]]} />
       <div className="flex gap-1.5">{[["open", "진행 중"], ["done", "완료"], ["all", "전체"]].map(([k, l]) => <Chip key={k} on={filter === k} onClick={() => setFilter(k)}>{l}</Chip>)}</div>
       <BookCard en="CASES" title={`퇴직자 ${rows.length}명`} flush>
@@ -270,7 +270,7 @@ function RetireCaseSheet({ company, u, c, profile, resign, approvals, isViewer, 
     // 🔗 2026-11-01 퇴직금·미사용 연차수당 [지급 완료] → 수입·지출 장부 지출(자금 잔액 반영), 체크를 풀면 장부에서 빠진다
     if (k === "severance" || k === "leavePay") {
       const on = !cur.done; const amt = k === "severance" ? (sev.eligible ? sev.amount : 0) : leavePay;
-      upsertAutoEntry(db, `${u.id}_${k}`, { company, date: kstDay(), account: k === "severance" ? "퇴직급여" : "급여·상여", item: `${k === "severance" ? "퇴직금" : "미사용 연차수당"} · ${u.name || ""}`, amount: on ? amt : 0, vendor: u.name || "", memo: "퇴직 정산 — 자동 반영", auto: "retire" }).catch(() => {});
+      upsertAutoEntry(db, `${u.id}_${k}`, { company, date: kstDay(), account: k === "severance" ? "퇴직급여" : "급여·상여", item: `${k === "severance" ? "퇴직금" : "미사용 연차수당"} · ${u.name || ""}`, amount: on ? amt : 0, vendor: u.name || "", memo: "퇴직 정산: 자동 반영", auto: "retire" }).catch(() => {});
     }
   };
   const today = kstDay();
@@ -280,11 +280,11 @@ function RetireCaseSheet({ company, u, c, profile, resign, approvals, isViewer, 
       <div className="rounded-2xl p-4 text-white" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
         <div className="text-[11px] font-extrabold tracking-[0.08em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ESTIMATE · 계산</div>
         <div className="grid grid-cols-2 gap-3 mt-2">
-          <div><div className="text-[12px] text-white/60">퇴직금 {sev.eligible ? "" : "(1년 미만 — 대상 아님)"}</div><div className="text-[24px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(sev.amount)}원</div><div className="text-[11.5px] text-white/50">재직 {sev.days.toLocaleString()}일</div></div>
+          <div><div className="text-[12px] text-white/60">퇴직금 {sev.eligible ? "" : "(1년 미만: 대상 아님)"}</div><div className="text-[24px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(sev.amount)}원</div><div className="text-[11.5px] text-white/50">재직 {sev.days.toLocaleString()}일</div></div>
           <div><div className="text-[12px] text-white/60">미사용 연차수당</div><div className="text-[24px] font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{won(leavePay)}원</div><div className="text-[11.5px] text-white/50">{f.unusedLeave || 0}일</div></div>
         </div>
         <div className={`mt-3 rounded-xl px-3 py-2 text-[12.5px] font-bold ${INVOLUNTARY.includes(f.reason) ? "bg-white/15" : "bg-white/[0.07]"}`}>
-          실업급여: {INVOLUNTARY.includes(f.reason) ? "비자발적 이직 — 수급 가능성이 높습니다. 이직확인서를 꼭 제출해 주세요." : "자발적 퇴사 — 원칙적으로 수급 불가(임금체불·통근 곤란 등 예외 사유 확인)."}
+          실업급여: {INVOLUNTARY.includes(f.reason) ? "비자발적 이직: 수급 가능성이 높습니다. 이직확인서를 꼭 제출해 주세요." : "자발적 퇴사: 원칙적으로 수급 불가(임금체불·통근 곤란 등 예외 사유 확인)."}
         </div>
       </div>
       {resign && <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4"><div className="text-[12px] font-extrabold tracking-[0.2em] text-[#4B6CB7]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>RESIGNATION</div><div className="text-[14.5px] font-black text-[#0F1A30] mt-1">사직서 {resign.docNo || ""} · 퇴직 희망일 {resign.data?.last || "-"}</div><div className="text-[13px] text-[#5B6B85] mt-1 whitespace-pre-wrap">{resign.data?.reason || ""}</div></div>}

@@ -30,9 +30,9 @@ function RadarPulse({ active, color = "#1B2B4B" }) {
 }
 
 const STAGE_META = {
-  submitted: { label: "신청 접수", desc: "화주사 가입 신청이 접수되었습니다." },
-  step1: { label: "1차 승인", desc: "연동 운송사 관리자가 확인하고 있습니다." },
-  step2: { label: "2차 승인", desc: "최종 승인이 완료되면 바로 이용하실 수 있습니다." },
+  submitted: { label: "신청 접수", desc: "화주사 가입 신청을 받았어요." },
+  step1: { label: "1차 승인", desc: "연동 운송사 관리자가 확인하고 있어요." },
+  step2: { label: "2차 승인", desc: "최종 승인이 끝나면 바로 쓸 수 있어요." },
 };
 
 export default function ShipperPending() {
@@ -97,7 +97,7 @@ export default function ShipperPending() {
         <div className="px-8 pt-8 pb-6 text-center" style={{ background: rejected ? "linear-gradient(135deg,#7f1d1d,#991b1b)" : "linear-gradient(135deg,#1B2B4B,#243a60)" }}>
           <div className="text-white/60 text-[12px] font-semibold tracking-wide mb-2 flex justify-center"><LogisTag height={9} text="화주 계정" /></div>
           <h1 className="text-white text-[20px] font-bold">
-            {rejected ? "승인이 거절되었습니다" : "승인 진행 중입니다"}
+            {rejected ? "승인이 거절됐어요" : "승인을 진행하고 있어요"}
           </h1>
           {application?.companyName && (
             <div className="text-white/70 text-[13px] mt-1.5">{application.companyName}</div>
@@ -112,7 +112,7 @@ export default function ShipperPending() {
               <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
               </div>
-              <div className="text-[14px] text-gray-700 font-semibold mb-1">가입 신청이 거절되었습니다</div>
+              <div className="text-[14px] text-gray-700 font-semibold mb-1">가입 신청이 거절됐어요</div>
               {(application?.transportRejectionReason || application?.rejectionReason) && (
                 <div className="text-[12px] text-gray-500 mt-2 bg-gray-50 rounded-lg px-4 py-3">
                   {application.transportRejectionReason || application.rejectionReason}

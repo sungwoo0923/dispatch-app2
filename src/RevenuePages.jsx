@@ -69,7 +69,7 @@ export function TargetPage({ rows = [], targetMonth, yearTarget = 0, isExcluded 
       </div>
 
       <div className="kp-rv-stack" style={{ display: "grid", gridTemplateColumns: "minmax(0,2.1fr) minmax(0,1fr)", gap: 14 }}>
-        <RvCard code="RACE" title="누적 매출 레이스 — 올해 vs 작년 vs 목표 페이스" right={
+        <RvCard code="RACE" title="누적 매출 레이스: 올해 vs 작년 vs 목표 페이스" right={
           <div style={{ display: "flex", gap: 12, fontSize: 12.5, fontWeight: 700, color: "#4b5563" }}>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 14, height: 3, background: NAVY, borderRadius: 2 }} />올해</span>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 14, borderTop: "2px dashed #94A3B8" }} />작년</span>
@@ -132,7 +132,7 @@ export function TargetPage({ rows = [], targetMonth, yearTarget = 0, isExcluded 
             ))}
           </div>
         </RvCard>
-        <RvCard code="P&L" title="운송료 구성 — 매출 = 운반비 + 수익">
+        <RvCard code="P&L" title="운송료 구성: 매출 = 운반비 + 수익">
           {[[`${curM}월`, m], [`${Y}년 누적`, y]].map(([k, d]) => (
             <div key={k} style={{ marginBottom: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>

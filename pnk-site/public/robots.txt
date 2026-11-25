@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /login
+Disallow: /intranet
+
+Sitemap: https://www.pnkproject.com/sitemap.xml

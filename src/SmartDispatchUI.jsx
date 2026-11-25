@@ -124,7 +124,7 @@ export function QuickOrderLine({ rows = [], userCompany = "", canMoney = false, 
             else if (e.key === "Enter") { e.preventDefault(); if (open) apply(list[idx]); else setOpen(true); }
             else if (e.key === "Escape") { e.preventDefault(); if (open && text) setOpen(false); else { setText(""); setOpen(false); ref.current?.blur(); } }
           }}
-          placeholder="예) 내일 대한 평택→이천 5톤윙 10파레트 35만 — 거래처 · 상하차지 · 차종 · 톤수 · 화물 · 운임을 한 줄로"
+          placeholder="예) 내일 대한 평택→이천 5톤윙 10파레트 35만: 거래처 · 상하차지 · 차종 · 톤수 · 화물 · 운임을 한 줄로"
           style={{ border: 0, boxShadow: "none", outline: "none", background: "transparent" }} className="flex-1 min-w-0 h-full bg-transparent text-[14px] font-semibold text-[#0F1A30] placeholder:text-[#A6B3C8] placeholder:font-medium outline-none" />
         {chips.map((c) => (
           <span key={c.l} className="shrink-0 hidden md:inline-flex items-center gap-1 h-6 px-2 rounded-md border border-[#DCE3EE] text-[11.5px]">
@@ -226,7 +226,7 @@ export function DriverSuggestCell({ order, pick, onAssign, drivers = [], disable
     <span data-kp="driver-suggest" data-variant={variant} onDoubleClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
       {caret ? (
         <button ref={btn} type="button" disabled={disabled} onClick={toggle} tabIndex={-1} data-kp="driver-suggest-caret"
-          title={`추천 기사 ${list.length}명${top ? ` — 1순위 ${top.이름}(${top.차량번호})` : ""} · 눌러서 골라 배정 (차량번호를 직접 입력해도 돼요)`}
+          title={`추천 기사 ${list.length}명${top ? ` · 1순위 ${top.이름}(${top.차량번호})` : ""} · 눌러서 골라 배정 (차량번호를 직접 입력해도 돼요)`}
           className={`inline-flex items-center justify-center gap-px h-[20px] min-w-[24px] px-1 rounded-md border text-[10px] font-black leading-none transition disabled:opacity-50 ${open ? "border-[#1B2B4B] bg-[#1B2B4B] text-white" : "border-[#C9D3E4] bg-[#EEF3FB] text-[#1B2B4B] hover:border-[#1B2B4B]"}`} style={NUM}>
           {list.length}
           <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M2 3.5 5 6.5 8 3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>

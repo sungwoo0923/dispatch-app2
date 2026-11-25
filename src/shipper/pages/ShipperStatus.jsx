@@ -1183,7 +1183,7 @@ export default function ShipperStatus() {
                         )}
                         {o.최종수정출처 === "transport" && (Date.now() - (o.최종수정일시?.seconds ? o.최종수정일시.seconds * 1000 : 0)) < 1000 * 60 * 60 * 48 && (
                           <button type="button"
-                            title="운송사가 오더 정보를 수정했습니다 — 클릭하여 확인"
+                            title="운송사가 오더 정보를 수정했습니다. 눌러서 확인하세요."
                             onClick={(e) => { e.stopPropagation(); openTransportEditPopup(o); }}
                             className="absolute -top-1.5 -right-1.5 w-3 h-3 rounded-full bg-amber-500 border-2 border-white cursor-pointer p-0"
                             style={{ animation: "cancelReqBlink 1.6s ease-in-out infinite" }}

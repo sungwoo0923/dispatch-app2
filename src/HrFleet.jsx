@@ -147,7 +147,7 @@ export function DriverOrderPanel({ company, driver, myName = "", onDone }) {
         audience: "internal", audiences: ["internal"], authorUid: auth.currentUser?.uid || "", createdAt: serverTimestamp(), companyName: company,
         hrOrder: { kind: "driver", driverId: driver.id, name: nameOf(driver), from, to: rec.to, date: f.date, type: f.type },
       });
-      setDone("발령을 냈어요 — 사내 공지(인사발령)에 올라갔어요.");
+      setDone("발령을 냈어요. 사내 공지(인사발령)에 올라갔어요.");
       onDone?.();
     } catch (e) { alert(`발령하지 못했어요: ${e?.message || e}`); } finally { setBusy(false); }
   };
@@ -192,7 +192,7 @@ export function TeamPicker({ value = "전체", onChange, teams = [] }) {
         <span className="pl-3 pr-1 text-[12px] font-black text-[#7A879C] shrink-0">팀</span>
         <input value={text} onFocus={() => setOpen(true)} onChange={(e) => { setText(e.target.value); setOpen(true); }}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); pick(list[0] || "전체"); } if (e.key === "Escape") setOpen(false); }}
-          placeholder="전체 — 팀 이름을 적거나 고르세요" className="flex-1 min-w-0 h-full px-1.5 text-[13px] font-bold text-[#0F1A30] outline-none bg-transparent placeholder:text-[#A7B3C6] placeholder:font-semibold" autoComplete="off" />
+          placeholder="전체: 팀 이름을 적거나 고르세요" className="flex-1 min-w-0 h-full px-1.5 text-[13px] font-bold text-[#0F1A30] outline-none bg-transparent placeholder:text-[#A7B3C6] placeholder:font-semibold" autoComplete="off" />
         {value !== "전체" && <button type="button" onClick={() => pick("전체")} className="px-1.5 text-[#9AA9C3] hover:text-[#0F1A30] text-[14px]" aria-label="팀 지우기">×</button>}
         <button type="button" tabIndex={-1} onClick={() => setOpen((v) => !v)} className="h-full px-3 text-[#5B6B85] text-[12px]" aria-label="팀 목록">▾</button>
       </div>

@@ -188,7 +188,7 @@ export default function CafeOrderDetail({ order, profile, onClose, onEdit, trust
         {/* 비공개 상세 */}
         {v2 && (canPrivate ? (
           <div className="rounded-2xl px-4 py-4 text-white" style={GRID_BG}>
-            <div className="flex items-center gap-2 text-[14px] font-bold text-[#8FB0F0]"><Icon name="shield" size={16} />{isMine ? "비공개 정보 (매칭된 운송사에게만 공개)" : "매칭 완료 — 상세 정보 공개"}</div>
+            <div className="flex items-center gap-2 text-[14px] font-bold text-[#8FB0F0]"><Icon name="shield" size={16} />{isMine ? "비공개 정보 (매칭된 운송사에게만 공개)" : "매칭 완료, 상세 정보 공개"}</div>
             {!detail ? <div className="mt-2 text-[14px] text-white/70">불러오는 중…</div> : (
               <div className="mt-2 space-y-2.5">
                 {[["상차지", detail.상차지명, detail.상차지주소], ["하차지", detail.하차지명, detail.하차지주소]].map(([l, n, a]) => (
@@ -378,7 +378,7 @@ function LegacyBlock({ order, profile, isMine }) {
       {order.상차지주소 || order.하차지주소 ? <div className="text-[14px] text-[#55657F] mb-2">{order.상차지명} {order.상차지주소} → {order.하차지명} {order.하차지주소}</div> : null}
       {order.status === "open" && !isMine && <button type="button" disabled={applying} onClick={apply} className={`${btnPrimary} w-full`} style={btnPrimaryStyle}>{applying ? "신청 중…" : "배차신청 (10초 안에 취소 가능)"}</button>}
       {order.status === "applying" && (isApplicant ? (
-        <div className="flex items-center gap-3"><div className="flex-1 text-[14px] font-bold text-[#0F1A30]">배차 확정까지 {remain ?? "-"}초 — 지금은 취소할 수 있습니다</div><button type="button" onClick={() => { clearTimeout(timer.current); cancelCafeApply(order.id, profile.uid).catch(() => {}); }} className={`${btnGhost} !h-11`}>신청취소</button></div>
+        <div className="flex items-center gap-3"><div className="flex-1 text-[14px] font-bold text-[#0F1A30]">배차 확정까지 {remain ?? "-"}초 남았습니다. 지금은 취소할 수 있습니다.</div><button type="button" onClick={() => { clearTimeout(timer.current); cancelCafeApply(order.id, profile.uid).catch(() => {}); }} className={`${btnGhost} !h-11`}>신청취소</button></div>
       ) : <div className="text-[14px] text-[#55657F]">다른 회원이 배차신청을 진행하고 있습니다.</div>)}
       {order.status === "confirmed" && (isMine || isApplicant) && (
         <div className="rounded-xl px-4 py-3 text-white" style={GRID_BG}>

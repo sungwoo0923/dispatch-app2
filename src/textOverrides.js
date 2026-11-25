@@ -463,7 +463,7 @@ export async function loadFromServer() {
     setDocs(next);
   } catch (e) {
     loadedFor = null;
-    console.warn("[문구] 불러오기 실패 — 저장해둔 값으로 보여줍니다", e?.message || e);
+    console.warn("[문구] 불러오기 실패: 저장해둔 값으로 보여줍니다", e?.message || e);
   }
 }
 

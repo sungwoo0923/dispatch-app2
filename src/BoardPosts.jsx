@@ -28,7 +28,7 @@ const fmt = (ms, full) => {
 export const BOARDS = {
   free: { label: "자유게시판", en: "FREE BOARD", icon: "chat", desc: "자유로운 소통과 이야기를 나누는 공간입니다." },
   admin: { label: "관리자게시판", en: "MANAGERS", icon: "shield", desc: "관리자 전용 공지 및 운영 정보를 공유합니다." },
-  exec: { label: "임원게시판", en: "EXECUTIVE", icon: "key", desc: "임원 전용 — 권한 설정 전까지 최고관리자만 보입니다" },
+  exec: { label: "임원게시판", en: "EXECUTIVE", icon: "key", desc: "임원 전용: 권한 설정 전까지 최고관리자만 보입니다" },
 };
 const isAdminRole = (r) => ["admin", "totalMaster", "hrManager"].includes(r);
 // ⭐ 2026-10-28: 임원게시판 권한(임원 직책 기준)은 아직 정하지 않아 최고관리자만 보이게 둔다 — 추후 설정

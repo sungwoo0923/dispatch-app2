@@ -131,14 +131,14 @@ export function installTableXNav() {
     // ① 가장자리
     Object.assign(fadeR.style, { left: `${right - 110}px`, top: `${top}px`, width: "110px", height: `${bottom - top}px`, background: `linear-gradient(90deg,rgba(${fadeRGB},0),rgba(${fadeRGB},.92) 75%)` });
     Object.assign(fadeL.style, { left: `${left}px`, top: `${top}px`, width: "64px", height: `${bottom - top}px`, background: `linear-gradient(270deg,rgba(${fadeRGB},0),rgba(${fadeRGB},.88) 75%)` });
-    show(fadeR, canR); show(btnR, canR); show(fadeL, canL); show(btnL, canL);
+    show(fadeR, false); show(btnR, canR); show(fadeL, false); show(btnL, canL); // 🛠 2026-11-25 가장자리 흐림(불빛) 없이 화살표만(사용자 요청)
     Object.assign(btnR.style, { left: `${right - 52}px`, top: `${midY - 20}px` });
     Object.assign(btnL.style, { left: `${left + 12}px`, top: `${midY - 17}px` });
     if (canR) {
       const hidden = headCells(box).filter((c) => c.offsetWidth > 0 && c.offsetLeft + c.offsetWidth / 2 > x + box.clientWidth);
       const names = hidden.slice(0, 2).map(cellText).filter(Boolean);
       more.textContent = hidden.length ? `${names.join(" · ")}${hidden.length > names.length ? ` 외 ${hidden.length - names.length}열` : ""}` : "";
-      show(more, !!hidden.length);
+      show(more, false); // 🛠 2026-11-25 "외 N열" 글자도 빼고 화살표만(사용자 요청)
       if (hidden.length) { const w = more.offsetWidth; Object.assign(more.style, { left: `${right - 60 - w}px`, top: `${midY - 12}px` }); }
     } else show(more, false);
     // ② 아래 구역 막대 — 표의 진짜 가로 막대(상자 아래 끝)가 화면 밖일 때만

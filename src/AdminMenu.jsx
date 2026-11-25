@@ -935,7 +935,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
       active={adminTab}
       onSelect={setAdminTab}
       heroTitle={`안녕하세요, ${myDisplayName}님`}
-      heroSubtitle={deptMode ? (pendingUserCount > 0 ? `가입 승인 대기 ${pendingUserCount}명이 있어요 — 회원 관리에서 직책·부서·권한을 정하고 승인해 주세요` : `${deptMode === "hr" ? "인사" : "경리"} 관리자메뉴 — 가입 승인 대기가 없습니다`) : todoCount > 0 ? `처리할 일이 ${todoCount}건 있어요 — 승인 대기 ${pendingUserCount} · 연동 대기 ${linkedPendingCount || 0} · 미답변 문의 ${unansweredInquiryCount || 0}` : "처리할 일이 모두 끝났어요. 수고하셨어요!"}
+      heroSubtitle={deptMode ? (pendingUserCount > 0 ? `가입 승인 대기 ${pendingUserCount}명이 있어요. 회원 관리에서 직책·부서·권한을 정하고 승인해 주세요` : `${deptMode === "hr" ? "인사" : "경리"} 관리자메뉴: 가입 승인 대기가 없습니다`) : todoCount > 0 ? `처리할 일이 ${todoCount}건 있어요. 승인 대기 ${pendingUserCount} · 연동 대기 ${linkedPendingCount || 0} · 미답변 문의 ${unansweredInquiryCount || 0}` : "처리할 일이 모두 끝났어요. 수고하셨어요!"}
       heroActions={[] /* 📱 2026-11-14 모바일 미리보기는 관리센터 › 운영 › 모바일 화면으로 옮겼다 */}
       stats={[
         { label: "전체 사용자", value: visibleUsers.length, icon: "users", tone: "navy" },
@@ -1293,7 +1293,7 @@ export default function AdminMenu({ parentRole = "", parentCompany = "", isViewe
               {isTotalMaster && filteredLinked.length > 0 && (
                 <div className="bg-[#1B2B4B]/5 border border-[#1B2B4B]/20 rounded-xl px-4 py-3 mb-4 flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#1B2B4B] shrink-0" />
-                  <span className="text-[13px] font-semibold text-[#1B2B4B]">운송사 1차 승인 완료 — 최종 승인 대기 중인 화주사입니다.</span>
+                  <span className="text-[13px] font-semibold text-[#1B2B4B]">운송사 1차 승인 완료: 최종 승인 대기 중인 화주사입니다.</span>
                 </div>
               )}
 
@@ -2396,7 +2396,7 @@ export function LandingPageEditPanel() {
           />
         ) : (
           <div className="text-[11px] text-gray-400 mb-2">
-            설정 안 함 — 기본 남색 배경이 나갑니다.
+            설정 안 함: 기본 남색 배경이 나갑니다.
           </div>
         )}
         <div className="flex items-center gap-2">

@@ -109,7 +109,7 @@ export function PayBadge({ row, onOpen }) {
   if (!s) return <button type="button" onClick={onOpen} title="정산 정보 보기" className="text-[12px] font-bold text-[#C2CBDB] hover:text-[#1B2B4B] px-2">–</button>;
   const t = TONE[s.tone];
   return (
-    <button type="button" onClick={onOpen} title={`${caught ? "OUT · 외부 콜을 잡은 오더" : "IN · 우리 오더"}${s.memo ? ` · 메모: ${s.memo}` : ""} — 눌러서 정산 정보 보기`} data-pay-badge={s.label}
+    <button type="button" onClick={onOpen} title={`${caught ? "OUT · 외부 콜을 잡은 오더" : "IN · 우리 오더"}${s.memo ? ` · 메모: ${s.memo}` : ""} · 눌러서 정산 정보 보기`} data-pay-badge={s.label}
       className="inline-flex items-center gap-1 h-7 px-2 rounded-full text-[12px] font-black whitespace-nowrap hover:brightness-95"
       style={{ background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, ...NUM }}>
       <span className="text-[9.5px] font-black px-1 rounded tracking-wide" style={caught ? { background: t.tag || "#1B2B4B", color: "#fff" } : { background: s.tone === "done" ? "rgba(255,255,255,.14)" : "#EEF2F8", color: s.tone === "done" ? "#CFE0FF" : "#7A8AA8" }}>{caught ? "OUT" : "IN"}</span>
@@ -136,7 +136,7 @@ export async function setCallDeposit({ row, done, date, name = "", patchDispatch
   const amt = done ? Number(String(row.청구운임 ?? "").replace(/[^\d.-]/g, "")) || 0 : 0;
   upsertAutoEntry(db, `calldep_${id}`, {
     company: coNow(company), date: d, type: "수입", account: "운송수입", item: `잡은 콜 입금 · ${row.거래처명 || ""}`, amount: amt, vendor: row.거래처명 || "",
-    memo: "정산관리 › 입금 확인 [입금완료] — 자동 반영", auto: "calldep", purpose: "collect",
+    memo: "정산관리 › 입금 확인 [입금완료]: 자동 반영", auto: "calldep", purpose: "collect",
   }).catch(() => {});
 }
 
@@ -416,7 +416,7 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
           )}
           {out && f.inv && (
             <Row label="청구 메모">
-              <input value={f.billMemo} disabled={!canEdit || busy} onChange={(e) => set("billMemo", e.target.value)} placeholder="청구완료 메모(필수) — 예: 11/12 메일로 계산서 발행" autoComplete="off" data-bill-memo
+              <input value={f.billMemo} disabled={!canEdit || busy} onChange={(e) => set("billMemo", e.target.value)} placeholder="청구완료 메모(필수), 예: 11/12 메일로 계산서 발행" autoComplete="off" data-bill-memo
                 className={`h-9 flex-1 min-w-[200px] px-2.5 rounded-lg border text-[13px] font-bold text-[#0F1A30] outline-none focus:border-[#1B2B4B] ${f.billMemo.trim() ? "border-[#DCE3EE] bg-white" : "border-[#FDB022] bg-[#FFFAEB]"}`} />
             </Row>
           )}
@@ -434,7 +434,7 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
               <DateField value={f.depDate} onChange={(v) => set("depDate", v || today())} disabled={!canEdit || busy} placeholder="입금일" />
               <input value={f.depName} disabled={!canEdit || busy} onChange={(e) => set("depName", e.target.value)} placeholder="입금자명(선택)" autoComplete="off"
                 className="h-9 w-[130px] px-2.5 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#0F1A30] outline-none focus:border-[#1B2B4B] bg-white" />
-              <input value={f.depMemo} disabled={!canEdit || busy} onChange={(e) => set("depMemo", e.target.value)} placeholder="입금 메모(필수) — 예: 농협 입금 확인" autoComplete="off" data-dep-memo
+              <input value={f.depMemo} disabled={!canEdit || busy} onChange={(e) => set("depMemo", e.target.value)} placeholder="입금 메모(필수), 예: 농협 입금 확인" autoComplete="off" data-dep-memo
                 className={`h-9 basis-full px-2.5 rounded-lg border text-[13px] font-bold text-[#0F1A30] outline-none focus:border-[#1B2B4B] ${f.depMemo.trim() ? "border-[#DCE3EE] bg-white" : "border-[#93C5FD] bg-[#EFF6FF]"}`} />
               {!deposited && <span className="basis-full text-[11.5px] font-semibold text-[#9AA9C3]">입금일은 오늘로 들어가 있습니다. [입금완료]를 누르려면 입금 메모를 남겨 주세요.</span>}
             </Row>
@@ -594,7 +594,7 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <span className="text-[12.5px] font-bold text-[#5B6B85]" style={NUM}>선택 {picked.length}건 · {won(sum(picked))}원</span>
           {filter !== "done" && <><span className="text-[12.5px] font-bold text-[#5B6B85]">처리 날짜</span><DateField value={date} onChange={(v) => setDate(v || today())} />
-            <button type="button" disabled={busy || isViewer} data-dep-invoice onClick={issueInvoices} title="고른 오더(고르지 않으면 지금 조회된 기간 · 업체의 미발행 오더 전부)를 계산서 발행으로 바꿔요 — 발행일은 왼쪽 날짜"
+            <button type="button" disabled={busy || isViewer} data-dep-invoice onClick={issueInvoices} title="고른 오더(고르지 않으면 지금 조회된 기간 · 업체의 미발행 오더 전부)를 계산서 발행으로 바꿔요. 발행일은 왼쪽 날짜"
               className="h-9 px-4 rounded-lg border border-[#0F1A30] text-[#0F1A30] text-[13px] font-black disabled:opacity-40 whitespace-nowrap">{picked.length ? `선택 ${picked.length}건 계산서 발행` : "조회된 건 계산서 발행"}</button>
             <button type="button" disabled={busy || isViewer} onClick={() => run(picked.filter((r) => r.입금상태 !== "입금완료"), true)} className="h-9 px-4 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-40 whitespace-nowrap">{busy ? "처리 중…" : "선택 건 입금완료"}</button></>}
           {filter !== "done" && sugg.size > 0 && <button type="button" disabled={busy || isViewer} data-sugg-all onClick={() => applySugg(rows.filter((r) => sugg.get(idOf(r))?.nameHit))} title="입금자명까지 맞는 후보만 한 번에 입금완료 처리합니다"
@@ -648,7 +648,7 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
                     {r.입금일 || ""}{r.입금자명 ? <span className="ml-1 text-[12px] text-[#7A8AA8]">{r.입금자명}</span> : null}
                     {!done && sugg.get(idOf(r)) && (() => { const g = sugg.get(idOf(r)); return (
                       <span className="inline-flex items-center gap-1.5" data-sugg>
-                        <span className={`inline-flex items-center h-6 px-2 rounded-full text-[11.5px] font-black border ${g.nameHit ? "bg-[#EEF3FB] text-[#1B2B4B] border-[#C9D6EC]" : "bg-white text-[#7A8AA8] border-[#DCE3EE]"}`} title={g.nameHit ? "금액 · 입금자명이 맞습니다" : "금액만 같습니다 — 입금자명을 확인해 주세요"}>
+                        <span className={`inline-flex items-center h-6 px-2 rounded-full text-[11.5px] font-black border ${g.nameHit ? "bg-[#EEF3FB] text-[#1B2B4B] border-[#C9D6EC]" : "bg-white text-[#7A8AA8] border-[#DCE3EE]"}`} title={g.nameHit ? "금액 · 입금자명이 맞습니다" : "금액만 같습니다. 입금자명을 확인해 주세요"}>
                           {md(g.txn.date)} {g.txn.name || "입금자 없음"} {won(g.txn.amount)}{g.vat ? " (부가세 포함)" : ""}{g.nameHit ? "" : " · 금액만"}
                         </span>
                         <button type="button" disabled={busy || isViewer} onClick={() => applySugg([r])} className="h-6 px-2 rounded-md bg-[#0F1A30] text-white text-[11.5px] font-black disabled:opacity-40">적용</button>

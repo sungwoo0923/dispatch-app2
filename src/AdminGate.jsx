@@ -101,13 +101,13 @@ function GateBody({ user, authTime, sub, onCancel, inline }) {
   const load = React.useCallback(async () => {
     setChecking(true); setMsg("");
     try {
-      const r = await Promise.race([mfa({ action: "status" }), new Promise((_, no) => setTimeout(() => no(new Error("서버 응답이 늦습니다")), 12000))]);
+      const r = await Promise.race([mfa({ action: "status" }), new Promise((_, no) => setTimeout(() => no(new Error("서버 응답이 늦어요. 잠시 뒤 다시 시도해 주세요.")), 12000))]);
       if (r.required === false) { markPassed(user.uid, authTime); return; }
       if (!r.hasCode) { setCode(""); setFirst(""); } // 아직 2차 비밀번호가 없는 계정 — 만들기 화면으로(미리 친 값은 지운다)
       setSetup(!r.hasCode);
-      if (r.locked) setMsg("여러 번 틀려 잠겼습니다. 10분 뒤 다시 해 주세요.");
+      if (r.locked) setMsg("여러 번 틀려서 잠겼어요. 10분 뒤 다시 해 주세요.");
       setStep("code");
-    } catch (e) { setMsg(e.message || "서버에 연결하지 못했습니다"); setStep("error"); }
+    } catch (e) { setMsg(e.message || "서버에 연결하지 못했어요"); setStep("error"); }
     finally { setChecking(false); }
   }, [user.uid, authTime]);
   React.useEffect(() => { warmAdminGate(); load(); }, [load]);
@@ -122,7 +122,7 @@ function GateBody({ user, authTime, sub, onCancel, inline }) {
       setCode(""); setFirst("");
       if (r.needSms) { setSetup(false); setPhone(r.phone || ""); setStep("sms"); }
       else markPassed(user.uid, authTime);
-    } catch (e) { setMsg(e.message || "확인하지 못했습니다"); setCode(""); if (setup) setFirst(""); }
+    } catch (e) { setMsg(e.message || "확인하지 못했어요"); setCode(""); if (setup) setFirst(""); }
     finally { setBusy(false); }
   };
 
@@ -206,13 +206,13 @@ export function AdminCodeChange() {
   const go = async () => {
     if (cur.length < 8 || nw.length < 8) return setMsg({ type: "err", text: "8자 이상 넣어 주세요." });
     if (!/^[A-Za-z0-9!@#$%^&*._-]{8,20}$/.test(nw)) return setMsg({ type: "err", text: "새 2차 비밀번호는 영문 · 숫자 · 기호(!@#$%^&*._-) 8~20자로 정해 주세요." });
-    if (nw !== nw2) return setMsg({ type: "err", text: "새 2차 비밀번호 확인이 맞지 않습니다." });
+    if (nw !== nw2) return setMsg({ type: "err", text: "새 2차 비밀번호 확인이 맞지 않아요." });
     setBusy(true); setMsg({ type: "", text: "" });
     try {
       await mfa({ action: "change", code: cur, newCode: nw });
       setCur(""); setNw(""); setNw2("");
-      setMsg({ type: "ok", text: "2차 비밀번호를 바꿨습니다. 인트라넷도 새 2차 비밀번호로 로그인합니다." });
-    } catch (e) { setMsg({ type: "err", text: e.message || "바꾸지 못했습니다" }); } finally { setBusy(false); }
+      setMsg({ type: "ok", text: "2차 비밀번호를 바꿨어요. 인트라넷도 새 2차 비밀번호로 로그인해요." });
+    } catch (e) { setMsg({ type: "err", text: e.message || "바꾸지 못했어요" }); } finally { setBusy(false); }
   };
   const input = "w-full border border-[#DCE3EE] rounded-xl px-3.5 py-2.5 text-[14px] outline-none focus:border-[#1B2B4B] bg-white";
   return (

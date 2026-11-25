@@ -1,5 +1,5 @@
 // ======================= src/adminCenter/PrivateFareAdmin.jsx =======================
-// 🔐 2026-11-18 관리자센터 › 보안 · 데이터 › 비공개 운임 — 최고관리자가 운송사 · 사람을 골라 비공개 운임을 켜고 끈다(사용자 요청)
+// 🔐 2026-11-18 관리자센터 › 계정 · 보안 › 권한 · 계정 › 비공개 운임 — 최고관리자가 운송사 · 사람을 골라 비공개 운임을 켜고 끈다(사용자 요청)
 //  · 켜면 그 사람의 임원 화면(PC · 휴대폰)에 [비공개 운임] 메뉴가 생긴다 → 들어갈 때 비밀번호(처음엔 그 사람이 직접 정함)
 //  · 최고관리자는 지정 · 끄기 · 비밀번호 초기화 · 지정 해제만 — 그 사람이 정한 금액은 최고관리자도 볼 수 없다(firestore.rules)
 //  · 저장: privateFareGrants/{uid} = { uid, companyName, name, team, position, on, grantedBy, grantedAt, lastOpenedAt(서버) }
@@ -78,7 +78,7 @@ export default function PrivateFareAdmin() {
       </div>
 
       <AdmPanel code="ASSIGNED" title="지정된 사람" right={<span className="text-[12.5px] font-bold" style={{ color: G.dim }}>{grants ? `${grants.length}명` : ""}</span>} bodyClass="p-0">
-        {grants === null ? <AdmEmpty /> : !grants.length ? <AdmEmpty>아직 지정한 사람이 없어요 — 아래에서 운송사를 고르고 사람을 켜 주세요</AdmEmpty> : (
+        {grants === null ? <AdmEmpty /> : !grants.length ? <AdmEmpty>아직 지정한 사람이 없어요. 아래에서 운송사를 고르고 사람을 켜 주세요.</AdmEmpty> : (
           <div className="overflow-x-auto"><table className="w-full text-[14px]" style={{ minWidth: 820 }}>
             <thead><tr>{["운송사", "이름", "부서 · 직책", "상태", "마지막으로 연 때", ""].map((h) => <th key={h} className="px-3 py-2.5 text-left font-extrabold whitespace-nowrap">{h}</th>)}</tr></thead>
             <tbody>{[...grants].sort((a, b) => String(a.companyName).localeCompare(String(b.companyName), "ko") || String(a.name).localeCompare(String(b.name), "ko")).map((g) => (
@@ -109,7 +109,7 @@ export default function PrivateFareAdmin() {
           </select>
           {co && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름 · 부서 · 직책 찾기" className={`${inp} w-[220px]`} style={inpSt} />}
         </div>
-        {!co ? <AdmEmpty>운송사를 고르면 그 회사 직원이 보여요</AdmEmpty> : !staff.length ? <AdmEmpty>{onlyExec === "exec" ? "임원 · 대표급 직원이 없어요 — [전체 직원]에서 골라 보세요" : "직원이 없어요"}</AdmEmpty> : (
+        {!co ? <AdmEmpty>운송사를 고르면 그 회사 직원이 보여요</AdmEmpty> : !staff.length ? <AdmEmpty>{onlyExec === "exec" ? "임원 · 대표급 직원이 없어요. [전체 직원]에서 골라 보세요." : "직원이 없어요"}</AdmEmpty> : (
           <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
             {staff.map((u) => {
               const g = byUid[u.uid]; const on = g?.on === true;

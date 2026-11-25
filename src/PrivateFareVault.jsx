@@ -188,7 +188,7 @@ export default function PrivateFareVault({ company, dispatchData = [] }) {
   React.useEffect(() => () => { api.lock().catch(() => {}); }, []);
 
   if (grant.loading) return <ExecPage en="PRIVATE FARE" title="비공개 운임"><Empty text="불러오는 중이에요" /></ExecPage>;
-  if (!grant.on) return <ExecPage en="PRIVATE FARE" title="비공개 운임"><Empty text="이 계정은 비공개 운임을 쓸 수 없어요" sub="최고관리자가 관리자센터 › 비공개 운임에서 지정한 사람만 열 수 있어요" /></ExecPage>;
+  if (!grant.on) return <ExecPage en="PRIVATE FARE" title="비공개 운임"><Empty text="이 계정은 비공개 운임을 쓸 수 없어요" sub="최고관리자가 관리자센터 › 계정 · 보안 › 권한 · 계정 › 비공개 운임에서 지정한 사람만 열 수 있어요" /></ExecPage>;
   if (!until) {
     return (
       <ExecPage en="PRIVATE FARE · LOCKED" title="비공개 운임" sub="나만 보는 실제 청구 금액이에요. 들어갈 때마다 비밀번호를 확인해요.">

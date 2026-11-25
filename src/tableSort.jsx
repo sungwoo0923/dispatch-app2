@@ -165,7 +165,7 @@ export const SortTh = React.memo(function SortTh({ k, sort, onSort, className = 
       className={`${className} group cursor-pointer select-none`}
       style={style}
       aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
-      title={title || (active ? (dir === "asc" ? "오름차순 — 한 번 더 누르면 내림차순" : "내림차순 — 한 번 더 누르면 정렬 해제") : "눌러서 정렬")}
+      title={title || (active ? (dir === "asc" ? "오름차순: 한 번 더 누르면 내림차순" : "내림차순: 한 번 더 누르면 정렬 해제") : "눌러서 정렬")}
       onClick={() => onSort(k)}
       {...rest}
     >

@@ -16,10 +16,10 @@ import {
 
 export const wonFull = (n) => `${(Math.round(Number(n) || 0)).toLocaleString("ko-KR")}원`;
 const money = (v) => { const d = String(v).replace(/[^\d]/g, "").slice(0, 9); return d ? Number(d).toLocaleString() : ""; };
-const SIGN = { charge: 1, release: 1, return_refund: 1, fee_income: 1, adjust: 0, hold: -1, fee_paid: -1, debt_paid: -1, deduct: -1, payout_scheduled: 1, payout_done: 1, fee_owed: -1, platform_fee: 1, withdraw_req: -1, withdraw_done: -1, withdraw_cancel: 1 };
+const SIGN = { charge: 1, release: 1, return_refund: 1, fee_income: 1, adjust: 0, hold: -1, fee_paid: -1, debt_paid: -1, deduct: -1, payout_scheduled: 1, payout_done: 1, payout_cancel: -1, fee_owed: -1, platform_fee: 1, withdraw_req: -1, withdraw_done: -1, withdraw_cancel: 1 };
 const CH_ST = { requested: ["확인 기다림", "sky"], confirmed: ["충전 완료", "navy"], rejected: ["반려", "line"], cancelled: ["취소", "line"] };
 const PO_ST = { scheduled: ["지급 예정", "sky"], queued: ["지급 대기", "sky"], requested: ["보내는 중", "blue"], processing: ["보내는 중", "blue"], paid: ["지급 완료", "navy"], failed: ["지급 실패", "line"] };
-const WD_ST = { requested: ["신청", "sky"], processing: ["보내는 중", "blue"], paid: ["출금 완료", "navy"], rejected: ["반려", "line"], failed: ["실패", "line"] };
+const WD_ST = { requested: ["신청", "sky"], processing: ["보내는 중", "blue"], paid: ["출금 완료", "navy"], rejected: ["반려", "line"], failed: ["실패", "line"], cancelled: ["취소", "line"] };
 const fmtT = (t) => (tsMs(t) ? new Date(tsMs(t)).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "방금");
 const mask = (n) => String(n || "").replace(/.(?=.{4})/g, "*");
 
@@ -87,7 +87,12 @@ export default function HubWallet({ me, cfg, toast, jobs = [], posts = [], notic
   };
   const withdraw = async () => {
     setBusy("wd");
-    try { await requestWithdraw(me, wamt); toast?.("출금을 신청했어요"); setWamt(""); }
+    try {
+      // ⭐ 2026-11-24 출금가능금액보다 많으면 서버가 "실패"로 돌려보내기 전에 여기서 먼저 알려 준다
+      const n = Number(String(wamt).replace(/[^\d]/g, "")) || 0;
+      if (n > (Number(w?.available) || 0)) throw new Error(`출금가능금액(${wonFull(w?.available)})보다 많아요.`);
+      await requestWithdraw(me, wamt); toast?.("출금을 신청했어요"); setWamt("");
+    }
     catch (e) { toast?.(String(e?.code || "").includes("permission") ? "출금가능금액을 확인해 주세요" : e?.message || "신청하지 못했어요"); }
     finally { setBusy(""); }
   };
@@ -98,7 +103,7 @@ export default function HubWallet({ me, cfg, toast, jobs = [], posts = [], notic
   const infoRows = [["유형", `${ROLES[me.role]?.label || ""} ${SOURCE_LABEL[me.source] ? `(${SOURCE_LABEL[me.source]})` : ""}`], ["이름", me.name], ["휴대폰", me.phone], ["회사", me.companyName], ["사업자번호", me.bizNo], ["사업자 상태", me.bizStatus],
     ...(me.vehicle ? [["차량", `${me.vehicle.plate} ${me.vehicle.ton} ${me.vehicle.type}`]] : []),
     // ⭐ 2026-11-07 차량번호로 로그인하는 차주는 가짜 이메일 대신 로그인 방법 · 휴대폰번호 변경 안내(로그인 정보라 관리자가 바꾼다)
-    isHubDriverEmail(me.email) ? ["로그인", "차량번호 + 휴대폰번호. 번호가 바뀌면 관리자에게 알려 주세요"] : ["이메일", me.email]].filter(([, v]) => v && String(v).trim());
+    isHubDriverEmail(me.email) ? ["로그인", "차량번호와 휴대폰번호로 로그인해요. 번호가 바뀌면 관리자에게 알려 주세요."] : ["이메일", me.email]].filter(([, v]) => v && String(v).trim());
 
   return (
     <div className="grid lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] gap-4 max-w-[1180px]" data-testid="wallet-view">
@@ -179,8 +184,8 @@ export default function HubWallet({ me, cfg, toast, jobs = [], posts = [], notic
             <input className={`${inputCls} text-right font-extrabold`} inputMode="numeric" value={wamt} onChange={(e) => setWamt(money(e.target.value))} placeholder="출금할 금액" style={NUMS} data-testid="withdraw-amount" />
             <Btn onClick={withdraw} disabled={!!busy || !wamt || !me.bank?.number} data-testid="withdraw-submit">{busy === "wd" ? "신청하고 있어요" : "출금"}</Btn>
           </div>
-          <div className="text-[13.5px] text-[#5F6E87] mt-1.5">{me.bank?.number ? `${me.bank.bank} ${mask(me.bank.number)}로 보내드려요` : "출금계좌를 먼저 등록해 주세요"}</div>
-          {wds.length > 0 && <div className="mt-2 divide-y divide-[#EEF1F6]" data-testid="withdraw-list">{wds.slice(0, 6).map((x) => <div key={x.id} className="flex items-center gap-2 py-2 text-[14.5px]"><Badge tone={WD_ST[x.status]?.[1]}>{WD_ST[x.status]?.[0] || x.status}</Badge><span className="font-extrabold" style={NUMS}>{wonFull(x.amount)}</span><span className="text-[#5F6E87] ml-auto">{ago(x.createdAt)}</span></div>)}</div>}
+          <div className="text-[13.5px] text-[#5F6E87] mt-1.5">{me.bank?.number ? `신청하면 담당자가 확인한 뒤 ${me.bank.bank} ${mask(me.bank.number)}로 보내 드려요` : "출금계좌를 먼저 등록해 주세요"}</div>
+          {wds.length > 0 && <div className="mt-2 divide-y divide-[#EEF1F6]" data-testid="withdraw-list">{wds.slice(0, 6).map((x) => <div key={x.id} className="flex items-center gap-2 py-2 text-[14.5px]"><Badge tone={WD_ST[x.status]?.[1]}>{WD_ST[x.status]?.[0] || x.status}</Badge><span className="font-extrabold shrink-0" style={NUMS}>{wonFull(x.amount)}</span>{(x.failReason || x.rejectReason) && <span className="min-w-0 truncate text-[13.5px] text-[#55657F]" data-testid="withdraw-reason">{x.failReason || x.rejectReason}</span>}<span className="text-[#5F6E87] ml-auto shrink-0">{ago(x.createdAt)}</span></div>)}</div>}
         </Sec>
         {(payouts.length > 0 || canTake(me)) && (
           <Sec icon="truck" title="운송료 지급" testid="wallet-payouts">
@@ -241,7 +246,7 @@ export default function HubWallet({ me, cfg, toast, jobs = [], posts = [], notic
         </Sec>
         <Sec icon="user" title="내정보" testid="me-view">
           <div className="divide-y divide-[#EEF1F6]">{infoRows.map(([k, v]) => <div key={k} className="flex py-2.5 text-[15px]"><span className="w-24 shrink-0 font-semibold text-[#5F6E87]">{k}</span><span className="font-bold text-[#0F1A30] break-all">{v}</span></div>)}</div>
-          <div className="mt-2 text-[13.5px] text-[#5F6E87]">{me.source === "signup" ? "차량과 서류를 바꾸려면 고객센터로 연락해 주세요" : "정보는 로지스웹 프로그램에서 바꿔 주세요"}</div>
+          <div className="mt-2 text-[13.5px] text-[#5F6E87]">{me.source === "signup" ? "차량과 서류를 바꾸려면 고객센터로 연락해 주세요." : "정보는 로지스웹 프로그램에서 바꿔 주세요."}</div>
           {children}
           {isAdmin && <a href="/admin" className="mt-3 h-12 px-4 rounded-2xl bg-[#F5F7FB] flex items-center gap-2 text-[16px] font-bold text-[#1B2B4B]" data-testid="me-admin"><HI name="shield" size={18} />허브 관리자<HI name="chevron" size={18} className="ml-auto" /></a>}
           {logout && <Btn kind="ghost" className="w-full mt-3" onClick={logout} data-testid="btn-logout"><HI name="logout" size={18} />로그아웃</Btn>}

@@ -620,7 +620,7 @@ export default function DriverRegister() {
               </span>
             </div>
             <div className="mt-1.5 min-h-[18px] text-[14.5px] font-bold">
-              {bankReset ? <span className="text-[#2D4C82]">! 은행이 바뀌어 계좌번호를 초기화했습니다 — 다시 입력해 주세요</span>
+              {bankReset ? <span className="text-[#2D4C82]">! 은행이 바뀌어 계좌번호를 지웠어요. 다시 입력해 주세요.</span>
                 : acctCheck && acctDigits ? <span className={acctCheck.level === "ok" ? "text-[#1B2B4B]" : acctCheck.level === "warn" ? "text-[#2D4C82]" : "text-[#7A89A3]"}>{acctCheck.level === "ok" ? "✓ " : "! "}{acctCheck.msg}</span>
                 : acctLens.length ? <span className="text-[#7A89A3]">{bank.bank} 계좌는 보통 {acctLens.join("·")}자리입니다</span> : null}
             </div>
@@ -712,7 +712,7 @@ export default function DriverRegister() {
                   <div className="text-[17px] font-black text-[#0F1A30]">'{companyName.trim()}' 운송사를 찾지 못했습니다</div>
                   <div className="mt-1 text-[15.5px] font-semibold text-[#5B6B85]">글자를 조금만 쳐 보세요(예: 앞 두 글자).</div>
                   <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setCoManual(true); setCoOpen(false); setError(""); }}
-                    className="mt-3 w-full h-12 rounded-xl border-2 border-[#DCE3EE] text-[16.5px] font-black text-[#3A4A66] active:bg-[#F3F6FA]">목록에 없어요 — 입력한 이름 그대로 신청</button>
+                    className="mt-3 w-full h-12 rounded-xl border-2 border-[#DCE3EE] text-[16.5px] font-black text-[#3A4A66] active:bg-[#F3F6FA]">목록에 없으면 입력한 이름으로 신청하기</button>
                 </div>
               )}
               {coMatches.map((c) => {
@@ -771,7 +771,7 @@ export default function DriverRegister() {
           className={`w-full flex items-center gap-3 px-4 h-16 rounded-2xl border-2 text-left ${moreOpen ? "border-[#2D4C82]/50 bg-[#F5F8FD]" : "border-dashed border-[#C9D2E0] bg-white"}`}>
           <span className="flex-1 min-w-0">
             <span className="block text-[17px] font-black text-[#1B2B4B]">추가 정보(선택){moreCount ? <span className="ml-1.5 text-[#2D4C82]">{moreCount}개 입력</span> : null}</span>
-            <span className="block text-[14.5px] font-bold text-[#7A89A3] truncate">차종·톤수, 거주지, 계좌, 사업자 — 나중에 내 정보에서 입력해도 됩니다</span>
+            <span className="block text-[14.5px] font-bold text-[#7A89A3] truncate">차종·톤수, 거주지, 계좌, 사업자 정보는 나중에 내 정보에서 입력해도 돼요</span>
           </span>
           <span className="text-[15.5px] font-black text-[#7A89A3] shrink-0">{moreOpen ? "접기 ▲" : "열기 ▼"}</span>
         </button>

@@ -230,13 +230,13 @@ export default function DriverApproveModal({ u, signup, candidates = [], bizDoc,
       }
       onDone?.({ kind: target ? "link" : "approve", type, target });
     }
-    catch (e) { console.error(e); setErr(`승인하지 못했습니다 — ${e?.code === "permission-denied" ? "권한이 없습니다(관리자·인사·경리 계정으로 다시 시도해 주세요)" : e?.message || "잠시 후 다시 시도해 주세요"}`); }
+    catch (e) { console.error(e); setErr(`승인하지 못했습니다. ${e?.code === "permission-denied" ? "권한이 없습니다(관리자·인사·경리 계정으로 다시 시도해 주세요)" : e?.message || "잠시 후 다시 시도해 주세요"}`); }
     finally { setBusy(false); }
   };
   const doReject = async () => {
     setBusy(true); setErr("");
     try { await rejectDriverSignup({ u, signup, reason, company }); onDone?.({ kind: "reject" }); }
-    catch (e) { console.error(e); setErr(`거절하지 못했습니다 — ${e?.message || "잠시 후 다시 시도해 주세요"}`); }
+    catch (e) { console.error(e); setErr(`거절하지 못했습니다. ${e?.message || "잠시 후 다시 시도해 주세요"}`); }
     finally { setBusy(false); }
   };
 
@@ -301,7 +301,7 @@ export default function DriverApproveModal({ u, signup, candidates = [], bizDoc,
                     {target && (
                       <div className="mb-2 rounded-2xl px-3.5 py-3 text-[13.5px] font-black text-[#0F1A30] bg-[#EAF1FF] border border-[#8FB0F0]" data-testid="drv-link-notice">
                         🔗 이미 등록된 기사 정보가 있어 연동합니다
-                        <div className="mt-0.5 text-[12px] font-bold text-[#3A4A66]">새 기사를 만들지 않고 아래 기사에 앱 계정을 붙입니다 — 기존 값은 그대로, 빈 칸만 채웁니다</div>
+                        <div className="mt-0.5 text-[12px] font-bold text-[#3A4A66]">새 기사를 만들지 않고 아래 기사에 앱 계정을 붙입니다. 기존 값은 그대로, 빈 칸만 채웁니다</div>
                       </div>
                     )}
                     <div className="space-y-2">
@@ -333,13 +333,13 @@ export default function DriverApproveModal({ u, signup, candidates = [], bizDoc,
                     </div>
                   </>
                 ) : (
-                  <div className="rounded-2xl border border-[#E3E8F0] bg-[#F6F8FC] px-3.5 py-3 text-[13px] font-bold text-[#5B6B85]">기사관리에 같은 차량번호·연락처 기사가 없습니다 — 새 기사로 등록됩니다</div>
+                  <div className="rounded-2xl border border-[#E3E8F0] bg-[#F6F8FC] px-3.5 py-3 text-[13px] font-bold text-[#5B6B85]">기사관리에 같은 차량번호·연락처 기사가 없습니다. 새 기사로 등록됩니다</div>
                 )}
                 {target && tGrade === "블랙" && <div className="mt-2 rounded-xl bg-[#FEF3F2] border border-[#FDA29B] px-3 py-2 text-[12.5px] font-black text-[#B42318]">⚠ 이 기사는 기사관리에서 「블랙」 등급입니다. 승인하면 아래 가입유형으로 바뀝니다.</div>}
                 {target && !target.samePlate && <div className="mt-2 rounded-xl bg-[#FFF8EC] border border-[#F5C98B] px-3 py-2 text-[12.5px] font-bold text-[#8A4B0A]">차량번호가 달라 기사관리 차량번호가 <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{me.차량번호}</b>(로그인 차량번호)로 바뀝니다.</div>}
                 {conflicts.length > 0 && (
                   <div className="mt-3 rounded-2xl border border-[#F5C98B] bg-[#FFFBF3] p-3" data-testid="drv-conflicts">
-                    <div className="text-[12.5px] font-black text-[#8A4B0A] mb-1.5">기존 정보와 다른 입력값 {conflicts.length}개 — 체크한 칸만 입력값으로 바꿉니다</div>
+                    <div className="text-[12.5px] font-black text-[#8A4B0A] mb-1.5">기존 정보와 다른 입력값 {conflicts.length}개: 체크한 칸만 입력값으로 바꿉니다</div>
                     <div className="space-y-1.5">
                       {conflicts.map(({ f, old, neu }) => (
                         <label key={f.key} className={`flex items-start gap-2 rounded-xl bg-white border border-[#F1E2C6] px-2.5 py-2 ${f.locked ? "" : "cursor-pointer"}`}>
@@ -374,7 +374,7 @@ export default function DriverApproveModal({ u, signup, candidates = [], bizDoc,
               {rejecting && (
                 <div className="rounded-2xl border border-[#FDA29B] bg-[#FEF6F5] p-3">
                   <div className="text-[13px] font-black text-[#B42318] mb-1.5">거절 사유 (선택)</div>
-                  <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={500} autoFocus placeholder="예) 소속 확인 불가 · 차량번호 오입력 — 다시 가입해 주세요" className="w-full px-3 py-2 rounded-xl border border-[#F4C7C3] bg-white text-[14px] outline-none focus:border-[#B42318] resize-none" />
+                  <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={500} autoFocus placeholder="예) 소속 확인 불가 · 차량번호 오입력: 다시 가입해 주세요" className="w-full px-3 py-2 rounded-xl border border-[#F4C7C3] bg-white text-[14px] outline-none focus:border-[#B42318] resize-none" />
                   <div className="mt-1 text-[11.5px] font-bold text-[#B42318]/80">거절하면 가입 신청과 기사앱 계정이 삭제됩니다(기사는 다시 가입할 수 있어요). 사유는 처리 기록에 남습니다.</div>
                 </div>
               )}

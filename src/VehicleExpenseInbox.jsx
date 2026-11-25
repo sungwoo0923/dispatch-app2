@@ -230,7 +230,7 @@ export function VehicleExpenseInbox({ company, drivers = [], canEdit = true, me 
   const row = (e) => { const ch = checksOf(e); return { ch, lv: checkLevel(ch), head: checkHeadline(ch) }; };
   return (
     <div className="space-y-3.5" data-kp="vex-inbox">
-      <Hero en="FLEET · VEHICLE EXPENSE" title="차량 비용 영수증" desc="기사앱에서 올린 정비·수리 영수증 — 자동 점검 후 확인하고 지출결의로"
+      <Hero en="FLEET · VEHICLE EXPENSE" title="차량 비용 영수증" desc="기사앱에서 올린 정비·수리 영수증: 자동 점검 후 확인하고 지출결의로"
         kpis={[["미확인", list.filter((e) => e.status === "접수").length, "건"], ["확인 필요", needCheck, "건"], ["결재 중", list.filter((e) => e.status === "결재중").length, "건"], ["이번 달 승인", won(approvedSum), "원"]]} />
       <div className="flex flex-wrap items-center gap-2">
         <Seg items={STATUS_TABS.map(([k, l]) => [k, l, counts[k]])} value={tab} onChange={setTab} />

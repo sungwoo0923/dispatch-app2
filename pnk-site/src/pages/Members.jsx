@@ -150,7 +150,7 @@ function MemberEditor({ m, me, all, onClose }) {
           <Field label="부서"><Select custom value={f.dept} onChange={set("dept")} options={deptOpts} placeholder="고르거나 직접 입력" /></Field>
           <Field label="직책"><Select custom value={f.title} onChange={set("title")} options={TITLES} placeholder="고르거나 직접 입력" /></Field>
         </div>
-        <Field label="사내메일 주소" hint="영문 소문자 · 숫자 — 한 번 정하면 바꾸지 않는 것이 좋습니다.">
+        <Field label="사내메일 주소" hint="영문 소문자와 숫자만 쓸 수 있습니다. 한 번 정하면 바꾸지 않는 것이 좋습니다.">
           <div className="flex items-center gap-2"><Input value={f.mailId} onChange={set("mailId")} className="tnum" /><span className="text-[14px] font-bold text-[#77716A] shrink-0">@{MAIL_DOMAIN}</span></div>
         </Field>
         <div className="grid grid-cols-2 gap-3">
@@ -158,7 +158,7 @@ function MemberEditor({ m, me, all, onClose }) {
           <Field label="상태"><Select value={f.status} onChange={set("status")} options={[{ key: "active", label: "사용 중" }, { key: "off", label: "사용 중지(퇴사 등)" }]} /></Field>
           {m.tm && me.isOwner && m.uid !== me.user.uid && (
             <div className="col-span-2 rounded-xl bg-amber-50 px-3 py-2.5 flex items-center gap-2 text-[12.5px] text-amber-900">
-              <span className="flex-1">부관리자 2차 비밀번호를 잊었을 때 — 초기화하면 다음 로그인 때 새로 정합니다.</span>
+              <span className="flex-1">부관리자가 2차 비밀번호를 잊었다면 초기화해 주세요. 다음 로그인 때 새로 정합니다.</span>
               <Btn kind="ghost" onClick={async () => { if (!window.confirm(`${m.name}님의 2차 비밀번호를 초기화할까요?`)) return; try { await callFn("pnkMfa")({ action: "reset", uid: m.uid }); window.alert("초기화했습니다."); } catch (e) { fail(e); } }}>2차 비밀번호 초기화</Btn>
             </div>
           )}

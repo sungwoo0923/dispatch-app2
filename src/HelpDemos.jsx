@@ -447,7 +447,7 @@ const DEMOS = {
     scene: (s) => { const i = s >= 3 ? s - 1 : s; const detail = s === 2; return (<>
       <TopBar items={["HOME", "배차", "매출", "정산", "회계관리", "자금관리"]} on="회계관리" />
       <Side items={["회계 개요", "회계 장부", "급여 계산", "퇴직 정산"]} on={1} />
-      {detail && <Pop r={[44, 15, 53, 82]} title="108 외상매출금 · 거래처 원장 — 한빛물류센터">
+      {detail && <Pop r={[44, 15, 53, 82]} title="108 외상매출금 · 거래처 원장: 한빛물류센터">
         {[["청구액", "4,620,000", ""], ["수금액", "3,300,000", "text-[#1F6F4A]"], ["미수금", "1,320,000", "text-[#B42318]"]].map(([l, v, c], k) => <div key={l} style={pos(3 + k * 32, 4, 30, 16)} className="rounded-md ring-1 ring-[#D3DBE8] px-1.5 flex flex-col justify-center"><span className="text-[10px] font-bold text-[#5B6B85] leading-none">{l}</span><b className={`text-[12px] ${c}`}>{v}</b></div>)}
         <Tbl r={[3, 26, 94, 68]} cols={[["상차일", 22], ["상차지 → 하차지", 38], ["합계", 22], ["입금", 18]]} rows={[["11.03", "평택항 → 이천", "1,650,000", "완료 11.10"], ["11.08", "평택항 → 오산", "1,320,000", "–"], ["11.12", "김해 → 청주", "1,650,000", "완료 11.15"]]} hiRow={1} />
       </Pop>}

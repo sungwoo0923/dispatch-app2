@@ -209,7 +209,7 @@ export default function StmtCompareModal({ client = "", ym = "", orders = [], on
               {src.kind === "table" ? (
                 <div className="rounded-2xl border border-[#E3E8F0] px-4 py-3">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <div className="text-[15px] font-black mr-auto">칸 맞추기 <span className="text-[12.5px] font-bold" style={{ color: mapOk ? C.ok : C.bad }}>{mapOk ? "자동으로 찾았어요 — 다르면 골라 주세요" : "금액 · 차량번호(또는 기사) 칸을 골라 주세요"}</span></div>
+                    <div className="text-[15px] font-black mr-auto">칸 맞추기 <span className="text-[12.5px] font-bold" style={{ color: mapOk ? C.ok : C.bad }}>{mapOk ? "자동으로 찾았어요. 다르면 골라 주세요" : "금액 · 차량번호(또는 기사) 칸을 골라 주세요"}</span></div>
                     {src.sheets.length > 1 && (
                       <label className="text-[13px] font-bold flex items-center gap-1.5" style={{ color: C.sub }} htmlFor="stmt-cmp-sheet">시트
                         <select id="stmt-cmp-sheet" value={sheetIdx} onChange={(e) => { const i = Number(e.target.value); const h = detectHeader(src.sheets[i].rows); setSheetIdx(i); setHdr(h); applyTable(src.sheets[i].rows, h); }} className="h-9 rounded-lg border border-[#D5DDEA] px-2 text-[13px] font-bold">
@@ -235,7 +235,7 @@ export default function StmtCompareModal({ client = "", ym = "", orders = [], on
                 </div>
               ) : (
                 <div className="rounded-2xl border border-[#E3E8F0] px-4 py-3 text-[13.5px]" style={{ color: C.sub }}>
-                  <b className="text-[#0F1A30]">줄 글로 읽었어요</b> — 줄마다 차량번호 · 날짜 · 금액 · 기사를 찾았어요{src.how === "image" ? "(캡처 글자 인식)" : ""}. 틀린 칸은 아래에서 바로 고치면 돼요.
+                  <b className="text-[#0F1A30]">줄 글로 읽었어요</b> · 줄마다 차량번호 · 날짜 · 금액 · 기사를 찾았어요{src.how === "image" ? "(캡처 글자 인식)" : ""}. 틀린 칸은 아래에서 바로 고치면 돼요.
                 </div>)}
 
               <div className="rounded-2xl border border-[#E3E8F0] overflow-hidden">
@@ -243,7 +243,7 @@ export default function StmtCompareModal({ client = "", ym = "", orders = [], on
                   <div className="text-[14.5px] font-black mr-auto">읽은 줄 <span className="text-[12.5px] font-bold" style={{ color: C.mute }}>{theirs.length.toLocaleString()}줄 · 합계 {fmtWon(theirs.reduce((a, r) => a + r.amount, 0))}원{stated ? ` · 명세서 합계 줄 ${fmtWon(stated)}원` : ""}</span></div>
                   <button type="button" disabled={!theirs.length} onClick={() => setStep("result")} className={btnPri}>비교하기</button>
                 </div>
-                {!theirs.length ? <div className="py-12 text-center text-[14px] font-bold" style={{ color: C.mute }}>읽은 줄이 없어요 — 위에서 칸을 맞춰 주세요</div> : (
+                {!theirs.length ? <div className="py-12 text-center text-[14px] font-bold" style={{ color: C.mute }}>읽은 줄이 없어요. 위에서 칸을 맞춰 주세요</div> : (
                   <table className="w-full" style={{ ...NUM, minWidth: 820 }}>
                     <thead><tr className="text-[12.5px]" style={{ color: C.sub }}>
                       <th className="px-2 py-2 font-black w-12">줄</th>{EDIT_KEYS.map((k) => <th key={k} className="px-2 py-2 font-black">{LABEL[k]}</th>)}<th className="w-10" />
@@ -286,9 +286,9 @@ export default function StmtCompareModal({ client = "", ym = "", orders = [], on
               </div>
               {(res.vat || tot.statedMismatch || res.allSame) && (
                 <div className="rounded-xl px-4 py-2.5 text-[13.5px] font-bold space-y-0.5" style={{ background: res.allSame ? "#F3FBF7" : "#FFF8EC", color: res.allSame ? C.ok : C.warn }}>
-                  {res.allSame && <div>우리 오더와 업체 명세서가 모두 맞아요{sum.warn ? ` — 날짜만 다른 ${sum.warn}건은 한 번 봐 주세요` : ""}.</div>}
+                  {res.allSame && <div>우리 오더와 업체 명세서가 모두 맞아요{sum.warn ? ` · 날짜만 다른 ${sum.warn}건은 한 번 봐 주세요` : ""}.</div>}
                   {res.vat && <div>업체 금액이 부가세 포함이라 우리 청구운임 × 1.1로 맞춰 봤어요(공급가 합계 {fmtWon(tot.ourSupply)}원).</div>}
-                  {tot.statedMismatch && <div>업체 명세서의 합계 줄({fmtWon(tot.stated)}원)이 줄마다 더한 값({fmtWon(tot.theirRows)}원)과 달라요 — 업체 쪽 합계를 확인해 주세요.</div>}
+                  {tot.statedMismatch && <div>업체 명세서의 합계 줄({fmtWon(tot.stated)}원)이 줄마다 더한 값({fmtWon(tot.theirRows)}원)과 달라요. 업체 쪽 합계를 확인해 주세요.</div>}
                 </div>)}
 
               <div className="rounded-2xl border border-[#E3E8F0] overflow-hidden">

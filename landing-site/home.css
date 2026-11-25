@@ -532,3 +532,47 @@ footer { background: #08101F; color: var(--t3); padding: 48px 0; font-size: 13.5
 
 /* 2026-11-07 사내메신저 · 출퇴근기록 · 사내메일(#office) — PC 상단 메뉴는 자리가 꽉 차서 휴대폰 메뉴 · 하단 링크에만 */
 @media (min-width: 1081px) { .nav a.nav-office { display: none; } }
+
+/* ============ 요금 (#pricing, 2026-11-24) — 금액 · 기능은 docs/pricing-2026-11.md 기준 ============ */
+#pricing { background: radial-gradient(900px 480px at 50% 0%, rgba(79,139,255,.18), transparent 70%), linear-gradient(180deg, #0F1A30, #0B1428); }
+#pricing::before { background: repeating-linear-gradient(135deg, rgba(143,176,240,.03) 0 1px, transparent 1px 14px); mask-image: linear-gradient(180deg, #000, transparent 60%); -webkit-mask-image: linear-gradient(180deg, #000, transparent 60%); }
+.plans { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+.plan { position: relative; display: flex; flex-direction: column; border-radius: 22px; padding: 28px 24px 24px; background: var(--card); box-shadow: inset 0 0 0 1px var(--edge), inset 0 1px 0 rgba(255,255,255,.04); min-width: 0; }
+.plan.rec { background: linear-gradient(160deg, #1E3361 0%, #1B2B4B 55%, #13213D 100%); box-shadow: inset 0 0 0 1.5px rgba(79,139,255,.75), 0 30px 70px -30px rgba(45,91,216,.75); }
+.pl-badge { position: absolute; top: -12px; left: 24px; padding: 4px 12px; border-radius: 99px; font-size: 12px; font-weight: 800; color: #fff; background: linear-gradient(120deg, var(--btn1), var(--btn2)); box-shadow: 0 6px 16px -6px rgba(79,139,255,.8); }
+.pl-en { font-family: var(--mono); font-size: 11.5px; font-weight: 700; letter-spacing: .2em; color: var(--t4); }
+.plan h3 { margin: 6px 0 4px; font-size: 22px; font-weight: 800; color: #fff; letter-spacing: -.02em; }
+.pl-who { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--t3); min-height: 40px; }
+.pl-amt { display: flex; align-items: baseline; gap: 6px; margin-top: 18px; color: #fff; }
+.pl-amt b { font-size: clamp(30px, 2.6vw, 36px); font-weight: 800; letter-spacing: -.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.pl-amt span { font-size: 14px; font-weight: 600; color: var(--t2); }
+.pl-sub { margin: 6px 0 0; font-size: 12.5px; color: var(--t4); }
+.pl-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 18px 0 0; }
+.pl-meta div { padding: 10px 12px; border-radius: 12px; background: rgba(143,176,240,.07); box-shadow: inset 0 0 0 1px var(--hair); min-width: 0; }
+.pl-meta dt { font-size: 11.5px; font-weight: 600; color: var(--t3); }
+.pl-meta dd { margin: 3px 0 0; font-size: 15px; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; }
+.pl-meta dd.off { color: var(--t4); font-weight: 600; font-size: 13.5px; }
+.pl-list { list-style: none; padding: 0; margin: 20px 0 0; display: grid; gap: 10px; flex: 1; align-content: start; }
+.pl-list li { display: flex; gap: 9px; font-size: 14px; line-height: 1.5; color: var(--t2); }
+.pl-list li svg.i { width: 17px; height: 17px; margin-top: 2px; color: #7EF0B5; }
+.pl-list li.inh { color: #fff; font-weight: 700; }
+.pl-list li.inh svg.i { color: var(--sky); }
+.pl-fee { margin: 18px 0 14px; padding-top: 14px; border-top: 1px solid var(--hair); font-size: 12.5px; line-height: 1.5; color: var(--t3); }
+.plan .btn { width: 100%; height: 50px; }
+.price-foot { list-style: none; padding: 0; margin: 28px 0 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 24px; }
+.price-foot li { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--t2); }
+.price-foot li::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex: none; }
+.price-extra { margin-top: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.pe-col { padding: 20px 22px; border-radius: 18px; background: rgba(143,176,240,.05); box-shadow: inset 0 0 0 1px var(--edge); }
+.pe-col b { display: block; font-size: 15px; color: #fff; line-height: 1.5; }
+.pe-col p { margin: 6px 0 0; font-size: 13.5px; line-height: 1.65; color: var(--t3); }
+.pe-col a { color: var(--sky); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+@media (max-width: 1180px) { .plans { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 28px; } .pl-who { min-height: 0; } }
+@media (max-width: 720px) {
+  .plans { grid-template-columns: minmax(0, 1fr); }
+  .plan { padding: 26px 20px 20px; }
+  .price-extra { grid-template-columns: 1fr; }
+  .price-foot { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .price-foot li { align-items: flex-start; font-size: 13.5px; }
+  .price-foot li::before { margin-top: 7px; }
+}

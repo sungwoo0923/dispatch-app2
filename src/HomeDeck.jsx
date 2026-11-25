@@ -88,7 +88,7 @@ function Panel({ code, title, right, children, style }) {
 }
 
 function Delta({ cur, prev, unit = "%" }) {
-  if (!prev) return <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, color: C.dim }}>— 비교 없음</span>;
+  if (!prev) return <span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", fontSize: 13, color: C.dim }}>비교 없음</span>;
   const r = ((cur - prev) / Math.abs(prev)) * 100;
   const up = r >= 0;
   return (

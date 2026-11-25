@@ -127,9 +127,9 @@ export async function saveAllApFiles({ files = [], images = [], docNo = "" }) {
 export function apFileErrText(e) {
   const c = String(e?.code || "");
   if (c === "storage/unauthorized") return "이 파일을 볼 권한이 없어요 (storage/unauthorized)";
-  if (c === "storage/object-not-found") return "파일이 저장소에 없어요 — 기안자가 올리는 중 창을 닫았을 수 있어요. 기안자에게 다시 첨부를 요청해 주세요 (object-not-found)";
-  if (c === "timeout" || c === "storage/retry-limit-exceeded") return "저장소 응답이 없어요 — 인터넷·회사 방화벽에서 firebasestorage.googleapis.com 접속이 막혔는지 확인해 주세요";
-  if (c === "storage/unauthenticated") return "로그인이 풀렸어요 — 다시 로그인해 주세요";
+  if (c === "storage/object-not-found") return "파일이 저장소에 없어요. 기안자가 올리는 중 창을 닫았을 수 있어요. 기안자에게 다시 첨부를 요청해 주세요 (object-not-found)";
+  if (c === "timeout" || c === "storage/retry-limit-exceeded") return "저장소 응답이 없어요. 인터넷·회사 방화벽에서 firebasestorage.googleapis.com 접속이 막혔는지 확인해 주세요";
+  if (c === "storage/unauthenticated") return "로그인이 풀렸어요. 다시 로그인해 주세요";
   return `파일을 불러오지 못했어요${c ? ` (${c})` : ""}`;
 }
 // 미리보기용 blob 주소(화면에 보이는 동안만) · retry()로 다시 받기
@@ -217,7 +217,7 @@ export function ApprovalAttachInput({ company, docId, me, files, setFiles, onRem
       setUploading((p) => [...p, tmp]);
       uploadApFile(file, { company, docId, me, count: 0 })
         .then((meta) => setFiles((p) => [...p, meta].slice(0, AP_FILE_COUNT)))
-        .catch((e) => onError?.(`${file.name} 올리기 실패: ${e?.code === "storage/unauthorized" ? "권한이 없어요 — 같은 회사 직원·기안자만 올릴 수 있어요. 계속 안 되면 관리자에게 '파일 저장소 보안 규칙(storage) 배포'를 요청해 주세요" : e.message || e}`))
+        .catch((e) => onError?.(`${file.name} 올리기 실패: ${e?.code === "storage/unauthorized" ? "권한이 없어요. 같은 회사 직원·기안자만 올릴 수 있어요. 계속 안 되면 관리자에게 '파일 저장소 보안 규칙(storage) 배포'를 요청해 주세요" : e.message || e}`))
         .finally(() => setUploading((p) => p.filter((x) => x !== tmp)));
     }
     if (errs.length) onError?.(errs.join(" "));

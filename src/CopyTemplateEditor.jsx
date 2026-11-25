@@ -40,7 +40,7 @@ export function CopyTemplateEditor({ canEdit = true, onSaved, compact = false })
   };
   const save = async () => {
     setBusy(true);
-    try { await saveCopyTemplates(draft); setDirty(false); setMsg("저장했습니다 — 다음 복사부터 바로 적용됩니다."); onSaved?.(); }
+    try { await saveCopyTemplates(draft); setDirty(false); setMsg("저장했습니다. 다음 복사부터 바로 적용됩니다."); onSaved?.(); }
     catch (e) { setMsg(`저장 실패: ${e.message}`); } finally { setBusy(false); }
   };
   const isSimple = mode === "simple";
@@ -78,7 +78,7 @@ export function CopyTemplateEditor({ canEdit = true, onSaved, compact = false })
         {isSimple && (<>
           <div className="rounded-xl border border-[#DCE3EE] bg-white px-4 py-3 text-[12.5px] leading-relaxed text-[#3A4A66]">
             <b className="text-[#0F1A30]">업체에 짧게 보내는 문구</b>입니다. 오더를 <b className="text-[#0F1A30]">여러 개 체크하고 [기사복사]</b>를 누르면 이 틀로 한 번에 복사됩니다(1개만 골랐을 때는 복사 방식에서 [간단 목록]).
-            날짜 · 상차지 · 하차지 · 구분이 같은 오더는 머리말 하나 아래로 묶입니다. <b className="text-[#0F1A30]">구분</b>은 시간으로 자동 판단합니다 — 야상: 전날 18시 이후(또는 새벽 5시 전) 상차 · 당착: 상차한 날 도착 · 익착: 다음 날 도착.
+            날짜 · 상차지 · 하차지 · 구분이 같은 오더는 머리말 하나 아래로 묶입니다. <b className="text-[#0F1A30]">구분</b>은 시간으로 자동 판단합니다. 야상: 전날 18시 이후(또는 새벽 5시 전) 상차 · 당착: 상차한 날 도착 · 익착: 다음 날 도착.
           </div>
           {area("header", "① 머리말 (묶음마다 한 줄)", "예: 11/13 에이제이-베베숲 평택 야상", 2)}
           {area("line", "② 기사 줄 (오더마다 한 줄)", "예: 대전88아8987  김영관  010-5251-7468", 2)}
@@ -95,7 +95,7 @@ export function CopyTemplateEditor({ canEdit = true, onSaved, compact = false })
         {d.includeUpload && area("uploadBlock", "① 업로드 안내", "맨 위에 붙음 · {업로드링크} 위치에 링크", 4)}
         {area("top", d.includeUpload ? "② 본문 위 문구" : "① 본문 위 문구", "날짜·상하차 정보 바로 위", 3)}
         <div className="rounded-xl border border-dashed border-[#B8C6DD] bg-[#F7F9FC] px-4 py-2.5 text-[12px] text-[#5B6B85]">
-          <span className="font-black text-[#1B2B4B]">오더 본문</span> — 날짜 · 상차/하차 · 경유지 · 화물 · 결제방법은 프로그램이 자동으로 채웁니다.
+          <span className="font-black text-[#1B2B4B]">오더 본문</span> · 날짜 · 상차/하차 · 경유지 · 화물 · 결제방법은 프로그램이 자동으로 채웁니다.
         </div>
         {area("bottom", d.includeUpload ? "③ 본문 아래 문구" : "② 본문 아래 문구", "마지막에 붙음", 5)}
         </>)}

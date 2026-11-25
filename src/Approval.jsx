@@ -1773,7 +1773,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
         ...(bizV ? { finIdx: bizV.finIdx } : {}),
         line: L, cc, ccUids: cc.map((c) => c.uid), participants: [...new Set([me.uid, ...L.map((s) => s.uid), ...cc.map((c) => c.uid)])],
         step: auto ? L.length : 0, status: auto ? "approved" : "pending", createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-        history: [{ at: Date.now(), uid: me.uid, name: me.name, action: "상신", comment: "" }, ...(auto ? [{ at: Date.now(), uid: "auto", name: "자동 승인", action: "승인", comment: "임원 설정 — 일일 업무일지 자동 승인" }] : [])], redraftOf: preset?.id || null,
+        history: [{ at: Date.now(), uid: me.uid, name: me.name, action: "상신", comment: "" }, ...(auto ? [{ at: Date.now(), uid: "auto", name: "자동 승인", action: "승인", comment: "임원 설정: 일일 업무일지 자동 승인" }] : [])], redraftOf: preset?.id || null,
         ...(auto ? { autoApproved: true } : {}),
       };
       // ⭐ 2026-11-02 점검 — 자동 승인 후에도 진행 중이면 상신 전에 미리 반영(자동 승인한 첫 결재자에게 '결재 요청' 푸시가 가지 않게). 최종 승인까지 가는 경우만 상신 후 저장
@@ -1808,7 +1808,7 @@ function Composer({ company, me, staff, cat, preset, onDone, leave, getLive, myD
         <button type="button" onClick={() => { draftStore.del(draftKey); setRestored(false); setData(initialData(form, { team: me?.team })); setTitle(""); setImages([]); setCc([]); }} className="h-8 px-3 rounded-lg border border-[#C9D6EE] bg-white text-[12.5px] font-black text-[#B42318] shrink-0">지우고 새로 쓰기</button>
       </div>
     )}
-    {editId && <div className="mb-3 rounded-xl bg-[#0F1A30] text-white px-4 py-2.5 text-[14px] font-bold">문서 수정 중 · {preset.docNo} — 결재자가 열어보기 전까지만 고칠 수 있습니다. 결재선·참조자는 바꿀 수 없습니다(바꾸려면 회수 후 재기안).</div>}
+    {editId && <div className="mb-3 rounded-xl bg-[#0F1A30] text-white px-4 py-2.5 text-[14px] font-bold">문서 수정 중 · {preset.docNo} · 결재자가 열어보기 전까지만 고칠 수 있습니다. 결재선·참조자는 바꿀 수 없습니다(바꾸려면 회수 후 재기안).</div>}
     <div className={`flex flex-wrap gap-2 mb-4 ${editId ? "hidden" : ""}`}>
       {forms.map((f) => (
         <button key={f.key} type="button" onClick={() => pickForm(f.key)}
@@ -2081,12 +2081,12 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
       if (target.length) setLinesLocal((m) => ({ ...m, ...Object.fromEntries(target.map((i) => [i, by])) }));
       setLineSel([]);
       if (completes) {
-        mailDrafter(`[지급 완료] ${d.title} — ${fmtWon(d.amount)} 지급되었습니다`, `[지급 완료] ${d.title} — ${fmtWon(d.amount)} 지급되었습니다.\n\n· 문서번호: ${d.docNo}\n· 지급일: ${date}\n· 처리: ${me.name || ""}${memo ? `\n· 메모: ${memo}` : ""}\n\n홈 › 전자결재 › 내 기안함에서 확인하세요.`);
+        mailDrafter(`[지급 완료] ${d.title}: ${fmtWon(d.amount)} 지급되었습니다`, `[지급 완료] ${d.title}: ${fmtWon(d.amount)} 지급되었습니다.\n\n· 문서번호: ${d.docNo}\n· 지급일: ${date}\n· 처리: ${me.name || ""}${memo ? `\n· 메모: ${memo}` : ""}\n\n홈 › 전자결재 › 내 기안함에서 확인하세요.`);
         setPaidLocal(patch.paid); // 화면에 바로 도장
         if (Array.isArray(d.data?.vexIds) && d.data.vexIds.length) syncExpensesPaid(d, { at: now, date, byName: me.name || "" }); // 🧾 차량 비용 영수증 → 지급완료 도장
       } else {
         const left = leftIdx.filter((i) => !target.includes(i));
-        mailDrafter(`[부분 지급] ${d.title} — ${target.length}건 ${fmtWon(amt)} 지급, ${left.length}건 남음`, `[부분 지급] ${d.title}\n\n· 지급: ${target.map(lineName).join(", ")} (${fmtWon(amt)})\n· 남음: ${left.map(lineName).join(", ")} (${fmtWon(sumOf(left))})\n· 지급일: ${date}\n· 처리: ${me.name || ""}${memo ? `\n· 메모: ${memo}` : ""}\n\n문서번호 ${d.docNo} · 홈 › 전자결재 › 내 기안함에서 줄마다 지급 여부를 볼 수 있어요.`);
+        mailDrafter(`[부분 지급] ${d.title}: ${target.length}건 ${fmtWon(amt)} 지급, ${left.length}건 남음`, `[부분 지급] ${d.title}\n\n· 지급: ${target.map(lineName).join(", ")} (${fmtWon(amt)})\n· 남음: ${left.map(lineName).join(", ")} (${fmtWon(sumOf(left))})\n· 지급일: ${date}\n· 처리: ${me.name || ""}${memo ? `\n· 메모: ${memo}` : ""}\n\n문서번호 ${d.docNo} · 홈 › 전자결재 › 내 기안함에서 줄마다 지급 여부를 볼 수 있어요.`);
       }
       if (account) setDoc(doc(db, "acctLedger", `appr_${d.id}`), { account }, { merge: true }).catch(() => {}); // 장부 계정과목도 맞춘다
       setPayAsk(null);
@@ -2106,7 +2106,7 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
       await updateDoc(doc(db, "approvals", d.id), patch);
       setLinesLocal((m) => ({ ...m, [i]: null }));
       if (wasPaid) { setPaidLocal(null); if (Array.isArray(d.data?.vexIds) && d.data.vexIds.length) syncExpensesPaid(d, null); }
-      mailDrafter(`[지급 취소] ${d.title} — ${lineName(i)} 지급이 취소되었습니다`, `[지급 취소] ${d.title}\n\n· ${lineName(i)} (${fmtWon(spendRowTotal(spendRows[i] || {}))}) 지급 기록이 취소되었습니다.\n· 처리: ${me.name || ""}\n\n문서번호 ${d.docNo}`);
+      mailDrafter(`[지급 취소] ${d.title}: ${lineName(i)} 지급이 취소되었습니다`, `[지급 취소] ${d.title}\n\n· ${lineName(i)} (${fmtWon(spendRowTotal(spendRows[i] || {}))}) 지급 기록이 취소되었습니다.\n· 처리: ${me.name || ""}\n\n문서번호 ${d.docNo}`);
     } catch (e) { window.alert(`지급 취소 실패: ${e.message}`); } finally { setBusy(false); }
   };
   const undoPay = async () => {
@@ -2121,7 +2121,7 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
       setPaidLocal(null); // 화면에 바로 지급 대기로
       if (multi) setLinesLocal(Object.fromEntries(spendRows.map((_, i) => [i, null])));
       if (Array.isArray(d.data?.vexIds) && d.data.vexIds.length) syncExpensesPaid(d, null); // 🧾 영수증도 다시 승인(지급 대기)
-      mailDrafter(`[지급 취소] ${d.title} — 지급 완료가 취소되었습니다`, `[지급 취소] ${d.title} — ${fmtWon(d.amount)} 지급 처리가 취소되었습니다.\n\n· 문서번호: ${d.docNo}${d.paid?.date ? `\n· 취소된 지급일: ${d.paid.date}` : ""}\n· 처리: ${me.name || ""}\n\n문서는 다시 지급 대기로 바뀌었습니다.`);
+      mailDrafter(`[지급 취소] ${d.title} · 지급 완료가 취소되었습니다`, `[지급 취소] ${d.title}: ${fmtWon(d.amount)} 지급 처리가 취소되었습니다.\n\n· 문서번호: ${d.docNo}${d.paid?.date ? `\n· 취소된 지급일: ${d.paid.date}` : ""}\n· 처리: ${me.name || ""}\n\n문서는 다시 지급 대기로 바뀌었습니다.`);
     } catch (e) { window.alert(`지급 취소 실패: ${e.message}`); } finally { setBusy(false); }
   };
   // 🖨 A4 기준으로 나눠서 인쇄(긴 회의록·보고서도 글줄 중간이 잘리지 않게)
@@ -2311,7 +2311,7 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
             )}
             {turn && (
               <div className="rounded-2xl border-2 border-[#1B2B4B] p-4 space-y-2.5">
-                <div className="text-[14px] font-black text-[#0F1A30]">{cTurn ? "결재 취소 요청 — 내 검토 차례" : "내 결재 차례입니다"}</div>
+                <div className="text-[14px] font-black text-[#0F1A30]">{cTurn ? "결재 취소 요청: 내 검토 차례" : "내 결재 차례입니다"}</div>
                 {!cTurn && (
                   <div className="flex items-center gap-2.5 rounded-xl bg-[#F4F6FA] border border-[#E3E8F0] px-3 py-2" data-ap-mark-row>
                     <span className="text-[10.5px] font-extrabold tracking-[0.2em] text-[#9AA9C3]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>MARK</span>
@@ -2371,7 +2371,7 @@ function Viewer({ d: d0, me, staff, company, onClose, onRedraft, onEdit, inline 
             {mine && d.status === "pending" && (
               <div className="text-[12.5px] text-[#5B6B85] leading-relaxed">
                 {canEdit(d, me.uid) ? "· 첫 결재자가 열어보기 전이라 수정할 수 있습니다." : d.line?.[0]?.viewedAt ? `· ${d.line[0].name}님이 ${new Date(d.line[0].viewedAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}에 열람해 수정이 잠겼습니다.` : ""}
-                {!anyApproved ? " 아직 승인 전이라 회수 후 재기안할 수 있습니다." : " 승인이 진행된 문서는 회수할 수 없습니다 — 현재 결재자에게 반려를 요청하세요."}
+                {!anyApproved ? " 아직 승인 전이라 회수 후 재기안할 수 있습니다." : " 승인이 진행된 문서는 회수할 수 없습니다. 현재 결재자에게 반려를 요청하세요."}
               </div>
             )}
             <div>

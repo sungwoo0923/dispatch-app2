@@ -51,7 +51,9 @@ export function noteSignedInUid(uid) {
 
 let clearing = false;
 // 로그아웃 때 — 저장값 + 기기 저장본(IndexedDB)을 지우고 새로 고친다(한 번만)
-export async function purgeOnSignOut(db) {
+//  🛠 2026-11-24 to 를 주면 새로 고치는 대신 그 주소로 연다 — 휴대폰 화면 · 기사앱은 로그아웃하자마자 /login 으로 옮겨 가서
+//   App.jsx 의 정리(0.4초 뒤)가 돌기 전에 페이지가 바뀌어 기기 저장본이 그대로 남았다
+export async function purgeOnSignOut(db, to) {
   if (clearing) return;
   clearing = true;
   purgeAccountStorage();
@@ -63,5 +65,5 @@ export async function purgeOnSignOut(db) {
     // 다른 탭이 같은 저장소를 쓰고 있으면 지우지 못한다 — 다음 로그아웃 때 다시 시도(서버 규칙이 다른 회사 문서는 새로 내려주지 않음)
     console.warn("[로그아웃 정리] 기기 저장본 지우기 실패:", e?.message || e);
   }
-  try { window.location.reload(); } catch { /* 무시 */ }
+  try { if (to) window.location.replace(to); else window.location.reload(); } catch { /* 무시 */ }
 }

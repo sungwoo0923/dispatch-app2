@@ -246,7 +246,7 @@ export default function ClientMergeModal({ clients = [], initialIds = [], userCo
       setResult(out);
       onDone?.(out);
     } catch (e) {
-      setErr(`합치다가 멈췄어요 — ${e?.code === "permission-denied" ? "저장 권한이 없어요." : (e?.message || e)}\n여기까지 바뀐 오더 ${res.orders.toLocaleString()}건은 그대로예요. 다시 [합치기]를 누르면 남은 것만 이어서 바꿔요.`);
+      setErr(`합치다가 멈췄어요. ${e?.code === "permission-denied" ? "저장 권한이 없어요." : (e?.message || e)}\n여기까지 바뀐 오더 ${res.orders.toLocaleString()}건은 그대로예요. 다시 [합치기]를 누르면 남은 것만 이어서 바꿔요.`);
       setScanTick((t) => t + 1);
     } finally { setBusy(null); }
   };
@@ -287,7 +287,7 @@ export default function ClientMergeModal({ clients = [], initialIds = [], userCo
               </div>
 
               <div>
-                <label className="block text-[12px] font-semibold text-gray-500 mb-1">고른 거래처 — 남길 이름에 ● 표시</label>
+                <label className="block text-[12px] font-semibold text-gray-500 mb-1">고른 거래처: 남길 이름에 ● 표시</label>
                 <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
                   {pickedRows.length === 0 && <div className="px-3 py-3 text-[13px] text-gray-400">아래에서 합칠 거래처를 찾아 넣어 주세요.</div>}
                   {pickedRows.map((c) => {
@@ -310,10 +310,10 @@ export default function ClientMergeModal({ clients = [], initialIds = [], userCo
                     );
                   })}
                 </div>
-                <input className={`${inp} mt-2`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="합칠 거래처 더 찾기(이름) — 등록 안 된 이름도 넣을 수 있어요" autoComplete="off" disabled={!!busy} />
+                <input className={`${inp} mt-2`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="합칠 거래처 더 찾기(이름): 등록 안 된 이름도 넣을 수 있어요" autoComplete="off" disabled={!!busy} />
                 {canAddName && (
                   <button type="button" onClick={addVirtual} disabled={!!busy} data-testid="merge-add-name" className="mt-1 w-full text-left px-3 py-2 rounded-lg border border-dashed border-[#9AA9C3] text-[13px] hover:bg-gray-50">
-                    + "<b>{qName}</b>" 넣기 <span className="text-[12px] text-gray-500">— 거래처로 등록 안 된 이름(오더 · 거래명세서에만 있는 이름)</span>
+                    + "<b>{qName}</b>" 넣기 <span className="text-[12px] text-gray-500">거래처로 등록 안 된 이름(오더 · 거래명세서에만 있는 이름)</span>
                   </button>
                 )}
                 {cands.length > 0 && (
@@ -332,7 +332,7 @@ export default function ClientMergeModal({ clients = [], initialIds = [], userCo
                         <span><b>빈 칸만 채우기</b> — "{nameOf(target)}"에 비어 있는 사업자번호 · 주소 등을 합칠 거래처 값으로 채우고, 담당자 · 메모는 합쳐요
                           {mode === "fill" && preview?.filled.length > 0 && <span className="block text-[12px] text-[#2D4C82] font-bold">채워질 칸: {preview.filled.map((f) => FIELD_LABEL[f] || f).join(", ")}</span>}</span></label>
                       <label className="flex items-start gap-2 cursor-pointer"><input type="radio" className="mt-1" checked={mode === "keep"} onChange={() => setMode("keep")} disabled={!!busy} />
-                        <span><b>"{nameOf(target)}" 정보 그대로</b> — 합칠 거래처 정보는 쓰지 않아요</span></label>
+                        <span><b>"{nameOf(target)}" 정보 그대로</b> · 합칠 거래처 정보는 쓰지 않아요</span></label>
                     </div>
                   </div>
 
@@ -348,7 +348,7 @@ export default function ClientMergeModal({ clients = [], initialIds = [], userCo
                     {lockedTotal > 0 && (
                       <label className="mt-2 flex items-start gap-2 cursor-pointer">
                         <input type="checkbox" className="mt-1" checked={includeLocked} onChange={(e) => setIncludeLocked(e.target.checked)} disabled={!!busy} data-testid="merge-include-locked" />
-                        <span>최종마감된 달 오더 {lockedTotal.toLocaleString()}건도 바꾸기 <span className="text-gray-400">(보통은 끄고 두세요 — 이미 나간 명세서 · 계산서와 이름이 달라져요)</span></span>
+                        <span>최종마감된 달 오더 {lockedTotal.toLocaleString()}건도 바꾸기 <span className="text-gray-400">(보통은 끄고 두세요. 이미 나간 명세서 · 계산서와 이름이 달라져요)</span></span>
                       </label>
                     )}
                   </div>

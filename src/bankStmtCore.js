@@ -83,7 +83,7 @@ export const BANK_PRESETS = [
     cols: { date: ["거래일시", "거래일자"], out: ["출금금액", "찾으신금액"], in: ["입금금액", "맡기신금액"], bal: ["거래후잔액", "잔액"], name: ["거래내용", "거래기록사항", "적요"], memo: ["거래기록사항"] } },
   { code: "post", name: "우체국", path: "인터넷뱅킹 › 조회 › 거래내역조회 › [엑셀]", cols: { date: ["거래일자"], time: ["거래시간"], in: ["입금액"], out: ["출금액"], bal: ["잔액"], name: ["내용", "적요"] } },
   { code: "kfcc", name: "새마을금고", path: "인터넷뱅킹 › 조회 › 거래내역조회 › [엑셀]", cols: { date: ["거래일시"], out: ["출금금액"], in: ["입금금액"], bal: ["잔액"], name: ["적요", "상대방"] } },
-  { code: "kakao", name: "카카오뱅크", path: "앱 › 계좌 › 거래내역 › [거래내역 저장(엑셀)] — 메일로 받은 파일", signed: true,
+  { code: "kakao", name: "카카오뱅크", path: "앱 › 계좌 › 거래내역 › [거래내역 저장(엑셀)]: 메일로 받은 파일", signed: true,
     cols: { date: ["거래일시"], kind: ["구분"], amt: ["거래금액"], bal: ["거래후잔액"], name: ["내용"], memo: ["메모"] } },
   { code: "toss", name: "토스뱅크", path: "앱 › 통장 › 거래내역 › [내보내기]", signed: true,
     cols: { date: ["거래일시"], name: ["적요"], kind: ["거래유형"], amt: ["거래금액"], bal: ["거래후잔액"], memo: ["메모"] } },

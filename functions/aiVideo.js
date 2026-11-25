@@ -127,7 +127,8 @@ function fixScenes(scenes, total) {
   return list.map((s, i) => {
     const want = Math.max(1, (Number(s.end) || 0) - (Number(s.start) || 0));
     const start = t;
-    const end = i === list.length - 1 ? Math.max(start + 1, total) : Math.min(total - (list.length - 1 - i), start + want);
+    // 🛠 2026-11-24 장면이 많으면 남은 자리(total - 남은 장면 수)가 start 보다 작아져 끝 < 시작(0초 · 거꾸로 된 자막)이 나왔다 → 최소 1초
+    const end = i === list.length - 1 ? Math.max(start + 1, total) : Math.max(start + 1, Math.min(total - (list.length - 1 - i), start + want));
     t = end;
     const vol = Math.max(0, Math.min(100, Math.round(Number(s.bgm?.volume) || 0)));
     return {

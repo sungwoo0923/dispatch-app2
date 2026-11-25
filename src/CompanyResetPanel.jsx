@@ -147,7 +147,7 @@ export function ResetProgressModal({ job, onClose }) {
             <div className={`h-full rounded-full transition-all duration-700 ${done ? "bg-[#2D4C82]" : fatal ? "bg-[#94A3B8]" : "bg-[#1B2B4B]"}`} style={{ width: `${Math.max(3, pct)}%` }} />
           </div>
           <div className="mt-3 text-[15px] font-bold text-[#1B2B4B]">
-            {fatal ? (state.status === "cancelled" ? "취소된 작업입니다" : "자동 진행을 멈췄습니다") : reviving ? "잠시 멈춰서 다시 이어가고 있어요" : state.status === "error" ? "일시적인 오류 — 곧 자동으로 이어서 진행합니다" : state.status === "paused" ? "한 번 실행 시간을 다 써서 이어서 진행합니다…" : state.step}
+            {fatal ? (state.status === "cancelled" ? "취소된 작업입니다" : "자동 진행을 멈췄습니다") : reviving ? "잠시 멈춰서 다시 이어가고 있어요" : state.status === "error" ? "일시적인 오류: 곧 자동으로 이어서 진행합니다" : state.status === "paused" ? "한 번 실행 시간을 다 써서 이어서 진행합니다…" : state.step}
           </div>
           {reviving && <div className="mt-1 text-[13.5px] text-[#5B6B85]">서버 신호가 {silentFor}초째 없어요. 멈춘 실행의 차례가 끝나면(최대 몇 분) 끝난 묶음은 건너뛰고 이어서 합니다.{state.step ? ` 마지막: ${state.step}` : ""}</div>}
           {notice && <div className="mt-2 rounded-xl border border-[#DCE3EE] bg-[#F5F8FD] px-4 py-2.5 text-[13.5px] text-[#1B2B4B]">{notice}</div>}
@@ -500,7 +500,7 @@ export default function CompanyResetPanel() {
         <div className="space-y-4">
           <section className={CARD}>
             <CardHead code="SECURITY" title="초기화 비밀번호"
-              desc={status === null ? "확인 중…" : status.hasPassword ? `설정됨${status.updatedAt ? ` · ${new Date(status.updatedAt).toLocaleString("ko-KR")}` : ""}${status.updatedBy ? ` · ${status.updatedBy}` : ""}` : "아직 설정되지 않았습니다 — 초기화·복원하려면 먼저 정해 주세요."}
+              desc={status === null ? "확인 중…" : status.hasPassword ? `설정됨${status.updatedAt ? ` · ${new Date(status.updatedAt).toLocaleString("ko-KR")}` : ""}${status.updatedBy ? ` · ${status.updatedBy}` : ""}` : "아직 설정되지 않았습니다. 초기화·복원하려면 먼저 정해 주세요."}
               right={status && !pwForm && <button onClick={() => setPwForm({ cur: "", pw1: "", pw2: "" })} className="shrink-0 h-9 px-3.5 rounded-lg bg-[#1B2B4B] text-white text-[14px] font-bold">{status.hasPassword ? "변경" : "설정"}</button>} />
             <div className="p-5">
               {pwForm ? (

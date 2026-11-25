@@ -313,7 +313,7 @@ export default function CafeApp() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-[18px] font-extrabold text-[#0F1A30]">우리 회사가 올린 오더</h2>
-                <div className="text-[14px] text-[#8592A8]">요청이 들어오면 상세에서 [수락] — 수락한 운송사의 배차 진행이 원래 오더에 자동 반영됩니다.</div>
+                <div className="text-[14px] text-[#8592A8]">요청이 들어오면 상세에서 [수락]을 누르세요. 수락한 운송사의 배차 진행이 원래 오더에 자동으로 반영됩니다.</div>
               </div>
               <div className="flex items-center gap-2 shrink-0">{ViewToggle}</div>
             </div>

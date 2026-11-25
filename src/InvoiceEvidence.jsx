@@ -297,7 +297,7 @@ export function EvidenceBox({ row, canEdit = true, expect, onScanned, api = fire
       {err && <div className="mt-2 text-[12px] font-semibold text-[#B54708] bg-[#FFFAEB] border border-[#FEDF89] rounded-lg px-3 py-2">{err}</div>}
       {last && !job && (
         <div className="mt-2" style={{ animation: "kpPop .35s ease both" }}>
-          <div className="text-[11px] font-black text-[#2D4C82] mb-1">방금 읽은 내용 — 위 칸에 자동으로 넣었어요</div>
+          <div className="text-[11px] font-black text-[#2D4C82] mb-1">방금 읽은 내용: 위 칸에 자동으로 넣었어요</div>
           <ScanCard scan={last} expect={expect} />
         </div>
       )}

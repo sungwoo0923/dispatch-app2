@@ -532,7 +532,7 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
         </div>
 
         <div className="rounded-xl border border-[#E3E8F0] bg-[#F8FAFD] p-3 mb-6">
-          <div className="text-[13px] font-black text-[#3A4A66] mb-1.5">화주사 구글시트(선택) — 넣어 두면 배차표에서 [시트 불러오기]로 날짜 탭을 바로 가져옵니다</div>
+          <div className="text-[13px] font-black text-[#3A4A66] mb-1.5">화주사 구글시트(선택): 넣어 두면 배차표에서 [시트 불러오기]로 날짜 탭을 바로 가져옵니다</div>
           <div className="flex flex-wrap gap-2">
             <input value={f.sheetUrl || ""} onChange={(e) => { setF({ ...f, sheetUrl: e.target.value }); setSheet({ tabs: null, tab: "", busy: "", err: "", office: false }); }} className={`${inp} flex-1 min-w-[240px]`} placeholder="https://docs.google.com/spreadsheets/d/…" />
             {!sheet.tabs ? <button type="button" onClick={() => loadTabs()} disabled={!!sheet.busy} className={`${btn} border border-[#DCE3EE] text-[#2D4C82]`}>{sheet.busy === "tabs" ? "여는 중…" : "시트 열기"}</button> : (
@@ -561,7 +561,7 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
             <label className="mt-2.5 flex items-start gap-2 cursor-pointer">
               <input type="checkbox" checked={!!f.fixedTab} onChange={(e) => setF((p) => ({ ...p, fixedTab: e.target.checked ? (sheet.tab || p.fixedTab || "") : "" }))} className="mt-0.5 w-[18px] h-[18px] accent-[#1B2B4B]" />
               <span className="text-[13px] text-[#3A4A66] leading-relaxed"><b className="text-[#0F1A30]">이 탭만 연결(테스트용)</b>
-                {f.fixedTab ? <> — 지금 <b className="text-[#2D4C82]">'{f.fixedTab}'</b> 탭 하나만 읽고 씁니다.{sheet.tabs && sheet.tab && sheet.tab !== f.fixedTab && <button type="button" onClick={(e) => { e.preventDefault(); setF((p) => ({ ...p, fixedTab: sheet.tab })); }} className="ml-1.5 underline font-bold text-[#2D4C82]">'{sheet.tab}'(으)로 바꾸기</button>}</> : <> — 끄면 날짜 이름 탭(예: 26-11-03)을 날짜마다 자동으로 연결합니다. "26-11-03(테스트)"처럼 다른 글자가 붙은 탭은 날짜 탭으로 보지 않습니다.</>}
+                {f.fixedTab ? <> · 지금 <b className="text-[#2D4C82]">'{f.fixedTab}'</b> 탭 하나만 읽고 씁니다.{sheet.tabs && sheet.tab && sheet.tab !== f.fixedTab && <button type="button" onClick={(e) => { e.preventDefault(); setF((p) => ({ ...p, fixedTab: sheet.tab })); }} className="ml-1.5 underline font-bold text-[#2D4C82]">'{sheet.tab}'(으)로 바꾸기</button>}</> : <> · 끄면 날짜 이름 탭(예: 26-11-03)을 날짜마다 자동으로 연결합니다. "26-11-03(테스트)"처럼 다른 글자가 붙은 탭은 날짜 탭으로 보지 않습니다.</>}
               </span>
             </label>
           )}
@@ -583,14 +583,14 @@ function FormEditor({ init, onClose, onSaved, co, clients = [], places = [] }) {
           {String(f.sheetUrl || "").trim() && (
             <label className="mt-2.5 flex items-start gap-2 cursor-pointer">
               <input type="checkbox" checked={f.autoSync !== false} onChange={(e) => setF((p) => ({ ...p, autoSync: e.target.checked }))} className="mt-0.5 w-[18px] h-[18px] accent-[#1B2B4B]" />
-              <span className="text-[13px] text-[#3A4A66] leading-relaxed"><b className="text-[#0F1A30]">시트 자동 연동</b> — 10분마다 시트를 확인해 <b>새 날짜 탭·새 줄은 오더로 자동 생성</b>, 화주 칸(도착지·시군구·리터 수량 등)은 시트 값으로 맞추고, 시트에서 지운 줄은 표시만 합니다. 저장하면 운송사 칸(차량·운송업체·단가·입차시간)이 시트에 자동으로 써집니다.</span>
+              <span className="text-[13px] text-[#3A4A66] leading-relaxed"><b className="text-[#0F1A30]">시트 자동 연동</b> · 10분마다 시트를 확인해 <b>새 날짜 탭·새 줄은 오더로 자동 생성</b>, 화주 칸(도착지·시군구·리터 수량 등)은 시트 값으로 맞추고, 시트에서 지운 줄은 표시만 합니다. 저장하면 운송사 칸(차량·운송업체·단가·입차시간)이 시트에 자동으로 써집니다.</span>
             </label>
           )}
         </div>
 
         <div className="text-[14px] font-black text-[#0F1A30] mb-2">칸(시트 제목줄 순서대로)</div>
         <div className="text-[12.5px] text-[#7A8AA6] mb-2">프로그램 칸 = 오더의 그 칸에 저장 · 수량 = 리터·박스 등 개수 · 합계 = 수량 합 자동 · 참고 = 오더에 그대로 보관(운송업체 등)<br />
-          <b className="text-[#3A4A66]">입력</b> = 누가 채우는 칸인지 — <b>화주</b>: 업체가 시트에 입력(시트 값이 기준) · <b>운송사</b>: 우리가 프로그램에 입력(프로그램 값이 기준, 저장하면 시트에 써 줌)</div>
+          <b className="text-[#3A4A66]">입력</b> = 누가 채우는 칸인지: <b>화주</b>: 업체가 시트에 입력(시트 값이 기준) · <b>운송사</b>: 우리가 프로그램에 입력(프로그램 값이 기준, 저장하면 시트에 써 줌)</div>
         <div className="space-y-1.5 mb-3">
           {f.columns.map((c, i) => (
             <div key={c.id} className="flex flex-wrap items-center gap-2">
@@ -934,7 +934,7 @@ export default function RouteBoard({ companyName = "" }) {
     setBusy((b) => b || "sync");
     try {
       const r = await sheetApi({ action: "sync", url: form.sheetUrl, boardId: form.id });
-      if (!quiet || r.created || r.updated || r.gone || r.deleted) setMsg(`시트와 맞췄습니다 — 새 오더 ${r.created || 0}건 · 화주 입력 반영 ${r.updated || 0}건${r.deleted ? ` · 시트에서 지운 줄 ${r.deleted}건 삭제` : ""}${r.gone ? ` · 시트에서 지워진 줄 ${r.gone}건(확인 필요)` : ""}`);
+      if (!quiet || r.created || r.updated || r.gone || r.deleted) setMsg(`시트와 맞췄습니다. 새 오더 ${r.created || 0}건 · 화주 입력 반영 ${r.updated || 0}건${r.deleted ? ` · 시트에서 지운 줄 ${r.deleted}건 삭제` : ""}${r.gone ? ` · 시트에서 지워진 줄 ${r.gone}건(확인 필요)` : ""}`);
       setTimeout(() => checkRef.current(true), 800);
     } catch (e) { if (!quiet) kpAlert(`시트와 맞추지 못했습니다: ${e?.message || e}`); }
     finally { setBusy((b) => (b === "sync" ? "" : b)); }
@@ -1019,7 +1019,7 @@ export default function RouteBoard({ companyName = "" }) {
       });
       await Promise.all(writes);
       setDirty(false); setRemoved([]);
-      const base = `저장했습니다 — 오더 ${saved}건 반영${removed.length ? ` · ${removed.length}건 삭제` : ""}`;
+      const base = `저장했습니다. 오더 ${saved}건 반영${removed.length ? ` · ${removed.length}건 삭제` : ""}`;
       setMsg(`${base}.`);
       // ⭐ 2026-11-03 시트 주소가 있으면 차량·기사·수량·운송업체·시간·비고를 그 날짜 탭에 자동으로 써 준다(실패해도 저장은 그대로)
       if (form.sheetUrl) {
@@ -1051,7 +1051,7 @@ export default function RouteBoard({ companyName = "" }) {
       }
       await updateDoc(doc(db, "routeBoards", form.id), { companyName: target, syncHash: {}, movedFrom: form.companyName || co, movedAt: serverTimestamp() });
       setFormId("");
-      kpAlert(`'${target}' 회사로 옮겼습니다 — 양식 1개 · 오더 ${docs.length}건.\n'${target}' 회사로 들어가서 확인해 주세요.`);
+      kpAlert(`'${target}' 회사로 옮겼습니다. 양식 1개 · 오더 ${docs.length}건.\n'${target}' 회사로 들어가서 확인해 주세요.`);
     } catch (e) { kpAlert(`옮기지 못했습니다: ${e?.message || e}`); } finally { setBusy(""); }
   };
   const delForm = async () => {
@@ -1080,7 +1080,7 @@ export default function RouteBoard({ companyName = "" }) {
         <button onClick={() => setSheetWiz(true)} className={`${btn} border border-[#2D4C82] text-[#2D4C82]`} data-testid="board-from-sheet">구글시트에서 양식 만들기</button>
         {form && <button onClick={() => setEdit(form)} className={`${btn} border border-[#DCE3EE] text-[#3A4A66]`}>양식 수정</button>}
         {form && <button onClick={delForm} className={`${btn} text-red-500`}>양식 삭제</button>}
-        {form && isMasterUser() && <button onClick={moveForm} disabled={!!busy} className={`${btn} border border-[#F7C97A] text-[#B54708]`} title="최고관리자 — 다른 회사로 잘못 만들어진 양식과 그 오더를 옮깁니다">{busy === "move" ? "옮기는 중…" : "다른 회사로 옮기기"}</button>}
+        {form && isMasterUser() && <button onClick={moveForm} disabled={!!busy} className={`${btn} border border-[#F7C97A] text-[#B54708]`} title="최고관리자: 다른 회사로 잘못 만들어진 양식과 그 오더를 옮깁니다">{busy === "move" ? "옮기는 중…" : "다른 회사로 옮기기"}</button>}
         <div className="flex-1" />
         {form && (
           <>
@@ -1113,8 +1113,8 @@ export default function RouteBoard({ companyName = "" }) {
           {form.sheetUrl && sheetDiff && (
             <div className={`rounded-xl border px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] ${goneCount ? "bg-[#FFF8E6] border-[#F7D58A]" : "bg-[#F5F8FD] border-[#E3E8F0]"}`}>
               <span className="font-black text-[#0F1A30]">구글시트 연동</span>
-              <span className="text-[#5B6B85]">{sheetDiff.error ? (isOfficeFileError(sheetDiff.error) ? "엑셀(xlsx) 파일이라 아직 읽기만 돼요" : `확인 실패 — ${sheetDiff.error}`) : !sheetDiff.tab ? (isMonthBoard(form) ? `${form.tabMode === "single" ? "연결한 탭" : `${sheetDayOf(form, date).slice(2, 4)}년${+sheetDayOf(form, date).slice(5, 7)}월 탭`}이 시트에 없습니다` : "이 날짜 탭이 시트에 없습니다") : sheetDiff.bad ? `'${sheetDiff.tab}' 탭에서 제목줄을 못 찾았습니다` : `'${sheetDiff.tab}' 탭 · ${new Date(sheetDiff.at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })} 확인 · ${form.autoSync === false ? "자동 연동 꺼짐" : "새 줄·새 날짜 탭은 자동으로 오더 생성"} · 저장하면 차량·운송업체·단가·입차시간이 시트에 입력`}</span>
-              {goneCount > 0 && <span className="font-black text-red-600">시트에서 지운 줄 {goneCount}개 — 프로그램에서도 자동으로 삭제합니다{form.autoSync === false ? "(자동 연동이 꺼져 있어 [지금 맞추기]를 눌러 주세요)" : ""}</span>}
+              <span className="text-[#5B6B85]">{sheetDiff.error ? (isOfficeFileError(sheetDiff.error) ? "엑셀(xlsx) 파일이라 아직 읽기만 돼요" : `확인 실패: ${sheetDiff.error}`) : !sheetDiff.tab ? (isMonthBoard(form) ? `${form.tabMode === "single" ? "연결한 탭" : `${sheetDayOf(form, date).slice(2, 4)}년${+sheetDayOf(form, date).slice(5, 7)}월 탭`}이 시트에 없습니다` : "이 날짜 탭이 시트에 없습니다") : sheetDiff.bad ? `'${sheetDiff.tab}' 탭에서 제목줄을 못 찾았습니다` : `'${sheetDiff.tab}' 탭 · ${new Date(sheetDiff.at).toLocaleTimeString("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit" })} 확인 · ${form.autoSync === false ? "자동 연동 꺼짐" : "새 줄·새 날짜 탭은 자동으로 오더 생성"} · 저장하면 차량·운송업체·단가·입차시간이 시트에 입력`}</span>
+              {goneCount > 0 && <span className="font-black text-red-600">시트에서 지운 줄 {goneCount}개: 프로그램에서도 자동으로 삭제합니다{form.autoSync === false ? "(자동 연동이 꺼져 있어 [지금 맞추기]를 눌러 주세요)" : ""}</span>}
               {/* ⭐ 2026-11-03 "새로 생긴 줄 지금 가져오기" 제거 — 자동 연동·[지금 맞추기]·고정노선현황 [기간 가져오기]로 들어온다 */}
               <button type="button" onClick={() => syncNow(false)} disabled={busy === "sync"} className="ml-auto h-8 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-bold text-[#3A4A66] disabled:opacity-50">{busy === "sync" ? "맞추는 중…" : "지금 맞추기"}</button>
             </div>
@@ -1124,7 +1124,7 @@ export default function RouteBoard({ companyName = "" }) {
             <OfficeSheetCard key={form.sheetUrl} onConvert={() => convertBoardSheet(form.sheetUrl, form.id)}
               onConverted={() => { tabsRef.current = { url: "", at: 0, tabs: [] }; setMsg("구글 시트로 바꿨어요. 원래 엑셀 파일은 그대로 있어요."); }} />
           )}
-          {!orders.length && !dirty && <div className="text-[13px] text-[#7A8AA6] px-1">이 날짜는 아직 저장된 배차표가 없습니다{form.groups.some((g) => (g.defaults || []).length) ? " — 기본 도착지를 채워 두었습니다." : "."}</div>}
+          {!orders.length && !dirty && <div className="text-[13px] text-[#7A8AA6] px-1">이 날짜는 아직 저장된 배차표가 없습니다{form.groups.some((g) => (g.defaults || []).length) ? " · 기본 도착지를 채워 두었습니다." : "."}</div>}
           {form.groups.map((g) => {
             const arr = rows[g.name] || [];
             const t = groupTotal(arr);
@@ -1141,7 +1141,7 @@ export default function RouteBoard({ companyName = "" }) {
                     <thead>
                       <tr className="bg-[#EAF1FB] text-[#3A4A66]">
                         {form.columns.map((c) => <th key={c.id} style={{ width: colWidth(c), minWidth: colWidth(c) }} className={`px-1.5 py-2 border border-[#DCE3EE] font-black whitespace-nowrap ${c.kind === "qty" ? "bg-[#FFF3B0]" : ""}`}>{c.label}</th>)}
-                        {showFare && <th className="px-1.5 py-2 border border-[#DCE3EE] font-black whitespace-nowrap w-[110px] bg-[#E6F4EA]" title="시트에는 없는 프로그램 칸 — 리터·파레트 수를 넣으면 단가표로 자동 계산, 직접 고치면 그 값">청구운임</th>}
+                        {showFare && <th className="px-1.5 py-2 border border-[#DCE3EE] font-black whitespace-nowrap w-[110px] bg-[#E6F4EA]" title="시트에는 없는 프로그램 칸: 리터·파레트 수를 넣으면 단가표로 자동 계산, 직접 고치면 그 값">청구운임</th>}
                         <th className="px-1.5 py-2 border border-[#DCE3EE] font-black whitespace-nowrap w-[90px]">상태</th>
                         <th className="border border-[#DCE3EE] w-[36px]" />
                       </tr>
@@ -1172,7 +1172,7 @@ export default function RouteBoard({ companyName = "" }) {
                             </td>
                           ))}
                           {showFare && (() => { const f = fareInfo(r); return (
-                            <td className="border border-[#E3E8F0] p-0.5 bg-[#F4FBF6]" title={f.title || (f.src === "직접" ? "직접 입력한 운임 — 비우면 단가표 자동" : f.src === "없음" ? (form.rateTable?.length ? "단가표에서 이 지역을 못 찾았습니다(직접 입력 가능)" : "양식에 단가표를 올리면 자동 계산") : "")}>
+                            <td className="border border-[#E3E8F0] p-0.5 bg-[#F4FBF6]" title={f.title || (f.src === "직접" ? "직접 입력한 운임: 비우면 단가표 자동" : f.src === "없음" ? (form.rateTable?.length ? "단가표에서 이 지역을 못 찾았습니다(직접 입력 가능)" : "양식에 단가표를 올리면 자동 계산") : "")}>
                               <input value={r.fareOverride != null ? (r.fareOverride ? Number(r.fareOverride).toLocaleString() : "") : (f.n ? f.n.toLocaleString() : "")} onChange={(e) => setFare(g.name, i, e.target.value)} inputMode="numeric"
                                 placeholder={f.src === "없음" ? "-" : ""} className={`${cellCls} text-right tabular-nums font-black`} />
                               {f.src && f.src !== "없음" && <div className={`text-[9.5px] font-bold text-right px-1.5 -mt-0.5 ${f.src === "직접" ? "text-[#B54708]" : "text-[#067647]"}`}>{f.src === "직접" ? "직접 입력" : "단가표"}</div>}

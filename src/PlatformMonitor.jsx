@@ -192,7 +192,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
       const r = await fetch(`${FUNCTIONS_BASE}/platformStats`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: "{}" });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || `오류 ${r.status}`);
-      setMsg(j.skipped ? `방금 집계했습니다 — ${Math.ceil(j.nextInSec / 60)}분 뒤에 다시 집계할 수 있습니다.` : `집계 완료 — 운송사 ${j.companies}곳 · 화주사 ${j.shippers}곳`);
+      setMsg(j.skipped ? `방금 집계했습니다. ${Math.ceil(j.nextInSec / 60)}분 뒤에 다시 집계할 수 있습니다.` : `집계 완료: 운송사 ${j.companies}곳 · 화주사 ${j.shippers}곳`);
     } catch (e) {
       setMsg(`집계 실패: ${e.message || e}${/Failed to fetch|404/.test(String(e.message)) ? " (서버 함수 배포가 필요합니다)" : ""}`);
     } finally { setBusy(false); }
@@ -239,7 +239,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
       if (c.status.key === "dormant" && c.staff) a.push({ c, text: c.lastOrder ? `${c.idle}일째 오더 없음` : "아직 오더 없음", level: 2 });
       if (c.status.key === "drop") a.push({ c, text: `전월 같은 기간 대비 오더 ${Math.round((1 - c.m.cnt / c.pmSame.cnt) * 100)}% 감소`, level: 2 });
       if (c.pending) a.push({ c, text: `직원 승인 대기 ${c.pending}명`, level: 1 });
-      if (c.help) a.push({ c, text: `도움 필요 — 가입 ${c.help.day}일째 · ${c.help.reasons.join(" · ")}`, level: 2 });
+      if (c.help) a.push({ c, text: `도움 필요: 가입 ${c.help.day}일째 · ${c.help.reasons.join(" · ")}`, level: 2 });
       else if (c.status.key === "new") a.push({ c, text: `신규 가입 · ${ymdOf(c.appliedAt)}`, level: 0 });
     });
     shippers.filter((s) => s.status === "pending").forEach((s) => a.push({ c: { name: s.name }, text: "화주사 가입 승인 대기", level: 1 }));
@@ -334,14 +334,14 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
               <div style={{ padding: phone ? 12 : 16, display: "flex", flexDirection: "column", gap: 12 }}>
                 {detail.help && (
                   <div style={{ borderRadius: 12, background: "#FEF3F2", border: "1px solid #FECDCA", color: "#7A271A", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 14.5, fontWeight: 900, flex: 1, minWidth: 200 }}>🆘 도움 필요 — 가입 {detail.help.day}일째 · {detail.help.reasons.join(" · ")} · 먼저 연락해 보세요</span>
+                    <span style={{ fontSize: 14.5, fontWeight: 900, flex: 1, minWidth: 200 }}>🆘 도움 필요: 가입 {detail.help.day}일째 · {detail.help.reasons.join(" · ")} · 먼저 연락해 보세요</span>
                     {detail.phone && <a href={`tel:${String(detail.phone).replace(/[^\d]/g, "")}`} style={{ height: 34, padding: "0 12px", borderRadius: 9, background: "#B42318", color: "#fff", fontSize: 13.5, fontWeight: 900, display: "inline-flex", alignItems: "center", textDecoration: "none" }}>📞 {detail.phone}</a>}
                     <button type="button" onClick={() => ackHelpNeeded(detail.name).catch((e) => window.alert(e.message))} style={{ height: 34, padding: "0 12px", borderRadius: 9, border: "1px solid #FDA29B", background: "#fff", color: "#7A271A", fontSize: 13.5, fontWeight: 900, cursor: "pointer" }}>확인함</button>
                   </div>
                 )}
                 {(detail.inactiveDays == null || detail.inactiveDays >= 7) && (detail.staff > 0 || detail.m.cnt > 0) && (
                   <div style={{ borderRadius: 12, background: "#0F1A30", color: "#fff", padding: "10px 14px", fontSize: 14.5, fontWeight: 800 }}>
-                    {detail.inactiveDays == null ? "이 회사는 접속 기록이 없습니다" : `${detail.inactiveDays}일째 아무도 접속하지 않았습니다`} — 연락해 사용 여부를 확인해 보세요.
+                    {detail.inactiveDays == null ? "이 회사는 접속 기록이 없습니다" : `${detail.inactiveDays}일째 아무도 접속하지 않았습니다`} · 연락해 사용 여부를 확인해 보세요.
                   </div>
                 )}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gridAutoRows: "1fr", gap: 10, alignItems: "stretch" }}>{/* ⭐ 2026-11-09 카드 6개 같은 폭·같은 높이 */}
@@ -431,7 +431,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <DupeWarning compact />
           <div style={{ display: "grid", gridTemplateColumns: phone ? "repeat(2, minmax(0,1fr))" : "repeat(4, minmax(0,1fr))", gap: phone ? 8 : 12 }}>
-            <Tile dark code="LIVE" label="지금 접속 중" value={LT.onlineNow} unit="명" foot={live?.errors?.sessions ? `⚠ 접속 기록을 불러오지 못함(${live.errors.sessions}) — 0이 아닐 수 있어요` : live?.ready ? `PC ${LT.pcNow} · 모바일 ${LT.mobileNow} · 24시간 ${LT.online24h}명` : "불러오는 중…"} onClick={() => setTab("live")} />
+            <Tile dark code="LIVE" label="지금 접속 중" value={LT.onlineNow} unit="명" foot={live?.errors?.sessions ? `⚠ 접속 기록을 불러오지 못함(${live.errors.sessions}): 0이 아닐 수 있어요` : live?.ready ? `PC ${LT.pcNow} · 모바일 ${LT.mobileNow} · 24시간 ${LT.online24h}명` : "불러오는 중…"} onClick={() => setTab("live")} />
             <Tile code="CARRIERS" label="가입 운송사" value={companies.length} unit="곳" foot={`활성 ${companies.filter((c) => c.status.key === "active").length} · 신규 ${companies.filter((c) => c.status.key === "new").length} · 휴면 ${companies.filter((c) => c.status.key === "dormant").length}`} onClick={() => setTab("companies")} />
             <Tile code="ACCOUNTS" label="전체 계정" value={(T.staff + T.drivers + T.shipperUsers).toLocaleString()} unit="명" foot={`직원 ${T.staff} · 기사 ${T.drivers} · 화주 ${T.shipperUsers}${T.pending ? ` · 대기 ${T.pending}` : ""}`} />
             <Tile code="QUEUE" label="처리 대기" value={live?.pending?.total ?? 0} unit="건" foot={live ? `가입 ${live.pending.transport.length + live.pending.shipper.length} · 요금제 ${live.pending.planReqs.length} · 문의 ${live.pending.inquiries.length}${live.pending.support?.length ? ` · 원격지원 ${live.pending.support.length}` : ""}` : "-"} onClick={() => setTab("todo")} />

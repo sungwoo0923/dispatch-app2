@@ -1,5 +1,5 @@
 // ======================= src/VideoStudio.jsx =======================
-// 🎬 2026-11-18 AI 본부 › 홍보팀 "영상 작업실" — 숏츠 · 교육영상을 홍보팀 AI와 같이 만든다
+// 🎬 2026-11-18 홍보팀 "영상 작업실"(2026-11-24부터 관리자센터 › 홍보 › 홍보 영상 › [영상 작업실] 탭) — 숏츠 · 교육영상을 홍보팀 AI와 같이 만든다
 //  ① 기획: 영상 종류 · 주제 · 길이 · 보는 사람 · 분위기 · 올릴 곳 → [기획안 만들기]
 //  ② 배경음악 큐시트: 장면마다 음악 · 볼륨(말할 때 낮춤) · 동작 + 무료 음원 검색어 → CSV(엑셀)로 내려받기
 //  ③ 자막: 장면 시간에 맞춘 SRT 파일 내려받기(캡컷 · 프리미어 · 유튜브에 그대로)
@@ -44,7 +44,7 @@ async function toEditor(plan, inp) {
   const [{ addDoc, collection, serverTimestamp }, { db }, kit] = await Promise.all([import("firebase/firestore"), import("./firebase"), import("./promo/promoKit")]);
   const wide = inp?.kind !== "숏츠"; const p = kit.newProject(wide ? "wide" : "shorts"); p.title = plan.title || p.title;
   p.scenes = (plan.scenes || []).map((s, i, a) => kit.newScene(i === a.length - 1 ? "cta" : "title", { kicker: i === 0 ? "" : s.title || "", title: (s.subtitles || [])[0] || s.title || "", sub: (s.subtitles || []).slice(1, 2).join(" "), narration: inp?.narration === "자막만" ? "" : s.narration || "", caption: inp?.narration === "자막만" ? (s.subtitles || []).join(" ") : "", dur: Math.max(2, (Number(s.end) || 0) - (Number(s.start) || 0)) }));
-  if (!p.scenes.length) return;
+  if (!p.scenes.length) throw new Error("장면이 없는 기획안이라 영상 편집실로 옮길 수 없어요. 기획안을 다시 만들어 주세요.");
   const r = await addDoc(collection(db, "mktVideos"), { ...JSON.parse(JSON.stringify(p)), fromPlan: true, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
   try { sessionStorage.setItem("kpOpenVideo", r.id); } catch { /* 무시 */ }
   window.dispatchEvent(new CustomEvent("kp-admin-go", { detail: "mkt:video" }));
@@ -79,6 +79,7 @@ function PlanStudio() {
   };
   const plan = cur?.plan; const inp = cur?.input || {};
   const tracks = new Map((plan?.tracks || []).map((t) => [t.id, t]));
+  const scenes = plan?.scenes || [];
   const name = safeName(plan?.title);
   const copyAll = () => { try { navigator.clipboard.writeText(planText(plan, inp)); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* 무시 */ } };
   const cues = plan ? subtitleCues(plan.scenes) : [];
@@ -156,13 +157,13 @@ function PlanStudio() {
           <section className="adm-hero rounded-[20px] px-5 py-4">
             <div className="text-[10.5px] font-extrabold tracking-[0.3em]" style={{ ...NUM, color: G.gold }}>{inp.kind} · {clock(total)} · {inp.platform}</div>
             <div className="text-[22px] font-black text-white mt-0.5">{plan.title}</div>
-            <div className="mt-1 text-[14px] font-bold" style={{ color: G.goldHi }}>첫 2초 — “{plan.hook}”</div>
+            <div className="mt-1 text-[14px] font-bold" style={{ color: G.goldHi }}>첫 2초: “{plan.hook}”</div>
             <div className="mt-1 text-[13px]" style={{ color: G.sub }}>{plan.summary} · {plan.format}</div>
             <div className="mt-3 flex flex-wrap gap-2">
               <button type="button" onClick={() => downloadText(`${name}.srt`, toSrt(plan.scenes), "application/x-subrip;charset=utf-8")} className="h-9 px-3.5 rounded-xl text-[13px] font-black inline-flex items-center gap-1.5" style={GOLD_BTN}><ShellIcon name="file" size={14} />자막 SRT 받기</button>
               <button type="button" onClick={() => downloadText(`${name}_배경음악_큐시트.csv`, cueSheetCsv(plan), "text/csv;charset=utf-8")} className="adm-btn h-9 px-3.5 rounded-xl text-[13px] font-black inline-flex items-center gap-1.5"><ShellIcon name="sheet" size={14} />음악 큐시트(엑셀)</button>
               <button type="button" onClick={copyAll} className="adm-btn h-9 px-3.5 rounded-xl text-[13px] font-black">{copied ? "복사했어요" : "기획안 전체 복사"}</button>
-              <button type="button" onClick={() => toEditor(plan, inp)} className="adm-btn h-9 px-3.5 rounded-xl text-[13px] font-black">🎬 영상 편집실에서 만들기</button>
+              <button type="button" onClick={() => { setErr(""); toEditor(plan, inp).catch((e) => setErr(`영상 편집실로 옮기지 못했어요. ${e?.message || e}`)); }} className="adm-btn h-9 px-3.5 rounded-xl text-[13px] font-black">🎬 영상 편집실에서 만들기</button>
               <span className="ml-auto self-center text-[11px] font-bold" style={{ ...NUM, color: G.dim }}>약 {Math.max(1, Math.round(usd(cur.usage) * 1400))}원</span>
             </div>
           </section>
@@ -175,7 +176,7 @@ function PlanStudio() {
 
           {tab === "plan" && (
             <AdmPanel bodyClass="p-0">
-              {plan.scenes.map((s) => (
+              {scenes.map((s) => (
                 <div key={s.no} className="px-5 py-4 grid gap-1.5 sm:grid-cols-[92px_minmax(0,1fr)]" style={{ borderBottom: `1px solid ${G.line}` }}>
                   <div><div className="text-[18px] font-black" style={{ ...NUM, color: G.goldHi }}>{String(s.no).padStart(2, "0")}</div><div className="text-[12px] font-bold" style={{ ...NUM, color: G.dim }}>{clock(s.start)}–{clock(s.end)}</div></div>
                   <div className="min-w-0 space-y-1">
@@ -192,7 +193,7 @@ function PlanStudio() {
 
           {tab === "bgm" && (<>
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-              {plan.tracks.map((t) => (
+              {(plan.tracks || []).map((t) => (
                 <AdmPanel key={t.id} bodyClass="p-4">
                   <div className="flex items-center gap-2"><span className="w-8 h-8 rounded-lg grid place-items-center text-[14px] font-black" style={GOLD_BTN}>{t.id}</span><span className="text-[15px] font-black text-white">{t.mood}</span><span className="ml-auto text-[12px] font-bold" style={{ ...NUM, color: G.gold }}>{t.bpm} BPM</span></div>
                   <div className="mt-1.5 text-[12.5px]" style={{ color: G.sub }}>{t.genre} · {t.where}</div>
@@ -203,7 +204,7 @@ function PlanStudio() {
             {/* 볼륨 흐름 — 시간 축 위에 장면별 볼륨 막대 */}
             <AdmPanel code="VOLUME" title="볼륨 흐름" right={<span className="text-[11.5px] font-bold" style={{ color: G.dim }}>말하는 장면은 낮게 · 말 없는 장면은 높게</span>}>
               <div className="flex items-end gap-[2px] h-[120px]">
-                {plan.scenes.map((s) => (
+                {scenes.map((s) => (
                   <div key={s.no} className="h-full flex flex-col justify-end min-w-0" style={{ flex: `${Math.max(0.5, s.end - s.start)} 1 0` }} title={`${s.no}. ${s.title} · ${s.bgm?.track} · 볼륨 ${s.bgm?.volume}`}>
                     <div className="rounded-t-md" style={{ height: `${Math.max(4, s.bgm?.volume || 0)}%`, backgroundColor: s.narration ? G.ice : G.gold, opacity: s.narration ? 0.85 : 1 }} />
                   </div>
@@ -216,7 +217,7 @@ function PlanStudio() {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[720px] text-[13px]">
                   <thead><tr style={{ borderBottom: `1px solid ${G.line}` }}>{["장면", "시간", "음악", "볼륨", "동작"].map((h) => <th key={h} className="px-4 py-2.5 text-left text-[12px] font-extrabold" style={{ color: G.gold }}>{h}</th>)}</tr></thead>
-                  <tbody>{plan.scenes.map((s) => { const t = tracks.get(s.bgm?.track); return (
+                  <tbody>{scenes.map((s) => { const t = tracks.get(s.bgm?.track); return (
                     <tr key={s.no} style={{ borderBottom: `1px solid ${G.line}` }}>
                       <td className="px-4 py-2 font-bold text-white">{s.no}. {s.title}</td>
                       <td className="px-4 py-2" style={{ ...NUM, color: G.sub }}>{clock(s.start)}–{clock(s.end)}</td>
@@ -228,7 +229,7 @@ function PlanStudio() {
                 </table>
               </div>
             </AdmPanel>
-            <div className="text-[12px] font-semibold leading-relaxed" style={{ color: G.dim }}>음원은 저작권 걱정 없는 곳에서 찾으세요 — 유튜브 스튜디오 › 오디오 보관함, Pixabay Music 등에 위 검색어를 넣으면 돼요. 편집 프로그램에서 큐시트의 볼륨 숫자대로 맞추면 말소리가 또렷해요.</div>
+            <div className="text-[12px] font-semibold leading-relaxed" style={{ color: G.dim }}>음원은 저작권 걱정이 없는 곳에서 찾으세요. 유튜브 스튜디오 › 오디오 보관함, Pixabay Music 등에 위 검색어를 넣으면 돼요. 편집 프로그램에서 큐시트의 볼륨 숫자대로 맞추면 말소리가 또렷해요.</div>
           </>)}
 
           {tab === "srt" && (

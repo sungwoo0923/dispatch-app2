@@ -47,12 +47,12 @@ export default function UserHub({ name = "", mailUnread = 0, onMyInfo, onSupport
   return (
     <div ref={box} className="relative" onMouseEnter={enter} onMouseLeave={leave} data-kp="user-hub">
       {children ? (
-        <button type="button" onClick={() => (onTriggerClick ? onTriggerClick() : setOpen((v) => !v))} aria-haspopup="menu" aria-expanded={open} title="내 메뉴 — 사내메일함 · 알림 내역 · 내 정보 · 원격 지원" className={`relative ${triggerClass}`}>
+        <button type="button" onClick={() => (onTriggerClick ? onTriggerClick() : setOpen((v) => !v))} aria-haspopup="menu" aria-expanded={open} title="내 메뉴: 사내메일함 · 알림 내역 · 내 정보 · 원격 지원" className={`relative ${triggerClass}`}>
           {children}
           {total > 0 && <span className="absolute -top-1.5 -right-1.5"><Badge n={total} /></span>}
         </button>
       ) : (
-      <button type="button" onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open} title="내 메뉴 — 사내메일함 · 알림 내역 · 내 정보 · 원격 지원"
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open} title="내 메뉴: 사내메일함 · 알림 내역 · 내 정보 · 원격 지원"
         className="kp-icon-btn transition relative !w-auto !px-1.5 gap-1.5 inline-flex items-center">
         <span className="w-6 h-6 rounded-full grid place-items-center text-[12px] font-black text-[#0F1A30] bg-white/90">{initial}</span>
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ opacity: 0.7 }}><path d="M6 9l6 6 6-6" /></svg>

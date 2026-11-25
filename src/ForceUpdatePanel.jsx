@@ -88,7 +88,7 @@ export default function ForceUpdatePanel() {
     const t = setTimeout(() => { // 5초 더 지켜보고(늦게 들어온 화면) 끝낸다
       endedRef.current = cfg.id;
       setDoc(doc(db, ...FORCE_DOC), { active: false, doneAt: Date.now(), history: history.map((h) => (h.id === cfg.id ? { ...h, done: true, donePct: prog.pct, doneN: prog.total } : h)) }, { merge: true }).catch(() => { endedRef.current = ""; });
-      setMsg(`적용 완료 — 접속 중 ${prog.total}명 모두 v${cfg.version}`);
+      setMsg(`적용 완료: 접속 중 ${prog.total}명 모두 v${cfg.version}`);
     }, 5000);
     return () => clearTimeout(t);
   }, [finished, cfg?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -153,7 +153,7 @@ export default function ForceUpdatePanel() {
                   <div className="text-[11.5px] font-bold mt-1" style={{ color: G.dim }}>접속 중 {prog.done}/{prog.total}명 적용</div></div>}
               </div>
               {left > 0 && <div className="text-[11.5px] font-bold mt-2" style={{ color: G.dim }}>남은 시간 · 아래 막대는 적용률이에요</div>}
-              <div className="h-1.5 rounded-full mt-3 overflow-hidden" style={{ background: "rgba(255,255,255,.07)" }}><div className="h-full" style={{ width: `${prog ? prog.pct : Math.min(100, (1 - left / total) * 100)}%`, transition: "width .6s", background: "linear-gradient(90deg,#D7BC82,#F3E3BC)", transition: "width 1s linear" }} /></div>
+              <div className="h-1.5 rounded-full mt-3 overflow-hidden" style={{ background: "rgba(255,255,255,.07)" }}><div className="h-full" style={{ width: `${prog ? prog.pct : Math.min(100, (1 - left / total) * 100)}%`, background: "linear-gradient(90deg,#D7BC82,#F3E3BC)", transition: "width 1s linear" }} /></div>
               <div className="flex justify-between text-[12.5px] font-bold mt-2.5" style={{ color: G.sub }}><span>v{cfg.version} 적용</span><span>{fmtTime(Number(cfg.fireAt))} 시작</span></div>
               <div className="flex flex-wrap gap-2 mt-3.5">
                 <button type="button" disabled={busy} onClick={() => save({ fireAt: Math.max(Date.now(), Number(cfg.fireAt)) + 120000 }, "2분 미뤘어요.")} className="h-9 px-3.5 rounded-[11px] text-[13px] font-black" style={{ border: "1px solid rgba(215,188,130,.5)", color: G.goldHi }}>+2분 미루기</button>

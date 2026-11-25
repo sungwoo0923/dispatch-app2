@@ -182,7 +182,7 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
               </div>
             </div>
             {!cur.hire && <div className="rounded-2xl bg-[#FEF3F2] border border-[#FECDCA] px-4 py-3 flex items-center gap-3"><span className="text-[13.5px] font-bold text-[#B42318]">입사일이 없어 연차를 계산할 수 없습니다</span><span className="ml-auto text-[12px] font-bold text-[#B42318]/80">인사관리부 › 인사관리 › 직원관리에서 등록</span></div>}
-            {cur.promote && <div className="rounded-2xl bg-[#FFF4E5] border border-[#FEDF89] px-4 py-3 flex items-center gap-3 flex-wrap"><span className="text-[13.5px] font-bold text-[#B54708]">연차 사용 촉진 대상 — 회기 종료 {cur.left}일 전, 잔여 {cur.remain}일 (근로기준법 61조)</span>{!isViewer && <button type="button" onClick={() => sendPromote(cur)} className="ml-auto h-9 px-3.5 rounded-lg bg-[#B54708] text-white text-[12.5px] font-black">촉진 안내 메일</button>}</div>}
+            {cur.promote && <div className="rounded-2xl bg-[#FFF4E5] border border-[#FEDF89] px-4 py-3 flex items-center gap-3 flex-wrap"><span className="text-[13.5px] font-bold text-[#B54708]">연차 사용 촉진 대상: 회기 종료 {cur.left}일 전, 잔여 {cur.remain}일 (근로기준법 61조)</span>{!isViewer && <button type="button" onClick={() => sendPromote(cur)} className="ml-auto h-9 px-3.5 rounded-lg bg-[#B54708] text-white text-[12.5px] font-black">촉진 안내 메일</button>}</div>}
             {cur.ent && (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
                 <BookCard en="MONTHLY USE" title="회기 월별 사용" right={<span className="text-[13px] font-black text-[#5B6B85]">사용 {cur.used}일</span>}>
@@ -234,7 +234,7 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
                   </div>
                 ))}
                 <div className="mt-2 rounded-xl bg-[#F5F8FD] border border-[#E3E8F0] px-3 py-2 text-[11.5px] text-[#5B6B85] leading-relaxed">
-                  ■ 몰래 바꾸지 못하게 — 사유 필수 · 조정 기록은 지울 수 없음(되돌리려면 반대로 조정) · 처리자·시각 자동 기록 · 본인에게 사내메일 자동 통보 · 본인의 "내 연차" 화면에도 조정 내역 표시
+                  ■ 몰래 바꾸지 못하게: 사유 필수 · 조정 기록은 지울 수 없음(되돌리려면 반대로 조정) · 처리자·시각 자동 기록 · 본인에게 사내메일 자동 통보 · 본인의 "내 연차" 화면에도 조정 내역 표시
                 </div>
               </BookCard>
             )}
@@ -272,20 +272,20 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
 // ═════════════════════════ 입·퇴사 체크리스트 ═════════════════════════
 export const ONBOARD_ITEMS = [
   { key: "contract", label: "근로계약서 작성·교부", desc: "서면 작성 후 1부 교부(미교부 시 500만원 이하 벌금)", due: (d) => d },
-  { key: "insurance", label: "4대보험 취득 신고", desc: "국민연금·건강·고용·산재 — 입사일 다음 달 15일까지", due: (d) => next15(d) },
+  { key: "insurance", label: "4대보험 취득 신고", desc: "국민연금·건강·고용·산재: 입사일 다음 달 15일까지", due: (d) => next15(d) },
   { key: "idcopy", label: "신분증·등본 사본", desc: "인사 기록용" },
   { key: "bank", label: "급여 통장 사본", desc: "급여 이체 계좌 확인" },
   { key: "privacy", label: "개인정보 수집·이용 동의서", desc: "인사·급여 처리 목적" },
   { key: "security", label: "보안·비밀유지 서약서", desc: "고객·운임 정보 보호" },
   { key: "account", label: "프로그램 계정·권한 발급", desc: "직원 관리에서 승인·권한 지정" },
-  { key: "equip", label: "장비·비품 지급", desc: "PC·명함·출입카드 — 비품 관리에 출고 기록" },
+  { key: "equip", label: "장비·비품 지급", desc: "PC·명함·출입카드: 비품 관리에 출고 기록" },
   { key: "edu", label: "법정 의무교육 안내", desc: "성희롱·괴롭힘 예방, 개인정보 보호, 산업안전" },
   { key: "hire", label: "입사일 등록", desc: "연차 자동 계산 기준", auto: (u, pf) => !!hireOf(u, pf) },
 ];
 export const OFFBOARD_ITEMS = [
   { key: "resign", label: "사직서 접수·수리", desc: "퇴사일 확정" },
   { key: "handover", label: "업무 인수인계", desc: "전자결재 › 인수인계로 작성" },
-  { key: "equip", label: "장비·비품 반납", desc: "PC·법인카드·출입카드 — 비품 관리에 입고 기록" },
+  { key: "equip", label: "장비·비품 반납", desc: "PC·법인카드·출입카드: 비품 관리에 입고 기록" },
   { key: "account", label: "계정 정지·권한 회수", desc: "퇴사 처리 시 로그인 차단" },
   { key: "insurance", label: "4대보험 상실 신고", desc: "퇴사일 다음 달 15일까지", due: (d) => next15(d) },
   { key: "severance", label: "퇴직금·잔여 연차 수당 정산", desc: "퇴직일로부터 14일 이내 지급", due: (d) => (d ? addDays(d, 14) : "") },

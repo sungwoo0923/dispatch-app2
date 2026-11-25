@@ -1415,7 +1415,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
                     <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 6 }}>
                       현재 상태: <span style={{ fontWeight: 700, color: approvers[myApproverIdx].status === "approved" ? "#1B2B4B" : approvers[myApproverIdx].status === "rejected" ? "#DC2626" : "#6B7280" }}>
                         {approvers[myApproverIdx].status === "approved" ? "승인" : approvers[myApproverIdx].status === "rejected" ? "반려" : "보류"}
-                      </span> &mdash; 아래에서 변경 가능
+                      </span> · 아래에서 변경 가능
                     </div>
                   )}
                   <div className="flex gap-2">

@@ -212,7 +212,7 @@ export default function FreightForm({ mode, initial = null, jobs = [], clients =
           <h2 className="text-lg font-bold">{{ container: "오더등록", sea: "선적등록", air: "항공등록", inland: "오더등록" }[mode]}</h2>
           {/* 💱 내륙 오더등록의 유가 칸 자리 — 오늘 환율 */}
           {mode !== "inland" && (
-            <div className="inline-flex items-center gap-3 h-11 px-4 rounded-xl bg-[#1B2B4B] text-white" title={fx.live ? `${fx.day} 환율(자동)` : "기본 환율 — 운임 줄에서 직접 고칠 수 있어요"}>
+            <div className="inline-flex items-center gap-3 h-11 px-4 rounded-xl bg-[#1B2B4B] text-white" title={fx.live ? `${fx.day} 환율(자동)` : "기본 환율: 운임 줄에서 직접 고칠 수 있어요"}>
               <span className="h-7 px-2 rounded-md bg-white text-[#0F1A30] text-[12px] font-black grid place-items-center">{fx.live ? "오늘 환율" : "기본 환율"}</span>
               {["USD", "EUR", "JPY", "CNY"].map((c) => <span key={c} className="text-[13px] font-bold tabular-nums whitespace-nowrap"><span className="text-white/60 mr-1">{c}</span>{rateOf(c).toLocaleString("ko-KR")}</span>)}
             </div>

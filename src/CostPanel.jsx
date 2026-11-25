@@ -207,9 +207,9 @@ export function useCostData() {
         const alt = sales.plans.filter((p) => PLAN_IDS.includes(p.id) && PLAN_IDS.indexOf(p.id) > PLAN_IDS.indexOf(r.planId)).map((p) => ({ p, t: monthlyOf(p, sales, inp).total })).sort((a, b) => a.t - b.t)[0];
         if (r.bill.usage?.over > 0 && alt && alt.t <= cur * 1.1) recs.push(`${alt.p.name} 전환 권유(월 ${won(alt.t)} · 기능↑)`);
         else if (r.bill.usage?.over > 0) recs.push(`초과 요금 ${won(r.bill.usage.over)} 청구`);
-        if (r.act.fleet > 0 && !planIncludes(r.planId, "fleet")) recs.push(`지입차 ${r.act.fleet}대 — 스탠다드부터 관리 기능`);
+        if (r.act.fleet > 0 && !planIncludes(r.planId, "fleet")) recs.push(`지입차 ${r.act.fleet}대: 스탠다드부터 관리 기능`);
       }
-      if (margin < 0) recs.push("적자 — 추가 청구 또는 요금 조정");
+      if (margin < 0) recs.push("적자: 추가 청구 또는 요금 조정");
       if (qtyOf(r.items, "taxInvoice") === 0 && r.act.ordersMonth > 1500) recs.push("전자세금계산서·알림톡 사용 시 추가 항목 청구");
       return { ...r, server, direct, gross, variableCost, fixedShare, margin, marginRate: r.revenue > 0 ? margin / r.revenue : null, reads: wR[i], writes: wW[i], recs };
     }).sort((a, b) => a.margin - b.margin);
@@ -241,8 +241,8 @@ export default function CostPanel({ openUsage }) {
       const r = await fetch(`${FUNCTIONS_BASE}/platformUsageNow`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: "{}" });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.error || r.status);
-      setMsg(j.skipped ? `방금 가져왔습니다 — ${Math.ceil((j.nextInSec || 0) / 60)}분 뒤 다시 누를 수 있어요` : j.ok === false ? "가져오지 못했습니다 — 아래 '서버 사용량' 안내를 확인해 주세요" : "구글 클라우드에서 사용량을 새로 가져왔습니다");
-    } catch (e) { setMsg(`가져오기 실패: ${e.message || e} (함수를 아직 배포하지 않았다면 정상입니다 — 추정값으로 보여드립니다)`); } finally { setBusy(false); }
+      setMsg(j.skipped ? `방금 가져왔습니다. ${Math.ceil((j.nextInSec || 0) / 60)}분 뒤 다시 누를 수 있어요` : j.ok === false ? "가져오지 못했습니다. 아래 '서버 사용량' 안내를 확인해 주세요" : "구글 클라우드에서 사용량을 새로 가져왔습니다");
+    } catch (e) { setMsg(`가져오기 실패: ${e.message || e} (함수를 아직 배포하지 않았다면 정상입니다. 추정값으로 보여드립니다)`); } finally { setBusy(false); }
   };
   return (
     <div className="space-y-4">
@@ -273,7 +273,7 @@ export default function CostPanel({ openUsage }) {
 function SourceNote({ d }) {
   return d.source === "measured"
     ? <Tag>서버 실측 · 구글 클라우드 모니터링</Tag>
-    : <Tag>활동량 추정 — 실측 연결 전</Tag>;
+    : <Tag>활동량 추정: 실측 연결 전</Tag>;
 }
 function SummaryView({ d, openUsage }) {
   const rows = [...d.variable.rows, ...d.fixed.rows, ...d.ledger.rows];
@@ -286,7 +286,7 @@ function SummaryView({ d, openUsage }) {
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Kpi k={`${Number(d.ym.slice(5))}월 매출 (VAT 별도)`} v={won(d.revenue)} sub={`청구 대상 ${d.paying}곳 · 월말 예상`} />
         <Kpi k="이달 지출" v={won(d.cost)} sub={`서버 ${won(d.variable.total)} + 고정 ${won(d.fixed.total)}${d.ledger.total ? ` + 실제 결제 ${won(d.ledger.total)}` : ""}`} />
-        <Kpi dark k="순이익" v={wonS(d.profit)} loss={loss} profit={d.profit} sub={loss ? "적자 — 운송사별 원가에서 원인 확인" : "매출 − 지출(월말 예상)"} />
+        <Kpi dark k="순이익" v={wonS(d.profit)} loss={loss} profit={d.profit} sub={loss ? "적자: 운송사별 원가에서 원인 확인" : "매출 − 지출(월말 예상)"} />
         <Kpi k="이익률" v={d.margin == null ? "-" : `${(d.margin * 100).toFixed(1)}%`} loss={d.margin != null && d.margin < 0} rate={d.margin == null ? undefined : d.margin * 100} sub="순이익 ÷ 매출" />
         <Kpi k="1곳당 평균" v={won(d.avgRevenue)} sub={`원가 ${won(d.paying ? d.cost / d.paying : 0)} / 곳`} />
       </div>
@@ -368,7 +368,7 @@ function CostTable({ d }) {
         </tbody>
       </table></div>
       <div className="px-5 py-3 border-t border-[#EEF1F6] text-[11.5px] text-[#7A879C] leading-relaxed">
-        출처: {m.source}. ⚠ Firestore 단가는 다중 리전(nam5) 기준 — 서울(asia-northeast3) 등 단일 리전은 단가가 다를 수 있으니 구글 클라우드 콘솔 › 결제 › 보고서와 맞춰 보세요.
+        출처: {m.source}. ⚠ Firestore 단가는 다중 리전(nam5) 기준: 서울(asia-northeast3) 등 단일 리전은 단가가 다를 수 있으니 구글 클라우드 콘솔 › 결제 › 보고서와 맞춰 보세요.
         Cloud Storage 무료 5GB는 예전 버킷(*.appspot.com)·미국 리전만 해당합니다. 24시콜(화물정보망)·PG 수수료는 고객사가 직접 계약하는 비용이라 넣지 않았습니다.
       </div>
     </Card>
@@ -406,7 +406,7 @@ function CompaniesView({ d }) {
         </Card>
       )}
       <Card code="PER CARRIER" title={`${Number(d.ym.slice(5))}월 운송사별 원가 · 이익`} right={<div className="flex gap-1">{[["margin", "이익 낮은 순"], ["revenue", "매출 순"], ["cost", "원가 순"]].map(([k, l]) => <button key={k} type="button" onClick={() => setSort(k)} className={`h-8 px-2.5 rounded-lg text-[12px] font-black border ${sort === k ? "bg-[#1B2B4B] text-white border-[#1B2B4B]" : "border-[#DCE3EE] text-[#5B6B85]"}`}>{l}</button>)}</div>} bodyClass="p-0">
-        {list.length === 0 ? <div className="py-14 text-center text-[#9AA9C3]">집계된 운송사가 없습니다 — 사용량·한도에서 [지금 갱신]을 눌러 주세요.</div> : (
+        {list.length === 0 ? <div className="py-14 text-center text-[#9AA9C3]">집계된 운송사가 없습니다. 사용량·한도에서 [지금 갱신]을 눌러 주세요.</div> : (
           <div className="overflow-x-auto"><table className="w-full text-[13px]" style={{ minWidth: 1240 }}>
             <thead><tr className="bg-[#1B2B4B] text-white">{["운송사", "요금제", "월 오더(예상)", "직원 · 지입", "앱 표본 읽기/쓰기", "매출", "서버 원가", "직접비(문자·세금계산서)", "고정비 몫", "이익 · 이익률", "추천"].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold whitespace-nowrap">{h}</th>)}</tr></thead>
             <tbody>{list.map((r) => {
@@ -431,7 +431,7 @@ function CompaniesView({ d }) {
         )}
         <div className="px-5 py-3 border-t border-[#EEF1F6] text-[11.5px] text-[#7A879C] leading-relaxed">
           · 서버 원가 = 이달 서버비(무료 제공량 반영)를 회사 활동량으로 나눈 몫입니다. 앱 표본(직원·기사 화면이 실제로 받은 문서 수)이 있으면 그 비율을 쓰고, 지입차 GPS 기록(안드로이드 기사앱)은 대수로 더합니다.<br />
-          · "단가 기준"은 무료 제공량이 없다고 봤을 때의 원가 — 회사가 늘어 무료량을 넘으면 이 값에 가까워집니다. 고정비 몫은 고정비를 청구 대상 회사 수로 똑같이 나눈 값입니다.
+          · "단가 기준"은 무료 제공량이 없다고 봤을 때의 원가: 회사가 늘어 무료량을 넘으면 이 값에 가까워집니다. 고정비 몫은 고정비를 청구 대상 회사 수로 똑같이 나눈 값입니다.
         </div>
       </Card>
     </div>
@@ -498,7 +498,7 @@ function BreakEvenView({ d }) {
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-          <div className="mt-2 text-[11.5px] text-[#9AA9C3]">곡선은 오른쪽 시뮬레이터 조건(요금제·일 오더·직원·지입차)의 회사가 늘어난다고 볼 때입니다. 비용은 고정비 + 서버비(무료 제공량 반영) — 서버비는 회사가 많아질수록 무료량을 넘어 조금씩 늘어납니다.</div>
+          <div className="mt-2 text-[11.5px] text-[#9AA9C3]">곡선은 오른쪽 시뮬레이터 조건(요금제·일 오더·직원·지입차)의 회사가 늘어난다고 볼 때입니다. 비용은 고정비 + 서버비(무료 제공량 반영): 서버비는 회사가 많아질수록 무료량을 넘어 조금씩 늘어납니다.</div>
         </Card>
         <Card code="SIMULATOR" title="시뮬레이터" right={<Btn onClick={() => setSim(seed())} className="h-8 px-3 text-[12px]">지금 평균으로</Btn>}>
           <div className="space-y-3.5">
@@ -518,7 +518,7 @@ function BreakEvenView({ d }) {
           </div>
         </Card>
       </div>
-      <Card code="PLAN UNIT ECONOMICS" title="요금제별 — 포함 한도를 꽉 채워 쓸 때 원가 · 마진" bodyClass="p-0">
+      <Card code="PLAN UNIT ECONOMICS" title="요금제별: 포함 한도를 꽉 채워 쓸 때 원가 · 마진" bodyClass="p-0">
         <div className="overflow-x-auto"><table className="w-full text-[13px]" style={{ minWidth: 820 }}>
           <thead><tr className="bg-[#1B2B4B] text-white">{["요금제", "월 요금", "포함 한도(직원 · 오더 · 지입)", "하루 읽기 / 쓰기(추정)", "서버 원가(단가 기준)", "마진", "마진율"].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold whitespace-nowrap">{h}</th>)}</tr></thead>
           <tbody>{perPlan.map(({ p, a, gross, margin, rate }) => { const e = estimateDaily(d.model, a); return (
@@ -532,7 +532,7 @@ function BreakEvenView({ d }) {
               <td className="px-3 py-2.5 text-right font-black tabular-nums" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: profitRateColor(rate * 100, { neutral: INK }) }}>{(rate * 100).toFixed(1)}%</td>
             </tr>); })}</tbody>
         </table></div>
-        <div className="px-5 py-3 border-t border-[#EEF1F6] text-[11.5px] text-[#7A879C]">고정비는 빼지 않은 값(공헌이익)입니다. 원가는 [비용 기준 설정] › 활동량 환산 계수로 추정 — 실측이 쌓이면 '서버 사용량'에서 [실측으로 계수 맞추기]를 누르세요.</div>
+        <div className="px-5 py-3 border-t border-[#EEF1F6] text-[11.5px] text-[#7A879C]">고정비는 빼지 않은 값(공헌이익)입니다. 원가는 [비용 기준 설정] › 활동량 환산 계수로 추정: 실측이 쌓이면 '서버 사용량'에서 [실측으로 계수 맞추기]를 누르세요.</div>
       </Card>
     </div>
   );
@@ -576,7 +576,7 @@ function ServerView({ d, model, saved, onRefresh, busy }) {
                         <li>구글 클라우드 콘솔(console.cloud.google.com) → 프로젝트 <b>dispatch-app-9b92f</b> → 왼쪽 메뉴 <b>IAM 및 관리자 › IAM</b></li>
             <li><b>dispatch-app-9b92f@appspot.gserviceaccount.com</b> 줄의 연필(수정) → <b>다른 역할 추가</b> → <b>모니터링 뷰어(Monitoring Viewer)</b> → 저장 (이미 '편집자'면 필요 없음)</li>
             <li>콘솔 위 검색창에 "Cloud Monitoring API" → <b>사용</b>(이미 켜져 있으면 그대로)</li>
-            <li>이 화면 위 <b>[사용량 지금 가져오기]</b> — 이달 1일부터 채워집니다. 그다음부터는 매시간 20분에 자동.</li>
+            <li>이 화면 위 <b>[사용량 지금 가져오기]</b> · 이달 1일부터 채워집니다. 그다음부터는 매시간 20분에 자동.</li>
           </ol>
           <div className="mt-2 text-[12px] text-[#7A879C]">그동안은 <b>활동량 추정</b>과 <b>앱 표본</b>(아래)으로 계산합니다.</div>
         </div>
@@ -615,7 +615,7 @@ function ServerView({ d, model, saved, onRefresh, busy }) {
           ))}
         </div>
       )}
-      <Card code="SERVER BILL" title="서버 항목 — 이달 지금까지 · 월말 예상" right={<div className="flex gap-2"><Btn onClick={calibrate} disabled={d.source !== "measured"} className="h-8 px-3 text-[12px]">실측으로 계수 맞추기</Btn><Btn onClick={onRefresh} disabled={busy} className="h-8 px-3 text-[12px]">{busy ? "…" : "지금 가져오기"}</Btn></div>} bodyClass="p-0">
+      <Card code="SERVER BILL" title="서버 항목: 이달 지금까지 · 월말 예상" right={<div className="flex gap-2"><Btn onClick={calibrate} disabled={d.source !== "measured"} className="h-8 px-3 text-[12px]">실측으로 계수 맞추기</Btn><Btn onClick={onRefresh} disabled={busy} className="h-8 px-3 text-[12px]">{busy ? "…" : "지금 가져오기"}</Btn></div>} bodyClass="p-0">
         <div className="overflow-x-auto"><table className="w-full text-[13px]" style={{ minWidth: 720 }}>
           <thead><tr className="bg-[#1B2B4B] text-white">{["항목", "무료 제공", "지금까지 사용", "지금까지 비용", "월말 예상 사용", "월말 예상 비용"].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold whitespace-nowrap">{h}</th>)}</tr></thead>
           <tbody>{fsRowsP.map((p) => { const m = fsRowsM.find((x) => x.key === p.key); const f = (v) => (v < 100 && v % 1 ? v.toFixed(2) : cnt(v)); return (
@@ -631,8 +631,8 @@ function ServerView({ d, model, saved, onRefresh, busy }) {
         {cmsg && <div className="px-5 py-2.5 border-t border-[#EEF1F6] text-[13px] font-bold">{cmsg}</div>}
         <div className="px-5 py-3 border-t border-[#EEF1F6] text-[11.5px] text-[#7A879C] leading-relaxed">Firestore 무료량은 하루 단위라, 날마다 무료량을 넘은 만큼만 더합니다. 구글 클라우드 지표는 몇 분 늦게 들어오고, 실제 청구서와 몇 % 차이가 날 수 있습니다(실제 청구 기준: 콘솔 › 결제).</div>
       </Card>
-      <Card code="APP SAMPLE" title="앱 표본 — 운송사별 화면이 받은 문서 수(이달)" bodyClass="p-0">
-        {!(d.counters || []).length ? <div className="py-10 text-center text-[#9AA9C3] text-[13px]">아직 표본이 없습니다 — 규칙 배포 후 직원이 접속하면 10분마다 쌓입니다.</div> : (
+      <Card code="APP SAMPLE" title="앱 표본: 운송사별 화면이 받은 문서 수(이달)" bodyClass="p-0">
+        {!(d.counters || []).length ? <div className="py-10 text-center text-[#9AA9C3] text-[13px]">아직 표본이 없습니다. 규칙 배포 후 직원이 접속하면 10분마다 쌓입니다.</div> : (
           <div className="overflow-x-auto"><table className="w-full text-[13px]" style={{ minWidth: 560 }}>
             <thead><tr className="bg-[#1B2B4B] text-white">{["운송사", "읽기", "쓰기", "접속(세션)", "세션당 읽기"].map((h) => <th key={h} className="px-3 py-2.5 text-center font-extrabold">{h}</th>)}</tr></thead>
             <tbody>{[...d.counters].sort((a, b) => num(b.reads) - num(a.reads)).map((c) => (
@@ -682,7 +682,7 @@ function SettingsModal({ model, onClose }) {
           <div>
             <div className="text-[10.5px] font-extrabold tracking-[0.3em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>COST MODEL · SETTINGS</div>
             <div className="text-[20px] font-black mt-0.5">비용 기준 설정</div>
-            <div className="text-[12.5px] text-white/65 mt-0.5">모든 단가는 {m.asOf} 기준 공개 가격 <b>추정치</b>입니다 — 실제 청구서(구글 클라우드 결제 · 카드 명세)와 맞춰 고쳐 주세요.</div>
+            <div className="text-[12.5px] text-white/65 mt-0.5">모든 단가는 {m.asOf} 기준 공개 가격 <b>추정치</b>입니다. 실제 청구서(구글 클라우드 결제 · 카드 명세)와 맞춰 고쳐 주세요.</div>
           </div>
           <button type="button" onClick={onClose} className="h-9 px-3.5 rounded-xl bg-white/10 border border-white/20 text-[13px] font-bold">닫기 ✕</button>
         </div>

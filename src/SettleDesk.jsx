@@ -76,7 +76,7 @@ export function KpModal({ open = true, onClose, en, title, sub, width = 560, chi
 export const STMT_STAGES = [
   { k: "미작성", label: "미작성", en: "TODO", hint: "아직 명세서를 만들지 않았어요" },
   { k: "작성", label: "작성", en: "DRAFT", hint: "명세서를 만들어 두었어요" },
-  { k: "발송", label: "발송", en: "SENT", hint: "거래처에 보냈어요(순서에서 뺌 — 메일은 언제든 보낼 수 있다)", opt: true },
+  { k: "발송", label: "발송", en: "SENT", hint: "거래처에 보냈어요(순서에서 뺌: 메일은 언제든 보낼 수 있다)", opt: true },
   // 🛠 2026-11-16 opt — 직접 기록할 때만 쓰는 단계(자동으로 바뀌지 않는다). 화면 단계 버튼에서는 숨긴다
   { k: "확인", label: "거래처 확인", en: "CHECKED", hint: "거래처가 내역을 확인했다고 직접 기록한 단계", opt: true },
   { k: "계산서요청", label: "계산서 요청", en: "TAX REQ", hint: "거래처가 계산서를 요청했다고 직접 기록한 단계", opt: true },
@@ -147,10 +147,10 @@ export function CloseStrip({ close, onReturn, onUnlock, onRelock, disabled }) {
     <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[13.5px]" data-kp="close-strip">
       <span className="font-black" style={{ color: tg.c }}>{tg.t}</span>
       <span className="text-[#5B6B85] font-bold" style={NUM}>
-        {tg.final ? (d.unlocked ? `${d.unlockedByName || "경리팀"} ${fmtDay(d.unlockedAt)} 일시해제 — 배차 담당자가 고칠 수 있어요. 끝나면 [다시 잠금]` : `${fmtDay(d.approvedAt)} 최종마감 · 배차 쪽 수정 잠금`)
+        {tg.final ? (d.unlocked ? `${d.unlockedByName || "경리팀"} ${fmtDay(d.unlockedAt)} 일시해제: 배차 담당자가 고칠 수 있어요. 끝나면 [다시 잠금]` : `${fmtDay(d.approvedAt)} 최종마감 · 배차 쪽 수정 잠금`)
           : tg.ready ? `${by ? `${by} · ` : ""}${at ? fmtDay(at) : ""} 배차 1차 마감`
           : close.status === "rejected" ? `반려 사유 · ${d.reason || "-"}${d.rejectedByName ? ` (${d.rejectedByName})` : ""}`
-          : close.changed ? "배차마감 후 오더가 변경됨 — 배차 담당자 재마감 필요"
+          : close.changed ? "배차마감 후 오더가 변경됨: 배차 담당자 재마감 필요"
           : "배차 담당자 1차 마감 전 · 명세서 작성은 가능"}
       </span>
       <span className="ml-auto flex items-center gap-3">
@@ -322,7 +322,7 @@ export function StatementClientRail({ month, setMonth, groups = [], sel, onSel, 
                 <span className={`text-[12px] font-black px-1.5 h-5 rounded-md inline-flex items-center whitespace-nowrap ${on ? "bg-white/15 text-white" : stageIdx(g.stage) === 0 ? "border border-dashed border-[#B8C4D8] text-[#5B6B85]" : stageIdx(g.stage) === 6 ? "bg-[#0F1A30] text-white" : "bg-[#EEF3FB] text-[#1B2B4B]"}`}>{stageLabel(g.stage)}</span>
               </div>
               <div className={`mt-0.5 flex items-center justify-between gap-2 text-[12.5px] font-bold ${on ? "text-white/70" : "text-[#5B6B85]"}`} style={NUM}>
-                <span className="whitespace-nowrap truncate min-w-0">{(g.count || 0).toLocaleString()}건{closeTag(g.close).t ? <span className="ml-1 font-black" style={{ color: on ? "#fff" : closeTag(g.close).c }}>· {closeTag(g.close).t}</span> : null}{g.settled ? <span className={`ml-1 ${on ? "text-white" : "text-[#1E6B4A]"}`} title="미수금관리에서 입금 확인(정산완료)">· 입금</span> : null}{pick && can && !g.email ? <span className="ml-1 text-[#A6400E]">· 메일 없음</span> : null}{g.subN > 1 ? <span className={`ml-1 ${on ? "text-white" : "text-[#2D4C82]"}`} title={`담당노선구분 ${g.subN}개 — 구분별 명세서 ${g.subDone || 0}개 작성`}>· 구분 {g.subDone || 0}/{g.subN}</span> : null}</span><span className={`whitespace-nowrap ${on ? "text-white font-black" : "text-[#0F1A30] font-black"}`}>{(g.total || 0).toLocaleString()}원</span>
+                <span className="whitespace-nowrap truncate min-w-0">{(g.count || 0).toLocaleString()}건{closeTag(g.close).t ? <span className="ml-1 font-black" style={{ color: on ? "#fff" : closeTag(g.close).c }}>· {closeTag(g.close).t}</span> : null}{g.settled ? <span className={`ml-1 ${on ? "text-white" : "text-[#1E6B4A]"}`} title="미수금관리에서 입금 확인(정산완료)">· 입금</span> : null}{pick && can && !g.email ? <span className="ml-1 text-[#A6400E]">· 메일 없음</span> : null}{g.subN > 1 ? <span className={`ml-1 ${on ? "text-white" : "text-[#2D4C82]"}`} title={`담당노선구분 ${g.subN}개: 구분별 명세서 ${g.subDone || 0}개 작성`}>· 구분 {g.subDone || 0}/{g.subN}</span> : null}</span><span className={`whitespace-nowrap ${on ? "text-white font-black" : "text-[#0F1A30] font-black"}`}>{(g.total || 0).toLocaleString()}원</span>
               </div>
             </button>
           );

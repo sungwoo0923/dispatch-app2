@@ -75,7 +75,7 @@ export default function MultiCompanyPanel() {
         ? { multiCompanies: sel, ...(keepActive ? {} : { activeCompany: "" }), personnelHistory: arrayUnion({ date: kstToday(), type: "여러 회사 사용", detail: `${sel.join(" · ")} · 관리센터 ${auth.currentUser?.email || ""}` }) }
         : { multiCompanies: deleteField(), activeCompany: deleteField(), personnelHistory: arrayUnion({ date: kstToday(), type: "여러 회사 사용 끔", detail: `관리센터 ${auth.currentUser?.email || ""}` }) },
       { merge: true });
-      setMsg(sel.length ? `${pick.name}님 — ${sel.join(" · ")} 오가기를 저장했어요. 그 계정은 몇 초 안에 [회사 전환]이 보여요.` : `${pick.name}님의 여러 회사 사용을 껐어요.`);
+      setMsg(sel.length ? `${pick.name}님: ${sel.join(" · ")} 오가기를 저장했어요. 그 계정은 몇 초 안에 [회사 전환]이 보여요.` : `${pick.name}님의 여러 회사 사용을 껐어요.`);
       setPick(null); setQ("");
     } catch (e) { setMsg(`저장하지 못했어요: ${e?.code || e?.message || e}`); } finally { setBusy(false); }
   };
@@ -107,7 +107,7 @@ export default function MultiCompanyPanel() {
         </div>
       </section>
       <section className={CARD}>
-        <Head code="ASSIGN" title={pick ? `${pick.name}님 — 오갈 회사 고르기` : "계정 찾기"} desc={pick ? `원래 소속 ${pick.company} 말고 같이 쓸 회사를 골라요(최대 10곳).` : "이름 · 이메일 · 회사명으로 직원을 찾아요(승인된 운송사 직원만)."} />
+        <Head code="ASSIGN" title={pick ? `${pick.name}님: 오갈 회사 고르기` : "계정 찾기"} desc={pick ? `원래 소속 ${pick.company} 말고 같이 쓸 회사를 골라요(최대 10곳).` : "이름 · 이메일 · 회사명으로 직원을 찾아요(승인된 운송사 직원만)."} />
         <div className="p-5">
           {!pick ? (
             <>

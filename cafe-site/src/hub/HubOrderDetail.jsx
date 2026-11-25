@@ -187,7 +187,7 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
     catch (e) {
       const denied = String(e?.code || e?.message || "").includes("permission");
       const depo = o && payKind(o.지급방식) === "deposit";
-      const deniedMsg = label === "req" ? (depo ? "지금은 신청할 수 없어요. 등록자 잔액이 부족하거나 이미 배차됐어요" : "이미 배차된 오더예요") : "지금은 할 수 없어요";
+      const deniedMsg = label === "req" ? (depo ? "지금은 신청할 수 없어요. 이미 배차됐거나 등록자 잔액이 부족해요" : "이미 배차된 오더예요") : "지금은 할 수 없어요";
       toast?.(denied ? deniedMsg : e?.message || "처리하지 못했어요", 3600);
     } finally { setBusy(""); setAsk(null); }
   };
@@ -315,11 +315,11 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
             </div>
           )}
           {o.회차?.status === "accepted" && <div className="rounded-2xl bg-[#F3F7FE] ring-1 ring-inset ring-[#C7D3E8] px-4 py-3 text-[15px] font-bold text-[#0F1A30]" data-testid="return-done">회차로 끝났어요. 회차비 {wonF(o.회차.amount)}</div>}
-          {o.회차?.status === "rejected" && isPoster && stage === "moving" && <div className="rounded-2xl bg-white ring-1 ring-inset ring-[#C7D3E8] px-4 py-3 text-[14.5px] font-bold text-[#3A4A66]">차주가 회차를 거절했어요. 전화로 이야기해 주세요</div>}
+          {o.회차?.status === "rejected" && isPoster && stage === "moving" && <div className="rounded-2xl bg-white ring-1 ring-inset ring-[#C7D3E8] px-4 py-3 text-[14.5px] font-bold text-[#3A4A66]">차주가 회차를 거절했어요. 전화로 이야기해 주세요.</div>}
 
           {(isPoster || isAdmin) && o.takerUid && match && (
             <Card className="p-4" data-testid="taker-card">
-              <div className="text-[14px] font-bold text-[#2D4C82] mb-3">{o.status === "assigned" && !o.confirmed ? "배차신청, 10초 뒤 확정" : "배차된 차량"}</div>
+              <div className="text-[14px] font-bold text-[#2D4C82] mb-3">{o.status === "assigned" && !o.confirmed ? "배차신청이 들어왔어요. 10초 뒤에 확정돼요" : "배차된 차량"}</div>
               <div className="flex items-center gap-3.5">
                 <Avatar path={match.photoPath} name={match.name} size={60} />
                 <div className="min-w-0 flex-1">
@@ -366,9 +366,12 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
               {!isPoster && posterPhone && <a href={telHref(posterPhone)} data-testid="btn-call-poster" className="mt-3 h-12 rounded-2xl w-full inline-flex items-center justify-center gap-2 text-white text-[16px] font-bold" style={{ background: "linear-gradient(120deg,#0F1A30,#2D4C82)" }}><HI name="phone" size={18} />등록자에게 전화</a>}
             </Card>
           ) : (!isPoster && !isAdmin && (
-            <Card className="p-4 flex items-start gap-3">
+            <Card className="p-4 flex items-start gap-3" data-testid="detail-locked">
               <span className="w-11 h-11 rounded-2xl bg-[#F2F5FA] text-[#55657F] inline-flex items-center justify-center shrink-0"><HI name="lock" size={19} /></span>
-              <div className="text-[15px] text-[#55657F] leading-relaxed"><b className="text-[#0F1A30]">주소와 연락처는 확정되면 보여요</b><br />신청하고 10초가 지나면 열려요.</div>
+              {/* ⭐ 2026-11-24 확정된 뒤 상세를 받는 동안 "확정되면 보여요"가 그대로 남던 것 */}
+              <div className="text-[15px] text-[#55657F] leading-relaxed">{confirmed
+                ? <><b className="text-[#0F1A30]">주소와 연락처를 불러오고 있어요</b><br />잠시만 기다려 주세요. 오래 걸리면 화면을 닫았다가 다시 열어 주세요.</>
+                : <><b className="text-[#0F1A30]">주소와 연락처는 확정되면 보여요</b><br />신청하고 10초가 지나면 열려요.</>}</div>
             </Card>
           ))}
 
@@ -433,14 +436,14 @@ export default function HubOrderDetail({ id, me, onClose, toast, onEdit, favorit
               <Btn kind="ghost" className={o.status === "open" ? "" : "col-span-2"} onClick={() => setAsk({ k: "cancelOrder" })} data-testid="btn-cancel-order">화물 취소</Btn>
             </div>
           )}
-          {o.status === "open" && isPoster && (o.cancelCount || 0) > 0 && <div className="text-[14px] text-[#5F6E87] text-center">10초 안 취소 {o.cancelCount}번. 5번이 되면 신청을 더 받지 않아요</div>}
+          {o.status === "open" && isPoster && (o.cancelCount || 0) > 0 && <div className="text-[14px] text-[#5F6E87] text-center">10초 안에 취소된 신청이 {o.cancelCount}번이에요. 5번이 되면 더는 신청을 받지 않아요.</div>}
         </div>
       </div>
       {action && <div className="shrink-0 p-4 lg:p-5 bg-white border-t border-[#E2E7EF] pb-[max(16px,env(safe-area-inset-bottom))]">{action}</div>}
 
-      {ask?.k === "deliver" && <Confirm title="운송을 마쳤나요?" body={"등록자에게 알리고 위치 보내기를 멈춰요.\n인수증과 전표는 다음 화면에서 올려 주세요."} okText="운송완료" onCancel={() => setAsk(null)} onOk={() => run("dlv", () => markDelivered(o, me, null), "운송완료! 수고하셨어요")} />}
+      {ask?.k === "deliver" && <Confirm title="운송을 마쳤나요?" body={"등록자에게 알리고 위치 보내기를 멈춰요.\n인수증과 전표는 다음 화면에서 올려 주세요."} okText="운송완료" onCancel={() => setAsk(null)} onOk={() => run("dlv", () => markDelivered(o, me, null), "운송을 마쳤어요. 수고하셨어요")} />}
       {ask?.k === "release" && <Confirm title="배차를 취소할까요?" body={"차주에게 알리고 다시 모집해요.\n먼저 전화로 이야기해 주세요."} okText="배차 취소" onCancel={() => setAsk(null)} onOk={() => run("rel", () => releaseTaker(o, me, "등록자 취소"), "다시 모집하고 있어요")} />}
-      {ask?.k === "cancelOrder" && <Confirm title="화물을 취소할까요?" body={o.takerUid ? "차주에게 알리고 운임을 잔액으로 돌려드려요." : "보드에서 내려가요."} okText="화물 취소" onCancel={() => setAsk(null)} onOk={() => run("co", () => cancelOrder(o, me), "취소했어요")} />}
+      {ask?.k === "cancelOrder" && <Confirm title="화물을 취소할까요?" body={o.takerUid ? (o.settle?.status === "held" ? "차주에게 알리고, 묶여 있던 운임은 잔액으로 돌려드려요." : "배차된 차주에게 취소를 알려요.") : "오더 목록에서 내려가요."} okText="화물 취소" onCancel={() => setAsk(null)} onOk={() => run("co", () => cancelOrder(o, me), "취소했어요")} />}
       {ask?.k === "return" && (
         <Confirm title="회차 요청" body="차주가 수락하면 회차비만 정산하고 나머지는 돌려드려요." okText="요청하기" onCancel={() => setAsk(null)} onOk={() => run("ret", () => proposeReturn(o, me, ret.amount, ret.reason), "회차를 요청했어요")}>
           <div className="mt-3 space-y-2.5" data-testid="return-form">

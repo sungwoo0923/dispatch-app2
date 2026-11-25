@@ -354,7 +354,7 @@ export default function SheetImportPanel() {
       setProgress({ pct: 100, step: "완료", done: true, result });
     } catch (e) {
       await setDoc(doc(db, "importBatches", batchId), { status: "error", error: String(e?.message || e) }, { merge: true }).catch(() => {});
-      setProgress({ pct: 0, step: "", error: `가져오기 실패: ${e?.message || e} — 일부만 저장됐다면 아래 기록에서 [가져오기 취소]로 지울 수 있습니다.` });
+      setProgress({ pct: 0, step: "", error: `가져오기 실패: ${e?.message || e} · 일부만 저장됐다면 아래 기록에서 [가져오기 취소]로 지울 수 있습니다.` });
     }
   };
 
@@ -479,7 +479,7 @@ export default function SheetImportPanel() {
       {/* STEP 2 탭 고르기 */}
       {book && (
         <section className={`${CARD} p-6`}>
-          <Head eyebrow="STEP 2" title="가져올 탭" desc={`${book.title} — 오더가 들어 있는 탭(보통 월별 탭)을 고르세요. 제목줄 위치가 다르면 줄 번호를 바꿔주세요.`} />
+          <Head eyebrow="STEP 2" title="가져올 탭" desc={`${book.title} · 오더가 들어 있는 탭(보통 월별 탭)을 고르세요. 제목줄 위치가 다르면 줄 번호를 바꿔주세요.`} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {book.tabs.map((t) => {
               const on = picked[t.title] !== undefined;
@@ -522,7 +522,7 @@ export default function SheetImportPanel() {
                 <span className="w-[86px] shrink-0 text-[14px] font-bold text-[#0F1A30]">{f.label || f.key}{f.req && <span className="text-red-500"> *</span>}</span>
                 <CustomSelect value={mapping[f.key] || ""} onChange={(e) => { setMapping((m) => ({ ...m, [f.key]: e.target.value })); setChecked(null); }}
                   className={`flex-1 min-w-0 border rounded-xl px-3 py-2 text-[14px] bg-white outline-none ${mapping[f.key] ? "border-[#1B2B4B]/40 text-[#0F1A30] font-semibold" : f.req ? "border-red-300 text-gray-400" : "border-[#DCE3EE] text-gray-400"}`}>
-                  <option value="">— 가져오지 않음 —</option>
+                  <option value="">가져오지 않음</option>
                   {allHeaders.map((h) => <option key={h} value={h}>{h}</option>)}
                 </CustomSelect>
               </label>
@@ -564,7 +564,7 @@ export default function SheetImportPanel() {
 
           {problems.length > 0 && (
             <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
-              <div className="text-[13.5px] font-bold text-red-700 mb-1.5">확인 필요 {problems.length}건 — 이 줄들은 가져오지 않습니다(칸 맞추기를 바꾸거나 시트를 고친 뒤 다시 검사)</div>
+              <div className="text-[13.5px] font-bold text-red-700 mb-1.5">확인 필요 {problems.length}건: 이 줄들은 가져오지 않습니다(칸 맞추기를 바꾸거나 시트를 고친 뒤 다시 검사)</div>
               <div className="max-h-[140px] overflow-y-auto text-[12.5px] text-red-700 space-y-0.5">
                 {problems.slice(0, 200).map((r, i) => <div key={i}>[{r.__tab} {r.__row}번째 줄] {r.__problems.join(", ")}</div>)}
               </div>

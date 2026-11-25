@@ -121,7 +121,7 @@ export function PenaltyDoc({ p, supplier = {}, onPhoto, wide }) {
             </div>
           ))}
         </div>
-        <div style={{ marginTop: 14, fontSize: 12.5, fontWeight: 900, color: "#1B2B4B" }}>첨부 — 고지서·사진</div>
+        <div style={{ marginTop: 14, fontSize: 12.5, fontWeight: 900, color: "#1B2B4B" }}>첨부: 고지서·사진</div>
         <div style={{ marginTop: 8, display: "grid", gridTemplateColumns: photos.length > 1 ? "1fr 1fr" : "1fr", gap: 8 }}>
           {photos.length ? photos.map((src, i) => (
             <button key={i} type="button" onClick={() => onPhoto?.(i)} style={{ padding: 0, border: "1px solid #DCE3EE", borderRadius: 12, overflow: "hidden", background: "#F3F6FA", cursor: onPhoto ? "zoom-in" : "default", aspectRatio: "4 / 3" }}>

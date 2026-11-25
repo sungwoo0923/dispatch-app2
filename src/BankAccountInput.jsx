@@ -88,7 +88,7 @@ export default function BankAccountInput({ value, onChange, compact = false, sta
           {[...uiOptionList("은행", BANK_NAMES), ...(v.bank && !uiOptionList("은행", BANK_NAMES).includes(v.bank) ? [v.bank] : [])].map((b) => <option key={b} value={b}>{uiOptionLabel("은행", b)}</option>)}
         </CustomSelect>
         <input inputMode="numeric" value={formatAccount(v.bank, v.acct)} onChange={(e) => set({ acct: onlyDigits(e.target.value).slice(0, accountMaxLen(v.bank)) })}
-          placeholder={v.bank ? (accountPattern(v.bank) ? `${accountPattern(v.bank)} (${accountLengths(v.bank).join(" · ")}자리)` : "계좌번호 — 숫자만 입력") : "은행을 먼저 고르세요"} className={`${inp} tabular-nums tracking-wide ${stacked ? "order-3 col-span-2" : ""}`} />
+          placeholder={v.bank ? (accountPattern(v.bank) ? `${accountPattern(v.bank)} (${accountLengths(v.bank).join(" · ")}자리)` : "계좌번호: 숫자만 입력") : "은행을 먼저 고르세요"} className={`${inp} tabular-nums tracking-wide ${stacked ? "order-3 col-span-2" : ""}`} />
         <input value={v.holder || ""} onChange={(e) => set({ holder: e.target.value })} placeholder="예금주" className={`${inp} ${stacked ? "order-2" : ""}`} />
       </div>
       <div className="flex items-center justify-between gap-2 min-h-[22px]">

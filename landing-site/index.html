@@ -18,17 +18,27 @@
 <meta property="og:description" content="오더 접수 · 배차 · 실시간 관제 · 정산 · 전자결재를 하나의 운송관리 플랫폼으로" />
 <meta property="og:url" content="https://www.logisweb.co.kr/" />
 <meta property="og:image" content="https://www.logisweb.co.kr/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="로지스웹 LogisWeb, 배차부터 정산까지 운송사 업무를 한 화면에서" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="로지스웹 LogisWeb | 운송사 통합 운송관리시스템(TMS)" />
+<meta name="twitter:description" content="오더 접수 · 배차 · 실시간 관제 · 정산 · 전자결재를 하나의 운송관리 플랫폼으로" />
+<meta name="twitter:image" content="https://www.logisweb.co.kr/og-image.png" />
 <meta property="og:locale" content="ko_KR" />
 <link rel="icon" type="image/png" href="/icons/sflow-icon.png" />
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+<!-- ⚡ 2026-11-24 글꼴: 굵기마다 한글 전체 파일(약 750KB씩)을 받던 것을, 화면에 쓰인 글자 조각만 받는 버전(버전 고정)으로 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pretendard@1.3.9/dist/web/static/pretendard-dynamic-subset.css" />
 <link rel="stylesheet" href="home.css" />
 <!-- 🔎 2026-11-14 검색 노출 — 예전엔 body 를 처음부터 투명(opacity:0)으로 두어, 스크립트를 실행하지 않는 검색 로봇(네이버 Yeti 등)에게는 글이 숨겨진 페이지로 보였다.
      이제 스크립트가 도는 브라우저에서만 잠깐(편집본 적용 전) 숨기고, 로봇 · 스크립트 꺼진 화면에서는 처음부터 보인다 -->
 <style>html.kp-pre body{opacity:0}</style>
 <script>document.documentElement.classList.add("kp-pre");setTimeout(function(){document.documentElement.classList.remove("kp-pre")},2500)</script>
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"LogisWeb","alternateName":["로지스웹","logisweb"],"applicationCategory":"BusinessApplication","operatingSystem":"Web, Windows, macOS, Android, iOS","description":"화물 운송사를 위한 배차관리·실시간 관제·정산 ERP·전자결재 프로그램","url":"https://www.logisweb.co.kr/","inLanguage":"ko-KR","offers":{"@type":"Offer","price":"0","priceCurrency":"KRW","description":"무료 체험"}}
+{"@context": "https://schema.org", "@graph": [{"@type": "Organization", "@id": "https://www.logisweb.co.kr/#org", "name": "LogisWeb", "alternateName": "로지스웹", "url": "https://www.logisweb.co.kr/", "logo": "https://www.logisweb.co.kr/brand/logisweb-mark.png"}, {"@type": "WebSite", "@id": "https://www.logisweb.co.kr/#website", "name": "로지스웹 LogisWeb", "url": "https://www.logisweb.co.kr/", "inLanguage": "ko-KR", "publisher": {"@id": "https://www.logisweb.co.kr/#org"}}, {"@type": "SoftwareApplication", "name": "LogisWeb", "alternateName": ["로지스웹", "logisweb"], "applicationCategory": "BusinessApplication", "operatingSystem": "Web, Windows, macOS, Android, iOS", "description": "화물 운송사를 위한 통합 운송관리시스템(TMS). 오더 스캔, 실시간 배차현황, GPS 차량 관제, 정산 · 회계, 전자결재, 기사앱을 하나의 데이터로 운영합니다.", "url": "https://www.logisweb.co.kr/", "image": "https://www.logisweb.co.kr/og-image.png", "inLanguage": "ko-KR", "publisher": {"@id": "https://www.logisweb.co.kr/#org"}, "offers": [{"@type": "Offer", "name": "라이트", "price": "89000", "priceCurrency": "KRW", "url": "https://www.logisweb.co.kr/#pricing", "priceSpecification": {"@type": "UnitPriceSpecification", "price": "89000", "priceCurrency": "KRW", "unitCode": "MON", "referenceQuantity": {"@type": "QuantitativeValue", "value": 1, "unitCode": "MON"}, "valueAddedTaxIncluded": false}}, {"@type": "Offer", "name": "베이직", "price": "199000", "priceCurrency": "KRW", "url": "https://www.logisweb.co.kr/#pricing", "priceSpecification": {"@type": "UnitPriceSpecification", "price": "199000", "priceCurrency": "KRW", "unitCode": "MON", "referenceQuantity": {"@type": "QuantitativeValue", "value": 1, "unitCode": "MON"}, "valueAddedTaxIncluded": false}}, {"@type": "Offer", "name": "스탠다드", "price": "349000", "priceCurrency": "KRW", "url": "https://www.logisweb.co.kr/#pricing", "priceSpecification": {"@type": "UnitPriceSpecification", "price": "349000", "priceCurrency": "KRW", "unitCode": "MON", "referenceQuantity": {"@type": "QuantitativeValue", "value": 1, "unitCode": "MON"}, "valueAddedTaxIncluded": false}}, {"@type": "Offer", "name": "프로", "price": "590000", "priceCurrency": "KRW", "url": "https://www.logisweb.co.kr/#pricing", "priceSpecification": {"@type": "UnitPriceSpecification", "price": "590000", "priceCurrency": "KRW", "unitCode": "MON", "referenceQuantity": {"@type": "QuantitativeValue", "value": 1, "unitCode": "MON"}, "valueAddedTaxIncluded": false}}]}, {"@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "기존에 쓰던 엑셀 자료를 그대로 옮길 수 있나요?", "acceptedAnswer": {"@type": "Answer", "text": "네. 거래처 · 상하차지 · 기사 목록을 엑셀이나 구글시트에서 가져올 수 있으며, 도입 시 데이터 이관을 지원합니다."}}, {"@type": "Question", "name": "기사님이 꼭 앱을 설치해야 하나요?", "acceptedAnswer": {"@type": "Answer", "text": "아니요. 인수증 · 서류는 문자 링크로 로그인 없이 제출할 수 있습니다. 실시간 관제 기능을 사용할 때만 기사앱이 필요합니다."}}, {"@type": "Question", "name": "PC 프로그램은 어떻게 설치하나요?", "acceptedAnswer": {"@type": "Answer", "text": "크롬 또는 엣지로 접속한 뒤 주소창의 설치 버튼을 누르면 바탕화면 앱으로 설치됩니다. 업데이트는 자동으로 적용됩니다."}}, {"@type": "Question", "name": "다른 운송사가 우리 데이터를 볼 수 있나요?", "acceptedAnswer": {"@type": "Answer", "text": "볼 수 없습니다. 운송사별로 데이터가 격리 저장되며, 직원별 메뉴 권한도 세부적으로 설정할 수 있습니다."}}, {"@type": "Question", "name": "세금계산서 발행도 되나요?", "acceptedAnswer": {"@type": "Answer", "text": "현재 거래명세서 발행 · 메일 발송 · 예상 부가세 집계를 지원하며, 홈택스 연동은 준비 중입니다."}}]}]}
 </script>
 </head>
 <body>
@@ -86,12 +96,13 @@
       <a data-k="e2072" href="#office" class="nav-office">메신저&nbsp;· 근태&nbsp;· 메일</a>
       <a data-k="e872" href="#hub" class="nav-hub">로지스웹 허브</a>
       <a data-k="e15" href="#download">다운로드</a>
+      <a data-k="e2199" href="#pricing">요금</a>
     </nav>
     <div data-k="e16" class="header-cta">
       <a data-k="e17" class="btn btn-ghost" href="login.html">로그인</a>
       <a data-k="e18" class="btn btn-white" href="#inquiry-form">무료 체험</a>
     </div>
-    <button data-k="e19" class="menu-btn" id="menuBtn" aria-label="메뉴 열기"><svg data-k="e20" class="i"><use href="#i-menu"/></svg></button>
+    <button data-k="e19" class="menu-btn" id="menuBtn" type="button" aria-label="메뉴 열기" aria-controls="nav" aria-expanded="false"><svg data-k="e20" class="i"><use href="#i-menu"/></svg></button>
   </div>
 </header>
 
@@ -110,10 +121,10 @@
   <div data-k="e34" class="hero-stage rv">
     <div data-k="e35" class="browser">
       <div data-k="e36" class="browser-bar"><i data-k="e37"></i><i data-k="e38"></i><i data-k="e39"></i><span data-k="e40">LogisWeb&nbsp;· 실시간배차현황</span></div>
-      <img data-k="e41" src="img/real-board.jpg" width="1600" height="960" alt="LogisWeb 실시간배차현황 화면 — 오늘 오더, 청구·기사운임, 상하차지가 한 표에 정리된 모습" />
+      <img data-k="e41" src="img/real-board.jpg" width="1600" height="960" fetchpriority="high" alt="LogisWeb 실시간배차현황 화면 — 오늘 오더, 청구·기사운임, 상하차지가 한 표에 정리된 모습" />
     </div>
     <div data-k="e42" class="hero-phone"><div data-k="e43" class="phone"><video data-k="e851" class="clip" autoplay muted loop playsinline preload="auto" poster="video/d-home.jpg" aria-label="LogisWeb 기사앱 홈 화면" style="aspect-ratio:390/780"><source data-k="e852" src="video/d-home.mp4" type="video/mp4" /><source data-k="e853" src="video/d-home.webm" type="video/webm" /></video></div></div>
-    <div data-k="e45" class="float-chip chip-a"><span data-k="e46" class="ic" style="background:#12A150"><svg data-k="e47" class="i"><use href="#i-check"/></svg></span><span data-k="e48">AI 오더 인식<small data-k="e49">붙여넣기만으로 17개 항목 자동 구조화</small></span></div>
+    <div data-k="e45" class="float-chip chip-a"><span data-k="e46" class="ic" style="background:#12A150"><svg data-k="e47" class="i"><use href="#i-check"/></svg></span><span data-k="e48">AI 오더 인식<small data-k="e49">붙여넣기만으로 상하차지 · 일시 · 운임 자동 입력</small></span></div>
     <div data-k="e50" class="float-chip chip-b"><span data-k="e51" class="ic" style="background:#2D5BD8"><svg data-k="e52" class="i"><use href="#i-pin"/></svg></span><span data-k="e53">실시간 차량 관제<small data-k="e54">기사앱 GPS 백그라운드 전송</small></span></div>
   </div>
 </section>
@@ -121,9 +132,9 @@
 <div data-k="e55" class="stats">
   <div data-k="e56" class="wrap stats-inner">
     <div data-k="e57" class="stat"><b data-k="e58" data-count="31">31<small data-k="e59">종</small></b><span data-k="e60">운송 실무 맞춤 전자결재 양식</span></div>
-    <div data-k="e61" class="stat"><b data-k="e62" class="sm">PC&nbsp;· 모바일&nbsp;· 기사앱</b><span data-k="e63">단일 데이터베이스 · 실시간 동기화</span></div>
-    <div data-k="e64" class="stat"><b data-k="e65">0<small data-k="e66">번</small></b><span data-k="e67">중복 입력 없는 원스톱 데이터 흐름</span></div>
-    <div data-k="e68" class="stat"><b data-k="e69" class="sm">데이터 마이그레이션</b><span data-k="e70">거래처 · 기사 · 운임 데이터를 그대로 이관합니다</span></div>
+    <div data-k="e61" class="stat"><b data-k="e62" class="sm">PC&nbsp;· 모바일&nbsp;· 기사앱</b><span data-k="e63">하나의 데이터로 실시간 동기화</span></div>
+    <div data-k="e64" class="stat"><b data-k="e65">1<small data-k="e66">회 입력</small></b><span data-k="e67">오더부터 정산까지 다시 입력할 필요가 없습니다</span></div>
+    <div data-k="e68" class="stat"><b data-k="e69" class="sm">데이터 마이그레이션</b><span data-k="e70">기존 거래처 · 기사 · 운임 자료 이관 지원</span></div>
   </div>
 </div>
 
@@ -143,12 +154,12 @@
       <div data-k="e2095" class="story-side rv">
         <h3 data-k="e2096" class="story-sub">운송사 배차 업무에서 반복되는 여섯 가지 비효율</h3>
         <ul data-k="e2097" class="story-list">
-          <li data-k="e2098"><span data-k="e2099" class="si"><svg data-k="e2100" class="i"><use href="#i-sheet"/></svg></span><div data-k="e2101"><b data-k="e2102">반복 오더의 수기 입력</b><p data-k="e2103">같은 오더를 매일 엑셀 · 구글시트에 한 건씩 다시 입력해야 했습니다.</p><em data-k="e2104"><svg data-k="e2105" class="i"><use href="#i-arrow"/></svg>카톡 붙여넣기 자동 입력 · 지난 오더 그대로 복사</em></div></li>
-          <li data-k="e2106"><span data-k="e2107" class="si"><svg data-k="e2108" class="i"><use href="#i-swap"/></svg></span><div data-k="e2109"><b data-k="e2110">중복 배차와 오더 누락</b><p data-k="e2111">배차 상태가 실시간으로 공유되지 않아 중복 배차가 발생하고, 누락된 오더는 메신저 기록을 다시 뒤져야 했습니다.</p><em data-k="e2112"><svg data-k="e2113" class="i"><use href="#i-arrow"/></svg>배차 상태를 모두가 실시간으로 같이 봅니다</em></div></li>
-          <li data-k="e2114"><span data-k="e2115" class="si"><svg data-k="e2116" class="i"><use href="#i-cam"/></svg></span><div data-k="e2117"><b data-k="e2118">인수증의 수동 전달</b><p data-k="e2119">기사가 보낸 인수증 사진을 담당자가 하나씩 화주사에 다시 전송했습니다.</p><em data-k="e2120"><svg data-k="e2121" class="i"><use href="#i-arrow"/></svg>기사앱으로 찍으면 오더에 바로 붙습니다</em></div></li>
-          <li data-k="e2122"><span data-k="e2123" class="si"><svg data-k="e2124" class="i"><use href="#i-phone"/></svg></span><div data-k="e2125"><b data-k="e2126">전화에 의존한 위치 확인</b><p data-k="e2127">차량 위치를 파악하려면 하루에도 여러 차례 기사에게 직접 전화해야 했습니다.</p><em data-k="e2128"><svg data-k="e2129" class="i"><use href="#i-arrow"/></svg>지도에서 차량 위치를 실시간으로 확인</em></div></li>
+          <li data-k="e2098"><span data-k="e2099" class="si"><svg data-k="e2100" class="i"><use href="#i-sheet"/></svg></span><div data-k="e2101"><b data-k="e2102">반복 오더의 수기 입력</b><p data-k="e2103">같은 오더를 매일 엑셀 · 구글시트에 한 건씩 다시 입력해야 했습니다.</p><em data-k="e2104"><svg data-k="e2105" class="i"><use href="#i-arrow"/></svg>카톡 오더 붙여넣기 자동 입력, 지난 오더 복사 등록</em></div></li>
+          <li data-k="e2106"><span data-k="e2107" class="si"><svg data-k="e2108" class="i"><use href="#i-swap"/></svg></span><div data-k="e2109"><b data-k="e2110">중복 배차와 오더 누락</b><p data-k="e2111">배차 상태가 실시간으로 공유되지 않아 중복 배차가 발생했고, 누락된 오더는 메신저 기록을 다시 확인해야 했습니다.</p><em data-k="e2112"><svg data-k="e2113" class="i"><use href="#i-arrow"/></svg>모든 담당자가 배차 상태를 실시간으로 공유합니다</em></div></li>
+          <li data-k="e2114"><span data-k="e2115" class="si"><svg data-k="e2116" class="i"><use href="#i-cam"/></svg></span><div data-k="e2117"><b data-k="e2118">인수증의 수동 전달</b><p data-k="e2119">기사가 보낸 인수증 사진을 담당자가 하나씩 화주사에 다시 전송했습니다.</p><em data-k="e2120"><svg data-k="e2121" class="i"><use href="#i-arrow"/></svg>기사앱으로 촬영하면 해당 오더에 바로 첨부됩니다</em></div></li>
+          <li data-k="e2122"><span data-k="e2123" class="si"><svg data-k="e2124" class="i"><use href="#i-phone"/></svg></span><div data-k="e2125"><b data-k="e2126">전화에 의존한 위치 확인</b><p data-k="e2127">차량 위치를 파악하려면 하루에도 여러 차례 기사에게 직접 전화해야 했습니다.</p><em data-k="e2128"><svg data-k="e2129" class="i"><use href="#i-arrow"/></svg>관제 지도에서 차량 위치를 실시간으로 확인합니다</em></div></li>
           <li data-k="e2130"><span data-k="e2131" class="si"><svg data-k="e2132" class="i"><use href="#i-doc"/></svg></span><div data-k="e2133"><b data-k="e2134">월말 정산의 재작업</b><p data-k="e2135">마감 때마다 거래처별 내역을 별도 파일로 다시 집계했습니다.</p><em data-k="e2136"><svg data-k="e2137" class="i"><use href="#i-arrow"/></svg>배차 기록이 그대로 정산 명세서가 됩니다</em></div></li>
-          <li data-k="e2138"><span data-k="e2139" class="si"><svg data-k="e2140" class="i"><use href="#i-won"/></svg></span><div data-k="e2141"><b data-k="e2142">흩어진 매출 데이터</b><p data-k="e2143">데이터가 여러 장부에 나뉘어 있어 실시간 매출 · 수익 파악이 어려웠습니다.</p><em data-k="e2144"><svg data-k="e2145" class="i"><use href="#i-arrow"/></svg>매출·수익을 대시보드에서 바로</em></div></li>
+          <li data-k="e2138"><span data-k="e2139" class="si"><svg data-k="e2140" class="i"><use href="#i-won"/></svg></span><div data-k="e2141"><b data-k="e2142">흩어진 매출 데이터</b><p data-k="e2143">데이터가 여러 장부에 나뉘어 있어 실시간 매출 · 수익 파악이 어려웠습니다.</p><em data-k="e2144"><svg data-k="e2145" class="i"><use href="#i-arrow"/></svg>매출과 수익을 대시보드에서 실시간으로 확인합니다</em></div></li>
         </ul>
       </div>
     </div>
@@ -228,13 +239,13 @@
       <button data-k="e176" data-t="fare">자사운임표</button>
     </div>
     <div data-k="e177" class="panel on" data-p="dsp-scan">
-      <div data-k="e836" class="shot clip-box"><div data-k="e837" class="clip-tabs" role="tablist"><button data-k="e838" type="button" class="on" data-clip="video/scan-text.mp4">글자 붙여넣기</button><button data-k="e839" type="button" data-clip="video/scan-image.mp4">캡처 이미지 붙여넣기</button></div><video data-k="e840" class="clip" autoplay muted loop playsinline preload="metadata" poster="video/scan-text.jpg" aria-label="오더스캔 — 카톡 오더를 붙여넣으면 칸마다 자동 입력되는 실제 화면" style="aspect-ratio:1440/860"><source data-k="e841" src="video/scan-text.mp4" type="video/mp4" /><source data-k="e849" src="video/scan-text.webm" type="video/webm" /></video></div>
+      <div data-k="e836" class="shot clip-box"><div data-k="e837" class="clip-tabs" role="group" aria-label="오더 스캔 영상 선택"><button data-k="e838" type="button" class="on" data-clip="video/scan-text.mp4">글자 붙여넣기</button><button data-k="e839" type="button" data-clip="video/scan-image.mp4">캡처 이미지 붙여넣기</button></div><video data-k="e840" class="clip" autoplay muted loop playsinline preload="metadata" poster="video/scan-text.jpg" aria-label="오더스캔 — 카톡 오더를 붙여넣으면 칸마다 자동 입력되는 실제 화면" style="aspect-ratio:1440/860"><source data-k="e841" src="video/scan-text.mp4" type="video/mp4" /><source data-k="e849" src="video/scan-text.webm" type="video/webm" /></video></div>
       <div data-k="e180"><span data-k="e181" class="tag">ORDER SCAN</span><h3 data-k="e182">메신저 오더, 붙여넣기 한 번으로 등록 완료</h3><p data-k="e183">문자 · 메신저 · 캡처 이미지를 그대로 붙여넣으면 상하차지 · 일시 · 차종 · 화물 · 운임을 항목별로 인식해 입력합니다.</p>
         <ul data-k="e184" class="checks">
           <li data-k="e185"><svg data-k="e186" class="i"><use href="#i-check"/></svg><span data-k="e187"><b data-k="e188">상하차지·일시·차종·화물·운임</b>을 줄마다 구분해 인식</span></li>
           <li data-k="e189"><svg data-k="e190" class="i"><use href="#i-check"/></svg><span data-k="e191">등록된 거래처 · 상하차지 정보와 <b data-k="e192">자동으로 매칭</b></span></li>
           <li data-k="e193"><svg data-k="e194" class="i"><use href="#i-check"/></svg><span data-k="e195">여러 건이 한 메시지로 와도 <b data-k="e196">오더 단위로 자동 분리</b></span></li>
-          <li data-k="e197"><svg data-k="e198" class="i"><use href="#i-check"/></svg><span data-k="e199"><b data-k="e200">적용 전까지는 저장되지 않아 검토 후 안전하게 등록</b> 확인 후 반영</span></li>
+          <li data-k="e197"><svg data-k="e198" class="i"><use href="#i-check"/></svg><span data-k="e199"><b data-k="e200">적용 전 검토 단계</b>를 거쳐 확인한 내용만 저장</span></li>
         </ul></div>
     </div>
     <div data-k="e201" class="panel" data-p="dsp-board">
@@ -262,7 +273,7 @@
       <div data-k="e250"><span data-k="e251" class="tag">FARE LOOKUP</span><h3 data-k="e252">이 구간의 적정 운임, 데이터로 확인합니다</h3><p data-k="e253">실제 거래된 운임 이력을 분석해 구간별 최저 · 평균 · 최고 운임을 제시합니다.</p>
         <ul data-k="e254" class="checks">
           <li data-k="e255"><svg data-k="e256" class="i"><use href="#i-check"/></svg><span data-k="e257">거래처 · 구간 · 차종 · 톤수 조건별 <b data-k="e258">실거래 운임 조회</b></span></li>
-          <li data-k="e259"><svg data-k="e260" class="i"><use href="#i-check"/></svg><span data-k="e261">전국 운임 조회 — 거리 · 차량 기준 <b data-k="e262">예상 운임 산출</b></span></li>
+          <li data-k="e259"><svg data-k="e260" class="i"><use href="#i-check"/></svg><span data-k="e261">전국 운임 조회로 거리 · 차량 기준 <b data-k="e262">예상 운임 산출</b></span></li>
           <li data-k="e263"><svg data-k="e264" class="i"><use href="#i-check"/></svg><span data-k="e265">노선별 · 다목적지 <b data-k="e266">단가표 발행</b>과 이력 관리</span></li>
         </ul></div>
     </div>
@@ -379,12 +390,12 @@
       <p data-k="e480">직원은 배차 현황과 결재를, 기사는 당일 배차와 증빙 서류를 모바일에서 처리합니다. 모든 처리 결과는 사무실 화면에 즉시 동기화됩니다.</p>
     </div>
     <div data-k="e481" class="mode-switch rv"><div data-k="e482" class="tabs" data-tabs="mob" style="margin:0"><button data-k="e483" class="on" data-t="staff">직원용 모바일</button><button data-k="e484" data-t="driver">기사앱</button></div></div>
-    <div data-k="e485" class="phones mob-set on" data-p="mob-staff">
-      <div data-k="e486" class="phone-card rv"><div data-k="e846" class="phone"><video data-k="e854" class="clip" autoplay muted loop playsinline preload="metadata" poster="video/m-menu.jpg" aria-label="직원용 모바일 — 전체 메뉴를 여는 실제 화면" style="aspect-ratio:390/780"><source data-k="e855" src="video/m-menu.mp4" type="video/mp4" /><source data-k="e856" src="video/m-menu.webm" type="video/webm" /></video></div><h4 data-k="e489">PC 기능을 모바일 환경 그대로</h4><p data-k="e490">등록 내역 · 화물 등록 · 미배차 · 일정 · 결재까지 휴대폰에서 처리합니다.</p></div>
+    <div data-k="e485" class="phones mob-set on" data-p="mob-staff" tabindex="0" role="region" aria-label="직원용 모바일 화면 예시">
+      <div data-k="e486" class="phone-card rv"><div data-k="e846" class="phone"><video data-k="e854" class="clip" autoplay muted loop playsinline preload="metadata" poster="video/m-menu.jpg" aria-label="직원용 모바일 — 전체 메뉴를 여는 실제 화면" style="aspect-ratio:390/780"><source data-k="e855" src="video/m-menu.mp4" type="video/mp4" /><source data-k="e856" src="video/m-menu.webm" type="video/webm" /></video></div><h4 data-k="e489">주요 업무를 휴대폰에서 그대로</h4><p data-k="e490">등록 내역 · 화물 등록 · 미배차 · 일정 · 결재까지 휴대폰에서 처리합니다.</p></div>
       <div data-k="e491" class="phone-card rv"><div data-k="e492" class="phone"><video data-k="e857" class="clip" autoplay muted loop playsinline preload="metadata" poster="video/m-list.jpg" aria-label="직원용 모바일 — 등록내역 오더 카드를 넘겨 보는 실제 화면" style="aspect-ratio:390/780"><source data-k="e858" src="video/m-list.mp4" type="video/mp4" /><source data-k="e859" src="video/m-list.webm" type="video/webm" /></video></div><h4 data-k="e494">등록내역&nbsp;· 화물등록</h4><p data-k="e495">상하차지 · 운임 · 배정 기사를 카드 한 장으로 확인합니다.</p></div>
       <div data-k="e496" class="phone-card rv"><div data-k="e497" class="phone"><video data-k="e860" class="clip" autoplay muted loop playsinline preload="metadata" poster="video/m-approval.jpg" aria-label="직원용 모바일 — 결재 문서를 열고 승인하는 실제 화면" style="aspect-ratio:390/780"><source data-k="e861" src="video/m-approval.mp4" type="video/mp4" /><source data-k="e862" src="video/m-approval.webm" type="video/webm" /></video></div><h4 data-k="e499">모바일 결재</h4><p data-k="e500">알림을 누르면 문서가 바로 열리고, 즉시 승인 · 반려할 수 있습니다.</p></div>
     </div>
-    <div data-k="e501" class="phones mob-set" data-p="mob-driver">
+    <div data-k="e501" class="phones mob-set" data-p="mob-driver" tabindex="0" role="region" aria-label="기사앱 화면 예시">
       <div data-k="e502" class="phone-card"><div data-k="e503" class="phone"><video data-k="e863" class="clip" autoplay muted loop playsinline preload="metadata" poster="video/d-home.jpg" aria-label="기사앱 — 운행 상태와 오늘 운행 현황 실제 화면" style="aspect-ratio:390/780"><source data-k="e864" src="video/d-home.mp4" type="video/mp4" /><source data-k="e865" src="video/d-home.webm" type="video/webm" /></video></div><h4 data-k="e505">운행 상태 · 당일 운행 현황</h4><p data-k="e506">운송 단계와 이동 거리가 관제 화면에 실시간으로 반영됩니다.</p></div>
       <div data-k="e507" class="phone-card"><div data-k="e508" class="phone"><video data-k="e866" class="clip" autoplay muted loop playsinline preload="metadata" poster="video/d-order.jpg" aria-label="기사앱 — 오늘 오더·길안내·사진 업로드 실제 화면" style="aspect-ratio:390/780"><source data-k="e867" src="video/d-order.mp4" type="video/mp4" /><source data-k="e868" src="video/d-order.webm" type="video/webm" /></video></div><h4 data-k="e510">오더 확인 · 내비게이션 연동 · 증빙 사진</h4><p data-k="e511">주소 복사 · 길안내 · 상하차 사진 · 운송 완료 처리까지 한 화면에서 진행합니다.</p></div>
       <div data-k="e512" class="phone-card"><div data-k="e513" class="phone"><video data-k="e869" class="clip" autoplay muted loop playsinline preload="metadata" poster="video/d-log.jpg" aria-label="기사앱 — 운행기록과 서류함 실제 화면" style="aspect-ratio:390/780"><source data-k="e870" src="video/d-log.mp4" type="video/mp4" /><source data-k="e871" src="video/d-log.webm" type="video/webm" /></video></div><h4 data-k="e515">운행 기록 · 서류함</h4><p data-k="e516">날짜별 근무 · 이동 거리 기록과 지급명세서 · 서류를 앱에서 확인합니다.</p></div>
@@ -397,12 +408,12 @@
   <div data-k="e879" class="wrap">
     <div data-k="e880" class="head rv">
       <span data-k="e881" class="eyebrow">LOGISWEB HUB</span>
-      <h2 data-k="e882">잉여 오더는 공유하고, 공차는 즉시 매칭합니다<br data-k="e883" />운송사 · 화주 · 차주를 잇는 로지스웹 허브</h2>
+      <h2 data-k="e882">운송사 · 화주 · 차주를 잇는 로지스웹 허브,<br data-k="e883" />남는 오더는 공유하고 빈 차는 바로 연결합니다</h2>
       <p data-k="e884">배차마당이 로지스웹 허브로 새롭게 바뀌었습니다. 같은 계정으로 이용하며, 허브에서 매칭된 오더는 배차 프로그램의 원래 오더와 자동으로 연결됩니다.</p>
     </div>
     <div data-k="e885" class="hub-grid">
       <div data-k="e886" class="shot rv clip-box hub-pc">
-        <div data-k="e887" class="clip-tabs" role="tablist"><button data-k="e888" type="button" class="on" data-clip="video/hub-pc-board.mp4">지역 오더 보드</button><button data-k="e889" type="button" data-clip="video/hub-pc-post.mp4">카톡 오더 스캔으로 화물등록</button></div>
+        <div data-k="e887" class="clip-tabs" role="group" aria-label="로지스웹 허브 영상 선택"><button data-k="e888" type="button" class="on" data-clip="video/hub-pc-board.mp4">지역 오더 보드</button><button data-k="e889" type="button" data-clip="video/hub-pc-post.mp4">카톡 오더 스캔으로 화물등록</button></div>
         <video data-k="e890" class="clip" autoplay muted loop playsinline preload="metadata" poster="video/hub-pc-board.jpg" aria-label="로지스웹 허브 PC — 상차 지역별 오더 보드와 오더 상세" style="aspect-ratio:1440/860"><source data-k="e891" src="video/hub-pc-board.mp4" type="video/mp4" /><source data-k="e892" src="video/hub-pc-board.webm" type="video/webm" /></video>
       </div>
       <div data-k="e893" class="hub-phones">
@@ -412,7 +423,7 @@
     </div>
     <div data-k="e908" class="hub-flow rv">
       <div data-k="e909" class="hub-step"><span data-k="e910" class="hub-n">1</span><b data-k="e911">배차 프로그램에서 [저장 + 허브 등록]</b><p data-k="e912">자체 배차가 어려운 오더를 그대로 허브에 공유합니다.</p></div>
-      <div data-k="e913" class="hub-step"><span data-k="e914" class="hub-n">2</span><b data-k="e915">다른 운송사·차주가 배차신청</b><p data-k="e916">매칭 전에는 시 · 구 단위 지역과 운임만 공개됩니다.</p></div>
+      <div data-k="e913" class="hub-step"><span data-k="e914" class="hub-n">2</span><b data-k="e915">다른 운송사 · 차주의 배차 신청</b><p data-k="e916">매칭 전에는 시 · 구 단위 지역과 운임만 공개됩니다.</p></div>
       <div data-k="e917" class="hub-step"><span data-k="e918" class="hub-n">3</span><b data-k="e919">원래 오더에 기사 자동 연결</b><p data-k="e920">차량번호 · 기사 · 운임이 배차 프로그램의 원래 오더에 자동으로 입력됩니다.</p></div>
       <div data-k="e921" class="hub-step"><span data-k="e922" class="hub-n">4</span><b data-k="e923">관제&nbsp;· 인수증&nbsp;· 정산까지</b><p data-k="e924">위치 공유, 인수증 자동 첨부, 예치금 기반 운송료 지급까지 연결됩니다.</p></div>
     </div>
@@ -444,7 +455,7 @@
     </div>
     <div data-k="e2012" class="panel on" data-p="gw-msg">
       <div data-k="e2013" class="shot clip-box"><video data-k="e2014" class="clip" autoplay muted loop playsinline preload="metadata" poster="video/gw-messenger.jpg" aria-label="사내메신저, 창을 옮기고 @멘션으로 메시지를 보낸 뒤 자주 쓰는 문구로 답하는 실제 화면" style="aspect-ratio:1440/860"><source data-k="e2015" src="video/gw-messenger.mp4" type="video/mp4" /><source data-k="e2016" src="video/gw-messenger.webm" type="video/webm" /></video><span data-k="e2017" class="clip-live">실제 화면</span></div>
-      <div data-k="e2018"><span data-k="e2019" class="tag">MESSENGER</span><h3 data-k="e2020">오더를 배차팀 대화방에 바로 공유</h3><p data-k="e2021">메신저 창은 원하는 위치에 두고, 오더는 카드로 · 운임표는 파일로 전달합니다.</p>
+      <div data-k="e2018"><span data-k="e2019" class="tag">MESSENGER</span><h3 data-k="e2020">오더를 배차팀 대화방에 바로 공유</h3><p data-k="e2021">메신저 창을 원하는 위치에 두고, 오더는 카드로, 운임표는 파일로 전달합니다.</p>
         <ul data-k="e2022" class="checks">
           <li data-k="e2023"><svg data-k="e2024" class="i"><use href="#i-check"/></svg><span data-k="e2025">1:1&nbsp;· 그룹 채팅, <b data-k="e2074">@이름 멘션</b>으로 담당자를 바로 부르기</span></li>
           <li data-k="e2026"><svg data-k="e2027" class="i"><use href="#i-check"/></svg><span data-k="e2028">오더를 <b data-k="e2075">카드로 공유</b>하면 상하차지&nbsp;· 차량&nbsp;· 운임이 한눈에</span></li>
@@ -453,7 +464,7 @@
     </div>
     <div data-k="e2032" class="panel" data-p="gw-att">
       <div data-k="e2033" class="shot clip-box"><video data-k="e2034" class="clip" autoplay muted loop playsinline preload="metadata" poster="video/gw-attendance.jpg" aria-label="출퇴근기록, 홈 화면에서 출근하기를 누르고 출근기록부에서 이번 달 기록을 보는 실제 화면" style="aspect-ratio:1440/860"><source data-k="e2035" src="video/gw-attendance.mp4" type="video/mp4" /><source data-k="e2036" src="video/gw-attendance.webm" type="video/webm" /></video><span data-k="e2037" class="clip-live">실제 화면</span></div>
-      <div data-k="e2038"><span data-k="e2039" class="tag">ATTENDANCE</span><h3 data-k="e2040">출근은 원클릭, 근태 기록은 자동으로</h3><p data-k="e2041">직원별 근무 시간 기준으로 출근 · 지각 · 퇴근을 기록하며, 앱 실행 중에는 자동으로 기록됩니다.</p>
+      <div data-k="e2038"><span data-k="e2039" class="tag">ATTENDANCE</span><h3 data-k="e2040">출근은 원클릭, 근태 기록은 자동으로</h3><p data-k="e2041">직원별 근무 시간을 기준으로 출근 · 지각 · 퇴근을 기록하며, 프로그램이 실행 중이면 자동으로 기록됩니다.</p>
         <ul data-k="e2042" class="checks">
           <li data-k="e2043"><svg data-k="e2044" class="i"><use href="#i-check"/></svg><span data-k="e2045">홈 화면 <b data-k="e2077">[출근하기]&nbsp;· [퇴근하기]</b>, 잘못 누른 퇴근은 되돌리기</span></li>
           <li data-k="e2046"><svg data-k="e2047" class="i"><use href="#i-check"/></svg><span data-k="e2048">PC를 켜면 자동 출근, 출근지 반경을 벗어나면 <b data-k="e2078">자동 퇴근</b></span></li>
@@ -491,7 +502,7 @@
         <p data-k="e548">운송사별 데이터 격리 저장과 직원별 메뉴 권한 관리로 정보 접근을 통제합니다.</p>
         <div data-k="e549" class="pills">
           <span data-k="e550"><svg data-k="e551" class="i"><use href="#i-shield"/></svg>운송사별 데이터 분리</span><span data-k="e552"><svg data-k="e553" class="i"><use href="#i-lock"/></svg>메뉴별 숨김&nbsp;· 조회&nbsp;· 수정 권한</span>
-          <span data-k="e554"><svg data-k="e555" class="i"><use href="#i-device"/></svg>계정당 PC 1대 + 모바일 1대</span><span data-k="e556"><svg data-k="e557" class="i"><use href="#i-monitor"/></svg>접속 기기&nbsp;· 로그인 이력</span>
+          <span data-k="e554"><svg data-k="e555" class="i"><use href="#i-device"/></svg>계정당 PC 1대 · 모바일 1대 접속</span><span data-k="e556"><svg data-k="e557" class="i"><use href="#i-monitor"/></svg>접속 기기&nbsp;· 로그인 이력</span>
           <span data-k="e558"><svg data-k="e559" class="i"><use href="#i-lock"/></svg>매출관리 별도 비밀번호</span><span data-k="e560"><svg data-k="e561" class="i"><use href="#i-sheet"/></svg>엑셀&nbsp;· 구글시트 가져오기</span>
         </div>
       </div>
@@ -506,13 +517,13 @@
     <div data-k="e567" class="compare">
       <div data-k="e568" class="cmp before rv"><h3 data-k="e569">도입 전</h3><ul data-k="e570">
         <li data-k="e571"><svg data-k="e572" class="i"><use href="#i-check"/></svg>메신저 오더를 확인해 엑셀에 한 칸씩 수기 입력</li>
-        <li data-k="e573"><svg data-k="e574" class="i"><use href="#i-check"/></svg>차량 위치 확인을 위해 하루 수십 통의 전화</li>
+        <li data-k="e573"><svg data-k="e574" class="i"><use href="#i-check"/></svg>차량 위치를 확인하려고 하루에도 여러 번 기사에게 전화</li>
         <li data-k="e575"><svg data-k="e576" class="i"><use href="#i-check"/></svg>인수증 사진을 메신저에서 찾아 폴더에 수동 정리</li>
         <li data-k="e577"><svg data-k="e578" class="i"><use href="#i-check"/></svg>월말마다 정산 엑셀을 재집계하고 지급명세서를 별도 작성</li>
         <li data-k="e579"><svg data-k="e580" class="i"><use href="#i-check"/></svg>운임 변경 · 휴가 신청은 종이 결재와 구두 보고</li>
       </ul></div>
       <div data-k="e581" class="cmp after rv"><h3 data-k="e582">LogisWeb 도입 후</h3><ul data-k="e583">
-        <li data-k="e584"><svg data-k="e585" class="i"><use href="#i-check"/></svg>붙여넣기 한 번으로 오더 등록, 거래처 · 운임 자동 매칭</li>
+        <li data-k="e584"><svg data-k="e585" class="i"><use href="#i-check"/></svg>붙여넣기 한 번으로 오더 등록, 거래처 · 상하차지 자동 매칭</li>
         <li data-k="e586"><svg data-k="e587" class="i"><use href="#i-check"/></svg>관제 지도에서 차량 위치와 운송 단계를 실시간 확인</li>
         <li data-k="e588"><svg data-k="e589" class="i"><use href="#i-check"/></svg>기사가 업로드한 인수증이 해당 오더에 자동 첨부</li>
         <li data-k="e590"><svg data-k="e591" class="i"><use href="#i-check"/></svg>배차 데이터로 거래명세서 · 지급명세서 자동 산출</li>
@@ -528,13 +539,13 @@
     <div data-k="e596" class="head center rv">
       <span data-k="e597" class="eyebrow">DOWNLOAD</span>
       <h2 data-k="e598">PC · 모바일 · 기사앱,<br data-k="e599" />지금 바로 시작하세요</h2>
-      <p data-k="e600">별도 설치 파일 없이 브라우저에서 바로 설치되며, 업데이트는 자동으로 적용됩니다.</p>
+      <p data-k="e600">PC와 직원용 모바일은 설치 파일 없이 브라우저에서 바로 설치하고, 업데이트도 자동으로 적용됩니다. 기사앱은 안드로이드 앱으로 제공합니다.</p>
     </div>
     <div data-k="e806" class="dl">
       <div data-k="e807" class="dl-card rv">
         <div data-k="e808" class="di"><svg data-k="e809" class="i"><use href="#i-monitor"/></svg></div>
         <h3 data-k="e810">PC 버전</h3>
-        <p data-k="e811">Windows&nbsp;· Mac의 크롬·엣지로 설치합니다. 바탕화면 아이콘으로 실행, 업데이트는 자동입니다.</p>
+        <p data-k="e811">Windows&nbsp;· Mac의 크롬 또는 엣지에서 설치합니다. 바탕화면 아이콘으로 실행하며, 업데이트는 자동으로 적용됩니다.</p>
         <button data-k="e812" class="btn btn-primary" data-modal="pcModal"><svg data-k="e813" class="i"><use href="#i-download"/></svg>PC 버전 설치하기</button>
         <span data-k="e814" class="meta">Windows 10+&nbsp;· macOS&nbsp;· Chrome / Edge</span>
       </div>
@@ -548,14 +559,129 @@
       <div data-k="e823" class="dl-card rv">
         <div data-k="e824" class="di"><svg data-k="e825" class="i"><use href="#i-phone"/></svg></div>
         <h3 data-k="e826">직원용 모바일</h3>
-        <p data-k="e827">아이폰&nbsp;· 안드로이드 모두 됩니다. 홈 화면에 추가하면 앱처럼 열리고 결재 알림도 받습니다.</p>
+        <p data-k="e827">아이폰과 안드로이드를 모두 지원합니다. 홈 화면에 추가하면 앱처럼 실행되고, 결재 알림도 받을 수 있습니다.</p>
         <button data-k="e828" class="btn btn-primary" data-modal="mModal"><svg data-k="e829" class="i"><use href="#i-phone"/></svg>홈 화면에 추가하는 방법</button>
         <span data-k="e830" class="meta">iPhone Safari&nbsp;· Android Chrome</span>
       </div>
     </div>
     <div data-k="e831" class="dl-qr rv">
       <img data-k="e832" src="img/qr-driver-apk.svg" alt="기사앱 다운로드 QR 코드" width="96" height="96" />
-      <div data-k="e833"><b data-k="e834">QR을 찍으면 기사앱이 바로 설치됩니다</b><span data-k="e835">카메라로 찍고 뜨는 링크를 누르세요&nbsp;· 안드로이드 전용</span></div>
+      <div data-k="e833"><b data-k="e834">QR 코드로 기사앱을 바로 내려받으세요</b><span data-k="e835">휴대폰 카메라로 QR을 비춘 뒤 표시되는 링크를 누르세요. 안드로이드 전용입니다.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────── 요금 (2026-11-24) — 금액 · 포함 기능은 docs/pricing-2026-11.md · src/planCore.js 기준. 요금이 바뀌면 이 섹션과 head의 JSON-LD offers를 같이 고친다 ───────────── -->
+<section data-k="e2200" class="block" id="pricing">
+  <div data-k="e2201" class="wrap">
+    <div data-k="e2202" class="head center rv">
+      <span data-k="e2203" class="eyebrow">PRICING</span>
+      <h2 data-k="e2204">회사 규모에 맞는 요금제를 선택하세요</h2>
+      <p data-k="e2205">모든 요금제에서 PC 프로그램과 직원용 모바일을 함께 사용하실 수 있습니다. 상위 요금제는 아래 요금제의 기능을 모두 포함합니다.</p>
+    </div>
+    <div data-k="e2206" class="plans">
+      <div data-k="e2207" class="plan rv">
+        <span data-k="e2208" class="pl-en">LITE</span>
+        <h3 data-k="e2209">라이트</h3>
+        <p data-k="e2210" class="pl-who">1인 주선 · 2~3인 (하루 30건 안팎)</p>
+        <div data-k="e2211" class="pl-amt"><b data-k="e2212">89,000</b><span data-k="e2213">원 / 월</span></div>
+        <p data-k="e2214" class="pl-sub">VAT 별도 · 12개월 약정 기준</p>
+        <dl data-k="e2215" class="pl-meta">
+          <div data-k="e2216"><dt data-k="e2217">직원 계정</dt><dd data-k="e2218">3명</dd></div>
+          <div data-k="e2219"><dt data-k="e2220">월 오더 포함</dt><dd data-k="e2221">1,000건</dd></div>
+          <div data-k="e2222"><dt data-k="e2223">지입차 관리</dt><dd data-k="e2224" class="off">미포함</dd></div>
+          <div data-k="e2225"><dt data-k="e2226">저장 용량</dt><dd data-k="e2227">10GB</dd></div>
+        </dl>
+        <ul data-k="e2228" class="pl-list">
+          <li data-k="e2229"><svg data-k="e2230" class="i"><use href="#i-check"/></svg>배차관리 · 실시간배차현황 · 배차현황</li>
+          <li data-k="e2231"><svg data-k="e2232" class="i"><use href="#i-check"/></svg>거래처 · 하차지 · 기사 관리</li>
+          <li data-k="e2233"><svg data-k="e2234" class="i"><use href="#i-check"/></svg>단가표 · 전국 운임조회</li>
+          <li data-k="e2235"><svg data-k="e2236" class="i"><use href="#i-check"/></svg>기사앱 · 업로드링크 · 기사복사</li>
+          <li data-k="e2237"><svg data-k="e2238" class="i"><use href="#i-check"/></svg>매출 · 정산 · 지급 관리</li>
+        </ul>
+        <p data-k="e2239" class="pl-fee">초기 도입비 0원</p>
+        <a data-k="e2240" class="btn btn-line" href="#inquiry-form" data-plan="라이트">무료 체험 신청</a>
+      </div>
+      <div data-k="e2241" class="plan rv">
+        <span data-k="e2242" class="pl-en">BASIC</span>
+        <h3 data-k="e2243">베이직</h3>
+        <p data-k="e2244" class="pl-who">소규모 운송사 4~6인 (하루 100건 안팎)</p>
+        <div data-k="e2245" class="pl-amt"><b data-k="e2246">199,000</b><span data-k="e2247">원 / 월</span></div>
+        <p data-k="e2248" class="pl-sub">VAT 별도 · 12개월 약정 기준</p>
+        <dl data-k="e2249" class="pl-meta">
+          <div data-k="e2250"><dt data-k="e2251">직원 계정</dt><dd data-k="e2252">6명</dd></div>
+          <div data-k="e2253"><dt data-k="e2254">월 오더 포함</dt><dd data-k="e2255">3,000건</dd></div>
+          <div data-k="e2256"><dt data-k="e2257">지입차 관리</dt><dd data-k="e2258" class="off">미포함</dd></div>
+          <div data-k="e2259"><dt data-k="e2260">저장 용량</dt><dd data-k="e2261">30GB</dd></div>
+        </dl>
+        <ul data-k="e2262" class="pl-list">
+          <li data-k="e2263" class="inh"><svg data-k="e2264" class="i"><use href="#i-check"/></svg>라이트 기능 전체</li>
+          <li data-k="e2265"><svg data-k="e2266" class="i"><use href="#i-check"/></svg>화주사 전용 포털 연동</li>
+          <li data-k="e2267"><svg data-k="e2268" class="i"><use href="#i-check"/></svg>전자결재 · 사내메일 · 게시판 · 인수인계</li>
+          <li data-k="e2269"><svg data-k="e2270" class="i"><use href="#i-check"/></svg>인사관리부 · 출근기록부 · 연차 · 증명서</li>
+          <li data-k="e2271"><svg data-k="e2272" class="i"><use href="#i-check"/></svg>회계 · 급여 · 자금 · 비품 관리</li>
+        </ul>
+        <p data-k="e2273" class="pl-fee">초기 도입비 300,000원 · 12개월 약정 시 면제</p>
+        <a data-k="e2274" class="btn btn-line" href="#inquiry-form" data-plan="베이직">무료 체험 신청</a>
+      </div>
+      <div data-k="e2275" class="plan rec rv">
+        <span data-k="e2276" class="pl-badge">추천</span>
+        <span data-k="e2277" class="pl-en">STANDARD</span>
+        <h3 data-k="e2278">스탠다드</h3>
+        <p data-k="e2279" class="pl-who">일반 운송사 7~10인 (하루 200건 안팎)</p>
+        <div data-k="e2280" class="pl-amt"><b data-k="e2281">349,000</b><span data-k="e2282">원 / 월</span></div>
+        <p data-k="e2283" class="pl-sub">VAT 별도 · 12개월 약정 기준</p>
+        <dl data-k="e2284" class="pl-meta">
+          <div data-k="e2285"><dt data-k="e2286">직원 계정</dt><dd data-k="e2287">10명</dd></div>
+          <div data-k="e2288"><dt data-k="e2289">월 오더 포함</dt><dd data-k="e2290">6,000건</dd></div>
+          <div data-k="e2291"><dt data-k="e2292">지입차 관리</dt><dd data-k="e2293">15대</dd></div>
+          <div data-k="e2294"><dt data-k="e2295">저장 용량</dt><dd data-k="e2296">50GB</dd></div>
+        </dl>
+        <ul data-k="e2297" class="pl-list">
+          <li data-k="e2298" class="inh"><svg data-k="e2299" class="i"><use href="#i-check"/></svg>베이직 기능 전체</li>
+          <li data-k="e2300"><svg data-k="e2301" class="i"><use href="#i-check"/></svg>지입차관리 (GPS · 운행기록 · 사진)</li>
+          <li data-k="e2302"><svg data-k="e2303" class="i"><use href="#i-check"/></svg>경영분석 · 일일 경영보고 (임원 화면)</li>
+        </ul>
+        <p data-k="e2304" class="pl-fee">초기 도입비 500,000원 · 12개월 약정 시 면제</p>
+        <a data-k="e2305" class="btn btn-primary" href="#inquiry-form" data-plan="스탠다드">무료 체험 신청</a>
+      </div>
+      <div data-k="e2306" class="plan rv">
+        <span data-k="e2307" class="pl-en">PRO</span>
+        <h3 data-k="e2308">프로</h3>
+        <p data-k="e2309" class="pl-who">중견 운송사 11인 이상 (하루 500건 안팎)</p>
+        <div data-k="e2310" class="pl-amt"><b data-k="e2311">590,000</b><span data-k="e2312">원 / 월</span></div>
+        <p data-k="e2313" class="pl-sub">VAT 별도 · 12개월 약정 기준</p>
+        <dl data-k="e2314" class="pl-meta">
+          <div data-k="e2315"><dt data-k="e2316">직원 계정</dt><dd data-k="e2317">25명</dd></div>
+          <div data-k="e2318"><dt data-k="e2319">월 오더 포함</dt><dd data-k="e2320">15,000건</dd></div>
+          <div data-k="e2321"><dt data-k="e2322">지입차 관리</dt><dd data-k="e2323">40대</dd></div>
+          <div data-k="e2324"><dt data-k="e2325">저장 용량</dt><dd data-k="e2326">200GB</dd></div>
+        </dl>
+        <ul data-k="e2327" class="pl-list">
+          <li data-k="e2328" class="inh"><svg data-k="e2329" class="i"><use href="#i-check"/></svg>스탠다드 기능 전체</li>
+          <li data-k="e2330"><svg data-k="e2331" class="i"><use href="#i-check"/></svg>수익성 인사이트</li>
+          <li data-k="e2332"><svg data-k="e2333" class="i"><use href="#i-check"/></svg>화주 월간 운송 리포트</li>
+          <li data-k="e2334"><svg data-k="e2335" class="i"><use href="#i-check"/></svg>화물정보망(24시콜) 오더 자동 전송</li>
+          <li data-k="e2336"><svg data-k="e2337" class="i"><use href="#i-check"/></svg>우선 기술지원 · 분기별 운영 점검 미팅</li>
+        </ul>
+        <p data-k="e2338" class="pl-fee">초기 도입비 1,000,000원 · 12개월 약정 시 면제</p>
+        <a data-k="e2339" class="btn btn-line" href="#inquiry-form" data-inq="도입문의" data-plan="프로">도입 상담 신청</a>
+      </div>
+    </div>
+    <ul data-k="e2340" class="price-foot rv">
+      <li data-k="e2341">일반 기사 기사앱 · 화주사 포털은 무료이며 인원 제한이 없습니다</li>
+      <li data-k="e2342">연간 선결제 시 2개월 무료 · 6개월 선결제 시 5% 할인</li>
+      <li data-k="e2343">기본료에 업무 영역 1개(내륙 · 컨테이너 · 해상 · 항공 중 하나)가 포함됩니다</li>
+    </ul>
+    <div data-k="e2344" class="price-extra rv">
+      <div data-k="e2345" class="pe-col">
+        <b data-k="e2346">포함량을 넘으면 사용한 만큼만 추가됩니다</b>
+        <p data-k="e2347">추가 직원 계정 월 20,000원/명 · 초과 오더 50원/건 · 지입차 추가 월 7,000원/대 · 저장 용량 추가 월 3,000원/GB (모두 VAT 별도)</p>
+      </div>
+      <div data-k="e2348" class="pe-col">
+        <b data-k="e2349">직원 25명 · 월 1만 5천 건을 크게 넘거나 여러 법인을 함께 운영하시나요?</b>
+        <p data-k="e2350">엔터프라이즈 요금은 별도 견적으로 안내해 드립니다. <a data-k="e2351" href="#inquiry-form" data-inq="도입문의">견적 문의하기</a></p>
+      </div>
     </div>
   </div>
 </section>
@@ -573,7 +699,7 @@
     <div data-k="e651" class="faq" style="margin-top:72px">
       <details data-k="e652" class="rv" open><summary data-k="e653">기존에 쓰던 엑셀 자료를 그대로 옮길 수 있나요?</summary><p data-k="e654">네. 거래처 · 상하차지 · 기사 목록을 엑셀이나 구글시트에서 가져올 수 있으며, 도입 시 데이터 이관을 지원합니다.</p></details>
       <details data-k="e655" class="rv"><summary data-k="e656">기사님이 꼭 앱을 설치해야 하나요?</summary><p data-k="e657">아니요. 인수증 · 서류는 문자 링크로 로그인 없이 제출할 수 있습니다. 실시간 관제 기능을 사용할 때만 기사앱이 필요합니다.</p></details>
-      <details data-k="e658" class="rv"><summary data-k="e659">PC 프로그램은 어떻게 설치하나요?</summary><p data-k="e660">크롬·엣지로 접속해 주소창의 설치 버튼을 누르면 바탕화면 앱이 됩니다. 업데이트는 자동입니다.</p></details>
+      <details data-k="e658" class="rv"><summary data-k="e659">PC 프로그램은 어떻게 설치하나요?</summary><p data-k="e660">크롬 또는 엣지로 접속한 뒤 주소창의 설치 버튼을 누르면 바탕화면 앱으로 설치됩니다. 업데이트는 자동으로 적용됩니다.</p></details>
       <details data-k="e661" class="rv"><summary data-k="e662">다른 운송사가 우리 데이터를 볼 수 있나요?</summary><p data-k="e663">볼 수 없습니다. 운송사별로 데이터가 격리 저장되며, 직원별 메뉴 권한도 세부적으로 설정할 수 있습니다.</p></details>
       <details data-k="e664" class="rv"><summary data-k="e665">세금계산서 발행도 되나요?</summary><p data-k="e666">현재 거래명세서 발행 · 메일 발송 · 예상 부가세 집계를 지원하며, 홈택스 연동은 준비 중입니다.</p></details>
     </div>
@@ -587,9 +713,9 @@
       <div data-k="e670" class="inq-info">
         <span data-k="e671" class="eyebrow">FREE TRIAL</span>
         <h2 data-k="e672">직접 운영해 보고<br data-k="e673" />결정하세요</h2>
-        <p data-k="e674">체험을 신청하면 담당자가 연락드려 체험 계정을 만들어 드려요. 궁금한 점만 있으면 신청 칸 맨 위 <b data-k="e2162">도입 상담 · 문의</b> 탭을 누르고 남겨 주세요.</p>
+        <p data-k="e674">체험을 신청하시면 담당자가 연락드려 체험 계정을 만들어 드립니다. 상담이나 문의만 필요하시면 신청서 위쪽의 <b data-k="e2162">도입 상담 · 문의</b> 탭을 선택해 주세요.</p>
         <ul data-k="e675">
-          <li data-k="e676"><svg data-k="e677" class="i"><use href="#i-check"/></svg>엑셀 거래처·기사 자료 이관 지원</li>
+          <li data-k="e676"><svg data-k="e677" class="i"><use href="#i-check"/></svg>엑셀 거래처 · 기사 자료 이관 지원</li>
           <li data-k="e678"><svg data-k="e679" class="i"><use href="#i-check"/></svg>PC 프로그램&nbsp;· 직원용 모바일&nbsp;· 기사앱 모두 제공</li>
           <li data-k="e680"><svg data-k="e681" class="i"><use href="#i-check"/></svg>회사별 권한&nbsp;· 메뉴&nbsp;· 결재선 맞춤 설정</li>
         </ul>
@@ -599,29 +725,29 @@
           <button data-k="e2164" type="button" role="tab" class="on" aria-selected="true" data-inq="무료체험">무료 체험 신청</button>
           <button data-k="e2165" type="button" role="tab" aria-selected="false" data-inq="도입문의">도입 상담 · 문의</button>
         </div>
-        <form data-k="e683" id="inquiryForm">
-          <div data-k="e684"><label data-k="e685" for="f-company">회사명 *</label><input data-k="e686" id="f-company" autocomplete="organization" placeholder="회사명" /></div>
-          <div data-k="e687"><label data-k="e688" for="f-name">담당자명 *</label><input data-k="e689" id="f-name" autocomplete="name" placeholder="담당자 성함" /></div>
-          <div data-k="e690"><label data-k="e691" for="f-phone">연락처 *</label><input data-k="e692" id="f-phone" autocomplete="tel" inputmode="numeric" placeholder="010-0000-0000" /></div>
-          <div data-k="e693"><label data-k="e694" for="f-email">이메일</label><input data-k="e695" id="f-email" autocomplete="email" placeholder="example@company.com" /></div>
+        <form data-k="e683" id="inquiryForm" novalidate>
+          <div data-k="e684"><label data-k="e685" for="f-company">회사명 *</label><input data-k="e686" id="f-company" autocomplete="organization" aria-required="true" placeholder="회사명" /></div>
+          <div data-k="e687"><label data-k="e688" for="f-name">담당자명 *</label><input data-k="e689" id="f-name" autocomplete="name" aria-required="true" placeholder="담당자 성함" /></div>
+          <div data-k="e690"><label data-k="e691" for="f-phone">연락처 *</label><input data-k="e692" id="f-phone" type="tel" autocomplete="tel" inputmode="tel" aria-required="true" placeholder="010-0000-0000" /></div>
+          <div data-k="e693"><label data-k="e694" for="f-email">이메일</label><input data-k="e695" id="f-email" type="email" autocomplete="email" placeholder="example@company.com" /></div>
           <div data-k="e696"><label data-k="e697" for="f-vehicles">운영 차량 대수</label><select data-k="e698" id="f-vehicles"><option data-k="e699" value="">선택해 주세요</option><option data-k="e700">10대 미만</option><option data-k="e701">10~30대</option><option data-k="e702">30~100대</option><option data-k="e703">100대 이상</option></select></div>
           <div data-k="e704"><label data-k="e705" for="f-staff">배차 담당 인원</label><select data-k="e706" id="f-staff"><option data-k="e707" value="">선택해 주세요</option><option data-k="e708">1~2명</option><option data-k="e709">3~5명</option><option data-k="e710">6~10명</option><option data-k="e711">10명 이상</option></select></div>
           <div data-k="e712" class="full"><label data-k="e713" for="f-current">현재 배차 관리 방식</label><select data-k="e714" id="f-current"><option data-k="e715" value="">선택해 주세요</option><option data-k="e716">엑셀</option><option data-k="e717">다른 배차 프로그램</option><option data-k="e718">수기·메모</option><option data-k="e719">기타</option></select></div>
-          <div data-k="e2166"><label data-k="e2167" for="f-plan">관심 요금제</label><select data-k="e2168" id="f-plan"><option data-k="e2169" value="">아직 모르겠어요</option><option data-k="e2170">라이트 (1~3인)</option><option data-k="e2171">베이직 (4~6인)</option><option data-k="e2172">스탠다드 (7~10인)</option><option data-k="e2173">프로 (11인 이상)</option></select></div>
-          <div data-k="e2174"><label data-k="e2175" for="f-calltime">연락받기 편한 시간</label><select data-k="e2176" id="f-calltime"><option data-k="e2177" value="">아무 때나 괜찮아요</option><option data-k="e2178">오전 (9~12시)</option><option data-k="e2179">오후 (13~18시)</option><option data-k="e2180">문자로 먼저 주세요</option></select></div>
+          <div data-k="e2166"><label data-k="e2167" for="f-plan">관심 요금제</label><select data-k="e2168" id="f-plan"><option data-k="e2169" value="">아직 정하지 않았습니다</option><option data-k="e2170">라이트 (1~3인)</option><option data-k="e2171">베이직 (4~6인)</option><option data-k="e2172">스탠다드 (7~10인)</option><option data-k="e2173">프로 (11인 이상)</option></select></div>
+          <div data-k="e2174"><label data-k="e2175" for="f-calltime">연락받기 편한 시간</label><select data-k="e2176" id="f-calltime"><option data-k="e2177" value="">언제든 괜찮습니다</option><option data-k="e2178">오전 (9~12시)</option><option data-k="e2179">오후 (13~18시)</option><option data-k="e2180">문자로 먼저 연락 부탁드립니다</option></select></div>
           <div data-k="e720" class="full"><label data-k="e721" for="f-message">문의 내용</label><textarea data-k="e722" id="f-message" rows="4" placeholder="필요한 기능이나 궁금한 점을 자유롭게 남겨 주세요."></textarea></div>
           <div data-k="e2181" class="full inq-sys inq-agree">
-            <label data-k="e2182" class="chk"><input type="checkbox" id="f-privacy" /><span data-k="e2183"><b>[필수]</b> 개인정보 수집 · 이용에 동의해요</span></label>
-            <details data-k="e2184"><summary data-k="e2185">자세히 보기</summary><p data-k="e2186">수집 항목: 회사명, 담당자명, 연락처, 이메일, 회사 규모, 문의 내용<br />쓰는 곳: 체험 계정 만들기, 상담 연락, 견적 안내<br />보관 기간: 상담이 끝나고 1년 뒤 삭제해요<br />동의하지 않을 수 있지만, 그러면 신청을 받을 수 없어요.</p></details>
-            <label data-k="e2187" class="chk"><input type="checkbox" id="f-marketing" /><span data-k="e2188"><b>[선택]</b> 새 기능 소식 · 운송 업무 팁을 이메일 · 문자로 받을게요 <small>(광고성 정보 · 언제든 수신거부 가능)</small></span></label>
+            <label data-k="e2182" class="chk"><input data-k="e2190" type="checkbox" id="f-privacy" /><span data-k="e2183"><b data-k="e2191">[필수]</b> 개인정보 수집 · 이용에 동의합니다</span></label>
+            <details data-k="e2184"><summary data-k="e2185">자세히 보기</summary><p data-k="e2186">수집 항목: 회사명, 담당자명, 연락처, 이메일, 회사 규모, 문의 내용<br data-k="e2192" />이용 목적: 체험 계정 생성, 상담 연락, 견적 안내<br data-k="e2193" />보관 기간: 상담 종료 후 1년이 지나면 삭제합니다.<br data-k="e2194" />동의를 거부할 수 있으나, 이 경우 신청을 접수할 수 없습니다.</p></details>
+            <label data-k="e2187" class="chk"><input data-k="e2195" type="checkbox" id="f-marketing" /><span data-k="e2188"><b data-k="e2196">[선택]</b> 새 기능 소식과 운송 업무 정보를 이메일 · 문자로 받겠습니다 <small data-k="e2197">(광고성 정보, 언제든 수신 거부 가능)</small></span></label>
           </div>
-          <div data-k="e723" id="form-error" class="error-text" style="display:none;"></div>
+          <div data-k="e723" id="form-error" class="error-text" role="alert" aria-live="assertive" style="display:none;"></div>
           <button data-k="e724" type="submit" id="submitBtn" class="submit-btn">무료 체험 신청</button>
         </form>
-        <div data-k="e725" id="successBox" class="success-box" style="display:none;">
+        <div data-k="e725" id="successBox" class="success-box" role="status" aria-live="polite" style="display:none;">
           <div data-k="e726" class="check"><svg data-k="e727" class="i"><use href="#i-check"/></svg></div>
           <h3 data-k="e728" id="successTitle">체험 신청이 접수되었습니다</h3>
-          <p data-k="e729" id="successDesc">담당자 확인 후 남겨 주신 연락처로 안내드리겠습니다.</p>
+          <p data-k="e729" id="successDesc">담당자가 확인한 뒤 남겨 주신 연락처로 안내해 드리겠습니다.</p>
         </div>
       </div>
     </div>
@@ -640,7 +766,7 @@
 <footer data-k="e737">
   <div data-k="e738" class="wrap footer-inner">
     <a data-k="e739" class="brand" href="/"><img data-k="lw5" class="lw-mark" src="brand/logisweb-mark.svg" width="52" height="24" alt="" /><span data-k="lw6" class="lw-txt"><img data-k="lw7" class="lw-word" src="brand/logisweb-wordmark.svg" width="125" height="14" alt="LogisWeb" /><small data-k="lw8">DISPATCH</small></span></a>
-    <div data-k="e744" class="footer-links"><a data-k="e745" href="#control">실시간 관제</a><a data-k="e746" href="#erp">정산&nbsp;· ERP</a><a data-k="e747" href="#approval">전자결재</a><a data-k="e2073" href="#office">메신저&nbsp;· 근태&nbsp;· 메일</a><a data-k="e950" href="#hub">로지스웹 허브</a><a data-k="e748" href="#download">다운로드</a><a data-k="e749" href="login.html">로그인</a></div>
+    <div data-k="e744" class="footer-links"><a data-k="e745" href="#control">실시간 관제</a><a data-k="e746" href="#erp">정산&nbsp;· ERP</a><a data-k="e747" href="#approval">전자결재</a><a data-k="e2073" href="#office">메신저&nbsp;· 근태&nbsp;· 메일</a><a data-k="e950" href="#hub">로지스웹 허브</a><a data-k="e748" href="#download">다운로드</a><a data-k="e2352" href="#pricing">요금</a><a data-k="e2198" href="/blog/">블로그</a><a data-k="e749" href="login.html">로그인</a></div>
     <div data-k="e750" class="copy">© <span data-k="e751" id="year"></span> LogisWeb. All rights reserved.</div>
     <div data-k="e752" class="footer-note">홈페이지의 화면 이미지는 실제 프로그램에 가상의 운송사 데이터를 넣어 촬영한 것입니다. 회사명·인물·차량번호·금액은 모두 예시입니다.</div>
   </div>
@@ -658,11 +784,11 @@
   <div data-k="e764" class="modal-card">
     <button data-k="e765" class="modal-x" data-close aria-label="닫기">×</button>
     <h3 data-k="e766" id="pcT">PC 버전 설치하기</h3>
-    <p data-k="e767">설치 파일을 받을 필요 없이, 브라우저에서 바로 바탕화면 앱으로 설치됩니다.</p>
+    <p data-k="e767">설치 파일을 내려받을 필요 없이 브라우저에서 바로 바탕화면 앱으로 설치됩니다.</p>
     <ol data-k="e768">
       <li data-k="e769"><span data-k="e770">아래 버튼을 눌러 프로그램을 <b data-k="e771">크롬</b> 또는 <b data-k="e772">엣지</b>로 엽니다.</span></li>
       <li data-k="e773"><span data-k="e774">주소창 오른쪽의 <span data-k="e775" class="kbd">설치</span> 아이콘(모니터 모양)을 누릅니다. 안 보이면 메뉴 <span data-k="e776" class="kbd">⋮</span> → <b data-k="e777">앱 설치</b>(엣지: <b data-k="e778">앱 → 이 사이트를 앱으로 설치</b>)를 누르세요.</span></li>
-      <li data-k="e779"><span data-k="e780">바탕화면과 시작 메뉴에 <b data-k="e781">LogisWeb</b> 아이콘이 생깁니다. 다음부터는 아이콘으로 실행하세요.</span></li>
+      <li data-k="e779"><span data-k="e780">바탕화면과 시작 메뉴에 <b data-k="e781">LogisWeb</b> 아이콘이 생깁니다. 다음부터는 이 아이콘으로 실행하세요.</span></li>
     </ol>
     <a data-k="e782" class="btn btn-dark btn-lg" style="width:100%" href="https://app.logisweb.co.kr/" target="_blank" rel="noopener">프로그램 열고 설치하기 <svg data-k="e783" class="i"><use href="#i-arrow"/></svg></a>
   </div>
@@ -673,9 +799,9 @@
     <h3 data-k="e787" id="mT">휴대폰 홈 화면에 추가하기</h3>
     <p data-k="e788">앱스토어 설치 없이 홈 화면 아이콘으로 바로 열립니다.</p>
     <ol data-k="e789">
-      <li data-k="e790"><span data-k="e791"><b data-k="e792">아이폰</b> — 사파리로 프로그램을 열고 아래쪽 <span data-k="e793" class="kbd">공유</span> 버튼 → <b data-k="e794">홈 화면에 추가</b>를 누릅니다.</span></li>
-      <li data-k="e795"><span data-k="e796"><b data-k="e797">안드로이드</b> — 크롬으로 프로그램을 열고 메뉴 <span data-k="e798" class="kbd">⋮</span> → <b data-k="e799">홈 화면에 추가</b>(또는 <b data-k="e800">앱 설치</b>)를 누릅니다.</span></li>
-      <li data-k="e801"><span data-k="e802">처음 열 때 <b data-k="e803">알림 허용</b>을 누르면 결재 요청·긴급 오더 알림을 받을 수 있습니다.</span></li>
+      <li data-k="e790"><span data-k="e791"><b data-k="e792">아이폰</b>: 사파리로 프로그램을 열고 아래쪽 <span data-k="e793" class="kbd">공유</span> 버튼 → <b data-k="e794">홈 화면에 추가</b>를 누릅니다.</span></li>
+      <li data-k="e795"><span data-k="e796"><b data-k="e797">안드로이드</b>: 크롬으로 프로그램을 열고 메뉴 <span data-k="e798" class="kbd">⋮</span> → <b data-k="e799">홈 화면에 추가</b>(또는 <b data-k="e800">앱 설치</b>)를 누릅니다.</span></li>
+      <li data-k="e801"><span data-k="e802">처음 열 때 <b data-k="e803">알림 허용</b>을 누르면 결재 요청과 긴급 오더 알림을 받을 수 있습니다.</span></li>
     </ol>
     <a data-k="e804" class="btn btn-dark btn-lg" style="width:100%" href="https://app.logisweb.co.kr/" target="_blank" rel="noopener">프로그램 열기 <svg data-k="e805" class="i"><use href="#i-arrow"/></svg></a>
   </div>
@@ -691,8 +817,8 @@
     window.addEventListener("scroll", () => { const h = $("#hdr"); if (h) h.classList.toggle("solid", window.scrollY > 20); }, { passive: true });
     document.addEventListener("click", (e) => {
       const t = e.target;
-      if (t.closest("#menuBtn")) { $("#hdr")?.classList.toggle("open"); return; }
-      if (t.closest("#nav a")) $("#hdr")?.classList.remove("open");
+      if (t.closest("#menuBtn")) { const open = $("#hdr")?.classList.toggle("open"); $("#menuBtn")?.setAttribute("aria-expanded", open ? "true" : "false"); return; }
+      if (t.closest("#nav a")) { $("#hdr")?.classList.remove("open"); $("#menuBtn")?.setAttribute("aria-expanded", "false"); }
       const tb = t.closest("[data-tabs] button");
       if (tb) {
         const tabs = tb.closest("[data-tabs]"), g = tabs.dataset.tabs;
@@ -772,8 +898,8 @@
   //  · [필수] 개인정보 동의 · [선택] 광고성 정보 수신 동의(정보통신망법 제50조 — 동의 날짜를 함께 남긴다)
   //  · 어디서 들어왔는지(utm · 이전 페이지)를 같이 저장 → 광고 · 블로그 효과를 숫자로 본다
   const INQ_MODE = {
-    "무료체험": { btn: "무료 체험 신청", ph: "필요한 기능이나 궁금한 점을 자유롭게 남겨 주세요.", ok: "체험 신청이 접수되었습니다", okDesc: "담당자 확인 후 남겨 주신 연락처로 체험 계정을 안내드릴게요." },
-    "도입문의": { btn: "상담 신청하기", ph: "궁금한 점을 적어 주세요. 예) 지입차 30대인데 정산까지 되나요?", ok: "상담 신청이 접수되었습니다", okDesc: "담당자가 확인하고 남겨 주신 연락처로 연락드릴게요." },
+    "무료체험": { btn: "무료 체험 신청", ph: "필요한 기능이나 궁금한 점을 자유롭게 남겨 주세요.", ok: "체험 신청이 접수되었습니다", okDesc: "담당자가 확인한 뒤 남겨 주신 연락처로 체험 계정을 안내해 드리겠습니다." },
+    "도입문의": { btn: "상담 신청하기", ph: "궁금한 점을 적어 주세요. 예) 지입차 30대를 운영 중인데 정산까지 가능한가요?", ok: "상담 신청이 접수되었습니다", okDesc: "담당자가 확인한 뒤 남겨 주신 연락처로 연락드리겠습니다." },
   };
   let inqMode = "무료체험";
   const setInqMode = (m) => {
@@ -787,6 +913,9 @@
     const t = e.target.closest && e.target.closest(".inq-type [data-inq], a[href='#inquiry-form']");
     if (!t || document.documentElement.classList.contains("kp-editing")) return;
     setInqMode(t.dataset.inq || "무료체험");
+    // 💳 2026-11-24 요금 섹션 버튼(data-plan) — 신청서의 "관심 요금제"를 그 요금제로 미리 골라 둔다
+    const sel = t.dataset.plan && document.getElementById("f-plan");
+    if (sel) { const o = [...sel.options].find((x) => x.textContent.trim().startsWith(t.dataset.plan)); if (o) sel.value = o.value; }
   });
   // 주소 끝이 #consult 면(광고 · 블로그 링크용) 상담 탭으로 열고 폼으로 내려간다
   if (location.hash === "#consult") { setInqMode("도입문의"); document.getElementById("inquiry-form")?.scrollIntoView(); }
@@ -824,7 +953,7 @@
     if (phone.replace(/\D/g, "").length < 9) return fail("연락처를 다시 확인해 주세요. 예) 010-1234-5678");
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail("이메일 주소를 다시 확인해 주세요.");
     if (inqMode === "도입문의" && !message) return fail("상담받고 싶은 내용을 문의 내용 칸에 적어 주세요.");
-    if (!privacyAgreed) return fail("개인정보 수집 · 이용에 동의해야 신청할 수 있어요.");
+    if (!privacyAgreed) return fail("개인정보 수집 · 이용에 동의해 주셔야 신청할 수 있습니다.");
     errorBox.style.display = "none";
     submitBtn.disabled = true;
     submitBtn.textContent = "전송 중...";
@@ -846,10 +975,10 @@
       form.style.display = "none";
       document.querySelector(".inq-type")?.setAttribute("hidden", "");
       document.getElementById("successTitle").textContent = INQ_MODE[inqMode].ok;
-      document.getElementById("successDesc").textContent = INQ_MODE[inqMode].okDesc + (marketingAgreed ? " 소식 받기에 동의해 주셔서 감사해요." : "");
+      document.getElementById("successDesc").textContent = INQ_MODE[inqMode].okDesc + (marketingAgreed ? " 소식 수신에 동의해 주셔서 감사합니다." : "");
       document.getElementById("successBox").style.display = "block";
     } catch (err) {
-      errorBox.textContent = "신청 전송에 실패했습니다. 잠시 후 다시 시도해주세요.";
+      errorBox.textContent = "신청을 전송하지 못했습니다. 잠시 후 다시 시도해 주세요.";
       errorBox.style.display = "block";
       submitBtn.disabled = false;
       submitBtn.textContent = INQ_MODE[inqMode].btn;

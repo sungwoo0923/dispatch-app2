@@ -373,7 +373,7 @@ export function NoticeWriter({ me, company, initial, onCancel, onSaved }) {
         {picker && <StaffPickerModal staff={staff} selected={targets} nameHint={initNames} onClose={() => setPicker(false)} onDone={(s) => { setTargets(s); setPicker(false); }} />}
         <label className="inline-flex items-center gap-2 text-[13.5px] font-black text-[#0F1A30] cursor-pointer">
           <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} className="w-4 h-4 accent-[#1B2B4B]" />
-          • 상단 고정 <span className="text-[12px] font-semibold text-[#9AA9C3]">(최대 5개 — 넘으면 오래된 고정은 목록으로 내려갑니다)</span>
+          • 상단 고정 <span className="text-[12px] font-semibold text-[#9AA9C3]">(최대 5개: 넘으면 오래된 고정은 목록으로 내려갑니다)</span>
         </label>
         {/* ⭐ 2026-11-03 예약 게시 — 정한 시각부터 보이고(그 전에는 작성자·관리자만 "예약" 표시로), 푸시도 그때 */}
         <div className={`flex flex-wrap items-center gap-3 px-4 py-3 rounded-xl border ${sched.on ? "bg-[#F5F8FD] border-[#C9D6EE]" : "bg-white border-[#E3E8F0]"}`}>
@@ -395,7 +395,7 @@ export function NoticeWriter({ me, company, initial, onCancel, onSaved }) {
         </div>
         <div>
           <Label>내용</Label>
-          <RichTextEditor value={html} onChange={setHtml} placeholder="공지할 내용을 입력하세요 — 위 단추로 굵게·크기·색·형광펜·정렬·목록" minHeight={360} />
+          <RichTextEditor value={html} onChange={setHtml} placeholder="공지할 내용을 입력하세요. 위 단추로 굵게·크기·색·형광펜·정렬·목록" minHeight={360} />
         </div>
         <div className="flex items-end justify-between gap-4 flex-wrap">
           <div>
@@ -503,7 +503,7 @@ export function StaffPickerModal({ staff, selected, onDone, onClose, nameHint = 
                 </div>
               );
             })}
-          {gone.length > 0 && <div className="px-3 py-2 text-[12px] text-[#9AA9C3]">목록에 없는 직원 {gone.length}명(퇴사 등)이 선택되어 있습니다 — {gone.map((u) => nameHint[u] || "이름 없음").join(", ")} <button type="button" onClick={() => toggle(gone, false)} className="ml-1 font-black text-[#2D4C82] underline">빼기</button></div>}
+          {gone.length > 0 && <div className="px-3 py-2 text-[12px] text-[#9AA9C3]">목록에 없는 직원 {gone.length}명(퇴사 등)이 선택되어 있습니다. {gone.map((u) => nameHint[u] || "이름 없음").join(", ")} <button type="button" onClick={() => toggle(gone, false)} className="ml-1 font-black text-[#2D4C82] underline">빼기</button></div>}
         </div>
         <div className="px-5 py-3.5 border-t border-[#EEF1F6] flex items-center gap-2 bg-[#FAFBFD]">
           <span className="text-[13px] font-black text-[#0F1A30] tabular-nums"><span style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{sel.size}</span>명 선택 <span className="text-[#9AA9C3] font-bold">/ 전체 {people.length}명</span></span>
@@ -578,7 +578,7 @@ export function HandoverWriter({ me, company, initial, onCancel, onSaved }) {
           </div>
           <div>
             <Label>인수인계 내용</Label>
-            <textarea value={text} onChange={(e) => setText(e.target.value)} rows={16} placeholder={"예)\n· 내일 오전 평택항 상차 3건 — 기사 배정 완료, 도착 확인만 필요\n· ○○물류 운임 정산 요청 회신 대기 중\n· 미배차 2건(오후 상차) 콜 계속 진행 부탁드립니다"} className={`${inp} py-3.5 leading-[1.85] resize-y min-h-[360px]`} />
+            <textarea value={text} onChange={(e) => setText(e.target.value)} rows={16} placeholder={"예)\n· 내일 오전 평택항 상차 3건: 기사 배정 완료, 도착 확인만 필요\n· ○○물류 운임 정산 요청 회신 대기 중\n· 미배차 2건(오후 상차) 콜 계속 진행 부탁드립니다"} className={`${inp} py-3.5 leading-[1.85] resize-y min-h-[360px]`} />
           </div>
         </div>
         <div className="rounded-2xl bg-white border border-[#E3E8F0] p-5 h-fit">

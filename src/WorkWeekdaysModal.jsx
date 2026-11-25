@@ -230,7 +230,7 @@ export default function WorkWeekdaysModal({ company, employees = [], coWeekdays 
                   <div className="text-[12.5px] font-black text-[#5B3FA8] flex items-center gap-1.5"><span className="w-5 h-5 rounded-full bg-[#7C5CC4] text-white text-[11px] flex items-center justify-center">i</span>이번 달 쉬는 날 출근 현황</div>
                   {offDays.map((d) => (
                     <div key={d} className="mt-1.5 text-[12.5px] text-[#3A2A6E]">
-                      <b>{WEEKDAY_NAMES[d]}요일</b>에 출근한 직원 {offWorkers[d].length}명 — {offWorkers[d].slice(0, 4).map(nameOf).join(", ")}{offWorkers[d].length > 4 ? " 외" : ""}
+                      <b>{WEEKDAY_NAMES[d]}요일</b>에 출근한 직원 {offWorkers[d].length}명: {offWorkers[d].slice(0, 4).map(nameOf).join(", ")}{offWorkers[d].length > 4 ? " 외" : ""}
                       {offWorkers[d].length >= Math.max(2, Math.ceil(following.length / 2))
                         ? <button onClick={() => setCoInput((v) => [...(normWeekdays(v) || []), d])} className="ml-2 font-black underline underline-offset-2">회사 기준에 {WEEKDAY_NAMES[d]}요일 넣기</button>
                         : <button onClick={() => goEmp(offWorkers[d][0])} className="ml-2 font-black underline underline-offset-2">개별 설정으로 보기</button>}

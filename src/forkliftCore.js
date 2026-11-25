@@ -179,3 +179,29 @@ export function forkliftRowFromSheet(row = {}) {
   if (r.계좌번호 && !r.은행) errors.push("은행 없음");
   return { row: r, errors };
 }
+
+// 🧾 2026-11-24 운임 내역(운임정보 · 운임확인서) — 이 오더에 들어간 운임을 항목별로 풀어 보여 준다(사용자 요청)
+//  기본 운임(특수운임을 넣기 전) → 지게차 · 특수운임 항목마다 기사운임 · 청구운임이 얼마씩 바뀌었는지 → 최종 운임 · 회사 별도 지급 · 수수료
+//  기본 운임은 오더에 저장된 "지금 반영해 둔 양"(지게차기사차감 · 특수기사차감 · 지게차청구추가 · 특수청구추가)으로 되돌려 구한다
+export function fareBreakdown(o) {
+  const drv = fkNum(o?.기사운임), sale = fkNum(o?.청구운임);
+  const baseDrv = drv + fkNum(o?.지게차기사차감) + fkNum(o?.특수기사차감);
+  const baseSale = sale - fkNum(o?.지게차청구추가) - fkNum(o?.특수청구추가);
+  const lines = [];
+  if (hasForklift(o)) {
+    const a = fkAmount(o); const m = fkMode(o);
+    lines.push({ key: "fork", name: "지게차비용", amount: a, how: `${fkModeLabel(o)}${o.지게차기사명 ? ` · ${o.지게차기사명}` : ""} · 지게차 기사에게 회사가 지급`,
+      drv: m === "기사" ? -a : 0, sale: m === "청구" ? a : 0, paid: a });
+  }
+  for (const it of sfItems(o)) {
+    const a = fkNum(it.금액); const p = sfPayee(it); const m = sfMode(it);
+    const modeShort = (SPECIAL_MODES.find((x) => x.key === m) || {}).short || "";
+    let d = 0, s = 0, paid = 0, to = "";
+    if (p === "없음") { if (m === "기사") d = -a; else s = a; to = m === "기사" ? "회사 몫으로 남음" : "따로 지급 없음"; }
+    else if (p === "기사") { d = a; if (m === "청구") s = a; to = "배차 기사에게 지급"; }
+    else { paid = a; if (m === "기사") d = -a; if (m === "청구") s = a; to = "회사가 따로 지급"; }
+    lines.push({ key: `sf${lines.length}`, name: sfName(it), amount: a, how: [modeShort, to, it.메모].filter(Boolean).join(" · "), drv: d, sale: s, paid });
+  }
+  const paid = paidOut(o);
+  return { fareType: String(o?.운임구분 || "").trim(), baseDrv, baseSale, lines, drv, sale, paid, profit: orderProfit(o) };
+}

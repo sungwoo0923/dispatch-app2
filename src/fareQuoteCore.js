@@ -138,10 +138,10 @@ export function quoteFare({ q = {}, sheets = [], presets = [], hist = null, toda
   }
   (plan?.items || []).filter((x) => num(x.금액) > 0).forEach((it, i) => {
     const a = num(it.금액); const payee = itemPayee(it); const md = itemMode(it);
-    const sale = payee === "없음" || md === "청구" ? a : 0;
+    const sale = md === "청구" ? a : 0;
     const pay = payee === "없음" ? 0 : a;
-    const why = payee === "없음" ? `${condWhy(it)}청구 단독 적용` : payee === "기사" ? `${condWhy(it)}${md === "청구" ? "청구 · 기사 동일 지급" : "회사 부담 · 기사 지급"}` : `${condWhy(it)}${md === "청구" ? "청구액 동일 외부 지급" : md === "기사" ? "기사운임에서 차감 · 외부 지급" : "회사 부담 · 외부 지급"}`;
-    lines.push({ key: `sp${i}`, name: itemName(it), tag: "노선 규칙", why: it.메모 && /경유 \d+곳/.test(it.메모) ? `${it.메모} · ${why}` : why, sale, pay, payTo: payee, driverDelta: payee === "외부" && md === "기사" ? -a : 0 });
+    const why = payee === "없음" ? `${condWhy(it)}${md === "기사" ? "기사운임에서 차감" : "청구 단독 적용"}` : payee === "기사" ? `${condWhy(it)}${md === "청구" ? "청구 · 기사 동일 지급" : "회사 부담 · 기사 지급"}` : `${condWhy(it)}${md === "청구" ? "청구액 동일 외부 지급" : md === "기사" ? "기사운임에서 차감 · 외부 지급" : "회사 부담 · 외부 지급"}`;
+    lines.push({ key: `sp${i}`, name: itemName(it), tag: "노선 규칙", why: it.메모 && /경유 \d+곳/.test(it.메모) ? `${it.메모} · ${why}` : why, sale, pay, payTo: payee, driverDelta: (payee === "외부" || payee === "없음") && md === "기사" ? -a : 0 });
   });
   const sale = num(rec.청구운임), driver = num(rec.기사운임), external = num(rec.외부지급합);
   const profit = sale - driver - external;

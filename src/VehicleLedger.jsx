@@ -528,7 +528,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
     upsertAutoEntry(db, `${v.id}_${row.id}`, {
       company: co, date: row.일자, type: "지출", account: "차량유지비", amount: amt, vendor: row.업체 || "",
       item: `${kind === "repairs" ? "차량 정비" : "구조변경"} · ${plate}${row.구분 ? ` · ${row.구분}` : ""}`,
-      memo: `차량관리대장 자동 — ${String(row.내용 || "").slice(0, 60)}`, auto: "vehrepair",
+      memo: `차량관리대장 자동: ${String(row.내용 || "").slice(0, 60)}`, auto: "vehrepair",
     }).catch(() => {});
   };
   // 🚚 2026-11-09 정비 이력 → 점검·소모품 "마지막 교체" 자동(기사 문서 care.items · 정비 내용 글자로 항목 찾기 · 더 새로운 기록만)
@@ -766,7 +766,7 @@ function Ledger({ v, co, appDriver, linkRaw, drivers, canEdit, by, narrow, purpo
       </div>
       {v.virtual && (
         <div style={{ padding: "12px 16px", borderRadius: 14, border: `1.5px dashed ${C.sky}`, background: "#F4F8FF", color: C.mid, fontSize: 14.5, fontWeight: 700, lineHeight: 1.6 }}>
-          <b style={{ color: C.navy }}>대장 미작성 차량</b> — 기사관리에 있는 지입·직영·임대 차량이지만 아직 대장에 저장한 내용이 없습니다. 기본 정보·정비·구조변경·기사 이력 중 하나를 저장하면 대장이 만들어집니다. (열어 보기만 해서는 아무것도 바뀌지 않습니다)
+          <b style={{ color: C.navy }}>대장 미작성 차량</b> · 기사관리에 있는 지입·직영·임대 차량이지만 아직 대장에 저장한 내용이 없습니다. 기본 정보·정비·구조변경·기사 이력 중 하나를 저장하면 대장이 만들어집니다. (열어 보기만 해서는 아무것도 바뀌지 않습니다)
         </div>
       )}
       {/* 바로가기 */}
@@ -1206,7 +1206,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
       const plate = window.__kpVlOpenPlate; if (!plate || !loaded) return;
       const r = rows.find((x) => plateCore(x.차량번호) === plateCore(plate));
       window.__kpVlOpenPlate = "";
-      if (r) { setHot(r.id); openRow(r); } else { setQ(String(plate)); toast(`${plate} — 차량관리대장에 없는 차량입니다. [차량 등록]으로 추가하세요`); }
+      if (r) { setHot(r.id); openRow(r); } else { setQ(String(plate)); toast(`${plate} · 차량관리대장에 없는 차량입니다. [차량 등록]으로 추가하세요`); }
     };
     tryOpen();
     window.addEventListener("kp-vl-open", tryOpen);
@@ -1443,7 +1443,7 @@ export default function VehicleLedger({ company = "", drivers = [], canEdit = tr
                           const eq = EQ_KEYS.includes(k);
                           const base = { ...td, whiteSpace: "nowrap", textAlign: "center", borderTop: "none", borderBottom: "1px solid #EEF1F6", ...(k === "모델연식" ? { borderLeft: "2px solid #DCE6F7" } : {}) };
                           if (k === "순번") return <td key={k} style={{ ...base, position: "sticky", left: 0, background: "inherit", zIndex: 1, width: 56, fontFamily: MONO, fontSize: 14, color: C.sub, fontWeight: 800 }}>{ri + 1}</td>;
-                          if (k === "차량번호") return <td key={k} style={{ ...base, position: "sticky", left: 152, background: "inherit", textAlign: "left", zIndex: 1, boxShadow: "1px 0 0 #EEF1F6" }}><span style={{ fontWeight: 900, fontSize: 15 }}>{val}</span>{r.virtual && <span title="관리대장 미작성 — 기사관리에 있는 지입·직영·임대 차량이지만 아직 대장에 아무것도 저장하지 않은 차량입니다. 정보를 저장하면 대장이 만들어지고 이 표시는 사라집니다." style={{ marginLeft: 6, padding: "2px 7px", borderRadius: 6, border: `1px dashed ${C.sky}`, fontSize: 14, color: C.blue, fontWeight: 800 }}>대장 미작성</span>}</td>;
+                          if (k === "차량번호") return <td key={k} style={{ ...base, position: "sticky", left: 152, background: "inherit", textAlign: "left", zIndex: 1, boxShadow: "1px 0 0 #EEF1F6" }}><span style={{ fontWeight: 900, fontSize: 15 }}>{val}</span>{r.virtual && <span title="관리대장 미작성: 기사관리에 있는 지입·직영·임대 차량이지만 아직 대장에 아무것도 저장하지 않은 차량입니다. 정보를 저장하면 대장이 만들어지고 이 표시는 사라집니다." style={{ marginLeft: 6, padding: "2px 7px", borderRadius: 6, border: `1px dashed ${C.sky}`, fontSize: 14, color: C.blue, fontWeight: 800 }}>대장 미작성</span>}</td>;
                           if (k === "현재기사") return <td key={k} style={{ ...base, fontWeight: 800 }}>{val || <span style={{ color: "#5B6B85" }}>-</span>}{r.appJoined && <span title="이 기사님은 기사앱에 가입했습니다(점검·소모품·제원이 기사앱과 연동)" style={{ marginLeft: 6, padding: "1px 7px", borderRadius: 6, background: C.mid, color: "#fff", fontSize: 14, fontWeight: 800 }}>앱 가입</span>}</td>;
                           if (k === "가입유형") return <td key={k} style={base}>{val ? <span style={{ display: "inline-flex", alignItems: "center", height: 26, padding: "0 11px", borderRadius: 8, fontSize: 14, fontWeight: 800, ...(val === "지입" ? { background: C.mid, color: "#fff" } : val === "직영" ? { background: "#E6F2EF", color: "#0F5F57", border: "1px solid #B9DCD5" } : { background: C.pale, color: C.blue, border: "1px solid #C9D7EE" }) }}>{val}</span> : <span style={{ color: C.sub }}>-</span>}</td>;
                           if (k === "담당자") return <td key={k} style={{ ...base, position: "sticky", left: 56, background: "inherit", zIndex: 1, width: 96, maxWidth: 96, overflow: "hidden", textOverflow: "ellipsis", fontWeight: 800, color: val ? (r.담당자Uid && r.담당자Uid === myUid ? C.blue : C.navy) : "#5B6B85" }}>{val || "-"}</td>;

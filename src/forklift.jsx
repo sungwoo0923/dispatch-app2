@@ -127,7 +127,7 @@ export function ForkliftDriverManager({ isViewer = false }) {
         <div className="mr-auto">
           <div className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>FORKLIFT DRIVERS</div>
           <div className="text-[16px] font-black text-[#0F1A30]">지게차 기사 <span className="text-[13px] text-[#7A89A3] font-bold">{list.length}명</span></div>
-          <div className="text-[12px] text-[#7A89A3]">오더의 지게차비용을 받는 기사 — 오더등록 [+ 지게차]에서 고르고, 정산관리 › 지게차 지급에서 지급합니다</div>
+          <div className="text-[12px] text-[#7A89A3]">오더의 지게차비용을 받는 기사: 오더등록 [+ 지게차]에서 고르고, 정산관리 › 지게차 지급에서 지급합니다</div>
         </div>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름·전화·회사 검색" className="h-9 w-52 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-semibold" />
         {!isViewer && <button type="button" onClick={() => setChooser(true)} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B] hover:border-[#4B6CB7]">대용량 업로드</button>}
@@ -137,7 +137,7 @@ export function ForkliftDriverManager({ isViewer = false }) {
         <table className="w-full text-[13.5px]" style={{ minWidth: 900 }}>
           <thead><tr className="bg-[#1B2B4B] text-white">{["이름", "전화번호", "지게차회사", "은행", "계좌번호", "예금주", "메모", "사용", ""].map((h) => <th key={h} className={th}>{h}</th>)}</tr></thead>
           <tbody>
-            {rows.length === 0 && <tr><td colSpan={9} className="py-14 text-center text-[#9AA9C3]">{list.length ? "검색 결과가 없습니다" : "등록된 지게차 기사가 없습니다 — [+ 지게차 기사] 또는 [대용량 업로드]로 등록하세요"}</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={9} className="py-14 text-center text-[#9AA9C3]">{list.length ? "검색 결과가 없습니다" : "등록된 지게차 기사가 없습니다. [+ 지게차 기사] 또는 [대용량 업로드]로 등록하세요"}</td></tr>}
             {rows.map((d) => (
               <tr key={d.id} className="border-t border-[#EEF1F6] hover:bg-[#F7F9FC]">
                 <td className={`${td} font-black text-[#0F1A30]`}>{d.이름}</td>
@@ -517,14 +517,15 @@ function SpecialFareModal({ form, asString, mobile, onClose, onApply }) {
       {sel === "기타" && <div>{lbl("항목 이름")}<input value={it.이름 || ""} onChange={(e) => setIt({ 이름: e.target.value })} onKeyDown={(e) => e.stopPropagation()} placeholder="예: 상차 보조비" className={inp} /></div>}
       <div>{lbl(sel === "기타" ? "금액" : t.label)}{moneyInput(it.금액, (v) => setIt({ 금액: v }))}</div>
       <div>{lbl("누가 받나요")}
-        <div className={`grid ${isJyCompany() || sfPayee(it) === "없음" ? "grid-cols-3" : "grid-cols-2"} gap-1 rounded-xl border border-[#C9D5EA] bg-white p-1`}>
-          {[["기사", "배차 기사에게 더 줌"], ["외부", "회사가 따로 지급"], ["없음", "지급 없음(청구만)"]].filter(([k]) => k !== "없음" || isJyCompany() || sfPayee(it) === "없음" /* 🏷 JY로지스틱스만(이미 그렇게 저장된 항목은 보이게) */).map(([k, l]) => (
+        <div className={`grid ${isJyCompany() || sfPayee(it) === "없음" || sel === "기타" ? "grid-cols-3" : "grid-cols-2"} gap-1 rounded-xl border border-[#C9D5EA] bg-white p-1`}>
+          {[["기사", "배차 기사에게 더 줌"], ["외부", "회사가 따로 지급"], ["없음", "지급 없음"]].filter(([k]) => k !== "없음" || isJyCompany() || sfPayee(it) === "없음" || sel === "기타" /* 🏷 JY로지스틱스만(이미 그렇게 저장된 항목은 보이게) */).map(([k, l]) => (
             <button key={k} type="button" onClick={() => setIt({ 받는사람: k, 부담: sfMode({ ...it, 받는사람: k }) })}
               className={`h-10 rounded-lg text-[12.5px] font-black ${sfPayee(it) === k ? "bg-[#0F1A30] text-white" : "text-[#3A4A66] hover:bg-[#EEF3FC]"}`}>{l}</button>
           ))}
         </div>
       </div>
-      <div>{lbl("누가 부담하나요")}{modeSeg(sfMode(it), (k) => setIt({ 부담: k }), sfPayee(it) === "없음" ? ["청구"] : sfPayee(it) === "기사" ? ["회사", "청구"] : ["기사", "회사", "청구"])}</div>
+      <div>{lbl("누가 부담하나요")}{modeSeg(sfMode(it), (k) => setIt(k === "기사" && sfPayee(it) === "기사" ? { 받는사람: "없음", 부담: "기사" } : { 부담: k }), sfPayee(it) === "없음" ? ["기사", "청구"] : sfPayee(it) === "기사" ? (sel === "기타" ? ["기사", "회사", "청구"] : ["회사", "청구"]) : ["기사", "회사", "청구"])}
+      {sel === "기타" && sfMode(it) === "기사" && sfPayee(it) !== "외부" && <div className="-mt-2 text-[12px] font-semibold text-[#5B6B85]">기사운임에서 이 금액을 빼요. 따로 주는 곳이 없으니 뺀 금액만큼 수수료가 늘어요.</div>}</div>
       <div>{lbl("메모 (선택)")}<input value={it.메모 || ""} onChange={(e) => setIt({ 메모: e.target.value })} onKeyDown={(e) => e.stopPropagation()} placeholder={sfPayee(it) === "외부" ? "받는 곳·사람" : "사유"} className={inp} /></div>
     </div>
   );
@@ -577,7 +578,7 @@ function SpecialFareModal({ form, asString, mobile, onClose, onApply }) {
             {diffRow("수익", orderProfit(base), orderProfit(after))}
           </div>
           {paidOut(after) > 0 && <div className="text-[11.5px] font-bold text-[#7A89A3] mb-2">회사가 따로 지급 {c(paidOut(after))}원{hasForklift(after) ? ` (지게차 ${c(fkAmount(after))}${after.지게차기사명 ? ` · ${after.지게차기사명}` : ""})` : ""}</div>}
-          {autoCount > 0 && <div className="text-[11.5px] font-bold text-[#2D4C82] mb-2" data-sf-auto="1">고정노선운임으로 자동으로 들어간 항목 {autoCount}개 — [적용]하면 이 오더는 직접 정한 값으로 바뀌어요(노선을 바꿔도 그대로)</div>}
+          {autoCount > 0 && <div className="text-[11.5px] font-bold text-[#2D4C82] mb-2" data-sf-auto="1">고정노선운임으로 자동으로 들어간 항목 {autoCount}개: [적용]하면 이 오더는 직접 정한 값으로 바뀌어요(노선을 바꿔도 그대로)</div>}
           {canRoute && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2.5 text-[12.5px] font-bold text-[#1B2B4B]" data-sf-route="1">
               <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={saveRoute} onChange={(e) => setSaveRoute(e.target.checked)} data-sf-route-save="1" />고정노선운임으로 등록 <span className="text-[#7A89A3] font-semibold">({form.거래처명} · {routeWithFrom || !form.하차지명 ? `${form.상차지명 || ""} → ` : ""}{form.하차지명 || "모든 하차지"})</span></label>

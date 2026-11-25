@@ -21,7 +21,7 @@ import { HubDatePick, HubTimePick } from "./hubDateTime"; // ⭐ 2026-11-22 로�
 const OrderScanModal = lazy(() => import("../../../src/OrderScanModal"));
 
 // ⭐ 2026-11-22 화물 단위(로지스웹 배차 프로그램 화물타입과 같은 값 — 선택안함 = 프로그램의 "없음")
-const CARGO_UNITS = [["", "선택안함"], ["파레트", "파레트"], ["박스", "박스"], ["통", "통"]];
+const CARGO_UNITS = [["", "선택 안 함"], ["파레트", "파레트"], ["박스", "박스"], ["통", "통"]];
 const money = (v) => { const d = String(v).replace(/[^\d]/g, "").slice(0, 9); return d ? Number(d).toLocaleString() : ""; };
 const numOf = (v) => Number(String(v || "").replace(/[^\d]/g, "")) || 0;
 const blank = (me) => {
@@ -210,7 +210,7 @@ export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg =
     if (!f.의뢰자구분) fails.push(["의뢰자구분", "의뢰자구분을 골라 주세요"]);
     if (f.의뢰자구분 === "운수사" && !biz) fails.push(["의뢰자사업자번호", "운수사는 사업자번호를 넣어 주세요"]);
     else if (biz && !bizNoValid(biz)) fails.push(["의뢰자사업자번호", "사업자번호를 다시 확인해 주세요"]);
-    if (fareN && fareN < 10000) fails.push(["운임", "운송료는 원 단위로 넣어 주세요"]);
+    if (fareN && fareN < 10000) fails.push(["운임", "운송료는 원 단위로 넣어 주세요(예: 350,000)"]);
     if (f.표시 === "later" && !f.showAt) fails.push(["showAt", "차주앱에 보일 시각을 골라 주세요"]);
     if (fails.length) {
       setBad(new Set(fails.map((x) => x[0])));
@@ -279,8 +279,9 @@ export default function HubPostForm({ me, editing, onClose, toast, onDone, cfg =
             <Field label="대수"><Sel value={f.대수} onChange={(v) => set("대수", v)} options={COUNT_OPTIONS} testid="pf-count" /></Field>
             <Field label="화물중량"><div className="relative"><input className={`${inputCls} pr-[72px] text-right`} inputMode="decimal" value={f.중량} onChange={inp("중량", (v) => weightNum(v).slice(0, 5))} placeholder="0" data-testid="pf-weight" /><span className="absolute right-4 top-1/2 -translate-y-1/2 text-[14.5px] font-bold text-[#5F6E87]">톤 이하</span></div></Field>
             <Field label="화물" required className="col-span-2">
-              <div className="grid grid-cols-[minmax(0,1fr)_120px_96px] gap-2">
-                {need("화물내용", <input className={inputCls} value={f.화물내용} onChange={inp("화물내용")} placeholder="예: 전자부품" data-testid="pf-cargo" />)}
+              {/* ⭐ 2026-11-24 휴대폰(360px)에서 화물 칸이 60px로 눌리던 것 — 휴대폰은 화물 한 줄 + 단위 · 수량 한 줄 */}
+              <div className="grid grid-cols-2 sm:grid-cols-[minmax(0,1fr)_120px_96px] gap-2">
+                <div className="col-span-2 sm:col-span-1 min-w-0">{need("화물내용", <input className={inputCls} value={f.화물내용} onChange={inp("화물내용")} placeholder="예: 전자부품" data-testid="pf-cargo" />)}</div>
                 <select className={selectCls} value={f.화물타입} onChange={(e) => { const v = e.target.value; set("화물타입", v); if (!v) set("화물수량", ""); }} data-testid="pf-cargo-unit">{CARGO_UNITS.map(([v, l]) => <option key={l} value={v}>{l}</option>)}</select>
                 {need("화물수량", <input className={`${inputCls} text-right`} inputMode="numeric" disabled={!f.화물타입} value={f.화물수량} onChange={inp("화물수량", (v) => v.replace(/[^\d]/g, "").slice(0, 4))} placeholder={f.화물타입 ? "수량" : "-"} data-testid="pf-cargo-qty" />)}
               </div>

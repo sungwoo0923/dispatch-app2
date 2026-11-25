@@ -205,7 +205,7 @@ export function monthDetail(list) {
 }
 
 export const ANOMALY_TYPES = [
-  { type: "청구운임 미입력", tone: "bad", amountLabel: "나간 운반비", amount: (r) => toWon(r.기사운임), desc: "매출 0원인데 기사운임만 나간 오더 — 수익이 그만큼 줄어듦" },
+  { type: "청구운임 미입력", tone: "bad", amountLabel: "나간 운반비", amount: (r) => toWon(r.기사운임), desc: "매출 0원인데 기사운임만 나간 오더: 수익이 그만큼 줄어듦" },
   { type: "역마진", tone: "bad", amountLabel: "손해 금액", amount: (r) => -orderProfit(r), desc: "기사운임(+지게차 등 회사 지급분)이 청구운임보다 큰 오더" },
   { type: "기사운임 미입력", tone: "warn", amountLabel: "청구운임", amount: (r) => toWon(r.청구운임), desc: "기사운임이 비어 수익이 실제보다 크게 잡힌 오더" },
   { type: "수익 0원", tone: "warn", amountLabel: "청구운임", amount: (r) => toWon(r.청구운임), desc: "청구운임 = 기사운임(+지게차 등 회사 지급분)" },
@@ -282,7 +282,7 @@ export function buildInsights(res) {
   const rateDiff = (B.rate - A.rate) * 100;
   let head = `${b} 매출은 ${a}보다 ${signMan(B.sale - A.sale)}(${saleChg >= 0 ? "+" : ""}${(saleChg * 100).toFixed(1)}%), 수익은 ${signMan(B.profit - A.profit)}(${profitChg >= 0 ? "+" : ""}${(profitChg * 100).toFixed(1)}%) 변했습니다.`;
   if (saleChg > 0.05 && profitChg < saleChg / 2) {
-    head += ` 매출이 늘어난 만큼 수익이 따라오지 못했습니다 — 수익률이 ${pct(A.rate)} → ${pct(B.rate)}로 ${Math.abs(rateDiff).toFixed(1)}%p ${rateDiff < 0 ? "떨어졌기" : "변했기"} 때문입니다.`;
+    head += ` 매출이 늘어난 만큼 수익이 따라오지 못했습니다. 수익률이 ${pct(A.rate)} → ${pct(B.rate)}로 ${Math.abs(rateDiff).toFixed(1)}%p ${rateDiff < 0 ? "떨어졌기" : "변했기"} 때문입니다.`;
   } else if (Math.abs(rateDiff) >= 0.5) {
     head += ` 수익률은 ${pct(A.rate)} → ${pct(B.rate)} (${rateDiff >= 0 ? "+" : ""}${rateDiff.toFixed(1)}%p).`;
   }

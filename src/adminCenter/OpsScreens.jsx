@@ -37,7 +37,7 @@ export function CommandDeck({ go, openCompany }) {
     ["직원 승인", (P?.staffByCo || []).reduce((a, x) => a + x.n, 0), "companies"],
   ];
   const queueTotal = queue.reduce((a, q) => a + q[1], 0);
-  const brief = `지금 ${t.onlineNow}명이 쓰고 있어요. 오늘 서버 읽기는 ${t.today ? `${compact(t.today.reads)}건(분당 ${Math.round(t.readsPerMin)}건)` : "아직 집계 전"}이고, 이번 달 운영비는 월말 기준 약 ${short(c.totalMonth)}원이에요${c.free ? " — 무료 기간이라 전액 운영자 부담이에요" : ""}.${overCos.length ? ` 한도를 넘은 운송사가 ${overCos.length}곳 있어요.` : ""}`;
+  const brief = `지금 ${t.onlineNow}명이 쓰고 있어요. 오늘 서버 읽기는 ${t.today ? `${compact(t.today.reads)}건(분당 ${Math.round(t.readsPerMin)}건)` : "아직 집계 전"}이고, 이번 달 운영비는 월말 기준 약 ${short(c.totalMonth)}원이에요.${c.free ? " 무료 기간이라 모두 운영자가 부담해요." : ""}${overCos.length ? ` 한도를 넘은 운송사가 ${overCos.length}곳 있어요.` : ""}`;
   return (
     <div className="space-y-3 sm:space-y-4">
       <DeckHead dstr={dstr} brief={brief} />
@@ -256,7 +256,7 @@ export function WalletView({ openSettings }) {
             <MiniStat label="AI(Claude API)" value={`${short(c.aiRow?.replaced ? 0 : ai.krw)}원`} sub={c.aiRow?.replaced ? "이달은 충전 금액으로 셈" : `${usd(ai.usd)} · 지금까지`} />
             <MiniStat label="실제 결제" value={`${short(c.paid || 0)}원`} sub={c.payRows?.length ? `${c.payRows.length}건 · 아래 결제 내역` : "아래에서 넣어요"} />
           </div>
-          {top && <div className="mt-3 rounded-[12px] px-3.5 py-2.5 text-[13px] font-bold leading-relaxed" style={{ background: "rgba(215,188,130,.07)", border: `1px solid ${G.line}`, color: G.sub }}>가장 많이 나가는 곳은 <b style={{ color: G.goldHi }}>{top.group}</b>이에요 — 월 {won(top.krw)}({c.totalMonth ? Math.round((top.krw / c.totalMonth) * 100) : 0}%).</div>}
+          {top && <div className="mt-3 rounded-[12px] px-3.5 py-2.5 text-[13px] font-bold leading-relaxed" style={{ background: "rgba(215,188,130,.07)", border: `1px solid ${G.line}`, color: G.sub }}>가장 많이 나가는 곳은 <b style={{ color: G.goldHi }}>{top.group}</b>이에요. 한 달에 {won(top.krw)}({c.totalMonth ? Math.round((top.krw / c.totalMonth) * 100) : 0}%)이 나가요.</div>}
         </AdmPanel>
         <AdmPanel code="BREAKDOWN" title="어디에 나가나요">
           <div className="grid grid-cols-1 sm:grid-cols-[200px_minmax(0,1fr)] gap-3 items-center">
@@ -307,7 +307,7 @@ export function WalletView({ openSettings }) {
       </AdmPanel>
       <div className="px-1 text-[12px] font-bold leading-relaxed" style={{ color: G.dim }}>
         · 구독 업그레이드 · API 충전처럼 실제로 낸 돈은 위 [결제 내역]에 넣으면 '실제 결제'로 잡혀요. 같은 항목의 예상 금액은 그 달만 빠져서 두 번 세지 않아요.<br />
-        · Vercel 사용량, 카카오 · 네이버 · Tmap 지도 호출 수, 각 업체 실제 청구서는 프로그램에 기록되지 않아요 — 단가 × 사용량(또는 활동량)으로 낸 값이에요.<br />
+        · Vercel 사용량, 카카오 · 네이버 · Tmap 지도 호출 수, 각 업체 실제 청구서는 프로그램에 기록되지 않아요. 그래서 단가 × 사용량(또는 활동량)으로 계산한 값을 보여 줘요.<br />
         · 단가 · 환율 · 고정비는 [비용 기준 · 손익 상세] › 비용 기준 설정에서 고쳐요.
       </div>
     </div>

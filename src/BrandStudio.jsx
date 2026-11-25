@@ -223,7 +223,7 @@ export default function BrandStudio() {
       </div>
 
       <div className="rounded-[16px] bg-[#EEF3FC] border border-[#C9D6EE] px-4 py-3 text-[13.5px] text-[#1B2B4B] leading-relaxed">
-        <b>이렇게 쓰면 돼요</b> — ① 로고 그림을 올리면 색깔별로 부분이 나뉘고, 어두운 · 밝은 바탕에 맞는 색이 자동으로 정해져요. ② 부분을 눌러 색 · 테두리 · 굵기를 고쳐요. ③ 오른쪽에서 로고가 들어가는 자리마다 바탕을 바꿔 보며 확인해요. ④ <b>[적용하기]</b>를 누르면 모든 회사 화면에 바뀌어요.
+        <b>이렇게 쓰면 돼요</b> · ① 로고 그림을 올리면 색깔별로 부분이 나뉘고, 어두운 · 밝은 바탕에 맞는 색이 자동으로 정해져요. ② 부분을 눌러 색 · 테두리 · 굵기를 고쳐요. ③ 오른쪽에서 로고가 들어가는 자리마다 바탕을 바꿔 보며 확인해요. ④ <b>[적용하기]</b>를 누르면 모든 회사 화면에 바뀌어요.
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)] gap-4 items-start">

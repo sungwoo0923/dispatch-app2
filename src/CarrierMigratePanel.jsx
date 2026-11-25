@@ -93,13 +93,13 @@ export function SheetLiveCard({ co, url, setUrl, tabNames = [] }) {
   const turnOn = async () => {
     const u = (url || live?.url || "").trim();
     if (!u) return setMsg("위 칸에 구글시트 주소를 먼저 붙여넣어 주세요.");
-    if (!(await kpConfirm(`${co} — 구글시트 실시간 반영을 켤까요?\n\n· 시트가 바뀌면 바로 새 줄은 오더로 만들고, 고친 줄은 그 오더를 고칩니다(아래 [시트 알림 설치]를 해 두면 몇 초 안에)\n· 시트에서 지운 줄은 프로그램 오더도 지웁니다(아래에서 끌 수 있음)\n· 프로그램에서 직접 고친 값은 다음 반영 때 시트 값으로 돌아갑니다(아래 [프로그램 → 시트 반영]을 켜면 시트에도 씁니다) — 입력 · 수정은 시트에서만 하세요`))) return;
+    if (!(await kpConfirm(`${co} · 구글시트 실시간 반영을 켤까요?\n\n· 시트가 바뀌면 바로 새 줄은 오더로 만들고, 고친 줄은 그 오더를 고칩니다(아래 [시트 알림 설치]를 해 두면 몇 초 안에)\n· 시트에서 지운 줄은 프로그램 오더도 지웁니다(아래에서 끌 수 있음)\n· 프로그램에서 직접 고친 값은 다음 반영 때 시트 값으로 돌아갑니다(아래 [프로그램 → 시트 반영]을 켜면 시트에도 씁니다): 입력 · 수정은 시트에서만 하세요`))) return;
     await set({ url: u, enabled: true, days: live?.days || 14, tabs: pickedTabs }, "on");
     runNow();
   };
   const runNow = async () => {
     setBusy("run"); setMsg("");
-    try { const d = await callApi("sheetImport", { action: "liveRun", company: co }); setLive(d.live); const r = d.result || {}; setMsg(`반영 완료 — 새로 ${won(r.created || 0)}건 · 고침 ${won(r.updated || 0)}건 · 삭제 ${won(r.removed || 0)}건 · 그대로 ${won(r.same || 0)}건${r.heldBack ? ` · 시트에 없는 오더 ${won(r.heldBack)}건은 너무 많아 지우지 않았습니다(시트 확인)` : ""}`); } catch (e) { setMsg(liveErr(e.message)); } finally { setBusy(""); }
+    try { const d = await callApi("sheetImport", { action: "liveRun", company: co }); setLive(d.live); const r = d.result || {}; setMsg(`반영 완료: 새로 ${won(r.created || 0)}건 · 고침 ${won(r.updated || 0)}건 · 삭제 ${won(r.removed || 0)}건 · 그대로 ${won(r.same || 0)}건${r.heldBack ? ` · 시트에 없는 오더 ${won(r.heldBack)}건은 너무 많아 지우지 않았습니다(시트 확인)` : ""}`); } catch (e) { setMsg(liveErr(e.message)); } finally { setBusy(""); }
   };
   const on = !!live?.enabled;
   const r = live?.lastResult;
@@ -175,7 +175,7 @@ function SheetPingBox({ co, live, pingOk, onDone }) {
           <ol className="list-decimal pl-5 text-[13px] text-[#3A4A66] leading-relaxed space-y-0.5">
             <li>구글시트 위 메뉴 <b>확장 프로그램 › Apps Script</b>를 눌러요.</li>
             <li>왼쪽 <b>파일 +</b> › <b>스크립트</b>로 새 파일(이름: LogisWeb)을 만들고, 아래 글을 붙여 넣은 뒤 <b>저장</b>해요. 이미 있던 다른 파일 · 코드는 지우지 마세요.</li>
-            <li>위쪽 함수 고르기에서 <b>logiswebInstall</b>을 고르고 <b>실행</b> → 구글 계정 권한을 허용하면 돼요. 태블릿 · 휴대폰에서는 권한 창이 안 열려 "알 수 없는 오류"가 날 수 있어요 — PC에서 해 주세요.</li>
+            <li>위쪽 함수 고르기에서 <b>logiswebInstall</b>을 고르고 <b>실행</b> → 구글 계정 권한을 허용하면 돼요. 태블릿 · 휴대폰에서는 권한 창이 안 열려 "알 수 없는 오류"가 날 수 있어요. PC에서 해 주세요.</li>
             <li>이 화면에 "설치됨"이 뜨면 끝이에요. 시트 주인 계정으로 한 번만 하면 돼요.</li>
           </ol>
           <div className="mt-2 flex gap-2"><button type="button" onClick={copy} className={`${btn} h-9 px-3 bg-[#1B2B4B] text-white text-[13px]`}>스크립트 복사</button></div>
@@ -202,7 +202,7 @@ export function SheetPushCard({ co }) {
   if (!co) return null;
   const setMode = async (mode) => {
     if (mode === push?.mode) return;
-    if (mode === "on" && !(await kpConfirm(`${co} — 프로그램에서 바꾼 오더를 구글시트에 쓰기 시작할까요?\n\n· 수정: 그 오더의 줄에서 바뀐 칸만 고칩니다(수식 칸은 건드리지 않음)\n· 등록: 담당노선구분(= 시트 탭)의 맨 아래 빈 줄에 넣습니다\n· 삭제: 그 줄의 값만 비웁니다(줄은 남김). 한꺼번에 20건 넘게 지우면 보류하고 여기서 확인받습니다\n· 시트 양식으로 옮길 수 없는 값은 프로그램에만 남고, 아래 기록에 표시됩니다\n\n먼저 [점검만]으로 며칠 지켜본 뒤 켜는 것을 권합니다.`))) return;
+    if (mode === "on" && !(await kpConfirm(`${co} · 프로그램에서 바꾼 오더를 구글시트에 쓰기 시작할까요?\n\n· 수정: 그 오더의 줄에서 바뀐 칸만 고칩니다(수식 칸은 건드리지 않음)\n· 등록: 담당노선구분(= 시트 탭)의 맨 아래 빈 줄에 넣습니다\n· 삭제: 그 줄의 값만 비웁니다(줄은 남김). 한꺼번에 20건 넘게 지우면 보류하고 여기서 확인받습니다\n· 시트 양식으로 옮길 수 없는 값은 프로그램에만 남고, 아래 기록에 표시됩니다\n\n먼저 [점검만]으로 며칠 지켜본 뒤 켜는 것을 권합니다.`))) return;
     setBusy(mode); setMsg("");
     try { const d = await callApi("sheetImport", { action: "pushSet", company: co, mode }); setPush(d.push); } catch (e) { setMsg(liveErr(e.message)); } finally { setBusy(""); }
   };
@@ -235,9 +235,9 @@ export function SheetPushCard({ co }) {
           <button type="button" onClick={() => { setOpen((v) => !v); load(); }} className="ml-auto h-9 px-3 rounded-lg border border-[#C9D5EA] bg-white text-[13px] font-black text-[#1B2B4B]">{open ? "기록 접기" : `기록 보기 (${won(items.length)})`}</button>
         </div>}
         {push && push.held > 0 && <div className="mt-3 rounded-xl border border-[#F0D9A8] bg-[#FFF8E8] px-4 py-3 flex items-center gap-2 flex-wrap">
-          <span className="font-bold text-[#7A4B00]">삭제 {won(push.held)}건을 보류했습니다 — 한꺼번에 많이 지워져 시트는 건드리지 않았습니다.</span>
+          <span className="font-bold text-[#7A4B00]">삭제 {won(push.held)}건을 보류했습니다. 한꺼번에 많이 지워져 시트는 건드리지 않았습니다.</span>
           <span className="ml-auto flex gap-1.5">
-            <button type="button" disabled={!!busy} onClick={() => resolve(idsOf("held"), true, `보류한 삭제 ${won(push.held)}건의 시트 줄을 비울까요?\n(줄의 값만 지웁니다 — 시트 버전 기록으로 되살릴 수 있습니다)`)} className="h-9 px-3 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-black disabled:opacity-50">시트에서도 비우기</button>
+            <button type="button" disabled={!!busy} onClick={() => resolve(idsOf("held"), true, `보류한 삭제 ${won(push.held)}건의 시트 줄을 비울까요?\n(줄의 값만 지웁니다. 시트 버전 기록으로 되살릴 수 있습니다)`)} className="h-9 px-3 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-black disabled:opacity-50">시트에서도 비우기</button>
             <button type="button" disabled={!!busy} onClick={() => resolve(idsOf("held"), false, `보류한 삭제 ${won(push.held)}건을 버릴까요?\n시트 줄은 그대로 두고, 다음 실시간 반영 때 그 줄이 다시 오더로 들어옵니다.`)} className="h-9 px-3 rounded-lg border border-[#C9D5EA] bg-white text-[13px] font-black text-[#5B6B85] disabled:opacity-50">버리기(시트 그대로)</button>
           </span>
         </div>}
@@ -453,7 +453,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
       const snap = await getDocs(query(collection(db, "orders"), where("companyName", "==", co), where("등록기기", "==", "구글시트 이전")));
       const ids = snap.docs.map((d) => d.id);
       if (!ids.length) { setWipe({ finished: 0 }); return; }
-      if (!(await kpConfirm(`${co} — 구글시트에서 가져온 오더 ${won(ids.length)}건을 전부 지울까요?\n\n· 오더만 지웁니다(거래처 · 상하차지 · 기사 · 단가표는 그대로)\n· 프로그램에서 직접 등록한 오더는 지우지 않습니다\n· 되돌릴 수 없습니다 — 지운 뒤 아래에서 다시 [가져오기]를 하세요\n· 실시간 반영은 꺼집니다(다시 가져온 뒤 켜 주세요)`))) return;
+      if (!(await kpConfirm(`${co} · 구글시트에서 가져온 오더 ${won(ids.length)}건을 전부 지울까요?\n\n· 오더만 지웁니다(거래처 · 상하차지 · 기사 · 단가표는 그대로)\n· 프로그램에서 직접 등록한 오더는 지우지 않습니다\n· 되돌릴 수 없습니다. 지운 뒤 아래에서 다시 [가져오기]를 하세요\n· 실시간 반영은 꺼집니다(다시 가져온 뒤 켜 주세요)`))) return;
       if (!(await kpConfirm(`한 번 더 확인합니다.\n${co} 오더 ${won(ids.length)}건 삭제를 시작할까요?`))) return;
       await callApi("sheetImport", { action: "pushSet", company: co, mode: "off" }).catch(() => {}); // 🔁 지우는 오더가 시트 줄까지 비우지 않게 시트 쓰기를 먼저 끈다
       await callApi("sheetImport", { action: "liveSet", company: co, enabled: false }).catch(() => {});
@@ -626,7 +626,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
       setProgress({ pct: 100, step: "완료", done: true, result: res });
     } catch (e) {
       await setDoc(doc(db, "importBatches", batchId), { status: "error", error: String(e?.message || e) }, { merge: true }).catch(() => {});
-      setProgress({ pct: 0, step: "", error: `가져오기 실패: ${e?.message || e} — 일부만 저장됐다면 아래 [가져오기 기록]에서 [가져오기 취소]로 지울 수 있습니다.` });
+      setProgress({ pct: 0, step: "", error: `가져오기 실패: ${e?.message || e} · 일부만 저장됐다면 아래 [가져오기 기록]에서 [가져오기 취소]로 지울 수 있습니다.` });
     } finally {
       releaseTenant();
       if (liveWasOn) await callApi("sheetImport", { action: "liveSet", company: co, enabled: true }).catch(() => {});
@@ -699,7 +699,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
                   </table>
                 </div>
                 <div className="mt-3 text-[13px] text-[#5B6B85] leading-relaxed">
-                  <b className="text-[#1B2B4B]">프로그램에만 있음</b> = 시트에 짝이 없는 오더(예전에 두 번 들어간 중복 · 시트에서 지운 줄) — 가져오기 때 [시트에 없는 오더 지우기]로 정리됩니다. <b className="text-[#1B2B4B]">이번에 가져오지 않는 탭</b>(대원전선 · 카고LCL 등)의 오더는 그대로 남습니다.
+                  <b className="text-[#1B2B4B]">프로그램에만 있음</b> = 시트에 짝이 없는 오더(예전에 두 번 들어간 중복 · 시트에서 지운 줄): 가져오기 때 [시트에 없는 오더 지우기]로 정리됩니다. <b className="text-[#1B2B4B]">이번에 가져오지 않는 탭</b>(대원전선 · 카고LCL 등)의 오더는 그대로 남습니다.
                 </div>
                 <span />
                 {cmp.missingEg.length > 0 && (
@@ -719,7 +719,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
 
           {/* STEP 2 탭별 결과 */}
           <section className={`${CARD} p-6`}>
-            <Head eyebrow="STEP 2" title="탭별로 읽은 결과" desc={`${book.title} — 거래처는 우선 탭 이름으로 넣어요(줄에 "화주" 칸이 있으면 그 값). 고친 뒤 [다시 계산]을 눌러 주세요.`}
+            <Head eyebrow="STEP 2" title="탭별로 읽은 결과" desc={`${book.title} · 거래처는 우선 탭 이름으로 넣어요(줄에 "화주" 칸이 있으면 그 값). 고친 뒤 [다시 계산]을 눌러 주세요.`}
               right={<button onClick={() => recalc()} className={`${btn} bg-[#EEF3FF] text-[#2D4C82]`}>다시 계산</button>} />
             <div className="flex flex-wrap gap-3 mb-5">
               <Stat label="오더" value={won(orders.length)} sub={opts.from || opts.to ? `전체 ${won(result.orders.length)} 중 기간 안` : `${orderTabs.length}개 탭`} />
@@ -781,7 +781,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
                         {t.memo.blocked.length > 0 && <div className="text-[#B42318]">⚠ {t.memo.blocked.join(" · ")} (거래처 메모에 남김)</div>}
                         {t.unresolved.length > 0 && (
                           <div className="mt-1.5 rounded-xl border border-[#F5D9B0] bg-[#FFF8EE] px-3 py-2">
-                            <div className="text-[#B45309] font-bold">주소 못 찾음 {t.unresolved.length}곳 — 시트 어디에도 주소가 없는 이름이에요. 아는 곳은 주소를 넣고 [주소 적용]을 눌러 주세요.</div>
+                            <div className="text-[#B45309] font-bold">주소 못 찾음 {t.unresolved.length}곳: 시트 어디에도 주소가 없는 이름이에요. 아는 곳은 주소를 넣고 [주소 적용]을 눌러 주세요.</div>
                             <div className="mt-1.5 grid grid-cols-1 md:grid-cols-2 gap-1.5">
                               {t.unresolved.slice(0, 12).map((u) => {
                                 const k = `${t.title}|${u.name}`;
@@ -887,7 +887,7 @@ export default function CarrierMigratePanel({ companies = [] }) {
               </div>
             )}
             <div className="mt-6">
-              <div className="flex items-center gap-2 flex-wrap mb-1.5"><div className="text-[14px] font-black text-[#0F1A30]">고정노선 후보 <span className="text-[12.5px] font-semibold text-gray-500">같은 구간 · 같은 운임이 {preset.routeMinCount}건 이상 — 운행 OFF로 만들고, 요일 · 기사를 확인한 뒤 고정노선 화면에서 켜요</span></div>{/* ☑ 2026-11-14 전체 선택 · 해제 */}<span className="ml-auto text-[12.5px] font-bold text-[#5B6B85]">{result.routes.filter((_, i) => routeOn[i]).length} / {result.routes.length} 선택</span><button type="button" onClick={() => setRouteOn(Object.fromEntries(result.routes.map((_, i) => [i, true])))} className="h-8 px-3 rounded-lg border border-[#C9D5EA] bg-white text-[12.5px] font-black text-[#1B2B4B]">전체 선택</button><button type="button" onClick={() => setRouteOn({})} className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#5B6B85]">전체 해제</button></div>
+              <div className="flex items-center gap-2 flex-wrap mb-1.5"><div className="text-[14px] font-black text-[#0F1A30]">고정노선 후보 <span className="text-[12.5px] font-semibold text-gray-500">같은 구간 · 같은 운임이 {preset.routeMinCount}건 이상: 운행 OFF로 만들고, 요일 · 기사를 확인한 뒤 고정노선 화면에서 켜요</span></div>{/* ☑ 2026-11-14 전체 선택 · 해제 */}<span className="ml-auto text-[12.5px] font-bold text-[#5B6B85]">{result.routes.filter((_, i) => routeOn[i]).length} / {result.routes.length} 선택</span><button type="button" onClick={() => setRouteOn(Object.fromEntries(result.routes.map((_, i) => [i, true])))} className="h-8 px-3 rounded-lg border border-[#C9D5EA] bg-white text-[12.5px] font-black text-[#1B2B4B]">전체 선택</button><button type="button" onClick={() => setRouteOn({})} className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#5B6B85]">전체 해제</button></div>
               <div className="overflow-x-auto rounded-xl border border-[#E3E8F0]">
                 <table className="min-w-full text-[13px]">
                   <thead className="bg-[#F4F6FA] text-[#5B6B85]"><tr>{["", "노선", "건수", "하루 평균", "청구", "기사", "같은 운임", "요일", "기사"].map((h, i) => <th key={i} className="px-2.5 py-2 text-left font-bold whitespace-nowrap">{h}</th>)}</tr></thead>

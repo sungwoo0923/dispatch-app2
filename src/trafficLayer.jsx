@@ -70,7 +70,7 @@ export function TrafficToggle({ dark = false, style, count, status }) {
       </button>
     )}
     <button type="button" className={`kp-trf-btn ${dark ? "d" : "l"} ${on ? "on" : ""}`} style={style} data-kp="traffic-toggle"
-      title={on ? `교통정보 끄기${note ? ` — ${note}` : ""}` : "교통정보 켜기 — 사고 · 공사 · 통제를 지도에 보여 줘요"}
+      title={on ? `교통정보 끄기${note ? ` — ${note}` : ""}` : "교통정보 켜기: 사고 · 공사 · 통제를 지도에 보여 줘요"}
       onClick={(e) => { e.stopPropagation(); setOn(!on); }}>
       <span className="dot" style={{ background: on ? (note ? "#F59E0B" : "#EF4444") : "#94A3B8" }} />
       교통정보 {on ? (note ? (status?.status === "no-key" ? "연결 전" : "…") : count != null ? count : "켜짐") : "꺼짐"}

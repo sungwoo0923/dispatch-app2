@@ -206,7 +206,7 @@ export default function DriverDocsReview({ company, isViewer = false }) {
         <div className="flex-1 min-w-[220px]">
           <div className="text-[11px] md:text-[12px] font-extrabold tracking-[0.26em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>DRIVER · DOCUMENTS</div>
           <div className="text-[20px] md:text-[24px] font-black mt-0.5">기사 제출 서류</div>
-          <div className="text-[12.5px] md:text-[14px] text-white/60 mt-0.5">기사앱에서 올라온 면허증·자격증·통장 사본 등 — 확인·반려·저장</div>
+          <div className="text-[12.5px] md:text-[14px] text-white/60 mt-0.5">기사앱에서 올라온 면허증·자격증·통장 사본 등: 확인·반려·저장</div>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right"><div className="text-[11px] font-bold text-white/55">필수 서류 완비율</div><div className="text-[30px] font-black tabular-nums leading-none" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{Math.round(rate * 100)}<span className="text-[15px] text-white/50">%</span></div></div>

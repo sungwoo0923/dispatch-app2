@@ -23,10 +23,10 @@ const LS = { id: "pnkSavedId", saveId: "pnkSaveId", auto: "pnkAutoLogin" };
 const lsGet = (k, d = "") => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const lsSet = (k, v) => { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { /* 무시 */ } };
 export const autoLoginOn = () => lsGet(LS.auto, "1") === "1";
-const authMsg = (er) => (er.code === "pnk/no-empno" ? "등록되지 않은 사번입니다. 사번이 없으면 이메일로 로그인해 주세요."
+const authMsg = (er) => (er.code === "pnk/no-empno" ? "등록되지 않은 사번입니다. 사번을 다시 확인해 주세요."
   : ["auth/invalid-credential", "auth/wrong-password", "auth/user-not-found", "auth/invalid-email", "auth/invalid-login-credentials"].includes(er.code) ? "사번(이메일) 또는 비밀번호가 맞지 않습니다."
-    : er.code === "auth/too-many-requests" ? "여러 번 틀려 잠시 막혔습니다. 잠시 뒤 다시 하거나 비밀번호를 재설정해 주세요."
-      : er.code === "auth/email-already-in-use" ? "이미 가입된 이메일입니다. [로그인]에서 그 계정으로 로그인한 뒤 가입 요청을 보내 주세요."
+    : er.code === "auth/too-many-requests" ? "로그인 시도가 여러 번 실패해 잠시 제한되었습니다. 잠시 후 다시 시도하거나 비밀번호를 재설정해 주세요."
+      : er.code === "auth/email-already-in-use" ? "이미 가입된 이메일입니다. [로그인]에서 해당 계정으로 로그인한 뒤 가입 요청을 보내 주세요."
         : er.code === "auth/weak-password" ? "비밀번호는 8자 이상으로 정해 주세요."
           : er.code === "auth/network-request-failed" ? "인터넷 연결을 확인해 주세요." : errMsg(er));
 
@@ -65,11 +65,12 @@ function Frame({ children, wide }) {
 }
 function Check({ checked, onChange, children, className = "" }) {
   return (
-    <label className={cx("flex items-center gap-2 text-[13px] font-semibold text-[#57514A] cursor-pointer select-none", className)}>
-      <span className={cx("w-[18px] h-[18px] rounded-md border-2 flex items-center justify-center transition shrink-0", checked ? "bg-navy border-navy" : "border-[#DDD8D1] bg-white")}>
+    <label className={cx("relative flex items-center gap-2 text-[13px] font-semibold text-[#57514A] cursor-pointer select-none", className)}>
+      <input type="checkbox" className="sr-only peer" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span className={cx("w-[18px] h-[18px] rounded-md border-2 flex items-center justify-center transition shrink-0 peer-focus-visible:ring-2 peer-focus-visible:ring-navy/40 peer-focus-visible:ring-offset-1", checked ? "bg-navy border-navy" : "border-[#DDD8D1] bg-white")} aria-hidden="true">
         {checked && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4"><path d="m5 12 5 5 9-10" /></svg>}
       </span>
-      <input type="checkbox" className="hidden" checked={checked} onChange={(e) => onChange(e.target.checked)} />{children}
+      {children}
     </label>
   );
 }
@@ -130,12 +131,12 @@ function LoginForm({ onStatus }) {
   };
   return (
     <form onSubmit={go} className="space-y-3">
-      <Field label="사번"><Input value={emp} onChange={(e) => setEmp(e.target.value.toUpperCase())} onBlur={() => setEmp((v) => normEmpNo(v))} autoFocus={!emp} className="h-12 text-[15px] tnum font-bold" /></Field>
+      <Field label="사번"><Input value={emp} onChange={(e) => setEmp(e.target.value.toUpperCase())} onBlur={() => setEmp((v) => normEmpNo(v))} autoFocus={!emp} placeholder="PNK-0001" autoComplete="off" spellCheck={false} className="h-12 text-[15px] tnum font-bold" /></Field>
       <Field label="이메일"><Input type="email" autoComplete="username" value={id} onChange={(e) => setId(e.target.value)} placeholder="가입한 이메일" className="h-12 text-[15px]" /></Field>
       <Field label="비밀번호">
         <div className="relative">
           <Input type={show ? "text" : "password"} autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} autoFocus={!!emp && !!id} className="h-12 text-[15px] pr-11" />
-          <button type="button" onClick={() => setShow((v) => !v)} className="absolute right-3 top-3.5 text-[#98928B]" aria-label="비밀번호 보기"><Icon name="eye" size={18} /></button>
+          <button type="button" onClick={() => setShow((v) => !v)} className="absolute right-3 top-3.5 text-[#98928B]" aria-label={show ? "비밀번호 숨기기" : "비밀번호 보기"} aria-pressed={show}><Icon name="eye" size={18} /></button>
         </div>
       </Field>
       <div className="flex items-center gap-4 pt-1">
@@ -156,15 +157,17 @@ function LoginForm({ onStatus }) {
 // 로그인한 계정이 이 사번의 인트라넷 직원인지 — 최고관리자 · 부관리자는 처음 들어올 때(사번 자동 발급 전) 통과
 async function checkMember(user, no) {
   const [m, u] = await Promise.all([
-    getDoc(doc(db, "pnkMembers", user.uid)).catch(() => null),
+    getDoc(doc(db, "pnkMembers", user.uid)).catch(() => "err"),
     getDoc(doc(db, "users", user.uid)).catch(() => null),
   ]);
+  // 🛠 2026-11-24 회원 정보를 못 읽었으면(통신 끊김 등) "회원이 아닙니다"로 잘못 안내하지 않는다
+  if (m === "err") return { ok: false, msg: "회원 정보를 확인하지 못했습니다. 인터넷 연결을 확인한 뒤 다시 로그인해 주세요." };
   const tm = String(user.email || "").toLowerCase() === "tjddnqkf@naver.com" || (u?.exists() && u.data().role === "totalMaster");
   const md = m?.exists() ? m.data() : null;
   if (tm) return !md?.empNo || md.empNo === no ? { ok: true } : { ok: false, msg: "사번이 맞지 않습니다." };
   if (u?.exists()) return { ok: false, msg: "로지스웹 계정으로는 사내 인트라넷에 들어올 수 없습니다. [회원가입]에서 직원으로 가입해 주세요." };
   if (!md) return { ok: false, msg: "인트라넷 회원이 아닙니다. [회원가입]에서 직원으로 가입해 주세요." };
-  if (!md.empNo) return { ok: false, msg: "아직 사번이 없습니다(승인 대기). 아래 [사번이 아직 없나요?]에서 가입 신청 상태를 볼 수 있습니다." };
+  if (!md.empNo) return { ok: false, msg: "아직 사번이 발급되지 않았습니다(승인 대기 중). 아래 [가입 신청 상태 확인]에서 진행 상황을 볼 수 있습니다." };
   if (md.empNo !== no) return { ok: false, msg: "사번 · 이메일 · 비밀번호가 맞지 않습니다." };
   if (md.status === "off") return { ok: false, msg: "사용이 중지된 계정입니다. 관리자에게 문의해 주세요." };
   return { ok: true };
@@ -187,7 +190,7 @@ function StatusForm({ onBack }) {
       await signOut(sc.auth);
       setRes(u?.exists() && !d ? { tone: "red", t: "로지스웹 계정입니다", d: "사내 인트라넷은 [회원가입]으로 가입한 직원만 들어올 수 있습니다." }
         : !d ? { tone: "red", t: "가입 신청이 없습니다", d: "[회원가입]에서 직원으로 가입해 주세요." }
-          : d.empNo ? { tone: "green", t: `승인되었습니다 — 사번 ${d.empNo}`, d: "로그인에서 사번 · 이메일 · 비밀번호를 넣어 들어오세요." }
+          : d.empNo ? { tone: "green", t: `승인되었습니다. 사번은 ${d.empNo}입니다.`, d: "로그인 화면에서 사번, 이메일, 비밀번호를 입력해 주세요." }
             : d.status === "off" ? { tone: "red", t: "사용이 중지된 계정입니다", d: "관리자에게 문의해 주세요." }
               : { tone: "navy", t: "승인 대기 중입니다", d: `${d.name || ""}님의 가입 신청을 대표 · 관리자가 확인하고 있습니다. 승인되면 사번이 발급됩니다.` });
     } catch (er) { setRes({ tone: "red", t: "확인하지 못했습니다", d: authMsg(er) }); }
@@ -311,7 +314,7 @@ const e164 = (p) => { const d = String(p || "").replace(/\D/g, ""); return d.sta
 const maskPhone = (p) => { const d = String(p || "").replace(/\D/g, "").replace(/^82/, "0"); return d.length >= 10 ? `${d.slice(0, 3)}-****-${d.slice(-4)}` : String(p || ""); };
 const smsMsg = (er) => ({
   "auth/invalid-verification-code": "인증번호가 맞지 않습니다.", "auth/code-expired": "인증번호 시간이 지났습니다. 다시 받아 주세요.",
-  "auth/too-many-requests": "요청이 많아 잠시 막혔습니다. 잠시 뒤 다시 해 주세요.", "auth/invalid-phone-number": "휴대폰 번호를 다시 확인해 주세요.",
+  "auth/too-many-requests": "요청이 많아 잠시 제한되었습니다. 잠시 후 다시 시도해 주세요.", "auth/invalid-phone-number": "휴대폰 번호를 다시 확인해 주세요.",
   "auth/captcha-check-failed": "보안 확인에 실패했습니다. 새로고침한 뒤 다시 해 주세요.", "auth/network-request-failed": "인터넷 연결을 확인해 주세요.",
 }[er?.code] || er?.message || "확인하지 못했습니다");
 
