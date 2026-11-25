@@ -100,6 +100,9 @@ for (const m of src.matchAll(/([.#][A-Za-z][^{}`"'\n]{0,160}?)\{([^{}]{0,800})\}
 }
 
 const head = `
+/* 📱 2026-11-26 휴대폰 — 화면 아래 남는 곳까지 어둡게(흰 바탕이 보였다) */
+body:has(.fm-dark.fm-mob),.kp-m:has(.fm-dark.fm-mob){background:#070D1A !important;background-image:none !important}
+:where(div,main):has(> main .fm-dark.fm-mob),main.kp-phone-body:has(.fm-dark.fm-mob){background:#070D1A !important}
 .fm-dark{background:#070D1A;color:#E6EDF8;border-radius:20px;padding:14px !important;border:1px solid #1A2742}
 .fm-dark.fm-pop{background:none;padding:0 !important;border:0;border-radius:0}
 .fm-dark.fm-mob{padding:12px 12px 24px !important;border-radius:0;border:0;min-height:100vh}
