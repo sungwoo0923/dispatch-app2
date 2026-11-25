@@ -5,7 +5,7 @@
 import React from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
-import { watchRelease, latestVersion } from "./releaseGate";
+import { watchRelease, latestVersion, publishRelease } from "./releaseGate";
 import { usePlatformLive } from "./PlatformLive";
 import { kpConfirm } from "./kpDialog";
 import { G, GOLD_BTN, AdmPanel } from "./adminCenter/admUi";
@@ -42,7 +42,6 @@ export default function ForceUpdatePanel() {
   const shown = onlyOld ? cos.filter((c) => c.old > 0) : cos;
   const chosen = scope === "all" ? cos : cos.filter((c) => pick.includes(c.name));
   const sumNow = chosen.reduce((s, c) => s + c.now, 0);
-  const sumOld = chosen.reduce((s, c) => s + c.old, 0);
   const delay = mins === "custom" ? Math.max(0, Math.min(240, Number(custom) || 0)) : mins;
   const toggle = (n) => setPick((p) => (p.includes(n) ? p.filter((x) => x !== n) : [...p, n]));
   const history = Array.isArray(cfg?.history) ? cfg.history : [];
@@ -56,13 +55,26 @@ export default function ForceUpdatePanel() {
   const schedule = async () => {
     if (!target?.build) return setMsg("적용할 버전을 알 수 없어요. 잠시 뒤 다시 눌러 주세요.");
     if (scope === "pick" && !pick.length) return setMsg("운송사를 하나 이상 골라 주세요.");
+    let tgt = target;
+    // 🛠 2026-11-25 배포 잠금이 최신보다 예전이면 대상 화면은 이미 그 버전이라 알림이 안 떴다(사용자 문의) — 최신을 먼저 배포하고 예약할지 묻는다
+    if (stale) {
+      const go = await kpConfirm(`지금 가입자에게 배포된 버전은 v${target.version} 이에요.\n최신 v${latest.version} 은 아직 배포 전이라, 이대로 예약하면 이미 v${target.version} 인 화면에는 알림이 뜨지 않아요.\n\n최신 v${latest.version} 을 먼저 배포하고 예약할까요?`);
+      if (!go) return setMsg(`예약하지 않았어요. 최신 버전을 배포한 뒤 다시 눌러 주세요.`);
+      if (!latest.url) return setMsg("최신 버전 주소를 알 수 없어요. [업데이트 배포]에서 최신 버전을 먼저 배포해 주세요.");
+      try { setBusy(true); await publishRelease(latest, "강제 업데이트 예약과 함께 배포"); tgt = { build: latest.build, version: latest.version }; }
+      catch (e) { setBusy(false); return setMsg(`최신 버전을 배포하지 못했어요: ${e?.message || e}`); }
+      setBusy(false);
+    } else if (inScopeNow > 0 && behindNow === 0) {
+      const go = await kpConfirm(`지금 접속 중인 대상 화면 ${inScopeNow}개가 모두 이미 v${target.version} 이에요.\n예약해도 지금은 알림이 뜨지 않아요(나중에 예전 화면으로 들어온 사람에게만 떠요).\n\n그래도 예약할까요?`);
+      if (!go) return;
+    }
     const who = scope === "all" ? `전체 운송사${shippers ? " · 화주사" : ""}` : `${pick.join(" · ")}${shippers ? " · 연동 화주사" : ""}`;
-    if (!(await kpConfirm(`${who}에 ${delay ? `${delay}분 뒤` : "바로"} v${target.version} 을 적용할까요?\n\n· 대상 화면 위 가운데에 안내와 남은 시간이 떠요\n· 시간이 되면 화면이 저절로 새로 고쳐져요\n· 이미 최신인 사람에게는 뜨지 않아요`))) return;
+    if (!(await kpConfirm(`${who}에 ${delay ? `${delay}분 뒤` : "바로"} v${tgt.version} 을 적용할까요?\n\n· 대상 화면 위 가운데에 안내와 남은 시간이 떠요\n· 시간이 되면 화면이 저절로 새로 고쳐져요\n· 이미 최신인 사람에게는 뜨지 않아요`))) return;
     const t = Date.now(); const id = `fu${t.toString(36)}`;
-    const rec = { id, at: t, scope, companies: scope === "pick" ? pick : [], shippers, mins: delay, version: target.version || "" };
+    const rec = { id, at: t, scope, companies: scope === "pick" ? pick : [], shippers, mins: delay, version: tgt.version || "" };
     await save({
       id, active: true, createdAt: t, fireAt: t + delay * 60000, by: auth.currentUser?.email || "",
-      scope, companies: scope === "pick" ? pick : [], shippers, build: target.build, version: target.version || "", message: message.trim() || DEFAULT_FORCE_MSG,
+      scope, companies: scope === "pick" ? pick : [], shippers, build: tgt.build, version: tgt.version || "", message: message.trim() || DEFAULT_FORCE_MSG,
       history: [rec, ...history].slice(0, 12),
     }, `${who} — ${delay ? `${delay}분 뒤` : "바로"} 적용 예약했어요.`);
   };
@@ -93,13 +105,18 @@ export default function ForceUpdatePanel() {
     return () => clearTimeout(t);
   }, [finished, cfg?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const stale = !!latest?.build && !!target?.build && String(target.build) < String(latest.build); // 배포 잠금 버전이 최신보다 예전
+  // 🛠 2026-11-25 알림이 실제로 뜰 화면 수 — 대상 중 지금 열려 있고 적용 버전보다 예전인 화면(최고관리자 빼고)
+  const scopeOf = (p) => !/totalMaster/.test(String(p.role || "")) && (p.isShipper ? (shippers && scope !== "pick") : (scope !== "pick" || pick.includes(p.company)));
+  const onlineScoped = (live?.onlineList || []).filter((p) => p.now && scopeOf(p));
+  const inScopeNow = onlineScoped.length;
+  const behindNow = target?.build ? onlineScoped.filter((p) => !p.build || String(p.build) < String(target.build)).length : 0;
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,.9fr)] items-start" data-kp="force-panel">
       <AdmPanel code="FORCE UPDATE" title="강제 업데이트 예약">
         <div className="text-[12.5px] leading-relaxed" style={{ color: G.sub }}>고른 운송사에 정한 시간 뒤 <b style={{ color: G.goldHi }}>v{target?.version || "…"}</b> 을 적용해요. 그 사이 대상 화면 위 가운데에 안내와 남은 시간이 보이고, 시간이 되면 저절로 새로 고쳐져요.</div>
         {stale && <div className="mt-3 rounded-xl px-3.5 py-2.5 text-[12.5px] font-bold leading-relaxed" style={{ background: "rgba(242,196,109,.08)", border: "1px solid rgba(242,196,109,.35)", color: G.warn }}>
-          배포 잠금이 v{target.version} 에 걸려 있어 그 버전으로 적용돼요. 최신 v{latest.version} 을 적용하려면 [업데이트 배포]에서 먼저 최신 버전을 배포해 주세요.</div>}
+          지금 가입자에게 배포된 버전은 v{target.version} 이에요. 최신 v{latest.version} 은 아직 배포 전이라, 이대로면 대상 화면에 알림이 뜨지 않아요. 예약 버튼을 누르면 최신 버전을 먼저 배포하고 예약할지 물어봐요.</div>}
         <div className="text-[12px] font-extrabold tracking-[0.06em] mt-4 mb-2" style={{ color: G.dim }}>대상</div>
         <div className="inline-flex p-1 rounded-[14px] gap-1" style={{ background: "rgba(255,255,255,.04)", border: `1px solid ${G.line2}` }}>
           {[["all", "전체 운송사"], ["pick", "운송사 선택"]].map(([k, l]) => (
@@ -131,7 +148,7 @@ export default function ForceUpdatePanel() {
         <textarea value={message} onChange={(e) => setMessage(e.target.value.slice(0, 120))} rows={2} className="w-full rounded-xl px-3.5 py-2.5 text-[13.5px] leading-relaxed outline-none resize-none" style={{ background: "rgba(255,255,255,.03)", border: `1px solid ${G.line2}`, color: G.ink }} />
         <div className="flex justify-between text-[11.5px] mt-1" style={{ color: G.dim }}><span>제목 "시스템 업데이트 예정" 아래에 한 줄로 보여요</span><button type="button" onClick={() => setMessage(DEFAULT_FORCE_MSG)} style={{ color: G.ice }}>기본 문구로</button></div>
         <div className="grid grid-cols-3 gap-2.5 mt-4">
-          {[["대상 운송사", scope === "all" ? "전체" : `${pick.length}곳`, G.ink], ["지금 접속 중", `${sumNow}명`, G.ink], ["이전 버전", `${sumOld}명`, G.warn]].map(([k, v, c]) => (
+          {[["대상 운송사", scope === "all" ? "전체" : `${pick.length}곳`, G.ink], ["지금 접속 중", `${sumNow}명`, G.ink], ["알림이 뜰 화면", stale ? "배포 필요" : `${behindNow}명`, behindNow || stale ? G.warn : G.dim]].map(([k, v, c]) => (
             <div key={k} className="rounded-[14px] px-3.5 py-3" style={{ background: "rgba(255,255,255,.03)", border: `1px solid ${G.line2}` }}>
               <div className="text-[11.5px] font-extrabold" style={{ color: G.dim }}>{k}</div><div className="text-[22px] font-black tabular-nums" style={{ color: c }}>{v}</div></div>))}
         </div>
