@@ -1,4 +1,5 @@
 // src/mobile/MobileFleetView.jsx — 지입차량 관제 (모바일)
+import { FLEET_DARK_CSS } from "../fleetDarkTheme";
 import { makeTruckIcon, truckColor, headingFor, pathHeading, TRUCK_CSS } from "../fleetTruck"; // 🚚 2026-11-25 관제 지도 = 관제실 다크 · 위에서 본 트럭
 import { isFleetGrade } from "../fleetGradesCore"; // 🚛 지입차 구분 한 곳
 import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
@@ -1026,7 +1027,8 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
   const displayPath = roadPath.length >= 2 ? roadPath : selectedPath;
 
   return (
-    <div className="mfv-root" style={{ fontFamily: "'Noto Sans KR',sans-serif", paddingBottom: 24 }}>
+    <div className="mfv-root fm-dark fm-mob" style={{ fontFamily: "'Noto Sans KR',sans-serif", paddingBottom: 24 }}>
+      <style>{FLEET_DARK_CSS}</style>{/* 🛰 2026-11-25 휴대폰 지입차관리도 관제실 다크(PC와 같은 규칙) */}
       {/* ⭐ 폴더블 2분할처럼 폭이 좁아도 버튼·뱃지 글자가 세로로 줄바꿈되며 겹치지 않게 */}
       <style>{`.mfv-root{word-break:keep-all;} .mfv-root button{white-space:nowrap;} .mfv-nw{white-space:nowrap;} .mfv-ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}`}</style>
 

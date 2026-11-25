@@ -7,6 +7,7 @@
 import React from "react";
 import { runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 일괄 처리 진행 창
 import { createPortal } from "react-dom";
+import { FleetDarkPop } from "./fleetDarkCtx"; // 🛰 2026-11-25 지입차관리 다크(밖에 뜨는 창)
 import { kpConfirm, kpPrompt } from "./kpDialog";
 import useNarrow from "./useNarrow";
 import { useBackClose } from "./mobileBack";
@@ -155,7 +156,7 @@ function Detail({ e, checks, canEdit, me, onClose, onAct, phone }) {
       {zoom && e.image && <Zoom src={e.image} paid={e.status === "지급완료"} paidDate={e.paidDate} onClose={() => setZoom(false)} />}
     </div>
   );
-  if (phone) return createPortal(<div className="fixed inset-0 z-[9000] bg-[#F4F6FA] overflow-y-auto p-3 pb-24">{body}</div>, document.body);
+  if (phone) return createPortal(<FleetDarkPop><div className="fixed inset-0 z-[9000] bg-[#F4F6FA] overflow-y-auto p-3 pb-24">{body}</div></FleetDarkPop>, document.body);
   return body;
 }
 
