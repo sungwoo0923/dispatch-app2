@@ -208,13 +208,16 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
     try {
       // 🔗 2026-11-25 거래처 수금 → 정본 입금 기록(arPayments, source "acct")에 먼저 — 자금관리 수입 장부는 서버가 한 줄(auto_ar_…) 붙인다
       //  acctPayments 합계는 예전 보고서 · AI 비서가 읽는 사본(paymentIds 로 이어 둬서 미수금 계산에서는 세지 않는다)
-      const paymentIds = type === "ar" ? await recordAcctDeposit({ client: name, amount: a, orders: yearOrders, pays: arPays, year }) : [];
+      // ✅ 2026-11-25 이번 입금으로 다 받은 청구월은 그 달 오더가 정산완료로 바뀐다(거래처정산 미수금관리와 같은 표시 · 일부입금은 그대로)
+      const dep = type === "ar" ? await recordAcctDeposit({ client: name, amount: a, orders: yearOrders, pays: arPays, year }) : [];
+      const paymentIds = [...dep];
       const newAr = type === "ar" ? { ...arPayments, [name]: (arPayments[name] || 0) + a } : arPayments;
       const newAp = type === "ap" ? { ...apPayments, [name]: (apPayments[name] || 0) + a } : apPayments;
       await saveAcctPayments(db, year, "", newAr, newAp, { type, name, amount: a, paymentIds });
       // 기사 지급은 정산관리 › 지급관리 [지급완료]가 장부에 반영(이중 기록 방지)
       setArPayments(newAr); setApPayments(newAp);
       setPayLog((l) => [...l, { type, name, amount: a, at: Date.now(), ...(paymentIds.length ? { paymentIds } : {}) }]);
+      if (dep.settled) alert(`${name} ${(dep.settledMonths || []).map((ym) => `${Number(ym.slice(5))}월`).join(" · ")}분을 다 받아서 그 달 오더 ${dep.settled}건을 정산완료로 바꿨어요.`);
     } catch (e) { console.error(e); alert(`저장 실패: ${e?.message || e}`); } finally { setSaving(false); }
   };
   const resetPayment = async (type, name) => {
@@ -226,7 +229,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
       const newAp = type === "ap" ? { ...apPayments, [name]: 0 } : apPayments;
       await saveAcctPayments(db, year, "", newAr, newAp, { type, name, amount: 0, reset: true });
       setPayLog((l) => [...l, { type, name, amount: 0, reset: true, at: Date.now() }]);
-      if (type === "ar") { await removeAcctDeposits({ client: name, year }).catch(() => 0); removeClientCollections(db, { name, year }).catch(() => {}); } // 회계 입금 기록 + 예전 자동 수금 줄
+      if (type === "ar") { await removeAcctDeposits({ client: name, year, orders: yearOrders }).catch(() => null); removeClientCollections(db, { name, year }).catch(() => {}); } // 회계 입금 기록 + 예전 자동 수금 줄 · ✅ 그 입금으로 바꾼 정산완료도 되돌림(다 받은 달이 아니게 되면)
       setArPayments(newAr); setApPayments(newAp);
     } catch (e) { console.error(e); alert(`초기화 실패: ${e?.message || e}`); } finally { setSaving(false); }
   };

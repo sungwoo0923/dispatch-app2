@@ -191,6 +191,49 @@ export function arPaidByClient({ orders = [], arPayments = [], acct = null, year
   return out;
 }
 
+// ── ✅ 2026-11-25 회계 [입금 처리]로 다 받은 청구월 → 그 달 오더 정산완료(거래처정산 미수금관리 · 은행 자동 매칭과 같은 키) ──
+//  정산상태.{청구월} = "정산완료" · 정산일.{청구월} = 입금일 · 정산자동.{청구월} = "acct:{depositKey}"(이 길로 바꾼 표시 — 되돌릴 때 이것만)
+//  남은 미수 = 그 달 아직 정산완료가 아닌 오더 청구액(공급가 합 × 1.1 반올림) − 그 거래처 · 그 달 입금 기록(arPayments) 합 → 10원 이하면 다 받은 것
+//  대상 오더 = 미수금과 같게(isArOrder: 배차완료 · 취소 아님 · 화주사 사본 아님 · 고정거래처 줄 아님)
+export const AR_FULL_TOL = 10;
+export const autoSettleTag = (depositKey) => `acct:${depositKey}`;
+const arMonthRowsOf = (orders, client, ym) => (orders || []).filter((r) => r && r._id && !r._fixed && isArOrder(r) && String(r.거래처명 || "") === client && monthOf(r) === ym);
+const paidInOf = (payments, client, ym) => (payments || []).reduce((a, p) => a + (p && String(p.client || "") === client && String(p.yyyymm || "").slice(0, 7) === ym ? Number(p.amount) || 0 : 0), 0);
+// 결과 [{ ym, due, paid, rows }] — rows = 정산완료로 바꿀 오더(아직 정산완료가 아닌 것만 → 두 번 눌러도 다시 쓰지 않음)
+//  only: 이 달들만 본다(이번 입금이 들어간 달)
+export function fullyPaidMonths({ orders = [], payments = [], client, only = null, tol = AR_FULL_TOL } = {}) {
+  if (!client) return [];
+  const pick = only ? new Set(only) : null; const yms = new Set();
+  (orders || []).forEach((r) => { if (r && String(r.거래처명 || "") === client) { const ym = monthOf(r); if (ym && (!pick || pick.has(ym))) yms.add(ym); } });
+  const out = [];
+  [...yms].sort().forEach((ym) => {
+    const rows = arMonthRowsOf(orders, client, ym).filter((r) => !isSettledIn(r, ym));
+    const supply = rows.reduce((a, r) => a + toWon(r.청구운임), 0);
+    if (!rows.length || supply <= 0) return;
+    const due = vatIncluded(supply); const paid = paidInOf(payments, client, ym);
+    if (paid + tol >= due) out.push({ ym, due, paid, rows });
+  });
+  return out;
+}
+// 되돌리기 — marks: 이 길로 정산완료한 기록 [{ col, id, ym, prev, tag }] · payments: 지운 뒤 남은 입금 기록
+//  지금도 tag 표시가 그대로인 정산완료 오더만 · 그 달이 남은 입금으로 더는 다 받지 않았을 때만 돌린다(직접 누른 정산완료는 건드리지 않음)
+export function autoSettleRevertsOf({ orders = [], payments = [], client, marks = [], tol = AR_FULL_TOL } = {}) {
+  const byId = new Map((orders || []).filter((r) => r && r._id).map((r) => [r._id, r]));
+  const live = (marks || []).filter((m) => {
+    const r = byId.get(m?.id);
+    return r && r.정산상태?.[m.ym] === "정산완료" && r.정산자동?.[m.ym] === m.tag;
+  });
+  const out = [];
+  [...new Set(live.map((m) => m.ym))].forEach((ym) => {
+    const mine = live.filter((m) => m.ym === ym); const ids = new Set(mine.map((m) => m.id));
+    const open = arMonthRowsOf(orders, client, ym).filter((r) => ids.has(r._id) || !isSettledIn(r, ym));
+    const due = vatIncluded(open.reduce((a, r) => a + toWon(r.청구운임), 0));
+    if (due > 0 && paidInOf(payments, client, ym) + tol >= due) return; // 다른 입금으로 여전히 다 받음 → 그대로
+    out.push(...mine);
+  });
+  return out;
+}
+
 // ── 예상 부가세 ──
 export const isTaxInvoiceSale = (r) => String(r?.지급방식 || "").trim() === "계산서";
 export const isInvoiceDriver = (d) => d?.세금계산서발행 === true;

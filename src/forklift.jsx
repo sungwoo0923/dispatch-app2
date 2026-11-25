@@ -21,7 +21,7 @@ import BulkUploadChooser, { downloadTemplateXlsx } from "./BulkUploadChooser";
 import { fmtPhone } from "./formatInput";
 import { kpAlert, kpConfirm } from "./kpDialog";
 import { MonthPicker } from "./kpInputs";
-import { bumpForkliftPayout, setExtPayout } from "./ledgerAuto"; // 지급완료 → 수입·지출 장부 자동
+import { bumpForkliftPayout, setExtPayout, setExtPayAdjust } from "./ledgerAuto"; // 지급완료 → 수입·지출 장부 자동
 import { isJyCompany } from "./jyOnly"; // 🏷 JY로지스틱스 전용(특수운임 "지급 없음")
 import RouteSpecialPresets from "./RouteSpecialPresets"; // ⭐ 2026-11-18 [특수운임 적용] 팝업 › 고정노선운임 탭
 import { useRoutePresets, applyRoutePresets, planRoutePreset, itemsFromOrder, mergeItems, saveRoutePreset, routePresetIdOf, AUTO as ROUTE_AUTO, nk as routeNk, stopCount as routeStops } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
@@ -29,7 +29,7 @@ import {
   FORKLIFT_MODES, FORKLIFT_UPLOAD_COLS, fkAmount, fkMode, fkModeLabel, fkPresetKey, forkliftApply, forkliftClear,
   forkliftPayoutGroups, forkliftRowFromSheet, forkliftSummary, hasForklift,
   SPECIAL_TYPES, SPECIAL_MODES, sfItems, sfMode, sfPayee, sfName, hasSpecial, specialCount, specialTotal, specialLines, specialApplyAll, orderProfit, paidOut, fkNum,
-  forkliftTransferRows, isCanceledOrder, extPayoutGroups, extPayPlan,
+  forkliftTransferRows, isCanceledOrder, extPayoutGroups, extPayPlan, extSettleGapPlan,
 } from "./forkliftCore";
 
 export * from "./forkliftCore";
@@ -717,7 +717,7 @@ function ForkliftPayoutsTab({ orders = [], patchDispatch, isViewer = false }) {
 
 // ─── 💳 2026-11-25 정산관리 › 지게차 · 외부 지급 › [외부 지급] 탭 ───
 //  특수운임 중 받는사람 "외부"(인력 상하차비 · 주차비 · 기타 — 회사가 따로 주는 돈)를 받는 곳(메모, 없으면 항목 이름)별로 모아 지급
-//  계산 · 저장 규칙은 src/forkliftCore.js(extPayoutGroups · extPayPlan), 장부는 ledgerAuto.setExtPayout(항목 한 줄)
+//  계산 · 저장 규칙은 src/forkliftCore.js(extPayoutGroups · extPayPlan · extSettleGapPlan), 장부는 ledgerAuto.setExtPayout(항목 한 줄) · setExtPayAdjust(추가 지급 · 환수 한 줄)
 const EXT_BADGE = "inline-flex items-center h-[18px] px-1.5 rounded-md bg-[#FFF4DB] text-[#8A5A00] text-[10.5px] font-black whitespace-nowrap align-middle";
 const extModeShort = (m) => (SPECIAL_MODES.find((x) => x.key === m) || {}).short || "";
 const extRowId = (r) => `${r.orderId}|${r.key}`;
@@ -744,7 +744,7 @@ function ExtPayoutsTab({ orders = [], patchDispatch, isViewer = false }) {
     if (!target.length) return;
     const total = target.reduce((a, r) => a + (paid ? r.amount : r.paidAmt), 0);
     const date = String(payDate || kstDay()).slice(0, 10);
-    if (!(await kpConfirm(paid ? `${target.length}건 · ${won(total)}원을 지급완료로 바꿀까요?\n지급일은 ${date}예요.` : `${target.length}건 · ${won(total)}원의 지급을 취소할까요?\n장부에 들어간 지급 기록도 같이 지워져요.`))) return;
+    if (!(await kpConfirm(paid ? `${target.length}건 · ${won(total)}원을 지급완료로 바꿀까요?\n지급일은 ${date}예요.` : `${target.length}건 · ${won(total)}원의 지급을 취소할까요?\n장부에 들어간 지급 기록(추가 지급 · 환수 포함)도 같이 지워져요.`))) return;
     // 같은 오더의 항목은 한 번에 저장(외부지급 칸을 통째로 쓴다)
     const byOrder = new Map();
     target.forEach((r) => { const e = byOrder.get(r.orderId) || { order: r.order, keys: [] }; e.keys.push(r.key); byOrder.set(r.orderId, e); });
@@ -758,16 +758,35 @@ function ExtPayoutsTab({ orders = [], patchDispatch, isViewer = false }) {
           const ok = await patchDispatch(orderId, { ...plan.patch, __system: true });
           if (ok === false) continue;
           // 수입·지출 장부(항목 한 줄 · 지급 취소면 지움)
-          for (const l of plan.ledger) setExtPayout(db, { orderId, itemKey: l.itemKey, amount: l.amount, date: l.date || date, company: order.companyName || getTenant(), to: l.to, name: l.name }).catch(() => {});
+          for (const l of plan.ledger) {
+            const base = { orderId, itemKey: l.itemKey, date: l.date || date, company: order.companyName || getTenant(), to: l.to, name: l.name };
+            setExtPayout(db, { ...base, amount: l.amount }).catch(() => {});
+            if (l.adjAmount != null) setExtPayAdjust(db, { ...base, amount: l.adjAmount }).catch(() => {}); // 지급 취소 → 조정 줄도 지움
+          }
         }
       } });
       setSel(new Set());
     } finally { setBusy(false); }
   };
+  // 💸 지급 후 금액 변경 — [추가 지급]/[환수 처리]: 차액만 조정 한 줄로(같은 항목은 한 줄 · 누적 금액이라 두 번 눌러도 같은 값)
+  const settleGap = async (r) => {
+    if (isViewer || !patchDispatch || !r) return;
+    const plan = extSettleGapPlan(r.order, r.key, kstDay());
+    if (!plan) return;
+    const plus = plan.gap > 0; const o = r.order || {};
+    if (!(await kpConfirm(`${plus ? "추가 지급" : "환수 처리"}할까요?\n${r.to} · ${r.name} · ${o.상차일 || ""}\n지급한 돈 ${won(r.paidAmt)}원 → 지금 금액 ${won(r.amount)}원\n${plus ? `${won(plan.gap)}원을 더 드린 것으로` : `${won(-plan.gap)}원을 돌려받은 것으로`} 장부에 남겨요.`, { title: plus ? "추가 지급" : "환수 처리", okText: "네", cancelText: "취소" }))) return;
+    setBusy(true);
+    try {
+      const ok = await patchDispatch(r.orderId, { ...plan.patch, __system: true });
+      if (ok === false) return;
+      const l = plan.ledger;
+      setExtPayAdjust(db, { orderId: r.orderId, itemKey: l.itemKey, amount: l.adjAmount, date: l.date, company: o.companyName || getTenant(), to: l.to, name: l.name }).catch(() => {});
+    } finally { setBusy(false); }
+  };
   const exportXlsx = async () => {
     const XLSX = await loadXLSX();
     const rows = [];
-    groups.forEach((g) => g.rows.forEach((r) => { const o = r.order || {}; rows.push({ 받는곳: g.name, 항목: r.name, 상차일: o.상차일 || "", 거래처: o.거래처명 || "", 상차지: o.상차지명 || "", 하차지: o.하차지명 || "", 금액: r.amount, 부담: extModeShort(r.mode), 지급: r.paid ? "지급완료" : "미지급", 지급일: r.paidDate || "", 지급액: r.paid ? r.paidAmt : "", 비고: [r.orphan ? "항목이 바뀜" : r.changed ? `지급 후 금액 변경 ${won(r.amount - r.paidAmt)}` : "", r.canceled ? "지급 후 취소" : ""].filter(Boolean).join(" · ") }); }));
+    groups.forEach((g) => g.rows.forEach((r) => { const o = r.order || {}; rows.push({ 받는곳: g.name, 항목: r.name, 상차일: o.상차일 || "", 거래처: o.거래처명 || "", 상차지: o.상차지명 || "", 하차지: o.하차지명 || "", 금액: r.amount, 부담: extModeShort(r.mode), 지급: r.paid ? "지급완료" : "미지급", 지급일: r.paidDate || "", 지급액: r.paid ? r.paidAmt : "", 조정액: r.adjAmt || "", 비고: [r.orphan ? "항목이 바뀜" : r.changed ? `지급 후 금액 변경 ${won(r.amount - r.paidAmt)}` : "", r.canceled ? "지급 후 취소" : ""].filter(Boolean).join(" · ") }); }));
     const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "외부지급"); XLSX.writeFile(wb, `외부지급_${ym || "전체"}.xlsx`);
   };
   const chk = "w-4 h-4 accent-[#0F1A30] align-middle cursor-pointer";
@@ -792,7 +811,7 @@ function ExtPayoutsTab({ orders = [], patchDispatch, isViewer = false }) {
           <div key={k} className={`rounded-[16px] px-3 sm:px-4 py-3 border min-w-0 ${i === 1 ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}><div className={`text-[12px] sm:text-[12.5px] font-bold whitespace-nowrap truncate ${i === 1 ? "text-white/60" : "text-[#7A879C]"}`}>{k}</div><div className="text-[17px] sm:text-[22px] font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{won(v)}<span className="text-[11px] sm:text-[12px] ml-0.5 sm:ml-1 opacity-50">원</span></div></div>
         ))}
       </div>
-      {sum.changed > 0 && <div className="rounded-[12px] bg-[#FFF8E8] border border-[#F2DFAE] px-3 py-2 text-[12.5px] font-bold text-[#8A5A00]">지급한 뒤 금액이 바뀐 항목이 {sum.changed}건 있어요. 장부에는 지급한 금액이 그대로 있어요. 새 금액으로 맞추려면 [지급 취소] 뒤 다시 [지급완료]를 누르면 돼요.</div>}
+      {sum.changed > 0 && <div className="rounded-[12px] bg-[#FFF8E8] border border-[#F2DFAE] px-3 py-2 text-[12.5px] font-bold text-[#8A5A00]">지급한 뒤 금액이 바뀐 항목이 {sum.changed}건 있어요. 장부에는 지급한 금액이 그대로 있어요. 받는 곳을 펼쳐 그 줄의 [추가 지급](더 드릴 때) · [환수 처리](돌려받을 때)를 누르면 차액만 장부에 들어가요. 항목을 지운 줄은 [지급 취소]를 누르면 돼요.</div>}
       <div className="rounded-[18px] bg-white border border-[#E3E8F0] overflow-x-auto">
         <table className="w-full text-[13.5px]" style={{ minWidth: 860 }}>
           <thead><tr className="bg-[#1B2B4B] text-white">{["", "받는 곳", "항목", "건수", "합계", "미지급", "지급완료", ""].map((h, i) => <th key={i} className={`px-3 py-2.5 font-extrabold whitespace-nowrap ${i === 0 ? "w-9" : ""}`}>{h}</th>)}</tr></thead>
@@ -820,7 +839,8 @@ function ExtPayoutsTab({ orders = [], patchDispatch, isViewer = false }) {
                       {r.canceled && <span className={`${EXT_BADGE} mr-1.5`}>지급 후 취소</span>}
                       {r.orphan ? <span className={`${EXT_BADGE} mr-1.5`} title="지급한 뒤 이 항목을 지웠거나 받는사람을 바꿨어요. 돈을 돌려받았다면 [지급 취소]를 눌러 주세요.">항목이 바뀌었어요</span>
                         : r.changed ? <span className={`${EXT_BADGE} mr-1.5`} title={`지급한 금액 ${won(r.paidAmt)}원 → 지금 ${won(r.amount)}원. 장부는 지급한 금액 그대로예요.`}>지급 후 금액 변경 {gap > 0 ? "+" : ""}{won(gap)}</span> : null}
-                      {r.paid ? <span className="font-bold text-[#1B2B4B] whitespace-nowrap">지급완료 {r.paidDate}{r.changed ? ` · ${won(r.paidAmt)}원` : ""}</span> : <span className="font-bold text-[#B54708]">미지급</span>}
+                      {r.changed && !r.orphan && !isViewer && <button type="button" disabled={busy} onClick={() => settleGap(r)} data-testid="ext-settle-gap" className="h-[18px] px-1.5 mr-1.5 rounded-md border border-[#C9D6EE] bg-white text-[#1B2B4B] text-[10.5px] font-bold hover:bg-[#EEF3FC] whitespace-nowrap align-middle disabled:opacity-40">{gap > 0 ? "추가 지급" : "환수 처리"}</button>}
+                      {r.paid ? <span className="font-bold text-[#1B2B4B] whitespace-nowrap" title={r.adjAmt ? `지급 ${won(r.basePaid)}원 ${r.adjAmt > 0 ? "+ 추가 지급" : "− 환수"} ${won(Math.abs(r.adjAmt))}원` : undefined}>지급완료 {r.paidDate}{r.changed || r.adjAmt ? ` · ${won(r.paidAmt)}원` : ""}</span> : <span className="font-bold text-[#B54708]">미지급</span>}
                     </td>
                     <td className="px-3 py-1.5 text-center">{!isViewer && (r.paid || payable(r)) && <button type="button" disabled={busy} onClick={() => markPaid([r], !r.paid)} className="h-7 px-2.5 rounded-md border border-[#DCE3EE] text-[11.5px] font-black whitespace-nowrap">{r.paid ? "지급 취소" : "지급완료"}</button>}</td>
                   </tr>

@@ -87,6 +87,17 @@ export async function setExtPayout(db, { orderId, itemKey, amount, date, company
     memo: "정산관리 › 지게차 · 외부 지급 › 외부 지급 [지급완료]: 자동 반영",
   });
 }
+// 💸 2026-11-25 외부 지급 · 지급 후 금액 변경 — 오더 × 항목 조정 한 줄(auto_extpayadj_회사_오더ID_항목키 · src/forkliftCore.js extAdjLedgerDocId)
+//  금액 = 누적 조정액(+ 추가 지급 · − 환수: 지출을 줄이는 음수), 0이면 지움(여러 번 눌러도 같은 값) — setDriverPayAdjust 와 같은 방식
+export async function setExtPayAdjust(db, { orderId, itemKey, amount, date, company, to = "", name = "" }) {
+  const amt = toInt(amount);
+  const tail = `${to ? ` · ${to}` : ""}${name && name !== to ? ` · ${name}` : ""}`;
+  return upsertAutoEntry(db, `${orderId}_${itemKey}`, {
+    company, date, type: "지출", account: "운반비", amount: amt, vendor: to || "외부", auto: "extpayadj", purpose: "drvpay",
+    item: amt >= 0 ? `외부 지급 추가 지급(정산관리)${tail}` : `외부 지급 환수(정산관리)${tail}`,
+    memo: "정산관리 › 지게차 · 외부 지급 › 외부 지급 [추가 지급]/[환수 처리]: 항목 한 개의 누적 차액",
+  });
+}
 
 // 거래처 수금 1건
 export async function addClientCollection(db, { name, amount, year, company }) {
