@@ -29,6 +29,32 @@ function workText(d) {
 }
 const groupOf = (ph) => PHASE_GROUPS.find((g) => g.phases.includes(ph)) || PHASE_GROUPS[3];
 
+// 🛠 2026-11-26 현위치 · 최종위치(주소) — 앱이 접속 중이고 10분 안에 들어온 위치면 현위치, 아니면 최종위치
+const isLive = (d) => !!d?.active && (() => { const ms = tsMs(d?.updatedAt); return ms != null && Date.now() - ms < 10 * 60 * 1000; })();
+function useAddr(loc, geocode) {
+  const [a, setA] = React.useState("");
+  const lat = loc?.lat, lng = loc?.lng;
+  React.useEffect(() => {
+    if (!geocode || !Number.isFinite(lat) || !Number.isFinite(lng)) { setA(""); return undefined; }
+    let alive = true;
+    geocode(lat, lng, (v) => { if (alive) setA(v || ""); });
+    return () => { alive = false; };
+  }, [lat, lng, geocode]);
+  return a;
+}
+function LocLine({ d, geocode, size = 12.5 }) {
+  const addr = useAddr(d?.location, geocode);
+  if (!d?.location) return <span style={{ fontSize: size, fontWeight: 700, color: C.dim }}>위치 기록 없음</span>;
+  const live = isLive(d);
+  return (
+    <span style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0, fontSize: size, fontWeight: 700 }}>
+      <span style={{ flexShrink: 0, fontWeight: 900, color: live ? "#34D399" : "#FBBF24" }}>{live ? "현위치" : "최종위치"}</span>
+      <span style={{ color: "#C9D5E8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{addr || "주소 찾는 중…"}</span>
+      {!live && <span style={{ flexShrink: 0, color: C.dim }}>{ago(d.updatedAt)}</span>}
+    </span>
+  );
+}
+
 function Clock() {
   const [now, setNow] = React.useState(() => new Date());
   React.useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
@@ -48,11 +74,11 @@ const DECK_CSS = `
 .lwd{font-family:${FONT};background:${C.bg};color:${C.text};border-radius:18px;overflow:hidden;border:1px solid ${C.line};display:flex;flex-direction:column;height:max(660px,calc(100vh - 170px));font-variant-numeric:tabular-nums}
 .lwd *{box-sizing:border-box}
 .lwd-top{display:flex;align-items:stretch;border-bottom:1px solid ${C.line};background:linear-gradient(180deg,#0C1528,#08101F);flex-shrink:0}
-.lwd-brand{width:300px;flex-shrink:0;display:flex;align-items:center;gap:12px;padding:12px 18px;border-right:1px solid ${C.line}}
+.lwd-brand{width:340px;flex-shrink:0;display:flex;align-items:center;gap:12px;padding:12px 18px;border-right:1px solid ${C.line}}
 .lwd-kpis{flex:1;display:grid;grid-template-columns:repeat(6,minmax(0,1fr))}
 .lwd-kpi{display:flex;flex-direction:column;justify-content:center;gap:2px;padding:10px 16px;border-right:1px solid ${C.line};min-width:0}
 .lwd-kpi:last-child{border-right:0}
-.lwd-body{flex:1;min-height:0;display:grid;grid-template-columns:300px minmax(0,1fr) 330px}
+.lwd-body{flex:1;min-height:0;display:grid;grid-template-columns:340px minmax(0,1fr) 330px}
 .lwd-col{min-height:0;display:flex;flex-direction:column;background:${C.panel}}
 .lwd-map{position:relative;min-width:0;min-height:0;background:#08111F}
 .lwd-scroll{flex:1;min-height:0;overflow:auto}
@@ -81,7 +107,7 @@ export default function FleetControlDeck({
   drivers = [], phaseById, searchQuery = "", onSearch, selected, onSelect, onContextMenu,
   locChangeRequests = [], collisionAlerts = [], onLocRequest, onLocDismiss, onCollisionResolve,
   logs = [], driversMap = {}, onDeleteFeed, todayPhotoIds = null,
-  renderMap, trackDate = null, onMapRefresh, onFitAll, onOpenDetail,
+  renderMap, trackDate = null, onMapRefresh, onFitAll, onOpenDetail, geocode = null,
 }) {
   const [group, setGroup] = React.useState("all");
   const phase = (d) => phaseById?.get(d.id) || "배차대기";
@@ -181,17 +207,15 @@ export default function FleetControlDeck({
                   <span style={{ width: 9, height: 9, borderRadius: 99, background: col, boxShadow: d.active ? `0 0 8px ${col}` : "none", flexShrink: 0 }} />
                   <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
                     <span style={{ display: "flex", gap: 8, alignItems: "baseline", minWidth: 0 }}>
-                      <b style={{ fontSize: 14.5, fontWeight: 900, color: "#F2F6FC", whiteSpace: "nowrap" }}>{d.이름 || "-"}</b>
-                      <span style={{ fontSize: 12.5, fontWeight: 700, color: C.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{d.차량번호 || ""}</span>
-                      {todayPhotoIds?.has(d.id) && <span title="오늘 올린 사진" style={{ fontSize: 11, fontWeight: 800, color: "#7DD3FC" }}>사진</span>}
+                      <b style={{ fontSize: 16, fontWeight: 900, color: "#F2F6FC", whiteSpace: "nowrap" }}>{d.이름 || "-"}</b>
+                      <span style={{ fontSize: 14, fontWeight: 800, color: "#CFE0FF", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: ".01em" }}>{d.차량번호 || ""}</span>
+                      {todayPhotoIds?.has(d.id) && <span title="오늘 올린 사진" style={{ fontSize: 12, fontWeight: 800, color: "#7DD3FC" }}>사진</span>}
                     </span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: C.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {d.active ? `${d.vehicleType || d.차종 || "차량"} · ${ago(d.updatedAt)}` : `미접속 · 마지막 ${ago(d.updatedAt)}`}
-                    </span>
+                    <LocLine d={d} geocode={geocode} />
                   </span>
                   <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
-                    <span style={{ fontSize: 11.5, fontWeight: 900, color: col, whiteSpace: "nowrap" }}>{alertIds.has(d.id) ? "충격 감지" : ph}</span>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: "#A9B8D2" }}>{spd > 3 ? `${spd}km/h` : d.location ? "정차" : "위치 없음"}</span>
+                    <span style={{ fontSize: 13, fontWeight: 900, color: col, whiteSpace: "nowrap" }}>{alertIds.has(d.id) ? "충격 감지" : ph}</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: "#A9B8D2" }}>{spd > 3 ? `${spd}km/h` : d.location ? "정차" : "위치 없음"}</span>
                   </span>
                 </button>
               );
@@ -209,17 +233,18 @@ export default function FleetControlDeck({
           </div>
 
           {sel && (
-            <section aria-label="따라가는 차량" style={{ position: "absolute", left: 14, bottom: 14, zIndex: 1000, width: "min(360px, calc(100% - 28px))", padding: "14px 16px", borderRadius: 14, background: "rgba(10,18,34,.94)", border: "1px solid #2B4F8C", boxShadow: "0 0 0 1px rgba(56,189,248,.15), 0 18px 40px rgba(0,0,0,.45)" }}>
+            <section aria-label="따라가는 차량" style={{ position: "absolute", left: 14, bottom: 14, zIndex: 1000, width: "min(400px, calc(100% - 28px))", padding: "14px 16px", borderRadius: 14, background: "rgba(10,18,34,.94)", border: "1px solid #2B4F8C", boxShadow: "0 0 0 1px rgba(56,189,248,.15), 0 18px 40px rgba(0,0,0,.45)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".18em", color: C.accent }}>따라가는 중</span>
                 <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 700, color: C.sub }}>{ago(sel.updatedAt)} 갱신</span>
                 <button type="button" aria-label="선택 해제" onClick={() => onSelect?.(sel)} style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.line2}`, background: "transparent", color: C.sub, cursor: "pointer", fontSize: 15, lineHeight: 1 }}>×</button>
               </div>
               <div style={{ marginTop: 4, display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-                <b style={{ fontSize: 19, fontWeight: 900 }}>{sel.이름 || "-"}</b>
-                <span style={{ fontSize: 14, fontWeight: 700, color: "#A9B8D2" }}>{sel.차량번호 || ""}</span>
-                <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 900, color: truckColor(selPhase) }}>{selPhase}</span>
+                <b style={{ fontSize: 20, fontWeight: 900 }}>{sel.이름 || "-"}</b>
+                <span style={{ fontSize: 16, fontWeight: 800, color: "#CFE0FF" }}>{sel.차량번호 || ""}</span>
+                <span style={{ marginLeft: "auto", fontSize: 14, fontWeight: 900, color: truckColor(selPhase) }}>{selPhase}</span>
               </div>
+              <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 10, background: "#0E1A30", border: `1px solid ${C.line2}` }}><LocLine d={sel} geocode={geocode} size={13.5} /></div>
               <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8 }}>
                 <div><div style={{ fontSize: 11.5, fontWeight: 700, color: C.dim }}>속도</div><div style={{ fontSize: 18, fontWeight: 900 }}>{Number(sel.speed) > 3 ? Number(sel.speed) : 0}<span style={{ fontSize: 12, color: C.sub }}> km/h</span></div></div>
                 <div><div style={{ fontSize: 11.5, fontWeight: 700, color: C.dim }}>오늘 이동</div><div style={{ fontSize: 18, fontWeight: 900 }}>{(Number(sel.총거리) || 0).toFixed(1)}<span style={{ fontSize: 12, color: C.sub }}> km</span></div></div>

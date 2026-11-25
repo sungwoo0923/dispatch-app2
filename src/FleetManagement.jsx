@@ -2,7 +2,8 @@
 import { makeTruckIcon, truckColor, headingFor, pathHeading } from "./fleetTruck";
 import FleetControlDeck from "./FleetControlDeck"; // 🛰 2026-11-25 관제현황 = 관제실 다크
 import { FLEET_DARK_CSS } from "./fleetDarkTheme";
-import { FleetDarkCtx, FleetDarkPop } from "./fleetDarkCtx"; // 🛰 2026-11-25 지입차관리 전체 다크(scripts/genFleetDark.mjs) // 🚚 2026-11-25 관제실 다크 · 위에서 본 트럭
+import { FleetDarkCtx, FleetDarkPop } from "./fleetDarkCtx";
+import { startFleetDarkGuard } from "./fleetDarkGuard"; // 🛰 2026-11-26 다크 지킴이 // 🛰 2026-11-25 지입차관리 전체 다크(scripts/genFleetDark.mjs) // 🚚 2026-11-25 관제실 다크 · 위에서 본 트럭
 import { buildDriverCopyText } from "./driverCopyText"; // 📋 2026-11-18 기사복사 문구 — PC · 모바일 같은 글
 import { useCopyTemplates } from "./copyTemplates";
 import { isFleetGrade } from "./fleetGradesCore"; // 🚛 지입차 구분(지입·직영·임대·분양) 한 곳
@@ -840,7 +841,7 @@ function FleetMap({ drivers, center, onSelect, selectedPath = [], fitAllCount = 
       <MapRecenter center={center} />
       <FitAll count={fitAllCount} drivers={drivers} />
       {selectedPath.length >= 2 && <FitPath points={selectedPath} resetKey={selectedDriver?.id} />}
-      <TileLayer className="lw-dark-tiles" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+      <TileLayer className="lw-dark-tiles" tileSize={512} zoomOffset={-1} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
       <TrafficOverlay />{/* 🚦 2026-11-22 사고 · 공사 · 통제 */}
 
       {/* ⭐ 이동 동선 — 예전엔 GPS 점을 하나하나 원으로 찍어 다닥다닥 보였다. 도로에 맞춘
@@ -866,7 +867,7 @@ function FleetMap({ drivers, center, onSelect, selectedPath = [], fitAllCount = 
               return makeTruckIcon({
                 color: truckColor(ph),
                 heading: headingFor(d.id, d.location, sel ? selHint : null),
-                label: sel ? `${d.이름 || ""} · ${spd > 3 ? `${spd}km/h` : ph}` : (tail || d.이름 || ""),
+                label: sel ? `${d.이름 || ""} · ${spd > 3 ? `${spd}km/h` : ph}` : [d.이름 && d.이름 !== "-" ? d.이름 : "", tail].filter(Boolean).join(" "), // 🛠 2026-11-26 이름 + 차량번호 끝 4자리
                 selected: sel, alert: !!alertIds?.has(d.id), offline: !d.active,
               });
             })()}
@@ -6933,6 +6934,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
 
   // ─── 렌더 ────────────────────────────────────────────────────────────────
   const darkDeck = dark ?? (!hideChrome && !forceTab); // 휴대폰 지입차관리 속화면은 dark 로 켠다 // 🛰 2026-11-25 지입차관리 메뉴 전체 = 관제실 다크(다른 메뉴에 끼워 쓸 때는 원래 밝은 화면)
+  React.useEffect(() => (darkDeck ? startFleetDarkGuard() : undefined), [darkDeck]); // 🛰 2026-11-26 규칙이 못 잡은 흰 바탕 · 안 보이는 글씨를 화면에서 바로 고침
   return (
     <FleetDarkCtx.Provider value={darkDeck}>
     <div className={darkDeck ? (hideChrome ? "fm-dark fm-mob" : "fm-dark") : undefined} style={{
@@ -7116,6 +7118,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
             }
             onMapRefresh={handleMapRefresh}
             onFitAll={() => setFitAllCount(c => c + 1)}
+            geocode={enqueueGeocode}
             onOpenDetail={() => { try { document.querySelector('[data-kp="fleet-detail"]')?.scrollIntoView({ behavior: "smooth", block: "start" }); } catch { /* 무시 */ } }}
           />
 

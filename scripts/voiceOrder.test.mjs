@@ -47,5 +47,16 @@ ok(V.SCHEMA.properties.patch.items.properties.k.enum.length === V.KEYS.length, "
 const u = V.buildUser({ text: "에이제이", current: { 상차일: "2026-11-25", stops: [{ kind: "상차", name: "트레이더스 칠곡" }], driverNote: "1번 김철수 2번 이영희" },
   known: { clients: ["AJ네트웍스"], places: [{ n: "이마트트레이더스 여주점", a: "경기 여주시" }], options: { 지급방식: ["계산서"] }, glossary: [["에이제이", "AJ네트웍스"]] }, now: Date.now() });
 ok(/에이제이 = AJ네트웍스/.test(u) && /AJ네트웍스/.test(u) && /경유1: 상차 트레이더스 칠곡/.test(u) && /기사 고르기 안내/.test(u) && /지급방식: 계산서/.test(u), "용어 사전 · 목록 · 경유 · 기사 안내가 AI에 간다");
+// Haiku가 권한 오류면 Sonnet으로 다시
+const { Anthropic } = require("../functions/orderScan.js");
+const authErr = Object.assign(Object.create(Anthropic.PermissionDeniedError.prototype), { status: 403, message: "model not allowed" });
+const tried = [];
+const flaky = () => ({ messages: { create: async (req) => { tried.push(req.model); if (req.model === "claude-haiku-5-5") throw authErr;
+  return { stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify({ reply: "네", action: "ask", patch: [], stopsChanged: false, stops: [], specialsChanged: false, specials: [], newItems: [] }) }], usage: {} }; } } });
+const r4 = await V.runVoiceTurn({ db: fakeDb(staff), auth, data: { text: "안녕" }, makeAnthropic: flaky });
+ok(r4.reply === "네" && tried.join(",") === "claude-haiku-5-5,claude-sonnet-5-5", "Haiku가 막히면 Sonnet으로 다시");
+let why = "";
+try { await V.runVoiceTurn({ db: fakeDb(staff), auth, data: { text: "안녕" }, makeAnthropic: () => ({ messages: { create: async () => { throw authErr; } } }) }); } catch (e) { why = `${e.code} ${e.message}`; }
+ok(/failed-precondition/.test(why) && /403/.test(why), "둘 다 막히면 이유(403)를 알려 준다");
 if (fails) { console.error(`\n${fails}개 실패`); process.exit(1); }
 console.log("\nvoiceOrder: 모두 통과");

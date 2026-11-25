@@ -111,7 +111,7 @@ main.kp-main:has(.fm-dark:not(.fm-pop)){background:#070D1A !important;box-shadow
 .fm-dark table{color:#E6EDF8}
 .fm-dark table tbody tr:nth-child(odd) td{background-color:transparent}
 .fm-dark table tbody tr:nth-child(even) td{background-color:rgba(143,176,240,.035)}
-.fm-dark table tbody tr:hover td{background-color:rgba(143,176,240,.08)}
+.fm-dark table tbody tr:hover td{background-color:rgba(143,176,240,.1) !important}
 .fm-dark table td,.fm-dark table th{border-color:#1A2742}
 .fm-dark svg[stroke="#1B2B4B" i],.fm-dark svg[stroke="#0F1A30" i],.fm-dark svg[stroke="#2D4C82" i],.fm-dark svg[stroke="#5B6B85" i],.fm-dark svg[stroke="#374151" i]{stroke:#9FB3D6}
 .fm-dark svg [stroke="#1B2B4B" i],.fm-dark svg [stroke="#0F1A30" i]{stroke:#9FB3D6}
