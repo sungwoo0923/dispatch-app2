@@ -347,12 +347,14 @@ function FareStatementBody({ rows, issuerName, show, MONO }) {
   const items = [...byItem.values()];
   const fareTypes = [...new Set(list.map((x) => x.fb.fareType).filter(Boolean))];
   const NW = { whiteSpace: "nowrap" };
-  const th = { ...NW, fontSize: 11, fontWeight: 800, color: "#5B6B85", padding: "9px 12px", background: "#F5F7FB", borderBottom: "1px solid #E3E8F0", textAlign: "left", verticalAlign: "middle" };
-  const thR = { ...th, textAlign: "right" };
+  const th = { ...NW, fontSize: 11.5, fontWeight: 800, color: "#5B6B85", padding: "9px 12px", background: "#F5F7FB", borderBottom: "1px solid #E3E8F0", textAlign: "center", verticalAlign: "middle" };
+  const thR = th; // 🛠 2026-11-25 제목 줄은 모두 가운데(사용자 요청)
   const td = { ...NW, fontSize: 12, fontWeight: 700, color: "#0F1A30", padding: "9px 12px", borderBottom: "1px solid #EEF1F6", verticalAlign: "middle" };
   const num = { ...td, textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums" };
-  const foot = { background: "#F5F7FB", borderBottom: "none", fontWeight: 900 };
-  const profitColor = (n) => (n < 0 ? "#B4342A" : n > 0 ? "#2D4C82" : "#7A89A3");
+  // 합계 줄 — 굵은 글씨 · 진한 바탕 · 위 굵은 선으로 다른 줄과 확실히 구분
+  const foot = { background: "#E8EEF8", borderBottom: "none", borderTop: "2px solid #0F1A30", fontWeight: 900, fontSize: 13, color: "#0F1A30" };
+  // 🛠 2026-11-25 수수료 색 — 배차현황 수수료 칸과 같게 이익 빨강 · 손실(마이너스) 파랑(사용자 요청)
+  const profitColor = (n) => (n < 0 ? "#1D4ED8" : n > 0 ? "#DC2626" : "#7A89A3");
   const sec = (en, title) => (
     <div style={{ display: "flex", alignItems: "baseline", gap: 8, margin: "20px 0 8px" }}>
       <span style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 800, letterSpacing: "0.22em", color: "#4B6CB7" }}>{en}</span>
@@ -392,7 +394,7 @@ function FareStatementBody({ rows, issuerName, show, MONO }) {
       {sec("DETAIL", "건별 운임")}
       <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #E3E8F0" }}>
         <thead><tr>
-          <th style={{ ...th, textAlign: "center" }}>No</th><th style={th}>상차일</th><th style={th}>상차지</th><th style={th}>하차지</th><th style={th}>차량번호</th><th style={th}>기사명</th><th style={th}>운임구분</th>
+          <th style={th}>No</th><th style={th}>상차일</th><th style={th}>상차지</th><th style={th}>하차지</th><th style={th}>차량번호</th><th style={th}>기사명</th><th style={th}>운임구분</th>
           {show.base && <th style={thR}>기본운임</th>}<th style={th}>특수운임</th>
           {show.drv && <th style={thR}>기사운임</th>}{show.sale && <th style={thR}>청구운임</th>}{show.fee && <th style={thR}>수수료</th>}
         </tr></thead>
@@ -451,26 +453,31 @@ function loadFareCertCols() {
   return d;
 }
 function FareCertColsButton({ show, setShow }) {
-  const [open, setOpen] = React.useState(false);
-  const ref = React.useRef(null);
+  // 🛠 2026-11-25 펼침 창을 화면 맨 위층(portal)에 띄운다 — 예전엔 창 머리(overflow-hidden)에 잘려 안 보였다
+  const [rect, setRect] = React.useState(null);
+  const btnRef = React.useRef(null); const popRef = React.useRef(null);
+  const open = !!rect;
   React.useEffect(() => {
     if (!open) return undefined;
-    const off = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", off);
-    return () => document.removeEventListener("mousedown", off);
+    const off = (e) => { if (!btnRef.current?.contains(e.target) && !popRef.current?.contains(e.target)) setRect(null); };
+    const key = (e) => { if (e.key === "Escape") { e.stopPropagation(); setRect(null); } };
+    const move = () => setRect(null);
+    document.addEventListener("mousedown", off); window.addEventListener("keydown", key, true); window.addEventListener("resize", move);
+    return () => { document.removeEventListener("mousedown", off); window.removeEventListener("keydown", key, true); window.removeEventListener("resize", move); };
   }, [open]);
   const on = FARE_CERT_COL_LIST.filter(([k]) => show[k]).length;
   const toggle = (k) => setShow((p) => { const n = { ...p, [k]: !p[k] }; try { localStorage.setItem(FARE_CERT_COLS_KEY, JSON.stringify(n)); } catch { /* 무시 */ } return n; });
   return (
-    <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className={`h-9 px-3 rounded-xl border text-[12.5px] font-bold whitespace-nowrap ${open ? "bg-white text-[#0F1A30] border-white" : "bg-white/10 border-white/20 hover:bg-white/20"}`}>
+    <>
+      <button ref={btnRef} type="button" onClick={() => setRect(open ? null : btnRef.current.getBoundingClientRect())} aria-expanded={open} className={`h-9 px-3 rounded-xl border text-[12.5px] font-bold whitespace-nowrap ${open ? "bg-white text-[#0F1A30] border-white" : "bg-white/10 border-white/20 hover:bg-white/20"}`}>
         금액 표시 설정 <span className="ml-1 text-[11px] opacity-70">{on}/{FARE_CERT_COL_LIST.length}</span>
       </button>
-      {open && (
-        <div className="absolute right-0 top-11 z-10 w-[220px] rounded-2xl bg-white text-[#0F1A30] shadow-[0_20px_50px_rgba(11,20,40,.35)] border border-[#E3E8F0] p-2">
-          <div className="px-2 pt-1 pb-2 text-[11.5px] font-bold text-[#7A89A3]">문서에 보일 금액을 골라요. 이 PC에 기억돼요.</div>
+      {open && createPortal(
+        <div ref={popRef} className="fixed w-[240px] rounded-2xl bg-white text-[#0F1A30] shadow-[0_20px_50px_rgba(11,20,40,.35)] border border-[#E3E8F0] p-2"
+          style={{ zIndex: 1000001, top: rect.bottom + 8, left: Math.max(8, Math.min(window.innerWidth - 248, rect.right - 240)) }}>
+          <div className="px-2 pt-1 pb-2 text-[12px] font-bold text-[#7A89A3]">문서에 보일 금액을 골라요. 이 PC에 기억돼요.</div>
           {FARE_CERT_COL_LIST.map(([k, l]) => (
-            <label key={k} className="flex items-center justify-between gap-2 px-2 h-10 rounded-xl hover:bg-[#F4F6FA] cursor-pointer text-[13.5px] font-black">
+            <label key={k} className="flex items-center justify-between gap-2 px-2 h-11 rounded-xl hover:bg-[#F4F6FA] cursor-pointer text-[14px] font-black">
               {l}
               <span className={`relative w-10 h-6 rounded-full transition ${show[k] ? "bg-[#0F1A30]" : "bg-[#D5DCE7]"}`}>
                 <input type="checkbox" className="sr-only" checked={!!show[k]} onChange={() => toggle(k)} />
@@ -478,9 +485,8 @@ function FareCertColsButton({ show, setShow }) {
               </span>
             </label>
           ))}
-        </div>
-      )}
-    </div>
+        </div>, document.body)}
+    </>
   );
 }
 function FareCertModal({ row, companyName, onClose }) {
@@ -531,14 +537,17 @@ function FareCertModal({ row, companyName, onClose }) {
   const savePdf = async () => {
     const canvas = await captureCanvas();
     if (!canvas) return;
-    const imgData = canvas.toDataURL("image/png");
-    const pdf = new (await loadJsPDF())("p", "mm", "a4");
-    const pdfWidth = 210;
+    // 🛠 2026-11-25 PDF 용량 — PNG(약 12MB) 대신 고화질 JPEG(약 1MB)로 넣는다. 메일 · 카톡으로 보내기 좋게
+    const imgData = canvas.toDataURL("image/jpeg", 0.92);
+    // 🧾 2026-11-25 넓은 명세서(문서 폭 1000px 넘음)는 A4 가로로 — 글씨가 작아지지 않게
+    const land = multi && (captureRef.current?.offsetWidth || 0) > 1100;
+    const pdf = new (await loadJsPDF())(land ? "l" : "p", "mm", "a4");
+    const pdfWidth = land ? 297 : 210; const pageH = land ? 210 : 297;
     const imgHeight = (canvas.height * pdfWidth) / canvas.width;
     // 🧾 명세서가 A4 한 장보다 길면 여러 장으로 나눠 담는다
-    for (let y = 0, page = 0; y < imgHeight; y += 297, page += 1) {
+    for (let y = 0, page = 0; y < imgHeight; y += pageH, page += 1) {
       if (page) pdf.addPage();
-      pdf.addImage(imgData, "PNG", 0, -y, pdfWidth, imgHeight);
+      pdf.addImage(imgData, "JPEG", 0, -y, pdfWidth, imgHeight);
     }
     pdf.save(`${docTitle}_${r.차량번호 || ""}_${r.상차일 || ""}${multi ? `_외${certRows.length - 1}건` : ""}.pdf`);
   };
@@ -548,10 +557,11 @@ function FareCertModal({ row, companyName, onClose }) {
     const imgData = canvas.toDataURL("image/png");
     const w = window.open("", "_blank");
     if (!w) return;
+    const land = multi && (captureRef.current?.offsetWidth || 0) > 1100; // 넓은 명세서는 가로로 인쇄
     w.document.write(`<!doctype html><html><head><title>${docTitle}</title><style>
-      @page { size: A4; margin: 10mm; }
+      @page { size: A4 ${land ? "landscape" : "portrait"}; margin: 10mm; }
       body { margin:0; display:flex; justify-content:center; background:#fff; }
-      img { width:100%; max-width:190mm; }
+      img { width:100%; max-width:${land ? 277 : 190}mm; }
     </style></head><body><img src="${imgData}" onload="window.print()" /></body></html>`);
     w.document.close();
   };
@@ -563,9 +573,9 @@ function FareCertModal({ row, companyName, onClose }) {
   const done = r.기사확인상태 === "완료" || !!r.기사완료일시;
   // 문서 안 표 한 칸 (html2canvas 캡처용이라 단순한 마크업만 사용)
   const cell = (label, value, opts = {}) => (
-    <div style={{ display: "flex", borderBottom: "1px solid #E3E8F0", minHeight: 38, gridColumn: opts.span ? "span 2" : undefined }}>
-      <div style={{ width: 92, flexShrink: 0, background: "#F5F7FB", color: "#5B6B85", fontSize: 12, fontWeight: 800, padding: "9px 12px", borderRight: "1px solid #E3E8F0" }}>{label}</div>
-      <div style={{ flex: 1, minWidth: 0, padding: "9px 12px", fontSize: 13.5, fontWeight: opts.bold ? 900 : 700, color: "#0F1A30", wordBreak: "break-all" }}>{value || "-"}</div>
+    <div style={{ display: "flex", borderBottom: "1px solid #E3E8F0", minHeight: 44, gridColumn: opts.span ? "span 2" : undefined }}>
+      <div style={{ width: 104, flexShrink: 0, background: "#F5F7FB", color: "#5B6B85", fontSize: 13.5, fontWeight: 800, padding: "11px 14px", borderRight: "1px solid #E3E8F0", whiteSpace: "nowrap", display: "flex", alignItems: "center" }}>{label}</div>
+      <div style={{ flex: 1, padding: "11px 14px", fontSize: 15, fontWeight: opts.bold ? 900 : 700, color: "#0F1A30", whiteSpace: "nowrap", display: "flex", alignItems: "center" }}>{value || "-"}</div>
     </div>
   );
   const sec = (en, title) => (
@@ -577,7 +587,7 @@ function FareCertModal({ row, companyName, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[999999] bg-[#0B1428]/70 backdrop-blur-[3px] flex items-center justify-center p-6">
-      <div className={`bg-[#F4F6FA] rounded-[26px] shadow-[0_40px_100px_rgba(0,0,0,0.45)] ${multi ? "w-[1480px]" : "w-[920px]"} max-w-[96vw] max-h-[94vh] flex flex-col overflow-hidden`} onClick={(e) => e.stopPropagation()}>
+      <div className={`bg-[#F4F6FA] rounded-[26px] shadow-[0_40px_100px_rgba(0,0,0,0.45)] ${multi ? "w-[1480px]" : "w-[1120px]"} max-w-[96vw] max-h-[94vh] flex flex-col overflow-hidden`} onClick={(e) => e.stopPropagation()}>
         {/* 헤더 툴바 */}
         <div className="relative flex items-center justify-between px-6 py-4 shrink-0 text-white overflow-hidden" style={{ background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 60%,#2D4C82 100%)" }}>
           <span className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
@@ -600,7 +610,7 @@ function FareCertModal({ row, companyName, onClose }) {
         <div ref={bodyRef} className="flex-1 overflow-auto p-6">
           <div style={docSize.w ? { width: docSize.w * zoom, height: docSize.h * zoom, margin: "0 auto" } : undefined}>
           <div style={{ transform: `scale(${zoom})`, transformOrigin: docSize.w ? "top left" : "top center", transition: "transform .15s", width: docSize.w || undefined }}>
-            <div ref={captureRef} className="mx-auto" style={{ ...(multi ? { width: "max-content", minWidth: 900 } : { width: 760 }), background: "#fff", fontFamily: "'Pretendard','Noto Sans KR',sans-serif", boxShadow: "0 10px 30px rgba(15,26,48,0.12)" }}>
+            <div ref={captureRef} className="mx-auto" style={{ ...(multi ? { width: "max-content", minWidth: 900 } : { width: "max-content", minWidth: 900 }), background: "#fff", fontFamily: "'Pretendard','Noto Sans KR',sans-serif", boxShadow: "0 10px 30px rgba(15,26,48,0.12)" }}>
               {/* 문서 머리 */}
               <div style={{ background: "#0F1A30", color: "#fff", padding: "22px 34px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
                 <div>
@@ -619,7 +629,7 @@ function FareCertModal({ row, companyName, onClose }) {
                 {multi ? <FareStatementBody rows={certRows} issuerName={issuerName} show={show} MONO={MONO} /> : (<>
                 <div style={{ fontSize: 13.5, fontWeight: 600, color: "#3A4A66", lineHeight: 1.75, background: "#F5F7FB", border: "1px solid #E3E8F0", borderRadius: 10, padding: "12px 16px" }}>
                   본 확인서는 <b style={{ color: "#0F1A30" }}>{issuerName || "운송사"}</b>가 아래 운송 건을 기사 <b style={{ color: "#0F1A30" }}>{r.이름 || "-"}</b>({r.차량번호 || "-"})에게 배차하였고,
-                  해당 기사님이 운송을 {done ? "완료하였음" : "수행함"}을 확인하며, 아래 기사운임을 지급함을 증명합니다.
+                  해당 기사님이 운송을 {done ? "완료하였음" : "수행함"}을 확인{show.drv ? "하며, 아래 기사운임을 지급함을 증명합니다." : "합니다."}
                 </div>
 
                 {sec("ROUTE", "운송 정보")}
@@ -658,31 +668,32 @@ function FareCertModal({ row, companyName, onClose }) {
                 {(() => {
                   const won = (n) => `${Math.round(n).toLocaleString()}원`;
                   const delta = (n) => (n ? <span style={{ color: n > 0 ? "#2D4C82" : "#B4342A" }}>{n > 0 ? "+" : "−"}{Math.abs(Math.round(n)).toLocaleString()}</span> : <span style={{ color: "#B7C2D3" }}>·</span>);
-                  const th = { fontSize: 11, fontWeight: 800, color: "#5B6B85", padding: "8px 10px", background: "#F5F7FB", borderBottom: "1px solid #E3E8F0", textAlign: "left", whiteSpace: "nowrap", verticalAlign: "middle" };
-                  const td = { fontSize: 12.5, fontWeight: 700, color: "#0F1A30", padding: "8px 10px", borderBottom: "1px solid #EEF1F6", verticalAlign: "middle" };
-                  const pc = (n) => (n < 0 ? "#B4342A" : n > 0 ? "#2D4C82" : "#7A89A3"); // 수수료 +파랑 · −빨강
+                  const th = { fontSize: 12.5, fontWeight: 800, color: "#5B6B85", padding: "9px 12px", background: "#F5F7FB", borderBottom: "1px solid #E3E8F0", textAlign: "center", whiteSpace: "nowrap", verticalAlign: "middle" };
+                  const td = { fontSize: 14, fontWeight: 700, color: "#0F1A30", padding: "10px 12px", borderBottom: "1px solid #EEF1F6", verticalAlign: "middle", whiteSpace: "nowrap" };
+                  const pc = (n) => (n < 0 ? "#1D4ED8" : n > 0 ? "#DC2626" : "#7A89A3"); // 수수료 이익 빨강 · 손실 파랑(배차현황과 같게)
                   const num = { ...td, textAlign: "right", fontFamily: MONO, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
-                  const total = { ...num, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" };
+                  const total = { ...num, fontWeight: 900, fontSize: 15, background: "#E8EEF8", borderTop: "2px solid #0F1A30", borderBottom: "none" };
+                  const totalL = { ...td, fontWeight: 900, fontSize: 15, background: "#E8EEF8", borderTop: "2px solid #0F1A30", borderBottom: "none" };
                   return (
                     <div style={{ marginTop: 12 }}>
                       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
-                        <span style={{ fontSize: 12.5, fontWeight: 900, color: "#0F1A30" }}>운임 내역</span>
+                        <span style={{ fontSize: 14.5, fontWeight: 900, color: "#0F1A30" }}>운임 내역</span>
                         {fb.fareType && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#2D4C82", background: "#EEF3FC", borderRadius: 6, padding: "2px 8px" }}>운임구분 {fb.fareType}</span>}
                       </div>
                       <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #E3E8F0" }}>
                         <thead><tr>
-                          <th style={th}>항목</th><th style={{ ...th, textAlign: "right" }}>금액</th><th style={th}>처리</th>
-                          {show.drv && <th style={{ ...th, textAlign: "right" }}>기사운임</th>}{show.sale && <th style={{ ...th, textAlign: "right" }}>청구운임</th>}
+                          <th style={th}>항목</th><th style={th}>금액</th><th style={th}>처리</th>
+                          {show.drv && <th style={th}>기사운임</th>}{show.sale && <th style={th}>청구운임</th>}
                         </tr></thead>
                         <tbody>
                           {show.base && <tr><td style={td}>기본운임</td><td style={num}>{won(fb.baseDrv)}</td><td style={{ ...td, color: "#7A89A3" }}>특수운임을 넣기 전 운임</td>{show.drv && <td style={num}>{won(fb.baseDrv)}</td>}{show.sale && <td style={num}>{won(fb.baseSale)}</td>}</tr>}
                           {fb.lines.map((l) => (
                             <tr key={l.key}><td style={td}>{l.name}</td><td style={num}>{won(l.amount)}</td><td style={{ ...td, fontWeight: 600, color: "#5B6B85" }}>{l.how}</td>{show.drv && <td style={num}>{delta(l.drv)}</td>}{show.sale && <td style={num}>{delta(l.sale)}</td>}</tr>
                           ))}
-                          <tr><td style={{ ...td, fontWeight: 900, background: "#F5F7FB", borderBottom: "none" }}>최종 운임</td><td style={total} /><td style={{ ...td, background: "#F5F7FB", borderBottom: "none", color: "#5B6B85", fontWeight: 600 }}>{fb.paid ? `회사 별도 지급 ${won(fb.paid)}` : ""}</td>{show.drv && <td style={total}>{won(fb.drv)}</td>}{show.sale && <td style={total}>{won(fb.sale)}</td>}</tr>
+                          <tr><td style={totalL}>최종 운임</td><td style={total} /><td style={{ ...totalL, color: "#5B6B85", fontWeight: 700, fontSize: 13 }}>{fb.paid ? `회사 별도 지급 ${won(fb.paid)}` : ""}</td>{show.drv && <td style={total}>{won(fb.drv)}</td>}{show.sale && <td style={total}>{won(fb.sale)}</td>}</tr>
                         </tbody>
                       </table>
-                      {show.fee && <div style={{ textAlign: "right", fontSize: 12, fontWeight: 800, color: "#3A4A66", marginTop: 6 }}>수수료(청구운임 − 기사운임 − 회사 별도 지급) <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: pc(fb.profit) }}>{won(fb.profit)}</b></div>}
+                      {show.fee && <div style={{ textAlign: "right", fontSize: 14, fontWeight: 800, color: "#3A4A66", marginTop: 6 }}>수수료(청구운임 − 기사운임 − 회사 별도 지급) <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: pc(fb.profit) }}>{won(fb.profit)}</b></div>}
                     </div>
                   );
                 })()}
@@ -719,7 +730,7 @@ function FareCertModal({ row, companyName, onClose }) {
 
         {/* 하단 액션 */}
         <div className="flex items-center justify-between gap-2 px-6 py-3.5 border-t border-[#E3E8F0] bg-white shrink-0">
-          <span className="text-[12px] font-bold text-[#8A97AD]">{multi ? "PDF는 길이에 맞춰 여러 장으로 나눠 저장돼요" : "A4 한 장으로 저장 · 인쇄됩니다"}</span>
+          <span className="text-[12px] font-bold text-[#8A97AD]">A4에 맞춰 저장 · 인쇄돼요. 길면 여러 장으로 나뉘고, 넓은 명세서는 가로로 저장돼요.</span>
           <div className="flex items-center gap-2">
             <button type="button" onClick={saveImage} className="h-10 px-4 rounded-xl border border-[#DCE3EE] text-[#1B2B4B] text-[13px] font-black hover:border-[#2D4C82] transition"><EditableText id="misc.btn.294.이미지저장" defaultText="이미지저장" /></button>
             <button type="button" onClick={savePdf} className="h-10 px-4 rounded-xl border border-[#DCE3EE] text-[#1B2B4B] text-[13px] font-black hover:border-[#2D4C82] transition">PDF저장</button>
