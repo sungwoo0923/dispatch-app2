@@ -1,7 +1,8 @@
 // src/mobile/MobileIntelView.jsx — 경영인텔리전스 (모바일 totalMaster 전용)
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useRouteCarrierFilter } from "../routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정
-import { isInsightRow, insightRange } from "../ProInsight"; // ⭐ 2026-11-05 PC·모바일 일치 — 인사이트 매출 기준 공용
+import { isInsightRow, insightRange } from "../ProInsight";
+import { salesMonthOf, salesBillDateOf } from "../salesRule"; // 🗓 2026-11-25 달 = 청구월(마감월) // ⭐ 2026-11-05 PC·모바일 일치 — 인사이트 매출 기준 공용
 import { orderProfit } from "../forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -257,7 +258,7 @@ function fmtW(v) {
   return `${v.toLocaleString()}원`;
 }
 
-function getYM(dateStr) { return dateStr?.slice(0, 7) ?? ""; }
+// (🗓 2026-11-25 getYM 은 청구월 salesMonthOf 로 바꿔 지웠다)
 function getY(dateStr) { return dateStr?.slice(0, 4) ?? ""; }
 
 // ────────────────────────────────────────────────
@@ -297,9 +298,10 @@ function IntelDashboard({ dispatchData, accent = NAVY }) {
 
   // ⭐ 2026-11-05 PC·모바일 일치 — PC 인사이트 "이번 달"과 같은 기간(1일~오늘) · 전월 대비도 PC처럼 지난달 같은 날까지
   const { s: tmS, e: tmE, ps: pmS, pe: pmE } = insightRange("this");
-  const thisMonth = useMemo(() => dispatchData.filter(d => d.상차일 >= tmS && d.상차일 <= tmE), [dispatchData, tmS, tmE]);
-  const lastMonth = useMemo(() => dispatchData.filter(d => d.상차일 >= pmS && d.상차일 <= pmE), [dispatchData, pmS, pmE]);
-  const thisYear  = useMemo(() => dispatchData.filter(d => getY(d.상차일) === cyStr), [dispatchData, cyStr]);
+  // 🗓 2026-11-25 달 · 연 매출은 청구월(마감월) 기준 — 청구일(salesBillDateOf · 이월 오더는 청구월 1일)로 나눈다(PC 인사이트 · 매출관리와 같다)
+  const thisMonth = useMemo(() => dispatchData.filter(d => { const b = salesBillDateOf(d); return b >= tmS && b <= tmE; }), [dispatchData, tmS, tmE]);
+  const lastMonth = useMemo(() => dispatchData.filter(d => { const b = salesBillDateOf(d); return b >= pmS && b <= pmE; }), [dispatchData, pmS, pmE]);
+  const thisYear  = useMemo(() => dispatchData.filter(d => getY(salesBillDateOf(d)) === cyStr), [dispatchData, cyStr]);
 
   const tmRev  = useMemo(() => thisMonth.reduce((s, d) => s + toInt(d.청구운임), 0), [thisMonth]);
   const tmProfit = useMemo(() => thisMonth.reduce((s, d) => s + orderProfit(d), 0) /* ⭐ 2026-11-17 줄 수수료와 같은 식 */, [thisMonth]);
@@ -312,7 +314,7 @@ function IntelDashboard({ dispatchData, accent = NAVY }) {
     return Array.from({ length: 6 }, (_, i) => {
       const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
       const prefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const rows = dispatchData.filter(x => getYM(x.상차일) === prefix);
+      const rows = dispatchData.filter(x => salesMonthOf(x) === prefix); // 🗓 청구월
       return {
         month: `${String(d.getMonth() + 1).padStart(2, "0")}월`,
         매출: rows.reduce((s, x) => s + toInt(x.청구운임), 0),

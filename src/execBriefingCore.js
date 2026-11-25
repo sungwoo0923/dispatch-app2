@@ -8,6 +8,7 @@
 //  · 팀별 기여: 담당자별 매출(dailyReportCore staffRanking)을 직원 소속 팀(users.team)으로 묶는다
 import { dateOf, toWon, isDone, rangeDays } from "./dailyReportCore";
 import { orderProfit, paidOut } from "./forkliftCore";
+import { isSalesOrder, salesMonthOf } from "./salesRule"; // 🗓 2026-11-25 돈 = 배차완료 · 청구월 기준
 
 // ── 인건비 계정 ──
 export const LABOR_ACCOUNT_RE = /급여|상여|퇴직|잡급|인건비|4대\s*보험|국민연금|건강보험|고용보험|산재보험/;
@@ -34,10 +35,11 @@ export function monthPipeline(rows, ym, today, yearRows) {
   const from = `${ym}-01`;
   const o = { orders: 0, done: 0, open: 0, sale: 0, cost: 0, driverPay: 0, profit: 0, deposited: 0, depositedCnt: 0, paid: 0, paidCnt: 0, days: rangeDays(from, today).length, useDeposit: false, usePay: false };
   for (const r of rows || []) {
-    const d = dateOf(r); if (d < from || d > today) continue;
-    o.orders += 1;
-    if (!isDone(r)) { o.open += 1; continue; }
-    o.done += 1;
+    const d = dateOf(r);
+    // 건수(접수 · 배차완료 · 미완료)는 상차일 1일 ~ 오늘
+    if (d >= from && d <= today) { o.orders += 1; if (!isDone(r)) o.open += 1; else o.done += 1; }
+    // 🗓 2026-11-25 돈(청구 매출 · 원가 · 이익 · 입금 · 지급)은 청구월(마감월) = 이번 달인 배차완료 오더(salesRule — 매출관리 · 미수금과 같은 달)
+    if (!isSalesOrder(r) || salesMonthOf(r) !== ym) continue;
     const s = toWon(r.청구운임); const drv = toWon(r.기사운임);
     o.sale += s; o.driverPay += drv; o.cost += drv + paidOut(r); o.profit += orderProfit(r);
     if (r.입금상태 === "입금완료") { o.deposited += s; o.depositedCnt += 1; }

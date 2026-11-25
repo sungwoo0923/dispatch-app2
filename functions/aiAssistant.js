@@ -221,6 +221,14 @@ const arCore = async () => _arCore || (_arCore = await import("./arCore.mjs"));
 // ⭐ 2026-11-17 수익(수수료) 공용 계산(화면 src/forkliftCore.js 와 같은 파일) — 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
 let _profitCore = null;
 const profitCore = async () => _profitCore || (_profitCore = await import("./profitCore.mjs"));
+// 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료 + 고정거래처) — 화면 매출관리 · 홈 · 일일 보고와 같은 파일
+let _salesRule = null;
+const salesRule = async () => _salesRule || (_salesRule = await import("./salesRule.mjs"));
+// 고정거래처 매출(fixedClients) → 매출 줄(기간 · 거래처 조건)
+async function fixedSalesIn(ctx, from, to, client) {
+  const SR = await salesRule();
+  return SR.fixedSalesRows(await loadCompanyCol(ctx, "fixedClients", 5000)).filter((r) => r.상차일 >= from && r.상차일 <= to && (!client || has(r.거래처명, client)));
+}
 
 // ─────────────────────────── 회사 데이터 읽기(우리 회사만) ───────────────────────────
 const coOf = (r) => String(r?.companyName || DEFAULT_CO).trim();
@@ -389,7 +397,7 @@ const TOOLS = {
     },
   },
   today_summary: {
-    description: "하루 현황 요약: 오더 수, 미배차(기사 없는 오더) 목록, 상태별 건수, 매출·기사운임·수익(청구 − 기사 − 지게차 등 회사 지급분), 승인대기.",
+    description: "하루 현황 요약: 오더 수, 미배차(기사 없는 오더) 목록, 상태별 건수, 매출·기사운임·수익(배차완료 오더 + 고정거래처 기준 — 매출관리와 같음, 청구 − 기사 − 지게차 등 회사 지급분), 승인대기.",
     input_schema: { type: "object", properties: { date: { type: "string", description: "YYYY-MM-DD(비우면 오늘)" } } },
     async run(ctx, a) {
       need(ctx, "orderRead", "오더 조회");
@@ -398,24 +406,31 @@ const TOOLS = {
       const by = {}; rows.forEach((r) => { const s = statusOf(r); by[s] = (by[s] || 0) + 1; });
       const un = sortOrders(rows.filter((r) => statusOf(r) === "미배차"));
       const countable = await countableOf(ctx);
-      const money = sumOf(rows.filter(countable), await profitCore()); // 🛠 2026-11-25 끈 운송업체 고정노선 오더는 매출에서 뺀다(홈 · 일일 보고와 같게)
-      return { 날짜: d, 오더수: rows.length, 상태별: by, ...(ctx.perms.sales ? { 매출: money.sale, 기사운임: money.cost, ...(money.paid ? { 지게차등회사지급: money.paid } : {}), 수익: money.profit } : {}), 미배차: un.slice(0, 40).map(brief) };
+      const SR = await salesRule();
+      // 🛠 2026-11-25 끈 운송업체 고정노선 오더는 매출에서 뺀다 · 📏 2026-11-25 매출 · 수익은 배차완료 + 고정거래처(매출관리와 같은 규칙) — 오더 수 · 상태별은 전체
+      const money = ctx.perms.sales ? sumOf([...rows.filter((r) => countable(r) && SR.isSalesOrder(r)), ...(await fixedSalesIn(ctx, d, d))], await profitCore()) : null;
+      return { 날짜: d, 오더수: rows.length, 상태별: by, ...(money ? { 매출기준: "배차완료 오더 + 고정거래처(매출관리와 같음)", 매출: money.sale, 기사운임: money.cost, ...(money.paid ? { 지게차등회사지급: money.paid } : {}), 수익: money.profit } : {}), 미배차: un.slice(0, 40).map(brief) };
     },
   },
   sales_summary: {
-    description: "매출(청구운임)·매입(cost=기사운임, paid=지게차·외부 특수운임 회사 지급분)·수익(청구 − 기사 − paid) 합계와 묶음별 순위. group_by: client(거래처)·day(일자)·month(월)·vehicle(차종)·driver(기사)·route(구간).",
+    description: "매출(청구운임)·매입(cost=기사운임, paid=지게차·외부 특수운임 회사 지급분)·수익(청구 − 기사 − paid) 합계와 묶음별 순위. 매출관리와 같은 기준 = 배차완료 오더 + 고정거래처(배차중·미배차·취소 제외), 기간 · 월은 청구월(마감월) 기준(이월 오더는 청구월 1일). group_by: client(거래처)·day(일자)·month(월)·vehicle(차종)·driver(기사)·route(구간).",
     input_schema: { type: "object", properties: { ...DATE_PROPS, group_by: { type: "string", enum: ["client", "day", "month", "vehicle", "driver", "route"] }, client: { type: "string" } } },
     async run(ctx, a) {
       need(ctx, "sales", "매출 조회");
       const { from, to } = dateRange(ctx, { date_from: a.date_from || `${ctx.today.slice(0, 7)}-01`, date_to: a.date_to || ctx.today }, 0, 400);
       const countable = await countableOf(ctx); // 🛠 2026-11-25 끈 운송업체 고정노선 오더 제외(매출관리 · 홈 · 일일 보고와 같게)
-      const rows = filterOrders(await loadOrders(ctx, from, to), { client: a.client }).filter((r) => !isCancelled(r) && countable(r));
-      const keyOf = { client: (r) => r.거래처명 || "미지정", day: (r) => r.상차일, month: (r) => String(r.상차일).slice(0, 7), vehicle: (r) => `${r.차량톤수 || ""} ${r.차량종류 || ""}`.trim() || "미지정", driver: (r) => r.이름 || r.차량번호 || "미배차", route: (r) => `${r.상차지명 || "-"} → ${r.하차지명 || "-"}` }[a.group_by || "client"] || ((r) => r.거래처명 || "미지정");
+      const SR = await salesRule(); // 📏 2026-11-25 배차완료 오더 + 고정거래처(매출관리와 같은 규칙)
+      // 🗓 2026-11-25 청구일(청구월 안 날짜 · 이월 오더는 청구월 1일) 기준 — 앞달 상차 · 이번 달 마감 오더도 읽게 한 달 앞부터 불러온다
+      const loadFrom = (() => { const x = new Date(`${from.slice(0, 7)}-01T00:00:00Z`); x.setUTCMonth(x.getUTCMonth() - 1); return x.toISOString().slice(0, 10); })();
+      const inBill = (r) => { const b = SR.salesBillDateOf(r); return b >= from && b <= to; };
+      const rows = [...filterOrders(await loadOrders(ctx, loadFrom, to), { client: a.client }).filter((r) => SR.isSalesOrder(r) && countable(r) && inBill(r)), ...(await fixedSalesIn(ctx, from, to, a.client))];
+      const keyOf0 = { client: (r) => r.거래처명 || "미지정", day: (r) => r.상차일, month: (r) => SR.salesMonthOf(r), /* 🗓 청구월 */ vehicle: (r) => `${r.차량톤수 || ""} ${r.차량종류 || ""}`.trim() || "미지정", driver: (r) => r.이름 || r.차량번호 || "미배차", route: (r) => `${r.상차지명 || "-"} → ${r.하차지명 || "-"}` }[a.group_by || "client"] || ((r) => r.거래처명 || "미지정");
+      const keyOf = (r) => (r.__fixed && ["vehicle", "driver", "route"].includes(a.group_by) ? "고정거래처" : keyOf0(r));
       const g = {}; rows.forEach((r) => { const k = keyOf(r); (g[k] = g[k] || []).push(r); });
       const P = await profitCore();
       const groups = Object.entries(g).map(([k, l]) => ({ 이름: k, ...sumOf(l, P) })).sort((x, y) => (a.group_by === "day" || a.group_by === "month" ? x.이름.localeCompare(y.이름) : y.sale - x.sale));
       const t = sumOf(rows, P);
-      return { 기간: `${from}~${to}`, 합계: { ...t, 수익률: t.sale ? `${((t.profit / t.sale) * 100).toFixed(1)}%` : "-" }, 묶음: groups.slice(0, 60) };
+      return { 기간: `${from}~${to}`, 기준: "배차완료 오더 + 고정거래처 · 청구월(마감월) 기준(매출관리와 같음)", 합계: { ...t, 수익률: t.sale ? `${((t.profit / t.sale) * 100).toFixed(1)}%` : "-" }, 묶음: groups.slice(0, 60) };
     },
   },
   receivables: {
@@ -425,11 +440,16 @@ const TOOLS = {
       need(ctx, "receivables", "미수금 조회");
       const yr = ctx.today.slice(0, 4);
       // ⭐ 2026-11-07 회계관리와 같은 계산(functions/arCore.mjs 공용) — 배차완료만 · 고정거래처 포함 · 청구액 부가세 포함(수금 기록은 실제 입금액)
-      const { receivablesOf } = await arCore();
-      const orders = await loadOrders(ctx, `${yr}-01-01`, `${yr}-12-31`);
+      const { receivablesOf, arPaidByClient } = await arCore();
+      // 🗓 청구월(마감월) 기준이라 지난해 12월 상차 · 올해 1월 마감(이월) 오더도 읽는다
+      const orders = await loadOrders(ctx, `${Number(yr) - 1}-12-01`, `${yr}-12-31`);
       const fixedRows = (await loadCompanyCol(ctx, "fixedClients", 5000)).filter((r) => String(r.날짜 || "").startsWith(yr));
+      // 🔗 2026-11-25 받은 돈 = 회계관리 · 거래처정산과 같은 식(arCore.arPaidByClient) — 정본 입금 기록(arPayments) + 정산완료 · 입금완료 오더 + 예전 회계 합계(acctPayments)
       const pay = await ctx.db.collection("acctPayments").doc(`${ctx.co}__${yr}`).get().catch(() => null);
-      const paid = pay?.exists ? pay.data()?.ar || {} : {};
+      const acct = pay?.exists ? { ar: pay.data()?.ar || {}, log: Array.isArray(pay.data()?.log) ? pay.data().log : [] } : { ar: {}, log: [] };
+      const arSnap = await ctx.db.collection("arPayments").where("company", "==", ctx.co).get().catch(() => ({ docs: [] }));
+      const arPayments = arSnap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+      const paid = arPaidByClient({ orders, arPayments, acct, year: yr });
       let list = receivablesOf({ orders, fixedRows, paid, today: ctx.today, year: yr })
         .filter((x) => x.outstanding > 0)
         .map((x) => ({ 거래처: x.client, 청구액: x.billed, 공급가: x.supply, 수금액: x.paid, 미수금: x.outstanding, 가장오래된미수일수: x.oldest }));

@@ -8,6 +8,7 @@ import {
   ResponsiveContainer, ComposedChart, BarChart, Bar, Line, Area, AreaChart, XAxis, YAxis, Tooltip, CartesianGrid, Cell, PieChart, Pie, ReferenceLine,
 } from "recharts";
 import { RvCard, RvTile, RvDelta, rvShort, RvRing } from "./RevenueDashboard";
+import { salesMonthOf } from "./salesRule"; // 🗓 2026-11-25 달 매출 = 청구월(마감월) 기준(미수금 · 회계와 같은 달)
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 수익률 색(플러스 빨강 · 마이너스 파랑)
 import { profitTotals, orderProfit, fkNum } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
 
@@ -32,7 +33,7 @@ export function TargetPage({ rows = [], targetMonth, yearTarget = 0, isExcluded 
   const Y = Number(targetMonth.slice(0, 4));
   const curM = Number(targetMonth.slice(5, 7));
   const pure = useMemo(() => rows.filter((r) => !isExcluded(r.거래처명)), [rows, isExcluded]);
-  const byMonth = (list, y) => Array.from({ length: 12 }, (_, i) => sOf(list.filter((r) => String(r.상차일 || "").startsWith(`${y}-${String(i + 1).padStart(2, "0")}`))));
+  const byMonth = (list, y) => Array.from({ length: 12 }, (_, i) => sOf(list.filter((r) => salesMonthOf(r) === `${y}-${String(i + 1).padStart(2, "0")}`)));
   const cur = useMemo(() => byMonth(pure, Y), [pure, Y]); // eslint-disable-line react-hooks/exhaustive-deps
   const last = useMemo(() => byMonth(pure, Y - 1), [pure, Y]); // eslint-disable-line react-hooks/exhaustive-deps
   const exCur = useMemo(() => (hasExcluded ? byMonth(rows.filter((r) => isExcluded(r.거래처명)), Y) : []), [rows, hasExcluded, Y, isExcluded]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -166,8 +167,9 @@ export function ClientsPage({ rows = [], targetMonth, isRankExcluded = () => fal
       if (!c || !d) return;
       if (!first[c] || d < first[c]) first[c] = d;
       if (isRankExcluded(c)) return;
-      if (d.startsWith(targetMonth)) { const e = cur[c] || (cur[c] = { sale: 0, cnt: 0, driver: 0 }); e.sale += toInt(r.청구운임); e.cnt += 1; e.driver += toInt(r.기사운임); }
-      else if (d.startsWith(prevYm)) { const e = prev[c] || (prev[c] = { sale: 0, cnt: 0 }); e.sale += toInt(r.청구운임); e.cnt += 1; }
+      const ym = salesMonthOf(r); // 🗓 청구월
+      if (ym === targetMonth) { const e = cur[c] || (cur[c] = { sale: 0, cnt: 0, driver: 0 }); e.sale += toInt(r.청구운임); e.cnt += 1; e.driver += toInt(r.기사운임); }
+      else if (ym === prevYm) { const e = prev[c] || (prev[c] = { sale: 0, cnt: 0 }); e.sale += toInt(r.청구운임); e.cnt += 1; }
     });
     const total = Object.values(cur).reduce((s, x) => s + x.sale, 0);
     const top = Object.entries(cur).map(([name, v]) => ({ name, ...v, prev: prev[name]?.sale || 0 })).sort((a, b) => b.sale - a.sale);
@@ -282,7 +284,7 @@ export function TrendPage({ rows = [], targetMonth, isRankExcluded = () => false
     const m = {};
     rows.forEach((r) => {
       const c = String(r.거래처명 || "").trim();
-      const ym = String(r.상차일 || "").slice(0, 7);
+      const ym = salesMonthOf(r); // 🗓 청구월
       if (!c || !months.includes(ym) || isRankExcluded(c)) return;
       const e = m[c] || (m[c] = {});
       e[ym] = (e[ym] || 0) + toInt(r.청구운임);
@@ -388,8 +390,8 @@ export function TrendPage({ rows = [], targetMonth, isRankExcluded = () => false
 export function YearlyPage({ rows = [], year }) {
   const months = useMemo(() => Array.from({ length: 12 }, (_, i) => {
     const ym = `${year}-${String(i + 1).padStart(2, "0")}`, lym = `${year - 1}-${String(i + 1).padStart(2, "0")}`;
-    const s = sOf(rows.filter((r) => String(r.상차일 || "").startsWith(ym)));
-    const l = sOf(rows.filter((r) => String(r.상차일 || "").startsWith(lym)));
+    const s = sOf(rows.filter((r) => salesMonthOf(r) === ym)); // 🗓 청구월
+    const l = sOf(rows.filter((r) => salesMonthOf(r) === lym));
     return { label: `${i + 1}월`, ...s, last: l.sale, rateV: s.sale ? Number(s.rate.toFixed(1)) : null };
   }), [rows, year]);
   const tot = months.reduce((a, m) => ({ sale: a.sale + m.sale, profit: a.profit + m.profit, cnt: a.cnt + m.cnt, last: a.last + m.last }), { sale: 0, profit: 0, cnt: 0, last: 0 });

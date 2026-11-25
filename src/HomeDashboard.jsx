@@ -28,6 +28,9 @@ import { createPortal } from "react-dom";
 import { BannerCard, BannerStyles } from "./BannerCenter";
 import { isNoticeUnread, useMinuteTick } from "./notifyCore";
 import HomeDeck, { buildPastStats } from "./HomeDeck";
+import { fkNum } from "./forkliftCore";
+import { isSalesOrder } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료) — 저장 값 v5(예전 v4는 취소만 뺀 전체 오더라 다시 계산)
+import { useCompanyRows } from "./companyColStore"; // 📏 2026-11-25 고정거래처 매출도 홈 매출에(매출관리와 같게)
 import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정
 import KpSubNav from "./KpSubNav";
 import { MailWorkspace, MAIL_FOLDERS, useMailCounts, folderBadge } from "./InternalMail";
@@ -440,10 +443,11 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   // ⭐ 2026-11-05 고정노선 운송업체 설정 — 끈 업체 오더는 홈 매출·실적·대시보드 합계에서 뺀다(미배차 목록은 그대로 전체)
   const carrierF = useRouteCarrierFilter(homeCompany);
   const dispatchData = useMemo(() => carrierF.filter(allDispatchData) || [], [allDispatchData, carrierF]);
+  const homeFixedRows = useCompanyRows("fixedClients", homeCompany); // 📏 2026-11-25 고정거래처 매출(매출관리와 같게 홈 매출 · 수익에 더함)
   const [pastCache, setPastCache] = useState(() => {
     try {
       const c = JSON.parse(localStorage.getItem("homePastStats") || "null");
-      return c && c.v === 4 && c.company === homeCompany && c.liveStart === liveStartStr && c.calYear === new Date().getFullYear() && (!carrierF.ready || (c.cs || "") === carrierF.sig) ? c : null;
+      return c && c.v === 6 && c.company === homeCompany && c.liveStart === liveStartStr && c.calYear === new Date().getFullYear() && (!carrierF.ready || (c.cs || "") === carrierF.sig) ? c : null;
     } catch { return null; }
   });
   useEffect(() => {
@@ -455,13 +459,13 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     const recompute = () => {
       const y = new Date().getFullYear();
       const end = pcPrevDay(liveStartStr);
-      return Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${y}-01-01`), where("상차일", "<=", end)))))
+      return Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${y - 1}-12-01`) /* 🗓 2026-11-25 1월 청구(작년 12월 상차 · 이월) 오더까지 — 달 매출 = 청구월 */, where("상차일", "<=", end)))))
         .then((snaps) => {
           const rows = snaps.flatMap((sn) => sn.docs.map((d) => d.data() || {})).filter((row) =>
             (row.companyName || DEFAULT_COMPANY) === homeCompany &&
             row.source !== "transport_transmit" && row.배차상태 !== "배차취소" && !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태) &&
             carrierF.isCountable(row)); // ⭐ 2026-11-05 운송업체 설정
-          const c = { ...sumStats(rows), ...buildPastStats(rows, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7)), v: 4, company: homeCompany, liveStart: liveStartStr, calYear: y, savedAt: Date.now(), cs: carrierF.sig };
+          const c = { ...sumStats(rows), ...buildPastStats(rows, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7)), v: 6, company: homeCompany, liveStart: liveStartStr, calYear: y, savedAt: Date.now(), cs: carrierF.sig };
           try { localStorage.setItem("homePastStats", JSON.stringify(c)); } catch { /* 용량 초과 등은 무시 */ }
           if (alive) setPastCache(c);
         })
@@ -753,7 +757,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     rows.forEach((row) => {
       const d = getLoadDate(row);
       if (!d) return;
-      const fare = Number(row?.청구운임 || 0);
+      const fare = isSalesOrder(row) ? fkNum(row?.청구운임) : 0; // 📏 2026-11-25 매출 = 배차완료만(매출관리와 같은 함수) · 건수는 그대로
       if (d.getFullYear() === currentYear) { year += fare; if (d.getMonth() === currentMonth) month += fare; }
       if (d >= new Date("2026-01-01")) count += 1;
     });
@@ -1005,6 +1009,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
         todo={onTodoGo ? <TodayTodo rows={allDispatchData} onGo={onTodoGo} /> : null}
         dispatchData={dispatchData}
         pastCache={pastCache}
+        fixedRows={homeFixedRows}
         liveStart={liveStartStr}
         users={users}
         isMaster={role === "totalMaster"}

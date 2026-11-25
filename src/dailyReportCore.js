@@ -1,12 +1,14 @@
 // ======================= src/dailyReportCore.js =======================
 // 📊 2026-11-06 일일 경영 보고(DAILY REPORT) — 계산만 하는 순수 함수(화면·서버 푸시가 같은 규칙)
 //  · 매출·수익은 기존 "경영 브리핑"(ExecSuite useYearDays → HomeDeck buildPastStats)과 같은 계산을 그대로 쓴다:
-//    취소·운송사 전송(transport_transmit) 제외 오더의 청구운임 = 매출, 청구운임 − 기사운임 − 회사 지급분(지게차·외부 특수운임) = 수익(orderProfit), 상차일 기준
+//    📏 2026-11-25 배차완료 오더(+ 고정거래처)의 청구운임 = 매출(functions/salesRule.mjs isSalesOrder — 매출관리와 같은 함수),
+//    청구운임 − 기사운임 − 회사 지급분(지게차·외부 특수운임) = 수익(orderProfit), 상차일 기준 · 오더 건수는 취소 · 운송사 전송만 뺀 전체(운영 숫자)
 //    (회사·권한 필터 + 고정노선 운송업체 설정(routeCarriers.makeIsCountable)을 거친 salesDispatchData를 받는다)
 //  · 보고 기준일: 화~금 = 전 영업일, 월요일 = 금·토·일 3일 합산(+ 지난주 주간 요약), 공휴일은 건너뛴다
 //  · functions/dailyReport.js에 같은 규칙(CommonJS 복사본)이 있다 — 바꾸면 둘 다 고친다
 import { getNationalHolidayLabel } from "./attendanceUtils";
 import { orderProfit, fkNum } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(배차표 수수료와 같은 식)
+import { isSalesOrder, salesBillDateOf } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료) — 매출관리 · 홈 · 서버와 같은 함수
 import { buildPastStats } from "./pastStats"; // ⚡ 2026-11-24 HomeDeck(차트 포함) 대신 계산만 있는 작은 파일 — 같은 함수 // 기존 경영 브리핑·홈과 같은 일별 매출·수익 계산
 
 export const DOW = ["일", "월", "화", "수", "목", "금", "토"];
@@ -78,8 +80,8 @@ export function reportBasis(today, prefs) {
 
 // ── 오더 판정(경영 브리핑과 같은 기준) ──
 // (ExecSuite.isCancelled · HomeDeck.dateOf와 같은 판정)
-// ⚠️ 매출관리(DispatchApp Settlement)는 배차완료(isDone) 오더 + 고정거래처만 매출로 센다 — 여기 매출은 취소만 뺀 전체 오더라
-//    두 화면 숫자가 다를 수 있다(화면마다 기준 문구를 적어 둠). 미수금(회계관리·이 보고서)은 둘 다 배차완료 기준.
+// 📏 2026-11-25 매출 · 수익 = 매출관리(DispatchApp Settlement)와 같은 기준 — 배차완료 오더 + 고정거래처(isSalesOrder · functions/salesRule.mjs).
+//    예전엔 여기만 취소를 뺀 전체 오더(배차중 · 미배차 포함)라 숫자가 달랐다. 오더 건수 · 배차완료율은 예전처럼 전체 오더로 센다. 미수금도 배차완료 기준.
 export const isCancelledOrder = (r) => r?.배차상태 === "배차취소" || ["취소", "배차취소", "오더취소", "취소됨"].includes(r?.상태);
 export const dateOf = (r) => String(r?.상차일자 || r?.상차일 || r?.상차 || "").slice(0, 10);
 export const saleOf = (r) => toWon(r?.청구운임);
@@ -102,7 +104,8 @@ export function aggregate(rows) {
     const e = byDay[d] || (byDay[d] = { sale: 0, profit: 0, done: 0, all: 0, cancel: 0 });
     if (isCancelledOrder(r)) { e.cancel += 1; continue; }
     live.push(r);
-    if (isDone(r)) e.done += 1;
+    if (isDone(r) && !r.__fixed) e.done += 1; // 고정거래처 줄은 오더가 아니라 건수에 안 센다
+    if (!isSalesOrder(r)) continue; // 📏 2026-11-25 거래처별 매출 · 수익은 배차완료만
     const c = clientOf(r);
     const cd = byClientDay[d] || (byClientDay[d] = {});
     const ce = cd[c] || (cd[c] = [0, 0, 0]);
@@ -110,7 +113,10 @@ export function aggregate(rows) {
   }
   const past = buildPastStats(live, "");
   Object.entries(past.days).forEach(([d, v]) => { const e = byDay[d] || (byDay[d] = { sale: 0, profit: 0, done: 0, all: 0, cancel: 0 }); e.sale = v[0]; e.profit = v[1]; e.all = v[2]; });
-  return { byDay, byClientDay };
+  // 🗓 2026-11-25 청구일별(청구월 기준 — 이월 오더는 청구월 1일) 매출 · 수익 — 월 누계 · 월 예상용(매출관리 · 미수금과 같은 달)
+  const byBill = {};
+  Object.entries(past.bill).forEach(([d, v]) => { byBill[d] = { sale: v[0], profit: v[1] }; });
+  return { byDay, byClientDay, byBill };
 }
 const z = () => ({ sale: 0, profit: 0, done: 0, all: 0, cancel: 0 });
 export function sumDays(byDay, days) {
@@ -137,7 +143,7 @@ export const prevYm = (ym) => { const d = new Date(`${ym}-01T00:00:00Z`); d.setU
 
 // 보고서 숫자 전체(오더 기반) — 화면이 다른 데이터(근태·자금 등)를 더 붙인다
 export function buildReport({ rows, basis, monthlyTarget = 0 }) {
-  const { byDay, byClientDay } = aggregate(rows);
+  const { byDay, byClientDay, byBill } = aggregate(rows);
   const cur = sumDays(byDay, basis.days);
   const p1 = sumDays(byDay, basis.prev1);
   const p7 = sumDays(byDay, basis.prev7);
@@ -151,14 +157,15 @@ export function buildReport({ rows, basis, monthlyTarget = 0 }) {
   // 월 누계(영업일 기준)
   const ym = basis.end.slice(0, 7);
   const pym = prevYm(ym);
-  const cumCur = bizCumulative(byDay, ym, basis.end);
-  const cumPrev = bizCumulative(byDay, pym);
+  // 🗓 월 누계 · 전월 같은 기간 · 월 예상은 청구월 기준(byBill) — 일 매출(cur · 14일 · 30일 그래프)은 상차일(byDay)
+  const cumCur = bizCumulative(byBill, ym, basis.end);
+  const cumPrev = bizCumulative(byBill, pym);
   const elapsed = cumCur.length;
   const mtd = cumCur[elapsed - 1] || 0;
   const prevSame = elapsed ? (cumPrev[Math.min(elapsed, cumPrev.length) - 1] || 0) : 0;
   const totalBiz = bizDaysInMonth(ym);
   const forecast = elapsed ? (mtd / elapsed) * totalBiz : 0;
-  const mtdProfit = rangeDays(`${ym}-01`, basis.end).reduce((s, d) => s + (byDay[d]?.profit || 0), 0);
+  const mtdProfit = rangeDays(`${ym}-01`, basis.end).reduce((s, d) => s + (byBill[d]?.profit || 0), 0);
   // 거래처(기준 기간) — 증감은 최근 4주 같은 요일(같은 기간) 평균 대비
   const cl = {};
   basis.days.forEach((d) => Object.entries(byClientDay[d] || {}).forEach(([c, v]) => { const e = cl[c] || (cl[c] = [0, 0, 0]); e[0] += v[0]; e[1] += v[1]; e[2] += v[2]; }));
@@ -166,7 +173,7 @@ export function buildReport({ rows, basis, monthlyTarget = 0 }) {
   const clientsAll = Object.entries(cl).map(([n, v]) => ({ n, sale: v[0], profit: v[1], cnt: v[2], margin: v[0] ? (v[1] / v[0]) * 100 : 0, d: pctChange(v[0], avg4(n)) })).sort((a, b) => b.sale - a.sale);
   const top = clientsAll.slice(0, 8);
   // 노선 TOP 5 · 운행 차량
-  const basisRows = (rows || []).filter((r) => basis.days.includes(dateOf(r)) && !isCancelledOrder(r) && r.source !== "transport_transmit");
+  const basisRows = (rows || []).filter((r) => basis.days.includes(dateOf(r)) && !isCancelledOrder(r) && r.source !== "transport_transmit" && !r.__fixed);
   const routes = {};
   const plates = new Set();
   const lowOrders = [];
@@ -174,10 +181,10 @@ export function buildReport({ rows, basis, monthlyTarget = 0 }) {
     const k = `${placeShort(r.상차지명)}→${placeShort(r.하차지명)}`;
     routes[k] = (routes[k] || 0) + 1;
     const pl = normPlate(r.차량번호); if (pl) plates.add(pl);
-    const s = saleOf(r); if (s > 0 && (profitOf(r) / s) * 100 < 5) lowOrders.push(r);
+    const s = saleOf(r); if (isSalesOrder(r) && s > 0 && (profitOf(r) / s) * 100 < 5) lowOrders.push(r); // 📏 저마진도 배차완료 오더만(기사운임 빈 미배차는 수익이 부풀려 보인다)
   });
   return {
-    basis, cur, p1, p7, spanDays, byDay, byClientDay,
+    basis, cur, p1, p7, spanDays, byDay, byClientDay, byBill,
     spark: { sale: spark((v) => v.sale), profit: spark((v) => v.profit), margin: spark(marginOf), orders: spark((v) => v.all) },
     d30, weekdayAvg,
     month: { ym, pym, cumCur, cumPrev, elapsed, totalBiz, mtd, mtdProfit, prevSame, forecast, target: monthlyTarget, d: pctChange(mtd, prevSame) },
@@ -187,15 +194,16 @@ export function buildReport({ rows, basis, monthlyTarget = 0 }) {
   };
 }
 
-// ── 담당자별 매출(매출관리·홈 담당자 순위와 같은 오더 기준: 취소·운송사 전송 제외, 청구운임 = 매출, orderProfit = 수익) ──
+// ── 담당자별 매출(매출관리·홈 담당자 순위와 같은 오더 기준: 📏 2026-11-25 배차완료(isSalesOrder), 청구운임 = 매출, orderProfit = 수익) ──
 //  staffOf(r) → 담당자 이름(등록한 직원 · src/detailGetters.js orderStaffNameRaw). 빈 값은 "미지정".
-export function staffStats(rows, days, staffOf) {
+//  byBill: true 면 청구일(청구월 기준 · 이월 오더는 청구월 1일)로 기간을 본다 — 달 비교(이번 달 누계 vs 전월)용. 기본은 상차일(하루 · 며칠 기준)
+export function staffStats(rows, days, staffOf, byBill = false) {
   const set = new Set(days); const seen = new Set(); const m = {};
   for (const r of rows || []) {
-    const d = dateOf(r); if (!set.has(d)) continue;
+    const d = byBill && isSalesOrder(r) ? salesBillDateOf(r) : dateOf(r); if (!set.has(d)) continue;
     const k = r._id ? `${r.__col || ""}/${r._id}` : null;
     if (k) { if (seen.has(k)) continue; seen.add(k); }
-    if (r.source === "transport_transmit" || isCancelledOrder(r)) continue;
+    if (!isSalesOrder(r) || r.__fixed) continue; // 📏 2026-11-25 배차완료만 · 고정거래처(담당 없음)는 담당자 순위에서 뺀다
     const n = String(staffOf(r) || "").trim() || "미지정";
     const e = m[n] || (m[n] = { n, sale: 0, profit: 0, cnt: 0 });
     e.sale += saleOf(r); e.profit += profitOf(r); e.cnt += 1;
@@ -203,8 +211,8 @@ export function staffStats(rows, days, staffOf) {
   return m;
 }
 // 지금 기간 vs 전 기간 → 순위 목록(매출 순)
-export function staffRanking(rows, curDays, prevDays, staffOf, hide = () => false) {
-  const a = staffStats(rows, curDays, staffOf); const b = staffStats(rows, prevDays, staffOf);
+export function staffRanking(rows, curDays, prevDays, staffOf, hide = () => false, byBill = false) {
+  const a = staffStats(rows, curDays, staffOf, byBill); const b = staffStats(rows, prevDays, staffOf, byBill);
   const list = Object.values(a).filter((x) => !hide(x.n)).map((x) => ({ ...x, margin: x.sale ? (x.profit / x.sale) * 100 : 0, prev: b[x.n]?.sale || 0, d: pctChange(x.sale, b[x.n]?.sale || 0) })).sort((p, q) => q.sale - p.sale);
   const total = list.reduce((s, x) => s + x.sale, 0);
   const prevTotal = Object.values(b).filter((x) => !hide(x.n)).reduce((s, x) => s + x.sale, 0);

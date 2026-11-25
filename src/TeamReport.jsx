@@ -11,6 +11,8 @@ import { db } from "./firebase";
 import { collection, getDocs, query, where, doc } from "firebase/firestore";
 import CustomSelect from "./CustomSelect";
 import { useCompanyPeople } from "./dailyReport";
+import { useRouteCarrierFilter } from "./routeCarriers"; // 📏 2026-11-25 끈 운송업체 고정노선 오더는 매출에서 뺀다(다른 보고서와 같게)
+import { hideBlind } from "./blind"; // 📏 2026-11-25 블라인드 오더는 최고관리자 외에는 안 보이게(다른 화면과 같게)
 import { useUserNameMap, orderStaffNameRaw, ORDER_MGR_FIXED } from "./detailGetters";
 import { useMyProfile } from "./userNames";
 import { isExecProfile, TEAM_OPTIONS } from "./hrConstants";
@@ -19,7 +21,7 @@ import { C } from "./dailyReportCharts";
 import { printA4, savePdf, pdfBlobOf } from "./a4Export";
 import { uploadApFile } from "./ApprovalFiles";
 import { kpAlert } from "./kpDialog";
-import { periodOf, buildTeamReport, teamMembers, teamKind, reportText, OPINION_SECTIONS, setHolidayFn } from "./teamReportCore";
+import { shiftYm, periodOf, buildTeamReport, teamMembers, teamKind, reportText, OPINION_SECTIONS, setHolidayFn } from "./teamReportCore";
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 이익 · 이익률 색(플러스 빨강 · 마이너스 파랑)
 
 setHolidayFn((d) => !!getNationalHolidayLabel(d));
@@ -152,14 +154,19 @@ export default function TeamReport({ company, me }) {
   React.useEffect(() => {
     if (!canMake || !company) return undefined;
     let alive = true; setRows(null); setLoadErr("");
-    const q = (col) => getDocs(query(collection(db, col), where("상차일", ">=", period.prevFrom), where("상차일", "<=", period.to)))
+    // 🗓 2026-11-25 돈은 청구월 기준 — 비교 기간 앞달 상차 · 다음 달 마감(이월) 오더도 읽게 한 달 앞부터
+    const qFrom = `${shiftYm(period.prevFrom.slice(0, 7), -1)}-01`;
+    const q = (col) => getDocs(query(collection(db, col), where("상차일", ">=", qFrom), where("상차일", "<=", period.to)))
       .then((s) => s.docs.map((d) => ({ _id: d.id, __col: col, ...d.data() }))).catch((e) => { if (col === "orders") throw e; return []; });
     Promise.all([q("orders"), q("dispatch")]).then(([a, b]) => { if (alive) setRows([...a, ...b]); }).catch((e) => { if (alive) { setRows([]); setLoadErr(e?.message || String(e)); } });
     return () => { alive = false; };
   }, [canMake, company, period.prevFrom, period.to]);
   const staffOf = React.useCallback((r) => { const n = orderStaffNameRaw(r, nameMap); return (n && n !== ORDER_MGR_FIXED ? n : "") || String(r?.배차확정자 || "").trim() || n || ""; }, [nameMap]);
   const members = React.useMemo(() => teamMembers(people, team), [people, team]);
-  const rep = React.useMemo(() => (rows && team && teamKind(team) === "sales" ? buildTeamReport({ rows, members, period, staffOf }) : null), [rows, members, period, staffOf, team]);
+  // 📏 2026-11-25 다른 보고서와 같은 입구 거름 — 끈 운송업체 고정노선 오더 · 블라인드 오더 제외(배차완료 기준은 buildTeamReport 가 salesRule 로)
+  const carrierF = useRouteCarrierFilter(company);
+  const repRows = React.useMemo(() => (rows ? hideBlind(rows).filter((r) => carrierF.isCountable(r)) : null), [rows, carrierF]);
+  const rep = React.useMemo(() => (repRows && carrierF.ready && team && teamKind(team) === "sales" ? buildTeamReport({ rows: repRows, members, period, staffOf }) : null), [repRows, carrierF.ready, members, period, staffOf, team]);
   // 작성자 의견 — 칸마다 넣고 빼기(처음엔 요약 · 잘된 점 · 문제점 · 다음 계획)
   const [onSecs, setOnSecs] = React.useState(["summary", "good", "issue", "plan"]);
   const [ops, setOps] = React.useState(() => Object.fromEntries(OPINION_SECTIONS.map(([k, , t]) => [k, t])));
@@ -322,7 +329,7 @@ export default function TeamReport({ company, me }) {
               {!onSecs.length && <p style={{ color: C.t3 }}>위에서 넣을 칸을 골라 주세요.</p>}
             </div>
           </Card>
-          <div style={{ textAlign: "right", fontSize: 13, color: C.t3, padding: "0 6px" }}>산출 기준: 배차 오더(취소 · 운송사 전송 제외) · 매출액 = 청구운임 · 매출총이익 = 청구운임 − 기사운임 − 외부 지급 · 담당자 = 오더 등록 직원</div>
+          <div style={{ textAlign: "right", fontSize: 13, color: C.t3, padding: "0 6px" }}>산출 기준: 배차완료 오더 · 청구월(마감월) 기준(매출관리와 같음 · 배차중 · 미배차 · 취소 · 운송사 전송 제외) · 매출액 = 청구운임 · 매출총이익 = 청구운임 − 기사운임 − 외부 지급 · 담당자 = 오더 등록 직원</div>
         </div>
       )}
     </div>

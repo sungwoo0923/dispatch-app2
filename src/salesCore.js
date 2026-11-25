@@ -8,6 +8,7 @@
 // ⭐ 2026-11-17 예외: 수익 식은 functions/profitCore.mjs(가져오는 것 없음)를 forkliftCore.js 로 가져온다 — 배차표 수수료와 같은 식
 //  매입(buy) = 기사운임 + 회사가 따로 지급(지게차·외부 특수운임) → 매출이익 = 매출 − 매입 = orderProfit
 import { orderProfit, orderCost, fkNum } from "./forkliftCore.js";
+import { salesMonthOf } from "./salesRule.js"; // 🗓 2026-11-25 실적 달 = 청구월(마감월 → 없으면 상차일 달) — 매출관리 · 미수금과 같은 달(가져오는 것: arCore · profitCore 뿐)
 
 export const toInt = (v) => fkNum(v); // 🛠 2026-11-25 매출이익(orderProfit)과 같은 금액 읽기(소수점 반올림)
 export const kstDay = (off = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(d.getUTCDate() + off); return d.toISOString().slice(0, 10); };
@@ -84,7 +85,7 @@ export function calcIncentive({ orders = [], accounts = [], policy: pIn, uid, ym
   let exN = 0, exSale = 0;
   (orders || []).forEach((r) => {
     const d = orderDate(r);
-    if (!d.startsWith(ym)) return;
+    if (salesMonthOf(r) !== ym) return; // 🗓 청구월
     const c = cName(r.거래처명);
     const a = acc.get(c);
     if (!a || a.uid !== uid) return;

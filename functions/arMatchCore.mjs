@@ -4,11 +4,13 @@
 //  · 서버: functions/bankSync.js — 팝빌 계좌조회로 받은 입금을 같은 식으로 맞춘다
 //
 //  식(예전 DispatchApp 거래처정산의 식을 그대로 옮겼다)
-//  · 거래처 · 청구월마다 배차완료 오더 공급가(청구운임) 합계 → 청구액 = × 1.1 반올림(부가세 포함) · 정산완료 달은 뺀다
+//  · 거래처 · 청구월(마감월 기준)마다 배차완료 오더 공급가(청구운임) 합계 → 청구액 = × 1.1 반올림(부가세 포함) · 정산완료 달은 뺀다
 //  · 남은 금액 = 청구액 − 입금 기록(arPayments, 거래처|월 합계)
 //  · 입금 배분: 남은 금액이 딱 맞는 달(±10원) → 없으면 오래된 달부터 채운다(다 채운 달 정산완료 · 모자라면 일부입금 · 남으면 초과입금)
 //  · 거래처 찾기: ① 회사가 배운 입금자명 별칭 ② 이름 포함 비교 ③ 둘 다 없으면 금액이 딱 맞는 달이 하나뿐일 때만 제안
 //  · 자동 반영은 "이름(또는 별칭)이 맞고 딱 맞게 정산되는 입금"만 — 나머지는 사람이 확인
+
+import { monthOf, isSettledIn } from "./arCore.mjs"; // 🗓 2026-11-25 청구월 = 마감월 기준(정산 홈 · 월 마감과 같은 식)
 
 export const AR_MATCH_TOL = 10;
 const AR_DEAD = ["취소", "배차취소", "오더취소", "취소됨"];
@@ -37,8 +39,9 @@ export function buildArMonths({ orders = [], paidMap = new Map(), inRange = () =
     // 🛠 2026-11-25 화주사 전송 사본 · 취소 오더 빼기 — 화면 목록은 이미 빠져 있지만 서버(은행 자동 매칭 bankSync)는 오더를 직접 읽어서
     //  상태 "취소" 오더까지 청구액에 들어가 화면 미수금과 금액이 달랐다(딱 맞는 입금도 자동 반영이 안 됨)
     if (r.source === "transport_transmit" || AR_DEAD.includes(String(r.상태 || "").trim())) return;
-    const ym = String(r.상차일 || "").slice(0, 7);
-    if (!ym || !inRange(ym) || r.정산상태?.[ym] === "정산완료") return;
+    // 🗓 2026-11-25 청구월 = 마감월(없으면 상차일 달) — 예) 상차 10/31 · 마감월 2026-11 → 11월분으로 맞춘다
+    const ym = monthOf(r);
+    if (!ym || !inRange(ym) || isSettledIn(r, ym)) return;
     if (!book.has(r.거래처명)) book.set(r.거래처명, new Map());
     const mm = book.get(r.거래처명);
     if (!mm.has(ym)) mm.set(ym, { k: `${r.거래처명}|${ym}`, client: r.거래처명, yyyymm: ym, rows: [], total: 0 });

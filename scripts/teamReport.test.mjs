@@ -20,13 +20,14 @@ const rows = [
   o(7, "2026-11-08", "이이", 100000, 97000, { st: "배차중" }),
 ];
 const rep = buildTeamReport({ rows, members, period: periodOf("thisMonth", "2026-11-15"), staffOf: (r) => r.who });
-assert.deepEqual([rep.cur.sale, rep.cur.profit, rep.cur.cnt], [450000, 53000, 4]);
+// 📏 2026-11-25 매출 · 수익은 배차완료만(functions/salesRule.mjs) — 배차중 o(7)은 빠지고 미배차 건수에만 든다
+assert.deepEqual([rep.cur.sale, rep.cur.profit, rep.cur.cnt], [350000, 50000, 3]);
 assert.deepEqual([rep.prev.sale, rep.prev.cnt], [80000, 1]);
-assert.equal(rep.members[0].name, "이이"); assert.equal(rep.members[0].sale, 300000);
+assert.equal(rep.members[0].name, "이이"); assert.equal(rep.members[0].sale, 200000);
 assert.equal(rep.members.find((m) => m.name === "김일").prevSale, 80000);
-assert.equal(rep.risks.lossCount, 1); assert.equal(rep.risks.lowCount, 1); assert.equal(rep.risks.unassigned, 1);
+assert.equal(rep.risks.lossCount, 1); assert.equal(rep.risks.lowCount, 0); assert.equal(rep.risks.unassigned, 1);
 assert.equal(rep.clients.top[0].n, "대원"); assert.deepEqual(rep.clients.newClients, ["대원"]);
-assert.equal(Math.round(rep.companyShare), Math.round((450000 / 1449999) * 100));
+assert.equal(Math.round(rep.companyShare), Math.round((350000 / 1349999) * 100));
 assert.equal(rep.daily.length, 15);
 assert.match(reportText(rep, "운송팀"), /운송팀 · 2026년 11월 실적/);
 // 손실 사유: 손실사유 칸이 먼저, 없으면 메모

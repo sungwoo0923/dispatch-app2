@@ -67,10 +67,10 @@ eq("구체적 수정은 바로 AI로", intentOf("삼진 오더 운임 수정해�
 
 // 기본 답변
 {
-  const ds = [row, { ...row, _id: "B", 차량번호: "경기80바1000", 청구운임: 300000, 기사운임: 250000 }, { ...row, _id: "C", 상차일: "2026-10-01" }];
+  const ds = [row, { ...row, _id: "B", 차량번호: "경기80바1000", 청구운임: 300000, 기사운임: 250000, 배차상태: "배차완료" }, { ...row, _id: "C", 상차일: "2026-10-01" }];
   has("미배차", /미배차 1건/.test(localAnswer("미배차 몇 건?", { dispatches: ds, today: T })));
   has("오늘 현황", /오더 2건/.test(localAnswer("오늘 배차 현황", { dispatches: ds, today: T })));
-  has("이번 달 매출", /550,000원/.test(localAnswer("이번 달 매출", { dispatches: ds, today: T })));
+  has("이번 달 매출(📏 배차완료만 — 미배차 줄은 빠진다)", /300,000원/.test(localAnswer("이번 달 매출", { dispatches: ds, today: T })) && !/550,000원/.test(localAnswer("이번 달 매출", { dispatches: ds, today: T })));
   has("부가세", /부가세 25,000원/.test(localAnswer("250000 부가세 계산", { dispatches: ds, today: T })));
   eq("모르면 null", localAnswer("우주 날씨", { dispatches: ds, today: T }), null);
 }
