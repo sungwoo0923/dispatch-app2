@@ -7,7 +7,7 @@
 //  · functions/dailyReport.js에 같은 규칙(CommonJS 복사본)이 있다 — 바꾸면 둘 다 고친다
 import { getNationalHolidayLabel } from "./attendanceUtils";
 import { orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(배차표 수수료와 같은 식)
-import { buildPastStats } from "./HomeDeck"; // 기존 경영 브리핑·홈과 같은 일별 매출·수익 계산
+import { buildPastStats } from "./pastStats"; // ⚡ 2026-11-24 HomeDeck(차트 포함) 대신 계산만 있는 작은 파일 — 같은 함수 // 기존 경영 브리핑·홈과 같은 일별 매출·수익 계산
 
 export const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 export const toWon = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;

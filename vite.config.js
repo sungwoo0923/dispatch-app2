@@ -158,7 +158,25 @@ export default defineConfig({
   // sourcemap: true — 배포 후에도 DevTools에서 실제 파일명/변수명으로 오류를 볼 수
   // 있게 한다(지금까지는 꺼져 있어서 오류가 나도 index-xxxx.js:41:12345 같은 압축된
   // 위치만 보였다). 사용자는 다운로드하지 않는 파일이라 로딩 속도에는 영향 없음.
-  build: { outDir: "dist", sourcemap: true },
+  // ⚡ 2026-11-24 LTE 속도 — firebase · react 묶음(압축 약 250KB)을 따로 떼어, 배포해도 이름(해시)이 그대로 남게 한다.
+  //  예전엔 앱 코드와 한 파일(index-*.js)이라 배포할 때마다 휴대폰이 firebase까지 새로 받았다(LTE에서 수 초).
+  //  라이브러리 버전이 바뀔 때만 새로 받는다. 순서 · 동작은 같다(정적 import 그대로).
+  build: {
+    outDir: "dist",
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const p = id.replace(/\\/g, "/");
+          if (!p.includes("/node_modules/")) return undefined;
+          // 첫 화면(index)에 원래 들어 있던 것만 — 화면 조각에서만 쓰는 라이브러리(@firebase/functions 등)를 첫 화면으로 끌어오지 않게
+          if (/\/node_modules\/(@firebase\/(firestore|auth|webchannel-wrapper|storage|messaging|installations|app|app-check|util|component|logger)|firebase\/(app|auth|firestore|storage|messaging|app-check)|idb)\//.test(p)) return "vendor-firebase";
+          if (/\/node_modules\/(react|react-dom|scheduler|react-router|react-router-dom)\//.test(p)) return "vendor-react";
+          return undefined;
+        },
+      },
+    },
+  },
 
   define: {
     __APP_VERSION__: JSON.stringify(getAppVersion()),
