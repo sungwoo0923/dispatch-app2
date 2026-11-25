@@ -127,6 +127,7 @@ export const TRUCK_CSS = `
 @keyframes lwTkBlink{0%,100%{opacity:1}50%{opacity:.35}}
 .lw-tk-blink{animation:lwTkBlink 1s ease-in-out infinite}
 .lw-dark-tiles{filter:invert(1) hue-rotate(200deg) brightness(.92) contrast(1.08) saturate(.5)}
+.lw-light-tiles{filter:grayscale(.7) contrast(1.02) brightness(1.03)}
 .lw-dark-map .leaflet-container,.lw-dark-map.leaflet-container{background:#08111F}
 .lw-dark-map .leaflet-control-zoom a{background:#0E1A30;color:#CFE0FF;border-color:#22345A}
 .lw-dark-map .leaflet-control-attribution{background:rgba(8,17,31,.7);color:#6B7A95}

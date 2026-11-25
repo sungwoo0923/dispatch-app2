@@ -1,6 +1,7 @@
 // ======================= FleetManagement.jsx =======================
 import { makeTruckIcon, truckColor, headingFor, pathHeading } from "./fleetTruck";
-import FleetControlDeck from "./FleetControlDeck"; // 🛰 2026-11-25 관제현황 = 관제실 다크
+import FleetControlDeck from "./FleetControlDeck";
+import { RouteRowsView, RouteTimelineView } from "./RouteBoardViews"; // 🗂 2026-11-26 노선관리 줄 보기 · 시간표 // 🛰 2026-11-25 관제현황 = 관제실 다크
 import { FLEET_DARK_CSS } from "./fleetDarkTheme";
 import { FleetDarkCtx, FleetDarkPop } from "./fleetDarkCtx";
 import { startFleetDarkGuard } from "./fleetDarkGuard"; // 🛰 2026-11-26 다크 지킴이 // 🛰 2026-11-25 지입차관리 전체 다크(scripts/genFleetDark.mjs) // 🚚 2026-11-25 관제실 다크 · 위에서 본 트럭
@@ -49,6 +50,8 @@ import jsPDF from "jspdf";
 import { getDrivingRoute, geocodeAddress, getDrivingPathByCoords } from "./tmapFareCalc";
 import { ShortAddr, DropEtaText, RemainText, RemainEtaText, FleetStepper, fleetStepIndex, pickCurrentOrder, sortActiveOrders, prefetchGeo, computeFleetPhase, useFleetPhaseGeo, FLEET_PHASE_FILTERS, FLEET_PHASE_COLORS, isPickupVisited } from "./fleetGeo";
 import { LeafletTrack, MapLegend } from "./mapLeaflet";
+import { useFleetLook, FleetLookSwitch } from "./fleetLook"; // 🎨 2026-11-26 관제현황 A/B 화면
+import DriverDayReplay from "./DriverDayReplay"; // 🗺 2026-11-26 하루 이동 기록 다시보기
 import { cleanTrack } from "./mapStyle";
 import { modificationStatus } from "./orderChange";
 import CustomDatePicker, { KOREAN_HOLIDAYS } from "./CustomDatePicker";
@@ -832,16 +835,16 @@ function FitAll({ count, drivers }) {
 }
 
 // 🚚 2026-11-25 관제실 다크 — 어두운 지도 + 위에서 본 트럭(운전석 색 = 통합 상태 · 머리 = 달리는 방향)
-function FleetMap({ drivers, center, onSelect, selectedPath = [], fitAllCount = 0, selectedDriver = null, phaseById = null, alertIds = null }) {
+function FleetMap({ drivers, center, onSelect, selectedPath = [], fitAllCount = 0, selectedDriver = null, phaseById = null, alertIds = null, light = false }) {
   const defaultCenter = center || { lat: 37.5665, lng: 126.9780 };
   const selHint = React.useMemo(() => pathHeading(selectedPath), [selectedPath]);
 
   return (
-    <MapContainer className="lw-dark-map" center={[defaultCenter.lat, defaultCenter.lng]} zoom={12} scrollWheelZoom style={{ height: "100%", width: "100%", minHeight: 360, position: "relative", background: "#08111F" }}>
+    <MapContainer className={light ? "lw-light-map" : "lw-dark-map"} center={[defaultCenter.lat, defaultCenter.lng]} zoom={12} scrollWheelZoom style={{ height: "100%", width: "100%", minHeight: 360, position: "relative", background: light ? "#E9EDF3" : "#08111F" }}>
       <MapRecenter center={center} />
       <FitAll count={fitAllCount} drivers={drivers} />
       {selectedPath.length >= 2 && <FitPath points={selectedPath} resetKey={selectedDriver?.id} />}
-      <TileLayer className="lw-dark-tiles" tileSize={512} zoomOffset={-1} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+      <TileLayer className={light ? "lw-light-tiles" : "lw-dark-tiles"} tileSize={512} zoomOffset={-1} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
       <TrafficOverlay />{/* 🚦 2026-11-22 사고 · 공사 · 통제 */}
 
       {/* ⭐ 이동 동선 — 예전엔 GPS 점을 하나하나 원으로 찍어 다닥다닥 보였다. 도로에 맞춘
@@ -993,7 +996,7 @@ function ActivityFeed({ logs, driversMap, onDeleteAll }) {
 
 // ─── DriverDetailPanel ────────────────────────────────────────────────────────
 
-function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, companyDefaultLoc, onSetCheckInLoc, onClearCheckInLoc, dropLoc, onSetDropLoc, onClearDropLoc, sessionWorkMs, sessionIsActive, sessionGpsDist, onFocusMap }) {
+function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, companyDefaultLoc, onSetCheckInLoc, onClearCheckInLoc, dropLoc, onSetDropLoc, onClearDropLoc, sessionWorkMs, sessionIsActive, sessionGpsDist, onFocusMap, onOpenHistory }) {
   if (!data) return null;
 
   const lastLog = logs[0];
@@ -1036,6 +1039,12 @@ function DriverDetailPanel({ data, logs, onClose, onDeleteLogs, checkInLoc, comp
                 }}
                 style={{ height: 30, padding: "0 14px", borderRadius: 8, border: "1px solid #1B2B4B", background: "#fff", color: "#1B2B4B", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
                 퇴근처리
+              </button>
+            )}
+            {onOpenHistory && (
+              <button type="button" title="출근부터 퇴근까지 · 오더별로 다닌 길을 지도에서 다시 봐요" onClick={onOpenHistory}
+                style={{ height: 30, padding: "0 14px", borderRadius: 8, border: 0, background: "#1B2B4B", color: "#fff", fontSize: 14, fontWeight: 800, cursor: "pointer" }}>
+                이동 기록 보기
               </button>
             )}
             {dwellMs !== null && dwellMs > 60000 && (
@@ -3952,7 +3961,12 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [focusId]);
-  const [onlyIdle, setOnlyIdle] = useState(false); // 배차 없는(오늘 놀고 있는) 차량만 보기
+  const [onlyIdle, setOnlyIdle] = useState(false);
+  // 🗂 2026-11-26 보기 — 줄 보기(기본) · 시간표 · 카드(예전 화면). 이 PC에 기억
+  const [replayFor, setReplayFor] = useState(null); // 🗺 2026-11-26 이동 기록 다시보기
+  const routeLook = useFleetLook();
+  const [routeView, setRouteViewRaw] = useState(() => { try { return localStorage.getItem("kpRouteView") || "rows"; } catch { return "rows"; } });
+  const setRouteView = (v) => { setRouteViewRaw(v); try { localStorage.setItem("kpRouteView", v); } catch { /* 무시 */ } }; // 배차 없는(오늘 놀고 있는) 차량만 보기
   // ⭐ 사용자 요청 — 배차자마다 담당 지입차가 따로 있어서, 들어오자마자 "내 담당
   // 차량"부터 보여야 한다. 전체 차량을 보는 기능은 토글로 그대로 유지.
   const [scope, setScope] = useState("mine");
@@ -4075,6 +4089,10 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
 
   return (
     <div>
+      {replayFor && (
+        <DriverDayReplay driver={replayFor} date={appliedStart > todayStr0 ? todayStr0 : appliedStart} light={routeLook === "B"} onClose={() => setReplayFor(null)}
+          orders={(dispatchData || []).filter((r) => { const n = String(replayFor.이름 || "").trim(), pl = String(replayFor.차량번호 || "").trim(); return !(r?.배차상태 === "배차취소" || ["취소", "배차취소", "오더취소", "취소됨"].includes(r?.상태)) && ((n && n !== "-" && String(r.이름 || "").trim() === n) || (pl && pl !== "-" && String(r.차량번호 || "").trim() === pl)); })} />
+      )}
       {/* KPI — 담당 기준 요약 카드(디지털 타일, 네이비 단색) */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 14 }}>
         <KpiCard label="총 등록기사" value={kpi.total} sub="대" code="FLEET" icon={KPI_ICONS.truck} primary />
@@ -4168,6 +4186,13 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
           </button>
         ))}
       </div>
+        {/* 🗂 2026-11-26 보기 고르기 — 줄 보기(기본) · 시간표 · 카드(예전) */}
+        <div role="group" aria-label="보기" style={{ display: "flex", gap: 3, background: "#fff", border: "1px solid #E3E8F0", borderRadius: 10, padding: 3 }}>
+          {[["rows", "줄 보기"], ["timeline", "시간표"], ["cards", "카드"]].map(([k, l]) => (
+            <button key={k} type="button" onClick={() => setRouteView(k)} aria-pressed={routeView === k}
+              style={{ height: 32, padding: "0 14px", borderRadius: 8, border: "none", fontSize: 14, fontWeight: 800, cursor: "pointer", background: routeView === k ? "linear-gradient(135deg,#1D4ED8,#2563EB)" : "transparent", color: routeView === k ? "#fff" : "#5B6B85" }}>{l}</button>
+          ))}
+        </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "stretch", background: "#fff", border: "1px solid #E3E8F0", borderRadius: 10, overflow: "hidden", boxShadow: "0 1px 2px rgba(16,24,40,.04)" }}>
           {[[scope === "mine" ? "내 담당" : "전체", scopedDrivers.length], ["배차", dispatchedCount], ["미배차", scopedDrivers.length - dispatchedCount]].map(([l, v], i) => (
             <span key={l} style={{ display: "inline-flex", alignItems: "baseline", gap: 6, padding: "6px 14px", borderLeft: i ? "1px solid #E3E8F0" : "none", fontSize: 14, fontWeight: 700, color: "#5B6B85" }}>
@@ -4188,8 +4213,27 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
           미배차 차량이 없습니다. 전원 배차 완료.
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {visibleRows.map(({ driver, orders, isOffDay, live, monthlyFareSum, acceptRate }, i) => (
+        (() => {
+          // 🗂 2026-11-26 정렬 · 묶음 — 운행 중 → 오더 확인 중 → 배차 예정 → 완료 → 배차 없음 → 휴차, 같으면 첫 상차 시각 · 이름
+          const RANK = { 운송중: 0, 오더확인중: 1, 배차예정: 2, 배차완료: 3, 배차대기: 4, 휴차: 5 };
+          const statusOf = (r) => driverDispatchStatus(r.orders, todayStr, r.live);
+          const firstMin = (r) => (r.orders[0] ? (parseTimeToMin(r.orders[0].상차시간) ?? 9999) : 9999);
+          const sortRows = (list) => [...list].sort((a, b) => (RANK[statusOf(a).label] ?? 9) - (RANK[statusOf(b).label] ?? 9) || firstMin(a) - firstMin(b) || (a.driver.이름 || "").localeCompare(b.driver.이름 || "", "ko"));
+          let groups;
+          if (scope === "all") {
+            const m = new Map();
+            visibleRows.forEach((r) => { const k = r.driver.담당자?.uid || ""; if (!m.has(k)) m.set(k, { key: k, title: k ? `${r.driver.담당자?.name || "담당자"} 담당` : "담당자 미지정", mine: !!k && k === myUid, rows: [] }); m.get(k).rows.push(r); });
+            groups = [...m.values()].map((g) => ({ ...g, title: g.mine ? `내 담당 · ${g.title}` : g.title, rows: sortRows(g.rows) }))
+              .sort((a, b) => (b.mine - a.mine) || ((!a.key) - (!b.key)) || a.title.localeCompare(b.title, "ko"));
+          } else groups = [{ key: "mine", title: "내 담당 차량", mine: true, rows: sortRows(visibleRows) }];
+          const orderMeta = (r, orders) => {
+            const curOrder = pickCurrentOrder(orders);
+            const isWaitingNext = r.기사확인상태 === "수락" && curOrder && (curOrder._id ?? curOrder.id) !== (r._id ?? r.id);
+            const fleetMeta = isWaitingNext ? FLEET_WAITING_META : (r.기사확인상태 ? FLEET_CHECK_PROG_META[r.기사확인상태] : null);
+            const meta = fleetMeta || PROG_META[computeOrderProgress(r, r.상차일, todayStr)] || {};
+            return { label: meta.label || "-", dot: meta.dot || "#94A3B8" };
+          };
+          const renderCard = ({ driver, orders, isOffDay, live, monthlyFareSum, acceptRate }, i) => (
             <DriverRouteCard
               key={driver.id}
               index={i + 1}
@@ -4213,8 +4257,22 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
               dimmed={!!focusId && focusId !== driver.id}
               onToggleFocus={toggleFocus}
             />
-          ))}
-        </div>
+          );
+          const dayLabel = !isSingleDay ? "" : appliedStart === todayStr ? "오늘" : appliedStart < todayStr ? "이날" : "예정";
+          if (routeView === "timeline") return <RouteTimelineView groups={groups} todayStr={todayStr} selectedDate={appliedStart} isSingleDay={isSingleDay} statusOf={statusOf} orderMeta={orderMeta} timeToMin={parseTimeToMin} onOpenDetail={setDetailDriver} />;
+          if (routeView === "rows") return <RouteRowsView groups={groups} todayStr={todayStr} dayLabel={dayLabel} isSingleDay={isSingleDay} statusOf={statusOf} orderMeta={orderMeta} renderCard={renderCard} onOpenDetail={setDetailDriver} onOpenHistory={(d) => setReplayFor(d)} geocode={enqueueGeocode} />;
+          let n = 0;
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {groups.map((g) => (
+                <React.Fragment key={g.key}>
+                  {groups.length > 1 && <div style={{ margin: "10px 2px 0", fontSize: 16, fontWeight: 900, color: g.mine ? "#7DD3FC" : undefined }}>{g.title} · {g.rows.length}대</div>}
+                  {g.rows.map((r) => { n += 1; return <React.Fragment key={r.driver.id}>{renderCard(r, n - 1)}</React.Fragment>; })}
+                </React.Fragment>
+              ))}
+            </div>
+          );
+        })()
       )}
 
       {detailDriver && (
@@ -6235,6 +6293,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
   const todayDate = kstDateStr();
   const yesterdayDate = kstDateStr(new Date(Date.now() - 86400_000));
   const [selectedTrackDate, setSelectedTrackDate] = useState(todayDate);
+  const [historyFor, setHistoryFor] = useState(null); // 🗺 2026-11-26 이동 기록 다시보기 { driver, date }
   const [pinModal, setPinModal] = useState(null); // { title, onConfirmed }
   const [companyDefaultLoc, setCompanyDefaultLoc] = useState(null);
   const [checkInLocModal, setCheckInLocModal] = useState(null); // { driverId, driverName, initialLoc }
@@ -6556,7 +6615,9 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
           // ⭐ 버그수정 — 기사앱(APK 네이티브 위치 서비스)은 active 필드를 따로 켜지 않아,
           // 위치가 계속 들어오는데도 "미접속/비활성"으로 보였다. 최근 10분 안에 위치나
           // 생존신호(heartbeatAt)가 들어왔으면 접속중으로 본다.
-          active: raw.active === true || isRecentlySeen(raw.updatedAt, raw.heartbeatAt),
+          // 🛠 2026-11-26 기사앱은 로그인 때 active를 켜고 로그아웃 때만 끈다(퇴근 · 앱 종료 때는 그대로) → 4일 전 퇴근한 기사도 "접속중"으로 보였다.
+          //  최근 10분 안에 위치나 생존신호가 들어왔을 때만 접속중
+          active: isRecentlySeen(raw.updatedAt, raw.heartbeatAt),
           speed: raw.speed || 0,
           workStartAt: raw.workStartAt || null,
           checkInLocation: raw.checkInLocation || null,
@@ -6933,7 +6994,8 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
 
 
   // ─── 렌더 ────────────────────────────────────────────────────────────────
-  const darkDeck = dark ?? (!hideChrome && !forceTab); // 휴대폰 지입차관리 속화면은 dark 로 켠다 // 🛰 2026-11-25 지입차관리 메뉴 전체 = 관제실 다크(다른 메뉴에 끼워 쓸 때는 원래 밝은 화면)
+  const fleetLook = useFleetLook(); // 🎨 2026-11-26 A 관제실 다크(기본) · B 지도 중심 라이트 — 계정마다
+  const darkDeck = fleetLook === "B" ? false : (dark ?? (!hideChrome && !forceTab)); // 휴대폰 지입차관리 속화면은 dark 로 켠다 // 🛰 2026-11-25 지입차관리 메뉴 전체 = 관제실 다크(다른 메뉴에 끼워 쓸 때는 원래 밝은 화면)
   React.useEffect(() => (darkDeck ? startFleetDarkGuard() : undefined), [darkDeck]); // 🛰 2026-11-26 규칙이 못 잡은 흰 바탕 · 안 보이는 글씨를 화면에서 바로 고침
   return (
     <FleetDarkCtx.Provider value={darkDeck}>
@@ -6942,6 +7004,10 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
       fontFamily: "'Pretendard','Noto Sans KR','Apple SD Gothic Neo',sans-serif",
     }}>
       {darkDeck && <style>{FLEET_DARK_CSS}</style>}
+      {historyFor && (
+        <DriverDayReplay driver={historyFor.driver} date={historyFor.date} light={fleetLook === "B"} onClose={() => setHistoryFor(null)}
+          orders={(dispatchData || []).filter((r) => { const n = String(historyFor.driver?.이름 || "").trim(), pl = String(historyFor.driver?.차량번호 || "").trim(); return !(r?.배차상태 === "배차취소" || ["취소", "배차취소", "오더취소", "취소됨"].includes(r?.상태) || r?.source === "transport_transmit") && ((n && n !== "-" && String(r.이름 || "").trim() === n) || (pl && pl !== "-" && String(r.차량번호 || "").trim() === pl)); })} />
+      )}
 
       {!hideChrome && (<>
       {/* ═══ 헤더 — 관제센터 스타일(네이비 그리드 + 디지털 시계) ═══ */}
@@ -7102,14 +7168,17 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
             onDeleteFeed={handleDeleteFeedLogs}
             todayPhotoIds={new Set((todayDriverPhotos || []).map(p => p.uid))}
             renderMap={(rows, alertIds) => (
-              <FleetMap drivers={rows} center={mapCenter} onSelect={handleSelect} selectedPath={selectedPath} roadPath={roadPath} fitAllCount={fitAllCount} selectedDriver={selected} phaseById={phaseById} alertIds={alertIds} />
+              <FleetMap drivers={rows} center={mapCenter} onSelect={handleSelect} selectedPath={selectedPath} roadPath={roadPath} fitAllCount={fitAllCount} selectedDriver={selected} phaseById={phaseById} alertIds={alertIds} light={fleetLook === "B"} />
             )}
+            light={fleetLook === "B"}
+            lookSwitch={<FleetLookSwitch look={fleetLook} />}
+            onOpenHistory={(d) => setHistoryFor({ driver: d, date: selectedTrackDate })}
             trackDate={
               <>
                 <CustomDatePicker
                   value={selectedTrackDate}
                   onChange={e => { const v = e.target.value; if (v && v <= todayDate) setSelectedTrackDate(v); }}
-                  className="h-[32px] min-w-[128px] px-2 border border-[#22345A] rounded-lg text-[13px] font-bold text-[#E6EDF8] bg-[#0E1A30] tabular-nums whitespace-nowrap"
+                  className={fleetLook === "B" ? "h-[32px] min-w-[128px] px-2 border border-[#DCE3EE] rounded-lg text-[13px] font-bold text-[#0F1A30] bg-white tabular-nums whitespace-nowrap" : "h-[32px] min-w-[128px] px-2 border border-[#22345A] rounded-lg text-[13px] font-bold text-[#E6EDF8] bg-[#0E1A30] tabular-nums whitespace-nowrap"}
                   showIcon
                 />
                 {selectedTrackDate !== yesterdayDate && <button type="button" className="lwd-btn" style={{ height: 32 }} onClick={() => setSelectedTrackDate(yesterdayDate)}>어제</button>}
@@ -7140,6 +7209,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
               sessionIsActive={sessionForDate.isActive}
               sessionGpsDist={sessionGpsDist}
               onFocusMap={handleFocusMap}
+              onOpenHistory={() => setHistoryFor({ driver: selected, date: selectedTrackDate })}
             /></div>
           )}
 

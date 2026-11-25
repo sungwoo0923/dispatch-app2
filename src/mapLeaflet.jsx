@@ -24,13 +24,13 @@ async function fetchRoad(a, b) {
 }
 const roadCache = new Map(); // "lat,lng>lat,lng" → [[lat,lng]…] | null(못 찾음)
 const pairKey = (a, b) => `${a.lat.toFixed(4)},${a.lng.toFixed(4)}>${b.lat.toFixed(4)},${b.lng.toFixed(4)}`;
-function kmBetween(a, b) {
+export function kmBetween(a, b) {
   const R = 6371, r = (d) => (d * Math.PI) / 180;
   const x = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(x));
 }
 // 점 목록 → { solids: [[[lat,lng]…]…], dashes: [[[lat,lng],[lat,lng]]…] }
-function useRoadSnapped(pts) {
+export function useRoadSnapped(pts) {
   const [, setVer] = useState(0);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
