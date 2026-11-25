@@ -1,6 +1,7 @@
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap");
-/* 랜딩페이지 편집(관리자메뉴)에서 글씨체 선택지로 쓰는 추가 폰트 2종 */
-@import url("https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700;800&family=Gothic+A1:wght@400;500;700;800&display=swap");
+/* ⚡ 2026-11-24 LTE 속도 — 구글 글꼴(Noto Sans KR · JetBrains Mono · Nanum Gothic · Gothic A1)은 index.html 에서 "화면을 막지 않게" 받는다.
+   예전엔 여기서 @import 해서, 이 스타일 파일 → fonts.googleapis.com 스타일까지 다 받을 때까지 첫 화면(로고 화면 포함)이 그려지지 않았다.
+   Pretendard는 굵기 하나로 모두 그리는 가변 글꼴 · 필요한 글자 묶음만 받는 파일로 바꿨다(src/fonts/pretendard-variable.css) */
+@import "./fonts/pretendard-variable.css";
 
 @tailwind base;
 @tailwind components;
