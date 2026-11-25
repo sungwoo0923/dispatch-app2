@@ -8,7 +8,7 @@ import fs from "fs";
 const FILES = [
   "src/FleetManagement.jsx", "src/FleetControlDeck.jsx", "src/VehicleExpenseInbox.jsx", "src/VehicleCarePanel.jsx", "src/VehicleLedger.jsx",
   "src/FleetPayDocs.jsx", "src/fleetGeo.jsx", "src/mapLeaflet.jsx", "src/FixedRoutes.jsx", "src/FixedRouteStatus.jsx", "src/RouteBoard.jsx",
-  "src/CustomDatePicker.jsx", "src/CustomSelect.jsx", "src/fleetDispatchWay.jsx", "src/fleetGrades.jsx", "src/DriverContextMenu.jsx",
+  "src/CustomDatePicker.jsx", "src/CustomSelect.jsx", "src/DriverJourney.jsx", "src/mobile/MobileFleetView.jsx", "src/fleetDispatchWay.jsx", "src/fleetGrades.jsx", "src/DriverContextMenu.jsx",
 ];
 const src = FILES.filter((f) => fs.existsSync(f)).map((f) => fs.readFileSync(f, "utf8")).join("\n");
 
@@ -78,8 +78,33 @@ for (const cls of classes) {
   css.push(`.fm-dark .${esc(cls)}${hover ? ":hover" : ""}{${prop}:${val} !important}`);
 }
 
+
+// 화면 파일 안 CSS 글(<style> · 템플릿 문자열)의 클래스 규칙 — .vl-card{background:#fff} 처럼 클래스로 색을 준 곳
+const DECL = /(background(?:-color)?|color|border(?:-(?:top|right|bottom|left))?(?:-color)?)\s*:\s*([^;{}!]+)(!important)?/g;
+for (const m of src.matchAll(/([.#][A-Za-z][^{}`"'\n]{0,160}?)\{([^{}]{0,800})\}/g)) {
+  const sel = m[1].trim();
+  if (!/^[.#:\w\s>,\[\]="'()*+~-]+$/.test(sel) || /\.fm-dark|\.lwd|\.lw-/.test(sel)) continue;
+  const decls = [];
+  for (const d of m[2].matchAll(DECL)) {
+    const prop = d[1], val = d[2].trim();
+    const hx = val.match(/#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/);
+    if (!hx) continue;
+    const h = norm(hx[0]); if (!h) continue;
+    if (prop.startsWith("background")) { if (/gradient|url\(/.test(val)) continue; const v = bgFor(h); if (v) decls.push(`background:${v} !important`); }
+    else if (prop === "color") { const v = fgFor(h); if (v) decls.push(`color:${v} !important`); }
+    else { const v = bdFor(h); if (v) decls.push(`${prop.endsWith("-color") ? prop : prop + "-color"}:${v} !important`); }
+  }
+  if (!decls.length) continue;
+  const scoped = sel.split(",").map((x) => `.fm-dark ${x.trim()}`).join(",");
+  css.push(`${scoped}{${decls.join(";")}}`);
+}
+
 const head = `
 .fm-dark{background:#070D1A;color:#E6EDF8;border-radius:20px;padding:14px !important;border:1px solid #1A2742}
+.fm-dark.fm-pop{background:none;padding:0 !important;border:0;border-radius:0}
+.fm-dark.fm-mob{padding:12px 12px 24px !important;border-radius:0;border:0;min-height:100vh}
+.fm-dark.fm-mob.mfv-root{padding:0 0 24px !important}
+main.kp-main:has(.fm-dark:not(.fm-pop)){background:#070D1A !important;box-shadow:none !important}
 .fm-dark input:not([type=checkbox]):not([type=radio]):not([type=range]),.fm-dark select,.fm-dark textarea{background:#0E1A30 !important;color:#E6EDF8 !important;border-color:#22345A !important}
 .fm-dark input::placeholder,.fm-dark textarea::placeholder{color:#5D6E8C !important}
 .fm-dark ::-webkit-scrollbar-thumb{background:#22345A !important}

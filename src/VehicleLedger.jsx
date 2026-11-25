@@ -5,6 +5,7 @@
 //  ② 관리대장(차량 한 대): 기본 정보 · 수리·정비 이력(부가세 10% 자동, 연·월 합계, 증빙) · 구조변경 · 기사 탑승 이력 ·
 //     기본정보 변경·기타 이력 — 한 페이지에서 한눈에, A4 인쇄·엑셀 저장
 //  휴대폰(좁은 화면)에서는 표 대신 카드로 그린다.
+import { FleetDarkPop } from "./fleetDarkCtx"; // 🛰 2026-11-25 지입차관리 다크(밖에 뜨는 창)
 import { isFleetGrade } from "./fleetGradesCore"; // 🚛 지입차 구분(지입·직영·임대·분양) 한 곳
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
@@ -151,7 +152,7 @@ function LedgerSelect({ value, onChange, options = [], placeholder = "선택", a
       style={{ ...inp, height: h, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer", textAlign: "left", fontWeight: cur ? 800 : 600, color: cur ? C.navy : "#5B6B85", borderColor: open ? C.blue : "#D5DDEA", boxShadow: open ? "0 0 0 4px rgba(45,76,130,.12)" : "none", ...(style || {}) }}>
       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{cur ? (list.find((o) => !o.group && String(o.v) === cur)?.label ?? cur) : placeholder}</span>{chev}
     </button>
-    {open && pos && createPortal(
+    {open && pos && createPortal(<FleetDarkPop>
       <div ref={menu} role="listbox" tabIndex={-1} data-ls-menu="1" onKeyDown={onKey} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
         style={{ position: "fixed", left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, zIndex: 2147483000, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 16, boxShadow: "0 18px 44px rgba(15,26,48,.22)", overflow: "hidden", display: "flex", flexDirection: "column", maxHeight: Math.max(220, Math.min(420, pos.maxH || 420)), fontFamily: "'Pretendard','Noto Sans KR',sans-serif", outline: "none" }}>
         <div style={{ padding: "10px 10px 8px", background: "#F7F9FC", borderBottom: "1px solid #EEF2F7" }}>
@@ -176,7 +177,7 @@ function LedgerSelect({ value, onChange, options = [], placeholder = "선택", a
           ))}
           {nq && !items.some((o) => !o.group && !o.custom) && <div style={{ padding: "10px 16px", fontSize: 14, fontWeight: 700, color: C.mute }}>찾는 항목이 없습니다 · Enter로 "{q.trim()}" 그대로 입력</div>}
         </div>
-      </div>, document.body)}
+      </div></FleetDarkPop>, document.body)}
   </>);
 }
 // 예전 이름 그대로(수리 구분 등) — 새 선택 목록으로
@@ -997,7 +998,7 @@ function LedgerDrawer({ onClose, onDouble, narrow, children }) {
   const onBackdrop = (e) => {
     if (Date.now() - openedAt.current < 600 && e.detail >= 2) onDouble?.();
   };
-  return createPortal(
+  return createPortal(<FleetDarkPop>
     <div data-vl-drawer="1" style={{ position: "fixed", inset: 0, zIndex: 9500 }}>
       <div onClick={onBackdrop} style={{ position: "absolute", inset: 0, background: "rgba(11,20,40,.42)", backdropFilter: "blur(1.5px)", opacity: shown ? 1 : 0, transition: "opacity .22s ease" }} />
       <aside role="dialog" aria-modal="true" aria-label="차량 정보"
@@ -1005,7 +1006,7 @@ function LedgerDrawer({ onClose, onDouble, narrow, children }) {
           transform: shown ? "translateX(0)" : "translateX(100%)", transition: "transform .28s cubic-bezier(.2,.8,.2,1)", borderTopLeftRadius: narrow ? 0 : 20, borderBottomLeftRadius: narrow ? 0 : 20, overflow: "hidden" }}>
         <div style={{ flex: 1, overflowY: "auto", padding: narrow ? 10 : 16, fontFamily: "'Pretendard','Noto Sans KR',sans-serif" }}>{children}</div>
       </aside>
-    </div>, document.body);
+    </div></FleetDarkPop>, document.body);
 }
 
 function RowActs({ onEdit, onDel }) {

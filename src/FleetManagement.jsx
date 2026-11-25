@@ -1,7 +1,8 @@
 // ======================= FleetManagement.jsx =======================
 import { makeTruckIcon, truckColor, headingFor, pathHeading } from "./fleetTruck";
 import FleetControlDeck from "./FleetControlDeck"; // 🛰 2026-11-25 관제현황 = 관제실 다크
-import { FLEET_DARK_CSS } from "./fleetDarkTheme"; // 🛰 2026-11-25 지입차관리 전체 다크(scripts/genFleetDark.mjs) // 🚚 2026-11-25 관제실 다크 · 위에서 본 트럭
+import { FLEET_DARK_CSS } from "./fleetDarkTheme";
+import { FleetDarkCtx, FleetDarkPop } from "./fleetDarkCtx"; // 🛰 2026-11-25 지입차관리 전체 다크(scripts/genFleetDark.mjs) // 🚚 2026-11-25 관제실 다크 · 위에서 본 트럭
 import { buildDriverCopyText } from "./driverCopyText"; // 📋 2026-11-18 기사복사 문구 — PC · 모바일 같은 글
 import { useCopyTemplates } from "./copyTemplates";
 import { isFleetGrade } from "./fleetGradesCore"; // 🚛 지입차 구분(지입·직영·임대·분양) 한 곳
@@ -1944,7 +1945,7 @@ function ManagerBadge({ driver, staff, canDelegate, onAssign, big = false }) {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
         </button>
       )}
-      {open && createPortal(
+      {open && createPortal(<FleetDarkPop>
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 100050, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setOpen(false)}>
           <div style={{ background: "#fff", borderRadius: 12, width: 280, maxHeight: "70vh", overflowY: "auto", boxShadow: "0 10px 40px rgba(0,0,0,.3)" }} onClick={e => e.stopPropagation()}>
             <div style={{ padding: "14px 16px", borderBottom: "1px solid #f0f2f5", fontSize: 15, fontWeight: 800, color: NAVY }}>
@@ -1972,7 +1973,7 @@ function ManagerBadge({ driver, staff, canDelegate, onAssign, big = false }) {
               )}
             </div>
           </div>
-        </div>,
+        </div></FleetDarkPop>,
         document.body
       )}
     </div>
@@ -2602,7 +2603,7 @@ function DriverJourneyPanel({ driver, orders, live, onClose, dispatchData }) {
     + (legs.find(l => l.type === "live")?.km || 0);
 
   // ⭐ 2026-10-31 화면 최상단에 띄운다(모바일에서 앱 상단바 밑에 깔려 위쪽이 잘렸다)
-  return createPortal(
+  return createPortal(<FleetDarkPop>
     <div style={{ position: "fixed", inset: 0, zIndex: 99980, background: "rgba(15,23,42,.28)", fontFamily: "'Noto Sans KR','Malgun Gothic',sans-serif" }} onClick={onClose}>
       <style>{`@keyframes fmSlideIn{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}} @keyframes fmLiveDash{to{stroke-dashoffset:-20}} .fm-journey-live{animation:fmLiveDash 1s linear infinite;} .fm-journey-tiles{filter:grayscale(.85) contrast(.95) brightness(1.04);}`}</style>
       <aside onClick={e => e.stopPropagation()}
@@ -2756,7 +2757,7 @@ function DriverJourneyPanel({ driver, orders, live, onClose, dispatchData }) {
         </div>
       </aside>
     </div>
-  , document.body);
+  </FleetDarkPop>, document.body);
 }
 
 // ⭐ 노선표 정렬 — 운송완료(완료시각 순) → 진행중/진행예정(수락 순) → 확인대기·기타(상차시간 순) → 거절
@@ -6183,7 +6184,7 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
           </div>}
         </div>
         {/* ⭐ 오른쪽 사이드바 — 크게, 바깥을 눌러도 닫히지 않고 [닫기]로만 닫힌다. 목록의 다른 차량을 누르면 그 차량으로 바뀐다 */}
-        {cur && createPortal(
+        {cur && createPortal(<FleetDarkPop>
           <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(960px, 100vw)", zIndex: 9500, background: "#F4F6FA", borderLeft: "1px solid #DCE3EE", boxShadow: "-18px 0 40px rgba(11,20,40,.18)", display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "18px 22px", color: "#fff", background: "linear-gradient(120deg,#0B1428 0%,#1B2B4B 65%,#2D4C82 100%)", display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -6196,7 +6197,7 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
             <div style={{ flex: 1, overflowY: "auto", padding: "20px 26px" }}>
               <VehicleCarePanel key={cur.id} driverId={cur.id} drv={cur.raw} by={by} staff large onToast={showToast} />
             </div>
-          </div>,
+          </div></FleetDarkPop>,
           document.body,
         )}
       </div>
@@ -6206,7 +6207,7 @@ function VehicleCareTab({ drivers = [], driversRaw = [], by = "" }) {
 }
 
 // 📱 forceTab·hideChrome — 모바일 앱이 같은 화면을 모듈별로 열 때(머리말·왼쪽 메뉴는 모바일 화면이 따로 그린다)
-export default function FleetManagement({ dispatchData = [], role = "", forceTab = "", hideChrome = false }) {
+export default function FleetManagement({ dispatchData = [], role = "", forceTab = "", hideChrome = false, dark = null }) {
   // Tab persistence across parent-tab switches → sessionStorage
   // ⭐ 사용자 요청 — 지입차관리에 들어왔을 때 노선/배차상태/담당 차량이 먼저
   // 보여야 하므로, 기본 진입 탭을 실시간관제가 아닌 노선관리로 바꾼다.
@@ -6931,9 +6932,10 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
 
 
   // ─── 렌더 ────────────────────────────────────────────────────────────────
-  const darkDeck = !hideChrome && !forceTab; // 🛰 2026-11-25 지입차관리 메뉴 전체 = 관제실 다크(다른 메뉴에 끼워 쓸 때는 원래 밝은 화면)
+  const darkDeck = dark ?? (!hideChrome && !forceTab); // 휴대폰 지입차관리 속화면은 dark 로 켠다 // 🛰 2026-11-25 지입차관리 메뉴 전체 = 관제실 다크(다른 메뉴에 끼워 쓸 때는 원래 밝은 화면)
   return (
-    <div className={darkDeck ? "fm-dark" : undefined} style={{
+    <FleetDarkCtx.Provider value={darkDeck}>
+    <div className={darkDeck ? (hideChrome ? "fm-dark fm-mob" : "fm-dark") : undefined} style={{
       display: "flex", flexDirection: "column", gap: 16, padding: "4px 0",
       fontFamily: "'Pretendard','Noto Sans KR','Apple SD Gothic Neo',sans-serif",
     }}>
@@ -7397,6 +7399,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
       )}
 
     </div>
+    </FleetDarkCtx.Provider>
   );
 }
 
