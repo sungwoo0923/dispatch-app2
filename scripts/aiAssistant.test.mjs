@@ -158,6 +158,15 @@ eq("조회전용은 배차관리 읽기", A.builtinDefault("viewer").배차관�
   const r = JSON.parse(lastToolResults(calls[1])[0].content);
   has("권한 관리에서 매출관리를 켜면 조회된다", r.합계?.sale === 550000, JSON.stringify(r));
 }
+{ // 🛠 2026-11-25 고정노선 운송업체 설정에서 끈 업체 오더는 AI 매출 합계에서도 뺀다(매출관리 · 홈 · 일일 보고와 같게)
+  const db = fakeDb(seed());
+  db.store.orders.R1 = { companyName: "테스트운송", 상차일: TODAY, 거래처명: "고정", 상차지명: "a", 하차지명: "b", 청구운임: 700000, 기사운임: 600000, 배차표Id: "rb1", 추가정보: { 운송업체: "꺼진운송" } };
+  db.store.orders.R2 = { companyName: "테스트운송", 상차일: TODAY, 거래처명: "고정", 상차지명: "a", 하차지명: "b", 청구운임: 80000, 기사운임: 70000, 배차표Id: "rb1", 추가정보: { 운송업체: "켜진운송" } };
+  db.store.routeCarrierSettings = { 테스트운송: { carriers: [{ name: "꺼진운송", on: false }, { name: "켜진운송", on: true }] } };
+  const { calls } = await run(db, "u1", { text: "이번 달 매출" }, (p, i) => (i === 0 ? toolUse("t", "sales_summary", { date_from: "2026-11-01", date_to: TODAY }) : textMsg("ok")));
+  const r = JSON.parse(lastToolResults(calls[1])[0].content);
+  has("끈 운송업체 고정노선 오더는 AI 매출에서 빠진다(켜진 업체는 포함)", r.합계?.sale === 550000 + 80000, JSON.stringify(r.합계));
+}
 {
   const db = fakeDb(seed());
   db.store.companyRoleOverrides = { 테스트운송: { roles: { admin: { menus: { 배차관리: "read" } } } } };

@@ -290,7 +290,7 @@ export function localEditProposal(text, row) {
 export function localAnswer(text, { dispatches = [], clients = [], today = todayYmd() } = {}) {
   const t = String(text || "").replace(/\s+/g, "");
   const ym = today.slice(0, 7);
-  const live = dispatches.filter((d) => !cancelled(d));
+  const live = dispatches.filter((d) => !cancelled(d) && d?.source !== "transport_transmit"); // 🛠 2026-11-25 화주사 전송 사본은 매출에서 빼기(홈 · 일일 보고 · 서버 AI 와 같게)
   const day = live.filter((d) => dateOfRow(d) === today);
   const month = live.filter((d) => dateOfRow(d).startsWith(ym));
   const sum = (l, k) => l.reduce((s, d) => s + num(d[k]), 0);

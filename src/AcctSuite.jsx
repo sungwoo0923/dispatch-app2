@@ -3,7 +3,7 @@
 //  · 회계 개요: 올해 매출·매입·매출총이익·예상 부가세 · 미수/미지급 · 월별 추이 · 미수 연령 · 분기 부가세 · 계정별 지출
 //  · 퇴직 정산(경리 전용): 퇴직금(평균임금×30×재직일/365) · 미사용 연차수당 · 4대보험 상실 · 이직확인서(실업급여) ·
 //    퇴직소득 원천징수 · 원천징수영수증 · 퇴직연금 — 법정 기한(D-day)과 처리 상태를 사람별로
-import { loadAcctPayments } from "./acctPayments";
+import { loadAcctPayments, useArPayments } from "./acctPayments"; // 🔗 2026-11-25 거래처정산 입금 기록도 미수금에
 import { useUserProfiles } from "./userProfilesLive"; // 🔒 2026-11-07 인사 프로필은 우리 회사 직원 한 건씩
 import { receivablesOf, vatEstimate, paidWithSettled } from "./arAging"; // ⭐ 2026-11-07 미수금(부가세 포함) · 예상 부가세 공용 계산
 import { upsertAutoEntry } from "./ledgerAuto";
@@ -67,6 +67,7 @@ export function AccountingOverview({ company, orders, drivers = [] }) {
   const y = new Date().getFullYear();
   const [pay, setPay] = React.useState({ ar: {}, ap: {} });
   const [ledger, setLedger] = React.useState([]);
+  const arPays = useArPayments(company); // 🔗 2026-11-25 거래처정산 › 미수금관리 입금(은행 자동 매칭 포함)
   React.useEffect(() => { loadAcctPayments(db, y, company).then(setPay).catch(() => {}); }, [y, company]);
   React.useEffect(() => { if (!company) return undefined; return onSnapshot(query(collection(db, "acctLedger"), where("companyName", "==", company)), (s) => setLedger(s.docs.map((d) => d.data())), () => setLedger([])); }, [company]);
   if (!orders) return <div className="py-24 text-center text-[14px] font-bold text-[#9AA9C3]">올해 운행 내역을 불러오는 중…</div>;
@@ -85,7 +86,7 @@ export function AccountingOverview({ company, orders, drivers = [] }) {
   const buy = Object.values(mon).reduce((a, x) => a + x.buy, 0);
   // ⭐ 2026-11-07 미수금 = 청구액(부가세 포함 · 거래처정산과 같은 식) − 수금 기록(실제 입금액) · 나이는 오래된 청구부터 수금된 것으로 봄
   //   일일 경영 보고 · 경영 분석 · AI 비서와 같은 계산(functions/arCore.mjs) · 고정거래처 포함(orders에 이미 들어 있음)
-  const arList = receivablesOf({ orders, paid: paidWithSettled(orders, pay.ar), today }) /* ⭐ 2026-11-18 정산관리 [입금완료]도 수금으로 */.map((x) => ({ c: x.client, out: x.outstanding, age: x.oldest, ag: x.aging })).filter((x) => x.out > 0);
+  const arList = receivablesOf({ orders, paid: paidWithSettled(orders, pay.ar, arPays, String(y)), today }) /* ⭐ 2026-11-18 정산관리 [입금완료]도 수금으로 · 🔗 2026-11-25 거래처정산 입금 · 정산완료 달도 */.map((x) => ({ c: x.client, out: x.outstanding, age: x.oldest, ag: x.aging })).filter((x) => x.out > 0);
   const arSum = arList.reduce((a, x) => a + x.out, 0);
   // ⭐ 2026-11-02 점검 — 미지급 = 운임 − max(지급등록액, [지급완료] 합계) : 회계관리 미지급 탭과 숫자 일치
   const apSum = Object.entries(ap).reduce((a, [d, v]) => a + Math.max(0, v - Math.max(toInt(pay.ap[d]), settled[d] || 0)), 0);

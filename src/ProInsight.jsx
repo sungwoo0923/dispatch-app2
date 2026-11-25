@@ -8,11 +8,11 @@
 import { MonthPicker } from "./kpInputs"; // 📅 2026-11-07 월 선택은 프로그램 달력으로
 import React from "react";
 import { CustomSelect } from "./CustomSelect";
-import { orderProfit, orderCost, paidOut } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
+import { orderProfit, orderCost, paidOut, fkNum } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
 import { profitStyle, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 마진율 색(플러스 빨강 · 마이너스 파랑)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
-const n = (v) => Number(String(v ?? "").replace(/[^\d-]/g, "")) || 0;
+const n = (v) => fkNum(v); // 🛠 2026-11-25 수익(orderProfit)과 같은 금액 읽기(소수점 반올림)
 const won = (v) => `${Math.round(v || 0).toLocaleString()}`;
 const pct = (a, b) => (b ? (a / b) * 100 : 0);
 const pad = (x) => String(x).padStart(2, "0");

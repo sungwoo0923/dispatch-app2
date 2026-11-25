@@ -2,7 +2,7 @@
 import { buildDriverCopyText } from "./driverCopyText"; // 📋 2026-11-18 기사복사 문구 — PC · 모바일 같은 글
 import { useCopyTemplates } from "./copyTemplates";
 import { isFleetGrade } from "./fleetGradesCore"; // 🚛 지입차 구분(지입·직영·임대·분양) 한 곳
-import { orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수수료 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표와 같은 식
+import { orderProfit, profitTotals, fkNum } from "./forkliftCore"; // ⭐ 2026-11-17 수수료 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표와 같은 식
 import { myNameNow } from "./userNames";
 import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import { pickCompanyLoc } from "./officeLocSync"; // 📍 2026-11-09 출근지 한 곳 관리
@@ -3395,7 +3395,9 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose, role = "" }) {
   const minAllowedDate = isUnrestricted ? null : monthsAgoKstDateStr(3);
   const clampDate = (v) => (minAllowedDate && v && v < minAllowedDate) ? minAllowedDate : v;
 
-  const toWon = (v) => Number(String(v || "0").replace(/[^\d]/g, "")) || 0;
+  const toWon = (v) => fkNum(v); // 🛠 2026-11-25 마이너스(-180,000) · 소수점도 배차현황과 같게(예전엔 부호를 지워 +180,000)
+  // 🛠 2026-11-25 취소 · 화주사 전송 사본은 매출에서 뺀다(배차현황 · 매출관리와 같게)
+  const isCancelledFleet = (r) => r?.배차상태 === "배차취소" || ["취소", "배차취소", "오더취소", "취소됨"].includes(r?.상태) || r?.source === "transport_transmit";
 
   const allDriverOrders = useMemo(() => {
     const name = (driver.이름 || "").trim();
@@ -3405,7 +3407,7 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose, role = "" }) {
       .filter(r => {
         const rName = (r.이름 || "").trim();
         const rPlate = (r.차량번호 || "").trim();
-        return (!!name && rName === name) || (!!plate && rPlate === plate);
+        return !isCancelledFleet(r) && ((!!name && rName === name) || (!!plate && rPlate === plate));
       })
       .sort((a, b) => String(b.상차일 || "").localeCompare(String(a.상차일 || "")));
   }, [driver, dispatchData]);
@@ -3424,9 +3426,11 @@ function DriverRouteDetailModal({ driver, dispatchData, onClose, role = "" }) {
     });
   }, [allDriverOrders, fromDate, toDate, orderSearch]);
 
-  const totalFare = driverOrders.reduce((s, r) => s + toWon(r.청구운임), 0);
-  const totalDriverFare = driverOrders.reduce((s, r) => s + toWon(r.기사운임), 0);
-  const totalMargin = totalFare - totalDriverFare;
+  // 🛠 2026-11-25 수수료 합 = 줄 수수료(orderProfit) 합 — 예전엔 청구 − 기사라 지게차 · 외부 지급분만큼 컸다
+  const fleetT = profitTotals(driverOrders);
+  const totalFare = fleetT.sale;
+  const totalDriverFare = fleetT.drv;
+  const totalMargin = fleetT.fee;
 
   const topRoutes = useMemo(() => {
     const map = new Map();

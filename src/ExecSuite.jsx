@@ -21,6 +21,7 @@ import HandoverCenter, { useHandoverUnread } from "./HandoverCenter";
 import { approvalNavItems } from "./menuTree"; // ⭐ 2026-11-10 메뉴 통일
 const ContractStudioX = React.lazy(() => import("./ContractStudio")); // ⭐ 2026-11-10 부서·임원 화면 전자결재 › 계약서
 import { buildPastStats } from "./HomeDeck";
+import { fkNum } from "./forkliftCore";
 import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정(끈 업체 오더는 매출에서 뺌)
 import { pcLiveWindowStart, pcPrevDay, useOrderHistory } from "./orderHistory";
 import { isUnassignedOrder } from "./unassignedRule"; // ⭐ 2026-11-07 미배차 공용 기준
@@ -50,7 +51,7 @@ import { execAnalyticsDemo } from "./execAnalyticsDemo";
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const GOLD = "#D7BC82";
 const ICE = "#8FB0F0";
-const toWon = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
+const toWon = (v) => fkNum(v); // 🛠 2026-11-25 수익(orderProfit)과 같은 금액 읽기
 const kstNow = () => new Date(Date.now() + 9 * 3600e3);
 const kstToday = () => kstNow().toISOString().slice(0, 10);
 const addDay = (ymd, n) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };

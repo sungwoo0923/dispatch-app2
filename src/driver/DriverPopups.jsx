@@ -147,7 +147,7 @@ export function WorkStartSetting({ driver, onSave }) {
 }
 
 // ─────────────────────────────── 새 오더 ───────────────────────────────
-const won = (v) => { const n = Number(String(v ?? "").replace(/[^\d]/g, "")); return n > 0 ? `${n.toLocaleString()}원` : ""; };
+const won = (v) => { const n = Number(String(v ?? "").replace(/[^\d-]/g, "")) || 0; return n ? `${n.toLocaleString()}원` : ""; }; // 🛠 2026-11-25 "-180,000"(기사 차감)도 부호 그대로
 const when = (d, t) => [String(d || "").slice(5).replace("-", "/"), t || (d ? "즉시" : "")].filter(Boolean).join(" ");
 function Row({ k, v, strong }) {
   if (!v) return null;

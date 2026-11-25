@@ -32,6 +32,10 @@ const STATUS = {
   배차취소: { label: "취소", cls: "bg-[#E9EDF3] text-[#7A89A3]" },
 };
 
+// 🔒 2026-11-25 화주에게는 청구 쪽만 — 운송사 수정이력에 섞인 기사운임 · 수수료 · 지게차/특수운임(기사 차감 · 외부 지급) 줄은 보여 주지 않는다
+//  (운송사가 화주 오더를 고치면 그 오더 이력에 "기사운임 300,000 → 270,000" 같은 줄이 같이 남는다 · 서버 사본 functions/roleMirror.js SHIPPER_DROP과 같은 기준 + 특수운임)
+const SHIPPER_HIDDEN_HISTORY = /기사운임|기사단가|기사지급|기사정산|기사차감|수수료|이익|수익|마진|원가|매입|외부지급|산재|보험료|지게차|특수운임|특수기사|^지급(상태|완료|일)$|미지급|운임보정|운임수동|내부메모|^메모$/;
+const shipperHistory = (list) => (Array.isArray(list) ? list : []).filter((h) => h && h.field && !SHIPPER_HIDDEN_HISTORY.test(String(h.field)));
 // 운송사 수정 팝업에서 필드명을 사람이 읽기 쉬운 라벨로 표시하기 위한 매핑
 const TRANSPORT_EDIT_FIELD_LABELS = {
   청구운임: "금액", 기사운임: "기사운임", 수수료: "수수료",
@@ -612,7 +616,7 @@ export default function ShipperStatus() {
     const hist = Array.isArray(o.history) ? o.history.filter(h => h && h.field) : [];
     if (hist.length === 0) { setTransportEditPopup({ order: o, entries: [] }); return; }
     const maxAt = Math.max(...hist.map(h => h.at || 0));
-    const entries = hist.filter(h => Math.abs((h.at || 0) - maxAt) < 5000);
+    const entries = shipperHistory(hist.filter(h => Math.abs((h.at || 0) - maxAt) < 5000)); // 🔒 기사운임 · 수수료 줄은 빼고
     setTransportEditPopup({ order: o, entries });
   };
 
@@ -1421,10 +1425,10 @@ export default function ShipperStatus() {
                 </div>
               </Section>
             )}
-            {Array.isArray(selectedOrder?.history) && selectedOrder.history.length > 0 && (
-              <Section title={`수정이력 (${selectedOrder.history.length})`}>
+            {shipperHistory(selectedOrder?.history).length > 0 && (
+              <Section title={`수정이력 (${shipperHistory(selectedOrder?.history).length})`}>
                 <div className="max-h-60 overflow-y-auto space-y-2">
-                  {selectedOrder.history.filter(h => h && h.field).slice().reverse().map((h, i) => (
+                  {shipperHistory(selectedOrder.history).slice().reverse().map((h, i) => (
                     <div key={i} className="flex items-start gap-2 text-[13px] pb-2 border-b border-gray-50 last:border-b-0">
                       <span className="text-gray-400 whitespace-nowrap shrink-0">{new Date(h.at).toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
                       <span className="text-gray-500 shrink-0">{h.user}</span>

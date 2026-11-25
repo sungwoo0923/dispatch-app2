@@ -13,7 +13,8 @@ import { useArDesk, stageLabel, sdCard, sdBtn, sdBtnPri, sdInp, Ico, IC, viewSta
 import { MarginPct, profitColor } from "./marginPct"; // ⭐ 2026-11-17 매출이익 옆 매출 대비 % · 매출이익 색(플러스 빨강 · 마이너스 파랑)
 import BillingBoard from "./BillingBoard"; // 🧾 2026-11-17 청구 현황판(미청구 · 청구완료 · 입금완료)
 import { closeBoard } from "./closeFlow"; // ✅ 2026-11-16 2단계 마감 숫자
-import { n, won, short, kstYm, monthOf, stageFinder, summarizeSettle, clientLedger } from "./settleCore";
+import { n, won, short, kstYm, monthOf, stageFinder, summarizeSettle, clientLedger, fleetPlateSet } from "./settleCore";
+import { isFleetGrade } from "./fleetGradesCore"; // 🔗 2026-11-25 기사 지급 = 용차지급관리와 같은 오더(지입차 제외)
 export { summarizeSettle, clientLedger } from "./settleCore";
 
 const NUM = { fontVariantNumeric: "tabular-nums" };
@@ -63,12 +64,13 @@ export const closeText = (r) => {
   return { t: "마감 전", c: G.mute, done: false };
 };
 
-export default function SettleHome({ orders = [], company = "", onGo, depositOn = false }) {
+export default function SettleHome({ orders = [], company = "", onGo, depositOn = false, drivers = null }) {
   const desk = useArDesk(company);
   const stageOf = React.useMemo(() => { const f = stageFinder(desk?.stmts); return (c, m) => viewStage(f(c, m)); }, [desk?.stmts]);
   const months = React.useMemo(() => { const set = new Set([kstYm(0), kstYm(-1)]); (orders || []).forEach((o) => { const m = monthOf(o); if (/^\d{4}-\d{2}$/.test(m)) set.add(m); }); return [...set].sort().reverse().slice(0, 24); }, [orders]);
   const [ym, setYm] = React.useState(() => kstYm(0));
-  const S = React.useMemo(() => summarizeSettle(orders, ym, stageOf), [orders, ym, stageOf]);
+  const fleetPlates = React.useMemo(() => (Array.isArray(drivers) ? fleetPlateSet(drivers, isFleetGrade) : null), [drivers]);
+  const S = React.useMemo(() => summarizeSettle(orders, ym, stageOf, undefined, { fleetPlates }), [orders, ym, stageOf, fleetPlates]);
   const closeOf = React.useCallback((c, m) => desk?.closes?.get(`${c}|${m}`) || null, [desk?.closes]);
   const board = React.useMemo(() => closeBoard(orders, ym, { closeOf }), [orders, ym, closeOf]);
   const boardMap = React.useMemo(() => new Map(board.map((r) => [r.client, r])), [board]);

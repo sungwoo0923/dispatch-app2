@@ -14,9 +14,9 @@ import { subscribeUsersLive } from "./usersLive"; // ⭐ 2026-11-02 속도 — �
 import { useEffect, useState } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db, auth } from "./firebase";
-import { orderProfit, orderCost, paidOut } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
+import { orderProfit, orderCost, paidOut, fkNum } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
 
-export const toWon = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
+export const toWon = (v) => fkNum(v); // 🛠 2026-11-25 수익(orderProfit)과 같은 금액 읽기(소수점 반올림)
 
 export function statsOf(list) {
   // ⭐ 2026-11-17 driver = 기사운임 합 · paid = 회사가 따로 지급(지게차·외부 특수운임) · profit = 줄 수수료(orderProfit) 합

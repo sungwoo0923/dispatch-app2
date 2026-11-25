@@ -88,6 +88,7 @@ import ViewSwitcher from "./ViewSwitcher"; // 🔀 2026-11-10 화면 전환 버�
 const SalesHub = React.lazy(() => import("./SalesHub")); // 💼 2026-11-10 영업관리(처음 열 때 받는다)
 import { ExecApprovals, TeamSchedule, ApprovalWorkspace, ExecScheduleBoard } from "./ExecSuite";
 import { useMyProfile, myNameNow, setMyNameCache } from "./userNames";
+import { nextFee } from "./forkliftCore"; // 🛠 2026-11-25 모바일 정산 저장도 PC와 같은 수수료 규칙
 import { sendCompanyMail, isMailSetupNeeded } from "./companyMail"; // ✉️ 2026-11-08 운송사별 발신 메일(예전 /api/send-email 대신)
 import { CompanyMailSettingsCard, MailSenderLine, MailSetupHost } from "./CompanyMailSettings";
 import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
@@ -2978,7 +2979,7 @@ const autoTransmitToShipper = async (savedRecord, shipperApp) => {
     지급방식: savedRecord.지급방식 || "",
     화물내용: savedRecord.화물내용 || "",
     화물단위: savedRecord.화물타입 || "",
-    청구운임: Number(savedRecord.청구운임) || 0,
+    청구운임: fkNum(savedRecord.청구운임), // 🛠 2026-11-25 "500,000"처럼 쉼표 있는 금액도 — 예전엔 Number()라 화주사 사본 청구운임이 0이 됐다
     차량번호: savedRecord.차량번호 || "",
     이름: savedRecord.이름 || "",
     전화번호: savedRecord.전화번호 || "",
@@ -3253,7 +3254,7 @@ import { SpecialFareTag, SpecialFareLine } from "./specialFareTag";
 import { FareShell, FareCard, FareRange, FareRow, FareVias, FareFilterPills, fareStats as calcFareStats } from "./FareResultUi"; // ⚠ 이 파일에 같은 이름 상태값(fareStats)이 있어 다른 이름으로 // 🎨 2026-11-24 운임조회 결과 창 새 디자인 // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import { withRoutePresets } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
 import { fareBreakdown } from "./forkliftCore"; // 🧾 2026-11-24 운임정보 운임 내역
-import { SpecialFareButton, ForkliftChip, ForkliftMark, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount, orderProfit, profitTotals } from "./forklift"; // 🏗 2026-11-09 지게차비용 · ⭐ 2026-11-17 수수료 한 식(orderProfit · profitTotals)
+import { SpecialFareButton, ForkliftChip, ForkliftMark, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount, orderProfit, profitTotals, fkNum } from "./forklift"; // 🏗 2026-11-09 지게차비용 · ⭐ 2026-11-17 수수료 한 식(orderProfit · profitTotals)
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합 현황) — 회사가 쓰는 영역에 따라 상단 메뉴가 바뀐다(src/bizModules.js)
@@ -4009,7 +4010,7 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
 function KpDeleteConfirm({ rows = [], note = "삭제 후에도 되돌리기로 복구할 수 있습니다", onCancel, onConfirm }) {
   const list = rows.filter(Boolean);
   const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}`;
-  const sum = list.reduce((a, r) => { a.sale += Number(r.청구운임) || 0; a.drv += Number(r.기사운임) || 0; return a; }, { sale: 0, drv: 0 });
+  const sum = profitTotals(list); // 🛠 2026-11-25 줄 수수료와 같은 식(청구 − 기사 − 지게차·특수운임 회사 지급분) · "500,000" 같은 글자 금액도 — 예전엔 Number()라 쉼표 있는 금액이 0이 됐다
   return (
     <div
       className="fixed inset-0 z-[99999] flex items-center justify-center bg-[#0F1A30]/45 backdrop-blur-[2px]"
@@ -4033,7 +4034,7 @@ function KpDeleteConfirm({ rows = [], note = "삭제 후에도 되돌리기로 �
           </div>
         </div>
         <div className="mx-7 grid grid-cols-3 rounded-2xl border border-[#E3E8F0] overflow-hidden">
-          {[["청구 합계", sum.sale], ["기사 합계", sum.drv], ["수수료", sum.sale - sum.drv]].map(([k, v], i) => (
+          {[["청구 합계", sum.sale], ["기사 합계", sum.drv], ["수수료", sum.fee]].map(([k, v], i) => (
             <div key={k} className={`px-4 py-2.5 text-center ${i ? "border-l border-[#E3E8F0]" : ""}`}>
               <div className="text-[11.5px] font-bold text-[#7A879C]">{k}</div>
               <div className="text-[16px] font-black text-[#0F1A30] tabular-nums">{won(v)}<span className="text-[11px] font-bold text-[#9AA9C3] ml-0.5">원</span></div>
@@ -6336,10 +6337,8 @@ const RichStatusBadge = ({ s, urgent, cancelReq, editReq, onCancelClick, onEditC
   );
 };
 
-export const toInt = (v) => {
-  const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
-  return isNaN(n) ? 0 : n;
-};
+// 🛠 2026-11-25 금액 읽기 = fkNum(functions/profitCore.mjs)과 같게 — 예전엔 소수점을 지워 "181818.18"(엑셀 계산 값)이 18,181,818이 됐다
+export const toInt = (v) => fkNum(v);
 export const fmtWon = (n) => `${Number(n || 0).toLocaleString()}원`;
 // 📌 전화번호 하이픈 자동 적용 함수 (프로그램 공용 — 입력 중에도 단계적으로 하이픈)
 //  · 010-1234-5678 / 011-123-4567 / 02-123-4567 / 02-1234-5678 / 031-123-4567
@@ -8553,11 +8552,9 @@ useEffect(() => {
     let totalProfit = 0;
 
     myOrders.forEach(o => {
-      const fare = Number(o?.청구운임 || 0);
-      const driverFee = Number(o?.기사운임 || 0);
-
-      totalRevenue += fare;
-      totalProfit += fare - driverFee;
+      // 🛠 2026-11-25 글자 금액("500,000")도 · 수익 = 줄 수수료(orderProfit) — 예전엔 Number()라 쉼표가 있으면 NaN, 지게차·외부 지급분도 안 뺐다
+      totalRevenue += fkNum(o?.청구운임);
+      totalProfit += orderProfit(o);
     });
 
     return {
@@ -8634,11 +8631,10 @@ useEffect(() => {
     return list.reduce(
       (acc, o) => {
         const fare = toInt(o?.청구운임);
-        const driverFee = toInt(o?.기사운임);
 
         acc.count += 1;
         acc.revenue += fare;
-        acc.profit += fare - driverFee;
+        acc.profit += orderProfit(o); // 🛠 2026-11-25 지게차·외부 특수운임(회사 지급분)까지 뺀 줄 수수료 — 배차현황과 같은 식
 
         return acc;
       },
@@ -9002,7 +8998,16 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   const aiCanWrite = role !== "viewer" && !(customRole && getMenuAccess(customRoles, role, "배차관리") !== "write");
   const aiOrderApi = {
     canWrite: aiCanWrite,
-    update: (id, patch, row) => (aiCanWrite ? patchDispatch(id, patch, row) : _viewerBlock()),
+    // 🛠 2026-11-25 AI 비서로 지급방식을 바꾸면 배차상태도 화면 확인 창과 같은 규칙(payTypeStatusPatch)으로 — "지급방식 취소 + 배차완료" 오더가 생기지 않게
+    update: (id, patch, row) => {
+      if (!aiCanWrite) return _viewerBlock();
+      const p = { ...patch };
+      if ("지급방식" in p && !("배차상태" in p)) {
+        const prev = row || (dispatchData || []).find((r) => r._id === id) || {};
+        Object.assign(p, payTypeStatusPatch(prev, p.지급방식, p));
+      }
+      return patchDispatch(id, p, row);
+    },
     remove: (ids) => (aiCanWrite ? removeDispatch(ids) : _viewerBlock()),
     create: async (recIn) => {
       if (!aiCanWrite) { _viewerBlock(); return false; }
@@ -10114,7 +10119,7 @@ return (
               upsertDriver={upsertDriver} upsertClient={upsertClientSafe} isViewer={isViewer} setCargoAddPopup={setCargoAddPopup} approvedShippers={approvedShippers} />
           )}
           {/* 🧭 정산 홈 — 월 마감 진행판 · 미수 경과 · 거래처 원장(기존 화면은 그대로, 여기서 바로 간다) */}
-          {정산관리Tab === "홈" && <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><SettleHome orders={settleRows} company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} onGo={(k, d) => { set정산관리Tab(k); if (d) setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: d })), 60); }} depositOn={betaPayOn} /></React.Suspense>}
+          {정산관리Tab === "홈" && <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><SettleHome orders={settleRows} drivers={drivers} company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} onGo={(k, d) => { set정산관리Tab(k); if (d) setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: d })), 60); }} depositOn={betaPayOn} /></React.Suspense>}
           {/* 🛠 2026-11-16 마감 검증 탭은 없앴다 — 배차자가 넘긴 거래처는 거래처정산에 "배차 마감"으로 보인다 */}
           {정산관리Tab === "지게차지급" && <ForkliftPayouts orders={settleRows} patchDispatch={patchDispatchSafe} isViewer={isViewer} />}
           {정산관리Tab === "입금확인" && betaPayOn && <CallDepositDesk orders={settleRows} patchDispatch={patchDispatchSafe} isViewer={isViewer} company={userCompany} onAttach={(r) => setDeskAttachId(r._id || r.id)} />}
@@ -11619,19 +11624,18 @@ const { doingList, pendingList, urgentList } = React.useMemo(() => ({
 }), [todayRows]);
 
 // 🚚 유통 데이터
-const money = (text) => {
-  const n = Number(String(text || "0").replace(/[^\d]/g, ""));
-  return isNaN(n) ? 0 : n;
-};
 const stripUndefined = (obj) =>
   Object.fromEntries(
     Object.entries(obj).filter(([, v]) => v !== undefined)
   );
 // 매출/기사비용/마진율
-const todayRevenue = todayRows.reduce((sum, r) => sum + money(r.청구운임), 0);
-const todayDriverCost = todayRows.reduce((sum, r) => sum + money(r.기사운임), 0);
+// 🛠 2026-11-25 수수료 = 줄 수수료 합(청구 − 기사 − 지게차·특수운임 회사 지급분) — 예전엔 청구 − 기사라 배차현황 칩보다 지게차비만큼 컸다
+const todayFareT = profitTotals(todayRows);
+const todayRevenue = todayFareT.sale;
+const todayDriverCost = todayFareT.drv;
+const todayFee = todayFareT.fee;
 const todayMarginRate = todayRevenue
-  ? ((todayRevenue - todayDriverCost) / todayRevenue) * 100
+  ? (todayFee / todayRevenue) * 100
   : 0;
 // 🔹 Top 거래처/하차지 통계
 const topClients = Object.entries(
@@ -19403,7 +19407,7 @@ className={`
       {[
         { label: "청구", val: todayRevenue },
         { label: "기사비용", val: todayDriverCost },
-        { label: "수수료", val: todayRevenue - todayDriverCost },
+        { label: "수수료", val: todayFee },
       ].map(({ label, val }) => (
         <div key={label} className="px-3 py-1.5 flex justify-between items-center border-b border-gray-50 last:border-0">
           <span className="text-[10px] text-gray-500 font-medium">{label}</span>
@@ -27529,10 +27533,7 @@ const handleUrgentSnooze = (minutes) => {
   // ------------------------
   // 숫자 변환
   // ------------------------
-  const toInt = (v) => {
-    const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
-    return isNaN(n) ? 0 : n;
-  };
+  const toInt = (v) => fkNum(v); // 🛠 2026-11-25 수수료 칩(profitTotals)과 같은 금액 읽기(소수점 반올림)
   const formatComma = (n) => {
     const v = toInt(n);
     return v.toLocaleString();
@@ -36211,7 +36212,7 @@ if (mode === "driver") {
     독차: false,
   });
 
-  const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const toInt = (v) => fkNum(v); // 🛠 2026-11-25 수수료 칩(profitTotals)과 같은 금액 읽기 — 엑셀 업로드의 소수점 금액(181818.18)이 18,181,818로 들어가던 것 고침
   const getId = (r) => r._id || r.id || r._fsid;
   // 🕘 변경 이력 1건 생성
   const makeHistory = ({ field, before, after }) => ({
@@ -44910,8 +44911,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
     [clients, places]
   );
 
-  const toInt = (v) =>
-    parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const toInt = (v) => fkNum(v); // 🛠 2026-11-25 수수료(orderProfit)와 같은 금액 읽기(소수점 반올림)
   const sum = (list, key) => list.reduce((a, r) => a + toInt(r[key]), 0);
   const profitRate = (sale, profit) =>
     sale === 0 ? 0 : (profit / sale) * 100;
@@ -60288,13 +60288,40 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
   // ⭐ 2026-11-05 PC·모바일 일치 — PC 정산관리와 같은 3개 탭(거래처정산·용차지급관리·지입정산관리) · 첫 화면도 PC처럼 거래처정산
   const [tab, setTab] = React.useState(() => { const t = settleStartTab(); return t === "홈" ? "홈" : "거래처정산"; }); // 🧭 2026-11-16 PC와 같게 정산 홈부터
   // 지급 상태·지급일 같은 정산 칸만 고치는 간단 저장(배차 검사 없이) — 오더가 있는 컬렉션 그대로
+  // 🛠 2026-11-25 PC patchDispatch 와 같은 돈 규칙 — ① 최종마감 잠금(정산 기록 __system 은 그대로 · 경리 권한은 통과)
+  //  ② 청구운임 · 기사운임을 고치면 수수료도 같이(nextFee — 직접 넣은 수수료는 그대로) ③ 화주사 전송 사본에 청구운임 등 같이
+  const mDesk = useArDesk((getTenant() || companyName || DEFAULT_COMPANY || "").trim());
+  const mProf = useMyProfile(auth.currentUser?.uid);
+  const mBypass = role === "totalMaster" || ["hrAcct", "allMgr", "acct", "accounting"].includes(role) || /경리|회계|정산/.test(String(mProf?.team || mProf?.부서 || ""));
   const patchDispatch = React.useCallback(async (_id, patch, knownPrev) => {
     if (!_id) return;
     const row = knownPrev || dispatchData.find((d) => d._id === _id || d.id === _id);
+    if (patch && !patch.__system && !mBypass) {
+      const lockOf = (o) => { const c = String(o?.거래처명 || "").trim(); if (!c) return null; const ym = String(o?.마감월 || "").slice(0, 7) || String(o?.상차일 || "").slice(0, 7); return isFinalLocked(mDesk.closes?.get(`${c}|${ym}`)) ? { client: c, ym } : null; };
+      const fl = lockOf(row) || (row ? lockOf({ ...row, ...patch }) : null);
+      if (fl) { window.alert(`${fl.client} ${Number(fl.ym.slice(5))}월은 최종마감 이후 수정이 불가합니다.\n필요 시 경리팀에 해제요청 해주세요.`); return false; }
+    }
     // ⭐ 2026-11-12 점검 — __system · __col 같은 화면용 표시는 문서에 쓰지 않는다(예전엔 그대로 저장됐다)
     const clean = {}; Object.entries(patch || {}).forEach(([k, v]) => { if (!k.startsWith("__")) clean[k] = v; });
-    await updateDoc(doc(db, patch?.__col || row?.__col || "dispatch", _id), { ...clean, updatedAt: serverTimestamp() });
-  }, [dispatchData]);
+    if (("청구운임" in clean || "기사운임" in clean) && !("수수료" in clean)) clean.수수료 = String(nextFee(row || null, { ...(row || {}), ...clean }));
+    const col = patch?.__col || row?.__col || "dispatch";
+    await updateDoc(doc(db, col, _id), { ...clean, updatedAt: serverTimestamp() });
+    const MIRROR = ["청구운임", "지급방식", "차량번호", "이름", "전화번호", "상차일", "하차일", "화물내용"];
+    const mp = {}; MIRROR.forEach((k) => { if (k in clean) mp[k] = clean[k]; });
+    if (Object.keys(mp).length && row?.source !== "transport_transmit") {
+      (async () => {
+        let mid = row?._transmittedOrderId || "";
+        if (!mid) { const sn = await getDocs(query(collection(db, "orders"), where("originCol", "==", col), where("originId", "==", _id), limit(1))); mid = sn.empty ? "" : sn.docs[0].id; }
+        if (mid) await updateDoc(doc(db, "orders", mid), { ...mp, updatedAt: Date.now() });
+      })().catch((e) => console.error("화주사 전송사본 동기화 오류:", e));
+    }
+  }, [dispatchData, mBypass, mDesk.closes]);
+  // 🔗 2026-11-25 정산 홈 기사 지급 = 용차지급관리와 같은 오더(지입차 제외) — 우리 회사 기사 목록
+  const [mDrivers, setMDrivers] = React.useState(null);
+  React.useEffect(() => {
+    const co = String(companyName || "").trim() || DEFAULT_COMPANY;
+    return onSnapshot(query(collection(db, "drivers"), where("companyName", "==", co)), (snap) => setMDrivers(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setMDrivers([]));
+  }, [companyName]);
   const betaPayOnM = useBetaOn(getTenant() || companyName); // 💳 입금 확인 탭(PC와 같은 조건)
   const [deskAttachId, setDeskAttachId] = React.useState("");
   // 거래처정산 › 거래처 정보(계좌·담당자 등) 저장 — PC upsertClient와 같은 문서(회사별 문서 이름)
@@ -60316,14 +60343,14 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
     <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={tab} onSelect={setTab}
       items={[{ key: "홈", label: "정산 홈", en: "OVERVIEW", icon: "dashboard" }, { key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt", badge: closeNM || undefined }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOnM ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
       {tab === "홈"
-        ? <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}><SettleHome orders={dispatchData} company={companyName || DEFAULT_COMPANY} depositOn={betaPayOnM} onGo={(k, d) => { setTab(k === "마감검증" ? "거래처정산" : k); if (d) setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: d })), 80); }} /></React.Suspense>
+        ? <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}><SettleHome orders={dispatchData} drivers={mDrivers} company={companyName || DEFAULT_COMPANY} depositOn={betaPayOnM} onGo={(k, d) => { setTab(k === "마감검증" ? "거래처정산" : k); if (d) setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: d })), 80); }} /></React.Suspense>
         : tab === "거래처정산"
         ? <ClientSettlement dispatchData={dispatchData} setDispatchData={() => {}} userCompany={companyName} clients={clients}
             setClients={(next) => (next || []).forEach(upsertClient)} upsertClient={upsertClient} showAlert={(m) => window.alert(m)}
             patchDispatch={isViewer ? async () => {} : patchDispatch} cardImage={cardImage} setCardImage={setCardImage}
             cardImageUploading={cardImageUploading} setCardImageUploading={setCardImageUploading} isViewer={isViewer} />
         : tab === "지급관리"
-        ? <PaymentManagement mobile dispatchData={dispatchData} patchDispatch={isViewer ? async () => {} : patchDispatch} companyName={companyName} canEditPayDay={role === "admin" || role === "totalMaster"} />
+        ? <PaymentManagement mobile dispatchData={dispatchData} drivers={mDrivers} patchDispatch={isViewer ? async () => {} : patchDispatch} companyName={companyName} canEditPayDay={role === "admin" || role === "totalMaster"} />
         : tab === "지게차지급"
         ? <ForkliftPayouts orders={dispatchData} patchDispatch={isViewer ? async () => {} : patchDispatch} isViewer={isViewer} />
         : tab === "입금확인" && betaPayOnM

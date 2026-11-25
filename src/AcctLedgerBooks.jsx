@@ -7,9 +7,9 @@
 //  ⚠ 숫자 계산은 receivablesOf · invoiceDriverPlates · isTaxInvoiceSale(arAging.js) — 회계 개요 · 거래처정산과 같은 식
 import React from "react";
 import { db } from "./firebase";
-import { loadAcctPayments, saveAcctPayments } from "./acctPayments";
+import { loadAcctPayments, saveAcctPayments, useArPayments } from "./acctPayments";
 import { addClientCollection, removeClientCollections } from "./ledgerAuto";
-import { receivablesOf, invoiceDriverPlates, isTaxInvoiceSale, isArOrder, arClientOf, vatIncluded } from "./arAging";
+import { receivablesOf, invoiceDriverPlates, isTaxInvoiceSale, isArOrder, arClientOf, vatIncluded, settlePaidByClient } from "./arAging";
 import { createPortal } from "react-dom";
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { EditableText } from "./EditMode";
@@ -135,11 +135,10 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
 
   // 청구액 = 부가세 포함(거래처정산 미수금과 같은 식) · 연체 구분 = 아직 못 받은 청구 중 가장 오래된 것의 경과일
   // ⭐ 2026-11-18 정산관리 › 입금 확인 [입금완료] 오더(부가세 포함) — 거래처별 합계
-  const arSettled = React.useMemo(() => {
-    const m = {};
-    yearOrders.forEach((r) => { if (isArOrder(r) && r.입금상태 === "입금완료") { const c = arClientOf(r); m[c] = (m[c] || 0) + vatIncluded(toInt(r.청구운임)); } });
-    return m;
-  }, [yearOrders]);
+  // 🔗 2026-11-25 + 거래처정산 › 미수금관리 입금 기록(arPayments · 은행 자동 매칭) · [정산완료] 처리한 달 — 예전엔 이 둘이 빠져 회계에서는 계속 미수로 남았다
+  const arPays = useArPayments();
+  const arSettleBook = React.useMemo(() => settlePaidByClient({ orders: yearOrders, arPayments: arPays, year: String(year) }), [yearOrders, arPays, year]);
+  const arSettled = React.useMemo(() => Object.fromEntries(Object.entries(arSettleBook).map(([c, v]) => [c, v.paid])), [arSettleBook]);
   const arByClient = React.useMemo(() => {
     const todayK = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
     const paidMap = { ...arPayments };
@@ -407,7 +406,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
               <td style={{ ...td, ...vl, ...totalCell }} colSpan={2} />
             </tr></tfoot>}
           </LedgerTable>
-          <Foot>* 청구액은 배차완료 오더의 청구운임(부가세 포함) 합계예요. 수금액은 회계 장부 [입금 처리] 금액과 정산관리 [입금완료] 처리 오더 금액 중 큰 쪽이에요. [입금 처리]는 자금관리 수입·지출 장부와 자금 잔액에도 반영돼요. 누계 잔액은 위에서부터 미수금을 더한 값이에요.</Foot>
+          <Foot>* 청구액은 배차완료 오더의 청구운임(부가세 포함) 합계예요. 수금액은 회계 장부 [입금 처리] 금액과 정산관리에서 받은 돈(입금 확인 [입금완료] · 거래처정산 미수금관리 입금 · 정산완료) 중 큰 쪽이에요. [입금 처리]는 자금관리 수입·지출 장부와 자금 잔액에도 반영돼요. 누계 잔액은 위에서부터 미수금을 더한 값이에요.</Foot>
         </div>
       )}
 
@@ -572,7 +571,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
         </div>
       )}
 
-      {detail && <LedgerDetail detail={detail} year={year} yearOrders={yearOrders} drivers={drivers} arByClient={arByClient} apByDriver={apByDriver} payLog={payLog} onClose={() => setDetail(null)}
+      {detail && <LedgerDetail detail={detail} year={year} yearOrders={yearOrders} drivers={drivers} arByClient={arByClient} arSettleBook={arSettleBook} apByDriver={apByDriver} payLog={payLog} onClose={() => setDetail(null)}
         onPay={(type, name) => { setDetail(null); if (type === "ar") { setArModal(name); setArInput(""); } else { setApModal(name); setApInput(""); } }} isViewer={isViewer} />}
       {/* 입금 · 지급 처리 창 */}
       {[["ar", arModal, setArModal, arInput, setArInput, "입금 처리", "미수금 잔액", (n) => arByClient.find((r) => r.client === n)?.outstanding || 0, "입금액 입력 (원)", "대변 · 108 외상매출금"],
@@ -586,7 +585,7 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
             </div>
             <div className="px-5 py-4">
               <div className="mb-2 flex items-baseline justify-between text-[13.5px] font-bold text-[#5B6B85]">{balLbl}<b className="text-[16px] text-[#0F1A30]" style={NUM}>{balOf(name).toLocaleString()}원</b></div>
-              {(() => { const st = type === "ar" ? (arByClient.find((r) => r.client === name)?.settled || 0) : (apByDriver.find((r) => r.driver === name)?.settled || 0); return st > 0 ? <div className="mb-2 text-[12.5px] font-bold text-[#5B6B85] leading-relaxed break-keep">정산관리에서 {type === "ar" ? "입금완료" : "지급완료"} 처리한 {st.toLocaleString()}원은 이미 반영돼 있어요. 같은 돈을 여기서 또 처리하지 않도록 확인해 주세요.</div> : null; })()}
+              {(() => { const st = type === "ar" ? (arByClient.find((r) => r.client === name)?.settled || 0) : (apByDriver.find((r) => r.driver === name)?.settled || 0); return st > 0 ? <div className="mb-2 text-[12.5px] font-bold text-[#5B6B85] leading-relaxed break-keep">정산관리에서 {type === "ar" ? "입금 처리" : "지급완료"} 처리한 {st.toLocaleString()}원은 이미 반영돼 있어요. 같은 돈을 여기서 또 처리하지 않도록 확인해 주세요.</div> : null; })()}
               <input autoComplete="off" inputMode="numeric" value={val ? Number(String(val).replace(/[^\d]/g, "") || 0).toLocaleString() : ""} onChange={(e) => setVal(e.target.value.replace(/[^\d]/g, ""))} placeholder={ph}
                 className="w-full h-12 border border-[#D3DBE8] rounded-xl px-3 text-[17px] font-black text-right outline-none focus:border-[#2D4C82]" style={NUM} autoFocus />
               <div className="flex gap-2 justify-end mt-4">
@@ -616,7 +615,7 @@ const logSince = (log, type, name) => {
   return mine.slice(last + 1).filter((x) => !x.reset && Number(x.amount) > 0);
 };
 
-function LedgerDetail({ detail, year, yearOrders, drivers, arByClient, apByDriver, payLog, onClose, onPay, isViewer }) {
+function LedgerDetail({ detail, year, yearOrders, drivers, arByClient, arSettleBook, apByDriver, payLog, onClose, onPay, isViewer }) {
   const [tab, setTab] = React.useState("list");
   const mobile = typeof window !== "undefined" && window.innerWidth < 768;
   React.useEffect(() => { const k = (e) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
@@ -632,7 +631,7 @@ function LedgerDetail({ detail, year, yearOrders, drivers, arByClient, apByDrive
     const logs = logSince(payLog, "ar", detail.key);
     const logSum = logs.reduce((s, x) => s + Number(x.amount || 0), 0);
     const legacy = Math.max(0, (r.manual || 0) - logSum);
-    const settledRows = orders.filter((o) => o.입금상태 === "입금완료");
+    const settleLines = (arSettleBook?.[detail.key]?.lines) || []; // 🔗 2026-11-25 정산관리 쪽(입금 확인 · 미수금관리) 받은 돈 — 청구월마다 한 줄
     title = r.client; code = "108 외상매출금 · 거래처 원장";
     summary = [["청구액", r.invoiced, INK], ["수금액", r.paid, "#1F6F4A"], ["미수금", r.outstanding, r.outstanding > 0 ? NEG : INK]];
     tabs = [["list", `청구 내역 ${orders.length}건`], ["pay", "수금 내역"]];
@@ -675,7 +674,7 @@ function LedgerDetail({ detail, year, yearOrders, drivers, arByClient, apByDrive
       const rows = [
         ...logs.map((x) => ({ d: atDay(x.at), kind: "회계 장부 입금 처리", amt: Number(x.amount) || 0, src: "manual" })),
         ...(legacy > 0 ? [{ d: "", kind: "이전 입금 처리 누계(일자 기록 없음)", amt: legacy, src: "manual" }] : []),
-        ...settledRows.map((o) => ({ d: String(o.입금일 || "").slice(0, 10), kind: `정산관리 입금 확인 · ${o.상차지명 || ""} → ${o.하차지명 || ""}`, amt: vatIncluded(toInt(o.청구운임)), src: "settle" })),
+        ...settleLines.map((x) => ({ d: String(x.d || "").slice(0, 10), kind: `정산관리 입금 · ${Number(x.ym.slice(0, 4))}년 ${Number(x.ym.slice(5))}월분${x.full ? " 다 받음" : " 일부"}`, amt: x.amt, src: "settle" })),
       ].sort((a, b) => String(a.d).localeCompare(String(b.d)));
       body = (
         <div className="space-y-2">
@@ -691,7 +690,7 @@ function LedgerDetail({ detail, year, yearOrders, drivers, arByClient, apByDrive
               ))}
             </tbody>
           </LedgerTable>
-          <Foot>* 수금액 {won(r.paid)}원 = 회계 장부 입금 처리 {won(r.manual)}원과 정산관리 입금완료 {won(r.settled)}원 중 큰 쪽이에요.</Foot>
+          <Foot>* 수금액 {won(r.paid)}원 = 회계 장부 입금 처리 {won(r.manual)}원과 정산관리에서 받은 돈 {won(r.settled)}원(입금 확인 [입금완료] · 거래처정산 미수금관리 입금 · 정산완료) 중 큰 쪽이에요.</Foot>
         </div>
       );
     }

@@ -12,6 +12,16 @@ assert.equal(S.sale, 450000, "취소 제외 · 마감월 이월 포함"); assert
 assert.deepEqual([step("orders").left, step("send").left, step("tax").left, step("close").left], [1, 1, 2, 2], "발송한 곳은 발송 단계 완료 · 마감한 곳은 모두 완료");
 assert.deepEqual([step("deposit").left, step("deposit").amount], [1, 200000], "입금완료 · 마감한 거래처는 미수에서 뺀다");
 assert.deepEqual([step("payout").left, step("payout").amount], [3, 270000]);
+// 🔗 2026-11-25 기사 지급 = 용차지급관리와 같은 오더 — 지입차(기사관리 등급) · 배차완료 전 오더는 세지 않는다(매입 합계는 그대로)
+{
+  const { fleetPlateSet } = await import("../src/settleCore.js");
+  const fp = fleetPlateSet([{ 등급: "지입", 차량번호: "12가 3456" }, { 등급: "일반", 차량번호: "99나9999" }], (g) => g === "지입");
+  const more = [...orders, o({ _id: "8", 차량번호: "12가-3456", 기사운임: "500000" }), o({ _id: "9", 배차상태: "배차중", 청구운임: "0", 기사운임: "30000" })];
+  const F = summarizeSettle(more, "2026-11", stageFinder(stmts), "2026-11-14", { fleetPlates: fp });
+  const p = F.steps.find((s) => s.key === "payout");
+  assert.deepEqual([p.total, p.left, p.amount], [4, 3, 270000], "지입차 · 배차중 오더는 기사 지급에서 빠진다");
+  assert.equal(F.drv, 350000 + 500000 + 30000, "매입(기사운임 합)에는 그대로 들어간다");
+}
 const ag = Object.fromEntries(S.aging.map((a) => [a.client, a]));
 assert.equal(ag.가나상사.over, 300000); assert.equal(ag.가나상사.d30, 200000); assert.ok(!ag.마바 && !ag.다라물산);
 const L = clientLedger(orders, "가나상사", stageFinder(stmts));

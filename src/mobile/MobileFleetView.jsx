@@ -585,7 +585,7 @@ function MobileOrderDetailModal({ order, currentId = null, onClose }) {
         {row("상차일시", `${order.상차일 || "-"} ${order.상차시간 || "즉시"}`)}
         {row("하차일시", `${order.하차일 || order.상차일 || "-"} ${order.하차시간 || "즉시"}`)}
         {row("화물정보", [order.차량종류, order.차량톤수, order.화물내용].filter(Boolean).join(" · "))}
-        {row("기사운임", order.기사운임 ? `${Number(String(order.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-")}
+        {row("기사운임", order.기사운임 ? `${(Number(String(order.기사운임).replace(/[^\d-]/g, "")) || 0).toLocaleString()}원` : "-")}
         {order.기사확인상태 === "거절" && row("거절사유", order.기사거절사유 || "사유 없음")}
       </div>
     </div>
@@ -881,11 +881,13 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
   // ⭐ 사용자 요청 — 관리자가 모바일에서도 지입차별 오늘/누적 매출을 볼 수 있어야
   // 한다. ordersFor는 오늘 오더만 매칭하므로, 날짜 제한 없이 전체 이력에서
   // 직접 청구운임을 합산한다.
-  const toWon = useCallback((v) => Number(String(v || "0").replace(/[^\d]/g, "")) || 0, []);
+  // 🛠 2026-11-25 PC 지입차 상세(FleetManagement)와 같게 — 금액 읽기 = fkNum(마이너스 · 소수점) · 취소 · 화주사 전송 사본 제외
+  const toWon = useCallback((v) => { if (v == null || v === "") return 0; if (typeof v === "number") return Number.isFinite(v) ? Math.round(v) : 0; const n = Number(String(v).replace(/[^\d.-]/g, "")); return Number.isFinite(n) ? Math.round(n) : 0; }, []);
   const revenueFor = useCallback((d) => {
     const plate = (d.차량번호 || "").trim();
     const name = (d.이름 || "").trim();
     const all = (dispatchData || []).filter(r => {
+      if (r?.배차상태 === "배차취소" || ["취소", "배차취소", "오더취소", "취소됨"].includes(r?.상태) || r?.source === "transport_transmit") return false;
       const rPlate = (r.차량번호 || "").trim();
       const rName = (r.이름 || "").trim();
       return (!!plate && rPlate === plate) || (!!name && rName === name);
@@ -1214,7 +1216,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                         // 머리줄(상태·거래처·운임) → 상차/하차 세로 노선 → 차량·화물·구간거리 → (진행중) 단계 진행선 + 남은거리·도착예상 한 줄
                         const ph = phaseOf(d);
                         const accepted = activeOrder.기사확인상태 === "수락" && kind === "current";
-                        const fare = Number(String(activeOrder.기사운임 ?? "").replace(/[^\d]/g, "")) || 0;
+                        const fare = Number(String(activeOrder.기사운임 ?? "").replace(/[^\d-]/g, "")) || 0; // 🛠 2026-11-25 "-180,000"(기사 차감) 부호 유지
                         const hm = (v) => { const ms = v?.toMillis ? v.toMillis() : typeof v?.seconds === "number" ? v.seconds * 1000 : 0; if (!ms) return ""; const t = new Date(ms); return `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`; };
                         const when = (date, time) => {
                           const t = time || "즉시";

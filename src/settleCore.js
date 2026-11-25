@@ -22,7 +22,15 @@ export function stageFinder(stmts) {
 
 // ── 계산(순수 함수) ──────────────────────────────────────────────
 //  orders: 오더 목록 · ym: "YYYY-MM" · stageOf(client, ym) → 명세서 단계 · today: "YYYY-MM-DD"
-export function summarizeSettle(orders, ym, stageOf = () => "미작성", today = kstToday()) {
+//  🔗 2026-11-25 opts.fleetPlates: 지입·직영·임대 차량번호(Set) — ⑤ 기사 지급은 용차지급관리 목록과 같은 오더만 센다(배차완료 · 지입차 제외)
+//   지입차 운임은 지입차관리 › 일괄 지급명세서로 따로 주고 [지급완료]를 누르지 않아서, 예전엔 정산 홈 "기사 지급"이 끝까지 0이 되지 않았다
+export const plateKeyOf = (v) => String(v ?? "").toUpperCase().replace(/\s+/g, "").replace(/[-.]/g, "");
+export function fleetPlateSet(drivers, isFleet) {
+  const set = new Set();
+  (drivers || []).forEach((d) => { if (!isFleet(d?.등급)) return; const p = plateKeyOf(d?.차량번호 || d?.carNo); if (p && p !== "-") set.add(p); });
+  return set;
+}
+export function summarizeSettle(orders, ym, stageOf = () => "미작성", today = kstToday(), { fleetPlates = null } = {}) {
   const rows = (orders || []).filter((o) => !isCancel(o) && o?.source !== "transport_transmit");
   const mine = rows.filter((o) => monthOf(o) === ym);
   const billable = mine.filter((o) => n(o.청구운임) > 0 && String(o.거래처명 || "").trim());
@@ -44,7 +52,8 @@ export function summarizeSettle(orders, ym, stageOf = () => "미작성", today =
   const unpaidOf = (c) => (idx(c) >= 6 ? 0 : Math.max(0, c.sale - c.paid));
   const unpaidClients = clients.filter((c) => unpaidOf(c) > 0);
   // ⑤ 기사 지급
-  const payable = mine.filter((o) => n(o.기사운임) > 0);
+  const withDrv = mine.filter((o) => n(o.기사운임) > 0);
+  const payable = withDrv.filter((o) => o.배차상태 === "배차완료" && !(fleetPlates && fleetPlates.has(plateKeyOf(o.차량번호))));
   const unpaidDrv = payable.filter((o) => (o.지급상태 || "지급중") !== "지급완료");
   const steps = [
     { key: "orders", label: "오더 확정", go: "거래처정산", total: mine.length, left: new Set([...noFare, ...unassigned].map((o) => o._id || o.id || o)).size, unit: "건", hint: `운임 미입력 ${noFare.length} · 미배차 ${unassigned.length}`, amount: 0 },
@@ -55,7 +64,7 @@ export function summarizeSettle(orders, ym, stageOf = () => "미작성", today =
     { key: "close", label: "마감", go: "거래처정산", total, left: needClose.length, unit: "곳", hint: "미마감", amount: sumOf(needClose) },
   ];
   // ⭐ 2026-11-17 매입 = 기사운임 + 회사가 따로 지급(지게차·외부 특수운임) → 매출이익 = 청구 − 기사 − 지게차 등(배차표 수수료와 같은 식)
-  const drv = payable.reduce((a, o) => a + n(o.기사운임), 0), paid = mine.reduce((a, o) => a + paidOut(o), 0);
+  const drv = withDrv.reduce((a, o) => a + n(o.기사운임), 0), paid = mine.reduce((a, o) => a + paidOut(o), 0);
   const sale = sumOf(clients), buy = drv + paid;
   // 미수 경과(전체 기간) — 입금 안 됐고 그 달을 마감하지 않은 청구
   const aging = new Map();
@@ -72,7 +81,7 @@ export function summarizeSettle(orders, ym, stageOf = () => "미작성", today =
 // 거래처 원장 — 달마다 청구 · 입금 · 잔액(오래된 달부터 잔액을 쌓는다)
 export function clientLedger(orders, client, stageOf = () => "미작성") {
   const m = new Map();
-  (orders || []).forEach((o) => { if (isCancel(o) || String(o.거래처명 || "").trim() !== client || n(o.청구운임) <= 0) return; const ym = monthOf(o); if (!ym) return; const x = m.get(ym) || { ym, count: 0, sale: 0, paid: 0 }; x.count += 1; x.sale += n(o.청구운임); if (o.입금상태 === "입금완료") x.paid += n(o.청구운임); m.set(ym, x); });
+  (orders || []).forEach((o) => { if (isCancel(o) || o?.source === "transport_transmit" || String(o.거래처명 || "").trim() !== client || n(o.청구운임) <= 0) return; const ym = monthOf(o); if (!ym) return; const x = m.get(ym) || { ym, count: 0, sale: 0, paid: 0 }; x.count += 1; x.sale += n(o.청구운임); if (o.입금상태 === "입금완료") x.paid += n(o.청구운임); m.set(ym, x); });
   let bal = 0;
   return [...m.values()].sort((a, b) => a.ym.localeCompare(b.ym)).map((x) => { const stage = stageOf(client, x.ym); const paid = stageIdx(stage) >= 6 ? x.sale : x.paid; bal += x.sale - paid; return { ...x, paid, stage, balance: bal }; });
 }

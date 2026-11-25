@@ -547,7 +547,7 @@ function OrderDetailBody({ o, onCopy, changed = [] }) {
       {(o.기사운임 || o.지급방식) && (
         <div style={{ display: "flex", alignItems: "baseline", gap: 10, fontSize: 16.5, color: "#3A4A66", padding: "12px 0", borderBottom: "1px solid #EEF2F8" }}>
           <span style={{ fontWeight: 800, flexShrink: 0, color: "#7D8BA3", width: 40 }}>운임</span>
-          <span style={{ fontWeight: 900, fontSize: 21, color: "#0B1428", ...(any("기사운임", "지급방식") ? CHG : {}) }}>{o.기사운임 ? `${Number(String(o.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-"}</span>
+          <span style={{ fontWeight: 900, fontSize: 21, color: "#0B1428", ...(any("기사운임", "지급방식") ? CHG : {}) }}>{o.기사운임 ? `${(Number(String(o.기사운임).replace(/[^\d-]/g, "")) || 0).toLocaleString()}원` : "-"}</span>
           {o.지급방식 && <span style={{ color: "#5B6B85" }}>· {o.지급방식}</span>}
         </div>
       )}
@@ -3704,7 +3704,7 @@ export default function DriverHome() {
             const totalPages = Math.max(1, Math.ceil(completedOrders.length / PAGE_SIZE));
             const page = Math.min(logbookPage, totalPages - 1);
             const paged = completedOrders.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
-            const fareSum = completedOrders.filter(o => orderResultOf(o).label === "운송완료").reduce((s, o) => s + (Number(String(o.기사운임 || 0).replace(/[^\d]/g, "")) || 0), 0);
+            const fareSum = completedOrders.filter(o => orderResultOf(o).label === "운송완료").reduce((s, o) => s + (Number(String(o.기사운임 || 0).replace(/[^\d-]/g, "")) || 0), 0);
             const doneCount = completedOrders.filter(o => orderResultOf(o).label === "운송완료").length;
             const hasDocs = (orderId) => {
               const has = (t) => allPhotoLogs.some(p => p.orderId === orderId && p.actionType === t);
@@ -3744,7 +3744,7 @@ export default function DriverHome() {
                         const t = (o.기사완료일시 || o.archivedAt)?.toDate?.();
                         const docs = hasDocs(o._id);
                         const res = orderResultOf(o);
-                        const fare = Number(String(o.기사운임 || 0).replace(/[^\d]/g, "")) || 0;
+                        const fare = Number(String(o.기사운임 || 0).replace(/[^\d-]/g, "")) || 0;
                         const chip = (ok, label) => (
                           <span style={{ fontSize: 14, fontWeight: 800, padding: "4px 10px", borderRadius: 999, background: ok ? "#E8F0FF" : "#F3F5F9", color: ok ? "#1B3A7A" : "#8A97AD", border: `1px solid ${ok ? "#C9D8F5" : "#E6EBF3"}` }}>{label} {ok ? "✓" : "✗"}</span>
                         );
@@ -3791,7 +3791,7 @@ export default function DriverHome() {
             const loadT = o.상차완료일시?.toDate?.();
             const acceptT = o.기사확인일시?.toDate?.();
             const fmtDT = (d) => d ? `${d.getMonth() + 1}/${d.getDate()} ${formatTime(d)}` : "-";
-            const fare = Number(String(o.기사운임 || 0).replace(/[^\d]/g, "")) || 0;
+            const fare = Number(String(o.기사운임 || 0).replace(/[^\d-]/g, "")) || 0;
             const docs = { load: allPhotoLogs.some(p => p.orderId === o._id && p.actionType === "상차완료"), drop: allPhotoLogs.some(p => p.orderId === o._id && p.actionType === "하차완료") };
             const Row = ({ k, v, strong }) => (
               <div style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "1px solid #EEF2F8" }}>

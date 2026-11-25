@@ -193,6 +193,9 @@ const ORD = (id, client, ym, fare, extra = {}) => ({ _id: id, __col: "orders", �
   const months = M.buildArMonths({ orders, paidMap: M.arPaidMapOf([{ client: "(주)한빛물류", yyyymm: "2026-09", amount: 100000 }]) });
   eq("달 묶기 · 부가세 포함 · 입금 빼기", months.get("(주)한빛물류").map((e) => [e.yyyymm, e.due, e.paid, e.remain]), [["2026-09", 1100000, 100000, 1000000], ["2026-10", 550000, 0, 550000]]);
   eq("배차완료만", months.has("취소거래처"), false);
+  // 🛠 2026-11-25 서버(bankSync)는 오더를 직접 읽는다 — 상태 "취소" · 화주사 전송 사본은 화면처럼 빼야 금액이 같다
+  const m2 = M.buildArMonths({ orders: [ORD("k1", "가나", "2026-10", 100000), ORD("k2", "가나", "2026-10", 50000, { 상태: "취소" }), ORD("k3", "가나", "2026-10", 70000, { source: "transport_transmit" })] });
+  eq("취소 · 전송 사본 빼기", m2.get("가나").map((e) => [e.total, e.due]), [[100000, 110000]]);
   const r = M.matchDeposits({ deposits: [{ name: "한빛물류", amount: 1000000 }, { name: "대한통운평택", amount: 100000 }, { name: "김철수", amount: 550000 }, { name: "모름", amount: 1 }], months });
   eq("이름일치 · 딱 맞는 달", [r.matches[0].client, r.matches[0].kind, r.matches[0].confidence, r.matches[0].alloc[0].yyyymm], ["(주)한빛물류", "정산완료", "이름일치", "2026-09"]);
   eq("일부 입금", [r.matches[1].client, r.matches[1].kind], ["대한통운 평택", "일부입금"]);

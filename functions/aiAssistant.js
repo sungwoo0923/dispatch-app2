@@ -308,6 +308,31 @@ function filterOrders(rows, a = {}) {
     return true;
   });
 }
+// 🛠 2026-11-25 고정노선 운송업체 설정(routeCarrierSettings) — 끈 업체 오더는 매출 합계에서 뺀다(매출관리 · 홈 · 일일 보고와 같게)
+//  src/routeCarriers.js makeIsCountable · functions/dailyReport.js 와 같은 규칙(설정을 저장한 적 없으면 전부 센다)
+const carrierKeyOf = (s) => String(s ?? "").replace(/\s+/g, "").toLowerCase();
+function routeCarrierOf(o) {
+  const ex = o?.추가정보;
+  if (ex && typeof ex === "object") {
+    const direct = String(ex.운송업체 ?? "").trim(); if (direct) return direct;
+    for (const k of Object.keys(ex)) if (/운송업체|운송사/.test(k)) { const v = String(ex[k] ?? "").trim(); if (v) return v; }
+  }
+  return String(o?.운송업체 ?? "").trim();
+}
+async function countableOf(ctx) {
+  if (ctx._countable) return ctx._countable;
+  const snap = await ctx.db.collection("routeCarrierSettings").doc(ctx.co).get().catch(() => null);
+  const setting = snap?.exists ? snap.data() || null : null;
+  let fn = () => true;
+  if (setting) {
+    const off = new Set();
+    (Array.isArray(setting.removed) ? setting.removed : []).forEach((n) => { const k = carrierKeyOf(n); if (k) off.add(k); });
+    (Array.isArray(setting.carriers) ? setting.carriers : []).forEach((c) => { const k = carrierKeyOf(c?.name); if (!k) return; if (c.on === false) off.add(k); else off.delete(k); });
+    fn = (o) => { if (!o?.배차표Id) return true; const c = routeCarrierOf(o); if (!c) return false; return !off.has(carrierKeyOf(c)); };
+  }
+  ctx._countable = fn;
+  return fn;
+}
 const sortOrders = (rows) => rows.sort((x, y) => `${x.상차일}${x.상차시간 || ""}`.localeCompare(`${y.상차일}${y.상차시간 || ""}`));
 // ⭐ 2026-11-17 P = profitCore() — cost = 기사운임 합 · paid = 지게차·외부 특수운임(회사가 따로 지급) · profit = 청구 − 기사 − paid(배차표 수수료 합과 같다)
 const sumOf = (rows, P) => rows.reduce((s, r) => { const sale = won(r.청구운임); const cost = won(r.기사운임); const paid = P.paidOut(r); s.count += 1; s.sale += sale; s.cost += cost; s.paid += paid; s.profit += sale - cost - paid; return s; }, { count: 0, sale: 0, cost: 0, paid: 0, profit: 0 });
@@ -372,7 +397,8 @@ const TOOLS = {
       const rows = (await loadOrders(ctx, d, d)).filter((r) => !isCancelled(r));
       const by = {}; rows.forEach((r) => { const s = statusOf(r); by[s] = (by[s] || 0) + 1; });
       const un = sortOrders(rows.filter((r) => statusOf(r) === "미배차"));
-      const money = sumOf(rows, await profitCore());
+      const countable = await countableOf(ctx);
+      const money = sumOf(rows.filter(countable), await profitCore()); // 🛠 2026-11-25 끈 운송업체 고정노선 오더는 매출에서 뺀다(홈 · 일일 보고와 같게)
       return { 날짜: d, 오더수: rows.length, 상태별: by, ...(ctx.perms.sales ? { 매출: money.sale, 기사운임: money.cost, ...(money.paid ? { 지게차등회사지급: money.paid } : {}), 수익: money.profit } : {}), 미배차: un.slice(0, 40).map(brief) };
     },
   },
@@ -382,7 +408,8 @@ const TOOLS = {
     async run(ctx, a) {
       need(ctx, "sales", "매출 조회");
       const { from, to } = dateRange(ctx, { date_from: a.date_from || `${ctx.today.slice(0, 7)}-01`, date_to: a.date_to || ctx.today }, 0, 400);
-      const rows = filterOrders(await loadOrders(ctx, from, to), { client: a.client }).filter((r) => !isCancelled(r));
+      const countable = await countableOf(ctx); // 🛠 2026-11-25 끈 운송업체 고정노선 오더 제외(매출관리 · 홈 · 일일 보고와 같게)
+      const rows = filterOrders(await loadOrders(ctx, from, to), { client: a.client }).filter((r) => !isCancelled(r) && countable(r));
       const keyOf = { client: (r) => r.거래처명 || "미지정", day: (r) => r.상차일, month: (r) => String(r.상차일).slice(0, 7), vehicle: (r) => `${r.차량톤수 || ""} ${r.차량종류 || ""}`.trim() || "미지정", driver: (r) => r.이름 || r.차량번호 || "미배차", route: (r) => `${r.상차지명 || "-"} → ${r.하차지명 || "-"}` }[a.group_by || "client"] || ((r) => r.거래처명 || "미지정");
       const g = {}; rows.forEach((r) => { const k = keyOf(r); (g[k] = g[k] || []).push(r); });
       const P = await profitCore();
