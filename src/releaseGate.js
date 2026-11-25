@@ -6,6 +6,7 @@
 //  · "새 버전이 나왔습니다" 안내(VersionCheck)는 가입자에게는 배포한 버전 기준, 관리자에게는 최신 기준
 import { doc, getDoc, onSnapshot, setDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import { scheduledPinOf as schedPinCore } from "./forceUpdateCore";
 
 /* global __APP_VERSION__, __BUILD_TIME__, __DEPLOY_URL__ */
 export const CUR_VER = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
@@ -25,7 +26,17 @@ export function syncReleaseChannel(isAdmin) {
   return false;
 }
 
-const pinOf = (d) => (d && d.enabled !== false && d.url && d.build ? { url: d.url, version: d.version || "", build: d.build } : null);
+const basePinOf = (d) => (d && d.enabled !== false && d.url && d.build ? { url: d.url, version: d.version || "", build: d.build } : null);
+// ⏱ 2026-11-25 예약 배포(강제 업데이트 예약) — publicRelease/current.scheduled = { url, version, build, at, scope, companies }
+//  예약 시각 전에는 아무도 새 버전을 보지 않는다(일반 "업데이트" 안내도 안 뜸). 시각이 지나면 대상 회사에게만 이 버전이 "배포한 버전"이 된다.
+const myCompany = () => { try { return String(localStorage.getItem("userCompany") || "").trim(); } catch { return ""; } };
+const myForced = () => { try { return localStorage.getItem("kpForced") || ""; } catch { return ""; } };
+export const scheduledPinOf = (d, now = Date.now(), company = myCompany()) => schedPinCore(d, { now, company, forced: myForced() });
+const pinOf = (d) => {
+  const base = basePinOf(d); const sch = scheduledPinOf(d);
+  if (sch && (!base || String(sch.build) > String(base.build))) return sch;
+  return base;
+};
 // 첫 화면의 시작 스크립트(vite.config.js)가 읽는 값 — 이 PC가 따라갈 배포 버전(없으면 지운다)
 const rememberPin = (pin) => { try { if (pin) localStorage.setItem("kpPin", JSON.stringify({ build: pin.build, version: pin.version })); else localStorage.removeItem("kpPin"); } catch { /* 무시 */ } };
 export async function readPin() {
@@ -67,7 +78,8 @@ export async function probeDeploy(host) { const r = await fetch(`/api/shell?prob
 export async function pinRelease(rec, note = "") {
   const by = auth.currentUser?.email || "";
   const r = { url: rec.url, version: rec.version || "", build: rec.build, at: Date.now(), by, note: String(note || "").slice(0, 200) };
-  await setDoc(RELEASE_REF(), { enabled: true, url: r.url, version: r.version, build: r.build, releasedAt: r.at, releasedBy: by, note: r.note, history: [r] }, { merge: true });
+  // 직접 배포하면 남아 있던 예약 배포는 지운다(배포한 버전이 기준)
+  await setDoc(RELEASE_REF(), { enabled: true, url: r.url, version: r.version, build: r.build, releasedAt: r.at, releasedBy: by, note: r.note, history: [r], scheduled: null }, { merge: true });
   await pruneBuilds(r.build).catch(() => {});
 }
 // 배포한 버전보다 예전에 올린 화면은 목록에서 지운다(배포한 버전 · 그 뒤에 올린 것만 남김)
@@ -88,4 +100,19 @@ export async function enforcePin() {
   if (typeof window !== "undefined" && window.__kpPinned) return; // 이미 배포 버전 화면
   try { const k = `kpPinFix:${pin.build}`; if (sessionStorage.getItem(k)) return; sessionStorage.setItem(k, "1"); } catch { return; }
   window.location.reload();
+}
+
+// ⏱ 2026-11-25 예약 배포 — 강제 업데이트 예약과 함께 "그 시각에 열릴 버전"만 적어 둔다(지금 배포하지 않음)
+export async function scheduleRelease(rec, { at, scope = "all", companies = [] } = {}) {
+  const by = auth.currentUser?.email || "";
+  await setDoc(RELEASE_REF(), { scheduled: { url: rec.url, version: rec.version || "", build: rec.build, at: Number(at) || Date.now(), scope, companies: scope === "pick" ? companies : [], by, setAt: Date.now() } }, { merge: true });
+}
+export const clearScheduledRelease = () => setDoc(RELEASE_REF(), { scheduled: null }, { merge: true });
+// 예약 시각이 지난 뒤 화면을 새로 열 때 이 PC가 열 버전을 미리 적어 둔다(시작 스크립트가 kpPin 을 읽는다)
+export function rememberForcedBuild(build, version = "") {
+  try {
+    if (!build) return;
+    localStorage.setItem("kpPin", JSON.stringify({ build, version })); // 시작 스크립트: 올라온 최신보다 예전이면 그 버전을, 같으면 최신을 연다
+    localStorage.setItem("kpForced", build);
+  } catch { /* 무시 */ }
 }

@@ -5,7 +5,7 @@
 import React from "react";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
-import { watchRelease, latestVersion, publishRelease } from "./releaseGate";
+import { watchRelease, latestVersion, scheduleRelease, clearScheduledRelease, pinRelease } from "./releaseGate";
 import { usePlatformLive } from "./PlatformLive";
 import { kpConfirm } from "./kpDialog";
 import { G, GOLD_BTN, AdmPanel } from "./adminCenter/admUi";
@@ -55,22 +55,22 @@ export default function ForceUpdatePanel() {
   const schedule = async () => {
     if (!target?.build) return setMsg("적용할 버전을 알 수 없어요. 잠시 뒤 다시 눌러 주세요.");
     if (scope === "pick" && !pick.length) return setMsg("운송사를 하나 이상 골라 주세요.");
-    let tgt = target;
-    // 🛠 2026-11-25 배포 잠금이 최신보다 예전이면 대상 화면은 이미 그 버전이라 알림이 안 떴다(사용자 문의) — 최신을 먼저 배포하고 예약할지 묻는다
-    if (stale) {
-      const go = await kpConfirm(`지금 가입자에게 배포된 버전은 v${target.version} 이에요.\n최신 v${latest.version} 은 아직 배포 전이라, 이대로 예약하면 이미 v${target.version} 인 화면에는 알림이 뜨지 않아요.\n\n최신 v${latest.version} 을 먼저 배포하고 예약할까요?`);
-      if (!go) return setMsg(`예약하지 않았어요. 최신 버전을 배포한 뒤 다시 눌러 주세요.`);
-      if (!latest.url) return setMsg("최신 버전 주소를 알 수 없어요. [업데이트 배포]에서 최신 버전을 먼저 배포해 주세요.");
-      try { setBusy(true); await publishRelease(latest, "강제 업데이트 예약과 함께 배포"); tgt = { build: latest.build, version: latest.version }; }
-      catch (e) { setBusy(false); return setMsg(`최신 버전을 배포하지 못했어요: ${e?.message || e}`); }
-      setBusy(false);
-    } else if (inScopeNow > 0 && behindNow === 0) {
-      const go = await kpConfirm(`지금 접속 중인 대상 화면 ${inScopeNow}개가 모두 이미 v${target.version} 이에요.\n예약해도 지금은 알림이 뜨지 않아요(나중에 예전 화면으로 들어온 사람에게만 떠요).\n\n그래도 예약할까요?`);
+    // ⏱ 2026-11-25 예약 배포(사용자 요청) — [업데이트 배포]를 먼저 누르지 않아도 된다.
+    //  최신 버전을 "예약 시각에 열릴 버전"으로만 적어 둔다 → 그 전에는 아무에게도 일반 업데이트 안내가 뜨지 않고, 대상 화면에만 위 가운데 알림바가 뜬다.
+    //  시각이 되면 대상 화면이 그 버전으로 새로 고쳐진다(고른 운송사만 · 다른 운송사는 그대로).
+    const tgt = latest?.build && latest.url && String(latest.build) > String(target.build) ? { build: latest.build, version: latest.version, url: latest.url } : target;
+    const viaSchedule = tgt !== target;
+    if (inScopeNow > 0 && onlineScoped.filter((p) => !p.build || String(p.build) < String(tgt.build)).length === 0) {
+      const go = await kpConfirm(`지금 접속 중인 대상 화면 ${inScopeNow}개가 모두 이미 v${tgt.version} 이에요.\n예약해도 지금은 알림이 뜨지 않아요(나중에 예전 화면으로 들어온 사람에게만 떠요).\n\n그래도 예약할까요?`);
       if (!go) return;
     }
     const who = scope === "all" ? `전체 운송사${shippers ? " · 화주사" : ""}` : `${pick.join(" · ")}${shippers ? " · 연동 화주사" : ""}`;
     if (!(await kpConfirm(`${who}에 ${delay ? `${delay}분 뒤` : "바로"} v${tgt.version} 을 적용할까요?\n\n· 대상 화면 위 가운데에 안내와 남은 시간이 떠요\n· 시간이 되면 화면이 저절로 새로 고쳐져요\n· 이미 최신인 사람에게는 뜨지 않아요`))) return;
     const t = Date.now(); const id = `fu${t.toString(36)}`;
+    if (viaSchedule) {
+      try { await scheduleRelease(tgt, { at: t + delay * 60000, scope, companies: pick }); }
+      catch (e) { return setMsg(`예약 버전을 저장하지 못했어요: ${e?.message || e}`); }
+    }
     const rec = { id, at: t, scope, companies: scope === "pick" ? pick : [], shippers, mins: delay, version: tgt.version || "" };
     await save({
       id, active: true, createdAt: t, fireAt: t + delay * 60000, by: auth.currentUser?.email || "",
@@ -101,22 +101,26 @@ export default function ForceUpdatePanel() {
       endedRef.current = cfg.id;
       setDoc(doc(db, ...FORCE_DOC), { active: false, doneAt: Date.now(), history: history.map((h) => (h.id === cfg.id ? { ...h, done: true, donePct: prog.pct, doneN: prog.total } : h)) }, { merge: true }).catch(() => { endedRef.current = ""; });
       setMsg(`적용 완료: 접속 중 ${prog.total}명 모두 v${cfg.version}`);
+      // ⏱ 2026-11-25 전체 대상 예약 배포가 끝나면 그 버전을 정식 배포 버전으로 올린다(고른 운송사만이면 예약 상태로 둔다 — 그 운송사만 새 버전)
+      const sch = rel?.scheduled;
+      if (cfg.scope !== "pick" && sch?.url && sch.build === cfg.build) pinRelease(sch, "강제 업데이트 예약으로 배포").catch(() => {});
     }, 5000);
     return () => clearTimeout(t);
   }, [finished, cfg?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const stale = !!latest?.build && !!target?.build && String(target.build) < String(latest.build); // 배포 잠금 버전이 최신보다 예전
+  const eff = stale && latest?.url ? { build: latest.build, version: latest.version } : target; // ⏱ 예약하면 실제로 적용될 버전
   // 🛠 2026-11-25 알림이 실제로 뜰 화면 수 — 대상 중 지금 열려 있고 적용 버전보다 예전인 화면(최고관리자 빼고)
   const scopeOf = (p) => !/totalMaster/.test(String(p.role || "")) && (p.isShipper ? (shippers && scope !== "pick") : (scope !== "pick" || pick.includes(p.company)));
   const onlineScoped = (live?.onlineList || []).filter((p) => p.now && scopeOf(p));
   const inScopeNow = onlineScoped.length;
-  const behindNow = target?.build ? onlineScoped.filter((p) => !p.build || String(p.build) < String(target.build)).length : 0;
+  const behindNow = eff?.build ? onlineScoped.filter((p) => !p.build || String(p.build) < String(eff.build)).length : 0;
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,.9fr)] items-start" data-kp="force-panel">
       <AdmPanel code="FORCE UPDATE" title="강제 업데이트 예약">
-        <div className="text-[12.5px] leading-relaxed" style={{ color: G.sub }}>고른 운송사에 정한 시간 뒤 <b style={{ color: G.goldHi }}>v{target?.version || "…"}</b> 을 적용해요. 그 사이 대상 화면 위 가운데에 안내와 남은 시간이 보이고, 시간이 되면 저절로 새로 고쳐져요.</div>
+        <div className="text-[12.5px] leading-relaxed" style={{ color: G.sub }}>고른 운송사에 정한 시간 뒤 <b style={{ color: G.goldHi }}>v{eff?.version || "…"}</b> 을 적용해요. 그 사이 대상 화면 위 가운데에 안내와 남은 시간이 보이고, 시간이 되면 저절로 새로 고쳐져요.</div>
         {stale && <div className="mt-3 rounded-xl px-3.5 py-2.5 text-[12.5px] font-bold leading-relaxed" style={{ background: "rgba(242,196,109,.08)", border: "1px solid rgba(242,196,109,.35)", color: G.warn }}>
-          지금 가입자에게 배포된 버전은 v{target.version} 이에요. 최신 v{latest.version} 은 아직 배포 전이라, 이대로면 대상 화면에 알림이 뜨지 않아요. 예약 버튼을 누르면 최신 버전을 먼저 배포하고 예약할지 물어봐요.</div>}
+          최신 v{latest.version} 을 예약 시각에 고른 대상에만 적용해요. [업데이트 배포]는 누르지 않아도 되고, 그 전에는 다른 사람에게 일반 업데이트 안내가 뜨지 않아요(지금 배포된 버전 v{target.version}).</div>}
         <div className="text-[12px] font-extrabold tracking-[0.06em] mt-4 mb-2" style={{ color: G.dim }}>대상</div>
         <div className="inline-flex p-1 rounded-[14px] gap-1" style={{ background: "rgba(255,255,255,.04)", border: `1px solid ${G.line2}` }}>
           {[["all", "전체 운송사"], ["pick", "운송사 선택"]].map(([k, l]) => (
@@ -148,7 +152,7 @@ export default function ForceUpdatePanel() {
         <textarea value={message} onChange={(e) => setMessage(e.target.value.slice(0, 120))} rows={2} className="w-full rounded-xl px-3.5 py-2.5 text-[13.5px] leading-relaxed outline-none resize-none" style={{ background: "rgba(255,255,255,.03)", border: `1px solid ${G.line2}`, color: G.ink }} />
         <div className="flex justify-between text-[11.5px] mt-1" style={{ color: G.dim }}><span>제목 "시스템 업데이트 예정" 아래에 한 줄로 보여요</span><button type="button" onClick={() => setMessage(DEFAULT_FORCE_MSG)} style={{ color: G.ice }}>기본 문구로</button></div>
         <div className="grid grid-cols-3 gap-2.5 mt-4">
-          {[["대상 운송사", scope === "all" ? "전체" : `${pick.length}곳`, G.ink], ["지금 접속 중", `${sumNow}명`, G.ink], ["알림이 뜰 화면", stale ? "배포 필요" : `${behindNow}명`, behindNow || stale ? G.warn : G.dim]].map(([k, v, c]) => (
+          {[["대상 운송사", scope === "all" ? "전체" : `${pick.length}곳`, G.ink], ["지금 접속 중", `${sumNow}명`, G.ink], ["알림이 뜰 화면", `${behindNow}명`, behindNow ? G.warn : G.dim]].map(([k, v, c]) => (
             <div key={k} className="rounded-[14px] px-3.5 py-3" style={{ background: "rgba(255,255,255,.03)", border: `1px solid ${G.line2}` }}>
               <div className="text-[11.5px] font-extrabold" style={{ color: G.dim }}>{k}</div><div className="text-[22px] font-black tabular-nums" style={{ color: c }}>{v}</div></div>))}
         </div>
@@ -175,7 +179,7 @@ export default function ForceUpdatePanel() {
               <div className="flex flex-wrap gap-2 mt-3.5">
                 <button type="button" disabled={busy} onClick={() => save({ fireAt: Math.max(Date.now(), Number(cfg.fireAt)) + 120000 }, "2분 미뤘어요.")} className="h-9 px-3.5 rounded-[11px] text-[13px] font-black" style={{ border: "1px solid rgba(215,188,130,.5)", color: G.goldHi }}>+2분 미루기</button>
                 <button type="button" disabled={busy} onClick={() => save({ fireAt: Date.now() }, "지금 바로 적용해요.")} className="h-9 px-3.5 rounded-[11px] text-[13px] font-black" style={{ border: "1px solid rgba(215,188,130,.5)", color: G.goldHi }}>지금 바로</button>
-                <button type="button" disabled={busy} onClick={async () => { if (await kpConfirm("예약을 취소할까요? 대상 화면의 안내가 바로 사라져요.")) save({ active: false, history: history.map((h) => (h.id === cfg.id ? { ...h, canceled: true } : h)) }, "예약을 취소했어요."); }} className="h-9 px-3.5 rounded-[11px] text-[13px] font-black" style={{ border: "1px solid rgba(255,138,122,.5)", color: G.bad }}>예약 취소</button>
+                <button type="button" disabled={busy} onClick={async () => { if (await kpConfirm("예약을 취소할까요? 대상 화면의 안내가 바로 사라져요.")) { clearScheduledRelease().catch(() => {}); save({ active: false, history: history.map((h) => (h.id === cfg.id ? { ...h, canceled: true } : h)) }, "예약을 취소했어요."); } }} className="h-9 px-3.5 rounded-[11px] text-[13px] font-black" style={{ border: "1px solid rgba(255,138,122,.5)", color: G.bad }}>예약 취소</button>
               </div>
             </div>)}
         </AdmPanel>
