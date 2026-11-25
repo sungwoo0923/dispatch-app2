@@ -117,6 +117,9 @@ import KpBootScreen from "../KpBootScreen";
 import { isMeaningfulChange } from "../bootProgress";
 import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift, Mic, Sparkles, Download, RotateCcw, Building2, ArrowUpDown, StickyNote, MessageSquare, History, PhoneCall } from "lucide-react";
 import VoiceAgentCall from "./VoiceAgentCall"; // 📞 2026-11-25 AI 상담원 음성 오더(통화하듯 말로 등록)
+import { addCompanyDropdownOption } from "../companyDropdownOptions"; // 📞 AI 상담원 — 새 지급방식 등 추가
+import { withCustomVehicleTypes, VT_DEFAULTS, addVehicleType } from "../vehicleTypes"; // 📞 AI 상담원 — 차종 목록 · 새 차종
+import { specialApplyAll, defaultFkMode, sfType } from "../forklift"; // 📞 AI 상담원 — 특수운임
 import { normTon, normVehicle, normPay } from "../orderScanAi"; // 📞 AI 상담원 값 정리
 // ⚡ 2026-11-24 LTE 속도 — 인사이트 화면 차트(recharts)는 그 화면을 열 때 받는다(src/mobile/MobileInsightCharts.jsx)
 const MInsightTrend = lazyView(() => import("./MobileInsightCharts").then((m) => ({ default: m.TrendLineChart })), null);
@@ -15040,27 +15043,59 @@ const pickDrop = (c) => {
   });
 };
 
-  // ===== 📞 2026-11-25 AI 상담원 음성 오더 — 통화하듯 말하면 AI가 칸을 채우고, "네"라고 하면 원래 저장(onSave) =====
+  // ===== 📞 2026-11-25 AI 상담원 음성 오더 — 말하고 [보내기] → AI가 칸 · 경유지 · 특수운임을 채우고, 읽어 준 뒤 "네"면 원래 저장(onSave) =====
   const [agentCall, setAgentCall] = useState(false);
-  const applyAgentPatch = (patch = {}) => {
+  const agentCompany = getTenant() || localStorage.getItem("userCompany") || "";
+  const agentOptions = () => ({
+    차종: withCustomVehicleTypes(VT_DEFAULTS, agentCompany),
+    지급방식: dropdownList("지급방식"), 배차방식: dropdownList("배차방식"), 상하차방법: dropdownList("상하차방법"),
+    운임구분: fareRM.on ? (fareRM.rules || []).map((r) => r?.name).filter(Boolean) : [],
+  });
+  const applyAgentResult = ({ patch = {}, stops = null, specials = null, newItems = [] } = {}) => {
     const loose = (x) => normalizeCompany(x || "");
-    Object.entries(patch).forEach(([k, raw]) => {
+    const placeOf = (name) => (clients || []).find((c) => loose(c.거래처명) && loose(c.거래처명) === loose(name));
+    Object.entries(patch || {}).forEach(([k, raw]) => {
       const v = String(raw ?? "").trim();
       if (!v) return;
       if (k === "청구운임" || k === "기사운임") { const n = Number(v.replace(/[^\d]/g, "")); if (n) updateMoney(k, n); return; }
+      if (k === "운임구분") { if (fareRM.on) updateMoney("운임구분", v); else update("운임구분", v); return; }
       if (k === "상차지명" || k === "하차지명") {
-        const hit = (clients || []).find((c) => loose(c.거래처명) && loose(c.거래처명) === loose(v)); // 등록 업체면 주소 · 담당자까지
+        const hit = placeOf(v); // 등록 업체면 주소 · 담당자까지
         if (hit) (k === "상차지명" ? pickPickup : pickDrop)(hit); else update(k, v);
         return;
       }
-      if (k === "거래처명") { update("거래처명", v); return; }
       if (k === "톤수") { update("톤수", normTon(v) || v); return; }
       if (k === "차종") { update("차종", normVehicle(v) || v); return; }
       if (k === "지급방식") { update("지급방식", normPay(v) || v); return; }
       if (k === "긴급") { update("긴급", /긴급|급|예|true/.test(v)); return; }
       if (k === "혼적여부") { update("혼적여부", v.includes("혼적") ? "혼적" : v.includes("독차") ? "독차" : v); return; }
-      if (k === "적요") { setForm((p) => (String(p.적요 || "").includes(v) ? p : { ...p, 적요: [p.적요, v].filter(Boolean).join("\n") })); return; }
+      if (k === "운행유형") { update("운행유형", v.includes("왕복") ? "왕복" : "편도"); return; }
+      if (k === "등록수량") { const n = Math.max(1, Math.min(30, Number(v.replace(/[^\d]/g, "")) || 1)); setMultiCount?.(n); return; }
+      if (k === "적요" || k === "전달사항") { setForm((p) => (String(p[k] || "").includes(v) ? p : { ...p, [k]: [p[k], v].filter(Boolean).join("\n") })); return; }
       update(k, v);
+    });
+    // 경유지(전체 목록) — 등록 업체면 주소 · 담당자까지
+    if (Array.isArray(stops)) {
+      const mk = (s, kind) => {
+        const hit = placeOf(s.name);
+        const cts = (Array.isArray(hit?.contacts) ? hit.contacts : []).filter((c) => c?.name?.trim());
+        const pc = cts.find((c) => c.isPrimary) || cts[0] || null;
+        return { ...emptyStop(), 업체명: hit?.거래처명 || s.name, 주소: hit?.주소 || "", 담당자: pc?.name || hit?.담당자 || "", 담당자번호: pc?.phone || hit?.담당자번호 || "",
+          화물내용: s.cargo || "", 방법: s.method || "", ...(kind === "상차" ? { 상차일: form.상차일 || "", 상차시간: s.time || "" } : { 하차일: form.하차일 || "", 하차시간: s.time || "" }) };
+      };
+      update("경유상차목록", stops.filter((s) => s.kind === "상차").map((s) => mk(s, "상차")));
+      update("경유하차목록", stops.filter((s) => s.kind === "하차").map((s) => mk(s, "하차")));
+    }
+    // 특수운임(전체 목록) — 지게차는 지게차 칸, 나머지는 특수운임 항목. 부담을 안 정했으면 기본값으로 두고 AI가 물어본다
+    if (Array.isArray(specials)) {
+      const fk = specials.find((x) => x.type === "지게차");
+      const items = specials.filter((x) => x.type !== "지게차").map((x) => ({ 종류: x.type, 이름: x.name || "", 금액: x.amount, 부담: x.burden || sfType(x.type).mode }));
+      setForm((p) => specialApplyAll(p, { fork: fk ? { 지게차비용: fk.amount, 지게차부담: fk.burden || defaultFkMode() } : null, items }, { asString: false }));
+    }
+    // 새 이름 — 사용자가 "새로 등록"이라고 한 것만 목록에 추가(거래처 · 상하차지는 오더 저장 때 그대로 들어간다)
+    (newItems || []).filter((n) => n.confirmed).forEach((n) => {
+      if (["지급방식", "배차방식", "상하차방법"].includes(n.kind)) addCompanyDropdownOption(n.kind, n.value, agentCompany).catch(() => {});
+      else if (n.kind === "차종") addVehicleType(agentCompany, n.value).catch(() => {});
     });
   };
 
@@ -16904,7 +16939,8 @@ const pickDrop = (c) => {
   </div>
 )}
 
-{agentCall && <VoiceAgentCall form={form} places={clients || []} clients={basicClients || []} onPatch={applyAgentPatch} onSave={onSave} onClose={() => setAgentCall(false)} />}
+{agentCall && <VoiceAgentCall form={form} multiCount={multiCount || 1} places={clients || []} clients={basicClients || []} drivers={drivers || []} options={agentOptions()} company={agentCompany}
+  hintsFor={(t) => mainScanAi.hintsFor(t)} onResult={applyAgentResult} onSave={onSave} onClose={() => setAgentCall(false)} />}
 {/* ===== 음성 오더 입력 바텀시트 ===== */}
 {voiceSheet && (
   <div className="fixed inset-0 z-[9999] flex flex-col justify-end">
