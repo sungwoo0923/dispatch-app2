@@ -60,7 +60,7 @@ export function installTableXNav() {
   let flow = 0; let flowRaf = 0; let dragging = null;
   const cache = new WeakMap();
 
-  // 잠깐 숨기기 — [×] 누르면 1시간 동안 화살표 · 막대 모두 숨김(이 브라우저)
+  // 잠깐 숨기기 — [×] 누르면 1시간 동안 아래 구역 막대만 숨김(이 브라우저). 🛠 2026-11-25 좌우 화살표는 그대로 뜬다(사용자 요청)
   let hideUntil = 0; try { hideUntil = Number(localStorage.getItem("kpXnavHide") || 0); } catch { /* 무시 */ }
   // 화면 아래 가운데에 다른 막대(선택 모드 · 알림 등)가 떠 있으면 구역 막대를 띄우지 않는다(두 줄로 겹쳐 보이지 않게)
   let busyAt = 0; let busy = false;
@@ -103,7 +103,10 @@ export function installTableXNav() {
   const bgOf = (el) => { let n = el; while (n && n !== document.documentElement) { const c = getComputedStyle(n).backgroundColor; const m = c.match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/); if (m && (m[4] === undefined || Number(m[4]) > 0.5)) return [m[1], m[2], m[3]].map(Number); n = n.parentElement; } return [255, 255, 255]; };
   const typing = () => { const a = document.activeElement; return !!(a && box && box.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)); };
   const headCells = (b) => { const tb = b.querySelector("table"); if (!tb) return []; const tr = tb.tHead?.rows?.[tb.tHead.rows.length - 1] || tb.rows?.[0]; return tr ? [...tr.cells] : []; };
-  const cellText = (c) => String(c.textContent || "").replace(/\s+/g, " ").trim().slice(0, 12);
+  // 🛠 2026-11-25 정렬 표시(▲▼ · ↑↓)는 빼고 이름만
+  const cellText = (c) => String(c.textContent || "").replace(/[▲▼△▽↑↓⇅]/g, "").replace(/\s+/g, " ").trim().slice(0, 12);
+  // 이름으로 쓸 만한 칸 — 체크박스 · 순번(No · #) · 숫자만 있는 칸은 건너뛴다
+  const named = (c) => { const t = cellText(c); return t && !/^(no\.?|#|순번|번호|선택|\d+)$/i.test(t) ? t : ""; };
 
   // 구역(막대 칸) — 머리줄 칸을 고르게 5~6구역으로 나눠 첫 칸 이름을 붙인다
   const buildSegs = (b) => {
@@ -112,14 +115,18 @@ export function installTableXNav() {
     const out = [];
     for (let i = 0; i < n; i += 1) {
       const from = (W * i) / n; const to = (W * (i + 1)) / n;
-      const c = cells.find((x) => x.offsetLeft >= from - 2 && x.offsetLeft < to) || null;
-      out.push({ from, to, label: c ? cellText(c) || `${i + 1}` : `${i + 1}`, left: c ? c.offsetLeft : from });
+      const inSeg = cells.filter((x) => x.offsetLeft >= from - 2 && x.offsetLeft < to);
+      // 🛠 2026-11-25 첫 칸이 체크박스처럼 이름이 없으면 "1"이 떴다 — 구역 안에서 이름이 있는 첫 칸을 쓴다(없으면 앞 구역에 걸친 칸 이름)
+      const c = inSeg.find(named) || inSeg[0] || null;
+      const spill = !c || !named(c) ? [...cells].reverse().find((x) => x.offsetLeft < from && named(x)) : null;
+      const label = (c && named(c)) || (spill && named(spill)) || (i === 0 ? "처음" : `구역 ${i + 1}`);
+      out.push({ from, to, label, left: c ? c.offsetLeft : from });
     }
     return out;
   };
 
   const place = () => {
-    if (!box || !box.isConnected || !isWide(box) || typing() || Date.now() > hoverUntil || Date.now() < hideUntil) { hideAll(); return; }
+    if (!box || !box.isConnected || !isWide(box) || typing() || Date.now() > hoverUntil) { hideAll(); return; }
     const r = box.getBoundingClientRect();
     const vh = window.innerHeight; const vw = window.innerWidth;
     const top = Math.max(r.top, 0); const bottom = Math.min(r.bottom, vh);
@@ -136,13 +143,13 @@ export function installTableXNav() {
     Object.assign(btnL.style, { left: `${left + 12}px`, top: `${midY - 17}px` });
     if (canR) {
       const hidden = headCells(box).filter((c) => c.offsetWidth > 0 && c.offsetLeft + c.offsetWidth / 2 > x + box.clientWidth);
-      const names = hidden.slice(0, 2).map(cellText).filter(Boolean);
+      const names = hidden.map(named).filter(Boolean).slice(0, 2);
       more.textContent = hidden.length ? `${names.join(" · ")}${hidden.length > names.length ? ` 외 ${hidden.length - names.length}열` : ""}` : "";
       show(more, false); // 🛠 2026-11-25 "외 N열" 글자도 빼고 화살표만(사용자 요청)
       if (hidden.length) { const w = more.offsetWidth; Object.assign(more.style, { left: `${right - 60 - w}px`, top: `${midY - 12}px` }); }
     } else show(more, false);
     // ② 아래 구역 막대 — 표의 진짜 가로 막대(상자 아래 끝)가 화면 밖일 때만
-    const barOn = r.bottom > vh + 4 && r.top < vh - 140 && !bottomBusy();
+    const barOn = r.bottom > vh + 4 && r.top < vh - 140 && !bottomBusy() && Date.now() >= hideUntil;
     if (barOn) {
       const key = `${box.scrollWidth}|${box.clientWidth}|${headCells(box).length}`;
       if (key !== segKey || !track.childElementCount) {
