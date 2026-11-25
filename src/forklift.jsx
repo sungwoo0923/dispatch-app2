@@ -11,8 +11,7 @@ import { runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 일괄 처리 
 import { CellNote } from "./cellNote"; // 🏷 2026-11-17 칸 모서리 표시 + 말풍선
 import { useListKeys } from "./useListKeys";
 import { createPortal } from "react-dom";
-// ⚡ 2026-11-24 LTE 속도 — 엑셀 라이브러리(약 140KB)는 엑셀 버튼을 누를 때 받는다(예전엔 모바일 첫 화면이 같이 받았다)
-const loadXLSX = () => import("xlsx");
+import * as XLSX from "xlsx";
 import { addDoc, collection, deleteDoc, doc, getDoc, onSnapshot, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
 import { db } from "./firebase";
 import { getTenant } from "./fsTenant";
@@ -90,14 +89,13 @@ export function ForkliftDriverManager({ isViewer = false }) {
     if (!(await kpConfirm(`지게차 기사 '${d.이름}'을(를) 삭제할까요?\n이미 저장된 오더의 지게차 기록은 그대로 남습니다.`))) return;
     try { await deleteDoc(doc(db, COL, d.id)); } catch (e) { kpAlert(`삭제 실패: ${e.message}`); }
   };
-  const onTemplate = async () => downloadTemplateXlsx(await loadXLSX(), "지게차기사_대용량업로드_양식.xlsx", "지게차기사", FORKLIFT_UPLOAD_COLS,
+  const onTemplate = () => downloadTemplateXlsx(XLSX, "지게차기사_대용량업로드_양식.xlsx", "지게차기사", FORKLIFT_UPLOAD_COLS,
     [["김지게", "010-1234-5678", "경동지게차", "KB국민", "123456-01-123456", "김지게", "경동 상차 전담"], ["박리프트", "01098765432", "인천리프트", "신한", "110-123-456789", "박리프트", ""]],
     [["이름", "필수"], ["전화번호", "하이픈 있어도 됨"], ["지게차회사", "소속 업체(없으면 비움)"], ["은행", "KB국민·신한·우리·하나·NH농협 등 (은행명 열도 인식)"], ["계좌번호", "숫자·하이픈"], ["예금주", "지급 받는 사람"], ["메모", "자유"]]);
   const onFile = async (e) => {
     const file = e.target.files?.[0]; e.target.value = "";
     if (!file) return;
     try {
-      const XLSX = await loadXLSX();
       const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
       const out = json.map(forkliftRowFromSheet).filter((r) => Object.values(r.row).some(Boolean))
@@ -646,8 +644,7 @@ export function ForkliftPayouts({ orders = [], patchDispatch, isViewer = false }
       } });
     } finally { setBusy(false); }
   };
-  const exportXlsx = async () => {
-    const XLSX = await loadXLSX();
+  const exportXlsx = () => {
     const rows = [];
     groups.forEach((g) => g.rows.forEach((r) => { const d = dMap[r.지게차기사ID] || {}; rows.push({ 지게차기사: g.name, 전화번호: fmtPhone(d.전화번호 || g.phone), 지게차회사: d.지게차회사 || g.company, 은행: d.은행 || "", 계좌번호: d.계좌번호 || "", 예금주: d.예금주 || "", 상차일: r.상차일 || "", 거래처: r.거래처명 || "", 상차지: r.상차지명 || "", 하차지: r.하차지명 || "", 지게차비용: fkAmount(r), 부담: fkModeLabel(r), 지급: r.지게차지급완료 ? "지급완료" : "미지급", 지급일: r.지게차지급일 || "" }); }));
     const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "지게차지급"); XLSX.writeFile(wb, `지게차지급_${ym || "전체"}.xlsx`);
@@ -657,7 +654,6 @@ export function ForkliftPayouts({ orders = [], patchDispatch, isViewer = false }
     const { rows, missing, total } = forkliftTransferRows(groups, dMap, { ym, payer: getTenant() });
     if (!rows.length) { await kpAlert(missing.length ? `미지급 기사 모두 계좌가 등록돼 있지 않아요.\n\n${missing.join(", ")}\n\n지게차 기사 관리에서 계좌를 먼저 등록해 주세요.` : "이 기간에 지급할(미지급) 지게차비가 없어요."); return; }
     if (missing.length && !(await kpConfirm(`계좌가 없는 기사 ${missing.length}명은 이체 엑셀에서 빠져요.\n\n${missing.join(", ")}\n\n나머지 ${rows.length}명(${total.toLocaleString()}원)만 받을까요?`))) return;
-    const XLSX = await loadXLSX();
     const ws = XLSX.utils.json_to_sheet(rows, { header: ["은행", "계좌번호", "예금주", "금액", "받는분 통장표시", "내 통장표시", "메모"] });
     ws["!cols"] = [{ wch: 12 }, { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 24 }];
     rows.forEach((_, i) => { const c = ws[XLSX.utils.encode_cell({ r: i + 1, c: 1 })]; if (c) { c.t = "s"; c.v = String(c.v); } }); // 계좌번호 앞자리 0이 사라지지 않게 글자로

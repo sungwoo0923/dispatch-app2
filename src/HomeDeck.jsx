@@ -6,10 +6,11 @@
 //  최근 7일은 실시간 오더(dispatchData)로 더한다.
 import React, { useEffect, useMemo, useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Line, ComposedChart, Bar, BarChart, Cell, PieChart, Pie } from "recharts";
+import { creatorOf } from "./monthCompare";
 import { AttendanceQuickButton } from "./attendanceQuick";
 import { LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 매익률 색(플러스 빨강 · 마이너스 파랑)
-import { buildPastStats } from "./pastStats";
+import { orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const C = { ink: "#E8EEF9", sub: "rgba(207,224,255,.8)", dim: "rgba(207,224,255,.72)", line: "rgba(143,176,240,.14)", glow: "#8FB0F0", hi: "#CFE0FF", accent: "#6E95E8" };
@@ -37,8 +38,25 @@ const hourOf = (t) => {
   return h >= 0 && h <= 23 ? h : null;
 };
 
-// ─── 지난 기간 집계(하루 1번) — 계산은 src/pastStats.js(⚡ 2026-11-24 차트 없는 작은 파일로 옮김 · 여기서 그대로 다시 내보냄)
-export { buildPastStats };
+// ─── 지난 기간 집계(하루 1번) — 일별 / 이번 달 담당자별 / 이번 달 거래처별 ─────────────
+export function buildPastStats(rows, thisMonth) {
+  const days = {}, staff = {}, clients = {};
+  for (const r of rows) {
+    const d = dateOf(r);
+    if (!d) continue;
+    const s = toWon(r.청구운임), p = orderProfit(r); // ⭐ 2026-11-17
+    const e = days[d] || (days[d] = [0, 0, 0]);
+    e[0] += s; e[1] += p; e[2] += 1;
+    if (d.startsWith(thisMonth)) {
+      const k = creatorOf(r) || "미지정";
+      const st = staff[k] || (staff[k] = [0, 0, 0]);
+      st[0] += s; st[1] += p; st[2] += 1;
+      const cn = String(r.거래처명 || "").trim();
+      if (cn) clients[cn] = (clients[cn] || 0) + s;
+    }
+  }
+  return { days, staff, clients, month: thisMonth };
+}
 
 // ─── 작은 부품 ──────────────────────────────────────────────────────────────────
 function Clock() {

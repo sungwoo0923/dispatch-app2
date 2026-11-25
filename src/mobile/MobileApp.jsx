@@ -48,7 +48,7 @@ import { cleanMgrRows, mgrName } from "../mgrPlaceholder";
 import { imeFocusRef } from "../imeFocus";
 import { checkHolidayDispatch, findRestConflict, confirmRestDispatch, restAckKey } from "../holidayConfirm";
 import { html2canvas } from "../lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
-const LoginManagerModal = lazyView(() => import("../LoginManager").then((m) => ({ default: m.LoginManagerModal })), null);
+import { LoginManagerModal } from "../LoginManager";
 import { useCompanyInfo } from "../companyInfo"; // ⭐ 2026-11-02 속도 — RateCard(엑셀 라이브러리 포함) 대신 작은 파일에서
 // ⭐ 2026-11-02 속도 — 안 쓰던 import(지입차 지도·지도운임·팔레트) 제거 → leaflet·지도 데이터가 첫 로딩에서 빠짐. 자주 안 여는 화면은 열 때 받는다
 import { lazyView } from "../lazyLoad";
@@ -56,8 +56,7 @@ import { textifyOrder } from "../orderText"; // 🛠 2026-11-16 숫자로 저장
 const MonthCloseM = lazyView(() => import("../MonthClose")); // ✅ 2026-11-16 월 마감(배차자 1차) — 휴대폰 화면(PC와 같은 화면 · 카드 · 아래에서 올라오는 고치기 창)
 const MobileAttendanceBoard = lazyView(() => import("./MobileAttendanceBoard"));
 const MobileIntelView = lazyView(() => import("./MobileIntelView"));
-// ⚡ 2026-11-24 LTE 속도 — 바로 안 보이는 창(메신저 · AI 비서 · 원격지원 · 알림 팝업 등)은 첫 화면이 뜬 뒤 따로 받는다(lazyView · 받는 동안은 아무것도 안 그림)
-const InternalMessenger = lazyView(() => import("../InternalMessenger"), null);
+import InternalMessenger from "../InternalMessenger";
 import { subscribeOrderSync, deleteOrderWithLog, historyStartDate, pcLiveWindowStart } from "../orderHistory";
 import CustomDatePicker from "../CustomDatePicker";
 import { askCopyDates } from "../CopyCountDialog";
@@ -116,9 +115,19 @@ import { OrderTimeline } from "../OrderTimeline"; // ★ 모바일 A/B 디자인
 import KpBootScreen from "../KpBootScreen";
 import { isMeaningfulChange } from "../bootProgress";
 import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift, Mic, Sparkles, Download, RotateCcw, Building2, ArrowUpDown, StickyNote, MessageSquare, History } from "lucide-react";
-// ⚡ 2026-11-24 LTE 속도 — 인사이트 화면 차트(recharts)는 그 화면을 열 때 받는다(src/mobile/MobileInsightCharts.jsx)
-const MInsightTrend = lazyView(() => import("./MobileInsightCharts").then((m) => ({ default: m.TrendLineChart })), null);
-const MInsightDayBar = lazyView(() => import("./MobileInsightCharts").then((m) => ({ default: m.DayBarChart })), null);
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
 import {
   collection,
   getDocs,
@@ -160,11 +169,11 @@ import BannerCenter from "../BannerCenter";
 import { publishDriverOrderRows, useDriverEventFeeds, useDriverEventCounts, setDriverSeenServer, setDriverToastsMuted, markDriverSeen, focusOrderRow, DriverEventToasts, DriverAckChip } from "../driverEvents"; // ⭐ 2026-11-05 기사앱 수락/거절·서류·긴급 알림(위쪽 배너·빨간 숫자)
 import { ContractExpiryBanner } from "../companyContract"; // ⭐ 2026-11-06 계약 만료 안내 띠
 import { PopupPrefsSection } from "../popupPrefs"; // ⭐ 2026-11-07 팝업 알림 켜고 끄기(계정별)
-const NotifyCenter = lazyView(() => import("../NotifyCenter"), null); // ⭐ 2026-11-03 알림 통합 — 가운데 알림 팝업
-const RemoteSupportHost = lazyView(() => import("../RemoteSupport").then((m) => ({ default: m.RemoteSupportHost })), null); // ⭐ 2026-11-02 원격지원 —
-const OrderCongratsPopup = lazyView(() => import("../OrderCongratsPopup"), null);
-const BirthdayPopup = lazyView(() => import("../BirthdayPopup"), null);
-const DailyReportPopupHost = lazyView(() => import("../DailyReport").then((m) => ({ default: m.DailyReportPopupHost })), null); // 📊 2026-11-06 일일 경영 보고 아침 요약 팝업
+import NotifyCenter from "../NotifyCenter"; // ⭐ 2026-11-03 알림 통합 — 가운데 알림 팝업
+import { RemoteSupportHost } from "../RemoteSupport"; // ⭐ 2026-11-02 원격지원 —
+import OrderCongratsPopup from "../OrderCongratsPopup";
+import BirthdayPopup from "../BirthdayPopup";
+import { DailyReportPopupHost } from "../DailyReport"; // 📊 2026-11-06 일일 경영 보고 아침 요약 팝업
 import { canSeeBriefing } from "../dailyReport";
 import { tryAutoCheckIn, tryAutoCheckOut, undoAutoCheckOut } from "../autoAttendance";
 import OrderScanModal, { scanDropDate } from "../OrderScanModal";
@@ -178,7 +187,7 @@ import DetailFilterButton, { applyDetailFilter, detailGroupOrder } from "../Deta
 import { useFixedRouteAutoDispatch } from "../FixedRoutes"; // ⭐ 2026-11-05 고정노선 배차 이어서 만들기
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
 import { LogisMark, LogisWordmark, LogisTag, LogisLockup } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
-const AiAssistant = lazyView(() => import("../AiAssistant"), null); // 🤖 2026-11-07 AI 비서
+import AiAssistant from "../AiAssistant"; // 🤖 2026-11-07 AI 비서
 import { useBetaOn, DispatchWayPicker } from "../CallPay"; // ⭐ 2026-11-11 시험 기능(테스트운송사)
 import { LiveDriverChip, FleetLiveButton, useFleetLivePublish } from "../liveFleet"; // ⭐ 2026-11-05 배차완료 지입·직영·임대 기사 실시간 관제
 import { useUiScreen, uiMenuItem, useUiConfigVersion } from "../uiConfig"; // ⭐ 2026-11-07 화면 편집 모드 — 메뉴 이름·순서·숨기기(권한은 그대로)
@@ -7784,7 +7793,16 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
           <div className={`text-[13px] font-bold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"} mb-3`}>최근 6개월 매출 추이</div>
           <div className="h-[180px]">
-            <MInsightTrend data={trendData} cardVersionB={cardVersionB} />
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={trendData} margin={{top:4,right:8,left:0,bottom:0}}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                <XAxis dataKey="ym" tick={{fontSize:10,fill:"#9CA3AF"}} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={v=>v>=1000000?`${(v/1000000).toFixed(0)}M`:v>=10000?`${Math.round(v/10000)}만`:`${v}`} tick={{fontSize:9,fill:"#9CA3AF"}} axisLine={false} tickLine={false} width={36} />
+                <Tooltip formatter={(v,n)=>[`${v.toLocaleString()}원`, n]} contentStyle={{borderRadius:10,fontSize:11}} />
+                <Line type="monotone" dataKey="매출" stroke={cardVersionB ? "#1B2B4B" : "#2563eb"} strokeWidth={2.5} dot={false} activeDot={{r:4}} />
+                <Line type="monotone" dataKey="수익" stroke="#6B7280" strokeWidth={2} dot={false} strokeDasharray="4 2" />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
           <div className="flex gap-4 mt-2 justify-center text-[11px] text-gray-500">
             <span className="flex items-center gap-1"><span className={`w-3 h-0.5 ${cardVersionB ? "bg-[#1B2B4B]" : "bg-blue-600"} inline-block`} />매출</span>
@@ -7818,7 +7836,17 @@ function MobileSalesPage({ data = [], fixedData = [], onBack, cardVersionB = fal
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
           <div className={`text-[13px] font-bold ${cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"} mb-3`}>요일별 수주 현황</div>
           <div className="h-[140px]">
-            <MInsightDayBar data={byDay} maxDay={maxDay} cardVersionB={cardVersionB} />
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={byDay} barSize={22} margin={{top:0,right:4,left:0,bottom:0}}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+                <XAxis dataKey="day" tick={{fontSize:11,fill:"#6B7280"}} axisLine={false} tickLine={false} />
+                <YAxis tick={{fontSize:9,fill:"#9CA3AF"}} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={{borderRadius:10,fontSize:11}} formatter={(v)=>[`${v}건`,"건수"]} />
+                <Bar dataKey="건수" radius={[4,4,0,0]}>
+                  {byDay.map((d,i) => <Cell key={i} fill={d.건수===maxDay?(cardVersionB?"#1B2B4B":"#2563eb"):"#D1D5DB"} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
           <div className="mt-2 text-[11px] text-gray-400 text-center">가장 많은 수주 요일: <b className={cardVersionB ? "text-[#1B2B4B]" : "text-blue-600"}>{busyDayLabel}요일</b></div>
         </div>
