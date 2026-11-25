@@ -5,6 +5,7 @@
 import React, { useMemo, useState } from "react";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Cell, BarChart } from "recharts";
 import { creatorOf, useStaffNames } from "./monthCompare";
+import { salesMonthOf, salesBillDayOf } from "./salesRule"; // 🗓 2026-11-25 달 매출 = 청구월(마감월) 기준 — 이월 오더는 청구월 1일로
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 매익률 색(플러스 빨강 · 마이너스 파랑)
 import { profitTotals, orderProfit, fkNum } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
 
@@ -153,16 +154,16 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
   const isCurrent = today.startsWith(targetMonth);
   const cutDay = isCurrent ? Number(today.slice(8)) : daysInMonth;
 
-  const monthRows = useMemo(() => rows.filter((r) => String(r.상차일 || "").startsWith(targetMonth)), [rows, targetMonth]);
-  const prevRows = useMemo(() => rows.filter((r) => String(r.상차일 || "").startsWith(prevYm)), [rows, prevYm]);
-  const prevSame = useMemo(() => prevRows.filter((r) => Number(String(r.상차일).slice(8, 10)) <= cutDay), [prevRows, cutDay]);
+  const monthRows = useMemo(() => rows.filter((r) => salesMonthOf(r) === targetMonth), [rows, targetMonth]);
+  const prevRows = useMemo(() => rows.filter((r) => salesMonthOf(r) === prevYm), [rows, prevYm]);
+  const prevSame = useMemo(() => prevRows.filter((r) => salesBillDayOf(r) <= cutDay), [prevRows, cutDay]);
   const m = statOf(monthRows), pm = statOf(prevSame), pmAll = statOf(prevRows);
 
   // 일별 + 누적 레이스
   const daily = useMemo(() => {
     const cur = Array(daysInMonth + 1).fill(0), curP = Array(daysInMonth + 1).fill(0), prev = Array(32).fill(0);
-    monthRows.forEach((r) => { const d = Number(String(r.상차일).slice(8, 10)); cur[d] += toInt(r.청구운임); curP[d] += orderProfit(r); });
-    prevRows.forEach((r) => { const d = Number(String(r.상차일).slice(8, 10)); if (d <= 31) prev[d] += toInt(r.청구운임); });
+    monthRows.forEach((r) => { const d = Math.min(salesBillDayOf(r), daysInMonth); cur[d] += toInt(r.청구운임); curP[d] += orderProfit(r); });
+    prevRows.forEach((r) => { const d = salesBillDayOf(r); if (d <= 31) prev[d] += toInt(r.청구운임); });
     let a = 0, b = 0;
     return Array.from({ length: daysInMonth }, (_, i) => {
       const d = i + 1;
@@ -175,14 +176,14 @@ export default function RevenueDashboard({ rows = [], targetMonth, forecast, yea
   // 월별(올해)
   const monthly = useMemo(() => Array.from({ length: 12 }, (_, i) => {
     const ym = `${Y}-${String(i + 1).padStart(2, "0")}`;
-    const s = statOf(rows.filter((r) => String(r.상차일 || "").startsWith(ym)));
+    const s = statOf(rows.filter((r) => salesMonthOf(r) === ym));
     return { label: `${i + 1}월`, sale: s.sale, rate: s.sale ? Number(s.rate.toFixed(1)) : null, on: ym === targetMonth };
   }), [rows, Y, targetMonth]);
 
   // 거래처 Top10 + 증감
   const clients = useMemo(() => {
     const cur = {}, prev = {};
-    rankRows.filter((r) => String(r.상차일 || "").startsWith(targetMonth)).forEach((r) => { const k = String(r.거래처명 || "").trim(); if (k) cur[k] = (cur[k] || 0) + toInt(r.청구운임); });
+    rankRows.filter((r) => salesMonthOf(r) === targetMonth).forEach((r) => { const k = String(r.거래처명 || "").trim(); if (k) cur[k] = (cur[k] || 0) + toInt(r.청구운임); });
     prevSame.forEach((r) => { const k = String(r.거래처명 || "").trim(); if (k && !isRankExcluded(k)) prev[k] = (prev[k] || 0) + toInt(r.청구운임); });
     const top = Object.entries(cur).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([name, v]) => ({ name, v, p: prev[name] || 0 }));
     const diff = [...new Set([...Object.keys(cur), ...Object.keys(prev)])].map((k) => ({ name: k, d: (cur[k] || 0) - (prev[k] || 0), v: cur[k] || 0, p: prev[k] || 0 }));

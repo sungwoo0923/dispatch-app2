@@ -89,7 +89,7 @@ const SalesHub = React.lazy(() => import("./SalesHub")); // 💼 2026-11-10 영�
 import { ExecApprovals, TeamSchedule, ApprovalWorkspace, ExecScheduleBoard } from "./ExecSuite";
 import { useMyProfile, myNameNow, setMyNameCache } from "./userNames";
 import { nextFee } from "./forkliftCore"; // 🛠 2026-11-25 모바일 정산 저장도 PC와 같은 수수료 규칙
-import { isSalesOrder, fixedSalesRow } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료 · 고정거래처) — 홈 · 보고서 · AI 비서와 같은 함수
+import { isSalesOrder, fixedSalesRow, salesMonthOf } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료 · 고정거래처) — 홈 · 보고서 · AI 비서와 같은 함수
 import { sendCompanyMail, isMailSetupNeeded } from "./companyMail"; // ✉️ 2026-11-08 운송사별 발신 메일(예전 /api/send-email 대신)
 import { CompanyMailSettingsCard, MailSenderLine, MailSetupHost } from "./CompanyMailSettings";
 import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
@@ -44912,14 +44912,14 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   // ⭐ 매출관리 — 선택한 연도 전체 + 고른 달 기준 3개월 전(전월 비교·마감 점검·담당자 실적)까지만 불러온다.
   // 월 비교 분석은 아무 달이나 고를 수 있어 열 때 전체를 불러온다.
   {
-    const yStart = `${selectedYear}-01-01`;
+    const yStart = `${Number(selectedYear) - 1}-12-01`; // 🗓 2026-11-25 청구월(마감월) 기준 — 지난해 12월 상차 · 1월 마감(이월) 오더도 1월 매출에 들어오게 한 달 앞부터
     const mStart = monthStartAgo(targetMonth, 3) || yStart;
     useLoadOrderRange(yStart < mStart ? yStart : mStart, histToday());
   }
   useLoadFullOrderHistory(monthCompareOpen || marginReportOpen);
   // ⭐ 거래처 동향(12개월 히트맵)·목표/연간(작년 비교) 화면을 열면 필요한 기간만 더 불러온다
-  useLoadOrderRange(monthStartAgo(targetMonth, 11), histToday(), activeTab === "trend");
-  useLoadOrderRange(`${(activeTab === "yearly" ? selectedYear : Number(targetMonth.slice(0, 4))) - 1}-01-01`, histToday(), activeTab === "target" || activeTab === "yearly");
+  useLoadOrderRange(monthStartAgo(targetMonth, 12), histToday(), activeTab === "trend"); // 🗓 청구월 기준이라 한 달 더 앞부터(이월 오더)
+  useLoadOrderRange(`${(activeTab === "yearly" ? selectedYear : Number(targetMonth.slice(0, 4))) - 2}-12-01`, histToday(), activeTab === "target" || activeTab === "yearly"); // 🗓 작년 1월 청구분(재작년 12월 상차 이월)까지
   const canSeeStaffPerf = role === "admin" || role === "totalMaster";
   // ⭐ AI 월간비교분석 탭에서 선택한 두 달 — 탭을 옮겨도(activeTab 전환으로
   // MonthCompareInsight가 unmount/remount 되어도) 선택이 유지되도록 상위인
@@ -45025,17 +45025,18 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const rows = React.useMemo(() => [...dispatchRows, ...fixedMapped], [dispatchRows, fixedMapped]);
 
   const dayRows = React.useMemo(() => rows.filter((r) => (r.상차일 || "") === kpiDay), [rows, kpiDay]);
-  const monthRows = React.useMemo(() => rows.filter((r) => (r.상차일 || "").startsWith(monthKey)), [rows, monthKey]);
+  // 🗓 2026-11-25 달 · 연 매출은 청구월(마감월 → 없으면 상차일 달 · functions/arCore.mjs monthOf) 기준 — 미수금 · 회계와 같은 달. 일 매출(dayRows)은 상차일 그대로
+  const monthRows = React.useMemo(() => rows.filter((r) => salesMonthOf(r) === monthKey), [rows, monthKey]);
 
-  const startKey = `${yearKey}-01-01`;
-  const endKey = `${targetMonth}-${String(new Date(yearKey, monthNum, 0).getDate()).padStart(2, "0")}`;
+  const startKey = `${yearKey}-01`;
+  const endKey = targetMonth;
   const yearRows = React.useMemo(() => rows.filter((r) => {
-    const d = r.상차일;
-    if (!d) return false;
-    return d >= startKey && d <= endKey;
+    const m = salesMonthOf(r);
+    if (!m) return false;
+    return m >= startKey && m <= endKey;
   }), [rows, startKey, endKey]);
 
-  const prevMonthRows = React.useMemo(() => rows.filter((r) => (r.상차일 || "").startsWith(prevMonthKey)), [rows, prevMonthKey]);
+  const prevMonthRows = React.useMemo(() => rows.filter((r) => salesMonthOf(r) === prevMonthKey), [rows, prevMonthKey]);
 
   const isValidClientName = (c) => c && !/^2\d{1,2}년/.test(c) && !isExcludedFast(c);
   // ⭐ firstAppearMap/newClients도 매번 전체 rows(수천 건)를 순회하는데, activeTab
@@ -45178,11 +45179,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   })();
 
   const baseYear = yearKey - 1;
-  const lastYearRows = rows.filter((r) => {
-    const d = r.상차일;
-    if (!d) return false;
-    return d.startsWith(String(baseYear));
-  });
+  const lastYearRows = rows.filter((r) => salesMonthOf(r).startsWith(String(baseYear))); // 🗓 청구월 기준
 
   const lastYearFreshByMonth = Array.from({ length: 12 }, (_, i) => ({
     month: `${i + 1}월`,
@@ -45191,7 +45188,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   }));
   lastYearRows.forEach((r) => {
     if (!isFresh(r)) return;
-    const d = r.상차일;
+    const d = salesMonthOf(r); // 🗓 청구월 기준
     if (!d) return;
     const mIdx = Number(d.slice(5, 7)) - 1;
     const sale = toInt(r.청구운임);
@@ -45308,7 +45305,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
           <div style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }} className="text-[11px] font-extrabold tracking-[0.24em] text-[#4B6CB7]">REVENUE · {RV_PAGES[rvPage].en}</div>
           <h1 className="text-[22px] font-black text-[#0F1A30] tracking-tight mt-0.5">{RV_PAGES[rvPage].label}</h1>
           {/* 📏 2026-11-25 매출 기준 한 규칙(functions/salesRule.mjs) — 홈 · 경영 브리핑 · 일일 경영 보고 · 팀 실적 · 경영 분석 · AI 비서도 같은 기준 */}
-          <div className="text-[12.5px] font-bold text-[#7A879C] mt-0.5" data-kp="rv-basis">배차완료 오더 + 고정거래처 기준(배차중·미배차·취소 제외 · 상차일 기준) · 홈 · 경영 브리핑 · 일일 경영 보고도 같은 기준</div>
+          <div className="text-[12.5px] font-bold text-[#7A879C] mt-0.5" data-kp="rv-basis">배차완료 오더 + 고정거래처 · 청구월(마감월) 기준(배차중·미배차·취소 제외 · 일 매출은 상차일) · 홈 · 경영 브리핑 · 일일 경영 보고도 같은 기준</div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {rvPage === "yearly" ? (

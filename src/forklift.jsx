@@ -787,9 +787,9 @@ function ExtPayoutsTab({ orders = [], patchDispatch, isViewer = false }) {
           <button type="button" disabled={busy || !selRows.length} onClick={() => markPaid(selRows, true)} data-testid="ext-pay-selected" className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black disabled:opacity-40">선택 지급완료</button>
         </div>
       )}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
         {[["외부 지급 합계", sum.total], ["미지급", sum.unpaid], ["지급완료", sum.paid]].map(([k, v], i) => (
-          <div key={k} className={`rounded-[16px] px-4 py-3 border ${i === 1 ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}><div className={`text-[12.5px] font-bold ${i === 1 ? "text-white/60" : "text-[#7A879C]"}`}>{k}</div><div className="text-[22px] font-black tabular-nums" style={{ fontFamily: MONO }}>{won(v)}<span className="text-[12px] ml-1 opacity-50">원</span></div></div>
+          <div key={k} className={`rounded-[16px] px-3 sm:px-4 py-3 border min-w-0 ${i === 1 ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}><div className={`text-[12px] sm:text-[12.5px] font-bold whitespace-nowrap truncate ${i === 1 ? "text-white/60" : "text-[#7A879C]"}`}>{k}</div><div className="text-[17px] sm:text-[22px] font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{won(v)}<span className="text-[11px] sm:text-[12px] ml-0.5 sm:ml-1 opacity-50">원</span></div></div>
         ))}
       </div>
       {sum.changed > 0 && <div className="rounded-[12px] bg-[#FFF8E8] border border-[#F2DFAE] px-3 py-2 text-[12.5px] font-bold text-[#8A5A00]">지급한 뒤 금액이 바뀐 항목이 {sum.changed}건 있어요. 장부에는 지급한 금액이 그대로 있어요. 새 금액으로 맞추려면 [지급 취소] 뒤 다시 [지급완료]를 누르면 돼요.</div>}

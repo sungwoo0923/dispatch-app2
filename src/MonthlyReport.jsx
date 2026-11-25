@@ -7,7 +7,7 @@
 //  인쇄/PDF는 브라우저 인쇄로 그대로.
 import React, { useMemo, useState } from "react";
 import { statsOf, toWon } from "./monthCompare";
-import { isSalesOrder } from "./salesRule";
+import { isSalesOrder, salesMonthOf } from "./salesRule"; // 🗓 2026-11-25 달 = 청구월(마감월)
 import { orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
 import { useLoadOrderRange, monthEnd, monthStartAgo } from "./orderHistory";
 import { CustomSelect } from "./CustomSelect";
@@ -32,13 +32,13 @@ function Delta({ a, b, money, rate }) {
 export default function MonthlyReport({ rows = [], isExcluded = () => false, hasExcluded = false, onClose }) {
   const [month, setMonth] = useState(kstMonth());
   const prev = shiftMonth(month, -1);
-  useLoadOrderRange(monthStartAgo(month, 1), monthEnd(month));
+  useLoadOrderRange(monthStartAgo(month, 2), monthEnd(month)); // 🗓 2026-11-25 청구월 기준 — 전월의 이월 오더(그 전달 상차)까지
   const [scope, setScope] = useState(hasExcluded ? "pure" : "all");
   const inScope = (r) => scope === "all" || !isExcluded(r.거래처명);
-  const A = useMemo(() => rows.filter((r) => String(r.상차일 || "").startsWith(prev) && inScope(r) && DONE(r)), [rows, prev, scope]); // eslint-disable-line react-hooks/exhaustive-deps
-  const B = useMemo(() => rows.filter((r) => String(r.상차일 || "").startsWith(month) && inScope(r) && DONE(r)), [rows, month, scope]); // eslint-disable-line react-hooks/exhaustive-deps
+  const A = useMemo(() => rows.filter((r) => salesMonthOf(r) === prev && inScope(r) && DONE(r)), [rows, prev, scope]); // eslint-disable-line react-hooks/exhaustive-deps
+  const B = useMemo(() => rows.filter((r) => salesMonthOf(r) === month && inScope(r) && DONE(r)), [rows, month, scope]); // eslint-disable-line react-hooks/exhaustive-deps
   const sa = statsOf(A), sb = statsOf(B);
-  const months = useMemo(() => [...new Set([kstMonth(), shiftMonth(kstMonth(), -1), ...rows.map((r) => String(r.상차일 || "").slice(0, 7))].filter((m) => /^\d{4}-\d{2}$/.test(m)))].sort().reverse().slice(0, 24), [rows]);
+  const months = useMemo(() => [...new Set([kstMonth(), shiftMonth(kstMonth(), -1), ...rows.map((r) => salesMonthOf(r))].filter((m) => /^\d{4}-\d{2}$/.test(m)))].sort().reverse().slice(0, 24), [rows]);
 
   const byKey = (list, key) => { const m = new Map(); list.forEach((r) => { const k = key(r); if (!m.has(k)) m.set(k, []); m.get(k).push(r); }); return m; };
   const clientA = byKey(A, (r) => String(r.거래처명 || "").trim() || "(미입력)");
@@ -53,7 +53,7 @@ export default function MonthlyReport({ rows = [], isExcluded = () => false, has
   const daily = (() => { const m = {}; B.forEach((r) => { const d = String(r.상차일).slice(8, 10); m[d] = (m[d] || 0) + toWon(r.청구운임); }); return Object.entries(m).sort(); })();
   const maxDaily = Math.max(1, ...daily.map(([, v]) => v));
   const risky = B.filter((r) => { const s = toWon(r.청구운임), p = orderProfit(r); return s > 0 && (p <= 0 || p / s < 0.05); }); // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사 지급분
-  const unassigned = rows.filter((r) => String(r.상차일 || "").startsWith(month) && DONE(r) && !String(r.차량번호 || "").trim());
+  const unassigned = rows.filter((r) => salesMonthOf(r) === month && DONE(r) && !String(r.차량번호 || "").trim());
   const unsettled = B.filter((r) => { const st = r.정산상태; const v = st && typeof st === "object" ? st[month] : st; return v !== "정산완료"; });
 
   const box = { background: "#fff", border: "1px solid #E3E8F0", borderRadius: 16, padding: 18 };

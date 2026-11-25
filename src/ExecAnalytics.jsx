@@ -15,7 +15,7 @@ import { ResponsiveContainer, BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tool
 import { db, auth } from "./firebase";
 import { useOrderHistory } from "./orderHistory";
 import { useCompanyRows } from "./companyColStore";
-import { loadAcctPayments } from "./acctPayments";
+import { useArPaid } from "./arPaidLive"; // 🔗 2026-11-25 미수금 받은 돈 — 회계 · 정산 화면과 같은 식
 import { computeFunds, isCredit } from "./fundsCalc";
 import { isDemoOn } from "./devDemoData";
 import { execAnalyticsDemo } from "./execAnalyticsDemo";
@@ -108,15 +108,9 @@ function useExecData({ company, dispatchData, drivers, loadRange: lrProp, months
   const recurLive = useCompanyRows("acctRecurring", co);
   const fundsLive = useCompanyRows("acctFunds", cash ? co : "");
   const fixedLive = useCompanyRows("fixedClients", co); // ⭐ 2026-11-07 고정거래처도 미수금에(회계관리와 같게)
-  const [arPay, setArPay] = React.useState(null);
-  React.useEffect(() => {
-    if (demo) { setArPay(demo.arPayments); return undefined; }
-    if (!company) return undefined;
-    let alive = true;
-    loadAcctPayments(db, Number(today.slice(0, 4)), company).then((d) => { if (alive) setArPay(d.ar || {}); }).catch(() => { if (alive) setArPay(null); });
-    return () => { alive = false; };
-  }, [demo, company, today]);
   const rows = React.useMemo(() => liveRows(demo ? demo.rows : dispatchData), [demo, dispatchData]);
+  // 🔗 2026-11-25 받은 돈 = 회계관리 · 거래처정산과 같은 식(arCore.arPaidByClient — 입금 기록 arPayments + 정산완료 · 입금완료 + 예전 회계 합계)
+  const arPay = useArPaid({ company, orders: rows, year: today.slice(0, 4), demoAr: demo ? demo.arPayments : null });
   const drv = demo ? demo.drivers : drivers;
   const fleet = React.useMemo(() => fleetIndex(drv), [drv]);
   return { demo, today, rows, fleet, ledger: demo ? demo.ledger : ledgerLive || [], recurring: demo ? demo.recurring : recurLive || [], funds: demo ? demo.funds : fundsLive || [], arPay, fixedRows: demo ? [] : fixedLive || [] };

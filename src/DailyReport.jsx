@@ -23,7 +23,7 @@ import { useOrderHistory } from "./orderHistory";
 import { useCompanyBiz, bizOf } from "./companyBiz";
 import { useCompanyRows } from "./companyColStore";
 import { fixedSalesRows } from "./salesRule"; // 📏 2026-11-25 고정거래처 매출도 보고서 매출에(매출관리와 같은 기준)
-import { loadAcctPayments } from "./acctPayments";
+import { useArPaid } from "./arPaidLive"; // 🔗 2026-11-25 미수금 받은 돈 — 회계 · 정산 화면과 같은 식
 import { isLateAt } from "./lateRule";
 import { receivablesOf } from "./arAging"; // ⭐ 2026-11-07 미수금 공용 계산(부가세 포함 · 고정거래처 포함)
 import { pickUnassignedOrders } from "./unassignedRule";
@@ -321,14 +321,8 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
   const recurring = demo ? demo.recurring : recurLive || [];
   const fundRows = demo ? demo.funds : fundsLive || [];
   const F = React.useMemo(() => (fundRows.length ? computeFunds(fundRows, ledger) : null), [fundRows, ledger]);
-  const [arPay, setArPay] = React.useState(null);
-  React.useEffect(() => {
-    if (demo) { setArPay(demo.arPayments); return undefined; }
-    if (sec.cash === false || !company) return undefined;
-    let alive = true;
-    loadAcctPayments(db, Number(today.slice(0, 4)), company).then((d) => { if (alive) setArPay(d.ar || {}); }).catch(() => { if (alive) setArPay(null); });
-    return () => { alive = false; };
-  }, [demo, company, today, sec.cash]);
+  // 🔗 2026-11-25 받은 돈 = 회계관리 · 거래처정산과 같은 식(arCore.arPaidByClient — 입금 기록 arPayments + 정산완료 · 입금완료 + 예전 회계 합계)
+  const arPay = useArPaid({ company: sec.cash === false ? "" : company, orders: rows, year: today.slice(0, 4), demoAr: demo ? demo.arPayments : null });
   const unassigned = React.useMemo(() => pickUnassignedOrders(demo ? demo.rows : dispatchData), [demo, dispatchData]);
 
   // 근무자(출근 기록) — 사무직

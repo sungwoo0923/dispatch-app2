@@ -437,11 +437,16 @@ const TOOLS = {
       need(ctx, "receivables", "미수금 조회");
       const yr = ctx.today.slice(0, 4);
       // ⭐ 2026-11-07 회계관리와 같은 계산(functions/arCore.mjs 공용) — 배차완료만 · 고정거래처 포함 · 청구액 부가세 포함(수금 기록은 실제 입금액)
-      const { receivablesOf } = await arCore();
-      const orders = await loadOrders(ctx, `${yr}-01-01`, `${yr}-12-31`);
+      const { receivablesOf, arPaidByClient } = await arCore();
+      // 🗓 청구월(마감월) 기준이라 지난해 12월 상차 · 올해 1월 마감(이월) 오더도 읽는다
+      const orders = await loadOrders(ctx, `${Number(yr) - 1}-12-01`, `${yr}-12-31`);
       const fixedRows = (await loadCompanyCol(ctx, "fixedClients", 5000)).filter((r) => String(r.날짜 || "").startsWith(yr));
+      // 🔗 2026-11-25 받은 돈 = 회계관리 · 거래처정산과 같은 식(arCore.arPaidByClient) — 정본 입금 기록(arPayments) + 정산완료 · 입금완료 오더 + 예전 회계 합계(acctPayments)
       const pay = await ctx.db.collection("acctPayments").doc(`${ctx.co}__${yr}`).get().catch(() => null);
-      const paid = pay?.exists ? pay.data()?.ar || {} : {};
+      const acct = pay?.exists ? { ar: pay.data()?.ar || {}, log: Array.isArray(pay.data()?.log) ? pay.data().log : [] } : { ar: {}, log: [] };
+      const arSnap = await ctx.db.collection("arPayments").where("company", "==", ctx.co).get().catch(() => ({ docs: [] }));
+      const arPayments = arSnap.docs.map((d) => ({ id: d.id, ...(d.data() || {}) }));
+      const paid = arPaidByClient({ orders, arPayments, acct, year: yr });
       let list = receivablesOf({ orders, fixedRows, paid, today: ctx.today, year: yr })
         .filter((x) => x.outstanding > 0)
         .map((x) => ({ 거래처: x.client, 청구액: x.billed, 공급가: x.supply, 수금액: x.paid, 미수금: x.outstanding, 가장오래된미수일수: x.oldest }));

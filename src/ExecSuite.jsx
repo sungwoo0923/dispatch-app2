@@ -44,7 +44,7 @@ import { staffRanking, monthSpans } from "./dailyReportCore";
 import { receivablesOf } from "./arAging";
 import { useUserNameMap, orderStaffNameRaw, ORDER_MGR_FIXED } from "./detailGetters";
 import { useCompanyRows } from "./companyColStore";
-import { loadAcctPayments } from "./acctPayments";
+import { useArPaid } from "./arPaidLive"; // 🔗 2026-11-25 미수금 받은 돈 — 회계 · 정산 화면과 같은 식
 import { computeFunds } from "./fundsCalc";
 import { isDemoOn } from "./devDemoData";
 import { execAnalyticsDemo } from "./execAnalyticsDemo";
@@ -348,16 +348,10 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
     Promise.resolve(loadRange(loadFrom, today)).then((r) => { if (alive && r !== null) setYearLoaded(true); }).catch(() => {});
     return () => { alive = false; };
   }, [demo, loadRange, loadFrom, today]);
-  const [arPay, setArPay] = React.useState(null);
-  React.useEffect(() => {
-    if (demo) { setArPay(demo.arPayments); return undefined; }
-    if (!company) return undefined;
-    let alive = true;
-    loadAcctPayments(db, Number(year), company).then((d) => { if (alive) setArPay(d.ar || {}); }).catch(() => { if (alive) setArPay(null); });
-    return () => { alive = false; };
-  }, [demo, company, year]);
   const carrierF = useRouteCarrierFilter(company);
   const rows = React.useMemo(() => liveRows(data).filter((r) => carrierF.isCountable(r)), [data, carrierF]);
+  // 🔗 2026-11-25 받은 돈 = 회계관리 · 거래처정산과 같은 식(arCore.arPaidByClient — 입금 기록 arPayments + 정산완료 · 입금완료 + 예전 회계 합계)
+  const arPay = useArPaid({ company, orders: rows, year, demoAr: demo ? demo.arPayments : null });
 
   // ── 매출 · 이익(홈과 같은 집계: 지난 기간 저장값 + 실시간) ──
   const dayNo = Number(today.slice(8, 10));
