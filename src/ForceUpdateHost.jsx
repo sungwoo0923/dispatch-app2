@@ -8,7 +8,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "./firebase";
-import { CUR_BUILD, CUR_VER } from "./releaseGate";
+import { CUR_BUILD, CUR_VER, rememberForcedBuild } from "./releaseGate";
 import { hardReloadForUpdate } from "./UpdateBanner";
 import { FORCE_DOC, DEFAULT_FORCE_MSG, forceApplies, forceBehind, forceLeft, fmtLeft } from "./forceUpdateCore";
 
@@ -75,6 +75,7 @@ export default function ForceUpdateHost({ company = "", role = "", linkedCompany
     let n = 0;
     try { n = Number(sessionStorage.getItem(`kpForceTry:${cfg.id}`) || 0); if (n >= 2) return; sessionStorage.setItem(`kpForceTry:${cfg.id}`, String(n + 1)); sessionStorage.setItem("kpForceDone", cfg.version || "최신"); } catch { /* 무시 */ }
     firing.current = true;
+    rememberForcedBuild(cfg.build, cfg.version || ""); // ⏱ 2026-11-25 예약 배포 — 새로 고칠 때 예약 버전으로 열리게
     hardReloadForUpdate();
   }, [cfg]);
   React.useEffect(() => { if (on && left <= 0) apply(); }, [on, left, apply]);

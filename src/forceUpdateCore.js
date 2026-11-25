@@ -34,3 +34,13 @@ export function fmtLeft(sec) {
   const m = Math.floor(sec / 60); const r = sec % 60;
   return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
 }
+
+// ⏱ 2026-11-25 예약 배포 — publicRelease/current.scheduled 가 이 PC에 지금 "배포한 버전"인지(화면 없이 계산 · 테스트용)
+//  · 예약 시각이 지났고(또는 이 PC가 [지금 적용]으로 이미 그 버전을 받았고) · 전체 대상이거나 고른 회사(또는 이미 받은 PC)일 때만
+export function scheduledPinOf(d, { now = Date.now(), company = "", forced = "" } = {}) {
+  const x = d?.scheduled;
+  if (!x || !x.url || !x.build) return null;
+  if (!(Number(x.at) <= now) && forced !== x.build) return null;
+  if (x.scope === "pick" && forced !== x.build && !(Array.isArray(x.companies) ? x.companies : []).map((c) => s(c)).includes(s(company))) return null;
+  return { url: x.url, version: x.version || "", build: x.build };
+}
