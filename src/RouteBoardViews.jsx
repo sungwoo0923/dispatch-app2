@@ -40,6 +40,7 @@ const CSS = `
 .rbt-name{width:240px;flex-shrink:0;padding:10px 14px;border-right:1px solid ${C.line};display:flex;flex-direction:column;justify-content:center;gap:3px;position:sticky;left:0;background:${C.panel};z-index:2}
 .rbt-blk{position:absolute;top:8px;bottom:8px;border-radius:10px;padding:4px 10px;display:flex;flex-direction:column;justify-content:center;overflow:hidden;cursor:pointer;border:1px solid rgba(255,255,255,.18)}
 .rbt-blk:hover{filter:brightness(1.15)}
+@media (max-width:700px){.rbt-name{width:150px;padding:8px 10px}}
 `;
 
 // ── 시간표 ──
