@@ -844,7 +844,7 @@ function FleetMap({ drivers, center, onSelect, selectedPath = [], fitAllCount = 
       <MapRecenter center={center} />
       <FitAll count={fitAllCount} drivers={drivers} />
       {selectedPath.length >= 2 && <FitPath points={selectedPath} resetKey={selectedDriver?.id} />}
-      <TileLayer className={light ? "lw-light-tiles" : "lw-dark-tiles"} tileSize={512} zoomOffset={-1} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+      <TileLayer key={light ? "tl-light" : "tl-dark"} className={light ? "lw-light-tiles" : "lw-dark-tiles"} tileSize={512} zoomOffset={-1} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
       <TrafficOverlay />{/* 🚦 2026-11-22 사고 · 공사 · 통제 */}
 
       {/* ⭐ 이동 동선 — 예전엔 GPS 점을 하나하나 원으로 찍어 다닥다닥 보였다. 도로에 맞춘
@@ -2831,6 +2831,7 @@ function VehicleSpecChip({ type, ton }) {
 }
 
 function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleDay = true, todayStr, isOffDay, live, monthlyFareSum = 0, acceptRate = null, onOpenDetail, staff, canDelegate, onAssignManager, index, staffByEmail, dispatchData, focused = false, dimmed = false, onToggleFocus }) {
+  const cardDark = React.useContext(FleetDarkCtx); // 🛠 2026-11-26 다크 번호판
   const first = orders[0];
   const last = orders[orders.length - 1];
   const hasConflict = isOffDay && orders.length > 0;
@@ -2920,7 +2921,10 @@ function DriverRouteCard({ driver, orders, selectedDate, rangeEndDate, isSingleD
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, flexWrap: "wrap" }}>
                 {/* 번호판 모양 */}
-                <span style={{ fontSize: 15, fontWeight: 800, color: "#0F1A30", padding: "1px 10px", border: "1.5px solid #0F1A30", borderRadius: 6, background: "linear-gradient(180deg,#fff,#F1F4F9)", letterSpacing: "0.03em", boxShadow: "inset 0 -1px 0 rgba(15,26,48,.12)" }}>{driver.차량번호 || "-"}</span>
+                {/* 🛠 2026-11-26 어두운 화면에서는 흰 번호판에 흰 글씨가 되어 안 보였다 → 다크 번호판 */}
+                <span className={cardDark ? "fm-keep-light" : undefined} style={cardDark
+                  ? { fontSize: 16, fontWeight: 900, color: "#F4F8FF", padding: "2px 10px", border: "1.5px solid #4C74B8", borderRadius: 7, background: "linear-gradient(180deg,#17305C,#0E1A30)", letterSpacing: "0.03em" }
+                  : { fontSize: 15, fontWeight: 800, color: "#0F1A30", padding: "1px 10px", border: "1.5px solid #0F1A30", borderRadius: 6, background: "linear-gradient(180deg,#fff,#F1F4F9)", letterSpacing: "0.03em", boxShadow: "inset 0 -1px 0 rgba(15,26,48,.12)" }}>{driver.차량번호 || "-"}</span>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 15, fontWeight: 700, color: "#374151", whiteSpace: "nowrap" }}>
                   <svg width="13" height="13" fill="none" stroke="#6b7280" strokeWidth="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.8 19.8 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                   {driver.전화번호 && driver.전화번호 !== "-" ? formatPhone(driver.전화번호) : "-"}

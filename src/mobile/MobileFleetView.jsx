@@ -1490,7 +1490,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
             >
               <MapRecenter center={mapCenter || mapSelected?.location} />
               {displayPath.length >= 2 && <FitPath points={displayPath} resetKey={mapSelected?.id} />}
-              <TileLayer className={lookB ? "lw-light-tiles" : "lw-dark-tiles"} tileSize={512} zoomOffset={-1} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+              <TileLayer key={lookB ? "tl-light" : "tl-dark"} className={lookB ? "lw-light-tiles" : "lw-dark-tiles"} tileSize={512} zoomOffset={-1} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
               <TrafficOverlay />{/* 🚦 2026-11-22 사고 · 공사 · 통제 */}
 
               {/* ⭐ 이동 동선 — 점 대신 매끈한 선 + 출발점/상태 변경 지점만 표시(PC와 동일) */}
