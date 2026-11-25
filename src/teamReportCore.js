@@ -7,7 +7,7 @@
 //  ⚠ 이 파일은 다른 파일을 가져오지 않는다(node 테스트에서 바로 읽는다) — 아래 작은 함수들은 src/dailyReportCore.js 와 같은 식
 //    (⭐ 2026-11-17 예외: 수익 식은 functions/profitCore.mjs(가져오는 것 없음)를 forkliftCore.js 로 가져온다 — 배차표 수수료와 같은 식)
 import { orderProfit, fkNum } from "./forkliftCore.js";
-import { isSalesOrder } from "./salesRule.js"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(가져오는 것 없음 · profitCore 만)
+import { isSalesOrder, salesBillDateOf } from "./salesRule.js"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(가져오는 것 없음 · profitCore 만)
 const toWon = (v) => fkNum(v); // 🛠 2026-11-25 수익(orderProfit)과 같은 금액 읽기(소수점 반올림)
 export const dateOf = (r) => String(r?.상차일자 || r?.상차일 || r?.상차 || "").slice(0, 10);
 export const saleOf = (r) => toWon(r?.청구운임);
@@ -76,14 +76,18 @@ export function buildTeamReport({ rows, members, period: p, staffOf }) {
   const seen = new Set();
   const inTeam = []; let coCur = 0; let unassignedPre = 0;
   for (const r of rows || []) {
-    const d = dateOf(r); if (!d || d < p.prevFrom || d > p.to) continue;
+    const d0 = dateOf(r); if (!d0) continue;
+    // 🗓 2026-11-25 돈은 청구일(청구월 안 날짜 · 이월 오더는 청구월 1일 — salesRule.salesBillDateOf), 미배차 건수는 상차일
+    const d = isSalesOrder(r) ? salesBillDateOf(r) || d0 : d0;
+    const inSpan = (x) => x >= p.prevFrom && x <= p.to;
+    if (!inSpan(d) && !inSpan(d0)) continue;
     const k = r._id || r.id ? `${r.__col || ""}/${r._id || r.id}` : null;
     if (k) { if (seen.has(k)) continue; seen.add(k); }
     if (r.source === "transport_transmit" || isCancelledOrder(r)) continue;
     const who = String(staffOf(r) || "").trim();
     // 미배차(배차중) 건수는 운영 숫자라 전체 오더로 센다
-    if (names.has(who) && d >= p.from && d <= p.to && (r.배차상태 || "") === "배차중") unassignedPre += 1;
-    if (!isSalesOrder(r)) continue; // 📏 2026-11-25 매출 · 수익은 배차완료만
+    if (names.has(who) && d0 >= p.from && d0 <= p.to && (r.배차상태 || "") === "배차중") unassignedPre += 1;
+    if (!isSalesOrder(r) || !inSpan(d)) continue; // 📏 2026-11-25 매출 · 수익은 배차완료만(청구일이 기간 안)
     if (d >= p.from) coCur += saleOf(r);
     if (names.has(who)) inTeam.push({ r, d, who });
   }

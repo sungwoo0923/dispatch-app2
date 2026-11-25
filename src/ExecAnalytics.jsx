@@ -21,9 +21,9 @@ import { isDemoOn } from "./devDemoData";
 import { execAnalyticsDemo } from "./execAnalyticsDemo";
 import { myTurn, useApprovals, ApprovalDocPreview } from "./Approval";
 import { addDay, kstToday, md, dateOf, toWon, isBizDay, rangeDays, dayDiff, mdDow } from "./dailyReportCore";
-import { isSalesOrder, fixedSalesRows } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료 + 고정거래처)
+import { isSalesOrder, fixedSalesRows, salesMonthOf } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료 + 고정거래처)
 import { orderCost } from "./forkliftCore"; // 📏 2026-11-25 기사 운송료 지급 = 기사운임 + 회사 지급분(지게차 · 외부 특수운임)
-import { plMonthly, receivables, dsoOf, clientTable, vehicleTable, priceWatch, cashForecast, salesTrend, liveRows, fleetIndex, monthsBack, ymOf, ymLabel, COGS_ACCOUNTS } from "./execAnalyticsCore";
+import { plMonthly, receivables, dsoOf, clientTable, vehicleTable, priceWatch, cashForecast, salesTrend, liveRows, fleetIndex, monthsBack, ymLabel, COGS_ACCOUNTS } from "./execAnalyticsCore";
 import { planExecution, planStatus } from "./bizPlan"; // 📑 2026-11-08 사업계획 탭
 import { bizPlanDemo } from "./bizPlanDemo";
 import { EX, EX_NUM, GOLD_GRAD, ExecPage, ExecPanel, Kpi, ExecKpis, ExecGrid, ExecTabs, ExecButton, Delta, Meter, Ring, RankBars, ExecTable, Chip, Empty, chartTheme, Legend, fmtMoney, fmtEokMan, pctChange, useBoxWidth } from "./execUi";
@@ -96,7 +96,7 @@ export function ExecShell({ en, title, sub, right, children, testId }) {
   );
 }
 // ─────────────────────────── 데이터 ───────────────────────────
-function useExecData({ company, dispatchData, drivers, loadRange: lrProp, months = 13, cash = false }) {
+function useExecData({ company, dispatchData, drivers, loadRange: lrProp, months = 14 /* 🗓 2026-11-25 청구월 기준 — 첫 달의 이월 오더(앞달 상차)까지 */, cash = false }) {
   const demo = demoOn() ? execAnalyticsDemo(company) : null;
   const today = kstToday();
   const { loadRange: ctx } = useOrderHistory() || {};
@@ -178,7 +178,7 @@ function PlTab({ rows: rows0, fleet, ledger, recurring, today, compact, W, fixed
   const hasData = pl.some((m) => m.sale > 0);
   if (!hasData) return <ExecPanel en="PROFIT & LOSS" title="손익"><Empty text="최근 12개월간 마감된 오더가 없습니다" sub="배차 실적이 누적되면 월별 매출 · 영업이익이 표시됩니다." /></ExecPanel>;
   return (<>
-    <Brief basis={`${ymKo(cur.m)} 마감 · 상차일 기준`}>
+    <Brief basis={`${ymKo(cur.m)} 마감 · 배차완료 · 청구월(마감월) 기준`}>
       {M}월 매출은 <B>{fmtEokMan(cur.sale)}</B>
       {dSale != null ? <>으로 전월 대비 <B color={dSale >= 0 ? EX.up : EX.down}>{Math.abs(dSale).toFixed(1)}% {dSale >= 0 ? "증가" : "감소"}</B>했으며, </> : "이며, "}
       영업{cur.op < 0 ? "손실" : "이익"}은 <B color={pc(cur.op)}>{fmtEokMan(Math.abs(cur.op))}</B>(영업이익률 {pct(cur.om)})입니다.
@@ -196,7 +196,7 @@ function PlTab({ rows: rows0, fleet, ledger, recurring, today, compact, W, fixed
         right={W >= 900 && <Legend items={[["매출(선택 월)", EX.gold], ["영업이익 +", EX.up], ["영업이익 −", EX.down]]} />}>
         {W < 900 && <div className="mb-2"><Legend items={[["매출(선택 월)", EX.gold], ["영업이익 +", EX.up], ["영업이익 −", EX.down]]} /></div>}
         <PlChart data={chart} sel={sel} setSel={setSel} compact={compact} />
-        <Basis>매출 = 배차완료 오더 + 고정거래처의 청구운임(매출관리와 같은 기준 · 배차중 · 미배차 제외) · 매입(운송원가) = 기사운임(소속 차량 기사운임 및 용차비) + 회사 부담 지게차 · 외부 특수운임 · 판관비 = 장부 지출액에서 운송원가 계정({COGS_ACCOUNTS.slice(0, 3).join(" · ")} 등)을 제외한 금액 · 장부 기록이 없는 월은 고정비 기준 추정 · 진행 중인 당월은 제외했습니다.</Basis>
+        <Basis>매출 = 배차완료 오더 + 고정거래처의 청구운임(매출관리와 같은 기준 · 배차중 · 미배차 제외 · 청구월(마감월) 기준) · 매입(운송원가) = 기사운임(소속 차량 기사운임 및 용차비) + 회사 부담 지게차 · 외부 특수운임 · 판관비 = 장부 지출액에서 운송원가 계정({COGS_ACCOUNTS.slice(0, 3).join(" · ")} 등)을 제외한 금액 · 장부 기록이 없는 월은 고정비 기준 추정 · 진행 중인 당월은 제외했습니다.</Basis>
       </ExecPanel>
       <PlStructure cur={cur} M={M} compact={compact} />
     </ExecGrid>
@@ -681,7 +681,7 @@ function CashTab({ rows, ledger, recurring, funds, arPay, today, compact, W, fix
     //  📏 2026-11-25 배차완료 오더의 orderCost(기사운임 + 회사가 따로 지급하는 지게차 · 외부 특수운임) — 나가는 돈을 빠짐없이
     const ms = [1, 2, 3].map((n) => { const d = new Date(`${today.slice(0, 7)}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - n); return d.toISOString().slice(0, 7); });
     const hasDrvRec = (recurring || []).some((x) => x.active !== false && /운송료|기사/.test(`${x.name || ""}${x.account || ""}`));
-    const drvPay = hasDrvRec ? 0 : ms.reduce((s, m) => s + rows.filter((r) => ymOf(dateOf(r)) === m).reduce((a, r) => a + (isSalesOrder(r) ? orderCost(r) : 0), 0), 0) / 3;
+    const drvPay = hasDrvRec ? 0 : ms.reduce((s, m) => s + rows.filter((r) => salesMonthOf(r) === m).reduce((a, r) => a + (isSalesOrder(r) ? orderCost(r) : 0), 0), 0) / 3;
     const last30 = rangeDays(addDay(today, -30), addDay(today, -1)); const bizN = last30.filter(isBizDay).length || 1;
     const set = new Set(last30); const sale30 = rows.reduce((s, r) => (set.has(dateOf(r)) && isSalesOrder(r) ? s + toWon(r.청구운임) : s), 0); // 📏 배차완료 매출
     const totOut = Object.values(rec).reduce((s, r) => s + r.outstanding, 0);

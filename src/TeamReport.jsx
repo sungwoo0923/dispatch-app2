@@ -21,7 +21,7 @@ import { C } from "./dailyReportCharts";
 import { printA4, savePdf, pdfBlobOf } from "./a4Export";
 import { uploadApFile } from "./ApprovalFiles";
 import { kpAlert } from "./kpDialog";
-import { periodOf, buildTeamReport, teamMembers, teamKind, reportText, OPINION_SECTIONS, setHolidayFn } from "./teamReportCore";
+import { shiftYm, periodOf, buildTeamReport, teamMembers, teamKind, reportText, OPINION_SECTIONS, setHolidayFn } from "./teamReportCore";
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 이익 · 이익률 색(플러스 빨강 · 마이너스 파랑)
 
 setHolidayFn((d) => !!getNationalHolidayLabel(d));
@@ -154,7 +154,9 @@ export default function TeamReport({ company, me }) {
   React.useEffect(() => {
     if (!canMake || !company) return undefined;
     let alive = true; setRows(null); setLoadErr("");
-    const q = (col) => getDocs(query(collection(db, col), where("상차일", ">=", period.prevFrom), where("상차일", "<=", period.to)))
+    // 🗓 2026-11-25 돈은 청구월 기준 — 비교 기간 앞달 상차 · 다음 달 마감(이월) 오더도 읽게 한 달 앞부터
+    const qFrom = `${shiftYm(period.prevFrom.slice(0, 7), -1)}-01`;
+    const q = (col) => getDocs(query(collection(db, col), where("상차일", ">=", qFrom), where("상차일", "<=", period.to)))
       .then((s) => s.docs.map((d) => ({ _id: d.id, __col: col, ...d.data() }))).catch((e) => { if (col === "orders") throw e; return []; });
     Promise.all([q("orders"), q("dispatch")]).then(([a, b]) => { if (alive) setRows([...a, ...b]); }).catch((e) => { if (alive) { setRows([]); setLoadErr(e?.message || String(e)); } });
     return () => { alive = false; };
@@ -327,7 +329,7 @@ export default function TeamReport({ company, me }) {
               {!onSecs.length && <p style={{ color: C.t3 }}>위에서 넣을 칸을 골라 주세요.</p>}
             </div>
           </Card>
-          <div style={{ textAlign: "right", fontSize: 13, color: C.t3, padding: "0 6px" }}>산출 기준: 배차 오더(취소 · 운송사 전송 제외) · 매출액 = 청구운임 · 매출총이익 = 청구운임 − 기사운임 − 외부 지급 · 담당자 = 오더 등록 직원</div>
+          <div style={{ textAlign: "right", fontSize: 13, color: C.t3, padding: "0 6px" }}>산출 기준: 배차완료 오더 · 청구월(마감월) 기준(매출관리와 같음 · 배차중 · 미배차 · 취소 · 운송사 전송 제외) · 매출액 = 청구운임 · 매출총이익 = 청구운임 − 기사운임 − 외부 지급 · 담당자 = 오더 등록 직원</div>
         </div>
       )}
     </div>

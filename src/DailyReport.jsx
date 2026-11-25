@@ -164,7 +164,8 @@ export function useBriefingCore({ company, dispatchData, prefs, bizSel = "", loa
   const demo = demoOn() ? dailyReportDemo(company) : null;
   const today = kstToday();
   const basis = React.useMemo(() => reportBasis(today, prefs), [today, prefs]);
-  const pmStart = `${addDay(`${basis.end.slice(0, 7)}-01`, -1).slice(0, 7)}-01`;
+  // 🗓 2026-11-25 월 누계는 청구월 기준 — 전월의 이월 오더(그 전달 상차)까지 한 달 더 앞부터 불러온다
+  const pmStart = `${addDay(`${addDay(`${basis.end.slice(0, 7)}-01`, -1).slice(0, 7)}-01`, -1).slice(0, 7)}-01`;
   const from35 = addDay(basis.start, -35);
   const from = [withYear ? `${basis.end.slice(0, 4)}-01-01` : null, pmStart, from35].filter(Boolean).sort()[0];
   useHistory(demo ? null : from, today, loadRange);
@@ -351,7 +352,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
     const hide = (n) => n === "최고관리자";
     return {
       basis: staffRanking(rows, basis.days, basis.prev1, staffOf, hide),
-      month: staffRanking(rows, mSpan.cur, mSpan.prev, staffOf, hide),
+      month: staffRanking(rows, mSpan.cur, mSpan.prev, staffOf, hide, true), // 🗓 달 비교는 청구월 기준
     };
   }, [rows, basis, mSpan, staffOf]);
   const moves = React.useMemo(() => clientMoves(report.byClientDay, mSpan.cur, mSpan.prev, 4), [report.byClientDay, mSpan]);
@@ -820,7 +821,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
           ? row("ops", "minmax(0,1.4fr) minmax(0,1fr)", opsCard, <div style={{ display: "grid", gap: g, alignContent: "start", minWidth: 0, height: "100%" }}>{hrCard}{movesCard}</div>)
           : <>{block("ops1", opsCard)}{block("hr1", hrCard)}{block("mv1", movesCard)}</>}
         <div data-pdf-block style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, paddingTop: 6, fontSize: 12, fontWeight: 500, color: T.faint, lineHeight: 1.6 }}>
-          <span>{dotDate(today)} {kstHm()} 집계 · 배차·정산·인사 데이터 자동 집계 · 매출 = 배차완료 오더 + 고정거래처 기준(매출관리와 같음 · 오더 건수는 취소 뺀 전체){bizSel ? ` · 청구 사업자 ${bizSel}` : ""}</span><span style={{ letterSpacing: "0.04em" }}>LogisWeb 자동 생성 보고서</span>
+          <span>{dotDate(today)} {kstHm()} 집계 · 배차·정산·인사 데이터 자동 집계 · 매출 = 배차완료 오더 + 고정거래처 기준(매출관리와 같음) · 월 누계는 청구월(마감월), 일 매출은 상차일 · 오더 건수는 취소 뺀 전체{bizSel ? ` · 청구 사업자 ${bizSel}` : ""}</span><span style={{ letterSpacing: "0.04em" }}>LogisWeb 자동 생성 보고서</span>
         </div>
       </div>
     );

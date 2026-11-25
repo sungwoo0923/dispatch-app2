@@ -63,4 +63,4 @@ export function salesTotals(rows = []) {
 }
 
 // 화면에 적는 기준 문구(모든 화면이 같은 말)
-export const SALES_RULE_LABEL = "매출·수익은 배차완료 오더 + 고정거래처 기준(취소 · 배차중 · 미배차 제외, 상차일 기준) — 매출관리와 같아요";
+export const SALES_RULE_LABEL = "매출·수익은 배차완료 오더 + 고정거래처 · 청구월(마감월) 기준(취소 · 배차중 · 미배차 제외, 일 매출은 상차일) — 매출관리와 같아요";

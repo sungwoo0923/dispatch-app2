@@ -27,7 +27,7 @@ export function useTenantCol(name, company) {
 const cache = new Map(); // 회사 → { at, rows }
 const KEEP_MS = 10 * 60 * 1000;
 // ⭐ 2026-11-17 지게차비용 · 특수운임도 남긴다(매출이익 = 청구 − 기사 − 회사가 따로 지급 · salesCore orderCost)
-const slim = (id, r, paid = null) => ({ _id: id, 수금: paid != null ? paid : (r.정산상태 && typeof r.정산상태 === "object" ? r.정산상태[orderDate(r).slice(0, 7)] : "") === "정산완료", 상차일: orderDate(r), 거래처명: r.거래처명 || "", 청구운임: r.청구운임 || 0, 기사운임: r.기사운임 || 0, 지게차비용: r.지게차비용 || "", ...(Array.isArray(r.특수운임) && r.특수운임.length ? { 특수운임: r.특수운임 } : {}), 상차지명: r.상차지명 || "", 하차지명: r.하차지명 || "", 차량종류: r.차량종류 || "", 차량톤수: r.차량톤수 || "" });
+const slim = (id, r, paid = null) => ({ _id: id, ...(r.마감월 ? { 마감월: r.마감월 } : {}) /* 🗓 2026-11-25 실적 달 = 청구월 */, 수금: paid != null ? paid : (r.정산상태 && typeof r.정산상태 === "object" ? r.정산상태[orderDate(r).slice(0, 7)] : "") === "정산완료", 상차일: orderDate(r), 거래처명: r.거래처명 || "", 청구운임: r.청구운임 || 0, 기사운임: r.기사운임 || 0, 지게차비용: r.지게차비용 || "", ...(Array.isArray(r.특수운임) && r.특수운임.length ? { 특수운임: r.특수운임 } : {}), 상차지명: r.상차지명 || "", 하차지명: r.하차지명 || "", 차량종류: r.차량종류 || "", 차량톤수: r.차량톤수 || "" });
 
 export function useSalesOrders(company, liveRows = []) {
   const co = String(company || "").trim();

@@ -7,7 +7,7 @@
 //    장부가 없는 달은 고정비(acctRecurring 지출)로 대신 채우고 "추정"으로 표시
 //  · 미수: 올해 배차완료 + 고정거래처 청구액(부가세 포함) − 수금 기록(acctPayments) · 오래된 청구부터 수금된 것으로 본다(src/arAging.js 공용)
 import { receivablesOf } from "./arAging"; // ⭐ 2026-11-07 미수금 공용 계산
-import { isSalesOrder } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료)
+import { isSalesOrder, salesMonthOf } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료)
 import { orderProfit, paidOut } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
 import { addDay, dayDiff, rangeDays, isBizDay, toWon, dateOf, isCancelledOrder, isDone, normPlate, prevYm } from "./dailyReportCore";
 
@@ -64,7 +64,7 @@ export function plMonthly({ rows, fleet, ledger, recurring, months }) {
   const out = Object.fromEntries(months.map((m) => [m, { m, sale: 0, own: 0, hire: 0, paid: 0, cnt: 0, sga: {}, sgaTotal: 0, est: false }]));
   rows.forEach((r) => {
     if (!isSalesOrder(r)) return; // 📏 2026-11-25 배차완료만
-    const m = ymOf(dateOf(r)); if (!set.has(m)) return;
+    const m = salesMonthOf(r); if (!set.has(m)) return; // 🗓 2026-11-25 달 = 청구월(마감월 · 매출관리 · 미수금과 같은 달)
     const e = out[m]; const pay = toWon(r.기사운임);
     e.sale += toWon(r.청구운임); e.cnt += 1;
     if (fleet.has(normPlate(r.차량번호))) e.own += pay; else e.hire += pay;
@@ -206,7 +206,7 @@ export function salesTrend(rows, today, months) {
   const first = {}; const last = {}; const byM = {}; const cntAll = {};
   rows.forEach((r) => {
     if (!isSalesOrder(r)) return; // 📏 2026-11-25 배차완료만
-    const c = clientOf(r); if (c === "미지정") return; const d = dateOf(r); const m = ymOf(d);
+    const c = clientOf(r); if (c === "미지정") return; const d = dateOf(r); const m = salesMonthOf(r); // 🗓 월 매출 = 청구월
     if (!first[c] || d < first[c]) first[c] = d; if (!last[c] || d > last[c]) last[c] = d;
     const e = byM[c] || (byM[c] = {}); e[m] = (e[m] || 0) + toWon(r.청구운임); cntAll[c] = (cntAll[c] || 0) + 1;
   });

@@ -8,7 +8,7 @@
 //  · functions/dailyReport.js에 같은 규칙(CommonJS 복사본)이 있다 — 바꾸면 둘 다 고친다
 import { getNationalHolidayLabel } from "./attendanceUtils";
 import { orderProfit, fkNum } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(배차표 수수료와 같은 식)
-import { isSalesOrder } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료) — 매출관리 · 홈 · 서버와 같은 함수
+import { isSalesOrder, salesBillDateOf } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료) — 매출관리 · 홈 · 서버와 같은 함수
 import { buildPastStats } from "./pastStats"; // ⚡ 2026-11-24 HomeDeck(차트 포함) 대신 계산만 있는 작은 파일 — 같은 함수 // 기존 경영 브리핑·홈과 같은 일별 매출·수익 계산
 
 export const DOW = ["일", "월", "화", "수", "목", "금", "토"];
@@ -113,7 +113,10 @@ export function aggregate(rows) {
   }
   const past = buildPastStats(live, "");
   Object.entries(past.days).forEach(([d, v]) => { const e = byDay[d] || (byDay[d] = { sale: 0, profit: 0, done: 0, all: 0, cancel: 0 }); e.sale = v[0]; e.profit = v[1]; e.all = v[2]; });
-  return { byDay, byClientDay };
+  // 🗓 2026-11-25 청구일별(청구월 기준 — 이월 오더는 청구월 1일) 매출 · 수익 — 월 누계 · 월 예상용(매출관리 · 미수금과 같은 달)
+  const byBill = {};
+  Object.entries(past.bill).forEach(([d, v]) => { byBill[d] = { sale: v[0], profit: v[1] }; });
+  return { byDay, byClientDay, byBill };
 }
 const z = () => ({ sale: 0, profit: 0, done: 0, all: 0, cancel: 0 });
 export function sumDays(byDay, days) {
@@ -140,7 +143,7 @@ export const prevYm = (ym) => { const d = new Date(`${ym}-01T00:00:00Z`); d.setU
 
 // 보고서 숫자 전체(오더 기반) — 화면이 다른 데이터(근태·자금 등)를 더 붙인다
 export function buildReport({ rows, basis, monthlyTarget = 0 }) {
-  const { byDay, byClientDay } = aggregate(rows);
+  const { byDay, byClientDay, byBill } = aggregate(rows);
   const cur = sumDays(byDay, basis.days);
   const p1 = sumDays(byDay, basis.prev1);
   const p7 = sumDays(byDay, basis.prev7);
@@ -154,14 +157,15 @@ export function buildReport({ rows, basis, monthlyTarget = 0 }) {
   // 월 누계(영업일 기준)
   const ym = basis.end.slice(0, 7);
   const pym = prevYm(ym);
-  const cumCur = bizCumulative(byDay, ym, basis.end);
-  const cumPrev = bizCumulative(byDay, pym);
+  // 🗓 월 누계 · 전월 같은 기간 · 월 예상은 청구월 기준(byBill) — 일 매출(cur · 14일 · 30일 그래프)은 상차일(byDay)
+  const cumCur = bizCumulative(byBill, ym, basis.end);
+  const cumPrev = bizCumulative(byBill, pym);
   const elapsed = cumCur.length;
   const mtd = cumCur[elapsed - 1] || 0;
   const prevSame = elapsed ? (cumPrev[Math.min(elapsed, cumPrev.length) - 1] || 0) : 0;
   const totalBiz = bizDaysInMonth(ym);
   const forecast = elapsed ? (mtd / elapsed) * totalBiz : 0;
-  const mtdProfit = rangeDays(`${ym}-01`, basis.end).reduce((s, d) => s + (byDay[d]?.profit || 0), 0);
+  const mtdProfit = rangeDays(`${ym}-01`, basis.end).reduce((s, d) => s + (byBill[d]?.profit || 0), 0);
   // 거래처(기준 기간) — 증감은 최근 4주 같은 요일(같은 기간) 평균 대비
   const cl = {};
   basis.days.forEach((d) => Object.entries(byClientDay[d] || {}).forEach(([c, v]) => { const e = cl[c] || (cl[c] = [0, 0, 0]); e[0] += v[0]; e[1] += v[1]; e[2] += v[2]; }));
@@ -180,7 +184,7 @@ export function buildReport({ rows, basis, monthlyTarget = 0 }) {
     const s = saleOf(r); if (isSalesOrder(r) && s > 0 && (profitOf(r) / s) * 100 < 5) lowOrders.push(r); // 📏 저마진도 배차완료 오더만(기사운임 빈 미배차는 수익이 부풀려 보인다)
   });
   return {
-    basis, cur, p1, p7, spanDays, byDay, byClientDay,
+    basis, cur, p1, p7, spanDays, byDay, byClientDay, byBill,
     spark: { sale: spark((v) => v.sale), profit: spark((v) => v.profit), margin: spark(marginOf), orders: spark((v) => v.all) },
     d30, weekdayAvg,
     month: { ym, pym, cumCur, cumPrev, elapsed, totalBiz, mtd, mtdProfit, prevSame, forecast, target: monthlyTarget, d: pctChange(mtd, prevSame) },
@@ -192,10 +196,11 @@ export function buildReport({ rows, basis, monthlyTarget = 0 }) {
 
 // ── 담당자별 매출(매출관리·홈 담당자 순위와 같은 오더 기준: 📏 2026-11-25 배차완료(isSalesOrder), 청구운임 = 매출, orderProfit = 수익) ──
 //  staffOf(r) → 담당자 이름(등록한 직원 · src/detailGetters.js orderStaffNameRaw). 빈 값은 "미지정".
-export function staffStats(rows, days, staffOf) {
+//  byBill: true 면 청구일(청구월 기준 · 이월 오더는 청구월 1일)로 기간을 본다 — 달 비교(이번 달 누계 vs 전월)용. 기본은 상차일(하루 · 며칠 기준)
+export function staffStats(rows, days, staffOf, byBill = false) {
   const set = new Set(days); const seen = new Set(); const m = {};
   for (const r of rows || []) {
-    const d = dateOf(r); if (!set.has(d)) continue;
+    const d = byBill && isSalesOrder(r) ? salesBillDateOf(r) : dateOf(r); if (!set.has(d)) continue;
     const k = r._id ? `${r.__col || ""}/${r._id}` : null;
     if (k) { if (seen.has(k)) continue; seen.add(k); }
     if (!isSalesOrder(r) || r.__fixed) continue; // 📏 2026-11-25 배차완료만 · 고정거래처(담당 없음)는 담당자 순위에서 뺀다
@@ -206,8 +211,8 @@ export function staffStats(rows, days, staffOf) {
   return m;
 }
 // 지금 기간 vs 전 기간 → 순위 목록(매출 순)
-export function staffRanking(rows, curDays, prevDays, staffOf, hide = () => false) {
-  const a = staffStats(rows, curDays, staffOf); const b = staffStats(rows, prevDays, staffOf);
+export function staffRanking(rows, curDays, prevDays, staffOf, hide = () => false, byBill = false) {
+  const a = staffStats(rows, curDays, staffOf, byBill); const b = staffStats(rows, prevDays, staffOf, byBill);
   const list = Object.values(a).filter((x) => !hide(x.n)).map((x) => ({ ...x, margin: x.sale ? (x.profit / x.sale) * 100 : 0, prev: b[x.n]?.sale || 0, d: pctChange(x.sale, b[x.n]?.sale || 0) })).sort((p, q) => q.sale - p.sale);
   const total = list.reduce((s, x) => s + x.sale, 0);
   const prevTotal = Object.values(b).filter((x) => !hide(x.n)).reduce((s, x) => s + x.sale, 0);

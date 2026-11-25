@@ -72,7 +72,7 @@ const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 function readPastCache(company, liveStart) {
   try {
     const c = JSON.parse(localStorage.getItem("homePastStats") || "null");
-    return c && c.v === 5 && c.company === company && c.liveStart === liveStart && c.calYear === new Date().getFullYear() ? c : null;
+    return c && c.v === 6 && c.company === company && c.liveStart === liveStart && c.calYear === new Date().getFullYear() ? c : null;
   } catch { return null; }
 }
 // 올해 일별 매출·이익·건수 = 지난 기간(하루 1번 계산해 둔 값) + 실시간 오더
@@ -88,12 +88,12 @@ export function useYearDays({ company, dispatchData = [], pastCache, liveStart, 
     if (past && (past.cs || "") === carrierF.sig) return undefined; // ⭐ 2026-11-05 운송업체 설정이 바뀌면 다시 계산
     let alive = true;
     const y = new Date().getFullYear();
-    Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${y}-01-01`), where("상차일", "<=", pcPrevDay(ls))))))
+    Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${y - 1}-12-01`) /* 🗓 2026-11-25 1월 청구(작년 12월 상차 · 이월) 오더까지 — 달 매출 = 청구월 */, where("상차일", "<=", pcPrevDay(ls))))))
       .then((snaps) => {
         const rows = snaps.flatMap((sn) => sn.docs.map((d) => d.data() || {})).filter((r) => (r.companyName || DEFAULT_COMPANY) === company && r.source !== "transport_transmit" && !isCancelled(r) && carrierF.isCountable(r));
         const thisMonth = kstToday().slice(0, 7);
         const sum = rows.reduce((a, r) => ({ year: a.year + (isSalesOrder(r) ? toWon(r.청구운임) : 0) }), { year: 0 }); // 📏 2026-11-25 배차완료만
-        const c = { ...sum, ...buildPastStats(rows, thisMonth), v: 5, company, liveStart: ls, calYear: y, savedAt: Date.now(), cs: carrierF.sig };
+        const c = { ...sum, ...buildPastStats(rows, thisMonth), v: 6, company, liveStart: ls, calYear: y, savedAt: Date.now(), cs: carrierF.sig };
         if (alive) setPast(c);
       })
       .catch(() => { if (alive) setPast({ days: {}, clients: {}, month: "", cs: carrierF.sig }); });
@@ -110,7 +110,10 @@ export function useYearDays({ company, dispatchData = [], pastCache, liveStart, 
     const clients = {};
     if (past?.month === thisMonth) Object.entries(past.clients || {}).forEach(([k, v]) => { clients[k] = (clients[k] || 0) + v; });
     [live, fx].forEach((x) => Object.entries(x.clients).forEach(([k, v]) => { clients[k] = (clients[k] || 0) + v; }));
-    return { days, clients, ready: !!past };
+    // 🗓 2026-11-25 청구일별 매출 · 이익(달 · 연 합계 = 청구월(마감월) 기준) — 지난 기간(상차일 < ls) + 실시간 + 고정거래처
+    const bill = {};
+    [past?.bill, live.bill, fx.bill].forEach((src) => Object.entries(src || {}).forEach(([d, v]) => { const e = bill[d] || (bill[d] = [0, 0]); e[0] += v[0]; e[1] += v[1]; }));
+    return { days, bill, clients, ready: !!past };
   }, [past, dispatchData, ls, carrierF, fixedLive, fixed]);
 }
 function useCompanyQuery(name, company, field = "companyName", extra = null) {
@@ -316,7 +319,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
   const prevMonth = (() => { const d = new Date(`${thisMonth}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7); })();
   const data = demo ? demo.rows : dispatchData;
   const demoPast = React.useMemo(() => (demo ? { days: {}, clients: {}, month: "", cs: "" } : null), [demo]);
-  const { days, clients, ready } = useYearDays({ company, dispatchData: data, pastCache: demo ? demoPast : pastCache, liveStart: demo ? `${year}-01-01` : liveStart, fixed: !demo });
+  const { days, bill, clients, ready } = useYearDays({ company, dispatchData: data, pastCache: demo ? demoPast : pastCache, liveStart: demo ? `${year}-01-01` : liveStart, fixed: !demo });
   const co = demo ? "" : company;
   const meX = demo ? { ...demo.me, ...Object.fromEntries(Object.entries(me || {}).filter(([, v]) => v)) } : me || {};
   const isCeo = isCeoPosition(meX?.position);
@@ -356,7 +359,8 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
   // ── 매출 · 이익(홈과 같은 집계: 지난 기간 저장값 + 실시간) ──
   const dayNo = Number(today.slice(8, 10));
   const dim = new Date(Date.UTC(Number(thisMonth.slice(0, 4)), Number(thisMonth.slice(5, 7)), 0)).getUTCDate();
-  const sumWhere = (fn) => Object.entries(days).reduce((a, [d, v]) => (fn(d) ? [a[0] + v[0], a[1] + v[1], a[2] + v[2]] : a), [0, 0, 0]);
+  // 🗓 2026-11-25 달 · 연 합계: 매출 · 이익 = 청구일(bill · 청구월 기준), 건수 = 상차일(days)
+  const sumWhere = (fn) => { const b = Object.entries(bill).reduce((a, [d, v]) => (fn(d) ? [a[0] + v[0], a[1] + v[1]] : a), [0, 0]); const c = Object.entries(days).reduce((a, [d, v]) => (fn(d) ? a + v[2] : a), 0); return [b[0], b[1], c]; };
   const [mSale, mProfit, mCnt] = sumWhere((d) => d.startsWith(thisMonth));
   const [pSale, pProfit] = sumWhere((d) => d.startsWith(prevMonth) && Number(d.slice(8, 10)) <= dayNo);
   const [ySale, yProfit, yCnt] = sumWhere((d) => d.startsWith(year));
@@ -421,7 +425,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
   const nameMap = useUserNameMap();
   const staffOf = React.useCallback((r) => { const n = orderStaffNameRaw(r, nameMap); return (n && n !== ORDER_MGR_FIXED ? n : "") || String(r?.배차확정자 || "").trim() || n || "미지정"; }, [nameMap]);
   const teamByName = React.useMemo(() => { const m = {}; staff.forEach((u) => { const n = String(personName(u) || u.name || "").trim(); if (n) m[n] = String(u.team || "").trim(); }); return m; }, [staff]);
-  const rank = React.useMemo(() => { const sp = monthSpans(today); return staffRanking(rows, sp.cur, sp.prev, staffOf, (n) => n === "최고관리자"); }, [rows, today, staffOf]);
+  const rank = React.useMemo(() => { const sp = monthSpans(today); return staffRanking(rows, sp.cur, sp.prev, staffOf, (n) => n === "최고관리자", true); /* 🗓 청구월 기준 */ }, [rows, today, staffOf]);
   const teamRows = React.useMemo(() => teamContribution(rank.list, (n) => teamByName[n] || ""), [rank, teamByName]);
 
   // ── 거래처 ──
@@ -499,7 +503,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
           <BTile en="YEAR TO DATE" label="올해 누적 매출" money={ySale} foot={<>매출총이익 <b style={{ ...EX_NUM, color: pColor(yProfit) }}>{fmtMoney(yProfit)}</b> · {fmtPct(yMargin)}</>} />
         </ExecKpis>
         {/* ⭐ 2026-11-07 규칙 점검 — 매출관리(배차완료만)와 숫자가 다른 이유를 화면에 적어 둔다 */}
-        <Basis className="mt-2.5 px-1"><span data-kp="exec-basis">매출 기준: 배차완료 오더 + 고정거래처(매출관리와 같음 · 배차중 · 미배차 · 취소 제외, 상차일 기준) · 오더 건수는 취소를 뺀 전체 오더</span>{isCeo && F.has ? " · 보유 자금은 경리 입력 예금 · 현금 잔액 기준" : ""}</Basis>
+        <Basis className="mt-2.5 px-1"><span data-kp="exec-basis">매출 기준: 배차완료 오더 + 고정거래처(매출관리와 같음 · 배차중 · 미배차 · 취소 제외) · 달 · 연 매출은 청구월(마감월), 일 매출은 상차일 · 오더 건수는 취소를 뺀 전체 오더</span>{isCeo && F.has ? " · 보유 자금은 경리 입력 예금 · 현금 잔액 기준" : ""}</Basis>
       </div>
 
       {/* 🌦 2026-11-18 운행 지역 날씨 — 임원 화면(골드) · 오늘 · 내일 오더 지역 · 기상특보 */}

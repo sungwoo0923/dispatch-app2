@@ -70,7 +70,9 @@ module.exports = function makeDailyReport({ db, FieldValue, sendPushAndCleanup, 
   async function companyNumbers(co, today, p) {
     const b = basisOf(today, p);
     const ym = b.end.slice(0, 7);
-    const from = [`${ym}-01`, b.prev7[0], b.prev1[0]].sort()[0];
+    // 🗓 2026-11-25 월 누계는 청구월(마감월) 기준 — 지난달 상차 · 이번 달 마감(이월) 오더도 읽게 한 달 앞부터
+    const pmFirst = (() => { const x = new Date(`${ym}-01T00:00:00Z`); x.setUTCMonth(x.getUTCMonth() - 1); return x.toISOString().slice(0, 10); })();
+    const from = [pmFirst, b.prev7[0], b.prev1[0]].sort()[0];
     const setting = (await db.collection("routeCarrierSettings").doc(co).get().catch(() => null))?.data() || null;
     const countable = makeIsCountable(setting);
     const rows = [];
@@ -84,7 +86,7 @@ module.exports = function makeDailyReport({ db, FieldValue, sendPushAndCleanup, 
     const fixedQ = co === defaultCompany ? db.collection("fixedClients") : db.collection("fixedClients").where("companyName", "==", co); // 회사명 없는 예전 문서 = 기본 회사
     const fixedSnap = await fixedQ.get().catch(() => ({ docs: [] }));
     const fixedRaw = fixedSnap.docs.map((d) => d.data() || {}).filter((r) => (r.companyName || defaultCompany) === co);
-    const byDay = {};
+    const byDay = {}; const byBill = {}; // byBill[청구일] = 매출(청구월 안의 날짜 · 이월은 1일 — 화면 dailyReportCore 와 같다)
     const P = await import("./profitCore.mjs"); // ⭐ 2026-11-17 화면과 같은 수익 식
     const SR = await import("./salesRule.mjs"); // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료) — 화면과 같은 파일
     rows.forEach((r) => {
@@ -93,14 +95,16 @@ module.exports = function makeDailyReport({ db, FieldValue, sendPushAndCleanup, 
       const e = byDay[d] || (byDay[d] = [0, 0, 0]); e[2] += 1; // 오더 건수는 취소 뺀 전체(운영 숫자)
       if (!SR.isSalesOrder(r)) return; // 매출 · 수익은 배차완료만
       e[0] += toWon(r.청구운임); e[1] += P.orderProfit(r);
+      const bd = SR.salesBillDateOf(r); if (bd) byBill[bd] = (byBill[bd] || 0) + toWon(r.청구운임);
     });
     SR.fixedSalesRows(fixedRaw).forEach((r) => {
       const d = dateOf(r); if (!d || d < from || d > today) return;
       const e = byDay[d] || (byDay[d] = [0, 0, 0]); e[0] += toWon(r.청구운임); e[1] += P.orderProfit(r);
+      byBill[d] = (byBill[d] || 0) + toWon(r.청구운임);
     });
     const sum = (days) => days.reduce((a, d) => { const v = byDay[d]; return v ? [a[0] + v[0], a[1] + v[1], a[2] + v[2]] : a; }, [0, 0, 0]);
     const cur = sum(b.days); const p7 = sum(b.prev7);
-    const mtd = range(`${ym}-01`, b.end).reduce((s, d) => s + (byDay[d]?.[0] || 0), 0);
+    const mtd = range(`${ym}-01`, b.end).reduce((s, d) => s + (byBill[d] || 0), 0); // 🗓 청구월 누계
     const cs = (await db.collection("companySettings").doc(co).get().catch(() => null))?.data() || {};
     const target = (Number(cs?.매출목표?.순수매출목표) || 0) / 12;
     return { b, cur, p7, mtd, target };

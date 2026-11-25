@@ -447,7 +447,7 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
   const [pastCache, setPastCache] = useState(() => {
     try {
       const c = JSON.parse(localStorage.getItem("homePastStats") || "null");
-      return c && c.v === 5 && c.company === homeCompany && c.liveStart === liveStartStr && c.calYear === new Date().getFullYear() && (!carrierF.ready || (c.cs || "") === carrierF.sig) ? c : null;
+      return c && c.v === 6 && c.company === homeCompany && c.liveStart === liveStartStr && c.calYear === new Date().getFullYear() && (!carrierF.ready || (c.cs || "") === carrierF.sig) ? c : null;
     } catch { return null; }
   });
   useEffect(() => {
@@ -459,13 +459,13 @@ export default function HomeDashboard({ role, user, userCompany = "", pending, d
     const recompute = () => {
       const y = new Date().getFullYear();
       const end = pcPrevDay(liveStartStr);
-      return Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${y}-01-01`), where("상차일", "<=", end)))))
+      return Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${y - 1}-12-01`) /* 🗓 2026-11-25 1월 청구(작년 12월 상차 · 이월) 오더까지 — 달 매출 = 청구월 */, where("상차일", "<=", end)))))
         .then((snaps) => {
           const rows = snaps.flatMap((sn) => sn.docs.map((d) => d.data() || {})).filter((row) =>
             (row.companyName || DEFAULT_COMPANY) === homeCompany &&
             row.source !== "transport_transmit" && row.배차상태 !== "배차취소" && !["취소", "배차취소", "오더취소", "취소됨"].includes(row.상태) &&
             carrierF.isCountable(row)); // ⭐ 2026-11-05 운송업체 설정
-          const c = { ...sumStats(rows), ...buildPastStats(rows, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7)), v: 5, company: homeCompany, liveStart: liveStartStr, calYear: y, savedAt: Date.now(), cs: carrierF.sig };
+          const c = { ...sumStats(rows), ...buildPastStats(rows, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7)), v: 6, company: homeCompany, liveStart: liveStartStr, calYear: y, savedAt: Date.now(), cs: carrierF.sig };
           try { localStorage.setItem("homePastStats", JSON.stringify(c)); } catch { /* 용량 초과 등은 무시 */ }
           if (alive) setPastCache(c);
         })
