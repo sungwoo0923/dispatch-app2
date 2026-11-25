@@ -3253,7 +3253,7 @@ import { SpecialFareTag, SpecialFareLine } from "./specialFareTag";
 import { FareShell, FareCard, FareRange, FareRow, FareVias, FareFilterPills, fareStats as calcFareStats } from "./FareResultUi"; // ⚠ 이 파일에 같은 이름 상태값(fareStats)이 있어 다른 이름으로 // 🎨 2026-11-24 운임조회 결과 창 새 디자인 // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import { withRoutePresets } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
 import { fareBreakdown } from "./forkliftCore"; // 🧾 2026-11-24 운임정보 운임 내역
-import { SpecialFareButton, ForkliftChip, ForkliftMark, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount, orderProfit, profitTotals } from "./forklift"; // 🏗 2026-11-09 지게차비용 · ⭐ 2026-11-17 수수료 한 식(orderProfit · profitTotals)
+import { SpecialFareButton, ForkliftChip, ForkliftMark, paidOut, hasSpecial, ForkliftDriverManager, ForkliftPayouts, forkliftApply, forkliftExcelCols, hasForklift, fkAmount, orderProfit, profitTotals, fkNum } from "./forklift"; // 🏗 2026-11-09 지게차비용 · ⭐ 2026-11-17 수수료 한 식(orderProfit · profitTotals)
 import { useTableSort, sortRows, SortTh } from "./tableSort";
 import { useCompanyFeatures } from "./companyFeatures";
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합 현황) — 회사가 쓰는 영역에 따라 상단 메뉴가 바뀐다(src/bizModules.js)
@@ -4009,7 +4009,7 @@ function KpSideMenu({ open, onOpen, onClose, menuState, active, onSelect, compan
 function KpDeleteConfirm({ rows = [], note = "삭제 후에도 되돌리기로 복구할 수 있습니다", onCancel, onConfirm }) {
   const list = rows.filter(Boolean);
   const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}`;
-  const sum = list.reduce((a, r) => { a.sale += Number(r.청구운임) || 0; a.drv += Number(r.기사운임) || 0; return a; }, { sale: 0, drv: 0 });
+  const sum = profitTotals(list); // 🛠 2026-11-25 줄 수수료와 같은 식(청구 − 기사 − 지게차·특수운임 회사 지급분) · "500,000" 같은 글자 금액도 — 예전엔 Number()라 쉼표 있는 금액이 0이 됐다
   return (
     <div
       className="fixed inset-0 z-[99999] flex items-center justify-center bg-[#0F1A30]/45 backdrop-blur-[2px]"
@@ -4033,7 +4033,7 @@ function KpDeleteConfirm({ rows = [], note = "삭제 후에도 되돌리기로 �
           </div>
         </div>
         <div className="mx-7 grid grid-cols-3 rounded-2xl border border-[#E3E8F0] overflow-hidden">
-          {[["청구 합계", sum.sale], ["기사 합계", sum.drv], ["수수료", sum.sale - sum.drv]].map(([k, v], i) => (
+          {[["청구 합계", sum.sale], ["기사 합계", sum.drv], ["수수료", sum.fee]].map(([k, v], i) => (
             <div key={k} className={`px-4 py-2.5 text-center ${i ? "border-l border-[#E3E8F0]" : ""}`}>
               <div className="text-[11.5px] font-bold text-[#7A879C]">{k}</div>
               <div className="text-[16px] font-black text-[#0F1A30] tabular-nums">{won(v)}<span className="text-[11px] font-bold text-[#9AA9C3] ml-0.5">원</span></div>
@@ -6336,10 +6336,8 @@ const RichStatusBadge = ({ s, urgent, cancelReq, editReq, onCancelClick, onEditC
   );
 };
 
-export const toInt = (v) => {
-  const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
-  return isNaN(n) ? 0 : n;
-};
+// 🛠 2026-11-25 금액 읽기 = fkNum(functions/profitCore.mjs)과 같게 — 예전엔 소수점을 지워 "181818.18"(엑셀 계산 값)이 18,181,818이 됐다
+export const toInt = (v) => fkNum(v);
 export const fmtWon = (n) => `${Number(n || 0).toLocaleString()}원`;
 // 📌 전화번호 하이픈 자동 적용 함수 (프로그램 공용 — 입력 중에도 단계적으로 하이픈)
 //  · 010-1234-5678 / 011-123-4567 / 02-123-4567 / 02-1234-5678 / 031-123-4567
@@ -8553,11 +8551,9 @@ useEffect(() => {
     let totalProfit = 0;
 
     myOrders.forEach(o => {
-      const fare = Number(o?.청구운임 || 0);
-      const driverFee = Number(o?.기사운임 || 0);
-
-      totalRevenue += fare;
-      totalProfit += fare - driverFee;
+      // 🛠 2026-11-25 글자 금액("500,000")도 · 수익 = 줄 수수료(orderProfit) — 예전엔 Number()라 쉼표가 있으면 NaN, 지게차·외부 지급분도 안 뺐다
+      totalRevenue += fkNum(o?.청구운임);
+      totalProfit += orderProfit(o);
     });
 
     return {
@@ -8634,11 +8630,10 @@ useEffect(() => {
     return list.reduce(
       (acc, o) => {
         const fare = toInt(o?.청구운임);
-        const driverFee = toInt(o?.기사운임);
 
         acc.count += 1;
         acc.revenue += fare;
-        acc.profit += fare - driverFee;
+        acc.profit += orderProfit(o); // 🛠 2026-11-25 지게차·외부 특수운임(회사 지급분)까지 뺀 줄 수수료 — 배차현황과 같은 식
 
         return acc;
       },
@@ -10114,7 +10109,7 @@ return (
               upsertDriver={upsertDriver} upsertClient={upsertClientSafe} isViewer={isViewer} setCargoAddPopup={setCargoAddPopup} approvedShippers={approvedShippers} />
           )}
           {/* 🧭 정산 홈 — 월 마감 진행판 · 미수 경과 · 거래처 원장(기존 화면은 그대로, 여기서 바로 간다) */}
-          {정산관리Tab === "홈" && <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><SettleHome orders={settleRows} company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} onGo={(k, d) => { set정산관리Tab(k); if (d) setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: d })), 60); }} depositOn={betaPayOn} /></React.Suspense>}
+          {정산관리Tab === "홈" && <React.Suspense fallback={<div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>}><SettleHome orders={settleRows} drivers={drivers} company={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} onGo={(k, d) => { set정산관리Tab(k); if (d) setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: d })), 60); }} depositOn={betaPayOn} /></React.Suspense>}
           {/* 🛠 2026-11-16 마감 검증 탭은 없앴다 — 배차자가 넘긴 거래처는 거래처정산에 "배차 마감"으로 보인다 */}
           {정산관리Tab === "지게차지급" && <ForkliftPayouts orders={settleRows} patchDispatch={patchDispatchSafe} isViewer={isViewer} />}
           {정산관리Tab === "입금확인" && betaPayOn && <CallDepositDesk orders={settleRows} patchDispatch={patchDispatchSafe} isViewer={isViewer} company={userCompany} onAttach={(r) => setDeskAttachId(r._id || r.id)} />}
@@ -11619,19 +11614,18 @@ const { doingList, pendingList, urgentList } = React.useMemo(() => ({
 }), [todayRows]);
 
 // 🚚 유통 데이터
-const money = (text) => {
-  const n = Number(String(text || "0").replace(/[^\d]/g, ""));
-  return isNaN(n) ? 0 : n;
-};
 const stripUndefined = (obj) =>
   Object.fromEntries(
     Object.entries(obj).filter(([, v]) => v !== undefined)
   );
 // 매출/기사비용/마진율
-const todayRevenue = todayRows.reduce((sum, r) => sum + money(r.청구운임), 0);
-const todayDriverCost = todayRows.reduce((sum, r) => sum + money(r.기사운임), 0);
+// 🛠 2026-11-25 수수료 = 줄 수수료 합(청구 − 기사 − 지게차·특수운임 회사 지급분) — 예전엔 청구 − 기사라 배차현황 칩보다 지게차비만큼 컸다
+const todayFareT = profitTotals(todayRows);
+const todayRevenue = todayFareT.sale;
+const todayDriverCost = todayFareT.drv;
+const todayFee = todayFareT.fee;
 const todayMarginRate = todayRevenue
-  ? ((todayRevenue - todayDriverCost) / todayRevenue) * 100
+  ? (todayFee / todayRevenue) * 100
   : 0;
 // 🔹 Top 거래처/하차지 통계
 const topClients = Object.entries(
@@ -19403,7 +19397,7 @@ className={`
       {[
         { label: "청구", val: todayRevenue },
         { label: "기사비용", val: todayDriverCost },
-        { label: "수수료", val: todayRevenue - todayDriverCost },
+        { label: "수수료", val: todayFee },
       ].map(({ label, val }) => (
         <div key={label} className="px-3 py-1.5 flex justify-between items-center border-b border-gray-50 last:border-0">
           <span className="text-[10px] text-gray-500 font-medium">{label}</span>
@@ -27529,10 +27523,7 @@ const handleUrgentSnooze = (minutes) => {
   // ------------------------
   // 숫자 변환
   // ------------------------
-  const toInt = (v) => {
-    const n = parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10);
-    return isNaN(n) ? 0 : n;
-  };
+  const toInt = (v) => fkNum(v); // 🛠 2026-11-25 수수료 칩(profitTotals)과 같은 금액 읽기(소수점 반올림)
   const formatComma = (n) => {
     const v = toInt(n);
     return v.toLocaleString();
@@ -36211,7 +36202,7 @@ if (mode === "driver") {
     독차: false,
   });
 
-  const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const toInt = (v) => fkNum(v); // 🛠 2026-11-25 수수료 칩(profitTotals)과 같은 금액 읽기 — 엑셀 업로드의 소수점 금액(181818.18)이 18,181,818로 들어가던 것 고침
   const getId = (r) => r._id || r.id || r._fsid;
   // 🕘 변경 이력 1건 생성
   const makeHistory = ({ field, before, after }) => ({
@@ -44910,8 +44901,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
     [clients, places]
   );
 
-  const toInt = (v) =>
-    parseInt(String(v || "0").replace(/[^\d-]/g, ""), 10) || 0;
+  const toInt = (v) => fkNum(v); // 🛠 2026-11-25 수수료(orderProfit)와 같은 금액 읽기(소수점 반올림)
   const sum = (list, key) => list.reduce((a, r) => a + toInt(r[key]), 0);
   const profitRate = (sale, profit) =>
     sale === 0 ? 0 : (profit / sale) * 100;

@@ -2,8 +2,9 @@
 // 💳 미수·미지급 입금(수금·지급) 처리 기록 — 2026-11-01 회사별로 분리
 //  예전에는 연도("2026") 문서 하나를 모든 운송사가 같이 써서 서로 덮어썼다.
 //  이제 "회사__연도" 문서에 저장하고, 예전 연도 문서는 우리 회사 것일 때만 읽어 이어 쓴다.
-import { doc, getDoc, setDoc, arrayUnion } from "firebase/firestore";
-import { auth } from "./firebase";
+import React from "react";
+import { doc, getDoc, setDoc, arrayUnion, collection, onSnapshot, query, where } from "firebase/firestore";
+import { auth, db } from "./firebase";
 import { getTenant } from "./fsTenant";
 import { DEFAULT_COMPANY } from "./firebase";
 
@@ -31,6 +32,18 @@ export function saveAcctPayments(db, year, company, ar, ap, entry) {
   const co = coOf(company);
   const log = entry && entry.name ? { log: arrayUnion({ type: entry.type === "ap" ? "ap" : "ar", name: String(entry.name), amount: Number(entry.amount) || 0, ...(entry.reset ? { reset: true } : {}), at: Date.now(), by: auth?.currentUser?.email || "" }) } : {};
   return setDoc(doc(db, "acctPayments", payDocId(year, co)), { ar, ap, companyName: co, year: Number(year), ...log }, { merge: true });
+}
+
+// 🔗 2026-11-25 거래처정산 › 미수금관리 입금 기록(arPayments, 은행 자동 매칭 포함) — 회계관리 미수금이 같이 본다(arAging.paidWithSettled)
+//  읽기 권한이 없으면 빈 목록(회계 미수금은 예전처럼 오더의 정산완료 · 입금완료만 본다)
+export function useArPayments(company) {
+  const co = coOf(company);
+  const [rows, setRows] = React.useState([]);
+  React.useEffect(() => {
+    if (!co) { setRows([]); return undefined; }
+    return onSnapshot(query(collection(db, "arPayments"), where("company", "==", co)), (s) => setRows(s.docs.map((d) => d.data() || {})), () => setRows([]));
+  }, [co]);
+  return rows;
 }
 
 // 📊 손익보고서 수동 입력(plManual) — 같은 문제(연도 문서 공유) → "회사__연도"

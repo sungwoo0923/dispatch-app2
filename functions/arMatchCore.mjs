@@ -11,6 +11,7 @@
 //  · 자동 반영은 "이름(또는 별칭)이 맞고 딱 맞게 정산되는 입금"만 — 나머지는 사람이 확인
 
 export const AR_MATCH_TOL = 10;
+const AR_DEAD = ["취소", "배차취소", "오더취소", "취소됨"];
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 
 export const normalizeForMatch = (s = "") =>
@@ -33,6 +34,9 @@ export function buildArMonths({ orders = [], paidMap = new Map(), inRange = () =
   const book = new Map();
   (Array.isArray(orders) ? orders : []).forEach((r) => {
     if ((r?.배차상태 || "") !== "배차완료" || !r.거래처명 || !rowOk(r)) return;
+    // 🛠 2026-11-25 화주사 전송 사본 · 취소 오더 빼기 — 화면 목록은 이미 빠져 있지만 서버(은행 자동 매칭 bankSync)는 오더를 직접 읽어서
+    //  상태 "취소" 오더까지 청구액에 들어가 화면 미수금과 금액이 달랐다(딱 맞는 입금도 자동 반영이 안 됨)
+    if (r.source === "transport_transmit" || AR_DEAD.includes(String(r.상태 || "").trim())) return;
     const ym = String(r.상차일 || "").slice(0, 7);
     if (!ym || !inRange(ym) || r.정산상태?.[ym] === "정산완료") return;
     if (!book.has(r.거래처명)) book.set(r.거래처명, new Map());

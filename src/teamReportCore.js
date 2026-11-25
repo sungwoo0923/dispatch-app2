@@ -5,8 +5,8 @@
 //  · 비교 = 바로 앞 같은 길이 기간(이번 달이면 지난달 같은 날까지가 아니라 지난달 전체 — 보고서는 "기간 대 기간")
 //  ⚠ 이 파일은 다른 파일을 가져오지 않는다(node 테스트에서 바로 읽는다) — 아래 작은 함수들은 src/dailyReportCore.js 와 같은 식
 //    (⭐ 2026-11-17 예외: 수익 식은 functions/profitCore.mjs(가져오는 것 없음)를 forkliftCore.js 로 가져온다 — 배차표 수수료와 같은 식)
-import { orderProfit } from "./forkliftCore.js";
-const toWon = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
+import { orderProfit, fkNum } from "./forkliftCore.js";
+const toWon = (v) => fkNum(v); // 🛠 2026-11-25 수익(orderProfit)과 같은 금액 읽기(소수점 반올림)
 export const dateOf = (r) => String(r?.상차일자 || r?.상차일 || r?.상차 || "").slice(0, 10);
 export const saleOf = (r) => toWon(r?.청구운임);
 export const profitOf = (r) => orderProfit(r); // ⭐ 2026-11-17 저장된 외부지급합 대신 오더 칸에서 다시 계산 — functions/profitCore.mjs

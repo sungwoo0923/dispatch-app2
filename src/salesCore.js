@@ -7,9 +7,9 @@
 
 // ⭐ 2026-11-17 예외: 수익 식은 functions/profitCore.mjs(가져오는 것 없음)를 forkliftCore.js 로 가져온다 — 배차표 수수료와 같은 식
 //  매입(buy) = 기사운임 + 회사가 따로 지급(지게차·외부 특수운임) → 매출이익 = 매출 − 매입 = orderProfit
-import { orderProfit, orderCost } from "./forkliftCore.js";
+import { orderProfit, orderCost, fkNum } from "./forkliftCore.js";
 
-export const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
+export const toInt = (v) => fkNum(v); // 🛠 2026-11-25 매출이익(orderProfit)과 같은 금액 읽기(소수점 반올림)
 export const kstDay = (off = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(d.getUTCDate() + off); return d.toISOString().slice(0, 10); };
 export const ymOf = (off = 0, base = kstDay()) => { const d = new Date(`${String(base).slice(0, 7)}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + off); return d.toISOString().slice(0, 7); };
 export const dayGap = (a, b) => Math.round((new Date(`${b}T00:00:00Z`) - new Date(`${a}T00:00:00Z`)) / 864e5);

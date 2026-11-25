@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { register } from "node:module";
 register("./extResolve.mjs", import.meta.url); // src는 확장자 없이 가져오므로 .js를 붙여 찾게
-const { agingOf } = await import("../src/arAging.js");
+const { agingOf, paidWithSettled } = await import("../src/arAging.js");
 const { calcLeaveBalance } = await import("../src/leaveUtils.js");
 const { leaveEntitlement } = await import("../src/approvalForms.js");
 const { isUnassignedOrder, pickUnassignedOrders } = await import("../src/unassignedRule.js");
@@ -107,6 +107,33 @@ t("미수금 — 청구액 부가세 포함(거래처·청구월마다 × 1.1) �
   // 나이: 10월분 220,002 중 120,000을 먼저 받음 → 10월 남은 100,002(36일) · 11월 55,000(4일)
   assert.deepEqual([by.삼진.aging.b30, by.삼진.aging.b60, by.삼진.oldest], [55000, 100002, 36]);
   assert.equal(AR.paidAmountOf({ amount: "1,000" }), 1000);
+});
+t("🔗 회계 미수금이 정산관리 입금을 같이 본다 — 미수금관리 입금 기록(arPayments) · 정산완료 달 · 입금완료 오더", () => {
+  const orders = [
+    ord("a", "2026-10-02", "삼진", 100000, { 정산상태: { "2026-10": "정산완료" }, 정산일: { "2026-10": "2026-11-05" } }),
+    ord("b", "2026-10-20", "삼진", 200000, { 정산상태: { "2026-10": "정산완료" } }), // 10월 다 정산완료 → 330,000 받음
+    ord("c", "2026-11-03", "삼진", 500000), // 11월 일부 입금 220,000
+    ord("d", "2026-11-04", "다라", 100000, { 입금상태: "입금완료", 입금일: "2026-11-06" }), // OUT 콜 입금완료 → 110,000
+    ord("e", "2026-11-05", "다라", 200000), // 그 달 나머지는 미수
+    ord("z", "2026-11-05", "삼진", 999999, { 상태: "취소" }), // 취소는 미수에도 받은 돈에도 없음
+  ];
+  const arPayments = [{ client: "삼진", yyyymm: "2026-11", amount: 220000, depositDate: "2026-11-20" }, { client: "삼진", yyyymm: "2025-11", amount: 1 }];
+  const sp = AR.settlePaidByClient({ orders, arPayments, year: "2026" });
+  assert.equal(sp.삼진.paid, 330000 + 220000);
+  assert.deepEqual(sp.삼진.lines.map((x) => [x.ym, x.amt, x.full, x.d]), [["2026-10", 330000, true, "2026-11-05"], ["2026-11", 220000, false, "2026-11-20"]]);
+  assert.equal(sp.다라.paid, 110000);
+  // 예전 식(입금완료만)이면 삼진 미수가 880,000 그대로였다 → 이제 330,000(11월 550,000 − 220,000)
+  const list = AR.receivablesOf({ orders, paid: paidWithSettled(orders, {}, arPayments, "2026"), today: "2026-11-25" });
+  const by = Object.fromEntries(list.map((x) => [x.client, x]));
+  assert.equal(by.삼진.billed, 880000);
+  assert.equal(by.삼진.outstanding, 330000);
+  assert.equal(by.다라.outstanding, 330000 - 110000);
+  // 회계 장부 [입금 처리] 금액이 더 크면 그쪽(같은 돈을 두 번 세지 않게 큰 쪽)
+  assert.equal(paidWithSettled(orders, { 삼진: 800000 }, arPayments, "2026").삼진, 800000);
+  // 정산관리 입금이 청구액보다 커도 그 달 청구액까지만
+  assert.equal(AR.settlePaidByClient({ orders: [ord("q", "2026-11-03", "가", 100000)], arPayments: [{ client: "가", yyyymm: "2026-11", amount: 500000 }] }).가.paid, 110000);
+  // 고정거래처 줄은 정산관리 미수금관리에 없어서 받은 돈 계산에서 빠진다
+  assert.equal(AR.settlePaidByClient({ orders: [{ ...ord("f", "2026-11-01", "고정", 100000), _fixed: true, 정산상태: { "2026-11": "정산완료" } }] }).고정, undefined);
 });
 t("예상 부가세 — 계산서 매출 × 10% − 세금계산서 발행 기사 운임 × 10%", () => {
   const drivers = [{ 차량번호: "12가 3456", 세금계산서발행: true }, { 차량번호: "99나9999" }];

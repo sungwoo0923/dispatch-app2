@@ -6,11 +6,11 @@ import React, { useMemo, useState } from "react";
 import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Cell, BarChart } from "recharts";
 import { creatorOf, useStaffNames } from "./monthCompare";
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 매익률 색(플러스 빨강 · 마이너스 파랑)
-import { profitTotals, orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
+import { profitTotals, orderProfit, fkNum } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NAVY = "#1B2B4B";
-const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
+const toInt = (v) => fkNum(v); // 🛠 2026-11-25 수익(profitTotals)과 같은 금액 읽기
 const short = (n) => {
   const a = Math.abs(n || 0);
   if (a >= 1e8) return `${(n / 1e8).toFixed(2)}억`;

@@ -585,7 +585,7 @@ function MobileOrderDetailModal({ order, currentId = null, onClose }) {
         {row("상차일시", `${order.상차일 || "-"} ${order.상차시간 || "즉시"}`)}
         {row("하차일시", `${order.하차일 || order.상차일 || "-"} ${order.하차시간 || "즉시"}`)}
         {row("화물정보", [order.차량종류, order.차량톤수, order.화물내용].filter(Boolean).join(" · "))}
-        {row("기사운임", order.기사운임 ? `${Number(String(order.기사운임).replace(/[^\d]/g, "")).toLocaleString()}원` : "-")}
+        {row("기사운임", order.기사운임 ? `${(Number(String(order.기사운임).replace(/[^\d-]/g, "")) || 0).toLocaleString()}원` : "-")}
         {order.기사확인상태 === "거절" && row("거절사유", order.기사거절사유 || "사유 없음")}
       </div>
     </div>
@@ -1214,7 +1214,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                         // 머리줄(상태·거래처·운임) → 상차/하차 세로 노선 → 차량·화물·구간거리 → (진행중) 단계 진행선 + 남은거리·도착예상 한 줄
                         const ph = phaseOf(d);
                         const accepted = activeOrder.기사확인상태 === "수락" && kind === "current";
-                        const fare = Number(String(activeOrder.기사운임 ?? "").replace(/[^\d]/g, "")) || 0;
+                        const fare = Number(String(activeOrder.기사운임 ?? "").replace(/[^\d-]/g, "")) || 0; // 🛠 2026-11-25 "-180,000"(기사 차감) 부호 유지
                         const hm = (v) => { const ms = v?.toMillis ? v.toMillis() : typeof v?.seconds === "number" ? v.seconds * 1000 : 0; if (!ms) return ""; const t = new Date(ms); return `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`; };
                         const when = (date, time) => {
                           const t = time || "즉시";

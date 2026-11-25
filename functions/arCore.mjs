@@ -85,6 +85,54 @@ export function receivablesOf({ orders = [], fixedRows = [], paid = {}, today, y
   }).sort((a, b) => b.outstanding - a.outstanding);
 }
 
+// ── 🔗 2026-11-25 정산관리에서 받은 돈(거래처별 · 부가세 포함) — 회계관리 미수금이 정산관리 입금을 같이 보게 ──
+//  예전에는 회계관리 미수금이 회계 장부 [입금 처리](acctPayments)와 입금 확인 [입금완료] 오더만 봐서,
+//  거래처정산 › 미수금관리에서 넣은 입금(arPayments · 은행 자동 매칭 포함)과 [정산완료] 처리한 달이 회계에서는 계속 미수로 남았다.
+//  거래처 · 청구월(상차일 달)마다:
+//   · 그 달 오더가 모두 정산완료(정산상태.{월}) 또는 입금완료(입금상태)면 → 그 달 청구액(공급가 합 × 1.1 반올림) 전부 받은 것으로
+//   · 아니면 → 정산완료 오더 청구액 + 입금완료 오더 청구액 + 그 달 입금 기록(arPayments) 합(그 달 청구액을 넘지 않게)
+//  고정거래처 줄은 정산관리 미수금관리에 없어서 뺀다. 결과 { [거래처]: { paid, lines: [{ d, ym, amt, full }] } }
+export function settlePaidByClient({ orders = [], arPayments = [], year } = {}) {
+  const yr = year ? String(year) : "";
+  const seen = new Set();
+  const byCM = {};
+  (orders || []).forEach((r) => {
+    if (!isArOrder(r) || r._fixed) return;
+    const d = dateOf(r); if (!d || (yr && d.slice(0, 4) !== yr)) return;
+    const k = r._id ? `${r.__col || ""}/${r._id}` : null;
+    if (k) { if (seen.has(k)) return; seen.add(k); }
+    const c = arClientOf(r); const ym = d.slice(0, 7); const s = toWon(r.청구운임);
+    const e = (byCM[c] = byCM[c] || {}); const m = (e[ym] = e[ym] || { supply: 0, settled: 0, deposited: 0, open: 0, last: "" });
+    m.supply += s;
+    const st = r.정산상태 && typeof r.정산상태 === "object" ? r.정산상태[ym] : "";
+    if (st === "정산완료") { m.settled += s; const sd = String(r.정산일?.[ym] || ""); if (sd > m.last) m.last = sd; }
+    else if (r.입금상태 === "입금완료") { m.deposited += vatIncluded(s); const dd = String(r.입금일 || ""); if (dd > m.last) m.last = dd; }
+    else if (s) m.open += 1;
+  });
+  const dep = {};
+  (arPayments || []).forEach((p) => {
+    if (!p) return;
+    const c = String(p.client || "").trim(); const ym = String(p.yyyymm || "").slice(0, 7);
+    if (!c || !ym || (yr && ym.slice(0, 4) !== yr)) return;
+    const x = ((dep[c] = dep[c] || {})[ym] = dep[c]?.[ym] || { amt: 0, last: "" });
+    x.amt += Number(p.amount) || 0; const dd = String(p.depositDate || ""); if (dd > x.last) x.last = dd;
+  });
+  const out = {};
+  Object.entries(byCM).forEach(([c, months]) => {
+    const lines = [];
+    Object.entries(months).sort(([a], [b]) => a.localeCompare(b)).forEach(([ym, m]) => {
+      const due = vatIncluded(m.supply); if (due <= 0) return;
+      const p = dep[c]?.[ym] || { amt: 0, last: "" };
+      const full = m.open === 0;
+      const amt = full ? due : Math.min(due, Math.max(0, vatIncluded(m.settled) + m.deposited + p.amt));
+      if (amt <= 0) return;
+      lines.push({ d: [m.last, p.last].sort().pop() || "", ym, amt, full });
+    });
+    if (lines.length) out[c] = { paid: lines.reduce((a, x) => a + x.amt, 0), lines };
+  });
+  return out;
+}
+
 // ── 예상 부가세 ──
 export const isTaxInvoiceSale = (r) => String(r?.지급방식 || "").trim() === "계산서";
 export const isInvoiceDriver = (d) => d?.세금계산서발행 === true;

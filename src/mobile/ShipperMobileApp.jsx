@@ -216,11 +216,15 @@ const TRANSPORT_EDIT_FIELD_LABELS = {
   전달사항: "전달사항", 요청차량: "요청차량", 추가정보: "추가정보",
 };
 
+// 🔒 2026-11-25 화주에게는 청구 쪽만 — 운송사 수정이력에 섞인 기사운임 · 수수료 · 지게차/특수운임(기사 차감 · 외부 지급) 줄은 보여 주지 않는다
+//  (운송사가 화주 오더를 고치면 그 오더 이력에 "기사운임 300,000 → 270,000" 같은 줄이 같이 남는다 · 서버 사본 functions/roleMirror.js SHIPPER_DROP과 같은 기준 + 특수운임)
+const SHIPPER_HIDDEN_HISTORY = /기사운임|기사단가|기사지급|기사정산|기사차감|수수료|이익|수익|마진|원가|매입|외부지급|산재|보험료|지게차|특수운임|특수기사|^지급(상태|완료|일)$|미지급|운임보정|운임수동|내부메모|^메모$/;
+const shipperHistory = (list) => (Array.isArray(list) ? list : []).filter((h) => h && h.field && !SHIPPER_HIDDEN_HISTORY.test(String(h.field)));
 const getTransportEditEntries = (order) => {
   const hist = Array.isArray(order?.history) ? order.history.filter(h => h && h.field) : [];
   if (hist.length === 0) return [];
   const maxAt = Math.max(...hist.map(h => h.at || 0));
-  return hist.filter(h => Math.abs((h.at || 0) - maxAt) < 5000);
+  return shipperHistory(hist.filter(h => Math.abs((h.at || 0) - maxAt) < 5000)); // 🔒 기사운임 · 수수료 줄은 빼고
 };
 
 // ⭐ 2026-10-29 리디자인 — 상태색도 네이비 단계로만(알록달록 금지)
@@ -345,7 +349,7 @@ async function shipperRequestDriverSwap(order, user) {
 
 // 수정이력 뷰어 (운송사 앱/PC와 동일한 history 배열 포맷을 사용)
 function HistoryViewerModal({ history = [], onClose }) {
-  const items = [...history].filter(h => h && h.field).reverse();
+  const items = shipperHistory(history).reverse();
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50" />
@@ -1888,12 +1892,12 @@ function ShipperDetailM({ order, onBack, onEdit, user }) {
         <RequestHoldActions order={order} onDeleted={onBack} />
       )}
 
-      {Array.isArray(order.history) && order.history.length > 0 && (
+      {shipperHistory(order.history).length > 0 && (
         <button
           onClick={() => setShowHistory(true)}
           className="w-full flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2 text-[12px] font-bold text-gray-500"
         >
-          <span>수정이력 ({order.history.length})</span>
+          <span>수정이력 ({shipperHistory(order.history).length})</span>
           <span className="text-gray-400">보기 &gt;</span>
         </button>
       )}

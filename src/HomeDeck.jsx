@@ -10,10 +10,11 @@ import { AttendanceQuickButton } from "./attendanceQuick";
 import { LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 매익률 색(플러스 빨강 · 마이너스 파랑)
 import { buildPastStats } from "./pastStats";
+import { fkNum } from "./forkliftCore";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const C = { ink: "#E8EEF9", sub: "rgba(207,224,255,.8)", dim: "rgba(207,224,255,.72)", line: "rgba(143,176,240,.14)", glow: "#8FB0F0", hi: "#CFE0FF", accent: "#6E95E8" };
-const toWon = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
+const toWon = (v) => fkNum(v); // 🛠 2026-11-25 수익(orderProfit)과 같은 금액 읽기
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const addDay = (ymd, n) => { const d = new Date(`${ymd}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const dateOf = (r) => String(r?.상차일자 || r?.상차일 || r?.상차 || "").slice(0, 10);

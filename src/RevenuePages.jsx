@@ -9,12 +9,12 @@ import {
 } from "recharts";
 import { RvCard, RvTile, RvDelta, rvShort, RvRing } from "./RevenueDashboard";
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 수익률 색(플러스 빨강 · 마이너스 파랑)
-import { profitTotals, orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
+import { profitTotals, orderProfit, fkNum } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const NAVY = "#1B2B4B";
 const SHADES = ["#0F1A30", "#1B2B4B", "#2D4C82", "#4B6CB7", "#6E8BC4", "#9FB2D6", "#C9D3E4", "#DCE3EF"];
-const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
+const toInt = (v) => fkNum(v); // 🛠 2026-11-25 수익(profitTotals)과 같은 금액 읽기
 // ⭐ 2026-11-17 driver = 기사운임 합 · cost = 운반비(기사운임 + 지게차·외부 특수운임) · profit = 매출 − 운반비(= 줄 수수료 합)
 const sOf = (list) => {
   const t = profitTotals(list);

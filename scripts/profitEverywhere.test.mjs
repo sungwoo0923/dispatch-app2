@@ -5,8 +5,8 @@
 //  · 저장된 수수료 · 외부지급합 칸은 예전 식으로 남아 있을 수 있어 믿지 않는다
 import * as PC from "../functions/profitCore.mjs";
 import * as FC from "../src/forkliftCore.js";
-import { profitOf as teamProfitOf } from "../src/teamReportCore.js";
-import { calcIncentive } from "../src/salesCore.js";
+import { profitOf as teamProfitOf, saleOf as saleOfTeam } from "../src/teamReportCore.js";
+import { calcIncentive, toInt as salesToInt } from "../src/salesCore.js";
 import { summarizeSettle } from "../src/settleCore.js";
 import { clientMatrix } from "../src/freight/freightCore.js";
 import { buildUpdate, localAnswer } from "../src/aiAssistantCore.js";
@@ -66,6 +66,13 @@ const cf = carrierFarePatch({ 배차표Id: "rb", 청구운임: 500000, 기사운
 eq([cf?.기사운임, cf?.수수료], ["450000", "0"], "수수료율 10% · 회사 부담 지게차 50,000 → 수수료 0");
 const cf0 = carrierFarePatch({ 배차표Id: "rb", 청구운임: 500000, 기사운임: "", 추가정보: { 운송업체: "X" } }, { carriers: [{ name: "X", rate: 10 }] });
 eq(cf0?.수수료, "50000", "지게차 없으면 예전과 같다(청구 − 기사)");
+
+// 7-2) 🛠 2026-11-25 금액 읽기 — 매출(청구운임 합)을 읽는 곳도 수익(orderProfit)과 같은 fkNum 규칙
+//  예전엔 parseInt(…replace(/[^\d-]/g, ""))라 소수점을 지웠다: 200000.4 → 2,000,004 · "181818.18"(엑셀 계산 값) → 18,181,818
+const odd = [200000.4, "181818.18", "500,000원", "-180,000", "", null, "1,000"];
+eq(odd.map((v) => saleOfTeam({ 청구운임: v })), odd.map((v) => PC.fkNum(v)), "팀 실적 매출 읽기 = fkNum");
+eq(odd.map(salesToInt), odd.map((v) => PC.fkNum(v)), "영업 인센티브 금액 읽기 = fkNum");
+eq(odd.map((v) => PC.fkNum(v)), [200000, 181818, 500000, -180000, 0, 0, 1000], "fkNum 예시 값");
 
 // 8) 서버(functions/*.js)가 쓰는 동적 import 도 같은 결과
 const PD = await import("../functions/profitCore.mjs");

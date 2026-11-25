@@ -15,7 +15,7 @@ import { CLOSE_RULES, closeBoard, closeChecks, isMine, canSubmit, canVerify, ver
 import { useLoadOrderRange, monthEnd } from "./orderHistory";
 import useNarrow from "./useNarrow";
 import { MarginPct } from "./marginPct"; // ⭐ 2026-11-17 합계 줄 수수료 옆 수수료율(수수료 ÷ 청구)
-import { orderProfit, paidOut } from "./forkliftCore"; // ⭐ 2026-11-17 수수료 한 식 — 청구 − 기사 − 회사가 따로 준 지게차·특수운임(배차현황 표와 같음)
+import { orderProfit, paidOut, nextFee } from "./forkliftCore"; // ⭐ 2026-11-17 수수료 한 식 — 청구 − 기사 − 회사가 따로 준 지게차·특수운임(배차현황 표와 같음)
 import { kpConfirm } from "./kpDialog";
 const StmtCompareModal = React.lazy(() => import("./StmtCompare")); // ⭐ 2026-11-17 업체 명세서 비교
 
@@ -57,7 +57,8 @@ function OrderSheet({ open, row, isNew, ym, phone, isViewer, clients, issues, on
     if (f.하차일 && f.하차일 < f.상차일) { setErr("하차일이 상차일보다 빨라요."); return; }
     const patch = {};
     FIELDS.forEach(([k, , t]) => { const nv = t === "money" ? n(f[k]) : String(f[k] || "").trim(); const ov = t === "money" ? n(row?.[k]) : String(row?.[k] ?? "").trim(); if (isNew ? (nv !== "" && nv !== 0) : nv !== ov) patch[k] = nv; });
-    if ("청구운임" in patch || "기사운임" in patch) patch.수수료 = orderProfit({ ...(row || {}), 청구운임: n(f.청구운임), 기사운임: n(f.기사운임) }); // ⭐ 2026-11-17 회사 지급분(지게차·특수운임) 빼기
+    // ⭐ 2026-11-17 회사 지급분(지게차·특수운임) 빼기 · 🛠 2026-11-25 사람이 직접 넣은 수수료는 그대로(배차현황 저장과 같은 규칙 nextFee)
+    if ("청구운임" in patch || "기사운임" in patch) patch.수수료 = nextFee(isNew ? null : row, { ...(row || {}), 청구운임: n(f.청구운임), 기사운임: n(f.기사운임) });
     if ("이름" in patch) patch.기사명 = patch.이름;
     if (isNew) { patch.배차상태 = String(f.차량번호 || "").trim() ? "배차완료" : "배차중"; patch.등록기기 = "월 마감"; }
     else if ("차량번호" in patch && String(f.차량번호 || "").trim() && (row?.배차상태 || "") !== "배차완료") patch.배차상태 = "배차완료";

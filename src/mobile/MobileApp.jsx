@@ -173,7 +173,7 @@ import { mainScanAi } from "../orderScanApi"; // 🧠 2026-11-07 오더 스캔 �
 import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange } from "../fareRules";
 import { applyRoutePresets, routePresetsNow } from "../routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
 import { placeSearch } from "../placeSearch"; // 🔎 2026-11-20 상하차지 검색 — PC와 같은 규칙
-import { SpecialFareButton, forkliftApply, paidOut, orderProfit, profitTotals, nextFee } from "../forklift"; import { isViewerNow } from "../blind"; // 🏗 2026-11-09 지게차비용
+import { SpecialFareButton, forkliftApply, paidOut, orderProfit, profitTotals, nextFee, fkNum } from "../forklift"; import { isViewerNow } from "../blind"; // 🏗 2026-11-09 지게차비용
 import DetailFilterButton, { applyDetailFilter, detailGroupOrder } from "../DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { useFixedRouteAutoDispatch } from "../FixedRoutes"; // ⭐ 2026-11-05 고정노선 배차 이어서 만들기
 import { VehicleTypePicker, currentCustomVehicleTypes, useVehicleTypes } from "../vehicleTypes"; // 🚚 2026-11-02 회사 공용 차량종류
@@ -202,6 +202,11 @@ const PC_CLIENT_MENU_ROLES = { has: (r) => ["admin", "totalMaster", "user", "tes
 // ⭐ 2026-11-05 PC·모바일 일치 — PC는 상태가 취소 목록이거나 배차상태가 "배차취소"(화주사가 취소 승인)인 오더를
 //   배차현황·실시간·이력·동기화 어디서든 뺀다. 모바일도 같은 한 가지 기준으로 정상 목록에서 뺀다.
 const isCancelledOrder = (o) => !!o && (CANCELED_STATUS_LIST.includes(o.상태) || String(o.배차상태 || "").trim() === "배차취소");
+// 🛠 2026-11-25 수정 · 복사 화면에 지게차 · 특수운임 칸도 불러온다(PC 오더 수정 · 복사와 같게)
+//  예전엔 청구 · 기사운임(이미 특수운임을 반영한 값)만 넘겨, 복사본 저장 때 노선 고정 지게차가 기사운임에서 한 번 더 빠지고(30만 → 27만 → 24만)
+//  수정 화면 [특수운임]이 "적용 전"으로 보여 다시 넣으면 두 번 빠졌다 · 수수료도 회사 지급분(지게차 · 외부)을 빼지 않고 보였다
+const M_SPECIAL_KEYS = ["지게차비용", "지게차부담", "지게차기사ID", "지게차기사명", "지게차기사전화", "지게차회사", "지게차기사차감", "지게차청구추가", "특수운임", "특수기사차감", "특수청구추가", "외부지급합", "지게차자동", "특수운임수동"];
+const specialFieldsOf = (o) => Object.fromEntries(M_SPECIAL_KEYS.filter((k) => o && o[k] !== undefined).map((k) => [k, k === "특수운임" && Array.isArray(o[k]) ? o[k].map((x) => ({ ...x })) : o[k]]));
 // ⭐ 2026-10-30 모바일 딜레이 — 저장(updateDoc)은 서버가 "받았다"고 답할 때까지 기다린다. LTE에서는 이게 수 초~수십 초라
 //   "기사취소를 눌러도 한참 뒤에 취소된다"의 원인이었다. 화면은 먼저 바꾸고 저장은 뒤에서 마저 하게 한다.
 //   (Firestore는 같은 폰의 실시간 목록에 쓴 내용을 즉시 반영하고, 끊겨도 다시 연결되면 자동으로 보낸다)
@@ -1201,8 +1206,9 @@ function BackIconButton({ onClick }) {
 // ------------------------------------------------------------------
 // 공통 유틸
 // ------------------------------------------------------------------
-const toNumber = (v) =>
-  Number(String(v ?? "").replace(/[^\d]/g, "")) || 0;
+// 🛠 2026-11-25 운임 칸 — "-180,000"(청구 없이 지게차 기사 차감만 있는 오더) 부호를 지키게 PC와 같은 숫자 읽기(fkNum)
+//  예전엔 빼기 기호를 지워, 기사운임이 -180,000인 오더를 모바일에서 수정 · 저장만 해도 +180,000으로 바뀌었다
+const toNumber = (v) => fkNum(v);
 
 // ⭐ 2026-11-04 속도 — toLocaleString("ko-KR")은 부를 때마다 숫자 형식기를 새로 만들어 느리다(카드마다 2번씩).
 //  같은 결과를 내는 형식기 하나를 만들어 두고 계속 쓴다.
@@ -5261,8 +5267,9 @@ const handleOrderDuplicate0 = (order, plan = null) => {
     청구운임: order.청구운임 || 0,
 
     기사운임: 0,
-    수수료: 0,
+    수수료: orderProfit({ ...specialFieldsOf(order), 청구운임: order.청구운임 || 0, 기사운임: 0 }),
     산재보험료: 0,
+    ...specialFieldsOf(order), // 🛠 2026-11-25 지게차 · 특수운임 칸도 복사(청구운임엔 이미 청구 추가분이 들어 있다 · 외부 지급분이 수수료에서 빠지게)
     ...(order.운임구분 ? { 운임구분: order.운임구분, 운임수동: false, ...(order.운임구분수수료율 != null && order.운임구분수수료율 !== "" ? { 운임구분수수료율: order.운임구분수수료율 } : {}) } : {}), // ⭐ 2026-11-09 기사 없이 복사해도 운임구분·오더별 수수료율 유지(기사 포함 복사와 같게)
 
     차량번호: "",
@@ -5336,8 +5343,9 @@ const handleOrderDuplicateWithDriver0 = (order, plan = null) => {
     배차방식: order.배차방식 || "",
     청구운임: order.청구운임 || 0,
     기사운임: order.기사운임 || 0,
-    수수료: (Number(order.청구운임) || 0) - (Number(order.기사운임) || 0),
+    수수료: orderProfit(order), // 🛠 2026-11-25 청구 − 기사 − 회사 지급분(PC 복사와 같게)
     산재보험료: order.산재보험료 || 0,
+    ...specialFieldsOf(order), // 🛠 2026-11-25 지게차 · 특수운임 칸도 복사(PC 복사 등록과 같게) — 빠지면 저장 때 노선 고정 지게차가 기사운임에서 또 빠졌다
     ...(order.운임구분 ? { 운임구분: order.운임구분, 운임수동: !!order.운임수동, ...(order.운임구분수수료율 != null && order.운임구분수수료율 !== "" ? { 운임구분수수료율: order.운임구분수수료율 } : {}) } : {}), // ⭐ 2026-11-02 운임규칙 · 2026-11-09 오더별 수수료율
     차량번호: order.차량번호 || "",
     기사명: order.기사명 || "",
@@ -5785,6 +5793,8 @@ const title =
           } else if (!patch.배차상태) patch.배차상태 = "배차완료";
         }
       }
+      // 🛠 2026-11-25 AI 비서로 청구 · 기사운임을 고치면 저장된 수수료도 같은 규칙으로(PC는 patchDispatch가 맞춘다 · nextFee)
+      if (("청구운임" in patch || "기사운임" in patch) && !("수수료" in patch)) patch.수수료 = nextFee(order, { ...order, ...patch });
       await updateDoc(doc(db, col, id), patch);
       syncShipperMirrorMobile(order, patch).catch(() => {});
       return true;
@@ -12261,7 +12271,9 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
       [`${type}지담당자번호`]: primary?.phone || c.담당자번호 || "",
     }));
   };
-  const fee = orderProfit(f); // ⭐ 2026-11-17 저장된 외부지급합 대신 지게차·특수운임 칸에서 다시 계산
+  // 🛠 2026-11-25 이 창 칸(f)에는 지게차 · 특수운임이 없어 청구 − 기사만 되던 것 — 오더의 지게차 · 특수운임 칸을 같이 넣어 계산(PC와 같은 수수료)
+  const feeOrder = { ...order, 청구운임: toNum(f.청구운임), 기사운임: toNum(f.기사운임) };
+  const fee = orderProfit(feeOrder);
   const joinU = (v, u) => (u ? `${v}${u}` : v);
   // 손대지 않은 칸은 원래 글자 그대로 둔다("12 파레트" → "12파레트"처럼 바뀐 걸로 잡히지 않게)
   const [init] = useState(() => {
@@ -12285,7 +12297,9 @@ function QuickEditSheet({ order, onClose, onSaved, cardVersionB, clients = [], b
       배차방식: f.배차방식, 지급방식: f.지급방식,
       ...(f.콜구분 !== undefined ? { 콜구분: f.콜구분 || "", 콜플랫폼: f.콜플랫폼 || "" } : {}), // 💳 2026-11-12 IN/OUT도 같이 저장
       화물내용: cargo, 차량종류: f.차량종류, 차종: f.차량종류, 차량톤수: ton, 톤수: ton,
-      청구운임: toNum(f.청구운임), 기사운임: toNum(f.기사운임), 수수료: fee,
+      청구운임: toNum(f.청구운임), 기사운임: toNum(f.기사운임),
+      // 🛠 2026-11-25 수수료는 운임을 바꿨을 때만 · PC patchDispatch와 같은 규칙(nextFee — 직접 넣은 수수료는 그대로). 예전엔 주소만 고쳐도 청구 − 기사로 덮어썼다
+      ...(toNum(f.청구운임) !== toNum(order.청구운임) || toNum(f.기사운임) !== toNum(order.기사운임) ? { 수수료: nextFee(order, feeOrder) } : {}),
       ...(fareRQ.on || order.운임구분 ? { 운임구분: f.운임구분 || "", ...(f.운임구분 ? { 운임수동: !!f.운임수동 } : {}), ...(f.운임구분 && String(f.운임구분수수료율 ?? "") !== "" ? { 운임구분수수료율: Number(f.운임구분수수료율) || 0 } : {}) } : {}), // ⭐ 2026-11-02 운임규칙 · 2026-11-09 오더별 수수료율
     };
     // 바뀐 항목만 저장
@@ -12740,7 +12754,8 @@ function MobileOrderDetail({
       배차방식: order.배차방식 || "",
       청구운임: claim != null ? claim : (order.청구운임 || 0),
       기사운임: drv != null ? drv : (order.기사운임 || 0),
-      수수료: (claim != null ? claim : (Number(order.청구운임)||0)) - (drv != null ? drv : (Number(order.기사운임)||0)),
+      수수료: nextFee(order, { ...order, 청구운임: claim != null ? claim : (order.청구운임 || 0), 기사운임: drv != null ? drv : (order.기사운임 || 0) }), // 🛠 2026-11-25 저장할 때와 같은 값
+      ...specialFieldsOf(order), // 🛠 2026-11-25 지게차 · 특수운임 칸도 불러온다(PC 수정과 같게 · [특수운임]에서 두 번 빠지지 않게)
       산재보험료: order.산재보험료 || 0,
       ...(order.운임구분 ? { 운임구분: order.운임구분, 운임수동: !!order.운임수동, ...(order.운임구분수수료율 != null && order.운임구분수수료율 !== "" ? { 운임구분수수료율: order.운임구분수수료율 } : {}) } : {}), // ⭐ 2026-11-02 운임규칙 · 2026-11-09 오더별 수수료율
       차량번호: order.차량번호 || "",
@@ -13210,7 +13225,8 @@ const handleAssignClick = async () => {
       화물내용: order.화물내용 || "", 상차방법: order.상차방법 || "", 하차방법: order.하차방법 || "",
       지급방식: order.지급방식 || "", 배차방식: order.배차방식 || "",
       청구운임: order.청구운임 || 0, 기사운임: order.기사운임 || 0,
-      수수료: (Number(order.청구운임) || 0) - (Number(order.기사운임) || 0),
+      수수료: nextFee(order, order), // 🛠 2026-11-25 저장할 때와 같은 값(청구 − 기사 − 회사 지급분 · 직접 넣은 수수료는 그대로)
+      ...specialFieldsOf(order), // 🛠 2026-11-25 지게차 · 특수운임 칸도 불러온다(PC 수정과 같게 · [특수운임]에서 두 번 빠지지 않게)
       산재보험료: order.산재보험료 || 0, 차량번호: carNo || "",
       ...(order.운임구분 ? { 운임구분: order.운임구분, 운임수동: !!order.운임수동, ...(order.운임구분수수료율 != null && order.운임구분수수료율 !== "" ? { 운임구분수수료율: order.운임구분수수료율 } : {}) } : {}), // ⭐ 2026-11-02 운임규칙 · 2026-11-09 오더별 수수료율
       혼적여부: mixLabelOf(order), 긴급: order.긴급 === true, 운행유형: order.운행유형 || "", 회전수: Number(order.회전수) > 1 ? Number(order.회전수) : 1,
@@ -16203,7 +16219,7 @@ const pickDrop = (c) => {
               inputMode="numeric"
               value={form.기사운임 ? Number(form.기사운임).toLocaleString() : ""}
               onChange={(e) =>
-                updateMoney("기사운임", e.target.value.replace(/[^\d]/g, ""))
+                updateMoney("기사운임", e.target.value.replace(/[^\d-]/g, ""))
               }
             />
           }

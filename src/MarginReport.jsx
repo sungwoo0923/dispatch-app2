@@ -9,10 +9,10 @@ import { MonthPicker } from "./kpInputs"; // 📅 2026-11-07 월 선택은 프�
 import React from "react";
 import { profitStyle, profitRateColor, MARGIN_RED, MARGIN_BLUE } from "./marginPct"; // ⭐ 2026-11-17 이익 색(플러스 빨강 · 마이너스 파랑)
 import * as XLSX from "xlsx";
-import { orderProfit, paidOut } from "./forkliftCore"; // ⭐ 2026-11-17 이익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
+import { orderProfit, paidOut, fkNum } from "./forkliftCore"; // ⭐ 2026-11-17 이익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임) — 배차표 수수료와 같은 식
 import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 
-const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
+const toInt = (v) => fkNum(v); // 🛠 2026-11-25 이익(orderProfit)과 같은 금액 읽기
 const pct = (profit, sale) => (sale ? Math.round((profit / sale) * 1000) / 10 : 0);
 const won = (n) => `${Math.round(n || 0).toLocaleString()}원`;
 const man = (n) => `${Math.round((n || 0) / 10000).toLocaleString()}만원`;
