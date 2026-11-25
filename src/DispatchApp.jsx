@@ -6874,6 +6874,33 @@ function ToastProvider({ children }) {
   const [toasts, setToasts] = React.useState([]);
   const toastHoverRef = React.useRef(false); // 🎨 2026-11-24 라이브 알림에 마우스를 올려 둔 동안 true
   const [liveOpen, setLiveOpen] = React.useState(false); // 알림이 3종류 넘게 몰렸을 때 펼치기
+  const dropTimersRef = React.useRef(new Set()); // 사라지는 타이머를 건 알림
+
+  // 알림이 사라질 때 — 먼저 흐려지고(leaving · 0.32초) 그다음 목록에서 뺀다
+  const startDrop = (id, type) => {
+    if (dropTimersRef.current.has(id)) return; // 같은 알림에 타이머를 두 번 걸지 않는다(React 가 상태 함수를 두 번 부르는 경우)
+    dropTimersRef.current.add(id);
+    // 화주사 수정요청/기사취소요청은 승인이 필요한 중요 건이라 놓치지 않도록 더 오래 유지한다.
+    const corner = type === "editRequest" || type === "cancelRequest";
+    // 🎨 2026-11-24 라이브 알림 — 마우스를 올려 두면 사라지지 않고 기다린다
+    const drop = () => {
+      if (toastHoverRef.current && !corner) { setTimeout(drop, 600); return; }
+      if (corner) { dropTimersRef.current.delete(id); setToasts((prev) => prev.filter(t => t.id !== id)); return; }
+      setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, leaving: true } : t)));
+      setTimeout(() => { dropTimersRef.current.delete(id); setToasts((prev) => prev.filter(t => t.id !== id)); }, 320);
+    };
+    setTimeout(drop, corner ? 8000 : 4000);
+  };
+  // 기다리던 알림 차례 — 배차 완료 알림이 다 사라졌으면(그리고 기다릴 시간이 지났으면) 흐린 상태에서 나타나게 한다
+  React.useEffect(() => {
+    const pend = toasts.filter((t) => t.pending);
+    if (!pend.length || toasts.some((t) => t.type === "dispatch")) return undefined;
+    const tm = setTimeout(() => {
+      pend.forEach((t) => startDrop(t.id, t.type));
+      setToasts((prev) => prev.map((t) => (t.pending ? { ...t, pending: false, fadeIn: true, createdAt: Date.now() } : t)));
+    }, Math.max(0, ...pend.map((t) => (t.holdUntil || 0) - Date.now())));
+    return () => clearTimeout(tm);
+  }, [toasts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const showToast = (message, type = "success", meta = null) => {
     const id = crypto.randomUUID();
@@ -6887,17 +6914,15 @@ function ToastProvider({ children }) {
         (meta?.orderId ? t.meta?.orderId === meta.orderId : true)
       );
       if (isDuplicate) return prev;
+      // 🎬 2026-11-25 배차하고 [수정 저장]하면 알림 두 개가 한꺼번에 뜨던 것 → 차례로(사용자 요청)
+      //  "배차 완료"가 먼저 뜨고 흐려지며 사라진 뒤, 같은 자리에 "오더 수정 완료"가 흐린 상태에서 진하게 나타난다.
+      //  · 배차 완료 알림이 떠 있는 동안 들어온 완료 알림(success)은 기다린다(pending)
+      //  · meta.afterDispatch(방금 저장으로 배차가 된 경우) — 배차 완료 알림이 조금 늦게 와도 그 뒤에 서도록 잠깐(1.5초까지) 기다린다
+      const wait = type === "success" && (meta?.afterDispatch || prev.some((t) => t.type === "dispatch"));
+      if (wait) return [...prev, { id, message, type, meta, createdAt: Date.now(), pending: true, holdUntil: Date.now() + (meta?.afterDispatch ? 1500 : 0) }];
+      startDrop(id, type);
       return [...prev, { id, message, type, meta, createdAt: Date.now() }];
     });
-
-    // 화주사 수정요청/기사취소요청은 승인이 필요한 중요 건이라 놓치지 않도록 더 오래 유지한다.
-    const duration = (type === "editRequest" || type === "cancelRequest") ? 8000 : 4000;
-    // 🎨 2026-11-24 라이브 알림 — 마우스를 올려 두면 사라지지 않고 기다린다
-    const drop = () => {
-      if (toastHoverRef.current && type !== "editRequest" && type !== "cancelRequest") { setTimeout(drop, 600); return; }
-      setToasts((prev) => prev.filter(t => t.id !== id));
-    };
-    setTimeout(drop, duration);
     // 새로 바뀐 오더 줄은 2초 동안 은은하게 표시
     if (meta?.orderId) setTimeout(() => {
       const el = document.getElementById(`row-${meta.orderId}`);
@@ -7005,7 +7030,7 @@ function ToastProvider({ children }) {
         };
         const hm = (ms) => new Date(ms || Date.now()).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
         const keep = (e) => e.preventDefault(); // 눌러도 입력칸 포커스를 빼앗지 않는다
-        const list = toasts.filter(t => t.type !== "editRequest" && t.type !== "cancelRequest");
+        const list = toasts.filter(t => t.type !== "editRequest" && t.type !== "cancelRequest" && !t.pending); // 차례를 기다리는 알림은 아직 안 보인다
         const groups = [];
         list.forEach((t) => { const g = groups.find((x) => x.type === t.type); if (g) g.items.push(t); else groups.push({ type: t.type, items: [t] }); });
         if (!groups.length) return null;
@@ -7022,6 +7047,10 @@ function ToastProvider({ children }) {
               @keyframes kpLiveBar{from{transform:scaleX(1)}to{transform:scaleX(0)}}
               @keyframes kpLiveNum{0%{transform:translateY(6px);opacity:.2}100%{transform:none;opacity:1}}
               .kp-live-pill{animation:kpLiveIn .38s cubic-bezier(.2,.8,.2,1) both}
+              @keyframes kpLiveFade{from{opacity:0}to{opacity:1}}
+              @keyframes kpLiveOut{from{opacity:1}to{opacity:0}}
+              .kp-live-pill.kp-live-fade{animation:kpLiveFade .5s ease-out both}
+              .kp-live-pill.kp-live-out{animation:kpLiveOut .32s ease-in both;pointer-events:none}
               .kp-live-pill:after{content:"";position:absolute;top:0;bottom:0;width:90px;left:0;background:linear-gradient(100deg,transparent,rgba(255,255,255,.12),transparent);animation:kpLiveSweep 1.1s ease-out .25s 1 both;pointer-events:none}
               .kp-live:hover .kp-live-bar{animation-play-state:paused}
               @keyframes kpRowNew{0%{background:rgba(47,191,143,.16)}100%{background:transparent}}
@@ -7037,7 +7066,7 @@ function ToastProvider({ children }) {
               const close = (e) => { e.stopPropagation(); g.items.forEach((t) => removeToast(t.id)); };
               return (
                 <div key={g.type} role="status" aria-live="polite" onMouseDown={keep} data-kp-sftoast={g.type}
-                  className="kp-live-pill pointer-events-auto relative overflow-hidden rounded-[22px] text-white max-w-full flex items-center gap-3 pl-3 pr-2 py-2.5 border border-white/[0.07] shadow-[0_18px_44px_rgba(11,20,40,.38)]"
+                  className={`kp-live-pill ${g.items.every((t) => t.leaving) ? "kp-live-out" : n === 1 && latest.fadeIn ? "kp-live-fade" : ""} pointer-events-auto relative overflow-hidden rounded-[22px] text-white max-w-full flex items-center gap-3 pl-3 pr-2 py-2.5 border border-white/[0.07] shadow-[0_18px_44px_rgba(11,20,40,.38)]`}
                   style={{ background: "linear-gradient(120deg,rgba(11,20,40,.97),rgba(23,36,64,.97))", backdropFilter: "blur(6px)" }}>
                   <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: ui.c }} />
                   <span className="w-10 h-10 rounded-[14px] grid place-items-center shrink-0" style={{ background: `${ui.c}29` }}>
@@ -29901,7 +29930,11 @@ const head = isDark
     delete payload.톤수타입;
 
 const savedId = copyTarget._id;
-    sflowToast("오더 수정 완료", "success"); // ★ 확인 버튼을 눌러야 닫히던 창 → 오른쪽 위 알림(바로 다음 작업 가능)
+    { // 🎬 2026-11-25 이번 저장으로 배차가 됐으면(차량번호가 새로 들어감) "배차 완료" 알림 뒤에 이어서 뜨게 한다
+      const _o = (rows || []).find((r) => r._id === copyTarget._id) || (dispatchData || []).find((r) => r._id === copyTarget._id);
+      const _np = normalizePlate(copyTarget.차량번호 || "");
+      sflowToast("오더 수정 완료", "success", _np && _np !== normalizePlate(_o?.차량번호 || "") ? { afterDispatch: true } : null);
+    }
     setCopyPanelOpen(false);
     // ⭐ 일마감 검증에서 열었던 수정이면, 방금 고친 내용이 반영되도록 검증을
     // 자동으로 다시 계산한다(오류/경고 + 24시콜 비교결과 모두).
@@ -39705,7 +39738,11 @@ return (
 
 // ✅ UI 먼저
     setCopyPanelOpen(false);
-    sflowToast("오더 수정 완료", "success"); // ★ 확인 버튼 없이 바로 다음 작업
+    { // 🎬 2026-11-25 이번 저장으로 배차가 됐으면 "배차 완료" 알림 뒤에 이어서 뜨게 한다
+      const _o = (dispatchData || []).find((r) => getId(r) === id);
+      const _np = normalizePlate(copyTarget.차량번호 || "");
+      sflowToast("오더 수정 완료", "success", _np && _np !== normalizePlate(_o?.차량번호 || "") ? { afterDispatch: true } : null);
+    }
     setEdited(prev => { const next = { ...prev }; delete next[id]; return next; });
     // ⭐ 일마감 검증에서 열었던 수정이면, 방금 고친 내용이 반영되도록 검증을
     // 자동으로 다시 계산한다(오류/경고 + 24시콜 비교결과 모두).
