@@ -1,11 +1,13 @@
 // ======================= src/teamReportCore.js =======================
 // 📑 2026-11-15 팀 실적 보고서 — 숫자 계산(화면 · PDF · PPT · 전자결재 공용, 테스트: scripts/teamReport.test.mjs)
-//  · 오더 기준은 매출관리 · 일일 경영 보고와 같다: 취소 · 운송사 전송 제외, 청구운임 = 매출, 청구운임 − 기사운임 − 회사가 따로 지급(지게차·외부 특수운임) = 수익
+//  · 오더 기준은 매출관리 · 일일 경영 보고와 같다: 📏 2026-11-25 배차완료 오더만(functions/salesRule.mjs isSalesOrder — 배차중 · 미배차 · 취소 · 운송사 전송 제외),
+//    청구운임 = 매출, 청구운임 − 기사운임 − 회사가 따로 지급(지게차·외부 특수운임) = 수익 · 미배차 건수(리스크)만 전체 오더로 센다
 //  · 팀원 = 그 팀 직원(users.team). 오더 담당 = 등록한 직원(src/detailGetters.js orderStaffNameRaw — 화면이 staffOf 로 넘긴다)
 //  · 비교 = 바로 앞 같은 길이 기간(이번 달이면 지난달 같은 날까지가 아니라 지난달 전체 — 보고서는 "기간 대 기간")
 //  ⚠ 이 파일은 다른 파일을 가져오지 않는다(node 테스트에서 바로 읽는다) — 아래 작은 함수들은 src/dailyReportCore.js 와 같은 식
 //    (⭐ 2026-11-17 예외: 수익 식은 functions/profitCore.mjs(가져오는 것 없음)를 forkliftCore.js 로 가져온다 — 배차표 수수료와 같은 식)
 import { orderProfit, fkNum } from "./forkliftCore.js";
+import { isSalesOrder, salesBillDateOf } from "./salesRule.js"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(가져오는 것 없음 · profitCore 만)
 const toWon = (v) => fkNum(v); // 🛠 2026-11-25 수익(orderProfit)과 같은 금액 읽기(소수점 반올림)
 export const dateOf = (r) => String(r?.상차일자 || r?.상차일 || r?.상차 || "").slice(0, 10);
 export const saleOf = (r) => toWon(r?.청구운임);
@@ -72,19 +74,26 @@ const fin = (e) => ({ ...e, margin: e.sale ? (e.profit / e.sale) * 100 : 0, perO
 export function buildTeamReport({ rows, members, period: p, staffOf }) {
   const names = new Set((members || []).map((m) => m.name));
   const seen = new Set();
-  const inTeam = []; let coCur = 0;
+  const inTeam = []; let coCur = 0; let unassignedPre = 0;
   for (const r of rows || []) {
-    const d = dateOf(r); if (!d || d < p.prevFrom || d > p.to) continue;
+    const d0 = dateOf(r); if (!d0) continue;
+    // 🗓 2026-11-25 돈은 청구일(청구월 안 날짜 · 이월 오더는 청구월 1일 — salesRule.salesBillDateOf), 미배차 건수는 상차일
+    const d = isSalesOrder(r) ? salesBillDateOf(r) || d0 : d0;
+    const inSpan = (x) => x >= p.prevFrom && x <= p.to;
+    if (!inSpan(d) && !inSpan(d0)) continue;
     const k = r._id || r.id ? `${r.__col || ""}/${r._id || r.id}` : null;
     if (k) { if (seen.has(k)) continue; seen.add(k); }
     if (r.source === "transport_transmit" || isCancelledOrder(r)) continue;
-    if (d >= p.from) coCur += saleOf(r);
     const who = String(staffOf(r) || "").trim();
+    // 미배차(배차중) 건수는 운영 숫자라 전체 오더로 센다
+    if (names.has(who) && d0 >= p.from && d0 <= p.to && (r.배차상태 || "") === "배차중") unassignedPre += 1;
+    if (!isSalesOrder(r) || !inSpan(d)) continue; // 📏 2026-11-25 매출 · 수익은 배차완료만(청구일이 기간 안)
+    if (d >= p.from) coCur += saleOf(r);
     if (names.has(who)) inTeam.push({ r, d, who });
   }
   const cur = z(); const prev = z();
   const byDay = {}; const mem = {}; const memPrev = {}; const cl = {}; const clPrev = {};
-  const low = []; const loss = []; let unassigned = 0;
+  const low = []; const loss = []; const unassigned = unassignedPre;
   (members || []).forEach((m) => { mem[m.name] = z(); });
   inTeam.forEach(({ r, d, who }) => {
     const c = String(r.거래처명 || "").trim() || "미지정";
@@ -94,7 +103,6 @@ export function buildTeamReport({ rows, members, period: p, staffOf }) {
       add(cl[c] || (cl[c] = z()), r);
       const s = saleOf(r); const pr = profitOf(r);
       if (s > 0 && pr < 0) loss.push(r); else if (s > 0 && (pr / s) * 100 < 5) low.push(r);
-      if ((r.배차상태 || "") === "배차중") unassigned += 1;
     } else if (d >= p.prevFrom && d <= p.prevTo) {
       add(prev, r); add(memPrev[who] || (memPrev[who] = z()), r); add(clPrev[c] || (clPrev[c] = z()), r);
     }

@@ -43,6 +43,24 @@ export async function bumpDriverPayout(db, { date, amount, count = 1, company })
   }, { merge: true });
 }
 
+// 💸 2026-11-25 지급 후 운임 변경 — 오더별 조정 한 줄(누적 조정액, 0이면 지움 · 여러 번 눌러도 같은 값)
+//  + 추가 지급 · − 환수(지출을 줄이는 음수 금액)
+export async function setDriverPayAdjust(db, { orderId, amount, date, company, who = "" }) {
+  const amt = toInt(amount);
+  return upsertAutoEntry(db, orderId, {
+    company, date, type: "지출", account: "운반비", amount: amt, vendor: who || "기사", auto: "drvpayadj", purpose: "drvpay",
+    item: amt >= 0 ? `기사운임 추가 지급(정산관리)${who ? ` · ${who}` : ""}` : `기사운임 환수(정산관리)${who ? ` · ${who}` : ""}`,
+    memo: "용차지급관리 › 지급 후 운임 변경 [추가 지급]/[환수 처리]: 오더 한 건의 누적 차액",
+  });
+}
+// 💸 2026-11-25 지입차 일괄 지급명세서 [지급 완료] — 기사님 × 달 한 줄(실지급액 · 0이면 지움)
+export async function setFleetStatementPayout(db, { stmtId, amount, date, company, who = "", memo = "" }) {
+  return upsertAutoEntry(db, stmtId, {
+    company, date, type: "지출", account: "운반비", amount, vendor: who || "지입 기사", auto: "fleetpay", purpose: "drvpay",
+    item: `지입 기사 지급(지급명세서)${who ? ` · ${who}` : ""}`, memo: memo || "지입차관리 › 일괄 지급명세서 [지급 완료]: 자동 반영",
+  });
+}
+
 // 🏗 2026-11-09 지게차 기사 지급(지급일별 합계) — 정산관리 › 지게차 지급 [지급완료]/[지급 취소]
 export async function bumpForkliftPayout(db, { date, amount, count = 1, company }) {
   const co = coOf(company); const d = String(date || kstDay()).slice(0, 10); const amt = toInt(amount);
@@ -58,6 +76,16 @@ export async function bumpForkliftPayout(db, { date, amount, count = 1, company 
     amount: increment(amt), count: increment(count), updatedAt: serverTimestamp(),
     ...(fresh ? { fundId: fundId || "", receipt: "", createdAt: serverTimestamp(), createdBy: auth.currentUser?.email || "" } : {}),
   }, { merge: true });
+}
+
+// 💳 2026-11-25 외부 지급(특수운임 받는사람 "외부" 한 항목) — 정산관리 › 지게차 · 외부 지급 › 외부 지급 [지급완료]/[지급 취소]
+//  오더 × 항목 한 줄(auto_extpay_회사_오더ID_항목키 · src/forkliftCore.js extLedgerDocId) — 금액 = 지급액, 0이면 지움(여러 번 눌러도 같은 값)
+export async function setExtPayout(db, { orderId, itemKey, amount, date, company, to = "", name = "" }) {
+  return upsertAutoEntry(db, `${orderId}_${itemKey}`, {
+    company, date, type: "지출", account: "운반비", amount, vendor: to || "외부", auto: "extpay", purpose: "drvpay",
+    item: `외부 지급(정산관리)${to ? ` · ${to}` : ""}${name && name !== to ? ` · ${name}` : ""}`,
+    memo: "정산관리 › 지게차 · 외부 지급 › 외부 지급 [지급완료]: 자동 반영",
+  });
 }
 
 // 거래처 수금 1건

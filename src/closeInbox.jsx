@@ -8,6 +8,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { useArDesk } from "./SettleDesk";
 import { isFinalLocked } from "./closeFlow";
+import { monthOf } from "./settleCore";
 import { setOrderGuard, setDeleteGuard } from "./orderWrite";
 
 const SEEN_KEY = (co) => `kpCloseInboxSeen:${co}`;
@@ -73,7 +74,7 @@ export function CloseInboxBanner({ inbox, onOpen, mobile = false }) {
 //  오더 내용 칸(거래처 · 날짜 · 상하차지 · 차량 · 기사 · 운임 · 상태 · 메모 등)을 고칠 때만 막는다 — 계산서 · 입금 · 지급 같은 정산 기록은 그대로
 //  bypass: 경리 · 회계 · 정산 팀, 최고관리자 등(일시해제 없이도 고칠 수 있는 사람)
 const CONTENT = new Set(["거래처명", "상차일", "하차일", "상차시간", "하차시간", "상차지명", "상차지주소", "하차지명", "하차지주소", "화물내용", "차량톤수", "차량종류", "차량번호", "이름", "기사명", "전화번호", "청구운임", "기사운임", "수수료", "배차상태", "지급방식", "배차방식", "메모", "마감월", "경유지_상차", "경유지_하차", "특수운임"]);
-const ymOf = (o) => String(o?.마감월 || "").slice(0, 7) || String(o?.상차일 || "").slice(0, 7);
+const ymOf = monthOf; // 🗓 청구월 정의는 functions/arCore.mjs 한 곳
 const MSG = (c, ym) => `${c} ${Number(String(ym).slice(5))}월은 최종마감 이후 수정이 불가합니다.\n필요 시 경리팀에 해제요청 해주세요.`;
 export function useFinalLockGuard(company, bypass = false) {
   const desk = useArDesk(String(company || "").trim());

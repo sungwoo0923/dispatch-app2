@@ -22,7 +22,8 @@ import { OrdersWeatherStrip } from "./publicDataMain"; // 🌦 2026-11-07 운행
 import { useOrderHistory } from "./orderHistory";
 import { useCompanyBiz, bizOf } from "./companyBiz";
 import { useCompanyRows } from "./companyColStore";
-import { loadAcctPayments } from "./acctPayments";
+import { fixedSalesRows } from "./salesRule"; // 📏 2026-11-25 고정거래처 매출도 보고서 매출에(매출관리와 같은 기준)
+import { useArPaid } from "./arPaidLive"; // 🔗 2026-11-25 미수금 받은 돈 — 회계 · 정산 화면과 같은 식
 import { isLateAt } from "./lateRule";
 import { receivablesOf } from "./arAging"; // ⭐ 2026-11-07 미수금 공용 계산(부가세 포함 · 고정거래처 포함)
 import { pickUnassignedOrders } from "./unassignedRule";
@@ -163,7 +164,8 @@ export function useBriefingCore({ company, dispatchData, prefs, bizSel = "", loa
   const demo = demoOn() ? dailyReportDemo(company) : null;
   const today = kstToday();
   const basis = React.useMemo(() => reportBasis(today, prefs), [today, prefs]);
-  const pmStart = `${addDay(`${basis.end.slice(0, 7)}-01`, -1).slice(0, 7)}-01`;
+  // 🗓 2026-11-25 월 누계는 청구월 기준 — 전월의 이월 오더(그 전달 상차)까지 한 달 더 앞부터 불러온다
+  const pmStart = `${addDay(`${addDay(`${basis.end.slice(0, 7)}-01`, -1).slice(0, 7)}-01`, -1).slice(0, 7)}-01`;
   const from35 = addDay(basis.start, -35);
   const from = [withYear ? `${basis.end.slice(0, 4)}-01-01` : null, pmStart, from35].filter(Boolean).sort()[0];
   useHistory(demo ? null : from, today, loadRange);
@@ -172,8 +174,11 @@ export function useBriefingCore({ company, dispatchData, prefs, bizSel = "", loa
   const rows = React.useMemo(() => (!bizSel || !biz.multi ? rowsAll : rowsAll.filter((r) => bizOf(r, biz.defaultName) === bizSel)), [rowsAll, bizSel, biz]);
   const cs = useDocData("companySettings", demo ? "" : company);
   const yearly = demo ? demo.yearlyTarget : Number(cs?.매출목표?.순수매출목표) || 0;
-  const report = React.useMemo(() => buildReport({ rows, basis, monthlyTarget: yearly > 0 ? yearly / 12 : 0 }), [rows, basis, yearly]);
-  const weekly = React.useMemo(() => (basis.weekly ? weeklySummary(rows, today) : null), [rows, basis.weekly, today]);
+  // 📏 2026-11-25 매출 · 수익 = 배차완료 오더 + 고정거래처(매출관리와 같다) — 청구 사업자를 고르면 고정거래처(사업자 칸 없음)는 뺀다
+  const fixedLive = useCompanyRows("fixedClients", demo ? "" : company);
+  const moneyRows = React.useMemo(() => (bizSel && biz.multi ? rows : [...rows, ...fixedSalesRows(fixedLive)]), [rows, fixedLive, bizSel, biz.multi]);
+  const report = React.useMemo(() => buildReport({ rows: moneyRows, basis, monthlyTarget: yearly > 0 ? yearly / 12 : 0 }), [moneyRows, basis, yearly]);
+  const weekly = React.useMemo(() => (basis.weekly ? weeklySummary(moneyRows, today) : null), [moneyRows, basis.weekly, today]);
   return { demo, today, basis, rows, rowsAll, report, weekly, biz };
 }
 
@@ -317,14 +322,8 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
   const recurring = demo ? demo.recurring : recurLive || [];
   const fundRows = demo ? demo.funds : fundsLive || [];
   const F = React.useMemo(() => (fundRows.length ? computeFunds(fundRows, ledger) : null), [fundRows, ledger]);
-  const [arPay, setArPay] = React.useState(null);
-  React.useEffect(() => {
-    if (demo) { setArPay(demo.arPayments); return undefined; }
-    if (sec.cash === false || !company) return undefined;
-    let alive = true;
-    loadAcctPayments(db, Number(today.slice(0, 4)), company).then((d) => { if (alive) setArPay(d.ar || {}); }).catch(() => { if (alive) setArPay(null); });
-    return () => { alive = false; };
-  }, [demo, company, today, sec.cash]);
+  // 🔗 2026-11-25 받은 돈 = 회계관리 · 거래처정산과 같은 식(arCore.arPaidByClient — 입금 기록 arPayments + 정산완료 · 입금완료 + 예전 회계 합계)
+  const arPay = useArPaid({ company: sec.cash === false ? "" : company, orders: rows, year: today.slice(0, 4), demoAr: demo ? demo.arPayments : null });
   const unassigned = React.useMemo(() => pickUnassignedOrders(demo ? demo.rows : dispatchData), [demo, dispatchData]);
 
   // 근무자(출근 기록) — 사무직
@@ -353,7 +352,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
     const hide = (n) => n === "최고관리자";
     return {
       basis: staffRanking(rows, basis.days, basis.prev1, staffOf, hide),
-      month: staffRanking(rows, mSpan.cur, mSpan.prev, staffOf, hide),
+      month: staffRanking(rows, mSpan.cur, mSpan.prev, staffOf, hide, true), // 🗓 달 비교는 청구월 기준
     };
   }, [rows, basis, mSpan, staffOf]);
   const moves = React.useMemo(() => clientMoves(report.byClientDay, mSpan.cur, mSpan.prev, 4), [report.byClientDay, mSpan]);
@@ -822,7 +821,7 @@ export default function DailyReport({ company, dispatchData = [], drivers: drive
           ? row("ops", "minmax(0,1.4fr) minmax(0,1fr)", opsCard, <div style={{ display: "grid", gap: g, alignContent: "start", minWidth: 0, height: "100%" }}>{hrCard}{movesCard}</div>)
           : <>{block("ops1", opsCard)}{block("hr1", hrCard)}{block("mv1", movesCard)}</>}
         <div data-pdf-block style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, paddingTop: 6, fontSize: 12, fontWeight: 500, color: T.faint, lineHeight: 1.6 }}>
-          <span>{dotDate(today)} {kstHm()} 집계 · 배차·정산·인사 데이터 자동 집계 · 매출 = 취소 · 운송사 전송 제외 전체 오더 기준(배차중 포함, 매출관리 화면은 배차완료 기준){bizSel ? ` · 청구 사업자 ${bizSel}` : ""}</span><span style={{ letterSpacing: "0.04em" }}>LogisWeb 자동 생성 보고서</span>
+          <span>{dotDate(today)} {kstHm()} 집계 · 배차·정산·인사 데이터 자동 집계 · 매출 = 배차완료 오더 + 고정거래처 기준(매출관리와 같음) · 월 누계는 청구월(마감월), 일 매출은 상차일 · 오더 건수는 취소 뺀 전체{bizSel ? ` · 청구 사업자 ${bizSel}` : ""}</span><span style={{ letterSpacing: "0.04em" }}>LogisWeb 자동 생성 보고서</span>
         </div>
       </div>
     );

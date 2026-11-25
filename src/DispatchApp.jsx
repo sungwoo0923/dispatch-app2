@@ -89,6 +89,7 @@ const SalesHub = React.lazy(() => import("./SalesHub")); // 💼 2026-11-10 영�
 import { ExecApprovals, TeamSchedule, ApprovalWorkspace, ExecScheduleBoard } from "./ExecSuite";
 import { useMyProfile, myNameNow, setMyNameCache } from "./userNames";
 import { nextFee } from "./forkliftCore"; // 🛠 2026-11-25 모바일 정산 저장도 PC와 같은 수수료 규칙
+import { isSalesOrder, fixedSalesRow, salesMonthOf } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료 · 고정거래처) — 홈 · 보고서 · AI 비서와 같은 함수
 import { sendCompanyMail, isMailSetupNeeded } from "./companyMail"; // ✉️ 2026-11-08 운송사별 발신 메일(예전 /api/send-email 대신)
 import { CompanyMailSettingsCard, MailSenderLine, MailSetupHost } from "./CompanyMailSettings";
 import { useCompanyStaff, masterHasHr, isHrStaffUser } from "./hrHandover";
@@ -145,7 +146,7 @@ import InternalMessenger from "./InternalMessenger";
 import { calcLeaveBalance } from "./leaveUtils";
 import { useMyLeaveExtras, useLeaveBasis } from "./leaveBasis"; // ⭐ 2026-11-07 내정보 연차 = 전자결재 연차 현황
 import { useCompanyWorkWeekdays } from "./workWeekdays"; // 🗓 2026-11-23 회사 근무 요일
-import { receivablesOf, invoiceDriverPlates, isTaxInvoiceSale, statementRowsOf, stmtIncludePrepaidOf, isPrepaidPay } from "./arAging"; // ⭐ 2026-11-07 미수금(부가세 포함) · 예상 부가세 공용 계산
+import { receivablesOf, invoiceDriverPlates, isTaxInvoiceSale, statementRowsOf, stmtIncludePrepaidOf, isPrepaidPay, monthOf as billYmOf, isSettledIn, settledDateIn } from "./arAging"; // 🗓 2026-11-25 billYmOf = 청구월(마감월 → 없으면 상차일 달) · 정산상태는 예전 상차월 키도 같이 봄 // ⭐ 2026-11-07 미수금(부가세 포함) · 예상 부가세 공용 계산
 import { TEAM_OPTIONS, POSITION_OPTIONS, TEAM_BADGE_CLASS, TEAM_BADGE_CLASS_UNASSIGNED } from "./hrConstants";
 const AttendanceBoard = lazyView(() => import("./AttendanceBoard"));
 import { todayStr as attendanceTodayStr, isRestDay, workWeekdaysOf, findApprovedLeaveForDate, isHoliday, isScheduleApproved, LEAVE_TYPE_LABEL, ATTENDANCE_STATUS_COLOR, approvalLeaveOn, hrLeaveOn } from "./attendanceUtils";
@@ -435,9 +436,10 @@ function FareStatementBody({ rows, issuerName, show, MONO }) {
           {items.map((c) => <tr key={c.name}><td style={td}>{c.name}</td><td style={num}>{c.cnt}</td><td style={num}>{won(c.amount)}</td>{show.drv && <td style={num}>{sign(c.drv)}</td>}{show.sale && <td style={num}>{sign(c.sale)}</td>}</tr>)}
           {!items.length && !show.base && <tr><td colSpan={5} style={{ ...td, color: "#9AA9C3" }}>특수운임이 없어요.</td></tr>}
           <tr><td style={{ ...td, ...foot }}>최종</td><td style={{ ...num, ...foot }} /><td style={{ ...num, ...foot, color: "#5B6B85", fontWeight: 700 }}>{T.paid ? `회사 별도 지급 ${won(T.paid)}` : ""}</td>{show.drv && <td style={{ ...num, ...foot }}>{won(T.drv)}</td>}{show.sale && <td style={{ ...num, ...foot }}>{won(T.sale)}</td>}</tr>
+          {/* 🛠 2026-11-25 수수료를 표 안 마지막 줄로(이익 빨강 · 손실 파랑) — 표 아래 작은 글씨로만 있어 잘 안 보였다 */}
+          {show.fee && <tr><td style={{ ...td, fontWeight: 900, fontSize: 13.5, background: "#FFF7F5" }}>수수료 합계</td><td colSpan={2} style={{ ...td, background: "#FFF7F5", color: "#7A89A3", fontWeight: 600, textAlign: "right" }}>청구운임 − 기사운임 − 회사 별도 지급</td><td colSpan={(show.drv ? 1 : 0) + (show.sale ? 1 : 0) || 1} style={{ ...num, background: "#FFF7F5", fontWeight: 900, fontSize: 15, color: profitColor(T.profit) }}>{won(T.profit)}원</td></tr>}
         </tbody>
       </table>
-      {show.fee && <div style={{ textAlign: "right", fontSize: 12.5, fontWeight: 800, color: "#3A4A66", marginTop: 8 }}>수수료 합계(청구운임 − 기사운임 − 회사 별도 지급) <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: profitColor(T.profit) }}>{won(T.profit)}원</b></div>}
     </>
   );
 }
@@ -692,9 +694,10 @@ function FareCertModal({ row, companyName, onClose }) {
                             <tr key={l.key}><td style={td}>{l.name}</td><td style={num}>{won(l.amount)}</td><td style={{ ...td, fontWeight: 600, color: "#5B6B85" }}>{l.how}</td>{show.drv && <td style={num}>{delta(l.drv)}</td>}{show.sale && <td style={num}>{delta(l.sale)}</td>}</tr>
                           ))}
                           <tr><td style={totalL}>최종 운임</td><td style={total} /><td style={{ ...totalL, color: "#5B6B85", fontWeight: 700, fontSize: 13 }}>{fb.paid ? `회사 별도 지급 ${won(fb.paid)}` : ""}</td>{show.drv && <td style={total}>{won(fb.drv)}</td>}{show.sale && <td style={total}>{won(fb.sale)}</td>}</tr>
+                          {/* 🛠 2026-11-25 수수료를 표 안 마지막 줄로(이익 빨강 · 손실 파랑) */}
+                          {show.fee && <tr><td style={{ ...td, fontWeight: 900, fontSize: 15, background: "#FFF7F5" }}>수수료</td><td colSpan={2} style={{ ...td, background: "#FFF7F5", color: "#7A89A3", fontWeight: 600, textAlign: "right" }}>청구운임 − 기사운임 − 회사 별도 지급</td><td colSpan={(show.drv ? 1 : 0) + (show.sale ? 1 : 0) || 1} style={{ ...num, background: "#FFF7F5", fontWeight: 900, fontSize: 16, color: pc(fb.profit) }}>{won(fb.profit)}</td></tr>}
                         </tbody>
                       </table>
-                      {show.fee && <div style={{ textAlign: "right", fontSize: 14, fontWeight: 800, color: "#3A4A66", marginTop: 6 }}>수수료(청구운임 − 기사운임 − 회사 별도 지급) <b style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums", color: pc(fb.profit) }}>{won(fb.profit)}</b></div>}
                     </div>
                   );
                 })()}
@@ -2870,6 +2873,9 @@ const approveCancelRequestPC = async (order) => {
     취소처리일시: serverTimestamp(),
     updatedAt: Date.now(),
   };
+  // 💸 2026-11-25 이미 지급한 오더 — 장부의 지급 기록은 남고 "지급 후 취소"로 표시된다고 먼저 알린다(지급 칸은 화주사 사본에 쓰지 않는다)
+  const _pg = paidEditGuard(order, { 상태: "취소", 배차상태: "배차취소" }, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10));
+  if (_pg.warn && !(await kpConfirm(_pg.warn, { title: "이미 지급한 오더예요", okText: "취소 승인", cancelText: "닫기" }))) return false;
   // 연동 화주사에게 전송된 사본이 있으면(운송사가 등록/전송한 오더), 취소 상태는
   // 화주사 사본에만 남기고 운송사 쪽 원본은 삭제한다.
   if (order._transmittedOrderId) {
@@ -2881,7 +2887,7 @@ const approveCancelRequestPC = async (order) => {
   } else {
     // 화주사가 직접 등록한 오더(사본 없음) — 이 문서 자체가 화주사의 유일한 기록이므로
     // 삭제하지 않고 취소 상태만 반영한다.
-    await updateDoc(ref, patch);
+    await updateDoc(ref, { ...patch, ..._pg.extra });
   }
 };
 const rejectCancelRequestPC = async (order) => {
@@ -3086,7 +3092,8 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride, op
   // 🧹 2026-11-09 원본의 운행·지급 진행값(기사 수락/완료, 상차완료, 지급완료, 수정이력)이 복사본에 딸려가면
   //  새 오더가 처음부터 "운송완료·지급완료"로 보였다 — 복사본은 새 운행으로 시작
   ["기사확인상태", "기사확인일시", "기사확인값", "상차완료일시", "하차완료일시", "기사완료일시", "배차확정일시", "배차확정자", "배차완료일시",
-    "지급상태", "지급일", "지게차지급완료", "지게차지급일", "history", "최종수정자", "취소처리일시"].forEach((k) => { delete payload[k]; });
+    "지급상태", "지급일", "지게차지급완료", "지게차지급일", "history", "최종수정자", "취소처리일시",
+    "지급액", "지급액기록일", "지급조정액", "지급조정일", "지급후취소", "지급명세서ID", "외부지급"].forEach((k) => { delete payload[k]; }); // 💸 2026-11-25 지급한 금액 기록도 복사하지 않기(외부지급 = 외부 특수운임 지급 기록 포함)
   // 📎 2026-11-12 첨부 · 증빙 · 정산 진행값은 복사하지 않는다 — 예전엔 원본의 첨부 개수(attachCount)만 딸려 와서
   //  복사본에 첨부 "1"이 떠 있는데 눌러 보면 아무것도 없었다(파일은 원본 오더에만 있다). 복사본은 첨부 없이 · 미청구로 시작
   ["attachCount", "officeAttach", "attachViewed", "업로드잠금", "업로드잠금해제만료", "재업로드완료알림", "업로드토큰", "업로드토큰발급",
@@ -3229,7 +3236,18 @@ import { pickUnassignedOrders } from "./unassignedRule"; // ⭐ 2026-11-05 PC·�
 import { useBadgeSeenSync, useUnseenItems, useMarkSeenOnView, unionCount } from "./seenBadges"; // ⭐ 2026-11-06 메뉴 숫자 = 계정별 안 본 것
 import { useMobileAlerts } from "./mobile/mobileAlerts";
 import { loadAcctPayments, saveAcctPayments, loadPlManual, savePlManual } from "./acctPayments";
-import { bumpDriverPayout, addClientCollection, removeClientCollections } from "./ledgerAuto";
+import { bumpDriverPayout, addClientCollection, removeClientCollections, setDriverPayAdjust } from "./ledgerAuto";
+import { payLedgerPlan, settleGapPlan, payGapOf, isPaidThenCanceled, paidEditGuard, paidDeleteWarn } from "./payCore"; // 💸 2026-11-25 지급한 금액 기록(지급액)
+// 💸 지급한 오더를 고칠 때 확인 — 여러 건을 한 번에 고쳐도 창이 줄줄이 뜨지 않게(한 번 [네]면 10초 동안은 다시 묻지 않는다)
+let _paidEditAckUntil = 0; let _paidEditAsk = null;
+const confirmPaidEdit = (msg) => {
+  if (Date.now() < _paidEditAckUntil) return Promise.resolve(true);
+  if (_paidEditAsk) return _paidEditAsk;
+  _paidEditAsk = kpConfirm(msg, { title: "이미 지급한 오더예요", okText: "네", cancelText: "취소" })
+    .then((ok) => { if (ok) _paidEditAckUntil = Date.now() + 10000; return ok; })
+    .finally(() => { setTimeout(() => { _paidEditAsk = null; }, 0); });
+  return _paidEditAsk;
+};
 import BannerCenter from "./BannerCenter";
 import { ContractExpiryBanner } from "./companyContract"; // ⭐ 2026-11-06 계약 만료 안내 띠
 import NotifyCenter from "./NotifyCenter"; // ⭐ 2026-11-03 알림 통합 — 공지·인사발령·전자결재·인수인계는 화면 가운데 팝업
@@ -3273,6 +3291,7 @@ const InvoiceFormEditor = React.lazy(() => import("./InvoiceFormEditor")); // �
 import { pickForm, visibleCols, headerLabels } from "./invoiceForm";
 import { closeBoard as closeBoardOf, approvePatch as closeApprovePatch, rejectPatch as closeRejectPatch, isFinalLocked, tempUnlockPatch, relockPatch } from "./closeFlow"; // ✅ 2026-11-16 배차 마감 → 거래처정산
 import { CloseStrip, viewStage } from "./SettleDesk";
+import { stmtDrift, stmtDriftText, stmtDriftHint } from "./settleCore"; // ⚠ 2026-11-25 명세서 작성 뒤 금액이 바뀌었는지
 import UserHub from "./UserHub";
 const CompanySwitcherLazy = React.lazy(() => import("./CompanySwitcher")); // 🔀 2026-11-19 운송사 전환(최고관리자 · 부관리자)
 import { useCloseInbox, CloseInboxBanner, useFinalLockGuard, useCloseInboxCount } from "./closeInbox"; // 📥 2026-11-16 배차마감 도착 숫자 · 배너
@@ -5472,6 +5491,14 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     }
   }
 
+  // 💸 2026-11-25 지급완료 오더의 기사운임 변경 · 취소 — 한 번 묻고, 장부는 그대로(지급액 고정 · "지급 후 운임 변경 / 지급 후 취소" 표시 · src/payCore.js)
+  //   (정산 기록 __system 저장은 묻지 않고 지급액 고정만)
+  if (patch && (!("지급상태" in patch) || patch.지급상태 === prev?.지급상태)) { // 오더 전체 저장(같은 지급상태가 딸려 옴)도 검사
+    const _pg = paidEditGuard(prev, patch, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10));
+    if (_pg.warn && !patch.__system && !(await confirmPaidEdit(_pg.warn))) return false;
+    Object.assign(patch, _pg.extra);
+  }
+
   // ⭐ 2026-11-01 청구운임·기사운임을 바꾸면 저장된 수수료도 같이 맞춘다 — 오더 수정 패널·표 칸 수정 등이
   //    운임만 바꾸고 수수료는 예전 값으로 남겨, 정산·매출(저장된 수수료를 먼저 읽음)에서 수익이 틀리게 나왔다.
   if (("청구운임" in patch || "기사운임" in patch || "지게차비용" in patch || "외부지급합" in patch || "특수운임" in patch)) {
@@ -5832,6 +5859,11 @@ const removeDispatch = async (arg, opts = {}) => {
     const of = (a) => { const id = typeof a === "string" ? a : a?._id; return (typeof a === "object" && a?.거래처명 ? a : null) || ordersCacheRef.current.find(d => d._id === id) || dispatchCacheRef.current.find(d => d._id === id) || null; };
     const locked = list.map((a) => finalLockOf(of(a))).filter(Boolean);
     if (locked.length) { globalShowAlert(`${locked.length === list.length ? "" : `${locked.length}건은 빼고 지울게요.\n`}${finalLockMsg(locked[0])}`); list = list.filter((a) => !finalLockOf(of(a))); if (!list.length) return; }
+  }
+  { // 💸 2026-11-25 이미 지급한 오더 — 지워도 장부의 지급 기록은 남는다고 먼저 알려 준다
+    const _of = (a) => { const id = typeof a === "string" ? a : a?._id; return ordersCacheRef.current.find(d => d._id === id) || dispatchCacheRef.current.find(d => d._id === id) || (typeof a === "object" ? a : null); };
+    const _w = paidDeleteWarn(list.map(_of));
+    if (_w && !(await kpConfirm(_w, { title: "이미 지급한 오더예요", okText: "지우기", cancelText: "취소", danger: true }))) return;
   }
   // 운송완료 오더 확인 — 한 건이면 원래 문구, 여러 건이면 한 번에 묻는다(거절하면 완료 건만 빼고 지운다)
   //   (진행 창이 뜨기 전에 묻는다 — 캐시에 없는 건은 예전처럼 준비 단계에서 건별로 묻는다)
@@ -10089,7 +10121,7 @@ return (
         {정산관리Visited && (role === "admin" || role === "totalMaster" || role === "test" || isViewer || !!customRole) && (
           <div style={{ display: menu === "정산관리" ? undefined : "none" }}>
           <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={정산관리Tab} onSelect={set정산관리Tab} actions={[{ key: "manual", label: "정산 매뉴얼", icon: "doc", onClick: () => window.dispatchEvent(new CustomEvent("kp-open-manual", { detail: { menu: "정산관리", section: { 홈: "home", 거래처정산: "billing", 지급관리: "payout", 입금확인: "deposit", 지입정산관리: "fleet", 지게차지급: "forklift" }[정산관리Tab] || "" } })) }]}
-            items={[{ key: "홈", label: "정산 홈", en: "OVERVIEW", icon: "dashboard" }, { key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt", badge: closeInboxN || undefined }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOn ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
+            items={[{ key: "홈", label: "정산 홈", en: "OVERVIEW", icon: "dashboard" }, { key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt", badge: closeInboxN || undefined }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOn ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 · 외부 지급", en: "FORKLIFT · EXT", icon: "wallet" }]}>
           <DetailScope data={salesDispatchData} getters={mainDetailGet} title="세부검색 · 정산관리">{(settleRows) => (<>
           {/* 🔎 2026-11-14 세부검색 버튼은 정산관리에서 뺐다(사용자 요청) */}
           {/* 거래명세서 검색/선택 상태 유지를 위해 지급관리 탭으로 전환해도 언마운트하지 않고 숨기기만 한다 */}
@@ -44880,14 +44912,14 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   // ⭐ 매출관리 — 선택한 연도 전체 + 고른 달 기준 3개월 전(전월 비교·마감 점검·담당자 실적)까지만 불러온다.
   // 월 비교 분석은 아무 달이나 고를 수 있어 열 때 전체를 불러온다.
   {
-    const yStart = `${selectedYear}-01-01`;
+    const yStart = `${Number(selectedYear) - 1}-12-01`; // 🗓 2026-11-25 청구월(마감월) 기준 — 지난해 12월 상차 · 1월 마감(이월) 오더도 1월 매출에 들어오게 한 달 앞부터
     const mStart = monthStartAgo(targetMonth, 3) || yStart;
     useLoadOrderRange(yStart < mStart ? yStart : mStart, histToday());
   }
   useLoadFullOrderHistory(monthCompareOpen || marginReportOpen);
   // ⭐ 거래처 동향(12개월 히트맵)·목표/연간(작년 비교) 화면을 열면 필요한 기간만 더 불러온다
-  useLoadOrderRange(monthStartAgo(targetMonth, 11), histToday(), activeTab === "trend");
-  useLoadOrderRange(`${(activeTab === "yearly" ? selectedYear : Number(targetMonth.slice(0, 4))) - 1}-01-01`, histToday(), activeTab === "target" || activeTab === "yearly");
+  useLoadOrderRange(monthStartAgo(targetMonth, 12), histToday(), activeTab === "trend"); // 🗓 청구월 기준이라 한 달 더 앞부터(이월 오더)
+  useLoadOrderRange(`${(activeTab === "yearly" ? selectedYear : Number(targetMonth.slice(0, 4))) - 2}-12-01`, histToday(), activeTab === "target" || activeTab === "yearly"); // 🗓 작년 1월 청구분(재작년 12월 상차 이월)까지
   const canSeeStaffPerf = role === "admin" || role === "totalMaster";
   // ⭐ AI 월간비교분석 탭에서 선택한 두 달 — 탭을 옮겨도(activeTab 전환으로
   // MonthCompareInsight가 unmount/remount 되어도) 선택이 유지되도록 상위인
@@ -44975,7 +45007,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   const dispatchRows = React.useMemo(() => (
     Array.isArray(dispatchData)
       ? dispatchData
-          .filter((r) => (r.배차상태 || "") === "배차완료")
+          .filter(isSalesOrder) // 📏 2026-11-25 functions/salesRule.mjs — 배차완료 · 취소/화주사 사본 제외(모든 매출 화면이 같은 함수)
           .map((r) => {
             return {
               ...r,
@@ -44987,40 +45019,24 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
       : []
   ), [dispatchData]);
 
-  const fixedMapped = React.useMemo(() => (fixedRows || []).map((r) => {
-    const sale = toInt(r.청구운임);
-    const driver = toInt(r.기사운임);
-    const fee =
-      r.수수료 !== undefined && r.수수료 !== null && String(r.수수료).trim() !== ""
-        ? toInt(r.수수료)
-        : Math.max(sale - driver, 0);
-    return {
-      상차일: r.날짜,
-      출발지: r.출발지 || "",
-      도착지: r.도착지 || "",
-      거래처명: r.거래처명 || "",
-      청구운임: sale,
-      기사운임: driver,
-      수수료: fee,
-      배차상태: "배차완료",
-      __fixed: true, // 월 비교 분석에서 "고정거래처"로 구분
-    };
-  }), [fixedRows]);
+  // 📏 2026-11-25 고정거래처 → 매출 줄(functions/salesRule.mjs fixedSalesRow — 예전 이 자리의 식 그대로 · __fixed: 월 비교 분석에서 "고정거래처"로 구분)
+  const fixedMapped = React.useMemo(() => (fixedRows || []).map(fixedSalesRow), [fixedRows]);
 
   const rows = React.useMemo(() => [...dispatchRows, ...fixedMapped], [dispatchRows, fixedMapped]);
 
   const dayRows = React.useMemo(() => rows.filter((r) => (r.상차일 || "") === kpiDay), [rows, kpiDay]);
-  const monthRows = React.useMemo(() => rows.filter((r) => (r.상차일 || "").startsWith(monthKey)), [rows, monthKey]);
+  // 🗓 2026-11-25 달 · 연 매출은 청구월(마감월 → 없으면 상차일 달 · functions/arCore.mjs monthOf) 기준 — 미수금 · 회계와 같은 달. 일 매출(dayRows)은 상차일 그대로
+  const monthRows = React.useMemo(() => rows.filter((r) => salesMonthOf(r) === monthKey), [rows, monthKey]);
 
-  const startKey = `${yearKey}-01-01`;
-  const endKey = `${targetMonth}-${String(new Date(yearKey, monthNum, 0).getDate()).padStart(2, "0")}`;
+  const startKey = `${yearKey}-01`;
+  const endKey = targetMonth;
   const yearRows = React.useMemo(() => rows.filter((r) => {
-    const d = r.상차일;
-    if (!d) return false;
-    return d >= startKey && d <= endKey;
+    const m = salesMonthOf(r);
+    if (!m) return false;
+    return m >= startKey && m <= endKey;
   }), [rows, startKey, endKey]);
 
-  const prevMonthRows = React.useMemo(() => rows.filter((r) => (r.상차일 || "").startsWith(prevMonthKey)), [rows, prevMonthKey]);
+  const prevMonthRows = React.useMemo(() => rows.filter((r) => salesMonthOf(r) === prevMonthKey), [rows, prevMonthKey]);
 
   const isValidClientName = (c) => c && !/^2\d{1,2}년/.test(c) && !isExcludedFast(c);
   // ⭐ firstAppearMap/newClients도 매번 전체 rows(수천 건)를 순회하는데, activeTab
@@ -45163,11 +45179,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   })();
 
   const baseYear = yearKey - 1;
-  const lastYearRows = rows.filter((r) => {
-    const d = r.상차일;
-    if (!d) return false;
-    return d.startsWith(String(baseYear));
-  });
+  const lastYearRows = rows.filter((r) => salesMonthOf(r).startsWith(String(baseYear))); // 🗓 청구월 기준
 
   const lastYearFreshByMonth = Array.from({ length: 12 }, (_, i) => ({
     month: `${i + 1}월`,
@@ -45176,7 +45188,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
   }));
   lastYearRows.forEach((r) => {
     if (!isFresh(r)) return;
-    const d = r.상차일;
+    const d = salesMonthOf(r); // 🗓 청구월 기준
     if (!d) return;
     const mIdx = Number(d.slice(5, 7)) - 1;
     const sale = toInt(r.청구운임);
@@ -45292,8 +45304,8 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
         <div>
           <div style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }} className="text-[11px] font-extrabold tracking-[0.24em] text-[#4B6CB7]">REVENUE · {RV_PAGES[rvPage].en}</div>
           <h1 className="text-[22px] font-black text-[#0F1A30] tracking-tight mt-0.5">{RV_PAGES[rvPage].label}</h1>
-          {/* ⭐ 2026-11-07 규칙 점검 — 경영 브리핑·일일 경영 보고(취소 제외 전체 오더)와 기준이 달라 숫자가 다를 수 있음을 적어 둔다 */}
-          <div className="text-[12.5px] font-bold text-[#7A879C] mt-0.5" data-kp="rv-basis">배차완료 오더 + 고정거래처 기준(배차중·승인대기·취소 제외) · 경영 브리핑·일일 경영 보고는 취소만 뺀 전체 오더 기준</div>
+          {/* 📏 2026-11-25 매출 기준 한 규칙(functions/salesRule.mjs) — 홈 · 경영 브리핑 · 일일 경영 보고 · 팀 실적 · 경영 분석 · AI 비서도 같은 기준 */}
+          <div className="text-[12.5px] font-bold text-[#7A879C] mt-0.5" data-kp="rv-basis">배차완료 오더 + 고정거래처 · 청구월(마감월) 기준(배차중·미배차·취소 제외 · 일 매출은 상차일) · 홈 · 경영 브리핑 · 일일 경영 보고도 같은 기준</div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {rvPage === "yearly" ? (
@@ -48298,8 +48310,14 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     list = list.filter(r => toInt(r.청구운임) > 0);
     if (searchType === "거래처명" && client) list = list.filter(r => (r.거래처명 || "") === client);
     if (searchType === "기사명" && client) list = list.filter(r => (r.이름 || "").includes(client));
-    if (start) list = list.filter(r => (r.상차일 || "") >= start);
-    if (end) list = list.filter(r => (r.상차일 || "") <= end);
+    // 🗓 2026-11-25 달 단위로 조회하면(1일 ~ 말일) 청구월(마감월) 기준 — 상차 10/31 · 마감월 11월 오더는 11월 명세서에(정산 홈 · 월 마감과 같은 달)
+    //  날짜를 하루 단위로 고르면 예전처럼 상차일 기준
+    const wholeMonths = start && end && start === monthStart(start.slice(0, 7)) && end === monthEnd(end.slice(0, 7));
+    if (wholeMonths) list = list.filter(r => { const ym = billYmOf(r); return ym >= start.slice(0, 7) && ym <= end.slice(0, 7); });
+    else {
+      if (start) list = list.filter(r => (r.상차일 || "") >= start);
+      if (end) list = list.filter(r => (r.상차일 || "") <= end);
+    }
     list = list.filter(csBizOk); // ⭐ 청구 사업자
     return list.sort((a, b) => (a.상차일 || "").localeCompare(b.상차일 || ""));
   }, [dispatchData, client, start, end, searched, searchType, csBizCur, csBiz.multi]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -48337,6 +48355,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     return {
       idx: i + 1,
       상차일: r.상차일 || "",
+      청구월: billYmOf(r), // 🗓 2026-11-25 월별 소계 = 청구월(마감월) 기준
       상차지: r.상차지명 || r.상차지 || "",
       하차지: r.하차지명 || r.하차지 || "",
       경유지: mergeViaNames(viaLists),
@@ -48377,7 +48396,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   const monthlySubtotals = useMemo(() => {
     const map = new Map();
     mapped.forEach(m => {
-      const ym = m.상차일.slice(0, 7); // "2025-01"
+      const ym = m.청구월 || m.상차일.slice(0, 7); // "2025-01" · 🗓 청구월(마감월) 기준
       if (!ym) return;
       if (!map.has(ym)) map.set(ym, { 공급가액: 0, 세액: 0, 건수: 0 });
       const entry = map.get(ym);
@@ -48789,20 +48808,21 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     }
 
     // ⭐ 전체 거래처 — 거래처마다 오더가 있는 달만 한 줄씩
-    const clientsInRange = isAll ? [...new Set(base.filter(r => allMonths.some(m => String(r.상차일||"").startsWith(m))).map(r => r.거래처명 || ""))].filter(Boolean).sort((a, b) => a.localeCompare(b, "ko")) : [selClient];
+    // 🗓 2026-11-25 청구월 = 마감월(없으면 상차일 달) — 정산 홈 · 월 마감 · 은행 입금 매칭과 같은 달 · 정산상태는 예전 상차월 키도 같이 본다(isSettledIn)
+    const clientsInRange = isAll ? [...new Set(base.filter(r => allMonths.includes(billYmOf(r))).map(r => r.거래처명 || ""))].filter(Boolean).sort((a, b) => a.localeCompare(b, "ko")) : [selClient];
     return clientsInRange.flatMap(client => allMonths.map(yyyymm => {
       const mm = yyyymm.slice(5);
-      const rows = base.filter(r => String(r.상차일||"").startsWith(yyyymm) && (!isAll || (r.거래처명||"") === client));
+      const rows = base.filter(r => billYmOf(r) === yyyymm && (!isAll || (r.거래처명||"") === client));
       if (isAll && !rows.length) return null;
       const total = rows.reduce((s, r) => s + toInt(r.청구운임), 0);
-      const allDone = rows.length > 0 && rows.every(r => r.정산상태?.[yyyymm] === "정산완료");
+      const allDone = rows.length > 0 && rows.every(r => isSettledIn(r, yyyymm));
 
       let status;
       if (allDone) status = "정산완료";
       else if (yyyymm >= currentYYYYMM) status = "진행중";
       else status = "미정산";
 
-      const dates = rows.map(r => r.정산일?.[yyyymm]).filter(Boolean).sort();
+      const dates = rows.map(r => settledDateIn(r, yyyymm)).filter(Boolean).sort();
       const k = `${client}|${yyyymm}`;
       const paid = arPaidMap.get(k) || 0; // 일부입금 누계
       const due = Math.round(total * 1.1);
@@ -49090,10 +49110,11 @@ const [arFromMM,   setArFromMM]   = useState("01");
 const [arToYear,   setArToYear]   = useState(String(THIS_YEAR));
 const [arToMM,     setArToMM]     = useState("12");
 // ⭐ 거래처정산 — 화면에서 고른 기간만 불러온다(기간조회 / 연월 범위 / 일괄정산 / 미수현황 각각)
-useLoadOrderRange(start && end ? start : null, end);
-useLoadOrderRange(monthStart(`${yearFrom}-${monthFrom}`), monthEnd(`${yearTo}-${monthTo}`));
-useLoadOrderRange(monthStart(`${batchFromYear}-${batchFromMM}`), monthEnd(`${batchToYear}-${batchToMM}`), batchModalOpen);
-useLoadOrderRange(monthStart(`${arFromYear}-${arFromMM}`), monthEnd(`${arToYear}-${arToMM}`), arReportOpen);
+// 🗓 2026-11-25 청구월(마감월) 기준 — 앞달 말에 상차하고 이번 달로 마감한(이월) 오더도 보이게 한 달 앞부터 받는다
+useLoadOrderRange(start && end ? (monthStartAgo(start.slice(0, 7), 1) || start) : null, end);
+useLoadOrderRange(monthStartAgo(`${yearFrom}-${monthFrom}`, 1), monthEnd(`${yearTo}-${monthTo}`));
+useLoadOrderRange(monthStartAgo(`${batchFromYear}-${batchFromMM}`, 1), monthEnd(`${batchToYear}-${batchToMM}`), batchModalOpen);
+useLoadOrderRange(monthStartAgo(`${arFromYear}-${arFromMM}`, 1), monthEnd(`${arToYear}-${arToMM}`), arReportOpen);
 const [arOnlyUnsettled, setArOnlyUnsettled] = useState(false);
 // ★ 신규: 거래처 필터
 const [arReportMode, setArReportMode] = useState("all"); // "all" | "selected"
@@ -49130,9 +49151,9 @@ const [arReportClientQ, setArReportClientQ] = useState("");
       const count = allMonths.filter(ym => {
         const rows2 = (dispatchData||[]).filter(r=>
           (r.배차상태||"")==="배차완료" && (r.거래처명||"")===name &&
-          String(r.상차일||"").startsWith(ym)
+          billYmOf(r) === ym // 🗓 청구월(마감월) 기준
         );
-        return rows2.length > 0 && !rows2.every(r=>r.정산상태?.[ym]==="정산완료");
+        return rows2.length > 0 && !rows2.every(r => isSettledIn(r, ym));
       }).length;
       map.set(name, count);
     });
@@ -49237,7 +49258,7 @@ const handleARReport = async () => {
     const name = r.거래처명 || "";
     if (!name) return;
     if (!companyMap.has(name)) return; // ★ 기본거래처 외 업체 제외
-    const ym = String(r.상차일 || "").slice(0, 7);
+    const ym = billYmOf(r); // 🗓 2026-11-25 청구월(마감월) 기준
     if (!months.includes(ym)) return;
     const entry = companyMap.get(name);
     if (!entry[ym]) entry[ym] = { charge: 0, count: 0, status: "미정산" };
@@ -49250,9 +49271,9 @@ const handleARReport = async () => {
     for (const ym of months) {
       if (!mData[ym]) continue;
       const monthRows3 = completedData.filter(r =>
-        (r.거래처명||"") === name && String(r.상차일||"").startsWith(ym)
+        (r.거래처명||"") === name && billYmOf(r) === ym
       );
-      mData[ym].status = (monthRows3.length > 0 && monthRows3.every(r => r.정산상태?.[ym] === "정산완료"))
+      mData[ym].status = (monthRows3.length > 0 && monthRows3.every(r => isSettledIn(r, ym)))
         ? "정산완료" : "미정산";
     }
   }
@@ -49593,7 +49614,7 @@ const handleBatchSettle = async (targetStatus) => {
       );
       for (const yyyymm of months) {
         const targetRows2 = clientRows.filter(r =>
-          String(r.상차일 || "").startsWith(yyyymm)
+          billYmOf(r) === yyyymm // 🗓 2026-11-25 청구월(마감월) 기준 — 정산상태 키도 청구월
         );
         for (const r of targetRows2) {
           if (!r._id) continue;
@@ -49637,7 +49658,7 @@ const handleBatchSettle = async (targetStatus) => {
       const oldStatus = (d.정산상태 && typeof d.정산상태 === "object") ? { ...d.정산상태 } : {};
       const oldDate   = (d.정산일   && typeof d.정산일   === "object") ? { ...d.정산일   } : {};
       for (const yyyymm of months) {
-        if (String(d.상차일 || "").startsWith(yyyymm)) {
+        if (billYmOf(d) === yyyymm) {
           oldStatus[yyyymm] = targetStatus;
           oldDate[yyyymm]   = dateStr;
         }
@@ -49716,10 +49737,14 @@ const handleBatchSettle = async (targetStatus) => {
   const applyOneMatch = async (m) => {
     const dateStr = todayStr8();
     const ids = new Map();
+    // 🔗 2026-11-25 입금 한 번 = depositKey 하나 → 자금관리 수입 장부 한 줄(서버 arPaymentLedger · 여러 달에 나눠도 합계 한 줄)
+    const depositKey = `settle_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+    const depDate = /^\d{4}-\d{2}-\d{2}/.test(String(m.deposit.date || "")) ? String(m.deposit.date).slice(0, 10) : String(m.deposit.date || "");
     for (const a of m.alloc) {
       await addDoc(collection(db, "arPayments"), {
         company: arCompany, client: m.client, yyyymm: a.yyyymm, amount: a.amount, full: a.full,
-        depositName: m.deposit.name || "", depositDate: m.deposit.date || "", at: serverTimestamp(), by: auth.currentUser?.email || "",
+        depositName: m.deposit.name || "", depositDate: depDate, at: serverTimestamp(), by: auth.currentUser?.email || "",
+        source: m.confidence === "직접 입력" ? "settle" : "excel", depositKey,
       });
       if (!a.full) continue;
       for (const r of a.rows || []) {
@@ -49788,7 +49813,7 @@ const handleBatchSettle = async (targetStatus) => {
   const [manualOpen, setManualOpen] = useState(false); // 직접 조회 팝업
   const [stageAsk, setStageAsk] = useState(null); // { stage, groups }
   const [pendingSend, setPendingSend] = useState(false);
-  useLoadOrderRange(monthStart(kstYm(-5) < pipeMonth ? kstYm(-5) : pipeMonth), monthEnd(pipeMonth > kstYm(0) ? pipeMonth : kstYm(0)));
+  useLoadOrderRange(monthStartAgo(kstYm(-5) < pipeMonth ? kstYm(-5) : pipeMonth, 1), monthEnd(pipeMonth > kstYm(0) ? pipeMonth : kstYm(0))); // 🗓 이월 오더(앞달 상차)도
   // ⭐ 2026-11-17 sub(담당노선구분)가 있으면 구분별 명세서 — kind "stmtSub" · 문서 이름도 따로(거래처 전체 명세서와 섞이지 않게)
   const stmtKey = (c, ym, sub = "") => (sub ? `${csBizCur}|${c}|${ym}|${sub}` : `${csBizCur}|${c}|${ym}`);
   const stmtDocOf = (c, ym, sub = "") => (sub ? desk.subStmts?.get(stmtKey(c, ym, sub)) : desk.stmts.get(stmtKey(c, ym))) || null;
@@ -49834,7 +49859,7 @@ const handleBatchSettle = async (targetStatus) => {
   const groupsOfMonth = (ym) => {
     const cm = closeMapOf(ym);
     const m = new Map();
-    billRows.forEach(r => { if (String(r.상차일 || "").slice(0, 7) !== ym) return; if (!m.has(r.거래처명)) m.set(r.거래처명, []); m.get(r.거래처명).push(r); });
+    billRows.forEach(r => { if (billYmOf(r) !== ym) return; if (!m.has(r.거래처명)) m.set(r.거래처명, []); m.get(r.거래처명).push(r); }); // 🗓 2026-11-25 청구월(마감월) 기준
     return [...m.entries()].map(([c, rows]) => {
       const d = stmtDocOf(c, ym);
       const ex = new Set(d?.excludedIds || []);
@@ -49848,7 +49873,7 @@ const handleBatchSettle = async (targetStatus) => {
       const subs = [...new Set(rows.map((r) => routeGroupOf(r) || RG_NONE))];
       const subN = subs.length > 1 ? subs.length : 0;
       const subDone = subN ? subs.filter((g) => stageIdx(stmtDocOf(c, ym, g)?.stage) >= 1).length : 0;
-      return { subN, subDone, close: cm.get(c) || null, key: `${c}|${ym}`, client: c, yyyymm: ym, rows: inc, count: inc.length, supply, vat, total: supply + vat, prepaidOut: pp.excluded.length, stage: viewStage(d?.stage), doc: d, lastAt, email: emailOf(c), settled: rows.every(r => r.정산상태?.[ym] === "정산완료") };
+      return { subN, subDone, close: cm.get(c) || null, key: `${c}|${ym}`, client: c, yyyymm: ym, rows: inc, count: inc.length, supply, vat, total: supply + vat, prepaidOut: pp.excluded.length, stage: viewStage(d?.stage), doc: d, lastAt, email: emailOf(c), settled: rows.every(r => isSettledIn(r, ym)), drift: stmtDrift(d, { supply, count: inc.length }) } // ⚠ 2026-11-25 작성 뒤 금액이 바뀌었는지;
     });
   };
   const pipeGroups = useMemo(() => groupsOfMonth(pipeMonth), [billRows, pipeMonth, desk.stmts, desk.subStmts, desk.closes, clients, prepaidDefault]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -49900,7 +49925,7 @@ const handleBatchSettle = async (targetStatus) => {
   const saveStmtDraft = async () => {
     if (!stmtYm) return;
     const extra = { count: mapped.length, supply: 합계공급가, vat: 합계세액, excludedIds: excludedRowsInvoice.map(r => r._id), includePrepaid: invIncPrepaid };
-    if (stageIdx(stmtStage) >= 1) { await desk.save(stmtDocId(client, stmtYm, stmtSub), { ...stmtBase(client, stmtYm, stmtSub), ...extra }); sflowToast("포함 오더를 저장했어요", "success"); return; }
+    if (stageIdx(stmtStage) >= 1) { await desk.save(stmtDocId(client, stmtYm, stmtSub), { ...stmtBase(client, stmtYm, stmtSub), ...extra, checkedAt: Date.now() }); sflowToast("포함 오더를 저장했어요", "success"); return; } // ⚠ checkedAt = 지금 금액으로 다시 확인한 때
     await setStmtStage(client, stmtYm, "작성", { extra, sub: stmtSub });
     sflowToast(`${stmtTitle} ${Number(stmtYm.slice(5))}월 명세서 작성 완료`, "success");
   };
@@ -49962,7 +49987,7 @@ const handleBatchSettle = async (targetStatus) => {
   useEffect(() => {
     if (isViewer || !arCompany || !desk.stmts?.size || !billRows.length) return;
     const byKey = new Map();
-    billRows.forEach(r => { const ym = String(r.상차일 || "").slice(0, 7); const k = `${r.거래처명}|${ym}`; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(r); });
+    billRows.forEach(r => { const ym = billYmOf(r); const k = `${r.거래처명}|${ym}`; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(r); }); // 🗓 청구월(마감월) 기준
     const todo = [];
     desk.stmts.forEach((d) => {
       if ((d.biz || "") !== (csBizCur || "") || !d.client || !d.yyyymm) return;
@@ -49971,7 +49996,7 @@ const handleBatchSettle = async (targetStatus) => {
       const k = `${d.client}|${d.yyyymm}`; if (autoCloseDone.current.has(`${csBizCur}|${k}`)) return;
       const ex = new Set(d.excludedIds || []);
       const rows = (byKey.get(k) || []).filter(r => !ex.has(r._id));
-      if (rows.length && rows.every(r => r.정산상태?.[d.yyyymm] === "정산완료")) todo.push(d);
+      if (rows.length && rows.every(r => isSettledIn(r, d.yyyymm))) todo.push(d);
     });
     if (!todo.length) return;
     todo.forEach(d => autoCloseDone.current.add(`${csBizCur}|${d.client}|${d.yyyymm}`));
@@ -50322,6 +50347,18 @@ const handleBatchSettle = async (targetStatus) => {
                       if (stageIdx(k) < stageIdx(stmtStage)) { revertStmt(k); return; } // 계산서 발행 · 마감 → 되돌리기
                       setStageAsk({ stage: k, groups: [g] });
                     }} />
+                  {(() => { // ⚠ 2026-11-25 명세서 작성 뒤 금액이 바뀌었는지(저장은 막지 않음) — 정산 홈 · 청구 현황판 · 명세서 목록에도 같은 배지
+                    const dr = stmtDrift(stmtCur, { supply: 합계공급가, count: mapped.length });
+                    if (!dr) return null;
+                    return (
+                      <div data-kp="stmt-drift-banner" className="mt-2.5 rounded-xl border border-[#FECDCA] bg-[#FEF3F2] px-3.5 py-2.5 flex items-center gap-3 flex-wrap">
+                        <div className="flex-1 min-w-[220px]">
+                          <div className="text-[14px] font-black text-[#B42318]" style={{ fontVariantNumeric: "tabular-nums" }}>⚠ {stmtDriftText(dr)}</div>
+                          <div className="text-[12.5px] font-bold text-[#7A2E22] mt-0.5">{stmtDriftHint(dr)}</div>
+                        </div>
+                        {!isViewer && <button type="button" onClick={saveStmtDraft} className={`${sdBtnPri} !h-9`} data-kp="stmt-drift-resave">지금 금액으로 다시 저장</button>}
+                      </div>);
+                  })()}
                 </div>
               ) : searched ? (
                 <div className="rounded-2xl border border-dashed border-[#C9D3E3] bg-white px-4 py-3 text-[14px] text-[#5B6B85]">거래처 한 곳 · 한 달(1일~말일)로 열면 발송 · 확인 · 계산서 · 마감 단계를 기록할 수 있어요</div>
@@ -53126,7 +53163,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const driversReady = Array.isArray(payDrivers); // 기사 목록이 오기 전엔 지입 차량을 가려낼 수 없어 잠깐 비워 둔다
   const base = useMemo(
     // 💳 2026-11-11 IN(우리 오더를 용차 기사가 잡은 것)만 — OUT(외부 콜을 잡은 오더)은 정산관리 › 입금 확인에서 본다(시험 기능 운송사)
-    () => (!driversReady ? [] : (Array.isArray(dispatchData) ? dispatchData : []).filter(r => (r.배차상태 || "") === "배차완료" && !fleetPlates.has(normalizePlate(r.차량번호 || "")) && !(payNoticeBeta && isCaughtCall(r)))),
+    // 💸 2026-11-25 지급 후 취소된 오더(배차완료가 아니어도)도 남겨 [지급 취소]할 수 있게 · 지입 지급명세서로 지급한 오더는 빼기
+    () => (!driversReady ? [] : (Array.isArray(dispatchData) ? dispatchData : []).filter(r => ((r.배차상태 || "") === "배차완료" || isPaidThenCanceled(r)) && !r.지급명세서ID && !fleetPlates.has(normalizePlate(r.차량번호 || "")) && !(payNoticeBeta && isCaughtCall(r)))),
     [dispatchData, fleetPlates, driversReady, payNoticeBeta]
   );
 
@@ -53206,31 +53244,47 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
 
   // ─── 지급 처리 ───
   // 🔗 2026-11-01 지급완료/취소 → 수입·지출 장부(지급일별 "기사운임 지급")에 자동 반영
-  const syncPayLedger = (row, nextStatus, nextDate) => {
+  // 💸 2026-11-25 장부는 오더에 남긴 지급액(지급완료 때 기사운임)으로 더하고 뺀다 — 지급 뒤 운임을 고쳐도 장부가 틀어지지 않게(src/payCore.js)
+  //   row = 바꾸기 전 오더 · keepAmount = 지급일만 옮기기
+  const syncPayLedger = (row, nextStatus, nextDate, { keepAmount = false } = {}) => {
     if (!row) return;
-    const amt = toInt(row.기사운임);
-    if (!amt) return;
     const wasPaid = (row.지급상태 || "지급중") === "지급완료";
     const co = companyName || row.companyName || "";
-    if (wasPaid) bumpDriverPayout(db, { date: row.지급일 || todayStr9(), amount: -amt, count: -1, company: co }).catch(() => {});
-    if (nextStatus === "지급완료") bumpDriverPayout(db, { date: nextDate, amount: amt, count: 1, company: co }).catch(() => {});
+    const plan = payLedgerPlan(row, { status: nextStatus, date: nextDate, keepAmount }, todayStr9());
+    plan.bumps.forEach((b) => bumpDriverPayout(db, { ...b, company: co }).catch(() => {}));
+    if (plan.adjAmount != null && row._id) setDriverPayAdjust(db, { orderId: row._id, amount: plan.adjAmount, date: todayStr9(), company: co, who: row.이름 || "" }).catch(() => {});
     // 📩 2026-11-11 지급완료 → 기사에게 입금 안내 문자(시험 기능 · 스위치를 켠 경우만 · 같은 기사는 한 통으로 묶음)
     if (nextStatus === "지급완료" && !wasPaid && payNoticeBeta) queuePayNotice({ row, date: nextDate, company: co, patchDispatch });
   };
+  // 오더에 저장할 칸(지급상태 · 지급일 · 지급액 · 지급액기록일 …) — 오더를 못 찾으면 예전처럼 상태 · 날짜만
+  const payPatchOf = (row, status, date, keepAmount = false) => (row
+    ? { ...payLedgerPlan(row, { status, date, keepAmount }, todayStr9()).patch, __system: true }
+    : { 지급상태: status, 지급일: date, __system: true });
   // 지급일만 고치기(지급완료 상태 그대로)
   const changePayDate = async (row, d) => {
     if (!patchDispatch || !row || !d || d === (row.지급일 || "")) return;
     if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return; // ✅ 2026-11-23 지급일 바꾸기 전에 한 번 묻기
-    await patchDispatch(row._id, { 지급일: d, __system: true });
-    syncPayLedger(row, "지급완료", d);
+    await patchDispatch(row._id, payPatchOf(row, "지급완료", d, true));
+    syncPayLedger(row, "지급완료", d, { keepAmount: true });
   };
   const pay = async (id, status) => {
     if (!patchDispatch) return alert("저장 기능이 연결되지 않아 처리할 수 없습니다. 화면을 새로고침한 뒤 다시 시도해 주세요.");
     const row = (dispatchData || []).find((r) => r._id === id);
     const date = status === "지급완료" ? (selectedPayDate || todayStr9()) : "";
     if (row && (row.지급상태 || "지급중") === status && (row.지급일 || "") === date) return; // 바뀐 게 없으면 장부도 그대로
-    await patchDispatch(id, { 지급상태: status, 지급일: date, __system: true });
+    await patchDispatch(id, payPatchOf(row, status, date));
     syncPayLedger(row, status, date);
+  };
+  // 💸 지급 후 운임 변경 — [추가 지급]/[환수 처리]: 차액만 조정 한 줄로(같은 오더는 한 줄 · 누적 금액이라 두 번 눌러도 같은 값)
+  const settleGap = async (row) => {
+    if (!patchDispatch || !row) return;
+    const plan = settleGapPlan(row, todayStr9());
+    if (!plan) return;
+    const who = `${row.이름 || "기사"}${row.차량번호 ? ` (${row.차량번호})` : ""}`;
+    const plus = plan.gap > 0;
+    if (!(await kpConfirm(`${plus ? "추가 지급" : "환수 처리"}할까요?\n${who} · ${row.상차일 || ""}\n지급한 돈 ${won(toInt(row.기사운임) - plan.gap)}원 → 지금 기사운임 ${won(row.기사운임)}원\n${plus ? `${won(plan.gap)}원을 더 드린 것으로` : `${won(-plan.gap)}원을 돌려받은 것으로`} 장부에 남겨요.`, { title: plus ? "추가 지급" : "환수 처리", okText: "네", cancelText: "취소" }))) return;
+    await patchDispatch(row._id, { ...plan.patch, __system: true });
+    setDriverPayAdjust(db, { orderId: row._id, amount: plan.adjAmount, date: todayStr9(), company: companyName || row.companyName || "", who: row.이름 || "" }).catch(() => {});
   };
 
   const bulkPay = async (ids, status) => {
@@ -53463,12 +53517,12 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
       const _n = payExcelPreview.matched.reduce((n, m) => n + (m.isSumMatch ? m.sumRecords.length : 1), 0);
       await runBulkTask({ count: _n, label: "오더", verb: "지급 처리", task: async (progress) => {
       for (const m of payExcelPreview.matched) {
-        const patch = { 지급상태: "지급완료", 지급일: m.지급일 || selectedPayDate, __system: true };
-        if (m.excelInsurance > 0) patch.산재보험료 = m.excelInsurance;
+        const payDay = m.지급일 || selectedPayDate;
+        const patchOf = (r) => ({ ...payPatchOf(r, "지급완료", payDay), ...(m.excelInsurance > 0 ? { 산재보험료: m.excelInsurance } : {}) }); // 💸 지급액도 같이
         if (m.isSumMatch) {
-          for (const r of m.sumRecords) { await patchDispatch(r._id, patch); syncPayLedger(r, "지급완료", patch.지급일); dispatchCount++; }
+          for (const r of m.sumRecords) { await patchDispatch(r._id, patchOf(r)); syncPayLedger(r, "지급완료", payDay); dispatchCount++; }
         } else {
-          await patchDispatch(m.dispatch._id, patch); syncPayLedger(m.dispatch, "지급완료", patch.지급일); dispatchCount++;
+          await patchDispatch(m.dispatch._id, patchOf(m.dispatch)); syncPayLedger(m.dispatch, "지급완료", payDay); dispatchCount++;
         }
         totalAmt += m.excelAmt || 0;
         progress(dispatchCount);
@@ -53615,6 +53669,19 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
         )}
       </div>
 
+      {/* 💸 2026-11-25 지급 후 운임 변경 · 지급 후 취소 — 장부는 지급한 금액 그대로, 아래 표의 [추가 지급]/[환수 처리]/[지급 취소]로 맞춰요 */}
+      {activeTab === "list" && (() => {
+        const gapRows = filtered.filter((r) => payGapOf(r) !== 0);
+        const cancelRows = filtered.filter((r) => isPaidThenCanceled(r));
+        if (!gapRows.length && !cancelRows.length) return null;
+        const gapSum = gapRows.reduce((a, r) => a + payGapOf(r), 0);
+        return (
+          <div className="rounded-xl border border-[#F5C98B] bg-[#FFF9F0] px-4 py-3 text-[12.5px] text-[#5C3A00] flex flex-wrap items-center gap-x-4 gap-y-1">
+            {gapRows.length > 0 && <span><b>지급 후 운임 변경 {gapRows.length}건</b> · 차액 {gapSum > 0 ? "+" : ""}{won(gapSum)}원: 지급상태 칸의 [추가 지급]/[환수 처리]를 누르면 장부에 들어가요.</span>}
+            {cancelRows.length > 0 && <span><b>지급 후 취소 {cancelRows.length}건</b>: 돈을 돌려받았다면 [✓ 지급완료]를 눌러 지급 취소해 주세요.</span>}
+          </div>
+        );
+      })()}
       {/* ══ 전체 목록 탭 ══ */}
       {activeTab === "list" && (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -53660,13 +53727,23 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
                           // 💳 2026-11-11 화면 가운데 확인 창 — Enter · [네] = 바로 적용, Esc · [취소] = 닫기
                           const who = `${r.이름 || "기사"}${r.차량번호 ? ` (${r.차량번호})` : ""}`;
                           const ok = isDone
-                            ? await kpConfirm(`지급완료를 취소하시겠습니까?\n${who} · ${won(r.기사운임)}원 → 미지급으로 돌립니다`, { title: "지급 취소", okText: "네", cancelText: "취소", danger: true })
+                            ? await kpConfirm(`지급완료를 취소하시겠습니까?\n${who} · ${won(toInt(r.기사운임) - payGapOf(r))}원 → 미지급으로 돌립니다`, { title: "지급 취소", okText: "네", cancelText: "취소", danger: true })
                             : await kpConfirm(`지급완료하시겠습니까?\n${who} · ${r.상차일 || ""} ${r.상차지명 || ""} → ${r.하차지명 || ""}\n기사운임 ${won(r.기사운임)}원 · 지급일 ${selectedPayDate || todayStr9()}`, { title: "지급완료", okText: "네", cancelText: "취소" });
                           if (ok) pay(r._id, isDone ? "지급중" : "지급완료");
                         }}
                           className={`px-3 py-1 rounded-lg text-[11px] font-bold text-white transition ${isDone ? "bg-[#0F1A30] hover:bg-[#1B2B4B]" : "bg-[#2D4C82] hover:bg-[#1B2B4B]"}`}>
                           {isDone ? "✓ 지급완료" : "미지급"}
                         </button>
+                        {/* 💸 2026-11-25 지급 뒤 운임이 바뀌었거나 취소된 오더 — 장부는 그대로, 차액은 직접 처리 */}
+                        {isDone && payGapOf(r) !== 0 && (
+                          <div className="mt-1 flex flex-col items-center gap-1">
+                            <span className="px-1.5 py-0.5 rounded-md bg-[#FFF4E5] border border-[#F5C98B] text-[#8A4B00] text-[10.5px] font-bold whitespace-nowrap" title={`지급한 돈 ${won(toInt(r.기사운임) - payGapOf(r))}원 · 지금 기사운임 ${won(r.기사운임)}원`}>지급 후 운임 변경 {payGapOf(r) > 0 ? "+" : ""}{won(payGapOf(r))}원</span>
+                            <button type="button" onClick={() => settleGap(r)} className="px-2 py-0.5 rounded-md border border-[#C9D6EE] bg-white text-[#1B2B4B] text-[10.5px] font-bold hover:bg-[#EEF3FC] whitespace-nowrap">{payGapOf(r) > 0 ? "추가 지급" : "환수 처리"}</button>
+                          </div>
+                        )}
+                        {isPaidThenCanceled(r) && (
+                          <div className="mt-1"><span className="px-1.5 py-0.5 rounded-md bg-[#FDECEC] border border-[#F1B8B8] text-[#9B1C1C] text-[10.5px] font-bold whitespace-nowrap" title={`취소일 ${r.지급후취소?.at || "-"} · 돈을 돌려받았다면 [지급 취소]를 눌러 주세요`}>지급 후 취소{r.지급후취소?.이름 ? ` · ${r.지급후취소.이름}` : ""}</span></div>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-center text-gray-500 border-b border-gray-100">
                         {/* 💳 2026-11-11 지급완료한 뒤에도 지급일을 고칠 수 있다(직접 입력 · 달력) — 장부의 지급 합계도 그 날짜로 옮긴다 */}
@@ -60304,6 +60381,11 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
     // ⭐ 2026-11-12 점검 — __system · __col 같은 화면용 표시는 문서에 쓰지 않는다(예전엔 그대로 저장됐다)
     const clean = {}; Object.entries(patch || {}).forEach(([k, v]) => { if (!k.startsWith("__")) clean[k] = v; });
     if (("청구운임" in clean || "기사운임" in clean) && !("수수료" in clean)) clean.수수료 = String(nextFee(row || null, { ...(row || {}), ...clean }));
+    if (!("지급상태" in clean) || clean.지급상태 === row?.지급상태) { // 💸 2026-11-25 PC와 같은 규칙 — 지급한 오더의 기사운임 변경 · 취소는 한 번 묻고 지급액 고정(src/payCore.js)
+      const _pg = paidEditGuard(row, clean, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10));
+      if (_pg.warn && !patch?.__system && !window.confirm(_pg.warn)) return false;
+      Object.assign(clean, _pg.extra);
+    }
     const col = patch?.__col || row?.__col || "dispatch";
     await updateDoc(doc(db, col, _id), { ...clean, updatedAt: serverTimestamp() });
     const MIRROR = ["청구운임", "지급방식", "차량번호", "이름", "전화번호", "상차일", "하차일", "화물내용"];
@@ -60341,7 +60423,7 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
   }, []);
   return (
     <KpSubNav code="SETTLEMENT" title="정산관리" icon="receipt" active={tab} onSelect={setTab}
-      items={[{ key: "홈", label: "정산 홈", en: "OVERVIEW", icon: "dashboard" }, { key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt", badge: closeNM || undefined }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOnM ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 지급", en: "FORKLIFT", icon: "wallet" }]}>
+      items={[{ key: "홈", label: "정산 홈", en: "OVERVIEW", icon: "dashboard" }, { key: "거래처정산", label: "거래처정산", en: "BILLING", icon: "receipt", badge: closeNM || undefined }, { key: "지급관리", label: "용차지급관리", en: "PAYOUT", icon: "wallet" }, ...(betaPayOnM ? [{ key: "입금확인", label: "입금 확인", en: "DEPOSIT", icon: "wallet" }] : []), { key: "지입정산관리", label: "지입정산관리", en: "FLEET PAY", icon: "wallet" }, { key: "지게차지급", label: "지게차 · 외부 지급", en: "FORKLIFT · EXT", icon: "wallet" }]}>
       {tab === "홈"
         ? <React.Suspense fallback={<div className="py-16 text-center text-[#9AA9C3]">불러오는 중…</div>}><SettleHome orders={dispatchData} drivers={mDrivers} company={companyName || DEFAULT_COMPANY} depositOn={betaPayOnM} onGo={(k, d) => { setTab(k === "마감검증" ? "거래처정산" : k); if (d) setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: d })), 80); }} /></React.Suspense>
         : tab === "거래처정산"

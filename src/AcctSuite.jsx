@@ -5,7 +5,7 @@
 //    퇴직소득 원천징수 · 원천징수영수증 · 퇴직연금 — 법정 기한(D-day)과 처리 상태를 사람별로
 import { loadAcctPayments, useArPayments } from "./acctPayments"; // 🔗 2026-11-25 거래처정산 입금 기록도 미수금에
 import { useUserProfiles } from "./userProfilesLive"; // 🔒 2026-11-07 인사 프로필은 우리 회사 직원 한 건씩
-import { receivablesOf, vatEstimate, paidWithSettled } from "./arAging"; // ⭐ 2026-11-07 미수금(부가세 포함) · 예상 부가세 공용 계산
+import { receivablesOf, vatEstimate, paidWithSettled, monthOf } from "./arAging"; // ⭐ 2026-11-07 미수금(부가세 포함) · 예상 부가세 공용 계산
 import { upsertAutoEntry } from "./ledgerAuto";
 import React from "react";
 import { collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, where, serverTimestamp } from "firebase/firestore";
@@ -16,6 +16,7 @@ import { BookHero, BookCard, Chip, Sheet, MONO } from "./OfficeBooks";
 import { ManualButton, GlossaryButton } from "./WorkManual"; // 📖 2026-11-14 회계용어 · 회계 매뉴얼
 import { isTMUser } from "./staffFilter";
 import { profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 이익률 색(플러스 빨강 · 마이너스 파랑)
+import { paidTotalOf } from "./payCore"; // 💸 2026-11-25 미지급 = 운임 − 실제 지급한 금액
 import { paidOut } from "./forkliftCore"; // ⭐ 2026-11-17 회사가 따로 지급(지게차·외부 특수운임)도 매입 — 매출총이익 = 배차표 수수료 합
 import { leaveEntitlement, leaveUseOf } from "./approvalForms";
 import { CustomSelect } from "./CustomSelect";
@@ -42,10 +43,11 @@ export function useYearOrders(company, fixedRows = []) {
   React.useEffect(() => {
     if (!company || yearCache.has(key)) return undefined;
     let alive = true;
-    Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${y}-01-01`), where("상차일", "<=", `${y}-12-31`)))))
+    // 🗓 2026-11-25 청구월(마감월) 기준 — 지난해 12월 상차 · 올해 1월 마감(이월) 오더도 받아 둔다(아래에서 청구월로 올해만 남김)
+    Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${y - 1}-12-01`), where("상차일", "<=", `${y}-12-31`)))))
       .then((snaps) => {
         const seen = new Set(); const out = [];
-        snaps.forEach((sn) => sn.docs.forEach((d) => { const r = d.data() || {}; if (seen.has(d.id)) return; seen.add(d.id); if ((r.companyName || DEFAULT_COMPANY) === company && r.배차상태 === "배차완료" && r.source !== "transport_transmit") out.push({ _id: d.id, ...r }); }));
+        snaps.forEach((sn) => sn.docs.forEach((d) => { const r = d.data() || {}; if (seen.has(d.id)) return; seen.add(d.id); if ((r.companyName || DEFAULT_COMPANY) === company && r.배차상태 === "배차완료" && r.source !== "transport_transmit" && monthOf(r).slice(0, 4) === String(y)) out.push({ _id: d.id, ...r }); }));
         yearCache.set(key, out);
         if (alive) setRows(out);
       })
@@ -77,16 +79,16 @@ export function AccountingOverview({ company, orders, drivers = [] }) {
   const ap = {};
   const settled = {}; // ⭐ 2026-11-02 점검 — 지급관리 [지급완료] 오더 기사운임 합계(미지급 탭 apByDriver와 동일 기준)
   orders.forEach((r) => {
-    const m = String(r.상차일 || "").slice(5, 7); const s = toInt(r.청구운임); const b = toInt(r.기사운임);
+    const m = monthOf(r).slice(5, 7); const s = toInt(r.청구운임); const b = toInt(r.기사운임); // 🗓 2026-11-25 청구월(마감월) 기준 — 정산 홈 · 월 마감과 같은 달
     if (mon[m]) { mon[m].sale += s; mon[m].buy += b + paidOut(r); } // ⭐ 2026-11-17 매입 = 기사운임 + 지게차·외부 지급(미지급 ap 는 기사운임 그대로)
     const d = r.이름 || "미지정"; ap[d] = (ap[d] || 0) + b;
-    if ((r.지급상태 || "") === "지급완료") settled[d] = (settled[d] || 0) + b; // ⭐ 2026-11-02 점검 — [지급완료] 처리분을 지급액으로 반영
+    if ((r.지급상태 || "") === "지급완료") settled[d] = (settled[d] || 0) + paidTotalOf(r); // ⭐ 2026-11-02 점검 — [지급완료] 처리분을 지급액으로 반영(💸 2026-11-25 실제 지급한 금액)
   });
   const sale = Object.values(mon).reduce((a, x) => a + x.sale, 0);
   const buy = Object.values(mon).reduce((a, x) => a + x.buy, 0);
   // ⭐ 2026-11-07 미수금 = 청구액(부가세 포함 · 거래처정산과 같은 식) − 수금 기록(실제 입금액) · 나이는 오래된 청구부터 수금된 것으로 봄
   //   일일 경영 보고 · 경영 분석 · AI 비서와 같은 계산(functions/arCore.mjs) · 고정거래처 포함(orders에 이미 들어 있음)
-  const arList = receivablesOf({ orders, paid: paidWithSettled(orders, pay.ar, arPays, String(y)), today }) /* ⭐ 2026-11-18 정산관리 [입금완료]도 수금으로 · 🔗 2026-11-25 거래처정산 입금 · 정산완료 달도 */.map((x) => ({ c: x.client, out: x.outstanding, age: x.oldest, ag: x.aging })).filter((x) => x.out > 0);
+  const arList = receivablesOf({ orders, paid: paidWithSettled(orders, pay, arPays, String(y)), today }) /* ⭐ 2026-11-18 정산관리 [입금완료]도 수금으로 · 🔗 2026-11-25 거래처정산 입금 · 정산완료 달도 */.map((x) => ({ c: x.client, out: x.outstanding, age: x.oldest, ag: x.aging })).filter((x) => x.out > 0);
   const arSum = arList.reduce((a, x) => a + x.out, 0);
   // ⭐ 2026-11-02 점검 — 미지급 = 운임 − max(지급등록액, [지급완료] 합계) : 회계관리 미지급 탭과 숫자 일치
   const apSum = Object.entries(ap).reduce((a, [d, v]) => a + Math.max(0, v - Math.max(toInt(pay.ap[d]), settled[d] || 0)), 0);
@@ -97,7 +99,7 @@ export function AccountingOverview({ company, orders, drivers = [] }) {
   const chart = months.filter((m) => m <= curM).map((m) => ({ k: `${Number(m)}월`, sale: mon[m].sale, buy: mon[m].buy, margin: mon[m].sale ? ((mon[m].sale - mon[m].buy) / mon[m].sale) * 100 : 0 }));
   const aging = [["30일 이내", 0], ["31~60일", 0], ["61~90일", 0], ["90일 초과", 0]];
   arList.forEach((x) => { aging[0][1] += x.ag.b30; aging[1][1] += x.ag.b60; aging[2][1] += x.ag.b90; aging[3][1] += x.ag.over; });
-  const quarters = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]].map((ms, i) => { const q = vatEstimate(orders.filter((r) => ms.includes(Number(String(r.상차일 || "").slice(5, 7)))), drivers); return { k: `${i + 1}분기`, sale: q.saleVat, buy: q.buyVat }; });
+  const quarters = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 12]].map((ms, i) => { const q = vatEstimate(orders.filter((r) => ms.includes(Number(monthOf(r).slice(5, 7)))), drivers); return { k: `${i + 1}분기`, sale: q.saleVat, buy: q.buyVat }; });
   const acc = {}; ledger.filter((r) => r.type === "지출" && String(r.date || "").startsWith(String(y))).forEach((r) => { acc[r.account || "기타"] = (acc[r.account || "기타"] || 0) + toInt(r.amount); });
   const accList = Object.entries(acc).sort((a, b) => b[1] - a[1]); const accTop = accList.slice(0, 6); const accRest = accList.slice(6).reduce((a, [, v]) => a + v, 0); if (accRest) accTop.push(["기타", accRest]);
   return (

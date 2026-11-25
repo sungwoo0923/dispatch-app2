@@ -4,7 +4,7 @@
 //  · ForkliftFeeRow         오더 등록·수정 화면의 [+ 지게차] 칩 → 금액 · 지게차 기사 · 부담 방식 한 줄 + 요약
 //                           같은 거래처·상차지로 예전에 넣은 지게차 값이 있으면 "이 상차지는 지게차 …" 제안 칩
 //  · ForkliftChip           표(실시간·배차현황)의 기사운임 옆 작은 표시
-//  · ForkliftPayouts        정산관리 › 지게차 지급 (지게차 기사별 합계 · 지급완료 · 엑셀)
+//  · ForkliftPayouts        정산관리 › 지게차 · 외부 지급 — [지게차](지게차 기사별 합계 · 지급완료 · 엑셀) | [외부 지급](외부 특수운임 받는 곳별)
 //  저장: forkliftDrivers/{id} · forkliftPresets/{회사__거래처__상차지} — 회사명은 fsTenant가 붙이고 거른다
 import React from "react";
 import { runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 일괄 처리 진행 창
@@ -21,7 +21,7 @@ import BulkUploadChooser, { downloadTemplateXlsx } from "./BulkUploadChooser";
 import { fmtPhone } from "./formatInput";
 import { kpAlert, kpConfirm } from "./kpDialog";
 import { MonthPicker } from "./kpInputs";
-import { bumpForkliftPayout } from "./ledgerAuto"; // 지급완료 → 수입·지출 장부 자동
+import { bumpForkliftPayout, setExtPayout } from "./ledgerAuto"; // 지급완료 → 수입·지출 장부 자동
 import { isJyCompany } from "./jyOnly"; // 🏷 JY로지스틱스 전용(특수운임 "지급 없음")
 import RouteSpecialPresets from "./RouteSpecialPresets"; // ⭐ 2026-11-18 [특수운임 적용] 팝업 › 고정노선운임 탭
 import { useRoutePresets, applyRoutePresets, planRoutePreset, itemsFromOrder, mergeItems, saveRoutePreset, routePresetIdOf, AUTO as ROUTE_AUTO, nk as routeNk, stopCount as routeStops } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
@@ -29,7 +29,7 @@ import {
   FORKLIFT_MODES, FORKLIFT_UPLOAD_COLS, fkAmount, fkMode, fkModeLabel, fkPresetKey, forkliftApply, forkliftClear,
   forkliftPayoutGroups, forkliftRowFromSheet, forkliftSummary, hasForklift,
   SPECIAL_TYPES, SPECIAL_MODES, sfItems, sfMode, sfPayee, sfName, hasSpecial, specialCount, specialTotal, specialLines, specialApplyAll, orderProfit, paidOut, fkNum,
-  forkliftTransferRows,
+  forkliftTransferRows, isCanceledOrder, extPayoutGroups, extPayPlan,
 } from "./forkliftCore";
 
 export * from "./forkliftCore";
@@ -617,8 +617,8 @@ export function ForkliftMark({ row }) {
 // 엑셀 내보내기 공용 열
 export const forkliftExcelCols = (r) => ({ 특수운임: specialLines(r).join(" / "), 지게차비용: fkAmount(r) || "", 지게차기사: r?.지게차기사명 || "", 지게차부담: hasForklift(r) ? fkModeLabel(r) : "", 지게차지급: hasForklift(r) ? (r.지게차지급완료 ? "지급완료" : "미지급") : "" });
 
-// ─── 정산관리 › 지게차 지급 ───
-export function ForkliftPayouts({ orders = [], patchDispatch, isViewer = false }) {
+// ─── 정산관리 › 지게차 · 외부 지급 › [지게차] 탭 ───
+function ForkliftPayoutsTab({ orders = [], patchDispatch, isViewer = false }) {
   const drivers = useForkliftDrivers();
   const dMap = React.useMemo(() => Object.fromEntries(drivers.map((d) => [d.id, d])), [drivers]);
   const [ym, setYm] = React.useState(() => kstDay().slice(0, 7));
@@ -665,9 +665,9 @@ export function ForkliftPayouts({ orders = [], patchDispatch, isViewer = false }
     XLSX.writeFile(wb, `지게차지급_이체_${ym || "전체"}.xlsx`);
   };
   return (
-    <div className="p-4 space-y-3" data-forklift-payouts>
+    <div className="space-y-3" data-forklift-payouts>
       <div className="rounded-[18px] bg-white border border-[#E3E8F0] px-4 py-3 flex flex-wrap items-center gap-2">
-        <div className="mr-auto"><div className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>FORKLIFT PAYOUT</div><div className="text-[16px] font-black text-[#0F1A30]">지게차 지급</div><div className="text-[12px] text-[#7A89A3]">오더에 넣은 지게차비용을 지게차 기사별로 모아 지급합니다(배차취소 제외 · 상차일 기준)</div></div>
+        <div className="mr-auto"><div className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>FORKLIFT PAYOUT</div><div className="text-[16px] font-black text-[#0F1A30]">지게차 지급</div><div className="text-[12px] text-[#7A89A3]">오더에 넣은 지게차비용을 지게차 기사님별로 모아 지급해요(취소 오더 · 화주사 사본 제외 · 상차일 기준)</div></div>
         <MonthPicker value={ym} onChange={setYm} clearable placeholder="전체 기간" /* ⭐ 2026-11-09 브라우저 월 선택(영문 표시) → 프로그램 달력 */ />
         <div className="inline-flex rounded-lg border border-[#DCE3EE] p-0.5">{["미지급", "지급완료", "전체"].map((k) => <button key={k} type="button" onClick={() => setOnly(k)} className={`h-8 px-3 rounded-md text-[12.5px] font-black ${only === k ? "bg-[#0F1A30] text-white" : "text-[#5B6B85]"}`}>{k}</button>)}</div>
         <button type="button" onClick={exportXlsx} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B]">엑셀</button>
@@ -701,7 +701,7 @@ export function ForkliftPayouts({ orders = [], patchDispatch, isViewer = false }
                     <td className="px-3 py-1.5" colSpan={2}>{r.거래처명 || ""} · {r.상차지명 || ""} → {r.하차지명 || ""}</td>
                     <td className="px-3 py-1.5 text-center">{fkModeLabel(r)}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums">{won(fkAmount(r))}</td>
-                    <td className="px-3 py-1.5 text-right" colSpan={2}>{r.지게차지급완료 ? <span className="font-bold text-[#1B2B4B]">지급완료 {r.지게차지급일 || ""}</span> : <span className="font-bold text-[#B54708]">미지급</span>}</td>
+                    <td className="px-3 py-1.5 text-right" colSpan={2}>{isCanceledOrder(r) && <span className={`${EXT_BADGE} mr-1.5`}>지급 후 취소</span>}{r.지게차지급완료 ? <span className="font-bold text-[#1B2B4B]">지급완료 {r.지게차지급일 || ""}</span> : <span className="font-bold text-[#B54708]">미지급</span>}</td>
                     <td className="px-3 py-1.5 text-center">{!isViewer && <button type="button" disabled={busy} onClick={() => markPaid([r], !r.지게차지급완료)} className="h-7 px-2.5 rounded-md border border-[#DCE3EE] text-[11.5px] font-black">{r.지게차지급완료 ? "지급 취소" : "지급완료"}</button>}</td>
                   </tr>
                 ))}
@@ -711,6 +711,144 @@ export function ForkliftPayouts({ orders = [], patchDispatch, isViewer = false }
         </table>
       </div>
       <div className="text-[12px] text-[#7A879C]">수익 = 청구운임 − 기사운임 − 지게차비용 · 기사 차감이면 기사운임에서 이미 빠져 있고, 추가 청구면 청구운임에 이미 더해져 있습니다. 매출관리·정산의 수익에도 같은 식이 쓰입니다.</div>
+    </div>
+  );
+}
+
+// ─── 💳 2026-11-25 정산관리 › 지게차 · 외부 지급 › [외부 지급] 탭 ───
+//  특수운임 중 받는사람 "외부"(인력 상하차비 · 주차비 · 기타 — 회사가 따로 주는 돈)를 받는 곳(메모, 없으면 항목 이름)별로 모아 지급
+//  계산 · 저장 규칙은 src/forkliftCore.js(extPayoutGroups · extPayPlan), 장부는 ledgerAuto.setExtPayout(항목 한 줄)
+const EXT_BADGE = "inline-flex items-center h-[18px] px-1.5 rounded-md bg-[#FFF4DB] text-[#8A5A00] text-[10.5px] font-black whitespace-nowrap align-middle";
+const extModeShort = (m) => (SPECIAL_MODES.find((x) => x.key === m) || {}).short || "";
+const extRowId = (r) => `${r.orderId}|${r.key}`;
+function ExtPayoutsTab({ orders = [], patchDispatch, isViewer = false }) {
+  const [ym, setYm] = React.useState(() => kstDay().slice(0, 7));
+  const [only, setOnly] = React.useState("미지급");
+  const [open, setOpen] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [payDate, setPayDate] = React.useState(() => kstDay());
+  const [sel, setSel] = React.useState(() => new Set());
+  const inMonth = (o) => !ym || String(o.상차일 || "").slice(0, 7) === ym;
+  const groups = React.useMemo(() => extPayoutGroups((orders || []).filter(inMonth)), [orders, ym]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shown = groups.filter((g) => only === "전체" || (only === "미지급" ? g.unpaid > 0 : g.paid > 0));
+  const sum = groups.reduce((a, g) => ({ total: a.total + g.total, paid: a.paid + g.paid, unpaid: a.unpaid + g.unpaid, changed: a.changed + g.changed }), { total: 0, paid: 0, unpaid: 0, changed: 0 });
+  const payable = (r) => !r.paid && r.amount > 0;
+  const allRows = groups.flatMap((g) => g.rows);
+  const selRows = allRows.filter((r) => sel.has(extRowId(r)) && payable(r));
+  const selSum = selRows.reduce((a, r) => a + r.amount, 0);
+  const toggle = (rows, on) => setSel((prev) => { const n = new Set(prev); rows.filter(payable).forEach((r) => (on ? n.add(extRowId(r)) : n.delete(extRowId(r)))); return n; });
+  React.useEffect(() => { setSel(new Set()); }, [ym]);
+  const markPaid = async (rows, paid = true) => {
+    if (isViewer || !patchDispatch) return;
+    const target = rows.filter((r) => (paid ? payable(r) : r.paid));
+    if (!target.length) return;
+    const total = target.reduce((a, r) => a + (paid ? r.amount : r.paidAmt), 0);
+    const date = String(payDate || kstDay()).slice(0, 10);
+    if (!(await kpConfirm(paid ? `${target.length}건 · ${won(total)}원을 지급완료로 바꿀까요?\n지급일은 ${date}예요.` : `${target.length}건 · ${won(total)}원의 지급을 취소할까요?\n장부에 들어간 지급 기록도 같이 지워져요.`))) return;
+    // 같은 오더의 항목은 한 번에 저장(외부지급 칸을 통째로 쓴다)
+    const byOrder = new Map();
+    target.forEach((r) => { const e = byOrder.get(r.orderId) || { order: r.order, keys: [] }; e.keys.push(r.key); byOrder.set(r.orderId, e); });
+    const list = [...byOrder.entries()];
+    setBusy(true);
+    try {
+      await runBulkTask({ count: list.length, label: "외부 지급", verb: "지급 상태 변경", unitWord: "건", task: async (progress) => { let _k = 0;
+        for (const [orderId, { order, keys }] of list) { progress(_k++);
+          const plan = extPayPlan(order, keys, { paid, date, today: kstDay() });
+          if (!plan) continue;
+          const ok = await patchDispatch(orderId, { ...plan.patch, __system: true });
+          if (ok === false) continue;
+          // 수입·지출 장부(항목 한 줄 · 지급 취소면 지움)
+          for (const l of plan.ledger) setExtPayout(db, { orderId, itemKey: l.itemKey, amount: l.amount, date: l.date || date, company: order.companyName || getTenant(), to: l.to, name: l.name }).catch(() => {});
+        }
+      } });
+      setSel(new Set());
+    } finally { setBusy(false); }
+  };
+  const exportXlsx = async () => {
+    const XLSX = await loadXLSX();
+    const rows = [];
+    groups.forEach((g) => g.rows.forEach((r) => { const o = r.order || {}; rows.push({ 받는곳: g.name, 항목: r.name, 상차일: o.상차일 || "", 거래처: o.거래처명 || "", 상차지: o.상차지명 || "", 하차지: o.하차지명 || "", 금액: r.amount, 부담: extModeShort(r.mode), 지급: r.paid ? "지급완료" : "미지급", 지급일: r.paidDate || "", 지급액: r.paid ? r.paidAmt : "", 비고: [r.orphan ? "항목이 바뀜" : r.changed ? `지급 후 금액 변경 ${won(r.amount - r.paidAmt)}` : "", r.canceled ? "지급 후 취소" : ""].filter(Boolean).join(" · ") }); }));
+    const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "외부지급"); XLSX.writeFile(wb, `외부지급_${ym || "전체"}.xlsx`);
+  };
+  const chk = "w-4 h-4 accent-[#0F1A30] align-middle cursor-pointer";
+  return (
+    <div className="space-y-3" data-ext-payouts>
+      <div className="rounded-[18px] bg-white border border-[#E3E8F0] px-4 py-3 flex flex-wrap items-center gap-2">
+        <div className="mr-auto min-w-[220px]"><div className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#4B6CB7]" style={{ fontFamily: MONO }}>EXTERNAL PAYOUT</div><div className="text-[16px] font-black text-[#0F1A30]">외부 지급</div><div className="text-[12px] text-[#7A89A3]">특수운임 중 회사가 따로 주는 돈(인력 상하차비 · 주차비 등)을 받는 곳별로 모아 지급해요(취소 오더 · 화주사 사본 제외 · 상차일 기준)</div></div>
+        <MonthPicker value={ym} onChange={setYm} clearable placeholder="전체 기간" />
+        <div className="inline-flex rounded-lg border border-[#DCE3EE] p-0.5">{["미지급", "지급완료", "전체"].map((k) => <button key={k} type="button" onClick={() => setOnly(k)} className={`h-8 px-3 rounded-md text-[12.5px] font-black ${only === k ? "bg-[#0F1A30] text-white" : "text-[#5B6B85]"}`}>{k}</button>)}</div>
+        <button type="button" onClick={exportXlsx} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B]">엑셀</button>
+      </div>
+      {!isViewer && (
+        <div className="rounded-[14px] bg-[#F4F6FA] border border-[#E3E8F0] px-3 py-2 flex flex-wrap items-center gap-2 text-[12.5px]">
+          <label className="inline-flex items-center gap-1.5 font-black text-[#1B2B4B]">지급일<input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} data-testid="ext-pay-date" className="h-8 px-2 rounded-lg border border-[#DCE3EE] bg-white text-[13px] font-bold tabular-nums" /></label>
+          <span className="text-[#7A89A3] font-bold mr-auto">{selRows.length ? `${selRows.length}건 고름 · ${won(selSum)}원` : "줄 앞 네모를 눌러 고르면 한 번에 지급완료할 수 있어요"}</span>
+          {selRows.length > 0 && <button type="button" onClick={() => setSel(new Set())} className="h-8 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[12px] font-black text-[#5B6B85]">선택 해제</button>}
+          <button type="button" disabled={busy || !selRows.length} onClick={() => markPaid(selRows, true)} data-testid="ext-pay-selected" className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black disabled:opacity-40">선택 지급완료</button>
+        </div>
+      )}
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        {[["외부 지급 합계", sum.total], ["미지급", sum.unpaid], ["지급완료", sum.paid]].map(([k, v], i) => (
+          <div key={k} className={`rounded-[16px] px-3 sm:px-4 py-3 border min-w-0 ${i === 1 ? "bg-[#0F1A30] text-white border-[#0F1A30]" : "bg-white border-[#E3E8F0]"}`}><div className={`text-[12px] sm:text-[12.5px] font-bold whitespace-nowrap truncate ${i === 1 ? "text-white/60" : "text-[#7A879C]"}`}>{k}</div><div className="text-[17px] sm:text-[22px] font-black tabular-nums whitespace-nowrap" style={{ fontFamily: MONO }}>{won(v)}<span className="text-[11px] sm:text-[12px] ml-0.5 sm:ml-1 opacity-50">원</span></div></div>
+        ))}
+      </div>
+      {sum.changed > 0 && <div className="rounded-[12px] bg-[#FFF8E8] border border-[#F2DFAE] px-3 py-2 text-[12.5px] font-bold text-[#8A5A00]">지급한 뒤 금액이 바뀐 항목이 {sum.changed}건 있어요. 장부에는 지급한 금액이 그대로 있어요. 새 금액으로 맞추려면 [지급 취소] 뒤 다시 [지급완료]를 누르면 돼요.</div>}
+      <div className="rounded-[18px] bg-white border border-[#E3E8F0] overflow-x-auto">
+        <table className="w-full text-[13.5px]" style={{ minWidth: 860 }}>
+          <thead><tr className="bg-[#1B2B4B] text-white">{["", "받는 곳", "항목", "건수", "합계", "미지급", "지급완료", ""].map((h, i) => <th key={i} className={`px-3 py-2.5 font-extrabold whitespace-nowrap ${i === 0 ? "w-9" : ""}`}>{h}</th>)}</tr></thead>
+          <tbody>
+            {shown.length === 0 && <tr><td colSpan={8} className="py-14 text-center text-[#9AA9C3]">이 달에 {only === "전체" ? "" : `${only} `}외부 지급이 없어요</td></tr>}
+            {shown.map((g) => { const gPay = g.rows.filter(payable); const gOn = gPay.length > 0 && gPay.every((r) => sel.has(extRowId(r))); const names = [...new Set(g.rows.map((r) => r.name))]; return (
+              <React.Fragment key={g.id}>
+                <tr className="border-t border-[#EEF1F6] hover:bg-[#F7F9FC] cursor-pointer" onClick={() => setOpen(open === g.id ? null : g.id)}>
+                  <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>{!isViewer && gPay.length > 0 && <input type="checkbox" className={chk} checked={gOn} onChange={(e) => toggle(gPay, e.target.checked)} aria-label={`${g.name} 미지급 모두 고르기`} />}</td>
+                  <td className="px-3 py-2 font-black text-[#0F1A30] whitespace-nowrap">{open === g.id ? "▾" : "▸"} {g.name}{g.changed > 0 && <span className={`${EXT_BADGE} ml-1.5`}>금액 변경 {g.changed}</span>}</td>
+                  <td className="px-3 py-2 text-center text-[#5B6B85] max-w-[220px] truncate" title={names.join(", ")}>{names.slice(0, 2).join(", ")}{names.length > 2 ? ` 외 ${names.length - 2}` : ""}</td>
+                  <td className="px-3 py-2 text-center tabular-nums">{g.count}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-bold">{won(g.total)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums font-black text-[#0F1A30]">{won(g.unpaid)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-[#5B6B85]">{won(g.paid)}</td>
+                  <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>{!isViewer && g.unpaid > 0 && <button type="button" disabled={busy} onClick={() => markPaid(g.rows, true)} className="h-8 px-3 rounded-lg bg-[#0F1A30] text-white text-[12px] font-black disabled:opacity-40 whitespace-nowrap">전체 지급완료</button>}</td>
+                </tr>
+                {open === g.id && g.rows.map((r) => { const o = r.order || {}; const gap = r.amount - r.paidAmt; return (
+                  <tr key={extRowId(r)} className="bg-[#FAFBFD] border-t border-[#F1F4F9] text-[12.5px]">
+                    <td className="px-3 py-1.5 text-center">{!isViewer && payable(r) && <input type="checkbox" className={chk} checked={sel.has(extRowId(r))} onChange={(e) => toggle([r], e.target.checked)} aria-label="이 항목 고르기" />}</td>
+                    <td className="px-3 py-1.5 pl-6 tabular-nums whitespace-nowrap">{o.상차일 || ""}</td>
+                    <td className="px-3 py-1.5" colSpan={2}><span className="font-black text-[#1B2B4B]">{r.name}</span><span className="text-[#7A89A3]"> · {o.거래처명 || ""} · {o.상차지명 || ""} → {o.하차지명 || ""}</span>{r.mode && <span className="text-[#9AA9C3]"> · {extModeShort(r.mode)}</span>}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{r.orphan ? <span className="text-[#9AA9C3]">-</span> : won(r.amount)}</td>
+                    <td className="px-3 py-1.5 text-right" colSpan={2}>
+                      {r.canceled && <span className={`${EXT_BADGE} mr-1.5`}>지급 후 취소</span>}
+                      {r.orphan ? <span className={`${EXT_BADGE} mr-1.5`} title="지급한 뒤 이 항목을 지웠거나 받는사람을 바꿨어요. 돈을 돌려받았다면 [지급 취소]를 눌러 주세요.">항목이 바뀌었어요</span>
+                        : r.changed ? <span className={`${EXT_BADGE} mr-1.5`} title={`지급한 금액 ${won(r.paidAmt)}원 → 지금 ${won(r.amount)}원. 장부는 지급한 금액 그대로예요.`}>지급 후 금액 변경 {gap > 0 ? "+" : ""}{won(gap)}</span> : null}
+                      {r.paid ? <span className="font-bold text-[#1B2B4B] whitespace-nowrap">지급완료 {r.paidDate}{r.changed ? ` · ${won(r.paidAmt)}원` : ""}</span> : <span className="font-bold text-[#B54708]">미지급</span>}
+                    </td>
+                    <td className="px-3 py-1.5 text-center">{!isViewer && (r.paid || payable(r)) && <button type="button" disabled={busy} onClick={() => markPaid([r], !r.paid)} className="h-7 px-2.5 rounded-md border border-[#DCE3EE] text-[11.5px] font-black whitespace-nowrap">{r.paid ? "지급 취소" : "지급완료"}</button>}</td>
+                  </tr>
+                ); })}
+              </React.Fragment>
+            ); })}
+          </tbody>
+        </table>
+      </div>
+      <div className="text-[12px] text-[#7A879C]">받는 곳은 특수운임의 메모(받는 곳 · 사람)로 묶어요. 메모가 없으면 항목 이름으로 묶어요. 수익에는 이미 빠져 있는 돈이라, 여기서는 줬는지만 관리해요. 지급완료하면 회계 장부에 지출로 한 줄씩 들어가요.</div>
+    </div>
+  );
+}
+
+// ─── 정산관리 › 지게차 · 외부 지급 — [지게차 | 외부 지급] 탭 ───
+const PAYOUT_TAB_KEY = "kp_fkpay_tab";
+export function ForkliftPayouts(props) {
+  const [tab, setTab] = React.useState(() => { try { return localStorage.getItem(PAYOUT_TAB_KEY) === "외부" ? "외부" : "지게차"; } catch { return "지게차"; } });
+  const pick = (k) => { setTab(k); try { localStorage.setItem(PAYOUT_TAB_KEY, k); } catch { /* 저장 못 해도 화면은 그대로 */ } };
+  return (
+    <div className="p-4 space-y-3">
+      <div className="inline-flex rounded-xl border border-[#DCE3EE] bg-white p-1" role="tablist" aria-label="지게차 · 외부 지급">
+        {[["지게차", "지게차"], ["외부", "외부 지급"]].map(([k, label]) => (
+          <button key={k} type="button" role="tab" aria-selected={tab === k} data-testid={`fkpay-tab-${k}`} onClick={() => pick(k)}
+            className={`h-9 px-4 rounded-lg text-[13.5px] font-black ${tab === k ? "bg-[#0F1A30] text-[#E9C46A]" : "text-[#5B6B85] hover:text-[#0F1A30]"}`}>{label}</button>
+        ))}
+      </div>
+      {tab === "외부" ? <ExtPayoutsTab {...props} /> : <ForkliftPayoutsTab {...props} />}
     </div>
   );
 }

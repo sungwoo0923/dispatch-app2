@@ -3,6 +3,7 @@ import React, { useMemo, useState, useEffect, useRef } from "react";
 import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import jsPDF from "jspdf";
 import { analyzeMonths, buildReport, COMPARE_DIMS, toWon, MARGIN_BANDS } from "./monthCompare";
+import { salesMonthOf } from "./salesRule"; // 🗓 2026-11-25 달 = 청구월(마감월)
 import { orderProfit } from "./forkliftCore"; // ⭐ 2026-11-17 수익 = 청구 − 기사 − 회사가 따로 지급(지게차·외부 특수운임)
 import { CustomSelect } from "./CustomSelect";
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 수익률 색(플러스 빨강 · 마이너스 파랑)
@@ -247,7 +248,7 @@ function CompareRows({ items, a, b, compact }) {
 
 export default function MonthCompareAnalysis({ rows = [], isExcluded = () => false, hasExcluded = false, onClose, compact = false }) {
   const months = useMemo(() => {
-    const s = new Set(rows.map((r) => String(r.상차일 || "").slice(0, 7)).filter((m) => /^\d{4}-\d{2}$/.test(m)));
+    const s = new Set(rows.map((r) => salesMonthOf(r)).filter((m) => /^\d{4}-\d{2}$/.test(m)));
     return [...s].sort().reverse();
   }, [rows]);
   // 기본: 지난달 vs 그 전달(이번 달은 아직 진행 중이라 비교가 왜곡됨)

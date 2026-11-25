@@ -2,15 +2,16 @@
 // 🛰 홈 대시보드(2026-10-28 리디자인) — 어두운 네이비 "관제 데크".
 //  오늘 실적 · 매출 추이(7일/30일/올해) · 매익률 게이지 · 담당자별 매출 순위 · 거래처 Top 5.
 //  ⭐ 알록달록 금지 — 네이비/하늘빛 계열만 쓴다.
-//  지난 기간(실시간 범위 이전) 합계는 HomeDashboard가 하루 1번 계산해 둔 pastCache(v4)를 쓰고,
+//  지난 기간(실시간 범위 이전) 합계는 HomeDashboard가 하루 1번 계산해 둔 pastCache(v6 · 📏 2026-11-25 매출 · 수익은 배차완료만 · 🗓 달 · 연은 청구월(bill))를 쓰고,
 //  최근 7일은 실시간 오더(dispatchData)로 더한다.
 import React, { useEffect, useMemo, useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Line, ComposedChart, Bar, BarChart, Cell, PieChart, Pie } from "recharts";
 import { AttendanceQuickButton } from "./attendanceQuick";
 import { LogisTag } from "./brand"; // 🔷 2026-11-04 LogisWeb 로고
 import { profitColor, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 매익률 색(플러스 빨강 · 마이너스 파랑)
-import { buildPastStats } from "./pastStats";
+import { buildPastStats, sumBill } from "./pastStats";
 import { fkNum } from "./forkliftCore";
+import { isSalesOrder, fixedSalesRows } from "./salesRule"; // 📏 2026-11-25 매출 · 수익 = 배차완료 + 고정거래처(매출관리와 같은 함수)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const C = { ink: "#E8EEF9", sub: "rgba(207,224,255,.8)", dim: "rgba(207,224,255,.72)", line: "rgba(143,176,240,.14)", glow: "#8FB0F0", hi: "#CFE0FF", accent: "#6E95E8" };
@@ -168,7 +169,8 @@ export const DECK_LABELS = {
   board: "오늘 · 내일 배차판", timeline: "상차 시간대 분포", timeTip: "시 상차", immediate: "오늘 \"즉시·시간미정\" 상차",
   mix: "최근 7일 차종 구성", routes: "최근 7일 주요 노선", weekday: "요일별 평균 오더", empty: "이번 달 오더가 아직 없습니다",
 };
-export default function HomeDeck({ dispatchData = [], pastCache, liveStart, users = [], myName = "", isMaster = false, att = null, todo = null, labels = null, weather = null }) {
+//  📏 2026-11-25 fixedRows = 고정거래처 매출(매출관리와 같게 매출 · 수익에 더함 · 건수에는 안 셈) · isMoney = 매출에 넣을 줄(기본 배차완료 — 화물 홈은 따로 넘김)
+export default function HomeDeck({ dispatchData = [], pastCache, liveStart, users = [], myName = "", isMaster = false, att = null, todo = null, labels = null, weather = null, fixedRows = null, isMoney = isSalesOrder }) {
   const L = labels ? { ...DECK_LABELS, ...labels } : DECK_LABELS;
   const today = kstToday();
   const thisMonth = today.slice(0, 7);
@@ -178,26 +180,39 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
   // 최근(실시간) 오더 집계 — 일별 / 이번 달 담당자 / 이번 달 거래처
   const live = useMemo(() => {
     const rows = dispatchData.filter((r) => !isCancelled(r) && r.source !== "transport_transmit" && dateOf(r) >= liveStart);
-    return { ...buildPastStats(rows, thisMonth), rows };
-  }, [dispatchData, liveStart, thisMonth]);
+    return { ...buildPastStats(rows, thisMonth, isMoney), rows };
+  }, [dispatchData, liveStart, thisMonth, isMoney]);
+  // 📏 2026-11-25 고정거래처 매출(실시간 구독 — 날짜 전체)
+  const fixed = useMemo(() => buildPastStats(fixedSalesRows(fixedRows), thisMonth), [fixedRows, thisMonth]);
 
-  // 일별 합치기(지난 기간 캐시 + 실시간)
+  // 일별 합치기(지난 기간 캐시 + 실시간 + 고정거래처)
   const days = useMemo(() => {
     const m = {};
     Object.entries(pastCache?.days || {}).forEach(([d, v]) => { if (d < liveStart) m[d] = [...v]; });
     Object.entries(live.days).forEach(([d, v]) => { m[d] = [...v]; });
+    Object.entries(fixed.days).forEach(([d, v]) => { const e = m[d] || (m[d] = [0, 0, 0]); e[0] += v[0]; e[1] += v[1]; });
     return m;
-  }, [pastCache, live, liveStart]);
+  }, [pastCache, live, liveStart, fixed]);
   const dayVal = (d) => days[d] || [0, 0, 0];
+  // 🗓 2026-11-25 청구일별 매출 · 수익(달 · 연 합계용 — 청구월(마감월) 기준, 미수금 · 회계 · 매출관리와 같은 달)
+  //  지난 기간 캐시는 상차일 < liveStart 오더, 실시간은 상차일 ≥ liveStart 오더라 겹치지 않는다
+  const bill = useMemo(() => {
+    const m = {};
+    [pastCache?.bill, live.bill, fixed.bill].forEach((src) => Object.entries(src || {}).forEach(([d, v]) => { const e = m[d] || (m[d] = [0, 0]); e[0] += v[0]; e[1] += v[1]; }));
+    return m;
+  }, [pastCache, live, fixed]);
 
   // KPI
   const t0 = dayVal(today), t1 = dayVal(addDay(today, -1));
   const sumRange = (from, to) => Object.entries(days).reduce((a, [d, v]) => (d >= from && d <= to ? [a[0] + v[0], a[1] + v[1], a[2] + v[2]] : a), [0, 0, 0]);
-  const mNow = sumRange(`${thisMonth}-01`, today);
+  // 🗓 달 · 연: 매출 · 수익 = 청구일(bill) 합, 건수 = 상차일(days) 합 — 매출관리처럼 그 달 전체(오늘 뒤 배차완료 오더 포함)
+  const moneyRange = (from, to, cntTo = to) => { const b = sumBill(bill, from, to); return [b[0], b[1], sumRange(from, cntTo)[2]]; };
+  const monthEndKey = (() => { const d = new Date(`${thisMonth}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + 1); d.setUTCDate(0); return d.toISOString().slice(0, 10); })();
+  const mNow = moneyRange(`${thisMonth}-01`, monthEndKey, today);
   const prevMonthStart = (() => { const d = new Date(`${thisMonth}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 10); })();
   const prevSameDay = (() => { const d = new Date(`${prevMonthStart}T00:00:00Z`); const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate(); d.setUTCDate(Math.min(Number(today.slice(8)), last)); return d.toISOString().slice(0, 10); })();
-  const mPrev = prevMonthStart.slice(0, 4) === today.slice(0, 4) ? sumRange(prevMonthStart, prevSameDay) : [0, 0, 0];
-  const yNow = sumRange(`${today.slice(0, 4)}-01-01`, today);
+  const mPrev = prevMonthStart.slice(0, 4) === today.slice(0, 4) ? moneyRange(prevMonthStart, prevSameDay) : [0, 0, 0];
+  const yNow = moneyRange(`${today.slice(0, 4)}-01-01`, monthEndKey, today);
   const dayOfMonth = Number(today.slice(8));
   const monthRate = mNow[0] ? (mNow[1] / mNow[0]) * 100 : 0;
   const todayRate = t0[0] ? (t0[1] / t0[0]) * 100 : 0;
@@ -219,7 +234,8 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
       return Array.from({ length: 12 }, (_, i) => {
         const ym = `${y}-${String(i + 1).padStart(2, "0")}`;
         const v = Object.entries(days).reduce((a, [d, x]) => (d.startsWith(ym) ? [a[0] + x[0], a[1] + x[1], a[2] + x[2]] : a), [0, 0, 0]);
-        return { label: `${i + 1}월`, s: v[0], p: v[1], c: v[2], on: ym === thisMonth };
+        const b = sumBill(bill, `${ym}-01`, `${ym}-31`); // 🗓 월 매출 · 수익 = 청구월
+        return { label: `${i + 1}월`, s: b[0], p: b[1], c: v[2], on: ym === thisMonth };
       });
     }
     const n = range === "7d" ? 7 : 30;
@@ -228,7 +244,7 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
       const v = dayVal(d);
       return { label: `${Number(d.slice(5, 7))}/${Number(d.slice(8))}`, s: v[0], p: v[1], c: v[2], on: d === today };
     });
-  }, [range, days, today, thisMonth]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [range, days, bill, today, thisMonth]); // eslint-disable-line react-hooks/exhaustive-deps
   const trendSum = trend.reduce((a, x) => [a[0] + x.s, a[1] + x.p, a[2] + x.c], [0, 0, 0]);
   const peak = trend.reduce((a, x) => (x.s > a.s ? x : a), { s: 0, label: "-" });
 
@@ -268,8 +284,9 @@ export default function HomeDeck({ dispatchData = [], pastCache, liveStart, user
     const add = (src) => Object.entries(src || {}).forEach(([k, v]) => { if (/\d{2}년\d{1,2}월/.test(k)) return; m[k] = (m[k] || 0) + v; });
     if (pastCache?.month === thisMonth) add(pastCache.clients);
     add(live.clients);
+    add(fixed.clients); // 📏 2026-11-25
     return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name, v]) => ({ name, v }));
-  }, [pastCache, live, thisMonth]);
+  }, [pastCache, live, thisMonth, fixed]);
   const clientTotal = topClients.reduce((a, c) => a + c.v, 0);
 
   // ── 아래 줄(운영 현황) — 오늘·내일 배차판 / 상차 시간대 / 차종 구성 / 주요 노선 / 요일 패턴 ──

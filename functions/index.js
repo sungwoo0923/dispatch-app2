@@ -5050,6 +5050,39 @@ exports.bankDepositSync = functions.runWith({ ...PB_RUN, timeoutSeconds: 540, me
     console.log("[계좌조회] 동기화:", JSON.stringify(r.map((x) => ({ company: x.company, new: x.new, auto: x.auto, review: x.review, off: x.off, error: x.error }))));
     return null;
   });
+// 🔗 2026-11-25 입금 기록(arPayments) → 자금관리 수입 장부 한 줄(functions/arLedgerCore.mjs)
+//  회계관리 [입금 처리] · 미수금관리 입금 · 은행 자동 매칭/확정 — 어느 길이든 기록이 생기면 auto_ar_{회사}_{기록 id} 한 줄, 지우면 그 줄도 지운다
+//  (문서 id 가 고정이라 다시 불려도 한 줄 · 처음 만들 때만 자금 현황 "거래처 입금" 기본 통장을 붙인다 · 장부에서 고친 통장 · 증빙은 그대로 둔다)
+exports.arPaymentLedger = functions.runWith({ timeoutSeconds: 60, memory: "256MB" }).firestore.document("arPayments/{id}").onWrite(async (chg, ctx) => {
+  const L = await import("./arLedgerCore.mjs");
+  const id = ctx.params.id;
+  const before = chg.before.exists ? chg.before.data() || {} : null;
+  const after = chg.after.exists ? chg.after.data() || {} : null;
+  const co = String((after || before || {}).company || "").trim();
+  if (!co) return null;
+  // 입금 한 번(묶는 키)마다 그 키의 기록을 다시 모아 장부 한 줄로 — 고치거나 지워도 합계가 맞게
+  const keys = new Set([before && L.arDepositKeyOf(before, id), after && L.arDepositKeyOf(after, id)].filter(Boolean));
+  for (const k of keys) {
+    try {
+      let list = [];
+      if (k === id) list = after ? [after] : [];
+      else if ((after?.depositKey || before?.depositKey) === k) list = ((await db.collection("arPayments").where("company", "==", co).where("depositKey", "==", k).get()).docs || []).map((d) => d.data() || {});
+      else { const tid = String((after?.bankTxnId || before?.bankTxnId) || ""); list = ((await db.collection("arPayments").where("company", "==", co).where("bankTxnId", "==", tid).get()).docs || []).map((d) => d.data() || {}).filter((x) => !x.depositKey); }
+      const entry = L.arLedgerEntry(list, k);
+      const ref = db.collection("acctLedger").doc(L.arLedgerDocId(co, k));
+      if (!entry) { await ref.delete().catch(() => null); continue; }
+      const cur = await ref.get();
+      let fundId = "";
+      if (!cur.exists) {
+        const fs = await db.collection("acctFunds").where("companyName", "==", co).get().catch(() => null);
+        const hit = (fs?.docs || []).map((d) => ({ id: d.id, ...d.data() })).find((f) => f.active !== false && (f.useFor || []).includes("collect"));
+        fundId = hit ? hit.id : "";
+      }
+      await ref.set({ ...entry, updatedAt: FieldValue.serverTimestamp(), ...(cur.exists ? {} : { fundId, receipt: "", createdAt: FieldValue.serverTimestamp(), createdBy: String(after?.by || "자동") }) }, { merge: true });
+    } catch (e) { console.error("[입금 장부] 실패:", id, k, e?.message || e); }
+  }
+  return null;
+});
 /* ==================================================================
    🧪 2026-11-08 테스트 회사 가짜 데이터 · 설명은 functions/seedTestCompany.js 맨 위
    호출형 seedTestCompany({ action: seed|reset|refresh|clear|status, company: "테스트운송사", cursor })

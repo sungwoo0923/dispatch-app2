@@ -12,6 +12,7 @@ import { formatAccountView as formatAccount } from "./bankUtil"; // 👀 화면�
 import { fmtBizNo } from "./formatInput";
 import { matchPrepay, normPlate, driverPayDiff, driverPatchFrom } from "./prepayCore";
 import { runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 가운데 진행 창(몇 건 중 몇 건 · 뒤 화면 흐림)
+import { payLedgerPlan } from "./payCore"; // 💸 2026-11-25 지급한 금액(지급액) 기록
 
 const won = (n) => Math.round(Number(n) || 0).toLocaleString();
 const NUM = { fontVariantNumeric: "tabular-nums" };
@@ -109,7 +110,7 @@ export default function PrepayImportModal({ fileName = "", items, pool, allOrder
           const date = (useHint && r.payDateHint) || payDate;
           for (const o of r.orders) {
             if (seen.has(o._id)) continue; seen.add(o._id);
-            await patchDispatch(o._id, { 지급상태: "지급완료", 지급일: date, 국세청승인번호: r.approvalNo, 계산서일자: r.invoiceDate, __system: true });
+            await patchDispatch(o._id, { ...payLedgerPlan(o, { status: "지급완료", date }, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)).patch, 국세청승인번호: r.approvalNo, 계산서일자: r.invoiceDate, __system: true }); // 💸 지급액도 같이
             onPaid?.(o, date);
             orderN++; progress(++step);
           }

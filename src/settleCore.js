@@ -7,7 +7,9 @@ export const stageIdx = (k) => Math.max(0, STAGE_ORDER.indexOf(k));
 export const n = (v) => Number(String(v ?? "").replace(/[^\d.-]/g, "")) || 0;
 export const won = (v) => Math.round(v || 0).toLocaleString("ko-KR");
 export const short = (v) => { const a = Math.abs(v || 0); return a >= 1e8 ? `${(v / 1e8).toFixed(1)}억` : a >= 1e4 ? `${Math.round(v / 1e4).toLocaleString("ko-KR")}만` : won(v); };
-export const monthOf = (o) => String(o?.마감월 || "").slice(0, 7) || String(o?.상차일 || "").slice(0, 7);
+// 🗓 2026-11-25 청구월(마감월 → 없으면 상차일 달) 정의는 functions/arCore.mjs 한 곳 — 미수금 · 은행 입금 매칭(서버) · 거래명세서 · 회계가 같은 식
+import { monthOf, statementRowsOf, stmtIncludePrepaidOf } from "../functions/arCore.mjs";
+export { monthOf };
 export const kstYm = (off = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + off); return d.toISOString().slice(0, 7); };
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const daysBetween = (a, b) => Math.round((new Date(`${b}T00:00:00Z`) - new Date(`${a}T00:00:00Z`)) / 86400000);
@@ -69,7 +71,8 @@ export function summarizeSettle(orders, ym, stageOf = () => "미작성", today =
   // 미수 경과(전체 기간) — 입금 안 됐고 그 달을 마감하지 않은 청구
   const aging = new Map();
   rows.forEach((o) => {
-    const c = String(o.거래처명 || "").trim(); const s = n(o.청구운임); const d = String(o.상차일 || "");
+    const c = String(o.거래처명 || "").trim(); const s = n(o.청구운임); const d0 = String(o.상차일 || ""); const bym = monthOf(o);
+    const d = d0 && bym && d0.slice(0, 7) < bym ? `${bym}-01` : d0; // 🗓 이월 오더(상차일이 청구월보다 앞)는 청구월 1일부터 센다(functions/arCore.mjs 와 같게)
     if (!c || s <= 0 || !d || o.입금상태 === "입금완료" || stageIdx(stageOf(c, monthOf(o))) >= 6) return;
     const age = daysBetween(d, today); if (age < 0) return;
     const x = aging.get(c) || { client: c, d30: 0, d60: 0, d90: 0, over: 0, total: 0 };
@@ -129,4 +132,33 @@ export function billingBoard(orders, { from = "", to = "", mode = "ar", stageOf 
   items.sort((a, b) => order[a.status] - order[b.status] || a.ym.localeCompare(b.ym) || b.amount - a.amount);
   const sum = (st) => { const l = items.filter((x) => x.status === st); return { count: l.length, orders: l.reduce((a, x) => a + x.count, 0), amount: l.reduce((a, x) => a + x.amount, 0), vat: l.reduce((a, x) => a + x.vat, 0) }; };
   return { items, totals: { unbilled: sum("unbilled"), billed: sum("billed"), paid: sum("paid") } };
+}
+
+
+// ── ⚠ 2026-11-25 명세서 작성 뒤 금액이 바뀌었는지 ──────────────────────────────
+//  명세서 문서(arDesk stmt)는 작성할 때 공급가(supply) · 건수(count) · 뺀 오더(excludedIds) · 선불·착불 포함(includePrepaid)을 남긴다.
+//  지금 오더로 같은 식(배차완료 · 청구운임 > 0 · 그 거래처 · 청구월 = monthOf · 뺀 오더 빼기 · 선불·착불 규칙)을 다시 더해 다르면 알려 준다.
+//  저장은 막지 않는다 — 명세서 · 정산 홈 · 청구 현황판에 배지만. 문구 예) "명세서 작성 뒤 금액이 바뀌었어요: 작성 1,200,000 → 지금 1,250,000"
+export function stmtRowsNow(orders, client, ym, doc, prepaidDefault = false) {
+  const ex = new Set(doc?.excludedIds || []);
+  const rows = (orders || []).filter((o) => !isCancel(o) && o?.source !== "transport_transmit" && (o.배차상태 || "") === "배차완료" && n(o.청구운임) > 0 && String(o.거래처명 || "").trim() === client && monthOf(o) === ym);
+  return statementRowsOf(rows, stmtIncludePrepaidOf(doc, prepaidDefault)).rows.filter((o) => !ex.has(o._id));
+}
+// doc: 명세서 문서 · now: { supply, count } 또는 오더 목록(rows) — 결과 null(같음 · 작성 전) | { was, now, diff, countWas, countNow, stage, issued }
+export function stmtDrift(doc, now) {
+  if (!doc || stageIdx(doc.stage) < 1 || typeof doc.supply !== "number") return null;
+  const cur = Array.isArray(now) ? { supply: now.reduce((a, o) => a + n(o.청구운임), 0), count: now.length } : (now || { supply: 0, count: 0 });
+  const countWas = typeof doc.count === "number" ? doc.count : null;
+  if (Math.round(cur.supply) === Math.round(doc.supply) && (countWas == null || countWas === cur.count)) return null;
+  return { was: doc.supply, now: cur.supply, diff: cur.supply - doc.supply, countWas, countNow: cur.count, stage: doc.stage, issued: stageIdx(doc.stage) >= 5 };
+}
+export const stmtDriftText = (d) => (!d ? "" : d.was === d.now
+  ? `명세서 작성 뒤 건수가 바뀌었어요: 작성 ${d.countWas}건 → 지금 ${d.countNow}건`
+  : `명세서 작성 뒤 금액이 바뀌었어요: 작성 ${won(d.was)} → 지금 ${won(d.now)}`);
+export const stmtDriftHint = (d) => (!d ? "" : d.issued ? "세금계산서를 이미 발행했어요. 명세서를 다시 확인하고 필요하면 수정 계산서를 발행해 주세요." : "명세서를 열어 다시 확인하고 [명세서 작성]을 한 번 더 누르면 지금 금액으로 맞춰져요.");
+// 거래처 × 청구월 명세서 문서 찾기(사업자 여러 개면 단계가 가장 앞선 것 · 구분별 명세서는 빼고)
+export function stmtDocFinder(stmts) {
+  const m = new Map();
+  (stmts ? [...stmts.values()] : []).forEach((d) => { if (!d || d.sub) return; const k = `${d.client}|${String(d.yyyymm || "").replace("-", "")}`; const cur = m.get(k); if (!cur || stageIdx(d.stage) > stageIdx(cur.stage)) m.set(k, d); });
+  return (client, ym) => m.get(`${client}|${String(ym).replace("-", "")}`) || null;
 }

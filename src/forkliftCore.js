@@ -132,12 +132,19 @@ export const fkPresetKey = (o) => {
   return `${n(o?.거래처명) || "_"}__${pick}`.replace(/[/#?[\]]/g, "_").slice(0, 300);
 };
 
-// 지게차 기사별 지급 목록(정산관리 › 지게차 지급)
+// 🚫 2026-11-25 지급 목록에서 빼는 오더 — 취소된 오더(상태 · 배차상태 취소 · 배차취소 · 오더취소 · 취소됨) · 화주사 사본(source "transport_transmit")
+//  예전엔 배차상태 "배차취소"만 뺐다. 이미 지급한 뒤 취소된 오더는 [지급 취소]를 할 수 있게 남긴다(화면에 "지급 후 취소" 표시)
+export const PAYOUT_CANCEL_STATES = ["취소", "배차취소", "오더취소", "취소됨"];
+export const isCanceledOrder = (o) => PAYOUT_CANCEL_STATES.includes(String(o?.배차상태 || "")) || PAYOUT_CANCEL_STATES.includes(String(o?.상태 || ""));
+export const isShipperCopy = (o) => String(o?.source || "") === "transport_transmit";
+
+// 지게차 기사별 지급 목록(정산관리 › 지게차 · 외부 지급 › 지게차)
 export function forkliftPayoutGroups(orders = []) {
   const m = new Map();
   for (const o of orders || []) {
     if (!hasForklift(o)) continue;
-    if (String(o?.배차상태 || "") === "배차취소") continue;
+    if (isShipperCopy(o)) continue;
+    if (isCanceledOrder(o) && !o.지게차지급완료) continue;
     const id = String(o.지게차기사ID || "") || `name:${String(o.지게차기사명 || "미지정").trim()}`;
     const g = m.get(id) || { id, name: String(o.지게차기사명 || "미지정"), phone: o.지게차기사전화 || "", company: o.지게차회사 || "", total: 0, paid: 0, unpaid: 0, count: 0, rows: [] };
     const a = fkAmount(o);
@@ -204,4 +211,92 @@ export function fareBreakdown(o) {
   }
   const paid = paidOut(o);
   return { fareType: String(o?.운임구분 || "").trim(), baseDrv, baseSale, lines, drv, sale, paid, profit: orderProfit(o) };
+}
+
+// ─── 💳 2026-11-25 외부 지급 — 특수운임 중 받는사람 "외부"(회사가 따로 주는 돈: 인력 상하차비 · 주차비 · 기타) ───
+//  정산관리 › 지게차 · 외부 지급 › [외부 지급] 탭. 수익(paidOut)에는 이미 빠져 있고, 여기서는 "줬는지"만 관리한다.
+//  저장: 오더.외부지급 = { [항목키]: { 상태: "지급완료", 지급일, 지급액, 이름, 받는곳, 기록일 } }
+//   · 특수운임 배열은 팝업 [적용](specialApplyAll)이 {종류·이름·금액·부담·받는사람·메모}만 남기고 다시 만들어서,
+//     항목 안에 지급 칸을 두면 다음 수정 때 사라진다 → 오더에 따로 둔다
+//   · 항목키 = 종류-이름(같은 이름이 또 있으면 ~2, ~3) — 금액 · 메모를 고쳐도 그대로
+//   · 지급액 = 지급완료 때 금액(장부에 들어간 금액). 그 뒤 항목 금액이 바뀌면 "지급 후 금액 변경"으로 표시
+//   · 지급한 항목을 지우거나 받는사람을 바꾸면 "항목이 바뀌었어요" 줄로 남겨 [지급 취소]를 할 수 있게 한다
+//  장부: acctLedger/auto_extpay_{회사}_{오더ID}_{항목키} 한 줄(지급액 · 지급 취소면 지움 — 여러 번 눌러도 같은 값)
+//  오더 복사 때는 외부지급을 복사하지 않는다(EXT_PAY_FIELDS)
+export const EXT_PAY_FIELDS = ["외부지급"];
+const extKeyPart = (v) => String(v || "").replace(/[\s/#?[\]._~|$*`]/g, "").slice(0, 24);
+export const extRecvOf = (it) => String(it?.메모 || "").trim() || sfName(it);
+export const extPayMap = (o) => (o?.외부지급 && typeof o.외부지급 === "object" && !Array.isArray(o.외부지급) ? o.외부지급 : {});
+// 외부 항목 목록(항목키 포함)
+export function extItems(o) {
+  const seen = {}; const out = [];
+  for (const it of sfItems(o)) {
+    if (sfPayee(it) !== "외부") continue;
+    const base = `${extKeyPart(it.종류) || "기타"}-${extKeyPart(sfName(it)) || "항목"}`;
+    seen[base] = (seen[base] || 0) + 1;
+    out.push({ key: seen[base] > 1 ? `${base}~${seen[base]}` : base, item: it, name: sfName(it), to: extRecvOf(it), amount: fkNum(it.금액), mode: sfMode(it) });
+  }
+  return out;
+}
+// 오더 한 건의 외부 지급 줄 — 지금 항목 + 지급했는데 항목이 사라진 줄(orphan)
+export function extPayoutRows(o) {
+  const map = extPayMap(o); const rows = []; const used = new Set();
+  const canceled = isCanceledOrder(o);
+  const orderId = String(o?._id || o?.id || "");
+  for (const x of extItems(o)) {
+    const st = map[x.key]; const paid = st?.상태 === "지급완료";
+    used.add(x.key);
+    const paidAmt = paid ? fkNum(st.지급액 ?? x.amount) : 0;
+    rows.push({ order: o, orderId, key: x.key, name: x.name, to: x.to, amount: x.amount, mode: x.mode, paid, paidAmt, paidDate: paid ? String(st.지급일 || "") : "",
+      changed: paid && paidAmt !== x.amount, orphan: false, canceled });
+  }
+  for (const [k, st] of Object.entries(map)) {
+    if (used.has(k) || st?.상태 !== "지급완료") continue;
+    const paidAmt = fkNum(st.지급액);
+    rows.push({ order: o, orderId, key: k, name: String(st.이름 || k), to: String(st.받는곳 || st.이름 || "받는 곳 없음"), amount: 0, mode: "", paid: true, paidAmt, paidDate: String(st.지급일 || ""), changed: true, orphan: true, canceled });
+  }
+  return rows;
+}
+const extGroupId = (to) => String(to || "").replace(/\s+/g, "").toLowerCase() || "_";
+// 받는 곳별 묶음 — 취소 오더 · 화주사 사본은 빼고, 지급한 뒤 취소된 줄만 남긴다
+export function extPayoutGroups(orders = []) {
+  const m = new Map();
+  for (const o of orders || []) {
+    if (isShipperCopy(o)) continue;
+    for (const r of extPayoutRows(o)) {
+      if (r.canceled && !r.paid) continue;
+      const id = extGroupId(r.to);
+      const g = m.get(id) || { id, name: r.to, total: 0, paid: 0, unpaid: 0, count: 0, changed: 0, rows: [] };
+      if (r.paid) g.paid += r.paidAmt; else g.unpaid += r.amount;
+      if (r.changed) g.changed += 1;
+      g.count += 1; g.total = g.paid + g.unpaid; g.rows.push(r);
+      m.set(id, g);
+    }
+  }
+  for (const g of m.values()) g.rows.sort((a, b) => String(a.order?.상차일 || "").localeCompare(String(b.order?.상차일 || "")));
+  return [...m.values()].sort((a, b) => b.unpaid - a.unpaid || b.total - a.total);
+}
+// 장부 줄 키(ledgerAuto.setExtPayout → upsertAutoEntry 와 같은 규칙)
+export const extLedgerKey = (orderId, itemKey) => `${orderId}_${itemKey}`;
+const ledgerSafe = (v) => String(v || "").replace(/[/\s#?[\]]/g, "_").slice(0, 80);
+export const extLedgerDocId = (company, orderId, itemKey) => `auto_extpay_${ledgerSafe(company)}_${ledgerSafe(extLedgerKey(orderId, itemKey))}`;
+// 지급완료 · 지급 취소 → { patch: { 외부지급 }, ledger: [{ itemKey, amount(0이면 장부 줄 지움), date, name, to }] }
+//  keys = 바꿀 항목키들. 이미 그 상태인 항목은 건드리지 않는다(장부도 그대로)
+export function extPayPlan(o, keys = [], { paid = true, date = "", today = "" } = {}) {
+  const want = new Set(keys || []);
+  const map = { ...extPayMap(o) }; const ledger = [];
+  for (const r of extPayoutRows(o)) {
+    if (!want.has(r.key) || r.paid === paid) continue;
+    if (paid) {
+      if (!(r.amount > 0)) continue;
+      const d = String(date || today || "").slice(0, 10);
+      map[r.key] = { 상태: "지급완료", 지급일: d, 지급액: r.amount, 이름: r.name, 받는곳: r.to, 기록일: today || d };
+      ledger.push({ itemKey: r.key, amount: r.amount, date: d, name: r.name, to: r.to });
+    } else {
+      delete map[r.key];
+      ledger.push({ itemKey: r.key, amount: 0, date: r.paidDate, name: r.name, to: r.to });
+    }
+  }
+  if (!ledger.length) return null;
+  return { patch: { 외부지급: Object.keys(map).length ? map : null }, ledger };
 }

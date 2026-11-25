@@ -12,6 +12,7 @@ import { orderProfit, orderCost, paidOut, fkNum } from "./forkliftCore"; // ⭐ 
 import { profitStyle, profitRateColor } from "./marginPct"; // ⭐ 2026-11-17 수익 · 마진율 색(플러스 빨강 · 마이너스 파랑)
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
+import { isSalesOrder, salesMonthOf, salesBillDateOf } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙
 const n = (v) => fkNum(v); // 🛠 2026-11-25 수익(orderProfit)과 같은 금액 읽기(소수점 반올림)
 const won = (v) => `${Math.round(v || 0).toLocaleString()}`;
 const pct = (a, b) => (b ? (a / b) * 100 : 0);
@@ -20,7 +21,8 @@ const ymKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const isCanceled = (r) => /취소/.test(String(r.배차상태 || "")) || /취소/.test(String(r.지급방식 || ""));
 // ⭐ 2026-11-05 PC·모바일 일치 — 인사이트 매출에 넣는 오더 기준(모바일 경영인텔리전스도 이 함수를 쓴다)
-export const isInsightRow = (r) => !!r && !!r.상차일 && !isCanceled(r) && n(r.청구운임) > 0;
+//  📏 2026-11-25 매출관리와 같은 기준 — 배차완료 오더만(functions/salesRule.mjs isSalesOrder · 배차중 · 미배차 · 취소 · 화주사 사본 제외)
+export const isInsightRow = (r) => isSalesOrder(r) && !!r.상차일 && !isCanceled(r) && n(r.청구운임) > 0;
 
 const PERIODS = [
   { key: "this", label: "이번 달" },
@@ -60,8 +62,9 @@ export default function ProInsight({ data = [], companyName = "", onOpenOrder })
   const [reportMonth, setReportMonth] = React.useState(() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return ymKey(d); });
   const { s, e, ps, pe } = rangeOf(period);
   const valid = React.useMemo(() => data.filter(isInsightRow), [data]);
-  const cur = valid.filter((r) => r.상차일 >= s && r.상차일 <= e);
-  const prev = valid.filter((r) => r.상차일 >= ps && r.상차일 <= pe);
+  // 🗓 2026-11-25 기간 매출은 청구일(청구월 안 날짜 · 이월 오더는 청구월 1일 — salesRule.salesBillDateOf) 기준
+  const cur = valid.filter((r) => { const b = salesBillDateOf(r); return b >= s && b <= e; });
+  const prev = valid.filter((r) => { const b = salesBillDateOf(r); return b >= ps && b <= pe; });
 
   const agg = (rows, keyFn) => {
     const m = new Map();
@@ -104,7 +107,7 @@ export default function ProInsight({ data = [], companyName = "", onOpenOrder })
   const allClients = [...new Set(valid.map((r) => String(r.거래처명 || "").trim()).filter(Boolean))].sort();
   const printReport = () => {
     if (!reportClient) { window.alert("거래처를 골라 주세요."); return; }
-    const rows = valid.filter((r) => String(r.거래처명 || "").trim() === reportClient && String(r.상차일).slice(0, 7) === reportMonth).sort((a, b) => String(a.상차일).localeCompare(String(b.상차일)));
+    const rows = valid.filter((r) => String(r.거래처명 || "").trim() === reportClient && salesMonthOf(r) === reportMonth) /* 🗓 청구월 */.sort((a, b) => String(a.상차일).localeCompare(String(b.상차일)));
     if (!rows.length) { window.alert("그 달에 이 거래처 운송 기록이 없습니다."); return; }
     const total = rows.reduce((a, r) => a + n(r.청구운임), 0);
     const byRoute = agg(rows, routeKey).sort((a, b) => b.cnt - a.cnt).slice(0, 8);

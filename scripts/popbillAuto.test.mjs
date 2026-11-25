@@ -48,7 +48,10 @@ function fakeDb() {
       return { docs: docs.slice(0, lim) };
     },
   });
-  return { store, collection: (col) => ({ doc: (id) => ref(col, id || `auto${++auto}`), ...query(col) }) };
+  const tx = { get: (r) => r.get(), update: (r, v) => r.update(v), set: (r, v, o) => r.set(v, o) };
+  let lock = Promise.resolve(); // 트랜잭션은 한 번에 하나(진짜 Firestore 처럼 겹쳐 통과하지 않게)
+  const runTransaction = (fn) => { const r = lock.then(() => fn(tx)); lock = r.catch(() => null); return r; };
+  return { store, runTransaction, collection: (col) => ({ doc: (id) => ref(col, id || `auto${++auto}`), ...query(col) }) };
 }
 const AUTH = (uid, email = "") => ({ uid, token: { email } });
 function seedUsers(db) {
@@ -237,6 +240,7 @@ const ORD = (id, client, ym, fare, extra = {}) => ({ _id: id, __col: "orders", �
   eq("팝빌 호출: 입금만 · 계좌", pb.calls[0], ["bank", "1088112342", "0003", "12345678901234", ["I"]]);
   const pays = [...db.store.entries()].filter(([k]) => k.startsWith("arPayments/")).map(([, v]) => v);
   eq("자동 반영 = 입금 처리와 같은 기록(+auto · source bank)", pays.map((p) => [p.company, p.client, p.yyyymm, p.amount, p.full, p.depositName, p.auto, p.source]), [["테스트운송", "(주)한빛물류", "2026-10", 1650000, true, "한빛물류", true, "bank"]]);
+  eq("입금 기록 id 고정 · 묶음 키(자금 장부 한 줄)", [[...db.store.keys()].filter((k) => k.startsWith("arPayments/")).every((k) => k.startsWith("arPayments/bank_")), pays[0].depositKey], [true, `bank_${M.bankTxnDocId("테스트운송", "acc1", "T1")}`]);
   eq("다 채운 달은 정산완료", [db.store.get("orders/a1").정산상태?.["2026-10"], db.store.get("orders/a2").정산상태?.["2026-10"], db.store.get("orders/a1").정산일?.["2026-10"]], ["정산완료", "정산완료", "2026-11-08"]);
   const t1 = db.store.get(`bankTxns/${M.bankTxnDocId("테스트운송", "acc1", "T1")}`);
   const t2id = M.bankTxnDocId("테스트운송", "acc1", "T2");
@@ -248,7 +252,10 @@ const ORD = (id, client, ym, fare, extra = {}) => ({ _id: id, __col: "orders", �
   // 확인 목록 — 다른 회사는 못 건드림
   await throwsCode("확정: 다른 회사 입금 막음", () => bs.action({ action: "confirm", id: t2id, client: "남의거래처" }, AUTH("u2")), "permission-denied");
   await throwsCode("확정: 조회전용 막음", () => bs.action({ action: "confirm", id: t2id }, AUTH("v1")), "permission-denied");
-  const c = await bs.action({ action: "confirm", id: t2id, client: "대한통운 평택" }, AUTH("u1", "a@x.kr"));
+  // 🔒 2026-11-25 두 사람이 동시에 [확정]해도 한 번만 반영(트랜잭션)
+  const both = await Promise.allSettled([bs.action({ action: "confirm", id: t2id, client: "대한통운 평택" }, AUTH("u1", "a@x.kr")), bs.action({ action: "confirm", id: t2id, client: "대한통운 평택" }, AUTH("u1", "a@x.kr"))]);
+  eq("동시 확정 → 하나만 통과 · 입금 기록 한 건", [both.map((x) => x.status).sort(), [...db.store.values()].filter((v) => v.bankTxnId === t2id).length, both.find((x) => x.status === "rejected")?.reason?.code], [["fulfilled", "rejected"], 1, "failed-precondition"]);
+  const c = both.find((x) => x.status === "fulfilled").value;
   eq("확정 → 반영 · 별칭 배움", [c.status, c.kind, c.learned, db.store.get("bankAliases/테스트운송")?.map?.["김민수"], db.store.get("dispatch/b1").정산상태?.["2026-10"]], ["confirmed", "정산완료", true, "대한통운 평택", "정산완료"]);
   await throwsCode("확정: 이미 처리한 입금", () => bs.action({ action: "confirm", id: t2id }, AUTH("u1")), "failed-precondition");
   // 다음 입금은 배운 별칭으로 자동
@@ -256,6 +263,10 @@ const ORD = (id, client, ym, fare, extra = {}) => ({ _id: id, __col: "orders", �
   list = [{ tid: "T3", trdt: "20261108120000", accIn: "330000", remark1: "김민수" }];
   const s3 = await bs.syncCompany("테스트운송");
   eq("배운 별칭으로 다음 입금 자동 반영", [s3.auto, db.store.get(`bankTxns/${M.bankTxnDocId("테스트운송", "acc1", "T3")}`).match?.confidence], [1, "별칭"]);
+  // 🗓 2026-11-25 이월 오더(상차 10/31 · 마감월 11월)는 서버 매칭에서도 11월분
+  db.store.set("orders/c1", { ...ORD("c1", "이월상사", "2026-10", 400000, { companyName: "테스트운송" }), 상차일: "2026-10-31", 마감월: "2026-11" });
+  const mo = await bs.monthsOf("테스트운송");
+  eq("서버 미정산 달: 이월 오더는 마감월(11월)", mo.get("이월상사").map((e) => [e.yyyymm, e.due]), [["2026-11", 440000]]);
   // 되돌리기
   const t1id = M.bankTxnDocId("테스트운송", "acc1", "T1");
   const u = await bs.action({ action: "undo", id: t1id }, AUTH("u1"));

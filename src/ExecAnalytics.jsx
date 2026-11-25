@@ -15,13 +15,15 @@ import { ResponsiveContainer, BarChart, Bar, Cell, LabelList, XAxis, YAxis, Tool
 import { db, auth } from "./firebase";
 import { useOrderHistory } from "./orderHistory";
 import { useCompanyRows } from "./companyColStore";
-import { loadAcctPayments } from "./acctPayments";
+import { useArPaid } from "./arPaidLive"; // 🔗 2026-11-25 미수금 받은 돈 — 회계 · 정산 화면과 같은 식
 import { computeFunds, isCredit } from "./fundsCalc";
 import { isDemoOn } from "./devDemoData";
 import { execAnalyticsDemo } from "./execAnalyticsDemo";
 import { myTurn, useApprovals, ApprovalDocPreview } from "./Approval";
 import { addDay, kstToday, md, dateOf, toWon, isBizDay, rangeDays, dayDiff, mdDow } from "./dailyReportCore";
-import { plMonthly, receivables, dsoOf, clientTable, vehicleTable, priceWatch, cashForecast, salesTrend, liveRows, fleetIndex, monthsBack, ymOf, ymLabel, COGS_ACCOUNTS } from "./execAnalyticsCore";
+import { isSalesOrder, fixedSalesRows, salesMonthOf } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료 + 고정거래처)
+import { orderCost } from "./forkliftCore"; // 📏 2026-11-25 기사 운송료 지급 = 기사운임 + 회사 지급분(지게차 · 외부 특수운임)
+import { plMonthly, receivables, dsoOf, clientTable, vehicleTable, priceWatch, cashForecast, salesTrend, liveRows, fleetIndex, monthsBack, ymLabel, COGS_ACCOUNTS } from "./execAnalyticsCore";
 import { planExecution, planStatus } from "./bizPlan"; // 📑 2026-11-08 사업계획 탭
 import { bizPlanDemo } from "./bizPlanDemo";
 import { EX, EX_NUM, GOLD_GRAD, ExecPage, ExecPanel, Kpi, ExecKpis, ExecGrid, ExecTabs, ExecButton, Delta, Meter, Ring, RankBars, ExecTable, Chip, Empty, chartTheme, Legend, fmtMoney, fmtEokMan, pctChange, useBoxWidth } from "./execUi";
@@ -94,7 +96,7 @@ export function ExecShell({ en, title, sub, right, children, testId }) {
   );
 }
 // ─────────────────────────── 데이터 ───────────────────────────
-function useExecData({ company, dispatchData, drivers, loadRange: lrProp, months = 13, cash = false }) {
+function useExecData({ company, dispatchData, drivers, loadRange: lrProp, months = 14 /* 🗓 2026-11-25 청구월 기준 — 첫 달의 이월 오더(앞달 상차)까지 */, cash = false }) {
   const demo = demoOn() ? execAnalyticsDemo(company) : null;
   const today = kstToday();
   const { loadRange: ctx } = useOrderHistory() || {};
@@ -106,15 +108,9 @@ function useExecData({ company, dispatchData, drivers, loadRange: lrProp, months
   const recurLive = useCompanyRows("acctRecurring", co);
   const fundsLive = useCompanyRows("acctFunds", cash ? co : "");
   const fixedLive = useCompanyRows("fixedClients", co); // ⭐ 2026-11-07 고정거래처도 미수금에(회계관리와 같게)
-  const [arPay, setArPay] = React.useState(null);
-  React.useEffect(() => {
-    if (demo) { setArPay(demo.arPayments); return undefined; }
-    if (!company) return undefined;
-    let alive = true;
-    loadAcctPayments(db, Number(today.slice(0, 4)), company).then((d) => { if (alive) setArPay(d.ar || {}); }).catch(() => { if (alive) setArPay(null); });
-    return () => { alive = false; };
-  }, [demo, company, today]);
   const rows = React.useMemo(() => liveRows(demo ? demo.rows : dispatchData), [demo, dispatchData]);
+  // 🔗 2026-11-25 받은 돈 = 회계관리 · 거래처정산과 같은 식(arCore.arPaidByClient — 입금 기록 arPayments + 정산완료 · 입금완료 + 예전 회계 합계)
+  const arPay = useArPaid({ company, orders: rows, year: today.slice(0, 4), demoAr: demo ? demo.arPayments : null });
   const drv = demo ? demo.drivers : drivers;
   const fleet = React.useMemo(() => fleetIndex(drv), [drv]);
   return { demo, today, rows, fleet, ledger: demo ? demo.ledger : ledgerLive || [], recurring: demo ? demo.recurring : recurLive || [], funds: demo ? demo.funds : fundsLive || [], arPay, fixedRows: demo ? [] : fixedLive || [] };
@@ -168,7 +164,9 @@ const PERIOD_L = { 30: "최근 30일", 90: "최근 3개월", 365: "최근 12개�
 function periodOf(today, k) { const n = Number(k); const to = today; const from = addDay(today, -(n - 1)); return { from, to, pFrom: addDay(from, -n), pTo: addDay(from, -1), n }; }
 
 // ═════════════════════════ 손익 ═════════════════════════
-function PlTab({ rows, fleet, ledger, recurring, today, compact, W }) {
+function PlTab({ rows: rows0, fleet, ledger, recurring, today, compact, W, fixedRows = [] }) {
+  // 📏 2026-11-25 손익 매출 = 배차완료 오더 + 고정거래처(매출관리와 같은 기준 · salesRule)
+  const rows = React.useMemo(() => [...rows0, ...fixedSalesRows(fixedRows)], [rows0, fixedRows]);
   const months = React.useMemo(() => { const d = new Date(`${today.slice(0, 7)}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 1); return monthsBack(d.toISOString().slice(0, 7), 12); }, [today]); // 마감된 12개월(이번 달은 진행 중이라 뺌)
   const pl = React.useMemo(() => plMonthly({ rows, fleet, ledger, recurring, months }), [rows, fleet, ledger, recurring, months]);
   const [sel, setSel] = React.useState(months.length - 1); // 지난달(마감된 달)
@@ -180,7 +178,7 @@ function PlTab({ rows, fleet, ledger, recurring, today, compact, W }) {
   const hasData = pl.some((m) => m.sale > 0);
   if (!hasData) return <ExecPanel en="PROFIT & LOSS" title="손익"><Empty text="최근 12개월간 마감된 오더가 없습니다" sub="배차 실적이 누적되면 월별 매출 · 영업이익이 표시됩니다." /></ExecPanel>;
   return (<>
-    <Brief basis={`${ymKo(cur.m)} 마감 · 상차일 기준`}>
+    <Brief basis={`${ymKo(cur.m)} 마감 · 배차완료 · 청구월(마감월) 기준`}>
       {M}월 매출은 <B>{fmtEokMan(cur.sale)}</B>
       {dSale != null ? <>으로 전월 대비 <B color={dSale >= 0 ? EX.up : EX.down}>{Math.abs(dSale).toFixed(1)}% {dSale >= 0 ? "증가" : "감소"}</B>했으며, </> : "이며, "}
       영업{cur.op < 0 ? "손실" : "이익"}은 <B color={pc(cur.op)}>{fmtEokMan(Math.abs(cur.op))}</B>(영업이익률 {pct(cur.om)})입니다.
@@ -198,7 +196,7 @@ function PlTab({ rows, fleet, ledger, recurring, today, compact, W }) {
         right={W >= 900 && <Legend items={[["매출(선택 월)", EX.gold], ["영업이익 +", EX.up], ["영업이익 −", EX.down]]} />}>
         {W < 900 && <div className="mb-2"><Legend items={[["매출(선택 월)", EX.gold], ["영업이익 +", EX.up], ["영업이익 −", EX.down]]} /></div>}
         <PlChart data={chart} sel={sel} setSel={setSel} compact={compact} />
-        <Basis>매출 = 청구운임 · 매입(운송원가) = 기사운임(소속 차량 기사운임 및 용차비) + 회사 부담 지게차 · 외부 특수운임 · 판관비 = 장부 지출액에서 운송원가 계정({COGS_ACCOUNTS.slice(0, 3).join(" · ")} 등)을 제외한 금액 · 장부 기록이 없는 월은 고정비 기준 추정 · 진행 중인 당월은 제외했습니다.</Basis>
+        <Basis>매출 = 배차완료 오더 + 고정거래처의 청구운임(매출관리와 같은 기준 · 배차중 · 미배차 제외 · 청구월(마감월) 기준) · 매입(운송원가) = 기사운임(소속 차량 기사운임 및 용차비) + 회사 부담 지게차 · 외부 특수운임 · 판관비 = 장부 지출액에서 운송원가 계정({COGS_ACCOUNTS.slice(0, 3).join(" · ")} 등)을 제외한 금액 · 장부 기록이 없는 월은 고정비 기준 추정 · 진행 중인 당월은 제외했습니다.</Basis>
       </ExecPanel>
       <PlStructure cur={cur} M={M} compact={compact} />
     </ExecGrid>
@@ -374,7 +372,7 @@ function ClientTab({ rows, arPay, today, W, compact, fixedRows = [] }) {
   return (<>
     <Toolbar basis={`${dot(P.from).slice(5)} ~ ${dot(P.to).slice(5)} · 증감률은 직전 동일 기간 대비`}><ExecTabs size="sm" items={PERIODS} value={pk} onChange={setPk} /></Toolbar>
     {!list.length ? <ExecPanel title="거래처 수익성"><Empty text="해당 기간에 오더가 없습니다" sub="조회 기간을 늘려 확인하시기 바랍니다." /></ExecPanel> : <>
-      <Brief basis="취소 · 운송사 전송 제외 · 상차일 기준">
+      <Brief basis="배차완료 오더 기준(매출관리와 같음) · 상차일 기준">
         {PERIOD_L[pk]} 거래처 <B>{list.length}곳</B>의 매출은 <B>{fmtEokMan(tot.sale)}</B>(매출총이익률 {pct(tot.sale ? (tot.profit / tot.sale) * 100 : 0)})입니다.
         {" "}상위 5개 거래처가 매출의 <B>{top5Share.toFixed(0)}%</B>를 차지하며,{" "}
         {!arPay ? "수금 기록이 없어 미수금은 산출하지 않았습니다." : o30 ? <>30일 초과 미수금은 <B color={EX.warn}>{fmtEokMan(o30)}</B>입니다.</> : "30일 초과 미수금은 없습니다."}
@@ -680,11 +678,12 @@ function CashTab({ rows, ledger, recurring, funds, arPay, today, compact, W, fix
     const cash = F ? F.cash : 0;
     const cardDue = F ? F.list.filter(isCredit).reduce((s, f) => s + (f.usedMonth || 0), 0) : 0;
     // 기사 운송료(최근 3개월 월평균) — 고정비에 운송료 지급이 따로 있으면 넣지 않는다
+    //  📏 2026-11-25 배차완료 오더의 orderCost(기사운임 + 회사가 따로 지급하는 지게차 · 외부 특수운임) — 나가는 돈을 빠짐없이
     const ms = [1, 2, 3].map((n) => { const d = new Date(`${today.slice(0, 7)}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - n); return d.toISOString().slice(0, 7); });
     const hasDrvRec = (recurring || []).some((x) => x.active !== false && /운송료|기사/.test(`${x.name || ""}${x.account || ""}`));
-    const drvPay = hasDrvRec ? 0 : ms.reduce((s, m) => s + rows.filter((r) => ymOf(dateOf(r)) === m).reduce((a, r) => a + toWon(r.기사운임), 0), 0) / 3;
+    const drvPay = hasDrvRec ? 0 : ms.reduce((s, m) => s + rows.filter((r) => salesMonthOf(r) === m).reduce((a, r) => a + (isSalesOrder(r) ? orderCost(r) : 0), 0), 0) / 3;
     const last30 = rangeDays(addDay(today, -30), addDay(today, -1)); const bizN = last30.filter(isBizDay).length || 1;
-    const set = new Set(last30); const sale30 = rows.reduce((s, r) => (set.has(dateOf(r)) ? s + toWon(r.청구운임) : s), 0);
+    const set = new Set(last30); const sale30 = rows.reduce((s, r) => (set.has(dateOf(r)) && isSalesOrder(r) ? s + toWon(r.청구운임) : s), 0); // 📏 배차완료 매출
     const totOut = Object.values(rec).reduce((s, r) => s + r.outstanding, 0);
     const wDso = totOut ? Object.entries(rec).reduce((s, [c, r]) => s + r.outstanding * (dso[c] || 60), 0) / totOut : 45;
     return { ...cashForecast({ today, cash, rec, dso, recurring, cardDue, driverPay: drvPay, weeks, newSalesDaily: sale30 / bizN, newDso: wDso }), cardDue, drvPay, wDso, totOut };
@@ -770,7 +769,7 @@ function CashTab({ rows, ledger, recurring, funds, arPay, today, compact, W, fix
           );
         })}
       </div>
-      <Basis>가정: 미수금은 청구일로부터 거래처별 평균 회수 기간(미수금 ÷ 최근 90일 일평균 매출, 15~120일) 경과 시 회수되는 것으로 보며, 회수 기일이 지난 미수금은 이번 주 50% · 다음 주 30%만 반영합니다. 향후 발생 매출은 평균 회수 기간 경과 후부터 반영합니다. 고정비 · 급여는 자금관리 고정비 등록일에, 카드 결제액은 당월 사용액을 익월 15일에, 기사 운송료는 최근 3개월 월평균({mn(fc.drvPay)}만원)을 매월 10일에 지급하는 것으로 가정합니다(고정비에 운송료가 등록된 경우 해당 금액을 적용합니다).</Basis>
+      <Basis>가정: 미수금은 청구일로부터 거래처별 평균 회수 기간(미수금 ÷ 최근 90일 일평균 매출, 15~120일) 경과 시 회수되는 것으로 보며, 회수 기일이 지난 미수금은 이번 주 50% · 다음 주 30%만 반영합니다. 향후 발생 매출은 평균 회수 기간 경과 후부터 반영합니다. 고정비 · 급여는 자금관리 고정비 등록일에, 카드 결제액은 당월 사용액을 익월 15일에, 기사 운송료는 최근 3개월 배차완료 오더의 기사운임 + 회사 부담 지게차 · 외부 특수운임 월평균({mn(fc.drvPay)}만원)을 매월 10일에 지급하는 것으로 가정합니다(고정비에 운송료가 등록된 경우 해당 금액을 적용합니다).</Basis>
     </ExecPanel>
   </>);
 }

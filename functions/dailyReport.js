@@ -6,7 +6,7 @@
 //  · 받는 사람 = 임원 화면 역할(customRoles roleScreen "exec" — 화면 isExec · 규칙 isExecRoleUser와 같은 기준)
 //    · dailyReportCompany/{회사}.recipients[uid] === false 면 보내지 않음 · 받는 요일(기본 월~금, 공휴일 제외)
 //  · 계산은 src/dailyReportCore.js와 같은 규칙(CommonJS 복사본): 기준 = 직전 영업일 ~ 어제(월요일 → 금·토·일)
-//    매출 = 취소·운송사 전송 제외 오더 청구운임, 수익 = 청구운임 − 기사운임 − 회사가 따로 지급(지게차·외부 특수운임)(⭐ 2026-11-17 functions/profitCore.mjs orderProfit — HomeDeck buildPastStats와 같음) + 고정노선 운송업체 설정
+//    매출 = 📏 2026-11-25 배차완료 오더(+ 고정거래처) 청구운임(functions/salesRule.mjs isSalesOrder — 화면 · 매출관리와 같은 함수), 수익 = 청구운임 − 기사운임 − 회사가 따로 지급(지게차·외부 특수운임)(⭐ 2026-11-17 functions/profitCore.mjs orderProfit — HomeDeck buildPastStats와 같음) + 고정노선 운송업체 설정
 //  · 같은 사람에게 같은 날 두 번 보내지 않게 dailyReportLogs/{uid}_{날짜}를 먼저 만든다(create — 있으면 건너뜀)
 const HOLIDAYS = new Set(["2025-01-01","2025-01-27","2025-01-28","2025-01-29","2025-01-30","2025-03-01","2025-03-03","2025-05-05","2025-05-06","2025-06-06","2025-08-15","2025-10-03","2025-10-05","2025-10-06","2025-10-07","2025-10-08","2025-10-09","2025-12-25","2026-01-01","2026-02-16","2026-02-17","2026-02-18","2026-03-01","2026-03-02","2026-05-05","2026-05-24","2026-05-25","2026-06-03","2026-06-06","2026-07-17","2026-08-15","2026-08-17","2026-09-24","2026-09-25","2026-09-26","2026-10-03","2026-10-05","2026-10-09","2026-12-25","2027-01-01","2027-02-06","2027-02-07","2027-02-08","2027-02-09","2027-03-01","2027-05-05","2027-05-13","2027-06-06","2027-07-17","2027-08-15","2027-08-16","2027-09-14","2027-09-15","2027-09-16","2027-10-03","2027-10-04","2027-10-09","2027-10-11","2027-12-25","2027-12-27","2028-01-01","2028-01-26","2028-01-27","2028-01-28","2028-03-01","2028-04-12","2028-05-02","2028-05-05","2028-06-06","2028-07-17","2028-08-15","2028-10-02","2028-10-03","2028-10-04","2028-10-05","2028-10-09","2028-12-25"]);
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
@@ -70,7 +70,9 @@ module.exports = function makeDailyReport({ db, FieldValue, sendPushAndCleanup, 
   async function companyNumbers(co, today, p) {
     const b = basisOf(today, p);
     const ym = b.end.slice(0, 7);
-    const from = [`${ym}-01`, b.prev7[0], b.prev1[0]].sort()[0];
+    // 🗓 2026-11-25 월 누계는 청구월(마감월) 기준 — 지난달 상차 · 이번 달 마감(이월) 오더도 읽게 한 달 앞부터
+    const pmFirst = (() => { const x = new Date(`${ym}-01T00:00:00Z`); x.setUTCMonth(x.getUTCMonth() - 1); return x.toISOString().slice(0, 10); })();
+    const from = [pmFirst, b.prev7[0], b.prev1[0]].sort()[0];
     const setting = (await db.collection("routeCarrierSettings").doc(co).get().catch(() => null))?.data() || null;
     const countable = makeIsCountable(setting);
     const rows = [];
@@ -80,16 +82,29 @@ module.exports = function makeDailyReport({ db, FieldValue, sendPushAndCleanup, 
       const snap = await q.get().catch((e) => { console.warn(`일일 경영 보고 ${co} ${col} 조회 실패:`, e?.message || e); return { docs: [] }; });
       snap.docs.forEach((d) => { const r = d.data() || {}; if ((r.companyName || defaultCompany) === co) rows.push(r); });
     }
-    const byDay = {};
+    // 📏 2026-11-25 고정거래처 매출(fixedClients · 날짜별) — 화면(일일 경영 보고 · 매출관리)과 같게 매출에 더한다
+    const fixedQ = co === defaultCompany ? db.collection("fixedClients") : db.collection("fixedClients").where("companyName", "==", co); // 회사명 없는 예전 문서 = 기본 회사
+    const fixedSnap = await fixedQ.get().catch(() => ({ docs: [] }));
+    const fixedRaw = fixedSnap.docs.map((d) => d.data() || {}).filter((r) => (r.companyName || defaultCompany) === co);
+    const byDay = {}; const byBill = {}; // byBill[청구일] = 매출(청구월 안의 날짜 · 이월은 1일 — 화면 dailyReportCore 와 같다)
     const P = await import("./profitCore.mjs"); // ⭐ 2026-11-17 화면과 같은 수익 식
+    const SR = await import("./salesRule.mjs"); // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료) — 화면과 같은 파일
     rows.forEach((r) => {
       if (r.source === "transport_transmit" || isCancelled(r) || !countable(r)) return;
       const d = dateOf(r); if (!d) return;
-      const e = byDay[d] || (byDay[d] = [0, 0, 0]); const s = toWon(r.청구운임); e[0] += s; e[1] += P.orderProfit(r); e[2] += 1;
+      const e = byDay[d] || (byDay[d] = [0, 0, 0]); e[2] += 1; // 오더 건수는 취소 뺀 전체(운영 숫자)
+      if (!SR.isSalesOrder(r)) return; // 매출 · 수익은 배차완료만
+      e[0] += toWon(r.청구운임); e[1] += P.orderProfit(r);
+      const bd = SR.salesBillDateOf(r); if (bd) byBill[bd] = (byBill[bd] || 0) + toWon(r.청구운임);
+    });
+    SR.fixedSalesRows(fixedRaw).forEach((r) => {
+      const d = dateOf(r); if (!d || d < from || d > today) return;
+      const e = byDay[d] || (byDay[d] = [0, 0, 0]); e[0] += toWon(r.청구운임); e[1] += P.orderProfit(r);
+      byBill[d] = (byBill[d] || 0) + toWon(r.청구운임);
     });
     const sum = (days) => days.reduce((a, d) => { const v = byDay[d]; return v ? [a[0] + v[0], a[1] + v[1], a[2] + v[2]] : a; }, [0, 0, 0]);
     const cur = sum(b.days); const p7 = sum(b.prev7);
-    const mtd = range(`${ym}-01`, b.end).reduce((s, d) => s + (byDay[d]?.[0] || 0), 0);
+    const mtd = range(`${ym}-01`, b.end).reduce((s, d) => s + (byBill[d] || 0), 0); // 🗓 청구월 누계
     const cs = (await db.collection("companySettings").doc(co).get().catch(() => null))?.data() || {};
     const target = (Number(cs?.매출목표?.순수매출목표) || 0) / 12;
     return { b, cur, p7, mtd, target };
@@ -160,5 +175,5 @@ module.exports = function makeDailyReport({ db, FieldValue, sendPushAndCleanup, 
     console.log(`📊 일일 경영 보고 ${today} ${slot}: ${out.length}명`, JSON.stringify(out).slice(0, 1500));
     return { today, slot, sent: out.filter((x) => !x.skipped).length, results: out };
   }
-  return { run };
+  return { run, companyNumbers }; // companyNumbers: 테스트(scripts/salesRule.test.mjs)가 화면과 같은 매출인지 본다
 };

@@ -5,7 +5,7 @@
 //    · 거래처 TOP 5 · 이번 주 부재 일정
 //  · 결재함(ExecApprovals): 최종 결재자 화면 — 결재 현황 요약 + 전자결재(결재함·기안함·결재선·인수인계)
 //  · 직원 일정(TeamSchedule): 연차·반차·외근·출장·병가·경조사를 달력으로(결재 완료 = 확정, 진행 중 = 점선)
-//  매출 통계는 홈과 같은 방식 — 올해 지난 기간 합계(하루 1번 계산·저장, homePastStats v4) + 최근 실시간 오더.
+//  매출 통계는 홈과 같은 방식 — 올해 지난 기간 합계(하루 1번 계산·저장, homePastStats v5 · 📏 2026-11-25 매출 · 수익은 배차완료 + 고정거래처) + 최근 실시간 오더.
 import { OrdersWeatherDeck } from "./publicDataMain"; // 🌦 2026-11-18 운행 지역 날씨(골드)
 import React from "react";
 import { arrowFocus } from "./useListKeys";
@@ -21,6 +21,7 @@ import HandoverCenter, { useHandoverUnread } from "./HandoverCenter";
 import { approvalNavItems } from "./menuTree"; // ⭐ 2026-11-10 메뉴 통일
 const ContractStudioX = React.lazy(() => import("./ContractStudio")); // ⭐ 2026-11-10 부서·임원 화면 전자결재 › 계약서
 import { buildPastStats } from "./HomeDeck";
+import { isSalesOrder, fixedSalesRows } from "./salesRule"; // 📏 2026-11-25 매출에 넣는 오더 한 규칙(배차완료 + 고정거래처)
 import { fkNum } from "./forkliftCore";
 import { useRouteCarrierFilter } from "./routeCarriers"; // ⭐ 2026-11-05 고정노선 운송업체 설정(끈 업체 오더는 매출에서 뺌)
 import { pcLiveWindowStart, pcPrevDay, useOrderHistory } from "./orderHistory";
@@ -43,7 +44,7 @@ import { staffRanking, monthSpans } from "./dailyReportCore";
 import { receivablesOf } from "./arAging";
 import { useUserNameMap, orderStaffNameRaw, ORDER_MGR_FIXED } from "./detailGetters";
 import { useCompanyRows } from "./companyColStore";
-import { loadAcctPayments } from "./acctPayments";
+import { useArPaid } from "./arPaidLive"; // 🔗 2026-11-25 미수금 받은 돈 — 회계 · 정산 화면과 같은 식
 import { computeFunds } from "./fundsCalc";
 import { isDemoOn } from "./devDemoData";
 import { execAnalyticsDemo } from "./execAnalyticsDemo";
@@ -71,13 +72,15 @@ const DOW = ["일", "월", "화", "수", "목", "금", "토"];
 function readPastCache(company, liveStart) {
   try {
     const c = JSON.parse(localStorage.getItem("homePastStats") || "null");
-    return c && c.v === 4 && c.company === company && c.liveStart === liveStart && c.calYear === new Date().getFullYear() ? c : null;
+    return c && c.v === 6 && c.company === company && c.liveStart === liveStart && c.calYear === new Date().getFullYear() ? c : null;
   } catch { return null; }
 }
 // 올해 일별 매출·이익·건수 = 지난 기간(하루 1번 계산해 둔 값) + 실시간 오더
-export function useYearDays({ company, dispatchData = [], pastCache, liveStart }) {
+//  📏 2026-11-25 매출 · 이익 = 배차완료 오더(buildPastStats · salesRule) + 고정거래처(fixed: false 면 빼기 — 데모 화면)
+export function useYearDays({ company, dispatchData = [], pastCache, liveStart, fixed = true }) {
   const ls = liveStart || pcLiveWindowStart();
   const carrierF = useRouteCarrierFilter(company); // ⭐ 2026-11-05
+  const fixedLive = useCompanyRows("fixedClients", fixed ? company : "");
   const [past, setPast] = React.useState(() => pastCache || readPastCache(company, ls));
   React.useEffect(() => { if (pastCache) setPast(pastCache); }, [pastCache]);
   React.useEffect(() => {
@@ -85,12 +88,12 @@ export function useYearDays({ company, dispatchData = [], pastCache, liveStart }
     if (past && (past.cs || "") === carrierF.sig) return undefined; // ⭐ 2026-11-05 운송업체 설정이 바뀌면 다시 계산
     let alive = true;
     const y = new Date().getFullYear();
-    Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${y}-01-01`), where("상차일", "<=", pcPrevDay(ls))))))
+    Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${y - 1}-12-01`) /* 🗓 2026-11-25 1월 청구(작년 12월 상차 · 이월) 오더까지 — 달 매출 = 청구월 */, where("상차일", "<=", pcPrevDay(ls))))))
       .then((snaps) => {
         const rows = snaps.flatMap((sn) => sn.docs.map((d) => d.data() || {})).filter((r) => (r.companyName || DEFAULT_COMPANY) === company && r.source !== "transport_transmit" && !isCancelled(r) && carrierF.isCountable(r));
         const thisMonth = kstToday().slice(0, 7);
-        const sum = rows.reduce((a, r) => ({ year: a.year + toWon(r.청구운임) }), { year: 0 });
-        const c = { ...sum, ...buildPastStats(rows, thisMonth), v: 4, company, liveStart: ls, calYear: y, savedAt: Date.now(), cs: carrierF.sig };
+        const sum = rows.reduce((a, r) => ({ year: a.year + (isSalesOrder(r) ? toWon(r.청구운임) : 0) }), { year: 0 }); // 📏 2026-11-25 배차완료만
+        const c = { ...sum, ...buildPastStats(rows, thisMonth), v: 6, company, liveStart: ls, calYear: y, savedAt: Date.now(), cs: carrierF.sig };
         if (alive) setPast(c);
       })
       .catch(() => { if (alive) setPast({ days: {}, clients: {}, month: "", cs: carrierF.sig }); });
@@ -100,14 +103,18 @@ export function useYearDays({ company, dispatchData = [], pastCache, liveStart }
     const thisMonth = kstToday().slice(0, 7);
     const liveRows = (dispatchData || []).filter((r) => !isCancelled(r) && r.source !== "transport_transmit" && dateOf(r) >= ls && carrierF.isCountable(r)); // ⭐ 2026-11-05
     const live = buildPastStats(liveRows, thisMonth);
+    const fx = buildPastStats(fixedSalesRows(fixed ? fixedLive : null), thisMonth); // 📏 2026-11-25 고정거래처(매출 · 이익만 · 건수 0)
     const days = {};
     Object.entries(past?.days || {}).forEach(([d, v]) => { if (d < ls) days[d] = [...v]; });
-    Object.entries(live.days).forEach(([d, v]) => { const e = days[d] || (days[d] = [0, 0, 0]); e[0] += v[0]; e[1] += v[1]; e[2] += v[2]; });
+    [live, fx].forEach((x) => Object.entries(x.days).forEach(([d, v]) => { const e = days[d] || (days[d] = [0, 0, 0]); e[0] += v[0]; e[1] += v[1]; e[2] += v[2]; }));
     const clients = {};
     if (past?.month === thisMonth) Object.entries(past.clients || {}).forEach(([k, v]) => { clients[k] = (clients[k] || 0) + v; });
-    Object.entries(live.clients).forEach(([k, v]) => { clients[k] = (clients[k] || 0) + v; });
-    return { days, clients, ready: !!past };
-  }, [past, dispatchData, ls, carrierF]);
+    [live, fx].forEach((x) => Object.entries(x.clients).forEach(([k, v]) => { clients[k] = (clients[k] || 0) + v; }));
+    // 🗓 2026-11-25 청구일별 매출 · 이익(달 · 연 합계 = 청구월(마감월) 기준) — 지난 기간(상차일 < ls) + 실시간 + 고정거래처
+    const bill = {};
+    [past?.bill, live.bill, fx.bill].forEach((src) => Object.entries(src || {}).forEach(([d, v]) => { const e = bill[d] || (bill[d] = [0, 0]); e[0] += v[0]; e[1] += v[1]; }));
+    return { days, bill, clients, ready: !!past };
+  }, [past, dispatchData, ls, carrierF, fixedLive, fixed]);
 }
 function useCompanyQuery(name, company, field = "companyName", extra = null) {
   const [rows, setRows] = React.useState(null);
@@ -312,7 +319,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
   const prevMonth = (() => { const d = new Date(`${thisMonth}-01T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7); })();
   const data = demo ? demo.rows : dispatchData;
   const demoPast = React.useMemo(() => (demo ? { days: {}, clients: {}, month: "", cs: "" } : null), [demo]);
-  const { days, clients, ready } = useYearDays({ company, dispatchData: data, pastCache: demo ? demoPast : pastCache, liveStart: demo ? `${year}-01-01` : liveStart });
+  const { days, bill, clients, ready } = useYearDays({ company, dispatchData: data, pastCache: demo ? demoPast : pastCache, liveStart: demo ? `${year}-01-01` : liveStart, fixed: !demo });
   const co = demo ? "" : company;
   const meX = demo ? { ...demo.me, ...Object.fromEntries(Object.entries(me || {}).filter(([, v]) => v)) } : me || {};
   const isCeo = isCeoPosition(meX?.position);
@@ -344,21 +351,16 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
     Promise.resolve(loadRange(loadFrom, today)).then((r) => { if (alive && r !== null) setYearLoaded(true); }).catch(() => {});
     return () => { alive = false; };
   }, [demo, loadRange, loadFrom, today]);
-  const [arPay, setArPay] = React.useState(null);
-  React.useEffect(() => {
-    if (demo) { setArPay(demo.arPayments); return undefined; }
-    if (!company) return undefined;
-    let alive = true;
-    loadAcctPayments(db, Number(year), company).then((d) => { if (alive) setArPay(d.ar || {}); }).catch(() => { if (alive) setArPay(null); });
-    return () => { alive = false; };
-  }, [demo, company, year]);
   const carrierF = useRouteCarrierFilter(company);
   const rows = React.useMemo(() => liveRows(data).filter((r) => carrierF.isCountable(r)), [data, carrierF]);
+  // 🔗 2026-11-25 받은 돈 = 회계관리 · 거래처정산과 같은 식(arCore.arPaidByClient — 입금 기록 arPayments + 정산완료 · 입금완료 + 예전 회계 합계)
+  const arPay = useArPaid({ company, orders: rows, year, demoAr: demo ? demo.arPayments : null });
 
   // ── 매출 · 이익(홈과 같은 집계: 지난 기간 저장값 + 실시간) ──
   const dayNo = Number(today.slice(8, 10));
   const dim = new Date(Date.UTC(Number(thisMonth.slice(0, 4)), Number(thisMonth.slice(5, 7)), 0)).getUTCDate();
-  const sumWhere = (fn) => Object.entries(days).reduce((a, [d, v]) => (fn(d) ? [a[0] + v[0], a[1] + v[1], a[2] + v[2]] : a), [0, 0, 0]);
+  // 🗓 2026-11-25 달 · 연 합계: 매출 · 이익 = 청구일(bill · 청구월 기준), 건수 = 상차일(days)
+  const sumWhere = (fn) => { const b = Object.entries(bill).reduce((a, [d, v]) => (fn(d) ? [a[0] + v[0], a[1] + v[1]] : a), [0, 0]); const c = Object.entries(days).reduce((a, [d, v]) => (fn(d) ? a + v[2] : a), 0); return [b[0], b[1], c]; };
   const [mSale, mProfit, mCnt] = sumWhere((d) => d.startsWith(thisMonth));
   const [pSale, pProfit] = sumWhere((d) => d.startsWith(prevMonth) && Number(d.slice(8, 10)) <= dayNo);
   const [ySale, yProfit, yCnt] = sumWhere((d) => d.startsWith(year));
@@ -423,7 +425,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
   const nameMap = useUserNameMap();
   const staffOf = React.useCallback((r) => { const n = orderStaffNameRaw(r, nameMap); return (n && n !== ORDER_MGR_FIXED ? n : "") || String(r?.배차확정자 || "").trim() || n || "미지정"; }, [nameMap]);
   const teamByName = React.useMemo(() => { const m = {}; staff.forEach((u) => { const n = String(personName(u) || u.name || "").trim(); if (n) m[n] = String(u.team || "").trim(); }); return m; }, [staff]);
-  const rank = React.useMemo(() => { const sp = monthSpans(today); return staffRanking(rows, sp.cur, sp.prev, staffOf, (n) => n === "최고관리자"); }, [rows, today, staffOf]);
+  const rank = React.useMemo(() => { const sp = monthSpans(today); return staffRanking(rows, sp.cur, sp.prev, staffOf, (n) => n === "최고관리자", true); /* 🗓 청구월 기준 */ }, [rows, today, staffOf]);
   const teamRows = React.useMemo(() => teamContribution(rank.list, (n) => teamByName[n] || ""), [rank, teamByName]);
 
   // ── 거래처 ──
@@ -501,7 +503,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
           <BTile en="YEAR TO DATE" label="올해 누적 매출" money={ySale} foot={<>매출총이익 <b style={{ ...EX_NUM, color: pColor(yProfit) }}>{fmtMoney(yProfit)}</b> · {fmtPct(yMargin)}</>} />
         </ExecKpis>
         {/* ⭐ 2026-11-07 규칙 점검 — 매출관리(배차완료만)와 숫자가 다른 이유를 화면에 적어 둔다 */}
-        <Basis className="mt-2.5 px-1"><span data-kp="exec-basis">매출 기준: 취소 · 운송사 전송을 제외한 전체 오더(배차중 · 승인대기 포함) · 매출관리는 배차완료 오더만 집계하므로 수치가 다를 수 있습니다</span>{isCeo && F.has ? " · 보유 자금은 경리 입력 예금 · 현금 잔액 기준" : ""}</Basis>
+        <Basis className="mt-2.5 px-1"><span data-kp="exec-basis">매출 기준: 배차완료 오더 + 고정거래처(매출관리와 같음 · 배차중 · 미배차 · 취소 제외) · 달 · 연 매출은 청구월(마감월), 일 매출은 상차일 · 오더 건수는 취소를 뺀 전체 오더</span>{isCeo && F.has ? " · 보유 자금은 경리 입력 예금 · 현금 잔액 기준" : ""}</Basis>
       </div>
 
       {/* 🌦 2026-11-18 운행 지역 날씨 — 임원 화면(골드) · 오늘 · 내일 오더 지역 · 기상특보 */}
