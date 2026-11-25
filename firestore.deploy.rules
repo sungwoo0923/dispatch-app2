@@ -326,6 +326,12 @@ service cloud.firestore {
     function fareRulesStaff(co) {
       return isTotalMasterUser() || (isOfficeStaff() && myCo() == co);
     }
+    match /voiceGlossary/{co} {
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co && !(myRole() in ['driver', 'shipper', 'cafeUser']));
+      allow write: if isTotalMasterUser() || (isApproved() && myCo() == co && !(myRole() in ['driver', 'shipper', 'viewer', 'cafeUser'])
+        && request.resource.data.keys().hasOnly(['items', 'updatedAt', 'updatedBy'])
+        && request.resource.data.items is list && request.resource.data.items.size() <= 500);
+    }
     match /companySettings/{co} {
       allow read: if isTotalMasterUser() || (isApproved() && myCo() == co && myRole() != 'driver');
       allow create: if request.resource.data.keys().hasOnly(['companyName', 'workWeekdays'])

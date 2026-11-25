@@ -435,6 +435,13 @@ service cloud.firestore {
     // 회사별 맞춤 기능(companyFeatures/{회사} = { fareRules: true, … }) — 최고관리자(관리자센터)만 켜고 끈다.
     //  그 회사 승인 직원은 읽기만(켜진 회사에만 메뉴가 보이게)
     // ⭐ 2026-11-03 회사 설정(공지 작성 권한 등) — 같은 회사는 읽고, 그 회사 마스터·최고관리자만 바꾼다
+    // 📞 2026-11-25 AI 상담원 용어 사전 — 회사가 넣은 말(예: 에이제이 = AJ네트웍스). 우리 회사 직원(기사 · 화주 · 조회전용 제외)만 읽고 고친다
+    match /voiceGlossary/{co} {
+      allow read: if isTotalMasterUser() || (isApproved() && myCo() == co && !(myRole() in ['driver', 'shipper', 'cafeUser']));
+      allow write: if isTotalMasterUser() || (isApproved() && myCo() == co && !(myRole() in ['driver', 'shipper', 'viewer', 'cafeUser'])
+        && request.resource.data.keys().hasOnly(['items', 'updatedAt', 'updatedBy'])
+        && request.resource.data.items is list && request.resource.data.items.size() <= 500);
+    }
     match /companySettings/{co} {
       allow read: if isTotalMasterUser() || (isApproved() && myCo() == co && myRole() != 'driver'); // 🔒 2026-11-23 기사 제외(출근지는 fleet_settings 복사본)
       // 🗓 2026-11-23 회사 근무 요일(workWeekdays: [0~6] — 0 일 · 6 토) — 관리자 · 인사 담당이 출근기록부 › 근무 요일에서 정한다(이 칸만)
