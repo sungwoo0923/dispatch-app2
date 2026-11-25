@@ -3187,7 +3187,7 @@ collections.forEach((name) => {
       // 이미 연결된 실시간 구독이 서버와 맞춰지는 순간(fromCache=false)을 그대로 쓰면 추가 조회가 필요 없다.
       const changeCount = snap.docChanges().length;
       // 첫 알림이 폰 저장본(캐시)이고 실제로 오더가 있었는지 — 처음 설치·캐시 없음이면 전부 "신규"로 세지 않는다
-      if (!seenFirst && snap.metadata.fromCache && snap.size > 0) hadCache = true;
+      if (!seenFirst && snap.metadata.fromCache && snap.size > 0) { hadCache = true; bootSyncRef.current.cacheHad = true; }
       if (!serverSynced) {
         // 서버가 보낸 변경은 "서버와 맞춰짐" 표시 전 알림에 먼저 섞여 오기도 해서, 첫 알림 이후 맞춰질 때까지 전부 센다
         // 시스템용 값(구글시트 줄번호 등)만 바뀐 건 "수정"으로 세지 않는다 — objCache에는 아직 직전 내용이 있다
@@ -3503,10 +3503,11 @@ useEffect(() => {
   if (!initLoadDone || !ordersLoaded || firstSyncDoneRef.current) return;
   firstSyncDoneRef.current = true;
   let finished = false;
+  // 🛠 2026-11-25 화면 열기(사용자 요청 · LTE 속도) — 폰에 저장된 오더가 있으면 서버 확인을 기다리지 않고 바로 연다.
+  //  서버와 맞추는 일은 실시간 구독이 뒤에서 계속하고, 바뀐 오더는 들어오는 대로 화면에 반영된다(동기화 시각은 다 맞춰졌을 때 기록)
   const finish = () => {
     if (finished) return;
     finished = true;
-    bootSyncRef.current.onProgress = null;
     bootStageStore.set((st) => ({ ...st, server: 100, apply: 100, ready: 100 }));
     setSecondaryReady(true); // 오더가 다 들어왔으니 기사·거래처·공지 등 나머지 구독 시작
   };
@@ -3519,11 +3520,13 @@ useEffect(() => {
       markSynced(Date.now());
       const { added = 0, modified = 0, removed = 0 } = bootSyncRef.current;
       bootStageStore.set((st) => ({ ...st, apply: 100, applyCount: added + modified + removed, applyDetail: { added, modified, removed } }));
+      bootSyncRef.current.onProgress = null;
       finish();
     }
   };
   bootSyncRef.current.onProgress = check;
   check();
+  if (bootSyncRef.current.cacheHad) finish(); // 저장본이 있으면 바로 연다(처음 설치 · 저장본 없음이면 예전처럼 서버를 기다린다)
   // ⚠️ 예전엔 4초(로딩 화면은 10초)가 지나면 받다 만 상태로 강제로 열었다 — 이제는 다 받을 때까지 기다리고,
   // 오래 걸리면 로딩 화면에 안내 문구를 보여준다(30초 이후엔 "저장된 오더로 먼저 열기" 버튼).
   bootSkipRef.current = finish;
