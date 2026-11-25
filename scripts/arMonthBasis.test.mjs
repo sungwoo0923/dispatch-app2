@@ -119,4 +119,42 @@ ok("명세서 작성 1,200,000 → 지금 1,250,000 이면 알림", () => {
   assert.equal(find("가나상사", "2026-11").stage, "계산서발행");
 });
 
+// ── ⑤ 회계 [입금 처리]로 다 받은 청구월 → 정산완료(fullyPaidMonths) · [초기화] 되돌리기(autoSettleRevertsOf) ──
+const pay = (yyyymm, amount, p) => ({ client: "가나상사", yyyymm, amount, ...p });
+ok("다 받은 달만 정산완료 대상 · 일부입금은 아님", () => {
+  const f = AR.fullyPaidMonths({ orders, payments: [pay("2026-10", 550000)], client: "가나상사" });
+  assert.deepEqual(f.map((x) => [x.ym, x.due, x.rows.map((r) => r._id)]), [["2026-10", 550000, ["o1"]]]);
+  assert.deepEqual(AR.fullyPaidMonths({ orders, payments: [pay("2026-10", 300000)], client: "가나상사" }), [], "일부입금");
+  assert.equal(AR.fullyPaidMonths({ orders, payments: [pay("2026-10", 549995)], client: "가나상사" }).length, 1, "10원 이하 차이는 다 받은 것");
+  assert.deepEqual(AR.fullyPaidMonths({ orders, payments: [pay("2026-10", 550000), pay("2026-11", 1320000)], client: "가나상사", only: ["2026-11"] }).map((x) => x.ym), ["2026-11"], "이번 입금이 들어간 달만");
+  assert.deepEqual(AR.fullyPaidMonths({ orders, payments: [pay("2026-10", 550000, { client: "다른상사" })], client: "가나상사" }), [], "다른 거래처 입금은 안 셈");
+});
+ok("이월 오더(상차 10/31 · 마감월 11월)는 11월분으로 정산완료", () => {
+  const f = AR.fullyPaidMonths({ orders, payments: [pay("2026-11", 1320000)], client: "가나상사" });
+  assert.deepEqual(f.map((x) => [x.ym, x.rows.map((r) => r._id).sort()]), [["2026-11", ["c1", "n1"]]]);
+  assert.deepEqual(AR.fullyPaidMonths({ orders, payments: [pay("2026-10", 1320000)], client: "가나상사" }).map((x) => [x.ym, x.rows.map((r) => r._id)]), [["2026-10", ["o1"]]], "10월 기록으로는 10월(상차 10/10)만 — 이월 오더 c1은 10월에 안 들어감");
+});
+ok("취소 · 화주사 사본 · 이미 정산완료 오더는 빼고 센다(두 번 눌러도 다시 안 씀)", () => {
+  const list = [O("n1"), O("x1", { 상태: "취소", 청구운임: "900000" }), O("x2", { source: "transport_transmit", 청구운임: "900000" }), O("x3", { 지급방식: "취소", 청구운임: "900000" }), O("s1", { 정산상태: { "2026-11": "정산완료" }, 청구운임: "300000" })];
+  const f = AR.fullyPaidMonths({ orders: list, payments: [pay("2026-11", 1100000)], client: "가나상사" });
+  assert.deepEqual(f.map((x) => [x.ym, x.due, x.rows.map((r) => r._id)]), [["2026-11", 1100000, ["n1"]]]);
+  const marked = list.map((r) => (r._id === "n1" ? { ...r, 정산상태: { "2026-11": "정산완료" } } : r));
+  assert.deepEqual(AR.fullyPaidMonths({ orders: marked, payments: [pay("2026-11", 1100000)], client: "가나상사" }), [], "다 정산완료 → 다시 쓸 것 없음");
+});
+ok("[초기화] 되돌리기: 이 길로 바꾼 정산완료만 · 다른 입금으로 여전히 다 받았으면 그대로", () => {
+  const tag = AR.autoSettleTag("acct_k1");
+  assert.equal(tag, "acct:acct_k1");
+  const auto = (id, p) => O(id, { 정산상태: { "2026-11": "정산완료" }, 정산일: { "2026-11": "2026-11-25" }, 정산자동: { "2026-11": tag }, ...p });
+  const now = [auto("n1"), O("m1", { 정산상태: { "2026-11": "정산완료" }, 청구운임: "500000" }), auto("c1", { 상차일: "2026-10-31", 마감월: "2026-11", 청구운임: "200000" })];
+  const marks = [{ col: "orders", id: "n1", ym: "2026-11", tag, prev: { status: null, date: null } }, { col: "orders", id: "c1", ym: "2026-11", tag, prev: { status: "미정산", date: "" } }, { col: "orders", id: "m1", ym: "2026-11", tag, prev: { status: null, date: null } }];
+  const back = AR.autoSettleRevertsOf({ orders: now, payments: [], client: "가나상사", marks });
+  assert.deepEqual(back.map((m) => m.id).sort(), ["c1", "n1"], "직접 누른 정산완료(m1 — 정산자동 표시 없음)는 그대로");
+  assert.deepEqual(AR.autoSettleRevertsOf({ orders: now, payments: [pay("2026-11", 1320000, { source: "bank" })], client: "가나상사", marks }), [], "은행 입금이 따로 다 채우면 그대로");
+  assert.equal(AR.autoSettleRevertsOf({ orders: now, payments: [pay("2026-11", 500000)], client: "가나상사", marks }).length, 2, "남은 입금이 일부면 되돌림");
+  const other = now.map((r) => (r._id === "n1" ? { ...r, 정산자동: { "2026-11": "acct:다른입금" } } : r));
+  assert.deepEqual(AR.autoSettleRevertsOf({ orders: other, payments: [], client: "가나상사", marks }).map((m) => m.id), ["c1"], "다른 입금 표시로 바뀐 오더는 안 건드림");
+  const manualAfter = now.map((r) => (r._id === "n1" ? { ...r, 정산상태: { "2026-11": "미정산" } } : r));
+  assert.deepEqual(AR.autoSettleRevertsOf({ orders: manualAfter, payments: [], client: "가나상사", marks }).map((m) => m.id), ["c1"], "이미 사람이 되돌린 오더는 안 건드림(두 번 초기화해도 같음)");
+});
+
 console.log(`\narMonthBasis: ${pass}개 통과`);
