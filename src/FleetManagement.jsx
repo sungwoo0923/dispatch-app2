@@ -1,7 +1,8 @@
 // ======================= FleetManagement.jsx =======================
 import { makeTruckIcon, truckColor, headingFor, pathHeading } from "./fleetTruck";
 import FleetControlDeck from "./FleetControlDeck";
-import { RouteRowsView, RouteTimelineView } from "./RouteBoardViews"; // 🗂 2026-11-26 노선관리 줄 보기 · 시간표 // 🛰 2026-11-25 관제현황 = 관제실 다크
+import { RouteTimelineView } from "./RouteBoardViews";
+import { RouteTableView } from "./RouteTable"; // 🗂 2026-11-26 노선관리 줄 보기 · 시간표 // 🛰 2026-11-25 관제현황 = 관제실 다크
 import { FLEET_DARK_CSS } from "./fleetDarkTheme";
 import { FleetDarkCtx, FleetDarkPop } from "./fleetDarkCtx";
 import { startFleetDarkGuard } from "./fleetDarkGuard"; // 🛰 2026-11-26 다크 지킴이 // 🛰 2026-11-25 지입차관리 전체 다크(scripts/genFleetDark.mjs) // 🚚 2026-11-25 관제실 다크 · 위에서 본 트럭
@@ -4264,7 +4265,7 @@ function RouteManagementTab({ drivers, dispatchData, liveDrivers = [], staff = [
           );
           const dayLabel = !isSingleDay ? "" : appliedStart === todayStr ? "오늘" : appliedStart < todayStr ? "이날" : "예정";
           if (routeView === "timeline") return <RouteTimelineView groups={groups} todayStr={todayStr} selectedDate={appliedStart} isSingleDay={isSingleDay} statusOf={statusOf} orderMeta={orderMeta} timeToMin={parseTimeToMin} onOpenDetail={setDetailDriver} />;
-          if (routeView === "rows") return <RouteRowsView groups={groups} todayStr={todayStr} dayLabel={dayLabel} isSingleDay={isSingleDay} statusOf={statusOf} orderMeta={orderMeta} renderCard={renderCard} onOpenDetail={setDetailDriver} onOpenHistory={(d) => setReplayFor(d)} geocode={enqueueGeocode} />;
+          if (routeView === "rows") return <RouteTableView groups={groups} dayLabel={dayLabel} isSingleDay={isSingleDay} statusOf={statusOf} renderCard={renderCard} onOpenDetail={setDetailDriver} onOpenHistory={(d) => setReplayFor(d)} geocode={enqueueGeocode} getRouteDist={enqueueRouteDist} curOrderOf={pickCurrentOrder} />; // 🗂 2026-11-26 칸마다 이름이 있는 표(휴대폰은 카드)
           let n = 0;
           return (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

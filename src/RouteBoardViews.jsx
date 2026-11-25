@@ -6,7 +6,6 @@
 //  · 묶음: 전체 지입차 = 담당자별(내가 맡은 묶음 맨 위 · 미지정 맨 아래), 내 담당 차량 = 내 것만
 //  · 계산 · 저장 함수는 FleetManagement 가 넘긴다(statusOf · orderMeta · renderCard · timeToMin · geocode)
 import React from "react";
-import { LocLine } from "./FleetControlDeck";
 
 const C = { panel: "#0B1424", panel2: "#0E1A30", line: "#1A2742", line2: "#22345A", text: "#E6EDF8", sub: "#8796AE", dim: "#6B7A95", accent: "#38BDF8" };
 const won = (v) => { const n = Number(String(v ?? "").replace(/[^\d]/g, "")); return n ? `${n.toLocaleString("ko-KR")}원` : "-"; };
@@ -42,93 +41,6 @@ const CSS = `
 .rbt-blk{position:absolute;top:8px;bottom:8px;border-radius:10px;padding:4px 10px;display:flex;flex-direction:column;justify-content:center;overflow:hidden;cursor:pointer;border:1px solid rgba(255,255,255,.18)}
 .rbt-blk:hover{filter:brightness(1.15)}
 `;
-
-// ── 줄 보기 ──
-export function RouteRowsView({ groups = [], todayStr, dayLabel = "", statusOf, orderMeta, renderCard, onOpenDetail, onOpenHistory, geocode, isSingleDay = true }) {
-  const [open, setOpen] = React.useState(() => new Set());
-  const toggle = (id) => setOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  let idx = 0;
-  return (
-    <div className="rbv">
-      <style>{CSS}</style>
-      {groups.map((g) => (
-        <div key={g.key}>
-          {groups.length > 1 && (
-            <div className="rbv-group">
-              <span style={{ width: 8, height: 8, borderRadius: 99, background: g.mine ? C.accent : g.key ? "#8FB0F0" : "#64748B" }} />
-              <span style={{ color: g.mine ? "#7DD3FC" : g.key ? C.text : "#A9B8D2" }}>{g.title}</span>
-              <span style={{ fontSize: 13.5, fontWeight: 800, color: C.sub }}>{g.rows.length}대 · 운행 {g.rows.filter((r) => statusOf(r).label === "운송중").length}</span>
-            </div>
-          )}
-          {/* 🛠 2026-11-26 칸 이름 줄을 묶음마다 다시 — 내려도 무슨 칸인지 보이게(묶음 안에서는 위에 붙어 따라온다) */}
-          <div className="rbv-grid rbv-head" role="row">
-            <div>기사 · 차량</div><div>배차상태</div><div>{isSingleDay ? "오더 · 상태 · 상차 시각 · 상차지 → 하차지 · 거래처 · 기사운임" : "기간 오더"}</div><div>이번 달 정산</div><div>담당자</div><div className="rbv-loc">현위치 · 최종위치</div><div>보기</div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {g.rows.map((row, ri) => {
-              idx += 1;
-              const { driver: d, orders, live, monthlyFareSum } = row;
-              const st = statusOf(row);
-              const sc = STATUS_COLOR[st.label] || "#A9B8D2";
-              const isOpen = open.has(d.id);
-              return (
-                <div key={d.id} data-route-row={d.id}>
-                  <div className={`rbv-row rbv-grid${orders.length ? "" : " idle"}${isOpen ? " open" : ""}${ri % 2 ? " alt" : ""}`}>
-                    <div className="rbv-cell">
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 12.5, fontWeight: 900, color: "#fff", background: "#2B3F66", borderRadius: 6, padding: "1px 7px" }}>{String(idx).padStart(2, "0")}</span>
-                        <b style={{ fontSize: 19, fontWeight: 900 }}>{d.이름 || "-"}</b>
-                        <span style={{ fontSize: 12.5, fontWeight: 900, padding: "2px 8px", borderRadius: 6, background: d.등급 === "직영" ? "#0F5E55" : "#1B2E54", color: "#E6EDF8" }}>{d.등급 || "지입"}</span>
-                      </div>
-                      <span style={{ alignSelf: "flex-start", fontSize: 16, fontWeight: 900, color: "#F4F8FF", padding: "2px 10px", borderRadius: 7, background: "linear-gradient(180deg,#17305C,#0E1A30)", border: "1.5px solid #4C74B8", letterSpacing: ".02em" }}>{d.차량번호 || "-"}</span>
-                      <span style={{ fontSize: 13.5, fontWeight: 700, color: "#A9B8D2" }}>{[d.차량톤수, d.차량종류].filter(Boolean).join(" ")}{d.전화번호 && d.전화번호 !== "-" ? ` · ${d.전화번호}` : ""}</span>
-                    </div>
-                    <div className="rbv-cell">
-                      <span style={{ fontSize: 15, fontWeight: 900, color: sc }}>{st.label}</span>
-                      {row.isOffDay && orders.length > 0 && <span style={{ fontSize: 12.5, fontWeight: 800, color: "#FCD34D" }}>근무 불가 요일</span>}
-                    </div>
-                    <div className="rbv-cell" style={{ justifyContent: orders.length ? "flex-start" : "center" }}>
-                      {orders.length === 0 && <span style={{ alignSelf: "flex-start", fontSize: 15, fontWeight: 900, color: "#FCD34D", padding: "4px 12px", borderRadius: 8, background: "rgba(251,191,36,.1)" }}>{isSingleDay ? `${dayLabel || "이날"} 배차 없음` : "기간 배차 없음"}</span>}
-                      {orders.length > 0 && <div className="rbv-lines">{orders.map((o, i) => {
-                        const m = orderMeta(o, orders);
-                        const ck = CHECK[o.기사확인상태];
-                        const done = o.기사확인상태 === "완료";
-                        return (
-                          <div key={o._id || i} className="rbv-line" style={{ opacity: done ? 0.7 : 1 }} title={`${o.상차일 || ""} ${o.상차시간 || ""} ${o.상차지명 || ""} → ${o.하차일 || ""} ${o.하차시간 || ""} ${o.하차지명 || ""}`}>
-                            <span className="rbv-no">{i + 1}</span>
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 900, color: m.color || "#CFE0FF" }}><span style={{ width: 8, height: 8, borderRadius: 99, background: m.dot, flexShrink: 0 }} />{m.label}</span>
-                            <span style={{ fontSize: 14.5, fontWeight: 800, color: "#CFE0FF" }}>{isSingleDay ? (o.상차시간 || "즉시") : `${String(o.상차일 || "").slice(5)} ${o.상차시간 || ""}`}</span>
-                            <span style={{ fontSize: 15.5, fontWeight: 900, lineHeight: 1.45, wordBreak: "keep-all", overflowWrap: "anywhere" }}>
-                              {o.상차지명 || "-"} <span style={{ color: "#5D7AB0" }}>→</span> {o.하차지명 || "-"}
-                              <span style={{ fontSize: 13.5, fontWeight: 700, color: C.sub }}> · {o.거래처명 || "-"}{o.하차시간 ? ` · 하차 ${o.하차일 && o.하차일 !== o.상차일 ? `${String(o.하차일).slice(5)} ` : ""}${o.하차시간}` : ""}</span>
-                            </span>
-                            <span className="rbv-fare">
-                              {ck && <span style={{ fontSize: 12.5, fontWeight: 900, color: ck[1], border: `1px solid ${ck[1]}55`, borderRadius: 6, padding: "1px 7px" }}>{ck[0]}</span>}
-                              <b style={{ fontSize: 15, fontWeight: 900 }}>{won(o.기사운임)}</b>
-                            </span>
-                          </div>
-                        );
-                      })}</div>}
-                    </div>
-                    <div className="rbv-cell"><b style={{ fontSize: 16, fontWeight: 900 }}>{(Number(monthlyFareSum) || 0).toLocaleString("ko-KR")}원</b></div>
-                    <div className="rbv-cell"><span style={{ fontSize: 14, fontWeight: 800, color: d.담당자?.name ? C.text : "#FCD34D" }}>{d.담당자?.name || "미지정"}</span></div>
-                    <div className="rbv-cell rbv-loc" style={{ display: "flex" }}>{live?.location ? <LocLine d={live} geocode={geocode} size={13} /> : <span style={{ fontSize: 13, fontWeight: 700, color: C.dim }}>위치 미연동</span>}</div>
-                    <div className="rbv-cell" style={{ gap: 6, flexWrap: "wrap", alignContent: "center" }}>
-                      <button type="button" className={`rbv-btn${isOpen ? " pri" : ""}`} onClick={() => toggle(d.id)} aria-expanded={isOpen}>{isOpen ? "접기 ▴" : "자세히 ▾"}</button>
-                      <button type="button" className="rbv-btn" onClick={() => onOpenDetail?.(d)}>상세</button>
-                      {onOpenHistory && <button type="button" className="rbv-btn" title="그날 다닌 길을 지도에서 다시 봐요" onClick={() => onOpenHistory(d)}>이동 기록</button>}
-                    </div>
-                  </div>
-                  {isOpen && <div style={{ marginTop: 6 }}>{renderCard(row, idx)}</div>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // ── 시간표 ──
 export function RouteTimelineView({ groups = [], todayStr, selectedDate, isSingleDay = true, statusOf, orderMeta, timeToMin, onOpenDetail }) {
