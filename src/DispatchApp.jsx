@@ -2979,7 +2979,7 @@ const autoTransmitToShipper = async (savedRecord, shipperApp) => {
     지급방식: savedRecord.지급방식 || "",
     화물내용: savedRecord.화물내용 || "",
     화물단위: savedRecord.화물타입 || "",
-    청구운임: Number(savedRecord.청구운임) || 0,
+    청구운임: fkNum(savedRecord.청구운임), // 🛠 2026-11-25 "500,000"처럼 쉼표 있는 금액도 — 예전엔 Number()라 화주사 사본 청구운임이 0이 됐다
     차량번호: savedRecord.차량번호 || "",
     이름: savedRecord.이름 || "",
     전화번호: savedRecord.전화번호 || "",
