@@ -1,5 +1,6 @@
 // src/mobile/MobileFleetView.jsx — 지입차량 관제 (모바일)
 import { FLEET_DARK_CSS } from "../fleetDarkTheme";
+import { startFleetDarkGuard } from "../fleetDarkGuard"; // 🛰 2026-11-26 다크 지킴이
 import { makeTruckIcon, truckColor, headingFor, pathHeading, TRUCK_CSS } from "../fleetTruck"; // 🚚 2026-11-25 관제 지도 = 관제실 다크 · 위에서 본 트럭
 import { isFleetGrade } from "../fleetGradesCore"; // 🚛 지입차 구분 한 곳
 import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
@@ -636,6 +637,7 @@ function MobileVehicleCare({ drivers = [], driversRaw = [], by = "" }) {
 }
 
 export default function MobileFleetView({ dispatchData = [], userCompany = "", onRegisterBack }) {
+  useEffect(() => startFleetDarkGuard(), []); // 🛰 2026-11-26 규칙이 못 잡은 흰 바탕 · 안 보이는 글씨를 화면에서 바로 고침
   const [driversRaw, setDriversRaw] = useState([]);
   const [usersMap, setUsersMap] = useState({});
   const [activityLogs, setActivityLogs] = useState([]);
@@ -1477,7 +1479,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
             >
               <MapRecenter center={mapCenter || mapSelected?.location} />
               {displayPath.length >= 2 && <FitPath points={displayPath} resetKey={mapSelected?.id} />}
-              <TileLayer className="lw-dark-tiles" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+              <TileLayer className="lw-dark-tiles" tileSize={512} zoomOffset={-1} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
               <TrafficOverlay />{/* 🚦 2026-11-22 사고 · 공사 · 통제 */}
 
               {/* ⭐ 이동 동선 — 점 대신 매끈한 선 + 출발점/상태 변경 지점만 표시(PC와 동일) */}
@@ -1495,7 +1497,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                   icon={makeTruckIcon({
                     color: truckColor(ph),
                     heading: headingFor(d.id, d.location, sel ? selHint : null),
-                    label: sel ? `${d.이름 || ""} · ${spd > 3 ? `${spd}km/h` : ph}` : String(d.차량번호 || "").replace(/\s/g, "").slice(-4),
+                    label: sel ? `${d.이름 || ""} · ${spd > 3 ? `${spd}km/h` : ph}` : [d.이름, String(d.차량번호 || "").replace(/\s/g, "").slice(-4)].filter(Boolean).join(" "),
                     selected: sel, offline: !d.active,
                   })}
                   zIndexOffset={sel ? 1000 : 0}

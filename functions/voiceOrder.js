@@ -10,6 +10,8 @@
 const { Anthropic, scanUserOf, takeQuota, ScanError } = require("./orderScan");
 
 const MODEL = "claude-haiku-5-5"; // 대답이 빨라야 해서 Haiku(오더 스캔과 같은 모델)
+// 🛠 2026-11-26 Haiku를 이 키로 못 쓰면(인증 · 권한 · 모델 없음) AI 비서와 같은 Sonnet으로 다시 — 실제 휴대폰에서 failed-precondition으로 막혔다
+const MODELS = [MODEL, "claude-sonnet-5-5"];
 const MAX_TURNS = 30;
 const MAX_SAY = 2000; // 한 번에 길게 말해도 되게
 
@@ -208,21 +210,34 @@ async function runVoiceTurn({ db, makeAnthropic, bumpUsage, auth, data, now = Da
   const client = makeAnthropic();
   if (!client) throw new ScanError("failed-precondition", "AI 키가 등록되지 않았어요");
   await takeQuota(db, auth.uid, "voice", now);
-  let res;
-  try {
-    res = await client.messages.create({
-      model: MODEL,
-      max_tokens: 4000,
-      system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
-      messages: [{ role: "user", content: buildUser({ history: data?.history, current: data?.current, known: data?.known, text, now }) }],
-      output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA } },
-    });
-  } catch (e) {
+  let res, lastErr = null;
+  for (const model of MODELS) {
+    try {
+      res = await client.messages.create({
+        model,
+        max_tokens: 4000,
+        system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content: buildUser({ history: data?.history, current: data?.current, known: data?.known, text, now }) }],
+        output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA } },
+      });
+      lastErr = null;
+      break;
+    } catch (e) {
+      lastErr = e;
+      console.error(`[AI 상담원] ${model} 호출 실패:`, e?.status || "", e?.message || e);
+      // 키 · 권한 · 모델 문제면 다음 모델로, 그 밖(잠깐 몰림 · 잘못된 요청)은 바로 알린다
+      const tryNext = e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError || e instanceof Anthropic.NotFoundError
+        || e instanceof Anthropic.BadRequestError;
+      if (!tryNext) break;
+    }
+  }
+  if (lastErr) {
+    const e = lastErr;
     const code = e instanceof Anthropic.RateLimitError ? "resource-exhausted"
       : e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError ? "failed-precondition"
         : e instanceof Anthropic.BadRequestError ? "invalid-argument" : "unavailable";
-    console.error("[AI 상담원] Claude 호출 실패:", e?.status || "", e?.message || e);
-    throw new ScanError(code, "AI 상담원이 잠깐 대답하지 못했어요");
+    const why = String(e?.error?.error?.message || e?.message || "").replace(/\s+/g, " ").slice(0, 120);
+    throw new ScanError(code, `AI 상담원이 대답하지 못했어요 (${e?.status || "오류"}${why ? ` · ${why}` : ""})`);
   }
   const u = res?.usage || {};
   bumpUsage?.({ input: u.input_tokens || 0, output: u.output_tokens || 0, cacheRead: u.cache_read_input_tokens || 0, cacheWrite: u.cache_creation_input_tokens || 0 });

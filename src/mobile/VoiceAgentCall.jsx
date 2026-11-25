@@ -76,6 +76,15 @@ export default function VoiceAgentCall({ form, multiCount = 1, places = [], clie
 
   React.useEffect(() => { const t = setInterval(() => setSec((s) => s + 1), 1000); return () => clearInterval(t); }, []);
   React.useEffect(() => subscribeGlossary(company, setGlossary), [company]);
+  // 🛠 2026-11-26 통화 중에는 화면이 꺼지지 않게(말하는 중에 절전되던 문제) — 다른 앱에 갔다 오면 다시 잡는다
+  React.useEffect(() => {
+    let lock = null, gone = false;
+    const grab = async () => { try { if (!gone && document.visibilityState === "visible" && navigator.wakeLock?.request) lock = await navigator.wakeLock.request("screen"); } catch { /* 지원 안 함 · 거부 */ } };
+    const onVis = () => { if (document.visibilityState === "visible") grab(); };
+    grab();
+    document.addEventListener("visibilitychange", onVis);
+    return () => { gone = true; document.removeEventListener("visibilitychange", onVis); try { lock?.release(); } catch { /* 무시 */ } };
+  }, []);
   React.useEffect(() => { logRef.current?.scrollTo?.({ top: 1e6, behavior: "smooth" }); }, [turns]);
   React.useEffect(() => () => { aliveRef.current = false; stopMic(); try { window.speechSynthesis?.cancel(); } catch { /* 무시 */ } }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

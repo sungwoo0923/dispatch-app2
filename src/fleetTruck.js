@@ -93,18 +93,19 @@ export function truckSvg(color, { w = 20, h = 42 } = {}) {
 
 // 지도 표시(Leaflet divIcon) — label: 이름표(차량번호 끝 4자리 · 속도 등) · selected: 하늘색 빛 · alert: 빨강 깜빡 · offline: 흐리게
 const iconCache = new Map();
-export function makeTruckIcon({ color, heading = 0, label = "", selected = false, alert = false, offline = false, scale = 1 }) {
+export function makeTruckIcon({ color, heading = 0, label = "", selected = false, alert = false, offline = false, scale = 1.5 }) { // 🛠 2026-11-26 트럭 · 이름표 크게(작아서 안 보인다는 의견)
   const h = Math.round(heading / 5) * 5; // 5도 단위로 묶어 아이콘을 덜 만든다
   const key = [color, h, label, selected, alert, offline, scale].join("|");
   const hit = iconCache.get(key);
   if (hit) return hit;
   const w = Math.round(20 * scale), ht = Math.round(42 * scale);
   const c = alert ? TRUCK_ALERT : color;
+  const R = Math.round(32 * scale), RA = Math.round(26 * scale);
   const ring = selected
-    ? `<span class="lw-tk-ring" style="position:absolute;left:-30px;top:-30px;width:60px;height:60px;border-radius:99px;background:rgba(56,189,248,.32)"></span>`
-    : alert ? `<span class="lw-tk-ring" style="position:absolute;left:-24px;top:-24px;width:48px;height:48px;border-radius:99px;background:rgba(239,68,68,.35)"></span>` : "";
+    ? `<span class="lw-tk-ring" style="position:absolute;left:-${R}px;top:-${R}px;width:${R * 2}px;height:${R * 2}px;border-radius:99px;background:rgba(56,189,248,.32)"></span>`
+    : alert ? `<span class="lw-tk-ring" style="position:absolute;left:-${RA}px;top:-${RA}px;width:${RA * 2}px;height:${RA * 2}px;border-radius:99px;background:rgba(239,68,68,.35)"></span>` : "";
   const tag = label
-    ? `<span style="position:absolute;left:${Math.round(24 * scale)}px;top:-11px;height:22px;padding:0 7px;border-radius:6px;background:rgba(10,18,34,.9);border:1px solid ${selected ? "#38BDF8" : alert ? "#EF4444" : "#22345A"};display:inline-flex;align-items:center;font:800 12px 'Noto Sans KR',sans-serif;color:#E6EDF8;white-space:nowrap;pointer-events:none">${esc(label)}</span>`
+    ? `<span style="position:absolute;left:${Math.round(17 * scale)}px;top:-15px;height:30px;padding:0 10px;border-radius:8px;background:rgba(10,18,34,.92);border:1.5px solid ${selected ? "#38BDF8" : alert ? "#EF4444" : "#3B5B97"};box-shadow:0 4px 12px rgba(0,0,0,.45);display:inline-flex;align-items:center;font:800 ${selected ? 15 : 14}px 'Noto Sans KR',sans-serif;color:#F2F6FC;white-space:nowrap;pointer-events:none">${esc(label)}</span>`
     : "";
   const icon = L.divIcon({
     className: "lw-tk",
@@ -125,7 +126,7 @@ export const TRUCK_CSS = `
 .lw-tk-ring{animation:lwTkRing 1.8s ease-out infinite;pointer-events:none}
 @keyframes lwTkBlink{0%,100%{opacity:1}50%{opacity:.35}}
 .lw-tk-blink{animation:lwTkBlink 1s ease-in-out infinite}
-.lw-dark-tiles{filter:invert(1) hue-rotate(200deg) brightness(.78) contrast(.92) saturate(.55)}
+.lw-dark-tiles{filter:invert(1) hue-rotate(200deg) brightness(.92) contrast(1.08) saturate(.5)}
 .lw-dark-map .leaflet-container,.lw-dark-map.leaflet-container{background:#08111F}
 .lw-dark-map .leaflet-control-zoom a{background:#0E1A30;color:#CFE0FF;border-color:#22345A}
 .lw-dark-map .leaflet-control-attribution{background:rgba(8,17,31,.7);color:#6B7A95}
