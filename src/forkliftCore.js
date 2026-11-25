@@ -215,11 +215,14 @@ export function fareBreakdown(o) {
 
 // ─── 💳 2026-11-25 외부 지급 — 특수운임 중 받는사람 "외부"(회사가 따로 주는 돈: 인력 상하차비 · 주차비 · 기타) ───
 //  정산관리 › 지게차 · 외부 지급 › [외부 지급] 탭. 수익(paidOut)에는 이미 빠져 있고, 여기서는 "줬는지"만 관리한다.
-//  저장: 오더.외부지급 = { [항목키]: { 상태: "지급완료", 지급일, 지급액, 이름, 받는곳, 기록일 } }
+//  저장: 오더.외부지급 = { [항목키]: { 상태: "지급완료", 지급일, 지급액, 이름, 받는곳, 기록일, 조정액?, 조정일? } }
 //   · 특수운임 배열은 팝업 [적용](specialApplyAll)이 {종류·이름·금액·부담·받는사람·메모}만 남기고 다시 만들어서,
 //     항목 안에 지급 칸을 두면 다음 수정 때 사라진다 → 오더에 따로 둔다
 //   · 항목키 = 종류-이름(같은 이름이 또 있으면 ~2, ~3) — 금액 · 메모를 고쳐도 그대로
 //   · 지급액 = 지급완료 때 금액(장부에 들어간 금액). 그 뒤 항목 금액이 바뀌면 "지급 후 금액 변경"으로 표시
+//   · 💸 2026-11-25 [추가 지급]/[환수 처리](용차지급관리 payCore.settleGapPlan 과 같은 방식) — 조정액 = 누적 차액(+ 더 줌 · − 돌려받음)
+//     실제로 준 돈(paidAmt) = 지급액 + 조정액 · 장부 조정 줄 acctLedger/auto_extpayadj_{회사}_{오더ID}_{항목키}(누적 금액 · 0이면 지움)
+//     [지급 취소]는 지급 줄 · 조정 줄을 같이 지우고 조정액도 비운다
 //   · 지급한 항목을 지우거나 받는사람을 바꾸면 "항목이 바뀌었어요" 줄로 남겨 [지급 취소]를 할 수 있게 한다
 //  장부: acctLedger/auto_extpay_{회사}_{오더ID}_{항목키} 한 줄(지급액 · 지급 취소면 지움 — 여러 번 눌러도 같은 값)
 //  오더 복사 때는 외부지급을 복사하지 않는다(EXT_PAY_FIELDS)
@@ -246,14 +249,16 @@ export function extPayoutRows(o) {
   for (const x of extItems(o)) {
     const st = map[x.key]; const paid = st?.상태 === "지급완료";
     used.add(x.key);
-    const paidAmt = paid ? fkNum(st.지급액 ?? x.amount) : 0;
-    rows.push({ order: o, orderId, key: x.key, name: x.name, to: x.to, amount: x.amount, mode: x.mode, paid, paidAmt, paidDate: paid ? String(st.지급일 || "") : "",
+    const basePaid = paid ? fkNum(st.지급액 ?? x.amount) : 0;
+    const adjAmt = paid ? fkNum(st.조정액) : 0;
+    const paidAmt = basePaid + adjAmt; // 실제로 준 돈(지급 + 추가 지급 − 환수)
+    rows.push({ order: o, orderId, key: x.key, name: x.name, to: x.to, amount: x.amount, mode: x.mode, paid, paidAmt, basePaid, adjAmt, paidDate: paid ? String(st.지급일 || "") : "",
       changed: paid && paidAmt !== x.amount, orphan: false, canceled });
   }
   for (const [k, st] of Object.entries(map)) {
     if (used.has(k) || st?.상태 !== "지급완료") continue;
-    const paidAmt = fkNum(st.지급액);
-    rows.push({ order: o, orderId, key: k, name: String(st.이름 || k), to: String(st.받는곳 || st.이름 || "받는 곳 없음"), amount: 0, mode: "", paid: true, paidAmt, paidDate: String(st.지급일 || ""), changed: true, orphan: true, canceled });
+    const basePaid = fkNum(st.지급액); const adjAmt = fkNum(st.조정액); const paidAmt = basePaid + adjAmt;
+    rows.push({ order: o, orderId, key: k, name: String(st.이름 || k), to: String(st.받는곳 || st.이름 || "받는 곳 없음"), amount: 0, mode: "", paid: true, paidAmt, basePaid, adjAmt, paidDate: String(st.지급일 || ""), changed: true, orphan: true, canceled });
   }
   return rows;
 }
@@ -280,7 +285,9 @@ export function extPayoutGroups(orders = []) {
 export const extLedgerKey = (orderId, itemKey) => `${orderId}_${itemKey}`;
 const ledgerSafe = (v) => String(v || "").replace(/[/\s#?[\]]/g, "_").slice(0, 80);
 export const extLedgerDocId = (company, orderId, itemKey) => `auto_extpay_${ledgerSafe(company)}_${ledgerSafe(extLedgerKey(orderId, itemKey))}`;
-// 지급완료 · 지급 취소 → { patch: { 외부지급 }, ledger: [{ itemKey, amount(0이면 장부 줄 지움), date, name, to }] }
+// 조정 줄(ledgerAuto.setExtPayAdjust — 추가 지급 · 환수)
+export const extAdjLedgerDocId = (company, orderId, itemKey) => `auto_extpayadj_${ledgerSafe(company)}_${ledgerSafe(extLedgerKey(orderId, itemKey))}`;
+// 지급완료 · 지급 취소 → { patch: { 외부지급 }, ledger: [{ itemKey, amount(0이면 장부 줄 지움), adjAmount(null 그대로 · 0 조정 줄 지움), date, name, to }] }
 //  keys = 바꿀 항목키들. 이미 그 상태인 항목은 건드리지 않는다(장부도 그대로)
 export function extPayPlan(o, keys = [], { paid = true, date = "", today = "" } = {}) {
   const want = new Set(keys || []);
@@ -291,12 +298,25 @@ export function extPayPlan(o, keys = [], { paid = true, date = "", today = "" } 
       if (!(r.amount > 0)) continue;
       const d = String(date || today || "").slice(0, 10);
       map[r.key] = { 상태: "지급완료", 지급일: d, 지급액: r.amount, 이름: r.name, 받는곳: r.to, 기록일: today || d };
-      ledger.push({ itemKey: r.key, amount: r.amount, date: d, name: r.name, to: r.to });
+      ledger.push({ itemKey: r.key, amount: r.amount, adjAmount: null, date: d, name: r.name, to: r.to });
     } else {
-      delete map[r.key];
-      ledger.push({ itemKey: r.key, amount: 0, date: r.paidDate, name: r.name, to: r.to });
+      delete map[r.key]; // 조정액도 같이 빠진다
+      ledger.push({ itemKey: r.key, amount: 0, adjAmount: 0, date: r.paidDate, name: r.name, to: r.to });
     }
   }
   if (!ledger.length) return null;
   return { patch: { 외부지급: Object.keys(map).length ? map : null }, ledger };
+}
+// 💸 [추가 지급]/[환수 처리] — 지급 후 금액이 바뀐 항목 하나의 차액을 조정액(누적)으로. 차액이 없거나 항목이 사라진 줄이면 null
+//  → { gap(+ 더 줌 · − 돌려받음), adjAmount(장부 조정 줄 금액 = 새 누적 조정액), patch: { 외부지급 }, ledger: { itemKey, adjAmount, date, name, to } }
+export function extSettleGapPlan(o, key, today = "") {
+  const r = extPayoutRows(o).find((x) => x.key === key);
+  if (!r || !r.paid || r.orphan) return null;
+  const gap = r.amount - r.paidAmt;
+  if (!gap) return null;
+  const adj = r.adjAmt + gap;
+  const map = { ...extPayMap(o) };
+  const { 조정액: _a, 조정일: _d, ...rest } = map[key] || {};
+  map[key] = adj ? { ...rest, 조정액: adj, 조정일: String(today || "").slice(0, 10) } : rest;
+  return { gap, adjAmount: adj, patch: { 외부지급: map }, ledger: { itemKey: key, adjAmount: adj, date: String(today || r.paidDate || "").slice(0, 10), name: r.name, to: r.to } };
 }
