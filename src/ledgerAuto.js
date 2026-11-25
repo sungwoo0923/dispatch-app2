@@ -78,6 +78,16 @@ export async function bumpForkliftPayout(db, { date, amount, count = 1, company 
   }, { merge: true });
 }
 
+// 💳 2026-11-25 외부 지급(특수운임 받는사람 "외부" 한 항목) — 정산관리 › 지게차 · 외부 지급 › 외부 지급 [지급완료]/[지급 취소]
+//  오더 × 항목 한 줄(auto_extpay_회사_오더ID_항목키 · src/forkliftCore.js extLedgerDocId) — 금액 = 지급액, 0이면 지움(여러 번 눌러도 같은 값)
+export async function setExtPayout(db, { orderId, itemKey, amount, date, company, to = "", name = "" }) {
+  return upsertAutoEntry(db, `${orderId}_${itemKey}`, {
+    company, date, type: "지출", account: "운반비", amount, vendor: to || "외부", auto: "extpay", purpose: "drvpay",
+    item: `외부 지급(정산관리)${to ? ` · ${to}` : ""}${name && name !== to ? ` · ${name}` : ""}`,
+    memo: "정산관리 › 지게차 · 외부 지급 › 외부 지급 [지급완료]: 자동 반영",
+  });
+}
+
 // 거래처 수금 1건
 export async function addClientCollection(db, { name, amount, year, company }) {
   const co = coOf(company); const amt = toInt(amount);
