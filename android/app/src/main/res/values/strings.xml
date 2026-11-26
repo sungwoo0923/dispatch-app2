@@ -4,4 +4,6 @@
     <string name="title_activity_main">LogisWeb 기사</string>
     <string name="package_name">com.kpflow.driver</string>
     <string name="custom_url_scheme">com.kpflow.driver</string>
+    <string name="kp_widget_desc">출근하기 · 지금 상태 · 다음 할 일</string>
+    <string name="kp_widget_label">LogisWeb 출근</string>
 </resources>

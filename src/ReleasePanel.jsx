@@ -49,9 +49,13 @@ export default function ReleasePanel({ children }) {
   const publish = async () => {
     if (!latest?.url) return setMsg("이 배포의 주소를 알 수 없어 배포할 수 없어요(Vercel 시스템 환경변수 VERCEL_URL 확인).");
     if (!mineIsLatest && !(await kpConfirm("지금 보고 있는 화면이 최신이 아니에요.\n최신 화면을 확인하지 않고 배포할까요?\n\n[취소] → [내 화면 최신으로]를 먼저 눌러 보는 걸 권해요."))) return;
-    if (!(await kpConfirm(`v${latest.version} 을 모든 가입자에게 배포할까요?\n\n· PC · 모바일 · 화주 화면이 바뀌어요(기사앱 화면은 이미 항상 최신이에요)\n· 이전 버전 기록은 지워져요(되돌리기 목록에 남지 않아요)`))) return;
+    if (!(await kpConfirm(`v${latest.version} 을 모든 가입자에게 배포할까요?\n\n· PC · 모바일 · 화주 화면이 바뀌어요\n· 기사앱: ${driverNote(latest)}\n· 이전 버전 기록은 지워져요(되돌리기 목록에 남지 않아요)`))) return;
     run("pub", () => publishRelease(latest, note), `v${latest.version} 배포 완료: 가입자 화면은 새로고침하면 바뀌어요`).then(() => setNote(""));
   };
+  // 🚚 2026-11-26 기사앱도 배포를 따른다 — 이 버전이 기사 화면 코드를 바꿨는지(기사앱 지문 비교)
+  const driverChanged = (b) => (!b?.driver || !locked || !rel?.driver ? null : b.driver !== rel.driver);
+  const driverNote = (b) => { const c = driverChanged(b); return c === false ? "바뀐 것 없음 → 기사에게는 업데이트 안내가 안 가요" : c ? "바뀜 → 기사앱에도 [업데이트] 안내가 떠요" : "기사앱에도 [업데이트] 안내가 떠요"; };
+  const DriverChip = ({ b }) => { const c = driverChanged(b); if (c === null) return null; return <span className={`shrink-0 h-6 px-2 rounded-full text-[11.5px] font-black inline-flex items-center ${c ? "bg-[#EAF0FF] text-[#2D5BD8]" : "bg-[#F1F4F9] text-[#7A879C]"}`}>{c ? "기사앱 바뀜" : "기사앱 그대로"}</span>; };
   const online = (live?.onlineList || []).filter((p) => p.now);
   const onPinned = locked ? online.filter((p) => p.build && p.build === rel.build).length : 0;
   // 고를 수 있는 버전 — 지금 배포한 것보다 새로 올린 화면만(예전 것은 배포할 때 지운다)
@@ -72,7 +76,7 @@ export default function ReleasePanel({ children }) {
         </div>
         <div className="mt-3 flex flex-wrap divide-x divide-[#EEF1F6] border-y border-[#EEF1F6] bg-[#FAFBFD]">
           <Cell label="가입자 화면" ver={locked ? rel.version : latest?.version} at={locked ? `배포 ${stamp(rel.releasedAt)}${online.length ? ` · 접속 ${onPinned}/${online.length}명` : ""}` : "잠금 없음"} tone={pinnedIsLatest ? "text-[#0F7A43]" : undefined} />
-          <Cell label="올라온 최신" ver={latest?.version} at={latest ? `올림 ${stamp(latest.build)}` : "확인 중"} tone={waiting ? "text-[#2D5BD8]" : undefined} />
+          <Cell label="올라온 최신" ver={latest?.version} at={latest ? `올림 ${stamp(latest.build)}${waiting && driverChanged(latest) !== null ? (driverChanged(latest) ? " · 기사앱 바뀜" : " · 기사앱 그대로") : ""}` : "확인 중"} tone={waiting ? "text-[#2D5BD8]" : undefined} />
           <Cell label="내 화면" ver={CUR_VER} at={latest ? (mineIsLatest ? "최신이에요" : "최신이 아니에요") : ""} />
         </div>
         <div className="px-5 py-4 flex flex-wrap items-center gap-2">
@@ -107,7 +111,7 @@ export default function ReleasePanel({ children }) {
                   {newer.slice(0, 8).map((b) => (
                     <li key={b.build} className="flex items-center gap-3 px-3.5 py-2.5">
                       <span className="text-[14.5px] font-black tabular-nums text-[#0F1A30] w-[76px]">v{b.version}</span>
-                      <span className="text-[12.5px] font-semibold text-[#5B6B85] tabular-nums flex-1">올림 {stamp(b.build)}</span>
+                      <span className="text-[12.5px] font-semibold text-[#5B6B85] tabular-nums flex-1">올림 {stamp(b.build)}</span><DriverChip b={b} />
                       <button type="button" disabled={!!busy} onClick={async () => { if (await kpConfirm(`가입자 화면을 v${b.version} 으로 고정할까요?\n이보다 예전 버전 기록은 지워져요.`)) run("pin", () => pinRelease(b, "버전 고정"), `가입자 화면을 v${b.version} 으로 고정했어요`); }} className="h-8 px-3 rounded-lg border border-[#C9D5EA] bg-white text-[12.5px] font-black text-[#1B2B4B] hover:bg-[#F5F8FD]">이 버전으로</button>
                     </li>))}
                 </ul>

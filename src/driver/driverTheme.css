@@ -71,6 +71,18 @@
   animation: kpdScan 3.6s ease-in-out infinite;
 }
 
+/* 🟦 2026-11-26 리디자인(2차 시안) — 헤더에 은은한 빛: 천천히 떠다니는 빛 두 개 + 9초마다 지나가는 사선 빛줄기(PC 배차화면처럼) */
+.kpd-amb { position: absolute; inset: 0; overflow: hidden; pointer-events: none; border-radius: inherit; }
+.kpd-amb i { position: absolute; border-radius: 50%; filter: blur(46px); }
+.kpd-amb i:nth-child(1) { width: 260px; height: 260px; left: -90px; top: -120px; background: radial-gradient(circle, rgba(70,105,220,.55), transparent 65%); animation: kpdDriftA 18s ease-in-out infinite alternate; }
+.kpd-amb i:nth-child(2) { width: 220px; height: 220px; right: -80px; bottom: -130px; background: radial-gradient(circle, rgba(105,80,210,.45), transparent 65%); animation: kpdDriftB 23s ease-in-out infinite alternate; }
+.kpd-amb::after { content: ""; position: absolute; top: -40%; bottom: -40%; left: 0; width: 110px;
+  background: linear-gradient(90deg, transparent, rgba(175,195,255,.08) 45%, rgba(225,232,255,.16) 50%, rgba(175,195,255,.08) 55%, transparent);
+  transform: translateX(-200px) skewX(-20deg); animation: kpdSweep 9s cubic-bezier(.45,.05,.3,1) infinite; }
+@keyframes kpdDriftA { to { transform: translate(70px, 40px) scale(1.15); } }
+@keyframes kpdDriftB { to { transform: translate(-60px, -30px) scale(.9); } }
+@keyframes kpdSweep { 0%, 55% { transform: translateX(-200px) skewX(-20deg); } 100% { transform: translateX(640px) skewX(-20deg); } }
+
 /* 상태 점 맥박 */
 @keyframes kpdPulse {
   0% { box-shadow: 0 0 0 0 rgba(111, 160, 255, 0.55); }
@@ -94,7 +106,7 @@
 .kpd-sheet { animation: kpdSheet 0.22s ease-out; }
 
 @media (prefers-reduced-motion: reduce) {
-  .kpd-scan::after, .kpd-pulse, .kpd-fade, .kpd-sheet { animation: none; }
+  .kpd-scan::after, .kpd-pulse, .kpd-fade, .kpd-sheet, .kpd-amb i, .kpd-amb::after { animation: none; }
 }
 
 /* ⭐ 2026-11-08 앱 틀 — 실제 보이는 화면 높이(100dvh: 아이폰 Safari 아래 도구막대·홈 바 제외)에 맞춘다.

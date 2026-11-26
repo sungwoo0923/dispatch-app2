@@ -51,7 +51,7 @@ async function getAllTokens() {
 // 나머지(배차등록/배차완료/재배차/배차취소)는 사용자가 모바일에서 직접 켜야 온다.
 const PUSH_TYPES = ["배차등록", "긴급배차", "배차완료", "재배차", "미배차", "배차취소"];
 // ⭐ 2026-11-01 팀별 알림 — 업무 알림(결재·공지·메일·메신저·가입신청·인사발령·마감보고)은 기본 켜짐, 끈 사람만 안 보낸다
-const PUSH_TYPES_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일", "인수인계", "기사출퇴근"]; // ⭐ 2026-11-03 인수인계(notifyHandover) · ⭐ 2026-11-10 담당 기사 출근·퇴근(notifyDriverCheckout)
+const PUSH_TYPES_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일", "인수인계", "기사출퇴근", "기사긴급", "기사수락", "기사완료"]; // ⭐ 2026-11-26 기사 수락 · 운송완료(notifyDispatcherOrderAcceptDone) · 기사 SOS(notifyEmergencyAlert) · ⭐ 2026-11-03 인수인계(notifyHandover) · ⭐ 2026-11-10 담당 기사 출근·퇴근(notifyDriverCheckout)
 function isPushTypeEnabled(prefs, type) {
   const v = prefs?.[type];
   if (v === true || v === false) return v;
@@ -629,8 +629,14 @@ async function findDriverByPlate(rawPlate, companyName, extraFilter) {
   const plate = normalizePlateServer(rawPlate || "");
   if (!plate) return null;
   const co = String(companyName || "(회사없음)").trim();
-  const snap = await db.collection("drivers").where("차량번호", "==", rawPlate).limit(20).get();
-  return snap.docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === plate
+  // 🐞 2026-11-26 오더 "12가 3456" · 기사 "12가3456"처럼 띄어쓰기만 달라도 못 찾아 푸시가 안 갔다 → 원래 값 · 띄어쓰기 없앤 값 둘 다 찾는다(roleMirror 와 같은 방식)
+  const raw = String(rawPlate || "").trim();
+  const tight = raw.replace(/\s+/g, "");
+  const variants = [...new Set([raw, tight, tight.replace(/([가-힣])(\d{4})$/, "$1 $2")].filter(Boolean))];
+  const snap = await db.collection("drivers").where("차량번호", "in", variants).limit(20).get();
+  // 기사앱에 가입·연결된 문서(drivers/{uid}, uid === 문서 id)를 먼저 — 예전에 미리 등록해 둔 문서로 푸시가 새지 않게
+  const docs = [...snap.docs].sort((a, b) => Number(b.data().uid === b.id) - Number(a.data().uid === a.id));
+  return docs.find((d) => normalizePlateServer(d.data()["차량번호"]) === plate
     && String(d.data().companyName || "(회사없음)").trim() === co
     && (!extraFilter || extraFilter(d))) || null;
 }
@@ -776,6 +782,55 @@ exports.notifyFleetDriverNewOrder = _notifyFleetDriverNewOrder("orders");
 exports.notifyFleetDriverNewOrderLegacy = _notifyFleetDriverNewOrder("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
 
 /* ==============================
+   ✔ 2026-11-26 지입 기사 — 오더 수락 · 운송 완료 → 담당 배차자 휴대폰 푸시(사용자 요청)
+   받는 사람: 그 오더 등록자 · 배차확정자 · 기사 담당자 중 같은 회사 직원
+   알림 설정 "기사 수락" · "기사 운송완료"(기본 켜짐)를 끈 사람, 지금 운송 화면이 아닌 사람(통합관리자 등)은 뺀다
+============================== */
+const _notifyDispatcherOrderAcceptDone = (COL) =>
+  functions.firestore
+    .document(`${COL}/{dispatchId}`)
+    .onUpdate(async (change, context) => {
+      const before = change.before.data();
+      const after = change.after.data();
+      if (!before || !after || after._seed) return null;
+      const st = after["기사확인상태"];
+      const was = before["기사확인상태"];
+      const kind = st === "수락" && was === "대기" ? "기사수락" : st === "완료" && was !== "완료" ? "기사완료" : "";
+      if (!kind) return null;
+      const co = after.companyName || before.companyName;
+      const uids = [after["createdByUid"], after["배차확정자Uid"]];
+      try {
+        const dDoc = after["차량번호"] ? await findDriverByPlate(after["차량번호"], co) : null;
+        const mgr = dDoc?.data()?.["담당자"];
+        if (mgr && typeof mgr === "object" && mgr.uid) uids.push(mgr.uid);
+      } catch (e) { console.warn("수락/완료 알림 기사 담당자 조회 실패:", e?.message || e); }
+      const recipUids = [...new Set(uids.filter((x) => typeof x === "string" && x))];
+      if (!recipUids.length) return null;
+      let tokens = [];
+      const uSnaps = await db.getAll(...recipUids.map((uid) => db.collection("users").doc(uid)));
+      uSnaps.forEach((d) => {
+        const u = d.exists ? d.data() : null;
+        if (!u || !sameCoUser(u, co) || !isPushTypeEnabled(u.pushPrefs, kind) || !notifyUserAllows(u, kind)) return;
+        tokens.push(...userTokens(u));
+      });
+      tokens = [...new Set(tokens)];
+      if (!tokens.length) return null;
+      const driverLabel = `${after["이름"] || "기사"}(${after["차량번호"] || "-"})`;
+      const route = [after["상차지명"], after["하차지명"]].filter(Boolean).join(" → ");
+      await sendPushAndCleanup(tokens, {
+        notification: kind === "기사수락"
+          ? { title: `✔ 오더 수락 · ${driverLabel}`, body: `${after["거래처명"] || "오더"}${route ? ` · ${route}` : ""}${after["상차시간"] ? ` · ${after["상차시간"]} 상차` : ""}` }
+          : { title: `🏁 운송 완료 · ${driverLabel}`, body: `${after["거래처명"] || "오더"}${route ? ` · ${route}` : ""} 운송을 마쳤어요` },
+        data: { type: kind === "기사수락" ? "fleet_order_accepted" : "fleet_order_done", orderId: context.params.dispatchId, target: "app" },
+        android: { priority: "high" },
+        apns: { payload: { aps: { sound: "default" } } },
+      }, kind === "기사수락" ? "지입기사 오더수락(담당자 알림)" : "지입기사 운송완료(담당자 알림)");
+      return null;
+    });
+exports.notifyDispatcherOrderAcceptDone = _notifyDispatcherOrderAcceptDone("orders");
+exports.notifyDispatcherOrderAcceptDoneLegacy = _notifyDispatcherOrderAcceptDone("dispatch");
+
+/* ==============================
    ⊘ 지입 기사 — 오더 거절 알림(배차담당자 본인에게 OS 푸시)
 ============================== */
 const _notifyDispatcherOrderRejected = (COL) =>
@@ -823,7 +878,7 @@ const _notifyDispatcherOrderRejected = (COL) =>
             ? `${driverLabel}님이 수정된 오더(${(after["수정거절항목"] || []).join("·") || "변경 내용"})를 거절했습니다 — 배차가 빠졌습니다. 다시 배차해 주세요.`
             : `${driverLabel}님이 오더를 거절했습니다${after["기사거절사유"] ? `: ${after["기사거절사유"]}` : ""}`,
         },
-        data: { type: "fleet_order_rejected", orderId: context.params.dispatchId },
+        data: { type: "fleet_order_rejected", orderId: context.params.dispatchId, target: "app" }, // target:"app" = 누르면 운송사 화면(public/sw.js)
         android: { priority: "high" },
         apns: { payload: { aps: { sound: "default" } } },
       }, "지입기사 오더거절(담당자 알림)");
@@ -850,13 +905,20 @@ function parseHM(v) {
   return h < 24 && mi < 60 ? h * 60 + mi : null;
 }
 // 순수 판정(테스트하기 쉽게 분리) — 보낼 단계("before" | "start") 또는 null
-function checkinReminderStage(d, nowMin, ymd, dow) {
+function checkinReminderStage(d, nowMin, ymd, dow, nowMs = Date.now()) {
   if (!d || d.출근알림 === false) return null;
   const start = parseHM(d.출근시간);
   if (start == null) return null;
   if (Array.isArray(d.근무요일) && d.근무요일.length && !d.근무요일.includes(CHECKIN_DOW[dow])) return null;
   const st = String(d.status || "").trim();
-  if (st && st !== "퇴근" && st !== "대기") return null; // 출근·운행중·휴차는 보내지 않는다
+  // 출근·운행중·휴차는 보내지 않는다 — 🐞 2026-11-26 단, "오늘" 상태일 때만.
+  //  자동 퇴근이 없어져서 어제 퇴근을 안 누른 기사는 상태가 출근/운송중으로 남아 오늘 출근 알림을 영영 못 받았다.
+  //  휴차 = 휴차일자가 오늘 · 출근/운행 = 오늘 출근했거나(workDate) 12시간 안에 상태가 바뀜(밤샘 운행 중)
+  if (st === "휴차") { if (String(d.휴차일자 || "") === ymd) return null; }
+  else if (st && st !== "퇴근" && st !== "대기") {
+    const upd = d.updatedAt && typeof d.updatedAt.toMillis === "function" ? d.updatedAt.toMillis() : 0;
+    if (d.workDate === ymd || (upd && nowMs - upd < 12 * 3600e3)) return null;
+  }
   if (d.isFinalCheckout && d.workDate === ymd) return null;
   const diff = nowMin - start;
   if (diff >= -11 && diff < -3) return "before";
@@ -1270,7 +1332,7 @@ exports.notifyFleetLateArrival = functions.runWith({ timeoutSeconds: 240 }).pubs
                 title: `⚠ ${c.label} 지연 우려 · ${driverLabel}`,
                 body: `${c.label}시간(${t24})이 지났지만 아직 ${c.label}지 [${place}] 반경 밖입니다. ${distText}. 기사님께 확인 바랍니다.`,
               },
-              data: { type: `fleet_late_${c.kind}`, orderId: docSnap.id },
+              data: { type: `fleet_late_${c.kind}`, orderId: docSnap.id, target: "app" },
               android: { priority: "high" },
               apns: { payload: { aps: { sound: "default" } } },
             }, `지입 ${c.label}지연(담당자)`);
@@ -3238,6 +3300,7 @@ async function sendNoticePush(n) {
     if (["shipper", "cafeUser"].includes(u.role)) return;
     if (u.role === "driver") {
       if (!toDriver) return;
+      if (u.driverPushEnabled === false) return; // 🐞 2026-11-26 기사앱 설정에서 알림을 끈 기사에게는 공지 푸시도 보내지 않는다(다른 기사 알림과 같게)
     } else {
       if (!toStaff) return;
       // ⭐ 2026-11-03 지정 공지 비공개 — 직원·팀 지정이면 지정된 사람(팀원)에게만. 관리자·다른 직원에게는 보내지 않는다(작성자는 위에서 제외)
@@ -3361,6 +3424,36 @@ exports.notifyHandover = functions.firestore.document("handovers/{id}").onCreate
       to, toNames: to.map(nameOf), cc: [], ccNames: [],
     });
   } catch (e) { if (e && e.code !== 6) console.error("인수인계 메일 사본 실패:", e); } // 6 = 이미 있음
+  return null;
+});
+
+// 🆘 2026-11-26 기사앱 [SOS 긴급 알림] → 운송사 휴대폰 푸시
+//  예전엔 emergency_alerts 에 적기만 하고 푸시가 없었다(기사 화면엔 "관리자에게 전송되었습니다") — 운송사 화면을 켜 둔 사람만 알았다.
+//  받는 사람: 그 회사 배차 담당(알림 설정 "기사 긴급(SOS)" — 기본 켜짐, src/notifyAudience.js 기사긴급) + 그 기사의 담당자(설정과 상관없이 항상)
+exports.notifyEmergencyAlert = functions.firestore.document("emergency_alerts/{id}").onCreate(async (snap) => {
+  const a = snap.data() || {};
+  if (a._seed || a.resolved === true) return null;
+  try {
+    const dSnap = a.uid ? await db.collection("drivers").doc(String(a.uid)).get().catch(() => null) : null;
+    const drv = dSnap?.exists ? dSnap.data() || {} : {};
+    const company = String(a.companyName || drv.companyName || PUSH_DEFAULT_COMPANY).trim();
+    const tokens = new Set(await getTokensForType("기사긴급", company));
+    const mgrUid = drv.담당자 && typeof drv.담당자 === "object" ? String(drv.담당자.uid || "") : "";
+    if (mgrUid) {
+      const u = await db.collection("users").doc(mgrUid).get().catch(() => null);
+      if (u?.exists && sameCoUser(u.data(), company)) userTokens(u.data()).forEach((t) => tokens.add(t));
+    }
+    if (!tokens.size) return null;
+    const name = String(a.driverName || drv.name || drv.이름 || "기사");
+    const car = String(a.carNo || drv.carNo || drv.차량번호 || "");
+    const loc = a.location && Number.isFinite(a.location.lat) ? ` · 위치 ${a.location.lat.toFixed(4)}, ${a.location.lng.toFixed(4)}` : " · 위치 없음";
+    await sendPushAndCleanup([...tokens], {
+      notification: { title: `🆘 긴급 · ${name}${car ? `(${car})` : ""}`, body: `기사님이 SOS 긴급 알림을 보냈어요. 바로 연락해 주세요${loc}` },
+      data: { type: "fleet_sos", alertId: snap.id, target: "app", tag: `sos-${snap.id}` },
+      android: { priority: "high" },
+      apns: { payload: { aps: { sound: "default" } } },
+    }, "기사 SOS");
+  } catch (e) { console.error("기사 SOS 푸시 실패:", e); }
   return null;
 });
 

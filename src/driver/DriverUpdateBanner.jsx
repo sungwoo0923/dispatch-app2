@@ -1,6 +1,6 @@
 // ======================= src/driver/DriverUpdateBanner.jsx =======================
 // ⭐ 2026-11-05 기사앱 업데이트 안내 — 📱 2026-11-11 상단 띠에서 화면 가운데 팝업으로
-//  1) 웹 새 버전 — 화면을 켜 둔 사이 새로 배포되면(/version.json 의 기사앱 지문 driver 를 비교 · 🚚 2026-11-26 기사 화면 코드가 바뀐 배포만) "새 버전이 있어요 [업데이트]"
+//  1) 웹 새 버전 — 최고관리자가 [업데이트 배포]한 버전(예약 배포 포함)이 기사 화면 코드를 바꿨으면(/version.json 의 기사앱 지문 driver 를 비교 · 🚚 2026-11-26 기사 화면 코드가 바뀐 배포만) "새 버전이 있어요 [업데이트]"
 //     → 누르면 캐시를 비우고 새로 불러온다. 아이폰 홈 화면 앱(PWA)·안드로이드 APK(서비스 주소를 여는 방식) 모두 같다.
 //  2) APK 새 버전 — 설치된 APK의 versionCode(Capacitor App 플러그인)와 GitHub 릴리즈(driver-apk-latest) 본문의
 //     "versionCode: N"을 비교해 더 새 APK가 있으면 "앱 업데이트가 있어요 [설치]" → APK 파일 다운로드.
@@ -10,20 +10,23 @@ import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { registerPlugin } from "@capacitor/core";
 // 🚚 2026-11-26 사용자 요청 — 기사앱과 상관없는 배포(PC 전용 화면 등)로는 안내하지 않는다.
-//  빌드가 기사 화면이 쓰는 코드만으로 만든 지문(version.json driver · 첫 화면 meta kp-driver-build — vite.config.js kp-driver-build)이 다를 때만 "새 버전"
+//  (2차) 기사앱도 최고관리자의 [업데이트 배포] · 예약 배포를 따른다 — "올라온 최신"이 아니라 "배포한 버전"(releaseGate targetVersion)과 비교:
+//   · 배포한 버전이 지금 화면보다 새롭고, 그 버전의 기사앱 지문(driver)이 지금 화면의 지문과 다를 때만 "새 버전"
+//   · 지문이 같으면(기사 화면 코드는 그대로) 안내 없음 — 다음에 앱을 새로 열면 시작 스크립트가 조용히 배포 버전으로 맞춘다
+//   · 지문을 모르면(예전에 배포한 버전 등) 안내한다(안전한 쪽)
 function useDriverNewVersion() {
   const [isNew, setIsNew] = useState(false);
   useEffect(() => {
-    let mine = "";
-    try { mine = document.querySelector('meta[name="kp-driver-build"]')?.getAttribute("content") || ""; } catch { mine = ""; }
-    if (!mine) return undefined; // 개발 화면 · 지문 없는 예전 화면 — 안내하지 않음
+    const myBuild = (typeof window !== "undefined" && window.__kpPinned) || CUR_BUILD;
+    if (!myBuild) return undefined; // 개발 화면 — 안내하지 않음
     let alive = true;
     const check = async () => {
       try {
-        const r = await fetch(`/version.json?t=${Date.now()}`, { cache: "no-store" });
-        if (!r.ok) return;
-        const j = await r.json();
-        if (alive && j?.driver) setIsNew(j.driver !== mine);
+        const t = await targetVersion();
+        if (!alive || !t?.build) return;
+        if (!(String(t.build) > String(myBuild))) { setIsNew(false); return; }
+        const mine = myDriverFp();
+        setIsNew(!(t.driver && mine && t.driver === mine));
       } catch { /* 오프라인 — 조용히 */ }
     };
     const first = setTimeout(check, 2500);
@@ -34,6 +37,7 @@ function useDriverNewVersion() {
   }, []);
   return isNew;
 }
+import { CUR_BUILD, myDriverFp, targetVersion } from "../releaseGate";
 import { hardReloadForUpdate } from "../UpdateBanner";
 
 // FleetDriverExtra.jsx의 DRIVER_APK_URL과 같은 주소(누르면 바로 APK 파일 다운로드)
@@ -42,6 +46,9 @@ const RELEASE_API = "https://api.github.com/repos/sungwoo0923/dispatch-app2/rele
 const CACHE_KEY = "kpApkLatest";
 const CACHE_MS = 6 * 3600e3; // GitHub API 호출 제한(시간당 60회/IP) — 6시간에 한 번만 확인
 const NativeApp = registerPlugin("App");
+// ⭐ 2026-11-26 앱 안에서 바로 받기 · 설치(android KpUpdatePlugin) — 새 APK 에만 있다. 없으면 예전처럼 파일 다운로드 링크
+const KpUpdate = registerPlugin("KpUpdate");
+const hasKpUpdate = () => { try { return !!window.Capacitor?.isPluginAvailable?.("KpUpdate"); } catch { return false; } };
 const isNative = () => typeof window !== "undefined" && !!window.Capacitor?.isNativePlatform?.();
 
 async function latestApkCode() {
@@ -63,6 +70,46 @@ export default function DriverUpdateBanner() {
   const [apkNew, setApkNew] = useState(false);
   const [hide, setHide] = useState("");
   const [busy, setBusy] = useState(false);
+  // APK 앱 안 설치 단계: "" | "down"(받는 중) | "perm"(설치 허용 필요) | "check"(설치 화면에서 돌아옴 — 안 됐으면 자동 차단 안내) | "err"
+  const [stage, setStage] = useState("");
+  const [pct, setPct] = useState(0);
+  const [samsung, setSamsung] = useState(false);
+  const [errMsg, setErrMsg] = useState("");
+  const stageRef = React.useRef(""); stageRef.current = stage;
+  const runInstall = React.useCallback(async () => {
+    try {
+      const r = await KpUpdate.install();
+      if (r?.needPermission) { setSamsung(!!r.samsung); setStage("perm"); return; }
+      setStage("check"); // 설치 화면이 열렸다 — 돌아왔는데 아직 예전 앱이면 막힌 것
+    } catch (e) { setErrMsg(String(e?.message || e)); setStage("err"); }
+  }, []);
+  // 설정 · 설치 화면에서 돌아오면: 허용이 켜졌으면 바로 설치 화면으로
+  useEffect(() => {
+    if (!hasKpUpdate()) return undefined;
+    let h = null;
+    try {
+      h = NativeApp.addListener("resume", async () => {
+        const st = stageRef.current;
+        if (st !== "perm") return;
+        try { const i = await KpUpdate.info(); if (i?.canInstall) runInstall(); } catch { /* 무시 */ }
+      });
+    } catch { h = null; }
+    return () => { try { Promise.resolve(h).then((x) => x?.remove?.()); } catch { /* 무시 */ } };
+  }, [runInstall]);
+  const startApk = async () => {
+    if (!hasKpUpdate()) { window.location.href = APK_URL; return; }
+    setErrMsg(""); setPct(0); setStage("down");
+    let sub = null;
+    try {
+      const i = await KpUpdate.info().catch(() => null); setSamsung(!!i?.samsung);
+      sub = await KpUpdate.addListener("progress", (p) => setPct(Number(p?.pct) || 0));
+      await KpUpdate.download({ url: APK_URL });
+      await runInstall();
+    } catch (e) { setErrMsg(String(e?.message || e)); setStage("err"); }
+    finally { try { sub?.remove?.(); } catch { /* 무시 */ } }
+  };
+  const openAutoBlocker = () => { KpUpdate.openAutoBlocker().catch(() => {}); };
+  const openPerm = () => { KpUpdate.openInstallPermission().catch(() => {}); };
   useEffect(() => {
     if (!isNative() || !window.Capacitor?.isPluginAvailable?.("App")) return undefined;
     let off = false;
@@ -90,7 +137,38 @@ export default function DriverUpdateBanner() {
   if (!kind) return null;
   const isApk = kind === "apk";
   // 📱 2026-11-11 상단 띠 → 화면 가운데 팝업. [업데이트]를 누르면 바로 새 화면으로 바뀐다(캐시 비우고 새로 불러오기).
-  const go = () => { if (isApk) { window.location.href = APK_URL; return; } setBusy(true); hardReloadForUpdate(); };
+  const go = () => { if (isApk) { startApk(); return; } setBusy(true); hardReloadForUpdate(); };
+  const S = { step: { display: "flex", gap: 10, alignItems: "flex-start", textAlign: "left", fontSize: 15.5, fontWeight: 700, color: "#0F1A30", lineHeight: 1.45, marginTop: 10 }, num: { flex: "none", width: 24, height: 24, borderRadius: 12, background: "#1B2B4B", color: "#fff", fontSize: 13, fontWeight: 900, display: "grid", placeItems: "center", marginTop: 1 }, sub: { marginTop: 8, width: "100%", height: 50, borderRadius: 15, border: "1px solid #C9D5EA", background: "#fff", color: "#1B2B4B", fontSize: 16.5, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" } };
+  // APK 앱 안 설치 — 단계별 안내(받는 중 · 설치 허용 · 자동 차단)
+  const apkBody = stage === "down" ? (
+    <div style={{ textAlign: "center" }}>
+      <div style={{ fontSize: 17, fontWeight: 800, color: "#0F1A30" }}>새 앱을 받는 중이에요 {pct}%</div>
+      <div style={{ marginTop: 14, height: 10, borderRadius: 6, background: "#E8EDF6", overflow: "hidden" }}><div style={{ width: `${pct}%`, height: "100%", background: "linear-gradient(90deg,#2D4C82,#6E8EFF)", transition: "width .2s" }} /></div>
+      <div style={{ marginTop: 10, fontSize: 14, color: "#5B6B85" }}>다 받으면 설치 화면이 바로 열려요 · [업데이트]만 누르면 끝</div>
+    </div>
+  ) : stage === "perm" ? (
+    <div>
+      <div style={{ fontSize: 17, fontWeight: 800, color: "#0F1A30", textAlign: "center" }}>설치하려면 한 번만 허용해 주세요</div>
+      {samsung && <div style={S.step}><span style={S.num}>1</span><span>[보안 위험 자동 차단]이 켜져 있으면 끄기<br /><span style={{ fontSize: 13.5, color: "#5B6B85", fontWeight: 600 }}>아래 버튼 → 보안 위험 자동 차단 → 끄기 → 뒤로</span></span></div>}
+      {samsung && <button type="button" onClick={openAutoBlocker} style={S.sub}>보안 위험 자동 차단 열기</button>}
+      <div style={S.step}><span style={S.num}>{samsung ? 2 : 1}</span><span>[이 출처 허용] 켜기<br /><span style={{ fontSize: 13.5, color: "#5B6B85", fontWeight: 600 }}>켜고 뒤로 오면 설치 화면이 바로 열려요</span></span></div>
+      <button type="button" onClick={openPerm} style={{ ...S.sub, background: "linear-gradient(120deg,#0F1A30,#2D4C82)", color: "#fff", border: "none", height: 56 }}>설치 허용 켜기</button>
+    </div>
+  ) : stage === "check" ? (
+    <div>
+      <div style={{ fontSize: 17, fontWeight: 800, color: "#0F1A30", textAlign: "center", lineHeight: 1.5 }}>설치 화면에서 [업데이트]를 눌러 주세요</div>
+      <div style={{ marginTop: 8, fontSize: 14.5, color: "#5B6B85", textAlign: "center", lineHeight: 1.5 }}>{samsung ? "\"보안 위험 자동 차단\"으로 막혔다면 아래 버튼으로 바로 끄고 다시 설치해요" : "설치가 안 됐다면 다시 설치를 눌러 주세요"}</div>
+      {samsung && <button type="button" onClick={openAutoBlocker} style={{ ...S.sub, marginTop: 14 }}>보안 위험 자동 차단 끄러 가기</button>}
+      <button type="button" onClick={runInstall} style={{ ...S.sub, background: "linear-gradient(120deg,#0F1A30,#2D4C82)", color: "#fff", border: "none", height: 56 }}>다시 설치</button>
+    </div>
+  ) : stage === "err" ? (
+    <div style={{ textAlign: "center" }}>
+      <div style={{ fontSize: 17, fontWeight: 800, color: "#0F1A30" }}>받지 못했어요</div>
+      <div style={{ marginTop: 6, fontSize: 13.5, color: "#5B6B85" }}>인터넷 연결을 확인하고 다시 눌러 주세요{errMsg ? ` (${errMsg.slice(0, 60)})` : ""}</div>
+      <button type="button" onClick={startApk} style={{ ...S.sub, background: "linear-gradient(120deg,#0F1A30,#2D4C82)", color: "#fff", border: "none", height: 56, marginTop: 14 }}>다시 받기</button>
+      <button type="button" onClick={() => { window.location.href = APK_URL; }} style={S.sub}>파일로 받기</button>
+    </div>
+  ) : null;
   return createPortal(
     <div role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, zIndex: 2147483000, background: "rgba(11,20,40,.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 22, fontFamily: '"Noto Sans KR", sans-serif' }}>
       <div style={{ width: "100%", maxWidth: 360, background: "#fff", borderRadius: 24, overflow: "hidden", boxShadow: "0 24px 60px rgba(0,0,0,.4)" }}>
@@ -101,14 +179,15 @@ export default function DriverUpdateBanner() {
           <div style={{ fontSize: 23, fontWeight: 900 }}>{isApk ? "앱 업데이트가 있어요" : "새 버전이 나왔어요"}</div>
         </div>
         <div style={{ padding: "18px 20px 20px" }}>
+          {isApk && apkBody ? apkBody : <>
           <div style={{ fontSize: 17.5, fontWeight: 700, color: "#0F1A30", textAlign: "center", lineHeight: 1.5 }}>
-            {isApk ? <>[설치]를 누른 뒤<br />받은 파일을 눌러 주세요</> : <>꼭 필요한 업데이트예요<br />[업데이트]를 누르면 바로 바뀝니다</>}
+            {isApk ? (hasKpUpdate() ? <>[설치]를 누르면 앱 안에서 받아<br />설치 화면이 바로 열려요</> : <>[설치]를 누른 뒤<br />받은 파일을 눌러 주세요</>) : <>꼭 필요한 업데이트예요<br />[업데이트]를 누르면 바로 바뀝니다</>}
           </div>
           <button type="button" onClick={go} disabled={busy}
             style={{ marginTop: 16, width: "100%", height: 58, borderRadius: 18, border: "none", background: "linear-gradient(120deg,#0F1A30,#2D4C82)", color: "#fff", fontSize: 21, fontWeight: 900, cursor: "pointer", fontFamily: "inherit", opacity: busy ? 0.7 : 1 }}>
             {busy ? "업데이트 중…" : isApk ? "설치" : "업데이트"}
-          </button>
-          {!busy && isApk && <button type="button" onClick={() => setHide(kind)}
+          </button></>}
+          {!busy && isApk && stage !== "down" && <button type="button" onClick={() => { setHide(kind); setStage(""); }}
             style={{ marginTop: 8, width: "100%", height: 46, borderRadius: 14, border: "none", background: "transparent", color: "#3A4A66", fontSize: 17, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>나중에</button>}
         </div>
       </div>

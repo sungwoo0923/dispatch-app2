@@ -53,6 +53,7 @@ import MobileSelect from "../mobile/MobileSelect"; // ⭐ 2026-11-02 기본 sele
 import { LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 // ⭐ 2026-11-05 출근 안내·새 오더 승인/거절·삭제 오더 안내 팝업, 빨간 숫자 배지, 알림 켜기 안내, 긴급 연락처(차량 담당자)
 import DriverUpdateBanner from "./DriverUpdateBanner"; // ⭐ 2026-11-05 웹·APK 업데이트 안내
+import SlideToConfirm from "./SlideToConfirm"; // 🟦 2026-11-26 밀어서 확인(2차 시안)
 import { SafetyEduMine, useEduPending } from "../SafetyEdu"; // 🦺 2026-11-24 안전교육
 import { EduIcon, EduTile } from "../eduIcons";
 import { CheckinPrompt, shouldPromptCheckin, WorkStartSetting, NewOrderPopup, ModifiedOrderPopup, DeletedOrdersPopup, PushSetupCard, RedBadge, useEmergencyContact, KP_RED, UrgentMemo } from "./DriverPopups";
@@ -137,6 +138,7 @@ function withKpLoc(fn) {
 //  플러그인이 아직 없으면 isPluginAvailable 검사로 조용히 건너뛴다(기존 동작과 동일).
 //  (플러그인 객체는 thenable이라 Promise로 넘기지 않고 콜백 안에서만 쓴다 — 위 KpLocation 주석 참고)
 const PushNotifications = registerPlugin("PushNotifications");
+const KpWidget = registerPlugin("KpWidget"); // 🟦 2026-11-26 홈 화면 위젯(android KpWidgetPlugin)
 const NativeAppPlugin = registerPlugin("App"); // 📱 2026-11-24 안드로이드 뒤로가기 버튼(backButton) · 앱 내리기
 let nativePushRegisteredUid = "";
 function registerNativePush(uid) {
@@ -382,6 +384,35 @@ function getActions(status, isFinalCheckout) {
         { label: "퇴근", status: "퇴근", primary: false },
       ];
   }
+}
+
+// 🔔 2026-11-26 사용자 요청 — 기사가 알림(푸시)을 꺼도 앱을 켜 둔 동안에는 새 오더 · 수정 · 취소를 소리 · 진동으로 알린다.
+//  (휴대폰 푸시는 서버가 driverPushEnabled 로 거르지만, 이 소리는 앱 화면 안에서만 울리므로 설정과 상관없다)
+//  브라우저는 손가락으로 한 번 누른 뒤에만 소리를 낼 수 있어 첫 터치 때 소리 장치를 깨워 둔다.
+let _chimeCtx = null;
+function _chimeCtxGet() {
+  try { if (!_chimeCtx) { const C = window.AudioContext || window.webkitAudioContext; if (C) _chimeCtx = new C(); } } catch { _chimeCtx = null; }
+  return _chimeCtx;
+}
+if (typeof window !== "undefined") {
+  const wake = () => { const c = _chimeCtxGet(); try { if (c && c.state === "suspended") c.resume(); } catch { /* 무시 */ } };
+  window.addEventListener("pointerdown", wake, { passive: true });
+}
+function inAppChime() {
+  try { if (document.visibilityState !== "visible") return; } catch { return; }
+  try { navigator.vibrate?.([220, 90, 220]); } catch { /* 무시 */ }
+  const c = _chimeCtxGet();
+  if (!c) return;
+  try {
+    if (c.state === "suspended") c.resume();
+    const t0 = c.currentTime + 0.02;
+    [[880, 0], [1318.5, 0.16]].forEach(([f, d]) => {
+      const o = c.createOscillator(); const g = c.createGain();
+      o.type = "sine"; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0 + d); g.gain.exponentialRampToValueAtTime(0.35, t0 + d + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d + 0.45);
+      o.connect(g); g.connect(c.destination); o.start(t0 + d); o.stop(t0 + d + 0.5);
+    });
+  } catch { /* 무시 */ }
 }
 
 function formatDuration(ms) {
@@ -776,25 +807,18 @@ function ActiveOrderCard({ order: o, loading, onComplete, onRoundComplete, onCop
       <DispatcherLine order={o} />
       {/* ⭐ 하차지 도착해 운송완료가 가능해지면 버튼이 천천히 깜빡여 눈에 띄게 */}
       <style>{`@keyframes kpCompletePulse { 0%,100% { box-shadow: 0 0 0 0 rgba(27,43,75,.55); filter: brightness(1); } 50% { box-shadow: 0 0 0 10px rgba(27,43,75,0); filter: brightness(1.12); } }`}</style>
+      {/* 🟦 2026-11-26 리디자인 — 상차완료 · 운송완료는 밀어서 확인(운전 중 잘못 누름 방지) */}
       {!loaded ? (
-        <>
-          <button onClick={() => { if (loadGate.ok && !loading) onLoadComplete?.(); }} disabled={loading || !loadGate.ok}
-            style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 14, border: "none", background: loadGate.ok ? "#1B2B4B" : "#9AA9C3", color: "#fff", fontWeight: 800, fontSize: 17, cursor: loadGate.ok ? "pointer" : "not-allowed", animation: loadGate.ok && !loading ? "kpCompletePulse 2.2s ease-in-out infinite" : "none" }}>
-            상차완료
-          </button>
-          {!loadGate.ok && (
-            <div style={{ marginTop: 6, fontSize: 14.5, fontWeight: 700, color: "#5B6B85", textAlign: "center" }}>{loadGate.msg}</div>
-          )}
-        </>
+        <SlideToConfirm style={{ marginTop: 14 }} label="밀어서 상차완료" loading={loading} disabled={!loadGate.ok}
+          note={!loadGate.ok ? loadGate.msg : ""}
+          onConfirm={() => { if (loadGate.ok && !loading) onLoadComplete?.(); }} />
       ) : (
-        <>
-          <button onClick={() => { if (!gate.ok) return; if (midRound) onRoundComplete?.(roundsDone + 1); else onComplete(); }} disabled={disabled} style={{ width: "100%", marginTop: 12, padding: "14px", borderRadius: 14, border: "none", background: gate.ok ? (midRound ? "#2D4C82" : "#1B2B4B") : "#9AA9C3", color: "#fff", fontWeight: 800, fontSize: 17, cursor: disabled ? "not-allowed" : "pointer", animation: gate.ok && !loading ? "kpCompletePulse 2.2s ease-in-out infinite" : "none" }}>
-            {midRound ? `${roundsDone + 1}회차 완료 (${roundsDone + 1}/${rounds})` : rounds > 1 ? `마지막 회차 · 운송완료` : "운송완료"}
-          </button>
-          {!gate.ok && (
-            <div style={{ marginTop: 6, fontSize: 14.5, fontWeight: 700, color: "#5B6B85", textAlign: "center" }}>{gate.msg}</div>
-          )}
-        </>
+        <div style={gate.ok && !loading ? { animation: "kpCompletePulse 2.4s ease-in-out infinite", borderRadius: 32, marginTop: 14 } : { marginTop: 14 }}>
+          <SlideToConfirm loading={loading} disabled={!gate.ok}
+            label={midRound ? `밀어서 ${roundsDone + 1}회차 완료` : rounds > 1 ? "밀어서 마지막 회차 · 운송완료" : "밀어서 운송완료"}
+            note={!gate.ok ? gate.msg : ""}
+            onConfirm={() => { if (!gate.ok) return; if (midRound) onRoundComplete?.(roundsDone + 1); else onComplete(); }} />
+        </div>
       )}
       {/* ⭐ 2026-11-08 사장님 요청 — 카드 안 상차·하차 사진 칸은 뺐다. 운송완료를 누르면 사진 올리기 창이 뜬다 */}
     </div>
@@ -866,6 +890,45 @@ function calcWorkSummary(logs) {
   }
 
   return { workMs, driveMs, checkInTime, tripCount };
+}
+
+// 🐞 2026-11-26 운행일지 달력 · 날짜 팝업 — 하루치 근무 요약.
+// 예전엔 지난 날짜에 퇴근 기록이 없으면 "근무중" + (지금 - 출근시각)으로 계산해서
+// 11-08 출근 하나가 18일 뒤 "432시간 8분"으로 보였다.
+// 이제는 그날 기록끼리만 더하고, 마지막 기록 뒤는
+//  · 오늘이면 지금까지 · 다음 기록이 12시간 안의 퇴근 · 최종퇴근 · 휴차면 그 시각까지(밤 근무가 다음 날 끝난 경우)
+//  · 그 밖엔 더하지 않고 "퇴근 기록 없음"으로 보여 준다.
+const DAY_END_STATUSES = ["퇴근", "최종퇴근", "휴차"];
+const DAY_IDLE_STATUSES = ["퇴근", "최종퇴근", "휴차", "대기", "휴식"];
+function calcDaySummary(dateStr, dayLogs, allLogs, todayStr) {
+  const st = (l) => l.status || l.mainStatus || "";
+  const tm = (l) => l.timestamp?.toDate?.() || null;
+  const logs = dayLogs.filter(tm);
+  let checkIn = null, checkOut = null, tripCount = 0, workMs = 0;
+  logs.forEach((l, i) => {
+    const s = st(l), t = tm(l);
+    if (s === "출근" && !checkIn) checkIn = t;
+    if ((s === "퇴근" || s === "최종퇴근") && checkIn) checkOut = t;
+    if (s === "운송중") tripCount++;
+    const next = logs[i + 1];
+    if (next && !DAY_IDLE_STATUSES.includes(s)) workMs += tm(next) - t;
+  });
+  const last = logs[logs.length - 1];
+  let openEnd = false; // 퇴근 없이 끝난 날
+  if (last && !DAY_IDLE_STATUSES.includes(st(last))) {
+    const lt = tm(last);
+    if (dateStr === todayStr) {
+      workMs += Date.now() - lt;
+    } else {
+      const after = (allLogs || []).filter(l => tm(l) && tm(l) > lt).sort((a, b) => tm(a) - tm(b))[0];
+      if (after && DAY_END_STATUSES.includes(st(after)) && tm(after) - lt <= 12 * 3600_000) {
+        workMs += tm(after) - lt;
+        if (st(after) !== "휴차") checkOut = tm(after);
+      } else openEnd = true;
+    }
+  }
+  const working = dateStr === todayStr && checkIn && !checkOut && last && !DAY_IDLE_STATUSES.includes(st(last));
+  return { checkIn, checkOut, tripCount, workMs: Math.max(0, workMs), openEnd: openEnd && !checkOut, working };
 }
 
 // ─── Haversine 거리 ───────────────────────────────────────────────────────────
@@ -1572,6 +1635,8 @@ export default function DriverHome() {
 
   // 🚚 2026-11-02 소속 회사가 추가한 차량종류도 고를 수 있게(읽기만 — 기사앱에서는 추가하지 않음)
   const vtDrv = useVehicleTypes(driver?.companyName || "", VEHICLE_CATEGORIES.filter((x) => x !== "직접입력"));
+  // 🚚 2026-11-26 예약 배포를 "고른 회사"에만 할 때 기사앱도 대상인지 알 수 있게(src/releaseGate.js myCompany)
+  useEffect(() => { try { if (driver?.companyName) localStorage.setItem("kpDriverCompany", driver.companyName); } catch { /* 무시 */ } }, [driver?.companyName]);
   const vehicleCats = React.useMemo(() => [...vtDrv.all, "직접입력"], [vtDrv.all]);
   // ⭐ 2026-11-01 소속 회사의 기본 출근지(fleet_settings/co_회사), 없으면 기본 회사만 예전 "default"
   useEffect(() => {
@@ -2331,6 +2396,62 @@ export default function DriverHome() {
   const modOrder = modifiedOrders[0] || null;
   // (3) 삭제된 오더 안내 — driver_notifications(deleted·popup, 아직 [확인] 안 누름)
   const deletedNotices = notifications.filter(n => n.deleted && n.popup && !n.popupAck);
+  // 🔔 새 오더 · 수정 · 취소 팝업이 새로 생기면 앱 안에서 소리 · 진동(처음 화면을 열 때 이미 있던 것은 조용히)
+  const alertSig = [...myOrders.filter(o => o.기사확인상태 === "대기" && o.배차상태 !== "배차취소" && o.상태 !== "취소").map(o => `n:${o._id}`), ...modifiedOrders.map(o => `m:${modSig(o)}`), ...deletedNotices.map(n => `d:${n.id}`)];
+  const alertSeenRef = useRef(null);
+  const alertSigRef = useRef(alertSig); alertSigRef.current = alertSig;
+  useEffect(() => { const t = setTimeout(() => { if (alertSeenRef.current === null) alertSeenRef.current = new Set(alertSigRef.current); }, 5000); return () => clearTimeout(t); }, []);
+  useEffect(() => {
+    if (!uid) return;
+    if (alertSeenRef.current === null) { if (myOrders.length || notifications.length) alertSeenRef.current = new Set(alertSig); return; }
+    const fresh = alertSig.filter(k => !alertSeenRef.current.has(k));
+    alertSig.forEach(k => alertSeenRef.current.add(k));
+    if (fresh.length) inAppChime();
+  }, [alertSig.join("|"), uid]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 🟦 2026-11-26 안드로이드 홈 화면 위젯 — 지금 상태 · 다음 할 일을 위젯에 적어 둔다(KpWidgetPlugin · 새 APK 에서만)
+  const widgetState = (() => {
+    if (!driver) return null;
+    const st = driver.status || "대기";
+    const todayW = kstDateStr();
+    const live = myOrders.filter(o => o.배차상태 !== "배차취소" && o.상태 !== "취소");
+    const acc = sortActiveOrders(live);
+    const cur = acc[0];
+    const pend = live.filter(o => o.기사확인상태 === "대기").length;
+    const todayCnt = live.filter(o => String(o.상차일 || "") === todayW).length;
+    if (driver.isFinalCheckout && driver.workDate === todayW) return { title: "오늘 근무 끝", sub: "수고하셨어요", action: "open", label: "앱 열기" };
+    if (st === "퇴근" || st === "대기" || !driver.status) return { title: "출근 전", sub: todayCnt ? `오늘 배차 ${todayCnt}건` : pend ? `새 오더 ${pend}건 · 확인해 주세요` : "오늘 배차를 기다리는 중", action: "checkin", label: "출근하기" };
+    if (st === "휴차") return { title: "휴차 중", sub: "앱을 열어 출근할 수 있어요", action: "open", label: "앱 열기" };
+    if (pend) return { title: `새 오더 ${pend}건`, sub: "수락 · 거절을 눌러 주세요", action: "open", label: "확인하기" };
+    if (cur) return { title: cur.하차지명 ? `${cur.하차지명}(으)로` : "운송 중", sub: [cur.거래처명, cur.하차시간 ? `${cur.하차시간} 하차` : ""].filter(Boolean).join(" · "), action: "open", label: "앱 열기" };
+    return { title: st === "출근" ? "출근 · 배차 대기" : st, sub: "새 오더가 오면 알려 드려요", action: "open", label: "앱 열기" };
+  })();
+  const widgetKey = widgetState ? JSON.stringify(widgetState) : "";
+  useEffect(() => {
+    if (!widgetState) return;
+    try { if (!window.Capacitor?.isPluginAvailable?.("KpWidget")) return; } catch { return; }
+    KpWidget.update(widgetState).catch(() => {});
+  }, [widgetKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 위젯 [출근하기]로 앱이 열리면 홈 탭의 [밀어서 출근]으로 데려가 반짝 표시
+  useEffect(() => {
+    let h = null;
+    const goCheckin = (url) => {
+      if (!/^logisweb-driver:\/\/checkin/.test(String(url || ""))) return;
+      setActiveTab("home");
+      setTimeout(() => {
+        const el = document.getElementById("kp-checkin-slide");
+        if (!el) return;
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.animate?.([{ boxShadow: "0 0 0 0 rgba(111,160,255,.0)" }, { boxShadow: "0 0 0 10px rgba(111,160,255,.45)" }, { boxShadow: "0 0 0 0 rgba(111,160,255,.0)" }], { duration: 1400, iterations: 2 });
+      }, 450);
+    };
+    try {
+      if (!window.Capacitor?.isNativePlatform?.()) return undefined;
+      NativeAppPlugin.getLaunchUrl?.().then((r) => goCheckin(r?.url)).catch(() => {});
+      h = NativeAppPlugin.addListener("appUrlOpen", (e) => goCheckin(e?.url));
+    } catch { h = null; }
+    return () => { try { Promise.resolve(h).then((x) => x?.remove?.()); } catch { /* 무시 */ } };
+  }, []);
   const [deletedBusy, setDeletedBusy] = useState(false);
   const confirmDeletedNotices = async () => {
     setDeletedBusy(true);
@@ -2728,12 +2849,12 @@ export default function DriverHome() {
       {/* ⭐ 2026-11-08 리디자인 — 딥 네이비 + 빛 번짐 + 미세 격자 + 하단 스캔 라인(디지털 계기판 느낌), 아래 모서리 둥글게 */}
       <div style={{ background: "radial-gradient(520px 220px at 88% -40px, rgba(111,160,255,0.38), transparent 70%), linear-gradient(160deg, #070D1C 0%, #0F1D3A 52%, #1F3A6E 100%)", padding: activeTab === "home" ? "calc(14px + env(safe-area-inset-top, 0px)) 18px 18px" : "calc(12px + env(safe-area-inset-top, 0px)) 18px 14px", position: "relative", flexShrink: 0, zIndex: 100, boxShadow: "0 14px 36px rgba(7,13,28,0.38)", overflow: "hidden", borderRadius: "0 0 26px 26px" }}>
         <span style={{ position: "absolute", inset: 0, opacity: 0.07, pointerEvents: "none", backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px", maskImage: "linear-gradient(180deg,#000,transparent)", WebkitMaskImage: "linear-gradient(180deg,#000,transparent)" }} />
+        <span className="kpd-amb" aria-hidden="true"><i /><i /></span>{/* 🟦 2026-11-26 은은한 빛(2차 시안) */}
         <span className="kpd-scan" />
         <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: activeTab === "home" ? 14 : 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 16, background: "rgba(255,255,255,0.10)", border: "1px solid rgba(255,255,255,0.16)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h13l5 5v5h-2M3 7v10h2m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0m0 0h6m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0" /></svg>
-            </div>
+            {/* 🟦 2026-11-26 트럭 그림 자리에 로지스웹 로고(2차 시안) */}
+            <div style={{ width: 44, height: 44, borderRadius: 14, background: "url(/icons/icon-192x192.png) center/cover", boxShadow: "0 6px 16px rgba(30,60,160,.45), inset 0 0 0 1px rgba(255,255,255,0.18)", flexShrink: 0 }} />
             <div style={{ minWidth: 0, overflow: "hidden" }}>
               <div style={{ fontSize: 12.5, color: "#8FB0F0", fontWeight: 800, letterSpacing: "0.26em", fontFamily: DRV_MONO, marginBottom: 4 }}><LogisTag height={7.5} text="DRIVER" /></div>
               <div style={{ fontSize: 20, fontWeight: 900, color: "white", letterSpacing: "-0.3px" }}>{driver.name || "-"}</div>
@@ -3030,7 +3151,13 @@ export default function DriverHome() {
               {driver.isFinalCheckout ? "당일 근무 완료" : (currentStatus === "퇴근" || currentStatus === "대기" || !driver.status ? "오늘 업무 시작" : "다음 액션")}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {actions.map((action, i) => (
+              {/* 🟦 2026-11-26 리디자인 — 첫 번째(주) 동작은 밀어서 확인, 나머지는 얇은 버튼 */}
+              {actions.map((action, i) => (action.primary && !action.pressed ? (
+                <div key={action.status} id={action.status === "출근" ? "kp-checkin-slide" : undefined}>
+                  <SlideToConfirm label={`밀어서 ${action.label}`} loading={statusLoading} disabled={!!action.disabled}
+                    onConfirm={() => handleActionButton(action)} />
+                </div>
+              ) :
                 <button
                   key={action.status}
                   onClick={() => handleActionButton(action)}
@@ -3663,19 +3790,22 @@ export default function DriverHome() {
                 </div>
                 {(() => {
                   const logs = calendarDayDetail.logs;
-                  let checkIn=null, checkOut=null, tripCount=0;
-                  logs.forEach(l => { const s = l.status || l.mainStatus || ""; const t = l.timestamp?.toDate?.(); if (s==="출근" && !checkIn) checkIn=t; if (s==="최종퇴근" || s==="퇴근") checkOut=t; if (s==="운송중") tripCount++; });
-                  const workMs = checkIn && checkOut ? checkOut.getTime()-checkIn.getTime() : (checkIn ? Date.now()-checkIn.getTime() : 0);
+                  const { checkIn, checkOut, tripCount, workMs, openEnd, working } = calcDaySummary(calendarDayDetail.dateStr, logs, allLogs, todayStr);
                   return (
                     <div style={{ padding: "16px" }}>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-                        {[["출근 시각", checkIn ? formatTime(checkIn) : "--"], ["퇴근 시각", checkOut ? formatTime(checkOut) : (checkIn ? "근무중" : "--")], ["근무 시간", workMs > 0 ? formatDuration(workMs) : "--"], ["운행 횟수", `${tripCount}회`]].map(([label, value]) => (
+                        {[["출근 시각", checkIn ? formatTime(checkIn) : "--"], ["퇴근 시각", checkOut ? formatTime(checkOut) : working ? "근무중" : (checkIn && openEnd) ? "기록 없음" : "--"], ["근무 시간", workMs >= 60_000 ? formatDuration(workMs) : "--"], ["운행 횟수", `${tripCount}회`]].map(([label, value]) => (
                           <div key={label} style={{ background: "#F5F8FD", borderRadius: 10, padding: "12px", textAlign: "center" }}>
                             <div style={{ fontSize: 18, fontWeight: 900, color: "#0F1A30", fontFamily: DRV_MONO }}>{value}</div>
                             <div style={{ fontSize: 12.5, color: "#9AA9C3", marginTop: 3, fontWeight: 600 }}>{label}</div>
                           </div>
                         ))}
                       </div>
+                      {checkIn && openEnd && (
+                        <div style={{ fontSize: 13, color: "#8A5A00", background: "#FFF7E6", border: "1px solid #F5DDA8", borderRadius: 10, padding: "9px 12px", marginBottom: 14, lineHeight: 1.5 }}>
+                          이날은 퇴근을 누르지 않았어요. 근무 시간은 마지막 기록까지만 셌어요.
+                        </div>
+                      )}
                       <div style={{ fontSize: 13.5, fontWeight: 700, color: "#9AA9C3", marginBottom: 10, letterSpacing: "0.05em" }}>상태 기록</div>
                       {logs.map((log, i) => { const t = log.timestamp?.toDate?.(); const cfg = STATUS_CONFIG[log.status] || STATUS_CONFIG["대기"]; return (
                         <div key={log.id || i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: i<logs.length-1 ? "1px solid #EEF2F8" : "none" }}>
