@@ -14494,26 +14494,14 @@ function checkDuplicateDispatch(form, dispatchData) {
   });
 }
 
-    // ✅ 필수값(거래처/상차지명/하차지명/화물내용/차량톤수/지급방식/배차방식) 검증
+    // ✅ 필수값(거래처 · 상차지명 · 하차지명) 검증
     const validateRequired = (f) => {
       const miss = [];
       const missKeys = [];
       if (!f.거래처명?.trim()) { miss.push("거래처"); missKeys.push("거래처명"); }
       if (!f.상차지명?.trim()) { miss.push("상차지명"); missKeys.push("상차지명"); }
       if (!f.하차지명?.trim()) { miss.push("하차지명"); missKeys.push("하차지명"); }
-      // 화물내용/차량톤수는 파레트·박스 등 타입 드롭다운만 고르고 숫자를 안 넣으면
-      // "파레트"/"톤" 같은 단위 문자열만 저장되어 겉으로는 비어있지 않은 것처럼
-      // 보인다 — 실제 값(숫자)이 있는지까지 확인해야 한다.
-      const 화물내용본문 = String(f.화물내용 || "").split("+")[0];
-      const 화물내용비어있음 = f.화물타입 && f.화물타입 !== "없음"
-        ? !/\d/.test(화물내용본문)
-        : !화물내용본문.trim();
-      if (화물내용비어있음) { miss.push("화물내용"); missKeys.push("화물내용"); }
-      const 차량톤수비어있음 = f.톤수타입
-        ? !String(f.톤수값 || "").trim()
-        : !String(f.차량톤수 || "").trim();
-      if (차량톤수비어있음) { miss.push("차량톤수"); missKeys.push("차량톤수"); }
-      if (!f.지급방식) { miss.push("지급방식"); missKeys.push("지급방식"); }
+      // 🛠 2026-11-26 사용자 요청 — 필수는 거래처 · 상차지명 · 하차지명만(화물내용 · 차량톤수 · 지급방식은 비워도 저장)
       if (miss.length) {
         setRequiredErrors(new Set(missKeys));
         setTimeout(() => setRequiredErrors(new Set()), 2500);
@@ -14531,9 +14519,13 @@ function checkDuplicateDispatch(form, dispatchData) {
     // ⭐ 날짜/시간 필수 검증
     const validateDateTime = (f) => {
       const miss = [];
-
-      if (!f.상차일) miss.push("상차일");
-      if (!f.하차일) miss.push("하차일");
+      // 🛠 2026-11-26 사용자 요청 — 필수는 거래처 · 상차지명 · 하차지명만. 날짜가 비어 있으면 막지 않고 채운다
+      //  (날짜 없는 오더는 날짜별 배차현황에서 안 보이므로): 상차일 없으면 오늘 · 하차일 없으면 상차일과 같은 날
+      if (!f.상차일 || !f.하차일) {
+        if (!f.상차일) f.상차일 = todayStr();
+        if (!f.하차일) f.하차일 = f.상차일;
+        setForm((p) => ({ ...p, 상차일: f.상차일, 하차일: f.하차일 }));
+      }
 
       const timeNoAmPm = (t) => t && !t.startsWith("오전") && !t.startsWith("오후");
       if (timeNoAmPm(f.상차시간) || timeNoAmPm(f.하차시간)) {
@@ -17862,7 +17854,7 @@ className={`
 <div className="relative">
   {/* ⭐ 2026-11-02 화면 점검 — 칩이 줄바꿈되면 아래 입력칸을 덮지 않게 라벨 높이를 늘린다 */}
   <label className={labelCls + " flex items-center gap-1 flex-wrap !h-auto min-h-[22px]"}>
-    <EditableText id="orderForm.label.화물내용" defaultText="화물내용" /> {reqStar}
+    <EditableText id="orderForm.label.화물내용" defaultText="화물내용" />
     <button type="button"
       tabIndex={-1}
       className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer whitespace-nowrap"
@@ -18061,7 +18053,7 @@ className={`
 </div>
 
 <div className="relative">
-  <label className={labelCls}><EditableText id="orderForm.label.차량톤수" defaultText="차량톤수" /> {reqStar}</label>
+  <label className={labelCls}><EditableText id="orderForm.label.차량톤수" defaultText="차량톤수" /></label>
 
   <div className="relative">
 
@@ -18997,7 +18989,7 @@ className={`
 
   {/* 결제 */}
   <div>
-    <label className={labelCls}><EditableText id="orderForm.label.지급방식" defaultText="지급방식" /> {reqStar}<DropdownOptionsManageButton optKey="지급방식" label="지급방식" role={role} userCompany={userCompany} /></label>
+    <label className={labelCls}><EditableText id="orderForm.label.지급방식" defaultText="지급방식" /><DropdownOptionsManageButton optKey="지급방식" label="지급방식" role={role} userCompany={userCompany} /></label>
    <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" ref={payTypeRef} className={`${inputCls}${requiredErrors.has("지급방식") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`} value={form.지급방식} onChange={(__v) => ((e) => {
   const v = e.target.value;
   onChange("지급방식", v);

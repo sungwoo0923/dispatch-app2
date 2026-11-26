@@ -205,7 +205,7 @@ function cleanOpt(x) {
 // 입력칸 — EditableText id(orderForm.label.상차방법 등)
 const FIELD_ID_RE = /^[A-Za-z][A-Za-z0-9_.가-힣·:/ -]{1,80}$/;
 // 배차등록 필수 칸(validateRequired) — 숨기면 저장이 막히므로 숨기기 금지
-export const REQUIRED_FIELDS = new Set(["orderForm.label.거래처", "orderForm.label.상차지", "orderForm.label.하차지", "orderForm.label.화물내용", "orderForm.label.차량톤수", "orderForm.label.지급방식"]);
+export const REQUIRED_FIELDS = new Set(["orderForm.label.거래처", "orderForm.label.상차지", "orderForm.label.하차지"]); // 🛠 2026-11-26 필수는 거래처 · 상차지명 · 하차지명만
 // 기본값을 정할 수 있는 칸(배차등록) — 화면 id → 저장 칸 이름
 export const DEFAULTABLE = { "orderForm.label.상차방법": "상차방법", "orderForm.label.하차방법": "하차방법", "orderForm.label.지급방식": "지급방식", "orderForm.label.배차방식": "배차방식", "orderForm.label.차량종류": "차량종류", "orderForm.label.메모": "메모", "orderForm.label.전달사항": "전달사항" };
 function cleanField(id, x) {

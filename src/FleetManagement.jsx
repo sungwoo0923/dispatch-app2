@@ -292,7 +292,8 @@ function MapRecenter({ center }) {
   const prev = useRef(null);
   useEffect(() => {
     if (!center) return;
-    const key = center._t ? `${center.lat},${center.lng},${center._t}` : `${center.lat},${center.lng}`;
+    // 🛠 2026-11-26 _f(누른 시각)가 있으면 같은 좌표여도 다시 옮긴다 — 지도를 다른 곳으로 옮겨 둔 뒤 같은 기사를 누르면 안 움직였다
+    const key = center._t || center._f ? `${center.lat},${center.lng},${center._t || center._f}` : `${center.lat},${center.lng}`;
     if (prev.current === key) return;
     prev.current = key;
     if (center._t) {
@@ -6896,7 +6897,11 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
 
   const handleSelect = useCallback((d) => {
     setSelected(prev => (prev?.id === d.id ? null : d));
-    if (d.location) setMapCenter(d.location);
+    if (d.location?.lat != null) setMapCenter({ lat: d.location.lat, lng: d.location.lng, _f: Date.now() }); // 🛠 2026-11-26 누를 때마다 그 기사로
+  }, []);
+  // 🛠 2026-11-26 관제현황 목록에서 이미 고른 기사를 다시 누르면 — 선택은 그대로 두고 지도만 그 기사로(예전엔 선택이 풀리기만 했다)
+  const handleRecenter = useCallback((d) => {
+    if (d?.location?.lat != null) setMapCenter({ lat: d.location.lat, lng: d.location.lng, _f: Date.now() });
   }, []);
 
   const handleFocusMap = useCallback((loc) => {
@@ -7170,6 +7175,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
             onSearch={setSearchQuery}
             selected={selected}
             onSelect={handleSelect}
+            onRecenter={handleRecenter}
             onContextMenu={handleContextMenu}
             locChangeRequests={locChangeRequests}
             collisionAlerts={collisionAlerts}

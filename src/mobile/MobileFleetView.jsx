@@ -481,7 +481,8 @@ function MapRecenter({ center }) {
   const prev = useRef(null);
   useEffect(() => {
     if (!center) return;
-    const key = center._t ? `${center.lat},${center.lng},${center._t}` : `${center.lat},${center.lng}`;
+    // 🛠 2026-11-26 _f(누른 시각)가 있으면 같은 좌표여도 다시 옮긴다
+    const key = center._t || center._f ? `${center.lat},${center.lng},${center._t || center._f}` : `${center.lat},${center.lng}`;
     if (prev.current === key) return;
     prev.current = key;
     if (center._t) {
@@ -945,17 +946,21 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
     [activityLogs, driversMap, selectedDate]
   );
 
+  // 🛠 2026-11-26 기사를 누르면 지도가 항상 그 기사로 간다(예전엔 한 번 따라간 위치가 남아 다른 기사를 눌러도 안 움직였다)
+  const focusOn = useCallback((d) => { if (d?.location?.lat != null) setMapCenter({ lat: d.location.lat, lng: d.location.lng, _f: Date.now() }); }, []);
   const handleMapSelect = useCallback((d) => {
+    focusOn(d);
     setMapSelected(prev => prev?.id === d.id ? null : d);
-    setGpsTracks([]); setRoadPath([]); // 🛠 2026-11-17 고르든 풀든 이전 경로는 지운다(예전 if(함수)는 늘 참이었다)
-  }, []);
+    setGpsTracks([]); setRoadPath([]); // 🛠 2026-11-26 고르든 풀든 이전 경로는 지운다(예전 if(함수)는 늘 참이었다)
+  }, [focusOn]);
 
   // 기사 목록에서 "지도 보기" 클릭
   const handleViewOnMap = useCallback((d, e) => {
     e.stopPropagation();
     setMapSelected(d);
+    focusOn(d);
     setActiveSection("map");
-  }, []);
+  }, [focusOn]);
 
   // ⭐ 버그수정 — "지도에서 경로 보기"로 들어간 뒤 뒤로가기를 누르면 MobileApp의
   // 전역 뒤로가기 핸들러가 무조건 배차내역(list)으로 보내버려서, 바로 전 화면(기사
@@ -1463,8 +1468,9 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
               return (
                 <button key={d.id}
                   onClick={() => {
-                    if (sel) { setMapSelected(null); setGpsTracks([]); setRoadPath([]); }
-                    else setMapSelected(d);
+                    // 🛠 2026-11-26 이미 고른 기사 칩을 다시 누르면 지도만 그 기사로(선택 풀기는 아래 카드 [닫기])
+                    if (sel) { focusOn(d); return; }
+                    setMapSelected(d); focusOn(d);
                   }}
                   style={{
                     padding: "0 13px", height: 36, borderRadius: 99,
