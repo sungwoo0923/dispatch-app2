@@ -3269,6 +3269,26 @@ exports.driverContractPush = functions.firestore.document("driverContracts/{id}"
   }, "운송계약서").catch((e) => console.error("[운송계약서 푸시] 실패:", e));
   return null;
 });
+// 📍 2026-11-26 위치 설정 요청 — 관제현황에서 [위치 설정 요청]을 누르면 그 기사 휴대폰으로 푸시(앱을 열면 위치 설정 확인 창)
+exports.driverLocFixPush = functions.firestore.document("driverLocFix/{id}").onCreate(async (snap) => {
+  const r = snap.data() || {};
+  if (!r.driverId) return null;
+  const u = await db.collection("users").doc(String(r.driverId)).get().catch(() => null);
+  const ud = u?.exists ? u.data() || {} : null;
+  if (!ud) return null;
+  if (r.companyName && ud.companyName && String(ud.companyName) !== String(r.companyName)) return null; // 다른 회사 기사에게는 보내지 않는다
+  if (ud.driverPushEnabled === false) { await snap.ref.update({ pushResult: "push_off" }).catch(() => {}); return null; } // 기사님이 알림을 끈 경우(앱을 열면 창은 뜬다)
+  const tokens = userTokens(ud);
+  if (!tokens.length) { await snap.ref.update({ pushResult: "no_token" }).catch(() => {}); return null; }
+  const res = await sendPushAndCleanup(tokens, {
+    notification: { title: "위치 설정을 확인해 주세요", body: `${r.requestedByName || "배차 담당"}님 요청 — 회사에 위치가 안 가고 있어요. 눌러서 앱을 열어 주세요.` },
+    data: { type: "loc_fix", tab: "home" },
+    android: { priority: "high" },
+    apns: { payload: { aps: { sound: "default" } } },
+  }, "위치 설정 요청").catch((e) => { console.error("[위치 설정 요청 푸시] 실패:", e); return null; });
+  await snap.ref.update({ pushResult: res ? `ok ${res.successCount}/${tokens.length}` : "fail" }).catch(() => {});
+  return null;
+});
 exports.notifyNotice = functions.firestore.document("notices/{id}").onCreate(async (snap) => {
   const n = snap.data() || {};
   if (n._seed) return null; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
