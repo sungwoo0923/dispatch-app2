@@ -1586,16 +1586,17 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                   const upMs = mapSelected.updatedAt?.toMillis ? mapSelected.updatedAt.toMillis() : mapSelected.updatedAt?.seconds ? mapSelected.updatedAt.seconds * 1000 : 0;
                   const live = !!mapSelected.active && upMs && Date.now() - upMs < 10 * 60 * 1000;
                   const stale = !!mapSelected.location && !live && !["퇴근", "최종퇴근", "휴차"].includes(mapSelected.상태);
-                  if (!stale && !(h && !h.ok) && !fix) return null;
+                  // 🛠 2026-11-26 버튼은 항상 보인다(예전: 위치가 끊겼거나 문제가 있을 때만 → 정상 기사에게는 버튼이 안 보여 헷갈렸다)
+                  const warn = !!(h && !h.ok) || stale;
                   const tone = fix?.key === "done" ? "#10B981" : "#F59E0B";
                   return (
-                    <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 10, background: D.panel, border: `1px solid ${D.line2}` }}>
-                      <div style={{ fontSize: 13, fontWeight: 800, lineHeight: 1.5, color: h && !h.ok ? "#EF4444" : tone }}>
-                        {h && !h.ok ? h.probs.join(" · ") : stale ? "위치가 안 들어오고 있어요" : ""}
-                      </div>
+                    <div style={{ marginTop: 8, padding: warn || fix ? "10px 12px" : 0, borderRadius: 10, background: warn || fix ? D.panel : "transparent", border: warn || fix ? `1px solid ${D.line2}` : 0 }}>
+                      {warn && <div style={{ fontSize: 13, fontWeight: 800, lineHeight: 1.5, color: h && !h.ok ? "#EF4444" : tone }}>
+                        {h && !h.ok ? h.probs.join(" · ") : "위치가 안 들어오고 있어요"}
+                      </div>}
                       {fix && <div style={{ fontSize: 12.5, fontWeight: 800, color: tone, marginTop: 2 }}>{fix.key === "done" ? `기사님이 설정을 확인했어요 · ${timeAgo(fix.at)}` : `위치 설정 요청 보냄 · ${timeAgo(fix.at)} · 아직 확인 전`}</div>}
                       <button type="button" onClick={() => sendLocFixRequest(mapSelected)}
-                        style={{ marginTop: 8, width: "100%", height: 40, borderRadius: 10, border: "1px solid #F59E0B", background: "transparent", color: "#F59E0B", fontSize: 14.5, fontWeight: 900, cursor: "pointer" }}>
+                        style={{ marginTop: warn || fix ? 8 : 0, width: "100%", height: 40, borderRadius: 10, border: `1px solid ${warn ? "#F59E0B" : D.line2}`, background: "transparent", color: warn ? "#F59E0B" : D.body, fontSize: 14.5, fontWeight: 900, cursor: "pointer" }}>
                         {fix?.key === "sent" ? "위치 설정 다시 요청" : "위치 설정 요청 보내기"}
                       </button>
                     </div>
