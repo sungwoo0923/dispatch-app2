@@ -63,12 +63,12 @@ function LocFixLine({ d, onLocFix }) {
   const h = locHealthOf(raw);
   const fix = locFixStateOf(raw);
   const stale = !!d?.location && !isLive(d) && !["퇴근", "최종퇴근", "휴차"].includes(d?.상태);
-  if (!onLocFix || (!stale && !(h && !h.ok) && !fix)) return null;
+  if (!onLocFix) return null; // 🛠 2026-11-26 버튼은 항상 보인다(안내 글만 문제 있을 때)
   const tone = fix?.key === "done" ? "var(--lw-ok)" : "#F59E0B";
   return (
     <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
       <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 800, lineHeight: 1.45, color: h && !h.ok ? "#EF4444" : tone }}>
-        {h && !h.ok ? h.probs.join(" · ") : stale ? "위치가 안 들어오고 있어요" : ""}
+        {h && !h.ok ? h.probs.join(" · ") : stale ? "위치가 안 들어오고 있어요" : !fix && h?.ok ? <span style={{ color: "var(--lw-sub)" }}>휴대폰 위치 설정 문제는 없어요</span> : ""}
         {fix && <span style={{ display: "block", color: tone }}>{fix.key === "done" ? `기사님이 설정을 확인했어요 · ${ago(fix.at)}` : `위치 설정 요청 보냄 · ${ago(fix.at)} · 아직 확인 전`}</span>}
       </span>
       <button type="button" className="lwd-btn" style={{ height: 32, flexShrink: 0 }} onClick={() => onLocFix(d)} title="기사님 휴대폰에 알림을 보내고, 앱을 열면 위치 설정 확인 창이 떠요">{fix?.key === "sent" ? "다시 요청" : "위치 설정 요청"}</button>
