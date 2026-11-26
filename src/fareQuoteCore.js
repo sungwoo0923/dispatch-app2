@@ -26,6 +26,17 @@ export function regionTokens(addr = "") {
     .map((t) => { if (PROV_SHORT[t]) return PROV_SHORT[t]; const c = t.replace(/(특별자치시|특별자치도|특별시|광역시|시|군|구)$/, ""); return c.length >= 2 ? c : t; }) // "대구" · "중구"는 자르지 않음
     .map(normRate).filter((t) => t.length >= 2);
 }
+// 📏 2026-11-26 단가표에 없는 톤수는 "바로 위 톤수" 칸으로(JY 롯데베르살리스 10월 이후 172건 전부 이 규칙 — 6 · 7톤 → 8톤, 12~14톤 → 15톤, 20~24톤 → 25톤)
+const tonNumK = (k) => { const m = /^(\d+(?:\.\d+)?)/.exec(String(k || "")); return m ? parseFloat(m[1]) : NaN; };
+function colFor(sheet, ton, up) {
+  const cols = sheet.columns || [];
+  const exact = cols.find((c) => tonKey(c.label) === ton);
+  if (exact || !up) return exact ? { col: exact, up: false } : null;
+  const want = tonNumK(ton);
+  if (!Number.isFinite(want)) return null;
+  const higher = cols.map((c) => ({ c, n: tonNumK(tonKey(c.label)) })).filter((x) => Number.isFinite(x.n) && x.n > want).sort((a, b) => a.n - b.n);
+  return higher.length ? { col: higher[0].c, up: true } : null;
+}
 export function findRate(sheets = [], q = {}, { aliases = false } = {}) {
   const ton = tonKey(q.톤수);
   const drop = normRate(q.하차지명);
@@ -42,13 +53,13 @@ export function findRate(sheets = [], q = {}, { aliases = false } = {}) {
       const wordHit = aliases && words.length > 1 && rName.length === drop.length && words.every((w) => rName.includes(w));
       const aliasHit = aliases && (dropA.includes(aliasKey(row.name)) || wordHit);
       if (!rName || !(rName.includes(drop) || drop.includes(rName) || aliasHit)) return;
-      const col = (sheet.columns || []).find((c) => tonKey(c.label) === ton);
+      const cf = colFor(sheet, ton, aliases); const col = cf?.col;
       const sale = col ? num(row.prices?.[col.id]) : 0;
       if (!sale) return;
       const buy = num(row.buyPrices?.[col.id]);
       const bn = normRate(sheet.baseName);
       const baseHit = !!bn && (bases.some((x) => x.includes(bn) || bn.includes(x)) || (aliases && baseA.includes(aliasKey(sheet.baseName))));
-      cands.push({ sale, buy, baseHit, exact: rName === drop || aliasHit, sheetName: String(sheet.baseName || "").trim(), rowName: String(row.name || "").trim(), ton: col.label });
+      cands.push({ sale, buy, baseHit, exact: rName === drop || aliasHit, tonUp: !!cf?.up, sheetName: String(sheet.baseName || "").trim(), rowName: String(row.name || "").trim(), ton: col.label });
     });
   });
   // 🗺 지역으로 찾기(JY · 기준지가 맞는 단가표만) — 주소의 더 작은 단위(시군구)가 맞는 줄이 먼저(경남 양산시 → "양산" > "경남")
@@ -58,7 +69,7 @@ export function findRate(sheets = [], q = {}, { aliases = false } = {}) {
       const bn = normRate(sheet.baseName);
       const baseHit = !!bn && (bases.some((x) => x.includes(bn) || bn.includes(x)) || baseA.includes(aliasKey(sheet.baseName)));
       if (!baseHit) return;
-      const col = (sheet.columns || []).find((c) => tonKey(c.label) === ton);
+      const cf = colFor(sheet, ton, true); const col = cf?.col;
       if (!col) return;
       (sheet.rows || []).forEach((row) => {
         const lvl = regs.indexOf(normRate(row.name));
@@ -66,13 +77,13 @@ export function findRate(sheets = [], q = {}, { aliases = false } = {}) {
         const sale = num(row.prices?.[col.id]);
         if (!sale) return;
         if (cands.some((c) => c.baseHit && c.sheetName === String(sheet.baseName || "").trim() && c.rowName === String(row.name || "").trim())) return; // 이름으로 이미 찾은 줄
-        cands.push({ sale, buy: num(row.buyPrices?.[col.id]), baseHit: true, exact: false, region: true, lvl, sheetName: String(sheet.baseName || "").trim(), rowName: String(row.name || "").trim(), ton: col.label });
+        cands.push({ sale, buy: num(row.buyPrices?.[col.id]), baseHit: true, exact: false, region: true, lvl, tonUp: !!cf.up, sheetName: String(sheet.baseName || "").trim(), rowName: String(row.name || "").trim(), ton: col.label });
       });
     });
   }
   if (!cands.length) return null;
   // 기준지 맞음 > 이름으로 찾음 > 이름이 똑같음 > (지역이면) 더 작은 단위
-  const rank = (c) => (c.baseHit ? 8 : 0) + (c.region ? 0 : 4) + (c.exact ? 2 : 0) + (c.region ? Math.min(c.lvl, 2) * 0.5 : 0);
+  const rank = (c) => (c.baseHit ? 16 : 0) + (c.tonUp ? 0 : 8) + (c.region ? 0 : 4) + (c.exact ? 2 : 0) + (c.region ? Math.min(c.lvl, 2) * 0.5 : 0);
   const top = Math.max(...cands.map(rank));
   const best = cands.filter((c) => rank(c) === top);
   if (new Set(best.map((c) => `${c.sale}/${c.buy}`)).size > 1) return { ambiguous: true, cands: best };

@@ -15070,7 +15070,7 @@ const ROUND_DISCOUNT = 0.9; // ★ 10% 할인 (조정 가능)
       }
       const r = findRate(multiRateSheets, { 거래처명: form.거래처명, 상차지명: form.상차지명, 하차지명: form.하차지명, 하차지주소: form.하차지주소, 톤수: ton }, { aliases: true });
       if (!r || r.ambiguous) return null;
-      return { ...r, label: `${r.sheetName || ""} → ${r.rowName} · ${r.ton}` };
+      return { ...r, label: `${r.sheetName || ""} → ${r.rowName} · ${r.tonUp ? `${ton} → ${r.ton} 단가` : r.ton}` }; // 📏 단가표에 없는 톤수는 바로 위 톤수
     }, [multiRateSheets, manseLearned, form.차량톤수, form.차량종류, form.하차지명, form.하차지주소, form.화물내용, form.경유하차목록, form.거래처명, form.상차지명]);
     const autoRateRef = React.useRef({ sale: "", buy: "" }); // 마지막으로 자동 입력한 금액(사람이 고쳤는지 구분)
     React.useEffect(() => {

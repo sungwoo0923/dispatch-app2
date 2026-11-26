@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import { execSync } from "child_process";
 import fs from "fs";
 import { fileURLToPath } from "url";
+import crypto from "crypto";
 
 const getAppVersion = () => {
   if (process.env.APP_VERSION) return process.env.APP_VERSION;
@@ -68,6 +69,7 @@ function fuelApiDevMiddleware() {
   };
 }
 
+let DRIVER_BUILD = ""; // 🚚 기사앱 지문(아래 kp-driver-build)
 const BUILD_TIME = new Date().toISOString(); // 화면 버전 확인(VersionCheck)용 — 번들과 version.json이 같은 값을 쓴다
 
 export default defineConfig({
@@ -98,6 +100,27 @@ export default defineConfig({
           const js = `window.__KP_BUILD__=${JSON.stringify(BUILD_TIME)};(function(){try{var p=location.pathname;if(!(p==="/"||p.indexOf("/app")===0||p.indexOf("/login")===0))return;if(!localStorage.getItem("userCompany"))return;var ua=navigator.userAgent.toLowerCase();var pad=(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1)||ua.indexOf("ipad")>=0||ua.indexOf("tablet")>=0;var phone=!pad&&(/iphone|ipod|android(?!.*tablet)/.test(ua)||innerWidth<768);var L=phone?${JSON.stringify(M)}:${JSON.stringify(D)};L.forEach(function(f){var l=document.createElement("link");l.rel="modulepreload";l.crossOrigin="";l.href="/"+f;document.head.appendChild(l);});}catch(e){}})();`;
           return [{ tag: "script", children: js, injectTo: "head-prepend" }];
         },
+      },
+    },
+    // 🚚 2026-11-26 사용자 요청 — 기사앱과 상관없는 업데이트로는 기사앱에 "새 버전" 안내를 띄우지 않는다.
+    //  기사 화면(src/driver/*)이 실제로 쓰는 우리 코드 파일만 모아 지문(driver)을 만들고 version.json · 첫 화면 HTML(meta kp-driver-build)에 적는다.
+    //  기사앱은 이 지문이 달라졌을 때만 업데이트 안내(src/driver/DriverUpdateBanner.jsx). 라이브러리(node_modules) · PC 전용 화면만 바뀐 배포는 안 뜬다
+    {
+      name: "kp-driver-build",
+      generateBundle() {
+        const ids = [...this.getModuleIds()];
+        const mine = (id) => /\/src\//.test(id.replace(/\\/g, "/")) && !/node_modules/.test(id) && !id.startsWith("\0");
+        const seen = new Set();
+        const walk = (id) => {
+          if (seen.has(id) || !mine(id)) return; seen.add(id);
+          const info = this.getModuleInfo(id); if (!info) return;
+          [...(info.importedIds || []), ...(info.dynamicallyImportedIds || [])].forEach(walk);
+        };
+        ids.filter((id) => /\/src\/driver\//.test(id.replace(/\\/g, "/"))).forEach(walk);
+        const h = crypto.createHash("sha1");
+        [...seen].sort().forEach((id) => { h.update(id.replace(/\\/g, "/").replace(/^.*\/src\//, "src/")); h.update("\n"); h.update(this.getModuleInfo(id)?.code || ""); });
+        DRIVER_BUILD = seen.size ? h.digest("hex").slice(0, 16) : "";
+        console.log(`🚚 기사앱 지문 ${DRIVER_BUILD} (파일 ${seen.size}개)`);
       },
     },
     {
@@ -146,7 +169,9 @@ export default defineConfig({
         }
         // ⭐ 접속 버전 확인용 — 화면(VersionCheck)이 이 파일과 자기 빌드 시각을 비교한다
         if (fs.existsSync("./dist")) {
-          fs.writeFileSync("./dist/version.json", JSON.stringify({ version: getAppVersion(), build: BUILD_TIME, url: process.env.VERCEL_URL || "" }));
+          fs.writeFileSync("./dist/version.json", JSON.stringify({ version: getAppVersion(), build: BUILD_TIME, url: process.env.VERCEL_URL || "", driver: DRIVER_BUILD }));
+          // 🚚 기사앱 지문을 첫 화면에도 — 기사앱이 "내 화면 지문"을 알아야 비교할 수 있다
+          if (DRIVER_BUILD) ["./dist/index.html", "./dist/driver.html"].forEach((f) => { if (fs.existsSync(f)) fs.writeFileSync(f, fs.readFileSync(f, "utf-8").replace("<head>", `<head><meta name="kp-driver-build" content="${DRIVER_BUILD}">`)); });
         }
       },
     },
