@@ -25,6 +25,7 @@ import { careSummary, vehicleDefaults } from "../vehicleCare";
 import CustomDatePicker from "../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 import MobileSelect from "./MobileSelect"; // 📱 2026-11-10 상태 필터 — 버튼 10개 대신 드롭다운
 import { TrafficOverlay } from "../trafficLayer"; // 🚦 2026-11-22 교통 돌발상황(ITS)
+import { ClientTag } from "../driverClient"; // 📱 2026-11-26 기사앱 · 웹 구분
 
 const NAVY = "#1B2B4B";
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
@@ -832,6 +833,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
           등급: raw.등급 || "",
           거주지: raw.거주지 || "",
           근무요일: raw.근무요일 || [],
+          raw, // 📱 2026-11-26 기사앱 · 웹 구분(clientType · nativeTracking)
         };
       })
       .sort((a, b) => statusPriority(a) - statusPriority(b));
@@ -1191,6 +1193,7 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                         <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
                           <span className="mfv-ell" style={{ fontSize: 15, fontWeight: 800, color: "#0F1A30", flexShrink: 1 }}>{d.이름}</span>
                           <span className="mfv-nw" style={{ fontSize: 14, color: "#3A4A66", fontWeight: 800, flexShrink: 0, padding: "0 6px", border: "1.5px solid #0F1A30", borderRadius: 4, background: "#fff" }}>{d.차량번호}</span>
+                          <ClientTag d={d.raw || {}} size={12} />
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, minWidth: 0 }}>
                           <span className="mfv-nw" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 14, fontWeight: 700, color: dispatchStatus.color, background: dispatchStatus.bg, padding: "2px 8px", borderRadius: 99, flexShrink: 0 }}>

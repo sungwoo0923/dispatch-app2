@@ -7,6 +7,7 @@
 //  · 좁은 화면: 오른쪽 칸은 아래로, 휴대폰 폭이면 한 줄씩
 import React from "react";
 import { PHASE_GROUPS, truckColor, TRUCK_CSS } from "./fleetTruck";
+import { driverClientOf, ClientTag } from "./driverClient"; // 📱 2026-11-26 기사앱 · 웹 구분
 
 const FONT = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 // 🎨 2026-11-26 A(관제실 다크 · 기본) / B(지도 중심 라이트) — 색은 CSS 변수(.lwd · .lwd.light)로
@@ -230,6 +231,7 @@ export default function FleetControlDeck({
                       <b style={{ fontSize: 16, fontWeight: 900, color: "var(--lw-strong)", whiteSpace: "nowrap" }}>{d.이름 || "-"}</b>
                       <span style={{ fontSize: 14, fontWeight: 800, color: "var(--lw-soft)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: ".01em" }}>{d.차량번호 || ""}</span>
                       {todayPhotoIds?.has(d.id) && <span title="오늘 올린 사진" style={{ fontSize: 12, fontWeight: 800, color: "var(--lw-sky)" }}>사진</span>}
+                      <ClientTag d={d} />
                     </span>
                     <LocLine d={d} geocode={geocode} />
                   </span>
@@ -262,9 +264,11 @@ export default function FleetControlDeck({
               <div style={{ marginTop: 4, display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
                 <b style={{ fontSize: 20, fontWeight: 900 }}>{sel.이름 || "-"}</b>
                 <span style={{ fontSize: 16, fontWeight: 800, color: "var(--lw-soft)" }}>{sel.차량번호 || ""}</span>
+                <span style={{ alignSelf: "center" }}><ClientTag d={sel} size={12.5} /></span>
                 <span style={{ marginLeft: "auto", fontSize: 14, fontWeight: 900, color: truckColor(selPhase) }}>{selPhase}</span>
               </div>
               <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 10, background: "var(--lw-panel2)", border: `1px solid ${C.line2}` }}><LocLine d={sel} geocode={geocode} size={13.5} /></div>
+              {driverClientOf(sel.raw || sel).key === "web" && <div style={{ marginTop: 6, fontSize: 12.5, fontWeight: 800, color: "#F59E0B", lineHeight: 1.45 }}>웹(인터넷)으로 쓰고 있어요. 화면을 끄면 위치가 끊겨요 → 기사앱 설치를 안내해 주세요</div>}
               <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8 }}>
                 <div><div style={{ fontSize: 11.5, fontWeight: 700, color: C.dim }}>속도</div><div style={{ fontSize: 18, fontWeight: 900 }}>{Number(sel.speed) > 3 ? Number(sel.speed) : 0}<span style={{ fontSize: 12, color: C.sub }}> km/h</span></div></div>
                 <div><div style={{ fontSize: 11.5, fontWeight: 700, color: C.dim }}>오늘 이동</div><div style={{ fontSize: 18, fontWeight: 900 }}>{(Number(sel.총거리) || 0).toFixed(1)}<span style={{ fontSize: 12, color: C.sub }}> km</span></div></div>

@@ -1,6 +1,7 @@
 // ======================= FleetManagement.jsx =======================
 import { makeTruckIcon, truckColor, headingFor, pathHeading } from "./fleetTruck";
 import FleetControlDeck from "./FleetControlDeck";
+import { driverClientOf, ClientTag } from "./driverClient"; // 📱 2026-11-26 기사앱 · 웹 구분
 import { RouteTimelineView } from "./RouteBoardViews";
 import { RouteTableView } from "./RouteTable"; // 🗂 2026-11-26 노선관리 줄 보기 · 시간표 // 🛰 2026-11-25 관제현황 = 관제실 다크
 import { FLEET_DARK_CSS } from "./fleetDarkTheme";
@@ -1264,6 +1265,8 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
           hasDriverDoc: !!rawOf(uid, u),
           docId: rawOf(uid, u)?.id || uid, // ⭐ 2026-11-10 담당자 지정은 실제 기사관리 문서로
           appStatus: "joined",
+          client: driverClientOf(raw), // 📱 2026-11-26 기사앱으로 쓰는지 웹(인터넷)으로 쓰는지
+          raw,
         };
       });
     // ⭐ 기사관리에서 지입·직영으로 지정했지만 아직 기사앱에 가입하지 않은 기사도 목록에 보인다(앱 미가입 표시 + 가입 안내 복사)
@@ -1389,6 +1392,7 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
         <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 700, color: d.online ? NAVY : "#5B6B85" }}>
           <span style={{ width: 8, height: 8, borderRadius: "50%", background: d.online ? "#2D4C82" : "#cbd2dc", flexShrink: 0 }} />
           {d.online ? "접속중" : d.lastSeen ? timeAgo(d.lastSeen) : "기록 없음"}
+          <ClientTag d={d.raw || {}} size={12.5} />
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
           <span style={{ fontSize: 14, color: "#5B6B85", fontWeight: 700, whiteSpace: "nowrap" }}>{d.createdAt ? formatDate(d.createdAt) : ""}</span>
@@ -1418,6 +1422,7 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
         </div>
         <div style={{ marginTop: 4, fontSize: 14, fontWeight: 700, color: d.online ? NAVY : "#5B6B85" }}>
           {d.noApp ? "앱 미가입" : d.online ? "● 앱 접속중" : `앱 접속 ${d.lastSeen ? timeAgo(d.lastSeen) : "기록 없음"}`}{sent ? ` · 안내 ${sent}` : ""}
+          {!d.noApp && <span style={{ marginLeft: 6, verticalAlign: "middle" }}><ClientTag d={d.raw || {}} size={12.5} /></span>}
         </div>
         <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           {d.hasDriverDoc && <ManagerBadge driver={{ id: d.docId || d.uid, 이름: d.이름, 담당자: d.담당자 }} staff={staff} canDelegate={canDelegate} onAssign={onAssignManager} big />}
@@ -1442,12 +1447,13 @@ function RegistrationTab({ usersMap, myCompanyName, driversRaw = [], myUid = nul
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {/* 요약 */}
-      <FaHero code="FLEET · DRIVER REGISTRY" title="기사 등록 관리" sub="기사앱에 가입·승인된 지입·직영·임대 기사님: 담당자 지정 · 앱 접속 상태"
+      <FaHero code="FLEET · DRIVER REGISTRY" title="기사 등록 관리" sub="기사앱에 가입·승인된 지입·직영·임대 기사님: 담당자 지정 · 앱 접속 상태 · 기사앱/웹 구분"
         icon={<><circle cx="10" cy="8" r="4" /><path d="M3 20c0-4 3-7 7-7M17 14v6M14 17h6" /></>}>
         {stat("내 차량", mine.length, "대", true)}
         {stat("전체 등록 기사", approved.length, "명")}
         {stat("지금 앱 접속중", approved.filter(d => d.online).length, "명")}
         {stat("앱 미가입", approved.filter(d => d.noApp).length, "명")}
+        {stat("웹으로 쓰는 기사", approved.filter(d => d.client?.key === "web").length, "명")}
       </FaHero>
 
       {/* ⭐ 2026-11-05 가입 승인 대기 배너 삭제 — 기사 가입 승인은 기사관리 › 기사 앱 계정 › 가입 승인에서만(지입·직영·임대 지정 + 기존 기사 연동) */}
