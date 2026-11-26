@@ -21445,6 +21445,8 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     dispatch: [
       W("기사출퇴근", "담당 기사 출근·퇴근", "내가 담당자인 기사가 출근하거나 퇴근하면"), // ⭐ 2026-11-10 서버 notifyDriverCheckout
       W("기사긴급", "기사 긴급(SOS)", "기사님이 기사앱에서 SOS 긴급 알림을 보내면"), // 🆘 2026-11-26 서버 notifyEmergencyAlert
+      W("기사수락", "기사 오더 수락", "내가 배차한 · 담당한 기사가 오더를 수락하면"), // ✔ 2026-11-26 서버 notifyDispatcherOrderAcceptDone
+      W("기사완료", "기사 운송 완료", "내가 배차한 · 담당한 기사가 운송을 마치면"),
       W("결재요청", "결재 요청", "내가 결재할 차례가 되면"),
       W("결재결과", "결재 결과", "내가 올린 연차·문서가 승인·반려되면"),
       ...(isAdminLike ? [W("가입신청", "가입 신청", "새 직원·기사가 가입을 신청하면"), W("마감보고", "마감 보고", "하루 마감 보고가 오면")] : []),
@@ -21465,7 +21467,7 @@ function MobileSettingsPage({ onBack, cardVersionB, setCardVersionB, alarmEnable
     { title: "공통 알림", items: COMMON_PUSH },
   ];
   const PUSH_PREF_TYPES = PUSH_GROUPS.flatMap((g) => g.items);
-  const PUSH_PREF_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일", "인수인계", "기사출퇴근", "기사긴급"];
+  const PUSH_PREF_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일", "인수인계", "기사출퇴근", "기사긴급", "기사수락", "기사완료"];
   const isPushPrefOn = (prefs, key) => {
     const v = prefs?.[key];
     if (v === true || v === false) return v;

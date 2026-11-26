@@ -13,7 +13,7 @@
 const NOTIFY_AUDIENCE = {
   // 🚚 배차(운송)
   배차등록: "dispatch", 긴급배차: "dispatch", 배차완료: "dispatch", 재배차: "dispatch", 미배차: "dispatch", 배차취소: "dispatch",
-  기사수락: "dispatch", 기사거절: "dispatch", 기사출퇴근: "dispatch", 기사지연: "dispatch", 기사긴급: "dispatch",
+  기사수락: "dispatch", 기사거절: "dispatch", 기사출퇴근: "dispatch", 기사지연: "dispatch", 기사긴급: "dispatch", 기사완료: "dispatch",
   화주재촉: "dispatch", 화주오더: "dispatch", 오더수정요청: "dispatch", 오더취소요청: "dispatch",
   고정노선미배차: "dispatch", 실시간배차: "dispatch", 배차알림: "dispatch",
   // 🧾 정산 · 회계(경리)

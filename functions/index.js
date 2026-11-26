@@ -51,7 +51,7 @@ async function getAllTokens() {
 // 나머지(배차등록/배차완료/재배차/배차취소)는 사용자가 모바일에서 직접 켜야 온다.
 const PUSH_TYPES = ["배차등록", "긴급배차", "배차완료", "재배차", "미배차", "배차취소"];
 // ⭐ 2026-11-01 팀별 알림 — 업무 알림(결재·공지·메일·메신저·가입신청·인사발령·마감보고)은 기본 켜짐, 끈 사람만 안 보낸다
-const PUSH_TYPES_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일", "인수인계", "기사출퇴근", "기사긴급"]; // ⭐ 2026-11-26 기사 SOS(notifyEmergencyAlert) · ⭐ 2026-11-03 인수인계(notifyHandover) · ⭐ 2026-11-10 담당 기사 출근·퇴근(notifyDriverCheckout)
+const PUSH_TYPES_DEFAULT_ON = ["긴급배차", "미배차", "결재요청", "결재결과", "공지사항", "사내메일", "인사발령", "마감보고", "가입신청", "메신저", "생일", "인수인계", "기사출퇴근", "기사긴급", "기사수락", "기사완료"]; // ⭐ 2026-11-26 기사 수락 · 운송완료(notifyDispatcherOrderAcceptDone) · 기사 SOS(notifyEmergencyAlert) · ⭐ 2026-11-03 인수인계(notifyHandover) · ⭐ 2026-11-10 담당 기사 출근·퇴근(notifyDriverCheckout)
 function isPushTypeEnabled(prefs, type) {
   const v = prefs?.[type];
   if (v === true || v === false) return v;
@@ -780,6 +780,55 @@ const _notifyFleetDriverNewOrder = (COL) =>
 // ⚡ 2026-11-23 예전엔 "{col}/{id}" — 모든 컬렉션의 모든 쓰기마다 불려(비용 · 지연) 첫 줄에서 그냥 끝났다 → 오더 컬렉션에서만 불리게
 exports.notifyFleetDriverNewOrder = _notifyFleetDriverNewOrder("orders");
 exports.notifyFleetDriverNewOrderLegacy = _notifyFleetDriverNewOrder("dispatch"); // 예전 오더(dispatch) 수정 · 삭제용
+
+/* ==============================
+   ✔ 2026-11-26 지입 기사 — 오더 수락 · 운송 완료 → 담당 배차자 휴대폰 푸시(사용자 요청)
+   받는 사람: 그 오더 등록자 · 배차확정자 · 기사 담당자 중 같은 회사 직원
+   알림 설정 "기사 수락" · "기사 운송완료"(기본 켜짐)를 끈 사람, 지금 운송 화면이 아닌 사람(통합관리자 등)은 뺀다
+============================== */
+const _notifyDispatcherOrderAcceptDone = (COL) =>
+  functions.firestore
+    .document(`${COL}/{dispatchId}`)
+    .onUpdate(async (change, context) => {
+      const before = change.before.data();
+      const after = change.after.data();
+      if (!before || !after || after._seed) return null;
+      const st = after["기사확인상태"];
+      const was = before["기사확인상태"];
+      const kind = st === "수락" && was === "대기" ? "기사수락" : st === "완료" && was !== "완료" ? "기사완료" : "";
+      if (!kind) return null;
+      const co = after.companyName || before.companyName;
+      const uids = [after["createdByUid"], after["배차확정자Uid"]];
+      try {
+        const dDoc = after["차량번호"] ? await findDriverByPlate(after["차량번호"], co) : null;
+        const mgr = dDoc?.data()?.["담당자"];
+        if (mgr && typeof mgr === "object" && mgr.uid) uids.push(mgr.uid);
+      } catch (e) { console.warn("수락/완료 알림 기사 담당자 조회 실패:", e?.message || e); }
+      const recipUids = [...new Set(uids.filter((x) => typeof x === "string" && x))];
+      if (!recipUids.length) return null;
+      let tokens = [];
+      const uSnaps = await db.getAll(...recipUids.map((uid) => db.collection("users").doc(uid)));
+      uSnaps.forEach((d) => {
+        const u = d.exists ? d.data() : null;
+        if (!u || !sameCoUser(u, co) || !isPushTypeEnabled(u.pushPrefs, kind) || !notifyUserAllows(u, kind)) return;
+        tokens.push(...userTokens(u));
+      });
+      tokens = [...new Set(tokens)];
+      if (!tokens.length) return null;
+      const driverLabel = `${after["이름"] || "기사"}(${after["차량번호"] || "-"})`;
+      const route = [after["상차지명"], after["하차지명"]].filter(Boolean).join(" → ");
+      await sendPushAndCleanup(tokens, {
+        notification: kind === "기사수락"
+          ? { title: `✔ 오더 수락 · ${driverLabel}`, body: `${after["거래처명"] || "오더"}${route ? ` · ${route}` : ""}${after["상차시간"] ? ` · ${after["상차시간"]} 상차` : ""}` }
+          : { title: `🏁 운송 완료 · ${driverLabel}`, body: `${after["거래처명"] || "오더"}${route ? ` · ${route}` : ""} 운송을 마쳤어요` },
+        data: { type: kind === "기사수락" ? "fleet_order_accepted" : "fleet_order_done", orderId: context.params.dispatchId, target: "app" },
+        android: { priority: "high" },
+        apns: { payload: { aps: { sound: "default" } } },
+      }, kind === "기사수락" ? "지입기사 오더수락(담당자 알림)" : "지입기사 운송완료(담당자 알림)");
+      return null;
+    });
+exports.notifyDispatcherOrderAcceptDone = _notifyDispatcherOrderAcceptDone("orders");
+exports.notifyDispatcherOrderAcceptDoneLegacy = _notifyDispatcherOrderAcceptDone("dispatch");
 
 /* ==============================
    ⊘ 지입 기사 — 오더 거절 알림(배차담당자 본인에게 OS 푸시)

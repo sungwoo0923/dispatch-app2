@@ -31,6 +31,19 @@
             android:exported="false"
             android:foregroundServiceType="location" />
 
+        <!-- 🟦 2026-11-26 홈 화면 위젯(출근 · 지금 상태) — KpWidgetProvider -->
+        <receiver
+            android:name=".KpWidgetProvider"
+            android:label="@string/kp_widget_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/kp_widget_info" />
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -58,6 +71,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- 배터리 최적화 제외 요청(절전으로 추적이 끊기지 않게) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- ⭐ 2026-11-26 앱 안에서 새 APK 설치 화면 열기(KpUpdatePlugin) — 기사님은 [업데이트]만 누르면 된다 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- 백그라운드 GPS 서비스는 @capacitor-community/background-geolocation 플러그인
     모듈 자체의 AndroidManifest.xml(gradle manifest merge)에서 올바른 클래스명으로
