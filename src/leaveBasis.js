@@ -24,7 +24,21 @@ export function useLeaveBasis(company) {
 export function mirrorLeaveBasis(company, leave) {
   const co = String(company || "").trim();
   if (!co) return Promise.resolve();
-  return setDoc(doc(db, "hrSettings", co), { companyName: co, leaveBasis: leaveBasisOf(leave), updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
+  // 🔕 2026-11-26 leavePopup — 연차 촉진 통지를 직원 화면에 팝업으로 띄울지(회사 설정 · 값이 없으면 띄움)
+  return setDoc(doc(db, "hrSettings", co), { companyName: co, leaveBasis: leaveBasisOf(leave), leavePopup: leave?.popup !== false, updatedAt: serverTimestamp() }, { merge: true }).catch(() => {});
+}
+
+// 🔕 2026-11-26 사용자 요청 — 연차 촉진 통지 팝업을 회사마다 끌 수 있게(인사관리부 › 연차 촉진 › 설정)
+//  끄면 들어올 때 화면 가운데 팝업만 안 뜬다. 알림 목록 · 사내메일 · 이메일 · 발송 기록(법정 통지 증빙)은 그대로
+const popupCache = new Map();
+export function useLeavePopupOn(company) {
+  const co = String(company || "").trim();
+  const [on, setOn] = React.useState(() => (popupCache.has(co) ? popupCache.get(co) : true));
+  React.useEffect(() => {
+    if (!co) return undefined;
+    return onSnapshot(doc(db, "hrSettings", co), (s) => { const v = !(s.exists() && s.data().leavePopup === false); popupCache.set(co, v); setOn(v); }, () => {});
+  }, [co]);
+  return on;
 }
 
 // 내정보(PC·모바일) 연차 — 전자결재 연차·반차 문서(내 것) · 연차 조정 · 회사 회기 기준을 한 번에

@@ -122,7 +122,7 @@ export default function LeavePromotionBoard({ company, canManage = false }) {
     if (!company) return undefined;
     return onSnapshot(query(collection(db, "leavePromotions"), where("companyName", "==", company)), (s) => setRecs(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setRecs([]));
   }, [company]);
-  React.useEffect(() => { if (setting !== undefined) setCfg({ basis: setting.basis || "hire", fiscalStart: setting.fiscalStart || "01-01", autoSend: setting.autoSend !== false, email: setting.email !== false }); }, [setting]);
+  React.useEffect(() => { if (setting !== undefined) setCfg({ basis: setting.basis || "hire", fiscalStart: setting.fiscalStart || "01-01", autoSend: setting.autoSend !== false, email: setting.email !== false, popup: setting.popup !== false }); }, [setting]);
   // ⭐ 2026-11-07 회기 기준을 직원이 읽는 곳(hrSettings.leaveBasis)에도 — 내정보 · 전자결재 연차 현황이 같은 회기로 계산
   React.useEffect(() => { if (setting !== undefined && canManage) mirrorLeaveBasis(company, setting); }, [setting, canManage, company]); // eslint-disable-line react-hooks/exhaustive-deps
   const today = kstDay();
@@ -171,8 +171,10 @@ export default function LeavePromotionBoard({ company, canManage = false }) {
             <span className="w-px h-6 bg-[#E3E8F0] mx-1" />
             <Chip on={cfg.autoSend} onClick={() => canManage && setCfg((c) => ({ ...c, autoSend: !c.autoSend }))}>{cfg.autoSend ? "✓ " : ""}매일 아침 자동 발송</Chip>
             <Chip on={cfg.email} onClick={() => canManage && setCfg((c) => ({ ...c, email: !c.email }))}>{cfg.email ? "✓ " : ""}이메일도 보내기</Chip>
+            {/* 🔕 2026-11-26 사용자 요청 — 들어갈 때마다 뜨는 팝업이 번거롭다 → 회사마다 끌 수 있게 */}
+            <Chip on={cfg.popup} onClick={() => canManage && setCfg((c) => ({ ...c, popup: !c.popup }))}>{cfg.popup ? "✓ " : ""}직원 화면에 팝업 띄우기</Chip>
           </div>
-          <div className="mt-2 text-[14px] text-[#5B6B85] leading-relaxed">입사 1년 미만(월차)은 종료 3개월 전 1차 · 1개월 전까지 2차. 자동 발송을 끄면 대상자를 인사 담당자에게만 알립니다. 자동 이메일은 회사 PC 프로그램이 켜져 있을 때 예약 메일로 나갑니다.</div>
+          <div className="mt-2 text-[14px] text-[#5B6B85] leading-relaxed">입사 1년 미만(월차)은 종료 3개월 전 1차 · 1개월 전까지 2차. 자동 발송을 끄면 대상자를 인사 담당자에게만 알립니다. 자동 이메일은 회사 PC 프로그램이 켜져 있을 때 예약 메일로 나갑니다. [직원 화면에 팝업 띄우기]를 끄면 들어갈 때 화면 가운데 팝업만 안 뜨고, 알림 목록 · 사내메일 · 이메일 · 발송 기록은 그대로 남아요.</div>
         </BookCard>
       )}
       <div className="flex gap-1.5 flex-wrap">{[["due", `촉진 대상 ${kpi.due}`], ["soon", "30일 안 시작"], ["plan", "계획 제출"], ["all", "전체"]].map(([k, l]) => <Chip key={k} on={filter === k} onClick={() => setFilter(k)}>{l}</Chip>)}</div>

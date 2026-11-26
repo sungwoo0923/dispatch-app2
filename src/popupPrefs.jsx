@@ -17,7 +17,7 @@ export const POPUP_CATS = [
   { key: "hr", label: "인사 공지", sub: "인사발령 공문, 발령 안내, 급여명세서" },
   { key: "etc", label: "기타 시스템 안내", sub: "인수인계, 생일 안내" },
 ];
-export const POPUP_REQUIRED = ["연차 사용 촉진 통지", "이용 계약 종료 안내", "로그인 보안 확인"];
+export const POPUP_REQUIRED = ["연차 사용 촉진 통지(회사 설정에서만 끌 수 있음)", "이용 계약 종료 안내", "로그인 보안 확인"]; // 🔕 2026-11-26 연차 촉진은 인사관리부 › 연차 촉진 설정에서 회사 전체로 끈다
 
 const LS_KEY = (uid) => `kpPopupPrefs:${uid}`;
 const readLs = (uid) => { try { const v = JSON.parse(localStorage.getItem(LS_KEY(uid)) || "{}"); return v && typeof v === "object" ? v : {}; } catch { return {}; } };
