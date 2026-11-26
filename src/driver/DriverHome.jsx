@@ -8,7 +8,7 @@ import { deleteDocsAtomic } from "../DeleteProgress"; // ⭐ 2026-11-05 삭제 �
 import { html2canvas } from "../lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import { db, auth, DEFAULT_COMPANY, FUNCTIONS_BASE, clearFcmToken } from "../firebase";
 import { purgeOnSignOut } from "../sessionPurge"; // 🛠 2026-11-24 로그아웃 때 기기 저장본 정리
-import { setViewOnly, setTenant } from "../fsTenant"; // 👀 2026-11-22 관리자 "기사 화면 보기" — 보기 전용(저장 막음) · 그 기사 회사로 보기
+import { setViewOnly, setTenant, isViewOnly } from "../fsTenant"; // 👀 2026-11-22 관리자 "기사 화면 보기" — 보기 전용(저장 막음) · 그 기사 회사로 보기
 import { readViewAs, clearViewAs } from "./DriverViewAs";
 import {
   doc,
@@ -32,6 +32,7 @@ import { setDoc, updateDoc } from "../orderWrite"; // ★ 오더 수정시각 �
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { keepDriverLoginError } from "./driverLoginErrors"; // ⭐ 2026-11-11 로그인 방식 변경 안내
 import { registerPlugin } from "@capacitor/core";
+import { detectDriverClient } from "../driverClient"; // 📱 2026-11-26 기사앱인지 웹인지 관리자 화면에 보이게
 import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo, getCachedGeo, isPickupVisited, sortActiveOrders, isLoaded } from "../fleetGeo";
 import { snapshotOrder, changedFields, changedLabels, changeDiff } from "../orderChange";
 import { shouldAutoLoad } from "../autoLoadCore"; // 🚚 2026-11-10 자동 상차완료 판정
@@ -842,6 +843,21 @@ function useGpsTracking(uid, driverData) {
       wl?.release().catch(() => {});
     };
   }, [uid]);
+
+  // 📱 2026-11-26 사용자 요청 — 관리자가 "기사앱 설치해서 쓰는지 / 인터넷(웹)으로 쓰는지" 볼 수 있게 기사 문서에 남긴다(src/driverClient.js).
+  //  바뀌었거나 6시간 넘게 지났을 때만 쓴다(쓰기 비용 절약) · 관리자 "기사 화면 보기"에서는 쓰지 않는다
+  const clientSavedRef = useRef("");
+  useEffect(() => {
+    if (!uid || !driverData || isViewOnly()) return;
+    const c = detectDriverClient();
+    const key = `${uid}|${c.clientType}|${c.clientOs}|${c.clientPwa}`;
+    if (clientSavedRef.current === key) return;
+    const at = driverData.clientAt?.toMillis ? driverData.clientAt.toMillis() : driverData.clientAt?.seconds ? driverData.clientAt.seconds * 1000 : 0;
+    const same = driverData.clientType === c.clientType && driverData.clientOs === c.clientOs && !!driverData.clientPwa === c.clientPwa;
+    clientSavedRef.current = key;
+    if (same && Date.now() - at < 6 * 3600000) return;
+    updateDoc(doc(db, "drivers", uid), { ...c, clientAt: serverTimestamp() }).catch(() => { clientSavedRef.current = ""; });
+  }, [uid, driverData]);
 
   // ⭐ 네이티브 위치 서비스 시작/중지 — 로그인돼 있고 퇴근·휴차 상태가 아니면 계속 추적.
   // 앱을 닫아도(최근앱에서 밀어도) 상단 "운행 추적 중" 알림이 있는 동안 전송이 유지된다.
