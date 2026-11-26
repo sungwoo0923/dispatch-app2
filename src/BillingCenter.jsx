@@ -68,7 +68,7 @@ function Kpi({ code, label, value, unit, foot, meter, accent = false }) {
 const TT = { borderRadius: 12, border: "1px solid #E3E8F0", fontSize: 12.5, fontWeight: 700, boxShadow: "0 10px 26px rgba(16,24,40,.10)" };
 
 export default function BillingCenter({ userEmail = "", userName = "", canEdit = false, canView = true, users = null, orders = null }) {
-  const { planId, company } = usePlan();
+  const { planId, company, lockedPrice = 0 } = usePlan(); // 💰 2026-11-26 초기 고객 고정 이용료
   const pricing = usePublicPricing();
   const [invoices, setInvoices] = React.useState(null);
   const [fleet, setFleet] = React.useState(null);
@@ -142,6 +142,7 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
   // ── 이번 달 예상 청구(VAT 별도) — 공개 요금 단가로 계산. 단가를 모르는 항목은 더하지 않고 "별도"로 표시 ──
   const bizCount = useBizModules(company).list.length; // 🧭 회사가 켠 업무 영역 수
   const bill = React.useMemo(() => {
+    if (lockedPrice > 0) return { rows: [{ k: "초기 고객 고정 이용료", v: lockedPrice }], total: lockedPrice, unknown: false }; // 💰 초과 요금 없이 이 금액만
     if (!plan) return null;
     const exSeats = staff == null ? 0 : Math.max(0, staff - num(plan.seats));
     const exOrders = usage ? Math.max(0, usage.projected - num(plan.orders)) : 0;
@@ -156,7 +157,7 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
       { k: `지입차 관리 ${Math.max(0, (fleet || 0) - num(plan.fleet))}대${num(plan.fleet) ? `(포함 ${num(plan.fleet)}대 초과)` : ""}`, v: hasFleet && fleetRate != null ? Math.max(0, (fleet || 0) - num(plan.fleet)) * fleetRate : null, hide: !hasFleet || Math.max(0, (fleet || 0) - num(plan.fleet)) === 0 },
     ].filter((x) => !x.hide);
     return { rows, total: rows.reduce((a, x) => a + (x.v || 0), 0), unknown: rows.some((x) => x.v == null) };
-  }, [plan, planId, staff, usage, fleet, pricing, bizCount]);
+  }, [plan, planId, staff, usage, fleet, pricing, bizCount, lockedPrice]);
   // ⭐ 2026-11-04 이달 청구서(관리센터 수납 관리에서 만든 것) — 기본료·초과 + 추가 항목(세금계산서·문자·개발 등) 줄을 그대로 보여준다
   const thisInv = (invoices || []).find((v) => v.month === ym) || null;
   const invRows = thisInv && (Array.isArray(thisInv.lines) || Array.isArray(thisInv.items))
@@ -224,7 +225,7 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
             <div className="text-[12.5px] text-white/60 mt-3 leading-relaxed">{plan ? `직원 ${plan.seats}명 · 월 오더 ${num(plan.orders).toLocaleString()}건 포함 · 초과 시 계정 ${won(pricing.extraSeat || 15000)}원/명, 오더 ${won(pricing.extraOrder || 50)}원/건` : "요금제가 지정되지 않아 모든 기능을 쓰고 있습니다. 요금제는 관리센터에서 지정됩니다."}</div>
           </div>
           <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
-            {[["MONTHLY", "월 이용료", plan ? won(plan.price) : "-"], ["ESTIMATE", "이번 달 예상", bill ? won(bill.total) : "-"], ["UNPAID", "미납 청구", won(unpaidSum)]].map(([c, l, v]) => (
+            {[["MONTHLY", lockedPrice > 0 ? "월 이용료(고정)" : "월 이용료", lockedPrice > 0 ? won(lockedPrice) : plan ? won(plan.price) : "-"], ["ESTIMATE", "이번 달 예상", bill ? won(bill.total) : "-"], ["UNPAID", "미납 청구", won(unpaidSum)]].map(([c, l, v]) => (
               <div key={c} className="rounded-2xl bg-white/[0.06] border border-white/10 px-3 sm:px-4 py-3 min-w-0 sm:min-w-[150px]">
                 <div className="text-[9.5px] font-extrabold tracking-[0.22em] text-[#8FB0F0]" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>{c}</div>
                 <div className="text-[11.5px] font-bold text-white/55">{l}</div>
@@ -312,7 +313,7 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
               {[["taxInvoiceFee", "전자세금계산서", "건"], ["alimtalkFee", "알림톡", "건"], ["smsFee", "문자", "건"], ["extraBizFee", "추가 사업자", "곳·월"]].some(([k]) => num(pricing[k]) > 0) && (
                 <div className="mt-4 rounded-xl bg-[#F7F9FC] border border-[#EEF1F6] px-3 py-2.5 text-[11.5px] font-bold text-[#5B6B85] leading-relaxed">
                   <div className="text-[9.5px] font-extrabold tracking-[0.2em] text-[#4B6CB7] mb-0.5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ADD-ONS · 사용한 만큼</div>
-                  {[["taxInvoiceFee", "전자세금계산서", "건"], ["alimtalkFee", "알림톡", "건"], ["smsFee", "문자(SMS)", "건"], ["lmsFee", "장문 문자", "건"], ["extraBizFee", "추가 사업자", "곳·월"], ["storagePerGB", "저장 용량 초과", "GB·월"]].filter(([k]) => num(pricing[k]) > 0).map(([k, l, u]) => `${l} ${won(pricing[k])}원/${u}`).join(" · ")}
+                  {[["taxInvoiceFee", "전자세금계산서", "건"], ["alimtalkFee", "알림톡", "건"], ["smsFee", "문자(SMS)", "건"], ["lmsFee", "장문 문자", "건"], ["accountCheckFee", "예금주 조회", "건"], ["bankAccountFee", "입금 자동 확인", "계좌·월"], ["hometaxFee", "홈택스 자동 수집", "사업자·월"], ["extraBizFee", "추가 사업자", "곳·월"], ["storagePerGB", "저장 용량 초과", "GB·월"]].filter(([k]) => num(pricing[k]) > 0).map(([k, l, u]) => `${l} ${won(pricing[k])}원/${u}`).join(" · ")}
                 </div>
               )}
               <div className="mt-auto pt-4 text-[11.5px] text-[#9AA9C3]">{invRows ? "관리센터에서 만든 이달 청구서 기준입니다(VAT 별도)." : "실제 청구 금액은 월말에 관리센터에서 확정한 청구서 기준입니다."}</div>

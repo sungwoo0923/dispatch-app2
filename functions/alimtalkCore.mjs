@@ -10,7 +10,9 @@
 //  · 알림톡이 실패하면 문자로 다시 보낸다(smsFallback이 꺼져 있지 않으면)
 import { dispatchStatusOf } from "./dispatchStatusCore.mjs";
 
-export const ALIMTALK_COST_NOTE = "건당 약 8~15원(실패해서 문자로 가면 문자 요금)";
+import { USAGE_PRICE } from "./pricingCore.mjs";
+// 💰 2026-11-26 운송사에게 보이는 안내 — 예전엔 팝빌 원가(8~15원)를 적어 두었다 → 실제 청구 단가(부가세 별도)
+export const ALIMTALK_COST_NOTE = `건당 ${USAGE_PRICE.alimtalk}원(부가세 별도) · 카톡을 못 받는 번호는 같은 내용이 문자로 가요`;
 export const ALIMTALK_TARGETS = ["client", "driver"];
 export const ALIMTALK_TARGET_LABEL = { client: "거래처 담당자", driver: "기사" };
 

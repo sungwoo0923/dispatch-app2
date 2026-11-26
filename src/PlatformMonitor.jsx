@@ -206,7 +206,7 @@ export default function PlatformMonitor({ demoStats = null, tab: tabProp, onTab,
   const sales = useSalesPricing();
   const helpAcks = useHelpAcks();
   const companies = useMemo(() => mergeCompanies(stats?.companies, live).map((c) => {
-    const bill = applyPlanBill(estimateBill(c, pricing, dayNo, daysInMonth), c, c.plan?.planId, sales);
+    const bill = applyPlanBill(estimateBill(c, pricing, dayNo, daysInMonth), c, c.plan?.planId, sales, c.plan?.lockedPrice); // 💰 초기 고객 고정 이용료
     const inactiveDays = c.lastSeen ? Math.floor((Date.now() - c.lastSeen) / 86400000) : null;
     return { ...c, bill, health: healthOf(c, today), status: statusOf(c, today), idle: daysAgo(c.lastOrder, today), inactiveDays, help: helpNeededOf(c, Date.now(), helpAcks) };
   }), [stats, live, pricing, dayNo, daysInMonth, today, sales, helpAcks]);

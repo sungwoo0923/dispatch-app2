@@ -46,7 +46,7 @@ ok("바이트 계산 · 발신번호는 알림톡 번호를 이어받음 · 모�
   assert.equal(r2.kind, "LMS"); assert.equal(db.store.get("messageUsage/A__2026-11").lms, 1);
   ok("90바이트 넘으면 장문(LMS)");
   const info = await S.info({}, { uid: "u1" });
-  assert.equal(info.connected, true); assert.deepEqual(info.usage, { sms: 1, lms: 1, alimtalk: 0 }); assert.equal(info.price.sms, 20);
+  assert.equal(info.connected, true); assert.deepEqual(info.usage, { sms: 1, lms: 1, alimtalk: 0 }); assert.equal(info.price.sms, 30); // 💰 2026-11-26 기본 단가 20 → 30(pricingCore USAGE_PRICE)
   ok("사용량 · 단가(기본값) 조회");
   db.store.set("platformConfig/messagePricing", { sms: 13, lms: 40, alimtalk: 9 });
   assert.equal((await S.info({}, { uid: "u1" })).price.lms, 40);

@@ -16,6 +16,7 @@ import {
 } from "./popbillAuto";
 import { POPBILL_BANKS, bankNameOf, maskAccount } from "./arMatch";
 import { SMS_MODES, smsInfo } from "./smsSend";
+import { USAGE_PRICE } from "../functions/pricingCore.mjs"; // 💰 2026-11-26 계좌조회 월 요금 안내
 
 const TONE = { ok: ["#E9F5EE", "#1F7A4D"], warn: ["#FFF4E0", "#9A5B00"], error: ["#FDECEC", "#B4342A"], muted: ["#F3F5F9", "#6B7A93"], info: ["#EEF3FA", "#2D4C82"] };
 export function Chip({ tone = "muted", children, title, testId }) {
@@ -271,6 +272,7 @@ export function BankAccountsCard({ company, canEdit }) {
       <CardHead en="POPBILL · BANK" title="입금 자동 조회" sub="미수금 자동 매칭" right={<LinkChip link={link} />} />
       <div className="p-4 space-y-3">
         <OffNotice link={link} />
+        <div className="text-[12.5px] font-bold text-[#5B6B85]" data-testid="bank-fee-note">켜 둔 계좌 1개당 월 {USAGE_PRICE.bankAccount.toLocaleString()}원(부가세 별도)이 월말 사용료에 더해져요. 꺼 둔 계좌는 청구하지 않아요.</div>
         <div className="text-[12.5px] text-[#7A879C]" title={'입금자명과 금액이 딱 맞으면 바로 입금 처리하고, 애매하면 미수금 화면의 "입금 확인 필요"에 모아 둬요.'}>등록한 계좌의 새 입금을 매시간(오전 8시 ~ 오후 8시) 가져와 미수금과 자동으로 맞춰요.</div>
         <div className="rounded-xl border border-[#E8EDF4] overflow-hidden">
           {!accounts.length && <div className="px-4 py-2.5 text-[13px] text-[#9AA9C3]">아직 등록한 계좌가 없어요</div>}
@@ -336,7 +338,7 @@ export function AlimtalkOrderToggle({ company, value, onChange, compact = false,
       <span className="inline-flex items-center justify-center min-w-8 h-8 px-1.5 rounded-lg shrink-0 text-[10.5px] font-black tracking-tight" style={{ background: on ? "#FEE500" : "#F1F4F8", color: on ? "#3C1E1E" : "#9AA9C3" }}>TALK</span>
       <div className="min-w-0">
         <div className="text-[13.5px] font-black text-[#0F1A30]">알림톡 보내기 {changed ? <span className="ml-1 text-[11.5px] font-bold text-[#2D4C82]">이 오더만 {on ? "켬" : "끔"}</span> : <span className="ml-1 text-[11.5px] font-bold text-[#9AA9C3]">회사 기본값</span>}</div>
-        {!compact && <div className="text-[12px] text-[#7A879C] truncate">배차완료되면 거래처 담당자 · 기사에게 카카오 알림톡 · 건당 약 8~15원</div>}
+        {!compact && <div className="text-[12px] text-[#7A879C] truncate">배차완료되면 거래처 담당자 · 기사에게 카카오 알림톡 · 건당 {USAGE_PRICE.alimtalk}원(부가세 별도)</div>}
       </div>
       <span className="ml-auto"><Switch on={on} label="알림톡 보내기" testId="alimtalk-order-switch" onChange={(v) => onChange(v)} /></span>
     </div>
