@@ -43,7 +43,7 @@ const ms = DA.slice(DA.indexOf("const menuState = (m) => {"), DA.indexOf("const 
 ok(/^\s*const menuState = \(m\) => \{\s*\/\/[^\n]*\n\s*if \(MENU_FEATURE\[m\] && !planIncludes\(planId, MENU_FEATURE\[m\]\)\) return "locked";/.test(ms), "PC menuState: 요금제 잠금이 맨 먼저(부서·임원 메뉴보다 앞)");
 ok(/handleMenuClick[\s\S]{0,300}openPlanLock\(MENU_FEATURE\[m\]\)/.test(DA), "PC 메뉴 클릭: 잠긴 메뉴는 요금제 안내 창");
 ok(/planIncludes\(planCM, "hr"\)[^\n]*출근기록부[^\n]*인사관리부/.test(DA), "PC 회사관리: 출근기록부·인사관리부 탭은 베이직부터, 회사정보는 전 요금제");
-ok(/featureOn\("call24"\)/.test(DA), "PC 24시콜 전송: 프로만");
+ok(!/call24|sendOrderTo24/.test(DA), "PC 24시콜 전송: 2026-11-27 없앴음(남은 코드 없음)");
 ok(/const ok = \(m\) => menuOk\(m\) && \(!MENU_FEATURE\[m\] \|\| planIncludes\(planIdM, MENU_FEATURE\[m\]\)\)/.test(MA), "모바일 메뉴: PC와 같은 요금제 기준");
 ok(/const deptOk = \(m\) => \(!MENU_FEATURE\[m\] \|\| planIncludes\(planIdM/.test(MA), "모바일 부서 메뉴(인사·회계·자금·비품·증명서): 요금제 기준");
 ok(/planIncludes\(planId, "groupware"\)/.test(HD), "홈 전자결재·메일·게시판·인수인계: 베이직부터");

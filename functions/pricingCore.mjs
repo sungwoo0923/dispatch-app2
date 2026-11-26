@@ -73,7 +73,7 @@ export const PLAN_COST = {
   lite: { infra: 15000, supportHours: 1 },
   basic: { infra: 30000, supportHours: 2 },
   standard: { infra: 60000, supportHours: 3 },   // 지입차 GPS(15대) 기록 · 사진 늘어남
-  pro: { infra: 120000, supportHours: 6 },       // 지입차 40대 · 24시콜 전송 · 분기 점검 미팅
+  pro: { infra: 120000, supportHours: 6 },       // 지입차 40대 · 분기 점검 미팅
 };
 export const SUPPORT_HOUR_COST = 50000;
 export const PAY_FEE_RATE = 0.03;

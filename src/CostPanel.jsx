@@ -369,7 +369,7 @@ function CostTable({ d }) {
       </table></div>
       <div className="px-5 py-3 border-t border-[#EEF1F6] text-[11.5px] text-[#7A879C] leading-relaxed">
         출처: {m.source}. ⚠ Firestore 단가는 다중 리전(nam5) 기준: 서울(asia-northeast3) 등 단일 리전은 단가가 다를 수 있으니 구글 클라우드 콘솔 › 결제 › 보고서와 맞춰 보세요.
-        Cloud Storage 무료 5GB는 예전 버킷(*.appspot.com)·미국 리전만 해당합니다. 24시콜(화물정보망)·PG 수수료는 고객사가 직접 계약하는 비용이라 넣지 않았습니다.
+        Cloud Storage 무료 5GB는 예전 버킷(*.appspot.com)·미국 리전만 해당합니다. PG 수수료는 고객사가 직접 계약하는 비용이라 넣지 않았습니다.
       </div>
     </Card>
   );

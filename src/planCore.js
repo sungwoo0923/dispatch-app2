@@ -57,7 +57,6 @@ export const FEATURE_ROWS = [
   { key: "export", label: "경영분석 · 일일 경영보고 (임원 화면)", min: "standard" },
   { key: "insight", label: "수익성 인사이트 (거래처·노선 마진 · 저마진 경고 · 이상 운임 감지)", min: "pro", star: true },
   { key: "shipperReport", label: "화주 월간 운송 리포트 (화주에게 보내는 원클릭 PDF)", min: "pro", star: true },
-  { key: "call24", label: "화물정보망(24시콜) 오더 자동 전송", min: "pro", star: true },
   { key: "support", label: "우선 기술지원 · 분기별 운영 점검 미팅", min: "pro" },
 ];
 export const FEATURE_BY_KEY = Object.fromEntries(FEATURE_ROWS.map((f) => [f.key, f]));

@@ -6,7 +6,7 @@ import { useCompanyFleetGrades } from "./fleetGrades"; // 🚛 지입차 구분(
 import { useFleetDispatchWayInstall, FleetDispatchWayButton } from "./fleetDispatchWay"; // 🚛 2026-11-23 지입차 배차방식 자동(회사별)
 import { isViewerNow } from "./blind"; // 🧾 특수운임 버튼(조회전용 숨김)
 import { fareBaseSale, effectiveFareRule as fareEffRule, farePctOf as farePctOfO, applyFareRule as fareApply, ruleDriverFare as fareRuleDrv, toNum as fareToNum } from "./fareRulesCore.js"; // 🧾 2026-11-25 운임명세서 운임구분 %
-import { MENU_FEATURE, planIncludes, openPlanLock, featureOn, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon, usePlan } from "./plans";
+import { MENU_FEATURE, planIncludes, openPlanLock, useCompanyPlanId, PlanValueProvider, PlanValueSync, PlanLockHost, LockIcon, usePlan } from "./plans";
 import { kpConfirm, kpPrompt } from "./kpDialog";
 import { editLossReason, lossReasonOf } from "./lossReason"; // 📑 2026-11-15 손실 오더 손실 사유
 import { runDelete, commitDeletes, deleteDocsAtomic, runUpload, runBulkTask } from "./DeleteProgress"; // ⏳ 2026-11-20 runBulkTask — 일괄 저장 · 수정 진행 창
@@ -77,7 +77,6 @@ import { BizCheck, bizGuardMain, ClientBizBulkButton, PopbillMemberCard } from "
 import { BankAccountsCard, BankReviewQueue, SmsSettingsCard, AlimtalkSettingsCard } from "./PopbillAuto"; // 🏦 2026-11-08 은행 입금 자동 매칭
 // 💬 2026-11-08 사장님 요청 — 카카오 알림톡은 PC·모바일 화면에서 모두 뺐다(새 오더는 알림톡:false → 서버 트리거가 보내지 않는다)
 import { buildArMonths as buildArMonthsCore, allocArDeposit as allocArDepositCore, allocKindOf, matchDeposits, arPaidMapOf } from "./arMatch"; // 💰 2026-11-08 입금 매칭 공용 식(서버 계좌조회와 같은 파일)
-import { sendOrderTo24Proxy as sendOrderTo24, call24Headers } from "../api/24CallProxy"; // 🔒 2026-11-27 24시콜 API 는 로그인 토큰을 붙여야 열린다
 import CustomDatePicker, { KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker"; // ⭐ 2026-11-04 특수운임 제거 — specialDemandInfo·weatherUtil 사용 안 함
 import { DateTimeSelect } from "./kpTimePick"; // ⏱ 2026-11-04 예약발송 날짜·시간 — 프로그램 달력 + 시간 드롭다운
 // ⭐ 2026-11-02 속도 — 관리자메뉴(엑셀 가져오기 등 포함)는 열 때 받는다. 직원 명부 구독은 usersLive 하나를 공유
@@ -325,31 +324,6 @@ const _lunchNameKey = (s = "") => String(s || "").toLowerCase().replace(/\s+/g, 
    수행했으며 얼마의 운임을 지급하는지를 증빙하는 문서 형태로 보여준다.
    확대/축소 미리보기 + 이미지/PDF 저장 + 인쇄를 지원한다.
 --------------------------------------------------*/
-// 📡 24시콜 연결 진단 줄 — 지금 중계 서버/직접 중 어떤 경로로 나가는지, 나가는 IP, 24시콜 응답을 한 번에 확인
-function Call24DiagBar() {
-  const [d, setD] = React.useState(null);
-  const [busy, setBusy] = React.useState(false);
-  const run = async () => {
-    setBusy(true);
-    try { const r = await fetch("/api/call24-diag", { headers: await call24Headers() }); setD(await r.json()); } catch (e) { setD({ test: { ok: false, message: e.message } }); } finally { setBusy(false); }
-  };
-  const ip = d ? (d.mode === "relay" ? d.relay?.ip : d.vercelIp) : "";
-  return (
-    <div className="rounded-xl border border-[#DCE3EE] bg-white px-4 py-2.5 flex items-center gap-3 flex-wrap text-[12px]">
-      <span className="text-[10px] font-extrabold tracking-[0.2em] text-[#4B6CB7]">CONNECTION</span>
-      {!d ? <span className="font-bold text-[#5B6B85]">전송이 안 되면 먼저 연결 진단을 눌러 보세요.</span> : (
-        <>
-          <span className={`px-2 py-0.5 rounded-md font-black ${d.test?.ok ? "bg-[#0F1A30] text-white" : "bg-[#EEF2F8] text-[#1B2B4B]"}`}>{d.test?.ok ? "24시콜 연결 정상" : `연결 실패 (${d.test?.code ?? "-"})`}</span>
-          <span className="font-bold text-[#3A4A66]">경로: {d.mode === "relay" ? "고정 IP 중계 서버" : "Vercel 직접(IP 수시 변경)"}</span>
-          {ip && <span className="font-bold text-[#3A4A66]">발신 IP: <b className="text-[#0F1A30]">{ip}</b></span>}
-          {d.test?.hint && <span className="w-full font-black text-[#0F1A30]">→ {d.test.hint}</span>}
-        </>
-      )}
-      <button type="button" onClick={run} disabled={busy} className="ml-auto h-8 px-3 rounded-lg bg-[#0F1A30] text-white font-black disabled:opacity-50">{busy ? "확인 중…" : "연결 진단"}</button>
-    </div>
-  );
-}
-
 // "인천광역시 서구 ..." → "인천광역시 서구" 처럼 앞의 두 토큰만 남겨 간단주소로 축약
 function fareCertShortAddr(addr = "") {
   const s = String(addr || "").trim();
@@ -1337,74 +1311,6 @@ function DuplicateOrderModal({ matches, onCancel, onProceed }) {
         <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
           <button type="button" onClick={onCancel} className="flex-1 py-2.5 rounded-lg border border-gray-300 text-gray-600 font-bold text-[13px] hover:bg-gray-50 transition"><EditableText id="misc.btn.834.취소" defaultText="취소" /></button>
           <button type="button" onClick={onProceed} className="flex-1 py-2.5 rounded-lg bg-[#1B2B4B] text-white font-bold text-[13px] hover:bg-[#243a60] transition"><EditableText id="misc.btn.835.그래도 등록" defaultText="그래도 등록" /></button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ⭐ 일마감 검증 팝업의 "24시콜 비교 불일치" 카드를 클릭했을 때 뜨는 비교 팝업 —
-// 예전엔 클릭하면 곧바로 오더복사/수정 패널이 열려서 무엇이 어떻게 다른지 한눈에
-// 안 보였다. 24시콜 파일 기준 값과 배차 프로그램 기준 값을 나란히 대비해서 보여주고,
-// 필요하면 "이 오더 수정하기"로 기존 수정 패널로 넘어갈 수 있게 한다.
-function CloseFileCompareModal({ item, programRow, onClose, onEdit }) {
-  if (!item) return null;
-  const typeBadge = (t) => t === "dispatch" ? "배차방식 불일치" : t === "fare" ? "운임 불일치" : t === "missing" ? "파일 누락" : t === "missingInProgram" ? "등록 누락" : t === "payment" ? "지급방식 불일치" : t;
-  const fmtVal = (v) => v === undefined || v === null || v === "" ? "-" : item.isMoney ? `${Number(v).toLocaleString()}원` : String(v);
-  const hasProgramRow = !!item.rowId;
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100000000] p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[560px] max-w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between">
-          <div className="min-w-0">
-            <div className="text-white font-bold text-[15px]">24시콜 비교 불일치</div>
-            <div className="text-white/60 text-[12px] mt-0.5 truncate">{item.label}</div>
-          </div>
-          <button type="button" onClick={onClose} className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white text-lg flex items-center justify-center shrink-0">×</button>
-        </div>
-
-        <div className="px-6 py-5 space-y-4">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-2.5 py-1 rounded-lg text-[12px] font-bold bg-red-50 text-red-700 border border-red-100">{typeBadge(item.type)}</span>
-            {item.거래처명 && <span className="text-[13px] text-gray-500">거래처 {item.거래처명}</span>}
-          </div>
-
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px] bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
-            <div><span className="text-gray-500">차량번호</span> <b className="text-gray-800 ml-1">{item.vehicle || programRow?.차량번호 || "-"}</b></div>
-            <div><span className="text-gray-500">기사명</span> <b className="text-gray-800 ml-1">{item.driverName || programRow?.이름 || "-"}</b></div>
-            <div className="col-span-2">
-              <span className="text-gray-500">오더</span>{" "}
-              <b className="text-gray-800 ml-1">
-                {hasProgramRow ? `${programRow?.상차지명 || "-"} → ${programRow?.하차지명 || "-"}` : "프로그램에 등록된 오더 없음"}
-              </b>
-            </div>
-          </div>
-
-          {item.fieldLabel && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="border border-gray-200 rounded-xl p-4">
-                <div className="text-[11px] font-bold text-gray-500 mb-2">24시콜 파일 기준</div>
-                <div className="text-[12px] text-gray-500 mb-0.5">{item.fieldLabel}</div>
-                <div className="text-[19px] font-black text-gray-800 break-words">{fmtVal(item.fileValue)}</div>
-              </div>
-              <div className="border-2 border-red-200 bg-red-50/50 rounded-xl p-4">
-                <div className="text-[11px] font-bold text-red-500 mb-2">배차 프로그램 기준</div>
-                <div className="text-[12px] text-gray-500 mb-0.5">{item.fieldLabel}</div>
-                <div className="text-[19px] font-black text-red-700 break-words">{fmtVal(item.programValue)}</div>
-              </div>
-            </div>
-          )}
-
-          <div className="text-[12px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 break-words leading-relaxed">
-            {item.msg}
-          </div>
-        </div>
-
-        <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-[13px] font-semibold border border-gray-300 text-gray-600 hover:bg-gray-50 transition">닫기</button>
-          {hasProgramRow && (
-            <button type="button" onClick={onEdit} className="px-4 py-2 rounded-lg text-[13px] font-bold bg-[#1B2B4B] text-white hover:bg-[#243a60] transition">이 오더 수정하기</button>
-          )}
         </div>
       </div>
     </div>
@@ -15586,92 +15492,6 @@ if (_quickMatches.length > 0) {
 };
     // ------------------ 오더복사 ------------------
 
-// 📡 24시콜 미리보기 팝업
-const [send24PreviewOpen, setSend24PreviewOpen] = React.useState(false);
-const [send24Payload, setSend24Payload] = React.useState(null);
-const [send24Data, setSend24Data] = React.useState(null);
-const [send24Sending, setSend24Sending] = React.useState(false);
-const [send24Result, setSend24Result] = React.useState(null);
-
-// ⭐ 24시콜은 시/도·구/군·읍/면/동, 차량톤수, 차량종류를 전부 자기네 마스터
-// 데이터와 글자 하나까지 정확히 일치해야만 받아준다(다르면 "-99 기타 오류").
-// 자유 입력 대신 24시콜이 실제로 제공하는 값만 드롭다운으로 고를 수 있게
-// 해서 전송 실패를 원천적으로 막는다.
-const [call24Sido, setCall24Sido] = React.useState([]);
-const [call24StartSgg, setCall24StartSgg] = React.useState([]);
-const [call24StartDong, setCall24StartDong] = React.useState([]);
-const [call24EndSgg, setCall24EndSgg] = React.useState([]);
-const [call24EndDong, setCall24EndDong] = React.useState([]);
-const [call24CargoTon, setCall24CargoTon] = React.useState([]);
-const [call24TruckType, setCall24TruckType] = React.useState([]);
-const [call24MetaLoading, setCall24MetaLoading] = React.useState(false);
-const [call24MetaError, setCall24MetaError] = React.useState(null);
-const fetchCall24Meta = async (body) => {
-  try {
-    const res = await fetch("/api/call24-meta", {
-      method: "POST",
-      headers: await call24Headers({ "Content-Type": "application/json" }),
-      body: JSON.stringify(body),
-    });
-    const json = await res.json();
-    if (json?.success) { setCall24MetaError(null); return json.list || []; }
-    setCall24MetaError({ code: json?.code, message: json?.message || "조회 실패", serverIp: json?.serverIp, hint: json?.hint });
-    return [];
-  } catch (e) {
-    setCall24MetaError({ code: "-", message: e.message });
-    return [];
-  }
-};
-React.useEffect(() => {
-  if (!send24PreviewOpen || !send24Data) return;
-  let cancelled = false;
-  (async () => {
-    setCall24MetaLoading(true);
-    setCall24MetaError(null);
-    const [sido, cargoTon] = await Promise.all([
-      fetchCall24Meta({ type: "addr" }),
-      fetchCall24Meta({ type: "cargoTon" }),
-    ]);
-    if (cancelled) return;
-    setCall24Sido(sido);
-    setCall24CargoTon(cargoTon);
-    const [startSgg, endSgg, truckType] = await Promise.all([
-      send24Data.startWide ? fetchCall24Meta({ type: "addr", sido: send24Data.startWide }) : Promise.resolve([]),
-      send24Data.endWide ? fetchCall24Meta({ type: "addr", sido: send24Data.endWide }) : Promise.resolve([]),
-      send24Data.cargoTon ? fetchCall24Meta({ type: "truckType", cargoTon: send24Data.cargoTon }) : Promise.resolve([]),
-    ]);
-    if (cancelled) return;
-    setCall24StartSgg(startSgg);
-    setCall24EndSgg(endSgg);
-    setCall24TruckType(truckType);
-    const [startDong, endDong] = await Promise.all([
-      send24Data.startWide && send24Data.startSgg ? fetchCall24Meta({ type: "addr", sido: send24Data.startWide, gugun: send24Data.startSgg }) : Promise.resolve([]),
-      send24Data.endWide && send24Data.endSgg ? fetchCall24Meta({ type: "addr", sido: send24Data.endWide, gugun: send24Data.endSgg }) : Promise.resolve([]),
-    ]);
-    if (cancelled) return;
-    setCall24StartDong(startDong);
-    setCall24EndDong(endDong);
-    setCall24MetaLoading(false);
-  })();
-  return () => { cancelled = true; };
-}, [send24PreviewOpen]);
-const handleCall24WideChange = async (prefix, v) => {
-  setSend24Data(d => ({ ...d, [`${prefix}Wide`]: v, [`${prefix}Sgg`]: "", [`${prefix}Dong`]: "" }));
-  if (prefix === "start") setCall24StartDong([]); else setCall24EndDong([]);
-  const list = v ? await fetchCall24Meta({ type: "addr", sido: v }) : [];
-  if (prefix === "start") setCall24StartSgg(list); else setCall24EndSgg(list);
-};
-const handleCall24SggChange = async (prefix, wideVal, v) => {
-  setSend24Data(d => ({ ...d, [`${prefix}Sgg`]: v, [`${prefix}Dong`]: "" }));
-  const list = v ? await fetchCall24Meta({ type: "addr", sido: wideVal, gugun: v }) : [];
-  if (prefix === "start") setCall24StartDong(list); else setCall24EndDong(list);
-};
-const handleCall24CargoTonChange = async (v) => {
-  setSend24Data(d => ({ ...d, cargoTon: v, truckType: "" }));
-  const list = v ? await fetchCall24Meta({ type: "truckType", cargoTon: v }) : [];
-  setCall24TruckType(list);
-};
-
 // 🔎 오더복사용 상태
 const [copyOpen, setCopyOpen] = React.useState(false);
 const [copyQ, setCopyQ] = React.useState("");
@@ -19487,60 +19307,6 @@ className={`
     >
       <DmIcon name="check" size={15} />저장
     </button>
-    <button
-      type="button"
-      onClick={() => {
-        if (!featureOn("call24")) { openPlanLock("call24"); return; } // ◆ 프로 요금제 기능
-        const { 거래처명, 상차지명, 하차지명, 상차일, 하차일 } = form;
-        if (!거래처명 || !상차지명 || !하차지명) return showAlert("거래처/상차지명/하차지명을 입력해주세요.");
-        if (!상차일 || !하차일) return showAlert("상차일/하차일은 반드시 필요합니다.");
-        // 주소 분리 헬퍼
-        const splitAddr = (addr = "") => {
-          const p = addr.trim().split(/\s+/);
-          return { wide: p[0]||"", sgg: p[1]||"", dong: p[2]||"", detail: p.slice(3).join(" ")||addr };
-        };
-        const up   = splitAddr(form.상차지주소 || "");
-        const down = splitAddr(form.하차지주소 || "");
-        const fare = Number(form.청구운임 || 0);
-        const fee  = Math.max(fare - Number(form.기사운임 || 0), 0);
-        const tonNum = Number((String(form.차량톤수 || "")).replace(/[^0-9.]/g, ""));
-        // 저장된 24시 계정 불러오기
-        const savedDdID  = localStorage.getItem("call24_ddID")  || "";
-        const savedDdPwd = localStorage.getItem("call24_ddPwd") || "";
-        const mapped = {
-          startWide: up.wide, startSgg: up.sgg, startDong: up.dong, startDetail: up.detail,
-          endWide: down.wide, endSgg: down.sgg, endDong: down.dong, endDetail: down.detail,
-          cargoTon: String(form.차량톤수 || ""),
-          truckType: form.차량종류 || "",
-          frgton: String(tonNum * 1.1 || 0),
-          cargoDsc: form.화물내용 || "",
-          startPlanDt: (form.상차일 || "").replace(/-/g, ""),
-          endPlanDt: (form.하차일 || form.상차일 || "").replace(/-/g, ""),
-          startLoad: form.상차방법 || "수작업",
-          endLoad: form.하차방법 || "수작업",
-          farePaytype: "인수증",
-          fare: String(fare),
-          fee: String(fee),
-          firstType: "01",
-          firstShipperNm: form.거래처명 || "",
-          firstShipperInfo: (form.거래처전화 || "").replace(/\D/g, ""),
-          firstShipperBizNo: form.거래처사업자번호 || "",
-          taxbillType: "Y",
-          endAreaPhone: (form.하차지연락처 || form.하차지담당자번호 || "").replace(/\D/g, ""),
-          ddID:  form["24시아이디"]  || savedDdID  || form.작성자 || "dispatch",
-          ddPwd: form["24시비밀번호"] || savedDdPwd || "",
-          _id: form._id,
-        };
-        setSend24Payload(mapped);
-        setSend24Data({ ...mapped });
-        setSend24Result(null);
-        setSend24Sending(false);
-        setSend24PreviewOpen(true);
-      }}
-      className={`${DM_BTN_SECONDARY} !h-11 !px-5 !text-[13.5px]`}
-    >
-      <DmIcon name="send" size={14} /> 24시전송
-    </button>
   </div>
 </form>
 </div>{/* 폼 카드 끝 - Today 패널은 외부 flex에서 처리 */}
@@ -19665,327 +19431,6 @@ className={`
         {/* ------------------------------
       ● 오더복사 팝업 (완성본)
 -------------------------------- */}
-        {/* ═══════════════════════════════════════════════
-              ◌ 24시콜 전송 미리보기 팝업
-        ═══════════════════════════════════════════════ */}
-        {send24PreviewOpen && send24Data && (
-          <div
-            className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]"
-            onKeyDown={e => { if (e.key === "Escape" && !send24Sending) { setSend24PreviewOpen(false); } }}
-          >
-            <div className="bg-white rounded-2xl shadow-2xl w-[860px] max-h-[90vh] flex flex-col overflow-hidden border border-gray-200">
-              {/* 헤더 */}
-              <div className="bg-[#1B2B4B] px-6 py-4 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-3">
-                  <div className="w-1.5 h-6 bg-blue-400 rounded-full" />
-                  <div>
-                    <h2 className="text-[16px] font-bold text-white"><EditableText id="popup.title.24시콜 전송" defaultText="24시콜 전송" /></h2>
-                    <p className="text-[11px] text-blue-200 mt-0.5">전송 전 내용을 확인하고 필요 시 수정하세요</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => { setSend24PreviewOpen(false); setSend24Result(null); }}
-                  disabled={send24Sending}
-                  className="text-white/60 hover:text-white text-xl font-bold leading-none disabled:opacity-40"
-                >✕</button>
-              </div>
-
-              {/* 바디 */}
-              <div className="overflow-y-auto flex-1 p-6 space-y-5">
-                <Call24DiagBar />
-                {call24MetaError && (
-                  <div className="rounded-xl px-5 py-3 text-[12px] font-semibold border bg-[#F2F5FA] border-[#DCE3EE] text-[#1B2B4B]">
-                    {call24MetaError.hint && <div className="mb-1 text-[12.5px] font-black text-[#0F1A30]">⚠ {call24MetaError.hint}</div>}
-                    {`주소/톤수/차종 목록을 24시콜에서 불러오지 못했어요. (코드: ${call24MetaError.code} / ${call24MetaError.message})`}
-                    {call24MetaError.serverIp && (
-                      <div className="mt-1 text-[11px] font-normal opacity-80">
-                        서버 IP: <span className="font-bold">{call24MetaError.serverIp}</span>
-                        {". 24시콜 마이페이지의 허용 IP와 다르면 이 IP를 등록해 주세요."}
-                      </div>
-                    )}
-                  </div>
-                )}
-                {/* 상차지 */}
-                <div>
-                  <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">상차지</div>
-                  <div className="grid grid-cols-4 gap-3">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-gray-500 font-semibold">시도</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                        value={send24Data.startWide ?? ""} disabled={send24Sending || call24MetaLoading}
-                        onChange={e => handleCall24WideChange("start", e.target.value)}>
-                        <option value="">선택</option>
-                        {call24Sido.map(v => <option key={v} value={v}>{v}</option>)}
-                      </CustomSelect>
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-gray-500 font-semibold">시군구</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                        value={send24Data.startSgg ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.startWide}
-                        onChange={e => handleCall24SggChange("start", send24Data.startWide, e.target.value)}>
-                        <option value="">선택</option>
-                        {call24StartSgg.map(v => <option key={v} value={v}>{v}</option>)}
-                      </CustomSelect>
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-gray-500 font-semibold">읍면동</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                        value={send24Data.startDong ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.startSgg}
-                        onChange={e => setSend24Data(d => ({ ...d, startDong: e.target.value }))}>
-                        <option value="">선택</option>
-                        {call24StartDong.map(v => <option key={v} value={v}>{v}</option>)}
-                      </CustomSelect>
-                    </div>
-                    {[["상세주소","startDetail"],
-                      ["상차예정일 (YYYYMMDD)","startPlanDt"]].map(([lbl,key]) => (
-                      <div key={key} className="flex flex-col gap-0.5">
-                        <span className="text-[11px] text-gray-500 font-semibold">{lbl}</span>
-                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                          value={send24Data[key] ?? ""} disabled={send24Sending}
-                          onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
-                      </div>
-                    ))}
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-gray-500 font-semibold">상차방법</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                        value={send24Data.startLoad ?? ""} disabled={send24Sending}
-                        onChange={e => setSend24Data(d => ({ ...d, startLoad: e.target.value }))}>
-                        {["수작업","지게차","호이스트","크레인","컨베이어","기타"].map(v => <option key={v} value={v}>{v}</option>)}
-                      </CustomSelect>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 하차지 */}
-                <div>
-                  <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">하차지</div>
-                  <div className="grid grid-cols-4 gap-3">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-gray-500 font-semibold">시도</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                        value={send24Data.endWide ?? ""} disabled={send24Sending || call24MetaLoading}
-                        onChange={e => handleCall24WideChange("end", e.target.value)}>
-                        <option value="">선택</option>
-                        {call24Sido.map(v => <option key={v} value={v}>{v}</option>)}
-                      </CustomSelect>
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-gray-500 font-semibold">시군구</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                        value={send24Data.endSgg ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.endWide}
-                        onChange={e => handleCall24SggChange("end", send24Data.endWide, e.target.value)}>
-                        <option value="">선택</option>
-                        {call24EndSgg.map(v => <option key={v} value={v}>{v}</option>)}
-                      </CustomSelect>
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-gray-500 font-semibold">읍면동</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                        value={send24Data.endDong ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.endSgg}
-                        onChange={e => setSend24Data(d => ({ ...d, endDong: e.target.value }))}>
-                        <option value="">선택</option>
-                        {call24EndDong.map(v => <option key={v} value={v}>{v}</option>)}
-                      </CustomSelect>
-                    </div>
-                    {[["상세주소","endDetail"],
-                      ["하차예정일 (YYYYMMDD)","endPlanDt"],["하차지연락처","endAreaPhone"]].map(([lbl,key]) => (
-                      <div key={key} className="flex flex-col gap-0.5">
-                        <span className="text-[11px] text-gray-500 font-semibold">{lbl}</span>
-                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                          value={send24Data[key] ?? ""} disabled={send24Sending}
-                          onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
-                      </div>
-                    ))}
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-gray-500 font-semibold">하차방법</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                        value={send24Data.endLoad ?? ""} disabled={send24Sending}
-                        onChange={e => setSend24Data(d => ({ ...d, endLoad: e.target.value }))}>
-                        {["수작업","지게차","호이스트","크레인","컨베이어","기타"].map(v => <option key={v} value={v}>{v}</option>)}
-                      </CustomSelect>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 화물/차량 */}
-                <div>
-                  <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">화물 / 차량</div>
-                  <div className="grid grid-cols-4 gap-3">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-gray-500 font-semibold">차량톤수</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                        value={send24Data.cargoTon ?? ""} disabled={send24Sending || call24MetaLoading}
-                        onChange={e => handleCall24CargoTonChange(e.target.value)}>
-                        <option value="">선택</option>
-                        {call24CargoTon.map(v => <option key={v} value={v}>{v}</option>)}
-                      </CustomSelect>
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-gray-500 font-semibold">차량종류</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                        value={send24Data.truckType ?? ""} disabled={send24Sending || call24MetaLoading || !send24Data.cargoTon}
-                        onChange={e => setSend24Data(d => ({ ...d, truckType: e.target.value }))}>
-                        <option value="">선택</option>
-                        {call24TruckType.map(v => <option key={v} value={v}>{v}</option>)}
-                      </CustomSelect>
-                    </div>
-                    {[["화물중량(t)","frgton"],["화물내용","cargoDsc"]].map(([lbl,key]) => (
-                      <div key={key} className="flex flex-col gap-0.5">
-                        <span className="text-[11px] text-gray-500 font-semibold">{lbl}</span>
-                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                          value={send24Data[key] ?? ""} disabled={send24Sending}
-                          onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 운임 */}
-                <div>
-                  <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">운임</div>
-                  <div className="grid grid-cols-4 gap-3">
-                    {[["청구운임","fare"],["기사운임","fee"]].map(([lbl,key]) => (
-                      <div key={key} className="flex flex-col gap-0.5">
-                        <span className="text-[11px] text-gray-500 font-semibold">{lbl}</span>
-                        <input autoComplete="off" inputMode="numeric" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] text-right focus:outline-none focus:border-[#1B2B4B]"
-                          value={send24Data[key] ? Number(String(send24Data[key]).replace(/[^\d]/g, "") || 0).toLocaleString() : ""} disabled={send24Sending}
-                          onChange={e => { const v = e.target.value.replace(/[^\d]/g, ""); setSend24Data(d => ({ ...d, [key]: v })); }} />
-                      </div>
-                    ))}
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-gray-500 font-semibold">결제방식</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                        value={send24Data.farePaytype ?? ""} disabled={send24Sending}
-                        onChange={e => setSend24Data(d => ({ ...d, farePaytype: e.target.value }))}>
-                        {["인수증","선착불","카드"].map(v => <option key={v} value={v}>{v}</option>)}
-                      </CustomSelect>
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-gray-500 font-semibold">세금계산서</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                        value={send24Data.taxbillType ?? ""} disabled={send24Sending}
-                        onChange={e => setSend24Data(d => ({ ...d, taxbillType: e.target.value }))}>
-                        <option value="Y">Y - 발행</option>
-                        <option value="N">N - 미발행</option>
-                      </CustomSelect>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 화주 */}
-                <div>
-                  <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">화주 정보</div>
-                  <div className="grid grid-cols-4 gap-3">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-gray-500 font-semibold">화주유형</span>
-                      <CustomSelect className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                        value={send24Data.firstType ?? ""} disabled={send24Sending}
-                        onChange={e => setSend24Data(d => ({ ...d, firstType: e.target.value }))}>
-                        <option value="01">01 - 직접화주</option>
-                        <option value="02">02 - 주선사</option>
-                      </CustomSelect>
-                    </div>
-                    {[["화주명","firstShipperNm"],["화주연락처","firstShipperInfo"],["사업자번호","firstShipperBizNo"]].map(([lbl,key]) => (
-                      <div key={key} className="flex flex-col gap-0.5">
-                        <span className="text-[11px] text-gray-500 font-semibold">{lbl}</span>
-                        <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                          value={send24Data[key] ?? ""} disabled={send24Sending}
-                          onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, [key]: v })); }} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 기타 */}
-                <div>
-                  <div className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">기타</div>
-                  <div className="grid grid-cols-4 gap-3">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-gray-500 font-semibold">24시콜 아이디 (ddID)</span>
-                      <input autoComplete="off" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                        value={send24Data.ddID ?? ""} disabled={send24Sending}
-                        onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, ddID: v })); }} />
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-gray-500 font-semibold">24시콜 비밀번호 (ddPwd)</span>
-                      <input autoComplete="off" type="password" className="border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-[#1B2B4B]"
-                        value={send24Data.ddPwd ?? ""} disabled={send24Sending}
-                        onChange={e => { const v = e.target.value; setSend24Data(d => ({ ...d, ddPwd: v })); }} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* 결과 */}
-                {send24Result && (
-                  <div className={`rounded-xl px-5 py-4 text-[13px] font-semibold border ${send24Result.ok ? "bg-[#0F1A30] border-[#0F1A30] text-white" : "bg-[#F2F5FA] border-[#B8C6DD] text-[#0F1A30]"}`}>
-                    {send24Result.ok
-                      ? `전송 완료  오더번호: ${send24Result.ordNo || "-"}  /  ${send24Result.msg}`
-                      : <>
-                          {`전송 실패  코드: ${send24Result.code}  /  ${send24Result.msg}`}
-                          {send24Result.hint && <div className="mt-1 text-[12.5px] font-black">→ {send24Result.hint}</div>}
-                          {send24Result.serverIp && /ip/i.test(send24Result.msg || "") && (
-                            <div className="mt-1 text-[11px] font-normal opacity-80">
-                              서버 IP: <span className="font-bold">{send24Result.serverIp}</span>
-                              {". 이 IP를 24시콜 마이페이지의 허용 IP에 등록해 주세요."}
-                            </div>
-                          )}
-                        </>
-                    }
-                  </div>
-                )}
-              </div>
-
-              {/* 하단 버튼 */}
-              <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 shrink-0">
-                <button
-                  onClick={() => { setSend24PreviewOpen(false); setSend24Result(null); }}
-                  disabled={send24Sending}
-                  className="px-5 py-2.5 rounded-xl text-[13px] font-semibold border border-gray-300 text-gray-600 hover:bg-gray-50 transition disabled:opacity-40"
-                ><EditableText id="misc.btn.16371.취소" defaultText="취소" /></button>
-                <button
-                  disabled={send24Sending || send24Result?.ok}
-                  onClick={async () => {
-                    setSend24Sending(true);
-                    setSend24Result(null);
-                    try {
-                      const payload = { ...send24Data };
-                      const rowId = payload._id;
-                      delete payload._id;
-                      // 계정 정보 localStorage 저장 (다음 전송에 자동 채움)
-                      if (payload.ddID)  localStorage.setItem("call24_ddID",  payload.ddID);
-                      if (payload.ddPwd) localStorage.setItem("call24_ddPwd", payload.ddPwd);
-                      const res = await sendOrderTo24({ ...payload, _id: rowId });
-                      const prevLogs = Array.isArray(form["24시전송로그"]) ? form["24시전송로그"] : [];
-                      const errMsg = res?.resultMsg || (typeof res?.error === "string" ? res.error : res?.error?.message) || res?.raw || "알 수 없는 오류";
-                      const newLog = { at: serverTimestamp(), success: !!res?.success, resultCode: res?.resultCode || "", resultMsg: errMsg };
-                      if (res?.success) {
-                        await patchDispatch(form._id, {
-                          "24시전송여부": true, "24시전송일시": serverTimestamp(),
-                          "24시전송결과코드": res.resultCode || "0000",
-                          "24시전송메시지": res.resultMsg || "성공",
-                          "24시전송로그": [...prevLogs, newLog],
-                          "24시오더번호": res.ordNo || "", 배차상태: "24시전송완료",
-                        });
-                        setSend24Result({ ok: true, ordNo: res.ordNo, msg: res.resultMsg || "성공" });
-                      } else {
-                        await patchDispatch(form._id, { "24시전송여부": false, "24시전송로그": [...prevLogs, newLog] });
-                        setSend24Result({ ok: false, code: res?.resultCode || "-", msg: errMsg, serverIp: res?._serverIp, hint: res?.hint });
-                      }
-                    } catch(e) {
-                      setSend24Result({ ok: false, code: "-", msg: e.message });
-                    }
-                    setSend24Sending(false);
-                  }}
-                  className={`px-7 py-2.5 rounded-xl text-[13px] font-bold text-white transition
-                    ${send24Sending || send24Result?.ok ? "bg-gray-400 cursor-not-allowed" : "bg-gradient-to-r from-[#1B2B4B] to-[#2d4a7a] hover:from-[#243a60] hover:to-[#355890]"}`}
-                >
-                  {send24Sending ? "전송 중…" : send24Result?.ok ? "전송됨 ✓" : "◌ 전송"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {copyOpen && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white w-[1140px] max-h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
@@ -26715,16 +26160,6 @@ const selectedSet = React.useMemo(() => new Set(selected), [selected]);
 const [closeReportOpen, setCloseReportOpen] = React.useState(false); // ★ 마감보고 전송 창
   const [dailyCloseResult, setDailyCloseResult] = React.useState(null);
   const [dailyCloseFilter, setDailyCloseFilter] = React.useState("all");
-  const [closeFileResult, setCloseFileResult] = React.useState(null);
-  // ⭐ 24시콜 파일 재비교(재검증)를 위해, 업로드했던 파일을 다시 읽지 않고도
-  // 파싱된 원본(json/컬럼 인덱스)을 기억해뒀다가 재사용한다.
-  const closeFileRawRef = React.useRef(null);
-  // ⭐ 24시콜 비교불일치를 업체별로 묶어서 볼지 여부 + 업체별 일괄수정에 쓰는 선택값
-  const [closeFileGroupMode, setCloseFileGroupMode] = React.useState(false);
-  const [closeFileBulkValue, setCloseFileBulkValue] = React.useState({});
-  // ⭐ 24시콜 비교 불일치 카드를 클릭했을 때 — 오더 수정 패널 대신 "24시콜 값 vs
-  // 프로그램 값"을 나란히 비교해서 보여주는 팝업에 쓸 대상.
-  const [closeFileCompareItem, setCloseFileCompareItem] = React.useState(null);
 
   // === 유사 운임조회 (선택수정 전용 업그레이드) ===
   const handleFareSearch = () => {
@@ -26966,7 +26401,7 @@ setFarePanelOpen(true);
 const [editStopOpen, setEditStopOpen] = React.useState(false);
 const [editStopType, setEditStopType] = React.useState("pickup");
   const [editPopupOpen, setEditPopupOpen] = React.useState(false);
-  // ⭐ 일마감 검증 팝업의 오류/경고/24시콜 목록에서 오더를 클릭해 오더복사/수정
+  // ⭐ 일마감 검증 팝업의 오류/경고 목록에서 오더를 클릭해 오더복사/수정
   // 패널(copyTarget)을 열었을 때만 채워지는, 해당 오더의 검증 문제점 목록 —
   // 패널 상단에 "문제점" 배너로 보여주고, 저장 시 일마감 검증을 자동으로
   // 다시 계산한다.
@@ -28678,391 +28113,7 @@ const handleDailyReport = async () => {
     printerFallback: auth.currentUser?.email?.split("@")[0] || "",
   });
 };
-// ===================== 24시콜 파일 비교 검증 =====================
-const handleCloseFileUpload = async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  e.target.value = "";
-
-  const XLSX = window.XLSX || (await import("xlsx"));
-  const data = await file.arrayBuffer();
-  const wb = XLSX.read(data, { type: "array" });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const json = XLSX.utils.sheet_to_json(ws, { header: 1 });
-
-  // 헤더 행 찾기
-  const headerIdx = json.findIndex(row =>
-    row.some(cell => String(cell || "").includes("차량번호"))
-  );
-  if (headerIdx === -1) {
-    showAlert("차량번호 컬럼을 찾을 수 없습니다.");
-    return;
-  }
-
-  const headers = json[headerIdx].map(h => String(h || "").trim());
-  const plateCol = headers.indexOf("차량번호");
-  const nameCol = headers.indexOf("차주이름");
-  const phoneCol = headers.indexOf("차주전화");
-  const feeTypeCol = headers.indexOf("요금구분");
-  const commCol = headers.indexOf("수수료");
-
-  // 날짜 컬럼 감지 (엑셀이 여러 날짜를 포함할 때 정확한 매칭 위해)
-  const dateColNames = ["날짜", "상차일", "운송일", "일자", "접수일", "운행일", "배차일", "상차일시", "픽업일", "운행날짜", "배차날짜", "출발일"];
-  const dateCol = dateColNames.reduce((found, name) => found !== -1 ? found : headers.indexOf(name), -1);
-
-  // 운송료 컬럼 (다양한 명칭 대응)
-  const fareColNames = ["운송료", "운임", "운임금액", "금액", "결제금액", "배차료", "차주운임", "지급금액"];
-  const fareCol = fareColNames.reduce((found, name) =>
-    found !== -1 ? found : headers.indexOf(name), -1
-  );
-
-  // 상/하차지 주소 컬럼 감지 (다중 건 기사의 주소 기반 1:1 매칭에 사용)
-  const filePickupAddrColNames = ["상차지주소", "출발지주소", "출발지", "상차지", "픽업지주소", "픽업지", "출발주소", "상차주소"];
-  const fileDropAddrColNames   = ["하차지주소", "도착지주소", "도착지", "하차지", "배달지주소", "배달지", "목적지", "도착주소", "하차주소"];
-  const filePickupAddrCol = filePickupAddrColNames.reduce((f, n) => f !== -1 ? f : headers.indexOf(n), -1);
-  const fileDropAddrCol   = fileDropAddrColNames.reduce((f, n) => f !== -1 ? f : headers.indexOf(n), -1);
-
-  // 주소 유사도 점수 (0~4): 같은 기사 다중 건 매칭 정밀도 향상
-  const addrMatchScore = (a, b) => {
-    if (!a || !b) return 0;
-    const na = String(a).replace(/\s+/g, "").toLowerCase().replace(/광역시|특별시|특별자치시/g, "");
-    const nb = String(b).replace(/\s+/g, "").toLowerCase().replace(/광역시|특별시|특별자치시/g, "");
-    if (na === nb) return 4;
-    if (na.length >= 6 && nb.length >= 6) {
-      const s = na.length < nb.length ? na : nb;
-      const l = na.length < nb.length ? nb : na;
-      if (l.includes(s.slice(0, 10)) || l.includes(s.slice(0, 7))) return 3;
-    }
-    const dongA = String(a).match(/([가-힣]+동)/g) || [];
-    const dongB = String(b).match(/([가-힣]+동)/g) || [];
-    if (dongA.length && dongB.length && dongA.some(d => dongB.includes(d))) return 2;
-    const guA = String(a).match(/([가-힣]+구)/)?.[1] || "";
-    const guB = String(b).match(/([가-힣]+구)/)?.[1] || "";
-    if (guA && guA === guB) return 1;
-    const siA = String(a).match(/([가-힣]+시)/)?.[1] || "";
-    const siB = String(b).match(/([가-힣]+시)/)?.[1] || "";
-    if (siA && siA === siB) return 1;
-    return 0;
-  };
-
-  if (plateCol === -1) {
-    showAlert("차량번호 컬럼을 찾을 수 없습니다.");
-    return;
-  }
-
-  // 엑셀 날짜값 → YYYY-MM-DD 파싱
-  const parseExcelDate = (val) => {
-    if (val == null || val === "") return null;
-    const str = String(val).trim();
-    // Excel 시리얼 숫자 (정수 or 소수점 포함 datetime) — 40000 이상이면 날짜로 간주
-    if (/^\d+(\.\d+)?$/.test(str) && Number(str) > 40000) {
-      const n = Math.floor(Number(str));
-      const d = new Date(Math.round((n - 25569) * 86400 * 1000));
-      const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
-      return kst.toISOString().slice(0, 10);
-    }
-    // YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD (날짜 또는 날짜+시간 모두 대응)
-    const m = str.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
-    if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
-    // YYYY년 MM월 DD일 형식
-    const mKr1 = str.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
-    if (mKr1) return `${mKr1[1]}-${mKr1[2].padStart(2, "0")}-${mKr1[3].padStart(2, "0")}`;
-    // MM월 DD일 형식 (연도 없음 → 올해 적용)
-    const mKr2 = str.match(/^(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
-    if (mKr2) {
-      const yr = new Date().getFullYear();
-      return `${yr}-${mKr2[1].padStart(2, "0")}-${mKr2[2].padStart(2, "0")}`;
-    }
-    // MM/DD or MM-DD (올해 연도 적용)
-    const m2 = str.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
-    if (m2) {
-      const yr = new Date().getFullYear();
-      return `${yr}-${m2[1].padStart(2, "0")}-${m2[2].padStart(2, "0")}`;
-    }
-    return null;
-  };
-
-  // 날짜 컬럼 자동 감지 (헤더명으로 못 찾으면 첫 데이터 행의 값으로 재탐색)
-  let effectiveDateCol = dateCol;
-  if (effectiveDateCol === -1 && json.length > headerIdx + 1) {
-    const firstDataRow = json[headerIdx + 1];
-    // 각 컬럼을 순회하며 날짜처럼 보이는 값이 있는 컬럼 중 "상차" 키워드 헤더 우선
-    const pickupRelated = headers.map((h, i) => ({ h, i }))
-      .filter(({ h }) => /상차|운송|픽업|배차|날짜|일자/.test(h));
-    for (const { i } of pickupRelated) {
-      if (parseExcelDate(firstDataRow?.[i])) { effectiveDateCol = i; break; }
-    }
-    // 그래도 없으면 전체 컬럼 중 날짜 값이 있는 첫 번째 컬럼
-    if (effectiveDateCol === -1) {
-      for (let ci = 0; ci < (firstDataRow?.length || 0); ci++) {
-        const parsed = parseExcelDate(firstDataRow?.[ci]);
-        if (parsed && parsed >= "2020-01-01") { effectiveDateCol = ci; break; }
-      }
-    }
-  }
-
-  // ⭐ 실제 매칭/판정 로직은 별도 함수로 감싸서 closeFileRawRef에 저장해둔다 —
-  // "재검증" 버튼을 누르면 파일을 다시 업로드하지 않고도 이 함수를 다시 호출해,
-  // 그 사이 사용자가 고친 최신 rows 기준으로 24시콜 비교불일치를 재계산할 수 있다.
-  const runCloseFileMatch = () => {
-  let targetDate = todayKST();
-  if (dayMode === "yesterday") targetDate = yesterdayKST();
-  if (dayMode === "tomorrow") targetDate = tomorrowKST();
-  const todayRows = rows.filter(r => r.상차일 === targetDate);
-
-  const fileIssues = [];
-
-  for (let i = headerIdx + 1; i < json.length; i++) {
-    const row = json[i];
-    if (!row || !row[plateCol]) continue;
-
-    const filePlate = normalizePlate(String(row[plateCol] || ""));
-    const fileName = String(row[nameCol] || "").trim();
-    const filePhone = String(row[phoneCol] || "").replace(/[^\d]/g, "");
-    const fileFeeType = String(row[feeTypeCol] || "").trim();
-    const fileComm = Number(row[commCol] || 0);
-    const fileDate = effectiveDateCol !== -1 ? parseExcelDate(row[effectiveDateCol]) : null;
-
-    if (!filePlate) continue;
-
-    // 내 프로그램에서 매칭 오더 찾기
-    // 날짜 컬럼이 있으면 → 차량번호 + 상차일 동시 매칭 (전체 rows 대상)
-    // 날짜 컬럼 없으면 → 기존대로 차량번호만 (todayRows 대상)
-    let matched;
-    if (fileDate) {
-      matched = rows.filter(r =>
-        normalizePlate(r.차량번호 || "") === filePlate && r.상차일 === fileDate
-      );
-    } else {
-      // 날짜 감지 실패: targetDate 기준 rows에서 차량번호 매칭
-      const candidates = todayRows.filter(r => normalizePlate(r.차량번호 || "") === filePlate);
-      if (candidates.length <= 1) {
-        matched = candidates;
-      } else if (fareCol !== -1) {
-        const fileFare = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
-        if (fileFare > 0) {
-          const byFare = candidates.filter(r =>
-            Math.abs(Number(String(r.기사운임 || "0").replace(/[^\d]/g, "")) - fileFare) < 5000
-          );
-          matched = byFare.length === 1 ? byFare : byFare.length > 1 ? byFare : [];
-        } else {
-          matched = [];
-        }
-      } else {
-        matched = [];
-      }
-    }
-
-    // ⭐ 정방향 누락 검증 — 24시콜 파일에는 이 차량번호/날짜 기록이 분명히 있는데
-    // 프로그램에는 그 조건에 맞는 오더가 하나도 없는 경우. 지금까지는 "프로그램에
-    // 24시로 등록됐는데 파일에 없다"(역방향)만 잡았고, 이 반대 방향(파일에는
-    // 있는데 프로그램에 아예 등록이 안 된 경우 = 등록 누락)은 조용히 넘어갔다.
-    if (matched.length === 0) {
-      fileIssues.push({
-        rowId: null,
-        seq: "?",
-        label: `${fileDate || targetDate} [차량 ${row[plateCol] || "-"}]${fileName ? ` ${fileName}` : ""}`,
-        type: "missingInProgram",
-        거래처명: "(미입력)",
-        vehicle: row[plateCol], driverName: fileName,
-        fieldLabel: "프로그램 등록 여부", fileValue: "24시콜 파일에 있음", programValue: "등록된 오더 없음",
-        msg: `24시콜 파일에 ${fileDate || targetDate} 차량 ${row[plateCol] || "-"}(${fileName || "기사명 미상"}) 기록이 있으나, 프로그램에는 해당 차량번호·날짜로 등록된 오더가 없어요. 등록 누락이 의심돼요`,
-      });
-      continue; // 매칭 후보 자체가 없으니 아래 배차방식/지급방식/운임 비교는 스킵
-    }
-
-    // 합산매칭 체크: Excel 1행 = 프로그램 N행의 운임 합계
-    let isSumFareMatch = false;
-    if (fareCol !== -1 && matched.length >= 2) {
-      const fileFareForSum = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
-      if (fileFareForSum > 0) {
-        const sumFare = matched.reduce((s, mr) =>
-          s + Number(String(mr.기사운임 || "0").replace(/[^\d]/g, "")), 0);
-        if (Math.abs(sumFare - fileFareForSum) < 1000) isSumFareMatch = true;
-      }
-    }
-
-    // ── 1:1 정밀 매칭 ─────────────────────────────────────────
-    // 같은 기사님이 당일 우리 오더를 여러 건 진행했을 때, 24시콜 각 행을 올바른
-    // 프로그램 레코드 하나와 짝지어야 한다. 이 처리 없으면 24시콜 행 A(예:12만원)의
-    // 운임이 프로그램의 다른 오더 B(예:15만원)와도 비교되어, 둘 다 정상 등록인데도
-    // "운임 불일치"로 잘못 표시된다.
-    let matchedForRow = matched;
-    if (!isSumFareMatch && matched.length >= 2) {
-      // 1순위: 운임이 정확히 일치하는 후보가 단 하나뿐이면 가장 확실한 신호이므로 그걸로 확정.
-      let narrowed = null;
-      if (fareCol !== -1) {
-        const fileFareForRow = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
-        if (fileFareForRow > 0) {
-          const fareMatched = matched.filter(mr =>
-            Number(String(mr.기사운임 || "0").replace(/[^\d]/g, "")) === fileFareForRow
-          );
-          if (fareMatched.length === 1) narrowed = fareMatched;
-        }
-      }
-
-      // 2순위: 운임으로 못 좁히면 기존대로 주소 유사도로 시도.
-      if (!narrowed) {
-        const fp = filePickupAddrCol !== -1 ? String(row[filePickupAddrCol] || "").trim() : "";
-        const fd = fileDropAddrCol   !== -1 ? String(row[fileDropAddrCol]   || "").trim() : "";
-        if (fp || fd) {
-          const scored = matched.map(mr => {
-            let s = 0;
-            // 하차지(목적지)가 구별력 높으므로 가중치 높게
-            if (fd) { s += addrMatchScore(fd, mr.하차지주소 || "") * 3; s += addrMatchScore(fd, mr.하차지명 || "") * 2; }
-            if (fp) { s += addrMatchScore(fp, mr.상차지주소 || "") * 2; s += addrMatchScore(fp, mr.상차지명 || ""); }
-            return { mr, s };
-          });
-          scored.sort((a, b) => b.s - a.s);
-          // 1등이 2등보다 확연히 높을 때만 좁힘 (동점이면 모호 → 원래대로 전체 비교)
-          if (scored[0].s > 0 && (scored.length < 2 || scored[0].s > scored[1].s)) {
-            narrowed = [scored[0].mr];
-          }
-        }
-      }
-
-      if (narrowed) matchedForRow = narrowed;
-    }
-
-    matchedForRow.forEach(mr => {
-      const seq = rows.indexOf(mr) + 1;
-      const dateLabel = fileDate ? ` (${fileDate})` : "";
-      const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}${dateLabel}`;
-      const 거래처명 = mr.거래처명 || "(미입력)";
-
-      // 1. 배차방식 검증: 24시콜 파일에 있으면 배차방식이 "24시"여야 함
-      const dispatch = (mr.배차방식 || "").trim();
-      if (dispatch && dispatch !== "24시" && dispatch !== "24시(고정기사)") {
-        fileIssues.push({
-          rowId: mr._id,
-          seq,
-          label,
-          type: "dispatch",
-          거래처명,
-          vehicle: row[plateCol], driverName: fileName,
-          fieldLabel: "배차방식", fileValue: "24시", programValue: dispatch,
-          msg: `24시콜 파일에 존재하나 배차방식이 "${dispatch}"(으)로 등록됨 (차량: ${row[plateCol]}, 기사: ${fileName})`,
-        });
-      }
-
-      // 2. 지급방식 검증 (손실이면 청구 없는 게 정상 → 지급방식 검증 스킵)
-      const programPay = (mr.지급방식 || "").trim();
-      const isSongsil = programPay === "손실";
-
-      if (!isSongsil) {
-        if (fileFeeType === "인수증") {
-          if (programPay && programPay !== "계산서") {
-            fileIssues.push({
-              rowId: mr._id, seq, label, type: "payment", 거래처명,
-              vehicle: row[plateCol], driverName: fileName,
-              fieldLabel: "지급방식", fileValue: fileFeeType, programValue: programPay,
-              msg: `24시콜: 인수증(계산서) / 프로그램: "${programPay}": 지급방식 불일치 (차량: ${row[plateCol]})`,
-            });
-          }
-        } else if (fileFeeType === "선/착불" || fileFeeType === "선착불") {
-          if (programPay && programPay !== "선불" && programPay !== "착불") {
-            fileIssues.push({
-              rowId: mr._id, seq, label, type: "payment", 거래처명,
-              vehicle: row[plateCol], driverName: fileName,
-              fieldLabel: "지급방식", fileValue: fileFeeType, programValue: programPay,
-              msg: `24시콜: 선/착불 / 프로그램: "${programPay}": 지급방식 불일치 (차량: ${row[plateCol]})`,
-            });
-          }
-        }
-      }
-
-      // 3. 운임 불일치 검증 (합산매칭인 경우 개별 운임 비교 생략)
-      if (fareCol !== -1 && !isSumFareMatch) {
-        const fileFare = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
-        const programFare = Number(String(mr.기사운임 || "0").replace(/[^\d]/g, ""));
-
-        if (isSongsil) {
-          if (fileFare > 0 && programFare > 0 && fileFare !== programFare) {
-            fileIssues.push({
-              rowId: mr._id, seq, label, type: "fare", 거래처명,
-              vehicle: row[plateCol], driverName: fileName,
-              fieldLabel: "운임(기사)", fileValue: fileFare, programValue: programFare, isMoney: true,
-              msg: `[손실] 24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원: 운임 불일치 (차량: ${row[plateCol]})`,
-            });
-          }
-        } else {
-          if (fileFare > 0 && programFare > 0 && fileFare !== programFare) {
-            fileIssues.push({
-              rowId: mr._id, seq, label, type: "fare", 거래처명,
-              vehicle: row[plateCol], driverName: fileName,
-              fieldLabel: "운임(기사)", fileValue: fileFare, programValue: programFare, isMoney: true,
-              msg: `24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원: 운임 불일치 (차량: ${row[plateCol]})`,
-            });
-          }
-        }
-      }
-    });
-  }
-
-  // 역방향 검증: 프로그램에서 배차방식이 "24시"인데 24시콜 파일에 없는 경우
-  // 날짜 컬럼 있으면 차량번호+날짜 세트로, 없으면 차량번호만으로 확인
-  const filePlates = new Set();
-  const filePlateDate = new Set(); // "plate__date" 형태
-  for (let i = headerIdx + 1; i < json.length; i++) {
-    const row = json[i];
-    if (!row || !row[plateCol]) continue;
-    const plate = normalizePlate(String(row[plateCol]));
-    filePlates.add(plate);
-    if (effectiveDateCol !== -1) {
-      const d = parseExcelDate(row[effectiveDateCol]);
-      if (d) filePlateDate.add(`${plate}__${d}`);
-    }
-  }
-
-  rows.forEach(mr => {
-    const dispatch = (mr.배차방식 || "").trim();
-    if (dispatch !== "24시" && dispatch !== "24시(고정기사)") return;
-    if (!mr.차량번호?.trim()) return;
-
-    const plate = normalizePlate(mr.차량번호);
-    // 날짜 컬럼 있으면 plate+date 조합으로 확인, 없으면 plate만 확인
-    const inFile = filePlateDate.size > 0
-      ? filePlateDate.has(`${plate}__${mr.상차일}`)
-      : filePlates.has(plate);
-
-    if (!inFile) {
-      const seq = rows.indexOf(mr) + 1;
-      const label = `${seq}번 [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}`;
-      fileIssues.push({
-        rowId: mr._id,
-        seq,
-        label,
-        type: "missing",
-        거래처명: mr.거래처명 || "(미입력)",
-        vehicle: mr.차량번호, driverName: mr.이름 || "-",
-        fieldLabel: "24시콜 파일 등록 여부", fileValue: "파일에 없음", programValue: `배차방식: ${mr.배차방식 || "24시"}`,
-        msg: `배차방식이 "24시"이나 24시콜 파일에 차량번호 없음 (차량: ${mr.차량번호}, 기사: ${mr.이름 || "-"}). 배차방식 오등록이 의심돼요`,
-      });
-    }
-  });
-
-  setCloseFileResult(fileIssues);
-  };
-  closeFileRawRef.current = runCloseFileMatch;
-  runCloseFileMatch();
-};
-
-// ⭐ 24시콜 비교불일치 업체별 일괄수정 — 같은 거래처의 지급방식/배차방식 불일치
-// 건들을 골라 한 번에 새 값으로 patchDispatch하고, 곧바로 오류/경고와 24시콜
-// 비교결과를 전부 재계산해 팝업을 최신 상태로 되돌린다.
-const bulkFixCloseFileIssues = async (items, fieldKey, value) => {
-  if (!value) { showAlert("적용할 값을 먼저 선택하세요."); return; }
-  const ids = [...new Set(items.map(it => it.rowId))];
-  if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
-  await runBulkTask({ count: ids.length, label: "오더", verb: "수정", task: (progress) => { let k = 0; return Promise.all(ids.map(id => Promise.resolve(patchDispatch(id, { [fieldKey]: value })).finally(() => progress(++k)))); } });
-  showAlert(`${ids.length}건의 ${fieldKey}이(가) "${value}"(으)로 일괄 수정되었습니다.`);
-  setTimeout(() => {
-    runDailyClose();
-    closeFileRawRef.current?.();
-  }, 300);
-};
-
-// ⭐ 일마감 검증 팝업의 오류/경고/24시콜 목록에서 오더를 클릭했을 때 — 팝업을
+// ⭐ 일마감 검증 팝업의 오류/경고 목록에서 오더를 클릭했을 때 — 팝업을
 // 닫고 그리드로 스크롤만 하던 것 대신, 그 오더의 상세 내용이 담긴 "선택수정"
 // 팝업을 일마감 검증보다 앞에 띄우고 어떤 문제가 있는지 배너로 보여준다.
 const openDailyCloseIssueDetail = (rowId) => {
@@ -29071,7 +28122,6 @@ const openDailyCloseIssueDetail = (rowId) => {
   const issues = [
     ...(dailyCloseResult?.errors || []).filter(x => x.rowId === rowId).map(x => ({ ...x, level: "오류" })),
     ...(dailyCloseResult?.warnings || []).filter(x => x.rowId === rowId).map(x => ({ ...x, level: "경고" })),
-    ...(closeFileResult || []).filter(x => x.rowId === rowId).map(x => ({ ...x, level: "24시콜" })),
   ];
   // 아래 정규화(화물수량/화물타입/톤수값/톤수타입 분리)는 우클릭 메뉴의 "수정"
   // 버튼이 오더복사/수정 패널(copyTarget)을 열 때 하는 것과 동일하다.
@@ -30096,10 +29146,10 @@ const savedId = copyTarget._id;
     }
     setCopyPanelOpen(false);
     // ⭐ 일마감 검증에서 열었던 수정이면, 방금 고친 내용이 반영되도록 검증을
-    // 자동으로 다시 계산한다(오류/경고 + 24시콜 비교결과 모두).
+    // 자동으로 다시 계산한다(오류/경고).
     if (dailyCloseIssueCtx) {
       setDailyCloseIssueCtx(null);
-      setTimeout(() => { runDailyClose(); closeFileRawRef.current?.(); }, 300);
+      setTimeout(() => { runDailyClose(); }, 300);
     }
     React.startTransition(() => {
       setRows(prev => prev.map(r => r._id === savedId ? { ...r, ...payload } : r));
@@ -30180,7 +29230,7 @@ flashRow(savedId);
 </div>
 
 {/* ⭐ 일마감 검증 목록에서 클릭해 이 패널을 열었을 때만 나타나는 문제점 배너 —
-    오류/경고/24시콜 비교불일치 중 이 오더에 해당하는 항목을 전부 모아 보여준다. */}
+    오류/경고 중 이 오더에 해당하는 항목을 전부 모아 보여준다. */}
 {dailyCloseIssueCtx && dailyCloseIssueCtx.length > 0 && (
   <div className="bg-gray-50 border border-gray-200 rounded-xl px-5 py-4">
     <div className="text-[13px] font-bold text-[#1B2B4B] mb-2">일마감 검증: 이 오더의 문제점 ({dailyCloseIssueCtx.length}건)</div>
@@ -33550,7 +32600,7 @@ setConfirmChange(null);
                 { label: "전체", value: dailyCloseResult.total, active: dailyCloseFilter === "all", key: "all" },
                 { label: "정상", value: dailyCloseResult.total - dailyCloseResult.errors.length, active: false, key: null },
                 { label: "오류", value: dailyCloseResult.errors.length, active: dailyCloseFilter === "errors", key: "errors" },
-                { label: "경고", value: dailyCloseResult.warnings.length + (closeFileResult?.length || 0), active: dailyCloseFilter === "warnings", key: "warnings" },
+                { label: "경고", value: dailyCloseResult.warnings.length, active: dailyCloseFilter === "warnings", key: "warnings" },
               ].map(item => (
                 <div
                   key={item.label}
@@ -33561,28 +32611,6 @@ setConfirmChange(null);
                   <div className="text-[30px] font-black leading-tight tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{item.value}<span className="text-[13px] font-bold opacity-50 ml-1">건</span></div>
                 </div>
               ))}
-            </div>
-          </div>
-
-          {/* 24시콜 파일 업로드 영역 */}
-          <div className="mx-6 mt-4 px-5 py-3.5 bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_26px_rgba(16,24,40,0.05)]">
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 h-10 px-4 rounded-xl bg-[#0F1A30] text-white hover:bg-[#1B2B4B] cursor-pointer transition text-[13px] font-black">
-                <span>24시콜 파일 비교</span>
-                <input autoComplete="off"
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  className="hidden"
-                  onChange={handleCloseFileUpload}
-                />
-              </label>
-              {closeFileResult && (
-                <span className="text-[12px] text-gray-500">
-                  {closeFileResult.length > 0
-                    ? `불일치 ${closeFileResult.length}건 감지`
-                    : "불일치 없음"}
-                </span>
-              )}
             </div>
           </div>
 
@@ -33648,104 +32676,9 @@ setConfirmChange(null);
             </div>
           )}
 
-          {/* 24시콜 파일 비교 결과 */}
-          {(dailyCloseFilter === "all" || dailyCloseFilter === "warnings") && closeFileResult && closeFileResult.length > 0 && (
-            <div className="mx-6 mt-4 p-5 bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_26px_rgba(16,24,40,0.05)]">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-[15px] font-black text-[#0F1A30]">24시콜 비교 불일치 ({closeFileResult.length}건)</div>
-                <div className="flex rounded-lg border border-gray-300 overflow-hidden text-[11px] font-semibold">
-                  <button type="button"
-                    className={`px-3 py-1 transition ${!closeFileGroupMode ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
-                    onClick={() => setCloseFileGroupMode(false)}><EditableText id="misc.btn.31498.전체보기" defaultText="전체보기" /></button>
-                  <button type="button"
-                    className={`px-3 py-1 transition ${closeFileGroupMode ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
-                    onClick={() => setCloseFileGroupMode(true)}><EditableText id="misc.btn.31501.업체별보기" defaultText="업체별보기" /></button>
-                </div>
-              </div>
-
-              {(() => {
-                const typeBadge = (t) => t === "dispatch" ? "배차방식" : t === "fare" ? "운임차이" : t === "missing" ? "파일누락" : t === "missingInProgram" ? "등록누락" : "지급방식";
-                // ⭐ 검증/분석 화면답게 톤을 낮췄다 — 실제 금액이 틀린 건(운임차이)만
-                // 옅은 빨강으로 구분하고, 나머지는 프로그램 전반의 회색/네이비 톤에
-                // 맞춘 중립 배지로 통일(알록달록하다는 피드백 반영).
-                const typeCls = (t) => t === "fare" || t === "missingInProgram" ? "bg-red-50 text-red-700 border border-red-100" : "bg-[#EEF2F8] text-[#1B2B4B] border border-[#DCE3EE]";
-                // ⭐ 클릭하면 바로 오더수정 패널을 여는 대신, 24시콜 값과 프로그램 값을
-                // 나란히 비교해 보여주는 팝업(CloseFileCompareModal)을 먼저 띄운다.
-                const Card = (f, i) => (
-                  <div key={i}
-                    className="flex items-start gap-3 px-4 py-3 border border-[#E3E8F0] rounded-xl cursor-pointer bg-white hover:border-[#2D4C82] hover:shadow-[0_6px_16px_rgba(15,26,48,0.08)] transition"
-                    onClick={() => setCloseFileCompareItem(f)}>
-                    <div className="w-7 h-7 rounded-lg bg-[#EEF2F8] text-[#1B2B4B] text-[11.5px] font-black tabular-nums flex items-center justify-center shrink-0">{f.seq}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-bold text-gray-900 break-words">{f.label}</div>
-                      <div className="text-[12px] text-gray-700 mt-1 leading-snug break-words">{f.msg}</div>
-                    </div>
-                    <span className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold ${typeCls(f.type)}`}>{typeBadge(f.type)}</span>
-                  </div>
-                );
-
-                if (!closeFileGroupMode) {
-                  return <div className="grid grid-cols-2 gap-2">{closeFileResult.map(Card)}</div>;
-                }
-
-                const groups = new Map();
-                closeFileResult.forEach(f => {
-                  const key = f.거래처명 || "(미입력)";
-                  if (!groups.has(key)) groups.set(key, []);
-                  groups.get(key).push(f);
-                });
-                const sorted = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
-
-                return (
-                  <div className="space-y-4">
-                    {sorted.map(([client, items]) => {
-                      const paymentItems = items.filter(f => f.type === "payment");
-                      const dispatchItems = items.filter(f => f.type === "dispatch");
-                      const payKey = `${client}__지급방식`;
-                      const dispKey = `${client}__배차방식`;
-                      return (
-                        <div key={client} className="border border-[#E3E8F0] rounded-xl overflow-hidden">
-                          <div className="bg-[#1B2B4B]/5 px-4 py-2 text-[13px] font-bold text-[#1B2B4B]">{client} ({items.length}건)</div>
-                          <div className="p-3 space-y-2">
-                            {(paymentItems.length > 0 || dispatchItems.length > 0) && (
-                              <div className="flex flex-wrap gap-2 mb-1">
-                                {paymentItems.length > 0 && (
-                                  <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
-                                    <span className="text-[11px] font-semibold text-gray-600">지급방식 불일치 {paymentItems.length}건 →</span>
-                                    <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white" value={closeFileBulkValue[payKey] || ""} onChange={(__v) => (e => setCloseFileBulkValue(p => ({ ...p, [payKey]: e.target.value })))({ target: { value: __v } })} />
-                                    <button type="button"
-                                      className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
-                                      onClick={() => bulkFixCloseFileIssues(paymentItems, "지급방식", closeFileBulkValue[payKey])}>
-                                      일괄적용
-                                    </button>
-                                  </div>
-                                )}
-                                {dispatchItems.length > 0 && (
-                                  <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
-                                    <span className="text-[11px] font-semibold text-gray-600">배차방식 불일치 {dispatchItems.length}건 →</span>
-                                    <CompanyOptionPicker optKey="배차방식" placeholder="선택" noneLabel="선택" className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white" value={closeFileBulkValue[dispKey] || ""} onChange={(__v) => (e => setCloseFileBulkValue(p => ({ ...p, [dispKey]: e.target.value })))({ target: { value: __v } })} />
-                                    <button type="button"
-                                      className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
-                                      onClick={() => bulkFixCloseFileIssues(dispatchItems, "배차방식", closeFileBulkValue[dispKey])}>
-                                      일괄적용
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            <div className="grid grid-cols-2 gap-2">{items.map(Card)}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
 
           {/* 전체 정상일 때 */}
-          {dailyCloseResult.errors.length === 0 && dailyCloseResult.warnings.length === 0 && (!closeFileResult || closeFileResult.length === 0) && (
+          {dailyCloseResult.errors.length === 0 && dailyCloseResult.warnings.length === 0 && (
             <div className="px-6 py-8 text-center">
               <div className="text-[16px] font-bold text-[#1B2B4B]">모든 오더가 정상입니다</div>
               <div className="text-[13px] text-gray-500 mt-1">
@@ -33876,7 +32809,6 @@ setConfirmChange(null);
               const issueIds = [
                 ...dailyCloseResult.errors.map(e => e.rowId),
                 ...dailyCloseResult.warnings.map(w => w.rowId),
-                ...(closeFileResult || []).map(f => f.rowId),
               ];
               const unique = [...new Set(issueIds)];
               setFilterErrorIds(unique);
@@ -33904,9 +32836,6 @@ setConfirmChange(null);
           className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
           onClick={() => {
             runDailyClose();
-            // ⭐ 24시콜 파일을 업로드해둔 상태였다면, 파일을 다시 올리지 않아도
-            // 방금 고친 내용이 반영된 최신 데이터로 비교결과도 다시 계산한다.
-            closeFileRawRef.current?.();
             setReVerifyToast("재검증이 완료되었습니다");
             setTimeout(() => setReVerifyToast(null), 2500);
           }}
@@ -33915,7 +32844,7 @@ setConfirmChange(null);
         </button>
         <button
           className="flex-1 py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold text-[13px] transition"
-          onClick={() => { setDailyCloseOpen(false); setDailyCloseFilter("all"); setCloseFileResult(null); }}
+          onClick={() => { setDailyCloseOpen(false); setDailyCloseFilter("all"); }}
         >
           닫기
         </button>
@@ -33923,17 +32852,6 @@ setConfirmChange(null);
     </div>
   </div>
 )}
-      {/* ⭐ 24시콜 값 vs 프로그램 값 비교 팝업 — 일마감 검증 팝업보다 앞(z-index 높음)에 뜬다 */}
-      <CloseFileCompareModal
-        item={closeFileCompareItem}
-        programRow={closeFileCompareItem ? (dispatchData.find(r => r._id === closeFileCompareItem.rowId) || rows.find(r => r._id === closeFileCompareItem.rowId)) : null}
-        onClose={() => setCloseFileCompareItem(null)}
-        onEdit={() => {
-          const rowId = closeFileCompareItem?.rowId;
-          setCloseFileCompareItem(null);
-          if (rowId) openDailyCloseIssueDetail(rowId);
-        }}
-      />
 {/* 오류오더 필터 활성 배너 */}
 {filterErrorIds !== null && (
   <div className="flex items-center gap-3 px-4 py-2 mb-2 bg-[#1B2B4B]/8 border border-[#1B2B4B]/30 rounded-xl">
@@ -34720,18 +33638,6 @@ const [dailyCloseOpen, setDailyCloseOpen] = React.useState(false);
 const [closeReportOpen, setCloseReportOpen] = React.useState(false); // ★ 마감보고 전송 창
 const [dailyCloseResult, setDailyCloseResult] = React.useState(null);
 const [dailyCloseFilter, setDailyCloseFilter] = React.useState("all");
-const [closeFileResult, setCloseFileResult] = React.useState(null);
-// ⭐ 24시콜 파일 재비교(재검증)를 위해, 업로드했던 파일을 다시 읽지 않고도
-// 파싱된 원본(json/컬럼 인덱스)을 기억해뒀다가 재사용한다 — "재검증" 버튼을
-// 눌렀을 때 오류/경고뿐 아니라 24시콜 비교불일치도 최신 데이터로 다시 계산.
-const closeFileRawRef = React.useRef(null);
-// ⭐ 24시콜 비교불일치를 업체별로 묶어서 볼지 여부 + 업체별 일괄수정에 쓰는
-// 선택값(거래처명__필드명 단위로 각각 기억)
-const [closeFileGroupMode, setCloseFileGroupMode] = React.useState(false);
-const [closeFileBulkValue, setCloseFileBulkValue] = React.useState({});
-// ⭐ 24시콜 비교 불일치 카드를 클릭했을 때 — 오더 수정 패널 대신 "24시콜 값 vs
-// 프로그램 값"을 나란히 비교해서 보여주는 팝업에 쓸 대상.
-const [closeFileCompareItem, setCloseFileCompareItem] = React.useState(null);
 const [filterErrorIds, setFilterErrorIds] = React.useState(null);
 const [reVerifyToast, setReVerifyToast] = React.useState(null);
 const lastWarnedRef = React.useRef(null);
@@ -34926,362 +33832,7 @@ const handleDailyReport = async () => {
     printerFallback: auth.currentUser?.email?.split("@")[0] || "",
   });
 };
-const handleCloseFileUpload = async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  e.target.value = "";
-
-  const XLSX = window.XLSX || (await import("xlsx"));
-  const data = await file.arrayBuffer();
-  const wb = XLSX.read(data, { type: "array" });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const json = XLSX.utils.sheet_to_json(ws, { header: 1 });
-
-  const headerIdx = json.findIndex(row =>
-    row.some(cell => String(cell || "").includes("차량번호"))
-  );
-  if (headerIdx === -1) { showAlert("차량번호 컬럼을 찾을 수 없습니다."); return; }
-
-  const headers = json[headerIdx].map(h => String(h || "").trim());
-  const plateCol   = headers.indexOf("차량번호");
-  const nameCol    = headers.indexOf("차주이름");
-  const phoneCol   = headers.indexOf("차주전화");
-  const feeTypeCol = headers.indexOf("요금구분");
-  const commCol    = headers.indexOf("수수료");
-
-  const dateColNames = ["날짜", "상차일", "운송일", "일자", "접수일", "운행일", "배차일", "상차일시", "픽업일", "운행날짜", "배차날짜", "출발일"];
-  const dateCol = dateColNames.reduce((found, name) => found !== -1 ? found : headers.indexOf(name), -1);
-
-  const fareColNames = ["운송료", "운임", "운임금액", "금액", "결제금액", "배차료", "차주운임", "지급금액"];
-  const fareCol = fareColNames.reduce((found, name) =>
-    found !== -1 ? found : headers.indexOf(name), -1
-  );
-
-  if (plateCol === -1) { showAlert("차량번호 컬럼을 찾을 수 없습니다."); return; }
-
-  const parseExcelDate = (val) => {
-    if (val == null || val === "") return null;
-    const str = String(val).trim();
-    if (/^\d+(\.\d+)?$/.test(str) && Number(str) > 40000) {
-      const n = Math.floor(Number(str));
-      const d = new Date(Math.round((n - 25569) * 86400 * 1000));
-      const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
-      return kst.toISOString().slice(0, 10);
-    }
-    const m = str.match(/(\d{4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})/);
-    if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
-    const mKr1 = str.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
-    if (mKr1) return `${mKr1[1]}-${mKr1[2].padStart(2, "0")}-${mKr1[3].padStart(2, "0")}`;
-    const mKr2 = str.match(/^(\d{1,2})\s*월\s*(\d{1,2})\s*일/);
-    if (mKr2) {
-      const yr = new Date().getFullYear();
-      return `${yr}-${mKr2[1].padStart(2, "0")}-${mKr2[2].padStart(2, "0")}`;
-    }
-    const m2 = str.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
-    if (m2) {
-      const yr = new Date().getFullYear();
-      return `${yr}-${m2[1].padStart(2, "0")}-${m2[2].padStart(2, "0")}`;
-    }
-    return null;
-  };
-
-  let effectiveDateCol = dateCol;
-  if (effectiveDateCol === -1 && json.length > headerIdx + 1) {
-    const firstDataRow = json[headerIdx + 1];
-    const pickupRelated = headers.map((h, i) => ({ h, i }))
-      .filter(({ h }) => /상차|운송|픽업|배차|날짜|일자/.test(h));
-    for (const { i } of pickupRelated) {
-      if (parseExcelDate(firstDataRow?.[i])) { effectiveDateCol = i; break; }
-    }
-    if (effectiveDateCol === -1) {
-      for (let ci = 0; ci < (firstDataRow?.length || 0); ci++) {
-        const parsed = parseExcelDate(firstDataRow?.[ci]);
-        if (parsed && parsed >= "2020-01-01") { effectiveDateCol = ci; break; }
-      }
-    }
-  }
-
-  // ⭐ 24시콜 파일 자체에 "상차일" 컬럼이 있으면, 그 값은 24시콜이 "내일상"류
-  // 화물정보까지 이미 반영해 확정해둔 실제 상차일이다(직접 파일로 확인함 —
-  // 처리시간은 09-20인데 상차일은 이미 2026-09-21로 들어있는 식). 이 컬럼일
-  // 때는 화물정보로 다시 보정하면 하루를 더 밀어버리는 이중 보정이 되므로
-  // 그대로 신뢰하고, 상차일 컬럼이 없어 처리시간/접수일 등으로 대체 감지된
-  // 경우에만 아래 "내일" 보정을 적용한다.
-  const effectiveDateColHeader = effectiveDateCol !== -1 ? headers[effectiveDateCol] : null;
-
-  const raw = { json, headerIdx, plateCol, nameCol, phoneCol, feeTypeCol, commCol, fareCol, effectiveDateCol, effectiveDateColHeader, parseExcelDate };
-  closeFileRawRef.current = raw;
-  setCloseFileResult(computeCloseFileIssues(raw));
-};
-
-// ⭐ 업로드된 24시콜 파일(raw)을 현재 조회기간의 최신 dispatchData와 다시
-// 비교해 불일치 목록을 계산 — 업로드 시점뿐 아니라 "재검증" 버튼으로도
-// (사용자가 오류를 고친 뒤) 같은 파일을 다시 읽지 않고 재사용할 수 있도록
-// handleCloseFileUpload에서 분리했다.
-const computeCloseFileIssues = (raw) => {
-  const { json, headerIdx, plateCol, nameCol, phoneCol, feeTypeCol, commCol, fareCol, effectiveDateCol, effectiveDateColHeader, parseExcelDate } = raw;
-  // "상차일" 컬럼은 24시콜이 이미 확정해둔 실제 상차일이라 그대로 믿는다 — 그
-  // 컬럼이 아닐 때만(처리시간 등으로 대체 감지된 경우만) 화물정보의 "내일/낼"로
-  // 보정한다(위 handleCloseFileUpload 주석 참고).
-  const trustDateColumnAsIs = effectiveDateColHeader === "상차일";
-
-  // 조회 기간 전체 rows (appliedStartDate ~ appliedEndDate)
-  const rangeStart = appliedStartDate || todayKST();
-  const rangeEnd   = appliedEndDate   || todayKST();
-  const viewRows = (dispatchData || []).filter(r =>
-    r.상차일 >= rangeStart && r.상차일 <= rangeEnd
-  );
-
-  // 처리일(raw) 하루 뒤 날짜 문자열 — 아래 "내일" 보정에 쓴다. 달/연도 경계도
-  // Date.UTC 계산에 맡겨 그대로 넘어가게 한다.
-  const addOneDay = (dateStr) => {
-    const [y, m, d] = dateStr.split("-").map(Number);
-    return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
-  };
-  // ⭐ 24시콜 파일의 처리일(raw)과 화물정보를 받아, "익일 오더를 전날 미리
-  // 등록"해둔 경우의 실제 상차일을 되돌려준다. 화물정보의 "내일/낼"은 상차(상)
-  // 뒤에 붙을 때만(예: "내일상", "내일 09시상", "낼09시상") 처리일+1을 실제
-  // 상차일로 보고, 하차(착) 뒤에 붙을 때는(예: "내일09시착") 오늘 상차·내일
-  // 도착하는 정상적인 익일배송일 뿐이라 상차일은 그대로 둔다 — "내일/낼" 뒤에서
-  // 상/착 중 어느 게 먼저 나오는지로 판단한다.
-  const resolveEffectiveDate = (rawDate, cargoText) => {
-    if (!rawDate) return rawDate;
-    const text = cargoText || "";
-    const m = text.match(/(내일|낼)/);
-    if (!m) return rawDate;
-    const rest = text.slice(m.index + m[0].length, m.index + m[0].length + 20);
-    const sIdx = rest.indexOf("상");
-    const cIdx = rest.indexOf("착");
-    const isLoadTomorrow = sIdx !== -1 && (cIdx === -1 || sIdx < cIdx);
-    return isLoadTomorrow ? addOneDay(rawDate) : rawDate;
-  };
-  // ⭐ 화물정보/화물내용 헤더명이 업체·양식마다 달라(고정된 헤더명으로는 그
-  // 컬럼을 못 찾는 경우가 있어) 위 판단이 아예 안 먹힐 수 있다 — 특정 컬럼만
-  // 보는 대신 그 행 전체 셀 텍스트를 이어붙여서 "내일/낼"을 찾는다. 차량번호·
-  // 상하차지·차주 정보엔 나올 일이 없는 단어라 오탐 위험 없이 훨씬 안전하다.
-  const rowCargoText = (row) => (row || []).map(c => String(c ?? "")).join(" ");
-
-  const fileIssues = [];
-
-  for (let i = headerIdx + 1; i < json.length; i++) {
-    const row = json[i];
-    if (!row || !row[plateCol]) continue;
-
-    const filePlate   = normalizePlate(String(row[plateCol] || ""));
-    const fileName    = String(row[nameCol]    || "").trim();
-    const filePhone   = String(row[phoneCol]   || "").replace(/[^\d]/g, "");
-    const fileFeeType = String(row[feeTypeCol] || "").trim();
-    const fileComm    = Number(row[commCol] || 0);
-    const rawFileDate = effectiveDateCol !== -1 ? parseExcelDate(row[effectiveDateCol]) : null;
-    const fileDate    = trustDateColumnAsIs ? rawFileDate : resolveEffectiveDate(rawFileDate, rowCargoText(row));
-
-    if (!filePlate) continue;
-
-    // ⭐ 지금 조회 중인 기간(rangeStart~rangeEnd) 밖으로 확정된 날짜는 이번 일마감
-    // 대상이 아니다 — 조회하지도, 24시콜 파일에 그 날짜로 받지도 않은 문제가
-    // 튀어나오지 않도록 아예 건너뛴다(날짜를 못 읽은 행은 기존처럼 차량번호만으로
-    // 비교하므로 여기서 걸러지지 않는다).
-    if (fileDate && (fileDate < rangeStart || fileDate > rangeEnd)) continue;
-
-    let matched;
-    if (fileDate) {
-      matched = viewRows.filter(r =>
-        normalizePlate(r.차량번호 || "") === filePlate && r.상차일 === fileDate
-      );
-    } else {
-      const candidates = viewRows.filter(r => normalizePlate(r.차량번호 || "") === filePlate);
-      if (candidates.length <= 1) {
-        matched = candidates;
-      } else if (fareCol !== -1) {
-        const fileFare = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
-        if (fileFare > 0) {
-          const byFare = candidates.filter(r =>
-            Math.abs(Number(String(r.기사운임 || "0").replace(/[^\d]/g, "")) - fileFare) < 5000
-          );
-          matched = byFare.length === 1 ? byFare : byFare.length > 1 ? byFare : [];
-        } else {
-          matched = [];
-        }
-      } else {
-        matched = [];
-      }
-    }
-
-    // ⭐ 정방향 누락 검증 — 24시콜 파일에는 이 차량번호/날짜 기록이 분명히 있는데
-    // 프로그램(조회기간 내)에는 그 조건에 맞는 오더가 하나도 없는 경우. "프로그램에
-    // 24시로 등록됐는데 파일에 없다"(아래 역방향 검증)만 잡던 것의 반대 방향이다.
-    if (matched.length === 0) {
-      fileIssues.push({
-        rowId: null,
-        seq: "?",
-        label: `${fileDate || "-"} [차량 ${row[plateCol] || "-"}]${fileName ? ` ${fileName}` : ""}`,
-        type: "missingInProgram",
-        거래처명: "(미입력)",
-        vehicle: row[plateCol], driverName: fileName,
-        fieldLabel: "프로그램 등록 여부", fileValue: "24시콜 파일에 있음", programValue: "등록된 오더 없음",
-        msg: `24시콜 파일에 ${fileDate || "해당"} 차량 ${row[plateCol] || "-"}(${fileName || "기사명 미상"}) 기록이 있으나, 프로그램에는 해당 차량번호·날짜로 등록된 오더가 없어요. 등록 누락이 의심돼요`,
-      });
-      continue;
-    }
-
-    // ⭐ 24시콜이 같은 기사의 그날 여러 건을 한 행으로 묶어 운임을 합산해 등록하는
-    // 경우가 있다(예: 프로그램엔 6만원+11만원 2건인데 24시콜엔 17만원 1건) — 이때
-    // 매칭된 프로그램 오더들의 기사운임 합이 파일 운임과 같으면 "합산 등록"으로
-    // 보고, 아래 개별 운임 비교(운임 불일치)를 이 파일 행에 대해서는 생략한다.
-    let isSumFareMatch = false;
-    if (fareCol !== -1 && matched.length >= 2) {
-      const fileFareForSum = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
-      if (fileFareForSum > 0) {
-        const sumFare = matched.reduce((s, mr) =>
-          s + Number(String(mr.기사운임 || "0").replace(/[^\d]/g, "")), 0);
-        if (Math.abs(sumFare - fileFareForSum) < 1000) isSumFareMatch = true;
-      }
-    }
-
-    // ⭐ 같은 기사님이 같은 날 우리 오더를 여러 건 진행한 경우, 24시콜 이 파일 행의
-    // 운임과 정확히 일치하는 프로그램 오더가 하나뿐이면 그 오더로 확정한다. 이게
-    // 없으면 이 파일 행이 그날의 "다른" 오더와도 비교되어, 둘 다 정상 등록인데도
-    // 운임이 서로 다르다는 이유만으로 양쪽 다 불일치로 잘못 표시된다. 합산매칭인
-    // 경우엔 매칭된 오더 전부에 대해 운임 비교 자체를 생략할 것이므로 좁히지 않는다.
-    let matchedForRow = matched;
-    if (!isSumFareMatch && fareCol !== -1 && matched.length >= 2) {
-      const fileFareForRow = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
-      if (fileFareForRow > 0) {
-        const fareMatched = matched.filter(mr =>
-          Number(String(mr.기사운임 || "0").replace(/[^\d]/g, "")) === fileFareForRow
-        );
-        if (fareMatched.length === 1) matchedForRow = fareMatched;
-      }
-    }
-
-    matchedForRow.forEach(mr => {
-      const seq = viewRows.indexOf(mr) + 1;
-      const dateLabel = ` (${mr.상차일 || fileDate || "-"})`;
-      const label = `${seq}번${dateLabel} [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}`;
-      const 거래처명 = mr.거래처명 || "(미입력)";
-
-      const dispatch = (mr.배차방식 || "").trim();
-      if (dispatch && dispatch !== "24시" && dispatch !== "24시(고정기사)") {
-        fileIssues.push({
-          rowId: mr._id, seq, label, type: "dispatch", 거래처명,
-          vehicle: row[plateCol], driverName: fileName,
-          fieldLabel: "배차방식", fileValue: "24시", programValue: dispatch,
-          msg: `24시콜 파일에 존재하나 배차방식이 "${dispatch}"(으)로 등록됨 (차량: ${row[plateCol]}, 기사: ${fileName})`,
-        });
-      }
-
-      const programPay = (mr.지급방식 || "").trim();
-      const isSongsil = programPay === "손실";
-
-      if (!isSongsil) {
-        if (fileFeeType === "인수증") {
-          if (programPay && programPay !== "계산서") {
-            fileIssues.push({
-              rowId: mr._id, seq, label, type: "payment", 거래처명,
-              vehicle: row[plateCol], driverName: fileName,
-              fieldLabel: "지급방식", fileValue: fileFeeType, programValue: programPay,
-              msg: `24시콜: 인수증(계산서) / 프로그램: "${programPay}": 지급방식 불일치 (차량: ${row[plateCol]})`,
-            });
-          }
-        } else if (fileFeeType === "선/착불" || fileFeeType === "선착불") {
-          if (programPay && programPay !== "선불" && programPay !== "착불") {
-            fileIssues.push({
-              rowId: mr._id, seq, label, type: "payment", 거래처명,
-              vehicle: row[plateCol], driverName: fileName,
-              fieldLabel: "지급방식", fileValue: fileFeeType, programValue: programPay,
-              msg: `24시콜: 선/착불 / 프로그램: "${programPay}": 지급방식 불일치 (차량: ${row[plateCol]})`,
-            });
-          }
-        }
-      }
-
-      // 운임 불일치 검증 — 24시콜이 이 파일 행 하나에 매칭된 프로그램 오더 여러
-      // 건의 운임을 합산해서 등록해둔 경우(isSumFareMatch)는 건별 비교가 의미가
-      // 없으므로 생략한다.
-      if (fareCol !== -1 && !isSumFareMatch) {
-        const fileFare    = Number(String(row[fareCol] || "0").replace(/[^\d]/g, ""));
-        const programFare = Number(String(mr.기사운임  || "0").replace(/[^\d]/g, ""));
-        if (isSongsil) {
-          if (fileFare > 0 && programFare > 0 && fileFare !== programFare) {
-            fileIssues.push({
-              rowId: mr._id, seq, label, type: "fare", 거래처명,
-              vehicle: row[plateCol], driverName: fileName,
-              fieldLabel: "운임(기사)", fileValue: fileFare, programValue: programFare, isMoney: true,
-              msg: `[손실] 24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원: 운임 불일치 (차량: ${row[plateCol]})`,
-            });
-          }
-        } else {
-          if (fileFare > 0 && programFare > 0 && fileFare !== programFare) {
-            fileIssues.push({
-              rowId: mr._id, seq, label, type: "fare", 거래처명,
-              vehicle: row[plateCol], driverName: fileName,
-              fieldLabel: "운임(기사)", fileValue: fileFare, programValue: programFare, isMoney: true,
-              msg: `24시콜 운송료: ${fileFare.toLocaleString()}원 / 프로그램 기사운임: ${programFare.toLocaleString()}원: 운임 불일치 (차량: ${row[plateCol]})`,
-            });
-          }
-        }
-      }
-    });
-  }
-
-  // 역방향 검증 — 여기서도 "내일" 보정된 날짜로 집합을 만들어야, 전날 미리
-  // 등록해둔 익일 오더가 프로그램 쪽엔 정상 등록돼 있는데도 "파일에 없음"으로
-  // 잘못 잡히지 않는다.
-  const filePlates = new Set();
-  const filePlateDate = new Set();
-  for (let i = headerIdx + 1; i < json.length; i++) {
-    const row = json[i];
-    if (!row || !row[plateCol]) continue;
-    const plate = normalizePlate(String(row[plateCol]));
-    filePlates.add(plate);
-    if (effectiveDateCol !== -1) {
-      const rawD = parseExcelDate(row[effectiveDateCol]);
-      const d = trustDateColumnAsIs ? rawD : resolveEffectiveDate(rawD, rowCargoText(row));
-      if (d) filePlateDate.add(`${plate}__${d}`);
-    }
-  }
-
-  viewRows.forEach(mr => {
-    const dispatch = (mr.배차방식 || "").trim();
-    if (dispatch !== "24시" && dispatch !== "24시(고정기사)") return;
-    if (!mr.차량번호?.trim()) return;
-
-    const plate = normalizePlate(mr.차량번호);
-    const inFile = filePlateDate.size > 0
-      ? filePlateDate.has(`${plate}__${mr.상차일}`)
-      : filePlates.has(plate);
-
-    if (!inFile) {
-      const seq = viewRows.indexOf(mr) + 1;
-      const label = `${seq}번 (${mr.상차일 || "-"}) [${mr.거래처명 || "-"}] ${mr.상차지명 || ""} → ${mr.하차지명 || ""}`;
-      fileIssues.push({
-        rowId: mr._id, seq, label, type: "missing", 거래처명: mr.거래처명 || "(미입력)",
-        vehicle: mr.차량번호, driverName: mr.이름 || "-",
-        fieldLabel: "24시콜 파일 등록 여부", fileValue: "파일에 없음", programValue: `배차방식: ${mr.배차방식 || "24시"}`,
-        msg: `배차방식이 "24시"이나 24시콜 파일에 차량번호 없음 (차량: ${mr.차량번호}, 기사: ${mr.이름 || "-"}). 배차방식 오등록이 의심돼요`,
-      });
-    }
-  });
-
-  return fileIssues;
-};
-
-// ⭐ 24시콜 비교불일치 업체별 일괄수정 — 같은 거래처의 지급방식/배차방식
-// 불일치 건들을 골라 한 번에 새 값으로 patchDispatch하고, 곧바로 오류/경고와
-// 24시콜 비교결과를 전부 재계산해 팝업을 최신 상태로 되돌린다.
-const bulkFixCloseFileIssues = async (items, fieldKey, value) => {
-  if (!value) { showAlert("적용할 값을 먼저 선택하세요."); return; }
-  const ids = [...new Set(items.map(it => it.rowId))];
-  if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) return;
-  await runBulkTask({ count: ids.length, label: "오더", verb: "수정", task: (progress) => { let k = 0; return Promise.all(ids.map(id => Promise.resolve(patchDispatch(id, { [fieldKey]: value })).finally(() => progress(++k)))); } });
-  showAlert(`${ids.length}건의 ${fieldKey}이(가) "${value}"(으)로 일괄 수정되었습니다.`);
-  setTimeout(() => {
-    runDailyClose();
-    if (closeFileRawRef.current) setCloseFileResult(computeCloseFileIssues(closeFileRawRef.current));
-  }, 300);
-};
-
-// ⭐ 일마감 검증 팝업의 오류/경고/24시콜 목록에서 오더를 클릭했을 때 — 팝업을
+// ⭐ 일마감 검증 팝업의 오류/경고 목록에서 오더를 클릭했을 때 — 팝업을
 // 닫고 그리드로 스크롤만 하던 것 대신, 그 오더의 상세 내용이 담긴 "선택수정"
 // 팝업을 일마감 검증보다 앞에 띄우고 어떤 문제가 있는지 배너로 보여준다.
 const openDailyCloseIssueDetail = (rowId) => {
@@ -35290,7 +33841,6 @@ const openDailyCloseIssueDetail = (rowId) => {
   const issues = [
     ...(dailyCloseResult?.errors || []).filter(x => x.rowId === rowId).map(x => ({ ...x, level: "오류" })),
     ...(dailyCloseResult?.warnings || []).filter(x => x.rowId === rowId).map(x => ({ ...x, level: "경고" })),
-    ...(closeFileResult || []).filter(x => x.rowId === rowId).map(x => ({ ...x, level: "24시콜" })),
   ];
   // 아래 정규화(화물수량/화물타입/톤수값/톤수타입 분리)는 우클릭 메뉴의 "수정"
   // 버튼이 오더복사/수정 패널(copyTarget)을 열 때 하는 것과 동일하다.
@@ -35618,7 +34168,7 @@ const flashRow = React.useCallback((id) => {
   const [justSaved, setJustSaved] = React.useState([]);
   const [editPopupOpen, setEditPopupOpen] = React.useState(false);
   React.useEffect(() => { editDrvEdit.reset(); }, [editPopupOpen, editTarget?._id]); // eslint-disable-line react-hooks/exhaustive-deps
-  // ⭐ 일마감 검증 팝업의 오류/경고/24시콜 목록에서 오더를 클릭해 이 선택수정
+  // ⭐ 일마감 검증 팝업의 오류/경고 목록에서 오더를 클릭해 이 선택수정
   // 팝업을 열었을 때만 채워지는, 해당 오더의 검증 문제점 목록.
   const [dailyCloseIssueCtx, setDailyCloseIssueCtx] = React.useState(null);
   const [bulkRows, setBulkRows] = React.useState([]);
@@ -39904,12 +38454,11 @@ return (
     }
     setEdited(prev => { const next = { ...prev }; delete next[id]; return next; });
     // ⭐ 일마감 검증에서 열었던 수정이면, 방금 고친 내용이 반영되도록 검증을
-    // 자동으로 다시 계산한다(오류/경고 + 24시콜 비교결과 모두).
+    // 자동으로 다시 계산한다(오류/경고).
     if (dailyCloseIssueCtx) {
       setDailyCloseIssueCtx(null);
       setTimeout(() => {
         runDailyClose();
-        if (closeFileRawRef.current) setCloseFileResult(computeCloseFileIssues(closeFileRawRef.current));
       }, 300);
     }
 
@@ -39988,7 +38537,7 @@ return (
 </div>
 
 {/* ⭐ 일마감 검증 목록에서 클릭해 이 패널을 열었을 때만 나타나는 문제점 배너 —
-    오류/경고/24시콜 비교불일치 중 이 오더에 해당하는 항목을 전부 모아 보여준다. */}
+    오류/경고 중 이 오더에 해당하는 항목을 전부 모아 보여준다. */}
 {dailyCloseIssueCtx && dailyCloseIssueCtx.length > 0 && (
   <div className="bg-gray-50 border border-gray-200 rounded-xl px-5 py-4">
     <div className="flex items-center justify-between mb-2 gap-3 flex-wrap">
@@ -41593,7 +40142,7 @@ setCopyPlaceOptions(list);
                 { label: "전체", value: dailyCloseResult.total, active: dailyCloseFilter === "all", key: "all" },
                 { label: "정상", value: dailyCloseResult.total - dailyCloseResult.errors.length, active: false, key: null },
                 { label: "오류", value: dailyCloseResult.errors.length, active: dailyCloseFilter === "errors", key: "errors" },
-                { label: "경고", value: dailyCloseResult.warnings.length + (closeFileResult?.length || 0), active: dailyCloseFilter === "warnings", key: "warnings" },
+                { label: "경고", value: dailyCloseResult.warnings.length, active: dailyCloseFilter === "warnings", key: "warnings" },
               ].map(item => (
                 <div key={item.label}
                   onClick={() => { if (item.key) setDailyCloseFilter(item.key); }}
@@ -41602,21 +40151,6 @@ setCopyPlaceOptions(list);
                   <div className="text-[30px] font-black leading-tight tabular-nums" style={{ fontFamily: "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif", fontVariantNumeric: "tabular-nums" }}>{item.value}<span className="text-[13px] font-bold opacity-50 ml-1">건</span></div>
                 </div>
               ))}
-            </div>
-          </div>
-
-          {/* 24시콜 파일 비교 */}
-          <div className="mx-6 mt-4 px-5 py-3.5 bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_26px_rgba(16,24,40,0.05)]">
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 h-10 px-4 rounded-xl bg-[#0F1A30] text-white hover:bg-[#1B2B4B] cursor-pointer transition text-[13px] font-black">
-                <span>24시콜 파일 비교</span>
-                <input autoComplete="off" type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleCloseFileUpload} />
-              </label>
-              {closeFileResult && (
-                <span className="text-[12px] text-gray-500">
-                  {closeFileResult.length > 0 ? `불일치 ${closeFileResult.length}건 감지` : "불일치 없음"}
-                </span>
-              )}
             </div>
           </div>
 
@@ -41664,102 +40198,6 @@ setCopyPlaceOptions(list);
             </div>
           )}
 
-          {/* 24시콜 비교 불일치 */}
-          {(dailyCloseFilter === "all" || dailyCloseFilter === "warnings") && closeFileResult && closeFileResult.length > 0 && (
-            <div className="mx-6 mt-4 p-5 bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_26px_rgba(16,24,40,0.05)]">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-[15px] font-black text-[#0F1A30]">24시콜 비교 불일치 ({closeFileResult.length}건)</div>
-                <div className="flex rounded-lg border border-gray-300 overflow-hidden text-[11px] font-semibold">
-                  <button type="button"
-                    className={`px-3 py-1 transition ${!closeFileGroupMode ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
-                    onClick={() => setCloseFileGroupMode(false)}><EditableText id="misc.btn.40446.전체보기" defaultText="전체보기" /></button>
-                  <button type="button"
-                    className={`px-3 py-1 transition ${closeFileGroupMode ? "bg-[#1B2B4B] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
-                    onClick={() => setCloseFileGroupMode(true)}><EditableText id="misc.btn.40449.업체별보기" defaultText="업체별보기" /></button>
-                </div>
-              </div>
-
-              {(() => {
-                const typeBadge = (t) => t === "dispatch" ? "배차방식" : t === "fare" ? "운임차이" : t === "missing" ? "파일누락" : t === "missingInProgram" ? "등록누락" : "지급방식";
-                // ⭐ 검증/분석 화면답게 톤을 낮췄다 — 실제 금액이 틀린 건(운임차이)만
-                // 옅은 빨강으로 구분하고, 나머지는 프로그램 전반의 회색/네이비 톤에
-                // 맞춘 중립 배지로 통일(알록달록하다는 피드백 반영).
-                const typeCls = (t) => t === "fare" || t === "missingInProgram" ? "bg-red-50 text-red-700 border border-red-100" : "bg-[#EEF2F8] text-[#1B2B4B] border border-[#DCE3EE]";
-                // ⭐ 클릭하면 바로 오더수정 패널을 여는 대신, 24시콜 값과 프로그램 값을
-                // 나란히 비교해 보여주는 팝업(CloseFileCompareModal)을 먼저 띄운다.
-                const Card = (f, i) => (
-                  <div key={i} className="flex items-start gap-3 px-4 py-3 border border-gray-200 rounded-xl bg-white cursor-pointer hover:bg-gray-50 transition"
-                    onClick={() => setCloseFileCompareItem(f)}>
-                    <div className="w-7 h-7 rounded-lg bg-[#EEF2F8] text-[#1B2B4B] text-[11.5px] font-black tabular-nums flex items-center justify-center shrink-0">{f.seq}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-bold text-gray-900 break-words">{f.label}</div>
-                      <div className="text-[12px] font-semibold text-gray-500 mt-0.5 break-words">{f.msg}</div>
-                    </div>
-                    <span className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-bold ${typeCls(f.type)}`}>{typeBadge(f.type)}</span>
-                  </div>
-                );
-
-                if (!closeFileGroupMode) {
-                  return <div className="grid grid-cols-2 gap-2">{closeFileResult.map(Card)}</div>;
-                }
-
-                // 업체별 그룹 — 건수 많은 순
-                const groups = new Map();
-                closeFileResult.forEach(f => {
-                  const key = f.거래처명 || "(미입력)";
-                  if (!groups.has(key)) groups.set(key, []);
-                  groups.get(key).push(f);
-                });
-                const sorted = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
-
-                return (
-                  <div className="space-y-4">
-                    {sorted.map(([client, items]) => {
-                      const paymentItems = items.filter(f => f.type === "payment");
-                      const dispatchItems = items.filter(f => f.type === "dispatch");
-                      const payKey = `${client}__지급방식`;
-                      const dispKey = `${client}__배차방식`;
-                      return (
-                        <div key={client} className="border border-[#E3E8F0] rounded-xl overflow-hidden">
-                          <div className="bg-[#1B2B4B]/5 px-4 py-2 text-[13px] font-bold text-[#1B2B4B]">{client} ({items.length}건)</div>
-                          <div className="p-3 space-y-2">
-                            {/* 업체 단위 일괄수정 — 같은 원인끼리 한 번에 수정 */}
-                            {(paymentItems.length > 0 || dispatchItems.length > 0) && (
-                              <div className="flex flex-wrap gap-2 mb-1">
-                                {paymentItems.length > 0 && (
-                                  <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
-                                    <span className="text-[11px] font-semibold text-gray-600">지급방식 불일치 {paymentItems.length}건 →</span>
-                                    <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white" value={closeFileBulkValue[payKey] || ""} onChange={(__v) => (e => setCloseFileBulkValue(p => ({ ...p, [payKey]: e.target.value })))({ target: { value: __v } })} />
-                                    <button type="button"
-                                      className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
-                                      onClick={() => bulkFixCloseFileIssues(paymentItems, "지급방식", closeFileBulkValue[payKey])}>
-                                      일괄적용
-                                    </button>
-                                  </div>
-                                )}
-                                {dispatchItems.length > 0 && (
-                                  <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
-                                    <span className="text-[11px] font-semibold text-gray-600">배차방식 불일치 {dispatchItems.length}건 →</span>
-                                    <CompanyOptionPicker optKey="배차방식" placeholder="선택" noneLabel="선택" className="border border-gray-300 rounded px-1.5 py-0.5 text-[11px] bg-white" value={closeFileBulkValue[dispKey] || ""} onChange={(__v) => (e => setCloseFileBulkValue(p => ({ ...p, [dispKey]: e.target.value })))({ target: { value: __v } })} />
-                                    <button type="button"
-                                      className="px-2 py-0.5 rounded bg-[#1B2B4B] text-white text-[11px] font-bold hover:bg-[#243a60] transition"
-                                      onClick={() => bulkFixCloseFileIssues(dispatchItems, "배차방식", closeFileBulkValue[dispKey])}>
-                                      일괄적용
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            <div className="grid grid-cols-2 gap-2">{items.map(Card)}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
 
           {/* 업체별 요약 */}
           {dailyCloseResult.clientSummary?.length > 0 && (
@@ -41870,7 +40308,6 @@ setCopyPlaceOptions(list);
               const issueIds = [
                 ...dailyCloseResult.errors.map(e => e.rowId),
                 ...dailyCloseResult.warnings.map(w => w.rowId),
-                ...(closeFileResult || []).map(f => f.rowId),
               ];
               const unique = [...new Set(issueIds)];
               setFilterErrorIds(unique);
@@ -41893,33 +40330,19 @@ setCopyPlaceOptions(list);
         <button className="flex-1 py-2.5 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white font-bold text-[13px] transition"
           onClick={() => {
             runDailyClose();
-            // ⭐ 24시콜 파일을 업로드해둔 상태였다면, 파일을 다시 올리지 않아도
-            // 방금 고친 내용이 반영된 최신 dispatchData로 비교결과도 다시 계산한다.
-            if (closeFileRawRef.current) setCloseFileResult(computeCloseFileIssues(closeFileRawRef.current));
             setReVerifyToast("↻ 재검증이 완료되었습니다");
             setTimeout(() => setReVerifyToast(null), 2500);
           }}>
           재검증
         </button>
         <button className="flex-1 py-2.5 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold text-[13px] transition"
-          onClick={() => { setDailyCloseOpen(false); setDailyCloseFilter("all"); setCloseFileResult(null); }}>
+          onClick={() => { setDailyCloseOpen(false); setDailyCloseFilter("all"); }}>
           닫기
         </button>
       </div>
     </div>
   </div>
 )}
-      {/* ⭐ 24시콜 값 vs 프로그램 값 비교 팝업 — 일마감 검증 팝업보다 앞(z-index 높음)에 뜬다 */}
-      <CloseFileCompareModal
-        item={closeFileCompareItem}
-        programRow={closeFileCompareItem ? (dispatchData || []).find(r => r._id === closeFileCompareItem.rowId) : null}
-        onClose={() => setCloseFileCompareItem(null)}
-        onEdit={() => {
-          const rowId = closeFileCompareItem?.rowId;
-          setCloseFileCompareItem(null);
-          if (rowId) openDailyCloseIssueDetail(rowId);
-        }}
-      />
     {/* 🔥 블랙/주의업체 팝업 */}
       {notificationsEnabled && warningPopup && (
         <div
@@ -49034,7 +47457,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
       const dates = rows.map(r => settledDateIn(r, yyyymm)).filter(Boolean).sort();
       const k = `${client}|${yyyymm}`;
       const paid = arPaidMap.get(k) || 0; // 일부입금 누계
-      const due = Math.round(total * 1.1);
+      // 🛠 2026-11-27 입금 확인에서 이미 받은 오더(입금상태 입금완료)는 받을 돈에서 뺀다 — 서버 · 은행 매칭(buildArMonths)과 같은 기준
+      const due = Math.round(rows.filter((r) => String(r?.입금상태 || "") !== "입금완료").reduce((s, r) => s + toInt(r.청구운임), 0) * 1.1);
       if (status !== "정산완료" && paid > 0) status = "일부입금";
       return { k, yyyymm, mm, year: yyyymm.slice(0,4), 거래처명: client, 건수: rows.length, 총청구금액: total, 정산상태: status, 정산일: dates.at(-1)||"", _rows: rows, 입금누계: paid, 잔액: Math.max(0, due - paid) };
     }).filter(Boolean));
