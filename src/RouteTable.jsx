@@ -7,7 +7,7 @@
 //             완료 = 작은 원형 체크 + "운송 완료 시각 · 거리 · 걸린 시간"
 //  · 수수료 = 배차현황과 같은 값(적어 둔 수수료 · 없으면 청구 − 기사 − 회사가 따로 지급한 특수운임) · 특수운임이 있으면 아래에 작게
 //  · 글자는 줄바꿈 · 자르기 없이. 폭이 모자라면 표를 옆으로 밀고, 기사 · 차량 칸은 왼쪽에 붙어 있다
-//  · 휴대폰(폭 900 아래)은 기사마다 카드 + 오더마다 상차 → 운행 → 하차 세로 배치
+//  · 휴대폰(폭 900 아래)은 시안 C-3 카드(2026-11-26): 왼쪽 차량(번호 · 이름 · 번호판 · 상태 · 현위치 · 이번 달 정산) · 오른쪽 그날 오더(타임라인 · 금액 3칸 · 버튼)
 import React from "react";
 import { useRemainInfo } from "./fleetGeo";
 import { fkNum, orderProfit, sfItems, sfPayee, sfType } from "./forkliftCore";
@@ -182,6 +182,81 @@ function Loc({ live, geocode }) {
   );
 }
 
+// ── 휴대폰 카드(시안 C-3) 조각 ──
+// 선 아이콘 한 개(이모지 대신)
+function Ico({ d, ring = false, dots = false, size = 13 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flexShrink: 0 }}>
+      {ring && <circle cx="12" cy="12" r="9" />}
+      {dots && <><circle cx="6" cy="18" r="2.5" /><circle cx="18" cy="6" r="2.5" /></>}
+      <path d={d} />
+    </svg>
+  );
+}
+const PIN = "M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21zM12 8v3";
+// 현위치 한 줄: 핀 · 간단 주소 · 몇 분 전
+function LocMini({ live, geocode }) {
+  const loc = live?.location;
+  const lat = loc?.lat, lng = loc?.lng;
+  const [addr, setAddr] = React.useState("");
+  React.useEffect(() => {
+    if (!geocode || !Number.isFinite(lat) || !Number.isFinite(lng)) { setAddr(""); return undefined; }
+    let alive = true;
+    geocode(lat, lng, (v) => { if (alive) setAddr(v || ""); });
+    return () => { alive = false; };
+  }, [lat, lng, geocode]);
+  if (!loc) return <div className="rtc-loc" style={{ color: "#6B7A95" }}><Ico d={PIN} />위치 미연동</div>;
+  const at = tsOf(live.updatedAt);
+  const isLive = live.active !== false && at && Date.now() - at < 10 * 60000;
+  return (
+    <div className="rtc-loc" title={`${isLive ? "현위치" : "최종위치"} · ${addr}`}>
+      <span style={{ color: isLive ? "#6EE7B7" : "#FCD34D", display: "inline-flex" }}><Ico d={PIN} /></span>
+      <span className="rtc-loc-a">{simpleAddr(addr) || "주소 찾는 중…"}</span>
+      <small>{agoText(at)}</small>
+    </div>
+  );
+}
+// 오더 한 건: 거래처 · 상태 알약 · 상차/하차 타임라인 · (운송중) 진행 막대 · 금액 3칸
+function OrderMini({ o, n, state, live, getRouteDist, pickT, dropT }) {
+  const dist = useRouteDist(o.상차지주소 || "", o.하차지주소 || "", getRouteDist);
+  const remain = useRemainInfo(state === "run" ? o : null, state === "run" ? live?.location : null, "운송중");
+  const note = feeNote(o);
+  let pill, sub = null, pct = null;
+  if (state === "done") {
+    const end = tsOf(o.기사완료일시);
+    const start = tsOf(o.상차지도착일시) || tsOf(o.상차완료일시) || tsOf(o.기사확인일시);
+    const took = end && start && end > start ? (end - start) / 60000 : null;
+    pill = <span className="rtc-pill done"><Ico d="m6 12.5 4 4 8-9" size={11} />완료{end ? ` ${hm(end)}` : ""}</span>;
+    sub = [dist?.km != null ? `${dist.km}km` : "", took != null ? `${dur(took)} 걸림` : ""].filter(Boolean).join(" · ");
+  } else if (state === "run") {
+    const toDrop = remain?.label === "하차지까지";
+    if (remain && toDrop && dist?.km) pct = Math.max(4, Math.min(96, (1 - remain.km / dist.km) * 100));
+    pill = <span className="rtc-pill run">운송중{pct != null ? ` ${Math.round(pct)}%` : ""}</span>;
+    sub = remain ? `${remain.km}km · ${dur(remain.min)} ${toDrop ? "남음" : "상차지까지"}` : "";
+  } else {
+    pill = <span className="rtc-pill plan">예정</span>;
+    sub = dist === undefined ? "거리 계산 중…" : dist ? `${dist.km}km · ${dur(dist.minutes)} 예상` : "";
+  }
+  return (
+    <div className="rtc-o">
+      <div className="rtc-cl">
+        <b>{n ? <span className="rtc-n">{n}</span> : null}{o.거래처명 || "-"}</b>{pill}
+      </div>
+      <div className="rtc-tl">
+        <div className="p" title={o.상차지주소 || ""}><span>{o.상차지명 || "-"} <small>{simpleAddr(o.상차지주소)}</small></span><small>{pickT}</small></div>
+        <div className="p u" title={o.하차지주소 || ""}><span>{o.하차지명 || "-"} <small>{simpleAddr(o.하차지주소)}</small></span><small>{dropT}</small></div>
+      </div>
+      {state === "run" && <div className="rtc-prog"><i style={{ width: `${pct ?? 0}%` }} /></div>}
+      {sub ? <div className="rtc-sub">{sub}</div> : null}
+      <div className="rtc-mn">
+        <span>청구<b>{fkNum(o.청구운임).toLocaleString("ko-KR")}</b></span>
+        <span>기사<b>{fkNum(o.기사운임).toLocaleString("ko-KR")}</b></span>
+        <span className="f">수수료<b>{feeOf(o).toLocaleString("ko-KR")}</b>{note && <em>{note}</em>}</span>
+      </div>
+    </div>
+  );
+}
+
 const CSS = `
 .rtv{font-family:'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕',sans-serif;color:#E6EDF8;font-variant-numeric:tabular-nums}
 .rtv-g{display:flex;align-items:center;gap:10px;margin:18px 2px 10px;font-size:16px;font-weight:900}
@@ -209,18 +284,48 @@ const CSS = `
 .rtv-plate{display:inline-block;margin-top:6px;font-size:15px;font-weight:900;color:#F4F8FF;padding:2px 10px;border-radius:7px;background:linear-gradient(180deg,#17305C,#0E1A30);border:1.5px solid #4C74B8;letter-spacing:.02em}
 .rtv-no{font-size:12px;font-weight:900;background:#2B3F66;border-radius:6px;padding:1px 7px;margin-right:6px;color:#fff}
 .rtv-badge{font-size:12px;font-weight:900;padding:2px 7px;border-radius:6px;margin-left:6px;color:#E6EDF8}
-/* 휴대폰 카드 */
-.rtm-card{background:#0B1424;border:1px solid #1A2742;border-radius:16px;overflow:hidden;margin-bottom:10px}
-.rtm-card.idle{border-color:#3A3220}
-.rtm-head{padding:12px 14px;display:flex;gap:10px;align-items:flex-start;border-bottom:1px solid #13213D}
-.rtm-o{padding:12px 14px;border-top:1px solid #13213D}
-.rtm-o:first-of-type{border-top:0}
-.rtm-pt{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:8px;align-items:baseline}
-.rtm-tag{font-size:12px;font-weight:900;padding:2px 0;border-radius:6px;text-align:center}
-.rtm-money{display:flex;justify-content:space-between;gap:8px;margin-top:10px;padding:9px 10px;border-radius:10px;background:#0E1A30;border:1px solid #1A2742}
-.rtm-money div{text-align:center;flex:1}.rtm-money small{display:block;font-size:11.5px;font-weight:800;color:#8796AE}.rtm-money b{font-size:14.5px;font-weight:900}
-.rtm-btns{display:flex;gap:6px;padding:10px 14px;border-top:1px solid #13213D}
-.rtm-btns .rtv-btn{flex:1;width:auto;margin:0;height:38px;font-size:14px}
+/* 휴대폰 카드 — 2026-11-26 시안 C-3(네이비 글래스 · 좌우 2단) */
+.rtc-list{display:flex;flex-direction:column;gap:10px;margin-bottom:6px}
+.rtc-card{background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.rtc-main{display:grid;grid-template-columns:118px minmax(0,1fr)}
+.rtc-lf{position:relative;padding:12px 10px 11px 13px;background:rgba(255,255,255,.025);border-right:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:6px;min-width:0}
+.rtc-lf:before{content:"";position:absolute;left:0;top:12px;bottom:12px;width:3px;border-radius:0 3px 3px 0;background:var(--st)}
+.rtc-h{display:flex;align-items:center;gap:5px}
+.rtc-no{font-size:11px;font-weight:800;color:#C9D3EE}
+.rtc-k{font-size:10.5px;font-weight:700;color:#B4C4FF;border:1px solid rgba(255,255,255,.14);border-radius:4px;padding:0 5px}
+.rtc-nm{font-size:16.5px;font-weight:800;letter-spacing:-.3px;line-height:1.15;overflow-wrap:anywhere}
+.rtc-plate{align-self:flex-start;font-size:12.5px;font-weight:800;letter-spacing:.03em;padding:2px 8px;border-radius:6px;background:rgba(143,168,255,.12);color:#DCE4FF;border:1px solid rgba(143,168,255,.45);white-space:nowrap}
+.rtc-st{font-size:12px;font-weight:800}
+.rtc-loc{display:flex;align-items:center;gap:4px;font-size:12.5px;font-weight:700;flex-wrap:wrap;color:#E6EDF8}
+.rtc-loc-a{overflow-wrap:anywhere}.rtc-loc small{color:#8594BC;font-weight:500;font-size:11px}
+.rtc-amt{margin-top:auto;padding-top:7px;border-top:1px dashed rgba(255,255,255,.1);font-size:10.5px;color:#8594BC;font-weight:600}
+.rtc-amt b{display:block;font-size:14.5px;color:#EEF2FF;font-weight:800;margin-top:1px}
+.rtc-rt{padding:11px 11px 10px;display:flex;flex-direction:column;gap:9px;min-width:0}
+.rtc-o{display:flex;flex-direction:column;gap:7px}
+.rtc-o+.rtc-o{padding-top:9px;border-top:1px solid rgba(255,255,255,.07)}
+.rtc-cl{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.rtc-cl b{font-size:13.5px;font-weight:800;min-width:0;overflow-wrap:anywhere;display:flex;align-items:center;gap:5px}
+.rtc-n{width:18px;height:18px;border-radius:5px;background:rgba(143,168,255,.16);color:#B4C4FF;font-size:10.5px;display:inline-grid;place-items:center;flex-shrink:0}
+.rtc-pill{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:800;border-radius:20px;padding:2px 8px;white-space:nowrap;flex-shrink:0}
+.rtc-pill.done{color:#6EE7B7;background:rgba(110,231,183,.12)}.rtc-pill.run{color:#A5B4FC;background:rgba(165,180,252,.16)}
+.rtc-pill.plan{color:#CBD5F0;background:rgba(255,255,255,.07)}.rtc-pill.idle{color:#8594BC;background:rgba(255,255,255,.06)}
+.rtc-tl{position:relative;padding-left:15px;display:flex;flex-direction:column;gap:5px}
+.rtc-tl:before{content:"";position:absolute;left:4px;top:7px;bottom:7px;width:1.5px;background:linear-gradient(#A78BFA,#5CC8FF)}
+.rtc-tl .p{position:relative;display:flex;justify-content:space-between;gap:6px;font-size:13px;font-weight:700;line-height:1.35}
+.rtc-tl .p:before{content:"";position:absolute;left:-15px;top:4px;width:9px;height:9px;border-radius:50%;box-sizing:border-box;border:2px solid #A78BFA;background:#0E1630}
+.rtc-tl .p.u:before{background:#5CC8FF;border-color:#5CC8FF}
+.rtc-tl .p span{min-width:0;overflow-wrap:anywhere}.rtc-tl small{color:#8594BC;font-weight:600;font-size:11.5px;white-space:nowrap}
+.rtc-prog{height:3px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden}.rtc-prog i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#6E8EFF,#A78BFA)}
+.rtc-sub{font-size:11.5px;color:#8594BC;font-weight:600;margin-top:-2px}
+.rtc-mn{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:rgba(0,0,0,.2);border-radius:9px;padding:5px 0;text-align:center}
+.rtc-mn span{font-size:10px;color:#8594BC;font-weight:600;min-width:0}.rtc-mn span+span{border-left:1px solid rgba(255,255,255,.08)}
+.rtc-mn b{display:block;font-size:12.5px;font-weight:800;color:#EEF2FF}.rtc-mn .f b{color:#6EE7B7}.rtc-mn em{display:block;font-style:normal;font-size:9.5px;color:#FCD34D}
+.rtc-empty{display:flex;flex-direction:column;gap:6px;flex:1}
+.rtc-btns{display:flex;gap:5px;margin-top:auto}
+.rtc-btns button{flex:1;min-width:0;height:32px;display:inline-flex;align-items:center;justify-content:center;gap:4px;font:inherit;font-size:12px;font-weight:700;border:1px solid rgba(255,255,255,.14);border-radius:8px;background:transparent;color:#D0D8F0;cursor:pointer;white-space:nowrap}
+.rtc-btns button.on{background:#8FA8FF;border-color:#8FA8FF;color:#0A1022}
+.rtc-open{padding:0 8px 10px;border-top:1px solid rgba(255,255,255,.07);padding-top:8px}
+@media (max-width:340px){.rtc-main{grid-template-columns:1fr}.rtc-lf{border-right:0;border-bottom:1px solid rgba(255,255,255,.08)}}
 `;
 
 function stateOf(o, row, statusLabel) {
@@ -258,66 +363,49 @@ export function RouteTableView({ groups = [], dayLabel = "", isSingleDay = true,
             </div>
           )}
           {narrow ? (
-            g.rows.map((row) => {
-              idx += 1;
-              const { driver: d, orders, live, monthlyFareSum } = row;
-              const st = statusOf(row).label;
-              const cur = curOrderOf?.(orders); const r2 = { ...row, curId: cur ? (cur._id ?? cur.id) : null };
-              const isOpen = open.has(d.id);
-              return (
-                <div key={d.id} className={`rtm-card${orders.length ? "" : " idle"}`}>
-                  <div className="rtm-head">
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", rowGap: 4 }}>
-                        <span className="rtv-no">{p2(idx)}</span><b style={{ fontSize: 18, fontWeight: 900 }}>{d.이름 || "-"}</b>
-                        <span className="rtv-badge" style={{ background: d.등급 === "직영" ? "#0F5E55" : "#1B2E54" }}>{d.등급 || "지입"}</span>
-                        <span style={{ marginLeft: 8, fontSize: 14, fontWeight: 900, color: STATUS_COLOR[st] || "#A9B8D2" }}>{st}</span>
-                      </div>
-                      <span className="rtv-plate">{d.차량번호 || "-"}</span>
-                      <div style={{ marginTop: 6 }}><Loc live={live} geocode={geocode} /></div>
-                    </div>
-                    <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <div style={{ fontSize: 11.5, fontWeight: 800, color: "#8796AE" }}>이번 달 정산</div>
-                      <div style={{ fontSize: 16, fontWeight: 900 }}>{won(monthlyFareSum)}</div>
-                    </div>
+            // 🗂 2026-11-26 휴대폰 카드 = 시안 C-3(네이비 글래스 · 좌우 2단) — 왼쪽 차량 · 오른쪽 그날 오더
+            <div className="rtc-list">
+              {g.rows.map((row) => {
+                idx += 1;
+                const { driver: d, orders, live, monthlyFareSum } = row;
+                const st = statusOf(row).label;
+                const cur = curOrderOf?.(orders); const r2 = { ...row, curId: cur ? (cur._id ?? cur.id) : null };
+                const isOpen = open.has(d.id);
+                const btns = (
+                  <div className="rtc-btns">
+                    <button type="button" className={isOpen ? "on" : undefined} onClick={() => toggle(d.id)} aria-expanded={isOpen}><Ico d={isOpen ? "M6 15l6-6 6 6" : "M12 11v6M12 7.5v.5"} ring={!isOpen} />{isOpen ? "접기" : "자세히"}</button>
+                    <button type="button" onClick={() => onOpenDetail?.(d)}><Ico d="M7 3h7l4 4v14H7zM10 12h6M10 16h6" />상세</button>
+                    {onOpenHistory && <button type="button" title="이동 기록" onClick={() => onOpenHistory(d)}><Ico d="M8.5 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.5" dots />이동</button>}
                   </div>
-                  {orders.length === 0 && <div style={{ padding: "12px 14px", fontSize: 15, fontWeight: 900, color: "#FCD34D" }}>{isSingleDay ? `${dayLabel || "이날"} 배차 없음` : "기간 배차 없음"}</div>}
-                  {orders.map((o, i) => {
-                    const note = feeNote(o);
-                    return (
-                      <div key={o._id || i} className="rtm-o">
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                          <span style={{ width: 24, height: 24, borderRadius: 7, background: "#22345A", display: "grid", placeItems: "center", fontSize: 12.5, fontWeight: 900, flexShrink: 0 }}>{i + 1}</span>
-                          <b style={{ fontSize: 15.5, fontWeight: 900 }}>{o.거래처명 || "-"}</b>
-                        </div>
-                        <div className="rtm-pt" title={o.상차지주소 || ""}>
-                          <span className="rtm-tag" style={{ background: "rgba(124,58,237,.18)", color: "#C4B5FD" }}>상차</span>
-                          <span style={{ fontSize: 15.5, fontWeight: 900, overflowWrap: "anywhere" }}>{o.상차지명 || "-"} <span style={{ fontSize: 13.5, color: "#CFE0FF", fontWeight: 800 }}>{simpleAddr(o.상차지주소)}</span></span>
-                          <span style={{ fontSize: 14.5, fontWeight: 900, whiteSpace: "nowrap" }}>{dateOf(o.상차일, o.상차시간)}</span>
-                        </div>
-                        <div style={{ margin: "8px 0" }}><Conn o={o} state={stateOf(o, r2, st)} live={live} getRouteDist={getRouteDist} W={240} /></div>
-                        <div className="rtm-pt" title={o.하차지주소 || ""}>
-                          <span className="rtm-tag" style={{ background: "rgba(2,132,199,.18)", color: "#7DD3FC" }}>하차</span>
-                          <span style={{ fontSize: 15.5, fontWeight: 900, overflowWrap: "anywhere" }}>{o.하차지명 || "-"} <span style={{ fontSize: 13.5, color: "#CFE0FF", fontWeight: 800 }}>{simpleAddr(o.하차지주소)}</span></span>
-                          <span style={{ fontSize: 14.5, fontWeight: 900, whiteSpace: "nowrap" }}>{dropT(o)}</span>
-                        </div>
-                        <div className="rtm-money">
-                          <div><small>청구운임</small><b>{won(fkNum(o.청구운임))}</b></div>
-                          <div><small>기사운임</small><b style={{ color: "#CFE0FF" }}>{won(fkNum(o.기사운임))}</b></div>
-                          <div><small>수수료</small><b style={{ color: "#34D399" }}>{won(feeOf(o))}</b>{note && <small style={{ color: "#FCD34D" }}>{note}</small>}</div>
-                        </div>
+                );
+                return (
+                  <div key={d.id} className="rtc-card">
+                    <div className="rtc-main">
+                      <div className="rtc-lf" style={{ "--st": STATUS_COLOR[st] || "#64748B" }}>
+                        <div className="rtc-h"><span className="rtc-no">{p2(idx)}</span><span className="rtc-k">{d.등급 || "지입"}</span></div>
+                        <div className="rtc-nm">{d.이름 || "-"}</div>
+                        <span className="rtc-plate">{d.차량번호 || "-"}</span>
+                        <span className="rtc-st" style={{ color: STATUS_COLOR[st] || "#A9B8D2" }}>{st}</span>
+                        <LocMini live={live} geocode={geocode} />
+                        <div className="rtc-amt">이번 달 정산<b>{won(monthlyFareSum)}</b></div>
                       </div>
-                    );
-                  })}
-                  <div className="rtm-btns">
-                    <button type="button" className={`rtv-btn${isOpen ? " on" : ""}`} onClick={() => toggle(d.id)}>{isOpen ? "접기" : "자세히"}</button>
-                    <button type="button" className="rtv-btn" onClick={() => onOpenDetail?.(d)}>상세</button>
-                    {onOpenHistory && <button type="button" className="rtv-btn" onClick={() => onOpenHistory(d)}>이동 기록</button>}
+                      <div className="rtc-rt">
+                        {orders.length === 0 ? (
+                          <div className="rtc-empty">
+                            <div className="rtc-cl"><b style={{ color: "#8594BC", fontWeight: 700 }}>{isSingleDay ? `${dayLabel || "이날"} 배차 없음` : "기간 배차 없음"}</b><span className="rtc-pill idle">미배차</span></div>
+                            {row.isOffDay && <div style={{ fontSize: 12, color: "#FCD34D", fontWeight: 700 }}>근무 불가 요일</div>}
+                          </div>
+                        ) : orders.map((o, i) => (
+                          <OrderMini key={o._id || i} o={o} n={orders.length > 1 ? i + 1 : 0} state={stateOf(o, r2, st)} live={live} getRouteDist={getRouteDist} pickT={dateOf(o.상차일, o.상차시간)} dropT={dropT(o)} />
+                        ))}
+                        {btns}
+                      </div>
+                    </div>
+                    {isOpen && <div className="rtc-open">{renderCard(row, idx)}</div>}
                   </div>
-                  {isOpen && <div style={{ padding: "0 8px 10px" }}>{renderCard(row, idx)}</div>}
-                </div>
-              );
-            })
+                );
+              })}
+            </div>
           ) : (
             <div className="rtv-wrap">
               <table>

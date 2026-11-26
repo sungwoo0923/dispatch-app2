@@ -868,6 +868,45 @@ function calcWorkSummary(logs) {
   return { workMs, driveMs, checkInTime, tripCount };
 }
 
+// 🐞 2026-11-26 운행일지 달력 · 날짜 팝업 — 하루치 근무 요약.
+// 예전엔 지난 날짜에 퇴근 기록이 없으면 "근무중" + (지금 - 출근시각)으로 계산해서
+// 11-08 출근 하나가 18일 뒤 "432시간 8분"으로 보였다.
+// 이제는 그날 기록끼리만 더하고, 마지막 기록 뒤는
+//  · 오늘이면 지금까지 · 다음 기록이 12시간 안의 퇴근 · 최종퇴근 · 휴차면 그 시각까지(밤 근무가 다음 날 끝난 경우)
+//  · 그 밖엔 더하지 않고 "퇴근 기록 없음"으로 보여 준다.
+const DAY_END_STATUSES = ["퇴근", "최종퇴근", "휴차"];
+const DAY_IDLE_STATUSES = ["퇴근", "최종퇴근", "휴차", "대기", "휴식"];
+function calcDaySummary(dateStr, dayLogs, allLogs, todayStr) {
+  const st = (l) => l.status || l.mainStatus || "";
+  const tm = (l) => l.timestamp?.toDate?.() || null;
+  const logs = dayLogs.filter(tm);
+  let checkIn = null, checkOut = null, tripCount = 0, workMs = 0;
+  logs.forEach((l, i) => {
+    const s = st(l), t = tm(l);
+    if (s === "출근" && !checkIn) checkIn = t;
+    if ((s === "퇴근" || s === "최종퇴근") && checkIn) checkOut = t;
+    if (s === "운송중") tripCount++;
+    const next = logs[i + 1];
+    if (next && !DAY_IDLE_STATUSES.includes(s)) workMs += tm(next) - t;
+  });
+  const last = logs[logs.length - 1];
+  let openEnd = false; // 퇴근 없이 끝난 날
+  if (last && !DAY_IDLE_STATUSES.includes(st(last))) {
+    const lt = tm(last);
+    if (dateStr === todayStr) {
+      workMs += Date.now() - lt;
+    } else {
+      const after = (allLogs || []).filter(l => tm(l) && tm(l) > lt).sort((a, b) => tm(a) - tm(b))[0];
+      if (after && DAY_END_STATUSES.includes(st(after)) && tm(after) - lt <= 12 * 3600_000) {
+        workMs += tm(after) - lt;
+        if (st(after) !== "휴차") checkOut = tm(after);
+      } else openEnd = true;
+    }
+  }
+  const working = dateStr === todayStr && checkIn && !checkOut && last && !DAY_IDLE_STATUSES.includes(st(last));
+  return { checkIn, checkOut, tripCount, workMs: Math.max(0, workMs), openEnd: openEnd && !checkOut, working };
+}
+
 // ─── Haversine 거리 ───────────────────────────────────────────────────────────
 function calcDist(lat1, lng1, lat2, lng2) {
   const R = 6371;
@@ -3663,19 +3702,22 @@ export default function DriverHome() {
                 </div>
                 {(() => {
                   const logs = calendarDayDetail.logs;
-                  let checkIn=null, checkOut=null, tripCount=0;
-                  logs.forEach(l => { const s = l.status || l.mainStatus || ""; const t = l.timestamp?.toDate?.(); if (s==="출근" && !checkIn) checkIn=t; if (s==="최종퇴근" || s==="퇴근") checkOut=t; if (s==="운송중") tripCount++; });
-                  const workMs = checkIn && checkOut ? checkOut.getTime()-checkIn.getTime() : (checkIn ? Date.now()-checkIn.getTime() : 0);
+                  const { checkIn, checkOut, tripCount, workMs, openEnd, working } = calcDaySummary(calendarDayDetail.dateStr, logs, allLogs, todayStr);
                   return (
                     <div style={{ padding: "16px" }}>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-                        {[["출근 시각", checkIn ? formatTime(checkIn) : "--"], ["퇴근 시각", checkOut ? formatTime(checkOut) : (checkIn ? "근무중" : "--")], ["근무 시간", workMs > 0 ? formatDuration(workMs) : "--"], ["운행 횟수", `${tripCount}회`]].map(([label, value]) => (
+                        {[["출근 시각", checkIn ? formatTime(checkIn) : "--"], ["퇴근 시각", checkOut ? formatTime(checkOut) : working ? "근무중" : (checkIn && openEnd) ? "기록 없음" : "--"], ["근무 시간", workMs >= 60_000 ? formatDuration(workMs) : "--"], ["운행 횟수", `${tripCount}회`]].map(([label, value]) => (
                           <div key={label} style={{ background: "#F5F8FD", borderRadius: 10, padding: "12px", textAlign: "center" }}>
                             <div style={{ fontSize: 18, fontWeight: 900, color: "#0F1A30", fontFamily: DRV_MONO }}>{value}</div>
                             <div style={{ fontSize: 12.5, color: "#9AA9C3", marginTop: 3, fontWeight: 600 }}>{label}</div>
                           </div>
                         ))}
                       </div>
+                      {checkIn && openEnd && (
+                        <div style={{ fontSize: 13, color: "#8A5A00", background: "#FFF7E6", border: "1px solid #F5DDA8", borderRadius: 10, padding: "9px 12px", marginBottom: 14, lineHeight: 1.5 }}>
+                          이날은 퇴근을 누르지 않았어요. 근무 시간은 마지막 기록까지만 셌어요.
+                        </div>
+                      )}
                       <div style={{ fontSize: 13.5, fontWeight: 700, color: "#9AA9C3", marginBottom: 10, letterSpacing: "0.05em" }}>상태 기록</div>
                       {logs.map((log, i) => { const t = log.timestamp?.toDate?.(); const cfg = STATUS_CONFIG[log.status] || STATUS_CONFIG["대기"]; return (
                         <div key={log.id || i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: i<logs.length-1 ? "1px solid #EEF2F8" : "none" }}>
