@@ -76,5 +76,11 @@ ok(r && r.sale === 150000, `에이제이: 처음 보는 곳은 '에이제이 지
   x = qq("처음 보는 창고", "충남 아산시 음봉면 1", "8톤");
   ok(x && x.sale === 150000, `계약표에 없는 곳 8톤 → 지역 11톤 단가 ${x?.sale}`);
 }
+{ // 괄호 지역 이름
+  const sh = { baseName: "에이제이 지역", columns: [{ id: "a", label: "5톤" }], rows: [{ name: "시화(안산)", prices: { a: "190000" } }, { name: "하양(경산)", prices: { a: "350000" } }] };
+  const f = (addr) => findRate([sh], { 거래처명: "에이제이", 하차지명: "모르는 창고", 하차지주소: addr, 톤수: "5톤장축" }, { aliases: true });
+  ok(f("경기 안산시 단원구 1")?.sale === 190000, "시화(안산) — 주소 안산 · 5톤장축 = 5톤");
+  ok(f("경북 경산시 하양읍 1")?.sale === 350000, "하양(경산) — 주소 경산");
+}
 if (fail) { console.error(`rateRegion: ${fail}건 실패`); process.exit(1); }
 console.log("rateRegion: 모두 통과");

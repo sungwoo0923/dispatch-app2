@@ -28,9 +28,11 @@ export function regionTokens(addr = "") {
 }
 // 📏 2026-11-26 단가표에 없는 톤수는 "바로 위 톤수" 칸으로(JY 롯데베르살리스 10월 이후 172건 전부 이 규칙 — 6 · 7톤 → 8톤, 12~14톤 → 15톤, 20~24톤 → 25톤)
 const tonNumK = (k) => { const m = /^(\d+(?:\.\d+)?)/.exec(String(k || "")); return m ? parseFloat(m[1]) : NaN; };
+// 🛠 2026-11-26 톤수는 숫자로 비교 — "5톤장축" · "11톤 윙" · "5T" 도 5톤 · 11톤 칸(예전엔 5톤장축을 없는 톤으로 보고 11톤 단가를 넣었다)
 function colFor(sheet, ton, up) {
   const cols = sheet.columns || [];
-  const exact = cols.find((c) => tonKey(c.label) === ton);
+  const want0 = tonNumK(ton);
+  const exact = cols.find((c) => tonKey(c.label) === ton) || (Number.isFinite(want0) ? cols.find((c) => tonNumK(tonKey(c.label)) === want0) : null);
   if (exact || !up) return exact ? { col: exact, up: false } : null;
   const want = tonNumK(ton);
   if (!Number.isFinite(want)) return null;
@@ -72,7 +74,10 @@ export function findRate(sheets = [], q = {}, { aliases = false } = {}) {
       const cf = colFor(sheet, ton, true); const col = cf?.col;
       if (!col) return;
       (sheet.rows || []).forEach((row) => {
-        const lvl = regs.indexOf(normRate(row.name));
+        // 🛠 2026-11-26 "시화(안산)" · "하양(경산)" — 괄호 밖 · 안 이름 둘 다 지역으로(주소가 경기 안산시 · 경북 경산시면 맞음)
+        const nm = String(row.name || "");
+        const names = [nm.replace(/\(.*?\)|（.*?）/g, ""), ...[...nm.matchAll(/[(（](.*?)[)）]/g)].map((m) => m[1])].map(normRate).filter(Boolean);
+        const lvl = Math.max(-1, ...names.map((x) => regs.indexOf(x)));
         if (lvl < 0) return;
         const sale = num(row.prices?.[col.id]);
         if (!sale) return;
@@ -84,7 +89,8 @@ export function findRate(sheets = [], q = {}, { aliases = false } = {}) {
   if (!cands.length) return null;
   // 🛠 2026-11-26 같은 거래처에 상하차지명 단가표와 지역 단가표가 같이 있어도 겹치지 않게 — 더 구체적인 줄이 먼저
   //  기준지 맞음 > 하차지 이름으로 찾음(주소로 찾은 지역보다) > 이름이 똑같음 > 긴 이름(베베숲 평택 > 평택) > 톤수 칸이 정확함 > (지역이면) 더 작은 단위
-  const rank = (c) => (c.baseHit ? 1000 : 0) + (c.region ? 0 : 500) + (c.exact ? 200 : 0) + Math.min(normRate(c.rowName).length, 20) * 5 + (c.tonUp ? 0 : 2) + (c.region ? Math.min(c.lvl, 2) * 0.5 : 0);
+  //  🛠 2026-11-26 톤수 칸이 정확한 표가 "위 톤수로 올린" 표보다 먼저 — 에이제이 시트: 계약표(제이글로벌)에 3.5톤이 없으면 지역표의 3.5톤 단가로 청구(5톤으로 올리지 않음)
+  const rank = (c) => (c.baseHit ? 2000 : 0) + (c.tonUp ? 0 : 1000) + (c.region ? 0 : 500) + (c.exact ? 200 : 0) + Math.min(normRate(c.rowName).length, 20) * 5 + (c.region ? Math.min(c.lvl, 2) * 0.5 : 0);
   const top = Math.max(...cands.map(rank));
   const best = cands.filter((c) => rank(c) === top);
   if (new Set(best.map((c) => `${c.sale}/${c.buy}`)).size > 1) return { ambiguous: true, cands: best };
