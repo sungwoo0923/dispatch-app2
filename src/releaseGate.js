@@ -15,11 +15,13 @@ export const CUR_URL = typeof __DEPLOY_URL__ !== "undefined" ? __DEPLOY_URL__ : 
 export const RELEASE_REF = () => doc(db, "publicRelease", "current");
 
 const COOKIE = "kp_ch";
-export const isLatestChannel = () => { try { return /(?:^|;\s*)kp_ch=latest(?:;|$)/.test(document.cookie); } catch { return false; } };
+// 🚚 2026-11-26 사용자 요청 — 기사앱 화면(/driver-…)은 배포 잠금 없이 항상 최신(기사 화면 고친 것이 바로 가야 한다) · 배차자 화면은 그대로 [업데이트 배포]를 따른다
+export const isDriverPage = () => { try { return /^\/driver-/.test(window.location.pathname); } catch { return false; } };
+export const isLatestChannel = () => { try { return isDriverPage() || /(?:^|;\s*)kp_ch=latest(?:;|$)/.test(document.cookie); } catch { return false; } };
 // 로그인한 계정의 권한이 정해질 때마다 부른다 — 바뀌었으면 true
 export function syncReleaseChannel(isAdmin) {
   try {
-    const had = isLatestChannel();
+    let had = false; try { had = /(?:^|;\s*)kp_ch=latest(?:;|$)/.test(document.cookie); } catch { had = false; } // 쿠키만 본다(기사 화면 최신은 쿠키와 상관없음 — 쿠키를 바꿨다고 새로고침이 반복되지 않게)
     if (isAdmin && !had) { document.cookie = `${COOKIE}=latest; path=/; max-age=${365 * 86400}; samesite=lax`; return true; }
     if (!isAdmin && had) { document.cookie = `${COOKIE}=; path=/; max-age=0; samesite=lax`; return true; }
   } catch { /* 무시 */ }

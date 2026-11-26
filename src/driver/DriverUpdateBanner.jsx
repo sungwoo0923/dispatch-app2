@@ -54,7 +54,15 @@ export default function DriverUpdateBanner() {
     return () => { off = true; };
   }, []);
 
-  const kind = apkNew && hide !== "apk" ? "apk" : webNew && hide !== "web" ? "web" : "";
+  // 🚚 2026-11-26 사용자 요청 — 기사앱 화면 새 버전은 강제: [나중에] 없음 · 앱을 막 연 참(20초 안)이면 묻지 않고 바로 바꾼다
+  //  (사진 고르기 등으로 잠깐 화면을 벗어났다 돌아올 때 저절로 새로 고치면 하던 일이 날아가서, 그때는 팝업으로 누르게 한다)
+  useEffect(() => {
+    if (!webNew) return;
+    let fresh = false;
+    try { fresh = (performance?.now?.() || 99999) < 20000; } catch { fresh = false; }
+    if (fresh) hardReloadForUpdate();
+  }, [webNew]);
+  const kind = apkNew && hide !== "apk" ? "apk" : webNew ? "web" : "";
   if (!kind) return null;
   const isApk = kind === "apk";
   // 📱 2026-11-11 상단 띠 → 화면 가운데 팝업. [업데이트]를 누르면 바로 새 화면으로 바뀐다(캐시 비우고 새로 불러오기).
@@ -70,13 +78,13 @@ export default function DriverUpdateBanner() {
         </div>
         <div style={{ padding: "18px 20px 20px" }}>
           <div style={{ fontSize: 17.5, fontWeight: 700, color: "#0F1A30", textAlign: "center", lineHeight: 1.5 }}>
-            {isApk ? <>[설치]를 누른 뒤<br />받은 파일을 눌러 주세요</> : <>[업데이트]를 누르면<br />바로 새 화면으로 바뀝니다</>}
+            {isApk ? <>[설치]를 누른 뒤<br />받은 파일을 눌러 주세요</> : <>꼭 필요한 업데이트예요<br />[업데이트]를 누르면 바로 바뀝니다</>}
           </div>
           <button type="button" onClick={go} disabled={busy}
             style={{ marginTop: 16, width: "100%", height: 58, borderRadius: 18, border: "none", background: "linear-gradient(120deg,#0F1A30,#2D4C82)", color: "#fff", fontSize: 21, fontWeight: 900, cursor: "pointer", fontFamily: "inherit", opacity: busy ? 0.7 : 1 }}>
             {busy ? "업데이트 중…" : isApk ? "설치" : "업데이트"}
           </button>
-          {!busy && <button type="button" onClick={() => setHide(kind)}
+          {!busy && isApk && <button type="button" onClick={() => setHide(kind)}
             style={{ marginTop: 8, width: "100%", height: 46, borderRadius: 14, border: "none", background: "transparent", color: "#3A4A66", fontSize: 17, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>나중에</button>}
         </div>
       </div>
