@@ -31,6 +31,13 @@ function fixEl(el) {
   const cs = getComputedStyle(el);
   if (cs.display === "none") return 0;
   let n = 0;
+  // 🛠 2026-11-26 밝은 그러데이션 바탕(예: 노선 카드 머리 #FBFCFE → #F4F7FB)도 어두운 판으로 — 예전엔 그러데이션은 건너뛰어 흰 띠로 남았다.
+  //  색이 모두 밝은 그러데이션만(어두운 · 색 있는 그러데이션은 그대로) · 그림(url)은 건드리지 않는다
+  if (/linear-gradient|radial-gradient/.test(cs.backgroundImage) && !/url\(/.test(cs.backgroundImage)) {
+    const stops = [...cs.backgroundImage.matchAll(/rgba?\([^)]*\)/g)].map((m) => parse(m[0])).filter(Boolean);
+    // 진하게 칠한 밝은 색이 있어야(흰 격자선처럼 옅은 무늬만 있는 어두운 카드는 그대로)
+    if (stops.length && stops.some((c) => c[3] > 0.5 && lum(c) > 0.75) && stops.every((c) => c[3] < 0.05 || lum(c) > 0.75)) { el.style.setProperty("background", "#0E1A30", "important"); n += 1; }
+  }
   const bg = parse(cs.backgroundColor);
   if (bg && bg[3] > 0.5 && !/gradient|url\(/.test(cs.backgroundImage)) {
     const L = lum(bg);
@@ -84,11 +91,13 @@ export function startFleetDarkGuard() {
     for (const r of recs) {
       if (r.target.closest && r.target.closest(".leaflet-container")) continue;
       if (r.type === "childList") { r.addedNodes.forEach((nd) => { try { fixTree(nd); } catch { /* 무시 */ } }); }
+      // 🛠 2026-11-26 칸의 style 만 바뀐 경우(데이터가 들어와 줄 색이 바뀜 등)도 그려지기 전에 바로 고친다 — 예전엔 0.25초 뒤라 흰색이 잠깐 보였다
+      else if (r.attributeName === "style") { try { if (r.target.closest?.(".fm-dark")) fixEl(r.target); } catch { /* 무시 */ } }
       else other = true;
     }
     if (other) later();
   });
-  mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+  mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style"] });
   sweep();
   return () => { mo.disconnect(); if (t) clearTimeout(t); };
 }
