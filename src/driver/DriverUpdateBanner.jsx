@@ -1,6 +1,6 @@
 // ======================= src/driver/DriverUpdateBanner.jsx =======================
 // ⭐ 2026-11-05 기사앱 업데이트 안내 — 📱 2026-11-11 상단 띠에서 화면 가운데 팝업으로
-//  1) 웹 새 버전 — 화면을 켜 둔 사이 새로 배포되면(VersionCheck가 /version.json을 비교) "새 버전이 있어요 [업데이트]"
+//  1) 웹 새 버전 — 화면을 켜 둔 사이 새로 배포되면(/version.json 의 기사앱 지문 driver 를 비교 · 🚚 2026-11-26 기사 화면 코드가 바뀐 배포만) "새 버전이 있어요 [업데이트]"
 //     → 누르면 캐시를 비우고 새로 불러온다. 아이폰 홈 화면 앱(PWA)·안드로이드 APK(서비스 주소를 여는 방식) 모두 같다.
 //  2) APK 새 버전 — 설치된 APK의 versionCode(Capacitor App 플러그인)와 GitHub 릴리즈(driver-apk-latest) 본문의
 //     "versionCode: N"을 비교해 더 새 APK가 있으면 "앱 업데이트가 있어요 [설치]" → APK 파일 다운로드.
@@ -9,7 +9,31 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { registerPlugin } from "@capacitor/core";
-import { useNewVersion } from "../VersionCheck";
+// 🚚 2026-11-26 사용자 요청 — 기사앱과 상관없는 배포(PC 전용 화면 등)로는 안내하지 않는다.
+//  빌드가 기사 화면이 쓰는 코드만으로 만든 지문(version.json driver · 첫 화면 meta kp-driver-build — vite.config.js kp-driver-build)이 다를 때만 "새 버전"
+function useDriverNewVersion() {
+  const [isNew, setIsNew] = useState(false);
+  useEffect(() => {
+    let mine = "";
+    try { mine = document.querySelector('meta[name="kp-driver-build"]')?.getAttribute("content") || ""; } catch { mine = ""; }
+    if (!mine) return undefined; // 개발 화면 · 지문 없는 예전 화면 — 안내하지 않음
+    let alive = true;
+    const check = async () => {
+      try {
+        const r = await fetch(`/version.json?t=${Date.now()}`, { cache: "no-store" });
+        if (!r.ok) return;
+        const j = await r.json();
+        if (alive && j?.driver) setIsNew(j.driver !== mine);
+      } catch { /* 오프라인 — 조용히 */ }
+    };
+    const first = setTimeout(check, 2500);
+    const iv = setInterval(check, 10 * 60 * 1000);
+    const onVis = () => { if (document.visibilityState === "visible") check(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { alive = false; clearTimeout(first); clearInterval(iv); document.removeEventListener("visibilitychange", onVis); };
+  }, []);
+  return isNew;
+}
 import { hardReloadForUpdate } from "../UpdateBanner";
 
 // FleetDriverExtra.jsx의 DRIVER_APK_URL과 같은 주소(누르면 바로 APK 파일 다운로드)
@@ -35,7 +59,7 @@ async function latestApkCode() {
 }
 
 export default function DriverUpdateBanner() {
-  const webNew = useNewVersion();
+  const webNew = useDriverNewVersion();
   const [apkNew, setApkNew] = useState(false);
   const [hide, setHide] = useState("");
   const [busy, setBusy] = useState(false);
@@ -54,7 +78,15 @@ export default function DriverUpdateBanner() {
     return () => { off = true; };
   }, []);
 
-  const kind = apkNew && hide !== "apk" ? "apk" : webNew && hide !== "web" ? "web" : "";
+  // 🚚 2026-11-26 사용자 요청 — 기사앱 화면 새 버전은 강제: [나중에] 없음 · 앱을 막 연 참(20초 안)이면 묻지 않고 바로 바꾼다
+  //  (사진 고르기 등으로 잠깐 화면을 벗어났다 돌아올 때 저절로 새로 고치면 하던 일이 날아가서, 그때는 팝업으로 누르게 한다)
+  useEffect(() => {
+    if (!webNew) return;
+    let fresh = false;
+    try { fresh = (performance?.now?.() || 99999) < 20000; } catch { fresh = false; }
+    if (fresh) hardReloadForUpdate();
+  }, [webNew]);
+  const kind = apkNew && hide !== "apk" ? "apk" : webNew ? "web" : "";
   if (!kind) return null;
   const isApk = kind === "apk";
   // 📱 2026-11-11 상단 띠 → 화면 가운데 팝업. [업데이트]를 누르면 바로 새 화면으로 바뀐다(캐시 비우고 새로 불러오기).
@@ -70,13 +102,13 @@ export default function DriverUpdateBanner() {
         </div>
         <div style={{ padding: "18px 20px 20px" }}>
           <div style={{ fontSize: 17.5, fontWeight: 700, color: "#0F1A30", textAlign: "center", lineHeight: 1.5 }}>
-            {isApk ? <>[설치]를 누른 뒤<br />받은 파일을 눌러 주세요</> : <>[업데이트]를 누르면<br />바로 새 화면으로 바뀝니다</>}
+            {isApk ? <>[설치]를 누른 뒤<br />받은 파일을 눌러 주세요</> : <>꼭 필요한 업데이트예요<br />[업데이트]를 누르면 바로 바뀝니다</>}
           </div>
           <button type="button" onClick={go} disabled={busy}
             style={{ marginTop: 16, width: "100%", height: 58, borderRadius: 18, border: "none", background: "linear-gradient(120deg,#0F1A30,#2D4C82)", color: "#fff", fontSize: 21, fontWeight: 900, cursor: "pointer", fontFamily: "inherit", opacity: busy ? 0.7 : 1 }}>
             {busy ? "업데이트 중…" : isApk ? "설치" : "업데이트"}
           </button>
-          {!busy && <button type="button" onClick={() => setHide(kind)}
+          {!busy && isApk && <button type="button" onClick={() => setHide(kind)}
             style={{ marginTop: 8, width: "100%", height: 46, borderRadius: 14, border: "none", background: "transparent", color: "#3A4A66", fontSize: 17, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>나중에</button>}
         </div>
       </div>

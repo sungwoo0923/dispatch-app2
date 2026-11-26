@@ -4,9 +4,10 @@
 //  · 하차지명: 톤수 칸 왼쪽에서 글자가 가장 많이 들어 있는 칸 · 주소: 머리줄에 "주소"가 있으면 그 칸(없어도 됨)
 //  · 매입(기사) 단가: 같은 톤수 이름이 한 번 더 나오면 두 번째 묶음 = 매입 단가(buy) — 오더등록에서 기사운임 자동 입력에 쓴다
 //  · baseHint: 머리줄 바로 윗줄에 적힌 이름(예: "제이글로벌") — 기준지 이름이 비어 있을 때 쓴다
+//  · 🛠 2026-11-26 "1 TON" · "5 TONS" 도 톤수로(예전엔 "1톤on"으로 읽혀 오더 톤수와 안 맞았다) · "26년 3분기 제출가" 같은 제목은 기준지 이름으로 안 씀
 //  ⚠ 다른 파일을 가져오지 않는다(node 테스트에서 그대로 읽음)
 const cell = (v) => String(v ?? "").trim();
-const tonKey = (v) => { const m = cell(v).replace(/\s+/g, "").toLowerCase().match(/^(\d+(?:\.\d+)?)(톤|t|ton)(.*)$/); return m ? `${m[1]}톤${m[3] || ""}` : ""; };
+const tonKey = (v) => { const m = cell(v).replace(/\s+/g, "").toLowerCase().match(/^(\d+(?:\.\d+)?)(톤|tons?|t)(.*)$/); return m ? `${m[1]}톤${m[3] || ""}` : ""; };
 const money = (v) => { const s = cell(v).replace(/[^\d]/g, ""); return s ? Number(s) : 0; };
 
 export function parseRateMatrix(rows = []) {
@@ -37,5 +38,5 @@ export function parseRateMatrix(rows = []) {
     if (!Object.keys(prices).length && !Object.keys(buyP).length) return;
     out.push({ name, address: addrCol >= 0 ? cell(r[addrCol]) : "", prices, buy: buyP });
   });
-  return { labels: [...new Set(tonCols.map((c) => c.label))], rows: out, baseHint: /매출|매입|청구|운송료|단가/.test(baseHint) ? "" : baseHint, hasBuy: buy.length > 0 };
+  return { labels: [...new Set(tonCols.map((c) => c.label))], rows: out, baseHint: /매출|매입|청구|운송료|단가|제출가|분기|견적|요율|구분/.test(baseHint) ? "" : baseHint, hasBuy: buy.length > 0 };
 }

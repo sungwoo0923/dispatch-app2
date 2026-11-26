@@ -1,4 +1,9 @@
 // src/mobile/MobileFleetView.jsx — 지입차량 관제 (모바일)
+import { FLEET_DARK_CSS } from "../fleetDarkTheme";
+import { startFleetDarkGuard } from "../fleetDarkGuard";
+import { useFleetLook, FleetLookSwitch } from "../fleetLook";
+import DriverDayReplay from "../DriverDayReplay"; // 🛰 2026-11-26 다크 지킴이
+import { makeTruckIcon, truckColor, headingFor, pathHeading, TRUCK_CSS } from "../fleetTruck"; // 🚚 2026-11-25 관제 지도 = 관제실 다크 · 위에서 본 트럭
 import { isFleetGrade } from "../fleetGradesCore"; // 🚛 지입차 구분 한 곳
 import { subscribeUsersLive } from "../usersLive"; // ⭐ 2026-11-02 속도 — 직원 명부 구독 공유
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
@@ -20,6 +25,8 @@ import { careSummary, vehicleDefaults } from "../vehicleCare";
 import CustomDatePicker from "../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 import MobileSelect from "./MobileSelect"; // 📱 2026-11-10 상태 필터 — 버튼 10개 대신 드롭다운
 import { TrafficOverlay } from "../trafficLayer"; // 🚦 2026-11-22 교통 돌발상황(ITS)
+import { ClientTag, LocHealthTag, locHealthOf, locFixStateOf } from "../driverClient"; // 📱 2026-11-26 기사앱 · 웹 구분 · 📍 위치 상태
+import { sendLocFixRequest } from "../locFixSend"; // 📍 2026-11-26 [위치 설정 요청]
 
 const NAVY = "#1B2B4B";
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
@@ -474,7 +481,8 @@ function MapRecenter({ center }) {
   const prev = useRef(null);
   useEffect(() => {
     if (!center) return;
-    const key = center._t ? `${center.lat},${center.lng},${center._t}` : `${center.lat},${center.lng}`;
+    // 🛠 2026-11-26 _f(누른 시각)가 있으면 같은 좌표여도 다시 옮긴다
+    const key = center._t || center._f ? `${center.lat},${center.lng},${center._t || center._f}` : `${center.lat},${center.lng}`;
     if (prev.current === key) return;
     prev.current = key;
     if (center._t) {
@@ -634,6 +642,9 @@ function MobileVehicleCare({ drivers = [], driversRaw = [], by = "" }) {
 }
 
 export default function MobileFleetView({ dispatchData = [], userCompany = "", onRegisterBack }) {
+  const lookB = useFleetLook() === "B"; // 🎨 2026-11-26 A 관제실 다크 · B 지도 중심 라이트
+  const [replayFor, setReplayFor] = useState(null); // 🗺 2026-11-26 이동 기록 다시보기
+  useEffect(() => (lookB ? undefined : startFleetDarkGuard()), [lookB]); // 🛰 2026-11-26 규칙이 못 잡은 흰 바탕 · 안 보이는 글씨를 화면에서 바로 고침
   const [driversRaw, setDriversRaw] = useState([]);
   const [usersMap, setUsersMap] = useState({});
   const [activityLogs, setActivityLogs] = useState([]);
@@ -817,13 +828,14 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
           location: raw.location || null,
           총거리: raw.totalDistance || 0,
           updatedAt: raw.updatedAt,
-          active: raw.active === true,
+          active: (() => { const ms = [raw.updatedAt, raw.heartbeatAt].map((t) => (t?.toMillis ? t.toMillis() : t?.seconds ? t.seconds * 1000 : 0)); return ms.some((m) => m && Date.now() - m < 10 * 60 * 1000); })(), // 🛠 2026-11-26 최근 10분 안에 위치 · 생존신호가 있을 때만 접속중(퇴근 뒤에도 접속중으로 남던 문제)
           speed: raw.speed || 0,
           workStartAt: raw.workStartAt || null,
           담당자: raw.담당자 || null,
           등급: raw.등급 || "",
           거주지: raw.거주지 || "",
           근무요일: raw.근무요일 || [],
+          raw, // 📱 2026-11-26 기사앱 · 웹 구분(clientType · nativeTracking)
         };
       })
       .sort((a, b) => statusPriority(a) - statusPriority(b));
@@ -934,17 +946,21 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
     [activityLogs, driversMap, selectedDate]
   );
 
+  // 🛠 2026-11-26 기사를 누르면 지도가 항상 그 기사로 간다(예전엔 한 번 따라간 위치가 남아 다른 기사를 눌러도 안 움직였다)
+  const focusOn = useCallback((d) => { if (d?.location?.lat != null) setMapCenter({ lat: d.location.lat, lng: d.location.lng, _f: Date.now() }); }, []);
   const handleMapSelect = useCallback((d) => {
+    focusOn(d);
     setMapSelected(prev => prev?.id === d.id ? null : d);
-    setGpsTracks([]); setRoadPath([]); // 🛠 2026-11-17 고르든 풀든 이전 경로는 지운다(예전 if(함수)는 늘 참이었다)
-  }, []);
+    setGpsTracks([]); setRoadPath([]); // 🛠 2026-11-26 고르든 풀든 이전 경로는 지운다(예전 if(함수)는 늘 참이었다)
+  }, [focusOn]);
 
   // 기사 목록에서 "지도 보기" 클릭
   const handleViewOnMap = useCallback((d, e) => {
     e.stopPropagation();
     setMapSelected(d);
+    focusOn(d);
     setActiveSection("map");
-  }, []);
+  }, [focusOn]);
 
   // ⭐ 버그수정 — "지도에서 경로 보기"로 들어간 뒤 뒤로가기를 누르면 MobileApp의
   // 전역 뒤로가기 핸들러가 무조건 배차내역(list)으로 보내버려서, 바로 전 화면(기사
@@ -1025,7 +1041,9 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
   const displayPath = roadPath.length >= 2 ? roadPath : selectedPath;
 
   return (
-    <div className="mfv-root" style={{ fontFamily: "'Noto Sans KR',sans-serif", paddingBottom: 24 }}>
+    <div className={lookB ? "mfv-root" : "mfv-root fm-dark fm-mob"} style={{ fontFamily: "'Noto Sans KR',sans-serif", paddingBottom: 24 }}>
+      {!lookB && <style>{FLEET_DARK_CSS}</style>}
+      {replayFor && <DriverDayReplay driver={replayFor} light={lookB} orders={(dispatchData || []).filter((r) => { const n = String(replayFor.이름 || "").trim(), pl = String(replayFor.차량번호 || "").trim(); return (n && n !== "-" && String(r.이름 || "").trim() === n) || (pl && pl !== "-" && String(r.차량번호 || "").trim() === pl); })} onClose={() => setReplayFor(null)} />}{/* 🛰 2026-11-25 휴대폰 지입차관리도 관제실 다크(PC와 같은 규칙) */}
       {/* ⭐ 폴더블 2분할처럼 폭이 좁아도 버튼·뱃지 글자가 세로로 줄바꿈되며 겹치지 않게 */}
       <style>{`.mfv-root{word-break:keep-all;} .mfv-root button{white-space:nowrap;} .mfv-nw{white-space:nowrap;} .mfv-ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}`}</style>
 
@@ -1181,6 +1199,8 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                         <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
                           <span className="mfv-ell" style={{ fontSize: 15, fontWeight: 800, color: "#0F1A30", flexShrink: 1 }}>{d.이름}</span>
                           <span className="mfv-nw" style={{ fontSize: 14, color: "#3A4A66", fontWeight: 800, flexShrink: 0, padding: "0 6px", border: "1.5px solid #0F1A30", borderRadius: 4, background: "#fff" }}>{d.차량번호}</span>
+                          <ClientTag d={d.raw || {}} size={12} />
+                          <LocHealthTag d={d.raw || {}} size={12} />
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, minWidth: 0 }}>
                           <span className="mfv-nw" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 14, fontWeight: 700, color: dispatchStatus.color, background: dispatchStatus.bg, padding: "2px 8px", borderRadius: 99, flexShrink: 0 }}>
@@ -1410,182 +1430,221 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
       )}
 
       {/* ═══ 지도 ═══ */}
-      {activeSection === "map" && (
-        <div>
-          {/* 기사 선택 칩 */}
-          <div className="no-scrollbar" style={{ display: "flex", gap: 8, overflowX: "auto", padding: "12px 16px 8px", scrollbarWidth: "none" }}>
+      {/* 🛰 2026-11-25 관제 지도 = 관제실 다크(PC 관제현황과 같은 톤) · 위에서 본 트럭(운전석 색 = 통합 상태 · 머리 = 달리는 방향) */}
+      {activeSection === "map" && (() => {
+        const D = lookB // 🎨 2026-11-26 B 지도 중심 라이트
+          ? { bg: "#F3F5F9", panel: "#FFFFFF", panel2: "#F7F9FC", line: "#E3E8F0", line2: "#DCE3EE", text: "#0F1A30", sub: "#5B6B85", dim: "#6B7A95", accent: "#0284C7", on: "#EAF1FF", soft: "#1B2B4B", body: "#3A4A66", float: "rgba(255,255,255,.96)", edge: "#C9D6EE", glow: "rgba(2,132,199,.12)", map: "#E9EDF3", blue2: "#2D4C82" }
+          : { bg: "#070D1A", panel: "#0A1222", panel2: "#0E1A30", line: "#1A2742", line2: "#22345A", text: "#E6EDF8", sub: "#8796AE", dim: "#6B7A95", accent: "#38BDF8", on: "#11223F", soft: "#CFE0FF", body: "#C9D5E8", float: "rgba(10,18,34,.88)", edge: "#2B4F8C", glow: "rgba(56,189,248,.12)", map: "#08111F", blue2: "#7FA4E6" };
+        const located = drivers.filter(d => d.location);
+        const grp = (ph) => (ph === "운송중" ? "run" : /상차/.test(ph) ? "load" : /하차/.test(ph) ? "unload" : (ph === "배차대기" || ph === "오더확인중") ? "wait" : "rest");
+        const cnt = { run: 0, load: 0, unload: 0, wait: 0, rest: 0 };
+        drivers.forEach(d => { cnt[grp(phaseOf(d))] += 1; });
+        const online = drivers.filter(d => d.active).length;
+        const selPh = mapSelected ? phaseOf(mapSelected) : null;
+        const selHint = pathHeading(displayPath);
+        return (
+        <div className="mfv-dark" style={{ background: D.bg, color: D.text, marginTop: 12 }}>
+          <style>{TRUCK_CSS}</style>
+          {/* 요약 줄 */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: `1px solid ${D.line}` }}>
+            <span style={{ width: 9, height: 9, borderRadius: 99, background: "#34D399", boxShadow: "0 0 8px #34D399", animation: "mfvBlink 1.5s ease-in-out infinite", flexShrink: 0 }} />
+            <div style={{ lineHeight: 1.15 }}><div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".2em", color: D.blue2 }}>FLEET CONTROL</div><div style={{ fontSize: 16, fontWeight: 900 }}>관제 지도</div></div>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 14, textAlign: "right" }}>
+              {[["운행", cnt.run, lookB ? "#1D4ED8" : "#60A5FA"], ["상하차", cnt.load + cnt.unload, lookB ? "#7E22CE" : "#C084FC"], ["대기", cnt.wait, lookB ? "#B45309" : "#FBBF24"], ["접속", `${online}/${drivers.length}`, lookB ? "#15803D" : "#34D399"]].map(([l, v, c]) => (
+                <div key={l}><div style={{ fontSize: 11, fontWeight: 700, color: D.sub }}>{l}</div><div style={{ fontSize: 17, fontWeight: 900, color: c, lineHeight: 1.15 }}>{v}</div></div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ padding: "10px 16px 0", display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 800, color: D.sub }}>화면</span>
+            <FleetLookSwitch look={lookB ? "B" : "A"} size="sm" />
+          </div>
+          {/* 기사 고르기 칩 */}
+          <div className="no-scrollbar" style={{ display: "flex", gap: 8, overflowX: "auto", padding: "10px 16px", scrollbarWidth: "none" }}>
             {drivers.map(d => {
-              const color = STATUS_COLORS[d.상태] || "#9AA9C3";
+              const color = truckColor(phaseOf(d));
               const sel = mapSelected?.id === d.id;
               return (
                 <button key={d.id}
                   onClick={() => {
-                    if (sel) { setMapSelected(null); setGpsTracks([]); setRoadPath([]); }
-                    else setMapSelected(d);
+                    // 🛠 2026-11-26 이미 고른 기사 칩을 다시 누르면 지도만 그 기사로(선택 풀기는 아래 카드 [닫기])
+                    if (sel) { focusOn(d); return; }
+                    setMapSelected(d); focusOn(d);
                   }}
                   style={{
-                    padding: "6px 13px", borderRadius: 99,
-                    border: sel ? `2px solid ${NAVY}` : "1px solid #E3E8F0",
-                    background: sel ? NAVY : "white",
-                    color: sel ? "#fff" : "#3A4A66",
-                    fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", cursor: "pointer", flexShrink: 0,
-                    display: "flex", alignItems: "center", gap: 6,
+                    padding: "0 13px", height: 36, borderRadius: 99,
+                    border: sel ? `1px solid ${D.accent}` : `1px solid ${D.line2}`,
+                    background: sel ? D.on : D.panel2,
+                    color: sel ? D.text : D.body, opacity: d.active ? 1 : 0.6,
+                    fontSize: 14, fontWeight: 800, whiteSpace: "nowrap", cursor: "pointer", flexShrink: 0,
+                    display: "flex", alignItems: "center", gap: 7,
                   }}>
-                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: sel ? "rgba(255,255,255,.7)" : color, display: "inline-block" }} />
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: color, boxShadow: d.active ? `0 0 6px ${color}` : "none", display: "inline-block" }} />
                   {d.이름}
-                  {d.active && !sel && <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#1B2B4B", display: "inline-block" }} />}
                 </button>
               );
             })}
             {drivers.length === 0 && (
-              <span style={{ fontSize: 14, color: "#5B6B85", padding: "6px 0" }}>등록된 기사님이 없습니다</span>
+              <span style={{ fontSize: 14, color: D.sub, padding: "6px 0" }}>등록된 기사님이 없습니다</span>
             )}
           </div>
 
           {/* 지도 */}
-          <div style={{ height: "58vh", minHeight: 360, position: "relative" }}>
+          <div style={{ height: "64vh", minHeight: 380, position: "relative" }}>
             <MapContainer
+              className={lookB ? "lw-light-map" : "lw-dark-map"}
               center={mapSelected?.location ? [mapSelected.location.lat, mapSelected.location.lng] : [37.5665, 126.9780]}
               zoom={mapSelected?.location ? 14 : 11}
               scrollWheelZoom
-              style={{ height: "100%", width: "100%" }}
+              style={{ height: "100%", width: "100%", background: D.map }}
             >
               <MapRecenter center={mapCenter || mapSelected?.location} />
               {displayPath.length >= 2 && <FitPath points={displayPath} resetKey={mapSelected?.id} />}
-              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+              <TileLayer key={lookB ? "tl-light" : "tl-dark"} className={lookB ? "lw-light-tiles" : "lw-dark-tiles"} tileSize={512} zoomOffset={-1} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
               <TrafficOverlay />{/* 🚦 2026-11-22 사고 · 공사 · 통제 */}
 
               {/* ⭐ 이동 동선 — 점 대신 매끈한 선 + 출발점/상태 변경 지점만 표시(PC와 동일) */}
               {selectedPath.length >= 2 && <LeafletTrack points={selectedPath} statusColors={STATUS_COLORS} />}
 
-              {/* 기사 현재 위치 마커 */}
-              {drivers.map(d => d.location ? (
+              {/* 기사 현재 위치 — 위에서 본 트럭 */}
+              {located.map(d => {
+                const sel = mapSelected?.id === d.id;
+                const ph = phaseOf(d);
+                const spd = Math.round(Number(d.speed) || 0);
+                return (
                 <Marker
                   key={d.id}
                   position={[d.location.lat, d.location.lng]}
-                  icon={getIcon(d.상태, d.active, d.이름)}
+                  icon={makeTruckIcon({
+                    color: truckColor(ph),
+                    heading: headingFor(d.id, d.location, sel ? selHint : null),
+                    label: sel ? `${d.이름 || ""} · ${spd > 3 ? `${spd}km/h` : ph}` : [d.이름, String(d.차량번호 || "").replace(/\s/g, "").slice(-4)].filter(Boolean).join(" "),
+                    selected: sel, offline: !d.active,
+                  })}
+                  zIndexOffset={sel ? 1000 : 0}
                   eventHandlers={{ click: () => setMapSelected(prev => prev?.id === d.id ? null : d) }}
                 >
-                  <Popup offset={[0, -46]}>
+                  <Popup offset={[0, -24]}>
                     <div style={{ fontSize: 14, lineHeight: 1.8, minWidth: 140, fontFamily: "'Noto Sans KR',sans-serif" }}>
                       <div style={{ fontWeight: 800, color: NAVY, marginBottom: 3, fontSize: 14 }}>
                         {d.이름}
                         <span style={{ fontWeight: 600, color: "#5B6B85", fontSize: 14, marginLeft: 6 }}>{d.차량번호}</span>
                       </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                        <span style={{ width: 7, height: 7, borderRadius: "50%", background: STATUS_COLORS[d.상태] || "#9AA9C3", display: "inline-block" }} />
-                        <span style={{ fontWeight: 700, color: STATUS_COLORS[d.상태] || "#5B6B85", fontSize: 14 }}>{d.상태}</span>
-                      </div>
+                      <div style={{ fontWeight: 800, color: FLEET_PHASE_COLORS[ph] || NAVY, fontSize: 14 }}>{ph}</div>
                       <div style={{ color: "#5B6B85", fontSize: 14, marginTop: 2 }}>이동거리: {d.총거리.toFixed(1)} km</div>
                       <div style={{ color: "#5B6B85", fontSize: 14, marginTop: 1 }}>{timeAgo(d.updatedAt)} · <SpeedBadge d={d} size={11} /></div>
                     </div>
                   </Popup>
                 </Marker>
-              ) : null)}
+                );
+              })}
             </MapContainer>
             {selectedPath.length >= 2 && <MapLegend showTraffic={false} />}
 
-            {/* 갱신 배지 + 새로고침 버튼 */}
-            <div style={{ position: "absolute", top: 10, left: 10, zIndex: 1000, display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <div style={{ background: "rgba(27,43,75,0.82)", borderRadius: 8, padding: "5px 10px", fontSize: 14, color: "rgba(255,255,255,0.9)", fontWeight: 700, display: "flex", alignItems: "center", gap: 5, backdropFilter: "blur(4px)" }}>
-                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#1B2B4B", animation: "mfvBlink 1.5s ease-in-out infinite" }} />
-                  1분 주기 갱신
-                </div>
-                <button
-                  onClick={handleMapRefresh}
-                  title="위치 즉시 새로고침"
-                  style={{ background: "rgba(255,255,255,0.93)", border: "1px solid #E3E8F0", borderRadius: 8, padding: "5px 10px", fontSize: 14, fontWeight: 700, color: NAVY, backdropFilter: "blur(4px)", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}
-                >
-                  <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  새로고침
-                </button>
-              </div>
-              {mapSelected && (
-                <div style={{ background: "rgba(255,255,255,0.9)", borderRadius: 8, padding: "5px 10px", fontSize: 14, color: NAVY, fontWeight: 700, backdropFilter: "blur(4px)" }}>
-                  {mapSelected.이름} · {timeAgo(mapSelected.updatedAt)} <SpeedBadge d={mapSelected} />
-                  {(() => {
-                    const ao = pickCurrentOrder(ordersFor(mapSelected) || []);
-                    if (!ao) return null;
-                    const ph = phaseOf(mapSelected);
-                    return (
-                      <div style={{ marginTop: 3, fontSize: 14 }}>
-                        <span style={{ color: FLEET_PHASE_COLORS[ph] || NAVY, fontWeight: 800 }}>{ph}</span>
-                        {" · "}<RemainText order={ao} location={mapSelected.location} phase={ph} />
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
+            {/* 지도 위 버튼 */}
+            <div style={{ position: "absolute", top: 10, left: 10, zIndex: 1000, display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ height: 34, padding: "0 11px", borderRadius: 9, background: D.float, border: `1px solid ${D.line2}`, fontSize: 13, fontWeight: 800, color: D.soft, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: D.accent, animation: "mfvBlink 1.5s ease-in-out infinite" }} />
+                지도 {located.length}대
+              </span>
+              <button
+                onClick={handleMapRefresh}
+                title="위치 즉시 새로고침"
+                style={{ height: 34, padding: "0 11px", borderRadius: 9, background: D.float, border: `1px solid ${D.line2}`, fontSize: 13, fontWeight: 800, color: D.soft, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}
+              >
+                <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                새로고침
+              </button>
             </div>
             {/* 경로 로딩 표시 — 기사/날짜 변경 시에만 잠깐 표시 */}
             {mapSelected && selectedPath.length >= 2 && roadPath.length < 2 && !osrmDoneRef.current && (
-              <div style={{ position: "absolute", top: 10, right: 10, zIndex: 1000, background: "rgba(255,255,255,.92)", borderRadius: 8, padding: "5px 11px", fontSize: 14, color: "#5B6B85", fontWeight: 600, display: "flex", alignItems: "center", gap: 6, backdropFilter: "blur(4px)" }}>
-                <div style={{ width: 10, height: 10, border: `2px solid ${NAVY}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin .8s linear infinite" }} />
+              <div style={{ position: "absolute", top: 10, right: 10, zIndex: 1000, background: D.float, border: `1px solid ${D.line2}`, borderRadius: 9, padding: "6px 11px", fontSize: 13, color: D.soft, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 10, height: 10, border: `2px solid ${D.soft}`, borderTopColor: "transparent", borderRadius: "50%", animation: "spin .8s linear infinite" }} />
                 경로 계산중...
               </div>
             )}
           </div>
 
-          {/* 선택 기사 하단 정보 카드 */}
+          {/* 따라가는 차량 카드 */}
           {mapSelected ? (
-            <div style={{ padding: "14px 16px", background: "white", borderTop: "2px solid #E3E8F0" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 17, fontWeight: 900, color: NAVY }}>{mapSelected.이름}</span>
-                    <span style={{ fontSize: 14, color: "#5B6B85", fontWeight: 700, letterSpacing: "0.04em" }}>{mapSelected.차량번호}</span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COLORS[mapSelected.상태] || "#9AA9C3", display: "inline-block" }} />
-                    <span style={{ fontSize: 14, fontWeight: 700, color: STATUS_COLORS[mapSelected.상태] || "#5B6B85" }}>{mapSelected.상태}</span>
-                    <span style={{ fontSize: 14, color: "#5B6B85" }}>{timeAgo(mapSelected.updatedAt)}</span>
-                    <SpeedBadge d={mapSelected} />
-                  </div>
+            <div style={{ padding: "14px 16px 18px", background: D.panel, borderTop: `1px solid ${D.line}` }}>
+              <div style={{ padding: "12px 14px", borderRadius: 14, background: D.panel2, border: `1px solid ${D.edge}`, boxShadow: `0 0 0 1px ${D.glow}` }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".18em", color: D.accent }}>따라가는 중</span>
+                  <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 700, color: D.sub }}>{timeAgo(mapSelected.updatedAt)}</span>
+                  <button
+                    onClick={() => { setMapSelected(null); setGpsTracks([]); setRoadPath([]); }}
+                    style={{ height: 30, padding: "0 10px", border: `1px solid ${D.line2}`, background: "transparent", borderRadius: 8, fontSize: 13, color: D.sub, cursor: "pointer", fontWeight: 700 }}
+                  >닫기</button>
                 </div>
-                <button
-                  onClick={() => { setMapSelected(null); setGpsTracks([]); setRoadPath([]); }}
-                  style={{ border: "1px solid #E3E8F0", background: "white", borderRadius: 8, padding: "6px 12px", fontSize: 14, color: "#5B6B85", cursor: "pointer", fontWeight: 600 }}
-                >
-                  닫기
+                <div style={{ marginTop: 4, display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                  <b style={{ fontSize: 17, fontWeight: 900 }}>{mapSelected.이름}</b>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: D.body }}>{mapSelected.차량번호}</span>
+                  <span style={{ alignSelf: "center", display: "inline-flex", gap: 4 }}><ClientTag d={mapSelected.raw || {}} size={12} /><LocHealthTag d={mapSelected.raw || {}} size={12} /></span>
+                  <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 900, color: truckColor(selPh) }}>{selPh}</span>
+                </div>
+                {(() => {
+                  // 📍 2026-11-26 위치가 끊겼거나 휴대폰 설정 문제 → [위치 설정 요청](PC 관제현황과 같음)
+                  const raw = mapSelected.raw || {};
+                  const h = locHealthOf(raw);
+                  const fix = locFixStateOf(raw);
+                  const upMs = mapSelected.updatedAt?.toMillis ? mapSelected.updatedAt.toMillis() : mapSelected.updatedAt?.seconds ? mapSelected.updatedAt.seconds * 1000 : 0;
+                  const live = !!mapSelected.active && upMs && Date.now() - upMs < 10 * 60 * 1000;
+                  const stale = !!mapSelected.location && !live && !["퇴근", "최종퇴근", "휴차"].includes(mapSelected.상태);
+                  // 🛠 2026-11-26 버튼은 항상 보인다(예전: 위치가 끊겼거나 문제가 있을 때만 → 정상 기사에게는 버튼이 안 보여 헷갈렸다)
+                  const warn = !!(h && !h.ok) || stale;
+                  const tone = fix?.key === "done" ? "#10B981" : "#F59E0B";
+                  return (
+                    <div style={{ marginTop: 8, padding: warn || fix ? "10px 12px" : 0, borderRadius: 10, background: warn || fix ? D.panel : "transparent", border: warn || fix ? `1px solid ${D.line2}` : 0 }}>
+                      {warn && <div style={{ fontSize: 13, fontWeight: 800, lineHeight: 1.5, color: h && !h.ok ? "#EF4444" : tone }}>
+                        {h && !h.ok ? h.probs.join(" · ") : "위치가 안 들어오고 있어요"}
+                      </div>}
+                      {fix && <div style={{ fontSize: 12.5, fontWeight: 800, color: tone, marginTop: 2 }}>{fix.key === "done" ? `기사님이 설정을 확인했어요 · ${timeAgo(fix.at)}` : `위치 설정 요청 보냄 · ${timeAgo(fix.at)} · 아직 확인 전`}</div>}
+                      <button type="button" onClick={() => sendLocFixRequest(mapSelected)}
+                        style={{ marginTop: warn || fix ? 8 : 0, width: "100%", height: 40, borderRadius: 10, border: `1px solid ${warn ? "#F59E0B" : D.line2}`, background: "transparent", color: warn ? "#F59E0B" : D.body, fontSize: 14.5, fontWeight: 900, cursor: "pointer" }}>
+                        {fix?.key === "sent" ? "위치 설정 다시 요청" : "위치 설정 요청 보내기"}
+                      </button>
+                    </div>
+                  );
+                })()}
+                {(() => {
+                  const ao = pickCurrentOrder(ordersFor(mapSelected) || []);
+                  if (!ao) return null;
+                  return <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700, color: D.body }}><RemainText order={ao} location={mapSelected.location} phase={selPh} /></div>;
+                })()}
+                <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                  {[
+                    { label: "이동거리", val: `${mapSelected.총거리.toFixed(1)} km` },
+                    { label: "평균 속도", val: avgSpeed !== null ? `${avgSpeed} km/h` : "-" },
+                    { label: "경로 점", val: gpsTracks.length > 0 ? `${gpsTracks.length}개` : `${selectedPath.length}개`, sub: gpsTracks.length > 0 ? "GPS" : "상태기록" },
+                  ].map(({ label, val, sub }) => (
+                    <div key={label} style={{ background: D.panel2, border: `1px solid ${D.line}`, borderRadius: 10, padding: "9px 10px" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: D.dim, marginBottom: 3 }}>{label}</div>
+                      <div style={{ fontSize: 15, fontWeight: 900 }}>{val}</div>
+                      {sub && <div style={{ fontSize: 11.5, color: D.dim, marginTop: 1 }}>{sub}</div>}
+                    </div>
+                  ))}
+                </div>
+                {mapSelected.location && (
+                  <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: D.dim }}>
+                    현재 좌표 {mapSelected.location.lat.toFixed(5)}, {mapSelected.location.lng.toFixed(5)}
+                  </div>
+                )}
+                <button type="button" onClick={() => setReplayFor(mapSelected)}
+                  style={{ marginTop: 10, width: "100%", height: 44, borderRadius: 11, border: 0, background: lookB ? "#0F1A30" : "#38BDF8", color: lookB ? "#fff" : "#04111F", fontSize: 15, fontWeight: 900, cursor: "pointer" }}>
+                  이동 기록 보기 · 출근부터 퇴근까지
                 </button>
               </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                {[
-                  { label: "이동거리", val: `${mapSelected.총거리.toFixed(1)} km` },
-                  { label: "평균 속도", val: avgSpeed !== null ? `${avgSpeed} km/h` : "-" },
-                  {
-                    label: "경로 포인트",
-                    val: gpsTracks.length > 0 ? `${gpsTracks.length}개` : `${selectedPath.length}개`,
-                    sub: gpsTracks.length > 0 ? "GPS" : "상태기록",
-                  },
-                ].map(({ label, val, sub }) => (
-                  <div key={label} style={{ background: "#F5F8FD", borderRadius: 9, padding: "10px 12px" }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#5B6B85", letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: NAVY }}>{val}</div>
-                    {sub && <div style={{ fontSize: 14, color: "#5B6B85", marginTop: 2 }}>{sub}</div>}
-                  </div>
-                ))}
-              </div>
-
-              {/* 현재 좌표 */}
-              {mapSelected.location && (
-                <div style={{ marginTop: 8, background: "#F5F8FD", borderRadius: 9, padding: "9px 12px", display: "flex", alignItems: "center", gap: 8 }}>
-                  <svg width="13" height="13" fill="none" stroke={NAVY} strokeWidth="2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                  <span style={{ fontSize: 14, color: NAVY, fontWeight: 600 }}>
-                    {mapSelected.location.lat.toFixed(5)}, {mapSelected.location.lng.toFixed(5)}
-                  </span>
-                </div>
-              )}
             </div>
           ) : (
-            <div style={{ padding: "16px", background: "#F5F8FD", borderTop: "1px solid #E3E8F0", textAlign: "center", fontSize: 14, color: "#5B6B85" }}>
-              위에서 기사를 선택하면 이동 경로가 표시됩니다
+            <div style={{ padding: "16px", background: D.panel, borderTop: `1px solid ${D.line}`, textAlign: "center", fontSize: 14, fontWeight: 700, color: D.sub }}>
+              위에서 기사를 고르면 따라가면서 이동 경로를 보여 줘요
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* ═══ 실시간 활동 피드 ═══ */}
       {activeSection === "feed" && (

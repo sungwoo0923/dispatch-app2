@@ -20,9 +20,16 @@ const key = (v) => String(v || "").toLowerCase().replace(/[^0-9a-z가-힣]/g, ""
 const MAP = new Map();
 GROUPS.forEach((g) => { const ks = [...new Set(g.map(key))]; ks.forEach((k) => MAP.set(k, ks)); });
 // 이 이름과 같은 곳의 이름들(글자만 남긴 모양 · 자기 자신 포함)
+// 🛠 2026-11-26 사용자 확인 — 트레이더스 ○○ = 에브리데이 ○○(같은 곳). 지역이 무엇이든 서로 같은 이름으로 본다(칠곡 · 비산 · 대구 · 경산 · 장성 …)
+const BRAND_SWAP = [["트레이더스", "에브리데이"]];
 export function aliasKeys(name) {
   const k = key(name);
   if (!k) return [];
-  return MAP.get(k) || [k];
+  const out = new Set(MAP.get(k) || [k]);
+  [...out].forEach((x) => BRAND_SWAP.forEach(([a, b]) => {
+    if (x.startsWith(a) && x.length > a.length) out.add(b + x.slice(a.length));
+    if (x.startsWith(b) && x.length > b.length) out.add(a + x.slice(b.length));
+  }));
+  return [...out];
 }
 export const aliasKey = key;

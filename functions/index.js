@@ -1080,7 +1080,8 @@ const _notifyFleetOrderModified = (COL) =>
       // 회전수는 비어있음/1을 같은 값(1회)으로 본다
       const normF = (f, v) => (f === "회전수" ? (Number(v) > 1 ? String(Math.floor(Number(v))) : "") : norm(v));
       const labels = ORDER_WATCH_GROUPS
-        .filter(([, fields]) => fields.some((f) => normF(f, before[f]) !== normF(f, after[f])))
+        // 🛠 2026-11-26 빈 주소를 채운 것만으로는 "오더 수정" 알림을 보내지 않는다(기사앱 재승인도 없음 — src/orderChange.js)
+        .filter(([, fields]) => fields.some((f) => normF(f, before[f]) !== normF(f, after[f]) && !(/주소$/.test(f) && !normF(f, before[f]))))
         .map(([label]) => label);
       if (!labels.length) return;
 
@@ -3269,6 +3270,26 @@ exports.driverContractPush = functions.firestore.document("driverContracts/{id}"
   }, "운송계약서").catch((e) => console.error("[운송계약서 푸시] 실패:", e));
   return null;
 });
+// 📍 2026-11-26 위치 설정 요청 — 관제현황에서 [위치 설정 요청]을 누르면 그 기사 휴대폰으로 푸시(앱을 열면 위치 설정 확인 창)
+exports.driverLocFixPush = functions.firestore.document("driverLocFix/{id}").onCreate(async (snap) => {
+  const r = snap.data() || {};
+  if (!r.driverId) return null;
+  const u = await db.collection("users").doc(String(r.driverId)).get().catch(() => null);
+  const ud = u?.exists ? u.data() || {} : null;
+  if (!ud) return null;
+  if (r.companyName && ud.companyName && String(ud.companyName) !== String(r.companyName)) return null; // 다른 회사 기사에게는 보내지 않는다
+  if (ud.driverPushEnabled === false) { await snap.ref.update({ pushResult: "push_off" }).catch(() => {}); return null; } // 기사님이 알림을 끈 경우(앱을 열면 창은 뜬다)
+  const tokens = userTokens(ud);
+  if (!tokens.length) { await snap.ref.update({ pushResult: "no_token" }).catch(() => {}); return null; }
+  const res = await sendPushAndCleanup(tokens, {
+    notification: { title: "위치 설정을 확인해 주세요", body: `${r.requestedByName || "배차 담당"}님 요청 — 회사에 위치가 안 가고 있어요. 눌러서 앱을 열어 주세요.` },
+    data: { type: "loc_fix", tab: "home" },
+    android: { priority: "high" },
+    apns: { payload: { aps: { sound: "default" } } },
+  }, "위치 설정 요청").catch((e) => { console.error("[위치 설정 요청 푸시] 실패:", e); return null; });
+  await snap.ref.update({ pushResult: res ? `ok ${res.successCount}/${tokens.length}` : "fail" }).catch(() => {});
+  return null;
+});
 exports.notifyNotice = functions.firestore.document("notices/{id}").onCreate(async (snap) => {
   const n = snap.data() || {};
   if (n._seed) return null; /* 🧪 테스트 데이터(_seed)는 알림 없음 */
@@ -4825,6 +4846,19 @@ exports.orderScanExtract = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], t
       makeAnthropic: () => (process.env.ANTHROPIC_API_KEY ? new (_orderScan.Anthropic)({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: data?.multi === true ? 100000 : 30000, maxRetries: 1 }) : null),
       // 💰 비용·손익 — 호출 수와 토큰(입력·출력·캐시 읽기·캐시 쓰기)
       bumpUsage: (u) => bumpScanUsage({ scanAiCalls: 1, scanAiInTok: u.input, scanAiOutTok: u.output, scanAiCacheReadTok: u.cacheRead, scanAiCacheWriteTok: u.cacheWrite }),
+    });
+  } catch (e) { throw scanHttpsError(e); }
+});
+
+// 📞 2026-11-25 AI 상담원 음성 오더 — 설명은 functions/voiceOrder.js 맨 위(휴대폰 오더등록 [AI 상담원])
+//  한 마디마다 Claude(Haiku)가 짧은 대답 · 채울 칸 · 다음 할 일만 돌려준다(저장은 화면이 원래 저장 함수로)
+const _voiceOrder = require("./voiceOrder");
+exports.voiceOrderTurn = functions.runWith({ secrets: ["ANTHROPIC_API_KEY"], timeoutSeconds: 60, memory: "256MB", ...appCheckCallOpts() }).https.onCall(async (data, context) => {
+  try {
+    return await _voiceOrder.runVoiceTurn({
+      db, auth: context.auth, data,
+      makeAnthropic: () => (process.env.ANTHROPIC_API_KEY ? new (_orderScan.Anthropic)({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25000, maxRetries: 1 }) : null),
+      bumpUsage: (u) => bumpScanUsage({ voiceAiCalls: 1, voiceAiInTok: u.input, voiceAiOutTok: u.output, voiceAiCacheReadTok: u.cacheRead, voiceAiCacheWriteTok: u.cacheWrite }),
     });
   } catch (e) { throw scanHttpsError(e); }
 });

@@ -2,6 +2,7 @@
 import { isTMUser, TM_AFFIL } from "../staffFilter"; // 🧑‍💻 2026-11-24 최고관리자 소속 = 로지스웹 · 개발자
 import { installKeyboardLift } from "./keyboardLift"; // ⌨️ 2026-11-24 자판 위로 입력칸 올리기
 import { MultiCompanyCard } from "../MultiCompanySwitch"; // 🏢 2026-11-24 여러 회사 오가기
+import { CompanySwitchCard } from "../CompanySwitcher"; // 🔀 2026-11-26 최고관리자 운송사 전환(PC와 같은 창)
 import { useNewSeen, markNewSeen } from "../newFeatures"; // ✨ 2026-11-24 새 메뉴 NEW 표시
 import NewMark from "../NewMark";
 import { RoadviewButton } from "../roadview"; // 📷 2026-11-20 상·하차지 로드뷰
@@ -73,7 +74,7 @@ import RouteMapModal from "../RouteMapModal";
 import southKorea from "@svg-maps/south-korea";
 import { canSeeNotice } from "../NoticeBoard";
 import React, { useState, useMemo, useEffect, useRef, startTransition, useSyncExternalStore } from "react";
-import { withCo, getTenant } from "../fsTenant";
+import { withCo, getTenant, isPreviewMode } from "../fsTenant";
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "../orderHistoryCache"; // ⚡ 2026-11-23 13개월 오더 폰 보관
 // ⚡ 2026-11-23 운임 참고용 13개월 오더는 화면을 열 때 한 번만 받는다 — 예전엔 실시간 구독이라 누가 오더를 고칠 때마다 받고,
 //  30분 뒤 다시 열면 13개월을 통째로 또 받았다(운임 비교에는 실시간이 필요 없다)
@@ -115,7 +116,12 @@ import "./mobileTheme.css";
 import { OrderTimeline } from "../OrderTimeline"; // ★ 모바일 A/B 디자인 + 알록달록 금지(남색 계열)
 import KpBootScreen from "../KpBootScreen";
 import { isMeaningfulChange } from "../bootProgress";
-import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift, Mic, Sparkles, Download, RotateCcw, Building2, ArrowUpDown, StickyNote, MessageSquare, History } from "lucide-react";
+import { Scale, Package, Snowflake, Car, Bike, Truck, Forklift, Mic, Sparkles, Download, RotateCcw, Building2, ArrowUpDown, StickyNote, MessageSquare, History, PhoneCall } from "lucide-react";
+import VoiceAgentCall from "./VoiceAgentCall"; // 📞 2026-11-25 AI 상담원 음성 오더(통화하듯 말로 등록)
+import { addCompanyDropdownOption } from "../companyDropdownOptions"; // 📞 AI 상담원 — 새 지급방식 등 추가
+import { withCustomVehicleTypes, VT_DEFAULTS, addVehicleType } from "../vehicleTypes"; // 📞 AI 상담원 — 차종 목록 · 새 차종
+import { specialApplyAll, defaultFkMode, sfType } from "../forklift"; // 📞 AI 상담원 — 특수운임
+import { normTon, normVehicle, normPay } from "../orderScanAi"; // 📞 AI 상담원 값 정리
 // ⚡ 2026-11-24 LTE 속도 — 인사이트 화면 차트(recharts)는 그 화면을 열 때 받는다(src/mobile/MobileInsightCharts.jsx)
 const MInsightTrend = lazyView(() => import("./MobileInsightCharts").then((m) => ({ default: m.TrendLineChart })), null);
 const MInsightDayBar = lazyView(() => import("./MobileInsightCharts").then((m) => ({ default: m.DayBarChart })), null);
@@ -8403,7 +8409,8 @@ function MobileSideMenu({
             스크롤되던 걸 없애고, 드로어 전체(메뉴~로그아웃~버전)가 하나로 이어져
             일반 스크롤바로 오르내리게 통합했다. */}
         <div ref={menuScrollRef} onScroll={(e) => { SIDE_MENU_SCROLL = e.currentTarget.scrollTop; }} className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-1" style={{ WebkitOverflowScrolling: "touch", paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)" }}>
-          <MultiCompanyCard />{/* 🏢 2026-11-24 여러 회사 계정 — 지금 회사 + [회사 전환] */}
+          {/* 🔀 2026-11-26 최고관리자 = 모든 운송사 [운송사 전환](PC와 같음) · 그 밖에는 여러 회사 계정 [회사 전환] */}
+          {realRole === "totalMaster" && !isPreviewMode() ? <CompanySwitchCard /> : <MultiCompanyCard />}
           {/* 🔀 2026-11-24 화면 전환 · 업무 영역 — 메뉴 줄이 아니라 [회사 전환] 카드와 같은 자리의 카드(사용자 요청 · 메뉴 줄이기) */}
           <WorkspaceCard dark={dark}
             view={roleViews ? (roleViews.find(([k]) => k === roleViewCur) || roleViews[0])[2] : ""} onView={roleViews ? () => onRoleView?.(roleViewCur) : null}
@@ -14328,9 +14335,7 @@ const [matchedClients, setMatchedClients] = useState([]);
     if (!form.거래처명?.trim()) { miss.push("거래처"); missKeys.push("거래처명"); }
     if (!form.상차지명?.trim()) { miss.push("상차지명"); missKeys.push("상차지명"); }
     if (!form.하차지명?.trim()) { miss.push("하차지명"); missKeys.push("하차지명"); }
-    if (!String(화물수량 || "").trim()) { miss.push("화물내용"); missKeys.push("화물내용"); }
-    if (!String(톤수값 || "").trim()) { miss.push("차량톤수"); missKeys.push("차량톤수"); }
-    if (!form.지급방식) { miss.push("지급방식"); missKeys.push("지급방식"); }
+    // 🛠 2026-11-26 사용자 요청 — 필수는 거래처 · 상차지명 · 하차지명만(화물내용 · 차량톤수 · 지급방식은 비워도 저장)
     if (miss.length) {
       setRequiredErrors(new Set(missKeys));
       if (missKeys.includes("거래처명")) setClientNameError(true);
@@ -15038,6 +15043,62 @@ const pickDrop = (c) => {
   });
 };
 
+  // ===== 📞 2026-11-25 AI 상담원 음성 오더 — 말하고 [보내기] → AI가 칸 · 경유지 · 특수운임을 채우고, 읽어 준 뒤 "네"면 원래 저장(onSave) =====
+  const [agentCall, setAgentCall] = useState(false);
+  const agentCompany = getTenant() || localStorage.getItem("userCompany") || "";
+  const agentOptions = () => ({
+    차종: withCustomVehicleTypes(VT_DEFAULTS, agentCompany),
+    지급방식: dropdownList("지급방식"), 배차방식: dropdownList("배차방식"), 상하차방법: dropdownList("상하차방법"),
+    운임구분: fareRM.on ? (fareRM.rules || []).map((r) => r?.name).filter(Boolean) : [],
+  });
+  const applyAgentResult = ({ patch = {}, stops = null, specials = null, newItems = [] } = {}) => {
+    const loose = (x) => normalizeCompany(x || "");
+    const placeOf = (name) => (clients || []).find((c) => loose(c.거래처명) && loose(c.거래처명) === loose(name));
+    Object.entries(patch || {}).forEach(([k, raw]) => {
+      const v = String(raw ?? "").trim();
+      if (!v) return;
+      if (k === "청구운임" || k === "기사운임") { const n = Number(v.replace(/[^\d]/g, "")); if (n) updateMoney(k, n); return; }
+      if (k === "운임구분") { if (fareRM.on) updateMoney("운임구분", v); else update("운임구분", v); return; }
+      if (k === "상차지명" || k === "하차지명") {
+        const hit = placeOf(v); // 등록 업체면 주소 · 담당자까지
+        if (hit) (k === "상차지명" ? pickPickup : pickDrop)(hit); else update(k, v);
+        return;
+      }
+      if (k === "톤수") { update("톤수", normTon(v) || v); return; }
+      if (k === "차종") { update("차종", normVehicle(v) || v); return; }
+      if (k === "지급방식") { update("지급방식", normPay(v) || v); return; }
+      if (k === "긴급") { update("긴급", /긴급|급|예|true/.test(v)); return; }
+      if (k === "혼적여부") { update("혼적여부", v.includes("혼적") ? "혼적" : v.includes("독차") ? "독차" : v); return; }
+      if (k === "운행유형") { update("운행유형", v.includes("왕복") ? "왕복" : "편도"); return; }
+      if (k === "등록수량") { const n = Math.max(1, Math.min(30, Number(v.replace(/[^\d]/g, "")) || 1)); setMultiCount?.(n); return; }
+      if (k === "적요" || k === "전달사항") { setForm((p) => (String(p[k] || "").includes(v) ? p : { ...p, [k]: [p[k], v].filter(Boolean).join("\n") })); return; }
+      update(k, v);
+    });
+    // 경유지(전체 목록) — 등록 업체면 주소 · 담당자까지
+    if (Array.isArray(stops)) {
+      const mk = (s, kind) => {
+        const hit = placeOf(s.name);
+        const cts = (Array.isArray(hit?.contacts) ? hit.contacts : []).filter((c) => c?.name?.trim());
+        const pc = cts.find((c) => c.isPrimary) || cts[0] || null;
+        return { ...emptyStop(), 업체명: hit?.거래처명 || s.name, 주소: hit?.주소 || "", 담당자: pc?.name || hit?.담당자 || "", 담당자번호: pc?.phone || hit?.담당자번호 || "",
+          화물내용: s.cargo || "", 방법: s.method || "", ...(kind === "상차" ? { 상차일: form.상차일 || "", 상차시간: s.time || "" } : { 하차일: form.하차일 || "", 하차시간: s.time || "" }) };
+      };
+      update("경유상차목록", stops.filter((s) => s.kind === "상차").map((s) => mk(s, "상차")));
+      update("경유하차목록", stops.filter((s) => s.kind === "하차").map((s) => mk(s, "하차")));
+    }
+    // 특수운임(전체 목록) — 지게차는 지게차 칸, 나머지는 특수운임 항목. 부담을 안 정했으면 기본값으로 두고 AI가 물어본다
+    if (Array.isArray(specials)) {
+      const fk = specials.find((x) => x.type === "지게차");
+      const items = specials.filter((x) => x.type !== "지게차").map((x) => ({ 종류: x.type, 이름: x.name || "", 금액: x.amount, 부담: x.burden || sfType(x.type).mode }));
+      setForm((p) => specialApplyAll(p, { fork: fk ? { 지게차비용: fk.amount, 지게차부담: fk.burden || defaultFkMode() } : null, items }, { asString: false }));
+    }
+    // 새 이름 — 사용자가 "새로 등록"이라고 한 것만 목록에 추가(거래처 · 상하차지는 오더 저장 때 그대로 들어간다)
+    (newItems || []).filter((n) => n.confirmed).forEach((n) => {
+      if (["지급방식", "배차방식", "상하차방법"].includes(n.kind)) addCompanyDropdownOption(n.kind, n.value, agentCompany).catch(() => {});
+      else if (n.kind === "차종") addVehicleType(agentCompany, n.value).catch(() => {});
+    });
+  };
+
   // ===== 음성 오더 등록 =====
   const [voiceSheet, setVoiceSheet] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
@@ -15334,6 +15395,10 @@ const pickDrop = (c) => {
           충분한 여백을 둔다. */}
       <div className="flex items-stretch gap-1.5">
         {[
+          !isLockedShipperEdit && !form._editId && (window.SpeechRecognition || window.webkitSpeechRecognition) && {
+            key: "agent", Icon: PhoneCall, label: "AI 상담원",
+            onClick: () => setAgentCall(true),
+          },
           !isLockedShipperEdit && (window.SpeechRecognition || window.webkitSpeechRecognition) && {
             key: "voice", Icon: Mic, label: "음성등록",
             onClick: () => { setVoiceSheet(true); setVoiceTranscript(""); setVoiceParsed(null); },
@@ -15930,7 +15995,7 @@ const pickDrop = (c) => {
         />
         {/* 톤수 */}
         <RowLabelInput
-          label={<>톤수 <span className="text-red-500">*</span></>}
+          label={<>톤수</>}
           input={
             <div className={`flex items-stretch border-0 border-b-2 transition ${
               requiredErrors.has("차량톤수") ? "border-red-500 ring-2 ring-red-300 animate-pulse" : "border-gray-300 focus-within:border-[var(--reg-accent)]"
@@ -15970,7 +16035,7 @@ const pickDrop = (c) => {
         />
         {/* 화물내용 */}
         <RowLabelInput
-          label={<>화물내용 <span className="text-red-500">*</span></>}
+          label={<>화물내용</>}
           input={
             <div className="space-y-1">
               <div className="flex justify-end">
@@ -16077,7 +16142,7 @@ const pickDrop = (c) => {
       {/* 배차방식은 화주사 오더라도 운송사가 항상 수정할 수 있어야 하므로 잠금 fieldset 밖에 둔다 */}
       <div className="border-t border-gray-100">
         <RowLabelInput
-          label={<span className="whitespace-nowrap tracking-tight">지급/배차 <span className="text-red-500">*</span></span>}
+          label={<span className="whitespace-nowrap tracking-tight">지급/배차</span>}
           input={
             <div className="flex flex-wrap gap-1.5">
               <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
@@ -16874,6 +16939,8 @@ const pickDrop = (c) => {
   </div>
 )}
 
+{agentCall && <VoiceAgentCall form={form} multiCount={multiCount || 1} places={clients || []} clients={basicClients || []} drivers={drivers || []} options={agentOptions()} company={agentCompany}
+  hintsFor={(t) => mainScanAi.hintsFor(t)} onResult={applyAgentResult} onSave={onSave} onClose={() => setAgentCall(false)} />}
 {/* ===== 음성 오더 입력 바텀시트 ===== */}
 {voiceSheet && (
   <div className="fixed inset-0 z-[9999] flex flex-col justify-end">

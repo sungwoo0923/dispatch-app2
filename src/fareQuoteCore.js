@@ -16,6 +16,29 @@ const tonKey = (v) => normRate(v).replace(/톤$/, "");
 //  하차지명이 맞는 줄 + 톤수 칸 → 기준지(거래처 · 상차지)가 맞는 것 > 하차지 이름이 똑같은 것
 //  가장 맞는 후보들의 금액이 서로 다르면 ambiguous(직접 확인)
 //  aliases(JY): 같은 곳의 다른 이름(평택초저온 = 베베숲 평택 · 에브리데이 시화 = 트레이더스 시화 · 에이제이 = 제이글로벌)도 맞는 것으로 본다
+// 🗺 2026-11-26 지역 단가표(예: 롯데베르살리스 — 줄 이름이 "양산 · 김해 · 충남" 같은 지역) — 하차지명이 업체명이어도
+//  하차지 주소의 시 · 도 · 시군구 이름으로 줄을 찾는다. 기준지(거래처 · 상차지)가 맞는 단가표에서만 · 이름으로 찾은 줄이 있으면 그쪽이 먼저
+const PROV_SHORT = { 서울특별시: "서울", 부산광역시: "부산", 대구광역시: "대구", 인천광역시: "인천", 광주광역시: "광주", 대전광역시: "대전", 울산광역시: "울산",
+  세종특별자치시: "세종", 경기도: "경기", 강원도: "강원", 강원특별자치도: "강원", 충청북도: "충북", 충청남도: "충남", 전라북도: "전북", 전북특별자치도: "전북",
+  전라남도: "전남", 경상북도: "경북", 경상남도: "경남", 제주특별자치도: "제주", 제주도: "제주" };
+export function regionTokens(addr = "") {
+  return String(addr || "").replace(/\(.*?\)|（.*?）/g, " ").split(/[\s,]+/).filter(Boolean).slice(0, 3)
+    .map((t) => { if (PROV_SHORT[t]) return PROV_SHORT[t]; const c = t.replace(/(특별자치시|특별자치도|특별시|광역시|시|군|구)$/, ""); return c.length >= 2 ? c : t; }) // "대구" · "중구"는 자르지 않음
+    .map(normRate).filter((t) => t.length >= 2);
+}
+// 📏 2026-11-26 단가표에 없는 톤수는 "바로 위 톤수" 칸으로(JY 롯데베르살리스 10월 이후 172건 전부 이 규칙 — 6 · 7톤 → 8톤, 12~14톤 → 15톤, 20~24톤 → 25톤)
+const tonNumK = (k) => { const m = /^(\d+(?:\.\d+)?)/.exec(String(k || "")); return m ? parseFloat(m[1]) : NaN; };
+// 🛠 2026-11-26 톤수는 숫자로 비교 — "5톤장축" · "11톤 윙" · "5T" 도 5톤 · 11톤 칸(예전엔 5톤장축을 없는 톤으로 보고 11톤 단가를 넣었다)
+function colFor(sheet, ton, up) {
+  const cols = sheet.columns || [];
+  const want0 = tonNumK(ton);
+  const exact = cols.find((c) => tonKey(c.label) === ton) || (Number.isFinite(want0) ? cols.find((c) => tonNumK(tonKey(c.label)) === want0) : null);
+  if (exact || !up) return exact ? { col: exact, up: false } : null;
+  const want = tonNumK(ton);
+  if (!Number.isFinite(want)) return null;
+  const higher = cols.map((c) => ({ c, n: tonNumK(tonKey(c.label)) })).filter((x) => Number.isFinite(x.n) && x.n > want).sort((a, b) => a.n - b.n);
+  return higher.length ? { col: higher[0].c, up: true } : null;
+}
 export function findRate(sheets = [], q = {}, { aliases = false } = {}) {
   const ton = tonKey(q.톤수);
   const drop = normRate(q.하차지명);
@@ -32,17 +55,42 @@ export function findRate(sheets = [], q = {}, { aliases = false } = {}) {
       const wordHit = aliases && words.length > 1 && rName.length === drop.length && words.every((w) => rName.includes(w));
       const aliasHit = aliases && (dropA.includes(aliasKey(row.name)) || wordHit);
       if (!rName || !(rName.includes(drop) || drop.includes(rName) || aliasHit)) return;
-      const col = (sheet.columns || []).find((c) => tonKey(c.label) === ton);
+      const cf = colFor(sheet, ton, aliases); const col = cf?.col;
       const sale = col ? num(row.prices?.[col.id]) : 0;
       if (!sale) return;
       const buy = num(row.buyPrices?.[col.id]);
       const bn = normRate(sheet.baseName);
       const baseHit = !!bn && (bases.some((x) => x.includes(bn) || bn.includes(x)) || (aliases && baseA.includes(aliasKey(sheet.baseName))));
-      cands.push({ sale, buy, baseHit, exact: rName === drop || aliasHit, sheetName: String(sheet.baseName || "").trim(), rowName: String(row.name || "").trim(), ton: col.label });
+      cands.push({ sale, buy, baseHit, exact: rName === drop || aliasHit, tonUp: !!cf?.up, sheetName: String(sheet.baseName || "").trim(), rowName: String(row.name || "").trim(), ton: col.label });
     });
   });
+  // 🗺 지역으로 찾기(JY · 기준지가 맞는 단가표만) — 주소의 더 작은 단위(시군구)가 맞는 줄이 먼저(경남 양산시 → "양산" > "경남")
+  const regs = aliases ? regionTokens(q.하차지주소) : [];
+  if (regs.length) {
+    (sheets || []).forEach((sheet) => {
+      const bn = normRate(sheet.baseName);
+      const baseHit = !!bn && (bases.some((x) => x.includes(bn) || bn.includes(x)) || baseA.includes(aliasKey(sheet.baseName)));
+      if (!baseHit) return;
+      const cf = colFor(sheet, ton, true); const col = cf?.col;
+      if (!col) return;
+      (sheet.rows || []).forEach((row) => {
+        // 🛠 2026-11-26 "시화(안산)" · "하양(경산)" — 괄호 밖 · 안 이름 둘 다 지역으로(주소가 경기 안산시 · 경북 경산시면 맞음)
+        const nm = String(row.name || "");
+        const names = [nm.replace(/\(.*?\)|（.*?）/g, ""), ...[...nm.matchAll(/[(（](.*?)[)）]/g)].map((m) => m[1])].map(normRate).filter(Boolean);
+        const lvl = Math.max(-1, ...names.map((x) => regs.indexOf(x)));
+        if (lvl < 0) return;
+        const sale = num(row.prices?.[col.id]);
+        if (!sale) return;
+        if (cands.some((c) => c.baseHit && c.sheetName === String(sheet.baseName || "").trim() && c.rowName === String(row.name || "").trim())) return; // 이름으로 이미 찾은 줄
+        cands.push({ sale, buy: num(row.buyPrices?.[col.id]), baseHit: true, exact: false, region: true, lvl, tonUp: !!cf.up, sheetName: String(sheet.baseName || "").trim(), rowName: String(row.name || "").trim(), ton: col.label });
+      });
+    });
+  }
   if (!cands.length) return null;
-  const rank = (c) => (c.baseHit ? 2 : 0) + (c.exact ? 1 : 0);
+  // 🛠 2026-11-26 같은 거래처에 상하차지명 단가표와 지역 단가표가 같이 있어도 겹치지 않게 — 더 구체적인 줄이 먼저
+  //  기준지 맞음 > 하차지 이름으로 찾음(주소로 찾은 지역보다) > 이름이 똑같음 > 긴 이름(베베숲 평택 > 평택) > 톤수 칸이 정확함 > (지역이면) 더 작은 단위
+  //  🛠 2026-11-26 톤수 칸이 정확한 표가 "위 톤수로 올린" 표보다 먼저 — 에이제이 시트: 계약표(제이글로벌)에 3.5톤이 없으면 지역표의 3.5톤 단가로 청구(5톤으로 올리지 않음)
+  const rank = (c) => (c.baseHit ? 2000 : 0) + (c.tonUp ? 0 : 1000) + (c.region ? 0 : 500) + (c.exact ? 200 : 0) + Math.min(normRate(c.rowName).length, 20) * 5 + (c.region ? Math.min(c.lvl, 2) * 0.5 : 0);
   const top = Math.max(...cands.map(rank));
   const best = cands.filter((c) => rank(c) === top);
   if (new Set(best.map((c) => `${c.sale}/${c.buy}`)).size > 1) return { ambiguous: true, cands: best };

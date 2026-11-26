@@ -1715,13 +1715,13 @@ export default function FixedRoutes({ drivers = [], companyName = "", dispatchDa
           </div>
         </section>
         {/* 오른쪽: 노선 상세 */}
-        <section className={`${card} overflow-hidden flex flex-col min-h-0`} data-fr-detail="1">
+        <section className={`${card} overflow-hidden flex flex-col min-h-0${sel ? "" : " max-[900px]:hidden"}`} data-fr-detail="1">{/* 📱 2026-11-26 휴대폰은 노선을 고르기 전엔 빈 상세 칸을 숨긴다 */}
           {!sel ? (
             <>
               <PanelHead en="ROUTE DETAIL" title="노선을 고르세요" />
               <div className="flex-1 flex flex-col items-center justify-center py-24 text-center px-6">
                 <div className="w-14 h-14 rounded-2xl bg-[#EEF3FC] border border-[#C9D6EE] flex items-center justify-center text-[#2D4C82] text-[22px] font-black">›</div>
-                <div className="mt-3 text-[17px] font-black text-[#0F1A30]">왼쪽 목록에서 노선을 고르세요</div>
+                <div className="mt-3 text-[17px] font-black text-[#0F1A30]">목록에서 노선을 고르세요</div>
                 <div className="text-[14.5px] text-[#5B6B85] mt-1">경로 · 일정 · 최근 배차가 보입니다. 두 번 누르면 수정</div>
               </div>
             </>

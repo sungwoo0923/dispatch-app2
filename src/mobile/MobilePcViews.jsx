@@ -148,7 +148,7 @@ function FleetView({ dispatchData, userCompany, role, onRegisterBack }) {
       groups={[{ label: "모듈", items: FLEET_MODULES }]}>
       {tab === "tracking"
         ? <div className="-mx-3 -my-3"><MobileFleetView dispatchData={dispatchData} userCompany={userCompany} onRegisterBack={onRegisterBack} /></div>
-        : <div className="kp-m-pc"><FleetManagement dispatchData={dispatchData} role={role} forceTab={tab} hideChrome /></div>}
+        : <div className="kp-m-pc -mx-3 -my-3"><FleetManagement dispatchData={dispatchData} role={role} forceTab={tab} hideChrome dark /></div>}{/* 🛰 2026-11-25 휴대폰 지입차관리 속화면도 관제실 다크 */}
     </KpSubNav>
   );
 }

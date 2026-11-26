@@ -6,6 +6,7 @@ import { kpConfirm } from "./kpDialog";
 import * as XLSX from "xlsx";
 import { isJyCompany } from "./jyOnly"; // 🏷 JY로지스틱스 전용
 import { parseRateMatrix } from "./rateSheetImport"; // 💰 회사 단가표 엑셀 그대로 읽기
+import RateRulesPanel from "./RateRulesPanel"; // 🧮 2026-11-26 청구 규칙 · 계산해 보기
 import { useLoadFullOrderHistory } from "./orderHistory";
 import { db } from "./firebase";
 import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, where, serverTimestamp } from "firebase/firestore";
@@ -1348,6 +1349,9 @@ ${sheet.note ? `<div class="notice">${esc(sheet.note)}</div>` : ""}
                     />
                   </div>
                 </div>
+
+                {/* 🧮 2026-11-26 청구 규칙(야상 · 대행료 …) · 계산해 보기 */}
+                <RateRulesPanel sheet={selectedSheet} onPatch={(p) => patchSheet(selectedSheet.id, p)} />
 
                 {/* 단가 매트릭스 표 */}
                 <div className="bg-white rounded-[20px] border border-[#E3E8F0] overflow-hidden">

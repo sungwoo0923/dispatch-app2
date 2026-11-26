@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import { execSync } from "child_process";
 import fs from "fs";
 import { fileURLToPath } from "url";
+import crypto from "crypto";
 
 const getAppVersion = () => {
   if (process.env.APP_VERSION) return process.env.APP_VERSION;
@@ -68,6 +69,7 @@ function fuelApiDevMiddleware() {
   };
 }
 
+let DRIVER_BUILD = ""; // 🚚 기사앱 지문(아래 kp-driver-build)
 const BUILD_TIME = new Date().toISOString(); // 화면 버전 확인(VersionCheck)용 — 번들과 version.json이 같은 값을 쓴다
 
 export default defineConfig({
@@ -100,6 +102,27 @@ export default defineConfig({
         },
       },
     },
+    // 🚚 2026-11-26 사용자 요청 — 기사앱과 상관없는 업데이트로는 기사앱에 "새 버전" 안내를 띄우지 않는다.
+    //  기사 화면(src/driver/*)이 실제로 쓰는 우리 코드 파일만 모아 지문(driver)을 만들고 version.json · 첫 화면 HTML(meta kp-driver-build)에 적는다.
+    //  기사앱은 이 지문이 달라졌을 때만 업데이트 안내(src/driver/DriverUpdateBanner.jsx). 라이브러리(node_modules) · PC 전용 화면만 바뀐 배포는 안 뜬다
+    {
+      name: "kp-driver-build",
+      generateBundle() {
+        const ids = [...this.getModuleIds()];
+        const mine = (id) => /\/src\//.test(id.replace(/\\/g, "/")) && !/node_modules/.test(id) && !id.startsWith("\0");
+        const seen = new Set();
+        const walk = (id) => {
+          if (seen.has(id) || !mine(id)) return; seen.add(id);
+          const info = this.getModuleInfo(id); if (!info) return;
+          [...(info.importedIds || []), ...(info.dynamicallyImportedIds || [])].forEach(walk);
+        };
+        ids.filter((id) => /\/src\/driver\//.test(id.replace(/\\/g, "/"))).forEach(walk);
+        const h = crypto.createHash("sha1");
+        [...seen].sort().forEach((id) => { h.update(id.replace(/\\/g, "/").replace(/^.*\/src\//, "src/")); h.update("\n"); h.update(this.getModuleInfo(id)?.code || ""); });
+        DRIVER_BUILD = seen.size ? h.digest("hex").slice(0, 16) : "";
+        console.log(`🚚 기사앱 지문 ${DRIVER_BUILD} (파일 ${seen.size}개)`);
+      },
+    },
     {
       name: "update-sw-version",
       closeBundle() {
@@ -120,6 +143,7 @@ export default defineConfig({
         //   · 그 밖: 이 PC에 기억된 "배포한 버전"(localStorage kpPin — src/releaseGate.js 가 적어 둔다)이 이 빌드보다 예전이면
         //     /api/shell 에서 그 버전의 첫 화면을 받아 그 버전의 묶음 두 줄을 대신 써 넣는다(그 버전 파일은 /assets 없는 파일 대리로 받는다)
         //   · 어떤 경우든 실패하면 이 빌드의 묶음으로(화면은 반드시 뜬다)
+        //   · 🚚 2026-11-26 기사앱 화면(/driver- 주소)은 잠금 없이 항상 이 빌드(최신) — 기사 화면 고친 것은 바로 가야 한다(src/releaseGate.js isDriverPage)
         if (fs.existsSync("./dist/index.html")) {
           let html = fs.readFileSync("./dist/index.html", "utf-8");
           const css = html.match(/[ \t]*<link rel="stylesheet"[^>]*href="\/assets\/[^"]+"[^>]*>\n?/g) || [];
@@ -128,7 +152,7 @@ export default defineConfig({
             const tags = [...css, ...js].map((t) => t.trim()).join("");
             const safe = (v) => JSON.stringify(v).replace(/</g, "\\u003c");
             const boot = `<script id="kp-entry" type="application/json">${safe({ build: BUILD_TIME, tags })}</script>`
-              + `<script>(function(){var B=${JSON.stringify(BUILD_TIME)},T=${safe(tags)};try{if(!/(?:^|;\\s*)kp_ch=latest(?:;|$)/.test(document.cookie)){var p=JSON.parse(localStorage.getItem("kpPin")||"null");if(p&&p.build&&p.build<B){var x=new XMLHttpRequest();x.open("GET","/api/shell?f=index&b="+encodeURIComponent(p.build),false);x.send();if(x.status===200&&x.getResponseHeader("X-Kp-Release")==="pinned"){var h=x.responseText,m=h.match(/<script id="kp-entry" type="application\\/json">([\\s\\S]*?)<\\/script>/),t="";if(m){t=JSON.parse(m[1]).tags}else{var a=h.match(/<link rel="stylesheet"[^>]*href="\\/assets\\/[^"]+"[^>]*>/g)||[],s=h.match(/<script type="module"[^>]*src="\\/assets\\/[^"]+"[^>]*><\\/script>/g)||[];if(s.length===1)t=a.join("")+s.join("")}if(t){T=t;window.__kpPinned=p.build}}}}}catch(e){}document.write(T)})();</script>`;
+              + `<script>(function(){var B=${JSON.stringify(BUILD_TIME)},T=${safe(tags)};try{if(location.pathname.indexOf("/driver-")!==0&&!/(?:^|;\\s*)kp_ch=latest(?:;|$)/.test(document.cookie)){var p=JSON.parse(localStorage.getItem("kpPin")||"null");if(p&&p.build&&p.build<B){var x=new XMLHttpRequest();x.open("GET","/api/shell?f=index&b="+encodeURIComponent(p.build),false);x.send();if(x.status===200&&x.getResponseHeader("X-Kp-Release")==="pinned"){var h=x.responseText,m=h.match(/<script id="kp-entry" type="application\\/json">([\\s\\S]*?)<\\/script>/),t="";if(m){t=JSON.parse(m[1]).tags}else{var a=h.match(/<link rel="stylesheet"[^>]*href="\\/assets\\/[^"]+"[^>]*>/g)||[],s=h.match(/<script type="module"[^>]*src="\\/assets\\/[^"]+"[^>]*><\\/script>/g)||[];if(s.length===1)t=a.join("")+s.join("")}if(t){T=t;window.__kpPinned=p.build}}}}}catch(e){}document.write(T)})();</script>`;
             css.forEach((t) => { html = html.replace(t, ""); });
             html = html.replace(js[0], `    ${boot}\n`);
             fs.writeFileSync("./dist/index.html", html);
@@ -145,7 +169,9 @@ export default defineConfig({
         }
         // ⭐ 접속 버전 확인용 — 화면(VersionCheck)이 이 파일과 자기 빌드 시각을 비교한다
         if (fs.existsSync("./dist")) {
-          fs.writeFileSync("./dist/version.json", JSON.stringify({ version: getAppVersion(), build: BUILD_TIME, url: process.env.VERCEL_URL || "" }));
+          fs.writeFileSync("./dist/version.json", JSON.stringify({ version: getAppVersion(), build: BUILD_TIME, url: process.env.VERCEL_URL || "", driver: DRIVER_BUILD }));
+          // 🚚 기사앱 지문을 첫 화면에도 — 기사앱이 "내 화면 지문"을 알아야 비교할 수 있다
+          if (DRIVER_BUILD) ["./dist/index.html", "./dist/driver.html"].forEach((f) => { if (fs.existsSync(f)) fs.writeFileSync(f, fs.readFileSync(f, "utf-8").replace("<head>", `<head><meta name="kp-driver-build" content="${DRIVER_BUILD}">`)); });
         }
       },
     },

@@ -14529,26 +14529,14 @@ function checkDuplicateDispatch(form, dispatchData) {
   });
 }
 
-    // ✅ 필수값(거래처/상차지명/하차지명/화물내용/차량톤수/지급방식/배차방식) 검증
+    // ✅ 필수값(거래처 · 상차지명 · 하차지명) 검증
     const validateRequired = (f) => {
       const miss = [];
       const missKeys = [];
       if (!f.거래처명?.trim()) { miss.push("거래처"); missKeys.push("거래처명"); }
       if (!f.상차지명?.trim()) { miss.push("상차지명"); missKeys.push("상차지명"); }
       if (!f.하차지명?.trim()) { miss.push("하차지명"); missKeys.push("하차지명"); }
-      // 화물내용/차량톤수는 파레트·박스 등 타입 드롭다운만 고르고 숫자를 안 넣으면
-      // "파레트"/"톤" 같은 단위 문자열만 저장되어 겉으로는 비어있지 않은 것처럼
-      // 보인다 — 실제 값(숫자)이 있는지까지 확인해야 한다.
-      const 화물내용본문 = String(f.화물내용 || "").split("+")[0];
-      const 화물내용비어있음 = f.화물타입 && f.화물타입 !== "없음"
-        ? !/\d/.test(화물내용본문)
-        : !화물내용본문.trim();
-      if (화물내용비어있음) { miss.push("화물내용"); missKeys.push("화물내용"); }
-      const 차량톤수비어있음 = f.톤수타입
-        ? !String(f.톤수값 || "").trim()
-        : !String(f.차량톤수 || "").trim();
-      if (차량톤수비어있음) { miss.push("차량톤수"); missKeys.push("차량톤수"); }
-      if (!f.지급방식) { miss.push("지급방식"); missKeys.push("지급방식"); }
+      // 🛠 2026-11-26 사용자 요청 — 필수는 거래처 · 상차지명 · 하차지명만(화물내용 · 차량톤수 · 지급방식은 비워도 저장)
       if (miss.length) {
         setRequiredErrors(new Set(missKeys));
         setTimeout(() => setRequiredErrors(new Set()), 2500);
@@ -14566,9 +14554,13 @@ function checkDuplicateDispatch(form, dispatchData) {
     // ⭐ 날짜/시간 필수 검증
     const validateDateTime = (f) => {
       const miss = [];
-
-      if (!f.상차일) miss.push("상차일");
-      if (!f.하차일) miss.push("하차일");
+      // 🛠 2026-11-26 사용자 요청 — 필수는 거래처 · 상차지명 · 하차지명만. 날짜가 비어 있으면 막지 않고 채운다
+      //  (날짜 없는 오더는 날짜별 배차현황에서 안 보이므로): 상차일 없으면 오늘 · 하차일 없으면 상차일과 같은 날
+      if (!f.상차일 || !f.하차일) {
+        if (!f.상차일) f.상차일 = todayStr();
+        if (!f.하차일) f.하차일 = f.상차일;
+        setForm((p) => ({ ...p, 상차일: f.상차일, 하차일: f.하차일 }));
+      }
 
       const timeNoAmPm = (t) => t && !t.startsWith("오전") && !t.startsWith("오후");
       if (timeNoAmPm(f.상차시간) || timeNoAmPm(f.하차시간)) {
@@ -15111,22 +15103,28 @@ const ROUND_DISCOUNT = 0.9; // ★ 10% 할인 (조정 가능)
         const m = manseLearned ? quoteManse(form, manseLearned) : null;
         return m && m.sale ? { sale: m.sale, buy: m.buy || 0, label: `만세보령 ${m.tier.label}` } : null;
       }
-      const r = findRate(multiRateSheets, { 거래처명: form.거래처명, 상차지명: form.상차지명, 하차지명: form.하차지명, 톤수: ton }, { aliases: true });
+      const r = findRate(multiRateSheets, { 거래처명: form.거래처명, 상차지명: form.상차지명, 하차지명: form.하차지명, 하차지주소: form.하차지주소, 톤수: ton }, { aliases: true });
       if (!r || r.ambiguous) return null;
-      return { ...r, label: `${r.sheetName || ""} → ${r.rowName} · ${r.ton}` };
+      return { ...r, label: `${r.sheetName || ""} → ${r.rowName} · ${r.tonUp ? `${ton} → ${r.ton} 단가` : r.ton}` }; // 📏 단가표에 없는 톤수는 바로 위 톤수
     }, [multiRateSheets, manseLearned, form.차량톤수, form.차량종류, form.하차지명, form.하차지주소, form.화물내용, form.경유하차목록, form.거래처명, form.상차지명]);
     const autoRateRef = React.useRef({ sale: "", buy: "" }); // 마지막으로 자동 입력한 금액(사람이 고쳤는지 구분)
     React.useEffect(() => {
       if (!autoRate || !canMoney) return;
-      const curSale = String(form.청구운임 ?? "").replace(/[^\d]/g, "");
-      const curBuy = String(form.기사운임 ?? "").replace(/[^\d]/g, "");
+      // 🛠 2026-11-26 "에브리데이 시화"를 처음 넣으면 다른 금액이 나오던 문제 — 노선 고정(야상 · 대행료)이 청구운임 · 기사운임에 더한 금액 때문에
+      //  "사람이 고친 금액"으로 보고 단가표 금액을 더 이상 안 바꿨다 → 특수운임으로 더한 몫을 빼고(단가 부분만) 견주고, 넣을 때는 다시 더한다
+      const digits = (v) => String(v ?? "").replace(/[^\d-]/g, "");
+      const addC = (Number(form.지게차청구추가) || 0) + (Number(form.특수청구추가) || 0); // 청구에 더해 둔 몫
+      const dedD = (Number(form.지게차기사차감) || 0) + (Number(form.특수기사차감) || 0); // 기사운임에서 뺀 몫(기사에게 더 준 것은 −)
+      const curSaleT = digits(form.청구운임), curBuyT = digits(form.기사운임);
+      const curSale = curSaleT ? String((Number(curSaleT) || 0) - addC) : "";
+      const curBuy = curBuyT ? String((Number(curBuyT) || 0) + dedD) : "";
       const last = autoRateRef.current;
-      const saleFree = !curSale || curSale === last.sale; // 비어 있거나 지난번 자동 입력 값 그대로
-      const buyFree = !curBuy || curBuy === last.buy;
-      if (saleFree && curSale !== String(autoRate.sale)) { autoRateRef.current = { ...autoRateRef.current, sale: String(autoRate.sale) }; onChange("청구운임", String(autoRate.sale)); }
+      const saleFree = !curSale || curSale === last.sale || curSale === "0"; // 비어 있거나 지난번 자동 입력 값 그대로
+      const buyFree = !curBuy || curBuy === last.buy || curBuy === "0";
+      if (saleFree && curSale !== String(autoRate.sale)) { autoRateRef.current = { ...autoRateRef.current, sale: String(autoRate.sale) }; onChange("청구운임", String(Number(autoRate.sale) + addC)); }
       // 지난번에 자동으로 넣은 기사운임인데 이번 단가표 줄에는 매입 단가가 없으면 비운다(다른 하차지 금액이 남지 않게)
-      if (!autoRate.buy && curBuy && curBuy === last.buy) { autoRateRef.current = { ...autoRateRef.current, buy: "" }; setTimeout(() => onChange("기사운임", ""), 0); }
-      if (autoRate.buy && buyFree && curBuy !== String(autoRate.buy)) { autoRateRef.current = { ...autoRateRef.current, buy: String(autoRate.buy) }; setTimeout(() => onChange("기사운임", String(autoRate.buy)), 0); }
+      if (!autoRate.buy && curBuy && curBuy === last.buy) { autoRateRef.current = { ...autoRateRef.current, buy: "" }; setTimeout(() => onChange("기사운임", dedD ? String(-dedD) : ""), 0); }
+      if (autoRate.buy && buyFree && curBuy !== String(autoRate.buy)) { autoRateRef.current = { ...autoRateRef.current, buy: String(autoRate.buy) }; setTimeout(() => onChange("기사운임", String(Number(autoRate.buy) - dedD)), 0); }
     }, [autoRate?.sale, autoRate?.buy, autoRate?.label]); // eslint-disable-line react-hooks/exhaustive-deps
     // ⭐ 운임조회 팝업 상태
     const [fareModalOpen, setFareModalOpen] = React.useState(false);
@@ -17897,7 +17895,7 @@ className={`
 <div className="relative">
   {/* ⭐ 2026-11-02 화면 점검 — 칩이 줄바꿈되면 아래 입력칸을 덮지 않게 라벨 높이를 늘린다 */}
   <label className={labelCls + " flex items-center gap-1 flex-wrap !h-auto min-h-[22px]"}>
-    <EditableText id="orderForm.label.화물내용" defaultText="화물내용" /> {reqStar}
+    <EditableText id="orderForm.label.화물내용" defaultText="화물내용" />
     <button type="button"
       tabIndex={-1}
       className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#1B2B4B] text-white hover:bg-[#243d6a] cursor-pointer whitespace-nowrap"
@@ -18096,7 +18094,7 @@ className={`
 </div>
 
 <div className="relative">
-  <label className={labelCls}><EditableText id="orderForm.label.차량톤수" defaultText="차량톤수" /> {reqStar}</label>
+  <label className={labelCls}><EditableText id="orderForm.label.차량톤수" defaultText="차량톤수" /></label>
 
   <div className="relative">
 
@@ -19032,7 +19030,7 @@ className={`
 
   {/* 결제 */}
   <div>
-    <label className={labelCls}><EditableText id="orderForm.label.지급방식" defaultText="지급방식" /> {reqStar}<DropdownOptionsManageButton optKey="지급방식" label="지급방식" role={role} userCompany={userCompany} /></label>
+    <label className={labelCls}><EditableText id="orderForm.label.지급방식" defaultText="지급방식" /><DropdownOptionsManageButton optKey="지급방식" label="지급방식" role={role} userCompany={userCompany} /></label>
    <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" ref={payTypeRef} className={`${inputCls}${requiredErrors.has("지급방식") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`} value={form.지급방식} onChange={(__v) => ((e) => {
   const v = e.target.value;
   onChange("지급방식", v);
@@ -25010,8 +25008,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
                   {/* 차량번호 */}
                   <td className={`${cell} relative`}>
-                    {/* ⭐ 2026-11-05 LIVE — 칩 대신 차량번호 입력칸 왼쪽 위 모서리의 6px 점(폭 0 · 칸 너비 그대로) */}
-                    {r.배차상태 === "배차완료" && <LiveDriverChip order={r} variant="pin" />}
+                    {/* 🛠 2026-11-26 LIVE 점은 기사명 칸으로 옮김(차량번호 칸이 넓어진다는 의견) */}
                     {/* 🛠 2026-11-23 추천 기사 ▾ 를 차량번호 칸 "안" 오른쪽 끝에(글자와 겹치지 않게 칸을 조금 넓힘) — 테두리는 바깥 상자가 그린다 */}
                     <div className="flex items-center border rounded bg-white w-[150px] min-w-[130px] pr-0.5 focus-within:border-[#1B2B4B] focus-within:ring-1 focus-within:ring-[#1B2B4B]/30">
                     <input autoComplete="off"
@@ -25056,8 +25053,9 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
                   </td>
 
-                  <td className={`${cell} w-[80px] max-w-[80px] overflow-hidden text-ellipsis`}>
-                    {r.이름}
+                  <td className={`${cell} w-[80px] max-w-[80px] overflow-hidden`}>
+                    {/* 🛠 2026-11-26 위치 관제 점 — 이름 바로 뒤(이름이 길면 이름만 줄이고 점은 항상 보임) */}
+                    <span className="inline-flex items-center max-w-full align-middle"><span className="truncate">{r.이름}</span>{r.배차상태 === "배차완료" && <LiveDriverChip order={r} variant="dot" />}</span>
                   </td>
 
                   <td className={cell}>{formatPhone(r.전화번호)}</td>
@@ -38234,8 +38232,7 @@ return (
 
                   {/* 차량번호(항상 활성화) · ⭐ 2026-11-05 지입·직영·임대 기사앱 LIVE 표시가 붙으면 그만큼 칸이 넓어진다 */}
                   <td className="border text-center whitespace-nowrap w-[160px] max-w-[160px] relative">
-                    {/* ⭐ 2026-11-05 LIVE — 칩 대신 차량번호 입력칸 왼쪽 위 모서리의 6px 점(폭 0 · 칸 너비 그대로) */}
-                    {row.배차상태 === "배차완료" && <LiveDriverChip order={row} variant="pin" />}
+                    {/* 🛠 2026-11-26 LIVE 점은 기사명 칸으로 옮김 */}
                     {/* 🛠 2026-11-23 추천 기사 ▾ 를 차량번호 칸 "안" 오른쪽 끝에(글자와 겹치지 않게 칸을 조금 넓힘) — 테두리는 바깥 상자가 그린다 */}
                     <div className="mx-auto flex items-center border rounded bg-white w-[154px] pr-0.5 focus-within:border-[#1B2B4B] focus-within:ring-1 focus-within:ring-[#1B2B4B]/30">
                     <input autoComplete="off"
@@ -38266,7 +38263,7 @@ return (
                     <PlateSuggestCaret order={row} />{/* 🚚 추천 기사 ▾ — 있을 때만 · 직접 입력은 그대로 */}
                     </div>
                   </td>
-                  <td className="border text-center whitespace-nowrap max-w-[80px] w-[80px] overflow-hidden text-ellipsis" title={row.이름 || ""}>{row.이름}</td>
+                  <td className="border text-center whitespace-nowrap max-w-[80px] w-[80px] overflow-hidden" title={row.이름 || ""}><span className="inline-flex items-center max-w-full align-middle"><span className="truncate">{row.이름}</span>{row.배차상태 === "배차완료" && <LiveDriverChip order={row} variant="dot" />}</span></td>
                   <td className="border text-center">
   {formatPhone(row.전화번호)}
 </td>

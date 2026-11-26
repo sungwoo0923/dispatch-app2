@@ -19,6 +19,7 @@ import { usePlatformNotices, usePlatformRead, markPlatformNoticeRead, PlatformBa
 import { RichHtml } from "./richText";
 import { DAY_MS, isNoticeUnread, noticeAtMs, toMs, useMinuteTick } from "./notifyCore";
 import { isPopupOn, popupCatOfNotify, usePopupPrefs } from "./popupPrefs";
+import { useLeavePopupOn } from "./leaveBasis"; // 🔕 2026-11-26 연차 촉진 팝업 회사 설정
 import { usePopupTurn } from "./popupTurn"; // 🪟 2026-11-18 접속 팝업 차례(알림 브리핑 → 축하 → 생일 → 일일 보고)
 
 const ApprovalDocPreview = React.lazy(() => import("./Approval").then((m) => ({ default: m.ApprovalDocPreview })));
@@ -407,7 +408,8 @@ export default function NotifyCenter({ uid, role, team = "", company = "", mobil
   const { queue: queueAll, ready, bumpLocal } = useNotifyQueue({ uid, role, team, company });
   // ⭐ 2026-11-07 팝업 알림 설정(계정별) — 꺼 둔 종류는 띄우지 않는다(읽음 처리도 안 해서 목록·메뉴 숫자에는 남는다)
   const popupPrefs = usePopupPrefs(uid);
-  const queue = queueAll.filter((x) => isPopupOn(popupPrefs, popupCatOfNotify(x)));
+  const leavePopup = useLeavePopupOn(company); // 🔕 2026-11-26 회사가 연차 촉진 팝업을 껐으면(인사관리부 › 연차 촉진 설정) 팝업만 안 띄움
+  const queue = queueAll.filter((x) => isPopupOn(popupPrefs, popupCatOfNotify(x)) && (leavePopup || !(x.src === "hrNotice" && (x.kind === "leave1" || x.kind === "leave2"))));
   const [done, setDone] = React.useState(() => new Set()); // 방금 확인한 것(서버 기록이 돌아오기 전에도 바로 사라지게)
   const [later, setLater] = React.useState(readLater);
   const [armed, setArmed] = React.useState(false); // 켜자마자(로딩 화면 위로) 뜨지 않게 잠깐 기다린다

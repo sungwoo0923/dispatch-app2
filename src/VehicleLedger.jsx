@@ -5,6 +5,7 @@
 //  ② 관리대장(차량 한 대): 기본 정보 · 수리·정비 이력(부가세 10% 자동, 연·월 합계, 증빙) · 구조변경 · 기사 탑승 이력 ·
 //     기본정보 변경·기타 이력 — 한 페이지에서 한눈에, A4 인쇄·엑셀 저장
 //  휴대폰(좁은 화면)에서는 표 대신 카드로 그린다.
+import { FleetDarkPop, FleetDarkCtx } from "./fleetDarkCtx"; // 🛰 2026-11-25 지입차관리 다크(밖에 뜨는 창)
 import { isFleetGrade } from "./fleetGradesCore"; // 🚛 지입차 구분(지입·직영·임대·분양) 한 곳
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
@@ -151,7 +152,7 @@ function LedgerSelect({ value, onChange, options = [], placeholder = "선택", a
       style={{ ...inp, height: h, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, cursor: "pointer", textAlign: "left", fontWeight: cur ? 800 : 600, color: cur ? C.navy : "#5B6B85", borderColor: open ? C.blue : "#D5DDEA", boxShadow: open ? "0 0 0 4px rgba(45,76,130,.12)" : "none", ...(style || {}) }}>
       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{cur ? (list.find((o) => !o.group && String(o.v) === cur)?.label ?? cur) : placeholder}</span>{chev}
     </button>
-    {open && pos && createPortal(
+    {open && pos && createPortal(<FleetDarkPop>
       <div ref={menu} role="listbox" tabIndex={-1} data-ls-menu="1" onKeyDown={onKey} onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}
         style={{ position: "fixed", left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, zIndex: 2147483000, background: "#fff", border: `1px solid ${C.line}`, borderRadius: 16, boxShadow: "0 18px 44px rgba(15,26,48,.22)", overflow: "hidden", display: "flex", flexDirection: "column", maxHeight: Math.max(220, Math.min(420, pos.maxH || 420)), fontFamily: "'Pretendard','Noto Sans KR',sans-serif", outline: "none" }}>
         <div style={{ padding: "10px 10px 8px", background: "#F7F9FC", borderBottom: "1px solid #EEF2F7" }}>
@@ -176,7 +177,7 @@ function LedgerSelect({ value, onChange, options = [], placeholder = "선택", a
           ))}
           {nq && !items.some((o) => !o.group && !o.custom) && <div style={{ padding: "10px 16px", fontSize: 14, fontWeight: 700, color: C.mute }}>찾는 항목이 없습니다 · Enter로 "{q.trim()}" 그대로 입력</div>}
         </div>
-      </div>, document.body)}
+      </div></FleetDarkPop>, document.body)}
   </>);
 }
 // 예전 이름 그대로(수리 구분 등) — 새 선택 목록으로
@@ -997,7 +998,7 @@ function LedgerDrawer({ onClose, onDouble, narrow, children }) {
   const onBackdrop = (e) => {
     if (Date.now() - openedAt.current < 600 && e.detail >= 2) onDouble?.();
   };
-  return createPortal(
+  return createPortal(<FleetDarkPop>
     <div data-vl-drawer="1" style={{ position: "fixed", inset: 0, zIndex: 9500 }}>
       <div onClick={onBackdrop} style={{ position: "absolute", inset: 0, background: "rgba(11,20,40,.42)", backdropFilter: "blur(1.5px)", opacity: shown ? 1 : 0, transition: "opacity .22s ease" }} />
       <aside role="dialog" aria-modal="true" aria-label="차량 정보"
@@ -1005,7 +1006,7 @@ function LedgerDrawer({ onClose, onDouble, narrow, children }) {
           transform: shown ? "translateX(0)" : "translateX(100%)", transition: "transform .28s cubic-bezier(.2,.8,.2,1)", borderTopLeftRadius: narrow ? 0 : 20, borderBottomLeftRadius: narrow ? 0 : 20, overflow: "hidden" }}>
         <div style={{ flex: 1, overflowY: "auto", padding: narrow ? 10 : 16, fontFamily: "'Pretendard','Noto Sans KR',sans-serif" }}>{children}</div>
       </aside>
-    </div>, document.body);
+    </div></FleetDarkPop>, document.body);
 }
 
 function RowActs({ onEdit, onDel }) {
@@ -1032,10 +1033,14 @@ const EQ_KEYS = EQUIP.map((e) => e.key);
 
 function Plate({ text, size = "md" }) {
   const big = size === "lg";
+  // 🛰 2026-11-26 지입차관리 다크 — 흰 번호판 위 글씨가 밝게 바뀌어 안 보이던 것: 다크에서는 남색 번호판 + 밝은 글씨
+  const dk = React.useContext(FleetDarkCtx);
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: big ? 10 : 6, padding: big ? "6px 16px 6px 8px" : "3px 10px 3px 5px", borderRadius: big ? 10 : 7, background: "linear-gradient(180deg,#FFFFFF,#EEF2F8)", border: `${big ? 2.5 : 1.5}px solid #0F1A30`, boxShadow: big ? "0 6px 18px rgba(0,0,0,.25), inset 0 -2px 0 rgba(15,26,48,.08)" : "inset 0 -1px 0 rgba(15,26,48,.08)", whiteSpace: "nowrap" }}>
-      <span style={{ width: big ? 8 : 5, alignSelf: "stretch", borderRadius: 3, background: "linear-gradient(180deg,#2D4C82,#1B2B4B)" }} />
-      <span style={{ fontSize: big ? 26 : 15.5, fontWeight: 900, color: "#0B1428", letterSpacing: big ? "0.04em" : "0.02em", ...TAB }}>{text}</span>
+    <span className="fm-keep-light" style={{ display: "inline-flex", alignItems: "center", gap: big ? 10 : 6, padding: big ? "6px 16px 6px 8px" : "3px 10px 3px 5px", borderRadius: big ? 10 : 7,
+      background: dk ? "linear-gradient(180deg,#17305C,#0E1A30)" : "linear-gradient(180deg,#FFFFFF,#EEF2F8)", border: `${big ? 2.5 : 1.5}px solid ${dk ? "#4C74B8" : "#1B2B4B"}`,
+      boxShadow: dk ? "inset 0 1px 0 rgba(255,255,255,.12), 0 4px 12px rgba(0,0,0,.35)" : "none", whiteSpace: "nowrap" }}>
+      <span style={{ width: big ? 8 : 5, alignSelf: "stretch", borderRadius: 3, background: dk ? "linear-gradient(180deg,#38BDF8,#2563EB)" : "linear-gradient(180deg,#2D4C82,#1B2B4B)" }} />
+      <span style={{ fontSize: big ? 26 : 15.5, fontWeight: 900, color: dk ? "#F4F8FF" : "#0B1428", letterSpacing: big ? "0.04em" : "0.02em", ...TAB }}>{text}</span>
     </span>
   );
 }

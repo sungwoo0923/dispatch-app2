@@ -76,3 +76,25 @@ export default function CompanySwitcher({ current = "", onClose }) {
       </div>
     </div>, document.body);
 }
+
+// 📱 2026-11-26 모바일 전체 메뉴 맨 위 — 최고관리자 [운송사 전환] 카드(PC 상단 이름 칸 › [운송사 전환]과 같은 창)
+//  MobileApp MobileSideMenu 에서 실제 권한(realRole)이 최고관리자일 때만 보인다
+export function CompanySwitchCard({ className = "" }) {
+  const [open, setOpen] = React.useState(false);
+  let cur = "";
+  try { cur = localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || ""; } catch { cur = ""; }
+  return (
+    <div className={`mx-3 my-2 ${className}`}>
+      <button type="button" onClick={() => setOpen(true)} data-kp="m-co-switch"
+        className="w-full rounded-2xl px-4 py-3 flex items-center gap-3 text-left text-white shadow-[0_8px_22px_rgba(11,20,40,0.18)]" style={{ background: "linear-gradient(120deg,#0B1428,#1B2B4B 60%,#2D4C82)" }}>
+        <span className="w-[34px] h-[34px] rounded-xl grid place-items-center text-[15px] font-black bg-white/15 shrink-0">{(cur || "?").slice(0, 1)}</span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-[11px] font-extrabold tracking-[0.12em] text-white/60">지금 보는 운송사 · 최고관리자</span>
+          <span className="block text-[15.5px] font-black truncate">{cur || "선택 안 됨"}</span>
+        </span>
+        <span className="h-8 px-3 rounded-lg bg-white/15 border border-white/20 text-[12.5px] font-black grid place-items-center whitespace-nowrap">운송사 전환</span>
+      </button>
+      {open && <CompanySwitcher current={cur} onClose={() => setOpen(false)} />}
+    </div>
+  );
+}
