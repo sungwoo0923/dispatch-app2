@@ -192,13 +192,17 @@ const CSS = `
 .rtv thead th.grp{font-size:12px;letter-spacing:.14em;padding:7px 9px;border-bottom:1px solid #1A2742}
 .rtv th.pk{color:#C4B5FD}.rtv th.dr{color:#7DD3FC}.rtv th.mo{color:#FCD34D}
 .rtv thead th:first-child{position:sticky;left:0;z-index:3}
-.rtv td{padding:12px 9px;font-size:14.5px;font-weight:700;border-bottom:1px solid #13213D;vertical-align:middle;background:#0B1424}
+.rtv td{padding:12px 9px;font-size:14.5px;font-weight:700;border-bottom:1px solid #13213D;vertical-align:middle;background:#0B1424;text-align:center}
+/* 🛠 2026-11-26 공용 표 스타일(index.css)이 모든 칸 글씨를 #111827 !important 로 칠해, 보라 · 하늘 덧칠 칸(상차 · 하차)은 다크 지킴이도 못 고쳐 검게 보였다
+   → 표가 글씨색을 직접 정한다. 칸마다 다른 색은 style 의 --c 로 */
+.rtv table tbody td{color:var(--c,#E6EDF8) !important}
+.rtv table tbody td.drv{text-align:left}
 .rtv tr.alt>td{background:#0D182C}
 .rtv td.drv{border-right:1px solid #1A2742;position:sticky;left:0;z-index:2}
 .rtv td.pk{background-image:linear-gradient(rgba(124,58,237,.07),rgba(124,58,237,.07))}
 .rtv td.dr{background-image:linear-gradient(rgba(2,132,199,.07),rgba(2,132,199,.07))}
-.rtv .place{font-size:15.5px;font-weight:900}.rtv .addr{font-size:14.5px;color:#CFE0FF;font-weight:800}.rtv .time{font-size:15px;font-weight:900}
-.rtv .money{text-align:right;font-size:15px;font-weight:900}
+.rtv .place{font-size:15.5px;font-weight:900}.rtv .addr{font-size:14.5px;--c:#CFE0FF;font-weight:800}.rtv .time{font-size:15px;font-weight:900}
+.rtv .money{text-align:center;font-size:15px;font-weight:900}
 .rtv .seq{width:26px;height:26px;border-radius:8px;background:#22345A;display:grid;place-items:center;font-size:13px;font-weight:900;margin:auto}
 .rtv-btn{display:block;width:84px;height:30px;border-radius:8px;border:1px solid #2B4F8C;background:transparent;color:#CFE0FF;font:inherit;font-size:13px;font-weight:800;margin:3px auto;cursor:pointer}
 .rtv-btn:hover{background:#13264A}.rtv-btn.on{background:#2563EB;border-color:#2563EB;color:#fff}
@@ -346,7 +350,7 @@ export function RouteTableView({ groups = [], dayLabel = "", isSingleDay = true,
                           <span className="rtv-plate">{d.차량번호 || "-"}</span>
                           <div style={{ fontSize: 12.5, color: "#A9B8D2", marginTop: 5, lineHeight: 1.45 }}>{[d.차량톤수, d.차량종류].filter(Boolean).join(" ") || "-"}<br />{d.전화번호 && d.전화번호 !== "-" ? d.전화번호 : ""}</div>
                         </td>
-                        <td rowSpan={n} style={{ textAlign: "center", fontWeight: 900, color: STATUS_COLOR[st] || "#A9B8D2" }}>{st}{row.isOffDay && orders.length > 0 && <div style={{ fontSize: 12, color: "#FCD34D", marginTop: 3 }}>근무 불가 요일</div>}</td>
+                        <td rowSpan={n} style={{ textAlign: "center", fontWeight: 900, "--c": STATUS_COLOR[st] || "#A9B8D2" }}>{st}{row.isOffDay && orders.length > 0 && <div style={{ fontSize: 12, color: "#FCD34D", marginTop: 3 }}>근무 불가 요일</div>}</td>
                       </>
                     );
                     const tail = (
@@ -363,7 +367,7 @@ export function RouteTableView({ groups = [], dayLabel = "", isSingleDay = true,
                     return (
                       <React.Fragment key={d.id}>
                         {orders.length === 0 ? (
-                          <tr className={alt}>{head}<td colSpan={12} style={{ color: "#FCD34D", fontWeight: 900 }}>{isSingleDay ? `${dayLabel || "이날"} 배차 없음` : "기간 배차 없음"}</td>{tail}</tr>
+                          <tr className={alt}>{head}<td colSpan={12} style={{ "--c": "#FCD34D", fontWeight: 900 }}>{isSingleDay ? `${dayLabel || "이날"} 배차 없음` : "기간 배차 없음"}</td>{tail}</tr>
                         ) : orders.map((o, i) => {
                           const note = feeNote(o);
                           return (
@@ -379,8 +383,8 @@ export function RouteTableView({ groups = [], dayLabel = "", isSingleDay = true,
                               <td className="dr addr" title={o.하차지주소 || ""}>{simpleAddr(o.하차지주소) || "-"}</td>
                               <td className="dr time">{dropT(o)}</td>
                               <td className="money">{won(fkNum(o.청구운임))}</td>
-                              <td className="money" style={{ color: "#CFE0FF" }}>{won(fkNum(o.기사운임))}</td>
-                              <td className="money" style={{ color: "#34D399" }}>{won(feeOf(o))}{note && <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "#FCD34D", marginTop: 2 }}>{note}</span>}</td>
+                              <td className="money" style={{ "--c": "#CFE0FF" }}>{won(fkNum(o.기사운임))}</td>
+                              <td className="money" style={{ "--c": "#34D399" }}>{won(feeOf(o))}{note && <span style={{ display: "block", fontSize: 11.5, fontWeight: 800, color: "#FCD34D", marginTop: 2 }}>{note}</span>}</td>
                               {i === 0 && tail}
                             </tr>
                           );
