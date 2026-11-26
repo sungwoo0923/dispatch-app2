@@ -14335,9 +14335,7 @@ const [matchedClients, setMatchedClients] = useState([]);
     if (!form.거래처명?.trim()) { miss.push("거래처"); missKeys.push("거래처명"); }
     if (!form.상차지명?.trim()) { miss.push("상차지명"); missKeys.push("상차지명"); }
     if (!form.하차지명?.trim()) { miss.push("하차지명"); missKeys.push("하차지명"); }
-    if (!String(화물수량 || "").trim()) { miss.push("화물내용"); missKeys.push("화물내용"); }
-    if (!String(톤수값 || "").trim()) { miss.push("차량톤수"); missKeys.push("차량톤수"); }
-    if (!form.지급방식) { miss.push("지급방식"); missKeys.push("지급방식"); }
+    // 🛠 2026-11-26 사용자 요청 — 필수는 거래처 · 상차지명 · 하차지명만(화물내용 · 차량톤수 · 지급방식은 비워도 저장)
     if (miss.length) {
       setRequiredErrors(new Set(missKeys));
       if (missKeys.includes("거래처명")) setClientNameError(true);
@@ -15997,7 +15995,7 @@ const pickDrop = (c) => {
         />
         {/* 톤수 */}
         <RowLabelInput
-          label={<>톤수 <span className="text-red-500">*</span></>}
+          label={<>톤수</>}
           input={
             <div className={`flex items-stretch border-0 border-b-2 transition ${
               requiredErrors.has("차량톤수") ? "border-red-500 ring-2 ring-red-300 animate-pulse" : "border-gray-300 focus-within:border-[var(--reg-accent)]"
@@ -16037,7 +16035,7 @@ const pickDrop = (c) => {
         />
         {/* 화물내용 */}
         <RowLabelInput
-          label={<>화물내용 <span className="text-red-500">*</span></>}
+          label={<>화물내용</>}
           input={
             <div className="space-y-1">
               <div className="flex justify-end">
@@ -16144,7 +16142,7 @@ const pickDrop = (c) => {
       {/* 배차방식은 화주사 오더라도 운송사가 항상 수정할 수 있어야 하므로 잠금 fieldset 밖에 둔다 */}
       <div className="border-t border-gray-100">
         <RowLabelInput
-          label={<span className="whitespace-nowrap tracking-tight">지급/배차 <span className="text-red-500">*</span></span>}
+          label={<span className="whitespace-nowrap tracking-tight">지급/배차</span>}
           input={
             <div className="flex flex-wrap gap-1.5">
               <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>

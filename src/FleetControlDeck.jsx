@@ -146,7 +146,7 @@ export default function FleetControlDeck({
   drivers = [], phaseById, searchQuery = "", onSearch, selected, onSelect, onContextMenu,
   locChangeRequests = [], collisionAlerts = [], onLocRequest, onLocDismiss, onCollisionResolve,
   logs = [], driversMap = {}, onDeleteFeed, todayPhotoIds = null,
-  renderMap, trackDate = null, onMapRefresh, onFitAll, onOpenDetail, geocode = null, light = false, lookSwitch = null, onOpenHistory = null, onLocFix = null,
+  renderMap, trackDate = null, onMapRefresh, onFitAll, onOpenDetail, geocode = null, light = false, lookSwitch = null, onOpenHistory = null, onLocFix = null, onRecenter = null,
 }) {
   const [group, setGroup] = React.useState("all");
   const phase = (d) => phaseById?.get(d.id) || "배차대기";
@@ -243,7 +243,7 @@ export default function FleetControlDeck({
               const col = alertIds.has(d.id) ? "#EF4444" : truckColor(ph);
               const spd = Number(d.speed) || 0;
               return (
-                <button key={d.id} type="button" className={"lwd-row" + (sel?.id === d.id ? " on" : "")} onClick={() => onSelect?.(d)} onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(e, d); }} style={{ opacity: d.active ? 1 : 0.6 }}>
+                <button key={d.id} type="button" className={"lwd-row" + (sel?.id === d.id ? " on" : "")} onClick={() => (sel?.id === d.id && onRecenter ? onRecenter(d) : onSelect?.(d))} onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(e, d); }} style={{ opacity: d.active ? 1 : 0.6 }}>
                   <span style={{ width: 9, height: 9, borderRadius: 99, background: col, boxShadow: d.active ? `0 0 8px ${col}` : "none", flexShrink: 0 }} />
                   <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
                     <span style={{ display: "flex", gap: 8, alignItems: "baseline", minWidth: 0 }}>

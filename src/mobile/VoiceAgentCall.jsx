@@ -14,7 +14,7 @@ import { subscribeGlossary, saveGlossary } from "../voiceGlossary";
 
 export const AGENT_KEYS = ["거래처명", "상차일", "상차시간", "상차지명", "상차지주소", "상차방법", "하차일", "하차시간", "하차지명", "하차지주소", "하차방법",
   "화물내용", "톤수", "차종", "청구운임", "기사운임", "지급방식", "배차방식", "운임구분", "혼적여부", "운행유형", "긴급", "차량번호", "기사명", "전화번호", "적요", "전달사항", "등록수량"];
-const REQUIRED = [["상차일", "상차일"], ["하차일", "하차일"], ["거래처명", "거래처"], ["상차지명", "상차지"], ["하차지명", "하차지"], ["차종", "차종"]];
+const REQUIRED = [["거래처명", "거래처"], ["상차지명", "상차지"], ["하차지명", "하차지"]]; // 🛠 2026-11-26 사용자 요청 — 필수는 거래처 · 상차지명 · 하차지명만(날짜는 말 안 하면 오늘)
 const GREETING = "네, 로지스웹 AI 배차 상담원이에요. 오더 내용을 편하게 쭉 말씀하시고, 다 말씀하시면 보내기를 눌러 주세요.";
 const BURDENS = [["기사", "기사 차감"], ["회사", "회사 부담"], ["청구", "추가 청구"]];
 const NEW_LABEL = { 거래처명: "거래처", 상차지명: "상차지", 하차지명: "하차지", 경유지: "경유지", 지급방식: "지급방식", 배차방식: "배차방식", 차종: "차종", 상하차방법: "상하차방법" };
@@ -309,7 +309,7 @@ export default function VoiceAgentCall({ form, multiCount = 1, places = [], clie
           </div>
           <div className="h-1.5 rounded-full bg-[#13233F] overflow-hidden mb-1"><div className="h-full rounded-full" style={{ width: `${((REQUIRED.length - missing.length) / REQUIRED.length) * 100}%`, background: "linear-gradient(90deg,#2563EB,#34D399)", transition: "width .4s" }} /></div>
           <Row k="거래처" miss={!has("거래처명")}>{f.거래처명}</Row>
-          <Row k="날짜" miss={!has("상차일") || !has("하차일")}>{has("상차일") ? <>{md(f.상차일)} {f.상차시간 || ""} 상차 → {f.하차일 === f.상차일 ? "당착" : md(f.하차일)} {f.하차시간 || ""}</> : ""}</Row>
+          <Row k="날짜" miss={false}>{has("상차일") ? <>{md(f.상차일)} {f.상차시간 || ""} 상차 → {f.하차일 === f.상차일 ? "당착" : md(f.하차일)} {f.하차시간 || ""}</> : ""}</Row>
           <Row k="상차지" miss={!has("상차지명")}>{has("상차지명") ? <>{f.상차지명}{f.상차방법 ? <span className="text-[#8796AE] font-bold"> · {f.상차방법}</span> : null}{f.상차지주소 ? <div className="text-[11.5px] font-bold text-[#6B7A95] truncate">{f.상차지주소}</div> : null}</> : ""}</Row>
           {stopsP.map((s, i) => <Row key={`p${i}`} k={`경유상차${stopsP.length > 1 ? i + 1 : ""}`}>{s.업체명}{s.상차시간 ? ` ${s.상차시간}` : ""}</Row>)}
           <Row k="하차지" miss={!has("하차지명")}>{has("하차지명") ? <>{f.하차지명}{f.하차방법 ? <span className="text-[#8796AE] font-bold"> · {f.하차방법}</span> : null}{f.하차지주소 ? <div className="text-[11.5px] font-bold text-[#6B7A95] truncate">{f.하차지주소}</div> : null}</> : ""}</Row>
