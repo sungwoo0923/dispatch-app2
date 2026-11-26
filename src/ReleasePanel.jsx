@@ -49,7 +49,7 @@ export default function ReleasePanel({ children }) {
   const publish = async () => {
     if (!latest?.url) return setMsg("이 배포의 주소를 알 수 없어 배포할 수 없어요(Vercel 시스템 환경변수 VERCEL_URL 확인).");
     if (!mineIsLatest && !(await kpConfirm("지금 보고 있는 화면이 최신이 아니에요.\n최신 화면을 확인하지 않고 배포할까요?\n\n[취소] → [내 화면 최신으로]를 먼저 눌러 보는 걸 권해요."))) return;
-    if (!(await kpConfirm(`v${latest.version} 을 모든 가입자에게 배포할까요?\n\n· PC · 모바일 · 기사앱 · 화주 화면 모두 바뀌어요\n· 이전 버전 기록은 지워져요(되돌리기 목록에 남지 않아요)`))) return;
+    if (!(await kpConfirm(`v${latest.version} 을 모든 가입자에게 배포할까요?\n\n· PC · 모바일 · 화주 화면이 바뀌어요(기사앱 화면은 이미 항상 최신이에요)\n· 이전 버전 기록은 지워져요(되돌리기 목록에 남지 않아요)`))) return;
     run("pub", () => publishRelease(latest, note), `v${latest.version} 배포 완료: 가입자 화면은 새로고침하면 바뀌어요`).then(() => setNote(""));
   };
   const online = (live?.onlineList || []).filter((p) => p.now);
