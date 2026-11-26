@@ -133,7 +133,7 @@ function ChipList({ value, onChange, placeholder }) {
         {value.length === 0 && <span className="text-[12.5px] text-[#9AA9C3] py-1.5">비어 있으면 기본 목록을 씁니다.</span>}
       </div>
       <div className="flex gap-1.5 mt-2.5">
-        <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} placeholder={placeholder}
+        <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.nativeEvent?.isComposing || e.keyCode === 229) return; if (e.key === "Enter") { e.preventDefault(); add(); } }} placeholder={placeholder}
           className="flex-1 h-10 px-3 rounded-xl border border-[#DCE3EE] text-[13.5px] font-semibold outline-none focus:border-[#2D4C82]" />
         <button type="button" onClick={add} className="h-10 px-4 rounded-xl bg-[#1B2B4B] text-white text-[13px] font-black">추가</button>
       </div>

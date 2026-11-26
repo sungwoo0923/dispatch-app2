@@ -5,6 +5,7 @@ export default async function handler(req, res) {
     const { ip } = await r.json();
     res.status(200).json({ ip, region: process.env.VERCEL_REGION || "unknown" });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error("[myip]", e?.message || e);
+    res.status(500).json({ error: "lookup failed" });
   }
 }

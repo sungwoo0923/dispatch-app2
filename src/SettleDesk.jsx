@@ -1065,7 +1065,7 @@ export function ArDetail({ data, note, onSaveNote, onQuickPay, quickPreview, onR
               <div className="inline-flex p-0.5 rounded-lg bg-[#F4F6FA] shrink-0">
                 {[["call", "통화"], ["promise", "약속"], ["memo", "메모"]].map(([k, l]) => <button key={k} type="button" onClick={() => setLogType(k)} className={`h-8 px-2.5 rounded-md text-[13px] font-black ${logType === k ? "bg-white text-[#0F1A30] shadow-sm" : "text-[#5B6B85]"}`}>{l}</button>)}
               </div>
-              <input autoComplete="off" disabled={isViewer} value={logText} onChange={(e) => setLogText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && logText.trim()) { onSaveNote({ addLog: { type: logType, text: logText.trim() } }); setLogText(""); } }} placeholder="기록 남기기 (Enter)" className={`${sdInp} h-9`} />
+              <input autoComplete="off" disabled={isViewer} value={logText} onChange={(e) => setLogText(e.target.value)} onKeyDown={(e) => { if (e.nativeEvent?.isComposing || e.keyCode === 229) return; if (e.key === "Enter" && logText.trim()) { onSaveNote({ addLog: { type: logType, text: logText.trim() } }); setLogText(""); } }} placeholder="기록 남기기 (Enter)" className={`${sdInp} h-9`} />
             </div>
             {!tl.length ? <div className="py-6 text-center text-[14px] text-[#9AA9C3]">기록이 없어요</div> : (
               <ol className="relative pl-5 max-h-[360px] xl:max-h-[620px] overflow-y-auto">

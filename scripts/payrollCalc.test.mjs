@@ -261,4 +261,14 @@ t("4대보험 직접 정하기 — 이번 달 금액 > 직원 고정 금액 > �
   assert.equal(D(r4, "np").amount, 0); assert.equal(r1.employer.np, base.employer.np);
 });
 
+// 🛠 2026-11-27 급여 0원인 달 — 국민연금 하한(40만원)으로 올려 떼지 않는다(신고 기준소득월액이 있으면 그 금액으로)
+t("과세급여 0원 · 기준소득월액 없음 → 국민연금 0 · 실지급 0", () => {
+  const r = calcPayslipFull({ payType: "monthly", baseMonthly: 0 }, {}, R);
+  assert.equal(amt(r.deductions, "np"), 0); assert.equal(r.net, 0); assert.equal(r.employer.np, 0);
+  const r2 = calcPayslipFull({ payType: "monthly", baseMonthly: 0, npBase: 2000000 }, {}, R);
+  assert.equal(amt(r2.deductions, "np"), 95000, "신고 기준소득월액이 있으면 그대로");
+  const r3 = calcPayslipFull({ payType: "monthly", baseMonthly: 0 }, { npOverride: 19000 }, R);
+  assert.equal(amt(r3.deductions, "np"), 19000, "이번 달 직접 입력은 그대로");
+});
+
 console.log(`\n급여 계산 테스트 ${n}개 통과`);

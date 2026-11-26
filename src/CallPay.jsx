@@ -128,12 +128,16 @@ const Row = ({ label, children }) => (
 const dateCls = "h-9 px-2.5 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#0F1A30] outline-none focus:border-[#1B2B4B] bg-white";
 
 // 입금완료 처리(잡은 콜) — 오더에 기록 + 수입·지출 장부(수입)에 한 줄(같은 오더는 한 줄만, 취소하면 지운다)
-export async function setCallDeposit({ row, done, date, name = "", patchDispatch, company, by = "", txnId = "", memo }) {
+//  🛠 2026-11-27 장부 금액 = 실제로 받은 돈 — 은행 입금으로 맞추면 그 입금액, 아니면 계산서 금액(운임 + 부가세 10%)
+//   예전엔 운임(공급가)만 적어서 통장 잔액이 부가세만큼 적게 나오고, 통장 내역에서 "장부에 없음"으로 떴다
+//   받은 돈은 오더 입금액 칸에도 남긴다(입금일만 고칠 때 같은 금액으로)
+export const callDepositAmountOf = (row, amount) => Math.round(toAmt(amount) || toAmt(row?.입금액) || vatOf(row?.청구운임).total);
+export async function setCallDeposit({ row, done, date, name = "", patchDispatch, company, by = "", txnId = "", memo, amount }) {
   const id = row?._id || row?.id;
   if (!id || !patchDispatch) return;
   const d = done ? (date || today()) : "";
-  await patchDispatch(id, { 입금상태: done ? "입금완료" : "", 입금일: d, 입금자명: done ? String(name || "").trim().slice(0, 40) : "", 입금처리자: done ? by : "", 입금거래id: done ? String(txnId || "") : "", ...(memo !== undefined || !done ? { 입금메모: done ? String(memo || "").trim().slice(0, 200) : "" } : {}), __system: true });
-  const amt = done ? Number(String(row.청구운임 ?? "").replace(/[^\d.-]/g, "")) || 0 : 0;
+  const amt = done ? callDepositAmountOf(row, amount) : 0;
+  await patchDispatch(id, { 입금상태: done ? "입금완료" : "", 입금일: d, 입금자명: done ? String(name || "").trim().slice(0, 40) : "", 입금처리자: done ? by : "", 입금거래id: done ? String(txnId || "") : "", 입금액: done ? amt : "", ...(memo !== undefined || !done ? { 입금메모: done ? String(memo || "").trim().slice(0, 200) : "" } : {}), __system: true });
   upsertAutoEntry(db, `calldep_${id}`, {
     company: coNow(company), date: d, type: "수입", account: "운송수입", item: `잡은 콜 입금 · ${row.거래처명 || ""}`, amount: amt, vendor: row.거래처명 || "",
     memo: "정산관리 › 입금 확인 [입금완료]: 자동 반영", auto: "calldep", purpose: "collect",
@@ -497,7 +501,7 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
   const applySugg = async (list) => {
     if (isViewer) return window.alert("조회전용 권한으로는 처리할 수 없습니다.");
     setBusy(true);
-    try { for (const r of list) { const g = sugg.get(r._id || r.id); if (g) await setCallDeposit({ row: r, done: true, date: g.txn.date || today(), name: g.txn.name || "", txnId: g.txn.id, memo: `은행 입금 확인 · ${g.txn.name || ""} ${won(g.txn.amount)}원`, patchDispatch, company }); } }
+    try { for (const r of list) { const g = sugg.get(r._id || r.id); if (g) await setCallDeposit({ row: r, done: true, date: g.txn.date || today(), name: g.txn.name || "", txnId: g.txn.id, amount: g.txn.amount, memo: `은행 입금 확인 · ${g.txn.name || ""} ${won(g.txn.amount)}원`, patchDispatch, company }); } }
     catch (e) { window.alert(`처리하지 못했습니다: ${e?.message || e}`); } finally { setBusy(false); }
   };
   // 조회 조건(검색어 · 기간)에 맞는 오더 — 상태 단추 숫자도 이걸로 센다

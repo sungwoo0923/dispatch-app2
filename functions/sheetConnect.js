@@ -351,7 +351,7 @@ function makeSheetConnect(deps) {
       res.status(400).json({ error: "알 수 없는 요청이에요." });
     } catch (e) {
       console.error("[시트 연결] 오류:", e?.message || e);
-      res.status(e.status || 500).json({ error: e?.message || String(e), ...(e.code === "office-file" || e.code === "convert-denied" ? { code: e.code, help: e.help || "" } : {}) });
+      res.status(e.status || 500).json({ error: (Number(e?.status) >= 400 && Number(e?.status) < 500 && e?.message) ? String(e.message) : "서버에서 처리하지 못했어요. 잠시 뒤 다시 해 주세요.", ...(e.code === "office-file" || e.code === "convert-denied" ? { code: e.code, help: e.help || "" } : {}) });
     }
   };
 }

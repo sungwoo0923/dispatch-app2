@@ -120,14 +120,20 @@
     {
       "src": "/driver-(login|register|home|signup)(.*)",
       "headers": {
-        "cache-control": "no-store, must-revalidate"
+        "cache-control": "no-store, must-revalidate",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-frame-options": "SAMEORIGIN"
       },
       "dest": "/driver.html"
     },
     {
       "src": "/(.*)",
       "headers": {
-        "cache-control": "no-store, must-revalidate"
+        "cache-control": "no-store, must-revalidate",
+        "x-content-type-options": "nosniff",
+        "referrer-policy": "strict-origin-when-cross-origin",
+        "x-frame-options": "SAMEORIGIN"
       },
       "dest": "/index.html"
     }

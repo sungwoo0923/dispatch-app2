@@ -138,6 +138,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, at: Date.now(), items });
   } catch (e) {
     res.setHeader("Cache-Control", "s-maxage=20");
-    return res.status(200).json({ ok: false, reason: "upstream", message: String(e?.message || e).slice(0, 200), items: [] });
+    console.error("[traffic]", e?.message || e);
+    return res.status(200).json({ ok: false, reason: "upstream", message: "교통 정보를 받지 못했어요", items: [] });
   }
 }

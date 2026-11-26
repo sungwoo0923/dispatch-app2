@@ -1,5 +1,6 @@
 // ======================= src/payrollUi.jsx =======================
 // ⭐ 2026-11-07 급여 화면 공용 조각(Payroll.jsx · PayrollReports.jsx) — 입력칸 · 드롭다운 · 금액칸 · 구독 훅 · 날짜 도우미
+import { csvCell } from "./htmlSafe"; // 🔒 2026-11-27 CSV 수식 실행 막기
 import React from "react";
 import { collection, doc, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "./firebase";
@@ -120,7 +121,7 @@ export async function downloadXlsx(name, sheets) {
   XLSX.writeFile(wb, `${name}.xlsx`);
 }
 export function downloadCsv(name, rows) {
-  const csv = rows.map((r) => r.map((c) => { const s = String(c ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(",")).join("\r\n");
+  const csv = rows.map((r) => r.map((c) => csvCell(c)).join(",")).join("\r\n");
   const b = new Blob([`﻿${csv}`], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `${name}.csv`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }

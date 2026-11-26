@@ -63,17 +63,26 @@ export default function BankStatementBook({ company, isViewer = false }) {
   const docOf = React.useCallback((id) => docs.find((d) => d.id === id), [docs]);
   const keys = React.useMemo(() => ledgerKeys(ledger || []), [ledger]);
   const fundOpts = (funds || []).filter((f) => f.active !== false && !["대출"].includes(f.kind));
+  // 🛠 2026-11-27 같은 날 · 같은 금액 · 같은 방향 거래가 여러 건이면 장부에 있는 건수만큼만 "장부에 있음"(예전엔 1건만 있어도 전부)
+  //  이 화면에서 [장부에 넣기]한 거래는 자기 줄을 먼저 쓰고, 나머지는 위에서부터 한 건씩 짝을 짓는다
+  const inLedgerIds = React.useMemo(() => {
+    const left = new Map(keys); const set = new Set();
+    const take = (k) => { const n = left.get(k) || 0; if (n <= 0) return false; left.set(k, n - 1); return true; };
+    txns.forEach((t) => { if (st.done[t.id] === "ledger") take(txnLedgerKey(t)); });
+    txns.forEach((t) => { if (st.done[t.id] || (t.out && match.has(t.id))) return; if (take(txnLedgerKey(t))) set.add(t.id); });
+    return set;
+  }, [txns, keys, match, st.done]);
   const stateOf = (t) => {
     if (st.done[t.id]) return st.done[t.id];
     if (t.out && match.has(t.id)) return "match";
-    if (keys.has(txnLedgerKey(t))) return "inLedger";
+    if (inLedgerIds.has(t.id)) return "inLedger";
     return t.in ? "in" : "none";
   };
   const counts = React.useMemo(() => {
     const c = { match: 0, none: 0, in: 0 };
     for (const t of txns) { const s = stateOf(t); if (s === "match") c.match++; else if (s === "none") c.none++; else if (s === "in") c.in++; }
     return c;
-  }, [txns, match, keys, st.done]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [txns, match, inLedgerIds, st.done]); // eslint-disable-line react-hooks/exhaustive-deps
   const list = txns.filter((t) => view === "전체" || (view === "입금" && t.in) || (view === "출금" && t.out) || (view === "장부에 없음" && ["none", "in"].includes(stateOf(t))));
 
   const onFile = async (e) => {

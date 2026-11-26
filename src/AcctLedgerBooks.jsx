@@ -238,7 +238,9 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
     const qd = vatData.quarters[vatQuarter];
     const header = ["월", "공급가액(매출)", "매출세액(10%)", "매입공급가액", "매입세액(10%)", "납부세액"];
     const rows = qd.months.map(({ mo, sales, costs }) => [`${Number(mo)}월`, sales, Math.round(sales * 0.1), costs, Math.round(costs * 0.1), Math.round(sales * 0.1) - Math.round(costs * 0.1)]);
-    const totalRow = ["합계", qd.sales, Math.round(qd.sales * 0.1), qd.costs, Math.round(qd.costs * 0.1), Math.round(qd.sales * 0.1) - Math.round(qd.costs * 0.1)];
+    // 🛠 2026-11-27 합계 줄 = 위 월별 줄을 더한 값(예전엔 분기 합계에 다시 반올림해서 1원씩 어긋났다)
+    const colSum = (i) => rows.reduce((a, r) => a + r[i], 0);
+    const totalRow = ["합계", colSum(1), colSum(2), colSum(3), colSum(4), colSum(5)];
     const ws = XLSX.utils.aoa_to_sheet([header, ...rows, totalRow]);
     ws["!cols"] = [{ wch: 8 }, ...Array(5).fill({ wch: 16 })];
     const wb = XLSX.utils.book_new();
@@ -260,8 +262,9 @@ export default function AcctLedgerBooks({ dispatchData = [], fixedRows = [], dri
   const methodSorted = React.useMemo(() => sortRows(costByMethod, acMethodSort.sort, (r, k) => r[AC_COST_KEY[k]]), [costByMethod, acMethodSort.sort]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const currentQData = vatData.quarters[vatQuarter] || { sales: 0, costs: 0, months: [] };
-  const vatOutput = Math.round(currentQData.sales * 0.1);
-  const vatInput = Math.round(currentQData.costs * 0.1);
+  // 🛠 2026-11-27 분기 세액 = 월별 세액(월마다 반올림)의 합 — 월별 표 · 분기 누계 · 엑셀 합계 줄과 같은 숫자
+  const vatOutput = currentQData.months.reduce((a, x) => a + Math.round(x.sales * 0.1), 0);
+  const vatInput = currentQData.months.reduce((a, x) => a + Math.round(x.costs * 0.1), 0);
   const vatNet = vatOutput - vatInput;
   const tab = TABS.find((t) => t[0] === subTab) || TABS[0];
   const btnDark = "h-8 px-2.5 rounded-lg bg-[#0F1A30] text-white text-[12.5px] font-black hover:opacity-85";

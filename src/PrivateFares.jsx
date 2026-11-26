@@ -11,6 +11,7 @@
 //  ▸ 거래처 규칙(실제 청구 자동 계산) — 직접 입력 · 공개 청구운임 + 정액 · 공개 청구운임 × 비율(%)
 //    오더마다 직접 고친 값이 있으면 그 값이 우선
 //  ▸ 화면: 매출관리 › 리포트 도구 › [비공개 청구](담당자에게만 보임 · 권한 확인은 DispatchApp usePrivateFareAccessLazy) — PC·모바일(같은 매출관리 화면)
+import { csvCell } from "./htmlSafe"; // 🔒 2026-11-27 CSV 수식 실행 막기
 import { isTMUser } from "./staffFilter"; // 🧑‍💻 2026-11-24 최고관리자는 회사 직원이 아님
 import React from "react";
 import { createPortal } from "react-dom";
@@ -204,7 +205,7 @@ function MainView({ company, settings, dispatchData }) {
     const lines = [head.join(",")];
     rows.forEach((r) => {
       const b = toNum(r.청구운임); const c = privateAmountOf(r, saved[r._id || r.id], ruleOf.get(String(r.거래처명 || "").trim()));
-      lines.push([r.상차일, r.거래처명, r.상차지명, r.하차지명, b, c.amount || "", c.amount ? c.amount - b : "", r.배차상태].map((x) => `"${String(x ?? "").replace(/"/g, '""')}"`).join(","));
+      lines.push([r.상차일, r.거래처명, r.상차지명, r.하차지명, b, c.amount || "", c.amount ? c.amount - b : "", r.배차상태].map((x) => csvCell(x)).join(","));
     });
     const url = URL.createObjectURL(new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8;" }));
     const a = document.createElement("a"); a.href = url; a.download = `실제청구_${client || "전체"}_${ym}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 2000);

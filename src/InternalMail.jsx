@@ -10,6 +10,7 @@
 //    일괄 처리·인쇄·서명. 추가 필드: status(sent|draft|scheduled), pendingTo/pendingToNames/pendingCc/pendingCcNames,
 //    scheduledAt, cc/ccNames, important, starredBy, purgedBy, recalledFor
 import React from "react";
+import { escHtml, imgSrcAttr } from "./htmlSafe"; // 🔒 2026-11-27 인쇄 창 이미지 · 글자 처리
 import { kpConfirm, kpPrompt } from "./kpDialog";
 import { runDelete, commitDeletes } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 처리
 import { createPortal } from "react-dom";
@@ -515,11 +516,11 @@ function Composer({ company, myName, staff, uid, init, onClose, onDone }) {
 function printMail(m) {
   const w = window.open("", "_blank", "width=820,height=900");
   if (!w) return;
-  const esc = (t) => String(t || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const esc = (t) => escHtml(t || "");
   w.document.write(`<html><head><meta charset="utf-8"><title>${esc(m.subject)}</title><style>body{font-family:'Pretendard','Noto Sans KR',sans-serif;padding:32px;color:#0F1A30}h1{font-size:22px;margin:0 0 12px}table{font-size:13px;border-collapse:collapse;margin-bottom:18px}td{padding:3px 12px 3px 0;vertical-align:top}td:first-child{color:#7A879C;font-weight:700}pre{white-space:pre-wrap;font-family:inherit;font-size:14px;line-height:1.8;border-top:2px solid #0F1A30;padding-top:16px}img{max-width:100%;margin:10px 0;border:1px solid #E3E8F0}</style></head><body>
     <h1>${m.important ? "[중요] " : ""}${esc(m.subject)}</h1>
     <table><tr><td>보낸 사람</td><td>${esc(m.fromName)} ${esc(m.fromEmail)}</td></tr><tr><td>받는 사람</td><td>${esc((m.toNames || m.pendingToNames || []).join(", "))}</td></tr>${(m.ccNames || []).length ? `<tr><td>참조</td><td>${esc(m.ccNames.join(", "))}</td></tr>` : ""}<tr><td>날짜</td><td>${esc(fmtAt(toMs(m.at), true))}</td></tr></table>
-    <pre>${esc(m.body)}</pre>${(m.images || []).map((s) => `<img src="${s}">`).join("")}
+    <pre>${esc(m.body)}</pre>${(m.images || []).map((s) => imgSrcAttr(s)).filter(Boolean).map((s) => `<img src="${s}">`).join("")}
     <script>window.onload=function(){setTimeout(function(){window.print()},300)}</script></body></html>`);
   w.document.close();
 }

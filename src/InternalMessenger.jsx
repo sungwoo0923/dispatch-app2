@@ -1,4 +1,5 @@
 import { FabButton, SizeButtons, DOCK_BG } from "./FloatDock";
+import { safeHref } from "./htmlSafe"; // 🔒 2026-11-27 링크는 https · tel 등만(javascript: 막기)
 import { isTMUser, TM_AFFIL } from "./staffFilter"; // 🧑‍💻 2026-11-24
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { imeFocusRef } from "./imeFocus";
@@ -2735,7 +2736,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                       </div>
                       <div style={{ fontSize: 12, color: "#7A879C", marginTop: 2 }}>{m.senderName} · {fmtDate(m.createdAt)} {fmtTime(m.createdAt)}{gallery === "file" && m.fileSize ? ` · ${(m.fileSize / 1024).toFixed(1)} KB` : ""}</div>
                     </div>
-                    {gallery === "file" && <a href={m.fileUrl} target="_blank" rel="noopener noreferrer" style={{ height: 32, padding: "0 12px", borderRadius: 10, background: NAVY, color: "#fff", fontSize: 12.5, fontWeight: 800, textDecoration: "none", display: "flex", alignItems: "center" }}>열기</a>}
+                    {gallery === "file" && <a href={safeHref(m.fileUrl)} target="_blank" rel="noopener noreferrer" style={{ height: 32, padding: "0 12px", borderRadius: 10, background: NAVY, color: "#fff", fontSize: 12.5, fontWeight: 800, textDecoration: "none", display: "flex", alignItems: "center" }}>열기</a>}
                     {gallery === "order" && <button type="button" onClick={() => setOrderView(m.order)} style={{ height: 32, padding: "0 12px", borderRadius: 10, border: "none", background: NAVY, color: "#fff", fontSize: 12.5, fontWeight: 800, cursor: "pointer" }}>열기</button>}
                     <button type="button" onClick={() => { setGallery(null); setTimeout(() => scrollToMsg(m.id), 50); }} style={{ height: 32, padding: "0 10px", borderRadius: 10, border: "1px solid #DCE3EE", background: "#fff", color: "#3A4A66", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>대화로</button>
                   </div>
@@ -2853,7 +2854,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                             onClick={() => setImgPreview(msg.imageUrl)} />
                         </div>
                       ) : msg.type === "file" ? (
-                        <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                        <a href={safeHref(msg.fileUrl)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 12, background: isMine ? themeMyBubble : "#fff", border: isMine ? "none" : "1px solid #e5e7eb", maxWidth: 220, boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
                             <div style={{ width: 36, height: 36, borderRadius: 8, background: isMine ? "rgba(255,255,255,0.15)" : "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isMine ? "#fff" : "#1B2B4B"} strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -2865,7 +2866,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                           </div>
                         </a>
                       ) : msg.type === "location" ? (
-                        <a href={msg.text} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                        <a href={safeHref(msg.text)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
                           <div style={{ borderRadius: 12, overflow: "hidden", width: 180, boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }}>
                             <div style={{ background: "#1B2B4B", padding: "28px 16px", textAlign: "center" }}>
                               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -2896,7 +2897,7 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                       ) : editMsg?.id === msg.id ? (
                         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                           <input value={editText} onChange={e => setEditText(e.target.value)}
-                            onKeyDown={e => { if (e.key === "Enter") onSaveEdit(); if (e.key === "Escape") setEditMsg(null); }}
+                            onKeyDown={e => { if (e.nativeEvent?.isComposing || e.keyCode === 229) return; if (e.key === "Enter") onSaveEdit(); if (e.key === "Escape") setEditMsg(null); }}
                             style={{ border: "1px solid #1B2B4B", borderRadius: 10, padding: "6px 10px", fontSize: 13, outline: "none", minWidth: 120 }}
                             ref={imeFocusRef} />
                           <button onClick={onSaveEdit} style={{ background: "#1B2B4B", color: "#fff", border: "none", borderRadius: 8, padding: "5px 8px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>저장</button>

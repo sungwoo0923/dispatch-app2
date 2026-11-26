@@ -13,6 +13,12 @@ const MAX_TRY = 5;
 const TOKEN_MS = 10 * 60 * 1000;
 const digits = (p) => String(p || "").replace(/\D/g, "").replace(/^82/, "0");
 const NOT_MATCH = "가입할 때 넣은 휴대폰 번호와 이메일이 맞지 않습니다";
+const SUPER_EMAIL = "tjddnqkf@naver.com";
+const PRIV_ROLES = ["totalMaster", "admin", "allMgr", "hrManager", "hrAcct"];
+const PRIV_MSG = "관리자 계정은 문자로 비밀번호를 바꿀 수 없어요. 아래 [이메일로 재설정 링크 받기]를 쓰거나 관리자에게 문의해 주세요";
+// 관리자급 계정 — 다른 직원 정보를 고칠 수 있는 계정이라 탈취되면 피해가 커서 문자 재설정을 막는다
+const isPrivileged = (d, email) => String(email || "").toLowerCase() === SUPER_EMAIL
+  || PRIV_ROLES.includes(String(d?.role || "")) || d?.isMaster === true || d?.subAdmin === true;
 
 function makePasswordResetSms({ db, HttpsError, now = () => Date.now(), getUserByEmail, verifyIdToken, updatePassword, revoke, deleteUser }) {
   return async function resetPasswordSms(data) {
@@ -36,9 +42,14 @@ function makePasswordResetSms({ db, HttpsError, now = () => Date.now(), getUserB
     if (!user) { await cleanup(""); throw new HttpsError("permission-denied", NOT_MATCH); }
     const snap = await db.doc(`users/${user.uid}`).get().catch(() => null);
     const d = snap?.exists ? snap.data() : {};
-    const phones = [d.phone, d.pcVerifyPhone, d.전화번호, d.연락처].map(digits).filter((x) => x.length >= 10);
+    // 🔒 2026-11-26 보안 — 로그인 계정(Firebase 인증)에 문자 인증으로 연결된 번호가 있으면 그 번호만 믿는다.
+    //  users 문서의 번호 칸(phone · 연락처 등)은 같은 회사 직원도 고칠 수 있어, 그것만으로 남의 비밀번호를 바꿀 수 있었다.
+    const authPhone = digits(user.phoneNumber);
+    const phones = (authPhone.length >= 10 ? [authPhone] : [d.phone, d.pcVerifyPhone, d.전화번호, d.연락처].map(digits)).filter((x) => x.length >= 10);
     if (!phones.includes(got)) { await cleanup(user.uid); throw new HttpsError("permission-denied", NOT_MATCH); }
     if (d.userStatus === "banned") { await cleanup(user.uid); throw new HttpsError("permission-denied", "사용할 수 없는 계정입니다. 관리자에게 문의하세요"); }
+    // 🔒 관리자급 계정(최고관리자 · 부관리자 · 회사 마스터 · 관리자 · 통합관리자 · 인사관리자)은 문자로 바꾸지 않는다 — 이메일 재설정 또는 관리자 문의
+    if (isPrivileged(d, email)) { await cleanup(user.uid); throw new HttpsError("failed-precondition", PRIV_MSG); }
     await updatePassword(user.uid, pw);
     if (revoke) await revoke(user.uid).catch(() => {});
     await db.doc(`users/${user.uid}`).set({ pwResetAt: now(), pwResetBy: "sms" }, { merge: true }).catch(() => {});
@@ -48,4 +59,4 @@ function makePasswordResetSms({ db, HttpsError, now = () => Date.now(), getUserB
   };
 }
 
-module.exports = { makePasswordResetSms, digits };
+module.exports = { makePasswordResetSms, digits, isPrivileged };

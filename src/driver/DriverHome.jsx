@@ -80,6 +80,20 @@ async function updateOrderSafe(ref, data) {
     return updateDoc(ref, slim);
   }
 }
+
+// 🛠 2026-11-27 수락 · 거절 직전에 오더를 서버에서 다시 읽어, 그사이 담당자가 차량을 바꿨거나 이미 처리된 오더면 멈춘다
+//  (예전엔 바로 써서, 다른 기사로 바뀐 오더를 거절하면 새 기사의 배차가 지워질 수 있었다). 읽기가 막히면 예전처럼 진행.
+const _plateKey = (v) => String(v ?? "").replace(/\s/g, "");
+async function orderStillMine(ref, localOrder, okStates = ["대기"]) {
+  try {
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return false;
+    const cur = snap.data() || {};
+    if (_plateKey(localOrder?.차량번호) && _plateKey(cur.차량번호) !== _plateKey(localOrder.차량번호)) return false;
+    if (!okStates.includes(String(cur.기사확인상태 || ""))) return false;
+    return true;
+  } catch { return true; }
+}
 const errCode = (e) => (e?.code ? ` (${String(e.code).replace(/^firestore\//, "")})` : ""); // 오류가 나면 무슨 오류인지 알 수 있게
 
 const tlLog = (type, by, extra = {}) => ({
@@ -1444,11 +1458,16 @@ export default function DriverHome() {
     });
   }, []);
 
+  const [loadStuck, setLoadStuck] = useState(false);
   useEffect(() => {
     if (!uid) return;
-    return onSnapshot(doc(db, "drivers", uid), (snap) => {
-      if (snap.exists()) setDriver(snap.data());
-    });
+    // 🛠 2026-11-27 기사 문서가 없거나 읽기가 막히면(권한 · 인터넷 끊김) "불러오는 중"에서 멈추지 않게 — 10초 뒤 [다시 시도 · 로그아웃]
+    const t = setTimeout(() => setLoadStuck(true), 10000);
+    const off = onSnapshot(doc(db, "drivers", uid), (snap) => {
+      if (snap.exists()) { setDriver(snap.data()); setLoadStuck(false); clearTimeout(t); }
+      else if (!snap.metadata.fromCache) setLoadStuck(true);
+    }, (e) => { console.warn("[기사 문서] 읽기 실패", e?.code || e); setLoadStuck(true); });
+    return () => { clearTimeout(t); off(); };
   }, [uid]);
   useEffect(() => {
     if (viewAs || !uid || !driver || vehicleSetupCheckedRef.current) return; // 관리자 보기 — 기사 처음 설정 창은 띄우지 않는다
@@ -1929,6 +1948,7 @@ export default function DriverHome() {
     setOrderActionLoading(true);
     try {
       const accepted = myOrders.find(x => x._id === orderId);
+      if (!(await orderStillMine(doc(db, col, orderId), accepted))) { showToast("오더 내용이 바뀌었어요. 화면을 새로 보고 다시 확인해 주세요."); return; }
       await updateDoc(doc(db, col, orderId), {
         기사확인상태: "수락",
         기사확인일시: serverTimestamp(),
@@ -1977,6 +1997,7 @@ export default function DriverHome() {
       // ⭐ 사용자 요청 — 거절하면 이 오더는 다시 배차 전 상태(배차중)로 돌아가야 하고,
       // 4/5파트 배차현황에서도 차량번호/이름/전화번호가 사라져야 한다(이 기사에게
       // 배정됐던 흔적을 지워 담당자가 바로 다른 차량을 다시 배정할 수 있게).
+      if (!(await orderStillMine(doc(db, rm.col || "orders", rm.orderId), myOrders.find((x) => x._id === rm.orderId), ["대기", "수락"]))) { showToast("오더 내용이 바뀌었어요. 화면을 새로 보고 다시 확인해 주세요."); setRejectModal?.(null); return; }
       await updateOrderSafe(doc(db, rm.col || "orders", rm.orderId), {
         기사확인상태: "거절",
         기사거절사유: rm.modified ? (reason ? `수정된 오더 거절 — ${reason}` : "수정된 오더 거절") : reason,
@@ -2356,7 +2377,8 @@ export default function DriverHome() {
     await Promise.race([clearFcmToken(auth.currentUser?.uid).catch(() => {}), new Promise((r) => setTimeout(r, 1200))]);
     if (uid) {
       try {
-        await updateDoc(doc(db, "drivers", uid), { active: false, updatedAt: serverTimestamp() });
+        // 🛠 2026-11-27 인터넷이 끊겨 있으면 서버 응답을 끝없이 기다려 로그아웃이 안 됐다 — 최대 1.5초만 기다림(저장은 연결되면 보내진다)
+        await Promise.race([updateDoc(doc(db, "drivers", uid), { active: false, updatedAt: serverTimestamp() }), new Promise((r) => setTimeout(r, 1500))]);
       } catch (_) {}
     }
     // 🛠 2026-11-18 로그아웃 중엔 화면 안에서 로그인 화면을 먼저 그리지 않는다(App.jsx) — 새 버전 배포 뒤 예전 로그인 화면 파일을
@@ -2563,6 +2585,15 @@ export default function DriverHome() {
         <div style={{ textAlign: "center" }}>
           <div style={{ width: 40, height: 40, border: "3px solid #1B2B4B", borderTopColor: "transparent", borderRadius: "50%", margin: "0 auto 12px", animation: "spin 0.8s linear infinite" }} />
           <div style={{ fontSize: 16.5, color: "#5B6B85" }}>불러오는 중이에요…</div>
+          {loadStuck && (
+            <div style={{ marginTop: 18 }}>
+              <div style={{ fontSize: 14.5, color: "#5B6B85", marginBottom: 12, lineHeight: 1.6 }}>기사 정보를 불러오지 못했어요.<br />인터넷 연결을 확인하고 다시 시도해 주세요.</div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                <button type="button" onClick={() => window.location.reload()} style={{ minHeight: 44, padding: "0 18px", borderRadius: 12, border: "none", background: "#1B2B4B", color: "#fff", fontSize: 15, fontWeight: 800 }}>다시 시도</button>
+                <button type="button" onClick={() => handleLogout()} style={{ minHeight: 44, padding: "0 18px", borderRadius: 12, border: "1.5px solid #C9D2E0", background: "#fff", color: "#0F1A30", fontSize: 15, fontWeight: 700 }}>로그아웃</button>
+              </div>
+            </div>
+          )}
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>

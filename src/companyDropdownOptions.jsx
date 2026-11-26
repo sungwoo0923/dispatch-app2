@@ -334,7 +334,7 @@ function DropdownOptionsEditorModal({ optKey, label, role, userCompany, initialO
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+            onKeyDown={(e) => { if (e.nativeEvent?.isComposing || e.keyCode === 229) return; if (e.key === "Enter") { e.preventDefault(); add(); } }}
             placeholder="새 옵션 추가"
             className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-[13px]"
           />

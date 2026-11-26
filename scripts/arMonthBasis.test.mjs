@@ -157,4 +157,27 @@ ok("[초기화] 되돌리기: 이 길로 바꾼 정산완료만 · 다른 입금
   assert.deepEqual(AR.autoSettleRevertsOf({ orders: manualAfter, payments: [], client: "가나상사", marks }).map((m) => m.id), ["c1"], "이미 사람이 되돌린 오더는 안 건드림(두 번 초기화해도 같음)");
 });
 
+// ── ⑥ 🛠 2026-11-27 정산완료한 달에 오더가 더 붙어도 예전 입금이 새 오더를 덮지 않게 · 입금완료(잡은 콜) 오더는 받은 것 ──
+ok("정산완료 뒤 같은 달에 추가한 오더는 미수로 남는다(매칭 · 회계 · 정산완료 대상 모두)", () => {
+  const S11 = { "2026-11": "정산완료" }; const D11 = { "2026-11": "2026-11-20" };
+  const list = [O("a", { 청구운임: "500000", 정산상태: S11, 정산일: D11 }), O("b", { 청구운임: "500000", 정산상태: S11, 정산일: D11 }), O("c", { 상차일: "2026-11-28", 청구운임: "300000" })];
+  const pays = [pay("2026-11", 1100000, { depositDate: "2026-11-20", source: "bank" })];
+  const e = M.buildArMonths({ orders: list, paidMap: M.arPaidMapOf(pays) }).get("가나상사")[0];
+  assert.deepEqual([e.due, e.remain], [330000, 330000]);
+  const paid = AR.arPaidByClient({ orders: list, arPayments: pays, year: "2026" });
+  assert.equal(AR.receivablesOf({ orders: list, paid, today: "2026-11-30", year: "2026" })[0].outstanding, 330000);
+  assert.deepEqual(AR.fullyPaidMonths({ orders: list, payments: pays, client: "가나상사" }), [], "c 는 아직 안 받음");
+  assert.equal(AR.fullyPaidMonths({ orders: list, payments: [...pays, pay("2026-11", 330000, { depositDate: "2026-11-29" })], client: "가나상사" }).length, 1, "c 몫이 들어오면 다 받음");
+  // 날짜를 모르면 예전처럼(입금 전부를 남은 오더에)
+  assert.equal(M.buildArMonths({ orders: list, paidMap: new Map([["가나상사|2026-11", 1100000]]) }).get("가나상사")[0].remain, 0);
+});
+ok("입금완료(잡은 콜) 오더는 받은 돈 — 매칭 남은 금액에서 빼고, 다 채우면 같이 정산완료", () => {
+  const list = [O("a", { 청구운임: "1000000", 콜구분: "OUT", 입금상태: "입금완료", 입금일: "2026-11-10" }), O("b", { 청구운임: "1000000" })];
+  const months = M.buildArMonths({ orders: list });
+  assert.deepEqual(months.get("가나상사").map((x) => [x.total, x.due, x.remain, x.rows.length]), [[1000000, 1100000, 1100000, 2]]);
+  const m = M.matchDeposits({ deposits: [{ amount: 1100000, name: "가나상사" }], months });
+  assert.equal(M.isConfidentMatch(m.matches[0]), true);
+  assert.deepEqual(AR.fullyPaidMonths({ orders: list, payments: [pay("2026-11", 1100000)], client: "가나상사" }).map((x) => x.rows.map((r) => r._id).sort()), [["a", "b"]]);
+});
+
 console.log(`\narMonthBasis: ${pass}개 통과`);

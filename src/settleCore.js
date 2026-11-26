@@ -8,7 +8,9 @@ export const n = (v) => Number(String(v ?? "").replace(/[^\d.-]/g, "")) || 0;
 export const won = (v) => Math.round(v || 0).toLocaleString("ko-KR");
 export const short = (v) => { const a = Math.abs(v || 0); return a >= 1e8 ? `${(v / 1e8).toFixed(1)}억` : a >= 1e4 ? `${Math.round(v / 1e4).toLocaleString("ko-KR")}만` : won(v); };
 // 🗓 2026-11-25 청구월(마감월 → 없으면 상차일 달) 정의는 functions/arCore.mjs 한 곳 — 미수금 · 은행 입금 매칭(서버) · 거래명세서 · 회계가 같은 식
-import { monthOf, statementRowsOf, stmtIncludePrepaidOf } from "../functions/arCore.mjs";
+import { monthOf, statementRowsOf, stmtIncludePrepaidOf, isSettledIn } from "../functions/arCore.mjs";
+// 🛠 2026-11-27 받은 오더 = 입금 확인 [입금완료] 또는 그 청구월 정산완료(미수금관리 [정산완료] · 은행 자동 매칭 · 회계 [입금 처리])
+const paidOrder = (o, ym) => o?.입금상태 === "입금완료" || isSettledIn(o, ym || monthOf(o));
 export { monthOf };
 export const kstYm = (off = 0) => { const d = new Date(Date.now() + 9 * 3600e3); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + off); return d.toISOString().slice(0, 7); };
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
@@ -38,7 +40,7 @@ export function summarizeSettle(orders, ym, stageOf = () => "미작성", today =
   const billable = mine.filter((o) => n(o.청구운임) > 0 && String(o.거래처명 || "").trim());
   // 거래처별
   const byClient = new Map();
-  billable.forEach((o) => { const c = String(o.거래처명).trim(); const x = byClient.get(c) || { client: c, count: 0, sale: 0, paid: 0 }; x.count += 1; x.sale += n(o.청구운임); if (o.입금상태 === "입금완료") x.paid += n(o.청구운임); byClient.set(c, x); });
+  billable.forEach((o) => { const c = String(o.거래처명).trim(); const x = byClient.get(c) || { client: c, count: 0, sale: 0, paid: 0 }; x.count += 1; x.sale += n(o.청구운임); if (paidOrder(o, ym)) x.paid += n(o.청구운임); byClient.set(c, x); });
   const clients = [...byClient.values()].map((x) => ({ ...x, stage: stageOf(x.client, ym) })).sort((a, b) => b.sale - a.sale);
   const idx = (c) => stageIdx(c.stage);
   const total = clients.length;
@@ -73,7 +75,7 @@ export function summarizeSettle(orders, ym, stageOf = () => "미작성", today =
   rows.forEach((o) => {
     const c = String(o.거래처명 || "").trim(); const s = n(o.청구운임); const d0 = String(o.상차일 || ""); const bym = monthOf(o);
     const d = d0 && bym && d0.slice(0, 7) < bym ? `${bym}-01` : d0; // 🗓 이월 오더(상차일이 청구월보다 앞)는 청구월 1일부터 센다(functions/arCore.mjs 와 같게)
-    if (!c || s <= 0 || !d || o.입금상태 === "입금완료" || stageIdx(stageOf(c, monthOf(o))) >= 6) return;
+    if (!c || s <= 0 || !d || paidOrder(o, bym) || stageIdx(stageOf(c, monthOf(o))) >= 6) return;
     const age = daysBetween(d, today); if (age < 0) return;
     const x = aging.get(c) || { client: c, d30: 0, d60: 0, d90: 0, over: 0, total: 0 };
     if (age <= 30) x.d30 += s; else if (age <= 60) x.d60 += s; else if (age <= 90) x.d90 += s; else x.over += s;
@@ -84,7 +86,7 @@ export function summarizeSettle(orders, ym, stageOf = () => "미작성", today =
 // 거래처 원장 — 달마다 청구 · 입금 · 잔액(오래된 달부터 잔액을 쌓는다)
 export function clientLedger(orders, client, stageOf = () => "미작성") {
   const m = new Map();
-  (orders || []).forEach((o) => { if (isCancel(o) || o?.source === "transport_transmit" || String(o.거래처명 || "").trim() !== client || n(o.청구운임) <= 0) return; const ym = monthOf(o); if (!ym) return; const x = m.get(ym) || { ym, count: 0, sale: 0, paid: 0 }; x.count += 1; x.sale += n(o.청구운임); if (o.입금상태 === "입금완료") x.paid += n(o.청구운임); m.set(ym, x); });
+  (orders || []).forEach((o) => { if (isCancel(o) || o?.source === "transport_transmit" || String(o.거래처명 || "").trim() !== client || n(o.청구운임) <= 0) return; const ym = monthOf(o); if (!ym) return; const x = m.get(ym) || { ym, count: 0, sale: 0, paid: 0 }; x.count += 1; x.sale += n(o.청구운임); if (paidOrder(o, ym)) x.paid += n(o.청구운임); m.set(ym, x); });
   let bal = 0;
   return [...m.values()].sort((a, b) => a.ym.localeCompare(b.ym)).map((x) => { const stage = stageOf(client, x.ym); const paid = stageIdx(stage) >= 6 ? x.sale : x.paid; bal += x.sale - paid; return { ...x, paid, stage, balance: bal }; });
 }

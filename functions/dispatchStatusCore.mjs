@@ -24,5 +24,6 @@ export function payTypeStatusPatch(prev = {}, nextPay, next = {}) {
   if (isPayCancel(nextPay)) return prevStatus === "배차취소" ? {} : { 배차상태: "배차취소" };
   if (prevStatus !== "배차취소") return {};
   if (!isPayCancel(prev?.지급방식) && CANCELED_STATES.includes(String(prev?.상태 ?? "").trim())) return {};
+  if (prev?.허브취소 === true) return {}; // 🛠 2026-11-27 허브에서 취소된 오더도 지급방식만 바꿔서는 되살리지 않는다
   return { 배차상태: dispatchStatusOf({ ...prev, ...next, 지급방식: nextPay }) };
 }

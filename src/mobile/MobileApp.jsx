@@ -404,7 +404,8 @@ function buildAttachFileNameMobile(order, item, index = 0, total = 1) {
 // 기사전달용 업로드 링크 단축 — PC(DispatchApp)의 buildShortUploadUrl과 동일한 규칙으로
 // /u/{code}를 발급한다(code는 토큰에서 파생되어 재복사해도 항상 같은 링크).
 function buildShortUploadUrlMobile(orderId, token) {
-  const code = String(token || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8) || Math.random().toString(36).slice(2, 10);
+  // 🔒 2026-11-27 짧은 링크 코드를 8자 → 20자로(예전 8자는 맞혀 보기로 남의 업로드 링크를 찾을 수 있었다). 이미 보낸 8자 링크는 그대로 열린다.
+  const code = String(token || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 20) || Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, "0")).join("");
   setDoc(doc(db, "shortLinks", code), { id: orderId, t: token, createdAt: serverTimestamp() }, { merge: true }).catch(() => {});
   return `${window.location.origin}/u/${code}`;
 }
@@ -3849,9 +3850,8 @@ useEffect(() => {
   if (!alarmEnabled || !dispatchAlertsOnM || !orders.length) return; // ⭐ 2026-11-17 운송 화면일 때만
 
   // 이미 알림 준 긴급 오더 기록 (중복 방지)
-  const notified = JSON.parse(
-    sessionStorage.getItem("urgentNotified") || "[]"
-  );
+  let notified = []; // 🛠 2026-11-27 저장값이 깨졌거나 저장소를 못 쓰면 앱 전체가 멈추던 것 — 빈 목록으로
+  try { const v = JSON.parse(sessionStorage.getItem("urgentNotified") || "[]"); if (Array.isArray(v)) notified = v; } catch { /* 무시 */ }
 
   const newUrgentOrders = orders.filter(o => {
     return (
@@ -3872,10 +3872,7 @@ useEffect(() => {
   navigator.vibrate?.([200, 100, 200]);
 
     const next = [...notified, ...newUrgentOrders.map(o => o.id)];
-    sessionStorage.setItem(
-      "urgentNotified",
-      JSON.stringify(next)
-    );
+    try { sessionStorage.setItem("urgentNotified", JSON.stringify(next)); } catch { /* 저장소를 못 써도 계속 */ }
   }
 }, [orders, alarmEnabled, dispatchAlertsOnM]);
 
@@ -4904,7 +4901,7 @@ const groupedByDate = useMemo(() => {
       지급방식: form.지급방식 || "",
       // 차량정보가 비어있으면(배차중으로 되돌아감) 배차방식(직접배차/24시 등)도
       // 다시 선택없음으로 되돌린다 — 화면에서 배차방식만 안 지우고 저장해도 어긋나지 않게.
-      배차방식: (form.차량번호 || "").trim() ? (form.배차방식 || "") : "선택없음",
+      배차방식: (form.차량번호 || "").trim() ? (form.배차방식 || "") : "", // 🛠 2026-11-27 PC와 같게 빈 값("선택없음" 글자는 칸이 공란으로 보이는 원인)
       ...(form.콜구분 !== undefined ? { 콜구분: form.콜구분 || "", 콜플랫폼: form.콜플랫폼 || "" } : {}), // 💳 2026-11-12 IN/OUT도 같이 저장(예전엔 빠졌다)
       혼적여부: form.혼적여부 || "독차",
       혼적: form.혼적여부 === "혼적",   // ← PC boolean 호환

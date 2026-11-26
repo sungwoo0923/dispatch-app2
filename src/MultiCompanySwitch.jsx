@@ -61,6 +61,11 @@ export async function switchMyCompany(target) {
     try { sessionStorage.removeItem("kpCoSwitching"); } catch { /* 무시 */ }
     throw new Error("회사를 바꾸지 못했어요. 잠시 뒤 다시 눌러 주세요");
   }
+  // 🔒 2026-11-27 앞 회사 화면 저장본(오더 · 기사 · 거래처 · 작성 중 오더)과 잠금 해제 표시를 지운다 — 새 회사 화면에 앞 회사 오더가 잠깐 보이던 것
+  try {
+    ["dispatchData", "drivers", "clients", "dispatchForm", "realtimeEdit", "homePastStats", "mobileNotifs", "kpServerFilter", "routeBoard:last", "kpRecentCompanies", "kpDriverViewCo"].forEach((k) => localStorage.removeItem(k));
+    ["exec_intel_ok", "sales_ok", "kpApPreset", "kpApPresetQueue", "kpQuoteSeed"].forEach((k) => sessionStorage.removeItem(k));
+  } catch { /* 무시 */ }
   try {
     localStorage.setItem("userCompany", co);
     localStorage.setItem("loginCompany", co); // 모바일 일부 화면이 loginCompany 를 먼저 읽는다

@@ -5,6 +5,7 @@
 //  - 고객은 로그인 없이 링크로 열고, 서명 칸만 채울 수 있다(firestore.rules). 서명 후엔 문서 지문(SHA-256)을 함께 남긴다.
 //  ⭐ 알록달록 금지 — 네이비 계열만.
 import React from "react";
+import { imgSrcAttr } from "./htmlSafe"; // 🔒 2026-11-27 서명 · 도장 이미지는 data:image / https 만
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { kpConfirm, kpPrompt } from "./kpDialog";
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
@@ -177,8 +178,8 @@ export const CONTRACT_CSS = `
 export function signBlockHtml(c) {
   const s = c.supplier || {}, k = c.vars || {};
   return `<div class="kp-sign">
-    <div><div class="t">SUPPLIER · 공급자</div><div class="r">상호 ${esc(s.name || "")}<br>대표 ${esc(s.ceo || "")} (인)<br>사업자번호 ${esc(s.bizNo || "")}<br>주소 ${esc(s.address || "")}</div>${c.supplierSeal ? `<img src="${c.supplierSeal}" alt="">` : ""}</div>
-    <div><div class="t">CUSTOMER · 고객</div><div class="r">상호 ${esc(k.고객사 || "")}<br>대표 ${esc(k.고객대표 || "")} ${c.signer?.name ? `(서명: ${esc(c.signer.name)}${c.signer.title ? ` ${esc(c.signer.title)}` : ""})` : "(인)"}<br>사업자번호 ${esc(k.고객사업자번호 || "")}<br>주소 ${esc(k.고객주소 || "")}</div>${c.signatureImg ? `<img src="${c.signatureImg}" alt="">` : ""}</div>
+    <div><div class="t">SUPPLIER · 공급자</div><div class="r">상호 ${esc(s.name || "")}<br>대표 ${esc(s.ceo || "")} (인)<br>사업자번호 ${esc(s.bizNo || "")}<br>주소 ${esc(s.address || "")}</div>${imgSrcAttr(c.supplierSeal) ? `<img src="${imgSrcAttr(c.supplierSeal)}" alt="">` : ""}</div>
+    <div><div class="t">CUSTOMER · 고객</div><div class="r">상호 ${esc(k.고객사 || "")}<br>대표 ${esc(k.고객대표 || "")} ${c.signer?.name ? `(서명: ${esc(c.signer.name)}${c.signer.title ? ` ${esc(c.signer.title)}` : ""})` : "(인)"}<br>사업자번호 ${esc(k.고객사업자번호 || "")}<br>주소 ${esc(k.고객주소 || "")}</div>${imgSrcAttr(c.signatureImg) ? `<img src="${imgSrcAttr(c.signatureImg)}" alt="">` : ""}</div>
   </div>
   ${c.status === "서명완료" ? `<div style="margin-top:12px;font-size:10.5px;color:#7A89A3;font-family:${C_MONO};line-height:1.6">전자서명 ${c.signedAt?.toDate ? c.signedAt.toDate().toLocaleString("ko-KR") : ""} · 문서 지문(SHA-256) ${esc(c.signedHash || "")}</div>` : ""}`;
 }

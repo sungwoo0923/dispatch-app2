@@ -4,6 +4,7 @@
 //  · SafetyEduMine   — 내 교육(기록 · 회사 설정을 읽고 EduPlayer 를 연다 · 이수한 교육은 디지털 이수증)
 //  · SafetyEduAdmin  — 인사관리부 › 안전교육: 이수 현황판(드롭다운 필터) + 기사 영상 대체 설정
 //  보이는 것: 우리 회사 기록만(규칙: eduRecords 는 본인 · 같은 회사 사무 직원만 읽는다)
+import { csvCell } from "./htmlSafe"; // 🔒 2026-11-27 CSV 수식 실행 막기
 import React from "react";
 import EduPlayer from "./EduPlayer";
 import { useBackClose } from "./mobileBack";
@@ -628,7 +629,7 @@ export function EduAdminBoard({ people, records, settings = {}, canManage, onSav
   const exportCsv = () => {
     const head = ["이름", aud === "driver" ? "차량번호" : "부서", ...courses.flatMap((c) => [c.title, `${c.title} 이수증 번호`])];
     const lines = rows.map((r) => [r.p.name, aud === "driver" ? r.p.carNo || "" : r.p.team || "", ...r.recs.flatMap((x) => (x ? [`${eduStatusOf(x).label} ${ymd(x.signedAt)}`, certNo(x)] : ["미이수", ""]))]);
-    const csv = "﻿" + [head, ...lines].map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const csv = "﻿" + [head, ...lines].map((l) => l.map((v) => csvCell(v)).join(",")).join("\n");
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = `안전교육_이수현황_${aud === "driver" ? "기사" : "직원"}.csv`; a.click();
   };
   const remind = async () => {
