@@ -17023,8 +17023,10 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
                 <label className={mrLabelCls}><EditableText id="orderForm.multi.label.스마트검색" defaultText="스마트검색" /></label>
                 <textarea
                   className="w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-2.5 text-[13px] resize-none bg-white shadow-[0_0_0_1px_rgba(27,43,75,0.08),0_2px_8px_rgba(27,43,75,0.06)] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B] focus:shadow-[0_0_0_1px_rgba(27,43,75,0.15),0_4px_12px_rgba(27,43,75,0.1)] placeholder:text-gray-500 transition-all"
-                  rows={2}
-                  placeholder="기사 스마트 검색 "
+                  rows={1}
+                  wrap="off" // 🛠 2026-11-26 한 줄로(줄바꿈 없이)
+                  style={{ whiteSpace: "nowrap", overflowX: "auto", overflowY: "hidden", height: 40, lineHeight: "22px", paddingTop: 8, paddingBottom: 8, paddingLeft: 12, paddingRight: 10, scrollbarWidth: "none" }}
+                  placeholder="기사 검색"
                   value={mrSmartDriverQuery}
                   onChange={e => handleMultiRegSmartDriverInput(e.target.value)}
                   onKeyDown={handleMultiRegSmartDriverKeyDown}
@@ -18851,10 +18853,12 @@ className={`
       className={orderCardStyle === "A"
         ? "w-full border-2 border-[#1B2B4B] rounded-xl px-4 py-2.5 text-[13px] resize-none bg-white shadow-[0_0_0_1px_rgba(27,43,75,0.08),0_2px_8px_rgba(27,43,75,0.06)] focus:outline-none focus:ring-2 focus:ring-[#1B2B4B]/30 focus:border-[#1B2B4B] placeholder:text-gray-500 transition-all"
         : "w-full rounded-[12px] border border-[#CFD8E6] bg-[#F7F9FC] px-3.5 py-2 text-[13px] font-bold text-[#0F1A30] resize-none placeholder:text-[#A7B3C6] placeholder:font-medium focus:outline-none focus:bg-white focus:border-[#4B6CB7] focus:ring-4 focus:ring-[#4B6CB7]/10 transition"}
-      rows={2}
+      rows={1}
+      wrap="off" // 🛠 2026-11-26 한 줄로(줄바꿈 없이) — 칸이 좁아 "기사 스마트 검색"이 두 줄로 꺾였다
+      style={{ whiteSpace: "nowrap", overflowX: "auto", overflowY: "hidden", height: 40, lineHeight: "22px", paddingTop: 8, paddingBottom: 8, paddingLeft: 12, paddingRight: 10, scrollbarWidth: "none" }}
       data-arrownav
 
-      placeholder={"기사 스마트 검색 "}
+      placeholder={"기사 검색"}
       value={smartDriverQuery}
 
 
