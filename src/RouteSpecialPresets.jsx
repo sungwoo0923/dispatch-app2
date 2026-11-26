@@ -17,7 +17,7 @@ import { SPECIAL_TYPES } from "./forkliftCore";
 import { isJyCompany } from "./jyOnly";
 import {
   useRoutePresets, saveRoutePreset, deleteRoutePreset, routePresetIdOf, loadSeedOrders,
-  seedProposals, proposalsToPresets, presetError, cleanItem, slotOf, nk, routeLabel, LEVEL_LABEL, levelOf, TYPE_LABEL, COND_LABEL,
+  seedProposals, proposalsToPresets, presetError, cleanItem, slotOf, nk, placeKey, routeLabel, LEVEL_LABEL, levelOf, TYPE_LABEL, COND_LABEL,
 } from "./routePreset";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
@@ -31,7 +31,8 @@ const modeText = (it) => `${MODE_LABEL[it.부담] || it.부담}${it.종류 !== "
 const condText = (it) => COND_LABEL[it.조건] || "항상";
 const amtText = (it) => `${won(it.금액)}${it.단위 === "개소" ? " /개소" : ""}`;
 
-export default function RouteSpecialPresets({ canEdit = true, canAdmin = false, mobile = false }) {
+// 🛠 2026-11-26 client — 단가표 화면(다목적지 단가표 › 청구 규칙)에서 그 거래처 규칙만 보이고, [+ 노선 추가]도 그 거래처로 채워 연다
+export default function RouteSpecialPresets({ canEdit = true, canAdmin = false, mobile = false, client = "" }) {
   const list = useRoutePresets();
   const [q, setQ] = React.useState("");
   const [edit, setEdit] = React.useState(null); // { id?, 거래처명, 상차지명, 하차지명, items }
@@ -49,7 +50,8 @@ export default function RouteSpecialPresets({ canEdit = true, canAdmin = false, 
   };
   const v2 = list.filter((p) => !p.legacy);
   const old = list.filter((p) => p.legacy && p.items.length);
-  const hit = (p) => { const t = nk(q); return !t || [p.거래처명, p.상차지명, p.하차지명, ...p.items.map(typeName)].some((v) => nk(v).includes(t)); };
+  const cKey = client ? placeKey(client) : "";
+  const hit = (p) => { if (cKey && placeKey(p.거래처명) !== cKey) return false; const t = nk(q); return !t || [p.거래처명, p.상차지명, p.하차지명, ...p.items.map(typeName)].some((v) => nk(v).includes(t)); };
   const shown = v2.filter(hit).sort((a, b) => a.거래처명.localeCompare(b.거래처명, "ko") || a.하차지명.localeCompare(b.하차지명, "ko") || a.상차지명.localeCompare(b.상차지명, "ko"));
   const rows = shown.flatMap((p) => p.items.map((it, i) => ({ p, it, i, first: i === 0, span: p.items.length })));
   const del = async (p, it) => {
@@ -71,7 +73,7 @@ export default function RouteSpecialPresets({ canEdit = true, canAdmin = false, 
       {/* 도구 줄 — 노선 불러오기 · 노선 추가 · 구글시트 적용 · 검색 */}
       <div className="flex flex-wrap items-center gap-2">
         {canEdit && <button type="button" onClick={() => setSeed(true)} disabled={seed} data-route-seed="1" className={btnLine}>노선 불러오기</button>}
-        {canEdit && <button type="button" onClick={() => setEdit({ 거래처명: "", 상차지명: "", 하차지명: "", items: [cleanItem({ 종류: "지게차", 금액: 0, 부담: "청구" })] })} data-route-add="1" className={btnDark}>+ 노선 추가</button>}
+        {canEdit && <button type="button" onClick={() => setEdit({ 거래처명: client || "", 상차지명: "", 하차지명: "", items: [cleanItem({ 종류: "지게차", 금액: 0, 부담: "청구" })] })} data-route-add="1" className={btnDark}>+ 노선 추가</button>}
         <label className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white text-[13px] font-extrabold text-[#1B2B4B] ${canAdmin ? "cursor-pointer" : "opacity-60"}`}
           title={`구글시트에서 들어오는 오더에도 적용해요. 시트 줄의 그 금액 칸(대행료 · 야상 등)이 비어 있을 때만 넣고, 채워져 있으면 시트 값을 그대로 써요.${canAdmin ? "" : " · 관리자만 바꿀 수 있어요"}`}>
           <input type="checkbox" checked={sheetOn} disabled={!canAdmin} onChange={(e) => toggleSheet(e.target.checked)} data-route-sheet="1" />구글시트 적용

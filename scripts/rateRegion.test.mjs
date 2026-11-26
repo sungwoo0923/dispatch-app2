@@ -82,5 +82,9 @@ ok(r && r.sale === 150000, `에이제이: 처음 보는 곳은 '에이제이 지
   ok(f("경기 안산시 단원구 1")?.sale === 190000, "시화(안산) — 주소 안산 · 5톤장축 = 5톤");
   ok(f("경북 경산시 하양읍 1")?.sale === 350000, "하양(경산) — 주소 경산");
 }
+{ // 트레이더스 ○○ = 에브리데이 ○○
+  const ct = { baseName: "제이글로벌", columns: [{ id: "a", label: "11톤" }], rows: [{ name: "트레이더스 칠곡", prices: { a: "352000" } }] };
+  ok(findRate([ct], { 거래처명: "에이제이", 하차지명: "에브리데이 칠곡", 톤수: "11톤" }, { aliases: true })?.sale === 352000, "에브리데이 칠곡 = 트레이더스 칠곡 계약 단가");
+}
 if (fail) { console.error(`rateRegion: ${fail}건 실패`); process.exit(1); }
 console.log("rateRegion: 모두 통과");
