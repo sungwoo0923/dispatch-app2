@@ -54,11 +54,14 @@ import { LogisTag } from "../brand"; // 🔷 2026-11-04 LogisWeb 로고
 // ⭐ 2026-11-05 출근 안내·새 오더 승인/거절·삭제 오더 안내 팝업, 빨간 숫자 배지, 알림 켜기 안내, 긴급 연락처(차량 담당자)
 import DriverUpdateBanner from "./DriverUpdateBanner"; // ⭐ 2026-11-05 웹·APK 업데이트 안내
 import SlideToConfirm from "./SlideToConfirm"; // 🟦 2026-11-26 밀어서 확인(2차 시안)
+import DriverPayTab from "./DriverPayTab"; // 💰 2026-11-26 정산 탭(2차 시안)
 import { SafetyEduMine, useEduPending } from "../SafetyEdu"; // 🦺 2026-11-24 안전교육
 import { EduIcon, EduTile } from "../eduIcons";
 import { CheckinPrompt, shouldPromptCheckin, WorkStartSetting, NewOrderPopup, ModifiedOrderPopup, DeletedOrdersPopup, PushSetupCard, RedBadge, useEmergencyContact, KP_RED, UrgentMemo } from "./DriverPopups";
 import CustomDatePicker from "../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 import "./driverTheme.css"; // ⭐ 2026-11-08 기사앱 리디자인 공통 테마
+import { DRIVER_DARK_CSS } from "./driverDarkTheme"; // 🌙 2026-11-26 어두운 화면(2차 시안) — scripts/genFleetDark.mjs driver
+import { startDarkGuard } from "../fleetDarkGuard";
 import { useCompanyFeature } from "../companyFeatures";
 // ⭐ 2026-11-08 업체 요청(회사별 기능) — 퇴근 키로수 입력 · 엔진오일(5만km, 4만km 알림)·타이어 표시
 import { fetchLinkedCompanyInfo } from "../linkedCompanyInfo";
@@ -414,6 +417,8 @@ function inAppChime() {
     });
   } catch { /* 무시 */ }
 }
+
+const TAB_ORDER = ["home", "logs", "pay", "vehicle", "docs", "contacts", "settings"]; // 하단 탭 순서
 
 function formatDuration(ms) {
   const s = Math.floor(ms / 1000);
@@ -896,39 +901,38 @@ function calcWorkSummary(logs) {
 // 예전엔 지난 날짜에 퇴근 기록이 없으면 "근무중" + (지금 - 출근시각)으로 계산해서
 // 11-08 출근 하나가 18일 뒤 "432시간 8분"으로 보였다.
 // 이제는 그날 기록끼리만 더하고, 마지막 기록 뒤는
-//  · 오늘이면 지금까지 · 다음 기록이 12시간 안의 퇴근 · 최종퇴근 · 휴차면 그 시각까지(밤 근무가 다음 날 끝난 경우)
-//  · 그 밖엔 더하지 않고 "퇴근 기록 없음"으로 보여 준다.
+//  · 오늘이면 지금까지 · 출근 뒤 20시간 안의 퇴근 · 최종퇴근(다음 날 새벽 퇴근 · 운송사가 반영한 퇴근 정정)이 있으면 그 시각까지
+//  · 그 밖엔 더하지 않고 "퇴근 기록 없음"으로 보여 준다(운행일지 › [정정 요청]).
 const DAY_END_STATUSES = ["퇴근", "최종퇴근", "휴차"];
 const DAY_IDLE_STATUSES = ["퇴근", "최종퇴근", "휴차", "대기", "휴식"];
 function calcDaySummary(dateStr, dayLogs, allLogs, todayStr) {
   const st = (l) => l.status || l.mainStatus || "";
   const tm = (l) => l.timestamp?.toDate?.() || null;
-  const logs = dayLogs.filter(tm);
-  let checkIn = null, checkOut = null, tripCount = 0, workMs = 0;
+  // 같은 시각 기록은 휴차 · 대기 → 출근 → 일 → 퇴근 순서로(같은 초에 휴차 · 출근을 눌러 순서가 뒤집히던 문제)
+  const rank = (l) => { const x = st(l); return x === "휴차" || x === "대기" ? 0 : x === "출근" ? 1 : DAY_END_STATUSES.includes(x) ? 3 : 2; };
+  const order = (a, b) => (tm(a) - tm(b)) || (rank(a) - rank(b));
+  let logs = dayLogs.filter(tm).sort(order);
+  const checkInLog = logs.find((l) => st(l) === "출근");
+  const checkIn = checkInLog ? tm(checkInLog) : null;
+  let checkOutLog = checkIn ? [...logs].reverse().find((l) => (st(l) === "퇴근" || st(l) === "최종퇴근") && tm(l) >= checkIn) : null;
+  // 그날 퇴근이 없으면 출근 뒤 20시간 안의 퇴근 · 최종퇴근(다음 날 새벽 퇴근 · 운송사가 반영한 퇴근 정정)을 찾는다
+  if (checkIn && !checkOutLog && dateStr !== todayStr) {
+    const lim = checkIn.getTime() + 20 * 3600e3;
+    checkOutLog = (allLogs || []).filter((l) => tm(l) && tm(l) > checkIn && tm(l).getTime() <= lim && (st(l) === "퇴근" || st(l) === "최종퇴근")).sort(order)[0] || null;
+    if (checkOutLog) logs = [...logs.filter((l) => tm(l) < tm(checkOutLog)), checkOutLog];
+  }
+  const checkOut = checkOutLog ? tm(checkOutLog) : null;
+  let tripCount = 0, workMs = 0;
   logs.forEach((l, i) => {
-    const s = st(l), t = tm(l);
-    if (s === "출근" && !checkIn) checkIn = t;
-    if ((s === "퇴근" || s === "최종퇴근") && checkIn) checkOut = t;
-    if (s === "운송중") tripCount++;
+    if (st(l) === "운송중" && (!checkOut || tm(l) <= checkOut)) tripCount++;
     const next = logs[i + 1];
-    if (next && !DAY_IDLE_STATUSES.includes(s)) workMs += tm(next) - t;
+    if (next && !DAY_IDLE_STATUSES.includes(st(l))) workMs += tm(next) - tm(l);
   });
   const last = logs[logs.length - 1];
-  let openEnd = false; // 퇴근 없이 끝난 날
-  if (last && !DAY_IDLE_STATUSES.includes(st(last))) {
-    const lt = tm(last);
-    if (dateStr === todayStr) {
-      workMs += Date.now() - lt;
-    } else {
-      const after = (allLogs || []).filter(l => tm(l) && tm(l) > lt).sort((a, b) => tm(a) - tm(b))[0];
-      if (after && DAY_END_STATUSES.includes(st(after)) && tm(after) - lt <= 12 * 3600_000) {
-        workMs += tm(after) - lt;
-        if (st(after) !== "휴차") checkOut = tm(after);
-      } else openEnd = true;
-    }
-  }
-  const working = dateStr === todayStr && checkIn && !checkOut && last && !DAY_IDLE_STATUSES.includes(st(last));
-  return { checkIn, checkOut, tripCount, workMs: Math.max(0, workMs), openEnd: openEnd && !checkOut, working };
+  const lastBusy = last && !DAY_IDLE_STATUSES.includes(st(last));
+  if (lastBusy && !checkOut && dateStr === todayStr) workMs += Date.now() - tm(last);
+  const working = dateStr === todayStr && !!checkIn && !checkOut && !!lastBusy;
+  return { checkIn, checkOut, tripCount, workMs: Math.max(0, workMs), openEnd: !!checkIn && !checkOut && dateStr !== todayStr, working };
 }
 
 // ─── Haversine 거리 ───────────────────────────────────────────────────────────
@@ -1334,6 +1338,9 @@ export default function DriverHome() {
   const [locRequestSent, setLocRequestSent] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => { const n = new Date(); return { y: n.getFullYear(), m: n.getMonth() }; });
   const [calendarDayDetail, setCalendarDayDetail] = useState(null); // { dateStr, logs }
+  // 🕘 2026-11-26 퇴근 정정 요청 — 운행일지에서 퇴근을 안 누른 날 → 운송사에 "몇 시에 퇴근했어요" 요청(관제현황 › 확인할 일에서 반영)
+  const [fixReqs, setFixReqs] = useState([]);
+  const [fixForm, setFixForm] = useState(null); // { time, memo, busy }
   const [photoModal, setPhotoModal] = useState(null); // { nextStatus, actionLabel }
   const [photoUploading, setPhotoUploading] = useState(false);
   const [todayPhotos, setTodayPhotos] = useState([]); // today's driver_photo_logs
@@ -1369,6 +1376,10 @@ export default function DriverHome() {
   // ⭐ 사용자 요청 — 알림/푸시 on-off. users/{uid}.driverPushEnabled를 Cloud
   // Functions가 발송 전에 확인한다(기본값: 켜짐).
   const [pushEnabled, setPushEnabled] = useState(true);
+  // 🌙 2026-11-26 화면 밝기 — 어둡게(기본 · 2차 시안) / 밝게. 이 휴대폰에만 저장
+  const [drvDark, setDrvDark] = useState(() => { try { return localStorage.getItem("kpDrvTheme") !== "light"; } catch { return true; } });
+  const toggleDrvDark = () => setDrvDark((v) => { const n = !v; try { localStorage.setItem("kpDrvTheme", n ? "dark" : "light"); } catch { /* 무시 */ } return n; });
+  useEffect(() => (drvDark ? startDarkGuard(".kpd-dark", "img,video,canvas,svg,path,iframe,.leaflet-tile-pane,.leaflet-tile,.lw-tk,.fm-keep-light,.kpd-keep,.kp-slide") : undefined), [drvDark]);
   const seenPendingOrderIdsRef = useRef(new Set());
   // 🚚 차량관리 — 처음 들어오면 차량 기본 설정 마법사(한 번), 홈에 정비·만기 알림
   const [vehicleSetup, setVehicleSetup] = useState(false);
@@ -2395,6 +2406,11 @@ export default function DriverHome() {
   const modifiedOrders = myOrders.filter(o => o.기사확인상태 === "수락" && o.배차상태 !== "배차취소" && o.상태 !== "취소" && changedFields(o).length > 0 && !laterOrderIdsRef.current.has(modSig(o)));
   const modOrder = modifiedOrders[0] || null;
   // (3) 삭제된 오더 안내 — driver_notifications(deleted·popup, 아직 [확인] 안 누름)
+  useEffect(() => {
+    if (!uid) return undefined;
+    return onSnapshot(query(collection(db, "location_change_requests"), where("uid", "==", uid), limit(60)),
+      (snap) => setFixReqs(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((r) => r.kind === "checkoutFix")), () => {});
+  }, [uid]);
   const deletedNotices = notifications.filter(n => n.deleted && n.popup && !n.popupAck);
   // 🔔 새 오더 · 수정 · 취소 팝업이 새로 생기면 앱 안에서 소리 · 진동(처음 화면을 열 때 이미 있던 것은 조용히)
   const alertSig = [...myOrders.filter(o => o.기사확인상태 === "대기" && o.배차상태 !== "배차취소" && o.상태 !== "취소").map(o => `n:${o._id}`), ...modifiedOrders.map(o => `m:${modSig(o)}`), ...deletedNotices.map(n => `d:${n.id}`)];
@@ -2599,7 +2615,8 @@ export default function DriverHome() {
   const dateStr = `${_td.getFullYear()}.${String(_td.getMonth()+1).padStart(2,"0")}.${String(_td.getDate()).padStart(2,"0")}`;
 
   return (
-    <div className="kpd-root kpd-shell" style={{ display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: '"Pretendard", "Noto Sans KR", sans-serif' }}>
+    <div className={`kpd-root kpd-shell${drvDark ? " kpd-dark" : ""}`} style={{ display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: '"Pretendard", "Noto Sans KR", sans-serif' }}>
+      {drvDark && <style>{DRIVER_DARK_CSS}</style>}
       {viewAs && (
         <div data-view-as style={{ position: "relative", zIndex: 2147483000, flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "calc(8px + env(safe-area-inset-top)) 14px 8px", background: "#0B1428", color: "#fff" }}>
           <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.12em", color: "#8FB0F0", whiteSpace: "nowrap" }}>관리자 보기</span>
@@ -2865,7 +2882,7 @@ export default function DriverHome() {
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               {/* SOS 긴급 버튼 */}
               <button
-                onClick={() => setEmergencyModal(true)}
+                className="kpd-keep" onClick={() => setEmergencyModal(true)}
                 style={{ display: "flex", alignItems: "center", gap: 5, height: 44, padding: "0 14px", borderRadius: 14, background: "linear-gradient(180deg,#fff,#E9EFFA)", border: "none", color: "#0B1428", fontSize: 14.5, fontWeight: 900, cursor: "pointer", boxShadow: "0 4px 14px rgba(0,0,0,0.3)", letterSpacing: "0.06em", fontFamily: DRV_MONO }}
               >
                 <svg width="13" height="13" fill="#0B1428" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
@@ -3384,6 +3401,13 @@ export default function DriverHome() {
         </div>
       )}
 
+      {/* ─── 탭: 정산(💰 2026-11-26 2차 시안 — 오더를 받는 기사만) ─── */}
+      {activeTab === "pay" && isFleetDriver && (
+        <div className="kpd-fade" style={{ padding: "16px" }}>
+          <DriverPayTab orders={myOrders} onOpenDocs={() => setActiveTab("docs")} />
+        </div>
+      )}
+
       {/* ─── 탭: 연락처 ─── */}
       {activeTab === "contacts" && (
         <div style={{ padding: "16px" }}>
@@ -3448,6 +3472,20 @@ export default function DriverHome() {
       {/* ─── 탭: 설정 ─── */}
       {activeTab === "settings" && (
         <div style={{ padding: "16px" }}>
+          {/* 💰 2026-11-26 [정산] 탭이 생겨 아래 탭을 6개로 맞추려고 [연락처]는 [더보기](설정) 맨 위로 옮겼다(오더를 받는 기사) */}
+          {isFleetDriver && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
+              {[["contacts", "연락처", "긴급 · 회사 · 도로 지원", <path key="p" d="M5.5 4h3.5l1.8 4.6-2.3 1.4a10.5 10.5 0 0 0 5.5 5.5l1.4-2.3L20 15v3.5A1.8 1.8 0 0 1 18.2 20 15.5 15.5 0 0 1 4 5.8 1.8 1.8 0 0 1 5.5 4z" />],
+                ["pay", "정산", "이번 달 기사운임", <path key="p" d="M3 7.5A2.5 2.5 0 0 1 5.5 5h13A2.5 2.5 0 0 1 21 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 16.5zM7 10l1.4 4.5L10 10l1.6 4.5L13 10M15.5 12h3" />]].map(([k, t, d, ic]) => (
+                <button key={k} type="button" onClick={() => setActiveTab(k)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 14px", borderRadius: 18, border: "1px solid #E6EBF3", background: "white", cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
+                  <span style={{ width: 38, height: 38, borderRadius: 12, flexShrink: 0, display: "grid", placeItems: "center", background: "linear-gradient(135deg,#0F1D3A,#2D4C82)", color: "#fff" }}>
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{ic}</svg>
+                  </span>
+                  <span style={{ minWidth: 0 }}><span style={{ display: "block", fontSize: 16, fontWeight: 800, color: "#0F1A30" }}>{t}</span><span style={{ display: "block", fontSize: 12.5, color: "#9AA9C3", marginTop: 1 }}>{d}</span></span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* ⭐ 사용자 요청 — 차량종류/톤수/거주지/요청사항은 가입할 때만 입력하고 끝이
               아니라, 기사 본인이 언제든 다시 수정할 수 있어야 한다(관리자도 PC
@@ -3576,13 +3614,26 @@ export default function DriverHome() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px" }}>
               <div>
                 <div style={{ fontSize: 15.5, color: "#0F1A30", fontWeight: 700 }}>새 오더 알림(푸시)</div>
-                <div style={{ fontSize: 13.5, color: "#9AA9C3", marginTop: 1 }}>꺼두면 배차 알림이 휴대폰에 뜨지 않습니다</div>
+                <div style={{ fontSize: 13.5, color: "#9AA9C3", marginTop: 1 }}>꺼두면 휴대폰 알림창에 뜨지 않아요 · 앱을 켜 둔 동안에는 소리로 알려요</div>
               </div>
               <button
                 onClick={togglePushEnabled}
-                style={{ width: 46, height: 26, borderRadius: 13, border: "none", cursor: "pointer", position: "relative", background: pushEnabled ? "#1B2B4B" : "#E3E8F0", transition: "background 0.15s", flexShrink: 0 }}
+                style={{ width: 46, height: 26, borderRadius: 13, border: "none", cursor: "pointer", position: "relative", background: pushEnabled ? "#4B6CD0" : "#E3E8F0", transition: "background 0.15s", flexShrink: 0 }}
               >
-                <span style={{ position: "absolute", top: 3, left: pushEnabled ? 23 : 3, width: 20, height: 20, borderRadius: "50%", background: "white", transition: "left 0.15s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
+                <span className="kpd-keep" style={{ position: "absolute", top: 3, left: pushEnabled ? 23 : 3, width: 20, height: 20, borderRadius: "50%", background: "white", transition: "left 0.15s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
+              </button>
+            </div>
+            {/* 🌙 2026-11-26 화면 밝기 — 어둡게(기본) / 밝게 */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 16px", borderTop: "1px solid #EEF2F8" }}>
+              <div>
+                <div style={{ fontSize: 15.5, color: "#0F1A30", fontWeight: 700 }}>어두운 화면</div>
+                <div style={{ fontSize: 13.5, color: "#9AA9C3", marginTop: 1 }}>밤에 눈이 편해요 · 끄면 밝은 화면</div>
+              </div>
+              <button
+                onClick={toggleDrvDark}
+                style={{ width: 46, height: 26, borderRadius: 13, border: "none", cursor: "pointer", position: "relative", background: drvDark ? "#4B6CD0" : "#E3E8F0", transition: "background 0.15s", flexShrink: 0 }}
+              >
+                <span className="kpd-keep" style={{ position: "absolute", top: 3, left: drvDark ? 23 : 3, width: 20, height: 20, borderRadius: "50%", background: "white", transition: "left 0.15s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
               </button>
             </div>
           </div>
@@ -3782,7 +3833,7 @@ export default function DriverHome() {
 
           {/* 달력 날짜 상세 팝업 */}
           {calendarDayDetail && (
-            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 100030, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => setCalendarDayDetail(null)}>
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 100030, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={() => { setCalendarDayDetail(null); setFixForm(null); }}>
               <div style={{ background: "white", borderRadius: "20px 20px 0 0", padding: "0 0 32px", width: "100%", maxWidth: 480, boxShadow: "0 -8px 32px rgba(0,0,0,0.2)", maxHeight: "min(80vh, calc(100dvh - 24px))", overflowY: "auto", overscrollBehavior: "contain" }} onClick={e => e.stopPropagation()}>
                 <div style={{ background: "#1B2B4B", padding: "18px 20px 16px", borderRadius: "20px 20px 0 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ color: "white", fontWeight: 800, fontSize: 17 }}>{calendarDayDetail.dateStr}</div>
@@ -3790,22 +3841,51 @@ export default function DriverHome() {
                 </div>
                 {(() => {
                   const logs = calendarDayDetail.logs;
-                  const { checkIn, checkOut, tripCount, workMs, openEnd, working } = calcDaySummary(calendarDayDetail.dateStr, logs, allLogs, todayStr);
+                  const { checkIn, checkOut, tripCount, workMs, working } = calcDaySummary(calendarDayDetail.dateStr, logs, allLogs, todayStr);
+                  const noOut = !!checkIn && !checkOut && calendarDayDetail.dateStr !== todayStr; // 지난 날인데 퇴근 기록 없음
                   return (
                     <div style={{ padding: "16px" }}>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-                        {[["출근 시각", checkIn ? formatTime(checkIn) : "--"], ["퇴근 시각", checkOut ? formatTime(checkOut) : working ? "근무중" : (checkIn && openEnd) ? "기록 없음" : "--"], ["근무 시간", workMs >= 60_000 ? formatDuration(workMs) : "--"], ["운행 횟수", `${tripCount}회`]].map(([label, value]) => (
+                        {[["출근 시각", checkIn ? formatTime(checkIn) : "--"], ["퇴근 시각", checkOut ? formatTime(checkOut) : working ? "근무중" : noOut ? "기록 없음" : "--"], ["근무 시간", workMs >= 60_000 ? formatDuration(workMs) : "--"], ["운행 횟수", `${tripCount}회`]].map(([label, value]) => (
                           <div key={label} style={{ background: "#F5F8FD", borderRadius: 10, padding: "12px", textAlign: "center" }}>
                             <div style={{ fontSize: 18, fontWeight: 900, color: "#0F1A30", fontFamily: DRV_MONO }}>{value}</div>
                             <div style={{ fontSize: 12.5, color: "#9AA9C3", marginTop: 3, fontWeight: 600 }}>{label}</div>
                           </div>
                         ))}
                       </div>
-                      {checkIn && openEnd && (
-                        <div style={{ fontSize: 13, color: "#8A5A00", background: "#FFF7E6", border: "1px solid #F5DDA8", borderRadius: 10, padding: "9px 12px", marginBottom: 14, lineHeight: 1.5 }}>
-                          이날은 퇴근을 누르지 않았어요. 근무 시간은 마지막 기록까지만 셌어요.
-                        </div>
-                      )}
+                      {noOut && (() => {
+                        // 🕘 퇴근 정정 요청 — 조용한 한 줄 + 글자 링크(2차 시안). 이미 보낸 요청이 있으면 그 상태만
+                        const req = fixReqs.filter((r) => r.date === calendarDayDetail.dateStr).sort((a, b) => (b.requestedOutMs || 0) - (a.requestedOutMs || 0))[0];
+                        const hm = (ms) => (ms ? new Date(Number(ms) + 9 * 3600e3).toISOString().slice(11, 16) : "");
+                        const send = async () => {
+                          if (!fixForm?.time || fixForm.busy) return;
+                          const [h, m] = fixForm.time.split(":").map(Number);
+                          const base = Date.parse(`${calendarDayDetail.dateStr}T00:00:00+09:00`);
+                          let ms = base + (h * 60 + m) * 60000;
+                          if (ms <= checkIn.getTime()) ms += 86400000; // 출근보다 이르면 다음 날 새벽 퇴근
+                          if (ms - checkIn.getTime() > 20 * 3600e3) { showToast("출근부터 20시간 안의 시각을 넣어 주세요"); return; }
+                          setFixForm((f) => ({ ...f, busy: true }));
+                          try {
+                            await addDoc(collection(db, "location_change_requests"), { kind: "checkoutFix", uid, driverName: driver?.name || "", carNo: driver?.carNo || "", companyName: driver?.companyName || "", date: calendarDayDetail.dateStr, checkInMs: checkIn.getTime(), requestedOutMs: ms, memo: String(fixForm.memo || "").slice(0, 80), status: "pending", requestedAt: serverTimestamp() });
+                            setFixForm(null); showToast("정정 요청을 보냈어요 · 운송사가 확인하면 반영돼요");
+                          } catch { setFixForm((f) => ({ ...f, busy: false })); showToast("보내지 못했어요. 잠시 뒤 다시 눌러 주세요"); }
+                        };
+                        return (
+                          <div style={{ marginBottom: 14, padding: "11px 2px", borderTop: "1px solid #EEF2F8", borderBottom: "1px solid #EEF2F8" }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 13.5 }}>
+                              <span style={{ color: "#8A97B0", display: "flex", alignItems: "center", gap: 6 }}><i style={{ width: 6, height: 6, borderRadius: 3, background: "#E0B84C", display: "inline-block" }} />{req ? (req.status === "approved" ? `퇴근 ${hm(req.requestedOutMs)}로 반영됐어요` : req.status === "rejected" ? "정정 요청이 반려됐어요" : `퇴근 ${hm(req.requestedOutMs)} 정정 요청 · 확인 중`) : "퇴근 기록이 없어 근무 시간은 마지막 기록까지만 셌어요"}</span>
+                              {(!req || req.status === "rejected") && !fixForm && <button type="button" onClick={() => setFixForm({ time: "", memo: "" })} style={{ flexShrink: 0, border: 0, background: "none", padding: 0, color: "#4B6CD0", fontWeight: 800, fontSize: 13.5, cursor: "pointer", fontFamily: "inherit" }}>정정 요청 ›</button>}
+                            </div>
+                            {fixForm && (
+                              <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
+                                <input type="time" value={fixForm.time} onChange={(e) => setFixForm((f) => ({ ...f, time: e.target.value }))} aria-label="실제 퇴근 시각" style={{ width: 118, height: 42, borderRadius: 10, border: "1px solid #DCE3EE", padding: "0 10px", fontSize: 16, fontFamily: "inherit" }} />
+                                <input value={fixForm.memo} onChange={(e) => setFixForm((f) => ({ ...f, memo: e.target.value }))} placeholder="메모(선택)" maxLength={80} style={{ flex: 1, minWidth: 0, height: 42, borderRadius: 10, border: "1px solid #DCE3EE", padding: "0 10px", fontSize: 15, fontFamily: "inherit" }} />
+                                <button type="button" onClick={send} disabled={!fixForm.time || fixForm.busy} style={{ height: 42, padding: "0 14px", borderRadius: 10, border: 0, background: fixForm.time ? "#1B2B4B" : "#9AA9C3", color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer", fontFamily: "inherit" }}>{fixForm.busy ? "…" : "보내기"}</button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <div style={{ fontSize: 13.5, fontWeight: 700, color: "#9AA9C3", marginBottom: 10, letterSpacing: "0.05em" }}>상태 기록</div>
                       {logs.map((log, i) => { const t = log.timestamp?.toDate?.(); const cfg = STATUS_CONFIG[log.status] || STATUS_CONFIG["대기"]; return (
                         <div key={log.id || i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: i<logs.length-1 ? "1px solid #EEF2F8" : "none" }}>
@@ -4289,13 +4369,13 @@ export default function DriverHome() {
       <div style={{
         position: "relative", flexShrink: 0, zIndex: 200,
         padding: "8px 10px max(14px, calc(6px + env(safe-area-inset-bottom, 0px)))",
-        background: "linear-gradient(180deg, rgba(238,242,248,0) 0%, rgba(238,242,248,.95) 40%)", marginTop: -8,
+        background: drvDark ? "linear-gradient(180deg, rgba(7,12,28,0) 0%, rgba(7,12,28,.95) 40%)" : "linear-gradient(180deg, rgba(238,242,248,0) 0%, rgba(238,242,248,.95) 40%)", marginTop: -8,
       }}>
       <div style={{
         maxWidth: 560, margin: "0 auto",
-        background: "rgba(255,255,255,0.86)", border: "1px solid rgba(214,224,240,0.9)", borderRadius: 24,
+        background: drvDark ? "rgba(16,24,50,0.78)" : "rgba(255,255,255,0.86)", border: drvDark ? "1px solid rgba(175,195,255,0.14)" : "1px solid rgba(214,224,240,0.9)", borderRadius: 24,
         backdropFilter: "blur(18px) saturate(1.6)", WebkitBackdropFilter: "blur(18px) saturate(1.6)",
-        boxShadow: "0 12px 36px rgba(11,20,40,0.16), inset 0 1px 0 rgba(255,255,255,0.9)", display: "flex", padding: "6px 4px",
+        boxShadow: drvDark ? "0 16px 36px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)" : "0 12px 36px rgba(11,20,40,0.16), inset 0 1px 0 rgba(255,255,255,0.9)", display: "flex", padding: "6px 4px",
       }}>
         {[
           { key: "home", label: "홈", badge: pendingOrders.length, icon: (
@@ -4319,35 +4399,41 @@ export default function DriverHome() {
             </svg>
           )},
           // ⭐ 2026-11-05 사장님 요청 — 하단 탭에서 "온도" 탭은 뺐다(적재함 온도 화면 코드는 남겨 둠)
-          { key: "contacts", label: "연락처", icon: (
+          // 💰 2026-11-26 오더를 받는 기사는 [정산]이 생기고 [연락처]는 [더보기](설정) 안으로
+          ...(isFleetDriver ? [{ key: "pay", label: "정산", icon: (
+            <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="5.5" width="18" height="13" rx="3" /><path d="M7 9.5l1.4 5 1.6-5 1.6 5 1.4-5M15.5 12h3" />
+            </svg>
+          ) }] : []),
+          { key: "contacts", label: "연락처", hide: isFleetDriver, icon: (
             <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 8.63a19.79 19.79 0 01-3.07-8.7A2 2 0 012 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.91 7.91a16 16 0 006.13 6.13l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
             </svg>
           )},
-          { key: "settings", label: "설정", icon: (
+          { key: "settings", label: isFleetDriver ? "더보기" : "설정", also: isFleetDriver ? ["contacts"] : [], icon: (
             <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
             </svg>
           )},
-        ].map(({ key, label, icon, badge }) => (
+        ].filter((t) => !t.hide).sort((a, b) => TAB_ORDER.indexOf(a.key) - TAB_ORDER.indexOf(b.key)).map(({ key, label, icon, badge, also = [] }) => { const on = activeTab === key || also.includes(activeTab); return (
           <button key={key} onClick={() => setActiveTab(key)} style={{ position: "relative",
             flex: 1, minWidth: 0, padding: "4px 0 3px", border: "none", background: "none",
             cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
-            color: activeTab === key ? "#0B1428" : "#7D8BA3",
-            fontWeight: activeTab === key ? 900 : 700,
+            color: on ? (drvDark ? "#fff" : "#0B1428") : "#7D8BA3",
+            fontWeight: on ? 900 : 700,
           }}>
             <span style={{
               width: 50, height: 34, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center",
-              color: activeTab === key ? "#fff" : "#7D8BA3",
-              background: activeTab === key ? "linear-gradient(135deg,#0F1D3A,#2D4C82)" : "transparent",
-              boxShadow: activeTab === key ? "0 8px 18px rgba(27,43,75,0.32), inset 0 1px 0 rgba(255,255,255,.18)" : "none",
+              color: on ? "#fff" : "#7D8BA3",
+              background: on ? "linear-gradient(135deg,#0F1D3A,#2D4C82)" : "transparent",
+              boxShadow: on ? "0 8px 18px rgba(27,43,75,0.32), inset 0 1px 0 rgba(255,255,255,.18)" : "none",
             }}>{icon}</span>
             {/* 📱 2026-11-24 360px 폭(탭 6개 = 칸 55px)에서 "운행기록"이 칸 밖으로 넘쳤다 — 좁은 화면에서는 글씨를 조금 줄인다 */}
             <span style={{ fontSize: "min(14.5px, 3.7vw)", letterSpacing: "-0.2px", whiteSpace: "nowrap" }}>{label}</span>
             {/* ⭐ 2026-11-05 카카오톡처럼 빨간 숫자 배지(#FF3B30 + 흰 숫자) */}
             <RedBadge n={badge} style={{ position: "absolute", top: 0, right: "calc(50% - 32px)" }} />
           </button>
-        ))}
+        ); })}
       </div>
       </div>
     </div>

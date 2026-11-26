@@ -44,6 +44,7 @@ import {
   documentId,
   serverTimestamp,
   arrayUnion, // 🛠 2026-11-26 관리자 대신 수락 타임라인
+  Timestamp, // 🕘 2026-11-26 퇴근 정정 반영 시각
 } from "firebase/firestore";
 import { updateDoc, setDoc } from "./orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from "react-leaflet";
@@ -6323,6 +6324,7 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
 
   const [collisionAlerts, setCollisionAlerts] = useState([]);
   const [locChangeRequests, setLocChangeRequests] = useState([]);
+  const [checkoutFixRequests, setCheckoutFixRequests] = useState([]); // 🕘 2026-11-26 기사앱 퇴근 정정 요청(같은 컬렉션 kind:"checkoutFix")
   const [myCompanyName, setMyCompanyName] = useState(null);
   // ⭐ 2026-11-02 차량관리대장 — 꺼진 회사는 메뉴·화면 모두 예전 그대로
   const coFeatures = useCompanyFeatures(getTenant() || myCompanyName);
@@ -6558,8 +6560,11 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
     return onSnapshot(
       query(collection(db, "location_change_requests"), where("status", "==", "pending"), limit(50)),
       (snap) => {
-        const reqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        reqs.sort((a, b) => (resolveTs(b.requestedAt)?.getTime() || 0) - (resolveTs(a.requestedAt)?.getTime() || 0));
+        const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        all.sort((a, b) => (resolveTs(b.requestedAt)?.getTime() || 0) - (resolveTs(a.requestedAt)?.getTime() || 0));
+        // 🕘 2026-11-26 퇴근 정정 요청은 따로(날짜마다 한 건) — 출발지 변경 요청과 섞이지 않게
+        setCheckoutFixRequests(all.filter((r) => r.kind === "checkoutFix"));
+        const reqs = all.filter((r) => r.kind !== "checkoutFix");
         // 🛠 2026-11-25 같은 기사가 여러 번 누른 요청은 최신 한 줄로(닫기는 같은 기사 요청을 모두 닫는다)
         const byUid = new Map();
         reqs.forEach((r) => { const k = r.uid || r.id; const cur = byUid.get(k); if (cur) cur._ids.push(r.id); else byUid.set(k, { ...r, _ids: [r.id] }); });
@@ -7205,6 +7210,20 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
             onAcceptFor={acceptForDriver}
             onContextMenu={handleContextMenu}
             locChangeRequests={locChangeRequests}
+            checkoutFixRequests={checkoutFixRequests}
+            onCheckoutFix={async (r, ok) => {
+              // 🕘 [반영] = 요청한 시각으로 퇴근 기록(운송사가 대신 처리한 기록 auto · 담당자 퇴근 푸시 없음) · [반려] = 요청만 닫기
+              try {
+                const by = auth.currentUser?.email || "";
+                if (ok) {
+                  const ms = Number(r.requestedOutMs) || 0;
+                  if (!ms) throw new Error("시각 없음");
+                  const ymd = new Date(ms + 9 * 3600e3).toISOString().slice(0, 10);
+                  await addDoc(collection(db, "driver_logs"), { uid: r.uid, driverName: r.driverName || "", carNo: r.carNo || "", companyName: r.companyName || getTenant() || "", status: "최종퇴근", mainStatus: "퇴근", logDate: ymd, timestamp: Timestamp.fromMillis(ms), auto: true, fixRequestId: r.id, fixedBy: by });
+                }
+                await updateDoc(doc(db, "location_change_requests", r.id), { status: ok ? "approved" : "rejected", resolvedAt: serverTimestamp(), resolvedBy: by });
+              } catch (e) { alert(`처리하지 못했어요: ${e?.message || e}`); }
+            }}
             collisionAlerts={collisionAlerts}
             onLocRequest={(req) => {
               const drv = drivers.find(d => d.id === req.uid);

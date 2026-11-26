@@ -5,11 +5,20 @@
 //  지입차관리 화면에 새 색을 쓰면 이걸 다시 돌린다.
 import fs from "fs";
 
-const FILES = [
+// 🌙 2026-11-26 기사앱 어두운 화면도 같은 방법으로 — node scripts/genFleetDark.mjs driver → src/driver/driverDarkTheme.js (.kpd-dark 안)
+const DRIVER = process.argv[2] === "driver";
+const R = DRIVER ? ".kpd-dark" : ".fm-dark";
+const DRIVER_FILES = [
+  "src/driver/DriverHome.jsx", "src/driver/DriverPopups.jsx", "src/driver/DriverDocBox.jsx", "src/driver/DriverNotices.jsx", "src/driver/DriverOdoOil.jsx",
+  "src/driver/DriverVehicleExpense.jsx", "src/driver/DriverContractSign.jsx", "src/driver/DriverSubmitDocs.jsx", "src/driver/DriverLogs.jsx", "src/driver/DriverTracking.jsx",
+  "src/VehicleCarePanel.jsx", "src/SafetyEdu.jsx", "src/eduIcons.jsx", "src/CustomDatePicker.jsx", "src/mobile/MobileSelect.jsx",
+];
+const FLEET_FILES = [
   "src/FleetManagement.jsx", "src/FleetControlDeck.jsx", "src/VehicleExpenseInbox.jsx", "src/VehicleCarePanel.jsx", "src/VehicleLedger.jsx",
   "src/FleetPayDocs.jsx", "src/fleetGeo.jsx", "src/mapLeaflet.jsx", "src/FixedRoutes.jsx", "src/FixedRouteStatus.jsx", "src/RouteBoard.jsx",
   "src/CustomDatePicker.jsx", "src/CustomSelect.jsx", "src/DriverJourney.jsx", "src/mobile/MobileFleetView.jsx", "src/fleetDispatchWay.jsx", "src/fleetGrades.jsx", "src/DriverContextMenu.jsx",
 ];
+const FILES = DRIVER ? DRIVER_FILES : FLEET_FILES;
 const src = FILES.filter((f) => fs.existsSync(f)).map((f) => fs.readFileSync(f, "utf8")).join("\n");
 
 const norm = (h) => { h = h.replace("#", "").toLowerCase(); if (h.length === 3) h = h.split("").map((c) => c + c).join(""); return h.length === 6 ? h : null; };
@@ -53,13 +62,13 @@ hexes.add("ffffff");
 for (const h of hexes) {
   const r = rgbStr(h);
   const bg = bgFor(h), fg = fgFor(h), bd = bdFor(h);
-  if (bg) css.push(`.fm-dark [style^="background: ${r}"],.fm-dark [style*="; background: ${r}"],.fm-dark [style^="background-color: ${r}"],.fm-dark [style*="; background-color: ${r}"]{background:${bg} !important}`);
-  if (fg) css.push(`.fm-dark [style^="color: ${r}"],.fm-dark [style*="; color: ${r}"]{color:${fg} !important}`);
-  if (bd) css.push(`.fm-dark [style*="solid ${r}"],.fm-dark [style*="dashed ${r}"]{border-color:${bd} !important}`);
+  if (bg) css.push(`${R} [style^="background: ${r}"],${R} [style*="; background: ${r}"],${R} [style^="background-color: ${r}"],${R} [style*="; background-color: ${r}"]{background:${bg} !important}`);
+  if (fg) css.push(`${R} [style^="color: ${r}"],${R} [style*="; color: ${r}"]{color:${fg} !important}`);
+  if (bd) css.push(`${R} [style*="solid ${r}"],${R} [style*="dashed ${r}"]{border-color:${bd} !important}`);
   seen.add(h);
 }
 // 'white' 낱말
-css.push(`.fm-dark [style^="background: white"],.fm-dark [style*="; background: white"],.fm-dark [style^="background-color: white"],.fm-dark [style*="; background-color: white"]{background:#0E1A30 !important}`);
+css.push(`${R} [style^="background: white"],${R} [style*="; background: white"],${R} [style^="background-color: white"],${R} [style*="; background-color: white"]{background:#0E1A30 !important}`);
 
 // Tailwind 클래스(bg-white · bg-[#F7F9FC] · text-[#0F1A30] · border-[#E3E8F0] · hover:…)
 const esc = (cls) => cls.replace(/([:\[\]#\/.])/g, "\\$1");
@@ -75,7 +84,7 @@ for (const cls of classes) {
   const val = kind === "bg" ? bgFor(h) : kind === "text" ? fgFor(h) : bdFor(h);
   if (!val) continue;
   const prop = kind === "bg" ? "background" : kind === "text" ? "color" : "border-color";
-  css.push(`.fm-dark .${esc(cls)}${hover ? ":hover" : ""}{${prop}:${val} !important}`);
+  css.push(`${R} .${esc(cls)}${hover ? ":hover" : ""}{${prop}:${val} !important}`);
 }
 
 
@@ -83,7 +92,7 @@ for (const cls of classes) {
 const DECL = /(background(?:-color)?|color|border(?:-(?:top|right|bottom|left))?(?:-color)?)\s*:\s*([^;{}!]+)(!important)?/g;
 for (const m of src.matchAll(/([.#][A-Za-z][^{}`"'\n]{0,160}?)\{([^{}]{0,800})\}/g)) {
   const sel = m[1].trim();
-  if (!/^[.#:\w\s>,\[\]="'()*+~-]+$/.test(sel) || /\.fm-dark|\.lwd|\.lw-/.test(sel)) continue;
+  if (!/^[.#:\w\s>,\[\]="'()*+~-]+$/.test(sel) || /\.fm-dark|\.kpd-dark|\.kpd-slide|\.kpd-amb|\.lwd|\.lw-/.test(sel)) continue;
   const decls = [];
   for (const d of m[2].matchAll(DECL)) {
     const prop = d[1], val = d[2].trim();
@@ -95,7 +104,7 @@ for (const m of src.matchAll(/([.#][A-Za-z][^{}`"'\n]{0,160}?)\{([^{}]{0,800})\}
     else { const v = bdFor(h); if (v) decls.push(`${prop.endsWith("-color") ? prop : prop + "-color"}:${v} !important`); }
   }
   if (!decls.length) continue;
-  const scoped = sel.split(",").map((x) => `.fm-dark ${x.trim()}`).join(",");
+  const scoped = sel.split(",").map((x) => `${R} ${x.trim()}`).join(",");
   css.push(`${scoped}{${decls.join(";")}}`);
 }
 
@@ -126,11 +135,26 @@ main.kp-main:has(.fm-dark:not(.fm-pop)){background:#070D1A !important;box-shadow
 .fm-dark .fc-grid-bg{background:linear-gradient(180deg,#0C1528,#08101F) !important;border-color:#1A2742 !important}
 .fm-dark .fc-route-card:hover{border-color:#3B5B97 !important}
 `;
-const out = `// ======================= src/fleetDarkTheme.js =======================
+const DRIVER_HEAD = `
+/* 🌙 2026-11-26 기사앱 어두운 화면(2차 시안) — 앱 바탕 · 글씨 · 입력칸 */
+.kpd-dark{background:#070C1C !important;color:#E6EDF8}
+.kpd-dark input:not([type=checkbox]):not([type=radio]):not([type=range]),.kpd-dark select,.kpd-dark textarea{background:#0E1A30 !important;color:#E6EDF8 !important;border-color:#22345A !important}
+.kpd-dark input::placeholder,.kpd-dark textarea::placeholder{color:#5D6E8C !important}
+.kpd-dark hr{border-color:#1A2742}
+.kpd-dark button.kpd-keep,.kpd-dark .kpd-keep-ink{color:#0B1428 !important}
+.kpd-dark svg[stroke="#1B2B4B" i],.kpd-dark svg[stroke="#0F1A30" i],.kpd-dark svg[stroke="#2D4C82" i],.kpd-dark svg[stroke="#3A4A66" i]{stroke:#9FB3D6}
+.kpd-dark svg [stroke="#1B2B4B" i],.kpd-dark svg [stroke="#0F1A30" i]{stroke:#9FB3D6}
+.kpd-dark svg[fill="#1B2B4B" i],.kpd-dark svg [fill="#1B2B4B" i],.kpd-dark svg[fill="#0F1A30" i],.kpd-dark svg [fill="#0F1A30" i]{fill:#9FB3D6}
+`;
+const out = DRIVER ? `// ======================= src/driver/driverDarkTheme.js =======================
+// 🌙 2026-11-26 기사앱 어두운 화면(2차 시안) — scripts/genFleetDark.mjs driver 가 만든다(손으로 고치지 말 것)
+//  DriverHome 맨 바깥에 className="kpd-dark" 가 붙었을 때만(설정 › 화면 › 어둡게 · 기본) 적용된다.
+export const DRIVER_DARK_CSS = ${JSON.stringify(DRIVER_HEAD + css.join("\n"))};
+` : `// ======================= src/fleetDarkTheme.js =======================
 // 🛰 2026-11-25 지입차관리 전체 = 관제실 다크(관제현황과 같은 톤) — scripts/genFleetDark.mjs 가 만든다(손으로 고치지 말 것)
 //  FleetManagement 맨 바깥에 className="fm-dark" 가 붙은 화면(지입차관리 메뉴)에서만 적용된다. 기사관리 › 서류관리처럼
 //  다른 메뉴 안에 끼워 쓰는 화면(hideChrome · forceTab)에는 붙지 않는다.
 export const FLEET_DARK_CSS = ${JSON.stringify(head + css.join("\n"))};
 `;
-fs.writeFileSync("src/fleetDarkTheme.js", out);
-console.log(`src/fleetDarkTheme.js — 규칙 ${css.length}개 (${(out.length / 1024).toFixed(0)}KB)`);
+fs.writeFileSync(DRIVER ? "src/driver/driverDarkTheme.js" : "src/fleetDarkTheme.js", out);
+console.log(`${DRIVER ? "src/driver/driverDarkTheme.js" : "src/fleetDarkTheme.js"} — 규칙 ${css.length}개 (${(out.length / 1024).toFixed(0)}KB)`);

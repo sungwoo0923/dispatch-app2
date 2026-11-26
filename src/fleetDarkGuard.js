@@ -4,7 +4,10 @@
 //  · .fm-dark 안(밖에 뜨는 창 .fm-pop 포함)에서 밝은 바탕(흰색 · 아주 옅은 회색) → 어두운 판, 옅은 색 바탕 → 같은 색의 어두운 빛
 //  · 어두운 바탕 위 어두운 글씨(대비 3 미만) → 밝은 글씨
 //  · 화면이 바뀔 때만(MutationObserver · 0.35초 모아서) 돈다. 지도 · 사진 · 그림은 건드리지 않는다
-const SKIP = "img,video,canvas,svg,path,iframe,.leaflet-tile-pane,.leaflet-tile,.lw-tk,.fm-keep-light";
+const SKIP0 = "img,video,canvas,svg,path,iframe,.leaflet-tile-pane,.leaflet-tile,.lw-tk,.fm-keep-light";
+// 🌙 2026-11-26 기사앱도 같은 지킴이를 쓴다(.kpd-dark) — 어느 바깥 틀(ROOT) 안을 고칠지 · 건너뛸 것(SKIP)을 지킴이마다 정한다
+let ROOT = ".fm-dark";
+let SKIP = SKIP0;
 const parse = (c) => { const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/.exec(c || ""); return m ? [+m[1], +m[2], +m[3], m[4] === undefined ? 1 : +m[4]] : null; };
 const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
 function hsl([r, g, b]) {
@@ -27,6 +30,7 @@ const bgUnder = (el) => {
 };
 
 function fixEl(el) {
+  if (!el.closest(ROOT)) return 0;
   if (el.closest(SKIP)) return 0;
   const cs = getComputedStyle(el);
   if (cs.display === "none") return 0;
@@ -64,9 +68,9 @@ function fixEl(el) {
 // node 와 그 안 전부(바탕부터 고쳐야 글씨 대비가 맞아서 위에서 아래 순서)
 function fixTree(node) {
   if (!node || node.nodeType !== 1) return 0;
-  if (!node.closest(".fm-dark")) {
+  if (!node.closest(ROOT)) {
     let n = 0;
-    node.querySelectorAll?.(".fm-dark").forEach((r) => { n += fixTree(r); });
+    node.querySelectorAll?.(ROOT).forEach((r) => { n += fixTree(r); });
     return n;
   }
   let n = fixEl(node);
@@ -75,14 +79,17 @@ function fixTree(node) {
 }
 export function fixFleetDark(scope = document) {
   let n = 0;
-  (scope.querySelectorAll ? scope.querySelectorAll(".fm-dark") : []).forEach((r) => { n += fixTree(r); });
+  (scope.querySelectorAll ? scope.querySelectorAll(ROOT) : []).forEach((r) => { n += fixTree(r); });
   return n;
 }
 
 // 지입차관리가 열려 있는 동안만 켠다
 //  🛠 2026-11-26 새로 붙은 칸은 화면에 그려지기 전에(MutationObserver 안에서 바로) 고친다 — 0.35초 늦게 고쳐 흰 표가 잠깐 보이던 문제
 //  그 밖의 변화(마우스 · 고른 줄 등)는 0.25초 모아서 한 번 더 훑는다. 지도(타일 · 트럭) 안 변화는 뺀다
-export function startFleetDarkGuard() {
+export function startFleetDarkGuard() { return startDarkGuard(".fm-dark", SKIP0); }
+// 🌙 기사앱 — startDarkGuard(".kpd-dark", "…,.kpd-keep"). 한 화면에 지킴이는 하나만 켠다(지입차관리 · 기사앱은 같이 열리지 않는다)
+export function startDarkGuard(root, skip = SKIP0) {
+  ROOT = root; SKIP = skip;
   let t = null;
   const sweep = () => { t = null; try { fixFleetDark(document); } catch { /* 무시 */ } };
   const later = () => { if (!t) t = setTimeout(sweep, 250); };
@@ -92,7 +99,7 @@ export function startFleetDarkGuard() {
       if (r.target.closest && r.target.closest(".leaflet-container")) continue;
       if (r.type === "childList") { r.addedNodes.forEach((nd) => { try { fixTree(nd); } catch { /* 무시 */ } }); }
       // 🛠 2026-11-26 칸의 style 만 바뀐 경우(데이터가 들어와 줄 색이 바뀜 등)도 그려지기 전에 바로 고친다 — 예전엔 0.25초 뒤라 흰색이 잠깐 보였다
-      else if (r.attributeName === "style") { try { if (r.target.closest?.(".fm-dark")) fixEl(r.target); } catch { /* 무시 */ } }
+      else if (r.attributeName === "style") { try { if (r.target.closest?.(ROOT)) fixEl(r.target); } catch { /* 무시 */ } }
       else other = true;
     }
     if (other) later();

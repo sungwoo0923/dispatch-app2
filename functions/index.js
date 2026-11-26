@@ -3457,6 +3457,31 @@ exports.notifyEmergencyAlert = functions.firestore.document("emergency_alerts/{i
   return null;
 });
 
+// 🕘 2026-11-26 기사앱 [퇴근 정정 요청](location_change_requests kind:"checkoutFix") → 그 기사 담당자 휴대폰 푸시
+//  담당자가 없으면 보내지 않는다(지입차관리 › 관제현황 › 확인할 일에 쌓인다) · 알림 설정 "담당 기사 출근·퇴근"을 따른다
+exports.notifyCheckoutFixRequest = functions.firestore.document("location_change_requests/{id}").onCreate(async (snap) => {
+  const r = snap.data() || {};
+  if (r.kind !== "checkoutFix" || !r.uid) return null;
+  try {
+    const dSnap = await db.collection("drivers").doc(String(r.uid)).get();
+    const drv = dSnap.exists ? dSnap.data() || {} : {};
+    const mgrUid = drv.담당자 && typeof drv.담당자 === "object" ? String(drv.담당자.uid || "") : "";
+    if (!mgrUid) return null;
+    const uSnap = await db.collection("users").doc(mgrUid).get();
+    const u = uSnap.exists ? uSnap.data() || {} : null;
+    const company = String(r.companyName || drv.companyName || PUSH_DEFAULT_COMPANY).trim();
+    if (!u || !sameCoUser(u, company) || !isPushTypeEnabled(u.pushPrefs, "기사출퇴근")) return null;
+    const hm = (ms) => (ms ? new Date(Number(ms) + 9 * 3600e3).toISOString().slice(11, 16) : "");
+    const md = String(r.date || "").slice(5).replace("-", "/");
+    await sendPushAndCleanup(userTokens(u), {
+      notification: { title: `🕘 퇴근 정정 요청 · ${r.driverName || drv.name || "기사"}`, body: `${md} 출근 ${hm(r.checkInMs)} → 퇴근 ${hm(r.requestedOutMs)}${r.memo ? ` · ${r.memo}` : ""} — 관제현황에서 반영해 주세요` },
+      data: { type: "fleet_checkout_fix", requestId: snap.id, target: "app" },
+      android: { priority: "high" },
+    }, "퇴근 정정 요청");
+  } catch (e) { console.error("퇴근 정정 요청 푸시 실패:", e); }
+  return null;
+});
+
 // ⭐ 2026-11-10 담당 기사 출근·퇴근 → 그 기사의 담당자(기사관리에서 정한 drivers/{uid}.담당자.uid)에게 휴대폰 푸시
 //  · 기사앱이 직접 출근·퇴근(최종퇴근 포함)한 기록만 — 운송사가 대신 [퇴근처리]한 것(auto)은 보내지 않는다
 //  · 담당자는 기록에 적힌 값이 아니라 서버가 기사 문서에서 다시 읽는다 · 같은 회사 · 재직 · "기사출퇴근" 알림을 끈 사람 제외
