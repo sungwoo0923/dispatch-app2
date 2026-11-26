@@ -180,12 +180,11 @@ public class KpLocationService extends Service {
     private void startLocationUpdates() {
         lm = (LocationManager) getSystemService(LOCATION_SERVICE);
         try {
-            if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, MIN_TIME_MS, 0f, locListener, Looper.getMainLooper());
-            }
-            if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, MIN_TIME_MS * 2, 0f, locListener, Looper.getMainLooper());
-            }
+            // 🛠 2026-11-27 꺼져 있어도 등록해 둔다 — 출근할 때 GPS가 꺼져 있다가 나중에 켜면 그때부터 GPS 위치가 온다(예전엔 그날 내내 네트워크 위치만 받아 경로 · 거리가 0)
+            try { lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, MIN_TIME_MS, 0f, locListener, Looper.getMainLooper()); }
+            catch (IllegalArgumentException e) { Log.w(TAG, "GPS 없음", e); }
+            try { lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, MIN_TIME_MS * 2, 0f, locListener, Looper.getMainLooper()); }
+            catch (IllegalArgumentException e) { Log.w(TAG, "네트워크 위치 없음", e); }
         } catch (SecurityException e) {
             Log.w(TAG, "위치 권한 없음", e);
             stopSelf();
@@ -240,18 +239,24 @@ public class KpLocationService extends Service {
         final boolean writeTrack = track;
         final int speedKmh = (int) Math.round(speed * 3.6);
         final double accM = acc;
-        io.execute(() -> upload(lat, lng, speedKmh, distKm, writeTrack, accM));
+        // 🛠 2026-11-27 업로드에 실패하면(터널 · 지하 등 신호 약함) 이번 거리를 다음 업로드에 다시 싣는다(예전엔 그대로 사라져 주행거리가 적게 잡혔다)
+        io.execute(() -> {
+            if (!upload(lat, lng, speedKmh, distKm, writeTrack, accM) && distKm > 0) {
+                new Handler(Looper.getMainLooper()).post(() -> pendingDistKm += distKm);
+            }
+        });
     }
 
     // ── Firestore REST ──────────────────────────────────────────────
-    private void upload(double lat, double lng, int speedKmh, double distKm, boolean writeTrack, double accM) {
+    // 성공하면 true(서버가 받음) · 실패하면 false
+    private boolean upload(double lat, double lng, int speedKmh, double distKm, boolean writeTrack, double accM) {
         SharedPreferences sp = getSharedPreferences(PREFS, MODE_PRIVATE);
         String uid = sp.getString("uid", null);
         String projectId = sp.getString("projectId", null);
-        if (uid == null || projectId == null) return;
+        if (uid == null || projectId == null) return true; // 로그인 정보가 없으면 다시 보내도 소용없다
         try {
             String token = getIdToken();
-            if (token == null) return;
+            if (token == null) return false;
             String base = "projects/" + projectId + "/databases/(default)/documents/";
 
             JSONArray writes = new JSONArray();
@@ -297,9 +302,11 @@ public class KpLocationService extends Service {
             String url = "https://firestore.googleapis.com/v1/projects/" + projectId + "/databases/(default)/documents:commit";
             int code = httpJson(url, new JSONObject().put("writes", writes).toString(), token, null);
             if (code == 401 || code == 403) { idToken = null; idTokenExpAt = 0; }
-            if (code >= 300) Log.w(TAG, "업로드 실패 HTTP " + code);
+            if (code >= 300) { Log.w(TAG, "업로드 실패 HTTP " + code); return code == 404; } // 404(기사 문서 없음)는 다시 보내도 같다
+            return true;
         } catch (Exception e) {
             Log.w(TAG, "업로드 오류", e);
+            return false;
         }
     }
 

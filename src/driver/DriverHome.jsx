@@ -1458,11 +1458,16 @@ export default function DriverHome() {
     });
   }, []);
 
+  const [loadStuck, setLoadStuck] = useState(false);
   useEffect(() => {
     if (!uid) return;
-    return onSnapshot(doc(db, "drivers", uid), (snap) => {
-      if (snap.exists()) setDriver(snap.data());
-    });
+    // 🛠 2026-11-27 기사 문서가 없거나 읽기가 막히면(권한 · 인터넷 끊김) "불러오는 중"에서 멈추지 않게 — 10초 뒤 [다시 시도 · 로그아웃]
+    const t = setTimeout(() => setLoadStuck(true), 10000);
+    const off = onSnapshot(doc(db, "drivers", uid), (snap) => {
+      if (snap.exists()) { setDriver(snap.data()); setLoadStuck(false); clearTimeout(t); }
+      else if (!snap.metadata.fromCache) setLoadStuck(true);
+    }, (e) => { console.warn("[기사 문서] 읽기 실패", e?.code || e); setLoadStuck(true); });
+    return () => { clearTimeout(t); off(); };
   }, [uid]);
   useEffect(() => {
     if (viewAs || !uid || !driver || vehicleSetupCheckedRef.current) return; // 관리자 보기 — 기사 처음 설정 창은 띄우지 않는다
@@ -2372,7 +2377,8 @@ export default function DriverHome() {
     await Promise.race([clearFcmToken(auth.currentUser?.uid).catch(() => {}), new Promise((r) => setTimeout(r, 1200))]);
     if (uid) {
       try {
-        await updateDoc(doc(db, "drivers", uid), { active: false, updatedAt: serverTimestamp() });
+        // 🛠 2026-11-27 인터넷이 끊겨 있으면 서버 응답을 끝없이 기다려 로그아웃이 안 됐다 — 최대 1.5초만 기다림(저장은 연결되면 보내진다)
+        await Promise.race([updateDoc(doc(db, "drivers", uid), { active: false, updatedAt: serverTimestamp() }), new Promise((r) => setTimeout(r, 1500))]);
       } catch (_) {}
     }
     // 🛠 2026-11-18 로그아웃 중엔 화면 안에서 로그인 화면을 먼저 그리지 않는다(App.jsx) — 새 버전 배포 뒤 예전 로그인 화면 파일을
@@ -2579,6 +2585,15 @@ export default function DriverHome() {
         <div style={{ textAlign: "center" }}>
           <div style={{ width: 40, height: 40, border: "3px solid #1B2B4B", borderTopColor: "transparent", borderRadius: "50%", margin: "0 auto 12px", animation: "spin 0.8s linear infinite" }} />
           <div style={{ fontSize: 16.5, color: "#5B6B85" }}>불러오는 중이에요…</div>
+          {loadStuck && (
+            <div style={{ marginTop: 18 }}>
+              <div style={{ fontSize: 14.5, color: "#5B6B85", marginBottom: 12, lineHeight: 1.6 }}>기사 정보를 불러오지 못했어요.<br />인터넷 연결을 확인하고 다시 시도해 주세요.</div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                <button type="button" onClick={() => window.location.reload()} style={{ minHeight: 44, padding: "0 18px", borderRadius: 12, border: "none", background: "#1B2B4B", color: "#fff", fontSize: 15, fontWeight: 800 }}>다시 시도</button>
+                <button type="button" onClick={() => handleLogout()} style={{ minHeight: 44, padding: "0 18px", borderRadius: 12, border: "1.5px solid #C9D2E0", background: "#fff", color: "#0F1A30", fontSize: 15, fontWeight: 700 }}>로그아웃</button>
+              </div>
+            </div>
+          )}
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
