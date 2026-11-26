@@ -6,7 +6,8 @@ import { createPortal } from "react-dom";
 import {
   collection, addDoc, onSnapshot, query, orderBy, limit,
   serverTimestamp, doc, setDoc, getDoc, updateDoc, deleteDoc,
-  getDocs, where, arrayUnion, arrayRemove, increment
+  getDocs, where, arrayUnion, arrayRemove, increment,
+  writeBatch, Timestamp, // 💬 2026-11-26 대화 가져오기(원래 시각 그대로)
 } from "firebase/firestore";
 import { db, auth, storage, FUNCTIONS_BASE } from "./firebase";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -1266,6 +1267,79 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     }
   };
 
+  // 💬 2026-11-26 사용자 요청 — 단체방 관리(방장) · 대화 내보내기 · 가져오기
+  //  · 내보내기(대화상대에서 빼기): 방을 만든 사람(createdBy)만 · 보안 규칙도 같은 조건(firestore.rules chat_rooms)
+  //  · 대화 내보내기: 이 방 메시지 전부를 파일로(.json = 다시 가져올 수 있음 · .txt = 읽기용)
+  //  · 대화 가져오기: 방장만 · 내보낸 .json 을 이 방에 원래 보낸 사람 이름 · 사진 · 시각 그대로 넣는다(imported · origSenderUid)
+  const kickMember = async (room, uid) => {
+    if (!room?.id || room.createdBy !== myUid || uid === myUid) return;
+    const nm = room.memberProfiles?.[uid]?.name || friends.find((f) => f.uid === uid)?.name || "대화상대";
+    if (!(await kpConfirm(`${nm}님을 이 방에서 내보낼까요?\n내보내면 이 방이 그 사람 목록에서 사라져요.`, { okText: "내보내기", danger: true }))) return;
+    const me = myProfile?.name || myEmail.split("@")[0];
+    try {
+      await updateDoc(doc(db, ROOMS_COLL, room.id), { members: arrayRemove(uid) });
+      await postSystemMsg({ ...room, members: (room.members || []).filter((u) => u !== uid) }, `${me}님이 ${nm}님을 내보냈습니다.`);
+    } catch (e) { window.alert(`내보내지 못했어요: ${e?.message || e}`); }
+  };
+  const tsToMs = (t) => (t?.toMillis ? t.toMillis() : t?.seconds ? t.seconds * 1000 : typeof t === "number" ? t : 0);
+  const downloadText = (name, text, type) => {
+    const url = URL.createObjectURL(new Blob([text], { type }));
+    const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  };
+  const exportChat = async (room) => {
+    if (!room?.id) return;
+    const snap = await getDocs(query(collection(db, MSGS_COLL), where("roomId", "==", room.id))).catch(() => null);
+    if (!snap) { window.alert("대화를 불러오지 못했어요."); return; }
+    const list = snap.docs.map((d) => d.data()).filter((m) => m.type !== "deleted").sort((a, b) => tsToMs(a.createdAt) - tsToMs(b.createdAt));
+    const KEEP = ["type", "text", "imageUrl", "imageUrls", "fileUrl", "fileName", "fileSize", "lat", "lng", "address", "contact", "notice", "replyToText", "replyToSender", "forwarded", "fwdFrom", "order"];
+    const msgs = list.map((m) => {
+      const o = { senderUid: m.imported ? m.origSenderUid : m.senderUid, senderName: m.senderName || "", senderPhoto: m.senderPhoto || "", at: m.imported && m.origAt ? m.origAt : tsToMs(m.createdAt) };
+      KEEP.forEach((k) => { if (m[k] !== undefined && m[k] !== null && m[k] !== "") o[k] = m[k]; });
+      return o;
+    });
+    const title = getRoomName(room) || "대화";
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadText(`${title}_대화_${stamp}.json`, JSON.stringify({ app: "LogisWeb", kind: "chat-export", v: 1, room: title, exportedAt: Date.now(), exportedBy: myProfile?.name || "", count: msgs.length, messages: msgs }, null, 1), "application/json");
+    const fmt = (ms) => { const d = new Date(ms); const p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+    const txt = msgs.map((m) => m.type === "system" ? `--- ${m.text || ""} (${fmt(m.at)}) ---` : `[${fmt(m.at)}] ${m.senderName}: ${m.text || (m.imageUrl || m.imageUrls ? "(사진)" : m.fileName ? `(파일 ${m.fileName})` : "")}`).join("\n");
+    setTimeout(() => downloadText(`${title}_대화_${stamp}.txt`, `${title} 대화 (${msgs.length}개)\n\n${txt}`, "text/plain;charset=utf-8"), 400);
+  };
+  const importFileRef = useRef(null);
+  const importTargetRef = useRef(null);
+  const askImportChat = (room) => {
+    if (!room?.id) return;
+    if (room.createdBy !== myUid) { window.alert("대화 가져오기는 방을 만든 사람만 할 수 있어요."); return; }
+    importTargetRef.current = room;
+    importFileRef.current?.click();
+  };
+  const importChat = async (file) => {
+    const room = importTargetRef.current;
+    if (!file || !room?.id) return;
+    let data = null;
+    try { data = JSON.parse(await file.text()); } catch { data = null; }
+    if (!data || data.kind !== "chat-export" || !Array.isArray(data.messages)) { window.alert("LogisWeb 에서 내보낸 대화 파일(.json)이 아니에요."); return; }
+    const msgs = data.messages.filter((m) => m && (m.text || m.imageUrl || m.imageUrls || m.fileUrl || m.type));
+    if (!msgs.length) { window.alert("가져올 대화가 없어요."); return; }
+    if (!(await kpConfirm(`「${data.room || "대화"}」 대화 ${msgs.length}개를 이 방에 넣을까요?\n원래 보낸 사람 이름 · 시각 그대로 보여요.`, { okText: "가져오기" }))) return;
+    const members = room.members || [myUid];
+    try {
+      for (let i = 0; i < msgs.length; i += 400) {
+        const b = writeBatch(db);
+        msgs.slice(i, i + 400).forEach((m) => {
+          const { senderUid, senderName, senderPhoto, at, ...rest } = m;
+          b.set(doc(collection(db, MSGS_COLL)), {
+            ...rest, roomId: room.id, senderUid: myUid, senderName: senderName || "알 수 없음", senderPhoto: senderPhoto || "",
+            imported: true, origSenderUid: senderUid || "", origAt: Number(at) || Date.now(),
+            createdAt: Timestamp.fromMillis(Number(at) || Date.now()), readBy: members, memberUids: members, totalMembers: members.length,
+          });
+        });
+        await b.commit();
+      }
+      await postSystemMsg(room, `${myProfile?.name || "방장"}님이 이전 대화 ${msgs.length}개를 가져왔습니다.`);
+    } catch (e) { window.alert(`가져오지 못했어요: ${e?.message || e}`); }
+  };
+
   // ── 메시지 수정/삭제 ──
   const saveEdit = async () => {
     if (!editMsg || !editText.trim()) return;
@@ -1511,6 +1585,8 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
     onInvite: () => activeRoom && openInvite(activeRoom),
     onRename: () => activeRoom && openRename(activeRoom),
     onLeave: () => activeRoom && leaveRoom(activeRoom.id),
+    onExportChat: () => activeRoom && exportChat(activeRoom),
+    onImportChat: activeRoom?.type === "group" && activeRoom?.createdBy === myUid ? () => askImportChat(activeRoom) : null,
   } : null;
 
   const friendsViewProps = {
@@ -1728,6 +1804,7 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
         </div>
       )}
 
+      <input ref={importFileRef} type="file" accept=".json,application/json" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; importChat(f); }} />
       {/* 대화상대 목록 */}
       {liveMembersRoom && (
         <div data-kp-dialog="1" style={dlgOverlay} onClick={() => setMembersRoom(null)}>
@@ -1761,6 +1838,11 @@ export default function InternalMessenger({ user, userCompany = "", role = "", m
                       </div>
                       {sub && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 1 }}>{sub}</div>}
                     </div>
+                    {/* 💬 2026-11-26 방장만 — 이 사람을 방에서 내보내기 */}
+                    {!isMe && liveMembersRoom.type === "group" && liveMembersRoom.createdBy === myUid && (
+                      <button type="button" onClick={(e) => { e.stopPropagation(); kickMember(liveMembersRoom, uid); }}
+                        style={{ flexShrink: 0, height: 28, padding: "0 10px", borderRadius: 8, border: "1px solid #fecaca", background: "#fff", color: "#dc2626", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>내보내기</button>
+                    )}
                   </div>
                 );
               })}
@@ -2372,7 +2454,7 @@ function FriendsView({ myProfile, friends, rooms, unreadMap, totalUnread, getRoo
 }
 
 // ════════════════ 채팅 뷰 ════════════════
-function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, sendingImgs = [], friends, mobileMode, themeHdr, themeMyBubble, themeChatBg, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf, groupPeople = [], onShowMembers, onInvite, onRename, onLeave, onShareOrder, onPin, onUnpin, onForward, quickReplies = [], onSaveQuickReplies, mentionPeople = [], myName = "" }) {
+function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input, setInput, onSend, onBack, onClose, editMsg, setEditMsg, editText, setEditText, onSaveEdit, onDeleteMsg, msgSearch, setMsgSearch, msgContainerRef, inputRef, onSendImage, onSendFile, onSendLocation, onSendContact, onSendNotice, fileUploading, sendingImgs = [], friends, mobileMode, themeHdr, themeMyBubble, themeChatBg, replyTo, setReplyTo, onReply, onAddReaction, onSendToSelf, groupPeople = [], onShowMembers, onInvite, onRename, onLeave, onExportChat, onImportChat, onShareOrder, onPin, onUnpin, onForward, quickReplies = [], onSaveQuickReplies, mentionPeople = [], myName = "" }) {
   const [showSearch, setShowSearch] = useState(false);
   // 💬 2026-11-19 운송사 요청 — 카카오톡처럼 글이 다음 줄로 넘어가면 입력칸이 같이 늘어난다(최대 6줄, 그 뒤로는 칸 안에서 스크롤 · 보내면 다시 한 줄)
   React.useLayoutEffect(() => {
@@ -2579,6 +2661,8 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
                     { label: `대화상대 ${room.members?.length || 0}명`, action: onShowMembers },
                     { label: "＋ 대화상대 초대", action: onInvite },
                     { label: "채팅방 이름 바꾸기", action: onRename },
+                    { label: "대화 내보내기(파일 저장)", action: onExportChat },
+                    ...(onImportChat ? [{ label: "대화 가져오기(방장)", action: onImportChat }] : []),
                     { label: "채팅방 나가기", action: onLeave, danger: true },
                   ].map(item => (
                     <button key={item.label} onClick={() => { setShowRoomMenu(false); item.action?.(); }}
@@ -2681,14 +2765,16 @@ function ChatView({ room, roomName, roomPhoto, messages, myUid, myProfile, input
         {(() => {
           let prevDate = "";
           return messages.map((msg, i) => {
-            const isMine = msg.senderUid === myUid;
+            // 💬 2026-11-26 가져온 대화는 원래 보낸 사람 기준(내 말풍선 · 묶음)
+            const sidOf = (m) => (m?.imported ? m.origSenderUid : m?.senderUid);
+            const isMine = sidOf(msg) === myUid;
             const prev = messages[i - 1];
             const next = messages[i + 1];
             // ⭐ 2026-11-03 안내 문구(system)를 사이에 두면 말풍선 묶음이 끊기도록
-            const isContinued = prev?.senderUid === msg.senderUid && prev?.type !== "system"
+            const isContinued = sidOf(prev) === sidOf(msg) && prev?.type !== "system"
               && msg.createdAt && prev.createdAt
               && (msg.createdAt?.toMillis?.() || 0) - (prev.createdAt?.toMillis?.() || 0) < 120000;
-            const isLast = !next || next.senderUid !== msg.senderUid || next.type === "system"
+            const isLast = !next || sidOf(next) !== sidOf(msg) || next.type === "system"
               || (next.createdAt?.toMillis?.() || 0) - (msg.createdAt?.toMillis?.() || 0) >= 120000;
 
             const dateStr = msg.createdAt ? fmtDate(msg.createdAt) : "";
