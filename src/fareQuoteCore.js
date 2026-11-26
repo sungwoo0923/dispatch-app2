@@ -82,8 +82,9 @@ export function findRate(sheets = [], q = {}, { aliases = false } = {}) {
     });
   }
   if (!cands.length) return null;
-  // 기준지 맞음 > 이름으로 찾음 > 이름이 똑같음 > (지역이면) 더 작은 단위
-  const rank = (c) => (c.baseHit ? 16 : 0) + (c.tonUp ? 0 : 8) + (c.region ? 0 : 4) + (c.exact ? 2 : 0) + (c.region ? Math.min(c.lvl, 2) * 0.5 : 0);
+  // 🛠 2026-11-26 같은 거래처에 상하차지명 단가표와 지역 단가표가 같이 있어도 겹치지 않게 — 더 구체적인 줄이 먼저
+  //  기준지 맞음 > 하차지 이름으로 찾음(주소로 찾은 지역보다) > 이름이 똑같음 > 긴 이름(베베숲 평택 > 평택) > 톤수 칸이 정확함 > (지역이면) 더 작은 단위
+  const rank = (c) => (c.baseHit ? 1000 : 0) + (c.region ? 0 : 500) + (c.exact ? 200 : 0) + Math.min(normRate(c.rowName).length, 20) * 5 + (c.tonUp ? 0 : 2) + (c.region ? Math.min(c.lvl, 2) * 0.5 : 0);
   const top = Math.max(...cands.map(rank));
   const best = cands.filter((c) => rank(c) === top);
   if (new Set(best.map((c) => `${c.sale}/${c.buy}`)).size > 1) return { ambiguous: true, cands: best };

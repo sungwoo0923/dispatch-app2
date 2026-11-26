@@ -49,5 +49,17 @@ r = q("화승 네트웍스", "경남 양산시 1", "5톤");
 ok(r && r.sale === 280000 && !r.tonUp, "단가표에 있는 톤수는 그대로");
 r = q("화승 네트웍스", "경남 양산시 1", "30톤");
 ok(!r, "가장 큰 톤수보다 크면 넣지 않음");
+// 🛠 같은 거래처에 상하차지명 단가표(기존)와 지역 단가표(새로 올림)가 같이 있을 때 — 구체적인 줄이 먼저
+const named = { baseName: "롯데베르살리스", columns: [{ id: "a", label: "5톤" }], rows: [{ name: "화승 네트웍스(유산공단)", prices: { a: "300000" } }] };
+r = findRate([lotte, named], { 거래처명: "롯데베르살리스", 하차지명: "화승 네트웍스(유산공단)", 하차지주소: "경남 양산시 1", 톤수: "5톤" }, { aliases: true });
+ok(r && r.sale === 300000, `상하차지명 줄이 지역 줄보다 먼저 ${r?.sale}`);
+r = findRate([lotte, named], { 거래처명: "롯데베르살리스", 하차지명: "다른 업체", 하차지주소: "경남 양산시 1", 톤수: "5톤" }, { aliases: true });
+ok(r && r.sale === 280000, `이름 줄이 없으면 지역 줄 ${r?.sale}`);
+const aj = { baseName: "에이제이 지역", columns: [{ id: "a", label: "5톤" }, { id: "b", label: "9.5톤" }], rows: [{ name: "평택", prices: { a: "134000", b: "150000" } }] };
+const ajNamed = { baseName: "에이제이", columns: [{ id: "a", label: "5톤" }], rows: [{ name: "베베숲 평택", prices: { a: "200000" } }] };
+r = findRate([aj, ajNamed], { 거래처명: "에이제이", 하차지명: "베베숲 평택", 하차지주소: "경기 평택시 1", 톤수: "5톤" }, { aliases: true });
+ok(r && r.sale === 200000, `에이제이: 기존 상하차지명 단가 먼저 ${r?.sale}`);
+r = findRate([aj, ajNamed], { 거래처명: "에이제이", 하차지명: "새 업체", 하차지주소: "경기 평택시 1", 톤수: "8톤" }, { aliases: true });
+ok(r && r.sale === 150000, `에이제이: 처음 보는 곳은 '에이제이 지역' 단가표(8톤 → 9.5톤) ${r?.sale}`);
 if (fail) { console.error(`rateRegion: ${fail}건 실패`); process.exit(1); }
 console.log("rateRegion: 모두 통과");
