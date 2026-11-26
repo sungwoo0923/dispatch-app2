@@ -7,7 +7,7 @@
 //  · 좁은 화면: 오른쪽 칸은 아래로, 휴대폰 폭이면 한 줄씩
 import React from "react";
 import { PHASE_GROUPS, truckColor, TRUCK_CSS } from "./fleetTruck";
-import { driverClientOf, ClientTag } from "./driverClient"; // 📱 2026-11-26 기사앱 · 웹 구분
+import { driverClientOf, ClientTag, LocHealthTag, locHealthOf, locFixStateOf } from "./driverClient"; // 📱 2026-11-26 기사앱 · 웹 구분 · 📍 위치 설정 요청
 
 const FONT = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 // 🎨 2026-11-26 A(관제실 다크 · 기본) / B(지도 중심 라이트) — 색은 CSS 변수(.lwd · .lwd.light)로
@@ -54,6 +54,25 @@ export function LocLine({ d, geocode, size = 12.5 }) {
       <span style={{ color: "var(--lw-body)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{addr || "주소 찾는 중…"}</span>
       {!live && <span style={{ flexShrink: 0, color: C.dim }}>{ago(d.updatedAt)}</span>}
     </span>
+  );
+}
+
+// 📍 2026-11-26 위치 문제 안내 + [위치 설정 요청] — 신호가 끊겼거나 설정 문제가 있을 때 · 요청을 보낸 뒤에는 상태를 보여 준다
+function LocFixLine({ d, onLocFix }) {
+  const raw = d?.raw || d || {};
+  const h = locHealthOf(raw);
+  const fix = locFixStateOf(raw);
+  const stale = !!d?.location && !isLive(d) && !["퇴근", "최종퇴근", "휴차"].includes(d?.상태);
+  if (!onLocFix || (!stale && !(h && !h.ok) && !fix)) return null;
+  const tone = fix?.key === "done" ? "var(--lw-ok)" : "#F59E0B";
+  return (
+    <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 800, lineHeight: 1.45, color: h && !h.ok ? "#EF4444" : tone }}>
+        {h && !h.ok ? h.probs.join(" · ") : stale ? "위치가 안 들어오고 있어요" : ""}
+        {fix && <span style={{ display: "block", color: tone }}>{fix.key === "done" ? `기사님이 설정을 확인했어요 · ${ago(fix.at)}` : `위치 설정 요청 보냄 · ${ago(fix.at)} · 아직 확인 전`}</span>}
+      </span>
+      <button type="button" className="lwd-btn" style={{ height: 32, flexShrink: 0 }} onClick={() => onLocFix(d)} title="기사님 휴대폰에 알림을 보내고, 앱을 열면 위치 설정 확인 창이 떠요">{fix?.key === "sent" ? "다시 요청" : "위치 설정 요청"}</button>
+    </div>
   );
 }
 
@@ -127,7 +146,7 @@ export default function FleetControlDeck({
   drivers = [], phaseById, searchQuery = "", onSearch, selected, onSelect, onContextMenu,
   locChangeRequests = [], collisionAlerts = [], onLocRequest, onLocDismiss, onCollisionResolve,
   logs = [], driversMap = {}, onDeleteFeed, todayPhotoIds = null,
-  renderMap, trackDate = null, onMapRefresh, onFitAll, onOpenDetail, geocode = null, light = false, lookSwitch = null, onOpenHistory = null,
+  renderMap, trackDate = null, onMapRefresh, onFitAll, onOpenDetail, geocode = null, light = false, lookSwitch = null, onOpenHistory = null, onLocFix = null,
 }) {
   const [group, setGroup] = React.useState("all");
   const phase = (d) => phaseById?.get(d.id) || "배차대기";
@@ -232,12 +251,13 @@ export default function FleetControlDeck({
                       <span style={{ fontSize: 14, fontWeight: 800, color: "var(--lw-soft)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", letterSpacing: ".01em" }}>{d.차량번호 || ""}</span>
                       {todayPhotoIds?.has(d.id) && <span title="오늘 올린 사진" style={{ fontSize: 12, fontWeight: 800, color: "var(--lw-sky)" }}>사진</span>}
                       <ClientTag d={d} />
+                      <LocHealthTag d={d} />
                     </span>
                     <LocLine d={d} geocode={geocode} />
                   </span>
                   <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
                     <span style={{ fontSize: 13, fontWeight: 900, color: col, whiteSpace: "nowrap" }}>{alertIds.has(d.id) ? "충격 감지" : ph}</span>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: "var(--lw-sub2)" }}>{spd > 3 ? `${spd}km/h` : d.location ? "정차" : "위치 없음"}</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: "var(--lw-sub2)" }}>{!d.location ? "위치 없음" : !isLive(d) ? "신호 없음" : spd > 3 ? `${spd}km/h` : "정차"}</span>
                   </span>
                 </button>
               );
@@ -264,13 +284,14 @@ export default function FleetControlDeck({
               <div style={{ marginTop: 4, display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
                 <b style={{ fontSize: 20, fontWeight: 900 }}>{sel.이름 || "-"}</b>
                 <span style={{ fontSize: 16, fontWeight: 800, color: "var(--lw-soft)" }}>{sel.차량번호 || ""}</span>
-                <span style={{ alignSelf: "center" }}><ClientTag d={sel} size={12.5} /></span>
+                <span style={{ alignSelf: "center", display: "inline-flex", gap: 4 }}><ClientTag d={sel} size={12.5} /><LocHealthTag d={sel} size={12.5} /></span>
                 <span style={{ marginLeft: "auto", fontSize: 14, fontWeight: 900, color: truckColor(selPhase) }}>{selPhase}</span>
               </div>
               <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 10, background: "var(--lw-panel2)", border: `1px solid ${C.line2}` }}><LocLine d={sel} geocode={geocode} size={13.5} /></div>
               {driverClientOf(sel.raw || sel).key === "web" && <div style={{ marginTop: 6, fontSize: 12.5, fontWeight: 800, color: "#F59E0B", lineHeight: 1.45 }}>웹(인터넷)으로 쓰고 있어요. 화면을 끄면 위치가 끊겨요 → 기사앱 설치를 안내해 주세요</div>}
+              <LocFixLine d={sel} onLocFix={onLocFix} />
               <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 8 }}>
-                <div><div style={{ fontSize: 11.5, fontWeight: 700, color: C.dim }}>속도</div><div style={{ fontSize: 18, fontWeight: 900 }}>{Number(sel.speed) > 3 ? Number(sel.speed) : 0}<span style={{ fontSize: 12, color: C.sub }}> km/h</span></div></div>
+                <div><div style={{ fontSize: 11.5, fontWeight: 700, color: C.dim }}>속도</div><div style={{ fontSize: 18, fontWeight: 900 }}>{isLive(sel) && Number(sel.speed) > 3 ? Number(sel.speed) : 0}<span style={{ fontSize: 12, color: C.sub }}> km/h</span></div></div>
                 <div><div style={{ fontSize: 11.5, fontWeight: 700, color: C.dim }}>오늘 이동</div><div style={{ fontSize: 18, fontWeight: 900 }}>{(Number(sel.총거리) || 0).toFixed(1)}<span style={{ fontSize: 12, color: C.sub }}> km</span></div></div>
                 <div><div style={{ fontSize: 11.5, fontWeight: 700, color: C.dim }}>근무</div><div style={{ fontSize: 16, fontWeight: 900, whiteSpace: "nowrap", lineHeight: 1.6 }}>{workText(sel)}</div></div>
               </div>

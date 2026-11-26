@@ -33,6 +33,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { keepDriverLoginError } from "./driverLoginErrors"; // ⭐ 2026-11-11 로그인 방식 변경 안내
 import { registerPlugin } from "@capacitor/core";
 import { detectDriverClient } from "../driverClient"; // 📱 2026-11-26 기사앱인지 웹인지 관리자 화면에 보이게
+import { DRIVER_APK_URL } from "../FleetDriverExtra"; // 📍 2026-11-26 웹 기사님께 [기사앱 받기]
 import { useAddrGeo, computeFleetPhase, useFleetPhaseGeo, getCachedGeo, isPickupVisited, sortActiveOrders, isLoaded } from "../fleetGeo";
 import { snapshotOrder, changedFields, changedLabels, changeDiff } from "../orderChange";
 import { shouldAutoLoad } from "../autoLoadCore"; // 🚚 2026-11-10 자동 상차완료 판정
@@ -201,6 +202,64 @@ function requestNativeIgnoreBattery() {
 function stopNativeTracking() {
   if (!isNative()) return Promise.resolve();
   return withKpLoc((plugin) => plugin.stop()).catch(() => {});
+}
+
+// 📍 2026-11-26 관리자가 [위치 설정 요청]을 보내면 뜨는 창 — 무엇이 문제인지 보여 주고 버튼 하나로 설정 화면을 연다.
+//  [다 했어요]를 누르면 drivers 문서에 locFixDoneAt · locHealth 를 남겨 관리자 화면에 "확인했어요"로 보인다
+function LocFixSheet({ uid, askBy, onDone }) {
+  const native = isNative();
+  const [st, setSt] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!native) return undefined;
+    let alive = true;
+    const poll = () => withKpLoc((p) => p.status()).then((r) => { if (alive && r) setSt(r); }).catch(() => {});
+    poll();
+    const t = setInterval(poll, 2000);
+    return () => { alive = false; clearInterval(t); };
+  }, [native]);
+  const done = async () => {
+    setBusy(true);
+    const patch = { locFixDoneAt: serverTimestamp() };
+    if (st) patch.locHealth = { running: !!st.running, fg: !!st.locationGranted, bg: !!st.backgroundGranted, battery: !!st.ignoringBattery };
+    if (st) patch.locHealthAt = serverTimestamp();
+    try { await updateDoc(doc(db, "drivers", uid), patch); } catch (_) { /* 다음에 다시 */ }
+    setBusy(false);
+    onDone?.();
+  };
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent || "");
+  const item = (ok, title, how, btn, onClick) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0", borderTop: "1px solid #EEF1F6" }}>
+      <span style={{ width: 26, height: 26, borderRadius: 99, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, color: "#fff", background: ok ? "#10B981" : "#EF4444" }}>{ok ? "✓" : "!"}</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", fontSize: 15.5, fontWeight: 800, color: "#0F1A30" }}>{title}</span>
+        {!ok && <span style={{ display: "block", fontSize: 13.5, color: "#5B6B85", marginTop: 2 }}>{how}</span>}
+      </span>
+      {!ok && btn && <button type="button" onClick={onClick} style={{ flexShrink: 0, padding: "8px 12px", borderRadius: 10, border: "none", background: "#1B2B4B", color: "#fff", fontSize: 14, fontWeight: 800 }}>{btn}</button>}
+    </div>
+  );
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(15,26,48,.55)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div style={{ width: "100%", maxWidth: 520, background: "#fff", borderRadius: "18px 18px 0 0", padding: "20px 18px calc(18px + env(safe-area-inset-bottom))" }}>
+        <div style={{ fontSize: 19, fontWeight: 900, color: "#0F1A30" }}>위치 설정을 확인해 주세요</div>
+        <div style={{ fontSize: 14.5, color: "#5B6B85", marginTop: 4, marginBottom: 8 }}>{askBy ? `${askBy}님이 요청했어요. ` : ""}회사 관제 화면에 위치가 안 가고 있어요.</div>
+        {native ? (
+          <>
+            {item(!!st?.locationGranted && !!st?.backgroundGranted, "위치 권한 '항상 허용'", "[설정 열기] → 권한 → 위치 → '항상 허용'을 눌러 주세요", "설정 열기", openNativeAppSettings)}
+            {item(!!st?.ignoringBattery, "배터리 '제한 없음'", "[허용하기]를 누르고 '허용'을 눌러 주세요. 안 되면 설정 열기 → 배터리 → '제한 없음'", "허용하기", requestNativeIgnoreBattery)}
+            {item(!!st?.running, "위치 전송 켜짐", "퇴근 · 휴차 중이면 꺼져 있는 게 맞아요. 출근하면 다시 켜져요", null, null)}
+          </>
+        ) : (
+          <div style={{ padding: "12px 0", borderTop: "1px solid #EEF1F6", fontSize: 14.5, color: "#0F1A30", lineHeight: 1.55 }}>
+            지금 인터넷(웹)으로 쓰고 있어요. 이렇게 쓰면 화면을 끄거나 닫는 순간 위치가 끊겨요.
+            {ios ? " 아이폰은 이 화면을 켜 둔 채로 운행해 주세요." : " 기사앱을 설치하면 앱을 닫아도 위치가 계속 가요."}
+            {!ios && <a href={DRIVER_APK_URL} style={{ display: "block", marginTop: 10, textAlign: "center", padding: "11px 0", borderRadius: 10, background: "#1B2B4B", color: "#fff", fontWeight: 800, textDecoration: "none" }}>기사앱 받기</a>}
+          </div>
+        )}
+        <button type="button" onClick={done} disabled={busy} style={{ marginTop: 12, width: "100%", padding: "14px 0", borderRadius: 12, border: "none", background: "#2D4C82", color: "#fff", fontSize: 16, fontWeight: 900 }}>{busy ? "저장 중…" : "다 했어요"}</button>
+      </div>
+    </div>
+  );
 }
 
 // 설정 탭 — 네이티브 실시간 위치 전송 상태 표시(3초마다 갱신)
@@ -913,6 +972,29 @@ function useGpsTracking(uid, driverData) {
     return () => { alive = false; };
   }, [uid, driverLoaded, offDuty, startTry]);
 
+  // 📍 2026-11-26 위치 상태 기록 — 관리자 관제현황에 [위치 설정 필요]가 보이게 휴대폰 설정(권한 · 항상 허용 · 배터리 · 전송 켜짐)을 남긴다.
+  //  앱을 열 때 · 다시 화면에 나올 때 · 5분마다 확인하고, 바뀌었거나 6시간 지났을 때만 쓴다
+  const healthSigRef = useRef("");
+  const healthAtRef = useRef(0);
+  useEffect(() => {
+    if (!isNative() || !uid || !driverLoaded || isViewOnly()) return undefined;
+    let alive = true;
+    const check = () => withKpLoc(async (plugin) => {
+      const st = await plugin.status();
+      if (!alive || !st) return;
+      const h = { running: !!st.running, fg: !!st.locationGranted, bg: !!st.backgroundGranted, battery: !!st.ignoringBattery };
+      const sig = JSON.stringify(h);
+      if (sig === healthSigRef.current && Date.now() - healthAtRef.current < 6 * 3600000) return;
+      healthSigRef.current = sig; healthAtRef.current = Date.now();
+      await updateDoc(doc(db, "drivers", uid), { locHealth: h, locHealthAt: serverTimestamp() });
+    }).catch(() => { healthSigRef.current = ""; });
+    const first = setTimeout(check, 4000); // 위치 전송을 켠 뒤에 확인
+    const t = setInterval(check, 5 * 60000);
+    const onVis = () => { if (document.visibilityState === "visible") setTimeout(check, 1500); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { alive = false; clearTimeout(first); clearInterval(t); document.removeEventListener("visibilitychange", onVis); };
+  }, [uid, driverLoaded, startTry]);
+
   const resetTotalDist = useCallback(() => {
     totalDistRef.current = 0;
     distInitializedRef.current = true;
@@ -1138,6 +1220,7 @@ export default function DriverHome() {
   const [viewAs] = useState(() => readViewAs());
   const [uid, setUid] = useState(null);
   const [driver, setDriver] = useState(null);
+  const [locFixClosedAt, setLocFixClosedAt] = useState(0); // 📍 2026-11-26 위치 설정 창을 닫은 요청 시각(저장이 늦어도 다시 안 뜨게)
   const [activeTab, setActiveTab] = useState("home");
   const inbox = useDriverInbox(uid); // ▤ 지급명세서·과태료 서류
   // 🦺 2026-11-24 안전교육 — 안 받은 교육 수(홈 카드 · 출근 때 하루 한 번 안내) · 관리자 보기(viewAs)에서는 안내 안 함
@@ -2830,6 +2913,14 @@ export default function DriverHome() {
                 </div>
               </div>
             );
+          })()}
+
+          {/* 📍 2026-11-26 관리자 [위치 설정 요청] → 설정 확인 창 */}
+          {!viewAs && uid && driver && (() => {
+            const ms = (t) => (t?.toMillis ? t.toMillis() : t?.seconds ? t.seconds * 1000 : 0);
+            const ask = ms(driver.locFixAskAt);
+            if (!ask || ms(driver.locFixDoneAt) >= ask || locFixClosedAt >= ask) return null;
+            return <LocFixSheet uid={uid} askBy={driver.locFixAskBy} onDone={() => setLocFixClosedAt(ask)} />;
           })()}
 
           {/* GPS 경고 — 네이티브 앱은 "항상 허용"까지 가야 배차 추적이 끊기지 않으므로

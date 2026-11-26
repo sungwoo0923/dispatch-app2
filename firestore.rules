@@ -370,6 +370,12 @@ service cloud.firestore {
       allow create, update: if isTotalMasterUser() || (isOfficeStaff() && co == myCoAny() && request.resource.data.get('companyName', '') == co
         && (isHrStaff() || isCompanyAdmin(myCo())));
     }
+    // 📍 2026-11-26 위치 설정 요청 기록 — 같은 운송사 직원이 남기고(서버가 기사 휴대폰에 푸시) 본다. 기사는 자기 것만 읽는다
+    match /driverLocFix/{id} {
+      allow read: if (isOfficeStaff() && coMatch(resource.data)) || (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid);
+      allow create: if isOfficeStaff() && coCreate() && request.resource.data.get('driverId', '') is string && request.resource.data.get('driverId', '') != '';
+      allow delete: if isOfficeStaff() && coMatch(resource.data);
+    }
     match /driverContracts/{id} {
       allow read: if (isOfficeStaff() && coMatch(resource.data)) || (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid);
       allow create: if isOfficeStaff() && coCreate() && request.resource.data.get('status', '') == 'sent';

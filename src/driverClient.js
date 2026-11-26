@@ -53,3 +53,42 @@ export function ClientTag({ d, size = 11.5 }) {
     style: { flexShrink: 0, padding: "0 6px", borderRadius: 6, border: `1px solid ${col}`, color: col, fontSize: size, fontWeight: 900, lineHeight: "17px", whiteSpace: "nowrap" },
   }, c.label);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 📍 2026-11-26 위치 상태 · 위치 설정 요청
+//  · 기사앱이 휴대폰 설정을 읽어 drivers/{uid}.locHealth 에 남긴다(src/driver/DriverHome.jsx):
+//    { running: 위치 전송 켜짐, fg: 위치 권한, bg: '항상 허용', battery: 배터리 제한 없음 } · locHealthAt
+//  · 관리자가 [위치 설정 요청]을 누르면 driverLocFix 기록(→ 서버가 기사 휴대폰에 푸시) + drivers 문서 locFixAskAt · locFixAskBy
+//    기사앱은 locFixAskAt 이 locFixDoneAt 보다 새로우면 "위치 설정을 확인해 주세요" 창을 띄운다
+const tsOf = (t) => (t?.toMillis ? t.toMillis() : t?.seconds ? t.seconds * 1000 : typeof t === "number" ? t : 0);
+
+export function locHealthOf(raw = {}) {
+  const r = raw || {};
+  const h = r.locHealth;
+  if (!h || r.clientType === "web") return null;
+  const off = ["퇴근", "휴차", "최종퇴근"].includes(r.status) || r.mainStatus === "휴차";
+  const probs = [];
+  if (h.fg === false) probs.push("위치 권한이 꺼져 있어요");
+  else if (h.bg === false) probs.push("위치 권한이 '항상 허용'이 아니에요");
+  if (h.battery === false) probs.push("배터리 절전이 걸려 있어요");
+  if (h.running === false && !off) probs.push("위치 전송이 꺼져 있어요");
+  return { ok: probs.length === 0, probs, at: tsOf(r.locHealthAt) };
+}
+
+// 위치 설정 요청 상태 — null | { key: "sent" | "done", at }
+export function locFixStateOf(raw = {}) {
+  const ask = tsOf(raw?.locFixAskAt);
+  if (!ask) return null;
+  const done = tsOf(raw?.locFixDoneAt);
+  return done >= ask ? { key: "done", at: done } : { key: "sent", at: ask };
+}
+
+// [위치 설정 필요] 빨간 배지 — 문제가 없거나 아직 기록이 없으면 안 보인다
+export function LocHealthTag({ d, size = 11.5 }) {
+  const h = locHealthOf(d?.raw || d);
+  if (!h || h.ok) return null;
+  return React.createElement("span", {
+    title: h.probs.join("\n"),
+    style: { flexShrink: 0, padding: "0 6px", borderRadius: 6, border: "1px solid #EF4444", color: "#EF4444", fontSize: size, fontWeight: 900, lineHeight: "17px", whiteSpace: "nowrap" },
+  }, "위치 설정 필요");
+}

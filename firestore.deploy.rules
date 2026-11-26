@@ -277,6 +277,11 @@ service cloud.firestore {
       allow create, update: if isTotalMasterUser() || (isOfficeStaff() && co == myCoAny() && request.resource.data.get('companyName', '') == co
         && (isHrStaff() || isCompanyAdmin(myCo())));
     }
+    match /driverLocFix/{id} {
+      allow read: if (isOfficeStaff() && coMatch(resource.data)) || (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid);
+      allow create: if isOfficeStaff() && coCreate() && request.resource.data.get('driverId', '') is string && request.resource.data.get('driverId', '') != '';
+      allow delete: if isOfficeStaff() && coMatch(resource.data);
+    }
     match /driverContracts/{id} {
       allow read: if (isOfficeStaff() && coMatch(resource.data)) || (isSignedIn() && resource.data.get('driverId', '') == request.auth.uid);
       allow create: if isOfficeStaff() && coCreate() && request.resource.data.get('status', '') == 'sent';
