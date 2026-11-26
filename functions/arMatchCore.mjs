@@ -10,7 +10,7 @@
 //  · 거래처 찾기: ① 회사가 배운 입금자명 별칭 ② 이름 포함 비교 ③ 둘 다 없으면 금액이 딱 맞는 달이 하나뿐일 때만 제안
 //  · 자동 반영은 "이름(또는 별칭)이 맞고 딱 맞게 정산되는 입금"만 — 나머지는 사람이 확인
 
-import { monthOf, isSettledIn } from "./arCore.mjs"; // 🗓 2026-11-25 청구월 = 마감월 기준(정산 홈 · 월 마감과 같은 식)
+import { monthOf, isSettledIn, settledDateIn, paidForOpenOf, isDepositedOrder, vatIncluded } from "./arCore.mjs"; // 🗓 2026-11-25 청구월 = 마감월 기준(정산 홈 · 월 마감과 같은 식)
 
 export const AR_MATCH_TOL = 10;
 const AR_DEAD = ["취소", "배차취소", "오더취소", "취소됨"];
@@ -24,9 +24,16 @@ export const normalizeForMatch = (s = "") =>
     .toLowerCase();
 
 // 입금 기록 → "거래처|월" 합계
+//  🛠 2026-11-27 m.dated(같은 키 → [{ d: 입금일, amt }])도 붙인다 — 정산완료 오더 몫으로 쓴 입금을 새 오더에 다시 쓰지 않게(buildArMonths)
 export function arPaidMapOf(payments) {
-  const m = new Map();
-  (payments || []).forEach((p) => { if (!p) return; const k = `${p.client}|${p.yyyymm}`; m.set(k, (m.get(k) || 0) + (Number(p.amount) || 0)); });
+  const m = new Map(); const dated = new Map();
+  (payments || []).forEach((p) => {
+    if (!p) return; const k = `${p.client}|${p.yyyymm}`; const amt = Number(p.amount) || 0;
+    m.set(k, (m.get(k) || 0) + amt);
+    const d = String(p.depositDate || "") || (typeof p.at === "number" ? new Date(p.at + 9 * 3600e3).toISOString().slice(0, 10) : p.at?.seconds ? new Date(p.at.seconds * 1000 + 9 * 3600e3).toISOString().slice(0, 10) : "");
+    (dated.get(k) || dated.set(k, []).get(k)).push({ d, amt });
+  });
+  m.dated = dated;
   return m;
 }
 
@@ -41,17 +48,23 @@ export function buildArMonths({ orders = [], paidMap = new Map(), inRange = () =
     if (r.source === "transport_transmit" || AR_DEAD.includes(String(r.상태 || "").trim())) return;
     // 🗓 2026-11-25 청구월 = 마감월(없으면 상차일 달) — 예) 상차 10/31 · 마감월 2026-11 → 11월분으로 맞춘다
     const ym = monthOf(r);
-    if (!ym || !inRange(ym) || isSettledIn(r, ym)) return;
+    if (!ym || !inRange(ym)) return;
     if (!book.has(r.거래처명)) book.set(r.거래처명, new Map());
     const mm = book.get(r.거래처명);
-    if (!mm.has(ym)) mm.set(ym, { k: `${r.거래처명}|${ym}`, client: r.거래처명, yyyymm: ym, rows: [], total: 0 });
-    const e = mm.get(ym); e.rows.push(r); e.total += toInt(r.청구운임);
+    if (!mm.has(ym)) mm.set(ym, { k: `${r.거래처명}|${ym}`, client: r.거래처명, yyyymm: ym, rows: [], total: 0, _settled: 0, _sLast: "" });
+    const e = mm.get(ym);
+    // 🛠 2026-11-27 정산완료 오더는 청구에서 빼되 금액 · 정산일은 기억(그 몫으로 쓴 입금을 새 오더에 다시 쓰지 않게)
+    if (isSettledIn(r, ym)) { e._settled += toInt(r.청구운임); const sd = settledDateIn(r, ym); if (sd > e._sLast) e._sLast = sd; return; }
+    // 🛠 2026-11-27 입금완료 오더(입금 확인에서 받은 잡은 콜)는 이미 받은 돈 — 청구(total)에는 안 넣고, 다 채우면 같이 정산완료(rows)
+    e.rows.push(r); if (!isDepositedOrder(r)) e.total += toInt(r.청구운임);
   });
+  const dated = paidMap instanceof Map ? paidMap.dated : null;
   const months = new Map();
-  book.forEach((mm, client) => months.set(client, [...mm.values()].filter((e) => e.total > 0).map((e) => {
+  book.forEach((mm, client) => months.set(client, [...mm.values()].filter((e) => e.total > 0).map(({ _settled, _sLast, ...e }) => {
     const paid = (paidMap instanceof Map ? paidMap.get(e.k) : paidMap?.[e.k]) || 0;
-    const due = Math.round(e.total * 1.1);
-    return { ...e, paid, due, remain: Math.max(0, due - paid) };
+    const due = vatIncluded(e.total);
+    const forOpen = paidForOpenOf({ paid, settledSupply: _settled, settledLast: _sLast, dated: dated?.get(e.k) || null });
+    return { ...e, paid, due, remain: Math.max(0, due - forOpen) };
   }).sort((a, b) => a.yyyymm.localeCompare(b.yyyymm))));
   return months;
 }

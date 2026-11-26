@@ -5,6 +5,7 @@
 //  · 세부 공개 대상(팀) — 내부용 공지를 특정 팀에만 보이게.
 //  · ⭐ 2026-11-03 받는 사람(직원) 지정 — targetUids의 직원에게만 보이게. "지정 N명"은 본문 안에서만(목록에는 안 보임).
 //  · 🔒 2026-11-03 지정 공지 비공개 — 팀·직원 지정 공지는 지정된 사람 · 작성자 · 최고관리자만(회사 관리자도 지정 안 됐으면 안 보임)
+import { imgSrcAttr, safeHref, escHtml } from "./htmlSafe"; // 🔒 2026-11-27 공문 이미지 주소 검사
 import React from "react";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { RichHtml } from "./richText";
@@ -143,12 +144,12 @@ export default function NoticeBoard({ notices = [], me, canWrite, isViewer, onEd
           {/* ⭐ 2026-10-31 공문(인사발령 등) 이미지 — 작게 보이던 문제: 본문 폭 가득(최대 920px), 누르면 원본 크기로 */}
           {cur.image && (
             <div className="space-y-2">
-              <button type="button" onClick={() => { const w = window.open(""); if (w) { w.document.write(`<title>${String(cur.title || "공문").replace(/</g, "")}</title><body style="margin:0;background:#0F1A30;display:flex;justify-content:center"><img src="${cur.image}" style="max-width:100%;height:auto"/></body>`); w.document.close(); } }}
+              <button type="button" onClick={() => { const w = window.open(""); if (w) { w.document.write(`<title>${escHtml(cur.title || "공문")}</title><body style="margin:0;background:#0F1A30;display:flex;justify-content:center"><img src="${imgSrcAttr(cur.image)}" style="max-width:100%;height:auto"/></body>`); w.document.close(); } }}
                 className="block w-full max-w-[920px] rounded-2xl overflow-hidden border border-[#E3E8F0] shadow-[0_10px_30px_rgba(15,26,48,0.08)] hover:shadow-[0_14px_36px_rgba(15,26,48,0.14)] transition">
                 <img src={cur.image} alt="" className="w-full h-auto block" />
               </button>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <a href={cur.image} download={`${String(cur.title || "공문").replace(/[\\/:*?"<>|]/g, "")}.jpg`} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"><span aria-hidden>⬇</span><span>이미지 저장</span></a>
+                <a href={safeHref(cur.image)} download={`${String(cur.title || "공문").replace(/[\\/:*?"<>|]/g, "")}.jpg`} className="h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B] inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"><span aria-hidden>⬇</span><span>이미지 저장</span></a>
                 <span className="text-[12px] text-[#9AA9C3] whitespace-nowrap">이미지를 누르면 원본 크기로 볼 수 있습니다</span>
               </div>
             </div>

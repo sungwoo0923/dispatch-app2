@@ -528,7 +528,7 @@ export function HrSettingsPanel({ company, canManage }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <BookCard en="DEPARTMENTS" title={`부서 ${hr.teams.length}개`}>
           <div className="flex flex-wrap gap-1.5">{hr.teams.map((v) => <Pill key={v} v={v} base={TEAM_OPTIONS.includes(v)} onX={TEAM_OPTIONS.includes(v) ? null : () => removeTeam(v)} />)}</div>
-          {canManage && <div className="mt-3 flex gap-2"><input value={t} onChange={(e) => setT(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTeam()} className={inp} placeholder="새 부서 (예: 영업팀, 물류센터)" /><button type="button" onClick={addTeam} className="h-11 px-4 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap">+ 추가</button></div>}
+          {canManage && <div className="mt-3 flex gap-2"><input value={t} onChange={(e) => setT(e.target.value)} onKeyDown={(e) => !(e.nativeEvent?.isComposing || e.keyCode === 229) && e.key === "Enter" && addTeam()} className={inp} placeholder="새 부서 (예: 영업팀, 물류센터)" /><button type="button" onClick={addTeam} className="h-11 px-4 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap">+ 추가</button></div>}
           <div className="mt-2 text-[11.5px] text-[#9AA9C3]">「기본」 표시가 있는 부서·직책은 뺄 수 없고, 직접 추가한 것만 ✕로 뺄 수 있습니다</div>
         </BookCard>
         <BookCard en="POSITIONS" title="직책">
@@ -536,7 +536,7 @@ export function HrSettingsPanel({ company, canManage }) {
           <div className="flex flex-wrap gap-1.5 mb-3">{hr.exec.map((v) => <Pill key={v} v={v} base={EXEC_POSITION_OPTIONS.includes(v)} onX={EXEC_POSITION_OPTIONS.includes(v) ? null : () => removePos(v)} />)}</div>
           <div className="text-[12px] font-black text-[#4B6CB7] mb-1.5">일반 직책</div>
           <div className="flex flex-wrap gap-1.5">{hr.normal.map((v) => <Pill key={v} v={v} base={POSITION_OPTIONS.includes(v)} onX={POSITION_OPTIONS.includes(v) ? null : () => removePos(v)} />)}</div>
-          {canManage && <div className="mt-3 flex gap-2 items-center"><input value={p} onChange={(e) => setP(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addPos()} className={inp} placeholder="새 직책 (예: 실장, 소장)" /><Chip on={pe} onClick={() => setPe(!pe)}>임원 직책</Chip><button type="button" onClick={addPos} className="h-11 px-4 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap">+ 추가</button></div>}
+          {canManage && <div className="mt-3 flex gap-2 items-center"><input value={p} onChange={(e) => setP(e.target.value)} onKeyDown={(e) => !(e.nativeEvent?.isComposing || e.keyCode === 229) && e.key === "Enter" && addPos()} className={inp} placeholder="새 직책 (예: 실장, 소장)" /><Chip on={pe} onClick={() => setPe(!pe)}>임원 직책</Chip><button type="button" onClick={addPos} className="h-11 px-4 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black whitespace-nowrap">+ 추가</button></div>}
         </BookCard>
       </div>
       <BookCard en="ROLES" title="권한(프로그램 사용 범위)">

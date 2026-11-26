@@ -296,7 +296,7 @@ function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allo
               <div style={{ display: "flex", gap: 6 }}>
                 <input value={newName} autoFocus placeholder={`새 ${ttl} (${meta.eg || "이름"})`} maxLength={30} autoComplete="off"
                   onChange={(e) => { setNewName(e.target.value); setErr(""); }}
-                  onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") { e.preventDefault(); doAdd(newName); } if (e.key === "Escape") { e.preventDefault(); setAdding(false); setTimeout(() => searchRef.current?.focus(), 0); } }}
+                  onKeyDown={(e) => { e.stopPropagation(); if (e.nativeEvent?.isComposing || e.keyCode === 229) return; if (e.key === "Enter") { e.preventDefault(); doAdd(newName); } if (e.key === "Escape") { e.preventDefault(); setAdding(false); setTimeout(() => searchRef.current?.focus(), 0); } }}
                   style={{ flex: 1, minWidth: 0, height: pos.sheet ? 44 : 36, borderRadius: 10, border: "1.5px solid #1B2B4B", padding: "0 10px", fontSize: pos.sheet ? 16 : 14.5, fontWeight: 800, color: "#0F1A30", outline: "none", boxSizing: "border-box" }} />
                 <button type="button" disabled={busy} data-opt-addsubmit="1" onClick={() => doAdd(newName)}
                   style={{ height: pos.sheet ? 44 : 36, padding: "0 14px", borderRadius: 10, border: "none", background: "#1B2B4B", color: "#fff", fontSize: 14, fontWeight: 900, cursor: "pointer", opacity: busy ? 0.6 : 1 }}>{busy ? "추가 중" : "추가"}</button>

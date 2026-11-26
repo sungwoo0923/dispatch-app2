@@ -5,7 +5,8 @@
 //    퇴직소득 원천징수 · 원천징수영수증 · 퇴직연금 — 법정 기한(D-day)과 처리 상태를 사람별로
 import { loadAcctPayments, useArPayments } from "./acctPayments"; // 🔗 2026-11-25 거래처정산 입금 기록도 미수금에
 import { useUserProfiles } from "./userProfilesLive"; // 🔒 2026-11-07 인사 프로필은 우리 회사 직원 한 건씩
-import { receivablesOf, vatEstimate, paidWithSettled, monthOf } from "./arAging"; // ⭐ 2026-11-07 미수금(부가세 포함) · 예상 부가세 공용 계산
+import { receivablesOf, vatEstimate, paidWithSettled, monthOf } from "./arAging";
+import { isArCanceled } from "../functions/arCore.mjs"; // 🛠 2026-11-27 회계용 오더에서 취소 오더 빼기(미수금과 같은 기준) // ⭐ 2026-11-07 미수금(부가세 포함) · 예상 부가세 공용 계산
 import { upsertAutoEntry } from "./ledgerAuto";
 import React from "react";
 import { collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, where, serverTimestamp } from "firebase/firestore";
@@ -47,7 +48,8 @@ export function useYearOrders(company, fixedRows = []) {
     Promise.all(["orders", "dispatch"].map((col) => getDocs(query(collection(db, col), where("상차일", ">=", `${y - 1}-12-01`), where("상차일", "<=", `${y}-12-31`)))))
       .then((snaps) => {
         const seen = new Set(); const out = [];
-        snaps.forEach((sn) => sn.docs.forEach((d) => { const r = d.data() || {}; if (seen.has(d.id)) return; seen.add(d.id); if ((r.companyName || DEFAULT_COMPANY) === company && r.배차상태 === "배차완료" && r.source !== "transport_transmit" && monthOf(r).slice(0, 4) === String(y)) out.push({ _id: d.id, ...r }); }));
+        // 🛠 2026-11-27 배차완료여도 상태가 취소인 오더(isArCanceled)는 뺀다 — 예전엔 매출 · 매입 · 예상 부가세에 들어가 미수금과 숫자가 달랐다
+        snaps.forEach((sn) => sn.docs.forEach((d) => { const r = d.data() || {}; if (seen.has(d.id)) return; seen.add(d.id); if ((r.companyName || DEFAULT_COMPANY) === company && r.배차상태 === "배차완료" && r.source !== "transport_transmit" && !isArCanceled(r) && monthOf(r).slice(0, 4) === String(y)) out.push({ _id: d.id, ...r }); }));
         yearCache.set(key, out);
         if (alive) setRows(out);
       })

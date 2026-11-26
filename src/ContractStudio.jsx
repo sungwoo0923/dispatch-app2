@@ -447,7 +447,7 @@ export default function ContractStudio({ company = "", me = {} }) {
                 </div>
                 {tplName !== null && (
                   <div className="flex gap-1.5 mt-2">
-                    <input autoFocus value={tplName} onChange={(e) => setTplName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") saveTpl(); }} placeholder="예: 배차팀 정규직 기본" className={inp} />
+                    <input autoFocus value={tplName} onChange={(e) => setTplName(e.target.value)} onKeyDown={(e) => { if (e.nativeEvent?.isComposing || e.keyCode === 229) return; if (e.key === "Enter") saveTpl(); }} placeholder="예: 배차팀 정규직 기본" className={inp} />
                     <button type="button" onClick={saveTpl} className="h-11 px-4 shrink-0 rounded-xl bg-[#2D4C82] text-white text-[13.5px] font-black">저장</button>
                   </div>
                 )}

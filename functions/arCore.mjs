@@ -45,6 +45,21 @@ export function settledDateIn(r, ym) {
 const billDateOf = (r, ym) => { const d = dateOf(r); return d && d.slice(0, 7) < ym ? `${ym}-01` : d; };
 
 export const vatIncluded = (supply) => Math.round((Number(supply) || 0) * (1 + AR_VAT_RATE));
+// 🛠 2026-11-27 그 달 입금 기록 중 "아직 정산완료가 아닌 오더"에 쓸 몫
+//  입금 기록(arPayments)은 거래처 × 청구월 합계라, 그 달을 정산완료한 뒤 오더가 더 붙으면 예전 입금이 새 오더까지 덮어
+//  미수금이 사라졌다(예: 11월 110만 입금 → 정산완료 → 11월 오더 30만 추가 → 미수 0).
+//  정산완료 오더의 마지막 정산일까지 들어온 입금은 먼저 그 정산완료 오더 몫(청구액 한도)으로 보고, 남은 것만 새 오더에 쓴다.
+//  날짜를 모르면(정산일 · 입금일 없음) 예전처럼 입금 전부를 아직 안 끝난 오더에 쓴다.
+//  dated: [{ d: 입금일, amt }] · settledLast: 정산완료 오더의 마지막 정산일
+export const ymd8 = (v) => String(v ?? "").replace(/\D/g, "").slice(0, 8);
+export function paidForOpenOf({ paid = 0, settledSupply = 0, settledLast = "", dated = null } = {}) {
+  const last = ymd8(settledLast);
+  if (!(paid > 0) || !(settledSupply > 0) || last.length < 8 || !Array.isArray(dated)) return Math.max(0, paid || 0);
+  const before = dated.reduce((a, x) => { const d = ymd8(x?.d); return a + (d.length >= 8 && d <= last ? Number(x?.amt) || 0 : 0); }, 0);
+  return Math.max(0, paid - Math.min(vatIncluded(settledSupply), before));
+}
+// 입금완료(입금 확인에서 받은 잡은 콜 등) 오더 — 오더에 받은 기록이 있어 그 달 남은 청구에서 뺀다
+export const isDepositedOrder = (r) => String(r?.입금상태 || "") === "입금완료";
 export const arClientOf = (r) => String(r?.거래처명 || "").trim() || String(r?.상차지명 || "").trim() || "미분류";
 export const isArCanceled = (r) => r?.배차상태 === "배차취소" || CANCELED.includes(String(r?.상태 || "").trim()) || String(r?.지급방식 || "").trim() === "취소";
 // 미수금에 넣는 오더 — 배차완료 · 취소 아님 · 운송사 전송 사본 아님(고정거래처 줄은 fixedArRows로 배차완료가 붙어 들어온다)
@@ -125,30 +140,33 @@ export function settlePaidByClient({ orders = [], arPayments = [], year, before 
     const k = r._id ? `${r.__col || ""}/${r._id}` : null;
     if (k) { if (seen.has(k)) return; seen.add(k); }
     const c = arClientOf(r); const s = toWon(r.청구운임);
-    const e = (byCM[c] = byCM[c] || {}); const m = (e[ym] = e[ym] || { supply: 0, settled: 0, deposited: 0, open: 0, last: "" });
+    const e = (byCM[c] = byCM[c] || {}); const m = (e[ym] = e[ym] || { supply: 0, settled: 0, deposited: 0, openSupply: 0, open: 0, last: "", sLast: "" });
     m.supply += s;
     // before: 이 날짜 전에 처리된 것만(예전 회계 입금과 겹치는지 볼 때 — arPaidByClient)
     const sd = settledDateIn(r, ym); const dd = String(r.입금일 || "");
-    if (isSettledIn(r, ym) && !(before && sd && sd >= before)) { m.settled += s; if (sd > m.last) m.last = sd; }
+    if (isSettledIn(r, ym) && !(before && sd && sd >= before)) { m.settled += s; if (sd > m.last) m.last = sd; if (sd > m.sLast) m.sLast = sd; }
     else if (r.입금상태 === "입금완료" && !(before && dd && dd >= before)) { m.deposited += vatIncluded(s); if (dd > m.last) m.last = dd; }
-    else if (s) m.open += 1;
+    else if (s) { m.open += 1; m.openSupply += s; }
   });
   const dep = {};
   (arPayments || []).forEach((p) => {
     if (!p || (skip && skip(p))) return;
     const c = String(p.client || "").trim(); const ym = String(p.yyyymm || "").slice(0, 7);
     if (!c || !ym || (yr && ym.slice(0, 4) !== yr)) return;
-    const x = ((dep[c] = dep[c] || {})[ym] = dep[c]?.[ym] || { amt: 0, last: "" });
+    const x = ((dep[c] = dep[c] || {})[ym] = dep[c]?.[ym] || { amt: 0, last: "", dated: [] });
     x.amt += Number(p.amount) || 0; const dd = String(p.depositDate || ""); if (dd > x.last) x.last = dd;
+    x.dated.push({ d: arPayDateOf(p), amt: Number(p.amount) || 0 });
   });
   const out = {};
   Object.entries(byCM).forEach(([c, months]) => {
     const lines = [];
     Object.entries(months).sort(([a], [b]) => a.localeCompare(b)).forEach(([ym, m]) => {
       const due = vatIncluded(m.supply); if (due <= 0) return;
-      const p = dep[c]?.[ym] || { amt: 0, last: "" };
+      const p = dep[c]?.[ym] || { amt: 0, last: "", dated: [] };
       const full = m.open === 0;
-      const amt = full ? due : Math.min(due, Math.max(0, vatIncluded(m.settled) + m.deposited + p.amt));
+      // 🛠 2026-11-27 받은 돈 = 그 달 청구 − 아직 안 끝난 오더의 남은 돈(정산완료 오더 몫으로 쓴 입금은 두 번 세지 않음)
+      const remain = Math.max(0, vatIncluded(m.openSupply) - paidForOpenOf({ paid: p.amt, settledSupply: m.settled, settledLast: m.sLast, dated: p.dated }));
+      const amt = full ? due : Math.max(0, due - remain);
       if (amt <= 0) return;
       lines.push({ d: [m.last, p.last].sort().pop() || "", ym, amt, full });
     });
@@ -199,6 +217,18 @@ export const AR_FULL_TOL = 10;
 export const autoSettleTag = (depositKey) => `acct:${depositKey}`;
 const arMonthRowsOf = (orders, client, ym) => (orders || []).filter((r) => r && r._id && !r._fixed && isArOrder(r) && String(r.거래처명 || "") === client && monthOf(r) === ym);
 const paidInOf = (payments, client, ym) => (payments || []).reduce((a, p) => a + (p && String(p.client || "") === client && String(p.yyyymm || "").slice(0, 7) === ym ? Number(p.amount) || 0 : 0), 0);
+const datedInOf = (payments, client, ym) => (payments || []).filter((p) => p && String(p.client || "") === client && String(p.yyyymm || "").slice(0, 7) === ym).map((p) => ({ d: arPayDateOf(p), amt: Number(p.amount) || 0 }));
+// 🛠 2026-11-27 그 달 남은 미수 — open: 아직 안 끝난 오더(정산완료로 바꿀 대상) · 정산완료 오더 몫 입금은 빼고 · 입금완료 오더는 받은 것
+function monthLeftOf(allRows, open, payments, client, ym) {
+  const openSet = new Set(open);
+  const settled = allRows.filter((r) => !openSet.has(r));
+  const settledSupply = settled.reduce((a, r) => a + toWon(r.청구운임), 0);
+  const settledLast = settled.map((r) => settledDateIn(r, ym)).filter(Boolean).sort().pop() || "";
+  const supply = open.filter((r) => !isDepositedOrder(r)).reduce((a, r) => a + toWon(r.청구운임), 0);
+  const due = vatIncluded(supply); const paid = paidInOf(payments, client, ym);
+  const left = Math.max(0, due - paidForOpenOf({ paid, settledSupply, settledLast, dated: datedInOf(payments, client, ym) }));
+  return { supply, due, paid, left };
+}
 // 결과 [{ ym, due, paid, rows }] — rows = 정산완료로 바꿀 오더(아직 정산완료가 아닌 것만 → 두 번 눌러도 다시 쓰지 않음)
 //  only: 이 달들만 본다(이번 입금이 들어간 달)
 export function fullyPaidMonths({ orders = [], payments = [], client, only = null, tol = AR_FULL_TOL } = {}) {
@@ -207,11 +237,12 @@ export function fullyPaidMonths({ orders = [], payments = [], client, only = nul
   (orders || []).forEach((r) => { if (r && String(r.거래처명 || "") === client) { const ym = monthOf(r); if (ym && (!pick || pick.has(ym))) yms.add(ym); } });
   const out = [];
   [...yms].sort().forEach((ym) => {
-    const rows = arMonthRowsOf(orders, client, ym).filter((r) => !isSettledIn(r, ym));
-    const supply = rows.reduce((a, r) => a + toWon(r.청구운임), 0);
-    if (!rows.length || supply <= 0) return;
-    const due = vatIncluded(supply); const paid = paidInOf(payments, client, ym);
-    if (paid + tol >= due) out.push({ ym, due, paid, rows });
+    const all = arMonthRowsOf(orders, client, ym);
+    const rows = all.filter((r) => !isSettledIn(r, ym));
+    if (!rows.length) return;
+    const { supply, due, paid, left } = monthLeftOf(all, rows, payments, client, ym);
+    if (supply <= 0) return;
+    if (left <= tol) out.push({ ym, due, paid, rows });
   });
   return out;
 }
@@ -226,9 +257,10 @@ export function autoSettleRevertsOf({ orders = [], payments = [], client, marks 
   const out = [];
   [...new Set(live.map((m) => m.ym))].forEach((ym) => {
     const mine = live.filter((m) => m.ym === ym); const ids = new Set(mine.map((m) => m.id));
-    const open = arMonthRowsOf(orders, client, ym).filter((r) => ids.has(r._id) || !isSettledIn(r, ym));
-    const due = vatIncluded(open.reduce((a, r) => a + toWon(r.청구운임), 0));
-    if (due > 0 && paidInOf(payments, client, ym) + tol >= due) return; // 다른 입금으로 여전히 다 받음 → 그대로
+    const all = arMonthRowsOf(orders, client, ym);
+    const open = all.filter((r) => ids.has(r._id) || !isSettledIn(r, ym));
+    const { due, left } = monthLeftOf(all, open, payments, client, ym);
+    if (due > 0 && left <= tol) return; // 다른 입금으로 여전히 다 받음 → 그대로
     out.push(...mine);
   });
   return out;

@@ -1476,6 +1476,15 @@ exports.notifyChatMessage = functions.firestore
 ================================================================== */
 const PUSH_SEND_KEY = "kpflow-push-2026";
 
+// 🔒 2026-11-26 보안 — 응답에 내부 오류 문구(라이브러리 메시지 · 경로 · 키 이름 등)를 그대로 내보내지 않는다.
+//  우리가 일부러 던진 안내(status 400~499)는 그대로, 그 밖의 오류는 로그에만 남기고 화면에는 일반 문구
+const PUB_ERR_MSG = "서버에서 처리하지 못했어요. 잠시 뒤 다시 해 주세요.";
+function pubErrMsg(e) {
+  const st = Number(e?.status) || 0;
+  if (st >= 400 && st < 500 && e?.message) return String(e.message);
+  console.error("[서버 오류]", e?.message || e);
+  return PUB_ERR_MSG;
+}
 exports.sendPushNotification = functions.https.onRequest(async (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -1505,7 +1514,7 @@ exports.sendPushNotification = functions.https.onRequest(async (req, res) => {
       tokens = await getAllTokens();
     }
   } catch (e) {
-    res.status(500).send(`대상 조회 실패: ${e?.message || e}`);
+    res.status(500).send(`대상 조회 실패: ${pubErrMsg(e)}`);
     return;
   }
   if (!tokens.length) { res.status(200).send("보낼 대상이 없습니다(등록된 푸시 토큰 없음)."); return; }
@@ -1522,7 +1531,7 @@ exports.sendPushNotification = functions.https.onRequest(async (req, res) => {
         : `발송 실패 (대상 ${tokens.length}명) — 로그를 확인해주세요.`
     );
   } catch (e) {
-    res.status(500).send(`오류: ${e?.message || e}`);
+    res.status(500).send(`오류: ${pubErrMsg(e)}`);
   }
 });
 
@@ -2203,7 +2212,7 @@ exports.lookupCompanyCode = functions.https.onRequest(async (req, res) => {
     res.status(200).json({ results: Array.from(seen.values()).slice(0, 50) });
   } catch (e) {
     console.error("회사코드 찾기 오류:", e);
-    res.status(500).json({ results: [], error: e?.message || String(e) });
+    res.status(500).json({ results: [], error: pubErrMsg(e) });
   }
 });
 /* ==================================================================
@@ -2521,7 +2530,7 @@ function makeCompanyResetHandler(budgetMs) {
       if (bulkCompany) await setBulkMode(bulkCompany, false);
       const fatal = !!(e.status && e.status >= 400 && e.status < 500);
       if (prog) await prog.fail(e?.message || String(e), fatal, step); // (초기화 실행은 resetJob.execute가 직접 적는다)
-      res.status(e.status || 500).json({ error: e?.message || String(e), step: e?.step || step });
+      res.status(e.status || 500).json({ error: pubErrMsg(e), step: e?.step || step });
     } finally {
       if (lease) await lease.release();
     }
@@ -2621,7 +2630,7 @@ async function companyResetPurgeHandler(req, res) {
     res.json({ ...r, partial: !r.done });
   } catch (e) {
     console.error("초기화 보관함 영구 삭제 오류:", e);
-    res.status(e.status || 500).json({ error: e?.message || String(e) });
+    res.status(e.status || 500).json({ error: pubErrMsg(e) });
   }
 }
 exports.companyResetPurge = onRequestV2(
@@ -2737,7 +2746,7 @@ exports.contractNoticeRun = functions.runWith({ secrets: PLATFORM_MAIL_SECRETS }
     if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = {}; } }
     res.json(await runContractExpiryNotices({ dryRun: body?.dryRun !== false, onlyCompany: String(body?.company || ""), by: me.email || me.uid }));
   } catch (e) {
-    res.status(e.status || 500).json({ error: e?.message || String(e) });
+    res.status(e.status || 500).json({ error: pubErrMsg(e) });
   }
 });
 
@@ -3031,7 +3040,7 @@ exports.restoreDeleted = functions.runWith({ timeoutSeconds: 300, memory: "512MB
     res.status(400).json({ error: "알 수 없는 요청입니다." });
   } catch (e) {
     console.error("휴지통 오류:", e);
-    res.status(e.status || 500).json({ error: e.message || "오류" });
+    res.status(e.status || 500).json({ error: pubErrMsg(e) });
   }
 });
 
@@ -3607,7 +3616,7 @@ exports.pushDiag = functions.runWith({ timeoutSeconds: 60, memory: "256MB" }).ht
     }
     res.status(400).json({ error: "알 수 없는 요청입니다." });
   } catch (e) {
-    res.status(e.status || 500).json({ error: e?.message || String(e) });
+    res.status(e.status || 500).json({ error: pubErrMsg(e) });
   }
 });
 // 🗓 2026-11-03 개인 일정 알림 — 직원이 개인 일정에 "휴대폰 푸시 알림 받기"를 체크하면 remindAt(ms)에 본인에게만 푸시
@@ -3946,7 +3955,7 @@ exports.automation = functions.runWith({ timeoutSeconds: 300, memory: "512MB" })
     res.status(400).json({ error: "알 수 없는 요청입니다." });
   } catch (e) {
     console.error("자동화 오류:", e);
-    res.status(e.status || 500).json({ error: e.message || "오류" });
+    res.status(e.status || 500).json({ error: pubErrMsg(e) });
   }
 });
 
@@ -3999,7 +4008,7 @@ exports.sheetOcr = functions.runWith({ timeoutSeconds: 120, memory: "512MB" }).h
     res.json({ words });
   } catch (e) {
     console.error("그림 글자 읽기 오류:", e?.response?.data || e);
-    res.status(e.status || 500).json({ error: e?.message || String(e) });
+    res.status(e.status || 500).json({ error: pubErrMsg(e) });
   }
 });
 
@@ -4239,7 +4248,7 @@ exports.routeBoardSheet = functions.runWith({ timeoutSeconds: 540, memory: "512M
     }
     res.status(400).json({ error: "알 수 없는 요청입니다." });
   } catch (e) {
-    res.status(e.status || 500).json({ error: e?.message || String(e), ...(e.code === "office-file" || e.code === "convert-denied" ? { code: e.code, help: e.help || "" } : {}) });
+    res.status(e.status || 500).json({ error: pubErrMsg(e), ...(e.code === "office-file" || e.code === "convert-denied" ? { code: e.code, help: e.help || "" } : {}) });
   }
 });
 
@@ -4386,7 +4395,7 @@ exports.sheetImport = functions
       res.status(400).json({ error: "알 수 없는 요청입니다." });
     } catch (e) {
       console.error("구글시트 가져오기 오류:", e);
-      res.status(e.status || 500).json({ error: e?.message || String(e) });
+      res.status(e.status || 500).json({ error: pubErrMsg(e) });
     }
   });
 
@@ -4647,7 +4656,7 @@ exports.platformStats = functions.runWith({ timeoutSeconds: 300, memory: "1GB" }
     res.json({ ok: true, ...(await computePlatformStats()) });
   } catch (e) {
     console.error("플랫폼 관제 집계 실패:", e);
-    res.status(e.status || 500).json({ error: e?.message || String(e) });
+    res.status(e.status || 500).json({ error: pubErrMsg(e) });
   }
 });
 
@@ -4781,7 +4790,7 @@ exports.platformUsageNow = functions.runWith({ timeoutSeconds: 120, memory: "256
     res.json(await collectPlatformUsage({ days }));
   } catch (e) {
     console.error("[서버 사용량] 수집 실패:", e);
-    res.status(e.status || 500).json({ error: e?.message || String(e) });
+    res.status(e.status || 500).json({ error: pubErrMsg(e) });
   }
 });
 

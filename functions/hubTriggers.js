@@ -85,7 +85,10 @@ function register({ functions, db, FieldValue, sendPushAndCleanup, userTokens, g
   out.hubVaDeposit = functions.https.onRequest(async (req, res) => {
     const secret = process.env.HUB_VA_WEBHOOK_SECRET || "";
     if (!secret) { res.status(503).json({ ok: false, reason: "not_configured" }); return; }
-    if (req.method !== "POST" || String(req.get("x-hub-secret") || "") !== secret) { res.status(403).json({ ok: false }); return; }
+    // 🔒 2026-11-26 비밀값 비교는 걸리는 시간으로 내용을 짐작하지 못하게(timingSafeEqual · 길이가 달라도 같은 계산)
+    const crypto = require("crypto");
+    const h = (v) => crypto.createHash("sha256").update(String(v)).digest();
+    if (req.method !== "POST" || !crypto.timingSafeEqual(h(req.get("x-hub-secret") || ""), h(secret))) { res.status(403).json({ ok: false }); return; }
     try {
       const b = req.body || {};
       const r = await _hubWallet.vaDeposit(db, FieldValue, { account: b.account, amount: b.amount, depositor: b.depositor, txId: b.txId });

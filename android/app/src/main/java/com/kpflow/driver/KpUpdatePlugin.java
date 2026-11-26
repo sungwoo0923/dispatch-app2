@@ -69,7 +69,8 @@ public class KpUpdatePlugin extends Plugin {
     @PluginMethod
     public void download(final PluginCall call) {
         final String url = call.getString("url");
-        if (url == null || !url.startsWith("https://")) { call.reject("BAD_URL"); return; }
+        // 🔒 2026-11-27 처음 받는 주소는 우리 GitHub 릴리즈만(웹 화면이 다른 APK 를 받게 시키지 못하게 · 그 뒤 넘겨주는 주소는 GitHub 다운로드 서버)
+        if (url == null || !url.startsWith("https://github.com/sungwoo0923/dispatch-app2/releases/")) { call.reject("BAD_URL"); return; }
         new Thread(() -> {
             HttpURLConnection c = null;
             File tmp = new File(apkFile().getParentFile(), "download.part");

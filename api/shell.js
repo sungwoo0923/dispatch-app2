@@ -72,6 +72,15 @@ async function getHtml(base, file, headers = {}) {
   htmlCache.set(key, html);
   return html;
 }
+// 우리 배포라고 확인된 주소 — 최고관리자만 쓰는 publicRelease(current · builds)에 적힌 주소와 이 배포 자신의 주소
+async function isTrustedHost(h) {
+  const own = [process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL].map((x) => String(x || "").toLowerCase());
+  if (own.includes(h)) return true;
+  const pin = await readPin().catch(() => null);
+  if (pin?.url && pin.url.toLowerCase() === h) return true;
+  const urls = await readBuildUrls().catch(() => []);
+  return urls.some((u) => String(u).toLowerCase() === h);
+}
 const wantsLatest = (req) => /(?:^|;\s*)kp_ch=latest(?:;|$)/.test(String(req.headers?.cookie || ""));
 
 export default async function handler(req, res) {
@@ -83,7 +92,7 @@ export default async function handler(req, res) {
     if (q.check) {
       const pin = await readPin(0);
       const out = { pin, ok: null, status: 0, bypass: !!process.env.VERCEL_AUTOMATION_BYPASS_SECRET };
-      if (pin) { try { const r = await withTimeout(`https://${pin.url}/index.html`, { headers: bypass() }); out.status = r.status; out.ok = r.ok && (r.headers.get("content-type") || "").includes("text/html"); } catch (e) { out.ok = false; out.error = String(e?.message || e); } }
+      if (pin) { try { const r = await withTimeout(`https://${pin.url}/index.html`, { headers: bypass() }); out.status = r.status; out.ok = r.ok && (r.headers.get("content-type") || "").includes("text/html"); } catch (e) { console.error("[shell check]", e?.message || e); out.ok = false; out.error = "배포한 버전 화면을 가져오지 못했습니다"; } }
       res.setHeader("Cache-Control", "no-store"); res.status(200).json(out); return;
     }
     // 🚦 2026-11-14 관리센터 › 예전 버전 고정 — Vercel 배포 주소의 버전 정보(version.json)를 대신 읽어 준다(화면에서 직접 읽으면 막힘)
@@ -92,12 +101,15 @@ export default async function handler(req, res) {
       res.setHeader("Cache-Control", "no-store");
       if (!HOST_OK.test(h)) { res.status(200).json({ ok: false, error: "Vercel 배포 주소(….vercel.app)만 넣을 수 있습니다" }); return; }
       try {
-        const r = await withTimeout(`https://${h}/version.json?t=${Date.now()}`, { headers: bypass() }, 5000);
+        // 🔒 2026-11-26 보안 — 보호 우회 비밀값(bypass)은 우리 배포라고 확인된 주소(배포한 버전 · 최근에 올린 화면 목록 · 지금 배포)에만 붙인다.
+        //  *.vercel.app 은 누구나 만들 수 있어, 아무 주소에나 붙이면 남의 서버로 비밀값이 새어 나간다(목록에 없는 주소는 비밀값 없이 읽는다)
+        const trusted = await isTrustedHost(h);
+        const r = await withTimeout(`https://${h}/version.json?t=${Date.now()}`, { headers: trusted ? bypass() : {} }, 5000);
         const ct = r.headers.get("content-type") || "";
         if (!r.ok || !ct.includes("json")) { res.status(200).json({ ok: false, status: r.status, error: r.status === 401 || r.status === 403 ? "Vercel이 이 주소를 로그인으로 막고 있습니다(아래 동작 점검 안내 참고)" : "이 주소에서 버전 정보를 찾지 못했습니다" }); return; }
         const j = await r.json();
         res.status(200).json({ ok: !!j.build, version: String(j.version || ""), build: String(j.build || ""), url: h, driver: String(j.driver || "") });
-      } catch (e) { res.status(200).json({ ok: false, error: String(e?.message || e) }); }
+      } catch (e) { console.error("[shell probe]", e?.message || e); res.status(200).json({ ok: false, error: "이 주소에서 버전 정보를 읽지 못했습니다" }); }
       return;
     }
     // 예전 버전 화면의 파일(/assets/*) — 최신 배포에 없는 것만 여기로 온다

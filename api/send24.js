@@ -1,5 +1,6 @@
 // 📡 24시콜 오더 등록 — 매핑·암호화 후 _call24.js를 통해(중계 서버 또는 직접) 전송
 import { call24, explain24, outboundIp, RELAY_URL } from "./_call24.js";
+import { requireStaff } from "./_auth.js";
 
 const TMAP_KEY = "rmzwkLwH9N4i9ayxDj9GR6l8hyFDaEk52ZQs4yer";
 
@@ -96,6 +97,9 @@ async function mapTo24Order(row) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method Not Allowed" });
+  // 🔒 2026-11-26 보안 — 로그인한 운송사 직원만(조회전용 제외). 예전엔 주소만 알면 누구나 회사 24시콜 계정으로 오더를 올릴 수 있었다
+  const me = await requireStaff(req, res, { allowViewer: false });
+  if (!me) return;
   try {
     const row = req.body || {};
     const payload = await mapTo24Order(row);
@@ -107,6 +111,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: false, resultCode: r.code, resultMsg: r.message || "실패", hint: explain24(r.code, r.message), via: r.via, _serverIp: serverIp });
   } catch (err) {
     console.error("send24 오류:", err.message);
-    return res.status(500).json({ success: false, error: err.message, resultMsg: err.message, hint: explain24(-97, err.message) });
+    // 내부 오류 문구는 로그에만 — 화면에는 일반 안내
+    return res.status(500).json({ success: false, error: "SEND_FAILED", resultMsg: "24시콜 전송 중 오류가 났어요. 잠시 뒤 다시 해 주세요", hint: explain24(-97, "") });
   }
 }

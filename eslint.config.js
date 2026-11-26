@@ -15,7 +15,7 @@ export default defineConfig([
     ],
     languageOptions: {
       ecmaVersion: 2020,
-      globals: globals.browser,
+      globals: { ...globals.browser, __BUILD_TIME__: "readonly", __APP_VERSION__: "readonly" }, // vite.config define 값
       parserOptions: {
         ecmaVersion: 'latest',
         ecmaFeatures: { jsx: true },

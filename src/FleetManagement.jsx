@@ -2044,7 +2044,8 @@ function buildFleetUploadUrl(order) {
     try { Object.assign(order, patch); } catch { /* 무시 */ }
     updateDoc(doc(db, order.__col || "orders", order._id), patch).catch(() => {});
   }
-  const code = String(token || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8) || Math.random().toString(36).slice(2, 10);
+  // 🔒 2026-11-27 짧은 링크 코드를 8자 → 20자로(예전 8자는 맞혀 보기로 남의 업로드 링크를 찾을 수 있었다). 이미 보낸 8자 링크는 그대로 열린다.
+  const code = String(token || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 20) || Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, "0")).join("");
   setDoc(doc(db, "shortLinks", code), { id: order._id, t: token, createdAt: serverTimestamp() }, { merge: true }).catch(() => {});
   return `${window.location.origin}/u/${code}`;
 }

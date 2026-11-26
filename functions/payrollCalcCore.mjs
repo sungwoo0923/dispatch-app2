@@ -235,7 +235,9 @@ export function calcPayslip(emp = {}, month = {}, rates = presetFor(2026)) {
     const rate = own ? num(emp[rateKey]) : num(rateDefault);
     return { amount: floorTo(calcFn(rate), unit), mode: own ? "rate" : "auto", rate };
   };
-  const npR = ins("np", emp.npExempt, (r) => npBase * r / 100, "npRate", R.npEmp);
+  // 🛠 2026-11-27 이번 달 과세급여가 0원이고 신고 기준소득월액도 없으면 국민연금은 0원 — 예전엔 하한(40만원)으로 올려 19,000원이 빠져 실지급이 마이너스였다
+  const npNone = taxable <= 0 && !num(emp.npBase);
+  const npR = ins("np", emp.npExempt, (r) => (npNone ? 0 : npBase * r / 100), "npRate", R.npEmp);
   const hiR = ins("hi", emp.hiExempt, (r) => hiBase * r / 100, "hiRate", R.hiEmp);
   const ltcR = ins("ltc", emp.hiExempt, (r) => hiR.amount * r / 100, "ltcRate", R.ltcRatio);
   const eiR = ins("ei", emp.eiExempt, (r) => taxable * r / 100, "eiRate", R.eiEmp);
@@ -251,7 +253,7 @@ export function calcPayslip(emp = {}, month = {}, rates = presetFor(2026)) {
   const localTax = hasLocalOv ? floorTo(num(month.localTaxOverride), 10) : floorTo(incomeTax * num(R.localTaxPct) / 100, 10);
   const taxMode = hasOv ? "manual" : hasFixed ? "fixed" : "auto";
   const deductions = [
-    { key: "np", label: "국민연금", amount: np, calc: insCalc(npR, `기준소득월액 ${wonFmt(npBase)}원 × `) },
+    { key: "np", label: "국민연금", amount: np, calc: npNone && (npR.mode === "auto" || npR.mode === "rate") ? "이번 달 과세급여 0원 — 국민연금 없음" : insCalc(npR, `기준소득월액 ${wonFmt(npBase)}원 × `) },
     { key: "hi", label: "건강보험", amount: hi, calc: insCalc(hiR, `보수월액 ${wonFmt(hiBase)}원 × `) },
     { key: "ltc", label: "장기요양보험", amount: ltc, calc: insCalc(ltcR, "건강보험료 × ") },
     { key: "ei", label: "고용보험", amount: ei, calc: insCalc(eiR, `과세급여 ${wonFmt(taxable)}원 × `) },
@@ -263,7 +265,7 @@ export function calcPayslip(emp = {}, month = {}, rates = presetFor(2026)) {
   const net = gross - totalDeduct;
 
   // 회사 부담(인건비 참고)
-  const erNp = emp.npExempt ? 0 : floorTo(npBase * num(R.npEr) / 100, unit);
+  const erNp = emp.npExempt || npNone ? 0 : floorTo(npBase * num(R.npEr) / 100, unit);
   const erHi = emp.hiExempt ? 0 : floorTo(hiBase * num(R.hiEr) / 100, unit);
   const erLtc = emp.hiExempt ? 0 : floorTo(erHi * num(R.ltcRatio) / 100, unit);
   const erEi = emp.eiExempt ? 0 : floorTo(taxable * (num(R.eiEr) + num(R.eiErExtra)) / 100, unit);

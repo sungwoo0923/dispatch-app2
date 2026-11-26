@@ -85,7 +85,24 @@ function makePrivateFarePin({ db, FieldValue, Timestamp, HttpsError }) {
     if (p) throw err("invalid-argument", p);
     const w = await who(context);
     if (!w.granted) throw err("permission-denied", "비공개 운임을 쓸 수 있게 지정된 계정이 아니에요");
-    if (w.pin?.hash && !(await checkPin(data?.currentPin, w.pin))) throw err("permission-denied", "지금 비밀번호가 맞지 않아요");
+    // 🔒 2026-11-26 보안 — 바꾸기의 "지금 비밀번호" 확인도 열기(verify)와 같은 틀린 횟수 · 잠금을 쓴다(예전엔 여기서 무한히 맞춰 볼 수 있었다)
+    if (w.pin?.hash) {
+      const now = Date.now();
+      const a = w.attempt;
+      const lockedUntil = Number(a.lockUntil) || 0;
+      if (lockedUntil > now) throw err("resource-exhausted", `여러 번 틀려 잠겼어요. ${Math.ceil((lockedUntil - now) / 60000)}분 뒤 다시 해 주세요`);
+      if (!(await checkPin(data?.currentPin, w.pin))) {
+        const fails = (Number(a.fails) || 0) + 1;
+        if (fails >= MAX_FAILS) {
+          const locks = Number(a.locks) || 0;
+          const lockUntil = now + lockMinutesFor(locks) * 60000;
+          await attemptRef(w.uid).set({ uid: w.uid, fails: 0, locks: locks + 1, lockUntil, lastFailAt: now });
+          throw err("resource-exhausted", `지금 비밀번호가 맞지 않아요. 여러 번 틀려 ${lockMinutesFor(locks)}분 동안 잠겼어요`);
+        }
+        await attemptRef(w.uid).set({ uid: w.uid, fails, locks: Number(a.locks) || 0, lockUntil: 0, lastFailAt: now }, { merge: true });
+        throw err("permission-denied", `지금 비밀번호가 맞지 않아요 (${MAX_FAILS - fails}번 남았어요)`);
+      }
+    }
     const h = await hashPin(data.newPin);
     await Promise.all([
       pinRef(w.uid).set({ uid: w.uid, companyName: w.company, ...h, updatedAt: FieldValue.serverTimestamp(), updatedAtMs: Date.now() }),

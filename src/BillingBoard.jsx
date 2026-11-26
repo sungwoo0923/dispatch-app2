@@ -3,6 +3,7 @@
 //  · 매출채권(AR): 화주사 정산(거래처 × 정산월) + 개별 오더 · 매입채무(AP): 용차 기사 운임(계산서 미수취 → 계산서 수취 → 지급완료)
 //  · 🎨 2026-11-17 리디자인 2 — 남색 관제판(헤더 · 회수율 링 · 단계 막대) + 3열 레인(단계별 표). 숫자는 기본 글씨체(tabular-nums)
 //  · 줄을 누르면 그 일을 하는 화면(거래명세서 · 입금 확인 · 용차지급관리)으로 간다. 계산은 settleCore.billingBoard(scripts/billingBoard.test.mjs)
+import { csvCell } from "./htmlSafe";
 import React from "react";
 import { billingBoard, won, short, kstYm, monthOf as monthOfRow, stmtRowsNow, stmtDrift, stmtDriftText, stmtDriftHint } from "./settleCore"; // ⚠ 2026-11-25 명세서 작성 뒤 금액 변경 배지
 import { routeGroupOf, rgLabel, RG_NONE } from "./routeGroups";
@@ -77,7 +78,7 @@ export default function BillingBoard({ orders = [], stageOf, months = [], onGo, 
     return onGo?.(depositOn ? "입금확인" : "거래처정산", depositOn ? undefined : { tab: "unsettledMonth" });
   };
   const exportCsv = () => {
-    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const esc = csvCell; // 🔒 2026-11-27 CSV 수식 실행 막기
     const lab = Object.fromEntries(M.lanes.map(([k, l]) => [k, l]));
     const head = ["단계", "구분", "정산월", "일자", mode === "ap" ? "기사" : "거래처", "건수", "공급가액", "부가세 포함", "경과일", "비고"];
     const lines = [head.join(",")].concat(shown.map((x) => [lab[x.status], mode === "ap" ? KIND.ap[0] : KIND[x.kind][0], x.ym, x.date, x.client, x.count, x.amount, x.vat, ageOf(x) ?? "", x.note].map(esc).join(",")));

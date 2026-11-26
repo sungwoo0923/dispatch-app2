@@ -26,4 +26,12 @@ const ag = Object.fromEntries(S.aging.map((a) => [a.client, a]));
 assert.equal(ag.가나상사.over, 300000); assert.equal(ag.가나상사.d30, 200000); assert.ok(!ag.마바 && !ag.다라물산);
 const L = clientLedger(orders, "가나상사", stageFinder(stmts));
 assert.deepEqual(L.map((x) => [x.ym, x.sale, x.balance]), [["2026-07", 300000, 300000], ["2026-11", 200000, 500000]]);
+// 🛠 2026-11-27 정산완료(미수금관리 · 은행 자동 매칭)한 달은 명세서가 마감 전이어도 받은 것으로 본다
+{
+  const sx = [{ _id: "s1", 거래처명: "사아", 배차상태: "배차완료", 상차일: "2026-11-03", 청구운임: "1000000", 정산상태: { "2026-11": "정산완료" }, 정산일: { "2026-11": "2026-11-25" } }];
+  const X = summarizeSettle(sx, "2026-11", () => "계산서발행", "2026-11-26");
+  const d = X.steps.find((s) => s.key === "deposit");
+  assert.deepEqual([d.left, d.amount, X.aging.length], [0, 0, 0], "정산완료한 달은 미입금 · 미수 경과에서 빠진다");
+  assert.equal(clientLedger(sx, "사아", () => "계산서발행")[0].balance, 0);
+}
 console.log("settleHome OK");

@@ -27,7 +27,8 @@ export default async function handler(req, res) {
     res.status(200);
     await pipeline(Readable.fromWeb(r.body), res); // 다 보낼 때까지 기다린다(먼저 끝내면 중간에 끊긴다)
   } catch (e) {
-    if (!res.headersSent) res.status(502).json({ error: String(e?.message || e) });
+    console.error("[ap-file]", e?.message || e);
+    if (!res.headersSent) res.status(502).json({ error: "download failed" });
     else res.end();
   }
 }

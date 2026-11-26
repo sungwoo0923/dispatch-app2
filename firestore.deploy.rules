@@ -1147,7 +1147,8 @@ service cloud.firestore {
             && request.resource.data.status == '서명완료'
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'signedAt', 'signer', 'signatureImg', 'signerAgent', 'signedHash', 'consent'])
             && request.resource.data.signatureImg is string
-            && request.resource.data.signatureImg.size() < 600000);
+            && request.resource.data.signatureImg.size() < 600000
+            && request.resource.data.signatureImg.matches('^data:image/png;base64,[A-Za-z0-9+/=]+$'));
     }
     match /platformNotices/{id} {
       allow read: if isTotalMasterUser()
@@ -1309,7 +1310,8 @@ service cloud.firestore {
     }
     function userSensitiveKeys() {
       return ['role', 'approved', 'isMaster', 'permissions', 'subAdmin', 'subAdminPrevRole', 'companyName', 'linkedTransportCompany', 'companyCode', 'businessNumber', 'workScope', 'legacyTeam',
-        'team', 'position', 'employmentStatus', 'mfaOpt', 'bioKeys', 'carNo', '차량번호'];
+        'team', 'position', 'employmentStatus', 'mfaOpt', 'bioKeys', 'carNo', '차량번호',
+        'phone', 'pcVerifyPhone', '전화번호', '연락처', 'mfaKind'];
     }
     function otherUserWriteOk() {
       let r = myRole();
@@ -1756,6 +1758,7 @@ service cloud.firestore {
       allow list: if false;
       allow create: if request.resource.data.viewers is list && request.resource.data.viewers.size() > 0 && request.resource.data.viewers.size() <= 10
         && request.resource.data.get('companyName', '') != ''
+        && co == string(request.resource.data.get('companyName', '')).trim().replace('/', '_')
         && (isTotalMasterUser()
           || (isApproved() && !isShipperUser() && request.resource.data.get('companyName', '') == myCo() && (myIsMaster() || myRole() == 'admin')));
       allow update: if isSignedIn() && request.auth.uid in resource.data.get('viewers', [])
@@ -2397,7 +2400,8 @@ service cloud.firestore {
         'bizStatusCache', 'bizStatusUsage', 'weatherUsage', 'weatherCache', 'companyPopbill', 'integrationConfig',
         'popbillSettings', 'bankSyncState', 'bankAliases', 'bankTxns', 'alimtalkLogs', 'smsLogs', 'messageUsage',
         'companyMailSettings', 'companyMailSecrets', 'companyMailUsage',
-        'bidQuotes', 'bidCostProfiles'];
+        'bidQuotes', 'bidCostProfiles',
+        'voiceGlossary', 'driverLocFix'];
     }
   }
 }

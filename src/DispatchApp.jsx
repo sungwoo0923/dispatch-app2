@@ -1,4 +1,5 @@
 // ===================== DispatchApp.jsx (PART 1/8) — START =====================
+import { escHtml, imgSrcAttr, csvCell } from "./htmlSafe"; // 🔒 2026-11-27 인쇄 창 · CSV 에 넣는 글자 처리
 import MultiCompanySwitch, { useMultiCompany, CompanyToneDot, GuestHrNotice } from "./MultiCompanySwitch"; // 🏢 2026-11-24 여러 회사 오가기
 import { getMultiState } from "./multiCompany";
 import { useCompanyFleetGrades } from "./fleetGrades"; // 🚛 지입차 구분(지입·직영·임대 + 회사 전용 분양)
@@ -63,7 +64,7 @@ import { buildSimpleList } from "./copySimple"; // 📋 2026-11-13 기사복사 
 import { getSimpleTpl } from "./copyTemplates";
 import OrderStaffFields from "./OrderStaffFields"; // 👤 2026-11-12 배차담당자 · 차량배정자 바꾸기
 import { askCopyDates } from "./CopyCountDialog"; // ⭐ 2026-11-06 복사 등록 — 몇 건·건별 날짜
-import { dispatchStatusOf, payTypeStatusPatch } from "./dispatchStatus"; // 🚚 2026-11-07 배차상태 공용 규칙
+import { dispatchStatusOf, payTypeStatusPatch, isPayCancel } from "./dispatchStatus"; // 🚚 2026-11-07 배차상태 공용 규칙
 import { requestRouteSheetPush } from "./routeSheetPush"; // 💰 2026-11-06 고정노선 오더 고치면 바로 시트에
 import { makeClientMatcher } from "./clientMatch"; // ⭐ 2026-11-03 거래처 검색: 정확히 같은 이름이 있으면 그것만
 import ClientMergeModal from "./ClientMergeModal"; // ⭐ 2026-11-17 거래처 합치기(거래처관리 › 기본거래처)
@@ -74,8 +75,8 @@ import JSZip from "jszip";
 import { BizCheck, bizGuardMain, ClientBizBulkButton, PopbillMemberCard } from "./publicDataMain"; // 🏛 2026-11-07 국세청 사업자 상태 · 팝빌 연동회원(🌦 날씨는 2026-11-18부터 대시보드에만 — 배차 목록에서 뺐다)
 import { BankAccountsCard, BankReviewQueue, SmsSettingsCard, AlimtalkSettingsCard } from "./PopbillAuto"; // 🏦 2026-11-08 은행 입금 자동 매칭
 // 💬 2026-11-08 사장님 요청 — 카카오 알림톡은 PC·모바일 화면에서 모두 뺐다(새 오더는 알림톡:false → 서버 트리거가 보내지 않는다)
-import { buildArMonths as buildArMonthsCore, allocArDeposit as allocArDepositCore, allocKindOf, matchDeposits } from "./arMatch"; // 💰 2026-11-08 입금 매칭 공용 식(서버 계좌조회와 같은 파일)
-import { sendOrderTo24Proxy as sendOrderTo24 } from "../api/24CallProxy";
+import { buildArMonths as buildArMonthsCore, allocArDeposit as allocArDepositCore, allocKindOf, matchDeposits, arPaidMapOf } from "./arMatch"; // 💰 2026-11-08 입금 매칭 공용 식(서버 계좌조회와 같은 파일)
+import { sendOrderTo24Proxy as sendOrderTo24, call24Headers } from "../api/24CallProxy"; // 🔒 2026-11-27 24시콜 API 는 로그인 토큰을 붙여야 열린다
 import CustomDatePicker, { KOREAN_HOLIDAYS, shortHolidayLabel } from "./CustomDatePicker"; // ⭐ 2026-11-04 특수운임 제거 — specialDemandInfo·weatherUtil 사용 안 함
 import { DateTimeSelect } from "./kpTimePick"; // ⏱ 2026-11-04 예약발송 날짜·시간 — 프로그램 달력 + 시간 드롭다운
 // ⭐ 2026-11-02 속도 — 관리자메뉴(엑셀 가져오기 등 포함)는 열 때 받는다. 직원 명부 구독은 usersLive 하나를 공유
@@ -176,6 +177,29 @@ import { subscribeOrderSync, deleteOrderWithLog, logOrderDeletion, OrderHistoryC
 const StaffPerformance = lazyView(() => import("./StaffPerformance"));
 import { RotationPicker, RotationBadge, expandRotation, rotationNotice, withRotationMemo, bulkRotationOf, expandBulkRotation, ROTATION_MAX } from "./rotation";
 import { generateMonthlyReportPPT, PPT_TEMPLATES } from "./pptReportUtil";
+
+// 🛠 2026-11-27 오더 복사/수정 패널 — 저장할 때 "패널을 연 뒤 내가 바꾼 칸"만 보낸다.
+//  (예전엔 연 순간의 오더 전체를 다시 써서, 그사이 다른 직원이 넣은 차량 · 기사 수락 · 지급완료 등이 예전 값으로 되돌아갔다)
+function copyPanelDiff(payload, orig) {
+  if (!orig) return payload;
+  const out = {};
+  for (const k of Object.keys(payload)) {
+    if (k === "updatedAt") { out[k] = payload[k]; continue; }
+    let same;
+    try { same = JSON.stringify(payload[k]) === JSON.stringify(orig[k]); } catch { same = false; }
+    if (!same) out[k] = payload[k];
+  }
+  return out;
+}
+function useCopyPanelOrig(copyPanelOpen, copyTarget) {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!copyPanelOpen || !copyTarget?._id) { ref.current = null; return; }
+    if (ref.current?._id !== copyTarget._id) ref.current = copyTarget;
+  }, [copyPanelOpen, copyTarget]);
+  return ref;
+}
+
 
 // ⭐ html2canvas로 캡처한 캔버스를 A4 PDF로 저장할 때 공용으로 쓰는 다중 페이지
 // 헬퍼 — 예전엔 캡처한 이미지 전체를 페이지마다 음수 좌표로 반복해서 그대로
@@ -306,7 +330,7 @@ function Call24DiagBar() {
   const [busy, setBusy] = React.useState(false);
   const run = async () => {
     setBusy(true);
-    try { const r = await fetch("/api/call24-diag"); setD(await r.json()); } catch (e) { setD({ test: { ok: false, message: e.message } }); } finally { setBusy(false); }
+    try { const r = await fetch("/api/call24-diag", { headers: await call24Headers() }); setD(await r.json()); } catch (e) { setD({ test: { ok: false, message: e.message } }); } finally { setBusy(false); }
   };
   const ip = d ? (d.mode === "relay" ? d.relay?.ip : d.vercelIp) : "";
   return (
@@ -3251,6 +3275,7 @@ import {
   where,
   deleteField,
   FieldValue, Timestamp, GeoPoint, DocumentReference, Bytes,
+  arrayUnion,
 } from "firebase/firestore";
 // 🛠 2026-11-13 Firestore 전용 값(serverTimestamp() · deleteField() · Timestamp 등) 판별 — 예전엔 클래스 "이름"으로 가렸는데,
 //  배포본은 코드 압축으로 이름이 바뀌어 못 알아봤다 → 서버 시각이 { _methodName: "serverTimestamp" }라는 쓰레기 값으로 저장됐다(배차한 시간이 안 나오던 원인).
@@ -3382,7 +3407,8 @@ function issueUploadUrl(r) {
   return buildShortUploadUrl(r._id, token);
 }
 function buildShortUploadUrl(orderId, token) {
-  const code = String(token || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8) || Math.random().toString(36).slice(2, 10);
+  // 🔒 2026-11-27 짧은 링크 코드를 8자 → 20자로(예전 8자는 맞혀 보기로 남의 업로드 링크를 찾을 수 있었다). 이미 보낸 8자 링크는 그대로 열린다.
+  const code = String(token || "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 20) || Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, "0")).join("");
   setDoc(doc(db, "shortLinks", code), { id: orderId, t: token, createdAt: serverTimestamp() }, { merge: true }).catch(() => {});
   return `${window.location.origin}/u/${code}`;
 }
@@ -5628,6 +5654,7 @@ const patchDispatch = async (_id, patch, knownPrev) => {
         if (
           isFleetGrade(driver.등급) && !!driver.uid && // ⭐ 2026-11-02 기사앱을 아직 안 쓰는(가입 안 한) 지입 기사는 승인대기 없이 바로 배차완료
           "차량번호" in patch &&
+          !isPayCancel("지급방식" in patch ? patch.지급방식 : prev?.지급방식) && // 🛠 2026-11-27 지급방식 "취소" 오더는 기사 알림 · 승인대기 없음
           normalizePlate(patch.차량번호) !== normalizePlate(prev?.차량번호)
         ) {
           patch.기사확인상태 = "대기";
@@ -5652,6 +5679,9 @@ const patchDispatch = async (_id, patch, knownPrev) => {
       }
     }
   }
+
+  // 🛠 2026-11-27 지급방식이 "취소"인 오더는 차량을 지우거나 넣어도 배차취소 그대로(목록에 다시 나오지 않게 · 서버 보정과 같게)
+  if (patch.배차상태 !== undefined && isPayCancel("지급방식" in patch ? patch.지급방식 : prev?.지급방식)) patch.배차상태 = "배차취소";
 
   // ⭐ "배차한시간" — 배차중 → 배차완료로 처음 넘어가는 그 순간의 시각만 기록한다
   // (등록일 hover 툴팁에서 사용). 이미 배차완료 상태였던 오더를 다른 정보만 고쳐
@@ -5783,7 +5813,8 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     ...cleanPatch,
     ...(String(prev.작성자 || "").trim() ? {} : { 작성자: prev.createdByEmail || auth.currentUser?.email || "" }),
     최종수정자: auth.currentUser?.email || "",
-    history: [...historyArr, ...histories],
+    // 🛠 2026-11-27 이력은 새 줄만 덧붙인다(예전엔 들고 있던 배열 전체를 다시 써서, 동시에 고치면 남의 이력이 지워졌다)
+    ...(histories.length ? { history: arrayUnion(...histories) } : (Array.isArray(prev.history) ? {} : { history: historyArr })),
   };
   if (!cleanPatch.__system) {
     _updatePayload.updatedAt = Date.now();
@@ -6046,11 +6077,10 @@ const approveEditRequestPC = async (order) => {
       histories.push(makeDispatchHistory({ userEmail: auth.currentUser?.email, field: key, before, after }));
     }
   });
-  const historyArr = Array.isArray(order.history) ? order.history : [];
   const ref = doc(db, order.__col || "orders", order._id || order.id);
   await updateDoc(ref, {
     ...pending,
-    history: [...historyArr, ...histories],
+    ...(histories.length ? { history: arrayUnion(...histories) } : {}), // 🛠 2026-11-27 새 이력만 덧붙이기
     최종수정출처: "shipper",
     최종수정일시: serverTimestamp(),
     수정요청: false,
@@ -15576,7 +15606,7 @@ const fetchCall24Meta = async (body) => {
   try {
     const res = await fetch("/api/call24-meta", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: await call24Headers({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
     });
     const json = await res.json();
@@ -26921,6 +26951,7 @@ const [editStopType, setEditStopType] = React.useState("pickup");
   const [dailyCloseIssueCtx, setDailyCloseIssueCtx] = React.useState(null);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
 const [copyTarget, setCopyTarget] = React.useState(null);
+const copyOrigRef = useCopyPanelOrig(copyPanelOpen, copyTarget); // 🛠 2026-11-27 바뀐 칸만 저장
 const [copyPanelWorkDatesOpen, setCopyPanelWorkDatesOpen] = React.useState(false); // 오더복사수정패널 근무일(묶음) 수정 팝업
 // 오더복사수정패널 스타일 — A: 우측 슬라이드(기본), B: 화면 중앙 드래그 가능 팝업.
 // 마지막 선택을 localStorage에 저장해 유지한다 (실시간배차현황/배차현황 공용).
@@ -30061,7 +30092,7 @@ flashRow(savedId);
     // 🛠 2026-11-24 저장이 거절되면(최종마감 · 날짜 역순 등 — patchDispatch가 false) 화면에 먼저 반영해 둔 값을 원래대로 되돌린다
     //  (예전엔 "수정 완료"로 보이다가 새로고침하면 예전 값으로 돌아갔다)
     const _before = rows.find((r) => r._id === savedId);
-    Promise.resolve(patchDispatch(savedId, payload)).then((ok) => {
+    Promise.resolve(patchDispatch(savedId, copyPanelDiff(payload, copyOrigRef.current))).then((ok) => {
       if (ok === false && _before) { setRows((prev) => prev.map((r) => (r._id === savedId ? _before : r))); sflowToast("저장되지 않았어요. 안내 창을 확인해 주세요.", "error"); }
     }).catch(console.error);
     if (payload.상차지명) savePlaceSmart(payload.상차지명, payload.상차지주소||"", payload.상차지담당자||"", payload.상차지담당자번호||"", null, undefined,
@@ -35336,6 +35367,7 @@ const [appliedEndDate, setAppliedEndDate] = React.useState("");
   const [editMode, setEditMode] = React.useState(false);
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
 const [copyTarget, setCopyTarget] = React.useState(null);
+const copyOrigRef = useCopyPanelOrig(copyPanelOpen, copyTarget); // 🛠 2026-11-27 바뀐 칸만 저장
 const [copyPanelWorkDatesOpen, setCopyPanelWorkDatesOpen] = React.useState(false); // 오더복사수정패널 근무일(묶음) 수정 팝업
 // 오더복사수정패널 스타일 — A: 우측 슬라이드(기본), B: 화면 중앙 드래그 가능 팝업.
 // 마지막 선택을 localStorage에 저장해 유지한다 (실시간배차현황/배차현황 공용).
@@ -45428,7 +45460,7 @@ function Settlement({ dispatchData, fixedRows = [], clients = [], places = [], i
     const headers = ["상차일","거래처명","상차지명","하차지명","청구운임","기사운임","수수료",...(fareRS.on ? ["운임구분"] : []),"배차상태"];
                 const csvRows = [headers.join(",")];
                 monthRows.forEach((r) => {
-                  csvRows.push(headers.map((h) => `"${String(r[h] || "").replace(/"/g, '""')}"`).join(","));
+                  csvRows.push(headers.map((h) => csvCell(r[h] || "")).join(","));
                 });
                 const blob = new Blob(["\uFEFF" + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
                 const url = URL.createObjectURL(blob);
@@ -46802,6 +46834,7 @@ function UnassignedStatus({ dispatchData, setDispatchData = () => {}, drivers = 
   const [copyPanelOpen, setCopyPanelOpen] = React.useState(false);
   const [copyContactChooser, setCopyContactChooser] = React.useState(null); // 오더복사/수정 패널 담당자 선택
   const [copyTarget, setCopyTarget] = React.useState(null);
+  const copyOrigRef = useCopyPanelOrig(copyPanelOpen, copyTarget); // 🛠 2026-11-27 바뀐 칸만 저장
   // 🖱 2026-11-16 미배차현황 오른쪽 클릭 메뉴(수정 · 삭제)
   const [unCtx, setUnCtx] = React.useState(null); // { x, y, row }
   React.useEffect(() => {
@@ -47294,7 +47327,7 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
                       const finalCargo = copyTarget.화물내용 || ""; // 🛠 2026-11-24 입력할 때마다 맞춰 둔 화물내용을 그대로(예전엔 수량+단위로 다시 만들어, 숫자로 시작하지 않는 화물내용이 저장할 때 지워졌다)
                       const payload = { ...copyTarget, 화물내용: finalCargo, 독차: dokchaOn(copyTarget), updatedAt: Date.now() }; // ⭐ 2026-11-06 독차 기본
                       ["화물수량", "화물타입", "톤수값", "톤수타입"].forEach((k) => { delete payload[k]; }); // 화면용 임시 칸은 저장하지 않는다(다른 패널과 같게)
-                      const ok = await patchDispatch(copyTarget._id, payload);
+                      const ok = await patchDispatch(copyTarget._id, copyPanelDiff(payload, copyOrigRef.current)); // 🛠 2026-11-27 바뀐 칸만
                       if (ok === false) return;
                       showToast("오더 수정 완료");
                       setCopyPanelOpen(false);
@@ -48689,7 +48722,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
         ${bForm.tax ? `<td style="${tdNum};color:${SUB}">${(m.세액||0).toLocaleString()}</td>
         <td style="${tdNum};font-weight:900">${((m.공급가액||0)+(m.세액||0)).toLocaleString()}</td>` : ""}
       </tr>`).join("");
-    const infoRow = (k, v, i) => `<tr><td style="padding:5px 10px;width:70px;color:${SUB};font-weight:700;font-size:11px;white-space:nowrap;border-top:${i?`1px solid ${HAIR}`:"none"}">${k}</td><td style="padding:5px 10px 5px 0;color:${INK};font-weight:600;font-size:11.5px;border-top:${i?`1px solid ${HAIR}`:"none"}">${v||"-"}</td></tr>`;
+    const infoRow = (k, v, i) => `<tr><td style="padding:5px 10px;width:70px;color:${SUB};font-weight:700;font-size:11px;white-space:nowrap;border-top:${i?`1px solid ${HAIR}`:"none"}">${k}</td><td style="padding:5px 10px 5px 0;color:${INK};font-weight:600;font-size:11.5px;border-top:${i?`1px solid ${HAIR}`:"none"}">${escHtml(v||"-")}</td></tr>`;
     const partyHead = (ko, en) => `<div style="background:${SOFT};padding:7px 10px;border-bottom:1px solid ${LINE};display:flex;justify-content:space-between;align-items:center"><span style="font-size:11.5px;font-weight:900;color:${INK};letter-spacing:0.08em">${ko}</span><span style="font-family:${MONO};font-size:8.5px;font-weight:800;letter-spacing:0.22em;color:${MUTE}">${en}</span></div>`;
     const foot = `background:${SOFT};border-top:2px solid ${INK};border-bottom:1px solid ${LINE};padding:8px 6px`;
     return `<div style="font-family:'Pretendard','Malgun Gothic','Apple SD Gothic Neo',sans-serif;background:#fff;width:1100px;box-sizing:border-box;padding:28px;color:${INK}">
@@ -48870,11 +48903,7 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
     if (!arCompany) return undefined;
     return onSnapshot(doc(db, "bankAliases", arCompany), (s) => setBankAliasMap((s.exists() && s.data()?.map) || {}), () => setBankAliasMap({}));
   }, [arCompany]);
-  const arPaidMap = useMemo(() => {
-    const m = new Map();
-    arPayments.forEach(p => { const k = `${p.client}|${p.yyyymm}`; m.set(k, (m.get(k) || 0) + (Number(p.amount) || 0)); });
-    return m;
-  }, [arPayments]);
+  const arPaidMap = useMemo(() => arPaidMapOf(arPayments), [arPayments]); // 🛠 2026-11-27 서버 · 회계관리와 같은 식(입금일 목록 포함)
 
   // ★ 미수금관리 거래처 드롭다운
   const [arDropOpen, setArDropOpen] = useState(false);
@@ -49479,7 +49508,7 @@ const reportRows = Array.from(companyMap.entries())
 
     return `<tr class="${idx % 2 === 0 ? "even" : "odd"}">
       <td class="center seq">${idx + 1}</td>
-      <td class="name">${r.name}</td>
+      <td class="name">${escHtml(r.name)}</td>
       <td class="center">${r.totalCount}건</td>
       ${cells}
       <td class="total">${r.totalCharge.toLocaleString()}</td>

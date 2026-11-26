@@ -67,8 +67,8 @@ t("휴대폰 로그인 후보: 계정 있는 기사 > 선등록, 재직 > 퇴사
   assert.strictEqual(V.pickPhoneMatch(c, { companyName: "에이운송", name: "이태훈" }).pick.uid, "b");
   assert.strictEqual(V.pickPhoneMatch([c[0]], { companyName: "에이운송", name: "이태훈" }).pick.pre, true);
 });
-t("회사명 없으면 기본 회사로 본다", () => {
-  assert.ok(V.sameCo("", "예전운송")); assert.ok(!V.sameCo("", "에이운송"));
+t("회사명 없으면 기본 회사((회사없음))로 본다", () => {
+  assert.ok(V.sameCo("", "(회사없음)")); assert.ok(!V.sameCo("", "에이운송"));
 });
 
 t("기사 합치기: 줄 셋(1019 · 차량번호 오타 줄 · 지금 쓰는 4931)을 차례로 합쳐도 구간이 모두 남는다", () => {

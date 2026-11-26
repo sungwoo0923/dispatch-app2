@@ -451,7 +451,7 @@ function ListTab({ say }) {
         </div>
       ))}
       <div className="flex gap-1.5">
-        <input value={nv} onChange={(e) => setNv(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addOne(); } }} placeholder="새 항목 이름" className={`${inp} flex-1`} data-kp="opt-new" />
+        <input value={nv} onChange={(e) => setNv(e.target.value)} onKeyDown={(e) => { if (e.nativeEvent?.isComposing || e.keyCode === 229) return; if (e.key === "Enter") { e.preventDefault(); addOne(); } }} placeholder="새 항목 이름" className={`${inp} flex-1`} data-kp="opt-new" />
         <button type="button" onClick={addOne} className="h-9 px-3 rounded-lg bg-[#1B2B4B] text-white text-[12.5px] font-black" data-kp="opt-add">더하기</button>
       </div>
       {getEffective().opts[key] && <button type="button" className={btn} onClick={() => { editDraft((d) => { delete d.opts[key]; }); say("기본 목록으로 돌렸어요"); }}>기본 목록으로</button>}

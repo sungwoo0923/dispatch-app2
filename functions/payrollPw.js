@@ -129,14 +129,29 @@ function makePayrollPw({ db, FieldValue, Timestamp, HttpsError }) {
     if (data?.warm === true) return WARM;
     const p0 = pwProblem(data?.newPassword); // 서버까지 안 가도 되는 검사는 먼저
     if (p0 && context?.auth?.uid) throw err("invalid-argument", p0);
-    const [w, [sec]] = await whoWith(context, data, (key) => [secretRef(key)]);
+    const [w, [sec, aSnap]] = await whoWith(context, data, (key, uid) => [secretRef(key), attemptRef(key, uid)]);
     if (!w.admin) throw err("permission-denied", "급여 비밀번호는 경리 관리자만 정하거나 바꿀 수 있어요");
     const has = sec.exists && !!sec.data().hash;
     const tm = w.email === SUPER_EMAIL || w.u.role === "totalMaster";
+    // 🔒 2026-11-26 보안 — 바꾸기의 "지금 비밀번호" 확인도 열기(verify)와 같은 틀린 횟수 · 잠금을 쓴다(예전엔 여기서 무한히 맞춰 볼 수 있었다)
+    const checkCur = has && !tm;
+    const a = aSnap?.data?.() || {};
+    const now = Date.now();
+    if (checkCur && (Number(a.lockUntil) || 0) > now) throw err("resource-exhausted", `여러 번 틀려 잠겼어요. ${Math.ceil((Number(a.lockUntil) - now) / 60000)}분 뒤 다시 해 주세요`);
     // ⭐ 2026-11-17 속도 — 지금 비밀번호 확인 · 새 비밀번호 해시를 동시에 계산(확인이 틀리면 새 해시는 버린다)
-    const [curOk, h] = await Promise.all([has && !tm ? checkPwAsync(data?.currentPassword, sec.data()) : true, hashPwAsync(data.newPassword)]);
+    const [curOk, h] = await Promise.all([checkCur ? checkPwAsync(data?.currentPassword, sec.data()) : true, hashPwAsync(data.newPassword)]);
     // 바꿀 때는 지금 비밀번호 확인(최고관리자는 잊어버린 회사를 위해 바로 다시 정할 수 있다)
-    if (!curOk) throw err("permission-denied", "지금 비밀번호가 맞지 않아요");
+    if (!curOk) {
+      const aRef = attemptRef(w.key, w.uid);
+      const fails = (Number(a.fails) || 0) + 1;
+      if (fails >= MAX_FAILS) {
+        const locks = Number(a.locks) || 0;
+        await aRef.set({ fails: 0, locks: locks + 1, lockUntil: now + lockMinutesFor(locks) * 60000, lastFailAt: now, uid: w.uid, companyName: w.company });
+        throw err("resource-exhausted", `지금 비밀번호가 맞지 않아요. 여러 번 틀려 ${lockMinutesFor(locks)}분 동안 잠겼어요`);
+      }
+      await aRef.set({ fails, locks: Number(a.locks) || 0, lockUntil: 0, lastFailAt: now, uid: w.uid, companyName: w.company }, { merge: true });
+      throw err("permission-denied", `지금 비밀번호가 맞지 않아요 (${MAX_FAILS - fails}번 남았어요)`);
+    }
     return { ok: true, expiresAt: await commitNewPw(w, h, has ? "change" : "set"), changed: has };
   }
   // ⭐ 2026-11-17 새 비밀번호 저장 · 다른 사람 잠금 해제 풀기 · 틀린 횟수 지우기 · 내 잠금 해제 — 예전엔 하나씩 차례로(왕복 4~5번), 이제 한 번에

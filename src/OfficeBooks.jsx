@@ -3,6 +3,7 @@
 //  · 수입·지출: 날짜·구분·계정과목·결제수단·거래처·증빙(영수증 사진) → 월별 합계·계정별 비중·일자별 목록·CSV
 //    전자결재 "비용·지출 결의" 승인분을 한 번에 장부로 가져오기, 매달 나가는 고정비(임대료·통신비 등) 한 번에 반영
 //  · 비품·자산: 사무가구·IT기기·소모품 등 — 수량·위치·담당자·구입가·상태, 소모품은 최소 수량 아래면 "재고 부족", 입출고 이력
+import { csvCell } from "./htmlSafe"; // 🔒 2026-11-27 CSV 수식 실행 막기
 import React from "react";
 import { runDelete, runBulkTask } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, arrayUnion } from "firebase/firestore";
@@ -360,7 +361,7 @@ export function CashBook({ company, isViewer = false }) {
   };
   const csv = () => {
     const head = ["날짜", "구분", "계정과목", "내용", "거래처", "결제수단", "금액", "공급가", "부가세", "증빙", "메모"]; // 🧾 2026-11-15 공급가 · 부가세(세무사 전달용)
-    const lines = [head.join(","), ...list.map((r) => { const v = r.supply != null ? { supply: r.supply, vat: r.vat } : vatSplit(r.amount, !["세금계산서", "카드전표", "현금영수증"].includes(r.evidence)); return [r.date, r.type, r.account, r.item, r.vendor, r.method, r.amount, v.supply, v.vat, r.evidence || (r.receipt ? "영수증" : ""), r.memo]; }).map((x) => x.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))];
+    const lines = [head.join(","), ...list.map((r) => { const v = r.supply != null ? { supply: r.supply, vat: r.vat } : vatSplit(r.amount, !["세금계산서", "카드전표", "현금영수증"].includes(r.evidence)); return [r.date, r.type, r.account, r.item, r.vendor, r.method, r.amount, v.supply, v.vat, r.evidence || (r.receipt ? "영수증" : ""), r.memo]; }).map((x) => x.map((v) => csvCell(v)).join(","))];
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + lines.join("\n")], { type: "text/csv" })); a.download = `수입지출_${ym}.csv`; a.click();
   };
 

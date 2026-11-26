@@ -293,6 +293,13 @@ const COLS = {
   kind: /유종|품목|구분|상품/,
 };
 const cellStr = (v) => String(v ?? "").trim();
+// 🛠 2026-11-27 시간 칸 — 엑셀 시간(Date · 0~1 숫자)도 HH:MM 으로(예전엔 12:00 이 11:59 로, 숫자 칸은 "0.5" 로 들어갔다)
+function cellTime(v) {
+  if (v instanceof Date && !Number.isNaN(+v)) { const d = new Date(Math.round(+v / 60000) * 60000); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
+  if (typeof v === "number" && v >= 0 && v < 1) { const m = Math.round(v * 1440) % 1440; return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; }
+  const t = /(\d{1,2}):(\d{2})/.exec(cellStr(v));
+  return t ? `${t[1].padStart(2, "0")}:${t[2]}` : cellStr(v);
+}
 export function detectCardCols(header = []) {
   const map = {};
   header.forEach((h, i) => {
@@ -304,7 +311,8 @@ export function detectCardCols(header = []) {
 }
 function excelDate(v) {
   if (typeof v === "number" && v > 20000 && v < 80000) { const d = new Date(Math.round((v - 25569) * DAY)); return { date: d.toISOString().slice(0, 10), time: d.toISOString().slice(11, 16) }; }
-  if (v instanceof Date && !Number.isNaN(+v)) { const d = new Date(+v + 9 * 3600e3); return { date: d.toISOString().slice(0, 10), time: d.toISOString().slice(11, 16) }; }
+  // 🛠 2026-11-27 엑셀(SheetJS cellDates) 날짜는 52초쯤 앞당겨져 와서(1899년 시간대 계산) 날짜만 있는 칸이 전날 23:59 가 됐다 — 분 단위로 반올림
+  if (v instanceof Date && !Number.isNaN(+v)) { const d = new Date(Math.round(+v / 60000) * 60000 + 9 * 3600e3); return { date: d.toISOString().slice(0, 10), time: d.toISOString().slice(11, 16) }; }
   const s = cellStr(v);
   const m = /(\d{4})[.\-/년\s]*(\d{1,2})[.\-/월\s]*(\d{1,2})/.exec(s) || /^(\d{4})(\d{2})(\d{2})/.exec(s.replace(/\D/g, ""));
   if (!m) return null;
@@ -328,7 +336,7 @@ export function parseCardSheet(aoa = [], type = "") {
     const amount = n(r[cols.amount]);
     if (!dt || !amount) continue;
     rows.push({
-      type: guess, date: dt.date, time: cols.time != null ? (excelDate(`2000-01-01 ${cellStr(r[cols.time])}`)?.time || cellStr(r[cols.time])) : dt.time,
+      type: guess, date: dt.date, time: cols.time != null ? cellTime(r[cols.time]) : dt.time,
       amount, plate: cols.plate != null ? cellStr(r[cols.plate]) : "", cardNo: cols.card != null ? cellStr(r[cols.card]).replace(/\s/g, "") : "",
       place: cols.place != null ? cellStr(r[cols.place]) : "", liter: cols.liter != null ? n(r[cols.liter]) : 0, kind: cols.kind != null ? cellStr(r[cols.kind]) : "",
     });

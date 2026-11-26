@@ -80,6 +80,20 @@ async function updateOrderSafe(ref, data) {
     return updateDoc(ref, slim);
   }
 }
+
+// 🛠 2026-11-27 수락 · 거절 직전에 오더를 서버에서 다시 읽어, 그사이 담당자가 차량을 바꿨거나 이미 처리된 오더면 멈춘다
+//  (예전엔 바로 써서, 다른 기사로 바뀐 오더를 거절하면 새 기사의 배차가 지워질 수 있었다). 읽기가 막히면 예전처럼 진행.
+const _plateKey = (v) => String(v ?? "").replace(/\s/g, "");
+async function orderStillMine(ref, localOrder, okStates = ["대기"]) {
+  try {
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return false;
+    const cur = snap.data() || {};
+    if (_plateKey(localOrder?.차량번호) && _plateKey(cur.차량번호) !== _plateKey(localOrder.차량번호)) return false;
+    if (!okStates.includes(String(cur.기사확인상태 || ""))) return false;
+    return true;
+  } catch { return true; }
+}
 const errCode = (e) => (e?.code ? ` (${String(e.code).replace(/^firestore\//, "")})` : ""); // 오류가 나면 무슨 오류인지 알 수 있게
 
 const tlLog = (type, by, extra = {}) => ({
@@ -1929,6 +1943,7 @@ export default function DriverHome() {
     setOrderActionLoading(true);
     try {
       const accepted = myOrders.find(x => x._id === orderId);
+      if (!(await orderStillMine(doc(db, col, orderId), accepted))) { showToast("오더 내용이 바뀌었어요. 화면을 새로 보고 다시 확인해 주세요."); return; }
       await updateDoc(doc(db, col, orderId), {
         기사확인상태: "수락",
         기사확인일시: serverTimestamp(),
@@ -1977,6 +1992,7 @@ export default function DriverHome() {
       // ⭐ 사용자 요청 — 거절하면 이 오더는 다시 배차 전 상태(배차중)로 돌아가야 하고,
       // 4/5파트 배차현황에서도 차량번호/이름/전화번호가 사라져야 한다(이 기사에게
       // 배정됐던 흔적을 지워 담당자가 바로 다른 차량을 다시 배정할 수 있게).
+      if (!(await orderStillMine(doc(db, rm.col || "orders", rm.orderId), myOrders.find((x) => x._id === rm.orderId), ["대기", "수락"]))) { showToast("오더 내용이 바뀌었어요. 화면을 새로 보고 다시 확인해 주세요."); setRejectModal?.(null); return; }
       await updateOrderSafe(doc(db, rm.col || "orders", rm.orderId), {
         기사확인상태: "거절",
         기사거절사유: rm.modified ? (reason ? `수정된 오더 거절 — ${reason}` : "수정된 오더 거절") : reason,

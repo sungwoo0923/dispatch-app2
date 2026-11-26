@@ -1436,7 +1436,9 @@ service cloud.firestore {
             && request.resource.data.status == '서명완료'
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'signedAt', 'signer', 'signatureImg', 'signerAgent', 'signedHash', 'consent'])
             && request.resource.data.signatureImg is string
-            && request.resource.data.signatureImg.size() < 600000);
+            && request.resource.data.signatureImg.size() < 600000
+            // 🔒 2026-11-27 서명 이미지는 서명판이 만든 PNG 글자만(따옴표 · 스크립트가 섞인 값으로 인쇄 창을 공격하지 못하게)
+            && request.resource.data.signatureImg.matches('^data:image/png;base64,[A-Za-z0-9+/=]+$'));
     }
     // 📢 플랫폼 공지(관리센터 → 고객사 배너 + 운송사 공지사항 목록) — 최고관리자 쓰기
     // ⭐ 2026-11-02 관리자센터2 — 대상별 읽기: 전체/전체 운송사/전체 화주사 공지는 로그인 사용자 누구나,
@@ -1647,7 +1649,9 @@ service cloud.firestore {
     }
     function userSensitiveKeys() {
       return ['role', 'approved', 'isMaster', 'permissions', 'subAdmin', 'subAdminPrevRole', 'companyName', 'linkedTransportCompany', 'companyCode', 'businessNumber', 'workScope', 'legacyTeam',
-        'team', 'position', 'employmentStatus', 'mfaOpt', 'bioKeys', 'carNo', '차량번호']; // 🔒 2026-11-23 부서 · 직책 · 재직 · 2차 인증 · 차량번호도 관리 권한자만 // workScope: 업무 범위(2026-11-13) · legacyTeam: 예전 부서 이름(서버만 적는다 · 2026-11-17)
+        'team', 'position', 'employmentStatus', 'mfaOpt', 'bioKeys', 'carNo', '차량번호',
+        // 🔒 2026-11-27 연락처 · 인증 번호 — 동료가 바꿔 문자 비밀번호 재설정으로 계정을 가져가지 못하게(관리 권한자 · 본인만)
+        'phone', 'pcVerifyPhone', '전화번호', '연락처', 'mfaKind']; // 🔒 2026-11-23 부서 · 직책 · 재직 · 2차 인증 · 차량번호도 관리 권한자만 // workScope: 업무 범위(2026-11-13) · legacyTeam: 예전 부서 이름(서버만 적는다 · 2026-11-17)
     }
     function otherUserWriteOk() {
       let r = myRole();
@@ -2251,6 +2255,8 @@ service cloud.firestore {
       // 처음 만들기 — 같은 회사 마스터·관리자, 또는 최고관리자(고객사 대신 켜 주기 · 만든 뒤에는 viewers가 아니면 못 본다)
       allow create: if request.resource.data.viewers is list && request.resource.data.viewers.size() > 0 && request.resource.data.viewers.size() <= 10
         && request.resource.data.get('companyName', '') != ''
+        // 🔒 2026-11-27 문서 키는 그 회사 이름이어야 한다(다른 회사 키를 먼저 만들어 그 회사가 못 쓰게 막는 것 방지 · PrivateFares.jsx coKey 와 같게)
+        && co == string(request.resource.data.get('companyName', '')).trim().replace('/', '_')
         && (isTotalMasterUser()
           || (isApproved() && !isShipperUser() && request.resource.data.get('companyName', '') == myCo() && (myIsMaster() || myRole() == 'admin')));
       allow update: if isSignedIn() && request.auth.uid in resource.data.get('viewers', [])
@@ -3041,7 +3047,9 @@ service cloud.firestore {
         // ✉️ 2026-11-08 운송사별 발신 메일 — 위에서 따로 정함(빠지면 승인된 직원 누구나 다른 회사 메일 설정 · 암호문을 읽는다)
         'companyMailSettings', 'companyMailSecrets', 'companyMailUsage',
         // 🧮 2026-11-23 입찰견적 — 위에서 따로 정함(빠지면 기사 계정도 회사 입찰 단가를 읽는다)
-        'bidQuotes', 'bidCostProfiles'];
+        'bidQuotes', 'bidCostProfiles',
+        // 🔒 2026-11-27 자체 규칙이 있는데 목록에 빠져 공용 규칙으로 남의 회사 문서를 먼저 만들 수 있었다
+        'voiceGlossary', 'driverLocFix'];
 
     }
   }
