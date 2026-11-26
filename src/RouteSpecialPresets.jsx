@@ -166,7 +166,7 @@ function PresetEditor({ value, list, onClose }) {
             <div><div className={lbl}>상차지 (비우면 모든 상차지)</div><input className={inp} value={f.상차지명} onChange={(e) => setF({ ...f, 상차지명: e.target.value })} placeholder="예: 에이제이" data-route-from="1" /></div>
             <div><div className={lbl}>하차지 (비우면 모든 하차지)</div><input className={inp} value={f.하차지명} onChange={(e) => setF({ ...f, 하차지명: e.target.value })} placeholder="예: 트레이더스 칠곡" data-route-to="1" /></div>
           </div>
-          <div className="text-[12.5px] text-[#6B7A99]">찾는 단계: <b>{(f.상차지명 || f.하차지명) ? LEVEL_LABEL[levelOf(f)] : "상차지나 하차지를 넣어 주세요"}</b> · 이름은 띄어쓰기가 달라도 같은 곳으로 봐요</div>
+          <div className="text-[12.5px] text-[#6B7A99]">찾는 단계: <b>{(f.상차지명 || f.하차지명) ? LEVEL_LABEL[levelOf(f)] : "거래처 전체(모든 노선) — 더 구체적인 노선 규칙이 있으면 그쪽이 먼저"}</b> · 이름은 띄어쓰기가 달라도 같은 곳으로 봐요</div>
           <div className="space-y-2">
             {f.items.map((it, i) => (
               <div key={i} className="rounded-xl border border-[#E3E8F0] bg-[#F7F9FD] p-3 grid grid-cols-2 sm:grid-cols-6 gap-2 items-end" data-route-item={i}>

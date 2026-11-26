@@ -126,7 +126,6 @@ export function presetDocData(p = {}) {
 }
 export function presetError(p = {}) {
   if (!cell(p.거래처명)) return "거래처를 입력해 주세요";
-  if (!cell(p.상차지명) && !cell(p.하차지명)) return "상차지나 하차지 중 하나는 입력해 주세요";
   const items = (p.items || []).map(cleanItem).filter((x) => x.금액 > 0);
   if (!items.length) return "금액이 있는 항목을 하나 이상 넣어 주세요";
   const slots = items.map(slotOf);
@@ -134,8 +133,9 @@ export function presetError(p = {}) {
   return "";
 }
 // 노선 단계 — 0 거래처+상차지+하차지 · 1 거래처+하차지 · 2 거래처+상차지
-export const levelOf = (p) => (cell(p.상차지명) && cell(p.하차지명) ? 0 : cell(p.하차지명) ? 1 : 2);
-export const LEVEL_LABEL = ["거래처 · 상차지 · 하차지", "거래처 · 하차지", "거래처 · 상차지"];
+// 🛠 2026-11-26 ④ 거래처 전체(상차지 · 하차지 모두 비움) — 예: 에이제이는 어느 노선이든 야상 +20,000(역방향 · 다른 상차지 오더 포함). 가장 마지막에 찾는다
+export const levelOf = (p) => (cell(p.상차지명) && cell(p.하차지명) ? 0 : cell(p.하차지명) ? 1 : cell(p.상차지명) ? 2 : 3);
+export const LEVEL_LABEL = ["거래처 · 상차지 · 하차지", "거래처 · 하차지", "거래처 · 상차지", "거래처 전체"];
 export const routeLabel = (p) => `${cell(p.거래처명) || "?"} · ${cell(p.상차지명) || "모든 상차지"} → ${cell(p.하차지명) || "모든 하차지"}`;
 
 // ── 이 오더에 맞는 프리셋 항목 ──────────────────────────────
@@ -143,7 +143,7 @@ export function presetsFor(order, presets = []) {
   const c = nk(order?.거래처명), f = nk(order?.상차지명), t = nk(order?.하차지명);
   if (!c || (!f && !t)) return [];
   return (presets || []).filter((p) => p && p.사용 !== false && !p.legacy && nk(p.거래처명) === c
-    && (cell(p.상차지명) || cell(p.하차지명))
+    && (cell(p.상차지명) || cell(p.하차지명) || p.v === 2) // 거래처 전체는 새 노선 문서(v2)만 — 예전 "상차지 기억"(v1)은 빈 칸이어도 쓰지 않는다
     && (!cell(p.상차지명) || nk(p.상차지명) === f) && (!cell(p.하차지명) || nk(p.하차지명) === t))
     .sort((a, b) => levelOf(a) - levelOf(b));
 }

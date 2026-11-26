@@ -94,6 +94,7 @@ export function ensureLiveStyles() {
 .kp-live-pin:hover{background:rgba(52,211,153,.16)}
 .kp-live-pin:hover .kp-live-dot{transform:scale(1.25)}
 .kp-live-pin:focus-visible{outline:2px solid #8FB0F0;outline-offset:1px}
+.kp-live-pin.inl{position:static;display:inline-grid;width:12px;height:12px;vertical-align:middle;flex-shrink:0;margin-left:3px}
 .kp-live-btn{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;cursor:pointer;font-weight:800;color:#fff;
   background:linear-gradient(135deg,#1B2B4B 0%,#0B1428 100%);border:1px solid #2D4C82;box-shadow:0 2px 6px rgba(11,20,40,.25),inset 0 1px 0 rgba(255,255,255,.08);transition:box-shadow .15s,border-color .15s}
 .kp-live-btn:hover{border-color:#8FB0F0;box-shadow:0 0 0 3px rgba(143,176,240,.16),0 4px 12px rgba(11,20,40,.3)}

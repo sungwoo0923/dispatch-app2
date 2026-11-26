@@ -24967,8 +24967,7 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
                   {/* 차량번호 */}
                   <td className={`${cell} relative`}>
-                    {/* ⭐ 2026-11-05 LIVE — 칩 대신 차량번호 입력칸 왼쪽 위 모서리의 6px 점(폭 0 · 칸 너비 그대로) */}
-                    {r.배차상태 === "배차완료" && <LiveDriverChip order={r} variant="pin" />}
+                    {/* 🛠 2026-11-26 LIVE 점은 기사명 칸으로 옮김(차량번호 칸이 넓어진다는 의견) */}
                     {/* 🛠 2026-11-23 추천 기사 ▾ 를 차량번호 칸 "안" 오른쪽 끝에(글자와 겹치지 않게 칸을 조금 넓힘) — 테두리는 바깥 상자가 그린다 */}
                     <div className="flex items-center border rounded bg-white w-[150px] min-w-[130px] pr-0.5 focus-within:border-[#1B2B4B] focus-within:ring-1 focus-within:ring-[#1B2B4B]/30">
                     <input autoComplete="off"
@@ -25013,8 +25012,9 @@ ${isHighlighted ? "animate-pulse bg-blue-100" : ""}
 
                   </td>
 
-                  <td className={`${cell} w-[80px] max-w-[80px] overflow-hidden text-ellipsis`}>
-                    {r.이름}
+                  <td className={`${cell} w-[80px] max-w-[80px] overflow-hidden`}>
+                    {/* 🛠 2026-11-26 위치 관제 점 — 이름 바로 뒤(이름이 길면 이름만 줄이고 점은 항상 보임) */}
+                    <span className="inline-flex items-center max-w-full align-middle"><span className="truncate">{r.이름}</span>{r.배차상태 === "배차완료" && <LiveDriverChip order={r} variant="dot" />}</span>
                   </td>
 
                   <td className={cell}>{formatPhone(r.전화번호)}</td>
@@ -38191,8 +38191,7 @@ return (
 
                   {/* 차량번호(항상 활성화) · ⭐ 2026-11-05 지입·직영·임대 기사앱 LIVE 표시가 붙으면 그만큼 칸이 넓어진다 */}
                   <td className="border text-center whitespace-nowrap w-[160px] max-w-[160px] relative">
-                    {/* ⭐ 2026-11-05 LIVE — 칩 대신 차량번호 입력칸 왼쪽 위 모서리의 6px 점(폭 0 · 칸 너비 그대로) */}
-                    {row.배차상태 === "배차완료" && <LiveDriverChip order={row} variant="pin" />}
+                    {/* 🛠 2026-11-26 LIVE 점은 기사명 칸으로 옮김 */}
                     {/* 🛠 2026-11-23 추천 기사 ▾ 를 차량번호 칸 "안" 오른쪽 끝에(글자와 겹치지 않게 칸을 조금 넓힘) — 테두리는 바깥 상자가 그린다 */}
                     <div className="mx-auto flex items-center border rounded bg-white w-[154px] pr-0.5 focus-within:border-[#1B2B4B] focus-within:ring-1 focus-within:ring-[#1B2B4B]/30">
                     <input autoComplete="off"
@@ -38223,7 +38222,7 @@ return (
                     <PlateSuggestCaret order={row} />{/* 🚚 추천 기사 ▾ — 있을 때만 · 직접 입력은 그대로 */}
                     </div>
                   </td>
-                  <td className="border text-center whitespace-nowrap max-w-[80px] w-[80px] overflow-hidden text-ellipsis" title={row.이름 || ""}>{row.이름}</td>
+                  <td className="border text-center whitespace-nowrap max-w-[80px] w-[80px] overflow-hidden" title={row.이름 || ""}><span className="inline-flex items-center max-w-full align-middle"><span className="truncate">{row.이름}</span>{row.배차상태 === "배차완료" && <LiveDriverChip order={row} variant="dot" />}</span></td>
                   <td className="border text-center">
   {formatPhone(row.전화번호)}
 </td>

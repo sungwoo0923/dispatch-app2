@@ -141,11 +141,12 @@ export function LiveDriverChip({ order, mobile, className = "", variant = "chip"
   const entry = useFleetLiveEntry(isLiveEligibleOrder(order) ? order.차량번호 : "");
   if (!entry) return null; // 대부분의 줄은 여기서 끝(시계 구독도 안 함)
   if (variant === "pin") return <LivePinInner order={order} entry={entry} className={className} />;
+  if (variant === "dot") return <LivePinInner order={order} entry={entry} className={`inl ${className}`} inline />; // 🛠 2026-11-26 기사 이름 바로 뒤 작은 점(칸을 넓히지 않게)
   return <LiveChipInner order={order} entry={entry} mobile={mobile} className={className} compact={variant === "compact"} />;
 }
 // ⭐ 2026-11-05 표 안 LIVE — 칩이 차량번호 칸을 넓히던 문제: 칸 모서리에 겹쳐 그리는 작은 점(absolute)으로 바꿨다.
 //  점에 마우스를 올리면 기사·마지막 수신 시각, 누르면 실시간 지도(예전 칩과 같은 창).
-function LivePinInner({ order, entry, className }) {
+function LivePinInner({ order, entry, className, inline = false }) {
   const now = useLiveNow();
   const [open, setOpen] = React.useState(false);
   ensureLiveStyles();
@@ -154,7 +155,7 @@ function LivePinInner({ order, entry, className }) {
   const stop = (e) => { e.stopPropagation(); };
   return (
     <>
-      <span className="kp-live-anchor"><button type="button" className={`kp-live-pin ${className}`} data-kp-live={st}
+      <span className={inline ? undefined : "kp-live-anchor"} style={inline ? { display: "contents" } : undefined}><button type="button" className={`kp-live-pin ${className}`} data-kp-live={st}
         title={`${st === "live" ? "LIVE" : st === "recent" ? "GPS" : "LAST"} · ${entry.grade} · ${entry.name || entry.plate} · 눌러서 실시간 위치 보기 (마지막 수신 ${liveAgeText(entry.updatedMs, now)}${entry.speed ? ` · ${entry.speed}km/h` : ""})`}
         aria-label="실시간 위치 보기"
         onClick={(e) => { stop(e); setOpen(true); }} onDoubleClick={stop} onMouseDown={stop} onPointerDown={stop} onTouchStart={stop} onContextMenu={stop}>
