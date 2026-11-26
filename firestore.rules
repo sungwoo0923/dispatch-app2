@@ -247,6 +247,7 @@ service cloud.firestore {
         || (shipperOwns(resource.data) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['기사운임', '수수료', '기사확인상태', '기사타임라인', '기사확인값', '배차확정자', '배차확정자Uid', 'companyName', 'shipperUid', 'createdByUid', '차량번호', '이름', '전화번호', '청구사업자',
           '블라인드', '_seed', 'shipperCompany', 'source', 'originCol', 'originId', '_transmittedOrderId']))
         // 기사 — 나에게 배정된 오더의 수락 · 거절 · 진행 · 완료 칸만
+        // (11/26 11:30 첫 배포가 구글 규칙 서버 503으로 7번 다 실패 → 다시 올림)
         // 🛠 2026-11-26 상차완료근거 · 상차지도착일시 · 상차지도착근거 · 배차방식이 빠져 있어 [상차완료] · 상차 사진 · 상차지 도착 기록 · 거절이 "처리 중 오류"로 막혔다
         || (driverAssigned(request.path) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['기사확인상태', '기사확인일시', '기사확인값', '기사거절사유', '기사완료일시', '기사타임라인', '배차상태', '배차확정일시', '배차확정자', '상차완료일시', '상차완료근거', '상차지도착주소', '상차지도착일시', '상차지도착근거', '배차방식', '상태', '수정재승인', '수정확인일시', '수정확인항목', '수정거절', '수정거절항목', '업체전달상태', '완료회차', '회차완료일시', 'attachCount', '이름', '전화번호', '차량번호', 'updatedAt', '_lastModified']));
       allow delete: if coMatch(resource.data) || (resource == null && isApproved() && myRole() != 'driver');

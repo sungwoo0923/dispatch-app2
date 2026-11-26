@@ -65,6 +65,19 @@ import { ODO_OIL_FEATURE, needOilConfirm, saveCheckoutKm, saveOilAck, oilInfo, O
 
 // ⭐ 오더 타임라인 — 기사 행동(수락/거절/수정확인/상차지도착/상차완료/운송완료 등)을
 // 오더 문서의 기사타임라인 배열에 "덮어쓰지 않고" 계속 쌓는다(관리자 지입차관리 타임라인).
+// 🛠 2026-11-26 오더 저장이 서버 규칙에 막히면(예전 규칙이 아직 올라가 있을 때 — 상차완료근거 · 상차지도착일시 · 상차지도착근거 · 배차방식이
+//  허용 칸에 없었다) 그 칸만 빼고 한 번 더 저장한다. 상차완료 시각 · 타임라인 같은 핵심은 그대로 남는다(firestore.rules 기사 수정 칸)
+const NEW_DRIVER_KEYS = ["상차완료근거", "상차지도착일시", "상차지도착근거", "배차방식"];
+async function updateOrderSafe(ref, data) {
+  try { return await updateDoc(ref, data); } catch (e) {
+    if (e?.code !== "permission-denied") throw e;
+    const slim = Object.fromEntries(Object.entries(data).filter(([k]) => !NEW_DRIVER_KEYS.includes(k)));
+    if (Object.keys(slim).length === Object.keys(data).length) throw e;
+    return updateDoc(ref, slim);
+  }
+}
+const errCode = (e) => (e?.code ? ` (${String(e.code).replace(/^firestore\//, "")})` : ""); // 오류가 나면 무슨 오류인지 알 수 있게
+
 const tlLog = (type, by, extra = {}) => ({
   기사타임라인: arrayUnion({ type, at: Date.now(), by: by || "", ...extra }),
 });
@@ -1888,7 +1901,7 @@ export default function DriverHome() {
       // ⭐ 사용자 요청 — 거절하면 이 오더는 다시 배차 전 상태(배차중)로 돌아가야 하고,
       // 4/5파트 배차현황에서도 차량번호/이름/전화번호가 사라져야 한다(이 기사에게
       // 배정됐던 흔적을 지워 담당자가 바로 다른 차량을 다시 배정할 수 있게).
-      await updateDoc(doc(db, rm.col || "orders", rm.orderId), {
+      await updateOrderSafe(doc(db, rm.col || "orders", rm.orderId), {
         기사확인상태: "거절",
         기사거절사유: rm.modified ? (reason ? `수정된 오더 거절 — ${reason}` : "수정된 오더 거절") : reason,
         // ⭐ 2026-11-09 수정된 오더를 거절 — 담당자 알림 문구가 달라진다(서버 notifyDispatcherOrderRejected)
@@ -1945,7 +1958,7 @@ export default function DriverHome() {
       .forEach(o => {
         const g = getCachedGeo(o.상차지주소);
         if (!g) return;
-        const mark = (근거) => updateDoc(doc(db, o.__col || "orders", o._id), {
+        const mark = (근거) => updateOrderSafe(doc(db, o.__col || "orders", o._id), {
           상차지도착주소: o.상차지주소, 상차지도착일시: serverTimestamp(), 상차지도착근거: 근거,
           ...tlLog("상차지도착", driver?.name, { detail: 근거 }),
         }).catch(() => {});
@@ -1990,14 +2003,14 @@ export default function DriverHome() {
   const handleLoadComplete = useCallback(async (o, 근거 = "기사버튼") => {
     if (!o?._id || o.상차완료일시) return;
     try {
-      await updateDoc(doc(db, o.__col || "orders", o._id), {
+      await updateOrderSafe(doc(db, o.__col || "orders", o._id), {
         상차완료일시: serverTimestamp(), 상차완료근거: 근거,
         ...(isPickupVisited(o) ? {} : { 상차지도착주소: o.상차지주소 || "", 상차지도착일시: serverTimestamp(), 상차지도착근거: 근거 }),
         ...tlLog("상차완료", driver?.name, { detail: 근거 }),
       });
       if (근거 === "기사버튼") showToast("상차완료되었습니다. 하차지로 이동해 주세요.");
     } catch (e) {
-      showToast("처리 중 오류가 발생했습니다");
+      showToast(`처리 중 오류가 발생했습니다${errCode(e)}`);
     }
   }, [driver?.name]);
 
@@ -2099,7 +2112,7 @@ export default function DriverHome() {
         uploadedBy: "driver", createdAt: serverTimestamp(),
       });
       const target = myOrders.find(x => x._id === orderId);
-      await updateDoc(doc(db, col, orderId), {
+      await updateOrderSafe(doc(db, col, orderId), {
         attachCount: increment(1),
         ...tlLog("사진전송", driver?.name, { detail: actionType }),
         // 상차완료 사진을 보냈으면 상차한 것으로 본다(GPS가 늦게 잡혀도 운송완료가 막히지 않게)
