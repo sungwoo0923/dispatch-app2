@@ -139,12 +139,14 @@ export const LEVEL_LABEL = ["거래처 · 상차지 · 하차지", "거래처 ·
 export const routeLabel = (p) => `${cell(p.거래처명) || "?"} · ${cell(p.상차지명) || "모든 상차지"} → ${cell(p.하차지명) || "모든 하차지"}`;
 
 // ── 이 오더에 맞는 프리셋 항목 ──────────────────────────────
+// 🛠 2026-11-26 트레이더스 ○○ = 에브리데이 ○○(같은 곳 — src/jyAliases.js 와 같은 규칙) · 거래처 에이제이 = 제이글로벌
+export const placeKey = (v) => nk(v).replace(/^에브리데이/, "트레이더스").replace(/^제이글로벌/, "에이제이");
 export function presetsFor(order, presets = []) {
-  const c = nk(order?.거래처명), f = nk(order?.상차지명), t = nk(order?.하차지명);
+  const c = placeKey(order?.거래처명), f = placeKey(order?.상차지명), t = placeKey(order?.하차지명);
   if (!c || (!f && !t)) return [];
-  return (presets || []).filter((p) => p && p.사용 !== false && !p.legacy && nk(p.거래처명) === c
+  return (presets || []).filter((p) => p && p.사용 !== false && !p.legacy && placeKey(p.거래처명) === c
     && (cell(p.상차지명) || cell(p.하차지명) || p.v === 2) // 거래처 전체는 새 노선 문서(v2)만 — 예전 "상차지 기억"(v1)은 빈 칸이어도 쓰지 않는다
-    && (!cell(p.상차지명) || nk(p.상차지명) === f) && (!cell(p.하차지명) || nk(p.하차지명) === t))
+    && (!cell(p.상차지명) || placeKey(p.상차지명) === f) && (!cell(p.하차지명) || placeKey(p.하차지명) === t))
     .sort((a, b) => levelOf(a) - levelOf(b));
 }
 export function matchRoutePreset(order, presets = []) {
