@@ -15068,7 +15068,7 @@ const ROUND_DISCOUNT = 0.9; // ★ 10% 할인 (조정 가능)
         const m = manseLearned ? quoteManse(form, manseLearned) : null;
         return m && m.sale ? { sale: m.sale, buy: m.buy || 0, label: `만세보령 ${m.tier.label}` } : null;
       }
-      const r = findRate(multiRateSheets, { 거래처명: form.거래처명, 상차지명: form.상차지명, 하차지명: form.하차지명, 톤수: ton }, { aliases: true });
+      const r = findRate(multiRateSheets, { 거래처명: form.거래처명, 상차지명: form.상차지명, 하차지명: form.하차지명, 하차지주소: form.하차지주소, 톤수: ton }, { aliases: true });
       if (!r || r.ambiguous) return null;
       return { ...r, label: `${r.sheetName || ""} → ${r.rowName} · ${r.ton}` };
     }, [multiRateSheets, manseLearned, form.차량톤수, form.차량종류, form.하차지명, form.하차지주소, form.화물내용, form.경유하차목록, form.거래처명, form.상차지명]);
