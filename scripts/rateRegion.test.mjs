@@ -61,5 +61,20 @@ r = findRate([aj, ajNamed], { 거래처명: "에이제이", 하차지명: "베�
 ok(r && r.sale === 200000, `에이제이: 기존 상하차지명 단가 먼저 ${r?.sale}`);
 r = findRate([aj, ajNamed], { 거래처명: "에이제이", 하차지명: "새 업체", 하차지주소: "경기 평택시 1", 톤수: "8톤" }, { aliases: true });
 ok(r && r.sale === 150000, `에이제이: 처음 보는 곳은 '에이제이 지역' 단가표(8톤 → 9.5톤) ${r?.sale}`);
+// 🧾 2026-11-26 사용자 예시 — 에이제이 → 계약 하차지(제이글로벌 단가표의 "쿠팡 벤더" 11톤 90,000)는 그 금액,
+//  계약표에 없는 곳이 주소로 아산이면 지역 단가표(아산 11톤 150,000)
+{
+  const region = { baseName: "에이제이 지역", columns: [{ id: "a", label: "5톤" }, { id: "b", label: "11톤" }], rows: [{ name: "아산", prices: { a: "120000", b: "150000" } }] };
+  const contract = { baseName: "제이글로벌", columns: [{ id: "a", label: "5톤" }, { id: "b", label: "11톤" }], rows: [{ name: "쿠팡 벤더", prices: { a: "90000", b: "90000" } }] };
+  const qq = (drop, addr, ton) => findRate([region, contract], { 거래처명: "에이제이", 상차지명: "에이제이", 하차지명: drop, 하차지주소: addr, 톤수: ton }, { aliases: true });
+  let x = qq("쿠팡 벤더", "충남 아산시 둔포면 1", "11톤");
+  ok(x && x.sale === 90000, `계약 하차지(쿠팡 벤더 · 주소 아산) → 계약 단가 90,000 ${x?.sale}`);
+  x = qq("벤더", "충남 아산시 둔포면 1", "11톤");
+  ok(x && x.sale === 90000, `하차지명을 "벤더"로만 적어도 계약 단가 ${x?.sale}`);
+  x = qq("처음 보는 창고", "충남 아산시 음봉면 1", "11톤");
+  ok(x && x.sale === 150000, `계약표에 없는 곳 · 주소 아산 → 지역 단가 150,000 ${x?.sale}`);
+  x = qq("처음 보는 창고", "충남 아산시 음봉면 1", "8톤");
+  ok(x && x.sale === 150000, `계약표에 없는 곳 8톤 → 지역 11톤 단가 ${x?.sale}`);
+}
 if (fail) { console.error(`rateRegion: ${fail}건 실패`); process.exit(1); }
 console.log("rateRegion: 모두 통과");
