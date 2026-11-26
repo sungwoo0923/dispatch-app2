@@ -96,7 +96,7 @@ export default async function handler(req, res) {
         const ct = r.headers.get("content-type") || "";
         if (!r.ok || !ct.includes("json")) { res.status(200).json({ ok: false, status: r.status, error: r.status === 401 || r.status === 403 ? "Vercel이 이 주소를 로그인으로 막고 있습니다(아래 동작 점검 안내 참고)" : "이 주소에서 버전 정보를 찾지 못했습니다" }); return; }
         const j = await r.json();
-        res.status(200).json({ ok: !!j.build, version: String(j.version || ""), build: String(j.build || ""), url: h });
+        res.status(200).json({ ok: !!j.build, version: String(j.version || ""), build: String(j.build || ""), url: h, driver: String(j.driver || "") });
       } catch (e) { res.status(200).json({ ok: false, error: String(e?.message || e) }); }
       return;
     }

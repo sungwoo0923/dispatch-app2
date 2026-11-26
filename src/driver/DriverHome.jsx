@@ -1611,6 +1611,8 @@ export default function DriverHome() {
 
   // 🚚 2026-11-02 소속 회사가 추가한 차량종류도 고를 수 있게(읽기만 — 기사앱에서는 추가하지 않음)
   const vtDrv = useVehicleTypes(driver?.companyName || "", VEHICLE_CATEGORIES.filter((x) => x !== "직접입력"));
+  // 🚚 2026-11-26 예약 배포를 "고른 회사"에만 할 때 기사앱도 대상인지 알 수 있게(src/releaseGate.js myCompany)
+  useEffect(() => { try { if (driver?.companyName) localStorage.setItem("kpDriverCompany", driver.companyName); } catch { /* 무시 */ } }, [driver?.companyName]);
   const vehicleCats = React.useMemo(() => [...vtDrv.all, "직접입력"], [vtDrv.all]);
   // ⭐ 2026-11-01 소속 회사의 기본 출근지(fleet_settings/co_회사), 없으면 기본 회사만 예전 "default"
   useEffect(() => {

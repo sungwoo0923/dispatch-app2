@@ -42,5 +42,5 @@ export function scheduledPinOf(d, { now = Date.now(), company = "", forced = "" 
   if (!x || !x.url || !x.build) return null;
   if (!(Number(x.at) <= now) && forced !== x.build) return null;
   if (x.scope === "pick" && forced !== x.build && !(Array.isArray(x.companies) ? x.companies : []).map((c) => s(c)).includes(s(company))) return null;
-  return { url: x.url, version: x.version || "", build: x.build };
+  return { url: x.url, version: x.version || "", build: x.build, driver: x.driver || "" };
 }

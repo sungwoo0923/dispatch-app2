@@ -1413,7 +1413,7 @@ function PlatformCenterInner({ user }) {
   else if (tab === "companyReset") body = <><Hero en="CLIENTS · RESET" title="운송사 초기화" desc="운송사 데이터를 모두 지워요. 지운 뒤 7일 동안은 보관함에서 되살릴 수 있어요. 계약을 끝내면서 지우려면 영업 · 계약 › 이용 기간 · 만료를 쓰세요." right={<AdmBtn onClick={() => setTab("contract:life")}>이용 기간 · 만료 ›</AdmBtn>} /><CompanyResetPanel /></>;
   else if (tab === "testSeed") body = <><Hero en="DEV TOOLS · TEST DATA" title="테스트 데이터" desc="테스트운송사에 가짜 데이터를 채우거나 다시 채워요. 다른 운송사에는 넣을 수 없어요." /><React.Suspense fallback={<AdmEmpty />}><TestSeedPanel /></React.Suspense></>;
   else if (tab === "contract:life") body = <><Hero en="CONTRACTS · LIFECYCLE" title="이용 기간 · 만료" desc="운송사별 계약 기간을 정하고, 만료 30 · 7 · 1일 전 안내를 보내요. 계약종료하면 데이터는 남기고 그 회사 사람은 접속할 수 없어요." right={<Clock />} /><ContractLifecyclePanel openCompany={openCompany} /></>;
-  else if (tab === "release") body = <><Hero en="OPERATIONS · RELEASE" title="업데이트 배포" desc="새 화면을 올려도 여기서 배포해야 가입자 화면이 바뀌어요. 최고관리자 · 부관리자는 항상 최신 화면을 먼저 봐요. 기사앱 화면은 배포를 기다리지 않고 올리는 즉시 최신으로 바뀌어요(새 버전이면 기사님 화면에 꼭 업데이트 안내)." /><ReleasePanel>
+  else if (tab === "release") body = <><Hero en="OPERATIONS · RELEASE" title="업데이트 배포" desc="새 화면을 올려도 여기서 배포해야 가입자 화면이 바뀌어요. 최고관리자 · 부관리자는 항상 최신 화면을 먼저 봐요. 기사앱도 여기서 배포할 때 바뀌어요(예약 배포 포함). 그 버전이 기사앱 화면을 바꿨을 때만 기사님께 업데이트 안내가 가고, PC 화면만 바뀐 배포면 기사님께는 안내가 안 가요." /><ReleasePanel>
     {/* 🧹 2026-11-14 '화주사 강제 업데이트' — 2026-11-15 고급 설정 안으로 */}
     <div><div className="text-[14px] font-black mb-2" style={{ color: G.ink }}>화주사 화면 강제 업데이트</div><ShipperForceUpdatePanel currentVersion={typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : ""} /></div></ReleasePanel>
     <div className="mt-4"><React.Suspense fallback={null}><ForceUpdatePanelLazy /></React.Suspense></div></>;

@@ -30,5 +30,6 @@ console.log(`forceUpdate OK (${n})`);
   chk("[지금 적용]으로 먼저 받은 PC는 유지", scheduledPinOf(d, { now: 1000, company: "다른", forced: "NEW" })?.build === "NEW");
   chk("전체 대상", scheduledPinOf({ scheduled: { ...d.scheduled, scope: "all" } }, { now: 3000, company: "아무" })?.build === "NEW");
   chk("예약 없음", scheduledPinOf({ url: "a", build: "OLD" }, { now: 3000 }) === null);
+  chk("기사앱 지문도 넘긴다(기사 업데이트 안내 여부)", scheduledPinOf({ scheduled: { ...d.scheduled, scope: "all", driver: "fp1" } }, { now: 3000 })?.driver === "fp1");
   console.log("scheduledPinOf OK");
 }

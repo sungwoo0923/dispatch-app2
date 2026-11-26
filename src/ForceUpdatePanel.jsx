@@ -58,7 +58,7 @@ export default function ForceUpdatePanel() {
     // ⏱ 2026-11-25 예약 배포(사용자 요청) — [업데이트 배포]를 먼저 누르지 않아도 된다.
     //  최신 버전을 "예약 시각에 열릴 버전"으로만 적어 둔다 → 그 전에는 아무에게도 일반 업데이트 안내가 뜨지 않고, 대상 화면에만 위 가운데 알림바가 뜬다.
     //  시각이 되면 대상 화면이 그 버전으로 새로 고쳐진다(고른 운송사만 · 다른 운송사는 그대로).
-    const tgt = latest?.build && latest.url && String(latest.build) > String(target.build) ? { build: latest.build, version: latest.version, url: latest.url } : target;
+    const tgt = latest?.build && latest.url && String(latest.build) > String(target.build) ? { build: latest.build, version: latest.version, url: latest.url, driver: latest.driver || "" } : target;
     const viaSchedule = tgt !== target;
     if (inScopeNow > 0 && onlineScoped.filter((p) => !p.build || String(p.build) < String(tgt.build)).length === 0) {
       const go = await kpConfirm(`지금 접속 중인 대상 화면 ${inScopeNow}개가 모두 이미 v${tgt.version} 이에요.\n예약해도 지금은 알림이 뜨지 않아요(나중에 예전 화면으로 들어온 사람에게만 떠요).\n\n그래도 예약할까요?`);
