@@ -2,6 +2,7 @@
 import { isTMUser, TM_AFFIL } from "../staffFilter"; // 🧑‍💻 2026-11-24 최고관리자 소속 = 로지스웹 · 개발자
 import { installKeyboardLift } from "./keyboardLift"; // ⌨️ 2026-11-24 자판 위로 입력칸 올리기
 import { MultiCompanyCard } from "../MultiCompanySwitch"; // 🏢 2026-11-24 여러 회사 오가기
+import { CompanySwitchCard } from "../CompanySwitcher"; // 🔀 2026-11-26 최고관리자 운송사 전환(PC와 같은 창)
 import { useNewSeen, markNewSeen } from "../newFeatures"; // ✨ 2026-11-24 새 메뉴 NEW 표시
 import NewMark from "../NewMark";
 import { RoadviewButton } from "../roadview"; // 📷 2026-11-20 상·하차지 로드뷰
@@ -73,7 +74,7 @@ import RouteMapModal from "../RouteMapModal";
 import southKorea from "@svg-maps/south-korea";
 import { canSeeNotice } from "../NoticeBoard";
 import React, { useState, useMemo, useEffect, useRef, startTransition, useSyncExternalStore } from "react";
-import { withCo, getTenant } from "../fsTenant";
+import { withCo, getTenant, isPreviewMode } from "../fsTenant";
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "../orderHistoryCache"; // ⚡ 2026-11-23 13개월 오더 폰 보관
 // ⚡ 2026-11-23 운임 참고용 13개월 오더는 화면을 열 때 한 번만 받는다 — 예전엔 실시간 구독이라 누가 오더를 고칠 때마다 받고,
 //  30분 뒤 다시 열면 13개월을 통째로 또 받았다(운임 비교에는 실시간이 필요 없다)
@@ -8408,7 +8409,8 @@ function MobileSideMenu({
             스크롤되던 걸 없애고, 드로어 전체(메뉴~로그아웃~버전)가 하나로 이어져
             일반 스크롤바로 오르내리게 통합했다. */}
         <div ref={menuScrollRef} onScroll={(e) => { SIDE_MENU_SCROLL = e.currentTarget.scrollTop; }} className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-1" style={{ WebkitOverflowScrolling: "touch", paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)" }}>
-          <MultiCompanyCard />{/* 🏢 2026-11-24 여러 회사 계정 — 지금 회사 + [회사 전환] */}
+          {/* 🔀 2026-11-26 최고관리자 = 모든 운송사 [운송사 전환](PC와 같음) · 그 밖에는 여러 회사 계정 [회사 전환] */}
+          {realRole === "totalMaster" && !isPreviewMode() ? <CompanySwitchCard /> : <MultiCompanyCard />}
           {/* 🔀 2026-11-24 화면 전환 · 업무 영역 — 메뉴 줄이 아니라 [회사 전환] 카드와 같은 자리의 카드(사용자 요청 · 메뉴 줄이기) */}
           <WorkspaceCard dark={dark}
             view={roleViews ? (roleViews.find(([k]) => k === roleViewCur) || roleViews[0])[2] : ""} onView={roleViews ? () => onRoleView?.(roleViewCur) : null}
