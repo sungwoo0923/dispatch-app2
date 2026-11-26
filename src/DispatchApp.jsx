@@ -15075,15 +15075,21 @@ const ROUND_DISCOUNT = 0.9; // ★ 10% 할인 (조정 가능)
     const autoRateRef = React.useRef({ sale: "", buy: "" }); // 마지막으로 자동 입력한 금액(사람이 고쳤는지 구분)
     React.useEffect(() => {
       if (!autoRate || !canMoney) return;
-      const curSale = String(form.청구운임 ?? "").replace(/[^\d]/g, "");
-      const curBuy = String(form.기사운임 ?? "").replace(/[^\d]/g, "");
+      // 🛠 2026-11-26 "에브리데이 시화"를 처음 넣으면 다른 금액이 나오던 문제 — 노선 고정(야상 · 대행료)이 청구운임 · 기사운임에 더한 금액 때문에
+      //  "사람이 고친 금액"으로 보고 단가표 금액을 더 이상 안 바꿨다 → 특수운임으로 더한 몫을 빼고(단가 부분만) 견주고, 넣을 때는 다시 더한다
+      const digits = (v) => String(v ?? "").replace(/[^\d-]/g, "");
+      const addC = (Number(form.지게차청구추가) || 0) + (Number(form.특수청구추가) || 0); // 청구에 더해 둔 몫
+      const dedD = (Number(form.지게차기사차감) || 0) + (Number(form.특수기사차감) || 0); // 기사운임에서 뺀 몫(기사에게 더 준 것은 −)
+      const curSaleT = digits(form.청구운임), curBuyT = digits(form.기사운임);
+      const curSale = curSaleT ? String((Number(curSaleT) || 0) - addC) : "";
+      const curBuy = curBuyT ? String((Number(curBuyT) || 0) + dedD) : "";
       const last = autoRateRef.current;
-      const saleFree = !curSale || curSale === last.sale; // 비어 있거나 지난번 자동 입력 값 그대로
-      const buyFree = !curBuy || curBuy === last.buy;
-      if (saleFree && curSale !== String(autoRate.sale)) { autoRateRef.current = { ...autoRateRef.current, sale: String(autoRate.sale) }; onChange("청구운임", String(autoRate.sale)); }
+      const saleFree = !curSale || curSale === last.sale || curSale === "0"; // 비어 있거나 지난번 자동 입력 값 그대로
+      const buyFree = !curBuy || curBuy === last.buy || curBuy === "0";
+      if (saleFree && curSale !== String(autoRate.sale)) { autoRateRef.current = { ...autoRateRef.current, sale: String(autoRate.sale) }; onChange("청구운임", String(Number(autoRate.sale) + addC)); }
       // 지난번에 자동으로 넣은 기사운임인데 이번 단가표 줄에는 매입 단가가 없으면 비운다(다른 하차지 금액이 남지 않게)
-      if (!autoRate.buy && curBuy && curBuy === last.buy) { autoRateRef.current = { ...autoRateRef.current, buy: "" }; setTimeout(() => onChange("기사운임", ""), 0); }
-      if (autoRate.buy && buyFree && curBuy !== String(autoRate.buy)) { autoRateRef.current = { ...autoRateRef.current, buy: String(autoRate.buy) }; setTimeout(() => onChange("기사운임", String(autoRate.buy)), 0); }
+      if (!autoRate.buy && curBuy && curBuy === last.buy) { autoRateRef.current = { ...autoRateRef.current, buy: "" }; setTimeout(() => onChange("기사운임", dedD ? String(-dedD) : ""), 0); }
+      if (autoRate.buy && buyFree && curBuy !== String(autoRate.buy)) { autoRateRef.current = { ...autoRateRef.current, buy: String(autoRate.buy) }; setTimeout(() => onChange("기사운임", String(Number(autoRate.buy) - dedD)), 0); }
     }, [autoRate?.sale, autoRate?.buy, autoRate?.label]); // eslint-disable-line react-hooks/exhaustive-deps
     // ⭐ 운임조회 팝업 상태
     const [fareModalOpen, setFareModalOpen] = React.useState(false);

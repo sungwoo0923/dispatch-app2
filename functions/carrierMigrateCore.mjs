@@ -73,6 +73,10 @@ export const PRESET_SUGGESTIONS = {
     // 🏗 2026-11-16 "대행료"(비고 "대행료/35,000")는 지게차비 — 거래처에 청구하고 지게차 기사에게 그대로 준다(지게차부담 "청구")
     //  매출 · 매입에 같은 금액이 있으면 지게차비용으로, 기사운임(매입 합계)에서는 그 금액을 뺀다(배차 기사 몫이 아님)
     forkliftExtraNames: ["대행료"],
+    // 🛠 2026-11-26 사용자 확인 — 대행료(상차비용)는 배차 기사에게도 똑같이 준다(시트 매입: 기사 17만 + 대행료 5만).
+    //  가져올 때 지게차비(외부 지급 · 기사운임에서 뺌)로 바꾸지 않고 특수운임 "대행료"(거래처 청구 + · 기사 지급 +)로.
+    //  시트로 내보낼 때는 예전 지게차비용 · 새 대행료 항목 모두 위 "대행료" 칸으로(sheetPushCore)
+    agencyToDriver: true,
     // 에이제이 탭: 상차일자 칸 = 하차일 · 베베숲 평택 = 평택초저온 · 에이제이 후문 = 에이제이 · 기사직통을 배차방식으로(직접배차는 뺌)
     arrivalDateTabs: ["에이제이"],
     placeAliases: { 에이제이: { "베베숲 평택": "평택초저온", 베베숲평택: "평택초저온", "평택 초저온": "평택초저온", "에이제이 후문": "에이제이", "에이제이 정문": "에이제이", "구성리 창고": "구성리창고", 구성리: "구성리창고", 구성창고: "구성리창고",
@@ -800,7 +804,7 @@ function rowToOrder(r, L, ctx) {
       return;
     }
     const both = Math.min(Math.max(a, 0), Math.max(b, 0));
-    if (both > 0 && (ctx.preset.forkliftExtraNames || []).includes(n)) fk += both; // 🏗 지게차비(거래처 청구 · 지게차 기사 지급)
+    if (both > 0 && !ctx.preset.agencyToDriver && (ctx.preset.forkliftExtraNames || []).includes(n)) fk += both; // 🏗 지게차비(거래처 청구 · 지게차 기사 지급) — agencyToDriver 회사는 아래 특수운임(기사 지급)으로
     else if (both > 0) items.push({ 종류: kind, 이름: n, 금액: both, 받는사람: "기사", 부담: "청구", 메모: "구글시트 이전" });
     if (a > both) items.push({ 종류: kind, 이름: n, 금액: a - both, 받는사람: "없음", 부담: "청구", 메모: both ? `구글시트 이전 · 청구 ${won(a)} 중 기사 지급 ${won(both)}` : "구글시트 이전 · 청구만" });
     if (b > both) items.push({ 종류: kind, 이름: n, 금액: b - both, 받는사람: "기사", 부담: "회사", 메모: both ? `구글시트 이전 · 기사 지급 ${won(b)} 중 청구 ${won(both)}` : "구글시트 이전 · 회사 부담" });
