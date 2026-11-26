@@ -87,7 +87,8 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   // ⭐ 2026-11-05 기사앱 알림(신규 오더·취소·출근 알림)은 눌렀을 때 기사 화면으로 연다(예전엔 항상 /app → 운송사 화면으로 감)
   const t = String(event.notification?.data?.type || "");
-  const target = /^(fleet_|driver_)/.test(t) ? "/driver-home" : "/app";
+  // 🐞 2026-11-26 담당자(배차자)에게 가는 fleet_ 알림(오더 거절 · 지연 우려)을 누르면 기사 로그인 화면이 열렸다 → target:"app" 이면 운송사 화면
+  const target = event.notification?.data?.target === "app" ? "/app" : /^(fleet_|driver_)/.test(t) ? "/driver-home" : "/app";
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       const isDrv = target === "/driver-home";
