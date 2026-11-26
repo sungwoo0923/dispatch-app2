@@ -50,6 +50,7 @@ import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차�
 import { useOrderFormFields } from "./orderFormFields"; // 🧩 2026-11-26 오더등록 입력칸 고르기
 import OrderFieldsModal from "./OrderFieldsModal";
 import { ORDER_SKIN_CSS, nextSkin, skinName } from "./orderSkins"; // 🎨 2026-11-26 오더등록 디자인 시안(최고관리자)
+import { LAYOUT_SKINS, ORDER_LAYOUT_CSS, LayoutDecor, FareSummary } from "./orderLayouts"; // 🎨 구성이 바뀌는 시안
 import { startDarkGuard } from "./fleetDarkGuard";
 import MgrBadge, { setMgrNameMap } from "./MgrBadge";
 import { isUrgentOrder, UrgentBadge, urgentRowStyle } from "./urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조(모든 현황 공용)
@@ -11102,9 +11103,12 @@ function DmDot({ on, alert = false }) {
   const [ofOpen, setOfOpen] = React.useState(false);
   // 🎨 2026-11-26 오더등록 디자인 시안 — 최고관리자만 [디자인 변경]으로 돌려 본다(입력칸 · 버튼 · 기능은 그대로, 모양만 · src/orderSkins.js)
   const [ofSkin, setOfSkin] = React.useState(() => { try { return localStorage.getItem("kpOrderSkin") || "base"; } catch { return "base"; } });
-  const skinOn = role === "totalMaster" ? ofSkin : "base";
+  // 🧪 개발 화면(import.meta.env.DEV)에서만 localStorage kpSkinTest=1 이면 다른 계정으로도 시안 점검 — 배포 빌드에는 들어가지 않는다
+  const skinAllowed = role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpSkinTest") === "1"; } catch { return false; } })());
+  const skinOn = skinAllowed ? ofSkin : "base";
   const cycleSkin = () => setOfSkin((v) => { const n = nextSkin(v); try { localStorage.setItem("kpOrderSkin", n); } catch { /* 무시 */ } return n; });
-  React.useEffect(() => (skinOn === "dark" ? startDarkGuard(".of-skin-dark", "img,video,canvas,svg,path,iframe,.leaflet-tile-pane,.leaflet-tile,.fm-keep-light", { restore: true }) : undefined), [skinOn]);
+  const layOn = LAYOUT_SKINS.has(skinOn);
+  React.useEffect(() => (skinOn === "cockpit" ? startDarkGuard(".of-skin-cockpit", "img,video,canvas,svg,path,iframe,.leaflet-tile-pane,.leaflet-tile,.fm-keep-light", { restore: true }) : undefined), [skinOn]);
   const dmLookupNameOf = React.useCallback((r) => _orderStaffNameRaw(r, userNameMap), [userNameMap]);
 
       // ⭐ 회사별 커스텀 드롭다운 옵션(Part B) — 등록폼 전역에서 재사용하므로 최상위에서
@@ -16316,7 +16320,7 @@ React.useEffect(() => {
     </button>
     {ofOpen && <OrderFieldsModal state={ofs} onClose={() => setOfOpen(false)} canCompany={!isViewer} />}
     {/* 🎨 2026-11-26 디자인 변경(최고관리자만) — 누를 때마다 기본 → A → B → C → D 순서로 실제 화면이 바뀐다 */}
-    {role === "totalMaster" && (
+    {skinAllowed && (
       <button type="button" onClick={cycleSkin} data-testid="order-skin-btn" title={`오더등록 디자인 시안 돌려 보기(최고관리자만) — 지금: ${skinName(skinOn)}`}
         className={`${DM_BTN} border ${skinOn !== "base" ? "bg-gradient-to-r from-[#4F46E5] to-[#0891B2] text-white border-transparent shadow-[0_6px_16px_rgba(79,70,229,0.3)]" : "bg-white text-[#4F46E5] border-[#C7D2FE] hover:bg-[#EEF2FF]"}`}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r="1.5" /><circle cx="17.5" cy="10.5" r="1.5" /><circle cx="8.5" cy="7.5" r="1.5" /><circle cx="6.5" cy="12.5" r="1.5" /><path d="M12 2a10 10 0 0 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4A5.6 5.6 0 0 0 22 9.8C22 5.5 17.5 2 12 2z" /></svg>
@@ -16715,7 +16719,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
 >
   
   {/* ================== 오더 정보 (카드 최상단 네이비 헤더) ================== */}
-<div className="col-span-full -mx-6 -mt-0 mb-2">{/* ⭐ 2026-11-02 화면 점검 — 칸 수가 바뀌어도 한 줄 전체 */}
+<div data-of="head" className="col-span-full -mx-6 -mt-0 mb-2">{/* ⭐ 2026-11-02 화면 점검 — 칸 수가 바뀌어도 한 줄 전체 */}
   <div className="relative px-6 py-3.5 flex items-center justify-between overflow-hidden" style={{ background: "linear-gradient(120deg,#0B1428 0%,#0F1A30 40%,#1B2B4B 75%,#2D4C82 100%)" }}>
     <span className="absolute inset-0 opacity-[0.08] pointer-events-none" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "22px 22px" }} />
     <span className="relative flex items-baseline gap-2.5">
@@ -17413,9 +17417,12 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
   </div>
 )}
 
+{/* 🎨 구성형 디자인 시안 — 카드 바탕 · 묶음 제목 · 가운데 경로(입력칸은 그대로) */}
+{layOn && <LayoutDecor skin={skinOn} form={form} onSwap={swapPickupDrop} onMap={() => setShowFareRouteMap(true)} />}
+
 {/* 청구 사업자(여러 사업자일 때만) + 거래처 + 신규등록
     ⭐ 2026-11-03 청구 사업자를 맨 앞 칸으로 — 거래처 칸(2칸) 안을 나눠 쓰므로 뒤 칸들이 밀리지 않는다 */}
-<div className={`col-span-2 ${dmBiz.multi ? "grid grid-cols-[minmax(0,0.85fr)_minmax(0,1.65fr)] gap-x-3.5" : ""}`}>
+<div data-of="cli" className={`col-span-2 ${dmBiz.multi ? "grid grid-cols-[minmax(0,0.85fr)_minmax(0,1.65fr)] gap-x-3.5" : ""}`}>
   {dmBiz.multi && (
     <div className="min-w-0">
       <label className={labelCls} htmlFor="dm-biz-select"><EditableText id="orderForm.label.청구사업자" defaultText="청구 사업자" /></label>
@@ -17565,7 +17572,7 @@ const similar = placeList.filter(p => {
 
   {/* 상차지명 + 자동완성 */}
   {ofShow("상차지") && ( /* 🧩 입력칸 설정 */
-  <div className="relative">
+  <div data-of="pn" className="relative">
     <label className={orderCardStyle === "A" ? "flex items-center h-[22px] overflow-visible gap-1.5 text-[16px] font-bold text-blue-600 mb-1" : "flex items-center h-[22px] overflow-visible gap-1.5 whitespace-nowrap text-[12.5px] font-black text-[#0F1A30] mb-1.5"}>
   {orderCardStyle === "B" && <span className="w-2 h-2 rounded-[2px] bg-[#0F1A30] shrink-0" />}
   <EditableText id="orderForm.label.상차지" defaultText="상차지" /> {reqStar}
@@ -17659,7 +17666,7 @@ const similar = placeList.filter(p => {
 
 {/* 상차지주소 */}
 {ofShow("상차지주소") && ( /* 🧩 입력칸 설정 */
-<div>
+<div data-of="pa">
   <div className="flex items-center h-[22px] overflow-visible justify-between mb-1">
     <label className={`${labelCls} mb-0 min-w-0 overflow-hidden`} /* ⭐ 2026-11-02 화면 점검 — 좁아지면 라벨이 버튼을 덮지 않게 */>
       <EditableText id="orderForm.label.상차지주소" defaultText="상차지주소" /> <AutoBadge show={autoPickMatched} />
@@ -17706,7 +17713,7 @@ className={`
 
 {/* 상차지 담당자 */}
 {ofShow("상차지담당자") && ( /* 🧩 입력칸 설정 */
-<div>
+<div data-of="pm">
   <div className="flex items-center h-[22px] overflow-visible justify-between mb-1">
     <label className={`${labelCls} mb-0`}>
       <EditableText id="orderForm.label.상차지담당자" defaultText="상차지 담당자" />
@@ -17730,7 +17737,7 @@ className={`
 
 {/* 상차지 연락처 */}
 {ofShow("상차지연락처") && ( /* 🧩 입력칸 설정 */
-<div>
+<div data-of="pc">
   <label className={labelCls}><EditableText id="orderForm.label.상차지연락처" defaultText="상차지 연락처" /></label>
   <input autoComplete="off"
     id="pickup-phone"
@@ -17747,7 +17754,7 @@ className={`
 
 {/* 하차지명 + 자동완성 */}
 {ofShow("하차지") && ( /* 🧩 입력칸 설정 */
-<div className="relative">
+<div data-of="dn" className="relative">
   <label className={orderCardStyle === "A" ? "flex items-center h-[22px] overflow-visible gap-1.5 text-[16px] font-bold text-red-500 mb-1" : "flex items-center h-[22px] overflow-visible gap-1.5 whitespace-nowrap text-[12.5px] font-black text-[#0F1A30] mb-1.5"}>
     {orderCardStyle === "B" && <span className="w-2 h-2 rounded-[2px] bg-[#CFE0FF] ring-1 ring-[#4B6CB7] shrink-0" />}
     <EditableText id="orderForm.label.하차지" defaultText="하차지" /> {reqStar}
@@ -17844,7 +17851,7 @@ className={`
 
 {/* 하차지주소 */}
 {ofShow("하차지주소") && ( /* 🧩 입력칸 설정 */
-<div>
+<div data-of="da">
 
   <div className="flex items-center h-[22px] overflow-visible justify-between mb-1">
 
@@ -17896,7 +17903,7 @@ className={`
 
 {/* 하차지 담당자 */}
 {ofShow("하차지담당자") && ( /* 🧩 입력칸 설정 */
-<div>
+<div data-of="dm">
   <div className="flex items-center h-[22px] overflow-visible justify-between mb-1">
     <label className={`${labelCls} mb-0`}>
       <EditableText id="orderForm.label.하차지담당자" defaultText="하차지 담당자" />
@@ -17920,7 +17927,7 @@ className={`
 )}
 
 {ofShow("하차지연락처") && ( /* 🧩 입력칸 설정 */
-<div>
+<div data-of="dc">
   <label className={labelCls}><EditableText id="orderForm.label.하차지연락처" defaultText="하차지 연락처" /></label>
   <input autoComplete="off"
     id="drop-phone"
@@ -17939,7 +17946,7 @@ className={`
 )}
 
 {ofShow("화물내용") && ( /* 🧩 입력칸 설정 */
-<div className="relative">
+<div data-of="cargo" className="relative">
   {/* ⭐ 2026-11-02 화면 점검 — 칩이 줄바꿈되면 아래 입력칸을 덮지 않게 라벨 높이를 늘린다 */}
   <label className={labelCls + " flex items-center gap-1 flex-wrap !h-auto min-h-[22px]"}>
     <EditableText id="orderForm.label.화물내용" defaultText="화물내용" />
@@ -18034,7 +18041,7 @@ className={`
 
 
 {ofShow("차량종류") && ( /* 🧩 입력칸 설정 */
-<div className="relative">
+<div data-of="vk" className="relative">
   <div
   className="flex items-center h-[22px] overflow-visible justify-between mb-1"
   onClick={(e) => e.stopPropagation()}
@@ -18144,7 +18151,7 @@ className={`
 )}
 
 {ofShow("차량톤수") && ( /* 🧩 입력칸 설정 */
-<div className="relative">
+<div data-of="ton" className="relative">
   <label className={labelCls}><EditableText id="orderForm.label.차량톤수" defaultText="차량톤수" /></label>
 
   <div className="relative">
@@ -18211,7 +18218,7 @@ className={`
 {canMoney && (
   <>
     {/* 청구운임 */}
-    <div>
+    <div data-of="fsale">
       <div className={`${labelCls} flex items-center gap-2 flex-wrap`}>
         <EditableText id="orderForm.label.청구운임" defaultText="청구운임" />
 
@@ -18245,7 +18252,7 @@ className={`
     </div>
 
     {/* 기사운임 */}
-    <div>
+    <div data-of="fdrv">
       <label className={`${labelCls} flex items-center gap-2`}>
         <EditableText id="orderForm.label.기사운임" defaultText="기사운임" />
 
@@ -18278,7 +18285,7 @@ className={`
     </div>
 
     {/* 수수료 */}
-    <div>
+    <div data-of="ffee">
       {/* ⭐ 2026-11-02 운임규칙 — 운임구분은 수수료 라벨 줄 오른쪽 알약 버튼(칸 배치 그대로) */}
       <div className={`${labelCls} flex items-center gap-1.5 whitespace-nowrap`}>
         <span className="shrink-0"><EditableText id="orderForm.label.수수료" defaultText="수수료" /></span>
@@ -18851,7 +18858,7 @@ className={`
 
  {/* ===== 스마트검색 (독립 컬럼) ===== */}
 {ofShow("스마트검색") && ( /* 🧩 입력칸 설정 */
-<div className="relative">
+<div data-of="ss" className="relative">
   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
     <label className={labelCls}><EditableText id="orderForm.label.스마트검색" defaultText="스마트검색" /></label>
     {/* ⭐ 빈 지입차 추천 — 오늘 배차 없는 지입·직영 기사를 상차지 가까운 순으로 (현재 최고관리자 전용) */}
@@ -18921,7 +18928,7 @@ className={`
 
 {/* ===== 차량번호 (독립 컬럼) ===== */}
 {ofShow("차량번호") && ( /* 🧩 입력칸 설정 */
-<div className="relative">
+<div data-of="plate" className="relative">
   <label className={labelCls}><EditableText id="orderForm.label.차량번호" defaultText="차량번호" /></label>
 
   <input autoComplete="off"
@@ -19037,7 +19044,7 @@ className={`
 
 {/* ===== 기사명 — ⭐ 2026-11-05 등록 기사와 매칭되면 잠금, 옆 [수정]으로 고침(미등록이면 예전처럼 바로 입력) ===== */}
 {ofShow("기사명") && ( /* 🧩 입력칸 설정 */
-<div>
+<div data-of="dname">
   <label className={labelCls}><EditableText id="orderForm.label.기사명" defaultText="기사명" /></label>
   <input autoComplete="off"
     data-arrownav
@@ -19056,7 +19063,7 @@ className={`
 
 {/* ===== 전화번호 ===== */}
 {ofShow("전화번호") && ( /* 🧩 입력칸 설정 */
-<div>
+<div data-of="dphone">
   <label className={labelCls}><EditableText id="orderForm.label.전화번호" defaultText="전화번호" />
     {(formDrvLocked || formDrvEdit.editing) && (
       <DriverEditButton tiny className="ml-auto" editing={formDrvEdit.editing}
@@ -19081,14 +19088,14 @@ className={`
 
   {/* 상/하차 방법 */}
   {ofShow("상차방법") && ( /* 🧩 입력칸 설정 */
-  <div>
+  <div data-of="lm">
     <label className={labelCls}><EditableText id="orderForm.label.상차방법" defaultText="상차방법" /><DropdownOptionsManageButton optKey="상하차방법" label="상/하차방법" role={role} userCompany={userCompany} /></label>
     <CompanyOptionPicker optKey="상하차방법" title="상차방법" placeholder="선택" noneLabel="선택" className={inputCls} value={form.상차방법} onChange={(__v) => ((e) => onChange("상차방법", e.target.value))({ target: { value: __v } })} />
   </div>
   )}
 
   {ofShow("하차방법") && ( /* 🧩 입력칸 설정 */
-  <div>
+  <div data-of="um">
     <label className={labelCls}><EditableText id="orderForm.label.하차방법" defaultText="하차방법" /><DropdownOptionsManageButton optKey="상하차방법" label="상/하차방법" role={role} userCompany={userCompany} /></label>
     <CompanyOptionPicker optKey="상하차방법" title="하차방법" placeholder="선택" noneLabel="선택" className={inputCls} value={form.하차방법} onChange={(__v) => ((e) => onChange("하차방법", e.target.value))({ target: { value: __v } })} />
   </div>
@@ -19096,7 +19103,7 @@ className={`
 
   {/* 결제 */}
   {ofShow("지급방식") && ( /* 🧩 입력칸 설정 */
-  <div>
+  <div data-of="pay">
     <label className={labelCls}><EditableText id="orderForm.label.지급방식" defaultText="지급방식" /><DropdownOptionsManageButton optKey="지급방식" label="지급방식" role={role} userCompany={userCompany} /></label>
    <CompanyOptionPicker optKey="지급방식" placeholder="선택" noneLabel="선택" ref={payTypeRef} className={`${inputCls}${requiredErrors.has("지급방식") ? " border-red-500 ring-2 ring-red-300 animate-pulse" : ""}`} value={form.지급방식} onChange={(__v) => ((e) => {
   const v = e.target.value;
@@ -19107,7 +19114,7 @@ className={`
   )}
 
   {ofShow("배차방식") && ( /* 🧩 입력칸 설정 */
-  <div>
+  <div data-of="way">
     <label className={labelCls}><EditableText id="orderForm.label.배차방식" defaultText="배차방식" /><DropdownOptionsManageButton optKey="배차방식" label="배차방식" role={role} userCompany={userCompany} /></label>
     {/* 💳 2026-11-11 배차방식 — 먼저 IN/OUT, 그다음 방식(시험 기능이 꺼진 운송사는 예전 그대로) */}
     <DispatchWayPicker scope={[form?.거래처명, form?.상차지명, form?.하차지명]} className={inputCls} value={form.배차방식} dir={form.콜구분 || ""} role={role} userCompany={userCompany}
@@ -19127,7 +19134,7 @@ className={`
     값·동작(메모, 메모중요도, 전달사항, 전달사항고정)은 예전과 똑같다
    =============================== */}
 {ofShow("메모") && ( /* 🧩 입력칸 설정 */
-<div className="col-span-full grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">{/* ⭐ 2026-11-02 화면 점검 — col-span-full */}
+<div data-of="memo" className="col-span-full grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">{/* ⭐ 2026-11-02 화면 점검 — col-span-full */}
 
   {/* ── 메모 ── */}
   <section className={`group relative flex flex-col rounded-2xl border bg-white transition focus-within:border-[#1B2B4B] focus-within:ring-2 focus-within:ring-[#1B2B4B]/15 focus-within:shadow-[0_0_0_6px_rgba(143,176,240,0.16)] ${form.메모중요도 === "CRITICAL" ? "border-[#1B2B4B]" : "border-[#E3E8F0]"}`}>
@@ -20212,7 +20219,8 @@ className={`
       
            {/* ==================== 상단: 입력폼 + Today 사이드패널 ==================== */}
 {skinOn !== "base" && <style>{ORDER_SKIN_CSS}</style>}{/* 🎨 디자인 시안(최고관리자) */}
-<div className={`flex items-stretch gap-3 w-full mb-4 of-skin of-skin-${skinOn}`} style={{ minWidth: 0 }}>
+{layOn && <style>{ORDER_LAYOUT_CSS}</style>}
+<div className={`flex items-stretch gap-3 w-full mb-4 of-skin of-skin-${skinOn}${layOn ? ` of-lay of-lay-${skinOn}` : ""}`} style={{ minWidth: 0 }}>
   {/* 왼쪽: 폼 */}
   {/* ⭐ 2026-11-01 화면이 좁으면(노트북·125% 배율 1536px 등) 입력칸이 겹쳐 화물내용 칸을 못 누를 정도였다 — 1800px 미만은 폼을 넓게 */}
   {/* ⭐ 2026-11-02 수수료 라벨 줄(운임구분)이 좁아지지 않게 입력 칸 74→77%(넓은 화면 62→66%) · 옆 달력은 그만큼 살짝 작게 */}
@@ -20225,6 +20233,19 @@ className={`
       (CustomDatePicker)에서 처리한다. 사용자 피드백: "오른쪽 패널에 있는
       달력말고 오더정보에 있는 달력에 다중선택 버튼을 넣어달라" — 그래서
       이 패널은 원래대로 단일 상/하차일 선택 전용으로 유지한다. */}
+  {skinOn === "route" ? (
+    // 🎨 A 루트 보드 — 달력 위에 운임 요약(보기만 · 입력은 왼쪽 칸)
+    <div className="flex flex-col gap-3" style={{ flex: "1 1 0%", minWidth: 0 }}>
+      <FareSummary form={form} hint={areaFareHint ? `이 구간 최근 운임 ${areaFareHint.min.toLocaleString()} ~ ${areaFareHint.max.toLocaleString()}원 (${areaFareHint.count}건)` : distanceFareEstimate ? `거리 기준 추정 ${distanceFareEstimate.min.toLocaleString()} ~ ${distanceFareEstimate.max.toLocaleString()}원` : ""} />
+  <OrderCalendarPanel
+      pickupDate={form.상차일 || ""}
+      dropDate={form.하차일 || ""}
+      onPickupChange={(v) => onChange("상차일", v)}
+      onDropChange={(v) => onChange("하차일", v)}
+      companyName={userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY}
+    />
+    </div>
+  ) : (
   <OrderCalendarPanel
     pickupDate={form.상차일 || ""}
     dropDate={form.하차일 || ""}
@@ -20232,6 +20253,7 @@ className={`
     onDropChange={(v) => onChange("하차일", v)}
     companyName={userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY}
   />
+  )}
 </div>
 {dupOrderMatches && (
   <DuplicateOrderModal

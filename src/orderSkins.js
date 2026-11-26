@@ -5,10 +5,11 @@
 //  · 이 PC에만 기억(localStorage kpOrderSkin) — 다른 계정 · 다른 PC는 그대로
 export const ORDER_SKINS = [
   { id: "base", name: "기본", desc: "지금 쓰는 화면" },
-  { id: "lux", name: "A 프리미엄 타일", desc: "칸마다 떠 있는 흰 타일 · 상차/하차 색 표시 · 눌린 칸은 파란 빛" },
-  { id: "clean", name: "B 클린 시트", desc: "흰 종이처럼 얇은 선만 · 머리도 흰색 · 박스형 입력칸" },
-  { id: "dark", name: "C 다크 콕핏", desc: "관제실 같은 어두운 화면 · 유리 칸 · 지나가는 빛" },
-  { id: "aurora", name: "D 오로라", desc: "밝은 화면에 은은한 오로라 빛 · 빛나는 테두리 · 부드러운 칸" },
+  // 🎨 구성이 바뀌는 시안(src/orderLayouts.jsx) — 입력칸은 그대로, 놓이는 자리 · 카드 · 경로 정보만
+  { id: "route", name: "A 루트 보드", desc: "상차 · 하차 카드 나란히 + 가운데 거리 · 시간 · 오른쪽 운임 요약" },
+  { id: "sheet", name: "B 섹션 시트", desc: "기본 · 상차 · 하차 · 화물 · 기사 · 운임 묶음 제목 + 4칸씩 정렬" },
+  { id: "cockpit", name: "C 3단 콕핏", desc: "왼쪽 상하차 · 가운데 화물 · 기사 · 오른쪽 운임, 어두운 화면" },
+  { id: "aurora", name: "D 오로라", desc: "밝은 화면에 은은한 오로라 빛(색만)" },
 ];
 export const nextSkin = (id) => { const i = ORDER_SKINS.findIndex((s) => s.id === id); return ORDER_SKINS[(i + 1) % ORDER_SKINS.length].id; };
 export const skinName = (id) => (ORDER_SKINS.find((s) => s.id === id) || ORDER_SKINS[0]).name;
