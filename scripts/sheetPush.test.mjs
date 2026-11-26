@@ -472,23 +472,23 @@ async function world(mode, opts = {}) {
     r("2026. 11. 14", "에이제이", "트레이더스 칠곡", "", "당착", "300,000", "", "", "300,000", "270,000", "", "", "270,000")];
   const ctx = makePushContext([{ title: "에이제이", rows }], JY, {});
   const presets = [
-    RP.parsePresetDoc(RP.presetDocData({ 거래처명: "에이제이", 하차지명: "트레이더스 칠곡", items: [{ 종류: "지게차", 금액: 35000, 부담: "청구" }] })),
-    RP.parsePresetDoc(RP.presetDocData({ 거래처명: "에이제이", 하차지명: "에브리데이 여주", items: [{ 종류: "지게차", 금액: 50000, 부담: "청구" }, { 종류: "할증", 이름: "야상", 금액: 20000, 받는사람: "없음", 부담: "청구", 조건: "야간" }] })),
+    RP.parsePresetDoc(RP.presetDocData({ 거래처명: "에이제이", 하차지명: "트레이더스 칠곡", items: [{ 종류: "기타", 이름: "대행료", 금액: 35000, 받는사람: "기사", 부담: "청구" }] })),
+    RP.parsePresetDoc(RP.presetDocData({ 거래처명: "에이제이", 하차지명: "에브리데이 여주", items: [{ 종류: "기타", 이름: "대행료", 금액: 50000, 받는사람: "기사", 부담: "청구" }, { 종류: "할증", 이름: "야상", 금액: 20000, 받는사람: "없음", 부담: "청구", 조건: "야간" }] })),
   ];
   const cellsOf = (plan) => Object.fromEntries(plan.cells.map((x) => [x.a1, x.value]));
   const rowOf = (n) => ctx.built.orders.find((x) => x.__tab === "에이제이" && x.__row === n);
   // ① 프로그램 등록(밤 · 에브리데이 여주) — 노선 고정 적용 → 시트: 입고시간 야상 · I 20,000(야상) · J/M 50,000(대행료=지게차) · 운송료 300,000
   const neu = applyRoutePresets({ companyName: "JY로지스틱스", 등록기기: "PC", 거래처명: "에이제이", 상차지명: "에이제이", 하차지명: "에브리데이 여주", 상차일: "2026-11-19", 상차시간: "21:00", 하차일: "2026-11-20", 청구운임: "300000", 기사운임: "270000", 수수료: "30000" }, presets);
-  assert.deepEqual([neu.청구운임, neu.기사운임, neu.지게차비용, neu.특수운임.map((x) => x.이름)], ["370000", "270000", "50000", ["야상"]]);
+  assert.deepEqual([neu.청구운임, neu.기사운임, neu.특수운임.map((x) => x.이름)], ["370000", "320000", ["대행료", "야상"]]);
   const c = planCreate(ctx, neu, "에이제이", { rowCount: 100 });
   assert.equal(c.ok, true);
   const m = cellsOf(c);
   assert.deepEqual([m.A7, m.F7, m.H7, m.I7, m.J7, m.K7, m.L7, m.M7, m.N7, m.O7], ["2026-11-20", "야상", "300000", "20000", "50000", "370000", "270000", "50000", undefined, "320000"], "시트 칸: 운송료 · 야상 · 대행료 · 합계");
   for (const k of ["청구운임", "기사운임", "특수운임", "지게차비용", "수수료", "특수청구추가", "지게차청구추가"]) assert.ok(!c.docPatch._programKeys.includes(k), `${k}: 시트와 같게 읽힌다`);
-  assert.ok(c.pushed.includes("특수운임") && c.pushed.includes("지게차비용"));
+  assert.ok(c.pushed.includes("특수운임"));
   // 다시 읽은 줄 = 같은 특수운임 · 같은 운임(두 번 더하지 않음)
   const back = rowOf(7);
-  assert.deepEqual([back.청구운임, back.기사운임, back.지게차비용, back.특수운임.map((x) => [x.이름, x.금액, x.받는사람, x.부담])], ["370000", "270000", 50000, [["야상", 20000, "없음", "청구"]]]);
+  assert.deepEqual([back.청구운임, back.기사운임, back.지게차비용, back.특수운임.map((x) => [x.이름, x.금액, x.받는사람, x.부담])], ["370000", "320000", undefined, [["대행료", 50000, "기사", "청구"], ["야상", 20000, "없음", "청구"]]]); // 🛠 2026-11-26 대행료는 기사에게도 똑같이(agencyToDriver)
   // 실시간 반영(시트 → 프로그램): 같은 줄로 보고 운임 · 특수운임을 덮어쓰지 않는다
   const doc = { ...neu, ...c.docPatch };
   const rc = reconcileOrders([{ id: "n1", data: doc }], [back]);
@@ -504,17 +504,17 @@ async function world(mode, opts = {}) {
   // ③ 시트에서 온 줄(14일 · 칠곡 · 대행료 없음)에 프로그램에서 노선 고정 적용 → 수정: J/M 35,000 · 운송료는 그대로
   const imp = forOrderDoc(rowOf(6), { company: "JY로지스틱스", batchId: "t" });
   const upd = applyRoutePresets(imp, presets);
-  assert.deepEqual([upd.청구운임, upd.기사운임, upd.지게차비용], ["335000", "270000", "35000"]);
+  assert.deepEqual([upd.청구운임, upd.기사운임], ["335000", "305000"]); // 대행료는 기사에게도 똑같이
   const u = planUpdate(ctx, imp, upd);
   assert.equal(u.ok, true);
   assert.deepEqual(cellsOf(u), { J6: "35000", K6: "335000", M6: "35000", O6: "305000" }, "추가 칸 · 합계만");
   assert.deepEqual(u.unpushed, []);
-  assert.deepEqual([rowOf(6).지게차비용, rowOf(6).기사운임, rowOf(6).청구운임], [35000, "270000", "335000"]);
+  assert.deepEqual([rowOf(6).지게차비용, rowOf(6).기사운임, rowOf(6).청구운임], [undefined, "305000", "335000"]);
   // ④ 지게차가 있는 줄(13일)의 기사운임만 고침 → 매입 운송료만(예전엔 대행료를 빼고 써서 기사운임이 35,000 적게 읽혔다)
   const d13 = forOrderDoc(rowOf(5), { company: "JY로지스틱스", batchId: "t" });
-  const u2 = planUpdate(ctx, d13, { ...d13, 기사운임: "280000" });
+  const u2 = planUpdate(ctx, d13, { ...d13, 기사운임: "315000" }); // 매입 운송료 270,000 → 280,000 (+ 대행료 35,000)
   assert.deepEqual(cellsOf(u2), { L5: "280000", O5: "315000" }, "매입 운송료 · 합계(지게차 포함)");
-  assert.equal(rowOf(5).기사운임, "280000");
+  assert.equal(rowOf(5).기사운임, "315000");
   // ⑤ 시트 칸으로 나타낼 수 없는 특수운임(외부 지급) — 운임은 예전 방식으로 쓰고 특수운임은 프로그램에만(_programKeys)
   const ext = { ...day, 하차일: "2026-11-21", 상차일: "2026-11-21", 특수운임수동: true };
   const ext2 = { ...ext, 특수운임: [{ 종류: "수작업", 금액: 30000, 받는사람: "외부", 부담: "청구" }], 청구운임: "380000", 외부지급합: 80000 };

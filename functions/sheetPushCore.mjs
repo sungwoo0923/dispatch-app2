@@ -47,6 +47,16 @@ const withClose = (o, arrival) => (cell(o?.마감월) ? o : { ...o, 마감월: S
 const NOT_WATCHED = new Set(["이전출처", "담당노선구분", "등록일", "_sheetKeys", "_programKeys", "_sheetBase", "_sheetWayRaw", "importBatchId", "작성자", "등록기기", "companyName", "_id"]);
 const MONEY = new Set(["청구운임", "기사운임", "수수료", "특수기사차감", "특수청구추가", "외부지급합"]);
 
+// 🛠 2026-11-26 대행료 = 기사에게도 주는 특수운임(preset.agencyToDriver) — 예전 지게차비용(부담 청구)을 같은 뜻으로 바꿔 본다
+export function agencyNorm(o, preset) {
+  const F = Math.max(0, Number(o?.지게차비용) || 0);
+  if (!preset?.agencyToDriver || !(F > 0) || o?.지게차부담 !== "청구") return o;
+  const name = (preset.forkliftExtraNames || [])[0] || "대행료";
+  const n = (v) => Number(v) || 0;
+  return { ...o, 지게차비용: 0, 지게차부담: "", 기사운임: String(n(o.기사운임) + F),
+    지게차청구추가: 0, 특수청구추가: n(o.특수청구추가) + F, 특수기사차감: n(o.특수기사차감) - F, 외부지급합: Math.max(0, n(o.외부지급합) - F),
+    특수운임: [...(Array.isArray(o.특수운임) ? o.특수운임 : []), { 종류: "기타", 이름: name, 금액: F, 받는사람: "기사", 부담: "청구" }] };
+}
 export function sameValue(k, a, b) {
   if (MONEY.has(k) || k === "지게차비용") return (Number(a) || 0) === (Number(b) || 0);
   if (k === "특수운임") return sameSpecials(a, b); // 메모 · 자동 표시 · 순서는 견주지 않는다
@@ -229,7 +239,8 @@ function moneyPlan(env, o) {
     const payee = ["기사", "외부", "없음"].includes(x.받는사람) ? x.받는사람 : SP_DEF[t][0];
     const mode = payee === "없음" ? (x.부담 === "기사" ? "기사" : "청구") : ["기사", "회사", "청구"].includes(x.부담) ? x.부담 : SP_DEF[t][1];
     const name = nm(x.이름);
-    let i = name ? pairs.findIndex((p) => !generic(p.name) && !forkNames.includes(nm(p.name)) && nm(p.name) === name) : -1;
+    // 🛠 2026-11-26 지게차비용이 없으면 "대행료" 같은 지게차 이름 칸도 같은 이름 특수운임이 쓸 수 있다(JY 대행료 = 기사 지급 특수운임)
+    let i = name ? pairs.findIndex((p) => !generic(p.name) && !(F > 0 && forkNames.includes(nm(p.name))) && nm(p.name) === name) : -1;
     if (i < 0) {
       i = pairs.findIndex((p, k) => generic(p.name) && (!genericName.has(k) || genericName.get(k) === name));
       if (i < 0) return null;
@@ -413,7 +424,9 @@ function fitEdits(ctx, title, rowNo, baseRow, target, fields, env) {
     const writeRow = [...baseRow];
     byField.forEach((list) => list.forEach((x) => { if (!x.virtual) writeRow[x.c] = x.v; }));
     if (!d.o) return { row, writeRow, d, fields: [...byField.keys()] }; // 줄 자체가 오더로 읽히지 않는다 — 부른 쪽이 되돌린다
-    const bad = [...byField.keys()].filter((k) => !pushSame(k, d.o[k], target[k], env.preset, title) || (k === "하차시간" && (!sameValue("하차일", d.o.하차일, target.하차일) || !sameValue("상차일", d.o.상차일, target.상차일))));
+    // 🛠 2026-11-26 agencyToDriver(JY) — 예전 지게차비용(청구) 오더는 다시 읽으면 특수운임 "대행료"(기사 지급) + 기사운임 +로 읽힌다 → 같은 뜻으로 맞춰 견준다
+    const tCmp = agencyNorm(target, env.preset);
+    const bad = [...byField.keys()].filter((k) => !pushSame(k, d.o[k], tCmp[k], env.preset, title) || (k === "하차시간" && (!sameValue("하차일", d.o.하차일, target.하차일) || !sameValue("상차일", d.o.상차일, target.상차일))));
     if (!bad.length) return { row, writeRow, d, fields: [...byField.keys()] };
     d.undo();
     // ⭐ 2026-11-17 운임 · 특수운임을 추가 칸까지 같이 써 봤는데 똑같이 읽히지 않으면 → 예전 방식(운송료 칸만)으로 한 번 더
@@ -460,9 +473,10 @@ export function planUpdate(ctx, before, after, opts = {}) {
   // 프로그램 값 그대로 두는 칸: 예전 것 중 이번에 시트와 같아진 것은 빼고, 이번에 고쳤는데 시트로는 못 옮긴 것을 더한다
   const pk = new Set(Array.isArray(before._programKeys) ? before._programKeys : []);
   const sb = { ...(before._sheetBase || {}) };
-  changed.forEach((k) => { if (samePlaceTab(k, o[k], after[k], ctx.preset, title) ?? sameValue(k, o[k], after[k])) { pk.delete(k); delete sb[k]; } else { pk.add(k); sb[k] = o[k] ?? ""; } });
+  const afterN = agencyNorm(after, ctx.preset); // 🛠 2026-11-26 예전 지게차비용 = 대행료(기사 지급)와 같은 뜻
+  changed.forEach((k) => { if (samePlaceTab(k, o[k], afterN[k], ctx.preset, title) ?? sameValue(k, o[k], afterN[k])) { pk.delete(k); delete sb[k]; } else { pk.add(k); sb[k] = o[k] ?? ""; } });
   const cells = cellsOf(title, rowNo, base, fit.writeRow);
-  return { ok: true, kind: "update", tab: title, row: rowNo, cells, pushed: fit.fields.filter((k) => pushSame(k, o[k], after[k], ctx.preset, title)), unpushed: changed.filter((k) => !pushSame(k, o[k], after[k], ctx.preset, title)),
+  return { ok: true, kind: "update", tab: title, row: rowNo, cells, pushed: fit.fields.filter((k) => pushSame(k, o[k], afterN[k], ctx.preset, title)), unpushed: changed.filter((k) => !pushSame(k, o[k], afterN[k], ctx.preset, title)),
     // _sheetKeys: 지금 시트에서 읽히는 칸 — 프로그램에서 배차해 시트에 쓴 차량 · 기사를 나중에 시트에서 지우면 프로그램에서도 비워지게(없으면 "시트에 원래 없던 값"으로 보고 남겨 뒀다)
     docPatch: { 이전출처: `${title}!${rowNo}`, _programKeys: [...pk], _sheetBase: sb, ...wayRaw(env.L, fit.writeRow), _sheetKeys: uniq([...(Array.isArray(before._sheetKeys) ? before._sheetKeys : []), ...Object.keys(o).filter((k) => !k.startsWith("__") && !empty(o[k]))]) } };
 }
@@ -515,8 +529,9 @@ export function planCreate(ctx, order, title, { rowCount = 0, atRow = 0, taken =
   const keys = Object.keys(o).filter((k) => !k.startsWith("__") && !empty(o[k]));
   const pk = []; const sb = {};
   // 시트에서 읽히는 값이 프로그램 값과 다른 칸은 프로그램 값을 둔다(등록일 · 하차일 · 거래처명 등) — 탭에서 오는 값(이전출처 · 담당노선구분)만 시트를 따른다
-  keys.forEach((k) => { if (k === "이전출처" || k === "담당노선구분") return; if (!(samePlaceTab(k, order[k], o[k], ctx.preset, title) ?? sameValue(k, order[k], o[k]))) { pk.push(k); sb[k] = o[k]; } });
-  return { ok: true, kind: "create", tab: title, row: rowNo, cells: cellsOf(title, rowNo, base, fit.writeRow), pushed: fit.fields.filter((k) => pushSame(k, o[k], order[k], ctx.preset, title)), unpushed: fields.filter((k) => !pushSame(k, o[k], order[k], ctx.preset, title)),
+  const orderN = agencyNorm(order, ctx.preset); // 🛠 2026-11-26 예전 지게차비용 = 대행료(기사 지급)와 같은 뜻
+  keys.forEach((k) => { if (k === "이전출처" || k === "담당노선구분") return; if (!(samePlaceTab(k, orderN[k], o[k], ctx.preset, title) ?? sameValue(k, orderN[k], o[k]))) { pk.push(k); sb[k] = o[k]; } });
+  return { ok: true, kind: "create", tab: title, row: rowNo, cells: cellsOf(title, rowNo, base, fit.writeRow), pushed: fit.fields.filter((k) => pushSame(k, o[k], orderN[k], ctx.preset, title)), unpushed: fields.filter((k) => !pushSame(k, o[k], orderN[k], ctx.preset, title)),
     docPatch: { 이전출처: `${title}!${rowNo}`, 담당노선구분: title, 시트연동: true, _sheetKeys: keys, _programKeys: pk, _sheetBase: sb, ...wayRaw(env.L, fit.writeRow), ...(!cell(order0.마감월) && cell(o.마감월) === cell(order.마감월) ? { 마감월: order.마감월 } : {}) } };
 }
 

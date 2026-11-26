@@ -1,12 +1,13 @@
 // ======================= src/RateRulesPanel.jsx =======================
 // 🧮 2026-11-26 사용자 요청 — 단가표(다목적지 단가표) 화면에서 "청구 규칙"을 같이 정하고 바로 계산해 보기
-//  예) 에브리데이 시화 · 5톤 · 야상 = 기본 180,000 + 야상 20,000 + 대행료(지게차) 50,000 = 청구 250,000
+//  예) 에브리데이 시화 · 5톤 · 야상 = 기본 180,000 + 야상 20,000 + 대행료 50,000 = 청구 250,000 · 기사 170,000 + 대행료 50,000 = 220,000
 //  · 규칙 저장소는 고정노선운임(배차관리 [특수운임 적용] › 고정노선운임)과 같다 — 여기서 고치면 오더 등록 · 구글시트 가져오기에도 그대로 적용
 //  · 이 단가표의 거래처(규칙 거래처) 것만 보인다(트레이더스 ○○ = 에브리데이 ○○ · 에이제이 = 제이글로벌)
 //  · [계산해 보기]: 하차지 · 톤수 · 도착 구분(당착 · 야상 · 익착 · 월착)을 고르면 단가표 금액 + 규칙 = 청구운임 · 기사운임
 import React from "react";
 import RouteSpecialPresets from "./RouteSpecialPresets";
-import { useRoutePresets } from "./routePreset";
+import { useRoutePresets, saveRoutePreset, deleteRoutePreset, placeKey, levelOf, itemName } from "./routePreset";
+import { NIGHT_ITEM, AGENCY_ITEM, isNightName, simpleOwned, isCleanAgency, simpleRulesOf } from "./rateRulesCore";
 import { applyRoutePresets } from "./routePresetApply";
 import { aliasKeys } from "./jyAliases";
 
@@ -20,6 +21,115 @@ export function ruleClientOf(sheet) {
   const base = String(sheet?.baseName || "").replace(/[(（].*$/, "").trim();
   if (!base || base === "새 기준지") return "";
   return aliasKeys(base).includes("에이제이") ? "에이제이" : base;
+}
+
+
+// ── 쉬운 규칙 화면 ──
+const SIMPLE_KEEP = (items) => { const seen = new Set(); return items.filter((it) => { const k = `${it.종류}|${it.이름 || ""}`; if (seen.has(k)) return false; seen.add(k); return true; }).map(({ p, ...it }) => it); };
+const itemText = (it) => `${it.종류 === "지게차" ? "지게차비용" : itemName(it)} ${won(it.금액)}${it.조건 && it.조건 !== "항상" ? `(${it.조건 === "야간" ? "야상" : it.조건}만)` : ""}`;
+function MoneyBox({ value, onChange, disabled, placeholder = "0" }) {
+  return <input inputMode="numeric" disabled={disabled} value={value ? Number(value).toLocaleString("ko-KR") : ""} placeholder={placeholder}
+    onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, ""))}
+    className="h-10 w-32 px-3 rounded-xl border border-[#DCE3EE] bg-white text-right text-[15px] font-black tabular-nums text-[#0F1A30] disabled:bg-[#F3F5F9]" />;
+}
+function DropRow({ g, client, canEdit, onDone }) {
+  const [amt, setAmt] = React.useState(g.amount ? String(g.amount) : "");
+  const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => { setAmt(g.amount ? String(g.amount) : ""); }, [g.amount]);
+  const save = async (amount) => {
+    const a = num(amount);
+    const removed = g.owned.filter((it) => !(isCleanAgency(it) && it.금액 === a));
+    if (!g.clean && removed.length && !window.confirm(`${g.name} — 겹쳐 있던 규칙을 지우고 한 개로 다시 써요.\n\n지울 것: ${removed.map(itemText).join(", ")}\n새로: ${a ? `대행료 ${won(a)} (청구 + · 기사운임 +)` : "없음"}\n\n이대로 할까요?`)) return;
+    setBusy(true);
+    try {
+      const target = { 거래처명: client, 상차지명: "", 하차지명: g.name, 출처: "쉬운 규칙" };
+      const lv1Rest = SIMPLE_KEEP(g.docs.filter((p) => levelOf(p) === 1).flatMap((p) => (p.items || []).filter((it) => !simpleOwned(it)).map((it) => ({ ...it, p }))));
+      const items = [...lv1Rest, ...(a ? [AGENCY_ITEM(a)] : [])];
+      let newId = "";
+      if (items.length) newId = await saveRoutePreset({ ...target, items });
+      for (const p of g.docs) {
+        if (p.id === newId) continue;
+        if (levelOf(p) === 1) { await deleteRoutePreset(p.id); continue; }
+        const rest = (p.items || []).filter((it) => !simpleOwned(it)); // 상차지까지 정한 규칙 — 쉬운 규칙 항목만 뺀다
+        if (rest.length === (p.items || []).length) continue;
+        if (rest.length) await saveRoutePreset({ ...p, items: rest }, { oldId: p.id }); else await deleteRoutePreset(p.id);
+      }
+      onDone?.(a ? `${g.name} 상차비용 ${won(a)}원으로 저장했어요` : `${g.name} 상차비용을 뺐어요`);
+    } catch (e) { window.alert(`저장하지 못했어요: ${e?.message || e}`); } finally { setBusy(false); }
+  };
+  const dirty = num(amt) !== g.amount || !g.clean;
+  return (
+    <div className="flex flex-wrap items-center gap-2 py-2.5 border-b border-[#EEF1F6] last:border-0">
+      <span className="w-44 text-[14px] font-black text-[#0F1A30] truncate" title={g.name}>{g.name}</span>
+      <MoneyBox value={amt} onChange={setAmt} disabled={!canEdit || busy} />
+      <span className="text-[13px] font-bold text-[#5B6B85]">원</span>
+      {canEdit && <button type="button" disabled={busy || !dirty} onClick={() => save(amt)} className={`h-9 px-3.5 rounded-lg text-[13px] font-extrabold ${dirty ? "bg-[#0F1A30] text-white" : "bg-[#EEF1F6] text-[#9AA9C3]"}`}>{g.clean ? "저장" : "간단하게 정리"}</button>}
+      {canEdit && g.docs.length > 0 && <button type="button" disabled={busy} onClick={() => save("")} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-extrabold text-[#B91C1C]">빼기</button>}
+      {!g.clean && g.owned.length > 0 && (
+        <span className="basis-full text-[12.5px] font-bold text-[#B45309]">⚠ 규칙이 겹쳐 있어요 — 지금 붙는 것: {g.owned.map(itemText).join(" · ")}. 금액을 넣고 [간단하게 정리]를 누르면 대행료 하나로 바뀌어요.</span>
+      )}
+      {g.other.length > 0 && <span className="basis-full text-[12px] font-bold text-[#7A89A3]">그대로 두는 것: {g.other.map(itemText).join(" · ")}</span>}
+    </div>
+  );
+}
+function SimpleRules({ client, presets, rows, canEdit }) {
+  const sr = React.useMemo(() => simpleRulesOf(presets, client), [presets, client]);
+  const [night, setNight] = React.useState(sr.night ? String(sr.night) : "");
+  const [msg, setMsg] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [newName, setNewName] = React.useState("");
+  React.useEffect(() => { setNight(sr.night ? String(sr.night) : ""); }, [sr.night]);
+  const done = (t) => { setMsg(t); setTimeout(() => setMsg(""), 4000); };
+  const saveNight = async () => {
+    const a = num(night);
+    setBusy(true);
+    try {
+      const wide3 = sr.wide.filter((p) => levelOf(p) === 3);
+      const main = wide3[0];
+      for (const p of sr.wide) {
+        const rest = (p.items || []).filter((it) => !(it.종류 === "할증" || isNightName(it.이름)));
+        const items = p === main ? [...rest, ...(a ? [NIGHT_ITEM(a)] : [])] : rest;
+        if (items.length === (p.items || []).length && p !== main) continue;
+        if (items.length) await saveRoutePreset({ ...p, items }, { oldId: p.id }); else await deleteRoutePreset(p.id);
+      }
+      if (!main && a) await saveRoutePreset({ 거래처명: client, 상차지명: "", 하차지명: "", 출처: "쉬운 규칙", items: [NIGHT_ITEM(a)] });
+      done(a ? `야상이면 청구에 ${won(a)}원 더해요` : "야상 추가 청구를 뺐어요");
+    } catch (e) { window.alert(`저장하지 못했어요: ${e?.message || e}`); } finally { setBusy(false); }
+  };
+  // 하차지 목록 = 이미 규칙이 있는 곳(같은 곳 다른 이름은 하나로)
+  const known = new Set(sr.drops.map((g) => g.key));
+  const suggest = rows.map((r) => r.name).filter((n) => !known.has(placeKey(n)));
+  const addKey = placeKey(newName);
+  const nightDirty = num(night) !== sr.night || sr.nightMessy;
+  return (
+    <div className="mt-4 rounded-2xl border border-[#E3E8F0] p-4">
+      <div className="text-[14px] font-black text-[#0F1A30]">쉬운 규칙 <span className="text-[12.5px] font-bold text-[#7A89A3]">· {client} 오더에 자동으로 붙어요 (트레이더스 ○○ = 에브리데이 ○○)</span></div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className="w-44 text-[14px] font-black text-[#0F1A30]">① 야상이면 청구 +</span>
+        <MoneyBox value={night} onChange={setNight} disabled={!canEdit || busy} placeholder="예: 20,000" />
+        <span className="text-[13px] font-bold text-[#5B6B85]">원</span>
+        {canEdit && <button type="button" disabled={busy || !nightDirty} onClick={saveNight} className={`h-9 px-3.5 rounded-lg text-[13px] font-extrabold ${nightDirty ? "bg-[#0F1A30] text-white" : "bg-[#EEF1F6] text-[#9AA9C3]"}`}>{sr.nightMessy ? "간단하게 정리" : "저장"}</button>}
+        <span className="basis-full text-[12.5px] font-bold text-[#7A89A3]">모든 하차지 · 야간 상차일 때만 · 거래처에만 더 받아요(기사운임은 그대로)</span>
+        {sr.nightMessy && <span className="basis-full text-[12.5px] font-bold text-[#B45309]">⚠ 야상 규칙이 여러 개예요 — {sr.nightItems.map((x) => `${x.p.상차지명 ? `${x.p.상차지명}에서 ` : ""}${itemText(x)}`).join(" · ")}. [간단하게 정리]를 누르면 위 금액 하나로 바뀌어요.</span>}
+      </div>
+      <div className="mt-4 text-[14px] font-black text-[#0F1A30]">② 하차지별 상차비용(대행료) <span className="text-[12.5px] font-bold text-[#7A89A3]">· 청구에 더하고, 기사에게도 똑같이 줘요</span></div>
+      <div className="mt-1">
+        {sr.drops.length === 0 && <div className="py-2 text-[13px] font-bold text-[#7A89A3]">아직 없어요. 아래에서 하차지를 추가해 주세요.</div>}
+        {sr.drops.map((g) => <DropRow key={g.key} g={g} client={client} canEdit={canEdit} onDone={done} />)}
+      </div>
+      {canEdit && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input list="rr-drop-suggest" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="하차지 이름 (예: 에브리데이 시화)"
+            className="h-10 w-56 px-3 rounded-xl border border-[#DCE3EE] text-[14px] font-bold text-[#0F1A30]" />
+          <datalist id="rr-drop-suggest">{suggest.map((n) => <option key={n} value={n} />)}</datalist>
+          {newName.trim() && (known.has(addKey)
+            ? <span className="text-[12.5px] font-bold text-[#B45309]">이미 위 목록에 있어요(같은 곳)</span>
+            : <DropRow key={"new-" + addKey} g={{ key: addKey, name: newName.trim(), docs: [], items: [], owned: [], other: [], amount: 0, clean: true }} client={client} canEdit={canEdit} onDone={(t) => { setNewName(""); done(t); }} />)}
+        </div>
+      )}
+      {msg && <div className="mt-3 text-[13px] font-extrabold text-[#059669]">✓ {msg}</div>}
+    </div>
+  );
 }
 
 const ARR = [["당착", "당착"], ["야상", "야상(야간 상차)"], ["익착", "익착"], ["월착", "월착"]];
@@ -55,7 +165,7 @@ export default function RateRulesPanel({ sheet, onPatch }) {
     };
     const out = applyRoutePresets(order, presets);
     const items = [
-      ...(num(out.지게차비용) > 0 ? [{ 이름: "지게차비용(대행료)", 금액: num(out.지게차비용), 부담: out.지게차부담 || "기사" }] : []),
+      ...(num(out.지게차비용) > 0 ? [{ 이름: "지게차비용", 금액: num(out.지게차비용), 부담: out.지게차부담 || "기사" }] : []),
       ...(out.특수운임 || []).filter((x) => num(x.금액) > 0).map((x) => ({ 이름: x.이름 || x.종류, 금액: num(x.금액), 부담: x.부담, 받는사람: x.받는사람 })),
     ];
     return { sale: num(out.청구운임), buy: num(out.기사운임), items };
@@ -71,8 +181,8 @@ export default function RateRulesPanel({ sheet, onPatch }) {
         <span className="w-1.5 h-1.5 rotate-45 bg-[#1B2B4B]" />
         <span className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]">RULES</span>
         <span className="text-[15px] font-black text-[#0F1A30]">청구 규칙 · 계산해 보기</span>
-        <span className="text-[12.5px] font-bold text-[#7A89A3]">야상 · 대행료(지게차) · 익착 · 월착처럼 단가에 더해지는 금액</span>
-        <button type="button" onClick={() => setOpen((v) => !v)} className="ml-auto h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13px] font-extrabold text-[#1B2B4B]">{open ? "규칙 목록 접기" : "규칙 보기 · 고치기"}</button>
+        <span className="text-[12.5px] font-bold text-[#7A89A3]">야상 · 상차비용(대행료)처럼 단가에 더해지는 금액</span>
+        <button type="button" onClick={() => setOpen((v) => !v)} className="ml-auto h-9 px-3.5 rounded-lg border border-[#DCE3EE] text-[13px] font-extrabold text-[#1B2B4B]">{open ? "자세한 규칙 접기" : "자세한 규칙(고급)"}</button>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2 text-[13px] font-bold text-[#3A4A66]">
         규칙 거래처
@@ -81,6 +191,8 @@ export default function RateRulesPanel({ sheet, onPatch }) {
           className="h-9 w-40 px-3 rounded-lg border border-[#DCE3EE] text-[14px] font-bold text-[#0F1A30]" />
         <span className="text-[12px] text-[#9AA9C3]">오더 거래처가 이 이름이면 아래 규칙이 붙어요 · 트레이더스 ○○ = 에브리데이 ○○</span>
       </div>
+
+      {client && <SimpleRules client={client} presets={presets} rows={rows} canEdit={canEdit} />}
 
       {/* 계산해 보기 */}
       <div className="mt-4 rounded-2xl bg-[#F5F8FD] border border-[#E3E8F0] p-4">
@@ -110,7 +222,7 @@ export default function RateRulesPanel({ sheet, onPatch }) {
 
       {open && (
         <div className="mt-4">
-          <div className="mb-2 text-[12.5px] font-bold text-[#5B6B85]">여기 규칙은 배차관리 [특수운임 적용] › 고정노선운임과 같아요. 상차지 · 하차지를 비우면 이 거래처 모든 노선(예: 야상 +20,000), 하차지를 넣으면 그 하차지만(예: 에브리데이 시화 대행료 50,000).</div>
+          <div className="mb-2 text-[12.5px] font-bold text-[#5B6B85]">보통은 위 [쉬운 규칙]만 쓰면 돼요. 여기는 익착 · 월착 · 대기료처럼 다른 규칙까지 직접 고치는 곳이에요(배차관리 [특수운임 적용] › 고정노선운임과 같아요).</div>
           <RouteSpecialPresets client={client} canEdit={canEdit} canAdmin={canAdmin} />
         </div>
       )}
