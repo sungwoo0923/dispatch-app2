@@ -16,6 +16,16 @@ const tonKey = (v) => normRate(v).replace(/톤$/, "");
 //  하차지명이 맞는 줄 + 톤수 칸 → 기준지(거래처 · 상차지)가 맞는 것 > 하차지 이름이 똑같은 것
 //  가장 맞는 후보들의 금액이 서로 다르면 ambiguous(직접 확인)
 //  aliases(JY): 같은 곳의 다른 이름(평택초저온 = 베베숲 평택 · 에브리데이 시화 = 트레이더스 시화 · 에이제이 = 제이글로벌)도 맞는 것으로 본다
+// 🗺 2026-11-26 지역 단가표(예: 롯데베르살리스 — 줄 이름이 "양산 · 김해 · 충남" 같은 지역) — 하차지명이 업체명이어도
+//  하차지 주소의 시 · 도 · 시군구 이름으로 줄을 찾는다. 기준지(거래처 · 상차지)가 맞는 단가표에서만 · 이름으로 찾은 줄이 있으면 그쪽이 먼저
+const PROV_SHORT = { 서울특별시: "서울", 부산광역시: "부산", 대구광역시: "대구", 인천광역시: "인천", 광주광역시: "광주", 대전광역시: "대전", 울산광역시: "울산",
+  세종특별자치시: "세종", 경기도: "경기", 강원도: "강원", 강원특별자치도: "강원", 충청북도: "충북", 충청남도: "충남", 전라북도: "전북", 전북특별자치도: "전북",
+  전라남도: "전남", 경상북도: "경북", 경상남도: "경남", 제주특별자치도: "제주", 제주도: "제주" };
+export function regionTokens(addr = "") {
+  return String(addr || "").replace(/\(.*?\)|（.*?）/g, " ").split(/[\s,]+/).filter(Boolean).slice(0, 3)
+    .map((t) => { if (PROV_SHORT[t]) return PROV_SHORT[t]; const c = t.replace(/(특별자치시|특별자치도|특별시|광역시|시|군|구)$/, ""); return c.length >= 2 ? c : t; }) // "대구" · "중구"는 자르지 않음
+    .map(normRate).filter((t) => t.length >= 2);
+}
 export function findRate(sheets = [], q = {}, { aliases = false } = {}) {
   const ton = tonKey(q.톤수);
   const drop = normRate(q.하차지명);
@@ -41,8 +51,28 @@ export function findRate(sheets = [], q = {}, { aliases = false } = {}) {
       cands.push({ sale, buy, baseHit, exact: rName === drop || aliasHit, sheetName: String(sheet.baseName || "").trim(), rowName: String(row.name || "").trim(), ton: col.label });
     });
   });
+  // 🗺 지역으로 찾기(JY · 기준지가 맞는 단가표만) — 주소의 더 작은 단위(시군구)가 맞는 줄이 먼저(경남 양산시 → "양산" > "경남")
+  const regs = aliases ? regionTokens(q.하차지주소) : [];
+  if (regs.length) {
+    (sheets || []).forEach((sheet) => {
+      const bn = normRate(sheet.baseName);
+      const baseHit = !!bn && (bases.some((x) => x.includes(bn) || bn.includes(x)) || baseA.includes(aliasKey(sheet.baseName)));
+      if (!baseHit) return;
+      const col = (sheet.columns || []).find((c) => tonKey(c.label) === ton);
+      if (!col) return;
+      (sheet.rows || []).forEach((row) => {
+        const lvl = regs.indexOf(normRate(row.name));
+        if (lvl < 0) return;
+        const sale = num(row.prices?.[col.id]);
+        if (!sale) return;
+        if (cands.some((c) => c.baseHit && c.sheetName === String(sheet.baseName || "").trim() && c.rowName === String(row.name || "").trim())) return; // 이름으로 이미 찾은 줄
+        cands.push({ sale, buy: num(row.buyPrices?.[col.id]), baseHit: true, exact: false, region: true, lvl, sheetName: String(sheet.baseName || "").trim(), rowName: String(row.name || "").trim(), ton: col.label });
+      });
+    });
+  }
   if (!cands.length) return null;
-  const rank = (c) => (c.baseHit ? 2 : 0) + (c.exact ? 1 : 0);
+  // 기준지 맞음 > 이름으로 찾음 > 이름이 똑같음 > (지역이면) 더 작은 단위
+  const rank = (c) => (c.baseHit ? 8 : 0) + (c.region ? 0 : 4) + (c.exact ? 2 : 0) + (c.region ? Math.min(c.lvl, 2) * 0.5 : 0);
   const top = Math.max(...cands.map(rank));
   const best = cands.filter((c) => rank(c) === top);
   if (new Set(best.map((c) => `${c.sale}/${c.buy}`)).size > 1) return { ambiguous: true, cands: best };
