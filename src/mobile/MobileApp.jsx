@@ -75,6 +75,8 @@ import southKorea from "@svg-maps/south-korea";
 import { canSeeNotice } from "../NoticeBoard";
 import React, { useState, useMemo, useEffect, useRef, startTransition, useSyncExternalStore } from "react";
 import { withCo, getTenant, isPreviewMode } from "../fsTenant";
+import { useOrderFormFields } from "../orderFormFields"; // 🧩 2026-11-26 오더등록 입력칸 고르기
+import OrderFieldsModal from "../OrderFieldsModal";
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "../orderHistoryCache"; // ⚡ 2026-11-23 13개월 오더 폰 보관
 // ⚡ 2026-11-23 운임 참고용 13개월 오더는 화면을 열 때 한 번만 받는다 — 예전엔 실시간 구독이라 누가 오더를 고칠 때마다 받고,
 //  30분 뒤 다시 열면 13개월을 통째로 또 받았다(운임 비교에는 실시간이 필요 없다)
@@ -14329,12 +14331,16 @@ const [matchedClients, setMatchedClients] = useState([]);
   const cargoInputRef = useRef(null);
   const tonInputRef = useRef(null);
   const payTypeSelectRef = useRef(null);
+  // 🧩 2026-11-26 오더등록 입력칸 고르기 — PC와 같은 설정(회사 기본 · 내 설정)
+  const ofs = useOrderFormFields(getTenant() || localStorage.getItem("userCompany") || "");
+  const ofShow = ofs.show;
+  const [ofOpen, setOfOpen] = useState(false);
   const validateRequiredMobile = () => {
     const miss = [];
     const missKeys = [];
     if (!form.거래처명?.trim()) { miss.push("거래처"); missKeys.push("거래처명"); }
-    if (!form.상차지명?.trim()) { miss.push("상차지명"); missKeys.push("상차지명"); }
-    if (!form.하차지명?.trim()) { miss.push("하차지명"); missKeys.push("하차지명"); }
+    if (ofShow("상차지") && !form.상차지명?.trim()) { miss.push("상차지명"); missKeys.push("상차지명"); } // 🧩 숨긴 칸은 필수 검사 안 함
+    if (ofShow("하차지") && !form.하차지명?.trim()) { miss.push("하차지명"); missKeys.push("하차지명"); }
     // 🛠 2026-11-26 사용자 요청 — 필수는 거래처 · 상차지명 · 하차지명만(화물내용 · 차량톤수 · 지급방식은 비워도 저장)
     if (miss.length) {
       setRequiredErrors(new Set(missKeys));
@@ -15379,8 +15385,13 @@ const pickDrop = (c) => {
         <button type="button" disabled={!(form.상차지주소 && form.하차지주소)} onClick={() => setFormRouteMap(true)}
           className="h-9 px-3 rounded-xl border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B] disabled:opacity-40">경로보기</button>
         {!form._editId && <button type="button" onClick={() => setFormRecurring(true)} className="h-9 px-3 rounded-xl border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B]">정기오더</button>}
+        {/* 🧩 2026-11-26 입력칸 설정 — 필요 없는 칸 숨기기(PC와 같은 설정) */}
+        <button type="button" onClick={() => setOfOpen(true)} data-testid="m-order-fields-btn" className="h-9 px-3 rounded-xl border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B]">
+          입력칸 설정{ofs.hidden.size > 0 ? ` · ${ofs.hidden.size}개 숨김` : ""}
+        </button>
         {form._editId && <div className="ml-auto"><OrderStaffFields order={form} setOrder={setForm} /></div>}
       </div>
+      {ofOpen && <OrderFieldsModal state={ofs} mobile onClose={() => setOfOpen(false)} canCompany={role !== "viewer"} />}
       {formRouteMap && <RouteMapModal pickupAddr={form.상차지주소} dropAddr={form.하차지주소} pickupName={form.상차지명} dropName={form.하차지명} onClose={() => setFormRouteMap(false)} />}
       {formRecurring && createPortal(<RecurringManagerModal form={form} onClose={() => setFormRecurring(false)} />, document.body)}
       {isLockedShipperEdit && (
@@ -15668,6 +15679,7 @@ const pickDrop = (c) => {
       <div className="space-y-1">
 
         {/* 상차지명 + 드롭다운 전용 */}
+        {ofShow("상차지") && (
         <div className="relative">
           <input autoComplete="off"
             ref={pickupNameInputRef}
@@ -15749,7 +15761,9 @@ const pickDrop = (c) => {
             </div>
           )}
         </div>
+        )}
 
+        {ofShow("상차지주소") && (
         <div className="flex items-end gap-2">
         <input autoComplete="off"
           className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
@@ -15761,7 +15775,9 @@ const pickDrop = (c) => {
         />
         <RoadviewButton addr={form.상차지주소} name={form.상차지명} variant="inline" className="mb-1" />
         </div>
+        )}
 
+        {ofShow("상차지담당자") && (
         <input autoComplete="off"
           className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
           placeholder="상차지 담당자"
@@ -15770,7 +15786,9 @@ const pickDrop = (c) => {
             update("상차지담당자", e.target.value)
           }
         />
+        )}
 
+        {ofShow("상차지연락처") && (
         <input autoComplete="off"
           className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
           placeholder="상차지 담당자번호"
@@ -15780,6 +15798,7 @@ const pickDrop = (c) => {
             update("상차지담당자번호", formatPhoneLive(e.target.value))
           }
         />
+        )}
 
         {/* 경유 상차지 버튼 + 미리보기 */}
         {(() => {
@@ -15842,6 +15861,7 @@ const pickDrop = (c) => {
       <div className="space-y-1">
 
         {/* 하차지명 + 드롭다운 전용 */}
+        {ofShow("하차지") && (
         <div className="relative">
           <input autoComplete="off"
             ref={dropNameInputRef}
@@ -15923,7 +15943,9 @@ const pickDrop = (c) => {
             </div>
           )}
         </div>
+        )}
 
+        {ofShow("하차지주소") && (
         <div className="flex items-end gap-2">
         <input autoComplete="off"
           className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
@@ -15935,7 +15957,9 @@ const pickDrop = (c) => {
         />
         <RoadviewButton addr={form.하차지주소} name={form.하차지명} variant="inline" className="mb-1" />
         </div>
+        )}
 
+        {ofShow("하차지담당자") && (
         <input autoComplete="off"
           className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
           placeholder="하차지 담당자"
@@ -15944,7 +15968,9 @@ const pickDrop = (c) => {
             update("하차지담당자", e.target.value)
           }
         />
+        )}
 
+        {ofShow("하차지연락처") && (
         <input autoComplete="off"
           className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition"
           placeholder="하차지 담당자번호"
@@ -15954,6 +15980,7 @@ const pickDrop = (c) => {
             update("하차지담당자번호", formatPhoneLive(e.target.value))
           }
         />
+        )}
 
         {/* 경유 하차지 버튼 + 미리보기 */}
         {(() => {
@@ -15987,13 +16014,16 @@ const pickDrop = (c) => {
 
       {/* 차량종류 */}
       <div className="border-t border-gray-100">
+        {ofShow("차량종류") && (
         <RowLabelInput
           label="차량종류"
           input={
             <VehicleTypePicker className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition" value={form.차종} base={["라보/다마스", "카고", "윙/카고", "윙바디", "탑차", "냉장탑", "냉동탑", "냉장윙", "냉동윙", "냉장/냉동탑", "냉장/냉동윙", "리프트", "오토바이", "기타"]} placeholder="차량종류 선택" noneLabel="차량종류 선택" onChange={(__v) => ((e) => update("차종", e.target.value))({ target: { value: __v } })} />
           }
         />
+        )}
         {/* 톤수 */}
+        {ofShow("차량톤수") && (
         <RowLabelInput
           label={<>톤수</>}
           input={
@@ -16033,7 +16063,9 @@ const pickDrop = (c) => {
             </div>
           }
         />
+        )}
         {/* 화물내용 */}
+        {ofShow("화물내용") && (
         <RowLabelInput
           label={<>화물내용</>}
           input={
@@ -16078,6 +16110,7 @@ const pickDrop = (c) => {
             </div>
           }
         />
+        )}
         {/* 화물내용 추가 팝업 — 화면이 좁은 기종에서 단위 드롭다운이 잘려 보이지
             않도록 팝업 폭을 뷰포트 비율(vw) 기반으로 반응형으로 잡는다. */}
         {/* ⌨️ 2026-11-24 화물내용 추가 창은 화면 위쪽에(가운데면 자판에 가렸다) */}
@@ -16125,15 +16158,21 @@ const pickDrop = (c) => {
 
       {/* 상/하차방법 */}
       <div className="border-t border-gray-100">
+        {(ofShow("상차방법") || ofShow("하차방법")) && (
         <RowLabelInput
           label="상/하차방법"
           input={
             <div className="flex flex-wrap gap-1.5">
+              {ofShow("상차방법") && (
               <CompanyOptionPicker optKey="상하차방법" title="상차방법" placeholder="상차방법" noneLabel="상차방법" style={{ minHeight: 40 }} className="flex-1 min-w-[90px] border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition" value={form.상차방법} onChange={(__v) => ((e) => update("상차방법", e.target.value))({ target: { value: __v } })} />
+              )}
+              {ofShow("하차방법") && (
               <CompanyOptionPicker optKey="상하차방법" title="하차방법" placeholder="하차방법" noneLabel="하차방법" style={{ minHeight: 40 }} className="flex-1 min-w-[90px] border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition" value={form.하차방법} onChange={(__v) => ((e) => update("하차방법", e.target.value))({ target: { value: __v } })} />
+              )}
             </div>
           }
         />
+        )}
       </div>
 
       </fieldset>
@@ -16141,19 +16180,25 @@ const pickDrop = (c) => {
       {/* 지급/배차방식 + 혼적/독차 */}
       {/* 배차방식은 화주사 오더라도 운송사가 항상 수정할 수 있어야 하므로 잠금 fieldset 밖에 둔다 */}
       <div className="border-t border-gray-100">
+        {(ofShow("지급방식") || ofShow("배차방식")) && (
         <RowLabelInput
           label={<span className="whitespace-nowrap tracking-tight">지급/배차</span>}
           input={
             <div className="flex flex-wrap gap-1.5">
+              {ofShow("지급방식") && (
               <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
                 <CompanyOptionPicker optKey="지급방식" placeholder="지급방식" noneLabel="지급방식" style={{ minHeight: 40 }} ref={payTypeSelectRef} className={`flex-1 min-w-[90px] border-0 border-b-2 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none transition ${
                     requiredErrors.has("지급방식") ? "border-red-500 ring-2 ring-red-300 animate-pulse" : "border-gray-300 focus:border-[var(--reg-accent)]"
                   }`} value={form.지급방식} onChange={(__v) => ((e) => update("지급방식", e.target.value))({ target: { value: __v } })} />
               </fieldset>
+              )}
+              {ofShow("배차방식") && (
               <DispatchWayPicker scope={[form?.거래처명, form?.상차지명, form?.하차지명]} wrapClassName="flex-1 min-w-[90px]" placeholder="배차방식" noneLabel="배차방식" style={{ minHeight: 40 }} className="w-full border-0 border-b-2 border-gray-300 rounded-none px-1 py-1.5 text-[13px] font-semibold text-gray-900 bg-transparent focus:outline-none focus:border-[var(--reg-accent)] transition" value={form.배차방식} dir={form.콜구분 || ""} onPick={(pk) => Object.entries(pk).forEach(([k, v]) => update(k, v))} />
+              )}
             </div>
           }
         />
+        )}
         <fieldset disabled={isLockedShipperEdit} style={{ display: "contents" }}>
         {/* 🧰 2026-11-23 [혼적] · [왕복] · [긴급] → [운행 옵션] 하나(누르면 체크 목록) — 넣는 값 · 왕복의 회전 줄은 예전 그대로 · 켜지 않으면 독차 */}
         <RowLabelInput
@@ -16345,6 +16390,7 @@ const pickDrop = (c) => {
 
       {/* 차량번호 / 기사명 / 연락처 */}
       <div className="border-t border-gray-100">
+        {ofShow("차량번호") && (
         <RowLabelInput
           label="차량번호"
           input={
@@ -16384,9 +16430,11 @@ const pickDrop = (c) => {
             />
           }
         />
+        )}
       </div>
 
       <div className="border-t border-gray-100">
+        {ofShow("기사명") && (
         <RowLabelInput
           label="기사명"
           input={
@@ -16399,9 +16447,11 @@ const pickDrop = (c) => {
             />
           }
         />
+        )}
       </div>
 
       <div className="border-t border-gray-100">
+        {ofShow("전화번호") && (
         <RowLabelInput
           label="연락처"
           input={
@@ -16424,6 +16474,7 @@ const pickDrop = (c) => {
             </div>
           }
         />
+        )}
       </div>
       {/* ⭐ 2026-11-05 같은 차량번호 기사가 여러 명(별도 추가 등)이면 골라 바꾼다 */}
       {!mfDrvEdit.editing && (
@@ -16444,6 +16495,7 @@ const pickDrop = (c) => {
 
       {/* 적요 */}
       <div className="border-t border-gray-100">
+        {ofShow("메모") && (
         <RowLabelInput
           label="적요"
           input={
@@ -16455,17 +16507,21 @@ const pickDrop = (c) => {
             />
           }
         />
+        )}
       </div>
 
       {/* 🧭 2026-11-14 PC와 같게 — 메모 중요도(일반 · 중요 · 긴급) · 담당노선구분(켠 운송사만) */}
       <div className="border-t border-gray-100">
+        {ofShow("메모") && (
         <RowLabelInput label="메모 중요도" input={<MemoPriority value={form.메모중요도 || "NORMAL"} onChange={(v) => update("메모중요도", v)} />} />
+        )}
         <RouteGroupField Field={RgFormRow} row={form} onChange={(v) => update("담당노선구분", v)}
           className="w-full h-9 px-2 rounded-lg border border-[#E3E8F0] bg-white text-[13px] font-bold text-[#0F1A30]" role={role} userCompany={getTenant() || localStorage.getItem("userCompany") || ""} />
       </div>
 
       {/* 전달사항 */}
       <div className="border-t border-gray-100">
+        {ofShow("메모") && (
         <RowLabelInput
           label="전달사항"
           right={
@@ -16484,6 +16540,7 @@ const pickDrop = (c) => {
             />
           }
         />
+        )}
       </div>
 
 
