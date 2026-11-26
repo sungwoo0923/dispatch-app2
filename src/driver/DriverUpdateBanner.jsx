@@ -1,6 +1,6 @@
 // ======================= src/driver/DriverUpdateBanner.jsx =======================
 // ⭐ 2026-11-05 기사앱 업데이트 안내 — 📱 2026-11-11 상단 띠에서 화면 가운데 팝업으로
-//  1) 웹 새 버전 — 화면을 켜 둔 사이 새로 배포되면(VersionCheck가 /version.json을 비교) "새 버전이 있어요 [업데이트]"
+//  1) 웹 새 버전 — 화면을 켜 둔 사이 새로 배포되면(/version.json 의 기사앱 지문 driver 를 비교 · 🚚 2026-11-26 기사 화면 코드가 바뀐 배포만) "새 버전이 있어요 [업데이트]"
 //     → 누르면 캐시를 비우고 새로 불러온다. 아이폰 홈 화면 앱(PWA)·안드로이드 APK(서비스 주소를 여는 방식) 모두 같다.
 //  2) APK 새 버전 — 설치된 APK의 versionCode(Capacitor App 플러그인)와 GitHub 릴리즈(driver-apk-latest) 본문의
 //     "versionCode: N"을 비교해 더 새 APK가 있으면 "앱 업데이트가 있어요 [설치]" → APK 파일 다운로드.
@@ -9,7 +9,31 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { registerPlugin } from "@capacitor/core";
-import { useNewVersion } from "../VersionCheck";
+// 🚚 2026-11-26 사용자 요청 — 기사앱과 상관없는 배포(PC 전용 화면 등)로는 안내하지 않는다.
+//  빌드가 기사 화면이 쓰는 코드만으로 만든 지문(version.json driver · 첫 화면 meta kp-driver-build — vite.config.js kp-driver-build)이 다를 때만 "새 버전"
+function useDriverNewVersion() {
+  const [isNew, setIsNew] = useState(false);
+  useEffect(() => {
+    let mine = "";
+    try { mine = document.querySelector('meta[name="kp-driver-build"]')?.getAttribute("content") || ""; } catch { mine = ""; }
+    if (!mine) return undefined; // 개발 화면 · 지문 없는 예전 화면 — 안내하지 않음
+    let alive = true;
+    const check = async () => {
+      try {
+        const r = await fetch(`/version.json?t=${Date.now()}`, { cache: "no-store" });
+        if (!r.ok) return;
+        const j = await r.json();
+        if (alive && j?.driver) setIsNew(j.driver !== mine);
+      } catch { /* 오프라인 — 조용히 */ }
+    };
+    const first = setTimeout(check, 2500);
+    const iv = setInterval(check, 10 * 60 * 1000);
+    const onVis = () => { if (document.visibilityState === "visible") check(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { alive = false; clearTimeout(first); clearInterval(iv); document.removeEventListener("visibilitychange", onVis); };
+  }, []);
+  return isNew;
+}
 import { hardReloadForUpdate } from "../UpdateBanner";
 
 // FleetDriverExtra.jsx의 DRIVER_APK_URL과 같은 주소(누르면 바로 APK 파일 다운로드)
@@ -35,7 +59,7 @@ async function latestApkCode() {
 }
 
 export default function DriverUpdateBanner() {
-  const webNew = useNewVersion();
+  const webNew = useDriverNewVersion();
   const [apkNew, setApkNew] = useState(false);
   const [hide, setHide] = useState("");
   const [busy, setBusy] = useState(false);
