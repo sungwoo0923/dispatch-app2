@@ -470,7 +470,8 @@ function UsagePanel() {
     const projected = Math.max(c.m?.cnt || 0, dayNo >= 7 ? Math.round((toDate / dayNo) * days) : toDate);
     const u = planUsageOf(c, planId, sales, projected);
     const p = u?.plan;
-    return { c, planId, p, u, projected, storageGB: u ? u.storageGB : Math.round(((c.storageKB || 0) / 1048576) * 100) / 100, total: p ? Number(p.price || 0) + u.over : 0 };
+    const lp = Number(plans[c.name]?.lockedPrice) > 0 ? Number(plans[c.name].lockedPrice) : 0; // 💰 초기 고객 고정 이용료 — 초과 요금 없음
+    return { c, planId, p, u: lp && u ? { ...u, over: 0 } : u, projected, locked: lp, storageGB: u ? u.storageGB : Math.round(((c.storageKB || 0) / 1048576) * 100) / 100, total: lp || (p ? Number(p.price || 0) + u.over : 0) };
   }).sort((a, b) => (b.u?.over || 0) - (a.u?.over || 0) || (b.c.m?.cnt || 0) - (a.c.m?.cnt || 0));
   const won = (n) => `${Math.round(Number(n) || 0).toLocaleString()}원`;
   const overCos = rows.filter((r) => r.u?.over > 0);
@@ -561,7 +562,17 @@ function PaymentsPanel() {
       await Promise.all(open.docs.map((d) => updateDoc(d.ref, { status: "처리", handledAt: serverTimestamp(), appliedPlan: planId || "" })));
     } catch (e) { window.alert(e.message); }
   };
-  const planBill = (c, base) => applyPlanBill(base, c, plans[c.name]?.planId, sales); // ⭐ 2026-11-02 관리자센터2 — 요금·청구와 같은 계산(SalesQuote.applyPlanBill)
+  const planBill = (c, base) => applyPlanBill(base, c, plans[c.name]?.planId, sales, plans[c.name]?.lockedPrice); // ⭐ 2026-11-02 관리자센터2 — 요금·청구와 같은 계산(SalesQuote.applyPlanBill) · 💰 초기 고객 고정 이용료
+  // 💰 2026-11-26 초기 고객 고정 이용료 — 지금 가입한 운송사를 한 번에(이미 고정된 곳은 그대로) · 회사별로 칸에서 고치기 · 0이면 풀림
+  const [lockAmt, setLockAmt] = React.useState("150000");
+  const setLocked = (company, v) => setDoc(doc(db, "companyPlans", company), v > 0 ? { lockedPrice: v, lockedAt: ymd(), updatedAt: serverTimestamp() } : { lockedPrice: deleteField(), lockedAt: deleteField(), updatedAt: serverTimestamp() }, { merge: true }).catch((e) => window.alert(e.message));
+  const lockAll = async (list) => {
+    const v = Math.floor(Number(String(lockAmt).replace(/[^\d]/g, "")) || 0);
+    const targets = list.filter((c) => c.kind !== "shipper" && !(Number(plans[c.name]?.lockedPrice) > 0));
+    if (!v || !targets.length) return;
+    if (!await kpConfirm(`지금 가입한 운송사 ${targets.length}곳의 월 이용료를 ${v.toLocaleString()}원(부가세 별도)으로 고정할까요?\n\n· 요금표를 바꿔도 이 회사들은 이 금액 그대로예요(직원 · 오더 초과 요금도 받지 않아요)\n· 문자 · 알림톡 · 계좌조회 사용료는 따로 청구돼요\n· 이미 고정된 회사는 건드리지 않아요\n\n${targets.map((c) => c.name).join(", ")}`)) return;
+    for (const c of targets) await setLocked(c.name, v);
+  };
   const [addon, setAddon] = React.useState(null); // ⭐ 2026-11-04 추가 항목 편집 중인 회사
   if (!stats || !pricing) return <div className="py-20 text-center text-[#9AA9C3]">불러오는 중…</div>;
   const days = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
@@ -589,6 +600,11 @@ function PaymentsPanel() {
           </div>
         ))}
       </div>
+      <div className="rounded-[16px] border border-[#E3E8F0] bg-white px-4 py-3 flex items-center gap-2 flex-wrap" data-kp="lock-price">
+        <div className="min-w-0 mr-auto"><div className="text-[14px] font-black text-[#0F1A30]">초기 고객 고정 이용료</div><div className="text-[12.5px] text-[#7A879C]">고정된 회사는 요금표가 바뀌어도 이 금액만 청구해요(초과 요금 없음 · 팝빌 사용료는 따로). 새로 가입하는 운송사는 요금표 가격이에요.</div></div>
+        <input inputMode="numeric" value={lockAmt} onChange={(e) => setLockAmt(e.target.value.replace(/[^\d]/g, ""))} className="w-[120px] h-9 px-3 rounded-lg border border-[#DCE3EE] text-right font-black tabular-nums" /><span className="text-[13px] text-[#7A879C]">원/월</span>
+        <button type="button" onClick={() => lockAll(companies)} disabled={!companies.some((c) => c.kind !== "shipper" && !(Number(plans[c.name]?.lockedPrice) > 0))} className="h-9 px-3.5 rounded-lg bg-[#0F1A30] text-white text-[13px] font-black disabled:opacity-40">지금 가입한 운송사 모두 고정 ({companies.filter((c) => c.kind !== "shipper" && !(Number(plans[c.name]?.lockedPrice) > 0)).length}곳)</button>
+      </div>
       <Card code="LEDGER" title={`${Number(month.slice(5))}월 수납 원장`} bodyClass="p-0">
         {companies.length === 0 ? <div className="py-14 text-center text-[#9AA9C3]">집계된 가입사가 없습니다. 관제 › 관제 대시보드 › [고객사 실적]에서 '지금 갱신'을 눌러 주세요.</div> : (
           <div className="overflow-x-auto"><table className="w-full text-[14px]" style={{ minWidth: 1040 }}>
@@ -601,6 +617,13 @@ function PaymentsPanel() {
                     <option value="">미지정(전체 기능)</option>
                     {(sales?.plans || []).filter((p) => ["lite", "basic", "standard", "pro"].includes(p.id)).map((p) => <option key={p.id} value={p.id}>{p.name} · {Number(p.price || 0).toLocaleString()}</option>)}
                   </CustomSelect>
+                  {/* 💰 2026-11-26 초기 고객 고정 이용료 — 비우거나 0이면 요금제 가격으로 */}
+                  <label className="mt-1 flex items-center justify-center gap-1 text-[11px] font-bold text-[#5B6B85]" title="이 회사만 매달 이 금액으로 청구(비우면 요금제 가격)">
+                    고정
+                    <input inputMode="numeric" placeholder="요금표" defaultValue={Number(plans[c.name]?.lockedPrice) > 0 ? String(plans[c.name].lockedPrice) : ""} key={`${c.name}_lk_${plans[c.name]?.lockedPrice || 0}`}
+                      onBlur={(e) => { const v = Math.max(0, Math.floor(Number(e.target.value.replace(/[^\d]/g, "")) || 0)); if (v === (Number(plans[c.name]?.lockedPrice) || 0)) return; setLocked(c.name, v); }}
+                      className={`w-[78px] h-7 px-1 rounded-md border text-right tabular-nums ${Number(plans[c.name]?.lockedPrice) > 0 ? "border-[#2D4C82] bg-[#EEF3FC] text-[#1B2B4B]" : "border-[#DCE3EE]"}`} />원
+                  </label>
                   {/* 👥 2026-11-09 추가 직원 계정 — 요금제 포함 인원을 넘어 승인할 수 있는 수(초과분은 추가 직원 계정 단가로 청구) */}
                   {plans[c.name]?.planId && (
                     <label className="mt-1 flex items-center justify-center gap-1 text-[11px] font-bold text-[#5B6B85]" title="요금제 포함 인원에 더해 이 회사가 직접 승인할 수 있는 직원 수">

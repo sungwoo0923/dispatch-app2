@@ -121,7 +121,7 @@ export function useCostData() {
     // ① 회사별 매출 — 수납 관리와 같은 계산(확정 금액이 있으면 그 값)
     const cos = mergeCompanies(stats?.companies || [], live).filter((c) => c.kind !== "shipper").map((c) => {
       const planId = plans[c.name]?.planId || "";
-      const bill = applyPlanBill(estimateBill(c, pricing, dim, dim), c, planId, sales);
+      const bill = applyPlanBill(estimateBill(c, pricing, dim, dim), c, planId, sales, plans[c.name]?.lockedPrice); // 💰 초기 고객 고정 이용료
       const inv = invMap[c.name] || null;
       const extra = itemsTotal(inv?.items);
       const revenue = inv && inv.amount != null ? num(inv.amount) : num(bill.total) + extra;

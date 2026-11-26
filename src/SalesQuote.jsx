@@ -120,8 +120,13 @@ export function planUsageOf(c, planId, sales, projected) {
   };
   return { plan: p, storageGB, limitGB, fleetIncluded: num(p.fleet), extra, fee, over: fee.seats + fee.orders + fee.fleet + fee.storage };
 }
-export function applyPlanBill(base, c, planId, sales) {
+// 💰 2026-11-26 초기 고객 고정 이용료 — companyPlans/{회사}.lockedPrice(원 · 부가세 별도)가 있으면 요금제 가격 · 초과 요금 대신 그 금액 하나만
+//  (요금표를 올려도 이미 가입한 운송사는 약속한 금액 그대로. 팝빌 사용료(문자 · 알림톡 · 계좌조회)는 따로 청구)
+export const lockedPriceOf = (planDoc) => { const v = Math.floor(Number(planDoc?.lockedPrice)); return Number.isFinite(v) && v > 0 ? v : 0; };
+export function applyPlanBill(base, c, planId, sales, lockedPrice = 0) {
   const p = planId && sales?.plans?.find((x) => x.id === planId);
+  const locked = Math.floor(Number(lockedPrice) || 0);
+  if (locked > 0) return { ...base, base: locked, seats: 0, orders: 0, fleet: 0, storage: 0, modules: 0, total: locked, planName: p?.name || "", locked: true, usage: p ? planUsageOf(c, planId, sales, base.projected || 0) : null };
   if (!p) return { ...base, planName: "" };
   const u = planUsageOf(c, planId, sales, base.projected || 0);
   const { seats, orders, fleet, storage } = u.fee;
@@ -159,7 +164,7 @@ export function billLines(bill) {
   if (!bill) return [];
   const u = bill.usage;
   return [
-    { key: "base", label: bill.planName ? `${bill.planName} 요금제 기본료` : "기본 이용료", amount: num(bill.base) },
+    { key: "base", label: bill.locked ? "초기 고객 고정 이용료" : bill.planName ? `${bill.planName} 요금제 기본료` : "기본 이용료", amount: num(bill.base) },
     { key: "seats", label: `추가 직원 계정${u ? ` ${u.extra.seats}명` : ""}`, amount: num(bill.seats) },
     { key: "orders", label: `초과 오더${u ? ` ${u.extra.orders.toLocaleString()}건` : ""}`, amount: num(bill.orders) },
     { key: "fleet", label: `지입차 관리${u ? ` ${u.extra.fleet}대${u.fleetIncluded ? `(포함 ${u.fleetIncluded}대 초과분)` : ""}` : ""}`, amount: num(bill.fleet) },

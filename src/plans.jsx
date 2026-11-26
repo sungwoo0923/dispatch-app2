@@ -21,15 +21,16 @@ export function planFeatureLines(planId) {
 }
 
 // ─── 회사 요금제 구독 ───
-const PlanCtx = React.createContext({ planId: null, company: "" });
+const PlanCtx = React.createContext({ planId: null, company: "", lockedPrice: 0 });
 export function PlanProvider({ company, children }) {
   const [planId, setPlanId] = React.useState(null);
+  const [lockedPrice, setLockedPrice] = React.useState(0); // 💰 2026-11-26 초기 고객 고정 이용료(companyPlans.lockedPrice)
   React.useEffect(() => {
     if (previewPlan) { setPlanId(previewPlan); return undefined; }
     if (!company) return undefined;
-    return onSnapshot(doc(db, "companyPlans", company), (s) => setPlanId(s.exists() ? s.data()?.planId || null : null), () => setPlanId(null));
+    return onSnapshot(doc(db, "companyPlans", company), (s) => { const d = s.exists() ? s.data() || {} : {}; setPlanId(d.planId || null); setLockedPrice(Math.max(0, Math.floor(Number(d.lockedPrice) || 0))); }, () => { setPlanId(null); setLockedPrice(0); });
   }, [company]);
-  const v = React.useMemo(() => ({ planId, company }), [planId, company]);
+  const v = React.useMemo(() => ({ planId, company, lockedPrice }), [planId, company, lockedPrice]);
   return <PlanCtx.Provider value={v}>{children}</PlanCtx.Provider>;
 }
 export const usePlan = () => React.useContext(PlanCtx);
