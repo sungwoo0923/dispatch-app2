@@ -10,7 +10,7 @@ export const PLAN_IDS = ["lite", "basic", "standard", "pro"];
 // 월 추가 옵션 기본 단가(요금제 관리 SALES_DEFAULT가 이 값을 쓴다)
 export const PLAN_RATES = { extraSeat: 20000, extraOrder: 50, fleetPerVehicle: 7000, storagePerGB: 3000 };
 export const RECOMMENDED_PLAN_VERSION = "2026-11c";
-// 💰 2026-11-26 요금표 재설정(3차) — 99,000 / 250,000 / 379,000 / 650,000 (VAT 별도) — 베이직은 사용자 요청으로 25만 원(원가 대비 약 45% 남음)
+// 💰 2026-11-26 요금표 재설정(3차) — 150,000 / 250,000 / 379,000 / 650,000 (VAT 별도) — 라이트 15만 · 베이직 25만은 사용자 요청(라이트 → 베이직 간격을 줄임)
 //  · 근거: functions/pricingCore.mjs PLAN_COST(서버 · 저장 · GPS · AI 추정 + 지원 시간 × 5만 원 + 결제 수수료 3%)로 검산해
 //    모든 요금제가 30% 이상 남게(예전 라이트 89,000 은 약 24%라 기준 미달). 11-09 이후 늘어난 기능(운임 규칙 · 운임명세서 · 지게차 · 특수운임 ·
 //    외부 지급 · AI 오더 스캔 · 전자계약 · 회계 자동 기록)도 반영해 약 10% 올림. 포함량(직원 · 오더 · 지입차 · 용량)은 그대로
@@ -32,7 +32,7 @@ export function moduleAddonFee(planId, moduleCount, addon = MODULE_ADDON) {
 }
 export const moduleAddonLabel = (moduleCount) => { const n = Math.max(1, Math.min(4, Math.floor(Number(moduleCount) || 1))); return n >= 4 ? "통합(4개 영역)" : n > 1 ? `업무 영역 ${n}개` : "업무 영역 1개"; };
 export const PLAN_DEFAULTS = [
-  { id: "lite", name: "라이트", en: "LITE", price: 99000, seats: 3, orders: 1000, fleet: 0, storageGB: 10, setupFee: 0, target: "1인 주선 · 2~3인 (일 30건 안팎)" },
+  { id: "lite", name: "라이트", en: "LITE", price: 150000, seats: 3, orders: 1000, fleet: 0, storageGB: 10, setupFee: 0, target: "1인 주선 · 2~3인 (일 30건 안팎)" },
   { id: "basic", name: "베이직", en: "BASIC", price: 250000, seats: 6, orders: 3000, fleet: 0, storageGB: 30, setupFee: 300000, target: "소규모 운송사 · 4~6인 (일 100건 안팎)" },
   { id: "standard", name: "스탠다드", en: "STANDARD", price: 379000, seats: 10, orders: 6000, fleet: 15, storageGB: 50, setupFee: 500000, target: "일반 운송사 · 7~10인 (일 200건 안팎)", recommended: true },
   { id: "pro", name: "프로", en: "PRO", price: 650000, seats: 25, orders: 15000, fleet: 40, storageGB: 200, setupFee: 1000000, target: "중견 운송사 · 11인 이상 (일 500건 안팎)" },
