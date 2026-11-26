@@ -27,10 +27,13 @@ export function snapshotOrder(o) {
 }
 
 // 바뀐 필드 이름 배열(기준값이 없으면 빈 배열 — 비교 불가)
+// 🛠 2026-11-26 주소 없이 보낸 오더에 나중에 주소만 채운 것은 "변경"이 아니다 — 기사님 재승인 없이 바로 도착 감지 · 남은 거리에 쓰인다
+//  (빈 주소 → 새 주소일 때만. 있던 주소를 다른 주소로 바꾸면 예전처럼 재승인)
+const FILL_ONLY = new Set(["상차지주소", "하차지주소"]);
 export function changedFields(o) {
   const base = o?.기사확인값;
   if (!base || typeof base !== "object") return [];
-  return WATCH_FIELDS.filter(f => f in base && normF(f, base[f]) !== normF(f, o?.[f]));
+  return WATCH_FIELDS.filter(f => f in base && normF(f, base[f]) !== normF(f, o?.[f]) && !(FILL_ONLY.has(f) && !normF(f, base[f])));
 }
 
 export function changedLabels(fields) {

@@ -1080,7 +1080,8 @@ const _notifyFleetOrderModified = (COL) =>
       // 회전수는 비어있음/1을 같은 값(1회)으로 본다
       const normF = (f, v) => (f === "회전수" ? (Number(v) > 1 ? String(Math.floor(Number(v))) : "") : norm(v));
       const labels = ORDER_WATCH_GROUPS
-        .filter(([, fields]) => fields.some((f) => normF(f, before[f]) !== normF(f, after[f])))
+        // 🛠 2026-11-26 빈 주소를 채운 것만으로는 "오더 수정" 알림을 보내지 않는다(기사앱 재승인도 없음 — src/orderChange.js)
+        .filter(([, fields]) => fields.some((f) => normF(f, before[f]) !== normF(f, after[f]) && !(/주소$/.test(f) && !normF(f, before[f]))))
         .map(([label]) => label);
       if (!labels.length) return;
 
