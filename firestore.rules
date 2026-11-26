@@ -2586,7 +2586,11 @@ service cloud.firestore {
     match /chat_rooms/{rid} {
       allow read: if isApproved() && request.auth.uid in resource.data.get('members', []);
       allow create: if isApproved() && request.auth.uid in request.resource.data.get('members', []);
-      allow update, delete: if isApproved() && request.auth.uid in resource.data.get('members', []);
+      // 💬 2026-11-26 다른 사람을 방에서 빼는 것(내보내기)은 방을 만든 사람(createdBy)만 — 나 자신이 나가는 것 · 초대 · 이름 바꾸기는 멤버 누구나
+      allow update: if isApproved() && request.auth.uid in resource.data.get('members', [])
+        && (resource.data.get('members', []).toSet().difference(request.resource.data.get('members', []).toSet()).difference([request.auth.uid].toSet()).size() == 0
+          || resource.data.get('createdBy', '') == request.auth.uid);
+      allow delete: if isApproved() && request.auth.uid in resource.data.get('members', []);
     }
     match /chat_messages/{mid} {
       allow read: if chatMember(resource.data.get('roomId', ''));

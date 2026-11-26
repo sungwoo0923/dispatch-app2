@@ -43,6 +43,7 @@ import {
   writeBatch,
   documentId,
   serverTimestamp,
+  arrayUnion, // 🛠 2026-11-26 관리자 대신 수락 타임라인
 } from "firebase/firestore";
 import { updateDoc, setDoc } from "./orderWrite"; // ★ 오더 수정시각 자동 기록(여러 사용자 실시간 일치)
 import { MapContainer, TileLayer, Marker, Popup, Polyline, CircleMarker, useMap } from "react-leaflet";
@@ -56,7 +57,7 @@ import { LeafletTrack, MapLegend } from "./mapLeaflet";
 import { useFleetLook, FleetLookSwitch } from "./fleetLook"; // 🎨 2026-11-26 관제현황 A/B 화면
 import DriverDayReplay from "./DriverDayReplay"; // 🗺 2026-11-26 하루 이동 기록 다시보기
 import { cleanTrack } from "./mapStyle";
-import { modificationStatus } from "./orderChange";
+import { modificationStatus, snapshotOrder } from "./orderChange";
 import CustomDatePicker, { KOREAN_HOLIDAYS } from "./CustomDatePicker";
 import { CustomSelect } from "./CustomSelect"; // ⭐ 2026-11-01 출근기록부·이력조회 공용 드롭다운
 import RouteMapModal from "./RouteMapModal";
@@ -6900,6 +6901,20 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
     if (d.location?.lat != null) setMapCenter({ lat: d.location.lat, lng: d.location.lng, _f: Date.now() }); // 🛠 2026-11-26 누를 때마다 그 기사로
   }, []);
   // 🛠 2026-11-26 관제현황 목록에서 이미 고른 기사를 다시 누르면 — 선택은 그대로 두고 지도만 그 기사로(예전엔 선택이 풀리기만 했다)
+  // 🛠 2026-11-26 오더확인중이 계속될 때 — 관리자가 기사님 대신 수락(기사앱 수락과 같은 칸 · 타임라인에 "관리자 대신 수락")
+  const pendingOf = useCallback((d) => (todayOrdersByPlate.get(normPlateKey(d?.차량번호)) || []).filter((o) => o.기사확인상태 === "대기"), [todayOrdersByPlate]);
+  const acceptForDriver = useCallback(async (o, d) => {
+    if (!o?._id) return;
+    if (!await kpConfirm(`${d?.이름 || "기사"}님 대신 이 오더를 수락할까요?\n${o.거래처명 || ""} · ${o.상차지명 || ""} → ${o.하차지명 || ""}\n\n기사님과 통화로 확인했을 때만 눌러 주세요. 기사앱에는 바로 운행 중 오더로 떠요.`, { okText: "대신 수락" })) return;
+    const by = myNameNow() || "관리자";
+    try {
+      await updateDoc(doc(db, o.__col || "orders", o._id), {
+        기사확인상태: "수락", 기사확인일시: serverTimestamp(), 배차상태: "배차완료",
+        기사확인값: snapshotOrder(o), 관리자대신수락: by,
+        기사타임라인: arrayUnion({ type: "수락", at: Date.now(), by: `${by}(관리자 대신)` }),
+      });
+    } catch (e) { window.alert(`처리하지 못했어요: ${e?.message || e}`); }
+  }, []);
   const handleRecenter = useCallback((d) => {
     if (d?.location?.lat != null) setMapCenter({ lat: d.location.lat, lng: d.location.lng, _f: Date.now() });
   }, []);
@@ -7176,6 +7191,8 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
             selected={selected}
             onSelect={handleSelect}
             onRecenter={handleRecenter}
+            pendingOf={pendingOf}
+            onAcceptFor={acceptForDriver}
             onContextMenu={handleContextMenu}
             locChangeRequests={locChangeRequests}
             collisionAlerts={collisionAlerts}
