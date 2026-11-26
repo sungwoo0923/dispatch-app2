@@ -49,6 +49,8 @@ import * as XLSX from "xlsx";
 import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차량 조회
 import { useOrderFormFields } from "./orderFormFields"; // 🧩 2026-11-26 오더등록 입력칸 고르기
 import OrderFieldsModal from "./OrderFieldsModal";
+import { ORDER_SKIN_CSS, nextSkin, skinName } from "./orderSkins"; // 🎨 2026-11-26 오더등록 디자인 시안(최고관리자)
+import { startDarkGuard } from "./fleetDarkGuard";
 import MgrBadge, { setMgrNameMap } from "./MgrBadge";
 import { isUrgentOrder, UrgentBadge, urgentRowStyle } from "./urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조(모든 현황 공용)
 import BulkEditCopyModal from "./BulkEditCopy"; // 🗂 2026-11-09 우클릭 [일괄수정·복사]
@@ -904,7 +906,7 @@ function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange
   const maxWorkDate = sortedWorkDates[sortedWorkDates.length - 1];
 
   return (
-    <div className="bg-white border border-[#E3E8F0] rounded-[24px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden flex flex-col" style={{ flex: "1 1 0%", minWidth: 240 }}>
+    <div className="kp-order-cal bg-white border border-[#E3E8F0] rounded-[24px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden flex flex-col" style={{ flex: "1 1 0%", minWidth: 240 }}>
       {/* 헤더 — 오늘 날짜 + 디지털 시계 */}
       <div className="px-5 py-3.5 flex items-center justify-between shrink-0" style={{ background: "linear-gradient(120deg,#0B1428,#0F1A30 50%,#1B2B4B)" }}>
         <div>
@@ -11098,6 +11100,11 @@ function DmDot({ on, alert = false }) {
   const ofs = useOrderFormFields(getTenant() || userCompany);
   const ofShow = ofs.show;
   const [ofOpen, setOfOpen] = React.useState(false);
+  // 🎨 2026-11-26 오더등록 디자인 시안 — 최고관리자만 [디자인 변경]으로 돌려 본다(입력칸 · 버튼 · 기능은 그대로, 모양만 · src/orderSkins.js)
+  const [ofSkin, setOfSkin] = React.useState(() => { try { return localStorage.getItem("kpOrderSkin") || "base"; } catch { return "base"; } });
+  const skinOn = role === "totalMaster" ? ofSkin : "base";
+  const cycleSkin = () => setOfSkin((v) => { const n = nextSkin(v); try { localStorage.setItem("kpOrderSkin", n); } catch { /* 무시 */ } return n; });
+  React.useEffect(() => (skinOn === "dark" ? startDarkGuard(".of-skin-dark", "img,video,canvas,svg,path,iframe,.leaflet-tile-pane,.leaflet-tile,.fm-keep-light", { restore: true }) : undefined), [skinOn]);
   const dmLookupNameOf = React.useCallback((r) => _orderStaffNameRaw(r, userNameMap), [userNameMap]);
 
       // ⭐ 회사별 커스텀 드롭다운 옵션(Part B) — 등록폼 전역에서 재사용하므로 최상위에서
@@ -16242,7 +16249,7 @@ React.useEffect(() => {
 </div>
    
    {/* ================== 통합 입력 카드 ================== */}
-<div className="bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden">
+<div className="kp-order-card bg-white rounded-2xl shadow-md border border-gray-200 overflow-hidden">
 
 {/* 액션바 */}
 <div className="px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[#EDF1F7] bg-[linear-gradient(180deg,#FBFCFE,#F5F7FB)]" style={{ minHeight: "56px" }}>
@@ -16308,6 +16315,14 @@ React.useEffect(() => {
       입력칸 설정{ofs.hidden.size > 0 && <span className="ml-0.5 text-[11px] font-black px-1.5 rounded-full bg-[#1B2B4B] text-white">{ofs.hidden.size}개 숨김</span>}
     </button>
     {ofOpen && <OrderFieldsModal state={ofs} onClose={() => setOfOpen(false)} canCompany={!isViewer} />}
+    {/* 🎨 2026-11-26 디자인 변경(최고관리자만) — 누를 때마다 기본 → A → B → C → D 순서로 실제 화면이 바뀐다 */}
+    {role === "totalMaster" && (
+      <button type="button" onClick={cycleSkin} data-testid="order-skin-btn" title={`오더등록 디자인 시안 돌려 보기(최고관리자만) — 지금: ${skinName(skinOn)}`}
+        className={`${DM_BTN} border ${skinOn !== "base" ? "bg-gradient-to-r from-[#4F46E5] to-[#0891B2] text-white border-transparent shadow-[0_6px_16px_rgba(79,70,229,0.3)]" : "bg-white text-[#4F46E5] border-[#C7D2FE] hover:bg-[#EEF2FF]"}`}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r="1.5" /><circle cx="17.5" cy="10.5" r="1.5" /><circle cx="8.5" cy="7.5" r="1.5" /><circle cx="6.5" cy="12.5" r="1.5" /><path d="M12 2a10 10 0 0 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4A5.6 5.6 0 0 0 22 9.8C22 5.5 17.5 2 12 2z" /></svg>
+        디자인 변경 · {skinName(skinOn)}
+      </button>
+    )}
     <OrderLookupModal open={dmLookupOpen} onClose={() => setDmLookupOpen(false)} rows={dmLookupOpen ? (dispatchData || []).filter((r) => !r?.배차표Id) : []} nameOf={dmLookupNameOf} />{/* ⭐ 2026-11-06 고정노선(배차표) 오더는 고정노선현황에서만 */}
     {recurringOpen && createPortal(<RecurringManagerModal form={form} onClose={() => setRecurringOpen(false)} />, document.body)}
 
@@ -20196,7 +20211,8 @@ className={`
       <>
       
            {/* ==================== 상단: 입력폼 + Today 사이드패널 ==================== */}
-<div className="flex items-stretch gap-3 w-full mb-4" style={{ minWidth: 0 }}>
+{skinOn !== "base" && <style>{ORDER_SKIN_CSS}</style>}{/* 🎨 디자인 시안(최고관리자) */}
+<div className={`flex items-stretch gap-3 w-full mb-4 of-skin of-skin-${skinOn}`} style={{ minWidth: 0 }}>
   {/* 왼쪽: 폼 */}
   {/* ⭐ 2026-11-01 화면이 좁으면(노트북·125% 배율 1536px 등) 입력칸이 겹쳐 화물내용 칸을 못 누를 정도였다 — 1800px 미만은 폼을 넓게 */}
   {/* ⭐ 2026-11-02 수수료 라벨 줄(운임구분)이 좁아지지 않게 입력 칸 74→77%(넓은 화면 62→66%) · 옆 달력은 그만큼 살짝 작게 */}
