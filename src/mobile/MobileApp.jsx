@@ -6596,7 +6596,7 @@ onGoAttendance={() => {
                   <button key={st} onClick={async () => {
                     const newApprovers = [...approvers];
                     newApprovers[myApproverIdx] = { ...newApprovers[myApproverIdx], status: st };
-                    await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: newApprovers, isReRequest: false });
+                    try { await updateDoc(doc(db, "schedules", selectedSchedule.id), { approvers: newApprovers, isReRequest: false }); } catch (e) { console.error(e); setToast("결재를 저장하지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요."); return; } // 🛠 2026-11-27 실패 안내
                     setSelectedSchedule(prev => ({ ...prev, approvers: newApprovers, isReRequest: false }));
                     // 결재 요청 알림 읽음 처리
                     const notifId = `req_${selectedSchedule.id}_${currentUser?.uid}`;

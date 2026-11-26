@@ -94,6 +94,15 @@ async function orderStillMine(ref, localOrder, okStates = ["대기"]) {
     return true;
   } catch { return true; }
 }
+
+// 🛠 2026-11-27 인터넷이 끊기면 저장이 "서버가 받았다"는 응답을 끝없이 기다려 출근 · 수락 · 완료 버튼이 잠긴 채로 있었다
+//  — 4초까지만 기다리고 화면은 풀어 준다(저장은 휴대폰에 남아 있다가 연결되면 서버로 보내진다)
+async function writeSoon(p, ms = 4000) {
+  let late = false;
+  const t = new Promise((r) => setTimeout(() => { late = true; r("queued"); }, ms));
+  const w = Promise.resolve(p).then(() => "saved", (e) => { if (late) { console.warn("[기사앱] 연결 뒤 저장 실패", e?.code || e); return "failed"; } throw e; });
+  return Promise.race([w, t]);
+}
 const errCode = (e) => (e?.code ? ` (${String(e.code).replace(/^firestore\//, "")})` : ""); // 오류가 나면 무슨 오류인지 알 수 있게
 
 const tlLog = (type, by, extra = {}) => ({
@@ -1459,6 +1468,13 @@ export default function DriverHome() {
   }, []);
 
   const [loadStuck, setLoadStuck] = useState(false);
+  // 🛠 2026-11-27 인터넷 끊김 표시(기사 홈 위 띠)
+  const [netOff, setNetOff] = useState(() => typeof navigator !== "undefined" && navigator.onLine === false);
+  useEffect(() => {
+    const on = () => setNetOff(false), off = () => setNetOff(true);
+    window.addEventListener("online", on); window.addEventListener("offline", off);
+    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+  }, []);
   useEffect(() => {
     if (!uid) return;
     // 🛠 2026-11-27 기사 문서가 없거나 읽기가 막히면(권한 · 인터넷 끊김) "불러오는 중"에서 멈추지 않게 — 10초 뒤 [다시 시도 · 로그아웃]
@@ -1796,9 +1812,9 @@ export default function DriverHome() {
       }
       // 🚚 2026-11-09 퇴근·출근하면 관제의 "퇴근 미처리" 표시를 지운다
       if (isFinal || newStatus === "출근" || firestoreStatus === "퇴근") driverUpdate.퇴근미처리 = deleteField();
-      await updateDoc(doc(db, "drivers", uid), driverUpdate);
+      await writeSoon(updateDoc(doc(db, "drivers", uid), driverUpdate));
       const logExtra = { ...(isFinal ? { finalDistance } : {}), ...(extraLog || {}) };
-      await addDoc(collection(db, "driver_logs"), {
+      await writeSoon(addDoc(collection(db, "driver_logs"), {
         uid,
         driverName: driver?.name || "",
         carNo: driver?.carNo || "",
@@ -1812,7 +1828,7 @@ export default function DriverHome() {
         timestamp: serverTimestamp(),
         location: (pos && (pos.accuracy == null || pos.accuracy <= 100)) ? { lat: pos.lat, lng: pos.lng } : null,
         ...logExtra,
-      });
+      }));
       showToast(`${isFinal ? "최종 퇴근" : newStatus} 처리되었습니다`);
     } catch (e) {
       showToast("처리 중 오류가 발생했습니다");
@@ -1949,14 +1965,14 @@ export default function DriverHome() {
     try {
       const accepted = myOrders.find(x => x._id === orderId);
       if (!(await orderStillMine(doc(db, col, orderId), accepted))) { showToast("오더 내용이 바뀌었어요. 화면을 새로 보고 다시 확인해 주세요."); return; }
-      await updateDoc(doc(db, col, orderId), {
+      await writeSoon(updateDoc(doc(db, col, orderId), {
         기사확인상태: "수락",
         기사확인일시: serverTimestamp(),
         ...tlLog("수락", driver?.name),
         배차상태: "배차완료",
         // 수락 시점 내용 저장 — 이후 관리자가 수정하면 무엇이 바뀌었는지 비교한다
         ...(accepted ? { 기사확인값: snapshotOrder(accepted) } : {}),
-      });
+      }));
       // ⭐ 버그수정 — 이전 오더 완료 시 남겨둔 lastCompletedOrderId를 안 지웠더니,
       // 새 오더를 수락한 직후에도 "하차완료" 업로드 타일이 이전 오더 기준으로
       // 계속 활성화돼 보였다(상차완료만 활성화돼야 하는데 둘 다 눌림).
@@ -1998,7 +2014,7 @@ export default function DriverHome() {
       // 4/5파트 배차현황에서도 차량번호/이름/전화번호가 사라져야 한다(이 기사에게
       // 배정됐던 흔적을 지워 담당자가 바로 다른 차량을 다시 배정할 수 있게).
       if (!(await orderStillMine(doc(db, rm.col || "orders", rm.orderId), myOrders.find((x) => x._id === rm.orderId), ["대기", "수락"]))) { showToast("오더 내용이 바뀌었어요. 화면을 새로 보고 다시 확인해 주세요."); setRejectModal?.(null); return; }
-      await updateOrderSafe(doc(db, rm.col || "orders", rm.orderId), {
+      await writeSoon(updateOrderSafe(doc(db, rm.col || "orders", rm.orderId), {
         기사확인상태: "거절",
         기사거절사유: rm.modified ? (reason ? `수정된 오더 거절 — ${reason}` : "수정된 오더 거절") : reason,
         // ⭐ 2026-11-09 수정된 오더를 거절 — 담당자 알림 문구가 달라진다(서버 notifyDispatcherOrderRejected)
@@ -2014,7 +2030,7 @@ export default function DriverHome() {
         배차확정일시: null,
         배차확정자: null,
         배차방식: "",
-      });
+      }));
       setOrderBanner(null);
       showToast(rm.modified ? "수정된 오더를 거절하고 담당자에게 알렸습니다." : "오더를 거절했습니다");
       setRejectModal(null);
@@ -2127,11 +2143,11 @@ export default function DriverHome() {
     if (orderActionLoading) return;
     setOrderActionLoading(true);
     try {
-      await updateDoc(doc(db, o.__col || "orders", o._id), {
+      await writeSoon(updateDoc(doc(db, o.__col || "orders", o._id), {
         완료회차: k,
         [`회차완료일시.${k}`]: serverTimestamp(),
         ...tlLog("회차완료", driver?.name, { detail: `${k}회차` }),
-      });
+      }));
       showToast(`${k}회차를 마쳤습니다. 다음 회차 상차지로 이동해 주세요.`);
     } catch (e) {
       showToast("처리 중 오류가 발생했습니다");
@@ -2144,11 +2160,11 @@ export default function DriverHome() {
     if (orderActionLoading) return;
     setOrderActionLoading(true);
     try {
-      await updateDoc(doc(db, col, orderId), {
+      await writeSoon(updateDoc(doc(db, col, orderId), {
         기사확인상태: "완료",
         기사완료일시: serverTimestamp(),
         ...tlLog("운송완료", driver?.name),
-      });
+      }));
       setLastCompletedOrderId(orderId);
       setLastCompletedOrderCol(col);
       setDropPhotoAsk({ orderId, col });
@@ -2648,6 +2664,11 @@ export default function DriverHome() {
   return (
     <div className={`kpd-root kpd-shell${drvDark ? " kpd-dark" : ""}`} style={{ display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: '"Pretendard", "Noto Sans KR", sans-serif' }}>
       {drvDark && <style>{DRIVER_DARK_CSS}</style>}
+      {netOff && (
+        <div role="status" style={{ flexShrink: 0, padding: "calc(8px + env(safe-area-inset-top)) 14px 8px", background: "#B42318", color: "#fff", fontSize: 14, fontWeight: 800, textAlign: "center" }}>
+          인터넷 연결이 끊겼어요 · 누른 내용은 연결되면 보내져요
+        </div>
+      )}
       {viewAs && (
         <div data-view-as style={{ position: "relative", zIndex: 2147483000, flexShrink: 0, display: "flex", alignItems: "center", gap: 10, padding: "calc(8px + env(safe-area-inset-top)) 14px 8px", background: "#0B1428", color: "#fff" }}>
           <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.12em", color: "#8FB0F0", whiteSpace: "nowrap" }}>관리자 보기</span>
