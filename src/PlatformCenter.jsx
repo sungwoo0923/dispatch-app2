@@ -16,6 +16,7 @@ import { addDoc, collection, deleteDoc, deleteField, doc, getDocs, limit, onSnap
 import { auth, db, FUNCTIONS_BASE } from "./firebase";
 import { pushTenantBypass } from "./fsTenant";
 import KpSubNav from "./KpSubNav";
+import { USAGE_PRICE, priceCheck, usageBill } from "../functions/pricingCore.mjs"; // 💰 2026-11-26 사용료 단가 · 손해 검사
 import PlatformMonitor, { estimateBill, usePhone } from "./PlatformMonitor";
 // ⭐ 2026-11-02 관리자센터 — 실시간 계정·접속 층 + 운영 위젯
 import { useHelpAcks, helpNeededList, ackHelpNeeded } from "./helpNeeded"; // 🆘 2026-11-09 신규 운송사 "도움 필요"
@@ -175,42 +176,60 @@ const msOf = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 
 
 // ═══════════════════════ 💬 문자 · 알림톡 사용량(2026-11-10) ═══════════════════════
 //  팝빌은 로지스웹이 한꺼번에 내고, 운송사별 월 사용량(messageUsage — 서버가 셈)에 단가를 곱해 월말에 청구한다
-//  단가: platformConfig/messagePricing { sms, lms, alimtalk }(원 · 부가세 별도) — 운송사 화면 "이번 달 예상 청구액"도 이 값
+//  단가: platformConfig/messagePricing { sms, lms, alimtalk, bankAccount }(원 · 부가세 별도) — 운송사 화면 "이번 달 예상 청구액"도 이 값
+//  💰 2026-11-26 손해 막기 — 기본 단가 · 원가(추정)는 functions/pricingCore.mjs 한 곳. 원가 대비 30% 미만이면 빨갛게 알리고,
+//   팝빌이 계좌마다 매달 받는 계좌조회(입금 자동 확인)도 등록 계좌 수(popbillSettings/{회사}.bankAccounts) × 월 단가로 같이 청구한다
+const MSG_PRICE_KEYS = [["sms", "단문(SMS)"], ["lms", "장문(LMS)"], ["alimtalk", "알림톡"], ["bankAccount", "계좌조회 · 월"]];
+const bankCountOf = (d) => (Array.isArray(d?.bankAccounts) ? d.bankAccounts.filter((a) => a && a.id && a.bankCode && a.accountNumber && a.enabled !== false).length : 0);
 function MessageUsagePanel() {
   const [ym, setYm] = React.useState(() => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7));
   const [rows, setRows] = React.useState(null);
+  const [banks, setBanks] = React.useState({});
   const [price, setPrice] = React.useState(null);
   const [draft, setDraft] = React.useState(null);
   const [msg, setMsg] = React.useState("");
   React.useEffect(() => onSnapshot(query(collection(db, "messageUsage"), where("month", "==", ym)), (s) => setRows(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setRows([])), [ym]);
+  React.useEffect(() => onSnapshot(collection(db, "popbillSettings"), (s) => { const o = {}; s.docs.forEach((d) => { const c = bankCountOf(d.data()); if (c) o[d.data()?.companyName || d.id] = c; }); setBanks(o); }, () => setBanks({})), []);
   React.useEffect(() => onSnapshot(doc(db, "platformConfig", "messagePricing"), (s) => setPrice(s.exists() ? s.data() : {}), () => setPrice({})), []);
-  const P = { sms: Number(price?.sms ?? 20), lms: Number(price?.lms ?? 50), alimtalk: Number(price?.alimtalk ?? 15) };
+  const P = Object.fromEntries(MSG_PRICE_KEYS.map(([k]) => [k, Number(price?.[k] ?? USAGE_PRICE[k])]));
   const v = draft || P;
+  const checks = priceCheck(Object.fromEntries(MSG_PRICE_KEYS.map(([k]) => [k, Number(v[k]) || 0])));
+  const chk = Object.fromEntries(checks.map((c) => [c.key, c]));
   const shift = (n) => { const [y, m] = ym.split("-").map(Number); setYm(new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 7)); };
-  const list = (rows || []).map((r) => ({ ...r, sms: Number(r.sms) || 0, lms: Number(r.lms) || 0, alimtalk: Number(r.alimtalk) || 0 }))
-    .map((r) => ({ ...r, amount: r.sms * P.sms + r.lms * P.lms + r.alimtalk * P.alimtalk })).sort((a, b) => b.amount - a.amount);
-  const sum = list.reduce((a, r) => ({ sms: a.sms + r.sms, lms: a.lms + r.lms, alimtalk: a.alimtalk + r.alimtalk, amount: a.amount + r.amount }), { sms: 0, lms: 0, alimtalk: 0, amount: 0 });
-  const savePrice = async () => { await setDoc(doc(db, "platformConfig", "messagePricing"), { sms: Number(v.sms) || 0, lms: Number(v.lms) || 0, alimtalk: Number(v.alimtalk) || 0, updatedAt: serverTimestamp() }, { merge: true }); setDraft(null); setMsg("단가를 저장했어요"); };
+  const byCo = new Map();
+  (rows || []).forEach((r) => byCo.set(r.company, { company: r.company, sms: Number(r.sms) || 0, lms: Number(r.lms) || 0, alimtalk: Number(r.alimtalk) || 0, bankAccount: 0 }));
+  Object.entries(banks).forEach(([co, cnt]) => { const r = byCo.get(co) || { company: co, sms: 0, lms: 0, alimtalk: 0, bankAccount: 0 }; r.bankAccount = cnt; byCo.set(co, r); });
+  const list = [...byCo.values()].map((r) => { const b = usageBill(r, P); return { ...r, id: r.company, amount: b.amount, profit: b.profit }; }).sort((a, b) => b.amount - a.amount);
+  const sum = list.reduce((a, r) => ({ sms: a.sms + r.sms, lms: a.lms + r.lms, alimtalk: a.alimtalk + r.alimtalk, bankAccount: a.bankAccount + r.bankAccount, amount: a.amount + r.amount, profit: a.profit + r.profit }), { sms: 0, lms: 0, alimtalk: 0, bankAccount: 0, amount: 0, profit: 0 });
+  const lossy = checks.filter((c) => !c.ok);
+  const savePrice = async () => {
+    if (lossy.length && !await kpConfirm(`원가 대비 남는 돈이 30%보다 적은 단가가 있어요.\n\n${lossy.map((c) => `· ${c.label} ${c.price}원 (원가 약 ${c.cost}원 · 추천 ${c.min}원 이상)`).join("\n")}\n\n그래도 저장할까요?`)) return;
+    await setDoc(doc(db, "platformConfig", "messagePricing"), { ...Object.fromEntries(MSG_PRICE_KEYS.map(([k]) => [k, Number(v[k]) || 0])), updatedAt: serverTimestamp() }, { merge: true }); setDraft(null); setMsg("단가를 저장했어요");
+  };
   const csv = () => {
-    const head = ["운송사", "월", "단문", "장문", "알림톡", "청구액(원·부가세 별도)"];
-    const lines = [head, ...list.map((r) => [r.company, ym, r.sms, r.lms, r.alimtalk, Math.round(r.amount)])].map((l) => l.join(",")).join("\n");
-    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\ufeff" + lines], { type: "text/csv" })); a.download = `문자알림톡사용량_${ym}.csv`; a.click();
+    const head = ["운송사", "월", "단문", "장문", "알림톡", "조회 계좌", "청구액(원·부가세 별도)", "남는 돈(추정)"];
+    const lines = [head, ...list.map((r) => [r.company, ym, r.sms, r.lms, r.alimtalk, r.bankAccount, Math.round(r.amount), Math.round(r.profit)])].map((l) => l.join(",")).join("\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + lines], { type: "text/csv" })); a.download = `문자알림톡사용량_${ym}.csv`; a.click();
   };
   const cell = "px-3 py-2.5 border-b border-[#EEF1F6] text-[13.5px] tabular-nums";
+  const pct = (m) => `${Math.round(m * 100)}%`;
   return (
     <>
-      <Hero en="BILLING · MESSAGES" title="문자 · 알림톡 사용량" desc="팝빌은 로지스웹이 내고, 운송사별 사용량에 단가를 곱해 월말에 청구해요"
-        right={<div className="flex gap-2"><div className="rounded-2xl bg-white/[0.08] border border-white/10 px-3.5 py-2"><div className="text-[11.5px] text-white/55 font-bold">{ym.replace("-", ".")} 청구 합계</div><div className="text-[20px] font-black tabular-nums">{Math.round(sum.amount).toLocaleString()}원</div></div></div>} />
-      <div className="grid lg:grid-cols-[300px_minmax(0,1fr)] gap-3 items-start">
+      <Hero en="BILLING · MESSAGES" title="문자 · 알림톡 · 계좌조회 사용량" desc="팝빌은 로지스웹이 내고, 운송사별 사용량에 단가를 곱해 월말에 청구해요"
+        right={<div className="flex gap-2"><div className="rounded-2xl bg-white/[0.08] border border-white/10 px-3.5 py-2"><div className="text-[11.5px] text-white/55 font-bold">{ym.replace("-", ".")} 청구 합계</div><div className="text-[20px] font-black tabular-nums">{Math.round(sum.amount).toLocaleString()}원</div></div><div className="rounded-2xl bg-white/[0.08] border border-white/10 px-3.5 py-2"><div className="text-[11.5px] text-white/55 font-bold">남는 돈(추정)</div><div className="text-[20px] font-black tabular-nums">{Math.round(sum.profit).toLocaleString()}원</div></div></div>} />
+      <div className="grid lg:grid-cols-[320px_minmax(0,1fr)] gap-3 items-start">
         <div className="rounded-2xl bg-white border border-[#E3E8F0] p-4 space-y-3" data-kp="msg-price">
           <div className="text-[10.5px] font-extrabold tracking-[0.22em] text-[#9AA9C3]">UNIT PRICE · 원 · 부가세 별도</div>
-          {[["sms", "단문(SMS)"], ["lms", "장문(LMS)"], ["alimtalk", "알림톡"]].map(([k, l]) => (
-            <label key={k} className="flex items-center gap-2"><span className="w-[78px] shrink-0 whitespace-nowrap text-[13px] font-bold text-[#3A4A66]">{l}</span>
-              <input inputMode="numeric" value={String(v[k] ?? "")} onChange={(e) => { setDraft({ ...v, [k]: e.target.value.replace(/[^\d.]/g, "") }); setMsg(""); }} className="flex-1 min-w-0 w-full h-9 px-3 rounded-lg border border-[#DCE3EE] text-[14px] font-black text-right tabular-nums" />
-              <span className="text-[12.5px] text-[#7A8AA6]">원</span></label>
+          {MSG_PRICE_KEYS.map(([k, l]) => (
+            <div key={k}>
+              <label className="flex items-center gap-2"><span className="w-[92px] shrink-0 whitespace-nowrap text-[13px] font-bold text-[#3A4A66]">{l}</span>
+                <input inputMode="numeric" value={String(v[k] ?? "")} onChange={(e) => { setDraft({ ...v, [k]: e.target.value.replace(/[^\d.]/g, "") }); setMsg(""); }} className={`flex-1 min-w-0 w-full h-9 px-3 rounded-lg border text-[14px] font-black text-right tabular-nums ${chk[k]?.ok === false ? "border-[#E8A39B] bg-[#FFF5F4]" : "border-[#DCE3EE]"}`} />
+                <span className="text-[12.5px] text-[#7A8AA6]">원</span></label>
+              {chk[k] && <div className={`mt-1 pl-[100px] text-[11.5px] font-bold ${chk[k].ok ? "text-[#7A8AA6]" : "text-[#B4342A]"}`}>원가 약 {chk[k].cost.toLocaleString()}원 · 남는 돈 {pct(chk[k].margin)}{chk[k].ok ? "" : ` · ${chk[k].loss ? "팔수록 손해" : "추천"} ${chk[k].min.toLocaleString()}원 이상`}</div>}
+            </div>
           ))}
           <button type="button" disabled={!draft} onClick={savePrice} className="w-full h-10 rounded-xl bg-[#0F1A30] text-white text-[13.5px] font-black disabled:opacity-40">단가 저장</button>
-          <div className="text-[12px] text-[#7A8AA6] leading-relaxed">운송사 회사정보 › 문자 보내기의 "이번 달 예상 청구액"에도 이 단가가 쓰여요. 팝빌 원가는 팝빌 › 요금 안내에서 확인하세요.</div>
+          <div className="text-[12px] text-[#7A8AA6] leading-relaxed">운송사 회사정보 › 문자 보내기의 "이번 달 예상 청구액"에도 이 단가가 쓰여요. 원가는 팝빌 계약 전 넉넉하게 잡은 추정값이에요(functions/pricingCore.mjs). 알림톡 원가에는 카톡을 못 받아 문자로 대신 가는 5%가 들어 있어요.</div>
           {msg && <div className="text-[12.5px] font-bold text-[#2D4C82]">{msg}</div>}
         </div>
         <div className="rounded-2xl bg-white border border-[#E3E8F0] overflow-hidden min-w-0">
@@ -219,18 +238,20 @@ function MessageUsagePanel() {
             <span className="text-[12.5px] font-bold text-[#7A8AA6]">{list.length}개 운송사</span>
             <button type="button" onClick={csv} disabled={!list.length} className="ml-auto h-9 px-3 rounded-lg border border-[#DCE3EE] text-[13px] font-black text-[#1B2B4B] disabled:opacity-40">엑셀(CSV)</button>
           </div>
+          <div className="overflow-x-auto">
           <table className="w-full border-separate border-spacing-0">
-            <thead><tr>{["운송사", "단문", "장문", "알림톡", "청구액"].map((h, i) => <th key={h} className={`text-[11.5px] font-extrabold text-[#7A8AA6] px-3 py-2.5 bg-[#F8FAFC] border-b border-[#E3E8F0] ${i ? "text-right" : "text-left"}`}>{h}</th>)}</tr></thead>
+            <thead><tr>{["운송사", "단문", "장문", "알림톡", "조회 계좌", "청구액", "남는 돈"].map((h, i) => <th key={h} className={`whitespace-nowrap text-[11.5px] font-extrabold text-[#7A8AA6] px-3 py-2.5 bg-[#F8FAFC] border-b border-[#E3E8F0] ${i ? "text-right" : "text-left"}`}>{h}</th>)}</tr></thead>
             <tbody>
-              {rows === null && <tr><td colSpan={5} className="py-12 text-center text-[13px] text-[#9AA9C3]">불러오는 중…</td></tr>}
-              {rows && !list.length && <tr><td colSpan={5} className="py-12 text-center text-[13px] text-[#9AA9C3]">이 달에 보낸 문자 · 알림톡이 없어요</td></tr>}
+              {rows === null && <tr><td colSpan={7} className="py-12 text-center text-[13px] text-[#9AA9C3]">불러오는 중…</td></tr>}
+              {rows && !list.length && <tr><td colSpan={7} className="py-12 text-center text-[13px] text-[#9AA9C3]">이 달에 보낸 문자 · 알림톡과 등록한 조회 계좌가 없어요</td></tr>}
               {list.map((r) => (
-                <tr key={r.id}><td className={`${cell} font-black`}>{r.company}</td><td className={`${cell} text-right`}>{r.sms.toLocaleString()}</td><td className={`${cell} text-right`}>{r.lms.toLocaleString()}</td><td className={`${cell} text-right`}>{r.alimtalk.toLocaleString()}</td><td className={`${cell} text-right font-black`}>{Math.round(r.amount).toLocaleString()}원</td></tr>
+                <tr key={r.id}><td className={`${cell} font-black`}>{r.company}</td><td className={`${cell} text-right`}>{r.sms.toLocaleString()}</td><td className={`${cell} text-right`}>{r.lms.toLocaleString()}</td><td className={`${cell} text-right`}>{r.alimtalk.toLocaleString()}</td><td className={`${cell} text-right`}>{r.bankAccount ? `${r.bankAccount}개` : "–"}</td><td className={`${cell} text-right font-black`}>{Math.round(r.amount).toLocaleString()}원</td><td className={`${cell} text-right ${r.profit < 0 ? "text-[#B4342A] font-black" : "text-[#5B6B85]"}`}>{Math.round(r.profit).toLocaleString()}원</td></tr>
               ))}
-              {list.length > 0 && <tr className="bg-[#F8FAFC]"><td className={`${cell} font-black`}>합계</td><td className={`${cell} text-right font-black`}>{sum.sms.toLocaleString()}</td><td className={`${cell} text-right font-black`}>{sum.lms.toLocaleString()}</td><td className={`${cell} text-right font-black`}>{sum.alimtalk.toLocaleString()}</td><td className={`${cell} text-right font-black`}>{Math.round(sum.amount).toLocaleString()}원</td></tr>}
+              {list.length > 0 && <tr className="bg-[#F8FAFC]"><td className={`${cell} font-black`}>합계</td><td className={`${cell} text-right font-black`}>{sum.sms.toLocaleString()}</td><td className={`${cell} text-right font-black`}>{sum.lms.toLocaleString()}</td><td className={`${cell} text-right font-black`}>{sum.alimtalk.toLocaleString()}</td><td className={`${cell} text-right font-black`}>{sum.bankAccount}개</td><td className={`${cell} text-right font-black`}>{Math.round(sum.amount).toLocaleString()}원</td><td className={`${cell} text-right font-black`}>{Math.round(sum.profit).toLocaleString()}원</td></tr>}
             </tbody>
           </table>
-          <div className="px-4 py-3 text-[12px] text-[#7A8AA6]">수납 관리에서 이 달 청구서를 만들 때 위 금액을 "문자 · 알림톡" 항목으로 더해 주세요.</div>
+          </div>
+          <div className="px-4 py-3 text-[12px] text-[#7A8AA6]">수납 관리에서 이 달 청구서를 만들 때 위 금액을 "문자 · 알림톡 · 계좌조회" 항목으로 더해 주세요. 조회 계좌는 운송사가 회사정보 › 입금 자동 조회 계좌에 켜 둔 개수예요(꺼 둔 계좌는 빼요).</div>
         </div>
       </div>
     </>

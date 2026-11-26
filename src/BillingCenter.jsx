@@ -312,7 +312,7 @@ export default function BillingCenter({ userEmail = "", userName = "", canEdit =
               {[["taxInvoiceFee", "전자세금계산서", "건"], ["alimtalkFee", "알림톡", "건"], ["smsFee", "문자", "건"], ["extraBizFee", "추가 사업자", "곳·월"]].some(([k]) => num(pricing[k]) > 0) && (
                 <div className="mt-4 rounded-xl bg-[#F7F9FC] border border-[#EEF1F6] px-3 py-2.5 text-[11.5px] font-bold text-[#5B6B85] leading-relaxed">
                   <div className="text-[9.5px] font-extrabold tracking-[0.2em] text-[#4B6CB7] mb-0.5" style={{ fontFamily: MONO, fontVariantNumeric: "tabular-nums" }}>ADD-ONS · 사용한 만큼</div>
-                  {[["taxInvoiceFee", "전자세금계산서", "건"], ["alimtalkFee", "알림톡", "건"], ["smsFee", "문자(SMS)", "건"], ["lmsFee", "장문 문자", "건"], ["extraBizFee", "추가 사업자", "곳·월"], ["storagePerGB", "저장 용량 초과", "GB·월"]].filter(([k]) => num(pricing[k]) > 0).map(([k, l, u]) => `${l} ${won(pricing[k])}원/${u}`).join(" · ")}
+                  {[["taxInvoiceFee", "전자세금계산서", "건"], ["alimtalkFee", "알림톡", "건"], ["smsFee", "문자(SMS)", "건"], ["lmsFee", "장문 문자", "건"], ["accountCheckFee", "예금주 조회", "건"], ["bankAccountFee", "입금 자동 확인", "계좌·월"], ["hometaxFee", "홈택스 자동 수집", "사업자·월"], ["extraBizFee", "추가 사업자", "곳·월"], ["storagePerGB", "저장 용량 초과", "GB·월"]].filter(([k]) => num(pricing[k]) > 0).map(([k, l, u]) => `${l} ${won(pricing[k])}원/${u}`).join(" · ")}
                 </div>
               )}
               <div className="mt-auto pt-4 text-[11.5px] text-[#9AA9C3]">{invRows ? "관리센터에서 만든 이달 청구서 기준입니다(VAT 별도)." : "실제 청구 금액은 월말에 관리센터에서 확정한 청구서 기준입니다."}</div>

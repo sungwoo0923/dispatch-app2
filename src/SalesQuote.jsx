@@ -9,6 +9,7 @@ import React from "react";
 import { runDelete } from "./DeleteProgress"; // ⭐ 2026-11-05 삭제 진행 창 + 한 번에 삭제
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "./firebase";
+import { USAGE_PRICE } from "../functions/pricingCore.mjs"; // 💰 2026-11-26 팝빌 사용료 판매 단가 한 곳
 import { PlanMatrix, PLAN_DEFAULTS, PLAN_IDS, PLAN_MATRIX_CSS, RECOMMENDED_PLAN_VERSION, planFeatureLines, planMatrixHtml, planIncludes, PLAN_RATES } from "./plans";
 // ⭐ 2026-11-09 지입차 포함 대수 표시 — 지입차관리 메뉴가 없는 요금제(라이트·베이직)는 "0대"가 아니라 "미포함"
 const fleetText = (p) => (PLAN_IDS.includes(p?.id) && !planIncludes(p.id, "fleet") ? "미포함" : `${num(p?.fleet || 0)}대`);
@@ -38,10 +39,14 @@ export const SALES_DEFAULT = {
   migrationFee: 500000,      // 대량 데이터 이전(기존 프로그램 이관)
   trainingFee: 300000,       // 추가 현장 교육 1회
   // ⭐ 2026-11-04 추가 청구(애드온) — 관리센터 › 청구 › 수납 관리에서 회사별 "추가 항목"으로 청구서에 붙인다
-  taxInvoiceFee: 300,        // 전자세금계산서 발행 1건(ASP 원가 + 마진)
-  alimtalkFee: 15,           // 카카오 알림톡 1건
-  smsFee: 30,                // 문자(SMS) 1건
-  lmsFee: 80,                // 장문 문자(LMS) 1건
+  // 💰 2026-11-26 팝빌 사용료 — functions/pricingCore.mjs USAGE_PRICE(원가 대비 30% 이상 남게) 한 곳에서 가져온다
+  taxInvoiceFee: USAGE_PRICE.taxInvoice,     // 전자세금계산서 발행 1건
+  alimtalkFee: USAGE_PRICE.alimtalk,         // 카카오 알림톡 1건(예전 15 → 대체 문자 발송까지 넣으면 원가 근처라 25)
+  smsFee: USAGE_PRICE.sms,                   // 문자(SMS) 1건
+  lmsFee: USAGE_PRICE.lms,                   // 장문 문자(LMS) 1건
+  accountCheckFee: USAGE_PRICE.accountCheck, // 예금주 조회 1건
+  bankAccountFee: USAGE_PRICE.bankAccount,   // 입금 자동 확인(계좌조회) 계좌 1개/월
+  hometaxFee: USAGE_PRICE.hometax,           // 홈택스 세금계산서 자동 수집 사업자 1곳/월
   extraBizFee: 50000,        // 추가 사업자(법인·지점) 1곳/월 — 다중 사업자 운영
   routeBoardSetupFee: 200000, // 고정노선 구글시트 배차표 연동 세팅 1양식(1회)
   devHourRate: 100000,       // 맞춤 기능 개발 1시간
@@ -130,6 +135,9 @@ export const ADDON_CATALOG = [
   { key: "alimtalk", label: "카카오 알림톡 발송", unit: "건", rateKey: "alimtalkFee", kind: "usage" },
   { key: "sms", label: "문자(SMS) 발송", unit: "건", rateKey: "smsFee", kind: "usage" },
   { key: "lms", label: "장문 문자(LMS) 발송", unit: "건", rateKey: "lmsFee", kind: "usage" },
+  { key: "accountCheck", label: "예금주 조회", unit: "건", rateKey: "accountCheckFee", kind: "usage" },
+  { key: "bankAccount", label: "입금 자동 확인(계좌조회)", unit: "계좌", rateKey: "bankAccountFee", kind: "monthly" },
+  { key: "hometax", label: "홈택스 세금계산서 자동 수집", unit: "사업자", rateKey: "hometaxFee", kind: "monthly" },
   { key: "extraBiz", label: "추가 사업자(법인·지점)", unit: "곳", rateKey: "extraBizFee", kind: "monthly" },
   { key: "devHour", label: "맞춤 기능 개발", unit: "시간", rateKey: "devHourRate", kind: "once" },
   { key: "setup", label: "초기 도입비", unit: "회", rateKey: "setupFee", kind: "once" },
@@ -304,7 +312,8 @@ export function priceSheetHtml(cfg) {
       <ul>${(p.features || []).map((f) => `<li>${esc(f)}</li>`).join("")}</ul></div>`).join("");
   const opt = [["추가 직원 계정", `1명당 월 ${won(cfg.extraSeat)}`], ["초과 오더", `1건당 ${won(cfg.extraOrder)}`], ["지입차 관리(GPS·운행기록·사진)", `요금제 포함 대수 초과 1대당 월 ${won(cfg.fleetPerVehicle)}`], ["일반 기사 기사앱 · 화주사 포털", "무료"],
     ["추가 저장 용량", `요금제 포함 용량 초과 1GB당 월 ${won(cfg.storagePerGB)}`], ["추가 사업자(법인·지점)", `1곳당 월 ${won(cfg.extraBizFee)}`],
-    ["전자세금계산서 발행", `1건당 ${won(cfg.taxInvoiceFee)}`], ["카카오 알림톡 · 문자", `알림톡 ${won(cfg.alimtalkFee)} · SMS ${won(cfg.smsFee)} · LMS ${won(cfg.lmsFee)} (1건)`]];
+    ["전자세금계산서 발행", `1건당 ${won(cfg.taxInvoiceFee)}`], ["카카오 알림톡 · 문자", `알림톡 ${won(cfg.alimtalkFee)} · SMS ${won(cfg.smsFee)} · LMS ${won(cfg.lmsFee)} (1건) — 휴대폰 연결 · QR 문자는 무료`],
+    ["입금 자동 확인(계좌조회)", `1계좌당 월 ${won(cfg.bankAccountFee ?? USAGE_PRICE.bankAccount)}`], ["홈택스 세금계산서 자동 수집", `1사업자당 월 ${won(cfg.hometaxFee ?? USAGE_PRICE.hometax)}`], ["예금주 조회", `1건당 ${won(cfg.accountCheckFee ?? USAGE_PRICE.accountCheck)}`]];
   const once = [["초기 도입비", `${won(cfg.setupFee)}${cfg.plans.some((p) => hasVal(p.setupFee)) ? " (요금제별 금액은 위 요금제 칸)" : ""} — ${cfg.waiveSetupMonths}개월 이상 약정 시 면제`], ["대량 데이터 이전", won(cfg.migrationFee)], ["추가 현장 교육", `1회 ${won(cfg.trainingFee)}`], ["구글시트 배차표 연동 세팅", `1양식 ${won(cfg.routeBoardSetupFee)}`], ["맞춤 개발", `1시간 ${won(cfg.devHourRate)} · 1일 ${won(cfg.devDayRate)}`], ["연간 선결제", `${cfg.annualFreeMonths}개월 무료`], ["단기 계약(최소 " + (cfg.minContractMonths ?? 6) + "개월)", `6개월 선결제 ${cfg.semiDiscountRate}% 할인 · 도입비 ${cfg.semiSetupRate}% 할인`]];
   const t = (rows) => `<table><tbody>${rows.map(([a, b]) => `<tr><th style="width:42%">${a}</th><td>${b}</td></tr>`).join("")}</tbody></table>`;
   return `<div class="page">
@@ -396,14 +405,14 @@ export function PricingEditor() {
     if (!await kpConfirm(`추천 요금표(${RECOMMENDED_PLAN_VERSION})를 화면에 채울까요?\n\n지금: ${cur}\n추천: ${nxt}\n\n· 포함 직원·오더·지입차·저장 용량, 요금제별 도입비, 추가 청구 단가도 함께 채웁니다.\n· 화면에만 채워지고 [저장]을 눌러야 적용됩니다. 기존 고객의 지정 요금제(회사별)는 그대로입니다.\n· 직접 만든 요금제·포함 기능 문구·공급자 정보·계약 문구는 그대로 둡니다.`)) return;
     const keepExtra = cfg.plans.filter((p) => !PLAN_IDS.includes(p.id));
     const plans = PLAN_DEFAULTS.map((d) => { const old = cfg.plans.find((p) => p.id === d.id) || {}; return { ...old, ...d, promoMonths: old.promoMonths || 0, promoRate: old.promoRate || 0, features: old.features?.length ? old.features : planFeatureLines(d.id) }; });
-    const pick = ["extraSeat", "extraOrder", "fleetPerVehicle", "setupFee", "migrationFee", "trainingFee", "storageGB", "storagePerGB", "devDayRate", "devHourRate", "taxInvoiceFee", "alimtalkFee", "smsFee", "lmsFee", "extraBizFee", "routeBoardSetupFee", "annualFreeMonths", "semiDiscountRate", "waiveSetupMonths"];
+    const pick = ["extraSeat", "extraOrder", "fleetPerVehicle", "setupFee", "migrationFee", "trainingFee", "storageGB", "storagePerGB", "devDayRate", "devHourRate", "taxInvoiceFee", "alimtalkFee", "smsFee", "lmsFee", "accountCheckFee", "bankAccountFee", "hometaxFee", "extraBizFee", "routeBoardSetupFee", "annualFreeMonths", "semiDiscountRate", "waiveSetupMonths"];
     set({ plans: [...plans, ...keepExtra], ...Object.fromEntries(pick.map((k) => [k, SALES_DEFAULT[k]])), recommendedVersion: RECOMMENDED_PLAN_VERSION });
     setMsg(`추천 요금표를 화면에 채웠습니다. 확인 후 오른쪽 위 [저장]을 눌러야 적용됩니다.`);
   };
   const OPTS = [
     ["월 추가 옵션", [["extraSeat", "추가 직원 계정 (1명/월)", "원"], ["extraOrder", "포함량 초과 오더 (1건)", "원"], ["fleetPerVehicle", "지입차 관리: 포함 대수 초과 (1대/월)", "원"], ["storageGB", "기본 저장 용량(요금제 칸이 비었을 때)", "GB"], ["storagePerGB", "초과 저장 (1GB/월)", "원"], ["extraBizFee", "추가 사업자·지점 (1곳/월)", "원"]]],
     // ⭐ 2026-11-04 추가 청구 — 사용한 만큼(수납 관리 › 추가 항목으로 청구서에 붙임)
-    ["사용량 추가 청구", [["taxInvoiceFee", "전자세금계산서 발행 (1건)", "원"], ["alimtalkFee", "카카오 알림톡 (1건)", "원"], ["smsFee", "문자 SMS (1건)", "원"], ["lmsFee", "장문 문자 LMS (1건)", "원"]]],
+    ["사용량 추가 청구", [["taxInvoiceFee", "전자세금계산서 발행 (1건)", "원"], ["alimtalkFee", "카카오 알림톡 (1건)", "원"], ["smsFee", "문자 SMS (1건)", "원"], ["lmsFee", "장문 문자 LMS (1건)", "원"], ["accountCheckFee", "예금주 조회 (1건)", "원"], ["bankAccountFee", "입금 자동 확인 (1계좌/월)", "원"], ["hometaxFee", "홈택스 자동 수집 (1사업자/월)", "원"]]],
     ["1회 비용 · 혜택", [["setupFee", "초기 도입비(요금제 칸이 비었을 때)", "원"], ["waiveSetupMonths", "도입비 면제 약정 기간", "개월"], ["migrationFee", "대량 데이터 이전", "원"], ["trainingFee", "추가 현장 교육 (1회)", "원"], ["routeBoardSetupFee", "구글시트 배차표 연동 세팅 (1양식)", "원"], ["devHourRate", "맞춤 개발 (1시간)", "원"], ["devDayRate", "맞춤 개발 (1일)", "원"], ["annualFreeMonths", "연간 선결제 무료", "개월"], ["minContractMonths", "최소 약정 기간", "개월"], ["semiDiscountRate", "6개월 선결제 할인", "%"], ["semiSetupRate", "단기 약정 도입비 할인", "%"], ["validDays", "견적 유효기간", "일"]]],
   ];
   // ⭐ 2026-11-06 요금제 관리 다시 꾸밈 — 견적서 작성과 같은 구성: 왼쪽 편집 / 오른쪽 실시간 미리보기(카드·표)

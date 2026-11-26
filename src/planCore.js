@@ -2,14 +2,19 @@
 // 💳 요금제 데이터·기능 잠금 규칙(순수 JS, firebase 없음) — plans.jsx가 다시 내보내고, scripts/planGateTest.mjs가 가상 테스트한다.
 export const PLAN_IDS = ["lite", "basic", "standard", "pro"];
 // ⭐ 2026-11-09 요금표 재설정(2차) — 기능 범위(배차·정산·그룹웨어·인사·급여·지입 GPS·AI·화주 포털)에 맞춰 상향
-//  가격 사다리: 89,000 / 199,000 / 349,000 / 590,000 (VAT 별도)
+//  가격 사다리(2차): 89,000 / 199,000 / 349,000 / 590,000 (VAT 별도) → 3차는 아래 RECOMMENDED_PLAN_VERSION 설명
 //  · seats 직원 계정(초과 가입은 막힘 — 추가 계정을 사야 열림) · orders 월 오더 · fleet 포함 지입차(GPS 관리) 대수 · storageGB 포함 저장 용량 · setupFee 초기 도입비(12개월 약정 시 면제)
 //  · 지입차 포함 대수 기준: 지입차관리 메뉴가 열리는 스탠다드부터 — 직원 1명당 지입차 약 1.5대(스탠다드 10명 → 15대, 프로 25명 → 40대). 라이트·베이직은 메뉴 자체가 없음(–)
 //  · 이미 저장된 요금(요금제 관리)은 그대로 둔다 — 관리센터 › 영업 › 요금제 관리 [추천 요금표 적용] → [저장]을 눌러야 바뀐다(RECOMMENDED_PLAN_VERSION)
 //  · 이 값이 기본값으로 쓰이는 곳: 저장된 요금이 아직 없을 때(신규 설치) · 공개 요금(publicPricing) 문서가 없을 때 · 가입 화면
 // 월 추가 옵션 기본 단가(요금제 관리 SALES_DEFAULT가 이 값을 쓴다)
 export const PLAN_RATES = { extraSeat: 20000, extraOrder: 50, fleetPerVehicle: 7000, storagePerGB: 3000 };
-export const RECOMMENDED_PLAN_VERSION = "2026-11b";
+export const RECOMMENDED_PLAN_VERSION = "2026-11c";
+// 💰 2026-11-26 요금표 재설정(3차) — 99,000 / 219,000 / 379,000 / 650,000 (VAT 별도)
+//  · 근거: functions/pricingCore.mjs PLAN_COST(서버 · 저장 · GPS · AI 추정 + 지원 시간 × 5만 원 + 결제 수수료 3%)로 검산해
+//    모든 요금제가 30% 이상 남게(예전 라이트 89,000 은 약 24%라 기준 미달). 11-09 이후 늘어난 기능(운임 규칙 · 운임명세서 · 지게차 · 특수운임 ·
+//    외부 지급 · AI 오더 스캔 · 전자계약 · 회계 자동 기록)도 반영해 약 10% 올림. 포함량(직원 · 오더 · 지입차 · 용량)은 그대로
+//  · 팝빌 사용료(문자 · 알림톡 · 세금계산서 · 계좌조회 · 홈택스 수집)는 요금제에 넣지 않고 쓴 만큼 따로 청구(pricingCore USAGE_PRICE)
 // 🧭 2026-11-13 업무 영역 추가 요금 — 기본료에는 업무 영역 1개(내륙 · 컨테이너 · 해상 · 항공 중 하나)가 들어 있고, 영역을 더 쓰면 요금제별 추가 요금이 붙는다
 //  · 1개 추가 단가(월): 기본료의 약 30%(라이트 3만 · 베이직 6만 · 스탠다드 10만 · 프로 17만)
 //  · 여러 개 묶음 할인: 2개째 추가부터 10%, 통합(4개 모두 = 3개 추가)은 20% → 1개 ×1.0 · 2개 ×1.8 · 3개(통합) ×2.4
@@ -26,10 +31,10 @@ export function moduleAddonFee(planId, moduleCount, addon = MODULE_ADDON) {
 }
 export const moduleAddonLabel = (moduleCount) => { const n = Math.max(1, Math.min(4, Math.floor(Number(moduleCount) || 1))); return n >= 4 ? "통합(4개 영역)" : n > 1 ? `업무 영역 ${n}개` : "업무 영역 1개"; };
 export const PLAN_DEFAULTS = [
-  { id: "lite", name: "라이트", en: "LITE", price: 89000, seats: 3, orders: 1000, fleet: 0, storageGB: 10, setupFee: 0, target: "1인 주선 · 2~3인 (일 30건 안팎)" },
-  { id: "basic", name: "베이직", en: "BASIC", price: 199000, seats: 6, orders: 3000, fleet: 0, storageGB: 30, setupFee: 300000, target: "소규모 운송사 · 4~6인 (일 100건 안팎)" },
-  { id: "standard", name: "스탠다드", en: "STANDARD", price: 349000, seats: 10, orders: 6000, fleet: 15, storageGB: 50, setupFee: 500000, target: "일반 운송사 · 7~10인 (일 200건 안팎)", recommended: true },
-  { id: "pro", name: "프로", en: "PRO", price: 590000, seats: 25, orders: 15000, fleet: 40, storageGB: 200, setupFee: 1000000, target: "중견 운송사 · 11인 이상 (일 500건 안팎)" },
+  { id: "lite", name: "라이트", en: "LITE", price: 99000, seats: 3, orders: 1000, fleet: 0, storageGB: 10, setupFee: 0, target: "1인 주선 · 2~3인 (일 30건 안팎)" },
+  { id: "basic", name: "베이직", en: "BASIC", price: 219000, seats: 6, orders: 3000, fleet: 0, storageGB: 30, setupFee: 300000, target: "소규모 운송사 · 4~6인 (일 100건 안팎)" },
+  { id: "standard", name: "스탠다드", en: "STANDARD", price: 379000, seats: 10, orders: 6000, fleet: 15, storageGB: 50, setupFee: 500000, target: "일반 운송사 · 7~10인 (일 200건 안팎)", recommended: true },
+  { id: "pro", name: "프로", en: "PRO", price: 650000, seats: 25, orders: 15000, fleet: 40, storageGB: 200, setupFee: 1000000, target: "중견 운송사 · 11인 이상 (일 500건 안팎)" },
 ];
 
 // 기능표 — min: 이 요금제부터 사용 가능
@@ -39,6 +44,10 @@ export const FEATURE_ROWS = [
   { key: "fare", label: "단가표 · 전국 운임조회", min: "lite" },
   { key: "driverApp", label: "기사앱 · 업로드링크 · 기사복사", min: "lite" },
   { key: "settlement", label: "매출관리 · 정산관리 · 지급관리", min: "lite" },
+  { key: "fareDocs", label: "운임 규칙(일대 · 월대 %) · 운임확인서 · 운임명세서", min: "lite" }, // 💰 2026-11-26 표시용(잠금 없음)
+  { key: "specialFare", label: "지게차 · 특수운임 · 외부 지급 관리", min: "lite" },
+  { key: "aiTools", label: "AI 비서 · AI 오더 스캔(사진 → 오더)", min: "lite" },
+  { key: "eContract", label: "전자계약(기사 · 화주 계약서 서명)", min: "lite" },
   { key: "shipperPortal", label: "화주사 전용 포털 연동", min: "basic" },
   { key: "groupware", label: "전자결재 · 사내메일 · 게시판 · 인수인계", min: "basic" },
   { key: "hr", label: "인사관리부 · 출근기록부 · 연차 · 증명서", min: "basic" },

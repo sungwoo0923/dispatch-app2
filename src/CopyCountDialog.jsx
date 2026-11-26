@@ -3,6 +3,7 @@
 //   · 건수 1~30 · 건마다 상차일/하차일(달력) — 처음엔 모두 오늘 · 건별로 바꿀 수 있다
 //   · askCopyDates() 를 부르면 창이 뜨고, [복사]를 누르면 [{상차일, 하차일}, …] / 닫으면 null
 //   · 🛠 2026-11-24 dates({상차일, 하차일})를 넘기면 그 날짜로 시작 — 패널에서 날짜를 바꾸고 [복사 등록]을 눌러도 오늘로 되돌아가던 문제
+import { USAGE_PRICE } from "../functions/pricingCore.mjs"; // 💰 2026-11-26 알림톡 청구 단가 안내
 import React from "react";
 import { createRoot } from "react-dom/client";
 import CustomDatePicker from "./CustomDatePicker";
@@ -121,7 +122,7 @@ function CopyCountDialog({ title, sub, mobile, alimtalk, order, dates, onDone })
             <span className="inline-flex items-center justify-center min-w-8 h-8 px-1.5 rounded-lg shrink-0 text-[10.5px] font-black tracking-tight" style={{ background: talk ? "#FEE500" : "#F1F4F8", color: talk ? "#3C1E1E" : "#9AA9C3" }}>TALK</span>
             <div className="min-w-0">
               <div className="text-[13.5px] font-black text-[#0F1A30]">알림톡 보내기 <span className="ml-1 text-[11.5px] font-bold text-[#9AA9C3]">{talk === alimtalk ? "회사 기본값" : `복사본만 ${talk ? "켬" : "끔"}`}</span></div>
-              <div className="text-[12px] text-[#7A879C]">배차완료되면 거래처 담당자 · 기사에게 보내요 · 건당 약 8~15원</div>
+              <div className="text-[12px] text-[#7A879C]">배차완료되면 거래처 담당자 · 기사에게 보내요 · 건당 {USAGE_PRICE.alimtalk}원(부가세 별도)</div>
             </div>
             <button type="button" role="switch" aria-checked={talk} aria-label="알림톡 보내기" onClick={() => setTalk((v) => !v)}
               className={`ml-auto relative inline-flex shrink-0 w-11 h-6 rounded-full transition ${talk ? "bg-[#1B2B4B]" : "bg-[#D5DCE7]"}`}>

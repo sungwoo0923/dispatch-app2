@@ -14,7 +14,7 @@ const mask = (p) => { const d = onlyDigits(p); return d.length >= 8 ? `${d.slice
 const bytesOf = (s) => [...String(s || "")].reduce((a, ch) => a + (ch.charCodeAt(0) > 127 ? 2 : 1), 0);
 const SMS_MAX = 90;
 const ymOf = (ms) => new Date(ms + 9 * 3600e3).toISOString().slice(0, 7);
-const DEFAULT_PRICE = { sms: 20, lms: 50, alimtalk: 15 }; // 단가를 아직 안 정했을 때 보여줄 값(원 · 부가세 별도)
+const DEFAULT_PRICE = { sms: 30, lms: 80, alimtalk: 25 }; // 단가를 아직 안 정했을 때 보여줄 값(원 · 부가세 별도) — 💰 2026-11-26 functions/pricingCore.mjs USAGE_PRICE 와 같게(scripts/pricing.test.mjs 가 검사)
 // 운송사별 월 사용량 — 서버만 쓴다(성공한 건만 센다)
 async function addUsage(db, FieldValue, co, at, add) {
   const month = ymOf(at);
