@@ -166,6 +166,7 @@ ${TRUCK_CSS}
 export default function FleetControlDeck({
   drivers = [], phaseById, searchQuery = "", onSearch, selected, onSelect, onContextMenu,
   locChangeRequests = [], collisionAlerts = [], onLocRequest, onLocDismiss, onCollisionResolve,
+  checkoutFixRequests = [], onCheckoutFix, // 🕘 2026-11-26 기사앱 퇴근 정정 요청
   logs = [], driversMap = {}, onDeleteFeed, todayPhotoIds = null,
   renderMap, trackDate = null, onMapRefresh, onFitAll, onOpenDetail, geocode = null, light = false, lookSwitch = null, onOpenHistory = null, onLocFix = null, onRecenter = null, pendingOf = null, onAcceptFor = null,
 }) {
@@ -192,7 +193,7 @@ export default function FleetControlDeck({
 
   const total = drivers.length;
   const online = drivers.filter((d) => d.active).length;
-  const alertsN = locChangeRequests.length + collisionAlerts.length;
+  const alertsN = locChangeRequests.length + collisionAlerts.length + checkoutFixRequests.length;
   const allCounts = React.useMemo(() => {
     const m = Object.fromEntries(PHASE_GROUPS.map((g) => [g.key, 0]));
     drivers.forEach((d) => { m[groupOf(phaseById?.get(d.id) || "배차대기").key] += 1; });
@@ -348,6 +349,23 @@ export default function FleetControlDeck({
                 </span>
               </div>
             ))}
+            {checkoutFixRequests.map((r) => {
+              const hmOf = (ms) => (ms ? new Date(Number(ms) + 9 * 3600e3).toISOString().slice(11, 16) : "--:--");
+              const md = String(r.date || "").slice(5).replace("-", "/");
+              return (
+                <div key={r.id} style={{ padding: "11px 12px", borderRadius: 11, background: "var(--lw-warn-bg, rgba(251,191,36,.1))", border: "1px solid var(--lw-warn-line, rgba(251,191,36,.35))", display: "flex", gap: 10, alignItems: "center" }}>
+                  <span style={{ width: 4, alignSelf: "stretch", borderRadius: 4, background: "var(--lw-warn)" }} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 13.5, fontWeight: 900 }}>퇴근 정정 요청 · {r.driverName || "-"}</span>
+                    <span style={{ display: "block", marginTop: 2, fontSize: 12, fontWeight: 700, color: C.sub }}>{md} 출근 {hmOf(r.checkInMs)} → 퇴근 <b style={{ color: C.text }}>{hmOf(r.requestedOutMs)}</b>{r.memo ? ` · ${r.memo}` : ""}</span>
+                  </span>
+                  <span style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <button type="button" className="lwd-btn" style={{ height: 30, fontSize: 12 }} onClick={() => onCheckoutFix?.(r, true)}>반영</button>
+                    <button type="button" className="lwd-btn" style={{ height: 30, fontSize: 12 }} onClick={() => onCheckoutFix?.(r, false)}>반려</button>
+                  </span>
+                </div>
+              );
+            })}
             {locChangeRequests.map((r) => (
               <div key={r.id} style={{ padding: "11px 12px", borderRadius: 11, background: "var(--lw-blue-bg)", border: "1px solid var(--lw-blue-line)", display: "flex", gap: 10, alignItems: "center" }}>
                 <span style={{ width: 4, alignSelf: "stretch", borderRadius: 4, background: "var(--lw-blue)" }} />
