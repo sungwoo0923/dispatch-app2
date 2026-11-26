@@ -25,7 +25,8 @@ import { careSummary, vehicleDefaults } from "../vehicleCare";
 import CustomDatePicker from "../CustomDatePicker"; // 📅 2026-11-07 날짜는 프로그램 달력으로
 import MobileSelect from "./MobileSelect"; // 📱 2026-11-10 상태 필터 — 버튼 10개 대신 드롭다운
 import { TrafficOverlay } from "../trafficLayer"; // 🚦 2026-11-22 교통 돌발상황(ITS)
-import { ClientTag, LocHealthTag } from "../driverClient"; // 📱 2026-11-26 기사앱 · 웹 구분
+import { ClientTag, LocHealthTag, locHealthOf, locFixStateOf } from "../driverClient"; // 📱 2026-11-26 기사앱 · 웹 구분 · 📍 위치 상태
+import { sendLocFixRequest } from "../locFixSend"; // 📍 2026-11-26 [위치 설정 요청]
 
 const NAVY = "#1B2B4B";
 // 전화번호 하이픈 자동 포맷 (DispatchApp.jsx formatPhone과 동일 규칙)
@@ -1574,8 +1575,32 @@ export default function MobileFleetView({ dispatchData = [], userCompany = "", o
                 <div style={{ marginTop: 4, display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
                   <b style={{ fontSize: 17, fontWeight: 900 }}>{mapSelected.이름}</b>
                   <span style={{ fontSize: 13, fontWeight: 800, color: D.body }}>{mapSelected.차량번호}</span>
+                  <span style={{ alignSelf: "center", display: "inline-flex", gap: 4 }}><ClientTag d={mapSelected.raw || {}} size={12} /><LocHealthTag d={mapSelected.raw || {}} size={12} /></span>
                   <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 900, color: truckColor(selPh) }}>{selPh}</span>
                 </div>
+                {(() => {
+                  // 📍 2026-11-26 위치가 끊겼거나 휴대폰 설정 문제 → [위치 설정 요청](PC 관제현황과 같음)
+                  const raw = mapSelected.raw || {};
+                  const h = locHealthOf(raw);
+                  const fix = locFixStateOf(raw);
+                  const upMs = mapSelected.updatedAt?.toMillis ? mapSelected.updatedAt.toMillis() : mapSelected.updatedAt?.seconds ? mapSelected.updatedAt.seconds * 1000 : 0;
+                  const live = !!mapSelected.active && upMs && Date.now() - upMs < 10 * 60 * 1000;
+                  const stale = !!mapSelected.location && !live && !["퇴근", "최종퇴근", "휴차"].includes(mapSelected.상태);
+                  if (!stale && !(h && !h.ok) && !fix) return null;
+                  const tone = fix?.key === "done" ? "#10B981" : "#F59E0B";
+                  return (
+                    <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 10, background: D.panel, border: `1px solid ${D.line2}` }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, lineHeight: 1.5, color: h && !h.ok ? "#EF4444" : tone }}>
+                        {h && !h.ok ? h.probs.join(" · ") : stale ? "위치가 안 들어오고 있어요" : ""}
+                      </div>
+                      {fix && <div style={{ fontSize: 12.5, fontWeight: 800, color: tone, marginTop: 2 }}>{fix.key === "done" ? `기사님이 설정을 확인했어요 · ${timeAgo(fix.at)}` : `위치 설정 요청 보냄 · ${timeAgo(fix.at)} · 아직 확인 전`}</div>}
+                      <button type="button" onClick={() => sendLocFixRequest(mapSelected)}
+                        style={{ marginTop: 8, width: "100%", height: 40, borderRadius: 10, border: "1px solid #F59E0B", background: "transparent", color: "#F59E0B", fontSize: 14.5, fontWeight: 900, cursor: "pointer" }}>
+                        {fix?.key === "sent" ? "위치 설정 다시 요청" : "위치 설정 요청 보내기"}
+                      </button>
+                    </div>
+                  );
+                })()}
                 {(() => {
                   const ao = pickCurrentOrder(ordersFor(mapSelected) || []);
                   if (!ao) return null;

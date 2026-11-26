@@ -1,7 +1,8 @@
 // ======================= FleetManagement.jsx =======================
 import { makeTruckIcon, truckColor, headingFor, pathHeading } from "./fleetTruck";
 import FleetControlDeck from "./FleetControlDeck";
-import { driverClientOf, ClientTag, LocHealthTag, locHealthOf } from "./driverClient"; // 📱 2026-11-26 기사앱 · 웹 구분 · 📍 위치 설정 요청
+import { driverClientOf, ClientTag, LocHealthTag } from "./driverClient"; // 📱 2026-11-26 기사앱 · 웹 구분
+import { sendLocFixRequest } from "./locFixSend"; // 📍 2026-11-26 위치 설정 요청
 import { RouteTimelineView } from "./RouteBoardViews";
 import { RouteTableView } from "./RouteTable"; // 🗂 2026-11-26 노선관리 줄 보기 · 시간표 // 🛰 2026-11-25 관제현황 = 관제실 다크
 import { FLEET_DARK_CSS } from "./fleetDarkTheme";
@@ -20,7 +21,7 @@ import { useBackClose } from "./mobileBack";
 import { sendText } from "./smsSend"; // 💬 2026-11-10 PC 문자 보내기 // 🔙 2026-11-10 덮어 뜬 창 뒤로가기로 닫기 // 🧾 2026-11-10 차량 비용 영수증 · 정기 차량 사진
 import { DriverGuideSendModal, guideSentLabel } from "./DriverAppGuide"; // ⭐ 2026-11-06 기사앱 안내 보내기
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
-import { kpConfirm, kpAlert } from "./kpDialog";
+import { kpConfirm } from "./kpDialog";
 import { createPortal } from "react-dom";
 import { imeFocusRef } from "./imeFocus";
 import { useSubnavTarget } from "./navMenus";
@@ -6319,26 +6320,8 @@ export default function FleetManagement({ dispatchData = [], role = "", forceTab
   const vlOn = coFeatures.vehicleLedger === true;
   const [companyStaffRaw, setCompanyStaffRaw] = useState([]); // users(role: totalMaster/admin/user) — 담당자 위임 대상
   const myUid = auth.currentUser?.uid || null;
-  // 📍 2026-11-26 [위치 설정 요청] — 기사 휴대폰에 푸시(서버 driverLocFixPush) + 기사앱에 "위치 설정을 확인해 주세요" 창
-  const sendLocFix = useCallback(async (d) => {
-    if (!d?.id) return;
-    const h = locHealthOf(d.raw || d);
-    const why = h && !h.ok ? `\n\n지금 확인된 문제:\n· ${h.probs.join("\n· ")}` : "";
-    if (!await kpConfirm(`${d.이름 || "기사"}님께 위치 설정 요청을 보낼까요?\n기사님 휴대폰에 알림이 가고, 앱을 열면 설정 확인 창이 떠요.${why}`, { okText: "보내기" })) return;
-    const by = myNameNow() || "배차 담당";
-    try {
-      await addDoc(collection(db, "driverLocFix"), {
-        companyName: myCompanyName || getTenant() || "",
-        driverId: d.id, driverName: d.이름 || "", carNo: d.차량번호 || "",
-        requestedByUid: auth.currentUser?.uid || "", requestedByName: by,
-        problems: h?.probs || [], createdAt: serverTimestamp(),
-      });
-      await updateDoc(doc(db, "drivers", d.id), { locFixAskAt: serverTimestamp(), locFixAskBy: by });
-      kpAlert("보냈어요. 기사님이 [다 했어요]를 누르면 여기에 '확인했어요'로 바뀌어요.");
-    } catch (e) {
-      kpAlert(`보내지 못했어요: ${e?.message || e}`);
-    }
-  }, [myCompanyName]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 📍 2026-11-26 [위치 설정 요청] — 보내는 일은 src/locFixSend.js(휴대폰 관제와 같이 씀)
+  const sendLocFix = useCallback((d) => sendLocFixRequest(d, myCompanyName || ""), [myCompanyName]);
 
   const canDelegate = ["admin", "totalMaster"].includes(
     companyStaffRaw.find(u => u.id === myUid)?.role
