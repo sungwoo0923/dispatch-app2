@@ -63,6 +63,7 @@ import { MARKET_SHORT } from "../orderMarketConfig";
 import { shareToHub } from "../hubShare";
 import { CARGO_VEHICLE_SPEC_TABLE, CargoExtraChips, ContactPickerIconButton, FareSortDropdown, OrderCalendarPanel, OrderMemoIconButton, PALLET_SPEC_TABLE, REVERSED_DATE_ORDER_MSG, StopBadge, TimeAmPmPicker, WaypointSection, _parseWorkDates, cleanStopCargo, defaultDriverNoticeTemplate, dokchaOn, fareCargoExact, fareCargoPartial, fetchPrinterInfo, formatPhone, getFareMatchLabel, getTotalPalletFromOrder, getTotalTonFromOrder, isReversedDateOrder, issueUploadUrl, makePlaceKey, mergeViaCargoText, mergeViaTonnage, nextManagerName, normalizePlate, safeLoad, safeSave, sflowToast, shouldShowDriverMemoAlert, sortFareHistory, toTonUnit, todayStr } from "./shared/dispatchCommon.jsx";
 import { MonthPicker } from "../kpInputs"; // 🗓 2026-11-27 마감월 — 프로그램 달력
+import OrderRouteMapPanel from "./OrderRouteMapPanel.jsx"; // 🗺 2026-11-27 시안 L — 오른쪽 실시간 경로 지도
 import { SideAssist } from "./OrderWorkAssist.jsx"; // 🧭 2026-11-27 오른쪽 오늘 일정(최고관리자 먼저)
 
 
@@ -654,7 +655,8 @@ function DmDot({ on, alert = false }) {
   const K_W = 1440;
   const kFitRef = React.useRef(null);
   const [kScale, setKScale] = React.useState(1);
-  const [kW, setKW] = React.useState(K_W); // 높이 때문에 작게 그릴 땐 남는 폭을 채우게 설계 폭을 조금 넓힌다(최대 1.3배)
+  const [kW, setKW] = React.useState(K_W);
+  const [kPanelH, setKPanelH] = React.useState(720); // 오른쪽 지도 높이 = 화면에 남은 높이 // 높이 때문에 작게 그릴 땐 남는 폭을 채우게 설계 폭을 조금 넓힌다(최대 1.3배)
   React.useEffect(() => {
     if (!kOn) return undefined;
     const el = kFitRef.current; if (!el || typeof ResizeObserver === "undefined") return undefined;
@@ -669,10 +671,13 @@ function DmDot({ on, alert = false }) {
       const availH = window.innerHeight - top - 14;
       const byW = w / K_W;
       const byH = designH > 0 && availH > 200 ? availH / designH : byW;
-      const next = Math.max(0.8, Math.min(2, Math.round(Math.min(byW, byH) * 1000) / 1000));
+      // 폭은 절대 넘치지 않게(오른쪽 지도 밑으로 들어가지 않게) · 높이 맞춤은 글씨가 너무 작아지지 않게 0.8 까지만
+      const next = Math.max(0.6, Math.min(2, Math.round(Math.min(byW, Math.max(0.8, byH)) * 1000) / 1000));
       const nextW = Math.round(Math.min(K_W * 1.3, Math.max(K_W, w / next)));
       setKScale((v) => (Math.abs(v - next) > 0.005 ? next : v));
       setKW((v) => (Math.abs(v - nextW) > 4 ? nextW : v));
+      const ph = Math.max(560, Math.round(availH));
+      setKPanelH((v) => (Math.abs(v - ph) > 4 ? ph : v));
     };
     fit(); const t = setTimeout(fit, 400);
     const ro = new ResizeObserver(fit); ro.observe(el);
@@ -9078,7 +9083,7 @@ className={`
   );
 })()}
     {/* 버튼 */}
-  <div className="col-span-full flex justify-end gap-2.5 mt-2 pt-4 border-t border-[#EDF1F7]">{/* ⭐ 2026-11-02 화면 점검 — col-span-full */}
+  <div data-of="save" className="col-span-full flex justify-end gap-2.5 mt-2 pt-4 border-t border-[#EDF1F7]">{/* ⭐ 2026-11-02 화면 점검 — col-span-full */}
     <button
       type="submit" data-tour="order-save"
       className={`${DM_BTN_PRIMARY} !h-11 !px-7 !text-[13.5px]`}
@@ -9477,7 +9482,7 @@ className={`
   {/* 왼쪽: 폼 */}
   {/* ⭐ 2026-11-01 화면이 좁으면(노트북·125% 배율 1536px 등) 입력칸이 겹쳐 화물내용 칸을 못 누를 정도였다 — 1800px 미만은 폼을 넓게 */}
   {/* ⭐ 2026-11-02 수수료 라벨 줄(운임구분)이 좁아지지 않게 입력 칸 74→77%(넓은 화면 62→66%) · 옆 달력은 그만큼 살짝 작게 */}
-  <div data-kp-order-form="1" className={kOn ? "w-full" : "basis-[77%] max-w-[77%] min-[1800px]:basis-[66%] min-[1800px]:max-w-[66%]"} style={{ flexGrow: kOn ? 1 : 0, flexShrink: 0, minWidth: 0, overflow: kOn ? "visible" : "hidden" }}>
+  <div data-kp-order-form="1" className={kOn ? "flex-1 min-w-0" : "basis-[77%] max-w-[77%] min-[1800px]:basis-[66%] min-[1800px]:max-w-[66%]"} style={{ flexGrow: kOn ? 1 : 0, flexShrink: kOn ? 1 : 0, minWidth: 0, overflow: kOn ? "visible" : "hidden" }}>
     {kOn ? (
       <div ref={kFitRef} className="w-full min-w-0">
         <div className="of-k-fit" style={{ width: kW, zoom: kScale, marginInline: "auto" }}>{renderForm()}</div>
@@ -9490,7 +9495,12 @@ className={`
       (CustomDatePicker)에서 처리한다. 사용자 피드백: "오른쪽 패널에 있는
       달력말고 오더정보에 있는 달력에 다중선택 버튼을 넣어달라" — 그래서
       이 패널은 원래대로 단일 상/하차일 선택 전용으로 유지한다. */}
-  {kOn ? null /* 🎨 시안 K — 달력은 입력창 안(오른쪽 칸) */ : skinOn === "route" ? (
+  {kOn ? (
+    // 🗺 시안 L — 오른쪽에 늘 떠 있는 실시간 경로 지도(상 · 하차 주소가 들어오면 경로 · 거리 · 시간 · 유류비 · 통행료)
+    <div className="shrink-0 self-start sticky top-0" style={{ width: "30%", minWidth: 400, maxWidth: 620 }}>
+      <OrderRouteMapPanel form={form} height={kPanelH} onOpenBig={() => setShowFareRouteMap(true)} />
+    </div>
+  ) : skinOn === "route" ? (
     // 🎨 A 루트 보드 — 달력 위에 운임 요약(보기만 · 입력은 왼쪽 칸)
     <div className="flex flex-col gap-3" style={{ flex: "1 1 0%", minWidth: 0 }}>
       <FareSummary form={form} hint={areaFareHint ? `이 구간 최근 운임 ${areaFareHint.min.toLocaleString()} ~ ${areaFareHint.max.toLocaleString()}원 (${areaFareHint.count}건)` : distanceFareEstimate ? `거리 기준 추정 ${distanceFareEstimate.min.toLocaleString()} ~ ${distanceFareEstimate.max.toLocaleString()}원` : ""} />

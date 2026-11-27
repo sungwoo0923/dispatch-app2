@@ -358,6 +358,7 @@ return res.status(200).json({
   distanceKm,
   durationMin,                        // 기존 숫자값 유지 (혹시 다른 곳에서 쓸 경우 대비)
   durationText: formatDuration(durationMin),  // 🔥 새로 추가
+  tollFare: Number.isFinite(Number(summary.totalFare)) ? Number(summary.totalFare) : null, // 💳 2026-11-27 통행료(티맵 · 오더등록 오른쪽 지도)
   path,
   segments,                           // ⭐ 구간별 교통상황(지도 색 표시용)
 });
