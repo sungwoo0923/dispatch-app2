@@ -12,11 +12,14 @@ const I = {
   me: <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></>,
   swap: <><path d="M7 7h11l-3-3M17 17H6l3 3" /></>,
   bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></>,
+  screen: <><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></>,
+  logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5M21 12H9" /></>,
 };
 const Badge = ({ n }) => (n > 0 ? <span className="min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-black text-white grid place-items-center tabular-nums" style={{ background: "#E5332A" }}>{n > 99 ? "99+" : n}</span> : null);
 
 // 🧭 2026-11-16 trigger(children)를 주면 그 모양(회사명 · 이름 칸)이 버튼이 된다 · onTriggerClick 이 있으면 누를 때 그걸 먼저(새 버전 업데이트)
-export default function UserHub({ name = "", mailUnread = 0, onMyInfo, onSupport, showSupport = true, children = null, onTriggerClick = null, align = "right", triggerClass = "", onSwitchCompany = null, switchLabel = "" }) {
+// 🧭 2026-11-27 profile={{ company, person }} — 오른쪽 끝 [알림 · 이름] 모양(사진 시안) · onScreen · onLogout — 화면 설정 · 로그아웃도 이 목록 안으로
+export default function UserHub({ name = "", mailUnread = 0, onMyInfo, onSupport, showSupport = true, children = null, onTriggerClick = null, align = "right", triggerClass = "", onSwitchCompany = null, switchLabel = "", profile = null, onScreen = null, screenSub = "", onLogout = null }) {
   const bell = useDriverEventCounts();
   const bellN = (bell.orders || 0) + (bell.docs || 0) + (bell.sos || 0) + (bell.checkout || 0);
   const total = mailUnread + bellN;
@@ -42,11 +45,27 @@ export default function UserHub({ name = "", mailUnread = 0, onMyInfo, onSupport
     // 🏢 2026-11-24 여러 회사 계정(최고관리자가 정해 준 회사끼리) — [회사 전환]
     ...(onSwitchCompany ? [{ k: "company", label: switchLabel || "운송사 전환", sub: switchLabel ? "정해진 회사끼리 로그아웃 없이" : "로그아웃 없이 다른 운송사 화면으로", ico: I.swap, on: onSwitchCompany }] : []),
     ...(showSupport ? [{ k: "support", label: "원격 지원 요청", sub: "사용이 어려우면 화면을 같이 봐요", ico: I.support, on: onSupport }] : []),
+    ...(onScreen ? [{ k: "screen", label: "화면 설정", sub: screenSub || "화면 맞춤 · 표 글씨 크기", ico: I.screen, on: onScreen, line: true }] : []),
+    ...(onLogout ? [{ k: "logout", label: "로그아웃", ico: I.logout, on: onLogout, line: !onScreen }] : []),
   ];
   const initial = String(name || "").trim().slice(0, 1) || "나";
   return (
     <div ref={box} className="relative" onMouseEnter={enter} onMouseLeave={leave} data-kp="user-hub">
-      {children ? (
+      {profile && !children ? (
+        <button type="button" onClick={() => setOpen(true)} aria-haspopup="menu" aria-expanded={open} title="내 메뉴: 사내메일함 · 알림 · 내 정보 · 화면 설정 · 로그아웃" data-kp="hdr-company"
+          className="h-9 inline-flex items-center gap-2.5 pl-1.5 pr-2.5 rounded-xl hover:bg-white/[0.08] transition whitespace-nowrap">
+          <span className="relative w-8 h-8 grid place-items-center text-white/85">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{I.bell}</svg>
+            {total > 0 && <span className="absolute -top-0.5 -right-1"><Badge n={total} /></span>}
+          </span>
+          <span className="w-8 h-8 rounded-full grid place-items-center text-[12.5px] font-black text-white shrink-0" style={{ background: "linear-gradient(135deg,#2D4C82,#4B6CB7)", boxShadow: "0 0 0 2px rgba(255,255,255,.18)" }}>{initial}</span>
+          <span className="text-left leading-tight min-w-0">
+            <span className="block text-[13px] font-black text-white truncate max-w-[180px]">{profile.person || name || "내 계정"}</span>
+            {profile.company && <span className="block text-[11px] font-bold text-white/55 truncate max-w-[180px]">{profile.company}</span>}
+          </span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ opacity: 0.6 }}><path d="M6 9l6 6 6-6" /></svg>
+        </button>
+      ) : children ? (
         <button type="button" onClick={() => (onTriggerClick ? onTriggerClick() : setOpen((v) => !v))} aria-haspopup="menu" aria-expanded={open} title="내 메뉴: 사내메일함 · 알림 내역 · 내 정보 · 원격 지원" className={`relative ${triggerClass}`}>
           {children}
           {total > 0 && <span className="absolute -top-1.5 -right-1.5"><Badge n={total} /></span>}
@@ -64,7 +83,7 @@ export default function UserHub({ name = "", mailUnread = 0, onMyInfo, onSupport
             {name && <div className="px-4 pt-2 pb-2 text-[12.5px] font-bold text-[#7A879C] border-b border-[#EEF2F8] mb-1 truncate">{name}</div>}
             {items.map((it) => (
               <button key={it.k} type="button" role="menuitem" onClick={() => pick(it.on)} data-kp={`user-hub-${it.k}`}
-                className="w-full px-4 py-2.5 flex items-center gap-3 text-left hover:bg-[#F4F6FA]">
+                className={`w-full px-4 py-2.5 flex items-center gap-3 text-left hover:bg-[#F4F6FA] ${it.line ? "border-t border-[#EEF2F8] mt-1 pt-3" : ""}`}>
                 <span className="text-[#1B2B4B]"><Ico d={it.ico} /></span>
                 <span className="flex-1 min-w-0"><span className="block text-[14px] font-bold">{it.label}</span>{it.sub && <span className="block text-[11.5px] text-[#9AA9C3] truncate">{it.sub}</span>}</span>
                 <Badge n={it.n || 0} />
