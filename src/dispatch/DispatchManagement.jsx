@@ -62,9 +62,8 @@ import { isFleetGrade } from "../DriverAppGuide";
 import { MARKET_SHORT } from "../orderMarketConfig";
 import { shareToHub } from "../hubShare";
 import { CARGO_VEHICLE_SPEC_TABLE, CargoExtraChips, ContactPickerIconButton, FareSortDropdown, OrderCalendarPanel, OrderMemoIconButton, PALLET_SPEC_TABLE, REVERSED_DATE_ORDER_MSG, StopBadge, TimeAmPmPicker, WaypointSection, _parseWorkDates, cleanStopCargo, defaultDriverNoticeTemplate, dokchaOn, fareCargoExact, fareCargoPartial, fetchPrinterInfo, formatPhone, getFareMatchLabel, getTotalPalletFromOrder, getTotalTonFromOrder, isReversedDateOrder, issueUploadUrl, makePlaceKey, mergeViaCargoText, mergeViaTonnage, nextManagerName, normalizePlate, safeLoad, safeSave, sflowToast, shouldShowDriverMemoAlert, sortFareHistory, toTonUnit, todayStr } from "./shared/dispatchCommon.jsx";
-import RealtimeStatus from "./RealtimeStatus.jsx";
 import { MonthPicker } from "../kpInputs"; // 🗓 2026-11-27 마감월 — 프로그램 달력
-import OrderWorkAssist, { readAssistMode, SideAssist } from "./OrderWorkAssist.jsx"; // 🧭 2026-11-27 오더등록 아래 작업 도우미(최고관리자 먼저)
+import { SideAssist } from "./OrderWorkAssist.jsx"; // 🧭 2026-11-27 오른쪽 오늘 일정(최고관리자 먼저)
 
 
 // ================= 카운트 애니메이션 =================
@@ -641,7 +640,6 @@ function DmDot({ on, alert = false }) {
       const tonTypeOptionsCustom = useCompanyDropdownOptions("톤수타입", role, userCompany);
       const [useNewForm, setUseNewForm] = React.useState(false);
       const [bottomStatusKey, setBottomStatusKey] = React.useState(0);
-      const [assistMode, setAssistMode] = React.useState(readAssistMode); // 🧭 2026-11-27 작업 도우미 | 전체 표(이 기기에 기억)
       // 🧭 우선 최고관리자만 · 🧪 개발 화면(import.meta.env.DEV)에서만 localStorage kpAssistTest=1 이면 다른 계정으로도 점검(배포 빌드엔 안 들어감)
       const assistAllowed = role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpAssistTest") === "1"; } catch { return false; } })());
       // ⏱ 상/하차 시간 + 이전/이후 표시용
@@ -11098,54 +11096,7 @@ setConfirmChange(null);
     </FareShell>
   );
 })()}
-        {/* 🧭 2026-11-27 작업 도우미 — 실시간배차현황 전체 표 대신(입력할 때 큰 표가 다시 그려지지 않게). 우선 최고관리자만 · [전체 표]로 예전 화면 */}
-{assistAllowed && assistMode === "assist" && (
-  <OrderWorkAssist rows={recentDispatchData}
-    myEmail={auth.currentUser?.email || ""} myName={userNameMap?.get?.(String(auth.currentUser?.email || "").toLowerCase()) || ""}
-    mode={assistMode} onMode={setAssistMode} />
-)}
-{assistAllowed && assistMode === "table" && (
-  <div className="mt-4 flex justify-end">
-    <button type="button" onClick={() => { try { localStorage.setItem("kpOrderAssistMode", "assist"); } catch { /* 무시 */ } setAssistMode("assist"); }}
-      className="h-9 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-extrabold text-[#1B2B4B] hover:bg-[#F5F7FB]">작업 도우미로 보기</button>
-  </div>
-)}
-        {/* ⭐ 4파트 동일한 실시간배차현황 테이블 */} 
-{role !== "dispatchManagement" && !(assistAllowed && assistMode === "assist") && (
-  <div id="realtime-status-area">
-    <RealtimeStatus
-      key={bottomStatusKey}
-      role={role}
-      userCompany={userCompany}
-      menu={menu}
-      dispatchData={recentDispatchData}
-      historyDispatchData={dispatchData}
-      liveDataReady={recentLiveDataReady}
-      drivers={drivers}
-      clients={clients}
-      placeRows={placeRows}
-      timeOptions={timeOptions}
-      tonOptions={tonOptions}
-      addDispatch={addDispatchSafe}
-      patchDispatch={patchDispatchSafe}
-      removeDispatch={removeDispatchSafe}
-      upsertDriver={upsertDriver}
-      upsertClient={upsertClient}
-      userNameMap={userNameMap}
-      filterType={filterType}
-      filterValue={filterValue}
-      setConfirmChange={setConfirmChange}
-      PAY_TYPES={PAY_TYPES}
-      isEmbedded={true}
-      setCargoAddPopup={setCargoAddPopup}
-      approveEditRequest={approveEditRequest}
-      rejectEditRequest={rejectEditRequest}
-      markEditRequestSeen={markEditRequestSeen}
-      approvedShippers={approvedShippers}
-    />
-  </div>
-)}
-
+        {/* 🧭 2026-11-27 사용자 결정 — 오더등록 메뉴는 오더 등록만: 아래 작업 도우미 · 실시간배차현황 표는 없앴다(현황은 실시간배차현황 · 배차현황 메뉴에서) */}
       </>
     );
   }

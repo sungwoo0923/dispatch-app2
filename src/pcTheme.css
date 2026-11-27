@@ -349,3 +349,6 @@
 @media (min-width: 2400px) { .kp-rv-zoom { zoom: 1.22; } }
 @media (min-width: 3000px) { .kp-rv-zoom { zoom: 1.45; } }
 .kp-rv-zoom.kp-rv-nozoom { zoom: 1 !important; }
+
+/* 🚚 2026-11-27 왼쪽 메뉴 아래 트럭 — 화면 높이가 낮으면 메뉴가 먼저(트럭 숨김) */
+@media (max-height: 760px) { .kp-subnav-truck { display: none; } }
