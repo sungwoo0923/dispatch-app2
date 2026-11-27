@@ -534,9 +534,10 @@ service cloud.firestore {
     //  아래 update 조건(조회전용 아닌 그 회사 직원 + 기능 켜짐 + companyName 유지) 그대로 통과 → 규칙 변경 없음
     match /fareRules/{co} {
       allow read: if fareRulesStaff(co);
-      allow create: if fareRulesStaff(co) && myRole() != 'viewer' && (isTotalMasterUser() || fareFeatureOn(co))
+      // 🔒 2026-11-27 영업 · 인사 · 법무 · 개발 역할은 보기만(기사운임을 바꾸는 설정 — 영업관리자가 규칙을 추가 · 수정하던 것). 화면 src/fareRules.js FARE_RULE_READONLY_ROLES 와 같음
+      allow create: if fareRulesStaff(co) && !(myRole() in ['viewer', 'salesMgr', 'salesStaff', 'hrManager', 'hrStaff', 'legalMgr', 'legalStaff', 'devMgr', 'devStaff']) && (isTotalMasterUser() || fareFeatureOn(co))
         && request.resource.data.get('companyName', '') == co;
-      allow update: if fareRulesStaff(co) && myRole() != 'viewer' && (isTotalMasterUser() || fareFeatureOn(co))
+      allow update: if fareRulesStaff(co) && !(myRole() in ['viewer', 'salesMgr', 'salesStaff', 'hrManager', 'hrStaff', 'legalMgr', 'legalStaff', 'devMgr', 'devStaff']) && (isTotalMasterUser() || fareFeatureOn(co))
         && request.resource.data.get('companyName', '') == co;
       allow delete: if fareRulesStaff(co) && isCompanyAdmin(co);
     }

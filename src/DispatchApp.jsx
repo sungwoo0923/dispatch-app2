@@ -3248,7 +3248,7 @@ import { RecurringManagerModal, CloseReportModal } from "./AutomationPanels";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 // ⭐ 2026-11-02 운임규칙 — 회사별 운임 규칙(운임구분 → 기사운임·수수료 자동 계산)
 import FareRulesSettings from "./FareRulesSettings";
-import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown } from "./fareRules";
+import { useFareRules, FareTypeSelect, FareRuleHint, FarePctInput, fareFormChange, farePatchOf, findFareRule, applyFareRule, FareTypeBreakdown, canEditFareRules } from "./fareRules";
 import { SpecialFareTag, SpecialFareLine } from "./specialFareTag";
 import { FareShell, FareCard, FareRange, FareRow, FareVias, FareFilterPills, fareStats as calcFareStats } from "./FareResultUi"; // ⚠ 이 파일에 같은 이름 상태값(fareStats)이 있어 다른 이름으로 // 🎨 2026-11-24 운임조회 결과 창 새 디자인 // 🏷 2026-11-18 운임조회 이력 — 특수운임 붙은 오더 표시
 import { withRoutePresets } from "./routePreset"; // ⭐ 2026-11-17 노선별 고정 특수운임
@@ -57004,7 +57004,7 @@ function CompanyManagementWrapper({ payrollInAcct = false, userCompany, role, us
       )}
       {tab === "조직도" && <OrgChart userCompany={userCompany} />}
       {/* ⭐ 2026-11-02 운임규칙 — 회사관리 › 운임 규칙 */}
-      {tab === "운임 규칙" && fareCM.feature && <FareRulesSettings company={userCompany} canEdit={role !== "viewer"} myName={myDocCM?.name || myName} />}
+      {tab === "운임 규칙" && fareCM.feature && <FareRulesSettings company={userCompany} canEdit={canEditFareRules(role, myDocCM?.isMaster === true)} myName={myDocCM?.name || myName} />}
       {tab === "내 이력서" && <HRManagementPage userCompany={userCompany} role={role} userId={userId} selfOnly />}
       {tab === "내정보" && (
         <MyProfilePage
