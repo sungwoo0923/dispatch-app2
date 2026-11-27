@@ -6,6 +6,8 @@ import { MANUALS, MANUAL_MENUS } from "../src/workManuals.js";
 import { HELP_DETAIL } from "../src/helpContent.js";
 import { GLOSSARY } from "../src/acctGlossary.js";
 const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
+// 🧩 2026-11-27 DispatchApp.jsx 를 화면별 파일(src/dispatch/**)로 나눴다 — 화면 코드 검사는 그 파일들까지 합쳐서 본다
+const readDispatchApp = () => [read("src/DispatchApp.jsx"), ...fs.readdirSync(new URL("../src/dispatch/", import.meta.url), { recursive: true }).filter((f) => /\.jsx?$/.test(f)).sort().map((f) => read(`src/dispatch/${f}`))].join("\n");
 let fails = 0;
 const ok = (c, n) => { if (c) console.log("✓", n); else { fails++; console.error("✗", n); } };
 const labelsOf = (src, marker) => {
@@ -13,7 +15,7 @@ const labelsOf = (src, marker) => {
   const line = src.slice(i, src.indexOf("\n", i) + 400);
   return [...line.matchAll(/label: "([^"]+)"/g)].map((m) => m[1]).filter((l) => !/매뉴얼|회계용어/.test(l));
 };
-const app = read("src/DispatchApp.jsx");
+const app = readDispatchApp();
 const actual = {
   정산관리: labelsOf(app, 'code="SETTLEMENT" title="정산관리"'),
   회계관리: labelsOf(app, 'code="ACCOUNTING" title="회계관리"'),
