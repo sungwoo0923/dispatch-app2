@@ -409,24 +409,19 @@ if (card) {
   const cols = [diesel, gasoline, premium].filter(Boolean);
   const nm = (it) => (it.PRODNM.includes("고급") ? "고급휘발유" : it.PRODNM.includes("경유") ? "경유" : "휘발유");
   return (
-    <div data-kp="fuel-card" className="w-[470px] max-w-full rounded-[18px] overflow-hidden text-white shadow-[0_14px_32px_rgba(15,26,48,0.28)]" style={{ background: "linear-gradient(125deg,#0B1428,#0F1A30 45%,#1B2B4B 80%,#2D4C82)" }}>
-      <div className="flex items-center gap-2.5 px-4 pt-3 pb-2.5">
-        <span className="w-[30px] h-[30px] rounded-[9px] bg-white/[0.12] grid place-items-center">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 21V5a2 2 0 012-2h6a2 2 0 012 2v16M3 21h12M14 9h2a2 2 0 012 2v5a1.5 1.5 0 003 0V8l-3-3M6 8h6" /></svg>
-        </span>
-        <div><div className="text-[10px] font-extrabold tracking-[0.24em] text-[#8FB0F0]">FUEL PRICE · TODAY</div><div className="text-[14px] font-black leading-tight">전국 유가</div></div>
-        <CustomSelect value={area} onChange={(e) => setArea(e.target.value)} className="ml-auto bg-white text-[#0F1A30] text-[12.5px] font-black rounded-[9px] px-3 py-1.5">
+    <div data-kp="fuel-card" className="flex items-stretch h-[52px] rounded-[14px] overflow-hidden text-white shadow-[0_10px_24px_rgba(15,26,48,0.25)]" style={{ background: "linear-gradient(125deg,#0B1428,#0F1A30 45%,#1B2B4B 80%,#2D4C82)" }}>
+      <div className="flex items-center gap-2 pl-3 pr-2.5">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8FB0F0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 21V5a2 2 0 012-2h6a2 2 0 012 2v16M3 21h12M14 9h2a2 2 0 012 2v5a1.5 1.5 0 003 0V8l-3-3M6 8h6" /></svg>
+        <div className="leading-tight"><div className="text-[9px] font-extrabold tracking-[0.2em] text-[#8FB0F0]">FUEL · TODAY</div><div className="text-[13px] font-black whitespace-nowrap">전국 유가</div></div>
+        <CustomSelect value={area} onChange={(e) => setArea(e.target.value)} className="ml-1 bg-white text-[#0F1A30] text-[12px] font-black rounded-[8px] px-2.5 py-1">
           {AREA_OPTIONS.map(a => (<option key={a.code} value={a.code}>{a.name}</option>))}
         </CustomSelect>
       </div>
-      <div className="grid border-t border-white/10" style={{ gridTemplateColumns: cols.map((_, i) => (i === 0 ? "1.15fr" : "1fr")).join(" ") }}>
-        {cols.map((it, i) => { const d = Number(it.DIFF || 0); const up = d > 0; return (
-          <div key={i} className={`px-4 pt-2.5 pb-3 border-l border-white/[0.08] ${i === 0 ? "bg-white/[0.07]" : ""}`} style={{ fontVariantNumeric: "tabular-nums" }}>
-            <div className={`text-[11.5px] font-extrabold ${i === 0 ? "text-white" : "text-[#9AA9C3]"}`}>{nm(it)}</div>
-            <div className={`${i === 0 ? "text-[20px]" : "text-[17px]"} font-black tracking-tight mt-0.5`}>{Number(it.PRICE).toLocaleString()}<small className="text-[11px] font-bold text-[#9AA9C3] ml-1">원/L</small></div>
-            <div className={`text-[11.5px] font-extrabold mt-0.5 ${up ? "text-[#FFB4B4]" : "text-[#9EE6B8]"}`}>{up ? "▲" : "▼"} {Math.abs(d)}원 <span className="text-[#7F8BA0] font-bold">전일</span></div>
-          </div>); })}
-      </div>
+      {cols.map((it, i) => { const d = Number(it.DIFF || 0); const up = d > 0; return (
+        <div key={i} className={`flex flex-col justify-center px-3 border-l border-white/10 ${i === 0 ? "bg-white/[0.08]" : ""}`} style={{ fontVariantNumeric: "tabular-nums" }}>
+          <div className={`text-[10.5px] font-extrabold ${i === 0 ? "text-white" : "text-[#9AA9C3]"}`}>{nm(it)} <span className={up ? "text-[#FFB4B4]" : "text-[#9EE6B8]"}>{up ? "▲" : "▼"}{Math.abs(d)}</span></div>
+          <div className="text-[15px] font-black tracking-tight whitespace-nowrap">{Number(it.PRICE).toLocaleString()}<small className="text-[10px] font-bold text-[#9AA9C3] ml-0.5">원/L</small></div>
+        </div>); })}
     </div>
   );
 }
@@ -654,6 +649,36 @@ function DmDot({ on, alert = false }) {
   const kOn = skinOn === "k"; // 🎨 2026-11-27 시안 K(사용자 확정)
   const [kDatesEl, setKDatesEl] = React.useState(null); // 날짜 줄을 K 격자 안으로(포털)
   const [kOptEl, setKOptEl] = React.useState(null); // 운행 옵션 묶음을 K 카드 안으로(포털)
+  // 🔍 2026-11-27 사용자 요청 — 브라우저를 확대 · 축소해도 오더등록 전체 구도가 그대로(글씨 · 칸 · 달력이 같이 커지고 작아짐)
+  //  설계 폭(K_W)으로 그린 뒤 화면 폭에 맞춰 통째로 배율(zoom) — 글씨는 다시 그려져 흐려지지 않는다
+  const K_W = 1440;
+  const kFitRef = React.useRef(null);
+  const [kScale, setKScale] = React.useState(1);
+  const [kW, setKW] = React.useState(K_W); // 높이 때문에 작게 그릴 땐 남는 폭을 채우게 설계 폭을 조금 넓힌다(최대 1.3배)
+  React.useEffect(() => {
+    if (!kOn) return undefined;
+    const el = kFitRef.current; if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const inner = el.firstElementChild;
+    // 폭에 맞춘 배율과, 화면 높이에 오더등록 전체가 들어오는 배율 중 작은 쪽 — 단, 글씨가 너무 작아지지 않게 0.9 아래로는 줄이지 않는다
+    const fit = () => {
+      const w = el.clientWidth; if (!(w > 0)) return;
+      const cur = parseFloat(getComputedStyle(inner).zoom) || 1;
+      const designH = inner.getBoundingClientRect().height / cur;
+      const scroller = el.closest("main");
+      const top = el.getBoundingClientRect().top + (scroller ? scroller.scrollTop : window.scrollY);
+      const availH = window.innerHeight - top - 14;
+      const byW = w / K_W;
+      const byH = designH > 0 && availH > 200 ? availH / designH : byW;
+      const next = Math.max(0.8, Math.min(2, Math.round(Math.min(byW, byH) * 1000) / 1000));
+      const nextW = Math.round(Math.min(K_W * 1.3, Math.max(K_W, w / next)));
+      setKScale((v) => (Math.abs(v - next) > 0.005 ? next : v));
+      setKW((v) => (Math.abs(v - nextW) > 4 ? nextW : v));
+    };
+    fit(); const t = setTimeout(fit, 400);
+    const ro = new ResizeObserver(fit); ro.observe(el);
+    window.addEventListener("resize", fit);
+    return () => { clearTimeout(t); ro.disconnect(); window.removeEventListener("resize", fit); };
+  }, [kOn]);
   const ofHiddenKey = [...ofs.hidden].sort().join("|");
   const ofGrid = React.useMemo(() => routeGrid(ofHiddenKey ? ofHiddenKey.split("|") : [], skinOn === "deck" || skinOn === "k" ? skinOn : "route"), [ofHiddenKey, skinOn]); // 숨긴 칸 자리는 옆 칸이 채운다
   const dmLookupNameOf = React.useCallback((r) => _orderStaffNameRaw(r, userNameMap), [userNameMap]);
@@ -9453,7 +9478,11 @@ className={`
   {/* ⭐ 2026-11-01 화면이 좁으면(노트북·125% 배율 1536px 등) 입력칸이 겹쳐 화물내용 칸을 못 누를 정도였다 — 1800px 미만은 폼을 넓게 */}
   {/* ⭐ 2026-11-02 수수료 라벨 줄(운임구분)이 좁아지지 않게 입력 칸 74→77%(넓은 화면 62→66%) · 옆 달력은 그만큼 살짝 작게 */}
   <div data-kp-order-form="1" className={kOn ? "w-full" : "basis-[77%] max-w-[77%] min-[1800px]:basis-[66%] min-[1800px]:max-w-[66%]"} style={{ flexGrow: kOn ? 1 : 0, flexShrink: 0, minWidth: 0, overflow: kOn ? "visible" : "hidden" }}>
-    {renderForm()}
+    {kOn ? (
+      <div ref={kFitRef} className="w-full min-w-0">
+        <div className="of-k-fit" style={{ width: kW, zoom: kScale, marginInline: "auto" }}>{renderForm()}</div>
+      </div>
+    ) : renderForm()}
   </div>
 
   {/* 오른쪽: 상/하차일 캘린더 패널 (기존 Today 통계패널 자리를 대체) —

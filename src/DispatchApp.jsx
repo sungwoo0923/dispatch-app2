@@ -376,7 +376,7 @@ function KpPageClock() {
 }
 function KpPageHeader({ menu }) {
   const meta = KP_PAGE_META[menu];
-  if (!meta) return null;
+  if (!meta || menu === "배차관리") return null; // 🎨 2026-11-27 오더등록은 화면 안 위쪽 띠가 머리말(한 화면에 다 들어오게)
   return (
     <div className="flex items-center gap-4 pb-4 mb-4 border-b border-[#EEF1F6]">
       <div className="relative w-12 h-12 rounded-[15px] flex items-center justify-center shrink-0 overflow-hidden shadow-[0_8px_20px_rgba(15,26,48,0.28)] ring-1 ring-white/10"
