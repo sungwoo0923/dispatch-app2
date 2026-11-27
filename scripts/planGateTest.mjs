@@ -7,7 +7,8 @@ import { PLAN_IDS, PLAN_DEFAULTS, PLAN_RATES, FEATURE_ROWS, MENU_FEATURE, homeIt
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) pass++; else { fail++; console.log("  ✗", msg); } };
 const src = (f) => fs.readFileSync(new URL(`../src/${f}`, import.meta.url), "utf8");
-const DA = src("DispatchApp.jsx"), MA = src("mobile/MobileApp.jsx"), HD = src("HomeDashboard.jsx");
+// 🧩 2026-11-27 DispatchApp.jsx 를 화면별 파일(src/dispatch/**)로 나눴다 — 화면 코드 검사는 그 파일들까지 합쳐서 본다
+const DA = [src("DispatchApp.jsx"), ...fs.readdirSync(new URL("../src/dispatch/", import.meta.url), { recursive: true }).filter((f) => /\.jsx?$/.test(f)).sort().map((f) => src(`dispatch/${f}`))].join("\n"), MA = src("mobile/MobileApp.jsx"), HD = src("HomeDashboard.jsx");
 
 // ── 1) 실제 화면 코드의 메뉴 목록을 읽어 온다(PC 왼쪽 메뉴 + 부서 메뉴 + 임원 메뉴)
 const side = [...DA.match(/const KP_SIDE_GROUPS = \[([\s\S]*?)\n\];/)[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]).filter((x) => !/^(배차|운임|기사 · 거래처|매출 · 정산|부서 업무|관리)$/.test(x));

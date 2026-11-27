@@ -171,7 +171,8 @@ const t = async (name, fn) => { await fn(); n += 1; console.log(`  ✓ ${name}`)
   });
   await t("화면 코드 — 회사 문서의 revenuePassword 를 읽거나 쓰는 코드가 없다 · 공용 호출 파일을 쓴다", () => {
     const root = path.join(__dirname, "..");
-    const pc = fs.readFileSync(path.join(root, "src/DispatchApp.jsx"), "utf8");
+    // 🧩 2026-11-27 DispatchApp.jsx 를 화면별 파일(src/dispatch/**)로 나눴다 — 화면 코드 검사는 그 파일들까지 합쳐서 본다
+    const pc = [path.join(root, "src/DispatchApp.jsx"), ...fs.readdirSync(path.join(root, "src/dispatch"), { recursive: true }).filter((f) => /\.jsx?$/.test(f)).sort().map((f) => path.join(root, "src/dispatch", f))].map((f) => fs.readFileSync(f, "utf8")).join("\n");
     const mo = fs.readFileSync(path.join(root, "src/mobile/MobileApp.jsx"), "utf8");
     const apiSrc = fs.readFileSync(path.join(root, "src/revenuePwApi.js"), "utf8");
     for (const [name, src] of [["DispatchApp", pc], ["MobileApp", mo], ["revenuePwApi", apiSrc]]) {
