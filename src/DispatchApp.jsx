@@ -50,9 +50,8 @@ import * as XLSX from "xlsx";
 import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차량 조회
 import { useOrderFormFields } from "./orderFormFields"; // 🧩 2026-11-26 오더등록 입력칸 고르기
 import OrderFieldsModal from "./OrderFieldsModal";
-import { ORDER_SKIN_CSS, nextSkin, skinName } from "./orderSkins"; // 🎨 2026-11-26 오더등록 디자인 시안(최고관리자)
-import { LAYOUT_SKINS, ORDER_LAYOUT_CSS, LayoutDecor, FareSummary } from "./orderLayouts"; // 🎨 구성이 바뀌는 시안
-import { startDarkGuard } from "./fleetDarkGuard";
+import { ORDER_SKIN_CSS, nextSkin, skinName, readSkin, saveSkin } from "./orderSkins"; // 🎨 2026-11-27 오더등록 A 루트 보드 기본 · 최고관리자만 기본 입력창과 전환
+import { LAYOUT_SKINS, ORDER_LAYOUT_CSS, LayoutDecor, FareSummary, routeGrid } from "./orderLayouts"; // 🎨 A 루트 보드
 import MgrBadge, { setMgrNameMap } from "./MgrBadge";
 import { isUrgentOrder, UrgentBadge, urgentRowStyle } from "./urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조(모든 현황 공용)
 import BulkEditCopyModal from "./BulkEditCopy"; // 🗂 2026-11-09 우클릭 [일괄수정·복사]
@@ -11038,13 +11037,15 @@ function DmDot({ on, alert = false }) {
   const ofShow = ofs.show;
   const [ofOpen, setOfOpen] = React.useState(false);
   // 🎨 2026-11-26 오더등록 디자인 시안 — 최고관리자만 [디자인 변경]으로 돌려 본다(입력칸 · 버튼 · 기능은 그대로, 모양만 · src/orderSkins.js)
-  const [ofSkin, setOfSkin] = React.useState(() => { try { return localStorage.getItem("kpOrderSkin") || "base"; } catch { return "base"; } });
-  // 🧪 개발 화면(import.meta.env.DEV)에서만 localStorage kpSkinTest=1 이면 다른 계정으로도 시안 점검 — 배포 빌드에는 들어가지 않는다
+  // 🎨 2026-11-27 모든 계정 = A 루트 보드 · 최고관리자만 [디자인 변경]으로 예전 기본 입력창과 오간다(이 기기에 기억)
+  // 🧪 개발 화면(import.meta.env.DEV)에서만 localStorage kpSkinTest=1 이면 다른 계정으로도 전환 점검 — 배포 빌드에는 들어가지 않는다
   const skinAllowed = role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpSkinTest") === "1"; } catch { return false; } })());
-  const skinOn = skinAllowed ? ofSkin : "base";
-  const cycleSkin = () => setOfSkin((v) => { const n = nextSkin(v); try { localStorage.setItem("kpOrderSkin", n); } catch { /* 무시 */ } return n; });
+  const [ofSkin, setOfSkin] = React.useState(() => readSkin(true));
+  const skinOn = skinAllowed ? ofSkin : readSkin(false);
+  const cycleSkin = () => setOfSkin((v) => { const n = nextSkin(v); saveSkin(n); return n; });
   const layOn = LAYOUT_SKINS.has(skinOn);
-  React.useEffect(() => (skinOn === "cockpit" ? startDarkGuard(".of-skin-cockpit", "img,video,canvas,svg,path,iframe,.leaflet-tile-pane,.leaflet-tile,.fm-keep-light", { restore: true }) : undefined), [skinOn]);
+  const ofHiddenKey = [...ofs.hidden].sort().join("|");
+  const ofGrid = React.useMemo(() => routeGrid(ofHiddenKey ? ofHiddenKey.split("|") : []), [ofHiddenKey]); // 숨긴 칸 자리는 옆 칸이 채운다
   const dmLookupNameOf = React.useCallback((r) => _orderStaffNameRaw(r, userNameMap), [userNameMap]);
 
       // ⭐ 회사별 커스텀 드롭다운 옵션(Part B) — 등록폼 전역에서 재사용하므로 최상위에서
@@ -16169,9 +16170,9 @@ React.useEffect(() => {
       입력칸 설정{ofs.hidden.size > 0 && <span className="ml-0.5 text-[11px] font-black px-1.5 rounded-full bg-[#1B2B4B] text-white">{ofs.hidden.size}개 숨김</span>}
     </button>
     {ofOpen && <OrderFieldsModal state={ofs} onClose={() => setOfOpen(false)} canCompany={!isViewer} />}
-    {/* 🎨 2026-11-26 디자인 변경(최고관리자만) — 누를 때마다 기본 → A → B → C → D 순서로 실제 화면이 바뀐다 */}
+    {/* 🎨 2026-11-27 디자인 변경(최고관리자만) — 누를 때마다 A 루트 보드 ↔ 기본 입력창 */}
     {skinAllowed && (
-      <button type="button" onClick={cycleSkin} data-testid="order-skin-btn" title={`오더등록 디자인 시안 돌려 보기(최고관리자만) — 지금: ${skinName(skinOn)}`}
+      <button type="button" onClick={cycleSkin} data-testid="order-skin-btn" title={`오더등록 화면 모양 바꾸기(최고관리자만 · 이 기기에만) — 지금: ${skinName(skinOn)}`}
         className={`${DM_BTN} border ${skinOn !== "base" ? "bg-gradient-to-r from-[#4F46E5] to-[#0891B2] text-white border-transparent shadow-[0_6px_16px_rgba(79,70,229,0.3)]" : "bg-white text-[#4F46E5] border-[#C7D2FE] hover:bg-[#EEF2FF]"}`}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r="1.5" /><circle cx="17.5" cy="10.5" r="1.5" /><circle cx="8.5" cy="7.5" r="1.5" /><circle cx="6.5" cy="12.5" r="1.5" /><path d="M12 2a10 10 0 0 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.3-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.4A5.6 5.6 0 0 0 22 9.8C22 5.5 17.5 2 12 2z" /></svg>
         디자인 변경 · {skinName(skinOn)}
@@ -17268,7 +17269,7 @@ shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)]
 )}
 
 {/* 🎨 구성형 디자인 시안 — 카드 바탕 · 묶음 제목 · 가운데 경로(입력칸은 그대로) */}
-{layOn && <LayoutDecor skin={skinOn} form={form} onSwap={swapPickupDrop} onMap={() => setShowFareRouteMap(true)} />}
+{layOn && <LayoutDecor skin={skinOn} form={form} mid={ofGrid.mid} onSwap={swapPickupDrop} onMap={() => setShowFareRouteMap(true)} />}
 
 {/* 청구 사업자(여러 사업자일 때만) + 거래처 + 신규등록
     ⭐ 2026-11-03 청구 사업자를 맨 앞 칸으로 — 거래처 칸(2칸) 안을 나눠 쓰므로 뒤 칸들이 밀리지 않는다 */}
@@ -19694,7 +19695,7 @@ className={`
       
            {/* ==================== 상단: 입력폼 + Today 사이드패널 ==================== */}
 {skinOn !== "base" && <style>{ORDER_SKIN_CSS}</style>}{/* 🎨 디자인 시안(최고관리자) */}
-{layOn && <style>{ORDER_LAYOUT_CSS}</style>}
+{layOn && <style>{ORDER_LAYOUT_CSS + ofGrid.css}</style>}
 <div className={`flex items-stretch gap-3 w-full mb-4 of-skin of-skin-${skinOn}${layOn ? ` of-lay of-lay-${skinOn}` : ""}`} style={{ minWidth: 0 }}>
   {/* 왼쪽: 폼 */}
   {/* ⭐ 2026-11-01 화면이 좁으면(노트북·125% 배율 1536px 등) 입력칸이 겹쳐 화물내용 칸을 못 누를 정도였다 — 1800px 미만은 폼을 넓게 */}

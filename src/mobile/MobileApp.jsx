@@ -77,6 +77,8 @@ import React, { useState, useMemo, useEffect, useRef, startTransition, useSyncEx
 import { withCo, getTenant, isPreviewMode } from "../fsTenant";
 import { useOrderFormFields } from "../orderFormFields"; // 🧩 2026-11-26 오더등록 입력칸 고르기
 import OrderFieldsModal from "../OrderFieldsModal";
+import { readSkin, saveSkin, nextSkin, skinName } from "../orderSkins"; // 🎨 2026-11-27 오더등록 A 루트 보드(기본) · 최고관리자만 기본 입력창과 전환
+import { MobileRouteLine, MOBILE_ROUTE_CSS } from "../orderLayouts";
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "../orderHistoryCache"; // ⚡ 2026-11-23 13개월 오더 폰 보관
 // ⚡ 2026-11-23 운임 참고용 13개월 오더는 화면을 열 때 한 번만 받는다 — 예전엔 실시간 구독이라 누가 오더를 고칠 때마다 받고,
 //  30분 뒤 다시 열면 13개월을 통째로 또 받았다(운임 비교에는 실시간이 필요 없다)
@@ -14332,6 +14334,11 @@ const [matchedClients, setMatchedClients] = useState([]);
   const ofs = useOrderFormFields(getTenant() || localStorage.getItem("userCompany") || "");
   const ofShow = ofs.show;
   const [ofOpen, setOfOpen] = useState(false);
+  // 🎨 2026-11-27 모든 계정 = A 루트 보드 · 최고관리자만 [디자인 변경]으로 예전 기본 입력창과 오간다(이 기기에 기억)
+  const mSkinAllowed = role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpSkinTest") === "1"; } catch { return false; } })()); // 🧪 개발 화면에서만 점검용
+  const [mSkinPick, setMSkinPick] = useState(() => readSkin(true));
+  const mSkin = mSkinAllowed ? mSkinPick : readSkin(false);
+  const mRoute = mSkin === "route";
   const validateRequiredMobile = () => {
     const miss = [];
     const missKeys = [];
@@ -15375,7 +15382,8 @@ const pickDrop = (c) => {
   };
 
   return (
-    <div className={`kp-m-form px-3.5 py-3 space-y-3 ${cardVersionB ? "kp-m-form-b" : "kp-m-form-a"}`} style={{ "--reg-accent": cardVersionB ? "#1B2B4B" : "#0F1A30" }}>
+    <div className={`kp-m-form px-3.5 py-3 space-y-3 ${cardVersionB ? "kp-m-form-b" : "kp-m-form-a"}${mRoute ? " kp-m-route" : ""}`} style={{ "--reg-accent": cardVersionB ? "#1B2B4B" : "#0F1A30" }}>
+      {mRoute && <style>{MOBILE_ROUTE_CSS}</style>}
       {form._editId && <MobileFixedRouteNotice order={form} />}
       {/* 🧭 2026-11-14 PC 오더등록과 같게 — 경로보기 · 정기오더 · (수정할 때) 담당자 변경 */}
       <div className="flex items-center gap-1.5 flex-wrap" data-m-form-tools>
@@ -15386,6 +15394,13 @@ const pickDrop = (c) => {
         <button type="button" onClick={() => setOfOpen(true)} data-testid="m-order-fields-btn" className="h-9 px-3 rounded-xl border border-[#DCE3EE] bg-white text-[12.5px] font-black text-[#1B2B4B]">
           입력칸 설정{ofs.hidden.size > 0 ? ` · ${ofs.hidden.size}개 숨김` : ""}
         </button>
+        {/* 🎨 디자인 변경(최고관리자만) — A 루트 보드 ↔ 기본 입력창 */}
+        {mSkinAllowed && (
+          <button type="button" data-testid="m-order-skin-btn" onClick={() => setMSkinPick((v) => { const n = nextSkin(v); saveSkin(n); return n; })}
+            className={`h-9 px-3 rounded-xl text-[12.5px] font-black ${mRoute ? "bg-gradient-to-r from-[#4F46E5] to-[#0891B2] text-white" : "border border-[#C7D2FE] bg-white text-[#4F46E5]"}`}>
+            디자인 · {skinName(mSkin)}
+          </button>
+        )}
         {form._editId && <div className="ml-auto"><OrderStaffFields order={form} setOrder={setForm} /></div>}
       </div>
       {ofOpen && <OrderFieldsModal state={ofs} mobile onClose={() => setOfOpen(false)} canCompany={role !== "viewer"} />}
@@ -15657,10 +15672,11 @@ const pickDrop = (c) => {
 
 
       {/* 상차/하차 + 주소 + 자동완성 */}
-<div className="p-3 space-y-3 border-t border-gray-100">
+<div className="kp-m-pd p-3 space-y-3 border-t border-gray-100">
 
   {/* 🔵 상차지 */}
   <RowLabelInput
+    className="kp-m-card-p"
     label={<>상차지 <span className="text-red-500">*</span></>}
     labelClassName="font-bold justify-center text-center"
     right={
@@ -15829,6 +15845,7 @@ const pickDrop = (c) => {
   {/* 상/하차지 맞바꾸기 — 카드 사이에 별도 공간을 차지하지 않도록 높이 0인
       래퍼 안에서 절대위치로 배치해, 상/하차지 라벨 컬럼(왼쪽 88px) 정중앙 ·
       두 카드의 경계선 위에 딱 겹치게 띄운다. 카드가 벌어지지 않는다. */}
+  {mRoute ? <MobileRouteLine form={form} onSwap={handleSwapPickupDrop} onMap={() => setFormRouteMap(true)} /> : (
   <div className="relative h-0 z-10">
     <button
       type="button"
@@ -15840,9 +15857,11 @@ const pickDrop = (c) => {
       <ArrowUpDown className="w-3.5 h-3.5 text-white" strokeWidth={2.4} />
     </button>
   </div>
+  )}
 
   {/* 하차지 */}
   <RowLabelInput
+    className="kp-m-card-d"
     label={<>하차지 <span className="text-red-500">*</span></>}
     labelClassName="font-bold justify-center text-center"
     right={
@@ -18218,9 +18237,9 @@ function MemoPriority({ value = "NORMAL", onChange }) {
   );
 }
 
-function RowLabelInput({ label, input, right, labelClassName = "" }) {
+function RowLabelInput({ label, input, right, labelClassName = "", className = "" }) {
   return (
-    <div className="flex border-b border-[#EEF1F6] last:border-b-0 overflow-hidden">
+    <div className={`flex border-b border-[#EEF1F6] last:border-b-0 overflow-hidden ${className}`}>
       <div className={`${right ? "w-[104px] max-[359px]:w-[92px]" : "w-[88px] max-[359px]:w-[72px]"} shrink-0 px-2.5 max-[359px]:px-2 py-2.5 text-[11.5px] font-bold text-[#5B6B85] bg-[#F7F9FC] border-r border-[#EEF1F6] flex items-center justify-between gap-1 ${labelClassName}`}>
         <span className="leading-tight break-keep">{label}</span>
         {right && <span className="ml-1 shrink-0 whitespace-nowrap [&_button]:whitespace-nowrap [&_span]:whitespace-nowrap">{right}</span>}
