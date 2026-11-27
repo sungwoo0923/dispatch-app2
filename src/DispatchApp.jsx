@@ -48,6 +48,7 @@ import { useDriverEditChoice, DriverEditButton, SamePlateChips, driversOfPlate, 
 import { Navigate, useNavigate } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
 import * as XLSX from "xlsx";
+import { saveWorkbook, kstFileDate } from "./xlsxSave"; // 🛠 2026-11-27 엑셀 파일 이름이 'download'로 저장되던 문제
 import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차량 조회
 import { useOrderFormFields } from "./orderFormFields"; // 🧩 2026-11-26 오더등록 입력칸 고르기
 import OrderFieldsModal from "./OrderFieldsModal";
@@ -28842,10 +28843,10 @@ const head = isDark
     row.화물내용=mergeViaCargoText(r.화물내용,[r.경유상차목록,r.경유하차목록])||"";
     row.차량종류=r.차량종류||"";
     row.차량톤수=mergeViaTonnage(r.차량톤수,[r.경유상차목록,r.경유하차목록])||"";
-    Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:orderProfit(r),...(fareOn?{운임구분:r.운임구분||""}:{}),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
+    Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:formatPhone(r.전화번호||""),배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:orderProfit(r),...(fareOn?{운임구분:r.운임구분||""}:{}),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
     return row;
   });
-  const ws=XLSX.utils.json_to_sheet(rowsExcel);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"실시간배차현황");XLSX.writeFile(wb,"실시간배차현황.xlsx");
+  const ws=XLSX.utils.json_to_sheet(rowsExcel);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"실시간배차현황");saveWorkbook(XLSX,wb,`실시간배차현황_${kstFileDate()}.xlsx`); /* 🛠 2026-11-27 파일 이름이 'download'로 저장되던 문제 · 날짜를 이름에 · 전화번호 010-0000-0000 */
 }} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.엑셀다운" defaultText="엑셀다운" /></button>
     </div>
 </div>
@@ -35657,7 +35658,7 @@ if (first) {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "배차현황");
-    XLSX.writeFile(wb, "배차현황.xlsx");
+    saveWorkbook(XLSX, wb, `배차현황_${kstFileDate()}.xlsx`); // 🛠 2026-11-27 파일 이름 · 확장자가 빠지지 않게(src/xlsxSave.js)
   };
   // =====================
   // 🔑 거래처명 정규화 (정렬용)
