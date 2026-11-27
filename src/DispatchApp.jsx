@@ -50,6 +50,7 @@ import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChar
 // ⚡ 2026-11-27 속도 — xlsx(약 420KB)는 엑셀 버튼 · 엑셀 올리기를 누를 때 받는다(예전엔 배차 프로그램 첫 묶음에 들어 로그인 → HOME 이 늦었다).
 //  쓰는 함수마다 맨 앞에서 const XLSX = await loadXLSX() — 동작 · 파일 모양은 그대로
 const loadXLSX = () => import("xlsx");
+import { saveWorkbook, kstFileDate } from "./xlsxSave"; // 🛠 2026-11-27 엑셀 파일 이름이 'download'로 저장되던 문제
 import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차량 조회
 import { useOrderFormFields } from "./orderFormFields"; // 🧩 2026-11-26 오더등록 입력칸 고르기
 import OrderFieldsModal from "./OrderFieldsModal";
@@ -9127,13 +9128,26 @@ const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
     }
   }, [role]);
 
+  // 🔎 2026-11-27 화면 전환 역할(통합관리자 · 최고관리자 · 통합인사관리자) — 다른 화면에만 있는 메뉴 → 그 화면 키
+  //  통합 검색(Ctrl + K) · 도움말 센터에서 찾을 수 있게 하고, 누르면 그 화면으로 바꿔서 연다(handleMenuClick)
+  const otherViewMenus = React.useMemo(() => {
+    const out = {};
+    const views = roleView.views;
+    if (!views || execHome) return out;
+    const cur = roleView.view || views[0][0];
+    const DISPATCH_ONLY = ["배차관리", "실시간배차현황", "배차현황", "단가표", "운임조회", "기사관리", "거래처관리", "매출관리", "지입차관리"];
+    if (cur !== "dispatch" && views.some(([k]) => k === "dispatch")) DISPATCH_ONLY.forEach((m) => { out[m] = "dispatch"; });
+    views.forEach(([k]) => { if (k !== cur && DEPT_MENUS[k] && k !== "exec") DEPT_MENUS[k].forEach((m) => { if (!(m in out)) out[m] = k; }); });
+    return out;
+  }, [roleView.views, roleView.view, execHome]);
   // ---------------- 메뉴 클릭 제어 ----------------
   const handleMenuClick = async (m) => {
     // ✋ 작성 중인 문서(전자결재·증명서 등)가 있으면 먼저 저장할지 묻는다
     if (m !== menu && !(await confirmLeave())) return;
     if (MENU_FEATURE[m] && !planIncludes(planId, MENU_FEATURE[m])) { openPlanLock(MENU_FEATURE[m]); return; }
     // 🧾 2026-11-14 운송 화면에서 정산관리 바로가기(홈 카드 · 검색)를 누르면 경리 화면으로 바꿔서 연다
-    const toView = switchViewFor(realRole, roleView.view, m);
+    //  🔎 2026-11-27 검색에서 고른 다른 화면 메뉴(지금 화면엔 없는 메뉴)도 그 화면으로 바꿔서 연다
+    const toView = switchViewFor(realRole, roleView.view, m) || (menuState(m) !== "ok" ? otherViewMenus[m] || "" : "");
     if (toView) { roleView.setView(toView); React.startTransition(() => setMenu(m)); return; }
     if (!deptMode && (role === "user" || role === "test") && blockedMenus.includes(m)) return;
     if (m !== "매출관리") setRevenueUnlocked(false);
@@ -9159,6 +9173,37 @@ const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
     window.addEventListener("kp-bank-ar-match", h);
     return () => window.removeEventListener("kp-bank-ar-match", h);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // 🔙 2026-11-27 PC 브라우저 [뒤로] — 메뉴 이동 · 화면 전환을 브라우저 기록에 쌓는다(예전엔 한 번 누르면 프로그램 밖으로 나갔다)
+  //  주소는 그대로 두고 기록의 state(kpNav: 메뉴 · 화면)만 남긴다 — [뒤로]/[앞으로]를 누르면 그 메뉴 · 화면으로 돌아간다
+  const navPopRef = React.useRef(false);
+  const navNowRef = React.useRef({ m: menu, v: roleView.view || "" });
+  navNowRef.current = { m: menu, v: roleView.view || "" };
+  React.useEffect(() => {
+    const cur = { m: menu, v: roleView.view || "" };
+    if (navPopRef.current) { navPopRef.current = false; return; }
+    let st = null;
+    try { st = window.history.state || {}; } catch { return; }
+    const was = st.kpNav;
+    if (was && was.m === cur.m && was.v === cur.v) return;
+    try {
+      if (!was) window.history.replaceState({ ...st, kpNav: cur }, "");
+      else window.history.pushState({ ...st, kpNav: cur }, "");
+    } catch { /* 무시 */ }
+  }, [menu, roleView.view]);
+  React.useEffect(() => {
+    const onPop = (e) => {
+      const nav = e.state?.kpNav;
+      if (!nav || !nav.m) return; // 프로그램 첫 화면보다 더 뒤 — 브라우저 기본 동작
+      const now = navNowRef.current;
+      const viewChange = !!nav.v && !!roleView.views && nav.v !== now.v && roleView.views.some(([k]) => k === nav.v);
+      if (!viewChange && nav.m === now.m) return;
+      navPopRef.current = true;
+      if (viewChange) roleView.setView(nav.v);
+      setMenu(nav.m);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [roleView.views, roleView.setView]); // eslint-disable-line react-hooks/exhaustive-deps
   const [sideMenuOpen, setSideMenuOpen] = React.useState(false);
   const closeSideMenu = React.useCallback(() => setSideMenuOpen(false), []);
 
@@ -9626,8 +9671,12 @@ return (
       <CloseInboxBanner inbox={closeInbox} onOpen={(x) => { handleMenuClick("정산관리"); setTimeout(() => { set정산관리Tab("거래처정산"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: { tab: "invoice", client: x.client, ym: x.ym } })), 120); }, 60); }} />
       {/* ★ 2026-11-12 자주 쓰는 메뉴(접었다 펴기) · 통합 검색 창 · 도움말 센터 — 지금 이 계정에 보이는 메뉴로 자동 구성 */}
       <QuickNav menu={menu} isMaster={realRole === "totalMaster"} /* 🔒 2026-11-18 도움말 '새 기능 · 바뀐 점'은 최고관리자만 */
-        menus={uiMenuList("pc", deptMode ? DEPT_MENUS[deptMode] : KP_SIDE_GROUPS.flatMap((g) => g.items)).filter((m) => menuState(m) === "ok")}
-        onGo={(m, code, key) => { handleMenuClick(m); if (code && key) setTimeout(() => emitSubnav(code, key), 0); }} />
+        menus={(() => { // 🔎 2026-11-27 지금 화면 메뉴 + (화면 전환 역할) 다른 화면에만 있는 메뉴 — 누르면 그 화면으로 바꿔서 연다
+          const cur = uiMenuList("pc", deptMode ? DEPT_MENUS[deptMode] : KP_SIDE_GROUPS.flatMap((g) => g.items)).filter((m) => menuState(m) === "ok");
+          const extra = Object.keys(otherViewMenus).filter((m) => !cur.includes(m) && menuState(m) !== "locked");
+          return [...cur, ...extra];
+        })()}
+        onGo={(m, code, key) => { const sw = !!otherViewMenus[m] && menuState(m) !== "ok"; handleMenuClick(m); if (code && key) setTimeout(() => emitSubnav(code, key), sw ? 400 : 0); }} />
 
 
       {/* 화주사 푸시 알림 — 상차 예정시각이 임박했는데 미처리인 오더를 화주사가 푸시하면 중앙에 확인 전까지 표시 */}
@@ -13108,8 +13157,9 @@ const handleMultiRegSmartDriverInput = (text) => {
         })
     : (name && name.length >= 2)
     ? (drivers || []).filter(d => d.이름 && d.이름.includes(name))
-    : [];
+    : smartDigitsMatch(drivers, text, phone);
   setMrSmartDriverMatched(results.slice(0, 8));
+  if (!plate && results.length) setMrSmartDriverActiveIdx(0);
 };
 
 const selectMultiRegSmartDriver = (d) => {
@@ -13141,6 +13191,8 @@ const handleMultiRegSmartDriverKeyDown = (e) => {
     e.preventDefault();
     if (mrSmartDriverMatched.length > 0 && mrSmartDriverActiveIdx >= 0 && mrSmartDriverActiveIdx < mrSmartDriverMatched.length) {
       selectMultiRegSmartDriver(mrSmartDriverMatched[mrSmartDriverActiveIdx]);
+    } else if (mrSmartDriverMatched.length > 0 && !parseDriverText(mrSmartDriverQuery).plate) {
+      selectMultiRegSmartDriver(mrSmartDriverMatched[0]); // 🛠 2026-11-27 Enter = 첫 번째 기사
     } else {
       applyMultiRegSmartDriverInput(mrSmartDriverQuery);
     }
@@ -14234,7 +14286,7 @@ React.useEffect(() => {
       ...p,
       차량번호: clean,
       이름: list[0].이름 || "",
-      전화번호: list[0].전화번호 || "",
+      전화번호: formatPhone(list[0].전화번호 || ""), // 🛠 2026-11-27 010-0000-0000 형식으로(예전 기사 문서는 01000009101 처럼 숫자만)
       배차상태: "배차완료",
     }));
     setDriverDropdownOpen(false);
@@ -14242,15 +14294,15 @@ React.useEffect(() => {
   }
 
   // 🔥 기존 기사 없음 → 입력 중에는 아무것도 안함
-  setForm((p) => ({
-    ...p,
-    이름: "",
-    전화번호: "",
-    배차상태: "배차중",
-  }));
+  //  🛠 2026-11-27 앞서 자동으로 채운 기사 정보만 지운다 — 손으로 먼저 적어 둔 기사명 · 전화는 남겨 신규 기사 등록 창에 넘긴다
+  const dg = (v) => String(v || "").replace(/\D/g, "");
+  const fromList = (p) => !!p.이름 && (drivers || []).some((d) => (d.이름 || "") === p.이름 && dg(d.전화번호) === dg(p.전화번호));
+  setForm((p) => (fromList(p) ? { ...p, 이름: "", 전화번호: "", 배차상태: "배차중" } : { ...p, 배차상태: "배차중" }));
 
   setDriverDropdownOpen(false);
 };
+// 🛠 2026-11-27 신규 기사 등록 창을 이미 띄운 차량번호(같은 차를 두 번 묻지 않게)
+const newDrvAskedRef = React.useRef("");
 const checkNewDriver = (carNo) => {
   const clean = (carNo || "").trim().replace(/\s+/g, "");
 
@@ -14266,13 +14318,14 @@ const checkNewDriver = (carNo) => {
         // 이미 이름이 있으면 (스마트검색으로 세팅됨) → 건드리지 않음
         return p;
       }
-      // 이름이 없을 때만 신규 기사 등록 모달
-      setDriverModal({
+      // 이름이 없을 때만 신규 기사 등록 모달 — 🛠 2026-11-27 오더 폼에 먼저 적은 전화번호는 미리 채운다 · 한 차량번호는 한 번만 묻는다
+      newDrvAskedRef.current = clean;
+      setDriverModal((m) => (m.open && m.carNo === clean ? m : {
         open: true,
         carNo: clean,
-        name: "",
-        phone: "",
-      });
+        name: p.이름 || "",
+        phone: p.전화번호 ? formatPhone(p.전화번호) : "",
+      }));
       return {
         ...p,
         차량번호: clean,
@@ -14300,6 +14353,8 @@ const checkDriverConflict = () => {
 
   // 🔹 기존 기사님이 없으면 → 신규 등록 여부 확인
   if (!list || list.length === 0) {
+    // 🛠 2026-11-27 이 차량번호로 신규 기사 등록 창을 이미 띄웠으면 다시 묻지 않는다(등록했거나 닫았으면 오더 저장 때 자동 등록)
+    if (newDrvAskedRef.current === plate) return;
     // 차량번호 + 이름 + 전화번호가 모두 있으면 자동 등록 제안
     if (name && phone) {
       setDriverConflictPopup({
@@ -15521,7 +15576,20 @@ React.useEffect(() => { setCopyShowMore(false); }, [copyQ, copyFilterType]);
 const [copySelected, setCopySelected] = React.useState([]);
 
 // 🔥 오더 복사 전용 (유일한 진입점)
-const applyCopy = (r) => {
+// 🛠 2026-11-27 시간은 오전/오후가 붙은 값만 복사(예전 오더의 '09:00' · '9시'를 그대로 복사하면 시간칸엔 빈칸으로 보이는데 저장 때 "오전/오후를 함께 선택해주세요"로 막혔다)
+//  quick: 한 줄 빠른 등록 — 지난 노선의 시간 · 메모 · 원본 오더에만 적힌 담당자는 가져오지 않는다(문장에 없는 값이 조용히 들어오지 않게)
+const copyTimeOf = (t) => {
+  const s = String(t || "").trim();
+  if (/^오[전후] /.test(s)) return s;
+  const m = s.match(/^(\d{1,2}):(\d{2})$/); // 24시간 표기만 오전/오후로 바꾼다("9시"처럼 오전·오후를 모르는 값은 비운다)
+  if (!m) return "";
+  const h = Number(m[1]); const mm = Number(m[2]);
+  if (h > 23 || mm > 59) return "";
+  const hh = h % 12 === 0 ? 12 : h % 12;
+  return `${h < 12 ? "오전" : "오후"} ${hh}시${mm ? ` ${mm}분` : ""}`;
+};
+const applyCopy = (r, opt = {}) => {
+  const quick = opt.quick === true;
   bizSeedRef.current = String(r.청구사업자 || "").trim(); bizManualRef.current = null; // ⭐ 2026-11-03 청구 사업자 자동 맞춤에 복사한 오더의 사업자를 넘긴다
   const pickupPlace = findPlaceByName(r.상차지명);
   const dropPlace   = findPlaceByName(r.하차지명);
@@ -15543,14 +15611,14 @@ const applyCopy = (r) => {
     // ✅ 상차지
     상차지명: r.상차지명 || "",
     상차지주소: pickupPlace?.주소 || r.상차지주소 || "",
-    상차지담당자: pickupPlace?.담당자 || r.상차지담당자 || "",
-    상차지담당자번호: pickupPlace?.담당자번호 || r.상차지담당자번호 || "",
+    상차지담당자: pickupPlace?.담당자 || (quick ? "" : r.상차지담당자) || "",
+    상차지담당자번호: pickupPlace?.담당자번호 || (quick ? "" : r.상차지담당자번호) || "",
 
     // ✅ 하차지
     하차지명: r.하차지명 || "",
     하차지주소: dropPlace?.주소 || r.하차지주소 || "",
-    하차지담당자: dropPlace?.담당자 || r.하차지담당자 || "",
-    하차지담당자번호: dropPlace?.담당자번호 || r.하차지담당자번호 || "",
+    하차지담당자: dropPlace?.담당자 || (quick ? "" : r.하차지담당자) || "",
+    하차지담당자번호: dropPlace?.담당자번호 || (quick ? "" : r.하차지담당자번호) || "",
 
 // ✅ 경유지 복사 (두 필드 모두 체크 - length로 빈배열 vs 빈배열 처리)
 경유상차목록: (() => { const pa=(v)=>{if(Array.isArray(v))return v;try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch{return[];}};const a=pa(r.경유상차목록);const b=pa(r.경유지_상차);return a.length?a:b; })(),
@@ -15567,13 +15635,13 @@ const applyCopy = (r) => {
     하차방법: r.하차방법 || "",
     상차일: todayStr,
     하차일: todayStr,
-    상차시간: r.상차시간 || "",
-    상차시간기준: r.상차시간기준 ?? null,
-    하차시간: r.하차시간 || "",
-    하차시간기준: r.하차시간기준 ?? null,
+    상차시간: quick ? "" : copyTimeOf(r.상차시간),
+    상차시간기준: quick || !copyTimeOf(r.상차시간) ? null : r.상차시간기준 ?? null,
+    하차시간: quick ? "" : copyTimeOf(r.하차시간),
+    하차시간기준: quick || !copyTimeOf(r.하차시간) ? null : r.하차시간기준 ?? null,
     지급방식: r.지급방식 || "",
     배차방식: "",
-    메모: r.메모 || "",
+    메모: quick ? "" : r.메모 || "",
     // 전달사항은 원본에서 "고정"을 눌러둔 경우에만 복사본으로 함께 넘어와야 한다 —
     // 고정하지 않고 저장한 오더의 전달사항은 그 오더에만 해당하는 일회성 내용이라
     // 오더복사/동일 노선 재입력 시 그대로 따라와서는 안 된다.
@@ -15809,6 +15877,14 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
   return { phone, plate, name };
 };
 const normD = (s="") => String(s).replace(/[-.\s]/g,"").toLowerCase();
+// 🔎 2026-11-27 스마트검색 — 차량번호 · 전화번호 뒤 4자리(예: 9101)나 전화번호 전체로도 기사를 찾는다(실무에선 "9101 차"처럼 뒷자리로 부른다)
+const smartDigitsMatch = (list, text, phone) => {
+  if (phone) return (list || []).filter(d => normD(d.전화번호) === normD(phone));
+  const q = normD(text);
+  if (!/^\d{4}$/.test(q)) return [];
+  const dg = (v) => String(v || "").replace(/\D/g, "");
+  return (list || []).filter(d => dg(d.차량번호).endsWith(q) || dg(d.전화번호).endsWith(q));
+};
 
 const handleSmartDriverInput = (text) => {
   setSmartDriverQuery(text);
@@ -15833,8 +15909,9 @@ const results = plate
       })
   : (name && name.length >= 2)
   ? (drivers||[]).filter(d => d.이름 && d.이름.includes(name))
-  : [];
+  : smartDigitsMatch(drivers, text, phone);
 setSmartDriverMatched(results.slice(0, 8));
+if (!plate && results.length) setSmartDriverActiveIdx(0); // 첫 번째 기사를 강조 — Enter 로 바로 고른다
 };
 
 // 스마트 검색 결과 선택
@@ -15888,6 +15965,9 @@ const handleSmartDriverKeyDown = (e) => {
     e.preventDefault();
     if (smartDriverMatched.length > 0 && smartDriverActiveIdx >= 0 && smartDriverActiveIdx < smartDriverMatched.length) {
       selectSmartDriver(smartDriverMatched[smartDriverActiveIdx]);
+    } else if (smartDriverMatched.length > 0 && !parseDriverText(smartDriverQuery).plate) {
+      // 🛠 2026-11-27 이름 · 뒷자리로 찾은 목록에서 Enter = 첫 번째 기사 선택(예전엔 검색어만 기사명에 들어가고 차량번호 · 전화는 빈칸)
+      selectSmartDriver(smartDriverMatched[0]);
     } else {
       applySmartDriverInput(smartDriverQuery);
     }
@@ -16021,7 +16101,7 @@ React.useEffect(() => {
       <>
         {/* ⭐ 2026-11-13 한 줄 빠른 등록 — 지난 노선을 찾아 오더복사와 같은 방식으로 채운다 */}
         {!isViewer && <QuickOrderLine rows={dispatchData} userCompany={userCompany} canMoney={canMoney} onApply={(row, o) => {
-          if (row) applyCopy(row);
+          if (row) applyCopy(row, { quick: true });
           // 🚚 2026-11-15 화물내용 · 상차→하차 이름도 한 줄에서(지난 노선이 없어도 적은 값은 채운다)
           setForm((p) => ({ ...p, ...(o.date ? { 상차일: o.date, 하차일: o.date } : {}), ...(o.ton ? { 차량톤수: o.ton, 톤수값: o.ton.replace("톤", ""), 톤수타입: "톤" } : {}), ...(o.kind ? { 차량종류: o.kind } : {}), ...(o.cargo ? { 화물내용: o.cargo } : {}), ...(!row && o.from ? { 상차지명: o.from } : {}), ...(!row && o.to ? { 하차지명: o.to } : {}) }));
           if (o.kind) setVehicleQuery(o.kind);
@@ -20269,8 +20349,9 @@ className={`
                 _id: driverModal.carNo,
                 차량번호: driverModal.carNo,
                 이름: driverModal.name,
-                전화번호: rawPhone,
+                전화번호: formatPhone(rawPhone), // 🛠 2026-11-27 다른 기사와 같은 010-0000-0000 형식으로 저장(예전엔 숫자만 저장돼 01000009101 로 보였다)
               });
+              sflowToast(`기사를 등록했어요 · ${driverModal.name}`, "success");
 
               // ⭐ 다중등록 모달에서 열린 경우엔 form이 아니라 해당 슬롯에 반영해야
               // 해서, 호출자가 onConfirm 콜백을 넘겨줬으면 그걸 대신 사용한다 —
@@ -28790,10 +28871,10 @@ const head = isDark
     row.화물내용=mergeViaCargoText(r.화물내용,[r.경유상차목록,r.경유하차목록])||"";
     row.차량종류=r.차량종류||"";
     row.차량톤수=mergeViaTonnage(r.차량톤수,[r.경유상차목록,r.경유하차목록])||"";
-    Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:r.전화번호||"",배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:orderProfit(r),...(fareOn?{운임구분:r.운임구분||""}:{}),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
+    Object.assign(row,{차량번호:r.차량번호||"",기사명:r.이름||"",전화번호:formatPhone(r.전화번호||""),배차상태:r.배차상태||"",청구운임:toInt(r.청구운임),기사운임:toInt(r.기사운임),수수료:orderProfit(r),...(fareOn?{운임구분:r.운임구분||""}:{}),지급방식:r.지급방식||"",배차방식:r.배차방식||"",메모:r.메모||""});
     return row;
   });
-  const ws=XLSX.utils.json_to_sheet(rowsExcel);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"실시간배차현황");XLSX.writeFile(wb,"실시간배차현황.xlsx");
+  const ws=XLSX.utils.json_to_sheet(rowsExcel);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"실시간배차현황");saveWorkbook(XLSX,wb,`실시간배차현황_${kstFileDate()}.xlsx`); /* 🛠 2026-11-27 파일 이름이 'download'로 저장되던 문제 · 날짜를 이름에 · 전화번호 010-0000-0000 */
 }} className="px-2 py-1 rounded-lg bg-[#1B2B4B] text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.엑셀다운" defaultText="엑셀다운" /></button>
     </div>
 </div>
@@ -35632,7 +35713,7 @@ if (first) {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "배차현황");
-    XLSX.writeFile(wb, "배차현황.xlsx");
+    saveWorkbook(XLSX, wb, `배차현황_${kstFileDate()}.xlsx`); // 🛠 2026-11-27 파일 이름 · 확장자가 빠지지 않게(src/xlsxSave.js)
   };
   // =====================
   // 🔑 거래처명 정규화 (정렬용)
@@ -51757,7 +51838,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const [payMethodFilter, setPayMethodFilter] = useState("전체");
   const [dispatchMethodFilter, setDispatchMethodFilter] = useState("전체");
   const [loadStart, setLoadStart] = useState(() => `${thisMonthStr()}-01`);
-  const [loadEnd, setLoadEnd] = useState(todayStr9);
+  // 🛠 2026-11-27 기본 기간 = 이번 달 1일 ~ 말일(예전엔 오늘까지라 내일 · 이번 달 남은 날 상차 오더가 빠져 정산 홈 '기사 지급'과 숫자가 달랐다)
+  const [loadEnd, setLoadEnd] = useState(() => { const d = new Date(); return `${thisMonthStr()}-${String(new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()).padStart(2, "0")}`; });
   useLoadOrderRange(loadStart || null, loadEnd); // ★ 고른 기간만 불러오기
   const [carNoQ, setCarNoQ] = useState("");
   const [nameQ, setNameQ] = useState("");
@@ -51765,7 +51847,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const [selectedPayDate, setSelectedPayDate] = useState(todayStr9());
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [editRow, setEditRow] = useState(null); // { id, data }
-  const [searched, setSearched] = useState(false); // 조회 버튼 눌러야 결과 표시
+  // 조회 버튼 눌러야 결과 표시 — 🛠 2026-11-27 정산 홈 [기사 지급]으로 들어오면 바로 조회된 상태(src/SettleHome.jsx 가 kpPayOpenNow 를 남긴다)
+  const [searched, setSearched] = useState(() => { try { const t = Number(sessionStorage.getItem("kpPayOpenNow") || 0); sessionStorage.removeItem("kpPayOpenNow"); return Date.now() - t < 10000; } catch { return false; } });
   const [vatRate] = useState(0.1); // 부가세 10%
   const [insuranceRate, setInsuranceRate] = useState(1.27); // 산재보험료율 (%)
   const [payExcelOpen, setPayExcelOpen] = useState(false);
@@ -57296,6 +57379,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
   const [activeTab, setActiveTab] = React.useState(view || "이력서");
   React.useEffect(() => { if (view) { setActiveTab(view); setDraft(null); setEditMode(false); } }, [view]);
   const [teamFilter, setTeamFilter] = React.useState("전체");
+  const [showLeftHr, setShowLeftHr] = React.useState(false); // 🛠 2026-11-27 퇴사자는 맨 아래 '퇴사자' 묶음 — 눌러야 보인다
   const [search, setSearch] = React.useState("");
   // 🚛 2026-11-15 인사발령 — 소속 기사(지입 · 직영 · 임대)도 발령할 수 있게(지입관리 › [인사발령 작성]에서 오면 그 기사를 골라 둔다)
   const [hrWho, setHrWho] = React.useState(() => { try { return sessionStorage.getItem("kpHrDriverFocus") ? "driver" : "staff"; } catch { return "staff"; } });
@@ -57416,8 +57500,9 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
 
   const grouped = React.useMemo(() => {
     const g = {};
-    filteredRows.forEach(r => {
-      const key = r.team || "미배정";
+    // 🛠 2026-11-27 퇴사자는 재직자와 섞지 않고 맨 아래 '퇴사자' 묶음으로(예전엔 같은 부서 목록에 퇴사 표시 없이 섞였다)
+    [...filteredRows.filter((r) => r.employmentStatus !== "퇴사"), ...filteredRows.filter((r) => r.employmentStatus === "퇴사")].forEach(r => {
+      const key = r.employmentStatus === "퇴사" ? "퇴사자" : r.team || "미배정";
       if (!g[key]) g[key] = [];
       g[key].push(r);
     });
@@ -57425,7 +57510,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
   }, [filteredRows]);
 
   React.useEffect(() => {
-    if (!selectedUid && rows.length) setSelectedUid(rows[0].uid);
+    if (!selectedUid && rows.length) setSelectedUid((rows.find((r) => r.employmentStatus !== "퇴사") || rows[0]).uid); // 처음엔 재직자부터
   }, [rows, selectedUid]);
   // 직원 등록 직후 → 그 사람 이력서로
   React.useEffect(() => { if (focusUid && rows.some((r) => r.uid === focusUid)) setSelectedUid(focusUid); }, [focusUid, rows.length]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -57626,11 +57711,17 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
           {Object.keys(grouped).length === 0 && <div className="py-16 text-center text-[13px] text-[#9AA9C3]">인원이 없습니다</div>}
           {Object.entries(grouped).map(([team, members2]) => (
             <div key={team} className="mb-2">
+              {team === "퇴사자" ? (
+                <button type="button" onClick={() => setShowLeftHr((v) => !v)} className="w-full px-2 pt-2 pb-1 flex items-center justify-between">
+                  <span className="text-[11px] font-extrabold tracking-[0.12em] text-[#7A879C]">퇴사자 {showLeftHr ? "▴" : "▾ 눌러서 보기"}</span>
+                  <span className="text-[11px] font-bold text-[#9AA9C3] tabular-nums">{members2.length}명</span>
+                </button>
+              ) : (
               <div className="px-2 pt-2 pb-1 flex items-center justify-between">
                 <span className="text-[11px] font-extrabold tracking-[0.12em] text-[#7A879C]">{team}</span>
                 <span className="text-[11px] font-bold text-[#9AA9C3] tabular-nums">{members2.length}명</span>
-              </div>
-              {members2.map(r => {
+              </div>)}
+              {(team !== "퇴사자" || showLeftHr || members2.some((r) => r.uid === selectedUid)) && members2.map(r => {
                 const photo = resumes[r.uid]?.photoUrl;
                 const on = selectedUid === r.uid;
                 return (
@@ -57641,7 +57732,7 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                       {photo ? <img src={photo} className="w-full h-full object-cover" /> : (r.name || "?").slice(0, 1)}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className={`text-[14px] font-extrabold truncate ${on ? "text-white" : "text-[#0F1A30]"}`}>{r.name || r.email}{resumes[r.uid]?.hrSeen === false && canManage && <span className="ml-1.5 align-middle text-[10px] font-black px-1.5 py-0.5 rounded bg-[#D92D20] text-white">NEW</span>}</div>
+                      <div className={`text-[14px] font-extrabold truncate ${on ? "text-white" : "text-[#0F1A30]"}`}>{r.name || r.email}{r.employmentStatus === "퇴사" && <span className={`ml-1.5 align-middle text-[10px] font-black px-1.5 py-0.5 rounded ${on ? "bg-white/20 text-white" : "bg-[#F2F4F7] text-[#5B6B85]"}`}>퇴사</span>}{resumes[r.uid]?.hrSeen === false && canManage && <span className="ml-1.5 align-middle text-[10px] font-black px-1.5 py-0.5 rounded bg-[#D92D20] text-white">NEW</span>}</div>
                       <div className={`text-[11.5px] truncate ${on ? "text-white/60" : "text-[#7A879C]"}`}>{r.position || "직책 미설정"}</div>
                     </div>
                     {r.pendingApprovals > 0 && <span className={`shrink-0 min-w-[20px] h-5 px-1.5 rounded-full text-[10.5px] font-extrabold flex items-center justify-center ${on ? "bg-white text-[#0F1A30]" : "bg-[#0F1A30] text-white"}`} title="결재 대기">{r.pendingApprovals}</span>}
@@ -57877,6 +57968,12 @@ function HRManagementPage({ userCompany, role, userId, focusUid = null, selfOnly
                     )}
                   </div>
                   )}
+                </div>
+              ) : activeTab === "인사발령" && canManage && selected.employmentStatus === "퇴사" ? (
+                // 🛠 2026-11-27 퇴사자에게는 발령 공문을 내지 않는다(예전엔 [발령 공문 발송]이 그대로 열려 공지 · 전 직원 메일이 나갈 수 있었다)
+                <div className="rounded-2xl border border-[#E3E8F0] bg-[#F8FAFD] px-5 py-10 text-center">
+                  <div className="text-[15px] font-black text-[#0F1A30]">퇴사한 직원이에요</div>
+                  <div className="text-[13px] text-[#5B6B85] mt-1.5 leading-relaxed">퇴사자에게는 인사발령 공문을 보낼 수 없어요.<br />다시 입사했다면 직원관리에서 재직으로 바꾼 뒤 발령하면 돼요.</div>
                 </div>
               ) : activeTab === "인사발령" && canManage ? (
                 <PersonnelOrder company={company} target={selected} isSelf={selected.uid === userId}

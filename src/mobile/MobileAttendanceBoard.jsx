@@ -21,6 +21,7 @@ function SourceLine({ rec }) {
   );
 }
 import { RadiusEditor, officeRadii, DEFAULT_IN_RADIUS, DEFAULT_OUT_RADIUS } from "../attendanceQuick";
+import { confirmEarlyLeave } from "../earlyLeave"; // 🛠 2026-11-27 조퇴 확인
 import { checkInsideOffice, workWindow } from "../autoAttendance";
 import { useCustomRoles } from "../customRoles";
 import {
@@ -308,6 +309,7 @@ export default function MobileAttendanceBoard({ userCompany, role, currentUser, 
   const handleCheckOut = async () => {
     if (!uid || !todayRec) return;
     if (!(await insideOrWarn("퇴근"))) return;
+    if ((await confirmEarlyLeave(myUserDoc, todayRec)) === false) return; // 🛠 2026-11-27 정해진 퇴근 시간 전이면 조퇴 확인
     setCheckingOut(true);
     try {
       await setDoc(doc(db, "attendance", `${todayDateStr}_${uid}`), {

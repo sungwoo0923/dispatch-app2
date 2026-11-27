@@ -327,7 +327,10 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
   const autoDaily = apSet.autoApproveDaily === true;
   const fundsLive = useFundsSummary(company, isCeo && !demo);
   const F = React.useMemo(() => (demo ? { ready: true, has: true, ...computeFunds(demo.funds, demo.ledger) } : fundsLive), [demo, fundsLive]);
-  const apLive = useApprovalsOf(co);
+  // 🛠 2026-11-27 결재 문서를 받기 전(null)에는 '0건' 대신 불러오는 중으로 보인다 — 예전엔 첫 화면에 '전사 진행 중 0건'이 확정값처럼 떴다
+  const apRawLive = useCompanyQuery("approvals", co, "company");
+  const apLive = apRawLive || [];
+  const apLoading = !demo && !!co && apRawLive == null;
   const approvals = demo ? demo.approvals : apLive;
   const staffLive = useStaff(co);
   const staff = React.useMemo(() => (demo ? demo.people.filter((p) => p.employmentStatus !== "퇴사").map((p) => ({ ...p, id: p.uid })) : staffLive.staff), [demo, staffLive.staff]);
@@ -502,7 +505,9 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
             : <BTile en="TREASURY" label="보유 자금" muted value={F.ready ? "자금관리 입력 전" : "불러오는 중…"} foot="경리 담당자가 예금 잔액을 입력하면 표시됩니다" onClick={() => onGo?.("자금현황")} />)}
           {ar ? <BTile en="RECEIVABLES" label="미수금" money={ar.total} foot={ar.over30 > 0 ? <span style={{ color: EX.warn }}>30일 초과 {fmtMoney(ar.over30)}</span> : `${ar.clients}곳 · 부가세 포함`} onClick={() => onGo?.("경영분석")} title="올해 배차완료 + 고정거래처 청구액(부가세 포함) − 수금액" />
             : <BTile en="RECEIVABLES" label="미수금" muted value="집계 중…" foot="올해 청구 · 수금 내역을 불러오고 있습니다" />}
-          <BTile en="YEAR TO DATE" label="올해 누적 매출" money={ySale} foot={<>매출총이익 <b style={{ ...EX_NUM, color: pColor(yProfit) }}>{fmtMoney(yProfit)}</b> · {fmtPct(yMargin)}</>} />
+          {/* 🛠 2026-11-27 지난 달들 집계(ready)가 끝나기 전엔 '집계 중…' — 예전엔 최근 오더만 더한 값(710만)이 확정값처럼 먼저 떴다 */}
+          {ready ? <BTile en="YEAR TO DATE" label="올해 누적 매출" money={ySale} foot={<>매출총이익 <b style={{ ...EX_NUM, color: pColor(yProfit) }}>{fmtMoney(yProfit)}</b> · {fmtPct(yMargin)}</>} />
+            : <BTile en="YEAR TO DATE" label="올해 누적 매출" muted value="집계 중…" foot="지난 달 오더까지 모아 계산하고 있습니다" />}
         </ExecKpis>
         {/* ⭐ 2026-11-07 규칙 점검 — 매출관리(배차완료만)와 숫자가 다른 이유를 화면에 적어 둔다 */}
         <Basis className="mt-2.5 px-1"><span data-kp="exec-basis">매출 기준: 배차완료 오더 + 고정거래처(매출관리와 같음 · 배차중 · 미배차 · 취소 제외) · 달 · 연 매출은 청구월(마감월), 일 매출은 상차일 · 오더 건수는 취소를 뺀 전체 오더</span>{isCeo && F.has ? " · 보유 자금은 경리 입력 예금 · 현금 잔액 기준" : ""}</Basis>
@@ -682,16 +687,16 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
           <button type="button" onClick={() => setAutoApproveDaily(company, !autoDaily, personName(me) || "")} aria-pressed={autoDaily}
             className="w-full mb-3 rounded-2xl px-3.5 py-2.5 flex items-center gap-3 text-left transition"
             style={{ background: autoDaily ? "rgba(215,188,130,.10)" : "rgba(255,255,255,.035)", border: `1px solid ${autoDaily ? EX.lineHi : EX.line}` }}>
-            <span className="min-w-0 flex-1"><span className="block text-[14px] font-black" style={{ color: EX.text }}>일일 업무일지 자동 승인</span><span className="block text-[12.5px] font-medium" style={{ color: EX.mute }}>{autoDaily ? "켜짐: 상신 즉시 자동 승인됩니다" : "꺼짐: 임원이 직접 검토 후 승인합니다"}</span></span>
+            <span className="min-w-0 flex-1"><span className="block text-[14px] font-black" style={{ color: EX.text }}>일일 업무일지 자동 승인 <span className="text-[11.5px] font-bold" style={{ color: EX.mute }}>(회사 설정)</span></span><span className="block text-[12.5px] font-medium" style={{ color: EX.mute }}>{autoDaily ? "켜짐: 상신 즉시 자동 승인됩니다" : "꺼짐: 임원이 직접 검토 후 승인합니다"}{apSet.updatedBy ? ` · 마지막 변경 ${apSet.updatedBy}` : ""}</span></span>{/* 🛠 2026-11-27 결재함 [내 결재 자동 승인](개인)과 구분 · 누가 바꿨는지 */}
             <span className="relative w-[52px] h-[30px] rounded-full shrink-0 transition" style={{ background: autoDaily ? GOLD_GRAD : "rgba(255,255,255,.15)" }}>
               <span className={`absolute top-[3px] w-6 h-6 rounded-full bg-white shadow transition-all ${autoDaily ? "left-[25px]" : "left-[3px]"}`} />
             </span>
           </button>
           <div className="flex items-end gap-3 mb-3">
-            <Num value={mine.length} unit="건" size={40} color={mine.length ? EX.goldHi : EX.faint} />
-            <span className="pb-1 text-[12.5px] font-semibold" style={{ color: EX.mute }}>전사 진행 중 {pendingAll.length}건{late.length ? <> · <span style={{ color: EX.danger }}>48시간 초과 {late.length}건</span></> : ""}</span>
+            {apLoading ? <span className="text-[16px] font-black" style={{ color: EX.mute }}>불러오는 중…</span> : <Num value={mine.length} unit="건" size={40} color={mine.length ? EX.goldHi : EX.faint} />}
+            {!apLoading && <span className="pb-1 text-[12.5px] font-semibold" style={{ color: EX.mute }}>전사 진행 중 {pendingAll.length}건{late.length ? <> · <span style={{ color: EX.danger }}>48시간 초과 {late.length}건</span></> : ""}</span>}
           </div>
-          {!mine.length ? <Empty text="현재 결재 대기 문서가 없습니다" sub="새 문서가 상신되면 이곳에 즉시 표시됩니다." /> : (
+          {apLoading ? null : !mine.length ? <Empty text="현재 결재 대기 문서가 없습니다" sub="새 문서가 상신되면 이곳에 즉시 표시됩니다." /> : (
             <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
               {mine.slice(0, 8).map((a) => {
                 const h = Math.max(0, Math.floor((Date.now() - tsMs(a.createdAt)) / 3600e3));
@@ -831,13 +836,15 @@ export function TeamSchedule({ company }) {
 function TeamScheduleCompany({ company, modeSwitch }) {
   // ⭐ 2026-11-02 점검 — 회사 전체 approvals 조회 대신 연차(leave)만 조회(eventsOf도 leave만 사용)
   const approvals = useLeaveApprovalsOf(company);
-  const { staff } = useStaff(company);
+  const { staff, all } = useStaff(company);
   const today = kstToday();
   const [ym, setYm] = React.useState(today.slice(0, 7));
   const [team, setTeam] = React.useState("전체");
   const [pick, setPick] = React.useState(today);
   const teamOf = Object.fromEntries(staff.map((u) => [u.id, u.team || "미배정"]));
-  const evs = approvals.flatMap(eventsOf).map((e) => ({ ...e, team: teamOf[e.uid] || e.team || "미배정" })).filter((e) => team === "전체" || e.team === team);
+  // 🛠 2026-11-27 퇴사자의 결재 중 휴가 · 퇴사일 뒤 휴가는 일정 · 부재 집계에서 뺀다(인사 HOME 이번 주 부재와 같은 기준)
+  const leftOn = Object.fromEntries((all || []).filter((u) => u.employmentStatus === "퇴사").map((u) => [u.id, String(u.resignedAt || u.resignDate || u.퇴사일 || "").slice(0, 10)]));
+  const evs = approvals.flatMap(eventsOf).filter((e) => !(e.uid in leftOn) || (e.status === "approved" && !!leftOn[e.uid] && e.date <= leftOn[e.uid])).map((e) => ({ ...e, team: teamOf[e.uid] || e.team || "미배정" })).filter((e) => team === "전체" || e.team === team);
   const teams = ["전체", ...Array.from(new Set(staff.map((u) => u.team || "미배정")))];
   const first = new Date(`${ym}-01T00:00:00Z`);
   const startDow = first.getUTCDay();

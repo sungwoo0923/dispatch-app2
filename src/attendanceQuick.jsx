@@ -98,7 +98,7 @@ function AttendanceQuickButtonInner({ company, uid, name, role, email, variant =
   React.useEffect(() => { if (!opt || !recLive) return; if (Object.keys(opt).every((k) => (opt[k] === null ? !recLive[k] : !!recLive[k]))) setOpt(null); }, [recLive, opt]);
   const rec = opt ? { ...(recLive || {}), ...Object.fromEntries(Object.entries(opt).map(([k, v]) => [k, v === null ? undefined : v])) } : recLive;
   const lockRef = React.useRef(false);
-  const { phase } = useCheckoutPhase(uid, rec);
+  const { phase, left: leftMin, endHm } = useCheckoutPhase(uid, rec);
   const blink = phase === "now"; // ⭐ 2026-11-03 퇴근 1분 전부터 퇴근 버튼 깜빡임(누를 때까지)
   const [busy, setBusy] = React.useState(false);
   // ⭐ 2026-11-02 휴대폰은 출근지 반경 안에서만 출근·퇴근(PC는 시간 기준이라 반경 검사 없음)
@@ -139,7 +139,10 @@ function AttendanceQuickButtonInner({ company, uid, name, role, email, variant =
   });
   const checkOut = run(async () => {
     if (!(await inside("퇴근"))) return;
-    if (!(await kpConfirm(`지금 퇴근 처리할까요?\n(잘못 눌렀으면 '되돌리기'로 다시 출근 상태로 돌릴 수 있습니다)`))) return;
+    // 🛠 2026-11-27 정해진 퇴근 시간보다 이르면 조퇴라고 먼저 알려 준다(예전엔 3시간 일찍 눌러도 아무 안내가 없었다)
+    const early = Number.isFinite(leftMin) && leftMin > 10;
+    const earlyMsg = early ? `정해진 퇴근 시간(${endHm})보다 ${leftMin >= 60 ? `${Math.floor(leftMin / 60)}시간 ` : ""}${leftMin % 60 ? `${leftMin % 60}분 ` : ""}일러요. 지금 퇴근하면 조퇴예요.\n조퇴는 전자결재 › 근태·휴가 신청 › [조퇴·지각]으로 사유서를 올려 주세요.\n\n` : "";
+    if (!(await kpConfirm(`${earlyMsg}지금 퇴근 처리할까요?\n(잘못 눌렀으면 '되돌리기'로 다시 출근 상태로 돌릴 수 있습니다)`, early ? { title: "조퇴 확인", okText: "조퇴하고 퇴근" } : {}))) return;
     const now = new Date().toISOString();
     setOpt({ checkOutTime: now }); // 화면 먼저
     await setDoc(ref, { checkOutTime: now, checkOutSource: "manual" }, { merge: true });

@@ -9,7 +9,7 @@ import { useLeaveGuard, draftStore } from "./leaveGuard";
 import { useUserProfiles } from "./userProfilesLive"; // 🔒 2026-11-07 인사 프로필은 우리 회사 직원 한 건씩
 import React from "react";
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
-import { collection, doc, onSnapshot, query, setDoc, where, arrayUnion, getDocs, getDoc } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, setDoc, updateDoc, where, arrayUnion, getDocs, getDoc } from "firebase/firestore";
 import { db, auth, DEFAULT_COMPANY } from "./firebase";
 import { leaveEntitlement, leaveUseOf } from "./approvalForms";
 import { leaveStatusOf } from "./leaveUtils"; // ⭐ 2026-11-07 연차 현황 공용 계산
@@ -22,6 +22,7 @@ import { sendInternalMail, compressImage } from "./InternalMail";
 import { html2canvas } from "./lazyLoad"; // ⭐ 2026-11-02 속도 — 캡처 라이브러리는 처음 캡처할 때 받는다
 import { printA4 } from "./a4Export";
 import { kpConfirm } from "./kpDialog";
+import { hireDateOf } from "./hireDate";
 
 const kstDay = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const tsMs = (v) => (v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : 0);
@@ -52,7 +53,7 @@ function useLeaveApprovals(company) {
   }, [company]);
   return rows;
 }
-const hireOf = (u, pf) => pf[u.id]?.hireDate || u.hireDate || "";
+const hireOf = (u, pf) => hireDateOf(u, pf[u.id]); // 🗓 2026-11-27 입사일 읽는 순서 통일(src/hireDate.js)
 
 function Loading() {
   return <div className="py-20 flex flex-col items-center gap-3 text-[#7A879C]"><span className="w-6 h-6 border-[3px] border-[#DCE3EE] border-t-[#1B2B4B] rounded-full animate-spin" /><span className="text-[12.5px] font-bold">불러오는 중…</span></div>;
@@ -113,7 +114,8 @@ export function LeaveLedger({ company, isViewer = false, canManage = false }) {
   const withEnt = rows.filter((r) => r.ent && r.total);
   const avgUse = withEnt.length ? Math.round((withEnt.reduce((s, r) => s + r.used / r.total, 0) / withEnt.length) * 100) : 0;
   const cur = rows.find((r) => r.u.id === sel) || shown[0] || null;
-  const saveHire = async () => { if (!editHire?.v) return; await setDoc(doc(db, "userProfiles", editHire.u.id), { hireDate: editHire.v }, { merge: true }); setEditHire(null); };
+  // 🗓 2026-11-27 입사일은 인사 프로필 · 사용자 문서 둘 다(급여 · 직원관리 목록도 같은 날짜를 보게)
+  const saveHire = async () => { if (!editHire?.v) return; await setDoc(doc(db, "userProfiles", editHire.u.id), { hireDate: editHire.v }, { merge: true }); await updateDoc(doc(db, "users", editHire.u.id), { hireDate: editHire.v }).catch(() => {}); setEditHire(null); };
   const me = auth.currentUser;
   // 🔐 연차 조정 — 사유 필수 · 지우지 못함(되돌리려면 반대 조정) · 본인에게 사내메일 자동 통보 · 본인 연차 화면에도 표시
   const saveAdj = async () => {
@@ -468,6 +470,10 @@ export function CertIssuer({ company, isViewer = false }) {
     if (!u) return alert("직원을 골라 주세요.");
     if (!purpose.trim()) return alert("용도를 적어 주세요. (예: 금융기관 제출용)");
     if (kind === "employ" && u.employmentStatus === "퇴사") return alert("퇴사자는 경력증명서로 발급해 주세요.");
+    // 🛠 2026-11-27 입사일 · 대표자명이 비면 증명서에 빈칸이 생긴다 — 발급하지 않고 어디서 채우는지 알려 준다
+    if (!hireOf(u, profiles)) return alert("입사일이 등록되지 않아 증명서의 입사일(재직 기간)이 비어 있어요.\n인사관리부 › 인사관리 › 직원관리에서 입사일을 먼저 넣어 주세요.");
+    if (!co) return alert("회사 정보를 불러오는 중이에요. 잠시 뒤 다시 눌러 주세요.");
+    if (!String(co?.ceo || "").trim()) return alert("회사 정보에 대표자 이름이 없어 '대표이사' 칸이 비어 있어요.\n회사관리 › 회사 정보의 [수정 요청]에서 대표자를 먼저 넣어 주세요(승인되면 반영돼요).");
     // ⭐ 2026-11-02 점검 — 인쇄 창을 클릭 직후(await 전에) 미리 연다: 캡처·저장·메일 발송을 기다린 뒤 window.open하면
     //  브라우저가 팝업으로 막아 인쇄 창이 안 뜨던 문제. 열린 창은 printA4에 넘기고, 실패하면 닫는다
     const win = window.open("", "_blank");

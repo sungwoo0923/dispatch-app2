@@ -342,7 +342,7 @@ export default function App() {
     const run = async () => {
       // 로그인 화면이 회사코드 등을 확인하는 중(잠깐 로그인했다가 다시 로그아웃할 수 있음)이면 끝날 때까지 기다린다
       for (let i = 0; i < 60; i++) {
-        if (sessionStorage.getItem("transportValidating") !== "true" && sessionStorage.getItem("shipperValidating") !== "true" && !isDriverBusy()) break;
+        if (sessionStorage.getItem("transportValidating") !== "true" && sessionStorage.getItem("shipperValidating") !== "true" && sessionStorage.getItem("kpSignupBusy") !== "true" && !isDriverBusy()) break;
         await new Promise((r) => setTimeout(r, 500));
       }
       if (auth.currentUser?.uid !== user.uid) { if (sessionGateRef.current.uid === user.uid) sessionGateRef.current.uid = null; return; }
@@ -834,7 +834,8 @@ export default function App() {
         setTenant(""); setTenantRole(null);
         //  실제 로그아웃(로그인 확인 중 잠깐 나갔다 들어오는 경우 제외)이면 기기에 남은 회사 데이터·저장본을 지우고 새로 고친다
         let validating = false;
-        try { validating = sessionStorage.getItem("transportValidating") === "true" || sessionStorage.getItem("shipperValidating") === "true"; } catch { /* 무시 */ }
+        // 🛠 2026-11-27 가입 신청 중(src/Signup.jsx) 잠깐 로그인 → 로그아웃도 '실제 로그아웃'이 아니다 — 정리 · 새로 고침을 하면 완료 안내가 사라졌다
+        try { validating = sessionStorage.getItem("transportValidating") === "true" || sessionStorage.getItem("shipperValidating") === "true" || sessionStorage.getItem("kpSignupBusy") === "true"; } catch { /* 무시 */ }
         const willPurge = wasSignedIn && !IS_MOBILE_PREVIEW && !isDriverBusy() && !validating && !isPreviewMode();
         if (willPurge) {
           setTimeout(() => { purgeOnSignOut(db).catch(() => {}); }, 400); // 로그아웃 기록(sessionLogs)을 먼저 보낸다
