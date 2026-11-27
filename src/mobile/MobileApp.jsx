@@ -77,7 +77,7 @@ import React, { useState, useMemo, useEffect, useRef, startTransition, useSyncEx
 import { withCo, getTenant, isPreviewMode } from "../fsTenant";
 import { useOrderFormFields } from "../orderFormFields"; // 🧩 2026-11-26 오더등록 입력칸 고르기
 import OrderFieldsModal from "../OrderFieldsModal";
-import { readSkin, saveSkin, nextSkin, skinName } from "../orderSkins"; // 🎨 2026-11-27 오더등록 A 루트 보드(기본) · 최고관리자만 기본 입력창과 전환
+import { readSkin, saveSkin, nextSkin, skinName, SKIN_SWITCH } from "../orderSkins"; // 🎨 2026-11-27 오더등록 A 루트 보드(기본) · 최고관리자만 기본 입력창과 전환
 import { MobileRouteLine, MOBILE_ROUTE_CSS } from "../orderLayouts";
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "../orderHistoryCache"; // ⚡ 2026-11-23 13개월 오더 폰 보관
 // ⚡ 2026-11-23 운임 참고용 13개월 오더는 화면을 열 때 한 번만 받는다 — 예전엔 실시간 구독이라 누가 오더를 고칠 때마다 받고,
@@ -14335,7 +14335,7 @@ const [matchedClients, setMatchedClients] = useState([]);
   const ofShow = ofs.show;
   const [ofOpen, setOfOpen] = useState(false);
   // 🎨 2026-11-27 모든 계정 = A 루트 보드 · 최고관리자만 [디자인 변경]으로 예전 기본 입력창과 오간다(이 기기에 기억)
-  const mSkinAllowed = role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpSkinTest") === "1"; } catch { return false; } })()); // 🧪 개발 화면에서만 점검용
+  const mSkinAllowed = SKIN_SWITCH && (role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpSkinTest") === "1"; } catch { return false; } })())); // 🧪 개발 화면에서만 점검용
   const [mSkinPick, setMSkinPick] = useState(() => readSkin(true));
   const mSkin = mSkinAllowed ? mSkinPick : readSkin(false);
   const mRoute = mSkin === "route";
