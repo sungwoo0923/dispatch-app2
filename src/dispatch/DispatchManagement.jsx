@@ -641,6 +641,36 @@ function DmDot({ on, alert = false }) {
       const [useNewForm, setUseNewForm] = React.useState(false);
       const [bottomStatusKey, setBottomStatusKey] = React.useState(0);
       // 🧭 우선 최고관리자만 · 🧪 개발 화면(import.meta.env.DEV)에서만 localStorage kpAssistTest=1 이면 다른 계정으로도 점검(배포 빌드엔 안 들어감)
+      // ⌨️ 2026-11-27 사용자 요청 — 오더등록에서 Tab 은 입력칸 · 드롭다운만 순서대로(버튼은 건너뜀). Shift+Tab 은 거꾸로
+      React.useEffect(() => {
+        const SEL = 'input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=file]):not([type=button]):not([type=submit]), select, textarea, button[aria-haspopup], [data-tab-field]';
+        const onKey = (e) => {
+          if (e.key !== "Tab" || e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey) return;
+          const root = e.target?.closest?.("[data-kp-order-form]");
+          if (!root) return;
+          // 순서: 날짜 줄(상차일 · 시간 · 하차일 · 시간) → 입력칸(청구 사업자 … 전달사항). 빠른 등록 · 도구 버튼 줄은 빼고
+          const ok = (el) => !el.disabled && el.tabIndex !== -1 && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
+          const zone = (sel) => [...root.querySelectorAll(sel)].filter((el) => el.matches(SEL) && ok(el));
+          const list = [...zone(".kp-date-row *"), ...zone('[data-of]:not([data-of="head"]) *')];
+          if (!list.length) return;
+          const cur = e.target;
+          let i = list.indexOf(cur);
+          let next;
+          if (i >= 0) next = list[(i + (e.shiftKey ? -1 : 1) + list.length) % list.length];
+          else {
+            // 버튼 등 목록에 없는 곳에 있으면 — 화면 순서상 바로 다음(또는 앞) 입력칸으로
+            const after = list.filter((el) => cur.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+            const before = list.filter((el) => cur.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING);
+            next = e.shiftKey ? (before[before.length - 1] || list[list.length - 1]) : (after[0] || list[0]);
+          }
+          if (!next) return;
+          e.preventDefault();
+          next.focus();
+          if (typeof next.select === "function" && next.tagName === "INPUT" && /^(text|search|tel|number|)$/.test(next.type || "")) { try { next.select(); } catch { /* 무시 */ } }
+        };
+        document.addEventListener("keydown", onKey);
+        return () => document.removeEventListener("keydown", onKey);
+      }, []);
       const assistAllowed = role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpAssistTest") === "1"; } catch { return false; } })());
       // ⏱ 상/하차 시간 + 이전/이후 표시용
 function renderTimeWithCond(time, cond) {
@@ -9325,7 +9355,7 @@ className={`
   {/* 왼쪽: 폼 */}
   {/* ⭐ 2026-11-01 화면이 좁으면(노트북·125% 배율 1536px 등) 입력칸이 겹쳐 화물내용 칸을 못 누를 정도였다 — 1800px 미만은 폼을 넓게 */}
   {/* ⭐ 2026-11-02 수수료 라벨 줄(운임구분)이 좁아지지 않게 입력 칸 74→77%(넓은 화면 62→66%) · 옆 달력은 그만큼 살짝 작게 */}
-  <div className="basis-[77%] max-w-[77%] min-[1800px]:basis-[66%] min-[1800px]:max-w-[66%]" style={{ flexGrow: 0, flexShrink: 0, minWidth: 0, overflow: "hidden" }}>
+  <div data-kp-order-form="1" className="basis-[77%] max-w-[77%] min-[1800px]:basis-[66%] min-[1800px]:max-w-[66%]" style={{ flexGrow: 0, flexShrink: 0, minWidth: 0, overflow: "hidden" }}>
     {renderForm()}
   </div>
 
