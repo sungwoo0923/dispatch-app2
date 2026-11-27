@@ -161,3 +161,27 @@ export function relockPatch(row, me, now = Date.now()) {
   return { kind: "close", client: row.client, yyyymm: row.ym, status: "approved", unlocked: false, snapshot: { count: row.count, sale: row.sale }, approvedBy: w.email, approvedByName: w.name, approvedAt: now,
     log: logOf(row.doc, { at: now, by: w.name, act: "다시 잠금(최종마감)", note: "" }) };
 }
+
+// 🗓 2026-11-27 이월 오더 일괄 지정 — 배차현황 · 월 마감에서 여러 오더를 골라 마감월을 한 번에
+//  mode: "next"(각 오더 상차일의 다음 달 · 익월) | "ym"(고른 달) | "clear"(비우기 = 상차일 달로)
+export const nextYmOf = (ym) => { const [y, m] = String(ym).split("-").map(Number); const d = new Date(Date.UTC(y, m, 1)); return d.toISOString().slice(0, 7); };
+export function carryPatchOf(o, mode, ym = "") {
+  const pick = String(o?.상차일 || "").slice(0, 7);
+  const cur = String(o?.마감월 || "").slice(0, 7);
+  const want = mode === "clear" ? "" : mode === "ym" ? String(ym || "").slice(0, 7) : /^\d{4}-\d{2}$/.test(pick) ? nextYmOf(pick) : "";
+  if (mode !== "clear" && !/^\d{4}-\d{2}$/.test(want)) return null;
+  if (want === cur) return null; // 이미 그 달
+  return { 마감월: want };
+}
+// 고른 오더 → { todo: [{ o, patch }], same: 이미 그 달인 건수, locked: 최종마감이라 못 바꾸는 건수 }
+//  isLocked(o) — 지금 달 또는 바꿀 달이 최종마감(잠금)인지(화면이 arDesk 마감 기록으로 판단해 넘긴다)
+export function carryPlan(rows = [], mode, ym = "", isLocked = () => false) {
+  const out = { todo: [], same: 0, locked: 0 };
+  (rows || []).forEach((o) => {
+    const patch = carryPatchOf(o, mode, ym);
+    if (!patch) { out.same += 1; return; }
+    if (isLocked(o) || isLocked({ ...o, ...patch })) { out.locked += 1; return; }
+    out.todo.push({ o, patch });
+  });
+  return out;
+}

@@ -1,6 +1,6 @@
 // 2단계 마감 · 거래명세서 양식 테스트 — node scripts/closeFlow.test.mjs
 import assert from "node:assert/strict";
-import { closeBoard, closeChecks, canSubmit, canVerify, verifyPatch, canApprove, canReject, submitPatch, approvePatch, rejectPatch, unlockPatch, dayBoard, closeCounts, isMine, prevYmOf } from "../src/closeFlow.js";
+import { closeBoard, closeChecks, canSubmit, canVerify, verifyPatch, canApprove, canReject, submitPatch, approvePatch, rejectPatch, unlockPatch, dayBoard, closeCounts, isMine, prevYmOf, nextYmOf, carryPatchOf, carryPlan } from "../src/closeFlow.js";
 import { normalizeForm, pickForm, visibleCols, headerLabels, BASE_FORM, formDoc } from "../src/invoiceForm.js";
 
 const me = { email: "Kim@Co.kr", uid: "u1", name: "김배차" };
@@ -73,6 +73,14 @@ docs.set("가나상사|2026-10", { ...sp, ...ap, unlocked: true });
 B = closeBoard(orders.map((x) => (x._id === "1" ? { ...x, 청구운임: "130000" } : x)), "2026-10", { me, today, closeOf });
 assert.ok(row("가나상사").changed, "일시해제 중엔 금액이 바뀌어도 알림");
 docs.set("가나상사|2026-10", { ...sp, status: "submitted" });
+// 🗓 2026-11-27 이월 오더 일괄 마감월 지정
+assert.equal(nextYmOf("2026-12"), "2027-01");
+assert.deepEqual(carryPatchOf({ 상차일: "2026-10-31" }, "next"), { 마감월: "2026-11" }, "익월 = 상차일 다음 달");
+assert.equal(carryPatchOf({ 상차일: "2026-10-31", 마감월: "2026-11" }, "next"), null, "이미 그 달");
+assert.deepEqual(carryPatchOf({ 상차일: "2026-10-31", 마감월: "2026-11" }, "clear"), { 마감월: "" });
+assert.equal(carryPatchOf({ 상차일: "2026-10-31" }, "ym", "12월"), null, "잘못 적은 달은 안 바꿈");
+const cp = carryPlan([{ _id: "a", 상차일: "2026-10-31" }, { _id: "b", 상차일: "2026-10-30", 마감월: "2026-11" }, { _id: "c", 상차일: "2026-10-29" }], "ym", "2026-11", (x) => x._id === "c");
+assert.deepEqual([cp.todo.map((x) => x.o._id), cp.same, cp.locked], [["a"], 1, 1], "이미 그 달 · 최종마감은 빼고");
 // 일 마감 — 그날 내 오더만
 const D = dayBoard(orders, "2026-10-05", me, today);
 assert.deepEqual([D.count, D.sale, D.block, D.warn], [2, 150000, 0, 1], "같은 날 같은 구간은 검사 안 함 · 기사운임 빈칸은 알림");

@@ -63,6 +63,7 @@ const ReceiptCenter = React.lazy(() => import("./ReceiptCenter")); // 🧾 2026-
 import { applyOwner } from "./orderOwner"; // 👤 2026-11-09 복사본 배차담당자
 import { routeOwnerFill } from "./routeOwnerApply"; // ⭐ 2026-11-17 담당노선 주인 — 빈 배차담당자 채우기
 import { isLockedOrder } from "../functions/routeOwnerCore.mjs";
+import { askCarryMonth } from "./carryMonth"; // 🗓 2026-11-27 이월 오더 일괄 마감월 지정
 import { buildSimpleList } from "./copySimple"; // 📋 2026-11-13 기사복사 간단 목록(여러 오더 한 번에)
 import { getSimpleTpl } from "./copyTemplates";
 import OrderStaffFields from "./OrderStaffFields"; // 👤 2026-11-12 배차담당자 · 차량배정자 바꾸기
@@ -33200,6 +33201,9 @@ function DispatchStatus({
   fixedForm = null,
   fixedActions = null, // ⭐ 2026-11-06 고정노선현황 오른쪽 클릭 메뉴(오더 추가·시트 열기·지금 맞추기)
 }) {
+  // 🗓 2026-11-27 마감월 일괄 지정 — 최종마감(잠금)된 달 오더는 빼고 바꾼다(경리 · 통합관리자는 그대로)
+  const carryDesk = useArDesk((getTenant() || userCompany || DEFAULT_COMPANY || "").trim());
+  const carryBypass = role === "totalMaster" || ["hrAcct", "allMgr", "acct", "accounting"].includes(role);
   // 🚚 2026-11-23 차량번호 칸 추천 기사 ▾(미배차현황 추천 기사와 같은 목록) — 고르면 배정 확인 창 → 배정
   const plateSuggestPick = useDriverSuggest(dispatchData, userCompany);
   const [plateAssignAsk, setPlateAssignAsk] = React.useState(null);
@@ -36537,6 +36541,12 @@ return (
             />
           )}
           <button className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>{if(!selected.size)return showAlert("삭제할 항목이 없습니다.");{const bad=fixedForm&&(dispatchData||[]).find((x)=>selected.has(getId(x))&&!frCanEdit(x));if(bad)return frLockAlert(bad);}setShowDeletePopup(true);}}><EditableText id="status.toolbar.선택삭제" defaultText="선택삭제" /></button>
+          {/* 🗓 2026-11-27 이월 오더 일괄 지정 — 고른 오더의 마감월(청구할 달)을 익월 · 고른 달 · 비우기로 한 번에 */}
+          {!isViewer && selected.size > 0 && <button type="button" data-kp="status-carry" title="고른 오더의 마감월(청구할 달)을 한 번에 정해요(예: 10/31 상차 → 11월 청구)" className="px-2 py-1 rounded-lg bg-white border border-[#C9D6EE] text-[#1B2B4B] text-[11px] font-semibold shadow hover:bg-[#EEF3FC] whitespace-nowrap"
+            onClick={() => askCarryMonth(filtered.filter((r) => selected.has(getId(r))), {
+              isLocked: (o) => !carryBypass && isLockedOrder(o, carryDesk.closes),
+              save: (o, patch) => patchDispatch(getId(o), { ...patch, ...(o.__col ? { __col: o.__col } : {}) }, o),
+            })}>마감월 지정 ({selected.size})</button>}
           <button className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap" onClick={()=>setSelected(new Set())}><EditableText id="status.toolbar.선택초기화" defaultText="선택초기화" /></button>
           {/* 🧰 2026-11-23 툴바 정리 — [대용량 업로드](관리자 · 최고관리자만) + [엑셀다운] → [엑셀 관리] */}
           <ToolMenuButton label="엑셀 관리" testId="status-excel-menu" menuTitle="엑셀로 가져오기 · 내보내기" minWidth={250}
