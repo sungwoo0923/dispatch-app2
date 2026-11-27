@@ -6,6 +6,7 @@
 //  · ⛽ 2026-11-27 월 할부금(시작 ~ 종료월) 자동 공제 · 유류카드 끝 4자리(주유비 엑셀 자동 매칭)
 //  · 차량 기본정보(차명·연식·정비 주기·검사/보험 만기)는 기사앱 첫 설정과 같은 마법사로 직접 입력
 import React from "react";
+import { MonthPicker } from "./kpInputs"; // 🗓 2026-11-27 할부 시작 · 종료월
 import { createPortal } from "react-dom"; // ⭐ 2026-11-05 DriverCombo 드롭다운
 import CustomDatePicker from "./CustomDatePicker"; // 📅 2026-11-04 날짜 입력은 프로그램 달력으로
 import BankAccountInput from "./BankAccountInput";
@@ -79,8 +80,9 @@ export default function FleetExtraFields({ value: v, onChange, company }) {
           {/* ⛽ 2026-11-27 할부금(시작 ~ 종료월 매달 명세서 자동 공제) · 유류카드 끝 4자리([주유비 불러오기] 자동 매칭) */}
           <div><label className={lab}>월 할부금 <span className="font-normal text-[#5B6B85]">(명세서 자동 공제)</span></label><input inputMode="numeric" className={`${inp} text-right`} value={v.할부금?.amount ? Number(v.할부금.amount).toLocaleString() : ""} onChange={(e) => { const a = Number(onlyDigits(e.target.value)) || 0; set({ 할부금: a ? { ...(v.할부금 || {}), amount: a } : null }); }} placeholder="0" /></div>
           <div className="grid grid-cols-2 gap-2">
-            <div><label className={lab}>할부 시작월</label><input type="month" className={inp} value={v.할부금?.start || ""} disabled={!v.할부금?.amount} onChange={(e) => set({ 할부금: { ...(v.할부금 || {}), start: e.target.value } })} /></div>
-            <div><label className={lab}>할부 종료월</label><input type="month" className={inp} value={v.할부금?.end || ""} disabled={!v.할부금?.amount} onChange={(e) => set({ 할부금: { ...(v.할부금 || {}), end: e.target.value } })} /></div>
+            {/* 🗓 2026-11-27 프로그램 달 고르기(MonthPicker) — 브라우저 기본 달력 대신 */}
+            <div><label className={lab}>할부 시작월</label><MonthPicker value={v.할부금?.start || ""} onChange={(ym) => set({ 할부금: { ...(v.할부금 || {}), start: ym || "" } })} quick={false} clearable placeholder="시작월" disabled={!v.할부금?.amount} max={v.할부금?.end || ""} className="w-full" triggerClassName={`${inp} w-full justify-between font-semibold`} /></div>
+            <div><label className={lab}>할부 종료월</label><MonthPicker value={v.할부금?.end || ""} onChange={(ym) => set({ 할부금: { ...(v.할부금 || {}), end: ym || "" } })} quick={false} clearable placeholder="종료월" disabled={!v.할부금?.amount} min={v.할부금?.start || ""} className="w-full" triggerClassName={`${inp} w-full justify-between font-semibold`} /></div>
           </div>
           <div className="col-span-2"><label className={lab}>유류카드 끝 4자리 <span className="font-normal text-[#5B6B85]">(주유비 엑셀 자동 매칭 · 여러 장은 쉼표로)</span></label><input inputMode="numeric" className={inp} value={(Array.isArray(v.유류카드) ? v.유류카드 : []).join(", ")} onChange={(e) => set({ 유류카드: (e.target.value.match(/\d{4}/g) || []).slice(0, 6) })} placeholder="예: 1234, 5678" /></div>
           <div className="col-span-2 flex items-center justify-between gap-3 rounded-xl bg-white border border-[#E3E8F0] px-3.5 py-2.5">
