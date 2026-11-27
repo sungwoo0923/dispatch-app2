@@ -48534,6 +48534,12 @@ const handleBatchSettle = async (targetStatus) => {
     await setStmtStage(client, stmtYm, stage, { extra, sub: stmtSub });
     sflowToast(`${stmtTitle} ${Number(stmtYm.slice(5))}월 ${stageLabel(stage)}`, "success");
   };
+  // 🧾 2026-11-27 [계산서 발행 기록] — 바로 단계를 바꾸지 않고 확인창(발행일 · 승인번호)을 띄운다. 국세청 발행은 팝빌 · 홈택스에서
+  const askStmtTax = () => {
+    if (!stmtYm || isViewer) return;
+    const extra = stageIdx(stmtStage) === 0 ? { count: mapped.length, supply: 합계공급가, vat: 합계세액, excludedIds: excludedRowsInvoice.map(r => r._id), includePrepaid: invIncPrepaid } : null;
+    setStageAsk({ stage: "계산서발행", groups: [{ client, yyyymm: stmtYm, sub: stmtSub, stage: stmtStage, extra }] });
+  };
   const revertStmt = async (stage) => {
     if (!stmtYm || isViewer) return;
     if (!(await kpConfirm(`${stmtTitle} ${Number(stmtYm.slice(5))}월 명세서를 ‘${stageLabel(stage)}’ 단계로 되돌릴까요?`))) return;
@@ -48603,10 +48609,11 @@ const handleBatchSettle = async (targetStatus) => {
       sflowToast(todo.length === 1 ? `${todo[0].client} ${Number(String(todo[0].yyyymm).slice(5))}월 입금을 확인하고 마감했어요` : `입금 확인 ${todo.length}곳 마감했어요`, "success");
     })();
   }, [billRows, desk.stmts, csBizCur, isViewer, arCompany]); // eslint-disable-line react-hooks/exhaustive-deps
-  const saveStageAsk = async ({ date, note }) => {
+  const saveStageAsk = async ({ date, note, taxNo }) => {
     const t = stageAsk; if (!t) return;
     setStageAsk(null);
-    await runBulkTask({ count: t.groups.length, label: "정산", verb: `${stageLabel(t.stage)} 기록`, unitWord: "곳", task: async (progress) => { let k = 0; for (const g of t.groups) { await setStmtStage(g.client, g.yyyymm, t.stage, { date, note, sub: g.sub || "", extra: stageIdx(g.stage) === 0 ? { ...stmtSnap(g), excludedIds: [] } : null }); progress(++k); } } });
+    const taxExtra = t.stage === "계산서발행" ? { taxIssuedOn: date || todayStr8(), ...(taxNo ? { taxNo } : {}) } : null; // 🧾 2026-11-27 발행일 · 승인번호
+    await runBulkTask({ count: t.groups.length, label: "정산", verb: `${stageLabel(t.stage)} 기록`, unitWord: "곳", task: async (progress) => { let k = 0; for (const g of t.groups) { const base = g.extra !== undefined ? g.extra : (stageIdx(g.stage) === 0 ? { ...stmtSnap(g), excludedIds: [] } : null); await setStmtStage(g.client, g.yyyymm, t.stage, { date, note, sub: g.sub || "", extra: taxExtra || base ? { ...(base || {}), ...(taxExtra || {}) } : null }); progress(++k); } } });
     sflowToast(`${t.groups.length > 1 ? `${t.groups.length}곳 ` : ""}${stageLabel(t.stage)} 기록`, "success");
   };
   const pipeNav = useMemo(() => [...pipeGroups].sort((a, b) => stageIdx(a.stage) - stageIdx(b.stage) || b.total - a.total), [pipeGroups]);
@@ -48978,7 +48985,7 @@ const handleBatchSettle = async (targetStatus) => {
                         <div className="flex items-center gap-2" data-kp="stmt-quick">
                           {/* 🧾 2026-11-16 미작성 [작성] → 작성 [계산서 발행] → 계산서 발행 [마감] → 마감 완료 */}
                           {stageIdx(stmtStage) === 0 && <button type="button" disabled={!rowsInvoice.length} onClick={saveStmtDraft} className={`${sdBtnPri} !h-full min-h-[44px] px-6`} data-kp="stmt-quick-write">작성</button>}
-                          {stageIdx(stmtStage) >= 1 && stageIdx(stmtStage) < 5 && <button type="button" disabled={!rowsInvoice.length} onClick={() => quickStmt("계산서발행")} className={`${sdBtnPri} !h-full min-h-[44px] px-6`} data-kp="stmt-quick-tax">계산서 발행</button>}
+                          {stageIdx(stmtStage) >= 1 && stageIdx(stmtStage) < 5 && <button type="button" disabled={!rowsInvoice.length} onClick={askStmtTax} className={`${sdBtnPri} !h-full min-h-[44px] px-6`} data-kp="stmt-quick-tax" title="팝빌 · 홈택스에서 발행한 뒤 발행일 · 승인번호를 기록해요">계산서 발행 기록</button>}
                           {stageIdx(stmtStage) === 5 && <button type="button" onClick={() => quickStmt("마감")} className={`${sdBtnPri} !h-full min-h-[44px] px-6`} data-kp="stmt-quick-close">마감</button>}
                           {stageIdx(stmtStage) === 6 && <span className="inline-flex items-center px-4 min-h-[44px] rounded-xl border border-[#0F1A30] text-[14px] font-black text-[#0F1A30]">마감 완료</span>}
                           {stageIdx(stmtStage) >= 5 && <button type="button" onClick={() => revertStmt("작성")} className={`${sdBtn} !h-full min-h-[44px]`} title="계산서 발행 · 마감을 취소하고 작성 단계로">작성으로 되돌리기</button>}

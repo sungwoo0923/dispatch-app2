@@ -720,19 +720,32 @@ export function StatementHistory({ history = [], logs = [] }) {
 export function StageRecordModal({ open, target, onClose, onSave }) {
   const [date, setDate] = React.useState(kstToday());
   const [note, setNote] = React.useState("");
-  React.useEffect(() => { if (open) { setDate(kstToday()); setNote(""); } }, [open]);
+  const [taxNo, setTaxNo] = React.useState(""); // 🧾 2026-11-27 계산서 발행 — 승인번호(선택)
+  React.useEffect(() => { if (open) { setDate(kstToday()); setNote(""); setTaxNo(""); } }, [open]);
   if (!open || !target) return null;
   const s = STMT_STAGES[stageIdx(target.stage)];
   const many = target.groups?.length > 1;
+  const isTax = target.stage === "계산서발행";
+  // 🧾 2026-11-27 계산서 발행은 '발행했다고 기록'만 한다(국세청 발행은 팝빌 · 홈택스에서) — 승인번호는 메모 앞에 붙여 남긴다
+  const submit = () => {
+    const no = taxNo.trim(); const m = note.trim();
+    onSave({ date, note: isTax && no ? `승인번호 ${no}${m ? ` · ${m}` : ""}` : m, ...(isTax && no ? { taxNo: no } : {}) });
+  };
   return (
-    <KpModal open onClose={onClose} en={`STAGE · ${s.en}`} title={`${s.label}(으)로 기록`} sub={many ? `${target.groups.length}곳 · ${ymLabel(target.groups[0]?.yyyymm)}` : `${target.groups?.[0]?.client || ""} · ${ymLabel(target.groups?.[0]?.yyyymm)}`} width={460}
-      footer={<><button type="button" onClick={onClose} className={sdBtn}>취소</button><button type="button" onClick={() => onSave({ date, note: note.trim() })} className={sdBtnPri}><Ico d={IC.check} size={15} w={2.6} />기록하기</button></>}>
+    <KpModal open onClose={onClose} en={`STAGE · ${s.en}`} title={isTax ? "계산서 발행 기록" : `${s.label}(으)로 기록`} sub={many ? `${target.groups.length}곳 · ${ymLabel(target.groups[0]?.yyyymm)}` : `${target.groups?.[0]?.client || ""} · ${ymLabel(target.groups?.[0]?.yyyymm)}`} width={460}
+      footer={<><button type="button" onClick={onClose} className={sdBtn}>취소</button><button type="button" onClick={submit} className={sdBtnPri} data-kp="stage-record-save"><Ico d={IC.check} size={15} w={2.6} />기록하기</button></>}>
       <div className="space-y-4">
-        <div className="rounded-xl bg-[#F4F6FA] px-4 py-3 text-[14px] text-[#3A4A66]">{s.hint}</div>
-        <label className="block"><span className="block text-[14px] font-black text-[#3A4A66] mb-1.5">날짜</span>
+        {isTax ? (
+          <div className="rounded-xl bg-[#FBF1DC] px-4 py-3 text-[14px] font-bold text-[#8A5A00] leading-relaxed" data-kp="stage-record-tax-warn">
+            국세청 세금계산서 발행은 팝빌 · 홈택스에서 하셨나요?<br />여기서는 ‘발행했다’고 기록만 해요. 실제 계산서는 나가지 않아요.
+          </div>
+        ) : <div className="rounded-xl bg-[#F4F6FA] px-4 py-3 text-[14px] text-[#3A4A66]">{s.hint}</div>}
+        <label className="block"><span className="block text-[14px] font-black text-[#3A4A66] mb-1.5">{isTax ? "발행일" : "날짜"}</span>
           <CustomDatePicker className={`${sdInp} text-left`} value={date} onChange={(e) => setDate(e.target.value)} /></label>
+        {isTax && <label className="block"><span className="block text-[14px] font-black text-[#3A4A66] mb-1.5">승인번호 <span className="text-[#9AA9C3] font-bold">(선택)</span></span>
+          <input autoComplete="off" className={sdInp} value={taxNo} onChange={(e) => setTaxNo(e.target.value)} placeholder="예: 20261107-41000000-00000001" data-kp="stage-record-taxno" /></label>}
         <label className="block"><span className="block text-[14px] font-black text-[#3A4A66] mb-1.5">메모 <span className="text-[#9AA9C3] font-bold">(선택)</span></span>
-          <input autoComplete="off" className={sdInp} value={note} onChange={(e) => setNote(e.target.value)} placeholder={target.stage === "계산서발행" ? "예: 승인번호 2026110700001" : "예: 담당 과장 메일로 확인"} onKeyDown={(e) => { if (e.key === "Enter") onSave({ date, note: note.trim() }); }} /></label>
+          <input autoComplete="off" className={sdInp} value={note} onChange={(e) => setNote(e.target.value)} placeholder={isTax ? "예: 홈택스에서 발행" : "예: 담당 과장 메일로 확인"} onKeyDown={(e) => { if (e.key === "Enter") submit(); }} /></label>
       </div>
     </KpModal>
   );
