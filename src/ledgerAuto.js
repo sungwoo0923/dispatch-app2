@@ -42,7 +42,7 @@ export async function setPayFundDefault(db, fundId, purpose = "drvpay") {
 
 // 기사 지급(지급일별 합계) — delta: +금액(지급완료) / −금액(지급 취소)
 //  💸 2026-11-27 amount = 실제 이체액(세금계산서 받는 기사는 부가세 포함). supply · vat 를 주면 공급가 · 부가세를 따로 누적한다
-//   (예전 줄은 공급가 칸이 없어서 처음 나눌 때 그때까지 금액을 공급가로 본다 — 예전엔 부가세를 안 넣었다)
+//   (이 기능 전에 생긴 그날 줄은 공급가 칸이 없어 나누지 않는다 — 금액은 그대로 쌓인다)
 //  fundId: 지급완료 때 고른 출금 통장(없으면 자금관리 기본 통장 · 그것도 없으면 빈칸). 이미 있는 줄이 빈칸이면 이번 통장으로 채운다
 //  합계가 0이 되면 줄을 지운다(지급완료 → 지급 취소로 0원 줄이 남던 것)
 export async function bumpDriverPayout(db, { date, amount, count = 1, company, fundId: pickFund, supply, vat }) {
@@ -59,9 +59,8 @@ export async function bumpDriverPayout(db, { date, amount, count = 1, company, f
   const fundId = needFund ? (pickFund || await defaultFundId(db, co, "drvpay")) : undefined;
   const split = supply != null || vat != null;
   const sup = split ? toInt(supply ?? amt - toInt(vat)) : 0; const tax = split ? toInt(vat) : 0;
-  const splitPatch = !split ? {} : (cur && cur.supply == null)
-    ? { supply: toInt(cur.amount) + sup, vat: tax } // 예전 줄 — 지금까지 금액은 공급가
-    : { supply: increment(sup), vat: increment(tax) };
+  // 예전 줄(공급가 칸 없음)은 나누지 않는다 — 여러 건을 한꺼번에 지급할 때 서로 덮어쓰지 않게(금액은 그대로 이체액)
+  const splitPatch = !split || (cur && cur.supply == null) ? {} : { supply: increment(sup), vat: increment(tax) };
   await setDoc(ref, {
     companyName: co, date: d, type: "지출", account: "운반비", item: "기사운임 지급(정산관리 자동)", method: "계좌이체", vendor: "기사",
     memo: "정산관리 › 지급관리 [지급완료] 합계: 자동 반영(세금계산서 받는 기사는 부가세 포함 이체액)", evidence: "자동", auto: "drvpay",
