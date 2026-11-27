@@ -47,7 +47,9 @@ import DriverContextMenu, { driverCopyText, copyToClipboard } from "./DriverCont
 import { useDriverEditChoice, DriverEditButton, SamePlateChips, driversOfPlate, pickDriverFor, isRegisteredCombo, saveDriverChoice } from "./DriverEditChoice"; // ⭐ 2026-11-05 매칭된 기사 이름·전화 [수정]
 import { Navigate, useNavigate } from "react-router-dom";
 import { CartesianGrid, Line, LineChart, BarChart, Bar, Cell, LabelList, PieChart, Pie, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from "recharts";
-import * as XLSX from "xlsx";
+// ⚡ 2026-11-27 속도 — xlsx(약 420KB)는 엑셀 버튼 · 엑셀 올리기를 누를 때 받는다(예전엔 배차 프로그램 첫 묶음에 들어 로그인 → HOME 이 늦었다).
+//  쓰는 함수마다 맨 앞에서 const XLSX = await loadXLSX() — 동작 · 파일 모양은 그대로
+const loadXLSX = () => import("xlsx");
 import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차량 조회
 import { useOrderFormFields } from "./orderFormFields"; // 🧩 2026-11-26 오더등록 입력칸 고르기
 import OrderFieldsModal from "./OrderFieldsModal";
@@ -74,7 +76,7 @@ import ClientMergeModal from "./ClientMergeModal"; // ⭐ 2026-11-17 거래처 �
 import { buildAliasMap, resolveOrderClient } from "./clientMerge"; // ⭐ 2026-11-17 합친 거래처의 옛 이름 → 남길 이름
 import DetailFilterButton, { applyDetailFilter, DetailScope, detailGroupOrder } from "./DetailFilter"; // 🔎 2026-11-03 세부검색(최대 3차)
 import { useCompanyBiz, bizOf, BizPicker, BizFilter, bizMatch, printInfoForBiz, BizListEditor, BizScope, BizSelect, bizColorOf, bizStripeProps, BizLegend, resolveBiz, rememberBiz, normBizKey, bankForBiz, bizInfoCardBlob } from "./companyBiz"; // ⭐ 2026-11-03 한 회사 · 여러 사업자 // ⭐ 2026-11-03 배차담당자 칸(등록자 + 차량 붙인 사람)
-import JSZip from "jszip";
+// ⚡ 2026-11-27 속도 — jszip 은 [전체저장(압축)]을 누를 때 받는다(handleSaveAllZip)
 import { BizCheck, bizGuardMain, ClientBizBulkButton, PopbillMemberCard } from "./publicDataMain"; // 🏛 2026-11-07 국세청 사업자 상태 · 팝빌 연동회원(🌦 날씨는 2026-11-18부터 대시보드에만 — 배차 목록에서 뺐다)
 import { BankAccountsCard, BankReviewQueue, SmsSettingsCard, AlimtalkSettingsCard } from "./PopbillAuto"; // 🏦 2026-11-08 은행 입금 자동 매칭
 // 💬 2026-11-08 사장님 요청 — 카카오 알림톡은 PC·모바일 화면에서 모두 뺐다(새 오더는 알림톡:false → 서버 트리거가 보내지 않는다)
@@ -149,8 +151,10 @@ import { useUiScreen, uiMenuList, uiMenuLabel, uiFormDefaults } from "./uiConfig
 import { useCompanyDropdownOptions, DropdownOptionsManageButton, useCompanyDropdownSync, dropdownList } from "./companyDropdownOptions";
 import { CompanyOptionPicker } from "./companyOptionPicker"; // 🧾 2026-11-02 지급방식·배차방식·상/하차방법 공용 선택기(＋ 추가)
 const RateCard = lazyView(() => import("./RateCard"));
-import AiAssistant from "./AiAssistant";
-import InternalMessenger from "./InternalMessenger";
+// ⚡ 2026-11-27 속도 — AI 비서 · 메신저는 떠 있는 버튼이라 화면이 뜬 뒤 따로 받는다(자리표시 없음 — 받는 동안 버튼만 잠깐 늦게 보인다).
+//  예전엔 배차 프로그램 첫 묶음에 같이 들어 로그인 → HOME 이 그만큼 늦었다
+const AiAssistant = lazyView(() => import("./AiAssistant"), null);
+const InternalMessenger = lazyView(() => import("./InternalMessenger"), null);
 import { calcLeaveBalance } from "./leaveUtils";
 import { useMyLeaveExtras, useLeaveBasis } from "./leaveBasis"; // ⭐ 2026-11-07 내정보 연차 = 전자결재 연차 현황
 import { useCompanyWorkWeekdays } from "./workWeekdays"; // 🗓 2026-11-23 회사 근무 요일
@@ -23863,6 +23867,7 @@ function AttachStatusPanel({ open, onClose, initialClient, dispatchData, db, com
     if (!targets.length) { alert("저장할 첨부파일이 없습니다."); return; }
     setBulkSaving(true);
     try {
+      const { default: JSZip } = await import("jszip");
       const zip = new JSZip();
       const usedNames = new Set();
       for (let i = 0; i < targets.length; i++) {
@@ -28748,7 +28753,8 @@ const head = isDark
 
     <button onClick={()=>{if(!selected.length)return showAlert("삭제할 항목을 선택하세요.");const list=rows.filter(r=>selected.includes(r._id));setDeleteList(list);setDeleteConfirmOpen(true);}} className="px-2 py-1 rounded-lg bg-red-600 text-white text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.선택삭제" defaultText="선택삭제" /></button>
     <button onClick={()=>setSelected([])} className="px-2 py-1 rounded-lg bg-gray-300 text-gray-800 text-[11px] font-semibold shadow hover:opacity-90 whitespace-nowrap"><EditableText id="realtime.toolbar.선택초기화" defaultText="선택초기화" /></button>
-    <button onClick={()=>{
+    <button onClick={async ()=>{
+      const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
   if(!filtered.length)return showAlert("내보낼 데이터가 없습니다.");
   const _sp=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
   const _merge=(r,f1,f2)=>[..._sp(r[f1]),..._sp(r[f2])].filter(s=>s&&(s.업체명?.trim()||s.주소?.trim())).filter((s,i,a)=>{const k=s.업체명||s.주소;return a.findIndex(x=>(x.업체명||x.주소)===k)===i;});
@@ -34950,7 +34956,8 @@ if (mode === "driver") {
   const BULK_COLS0 = ["상차일", "상차시간", "하차일", "하차시간", "거래처명", "상차지명", "상차지주소", "하차지명", "하차지주소", "화물내용", "차량종류", "차량톤수", "차량번호", "기사명", "전화번호", "청구운임", "기사운임", "지급방식", "배차방식", "메모", "회전", "회전방식"]; // 📥 2026-11-25 회전 · 회전방식(같은 날 같은 노선 N회 — 비우면 보통 오더)
   // ⭐ 2026-11-02 운임규칙 — 규칙 사용 회사는 양식에 "운임구분" 열(비우면 예전처럼)
   const BULK_COLS = fareOn ? [...BULK_COLS0, "운임구분"] : BULK_COLS0;
-  const downloadBulkTemplate = () => {
+  const downloadBulkTemplate = async () => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     const today = new Date(); const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const t1 = new Date(today.getTime() + 86400000);
     const samples = [
@@ -34995,6 +35002,7 @@ if (mode === "driver") {
 
     const reader = new FileReader();
     reader.onload = async (evt) => {
+      const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
       const data = new Uint8Array(evt.target.result);
       const workbook = XLSX.read(data, { type: "array" });
       const sheetName = workbook.SheetNames[0];
@@ -35491,7 +35499,8 @@ if (first) {
     const n = Number(String(v).replace(/[^\d-]/g, ""));
     return Number.isNaN(n) ? 0 : n;
   };
-  const downloadExcel = () => {
+  const downloadExcel = async () => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     const _sp=(v)=>{if(Array.isArray(v)&&v.length>0)return v;if(typeof v==="string"&&v.trim().startsWith("[")){try{const p=JSON.parse(v);if(Array.isArray(p)&&p.length>0)return p;}catch{}}if(v&&typeof v==="object"&&!Array.isArray(v)){const ks=Object.keys(v);if(ks.length>0&&ks.every(k=>/^\d+$/.test(k)))return ks.sort((a,b)=>Number(a)-Number(b)).map(k=>v[k]);if(v.업체명)return[v];}return[];};
     const _merge=(r,f1,f2)=>[..._sp(r[f1]),..._sp(r[f2])].filter(s=>s&&(s.업체명?.trim()||s.주소?.trim())).filter((s,i,a)=>{const k=s.업체명||s.주소;return a.findIndex(x=>(x.업체명||x.주소)===k)===i;});
     const _via=(list)=>list.map(s=>s.업체명||s.주소||"").filter(Boolean).join(", ");
@@ -47550,7 +47559,8 @@ const patchMonthOnDoc = async (id, yyyymm, status, dateStr) => {
   clearSel();
 };
 
-  const downloadMonthExcel = () => {
+  const downloadMonthExcel = async () => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     if (!selClient) return showAlert("거래처를 선택하세요.");
     const rows = monthRows.map((row, idx) => ({
       순번: idx + 1, 청구월: row.yyyymm, 거래처명: row.거래처명,
@@ -48252,7 +48262,8 @@ const handleBatchSettle = async (targetStatus) => {
     e.target.value = "";
 
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
+      const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
       const data = new Uint8Array(evt.target.result);
       const workbook = XLSX.read(data, { type: "array" });
       const sheetName = workbook.SheetNames[0];
@@ -49834,6 +49845,7 @@ const handleBatchSettle = async (targetStatus) => {
                   화물명: m.화물명, 기사명: m.기사명, 차량번호: m.차량번호,
                   공급가액: m.공급가액, "세액(10%)": m.세액, 합계: m.공급가액+m.세액,
                 }));
+                const XLSX = await loadXLSX();
                 const wb2 = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb2, XLSX.utils.json_to_sheet(wsData), "거래명세서");
                 const excelBase64 = XLSX.write(wb2, { bookType: "xlsx", type: "base64" });
@@ -50098,6 +50110,7 @@ const handleBatchSettle = async (targetStatus) => {
                           "세액(10%)": m.세액,
                           합계: m.공급가액 + m.세액,
                         }));
+                        const XLSX = await loadXLSX();
                         const wb2 = XLSX.utils.book_new();
                         const ws2 = XLSX.utils.json_to_sheet(wsData);
                         XLSX.utils.book_append_sheet(wb2, ws2, "거래명세서");
@@ -50511,7 +50524,8 @@ const handleBatchSettle = async (targetStatus) => {
                     uploadDesc="엑셀을 고르면 매칭 결과를 먼저 보여드리고, 확인 후 정산완료·일부입금으로 반영합니다."
                     uploadTips={["입금액이 모자라면 일부입금으로", "매칭 안 된 입금은 따로 표시"]}
                     onClose={() => setBankBulkOpen(false)}
-                    onTemplate={() => {
+                    onTemplate={async () => {
+                      const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
                       const ws = XLSX.utils.aoa_to_sheet([["거래일", "적요(입금자명)", "입금액", "잔액", "비고"], ["2026-10-05", "(주)예시물류", 1100000, 5100000, "9월 운송료"], ["2026-10-06", "홍길동상사", 550000, 5650000, ""]]);
                       ws["!cols"] = [{ wch: 12 }, { wch: 22 }, { wch: 14 }, { wch: 14 }, { wch: 18 }];
                       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "입금내역");
@@ -51207,6 +51221,7 @@ const handleBatchSettle = async (targetStatus) => {
                           청구월: r.yyyymm, 건수: r.건수,
                           총청구금액: r.총청구금액, 정산상태: r.정산상태, 정산일: r.정산일||"",
                         }));
+                        const XLSX = await loadXLSX();
                         const wb2 = XLSX.utils.book_new();
                         XLSX.utils.book_append_sheet(wb2, XLSX.utils.json_to_sheet(wsData), "미수금현황");
                         fileAttachments.push({
@@ -51881,7 +51896,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const toggleOne = (id) => setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   // ─── 엑셀 ───
-  const downloadExcel = () => {
+  const downloadExcel = async () => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     if (!filtered.length) return alert("다운로드할 내역이 없습니다.");
     const rows = filtered.map((r, i) => ({
       순번: i + 1, 상차일: r.상차일 || "", 지급상태: r.지급상태 || "지급중", 지급일: r.지급일 || "",
@@ -51905,7 +51921,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
+      const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
       try {
         // cellDates 없이 원본 시리얼로 읽어야 timezone 왜곡 없음
         const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
@@ -52070,7 +52087,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
     if (!plan.rows.length && !plan.missingDetail.length) return alert("이 기간에 지급할(미지급) 용차 운임이 없어요.");
     setTransferPlan({ period, plan });
   };
-  const downloadTransfer = (plan) => {
+  const downloadTransfer = async (plan) => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     const { rows } = plan;
     const ws = XLSX.utils.json_to_sheet(rows, { header: ["은행", "계좌번호", "예금주", "금액", "받는분 통장표시", "내 통장표시", "메모"] });
     ws["!cols"] = [{ wch: 12 }, { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 40 }];
@@ -52671,6 +52689,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
   // 🪪 2026-11-20 [정산정보 가져오기] — 선정산 파일(여러 개)에서 차량번호로 기사를 찾아 사업자번호 · 계좌만 채운다
   const [payInfoImport, setPayInfoImport] = React.useState(null); // { fileNames, items }
   const onPayInfoFiles = async (e) => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     const files = [...(e.target.files || [])];
     e.target.value = "";
     if (!files.length) return;
@@ -52691,7 +52710,8 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
     setPayInfoImport({ fileNames: names, items });
   };
   // 기사관리에 없는 차량 → 대용량 업로드 양식 열 그대로(+ 정산 정보) 엑셀
-  const downloadMissingPayInfo = (its) => {
+  const downloadMissingPayInfo = async (its) => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     const rows = its.map((it) => ({ 차량번호: it.plate, 이름: it.ceo || "", 전화번호: it.phone || "", 등급: "일반", 메모: it.company || "",
       사업자번호: it.bizNo ? fmtBizNo(it.bizNo) : "", 상호: it.company || "", 대표자: it.ceo || "", 은행: it.bank || "", 계좌번호: it.acct || "", 예금주: it.holder || "" }));
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -52907,7 +52927,8 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
     showAlert("삭제 완료");
   };
 
-  const downloadExcel = () => {
+  const downloadExcel = async () => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     if (!filtered.length) return showAlert("내보낼 데이터가 없습니다.");
     const rows = filtered.map((r,i) => ({
       순번:i+1, 차량번호:r.차량번호||"", 이름:r.이름||"",
@@ -52925,6 +52946,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async (evt) => {
+      const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
       try {
         const wb = XLSX.read(new Uint8Array(evt.target.result), { type:"array" });
         const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval:"" });
@@ -53073,7 +53095,7 @@ function DriverManagement({ drivers: driversRaw, upsertDriver, removeDriver, sho
               uploadDesc="작성한 양식을 고르면 등록할 건수를 먼저 보여드리고, 확인 후 반영합니다."
               uploadTips={["이미 있는 차량번호는 내용만 갱신", "기사앱 가입 차량도 같은 기사로 합쳐짐"]}
               onClose={() => setDriverBulkOpen(false)}
-              onTemplate={() => downloadTemplateXlsx(XLSX, "기사관리_양식.xlsx", "기사관리", ["차량번호", "이름", "전화번호", "등급", "메모"],
+              onTemplate={async () => downloadTemplateXlsx(await loadXLSX(), "기사관리_양식.xlsx", "기사관리", ["차량번호", "이름", "전화번호", "등급", "메모"],
                 [["경기12가3456", "김기사", "010-1234-5678", "일반", ""], ["서울34나5678", "이기사", "010-9876-5432", "지입", "평일만 가능"]],
                 [["예시 2줄", "예시 줄은 지우고 기사를 한 줄에 한 명씩 입력하세요."], ["차량번호", "필수. 띄어쓰기는 자동으로 지웁니다."], ["등급", "일반 / 직영 / 지입 / 블랙 중 하나 (비우면 일반)"], ["이미 등록된 기사", "같은 차량번호가 있으면 새로 만들지 않고 내용만 고칩니다."]])}
               onFile={(e) => { setDriverBulkOpen(false); onExcel(e); }}
@@ -54651,7 +54673,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       uploadDesc="작성한 양식을 고르면 등록할 건수를 먼저 보여드리고, 확인 후 반영합니다."
       uploadTips={["빈 줄은 자동으로 건너뜀", "일반메모·오더메모도 함께 저장"]}
       onClose={() => setClientBulkKind(null)}
-      onTemplate={() => downloadTemplateXlsx(XLSX, "기본거래처_양식.xlsx", "거래처", ["거래처명", "사업자번호", "대표자", "업태", "종목", "주소", "담당자", "연락처", "이메일", "일반메모", "오더메모"],
+      onTemplate={async () => downloadTemplateXlsx(await loadXLSX(), "기본거래처_양식.xlsx", "거래처", ["거래처명", "사업자번호", "대표자", "업태", "종목", "주소", "담당자", "연락처", "이메일", "일반메모", "오더메모"],
         [["동원F&B", "123-45-67890", "홍길동", "제조", "식품", "서울 서초구 마방로 68", "김대리", "02-1234-5678", "kim@example.com", "", "파레트 회수 필수"]],
         [["예시 1줄", "예시 줄은 지우고 거래처를 한 줄에 하나씩 입력하세요."], ["거래처명", "필수. 같은 이름이 이미 있으면 새로 만들지 않고 내용만 고칩니다."], ["일반메모 / 오더메모", "오더메모는 오더 등록 시 함께 보이는 메모입니다."]])}
       onFile={(e) => { setClientBulkKind(null); onExcel(e); }}
@@ -54664,7 +54686,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
       uploadDesc="작성한 양식을 고르면 새로 등록될 건수를 먼저 보여드리고, 확인 후 반영합니다."
       uploadTips={["빈 줄·주소 없는 줄은 건너뜀", "주소는 도로명/지번 모두 가능"]}
       onClose={() => setClientBulkKind(null)}
-      onTemplate={() => downloadTemplateXlsx(XLSX, "상하차지거래처_양식.xlsx", "상하차지", ["업체명", "주소", "담당자", "담당자번호", "메모"],
+      onTemplate={async () => downloadTemplateXlsx(await loadXLSX(), "상하차지거래처_양식.xlsx", "상하차지", ["업체명", "주소", "담당자", "담당자번호", "메모"],
         [["CJ 대구센터", "대구 달서구 성서로 10", "박과장", "010-2222-3333", "하차 09시 이후"], ["이마트 광주센터", "광주 광산구 하남산단 5", "", "", ""]],
         [["예시 2줄", "예시 줄은 지우고 상하차지를 한 줄에 하나씩 입력하세요."], ["업체명 · 주소", "필수. 주소가 없으면 그 줄은 건너뜁니다."], ["중복", "이미 같은 주소로 등록된 상하차지는 건너뜁니다."]])}
       onFile={(e) => { setClientBulkKind(null); onExcelPlaces(e); }}
@@ -54675,6 +54697,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async (evt) => {
+      const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
       try {
         const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
         const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
@@ -54712,7 +54735,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     reader.readAsArrayBuffer(file);
   };
 
-  const downloadClientExcel = () => {
+  const downloadClientExcel = async () => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     const data = filtered.length > 0 ? filtered : rows;
     if (!data.length) return showAlert("다운로드할 데이터가 없습니다.");
     const ws = XLSX.utils.json_to_sheet(data.map(r => ({
@@ -54964,6 +54988,7 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = async (evt) => {
+      const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
       try {
         const wb = XLSX.read(new Uint8Array(evt.target.result), { type: "array" });
         const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
@@ -55017,7 +55042,8 @@ function ClientManagement({ clients = [], upsertClient, removeClient, upsertPlac
     showAlert(`${up.ok}곳을 정리했습니다.${up.fail ? `\n실패 ${up.fail}곳` : ""}`);
   };
 
-  const downloadPlaceExcel = () => {
+  const downloadPlaceExcel = async () => {
+    const XLSX = await loadXLSX(); // ⚡ 엑셀 라이브러리는 누를 때 받는다
     const data = filteredPlaces.length > 0 ? filteredPlaces : placeRows;
     if (!data.length) return showAlert("다운로드할 데이터가 없습니다.");
     const ws = XLSX.utils.json_to_sheet(data.map(r => ({
