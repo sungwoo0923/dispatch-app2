@@ -5068,6 +5068,14 @@ exports.execPinStatus = payCall(_execPin.status);
 exports.execPinSet = payCall(_execPin.setPin);
 exports.execPinVerify = payCall(_execPin.verify);
 exports.execPinReset = payCall(_execPin.reset);
+/* ==================================================================
+   🔐 2026-11-27 매출관리 비밀번호(회사 하나에 하나) — 설명은 functions/revenuePw.js 맨 위
+   호출형 3개: revenuePwStatus · revenuePwSet(회사 마스터 · 최고관리자) · revenuePwVerify — 예전 companySettings.revenuePassword 는 처음 확인 때 해시로 옮기고 지운다
+================================================================== */
+const _revenuePw = require("./revenuePw").makeRevenuePw({ db, FieldValue, HttpsError: functions.https.HttpsError });
+exports.revenuePwStatus = payCall(_revenuePw.status);
+exports.revenuePwSet = payCall(_revenuePw.setPw);
+exports.revenuePwVerify = payCall(_revenuePw.verify);
 exports.payrollPwReset = payCall(_payrollPw.resetPw); // ⭐ 2026-11-10 급여 비밀번호 잊었을 때(로그인 비밀번호로 본인 확인 후)
 
 /* ==================================================================

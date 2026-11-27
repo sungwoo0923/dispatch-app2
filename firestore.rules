@@ -470,7 +470,12 @@ service cloud.firestore {
       allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['companyName', 'workWeekdays'])
         && request.resource.data.get('companyName', co) == co && request.resource.data.workWeekdays is list && request.resource.data.workWeekdays.size() <= 7
         && isApproved() && myCo() == co && (myRole() in ['admin', 'allMgr', 'test'] || isHrStaff());
-      allow write: if isTotalMasterUser() || (isApproved() && myCo() == co && myIsMaster());
+      // 🔐 2026-11-27 매출 비밀번호(revenuePassword)는 서버만(functions/revenuePw.js) — 화면은 이 칸을 만들거나 바꾸거나 지우지 못한다
+      allow create: if (isTotalMasterUser() || (isApproved() && myCo() == co && myIsMaster()))
+        && !('revenuePassword' in request.resource.data);
+      allow update: if (isTotalMasterUser() || (isApproved() && myCo() == co && myIsMaster()))
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['revenuePassword']);
+      allow delete: if isTotalMasterUser() || (isApproved() && myCo() == co && myIsMaster());
       // 사업자 목록(bizList)은 관리자·경리·인사도(공지 작성 권한은 못 바꿈)
       // ⭐ 2026-11-04 통합관리자(allMgr = 운송+경리+인사)·경리사무원(acctStaff)도
       allow create: if isApproved() && myCo() == co && myRole() in ['admin', 'allMgr', 'hrAcct', 'hrManager', 'test', 'acctStaff']
@@ -2321,6 +2326,15 @@ service cloud.firestore {
     match /execPinAttempts/{uid} {
       allow read, write: if false;
     }
+    // 🔐 2026-11-27 매출관리 비밀번호(회사 하나에 하나) — 서버만(functions/revenuePw.js)
+    //  revenuePws/{회사 키} = { companyName, salt, hash(scrypt) } · revenuePwAttempts/{uid} = 틀린 횟수 · 잠금
+    //  화면은 읽기 · 쓰기 모두 못 한다. 예전 칸 companySettings/{회사}.revenuePassword 도 화면이 못 쓴다(서버가 옮기고 지운다)
+    match /revenuePws/{key} {
+      allow read, write: if false;
+    }
+    match /revenuePwAttempts/{uid} {
+      allow read, write: if false;
+    }
     match /privateFareUnlocks/{uid} {
       allow read: if isSignedIn() && request.auth.uid == uid;
       allow create, update: if false;
@@ -3040,6 +3054,8 @@ service cloud.firestore {
         'privateFareGrants', 'privateFarePins', 'privateFarePinAttempts', 'privateFareUnlocks', 'privateFareVaults',
         // 🔐 2026-11-27 인사이트 · 지입차관리 PIN(서버만 — functions/execPin.js)
         'execPins', 'execPinAttempts',
+        // 🔐 2026-11-27 매출관리 비밀번호(서버만 — functions/revenuePw.js)
+        'revenuePws', 'revenuePwAttempts',
         // 🤖 2026-11-06 AI 팀 사용 기록 — 위에서 따로 정함
         'aiTeamLogs',
         // 📊 2026-11-06 일일 경영 보고 — 위에서 따로 정함

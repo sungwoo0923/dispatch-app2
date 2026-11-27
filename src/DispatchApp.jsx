@@ -37,6 +37,7 @@ import { html2canvas, loadJsPDF, lazyView, prefetchWhenIdle } from "./lazyLoad";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { VehicleTypePicker, VehicleTypeAddButton, useVehicleTypes, withCustomVehicleTypes, VT_DEFAULTS } from "./vehicleTypes"; // ⭐ 2026-11-02 회사 공용 차량종류
 import { withCo, getTenant, isPreviewMode } from "./fsTenant";
+import { useRevenuePw, revenuePwTexts, REVENUE_PW_NONE, REVENUE_PW_FORGOT, REVENUE_PW_MIN } from "./revenuePwApi"; // 🔐 2026-11-27 매출 비밀번호 서버 확인
 // 🧪 개발 전용 — /preview?demo=1 둘러보기 점검에서는 매출관리 비밀번호 화면을 건너뛴다(배포 빌드에서는 항상 false)
 const DEV_DEMO_REVENUE = import.meta.env.DEV && (() => { try { return window.location.pathname === "/preview" && new URLSearchParams(window.location.search).get("demo") === "1"; } catch { return false; } })();
 import { coDocKey } from "./coKey";
@@ -8866,13 +8867,6 @@ const navScrollRefCb = React.useCallback((el) => {
 const scrollNavBy = (dir) => { const el = navScrollRef.current; if (el) el.scrollBy({ left: dir * Math.max(160, el.clientWidth * 0.6), behavior: "smooth" }); };
 // 매출관리 비밀번호 게이트
 const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
-const [revenuePassInput, setRevenuePassInput] = React.useState("");
-const [revenuePassError, setRevenuePassError] = React.useState(false);
-const [revenuePassword, setRevenuePassword] = React.useState(null); // null = not loaded yet
-const [revenuePasswordLoaded, setRevenuePasswordLoaded] = React.useState(false);
-const [revenuePasswordError, setRevenuePasswordError] = React.useState(""); // 불러오기 실패 사유
-const [revenuePasswordRetry, setRevenuePasswordRetry] = React.useState(0);
-const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // ★ 잠금 화면에서 비밀번호 변경
 
   // ---------------- 역할별 차단 메뉴 ----------------
   // 최고관리자가 새로 만든 커스텀 권한(역할) — 메뉴별 접근범위(숨김/조회/조회+수정)를
@@ -8884,8 +8878,6 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
   useCompanyDropdownSync(role, userCompany); // ⭐ 편집모드 옵션(배차방식 등)을 표·빠른수정에도 회사별로
   // ⭐ 2026-11-01 가입 승인 대기 — 승인할 수 있는 사람(관리자·경리·인사·마스터)에게 상단 [관리자메뉴] 숫자 + 새 신청 알림
   const canApproveSignup = ["admin", "totalMaster", "superadmin", "test", "hrManager", "hrAcct", "allMgr"].includes(realRole || role) || myProfileDoc?.isMaster === true;
-  // ⭐ 2026-11-03 매출관리 비밀번호는 회사 마스터만 정하고 바꾼다(대표·관리자도 설정된 비밀번호를 입력) — 서버 규칙(companySettings)도 같은 기준
-  const canSetRevenuePw = role === "totalMaster" || myProfileDoc?.isMaster === true;
   const pendingSignups = usePendingSignups(canApproveSignup ? (role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || "")) : "");
   // ⭐ 2026-11-05 관리자메뉴 숫자는 직원 가입만 — 기사 가입은 기사관리 › 기사 앱 계정 › 가입 승인 숫자(alertsNav.signupDriver)로만
   const pendingStaffSignups = pendingSignups.filter((u) => u.role !== "driver").length;
@@ -9117,28 +9109,6 @@ const [revenuePwSetupOpen, setRevenuePwSetupOpen] = React.useState(false); // �
     return () => window.removeEventListener("keydown", handler);
   }, [role]);
 
-  // 매출관리 비밀번호 - 회사별 Firestore 로드
-  // ⚠️ 예전엔 ① 회사명이 비어 있거나(캐시 초기화 등으로 저장된 회사명이 지워진 경우) ② 서버가 읽기를 거부·실패하면
-  // 아무 값도 안 들어와 "로딩 중..."이 끝나지 않았다. 회사명이 없으면 기본 회사로 보고, 실패하면 이유와 "다시 시도"를 보여준다.
-  useEffect(() => {
-    const co = (userCompany || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
-    setRevenuePasswordError("");
-    if (!co) { setRevenuePasswordError("회사 정보가 없습니다. 다시 로그인해 주세요."); return undefined; }
-    // 서버 응답이 오래 없으면(네트워크 문제) 안내
-    const slow = setTimeout(() => setRevenuePasswordError((e) => e || "서버 응답이 늦어지고 있습니다."), 8000);
-    const unsub = onSnapshot(doc(db, "companySettings", co), (snap) => {
-      clearTimeout(slow);
-      const data = snap.data();
-      setRevenuePassword(data?.revenuePassword ?? null);
-      setRevenuePasswordLoaded(true);
-      setRevenuePasswordError("");
-    }, (err) => {
-      clearTimeout(slow);
-      console.error("매출관리 비밀번호 불러오기 실패:", err);
-      setRevenuePasswordError(err?.code === "permission-denied" ? "읽기 권한이 없습니다(계정 승인 상태를 확인해 주세요)." : `불러오기 실패: ${err?.code || err?.message || err}`);
-    });
-    return () => { clearTimeout(slow); unsub(); };
-  }, [userCompany, revenuePasswordRetry]);
 
   // 역할이 바뀌어 현재 메뉴가 차단 목록에 포함되면 HOME으로 이동
   useEffect(() => {
@@ -10064,75 +10034,8 @@ return (
             />)}</BizScope>)}</DetailScope>
             </>
           ) : (
-            <div className="flex items-center justify-center" style={{ minHeight: "60vh" }}>
-              <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 w-[360px]">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-[#1B2B4B] flex items-center justify-center">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                  </div>
-                  <div>
-                    <div className="text-[15px] font-bold text-[#1B2B4B]">매출관리</div>
-                    <div className="text-[11px] text-gray-500">비밀번호를 입력하세요</div>
-                  </div>
-                </div>
-                {!revenuePasswordLoaded ? (
-                  revenuePasswordError ? (
-                    <div className="text-center py-2">
-                      <div className="text-[13px] text-red-500 mb-3">{revenuePasswordError}</div>
-                      <button
-                        onClick={() => { setRevenuePasswordError(""); setRevenuePasswordRetry((n) => n + 1); }}
-                        className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold"
-                      >다시 시도</button>
-                    </div>
-                  ) : (
-                    <div className="text-center py-4 text-gray-500 text-[13px]">로딩 중...</div>
-                  )
-                ) : (revenuePwSetupOpen || (!revenuePassword && canSetRevenuePw)) ? (
-                  // ⭐ 비밀번호 설정·변경은 이 창에서(관리자 이상) — 예전엔 회사관리 › 운영 설정에 있었다
-                  <div>
-                    <RevenuePasswordSection companyName={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} />
-                    {revenuePassword && <button type="button" onClick={() => setRevenuePwSetupOpen(false)} className="w-full mt-3 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-[13px] font-semibold hover:bg-gray-50 transition">비밀번호 입력으로 돌아가기</button>}
-                  </div>
-                ) : !revenuePassword ? (
-                  <div className="text-[13px] text-gray-500 text-center">비밀번호가 설정되지 않았습니다.<br/>회사 마스터에게 설정을 요청해 주세요.</div>
-                ) : (
-                  <form onSubmit={(e) => {
-                    e.preventDefault();
-                    if (revenuePassInput === revenuePassword) {
-                      setRevenueUnlocked(true);
-                      setRevenuePassInput("");
-                      setRevenuePassError(false);
-                    } else {
-                      setRevenuePassError(true);
-                      setRevenuePassInput("");
-                    }
-                  }}>
-                    <input autoComplete="off"
-                      type="password"
-                      autoFocus
-                      className="w-full border border-gray-200 rounded-xl px-4 py-3 text-[14px] text-center tracking-widest mb-3 focus:outline-none focus:border-[#1B2B4B] transition"
-                      placeholder="비밀번호 입력"
-                      value={revenuePassInput}
-                      onChange={e => { setRevenuePassInput(e.target.value); setRevenuePassError(false); }}
-                    />
-                    {revenuePassError && <div className="text-red-500 text-[12px] text-center mb-3 font-medium">비밀번호가 올바르지 않습니다</div>}
-                    <button type="submit" className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl text-[14px] font-bold hover:bg-[#243860] transition"><EditableText id="misc.btn.6942.확인" defaultText="확인" /></button>
-                    {canSetRevenuePw && (
-                      <button type="button" onClick={() => setRevenuePwSetupOpen(true)} className="w-full mt-2 py-2.5 border border-[#1B2B4B]/30 text-[#1B2B4B] rounded-xl text-[13px] font-semibold hover:bg-[#F5F8FD] transition">비밀번호 변경</button>
-                    )}
-                    {role === "totalMaster" && (
-                      <button type="button" onClick={async () => {
-                        if (!await kpConfirm("매출관리 비밀번호를 초기화하시겠습니까?")) return;
-                        const co = (localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || "").trim();
-                        await setDoc(doc(db, "companySettings", co), { revenuePassword: null }, { merge: true });
-                        setRevenuePassword(null);
-                        showAlert("비밀번호가 초기화되었습니다.");
-                      }} className="w-full mt-2 py-2.5 border border-red-300 text-red-500 rounded-xl text-[13px] font-semibold hover:bg-red-50 transition">초기화 (최고관리자)</button>
-                    )}
-                  </form>
-                )}
-              </div>
-            </div>
+            // 🔐 2026-11-27 매출 비밀번호는 서버가 확인한다(src/revenuePwApi.js · functions/revenuePw.js)
+            <RevenuePwPanel company={(getTenant() || localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} onVerified={() => setRevenueUnlocked(true)} />
           )
         )}
 
@@ -56519,115 +56422,62 @@ function PaymentDateRuleChip({ companyName, canEdit }) {
   );
 }
 
-// ─────────── 매출관리 비밀번호 설정 섹션 ───────────
-function RevenuePasswordSection({ companyName }) {
-  const [currentPw, setCurrentPw] = React.useState(null);
-  const [loaded, setLoaded] = React.useState(false);
-  const [changeMode, setChangeMode] = React.useState(false);
-  const [oldPw, setOldPw] = React.useState("");
-  const [newPw, setNewPw] = React.useState("");
-  const [confirmPw, setConfirmPw] = React.useState("");
-  const [saving, setSaving] = React.useState(false);
-  const [msg, setMsg] = React.useState("");
-  const [msgType, setMsgType] = React.useState("ok"); // "ok" | "err"
-
-  React.useEffect(() => {
-    if (!companyName) return;
-    const unsub = onSnapshot(doc(db, "companySettings", companyName.trim()), (snap) => {
-      setCurrentPw(snap.data()?.revenuePassword || null);
-      setLoaded(true);
-    });
-    return () => unsub();
-  }, [companyName]);
-
-  const clearForm = () => { setOldPw(""); setNewPw(""); setConfirmPw(""); setChangeMode(false); };
-
-  const showMsg = (text, type = "ok") => { setMsg(text); setMsgType(type); };
-
-  const handleSave = async () => {
-    if (changeMode && oldPw !== currentPw) { showMsg("현재 비밀번호가 일치하지 않습니다.", "err"); return; }
-    if (!newPw) { showMsg("새 비밀번호를 입력하세요.", "err"); return; }
-    if (newPw !== confirmPw) { showMsg("비밀번호가 일치하지 않습니다.", "err"); return; }
-    setSaving(true);
-    try {
-      await setDoc(doc(db, "companySettings", companyName.trim()), { revenuePassword: newPw }, { merge: true });
-      setCurrentPw(newPw);
-      clearForm();
-      showMsg(changeMode ? "비밀번호가 변경되었습니다." : "비밀번호가 저장되었습니다.");
-    } catch(e) { showMsg("저장 실패: " + e.message, "err"); }
-    setSaving(false);
-  };
-
-  const handleReset = async () => {
-    if (!await kpConfirm("비밀번호를 초기화하시겠습니까?")) return;
-    try {
-      await setDoc(doc(db, "companySettings", companyName.trim()), { revenuePassword: null }, { merge: true });
-      setCurrentPw(null);
-      clearForm();
-      showMsg("비밀번호가 초기화되었습니다.");
-    } catch(e) { showMsg("초기화 실패: " + e.message, "err"); }
-  };
-
+// ─────────── 매출관리 비밀번호 잠금 화면 ───────────
+// 🔐 2026-11-27 서버가 확인한다(functions/revenuePw.js) — 화면은 회사 문서의 revenuePassword 를 읽거나 비교하지 않는다
+//  정하기 · 바꾸기 · 잊었을 때 새로 정하기: 회사 마스터 · 최고관리자(서버가 다시 확인) · 5번 틀리면 잠김(10 → 30 → 60분)
+function RevenuePwPanel({ company, onVerified }) {
+  const g = useRevenuePw({ company, onVerified });
+  const [pw, setPw] = React.useState("");
+  const [cur, setCur] = React.useState("");
+  const [n1, setN1] = React.useState("");
+  const [n2, setN2] = React.useState("");
+  const [title, sub] = revenuePwTexts(g.phase);
+  const inp = "w-full border border-gray-200 rounded-xl px-4 py-3 text-[14px] text-center tracking-widest focus:outline-none focus:border-[#1B2B4B] transition";
+  const clear = () => { setPw(""); setCur(""); setN1(""); setN2(""); };
+  const isSet = g.phase === "setup" || g.phase === "change" || g.phase === "forgot";
   return (
-    <div>
-      <p className="text-[16px] font-black text-[#0F1A30] mb-4">매출관리 비밀번호</p>
-      {!loaded ? (
-        <div className="text-[13px] text-gray-500">로딩 중...</div>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-2">
-            <div className="text-[14.5px] text-gray-600">
-              현재 상태: <b className={currentPw ? "text-[#1B2B4B]" : "text-gray-500"}>{currentPw ? "설정됨" : "미설정"}</b>
-            </div>
-            {currentPw && !changeMode && (
-              <button onClick={() => { setChangeMode(true); setMsg(""); }}
-                className="px-3 py-1.5 rounded-lg bg-[#1B2B4B] text-white text-[12px] font-bold hover:bg-[#243a60] transition shrink-0">
-                변경
-              </button>
-            )}
+    <div className="flex items-center justify-center" style={{ minHeight: "60vh" }}>
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 w-[360px]">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-xl bg-[#1B2B4B] flex items-center justify-center">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           </div>
-          {msg && <div className={`text-[12px] font-medium ${msgType === "err" ? "text-red-500" : "text-emerald-600"}`}>{msg}</div>}
-          {(!currentPw || changeMode) && (
-            <>
-              {changeMode && (
-                <div>
-                  <label className="block text-[13px] font-semibold text-gray-600 mb-1.5">현재 비밀번호</label>
-                  <input autoComplete="off" type="password" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
-                    placeholder="현재 비밀번호" value={oldPw} onChange={e => { setOldPw(e.target.value); setMsg(""); }} />
-                </div>
-              )}
-              <div>
-                <label className="block text-[13px] font-semibold text-gray-600 mb-1.5">새 비밀번호</label>
-                <input autoComplete="off" type="password" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
-                  placeholder="새 비밀번호" value={newPw} onChange={e => { setNewPw(e.target.value); setMsg(""); }} />
-              </div>
-              <div>
-                <label className="block text-[13px] font-semibold text-gray-600 mb-1.5">비밀번호 확인</label>
-                <input autoComplete="off" type="password" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-[14px] focus:outline-none focus:border-[#1B2B4B]"
-                  placeholder="비밀번호 확인" value={confirmPw} onChange={e => { setConfirmPw(e.target.value); setMsg(""); }} />
-              </div>
-              <div className="flex gap-2">
-                <button onClick={handleSave} disabled={saving}
-                  className="flex-1 py-3 rounded-xl bg-[#1B2B4B] hover:bg-[#243a60] text-white text-[14px] font-bold transition disabled:opacity-40">
-                  {saving ? "저장 중..." : (changeMode ? "변경 저장" : "저장")}
-                </button>
-                {changeMode && (
-                  <button onClick={() => { clearForm(); setMsg(""); }}
-                    className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-500 text-[13px] font-semibold hover:bg-gray-50 transition">
-                    취소
-                  </button>
-                )}
-              </div>
-              {currentPw && (
-                <button onClick={handleReset}
-                  className="w-full py-2 rounded-xl border border-red-200 text-red-500 text-[13px] font-semibold hover:bg-red-50 transition">
-                  비밀번호 초기화
-                </button>
-              )}
-            </>
-          )}
+          <div>
+            <div className="text-[15px] font-bold text-[#1B2B4B]">{title}</div>
+            <div className="text-[11px] text-gray-500">{sub}</div>
+          </div>
         </div>
-      )}
+        {g.phase === "loading" ? (
+          <div className="text-center py-4 text-gray-500 text-[13px]">확인하는 중이에요…</div>
+        ) : (g.phase === "netError" || g.phase === "notStaff" || g.phase === "noCompany") ? (
+          <div className="text-center py-2">
+            <div className="text-[13px] text-red-500 mb-3">{g.phase === "netError" ? g.error : sub}</div>
+            <button type="button" onClick={g.retry} className="px-4 py-2 rounded-lg bg-[#1B2B4B] text-white text-[13px] font-bold">다시 시도</button>
+          </div>
+        ) : g.phase === "none" ? (
+          <div className="text-[13px] text-gray-500 text-center leading-relaxed">{REVENUE_PW_NONE}</div>
+        ) : isSet ? (
+          <form onSubmit={async (e) => { e.preventDefault(); if (await g.save({ newPw: n1, confirmPw: n2, currentPw: cur })) clear(); }} className="space-y-2.5">
+            {g.info && <div className="text-[12px] text-[#1B2B4B] bg-[#F5F8FD] rounded-lg px-3 py-2">{g.info}</div>}
+            {g.phase === "change" && <input autoComplete="off" type="password" autoFocus className={inp} placeholder="지금 비밀번호" value={cur} onChange={(e) => { setCur(e.target.value); g.clearError(); }} />}
+            <input autoComplete="off" type="password" autoFocus={g.phase !== "change"} className={inp} placeholder={`새 비밀번호(${REVENUE_PW_MIN}자리 이상)`} value={n1} onChange={(e) => { setN1(e.target.value); g.clearError(); }} />
+            <input autoComplete="off" type="password" className={inp} placeholder="새 비밀번호 한 번 더" value={n2} onChange={(e) => { setN2(e.target.value); g.clearError(); }} />
+            {g.error && <div className="text-red-500 text-[12px] text-center font-medium">{g.error}</div>}
+            <button type="submit" disabled={g.busy || (g.phase === "change" && g.locked > 0)} className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl text-[14px] font-bold hover:bg-[#243860] transition disabled:opacity-50">{g.busy ? "저장하는 중…" : "저장하고 열기"}</button>
+            {g.hasPw && <button type="button" onClick={() => { clear(); g.back(); }} className="w-full py-2.5 border border-gray-200 text-gray-600 rounded-xl text-[13px] font-semibold hover:bg-gray-50 transition">비밀번호 넣기로 돌아가기</button>}
+          </form>
+        ) : (
+          <form onSubmit={async (e) => { e.preventDefault(); const ok = await g.verify(pw); setPw(""); if (ok) clear(); }}>
+            <input autoComplete="off" type="password" autoFocus disabled={g.locked > 0} className={`${inp} mb-3`} placeholder="비밀번호" value={pw} onChange={(e) => { setPw(e.target.value); g.clearError(); }} />
+            {g.error && <div className="text-red-500 text-[12px] text-center mb-3 font-medium">{g.error}</div>}
+            <button type="submit" disabled={g.busy || g.locked > 0} className="w-full py-3 bg-[#1B2B4B] text-white rounded-xl text-[14px] font-bold hover:bg-[#243860] transition disabled:opacity-50">{g.busy ? "확인하는 중…" : <EditableText id="misc.btn.6942.확인" defaultText="확인" />}</button>
+            {g.canSet ? (<>
+              <button type="button" onClick={() => { clear(); g.openChange(); }} className="w-full mt-2 py-2.5 border border-[#1B2B4B]/30 text-[#1B2B4B] rounded-xl text-[13px] font-semibold hover:bg-[#F5F8FD] transition">비밀번호 바꾸기</button>
+              <button type="button" onClick={() => { clear(); g.openForgot(); }} className="w-full mt-2 py-2 text-gray-500 text-[12px] font-semibold hover:text-[#1B2B4B] transition">잊었을 때 새로 정하기</button>
+            </>) : <div className="mt-3 text-[11.5px] text-gray-400 text-center">{REVENUE_PW_FORGOT}</div>}
+          </form>
+        )}
+      </div>
     </div>
   );
 }

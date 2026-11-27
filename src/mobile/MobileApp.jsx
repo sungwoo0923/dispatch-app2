@@ -18,6 +18,7 @@ import { runDelete, deleteOrdersWithLogAtomic } from "../DeleteProgress"; // ⭐
 import { RichHtml } from "../richText"; // ⭐ 2026-11-03 공지 꾸민 글 보여주기
 import { isMasterKey } from "../monthCompare"; // ⭐ 2026-11-03 최고관리자 계정은 "최고관리자"로
 import { useMyProfile } from "../userNames";
+import { useRevenuePw, revenuePwTexts, REVENUE_PW_NONE, REVENUE_PW_FORGOT, REVENUE_PW_MIN } from "../revenuePwApi"; // 🔐 2026-11-27 매출 비밀번호 서버 확인
 import { useCompanyFeatures } from "../companyFeatures"; // ⭐ 2026-11-04 마스터 권한 관리(회사별)
 // 🧭 2026-11-12 업무 영역(내륙 · 컨테이너 · 해상 · 항공 · 통합) — 모바일은 기존 화면 위에 업무 화면을 덮어 띄운다(src/freight/FreightMobile.jsx)
 import { useBizModules, readBiz, writeBiz, bizInfo } from "../bizModules";
@@ -7519,51 +7520,49 @@ setOpenMemo={setOpenMemo}
 );
 }
 
-// ⭐ 2026-11-03 매출관리 비밀번호 — PC와 같은 "회사 비밀번호"(companySettings/{회사}.revenuePassword)
-//   예전엔 휴대폰마다 따로 정하는 6자리 PIN이라 아무나 새로 정할 수 있었다. 이제 회사 마스터만 정하고, 대표·관리자 포함 모두 그 비밀번호를 입력한다.
+// 🔐 2026-11-27 매출관리 비밀번호 — PC와 같은 "회사 비밀번호" · 서버가 확인한다(src/revenuePwApi.js · functions/revenuePw.js)
+//   화면은 회사 문서의 revenuePassword 를 읽거나 비교하지 않는다. 정하기 · 바꾸기 · 잊었을 때 새로 정하기는 회사 마스터 · 최고관리자 · 5번 틀리면 잠김
 function SalesPinGate({ onVerified }) {
   const co = (getTenant() || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim();
-  const me = useMyProfile(auth.currentUser?.uid);
-  const isMaster = localStorage.getItem("role") === "totalMaster" || me?.isMaster === true;
-  const [pw, setPw] = useState(undefined); // undefined = 불러오는 중, null = 없음
+  const g = useRevenuePw({ company: co, onVerified });
   const [input, setInput] = useState("");
-  const [err, setErr] = useState("");
-  const [setup, setSetup] = useState(false);
-  const [n1, setN1] = useState(""); const [n2, setN2] = useState(""); const [busy, setBusy] = useState(false);
-  useEffect(() => onSnapshot(doc(db, "companySettings", co), (x) => setPw(x.exists() ? (x.data()?.revenuePassword ?? null) : null), () => setPw(null)), [co]);
-  const save = async () => {
-    if (n1.length < 4) { setErr("비밀번호는 4자리 이상으로 입력해 주세요."); return; }
-    if (n1 !== n2) { setErr("두 번 입력한 비밀번호가 다릅니다."); return; }
-    setBusy(true);
-    try { await setDoc(doc(db, "companySettings", co), { revenuePassword: n1 }, { merge: true }); setSetup(false); setN1(""); setN2(""); setErr(""); onVerified(); }
-    catch (e) { setErr(/permission/i.test(String(e?.message || e)) ? "회사 마스터만 비밀번호를 정할 수 있습니다." : `저장 실패: ${e?.message || e}`); }
-    finally { setBusy(false); }
-  };
-  const inp = "w-full h-12 rounded-xl border border-[#DCE3EE] px-4 text-center text-[16px] tracking-[0.3em] font-black text-[#0F1A30] outline-none focus:border-[#1B2B4B]";
-  const showSetup = setup || (pw === null && isMaster);
+  const [cur, setCur] = useState("");
+  const [n1, setN1] = useState(""); const [n2, setN2] = useState("");
+  const clear = () => { setInput(""); setCur(""); setN1(""); setN2(""); };
+  const [title, sub] = revenuePwTexts(g.phase);
+  const inp = "w-full h-12 rounded-xl border border-[#DCE3EE] px-4 text-center text-[16px] tracking-[0.3em] font-black text-[#0F1A30] outline-none focus:border-[#1B2B4B] disabled:bg-[#F5F7FA]";
+  const isSet = g.phase === "setup" || g.phase === "change" || g.phase === "forgot";
   return (
     <div className="min-h-[70vh] flex items-center justify-center px-5">
       <div className="w-full max-w-[360px] rounded-3xl bg-white border border-[#E3E8F0] shadow-[0_12px_32px_rgba(15,26,48,.12)] p-6">
         <div className="w-12 h-12 rounded-2xl bg-[#0F1A30] text-white flex items-center justify-center mx-auto">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
         </div>
-        <div className="mt-3 text-center text-[18px] font-black text-[#0F1A30]">{showSetup ? "매출관리 비밀번호 설정" : "매출관리"}</div>
-        <div className="mt-1 text-center text-[12.5px] text-[#7A8AA6]">{showSetup ? "회사 전체가 같은 비밀번호를 씁니다(마스터만 설정)" : "회사 비밀번호를 입력해 주세요"}</div>
+        <div className="mt-3 text-center text-[18px] font-black text-[#0F1A30]">{title}</div>
+        <div className="mt-1 text-center text-[12.5px] text-[#7A8AA6]">{sub}</div>
         <div className="mt-5 space-y-2.5">
-          {pw === undefined ? <div className="py-6 text-center text-[13px] text-[#9AA9C3]">불러오는 중…</div>
-            : showSetup ? (<>
-              <input type="password" className={inp} placeholder="새 비밀번호" value={n1} onChange={(e) => { setN1(e.target.value); setErr(""); }} />
-              <input type="password" className={inp} placeholder="새 비밀번호 확인" value={n2} onChange={(e) => { setN2(e.target.value); setErr(""); }} />
-              <button type="button" disabled={busy} onClick={save} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-60">{busy ? "저장 중…" : "저장"}</button>
-              {pw && <button type="button" onClick={() => { setSetup(false); setErr(""); }} className="w-full h-11 rounded-xl border border-[#E3E8F0] text-[#3A4A66] text-[13.5px] font-bold">비밀번호 입력으로</button>}
-            </>) : pw === null ? (
-              <div className="py-4 text-center text-[13.5px] text-[#5B6B85] leading-relaxed">비밀번호가 아직 없습니다.<br />회사 마스터에게 설정을 요청해 주세요.</div>
-            ) : (<form onSubmit={(e) => { e.preventDefault(); if (input === pw) onVerified(); else { setErr("비밀번호가 올바르지 않습니다"); setInput(""); } }} className="space-y-2.5">
-              <input type="password" autoFocus className={inp} placeholder="비밀번호" value={input} onChange={(e) => { setInput(e.target.value); setErr(""); }} />
-              <button type="submit" className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">확인</button>
-              {isMaster && <button type="button" onClick={() => setSetup(true)} className="w-full h-11 rounded-xl border border-[#1B2B4B]/30 text-[#1B2B4B] text-[13.5px] font-bold">비밀번호 변경(마스터)</button>}
+          {g.phase === "loading" ? <div className="py-6 text-center text-[13px] text-[#9AA9C3]">확인하는 중이에요…</div>
+            : (g.phase === "netError" || g.phase === "notStaff" || g.phase === "noCompany") ? (<>
+              <div className="py-2 text-center text-[13px] text-[#D92D20] leading-relaxed">{g.phase === "netError" ? g.error : sub}</div>
+              <button type="button" onClick={g.retry} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black">다시 시도</button>
+            </>) : g.phase === "none" ? (
+              <div className="py-4 text-center text-[13.5px] text-[#5B6B85] leading-relaxed">{REVENUE_PW_NONE}</div>
+            ) : isSet ? (<form onSubmit={async (e) => { e.preventDefault(); if (await g.save({ newPw: n1, confirmPw: n2, currentPw: cur })) clear(); }} className="space-y-2.5">
+              {g.info && <div className="rounded-xl bg-[#F5F8FD] px-3 py-2 text-[12.5px] text-[#1B2B4B]">{g.info}</div>}
+              {g.phase === "change" && <input type="password" autoComplete="off" className={inp} placeholder="지금 비밀번호" value={cur} onChange={(e) => { setCur(e.target.value); g.clearError(); }} />}
+              <input type="password" autoComplete="off" className={inp} placeholder={`새 비밀번호(${REVENUE_PW_MIN}자리 이상)`} value={n1} onChange={(e) => { setN1(e.target.value); g.clearError(); }} />
+              <input type="password" autoComplete="off" className={inp} placeholder="새 비밀번호 한 번 더" value={n2} onChange={(e) => { setN2(e.target.value); g.clearError(); }} />
+              <button type="submit" disabled={g.busy || (g.phase === "change" && g.locked > 0)} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-60">{g.busy ? "저장하는 중…" : "저장하고 열기"}</button>
+              {g.hasPw && <button type="button" onClick={() => { clear(); g.back(); }} className="w-full h-11 rounded-xl border border-[#E3E8F0] text-[#3A4A66] text-[13.5px] font-bold">비밀번호 넣기로 돌아가기</button>}
+            </form>) : (<form onSubmit={async (e) => { e.preventDefault(); await g.verify(input); setInput(""); }} className="space-y-2.5">
+              <input type="password" autoComplete="off" autoFocus disabled={g.locked > 0} className={inp} placeholder="비밀번호" value={input} onChange={(e) => { setInput(e.target.value); g.clearError(); }} />
+              <button type="submit" disabled={g.busy || g.locked > 0} className="w-full h-12 rounded-xl bg-[#0F1A30] text-white text-[15px] font-black disabled:opacity-60">{g.busy ? "확인하는 중…" : "확인"}</button>
+              {g.canSet ? (<>
+                <button type="button" onClick={() => { clear(); g.openChange(); }} className="w-full h-11 rounded-xl border border-[#1B2B4B]/30 text-[#1B2B4B] text-[13.5px] font-bold">비밀번호 바꾸기(마스터)</button>
+                <button type="button" onClick={() => { clear(); g.openForgot(); }} className="w-full h-10 text-[12.5px] font-bold text-[#7A8AA6]">잊었을 때 새로 정하기</button>
+              </>) : <div className="pt-1 text-center text-[12px] text-[#9AA9C3]">{REVENUE_PW_FORGOT}</div>}
             </form>)}
-          {err && <div className="text-center text-[12.5px] font-bold text-[#D92D20]">{err}</div>}
+          {g.error && g.phase !== "netError" && <div className="text-center text-[12.5px] font-bold text-[#D92D20]">{g.error}</div>}
         </div>
       </div>
     </div>
