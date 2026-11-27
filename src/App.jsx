@@ -397,7 +397,10 @@ export default function App() {
     adminAuthTime(user).then((t) => { if (alive) setUserAuthAt(t); });
     return () => { alive = false; };
   }, [userGateOn, user]);
-  const needUserMfa = userGateOn && pcMfaTick >= 0 && (userAuthAt === null || !isAdminGatePassed(user.uid, userAuthAt));
+  // 🛠 2026-11-27 로그인 카드에서 방금(1분 안) 2차 인증을 통과했으면, 이번 로그인 시각(userAuthAt)을 읽는 동안 덮개를 다시 띄우지 않는다
+  //  (예전엔 카드에서 PIN 을 넣고 들어오면 덮개가 한 번 더 번쩍 떴다 — 여러 회사 계정은 회사 전환으로 더 길게 보였다)
+  const justPassed = (() => { try { const v = JSON.parse(localStorage.getItem("kpAdminGateOk") || "null"); return !!v && v.uid === user?.uid && Date.now() - (v.at || 0) < 60000; } catch { return false; } })();
+  const needUserMfa = userGateOn && pcMfaTick >= 0 && (userAuthAt === null ? !justPassed : !isAdminGatePassed(user.uid, userAuthAt));
   // 로그인했을 때 2차 인증을 쓸지 묻기 — [사용 안 함]이면 30일 뒤 다시(세션마다 한 번만 판단)
   const [mfaAsk, setMfaAsk] = useState("");
   useEffect(() => {

@@ -8,7 +8,6 @@ import { initializeApp, getApps } from "firebase/app";
 import BigCheck from "./components/BigCheck";
 import { doc, getDoc, getFirestore, collection, getDocs, query, where, updateDoc, serverTimestamp } from "firebase/firestore";
 import SignupWelcomeCard from "./SignupWelcomeCard"; // 🎉 2026-11-22 승인 뒤 첫 로그인 — 가입 완료 카드(회사코드)
-import { readPublicCompanies } from "./publicCompanies"; // 🔎 2026-11-22 회사명 조회
 import { canMulti, multiCompaniesOf, activeCompanyOf } from "./multiCompany"; // 🏢 2026-11-24 여러 회사 오가기
 import { waitClaimsCompany, fetchMyCompanyCodes } from "./MultiCompanySwitch";
 import { useNavigate, Link } from "react-router-dom";
@@ -45,14 +44,6 @@ export default function TransportLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [welcome, setWelcome] = useState(null); // 🎉 가입 완료 카드 { companyName, companyCode, name, email }
-  const [coList, setCoList] = useState(null); // 🔎 회사명 조회(공개 운송사 목록)
-  const [coOpen, setCoOpen] = useState(false);
-  const [coBusy, setCoBusy] = useState(false);
-  const openCoSearch = async () => {
-    if (coList) { setCoOpen(true); return; }
-    setCoBusy(true);
-    try { setCoList(await readPublicCompanies()); } catch { setCoList([]); } finally { setCoBusy(false); setCoOpen(true); }
-  };
   const [previewInfo, setPreviewInfo] = useState(null); // 승인 대기 계정 — 둘러보기 버튼
   const [msg, setMsg] = useState(null);
   const [showPopup, setShowPopup] = useState(false);
@@ -334,7 +325,7 @@ export default function TransportLogin() {
           await signOut(auth); // ⭐ 2026-11-22 로그아웃을 먼저 — "확인 중" 표시를 먼저 지우면 앱이 진짜 로그아웃으로 알고 화면을 새로 고쳐 안내가 사라졌다
           sessionStorage.removeItem("transportValidating");
           window.__kpGateInline = false;
-          setError("회사명을 입력해 주세요. [조회]를 누르면 찾을 수 있어요.");
+          setError("회사명을 입력해 주세요. 모르면 이메일 · 비밀번호를 넣고 [회사코드 찾기]를 누르면 회사명 · 코드가 같이 채워져요.");
           return;
         }
         if (isSubAdmin && !inputCompanyName) inputCompanyName = localStorage.getItem("loginCompany") || "";
@@ -422,7 +413,9 @@ export default function TransportLogin() {
         // 🏢 여러 회사 계정 — 입력한 회사가 지금 회사와 다르면 바꾸고, 서버 토큰이 바뀔 때까지 기다린다
         if (canMulti(userData) && activeCompanyOf(userData) !== inputCompanyName) {
           await updateDoc(doc(db, "users", uid), { activeCompany: inputCompanyName === userData.companyName ? "" : inputCompanyName }).catch(() => {});
+          setMsg(`${inputCompanyName}(으)로 회사를 바꾸는 중이에요. 길면 30초까지 걸려요.`); // 🛠 2026-11-27 여러 회사 계정 — "확인 중"만 보여 멈춘 줄 알았다
           const okCo = await waitClaimsCompany(credential.user, inputCompanyName);
+          setMsg(null);
           if (!okCo) {
             await signOut(auth);
             sessionStorage.removeItem("transportValidating");
@@ -632,24 +625,10 @@ export default function TransportLogin() {
             <div className="relative">
             {field("company", "회사명", (
               <>
-                <input type="text" placeholder="가입한 회사명 (최고관리자는 비워도 돼요)" value={companyName} onChange={(e) => { setCompanyName(e.target.value); if (coList) setCoOpen(true); }} onKeyDown={handleKeyDown} className={inputCls} />
-                <button type="button" onClick={() => (coOpen ? setCoOpen(false) : openCoSearch())} disabled={coBusy} data-co-search className="text-[11.5px] font-extrabold text-[#4B6CB7] hover:underline shrink-0">{coBusy ? "조회 중" : "조회"}</button>
+                {/* 🔒 2026-11-27 사용자 요청 — 로그인 전에 [조회]로 등록된 운송사 이름이 전부 보이던 것을 없앴다. 회사명 · 코드는 [회사코드 찾기](이메일 · 비밀번호 확인 뒤 내 회사만)로 채운다 */}
+                <input type="text" placeholder="가입한 회사명" value={companyName} onChange={(e) => setCompanyName(e.target.value)} onKeyDown={handleKeyDown} className={inputCls} />
               </>
             ))}
-            {coOpen && (() => {
-              const k = companyName.replace(/\s+/g, "").toLowerCase();
-              const hits = (coList || []).filter((c) => !k || String(c.companyName).replace(/\s+/g, "").toLowerCase().includes(k)).slice(0, 30);
-              return (
-                <div className="absolute z-30 left-0 right-0 -mt-2 mb-3 bg-white border border-[#DCE3EE] rounded-[13px] shadow-[0_18px_40px_rgba(15,26,48,.18)] max-h-[240px] overflow-y-auto" data-co-list>
-                  {hits.length ? hits.map((c) => (
-                    <button key={c.companyName} type="button" onClick={() => { setCompanyName(c.companyName); setCoOpen(false); }} className="w-full text-left px-4 py-2.5 hover:bg-[#EEF3FC] border-b border-[#EEF1F6] last:border-0">
-                      <div className="text-[13.5px] font-bold text-[#1B2B4B]">{c.companyName}</div>
-                      {c.address && <div className="text-[11.5px] text-[#7A89A3] truncate">{c.address}</div>}
-                    </button>
-                  )) : <div className="px-4 py-3 text-[12.5px] text-[#7A89A3]">{companyName ? `"${companyName}"(으)로 등록된 회사가 없어요` : "등록된 회사가 없어요"}</div>}
-                </div>
-              );
-            })()}
             </div>
             {field("email", "이메일", (
               <input type="email" placeholder="name@company.com" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={handleKeyDown} className={inputCls} />
