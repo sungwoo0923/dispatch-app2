@@ -4437,12 +4437,13 @@ const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
   }, []);
   // 🏦 2026-11-19 자금관리 › 통장 내역 [미수금과 맞추기] — 정산관리 › 거래처정산 › 미수금관리로 가서 올린 입금으로 자동 매칭 창을 연다
   React.useEffect(() => {
+    // 🧩 2026-11-27 거래처정산은 따로 떼어 낸 화면(src/dispatch/ClientSettlement.jsx) — 화면 파일을 받은 뒤 열기 신호를 보낸다(받아 둔 뒤엔 예전과 같은 시간)
     const h = (e) => {
       const deps = e?.detail?.deposits;
       if (!Array.isArray(deps) || !deps.length) return;
       e.detail.handled = true;
       menuClickRef.current("정산관리");
-      setTimeout(() => { set정산관리Tab("거래처정산"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: { tab: "unsettledMonth", deposits: deps } })), 160); }, 80);
+      setTimeout(() => { set정산관리Tab("거래처정산"); ClientSettlement.preload().catch(() => {}).then(() => setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: { tab: "unsettledMonth", deposits: deps } })), 160)); }, 80);
     };
     window.addEventListener("kp-bank-ar-match", h);
     return () => window.removeEventListener("kp-bank-ar-match", h);
@@ -4942,7 +4943,7 @@ return (
 
         </div>
       </header>
-      <CloseInboxBanner inbox={closeInbox} onOpen={(x) => { handleMenuClick("정산관리"); setTimeout(() => { set정산관리Tab("거래처정산"); setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: { tab: "invoice", client: x.client, ym: x.ym } })), 120); }, 60); }} />
+      <CloseInboxBanner inbox={closeInbox} onOpen={(x) => { handleMenuClick("정산관리"); setTimeout(() => { set정산관리Tab("거래처정산"); ClientSettlement.preload().catch(() => {}).then(() => setTimeout(() => window.dispatchEvent(new CustomEvent("kp-settle-open", { detail: { tab: "invoice", client: x.client, ym: x.ym } })), 120)); }, 60); }} />
       {/* ★ 2026-11-12 자주 쓰는 메뉴(접었다 펴기) · 통합 검색 창 · 도움말 센터 — 지금 이 계정에 보이는 메뉴로 자동 구성 */}
       <QuickNav menu={menu} isMaster={realRole === "totalMaster"} /* 🔒 2026-11-18 도움말 '새 기능 · 바뀐 점'은 최고관리자만 */
         menus={(() => { // 🔎 2026-11-27 지금 화면 메뉴 + (화면 전환 역할) 다른 화면에만 있는 메뉴 — 누르면 그 화면으로 바꿔서 연다
