@@ -46,9 +46,11 @@ function css(tid, idx, st, ci) {
     out.push(`${T}>thead>tr:last-child>${H}{${one(st.head)}}`);
     if (inner(st.head)) out.push(`${T}>thead>tr:last-child>${H} *{${inner(st.head)}}`);
   }
-  if (st.cell && one(st.cell)) {
-    out.push(`${T}>tbody>tr>${D}{${one(st.cell)}}`);
-    if (inner(st.cell)) out.push(`${T}>tbody>tr>${D} *:not(button):not(svg):not(path){${inner(st.cell)}}`);
+  // 🎨 2026-11-27 사용자 요청 — 칸 배경색을 바꾸면(굵기를 따로 안 골랐으면) 그 칸 글씨는 자동으로 굵게
+  const cell = st.cell ? { ...st.cell, weight: st.cell.weight || (st.cell.bg ? 800 : "") } : null;
+  if (cell && one(cell)) {
+    out.push(`${T}>tbody>tr>${D}{${one(cell)}}`);
+    if (inner(cell)) out.push(`${T}>tbody>tr>${D} *:not(button):not(svg):not(path){${inner(cell)}}`);
   }
   return out.join("\n");
 }
