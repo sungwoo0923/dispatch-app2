@@ -621,11 +621,13 @@ function DmDot({ on, alert = false }) {
   // 🧪 개발 화면(import.meta.env.DEV)에서만 localStorage kpSkinTest=1 이면 다른 계정으로도 전환 점검 — 배포 빌드에는 들어가지 않는다
   const skinAllowed = SKIN_SWITCH && (role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpSkinTest") === "1"; } catch { return false; } })()));
   const [ofSkin, setOfSkin] = React.useState(() => readSkin(true));
-  const skinOn = skinAllowed ? ofSkin : readSkin(false);
+  // 🎨 2026-11-27 D 카드형(사용자 시안) — 우선 최고관리자만(작업 도우미와 같이) · 개발 화면은 kpAssistTest=1 로 점검
+  const deckOn = role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpAssistTest") === "1"; } catch { return false; } })());
+  const skinOn = deckOn ? "deck" : skinAllowed ? ofSkin : readSkin(false);
   const cycleSkin = () => setOfSkin((v) => { const n = nextSkin(v); saveSkin(n); return n; });
   const layOn = LAYOUT_SKINS.has(skinOn);
   const ofHiddenKey = [...ofs.hidden].sort().join("|");
-  const ofGrid = React.useMemo(() => routeGrid(ofHiddenKey ? ofHiddenKey.split("|") : []), [ofHiddenKey]); // 숨긴 칸 자리는 옆 칸이 채운다
+  const ofGrid = React.useMemo(() => routeGrid(ofHiddenKey ? ofHiddenKey.split("|") : [], skinOn === "deck" ? "deck" : "route"), [ofHiddenKey, skinOn]); // 숨긴 칸 자리는 옆 칸이 채운다
   const dmLookupNameOf = React.useCallback((r) => _orderStaffNameRaw(r, userNameMap), [userNameMap]);
 
       // ⭐ 회사별 커스텀 드롭다운 옵션(Part B) — 등록폼 전역에서 재사용하므로 최상위에서
@@ -9355,7 +9357,7 @@ className={`
     </div>
   ) : assistAllowed ? (
     // 🧭 2026-11-27 달력 자리에 [달력 | 거래처 최근 노선] — 거래처를 고르면 최근 노선이 저절로 열린다(입력창 바로 옆에서 [채우기])
-    <SideAssist history={dispatchData} client={form.거래처명} onFill={fillFromRoute} calendar={
+    <SideAssist rows={recentDispatchData} history={dispatchData} client={form.거래처명} onFill={fillFromRoute} calendar={
       <OrderCalendarPanel
         pickupDate={form.상차일 || ""}
         dropDate={form.하차일 || ""}
