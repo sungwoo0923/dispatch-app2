@@ -4,7 +4,21 @@
 //  · 아래: 거리 · 예상 시간(상차시간 기준 도착 예상) · 예상 유류비(톤수별 연비 × 오늘 경유값) · 통행료(티맵)
 import React from "react";
 import { loadTmap } from "../tmapLoader";
-import { drawTmapTrafficRoute, clearTmapOverlays, TRAFFIC_LEGEND } from "../mapStyle";
+import { drawTmapTrafficRoute, clearTmapOverlays, TRAFFIC_LEGEND, routeSegments } from "../mapStyle";
+import { MapContainer, TileLayer, CircleMarker, useMap } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import { LeafletTrafficRoute } from "../mapLeaflet";
+
+// 티맵을 못 불러올 때 쓰는 기본 지도(오픈스트리트맵) — 경로가 있으면 그 범위로 맞춘다
+function FitRoute({ route }) {
+  const map = useMap();
+  React.useEffect(() => {
+    const pts = routeSegments(route).flatMap((x) => x.points);
+    if (pts.length >= 2) { try { map.fitBounds(pts, { padding: [40, 40] }); } catch { /* 무시 */ } }
+  }, [route, map]);
+  React.useEffect(() => { const t = setTimeout(() => { try { map.invalidateSize(); } catch { /* 무시 */ } }, 200); return () => clearTimeout(t); });
+  return null;
+}
 
 const NUM = { fontVariantNumeric: "tabular-nums" };
 // 톤수별 기준 연비(km/L) — 회사 값이 따로 없을 때 쓰는 보통 값
@@ -37,29 +51,39 @@ export default function OrderRouteMapPanel({ form, onOpenBig, height }) {
   const mapRef = React.useRef(null);
   const overlays = React.useRef([]);
   const [ready, setReady] = React.useState(false);
+  const [engine, setEngine] = React.useState("loading"); // loading | tmap | basic(오픈스트리트맵)
+  const [route, setRoute] = React.useState(null);
   const [state, setState] = React.useState("idle"); // idle | loading | ready | error
   const [info, setInfo] = React.useState(null);
   const from = String(form?.상차지주소 || "").trim(), to = String(form?.하차지주소 || "").trim();
 
-  // 지도는 늘 띄워 둔다(주소가 없어도 수도권 지도)
+  // 지도는 늘 띄워 둔다(주소가 없어도 수도권 지도) — 티맵이 늦으면 끝까지 기다리고(최대 약 10초 · 한 번 더 시도), 그래도 안 되면 기본 지도
   React.useEffect(() => {
     let off = false;
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     (async () => {
-      await loadTmap().catch(() => {});
-      for (let i = 0; i < 60 && !(window.Tmapv2?.Map && document.getElementById(mapId)); i++) await new Promise((r) => setTimeout(r, 50));
-      if (off || !window.Tmapv2?.Map || !document.getElementById(mapId)) return;
-      mapRef.current = new window.Tmapv2.Map(mapId, { center: new window.Tmapv2.LatLng(37.45, 127.05), width: "100%", height: "100%", zoom: 9 });
-      setReady(true);
+      for (let tryN = 0; tryN < 2 && !off; tryN++) {
+        try { await Promise.race([loadTmap(), wait(6000)]); } catch { /* 다시 */ }
+        for (let i = 0; i < 80 && !off && !(window.Tmapv2?.Map && document.getElementById(mapId)); i++) await wait(60);
+        if (off) return;
+        if (window.Tmapv2?.Map && document.getElementById(mapId)) {
+          try {
+            mapRef.current = new window.Tmapv2.Map(mapId, { center: new window.Tmapv2.LatLng(37.45, 127.05), width: "100%", height: "100%", zoom: 9 });
+            setEngine("tmap"); setReady(true); return;
+          } catch { /* 다시 */ }
+        }
+        await wait(1500);
+      }
+      if (!off) setEngine("basic");
     })();
     return () => { off = true; };
   }, [mapId]);
   // 패널 크기가 바뀌면 지도 크기도
   React.useEffect(() => { try { mapRef.current?.resize?.(); } catch { /* 무시 */ } }, [height]);
 
+  // ① 경로 찾기 — 지도 종류와 상관없이(주소가 바뀌면 0.7초 뒤)
   React.useEffect(() => {
-    const map = mapRef.current; if (!ready || !map) return undefined;
-    clearTmapOverlays(overlays.current); overlays.current = [];
-    if (!from || !to) { setState("idle"); setInfo(null); return undefined; }
+    if (!from || !to) { setState("idle"); setInfo(null); setRoute(null); return undefined; }
     setState("loading");
     let off = false;
     const t = setTimeout(async () => {
@@ -71,26 +95,52 @@ export default function OrderRouteMapPanel({ form, onOpenBig, height }) {
         r = await res.json();
       } catch { r = null; }
       if (off) return;
-      if (!r?.path?.length) { setState("error"); setInfo(null); return; }
-      const T = window.Tmapv2;
-      overlays.current = drawTmapTrafficRoute(map, r, { weight: 7 }) || [];
-      const path = r.path.map(([lng, lat]) => new T.LatLng(lat, lng));
-      const s = path[0], e = path[path.length - 1];
-      overlays.current.push(new T.Marker({ position: s, map, icon: pin("상", "#1B2B4B"), iconSize: new T.Size(44, 54), iconAnchor: new T.Point(22, 54) }));
-      overlays.current.push(new T.Marker({ position: e, map, icon: pin("하", "#2D4C82"), iconSize: new T.Size(44, 54), iconAnchor: new T.Point(22, 54) }));
-      const b = new T.LatLngBounds(); path.forEach((p) => b.extend(p)); try { map.fitBounds(b, 60); } catch { map.fitBounds(b); }
+      if (!r?.path?.length) { setState("error"); setInfo(null); setRoute(null); return; }
+      setRoute(r);
       setInfo({ km: Number(r.distanceKm) || 0, min: Number(r.durationMin) || 0, toll: r.tollFare });
       setState("ready");
     }, 700);
     return () => { off = true; clearTimeout(t); };
-  }, [ready, from, to]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [from, to]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ② 티맵에 그리기(교통 색 · 상 · 하 표시 · 경로에 맞춰 확대)
+  React.useEffect(() => {
+    const map = mapRef.current; if (!ready || !map || engine !== "tmap") return;
+    clearTmapOverlays(overlays.current); overlays.current = [];
+    if (!route?.path?.length) return;
+    const T = window.Tmapv2;
+    overlays.current = drawTmapTrafficRoute(map, route, { weight: 7 }) || [];
+    const path = route.path.map(([lng, lat]) => new T.LatLng(lat, lng));
+    overlays.current.push(new T.Marker({ position: path[0], map, icon: pin("상", "#1B2B4B"), iconSize: new T.Size(44, 54), iconAnchor: new T.Point(22, 54) }));
+    overlays.current.push(new T.Marker({ position: path[path.length - 1], map, icon: pin("하", "#2D4C82"), iconSize: new T.Size(44, 54), iconAnchor: new T.Point(22, 54) }));
+    const bd = new T.LatLngBounds(); path.forEach((p) => bd.extend(p)); try { map.fitBounds(bd, 60); } catch { map.fitBounds(bd); }
+  }, [ready, engine, route]);
 
   const startMin = minOf(form?.상차시간);
   const eta = info ? hm((startMin ?? (new Date().getHours() * 60 + new Date().getMinutes())) + info.min) : "";
   const eff = effOf(form?.차량톤수);
-  const price = dieselPrice();
+  const [fetchedPrice, setFetchedPrice] = React.useState(null);
+  const cachedPrice = dieselPrice();
+  // 오늘 경유값이 아직 없으면(유가 카드보다 먼저 열림 등) 직접 한 번 불러온다
+  React.useEffect(() => {
+    if (cachedPrice) return;
+    let off = false;
+    (async () => {
+      try {
+        const API_BASE = import.meta.env.VITE_API_BASE || "";
+        const d = await (await fetch(`${API_BASE}/api/fuel?area=01`)).json();
+        const oil = Array.isArray(d?.RESULT?.OIL) ? d.RESULT.OIL : [];
+        const x = oil.find((o) => String(o?.PRODNM || "").includes("경유") || o?.PRODCD === "D047");
+        const v = Number(String(x?.PRICE ?? "").replace(/,/g, ""));
+        if (!off && v > 0) setFetchedPrice(v);
+      } catch { /* 무시 */ }
+    })();
+    return () => { off = true; };
+  }, [cachedPrice]);
+  const price = cachedPrice || fetchedPrice;
   const fuel = info && eff && price ? (info.km / eff) * price : null;
   const zoom = (d) => { try { mapRef.current?.setZoom(mapRef.current.getZoom() + d); } catch { /* 무시 */ } };
+  const tmapOn = engine === "tmap";
 
   const Stat = ({ lbl, val, sub, dark }) => (
     <div className="rounded-[14px] px-3.5 py-3" style={dark ? { background: "linear-gradient(135deg,#0F1A30,#1B2B4B 60%,#2D4C82)", color: "#fff" } : { background: "#F4F7FB" }}>
@@ -106,10 +156,20 @@ export default function OrderRouteMapPanel({ form, onOpenBig, height }) {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="19" r="2" /><circle cx="18" cy="5" r="2" /><path d="M8 19h8a3 3 0 000-6H8a3 3 0 010-6h8" /></svg>
         </span>
         <div className="leading-tight"><div className="text-[10px] font-extrabold tracking-[0.22em] text-[#2D4C82]">LIVE ROUTE</div><div className="text-[15px] font-black text-[#0F1A30]">실시간 경로</div></div>
-        <span className="ml-auto h-[26px] inline-flex items-center gap-1.5 px-2.5 rounded-[8px] bg-[#EEF3FB] text-[11.5px] font-black text-[#1B2B4B]"><span className="w-[7px] h-[7px] rounded-full bg-[#2EB67D]" />TMAP 실시간 교통</span>
+        <span className="ml-auto h-[26px] inline-flex items-center gap-1.5 px-2.5 rounded-[8px] bg-[#EEF3FB] text-[11.5px] font-black text-[#1B2B4B]"><span className="w-[7px] h-[7px] rounded-full bg-[#2EB67D]" />{engine === "basic" ? "실시간 교통 경로" : "TMAP 실시간 교통"}</span>
       </div>
       <div className="relative flex-1 min-h-0 bg-[#EEF2F7]">
-        <div id={mapId} className="absolute inset-0" />
+        <div id={mapId} className="absolute inset-0" style={{ visibility: engine === "basic" ? "hidden" : "visible" }} />
+        {engine === "basic" && (
+          <MapContainer center={[37.45, 127.05]} zoom={9} zoomControl={false} attributionControl={false} style={{ position: "absolute", inset: 0 }}>
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+            {route && <LeafletTrafficRoute routeData={route} weight={7} />}
+            {route?.path?.length > 1 && <CircleMarker center={[route.path[0][1], route.path[0][0]]} radius={8} pathOptions={{ color: "#fff", weight: 3, fillColor: "#1B2B4B", fillOpacity: 1 }} />}
+            {route?.path?.length > 1 && <CircleMarker center={[route.path[route.path.length - 1][1], route.path[route.path.length - 1][0]]} radius={8} pathOptions={{ color: "#fff", weight: 3, fillColor: "#2D4C82", fillOpacity: 1 }} />}
+            <FitRoute route={route} />
+          </MapContainer>
+        )}
+        {engine === "loading" && <div className="absolute inset-0 grid place-items-center text-[13px] font-bold text-[#5E6B82] bg-[#EEF2F7]" style={{ zIndex: 4 }}>지도를 불러오는 중…</div>}
         {(form?.상차지명 || from) && (
           <div className="absolute left-3 right-3 top-3 flex flex-col gap-1.5 pointer-events-none" style={{ zIndex: 5 }}>
             {[["상", form?.상차지명 || from, form?.상차시간 || "", false], ["하", form?.하차지명 || to, info ? `도착 예상 ${eta}` : form?.하차시간 || "", true]].filter(([, n]) => n).map(([t, n, r, o]) => (
@@ -129,9 +189,9 @@ export default function OrderRouteMapPanel({ form, onOpenBig, height }) {
             {TRAFFIC_LEGEND.map((x) => <span key={x.c} className="flex items-center gap-1"><span className="inline-block w-4 h-1.5 rounded" style={{ background: x.color }} />{x.label}</span>)}
           </div>
         )}
-        <div className="absolute right-3 bottom-3 flex flex-col gap-1.5" style={{ zIndex: 5 }}>
+        {tmapOn && <div className="absolute right-3 bottom-3 flex flex-col gap-1.5" style={{ zIndex: 5 }}>
           {[["+", 1], ["−", -1]].map(([l, d]) => <button key={l} type="button" tabIndex={-1} onClick={() => zoom(d)} className="w-[34px] h-[34px] rounded-[10px] bg-white border border-[#DCE2EC] text-[#1B2B4B] font-black shadow-sm hover:bg-[#F3F6FB]">{l}</button>)}
-        </div>
+        </div>}
       </div>
       <div className="p-3.5 grid grid-cols-2 gap-2.5 border-t border-[#EEF2F8]">
         <Stat dark lbl="거리" val={info ? `${info.km.toFixed(1)}km` : "—"} sub="실제 도로 기준" />
