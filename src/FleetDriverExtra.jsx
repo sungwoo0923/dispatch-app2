@@ -3,6 +3,7 @@
 //  · 기사앱 상태(가입·승인 / 가입 대기 / 미가입) + 가입 안내 문자 복사(앱 받는 주소 포함)
 //  · 정산 계좌(은행·계좌·예금주) · 사업자번호·상호 → 지입차관리 정산(일괄 지급명세서)에 그대로 쓰임
 //  · 지입 계약(시작일·월 지입료·명의) — 월 지입료는 지급명세서 기사별 공제에 자동 반영
+//  · ⛽ 2026-11-27 월 할부금(시작 ~ 종료월) 자동 공제 · 유류카드 끝 4자리(주유비 엑셀 자동 매칭)
 //  · 차량 기본정보(차명·연식·정비 주기·검사/보험 만기)는 기사앱 첫 설정과 같은 마법사로 직접 입력
 import React from "react";
 import { createPortal } from "react-dom"; // ⭐ 2026-11-05 DriverCombo 드롭다운
@@ -75,6 +76,13 @@ export default function FleetExtraFields({ value: v, onChange, company }) {
           <div />
           <div><label className={lab}>지입 계약 시작일</label><CustomDatePicker className={inp} value={v.지입계약일 || ""} onChange={(e) => set({ 지입계약일: e.target.value })} showIcon /></div>
           <div><label className={lab}>월 지입료 <span className="font-normal text-[#5B6B85]">(명세서 자동 공제)</span></label><input inputMode="numeric" className={`${inp} text-right`} value={fee ? Number(fee).toLocaleString() : ""} onChange={(e) => setFee(e.target.value)} placeholder="0" /></div>
+          {/* ⛽ 2026-11-27 할부금(시작 ~ 종료월 매달 명세서 자동 공제) · 유류카드 끝 4자리([주유비 불러오기] 자동 매칭) */}
+          <div><label className={lab}>월 할부금 <span className="font-normal text-[#5B6B85]">(명세서 자동 공제)</span></label><input inputMode="numeric" className={`${inp} text-right`} value={v.할부금?.amount ? Number(v.할부금.amount).toLocaleString() : ""} onChange={(e) => { const a = Number(onlyDigits(e.target.value)) || 0; set({ 할부금: a ? { ...(v.할부금 || {}), amount: a } : null }); }} placeholder="0" /></div>
+          <div className="grid grid-cols-2 gap-2">
+            <div><label className={lab}>할부 시작월</label><input type="month" className={inp} value={v.할부금?.start || ""} disabled={!v.할부금?.amount} onChange={(e) => set({ 할부금: { ...(v.할부금 || {}), start: e.target.value } })} /></div>
+            <div><label className={lab}>할부 종료월</label><input type="month" className={inp} value={v.할부금?.end || ""} disabled={!v.할부금?.amount} onChange={(e) => set({ 할부금: { ...(v.할부금 || {}), end: e.target.value } })} /></div>
+          </div>
+          <div className="col-span-2"><label className={lab}>유류카드 끝 4자리 <span className="font-normal text-[#5B6B85]">(주유비 엑셀 자동 매칭 · 여러 장은 쉼표로)</span></label><input inputMode="numeric" className={inp} value={(Array.isArray(v.유류카드) ? v.유류카드 : []).join(", ")} onChange={(e) => set({ 유류카드: (e.target.value.match(/\d{4}/g) || []).slice(0, 6) })} placeholder="예: 1234, 5678" /></div>
           <div className="col-span-2 flex items-center justify-between gap-3 rounded-xl bg-white border border-[#E3E8F0] px-3.5 py-2.5">
             <div className="min-w-0">
               <div className="text-[14px] font-black text-[#0F1A30]">차량 기본정보</div>

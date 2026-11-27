@@ -32,6 +32,15 @@ import { makeTripOwner, platePeriods } from "./driverVehicleHistory"; // ⭐ 202
 import useNarrow from "./useNarrow"; // ⭐ 2026-11-06 휴대폰 폭 카드 목록
 import { statementPayPatch, statementUnpayPatch, isPaidOrder } from "./payCore"; // 💸 2026-11-25 [지급 완료] → 오더도 지급완료
 import { setFleetStatementPayout } from "./ledgerAuto";
+import { fuelOf, installmentOf } from "./fleetFuel"; // ⛽ 2026-11-27 주유비 · 할부금 자동 공제(업체 요청)
+import FleetFuelImport from "./FleetFuelImport";
+import { useStmtCols, StmtColsModal } from "./fleetStmtCols"; // 🧾 2026-11-27 지급명세서 운행 내역 칸(회사별)
+// 공제를 항목별로 묶기 — 요약 표 · 엑셀 칸(주유비 · 지입료 · 할부금 · 기타)
+export const dedGroups = (deds) => {
+  const g = { fuel: 0, fee: 0, inst: 0, etc: 0 };
+  (deds || []).forEach((x) => { const l = String(x.label || ""); const a = Number(x.amount) || 0; if (/^(주유|유류)/.test(l)) g.fuel += a; else if (/^지입료/.test(l)) g.fee += a; else if (/^할부금/.test(l)) g.inst += a; else g.etc += a; });
+  return g;
+};
 
 const toInt = (v) => parseInt(String(v ?? "0").replace(/[^\d-]/g, ""), 10) || 0;
 const CANCELED = ["배차취소", "취소", "오더취소", "취소됨"];
@@ -43,7 +52,7 @@ const digits = (v) => String(v || "").replace(/\D/g, "");
 const fmtBiz = (v) => { const d = digits(v); return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}` : d; };
 const fmtTs = (v) => { const ms = v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : 0; if (!ms) return ""; const s = new Date(ms + 9 * 3600e3).toISOString(); return `${s.slice(5, 10).replace("-", ".")} ${s.slice(11, 16)}`; };
 
-export const DED_KINDS = ["지입료", "관리비", "보험료", "보험료 할증", "할부금", "유류 선지급", "세금", "원천세 3.3%", "과태료", "범칙금", "통행료", "사고 처리비", "기타"];
+export const DED_KINDS = ["지입료", "관리비", "보험료", "보험료 할증", "할부금", "주유비", "유류 선지급", "세금", "원천세 3.3%", "과태료", "범칙금", "통행료", "사고 처리비", "기타"];
 export const PENALTY_STATUSES = ["접수", "기사 확인", "납부 완료", "이의 신청", "취소"];
 
 const card = "rounded-[18px] bg-white border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_8px_20px_rgba(16,24,40,0.05)]";
@@ -113,7 +122,7 @@ function DeductionEditor({ title, sub, value = [], auto = [], gross = 0, onSave,
               <div className={`${inp} w-full flex items-center bg-[#F5F8FD]`}>{d.kind || kindOfLabel(d.label)}</div>
               <div className={`${inp} w-full flex items-center gap-1.5 bg-[#F5F8FD] min-w-0`}><span className="shrink-0 h-6 px-1.5 rounded-md bg-[#0F1A30] text-white text-[13px] font-black inline-flex items-center">{d.src}</span><span className="truncate">{d.memo || d.label}</span></div>
               <div className={`${inp} w-full flex items-center justify-end bg-[#F5F8FD] tabular-nums`} style={{ fontFamily: MONO }}>{won(d.amount)}</div>
-              <span className="w-10 h-10 flex items-center justify-center text-[#5B6B85]" title={d.src === "과태료" ? "과태료·사고 서류에서 수정" : d.src === "공통" ? "[공통 공제]에서 수정" : "기사관리에서 수정"}>■</span>
+              <span className="w-10 h-10 flex items-center justify-center text-[#5B6B85]" title={d.src === "과태료" ? "과태료·사고 서류에서 수정" : d.src === "공통" ? "[공통 공제]에서 수정" : d.src === "주유비" ? "[주유비 불러오기]에서 수정" : "기사관리(지입 계약)에서 수정"}>■</span>
             </div>
           ))}
           {list.map((d, j) => {
@@ -149,6 +158,7 @@ const viaNames = (r) => [r.경유지_상차, r.경유지_하차, r.경유상차�
 function useStatements({ drivers, dispatchData, co, ym, vatMode, includeEmpty = false }) {
   const [from, to] = monthRange(ym);
   const settings = useCompanyDoc("companySettings", co);
+  const stmtCols = useStmtCols(co); // 🧾 2026-11-27 운행 내역 칸 — 발송하는 명세서에 함께 저장(기사앱도 같은 모양)
   const defDeds = (settings.statementDeductions || []).filter((d) => d.label);
   const draftKey = `kpStmtDraft_${co}_${ym}`;
   const [edits, setEdits] = React.useState({});
@@ -181,7 +191,7 @@ function useStatements({ drivers, dispatchData, co, ym, vatMode, includeEmpty = 
       const day = r.상차일 || ""; if (day < from || day > to) return false;
       return toInt(r.기사운임) > 0;
     }).sort((a, b) => String(a.상차일).localeCompare(String(b.상차일)))
-      .map((r) => ({ id: r._id || r.id || "", col: r.__col || "", date: r.상차일 || "", client: r.거래처명 || "", from: r.상차지명 || "", to: r.하차지명 || "", via: viaNames(r), cargo: r.화물내용 || "", ton: r.차량톤수 || r.톤수 || "", fare: toInt(r.기사운임), route: r.고정노선명 || "" }));
+      .map((r) => ({ id: r._id || r.id || "", col: r.__col || "", date: r.상차일 || "", dropDate: r.하차일 || "", client: r.거래처명 || "", from: r.상차지명 || "", to: r.하차지명 || "", via: viaNames(r), cargo: r.화물내용 || "", ton: r.차량톤수 || r.톤수 || "", carNo: r.차량번호 || "", driver: r.이름 || r.기사명 || "", fare: toInt(r.기사운임), route: r.고정노선명 || "" }));
     const gross = trips.reduce((s, t) => s + t.fare, 0);
     const vat = vatMode === "biz" && d.사업자번호 ? Math.round(gross * 0.1) : 0;
     // 기사 부담(공제) 과태료 — 이의 신청·취소는 빼고, 다른 달에 이미 정산된 건도 뺀다
@@ -190,17 +200,21 @@ function useStatements({ drivers, dispatchData, co, ym, vatMode, includeEmpty = 
     const auto = [
       ...defDeds.map((x) => ({ label: x.label, amount: toInt(x.amount), src: "공통", kind: kindOfLabel(x.label) })),
       ...(d.공제항목 || []).filter((x) => x.label).map((x) => ({ label: x.label, amount: toInt(x.amount), src: "기사관리", kind: kindOfLabel(x.label) })),
+      // ⛽ 2026-11-27 할부금(지입 계약 · 시작 ~ 종료월) · 그 달 주유비([주유비 불러오기])
+      ...(() => { const v = installmentOf(d, ym); return v ? [{ label: v.total ? `할부금 (${v.nth}/${v.total}회)` : "할부금", amount: v.amount, src: "기사관리", kind: "할부금" }] : []; })(),
+      ...(() => { const v = fuelOf(d, ym); return v ? [{ label: "주유비", amount: v.amount, src: "주유비", kind: "주유비", memo: `주유비 ${v.count ? `${v.count}건 · ` : ""}${won(v.amount)}원` }] : []; })(),
       ...penList.map((p) => ({ label: `${p.kind || "과태료"} ${p.date || ""}`.trim(), amount: toInt(p.amount), src: "과태료", kind: DED_KINDS.includes(p.kind) ? p.kind : "과태료", memo: [p.date, p.summary || p.detail || p.place].filter(Boolean).join(" · ") })),
     ];
     const extra = (edits[d.id] || []).filter((x) => x.label && toInt(x.amount));
     const deductions = [...auto, ...extra.map((x) => ({ ...x, src: "추가" }))].map((x) => ({ label: x.label, amount: toInt(x.amount) }));
     const deductTotal = deductions.reduce((s, x) => s + x.amount, 0);
+    const dg = dedGroups(deductions);
     const bankCheck = d.정산계좌?.acct ? validateAccount(d.정산계좌.bank, d.정산계좌.acct) : { ok: false, level: "error", msg: "계좌 미등록" };
     return {
-      key: d.id, d, trips, gross, vat, auto, deductions, deductTotal, extra, penIds: penList.map((p) => p.id), net: gross + vat - deductTotal, bankCheck,
-      st: { companyName: co, driverId: d.appUid || d.id, driverKey: d.id, driverName: name, joinType: d.등급 || "", carNo: plate, phone: d.전화번호 || "", period: ym, from, to, trips, gross, vat, deductions, deductTotal, net: gross + vat - deductTotal, bank: d.정산계좌 || null, bizNo: d.사업자번호 || "", bizName: d.사업자상호 || "" },
+      key: d.id, d, trips, gross, vat, auto, deductions, deductTotal, dg, extra, penIds: penList.map((p) => p.id), net: gross + vat - deductTotal, bankCheck,
+      st: { companyName: co, driverId: d.appUid || d.id, driverKey: d.id, driverName: name, joinType: d.등급 || "", carNo: plate, phone: d.전화번호 || "", period: ym, from, to, trips, cols: stmtCols, gross, vat, deductions, deductTotal, net: gross + vat - deductTotal, bank: d.정산계좌 || null, bizNo: d.사업자번호 || "", bizName: d.사업자상호 || "" },
     };
-  }).filter((r) => includeEmpty || r.trips.length || r.deductTotal), [drivers, tripOwner, dispatchData, from, to, ym, vatMode, penalties, edits, JSON.stringify(defDeds), co, includeEmpty]); // eslint-disable-line react-hooks/exhaustive-deps
+  }).filter((r) => includeEmpty || r.trips.length || r.deductTotal), [drivers, tripOwner, dispatchData, from, to, ym, vatMode, penalties, edits, JSON.stringify(defDeds), co, includeEmpty, stmtCols]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const send = async (list0) => {
     // 💸 2026-11-25 지급 완료한 명세서는 다시 보내지 않는다(다시 보내면 지급 기록이 지워져서) — [지급 취소] 뒤에 다시 보내 주세요
@@ -302,6 +316,8 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
   const { rows, sent, defDeds, edits, saveEdits, send, saveCommon, markPaid, unmarkPaid } = useStatements({ drivers, dispatchData, co, ym, vatMode });
   const [payDate, setPayDate] = React.useState(kstToday()); // 💸 2026-11-25 [지급 완료] 지급일
   const [dedEdit, setDedEdit] = React.useState(null);
+  const [fuelOpen, setFuelOpen] = React.useState(false);
+  const [colsOpen, setColsOpen] = React.useState(false);
   const [sel, setSel] = React.useState(new Set());
   const [preview, setPreview] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
@@ -309,7 +325,7 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
 
   const qq = q.replace(/\s/g, "");
   const shown = rows.filter((r) => !qq || `${r.d.이름}${r.d.차량번호}${r.d.전화번호}${r.d.사업자상호 || ""}`.replace(/\s/g, "").includes(qq));
-  const totals = shown.reduce((a, r) => ({ n: a.n + r.trips.length, gross: a.gross + r.gross, vat: a.vat + r.vat, net: a.net + r.net, ded: a.ded + r.deductTotal }), { n: 0, gross: 0, vat: 0, net: 0, ded: 0 });
+  const totals = shown.reduce((a, r) => ({ n: a.n + r.trips.length, gross: a.gross + r.gross, vat: a.vat + r.vat, net: a.net + r.net, ded: a.ded + r.deductTotal, dg: { fuel: a.dg.fuel + r.dg.fuel, fee: a.dg.fee + r.dg.fee, inst: a.dg.inst + r.dg.inst, etc: a.dg.etc + r.dg.etc } }), { dg: { fuel: 0, fee: 0, inst: 0, etc: 0 }, n: 0, gross: 0, vat: 0, net: 0, ded: 0 });
   const allOn = shown.length > 0 && shown.every((r) => sel.has(r.key));
   const toggle = (k) => setSel((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
   const sendSelected = async (keys) => { setBusy(true); const ok = await send(rows.filter((r) => keys.has(r.key))); if (ok) setSel(new Set()); setBusy(false); };
@@ -336,10 +352,10 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
     const list = sel.size ? rows.filter((r) => sel.has(r.key)) : shown;
     if (!list.length) { kpAlert("내려받을 기사님이 없습니다."); return; }
     const wb = XLSX.utils.book_new();
-    const A = [["순번", "차량번호", "기사명", "등급", "전화번호", "사업자번호", "사업자명", "운행건수", "운임합계", "부가세", "공제합계", "실지급액", "은행", "계좌", "예금주", "계좌확인", "발송상태"]];
-    list.forEach((r, i) => { const b = r.d.정산계좌 || {}; A.push([i + 1, r.d.차량번호, r.d.이름, r.d.등급 || "", r.d.전화번호 || "", fmtBiz(r.d.사업자번호), r.d.사업자상호 || "", r.trips.length, r.gross, r.vat, r.deductTotal, r.net, b.bank || "", b.acct ? formatAccount(b.bank, b.acct) : "", b.holder || "", r.bankCheck.level === "ok" ? "계좌확인완료" : r.bankCheck.msg, sent[r.key]?.status ? ({ sent: "발송", read: "읽음", confirmed: "확인" }[sent[r.key].status] || "발송") : "미발송"]); });
-    A.push([], ["", "합계", "", "", "", "", "", list.reduce((s, r) => s + r.trips.length, 0), list.reduce((s, r) => s + r.gross, 0), list.reduce((s, r) => s + r.vat, 0), list.reduce((s, r) => s + r.deductTotal, 0), list.reduce((s, r) => s + r.net, 0)]);
-    const ws1 = XLSX.utils.aoa_to_sheet(A); ws1["!cols"] = [6, 12, 10, 6, 14, 14, 14, 8, 12, 10, 12, 12, 10, 18, 10, 12, 8].map((wch) => ({ wch }));
+    const A = [["순번", "차량번호", "기사명", "등급", "전화번호", "사업자번호", "사업자명", "운행건수", "운임합계", "부가세", "주유비", "지입료", "할부금", "기타 공제", "공제합계", "실지급액", "은행", "계좌", "예금주", "계좌확인", "발송상태"]];
+    list.forEach((r, i) => { const b = r.d.정산계좌 || {}; A.push([i + 1, r.d.차량번호, r.d.이름, r.d.등급 || "", r.d.전화번호 || "", fmtBiz(r.d.사업자번호), r.d.사업자상호 || "", r.trips.length, r.gross, r.vat, r.dg.fuel, r.dg.fee, r.dg.inst, r.dg.etc, r.deductTotal, r.net, b.bank || "", b.acct ? formatAccount(b.bank, b.acct) : "", b.holder || "", r.bankCheck.level === "ok" ? "계좌확인완료" : r.bankCheck.msg, sent[r.key]?.status ? ({ sent: "발송", read: "읽음", confirmed: "확인" }[sent[r.key].status] || "발송") : "미발송"]); });
+    A.push([], ["", "합계", "", "", "", "", "", list.reduce((s, r) => s + r.trips.length, 0), list.reduce((s, r) => s + r.gross, 0), list.reduce((s, r) => s + r.vat, 0), ...["fuel", "fee", "inst", "etc"].map((k) => list.reduce((s, r) => s + r.dg[k], 0)), list.reduce((s, r) => s + r.deductTotal, 0), list.reduce((s, r) => s + r.net, 0)]);
+    const ws1 = XLSX.utils.aoa_to_sheet(A); ws1["!cols"] = [6, 12, 10, 6, 14, 14, 14, 8, 12, 10, 11, 11, 11, 11, 12, 12, 10, 18, 10, 12, 8].map((wch) => ({ wch }));
     XLSX.utils.book_append_sheet(wb, ws1, "지급 요약");
     const B = [["기사명", "차량번호", "순번", "상차일", "거래처", "상차지", "경유(기사운임)", "하차지", "화물", "톤수", "기사운임"]];
     list.forEach((r) => r.trips.forEach((t, i) => B.push([r.d.이름, r.d.차량번호, i + 1, t.date, t.client, t.from, t.via, t.to, t.cargo, t.ton, t.fare])));
@@ -377,6 +393,10 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
         <button type="button" onClick={() => setDedEdit({ key: "__common__", title: "공통 공제", sub: "모든 기사님 명세서에 똑같이 들어갑니다", value: defDeds })} className={btnL}>
           공통 공제 {defDeds.length ? `${defDeds.length}건 · ${won(defDeds.reduce((s, d) => s + toInt(d.amount), 0))}원` : "설정"}
         </button>
+        {/* ⛽ 2026-11-27 주유비 — 은행 · 카드 사용내역 엑셀 → 기사님별 그 달 주유비 공제 */}
+        <button type="button" data-testid="fuel-import-btn" onClick={() => setFuelOpen(true)} className={btnL}>주유비 불러오기{totals.dg.fuel ? ` · ${won(totals.dg.fuel)}원` : ""}</button>
+        {/* 🧾 2026-11-27 지급명세서 운행 내역에 보일 칸(회사별) */}
+        <button type="button" data-testid="stmt-cols-btn" onClick={() => setColsOpen(true)} className={btnL}>명세서 칸 설정</button>
         <div className="ml-auto flex items-center gap-2 flex-wrap">
           <span className="text-[14px] font-bold text-[#5B6B85] whitespace-nowrap">선택 {sel.size}명</span>
           <button type="button" onClick={() => setPreview(0)} disabled={!shown.length} className={btnL}>미리보기</button>
@@ -423,11 +443,11 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
         </div>
       )}
       {!narrow && <div className={`${card} overflow-x-auto`}>
-        <table className="w-full min-w-[1780px]">
+        <table className="w-full min-w-[2120px]">
           <thead>
             <tr className="bg-[#0B1428] text-[#DCE6F7]">
               <th className="w-12 py-3.5"><input type="checkbox" className="w-4 h-4" checked={allOn} onChange={() => setSel(allOn ? new Set() : new Set(shown.map((r) => r.key)))} /></th>
-              {["순번", "차량번호", "기사명", "가입유형", "전화번호", "사업자번호", "사업자명", "정산 계좌", "계좌 확인", "건수", "운임", "부가세", "공제", "실지급액", "상태", ""].map((h, i) => <th key={i} className={`${TH} ${["건수", "운임", "부가세", "공제", "실지급액"].includes(h) ? "text-right" : ""}`}>{h}</th>)}
+              {["순번", "차량번호", "기사명", "가입유형", "건수", "운임", "부가세", "주유비", "지입료", "할부금", "기타 공제", "실지급액", "상태", "", "전화번호", "사업자번호", "사업자명", "정산 계좌", "계좌 확인"].map((h, i) => <th key={i} className={`${TH} ${["건수", "운임", "부가세", "주유비", "지입료", "할부금", "기타 공제", "실지급액"].includes(h) ? "text-right" : ""}`}>{h}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -438,19 +458,16 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
                 <td className={`${TD} font-black text-[#0F1A30]`}>{r.d.차량번호 || "-"}</td>
                 <td className={`${TD} font-black text-[#0F1A30]`}>{r.d.이름}{!r.d.appUid && <span className="ml-1.5 text-[14px] font-bold text-[#5B6B85]">앱 미가입</span>}</td>
                 <td className={TD}><JoinChip v={r.d.등급} /></td>{/* ⭐ 2026-11-06 가입유형 칸 */}
-                <td className={`${TD} tabular-nums text-[#3A4A66]`}>{(r.d.전화번호 && (fmtPhone(r.d.전화번호) || r.d.전화번호)) || "-"}</td>
-                <td className={`${TD} tabular-nums text-[#3A4A66]`}>{r.d.사업자번호 ? fmtBiz(r.d.사업자번호) : "-"}</td>
-                <td className={`${TD} text-[#3A4A66]`}>{r.d.사업자상호 || "-"}</td>
-                <td className={`${TD} font-bold text-[#0F1A30] tabular-nums`}>{r.d.정산계좌?.acct ? acctLine(r.d.정산계좌) : <span className="text-[#5B6B85]">미등록</span>}</td>
-                <td className={TD}>{r.bankCheck.level === "ok" ? <Chip>✓ 계좌확인완료</Chip> : <Chip soft>! {r.bankCheck.msg}</Chip>}</td>
                 <td className={`${TD} ${NUM} text-right tabular-nums`}>{r.trips.length}</td>
                 <td className={`${TD} ${NUM} text-right tabular-nums`} style={{ fontFamily: MONO }}>{won(r.gross)}</td>
                 <td className={`${TD} text-right tabular-nums text-[16px] font-bold text-[#3A4A66]`} style={{ fontFamily: MONO }}>{r.vat ? won(r.vat) : "-"}</td>
+                {/* ⛽ 2026-11-27 공제를 항목별로(주유비 · 지입료 · 할부금) — 나머지는 [기타 공제] 버튼 */}
+                {[r.dg.fuel, r.dg.fee, r.dg.inst].map((v, j) => <td key={j} className={`${TD} text-right tabular-nums text-[16px] font-bold ${v ? "text-[#0B1428]" : "text-[#B4BFD0]"}`} style={{ fontFamily: MONO }}>{v ? `-${won(v)}` : "-"}</td>)}
                 <td className={`${TD} text-right`}>
                   <button type="button" onClick={() => setDedEdit({ key: r.key, title: `${r.d.이름} 기사님 공제`, sub: "자동 공제(■)와 이번 달 추가 공제를 함께 봅니다", value: r.extra, auto: r.auto, gross: r.gross })}
                     title={r.deductions.map((d) => `${d.label} ${won(d.amount)}`).join("\n") || "공제 추가"}
                     className="h-9 px-3 rounded-lg border border-[#DCE3EE] bg-white hover:bg-[#F5F8FD] text-[14px] font-black tabular-nums text-[#1B2B4B]" style={{ fontFamily: MONO }}>
-                    {r.deductTotal ? `-${won(r.deductTotal)}` : "+ 공제"}{r.deductions.length ? <span className="ml-1.5 text-[14px] text-[#5B6B85]">{r.deductions.length}건</span> : null}
+                    {r.dg.etc ? `-${won(r.dg.etc)}` : "+ 추가"}
                   </button>
                 </td>
                 <td className={`${TD} text-right tabular-nums font-black text-[17px] text-[#0B1428]`} style={{ fontFamily: MONO }}>{won(r.net)}</td>
@@ -460,19 +477,24 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
                   <button type="button" onClick={() => sendSelected(new Set([r.key]))} disabled={isPaidRow(r)} className="ml-1.5 h-9 px-3.5 rounded-lg bg-[#1B2B4B] text-white text-[14px] font-black disabled:opacity-40">발송</button>
                   <span className="ml-1.5 inline-block">{payBtn(r, "h-9 px-3 rounded-lg text-[14px] font-black disabled:opacity-40")}</span>
                 </td>
+                <td className={`${TD} tabular-nums text-[#3A4A66]`}>{(r.d.전화번호 && (fmtPhone(r.d.전화번호) || r.d.전화번호)) || "-"}</td>
+                <td className={`${TD} tabular-nums text-[#3A4A66]`}>{r.d.사업자번호 ? fmtBiz(r.d.사업자번호) : "-"}</td>
+                <td className={`${TD} text-[#3A4A66]`}>{r.d.사업자상호 || "-"}</td>
+                <td className={`${TD} font-bold text-[#0F1A30] tabular-nums`}>{r.d.정산계좌?.acct ? acctLine(r.d.정산계좌) : <span className="text-[#5B6B85]">미등록</span>}</td>
+                <td className={TD}>{r.bankCheck.level === "ok" ? <Chip>✓ 계좌확인완료</Chip> : <Chip soft>! {r.bankCheck.msg}</Chip>}</td>
               </tr>
             ))}
-            {!shown.length && <tr><td colSpan={17} className="py-20 text-center text-[15px] font-bold text-[#5B6B85]">{ym} 기간에 운행한 지입·직영·임대 기사님이 없습니다</td></tr>}
+            {!shown.length && <tr><td colSpan={20} className="py-20 text-center text-[15px] font-bold text-[#5B6B85]">{ym} 기간에 운행한 지입·직영·임대 기사님이 없습니다</td></tr>}
           </tbody>
           {shown.length > 0 && (
             <tfoot>
               <tr className="bg-[#F3F6FA] font-black text-[#0F1A30] text-[14.5px]">
-                <td /><td colSpan={9} className="px-3 py-3.5">합계 {shown.length}명</td>
+                <td /><td colSpan={4} className="px-3 py-3.5">합계 {shown.length}명</td>
                 <td className="px-3 text-right tabular-nums text-[16px]">{totals.n}</td>
                 <td className="px-3 text-right tabular-nums text-[16px]" style={{ fontFamily: MONO }}>{won(totals.gross)}</td>
                 <td className="px-3 text-right tabular-nums text-[16px]" style={{ fontFamily: MONO }}>{won(totals.vat)}</td>
-                <td className="px-3 text-right tabular-nums text-[16px]" style={{ fontFamily: MONO }}>-{won(totals.ded)}</td>
-                <td className="px-3 text-right tabular-nums text-[18px]" style={{ fontFamily: MONO }}>{won(totals.net)}</td><td colSpan={2} />
+                {["fuel", "fee", "inst", "etc"].map((k) => <td key={k} className="px-3 text-right tabular-nums text-[16px]" style={{ fontFamily: MONO }}>{totals.dg[k] ? `-${won(totals.dg[k])}` : "-"}</td>)}
+                <td className="px-3 text-right tabular-nums text-[18px]" style={{ fontFamily: MONO }}>{won(totals.net)}</td><td colSpan={7} />
               </tr>
             </tfoot>
           )}
@@ -480,6 +502,8 @@ export function BatchStatementsPanel({ drivers = [], dispatchData = [], companyN
       </div>}
 
       {dedEdit && <DeductionEditor title={dedEdit.title} sub={dedEdit.sub} value={dedEdit.value} auto={dedEdit.auto || []} gross={dedEdit.gross || 0} onSave={onSaveDed} onClose={() => setDedEdit(null)} />}
+      <FleetFuelImport open={fuelOpen} ym={ym} drivers={drivers} onClose={() => setFuelOpen(false)} />
+      <StmtColsModal open={colsOpen} co={co} onClose={() => setColsOpen(false)} />
 
       {cur && (
         <div className="fixed inset-0 z-[99990] bg-[#0B1428]/55 flex justify-end">
@@ -519,6 +543,8 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
   const [dedEdit, setDedEdit] = React.useState(false);
   const [preview, setPreview] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
+  // 🧾 2026-11-27 운행 내역 줄을 누르면 그 오더 수정 패널(월 마감과 같은 패널) — 오더를 고치면 배차 · 매출 · 명세서가 함께 맞춰진다
+  const openOrder = (t) => { const o = (dispatchData || []).find((r) => (r._id || r.id) === t.id); if (o) window.dispatchEvent(new CustomEvent("kp-open-copy-panel", { detail: { row: o } })); };
   const docRef = React.useRef(null);
   const sorted = [...rows].sort((a, b) => b.trips.length - a.trips.length || String(a.d.이름).localeCompare(String(b.d.이름), "ko"));
   const qq = q.replace(/\s/g, "");
@@ -639,7 +665,7 @@ export function SingleStatementPanel({ drivers = [], dispatchData = [], companyN
                   <thead><tr className="bg-[#0B1428] text-[#DCE6F7]">{["순번", "상차일", "거래처", "상차지", "경유", "하차지", "화물", "톤수", "기사운임"].map((h) => <th key={h} className={`${TH} ${h === "기사운임" ? "text-right" : ""}`}>{h}</th>)}</tr></thead>
                   <tbody>
                     {trips.map((t, i) => (
-                      <tr key={i} className={`border-b border-[#EEF1F6] ${i % 2 ? "bg-[#FAFBFD]" : "bg-white"}`}>
+                      <tr key={i} onClick={() => openOrder(t)} title="누르면 오더 수정(배차 · 매출 · 명세서가 함께 바뀝니다)" className={`border-b border-[#EEF1F6] cursor-pointer hover:bg-[#EEF3FC] ${i % 2 ? "bg-[#FAFBFD]" : "bg-white"}`}>
                         <td className={`${TD} text-[#5B6B85] font-bold tabular-nums`} style={{ fontFamily: MONO }}>{i + 1}</td>
                         <td className={`${TD} tabular-nums font-bold`} style={{ fontFamily: MONO }}>{t.date}</td>
                         <td className={`${TD} font-black text-[#0F1A30]`}>{t.client}{t.route && <span className="ml-1.5 text-[14px] font-black px-1.5 py-0.5 rounded bg-[#EEF3FC] text-[#1B2B4B]">고정</span>}</td>
@@ -1106,7 +1132,7 @@ export function useFleetDrivers() {
     .map((raw) => ({
       id: raw.id, 이름: String(raw.이름 || raw.name || "").trim() || "-", 차량번호: String(raw.차량번호 || raw.carNo || "").trim() || "-",
       전화번호: String(raw.전화번호 || raw.phone || "").trim() || "-", 등급: raw.등급, 차량종류: raw.차량종류 || "", 차량톤수: String(raw.차량톤수 || raw.톤수 || ""),
-      정산계좌: raw.정산계좌 || null, 사업자번호: raw.사업자번호 || "", 사업자상호: raw.사업자상호 || "", appUid: raw.uid || "", 공제항목: raw.공제항목 || null, 차량이력: Array.isArray(raw.차량이력) ? raw.차량이력 : null,
+      정산계좌: raw.정산계좌 || null, 사업자번호: raw.사업자번호 || "", 사업자상호: raw.사업자상호 || "", appUid: raw.uid || "", 공제항목: raw.공제항목 || null, 할부금: raw.할부금 || null, 유류카드: Array.isArray(raw.유류카드) ? raw.유류카드 : [], 주유비: raw.주유비 || null, /* ⛽ 2026-11-27 */ 차량이력: Array.isArray(raw.차량이력) ? raw.차량이력 : null,
     })).sort((a, b) => a.이름.localeCompare(b.이름, "ko"))), () => setList([])), []);
   return list;
 }

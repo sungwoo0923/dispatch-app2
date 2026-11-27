@@ -10083,6 +10083,12 @@ return (
           {정산관리Tab === "지입정산관리" && (
             <FleetSettlementMenu dispatchData={settleRows} companyName={(localStorage.getItem("loginCompany") || userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY || "").trim()} />
           )}
+          {/* 🧾 2026-11-27 지입정산 개별 정산서 운행 내역 줄을 누르면 뜨는 오더 수정 패널(월 마감과 같은 패널) */}
+          {정산관리Tab === "지입정산관리" && !isViewer && (
+            <UnassignedStatus panelOnly role={role} userCompany={userCompany} userNameMap={userNameMap} dispatchData={dispatchData} setDispatchData={setDispatchData}
+                patchDispatch={patchDispatchSafe} removeDispatch={removeDispatchSafe} drivers={drivers} clients={clients} places={places}
+                upsertDriver={upsertDriver} upsertClient={upsertClientSafe} isViewer={isViewer} setCargoAddPopup={setCargoAddPopup} approvedShippers={approvedShippers} />
+          )}
           {정산관리Tab === "지급관리" && (
             <div className="p-4">
               <PaymentManagement
