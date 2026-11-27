@@ -9162,6 +9162,37 @@ const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
     window.addEventListener("kp-bank-ar-match", h);
     return () => window.removeEventListener("kp-bank-ar-match", h);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // 🔙 2026-11-27 PC 브라우저 [뒤로] — 메뉴 이동 · 화면 전환을 브라우저 기록에 쌓는다(예전엔 한 번 누르면 프로그램 밖으로 나갔다)
+  //  주소는 그대로 두고 기록의 state(kpNav: 메뉴 · 화면)만 남긴다 — [뒤로]/[앞으로]를 누르면 그 메뉴 · 화면으로 돌아간다
+  const navPopRef = React.useRef(false);
+  const navNowRef = React.useRef({ m: menu, v: roleView.view || "" });
+  navNowRef.current = { m: menu, v: roleView.view || "" };
+  React.useEffect(() => {
+    const cur = { m: menu, v: roleView.view || "" };
+    if (navPopRef.current) { navPopRef.current = false; return; }
+    let st = null;
+    try { st = window.history.state || {}; } catch { return; }
+    const was = st.kpNav;
+    if (was && was.m === cur.m && was.v === cur.v) return;
+    try {
+      if (!was) window.history.replaceState({ ...st, kpNav: cur }, "");
+      else window.history.pushState({ ...st, kpNav: cur }, "");
+    } catch { /* 무시 */ }
+  }, [menu, roleView.view]);
+  React.useEffect(() => {
+    const onPop = (e) => {
+      const nav = e.state?.kpNav;
+      if (!nav || !nav.m) return; // 프로그램 첫 화면보다 더 뒤 — 브라우저 기본 동작
+      const now = navNowRef.current;
+      const viewChange = !!nav.v && !!roleView.views && nav.v !== now.v && roleView.views.some(([k]) => k === nav.v);
+      if (!viewChange && nav.m === now.m) return;
+      navPopRef.current = true;
+      if (viewChange) roleView.setView(nav.v);
+      setMenu(nav.m);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [roleView.views, roleView.setView]); // eslint-disable-line react-hooks/exhaustive-deps
   const [sideMenuOpen, setSideMenuOpen] = React.useState(false);
   const closeSideMenu = React.useCallback(() => setSideMenuOpen(false), []);
 
@@ -51704,7 +51735,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const [payMethodFilter, setPayMethodFilter] = useState("전체");
   const [dispatchMethodFilter, setDispatchMethodFilter] = useState("전체");
   const [loadStart, setLoadStart] = useState(() => `${thisMonthStr()}-01`);
-  const [loadEnd, setLoadEnd] = useState(todayStr9);
+  // 🛠 2026-11-27 기본 기간 = 이번 달 1일 ~ 말일(예전엔 오늘까지라 내일 · 이번 달 남은 날 상차 오더가 빠져 정산 홈 '기사 지급'과 숫자가 달랐다)
+  const [loadEnd, setLoadEnd] = useState(() => { const d = new Date(); return `${thisMonthStr()}-${String(new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()).padStart(2, "0")}`; });
   useLoadOrderRange(loadStart || null, loadEnd); // ★ 고른 기간만 불러오기
   const [carNoQ, setCarNoQ] = useState("");
   const [nameQ, setNameQ] = useState("");
@@ -51712,7 +51744,8 @@ function PaymentManagement({ dispatchData = [], patchDispatch, clients = [], dri
   const [selectedPayDate, setSelectedPayDate] = useState(todayStr9());
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [editRow, setEditRow] = useState(null); // { id, data }
-  const [searched, setSearched] = useState(false); // 조회 버튼 눌러야 결과 표시
+  // 조회 버튼 눌러야 결과 표시 — 🛠 2026-11-27 정산 홈 [기사 지급]으로 들어오면 바로 조회된 상태(src/SettleHome.jsx 가 kpPayOpenNow 를 남긴다)
+  const [searched, setSearched] = useState(() => { try { const t = Number(sessionStorage.getItem("kpPayOpenNow") || 0); sessionStorage.removeItem("kpPayOpenNow"); return Date.now() - t < 10000; } catch { return false; } });
   const [vatRate] = useState(0.1); // 부가세 10%
   const [insuranceRate, setInsuranceRate] = useState(1.27); // 산재보험료율 (%)
   const [payExcelOpen, setPayExcelOpen] = useState(false);

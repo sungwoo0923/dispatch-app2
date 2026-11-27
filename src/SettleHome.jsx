@@ -111,7 +111,7 @@ export default function SettleHome({ orders = [], company = "", onGo, depositOn 
     { k: "write", no: "02", label: "명세서 작성", done: rows.filter((r) => r.idx >= 1).length, total, test: (r) => r.idx < 1, go: () => go("거래처정산", { tab: "invoice", board: true }), link: "명세서" },
     { k: "tax", no: "03", label: "계산서 발행", done: rows.filter((r) => r.idx >= 2).length, total, test: (r) => r.idx < 2, go: () => go("거래처정산", { tab: "invoice", board: true }), link: "명세서" },
     { k: "deposit", no: "04", label: "입금 확인", done: rows.filter((r) => r.unpaid <= 0).length, total, test: (r) => r.unpaid > 0, go: () => go("거래처정산", { tab: "unsettledMonth" }), link: "미수금관리", amt: rows.reduce((a, r) => a + r.unpaid, 0) },
-    { k: "payout", no: "05", label: "기사 지급", done: step("payout").total - step("payout").left, total: step("payout").total, unit: "건", go: () => go("지급관리"), link: "용차지급관리", amt: step("payout").amount },
+    { k: "payout", no: "05", label: "기사 지급", done: step("payout").total - step("payout").left, total: step("payout").total, unit: "건", go: () => { try { sessionStorage.setItem("kpPayOpenNow", String(Date.now())); } catch { /* 무시 */ } go("지급관리"); }, link: "용차지급관리" /* 🛠 2026-11-27 이번 달 전체로 바로 조회된 상태로 연다 */, amt: step("payout").amount },
     { k: "end", no: "06", label: "정산 마감", done: rows.filter((r) => r.idx >= 3).length, total, test: (r) => r.idx < 3, go: () => go("거래처정산", { tab: "invoice", board: true }), link: "명세서" },
   ];
   const cur = steps.findIndex((x) => x.done < x.total);
