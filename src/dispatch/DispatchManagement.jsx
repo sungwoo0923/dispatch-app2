@@ -63,6 +63,8 @@ import { MARKET_SHORT } from "../orderMarketConfig";
 import { shareToHub } from "../hubShare";
 import { CARGO_VEHICLE_SPEC_TABLE, CargoExtraChips, ContactPickerIconButton, FareSortDropdown, OrderCalendarPanel, OrderMemoIconButton, PALLET_SPEC_TABLE, REVERSED_DATE_ORDER_MSG, StopBadge, TimeAmPmPicker, WaypointSection, _parseWorkDates, cleanStopCargo, defaultDriverNoticeTemplate, dokchaOn, fareCargoExact, fareCargoPartial, fetchPrinterInfo, formatPhone, getFareMatchLabel, getTotalPalletFromOrder, getTotalTonFromOrder, isReversedDateOrder, issueUploadUrl, makePlaceKey, mergeViaCargoText, mergeViaTonnage, nextManagerName, normalizePlate, safeLoad, safeSave, sflowToast, shouldShowDriverMemoAlert, sortFareHistory, toTonUnit, todayStr } from "./shared/dispatchCommon.jsx";
 import RealtimeStatus from "./RealtimeStatus.jsx";
+import { MonthPicker } from "../kpInputs"; // 🗓 2026-11-27 마감월 — 프로그램 달력
+import OrderWorkAssist, { readAssistMode } from "./OrderWorkAssist.jsx"; // 🧭 2026-11-27 오더등록 아래 작업 도우미(최고관리자 먼저)
 
 
 // ================= 카운트 애니메이션 =================
@@ -636,6 +638,9 @@ function DmDot({ on, alert = false }) {
       const tonTypeOptionsCustom = useCompanyDropdownOptions("톤수타입", role, userCompany);
       const [useNewForm, setUseNewForm] = React.useState(false);
       const [bottomStatusKey, setBottomStatusKey] = React.useState(0);
+      const [assistMode, setAssistMode] = React.useState(readAssistMode); // 🧭 2026-11-27 작업 도우미 | 전체 표(이 기기에 기억)
+      // 🧭 우선 최고관리자만 · 🧪 개발 화면(import.meta.env.DEV)에서만 localStorage kpAssistTest=1 이면 다른 계정으로도 점검(배포 빌드엔 안 들어감)
+      const assistAllowed = role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpAssistTest") === "1"; } catch { return false; } })());
       // ⏱ 상/하차 시간 + 이전/이후 표시용
 function renderTimeWithCond(time, cond) {
   if (!time) return "-";
@@ -5183,6 +5188,14 @@ const copyTimeOf = (t) => {
   const hh = h % 12 === 0 ? 12 : h % 12;
   return `${h < 12 ? "오전" : "오후"} ${hh}시${mm ? ` ${mm}분` : ""}`;
 };
+// 🧭 2026-11-27 작업 도우미 [채우기] — 오더복사(빠른 등록과 같은 방식)로 상하차지 · 주소 · 담당자 · 차종을 넣고,
+//  톤수 · 운임까지 채운다. 지금 폼의 상차일 · 하차일 · 시간 · 메모 · 전달사항은 그대로 둔다(사용자 결정)
+const fillFromRoute = (r) => {
+  if (!r) return;
+  const keep = { 상차일: form.상차일, 하차일: form.하차일, 상차시간: form.상차시간, 하차시간: form.하차시간, 상차시간기준: form.상차시간기준, 하차시간기준: form.하차시간기준, 메모: form.메모, 전달사항: form.전달사항, 전달사항고정: form.전달사항고정 };
+  applyCopy(r, { quick: true });
+  setForm((p) => ({ ...p, ...Object.fromEntries(Object.entries(keep).filter(([, v]) => v !== undefined)), 차량톤수: r.차량톤수 || "", 청구운임: r.청구운임 || "", 기사운임: r.기사운임 || "" }));
+};
 const applyCopy = (r, opt = {}) => {
   const quick = opt.quick === true;
   bizSeedRef.current = String(r.청구사업자 || "").trim(); bizManualRef.current = null; // ⭐ 2026-11-03 청구 사업자 자동 맞춤에 복사한 오더의 사업자를 넘긴다
@@ -8571,12 +8584,14 @@ className={`
        비워 두면 예전처럼 상차일의 달(거래처 마감일이 있으면 그 기준). 정하면 명세서 · 미수금 · 매출 · 회계가 모두 이 달로 잡힌다(arCore.monthOf) */}
   {ofShow("마감월") && (
   <div data-of="closeym">
-    <label className={labelCls} title="상차한 달과 청구할 달이 다를 때만 고르세요. 비워 두면 상차일의 달로 청구돼요.">마감월 <span className="text-[11px] font-semibold text-gray-400">(이월일 때만)</span></label>
-    <div className="flex gap-1">
-      <input type="month" className={inputCls} value={String(form.마감월 || "").slice(0, 7)} onChange={(e) => onChange("마감월", e.target.value)} />
-      {(() => { const d = String(form.상차일 || ""); if (!/^\d{4}-\d{2}/.test(d)) return null; const [y, m] = d.slice(0, 7).split("-").map(Number); const nx = `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}`; return form.마감월
-        ? <button type="button" className="shrink-0 px-2 rounded-lg border border-gray-300 text-[12px] font-bold text-gray-600" onClick={() => onChange("마감월", "")}>지우기</button>
-        : <button type="button" className="shrink-0 px-2 rounded-lg border border-gray-300 text-[12px] font-bold text-gray-600 whitespace-nowrap" onClick={() => onChange("마감월", nx)}>익월({Number(nx.slice(5))}월)</button>; })()}
+    {/* 🎨 2026-11-27 브라우저 기본 달 선택(--------- ----) 대신 프로그램 달력 · 익월 버튼은 머리줄로(칸 옆에 두면 오른쪽이 잘렸다) */}
+    <label className={`${labelCls} flex items-center justify-between gap-2`} title="상차한 달과 청구할 달이 다를 때만 고르세요. 비워 두면 상차일의 달로 청구돼요.">
+      <span>마감월 <span className="text-[11px] font-semibold text-gray-400">(이월일 때만)</span></span>
+      {(() => { const d = String(form.상차일 || ""); if (form.마감월 || !/^\d{4}-\d{2}/.test(d)) return null; const [y, m] = d.slice(0, 7).split("-").map(Number); const nx = `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}`;
+        return <button type="button" className="text-[11.5px] font-extrabold text-[#2D4C82] hover:underline whitespace-nowrap" onClick={(e) => { e.preventDefault(); onChange("마감월", nx); }} title={`${Number(nx.slice(5))}월로 넣기`}>익월</button>; })()}
+    </label>
+    <div>
+      <MonthPicker value={String(form.마감월 || "").slice(0, 7)} onChange={(v) => onChange("마감월", v || "")} clearable placeholder="상차일의 달" quick={false} className="w-full" />
     </div>
   </div>
   )}
@@ -11078,8 +11093,20 @@ setConfirmChange(null);
     </FareShell>
   );
 })()}
+        {/* 🧭 2026-11-27 작업 도우미 — 실시간배차현황 전체 표 대신(입력할 때 큰 표가 다시 그려지지 않게). 우선 최고관리자만 · [전체 표]로 예전 화면 */}
+{assistAllowed && assistMode === "assist" && (
+  <OrderWorkAssist rows={recentDispatchData} history={dispatchData} client={form.거래처명}
+    myEmail={auth.currentUser?.email || ""} myName={userNameMap?.get?.(String(auth.currentUser?.email || "").toLowerCase()) || ""}
+    mode={assistMode} onMode={setAssistMode} onFill={fillFromRoute} />
+)}
+{assistAllowed && assistMode === "table" && (
+  <div className="mt-4 flex justify-end">
+    <button type="button" onClick={() => { try { localStorage.setItem("kpOrderAssistMode", "assist"); } catch { /* 무시 */ } setAssistMode("assist"); }}
+      className="h-9 px-3.5 rounded-xl border border-[#DCE3EE] bg-white text-[13px] font-extrabold text-[#1B2B4B] hover:bg-[#F5F7FB]">작업 도우미로 보기</button>
+  </div>
+)}
         {/* ⭐ 4파트 동일한 실시간배차현황 테이블 */} 
-{role !== "dispatchManagement" && (
+{role !== "dispatchManagement" && !(assistAllowed && assistMode === "assist") && (
   <div id="realtime-status-area">
     <RealtimeStatus
       key={bottomStatusKey}

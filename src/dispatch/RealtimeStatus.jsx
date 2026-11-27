@@ -1,5 +1,6 @@
 // ======================= src/dispatch/RealtimeStatus.jsx =======================
 // 🧩 2026-11-27 src/DispatchApp.jsx 에서 그대로 옮긴 코드(동작 · 화면 그대로) — 큰 파일을 화면별로 나눠 로그인 직후 받는 JS 를 줄였다.
+import { MonthPicker } from "../kpInputs"; // 🗓 2026-11-27 마감월 — 프로그램 달력
 import { isViewerNow } from "../blind";
 import { kpConfirm, kpPrompt } from "../kpDialog";
 import { editLossReason, lossReasonOf } from "../lossReason";
@@ -6841,7 +6842,7 @@ value={copyTarget?.화물수량 || ""}
               {/* 🗓 2026-11-27 마감월(이월 오더) — 비우면 상차일의 달로 청구 */}
               <div>
                 <label>마감월 <span className="text-[11px] text-gray-500">(이월일 때만)</span></label>
-                <input type="month" className="border p-2 rounded w-full" value={String(editTarget.마감월 || "").slice(0, 7)} onChange={(e) => setEditTarget((p) => ({ ...p, 마감월: e.target.value }))} />
+                <MonthPicker value={String(editTarget.마감월 || "").slice(0, 7)} onChange={(v) => setEditTarget((p) => ({ ...p, 마감월: v || "" }))} clearable placeholder="상차일의 달" quick={false} className="w-full" />
               </div>
 
               <div>

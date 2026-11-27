@@ -81,7 +81,7 @@ export const callDir = (r) => (isCaughtCall(r) ? "OUT" : "IN");
 // 지금 단계 — { kind, label, tone, date }
 export function payStage(r) {
   if (!r) return null;
-  // 🎨 2026-11-12 OUT(콜잡이 24시 · 원콜 등 · 외부 운송사 오더) — 미청구(빨강, 기본) → 청구완료(연주황, 메모) → 입금완료(파랑, 메모)
+  // 🎨 2026-11-12 OUT(콜잡이 24시 · 원콜 등 · 외부 운송사 오더) — 미청구 → 청구완료(메모) → 입금완료(메모) · 🎨 2026-11-27 색은 남색 한 계열(TONE 참고)
   if (isCaughtCall(r)) {
     if (r.입금상태 === "입금완료") return { kind: "in", label: "입금완료", tone: "outPaid", date: r.입금일 || "", memo: r.입금메모 || "" };
     if (r.계산서일) return { kind: "in", label: "청구완료", tone: "outBilled", date: r.계산서일, memo: r.청구메모 || "" };
@@ -96,9 +96,11 @@ const TONE = {
   done: { bg: "#0F1A30", fg: "#fff", bd: "#0F1A30" },
   wait: { bg: "#EEF3FB", fg: "#1B2B4B", bd: "#C9D6EC" },
   todo: { bg: "#fff", fg: "#7A8AA8", bd: "#DCE3EE" },
-  outTodo: { bg: "#FEE4E2", fg: "#B42318", bd: "#F97066", tag: "#D92D20" },   // 미청구 — 빨강
-  outBilled: { bg: "#FFEAD5", fg: "#B93815", bd: "#FDB022", tag: "#F79009" }, // 청구완료 — 연주황
-  outPaid: { bg: "#2563EB", fg: "#fff", bd: "#2563EB", tag: "rgba(255,255,255,.25)" }, // 입금완료 — 파랑
+  // 🎨 2026-11-27 사용자 요청 — 빨강 · 주황 · 파랑이 너무 알록달록해서 프로그램 남색 한 계열로(진할수록 다음 단계)
+  //  미청구 = 흰 바탕 + 점선 테두리(아직 할 일) · 청구완료 = 옅은 남색 · 입금완료 = 진한 남색
+  outTodo: { bg: "#fff", fg: "#3A4A66", bd: "#AEBBD0", tag: "#5B6B85", dash: true }, // 미청구
+  outBilled: { bg: "#EEF3FB", fg: "#1B2B4B", bd: "#C9D6EC", tag: "#2D4C82" },          // 청구완료
+  outPaid: { bg: "#0F1A30", fg: "#fff", bd: "#0F1A30", tag: "rgba(255,255,255,.18)" },  // 입금완료
 };
 export const OUT_STAGE_COLORS = { 미청구: TONE.outTodo, 청구완료: TONE.outBilled, 입금완료: TONE.outPaid };
 
@@ -111,7 +113,7 @@ export function PayBadge({ row, onOpen }) {
   return (
     <button type="button" onClick={onOpen} title={`${caught ? "OUT · 외부 콜을 잡은 오더" : "IN · 우리 오더"}${s.memo ? ` · 메모: ${s.memo}` : ""} · 눌러서 정산 정보 보기`} data-pay-badge={s.label}
       className="inline-flex items-center gap-1 h-7 px-2 rounded-full text-[12px] font-black whitespace-nowrap hover:brightness-95"
-      style={{ background: t.bg, color: t.fg, border: `1px solid ${t.bd}`, ...NUM }}>
+      style={{ background: t.bg, color: t.fg, border: `1px ${t.dash ? "dashed" : "solid"} ${t.bd}`, ...NUM }}>
       <span className="text-[9.5px] font-black px-1 rounded tracking-wide" style={caught ? { background: t.tag || "#1B2B4B", color: "#fff" } : { background: s.tone === "done" ? "rgba(255,255,255,.14)" : "#EEF2F8", color: s.tone === "done" ? "#CFE0FF" : "#7A8AA8" }}>{caught ? "OUT" : "IN"}</span>
       {s.label}{(s.tone === "done" || s.tone === "outBilled" || s.tone === "outPaid") && s.date ? <span className="font-bold opacity-80">{md(s.date)}</span> : null}
       {s.memo ? <span aria-hidden className="w-1.5 h-1.5 rounded-full" style={{ background: "currentColor", opacity: 0.7 }} /> : null}
@@ -407,7 +409,7 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
             <DateField value={f.inv} onChange={(v) => set("inv", v)} disabled={!canEdit || busy} placeholder="미발행" />
             {canEdit && !f.inv && <button type="button" disabled={busy} onClick={() => set("inv", today())} className="h-9 px-3 rounded-lg border border-[#DCE3EE] text-[12.5px] font-black text-[#1B2B4B]">오늘</button>}
             {canEdit && f.inv && <button type="button" disabled={busy} onClick={() => set("inv", "")} className="text-[12px] font-bold text-[#9AA9C3] hover:text-red-600">지우기</button>}
-            {out && (() => { const lb = deposited ? "입금완료" : f.inv ? "청구완료" : "미청구"; const c = OUT_STAGE_COLORS[lb]; return <span data-out-stage={lb} className="ml-auto inline-flex items-center h-7 px-2.5 rounded-full text-[12px] font-black" style={{ background: c.bg, color: c.fg, border: `1px solid ${c.bd}` }}>{lb}</span>; })()}
+            {out && (() => { const lb = deposited ? "입금완료" : f.inv ? "청구완료" : "미청구"; const c = OUT_STAGE_COLORS[lb]; return <span data-out-stage={lb} className="ml-auto inline-flex items-center h-7 px-2.5 rounded-full text-[12px] font-black" style={{ background: c.bg, color: c.fg, border: `1px ${c.dash ? "dashed" : "solid"} ${c.bd}` }}>{lb}</span>; })()}
           </Row>
           {otherRows.length > 0 && (
             <Row label="일괄 적용">
@@ -434,7 +436,7 @@ export function PayPopup({ row, onClose, patchDispatch, canEdit = true, company 
           </Row>
           {out ? (
             <Row label="입금">
-              {deposited && <span className="inline-flex items-center h-7 px-2.5 rounded-full bg-[#2563EB] text-white text-[12px] font-black">입금완료</span>}
+              {deposited && <span className="inline-flex items-center h-7 px-2.5 rounded-full bg-[#0F1A30] text-white text-[12px] font-black">입금완료</span>}
               <DateField value={f.depDate} onChange={(v) => set("depDate", v || today())} disabled={!canEdit || busy} placeholder="입금일" />
               <input value={f.depName} disabled={!canEdit || busy} onChange={(e) => set("depName", e.target.value)} placeholder="입금자명(선택)" autoComplete="off"
                 className="h-9 w-[130px] px-2.5 rounded-lg border border-[#DCE3EE] text-[13px] font-bold text-[#0F1A30] outline-none focus:border-[#1B2B4B] bg-white" />
@@ -631,9 +633,9 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
                   <td className={td}>
                     {r.계산서스캔 || r.입금증빙 ? (() => { const sc = r.계산서스캔 || r.입금증빙; const okAmt = [vatOf(r.청구운임).supply, vatOf(r.청구운임).total].some((v) => v && (Math.abs(v - (sc.supply || 0)) <= 10 || Math.abs(v - (sc.total || 0)) <= 10)); return (
                       <button type="button" onClick={() => setEvRow(r)} data-desk-evidence title={`${sc.kind || "증빙"} · ${sc.date || ""} · 합계 ${won(sc.total)}원${sc.payer ? ` · ${sc.payer}` : ""}`}
-                        className={`inline-flex items-center gap-1 h-7 px-2 rounded-full text-[11.5px] font-black border ${okAmt ? "bg-[#ECFDF3] text-[#067647] border-[#ABEFC6]" : "bg-[#FFFAEB] text-[#B54708] border-[#FEDF89]"}`}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M4 2h16v20l-3-2-3 2-3-2-3 2-4-2z" /><path d="M8 7h8M8 11h8M8 15h5" /></svg>
-                        {sc.kind === "이체확인증" ? "이체" : "계산서"} {okAmt ? "✓" : "!"}
+                        className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-[11.5px] font-black border bg-white ${okAmt ? "text-[#1B2B4B] border-[#C9D6EC]" : "text-[#B42318] border-[#E9B9B4]"}`}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 2h16v20l-3-2-3 2-3-2-3 2-4-2z" /><path d="M8 7h8M8 11h8M8 15h5" /></svg>
+                        {sc.kind === "이체확인증" ? "이체" : "계산서"}{okAmt ? "" : " · 금액 확인" /* 🎨 2026-11-27 맞으면 체크 표시 없이 이름만(사용자 요청) · 금액이 다를 때만 알림 */}
                       </button>); })()
                       : (r.증빙수 || 0) > 0
                         ? <button type="button" onClick={() => setEvRow(r)} className="inline-flex items-center h-7 px-2 rounded-full text-[11.5px] font-black border bg-white text-[#1B2B4B] border-[#C9D6EC]" title="올린 증빙서류 보기(자동으로 읽지 못한 파일)">증빙 {r.증빙수}</button>
@@ -642,12 +644,12 @@ export function CallDepositDesk({ orders = [], patchDispatch, isViewer = false, 
                   <td className={td}>
                     <button type="button" onClick={() => onAttach?.(r)} disabled={!onAttach} title="첨부 보기 · 올리기(배차현황 첨부와 같은 파일)" data-desk-attach
                       className="relative inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-[#F1F4F9]">
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={(r.attachCount || 0) > 0 ? ((r.officeAttach || 0) > 0 ? "#2563EB" : "#059669") : "#cbd5e1"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
-                      {(r.attachCount || 0) > 0 && <span className={`absolute -top-1 -right-1 min-w-[16px] h-[16px] ${(r.officeAttach || 0) > 0 ? "bg-blue-600" : "bg-emerald-500"} text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none`}>{r.attachCount}</span>}
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={(r.attachCount || 0) > 0 ? "#1B2B4B" : "#C2CBDB"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
+                      {(r.attachCount || 0) > 0 && <span className={`absolute -top-1 -right-1 min-w-[16px] h-[16px] ${(r.officeAttach || 0) > 0 ? "bg-[#2D4C82]" : "bg-[#0F1A30]"} text-white text-[9px] font-bold rounded-full flex items-center justify-center px-0.5 leading-none`}>{r.attachCount}</span>}
                     </button>
                   </td>
                   <td className={td}>{(() => { const lb = done ? "입금완료" : r.계산서일 ? "청구완료" : "미청구"; const c = OUT_STAGE_COLORS[lb]; const memo = done ? r.입금메모 : r.청구메모;
-                    return <span title={memo ? `메모: ${memo}` : ""} data-desk-stage={lb} className="inline-flex items-center h-6 px-2 rounded-full text-[11.5px] font-black" style={{ background: c.bg, color: c.fg, border: `1px solid ${c.bd}` }}>{lb}</span>; })()}
+                    return <span title={memo ? `메모: ${memo}` : ""} data-desk-stage={lb} className="inline-flex items-center h-6 px-2.5 rounded-full text-[11.5px] font-black" style={{ background: c.bg, color: c.fg, border: `1px ${c.dash ? "dashed" : "solid"} ${c.bd}` }}>{lb}</span>; })()}
                     {(done ? r.입금메모 : r.청구메모) ? <div className="text-[11px] font-semibold text-[#5B6B85] max-w-[160px] truncate mx-auto">{done ? r.입금메모 : r.청구메모}</div> : null}</td>
                   <td className={td} style={NUM}>
                     {r.입금일 || ""}{r.입금자명 ? <span className="ml-1 text-[12px] text-[#7A8AA8]">{r.입금자명}</span> : null}
