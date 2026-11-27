@@ -127,8 +127,10 @@ export function ScreenFitButton({ fit }) {
 }
 
 // 🖥 2026-11-16 [화면 설정] 하나 — 누르면 창에서 화면 맞춤 · 표 글씨 크기를 고른다(예전 [화면 맞춤] · [가+ 크게 보기] 두 버튼을 합침)
-export function ScreenSettingsButton({ fit }) {
+export function ScreenSettingsButton({ fit, hideButton = false }) {
   const [open, setOpen] = React.useState(false);
+  // 🧭 2026-11-27 상단바 [내 메뉴] › 화면 설정 에서도 연다(버튼은 숨기고 창만)
+  React.useEffect(() => { const h = () => setOpen(true); window.addEventListener("kp-open-screen-settings", h); return () => window.removeEventListener("kp-open-screen-settings", h); }, []);
   const mode = fit.xl ? "xl" : fit.big ? "big" : "normal";
   const Opt = ({ k, title, desc }) => { const on = fit.on && mode === k; return (
     <button type="button" onClick={() => fit.setMode(k)} data-kp={`screen-mode-${k}`} aria-pressed={on}
@@ -138,11 +140,11 @@ export function ScreenSettingsButton({ fit }) {
     </button>); };
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} data-kp="screen-settings" title="화면 맞춤 · 표 글씨 크기"
+      {!hideButton && <button type="button" onClick={() => setOpen(true)} data-kp="screen-settings" title="화면 맞춤 · 표 글씨 크기"
         className={`kp-chip-btn text-[12px] transition inline-flex items-center gap-1.5 ${fit.on ? "!bg-white !text-[#0F1A30] !border-white" : ""}`}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
         화면 설정{fit.on && <span className="tabular-nums opacity-70">{fit.pct}%</span>}
-      </button>
+      </button>}
       {open && createPortal(
         <div className="fixed inset-0 z-[2147482500] bg-[rgba(11,20,40,0.45)] flex items-center justify-center p-4" onClick={() => setOpen(false)}>
           <div role="dialog" aria-label="화면 설정" className="w-full max-w-[560px] bg-white rounded-2xl shadow-[0_24px_60px_rgba(11,20,40,0.35)] overflow-hidden" onClick={(e) => e.stopPropagation()} style={{ fontFamily: "'Pretendard','Noto Sans KR',sans-serif" }}>

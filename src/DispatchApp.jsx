@@ -4702,20 +4702,7 @@ return (
                 </a>
                 {/* 🧭 2026-11-16 회사명 + 내 이름 · 직급 한 칸 = [내 메뉴] — 마우스를 올리거나 누르면 사내메일함 · 알림 내역 · 내 정보 · 원격 지원
                      새 버전이 나오면 이 칸이 [새 버전 · 눌러서 업데이트]로 바뀌고, 누르면 바로 업데이트(메뉴는 마우스를 올리면 그대로 열림) */}
-                {(co || myRealName || hdrNewVer) && (
-                  <UserHub align="left" name={[myRealName || user?.displayName || "", myProfileDoc?.position || ""].filter(Boolean).join(" ")} mailUnread={mailCountsNav.unread || 0}
-                    showSupport={role !== "totalMaster"} onSupport={openRemoteSupport}
-                    onSwitchCompany={realRole === "totalMaster" && !isPreviewMode() ? () => setCoSwitchOpen(true) : multiCo.list.length && !isPreviewMode() ? () => setMultiCoOpen(true) : null}
-                    switchLabel={multiCo.list.length && realRole !== "totalMaster" ? "회사 전환" : ""}
-                    onMyInfo={() => { setMyInfoNameDraft(myRealName); setMyInfoPhoneDraft(myPhone); setShowMyInfo(true); }}
-                    onTriggerClick={hdrNewVer ? () => hardReloadForUpdate() : null}
-                    triggerClass={`ml-1 px-3 h-8 inline-flex items-center gap-2 rounded-lg whitespace-nowrap shrink-0 transition ${hdrNewVer ? "border border-[#8FB0F0]/70 bg-white/[0.08] hover:bg-white/[0.16] text-[12.5px] font-black text-white" : `bg-white/[0.07] border border-white/10 hover:bg-white/[0.14] font-bold text-white/90 ${co.length > 8 ? "text-[12px]" : "text-[13px]"}`}`}>
-                    {hdrNewVer
-                      ? <span data-kp="hdr-update" className="inline-flex items-center gap-2"><span className="kp-subnav-newdot w-1.5 h-1.5 rounded-full bg-[#CFE0FF]" />새 버전{hdrNewVer.version ? ` v${hdrNewVer.version}` : ""} · 눌러서 업데이트</span>
-                      : <span data-kp="hdr-company" className="inline-flex items-center gap-1.5"><CompanyToneDot />{co}{(myRealName || user?.displayName) && <span className="text-white/60 font-semibold">{myRealName || user?.displayName}{myProfileDoc?.position ? ` ${myProfileDoc.position}` : ""}</span>}
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ opacity: 0.6 }}><path d="M6 9l6 6 6-6" /></svg></span>}
-                  </UserHub>
-                )}
+                {/* 🧭 2026-11-27 회사명 · 이름 칸은 오른쪽 끝으로 옮김(알림 · 이름 모양) — 화면 설정 · 로그아웃도 그 안에 */}
                 {coSwitchOpen && <React.Suspense fallback={null}><CompanySwitcherLazy current={co} onClose={() => setCoSwitchOpen(false)} /></React.Suspense>}
                 {multiCoOpen && <MultiCompanySwitch onClose={() => setMultiCoOpen(false)} />}
                 {/* 🛰 2026-11-10 버전 표시·새 버전 안내는 왼쪽 메뉴(KpSubNav) 머리·맨 아래로 옮김 */}
@@ -4919,16 +4906,24 @@ return (
             {/* 🔎 2026-11-12 통합 검색(Ctrl + K) — 메뉴 · 세부 화면 · 도움말 찾기 */}
             {/* 🧹 2026-11-16 상단 [검색] 버튼은 뺐다 — Ctrl + K 는 그대로 */}
             {/* 🖥 2026-11-10 화면 맞춤 — 표 전체가 한 화면에 보이게 자동 배율 */}
-            <ScreenSettingsButton fit={screenFit} />
+            <ScreenSettingsButton fit={screenFit} hideButton />
+            {(() => { const co = role === "totalMaster" ? (localStorage.getItem("loginCompany") || userCompany || "") : (userCompany || localStorage.getItem("userCompany") || ""); return (co || myRealName || hdrNewVer || user) && (
+              <UserHub align="right" profile={{ person: [myRealName || user?.displayName || "", myProfileDoc?.position || ""].filter(Boolean).join(" "), company: co }}
+                onScreen={() => window.dispatchEvent(new CustomEvent("kp-open-screen-settings"))} screenSub={screenFit?.on ? `화면 맞춤 켜짐 · ${screenFit.pct}%` : "화면 맞춤 · 표 글씨 크기"} onLogout={logout} name={[myRealName || user?.displayName || "", myProfileDoc?.position || ""].filter(Boolean).join(" ")} mailUnread={mailCountsNav.unread || 0}
+                showSupport={role !== "totalMaster"} onSupport={openRemoteSupport}
+                onSwitchCompany={realRole === "totalMaster" && !isPreviewMode() ? () => setCoSwitchOpen(true) : multiCo.list.length && !isPreviewMode() ? () => setMultiCoOpen(true) : null}
+                switchLabel={multiCo.list.length && realRole !== "totalMaster" ? "회사 전환" : ""}
+                onMyInfo={() => { setMyInfoNameDraft(myRealName); setMyInfoPhoneDraft(myPhone); setShowMyInfo(true); }}
+                onTriggerClick={hdrNewVer ? () => hardReloadForUpdate() : null}
+                triggerClass={`ml-1 px-3 h-8 inline-flex items-center gap-2 rounded-lg whitespace-nowrap shrink-0 transition ${hdrNewVer ? "border border-[#8FB0F0]/70 bg-white/[0.08] hover:bg-white/[0.16] text-[12.5px] font-black text-white" : `bg-white/[0.07] border border-white/10 hover:bg-white/[0.14] font-bold text-white/90 ${co.length > 8 ? "text-[12px]" : "text-[13px]"}`}`}>
+                {hdrNewVer ? <span data-kp="hdr-update" className="inline-flex items-center gap-2"><span className="kp-subnav-newdot w-1.5 h-1.5 rounded-full bg-[#CFE0FF]" />새 버전{hdrNewVer.version ? ` v${hdrNewVer.version}` : ""} · 눌러서 업데이트</span> : null}
+              </UserHub>
+            ); })()}
+
 
             {/* 🧹 2026-11-10 [최적화]·[가](글씨 크기) 버튼은 상단바에서 뺌 — 저장된 글씨 크기는 그대로 적용 */}
 
-            <button
-              onClick={logout}
-              className="kp-chip-btn text-[12px] transition"
-            >
-              로그아웃
-            </button>
+            {/* 🧭 2026-11-27 로그아웃은 오른쪽 끝 [내 메뉴] 안으로 */}
           </div>
 
         </div>
