@@ -18,7 +18,7 @@ import { MarginPct } from "./marginPct"; // ⭐ 2026-11-17 합계 줄 수수료 
 import { orderProfit, paidOut, nextFee } from "./forkliftCore"; // ⭐ 2026-11-17 수수료 한 식 — 청구 − 기사 − 회사가 따로 준 지게차·특수운임(배차현황 표와 같음)
 import { kpConfirm } from "./kpDialog";
 import { closeRuleOf, clientPeriod, useCloseDaysVersion } from "./clientCloseDays"; // 🗓 2026-11-27 거래처별 마감일(25일 마감 → 10/26 ~ 11/25)
-import ClientCloseDayModal from "./ClientCloseDayModal";
+import ClientCloseDayModal, { ClientCloseDateModal } from "./ClientCloseDayModal";
 const mdTxt = (d) => `${d.slice(5, 7)}.${d.slice(8, 10)}`;
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const dDay = (to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${kstToday()}T00:00:00Z`)) / 864e5);
@@ -163,6 +163,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
   const cdVer = useCloseDaysVersion();
   const [cdf, setCdf] = React.useState("");
   const [cdOpen, setCdOpen] = React.useState("");
+  const [cdDate, setCdDate] = React.useState(""); // [마감날짜 변경] 이번 달만 끝 날짜
   React.useEffect(() => { if (!toast) return undefined; const t = setTimeout(() => setToast(""), 3200); return () => clearTimeout(t); }, [toast]);
   const openRow = (o) => { if (lockedOf(groupsRef.current.find((g) => g.client === (String(o.거래처명 || "").trim() || "(거래처 없음)")))) { setToast("최종마감 이후 수정이 불가합니다. 필요 시 경리팀에 해제요청 해주세요."); return; } return onOpenOrder && !phone ? onOpenOrder(o) : setSheet({ row: o }); };
   const groupsRef = React.useRef([]);
@@ -292,10 +293,10 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
               <span className={`text-[14px] font-black truncate flex-1 ${on ? "text-white" : "text-[#0F1A30]"}`}>{g.client}</span>
               {on ? <span className="h-6 px-2 rounded-lg bg-white/15 text-white text-[11.5px] font-black inline-flex items-center whitespace-nowrap">{stOf(g).label}</span> : <Badge g={g} small />}
             </div>
-            {g.cd ? (
+            {g.cd || g.period.changed ? (
               <div className="mt-1 pl-7 flex items-center gap-1 flex-wrap text-[11.5px] font-black" style={NUM} data-kp="mc-closeday">
-                <span className={`h-5 px-1.5 rounded-md inline-flex items-center whitespace-nowrap ${on ? "bg-white/15 text-white border border-white/25" : "bg-[#EEF2FA] text-[#2D4C82] border border-[#CFD9EC]"}`}>{g.cd}일 마감</span>
-                <span className={on ? "text-white/80" : "text-[#2D4C82]"}>{mdTxt(g.period.from)} ~ {mdTxt(g.period.to)}</span>
+                <span className={`h-5 px-1.5 rounded-md inline-flex items-center whitespace-nowrap ${on ? "bg-white/15 text-white border border-white/25" : "bg-[#EEF2FA] text-[#2D4C82] border border-[#CFD9EC]"}`}>{g.cd ? `${g.cd}일 마감` : "말일"}</span>
+                <span className={on ? "text-white/80" : "text-[#2D4C82]"}>{mdTxt(g.period.from)} ~ {mdTxt(g.period.to)}{g.period.changed ? " (변경)" : ""}</span>
                 {(() => { const du = dueOf(g); return du ? <span className={`h-5 px-1.5 rounded-md inline-flex items-center whitespace-nowrap ${du.c === "r" ? (on ? "bg-white text-[#0F1A30]" : "bg-[#1B2B4B] text-white") : on ? "bg-white/15 text-white/80" : "bg-[#F1F4F9] text-[#5B6B85]"}`}>{du.t}</span> : null; })()}
               </div>) : null}
             <div className={`mt-0.5 pl-7 flex items-center justify-between gap-2 text-[12px] font-bold ${on ? "text-white/70" : "text-[#5B6B85]"}`} style={NUM}>
@@ -324,7 +325,9 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
             <span className="text-[#5B6B85]">기간</span>
             <span className="font-black text-[#0F1A30]">{g.period.from.replace(/-/g, ".")} ~ {g.period.to.slice(5).replace("-", ".")}</span>
             <span className={`h-6 px-2 rounded-lg text-[12px] font-black inline-flex items-center ${g.cd ? "bg-[#EEF2FA] text-[#2D4C82] border border-[#CFD9EC]" : "bg-[#F1F4F9] text-[#5B6B85]"}`}>{g.cd ? `매달 ${g.cd}일 마감` : "말일 마감"}{g.period.first ? " · 첫 달" : ""}</span>
-            {g.client !== "(거래처 없음)" && <button type="button" data-testid="mc-closeday-btn" onClick={() => setCdOpen(g.client)} className="h-6 px-2 rounded-lg border border-[#D5DDEA] bg-white text-[12px] font-black text-[#1B2B4B] hover:bg-[#F4F6FA]">마감일 바꾸기</button>}
+            {g.period.changed && <span className="h-6 px-2 rounded-lg text-[12px] font-black inline-flex items-center bg-[#1B2B4B] text-white">이번 달 변경</span>}
+            {g.client !== "(거래처 없음)" && <button type="button" data-testid="mc-closeday-btn" onClick={() => setCdOpen(g.client)} className="h-6 px-2 rounded-lg border border-[#D5DDEA] bg-white text-[12px] font-black text-[#1B2B4B] hover:bg-[#F4F6FA]" title="매달 며칠에 마감하는지 정해요">마감일 설정</button>}
+            {g.client !== "(거래처 없음)" && <button type="button" data-testid="mc-closedate-btn" onClick={() => setCdDate(g.client)} className="h-6 px-2 rounded-lg border border-[#D5DDEA] bg-white text-[12px] font-black text-[#1B2B4B] hover:bg-[#F4F6FA]" title="이번 달만 끝 날짜를 바꿔요 · 다음 달은 그다음 날부터">마감날짜 변경</button>}
           </div>
         </div>
         {list.length > 1 && idx >= 0 && (
@@ -429,6 +432,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
       {toast && <div className="fixed left-1/2 -translate-x-1/2 bottom-8 z-[100060] px-5 py-3 rounded-2xl bg-[#14213D] text-white text-[14px] font-bold shadow-[0_16px_40px_rgba(10,18,36,.3)]" role="status">{toast}</div>}
 
       <ClientCloseDayModal open={!!cdOpen} client={cdOpen} company={company} isViewer={isViewer} onClose={() => setCdOpen("")} />
+      <ClientCloseDateModal open={!!cdDate} client={cdDate} company={company} ym={ym} isViewer={isViewer} onClose={() => setCdDate("")} />
       {/* ⭐ 2026-11-17 업체 명세서 비교 — 고른 거래처의 이 달 오더 전체(보기 · 노선 거르기와 상관없이)와 맞춘다 */}
       {cmpOpen && cur && (
         <React.Suspense fallback={null}>

@@ -57,4 +57,26 @@ ok("정산 홈 · 미수금 계산도 같은 달로 묶인다", () => {
   assert.equal(S.summarizeSettle(orders, "2026-10", () => "미작성", "2026-11-27").sale, 100000);
   assert.equal(S.summarizeSettle(orders, "2026-12", () => "미작성", "2026-12-27").sale, 400000);
 });
+ok("[마감날짜 변경] 이번 달만 끝 날짜 — 다음 기간은 그다음 날부터(겹침 · 빠짐 없음)", () => {
+  const r = AR.normCloseRule(25, "2026-10", { "2026-11": "2026-11-24" });
+  assert.deepEqual(AR.closePeriodOf("2026-11", r), { from: "2026-10-26", to: "2026-11-24", day: 25, changed: true });
+  assert.deepEqual(AR.closePeriodOf("2026-12", r), { from: "2026-11-25", to: "2026-12-25", day: 25 });
+  assert.equal(AR.closeYmOf("2026-11-24", r), "2026-11");
+  assert.equal(AR.closeYmOf("2026-11-25", r), "2026-12", "당긴 날 다음 날은 12월분");
+  const late = AR.normCloseRule(25, "2026-10", { "2026-11": "2026-11-28" });
+  assert.equal(AR.closeYmOf("2026-11-27", late), "2026-11", "늦춘 끝 날짜까지는 11월분");
+  assert.equal(AR.closeYmOf("2026-11-29", late), "2026-12");
+  assert.deepEqual(AR.closePeriodOf("2026-12", late), { from: "2026-11-29", to: "2026-12-25", day: 25 });
+  assert.deepEqual(AR.overrideRangeOf("2026-11", r), { min: "2026-10-26", max: "2026-12-24", natural: "2026-11-25" });
+});
+ok("[마감날짜 변경] 말일 거래처도 이번 달만", () => {
+  const r = AR.normCloseRule("", "", { "2026-12": "2026-12-28" });
+  assert.deepEqual(r, { day: 0, from: "", ov: { "2026-12": "2026-12-28" } });
+  assert.equal(AR.closeYmOf("2026-12-29", r), "2027-01");
+  assert.deepEqual(AR.closePeriodOf("2027-01", r), { from: "2026-12-29", to: "2027-01-31", day: 0 });
+  assert.deepEqual(AR.closePeriodOf("2026-11", r), { from: "2026-11-01", to: "2026-11-30", day: 0 });
+  assert.equal(AR.normCloseRule("", "", { x: "y" }), null, "엉뚱한 값은 무시");
+  AR.setClientCloseDays("다회사", [{ 거래처명: "말일상사", 마감변경: { "2026-12": "2026-12-28" } }]);
+  assert.equal(AR.monthOf({ companyName: "다회사", 거래처명: "말일상사", 상차일: "2026-12-30" }), "2027-01");
+});
 console.log(`\nclientCloseDay: ${pass}개 통과`);
