@@ -12,6 +12,8 @@ import { addCompanyDropdownOption, removeCompanyDropdownOption, renameCompanyDro
 import { uiOptionLabel, useUiConfigVersion } from "./uiConfig"; // ⭐ 2026-11-07 화면 편집 — 보이는 이름만 바꾸기(저장값 그대로)
 import { kpConfirm, kpPrompt, kpAlert } from "./kpDialog";
 import { PIN_KEYS, PIN_MAX, usePins, applyPins, togglePin } from "./optionPins"; // 📌 2026-11-23 자주 쓰는 방식 맨 위 고정
+import { auth } from "./firebase";
+import { getUsersLiveList } from "./usersLive";
 
 const MONO = "'Noto Sans KR','Apple SD Gothic Neo','맑은 고딕','Malgun Gothic',sans-serif";
 const FONT = "'Pretendard','Noto Sans KR',sans-serif";
@@ -33,6 +35,17 @@ const Chev = ({ open }) => (
   </svg>
 );
 
+// 🔒 2026-11-27 회사 공용 목록(지급방식 · 상하차방법 등)의 추가 · 이름 바꾸기 · 삭제는 사무원에게 숨긴다(📌 고정은 나만이라 그대로)
+//  사무원이 지우면 회사 모든 화면 목록에서 빠졌다. 보안 규칙도 companySettings.dropdownOptions 는 회사 마스터 · 최고관리자만 고친다
+const OPTION_STAFF_ROLES = ["user", "acctStaff", "hrStaff", "salesStaff", "legalStaff", "devStaff", "viewer"];
+export const canManageOptionList = () => {
+  try {
+    const r = String(localStorage.getItem("role") || "");
+    if (!OPTION_STAFF_ROLES.includes(r)) return true;
+    const uid = auth?.currentUser?.uid;
+    return !!uid && (getUsersLiveList() || []).some((u) => u.id === uid && u.isMaster === true);
+  } catch { return false; }
+};
 const isNarrow = () => { try { return window.innerWidth < 640; } catch { return false; } };
 const isTouch = () => { try { return window.matchMedia("(pointer: coarse)").matches; } catch { return false; } };
 
@@ -105,7 +118,8 @@ export function OptTrash({ onClick, title = "삭제", disabled = false, size = 2
 }
 
 // ─────────────── 떠 있는 목록(열었을 때만 그린다) ───────────────
-function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allowAdd, role, userCompany, align, labelOf, scope, onPick, onClose }) {
+function OptionMenu({ anchor, optKey, cur, meta, ttl, noneLabel, allowNone, allowAdd: allowAdd0, role, userCompany, align, labelOf, scope, onPick, onClose }) {
+  const allowAdd = React.useMemo(() => allowAdd0 && canManageOptionList(), [allowAdd0]);
   const co = useCompanyOptionList(optKey, role, userCompany);
   const sheet = React.useMemo(() => isNarrow(), []);
   const touch = React.useMemo(() => isTouch(), []);

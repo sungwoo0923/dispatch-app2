@@ -9257,6 +9257,8 @@ const [revenueUnlocked, setRevenueUnlocked] = React.useState(false);
     if (["회계관리", "인사관리부", "출근기록부", "직원관리", "기사서류", "자금관리", "비품관리", "연차관리", "입퇴사관리", "증명서발급"].includes(m)) return ["회계관리", "자금관리", "비품관리", "인사관리부", "증명서발급"].includes(m) && ownOk(m) ? "ok" : "hidden";
     // ⭐ 2026-11-04 회사 마스터가 권한 관리에서 관리자 메뉴를 숨겨도 본인은 잠기지 않게(다시 고칠 수 있도록)
     if (m === "관리자메뉴" && role === "admin" && myProfileDoc?.isMaster === true) return "ok";
+    // 🔒 2026-11-27 눌러도 열리지 않는 메뉴는 숨긴다(handleMenuClick 과 같은 조건) — 권한 관리에 운송사무원 설정을 저장한 회사는 매출관리가 보이는데 눌러도 반응이 없었다
+    if (!deptMode && (role === "user" || role === "test") && blockedMenus.includes(m)) return "hidden";
     if (customRole && getMenuAccess(customRoles, role, m) === "hidden") return "hidden";
     const isBlocked = !customRole && (role === "user" || role === "test" || isViewer) && blockedMenus.includes(m);
     if (m === "관리자메뉴" && role !== "admin" && role !== "totalMaster" && role !== "viewer") return "hidden"; // 🔒 2026-11-14 예전 !isViewer — 지금 보는 메뉴가 '조회'면 운송사무원 등에게도 관리자메뉴가 보였다
