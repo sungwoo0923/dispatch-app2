@@ -5768,7 +5768,7 @@ const title =
   : page === "myinfo" ? "내정보"
   : page === "settings" ? "설정"
   : page === "fleet" ? "지입차관리"
-  : page === "intel" ? "경영인텔리전스"
+  : page === "intel" ? "인사이트"
   : page === "gsheet" ? "구글시트 전송"
   : "상세보기";
 
@@ -8455,7 +8455,7 @@ function MobileSideMenu({
               <MenuItem label="임원 스케줄" icon="pin" onClick={() => onGo?.("dept:execsched")} dark={dark} />
               {(canRevenue || isExec) && ok("매출관리") && <MenuItem label="매출관리" icon="chart" onClick={onGoSales} dark={dark} />}
               <MenuItem label="영업관리" icon="trend" onClick={() => onGo?.("dept:sales")} dark={dark} />{/* PC 임원 화면 메뉴(DEPT_MENUS.exec)와 같게 */}
-              {(isAdminRole || isExec) && ok("인사이트") && <MenuItem label="경영인텔리전스" icon="trend" onClick={onGoIntel} dark={dark} />}
+              {/* 🗑 2026-11-27 사장님 요청 — "경영인텔리전스" 메뉴 없앰(같은 화면은 [인사이트] 메뉴로, PC와 같게) */}
             </MenuSection>
           )}
           {deptMode === "sales" && (
