@@ -77,6 +77,7 @@ import React, { useState, useMemo, useEffect, useRef, startTransition, useSyncEx
 import { withCo, getTenant, isPreviewMode } from "../fsTenant";
 import { useOrderFormFields } from "../orderFormFields"; // 🧩 2026-11-26 오더등록 입력칸 고르기
 import OrderFieldsModal from "../OrderFieldsModal";
+import { registerCloseDays } from "../clientCloseDays"; // 🗓 2026-11-27 거래처별 마감일
 import { readSkin, saveSkin, nextSkin, skinName, SKIN_SWITCH } from "../orderSkins"; // 🎨 2026-11-27 오더등록 A 루트 보드(기본) · 최고관리자만 기본 입력창과 전환
 import { MobileRouteLine, MOBILE_ROUTE_CSS } from "../orderLayouts";
 import { readHistoryCache, writeHistoryCache, fetchHistoryDelta, HISTORY_CACHE_MAX_AGE } from "../orderHistoryCache"; // ⚡ 2026-11-23 13개월 오더 폰 보관
@@ -3980,6 +3981,7 @@ useEffect(() => {
       .filter(c => !co || !c.companyName || c.companyName === co)
       .map(d => ({
         id: d.id,
+        ...(d.마감일 ? { 마감일: d.마감일, 마감시작월: d.마감시작월 || "" } : {}), // 🗓 2026-11-27 거래처별 마감일
         거래처명: d.거래처명 || "",
         주소: d.주소 || "",
         담당자: d.담당자 || "",
@@ -3994,6 +3996,7 @@ useEffect(() => {
         팝업표시: d.팝업표시 !== undefined ? d.팝업표시 : true,
         ...(typeof d.순수매출제외 === "boolean" ? { 순수매출제외: d.순수매출제외 } : {}),
       }));
+    registerCloseDays(co, list); // 🗓 2026-11-27 거래처별 마감일 → 청구월
     startTransition(() => setClients(list)); // 끊김 방지(낮은 우선순위)
   });
   return () => unsub();
