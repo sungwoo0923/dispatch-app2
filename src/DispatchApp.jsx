@@ -50,9 +50,8 @@ import * as XLSX from "xlsx";
 import OrderLookupModal from "./OrderLookup"; // ⭐ 2026-11-03 담당자·차량 조회
 import { useOrderFormFields } from "./orderFormFields"; // 🧩 2026-11-26 오더등록 입력칸 고르기
 import OrderFieldsModal from "./OrderFieldsModal";
-import { registerCloseDays, closeRuleOf, clientPeriod, periodText } from "./clientCloseDays"; // 🗓 2026-11-27 거래처별 마감일
-import ClientCloseDayModal from "./ClientCloseDayModal";
-const clientPeriodText = (name) => { const k = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7); return `${Number(k.slice(5))}월분 ${periodText(clientPeriod(name, k))}`; };
+import { registerCloseDays, closeRuleOf, clientPeriod, periodText, useCloseDaysVersion } from "./clientCloseDays"; // 🗓 2026-11-27 거래처별 마감일
+import ClientCloseDayModal, { ClientCloseDateModal } from "./ClientCloseDayModal";
 import { ORDER_SKIN_CSS, nextSkin, skinName, readSkin, saveSkin, SKIN_SWITCH } from "./orderSkins"; // 🎨 2026-11-27 오더등록 A 루트 보드 기본 · 최고관리자만 기본 입력창과 전환
 import { LAYOUT_SKINS, ORDER_LAYOUT_CSS, LayoutDecor, FareSummary, routeGrid, SwapRouteButton } from "./orderLayouts"; // 🎨 A 루트 보드
 import MgrBadge, { setMgrNameMap } from "./MgrBadge";
@@ -46676,6 +46675,26 @@ function arDueDate(yyyymm, rule) {
   const days = parseInt(r, 10); // "30일" = 청구월 말일부터 30일 뒤
   return days ? fmt(y, m, lastOf(y, m) + days) : "";
 }
+// 🗓 2026-11-27 미수금관리 거래처 카드 안 — 마감일 · 이번 기간 · [마감일 설정] · [마감날짜 변경](월 마감과 같은 창)
+function ArCloseBar({ name, company, isViewer }) {
+  const [open, setOpen] = React.useState(""); // "" | set | date
+  useCloseDaysVersion();
+  const r = closeRuleOf(name);
+  const k = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7);
+  const p = clientPeriod(name, k);
+  return (
+    <div className="mt-2.5 pt-2.5 border-t border-white/10 flex items-center gap-1.5 flex-wrap" data-kp="ar-closebar">
+      <span className="text-[12.5px] font-bold text-white/60">마감</span>
+      <span className="h-7 px-2 rounded-lg bg-white/[0.08] border border-white/15 text-[12.5px] font-black text-white inline-flex items-center" style={{ fontVariantNumeric: "tabular-nums" }}>
+        {r?.day ? `매달 ${r.day}일` : "말일"} · {Number(k.slice(5))}월분 {periodText(p)}{p.changed ? " (변경)" : ""}
+      </span>
+      <button type="button" data-testid="ar-closeday-btn" onClick={() => setOpen("set")} title="매달 며칠에 마감하는지 정해요" className="h-7 px-2.5 rounded-lg bg-white text-[#0F1A30] text-[12.5px] font-black">마감일 설정</button>
+      <button type="button" data-testid="ar-closedate-btn" onClick={() => setOpen("date")} title="이번 달만 끝 날짜를 바꿔요 · 다음 달은 그다음 날부터" className="h-7 px-2.5 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-white text-[12.5px] font-black">마감날짜 변경</button>
+      <ClientCloseDayModal open={open === "set"} client={name} company={company} isViewer={isViewer} onClose={() => setOpen("")} />
+      <ClientCloseDateModal open={open === "date"} client={name} company={company} ym={k} isViewer={isViewer} onClose={() => setOpen("")} />
+    </div>
+  );
+}
 function ArClientInfo({ client, name, upsertClient, isViewer }) {
   const c = client || {};
   const [rule, setRule] = React.useState(c.결제일 || "");
@@ -46688,9 +46707,6 @@ function ArClientInfo({ client, name, upsertClient, isViewer }) {
     if (!(await kpConfirm("수정하시겠습니까?", { okText: "저장" }))) { setRule(c.결제일 || ""); return; }
     upsertClient?.({ ...client, 결제일: v });
   };
-  // 🗓 2026-11-27 거래처 마감일(비우면 말일) — 이 거래처의 명세서 · 미수금 청구월 기간
-  const [cdOpen, setCdOpen] = React.useState(false);
-  const cdRule = closeRuleOf(name);
   const rows = [["사업자번호", c.사업자번호], ["대표자", c.대표자], ["담당자", c.담당자], ["연락처", c.연락처], ["이메일", c.이메일], ["주소", c.주소]];
   return (
     <div className="mb-4 rounded-2xl border border-[#E3E8F0] bg-white overflow-hidden">
@@ -46705,12 +46721,6 @@ function ArClientInfo({ client, name, upsertClient, isViewer }) {
             <button key={v} type="button" disabled={isViewer || !client} onClick={() => save(v)} className={`h-8 px-2.5 rounded-lg text-[12px] font-black ${rule === v ? "bg-white text-[#0F1A30]" : "bg-white/10 border border-white/20 text-white"} disabled:opacity-50`}>{v}</button>
           ))}
           <input value={rule} onChange={(e) => setRule(e.target.value)} onBlur={(e) => save(e.target.value.trim())} disabled={isViewer || !client} placeholder="직접 (예: 익월 25일)" className="h-8 w-36 px-2.5 rounded-lg bg-white/10 border border-white/20 text-[12.5px] font-bold text-white placeholder:text-white/40 outline-none" />
-          <span className="w-px h-5 bg-white/20 mx-1" />
-          <span className="text-[12px] font-bold text-white/70">마감일</span>
-          <button type="button" data-testid="ar-closeday-btn" onClick={() => setCdOpen(true)} title="매달 며칠에 마감하는 업체인지 — 명세서 · 미수금 · 월 마감 기간이 같이 바뀌어요"
-            className={`h-8 px-2.5 rounded-lg text-[12px] font-black ${cdRule?.day ? "bg-white text-[#0F1A30]" : "bg-white/10 border border-white/20 text-white"}`}>
-            {cdRule?.day ? `${cdRule.day}일 마감 · ${clientPeriodText(name)}` : "말일 · 설정"}
-          </button>
         </div>
       </div>
       {client ? (
@@ -46723,7 +46733,6 @@ function ArClientInfo({ client, name, upsertClient, isViewer }) {
           ))}
         </div>
       ) : <div className="px-5 py-3 text-[12.5px] text-[#7A89A3]">기본거래처에 등록되지 않은 거래처입니다 · 거래처관리 › 기본거래처에서 등록하면 정보와 결제 조건이 여기에 보입니다</div>}
-      <ClientCloseDayModal open={cdOpen} client={name} company={c.companyName || localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || ""} isViewer={isViewer} onClose={() => setCdOpen(false)} />
     </div>
   );
 }
@@ -50546,6 +50555,7 @@ const handleBatchSettle = async (targetStatus) => {
                   onClose={csPhone ? () => pickArClient("") : undefined}
                   onSaveNote={arSaveNote} onQuickPay={arQuickPay} quickPreview={arQuickPlan} onRemind={openArEmail} onReport={openArReport}
                   info={arCur ? <ArClientInfo client={(clients || []).find((c) => c.거래처명 === arCur.client)} name={arCur.client} upsertClient={upsertClient} isViewer={isViewer} /> : null}
+                  closeBar={arCur && arCur.client ? <ArCloseBar name={arCur.client} company={(localStorage.getItem("loginCompany") || localStorage.getItem("userCompany") || "").trim()} isViewer={isViewer} /> : null}
                   ledger={arCur ? (
                     <div>
                       <div className="flex items-center gap-2 mb-2">
