@@ -124,6 +124,31 @@ ${top.length ? `${top.map((n) => `.of-lay-route .kp-order-form > [data-of="${n}"
   return { css, mid: !!firstCard };
 }
 
+// ── 🗓 2026-11-27 기본 입력창 1안(사용자 선택) — [상·하차 교체] 버튼 하나에 거리 · 시간 · 도착 예상 · 경로보기를 합친다 ──
+//  주소가 둘 다 없으면 지금처럼 [상·하차 교체]만 보인다
+export function SwapRouteButton({ form, onSwap, onMap }) {
+  const r = useDrivingRoute(form?.상차지주소, form?.하차지주소);
+  const has = !!(form?.상차지주소 && form?.하차지주소);
+  const eta = r && form?.상차시간 ? addMin(form.상차시간, r.minutes) : "";
+  return (
+    <span className="ml-2 inline-flex items-center h-8 rounded-xl border border-[#1B2B4B] bg-white text-[#1B2B4B] overflow-hidden max-w-full" data-testid="swap-route">
+      <button type="button" onClick={onSwap} title="상차지 ↔ 하차지 교체"
+        className="inline-flex items-center gap-1.5 h-full px-3 text-[12px] font-extrabold hover:bg-[#1B2B4B] hover:text-white active:scale-95 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1B2B4B]">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3" /></svg>상·하차 교체
+      </button>
+      {has && (<>
+        <span className="w-px h-4 bg-[#DCE3EE]" />
+        <span className="inline-flex items-center gap-1.5 px-2.5 text-[12px] font-bold text-[#3A4A66] whitespace-nowrap" style={{ fontVariantNumeric: "tabular-nums" }}>
+          {r === undefined ? <span className="text-[#8A97B0]">거리 계산 중…</span>
+            : r ? <><b className="text-[13px] font-black text-[#0F1A30]">{r.km}km</b><span>· {dur(r.minutes)}</span>{eta && <span className="px-1.5 rounded-md bg-[#EEF2FA] text-[#2D4C82] font-black">도착 {eta}</span>}</>
+            : <span className="text-[#8A97B0]">경로를 못 찾았어요</span>}
+        </span>
+        <button type="button" onClick={onMap} className="h-6 mr-1 px-2 rounded-lg bg-[#1B2B4B] text-white text-[11.5px] font-black hover:bg-[#0F1A30]">경로보기</button>
+      </>)}
+    </span>
+  );
+}
+
 // ── 모바일 A 루트 보드 — 상차 카드와 하차 카드 사이 한 줄(교체 · 거리 · 시간 · 도착 · 경로보기) ──
 export function MobileRouteLine({ form, onSwap, onMap }) {
   const r = useDrivingRoute(form?.상차지주소, form?.하차지주소);
@@ -144,20 +169,23 @@ export function MobileRouteLine({ form, onSwap, onMap }) {
     </div>
   );
 }
-export const MOBILE_ROUTE_CSS = `
-.kp-m-route .kp-m-pd{background:#F3F6FB;padding:12px 10px!important}
-.kp-m-route .kp-m-pd > .kp-m-card-p,.kp-m-route .kp-m-pd > .kp-m-card-d{position:relative;border-radius:16px;background:#fff;border:0!important;box-shadow:0 1px 2px rgba(15,26,48,.05),0 10px 22px rgba(15,26,48,.06),inset 0 0 0 1px #E3E8F0}
-.kp-m-route .kp-m-pd > .kp-m-card-p > div:first-child{background:#EEF2FF!important;color:#4B5FD0!important;border-radius:16px 0 0 16px}
-.kp-m-route .kp-m-pd > .kp-m-card-d > div:first-child{background:#E8F6FD!important;color:#0E7FB5!important;border-radius:16px 0 0 16px}
+// 상차 · 하차 사이 한 줄(⇅ 교체 + 거리 · 시간) — 🗓 2026-11-27 기본 입력창에도 쓴다
+export const MOBILE_RLINE_CSS = `
 .kp-m-rline{display:flex;align-items:center;gap:6px;margin:2px 4px!important}
-.kp-m-rline-sw{width:30px;height:30px;flex-shrink:0;border-radius:50%;border:1px solid #DCE3EE;background:#fff;color:#1B2B4B;font-size:15px;font-weight:900;box-shadow:0 2px 6px rgba(15,26,48,.08)}
-.kp-m-rline-sw:active{background:#1B2B4B;color:#fff}
+.kp-m-rline-sw{width:30px;height:30px;flex-shrink:0;border-radius:50%;border:0;background:#1B2B4B;color:#fff;font-size:15px;font-weight:900;box-shadow:0 2px 6px rgba(15,26,48,.08)}
+.kp-m-rline-sw:active{background:#0F1A30;transform:scale(.92)}
 .kp-m-rline-ln{flex:1;height:2px;min-width:8px;border-radius:2px;background:linear-gradient(90deg,#7C8CF8,#38BDF8);opacity:.5}
 .kp-m-rline-box{display:flex;align-items:baseline;gap:6px;padding:5px 11px;border-radius:13px;background:#fff;box-shadow:0 4px 12px rgba(15,26,48,.07),inset 0 0 0 1px #E3E8F0;white-space:nowrap}
 .kp-m-rline-box b{font-size:14.5px;font-weight:900;color:#0F1A30;font-variant-numeric:tabular-nums}
 .kp-m-rline-box i{font-style:normal;font-size:12.5px;font-weight:800;color:#3A4A66}
 .kp-m-rline-box em{font-style:normal;font-size:11.5px;font-weight:700;color:#8A97B0}
 .kp-m-rline-map{height:28px;flex-shrink:0;padding:0 10px;border-radius:14px;border:1px solid #DCE3EE;background:#fff;color:#1B2B4B;font-size:11.5px;font-weight:800}
+`;
+export const MOBILE_ROUTE_CSS = `
+.kp-m-route .kp-m-pd{background:#F3F6FB;padding:12px 10px!important}
+.kp-m-route .kp-m-pd > .kp-m-card-p,.kp-m-route .kp-m-pd > .kp-m-card-d{position:relative;border-radius:16px;background:#fff;border:0!important;box-shadow:0 1px 2px rgba(15,26,48,.05),0 10px 22px rgba(15,26,48,.06),inset 0 0 0 1px #E3E8F0}
+.kp-m-route .kp-m-pd > .kp-m-card-p > div:first-child{background:#EEF2FF!important;color:#4B5FD0!important;border-radius:16px 0 0 16px}
+.kp-m-route .kp-m-pd > .kp-m-card-d > div:first-child{background:#E8F6FD!important;color:#0E7FB5!important;border-radius:16px 0 0 16px}
 `;
 
 const A = (r) => `.of-lay-${r} .kp-order-form`;

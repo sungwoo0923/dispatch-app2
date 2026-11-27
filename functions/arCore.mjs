@@ -37,15 +37,23 @@ let CLOSE_CUR = "";
 let CLOSE_VER = 0;
 const ymAdd = (ym, k) => { const [y, m] = ym.split("-").map(Number); const t = y * 12 + (m - 1) + k; return `${Math.floor(t / 12)}-${String((t % 12) + 1).padStart(2, "0")}`; };
 const ymLastDay = (ym) => { const [y, m] = ym.split("-").map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate(); };
-export function normCloseRule(day, from) {
+//  🗓 2026-11-27 [마감날짜 변경] — 이번 달만 끝 날짜를 바꾼다(ov: { "YYYY-MM": "YYYY-MM-DD" } · 거래처 정보 마감변경)
+//   다음 기간은 늘 바꾼 끝 날짜 다음 날부터 시작 → 겹치거나 빠지는 날이 없다(말일 거래처도 쓸 수 있다)
+const ymdRe = /^\d{4}-\d{2}-\d{2}$/;
+const cleanOv = (ov) => { const o = {}; Object.entries(ov && typeof ov === "object" ? ov : {}).forEach(([k, v]) => { if (/^\d{4}-\d{2}$/.test(k) && ymdRe.test(String(v || ""))) o[k] = String(v); }); return o; };
+export function normCloseRule(day, from, ov) {
   const d = parseInt(String(day ?? "").replace(/[^\d]/g, ""), 10);
-  if (!(d >= 1 && d <= 28)) return null;
-  return { day: d, from: /^\d{4}-\d{2}$/.test(String(from || "")) ? String(from) : "" };
+  const o = cleanOv(ov);
+  const ok = d >= 1 && d <= 28;
+  if (!ok && !Object.keys(o).length) return null;
+  const r = { day: ok ? d : 0, from: ok && /^\d{4}-\d{2}$/.test(String(from || "")) ? String(from) : "" };
+  if (Object.keys(o).length) r.ov = o;
+  return r;
 }
-// clients: [{ 거래처명, 마감일, 마감시작월 }] — 마감일이 없는(말일) 거래처는 빠진다
+// clients: [{ 거래처명, 마감일, 마감시작월, 마감변경 }] — 마감일도 마감변경도 없는(말일) 거래처는 빠진다
 export function setClientCloseDays(company, clients) {
   const m = new Map();
-  (clients || []).forEach((c) => { const r = normCloseRule(c?.마감일, c?.마감시작월); const name = String(c?.거래처명 || c?.업체명 || "").trim(); if (r && name) m.set(name, r); });
+  (clients || []).forEach((c) => { const r = normCloseRule(c?.마감일, c?.마감시작월, c?.마감변경); const name = String(c?.거래처명 || c?.업체명 || "").trim(); if (r && name) m.set(name, r); });
   const co = String(company || "");
   const before = JSON.stringify([...(CLOSE_RULES.get(co) || new Map())]);
   CLOSE_RULES.set(co, m); CLOSE_CUR = co;
@@ -57,22 +65,32 @@ export const closeRuleOf = (client, company) => {
   const c = String(client || "").trim(); if (!c) return null;
   return (company && CLOSE_RULES.get(String(company))?.get(c)) || CLOSE_RULES.get(CLOSE_CUR)?.get(c) || null;
 };
-// 날짜(YYYY-MM-DD) → 그 거래처 규칙으로 몇 월분인지
+const pad2 = (n) => String(n).padStart(2, "0");
+const dayAfter = (ymd) => { const t = new Date(`${ymd}T00:00:00Z`); t.setUTCDate(t.getUTCDate() + 1); return t.toISOString().slice(0, 10); };
+const ruleOn = (rule, ym) => !!(rule && rule.day && !(rule.from && ym < rule.from));
+// 매달 규칙대로라면 끝나는 날(바꾼 날 빼고)
+export const naturalEndOf = (ym, rule) => `${ym}-${pad2(ruleOn(rule, ym) ? Math.min(rule.day, ymLastDay(ym)) : ymLastDay(ym))}`;
+const endOf = (ym, rule) => rule?.ov?.[ym] || naturalEndOf(ym, rule);
+// 청구월(ym)의 기간 { from: "YYYY-MM-DD", to, day } — 규칙이 없으면 1일 ~ 말일 · first: 마감일 첫 달 · changed: [마감날짜 변경]한 달
+export function closePeriodOf(ym, rule) {
+  const out = { from: dayAfter(endOf(ymAdd(ym, -1), rule)), to: endOf(ym, rule), day: ruleOn(rule, ym) ? rule.day : 0 };
+  if (rule?.from && ym === rule.from && rule.day) out.first = true;
+  if (rule?.ov?.[ym]) out.changed = true;
+  return out;
+}
+// 날짜(YYYY-MM-DD) → 그 거래처 규칙으로 몇 월분인지(앞뒤 달 기간 중 그 날짜가 든 달)
 export function closeYmOf(date, rule) {
   const d = String(date || "").slice(0, 10); const ym = d.slice(0, 7);
-  if (!rule || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return ym;
-  if (rule.from && ym < rule.from) return ym;
-  return Number(d.slice(8, 10)) > rule.day ? ymAdd(ym, 1) : ym;
+  if (!rule || !ymdRe.test(d)) return ym;
+  for (const k of [ym, ymAdd(ym, 1), ymAdd(ym, -1)]) { const p = closePeriodOf(k, rule); if (d >= p.from && d <= p.to) return k; }
+  return ym;
 }
-// 청구월(ym)의 기간 { from: "YYYY-MM-DD", to } — 규칙이 없으면 1일 ~ 말일
-export function closePeriodOf(ym, rule) {
-  const cal = { from: `${ym}-01`, to: `${ym}-${String(ymLastDay(ym)).padStart(2, "0")}`, day: 0 };
-  if (!rule || (rule.from && ym < rule.from)) return cal;
-  const to = `${ym}-${String(Math.min(rule.day, ymLastDay(ym))).padStart(2, "0")}`;
-  if (rule.from && ym === rule.from) return { from: `${ym}-01`, to, day: rule.day, first: true };
-  const p = ymAdd(ym, -1); const sd = rule.day + 1;
-  const from = sd > ymLastDay(p) ? `${ym}-01` : `${p}-${String(sd).padStart(2, "0")}`;
-  return { from, to, day: rule.day };
+// [마감날짜 변경]에서 고를 수 있는 끝 날짜 — 이번 기간 시작일 ~ 다음 달 원래 끝 하루 전(다음 기간이 하루라도 남게)
+export function overrideRangeOf(ym, rule) {
+  const from = closePeriodOf(ym, rule).from;
+  const nx = ymAdd(ym, 1); const nEnd = rule?.ov?.[nx] || naturalEndOf(nx, rule);
+  const t = new Date(`${nEnd}T00:00:00Z`); t.setUTCDate(t.getUTCDate() - 1);
+  return { min: from, max: t.toISOString().slice(0, 10), natural: naturalEndOf(ym, rule) };
 }
 // 화면 · 서버 공통 — 거래처의 청구월 기간(거래처 이름으로)
 export const clientPeriodOf = (client, ym, company) => closePeriodOf(ym, closeRuleOf(client, company));

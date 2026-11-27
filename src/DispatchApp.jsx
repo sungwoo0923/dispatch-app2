@@ -54,7 +54,7 @@ import { registerCloseDays, closeRuleOf, clientPeriod, periodText } from "./clie
 import ClientCloseDayModal from "./ClientCloseDayModal";
 const clientPeriodText = (name) => { const k = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 7); return `${Number(k.slice(5))}월분 ${periodText(clientPeriod(name, k))}`; };
 import { ORDER_SKIN_CSS, nextSkin, skinName, readSkin, saveSkin, SKIN_SWITCH } from "./orderSkins"; // 🎨 2026-11-27 오더등록 A 루트 보드 기본 · 최고관리자만 기본 입력창과 전환
-import { LAYOUT_SKINS, ORDER_LAYOUT_CSS, LayoutDecor, FareSummary, routeGrid } from "./orderLayouts"; // 🎨 A 루트 보드
+import { LAYOUT_SKINS, ORDER_LAYOUT_CSS, LayoutDecor, FareSummary, routeGrid, SwapRouteButton } from "./orderLayouts"; // 🎨 A 루트 보드
 import MgrBadge, { setMgrNameMap } from "./MgrBadge";
 import { isUrgentOrder, UrgentBadge, urgentRowStyle } from "./urgentOrder"; // ⭐ 2026-11-06 긴급 오더 강조(모든 현황 공용)
 import BulkEditCopyModal from "./BulkEditCopy"; // 🗂 2026-11-09 우클릭 [일괄수정·복사]
@@ -2611,6 +2611,7 @@ function normalizeClient(row) {
     ...(row.기본사업자 ? { 기본사업자: String(row.기본사업자) } : {}),
     // 🗓 2026-11-27 거래처별 마감일(비우면 말일) · 적용 시작 청구월 — functions/arCore.mjs
     ...(row.마감일 ? { 마감일: String(row.마감일), 마감시작월: String(row.마감시작월 || "") } : {}),
+    ...(row.마감변경 && typeof row.마감변경 === "object" ? { 마감변경: row.마감변경 } : {}), // [마감날짜 변경] 이번 달만
     ...(row.결제일 ? { 결제일: String(row.결제일) } : {}),
   };
 }
@@ -2641,6 +2642,7 @@ function normalizeClients(arr) {
       ...(typeof c.매출순위제외 === "boolean" ? { 매출순위제외: c.매출순위제외 } : {}),
       ...(c.기본사업자 ? { 기본사업자: c.기본사업자 } : {}),
       ...(c.마감일 ? { 마감일: c.마감일, 마감시작월: c.마감시작월 || "" } : {}), // 🗓 2026-11-27 거래처별 마감일
+      ...(c.마감변경 ? { 마감변경: c.마감변경 } : {}),
       ...(c.결제일 ? { 결제일: c.결제일 } : {}),
     }));
 }
@@ -16513,14 +16515,8 @@ React.useEffect(() => {
   </button>
 </div>
 
-<button
-type="button"
-onClick={swapPickupDrop}
-className="ml-2 inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-extrabold rounded-xl border border-[#1B2B4B] bg-white text-[#1B2B4B] hover:bg-[#1B2B4B] hover:text-white active:scale-95 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1B2B4B] focus-visible:ring-offset-2"
-title="상차지 ↔ 하차지 교체"
->
-<DmIcon name="swap" size={14} />상·하차 교체
-</button>
+{/* 🗓 2026-11-27 오더등록 1안 — [상·하차 교체] 버튼 하나에 거리 · 시간 · 도착 예상 · 경로보기(주소 둘 다 있을 때) */}
+<SwapRouteButton form={form} onSwap={swapPickupDrop} onMap={() => setShowFareRouteMap(true)} />
   </div>
 </div>
 {/* ===== 오더 자동파싱 영역 ===== */}
@@ -46712,8 +46708,8 @@ function ArClientInfo({ client, name, upsertClient, isViewer }) {
           <span className="w-px h-5 bg-white/20 mx-1" />
           <span className="text-[12px] font-bold text-white/70">마감일</span>
           <button type="button" data-testid="ar-closeday-btn" onClick={() => setCdOpen(true)} title="매달 며칠에 마감하는 업체인지 — 명세서 · 미수금 · 월 마감 기간이 같이 바뀌어요"
-            className={`h-8 px-2.5 rounded-lg text-[12px] font-black ${cdRule ? "bg-white text-[#0F1A30]" : "bg-white/10 border border-white/20 text-white"}`}>
-            {cdRule ? `${cdRule.day}일 마감 · ${clientPeriodText(name)}` : "말일 · 바꾸기"}
+            className={`h-8 px-2.5 rounded-lg text-[12px] font-black ${cdRule?.day ? "bg-white text-[#0F1A30]" : "bg-white/10 border border-white/20 text-white"}`}>
+            {cdRule?.day ? `${cdRule.day}일 마감 · ${clientPeriodText(name)}` : "말일 · 설정"}
           </button>
         </div>
       </div>
