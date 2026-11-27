@@ -68,6 +68,7 @@ function Viewer({ list, index, onIndex, onClose }) {
         <button type="button" style={nav(index > 0)} disabled={index <= 0} onClick={() => onIndex(index - 1)} aria-label="이전 사용법">‹</button>
         <button type="button" style={nav(index < list.length - 1)} disabled={index >= list.length - 1} onClick={() => onIndex(index + 1)} aria-label="다음 사용법">›</button>
         {g.message && <button type="button" data-kp="guide-copy-text" style={btn} onClick={() => navigator.clipboard?.writeText(g.message).then(() => say("안내 글을 복사했어요"), () => say("복사하지 못했어요"))}>안내 글 복사</button>}
+        {g.pdf && <button type="button" data-kp="guide-pdf" style={btn} onClick={() => downloadImage(g.pdf, `${g.title.replace(/[\\/:*?"<>|]/g, " ").trim()}.pdf`).then(() => say("PDF를 내려받았어요"), () => say("내려받지 못했어요"))}>PDF 받기</button>}
         <button type="button" data-kp="guide-copy-image" style={btn} onClick={() => copyImage(src).then(() => say("이미지를 복사했어요 · 메신저에 붙여 넣으세요"), () => say("이 브라우저는 이미지 복사가 안 돼요 · 내려받기를 눌러 주세요"))}>이미지 복사</button>
         <button type="button" data-kp="guide-download" style={{ ...btn, ...GOLD_BTN, border: "1px solid transparent" }} onClick={() => downloadImage(src, fileNameOf(g)).then(() => say("내려받았어요"), () => say("내려받지 못했어요"))}>내려받기</button>
         <button type="button" style={btn} onClick={onClose}>닫기 ✕</button>

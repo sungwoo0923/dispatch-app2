@@ -965,7 +965,7 @@ export function ArNextAction({ data, expectDate, onRemind }) {
   );
 }
 
-export function ArDetail({ data, note, onSaveNote, onQuickPay, quickPreview, onRemind, onReport, onClose, ledger, info, isViewer }) {
+export function ArDetail({ data, note, onSaveNote, onQuickPay, quickPreview, onRemind, onReport, onClose, ledger, info, closeBar, isViewer }) {
   const [tab, setTab] = React.useState("timeline");
   const [amt, setAmt] = React.useState("");
   const [payDate, setPayDate] = React.useState(kstToday());
@@ -1014,6 +1014,7 @@ export function ArDetail({ data, note, onSaveNote, onQuickPay, quickPreview, onR
           <button type="button" onClick={onReport} className="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[13px] font-black inline-flex items-center gap-1.5"><Ico d={IC.doc} size={14} />미수금 보고서</button>
           {data.phone && <a href={`tel:${data.phone}`} className="h-9 px-3 rounded-lg bg-white/10 hover:bg-white/20 text-white text-[13px] font-black inline-flex items-center gap-1.5 ml-auto"><Ico d={IC.phone} size={14} />전화</a>}
         </div>
+        {closeBar /* 🗓 2026-11-27 거래처 마감일 — [마감일 설정] · [마감날짜 변경] */}
       </div>
 
       {/* 💡 2026-11-14 다음 할 일 추천 · 입금 약속 지남 · 독촉 문구 복사 — 경과일에 맞춰 무엇을 하면 좋은지 */}

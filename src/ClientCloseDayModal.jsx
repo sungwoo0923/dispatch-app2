@@ -100,8 +100,12 @@ export default function ClientCloseDayModal({ open, client, company, onClose, is
 
 // ── [마감날짜 변경] 이번 달만 끝 날짜 — 다음 기간은 그다음 날부터 자동(겹치거나 빠지는 날 없음) ──
 const addDay = (ymd, k) => { const t = new Date(`${ymd}T00:00:00Z`); t.setUTCDate(t.getUTCDate() + k); return t.toISOString().slice(0, 10); };
+const prevYm = (ym) => { const [y, m] = ym.split("-").map(Number); return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`; };
 const nextYm = (ym) => { const [y, m] = ym.split("-").map(Number); return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`; };
-export function ClientCloseDateModal({ open, client, company, ym, onClose, isViewer = false }) {
+export function ClientCloseDateModal({ open, client, company, ym: ymProp, onClose, isViewer = false }) {
+  // 달은 ‹ › 로 옮길 수 있다(미수금관리는 이번 달부터 열림 · 월 마감은 고른 달)
+  const [ym, setYm] = React.useState(ymProp || kstYm(0));
+  React.useEffect(() => { if (open) setYm(ymProp || kstYm(0)); }, [open, ymProp]);
   const cur = closeRuleOf(client);
   const range = overrideRangeOf(ym, cur);
   const [end, setEnd] = React.useState("");
@@ -132,7 +136,11 @@ export function ClientCloseDateModal({ open, client, company, ym, onClose, isVie
         </div>
         <div className="p-5 space-y-4">
           <div>
-            <div className="text-[13px] font-black text-[#14213D] mb-2">{ymKo(ym)} 끝 날짜</div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <button type="button" aria-label="이전 달" onClick={() => setYm(prevYm(ym))} className="w-8 h-8 rounded-lg border border-[#DCE3EE] text-[#1B2B4B] font-black">‹</button>
+              <span className="text-[14px] font-black text-[#14213D] px-1" data-testid="closedate-ym">{ymKo(ym)} 끝 날짜</span>
+              <button type="button" aria-label="다음 달" onClick={() => setYm(nextYm(ym))} className="w-8 h-8 rounded-lg border border-[#DCE3EE] text-[#1B2B4B] font-black">›</button>
+            </div>
             <div className="flex flex-wrap gap-1.5">
               {chips.map((d) => <button key={d} type="button" disabled={isViewer} onClick={() => setEnd(d)} className={chip(end === d)}>{md(d)}{d === range.natural ? " (원래)" : ""}</button>)}
             </div>
