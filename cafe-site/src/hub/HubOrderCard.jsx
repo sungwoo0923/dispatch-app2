@@ -69,7 +69,7 @@ export default function HubOrderCard({ o, onOpen, mine, fav, fresh, extraKm, com
   );
 }
 
-// ⭐ 2026-11-07 등록내역 한 줄(24시콜 등록내역 구조 참고) — 상차 지역(당상) · 하차 지역(당착) · 운임 · 독차/혼적 + 결제/톤/차종 · 시각 · 단계
+// ⭐ 2026-11-07 등록내역 한 줄 — 상차 지역(당상) · 하차 지역(당착) · 운임 · 독차/혼적 + 결제/톤/차종 · 시각 · 단계
 export function HubOrderRow({ o, onOpen, takerPhone }) {
   const stg = stageOf(o);
   const tone = { open: "bg-[#EAF0FA] text-[#1B2B4B]", pending: "bg-[#2D4C82] text-white", moving: "bg-[#2D4C82] text-white", delivered: "bg-[#0F1A30] text-white", returned: "bg-[#0F1A30] text-white", cancelled: "bg-[#F2F5FA] text-[#5F6E87]" }[stg];

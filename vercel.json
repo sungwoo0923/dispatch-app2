@@ -29,24 +29,6 @@
         "icn1"
       ]
     },
-    "api/send24.js": {
-      "maxDuration": 30,
-      "regions": [
-        "icn1"
-      ]
-    },
-    "api/call24-meta.js": {
-      "maxDuration": 15,
-      "regions": [
-        "icn1"
-      ]
-    },
-    "api/call24-diag.js": {
-      "maxDuration": 30,
-      "regions": [
-        "icn1"
-      ]
-    },
     "api/shell.js": {
       "maxDuration": 15,
       "regions": [
