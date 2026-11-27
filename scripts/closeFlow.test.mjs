@@ -60,13 +60,13 @@ assert.ok(row("가나상사").changed && !canApprove(row("가나상사")) && can
 const ap = approvePatch(closeBoard(orders, "2026-10", { me, today, closeOf }).find((r) => r.client === "가나상사"), { name: "최경리" });
 assert.equal(ap.status, "approved"); assert.equal(unlockPatch(row("가나상사"), me).status, "none");
 assert.deepEqual(closeCounts(closeBoard(orders, "2026-10", { me, today, closeOf })), { none: 2, verified: 0, submitted: 1, rejected: 0, approved: 0 });
-// ⚠ 2026-11-27 최종마감 뒤 — 건수가 바뀌면 '마감 후 변경', 금액만 바뀐 건(경리가 명세서에서 고침) 아님
+// ⚠ 2026-11-27 최종마감 뒤 — 오더 건수나 오더 금액이 바뀌면 '마감 후 변경'(명세서 화면 수정은 오더를 안 바꿔서 안 잡힘)
 assert.deepEqual([ap.snapshot.count, ap.snapshot.sale], [2, 200000], "최종마감 때 건수 · 금액을 남긴다");
 docs.set("가나상사|2026-10", { ...sp, ...ap });
 B = closeBoard(orders, "2026-10", { me, today, closeOf });
 assert.ok(!row("가나상사").changed, "최종마감 그대로");
 B = closeBoard(orders.map((x) => (x._id === "1" ? { ...x, 청구운임: "130000" } : x)), "2026-10", { me, today, closeOf });
-assert.ok(!row("가나상사").changed, "잠금 중 금액만 바뀜(명세서 수정) → 명세서 '금액 바뀜'이 알려 주므로 여기선 아님");
+assert.ok(row("가나상사").changed, "잠금 중 오더 금액만 바뀜 → 마감 후 변경(운송팀 월 마감에서도 보이게 · 2026-11-27)");
 B = closeBoard(orders.filter((x) => x._id !== "2"), "2026-10", { me, today, closeOf });
 assert.ok(row("가나상사").changed && !canApprove(row("가나상사")) && !canVerify(row("가나상사")), "잠금 중 건수가 바뀜 → 마감 후 변경(배차 쪽 검증 버튼은 그대로 없음)");
 docs.set("가나상사|2026-10", { ...sp, ...ap, unlocked: true });

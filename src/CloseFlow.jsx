@@ -240,7 +240,7 @@ export default function CloseFlow({ orders = [], company = "", mode = "disp", me
             <div className="min-w-0">
               <div className="text-[15px] font-black">{cur.client} <span className="font-medium text-[#5A6781]" style={NUM}>· {cur.count}건 · {won(cur.sale)}원</span></div>
               {cur.status === "rejected" && cur.doc?.reason && <div className={`mt-1.5 text-[13.5px] ${TONE.bad}`}><b className="mr-2">반려 사유</b>{cur.doc.reason}</div>}
-              {cur.changed && cur.status === "approved" && <div className={`mt-1.5 text-[13.5px] ${TONE.bad}`}><b className="mr-2">마감 후 변경</b>최종마감 때 {cur.doc.snapshot.count}건 · {won(cur.doc.snapshot.sale)}원 → 지금 {cur.count}건 · {won(cur.sale)}원. 명세서를 확인하고 [일시해제] → [다시 잠금]하면 지금 건수로 다시 마감돼요.</div>}
+              {cur.changed && cur.status === "approved" && <div className={`mt-1.5 text-[13.5px] ${TONE.bad}`}><b className="mr-2">마감 후 변경</b>최종마감 때 {cur.doc.snapshot.count}건 · {won(cur.doc.snapshot.sale)}원 → 지금 {cur.count}건 · {won(cur.sale)}원. 명세서를 확인하고 [일시해제] → [다시 잠금]하면 지금 건수 · 금액으로 다시 마감돼요.</div>}
               {cur.changed && cur.status !== "approved" && <div className={`mt-1.5 text-[13.5px] ${TONE.bad}`}><b className="mr-2">금액 바뀜</b>1차 마감 때 {cur.doc.snapshot.count}건 · {won(cur.doc.snapshot.sale)}원 → 지금 {cur.count}건 · {won(cur.sale)}원. 배차자가 다시 1차 마감해야 승인할 수 있어요.</div>}
               <div className="mt-2"><CheckList checks={cur.checks} onOpenOrder={onOpenOrder} bigDiff={cur.bigDiff} diff={cur.diff} prevSale={cur.prevSale} /></div>
               {!isViewer && (
