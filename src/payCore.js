@@ -119,3 +119,36 @@ export function statementUnpayPatch(order, stmtId) {
   if (!order || order.지급명세서ID !== stmtId) return null;
   return { 지급상태: "지급중", 지급일: "", 지급명세서ID: null, ...CLEAR };
 }
+
+// ── 🏷 2026-11-27 배차완료 오더 운임 변경 표시 ──
+//  배차완료(운행이 정해진) 오더의 청구운임 · 기사운임이 바뀌면 오더에 운임변경 = { at, by, 청구: [전, 후]?, 기사: [전, 후]? } (마지막 변경)
+//  → 배차현황 줄에 작은 '운임 변경' 표시. 같은 칸을 여러 번 바꾸면 처음 값(첫 '전')은 그대로 둔다. 전체 기록은 오더 변경 이력(history)
+const FARE_KEYS = [["청구운임", "청구"], ["기사운임", "기사"]];
+export function fareChangeMark(prev, patch = {}, { by = "", now = Date.now() } = {}) {
+  if (!prev || String(prev.배차상태 || "") !== "배차완료") return null;
+  const old = prev.운임변경 && typeof prev.운임변경 === "object" ? prev.운임변경 : null;
+  const out = {}; let hit = false;
+  FARE_KEYS.forEach(([k, s]) => {
+    if (!(k in patch) || toInt(patch[k]) === toInt(prev[k])) { if (old?.[s]) out[s] = old[s]; return; }
+    const first = Array.isArray(old?.[s]) ? toInt(old[s][0]) : toInt(prev[k]);
+    if (first === toInt(patch[k])) return; // 처음 값으로 돌아오면 그 칸은 표시 없음
+    out[s] = [first, toInt(patch[k])]; hit = true;
+  });
+  if (!hit) {
+    // 처음 값으로 돌아온 칸은 표시에서 뺀다(모두 돌아왔으면 표시를 지움)
+    if (!old || !FARE_KEYS.some(([k]) => k in patch && toInt(patch[k]) !== toInt(prev[k]))) return null;
+    return out.청구 || out.기사 ? { at: old.at || now, by: old.by || "", ...out } : { clear: true };
+  }
+  return { at: now, by: String(by || ""), ...out };
+}
+// 표시 글: "청구 350,000 → 380,000 · 기사 300,000 → 320,000"
+export function fareChangeText(m) {
+  if (!m || typeof m !== "object") return "";
+  return FARE_KEYS.map(([, s]) => (Array.isArray(m[s]) ? `${s} ${toInt(m[s][0]).toLocaleString()} → ${toInt(m[s][1]).toLocaleString()}` : "")).filter(Boolean).join(" · ");
+}
+// 🔒 지급완료 오더 기사운임 — 사무원(user)은 못 바꾼다(관리자 · 경리 권한은 그대로). bypass = 경리 · 통합관리자 등
+export const PAID_FARE_LOCK_MSG = "이미 지급한 오더라 기사운임은 관리자만 바꿀 수 있어요.\n운송 관리자나 경리팀에 바꿔 달라고 요청해 주세요.";
+export function paidFareLocked(role, bypass, prev, patch = {}) {
+  if (bypass || String(role || "") !== "user" || !isPaidOrder(prev)) return false;
+  return "기사운임" in patch && toInt(patch.기사운임) !== toInt(prev.기사운임);
+}

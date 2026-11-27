@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import {
   payLedgerPlan, settleGapPlan, payGapOf, paidTotalOf, basePaidOf, isPaidThenCanceled,
-  paidEditGuard, paidDeleteWarn, statementPayPatch, statementUnpayPatch, payTransferOf,
+  paidEditGuard, paidDeleteWarn, statementPayPatch, statementUnpayPatch, payTransferOf, fareChangeMark, fareChangeText, paidFareLocked,
 } from "../src/payCore.js";
 
 let n = 0;
@@ -149,6 +149,25 @@ t("세금계산서 받는 기사: 장부 = 부가세 포함 이체액 · 공급�
   assert.equal(payTransferOf({ 기사운임: 260000 }, true).total, 286000); assert.equal(payTransferOf({ 기사운임: 260000 }, false).total, 260000);
   const plain = payLedgerPlan({ _id: "w", 기사운임: 100000 }, { status: "지급완료", date: "2026-11-27" }, TODAY);
   assert.equal(plain.patch.지급부가세, null); assert.equal(plain.bumps[0].amount, 100000); assert.equal(plain.bumps[0].vat, 0);
+});
+
+t("배차완료 오더 운임 변경 표시 · 사무원은 지급완료 오더 기사운임 못 바꿈", () => {
+  const done = { 배차상태: "배차완료", 청구운임: 350000, 기사운임: 300000 };
+  assert.equal(fareChangeMark({ ...done, 배차상태: "배차중" }, { 청구운임: 380000 }), null, "배차중은 표시 안 함");
+  assert.equal(fareChangeMark(done, { 메모: "x" }), null);
+  assert.equal(fareChangeMark(done, { 청구운임: "350,000" }), null, "같은 금액");
+  const m = fareChangeMark(done, { 청구운임: 380000, 기사운임: 320000 }, { by: "kim@co.kr", now: 5 });
+  assert.deepEqual(m, { at: 5, by: "kim@co.kr", 청구: [350000, 380000], 기사: [300000, 320000] });
+  assert.equal(fareChangeText(m), "청구 350,000 → 380,000 · 기사 300,000 → 320,000");
+  const m2 = fareChangeMark({ ...done, 청구운임: 380000, 운임변경: { 청구: [350000, 380000] } }, { 청구운임: 400000 }, { now: 6 });
+  assert.deepEqual(m2.청구, [350000, 400000], "처음 값은 그대로");
+  assert.deepEqual(fareChangeMark({ ...done, 청구운임: 380000, 운임변경: { 청구: [350000, 380000] } }, { 청구운임: 350000 }), { clear: true }, "처음 값으로 돌아오면 표시 지움");
+  const paid = { ...done, 지급상태: "지급완료" };
+  assert.equal(paidFareLocked("user", false, paid, { 기사운임: 310000 }), true);
+  assert.equal(paidFareLocked("user", false, paid, { 청구운임: 400000 }), false, "청구운임은 막지 않음");
+  assert.equal(paidFareLocked("admin", false, paid, { 기사운임: 310000 }), false, "관리자는 그대로");
+  assert.equal(paidFareLocked("user", true, paid, { 기사운임: 310000 }), false, "경리 권한은 그대로");
+  assert.equal(paidFareLocked("user", false, done, { 기사운임: 310000 }), false, "지급 전은 그대로");
 });
 
 console.log(`payCore: ${n}개 통과`);

@@ -3073,7 +3073,7 @@ const submitCopyOrderPC = async (copyTarget, approvedShippers, cargoOverride, op
   //  새 오더가 처음부터 "운송완료·지급완료"로 보였다 — 복사본은 새 운행으로 시작
   ["기사확인상태", "기사확인일시", "기사확인값", "상차완료일시", "하차완료일시", "기사완료일시", "배차확정일시", "배차확정자", "배차완료일시",
     "지급상태", "지급일", "지게차지급완료", "지게차지급일", "history", "최종수정자", "취소처리일시",
-    "지급액", "지급액기록일", "지급조정액", "지급조정일", "지급후취소", "지급명세서ID", "외부지급"].forEach((k) => { delete payload[k]; }); // 💸 2026-11-25 지급한 금액 기록도 복사하지 않기(외부지급 = 외부 특수운임 지급 기록 포함)
+    "지급액", "지급액기록일", "지급조정액", "지급조정일", "지급후취소", "지급명세서ID", "외부지급", "지급부가세", "운임변경"].forEach((k) => { delete payload[k]; }); // 💸 2026-11-25 지급한 금액 기록도 복사하지 않기(외부지급 = 외부 특수운임 지급 기록 포함)
   // 📎 2026-11-12 첨부 · 증빙 · 정산 진행값은 복사하지 않는다 — 예전엔 원본의 첨부 개수(attachCount)만 딸려 와서
   //  복사본에 첨부 "1"이 떠 있는데 눌러 보면 아무것도 없었다(파일은 원본 오더에만 있다). 복사본은 첨부 없이 · 미청구로 시작
   ["attachCount", "officeAttach", "attachViewed", "업로드잠금", "업로드잠금해제만료", "재업로드완료알림", "업로드토큰", "업로드토큰발급",
@@ -3218,7 +3218,7 @@ import { useBadgeSeenSync, useUnseenItems, useMarkSeenOnView, unionCount } from 
 import { useMobileAlerts } from "./mobile/mobileAlerts";
 import { loadAcctPayments, saveAcctPayments, loadPlManual, savePlManual } from "./acctPayments";
 import { bumpDriverPayout, addClientCollection, removeClientCollections, setDriverPayAdjust, payFundInfo, setPayFundDefault } from "./ledgerAuto";
-import { payLedgerPlan, settleGapPlan, payGapOf, isPaidThenCanceled, paidEditGuard, paidDeleteWarn, payTransferOf, PAY_VAT_RATE, paidVatOf } from "./payCore"; // 💸 2026-11-25 지급한 금액 기록(지급액)
+import { payLedgerPlan, settleGapPlan, payGapOf, isPaidThenCanceled, paidEditGuard, paidDeleteWarn, payTransferOf, PAY_VAT_RATE, paidVatOf, fareChangeMark, paidFareLocked, PAID_FARE_LOCK_MSG, fareChangeText } from "./payCore"; // 💸 2026-11-25 지급한 금액 기록(지급액)
 // 💸 지급한 오더를 고칠 때 확인 — 여러 건을 한 번에 고쳐도 창이 줄줄이 뜨지 않게(한 번 [네]면 10초 동안은 다시 묻지 않는다)
 let _paidEditAckUntil = 0; let _paidEditAsk = null;
 const confirmPaidEdit = (msg) => {
@@ -5477,6 +5477,8 @@ const patchDispatch = async (_id, patch, knownPrev) => {
   // 💸 2026-11-25 지급완료 오더의 기사운임 변경 · 취소 — 한 번 묻고, 장부는 그대로(지급액 고정 · "지급 후 운임 변경 / 지급 후 취소" 표시 · src/payCore.js)
   //   (정산 기록 __system 저장은 묻지 않고 지급액 고정만)
   if (patch && (!("지급상태" in patch) || patch.지급상태 === prev?.지급상태)) { // 오더 전체 저장(같은 지급상태가 딸려 옴)도 검사
+    // 🔒 2026-11-27 지급완료 오더의 기사운임은 관리자(운송 · 경리)만 바꾼다 — 사무원(user)이 바꾸려 하면 안내하고 저장하지 않는다
+    if (!patch.__system && paidFareLocked(role, finalBypass, prev, patch)) { globalShowAlert(PAID_FARE_LOCK_MSG); return false; }
     const _pg = paidEditGuard(prev, patch, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10));
     if (_pg.warn && !patch.__system && !(await confirmPaidEdit(_pg.warn))) return false;
     Object.assign(patch, _pg.extra);
@@ -5711,6 +5713,8 @@ const patchDispatch = async (_id, patch, knownPrev) => {
     }
   });
 
+  // 🏷 2026-11-27 배차완료 오더의 청구운임 · 기사운임을 바꾸면 '운임 변경' 표시(배차현황 줄) — 누가 · 언제 · 전 → 후(마지막 변경). 전체 기록은 변경 이력(history)
+  { const fc = fareChangeMark(prev, cleanPatch, { by: auth.currentUser?.email || "" }); if (fc) cleanPatch.운임변경 = fc.clear ? null : fc; }
   const historyArr = Array.isArray(prev.history) ? prev.history : [];
   if (!prev.createdAt) {
     cleanPatch.createdAt = prev.updatedAt || prev.createdTime || Date.now();
@@ -32946,6 +32950,20 @@ setConfirmChange(null);
   );
 }
 /* ===================== 메모 더보기 컴포넌트 ===================== */
+// 🏷 2026-11-27 배차완료 뒤 운임이 바뀐 오더 — 금액 옆 작은 '변경' 표시(마우스를 올리면 누가 · 언제 · 전 → 후). 전체 기록은 [변경 이력]
+function FareChangeMark({ row, k }) {
+  const m = row?.운임변경;
+  const s = k === "청구운임" ? "청구" : "기사";
+  if (!m || typeof m !== "object" || !Array.isArray(m[s])) return null;
+  const t = new Date(Number(m.at || 0) + 9 * 3600e3);
+  const when = m.at ? `${t.getUTCMonth() + 1}/${t.getUTCDate()} ${String(t.getUTCHours()).padStart(2, "0")}:${String(t.getUTCMinutes()).padStart(2, "0")}` : "";
+  const who = String(m.by || "").split("@")[0];
+  return (
+    <span data-kp="fare-change" title={`배차완료 뒤 운임 변경${when ? ` · ${when}` : ""}${who ? ` · ${who}` : ""}\n${fareChangeText(m)}`}
+      className="ml-1 inline-block align-middle px-1 rounded bg-[#FFF4E0] border border-[#F2C98A] text-[#8A5A00] text-[10px] font-black leading-[14px]">운임 변경</span>
+  );
+}
+
 function MemoMore({ text = "" }) {
   const [open, setOpen] = React.useState(false);
   const str = String(text);
@@ -36925,7 +36943,7 @@ return (
                           onChange={(e) => updateEdited(row, key, e.target.value)}
                         />
                       ) : (
-                        <>{toInt(row[key]).toLocaleString()}{key === "기사운임" && <ForkliftMark row={row} />}</>
+                        <>{toInt(row[key]).toLocaleString()}{key === "기사운임" && <ForkliftMark row={row} />}<FareChangeMark row={row} k={key} /></>
                       )}
                     </td>
                   ))}
@@ -58985,10 +59003,12 @@ export function PcSettleMobile({ dispatchData = [], companyName = "", role = "",
     const clean = {}; Object.entries(patch || {}).forEach(([k, v]) => { if (!k.startsWith("__")) clean[k] = v; });
     if (("청구운임" in clean || "기사운임" in clean) && !("수수료" in clean)) clean.수수료 = String(nextFee(row || null, { ...(row || {}), ...clean }));
     if (!("지급상태" in clean) || clean.지급상태 === row?.지급상태) { // 💸 2026-11-25 PC와 같은 규칙 — 지급한 오더의 기사운임 변경 · 취소는 한 번 묻고 지급액 고정(src/payCore.js)
+      if (!patch?.__system && paidFareLocked(role, mBypass, row, clean)) { window.alert(PAID_FARE_LOCK_MSG); return false; } // 🔒 2026-11-27 PC와 같은 규칙
       const _pg = paidEditGuard(row, clean, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10));
       if (_pg.warn && !patch?.__system && !window.confirm(_pg.warn)) return false;
       Object.assign(clean, _pg.extra);
     }
+    if (!patch?.__system) { const fc = fareChangeMark(row, clean, { by: auth.currentUser?.email || "" }); if (fc) clean.운임변경 = fc.clear ? null : fc; } // 🏷 2026-11-27 PC와 같은 '운임 변경' 표시
     const col = patch?.__col || row?.__col || "dispatch";
     await updateDoc(doc(db, col, _id), { ...clean, updatedAt: serverTimestamp() });
     const MIRROR = ["청구운임", "지급방식", "차량번호", "이름", "전화번호", "상차일", "하차일", "화물내용"];
