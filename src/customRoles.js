@@ -134,8 +134,9 @@ export function builtinDefaultMenuAccess(roleKey) {
   if (roleKey === "hrStaff") return only(["HOME", "전자결재", "인사관리부", "증명서발급", "회사관리"]);
   // 💼 2026-11-15 영업 — 홈 · 전자결재 · 영업관리 · 회사관리만(사용자 요청). 배차현황 · 운임 · 배차자용 거래처관리 · 배차 매출관리는 영업 일이 아니다.
   //  내 매출 · 인센티브 · 내가 데려온 거래처는 영업관리 안에서 본다
-  if (roleKey === "salesMgr") return only(["HOME", "전자결재", "영업관리", "회사관리"]);
-  if (roleKey === "salesStaff") return only(["HOME", "전자결재", "영업관리", "회사관리"]);
+  // 🧾 2026-11-27 견적서(단가표 › 직접 작성 · 발행 이력 / 운임조회 › 운임 산출)는 영업 일 — 단가표 · 운임조회를 기본으로 연다(견적 '단계'는 있는데 견적서를 만들 곳이 없던 것)
+  if (roleKey === "salesMgr") return only(["HOME", "전자결재", "영업관리", "단가표", "운임조회", "회사관리"]);
+  if (roleKey === "salesStaff") return only(["HOME", "전자결재", "영업관리", "단가표", "운임조회", "회사관리"]);
   // 통합 역할 — 각 화면 역할 기본값을 합친 것(설정에서 숨기거나 조회로 낮출 수 있다)
   if (roleKey === "hrAcct") return union("test", "hrManager");
   if (roleKey === "allMgr") return union("admin", "test", "hrManager", "salesMgr");

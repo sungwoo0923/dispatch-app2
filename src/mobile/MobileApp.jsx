@@ -8468,6 +8468,9 @@ function MobileSideMenu({
               <MenuItem label="영업 홈" icon="dashboard" onClick={() => onGo?.("dept")} dark={dark} />
               {ok("영업관리") && <MenuItem label="영업관리" icon="trend" onClick={() => onGo?.("dept:sales")} dark={dark} />}
               {/* 🧹 2026-11-15 영업은 홈 · 전자결재 · 영업관리 · 회사관리만(배차현황 · 운임 · 거래처관리 · 매출관리는 PC와 같이 뺐다) */}
+              {/* 🧾 2026-11-27 견적서 작성용 단가표 · 운임조회는 PC와 같이 다시 연다 */}
+              {ok("단가표") && <MenuItem label="단가표" icon="money" onClick={onGoRateCard} dark={dark} />}
+              {ok("운임조회") && <MenuItem label="운임조회" icon="globe" onClick={onGoNationalFare} dark={dark} />}
             </MenuSection>
           )}
           {/* 🧭 2026-11-24 화면 전환 · 업무 영역은 메뉴가 아니라 맨 위 카드(WorkspaceCard)로 · 직원 · 기사는 경리 · 인사 주업무 묶음 안으로 */}
