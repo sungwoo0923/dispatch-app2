@@ -37,7 +37,8 @@ export function monthPipeline(rows, ym, today, yearRows) {
   for (const r of rows || []) {
     const d = dateOf(r);
     // 건수(접수 · 배차완료 · 미완료)는 상차일 1일 ~ 오늘
-    if (d >= from && d <= today) { o.orders += 1; if (!isDone(r)) o.open += 1; else o.done += 1; }
+    // 📏 2026-11-27 고정거래처 줄(__fixed)은 돈에만 넣고 건수에는 안 센다 — 위 '이번 달 매출' 타일과 같은 매출(배차완료 + 고정거래처)
+    if (!r.__fixed && d >= from && d <= today) { o.orders += 1; if (!isDone(r)) o.open += 1; else o.done += 1; }
     // 🗓 2026-11-25 돈(청구 매출 · 원가 · 이익 · 입금 · 지급)은 청구월(마감월) = 이번 달인 배차완료 오더(salesRule — 매출관리 · 미수금과 같은 달)
     if (!isSalesOrder(r) || salesMonthOf(r) !== ym) continue;
     const s = toWon(r.청구운임); const drv = toWon(r.기사운임);

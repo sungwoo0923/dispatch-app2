@@ -5,6 +5,8 @@ import { extItems, extPayoutRows, extPayoutGroups, extPayPlan, extSettleGapPlan,
 let pass = 0, fail = 0;
 const eq = (a, b, n) => { const ok = JSON.stringify(a) === JSON.stringify(b); if (ok) pass++; else { fail++; console.error("✗", n, "\n  got ", JSON.stringify(a), "\n  want", JSON.stringify(b)); } };
 const read = (f) => fs.readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
+// 🧩 2026-11-27 DispatchApp.jsx 를 화면별 파일(src/dispatch/**)로 나눴다 — 화면 코드 검사는 그 파일들까지 합쳐서 본다
+const readDispatchApp = () => [read("src/DispatchApp.jsx"), ...fs.readdirSync(new URL("../src/dispatch/", import.meta.url), { recursive: true }).filter((f) => /\.jsx?$/.test(f)).sort().map((f) => read(`src/dispatch/${f}`))].join("\n");
 
 const items = [
   { 종류: "수작업", 이름: "", 금액: 120000, 부담: "청구", 받는사람: "외부", 메모: "한빛 인력" },
@@ -67,7 +69,7 @@ eq(gs.flatMap((g) => g.rows).map((r) => [r.key, r.canceled]), [["수작업-수�
 const fk = (x) => ({ 지게차비용: 50000, 지게차기사ID: "a", 지게차기사명: "김지게", ...x });
 eq(forkliftPayoutGroups([fk({}), fk({ 상태: "취소" }), fk({ 상태: "오더취소" }), fk({ source: "transport_transmit" }), fk({ 상태: "취소됨", 지게차지급완료: true })]).map((g) => [g.count, g.unpaid, g.paid]), [[2, 50000, 50000]], "지게차: 취소 · 사본 제외, 지급 후 취소는 남김");
 // 9) 오더 복사 때 외부지급을 복사하지 않는다
-const app = read("src/DispatchApp.jsx");
+const app = readDispatchApp();
 const copyLine = app.split("\n").find((l) => l.includes('"지급명세서ID"') && l.includes("delete payload[k]"));
 eq(!!copyLine && copyLine.includes('"외부지급"'), true, "PC 복사: 외부지급 지움");
 const mob = read("src/mobile/MobileApp.jsx");

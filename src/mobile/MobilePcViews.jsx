@@ -52,19 +52,19 @@ import { useRouteCarrierFilter } from "../routeCarriers"; // ⭐ 2026-11-05 고�
 
 // 매출관리는 PC 배차 프로그램 안에 있는 화면이라 그 묶음을 필요할 때만 받아온다
 const RolePermissionsPanel = React.lazy(() => import("../RolePermissionsPanel")); // ⭐ 2026-11-04 마스터 권한 관리(모바일)
-const PcSettlement = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcSettlement })));
+const PcSettlement = React.lazy(() => Promise.all([import("../DispatchApp"), import("../dispatch/Settlement.jsx")]).then(([m]) => ({ default: m.PcSettlement }))); // 🧩 2026-11-27 화면 파일(src/dispatch)도 같이 받는다
 // 🏢 경리·인사 모드 — PC 정산관리·회계관리·인사관리 화면
-const PcSettleMobile = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcSettleMobile })));
+const PcSettleMobile = React.lazy(() => Promise.all([import("../DispatchApp"), import("../dispatch/ClientSettlement.jsx"), import("../dispatch/PaymentManagement.jsx")]).then(([m]) => ({ default: m.PcSettleMobile }))); // 🧩 2026-11-27 화면 파일(src/dispatch)도 같이 받는다
 const PcAccounting = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcAccounting })));
 // ⭐ 2026-11-06 직원 급여 · 급여명세서 · 연차 사용 촉진
 const PayrollCenter = React.lazy(() => import("../Payroll"));
 const MyPayslips = React.lazy(() => import("../Payroll").then((m) => ({ default: m.MyPayslips })));
 import LeaveArea from "../LeaveArea"; // ⭐ 2026-11-07 연차 현황 + 연차 사용 촉진 한 화면
 const MyLeavePlan = React.lazy(() => import("../LeavePromotion").then((m) => ({ default: m.MyLeavePlan })));
-const PcHrPage = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcHrPage })));
+const PcHrPage = React.lazy(() => Promise.all([import("../DispatchApp"), import("../dispatch/HRManagementPage.jsx")]).then(([m]) => ({ default: m.PcHrPage }))); // 🧩 2026-11-27 화면 파일(src/dispatch)도 같이 받는다
 // ⭐ 2026-11-05 PC·모바일 일치 — 기사관리·거래처관리(PC 화면 그대로)
-const PcDriverMobile = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcDriverMobile })));
-const PcClientMobile = React.lazy(() => import("../DispatchApp").then((m) => ({ default: m.PcClientMobile })));
+const PcDriverMobile = React.lazy(() => Promise.all([import("../DispatchApp"), import("../dispatch/DriverManagement.jsx")]).then(([m]) => ({ default: m.PcDriverMobile }))); // 🧩 2026-11-27 화면 파일(src/dispatch)도 같이 받는다
+const PcClientMobile = React.lazy(() => Promise.all([import("../DispatchApp"), import("../dispatch/ClientManagement.jsx")]).then(([m]) => ({ default: m.PcClientMobile }))); // 🧩 2026-11-27 화면 파일(src/dispatch)도 같이 받는다
 // 휴대폰 폭 — PC 숫자 타일(6칸)을 3칸으로
 // ⭐ 2026-11-06 가로로 밀어 보던 화면을 없앰 — 표는 카드 목록(mobile prop)으로 그리고, 팝업은 화면 폭에 맞춰 한 줄 배치
 const KP_M_CM_CSS = `.kp-m-cm{overflow-x:hidden;max-width:100%}
