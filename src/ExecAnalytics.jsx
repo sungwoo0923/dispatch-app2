@@ -174,7 +174,7 @@ function PlTab({ rows: rows0, fleet, ledger, recurring, today, compact, W, fixed
   const M = Number(cur.m.slice(5, 7));
   const ltm = pl.reduce((a, m) => ({ sale: a.sale + m.sale, op: a.op + m.op, gross: a.gross + m.gross }), { sale: 0, op: 0, gross: 0 });
   const dSale = prev ? pctChange(cur.sale, prev.sale) : null;
-  const chart = pl.map((m, i) => ({ k: ymLabel(m.m), i, sale: Math.round(m.sale / 1e4), op: Math.round(m.op / 1e4), gm: m.sale ? Number(m.gm.toFixed(1)) : null, om: m.sale ? Number(m.om.toFixed(1)) : null, raw: m }));
+  const chart = pl.map((m, i) => ({ k: ymLabel(m.m), i, sale: Math.round(m.sale / 1e4), op: Math.round(m.op / 1e4), gm: m.sale ? Number(m.gm.toFixed(1)) : null, om: m.sale && Math.abs(m.om) <= 200 ? Number(m.om.toFixed(1)) : null /* 📏 2026-11-27 극단값은 추이 선에서 빼기(축이 깨짐) */, raw: m }));
   const hasData = pl.some((m) => m.sale > 0);
   if (!hasData) return <ExecPanel en="PROFIT & LOSS" title="손익"><Empty text="최근 12개월간 마감된 오더가 없습니다" sub="배차 실적이 누적되면 월별 매출 · 영업이익이 표시됩니다." /></ExecPanel>;
   return (<>
