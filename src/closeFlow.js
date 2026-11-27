@@ -82,8 +82,10 @@ export function closeBoard(orders, ym, { closeOf = () => null, me = null, today 
     const ps = prevSale.get(x.client) || 0;
     const diff = ps > 0 ? (x.sale - ps) / ps : 0;
     const snap = doc?.snapshot;
-    // 최종마감(잠금)은 경리가 명세서에서 금액을 고쳐도 "바뀜"으로 보지 않는다 — 일시해제 중에만 본다
-    const changed = !!snap && status !== "none" && (status !== "approved" || !!doc?.unlocked) && (snap.count !== x.rows.length || Math.round(snap.sale) !== Math.round(x.sale));
+    // 최종마감(잠금)은 경리가 명세서에서 금액을 고쳐도 "바뀜"으로 보지 않는다(금액은 명세서 '금액 바뀜' 배지가 따로 알려 줌)
+    //  ⚠ 2026-11-27 다만 잠금 중에 오더 건수가 바뀌면(잠금이라 배차 쪽에선 못 바꾸는데 23 → 12건처럼 바뀐 경우) '마감 후 변경'으로 본다
+    const lockedNow = status === "approved" && !doc?.unlocked;
+    const changed = !!snap && status !== "none" && (lockedNow ? snap.count !== x.rows.length : (snap.count !== x.rows.length || Math.round(snap.sale) !== Math.round(x.sale)));
     return {
       client: x.client, ym, count: x.rows.length, sale: x.sale, buy: x.buy, rows: x.rows, checks,
       block: blockCount(checks), warn: warnCount(checks), prevSale: ps, diff, bigDiff: ps > 0 && Math.abs(diff) > DIFF_LIMIT,
@@ -119,7 +121,7 @@ export function submitPatch(row, me, note = "", now = Date.now()) {
 export function approvePatch(row, me, now = Date.now()) {
   const w = who(me);
   return { kind: "close", client: row.client, yyyymm: row.ym, status: "approved", approvedBy: w.email, approvedByName: w.name, approvedAt: now,
-    unlocked: false, log: logOf(row.doc, { at: now, by: w.name, act: "최종마감", note: "" }) };
+    unlocked: false, snapshot: { count: row.count, sale: row.sale }, log: logOf(row.doc, { at: now, by: w.name, act: "최종마감", note: "" }) };
 }
 export function rejectPatch(row, me, reason, now = Date.now()) {
   const w = who(me);

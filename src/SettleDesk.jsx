@@ -131,6 +131,7 @@ export function useArDesk(company) {
 //  close = closeBoard() 한 줄({ status, changed, doc }) · 글씨색으로만
 export function closeTag(close) {
   if (!close) return { t: "", c: SD.mute, ready: false };
+  if (close.changed && close.status === "approved") return { t: "마감 후 변경", c: "#C62F25", ready: true, final: true, after: true }; // ⚠ 2026-11-27 최종마감 뒤 건수 바뀜 — 일시해제 · 다시 잠금 버튼은 그대로
   if (close.changed && close.status !== "none") return { t: "마감 후 변경", c: "#C62F25", ready: false };
   if (close.status === "approved") return { t: close.doc?.unlocked ? "일시해제" : "최종마감", c: close.doc?.unlocked ? "#B25F00" : "#0F1A30", ready: true, final: true };
   if (close.status === "submitted") return { t: "배차마감", c: "#0F7A52", ready: true };
@@ -147,7 +148,8 @@ export function CloseStrip({ close, onReturn, onUnlock, onRelock, disabled }) {
     <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[13.5px]" data-kp="close-strip">
       <span className="font-black" style={{ color: tg.c }}>{tg.t}</span>
       <span className="text-[#5B6B85] font-bold" style={NUM}>
-        {tg.final ? (d.unlocked ? `${d.unlockedByName || "경리팀"} ${fmtDay(d.unlockedAt)} 일시해제: 배차 담당자가 고칠 수 있어요. 끝나면 [다시 잠금]` : `${fmtDay(d.approvedAt)} 최종마감 · 배차 쪽 수정 잠금`)
+        {tg.after ? `${fmtDay(d.approvedAt)} 최종마감 뒤 오더가 바뀌었어요: 마감 때 ${d.snapshot?.count ?? "-"}건 → 지금 ${close.count ?? "-"}건. 명세서를 확인하고 [일시해제] → [다시 잠금]하면 지금 건수로 다시 마감돼요`
+          : tg.final ? (d.unlocked ? `${d.unlockedByName || "경리팀"} ${fmtDay(d.unlockedAt)} 일시해제: 배차 담당자가 고칠 수 있어요. 끝나면 [다시 잠금]` : `${fmtDay(d.approvedAt)} 최종마감 · 배차 쪽 수정 잠금`)
           : tg.ready ? `${by ? `${by} · ` : ""}${at ? fmtDay(at) : ""} 배차 1차 마감`
           : close.status === "rejected" ? `반려 사유 · ${d.reason || "-"}${d.rejectedByName ? ` (${d.rejectedByName})` : ""}`
           : close.changed ? "배차마감 후 오더가 변경됨: 배차 담당자 재마감 필요"

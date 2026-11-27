@@ -250,6 +250,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
   };
   const stateLine = (g) => {
     const s = g.status;
+    if (g.changed && s === "approved") { const sn = g.row?.doc?.snapshot || {}; return { t: `최종마감 뒤에 오더 건수가 바뀌었어요(마감 때 ${sn.count ?? "-"}건 → 지금 ${g.count}건). 경리팀에 알려 주세요. 경리팀이 [일시해제] → [다시 잠금]하면 지금 건수로 다시 마감돼요.`, c: C.bad }; } // ⚠ 2026-11-27
     if (g.changed && s !== "none") return { t: `${s === "verified" ? "검증" : "마감"} 뒤에 오더가 바뀌었어요. 다시 검증해 주세요.`, c: C.bad };
     if (s === "rejected") return { t: `경리팀 반려 · ${g.row?.doc?.reason || "사유 없음"}${g.row?.doc?.rejectedByName ? ` (${g.row.doc.rejectedByName})` : ""} · 고친 뒤 다시 검증해 주세요.`, c: C.bad };
     if (s === "approved" && g.row?.doc?.unlocked) return { t: "경리팀이 일시해제했어요. 지금은 고치거나 추가 · 삭제할 수 있어요. 끝나면 경리팀이 다시 잠가요.", c: C.warn };
