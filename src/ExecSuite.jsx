@@ -389,7 +389,7 @@ export function ExecDashboard({ company, dispatchData = [], onGo, pastCache, liv
   const daily = Array.from({ length: 30 }, (_, i) => { const d = addDay(today, i - 29); const v = days[d] || [0, 0, 0]; return { k: d.slice(5).replace("-", "."), sale: v[0], profit: v[1] }; });
 
   // ── 이번 달 사업 흐름 ──
-  const pipe = React.useMemo(() => monthPipeline(rows, thisMonth, today), [rows, thisMonth, today]);
+  const pipe = React.useMemo(() => monthPipeline([...rows, ...(demo ? [] : fixedSalesRows(fixedLive || []))], thisMonth, today), [rows, thisMonth, today, fixedLive, demo]); // 📏 2026-11-27 고정거래처 포함(이번 달 매출 타일과 같은 숫자)
   const todayRows = (data || []).filter((r) => dateOf(r) === today && !isCancelled(r) && r.source !== "transport_transmit");
   const doneToday = todayRows.filter((r) => String(r.배차상태 || "").trim() === "배차완료");
   const unassigned = todayRows.filter(isUnassignedOrder);
