@@ -13144,8 +13144,9 @@ const handleMultiRegSmartDriverInput = (text) => {
         })
     : (name && name.length >= 2)
     ? (drivers || []).filter(d => d.이름 && d.이름.includes(name))
-    : [];
+    : smartDigitsMatch(drivers, text, phone);
   setMrSmartDriverMatched(results.slice(0, 8));
+  if (!plate && results.length) setMrSmartDriverActiveIdx(0);
 };
 
 const selectMultiRegSmartDriver = (d) => {
@@ -13177,6 +13178,8 @@ const handleMultiRegSmartDriverKeyDown = (e) => {
     e.preventDefault();
     if (mrSmartDriverMatched.length > 0 && mrSmartDriverActiveIdx >= 0 && mrSmartDriverActiveIdx < mrSmartDriverMatched.length) {
       selectMultiRegSmartDriver(mrSmartDriverMatched[mrSmartDriverActiveIdx]);
+    } else if (mrSmartDriverMatched.length > 0 && !parseDriverText(mrSmartDriverQuery).plate) {
+      selectMultiRegSmartDriver(mrSmartDriverMatched[0]); // 🛠 2026-11-27 Enter = 첫 번째 기사
     } else {
       applyMultiRegSmartDriverInput(mrSmartDriverQuery);
     }
@@ -14270,7 +14273,7 @@ React.useEffect(() => {
       ...p,
       차량번호: clean,
       이름: list[0].이름 || "",
-      전화번호: list[0].전화번호 || "",
+      전화번호: formatPhone(list[0].전화번호 || ""), // 🛠 2026-11-27 010-0000-0000 형식으로(예전 기사 문서는 01000009101 처럼 숫자만)
       배차상태: "배차완료",
     }));
     setDriverDropdownOpen(false);
@@ -14278,15 +14281,15 @@ React.useEffect(() => {
   }
 
   // 🔥 기존 기사 없음 → 입력 중에는 아무것도 안함
-  setForm((p) => ({
-    ...p,
-    이름: "",
-    전화번호: "",
-    배차상태: "배차중",
-  }));
+  //  🛠 2026-11-27 앞서 자동으로 채운 기사 정보만 지운다 — 손으로 먼저 적어 둔 기사명 · 전화는 남겨 신규 기사 등록 창에 넘긴다
+  const dg = (v) => String(v || "").replace(/\D/g, "");
+  const fromList = (p) => !!p.이름 && (drivers || []).some((d) => (d.이름 || "") === p.이름 && dg(d.전화번호) === dg(p.전화번호));
+  setForm((p) => (fromList(p) ? { ...p, 이름: "", 전화번호: "", 배차상태: "배차중" } : { ...p, 배차상태: "배차중" }));
 
   setDriverDropdownOpen(false);
 };
+// 🛠 2026-11-27 신규 기사 등록 창을 이미 띄운 차량번호(같은 차를 두 번 묻지 않게)
+const newDrvAskedRef = React.useRef("");
 const checkNewDriver = (carNo) => {
   const clean = (carNo || "").trim().replace(/\s+/g, "");
 
@@ -14302,13 +14305,14 @@ const checkNewDriver = (carNo) => {
         // 이미 이름이 있으면 (스마트검색으로 세팅됨) → 건드리지 않음
         return p;
       }
-      // 이름이 없을 때만 신규 기사 등록 모달
-      setDriverModal({
+      // 이름이 없을 때만 신규 기사 등록 모달 — 🛠 2026-11-27 오더 폼에 먼저 적은 전화번호는 미리 채운다 · 한 차량번호는 한 번만 묻는다
+      newDrvAskedRef.current = clean;
+      setDriverModal((m) => (m.open && m.carNo === clean ? m : {
         open: true,
         carNo: clean,
-        name: "",
-        phone: "",
-      });
+        name: p.이름 || "",
+        phone: p.전화번호 ? formatPhone(p.전화번호) : "",
+      }));
       return {
         ...p,
         차량번호: clean,
@@ -14336,6 +14340,8 @@ const checkDriverConflict = () => {
 
   // 🔹 기존 기사님이 없으면 → 신규 등록 여부 확인
   if (!list || list.length === 0) {
+    // 🛠 2026-11-27 이 차량번호로 신규 기사 등록 창을 이미 띄웠으면 다시 묻지 않는다(등록했거나 닫았으면 오더 저장 때 자동 등록)
+    if (newDrvAskedRef.current === plate) return;
     // 차량번호 + 이름 + 전화번호가 모두 있으면 자동 등록 제안
     if (name && phone) {
       setDriverConflictPopup({
@@ -15858,6 +15864,14 @@ const phoneMatch = text.match(/01[016789][- .]?\d{3,4}[- .]?\d{4}/);
   return { phone, plate, name };
 };
 const normD = (s="") => String(s).replace(/[-.\s]/g,"").toLowerCase();
+// 🔎 2026-11-27 스마트검색 — 차량번호 · 전화번호 뒤 4자리(예: 9101)나 전화번호 전체로도 기사를 찾는다(실무에선 "9101 차"처럼 뒷자리로 부른다)
+const smartDigitsMatch = (list, text, phone) => {
+  if (phone) return (list || []).filter(d => normD(d.전화번호) === normD(phone));
+  const q = normD(text);
+  if (!/^\d{4}$/.test(q)) return [];
+  const dg = (v) => String(v || "").replace(/\D/g, "");
+  return (list || []).filter(d => dg(d.차량번호).endsWith(q) || dg(d.전화번호).endsWith(q));
+};
 
 const handleSmartDriverInput = (text) => {
   setSmartDriverQuery(text);
@@ -15882,8 +15896,9 @@ const results = plate
       })
   : (name && name.length >= 2)
   ? (drivers||[]).filter(d => d.이름 && d.이름.includes(name))
-  : [];
+  : smartDigitsMatch(drivers, text, phone);
 setSmartDriverMatched(results.slice(0, 8));
+if (!plate && results.length) setSmartDriverActiveIdx(0); // 첫 번째 기사를 강조 — Enter 로 바로 고른다
 };
 
 // 스마트 검색 결과 선택
@@ -15937,6 +15952,9 @@ const handleSmartDriverKeyDown = (e) => {
     e.preventDefault();
     if (smartDriverMatched.length > 0 && smartDriverActiveIdx >= 0 && smartDriverActiveIdx < smartDriverMatched.length) {
       selectSmartDriver(smartDriverMatched[smartDriverActiveIdx]);
+    } else if (smartDriverMatched.length > 0 && !parseDriverText(smartDriverQuery).plate) {
+      // 🛠 2026-11-27 이름 · 뒷자리로 찾은 목록에서 Enter = 첫 번째 기사 선택(예전엔 검색어만 기사명에 들어가고 차량번호 · 전화는 빈칸)
+      selectSmartDriver(smartDriverMatched[0]);
     } else {
       applySmartDriverInput(smartDriverQuery);
     }
@@ -20304,8 +20322,9 @@ className={`
                 _id: driverModal.carNo,
                 차량번호: driverModal.carNo,
                 이름: driverModal.name,
-                전화번호: rawPhone,
+                전화번호: formatPhone(rawPhone), // 🛠 2026-11-27 다른 기사와 같은 010-0000-0000 형식으로 저장(예전엔 숫자만 저장돼 01000009101 로 보였다)
               });
+              sflowToast(`기사를 등록했어요 · ${driverModal.name}`, "success");
 
               // ⭐ 다중등록 모달에서 열린 경우엔 form이 아니라 해당 슬롯에 반영해야
               // 해서, 호출자가 onConfirm 콜백을 넘겨줬으면 그걸 대신 사용한다 —
