@@ -620,9 +620,8 @@ function DmDot({ on, alert = false }) {
   // 🧪 개발 화면(import.meta.env.DEV)에서만 localStorage kpSkinTest=1 이면 다른 계정으로도 전환 점검 — 배포 빌드에는 들어가지 않는다
   const skinAllowed = SKIN_SWITCH && (role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpSkinTest") === "1"; } catch { return false; } })()));
   const [ofSkin, setOfSkin] = React.useState(() => readSkin(true));
-  // 🎨 2026-11-27 D 카드형(사용자 시안) — 우선 최고관리자만(작업 도우미와 같이) · 개발 화면은 kpAssistTest=1 로 점검
-  const deckOn = role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpAssistTest") === "1"; } catch { return false; } })());
-  //  🗓 2026-11-27 사용자 결정: 위 입력창은 원래대로 — 카드형(deck)은 끄고 달력 · 아래 목록만 새 모양(deckOn 은 오른쪽 · 아래에만 쓴다)
+  // 🎨 2026-11-27 카드형(deck) 입력창은 쓰지 않음(사용자 결정)
+  //  🗓 2026-11-27 사용자 결정: 위 입력창은 원래대로 — 카드형(deck)은 끔
   const skinOn = skinAllowed ? ofSkin : readSkin(false);
   const cycleSkin = () => setOfSkin((v) => { const n = nextSkin(v); saveSkin(n); return n; });
   const layOn = LAYOUT_SKINS.has(skinOn);
@@ -640,7 +639,7 @@ function DmDot({ on, alert = false }) {
       const tonTypeOptionsCustom = useCompanyDropdownOptions("톤수타입", role, userCompany);
       const [useNewForm, setUseNewForm] = React.useState(false);
       const [bottomStatusKey, setBottomStatusKey] = React.useState(0);
-      // 🧭 우선 최고관리자만 · 🧪 개발 화면(import.meta.env.DEV)에서만 localStorage kpAssistTest=1 이면 다른 계정으로도 점검(배포 빌드엔 안 들어감)
+      // 🧭 2026-11-27 오른쪽 오늘 일정 · 새 달력 — 모든 사용자
       // ⌨️ 2026-11-27 사용자 요청 — 오더등록에서 Tab 은 입력칸 · 드롭다운만 순서대로(버튼은 건너뜀). Shift+Tab 은 거꾸로
       React.useEffect(() => {
         const SEL = 'input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=file]):not([type=button]):not([type=submit]), select, textarea, button[aria-haspopup], [data-tab-field]';
@@ -671,7 +670,7 @@ function DmDot({ on, alert = false }) {
         document.addEventListener("keydown", onKey);
         return () => document.removeEventListener("keydown", onKey);
       }, []);
-      const assistAllowed = role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpAssistTest") === "1"; } catch { return false; } })());
+      const assistAllowed = true; // 🧭 2026-11-27 사용자 결정 — 오른쪽 오늘 일정 · 새 달력을 모든 사용자에게
       // ⏱ 상/하차 시간 + 이전/이후 표시용
 function renderTimeWithCond(time, cond) {
   if (!time) return "-";
@@ -5953,7 +5952,7 @@ React.useEffect(() => {
 )}
   <div className="w-px h-7 bg-gray-200" />
   {/* 날짜 시간 ▼ */}
-<div className="kp-date-row flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+<div className="kp-date-row flex flex-nowrap items-center gap-x-2.5 text-sm min-w-0">{/* 🧭 2026-11-27 사용자 요청 — 상·하차 교체까지 한 줄(줄바꿈 금지) */}
 
 {/* ================= 상차 ================= */}
   <label className="text-[13px] font-bold text-[#1B2B4B]">상차</label>

@@ -535,3 +535,10 @@ table[data-kp-st] > thead > tr:last-child > th { box-shadow: inset 0 -1px 0 rgba
 
 /* 🏢 2026-11-24 여러 회사 오가기 — 지금 쓰는 회사 색 띠(화면 맨 위 3px · 여러 회사 계정만) */
 html[data-kp-co-tone] body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 3px; background: var(--kp-co-main); z-index: 2147483000; pointer-events: none; }
+
+/* 🧭 2026-11-27 오더등록 날짜 줄 — 상·하차 교체까지 늘 한 줄(줄바꿈 금지). 화면이 좁으면 줄 전체를 살짝 작게 */
+.kp-date-row { flex-wrap: nowrap !important; zoom: .9; }
+@media (max-width: 1679px) { .kp-date-row { zoom: .82; } }
+@media (max-width: 1500px) { .kp-date-row { zoom: .76; } }
+@media (max-width: 1360px) { .kp-date-row { zoom: .66; } }
+@media (max-width: 1200px) { .kp-date-row { zoom: .58; } }
