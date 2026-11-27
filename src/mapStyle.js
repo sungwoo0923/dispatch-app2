@@ -6,12 +6,14 @@
 //  Tmap(Tmapv2) 지도와 Leaflet 지도 둘 다 지원한다.
 import { haversineKm } from "./tmapFareCalc";
 
+// 🚦 2026-11-27 사용자 요청 — 실시간 교통 색: 원활 초록 · 서행 주황 · 막히는 구간(지체 · 정체) 빨강
+//  티맵이 교통 정보를 주지 않은 구간(0)은 막힘이 없는 것으로 보고 원활(초록)과 같은 색
 export const TRAFFIC = {
-  0: { color: "#3b82f6", label: "정보없음" },
-  1: { color: "#16a34a", label: "원활" },
-  2: { color: "#f59e0b", label: "서행" },
-  3: { color: "#f97316", label: "지체" },
-  4: { color: "#dc2626", label: "정체" },
+  0: { color: "#16A34A", label: "원활" },
+  1: { color: "#16A34A", label: "원활" },
+  2: { color: "#F97316", label: "서행" },
+  3: { color: "#EF4444", label: "지체" },
+  4: { color: "#DC2626", label: "정체" },
 };
 export const TRACK_COLOR = "#7c3aed"; // 실제 이동 동선(보라) — 교통 색과 겹치지 않게
 const CASING = "#ffffff";
@@ -131,4 +133,4 @@ export function dotIcon(fill, stroke) {
 }
 
 // 지도 좌하단 범례 HTML(문자열) — 필요한 곳에서 dangerouslySetInnerHTML 없이 React로 그리도록
-export const TRAFFIC_LEGEND = [1, 2, 4, 0].map(c => ({ c, ...TRAFFIC[c] }));
+export const TRAFFIC_LEGEND = [1, 2, 4].map(c => ({ c, ...TRAFFIC[c] })); // 원활 · 서행 · 정체
