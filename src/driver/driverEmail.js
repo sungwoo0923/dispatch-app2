@@ -5,6 +5,7 @@
 // 기존 기사는 예전 계정 그대로 로그인된다.
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
+import { driverKeys } from "./driverLoginKey"; // 🔒 2026-11-27 새 가입 기사는 비밀번호 = 기기에 저장한 무작위 열쇠
 
 const DOMAIN = "driver.run25.kr";
 const plate = (carNo) => String(carNo || "").replace(/ /g, "");
@@ -21,12 +22,22 @@ export const scopedDriverEmail = (companyName, carNo) => `${plate(carNo)}.c${coH
 // 성공: { uid, email } / 실패: 마지막 오류를 던짐
 // ⭐ 2026-11-03 가입 화면이 차량번호를 띄어쓰기 없이 저장(비밀번호도 띄어쓰기 없음) — 로그인 때 띄어 써도 되게 둘 다 시도
 const driverPasswords = (carNo) => [...new Set([String(carNo || "").trim(), plate(String(carNo || "").trim())])].filter(Boolean);
-async function signInAnyPassword(auth, email, carNo) {
+// 🔒 2026-11-27 이 기기에 저장된 열쇠(새 방식) → 차량번호(예전 기사) 순서로 시도. 성공한 결과에 viaKey(열쇠로 들어왔는지)를 붙인다.
+//  예전 기사 기기엔 열쇠가 없어 지금과 똑같이 차량번호로만 시도한다(로그인 유지).
+//  ⚠ 예전 기사를 로그인 직후 열쇠로 조용히 바꾸는 일(updatePassword)은 일부러 하지 않는다 —
+//    비밀번호를 바꾸면 Firebase가 그 계정의 다른 기기 로그인을 끊는다(운행 중 두 번째 폰 · 태블릿 관제가 끊김).
+//    끊긴 기기는 열쇠가 없어 문자 인증을 해야 하는데, 가입 휴대폰번호가 틀리게 적힌 기사는 다시 못 들어온다.
+//    문자 인증 로그인(DriverSmsLogin)이 운영에서 잘 되는지 본 뒤, 기사 공지와 함께 단계적으로 옮긴다.
+async function signInAnyPassword(auth, email, carNo, legacyPws = driverPasswords(carNo)) {
   let err = null;
-  for (const pw of driverPasswords(carNo)) {
-    try { return await signInWithEmailAndPassword(auth, email, pw); } catch (e) { err = e; if (e?.code === "auth/user-not-found" || e?.code === "auth/too-many-requests") break; }
+  const keys = driverKeys();
+  for (const pw of [...keys, ...legacyPws.filter((p) => !keys.includes(p))]) {
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, pw);
+      return Object.assign(cred, { viaKey: keys.includes(pw) });
+    } catch (e) { err = e; if (e?.code === "auth/user-not-found" || e?.code === "auth/too-many-requests" || e?.code === "auth/network-request-failed" || e?.code === "auth/user-disabled") break; }
   }
-  throw err;
+  throw err || Object.assign(new Error("no password"), { code: "auth/invalid-credential" });
 }
 
 const plateKey = (v) => plate(v).toLowerCase();
@@ -54,7 +65,7 @@ export async function signInDriver(auth, db, companyName, carNo) {
         lastErr = Object.assign(new Error("moved"), { code: "auth/user-not-found" });
         continue;
       }
-      return { uid: res.user.uid, email };
+      return { uid: res.user.uid, email, viaKey: res.viaKey === true };
     } catch (e) {
       lastErr = e;
       // ⭐ 2026-11-05 인터넷 끊김·시도 과다는 다음 계정을 시도해도 같다 — 바로 알린다
@@ -107,9 +118,9 @@ export async function resolveDriverPhone(base, { companyName, phone, name }) {
   }
 }
 
-// 서버가 알려준 계정으로 로그인 — 비밀번호는 차량번호(미배정 계정은 메일 앞부분)
+// 서버가 알려준 계정으로 로그인 — 기기 열쇠 → 차량번호(미배정 계정은 메일 앞부분) 순서
 export async function signInDriverAccount(auth, email, carNo) {
   const local = String(email || "").split("@")[0];
-  if (/^nocar\./i.test(local)) return signInWithEmailAndPassword(auth, email, local.toLowerCase());
+  if (/^nocar\./i.test(local)) return signInAnyPassword(auth, email, "", [local.toLowerCase()]);
   return signInAnyPassword(auth, email, carNo);
 }

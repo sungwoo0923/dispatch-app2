@@ -101,7 +101,9 @@ module.exports = function makeDriverVehicle({ functions, db, getAuth, FieldValue
 
   // 로그인할 때 계정을 지금 차량번호로 맞춘다(차량 변경 뒤 첫 로그인) — 이 순간엔 기사님이 로그인 화면에 있어 끊길 운행이 없다.
   //  새 차량번호 메일을 아직 다른 기사(다시 로그인 전) 계정이 쓰고 있으면, 그 기사를 건드리지 않고 이 기사 전용 메일을 쓴다.
-  async function syncLogin(uid, co, carNo, au) {
+  //  🔒 2026-11-27 열쇠 계정(새로 가입 · 문자 인증으로 새 열쇠를 받은 기사)은 비밀번호를 건드리지 않고 메일만 바꾼다.
+  //   (예전엔 여기서 비밀번호를 새 차량번호로 바꿨다 — 열쇠 계정이 다시 "번호판만 알면 로그인"으로 돌아가고, 기기 열쇠도 안 맞게 된다)
+  async function syncLogin(uid, co, carNo, au, keyLogin = false) {
     const plate = V.plateOf(carNo);
     let email;
     let password;
@@ -111,7 +113,7 @@ module.exports = function makeDriverVehicle({ functions, db, getAuth, FieldValue
       email = r.holder ? V.uniqueEmail(plate, uid) : r.email;
       password = plate;
     }
-    if (String(au.email || "").toLowerCase() !== email) await getAuth().updateUser(uid, { email, password });
+    if (String(au.email || "").toLowerCase() !== email) await getAuth().updateUser(uid, keyLogin ? { email } : { email, password });
     await db.collection("users").doc(uid).update({ email, loginSync: false });
     return email;
   }
@@ -154,6 +156,7 @@ module.exports = function makeDriverVehicle({ functions, db, getAuth, FieldValue
       const cands = [...users].filter(([, u]) => u.role === "driver").map(([id, u]) => ({
         uid: id, companyName: u.companyName, name: u.name, carNo: String(u.carNo || ""), approved: u.approved === true,
         retired: String(u.employmentStatus || "").trim() === "퇴사", createdAt: toMs(u.createdAt), loginSync: u.loginSync === true,
+        keyLogin: V.isKeyLogin(u),
       })).concat(pres.filter((p) => p.carNo));
       const m = V.pickPhoneMatch(cands, { companyName: co, name });
       if (!m.ok) { res.status(200).json({ ok: false, code: m.code }); return; }
@@ -162,7 +165,7 @@ module.exports = function makeDriverVehicle({ functions, db, getAuth, FieldValue
       if (!au?.email) { res.status(200).json({ ok: false, code: "NOT_FOUND" }); return; }
       if (au.disabled) { res.status(200).json({ ok: false, code: "DISABLED" }); return; }
       // 차량이 바뀐 뒤 첫 로그인이면 계정을 새 차량번호로 맞춘 다음 알려준다
-      const email = m.pick.loginSync ? await syncLogin(m.pick.uid, co, m.pick.carNo, au) : au.email;
+      const email = m.pick.loginSync ? await syncLogin(m.pick.uid, co, m.pick.carNo, au, m.pick.keyLogin === true) : au.email;
       res.status(200).json({ ok: true, email, carNo: V.isNocarEmail(email) ? "" : m.pick.carNo });
     } catch (e) {
       console.error("driverPhoneLogin 실패:", e);

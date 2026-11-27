@@ -111,7 +111,11 @@ function mergeFill(keep, old) {
   return out;
 }
 
+// 🔒 2026-11-27 열쇠 계정 — 비밀번호가 차량번호가 아니라 기기에 저장한 무작위 값(src/driver/driverLoginKey.js)
+//  가입 · 로그인 화면이 users.loginKey 를 남기고, 문자 인증으로 비밀번호를 바꾼 계정은 resetPasswordSms 가 pwResetBy:"sms" 를 남긴다.
+const isKeyLogin = (u) => !!u && (u.loginKey === true || u.pwResetBy === "sms");
+
 module.exports = {
   DOMAIN, DEFAULT_CO, plateOf, normText, digits, phoneValid, phoneVariants, plateValid, coHash, legacyEmail, scopedEmail,
-  nocarLocal, nocarEmail, uniqueEmail, isNocarEmail, coOf, sameCo, kstDay, dayValid, addDays, applyHistory, pickPhoneMatch, mergeHistory, mergeFill, MERGE_FILL,
+  isKeyLogin, nocarLocal, nocarEmail, uniqueEmail, isNocarEmail, coOf, sameCo, kstDay, dayValid, addDays, applyHistory, pickPhoneMatch, mergeHistory, mergeFill, MERGE_FILL,
 };
