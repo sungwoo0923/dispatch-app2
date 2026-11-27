@@ -623,7 +623,8 @@ function DmDot({ on, alert = false }) {
   const [ofSkin, setOfSkin] = React.useState(() => readSkin(true));
   // 🎨 2026-11-27 D 카드형(사용자 시안) — 우선 최고관리자만(작업 도우미와 같이) · 개발 화면은 kpAssistTest=1 로 점검
   const deckOn = role === "totalMaster" || (import.meta.env.DEV && (() => { try { return localStorage.getItem("kpAssistTest") === "1"; } catch { return false; } })());
-  const skinOn = deckOn ? "deck" : skinAllowed ? ofSkin : readSkin(false);
+  //  🗓 2026-11-27 사용자 결정: 위 입력창은 원래대로 — 카드형(deck)은 끄고 달력 · 아래 목록만 새 모양(deckOn 은 오른쪽 · 아래에만 쓴다)
+  const skinOn = skinAllowed ? ofSkin : readSkin(false);
   const cycleSkin = () => setOfSkin((v) => { const n = nextSkin(v); saveSkin(n); return n; });
   const layOn = LAYOUT_SKINS.has(skinOn);
   const ofHiddenKey = [...ofs.hidden].sort().join("|");
@@ -5190,14 +5191,6 @@ const copyTimeOf = (t) => {
   const hh = h % 12 === 0 ? 12 : h % 12;
   return `${h < 12 ? "오전" : "오후"} ${hh}시${mm ? ` ${mm}분` : ""}`;
 };
-// 🧭 2026-11-27 작업 도우미 [채우기] — 오더복사(빠른 등록과 같은 방식)로 상하차지 · 주소 · 담당자 · 차종을 넣고,
-//  톤수 · 운임까지 채운다. 지금 폼의 상차일 · 하차일 · 시간 · 메모 · 전달사항은 그대로 둔다(사용자 결정)
-const fillFromRoute = (r) => {
-  if (!r) return;
-  const keep = { 상차일: form.상차일, 하차일: form.하차일, 상차시간: form.상차시간, 하차시간: form.하차시간, 상차시간기준: form.상차시간기준, 하차시간기준: form.하차시간기준, 메모: form.메모, 전달사항: form.전달사항, 전달사항고정: form.전달사항고정 };
-  applyCopy(r, { quick: true });
-  setForm((p) => ({ ...p, ...Object.fromEntries(Object.entries(keep).filter(([, v]) => v !== undefined)), 차량톤수: r.차량톤수 || "", 청구운임: r.청구운임 || "", 기사운임: r.기사운임 || "" }));
-};
 const applyCopy = (r, opt = {}) => {
   const quick = opt.quick === true;
   bizSeedRef.current = String(r.청구사업자 || "").trim(); bizManualRef.current = null; // ⭐ 2026-11-03 청구 사업자 자동 맞춤에 복사한 오더의 사업자를 넘긴다
@@ -9356,9 +9349,9 @@ className={`
     />
     </div>
   ) : assistAllowed ? (
-    // 🧭 2026-11-27 달력 자리에 [달력 | 거래처 최근 노선] — 거래처를 고르면 최근 노선이 저절로 열린다(입력창 바로 옆에서 [채우기])
-    <SideAssist rows={recentDispatchData} history={dispatchData} client={form.거래처명} onFill={fillFromRoute} calendar={
-      <OrderCalendarPanel
+    // 🧭 2026-11-27 시안 D — 오른쪽 '오늘 일정' 카드(요약 · 사진 모양 달력 · 주요 일정). 사용자 요청으로 거래처 최근 노선은 뺐다
+    <SideAssist rows={recentDispatchData} calendar={
+      <OrderCalendarPanel variant="deck"
         pickupDate={form.상차일 || ""}
         dropDate={form.하차일 || ""}
         onPickupChange={(v) => onChange("상차일", v)}

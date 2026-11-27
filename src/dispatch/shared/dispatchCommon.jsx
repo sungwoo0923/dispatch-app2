@@ -631,7 +631,7 @@ export function OrderPanelClock() {
   const p2 = (n) => String(n).padStart(2, "0");
   return <>{`${p2(clock.getHours())}:${p2(clock.getMinutes())}:${p2(clock.getSeconds())}`}</>;
 }
-export function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange, companyName, multiMode, workDates, onToggleWorkDate, footer }) {
+export function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDropChange, companyName, multiMode, workDates, onToggleWorkDate, footer, variant }) {
   const pad2 = (n) => String(n).padStart(2, "0");
   const fmt = (y, m, d) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
   const parseValidDate = (s) => {
@@ -715,6 +715,60 @@ export function OrderCalendarPanel({ pickupDate, dropDate, onPickupChange, onDro
   const sortedWorkDates = React.useMemo(() => Array.from(workDateSet).sort(), [workDateSet]);
   const minWorkDate = sortedWorkDates[0];
   const maxWorkDate = sortedWorkDates[sortedWorkDates.length - 1];
+
+  // 🗓 2026-11-27 사용자 요청(시안 D) — 오른쪽 "오늘 일정" 카드 안에 들어가는 사진 모양 달력.
+  //  기능은 그대로: [상차일 · 하차일] 중 고른 쪽에 날짜가 들어가고, 공휴일 · 승인된 휴가 · 외근도 보인다(점 · 누르면 이름은 말풍선)
+  //  색은 남색 한 계열: 상차일 = 꽉 찬 원, 하차일 = 테두리 원, 오늘 = 옅은 원
+  if (variant === "deck" && !multiMode) {
+    const lead = Array.from({ length: firstDay }, (_, i) => new Date(viewYear, viewMonth, i - firstDay + 1).getDate());
+    const tailN = (7 - ((firstDay + daysInMonth) % 7)) % 7;
+    const pill = (on) => `flex-1 h-[34px] rounded-[10px] border text-[12.5px] font-extrabold inline-flex items-center justify-center gap-1.5 transition ${on ? "bg-[#1B2B4B] border-[#1B2B4B] text-white" : "bg-white border-[#DCE3EE] text-[#1B2B4B] hover:bg-[#F5F7FB]"}`;
+    return (
+      <div className="kp-order-cal-deck" style={{ fontVariantNumeric: "tabular-nums" }}>
+        <div className="flex items-center justify-between mb-1.5">
+          <button type="button" onClick={() => goMonth(-1)} aria-label="이전 달" className="w-8 h-8 rounded-lg grid place-items-center text-[#5B6B85] hover:bg-[#F1F4F9] text-[17px]">‹</button>
+          <button type="button" onClick={goToday} title="오늘로 이동" className="text-[16px] font-black text-[#0F1A30]">{viewYear}년 {viewMonth + 1}월</button>
+          <button type="button" onClick={() => goMonth(1)} aria-label="다음 달" className="w-8 h-8 rounded-lg grid place-items-center text-[#5B6B85] hover:bg-[#F1F4F9] text-[17px]">›</button>
+        </div>
+        <div className="grid grid-cols-7">
+          {["일", "월", "화", "수", "목", "금", "토"].map((w) => <div key={w} className="text-center text-[12px] font-bold text-[#8A97AD] py-1.5">{w}</div>)}
+          {lead.map((d, i) => <div key={`l${i}`} className="text-center text-[12.5px] font-bold text-[#C2CBDB] py-[7px]">{d}</div>)}
+          {cells.filter((d) => d != null).map((d) => {
+            const dateStr = fmt(viewYear, viewMonth, d);
+            const isPickup = dateStr === pickupDate, isDrop = dateStr === dropDate, isToday = dateStr === todayStr;
+            const holidayName = KOREAN_HOLIDAYS[dateStr];
+            const leaves = leavesByDate.get(dateStr) || [];
+            const tip = [isPickup && "상차일", isDrop && "하차일", holidayName, ...leaves.map((x) => `${x.name || "직원"} ${LEAVE_TYPE_LABEL[x.type] || x.type}`)].filter(Boolean).join(" · ");
+            const circle = isPickup ? "bg-[#1B2B4B] text-white" : isDrop ? "border-2 border-[#1B2B4B] text-[#1B2B4B]" : isToday ? "bg-[#EEF3FB] text-[#1B2B4B]" : holidayName ? "text-[#B4233A]" : "text-[#1B2B4B]";
+            return (
+              <button key={d} type="button" onClick={() => handlePick(dateStr)} title={tip || undefined} aria-label={`${viewMonth + 1}월 ${d}일${tip ? ` · ${tip}` : ""}`}
+                className="relative flex flex-col items-center py-[3px] group">
+                <span className={`w-[30px] h-[30px] rounded-full grid place-items-center text-[12.5px] font-bold group-hover:ring-2 group-hover:ring-[#C9D6EC] ${circle} ${isToday && todayPulse ? "ring-4 ring-[#8FB0F0]" : ""}`}>{d}</span>
+                <span className="h-[5px] flex gap-[3px] mt-[1px]" aria-hidden="true">
+                  {leaves.length > 0 && <span className="w-[5px] h-[5px] rounded-full bg-[#2D4C82]" />}
+                  {holidayName && <span className="w-[5px] h-[5px] rounded-full bg-[#B4233A]" />}
+                </span>
+              </button>
+            );
+          })}
+          {Array.from({ length: tailN }, (_, i) => <div key={`t${i}`} className="text-center text-[12.5px] font-bold text-[#C2CBDB] py-[7px]">{i + 1}</div>)}
+        </div>
+        <div className="flex gap-1.5 mt-2" role="group" aria-label="달력에서 고른 날짜를 넣을 칸">
+          <button type="button" onClick={() => setTarget("pickup")} aria-pressed={target === "pickup"} className={pill(target === "pickup")}>상차일{pickupDate ? ` · ${pickupDate.slice(5).replace("-", "/")}` : " 선택"}</button>
+          <button type="button" onClick={() => setTarget("drop")} aria-pressed={target === "drop"} className={pill(target === "drop")}>하차일{dropDate ? ` · ${dropDate.slice(5).replace("-", "/")}` : " 선택"}</button>
+        </div>
+        <div className="flex items-center justify-between mt-2 text-[11px] font-bold text-[#8A97AD]">
+          <button type="button" onClick={goToday} className="text-[#1B2B4B] font-extrabold hover:underline">오늘로 이동</button>
+          <span className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-[#1B2B4B]" />상차</span>
+            <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full border-2 border-[#1B2B4B]" />하차</span>
+            <span className="inline-flex items-center gap-1"><span className="w-[5px] h-[5px] rounded-full bg-[#2D4C82]" />휴가·외근</span>
+            <span className="inline-flex items-center gap-1"><span className="w-[5px] h-[5px] rounded-full bg-[#B4233A]" />공휴일</span>
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="kp-order-cal bg-white border border-[#E3E8F0] rounded-[24px] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden flex flex-col" style={{ flex: "1 1 0%", minWidth: 240 }}>
