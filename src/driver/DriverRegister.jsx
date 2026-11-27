@@ -6,9 +6,10 @@ import { auth, db, FUNCTIONS_BASE } from "../firebase";
 import { fmtPhone } from "../formatInput";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { legacyDriverEmail, scopedDriverEmail, legacyOwnerCompany } from "./driverEmail";
+import { newDriverKey, saveDriverKey, forgetDriverKey } from "./driverLoginKey"; // 🔒 2026-11-27 비밀번호 = 기기에 저장하는 무작위 열쇠(차량번호 아님)
 import { setDriverBusy } from "./driverLoginErrors"; // ⭐ 2026-11-05 확인 중엔 App이 기사 화면으로 넘기지 않게
 import { isDriverAppContext } from "./driverAppContext"; // ⭐ 2026-11-08 기사앱(APK·홈 화면 기사앱)에선 다른 유형 로그인 숨김
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
 import { addDoc, collection } from "firebase/firestore";
 import { BANK_NAMES, accountLengths, formatAccount, validateAccount, onlyDigits } from "../bankUtil";
@@ -354,7 +355,15 @@ export default function DriverRegister() {
     const plate = plateOf(carNo);
     const co = (coPicked || companyName).trim();
     let email = legacyDriverEmail(plate);
-    const password = plate;
+    // 🔒 2026-11-27 보안 — 예전엔 비밀번호 = 차량번호라 번호판만 알면 그 기사로 로그인됐다.
+    //  이제 이 기기에서 만든 무작위 열쇠를 비밀번호로 쓰고 기기에 저장한다(기사님은 지금처럼 운송사 · 휴대폰번호 · 이름만 넣는다).
+    //  계정을 만들기 "전에" 저장 — 만든 직후 앱이 꺼져도 열쇠가 남는다. 못 만들면 아래에서 지운다.
+    //  새 휴대폰에서는 로그인 화면 [문자 인증으로 로그인]으로 새 열쇠를 받는다.
+    let password;
+    try { password = newDriverKey(); } catch {
+      return setError("이 휴대폰에서는 가입을 마칠 수 없어요. 앱(또는 크롬)을 최신으로 업데이트한 뒤 다시 해 주세요.");
+    }
+    saveDriverKey(password);
     // vehicleType은 기존 화면들이 "카고 3.5톤" 식 한 줄 문자열로 읽던 필드라 하위호환으로 함께 저장(선택 입력이라 비어 있을 수 있음)
     const vehicleType = [category, tonnage].filter(Boolean).join(" ");
     const phoneStr = fmtPhone(phone);
@@ -381,6 +390,7 @@ export default function DriverRegister() {
     const marks = {};
     const mark = (k) => { marks[k] = Math.round(performance.now() - t0); };
     let created = null;
+    let created0 = false; // 계정을 한 번이라도 만들었는지(열쇠 정리용)
     try {
       setLoading(true);
       setPhase(1);
@@ -398,6 +408,7 @@ export default function DriverRegister() {
         res = await createUserWithEmailAndPassword(auth, email, password);
       }
       created = res.user;
+      created0 = true;
       const uid = res.user.uid;
       mark("계정");
       setPhase(2);
@@ -406,6 +417,7 @@ export default function DriverRegister() {
       if (await phoneTaken(res.user, co, phoneStr)) {
         await res.user.delete().catch(() => {});
         created = null;
+        forgetDriverKey(password);
         await signOut(auth).catch(() => {});
         setDriverBusy(false);
         setError("이미 가입된 휴대폰번호입니다. 로그인 화면에서 휴대폰번호로 로그인해 주세요. (차량이 바뀌셨다면 운송사에 차량 변경을 요청해 주세요.)");
@@ -430,7 +442,8 @@ export default function DriverRegister() {
         created = null;
         try { localStorage.setItem(SAVED_LOGIN_KEY, JSON.stringify({ remember: true, autoLogin: false, companyName: co, carNo: plate, name: name.trim(), phone: onlyDigits(phone) })); } catch { /* 저장 실패 무시 */ }
         // ⭐ 2026-11-05 사진 저장은 완료 화면을 띄운 뒤 뒤에서 마저 한다
-        finishInBackground([bizDoc(uid)]);
+        //  🔒 2026-11-27 열쇠 계정 표시(loginKey) — 차량 변경 때 서버가 비밀번호를 차량번호로 되돌리지 않게(functions/driverVehicle.js syncLogin)
+        finishInBackground([bizDoc(uid), updateDoc(doc(db, "users", uid), { loginKey: true }).catch(() => {})]);
         setPhase(4);
         setSuccess(link.approved === false ? "linkedPending" : "linked"); // 🔒 2026-11-23 문자 인증 안 했으면 연결만 하고 승인 대기
         console.info("[기사 가입] 단계별 시간(ms)", marks);
@@ -440,6 +453,7 @@ export default function DriverRegister() {
       if (link?.conflict) {
         await res.user.delete().catch(() => {});
         created = null;
+        forgetDriverKey(password);
         setDriverBusy(false);
         setError("운송사에 이미 등록된 차량번호인데, 이름 · 휴대폰번호 · 운송사명 중 다른 것이 있어요. 운송사에 등록된 그대로 넣거나 운송사에 문의해 주세요.");
         return;
@@ -465,6 +479,7 @@ export default function DriverRegister() {
           hireDate: hireDate || "",
           ...payInfo,
           approved: false,
+          loginKey: true, // 🔒 2026-11-27 비밀번호 = 기기 열쇠(차량번호 아님) — 서버가 비밀번호를 차량번호로 되돌리지 않게
           termsAgreed,
           privacyAgreed,
           gpsAgreed,
@@ -512,6 +527,8 @@ export default function DriverRegister() {
     } catch (err) {
       console.error(err);
       // 계정만 만들어지고 저장이 실패했으면 계정을 지워 다시 가입할 수 있게 한다
+      // 계정을 못 만들었거나 방금 지웠으면 이 열쇠는 쓸 데가 없다(가입이 끝난 계정의 열쇠는 남긴다)
+      if (created || !created0) forgetDriverKey(password);
       if (created) await created.delete().catch(() => {});
       await signOut(auth).catch(() => {});
       setDriverBusy(false);

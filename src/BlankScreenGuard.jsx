@@ -6,7 +6,7 @@
 //  · [새로고침] · [화면 기억 지우고 다시 열기](로그인 · 회사 선택 · 배포 버전 기억은 남긴다)
 import React from "react";
 
-const KEEP = /^(firebase|loginCompany$|userCompany$|kpPin|kpDriverApp$|kpApkStaff$)/;
+const KEEP = /^(firebase|loginCompany$|userCompany$|kpPin|kpDriverApp$|kpApkStaff$|driverLoginKeys$)/; // 🔒 2026-11-27 driverLoginKeys = 기사 로그인 열쇠(지우면 문자 인증을 다시 해야 함)
 const isEmptyHit = (el) => !el || el === document.body || el === document.documentElement || el.id === "root";
 
 function looksBlank() {

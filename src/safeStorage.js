@@ -3,6 +3,7 @@
 // 지우고 다시 저장한다.
 const KEEP = new Set([
   "transportLoginSaved", "driverLoginSaved", "loginCompany", "userCompany", "transportCode", "role",
+  "driverLoginKeys", // 🔒 2026-11-27 기사 로그인 열쇠(지우면 새로 가입한 기사가 문자 인증을 다시 해야 한다)
 ]);
 export const isQuota = (e) => e && (e.code === 22 || e.code === 1014 || e.name === "QuotaExceededError" || e.name === "NS_ERROR_DOM_QUOTA_REACHED");
 
