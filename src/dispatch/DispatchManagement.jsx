@@ -64,7 +64,7 @@ import { shareToHub } from "../hubShare";
 import { CARGO_VEHICLE_SPEC_TABLE, CargoExtraChips, ContactPickerIconButton, FareSortDropdown, OrderCalendarPanel, OrderMemoIconButton, PALLET_SPEC_TABLE, REVERSED_DATE_ORDER_MSG, StopBadge, TimeAmPmPicker, WaypointSection, _parseWorkDates, cleanStopCargo, defaultDriverNoticeTemplate, dokchaOn, fareCargoExact, fareCargoPartial, fetchPrinterInfo, formatPhone, getFareMatchLabel, getTotalPalletFromOrder, getTotalTonFromOrder, isReversedDateOrder, issueUploadUrl, makePlaceKey, mergeViaCargoText, mergeViaTonnage, nextManagerName, normalizePlate, safeLoad, safeSave, sflowToast, shouldShowDriverMemoAlert, sortFareHistory, toTonUnit, todayStr } from "./shared/dispatchCommon.jsx";
 import RealtimeStatus from "./RealtimeStatus.jsx";
 import { MonthPicker } from "../kpInputs"; // 🗓 2026-11-27 마감월 — 프로그램 달력
-import OrderWorkAssist, { readAssistMode } from "./OrderWorkAssist.jsx"; // 🧭 2026-11-27 오더등록 아래 작업 도우미(최고관리자 먼저)
+import OrderWorkAssist, { readAssistMode, SideAssist } from "./OrderWorkAssist.jsx"; // 🧭 2026-11-27 오더등록 아래 작업 도우미(최고관리자 먼저)
 
 
 // ================= 카운트 애니메이션 =================
@@ -9353,6 +9353,16 @@ className={`
       companyName={userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY}
     />
     </div>
+  ) : assistAllowed ? (
+    // 🧭 2026-11-27 달력 자리에 [달력 | 거래처 최근 노선] — 거래처를 고르면 최근 노선이 저절로 열린다(입력창 바로 옆에서 [채우기])
+    <SideAssist history={dispatchData} client={form.거래처명} onFill={fillFromRoute} calendar={
+      <OrderCalendarPanel
+        pickupDate={form.상차일 || ""}
+        dropDate={form.하차일 || ""}
+        onPickupChange={(v) => onChange("상차일", v)}
+        onDropChange={(v) => onChange("하차일", v)}
+        companyName={userCompany || localStorage.getItem("userCompany") || DEFAULT_COMPANY}
+      />} />
   ) : (
   <OrderCalendarPanel
     pickupDate={form.상차일 || ""}
@@ -11095,9 +11105,9 @@ setConfirmChange(null);
 })()}
         {/* 🧭 2026-11-27 작업 도우미 — 실시간배차현황 전체 표 대신(입력할 때 큰 표가 다시 그려지지 않게). 우선 최고관리자만 · [전체 표]로 예전 화면 */}
 {assistAllowed && assistMode === "assist" && (
-  <OrderWorkAssist rows={recentDispatchData} history={dispatchData} client={form.거래처명}
+  <OrderWorkAssist rows={recentDispatchData}
     myEmail={auth.currentUser?.email || ""} myName={userNameMap?.get?.(String(auth.currentUser?.email || "").toLowerCase()) || ""}
-    mode={assistMode} onMode={setAssistMode} onFill={fillFromRoute} />
+    mode={assistMode} onMode={setAssistMode} />
 )}
 {assistAllowed && assistMode === "table" && (
   <div className="mt-4 flex justify-end">
