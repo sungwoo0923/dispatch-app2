@@ -24,13 +24,9 @@ const short = (s, n) => { const t = String(s || "").trim(); return t.length > n 
 const stateOf = (r) => (String(r?.배차상태 || "").trim() === "배차완료" ? "done" : isUnassignedOrder(r) ? "todo" : "wait");
 const STATE = { todo: { label: "미배차" }, wait: { label: "배차중" }, done: { label: "배차완료" } };
 function StateMark({ k }) {
-  const fill = k === "done" ? C.navy : k === "wait" ? `linear-gradient(90deg, ${C.navy} 50%, #fff 50%)` : "#fff";
-  return (
-    <span className="inline-flex items-center gap-1.5 text-[12.5px] font-bold" style={{ color: k === "done" ? C.ink : k === "wait" ? C.navy : C.sub }}>
-      <span aria-hidden="true" style={{ width: 9, height: 9, borderRadius: 9, border: `1.5px solid ${C.navy}`, background: fill, boxSizing: "border-box" }} />
-      {STATE[k].label}
-    </span>
-  );
+  // 🎨 2026-11-27 알록달록하지 않게 — 남색 진하기로만: 미배차(점선) · 배차중(옅은 남색) · 배차완료(진한 남색)
+  const st = k === "done" ? { background: C.ink, color: "#fff", border: `1px solid ${C.ink}` } : k === "wait" ? { background: C.tint, color: C.navy, border: "1px solid #C9D6EC" } : { background: "#fff", color: "#3A4A66", border: "1px dashed #AEBBD0" };
+  return <span className="inline-flex items-center justify-center h-[24px] min-w-[64px] px-2 rounded-full text-[11.5px] font-extrabold" style={st}>{STATE[k].label}</span>;
 }
 
 export const readAssistMode = () => { try { return localStorage.getItem("kpOrderAssistMode") === "table" ? "table" : "assist"; } catch { return "assist"; } };
@@ -100,21 +96,63 @@ export function ClientRoutesPanel({ history = [], client = "", onFill }) {
   );
 }
 
-// 오른쪽 패널 — [달력 | 최근 노선] 전환. 거래처를 새로 고르면 최근 노선으로 저절로 바뀐다(이 기기에 마지막 선택 기억)
-export function SideAssist({ calendar, history = [], client = "", onFill }) {
+// 오른쪽 패널 — 오늘 일정(요약 알약) · [달력 | 거래처 최근 노선] · 주요 일정. 거래처를 새로 고르면 최근 노선으로 저절로 바뀐다(이 기기에 마지막 선택 기억)
+const DOW = ["일", "월", "화", "수", "목", "금", "토"];
+export function SideAssist({ calendar, rows = [], history = [], client = "", onFill }) {
   const [tab, setTab] = React.useState(() => { try { return localStorage.getItem("kpOrderSideTab") === "routes" ? "routes" : "cal"; } catch { return "cal"; } });
   const pick = (v) => { setTab(v); try { localStorage.setItem("kpOrderSideTab", v); } catch { /* 무시 */ } };
   const prev = React.useRef(String(client || "").trim());
   React.useEffect(() => { const c = String(client || "").trim(); if (c && c !== prev.current) setTab("routes"); prev.current = c; }, [client]);
+  const today = kst(0);
+  const todayList = React.useMemo(() => (rows || []).filter((r) => !isCancel(r) && r.source !== "transport_transmit" && String(r.상차일 || "").slice(0, 10) === today), [rows, today]);
+  const cnt = React.useMemo(() => { const k = { all: todayList.length, todo: 0, wait: 0, done: 0 }; todayList.forEach((r) => { k[stateOf(r)] += 1; }); return k; }, [todayList]);
+  // 상차시간 — "09:30" · "오후 3시" · "15시 30분" 등 여러 모양을 24시간 "HH:MM" 으로(못 읽으면 맨 뒤 · 그대로 표시)
+  const timeOf = (r) => {
+    const raw = `${String(r.상차시간구분 || "")} ${String(r.상차시간 || "")}`.trim();
+    const m = /(\d{1,2})\s*(?::|시)\s*(\d{1,2})?/.exec(raw);
+    if (!m) return { k: 9999, txt: String(r.상차시간 || "").trim() || "미정" };
+    let h = +m[1]; const mi = +(m[2] || 0);
+    if (/오후/.test(raw) && h < 12) h += 12; if (/오전/.test(raw) && h === 12) h = 0;
+    return { k: h * 60 + mi, txt: `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}` };
+  };
+  const agenda = React.useMemo(() => todayList.map((r) => ({ r, t: timeOf(r) })).sort((a, b) => a.t.k - b.t.k).slice(0, 4), [todayList]); // eslint-disable-line react-hooks/exhaustive-deps
+  const d = new Date(`${today}T00:00:00Z`);
   return (
-    <div className="flex flex-col gap-2.5" style={{ flex: "1 1 0%", minWidth: 0, fontFamily: MONO }}>
-      <div role="group" aria-label="오른쪽 패널" className="flex p-[3px] rounded-xl bg-[#F1F4F9] border border-[#E3E8F0]">
-        {[["cal", "달력"], ["routes", "거래처 최근 노선"]].map(([k, l]) => (
-          <button key={k} type="button" onClick={() => pick(k)} aria-pressed={tab === k}
-            className={`flex-1 h-8 rounded-[9px] text-[13px] ${tab === k ? "bg-[#0F1A30] text-white font-extrabold" : "text-[#5B6B85] font-bold hover:text-[#0F1A30]"}`}>{l}</button>
-        ))}
+    <div className="flex flex-col" style={{ flex: "1 1 0%", minWidth: 0, fontFamily: MONO }} data-kp="side-assist">
+      <div className="rounded-[20px] overflow-hidden bg-white border border-[#E6EBF3] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_26px_rgba(16,24,40,0.05)] flex flex-col">
+        <div className="px-4 py-3 flex items-center gap-2 text-white" style={{ background: "linear-gradient(120deg,#0F1A30,#1B2B4B 60%,#2D4C82)" }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M3 10h18M8 3v4M16 3v4" /></svg>
+          <span className="text-[15px] font-black">오늘 일정</span>
+          <span className="ml-auto text-[13px] font-bold text-[#C9D3E3]" style={NUM}>{today.replace(/-/g, ".")} ({DOW[d.getUTCDay()]})</span>
+        </div>
+        <div className="px-3.5 py-3 grid grid-cols-3 gap-2 border-b border-[#EEF2F8]">
+          {[["배차", cnt.all, "#0F1A30"], ["완료", cnt.done, "#0F1A30"], ["미배차", cnt.todo, cnt.todo ? "#0F1A30" : "#8A97AD"]].map(([l, n, c]) => (
+            <div key={l} className="flex items-center justify-center gap-1.5 h-9 rounded-xl border border-[#E3E8F0] bg-[#FAFBFD] text-[12.5px] font-bold text-[#5B6B85]">
+              {l} <b className="text-[14px] font-black" style={{ ...NUM, color: c }}>{n}</b>건
+            </div>
+          ))}
+        </div>
+        <div className="px-3.5 pt-3">
+          <div role="group" aria-label="오른쪽 패널" className="flex p-[3px] rounded-xl bg-[#F1F4F9] border border-[#E3E8F0]">
+            {[["cal", "달력"], ["routes", "거래처 최근 노선"]].map(([k, l]) => (
+              <button key={k} type="button" onClick={() => pick(k)} aria-pressed={tab === k}
+                className={`flex-1 h-8 rounded-[9px] text-[13px] ${tab === k ? "bg-[#0F1A30] text-white font-extrabold" : "text-[#5B6B85] font-bold hover:text-[#0F1A30]"}`}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <div className="p-3.5">{tab === "cal" ? calendar : <ClientRoutesPanel history={history} client={client} onFill={onFill} />}</div>
+        <div className="px-4 pb-4 pt-1 border-t border-[#EEF2F8]">
+          <div className="flex items-center justify-between pt-3 mb-2"><span className="text-[13.5px] font-black">주요 일정</span><span className="text-[11.5px] font-bold text-[#8A97AD]">오늘 상차 · 시간순</span></div>
+          {agenda.length === 0 ? <div className="text-[12.5px] text-[#8A97AD] py-2">오늘 상차 오더가 없어요</div> : agenda.map(({ r, t }, i) => (
+            <button key={idOf(r) || i} type="button" onDoubleClick={() => { const id = idOf(r); if (id && window.__selectOrder) window.__selectOrder(id); }} title="두 번 누르면 배차현황에서 열려요"
+              className="w-full flex items-center gap-2.5 py-1.5 text-left text-[12.5px]">
+              <span aria-hidden="true" className="w-2 h-2 rounded-full shrink-0" style={{ background: stateOf(r) === "done" ? C.ink : "#fff", border: `1.5px solid ${C.navy}` }} />
+              <span className="w-[44px] shrink-0 font-extrabold whitespace-nowrap" style={{ ...NUM, color: t.k === 9999 ? C.dim : C.ink }}>{t.txt.slice(0, 5)}</span>
+              <span className="min-w-0 truncate text-[#3A4A66]"><b className="font-extrabold text-[#0F1A30]">{r.거래처명 || "-"}</b> · {r.상차지명 || ""} → {r.하차지명 || ""}</span>
+            </button>
+          ))}
+        </div>
       </div>
-      {tab === "cal" ? calendar : <ClientRoutesPanel history={history} client={client} onFill={onFill} />}
     </div>
   );
 }
@@ -155,8 +193,8 @@ export default function OrderWorkAssist({ rows = [], myEmail = "", myName = "", 
 
   const card = "bg-white rounded-[20px] border border-[#E3E8F0] shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_26px_rgba(16,24,40,0.05)]";
   const eyebrow = "text-[10.5px] font-extrabold tracking-[0.24em] text-[#8A97AD]";
-  const th = "px-2 pb-2.5 text-[12px] font-extrabold text-[#5B6B85] border-b-[1.5px] border-[#E3E8F0] whitespace-nowrap";
-  const td = "px-2 py-[11px] border-b border-[#EEF2F8] whitespace-nowrap overflow-hidden text-ellipsis";
+  const th = "px-2 py-2.5 text-[12px] font-extrabold text-[#5B6B85] bg-[#F5F7FB] border-y border-[#E6EBF3] whitespace-nowrap first:rounded-l-xl first:border-l last:rounded-r-xl last:border-r";
+  const td = "px-2 py-[12px] border-b border-[#EEF2F8] whitespace-nowrap overflow-hidden text-ellipsis";
   // 🧭 2026-11-27 사용자 요청 — 배차현황과 같은 칸을 하나씩 따로(묶지 않는다)
   const COLS = [
     ["등록", 58, "left"], ["상차일", 56, "left"], ["거래처", 120, "left"], ["상차지", 140, "left"], ["하차지", 140, "left"],
@@ -168,10 +206,16 @@ export default function OrderWorkAssist({ rows = [], myEmail = "", myName = "", 
     <section className={`${card} mt-4 overflow-hidden`} style={{ fontFamily: MONO, color: C.ink }} data-kp="order-assist">
       {/* 머리 */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-[22px] pt-[18px] pb-4 border-b border-[#EEF2F8]">
-        <div className="flex items-center gap-2"><span aria-hidden="true" className="w-1.5 h-1.5 rotate-45 bg-[#1B2B4B]" /><span className={eyebrow}>WORK ASSIST</span></div>
-        <h2 className="m-0 text-[18px] font-black">작업 도우미</h2>
-        <span className="text-[13px] text-[#8A97AD]">오늘 배차 현황 · 오늘 등록한 오더</span>
+                <span aria-hidden="true" className="w-3.5 h-3.5 rounded-full border-[3px] border-[#1B2B4B]" />
+        <h2 className="m-0 text-[18px] font-black">배차 목록</h2>
+        <span className="text-[13px] font-bold text-[#8A97AD]" style={NUM}>오늘 등록 {todayRows.length}건</span>
         <div className="ml-auto flex items-center gap-2.5">
+          <div role="group" aria-label="누가 등록한 오더" className="flex gap-1.5">
+            {[["me", `내 오더 ${mine.length}`], ["team", `팀 전체 ${todayRows.length}`]].map(([k, l]) => (
+              <button key={k} type="button" onClick={() => setScope(k)} aria-pressed={scope === k}
+                className={`h-[32px] px-3 rounded-[10px] text-[12.5px] border ${scope === k ? "bg-[#0F1A30] border-[#0F1A30] text-white font-extrabold" : "bg-white border-[#DCE3EE] text-[#3A4A66] font-bold"}`} style={NUM}>{l}</button>
+            ))}
+          </div>
           <div role="group" aria-label="아래 화면 고르기" className="flex p-[3px] rounded-xl bg-[#F1F4F9] border border-[#E3E8F0]">
             {[["assist", "작업 도우미"], ["table", "전체 표"]].map(([k, l]) => (
               <button key={k} type="button" onClick={() => setMode(k)} aria-pressed={mode === k}
@@ -181,33 +225,8 @@ export default function OrderWorkAssist({ rows = [], myEmail = "", myName = "", 
         </div>
       </div>
 
-      {/* ① 오늘 배차 현황 */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 px-[22px] py-3.5 border-b border-[#EEF2F8]">
-        {[["ORDERS", "오늘 상차", kpi.all], ["PENDING", "미배차", kpi.todo, true], ["ASSIGNING", "배차중", kpi.wait], ["DONE", "배차완료", kpi.done], ["TOMORROW", "내일 상차", kpi.tomorrow]].map(([en, label, n, hot]) => {
-          const on = hot && n > 0;
-          return (
-            <button key={en} type="button" onClick={() => go("실시간배차현황")} title={`${label} — 실시간배차현황에서 보기`}
-              className="flex items-center justify-between gap-2.5 px-4 py-3 rounded-[14px] text-left transition hover:border-[#8FB0F0]"
-              style={{ border: `1px solid ${on ? C.navy : C.line}`, background: on ? C.tint : "#fff" }}>
-              <span className="flex flex-col gap-0.5"><span className={eyebrow}>{en}</span><span className="text-[13.5px] font-extrabold text-[#3A4A66]">{label}</span></span>
-              <span className="text-[26px] font-black leading-none" style={{ ...NUM, color: C.ink }}>{n}<span className="text-[13px] font-bold text-[#8A97AD] ml-0.5">건</span></span>
-            </button>
-          );
-        })}
-      </div>
-
       {/* ② 오늘 등록한 오더 */}
-      <div className="px-[22px] pt-[18px] pb-[22px] min-w-0">
-        <div className="flex items-center gap-2.5 mb-3">
-          <span className={eyebrow}>RECENT</span>
-          <h3 className="m-0 text-[15.5px] font-black">오늘 {scope === "me" ? "내가" : "팀이"} 등록한 오더</h3>
-          <div role="group" aria-label="보기" className="ml-auto flex gap-1.5">
-            {[["me", `내 오더 ${mine.length}`], ["team", `팀 전체 ${todayRows.length}`]].map(([k, l]) => (
-              <button key={k} type="button" onClick={() => setScope(k)} aria-pressed={scope === k}
-                className={`h-[30px] px-3 rounded-[9px] text-[12.5px] border ${scope === k ? "bg-[#0F1A30] border-[#0F1A30] text-white font-extrabold" : "bg-white border-[#DCE3EE] text-[#3A4A66] font-bold"}`} style={NUM}>{l}</button>
-            ))}
-          </div>
-        </div>
+      <div className="px-[22px] pt-4 pb-[22px] min-w-0">
         {list.length === 0 ? (
           <div className="py-12 text-center text-[13.5px] text-[#8A97AD] border border-dashed border-[#DCE3EE] rounded-[14px]">오늘 {scope === "me" ? "내가" : ""} 등록한 오더가 아직 없어요. 위에서 저장하면 여기에 바로 보여요.</div>
         ) : (

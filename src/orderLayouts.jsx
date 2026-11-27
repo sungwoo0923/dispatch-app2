@@ -7,7 +7,7 @@
 import React from "react";
 import { getDrivingRoute } from "./tmapFareCalc";
 
-export const LAYOUT_SKINS = new Set(["route"]);
+export const LAYOUT_SKINS = new Set(["route", "deck"]); // 🎨 2026-11-27 deck = 밝은 카드형(사용자 시안 · 최고관리자 먼저)
 
 // ── 상차 → 하차 실제 도로 거리 · 시간(티맵) — 주소가 바뀌면 0.6초 뒤 한 번, 같은 구간은 기억 ──
 const routeCache = new Map();
@@ -98,10 +98,20 @@ const ROUTE_ROWS = [
   [[["fsale", 4], ["fdrv", 4], ["ffee", 4]]],
   [[["memo", 12]]],
 ];
-export function routeGrid(hiddenKeys) {
+// 🎨 2026-11-27 D 카드형(deck) — 출발 · 도착 한 줄 → 담당자 → 거래처 · 화물 · 차량 → 운임 · 방법 → 기사 · 배차 → 메모(12칸)
+const DECK_ROWS = [
+  [[["head", 12]]],
+  [[["pn", 3], ["pa", 3]], [["dn", 3], ["da", 3]]],
+  [[["pm", 3], ["pc", 3]], [["dm", 3], ["dc", 3]]],
+  [[["cli", 4], ["cargo", 3], ["vk", 3], ["ton", 2]]],
+  [[["fsale", 2], ["fdrv", 2], ["ffee", 2]], [["pay", 2], ["lm", 2], ["um", 2]]],
+  [[["ss", 2], ["plate", 2], ["dname", 2], ["dphone", 2]], [["way", 2], ["closeym", 2]]],
+  [[["memo", 12]]],
+];
+export function routeGrid(hiddenKeys, skin = "route") {
   const off = new Set([...(hiddenKeys || [])].map((k) => FIELD_TAG[k]).filter(Boolean));
   const rows = [];
-  for (const row of ROUTE_ROWS) {
+  for (const row of (skin === "deck" ? DECK_ROWS : ROUTE_ROWS)) {
     if (!row.flat().some(([n]) => n !== "md" && !off.has(n))) continue;
     const cells = [];
     for (const grp of row) {
@@ -119,6 +129,7 @@ export function routeGrid(hiddenKeys) {
   }
   const firstCard = rows.find((r) => r.includes("md"));
   const top = firstCard ? [...new Set(firstCard.filter((n) => n !== "md" && n !== "."))] : [];
+  if (skin === "deck") return { css: `${A("deck")}{grid-template-areas:${rows.map((r) => `"${r.join(" ")}"`).join(" ")}!important}`, mid: false };
   const css = `${A("route")}{grid-template-areas:${rows.map((r) => `"${r.join(" ")}"`).join(" ")}!important}
 ${top.length ? `${top.map((n) => `.of-lay-route .kp-order-form > [data-of="${n}"]`).join(",")}{padding-top:18px}` : ""}`;
   return { css, mid: !!firstCard };
@@ -239,4 +250,33 @@ ${area("route", ALL)}
 .of-lay-route .kp-order-cal{border-radius:22px!important}
 
 @media (max-width:1279px){${A("route")}{column-gap:8px!important}}
+
+/* ═══════ D 카드형(deck) — 밝은 흰 카드 · 박스 입력칸 · 연한 머리줄(사용자 시안 2026-11-27) ═══════ */
+.of-skin-deck{background:linear-gradient(180deg,#F4F7FC,#EEF2F8);border-radius:26px;padding:14px;box-shadow:inset 0 0 0 1px #E6EBF3}
+.of-skin-deck .kp-order-card{border-radius:20px!important;border:1px solid #E6EBF3!important;box-shadow:0 1px 2px rgba(16,24,40,.04),0 10px 26px rgba(16,24,40,.05)!important;margin-bottom:12px}
+.of-skin-deck .kp-order-card > div:first-child{background:#fff!important;border-bottom:1px solid #EEF2F8!important}
+.of-skin-deck .kp-order-card button{border-radius:11px!important}
+.of-skin-deck .kp-date-row{padding:12px 16px!important;background:#FAFBFD}
+${A("deck")}{grid-template-columns:repeat(12,minmax(0,1fr))!important;column-gap:14px!important;row-gap:14px!important;background:#fff!important;border:1px solid #E6EBF3!important;border-radius:20px!important;box-shadow:0 1px 2px rgba(16,24,40,.04),0 10px 26px rgba(16,24,40,.05)!important;padding:0 22px 22px!important}
+${area("deck", [...ALL.filter((n) => n !== "md"), "closeym"])}
+/* 머리줄 — 남색 띠 대신 흰 바탕 · 남색 글씨 · 알약 버튼 */
+.of-lay-deck .kp-order-form > [data-of="head"]{margin:0 -22px 4px!important}
+.of-lay-deck .kp-order-form > [data-of="head"] > div{background:#fff!important;border-bottom:1px solid #EEF2F8;padding:14px 22px!important}
+.of-lay-deck .kp-order-form > [data-of="head"] > div > span:first-child{display:none}
+.of-lay-deck .kp-order-form > [data-of="head"] > div > span span{color:#0F1A30!important}
+.of-lay-deck .kp-order-form > [data-of="head"] span.text-\[10px\]{color:#2D4C82!important}
+.of-lay-deck .kp-order-form > [data-of="head"] button{background:#F1F4F9!important;color:#1B2B4B!important;border:1px solid #E3E8F0!important;box-shadow:none!important}
+.of-lay-deck .kp-order-form > [data-of="head"] button:first-child{background:#0F1A30!important;color:#fff!important;border-color:#0F1A30!important}
+.of-lay-deck .kp-order-form > [data-of="head"] button:first-child *{color:#fff!important}
+/* 입력칸 — 박스형 · 연한 바탕 · 누르면 남색 테두리 */
+.of-lay-deck .kp-order-form label{font-size:12px!important;color:#5B6B85!important;font-weight:800!important;margin-bottom:6px!important}
+.of-lay-deck .kp-order-form input:not([type=checkbox]):not([type=radio]),.of-lay-deck .kp-order-form select{height:40px!important;border:1px solid #DCE3EE!important;border-radius:10px!important;background:#F8FAFD!important;padding-left:12px!important;font-size:14px!important;box-shadow:none!important}
+.of-lay-deck .kp-order-form input:focus,.of-lay-deck .kp-order-form select:focus{border-color:#1B2B4B!important;background:#fff!important;box-shadow:0 0 0 3px rgba(45,76,130,.12)!important;outline:none!important}
+.of-lay-deck .kp-order-form textarea{border-radius:12px!important;background:#F8FAFD!important}
+.of-lay-deck .kp-order-form > [data-of="fsale"] input,.of-lay-deck .kp-order-form > [data-of="fdrv"] input,.of-lay-deck .kp-order-form > [data-of="ffee"] input{text-align:right;font-variant-numeric:tabular-nums;font-weight:800!important}
+/* 출발(상차) · 도착(하차) 칸 앞에 작은 점 */
+.of-lay-deck .kp-order-form > [data-of="pn"] label::before,.of-lay-deck .kp-order-form > [data-of="dn"] label::before{content:"";display:inline-block;width:8px;height:8px;border-radius:8px;margin-right:6px;vertical-align:1px;border:2px solid #1B2B4B}
+.of-lay-deck .kp-order-form > [data-of="dn"] label::before{background:#1B2B4B}
+.of-lay-deck .kp-order-cal{border-radius:20px!important}
+@media (max-width:1279px){${A("deck")}{column-gap:10px!important}}
 `;
