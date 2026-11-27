@@ -20,12 +20,14 @@ function Key({ children, dark }) {
   return <span style={{ marginLeft: 8, padding: "1px 6px", borderRadius: 6, fontSize: 10.5, fontWeight: 800, fontFamily: "ui-monospace,Menlo,monospace", border: `1px solid ${dark ? "rgba(255,255,255,.35)" : "#DCE3EE"}`, color: dark ? "rgba(255,255,255,.85)" : "#7A869C", background: dark ? "rgba(255,255,255,.08)" : "#F7F9FC" }}>{children}</span>;
 }
 
-function Dialog({ message, title, okText, cancelText, danger, alertOnly, prompt, defaultValue, placeholder, onDone, edit, changes }) {
+function Dialog({ message, title, okText, cancelText, danger, alertOnly, prompt, defaultValue, placeholder, onDone, edit, changes, choices }) {
   const okRef = React.useRef(null);
   const inRef = React.useRef(null);
   const [val, setVal] = React.useState(defaultValue == null ? "" : String(defaultValue));
   const valRef = React.useRef(val);
   valRef.current = val;
+  // 💬 2026-11-27 고르기 창(kpChoose) — 목록에서 하나 고르고 [확인]. prompt 처럼 값을 돌려준다
+  const pick = Array.isArray(choices) && choices.length > 0;
   React.useEffect(() => {
     if (prompt) { inRef.current?.focus(); inRef.current?.select(); } else okRef.current?.focus();
     const openedAt = Date.now();
@@ -33,13 +35,13 @@ function Dialog({ message, title, okText, cancelText, danger, alertOnly, prompt,
       if (e.isComposing) return;
       // 창을 띄운 Enter가 눌린 채 반복돼 바로 저장되는 실수를 막는다
       if (e.key === "Enter" && (e.repeat || Date.now() - openedAt < 150)) { e.preventDefault(); e.stopPropagation(); return; }
-      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onDone(prompt ? null : false); }
-      else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); onDone(prompt ? valRef.current : true); }
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onDone(prompt || pick ? null : false); }
+      else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); onDone(prompt || pick ? valRef.current : true); }
     };
     window.addEventListener("keydown", k, true);
     return () => window.removeEventListener("keydown", k, true);
-  }, [onDone, prompt]);
-  const isEdit = !prompt && !alertOnly && (edit || EDIT_RE.test(String(message ?? "")));
+  }, [onDone, prompt, pick]);
+  const isEdit = !prompt && !pick && !alertOnly && (edit || EDIT_RE.test(String(message ?? "")));
   const lines = String(message ?? "").split("\n");
   const eyebrow = prompt ? "INPUT" : alertOnly ? "NOTICE" : isEdit ? "EDIT · 수정 확인" : danger ? "CONFIRM · CAUTION" : "CONFIRM";
   const heading = title || (prompt ? "입력해 주세요" : alertOnly ? "알림" : isEdit ? "수정하시겠습니까?" : "확인해 주세요");
@@ -78,6 +80,16 @@ function Dialog({ message, title, okText, cancelText, danger, alertOnly, prompt,
             </div>
           )}
           {isEdit && !rows.length && !bodyLines.length && <div style={{ color: "#3A4A66", fontSize: 14, fontWeight: 600 }}>저장하면 바로 반영돼요. 다시 한 번 확인해 주세요.</div>}
+          {pick && (
+            <div role="radiogroup" style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+              {choices.map((c) => { const on = String(c.value) === val; return (
+                <button key={String(c.value)} type="button" role="radio" aria-checked={on} data-kp-choice={String(c.value)} onClick={() => setVal(String(c.value))}
+                  style={{ textAlign: "left", minHeight: 44, padding: "8px 14px", borderRadius: 13, border: `1.5px solid ${on ? "#2D4C82" : "#DCE3EE"}`, background: on ? "#EEF3FC" : "#fff", color: "#0F1A30", fontSize: 14, fontWeight: on ? 900 : 700, cursor: "pointer", fontFamily: "inherit" }}>
+                  {on ? "● " : "○ "}{c.label}{c.sub && <span style={{ display: "block", marginLeft: 18, fontSize: 12, fontWeight: 600, color: "#7A869C" }}>{c.sub}</span>}
+                </button>
+              ); })}
+            </div>
+          )}
           {prompt && (
             <input ref={inRef} value={val} onChange={(e) => setVal(e.target.value)} placeholder={placeholder || ""}
               style={{ marginTop: 12, width: "100%", height: 46, borderRadius: 13, border: "1px solid #C9D6EE", background: "#F7F9FC", padding: "0 14px", fontSize: 15, fontWeight: 700, color: "#0F1A30", outline: "none", boxSizing: "border-box", fontFamily: "inherit" }}
@@ -86,8 +98,8 @@ function Dialog({ message, title, okText, cancelText, danger, alertOnly, prompt,
           )}
         </div>
         <div style={{ display: "flex", gap: 8, padding: "16px 22px 20px", flexShrink: 0 }}>
-          {!alertOnly && <button type="button" onClick={() => onDone(prompt ? null : false)} style={{ flex: 1, height: 46, borderRadius: 13, border: "1px solid #DCE3EE", background: "#fff", color: "#3A4A66", fontSize: 14.5, fontWeight: 800, cursor: "pointer" }}>{cancelText || "취소"}{!prompt && <Key>Esc</Key>}</button>}
-          <button ref={okRef} type="button" onClick={() => onDone(prompt ? val : true)} style={{ flex: alertOnly ? 1 : 1.4, height: 46, borderRadius: 13, border: "none", background: danger ? "#0B1428" : "#1B2B4B", color: "#fff", fontSize: 14.5, fontWeight: 900, cursor: "pointer", boxShadow: "0 8px 20px rgba(15,26,48,.28)" }}>{okText || (isEdit ? "저장" : "확인")}{!prompt && <Key dark>Enter</Key>}</button>
+          {!alertOnly && <button type="button" onClick={() => onDone(prompt || pick ? null : false)} style={{ flex: 1, height: 46, borderRadius: 13, border: "1px solid #DCE3EE", background: "#fff", color: "#3A4A66", fontSize: 14.5, fontWeight: 800, cursor: "pointer" }}>{cancelText || "취소"}{!prompt && !pick && <Key>Esc</Key>}</button>}
+          <button ref={okRef} type="button" onClick={() => onDone(prompt || pick ? val : true)} style={{ flex: alertOnly ? 1 : 1.4, height: 46, borderRadius: 13, border: "none", background: danger ? "#0B1428" : "#1B2B4B", color: "#fff", fontSize: 14.5, fontWeight: 900, cursor: "pointer", boxShadow: "0 8px 20px rgba(15,26,48,.28)" }}>{okText || (isEdit ? "저장" : "확인")}{!prompt && <Key dark>Enter</Key>}</button>
         </div>
       </div>
     </div>
@@ -98,11 +110,12 @@ function Dialog({ message, title, okText, cancelText, danger, alertOnly, prompt,
 let chain = Promise.resolve();
 function open(props) {
   const run = () => new Promise((resolve) => {
-    if (typeof document === "undefined" || !document.body) { resolve(props.prompt ? null : !!props.alertOnly); return; }
+    if (typeof document === "undefined" || !document.body) { resolve(props.prompt || props.choices ? null : !!props.alertOnly); return; }
     const host = document.createElement("div");
     document.body.appendChild(host);
     const root = createRoot(host);
-    const done = (v) => { resolve(props.prompt ? (v == null ? null : String(v)) : !!v); setTimeout(() => { root.unmount(); host.remove(); }, 0); };
+    const valued = props.prompt || (Array.isArray(props.choices) && props.choices.length > 0);
+    const done = (v) => { resolve(valued ? (v == null ? null : String(v)) : !!v); setTimeout(() => { root.unmount(); host.remove(); }, 0); };
     root.render(<Dialog {...props} onDone={done} />);
   });
   const p = chain.then(run, run);
@@ -119,6 +132,9 @@ export const kpAlert = (message, opts = {}) => {
   return open({ message, alertOnly: true, ...opts });
 };
 export const kpPrompt = (message, defaultValue = "", opts = {}) => open({ message, prompt: true, defaultValue, ...opts });
+// 💬 2026-11-27 목록에서 하나 고르기 — kpChoose("어느 통장에서 보냈나요?", [{ value: "id", label: "운영 통장", sub: "국민 123" }], { defaultValue: "id" })
+//  고른 값(문자열)을 돌려주고, 취소하면 null
+export const kpChoose = (message, choices = [], opts = {}) => open({ message, choices, defaultValue: opts.defaultValue ?? (choices[0] ? String(choices[0].value) : ""), ...opts });
 
 // 🔔 브라우저 기본 알림창(window.alert) → 프로그램 디자인 알림창
 //  · alert()는 돌려주는 값이 없어 그대로 바꿔도 동작은 같다(창이 떠 있는 동안 뒤 코드가 먼저 돌 뿐)

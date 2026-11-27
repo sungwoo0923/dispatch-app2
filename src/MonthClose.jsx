@@ -19,6 +19,7 @@ import { orderProfit, paidOut, nextFee } from "./forkliftCore"; // ⭐ 2026-11-1
 import { kpConfirm } from "./kpDialog";
 import { closeRuleOf, clientPeriod, useCloseDaysVersion } from "./clientCloseDays"; // 🗓 2026-11-27 거래처별 마감일(25일 마감 → 10/26 ~ 11/25)
 import ClientCloseDayModal, { ClientCloseDateModal } from "./ClientCloseDayModal";
+import { askCarryMonth } from "./carryMonth"; // 🗓 2026-11-27 고른 오더 마감월 한 번에(이월)
 const mdTxt = (d) => `${d.slice(5, 7)}.${d.slice(8, 10)}`;
 const kstToday = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const dDay = (to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${kstToday()}T00:00:00Z`)) / 864e5);
@@ -158,7 +159,9 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
   const [osort, setOsort] = React.useState("date"); // date | status
   const [busy, setBusy] = React.useState("");
   const [toast, setToast] = React.useState("");
-  const [cmpOpen, setCmpOpen] = React.useState(false); // ⭐ 2026-11-17 업체 명세서 비교(고른 거래처)
+  const [cmpOpen, setCmpOpen] = React.useState(false);
+  const [pick, setPick] = React.useState(() => new Set()); // 🗓 2026-11-27 마감월 지정할 오더(고른 거래처 안에서)
+  React.useEffect(() => { setPick(new Set()); }, [sel, ym]); // ⭐ 2026-11-17 업체 명세서 비교(고른 거래처)
   // 🗓 2026-11-27 거래처별 마감일 — 거르기("" 전체 · 0 말일 · 25 …) · 마감일 정하기 창
   const cdVer = useCloseDaysVersion();
   const [cdf, setCdf] = React.useState("");
@@ -250,6 +253,7 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
   };
   const stateLine = (g) => {
     const s = g.status;
+    if (g.changed && s === "approved") { const sn = g.row?.doc?.snapshot || {}; return { t: `최종마감 뒤에 오더 건수가 바뀌었어요(마감 때 ${sn.count ?? "-"}건 → 지금 ${g.count}건). 경리팀에 알려 주세요. 경리팀이 [일시해제] → [다시 잠금]하면 지금 건수로 다시 마감돼요.`, c: C.bad }; } // ⚠ 2026-11-27
     if (g.changed && s !== "none") return { t: `${s === "verified" ? "검증" : "마감"} 뒤에 오더가 바뀌었어요. 다시 검증해 주세요.`, c: C.bad };
     if (s === "rejected") return { t: `경리팀 반려 · ${g.row?.doc?.reason || "사유 없음"}${g.row?.doc?.rejectedByName ? ` (${g.row.doc.rejectedByName})` : ""} · 고친 뒤 다시 검증해 주세요.`, c: C.bad };
     if (s === "approved" && g.row?.doc?.unlocked) return { t: "경리팀이 일시해제했어요. 지금은 고치거나 추가 · 삭제할 수 있어요. 끝나면 경리팀이 다시 잠가요.", c: C.warn };
@@ -373,6 +377,8 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
           <select id="mc-sort" value={osort} onChange={(e) => setOsort(e.target.value)} className="h-9 rounded-lg border border-[#D5DDEA] bg-white px-2 text-[13px] font-bold text-[#1B2B4B]" title="정렬">
             <option value="date">날짜순</option><option value="status">상태순(확인 필요 먼저)</option>
           </select>)}
+          {!phone && !isViewer && !lockedOf(g) && pick.size > 0 && <button type="button" data-kp="mc-carry" title="고른 오더의 마감월(청구할 달)을 한 번에 정해요(예: 10/31 상차 → 11월 청구)" className="h-9 rounded-lg px-3.5 border border-[#2D4C82] bg-[#EEF3FC] text-[13px] font-black text-[#1B2B4B] whitespace-nowrap"
+            onClick={async () => { const n2 = await askCarryMonth(g.rows.filter((o) => pick.has(idOf(o))), { isLocked: (o) => isFinalLocked(desk.closes.get(`${String(o.거래처명 || "").trim()}|${monthOf(o)}`)), save: (o, patch) => onPatch?.(o, patch) }); if (n2) setPick(new Set()); }}>마감월 지정 ({pick.size})</button>}
           <button type="button" onClick={() => setCmpOpen(true)} className={`${phone ? "flex-1 h-11 rounded-xl" : "h-9 rounded-lg"} px-3.5 border border-[#D5DDEA] bg-white text-[13px] font-bold text-[#1B2B4B]`} data-kp="mc-stmt-compare" title="업체가 보낸 거래명세서(엑셀 · 캡처)를 올려 우리 오더와 맞춰 봐요">업체 명세서 비교</button>
           {lockedOf(g) ? <span className="h-9 px-3 inline-flex items-center rounded-lg border border-[#0F1A30] text-[12.5px] font-black text-[#0F1A30]">최종마감 · 수정 잠금</span>
             : !isViewer && <button type="button" onClick={() => addOrder(g.client)} className={`${phone ? "flex-1 h-11 rounded-xl bg-[#0F1A30] text-white border-[#0F1A30] font-black" : "h-9 rounded-lg bg-white text-[#1B2B4B] border-[#D5DDEA] font-bold"} px-3.5 border text-[13px]`}>+ 오더 추가</button>}
@@ -390,11 +396,13 @@ export default function MonthClose({ orders = [], company = "", me = null, staff
           <div className="overflow-auto max-h-[calc(100vh-430px)] min-h-[200px]">
             <table className="kp-sd kp-grid kp-sticky-head w-full" style={{ ...NUM, minWidth: 900 }}>{/* 🛠 2026-11-27 내려도 칸 이름(머리줄)이 따라오게 */}
               <thead><tr className="text-[12.5px] text-[#5B6B85]">
+                {!isViewer && !lockedOf(g) && <th className="px-1.5 py-2 sticky top-0 bg-[#F8FAFD] z-[1] text-center"><input type="checkbox" aria-label="오더 모두 고르기" checked={shownRows(g).length > 0 && shownRows(g).every((o) => pick.has(idOf(o)))} onChange={(e) => setPick(e.target.checked ? new Set(shownRows(g).map(idOf)) : new Set())} /></th>}
                 {["순번", "상차일", "상차지 → 하차지", "톤수", "차량번호", "기사", "청구", "기사운임", "수수료", "확인", ""].map((h, i) => <th key={i} className="px-2.5 py-2 font-black sticky top-0 bg-[#F8FAFD] z-[1] whitespace-nowrap text-center">{h}</th>)}
               </tr></thead>
               <tbody>
                 {shownRows(g).map((o, i) => { const is = issuesOfRow(o); return (
                   <tr key={idOf(o)} onClick={() => openRow(o)} className="cursor-pointer border-t border-[#EEF2F8] hover:bg-[#F8FAFD]" title="눌러서 수정" style={{ boxShadow: is.length ? `inset 3px 0 0 ${is.some((x) => x.block) ? C.bad : C.warn}` : undefined }}>
+                    {!isViewer && !lockedOf(g) && <td className="px-1.5 py-2 text-center" onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label="이 오더 고르기" checked={pick.has(idOf(o))} onChange={() => setPick((p) => { const x = new Set(p); if (x.has(idOf(o))) x.delete(idOf(o)); else x.add(idOf(o)); return x; })} /></td>}
                     <td className="px-2.5 py-2 text-center text-[12.5px] text-[#9AA9C3]">{i + 1}</td>
                     <td className="px-2.5 py-2 text-[13px] whitespace-nowrap text-center">{String(o.상차일 || "").slice(5)}</td>
                     <td className="px-2.5 py-2 text-[13px] font-bold max-w-[280px] truncate text-center">{o.상차지명 || "-"} <span className="text-[#9AA9C3]">→</span> {o.하차지명 || "-"}</td>
